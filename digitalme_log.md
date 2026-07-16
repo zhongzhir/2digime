@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-07-16（P1-02 修订 · 版本界面恢复错误真实呈现）
+
+### 任务
+
+- 编号：`P1-02`（Owner 验收阻断：listVersions 吞 recover 错误仍返回 ok）
+- 分支：`codex/p1-02-package-store`
+- 状态：仍为 `statically_verified`（不标 accepted；交 Codex 复核）
+
+### 处理
+
+1. 新增 `version-panel.js`：`buildVersionPanelInfo(store)` 先 `recover()`，失败则 fail-closed；
+2. `recover_ambiguous` / `package_locked` / 其他恢复失败分别映射 `statusCode` 与中文提示；
+3. 任何 recovery issue 时 `previousVersionId`/`previousRevision` 为 `null`，保留 live/backup/journal 证据；
+4. renderer 仅在 `statusCode === "ok"` 启用「恢复到上一个版本」，recovery 时标「暂不可恢复」；
+5. 测试 28–29：无 journal 歧义、持锁不可恢复；测试 27 改用 panel 断言正常路径。
+
+### 验证
+
+- `npm run test:p1-02`：31/31
+- `npm run test:p1-01`：21/21 + 泄露扫描
+- 语法检查、`git diff --check`、Package 基线 hash 未变
+
+---
+
 ## 2026-07-16（P1-02 修订 · 重启后可恢复的资料版本入口）
 
 ### 任务

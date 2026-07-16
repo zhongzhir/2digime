@@ -1,6 +1,6 @@
 # P1-02 任务包：Package schema + PackageStore 最小版本提交
 
-状态：statically_verified（Codex 复核中；Owner 沙盒验收暂缓至复核通过；已补重启后资料版本恢复入口）
+状态：statically_verified（Codex 复核中；Owner 沙盒验收暂缓至复核通过；已补版本界面 recovery issue 真实呈现）
 阶段：第一阶段 / WP1（PackageStore 最小可信切片）
 前置任务：P1-00、P1-01 已接受
 规格依据：`digitalme_phase1_subject_upgrade_plan_v0.1.md` §2.2、§3 WP1

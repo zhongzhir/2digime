@@ -2210,16 +2210,29 @@ async function refreshPackageVersionsPanel() {
     const info = await window.digitalMe.listPackageVersions();
     const currentRevision =
       info && typeof info.currentRevision === "number" ? info.currentRevision : null;
-    currentEl.textContent =
-      currentRevision != null ? `当前版本：第 ${currentRevision} 版` : "当前版本：未知";
+    const notRecoverable =
+      info &&
+      (info.recoveryIssue ||
+        info.statusCode === "recover_ambiguous" ||
+        info.statusCode === "package_locked" ||
+        info.statusCode === "recover_unavailable" ||
+        info.statusCode === "unhealthy" ||
+        info.statusCode === "schema_unsupported" ||
+        info.statusCode === "schema_v01" ||
+        info.statusCode === "package_missing");
+    if (currentRevision != null) {
+      currentEl.textContent = notRecoverable
+        ? `当前版本：第 ${currentRevision} 版（暂不可恢复）`
+        : `当前版本：第 ${currentRevision} 版`;
+    } else {
+      currentEl.textContent = "当前版本：未知";
+    }
 
-    if (info && info.previousVersionId && typeof info.previousRevision === "number") {
+    const canRollback = info && info.statusCode === "ok" && info.recoverable !== false;
+    if (canRollback && info.previousVersionId && typeof info.previousRevision === "number") {
       pkgVersionsState.previousVersionId = info.previousVersionId;
       previousEl.textContent = `最近可恢复：第 ${info.previousRevision} 版（${info.previousVersionId}）`;
-      const canRollback =
-        info.statusCode === "ok" ||
-        (info.healthy && info.previousVersionId && info.schemaVersion === "0.2");
-      btn.disabled = !canRollback;
+      btn.disabled = false;
     } else {
       previousEl.textContent = "最近可恢复：无";
       btn.disabled = true;

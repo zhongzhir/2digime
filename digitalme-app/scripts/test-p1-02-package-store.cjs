@@ -19,6 +19,7 @@ const {
   resolveInsidePackage,
   dirByteFingerprint,
   readManifest,
+  buildVersionPanelInfo,
 } = require("../src/package-store");
 const { createMinimalFixture } = require("../src/package-store/fixture");
 const { listContentFiles } = require("../src/package-store/digest");
@@ -1232,7 +1233,12 @@ test("27. restart simulation: listVersions then rollback from disk", () => {
 
     // Simulate app restart: brand-new PackageStore instance, no in-memory lastFeedbackCommit.
     const s2 = store(dir, {}, "owner:session-2");
-    const versions = s2.listVersions();
+    const panel = buildVersionPanelInfo(s2);
+    assert.equal(panel.statusCode, "ok");
+    assert.equal(panel.recoverable, true);
+    assert.ok(panel.previousVersionId, "previous snapshot must be offered after restart");
+    assert.ok(typeof panel.previousRevision === "number");
+    const versions = panel.versions;
     const live = versions.find((v) => v.kind === "live");
     const snapshots = versions
       .filter((v) => v.kind === "snapshot")
@@ -1242,6 +1248,7 @@ test("27. restart simulation: listVersions then rollback from disk", () => {
     const previous = snapshots.find((s) => s.revision < live.revision);
     assert.ok(previous, "previous snapshot must be listed from disk after restart");
     assert.equal(previous.versionId, committed.rollbackVersion);
+    assert.equal(panel.previousVersionId, previous.versionId);
 
     const rolled = s2.rollback(previous.versionId, { confirmed: true });
     assert.ok(rolled.revision > committed.revision, "rollback must create a new revision");
@@ -1249,9 +1256,59 @@ test("27. restart simulation: listVersions then rollback from disk", () => {
 
     // Third instance: versions still readable after another "restart".
     const s3 = store(dir, {}, "owner:session-3");
-    const after = s3.listVersions();
+    const panel3 = buildVersionPanelInfo(s3);
+    assert.equal(panel3.statusCode, "ok");
+    const after = panel3.versions;
     const live3 = after.find((v) => v.kind === "live");
     assert.equal(live3.revision, rolled.revision);
+    assertNoLockJournalJunk(storeRootFor(dir));
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("28. version panel: no journal + live + backup → not recoverable", () => {
+  const dir = makeV02("panel-ambiguous");
+  try {
+    const storeRoot = storeRootFor(dir);
+    const backup = path.join(storeRoot, "swap-backup");
+    clearJournal(storeRoot);
+    fs.cpSync(dir, backup, { recursive: true });
+
+    const s = store(dir);
+    const panel = buildVersionPanelInfo(s);
+    assert.equal(panel.statusCode, "recover_ambiguous");
+    assert.equal(panel.recoverable, false);
+    assert.equal(panel.previousVersionId, null);
+    assert.equal(panel.previousRevision, null);
+    assert.ok(panel.recoveryIssue);
+    assert.equal(panel.recoveryIssue.code, "recover_ambiguous");
+    assert.ok(typeof panel.currentRevision === "number", "current revision may be shown read-only");
+    assert.equal(fs.existsSync(dir), true, "live must remain");
+    assert.equal(fs.existsSync(backup), true, "backup must remain");
+    assertNoLockJournalJunk(storeRoot);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("29. version panel: lock held → package_locked, rollback disabled", () => {
+  const dir = makeV02("panel-locked");
+  try {
+    const holder = store(dir, {}, "panel-lock-holder");
+    const lockInfo = holder.lock.acquire("panel-lock-holder");
+    try {
+      const challenger = store(dir, {}, "panel-lock-challenger");
+      const panel = buildVersionPanelInfo(challenger);
+      assert.equal(panel.statusCode, "package_locked");
+      assert.equal(panel.recoverable, false);
+      assert.equal(panel.previousVersionId, null);
+      assert.equal(panel.previousRevision, null);
+      assert.ok(panel.recoveryIssue);
+      assert.equal(panel.recoveryIssue.code, "package_locked");
+    } finally {
+      holder.lock.release(lockInfo.operationToken);
+    }
     assertNoLockJournalJunk(storeRootFor(dir));
   } finally {
     cleanup(dir);

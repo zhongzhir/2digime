@@ -12,7 +12,7 @@ const policies = require("./policies");
 const inbox = require("./inbox");
 const retrieval = require("./retrieval");
 const feedback = require("./feedback");
-const { PackageStore } = require("./package-store");
+const { PackageStore, buildVersionPanelInfo } = require("./package-store");
 const { createMinimalFixture } = require("./package-store/fixture");
 const pptxOutput = require("./outputs/pptx");
 const documentOutput = require("./outputs/document");
@@ -2854,64 +2854,7 @@ ipcMain.handle("packageStore:inspect", (_e, payload) => {
 ipcMain.handle("packageStore:listVersions", () => {
   const pkgDir = path.resolve(packageDirFromConfig());
   const store = new PackageStore({ packageDir: pkgDir, ownerId: "sandbox:list" });
-  try {
-    store.recover();
-  } catch (e) {
-    if (e && e.code === "recover_ambiguous") {
-      /* still list what we can; surface via inspect */
-    } else if (e && e.code) {
-      /* continue to inspect/list for user-visible status */
-    }
-  }
-  const inspect = store.inspect();
-  const versions = store.listVersions();
-  const live = versions.find((v) => v.kind === "live") || null;
-  const snapshots = versions
-    .filter((v) => v.kind === "snapshot")
-    .slice()
-    .sort((a, b) => b.revision - a.revision);
-  const currentRevision =
-    live && typeof live.revision === "number"
-      ? live.revision
-      : typeof inspect.revision === "number"
-        ? inspect.revision
-        : null;
-  const previous =
-    snapshots.find((s) => currentRevision == null || s.revision < currentRevision) || null;
-
-  let statusCode = "ok";
-  let statusMessage = "";
-  if (!inspect.exists) {
-    statusCode = "package_missing";
-    statusMessage = "当前资料目录不存在，无法管理版本。";
-  } else if (inspect.schemaVersion !== "0.2" && inspect.schemaVersion != null) {
-    statusCode = "schema_unsupported";
-    statusMessage = "当前资料格式版本不受支持，暂无法使用版本恢复。";
-  } else if (!inspect.schemaVersion || inspect.schemaVersion !== "0.2") {
-    statusCode = "schema_v01";
-    statusMessage =
-      "当前资料尚未升级到可版本管理的格式。请先使用临时演示资料验收，或完成显式升级后再恢复。";
-  } else if (!inspect.healthy) {
-    statusCode = "unhealthy";
-    statusMessage = "资料校验未通过，已暂停版本恢复。请先排除资料损坏或路径问题。";
-  } else if (!previous) {
-    statusCode = "no_snapshot";
-    statusMessage = "尚无可恢复的历史版本。完成一次已确认的资料写入后，才会生成可恢复版本。";
-  } else {
-    statusMessage = "可将资料恢复到上一个已保存版本。恢复会生成新的版本号，不会删除历史版本。";
-  }
-
-  return {
-    currentRevision,
-    schemaVersion: inspect.schemaVersion,
-    healthy: !!inspect.healthy,
-    issues: inspect.issues || [],
-    previousVersionId: previous ? previous.versionId : null,
-    previousRevision: previous ? previous.revision : null,
-    versions,
-    statusCode,
-    statusMessage,
-  };
+  return buildVersionPanelInfo(store);
 });
 
 ipcMain.handle("packageStore:rollback", (_e, payload) => {

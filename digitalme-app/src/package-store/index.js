@@ -1447,6 +1447,8 @@ class PackageStore {
   }
 }
 
+const { buildVersionPanelInfo, mapRecoveryFailure } = require("./version-panel");
+
 module.exports = {
   PackageStore,
   SCHEMA_VERSION,
@@ -1459,4 +1461,6 @@ module.exports = {
   readManifest,
   assertNoSymlinksOrEscapes,
   writeManifestWithDigest,
+  buildVersionPanelInfo,
+  mapRecoveryFailure,
 };
