@@ -1,8 +1,9 @@
 "use strict";
 
 /**
- * Crash-safe journal: immutable per-generation records.
- * Never replaces/deletes the previous complete record before the next is fully published.
+ * Crash-safe journal: immutable per-generation records within the current
+ * unfinished transaction sequence. Never replaces/deletes the previous complete
+ * record before the next is fully published.
  */
 
 const fs = require("node:fs");
@@ -253,7 +254,7 @@ function cleanupJournalArtifacts(storeRoot) {
       if (PUBLISHING_RE.test(name) || name.includes(".tmp.") || name.includes(".bak.")) {
         // Incomplete publishing: if parseable+complete keep for readLatest? No — only final names count.
         // Orphan publishing after crash: safe to delete once a higher complete generation exists,
-        // or keep if it is the only evidence. Prefer: if parseable complete and gen >= max final, 
+        // or keep if it is the only evidence. Prefer: if parseable complete and gen >= max final,
         // try to promote; else delete incomplete.
         const full = path.join(jdir, name);
         const rec = parseRecordFile(full);

@@ -918,6 +918,16 @@
           <button type="button" id="btn-create-demo-pkg" class="btn-ghost">创建临时演示资料</button>
         </div>
         <p class="hint">演示资料写在系统临时目录，不会改动你平时使用的主体资料。</p>
+        <div class="settings-pkg-versions" id="settings-pkg-versions">
+          <h3 class="settings-subhead">资料版本</h3>
+          <p id="pkg-version-current" class="hint" aria-live="polite">正在读取版本信息…</p>
+          <p id="pkg-version-previous" class="hint" aria-live="polite"></p>
+          <p id="pkg-version-hint" class="hint"></p>
+          <div class="modal-actions" style="margin-top:0;justify-content:flex-start">
+            <button type="button" id="btn-pkg-rollback-prev" class="btn-ghost" disabled>恢复到上一个版本</button>
+            <button type="button" id="btn-pkg-versions-refresh" class="btn-ghost">刷新版本信息</button>
+          </div>
+        </div>
         <details class="settings-l0" open>
           <summary>主体编排 · 外部执行体与记录</summary>
           <p class="hint">编程默认用「本机对话+工具」。若要调度本机其它代码助手，填写命令并启用；每次委派须确认且需允许改文件。</p>

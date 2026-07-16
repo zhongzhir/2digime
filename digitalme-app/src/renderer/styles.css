@@ -1095,6 +1095,16 @@ body {
   box-shadow: 0 16px 48px rgba(90, 60, 40, 0.18);
 }
 .modal-card h2 { font-size: 18px; margin-bottom: 16px; color: #5c4033; }
+.modal-card .settings-subhead {
+  font-size: 14px;
+  margin: 16px 0 8px;
+  color: #5c4033;
+  font-weight: 600;
+}
+.settings-pkg-versions {
+  margin: 8px 0 16px;
+  padding-top: 4px;
+}
 .modal-card label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; margin-bottom: 12px; }
 .modal-card input, .modal-card select, .modal-card textarea {
   background: #fffaf6;

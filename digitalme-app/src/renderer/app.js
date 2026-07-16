@@ -871,6 +871,7 @@ function bindEvents() {
         packageDir: r.packageDir,
       });
       pkg = await window.digitalMe.loadPackage();
+      await refreshPackageVersionsPanel();
       alert(
         "已创建临时演示资料，并已设为当前资料目录。\n路径：" +
           (r.packageDir || "")
@@ -878,6 +879,12 @@ function bindEvents() {
     } catch (e) {
       alert("创建失败：" + (e.message || String(e)));
     }
+  });
+  $("btn-pkg-rollback-prev")?.addEventListener("click", () => {
+    rollbackToPreviousPackageVersion().catch((e) => alert(e.message || String(e)));
+  });
+  $("btn-pkg-versions-refresh")?.addEventListener("click", () => {
+    refreshPackageVersionsPanel().catch((e) => alert(e.message || String(e)));
   });
   $("btn-cli-save")?.addEventListener("click", () => {
     saveCliExecutorSettings().catch((e) => alert(e.message || String(e)));
@@ -2174,7 +2181,104 @@ async function openSettings() {
     /* ignore */
   }
   await refreshSettingsAuditList();
+  await refreshPackageVersionsPanel();
   $("settings-modal").classList.remove("hidden");
+}
+
+/** Settings: package version panel (disk-backed; survives app restart). */
+let pkgVersionsState = { previousVersionId: null };
+
+async function refreshPackageVersionsPanel() {
+  const currentEl = $("pkg-version-current");
+  const previousEl = $("pkg-version-previous");
+  const hintEl = $("pkg-version-hint");
+  const btn = $("btn-pkg-rollback-prev");
+  if (!currentEl || !previousEl || !hintEl || !btn) return;
+
+  pkgVersionsState.previousVersionId = null;
+  btn.disabled = true;
+  currentEl.textContent = "正在读取版本信息…";
+  previousEl.textContent = "";
+  hintEl.textContent = "";
+
+  if (!window.digitalMe.listPackageVersions) {
+    currentEl.textContent = "当前版本不支持资料版本管理。";
+    return;
+  }
+
+  try {
+    const info = await window.digitalMe.listPackageVersions();
+    const currentRevision =
+      info && typeof info.currentRevision === "number" ? info.currentRevision : null;
+    currentEl.textContent =
+      currentRevision != null ? `当前版本：第 ${currentRevision} 版` : "当前版本：未知";
+
+    if (info && info.previousVersionId && typeof info.previousRevision === "number") {
+      pkgVersionsState.previousVersionId = info.previousVersionId;
+      previousEl.textContent = `最近可恢复：第 ${info.previousRevision} 版（${info.previousVersionId}）`;
+      const canRollback =
+        info.statusCode === "ok" ||
+        (info.healthy && info.previousVersionId && info.schemaVersion === "0.2");
+      btn.disabled = !canRollback;
+    } else {
+      previousEl.textContent = "最近可恢复：无";
+      btn.disabled = true;
+    }
+
+    hintEl.textContent = (info && info.statusMessage) || "";
+  } catch (e) {
+    currentEl.textContent = "无法读取资料版本。";
+    previousEl.textContent = "";
+    hintEl.textContent = e.message || String(e);
+    btn.disabled = true;
+  }
+}
+
+async function rollbackToPreviousPackageVersion() {
+  const versionId = pkgVersionsState.previousVersionId;
+  if (!versionId) {
+    alert("当前没有可恢复的历史版本。");
+    await refreshPackageVersionsPanel();
+    return;
+  }
+  if (!/^v\d+$/.test(String(versionId))) {
+    alert("版本编号无效，请刷新后重试。");
+    await refreshPackageVersionsPanel();
+    return;
+  }
+  const ok = confirm(
+    "确认恢复到上一个版本？\n\n恢复会产生一个新的版本号，不会删除历史版本。"
+  );
+  if (!ok) return;
+
+  const btn = $("btn-pkg-rollback-prev");
+  if (btn) btn.disabled = true;
+  try {
+    const r = await window.digitalMe.rollbackPackageVersion({
+      versionId,
+      confirmed: true,
+    });
+    pkg = await window.digitalMe.loadPackage();
+    await refreshPackageVersionsPanel();
+    const msg =
+      r && typeof r.revision === "number"
+        ? `已恢复到上一版内容，当前为第 ${r.revision} 版。`
+        : "已完成版本恢复。";
+    alert(msg);
+    addMessage("system-note", msg);
+  } catch (e) {
+    const code = e && e.code;
+    let msg = e.message || String(e);
+    if (code === "version_not_found") {
+      msg = "该版本已不存在或不可恢复，请刷新版本信息后重试。";
+    } else if (code === "version_id_invalid") {
+      msg = "只能使用系统提供的版本编号进行恢复。";
+    } else if (code === "confirmation_required") {
+      msg = "需要确认后才能恢复。";
+    }
+    alert("恢复失败：" + msg);
+    await refreshPackageVersionsPanel();
+  }
 }
 
 async function saveCliExecutorSettings() {
@@ -2262,7 +2366,7 @@ function bindFeedback() {
   if (undoBtn) {
     undoBtn.addEventListener("click", async () => {
       if (!lastFeedbackCommit || !lastFeedbackCommit.rollbackVersion) return;
-      if (!confirm("确认撤销本次写入，恢复到写入前的版本？")) return;
+      if (!confirm("确认撤销本次写入？\n\n恢复会产生一个新的版本号，不会删除历史版本。")) return;
       undoBtn.disabled = true;
       try {
         const r = await window.digitalMe.rollbackPackageVersion({
@@ -2275,6 +2379,9 @@ function bindFeedback() {
         undoBtn.classList.add("hidden");
         lastFeedbackCommit = null;
         pkg = await window.digitalMe.loadPackage();
+        if (typeof refreshPackageVersionsPanel === "function") {
+          await refreshPackageVersionsPanel();
+        }
       } catch (e) {
         alert("撤销失败：" + (e.message || String(e)));
       } finally {
@@ -2337,6 +2444,9 @@ function bindFeedback() {
         $("btn-feedback-undo").classList.remove("hidden");
       }
       pkg = await window.digitalMe.loadPackage();
+      if (typeof refreshPackageVersionsPanel === "function") {
+        await refreshPackageVersionsPanel();
+      }
     } catch (e) {
       alert("写入失败：" + e.message);
     } finally {

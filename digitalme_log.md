@@ -5,6 +5,29 @@
 
 ---
 
+## 2026-07-16（P1-02 修订 · 重启后可恢复的资料版本入口）
+
+### 任务
+
+- 编号：`P1-02`（Owner 验收阻断：重启后不可撤销；保留既有提交）
+- 分支：`codex/p1-02-package-store`
+- 状态：仍为 `statically_verified`（不标 accepted；先 Codex 复核再沙盒验收）
+
+### 处理
+
+1. 设置页新增「资料版本」：显示当前 revision、最近可恢复版本、「恢复到上一个版本」；
+2. 版本列表与恢复均从磁盘 PackageStore 读取，不依赖 renderer 内存；
+3. 恢复前二次确认，并说明会生成新 revision、不删除历史；
+4. renderer 仅提交主进程返回的 `versionId`；
+5. 补齐「提交 → 新实例模拟重启 → listVersions → rollback」自动测试；
+6. `strategy.md` / `journal.js` 表述与空白清理。
+
+### 验证
+
+- `npm run test:p1-02`、`npm run test:p1-01`、语法检查、`git diff --check`、Package 基线
+
+---
+
 ## 2026-07-16（P1-02 修订 · 消除锁/journal 替换窗口）
 
 ### 任务

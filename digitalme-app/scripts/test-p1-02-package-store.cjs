@@ -1206,6 +1206,58 @@ test("26. commit phase journal hooks leave no bak/tmp after success", () => {
   }
 });
 
+test("27. restart simulation: listVersions then rollback from disk", () => {
+  const dir = makeV02("restart-rollback");
+  try {
+    const s1 = store(dir, {}, "owner:session-1");
+    const before = fs.readFileSync(path.join(dir, "style-guide.md"), "utf8");
+    const cs = s1.createChangeSet({
+      actor: "owner:feedback",
+      reason: "write then restart then rollback",
+      sourceRefs: ["feedback"],
+      dataKinds: ["owner_assertion"],
+      ops: [
+        {
+          type: "ensure_section_append",
+          path: "style-guide.md",
+          section: "## 用户反馈（风格纠正）",
+          line: "- after restart must still undo",
+        },
+      ],
+    });
+    const committed = s1.commit(cs.id, { confirmed: true });
+    assert.ok(committed.revision > 0);
+    assert.ok(committed.rollbackVersion);
+    assert.ok(fs.readFileSync(path.join(dir, "style-guide.md"), "utf8").includes("after restart"));
+
+    // Simulate app restart: brand-new PackageStore instance, no in-memory lastFeedbackCommit.
+    const s2 = store(dir, {}, "owner:session-2");
+    const versions = s2.listVersions();
+    const live = versions.find((v) => v.kind === "live");
+    const snapshots = versions
+      .filter((v) => v.kind === "snapshot")
+      .sort((a, b) => b.revision - a.revision);
+    assert.ok(live, "live version must be listed from disk");
+    assert.equal(live.revision, committed.revision);
+    const previous = snapshots.find((s) => s.revision < live.revision);
+    assert.ok(previous, "previous snapshot must be listed from disk after restart");
+    assert.equal(previous.versionId, committed.rollbackVersion);
+
+    const rolled = s2.rollback(previous.versionId, { confirmed: true });
+    assert.ok(rolled.revision > committed.revision, "rollback must create a new revision");
+    assert.equal(fs.readFileSync(path.join(dir, "style-guide.md"), "utf8"), before);
+
+    // Third instance: versions still readable after another "restart".
+    const s3 = store(dir, {}, "owner:session-3");
+    const after = s3.listVersions();
+    const live3 = after.find((v) => v.kind === "live");
+    assert.equal(live3.revision, rolled.revision);
+    assertNoLockJournalJunk(storeRootFor(dir));
+  } finally {
+    cleanup(dir);
+  }
+});
+
 console.log("");
 console.log(`P1-02 results: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
