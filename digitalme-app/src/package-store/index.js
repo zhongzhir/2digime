@@ -45,6 +45,14 @@ const {
 } = require("./fs-util");
 const { PackageLock } = require("./lock");
 const { applyOps } = require("./apply-ops");
+const {
+  writeJournalRecord,
+  clearJournal,
+  cleanupJournalArtifacts,
+  recoverJournalState,
+  readLatestJournal,
+  journalsDir,
+} = require("./journal");
 
 const ALLOWED_OPS = new Set([
   "append_jsonl",
@@ -262,6 +270,7 @@ class PackageStore {
     ensureDir(this.storeRoot);
     ensureDir(path.join(this.storeRoot, "changesets"));
     ensureDir(path.join(this.storeRoot, "snapshots"));
+    ensureDir(journalsDir(this.storeRoot));
   }
 
   _hook(name, ...args) {
@@ -269,31 +278,28 @@ class PackageStore {
     if (typeof fn === "function") fn(...args);
   }
 
-  _journalPath() {
-    return path.join(this.storeRoot, "journal.json");
-  }
-
   _readJournal() {
-    return readJson(this._journalPath(), null);
+    // Promote complete publishing files left by a crash, then read highest generation.
+    recoverJournalState(this.storeRoot);
+    return readLatestJournal(this.storeRoot);
   }
 
   _writeJournal(body) {
-    this._hook("beforeWriteJournal", body);
-    writeJsonAtomic(this._journalPath(), {
-      ...body,
-      updatedAt: isoNow(),
+    writeJournalRecord(this.storeRoot, body, {
+      beforeWriteJournal: (b) => this._hook("beforeWriteJournal", b),
+      beforeJournalPublish: (info) => this._hook("beforeJournalPublish", info),
+      beforeJournalRename: (info) => this._hook("beforeJournalRename", info),
+      afterWriteJournal: (rec, p) => this._hook("afterWriteJournal", rec, p),
     });
   }
 
   _clearJournal() {
-    const p = this._journalPath();
-    if (fs.existsSync(p)) {
-      try {
-        fs.unlinkSync(p);
-      } catch {
-        /* ignore */
-      }
-    }
+    clearJournal(this.storeRoot);
+    cleanupJournalArtifacts(this.storeRoot);
+  }
+
+  _cleanupStoreArtifacts() {
+    cleanupJournalArtifacts(this.storeRoot);
   }
 
   _changeSetPath(id) {
@@ -1228,6 +1234,7 @@ class PackageStore {
   }
 
   _recoverLocked() {
+    this._cleanupStoreArtifacts();
     const journal = this._readJournal();
     const staging = this._stagingPath();
     const backup = this._backupPath();
@@ -1236,14 +1243,48 @@ class PackageStore {
     const stagingExists = fs.existsSync(staging);
 
     if (!journal || !journal.phase) {
-      // No journal: only clean clearly disposable staging if live is healthy.
+      // Fail closed when multiple version candidates exist without a journal.
+      if (liveExists && backupExists) {
+        throw err("recover_ambiguous", "recover_ambiguous", {
+          phase: null,
+          hint: "no_journal_live_and_backup",
+          liveExists: true,
+          backupExists: true,
+          stagingExists,
+        });
+      }
+      if (!liveExists && backupExists && stagingExists) {
+        throw err("recover_ambiguous", "recover_ambiguous", {
+          phase: null,
+          hint: "no_journal_multiple_candidates",
+          liveExists: false,
+          backupExists: true,
+          stagingExists: true,
+        });
+      }
+      // Unique live + orphan staging only: discard staging.
       if (liveExists && stagingExists && !backupExists) {
         rmrf(staging);
         return { ok: true, action: "cleared_orphan_staging", phase: null };
       }
+      // Unique backup, no live, no staging: restore after digest+revision check.
       if (!liveExists && backupExists && !stagingExists) {
+        const dig = safeDigest(backup);
+        const rev = safeRevision(backup);
+        if (!dig || rev == null) {
+          throw err("recover_ambiguous", "recover_ambiguous", {
+            phase: null,
+            hint: "no_journal_backup_unverified",
+          });
+        }
         fs.renameSync(backup, this.packageDir);
-        return { ok: true, action: "restored_backup_without_journal", phase: null };
+        return {
+          ok: true,
+          action: "restored_unique_verified_backup",
+          phase: null,
+          revision: rev,
+          rootSha256: dig.rootSha256,
+        };
       }
       if (!liveExists && (backupExists || stagingExists)) {
         throw err("recover_ambiguous", "recover_ambiguous", {

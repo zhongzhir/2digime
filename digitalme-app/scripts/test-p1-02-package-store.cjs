@@ -23,9 +23,17 @@ const {
 const { createMinimalFixture } = require("../src/package-store/fixture");
 const { listContentFiles } = require("../src/package-store/digest");
 const { writeJsonAtomic } = require("../src/package-store/fs-util");
+const {
+  writeJournalRecord,
+  readLatestJournal,
+  listGenerationFiles,
+  journalsDir,
+  clearJournal,
+} = require("../src/package-store/journal");
 const feedback = require("../src/feedback");
 
 const RACE_PAIR = path.join(__dirname, "p1-02-lock-race-pair.cjs");
+const HEARTBEAT_RACE = path.join(__dirname, "p1-02-heartbeat-race-worker.cjs");
 
 let passed = 0;
 let failed = 0;
@@ -93,6 +101,33 @@ function assertCode(fn, code) {
   }
   assert.ok(caught, "expected throw");
   assert.equal(caught.code, code, `expected ${code}, got ${caught && caught.code}: ${caught && caught.message}`);
+}
+
+function plantJournal(storeRoot, body) {
+  return writeJournalRecord(storeRoot, body);
+}
+
+function assertNoLockJournalJunk(storeRoot) {
+  if (!fs.existsSync(storeRoot)) return;
+  const names = fs.readdirSync(storeRoot);
+  for (const name of names) {
+    assert.equal(
+      /\.(bak|tmp)\./i.test(name) || /\.publishing-/i.test(name),
+      false,
+      `leftover artifact at store root: ${name}`
+    );
+  }
+  const jdir = journalsDir(storeRoot);
+  if (fs.existsSync(jdir)) {
+    for (const name of fs.readdirSync(jdir)) {
+      assert.equal(
+        name.includes(".publishing-") || name.includes(".tmp.") || name.includes(".bak."),
+        false,
+        `leftover journal artifact: ${name}`
+      );
+    }
+  }
+  assert.equal(fs.existsSync(path.join(storeRoot, "lock.json")), false, "lock must be released");
 }
 
 // ---------- §10.1 v0.1 inspect read-only ----------
@@ -497,46 +532,38 @@ test("10. recover() restores unique clear version after interrupt", () => {
     const storeRoot = storeRootFor(dir);
     const staging = path.join(storeRoot, "staging");
     const backup = path.join(storeRoot, "swap-backup");
-    const journal = path.join(storeRoot, "journal.json");
 
     // Simulate staging phase interrupt: staging exists, live intact.
     fs.mkdirSync(staging, { recursive: true });
     fs.writeFileSync(path.join(staging, "junk.txt"), "x", "utf8");
-    fs.writeFileSync(
-      journal,
-      JSON.stringify({
-        phase: "staging",
-        op: "commit",
-        livePath: dir,
-        stagingPath: staging,
-        backupPath: backup,
-        backupRootSha256: beforeHash,
-      }),
-      "utf8"
-    );
+    plantJournal(storeRoot, {
+      phase: "staging",
+      op: "commit",
+      livePath: dir,
+      stagingPath: staging,
+      backupPath: backup,
+      backupRootSha256: beforeHash,
+    });
     const r1 = s.recover();
     assert.equal(r1.ok, true);
     assert.equal(r1.action, "discarded_staging");
     assert.equal(fs.existsSync(staging), false);
     assert.equal(fingerprintPackage(dir), before);
+    assert.equal(readLatestJournal(storeRoot), null);
 
     // Simulate swap interrupt: live gone, backup present.
     fs.renameSync(dir, backup);
-    fs.writeFileSync(
-      journal,
-      JSON.stringify({
-        phase: "swapping",
-        op: "commit",
-        livePath: dir,
-        stagingPath: staging,
-        backupPath: backup,
-        revisionBefore: 1,
-        revisionAfter: 2,
-        backupRootSha256: beforeHash,
-        expectedRootSha256: "0".repeat(64),
-      }),
-      "utf8"
-    );
+    plantJournal(storeRoot, {
+      phase: "swapping",
+      op: "commit",
+      livePath: dir,
+      stagingPath: staging,
+      backupPath: backup,
+      revisionBefore: 1,
+      revisionAfter: 2,
+      backupRootSha256: beforeHash,
+      expectedRootSha256: "0".repeat(64),
+    });
     const r2 = s.recover();
     assert.equal(r2.ok, true);
     assert.equal(r2.action, "restored_backup_after_swap_interrupt");
@@ -546,23 +573,20 @@ test("10. recover() restores unique clear version after interrupt", () => {
     // Ambiguous: live + backup both present with mismatched hashes → fail closed
     fs.mkdirSync(backup, { recursive: true });
     fs.writeFileSync(path.join(backup, "manifest.json"), "{}", "utf8");
-    fs.writeFileSync(
-      journal,
-      JSON.stringify({
-        phase: "swapping",
-        op: "commit",
-        livePath: dir,
-        stagingPath: staging,
-        backupPath: backup,
-        revisionBefore: 1,
-        revisionAfter: 2,
-        backupRootSha256: beforeHash,
-        expectedRootSha256: "a".repeat(64),
-      }),
-      "utf8"
-    );
+    plantJournal(storeRoot, {
+      phase: "swapping",
+      op: "commit",
+      livePath: dir,
+      stagingPath: staging,
+      backupPath: backup,
+      revisionBefore: 1,
+      revisionAfter: 2,
+      backupRootSha256: beforeHash,
+      expectedRootSha256: "a".repeat(64),
+    });
     assertCode(() => s.recover(), "recover_ambiguous");
-    assert.equal(fs.existsSync(journal), true, "journal must remain on ambiguous recover");
+    assert.ok(readLatestJournal(storeRoot), "journal must remain on ambiguous recover");
+    assertNoLockJournalJunk(storeRoot);
   } finally {
     cleanup(dir);
   }
@@ -820,7 +844,6 @@ test("17. corrupted live + no backup → recover_ambiguous keeps journal", () =>
   try {
     const s = store(dir);
     const storeRoot = storeRootFor(dir);
-    const journal = path.join(storeRoot, "journal.json");
     const staging = path.join(storeRoot, "staging");
     const backup = path.join(storeRoot, "swap-backup");
     const goodHash = computeContentDigest(dir).rootSha256;
@@ -829,24 +852,20 @@ test("17. corrupted live + no backup → recover_ambiguous keeps journal", () =>
     fs.writeFileSync(path.join(dir, "manifest.json"), "{not-json", "utf8");
     fs.mkdirSync(staging, { recursive: true });
     fs.writeFileSync(path.join(staging, "x.txt"), "staging", "utf8");
-    fs.writeFileSync(
-      journal,
-      JSON.stringify({
-        phase: "swapping",
-        op: "commit",
-        livePath: dir,
-        stagingPath: staging,
-        backupPath: backup,
-        revisionBefore: 1,
-        revisionAfter: 2,
-        expectedRootSha256: goodHash,
-        backupRootSha256: goodHash,
-      }),
-      "utf8"
-    );
+    plantJournal(storeRoot, {
+      phase: "swapping",
+      op: "commit",
+      livePath: dir,
+      stagingPath: staging,
+      backupPath: backup,
+      revisionBefore: 1,
+      revisionAfter: 2,
+      expectedRootSha256: goodHash,
+      backupRootSha256: goodHash,
+    });
 
     assertCode(() => s.recover(), "recover_ambiguous");
-    assert.equal(fs.existsSync(journal), true);
+    assert.ok(readLatestJournal(storeRoot), "journal must remain");
     assert.equal(fs.existsSync(staging), true);
   } finally {
     cleanup(dir);
@@ -966,9 +985,222 @@ test("21. same actor second process blocked while lock held", () => {
     try {
       const b = store(dir, {}, "shared-actor");
       assertCode(() => b.lock.acquire("shared-actor"), "package_locked");
+      const child = spawnSync(
+        process.execPath,
+        [HEARTBEAT_RACE, storeRootFor(dir), "shared-actor"],
+        { encoding: "utf8", timeout: 30_000 }
+      );
+      assert.equal(child.status, 0, child.stderr || child.stdout);
+      assert.match(String(child.stdout).trim(), /^LOCKED$/);
     } finally {
       a.lock.release(lockInfo.operationToken);
     }
+    assertNoLockJournalJunk(storeRootFor(dir));
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("22. heartbeat window: second process always package_locked (same + different actors)", () => {
+  function raceDuringHeartbeat(label, holderActor, challengerActor) {
+    const dir = makeV02(`hb-race-${label}`);
+    try {
+      const storeRoot = storeRootFor(dir);
+      const holder = new (require("../src/package-store/lock").PackageLock)(storeRoot, {
+        beforeHeartbeat() {
+          const child = spawnSync(
+            process.execPath,
+            [HEARTBEAT_RACE, storeRoot, challengerActor],
+            { encoding: "utf8", timeout: 30_000 }
+          );
+          assert.equal(child.status, 0, child.stderr || child.stdout);
+          const out = String(child.stdout || "").trim();
+          assert.equal(
+            out,
+            "LOCKED",
+            `${label}: expected LOCKED during heartbeat, got ${out}`
+          );
+          assert.notEqual(out, "ACQUIRED_DURING_HEARTBEAT");
+        },
+      });
+      const handle = holder.acquire(holderActor);
+      assert.equal(fs.existsSync(path.join(storeRoot, "lock.json")), true);
+      // Multiple heartbeats — lock.json must remain continuously present.
+      for (let i = 0; i < 5; i++) {
+        assert.equal(fs.existsSync(path.join(storeRoot, "lock.json")), true);
+        holder.heartbeat(handle.operationToken);
+        assert.equal(fs.existsSync(path.join(storeRoot, "lock.json")), true);
+      }
+      holder.release(handle.operationToken);
+      assertNoLockJournalJunk(storeRoot);
+    } finally {
+      cleanup(dir);
+    }
+  }
+  raceDuringHeartbeat("same", "actor-shared", "actor-shared");
+  raceDuringHeartbeat("diff", "actor-a", "actor-b");
+});
+
+test("23. journal publishing crash: previous generation recoverable", () => {
+  const dir = makeV02("journal-crash");
+  try {
+    const storeRoot = storeRootFor(dir);
+    const staging = path.join(storeRoot, "staging");
+    const backup = path.join(storeRoot, "swap-backup");
+    const beforeHash = computeContentDigest(dir).rootSha256;
+
+    plantJournal(storeRoot, {
+      phase: "staging",
+      op: "commit",
+      livePath: dir,
+      stagingPath: staging,
+      backupPath: backup,
+      backupRootSha256: beforeHash,
+    });
+    const gen1 = readLatestJournal(storeRoot);
+    assert.equal(gen1.phase, "staging");
+    assert.equal(gen1.generation, 1);
+
+    // Simulate crash: new publishing file written, not renamed to final.
+    const publishing = path.join(
+      journalsDir(storeRoot),
+      "journal-2.publishing-deadbeef.json"
+    );
+    fs.writeFileSync(
+      publishing,
+      JSON.stringify(
+        {
+          phase: "swapping",
+          generation: 2,
+          complete: true,
+          expectedRootSha256: "b".repeat(64),
+          backupRootSha256: beforeHash,
+          revisionBefore: 1,
+          revisionAfter: 2,
+        },
+        null,
+        2
+      ),
+      "utf8"
+    );
+
+    // Before recoverJournalState promotion: latest complete FINAL should still be staging.
+    // After PackageStore.recover path, publishing may be promoted — either way transaction state exists.
+    const s = store(dir);
+    fs.mkdirSync(staging, { recursive: true });
+    fs.writeFileSync(path.join(staging, "junk.txt"), "x", "utf8");
+
+    // If publishing promoted to gen2 swapping with bogus expected hash while live intact matching backup hash...
+    // For this test: delete incomplete publishing mid-content to simulate crash before complete write,
+    // and keep gen1; recover should use gen1 staging → discard staging.
+    fs.writeFileSync(publishing, "{incomplete", "utf8");
+    const r = s.recover();
+    assert.equal(r.ok, true);
+    assert.equal(r.action, "discarded_staging");
+    assert.equal(fs.existsSync(staging), false);
+    // After successful recover, journals cleared — no bak/tmp leftovers.
+    assertNoLockJournalJunk(storeRoot);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("24. journal rename gap: complete publishing promoted on recover", () => {
+  const dir = makeV02("journal-promote");
+  try {
+    const storeRoot = storeRootFor(dir);
+    const staging = path.join(storeRoot, "staging");
+    const backup = path.join(storeRoot, "swap-backup");
+    const beforeHash = computeContentDigest(dir).rootSha256;
+    const before = fingerprintPackage(dir);
+
+    // Old final renamed away (simulate replace gap) — only publishing remains with complete record.
+    fs.mkdirSync(journalsDir(storeRoot), { recursive: true });
+    const publishing = path.join(journalsDir(storeRoot), "journal-1.publishing-cafe.json");
+    fs.writeFileSync(
+      publishing,
+      JSON.stringify(
+        {
+          phase: "swapping",
+          generation: 1,
+          complete: true,
+          op: "commit",
+          livePath: dir,
+          stagingPath: staging,
+          backupPath: backup,
+          revisionBefore: 1,
+          revisionAfter: 2,
+          backupRootSha256: beforeHash,
+          expectedRootSha256: "0".repeat(64),
+        },
+        null,
+        2
+      ),
+      "utf8"
+    );
+
+    fs.renameSync(dir, backup);
+    const s = store(dir);
+    const r = s.recover();
+    assert.equal(r.ok, true);
+    assert.equal(r.action, "restored_backup_after_swap_interrupt");
+    assert.equal(fs.existsSync(dir), true);
+    assert.equal(fingerprintPackage(dir), before);
+    assertNoLockJournalJunk(storeRoot);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("25. no journal + live + backup → recover_ambiguous keeps both", () => {
+  const dir = makeV02("no-journal-ambiguous");
+  try {
+    const storeRoot = storeRootFor(dir);
+    const backup = path.join(storeRoot, "swap-backup");
+    clearJournal(storeRoot);
+    // Copy live to backup so both exist with no journal.
+    fs.cpSync(dir, backup, { recursive: true });
+    assert.equal(fs.existsSync(dir), true);
+    assert.equal(fs.existsSync(backup), true);
+    assert.equal(readLatestJournal(storeRoot), null);
+
+    const s = store(dir);
+    assertCode(() => s.recover(), "recover_ambiguous");
+    assert.equal(fs.existsSync(dir), true, "live must remain");
+    assert.equal(fs.existsSync(backup), true, "backup must remain");
+    assertNoLockJournalJunk(storeRoot);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("26. commit phase journal hooks leave no bak/tmp after success", () => {
+  const dir = makeV02("journal-clean");
+  try {
+    const phases = [];
+    const s = store(dir, {
+      afterWriteJournal(rec) {
+        phases.push(rec.phase);
+      },
+    });
+    const cs = s.createChangeSet({
+      actor: "test",
+      reason: "journal cleanliness",
+      sourceRefs: ["test"],
+      dataKinds: ["owner_assertion"],
+      ops: [
+        {
+          type: "ensure_section_append",
+          path: "style-guide.md",
+          section: "## 用户反馈（风格纠正）",
+          line: "- clean journal",
+        },
+      ],
+    });
+    s.commit(cs.id, { confirmed: true });
+    assert.ok(phases.includes("staging"));
+    assert.ok(phases.includes("swapping") || phases.includes("committed"));
+    assertNoLockJournalJunk(storeRootFor(dir));
   } finally {
     cleanup(dir);
   }

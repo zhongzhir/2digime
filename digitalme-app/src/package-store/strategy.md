@@ -37,9 +37,12 @@ Package 根目录旁建立店铺（不计入内容根摘要）：
 
 ## 锁与恢复要点
 
-- **锁**：禁止 exists→write；heartbeat 延长 `leaseExpiresAt`，活动操作不会仅因超过 5 分钟被覆盖。
-- **recover**：必须持锁；live 摘要/revision 与 journal 不符时不清 journal。
-- **元数据写**：目标存在时 bak→rename 替换；失败还原 bak；禁止删旧后 copyFile。
+- **锁所有权文件 `lock.json`**：`open("wx")` 创建后，在整个持锁期内**不得** rename/unlink/replace；heartbeat 只写 `lock-heartbeats/hb-*.json` 旁路记录。
+- **过期**：仅当持有者 PID 已死亡才可原子 rename 接管；不会因超过固定 5 分钟而抢走活动进程。
+- **journal**：`journals/journal-NNNNNNNNNN.json` 单调 generation；每次 phase 写 publishing 再 rename 发布；崩溃时上一完整 generation 仍可读；recover 会提升完整但未 rename 的 publishing。
+- **无 journal**：live+backup 同时存在 → `recover_ambiguous`（不得 noop）；仅唯一且通过摘要/revision 校验的候选可自动恢复。
+- **元数据写**（changeset 等）：目标存在时 bak→rename 替换；失败还原 bak；禁止删旧后 copyFile。
+- **随机 bak/tmp**：recover/成功清理路径会识别并清理，不得当作 harmless 遗留。
 
 
 ## 为何可证明安全（及边界）

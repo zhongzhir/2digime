@@ -5,6 +5,29 @@
 
 ---
 
+## 2026-07-16（P1-02 修订 · 消除锁/journal 替换窗口）
+
+### 任务
+
+- 编号：`P1-02`（Codex 二次复核阻断项；保留 `ff36102`、`fa84677`）
+- 分支：`codex/p1-02-package-store`
+- 状态：仍为 `statically_verified`（暂缓 Owner 沙盒验收）
+
+### 处理
+
+1. **锁**：`lock.json` 持锁期不再 rename/replace；heartbeat 写 `lock-heartbeats/` 旁路；过期仅 PID 死亡后原子接管。
+2. **journal**：单调 `journals/journal-NNNNNNNNNN.json`；publishing→rename；崩溃保留上一完整 generation；可提升完整 publishing。
+3. **无 journal**：live+backup → `recover_ambiguous`（不再 noop）；仅唯一已校验候选可自动恢复。
+4. **测试**：heartbeat 窗口 child 抢锁、journal 崩溃/提升、无 journal 歧义、无 bak/tmp 残留。
+
+### 验证
+
+- `npm run test:p1-02`：28/28
+- `npm run test:p1-01`：21/21 + 泄露扫描
+- Package 清单 SHA-256 仍为 `3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a`
+
+---
+
 ## 2026-07-16（P1-02 修订 · 锁/摘要/恢复/快照 fail-closed）
 
 ### 任务
