@@ -5,13 +5,49 @@
 
 ---
 
+## 2026-07-16（P1-01 SecretStore 与敏感配置迁移 · Cursor 实现）
+
+### 任务
+
+- 编号：`P1-01`
+- 代码 Owner：Cursor
+- 分支：`codex/p1-01-secret-store`
+- 状态：`statically_verified`（未标记 accepted；待 Owner 真实模型验收与 Codex 复核）
+
+### 本次完成
+
+1. 新增主进程 `SecretStore`（Electron `safeStorage` 适配器可注入；拒绝 Base64 冒充加密）；
+2. 分离 PublicConfig / RuntimeConfig；`config:get` 仅返回 `apiKeyConfigured` 与空 `apiKey`；
+3. 启动时幂等迁移旧 `config.json` 明文密钥；失败保留旧明文并提示；成功后删除明文并保留备份；
+4. 扩展 `env` 不再落盘明文；连接时主进程按扩展 id 临时装配；
+5. 设置页：已保存提示、空白保留、清除确认；不回显密钥；
+6. 自动测试与泄露扫描通过；P1-00 Package 清单 hash 复验一致。
+
+### 验证
+
+- `npm run test:p1-01`（11 项 SecretStore/迁移 + 泄露扫描）通过
+- `node --check` 全部 App JS 通过
+- Package 清单 SHA-256 仍为 `3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a`
+
+### 已知未解决
+
+1. `extension-manager` 仍继承完整 `process.env`（属后续 ToolBroker，本任务未宣称解决）；
+2. 扩展密钥完整撤销 UI 仅有窄 IPC `secrets:clearExtensionEnv`，产品面后续可加深；
+3. 未做 Owner 真实模型联调。
+
+### 下一步
+
+Codex 复核 + Owner 人工验收 → 标记 accepted → 启动 `P1-02`。
+
+---
+
 ## 2026-07-16（P1-00 工程与 Package 基线冻结 · Cursor 实现）
 
 ### 任务
 
 - 编号：`P1-00`
 - 代码 Owner：Cursor
-- 状态：`statically_verified`（自动验证通过；**尚未首次 Git commit**）
+- 状态：`accepted`（自动验证、Owner 范围确认、首次提交与 Codex 复核均完成）
 
 ### 本次完成
 
@@ -44,7 +80,9 @@
 
 ### 下一步
 
-本地首次提交（按 Owner 确认范围）→ 可选创建 GitHub 远程并推送 → 然后启动 `P1-01 SecretStore 与敏感配置迁移`。
+1. 本地首次提交已完成：`151d798`（85 个文件；不含 Package 与根目录 doc/docx）；
+2. 尚无 remote、未推送；远程仓库不是继续本地开发的前提；
+3. P1-00 经 Codex 复核通过；下一任务为 `P1-01 SecretStore 与敏感配置迁移`，任务包见 `digitalme_phase1_task_P1-01_secret_store.md`。
 
 ---
 
@@ -84,7 +122,7 @@
 
 第一批验收后再启动 PolicyEngine、可信审计、ToolBroker 与协作骨架。
 
-`P1-00` 任务包：`digitalme_phase1_task_P1-00_baseline_freeze.md`；**2026-07-16 已由 Cursor 执行完毕（`statically_verified`）**，Git 已初始化但**尚未首次提交**；详见本日志上方 P1-00 条目。
+`P1-00` 已接受（基线 `151d798`）。`P1-01` 任务包见 `digitalme_phase1_task_P1-01_secret_store.md`，实现状态见本日志上方 P1-01 条目。
 
 ---
 

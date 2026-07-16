@@ -23,7 +23,7 @@
 | External CLI | `implemented` | `digitalme-app/src/orchestration/agents.js` | 确认后 shell 委派已实现；默认应视为开发者实验 |
 | Audit | `implemented` | `digitalme-app/src/orchestration/audit-store.js` | 本地 JSON 账本；非 append-only/不可伪可信审计 |
 | Package export/import | `planned` | 规格 v0.4 §7.4.2；审计 F-04/F-05 | 文档有分级导出设想；运行时无完整导出—删除—重导入闭环 |
-| Secret storage | `planned` | 审计 F-01；计划 WP2 / P1-01 | 当前明文 config；SecretStore 尚未落地 |
+| Secret storage | `statically_verified` | P1-01：`src/security/secret-store.js`、`config-secrets.js`；`npm run test:p1-01` | 已用 Electron safeStorage + 迁移；待 Owner 真实模型验收与 Codex 复核后方可 `accepted`/`released` |
 | External collaboration | `specified` | `digital-me-package/contracts/*`；规格 v0.4 §7.4.5 | Agent Card / Interaction Contract 数据结构已对齐；无用户面协作闭环 |
 
 ## 附注

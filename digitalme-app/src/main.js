@@ -1,6 +1,6 @@
 "use strict";
 
-const { app, BrowserWindow, ipcMain, dialog, Menu } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, Menu, safeStorage } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 const https = require("node:https");
@@ -25,10 +25,31 @@ const capabilitySurface = require("./capabilities/surface");
 const l0Orchestration = require("./orchestration/l0");
 const l0Audit = require("./orchestration/audit-store");
 const l0Agents = require("./orchestration/agents");
+const { SecretStore } = require("./security/secret-store");
+const { createElectronSafeStorageAdapter } = require("./security/electron-safe-storage-adapter");
+const { ConfigSecretsService, extensionSecretId } = require("./security/config-secrets");
 
 // Digital Me Package lives one level up from the app folder by default.
 const DEFAULT_PACKAGE_DIR = path.join(__dirname, "..", "..", "digital-me-package");
 const CONFIG_PATH = path.join(app.getPath("userData"), "config.json");
+
+let configSecrets = null;
+
+function getConfigSecrets() {
+  if (configSecrets) return configSecrets;
+  const userDataPath = app.getPath("userData");
+  const store = new SecretStore({
+    userDataPath,
+    encryptAdapter: createElectronSafeStorageAdapter(safeStorage),
+  });
+  configSecrets = new ConfigSecretsService({
+    userDataPath,
+    configPath: CONFIG_PATH,
+    secretStore: store,
+    defaultPackageDir: DEFAULT_PACKAGE_DIR,
+  });
+  return configSecrets;
+}
 
 function buildAppMenu() {
   const template = [
@@ -105,6 +126,15 @@ function createWindow() {
 
 app.whenReady().then(() => {
   buildAppMenu();
+  const migration = getConfigSecrets().migrateLegacySecrets();
+  if (migration && (migration.status === "blocked" || migration.status === "failed") && migration.warning) {
+    dialog.showMessageBox({
+      type: "warning",
+      title: "连接密钥安全提示",
+      message: "密钥未能迁入本机安全存储",
+      detail: migration.warning,
+    });
+  }
   createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -444,7 +474,8 @@ function buildExtensionFromCatalog(item, options = {}) {
 }
 
 function getCapabilityExtensions() {
-  const cfg = readConfig();
+  const svc = getConfigSecrets();
+  const cfg = svc.readRawConfig();
   let list = Array.isArray(cfg.capabilityExtensions) ? cfg.capabilityExtensions : [];
   // 迁移旧版示例 id / 高摩擦启动方式
   let changed = false;
@@ -471,23 +502,26 @@ function getCapabilityExtensions() {
     return ext;
   });
   if (changed) {
-    cfg.capabilityExtensions = list;
-    writeConfig(cfg);
+    cfg.capabilityExtensions = list.map((e) => svc.sanitizeExtension(e, svc.secretStore));
+    delete cfg.apiKey;
+    svc.writeRawConfig(cfg);
   }
-  return list;
+  return list.map((e) => svc.sanitizeExtension(e, svc.secretStore));
 }
 
 function saveCapabilityExtensions(list) {
-  const cfg = readConfig();
-  cfg.capabilityExtensions = list;
-  writeConfig(cfg);
-  return cfg.capabilityExtensions;
+  return getConfigSecrets().saveExtensionsList(list);
 }
 
 function findExtensionById(id) {
   const ext = getCapabilityExtensions().find((e) => e.id === id);
   if (!ext) throw new Error("未找到已启用的扩展：" + id + "。请先在商店中启用。");
   return ext;
+}
+
+function findExtensionForConnect(id) {
+  const publicExt = findExtensionById(id);
+  return getConfigSecrets().hydrateExtensionEnv(publicExt);
 }
 
 function enrichCatalogForUi() {
@@ -506,30 +540,56 @@ function enrichCatalogForUi() {
   };
 }
 
-// ---------- Config ----------
+// ---------- Config (PublicConfig for renderer; RuntimeConfig only in main) ----------
 function readConfig() {
-  try {
-    return JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
-  } catch {
-    return {
-      provider: "openai-compatible",
-      baseURL: "https://api.openai.com/v1",
-      apiKey: "",
-      model: "gpt-4o-mini",
-      packageDir: DEFAULT_PACKAGE_DIR,
-    };
-  }
+  // Legacy name kept for internal call sites that need runtime secrets.
+  return getConfigSecrets().getRuntimeConfig();
+}
+
+function readPublicConfig() {
+  return getConfigSecrets().readPublicConfig();
 }
 
 function writeConfig(cfg) {
-  fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true });
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2), "utf8");
+  // Internal writes must not reintroduce plaintext apiKey.
+  const svc = getConfigSecrets();
+  const next = { ...cfg };
+  delete next.apiKey;
+  if (Array.isArray(next.capabilityExtensions)) {
+    next.capabilityExtensions = next.capabilityExtensions.map((e) =>
+      svc.sanitizeExtension(e, svc.secretStore)
+    );
+  }
+  const raw = svc.readRawConfig();
+  svc.writeRawConfig({
+    ...raw,
+    ...next,
+    secretsMigration: next.secretsMigration || raw.secretsMigration,
+  });
 }
 
-ipcMain.handle("config:get", () => readConfig());
+ipcMain.handle("config:get", () => readPublicConfig());
 ipcMain.handle("config:set", (_e, cfg) => {
-  writeConfig(cfg);
-  return true;
+  getConfigSecrets().setConfigFromRenderer(cfg || {});
+  return readPublicConfig();
+});
+ipcMain.handle("config:clearApiKey", () => {
+  return getConfigSecrets().clearModelApiKey();
+});
+ipcMain.handle("secrets:clearExtensionEnv", (_e, payload) => {
+  const extensionId = String(payload?.extensionId || "").trim();
+  const envKey = String(payload?.envKey || "").trim();
+  if (!extensionId || !envKey) throw new Error("请指定扩展与密钥名称");
+  getConfigSecrets().clearExtensionSecret(extensionId, envKey);
+  // Refresh sanitized list on disk
+  const list = getCapabilityExtensions();
+  saveCapabilityExtensions(list);
+  return {
+    ok: true,
+    extensionId,
+    envKey,
+    configured: getConfigSecrets().secretStore.has(extensionSecretId(extensionId, envKey)),
+  };
 });
 
 // ---------- Digital Me Package loading ----------
@@ -542,7 +602,7 @@ function safeRead(p) {
 }
 
 function packageDirFromConfig() {
-  return readConfig().packageDir || DEFAULT_PACKAGE_DIR;
+  return readPublicConfig().packageDir || DEFAULT_PACKAGE_DIR;
 }
 
 ipcMain.handle("package:load", () => {
@@ -681,7 +741,7 @@ ipcMain.handle("life:markMindHooksDistilled", (_e, ids) => {
 
 ipcMain.handle("life:generateCognitionReport", async () => {
   const cfg = readConfig();
-  if (!cfg.apiKey) throw new Error("尚未配置 API Key，请在设置中填写。");
+  if (!cfg.apiKey) throw new Error("还没有连接智能引擎。请打开设置，填好密钥后再试。");
   const dir = packageDirFromConfig();
   const pkg = {
     persona: safeRead(path.join(dir, "persona.md")),
@@ -1413,20 +1473,28 @@ async function ensureExtensionConnected(cid) {
   const item = catalog.getById(cid);
   if (!item) return { id: cid, ok: false, message: "目录中无此项" };
   const existing = getCapabilityExtensions().find((e) => e.id === cid);
-  if (item.needsKey && !(existing && existing.env && Object.values(existing.env).some(Boolean))) {
+  const hasConfiguredKey =
+    existing &&
+    existing.envConfigured &&
+    Object.values(existing.envConfigured).some(Boolean);
+  if (item.needsKey && !hasConfiguredKey) {
     return { id: cid, name: item.name, ok: false, skipped: true, message: "需在「能力」页配置密钥后启用" };
   }
   try {
     let ext = existing;
     if (!ext) {
       const built = buildExtensionFromCatalog(item, { params: {}, env: {} });
-      const list = getCapabilityExtensions().filter((e) => e.id !== built.id);
-      list.push(built);
+      const publicBuilt = getConfigSecrets().sanitizeExtension(
+        { ...built, env: undefined, envKeyNames: (item.envKeys || []).map((ek) => ek.key) },
+        getConfigSecrets().secretStore
+      );
+      const list = getCapabilityExtensions().filter((e) => e.id !== publicBuilt.id);
+      list.push(publicBuilt);
       saveCapabilityExtensions(list);
-      ext = built;
+      ext = publicBuilt;
     }
     const em = await getExtensionManager();
-    await em.connectExtension(ext);
+    await em.connectExtension(getConfigSecrets().hydrateExtensionEnv(ext));
     return { id: cid, name: item.name, ok: true, connected: true };
   } catch (e) {
     return { id: cid, name: item.name, ok: false, message: e.message || String(e) };
@@ -1903,10 +1971,14 @@ ipcMain.handle("scenarios:prepare", async (_e, packId) => {
     }
     try {
       const built = buildExtensionFromCatalog(item, { params: {}, env: {} });
-      const list = getCapabilityExtensions().filter((e) => e.id !== built.id);
-      list.push(built);
+      const publicBuilt = getConfigSecrets().sanitizeExtension(
+        { ...built, env: undefined, envKeyNames: (item.envKeys || []).map((ek) => ek.key) },
+        getConfigSecrets().secretStore
+      );
+      const list = getCapabilityExtensions().filter((e) => e.id !== publicBuilt.id);
+      list.push(publicBuilt);
       saveCapabilityExtensions(list);
-      await em.connectExtension(built);
+      await em.connectExtension(getConfigSecrets().hydrateExtensionEnv(publicBuilt));
       results.push({ id: cid, name: item.name, ok: true, connected: true });
     } catch (err) {
       results.push({ id: cid, name: item.name, ok: false, error: err.message || String(err) });
@@ -2707,6 +2779,7 @@ ipcMain.handle("extensions:saveConfig", (_e, list) => {
         args: Array.isArray(ext.args) ? ext.args.map(String) : [],
         cwd: ext.cwd ? String(ext.cwd) : undefined,
         env: ext.env && typeof ext.env === "object" ? ext.env : undefined,
+        envKeyNames: Array.isArray(ext.envKeyNames) ? ext.envKeyNames.map(String) : undefined,
         note: ext.note ? String(ext.note) : undefined,
         params: ext.params && typeof ext.params === "object" ? ext.params : undefined,
       }))
@@ -2718,14 +2791,28 @@ ipcMain.handle("extensions:enable", async (_e, payload) => {
   const catalogId = payload?.catalogId || payload?.id;
   const item = catalog.getById(catalogId);
   if (!item) throw new Error("精选目录中不存在：" + catalogId);
+  const envInput = payload?.env && typeof payload.env === "object" ? payload.env : {};
   const built = buildExtensionFromCatalog(item, {
     params: payload?.params || {},
-    env: payload?.env || {},
+    env: envInput,
   });
-  const list = getCapabilityExtensions().filter((e) => e.id !== built.id);
-  list.push(built);
+  const svc = getConfigSecrets();
+  if (Object.keys(envInput).length) {
+    svc.ingestExtensionSecrets(built.id, envInput);
+  }
+  const envKeyNames = (item.envKeys || []).map((ek) => ek.key).filter(Boolean);
+  const publicBuilt = svc.sanitizeExtension(
+    {
+      ...built,
+      env: undefined,
+      envKeyNames,
+    },
+    svc.secretStore
+  );
+  const list = getCapabilityExtensions().filter((e) => e.id !== publicBuilt.id);
+  list.push(publicBuilt);
   saveCapabilityExtensions(list);
-  return built;
+  return publicBuilt;
 });
 
 ipcMain.handle("extensions:disable", async (_e, id) => {
@@ -2778,8 +2865,9 @@ ipcMain.handle("extensions:connect", async (_e, id) => {
       }
     }
   }
+  const hydrated = getConfigSecrets().hydrateExtensionEnv(ext);
   const em = await getExtensionManager();
-  return em.connectExtension(ext);
+  return em.connectExtension(hydrated);
 });
 
 ipcMain.handle("extensions:disconnect", async (_e, id) => {

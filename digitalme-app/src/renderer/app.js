@@ -136,7 +136,7 @@ function renderPackageStatus() {
 async function renderModelStatus() {
   const cfg = await window.digitalMe.getConfig();
   const el = $("model-status");
-  if (cfg.apiKey) {
+  if (cfg.apiKeyConfigured) {
     el.innerHTML = `智能引擎已连接<br/><span class="hint-line">可在设置中更换</span>`;
   } else {
     el.textContent = "尚未连接（打开设置完成连接）";
@@ -852,6 +852,9 @@ function bindEvents() {
   $("btn-settings").addEventListener("click", openSettings);
   $("btn-close").addEventListener("click", () => $("settings-modal").classList.add("hidden"));
   $("btn-save").addEventListener("click", saveSettings);
+  if ($("btn-clear-apikey")) {
+    $("btn-clear-apikey").addEventListener("click", clearApiKeySettings);
+  }
   $("btn-cli-save")?.addEventListener("click", () => {
     saveCliExecutorSettings().catch((e) => alert(e.message || String(e)));
   });
@@ -2120,9 +2123,22 @@ function renderReview(res) {
 async function openSettings() {
   const cfg = await window.digitalMe.getConfig();
   $("cfg-baseurl").value = cfg.baseURL || "";
-  $("cfg-apikey").value = cfg.apiKey || "";
+  $("cfg-apikey").value = "";
   $("cfg-model").value = cfg.model || "";
   $("cfg-pkgdir").value = cfg.packageDir || pkg.dir || "";
+  const statusEl = $("cfg-apikey-status");
+  if (statusEl) {
+    statusEl.textContent = cfg.apiKeyConfigured
+      ? "已安全保存（输入框保持空白；留空保存将保留现有密钥）"
+      : "尚未配置密钥";
+  }
+  const warnEl = $("cfg-secret-warning");
+  if (warnEl) {
+    warnEl.textContent =
+      cfg.secretStoreWarning && cfg.secretStoreWarning.message
+        ? cfg.secretStoreWarning.message
+        : "";
+  }
   try {
     const cli = await window.digitalMe.l0GetCliAgentConfig?.();
     if (cli) {
@@ -2155,11 +2171,33 @@ async function saveSettings() {
     model: $("cfg-model").value.trim(),
     packageDir: $("cfg-pkgdir").value.trim(),
   };
-  await window.digitalMe.setConfig(cfg);
+  try {
+    await window.digitalMe.setConfig(cfg);
+  } catch (e) {
+    alert("保存失败：" + (e.message || String(e)));
+    return;
+  }
+  $("cfg-apikey").value = "";
   $("settings-modal").classList.add("hidden");
   pkg = await window.digitalMe.loadPackage();
   renderPackageStatus();
   await renderModelStatus();
+}
+
+async function clearApiKeySettings() {
+  if (!window.digitalMe.clearApiKey) return;
+  const ok = confirm("确定清除已保存的连接密钥？清除后需要重新填写才能调用智能引擎。");
+  if (!ok) return;
+  try {
+    await window.digitalMe.clearApiKey();
+    $("cfg-apikey").value = "";
+    const statusEl = $("cfg-apikey-status");
+    if (statusEl) statusEl.textContent = "尚未配置密钥";
+    await renderModelStatus();
+    alert("已清除连接密钥。");
+  } catch (e) {
+    alert("清除失败：" + (e.message || String(e)));
+  }
 }
 
 // ---------- Feedback ----------

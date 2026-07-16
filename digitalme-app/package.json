@@ -6,7 +6,8 @@
   "type": "commonjs",
   "scripts": {
     "start": "electron .",
-    "dev": "electron . --dev"
+    "dev": "electron . --dev",
+    "test:p1-01": "node scripts/test-p1-01-secret-store.cjs && node scripts/test-p1-01-secret-leak-scan.cjs"
   },
   "keywords": [
     "digital-me",

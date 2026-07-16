@@ -902,8 +902,12 @@
           <input id="cfg-baseurl" type="text" placeholder="例如 https://api.deepseek.com/v1" />
         </label>
         <label>连接密钥
-          <input id="cfg-apikey" type="password" placeholder="只保存在你这台电脑上" />
+          <input id="cfg-apikey" type="password" placeholder="留空表示保留已保存的密钥；输入新值则替换" autocomplete="off" />
         </label>
+        <p id="cfg-apikey-status" class="hint" aria-live="polite"></p>
+        <div class="modal-actions" style="margin-top:0;justify-content:flex-start">
+          <button type="button" id="btn-clear-apikey" class="btn-ghost">清除密钥</button>
+        </div>
         <label>引擎名称
           <input id="cfg-model" type="text" placeholder="由服务方提供，可在说明中查看" />
         </label>
@@ -936,7 +940,8 @@
           <button id="btn-save">保存</button>
           <button id="btn-close" class="btn-ghost">取消</button>
         </div>
-        <p class="hint">密钥只存在本机。普通使用填好地址、密钥与引擎名称即可。</p>
+        <p class="hint">密钥经本机安全存储保护，界面不会回显。普通使用填好地址与引擎名称即可；首次需填写密钥。</p>
+        <p id="cfg-secret-warning" class="hint" style="color:#8a3a12"></p>
       </div>
     </div>
 

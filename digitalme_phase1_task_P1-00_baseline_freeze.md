@@ -1,6 +1,6 @@
 # P1-00 任务包：工程与 Package 基线冻结
 
-状态：statically_verified（待 Owner 确认 Git 范围与快照后，方可首次提交）  
+状态：accepted（Owner 已确认范围；基线提交 `151d798`；Codex 已复核）
 阶段：第一阶段 / WP0  
 规格依据：`digitalme_phase1_subject_upgrade_plan_v0.1.md` §3 WP0、§7  
 审计依据：`digitalme_architecture_audit_20260716.md` F-04、F-05、F-08、F-12、F-13
@@ -136,8 +136,7 @@ Owner 只需确认：
 - 自动测试：`node scripts/p1-00-verify-all.mjs` → 全部 6 项 `ok: true`（见 `build/reports/p1-00-verify-all.json`）
 - Package 前后 hash：逐文件 SHA-256 **完全一致**（56 文件 / 2,077,665 字节；清单 SHA-256 `3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a`）
 - 快照位置：`C:\Users\46554\DigitalMe-baselines\digital-me-package-v0.1-2026-07-16T02-39-48-124Z`（工作区外，不在 Git 跟踪范围）
-- Git 是否初始化：是（空仓库，无 commit）；初始化前曾移除无效空 `.git` 云盘重解析点占位（非有效仓库）
-- 是否已提交：**否**（等待 Owner 确认拟纳入范围）
-- 未验证事项：Owner 对 Git 清单与快照位置的人工确认；未推送远程；未关闭 MCP/CLI（属后续安全任务，且本任务禁止改 App 行为）
+- Git 是否初始化：是；初始化前曾移除无效空 `.git` 云盘重解析点占位（非有效仓库）
+- 是否已提交：**是**，本地基线提交 `151d798`（85 个文件）；未设置 remote、未推送
+- 未验证事项：未做远程备份；未关闭 MCP/CLI（属后续安全任务，且本任务禁止改 App 行为）
 - 建议下一任务：`P1-01 SecretStore 与敏感配置迁移`。
-

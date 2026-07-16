@@ -371,6 +371,8 @@ flowchart LR
 
 首个标准任务包已建立：`digitalme_phase1_task_P1-00_baseline_freeze.md`。后续 P1-01～P1-03 均须沿用其“目标、范围、禁止事项、迁移、验证、人工验收、回滚、证据”结构。
 
+执行状态：P1-00 已接受并形成基线提交 `151d798`；P1-01 已建立任务包 `digitalme_phase1_task_P1-01_secret_store.md`，状态 `ready`。
+
 ---
 
 ## 8. 状态维护
