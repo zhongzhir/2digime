@@ -1,0 +1,721 @@
+{
+  "task": "P1-00",
+  "generatedAtUtc": "2026-07-16T02:42:04.709Z",
+  "redacted": true,
+  "packageRootHint": "digital-me-package/",
+  "packageDigest": {
+    "fileCount": 56,
+    "totalBytes": 2077665,
+    "manifestSha256": "3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a"
+  },
+  "manifest": {
+    "packageVersion": "0.1",
+    "updatedAt": "2026-07-08T00:00:00Z",
+    "packageType": "private",
+    "interopEnabled": {
+      "_note": "对齐业界互操作协议栈（架构就绪，MVP 未启用运行时）。见 digitalme_context.md 4.5。",
+      "collaboration": false,
+      "tools": false,
+      "payments": false,
+      "identity": false
+    }
+  },
+  "parseSummary": {
+    "jsonFiles": {
+      "ok": 37,
+      "fail": 0
+    },
+    "jsonlFiles": {
+      "ok": 8,
+      "fail": 0
+    },
+    "jsonlRecords": 2939,
+    "jsonlLineErrors": 0,
+    "otherFiles": 11
+  },
+  "sourceAnalysis": {
+    "sourceIndexCount": 79,
+    "hashCoverage": {
+      "filled": 0,
+      "empty": 79,
+      "coverageRatio": 0
+    },
+    "danglingSourceRefs": {
+      "count": 94,
+      "samples": [
+        {
+          "sourceId": "consolidated",
+          "fromFile": "_raw/corruption-backup-2026-07-09/decision-frameworks.json"
+        },
+        {
+          "sourceId": "consolidated",
+          "fromFile": "_raw/corruption-backup-2026-07-09/decision-frameworks.json"
+        },
+        {
+          "sourceId": "consolidated",
+          "fromFile": "_raw/corruption-backup-2026-07-09/decision-frameworks.json"
+        },
+        {
+          "sourceId": "consolidated",
+          "fromFile": "_raw/corruption-backup-2026-07-09/decision-frameworks.json"
+        },
+        {
+          "sourceId": "consolidated",
+          "fromFile": "_raw/corruption-backup-2026-07-09/decision-frameworks.json"
+        },
+        {
+          "sourceId": "consolidated",
+          "fromFile": "_raw/corruption-backup-2026-07-09/decision-frameworks.json"
+        },
+        {
+          "sourceId": "consolidated",
+          "fromFile": "_raw/corruption-backup-2026-07-09/decision-frameworks.json"
+        },
+        {
+          "sourceId": "consolidated",
+          "fromFile": "_raw/corruption-backup-2026-07-09/decision-frameworks.json"
+        },
+        {
+          "sourceId": "consolidated",
+          "fromFile": "_raw/corruption-backup-2026-07-09/decision-frameworks.json"
+        },
+        {
+          "sourceId": "consolidated",
+          "fromFile": "_raw/corruption-backup-2026-07-09/decision-frameworks.json"
+        },
+        {
+          "sourceId": "consolidated",
+          "fromFile": "_raw/corruption-backup-2026-07-09/decision-frameworks.json"
+        },
+        {
+          "sourceId": "consolidated",
+          "fromFile": "_raw/corruption-backup-2026-07-09/decision-frameworks.json"
+        },
+        {
+          "sourceId": "consolidated",
+          "fromFile": "_raw/corruption-backup-2026-07-09/decision-frameworks.json"
+        },
+        {
+          "sourceId": "consolidated",
+          "fromFile": "_raw/corruption-backup-2026-07-09/decision-frameworks.json"
+        },
+        {
+          "sourceId": "consolidated",
+          "fromFile": "_raw/corruption-backup-2026-07-09/decision-frameworks.json"
+        },
+        {
+          "sourceId": "consolidated",
+          "fromFile": "_raw/corruption-backup-2026-07-09/decision-frameworks.json"
+        },
+        {
+          "sourceId": "consolidated",
+          "fromFile": "_raw/corruption-backup-2026-07-09/memory/long-term-memory.jsonl"
+        },
+        {
+          "sourceId": "consolidated",
+          "fromFile": "_raw/corruption-backup-2026-07-09/memory/long-term-memory.jsonl"
+        },
+        {
+          "sourceId": "consolidated",
+          "fromFile": "_raw/corruption-backup-2026-07-09/memory/long-term-memory.jsonl"
+        },
+        {
+          "sourceId": "consolidated",
+          "fromFile": "_raw/corruption-backup-2026-07-09/memory/long-term-memory.jsonl"
+        }
+      ]
+    },
+    "unresolvableLocations": {
+      "count": 7,
+      "samples": [
+        {
+          "sourceId": "src_book_zhengzhijingji",
+          "locationHint": "…/books/（本人著作，仅本地持有）"
+        },
+        {
+          "sourceId": "src__19952_pdf_mrg4yfdm",
+          "locationHint": "…/工作相关/张元林_社会愿望(19952).pdf"
+        },
+        {
+          "sourceId": "src__docx_mrg6nfbz",
+          "locationHint": "…/北机院/行业专家简表-张元林.docx"
+        },
+        {
+          "sourceId": "src_life__docx_mrg8qh6x",
+          "locationHint": "…/北机院/行业专家简表-张元林.docx"
+        },
+        {
+          "sourceId": "src_life_Dasym_pdf_mrhpbqit",
+          "locationHint": "…/孔蓉/Dasym合作说明.pdf"
+        },
+        {
+          "sourceId": "src_00_pdf_mrhpdtt4",
+          "locationHint": "…/清链/00 清链矿场.pdf"
+        },
+        {
+          "sourceId": "src_life__docx_mripuxsu",
+          "locationHint": "…/华闻研究院/开结式议程.docx"
+        }
+      ]
+    },
+    "unusedSourceIds": {
+      "count": 2,
+      "samples": [
+        "src_art_mrc0ii43_771",
+        "src_art_mrc115hf_18"
+      ]
+    },
+    "referencedSourceIds": 79
+  },
+  "layerDistribution": {
+    "status": {
+      "confirmed": 41,
+      "rejected": 17,
+      "unknown": 21,
+      "active": 1
+    },
+    "confidence": {
+      "high": 886,
+      "medium": 137,
+      "low": 56
+    },
+    "kind": {
+      "long_term": 999,
+      "role": 33,
+      "org_link": 9,
+      "activity": 17,
+      "domain": 18,
+      "outcome": 1,
+      "capability": 2,
+      "background": 1,
+      "profession": 1
+    },
+    "layerHints": {
+      "claim": 58,
+      "identityclaims": 1
+    },
+    "sourceRefsArrays": 1313,
+    "sourceRefsEntries": 1312,
+    "jsonlRecordCounts": {
+      "memory/long-term-memory.jsonl": 88,
+      "memory/raw-memory.jsonl": 911,
+      "life/events.jsonl": 22,
+      "life/inferences.jsonl": 58
+    }
+  },
+  "trust": {
+    "signatureFilePresent": true,
+    "signatureUsable": false,
+    "signatureMode": "placeholder"
+  },
+  "files": [
+    {
+      "relativePath": "_raw/corruption-backup-2026-07-09/decision-frameworks-raw.json",
+      "size": 228878,
+      "sha256": "2970f82d60fb261940f3385a384e555b77d0c0bf16b456547f156d24c1b725ea",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "_raw/corruption-backup-2026-07-09/decision-frameworks.json",
+      "size": 20407,
+      "sha256": "74450ba72bf3f6626a22305dc433b838d41a6d7292085317d26e01a09c727e9c",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "_raw/corruption-backup-2026-07-09/memory/long-term-memory.jsonl",
+      "size": 12211,
+      "sha256": "1b20f9d97d0c4f11f9906fe5453871e4a75729fef496f579d13e763aac8e75aa",
+      "parse": {
+        "ok": true,
+        "records": 30,
+        "emptyLines": 1,
+        "errorCount": 0
+      }
+    },
+    {
+      "relativePath": "_raw/corruption-backup-2026-07-09/memory/raw-memory.jsonl",
+      "size": 294988,
+      "sha256": "77a4b1d51c7f8f7662e7c8c82f6f1f243ba079dbec6d52bb37c874fb770a2450",
+      "parse": {
+        "ok": true,
+        "records": 914,
+        "emptyLines": 1,
+        "errorCount": 0
+      }
+    },
+    {
+      "relativePath": "_raw/decision-frameworks.json",
+      "size": 228878,
+      "sha256": "2970f82d60fb261940f3385a384e555b77d0c0bf16b456547f156d24c1b725ea",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "_raw/long-term-memory.jsonl",
+      "size": 294988,
+      "sha256": "77a4b1d51c7f8f7662e7c8c82f6f1f243ba079dbec6d52bb37c874fb770a2450",
+      "parse": {
+        "ok": true,
+        "records": 914,
+        "emptyLines": 1,
+        "errorCount": 0
+      }
+    },
+    {
+      "relativePath": "_raw/persona.md",
+      "size": 95508,
+      "sha256": "2fbe650975dd1cc945a9c46783d95d70d630e180113ae019dd6885aa1babaa5d",
+      "parse": null
+    },
+    {
+      "relativePath": "_raw/style-guide.md",
+      "size": 93476,
+      "sha256": "8eb708ae6c66aa7f065811d2f3dbcaf4ce126795622094bac927e337665503e4",
+      "parse": null
+    },
+    {
+      "relativePath": "commerce/mandates/cart-mandate.sample.json",
+      "size": 1950,
+      "sha256": "cd5894f7ad801c89cee02ddbba3ee72adf23636dd1ce2536010a0297779291f3",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "commerce/mandates/intent-mandate.sample.json",
+      "size": 1740,
+      "sha256": "ec86c1d58ef3762929f51999f908e97a31399e1bc15c02bad8b48bda9af40b86",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "commerce/mandates/payment-mandate.sample.json",
+      "size": 1740,
+      "sha256": "9b32e910b94e2152f61aa40d1ddee5d9ffd749c61a8357f24518785a1b37b6a6",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "commerce/pricing-policy.json",
+      "size": 889,
+      "sha256": "f6f712d88a0bd10c6051aa2ef301311163e9ff12338f0e7bed776c26b1f66747",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "commerce/settlement-records.jsonl",
+      "size": 594,
+      "sha256": "fb86836a44edf7d7b0f204cd6dc15ed7b03ce23afa38d5cf0bac54f0960bd255",
+      "parse": {
+        "ok": true,
+        "records": 2,
+        "emptyLines": 1,
+        "errorCount": 0
+      }
+    },
+    {
+      "relativePath": "contracts/agent-card.json",
+      "size": 3710,
+      "sha256": "391f47ef73d747839815731cb1b9ec07139d735e97aac3d6b71b9ec176bcc13a",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "contracts/interaction-contract-schema.json",
+      "size": 4897,
+      "sha256": "e85b1316c98d3e040c366e1e5ca9f1da46313c7d2a50f05521ed575c3b7cffe7",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "contracts/interaction-contract.sample.json",
+      "size": 1990,
+      "sha256": "3c111e9dfe6e8d59583ccaa298935228b76ad0e1a239ac5c2af623e816e87386",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "contracts/README.md",
+      "size": 2828,
+      "sha256": "cdfd265c7fefb05a42deffd559f302f1e3e448a88605d87712a6d9d894ad0198",
+      "parse": null
+    },
+    {
+      "relativePath": "decision-frameworks-raw.json",
+      "size": 218632,
+      "sha256": "a0fc01bb0f9fa443aef6569d99ceee79e5660c245c34ca800207b3254188167d",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "decision-frameworks.json",
+      "size": 32474,
+      "sha256": "757e9e9e24ac243f57d19f5676d0db1d073f75761a748f935be9f33da6bed336",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "definitions/affective-profile.json",
+      "size": 305,
+      "sha256": "f6fd61992b25219ab7708b0c73a30b2a2aaca7839cb0d5bf2a88ebd2bccd2ce1",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "definitions/behavior-profile.json",
+      "size": 334,
+      "sha256": "8a89280ae7444a11aa80363e73604756472b0dfa02c0994b4592df328ebd3c14",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "definitions/embodied-profile.json",
+      "size": 484,
+      "sha256": "7c056426a0f08a1a996e3bd5778ca1cef59ba9c77c9ce5215406235b00660d72",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "definitions/physiological-profile.json",
+      "size": 319,
+      "sha256": "f137494c794c9a9454ab7b2ae2fc1d58b31ed9690a90a48c4c5f24e90b954903",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "definitions/README.md",
+      "size": 1481,
+      "sha256": "81b4a4a2cd03d764e406c1103a1719cb823b38a1c236028b678a802ebf38bc59",
+      "parse": null
+    },
+    {
+      "relativePath": "definitions/relational-profile.json",
+      "size": 308,
+      "sha256": "9a348ccddb5835c56295570407e55d2e66c305fa828896894e9236b746646d7b",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "identity-facts.md",
+      "size": 5371,
+      "sha256": "a4d1ca79ee6d44882f33cca14cf5f14d860707dcbfba185b1f64e6d05c48fe05",
+      "parse": null
+    },
+    {
+      "relativePath": "identity.json",
+      "size": 7033,
+      "sha256": "0ec61996ea8d10b9fb439ea78245e32b2385fcc48ab559d9fd04bb24d2cb4e74",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "life/capability_signals.json",
+      "size": 3163,
+      "sha256": "bf515129e1494ad9c87e0e1555717d10a2076780e30155ecfbfbec6210526e49",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "life/domains.json",
+      "size": 23615,
+      "sha256": "d3172ae63b21973a1773824fedd4d53fd06a968042ebd8d29a5e01e7ef64eaa1",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "life/events.jsonl",
+      "size": 7655,
+      "sha256": "13c1b75d16254bcdfd28a700b0de7f8e398292714819c5f5de498dc2b24952b6",
+      "parse": {
+        "ok": true,
+        "records": 22,
+        "emptyLines": 1,
+        "errorCount": 0
+      }
+    },
+    {
+      "relativePath": "life/inferences.jsonl",
+      "size": 21062,
+      "sha256": "dd6a911b926ed819aecdbf032452cc0d1355955f4e1b13a1683f6a5f4602a690",
+      "parse": {
+        "ok": true,
+        "records": 58,
+        "emptyLines": 1,
+        "errorCount": 0
+      }
+    },
+    {
+      "relativePath": "life/interests.json",
+      "size": 100,
+      "sha256": "ea6a55db87a47e689f50fd6b38b8e45d013189d3c536292abba850ba72373718",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "life/mind_hooks.json",
+      "size": 15887,
+      "sha256": "fea9451a5df6ec8f50987ae2843563b8961a3cf5a95dc38d4017e732bab20a68",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "life/org_touchpoints.json",
+      "size": 11482,
+      "sha256": "073608cad4248ff9599b33550bb75637358caa3371201f3d99a7da77904f3bc3",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "life/outcomes.json",
+      "size": 1152,
+      "sha256": "2b1198383ca54130af212bdb1f9ad03edee823f2145b959f7f10eb62f8c92845",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "life/people.json",
+      "size": 5560,
+      "sha256": "687a1fa055fccc10b623bc2de97a224aacb5fcc5ea4957d5b135fc15981c3f1a",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "life/README.md",
+      "size": 237,
+      "sha256": "86b9647c4808700f1743d346a7bd5056717474b2bcccd65e4ba1c00ce61ddf8a",
+      "parse": null
+    },
+    {
+      "relativePath": "life/relations.json",
+      "size": 5938,
+      "sha256": "eb473885a4d38e237166ced1c83005c08d9834ae3458d47c8df2e795da1d4c5d",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "life/roles.json",
+      "size": 10412,
+      "sha256": "c4723f75a007f9916d119206bae520770909f4b58735e559ddf94ed115f0f05f",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "manifest.json",
+      "size": 3332,
+      "sha256": "9f5c0432a4ce84728f11604ce2a4b0d8f97dad5ba79748291aac71cb72db39fb",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "memory/long-term-memory.jsonl",
+      "size": 31041,
+      "sha256": "cc14736d66d6eda939defdbb8f9b65fb4656cce2b6bde97ed6966613dce1dcb0",
+      "parse": {
+        "ok": true,
+        "records": 88,
+        "emptyLines": 1,
+        "errorCount": 0
+      }
+    },
+    {
+      "relativePath": "memory/memory-index.json",
+      "size": 491,
+      "sha256": "277837fe2fbb8a36a8dc388a4a493c5b1b6cb7b675d4eb226fdd1e6e5efd54f0",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "memory/raw-memory.jsonl",
+      "size": 293800,
+      "sha256": "6d59646bfabbeff0707def531b939e134e3904387be90afb1dc3a077fca51977",
+      "parse": {
+        "ok": true,
+        "records": 911,
+        "emptyLines": 1,
+        "errorCount": 0
+      }
+    },
+    {
+      "relativePath": "persona.md",
+      "size": 21394,
+      "sha256": "25c65609b56be25345314e5ce7651b88225b28a15615aa042d58cb0ed5e8a63f",
+      "parse": null
+    },
+    {
+      "relativePath": "policies/authorization-policy.json",
+      "size": 105,
+      "sha256": "aaee0daa3f2300cb3e82213eeeabcaced2b4019fce2327b19615c2bf8c9552ba",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "policies/boundaries.json",
+      "size": 2375,
+      "sha256": "b40ec18ba32c0e81348918d185d801a1340d29c09a967209305107c2a8e9752a",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "policies/usage-policy.json",
+      "size": 448,
+      "sha256": "74fa00e0985ea3b0bbca36e3f0e8e57e671e6450e168a7127d37488f0d491ca4",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "preferences.json",
+      "size": 1411,
+      "sha256": "6ed4928b0f2f064fa1c087f6ca3dd49d6868deb1cb2fa0b86d7938aa49f69cab",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "prompts/system-prompt.md",
+      "size": 2104,
+      "sha256": "8c6352097c598e99ab61dbf75cbdfb578f3f853bbdffbc017090753f7e7c8847",
+      "parse": null
+    },
+    {
+      "relativePath": "README.md",
+      "size": 2327,
+      "sha256": "e6d70c3f58f20ec67e72c0704aa40b4e86bae1ff841d37dc8e01539357dcb443",
+      "parse": null
+    },
+    {
+      "relativePath": "skills/political-economy-analysis.md",
+      "size": 1553,
+      "sha256": "a1b561ab4d9ccb502a5cf8e1bd92375d39558d3b8986fd214cc4e08fa0dc18ff",
+      "parse": null
+    },
+    {
+      "relativePath": "skills/skill-index.json",
+      "size": 443,
+      "sha256": "ca5b5edcbfda1bd061a7fb96a981ac1f7f05736a29e757085b1ac78bb518a3aa",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "sources/source-index.json",
+      "size": 41722,
+      "sha256": "a0921e972caededfafa59a24c9f6888c6c319db56da258e0fbcd96d1ae63ec0d",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "style-guide.md",
+      "size": 11203,
+      "sha256": "fe8d71adf1d13f348c8759d633fb7fd1718509cccc248680ebd33479a14da7be",
+      "parse": null
+    },
+    {
+      "relativePath": "trust/chain-anchor.json",
+      "size": 674,
+      "sha256": "07a4e27be96106ffb4d8f8b8f6638a9cf224f1126a392fc5943100e05b58805c",
+      "parse": {
+        "ok": true
+      }
+    },
+    {
+      "relativePath": "trust/signature.json",
+      "size": 566,
+      "sha256": "9ae04af624323cf0c189a97dbe72d5397b7e1b2fae325a5c61db62cfa31d269c",
+      "parse": {
+        "ok": true
+      }
+    }
+  ],
+  "tree": [
+    "_raw/corruption-backup-2026-07-09/decision-frameworks-raw.json",
+    "_raw/corruption-backup-2026-07-09/decision-frameworks.json",
+    "_raw/corruption-backup-2026-07-09/memory/long-term-memory.jsonl",
+    "_raw/corruption-backup-2026-07-09/memory/raw-memory.jsonl",
+    "_raw/decision-frameworks.json",
+    "_raw/long-term-memory.jsonl",
+    "_raw/persona.md",
+    "_raw/style-guide.md",
+    "commerce/mandates/cart-mandate.sample.json",
+    "commerce/mandates/intent-mandate.sample.json",
+    "commerce/mandates/payment-mandate.sample.json",
+    "commerce/pricing-policy.json",
+    "commerce/settlement-records.jsonl",
+    "contracts/agent-card.json",
+    "contracts/interaction-contract-schema.json",
+    "contracts/interaction-contract.sample.json",
+    "contracts/README.md",
+    "decision-frameworks-raw.json",
+    "decision-frameworks.json",
+    "definitions/affective-profile.json",
+    "definitions/behavior-profile.json",
+    "definitions/embodied-profile.json",
+    "definitions/physiological-profile.json",
+    "definitions/README.md",
+    "definitions/relational-profile.json",
+    "identity-facts.md",
+    "identity.json",
+    "life/capability_signals.json",
+    "life/domains.json",
+    "life/events.jsonl",
+    "life/inferences.jsonl",
+    "life/interests.json",
+    "life/mind_hooks.json",
+    "life/org_touchpoints.json",
+    "life/outcomes.json",
+    "life/people.json",
+    "life/README.md",
+    "life/relations.json",
+    "life/roles.json",
+    "manifest.json",
+    "memory/long-term-memory.jsonl",
+    "memory/memory-index.json",
+    "memory/raw-memory.jsonl",
+    "persona.md",
+    "policies/authorization-policy.json",
+    "policies/boundaries.json",
+    "policies/usage-policy.json",
+    "preferences.json",
+    "prompts/system-prompt.md",
+    "README.md",
+    "skills/political-economy-analysis.md",
+    "skills/skill-index.json",
+    "sources/source-index.json",
+    "style-guide.md",
+    "trust/chain-anchor.json",
+    "trust/signature.json"
+  ]
+}

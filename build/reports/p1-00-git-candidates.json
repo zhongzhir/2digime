@@ -1,0 +1,255 @@
+{
+  "task": "P1-00",
+  "generatedAtUtc": "2026-07-16T02:40:21.677Z",
+  "candidateFileCount": 142,
+  "topLevel": [
+    {
+      "name": ".cursor",
+      "fileCount": 1,
+      "samples": [
+        ".cursor/rules/product-development-process.mdc"
+      ],
+      "sensitivityNote": "低-中：编辑器规则；可按需纳入"
+    },
+    {
+      "name": ".gitignore",
+      "fileCount": 1,
+      "samples": [
+        ".gitignore"
+      ],
+      "sensitivityNote": "待 Owner 审阅"
+    },
+    {
+      "name": "\"\\346\\225\\260\\345\\255\\227\\344\\271\\213\\346\\210\\221-\\347\\263\\273\\347\\273\\237\\346\\236\\204\\346\\203\\263.docx\"",
+      "fileCount": 1,
+      "samples": [
+        "\"\\346\\225\\260\\345\\255\\227\\344\\271\\213\\346\\210\\221-\\347\\263\\273\\347\\273\\237\\346\\236\\204\\346\\203\\263.docx\""
+      ],
+      "sensitivityNote": "待 Owner 审阅"
+    },
+    {
+      "name": "aivestor-to-digital-me-capability-abstraction-draft.md",
+      "fileCount": 1,
+      "samples": [
+        "aivestor-to-digital-me-capability-abstraction-draft.md"
+      ],
+      "sensitivityNote": "待 Owner 审阅"
+    },
+    {
+      "name": "build",
+      "fileCount": 8,
+      "samples": [
+        "build/reports/p1-00-git-candidates.json",
+        "build/reports/p1-00-git-candidates.md",
+        "build/reports/p1-00-package-baseline-run2.json",
+        "build/reports/p1-00-package-baseline-run2.summary.md",
+        "build/reports/p1-00-package-baseline.json"
+      ],
+      "sensitivityNote": "高/可变：构建与报告；多数应被忽略，仅脱敏报告可考虑"
+    },
+    {
+      "name": "digital-me-package",
+      "fileCount": 56,
+      "samples": [
+        "digital-me-package/README.md",
+        "digital-me-package/_raw/corruption-backup-2026-07-09/decision-frameworks-raw.json",
+        "digital-me-package/_raw/corruption-backup-2026-07-09/decision-frameworks.json",
+        "digital-me-package/_raw/corruption-backup-2026-07-09/memory/long-term-memory.jsonl",
+        "digital-me-package/_raw/corruption-backup-2026-07-09/memory/raw-memory.jsonl"
+      ],
+      "sensitivityNote": "高：含本人人格/记忆/人生轨迹蒸馏结果；是否入库须 Owner 确认"
+    },
+    {
+      "name": "digital-me-package-v0.1-data-structure-draft.md",
+      "fileCount": 1,
+      "samples": [
+        "digital-me-package-v0.1-data-structure-draft.md"
+      ],
+      "sensitivityNote": "待 Owner 审阅"
+    },
+    {
+      "name": "digital-me-project-positioning-draft.md",
+      "fileCount": 1,
+      "samples": [
+        "digital-me-project-positioning-draft.md"
+      ],
+      "sensitivityNote": "待 Owner 审阅"
+    },
+    {
+      "name": "digital-me-user-sovereignty-principles-draft.md",
+      "fileCount": 1,
+      "samples": [
+        "digital-me-user-sovereignty-principles-draft.md"
+      ],
+      "sensitivityNote": "待 Owner 审阅"
+    },
+    {
+      "name": "digitalme_architecture_audit_20260716.md",
+      "fileCount": 1,
+      "samples": [
+        "digitalme_architecture_audit_20260716.md"
+      ],
+      "sensitivityNote": "待 Owner 审阅"
+    },
+    {
+      "name": "digitalme_architecture_edge_sovereign_v0.1.md",
+      "fileCount": 1,
+      "samples": [
+        "digitalme_architecture_edge_sovereign_v0.1.md"
+      ],
+      "sensitivityNote": "待 Owner 审阅"
+    },
+    {
+      "name": "digitalme_capability_status_v0.1.md",
+      "fileCount": 1,
+      "samples": [
+        "digitalme_capability_status_v0.1.md"
+      ],
+      "sensitivityNote": "待 Owner 审阅"
+    },
+    {
+      "name": "digitalme_context.md",
+      "fileCount": 1,
+      "samples": [
+        "digitalme_context.md"
+      ],
+      "sensitivityNote": "待 Owner 审阅"
+    },
+    {
+      "name": "digitalme_data_sovereignty_principle_20260711.md",
+      "fileCount": 1,
+      "samples": [
+        "digitalme_data_sovereignty_principle_20260711.md"
+      ],
+      "sensitivityNote": "待 Owner 审阅"
+    },
+    {
+      "name": "digitalme_inbox_access_plan_v0.1.md",
+      "fileCount": 1,
+      "samples": [
+        "digitalme_inbox_access_plan_v0.1.md"
+      ],
+      "sensitivityNote": "待 Owner 审阅"
+    },
+    {
+      "name": "digitalme_intake_questionnaire.md",
+      "fileCount": 1,
+      "samples": [
+        "digitalme_intake_questionnaire.md"
+      ],
+      "sensitivityNote": "待 Owner 审阅"
+    },
+    {
+      "name": "digitalme_life_graph_v0.1.md",
+      "fileCount": 1,
+      "samples": [
+        "digitalme_life_graph_v0.1.md"
+      ],
+      "sensitivityNote": "待 Owner 审阅"
+    },
+    {
+      "name": "digitalme_log.md",
+      "fileCount": 1,
+      "samples": [
+        "digitalme_log.md"
+      ],
+      "sensitivityNote": "待 Owner 审阅"
+    },
+    {
+      "name": "digitalme_material_guidance_v0.1.md",
+      "fileCount": 1,
+      "samples": [
+        "digitalme_material_guidance_v0.1.md"
+      ],
+      "sensitivityNote": "待 Owner 审阅"
+    },
+    {
+      "name": "digitalme_mvp_scope_v0.1.md",
+      "fileCount": 1,
+      "samples": [
+        "digitalme_mvp_scope_v0.1.md"
+      ],
+      "sensitivityNote": "待 Owner 审阅"
+    },
+    {
+      "name": "digitalme_narrative_ai_era_autonomy.md",
+      "fileCount": 1,
+      "samples": [
+        "digitalme_narrative_ai_era_autonomy.md"
+      ],
+      "sensitivityNote": "待 Owner 审阅"
+    },
+    {
+      "name": "digitalme_p1_00_git_candidates.md",
+      "fileCount": 1,
+      "samples": [
+        "digitalme_p1_00_git_candidates.md"
+      ],
+      "sensitivityNote": "待 Owner 审阅"
+    },
+    {
+      "name": "digitalme_person_definition_v0.1.md",
+      "fileCount": 1,
+      "samples": [
+        "digitalme_person_definition_v0.1.md"
+      ],
+      "sensitivityNote": "待 Owner 审阅"
+    },
+    {
+      "name": "digitalme_phase1_subject_upgrade_plan_v0.1.md",
+      "fileCount": 1,
+      "samples": [
+        "digitalme_phase1_subject_upgrade_plan_v0.1.md"
+      ],
+      "sensitivityNote": "待 Owner 审阅"
+    },
+    {
+      "name": "digitalme_phase1_task_P1-00_baseline_freeze.md",
+      "fileCount": 1,
+      "samples": [
+        "digitalme_phase1_task_P1-00_baseline_freeze.md"
+      ],
+      "sensitivityNote": "待 Owner 审阅"
+    },
+    {
+      "name": "digitalme_product_spec_v0.2.md",
+      "fileCount": 1,
+      "samples": [
+        "digitalme_product_spec_v0.2.md"
+      ],
+      "sensitivityNote": "待 Owner 审阅"
+    },
+    {
+      "name": "digitalme_user_guide_v0.1.md",
+      "fileCount": 1,
+      "samples": [
+        "digitalme_user_guide_v0.1.md"
+      ],
+      "sensitivityNote": "待 Owner 审阅"
+    },
+    {
+      "name": "digitalme-app",
+      "fileCount": 40,
+      "samples": [
+        "digitalme-app/.gitignore",
+        "digitalme-app/README.md",
+        "digitalme-app/package-lock.json",
+        "digitalme-app/package.json",
+        "digitalme-app/scripts/_patch_cognition_ui.js"
+      ],
+      "sensitivityNote": "中：应用代码；注意勿纳入 node_modules 与本地配置"
+    },
+    {
+      "name": "scripts",
+      "fileCount": 13,
+      "samples": [
+        "scripts/clean-corruption.mjs",
+        "scripts/consolidate-style.mjs",
+        "scripts/consolidate.mjs",
+        "scripts/distill-batch.mjs",
+        "scripts/extract-docx.mjs"
+      ],
+      "sensitivityNote": "低-中：工程脚本；基线脚本可入库"
+    }
+  ]
+}

@@ -1,0 +1,311 @@
+{
+  "version": "0.3",
+  "title": "自我评测",
+  "note": "建议先准备履历类文件，再完成本评测。多数题目点选即可；可选填一句补充。",
+  "bootstrap": {
+    "headline": "先备齐两类材料，再开始构建",
+    "resume": {
+      "title": "① 履历与经历",
+      "hint": "简历、任职说明、项目经历等，写清时间、角色、机构与结果即可。",
+      "feeds": ["时间线", "角色", "成就", "机构"]
+    },
+    "assessment": {
+      "title": "② 自我评测或判断材料",
+      "hint": "完成本页题目；也可提交带取舍与理由的决策记录、复盘、测评摘要。",
+      "feeds": ["观念", "判断", "表达", "边界"]
+    },
+    "equivalent": "若同一份文件同时包含经历与判断内容，提交一次即可。"
+  },
+  "sections": [
+    {
+      "id": "traits",
+      "title": "一、性格倾向（必答）",
+      "hint": "每项选一项。可选填一句补充（例如别人常怎么评价你）。",
+      "type": "scale",
+      "priority": "required",
+      "questions": [
+        {
+          "id": "t_open",
+          "text": "对新观点、新领域是否好奇，是否喜欢探索与想象",
+          "input": "scale",
+          "options": ["高", "中", "低"],
+          "followupId": "t_open_note",
+          "followup": "可选：一句补充"
+        },
+        {
+          "id": "t_consc",
+          "text": "做事是否有计划、有条理、说到做到",
+          "input": "scale",
+          "options": ["高", "中", "低"],
+          "followupId": "t_consc_note",
+          "followup": "可选：一句补充"
+        },
+        {
+          "id": "t_extra",
+          "text": "是否主动社交，并从人际互动中获得能量",
+          "input": "scale",
+          "options": ["高", "中", "低"],
+          "followupId": "t_extra_note",
+          "followup": "可选：一句补充"
+        },
+        {
+          "id": "t_agree",
+          "text": "是否更倾向合作、信任、维护关系和谐",
+          "input": "scale",
+          "options": ["高", "中", "低"],
+          "followupId": "t_agree_note",
+          "followup": "可选：一句补充"
+        },
+        {
+          "id": "t_stable",
+          "text": "压力下是否仍能保持判断与节奏",
+          "input": "scale",
+          "options": ["高", "中", "低"],
+          "followupId": "t_stable_note",
+          "followup": "可选：一句补充"
+        }
+      ]
+    },
+    {
+      "id": "values",
+      "title": "二、价值排序（必答）",
+      "hint": "先选出最重要的 3 项；再选出你几乎不妥协的底线（可多选）。",
+      "type": "choice",
+      "priority": "required",
+      "questions": [
+        {
+          "id": "v_top3",
+          "text": "下列哪 3 项最能驱动你？（点选恰好 3 项）",
+          "input": "multi",
+          "maxSelect": 3,
+          "options": [
+            "自我导向",
+            "成就",
+            "权力与影响",
+            "安全稳定",
+            "仁爱与关系",
+            "公平与普世",
+            "传统与责任",
+            "刺激与新鲜",
+            "享乐与体验",
+            "遵从与秩序"
+          ],
+          "followupId": "v_top3_note",
+          "followup": "可选：为何选这三项（一句话）"
+        },
+        {
+          "id": "v_never",
+          "text": "你几乎绝不妥协的底线是？",
+          "input": "multi",
+          "maxSelect": 3,
+          "options": [
+            "诚信与不作假",
+            "不伤害他人利益",
+            "不违背公开承诺",
+            "不牺牲长期信誉换短期利益",
+            "不越权或越界替人做主",
+            "其他（请在补充中写明）"
+          ],
+          "followupId": "v_never_note",
+          "followup": "可选：补充说明"
+        }
+      ]
+    },
+    {
+      "id": "decide",
+      "title": "三、决策习惯（建议）",
+      "hint": "可选 1–2 项。",
+      "type": "choice",
+      "priority": "recommended",
+      "questions": [
+        {
+          "id": "d_style",
+          "text": "做重要决定时，你更常怎么做？",
+          "input": "multi",
+          "maxSelect": 2,
+          "options": [
+            "理性列证据",
+            "凭直觉",
+            "多问信任的人",
+            "先暂缓观望",
+            "当机立断"
+          ],
+          "followupId": "d_style_note",
+          "followup": "可选：举一个简短例子"
+        }
+      ]
+    },
+    {
+      "id": "situational",
+      "title": "四、情境判断（至少答 3 题）",
+      "hint": "先点选最接近的选项；理由可选填。建议优先完成标有「优先」的三题。",
+      "type": "choice",
+      "priority": "required_min3",
+      "questions": [
+        {
+          "id": "s_info",
+          "text": "【优先】关键信息不足却必须拍板时，你更倾向？",
+          "input": "single",
+          "options": ["再等更多信息", "基于现有信息果断决定", "先做可逆的小决定试探"],
+          "followupId": "s_info_why",
+          "followup": "可选：一句话理由"
+        },
+        {
+          "id": "s_principle",
+          "text": "【优先】明显有利可图，但需在原则上让步时？",
+          "input": "single",
+          "options": ["原则优先，宁可放弃利益", "看原则是否触碰底线再定", "多数情况下接受让步换结果"],
+          "followupId": "s_principle_why",
+          "followup": "可选：哪些原则绝不让步"
+        },
+        {
+          "id": "s_person",
+          "text": "【优先】能力很强但诚信或价值观让你不安的合作者？",
+          "input": "single",
+          "options": ["停止或严格限制合作", "设边界后继续", "以结果为准继续合作"],
+          "followupId": "s_person_why",
+          "followup": "可选：一句话依据"
+        },
+        {
+          "id": "s_time",
+          "text": "短期收益高但透支长期，与相反方案之间？",
+          "input": "single",
+          "options": ["优先长期", "看可逆性与代价再定", "优先短期可见结果"],
+          "followupId": "s_time_why",
+          "followup": "可选：一句真实例子"
+        },
+        {
+          "id": "s_dissent",
+          "text": "多数人反对你的判断时？",
+          "input": "single",
+          "options": ["证据仍在就坚持", "先复核再决定", "多数反对则倾向改口"],
+          "followupId": "s_dissent_why",
+          "followup": "可选：一句话补充"
+        },
+        {
+          "id": "s_fair",
+          "text": "分配机会或资源时，你更看重？",
+          "input": "single",
+          "options": ["结果公平", "整体效率", "视情境在两者间权衡"],
+          "followupId": "s_fair_why",
+          "followup": "可选：有无例外"
+        },
+        {
+          "id": "s_fail",
+          "text": "回想一次失败，主因更像？",
+          "input": "single",
+          "options": ["外部环境", "他人因素", "自己的判断或执行"],
+          "followupId": "s_fail_why",
+          "followup": "可选：后来改了什么"
+        }
+      ]
+    },
+    {
+      "id": "life_skeleton",
+      "title": "五、经历概要（无履历文件时建议填写）",
+      "hint": "已提交简历或任职材料可跳过。此处用于补齐时间线。",
+      "type": "mixed",
+      "priority": "if_no_resume",
+      "questions": [
+        {
+          "id": "l_timeline",
+          "text": "用几条「年份 + 角色/机构 + 结果」勾勒主线（可分条写）",
+          "input": "open",
+          "rows": 3
+        },
+        {
+          "id": "l_peak",
+          "text": "最能代表你的一项成果是？",
+          "input": "open",
+          "rows": 2,
+          "followupId": "l_peak_role",
+          "followup": "可选：当时你的角色"
+        },
+        {
+          "id": "l_domain",
+          "text": "你最被认可的擅长方向更接近？",
+          "input": "single",
+          "options": [
+            "研究与分析",
+            "管理与组织",
+            "创作与表达",
+            "商务与合作",
+            "技术与工程",
+            "教育与培养",
+            "其他（请在补充中写明）"
+          ],
+          "followupId": "l_domain_note",
+          "followup": "可选：与同行相比，你独特在哪一点"
+        }
+      ]
+    },
+    {
+      "id": "interview",
+      "title": "六、表达与边界（建议）",
+      "hint": "点选为主；开放填写尽量简短。",
+      "type": "mixed",
+      "priority": "recommended",
+      "questions": [
+        {
+          "id": "i_intro",
+          "text": "若用一句话介绍自己，希望别人先记住什么？",
+          "input": "open",
+          "rows": 2
+        },
+        {
+          "id": "i_think",
+          "text": "做复杂判断时，你最依赖？",
+          "input": "single",
+          "options": ["数据与证据", "过往经验", "直觉", "信任的人的意见"],
+          "followupId": "i_think_note",
+          "followup": "可选：补充拆解方式"
+        },
+        {
+          "id": "i_style",
+          "text": "你的表达习惯更接近？",
+          "input": "single",
+          "options": ["先结论后论据", "先铺垫再收束", "善用类比与例子", "简洁条目化", "视对象调整"],
+          "followupId": "i_style_note",
+          "followup": "可选：常用说法或框架"
+        },
+        {
+          "id": "i_dislike",
+          "text": "你最反感哪种做事方式？",
+          "input": "single",
+          "options": ["言而无信", "推诿责任", "空谈不落地", "隐瞒关键信息", "滥用权力", "其他（请补充）"],
+          "followupId": "i_dislike_note",
+          "followup": "可选：一句话说明"
+        },
+        {
+          "id": "i_contrarian",
+          "text": "是否有一个你与常见看法不同的观点？",
+          "input": "single",
+          "options": ["有，且愿意说明", "有，但暂不展开", "没有特别突出的"],
+          "followupId": "i_contrarian_note",
+          "followup": "可选：观点与依据"
+        },
+        {
+          "id": "i_boundary",
+          "text": "数字之我绝对不要替你做哪些事？",
+          "input": "multi",
+          "maxSelect": 4,
+          "options": [
+            "对外发表未经你确认的立场",
+            "代替你签署或承诺",
+            "泄露私人关系与敏感经历",
+            "在你不知情时联系他人",
+            "夸大成就或编造经历",
+            "其他（请补充）"
+          ],
+          "followupId": "i_boundary_note",
+          "followup": "可选：补充禁区"
+        }
+      ]
+    }
+  ],
+  "completionGuide": {
+    "minimum": "性格倾向 5 题 + 价值排序 2 题 + 情境判断至少 3 题（无履历文件时，建议再填经历概要）",
+    "better": "在最低要求上补全情境题，并完成表达与边界",
+    "withFiles": "已提交履历可跳过经历概要；已有判断类材料仍建议完成「优先」三道情境题以便核对"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "digitalme-app",
+  "version": "0.1.0",
+  "description": "Digital Me 本地桌面应用：加载个人 Digital Me Package，以 AI 为底座完成'像我'的任务。",
+  "main": "src/main.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev"
+  },
+  "keywords": [
+    "digital-me",
+    "personal-ai",
+    "local-first"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^32.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "pdf-parse": "^2.4.5",
+    "pptxgenjs": "^4.0.1"
+  }
+}

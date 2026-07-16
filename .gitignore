@@ -1,0 +1,82 @@
+# --- dependencies ---
+node_modules/
+**/node_modules/
+
+# --- local secrets & runtime config (never commit) ---
+.env
+.env.*
+!.env.example
+**/config.local.json
+**/secrets.json
+**/secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Electron / app local runtime (userData mirrors, logs, temp)
+digitalme-app/.runtime/
+digitalme-app/userData/
+**/.electron-cache/
+**/electron-user-data/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Package snapshots & diagnostic outputs (may contain private text) ---
+.digitalme-snapshots/
+**/package-snapshots/
+build/*
+!build/reports/
+build/reports/**/*.full.*
+build/reports/**/*-unredacted*
+build/reports/p1-00-snapshot-pointer.json
+build/_p1_00_scratch/
+build/p1-00-diagnostics/
+*.baseline.full.json
+*.baseline.full.jsonl
+
+# --- private source materials (Owner confirmation required before any exception) ---
+source-materials/
+!source-materials/README.md
+
+# --- Package subject assets: keep out of Git history (Owner decision 2026-07-16) ---
+digital-me-package/
+
+# --- root Office docs that may contain private planning text ---
+/*.docx
+/*.doc
+
+# --- OS / editor / cloud / Office temp ---
+.DS_Store
+Thumbs.db
+Desktop.ini
+~$*
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.code-workspace
+
+# WPS / Office lock & autosave
+.~*
+*.asd
+*.wbk
+__MACOSX/
+
+# --- local caches & indexes (rebuildable) ---
+**/source-materials/.index/
+**/.cache/
+**/dist/
+**/coverage/
+*.tsbuildinfo
+
+# --- Cursor / agent local state (keep rules; ignore caches) ---
+.cursor/cache/
+.cursor/projects/
+.agents/cache/
+.codex/cache/

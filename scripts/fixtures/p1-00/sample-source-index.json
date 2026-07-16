@@ -1,0 +1,10 @@
+{
+  "sources": [
+    {
+      "id": "src_fixture_demo",
+      "title": "fixture-demo",
+      "hash": "",
+      "path": "fixtures/does-not-exist.txt"
+    }
+  ]
+}

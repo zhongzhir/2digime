@@ -1,0 +1,76 @@
+{
+  "task": "P1-00",
+  "startedAtUtc": "2026-07-16T02:42:02.439Z",
+  "finishedAtUtc": "2026-07-16T02:42:05.085Z",
+  "ok": true,
+  "results": [
+    {
+      "name": "app_js_syntax",
+      "ok": true,
+      "detail": {
+        "checked": 29,
+        "failures": []
+      }
+    },
+    {
+      "name": "package_json_jsonl_parse",
+      "ok": true,
+      "detail": {
+        "exitCode": 0,
+        "stdout": "{\"ok\":true,\"fileCount\":56,\"totalBytes\":2077665,\"manifestSha256\":\"3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a\",\"report\":\"build/reports/p1-00-package-baseline.json\"}",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "baseline_twice_hash_stable",
+      "ok": true,
+      "detail": {
+        "before": "3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a",
+        "afterRun1": "3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a",
+        "afterRun2": "3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a",
+        "fileCount": 56,
+        "totalBytes": 2077665
+      }
+    },
+    {
+      "name": "snapshot_matches_source_package",
+      "ok": true,
+      "detail": {
+        "snapshotRootHint": "DigitalMe-baselines/digital-me-package-v0.1-2026-07-16T02-39-48-124Z",
+        "source": {
+          "fileCount": 56,
+          "totalBytes": 2077665,
+          "manifestSha256": "3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a"
+        },
+        "snapshot": {
+          "fileCount": 56,
+          "totalBytes": 2077665,
+          "manifestSha256": "3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a"
+        }
+      }
+    },
+    {
+      "name": "git_status_excludes_sensitive",
+      "ok": true,
+      "detail": {
+        "trackedCandidates": 30,
+        "forbiddenHits": []
+      }
+    },
+    {
+      "name": "package_unchanged_after_task_checks",
+      "ok": true,
+      "detail": {
+        "before": "3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a",
+        "after": "3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a",
+        "fileCount": 56,
+        "totalBytes": 2077665
+      }
+    }
+  ],
+  "packageDigest": {
+    "fileCount": 56,
+    "totalBytes": 2077665,
+    "manifestSha256": "3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a"
+  }
+}
