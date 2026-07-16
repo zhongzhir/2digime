@@ -111,6 +111,7 @@ contextBridge.exposeInMainWorld("digitalMe", {
   createDemoPackage: (opts) => ipcRenderer.invoke("packageStore:createDemo", opts),
   inspectPackageStore: (opts) => ipcRenderer.invoke("packageStore:inspect", opts),
   listPackageVersions: () => ipcRenderer.invoke("packageStore:listVersions"),
+  getSubjectOverview: () => ipcRenderer.invoke("subject:getOverview"),
   rollbackPackageVersion: (payload) => ipcRenderer.invoke("packageStore:rollback", payload),
   recoverPackageStore: () => ipcRenderer.invoke("packageStore:recover"),
   planPpt: (payload) => ipcRenderer.invoke("output:planPpt", payload),

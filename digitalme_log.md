@@ -33,6 +33,31 @@ Owner 未记录界面显示的具体 revision 数字，但“重启后版本仍�
 
 ---
 
+## 2026-07-16（P1-03 · 主体首页与 SubjectOverview v1）
+
+### 任务
+
+- 编号：`P1-03`（主体首页信息架构与数据契约）
+- 分支：`codex/p1-03-subject-home`
+- 基线提交：`6fa0881`
+- 状态：`statically_verified`（交 Codex 复核；Owner 只读验收暂缓）
+
+### 处理
+
+1. 新增 `subject-overview/` 只读聚合：`buildSubjectOverviewV1`（契约 v1）；
+2. IPC `subject:getOverview` + preload `getSubjectOverview`；
+3. 「我 → 数字之我 → 首页」呈现主体抬头、七类分层、版本恢复入口、能力五态、边界与协作状态；
+4. 读取不调用 migrate/scaffold/recover；`assessRecoverabilityReadOnly` 评估恢复状态；
+5. renderer 全量 `textContent` 渲染，不拼接主体正文。
+
+### 验证
+
+- `npm run test:p1-03`：12/12
+- `npm run test:p1-02`：31/31；`npm run test:p1-01`：21/21 + 泄露扫描
+- 语法检查、`git diff --check`、Package 基线 hash 未变
+
+---
+
 ## 2026-07-16（P1-02 修订 · 版本界面恢复错误真实呈现）
 
 ### 任务

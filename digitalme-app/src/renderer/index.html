@@ -566,8 +566,8 @@
         <section id="view-me" class="view hidden">
           <header id="topbar" class="me-topbar">
             <div class="me-topbar-main">
-              <div id="persona-title">我</div>
-              <div id="persona-sub">提交材料以完善数字之我；在「数字之我」中查看与校对</div>
+              <div id="persona-title">我的数字之我</div>
+              <div id="persona-sub">查看主体构成、版本健康与能力边界；提交材料请到「构建」</div>
             </div>
             <button type="button" id="btn-me-help" class="btn-help" data-help-topic="me" title="打开说明">说明</button>
           </header>
@@ -709,7 +709,7 @@
               <!-- 数字之我：成品与校对 -->
               <div id="me-lane-self" class="me-lane">
                 <div class="mode-tabs" id="me-tabs" role="tablist">
-                  <button type="button" class="mode-tab active" data-me-tab="overview">概览</button>
+                  <button type="button" class="mode-tab active" data-me-tab="overview">首页</button>
                   <button type="button" class="mode-tab" data-me-tab="cognition">认知</button>
                   <button type="button" class="mode-tab" data-me-tab="timeline">时间线</button>
                   <button type="button" class="mode-tab" data-me-tab="roles">角色</button>
@@ -718,26 +718,42 @@
                 </div>
 
                 <div id="me-panel-overview" class="life-panel">
-                  <div class="output-card">
-                    <h3>我是谁 · 覆盖度 <span class="tip-mark" data-tip-id="me-coverage" tabindex="0" role="button" aria-label="覆盖度说明">?</span></h3>
-                    <p class="muted life-hint">这里只看结果与缺口。提交材料与自我评测请到「构建」。</p>
-                    <div id="me-overview-stats" class="me-overview-stats"></div>
-                    <div id="me-coverage-gaps" class="coverage-gaps"></div>
-                    <div class="builder-actions" style="margin-top:12px">
-                      <button type="button" id="btn-me-goto-inbox">去构建</button>
-                      <button type="button" id="btn-me-goto-cognition" class="btn-ghost">去认知面板</button>
-                      <button type="button" id="btn-me-goto-timeline" class="btn-ghost">去时间线</button>
-                      <button type="button" id="btn-me-goto-mind" class="btn-ghost">去观念与表达</button>
-                      <button type="button" id="btn-me-goto-boundaries" class="btn-ghost">看边界</button>
-                    </div>
-                  </div>
-                  <div class="output-card">
-                    <div class="ext-store-head">
+                  <div id="subject-home" class="subject-home">
+                    <section class="output-card subject-home-hero">
+                      <h2 class="subject-home-title">我的数字之我</h2>
+                      <p id="subject-home-tagline" class="muted life-hint">
+                        它由你的资料、声明、决定和边界持续形成，不是一个通用 AI 账号。
+                      </p>
+                      <div id="subject-home-identity" class="subject-home-grid" aria-live="polite"></div>
+                      <div id="subject-home-package" class="subject-home-meta" aria-live="polite"></div>
+                    </section>
+                    <section class="output-card">
+                      <h3>我的构成</h3>
+                      <p class="muted life-hint">七类主体数据分层展示；事实、本人声明与系统推断不可混为一谈。</p>
+                      <div id="subject-home-layers" class="subject-layer-grid" aria-live="polite"></div>
+                    </section>
+                    <section class="output-card">
+                      <h3>最近变化与可恢复</h3>
+                      <div id="subject-home-recent" class="subject-home-block" aria-live="polite"></div>
+                      <div class="builder-actions" style="margin-top:10px">
+                        <button type="button" id="btn-subject-goto-versions" class="btn-ghost">前往资料版本</button>
+                        <button type="button" id="btn-subject-refresh" class="btn-ghost">刷新首页</button>
+                      </div>
+                    </section>
+                    <section class="output-card">
                       <h3>我现在能做什么</h3>
-                      <button type="button" id="btn-me-refresh-surface" class="btn-ghost">刷新</button>
-                    </div>
-                    <p class="muted life-hint">对内能力面：已就绪工具、开箱场景与可写文稿类型。对外发布与协作调用将在后续分期开放。</p>
-                    <div id="me-capability-surface" class="cap-surface-body muted">加载中…</div>
+                      <p class="muted life-hint">仅展示真实可用、受限与实验中的能力；不代表对外已公开。</p>
+                      <div id="subject-home-capabilities" class="subject-cap-grid" aria-live="polite"></div>
+                    </section>
+                    <section class="output-card">
+                      <h3>边界与对外状态</h3>
+                      <div id="subject-home-boundaries" class="subject-home-block" aria-live="polite"></div>
+                      <div id="subject-home-collaboration" class="subject-home-block" aria-live="polite"></div>
+                    </section>
+                    <section id="subject-home-warnings-card" class="output-card subject-warnings hidden">
+                      <h3>需要注意</h3>
+                      <ul id="subject-home-warnings" class="subject-warning-list"></ul>
+                    </section>
                   </div>
                 </div>
 

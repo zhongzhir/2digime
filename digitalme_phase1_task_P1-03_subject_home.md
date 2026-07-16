@@ -1,6 +1,6 @@
 # P1-03 任务包：主体首页信息架构与数据契约
 
-状态：specified（下一唯一主任务；待 Cursor 建立实现分支）
+状态：statically_verified（Codex 复核中；Owner 只读沙盒验收暂缓）
 阶段：第一阶段 / WP4（主体产品面与观念认知）
 前置任务：P1-00、P1-01、P1-02 已接受
 规格依据：`digitalme_phase1_subject_upgrade_plan_v0.1.md` §2.1、§2.2、§3 WP4

@@ -6104,28 +6104,208 @@ function renderCoverageGaps(el, gaps) {
   });
 }
 
+const CAPABILITY_STATUS_LABEL = {
+  available: "可用",
+  limited: "受限",
+  experimental: "实验中",
+  unavailable: "不可用",
+  unknown: "未知",
+};
+
+const HEALTH_STATUS_LABEL = {
+  healthy: "正常",
+  unhealthy: "需关注",
+  missing: "缺失",
+  limited: "部分可用",
+  unversioned: "未版本化",
+};
+
+function setSafeText(el, text) {
+  if (!el) return;
+  el.textContent = text == null ? "" : String(text);
+}
+
+function clearChildren(el) {
+  if (!el) return;
+  while (el.firstChild) el.removeChild(el.firstChild);
+}
+
+function appendMetaRow(container, label, value) {
+  if (!container) return;
+  const row = document.createElement("div");
+  row.className = "subject-meta-row";
+  const lab = document.createElement("span");
+  lab.className = "subject-meta-label";
+  setSafeText(lab, label);
+  const val = document.createElement("strong");
+  setSafeText(val, value);
+  row.appendChild(lab);
+  row.appendChild(val);
+  container.appendChild(row);
+}
+
+async function refreshSubjectHome() {
+  const identityEl = $("subject-home-identity");
+  const packageEl = $("subject-home-package");
+  const layersEl = $("subject-home-layers");
+  const recentEl = $("subject-home-recent");
+  const capsEl = $("subject-home-capabilities");
+  const boundsEl = $("subject-home-boundaries");
+  const collabEl = $("subject-home-collaboration");
+  const warnCard = $("subject-home-warnings-card");
+  const warnList = $("subject-home-warnings");
+  if (!identityEl || !window.digitalMe.getSubjectOverview) return;
+
+  setSafeText(identityEl, "正在加载主体信息…");
+  clearChildren(packageEl);
+  clearChildren(layersEl);
+  clearChildren(recentEl);
+  clearChildren(capsEl);
+  clearChildren(boundsEl);
+  clearChildren(collabEl);
+  if (warnCard) warnCard.classList.add("hidden");
+  if (warnList) clearChildren(warnList);
+
+  try {
+    const overview = await window.digitalMe.getSubjectOverview();
+    const id = overview.identity || {};
+    const pkg = overview.package || {};
+
+    clearChildren(identityEl);
+    appendMetaRow(
+      identityEl,
+      "主体名称",
+      id.displayName || "未知"
+    );
+    appendMetaRow(
+      identityEl,
+      "所有者",
+      id.ownerDisplayName || (id.ownershipStatus === "self" ? "本人" : "未知")
+    );
+    appendMetaRow(identityEl, "归属", id.ownershipStatus === "self" ? "本人管理" : "未知");
+    appendMetaRow(identityEl, "隐私", pkg.privacyLabel || "默认私有 · 未公开");
+
+    clearChildren(packageEl);
+    const rev =
+      typeof pkg.revision === "number" ? `第 ${pkg.revision} 版` : "未知";
+    appendMetaRow(packageEl, "资料版本", rev);
+    appendMetaRow(
+      packageEl,
+      "格式版本",
+      pkg.schemaVersion ? String(pkg.schemaVersion) : "未版本化（v0.1）"
+    );
+    appendMetaRow(
+      packageEl,
+      "健康状态",
+      HEALTH_STATUS_LABEL[pkg.healthStatus] || pkg.healthStatus || "未知"
+    );
+    if (pkg.updatedAt) {
+      appendMetaRow(packageEl, "最近更新", String(pkg.updatedAt).slice(0, 10));
+    }
+    appendMetaRow(packageEl, "存放位置", pkg.locationLabel || "本机资料目录");
+
+    clearChildren(layersEl);
+    for (const layer of overview.layers || []) {
+      const card = document.createElement("div");
+      card.className = `subject-layer-card ${layer.visualClass || ""}`;
+      const head = document.createElement("div");
+      head.className = "subject-layer-head";
+      const title = document.createElement("strong");
+      setSafeText(title, layer.userLabel || layer.kind);
+      const count = document.createElement("span");
+      count.className = "subject-layer-count";
+      const countText =
+        layer.countStatus === "known" || layer.countStatus === "partial"
+          ? layer.count == null
+            ? "未知"
+            : String(layer.count)
+          : "未知";
+      setSafeText(count, countText);
+      head.appendChild(title);
+      head.appendChild(count);
+      const expl = document.createElement("p");
+      expl.className = "muted subject-layer-expl";
+      setSafeText(expl, layer.explanation || "");
+      card.appendChild(head);
+      card.appendChild(expl);
+      layersEl.appendChild(card);
+    }
+
+    clearChildren(recentEl);
+    const recent = overview.recentChange || {};
+    const recentP = document.createElement("p");
+    setSafeText(recentP, recent.summary || "最近变化：未知");
+    recentEl.appendChild(recentP);
+    if (pkg.recoverability) {
+      const rec = document.createElement("p");
+      rec.className = "muted";
+      const recLabel = pkg.recoverability.recoverable
+        ? "可恢复"
+        : "暂不可恢复";
+      setSafeText(rec, `版本恢复：${recLabel}。${pkg.recoverability.message || ""}`);
+      recentEl.appendChild(rec);
+    }
+
+    clearChildren(capsEl);
+    for (const cap of overview.capabilities || []) {
+      const card = document.createElement("div");
+      card.className = "subject-cap-card";
+      const head = document.createElement("div");
+      head.className = "subject-cap-head";
+      const title = document.createElement("strong");
+      setSafeText(title, cap.label || cap.id);
+      const st = document.createElement("span");
+      st.className = `subject-cap-status status-${cap.status || "unknown"}`;
+      setSafeText(st, CAPABILITY_STATUS_LABEL[cap.status] || cap.status || "未知");
+      head.appendChild(title);
+      head.appendChild(st);
+      const lim = document.createElement("p");
+      lim.className = "muted";
+      setSafeText(lim, cap.limitation || "");
+      card.appendChild(head);
+      card.appendChild(lim);
+      capsEl.appendChild(card);
+    }
+
+    clearChildren(boundsEl);
+    const b = overview.boundaries || {};
+    appendMetaRow(boundsEl, "边界", b.summary || "未知");
+    if (b.pendingWarnings && b.pendingWarnings.length) {
+      const p = document.createElement("p");
+      p.className = "muted";
+      setSafeText(p, b.pendingWarnings.join("；"));
+      boundsEl.appendChild(p);
+    }
+
+    clearChildren(collabEl);
+    const c = overview.collaboration || {};
+    appendMetaRow(collabEl, "对外可见性", c.visibilityLabel || "默认私有 · 未公开");
+    appendMetaRow(collabEl, "协作名片", c.cardStatusLabel || "尚未建立");
+    appendMetaRow(collabEl, "对外授权", c.authorizationLabel || "无自动对外授权");
+
+    const warnings = overview.warnings || [];
+    if (warnCard && warnList && warnings.length) {
+      warnCard.classList.remove("hidden");
+      for (const w of warnings) {
+        const li = document.createElement("li");
+        setSafeText(li, w.message || w.code || "需要注意");
+        warnList.appendChild(li);
+      }
+    }
+  } catch (e) {
+    setSafeText(identityEl, "无法加载主体信息。");
+    if (packageEl) {
+      clearChildren(packageEl);
+      const errP = document.createElement("p");
+      errP.className = "muted";
+      setSafeText(errP, e.message || String(e));
+      packageEl.appendChild(errP);
+    }
+  }
+}
+
 function renderMeOverview() {
-  const el = $("me-overview-stats");
-  const events = (lifeGraphCache && lifeGraphCache.events) || [];
-  const roles = (lifeGraphCache && lifeGraphCache.roles && lifeGraphCache.roles.items) || [];
-  const inferences = (lifeGraphCache && lifeGraphCache.inferences) || [];
-  const outcomes = (lifeGraphCache && lifeGraphCache.outcomes && lifeGraphCache.outcomes.items) || [];
-  const people = (lifeGraphCache && lifeGraphCache.people && lifeGraphCache.people.items) || [];
-  const peopleConfirmed = people.filter((p) => p.status === "confirmed");
-  const bounds = (boundariesCache && boundariesCache.items) || [];
-  const enabledBounds = bounds.filter((b) => b.enabled !== false).length;
-  const hasPersona = !!(pkg && pkg.persona && String(pkg.persona).trim().length > 80);
-  const openInf = Array.isArray(inferences)
-    ? inferences.filter((i) => (i.status || "open") === "open").length
-    : 0;
-  el.innerHTML =
-    `<div class="me-stat"><strong>${hasPersona ? "已有" : "待补"}</strong><span>观念与表达</span></div>` +
-    `<div class="me-stat"><strong>${events.length}</strong><span>人生事件</span></div>` +
-    `<div class="me-stat"><strong>${roles.length}</strong><span>角色切片</span></div>` +
-    `<div class="me-stat"><strong>${outcomes.length}</strong><span>成就</span></div>` +
-    `<div class="me-stat"><strong>${peopleConfirmed.length}</strong><span>已确认关系人</span></div>` +
-    `<div class="me-stat"><strong>${openInf}</strong><span>低把握推断</span></div>` +
-    `<div class="me-stat"><strong>${enabledBounds}</strong><span>启用中的边界</span></div>`;
+  refreshSubjectHome();
 }
 
 function coverageBar(label, filled, totalHint) {
@@ -6648,10 +6828,10 @@ async function refreshMeView() {
     renderRolesFacet(lifeGraphCache);
     await renderBoundaries();
     await refreshInboxPanel();
-    renderMeOverview();
+    await refreshSubjectHome();
     try {
       const snap = await window.digitalMe.getCognition();
-      renderCoverageGaps($("me-coverage-gaps"), snap.gaps || []);
+      renderCoverageGaps($("cognition-gaps"), snap.gaps || []);
     } catch {
       /* optional */
     }
@@ -7045,7 +7225,9 @@ function bindMe() {
   document.querySelectorAll("#me-tabs .mode-tab").forEach((btn) => {
     btn.addEventListener("click", () => switchMeTab(btn.dataset.meTab));
   });
-  $("btn-me-goto-inbox").addEventListener("click", () => goBuildView());
+  $("btn-me-goto-inbox")?.addEventListener("click", () => goBuildView());
+  $("btn-subject-goto-versions")?.addEventListener("click", () => openSettings());
+  $("btn-subject-refresh")?.addEventListener("click", () => refreshSubjectHome());
   const refreshSurface = $("btn-me-refresh-surface");
   if (refreshSurface) {
     refreshSurface.addEventListener("click", () => refreshCapabilitySurface());

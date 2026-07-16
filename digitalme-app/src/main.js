@@ -13,6 +13,7 @@ const inbox = require("./inbox");
 const retrieval = require("./retrieval");
 const feedback = require("./feedback");
 const { PackageStore, buildVersionPanelInfo } = require("./package-store");
+const { buildSubjectOverviewV1 } = require("./subject-overview");
 const { createMinimalFixture } = require("./package-store/fixture");
 const pptxOutput = require("./outputs/pptx");
 const documentOutput = require("./outputs/document");
@@ -2855,6 +2856,23 @@ ipcMain.handle("packageStore:listVersions", () => {
   const pkgDir = path.resolve(packageDirFromConfig());
   const store = new PackageStore({ packageDir: pkgDir, ownerId: "sandbox:list" });
   return buildVersionPanelInfo(store);
+});
+
+ipcMain.handle("subject:getOverview", async () => {
+  const pkgDir = path.resolve(packageDirFromConfig());
+  const pub = readPublicConfig();
+  let readyExtensionCount = 0;
+  try {
+    const em = await getExtensionManager();
+    const statusList = em.getSessionStatus();
+    readyExtensionCount = (statusList || []).filter((s) => s && s.status === "connected").length;
+  } catch {
+    /* optional */
+  }
+  return buildSubjectOverviewV1(pkgDir, {
+    hasApiKey: !!pub.apiKeyConfigured,
+    readyExtensionCount,
+  });
 });
 
 ipcMain.handle("packageStore:rollback", (_e, payload) => {

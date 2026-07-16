@@ -1,14 +1,14 @@
 {
   "task": "P1-00",
-  "startedAtUtc": "2026-07-16T06:22:52.475Z",
-  "finishedAtUtc": "2026-07-16T06:22:56.353Z",
+  "startedAtUtc": "2026-07-16T07:18:02.313Z",
+  "finishedAtUtc": "2026-07-16T07:18:06.171Z",
   "ok": true,
   "results": [
     {
       "name": "app_js_syntax",
       "ok": true,
       "detail": {
-        "checked": 42,
+        "checked": 48,
         "failures": []
       }
     },
@@ -53,7 +53,7 @@
       "name": "git_status_excludes_sensitive",
       "ok": true,
       "detail": {
-        "trackedCandidates": 9,
+        "trackedCandidates": 14,
         "forbiddenHits": []
       }
     },
