@@ -371,7 +371,7 @@ flowchart LR
 
 首个标准任务包已建立：`digitalme_phase1_task_P1-00_baseline_freeze.md`。后续 P1-01～P1-03 均须沿用其“目标、范围、禁止事项、迁移、验证、人工验收、回滚、证据”结构。
 
-执行状态：P1-00 已接受并形成基线提交 `151d798`；P1-01 已接受（提交 `363e58d`、`94f7e13`、`9d3ecc4`）；P1-02 已接受（实现分支 `codex/p1-02-package-store`，Feedback 唯一切片完成临时资料提交、重启与恢复验收；Builder/Life/Policies 仍直接写，待后续迁移）；P1-03 已形成任务包，状态 `specified`，是下一唯一主任务。
+执行状态：P1-00 已接受并形成基线提交 `151d798`；P1-01 已接受（提交 `363e58d`、`94f7e13`、`9d3ecc4`）；P1-02 已接受（实现分支 `codex/p1-02-package-store`，Feedback 唯一切片完成临时资料提交、重启与恢复验收；Builder/Life/Policies 仍直接写，待后续迁移）；P1-03 实现分支 `codex/p1-03-subject-home`（提交 `47147e8`），状态 `statically_verified`，交 Codex 复核。
 
 ---
 
