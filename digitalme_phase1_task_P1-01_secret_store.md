@@ -1,11 +1,12 @@
 # P1-01 任务包：SecretStore 与敏感配置迁移
 
-状态：statically_verified（待 Owner 真实模型验收 + Codex 复核后可 accepted）  
+状态：statically_verified（Codex 初复核「需要修改」后已出修订提交；待 Codex 再复核；暂缓 Owner 真实密钥验收；通过后方可 accepted）  
 阶段：第一阶段 / WP2（SecretStore 切片）  
 前置任务：P1-00 已接受，基线提交 `151d798`  
 规格依据：`digitalme_phase1_subject_upgrade_plan_v0.1.md` §3 WP2、`digitalme_product_spec_v0.2.md` §7.4.2–7.4.3  
 审计依据：`digitalme_architecture_audit_20260716.md` F-01、F-02  
-实现分支：`codex/p1-01-secret-store`
+实现分支：`codex/p1-01-secret-store`  
+实现提交：`363e58d`；修订提交见 `digitalme_log.md`「P1-01 修订」
 
 ---
 

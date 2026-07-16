@@ -128,10 +128,17 @@ app.whenReady().then(() => {
   buildAppMenu();
   const migration = getConfigSecrets().migrateLegacySecrets();
   if (migration && (migration.status === "blocked" || migration.status === "failed") && migration.warning) {
+    const title =
+      migration.code === "config_json_corrupt" ||
+      migration.code === "config_permission_denied" ||
+      migration.code === "config_read_failed" ||
+      migration.code === "config_not_a_file"
+        ? "配置文件无法安全读取"
+        : "密钥未能迁入本机安全存储";
     dialog.showMessageBox({
       type: "warning",
-      title: "连接密钥安全提示",
-      message: "密钥未能迁入本机安全存储",
+      title,
+      message: title,
       detail: migration.warning,
     });
   }
@@ -475,7 +482,9 @@ function buildExtensionFromCatalog(item, options = {}) {
 
 function getCapabilityExtensions() {
   const svc = getConfigSecrets();
-  const cfg = svc.readRawConfig();
+  const loaded = svc.loadRawConfig();
+  if (loaded.status === "error") return [];
+  const cfg = loaded.config;
   let list = Array.isArray(cfg.capabilityExtensions) ? cfg.capabilityExtensions : [];
   // 迁移旧版示例 id / 高摩擦启动方式
   let changed = false;
@@ -502,9 +511,13 @@ function getCapabilityExtensions() {
     return ext;
   });
   if (changed) {
-    cfg.capabilityExtensions = list.map((e) => svc.sanitizeExtension(e, svc.secretStore));
-    delete cfg.apiKey;
-    svc.writeRawConfig(cfg);
+    try {
+      cfg.capabilityExtensions = list.map((e) => svc.sanitizeExtension(e, svc.secretStore));
+      delete cfg.apiKey;
+      svc.writeRawConfig(cfg);
+    } catch {
+      /* keep in-memory list; do not overwrite unreadable/corrupt configs */
+    }
   }
   return list.map((e) => svc.sanitizeExtension(e, svc.secretStore));
 }
@@ -553,6 +566,12 @@ function readPublicConfig() {
 function writeConfig(cfg) {
   // Internal writes must not reintroduce plaintext apiKey.
   const svc = getConfigSecrets();
+  const loaded = svc.loadRawConfig();
+  if (loaded.status === "error") {
+    const err = new Error(loaded.message || "config_unreadable");
+    err.code = loaded.code || "config_unreadable";
+    throw err;
+  }
   const next = { ...cfg };
   delete next.apiKey;
   if (Array.isArray(next.capabilityExtensions)) {
@@ -560,7 +579,7 @@ function writeConfig(cfg) {
       svc.sanitizeExtension(e, svc.secretStore)
     );
   }
-  const raw = svc.readRawConfig();
+  const raw = loaded.config;
   svc.writeRawConfig({
     ...raw,
     ...next,

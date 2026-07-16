@@ -5,6 +5,34 @@
 
 ---
 
+## 2026-07-16（P1-01 修订 · 关闭迁移恢复缺口）
+
+### 任务
+
+- 编号：`P1-01`（修订，保留实现提交 `363e58d`）
+- 代码 Owner：Cursor
+- 分支：`codex/p1-01-secret-store`
+- 状态：仍为 `statically_verified`（Codex 此前「需要修改」；本修订后待再复核；**暂不**做 Owner 真实密钥验收）
+
+### Codex 复核项与处理
+
+1. **明文备份泄露**：成功路径仅用临时 `config.json.migrate-tmp.*.bak`；校验 SecretStore 后清除临时/遗留明文备份，再原子写入脱敏配置；不再永久保留 `pre-secret-migration.bak`。
+2. **损坏配置保护**：`loadRawConfig`/`readRawConfig` 仅在文件缺失时返回默认；JSON 损坏、权限或读取失败阻断迁移、可操作警告、不覆盖原文件。
+3. **扩展 env 短值**：取消长度启发式；所有非空 env（含 `LOG_LEVEL=info`）迁入 SecretStore 并可注入扩展。
+4. **测试与扫描**：补齐成功无明文残留、损坏/不可读不覆盖、短 env、SecretStore 写失败、回读校验失败、脱敏写入失败等；泄露扫描增加临时 userData 迁移产物明文扫描（不用真实 userData/密钥）。
+
+### 验证
+
+- `npm run test:p1-01`：18 项 + 泄露扫描（含迁移产物）通过
+- `node --check`：本次修改的 JS 全部通过
+- Package 清单 SHA-256 仍为 `3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a`
+
+### 下一步
+
+Codex 再复核 → 通过后再安排 Owner 真实密钥验收 → 方可 `accepted`。
+
+---
+
 ## 2026-07-16（P1-01 SecretStore 与敏感配置迁移 · Cursor 实现）
 
 ### 任务
@@ -18,14 +46,14 @@
 
 1. 新增主进程 `SecretStore`（Electron `safeStorage` 适配器可注入；拒绝 Base64 冒充加密）；
 2. 分离 PublicConfig / RuntimeConfig；`config:get` 仅返回 `apiKeyConfigured` 与空 `apiKey`；
-3. 启动时幂等迁移旧 `config.json` 明文密钥；失败保留旧明文并提示；成功后删除明文并保留备份；
+3. 启动时幂等迁移旧 `config.json` 明文密钥；失败保留旧明文并提示；成功后删除明文（修订后不再保留永久明文备份）；
 4. 扩展 `env` 不再落盘明文；连接时主进程按扩展 id 临时装配；
 5. 设置页：已保存提示、空白保留、清除确认；不回显密钥；
 6. 自动测试与泄露扫描通过；P1-00 Package 清单 hash 复验一致。
 
 ### 验证
 
-- `npm run test:p1-01`（11 项 SecretStore/迁移 + 泄露扫描）通过
+- `npm run test:p1-01`（初版）通过；修订后见上方条目
 - `node --check` 全部 App JS 通过
 - Package 清单 SHA-256 仍为 `3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a`
 
@@ -33,12 +61,11 @@
 
 1. `extension-manager` 仍继承完整 `process.env`（属后续 ToolBroker，本任务未宣称解决）；
 2. 扩展密钥完整撤销 UI 仅有窄 IPC `secrets:clearExtensionEnv`，产品面后续可加深；
-3. 未做 Owner 真实模型联调。
+3. 未做 Owner 真实模型联调（Codex 要求修订完成前暂缓）。
 
 ### 下一步
 
-Codex 复核 + Owner 人工验收 → 标记 accepted → 启动 `P1-02`。
-
+见上方「P1-01 修订」条目。
 ---
 
 ## 2026-07-16（P1-00 工程与 Package 基线冻结 · Cursor 实现）

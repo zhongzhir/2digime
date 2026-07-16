@@ -7,11 +7,13 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const crypto = require("node:crypto");
 const { SecretStore, atomicWriteJson } = require("./secret-store");
 
 const MODEL_API_KEY_ID = "model.apiKey";
 const MIGRATION_VERSION = 1;
-const BACKUP_NAME = "config.json.pre-secret-migration.bak";
+/** Legacy permanent backup name from earlier P1-01 revision; must be removed after success. */
+const LEGACY_BACKUP_NAME = "config.json.pre-secret-migration.bak";
 
 function extensionSecretId(extensionId, envKey) {
   return `extension.${String(extensionId)}.${String(envKey)}`;
@@ -44,6 +46,14 @@ function isNonEmptyString(v) {
   return typeof v === "string" && v.trim().length > 0;
 }
 
+function classifyReadError(err) {
+  if (!err) return "config_read_failed";
+  if (err instanceof SyntaxError) return "config_json_corrupt";
+  if (err.code === "EACCES" || err.code === "EPERM") return "config_permission_denied";
+  if (err.code === "EISDIR") return "config_not_a_file";
+  return "config_read_failed";
+}
+
 class ConfigSecretsService {
   /**
    * @param {object} opts
@@ -51,30 +61,114 @@ class ConfigSecretsService {
    * @param {string} [opts.configPath]
    * @param {import('./secret-store').SecretStore} opts.secretStore
    * @param {string} [opts.defaultPackageDir]
+   * @param {{ beforeCommitCleanedConfig?: Function, beforeWriteConfig?: Function }} [opts.hooks]
    */
   constructor(opts) {
     this.userDataPath = opts.userDataPath;
     this.configPath = opts.configPath || path.join(opts.userDataPath, "config.json");
     this.secretStore = opts.secretStore;
     this.defaultPackageDir = opts.defaultPackageDir || "";
+    this.hooks = opts.hooks || {};
     this.lastMigration = null;
+    this._activeTempBackupPath = null;
   }
 
+  legacyBackupPath() {
+    return path.join(this.userDataPath, LEGACY_BACKUP_NAME);
+  }
+
+  /** @deprecated use legacyBackupPath / temp backups; kept for tests expecting method name */
   backupPath() {
-    return path.join(this.userDataPath, BACKUP_NAME);
+    return this.legacyBackupPath();
   }
 
-  readRawConfig() {
+  loadRawConfig() {
+    if (!fs.existsSync(this.configPath)) {
+      return {
+        status: "missing",
+        config: defaultPublicConfig(this.defaultPackageDir),
+      };
+    }
+    let text;
     try {
-      return JSON.parse(fs.readFileSync(this.configPath, "utf8"));
-    } catch {
-      return defaultPublicConfig(this.defaultPackageDir);
+      text = fs.readFileSync(this.configPath, "utf8");
+    } catch (err) {
+      return {
+        status: "error",
+        code: classifyReadError(err),
+        message: "配置文件无法读取，已停止密钥迁移并保留原始数据。",
+        error: err,
+      };
+    }
+    try {
+      const config = JSON.parse(text);
+      if (!config || typeof config !== "object" || Array.isArray(config)) {
+        return {
+          status: "error",
+          code: "config_json_corrupt",
+          message: "配置文件不是有效的 JSON 对象，已停止密钥迁移并保留原始数据。",
+        };
+      }
+      return { status: "ok", config };
+    } catch (err) {
+      return {
+        status: "error",
+        code: classifyReadError(err),
+        message: "配置文件已损坏或无法解析，已停止密钥迁移并保留原始数据。",
+        error: err,
+      };
     }
   }
 
+  /**
+   * Returns config object. Defaults only when file is missing.
+   * Throws on corrupt / permission / read failures (never silently overwrites).
+   */
+  readRawConfig() {
+    const loaded = this.loadRawConfig();
+    if (loaded.status === "ok" || loaded.status === "missing") {
+      return loaded.config;
+    }
+    const err = new Error(loaded.message || "config_unreadable");
+    err.code = loaded.code || "config_read_failed";
+    throw err;
+  }
+
   writeRawConfig(cfg) {
+    if (typeof this.hooks.beforeWriteConfig === "function") {
+      this.hooks.beforeWriteConfig(cfg);
+    }
     fs.mkdirSync(path.dirname(this.configPath), { recursive: true });
     atomicWriteJson(this.configPath, cfg);
+  }
+
+  _makeTempBackupPath() {
+    const stamp = `${process.pid}.${crypto.randomBytes(6).toString("hex")}`;
+    return path.join(this.userDataPath, `config.json.migrate-tmp.${stamp}.bak`);
+  }
+
+  _removeFileIfExists(filePath) {
+    try {
+      if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  _cleanupPlaintextBackups(extraPaths = []) {
+    for (const p of extraPaths) this._removeFileIfExists(p);
+    this._removeFileIfExists(this.legacyBackupPath());
+    // Sweep any leftover migrate-tmp backups in userData.
+    try {
+      const names = fs.readdirSync(this.userDataPath);
+      for (const name of names) {
+        if (name.startsWith("config.json.migrate-tmp.") && name.endsWith(".bak")) {
+          this._removeFileIfExists(path.join(this.userDataPath, name));
+        }
+      }
+    } catch {
+      /* ignore */
+    }
   }
 
   /** Strip secrets from an extension record for disk / renderer. */
@@ -102,7 +196,7 @@ class ConfigSecretsService {
     return out;
   }
 
-  toPublicConfig(raw, secretStore) {
+  toPublicConfig(raw, secretStore, extra = {}) {
     const cfg = { ...(raw || defaultPublicConfig(this.defaultPackageDir)) };
     const store = secretStore || this.secretStore;
     const list = Array.isArray(cfg.capabilityExtensions)
@@ -118,16 +212,44 @@ class ConfigSecretsService {
       capabilityExtensions: list,
       secretsMigration: cfg.secretsMigration || null,
       secretStoreWarning: cfg.secretStoreWarning || null,
+      configUnreadable: !!extra.configUnreadable,
     };
   }
 
   readPublicConfig() {
-    return this.toPublicConfig(this.readRawConfig(), this.secretStore);
+    const loaded = this.loadRawConfig();
+    if (loaded.status === "error") {
+      return {
+        ...this.toPublicConfig(defaultPublicConfig(this.defaultPackageDir), this.secretStore, {
+          configUnreadable: true,
+        }),
+        secretStoreWarning: {
+          code: loaded.code,
+          message: loaded.message,
+          at: new Date().toISOString(),
+        },
+        apiKeyConfigured: false,
+        capabilityExtensions: [],
+      };
+    }
+    return this.toPublicConfig(loaded.config, this.secretStore);
   }
 
   /** Main-process runtime config: public fields + resolved model apiKey. */
   getRuntimeConfig() {
-    const publicCfg = this.readPublicConfig();
+    const loaded = this.loadRawConfig();
+    if (loaded.status === "error") {
+      return {
+        provider: "openai-compatible",
+        baseURL: "",
+        model: "",
+        packageDir: this.defaultPackageDir,
+        apiKey: "",
+        capabilityExtensions: [],
+        configUnreadable: true,
+      };
+    }
+    const publicCfg = this.toPublicConfig(loaded.config, this.secretStore);
     let apiKey = "";
     try {
       if (this.secretStore.has(MODEL_API_KEY_ID)) {
@@ -142,7 +264,9 @@ class ConfigSecretsService {
       model: publicCfg.model,
       packageDir: publicCfg.packageDir,
       apiKey,
-      capabilityExtensions: this.readRawConfig().capabilityExtensions || [],
+      capabilityExtensions: Array.isArray(loaded.config.capabilityExtensions)
+        ? loaded.config.capabilityExtensions
+        : [],
     };
   }
 
@@ -151,6 +275,7 @@ class ConfigSecretsService {
    * - undefined / "" => keep existing secret
    * - non-empty string => replace secret
    * Does not accept renderer-supplied apiKeyConfigured as truth.
+   * Refuses to write when existing config is unreadable/corrupt.
    */
   setConfigFromRenderer(input) {
     if (!input || typeof input !== "object") {
@@ -158,7 +283,13 @@ class ConfigSecretsService {
       err.code = "invalid_config_payload";
       throw err;
     }
-    const raw = this.readRawConfig();
+    const loaded = this.loadRawConfig();
+    if (loaded.status === "error") {
+      const err = new Error(loaded.message || "config_unreadable");
+      err.code = loaded.code || "config_unreadable";
+      throw err;
+    }
+    const raw = loaded.config;
     const next = {
       ...raw,
       provider: "openai-compatible",
@@ -167,7 +298,6 @@ class ConfigSecretsService {
       packageDir:
         typeof input.packageDir === "string" ? input.packageDir.trim() : raw.packageDir || this.defaultPackageDir,
     };
-    // Never trust renderer apiKeyConfigured; never persist plaintext apiKey.
     delete next.apiKey;
 
     if (typeof input.apiKey === "string" && input.apiKey.trim()) {
@@ -201,7 +331,11 @@ class ConfigSecretsService {
 
   clearModelApiKey() {
     this.secretStore.delete(MODEL_API_KEY_ID);
-    const raw = this.readRawConfig();
+    const loaded = this.loadRawConfig();
+    if (loaded.status === "error") {
+      return this.readPublicConfig();
+    }
+    const raw = loaded.config;
     if (Object.prototype.hasOwnProperty.call(raw, "apiKey")) {
       delete raw.apiKey;
       this.writeRawConfig(raw);
@@ -218,8 +352,8 @@ class ConfigSecretsService {
     for (const ext of list) {
       if (!ext || !ext.id || !ext.env || typeof ext.env !== "object") continue;
       for (const [key, value] of Object.entries(ext.env)) {
+        // Migrate every non-empty env value (including short values like LOG_LEVEL=info).
         if (!isNonEmptyString(value)) continue;
-        if (!looksLikeSecretEnvKey(key) && String(value).length < 8) continue;
         found.push({
           id: extensionSecretId(ext.id, key),
           value: String(value).trim(),
@@ -232,103 +366,7 @@ class ConfigSecretsService {
     return found;
   }
 
-  /**
-   * Idempotent migration. On any failure, leave config plaintext intact.
-   * @returns {{ status: string, migratedCount?: number, warning?: string }}
-   */
-  migrateLegacySecrets() {
-    const raw = this.readRawConfig();
-    const legacy = this.collectLegacySecrets(raw);
-    const already =
-      raw.secretsMigration &&
-      raw.secretsMigration.version === MIGRATION_VERSION &&
-      raw.secretsMigration.status === "completed";
-
-    if (!legacy.length) {
-      if (!already) {
-        raw.secretsMigration = {
-          version: MIGRATION_VERSION,
-          status: "completed",
-          completedAt: new Date().toISOString(),
-          migratedCount: 0,
-          note: "no_plaintext_secrets",
-        };
-        delete raw.secretStoreWarning;
-        delete raw.apiKey;
-        if (Array.isArray(raw.capabilityExtensions)) {
-          raw.capabilityExtensions = raw.capabilityExtensions.map((e) =>
-            this.sanitizeExtension(e, this.secretStore)
-          );
-        }
-        this.writeRawConfig(raw);
-      }
-      this.lastMigration = { status: "completed", migratedCount: 0 };
-      return this.lastMigration;
-    }
-
-    if (!this.secretStore.isEncryptionAvailable()) {
-      const warning =
-        "本机安全存储不可用，连接密钥仍留在普通配置中。请检查系统登录与凭据保护后重启应用；在修复前不会清除旧配置。";
-      raw.secretStoreWarning = {
-        code: "secret_encryption_unavailable",
-        message: warning,
-        at: new Date().toISOString(),
-      };
-      raw.secretsMigration = {
-        version: MIGRATION_VERSION,
-        status: "blocked",
-        reason: "secret_encryption_unavailable",
-        at: new Date().toISOString(),
-        pendingCount: legacy.length,
-      };
-      this.writeRawConfig(raw);
-      this.lastMigration = { status: "blocked", warning, pendingCount: legacy.length };
-      return this.lastMigration;
-    }
-
-    // Backup before any mutation of secrets file / config cleanup.
-    try {
-      fs.mkdirSync(this.userDataPath, { recursive: true });
-      fs.copyFileSync(this.configPath, this.backupPath());
-    } catch (err) {
-      const warning = "无法备份旧配置，已中止密钥迁移；旧配置未改动。";
-      this.lastMigration = { status: "failed", warning, code: "backup_failed" };
-      return this.lastMigration;
-    }
-
-    try {
-      for (const item of legacy) {
-        this.secretStore.set(item.id, item.value);
-        if (!this.secretStore.verify(item.id, item.value)) {
-          const err = new Error("secret_verify_failed");
-          err.code = "secret_verify_failed";
-          err.secretId = item.id;
-          throw err;
-        }
-      }
-    } catch (err) {
-      const warning =
-        "密钥未能安全写入或校验失败，已保留旧配置明文。请重启应用重试；在成功前不会删除旧密钥。";
-      raw.secretStoreWarning = {
-        code: err.code || "migrate_write_failed",
-        message: warning,
-        at: new Date().toISOString(),
-        secretId: err.secretId || undefined,
-      };
-      raw.secretsMigration = {
-        version: MIGRATION_VERSION,
-        status: "failed",
-        reason: err.code || "migrate_write_failed",
-        at: new Date().toISOString(),
-        pendingCount: legacy.length,
-      };
-      // Do not strip plaintext.
-      this.writeRawConfig(raw);
-      this.lastMigration = { status: "failed", warning, code: err.code };
-      return this.lastMigration;
-    }
-
-    // All secrets verified — now strip plaintext from config atomically.
+  _buildCleanedConfig(raw, migratedCount) {
     const cleaned = { ...raw };
     delete cleaned.apiKey;
     delete cleaned.secretStoreWarning;
@@ -336,7 +374,9 @@ class ConfigSecretsService {
       cleaned.capabilityExtensions = cleaned.capabilityExtensions.map((ext) => {
         const envKeyNames = new Set();
         if (ext.env && typeof ext.env === "object") {
-          for (const k of Object.keys(ext.env)) envKeyNames.add(k);
+          for (const [k, v] of Object.entries(ext.env)) {
+            if (isNonEmptyString(v)) envKeyNames.add(k);
+          }
         }
         if (Array.isArray(ext.envKeyNames)) {
           for (const k of ext.envKeyNames) envKeyNames.add(k);
@@ -351,9 +391,170 @@ class ConfigSecretsService {
       version: MIGRATION_VERSION,
       status: "completed",
       completedAt: new Date().toISOString(),
-      migratedCount: legacy.length,
+      migratedCount,
     };
-    this.writeRawConfig(cleaned);
+    return cleaned;
+  }
+
+  /**
+   * Idempotent migration.
+   * Success path: keep original config until secrets verified → remove temp plaintext backup →
+   * atomic write of redacted config. Never leaves permanent plaintext backups.
+   * Any failure: original config preserved; status is never "completed".
+   */
+  migrateLegacySecrets() {
+    const loaded = this.loadRawConfig();
+    if (loaded.status === "error") {
+      this.lastMigration = {
+        status: "blocked",
+        warning: loaded.message,
+        code: loaded.code,
+        preserveOriginal: true,
+      };
+      return this.lastMigration;
+    }
+
+    const raw = loaded.config;
+    const legacy = this.collectLegacySecrets(raw);
+    const already =
+      raw.secretsMigration &&
+      raw.secretsMigration.version === MIGRATION_VERSION &&
+      raw.secretsMigration.status === "completed";
+
+    if (!legacy.length) {
+      if (!already) {
+        // No plaintext secrets: mark complete and sanitize shape without inventing secrets.
+        const cleaned = this._buildCleanedConfig(raw, 0);
+        cleaned.secretsMigration.note = "no_plaintext_secrets";
+        try {
+          this.writeRawConfig(cleaned);
+          this._cleanupPlaintextBackups();
+        } catch (err) {
+          this.lastMigration = {
+            status: "failed",
+            warning: "无法写入脱敏配置，已保留原配置。",
+            code: err.code || "config_write_failed",
+          };
+          return this.lastMigration;
+        }
+      } else {
+        this._cleanupPlaintextBackups();
+      }
+      this.lastMigration = { status: "completed", migratedCount: 0 };
+      return this.lastMigration;
+    }
+
+    if (!this.secretStore.isEncryptionAvailable()) {
+      const warning =
+        "本机安全存储不可用，连接密钥仍留在普通配置中。请检查系统登录与凭据保护后重启应用；在修复前不会清除旧配置。";
+      // Metadata-only update; plaintext retained. Do not create permanent plaintext backup.
+      try {
+        const marked = {
+          ...raw,
+          secretStoreWarning: {
+            code: "secret_encryption_unavailable",
+            message: warning,
+            at: new Date().toISOString(),
+          },
+          secretsMigration: {
+            version: MIGRATION_VERSION,
+            status: "blocked",
+            reason: "secret_encryption_unavailable",
+            at: new Date().toISOString(),
+            pendingCount: legacy.length,
+          },
+        };
+        this.writeRawConfig(marked);
+      } catch {
+        /* still report blocked even if warning persist failed */
+      }
+      this.lastMigration = { status: "blocked", warning, pendingCount: legacy.length };
+      return this.lastMigration;
+    }
+
+    // Transaction: original config.json remains source of truth until final atomic replace.
+    let tempBackupPath = null;
+    try {
+      fs.mkdirSync(this.userDataPath, { recursive: true });
+      tempBackupPath = this._makeTempBackupPath();
+      this._activeTempBackupPath = tempBackupPath;
+      fs.copyFileSync(this.configPath, tempBackupPath);
+    } catch (err) {
+      this._removeFileIfExists(tempBackupPath);
+      this._activeTempBackupPath = null;
+      this.lastMigration = {
+        status: "failed",
+        warning: "无法创建迁移临时备份，已中止密钥迁移；旧配置未改动。",
+        code: "backup_failed",
+      };
+      return this.lastMigration;
+    }
+
+    try {
+      for (const item of legacy) {
+        this.secretStore.set(item.id, item.value);
+        if (!this.secretStore.verify(item.id, item.value)) {
+          const err = new Error("secret_verify_failed");
+          err.code = "secret_verify_failed";
+          err.secretId = item.id;
+          throw err;
+        }
+      }
+    } catch (err) {
+      this._cleanupPlaintextBackups([tempBackupPath]);
+      this._activeTempBackupPath = null;
+      const warning =
+        "密钥未能安全写入或校验失败，已保留旧配置明文。请重启应用重试；在成功前不会删除旧密钥。";
+      // Keep original plaintext; optionally persist failure metadata without claiming completed.
+      try {
+        const marked = {
+          ...raw,
+          secretStoreWarning: {
+            code: err.code || "migrate_write_failed",
+            message: warning,
+            at: new Date().toISOString(),
+            secretId: err.secretId || undefined,
+          },
+          secretsMigration: {
+            version: MIGRATION_VERSION,
+            status: "failed",
+            reason: err.code || "migrate_write_failed",
+            at: new Date().toISOString(),
+            pendingCount: legacy.length,
+          },
+        };
+        this.writeRawConfig(marked);
+      } catch {
+        /* original file still present if this write fails */
+      }
+      this.lastMigration = { status: "failed", warning, code: err.code || "migrate_write_failed" };
+      return this.lastMigration;
+    }
+
+    const cleaned = this._buildCleanedConfig(raw, legacy.length);
+
+    // Remove plaintext temp/legacy backups BEFORE committing cleaned config.
+    this._cleanupPlaintextBackups([tempBackupPath]);
+    this._activeTempBackupPath = null;
+
+    try {
+      if (typeof this.hooks.beforeCommitCleanedConfig === "function") {
+        this.hooks.beforeCommitCleanedConfig(cleaned);
+      }
+      this.writeRawConfig(cleaned);
+    } catch (err) {
+      // Original config.json still has plaintext (never replaced). Ensure no temp backups remain.
+      this._cleanupPlaintextBackups([tempBackupPath]);
+      this.lastMigration = {
+        status: "failed",
+        warning: "脱敏配置写入失败，已保留旧配置明文，未标记迁移完成。",
+        code: err.code || "config_write_failed",
+      };
+      return this.lastMigration;
+    }
+
+    // Final sweep in case rename left anything.
+    this._cleanupPlaintextBackups();
     this.lastMigration = { status: "completed", migratedCount: legacy.length };
     return this.lastMigration;
   }
@@ -402,7 +603,6 @@ class ConfigSecretsService {
       for (const k of Object.keys(ext.envConfigured)) names.add(k);
     }
     if (ext.env && typeof ext.env === "object") {
-      // Legacy in-memory shape during migration window.
       for (const [k, v] of Object.entries(ext.env)) {
         if (isNonEmptyString(v)) env[k] = String(v);
         else names.add(k);
@@ -432,7 +632,13 @@ class ConfigSecretsService {
       err.code = "extensions_must_be_array";
       throw err;
     }
-    const raw = this.readRawConfig();
+    const loaded = this.loadRawConfig();
+    if (loaded.status === "error") {
+      const err = new Error(loaded.message || "config_unreadable");
+      err.code = loaded.code || "config_unreadable";
+      throw err;
+    }
+    const raw = loaded.config;
     const nextList = [];
     for (const ext of list) {
       const id = String(ext.id || "").trim();
@@ -496,14 +702,52 @@ function deepContainsSecret(value, secrets, depth = 0) {
   return null;
 }
 
+/** Recursively scan files under dir for plaintext secrets. */
+function scanDirForPlaintextSecrets(rootDir, secrets) {
+  const hits = [];
+  if (!fs.existsSync(rootDir)) return hits;
+  const stack = [rootDir];
+  while (stack.length) {
+    const cur = stack.pop();
+    let entries;
+    try {
+      entries = fs.readdirSync(cur, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const ent of entries) {
+      const full = path.join(cur, ent.name);
+      if (ent.isDirectory()) {
+        stack.push(full);
+        continue;
+      }
+      if (!ent.isFile()) continue;
+      let text;
+      try {
+        text = fs.readFileSync(full, "utf8");
+      } catch {
+        continue;
+      }
+      for (const s of secrets) {
+        if (s && text.includes(s)) {
+          hits.push({ file: path.relative(rootDir, full).split(path.sep).join("/"), secret: s });
+        }
+      }
+    }
+  }
+  return hits;
+}
+
 module.exports = {
   ConfigSecretsService,
   MODEL_API_KEY_ID,
   MIGRATION_VERSION,
-  BACKUP_NAME,
+  LEGACY_BACKUP_NAME,
+  BACKUP_NAME: LEGACY_BACKUP_NAME,
   extensionSecretId,
   defaultPublicConfig,
   looksLikeSecretEnvKey,
   deepContainsSecret,
+  scanDirForPlaintextSecrets,
   SecretStore,
 };
