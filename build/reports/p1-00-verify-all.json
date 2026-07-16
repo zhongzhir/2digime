@@ -1,7 +1,7 @@
 {
   "task": "P1-00",
-  "startedAtUtc": "2026-07-16T07:56:10.637Z",
-  "finishedAtUtc": "2026-07-16T07:56:14.571Z",
+  "startedAtUtc": "2026-07-16T08:25:54.345Z",
+  "finishedAtUtc": "2026-07-16T08:25:58.225Z",
   "ok": true,
   "results": [
     {
@@ -53,7 +53,7 @@
       "name": "git_status_excludes_sensitive",
       "ok": true,
       "detail": {
-        "trackedCandidates": 14,
+        "trackedCandidates": 8,
         "forbiddenHits": []
       }
     },

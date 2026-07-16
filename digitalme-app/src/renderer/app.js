@@ -2182,7 +2182,10 @@ async function openSettings() {
   }
   await refreshSettingsAuditList();
   await refreshPackageVersionsPanel();
-  $("settings-modal").classList.remove("hidden");
+  const settingsModal = $("settings-modal");
+  const settingsBody = settingsModal.querySelector(".settings-modal-body");
+  settingsModal.classList.remove("hidden");
+  if (settingsBody) settingsBody.scrollTop = 0;
 }
 
 /** Settings: package version panel (disk-backed; survives app restart). */

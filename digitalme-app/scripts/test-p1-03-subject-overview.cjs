@@ -479,6 +479,24 @@ test("20. corrupt identity and definition JSON produce warnings", () => {
   }
 });
 
+test("21. settings modal stays viewport-bound with sticky reachable actions", () => {
+  const rendererDir = path.join(__dirname, "..", "src", "renderer");
+  const html = fs.readFileSync(path.join(rendererDir, "index.html"), "utf8");
+  const css = fs.readFileSync(path.join(rendererDir, "styles.css"), "utf8");
+  const appJs = fs.readFileSync(path.join(rendererDir, "app.js"), "utf8");
+
+  assert.match(html, /id="settings-modal" class="modal settings-modal hidden"/);
+  assert.match(html, /class="modal-card settings-modal-card"/);
+  assert.match(html, /class="settings-modal-body"/);
+  assert.match(html, /class="modal-actions settings-modal-footer"/);
+  assert.match(css, /\.settings-modal-card\s*\{[\s\S]*max-height:\s*calc\(100dvh/);
+  assert.match(css, /\.settings-modal-body\s*\{[\s\S]*overflow-y:\s*auto/);
+  assert.match(css, /\.settings-modal-body\s*\{[\s\S]*min-height:\s*0/);
+  assert.match(css, /\.settings-modal-footer\s*\{[\s\S]*position:\s*sticky/);
+  assert.match(css, /\.settings-modal-footer\s*\{[\s\S]*bottom:\s*0/);
+  assert.match(appJs, /settingsBody\.scrollTop\s*=\s*0/);
+});
+
 console.log("");
 console.log(`P1-03 results: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

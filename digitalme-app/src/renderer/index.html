@@ -911,9 +911,10 @@
     </div>
 
     <!-- Settings modal -->
-    <div id="settings-modal" class="modal hidden">
-      <div class="modal-card">
+    <div id="settings-modal" class="modal settings-modal hidden">
+      <div class="modal-card settings-modal-card">
         <h2>设置</h2>
+        <div class="settings-modal-body">
         <label>智能引擎地址
           <input id="cfg-baseurl" type="text" placeholder="例如 https://api.deepseek.com/v1" />
         </label>
@@ -966,12 +967,13 @@
           </div>
           <div id="settings-audit-list" class="library-list" style="max-height:180px;overflow:auto"></div>
         </details>
-        <div class="modal-actions">
+        <p class="hint">密钥经本机安全存储保护，界面不会回显。普通使用填好地址与引擎名称即可；首次需填写密钥。</p>
+        <p id="cfg-secret-warning" class="hint" style="color:#8a3a12"></p>
+        </div>
+        <div class="modal-actions settings-modal-footer">
           <button id="btn-save">保存</button>
           <button id="btn-close" class="btn-ghost">取消</button>
         </div>
-        <p class="hint">密钥经本机安全存储保护，界面不会回显。普通使用填好地址与引擎名称即可；首次需填写密钥。</p>
-        <p id="cfg-secret-warning" class="hint" style="color:#8a3a12"></p>
       </div>
     </div>
 
