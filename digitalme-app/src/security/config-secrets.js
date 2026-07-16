@@ -14,6 +14,15 @@ const MODEL_API_KEY_ID = "model.apiKey";
 const MIGRATION_VERSION = 1;
 /** Legacy permanent backup name from earlier P1-01 revision; must be removed after success. */
 const LEGACY_BACKUP_NAME = "config.json.pre-secret-migration.bak";
+const PLAINTEXT_BACKUP_CLEANUP_FAILED = "plaintext_backup_cleanup_failed";
+
+function cleanupFailureWarning() {
+  return "检测到明文配置备份未能安全删除，已中止迁移并保留原配置。请重启应用重试；在备份清除前不会标记迁移完成。";
+}
+
+function residualBackupWarning() {
+  return "检测到旧的明文配置备份仍存在且未能安全删除。请检查文件权限或磁盘空间后重启应用。";
+}
 
 function extensionSecretId(extensionId, envKey) {
   return `extension.${String(extensionId)}.${String(envKey)}`;
@@ -61,7 +70,7 @@ class ConfigSecretsService {
    * @param {string} [opts.configPath]
    * @param {import('./secret-store').SecretStore} opts.secretStore
    * @param {string} [opts.defaultPackageDir]
-   * @param {{ beforeCommitCleanedConfig?: Function, beforeWriteConfig?: Function }} [opts.hooks]
+   * @param {{ beforeCommitCleanedConfig?: Function, beforeWriteConfig?: Function, beforeDeletePlaintextBackup?: Function, beforeEnumeratePlaintextBackups?: Function }} [opts.hooks]
    */
   constructor(opts) {
     this.userDataPath = opts.userDataPath;
@@ -147,28 +156,159 @@ class ConfigSecretsService {
     return path.join(this.userDataPath, `config.json.migrate-tmp.${stamp}.bak`);
   }
 
-  _removeFileIfExists(filePath) {
+  _enumeratePlaintextBackupPaths(extraPaths = [], { strict = false } = {}) {
+    const paths = [];
+    const seen = new Set();
+    const add = (p) => {
+      if (!p || seen.has(p)) return;
+      seen.add(p);
+      paths.push(p);
+    };
+    for (const p of extraPaths) add(p);
+    add(this.legacyBackupPath());
+    if (typeof this.hooks.beforeEnumeratePlaintextBackups === "function") {
+      try {
+        this.hooks.beforeEnumeratePlaintextBackups(this.userDataPath);
+      } catch (err) {
+        if (strict) {
+          const e = new Error("enumerate_hook_failed");
+          e.code = PLAINTEXT_BACKUP_CLEANUP_FAILED;
+          e.cause = err;
+          throw e;
+        }
+      }
+    }
+    if (!fs.existsSync(this.userDataPath)) return paths;
+    let names;
     try {
-      if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
-    } catch {
-      /* ignore */
+      names = fs.readdirSync(this.userDataPath);
+    } catch (err) {
+      if (strict) {
+        const e = new Error("enumerate_backups_failed");
+        e.code = PLAINTEXT_BACKUP_CLEANUP_FAILED;
+        e.cause = err;
+        throw e;
+      }
+      return paths;
+    }
+    for (const name of names) {
+      if (name.startsWith("config.json.migrate-tmp.") && name.endsWith(".bak")) {
+        add(path.join(this.userDataPath, name));
+      }
+    }
+    return paths;
+  }
+
+  _strictUnlink(filePath) {
+    if (!filePath || !fs.existsSync(filePath)) return;
+    if (typeof this.hooks.beforeDeletePlaintextBackup === "function") {
+      try {
+        this.hooks.beforeDeletePlaintextBackup(filePath);
+      } catch (err) {
+        const e = new Error("unlink_hook_failed");
+        e.code = PLAINTEXT_BACKUP_CLEANUP_FAILED;
+        e.path = filePath;
+        e.cause = err;
+        throw e;
+      }
+    }
+    try {
+      fs.unlinkSync(filePath);
+    } catch (err) {
+      const e = new Error("unlink_failed");
+      e.code = PLAINTEXT_BACKUP_CLEANUP_FAILED;
+      e.path = filePath;
+      e.cause = err;
+      throw e;
+    }
+    if (fs.existsSync(filePath)) {
+      const e = new Error("unlink_residual");
+      e.code = PLAINTEXT_BACKUP_CLEANUP_FAILED;
+      e.path = filePath;
+      throw e;
     }
   }
 
-  _cleanupPlaintextBackups(extraPaths = []) {
-    for (const p of extraPaths) this._removeFileIfExists(p);
-    this._removeFileIfExists(this.legacyBackupPath());
-    // Sweep any leftover migrate-tmp backups in userData.
-    try {
-      const names = fs.readdirSync(this.userDataPath);
+  _verifyNoPlaintextBackupsRemain(extraPaths = []) {
+    const remaining = [];
+    for (const p of extraPaths) {
+      if (p && fs.existsSync(p)) remaining.push(p);
+    }
+    if (fs.existsSync(this.legacyBackupPath())) {
+      remaining.push(this.legacyBackupPath());
+    }
+    if (fs.existsSync(this.userDataPath)) {
+      let names;
+      try {
+        names = fs.readdirSync(this.userDataPath);
+      } catch (err) {
+        const e = new Error("verify_enumerate_failed");
+        e.code = PLAINTEXT_BACKUP_CLEANUP_FAILED;
+        e.cause = err;
+        throw e;
+      }
       for (const name of names) {
         if (name.startsWith("config.json.migrate-tmp.") && name.endsWith(".bak")) {
-          this._removeFileIfExists(path.join(this.userDataPath, name));
+          remaining.push(path.join(this.userDataPath, name));
         }
       }
-    } catch {
-      /* ignore */
     }
+    if (remaining.length) {
+      const e = new Error("backups_remain");
+      e.code = PLAINTEXT_BACKUP_CLEANUP_FAILED;
+      e.remaining = remaining;
+      throw e;
+    }
+  }
+
+  /** Success-path barrier: delete all plaintext backups and verify none remain. */
+  _strictCleanupPlaintextBackups(extraPaths = []) {
+    const targets = this._enumeratePlaintextBackupPaths(extraPaths, { strict: true });
+    for (const p of targets) {
+      this._strictUnlink(p);
+    }
+    this._verifyNoPlaintextBackupsRemain(extraPaths);
+  }
+
+  /** Failure-path best effort; returns final safety state (never swallows residual risk). */
+  _bestEffortCleanupPlaintextBackups(extraPaths = []) {
+    let lastError = null;
+    const targets = this._enumeratePlaintextBackupPaths(extraPaths, { strict: false });
+    for (const p of targets) {
+      try {
+        this._strictUnlink(p);
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    try {
+      this._verifyNoPlaintextBackupsRemain(extraPaths);
+      return { ok: true, remaining: [], error: lastError };
+    } catch (err) {
+      return {
+        ok: false,
+        remaining: err.remaining || [],
+        error: err,
+        lastError: lastError || err,
+      };
+    }
+  }
+
+  _migrationBlockedByCleanup(err, raw, legacy, tempBackupPath) {
+    const cleanup = this._bestEffortCleanupPlaintextBackups(
+      [tempBackupPath, this._activeTempBackupPath].filter(Boolean)
+    );
+    this._activeTempBackupPath = null;
+    const code = err.code || PLAINTEXT_BACKUP_CLEANUP_FAILED;
+    const warning = cleanup.ok ? cleanupFailureWarning() : residualBackupWarning();
+    // Before redacted commit: never mutate config.json; preserve original plaintext bytes.
+    return {
+      status: "failed",
+      warning,
+      code,
+      cleanupOk: cleanup.ok,
+      remainingBackups: cleanup.remaining,
+    };
   }
 
   /** Strip secrets from an extension record for disk / renderer. */
@@ -423,22 +563,35 @@ class ConfigSecretsService {
 
     if (!legacy.length) {
       if (!already) {
-        // No plaintext secrets: mark complete and sanitize shape without inventing secrets.
         const cleaned = this._buildCleanedConfig(raw, 0);
         cleaned.secretsMigration.note = "no_plaintext_secrets";
         try {
+          this._strictCleanupPlaintextBackups();
           this.writeRawConfig(cleaned);
-          this._cleanupPlaintextBackups();
+          this._strictCleanupPlaintextBackups();
         } catch (err) {
           this.lastMigration = {
             status: "failed",
-            warning: "无法写入脱敏配置，已保留原配置。",
+            warning:
+              err.code === PLAINTEXT_BACKUP_CLEANUP_FAILED
+                ? cleanupFailureWarning()
+                : "无法写入脱敏配置，已保留原配置。",
             code: err.code || "config_write_failed",
           };
           return this.lastMigration;
         }
       } else {
-        this._cleanupPlaintextBackups();
+        try {
+          this._strictCleanupPlaintextBackups();
+        } catch (err) {
+          this.lastMigration = {
+            status: "failed",
+            warning: residualBackupWarning(),
+            code: err.code || PLAINTEXT_BACKUP_CLEANUP_FAILED,
+            residualRisk: true,
+          };
+          return this.lastMigration;
+        }
       }
       this.lastMigration = { status: "completed", migratedCount: 0 };
       return this.lastMigration;
@@ -480,7 +633,7 @@ class ConfigSecretsService {
       this._activeTempBackupPath = tempBackupPath;
       fs.copyFileSync(this.configPath, tempBackupPath);
     } catch (err) {
-      this._removeFileIfExists(tempBackupPath);
+      this._tryUnlinkQuiet(tempBackupPath);
       this._activeTempBackupPath = null;
       this.lastMigration = {
         status: "failed",
@@ -501,11 +654,10 @@ class ConfigSecretsService {
         }
       }
     } catch (err) {
-      this._cleanupPlaintextBackups([tempBackupPath]);
+      const cleanup = this._bestEffortCleanupPlaintextBackups([tempBackupPath]);
       this._activeTempBackupPath = null;
       const warning =
         "密钥未能安全写入或校验失败，已保留旧配置明文。请重启应用重试；在成功前不会删除旧密钥。";
-      // Keep original plaintext; optionally persist failure metadata without claiming completed.
       try {
         const marked = {
           ...raw,
@@ -527,15 +679,25 @@ class ConfigSecretsService {
       } catch {
         /* original file still present if this write fails */
       }
-      this.lastMigration = { status: "failed", warning, code: err.code || "migrate_write_failed" };
+      const result = { status: "failed", warning, code: err.code || "migrate_write_failed" };
+      if (!cleanup.ok) {
+        result.code = PLAINTEXT_BACKUP_CLEANUP_FAILED;
+        result.warning = residualBackupWarning();
+        result.remainingBackups = cleanup.remaining;
+      }
+      this.lastMigration = result;
       return this.lastMigration;
     }
 
     const cleaned = this._buildCleanedConfig(raw, legacy.length);
 
-    // Remove plaintext temp/legacy backups BEFORE committing cleaned config.
-    this._cleanupPlaintextBackups([tempBackupPath]);
-    this._activeTempBackupPath = null;
+    try {
+      this._strictCleanupPlaintextBackups([tempBackupPath]);
+      this._activeTempBackupPath = null;
+    } catch (err) {
+      this.lastMigration = this._migrationBlockedByCleanup(err, raw, legacy, tempBackupPath);
+      return this.lastMigration;
+    }
 
     try {
       if (typeof this.hooks.beforeCommitCleanedConfig === "function") {
@@ -543,20 +705,60 @@ class ConfigSecretsService {
       }
       this.writeRawConfig(cleaned);
     } catch (err) {
-      // Original config.json still has plaintext (never replaced). Ensure no temp backups remain.
-      this._cleanupPlaintextBackups([tempBackupPath]);
+      const cleanup = this._bestEffortCleanupPlaintextBackups([tempBackupPath]);
       this.lastMigration = {
         status: "failed",
-        warning: "脱敏配置写入失败，已保留旧配置明文，未标记迁移完成。",
-        code: err.code || "config_write_failed",
+        warning: cleanup.ok
+          ? "脱敏配置写入失败，已保留旧配置明文，未标记迁移完成。"
+          : residualBackupWarning(),
+        code: cleanup.ok ? err.code || "config_write_failed" : PLAINTEXT_BACKUP_CLEANUP_FAILED,
+        remainingBackups: cleanup.ok ? undefined : cleanup.remaining,
       };
       return this.lastMigration;
     }
 
-    // Final sweep in case rename left anything.
-    this._cleanupPlaintextBackups();
+    try {
+      this._strictCleanupPlaintextBackups();
+    } catch (err) {
+      try {
+        const fix = {
+          ...cleaned,
+          secretStoreWarning: {
+            code: PLAINTEXT_BACKUP_CLEANUP_FAILED,
+            message: residualBackupWarning(),
+            at: new Date().toISOString(),
+          },
+          secretsMigration: {
+            version: MIGRATION_VERSION,
+            status: "failed",
+            reason: PLAINTEXT_BACKUP_CLEANUP_FAILED,
+            at: new Date().toISOString(),
+            pendingCount: legacy.length,
+          },
+        };
+        this.writeRawConfig(fix);
+      } catch {
+        /* cleaned config may still show completed on disk */
+      }
+      this.lastMigration = {
+        status: "failed",
+        warning: residualBackupWarning(),
+        code: PLAINTEXT_BACKUP_CLEANUP_FAILED,
+        residualRisk: true,
+      };
+      return this.lastMigration;
+    }
+
     this.lastMigration = { status: "completed", migratedCount: legacy.length };
     return this.lastMigration;
+  }
+
+  _tryUnlinkQuiet(filePath) {
+    try {
+      if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    } catch {
+      /* best-effort only */
+    }
   }
 
   /** Extract secrets from enable/save payloads; persist only names on disk. */
@@ -743,6 +945,7 @@ module.exports = {
   MODEL_API_KEY_ID,
   MIGRATION_VERSION,
   LEGACY_BACKUP_NAME,
+  PLAINTEXT_BACKUP_CLEANUP_FAILED,
   BACKUP_NAME: LEGACY_BACKUP_NAME,
   extensionSecretId,
   defaultPublicConfig,

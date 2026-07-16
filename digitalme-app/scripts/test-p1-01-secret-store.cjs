@@ -20,6 +20,7 @@ const {
   deepContainsSecret,
   scanDirForPlaintextSecrets,
   LEGACY_BACKUP_NAME,
+  PLAINTEXT_BACKUP_CLEANUP_FAILED,
 } = require("../src/security/config-secrets");
 
 const FAKE_MODEL_KEY = "sk-test-MODEL-KEY-9f3a2c1b";
@@ -273,6 +274,127 @@ test("verify/readback failure keeps old config and is not completed", () => {
       .filter((n) => n.startsWith("config.json.migrate-tmp."));
     assert.equal(tmpLeft.length, 0);
   } finally {
+    cleanup(dir);
+  }
+});
+
+test("plaintext backup unlink failure blocks migration completion", () => {
+  const dir = tempDir("unlink-fail");
+  const legacyBackup = path.join(dir, LEGACY_BACKUP_NAME);
+  const originalUnlink = fs.unlinkSync;
+  try {
+    const { svc, configPath } = makeService(dir);
+    fs.writeFileSync(
+      legacyBackup,
+      JSON.stringify({ apiKey: FAKE_MODEL_KEY, model: "backup-copy" }),
+      "utf8"
+    );
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({ apiKey: FAKE_MODEL_KEY, model: "keep-me" }),
+      "utf8"
+    );
+    const before = fs.readFileSync(configPath, "utf8");
+
+    fs.unlinkSync = (target) => {
+      if (path.resolve(String(target)) === path.resolve(legacyBackup)) {
+        const err = new Error("EPERM");
+        err.code = "EPERM";
+        throw err;
+      }
+      return originalUnlink.call(fs, target);
+    };
+
+    const mig = svc.migrateLegacySecrets();
+    assert.notEqual(mig.status, "completed");
+    assert.equal(mig.status, "failed");
+    assert.equal(mig.code, PLAINTEXT_BACKUP_CLEANUP_FAILED);
+    const after = fs.readFileSync(configPath, "utf8");
+    assert.ok(after.includes(FAKE_MODEL_KEY));
+    assert.equal(JSON.parse(after).apiKey, FAKE_MODEL_KEY);
+    assert.notEqual(JSON.parse(after).secretsMigration?.status, "completed");
+    assert.equal(after, before, "redacted config must not replace original on cleanup failure");
+    assert.equal(fs.existsSync(legacyBackup), true);
+    assert.ok(fs.readFileSync(legacyBackup, "utf8").includes(FAKE_MODEL_KEY));
+    const tmpLeft = fs
+      .readdirSync(dir)
+      .filter((n) => n.startsWith("config.json.migrate-tmp."));
+    assert.equal(tmpLeft.length, 0, "temp backups should be best-effort removed");
+  } finally {
+    fs.unlinkSync = originalUnlink;
+    cleanup(dir);
+  }
+});
+
+test("plaintext backup directory enumerate failure blocks migration completion", () => {
+  const dir = tempDir("enum-fail");
+  const originalReaddir = fs.readdirSync;
+  try {
+    const { svc, configPath } = makeService(dir);
+    fs.writeFileSync(configPath, JSON.stringify({ apiKey: FAKE_MODEL_KEY, model: "keep" }), "utf8");
+    const before = fs.readFileSync(configPath, "utf8");
+
+    fs.readdirSync = (target, opts) => {
+      if (path.resolve(String(target)) === path.resolve(dir)) {
+        const err = new Error("EACCES");
+        err.code = "EACCES";
+        throw err;
+      }
+      return originalReaddir.call(fs, target, opts);
+    };
+
+    const mig = svc.migrateLegacySecrets();
+    assert.notEqual(mig.status, "completed");
+    assert.equal(mig.status, "failed");
+    assert.equal(mig.code, PLAINTEXT_BACKUP_CLEANUP_FAILED);
+    const after = fs.readFileSync(configPath, "utf8");
+    assert.ok(after.includes(FAKE_MODEL_KEY));
+    assert.equal(JSON.parse(after).apiKey, FAKE_MODEL_KEY);
+    assert.notEqual(JSON.parse(after).secretsMigration?.status, "completed");
+    assert.equal(after, before, "redacted config must not replace original on enumerate failure");
+  } finally {
+    fs.readdirSync = originalReaddir;
+    cleanup(dir);
+  }
+});
+
+test("completed migration reports residual risk when plaintext backup cannot be removed", () => {
+  const dir = tempDir("residual-risk");
+  const legacyBackup = path.join(dir, LEGACY_BACKUP_NAME);
+  const originalUnlink = fs.unlinkSync;
+  try {
+    const { svc, configPath } = makeService(dir);
+    fs.writeFileSync(configPath, JSON.stringify({ apiKey: FAKE_MODEL_KEY }), "utf8");
+    assert.equal(svc.migrateLegacySecrets().status, "completed");
+    assertNoPlaintextArtifacts(dir, [FAKE_MODEL_KEY]);
+
+    fs.writeFileSync(
+      legacyBackup,
+      JSON.stringify({ apiKey: FAKE_MODEL_KEY, note: "stale-backup" }),
+      "utf8"
+    );
+
+    fs.unlinkSync = (target) => {
+      if (path.resolve(String(target)) === path.resolve(legacyBackup)) {
+        const err = new Error("EPERM");
+        err.code = "EPERM";
+        throw err;
+      }
+      return originalUnlink.call(fs, target);
+    };
+
+    const mig = svc.migrateLegacySecrets();
+    assert.notEqual(mig.status, "completed");
+    assert.equal(mig.status, "failed");
+    assert.equal(mig.code, PLAINTEXT_BACKUP_CLEANUP_FAILED);
+    assert.equal(mig.residualRisk, true);
+    assert.equal(fs.existsSync(legacyBackup), true);
+    assert.ok(fs.readFileSync(legacyBackup, "utf8").includes(FAKE_MODEL_KEY));
+    const cfg = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    assert.equal(cfg.apiKey, undefined);
+    assert.equal(cfg.secretsMigration?.status, "completed");
+  } finally {
+    fs.unlinkSync = originalUnlink;
     cleanup(dir);
   }
 });

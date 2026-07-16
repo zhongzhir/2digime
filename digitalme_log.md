@@ -5,6 +5,28 @@
 
 ---
 
+## 2026-07-16（P1-01 修订 · 备份清理 fail-closed）
+
+### 任务
+
+- 编号：`P1-01`（第二次修订，保留 `363e58d`、`94f7e13`）
+- 分支：`codex/p1-01-secret-store`
+- 状态：仍为 `statically_verified`（Codex 第二次复核阻断项已修；待再复核）
+
+### 处理
+
+- 成功路径增加严格清理屏障：删除临时/遗留明文备份 → 枚举 `migrate-tmp.*.bak` → 验证无残留后才可 `completed`。
+- 删除、枚举或残留验证失败：不写脱敏 `completed` 配置；提交前失败时原 `config.json` 字节不变；返回 `plaintext_backup_cleanup_failed`；启动时显示安全警告。
+- 已完成迁移但发现旧明文备份且无法删除：不得再报 `completed`，报告残留风险（`residualRisk`）。
+- 新增测试：注入 `unlink` / `readdir` 失败及残留备份场景。
+
+### 验证
+
+- `npm run test:p1-01`：21 项 + 泄露扫描通过
+- Package 清单 SHA-256 仍为 `3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a`
+
+---
+
 ## 2026-07-16（P1-01 修订 · 关闭迁移恢复缺口）
 
 ### 任务

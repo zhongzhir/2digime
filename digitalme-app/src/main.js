@@ -134,7 +134,9 @@ app.whenReady().then(() => {
       migration.code === "config_read_failed" ||
       migration.code === "config_not_a_file"
         ? "配置文件无法安全读取"
-        : "密钥未能迁入本机安全存储";
+        : migration.code === "plaintext_backup_cleanup_failed"
+          ? "明文配置备份未能安全清除"
+          : "密钥未能迁入本机安全存储";
     dialog.showMessageBox({
       type: "warning",
       title,
