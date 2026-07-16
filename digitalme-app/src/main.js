@@ -29,6 +29,8 @@ const capabilitySurface = require("./capabilities/surface");
 const l0Orchestration = require("./orchestration/l0");
 const l0Audit = require("./orchestration/audit-store");
 const l0Agents = require("./orchestration/agents");
+const externalAgentFlow = require("./orchestration/external-agent-flow");
+const decisionAudit = require("./decision-audit");
 const { SecretStore } = require("./security/secret-store");
 const { createElectronSafeStorageAdapter } = require("./security/electron-safe-storage-adapter");
 const { ConfigSecretsService, extensionSecretId } = require("./security/config-secrets");
@@ -1909,13 +1911,19 @@ ipcMain.handle("code:buildDelegationHint", async (_e, payload) => {
   };
 });
 
-ipcMain.handle("l0:auditAppend", async (_e, payload) =>
-  l0Audit.append(app.getPath("userData"), payload || {})
-);
 ipcMain.handle("l0:auditList", async (_e, opts) =>
   l0Audit.list(app.getPath("userData"), opts || {})
 );
-ipcMain.handle("l0:auditClear", async () => l0Audit.clear(app.getPath("userData")));
+
+ipcMain.handle("decisionAudit:list", async (_e, opts) =>
+  decisionAudit.list(app.getPath("userData"), opts || {})
+);
+ipcMain.handle("decisionAudit:verify", async () =>
+  decisionAudit.verify(app.getPath("userData"))
+);
+ipcMain.handle("decisionAudit:rotate", async () =>
+  decisionAudit.rotate(app.getPath("userData"))
+);
 
 ipcMain.handle("l0:listAgents", async () => l0Agents.listAgents(app.getPath("userData")));
 ipcMain.handle("l0:setActiveAgent", async (_e, agentId) =>
@@ -1940,16 +1948,12 @@ ipcMain.handle("l0:buildControlBrief", async (_e, payload) => {
 
 const activeDelegateAborts = new Map();
 
+ipcMain.handle("l0:requestExternalAgent", async (e, payload) =>
+  externalAgentFlow.requestExternalAgent(app.getPath("userData"), e, payload || {}, l0Agents)
+);
+
 ipcMain.handle("l0:runExternalAgent", async (e, payload) => {
   const userData = app.getPath("userData");
-  const ag = l0Agents.getActiveAgent(userData);
-  if (!ag || ag.kind !== "cli") throw new Error("当前未选用外部命令执行体");
-  const task = String((payload && payload.task) || "").trim();
-  if (!task) throw new Error("任务为空");
-  const writeAuthorized = !!(payload && payload.writeAuthorized);
-  if (!writeAuthorized) {
-    throw new Error("外部执行体可能改文件：请先勾选「允许改动授权目录中的文件」，并确认你信任该命令。");
-  }
   const rid = (payload && payload.requestId) || "dlg_" + Date.now();
   const ac = new AbortController();
   activeDelegateAborts.set(rid, ac);
@@ -1961,37 +1965,17 @@ ipcMain.handle("l0:runExternalAgent", async (e, payload) => {
     }
   };
   try {
-    sendProg({ phase: "thinking", label: "正在调度外部执行体…" });
-    const result = await l0Agents.runCliAgent(userData, { task, signal: ac.signal });
-    if (result.aborted) {
-      l0Audit.append(userData, {
-        scene: "code",
-        action: "external_abort",
-        auth: "write",
-        executor: ag.id,
-        summary: task.slice(0, 120),
-        outcome: "aborted",
-      });
-      return { ok: false, aborted: true, reply: "已停止外部执行体。", meta: { capabilitiesUsed: [ag.id] } };
-    }
-    const reply =
-      (result.ok ? "外部执行体已结束。\n\n" : "外部执行体结束（可能非零退出码）。\n\n") +
-      (result.output || "（无输出）");
-    l0Audit.append(userData, {
-      scene: "code",
-      action: "external_delegate",
-      auth: "write",
-      executor: ag.id,
-      summary: task.slice(0, 120),
-      capabilities: [ag.id],
-      outcome: result.ok ? "ok" : "exit_" + result.code,
-    });
-    sendProg({ phase: "done" });
-    return {
-      ok: result.ok,
-      reply,
-      meta: { capabilitiesUsed: [ag.id], usedTools: true, executor: ag.name },
-    };
+    return await externalAgentFlow.runExternalAgent(
+      userData,
+      e,
+      payload || {},
+      l0Agents,
+      {
+        runCliAgent: l0Agents.runCliAgent,
+        onProgress: sendProg,
+        signal: ac.signal,
+      }
+    );
   } finally {
     activeDelegateAborts.delete(rid);
   }

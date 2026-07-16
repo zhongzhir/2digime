@@ -889,10 +889,21 @@ function bindEvents() {
   $("btn-cli-save")?.addEventListener("click", () => {
     saveCliExecutorSettings().catch((e) => alert(e.message || String(e)));
   });
-  $("btn-audit-clear")?.addEventListener("click", async () => {
-    if (!window.confirm("清空全部行动记录？此操作不可恢复。")) return;
+  $("btn-audit-rotate")?.addEventListener("click", async () => {
+    if (
+      !window.confirm(
+        "将开启新的决策记录代次。旧代次文件仍保留在本机，不会被删除。\n\n继续？"
+      )
+    )
+      return;
+    if (
+      !window.confirm(
+        "请再次确认：开启新代次后，新记录将从空链开始，旧代次可在设置中切换查看。\n\n确定开启？"
+      )
+    )
+      return;
     try {
-      await window.digitalMe.l0AuditClear?.();
+      await window.digitalMe.decisionAuditRotate?.();
       await refreshSettingsAuditList();
       await refreshCodeAuditList();
     } catch (e) {
@@ -3472,31 +3483,40 @@ async function refreshCodeScenarioHint() {
   }
 }
 
-async function recordL0Audit(payload) {
-  try {
-    if (window.digitalMe.l0AuditAppend) await window.digitalMe.l0AuditAppend(payload);
-  } catch {
-    /* ignore */
-  }
+async function recordL0Audit(_payload) {
+  /* legacy renderer append removed in P1-04; trusted records are main-process only */
 }
 
-async function refreshCodeAuditList() {
-  const box = $("code-audit-list");
-  if (!box || !window.digitalMe.l0AuditList) return;
+function formatDecisionAuditRow(r) {
+  const when = (r.at || "").replace("T", " ").slice(0, 19);
+  const scopes = Array.isArray(r.dataScopes) ? r.dataScopes.join("、") : "";
+  const status = (r.outcome && r.outcome.status) || r.event || "";
+  return (
+    `<div class="path">${escapeHtml(when)} · ${escapeHtml(r.event || "")} · ${escapeHtml(status)}</div>` +
+    `<div class="muted" style="font-size:11px">${escapeHtml(r.action || "")}${scopes ? " · " + escapeHtml(scopes) : ""}</div>`
+  );
+}
+
+async function refreshDecisionAuditList(box, limit) {
+  if (!box || !window.digitalMe.decisionAuditList) return;
   try {
-    const rows = await window.digitalMe.l0AuditList({ scene: "code", limit: 12 });
+    const data = await window.digitalMe.decisionAuditList({ limit: limit || 30 });
     box.innerHTML = "";
+    const rows = (data && data.entries) || [];
     if (!rows.length) {
       box.innerHTML = `<div class="muted">尚无记录。</div>`;
       return;
     }
+    if (data && data.healthy === false) {
+      const warn = document.createElement("div");
+      warn.className = "muted";
+      warn.textContent = "记录完整性校验未通过，请谨慎参考。";
+      box.appendChild(warn);
+    }
     for (const r of rows) {
       const div = document.createElement("div");
       div.className = "code-file-row";
-      const when = (r.at || "").replace("T", " ").slice(0, 19);
-      div.innerHTML =
-        `<div class="path">${escapeHtml(when)} · ${escapeHtml(r.auth || "")} · ${escapeHtml(r.executor || "")}</div>` +
-        `<div class="muted" style="font-size:11px">${escapeHtml(r.summary || r.action || "")}</div>`;
+      div.innerHTML = formatDecisionAuditRow(r);
       box.appendChild(div);
     }
   } catch (e) {
@@ -3504,28 +3524,69 @@ async function refreshCodeAuditList() {
   }
 }
 
-async function refreshSettingsAuditList() {
-  const box = $("settings-audit-list");
-  if (!box || !window.digitalMe.l0AuditList) return;
-  try {
-    const rows = await window.digitalMe.l0AuditList({ limit: 30 });
-    box.innerHTML = "";
-    if (!rows.length) {
-      box.innerHTML = `<div class="muted">尚无行动记录。</div>`;
+function buildExternalAgentDataScopes(writeAuthorized) {
+  const scopes = ["task_text", "env_inherit"];
+  if (writeAuthorized) scopes.push("workspace_files");
+  return scopes;
+}
+
+function showExternalAgentConfirmModal(summary, expiresAt) {
+  return new Promise((resolve) => {
+    const modal = $("external-agent-confirm-modal");
+    const title = $("ext-agent-confirm-title");
+    const headline = $("ext-agent-confirm-headline");
+    const details = $("ext-agent-confirm-details");
+    const expiry = $("ext-agent-confirm-expiry");
+    const btnOk = $("btn-ext-agent-confirm");
+    const btnCancel = $("btn-ext-agent-cancel");
+    if (!modal || !details || !btnOk || !btnCancel) {
+      resolve(false);
       return;
     }
-    for (const r of rows) {
-      const div = document.createElement("div");
-      div.className = "code-file-row";
-      const when = (r.at || "").replace("T", " ").slice(0, 19);
-      div.innerHTML =
-        `<div class="path">${escapeHtml(when)} · ${escapeHtml(r.scene || "")} · ${escapeHtml(r.auth || "")}</div>` +
-        `<div class="muted" style="font-size:11px">${escapeHtml((r.executor || "") + " · " + (r.summary || ""))}</div>`;
-      box.appendChild(div);
+    if (title) title.textContent = "确认外部程序执行";
+    if (headline) headline.textContent = (summary && summary.headline) || "即将让本机外部程序执行任务";
+    details.innerHTML = "";
+    const rows = [
+      ["执行体", summary && summary.executorName],
+      ["命令", summary && summary.commandLabel],
+      ["工作目录", summary && summary.cwd],
+      ["可能改文件", summary && summary.mayModifyFiles ? "是" : "否"],
+      ["数据范围", summary && Array.isArray(summary.dataScopes) ? summary.dataScopes.join("、") : ""],
+      ["风险", summary && summary.risk],
+      ["任务长度", summary && summary.taskLength != null ? summary.taskLength + " 字" : ""],
+    ];
+    for (const [label, value] of rows) {
+      const dt = document.createElement("dt");
+      dt.textContent = label;
+      const dd = document.createElement("dd");
+      dd.textContent = value || "—";
+      details.appendChild(dt);
+      details.appendChild(dd);
     }
-  } catch (e) {
-    box.innerHTML = `<div class="muted">${escapeHtml(e.message || String(e))}</div>`;
-  }
+    if (expiry) {
+      const exp = expiresAt ? new Date(expiresAt).toLocaleString() : "";
+      expiry.textContent = exp ? `确认凭据有效期至：${exp}` : "";
+    }
+    modal.classList.remove("hidden");
+    const cleanup = (result) => {
+      modal.classList.add("hidden");
+      btnOk.removeEventListener("click", onOk);
+      btnCancel.removeEventListener("click", onCancel);
+      resolve(result);
+    };
+    const onOk = () => cleanup(true);
+    const onCancel = () => cleanup(false);
+    btnOk.addEventListener("click", onOk);
+    btnCancel.addEventListener("click", onCancel);
+  });
+}
+
+async function refreshCodeAuditList() {
+  await refreshDecisionAuditList($("code-audit-list"), 12);
+}
+
+async function refreshSettingsAuditList() {
+  await refreshDecisionAuditList($("settings-audit-list"), 30);
 }
 
 async function refreshCodeExecutorSelect() {
@@ -3639,22 +3700,44 @@ async function sendCode() {
     let caps = [];
     let executorName = "本机对话";
 
-    if (executorId !== "builtin" && window.digitalMe.l0RunExternalAgent) {
-      const ok = window.confirm(
-        "将把任务交给外部命令执行体。\n\n请确认：\n1）你信任该命令；\n2）已勾选允许改动文件；\n3）任务说明准确。\n\n继续？"
-      );
-      if (!ok) {
+    if (executorId !== "builtin" && window.digitalMe.l0RequestExternalAgent) {
+      await window.digitalMe.l0SetActiveAgent?.(executorId);
+      const dataScopes = buildExternalAgentDataScopes(writeAuthorized);
+      if (writeAuthorized === false) {
+        pending.classList.remove("streaming");
+        pending.className = "msg system-note";
+        pending.textContent =
+          "外部执行体可能改文件：请先勾选「允许改动授权目录中的文件」，并确认你信任该命令。";
+        codeHistory.push({
+          role: "system-note",
+          content: pending.textContent,
+        });
+        return;
+      }
+      if (trail) trail.textContent = "正在请求安全确认…";
+      const prep = await window.digitalMe.l0RequestExternalAgent({
+        task: text,
+        dataScopes,
+        writeIntent: writeAuthorized,
+        requestId: codeRequestId,
+      });
+      if (!prep || prep.status !== "require_confirmation") {
+        throw new Error("未能获取确认摘要。");
+      }
+      const confirmed = await showExternalAgentConfirmModal(prep.summary, prep.expiresAt);
+      if (!confirmed) {
         pending.classList.remove("streaming");
         pending.className = "msg system-note";
         pending.textContent = "已取消外部委派。";
         codeHistory.push({ role: "system-note", content: "已取消外部委派。" });
         return;
       }
-      await window.digitalMe.l0SetActiveAgent?.(executorId);
       if (trail) trail.textContent = "正在调度外部执行体（须你已确认）…";
       const res = await window.digitalMe.l0RunExternalAgent({
         task: text,
-        writeAuthorized,
+        dataScopes,
+        writeIntent: writeAuthorized,
+        confirmationToken: prep.confirmationToken,
         requestId: codeRequestId,
       });
       reply = (res && res.reply) || "";

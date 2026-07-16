@@ -134,7 +134,8 @@ function getCliAgentConfig(userData) {
 }
 
 /**
- * Run CLI agent with user-confirmed task. Returns { ok, output, code, aborted }
+ * Run CLI agent with user-confirmed task. Authorization is enforced in main process (P1-04).
+ * Returns { ok, output, code, aborted }
  */
 function runCliAgent(userData, { task, signal } = {}) {
   return new Promise((resolve, reject) => {

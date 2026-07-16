@@ -5,6 +5,36 @@
 
 ---
 
+## 2026-07-16（P1-04 · PolicyEngine 与可信决策记录切片）
+
+### 结论
+
+- 编号：`P1-04`
+- 分支：`codex/p1-04-policy-decision-audit`
+- 状态：`statically_verified`（待 Codex 安全复核与 Owner 沙盒验收）
+- 范围：PolicyEngine v1、一次性确认票据、DecisionAudit v1、外部命令执行体强制切片
+- 未做：ToolBroker、MCP 隔离、沙箱、Builder/Life/Policies 写路径、外部协作
+
+### 实现摘要
+
+- 新增 `src/policy-engine/`（schema、digest、判定、confirmation-store）与 `src/decision-audit/`（JSONL + hash chain）；
+- 新增 `src/orchestration/external-agent-flow.js` 编排请求→确认→审计→执行；
+- `l0:runExternalAgent` 不再信任 renderer `writeAuthorized`；两阶段 `l0:requestExternalAgent` + 票据执行；
+- preload 移除 `l0AuditAppend` / `l0AuditClear`；暴露 `decisionAuditList/Verify/Rotate`；
+- 设置页与编程页行动记录改为只读 DecisionAudit；「清空」改为「开启新记录代次」二次确认。
+
+### 验证
+
+- `npm run test:p1-04`：14/14；P1-01 21/21 + 泄露扫描、P1-02 31/31、P1-03 21/21 回归通过；
+- 故障注入：审计 `execution_approved` 写失败时 spawn=0；hash 链篡改/半行可检出；
+- `digital-me-package/**` git 无差异；当前清单 SHA-256 `aaf692dc183d16a0a08e811269fc040aff3d2e4ed5d90ce29fc38d1cf5c25f7e`（P1-04 未写入 Package）。
+
+### 下一步
+
+Codex 安全复核 → Owner 沙盒验收（无敏感资料、安全演示命令）→ 方可标记 `accepted`。
+
+---
+
 ## 2026-07-16（P1-03 accepted · 主体首页与设置弹窗验收完成）
 
 ### 结论

@@ -386,7 +386,7 @@
                   <h3>行动记录
                     <span class="tip-mark" data-tip-id="code-audit" tabindex="0" role="button" aria-label="说明">?</span>
                   </h3>
-                  <p class="muted write-rail-hint">本机保存的授权与委派轨迹，便于核对「谁在什么授权下做了什么」。</p>
+                  <p class="muted write-rail-hint">主进程写入的可信决策记录，不含完整任务正文。</p>
                   <div id="code-audit-list" class="library-list"></div>
                   <div class="builder-actions">
                     <button type="button" id="btn-code-audit-refresh" class="btn-ghost">刷新</button>
@@ -962,9 +962,10 @@
             <button type="button" id="btn-cli-save" class="btn-ghost">保存执行体配置</button>
           </div>
           <div class="ext-store-head" style="margin-top:12px">
-            <h3 style="font-size:14px;margin:0">近期行动记录</h3>
-            <button type="button" id="btn-audit-clear" class="btn-ghost">清空记录</button>
+            <h3 style="font-size:14px;margin:0">近期决策记录</h3>
+            <button type="button" id="btn-audit-rotate" class="btn-ghost">开启新记录代次</button>
           </div>
+          <p class="hint" style="margin:4px 0 8px">由主进程写入的可信决策链；旧代次保留，仅供本机核对完整性。</p>
           <div id="settings-audit-list" class="library-list" style="max-height:180px;overflow:auto"></div>
         </details>
         <p class="hint">密钥经本机安全存储保护，界面不会回显。普通使用填好地址与引擎名称即可；首次需填写密钥。</p>
@@ -1026,6 +1027,20 @@
         <div class="modal-actions">
           <button id="btn-ext-enable-confirm">确认启用</button>
           <button id="btn-ext-enable-cancel" class="btn-ghost">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- External agent confirmation (policy-gated) -->
+    <div id="external-agent-confirm-modal" class="modal hidden">
+      <div class="modal-card">
+        <h2 id="ext-agent-confirm-title">确认外部程序执行</h2>
+        <p id="ext-agent-confirm-headline" class="hint"></p>
+        <dl id="ext-agent-confirm-details" class="library-list" style="margin:12px 0"></dl>
+        <p id="ext-agent-confirm-expiry" class="hint"></p>
+        <div class="modal-actions">
+          <button type="button" id="btn-ext-agent-cancel" class="btn-ghost">取消</button>
+          <button type="button" id="btn-ext-agent-confirm">确认执行</button>
         </div>
       </div>
     </div>
