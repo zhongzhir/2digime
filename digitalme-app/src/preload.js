@@ -107,7 +107,12 @@ contextBridge.exposeInMainWorld("digitalMe", {
   getActiveSkill: (scene) => ipcRenderer.invoke("skills:getActive", scene),
   saveSkillFromContext: (payload) => ipcRenderer.invoke("skills:saveFromContext", payload),
   previewFeedback: (payload) => ipcRenderer.invoke("feedback:preview", payload),
-  applyFeedback: (plan) => ipcRenderer.invoke("feedback:apply", plan),
+  applyFeedback: (payload) => ipcRenderer.invoke("feedback:apply", payload),
+  createDemoPackage: (opts) => ipcRenderer.invoke("packageStore:createDemo", opts),
+  inspectPackageStore: (opts) => ipcRenderer.invoke("packageStore:inspect", opts),
+  listPackageVersions: () => ipcRenderer.invoke("packageStore:listVersions"),
+  rollbackPackageVersion: (payload) => ipcRenderer.invoke("packageStore:rollback", payload),
+  recoverPackageStore: () => ipcRenderer.invoke("packageStore:recover"),
   planPpt: (payload) => ipcRenderer.invoke("output:planPpt", payload),
   savePpt: (plan) => ipcRenderer.invoke("output:savePpt", { plan }),
   // Capability extensions

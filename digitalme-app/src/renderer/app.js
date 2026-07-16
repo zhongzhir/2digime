@@ -855,6 +855,30 @@ function bindEvents() {
   if ($("btn-clear-apikey")) {
     $("btn-clear-apikey").addEventListener("click", clearApiKeySettings);
   }
+  $("btn-create-demo-pkg")?.addEventListener("click", async () => {
+    if (!window.digitalMe.createDemoPackage) {
+      alert("当前版本不支持创建演示资料。");
+      return;
+    }
+    try {
+      const r = await window.digitalMe.createDemoPackage({ migrateToV02: true });
+      if ($("cfg-pkgdir")) $("cfg-pkgdir").value = r.packageDir || "";
+      await window.digitalMe.setConfig({
+        provider: "openai-compatible",
+        baseURL: ($("cfg-baseurl")?.value || "").trim(),
+        apiKey: ($("cfg-apikey")?.value || "").trim(),
+        model: ($("cfg-model")?.value || "").trim(),
+        packageDir: r.packageDir,
+      });
+      pkg = await window.digitalMe.loadPackage();
+      alert(
+        "已创建临时演示资料，并已设为当前资料目录。\n路径：" +
+          (r.packageDir || "")
+      );
+    } catch (e) {
+      alert("创建失败：" + (e.message || String(e)));
+    }
+  });
   $("btn-cli-save")?.addEventListener("click", () => {
     saveCliExecutorSettings().catch((e) => alert(e.message || String(e)));
   });
@@ -2201,13 +2225,20 @@ async function clearApiKeySettings() {
 }
 
 // ---------- Feedback ----------
+let lastFeedbackCommit = null;
+
 function openFeedback(ctx) {
   feedbackCtx = ctx;
   feedbackPlan = null;
+  lastFeedbackCommit = null;
   $("feedback-excerpt").textContent = (ctx.assistantExcerpt || "").slice(0, 500);
   $("feedback-input").value = "";
   $("feedback-step-form").classList.remove("hidden");
   $("feedback-step-confirm").classList.add("hidden");
+  const done = $("feedback-step-done");
+  if (done) done.classList.add("hidden");
+  const undo = $("btn-feedback-undo");
+  if (undo) undo.classList.add("hidden");
   $("feedback-modal").classList.remove("hidden");
 }
 
@@ -2223,6 +2254,34 @@ function bindFeedback() {
     $("feedback-step-confirm").classList.add("hidden");
     $("feedback-step-form").classList.remove("hidden");
   });
+  const doneClose = $("btn-feedback-done-close");
+  if (doneClose) {
+    doneClose.addEventListener("click", closeFeedback);
+  }
+  const undoBtn = $("btn-feedback-undo");
+  if (undoBtn) {
+    undoBtn.addEventListener("click", async () => {
+      if (!lastFeedbackCommit || !lastFeedbackCommit.rollbackVersion) return;
+      if (!confirm("确认撤销本次写入，恢复到写入前的版本？")) return;
+      undoBtn.disabled = true;
+      try {
+        const r = await window.digitalMe.rollbackPackageVersion({
+          versionId: lastFeedbackCommit.rollbackVersion,
+          confirmed: true,
+        });
+        const msg = `已撤销，当前为第 ${r.revision} 版。`;
+        addMessage("system-note", msg);
+        if ($("feedback-done-msg")) $("feedback-done-msg").textContent = msg;
+        undoBtn.classList.add("hidden");
+        lastFeedbackCommit = null;
+        pkg = await window.digitalMe.loadPackage();
+      } catch (e) {
+        alert("撤销失败：" + (e.message || String(e)));
+      } finally {
+        undoBtn.disabled = false;
+      }
+    });
+  }
   $("btn-feedback-preview").addEventListener("click", async () => {
     const correction = $("feedback-input").value.trim();
     if (!correction) return;
@@ -2233,24 +2292,50 @@ function bindFeedback() {
         assistantExcerpt: feedbackCtx?.assistantExcerpt || "",
       });
       feedbackPlan = plan;
-      $("feedback-category").textContent = plan.categoryLabel + "（" + plan.category + "）";
+      $("feedback-category").textContent = plan.categoryLabel || plan.category || "";
       $("feedback-target").textContent = plan.targetFile;
       $("feedback-proposed").textContent = plan.proposedContent;
+      const revHint = $("feedback-revision-hint");
+      if (revHint) {
+        const base =
+          plan.baseRevision != null ? `当前版本 ${plan.baseRevision}。` : "";
+        revHint.textContent =
+          base + "确认后形成新版本，可撤销。写入后下次对话将参考该修正。";
+      }
       $("feedback-step-form").classList.add("hidden");
       $("feedback-step-confirm").classList.remove("hidden");
+      const done = $("feedback-step-done");
+      if (done) done.classList.add("hidden");
     } catch (e) {
       alert("预览失败：" + e.message);
     }
   });
   $("btn-feedback-apply").addEventListener("click", async () => {
-    if (!feedbackPlan) return;
+    if (!feedbackPlan || !feedbackPlan.changeSetId) return;
     const plan = feedbackPlan;
     $("btn-feedback-apply").disabled = true;
     try {
-      const r = await window.digitalMe.applyFeedback(plan);
-      const label = plan.categoryLabel || plan.category || "";
-      closeFeedback();
-      addMessage("system-note", `已写入反馈 → ${r.targetFile}（${label}）`);
+      const r = await window.digitalMe.applyFeedback({
+        changeSetId: plan.changeSetId,
+        confirmed: true,
+        category: plan.category,
+      });
+      lastFeedbackCommit = r;
+      const paths = (r.affectedPaths && r.affectedPaths.length
+        ? r.affectedPaths
+        : [r.targetFile || plan.targetFile]
+      )
+        .filter(Boolean)
+        .join("、");
+      const msg = `已形成第 ${r.revision} 版，已修改：${paths}。如需撤销，可恢复到 ${r.rollbackVersion}。`;
+      addMessage("system-note", msg);
+      if ($("feedback-done-msg")) $("feedback-done-msg").textContent = msg;
+      $("feedback-step-confirm").classList.add("hidden");
+      const done = $("feedback-step-done");
+      if (done) done.classList.remove("hidden");
+      if ($("btn-feedback-undo") && r.rollbackVersion) {
+        $("btn-feedback-undo").classList.remove("hidden");
+      }
       pkg = await window.digitalMe.loadPackage();
     } catch (e) {
       alert("写入失败：" + e.message);

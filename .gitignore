@@ -26,6 +26,7 @@ yarn-error.log*
 
 # --- Package snapshots & diagnostic outputs (may contain private text) ---
 .digitalme-snapshots/
+.digitalme-pkgstore/
 **/package-snapshots/
 build/*
 !build/reports/

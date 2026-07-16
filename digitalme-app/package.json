@@ -7,7 +7,9 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "test:p1-01": "node scripts/test-p1-01-secret-store.cjs && node scripts/test-p1-01-secret-leak-scan.cjs"
+    "test:p1-01": "node scripts/test-p1-01-secret-store.cjs && node scripts/test-p1-01-secret-leak-scan.cjs",
+    "test:p1-02": "node scripts/test-p1-02-package-store.cjs",
+    "test:p1-phase1": "npm run test:p1-01 && npm run test:p1-02"
   },
   "keywords": [
     "digital-me",

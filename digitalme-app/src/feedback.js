@@ -1,8 +1,7 @@
 "use strict";
 
-const fs = require("node:fs");
-const path = require("node:path");
 const { hasReplacementChar } = require("./builder");
+const { PackageStore, readManifest } = require("./package-store");
 
 const CATEGORIES = {
   style: { label: "表达风格", file: "style-guide.md", section: "## 用户反馈（风格纠正）" },
@@ -18,8 +17,10 @@ const CLASSIFY_RULES = [
   { cat: "memory", re: /观点|判断|我认为|不对|实际上|事实是|错误|应该是|没说|没写过|曲解/, w: 2 },
 ];
 
-function isoNow() {
-  return new Date().toISOString();
+function err(code, message) {
+  const e = new Error(message || code);
+  e.code = code;
+  return e;
 }
 
 function classifyFeedback({ correction }) {
@@ -31,7 +32,10 @@ function classifyFeedback({ correction }) {
   let best = "memory";
   let max = 0;
   for (const [k, v] of Object.entries(scores)) {
-    if (v > max) { max = v; best = k; }
+    if (v > max) {
+      max = v;
+      best = k;
+    }
   }
   return { category: best, ...CATEGORIES[best], scores };
 }
@@ -73,60 +77,134 @@ function buildWritePlan({ category, correction, userQuestion, assistantExcerpt }
   };
 }
 
-function ensureSection(filePath, section) {
-  let text = fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf8") : "";
-  if (!text.includes(section)) {
-    text = text.trimEnd() + `\n\n${section}\n\n> 由对话反馈自动沉淀，供后续输出参考。\n`;
-    fs.writeFileSync(filePath, text, "utf8");
-  }
-  return text;
-}
-
-function appendToSection(pkgDir, relFile, section, line) {
-  const filePath = path.join(pkgDir, relFile);
-  ensureSection(filePath, section);
-  fs.appendFileSync(filePath, line + "\n", "utf8");
-}
-
-function appendMemory(pkgDir, entry) {
-  const file = path.join(pkgDir, "memory", "long-term-memory.jsonl");
-  let maxId = 0;
-  if (fs.existsSync(file)) {
-    for (const l of fs.readFileSync(file, "utf8").split("\n")) {
-      const mm = /"id"\s*:\s*"core_(\d+)"/.exec(l) || /"id"\s*:\s*"mem_(\d+)"/.exec(l) || /"id"\s*:\s*"fb_(\d+)"/.exec(l);
-      if (mm) maxId = Math.max(maxId, parseInt(mm[1], 10));
-    }
-  }
-  const row = {
-    id: "fb_" + String(maxId + 1).padStart(3, "0"),
-    type: "long_term",
-    content: entry.content,
-    theme: entry.theme || "用户反馈",
-    confidence: entry.confidence || "high",
-    sensitivity: "private",
-    createdAt: isoNow(),
-    sourceRefs: ["feedback"],
-    expiresAt: null,
-  };
-  const raw = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
-  const needsNL = raw.length > 0 && !raw.endsWith("\n");
-  fs.appendFileSync(file, (needsNL ? "\n" : "") + JSON.stringify(row) + "\n", "utf8");
-  return row.id;
-}
-
-function applyFeedback(pkgDir, plan) {
+/**
+ * Map a write plan to PackageStore ops.
+ */
+function planToOps(plan) {
+  if (!plan || typeof plan !== "object") return [];
   if (plan.category === "memory") {
-    const id = appendMemory(pkgDir, plan.memoryEntry);
-    return { ok: true, targetFile: plan.targetFile, id, category: plan.category };
+    const entry = plan.memoryEntry || {};
+    return [
+      {
+        type: "append_jsonl",
+        path: "memory/long-term-memory.jsonl",
+        row: {
+          type: "long_term",
+          content: entry.content,
+          theme: entry.theme || "用户反馈",
+          confidence: entry.confidence || "high",
+          sensitivity: "private",
+          sourceRefs: ["feedback"],
+          expiresAt: null,
+        },
+      },
+    ];
   }
-  appendToSection(pkgDir, plan.targetFile, plan.section, plan.appendLine);
-  return { ok: true, targetFile: plan.targetFile, category: plan.category };
+  return [
+    {
+      type: "ensure_section_append",
+      path: plan.targetFile,
+      section: plan.section,
+      line: plan.appendLine || plan.proposedContent,
+    },
+  ];
 }
 
-function previewFeedback(payload) {
-  const classified = classifyFeedback(payload);
-  const plan = buildWritePlan({ ...payload, category: classified.category });
-  return { ...plan, scores: classified.scores };
+function openStore(packageDir, storeHooks) {
+  return new PackageStore({
+    packageDir,
+    hooks: storeHooks || {},
+    ownerId: "owner:feedback",
+  });
 }
 
-module.exports = { classifyFeedback, buildWritePlan, previewFeedback, applyFeedback, CATEGORIES };
+/**
+ * Classify + build plan + create candidate change set. Does not modify package content.
+ */
+function previewFeedback(packageDir, payload, storeHooks) {
+  const classified = classifyFeedback(payload || {});
+  const plan = buildWritePlan({ ...(payload || {}), category: classified.category });
+  const dataKinds = ["owner_assertion"];
+  const ops = planToOps(plan);
+
+  const store = openStore(packageDir, storeHooks);
+  store.recover();
+
+  const cs = store.createChangeSet({
+    actor: "owner:feedback",
+    reason: plan.summary || "用户确认的反馈修正",
+    sourceRefs: ["feedback"],
+    dataKinds,
+    ops,
+  });
+
+  const storePreview = store.preview(cs.id);
+
+  return {
+    ...plan,
+    scores: classified.scores,
+    changeSetId: cs.id,
+    baseRevision: cs.baseRevision,
+    storePreview,
+    dataKinds,
+  };
+}
+
+/**
+ * Commit a previously previewed change set. Requires confirmation + changeSetId.
+ */
+function applyFeedback(packageDir, payload, storeHooks) {
+  const body = payload || {};
+  const changeSetId = typeof body.changeSetId === "string" ? body.changeSetId.trim() : "";
+  if (!changeSetId) {
+    throw err("changeset_required", "请先预览并确认后再写入；不能直接提交未经预览的写入计划。");
+  }
+
+  const confirmed =
+    body.confirmed === true ||
+    (body.confirmation && body.confirmation.confirmed === true);
+  if (!confirmed) {
+    throw err("confirmation_required", "需要明确确认后才能写入。");
+  }
+
+  const store = openStore(packageDir, storeHooks);
+  store.recover();
+
+  const committed = store.commit(changeSetId, { confirmed: true });
+  const manifest = readManifest(packageDir);
+  const updatedAt =
+    (manifest && manifest.updatedAt) || new Date().toISOString();
+
+  const affectedPaths = committed.affectedPaths || [];
+  let targetFile = affectedPaths[0] || null;
+  let category = body.category || null;
+  if (!category && targetFile) {
+    if (String(targetFile).includes("long-term-memory")) category = "memory";
+    else if (targetFile === "style-guide.md") category = "style";
+    else if (targetFile === "persona.md") category = "persona";
+  }
+  if (!targetFile && category && CATEGORIES[category]) {
+    targetFile = CATEGORIES[category].file;
+  }
+
+  return {
+    ok: true,
+    changeSetId: committed.changeSetId,
+    targetFile,
+    category,
+    revision: committed.revision,
+    affectedPaths,
+    rollbackVersion: committed.rollbackVersion,
+    updatedAt,
+    rootSha256: committed.rootSha256,
+  };
+}
+
+module.exports = {
+  classifyFeedback,
+  buildWritePlan,
+  previewFeedback,
+  applyFeedback,
+  planToOps,
+  CATEGORIES,
+};

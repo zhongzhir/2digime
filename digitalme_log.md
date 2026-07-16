@@ -5,6 +5,72 @@
 
 ---
 
+## 2026-07-16（P1-02 PackageStore 最小版本提交 · Cursor 实现）
+
+### 任务
+
+- 编号：`P1-02`
+- 代码 Owner：Cursor
+- 分支：`codex/p1-02-package-store`
+- 状态：`statically_verified`（未经 Owner 沙盒验收与 Codex 复核，不得 accepted）
+
+### 本次完成
+
+1. 新建 `digitalme-app/src/package-store/`：schema v0.2、内容根摘要（SHA-256）、锁、journal、change set、快照、同卷目录切换、rollback、recover；
+2. Windows/WPS 策略写入 `package-store/strategy.md`：旁路完整 staging + 两步 rename + journal，失败恢复到唯一明确旧版；
+3. Feedback 唯一切片：preview 只建候选 change set；apply 仅 commit 已预览 id；数据类 `owner_assertion`；
+4. 沙盒：设置页「创建临时演示资料」+ 版本提示/撤销；不触碰真实 `digital-me-package/**`；
+5. 自动测试 `npm run test:p1-02`（16 项）与 P1-01 回归通过；Package 基线 hash 未变。
+
+### 明确未完成（不得夸大）
+
+- Builder、`life:applyMindHooks`、Life 全写面、Policies、`package:load` scaffold、离线 scripts 等**仍直接写 Package**；
+- 未宣称“所有主体写入已统一治理”。
+
+### 验证
+
+- `npm run test:p1-02`：16/16
+- `npm run test:p1-01`：21/21 + 泄露扫描
+- Package 清单 SHA-256：`3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a`
+- Git：`digital-me-package/**` 相对 `151d798` 无差异
+
+### 下一步
+
+Owner 沙盒验收 + Codex 复核 → `accepted` → 再决定是否迁移 Builder/Life/Policies。
+
+---
+
+## 2026-07-16（P1-01 正式验收通过）
+
+### 结论
+
+- 任务：`P1-01 SecretStore 与敏感配置迁移`
+- 状态：`accepted`
+- 实现提交：`363e58d`
+- 修订提交：`94f7e13`、`9d3ecc4`
+- Codex：三次架构与安全复核通过
+- Owner：真实模型人工验收通过
+
+### 验收证据
+
+- 自动测试：`npm run test:p1-01`，21/21 通过；源码与临时迁移产物泄露扫描通过；
+- 重启后设置页显示“已安全保存”，输入框不回显密钥；
+- 普通对话成功；密钥框空白保存后仍可调用；
+- 替换密钥成功；清除密钥后正确阻止调用；
+- 截图中的一次调用失败由无效模型标识 `deepseek-v4-flash quick` 引起，改回服务端有效标识 `deepseek-v4-flash` 后恢复，与 SecretStore 无关；
+- Package 基线未变，清单 SHA-256：`3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a`。
+
+### 保留边界
+
+- 扩展进程继承完整 `process.env`、工具隔离和完整密钥撤销产品面留给后续 ToolBroker；
+- P1-01 的能力状态升为 `runtime_verified`，不等同于整个应用已可公开发布。
+
+### 下一步
+
+唯一主任务切换到 `P1-02 Package schema + PackageStore 最小版本提交`，任务包：`digitalme_phase1_task_P1-02_package_store.md`。
+
+---
+
 ## 2026-07-16（P1-01 修订 · 备份清理 fail-closed）
 
 ### 任务

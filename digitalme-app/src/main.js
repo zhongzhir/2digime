@@ -3,6 +3,7 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu, safeStorage } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
+const os = require("node:os");
 const https = require("node:https");
 const builder = require("./builder");
 const materials = require("./materials");
@@ -11,6 +12,8 @@ const policies = require("./policies");
 const inbox = require("./inbox");
 const retrieval = require("./retrieval");
 const feedback = require("./feedback");
+const { PackageStore } = require("./package-store");
+const { createMinimalFixture } = require("./package-store/fixture");
 const pptxOutput = require("./outputs/pptx");
 const documentOutput = require("./outputs/document");
 const library = require("./outputs/library");
@@ -144,6 +147,8 @@ app.whenReady().then(() => {
       detail: migration.warning,
     });
   }
+  // Recover interrupted PackageStore journal only — never auto-migrate schema.
+  tryRecoverConfiguredPackageStore();
   createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -626,8 +631,37 @@ function packageDirFromConfig() {
   return readPublicConfig().packageDir || DEFAULT_PACKAGE_DIR;
 }
 
+function isUnderTmpDir(dir) {
+  const resolved = path.resolve(String(dir || ""));
+  const tmp = path.resolve(os.tmpdir());
+  return resolved === tmp || resolved.startsWith(tmp + path.sep);
+}
+
+function assertPackageStoreDirAllowed(packageDir) {
+  const resolved = path.resolve(String(packageDir || ""));
+  const cfgDir = path.resolve(packageDirFromConfig());
+  if (resolved === cfgDir) return resolved;
+  if (isUnderTmpDir(resolved)) return resolved;
+  const e = new Error("仅允许操作当前配置的资料目录，或系统临时目录下的演示资料。");
+  e.code = "package_dir_not_allowed";
+  throw e;
+}
+
+function tryRecoverConfiguredPackageStore() {
+  try {
+    const dir = packageDirFromConfig();
+    if (!dir || !fs.existsSync(dir)) return null;
+    const store = new PackageStore({ packageDir: dir, ownerId: "app:recover" });
+    return store.recover();
+  } catch (e) {
+    console.warn("[package-store] recover skipped:", e && (e.code || e.message));
+    return null;
+  }
+}
+
 ipcMain.handle("package:load", () => {
   const dir = packageDirFromConfig();
+  tryRecoverConfiguredPackageStore();
   life.ensureLifeScaffold(dir);
   policies.ensureBoundariesScaffold(dir);
   const manifestRaw = safeRead(path.join(dir, "manifest.json"));
@@ -2774,13 +2808,83 @@ ipcMain.handle("intake:distill", async (e, { answers }) => {
   return res;
 });
 
-// ---------- Feedback loop ----------
-ipcMain.handle("feedback:preview", (_e, payload) => feedback.previewFeedback(payload));
+// ---------- Feedback loop (via PackageStore change sets) ----------
+ipcMain.handle("feedback:preview", (_e, payload) => {
+  const pkgDir = packageDirFromConfig();
+  return feedback.previewFeedback(pkgDir, payload || {});
+});
 
-ipcMain.handle("feedback:apply", (_e, plan) => {
-  const cfg = readConfig();
-  const pkgDir = cfg.packageDir || DEFAULT_PACKAGE_DIR;
-  return feedback.applyFeedback(pkgDir, plan);
+ipcMain.handle("feedback:apply", (_e, payload) => {
+  const pkgDir = packageDirFromConfig();
+  const body = payload && typeof payload === "object" ? payload : {};
+  // Only accept changeSetId + confirmation — never raw write plans.
+  return feedback.applyFeedback(pkgDir, {
+    changeSetId: body.changeSetId,
+    confirmed: body.confirmed,
+    confirmation: body.confirmation,
+    category: body.category,
+  });
+});
+
+// ---------- PackageStore sandbox (tmp demos only; never auto-touch real package) ----------
+ipcMain.handle("packageStore:createDemo", (_e, opts) => {
+  const options = opts && typeof opts === "object" ? opts : {};
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dm-p102-demo-"));
+  createMinimalFixture(dir, {
+    schemaVersion: options.schemaVersion,
+    withMemoryLine: !!options.withMemoryLine,
+  });
+  const store = new PackageStore({ packageDir: dir, ownerId: "sandbox:demo" });
+  if (options.migrateToV02 === true) {
+    store.migrateToV02({ actor: "sandbox:demo", toolVersion: "digitalme-app-sandbox" });
+  }
+  const inspect = store.inspect();
+  return { packageDir: dir, inspect };
+});
+
+ipcMain.handle("packageStore:inspect", (_e, payload) => {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const pkgDir = body.packageDir
+    ? assertPackageStoreDirAllowed(body.packageDir)
+    : path.resolve(packageDirFromConfig());
+  const store = new PackageStore({ packageDir: pkgDir, ownerId: "sandbox:inspect" });
+  return store.inspect();
+});
+
+ipcMain.handle("packageStore:listVersions", () => {
+  const pkgDir = path.resolve(packageDirFromConfig());
+  const store = new PackageStore({ packageDir: pkgDir, ownerId: "sandbox:list" });
+  return store.listVersions();
+});
+
+ipcMain.handle("packageStore:rollback", (_e, payload) => {
+  const body = payload && typeof payload === "object" ? payload : {};
+  const pkgDir = body.packageDir
+    ? assertPackageStoreDirAllowed(body.packageDir)
+    : path.resolve(packageDirFromConfig());
+  const confirmed =
+    body.confirmed === true ||
+    (body.confirmation && body.confirmation.confirmed === true);
+  if (!confirmed) {
+    const e = new Error("需要明确确认后才能恢复到指定版本。");
+    e.code = "confirmation_required";
+    throw e;
+  }
+  const versionId = body.versionId || body.rollbackVersion;
+  if (!versionId) {
+    const e = new Error("请指定要恢复的版本。");
+    e.code = "version_required";
+    throw e;
+  }
+  const store = new PackageStore({ packageDir: pkgDir, ownerId: "sandbox:rollback" });
+  store.recover();
+  return store.rollback(versionId, { confirmed: true });
+});
+
+ipcMain.handle("packageStore:recover", () => {
+  const pkgDir = path.resolve(packageDirFromConfig());
+  const store = new PackageStore({ packageDir: pkgDir, ownerId: "sandbox:recover" });
+  return store.recover();
 });
 
 // ---------- Capability extensions IPC ----------
