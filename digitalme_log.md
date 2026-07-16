@@ -11,7 +11,7 @@
 
 - 编号：`P1-04`
 - 分支：`codex/p1-04-policy-decision-audit`
-- 状态：`statically_verified`（待 Codex 安全复核与 Owner 沙盒验收）
+- 状态：`statically_verified`（Codex 复核要求修订已完成；待再复核，暂缓 Owner 沙盒验收）
 - 范围：PolicyEngine v1、一次性确认票据、DecisionAudit v1、外部命令执行体强制切片
 - 未做：ToolBroker、MCP 隔离、沙箱、Builder/Life/Policies 写路径、外部协作
 
@@ -20,18 +20,18 @@
 - 新增 `src/policy-engine/`（schema、digest、判定、confirmation-store）与 `src/decision-audit/`（JSONL + hash chain）；
 - 新增 `src/orchestration/external-agent-flow.js` 编排请求→确认→审计→执行；
 - `l0:runExternalAgent` 不再信任 renderer `writeAuthorized`；两阶段 `l0:requestExternalAgent` + 票据执行；
-- preload 移除 `l0AuditAppend` / `l0AuditClear`；暴露 `decisionAuditList/Verify/Rotate`；
-- 设置页与编程页行动记录改为只读 DecisionAudit；「清空」改为「开启新记录代次」二次确认。
+- preload 移除 `l0AuditAppend` / `l0AuditClear`；暴露受控 `decisionAuditList/Verify/RequestRotate/Rotate`；
+- 设置页与编程页行动记录改为只读 DecisionAudit；旧代次可查看；「开启新记录代次」须主进程票据确认。
 
 ### 验证
 
-- `npm run test:p1-04`：14/14；P1-01 21/21 + 泄露扫描、P1-02 31/31、P1-03 21/21 回归通过；
-- 故障注入：审计 `execution_approved` 写失败时 spawn=0；hash 链篡改/半行可检出；
-- `digital-me-package/**` git 无差异；当前清单 SHA-256 `aaf692dc183d16a0a08e811269fc040aff3d2e4ed5d90ce29fc38d1cf5c25f7e`（P1-04 未写入 Package）。
+- `npm run test:p1-04`：19/19；P1-01 21/21 + 泄露扫描、P1-02 31/31、P1-03 21/21 回归通过；
+- 故障注入：账本篡改/半行阻断、meta 损坏/缺失/落后恢复、配置漂移阻断、取消失效、rotate 绕过失败、P1-00 Package 逐文件基线复验均通过；
+- P1-00 Package 基线清单 SHA-256 仍为 `3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a`；本次按基线报告逐路径比较文件集合、大小与 SHA-256，P1-04 未写入 Package。
 
 ### 下一步
 
-Codex 安全复核 → Owner 沙盒验收（无敏感资料、安全演示命令）→ 方可标记 `accepted`。
+交 Codex 再复核；通过后再安排 Owner 沙盒验收（无敏感资料、安全演示命令）→ 方可标记 `accepted`。
 
 ---
 

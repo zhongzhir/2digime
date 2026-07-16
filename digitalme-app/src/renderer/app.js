@@ -890,25 +890,33 @@ function bindEvents() {
     saveCliExecutorSettings().catch((e) => alert(e.message || String(e)));
   });
   $("btn-audit-rotate")?.addEventListener("click", async () => {
-    if (
-      !window.confirm(
-        "将开启新的决策记录代次。旧代次文件仍保留在本机，不会被删除。\n\n继续？"
-      )
-    )
-      return;
-    if (
-      !window.confirm(
-        "请再次确认：开启新代次后，新记录将从空链开始，旧代次可在设置中切换查看。\n\n确定开启？"
-      )
-    )
-      return;
     try {
-      await window.digitalMe.decisionAuditRotate?.();
+      const prep = await window.digitalMe.decisionAuditRequestRotate?.();
+      if (!prep || !prep.rotationToken) throw new Error("未能获取代次确认凭据。");
+      if (
+        !window.confirm(
+          "将开启新的决策记录代次。旧代次仍保留，可在设置中查看。\n\n继续？"
+        )
+      )
+        return;
+      if (
+        !window.confirm(
+          "请再次确认：新代次会从空链开始，旧代次仍保留为历史记录。\n\n确定开启？"
+        )
+      )
+        return;
+      await window.digitalMe.decisionAuditRotate?.({
+        decisionId: prep.decisionId,
+        rotationToken: prep.rotationToken,
+      });
       await refreshSettingsAuditList();
       await refreshCodeAuditList();
     } catch (e) {
       alert(e.message || String(e));
     }
+  });
+  $("settings-audit-generation")?.addEventListener("change", () => {
+    refreshSettingsAuditList().catch((e) => alert(e.message || String(e)));
   });
 
   document.querySelectorAll(".nav-item").forEach((btn) => {
@@ -3491,26 +3499,64 @@ function formatDecisionAuditRow(r) {
   const when = (r.at || "").replace("T", " ").slice(0, 19);
   const scopes = Array.isArray(r.dataScopes) ? r.dataScopes.join("、") : "";
   const status = (r.outcome && r.outcome.status) || r.event || "";
+  const reasons =
+    r.outcome && Array.isArray(r.outcome.reasonCodes) && r.outcome.reasonCodes.length
+      ? " · " + r.outcome.reasonCodes.join("、")
+      : "";
   return (
     `<div class="path">${escapeHtml(when)} · ${escapeHtml(r.event || "")} · ${escapeHtml(status)}</div>` +
-    `<div class="muted" style="font-size:11px">${escapeHtml(r.action || "")}${scopes ? " · " + escapeHtml(scopes) : ""}</div>`
+    `<div class="muted" style="font-size:11px">${escapeHtml(r.action || "")}${scopes ? " · " + escapeHtml(scopes) : ""}${escapeHtml(reasons)}</div>`
   );
 }
 
-async function refreshDecisionAuditList(box, limit) {
+function renderAuditGenerationSelect(data) {
+  const sel = $("settings-audit-generation");
+  if (!sel) return;
+  const currentValue = sel.value;
+  sel.innerHTML = "";
+  const gens = (data && data.availableGenerations) || [];
+  for (const gen of gens) {
+    const opt = document.createElement("option");
+    opt.value = String(gen);
+    opt.textContent = `第 ${gen} 代`;
+    if (String(gen) === String(currentValue || data.currentGeneration || data.generation || "")) {
+      opt.selected = true;
+    }
+    sel.appendChild(opt);
+  }
+}
+
+function renderAuditIntegrity(data) {
+  const el = $("settings-audit-integrity");
+  if (!el) return;
+  if (!data) {
+    el.textContent = "";
+    return;
+  }
+  const currentHealthy = data.healthy === false ? "当前代次异常" : "当前代次正常";
+  const globalHealthy = data.globalHealthy === false ? "全局完整性异常" : "全局完整性正常";
+  el.textContent = `${currentHealthy}；${globalHealthy}。${data.note || ""}`;
+}
+
+async function refreshDecisionAuditList(box, limit, generation) {
   if (!box || !window.digitalMe.decisionAuditList) return;
   try {
-    const data = await window.digitalMe.decisionAuditList({ limit: limit || 30 });
+    const data = await window.digitalMe.decisionAuditList({
+      limit: limit || 30,
+      generation,
+    });
     box.innerHTML = "";
+    renderAuditGenerationSelect(data);
+    renderAuditIntegrity(data);
     const rows = (data && data.entries) || [];
     if (!rows.length) {
       box.innerHTML = `<div class="muted">尚无记录。</div>`;
       return;
     }
-    if (data && data.healthy === false) {
+    if (data && (data.healthy === false || data.globalHealthy === false)) {
       const warn = document.createElement("div");
       warn.className = "muted";
-      warn.textContent = "记录完整性校验未通过，请谨慎参考。";
+      warn.textContent = "记录完整性校验未通过，请谨慎参考并优先处理异常。";
       box.appendChild(warn);
     }
     for (const r of rows) {
@@ -3574,8 +3620,8 @@ function showExternalAgentConfirmModal(summary, expiresAt) {
       btnCancel.removeEventListener("click", onCancel);
       resolve(result);
     };
-    const onOk = () => cleanup(true);
-    const onCancel = () => cleanup(false);
+    const onOk = () => cleanup({ confirmed: true });
+    const onCancel = () => cleanup({ confirmed: false });
     btnOk.addEventListener("click", onOk);
     btnCancel.addEventListener("click", onCancel);
   });
@@ -3586,7 +3632,8 @@ async function refreshCodeAuditList() {
 }
 
 async function refreshSettingsAuditList() {
-  await refreshDecisionAuditList($("settings-audit-list"), 30);
+  const generation = $("settings-audit-generation")?.value || "";
+  await refreshDecisionAuditList($("settings-audit-list"), 30, generation || undefined);
 }
 
 async function refreshCodeExecutorSelect() {
@@ -3725,7 +3772,15 @@ async function sendCode() {
         throw new Error("未能获取确认摘要。");
       }
       const confirmed = await showExternalAgentConfirmModal(prep.summary, prep.expiresAt);
-      if (!confirmed) {
+      if (!confirmed || !confirmed.confirmed) {
+        try {
+          await window.digitalMe.l0CancelExternalAgentConfirmation?.({
+            decisionId: prep.decisionId,
+            confirmationToken: prep.confirmationToken,
+          });
+        } catch {
+          /* ignore cancel failure; user-facing cancel remains */
+        }
         pending.classList.remove("streaming");
         pending.className = "msg system-note";
         pending.textContent = "已取消外部委派。";
@@ -3737,6 +3792,7 @@ async function sendCode() {
         task: text,
         dataScopes,
         writeIntent: writeAuthorized,
+        decisionId: prep.decisionId,
         confirmationToken: prep.confirmationToken,
         requestId: codeRequestId,
       });

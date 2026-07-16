@@ -15,6 +15,10 @@ function digestTaskText(taskText) {
   return { taskDigest: hash, taskLength: text.length };
 }
 
+function digestValue(value) {
+  return crypto.createHash("sha256").update(String(value || ""), "utf8").digest("hex");
+}
+
 function buildRequestDigest(request) {
   const payload = {
     actor: request.actor,
@@ -27,7 +31,12 @@ function buildRequestDigest(request) {
       executorId: request.resource.executorId,
       executorName: request.resource.executorName,
       commandBasename: request.resource.commandBasename,
-      cwd: request.resource.cwd || "",
+      cwdDisplay: request.resource.cwdDisplay || "",
+      cwdNormalized: request.resource.cwdNormalized || "",
+      commandFingerprint: request.resource.commandFingerprint || "",
+      argsTemplateFingerprint: request.resource.argsTemplateFingerprint || "",
+      cwdFingerprint: request.resource.cwdFingerprint || "",
+      configFingerprint: request.resource.configFingerprint || "",
     },
     taskDigest: request.taskDigest,
     taskLength: request.taskLength,
@@ -38,5 +47,6 @@ function buildRequestDigest(request) {
 module.exports = {
   stableStringify,
   digestTaskText,
+  digestValue,
   buildRequestDigest,
 };

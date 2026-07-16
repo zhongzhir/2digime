@@ -134,13 +134,16 @@ contextBridge.exposeInMainWorld("digitalMe", {
   l0AuditList: (opts) => ipcRenderer.invoke("l0:auditList", opts),
   decisionAuditList: (opts) => ipcRenderer.invoke("decisionAudit:list", opts),
   decisionAuditVerify: () => ipcRenderer.invoke("decisionAudit:verify"),
-  decisionAuditRotate: () => ipcRenderer.invoke("decisionAudit:rotate"),
+  decisionAuditRequestRotate: () => ipcRenderer.invoke("decisionAudit:requestRotate"),
+  decisionAuditRotate: (payload) => ipcRenderer.invoke("decisionAudit:rotate", payload),
   l0ListAgents: () => ipcRenderer.invoke("l0:listAgents"),
   l0SetActiveAgent: (agentId) => ipcRenderer.invoke("l0:setActiveAgent", agentId),
   l0SaveCliAgent: (payload) => ipcRenderer.invoke("l0:saveCliAgent", payload),
   l0GetCliAgentConfig: () => ipcRenderer.invoke("l0:getCliAgentConfig"),
   l0BuildControlBrief: (payload) => ipcRenderer.invoke("l0:buildControlBrief", payload),
   l0RequestExternalAgent: (payload) => ipcRenderer.invoke("l0:requestExternalAgent", payload),
+  l0CancelExternalAgentConfirmation: (payload) =>
+    ipcRenderer.invoke("l0:cancelExternalAgentConfirmation", payload),
   l0RunExternalAgent: (payload) => ipcRenderer.invoke("l0:runExternalAgent", payload),
   l0StopExternalAgent: (payload) => ipcRenderer.invoke("l0:stopExternalAgent", payload),
   // Builder

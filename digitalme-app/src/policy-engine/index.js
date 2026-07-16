@@ -1,22 +1,22 @@
 "use strict";
 
 const crypto = require("node:crypto");
+const path = require("node:path");
 const { POLICY_VERSION, normalizePolicyRequest } = require("./schema");
-const { buildRequestDigest } = require("./digest");
+const { buildRequestDigest, digestTaskText, digestValue, stableStringify } = require("./digest");
 
 function newDecisionId() {
   return "dec_" + crypto.randomBytes(8).toString("hex");
 }
 
 function buildConfirmationSummary(request) {
-  const mayWrite = request.dataScopes.includes("workspace_files");
   return {
     headline: "即将让本机外部程序执行任务",
     executorName: request.resource.executorName,
     commandLabel: request.resource.commandBasename,
-    cwd: request.resource.cwd || "（未指定，使用进程默认目录）",
+    cwd: request.resource.cwdDisplay || "（未指定，使用进程默认目录）",
     dataScopes: request.dataScopes.map(scopeLabel),
-    mayModifyFiles: mayWrite,
+    mayModifyFiles: true,
     risk: riskLabel(request.risk),
     taskLength: request.taskLength,
   };
@@ -46,6 +46,13 @@ function evaluateRules(request, context = {}) {
     return {
       effect: "deny",
       reasonCodes: ["cli_not_configured"],
+      obligations: [],
+    };
+  }
+  if (!request.dataScopes.includes("workspace_files")) {
+    return {
+      effect: "deny",
+      reasonCodes: ["workspace_write_confirmation_required"],
       obligations: [],
     };
   }
@@ -84,14 +91,15 @@ function evaluateRules(request, context = {}) {
 /**
  * @param {object} rawRequest
  * @param {{ cliEnabled?: boolean, hasCommand?: boolean }} context
+ * @param {{ decisionId?: string }} options
  */
-function evaluatePolicy(rawRequest, context = {}) {
+function evaluatePolicy(rawRequest, context = {}, options = {}) {
   const normalized = normalizePolicyRequest(rawRequest);
   if (!normalized.ok) {
     return {
       policyVersion: POLICY_VERSION,
       effect: "deny",
-      decisionId: newDecisionId(),
+      decisionId: options.decisionId || newDecisionId(),
       reasonCodes: normalized.reasonCodes,
       obligations: [],
       requestDigest: "",
@@ -107,7 +115,7 @@ function evaluatePolicy(rawRequest, context = {}) {
   const decision = {
     policyVersion: POLICY_VERSION,
     effect: rules.effect,
-    decisionId: newDecisionId(),
+    decisionId: options.decisionId || newDecisionId(),
     reasonCodes: rules.reasonCodes,
     obligations: rules.obligations,
     requestDigest,
@@ -124,14 +132,28 @@ function buildExternalCliRequest({
   agent,
   writeIntent,
 }) {
-  const { digestTaskText } = require("./digest");
   const task = digestTaskText(taskText);
   const scopes = Array.isArray(dataScopes) ? [...dataScopes] : [];
   if (!scopes.includes("task_text")) scopes.push("task_text");
   if (writeIntent && !scopes.includes("workspace_files")) scopes.push("workspace_files");
-  scopes.push("env_inherit");
+  if (!scopes.includes("env_inherit")) scopes.push("env_inherit");
   const command = String((agent && agent.command) || "").trim();
+  const argsTemplate = Array.isArray(agent && agent.argsTemplate)
+    ? agent.argsTemplate.map((item) => String(item))
+    : [];
+  const cwdNormalized = String((agent && agent.cwdNormalized) || "").trim();
+  const cwdDisplay = String((agent && agent.cwdDisplay) || (agent && agent.cwd) || "").trim();
   const commandBasename = command ? command.replace(/^.*[\\/]/, "") : "";
+  const configFingerprint =
+    String((agent && agent.configFingerprint) || "") ||
+    digestValue(
+      stableStringify({
+        executorId: String((agent && agent.id) || "cli-coder"),
+        command,
+        argsTemplate,
+        cwdNormalized,
+      })
+    );
   return {
     actor: "owner:renderer",
     purpose: "code_delegate",
@@ -143,7 +165,12 @@ function buildExternalCliRequest({
       executorId: String((agent && agent.id) || "cli-coder"),
       executorName: String((agent && agent.name) || "外部命令执行体"),
       commandBasename: commandBasename || "（未配置）",
-      cwd: String((agent && agent.cwd) || ""),
+      cwdDisplay,
+      cwdNormalized,
+      commandFingerprint: digestValue(command),
+      argsTemplateFingerprint: digestValue(stableStringify(argsTemplate)),
+      cwdFingerprint: digestValue(cwdNormalized),
+      configFingerprint,
     },
     taskDigest: task.taskDigest,
     taskLength: task.taskLength,

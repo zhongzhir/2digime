@@ -8,7 +8,9 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
+const { stableStringify } = require("../policy-engine/digest");
 
 function storePath(userData) {
   return path.join(userData, "l0-agent-registry.json");
@@ -69,6 +71,46 @@ function writeRegistry(userData, reg) {
   fs.writeFileSync(storePath(userData), JSON.stringify(reg, null, 2), "utf8");
 }
 
+function normalizeCwd(cwd) {
+  const value = String(cwd || "").trim();
+  if (!value) return "";
+  return path.resolve(value);
+}
+
+function buildCliAgentSnapshot(agent) {
+  const command = String((agent && agent.command) || "").trim();
+  const argsTemplate = Array.isArray(agent && agent.argsTemplate)
+    ? agent.argsTemplate.map((item) => String(item))
+    : ["{{task}}"];
+  const cwdDisplay = String((agent && agent.cwd) || "").trim();
+  const cwdNormalized = normalizeCwd(cwdDisplay);
+  const fingerprint = crypto
+    .createHash("sha256")
+    .update(
+      stableStringify({
+        executorId: String((agent && agent.id) || "cli-coder"),
+        command,
+        argsTemplate,
+        cwdNormalized,
+      }),
+      "utf8"
+    )
+    .digest("hex");
+  return {
+    id: String((agent && agent.id) || "cli-coder"),
+    name: String((agent && agent.name) || "外部命令执行体"),
+    kind: "cli",
+    enabled: !!(agent && agent.enabled),
+    command,
+    argsTemplate,
+    cwd: cwdDisplay,
+    cwdDisplay,
+    cwdNormalized,
+    commandBasename: command ? command.replace(/^.*[\\/]/, "") : "",
+    configFingerprint: fingerprint,
+  };
+}
+
 function listAgents(userData) {
   const reg = readRegistry(userData);
   return {
@@ -122,6 +164,12 @@ function getActiveAgent(userData) {
   return (reg.agents || []).find((a) => a.id === id) || (reg.agents || [])[0];
 }
 
+function getActiveCliAgentSnapshot(userData) {
+  const ag = getActiveAgent(userData);
+  if (!ag || ag.kind !== "cli") return null;
+  return buildCliAgentSnapshot(ag);
+}
+
 function getCliAgentConfig(userData) {
   const reg = readRegistry(userData);
   const ag = (reg.agents || []).find((a) => a.id === "cli-coder");
@@ -130,6 +178,8 @@ function getCliAgentConfig(userData) {
     command: String(ag.command || ""),
     cwd: String(ag.cwd || ""),
     enabled: !!ag.enabled,
+    argsTemplate: Array.isArray(ag.argsTemplate) ? ag.argsTemplate.map(String) : ["{{task}}"],
+    configFingerprint: buildCliAgentSnapshot(ag).configFingerprint,
   };
 }
 
@@ -137,9 +187,9 @@ function getCliAgentConfig(userData) {
  * Run CLI agent with user-confirmed task. Authorization is enforced in main process (P1-04).
  * Returns { ok, output, code, aborted }
  */
-function runCliAgent(userData, { task, signal } = {}) {
+function runCliAgent(userData, { task, signal, agentConfig } = {}) {
   return new Promise((resolve, reject) => {
-    const ag = getActiveAgent(userData);
+    const ag = agentConfig ? buildCliAgentSnapshot(agentConfig) : getActiveCliAgentSnapshot(userData);
     if (!ag || ag.kind !== "cli") {
       reject(new Error("当前执行体不是外部命令类型"));
       return;
@@ -157,7 +207,7 @@ function runCliAgent(userData, { task, signal } = {}) {
     const args = (ag.argsTemplate && ag.argsTemplate.length ? ag.argsTemplate : ["{{task}}"]).map((a) =>
       String(a).replace(/\{\{task\}\}/g, taskText)
     );
-    const cwd = ag.cwd && fs.existsSync(ag.cwd) ? ag.cwd : undefined;
+    const cwd = ag.cwdNormalized && fs.existsSync(ag.cwdNormalized) ? ag.cwdNormalized : undefined;
     const child = spawn(cmd, args, {
       cwd,
       shell: true,
@@ -207,6 +257,9 @@ module.exports = {
   setActiveAgent,
   saveCliAgent,
   getActiveAgent,
+  getActiveCliAgentSnapshot,
+  buildCliAgentSnapshot,
+  normalizeCwd,
   getCliAgentConfig,
   runCliAgent,
   readRegistry,

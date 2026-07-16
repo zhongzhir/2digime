@@ -1,6 +1,6 @@
 "use strict";
 
-const path = require("node:path");
+const crypto = require("node:crypto");
 const {
   evaluatePolicy,
   buildExternalCliRequest,
@@ -47,30 +47,76 @@ function resolveDataScopes(payload) {
       if (v) scopes.push(v);
     }
   }
-  const writeIntent =
-    !!(payload && payload.writeIntent) ||
-    !!(payload && payload.allowWorkspaceWrite);
+  const writeIntent = !!(payload && payload.writeIntent) || !!(payload && payload.allowWorkspaceWrite);
   if (writeIntent && !scopes.includes("workspace_files")) scopes.push("workspace_files");
   if (!scopes.includes("task_text")) scopes.push("task_text");
   if (!scopes.includes("env_inherit")) scopes.push("env_inherit");
   return { scopes, writeIntent };
 }
 
+function safeDenyReason(reason) {
+  const reasons = {
+    missing_token: "缺少有效确认凭据。",
+    unknown_token: "确认凭据无效或已失效。",
+    token_replayed: "该确认凭据已使用，不能重复执行。",
+    token_expired: "确认凭据已过期，请重新发起请求。",
+    token_revoked: "该确认已取消，请重新发起请求。",
+    token_binding_mismatch: "请求内容或执行配置与确认时不一致，已拒绝。",
+    token_scope_mismatch: "数据范围与确认时不一致，已拒绝。",
+  };
+  return reasons[reason] || "确认凭据校验失败。";
+}
+
+function correlationApproval(token) {
+  return {
+    confirmationId: token.correlationId,
+    confirmedAt: token.consumedAt,
+  };
+}
+
+function appendDecisionEvent(userData, decision, event, extra = {}) {
+  return appendAuditOrThrow(userData, {
+    ...auditFieldsFromDecision(decision),
+    event,
+    approval: extra.approval || null,
+    outcome: extra.outcome || null,
+  });
+}
+
+function ensureAuditHealthy(userData) {
+  const resolved = decisionAudit.resolveState(userData, { allowInitialize: true, allowRecover: true });
+  const verify = resolved.verify || decisionAudit.verify(userData);
+  if (!resolved.ok || !verify.healthy) {
+    const err = new Error("决策记录完整性异常，已阻止高风险执行。");
+    err.code = "audit_unhealthy";
+    err.auditVerify = verify;
+    throw err;
+  }
+  return verify;
+}
+
+function resolveCliSnapshot(userData, agents) {
+  const snapshot = agents.getActiveCliAgentSnapshot(userData);
+  if (!snapshot) throw new Error("当前未选用外部命令执行体");
+  return snapshot;
+}
+
 /**
  * Phase 1: evaluate policy, issue confirmation token if needed.
  */
 function requestExternalAgent(userData, event, payload, agents) {
+  ensureAuditHealthy(userData);
   const task = String((payload && payload.task) || "").trim();
   if (!task) throw new Error("任务为空");
 
-  const ag = agents.getActiveAgent(userData);
-  if (!ag || ag.kind !== "cli") throw new Error("当前未选用外部命令执行体");
+  const ag = resolveCliSnapshot(userData, agents);
 
   const { scopes, writeIntent } = resolveDataScopes(payload);
-  if (writeIntent && !scopes.includes("workspace_files")) {
-    throw new Error("外部执行体可能改文件：请勾选允许改动授权目录中的文件。");
+  if (!scopes.includes("workspace_files")) {
+    throw new Error("外部执行体未沙箱化，必须先明确确认可改动授权目录中的文件。");
   }
 
+  const decisionId = String((payload && payload.decisionId) || "") || undefined;
   const rawRequest = buildExternalCliRequest({
     taskText: task,
     dataScopes: scopes,
@@ -80,12 +126,9 @@ function requestExternalAgent(userData, event, payload, agents) {
   const decision = evaluatePolicy(rawRequest, {
     cliEnabled: !!ag.enabled && !!ag.command,
     hasCommand: !!(ag.command && String(ag.command).trim()),
-  });
+  }, { decisionId });
 
-  appendAuditOrThrow(userData, {
-    ...auditFieldsFromDecision(decision),
-    event: "policy_evaluated",
-    approval: null,
+  appendDecisionEvent(userData, decision, "policy_evaluated", {
     outcome: { status: decision.effect, reasonCodes: decision.reasonCodes },
   });
 
@@ -107,26 +150,24 @@ function requestExternalAgent(userData, event, payload, agents) {
   }
 
   const senderId = senderIdFromEvent(event);
-  const { tokenId, expiresAt } = confirmationStore.issueToken(
+  const { tokenId, correlationId, expiresAt } = confirmationStore.issueToken(
     {
       requestDigest: decision.requestDigest,
       actor: decision.request.actor,
       action: decision.request.action,
       destination: decision.request.destination,
       dataScopes: decision.request.dataScopes,
-      cwd: decision.request.resource.cwd || "",
+      cwd: decision.request.resource.cwdNormalized || "",
       senderId,
       taskDigest: decision.request.taskDigest,
       decisionId: decision.decisionId,
+      executorConfigFingerprint: decision.request.resource.configFingerprint,
     },
-    { ttlMs: payload && payload.confirmationTtlMs }
   );
 
-  appendAuditOrThrow(userData, {
-    ...auditFieldsFromDecision(decision),
-    event: "confirmation_issued",
-    approval: { tokenId },
-    outcome: { status: "awaiting_confirmation", expiresAt },
+  appendDecisionEvent(userData, decision, "confirmation_issued", {
+    approval: { confirmationId: correlationId },
+    outcome: { status: "awaiting_confirmation", expiresAt, reasonCodes: decision.reasonCodes },
   });
 
   return {
@@ -140,10 +181,157 @@ function requestExternalAgent(userData, event, payload, agents) {
   };
 }
 
+function cancelExternalAgentConfirmation(userData, event, payload) {
+  ensureAuditHealthy(userData);
+  const tokenId = String((payload && payload.confirmationToken) || "").trim();
+  const result = confirmationStore.revokeToken(tokenId, { reason: "owner_canceled" });
+  if (!result.ok) {
+    throw new Error(safeDenyReason(result.reason));
+  }
+  const token = result.token;
+  appendAuditOrThrow(userData, {
+    decisionId: token.decisionId,
+    policyVersion: POLICY_VERSION,
+    requestDigest: token.requestDigest,
+    actor: token.actor,
+    purpose: "code_delegate",
+    action: token.action,
+    dataScopes: token.dataScopes,
+    destination: token.destination,
+    event: "confirmation_canceled",
+    approval: {
+      confirmationId: token.correlationId,
+      canceledAt: token.revokedAt,
+    },
+    outcome: { status: "canceled" },
+  });
+  return { ok: true, decisionId: token.decisionId };
+}
+
+function requestAuditRotate(userData) {
+  ensureAuditHealthy(userData);
+  const verify = decisionAudit.verify(userData);
+  const decisionId = "rot_" + crypto.randomBytes(8).toString("hex");
+  const currentGeneration = verify.meta ? verify.meta.currentGeneration : 1;
+  const current = verify.generations.find((item) => item.generation === currentGeneration);
+  const { tokenId, correlationId, expiresAt } = confirmationStore.issueToken({
+    requestDigest: `rotate:${currentGeneration}`,
+    actor: "owner:settings",
+    action: "rotate_generation",
+    destination: "local_ledger",
+    dataScopes: [],
+    cwd: "",
+    senderId: "settings",
+    taskDigest: `rotate:${currentGeneration}`,
+    decisionId,
+    executorConfigFingerprint: "decision-audit",
+  });
+  appendAuditOrThrow(userData, {
+    decisionId,
+    policyVersion: POLICY_VERSION,
+    requestDigest: `rotate:${currentGeneration}`,
+    actor: "owner:settings",
+    purpose: "audit_maintenance",
+    action: "rotate_generation",
+    dataScopes: [],
+    destination: "local_ledger",
+    event: "rotation_confirmation_issued",
+    approval: { confirmationId: correlationId },
+    outcome: {
+      status: "awaiting_confirmation",
+      expiresAt,
+      fromGeneration: currentGeneration,
+      previousGenerationLastHash: current ? current.lastHash : GENESIS_HASH,
+    },
+  });
+  return {
+    decisionId,
+    rotationToken: tokenId,
+    expiresAt,
+    currentGeneration,
+  };
+}
+
+function confirmAuditRotate(userData, payload) {
+  ensureAuditHealthy(userData);
+  const tokenId = String((payload && payload.rotationToken) || "").trim();
+  const decisionId = String((payload && payload.decisionId) || "").trim();
+  const verify = decisionAudit.verify(userData);
+  const currentGeneration = verify.meta ? verify.meta.currentGeneration : 1;
+  const current = verify.generations.find((item) => item.generation === currentGeneration);
+  const consumed = confirmationStore.consumeToken(tokenId, {
+    requestDigest: `rotate:${currentGeneration}`,
+    actor: "owner:settings",
+    action: "rotate_generation",
+    destination: "local_ledger",
+    dataScopes: [],
+    cwd: "",
+    senderId: "settings",
+    taskDigest: `rotate:${currentGeneration}`,
+    decisionId,
+    executorConfigFingerprint: "decision-audit",
+  });
+  if (!consumed.ok) throw new Error(safeDenyReason(consumed.reason));
+  appendAuditOrThrow(userData, {
+    decisionId,
+    policyVersion: POLICY_VERSION,
+    requestDigest: `rotate:${currentGeneration}`,
+    actor: "owner:settings",
+    purpose: "audit_maintenance",
+    action: "rotate_generation",
+    dataScopes: [],
+    destination: "local_ledger",
+    event: "rotation_confirmation_consumed",
+    approval: correlationApproval(consumed.token),
+    outcome: { status: "confirmed", fromGeneration: currentGeneration },
+  });
+  return decisionAudit.rotate(userData, {
+    decisionId,
+    policyVersion: POLICY_VERSION,
+    actor: "owner:settings",
+    approval: correlationApproval(consumed.token),
+  });
+}
+
+function appendDeniedConfirmation(userData, decision, token, reason) {
+  appendAuditOrThrow(userData, {
+    ...auditFieldsFromDecision(decision),
+    event: "confirmation_denied",
+    approval: token ? { confirmationId: token.correlationId } : null,
+    outcome: { status: "denied", reasonCodes: [reason] },
+  });
+}
+
+function buildDecisionForExecution(userData, event, payload, agents) {
+  const { scopes, writeIntent } = resolveDataScopes(payload);
+  if (!scopes.includes("workspace_files")) {
+    throw new Error("外部执行体未沙箱化，必须先明确确认可改动授权目录中的文件。");
+  }
+  const ag = resolveCliSnapshot(userData, agents);
+  const decisionId = String((payload && payload.decisionId) || "").trim();
+  if (!decisionId) throw new Error("缺少原始决策编号，请重新发起确认。");
+  const rawRequest = buildExternalCliRequest({
+    taskText: String((payload && payload.task) || "").trim(),
+    dataScopes: scopes,
+    agent: ag,
+    writeIntent,
+  });
+  const decision = evaluatePolicy(
+    rawRequest,
+    {
+      cliEnabled: !!ag.enabled && !!ag.command,
+      hasCommand: !!(ag.command && String(ag.command).trim()),
+    },
+    { decisionId }
+  );
+  return { decision, agentSnapshot: ag };
+}
+
 /**
  * Phase 2: re-evaluate, consume token, audit-approved, execute.
  */
 async function runExternalAgent(userData, event, payload, agents, deps = {}) {
+  ensureAuditHealthy(userData);
   const runCliAgent = deps.runCliAgent || agents.runCliAgent;
   const onProgress = deps.onProgress || (() => {});
 
@@ -158,29 +346,8 @@ async function runExternalAgent(userData, event, payload, agents, deps = {}) {
     throw new Error("确认须由主进程签发的一次性凭据完成，界面勾选不能代替确认。");
   }
 
-  const ag = agents.getActiveAgent(userData);
-  if (!ag || ag.kind !== "cli") throw new Error("当前未选用外部命令执行体");
-
-  const { scopes, writeIntent } = resolveDataScopes(payload);
-  if (writeIntent && !scopes.includes("workspace_files")) {
-    throw new Error("外部执行体可能改文件：请勾选允许改动授权目录中的文件。");
-  }
-
-  const rawRequest = buildExternalCliRequest({
-    taskText: task,
-    dataScopes: scopes,
-    agent: ag,
-    writeIntent,
-  });
-  const decision = evaluatePolicy(rawRequest, {
-    cliEnabled: !!ag.enabled && !!ag.command,
-    hasCommand: !!(ag.command && String(ag.command).trim()),
-  });
-
-  appendAuditOrThrow(userData, {
-    ...auditFieldsFromDecision(decision),
-    event: "policy_evaluated",
-    approval: null,
+  const { decision, agentSnapshot } = buildDecisionForExecution(userData, event, payload, agents);
+  appendDecisionEvent(userData, decision, "policy_evaluated", {
     outcome: { status: decision.effect, reasonCodes: decision.reasonCodes },
   });
 
@@ -195,51 +362,46 @@ async function runExternalAgent(userData, event, payload, agents, deps = {}) {
     action: decision.request.action,
     destination: decision.request.destination,
     dataScopes: decision.request.dataScopes,
-    cwd: decision.request.resource.cwd || "",
+    cwd: decision.request.resource.cwdNormalized || "",
     senderId,
     taskDigest: decision.request.taskDigest,
+    decisionId: decision.decisionId,
+    executorConfigFingerprint: decision.request.resource.configFingerprint,
   });
   if (!consumed.ok) {
-    const reasons = {
-      missing_token: "缺少有效确认凭据。",
-      unknown_token: "确认凭据无效或已失效。",
-      token_replayed: "该确认凭据已使用，不能重复执行。",
-      token_expired: "确认凭据已过期，请重新发起请求。",
-      token_binding_mismatch: "请求内容与确认时不一致，已拒绝。",
-      token_scope_mismatch: "数据范围与确认时不一致，已拒绝。",
-    };
-    throw new Error(reasons[consumed.reason] || "确认凭据校验失败。");
+    const peek = confirmationStore.peekToken(tokenId);
+    try {
+      appendDeniedConfirmation(userData, decision, peek, consumed.reason);
+    } catch {
+      /* fail-closed path will surface original error */
+    }
+    throw new Error(safeDenyReason(consumed.reason));
   }
+  const token = consumed.token;
 
-  appendAuditOrThrow(userData, {
-    ...auditFieldsFromDecision(decision),
-    event: "confirmation_consumed",
-    approval: { tokenId, confirmedAt: consumed.token.consumedAt },
+  appendDecisionEvent(userData, decision, "confirmation_consumed", {
+    approval: correlationApproval(token),
     outcome: { status: "confirmed" },
   });
 
-  appendAuditOrThrow(userData, {
-    ...auditFieldsFromDecision(decision),
-    event: "execution_approved",
-    approval: { tokenId },
+  appendDecisionEvent(userData, decision, "execution_approved", {
+    approval: correlationApproval(token),
     outcome: { status: "approved" },
   });
 
   const rid = (payload && payload.requestId) || "dlg_" + Date.now();
   const signal = deps.signal;
 
-  appendAuditOrThrow(userData, {
-    ...auditFieldsFromDecision(decision),
-    event: "execution_started",
-    approval: { tokenId },
-    outcome: { status: "started", executorId: ag.id },
+  appendDecisionEvent(userData, decision, "execution_started", {
+    approval: correlationApproval(token),
+    outcome: { status: "started" },
   });
 
   onProgress({ phase: "thinking", label: "正在调度外部执行体…" });
 
   let auditIncomplete = false;
   try {
-    const result = await runCliAgent(userData, { task, signal });
+    const result = await runCliAgent(userData, { task, signal, agentConfig: agentSnapshot });
     const outputDigest = decisionAudit.digestOutput(result.output || "");
     const outcomeStatus = result.aborted
       ? "aborted"
@@ -255,7 +417,7 @@ async function runExternalAgent(userData, event, payload, agents, deps = {}) {
           : result.ok
             ? "execution_completed"
             : "execution_failed",
-        approval: { tokenId },
+        approval: correlationApproval(token),
         outcome: {
           status: outcomeStatus,
           exitCode: result.code,
@@ -274,7 +436,7 @@ async function runExternalAgent(userData, event, payload, agents, deps = {}) {
         reply: auditIncomplete
           ? "已停止外部执行体。注意：部分决策记录未能写入（audit_incomplete）。"
           : "已停止外部执行体。",
-        meta: { capabilitiesUsed: [ag.id], auditIncomplete },
+        meta: { capabilitiesUsed: [agentSnapshot.id], auditIncomplete },
       };
     }
 
@@ -291,9 +453,9 @@ async function runExternalAgent(userData, event, payload, agents, deps = {}) {
       ok: result.ok,
       reply,
       meta: {
-        capabilitiesUsed: [ag.id],
+        capabilitiesUsed: [agentSnapshot.id],
         usedTools: true,
-        executor: ag.name,
+        executor: agentSnapshot.name,
         auditIncomplete,
       },
     };
@@ -302,8 +464,8 @@ async function runExternalAgent(userData, event, payload, agents, deps = {}) {
       appendAuditOrThrow(userData, {
         ...auditFieldsFromDecision(decision),
         event: "execution_failed",
-        approval: { tokenId },
-        outcome: { status: "error", message: String(err.message || err).slice(0, 120) },
+        approval: correlationApproval(token),
+        outcome: { status: "error" },
       });
     } catch {
       auditIncomplete = true;
@@ -319,7 +481,10 @@ async function runExternalAgent(userData, event, payload, agents, deps = {}) {
 }
 
 module.exports = {
+  confirmAuditRotate,
+  cancelExternalAgentConfirmation,
   requestExternalAgent,
+  requestAuditRotate,
   runExternalAgent,
   senderIdFromEvent,
   resolveDataScopes,

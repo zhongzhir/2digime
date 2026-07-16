@@ -68,7 +68,14 @@ function normalizePolicyRequest(raw) {
     if (!isNonEmptyString(resource.executorId)) reasonCodes.push("missing_executor_id");
     if (!isNonEmptyString(resource.executorName)) reasonCodes.push("missing_executor_name");
     if (!isNonEmptyString(resource.commandBasename)) reasonCodes.push("missing_command");
-    if (resource.cwd != null && typeof resource.cwd !== "string") reasonCodes.push("invalid_cwd");
+    if (!isNonEmptyString(resource.commandFingerprint)) reasonCodes.push("missing_command_fingerprint");
+    if (!isNonEmptyString(resource.argsTemplateFingerprint)) reasonCodes.push("missing_args_fingerprint");
+    if (!isNonEmptyString(resource.cwdFingerprint)) reasonCodes.push("missing_cwd_fingerprint");
+    if (!isNonEmptyString(resource.configFingerprint)) reasonCodes.push("missing_config_fingerprint");
+    if (resource.cwdDisplay != null && typeof resource.cwdDisplay !== "string") reasonCodes.push("invalid_cwd");
+    if (resource.cwdNormalized != null && typeof resource.cwdNormalized !== "string") {
+      reasonCodes.push("invalid_cwd_normalized");
+    }
   }
 
   if (reasonCodes.length) return { ok: false, reasonCodes };
@@ -86,7 +93,12 @@ function normalizePolicyRequest(raw) {
         executorId: String(resource.executorId).trim(),
         executorName: String(resource.executorName).trim(),
         commandBasename: String(resource.commandBasename).trim(),
-        cwd: resource.cwd != null ? String(resource.cwd).trim() : "",
+        cwdDisplay: resource.cwdDisplay != null ? String(resource.cwdDisplay).trim() : "",
+        cwdNormalized: resource.cwdNormalized != null ? String(resource.cwdNormalized).trim() : "",
+        commandFingerprint: String(resource.commandFingerprint || "").trim(),
+        argsTemplateFingerprint: String(resource.argsTemplateFingerprint || "").trim(),
+        cwdFingerprint: String(resource.cwdFingerprint || "").trim(),
+        configFingerprint: String(resource.configFingerprint || "").trim(),
       },
       taskDigest: String(raw.taskDigest || "").trim(),
       taskLength: Number(raw.taskLength) || 0,

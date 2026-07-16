@@ -1921,8 +1921,11 @@ ipcMain.handle("decisionAudit:list", async (_e, opts) =>
 ipcMain.handle("decisionAudit:verify", async () =>
   decisionAudit.verify(app.getPath("userData"))
 );
-ipcMain.handle("decisionAudit:rotate", async () =>
-  decisionAudit.rotate(app.getPath("userData"))
+ipcMain.handle("decisionAudit:requestRotate", async () =>
+  externalAgentFlow.requestAuditRotate(app.getPath("userData"))
+);
+ipcMain.handle("decisionAudit:rotate", async (_e, payload) =>
+  externalAgentFlow.confirmAuditRotate(app.getPath("userData"), payload || {})
 );
 
 ipcMain.handle("l0:listAgents", async () => l0Agents.listAgents(app.getPath("userData")));
@@ -1950,6 +1953,9 @@ const activeDelegateAborts = new Map();
 
 ipcMain.handle("l0:requestExternalAgent", async (e, payload) =>
   externalAgentFlow.requestExternalAgent(app.getPath("userData"), e, payload || {}, l0Agents)
+);
+ipcMain.handle("l0:cancelExternalAgentConfirmation", async (e, payload) =>
+  externalAgentFlow.cancelExternalAgentConfirmation(app.getPath("userData"), e, payload || {})
 );
 
 ipcMain.handle("l0:runExternalAgent", async (e, payload) => {
