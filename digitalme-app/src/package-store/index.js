@@ -17,8 +17,12 @@ const {
   MAX_REASON_LEN,
   MAX_CONTENT_LEN,
   MAX_CHANGESET_OPS,
-  isDataKind,
   assertManifestShape,
+  assertActor,
+  assertSourceRefs,
+  assertDataKinds,
+  assertMigrationMetadata,
+  assertChangeSetSize,
 } = require("./schema");
 const {
   normalizeRel,
@@ -29,6 +33,7 @@ const {
   computeContentDigest,
   listContentFiles,
   hashBuffer,
+  assertNoSymlinksOrEscapes,
 } = require("./digest");
 const {
   ensureDir,
@@ -47,7 +52,6 @@ const ALLOWED_OPS = new Set([
   "write_text",
 ]);
 
-const MAX_SOURCE_REFS = 32;
 const MAX_DIFF_CHARS = 4000;
 const PREVIEW_TMP = "preview-tmp";
 
@@ -110,6 +114,25 @@ function parseVersionId(versionId) {
   return parseInt(m[1], 10);
 }
 
+function safeDigest(dir) {
+  if (!dir || !fs.existsSync(dir)) return null;
+  try {
+    return computeContentDigest(dir);
+  } catch {
+    return null;
+  }
+}
+
+function safeRevision(dir) {
+  try {
+    const m = readManifest(dir);
+    if (m && typeof m.revision === "number" && Number.isInteger(m.revision)) return m.revision;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
 /**
  * Digest was computed while manifest lacked contentDigest.
  * Verify by hashing a canonical manifest without that field.
@@ -132,7 +155,11 @@ function verifyStoredContentDigest(packageDir) {
       delete canonical.contentDigest;
       buf = Buffer.from(JSON.stringify(canonical, null, 2), "utf8");
     } else {
-      buf = fs.readFileSync(path.join(rootDir, ...rel.split("/")));
+      try {
+        buf = fs.readFileSync(path.join(rootDir, ...rel.split("/")));
+      } catch (e) {
+        throw err("read_failed", "read_failed", { path: rel, cause: e && e.message });
+      }
     }
     entries.push({ path: rel, sha256: hashBuffer(buf), bytes: buf.length });
   }
@@ -180,6 +207,7 @@ function validateJsonlFile(abs) {
 }
 
 function validatePackageTree(packageDir) {
+  assertNoSymlinksOrEscapes(packageDir);
   const issues = [];
   const root = path.resolve(packageDir);
   const files = listContentFiles(packageDir);
@@ -213,7 +241,9 @@ function validatePackageTree(packageDir) {
 
 class PackageStore {
   /**
-   * @param {{ packageDir: string, hooks?: object, ownerId?: string }} opts
+   * @param {{ packageDir: string, hooks?: object, actor?: string, ownerId?: string }} opts
+   * `actor` / `ownerId` are logical identifiers only; each commit/rollback/recover
+   * acquires a fresh lock operationToken.
    */
   constructor(opts = {}) {
     if (!opts || !opts.packageDir) {
@@ -221,7 +251,8 @@ class PackageStore {
     }
     this.packageDir = path.resolve(opts.packageDir);
     this.hooks = opts.hooks || {};
-    this.ownerId = opts.ownerId || `pid:${process.pid}`;
+    this.actor = opts.actor || opts.ownerId || `pid:${process.pid}`;
+    this.ownerId = this.actor;
     this.storeRoot = storeRootFor(this.packageDir);
     this.lock = new PackageLock(this.storeRoot, this.hooks);
     this._ensureStoreLayout();
@@ -293,6 +324,83 @@ class PackageStore {
     return path.join(this.storeRoot, "snapshots", snapshotDirName(revision));
   }
 
+  /**
+   * Publish snapshot without deleting existing vN.
+   * Writes to snapshots/.publishing-vN-<token>/ then renames to vN.
+   * If vN already exists: verify package content (excluding .snapshot-meta.json)
+   * matches source; mismatch → snapshot_conflict. Never rmrf(vN).
+   */
+  _publishSnapshot(revision, sourceDir, meta) {
+    const snapRoot = path.join(this.storeRoot, "snapshots");
+    ensureDir(snapRoot);
+    const finalPath = this._snapshotPath(revision);
+    const token = crypto.randomBytes(8).toString("hex");
+    const publishing = path.join(snapRoot, `.publishing-v${revision}-${token}`);
+
+    this._hook("beforeSnapshot", { revision, publishing, finalPath });
+
+    const sourceDigest = computeContentDigest(sourceDir);
+
+    if (fs.existsSync(finalPath)) {
+      const existingDigest = this._snapshotContentDigest(finalPath);
+      if (existingDigest.rootSha256 !== sourceDigest.rootSha256) {
+        throw err("snapshot_conflict", "snapshot_conflict", {
+          revision,
+          existingRootSha256: existingDigest.rootSha256,
+          intendedRootSha256: sourceDigest.rootSha256,
+        });
+      }
+      // Identical package content — keep existing vN byte-identical.
+      return finalPath;
+    }
+
+    rmrf(publishing);
+    copyTree(sourceDir, publishing);
+    this._hook("afterSnapshotCopy", { revision, publishing, finalPath });
+    writeJsonAtomic(path.join(publishing, ".snapshot-meta.json"), {
+      ...meta,
+      revision,
+      rootSha256: (meta && meta.rootSha256) || sourceDigest.rootSha256,
+      capturedAt: meta && meta.capturedAt ? meta.capturedAt : isoNow(),
+    });
+
+    // Verify publishing content (sans meta) still matches source before rename.
+    const publishedDigest = this._snapshotContentDigest(publishing);
+    if (publishedDigest.rootSha256 !== sourceDigest.rootSha256) {
+      rmrf(publishing);
+      throw err("snapshot_publish_mismatch", "snapshot_publish_mismatch");
+    }
+
+    this._hook("beforeSnapshotRename", { publishing, finalPath });
+    fs.renameSync(publishing, finalPath);
+    return finalPath;
+  }
+
+  /** Content digest of a snapshot dir, ignoring .snapshot-meta.json. */
+  _snapshotContentDigest(dir) {
+    const files = listContentFiles(dir).filter((f) => f !== ".snapshot-meta.json");
+    const entries = [];
+    const rootDir = path.resolve(dir);
+    for (const rel of files) {
+      const full = path.join(rootDir, ...rel.split("/"));
+      let buf;
+      try {
+        buf = fs.readFileSync(full);
+      } catch (e) {
+        throw err("read_failed", "read_failed", { path: full, cause: e && e.message });
+      }
+      entries.push({ path: rel, sha256: hashBuffer(buf), bytes: buf.length });
+    }
+    const lines = entries.map((e) => `${e.sha256}  ${e.path}`).join("\n");
+    const rootSha256 = hashBuffer(Buffer.from(lines, "utf8"));
+    return {
+      algorithm: "sha256",
+      rootSha256,
+      fileCount: entries.length,
+      files: entries,
+    };
+  }
+
   _currentLiveState() {
     const manifest = readManifest(this.packageDir);
     let digest = null;
@@ -343,6 +451,12 @@ class PackageStore {
     if (!result.exists) {
       issues.push({ code: "package_missing", message: "package_missing" });
       return result;
+    }
+
+    try {
+      assertNoSymlinksOrEscapes(dir);
+    } catch (e) {
+      issues.push({ code: e.code || "symlink_rejected", message: e.message, path: e.path });
     }
 
     let manifest = null;
@@ -404,7 +518,7 @@ class PackageStore {
         }
       }
     } catch (e) {
-      issues.push({ code: "list_files_failed", message: e.message });
+      issues.push({ code: e.code || "list_files_failed", message: e.message });
     }
 
     if (manifest && manifest.contentDigest && manifest.contentDigest.rootSha256) {
@@ -441,7 +555,7 @@ class PackageStore {
       };
     }
 
-    const who = String(actor || this.ownerId || "migration");
+    const who = assertActor(String(actor || this.actor || "migration"));
     const tool = String(toolVersion || "package-store");
     const cs = this.createChangeSet({
       actor: who,
@@ -490,9 +604,7 @@ class PackageStore {
    * Build a candidate change set. Does not modify the live Package.
    */
   createChangeSet(intent = {}) {
-    const actor = String(intent.actor || "").trim();
-    if (!actor) throw err("actor_required", "actor_required");
-
+    const actor = assertActor(intent.actor);
     const reason = String(intent.reason || "");
     if (!reason || reason.length > MAX_REASON_LEN) {
       throw err("reason_invalid", "reason_invalid");
@@ -503,12 +615,9 @@ class PackageStore {
       throw err("too_many_ops", "too_many_ops");
     }
 
-    const dataKinds = Array.isArray(intent.dataKinds) ? intent.dataKinds : [];
-    for (const k of dataKinds) {
-      if (!isDataKind(k)) throw err("data_kind_invalid", "data_kind_invalid", { kind: k });
-    }
-
-    const sourceRefs = Array.isArray(intent.sourceRefs) ? intent.sourceRefs.slice(0, MAX_SOURCE_REFS) : [];
+    const dataKinds = assertDataKinds(intent.dataKinds);
+    const sourceRefs = assertSourceRefs(intent.sourceRefs);
+    const migration = assertMigrationMetadata(intent.migration);
 
     const ops = [];
     const affectedPaths = [];
@@ -517,7 +626,8 @@ class PackageStore {
       const type = String(raw.type || "");
       if (!ALLOWED_OPS.has(type)) throw err("op_not_allowed", "op_not_allowed", { type });
 
-      const rel = normalizeRel(raw.path);
+      // Manifest only via writeManifestWithDigest — forbid in change-set ops.
+      const rel = normalizeRel(raw.path, { allowManifest: false });
       resolveInsidePackage(this.packageDir, rel);
 
       if (type === "append_jsonl") {
@@ -566,7 +676,9 @@ class PackageStore {
       createdAt: isoNow(),
       status: "candidate",
     };
-    if (intent.migration) cs.migration = intent.migration;
+    if (migration) cs.migration = migration;
+
+    assertChangeSetSize(cs);
 
     this._ensureStoreLayout();
     this._saveChangeSet(cs);
@@ -639,7 +751,7 @@ class PackageStore {
     }
 
     this._ensureStoreLayout();
-    this.lock.acquire(this.ownerId);
+    const lockInfo = this.lock.acquire(this.actor);
 
     const staging = this._stagingPath();
     const backup = this._backupPath();
@@ -649,6 +761,7 @@ class PackageStore {
     let swapped = false;
 
     try {
+      this.lock.heartbeat(lockInfo.operationToken);
       const live = this._currentLiveState();
       revisionBefore = live.revision;
 
@@ -669,17 +782,15 @@ class PackageStore {
         }
       }
 
-      // Snapshot current live (immutable history).
-      this._hook("beforeSnapshot", { revision: revisionBefore });
-      const snapPath = this._snapshotPath(revisionBefore);
-      rmrf(snapPath);
-      copyTree(this.packageDir, snapPath);
-      writeJsonAtomic(path.join(snapPath, ".snapshot-meta.json"), {
-        revision: revisionBefore,
-        capturedAt: isoNow(),
+      assertNoSymlinksOrEscapes(this.packageDir);
+
+      // Snapshot current live (immutable history) — never rmrf existing vN.
+      const snapPath = this._publishSnapshot(revisionBefore, this.packageDir, {
         changeSetId: cs.id,
         rootSha256: live.rootSha256,
       });
+
+      this.lock.heartbeat(lockInfo.operationToken);
 
       this._writeJournal({
         phase: "staging",
@@ -690,6 +801,7 @@ class PackageStore {
         stagingPath: staging,
         backupPath: backup,
         snapshotPath: snapPath,
+        backupRootSha256: live.rootSha256,
       });
 
       this._hook("beforeStaging", { changeSetId: cs.id });
@@ -730,6 +842,9 @@ class PackageStore {
         afterHashes[rel] = fileSha256IfExists(staging, rel);
       }
 
+      const expectedRootSha256 = finalManifest.contentDigest.rootSha256;
+      const backupRootSha256 = live.rootSha256;
+
       this._writeJournal({
         phase: "swapping",
         op: "commit",
@@ -740,8 +855,11 @@ class PackageStore {
         stagingPath: staging,
         backupPath: backup,
         snapshotPath: snapPath,
-        expectedRootSha256: finalManifest.contentDigest.rootSha256,
+        expectedRootSha256,
+        backupRootSha256,
       });
+
+      this.lock.heartbeat(lockInfo.operationToken);
 
       this._hook("beforeSwap", {
         live: this.packageDir,
@@ -774,6 +892,8 @@ class PackageStore {
           livePath: this.packageDir,
           stagingPath: staging,
           backupPath: backup,
+          expectedRootSha256,
+          backupRootSha256,
           swapError: swapErr.code || swapErr.message,
           failed: true,
         });
@@ -802,6 +922,8 @@ class PackageStore {
         revisionAfter,
         livePath: this.packageDir,
         backupPath: backup,
+        expectedRootSha256,
+        backupRootSha256,
       });
 
       // Cleanup: drop swap-backup and any staging residue after success.
@@ -829,7 +951,7 @@ class PackageStore {
       }
       throw e;
     } finally {
-      this.lock.release(this.ownerId);
+      this.lock.release(lockInfo.operationToken);
     }
   }
 
@@ -847,6 +969,7 @@ class PackageStore {
     }
 
     for (const name of names) {
+      if (name.startsWith(".publishing-")) continue;
       const full = path.join(snapRoot, name);
       let st;
       try {
@@ -855,7 +978,12 @@ class PackageStore {
         continue;
       }
       if (!st.isDirectory()) continue;
-      const rev = parseVersionId(name);
+      let rev;
+      try {
+        rev = parseVersionId(name);
+      } catch {
+        continue;
+      }
       const meta = readJson(path.join(full, ".snapshot-meta.json"), null);
       const man = readManifest(full);
       versions.push({
@@ -941,7 +1069,7 @@ class PackageStore {
     }
 
     this._ensureStoreLayout();
-    this.lock.acquire(this.ownerId);
+    const lockInfo = this.lock.acquire(this.actor);
 
     const staging = this._stagingPath();
     const backup = this._backupPath();
@@ -951,20 +1079,15 @@ class PackageStore {
     let finalManifest = null;
 
     try {
+      this.lock.heartbeat(lockInfo.operationToken);
       const live = this._currentLiveState();
       revisionBefore = live.revision;
 
-      this._hook("beforeSnapshot", { revision: revisionBefore, op: "rollback" });
-      const snapCurrent = this._snapshotPath(revisionBefore);
-      if (!fs.existsSync(snapCurrent)) {
-        copyTree(this.packageDir, snapCurrent);
-        writeJsonAtomic(path.join(snapCurrent, ".snapshot-meta.json"), {
-          revision: revisionBefore,
-          capturedAt: isoNow(),
-          reason: "pre-rollback",
-          rootSha256: live.rootSha256,
-        });
-      }
+      // Ensure current live is snapshotted without destroying existing vN.
+      this._publishSnapshot(revisionBefore, this.packageDir, {
+        reason: "pre-rollback",
+        rootSha256: live.rootSha256,
+      });
 
       this._writeJournal({
         phase: "staging",
@@ -974,6 +1097,7 @@ class PackageStore {
         livePath: this.packageDir,
         stagingPath: staging,
         backupPath: backup,
+        backupRootSha256: live.rootSha256,
       });
 
       this._hook("beforeStaging", { op: "rollback" });
@@ -1001,6 +1125,9 @@ class PackageStore {
       this._hook("beforeValidateStaging", { staging });
       validatePackageTree(staging);
 
+      const expectedRootSha256 = finalManifest.contentDigest.rootSha256;
+      const backupRootSha256 = live.rootSha256;
+
       this._writeJournal({
         phase: "swapping",
         op: "rollback",
@@ -1010,8 +1137,11 @@ class PackageStore {
         livePath: this.packageDir,
         stagingPath: staging,
         backupPath: backup,
-        expectedRootSha256: finalManifest.contentDigest.rootSha256,
+        expectedRootSha256,
+        backupRootSha256,
       });
+
+      this.lock.heartbeat(lockInfo.operationToken);
 
       this._hook("beforeSwap", { op: "rollback" });
       rmrf(backup);
@@ -1028,6 +1158,20 @@ class PackageStore {
         } catch {
           /* recover() */
         }
+        this._writeJournal({
+          phase: "swapping",
+          op: "rollback",
+          targetVersion: snapshotDirName(targetRev),
+          revisionBefore,
+          revisionAfter,
+          livePath: this.packageDir,
+          stagingPath: staging,
+          backupPath: backup,
+          expectedRootSha256,
+          backupRootSha256,
+          swapError: swapErr.code || swapErr.message,
+          failed: true,
+        });
         throw err("swap_failed", "swap_failed", { cause: swapErr });
       }
 
@@ -1040,6 +1184,8 @@ class PackageStore {
         revisionBefore,
         revisionAfter,
         targetVersion: snapshotDirName(targetRev),
+        expectedRootSha256,
+        backupRootSha256,
       });
       rmrf(backup);
       rmrf(staging);
@@ -1063,15 +1209,25 @@ class PackageStore {
       }
       throw e;
     } finally {
-      this.lock.release(this.ownerId);
+      this.lock.release(lockInfo.operationToken);
     }
   }
 
   /**
    * Recover from an interrupted journal. Fail closed on ambiguous states.
+   * Always acquires lock with a fresh operationToken.
    */
   recover() {
     this._ensureStoreLayout();
+    const lockInfo = this.lock.acquire(this.actor);
+    try {
+      return this._recoverLocked();
+    } finally {
+      this.lock.release(lockInfo.operationToken);
+    }
+  }
+
+  _recoverLocked() {
     const journal = this._readJournal();
     const staging = this._stagingPath();
     const backup = this._backupPath();
@@ -1118,37 +1274,9 @@ class PackageStore {
     }
 
     if (phase === "swapping") {
-      if (liveExists && !backupExists) {
-        // Swap completed (or never moved live); drop leftover staging.
-        rmrf(staging);
-        this._clearJournal();
-        return { ok: true, action: "finalize_swap_live_present", phase };
-      }
-      if (!liveExists && backupExists) {
-        // Crash between renames — restore unique old version.
-        fs.renameSync(backup, this.packageDir);
-        rmrf(staging);
-        this._clearJournal();
-        return { ok: true, action: "restored_backup_after_swap_interrupt", phase };
-      }
-      if (liveExists && backupExists) {
-        // Both present: do not silently pick a winner.
-        throw err("recover_ambiguous", "recover_ambiguous", {
-          phase,
-          liveExists,
-          backupExists,
-          stagingExists,
-          hint: "live_and_backup_both_present",
-        });
-      }
-      if (!liveExists && !backupExists && stagingExists) {
-        throw err("recover_ambiguous", "recover_ambiguous", {
-          phase,
-          hint: "only_staging_present",
-        });
-      }
-      throw err("recover_ambiguous", "recover_ambiguous", {
-        phase,
+      return this._recoverSwapping(journal, {
+        staging,
+        backup,
         liveExists,
         backupExists,
         stagingExists,
@@ -1164,6 +1292,118 @@ class PackageStore {
 
     throw err("recover_ambiguous", "recover_ambiguous", { phase });
   }
+
+  _recoverSwapping(journal, ctx) {
+    const { staging, backup, liveExists, backupExists, stagingExists } = ctx;
+    const expected = journal.expectedRootSha256;
+    const backupHash = journal.backupRootSha256;
+    const revisionBefore = journal.revisionBefore;
+    const revisionAfter = journal.revisionAfter;
+    const phase = journal.phase;
+
+    const liveDigest = liveExists ? safeDigest(this.packageDir) : null;
+    const backupDigest = backupExists ? safeDigest(backup) : null;
+    const liveRev = liveExists ? safeRevision(this.packageDir) : null;
+
+    // live matches expected + revisionAfter → finalize cleanup
+    if (
+      liveExists &&
+      liveDigest &&
+      expected &&
+      liveDigest.rootSha256 === expected &&
+      (revisionAfter == null || liveRev === revisionAfter)
+    ) {
+      rmrf(staging);
+      rmrf(backup);
+      this._clearJournal();
+      return { ok: true, action: "finalize_swap_live_present", phase };
+    }
+
+    // live matches backup hash + revisionBefore → discard staging (swap never completed / rolled back)
+    if (
+      liveExists &&
+      liveDigest &&
+      backupHash &&
+      liveDigest.rootSha256 === backupHash &&
+      (revisionBefore == null || liveRev === revisionBefore)
+    ) {
+      rmrf(staging);
+      // If backup also present and matches, drop it; otherwise keep evidence if mismatch.
+      if (backupExists) {
+        if (backupDigest && backupDigest.rootSha256 === backupHash) {
+          rmrf(backup);
+        } else if (!backupDigest) {
+          // unreadable backup with live already restored — ambiguous
+          throw err("recover_ambiguous", "recover_ambiguous", {
+            phase,
+            hint: "live_matches_backup_hash_but_backup_unreadable",
+          });
+        } else {
+          throw err("recover_ambiguous", "recover_ambiguous", {
+            phase,
+            hint: "live_and_backup_both_present_hash_mismatch",
+          });
+        }
+      }
+      this._clearJournal();
+      return { ok: true, action: "discarded_staging_after_swap_interrupt", phase };
+    }
+
+    // live missing + backup matches backupRootSha256 → restore backup
+    if (!liveExists && backupExists) {
+      if (!backupHash) {
+        // Legacy journal without hash — still restore unique backup if staging alone isn't claiming victory.
+        fs.renameSync(backup, this.packageDir);
+        rmrf(staging);
+        this._clearJournal();
+        return { ok: true, action: "restored_backup_after_swap_interrupt", phase };
+      }
+      if (backupDigest && backupDigest.rootSha256 === backupHash) {
+        fs.renameSync(backup, this.packageDir);
+        rmrf(staging);
+        this._clearJournal();
+        return { ok: true, action: "restored_backup_after_swap_interrupt", phase };
+      }
+      throw err("recover_ambiguous", "recover_ambiguous", {
+        phase,
+        hint: "backup_hash_mismatch",
+        expectedBackup: backupHash,
+        actualBackup: backupDigest && backupDigest.rootSha256,
+      });
+    }
+
+    // live destroyed/unreadable and backup missing → integrity / ambiguous, keep journal
+    if (!liveExists && !backupExists) {
+      throw err("recover_ambiguous", "recover_ambiguous", {
+        phase,
+        hint: stagingExists ? "only_staging_present" : "live_and_backup_missing",
+      });
+    }
+
+    // live exists but unreadable
+    if (liveExists && !liveDigest) {
+      throw err("recover_ambiguous", "recover_ambiguous", {
+        phase,
+        hint: "live_unreadable",
+        backupExists,
+      });
+    }
+
+    // live exists but digest/revision mismatch → do not clear journal
+    throw err("recover_ambiguous", "recover_ambiguous", {
+      phase,
+      liveExists,
+      backupExists,
+      stagingExists,
+      liveRootSha256: liveDigest && liveDigest.rootSha256,
+      liveRevision: liveRev,
+      expectedRootSha256: expected,
+      backupRootSha256: backupHash,
+      revisionBefore,
+      revisionAfter,
+      hint: "live_digest_or_revision_mismatch",
+    });
+  }
 }
 
 module.exports = {
@@ -1176,4 +1416,6 @@ module.exports = {
   resolveInsidePackage,
   dirByteFingerprint,
   readManifest,
+  assertNoSymlinksOrEscapes,
+  writeManifestWithDigest,
 };

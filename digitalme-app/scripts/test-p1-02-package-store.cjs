@@ -9,6 +9,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const assert = require("node:assert/strict");
+const { spawnSync } = require("node:child_process");
 const {
   PackageStore,
   SCHEMA_VERSION,
@@ -21,7 +22,10 @@ const {
 } = require("../src/package-store");
 const { createMinimalFixture } = require("../src/package-store/fixture");
 const { listContentFiles } = require("../src/package-store/digest");
+const { writeJsonAtomic } = require("../src/package-store/fs-util");
 const feedback = require("../src/feedback");
+
+const RACE_PAIR = path.join(__dirname, "p1-02-lock-race-pair.cjs");
 
 let passed = 0;
 let failed = 0;
@@ -59,11 +63,11 @@ function fingerprintPackage(dir) {
   return dirByteFingerprint(dir);
 }
 
-function store(packageDir, hooks, ownerId) {
+function store(packageDir, hooks, actor) {
   return new PackageStore({
     packageDir,
     hooks: hooks || {},
-    ownerId: ownerId || `test:${process.pid}`,
+    actor: actor || `test:${process.pid}`,
   });
 }
 
@@ -321,7 +325,6 @@ test("7. before-hash / revision conflict blocks commit", () => {
         },
       ],
     });
-    // Commit something else first via another change set after fixing persona hash by remigrating digest... 
     // Simpler: bump revision in manifest to force conflict_revision.
     const m = readManifest(dir);
     m.revision = (m.revision || 0) + 99;
@@ -332,58 +335,83 @@ test("7. before-hash / revision conflict blocks commit", () => {
   }
 });
 
-// ---------- §10.8 concurrent writers ----------
-test("8. concurrent writers: only one succeeds", () => {
-  const dir = makeV02("concurrent");
-  try {
-    const a = store(dir, {}, "writer-a");
-    const b = store(dir, {}, "writer-b");
-    const csA = a.createChangeSet({
-      actor: "writer-a",
-      reason: "a",
-      sourceRefs: [],
-      dataKinds: ["owner_assertion"],
-      ops: [
-        {
-          type: "ensure_section_append",
-          path: "style-guide.md",
-          section: "## 用户反馈（风格纠正）",
-          line: "- from-a",
-        },
-      ],
-    });
-    const csB = b.createChangeSet({
-      actor: "writer-b",
-      reason: "b",
-      sourceRefs: [],
-      dataKinds: ["owner_assertion"],
-      ops: [
-        {
-          type: "ensure_section_append",
-          path: "style-guide.md",
-          section: "## 用户反馈（风格纠正）",
-          line: "- from-b",
-        },
-      ],
-    });
-
-    let bFailed = false;
-    const aLocked = store(dir, {}, "writer-a");
-    // Hold lock with writer-a, then writer-b must fail.
-    aLocked.lock.acquire("writer-a");
+// ---------- §10.8 concurrent writers (real child_process) ----------
+test("8. concurrent writers: only one succeeds (same + different actors)", () => {
+  function parallelRace(label, actorA, actorB) {
+    const dir = makeV02(`race-${label}`);
     try {
-      b.commit(csB.id, { confirmed: true });
-    } catch (e) {
-      bFailed = e.code === "package_locked";
-    }
-    aLocked.lock.release("writer-a");
-    assert.equal(bFailed, true);
+      const prepA = store(dir, {}, actorA);
+      const csA = prepA.createChangeSet({
+        actor: actorA,
+        reason: "race-a",
+        sourceRefs: [],
+        dataKinds: ["owner_assertion"],
+        ops: [
+          {
+            type: "ensure_section_append",
+            path: "style-guide.md",
+            section: "## 用户反馈（风格纠正）",
+            line: `- race-a-${label}-${Date.now()}`,
+          },
+        ],
+      });
+      const prepB = store(dir, {}, actorB);
+      const csB = prepB.createChangeSet({
+        actor: actorB,
+        reason: "race-b",
+        sourceRefs: [],
+        dataKinds: ["owner_assertion"],
+        ops: [
+          {
+            type: "ensure_section_append",
+            path: "style-guide.md",
+            section: "## 用户反馈（风格纠正）",
+            line: `- race-b-${label}-${Date.now()}`,
+          },
+        ],
+      });
 
-    const r = a.commit(csA.id, { confirmed: true });
-    assert.equal(r.ok, true);
-  } finally {
-    cleanup(dir);
+      const pair = spawnSync(
+        process.execPath,
+        [RACE_PAIR, dir, csA.id, actorA, csB.id, actorB],
+        { encoding: "utf8", timeout: 120_000 }
+      );
+      assert.equal(pair.status, 0, `pair runner failed: ${pair.stderr || pair.stdout}`);
+      const line = String(pair.stdout || "")
+        .trim()
+        .split(/\r?\n/)
+        .filter(Boolean)
+        .pop();
+      const body = JSON.parse(line);
+      assert.equal(body.ok, true);
+      const parsed = (body.results || []).map((r) => r.parsed);
+      const successes = parsed.filter((p) => p && p.ok === true);
+      const failures = parsed.filter((p) => p && p.ok === false);
+      assert.equal(
+        successes.length,
+        1,
+        `${label}: exactly one success, got ${JSON.stringify(parsed)}`
+      );
+      assert.ok(failures.length >= 1, `${label}: at least one failure`);
+      const failCodes = failures.map((f) => f.code);
+      assert.ok(
+        failCodes.some((c) =>
+          [
+            "package_locked",
+            "conflict_revision",
+            "conflict_root_hash",
+            "conflict_before_hash",
+          ].includes(c)
+        ),
+        `${label}: failure should be lock/conflict, got ${failCodes}`
+      );
+    } finally {
+      cleanup(dir);
+    }
   }
+
+  parallelRace("diff-actors", "writer-a", "writer-b");
+  parallelRace("same-actor", "same-actor", "same-actor");
 });
 
 // ---------- §10.9 fault injection keeps old bytes ----------
@@ -465,6 +493,7 @@ test("10. recover() restores unique clear version after interrupt", () => {
   try {
     const s = store(dir);
     const before = fingerprintPackage(dir);
+    const beforeHash = computeContentDigest(dir).rootSha256;
     const storeRoot = storeRootFor(dir);
     const staging = path.join(storeRoot, "staging");
     const backup = path.join(storeRoot, "swap-backup");
@@ -481,6 +510,7 @@ test("10. recover() restores unique clear version after interrupt", () => {
         livePath: dir,
         stagingPath: staging,
         backupPath: backup,
+        backupRootSha256: beforeHash,
       }),
       "utf8"
     );
@@ -500,6 +530,10 @@ test("10. recover() restores unique clear version after interrupt", () => {
         livePath: dir,
         stagingPath: staging,
         backupPath: backup,
+        revisionBefore: 1,
+        revisionAfter: 2,
+        backupRootSha256: beforeHash,
+        expectedRootSha256: "0".repeat(64),
       }),
       "utf8"
     );
@@ -509,7 +543,7 @@ test("10. recover() restores unique clear version after interrupt", () => {
     assert.equal(fs.existsSync(dir), true);
     assert.equal(fingerprintPackage(dir), before);
 
-    // Ambiguous: live + backup both present → fail closed
+    // Ambiguous: live + backup both present with mismatched hashes → fail closed
     fs.mkdirSync(backup, { recursive: true });
     fs.writeFileSync(path.join(backup, "manifest.json"), "{}", "utf8");
     fs.writeFileSync(
@@ -520,10 +554,15 @@ test("10. recover() restores unique clear version after interrupt", () => {
         livePath: dir,
         stagingPath: staging,
         backupPath: backup,
+        revisionBefore: 1,
+        revisionAfter: 2,
+        backupRootSha256: beforeHash,
+        expectedRootSha256: "a".repeat(64),
       }),
       "utf8"
     );
     assertCode(() => s.recover(), "recover_ambiguous");
+    assert.equal(fs.existsSync(journal), true, "journal must remain on ambiguous recover");
   } finally {
     cleanup(dir);
   }
@@ -558,8 +597,6 @@ test("11. rollback creates new revision and restores content", () => {
     // Content restored to pre-commit (minus manifest revision bump differences in digest)
     assert.ok(!styleBack.includes("temporary change"));
     // Snapshot v0 still exists (history not overwritten)
-    const snap0 = path.join(storeRootFor(dir), "snapshots", "v0");
-    // After first commit snapshot of previous revision exists
     const snaps = fs.readdirSync(path.join(storeRootFor(dir), "snapshots"));
     assert.ok(snaps.length >= 1);
     assert.ok(style0.length >= 0);
@@ -686,6 +723,252 @@ test("fixture helper creates v0.1 without schemaVersion", () => {
     assert.equal(m.revision, 0);
     assert.ok(fs.existsSync(path.join(dir, "persona.md")));
     assert.ok(fs.existsSync(path.join(dir, "identity.json")));
+  } finally {
+    cleanup(dir);
+  }
+});
+
+// ---------- Hardening extras ----------
+test("15. unreadable subdirectory → digest throws readdir_failed", () => {
+  const dir = makeV02("unreadable");
+  try {
+    const sub = path.join(dir, "memory", "hidden");
+    fs.mkdirSync(sub, { recursive: true });
+    fs.writeFileSync(path.join(sub, "a.txt"), "a", "utf8");
+    const orig = fs.readdirSync;
+    fs.readdirSync = function patched(p, opts) {
+      if (String(p).replace(/\\/g, "/").includes("/memory/hidden")) {
+        const e = new Error("EACCES");
+        e.code = "EACCES";
+        throw e;
+      }
+      return orig.call(fs, p, opts);
+    };
+    try {
+      assertCode(() => computeContentDigest(dir), "readdir_failed");
+      assertCode(() => listContentFiles(dir), "readdir_failed");
+    } finally {
+      fs.readdirSync = orig;
+    }
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("16. symlink in package → inspect unhealthy and commit rejects", () => {
+  const dir = makeV02("symlink-pkg");
+  try {
+    const outside = tempDir("symlink-out");
+    fs.writeFileSync(path.join(outside, "x.txt"), "x", "utf8");
+    const linkPath = path.join(dir, "memory", "escape-link");
+    let ok = false;
+    try {
+      fs.symlinkSync(outside, linkPath, "junction");
+      ok = true;
+    } catch {
+      try {
+        fs.symlinkSync(outside, linkPath, "dir");
+        ok = true;
+      } catch {
+        ok = false;
+      }
+    }
+    if (!ok) {
+      console.log("  (skip: cannot create symlink/junction)");
+      return;
+    }
+    const s = store(dir);
+    const report = s.inspect();
+    assert.equal(report.healthy, false);
+    assert.ok(
+      report.issues.some((i) =>
+        ["symlink_rejected", "reparse_rejected"].includes(i.code)
+      )
+    );
+    const cs = s.createChangeSet({
+      actor: "test",
+      reason: "commit with symlink present",
+      sourceRefs: ["test"],
+      dataKinds: ["owner_assertion"],
+      ops: [
+        {
+          type: "ensure_section_append",
+          path: "style-guide.md",
+          section: "## 用户反馈（风格纠正）",
+          line: "- should fail",
+        },
+      ],
+    });
+    let code = null;
+    try {
+      s.commit(cs.id, { confirmed: true });
+    } catch (e) {
+      code = e.code;
+    }
+    assert.ok(
+      ["symlink_rejected", "reparse_rejected"].includes(code),
+      `expected symlink/reparse reject, got ${code}`
+    );
+    cleanup(outside);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("17. corrupted live + no backup → recover_ambiguous keeps journal", () => {
+  const dir = makeV02("corrupt-live");
+  try {
+    const s = store(dir);
+    const storeRoot = storeRootFor(dir);
+    const journal = path.join(storeRoot, "journal.json");
+    const staging = path.join(storeRoot, "staging");
+    const backup = path.join(storeRoot, "swap-backup");
+    const goodHash = computeContentDigest(dir).rootSha256;
+
+    // Corrupt live manifest so digest/revision cannot match journal expectations.
+    fs.writeFileSync(path.join(dir, "manifest.json"), "{not-json", "utf8");
+    fs.mkdirSync(staging, { recursive: true });
+    fs.writeFileSync(path.join(staging, "x.txt"), "staging", "utf8");
+    fs.writeFileSync(
+      journal,
+      JSON.stringify({
+        phase: "swapping",
+        op: "commit",
+        livePath: dir,
+        stagingPath: staging,
+        backupPath: backup,
+        revisionBefore: 1,
+        revisionAfter: 2,
+        expectedRootSha256: goodHash,
+        backupRootSha256: goodHash,
+      }),
+      "utf8"
+    );
+
+    assertCode(() => s.recover(), "recover_ambiguous");
+    assert.equal(fs.existsSync(journal), true);
+    assert.equal(fs.existsSync(staging), true);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("18. snapshot mid-copy failure leaves existing vN unchanged", () => {
+  const dir = makeV02("snap-mid");
+  try {
+    const s1 = store(dir);
+    const cs1 = s1.createChangeSet({
+      actor: "test",
+      reason: "first commit for snapshot",
+      sourceRefs: ["test"],
+      dataKinds: ["owner_assertion"],
+      ops: [
+        {
+          type: "ensure_section_append",
+          path: "style-guide.md",
+          section: "## 用户反馈（风格纠正）",
+          line: "- first",
+        },
+      ],
+    });
+    const r1 = s1.commit(cs1.id, { confirmed: true });
+    const snapPath = path.join(storeRootFor(dir), "snapshots", r1.rollbackVersion);
+    assert.equal(fs.existsSync(snapPath), true);
+    const snapFp = dirByteFingerprint(snapPath);
+
+    const s2 = store(dir, {
+      afterSnapshotCopy() {
+        throw Object.assign(new Error("mid_copy_fail"), { code: "mid_copy_fail" });
+      },
+    });
+    const cs2 = s2.createChangeSet({
+      actor: "test",
+      reason: "second commit fails mid snapshot",
+      sourceRefs: ["test"],
+      dataKinds: ["owner_assertion"],
+      ops: [
+        {
+          type: "ensure_section_append",
+          path: "style-guide.md",
+          section: "## 用户反馈（风格纠正）",
+          line: "- second",
+        },
+      ],
+    });
+    assertCode(() => s2.commit(cs2.id, { confirmed: true }), "mid_copy_fail");
+    assert.equal(fs.existsSync(snapPath), true);
+    assert.equal(dirByteFingerprint(snapPath), snapFp, "existing vN must stay byte-identical");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("19. writeJsonAtomic rename failure leaves old target readable", () => {
+  const dir = tempDir("atomic-json");
+  try {
+    const target = path.join(dir, "journal.json");
+    writeJsonAtomic(target, { phase: "staging", keep: true });
+    const before = fs.readFileSync(target, "utf8");
+    assert.ok(before.includes("staging"));
+
+    let threw = false;
+    try {
+      writeJsonAtomic(
+        target,
+        { phase: "swapping", keep: false },
+        {
+          beforeReplaceTarget() {
+            throw Object.assign(new Error("rename_boom"), { code: "rename_boom" });
+          },
+        }
+      );
+    } catch (e) {
+      threw = true;
+      assert.equal(e.code, "rename_boom");
+    }
+    assert.equal(threw, true);
+    assert.equal(fs.existsSync(target), true);
+    const after = fs.readFileSync(target, "utf8");
+    assert.equal(after, before);
+    assert.ok(after.includes('"phase": "staging"') || after.includes('"phase":"staging"'));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("20. createChangeSet forbids manifest.json path", () => {
+  const dir = makeV02("forbid-manifest");
+  try {
+    const s = store(dir);
+    assertCode(
+      () =>
+        s.createChangeSet({
+          actor: "test",
+          reason: "try write manifest",
+          sourceRefs: ["test"],
+          dataKinds: ["owner_assertion"],
+          ops: [{ type: "write_text", path: "manifest.json", content: "{}" }],
+        }),
+      "path_rejected"
+    );
+    assertCode(() => normalizeRel("manifest.json", { allowManifest: false }), "path_rejected");
+    assert.equal(normalizeRel("manifest.json"), "manifest.json");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("21. same actor second process blocked while lock held", () => {
+  const dir = makeV02("same-actor-lock");
+  try {
+    const a = store(dir, {}, "shared-actor");
+    const lockInfo = a.lock.acquire("shared-actor");
+    try {
+      const b = store(dir, {}, "shared-actor");
+      assertCode(() => b.lock.acquire("shared-actor"), "package_locked");
+    } finally {
+      a.lock.release(lockInfo.operationToken);
+    }
   } finally {
     cleanup(dir);
   }

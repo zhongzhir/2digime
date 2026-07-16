@@ -1,12 +1,13 @@
 # P1-02 任务包：Package schema + PackageStore 最小版本提交
 
-状态：statically_verified（待 Owner 沙盒验收 + Codex 复核后方可 accepted）
+状态：statically_verified（Codex 初复核「需要修改」后已出修订；待再复核；暂缓 Owner 沙盒验收）
 阶段：第一阶段 / WP1（PackageStore 最小可信切片）
 前置任务：P1-00、P1-01 已接受
 规格依据：`digitalme_phase1_subject_upgrade_plan_v0.1.md` §2.2、§3 WP1
 审计依据：`digitalme_architecture_audit_20260716.md` F-04、F-05、F-06、§6.1
 实现 Owner：Cursor；架构/安全复核：Codex；人工验收：Owner
 实现分支：`codex/p1-02-package-store`
+实现提交：`ff36102`；修订见 `digitalme_log.md`「P1-02 修订」
 
 ---
 

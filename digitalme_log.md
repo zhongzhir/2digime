@@ -5,6 +5,31 @@
 
 ---
 
+## 2026-07-16（P1-02 修订 · 锁/摘要/恢复/快照 fail-closed）
+
+### 任务
+
+- 编号：`P1-02`（Codex 初复核「需要修改」后的修订；保留 `ff36102`）
+- 分支：`codex/p1-02-package-store`
+- 状态：仍为 `statically_verified`（暂缓 Owner 沙盒验收）
+
+### 处理
+
+1. **跨进程锁**：actor 与 operationToken 分离；`open("wx")` 独占创建；同/异 actor 第二进程均阻断；stale 仅租约过期且 PID 死亡后原子 rename 接管；recover/commit/rollback 均持锁。
+2. **摘要 fail-closed**：readdir/stat/read 失败抛错；symlink/reparse 拒绝；禁止静默跳过。
+3. **recover**：swapping 用 `expectedRootSha256` / `backupRootSha256` / revision 判定；不匹配保留 journal；损坏 live 无 backup → `recover_ambiguous`。
+4. **不可变快照**：`.publishing-vN-<token>` 校验后 rename；已有 vN 只比对一致性；中途失败不删原快照。
+5. **元数据原子写**：bak+rename 替换；禁止删旧后 copy；失败还原旧文件。
+6. **边界**：严格 manifest 字段；changeset 禁止写 `manifest.json`。
+
+### 验证
+
+- `npm run test:p1-02`：23/23（含 child_process 抢锁、同 actor 阻断、不可读目录、symlink、损坏恢复、快照中途失败、元数据替换失败）
+- `npm run test:p1-01`：21/21 + 泄露扫描
+- Package 清单 SHA-256 仍为 `3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a`
+
+---
+
 ## 2026-07-16（P1-02 PackageStore 最小版本提交 · Cursor 实现）
 
 ### 任务

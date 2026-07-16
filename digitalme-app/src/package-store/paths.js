@@ -8,7 +8,14 @@ const {
   MAX_PATH_LEN,
 } = require("./schema");
 
-function normalizeRel(rel) {
+/**
+ * Normalize a package-relative path.
+ * @param {string} rel
+ * @param {{ allowManifest?: boolean, forbidManifest?: boolean }} [opts]
+ *   - allowManifest:false or forbidManifest:true → reject path "manifest.json"
+ *     (changeset ops must not write manifest; use writeManifestWithDigest).
+ */
+function normalizeRel(rel, opts = {}) {
   if (typeof rel !== "string") {
     const err = new Error("path_not_string");
     err.code = "path_rejected";
@@ -37,6 +44,14 @@ function normalizeRel(rel) {
     throw err;
   }
   s = parts.join("/");
+
+  const forbidManifest = opts.forbidManifest === true || opts.allowManifest === false;
+  if (forbidManifest && s === "manifest.json") {
+    const err = new Error("manifest_path_forbidden");
+    err.code = "path_rejected";
+    throw err;
+  }
+
   const allowed = ALLOWED_PACKAGE_REL_PREFIXES.some((prefix) => {
     if (prefix.endsWith("/")) return s === prefix.slice(0, -1) || s.startsWith(prefix);
     return s === prefix;

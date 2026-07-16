@@ -23,18 +23,24 @@ Package 根目录旁建立店铺（不计入内容根摘要）：
 
 ## 提交顺序
 
-1. 获取单写者锁（含 stale 判定）
-2. 重算 live 的 revision / 内容根摘要，与 change set 的 base 比对
-3. 将 live 完整复制为不可变快照 `snapshots/vN`
-4. 写入 journal：`phase=staging`
-5. 在同卷 `staging/` 构建完整候选（复制 live → 应用 ops → 写 manifest）
-6. 校验 JSON/JSONL、路径、manifest、摘要
-7. journal：`phase=swapping`（记录 live / staging / backup 路径）
-8. `rename(live → swap-backup)`，再 `rename(staging → live)`
-9. 重新打开 live 并校验；journal：`phase=committed`
-10. 清理 staging 残留、释放锁
+1. 获取单写者锁（`open("wx")` + 不可预测 `operationToken`；actor 仅逻辑身份；同 actor 第二进程亦阻断；stale 仅租约过期且 PID 死亡后原子 rename 接管）；
+2. 重新计算当前 revision/hash，与 change set 的 base 比对；
+3. 生成当前版本不可变快照（写入 `.publishing-vN-<token>`，校验后再 rename 为 `vN`；禁止先删已有 vN）；
+4. 写入恢复 journal（含 `expectedRootSha256`、`backupRootSha256`、`revisionBefore/After`）；
+5. 在同一卷的 staging 中构建完整候选版本；
+6. 校验 JSON/JSONL、schema、受影响路径、symlink/reparse、manifest 和内容摘要（遍历失败一律抛错）；
+7. manifest 最后生成（changeset 不得直接写 manifest.json）；
+8. 使用可证明的安全切换策略提交；
+9. 提交后重新打开并校验；
+10. 清理 staging，释放锁（仅匹配 operationToken）；
+11. 任一步失败，按 journal 哈希矩阵恢复到唯一明确旧版；无法唯一判定则 `recover_ambiguous` 并保留证据。
 
-任一步失败：按 journal 恢复到**唯一明确**的旧版本（优先 `swap-backup`，否则快照），不静默挑选不明版本。
+## 锁与恢复要点
+
+- **锁**：禁止 exists→write；heartbeat 延长 `leaseExpiresAt`，活动操作不会仅因超过 5 分钟被覆盖。
+- **recover**：必须持锁；live 摘要/revision 与 journal 不符时不清 journal。
+- **元数据写**：目标存在时 bak→rename 替换；失败还原 bak；禁止删旧后 copyFile。
+
 
 ## 为何可证明安全（及边界）
 
