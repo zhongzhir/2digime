@@ -5,6 +5,34 @@
 
 ---
 
+## 2026-07-16（P1-02 accepted · Owner 沙盒验收完成）
+
+### 结论
+
+- 编号：`P1-02`
+- 分支：`codex/p1-02-package-store`
+- 状态：`accepted`
+- 自动验证：`npm run test:p1-02` 31/31；`npm run test:p1-01` 21/21 + 泄露扫描；语法与 `git diff --check` 通过
+- Package 基线：56 文件 / 2,077,665 字节；清单 SHA-256 `3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a`
+
+### Owner 验收证据
+
+1. 临时演示资料创建通过，未触碰真实 Package；
+2. Feedback 预览未写入；确认后形成新版本；
+3. 应用重启后版本仍在，设置页可从磁盘发现最近可恢复版本；
+4. 恢复操作通过，恢复本身形成新 revision，测试修正内容已撤销；
+5. 验收结束后已恢复真实资料目录配置。
+
+Owner 未记录界面显示的具体 revision 数字，但“重启后版本仍在 + 重启后恢复入口可用 + 内容成功撤销”已覆盖所需运行链路，不影响接受结论。
+
+### 边界与下一步
+
+- 本次只证明 Feedback 切片；不得宣称 Builder、Life、Policies 等主体写入已统一治理；
+- PackageStore 与 Feedback 状态提升为 `runtime_verified`；
+- 下一唯一主任务：`P1-03 主体首页信息架构与数据契约`，任务包 `digitalme_phase1_task_P1-03_subject_home.md`。
+
+---
+
 ## 2026-07-16（P1-02 修订 · 版本界面恢复错误真实呈现）
 
 ### 任务

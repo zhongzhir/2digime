@@ -15,14 +15,14 @@
 |---|---|---|---|
 | Builder | `implemented` | `digitalme-app/src/builder.js`；审计 §3.1 | 提取/分块/蒸馏/写回已有代码；**仍直接写 Package，未迁 PackageStore** |
 | Retrieval | `implemented` | `digitalme-app/src/retrieval.js` | TF-IDF-lite 本地检索已接线对话；无自动化回归 |
-| Feedback | `statically_verified` | `feedback.js` + PackageStore；`npm run test:p1-02` 项 12–13 | P1-02：预览→确认→commit；仍仅 Feedback 切片接入 |
+| Feedback | `runtime_verified` | `feedback.js` + PackageStore；`npm run test:p1-02` 31/31；Owner 临时资料验收 | 预览不写、确认提交、重启保留、跨重启恢复均通过；仍仅 Feedback 切片接入 |
 | Life Graph | `implemented` | `digitalme-app/src/life.js`；`digital-me-package/life/` | 事件/维度表/推断可写；**仍直接写文件，未迁 PackageStore** |
 | Writing | `implemented` | `digitalme-app/src/outputs/*`；`renderer/app.js` 写作场景 | 文稿库/改稿/导出已实现；未达连续 5 次真实验收门槛 |
 | Research | `implemented` | `digitalme-app/src/research/*` | ResearchNotebook / Agent 循环已实现；安全与评测未闭环 |
 | MCP extensions | `implemented` | `digitalme-app/src/capabilities/*` | 可安装连接并自动调用；默认高风险，待 ToolBroker 硬化 |
 | External CLI | `implemented` | `digitalme-app/src/orchestration/agents.js` | 确认后 shell 委派已实现；默认应视为开发者实验 |
 | Audit | `implemented` | `digitalme-app/src/orchestration/audit-store.js` | 本地 JSON 账本；非 append-only/不可伪可信审计 |
-| PackageStore | `statically_verified` | `src/package-store/*`；`npm run test:p1-02` 16/16；策略见 `strategy.md` | P1-02 最小可信切片已实现；**仅 Feedback 接入**；Builder/Life/Policies 等仍直接写 |
+| PackageStore | `runtime_verified` | `src/package-store/*`；`npm run test:p1-02` 31/31；Owner 临时资料提交/重启/恢复验收 | P1-02 最小可信切片已验收；**仅 Feedback 接入**；Builder/Life/Policies 等仍直接写 |
 | Package export/import | `planned` | 规格 v0.4 §7.4.2；审计 F-04/F-05 | 文档有分级导出设想；运行时无完整导出—删除—重导入闭环 |
 | Secret storage | `runtime_verified` | P1-01：提交 `363e58d`、`94f7e13`、`9d3ecc4`；`npm run test:p1-01` 21/21；Owner 真实模型验收 | 重启识别、普通调用、空白保留、替换、清除均通过；扩展撤销 UI 与最小 env 隔离仍属后续 ToolBroker |
 | External collaboration | `specified` | `digital-me-package/contracts/*`；规格 v0.4 §7.4.5 | Agent Card / Interaction Contract 数据结构已对齐；无用户面协作闭环 |
