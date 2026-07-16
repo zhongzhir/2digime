@@ -5,6 +5,36 @@
 
 ---
 
+## 2026-07-16（P1-03 accepted · 主体首页与设置弹窗验收完成）
+
+### 结论
+
+- 编号：`P1-03`
+- 分支：`codex/p1-03-subject-home`
+- 状态：`accepted`
+- 实现与修订提交：`47147e8`、`2802026`、`4a595eb`
+- 能力状态：Subject home 提升为 `runtime_verified`；不等同于整个应用已发布
+
+### Owner 验收
+
+- 主体名称与归属、默认私有与未公开、v0.1 未版本化提示通过；
+- 事实/本人声明/系统推断、统计来源与“至少 N 条”可区分；
+- 能力状态、边界与协作状态、资料版本入口及重启一致性通过；
+- 设置弹窗正文独立滚动，保存/取消可达，背景不滚动，重新打开回到顶部。
+
+### 技术证据与边界
+
+- Codex 复核未发现阻断项；
+- 最终回归：P1-03 21/21、P1-02 31/31、P1-01 21/21 + 泄露扫描；
+- `digital-me-package/**` 无差异；清单 SHA-256 `3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a`；
+- Builder/Life/Policies 写路径、PolicyEngine、可信 AuditService、ToolBroker 与真实外部协作仍未完成。
+
+### 下一步
+
+第一批 P1-00～P1-03 已收口。下一唯一主任务为 `P1-04 PolicyEngine 与可信决策记录最小强制切片`，任务包 `digitalme_phase1_task_P1-04_policy_decision_audit.md`；其验收后再进入 ToolBroker 与协作骨架。
+
+---
+
 ## 2026-07-16（P1-03 修订 · 严格只读与统计语义）
 
 ### 结论

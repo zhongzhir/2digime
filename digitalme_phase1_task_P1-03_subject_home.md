@@ -1,6 +1,6 @@
 # P1-03 任务包：主体首页信息架构与数据契约
 
-状态：statically_verified（Codex 复核中；Owner 只读沙盒验收暂缓）
+状态：accepted（Codex 复核通过；Owner 主体首页与设置弹窗验收通过）
 阶段：第一阶段 / WP4（主体产品面与观念认知）
 前置任务：P1-00、P1-01、P1-02 已接受
 规格依据：`digitalme_phase1_subject_upgrade_plan_v0.1.md` §2.1、§2.2、§3 WP4
@@ -205,6 +205,15 @@ Owner 最终应能回答：
 - 七类计数提供 `known / partial / unknown`、来源与 breakdown；拒绝的推断不计入；
 - `npm run test:p1-03` 20/20，P1-02 31/31，P1-01 21/21 + 泄露扫描；
 - 状态保持 `statically_verified`，未进行 Owner 验收。
+
+### 11.2 最终复核与 Owner 验收
+
+- 严格只读修订经 Codex 复核通过；
+- Owner 已确认主体名称与归属、默认私有与未公开、v0.1 未版本化提示、事实/声明/推断分层、统计来源与“至少 N 条”、能力状态、边界与协作状态、资料版本入口及重启一致性；
+- 设置弹窗视口可达性修复提交：`4a595eb`；正文独立滚动、底部保存/取消操作区固定可达，重新打开回到顶部；
+- Owner 已完成设置弹窗真实 Electron 复验；
+- 最终自动回归：P1-03 21/21、P1-02 31/31、P1-01 21/21 + 泄露扫描；
+- `digital-me-package/**` 未变化，清单 SHA-256 仍为 `3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a`。
 
 ## 12. 停止条件
 

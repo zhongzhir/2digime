@@ -25,8 +25,9 @@
 | PackageStore | `runtime_verified` | `src/package-store/*`；`npm run test:p1-02` 31/31；Owner 临时资料提交/重启/恢复验收 | P1-02 最小可信切片已验收；**仅 Feedback 接入**；Builder/Life/Policies 等仍直接写 |
 | Package export/import | `planned` | 规格 v0.4 §7.4.2；审计 F-04/F-05 | 文档有分级导出设想；运行时无完整导出—删除—重导入闭环 |
 | Secret storage | `runtime_verified` | P1-01：提交 `363e58d`、`94f7e13`、`9d3ecc4`；`npm run test:p1-01` 21/21；Owner 真实模型验收 | 重启识别、普通调用、空白保留、替换、清除均通过；扩展撤销 UI 与最小 env 隔离仍属后续 ToolBroker |
+| PolicyEngine | `specified` | `digitalme_phase1_task_P1-04_policy_decision_audit.md` | 尚无运行时强制；P1-04 只接外部命令执行体这一条高风险切片 |
 | External collaboration | `specified` | `digital-me-package/contracts/*`；规格 v0.4 §7.4.5 | Agent Card / Interaction Contract 数据结构已对齐；无用户面协作闭环 |
-| Subject home (P1-03) | `statically_verified` | `src/subject-overview/*`；`src/package-store/read-only.js`；`subject:getOverview`；`npm run test:p1-03` 20/20 | 严格只读聚合与 SubjectOverview v1；父目录完整树测试证明不创建/修改旁路仓；不迁移写路径 |
+| Subject home (P1-03) | `runtime_verified` | `src/subject-overview/*`；`src/package-store/read-only.js`；`subject:getOverview`；P1-03 21/21；Codex 复核与 Owner 真实 Electron 验收 | 严格只读聚合与 SubjectOverview v1；主体认知、七类分层、能力/边界/协作状态、版本入口、重启一致性及设置弹窗可达性均通过；不迁移写路径 |
 
 ## 附注
 
