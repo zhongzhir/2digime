@@ -2,8 +2,11 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { PackageStore } = require("../package-store");
 const { readJson } = require("../package-store/fs-util");
+const {
+  inspectPackageReadOnly,
+  listPackageVersionsReadOnly,
+} = require("../package-store/read-only");
 const {
   SUBJECT_OVERVIEW_CONTRACT_VERSION,
   DATA_KINDS,
@@ -20,7 +23,7 @@ function pushWarning(warnings, code, message, extra) {
   }
 }
 
-function readIdentityReadOnly(pkgDir) {
+function readIdentityReadOnly(pkgDir, warnings) {
   const manifestPath = path.join(pkgDir, "manifest.json");
   const identityPath = path.join(pkgDir, "identity.json");
   let manifest = null;
@@ -30,6 +33,7 @@ function readIdentityReadOnly(pkgDir) {
       manifest = readJson(manifestPath, null);
     } catch {
       manifest = null;
+      pushWarning(warnings, "manifest_parse_error", "资料清单无法解析。");
     }
   }
   if (fs.existsSync(identityPath)) {
@@ -37,6 +41,7 @@ function readIdentityReadOnly(pkgDir) {
       identity = readJson(identityPath, null);
     } catch {
       identity = null;
+      pushWarning(warnings, "identity_parse_error", "身份资料无法解析。");
     }
   }
   return { manifest, identity };
@@ -76,8 +81,7 @@ function resolveIdentity(manifest, identity, warnings) {
 
 function mapHealthStatus(inspect) {
   if (!inspect.exists) return "missing";
-  if (!inspect.healthy) return "unhealthy";
-  if (inspect.schemaVersion === "0.2") return "healthy";
+  if (inspect.schemaVersion === "0.2") return inspect.healthy ? "healthy" : "unhealthy";
   if (inspect.schemaVersion) return "limited";
   return "unversioned";
 }
@@ -95,6 +99,7 @@ function buildLayers(pkgDir, warnings) {
       count: c.count,
       countStatus: c.countStatus,
       provenance: c.provenance || "",
+      breakdown: Array.isArray(c.breakdown) ? c.breakdown : [],
     };
   });
 }
@@ -168,10 +173,10 @@ function buildCollaborationSection(collab) {
 function buildSubjectOverviewV1(packageDir, runtime = {}) {
   const pkgDir = path.resolve(String(packageDir || ""));
   const warnings = [];
-  const store = new PackageStore({ packageDir: pkgDir, ownerId: "subject:overview" });
-  const inspect = store.inspect(pkgDir);
-  const recover = assessRecoverabilityReadOnly(store);
-  const { manifest, identity } = readIdentityReadOnly(pkgDir);
+  const inspect = inspectPackageReadOnly(pkgDir);
+  const versions = listPackageVersionsReadOnly(pkgDir);
+  const recover = assessRecoverabilityReadOnly(pkgDir, inspect, versions);
+  const { manifest, identity } = readIdentityReadOnly(pkgDir, warnings);
 
   if (!inspect.exists) {
     pushWarning(warnings, "package_missing", "资料目录不存在或无法访问。");

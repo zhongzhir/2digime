@@ -10,9 +10,9 @@ function buildCapabilityStatuses(runtime = {}) {
     let status = cap.status;
     let limitation = cap.limitation;
     if (cap.id === "dialogue") {
-      status = runtime.hasApiKey ? "available" : "unavailable";
+      status = runtime.hasApiKey ? "limited" : "unavailable";
       limitation = runtime.hasApiKey
-        ? "已配置智能引擎，可进行本机对话。"
+        ? "已配置智能引擎；当前连通性需在实际对话中确认。"
         : "尚未配置智能引擎密钥，请前往设置。";
     }
     if (cap.id === "mcp_extensions" && runtime.readyExtensionCount > 0) {

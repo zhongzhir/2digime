@@ -26,7 +26,7 @@
 | Package export/import | `planned` | 规格 v0.4 §7.4.2；审计 F-04/F-05 | 文档有分级导出设想；运行时无完整导出—删除—重导入闭环 |
 | Secret storage | `runtime_verified` | P1-01：提交 `363e58d`、`94f7e13`、`9d3ecc4`；`npm run test:p1-01` 21/21；Owner 真实模型验收 | 重启识别、普通调用、空白保留、替换、清除均通过；扩展撤销 UI 与最小 env 隔离仍属后续 ToolBroker |
 | External collaboration | `specified` | `digital-me-package/contracts/*`；规格 v0.4 §7.4.5 | Agent Card / Interaction Contract 数据结构已对齐；无用户面协作闭环 |
-| Subject home (P1-03) | `statically_verified` | `src/subject-overview/*`；`subject:getOverview`；`npm run test:p1-03` 12/12 | 主体首页只读聚合与 SubjectOverview v1；不迁移写路径、不自动迁移真实 Package |
+| Subject home (P1-03) | `statically_verified` | `src/subject-overview/*`；`src/package-store/read-only.js`；`subject:getOverview`；`npm run test:p1-03` 20/20 | 严格只读聚合与 SubjectOverview v1；父目录完整树测试证明不创建/修改旁路仓；不迁移写路径 |
 
 ## 附注
 

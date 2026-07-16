@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { readJson } = require("../package-store/fs-util");
 const { readLatestJournal } = require("../package-store/journal");
+const { storeRootFor } = require("../package-store/paths");
 
 function isPidAlive(pid) {
   if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) return false;
@@ -19,11 +20,13 @@ function isPidAlive(pid) {
 
 /**
  * Read-only recoverability assessment — does not call recover() or acquire locks.
- * @param {import('../package-store').PackageStore} store
+ * @param {string} packageDir
+ * @param {object} inspect
+ * @param {object[]} versions
  */
-function assessRecoverabilityReadOnly(store) {
-  const inspect = store.inspect();
-  const versions = store.listVersions();
+function assessRecoverabilityReadOnly(packageDir, inspect, versions) {
+  const resolvedPackageDir = path.resolve(packageDir);
+  const storeRoot = storeRootFor(resolvedPackageDir);
   const live = versions.find((v) => v.kind === "live") || null;
   const snapshots = versions
     .filter((v) => v.kind === "snapshot")
@@ -38,7 +41,7 @@ function assessRecoverabilityReadOnly(store) {
   const previous =
     snapshots.find((s) => currentRevision == null || s.revision < currentRevision) || null;
 
-  const lock = readJson(path.join(store.storeRoot, "lock.json"), null);
+  const lock = readJson(path.join(storeRoot, "lock.json"), null);
   if (lock && isPidAlive(lock.pid)) {
     return {
       statusCode: "package_locked",
@@ -50,9 +53,9 @@ function assessRecoverabilityReadOnly(store) {
     };
   }
 
-  const journal = readLatestJournal(store.storeRoot);
-  const backupPath = path.join(store.storeRoot, "swap-backup");
-  const liveExists = fs.existsSync(store.packageDir);
+  const journal = readLatestJournal(storeRoot);
+  const backupPath = path.join(storeRoot, "swap-backup");
+  const liveExists = fs.existsSync(resolvedPackageDir);
   const backupExists = fs.existsSync(backupPath);
   if (!journal && liveExists && backupExists) {
     return {

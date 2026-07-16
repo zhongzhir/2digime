@@ -198,6 +198,14 @@ Owner 最终应能回答：
 - Owner 验收步骤与未完成边界；
 - 分支和独立提交号。
 
+### 11.1 静态验证修订
+
+- `subject:getOverview` 使用严格纯只读 helper，不构造普通 `PackageStore`，不调用会创建目录的版本枚举；
+- 无旁路仓连续读取两次后仍不存在；已有旁路仓读取前后完整树、目录/文件 mtime 与内容一致；
+- 七类计数提供 `known / partial / unknown`、来源与 breakdown；拒绝的推断不计入；
+- `npm run test:p1-03` 20/20，P1-02 31/31，P1-01 21/21 + 泄露扫描；
+- 状态保持 `statically_verified`，未进行 Owner 验收。
+
 ## 12. 停止条件
 
 实现、自动验证和静态复核材料完成后停止，状态最高标为 `statically_verified`。未经 Owner 真实只读验收与 Codex 复核，不得标记 `accepted`，不得顺带启动 PolicyEngine、ToolBroker 或协作骨架。

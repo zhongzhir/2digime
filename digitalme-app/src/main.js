@@ -2858,20 +2858,11 @@ ipcMain.handle("packageStore:listVersions", () => {
   return buildVersionPanelInfo(store);
 });
 
-ipcMain.handle("subject:getOverview", async () => {
+ipcMain.handle("subject:getOverview", () => {
   const pkgDir = path.resolve(packageDirFromConfig());
   const pub = readPublicConfig();
-  let readyExtensionCount = 0;
-  try {
-    const em = await getExtensionManager();
-    const statusList = em.getSessionStatus();
-    readyExtensionCount = (statusList || []).filter((s) => s && s.status === "connected").length;
-  } catch {
-    /* optional */
-  }
   return buildSubjectOverviewV1(pkgDir, {
     hasApiKey: !!pub.apiKeyConfigured,
-    readyExtensionCount,
   });
 });
 

@@ -2333,6 +2333,9 @@ body {
   font-weight: 600;
 }
 .subject-layer-expl { margin: 0; font-size: 12px; line-height: 1.45; }
+.subject-layer-source { margin-top: 8px; font-size: 11px; }
+.subject-layer-source summary { cursor: pointer; color: var(--muted); }
+.subject-layer-source p { margin: 5px 0 0; line-height: 1.4; }
 .subject-layer-card.layer-owner { border-left: 3px solid #8b5a2b; }
 .subject-layer-card.layer-inference { border-left: 3px solid #6b7280; }
 .subject-layer-card.layer-fact { border-left: 3px solid #2f6f4e; }

@@ -6214,12 +6214,12 @@ async function refreshSubjectHome() {
       setSafeText(title, layer.userLabel || layer.kind);
       const count = document.createElement("span");
       count.className = "subject-layer-count";
-      const countText =
-        layer.countStatus === "known" || layer.countStatus === "partial"
-          ? layer.count == null
-            ? "未知"
-            : String(layer.count)
-          : "未知";
+      let countText = "未知";
+      if (layer.countStatus === "known" && typeof layer.count === "number") {
+        countText = `${layer.count} 条`;
+      } else if (layer.countStatus === "partial" && typeof layer.count === "number") {
+        countText = `至少 ${layer.count} 条`;
+      }
       setSafeText(count, countText);
       head.appendChild(title);
       head.appendChild(count);
@@ -6228,6 +6228,27 @@ async function refreshSubjectHome() {
       setSafeText(expl, layer.explanation || "");
       card.appendChild(head);
       card.appendChild(expl);
+      if (layer.provenance || (layer.breakdown && layer.breakdown.length)) {
+        const details = document.createElement("details");
+        details.className = "subject-layer-source";
+        const summary = document.createElement("summary");
+        setSafeText(summary, "统计来源");
+        details.appendChild(summary);
+        const sourceText = document.createElement("p");
+        sourceText.className = "muted";
+        const breakdownText = (layer.breakdown || [])
+          .map((item) => {
+            const value = typeof item.count === "number" ? `${item.count} 条` : "未知";
+            return `${item.source || "来源"}：${value}`;
+          })
+          .join("；");
+        setSafeText(
+          sourceText,
+          [layer.provenance || "", breakdownText].filter(Boolean).join("。")
+        );
+        details.appendChild(sourceText);
+        card.appendChild(details);
+      }
       layersEl.appendChild(card);
     }
 

@@ -8,8 +8,14 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const crypto = require("node:crypto");
 const assert = require("node:assert/strict");
-const { PackageStore, dirByteFingerprint, DATA_KINDS } = require("../src/package-store");
+const {
+  PackageStore,
+  dirByteFingerprint,
+  DATA_KINDS,
+  storeRootFor,
+} = require("../src/package-store");
 const { createMinimalFixture } = require("../src/package-store/fixture");
 const {
   buildSubjectOverviewV1,
@@ -54,6 +60,40 @@ function makeV02(label) {
   const s = new PackageStore({ packageDir: dir, ownerId: "test:migrate" });
   s.migrateToV02({ actor: "test:migrate", toolVersion: "test-p1-03" });
   return dir;
+}
+
+function snapshotTree(root) {
+  const out = [];
+  function walk(dir) {
+    const names = fs.readdirSync(dir).sort();
+    for (const name of names) {
+      const full = path.join(dir, name);
+      const rel = path.relative(root, full).split(path.sep).join("/");
+      const stat = fs.lstatSync(full);
+      if (stat.isDirectory()) {
+        out.push({ rel, type: "dir", mtimeMs: stat.mtimeMs });
+        walk(full);
+      } else {
+        const buf = fs.readFileSync(full);
+        out.push({
+          rel,
+          type: "file",
+          bytes: stat.size,
+          mtimeMs: stat.mtimeMs,
+          sha256: crypto.createHash("sha256").update(buf).digest("hex"),
+        });
+      }
+    }
+  }
+  walk(root);
+  return out;
+}
+
+function makeContainedV01(label) {
+  const container = tempDir(`container-${label}`);
+  const packageDir = path.join(container, "package");
+  createMinimalFixture(packageDir);
+  return { container, packageDir };
 }
 
 function seedLifeFiles(dir) {
@@ -296,6 +336,144 @@ test("12. capabilities include limitation and five-state statuses", () => {
     }
     const mcp = overview.capabilities.find((c) => c.id === "mcp_extensions");
     assert.equal(mcp.status, "limited");
+    const dialogue = overview.capabilities.find((c) => c.id === "dialogue");
+    assert.equal(dialogue.status, "limited", "configured does not prove live connectivity");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("13. overview never creates package sidecar directory", () => {
+  const { container, packageDir } = makeContainedV01("no-sidecar");
+  try {
+    const sidecar = path.join(container, ".digitalme-pkgstore");
+    assert.equal(fs.existsSync(sidecar), false);
+    const before = snapshotTree(container);
+    buildSubjectOverviewV1(packageDir);
+    assert.equal(fs.existsSync(sidecar), false);
+    assert.deepEqual(snapshotTree(container), before);
+    buildSubjectOverviewV1(packageDir);
+    assert.equal(fs.existsSync(sidecar), false);
+    assert.deepEqual(snapshotTree(container), before);
+  } finally {
+    cleanup(container);
+  }
+});
+
+test("14. existing package sidecar tree remains byte- and mtime-identical", () => {
+  const { container, packageDir } = makeContainedV01("existing-sidecar");
+  try {
+    const writer = new PackageStore({ packageDir, ownerId: "test:fixture-only" });
+    writer.migrateToV02({ actor: "test:fixture-only", toolVersion: "test-p1-03" });
+    const before = snapshotTree(container);
+    const overview = buildSubjectOverviewV1(packageDir);
+    assert.ok(overview.package.recoverability);
+    assert.deepEqual(snapshotTree(container), before);
+  } finally {
+    cleanup(container);
+  }
+});
+
+test("15. identity-facts.md counts actual facts", () => {
+  const dir = makeV01("identity-facts");
+  try {
+    fs.writeFileSync(
+      path.join(dir, "identity-facts.md"),
+      "# 身份事实\n\n- 事实一\n- 事实二\n- 事实三\n",
+      "utf8"
+    );
+    const overview = buildSubjectOverviewV1(dir);
+    const facts = overview.layers.find((layer) => layer.kind === "fact");
+    assert.equal(facts.count, 3);
+    assert.equal(facts.countStatus, "known");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("16. builder memory is not owner assertion; feedback memory is", () => {
+  const dir = makeV01("owner-memory");
+  try {
+    fs.writeFileSync(
+      path.join(dir, "memory", "long-term-memory.jsonl"),
+      [
+        JSON.stringify({ id: "builder", content: "builder", sourceRefs: ["builder"] }),
+        JSON.stringify({ id: "feedback", content: "feedback", sourceRefs: ["feedback"] }),
+      ].join("\n") + "\n",
+      "utf8"
+    );
+    const overview = buildSubjectOverviewV1(dir);
+    const owner = overview.layers.find((layer) => layer.kind === "owner_assertion");
+    const memory = owner.breakdown.find((item) => item.source === "已确认长期记忆");
+    assert.equal(memory.count, 1);
+    assert.equal(owner.countStatus, "partial", "unconfirmed preferences prevent exact total");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("17. rejected inference excluded with status breakdown", () => {
+  const dir = makeV01("inference-status");
+  try {
+    fs.mkdirSync(path.join(dir, "life"), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "life", "inferences.jsonl"),
+      [
+        JSON.stringify({ id: "open", status: "open" }),
+        JSON.stringify({ id: "confirmed", status: "confirmed" }),
+        JSON.stringify({ id: "rejected", status: "rejected" }),
+      ].join("\n") + "\n",
+      "utf8"
+    );
+    const overview = buildSubjectOverviewV1(dir);
+    const inference = overview.layers.find((layer) => layer.kind === "inference");
+    assert.equal(inference.count, 2);
+    assert.equal(
+      inference.breakdown.find((item) => item.source === "已拒绝（未计入）").count,
+      1
+    );
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("18. renderer labels partial counts as at least, never exact", () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, "..", "src", "renderer", "app.js"),
+    "utf8"
+  );
+  assert.match(source, /countStatus === "partial"[\s\S]{0,180}`至少 \$\{layer\.count\} 条`/);
+  assert.match(source, /countStatus === "known"[\s\S]{0,180}`\$\{layer\.count\} 条`/);
+});
+
+test("19. writing remains limited before continuous real acceptance", () => {
+  const dir = makeV01("writing-limited");
+  try {
+    const overview = buildSubjectOverviewV1(dir);
+    const writing = overview.capabilities.find((cap) => cap.id === "writing");
+    assert.equal(writing.status, "limited");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("20. corrupt identity and definition JSON produce warnings", () => {
+  const dir = makeV01("corrupt-data");
+  try {
+    fs.writeFileSync(path.join(dir, "identity.json"), "{broken", "utf8");
+    fs.mkdirSync(path.join(dir, "definitions"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "definitions", "bad.json"), "{broken", "utf8");
+    fs.writeFileSync(path.join(dir, "definitions", "good.json"), "{}", "utf8");
+    const overview = buildSubjectOverviewV1(dir);
+    assert.ok(overview.warnings.some((warning) => warning.code === "identity_parse_error"));
+    assert.ok(
+      overview.warnings.some(
+        (warning) =>
+          warning.code === "json_parse_error" && String(warning.message).includes("定义文件")
+      )
+    );
+    const state = overview.layers.find((layer) => layer.kind === "current_state");
+    assert.equal(state.countStatus, "partial");
   } finally {
     cleanup(dir);
   }

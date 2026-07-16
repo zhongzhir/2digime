@@ -5,6 +5,26 @@
 
 ---
 
+## 2026-07-16（P1-03 修订 · 严格只读与统计语义）
+
+### 结论
+
+- 状态：仍为 `statically_verified`；不进行 Owner 验收；
+- overview 改用 `package-store/read-only.js`，不构造普通 `PackageStore`；
+- 构造、inspect、版本枚举和恢复状态检查均不创建旁路目录；
+- 七类计数改为 canonical source / breakdown / partial 语义；
+- 写作状态改为「受限」，Feedback 保持「可用」。
+
+### 验证
+
+- `npm run test:p1-03`：20/20；
+- P1-02：31/31；P1-01：21/21 + 泄露扫描；
+- 无旁路仓连续读取两次仍不存在；已有旁路仓读取前后完整树、mtime 与内容一致；
+- JavaScript 语法、`git diff --check` 与 Package 基线复验通过；
+- Package 清单 SHA-256：`3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a`。
+
+---
+
 ## 2026-07-16（P1-02 accepted · Owner 沙盒验收完成）
 
 ### 结论

@@ -23,7 +23,7 @@ const LAYER_META = Object.freeze({
   },
   inference: {
     userLabel: "系统推断",
-    explanation: "系统根据材料归纳的候选判断，把握较低，需你校对后才可视为你的立场。",
+    explanation: "系统根据材料归纳的判断；其中既可能有待校对项，也可能有已确认项，拒绝项不计入。",
     visualClass: "layer-inference",
   },
   current_state: {
@@ -54,7 +54,7 @@ const CAPABILITY_CATALOG = Object.freeze([
   {
     id: "writing",
     label: "写作与成稿",
-    status: "available",
+    status: "limited",
     limitation: "可创建、改稿与导出文稿；连续真实验收尚未完成。",
     navTarget: "do",
   },
