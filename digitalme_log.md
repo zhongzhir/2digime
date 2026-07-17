@@ -1,7 +1,44 @@
 # Digital Me 工作日志
 
-版本：v0.1  
+版本：v0.1
 状态：持续更新
+
+---
+
+## 2026-07-17（P1-06 · Owner 临时资料验收通过）
+
+### 结论
+
+- 编号：`P1-06`
+- 分支：`codex/p1-06-builder-package-store-impl`
+- 状态：`accepted`
+- 实现提交：`0e8ba88`；文档空白清理：`81ba8f1`
+- 任务包：`digitalme_phase1_task_P1-06_builder_package_store.md`
+
+### Owner 沙盒验收（仅临时演示资料；未触碰真实 Package）
+
+| 项目 | 结果 |
+|---|---|
+| 创建临时演示资料 | 通过 |
+| 提交一份测试材料 | 通过 |
+| 启动 Builder | 通过 |
+| 预览阶段 Package 字节未变化 | 通过 |
+| 确认写入后显示新 revision | 通过 |
+| 重启应用后 revision 与内容一致 | 通过 |
+| 执行撤销/恢复 | 通过 |
+| 恢复产生新 revision | 通过 |
+| 来源、数据类别与修改范围可见 | 通过 |
+
+### 边界
+
+- 仅 Builder 观念/人格写入已迁 PackageStore；
+- identity、Life、Policies 仍未迁移；
+- 不包含 Policies、MCP、外部协作。
+
+### 下一步
+
+- 下一唯一主任务：`P1-07 Life/identity 写入路径迁移到 PackageStore`；
+- 明确不包含 Policies、MCP、外部协作。
 
 ---
 
@@ -10,8 +47,8 @@
 ### 结论
 
 - 编号：`P1-06`
-- 分支：`codex/p1-06-builder-package-store`
-- 状态：`statically_verified`（自动测试通过；交 Codex 复核；**不**标记 `accepted`）
+- 分支：`codex/p1-06-builder-package-store` / `codex/p1-06-builder-package-store-impl`
+- 状态：其后已由 Owner 临时资料验收升为 `accepted`（见上条）
 - 任务包：`digitalme_phase1_task_P1-06_builder_package_store.md`
 
 ### 实现摘要
@@ -26,7 +63,6 @@
 
 - `npm run test:p1-06`：14/14
 - `npm run test:p1-phase1`（含 P1-01～P1-06）
-- Owner 沙盒验收仅用临时演示资料，待 Codex 复核后进行
 
 ---
 

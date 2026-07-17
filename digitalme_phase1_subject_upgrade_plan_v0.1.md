@@ -371,7 +371,7 @@ flowchart LR
 
 首个标准任务包已建立：`digitalme_phase1_task_P1-00_baseline_freeze.md`。后续 P1-01～P1-03 均须沿用其“目标、范围、禁止事项、迁移、验证、人工验收、回滚、证据”结构。
 
-执行状态：P1-00～P1-04 均已接受；P1-05 为 `statically_verified`（ToolBroker 最小隔离；不标记 accepted）。P1-00 形成基线提交 `151d798`；P1-01 已接受；P1-02 已接受（Feedback 切片）；P1-03 已接受；P1-04 已接受。当前主任务为 `P1-06 Builder 写入路径迁移到 PackageStore`，任务包 `digitalme_phase1_task_P1-06_builder_package_store.md`（分支 `codex/p1-06-builder-package-store`）：Builder 观念/人格写入经 preview→确认→PackageStore commit；Life / Policies / identity 写路径、MCP 与外部协作仍不迁移；最高状态 `statically_verified`，待 Codex 复核与 Owner 沙盒验收。
+执行状态：P1-00～P1-04、P1-06 均已接受；P1-05 仍为 `statically_verified`（ToolBroker 最小隔离；不标记 accepted）。P1-06（分支 `codex/p1-06-builder-package-store-impl`，提交 `0e8ba88`、`81ba8f1`）已将 Builder 观念/人格写入迁入 PackageStore（preview→确认→commit）；**仅该切片**；identity / Life / Policies、MCP、外部协作均未迁移。下一唯一主任务为 `P1-07 Life/identity 写入路径迁移到 PackageStore`；明确不包含 Policies、MCP、外部协作。
 
 ---
 
