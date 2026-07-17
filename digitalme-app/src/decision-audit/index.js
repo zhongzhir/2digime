@@ -114,6 +114,19 @@ function sanitizeOutcome(outcome) {
   if (outcome.exitCode != null) row.exitCode = Number(outcome.exitCode);
   if (outcome.outputLength != null) row.outputLength = Number(outcome.outputLength);
   if (outcome.outputSha256) row.outputSha256 = String(outcome.outputSha256).slice(0, 64);
+  if (outcome.outputDigestKind) {
+    row.outputDigestKind = String(outcome.outputDigestKind).slice(0, 32);
+  }
+  if (outcome.retainedLength != null) row.retainedLength = Number(outcome.retainedLength);
+  if (outcome.retainedSha256) row.retainedSha256 = String(outcome.retainedSha256).slice(0, 64);
+  if (outcome.totalBytes != null) row.totalBytes = Number(outcome.totalBytes);
+  if (outcome.retainedBytes != null) row.retainedBytes = Number(outcome.retainedBytes);
+  if (outcome.stdoutLen != null) row.stdoutLen = Number(outcome.stdoutLen);
+  if (outcome.stderrLen != null) row.stderrLen = Number(outcome.stderrLen);
+  if (outcome.truncated) row.truncated = true;
+  if (outcome.timedOut) row.timedOut = true;
+  if (outcome.cancelled) row.cancelled = true;
+  if (outcome.orphanRisk) row.orphanRisk = true;
   if (outcome.expiresAt) row.expiresAt = String(outcome.expiresAt);
   if (outcome.fromGeneration != null) row.fromGeneration = Number(outcome.fromGeneration);
   if (outcome.toGeneration != null) row.toGeneration = Number(outcome.toGeneration);
@@ -709,6 +722,41 @@ function digestOutput(output) {
   return {
     outputLength: text.length,
     outputSha256: crypto.createHash("sha256").update(text, "utf8").digest("hex"),
+    outputDigestKind: "legacy_retained_or_full",
+  };
+}
+
+/**
+ * Prefer executor-provided stream metrics. Never label a truncated retained prefix as the full digest.
+ */
+function digestExecutionOutput(result) {
+  if (!result || typeof result !== "object") {
+    return digestOutput("");
+  }
+  const truncated = !!result.truncated;
+  const fullSha = String(result.fullOutputSha256 || "");
+  const retainedSha = String(result.retainedSha256 || "");
+  const totalBytes = Number(result.totalBytes) || 0;
+  const retainedBytes = Number(result.retainedBytes) || 0;
+  if (fullSha) {
+    return {
+      outputLength: totalBytes,
+      outputSha256: fullSha,
+      outputDigestKind: truncated ? "full_stream" : "full",
+      retainedLength: retainedBytes,
+      retainedSha256: retainedSha || undefined,
+      truncated,
+    };
+  }
+  // Fallback: hashing retained text only — must not claim "full" when truncated.
+  const legacy = digestOutput(result.output || "");
+  return {
+    outputLength: truncated ? totalBytes || legacy.outputLength : legacy.outputLength,
+    outputSha256: legacy.outputSha256,
+    outputDigestKind: truncated ? "retained_prefix" : "full",
+    retainedLength: retainedBytes || legacy.outputLength,
+    retainedSha256: retainedSha || legacy.outputSha256,
+    truncated,
   };
 }
 
@@ -718,6 +766,7 @@ module.exports = {
   appendEntry,
   assessRecovery,
   digestOutput,
+  digestExecutionOutput,
   ledgerPath,
   list,
   metaPath,

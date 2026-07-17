@@ -455,7 +455,7 @@ async function runExternalAgent(userData, event, payload, agents, deps = {}) {
   let auditIncomplete = false;
   try {
     const result = await trackedExecute(prepared.plan, { signal });
-    const outputDigest = decisionAudit.digestOutput(result.output || "");
+    const outputDigest = decisionAudit.digestExecutionOutput(result);
     let outcomeStatus = "failed";
     let eventName = "execution_failed";
     if (result.aborted) {
@@ -481,8 +481,10 @@ async function runExternalAgent(userData, event, payload, agents, deps = {}) {
           timedOut: !!result.timedOut,
           cancelled: !!result.aborted,
           orphanRisk: !!result.orphanRisk,
-          stdoutLen: result.stdoutLen,
-          stderrLen: result.stderrLen,
+          stdoutLen: result.stdoutTotalBytes != null ? result.stdoutTotalBytes : result.stdoutLen,
+          stderrLen: result.stderrTotalBytes != null ? result.stderrTotalBytes : result.stderrLen,
+          totalBytes: result.totalBytes,
+          retainedBytes: result.retainedBytes,
           ...outputDigest,
         },
       });

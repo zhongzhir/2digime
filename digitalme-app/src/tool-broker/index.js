@@ -7,8 +7,10 @@ const {
   TOOL_BROKER_VERSION,
   LOCAL_CLI_TOOL_ID,
   FORBIDDEN_EXECUTABLE_EXTS,
+  FIXED_LOCAL_CLI_ARGS_TEMPLATE,
   MAX_TASK_CHARS,
   MAX_ARG_COUNT,
+  isForbiddenExecutableBasename,
   normalizeToolDefinition,
 } = require("./schema");
 const {
@@ -16,6 +18,7 @@ const {
   updateLocalCliSettings,
   publicToolSettings,
   loadRegistry,
+  registryPath,
 } = require("./registry");
 const { resolveAuthorizedCwd, looksLikeNetworkOrCloudSync } = require("./paths");
 const { buildMinimalEnv, listEnvKeyNames } = require("./environment");
@@ -38,6 +41,9 @@ function resolveExecutable(executableRaw) {
   if (!path.isAbsolute(raw)) {
     throw fail("executable_not_absolute", "可执行文件须为绝对路径");
   }
+  if (isForbiddenExecutableBasename(raw)) {
+    throw fail("forbidden_shell_host", "不得将命令解释器或脚本宿主注册为本地命令工具");
+  }
   const ext = path.extname(raw).toLowerCase();
   if (FORBIDDEN_EXECUTABLE_EXTS.has(ext)) {
     throw fail("forbidden_executable_type", "不支持通过脚本解释器间接启动的文件类型");
@@ -49,6 +55,9 @@ function resolveExecutable(executableRaw) {
   const real = fs.realpathSync(raw);
   if (looksLikeNetworkOrCloudSync(real)) {
     throw fail("network_or_cloud_path_rejected", "不支持网络或云同步路径上的可执行文件");
+  }
+  if (isForbiddenExecutableBasename(real)) {
+    throw fail("forbidden_shell_host", "不得将命令解释器或脚本宿主注册为本地命令工具");
   }
   const realExt = path.extname(real).toLowerCase();
   if (FORBIDDEN_EXECUTABLE_EXTS.has(realExt)) {
@@ -77,10 +86,10 @@ function resolveExecutable(executableRaw) {
 const ALLOWED_PLACEHOLDERS = new Set(["{{task}}"]);
 
 function expandArgsTemplate(argsTemplate, taskText) {
-  if (!Array.isArray(argsTemplate) || !argsTemplate.length) {
-    throw fail("missing_args_template", "缺少参数模板");
-  }
-  if (argsTemplate.length > MAX_ARG_COUNT) {
+  // Always enforce code-owned contract regardless of caller input.
+  const template = [...FIXED_LOCAL_CLI_ARGS_TEMPLATE];
+  void argsTemplate;
+  if (template.length > MAX_ARG_COUNT) {
     throw fail("args_template_too_long", "参数过多");
   }
   const task = String(taskText || "");
@@ -89,10 +98,9 @@ function expandArgsTemplate(argsTemplate, taskText) {
   if (task.includes("\0")) throw fail("task_nul", "任务含非法字符");
 
   const args = [];
-  for (const part of argsTemplate) {
+  for (const part of template) {
     if (typeof part !== "string") throw fail("invalid_args_template", "参数模板非法");
     if (part.includes("\0")) throw fail("args_nul", "参数含非法字符");
-    // Only whole-token placeholder replacement; no shell interpolation.
     if (part === "{{task}}") {
       args.push(task);
       continue;
@@ -104,7 +112,6 @@ function expandArgsTemplate(argsTemplate, taskText) {
       }
     }
     if (matches.length) {
-      // Refuse partial embedding that could look like concatenation tricks.
       throw fail("placeholder_must_be_whole_arg", "占位符须作为完整参数项");
     }
     args.push(part);
@@ -114,13 +121,6 @@ function expandArgsTemplate(argsTemplate, taskText) {
 
 /**
  * Build an immutable execution plan for the registered local_cli tool.
- * @param {string} userDataPath
- * @param {{
- *   taskText: string,
- *   dataScopes?: string[],
- *   requestedCwd?: string,
- *   toolId?: string,
- * }} input
  */
 function preparePlan(userDataPath, input = {}) {
   const toolId = String(input.toolId || LOCAL_CLI_TOOL_ID).trim();
@@ -129,10 +129,23 @@ function preparePlan(userDataPath, input = {}) {
   }
 
   let definition;
+  let rawExecutable = "";
   try {
     const registry = loadRegistry(userDataPath);
     if (!registry || !registry.tools || !registry.tools[toolId]) {
       return { ok: false, reasonCodes: ["registry_load_failed"], plan: null };
+    }
+    // Inspect on-disk executable even when normalize fail-closes to defaults.
+    try {
+      const disk = JSON.parse(fs.readFileSync(registryPath(userDataPath), "utf8"));
+      rawExecutable = String(
+        (disk && disk.tools && disk.tools[toolId] && disk.tools[toolId].executable) || ""
+      ).trim();
+    } catch {
+      rawExecutable = String(registry.tools[toolId].executable || "").trim();
+    }
+    if (rawExecutable && isForbiddenExecutableBasename(rawExecutable)) {
+      return { ok: false, reasonCodes: ["forbidden_shell_host"], plan: null };
     }
     const normalized = normalizeToolDefinition(registry.tools[toolId]);
     if (!normalized.ok) {
@@ -145,6 +158,10 @@ function preparePlan(userDataPath, input = {}) {
 
   if (!definition.enabled) {
     return { ok: false, reasonCodes: ["tool_disabled"], plan: null };
+  }
+
+  if (isForbiddenExecutableBasename(definition.executable)) {
+    return { ok: false, reasonCodes: ["forbidden_shell_host"], plan: null };
   }
 
   const scopes = Array.isArray(input.dataScopes)
@@ -187,7 +204,6 @@ function preparePlan(userDataPath, input = {}) {
     };
   }
 
-  // Absolute executable → do not pass PATH.
   const env = buildMinimalEnv(definition.envAllowlist, process.env, { includePath: false });
   const envKeyNames = listEnvKeyNames(env);
 
@@ -200,11 +216,10 @@ function preparePlan(userDataPath, input = {}) {
     executableBasename: resolvedExe.executableBasename,
     executableFingerprint: resolvedExe.executableFingerprint,
     args: Object.freeze([...args]),
-    argsTemplate: Object.freeze([...definition.argsTemplate]),
+    argsTemplate: Object.freeze([...FIXED_LOCAL_CLI_ARGS_TEMPLATE]),
     cwd: cwdInfo.cwdReal,
     authorizedCwdRoot: cwdInfo.rootReal,
     envKeyNames: Object.freeze([...envKeyNames]),
-    // env values stay internal to executor; not frozen into public plan snapshot fields for audit UI
     _env: env,
     timeoutMs: definition.timeoutMs,
     maxOutputBytes: definition.maxOutputBytes,
@@ -275,7 +290,7 @@ function revalidatePlan(userDataPath, previousPlan, taskText, dataScopes) {
 /**
  * Execute a prepared plan. Does not re-check policy; caller must gate.
  */
-async function executePreparedPlan(plan, { signal } = {}) {
+async function executePreparedPlan(plan, { signal, executorDeps } = {}) {
   if (!plan || plan.shell !== false) {
     return {
       ok: false,
@@ -286,21 +301,29 @@ async function executePreparedPlan(plan, { signal } = {}) {
       timedOut: false,
       cancelled: false,
       orphanRisk: false,
+      totalBytes: 0,
+      stdoutTotalBytes: 0,
+      stderrTotalBytes: 0,
+      retainedBytes: 0,
+      fullOutputSha256: "",
+      retainedSha256: "",
+      outputDigestKind: "none",
     };
   }
-  const result = await executePlan({
-    executable: plan.executable,
-    args: [...plan.args],
-    cwd: plan.cwd,
-    env: plan._env || buildMinimalEnv(plan.envKeyNames || [], process.env, { includePath: false }),
-    timeoutMs: plan.timeoutMs,
-    maxOutputBytes: plan.maxOutputBytes,
-    signal,
-  });
+  const result = await executePlan(
+    {
+      executable: plan.executable,
+      args: [...plan.args],
+      cwd: plan.cwd,
+      env: plan._env || buildMinimalEnv(plan.envKeyNames || [], process.env, { includePath: false }),
+      timeoutMs: plan.timeoutMs,
+      maxOutputBytes: plan.maxOutputBytes,
+      signal,
+    },
+    executorDeps || {}
+  );
 
-  const combined = ((result.stdout || "") + (result.stderr ? "\n---\n" + result.stderr : "")).trim();
-  const orphanRisk = !!(result.timedOut || result.cancelled) && result.code === "spawn_error";
-
+  const retained = String(result.stdout || "");
   return {
     ok: !!result.ok,
     aborted: !!result.cancelled,
@@ -308,10 +331,20 @@ async function executePreparedPlan(plan, { signal } = {}) {
     truncated: !!result.truncated,
     code: result.exitCode,
     statusCode: result.code,
-    output: combined.slice(0, plan.maxOutputBytes || 65536),
-    stdoutLen: Buffer.byteLength(result.stdout || "", "utf8"),
-    stderrLen: Buffer.byteLength(result.stderr || "", "utf8"),
-    orphanRisk,
+    output: retained,
+    // Full stream accounting (not limited to retained prefix).
+    totalBytes: Number(result.totalBytes) || 0,
+    stdoutTotalBytes: Number(result.stdoutTotalBytes) || 0,
+    stderrTotalBytes: Number(result.stderrTotalBytes) || 0,
+    retainedBytes: Number(result.retainedBytes) || 0,
+    fullOutputSha256: String(result.fullOutputSha256 || ""),
+    retainedSha256: String(result.retainedSha256 || ""),
+    outputDigestKind: result.truncated ? "retained_prefix" : String(result.outputDigestKind || "full"),
+    // Legacy fields: lengths are full totals, not retained-only.
+    stdoutLen: Number(result.stdoutTotalBytes) || 0,
+    stderrLen: Number(result.stderrTotalBytes) || 0,
+    orphanRisk: !!result.orphanRisk,
+    reclaim: result.reclaim || null,
     message: result.message || "",
   };
 }
@@ -321,7 +354,6 @@ function getPublicSettings(userDataPath) {
 }
 
 function saveNarrowSettings(userDataPath, patch) {
-  // Strip unknown fields — only narrow Owner settings.
   const allowed = {
     executable: patch.executable,
     authorizedCwdRoot: patch.authorizedCwdRoot,
@@ -335,6 +367,7 @@ function saveNarrowSettings(userDataPath, patch) {
 module.exports = {
   TOOL_BROKER_VERSION,
   LOCAL_CLI_TOOL_ID,
+  FIXED_LOCAL_CLI_ARGS_TEMPLATE,
   preparePlan,
   revalidatePlan,
   executePreparedPlan,
@@ -344,4 +377,5 @@ module.exports = {
   saveNarrowSettings,
   getToolDefinition,
   loadRegistry,
+  isForbiddenExecutableBasename,
 };

@@ -1,6 +1,6 @@
 # P1-05 任务包：ToolBroker 与外部 CLI 最小隔离切片
 
-状态：statically_verified（自动验证完成；须经 Codex 安全复核与 Owner 沙盒验收后方可 accepted）
+状态：statically_verified（第一轮 Codex 复核修订已落地；须经第二轮安全复核与 Owner 沙盒验收后方可 accepted）
 阶段：第一阶段 / WP3（受控能力执行）
 前置任务：P1-00～P1-04 已接受
 规格依据：`digitalme_phase1_subject_upgrade_plan_v0.1.md` §3 WP3

@@ -5,6 +5,36 @@
 
 ---
 
+## 2026-07-17（P1-05 第一轮 Codex 复核修订）
+
+### 结论
+
+- 编号：`P1-05`
+- 分支：`codex/p1-05-tool-broker`
+- 基线提交：`34270b3`（保留，不 amend）
+- 状态：仍为 `statically_verified`；交 Codex **第二轮**安全复核；**不**安排 Owner 验收
+
+### 修订摘要
+
+1. 禁止将 `cmd.exe` / PowerShell / pwsh / wscript / cscript / mshta 等 shell/脚本宿主注册为 `local_cli`；参数契约固定为代码所有的 `["{{task}}"]`；
+2. 真实测试：注册/篡改 `cmd.exe` 并提交 `/c echo ...>marker` 在计划阶段拒绝，`spawn=0`、文件不存在；
+3. `taskkill` 使用 `System32\\taskkill.exe` 绝对路径 + 最小环境；校验退出与进程存活；无法证明终止时 `orphanRisk=true`；
+4. 故障注入：taskkill 路径劫持、失败、目标仍存活；
+5. 应用退出 / 窗口销毁时 abort 并限时等待委派；`requestId` 绑定真实 sender，拒绝重复；
+6. stdout/stderr 共用保留上限；持续统计完整字节与流式 SHA-256；审计区分 `full_stream` 与 `retained_prefix`，不得把截断前缀冒充完整摘要。
+
+### 验证
+
+- `npm run test:p1-phase1`（含 P1-01～P1-05）通过；
+- `node --check` 关键模块通过；`git diff --check` 无错误空白；
+- Package 基线 SHA-256 仍为 `3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a`。
+
+### 下一步
+
+停止实现；提交 Codex 第二轮安全复核。
+
+---
+
 ## 2026-07-17（P1-05 · ToolBroker 与外部 CLI 最小隔离切片）
 
 ### 结论

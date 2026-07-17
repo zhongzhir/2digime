@@ -30,6 +30,7 @@ const l0Orchestration = require("./orchestration/l0");
 const l0Audit = require("./orchestration/audit-store");
 const l0Agents = require("./orchestration/agents");
 const externalAgentFlow = require("./orchestration/external-agent-flow");
+const delegateRuntime = require("./orchestration/delegate-runtime");
 const decisionAudit = require("./decision-audit");
 const { SecretStore } = require("./security/secret-store");
 const { createElectronSafeStorageAdapter } = require("./security/electron-safe-storage-adapter");
@@ -128,6 +129,14 @@ function createWindow() {
   });
   win.loadFile(path.join(__dirname, "renderer", "index.html"));
   if (process.argv.includes("--dev")) win.webContents.openDevTools();
+  const senderId = String(win.webContents.id);
+  win.webContents.on("destroyed", () => {
+    try {
+      delegateRuntime.abortForSender(senderId);
+    } catch {
+      /* ignore */
+    }
+  });
 }
 
 app.whenReady().then(() => {
@@ -168,6 +177,11 @@ app.on("before-quit", (event) => {
   event.preventDefault();
   quitting = true;
   (async () => {
+    try {
+      await delegateRuntime.abortAllAndWait(delegateRuntime.DEFAULT_QUIT_WAIT_MS);
+    } catch {
+      /* ignore */
+    }
     try {
       const em = await getExtensionManager();
       await em.disconnectAll();
@@ -1960,8 +1974,18 @@ ipcMain.handle("l0:cancelExternalAgentConfirmation", async (e, payload) =>
 
 ipcMain.handle("l0:runExternalAgent", async (e, payload) => {
   const userData = app.getPath("userData");
-  const rid = (payload && payload.requestId) || "dlg_" + Date.now();
-  const ac = new AbortController();
+  const rid = String((payload && payload.requestId) || "").trim();
+  if (!rid) {
+    throw new Error("缺少请求编号，无法启动外部程序。");
+  }
+  const began = delegateRuntime.begin(rid, e);
+  if (!began.ok) {
+    if (began.reason === "duplicate_request_id") {
+      throw new Error("相同请求编号的外部委派仍在进行，已拒绝重复启动。");
+    }
+    throw new Error("无法登记外部委派请求。");
+  }
+  const ac = began.abort;
   activeDelegateAborts.set(rid, ac);
   const sendProg = (p) => {
     try {
@@ -1970,19 +1994,22 @@ ipcMain.handle("l0:runExternalAgent", async (e, payload) => {
       /* ignore */
     }
   };
+  const runPromise = externalAgentFlow.runExternalAgent(
+    userData,
+    e,
+    payload || {},
+    l0Agents,
+    {
+      onProgress: sendProg,
+      signal: ac.signal,
+    }
+  );
+  delegateRuntime.attachPromise(rid, runPromise);
   try {
-    return await externalAgentFlow.runExternalAgent(
-      userData,
-      e,
-      payload || {},
-      l0Agents,
-      {
-        onProgress: sendProg,
-        signal: ac.signal,
-      }
-    );
+    return await runPromise;
   } finally {
     activeDelegateAborts.delete(rid);
+    delegateRuntime.end(rid);
   }
 });
 
@@ -1990,6 +2017,7 @@ ipcMain.handle("l0:stopExternalAgent", async (_e, payload) => {
   const rid = payload && payload.requestId;
   const ac = rid && activeDelegateAborts.get(rid);
   if (ac) ac.abort();
+  if (rid) delegateRuntime.abortOne(rid);
   return { ok: true };
 });
 

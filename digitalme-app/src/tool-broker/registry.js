@@ -86,8 +86,12 @@ function getToolDefinition(userDataPath, toolId = LOCAL_CLI_TOOL_ID) {
  * Does not accept free-form shell commands or arbitrary env maps.
  */
 function updateLocalCliSettings(userDataPath, patch = {}) {
-  const path = require("node:path");
-  const { FORBIDDEN_EXECUTABLE_EXTS } = require("./schema");
+  const pathMod = require("node:path");
+  const {
+    FORBIDDEN_EXECUTABLE_EXTS,
+    isForbiddenExecutableBasename,
+    FIXED_LOCAL_CLI_ARGS_TEMPLATE,
+  } = require("./schema");
   const { looksLikeNetworkOrCloudSync } = require("./paths");
   const registry = loadRegistry(userDataPath);
   const current = registry.tools[LOCAL_CLI_TOOL_ID] || defaultLocalCliDefinition();
@@ -96,7 +100,7 @@ function updateLocalCliSettings(userDataPath, patch = {}) {
     toolId: LOCAL_CLI_TOOL_ID,
     definitionVersion: TOOL_BROKER_VERSION,
     name: current.name || "本地命令工具",
-    argsTemplate: current.argsTemplate && current.argsTemplate.length ? current.argsTemplate : ["{{task}}"],
+    argsTemplate: [...FIXED_LOCAL_CLI_ARGS_TEMPLATE],
     allowedActions: ["execute_task"],
     timeoutMs: current.timeoutMs,
     maxOutputBytes: current.maxOutputBytes,
@@ -117,13 +121,14 @@ function updateLocalCliSettings(userDataPath, patch = {}) {
 
   const reasonCodes = [];
   if (nextRaw.executable) {
-    if (!path.isAbsolute(nextRaw.executable)) reasonCodes.push("executable_not_absolute");
+    if (!pathMod.isAbsolute(nextRaw.executable)) reasonCodes.push("executable_not_absolute");
     if (looksLikeNetworkOrCloudSync(nextRaw.executable)) reasonCodes.push("network_or_cloud_path_rejected");
-    const ext = path.extname(nextRaw.executable).toLowerCase();
+    if (isForbiddenExecutableBasename(nextRaw.executable)) reasonCodes.push("forbidden_shell_host");
+    const ext = pathMod.extname(nextRaw.executable).toLowerCase();
     if (FORBIDDEN_EXECUTABLE_EXTS.has(ext)) reasonCodes.push("forbidden_executable_type");
   }
   if (nextRaw.authorizedCwdRoot) {
-    if (!path.isAbsolute(nextRaw.authorizedCwdRoot)) reasonCodes.push("cwd_not_absolute");
+    if (!pathMod.isAbsolute(nextRaw.authorizedCwdRoot)) reasonCodes.push("cwd_not_absolute");
     if (looksLikeNetworkOrCloudSync(nextRaw.authorizedCwdRoot)) {
       reasonCodes.push("network_or_cloud_path_rejected");
     }
@@ -181,4 +186,5 @@ module.exports = {
   updateLocalCliSettings,
   publicToolSettings,
   LOCAL_CLI_TOOL_ID,
+  registryPath,
 };

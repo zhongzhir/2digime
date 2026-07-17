@@ -11,6 +11,12 @@ const MAX_ARG_COUNT = 32;
 /** Windows process-required keys (matched case-insensitively). No PATH by default. */
 const DEFAULT_ENV_ALLOWLIST = Object.freeze(["SystemRoot", "WINDIR", "TEMP", "TMP"]);
 
+/**
+ * Code-owned fixed args contract for local_cli.
+ * Owner settings cannot widen this; only the whole-token {{task}} placeholder is allowed.
+ */
+const FIXED_LOCAL_CLI_ARGS_TEMPLATE = Object.freeze(["{{task}}"]);
+
 const FORBIDDEN_EXECUTABLE_EXTS = new Set([
   ".bat",
   ".cmd",
@@ -20,10 +26,41 @@ const FORBIDDEN_EXECUTABLE_EXTS = new Set([
   ".jse",
   ".wsf",
   ".wsh",
+  ".vbe",
+  ".ws",
+  ".msc",
+]);
+
+/** Shell / script hosts that must never be registered as local_cli (basename, case-insensitive). */
+const FORBIDDEN_EXECUTABLE_BASENAMES = new Set([
+  "cmd.exe",
+  "cmd",
+  "command.com",
+  "powershell.exe",
+  "powershell",
+  "powershell_ise.exe",
+  "pwsh.exe",
+  "pwsh",
+  "wscript.exe",
+  "wscript",
+  "cscript.exe",
+  "cscript",
+  "mshta.exe",
+  "mshta",
 ]);
 
 function isNonEmptyString(v) {
   return typeof v === "string" && v.trim().length > 0;
+}
+
+function basenameLower(target) {
+  const s = String(target || "").trim().replace(/\\/g, "/");
+  const base = s.includes("/") ? s.slice(s.lastIndexOf("/") + 1) : s;
+  return base.toLowerCase();
+}
+
+function isForbiddenExecutableBasename(target) {
+  return FORBIDDEN_EXECUTABLE_BASENAMES.has(basenameLower(target));
 }
 
 /**
@@ -39,7 +76,8 @@ function normalizeToolDefinition(raw) {
   const definitionVersion = String(raw.definitionVersion || "").trim();
   const name = String(raw.name || "").trim();
   const executable = String(raw.executable || "").trim();
-  const argsTemplate = Array.isArray(raw.argsTemplate) ? raw.argsTemplate.map(String) : null;
+  // Enforce code-owned args contract; ignore any widened template from disk/settings.
+  const argsTemplate = [...FIXED_LOCAL_CLI_ARGS_TEMPLATE];
   const allowedActions = Array.isArray(raw.allowedActions)
     ? raw.allowedActions.map((item) => String(item).trim()).filter(Boolean)
     : [];
@@ -54,14 +92,6 @@ function normalizeToolDefinition(raw) {
   if (toolId !== LOCAL_CLI_TOOL_ID) reasonCodes.push("unknown_tool_id");
   if (!isNonEmptyString(definitionVersion)) reasonCodes.push("missing_definition_version");
   if (!isNonEmptyString(name)) reasonCodes.push("missing_tool_name");
-  if (!Array.isArray(argsTemplate) || !argsTemplate.length) reasonCodes.push("missing_args_template");
-  else if (argsTemplate.length > MAX_ARG_COUNT) reasonCodes.push("args_template_too_long");
-  else {
-    for (const part of argsTemplate) {
-      if (typeof part !== "string") reasonCodes.push("invalid_args_template");
-      if (part.includes("\0")) reasonCodes.push("args_nul");
-    }
-  }
   if (!allowedActions.includes("execute_task")) reasonCodes.push("missing_allowed_action");
   if (!Number.isFinite(timeoutMs) || timeoutMs < 500 || timeoutMs > 10 * 60 * 1000) {
     reasonCodes.push("invalid_timeout");
@@ -70,6 +100,9 @@ function normalizeToolDefinition(raw) {
     reasonCodes.push("invalid_max_output");
   }
   if (!envAllowlist.length) reasonCodes.push("missing_env_allowlist");
+  if (executable && isForbiddenExecutableBasename(executable)) {
+    reasonCodes.push("forbidden_shell_host");
+  }
 
   if (reasonCodes.length) return { ok: false, reasonCodes };
 
@@ -80,7 +113,7 @@ function normalizeToolDefinition(raw) {
       definitionVersion,
       name,
       executable,
-      argsTemplate: [...argsTemplate],
+      argsTemplate,
       allowedActions: [...new Set(allowedActions)].sort(),
       timeoutMs: Math.floor(timeoutMs),
       maxOutputBytes: Math.floor(maxOutputBytes),
@@ -97,7 +130,7 @@ function defaultLocalCliDefinition() {
     definitionVersion: TOOL_BROKER_VERSION,
     name: "本地命令工具",
     executable: "",
-    argsTemplate: ["{{task}}"],
+    argsTemplate: [...FIXED_LOCAL_CLI_ARGS_TEMPLATE],
     allowedActions: ["execute_task"],
     timeoutMs: DEFAULT_TIMEOUT_MS,
     maxOutputBytes: DEFAULT_MAX_OUTPUT_BYTES,
@@ -113,9 +146,13 @@ module.exports = {
   DEFAULT_TIMEOUT_MS,
   DEFAULT_MAX_OUTPUT_BYTES,
   DEFAULT_ENV_ALLOWLIST,
+  FIXED_LOCAL_CLI_ARGS_TEMPLATE,
   FORBIDDEN_EXECUTABLE_EXTS,
+  FORBIDDEN_EXECUTABLE_BASENAMES,
   MAX_TASK_CHARS,
   MAX_ARG_COUNT,
+  basenameLower,
+  isForbiddenExecutableBasename,
   normalizeToolDefinition,
   defaultLocalCliDefinition,
 };
