@@ -856,6 +856,18 @@ body {
 .builder-review.hidden { display: none; }
 .builder-review h3 { font-size: 15px; margin-bottom: 6px; }
 .review-hint { font-size: 13px; color: var(--muted); margin-bottom: 14px; line-height: 1.5; }
+.builder-write-preview {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #fffaf6;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+.builder-write-preview.hidden { display: none !important; }
 .review-group { margin-bottom: 16px; }
 .review-group-head {
   display: flex;

@@ -6,6 +6,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const https = require("node:https");
 const builder = require("./builder");
+const builderPackageWrite = require("./builder/package-write");
 const materials = require("./materials");
 const life = require("./life");
 const policies = require("./policies");
@@ -866,14 +867,23 @@ ipcMain.handle("life:applyMindHooks", async (e) => {
     usedFor: ["style-guide", "persona", "decision-frameworks", "long-term-memory"],
     materialKind: "persona",
   };
-  const written = builder.writeBack(dir, agg, sourceMeta);
+  // Owner clicked「写入观念线索」— preview then confirm via PackageStore (P1-06).
+  const preview = builderPackageWrite.previewPersonaWrite(dir, {
+    agg,
+    sourceMeta,
+    reason: "观念线索确认写入",
+  });
+  const written = builderPackageWrite.commitPersonaWrite(dir, {
+    changeSetId: preview.changeSetId,
+    confirmed: true,
+  });
   life.markMindHooksStatus(
     dir,
     hooks.map((h) => h.id),
     "distilled"
   );
   e.sender.send("builder:progress", { phase: "done", agg, materialKind: "persona" });
-  return { ok: true, written, hookCount: hooks.length };
+  return { ok: true, written, hookCount: hooks.length, revision: written.revision };
 });
 
 ipcMain.handle("life:markMindHooksDistilled", (_e, ids) => {
@@ -3164,14 +3174,31 @@ ipcMain.handle("shell:openPath", async (_e, target) => {
   return { ok: true, path: p };
 });
 
-// Confirm write-back to the package (persona distill or identity facts).
-ipcMain.handle("builder:write", async (_e, { agg, identity, materialKind, filePath, title }) => {
+// Preview persona write via PackageStore (bytes unchanged until confirm).
+ipcMain.handle("builder:previewWrite", async (_e, payload) => {
+  const body = payload && typeof payload === "object" ? payload : {};
+  if (body.materialKind === "identity") {
+    throw new Error("人生事实写入尚未迁入 PackageStore；请使用既有确认写入流程。");
+  }
+  const pkgDir = packageDirFromConfig();
+  return builderPackageWrite.previewPersonaWrite(pkgDir, {
+    agg: body.agg,
+    filePath: body.filePath,
+    title: body.title,
+    sourceMeta: body.sourceMeta,
+    reason: body.reason,
+  });
+});
+
+// Confirm write-back: persona via PackageStore change set; identity still Life (out of P1-06).
+ipcMain.handle("builder:write", async (_e, payload) => {
+  const body = payload && typeof payload === "object" ? payload : {};
   const cfg = readConfig();
   const pkgDir = cfg.packageDir || DEFAULT_PACKAGE_DIR;
-  const kind = materialKind === "identity" ? "identity" : "persona";
+  const kind = body.materialKind === "identity" ? "identity" : "persona";
 
   if (kind === "identity") {
-    const idPayload = identity || {};
+    const idPayload = body.identity || {};
     let events = Array.isArray(idPayload.events) ? idPayload.events : [];
     if (!events.length && Array.isArray(idPayload.claims)) {
       events = idPayload.claims.map((c) => ({
@@ -3195,12 +3222,12 @@ ipcMain.handle("builder:write", async (_e, { agg, identity, materialKind, filePa
       alter_candidates: idPayload.alter_candidates || [],
       mind_hooks: idPayload.mind_hooks || [],
       capability_signals: idPayload.capability_signals || [],
-      filePath,
-      title,
+      filePath: body.filePath,
+      title: body.title,
     });
     materials.archiveIdentityRun(app.getPath("userData"), {
-      title: title || "社会事实",
-      filePath: filePath || "",
+      title: body.title || "社会事实",
+      filePath: body.filePath || "",
       claims: events.map((e) => ({ type: "role", value: e.what })),
       facts: idPayload.facts || [],
       events,
@@ -3210,17 +3237,13 @@ ipcMain.handle("builder:write", async (_e, { agg, identity, materialKind, filePa
     return { materialKind: "identity", ...result };
   }
 
-  const base = path.basename(filePath || "source");
-  const sourceMeta = {
-    id: "src_" + base.replace(/[^a-zA-Z0-9]+/g, "_").slice(0, 40) + "_" + Date.now().toString(36),
-    type: "document",
-    title: title || base,
-    author: "",
-    createdAt: new Date().toISOString(),
-    location: filePath || "",
-    sensitivity: "private",
-    usedFor: ["style-guide", "persona", "decision-frameworks", "long-term-memory"],
+  // Persona: only changeSetId + confirmation — never raw agg/paths from renderer as the write plan.
+  return {
     materialKind: "persona",
+    ...builderPackageWrite.commitPersonaWrite(pkgDir, {
+      changeSetId: body.changeSetId,
+      confirmed: body.confirmed,
+      confirmation: body.confirmation,
+    }),
   };
-  return { materialKind: "persona", ...builder.writeBack(pkgDir, agg, sourceMeta) };
 });

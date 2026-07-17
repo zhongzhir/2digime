@@ -156,6 +156,7 @@ contextBridge.exposeInMainWorld("digitalMe", {
   pickFile: () => ipcRenderer.invoke("builder:pickFile"),
   distill: (payload) => ipcRenderer.invoke("builder:distill", payload),
   cancelDistill: () => ipcRenderer.invoke("builder:cancel"),
+  previewDistillWrite: (payload) => ipcRenderer.invoke("builder:previewWrite", payload),
   writeDistill: (payload) => ipcRenderer.invoke("builder:write", payload),
   getMaterialKinds: () => ipcRenderer.invoke("materials:kinds"),
   listCustody: () => ipcRenderer.invoke("materials:listCustody"),

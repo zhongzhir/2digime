@@ -371,7 +371,7 @@ flowchart LR
 
 首个标准任务包已建立：`digitalme_phase1_task_P1-00_baseline_freeze.md`。后续 P1-01～P1-03 均须沿用其“目标、范围、禁止事项、迁移、验证、人工验收、回滚、证据”结构。
 
-执行状态：P1-00～P1-04 均已接受。P1-00 形成基线提交 `151d798`；P1-01 已接受（提交 `363e58d`、`94f7e13`、`9d3ecc4`）；P1-02 已接受（Feedback 唯一切片完成临时资料提交、重启与恢复验收；Builder/Life/Policies 仍直接写，待后续迁移）；P1-03 已接受（提交 `47147e8`、`2802026`、`4a595eb`，主体首页与设置弹窗通过真实 Electron 验收）；P1-04 已接受（提交 `9929e8b`、`0e19106`、`6fc6046`，PolicyEngine 与 DecisionAudit 外部 CLI 切片通过三轮 Codex 复核和 Owner 成功/失败/取消、代次轮换、重启验收）。下一唯一主任务为 `P1-05 ToolBroker 与外部 CLI 最小隔离切片`，任务包 `digitalme_phase1_task_P1-05_tool_broker.md`；不得并行启动 MCP 迁移或外部协作骨架。
+执行状态：P1-00～P1-04 均已接受；P1-05 为 `statically_verified`（ToolBroker 最小隔离；不标记 accepted）。P1-00 形成基线提交 `151d798`；P1-01 已接受；P1-02 已接受（Feedback 切片）；P1-03 已接受；P1-04 已接受。当前主任务为 `P1-06 Builder 写入路径迁移到 PackageStore`，任务包 `digitalme_phase1_task_P1-06_builder_package_store.md`（分支 `codex/p1-06-builder-package-store`）：Builder 观念/人格写入经 preview→确认→PackageStore commit；Life / Policies / identity 写路径、MCP 与外部协作仍不迁移；最高状态 `statically_verified`，待 Codex 复核与 Owner 沙盒验收。
 
 ---
 

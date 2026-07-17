@@ -1393,6 +1393,71 @@ function countPersonaAgg(agg) {
   );
 }
 
+function formatBuilderPreviewSummary(preview) {
+  if (!preview) return "";
+  const paths = (preview.affectedPaths || []).join("、") || "（无）";
+  const kinds = (preview.dataKinds || []).join("、") || "inference";
+  const refs = (preview.sourceRefs || []).join("、") || "—";
+  return [
+    "预览（资料尚未改动）",
+    `基准版本：${preview.baseRevision ?? "—"}`,
+    `数据类别：${kinds}`,
+    `来源：${refs}`,
+    `将修改：${paths}`,
+    `条目：记忆 ${preview.memories || 0} · 框架 ${preview.frameworks || 0} · 风格 ${preview.styleObservations || 0} · 人格 ${preview.personaNotes || 0}`,
+    "确认后才会写入并形成新版本；可放弃。",
+  ].join("\n");
+}
+
+function formatBuilderCommitSummary(r) {
+  if (!r) return "写入完成。";
+  const rev = r.revision != null ? String(r.revision) : "—";
+  const roll = r.rollbackVersion != null ? String(r.rollbackVersion) : "—";
+  const paths = (r.affectedPaths || []).join("、") || "—";
+  return (
+    `已确认写入观念：记忆 +${r.memories || 0}，框架 +${r.frameworks || 0}，` +
+    `风格 +${r.styleObservations || 0}，人格观察 +${r.personaNotes || 0}。` +
+    `\n新版本：${rev}（可恢复到版本 ${roll}）。\n修改范围：${paths}`
+  );
+}
+
+/** Preview + Owner-confirmed commit for persona distill (PackageStore). */
+async function previewAndCommitPersonaWrite(agg, src, options = {}) {
+  if (!window.digitalMe.previewDistillWrite || !window.digitalMe.writeDistill) {
+    throw new Error("当前版本不支持经资料库确认的写入，请完全退出后重新启动应用。");
+  }
+  const preview = await window.digitalMe.previewDistillWrite({
+    materialKind: "persona",
+    agg,
+    filePath: src.filePath,
+    title: src.title,
+  });
+  const previewBox = $("builder-write-preview");
+  if (previewBox) {
+    previewBox.textContent = formatBuilderPreviewSummary(preview);
+    previewBox.classList.remove("hidden");
+  }
+  if (options.onPreview) options.onPreview(preview);
+
+  if (options.requireExplicitConfirm) {
+    const ok = window.confirm(
+      "预览已生成，资料尚未改动。\n\n" +
+        formatBuilderPreviewSummary(preview) +
+        "\n\n确认将以上变更写入数字之我资料吗？"
+    );
+    if (!ok) {
+      return { ok: false, cancelled: true, preview };
+    }
+  }
+
+  const r = await window.digitalMe.writeDistill({
+    materialKind: "persona",
+    changeSetId: preview.changeSetId,
+    confirmed: true,
+  });
+  return { ok: true, preview, result: r };
+}
+
 /** Write distill result without checkbox review (智能构建 / 少决策). */
 async function autoWriteDistillResult(result, label) {
   const kind = (result && result.materialKind) || materialKind || "persona";
@@ -1438,12 +1503,29 @@ async function autoWriteDistillResult(result, label) {
     distillResult = null;
     return { ok: true, skipped: true };
   }
-  const r = await window.digitalMe.writeDistill({
-    materialKind: "persona",
-    agg,
-    filePath: src.filePath,
-    title: src.title,
+  const committed = await previewAndCommitPersonaWrite(agg, src, {
+    requireExplicitConfirm: true,
+    onPreview: (preview) => {
+      const line = formatBuilderPreviewSummary(preview);
+      if (progressSinkId === "inbox-progress") {
+        updateInboxProgressSummary({ current: "已生成写入预览（资料未改动）", appendDetail: line });
+      } else {
+        const pel = progressEl();
+        if (pel) pel.textContent += line + "\n";
+      }
+    },
   });
+  if (!committed.ok) {
+    const pel = progressEl();
+    const msg = "已放弃写入。资料未改动。";
+    if (progressSinkId === "inbox-progress") {
+      updateInboxProgressSummary({ current: msg, appendDetail: msg });
+    } else if (pel) {
+      pel.textContent += msg + "\n";
+    }
+    return { ok: false, cancelled: true, kind: "persona" };
+  }
+  const r = committed.result;
   if (result.meta && result.meta.hookIds && result.meta.hookIds.length) {
     try {
       await window.digitalMe.markMindHooksDistilled(result.meta.hookIds);
@@ -1452,12 +1534,10 @@ async function autoWriteDistillResult(result, label) {
     }
   }
   const pel = progressEl();
-  const writeLine =
-    `已自动写入观念：记忆 +${r.memories || 0}，框架 +${r.frameworks || 0}，` +
-    `风格 +${r.styleObservations || 0}，人格观察 +${r.personaNotes || 0}。`;
+  const writeLine = formatBuilderCommitSummary(r);
   if (progressSinkId === "inbox-progress") {
     updateInboxProgressSummary({
-      current: writeLine,
+      current: `已写入，版本 ${r.revision}`,
       appendDetail: writeLine,
     });
   } else if (pel) {
@@ -1786,14 +1866,15 @@ function bindBuilder() {
     $("btn-write").disabled = true;
     try {
       const label = currentSourceLabel || { filePath: "", title: "素材" };
-      const r = await window.digitalMe.writeDistill({
-        materialKind: "persona",
-        agg,
-        filePath: label.filePath,
-        title: label.title,
+      const committed = await previewAndCommitPersonaWrite(agg, label, {
+        requireExplicitConfirm: true,
       });
-      $("builder-progress").textContent =
-        `已写入勾选内容：记忆 +${r.memories}，判断框架 +${r.frameworks}，风格观察 +${r.styleObservations}，人格观察 +${r.personaNotes}。`;
+      if (!committed.ok) {
+        $("builder-progress").textContent = "已放弃写入。资料未改动。";
+        return;
+      }
+      const r = committed.result;
+      $("builder-progress").textContent = formatBuilderCommitSummary(r);
       if (distillResult.meta && distillResult.meta.hookIds && distillResult.meta.hookIds.length) {
         try {
           await window.digitalMe.markMindHooksDistilled(distillResult.meta.hookIds);
@@ -1805,10 +1886,13 @@ function bindBuilder() {
       distillResult = null;
       pkg = await window.digitalMe.loadPackage();
       renderPackageStatus();
+      if (typeof refreshPackageVersionsPanel === "function") {
+        await refreshPackageVersionsPanel();
+      }
       await refreshMeView();
       goSelfView("cognition");
     } catch (e) {
-      $("builder-progress").textContent = "写入出错：" + e.message;
+      $("builder-progress").textContent = "写入出错：" + (e.message || String(e));
     } finally {
       $("btn-write").disabled = false;
     }

@@ -703,11 +703,12 @@
                 <div id="builder-progress" class="builder-progress"></div>
                 <div id="builder-review" class="builder-review hidden">
                   <h3>处理结果（勾选要留下的，再写入）</h3>
-                  <p class="review-hint">默认全选。去掉不想写入的条目；至少保留一条才能写入。</p>
+                  <p class="review-hint">默认全选。去掉不想写入的条目；至少保留一条才能写入。写入前会生成预览，确认后才会形成新版本。</p>
                   <div id="review-content"></div>
+                  <div id="builder-write-preview" class="builder-write-preview hidden" aria-live="polite"></div>
                   <div class="review-actions">
-                    <button id="btn-write" type="button">写入已勾选内容</button>
-                    <button id="btn-discard" class="btn-ghost" type="button">丢弃</button>
+                    <button id="btn-write" type="button">预览并确认写入</button>
+                    <button id="btn-discard" class="btn-ghost" type="button">放弃</button>
                   </div>
                 </div>
               </div>

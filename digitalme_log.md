@@ -5,6 +5,31 @@
 
 ---
 
+## 2026-07-17（P1-06 · Builder → PackageStore）
+
+### 结论
+
+- 编号：`P1-06`
+- 分支：`codex/p1-06-builder-package-store`
+- 状态：`statically_verified`（自动测试通过；交 Codex 复核；**不**标记 `accepted`）
+- 任务包：`digitalme_phase1_task_P1-06_builder_package_store.md`
+
+### 实现摘要
+
+1. 新增 `src/builder/package-write.js`：`previewPersonaWrite` / `commitPersonaWrite`；
+2. `builder.writeBack` 阻断直接写；`builder:previewWrite` + `builder:write`（persona 仅 `changeSetId` + 确认）；
+3. 智能构建与审阅写入：先预览（字节不变）再 Owner 确认后 commit；展示 revision / 可恢复版本 / 修改范围；
+4. `dataKind=inference`，保留 `actor` / `reason` / `sourceRefs`；过期 changeSet 拒绝；
+5. **未迁移**：Life / Policies / identity、`package:load` scaffold、离线 distill 工具、MCP、外部协作、真实 Package 基线。
+
+### 验证
+
+- `npm run test:p1-06`：14/14
+- `npm run test:p1-phase1`（含 P1-01～P1-06）
+- Owner 沙盒验收仅用临时演示资料，待 Codex 复核后进行
+
+---
+
 ## 2026-07-17（P1-05 · 真实 IPC 停止路径）
 
 ### 结论

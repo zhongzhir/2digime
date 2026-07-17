@@ -979,101 +979,14 @@ function aggregate(results) {
   return agg;
 }
 
-// ---------- Package write-back ----------
+// ---------- Package write-back (P1-06: PackageStore only) ----------
 
-function isoNow() {
-  return new Date().toISOString();
-}
-
-function appendMemories(pkgDir, memories, sourceId) {
-  if (!memories.length) return 0;
-  const clean = memories.filter((m) => m && m.content && !hasReplacementChar(m.content));
-  if (!clean.length) return 0;
-  const file = path.join(pkgDir, "memory", "long-term-memory.jsonl");
-  const existing = fs.existsSync(file) ? fs.readFileSync(file, "utf8").trim() : "";
-  let maxId = 0;
-  existing.split("\n").forEach((l) => {
-    const mm = /"id"\s*:\s*"mem_(\d+)"/.exec(l);
-    if (mm) maxId = Math.max(maxId, parseInt(mm[1], 10));
-  });
-  const lines = clean.map((m, i) =>
-    JSON.stringify({
-      id: "mem_" + String(maxId + i + 1).padStart(3, "0"),
-      type: "long_term",
-      content: m.content,
-      confidence: m.confidence || "medium",
-      sensitivity: "private",
-      createdAt: isoNow(),
-      sourceRefs: [sourceId],
-      expiresAt: null,
-    })
-  );
-  // Ensure single newline separation (existing file already ends with "\n").
-  const raw = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
-  const needsNL = raw.length > 0 && !raw.endsWith("\n");
-  fs.appendFileSync(file, (needsNL ? "\n" : "") + lines.join("\n") + "\n", "utf8");
-  return lines.length;
-}
-
-function appendFrameworks(pkgDir, frameworks, sourceId) {
-  if (!frameworks.length) return 0;
-  const file = path.join(pkgDir, "decision-frameworks.json");
-  const data = JSON.parse(fs.readFileSync(file, "utf8"));
-  const existingNames = new Set((data.frameworks || []).map((f) => norm(f.name)));
-  let added = 0;
-  for (const f of frameworks) {
-    if (hasReplacementChar(f)) continue;
-    if (existingNames.has(norm(f.name))) continue;
-    data.frameworks.push({
-      id: "framework_" + Date.now() + "_" + added,
-      name: f.name,
-      domain: f.domain || "general",
-      principles: f.principles || [],
-      positiveSignals: f.positiveSignals || [],
-      negativeSignals: f.negativeSignals || [],
-      typicalQuestions: f.typicalQuestions || [],
-      sourceRefs: [sourceId],
-    });
-    added++;
-  }
-  fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
-  return added;
-}
-
-function appendObservations(pkgDir, fileName, title, observations, sourceId, sourceTitle) {
-  const clean = (observations || []).filter((o) => typeof o === "string" && o.trim() && !hasReplacementChar(o));
-  if (!clean.length) return 0;
-  const file = path.join(pkgDir, fileName);
-  const block =
-    `\n\n## 增量蒸馏观察：${sourceTitle}\n` +
-    `> 来源：${sourceId} · 蒸馏时间：${isoNow()}\n\n` +
-    clean.map((o) => "- " + o).join("\n") +
-    "\n";
-  fs.appendFileSync(file, block, "utf8");
-  return observations.length;
-}
-
-function registerSource(pkgDir, source) {
-  const file = path.join(pkgDir, "sources", "source-index.json");
-  const data = JSON.parse(fs.readFileSync(file, "utf8"));
-  if (!data.sources.some((s) => s.id === source.id)) {
-    data.sources.push(source);
-    fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
-  }
-}
-
-function writeBack(pkgDir, agg, sourceMeta) {
-  registerSource(pkgDir, sourceMeta);
-  return {
-    memories: appendMemories(pkgDir, agg.memories, sourceMeta.id),
-    frameworks: appendFrameworks(pkgDir, agg.decisionFrameworks, sourceMeta.id),
-    styleObservations: appendObservations(
-      pkgDir, "style-guide.md", "风格", agg.styleObservations, sourceMeta.id, sourceMeta.title
-    ),
-    personaNotes: appendObservations(
-      pkgDir, "persona.md", "人格", agg.personaNotes, sourceMeta.id, sourceMeta.title
-    ),
-  };
+/**
+ * @deprecated Direct Package mutation blocked. Use builder/package-write.js.
+ */
+function writeBack() {
+  const { writeBack: blocked } = require("./builder/package-write");
+  return blocked();
 }
 
 module.exports = {

@@ -13,7 +13,7 @@
 
 | 能力 | 状态 | 证据（文件/测试） | 说明 |
 |---|---|---|---|
-| Builder | `implemented` | `digitalme-app/src/builder.js`；审计 §3.1 | 提取/分块/蒸馏/写回已有代码；**仍直接写 Package，未迁 PackageStore** |
+| Builder | `statically_verified` | `src/builder/package-write.js`；`builder:previewWrite` / `builder:write`；`npm run test:p1-06` 14/14 | 观念/人格写入经 PackageStore 预览与确认；`dataKind=inference`；**不**把模型输出当已确认事实；identity/Life 写路径仍待迁移 |
 | Retrieval | `implemented` | `digitalme-app/src/retrieval.js` | TF-IDF-lite 本地检索已接线对话；无自动化回归 |
 | Feedback | `runtime_verified` | `feedback.js` + PackageStore；`npm run test:p1-02` 31/31；Owner 临时资料验收 | 预览不写、确认提交、重启保留、跨重启恢复均通过；仍仅 Feedback 切片接入 |
 | Life Graph | `implemented` | `digitalme-app/src/life.js`；`digital-me-package/life/` | 事件/维度表/推断可写；**仍直接写文件，未迁 PackageStore** |
@@ -23,7 +23,7 @@
 | External CLI | `statically_verified` | `src/tool-broker/*`；`external-agent-flow.js`；`npm run test:p1-05` 19/19 + P1-01～04 回归 | 身份契约 + Authenticode + spawn 前 TOCTOU；停止立即生效；`shell:false`；**不是 OS 沙箱**；不标记 accepted |
 | Audit (legacy) | `implemented` | `digitalme-app/src/orchestration/audit-store.js` | 旧 JSON 账本；renderer 已不可追加；不冒充可信链 |
 | DecisionAudit (P1-04) | `runtime_verified` | `src/decision-audit/*`；`src/orchestration/external-agent-flow.js`；`npm run test:p1-04` 25/25 + P1-01～03 回归；Codex 三轮复核；Owner 成功/失败/取消、轮换、重启验收 | append-only JSONL + hash chain；仅向前恢复；跨代连接校验；仅可检测篡改，非签名或不可删除存证；仅外部 CLI 切片接入；P1-05 起绑定 planDigest |
-| PackageStore | `runtime_verified` | `src/package-store/*`；`npm run test:p1-02` 31/31；Owner 临时资料提交/重启/恢复验收 | P1-02 最小可信切片已验收；**仅 Feedback 接入**；Builder/Life/Policies 等仍直接写 |
+| PackageStore | `runtime_verified` | `src/package-store/*`；`npm run test:p1-02` 31/31；P1-06 Builder 接入 `test:p1-06` | Feedback + Builder 观念写入已接入；**Life / Policies / identity 仍直接写，待后续迁移** |
 | Package export/import | `planned` | 规格 v0.4 §7.4.2；审计 F-04/F-05 | 文档有分级导出设想；运行时无完整导出—删除—重导入闭环 |
 | Secret storage | `runtime_verified` | P1-01：提交 `363e58d`、`94f7e13`、`9d3ecc4`；`npm run test:p1-01` 21/21；Owner 真实模型验收 | 重启识别、普通调用、空白保留、替换、清除均通过；扩展撤销 UI 与按工具密钥注入仍属后续 |
 | PolicyEngine (P1-04) | `runtime_verified` | `src/policy-engine/*`；`l0:requestExternalAgent` / `l0:runExternalAgent`；`npm run test:p1-04` 25/25；Codex 三轮复核；Owner 确认/取消/执行验收 | v1 内置规则；fail-closed；P1-05 起 `requestDigest` 绑定 ToolBroker 执行计划；不代表全部工具已统一治理 |
