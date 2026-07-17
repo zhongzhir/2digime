@@ -84,38 +84,38 @@ Builder 不得把模型输出直接视为已确认主体事实；写入数据类
 
 `npm run test:p1-06`（`scripts/test-p1-06-builder-package-store.cjs`）覆盖：
 
-1. preview 不改变 Package 字节  
-2. 未确认不能写入  
-3. 确认后只提交预览过的路径  
-4. 写入产生新 revision  
-5. sourceRefs / dataKind / actor / reason 正确  
-6. 过期 changeSet 拒绝  
-7. revision/hash 冲突拒绝  
-8. commit 失败时旧版本保持不变  
-9. 重启后 revision 与内容一致  
-10. rollback 产生新 revision 并恢复内容  
-11. Builder 不再直接写 Package  
-12. P1-01～P1-05 全量回归  
-13. Package 基线逐文件 SHA-256 不变  
+1. preview 不改变 Package 字节
+2. 未确认不能写入
+3. 确认后只提交预览过的路径
+4. 写入产生新 revision
+5. sourceRefs / dataKind / actor / reason 正确
+6. 过期 changeSet 拒绝
+7. revision/hash 冲突拒绝
+8. commit 失败时旧版本保持不变
+9. 重启后 revision 与内容一致
+10. rollback 产生新 revision 并恢复内容
+11. Builder 不再直接写 Package
+12. P1-01～P1-05 全量回归
+13. Package 基线逐文件 SHA-256 不变
 
 ## 8. Owner 沙盒验收（仅临时演示资料）
 
-1. 创建临时演示资料；  
-2. 提交一份测试材料；  
-3. 启动 Builder；  
-4. 确认预览阶段 Package 未变化；  
-5. 确认写入后显示新 revision；  
-6. 重启应用确认版本一致；  
-7. 执行撤销/恢复；  
-8. 确认恢复产生新 revision；  
-9. 验证来源、数据类别和修改范围可见。  
+1. 创建临时演示资料；
+2. 提交一份测试材料；
+3. 启动 Builder；
+4. 确认预览阶段 Package 未变化；
+5. 确认写入后显示新 revision；
+6. 重启应用确认版本一致；
+7. 执行撤销/恢复；
+8. 确认恢复产生新 revision；
+9. 验证来源、数据类别和修改范围可见。
 
 ## 9. 禁止事项
 
-- 不顺带迁移 Life / Policies / MCP / 外部协作；  
-- 不改动 `digital-me-package/**` 基线；  
-- 不把模型蒸馏结果标为 `owner_assertion` 或 `fact`；  
-- 不标记 `accepted` / `runtime_verified`，直至 Codex 复核与 Owner 沙盒通过。  
+- 不顺带迁移 Life / Policies / MCP / 外部协作；
+- 不改动 `digital-me-package/**` 基线；
+- 不把模型蒸馏结果标为 `owner_assertion` 或 `fact`；
+- 不标记 `accepted` / `runtime_verified`，直至 Codex 复核与 Owner 沙盒通过。
 
 ## 10. 验证命令
 
