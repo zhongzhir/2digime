@@ -103,21 +103,77 @@ const DO_SCENES = [
 const $ = (id) => document.getElementById(id);
 
 async function init() {
-  pkg = await window.digitalMe.loadPackage();
-  renderPackageStatus();
-  await renderModelStatus();
-  await renderCapabilitiesStatus();
+  // Must register before any await / bindEvents — stop depends on this surviving init failures.
+  try {
+    if (window.digitalMe && typeof window.digitalMe.onExternalAgentStarted === "function") {
+      window.digitalMe.onExternalAgentStarted(onExternalAgentStarted);
+    }
+    if (window.digitalMe && typeof window.digitalMe.onChatProgress === "function") {
+      unsubChatProgress = window.digitalMe.onChatProgress(onChatProgress);
+    }
+    if (window.digitalMe && typeof window.digitalMe.onResearchProgress === "function") {
+      window.digitalMe.onResearchProgress(onResearchProgress);
+    }
+  } catch (err) {
+    console.error("[Digital Me] 进度/停止监听注册失败", err);
+  }
+
+  try {
+    pkg = await window.digitalMe.loadPackage();
+    renderPackageStatus();
+  } catch (err) {
+    console.error("[Digital Me] 加载资料失败", err);
+    reportInitError("加载资料失败", err);
+  }
+
+  try {
+    await renderModelStatus();
+  } catch (err) {
+    console.error("[Digital Me] 模型状态失败", err);
+  }
+
+  try {
+    await renderCapabilitiesStatus();
+  } catch (err) {
+    console.error("[Digital Me] 能力状态失败", err);
+  }
+
   bindEvents();
-  unsubChatProgress = window.digitalMe.onChatProgress(onChatProgress);
-  if (window.digitalMe.onResearchProgress) {
-    window.digitalMe.onResearchProgress(onResearchProgress);
+
+  try {
+    await ensureSession();
+    await loadScenarioPacks();
+    await refreshCapabilitySurface();
+  } catch (err) {
+    console.error("[Digital Me] 会话/场景初始化失败", err);
+    reportInitError("部分初始化未完成", err);
   }
-  if (window.digitalMe.onExternalAgentStarted) {
-    window.digitalMe.onExternalAgentStarted(onExternalAgentStarted);
+}
+
+function reportInitError(label, err) {
+  const msg = `${label}：${(err && err.message) || err || "未知错误"}`;
+  console.error("[Digital Me]", msg);
+  try {
+    let ban = document.getElementById("ui-init-warning");
+    if (!ban) {
+      ban = document.createElement("div");
+      ban.id = "ui-init-warning";
+      ban.setAttribute("role", "status");
+      ban.style.cssText =
+        "margin:8px 12px;padding:8px 10px;border:1px solid #c4a35a;background:#fff8e8;color:#3a2f1a;font-size:12px;border-radius:6px;";
+      const host = document.querySelector(".app-main") || document.body;
+      host.insertBefore(ban, host.firstChild);
+    }
+    ban.textContent = msg;
+    ban.classList.remove("hidden");
+  } catch {
+    /* ignore */
   }
-  await ensureSession();
-  await loadScenarioPacks();
-  await refreshCapabilitySurface();
+}
+
+function reportBindError(name, err) {
+  console.error(`[Digital Me] 界面绑定失败（${name}）`, err);
+  reportInitError(`界面「${name}」绑定失败，部分按钮可能不可用`, err);
 }
 
 function renderPackageStatus() {
@@ -795,23 +851,48 @@ async function send() {
 }
 
 function bindEvents() {
-  $("btn-send").addEventListener("click", send);
-  $("btn-stop").addEventListener("click", async () => {
+  const steps = [
+    ["chat-core", bindChatCoreControls],
+    ["nav", bindNavControls],
+    ["builder", bindBuilder],
+    ["feedback", bindFeedback],
+    ["output", bindOutput],
+    ["do", bindDo],
+    ["write", bindWriteWorkspace],
+    ["research", bindResearch],
+    ["code", bindCodeWorkspace],
+    ["extensions", bindExtensions],
+    ["me", bindMe],
+    ["bootstrap-files", bindBootstrapFileActions],
+    ["help-tips", bindHelpAndTips],
+  ];
+  for (const [name, fn] of steps) {
+    try {
+      if (typeof fn === "function") fn();
+    } catch (err) {
+      reportBindError(name, err);
+    }
+  }
+}
+
+function bindChatCoreControls() {
+  $("btn-send")?.addEventListener("click", send);
+  $("btn-stop")?.addEventListener("click", async () => {
     if (currentRequestId) await window.digitalMe.stopChat({ requestId: currentRequestId });
   });
-  $("btn-attach").addEventListener("click", async () => {
+  $("btn-attach")?.addEventListener("click", async () => {
     const files = await window.digitalMe.pickAttachments();
     if (!files?.length) return;
     pendingAttachments = pendingAttachments.concat(files);
     renderAttachChips();
   });
-  $("input").addEventListener("keydown", (e) => {
+  $("input")?.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       send();
     }
   });
-  $("btn-new-session").addEventListener("click", async () => {
+  $("btn-new-session")?.addEventListener("click", async () => {
     await persistCurrentSession();
     currentSession = await window.digitalMe.createSession({ title: "新对话" });
     history = [];
@@ -827,8 +908,10 @@ function bindEvents() {
   document.querySelectorAll("#intent-chips button").forEach((btn) => {
     btn.addEventListener("click", () => {
       const intent = btn.dataset.intent || "";
-      $("input").value = intent;
-      $("input").focus();
+      if ($("input")) {
+        $("input").value = intent;
+        $("input").focus();
+      }
     });
   });
 
@@ -864,9 +947,9 @@ function bindEvents() {
     await generatePptFromDocument(currentArtifact.title, currentArtifact.content);
   });
 
-  $("btn-settings").addEventListener("click", openSettings);
-  $("btn-close").addEventListener("click", () => $("settings-modal").classList.add("hidden"));
-  $("btn-save").addEventListener("click", saveSettings);
+  $("btn-settings")?.addEventListener("click", openSettings);
+  $("btn-close")?.addEventListener("click", () => $("settings-modal")?.classList.add("hidden"));
+  $("btn-save")?.addEventListener("click", saveSettings);
   if ($("btn-clear-apikey")) {
     $("btn-clear-apikey").addEventListener("click", clearApiKeySettings);
   }
@@ -933,21 +1016,12 @@ function bindEvents() {
   $("settings-audit-generation")?.addEventListener("change", () => {
     refreshSettingsAuditList().catch((e) => alert(e.message || String(e)));
   });
+}
 
+function bindNavControls() {
   document.querySelectorAll(".nav-item").forEach((btn) => {
     btn.addEventListener("click", () => switchView(btn.dataset.view, btn));
   });
-
-  bindBuilder();
-  bindFeedback();
-  bindOutput();
-  bindDo();
-  bindWriteWorkspace();
-  bindResearch();
-  bindCodeWorkspace();
-  bindExtensions();
-  bindMe();
-  bindHelpAndTips();
 }
 
 function switchView(view, btn, opts = {}) {
@@ -1404,7 +1478,9 @@ async function runMaterialPipeline(kind, files, options = {}) {
 }
 
 function bindBuilder() {
-  window.digitalMe.onBuilderProgress(renderProgress);
+  if (window.digitalMe && typeof window.digitalMe.onBuilderProgress === "function") {
+    window.digitalMe.onBuilderProgress(renderProgress);
+  }
 
   document.querySelectorAll('input[name="material-kind"]').forEach((radio) => {
     radio.addEventListener("change", () => {
@@ -1414,7 +1490,7 @@ function bindBuilder() {
   });
   syncMaterialKindUi();
 
-  $("btn-pick").addEventListener("click", async () => {
+  $("btn-pick")?.addEventListener("click", async () => {
     const files = await window.digitalMe.pickFile();
     const list = Array.isArray(files) ? files : files ? [files] : [];
     if (!list.length) return;
@@ -1428,7 +1504,7 @@ function bindBuilder() {
     renderPickList();
   });
 
-  $("btn-distill").addEventListener("click", async () => {
+  $("btn-distill")?.addEventListener("click", async () => {
     if (!pickedFiles.length) return;
     const kind = selectedMaterialKind();
     $("btn-distill").disabled = true;
@@ -1441,7 +1517,7 @@ function bindBuilder() {
     }
   });
 
-  $("btn-facts-pick").addEventListener("click", async () => {
+  $("btn-facts-pick")?.addEventListener("click", async () => {
     const files = await window.digitalMe.pickFile();
     const list = Array.isArray(files) ? files : files ? [files] : [];
     if (!list.length) return;
@@ -1455,7 +1531,7 @@ function bindBuilder() {
     renderFactsPickList();
   });
 
-  $("btn-facts-run").addEventListener("click", async () => {
+  $("btn-facts-run")?.addEventListener("click", async () => {
     if (!factsPickedFiles.length) return;
     $("btn-facts-run").disabled = true;
     try {
@@ -1466,7 +1542,7 @@ function bindBuilder() {
     }
   });
 
-  $("btn-intake-distill").addEventListener("click", async () => {
+  $("btn-intake-distill")?.addEventListener("click", async () => {
     const gate = intakeMeetsMinimum();
     if (!gate.ok) {
       $("builder-progress").textContent = gate.msg;
@@ -1493,7 +1569,7 @@ function bindBuilder() {
     }
   });
 
-  $("btn-write").addEventListener("click", async () => {
+  $("btn-write")?.addEventListener("click", async () => {
     if (!distillResult) return;
     const kind = distillResult.materialKind || materialKind || "persona";
 
@@ -1608,7 +1684,7 @@ function bindBuilder() {
     }
   });
 
-  $("btn-discard").addEventListener("click", () => {
+  $("btn-discard")?.addEventListener("click", () => {
     distillResult = null;
     $("builder-review").classList.add("hidden");
     $("builder-progress").textContent = "已丢弃本次结果。";
@@ -7425,11 +7501,11 @@ function bindHelpAndTips() {
     tabsEl.querySelectorAll("[data-help-tab]").forEach((btn) => {
       btn.addEventListener("click", () => openHelp(activeTopic, btn.dataset.helpTab));
     });
-    $("help-modal").classList.remove("hidden");
+    $("help-modal")?.classList.remove("hidden");
   }
 
   function closeHelp() {
-    $("help-modal").classList.add("hidden");
+    $("help-modal")?.classList.add("hidden");
   }
 
   document.querySelectorAll("[data-help-topic]").forEach((btn) => {
@@ -7456,8 +7532,7 @@ function bindHelpAndTips() {
 
   function showTip(el) {
     if (!bubble || !el) return;
-    const text = tipTextFor(el);
-    if (!text) return;
+    const text = tipTextFor(el) || "暂无说明";
     if (tipHideTimer) {
       clearTimeout(tipHideTimer);
       tipHideTimer = null;
@@ -7484,27 +7559,183 @@ function bindHelpAndTips() {
     }, 120);
   }
 
-  function bindTipTarget(el) {
-    if (!el || el.dataset.tipBound === "1") return;
-    el.dataset.tipBound = "1";
-    el.addEventListener("mouseenter", () => showTip(el));
-    el.addEventListener("mouseleave", hideTipSoon);
-    el.addEventListener("focus", () => showTip(el));
-    el.addEventListener("blur", hideTipSoon);
-    el.addEventListener("click", (e) => {
-      // Don't let "?" inside tabs/buttons trigger the parent action alone without tip
-      if (el.classList.contains("tip-mark")) {
-        e.preventDefault();
-        e.stopPropagation();
-        showTip(el);
-      }
-    });
+  function tipTargetFrom(node) {
+    if (!node || !node.closest) return null;
+    return node.closest(".tip-mark, [data-tip-id]");
   }
 
-  document.querySelectorAll(".tip-mark, [data-tip-id]").forEach(bindTipTarget);
+  // Document delegation: survives missed per-node binds and late-rendered tips.
+  if (!document.documentElement.dataset.dmTipDelegate) {
+    document.documentElement.dataset.dmTipDelegate = "1";
+    document.addEventListener(
+      "pointerover",
+      (e) => {
+        const el = tipTargetFrom(e.target);
+        if (el) showTip(el);
+      },
+      true
+    );
+    document.addEventListener(
+      "pointerout",
+      (e) => {
+        const el = tipTargetFrom(e.target);
+        if (!el) return;
+        const related = tipTargetFrom(e.relatedTarget);
+        if (related === el) return;
+        hideTipSoon();
+      },
+      true
+    );
+    document.addEventListener(
+      "focusin",
+      (e) => {
+        const el = tipTargetFrom(e.target);
+        if (el) showTip(el);
+      },
+      true
+    );
+    document.addEventListener(
+      "focusout",
+      (e) => {
+        const el = tipTargetFrom(e.target);
+        if (el) hideTipSoon();
+      },
+      true
+    );
+    document.addEventListener(
+      "click",
+      (e) => {
+        const mark = e.target && e.target.closest && e.target.closest(".tip-mark");
+        if (!mark) return;
+        e.preventDefault();
+        e.stopPropagation();
+        showTip(mark);
+      },
+      true
+    );
+  }
 
-  // Expose for dynamically rendered rows if needed later
   window.digitalMeShowHelp = openHelp;
+  window.digitalMeShowTip = showTip;
+}
+
+/**
+ * Top-level inbox file pick — used by inbox + bootstrap actions.
+ * Must not live inside bindMe (that binder used to throw before reaching nested handlers).
+ */
+async function pickIntoInbox(doneHint) {
+  updateInboxProgressSummary({
+    headline: "正在打开文件选择…",
+    current: "请在系统对话框中选择文件。",
+    resetDetail: true,
+    appendDetail: "正在打开文件选择…",
+  });
+  let files;
+  try {
+    files = await window.digitalMe.pickFile();
+  } catch (e) {
+    const msg = String((e && e.message) || e || "未知错误");
+    updateInboxProgressSummary({
+      headline: "无法打开文件选择",
+      current: msg,
+      appendDetail: "无法打开文件选择：" + msg,
+    });
+    return;
+  }
+  const list = Array.isArray(files) ? files : files ? [files] : [];
+  if (!list.length) {
+    updateInboxProgressSummary({
+      headline: "未选择文件",
+      current: "未选择文件。可再次点击提交。",
+      appendDetail: "未选择文件。",
+    });
+    return;
+  }
+  const names = list
+    .map((f) => {
+      if (!f) return "";
+      if (f.name) return String(f.name);
+      const fp = String(f.filePath || f.path || "");
+      const parts = fp.split(/[/\\]/);
+      return parts[parts.length - 1] || fp;
+    })
+    .filter(Boolean);
+  const namePreview =
+    names.slice(0, 5).join("、") + (names.length > 5 ? ` 等 ${names.length} 个` : "");
+  updateInboxProgressSummary({
+    headline: `已选择 ${list.length} 个文件`,
+    current: namePreview || `共 ${list.length} 个文件`,
+    countsText: String(list.length),
+    appendDetail: `已选择 ${list.length} 个文件：${namePreview || "（无文件名）"}`,
+  });
+  let r;
+  try {
+    r = await window.digitalMe.enqueueInbox(list);
+  } catch (e) {
+    const msg = String((e && e.message) || e || "未知错误");
+    updateInboxProgressSummary({
+      headline: "材料入库失败",
+      current: msg,
+      appendDetail: "材料入库失败：" + msg,
+    });
+    return;
+  }
+  const addedLen = r && Array.isArray(r.added) ? r.added.length : list.length;
+  hideBuildDoneBanner();
+  updateInboxProgressSummary({
+    headline: "已投入材料",
+    current: doneHint || `已投入 ${addedLen} 个文件。下一步：点「智能构建」。`,
+    countsText: `+${addedLen}`,
+    resetDetail: true,
+    appendDetail: `已投入 ${addedLen} 个文件。可直接点「智能构建」。`,
+  });
+  await refreshInboxPanel();
+}
+
+/** Document-level bootstrap file actions — independent of bindMe success. */
+function bindBootstrapFileActions() {
+  const resume = $("btn-bootstrap-resume");
+  if (resume) {
+    if (!resume.getAttribute("title")) {
+      resume.setAttribute("title", "选择履历或经历类文件并加入待处理材料");
+    }
+    if (!resume.getAttribute("aria-label")) {
+      resume.setAttribute("aria-label", "提交履历类文件");
+    }
+  }
+  const assess = $("btn-bootstrap-assessment-file");
+  if (assess) {
+    if (!assess.getAttribute("title")) {
+      assess.setAttribute("title", "选择判断或评测类文件并加入待处理材料");
+    }
+    if (!assess.getAttribute("aria-label")) {
+      assess.setAttribute("aria-label", "提交判断类文件");
+    }
+  }
+
+  if (document.documentElement.dataset.dmBootstrapDelegate === "1") return;
+  document.documentElement.dataset.dmBootstrapDelegate = "1";
+  document.addEventListener(
+    "click",
+    (e) => {
+      const btn = e.target && e.target.closest && e.target.closest("button");
+      if (!btn || !btn.id) return;
+      if (btn.id === "btn-bootstrap-resume") {
+        e.preventDefault();
+        pickIntoInbox(
+          "已提交履历类材料。建议再完成自我评测或提交判断类文件，然后点击「开始构建」。"
+        );
+        return;
+      }
+      if (btn.id === "btn-bootstrap-assessment-file") {
+        e.preventDefault();
+        pickIntoInbox(
+          "已提交判断类材料。若尚无履历，请提交简历或填写「经历概要」，然后点击「开始构建」。"
+        );
+      }
+    },
+    false
+  );
 }
 
 function bindMe() {
@@ -7531,16 +7762,18 @@ function bindMe() {
   }
   const mindBuild = $("btn-mind-goto-build");
   if (mindBuild) mindBuild.addEventListener("click", () => goBuildView());
-  $("btn-me-goto-cognition").addEventListener("click", () => switchMeTab("cognition"));
-  $("btn-me-goto-timeline").addEventListener("click", () => switchMeTab("timeline"));
-  $("btn-me-goto-mind").addEventListener("click", () => switchMeTab("mind"));
-  $("btn-me-goto-boundaries").addEventListener("click", () => switchMeTab("boundaries"));
-  $("btn-cognition-refresh").addEventListener("click", () => refreshCognitionPanel());
-  $("btn-distill-mind-hooks").addEventListener("click", async () => {
+  $("btn-me-goto-cognition")?.addEventListener("click", () => switchMeTab("cognition"));
+  $("btn-me-goto-timeline")?.addEventListener("click", () => switchMeTab("timeline"));
+  $("btn-me-goto-mind")?.addEventListener("click", () => switchMeTab("mind"));
+  $("btn-me-goto-boundaries")?.addEventListener("click", () => switchMeTab("boundaries"));
+  $("btn-cognition-refresh")?.addEventListener("click", () => refreshCognitionPanel());
+  $("btn-distill-mind-hooks")?.addEventListener("click", async () => {
     const msg = $("cognition-msg");
+    if (!msg) return;
     msg.textContent = "正在一键写入观念线索…";
     msg.dataset.keep = "1";
-    $("btn-distill-mind-hooks").disabled = true;
+    const distillBtn = $("btn-distill-mind-hooks");
+    if (distillBtn) distillBtn.disabled = true;
     const reviewBtn = $("btn-distill-mind-hooks-review");
     if (reviewBtn) reviewBtn.disabled = true;
     try {
@@ -7558,7 +7791,7 @@ function bindMe() {
       msg.textContent = "写入失败：" + (e.message || e);
     } finally {
       delete msg.dataset.keep;
-      $("btn-distill-mind-hooks").disabled = false;
+      if (distillBtn) distillBtn.disabled = false;
       if (reviewBtn) reviewBtn.disabled = false;
       await refreshCognitionPanel();
     }
@@ -7590,11 +7823,13 @@ function bindMe() {
       }
     });
   }
-  $("btn-cognition-report").addEventListener("click", async () => {
+  $("btn-cognition-report")?.addEventListener("click", async () => {
     const msg = $("cognition-msg");
+    if (!msg) return;
     msg.textContent = "正在生成自我认知简报…";
     msg.dataset.keep = "1";
-    $("btn-cognition-report").disabled = true;
+    const reportBtn = $("btn-cognition-report");
+    if (reportBtn) reportBtn.disabled = true;
     try {
       const r = await window.digitalMe.generateCognitionReport();
       msg.textContent = `已生成「${r.item.title}」，可在「工作台 · 写作」中打开与导出。`;
@@ -7602,85 +7837,85 @@ function bindMe() {
       msg.textContent = "生成失败：" + (e.message || e);
     } finally {
       delete msg.dataset.keep;
-      $("btn-cognition-report").disabled = false;
+      if (reportBtn) reportBtn.disabled = false;
     }
   });
-  $("btn-cognition-add-person").addEventListener("click", async () => {
-    const name = $("cognition-person-name").value.trim();
-    const relationType = $("cognition-person-type").value.trim() || "其他";
+  $("btn-cognition-add-person")?.addEventListener("click", async () => {
+    const name = ($("cognition-person-name")?.value || "").trim();
+    const relationType = ($("cognition-person-type")?.value || "").trim() || "其他";
     if (!name) {
-      $("cognition-msg").textContent = "请填写关系人姓名";
+      if ($("cognition-msg")) $("cognition-msg").textContent = "请填写关系人姓名";
       return;
     }
     const r = await window.digitalMe.upsertLifePerson({ name, relationType, context: "手动添加", confidence: "medium" });
     if (!r.ok) {
-      $("cognition-msg").textContent = "添加失败（可能已存在）";
+      if ($("cognition-msg")) $("cognition-msg").textContent = "添加失败（可能已存在）";
       return;
     }
-    $("cognition-person-name").value = "";
-    $("cognition-person-type").value = "";
-    $("cognition-msg").textContent = `已添加关系人「${name}」`;
+    if ($("cognition-person-name")) $("cognition-person-name").value = "";
+    if ($("cognition-person-type")) $("cognition-person-type").value = "";
+    if ($("cognition-msg")) $("cognition-msg").textContent = `已添加关系人「${name}」`;
     lifeGraphCache = null;
     await refreshCognitionPanel();
   });
-  $("btn-life-refresh").addEventListener("click", refreshMeView);
-  $("btn-life-add").addEventListener("click", () => openLifeEditor(null));
-  $("btn-life-editor-close").addEventListener("click", () => {
-    $("life-event-editor").classList.add("hidden");
+  $("btn-life-refresh")?.addEventListener("click", refreshMeView);
+  $("btn-life-add")?.addEventListener("click", () => openLifeEditor(null));
+  $("btn-life-editor-close")?.addEventListener("click", () => {
+    $("life-event-editor")?.classList.add("hidden");
   });
-  $("btn-life-save").addEventListener("click", async () => {
+  $("btn-life-save")?.addEventListener("click", async () => {
     const payload = {
-      id: $("life-edit-id").value || undefined,
-      when: $("life-edit-when").value.trim(),
-      what: $("life-edit-what").value.trim(),
-      roleLabels: $("life-edit-roles").value
+      id: $("life-edit-id")?.value || undefined,
+      when: ($("life-edit-when")?.value || "").trim(),
+      what: ($("life-edit-what")?.value || "").trim(),
+      roleLabels: ($("life-edit-roles")?.value || "")
         .split(/[,，、]/)
         .map((s) => s.trim())
         .filter(Boolean),
-      org: $("life-edit-org").value.trim(),
-      outcome: $("life-edit-outcome").value.trim(),
+      org: ($("life-edit-org")?.value || "").trim(),
+      outcome: ($("life-edit-outcome")?.value || "").trim(),
       facets: ["roles"],
     };
-    $("life-editor-msg").textContent = "保存中…";
+    if ($("life-editor-msg")) $("life-editor-msg").textContent = "保存中…";
     const res = await window.digitalMe.upsertLifeEvent(payload);
     if (!res.ok) {
-      $("life-editor-msg").textContent = res.error || "保存失败";
+      if ($("life-editor-msg")) $("life-editor-msg").textContent = res.error || "保存失败";
       return;
     }
     pkg = await window.digitalMe.loadPackage();
     await refreshMeView();
-    $("life-event-editor").classList.add("hidden");
-    $("life-editor-msg").textContent = "";
+    $("life-event-editor")?.classList.add("hidden");
+    if ($("life-editor-msg")) $("life-editor-msg").textContent = "";
   });
-  $("btn-life-delete").addEventListener("click", async () => {
-    const id = $("life-edit-id").value;
+  $("btn-life-delete")?.addEventListener("click", async () => {
+    const id = $("life-edit-id")?.value;
     if (!id) return;
     if (!window.confirm("确定从时间轴删除此事件？")) return;
     const res = await window.digitalMe.deleteLifeEvent(id);
     if (!res.ok) {
-      $("life-editor-msg").textContent = res.error || "删除失败";
+      if ($("life-editor-msg")) $("life-editor-msg").textContent = res.error || "删除失败";
       return;
     }
     pkg = await window.digitalMe.loadPackage();
     await refreshMeView();
-    $("life-event-editor").classList.add("hidden");
+    $("life-event-editor")?.classList.add("hidden");
   });
-  $("btn-boundary-add").addEventListener("click", async () => {
-    const text = $("boundary-text").value.trim();
-    const scope = $("boundary-scope").value;
-    $("boundary-msg").textContent = "保存中…";
+  $("btn-boundary-add")?.addEventListener("click", async () => {
+    const text = ($("boundary-text")?.value || "").trim();
+    const scope = $("boundary-scope")?.value;
+    if ($("boundary-msg")) $("boundary-msg").textContent = "保存中…";
     const res = await window.digitalMe.addBoundary({ text, scope });
     if (!res.ok) {
-      $("boundary-msg").textContent = res.error || "添加失败";
+      if ($("boundary-msg")) $("boundary-msg").textContent = res.error || "添加失败";
       return;
     }
-    $("boundary-text").value = "";
+    if ($("boundary-text")) $("boundary-text").value = "";
     pkg = await window.digitalMe.loadPackage();
     await renderBoundaries();
     renderMeOverview();
     $("boundary-msg").textContent = "已添加，对话将遵守";
   });
-  $("btn-boundary-restore").addEventListener("click", async () => {
+  $("btn-boundary-restore")?.addEventListener("click", async () => {
     const ok = window.confirm("将重新启用全部系统默认边界（保留你追加的个人条目）。确定？");
     if (!ok) return;
     const res = await window.digitalMe.restoreBoundaryDefaults({ confirmed: true });
@@ -7721,76 +7956,7 @@ function bindMe() {
     }
   });
 
-  async function pickIntoInbox(doneHint) {
-    updateInboxProgressSummary({
-      headline: "正在打开文件选择…",
-      current: "请在系统对话框中选择文件。",
-      resetDetail: true,
-      appendDetail: "正在打开文件选择…",
-    });
-    let files;
-    try {
-      files = await window.digitalMe.pickFile();
-    } catch (e) {
-      const msg = String((e && e.message) || e || "未知错误");
-      updateInboxProgressSummary({
-        headline: "无法打开文件选择",
-        current: msg,
-        appendDetail: "无法打开文件选择：" + msg,
-      });
-      return;
-    }
-    const list = Array.isArray(files) ? files : files ? [files] : [];
-    if (!list.length) {
-      updateInboxProgressSummary({
-        headline: "未选择文件",
-        current: "未选择文件。可再次点击提交。",
-        appendDetail: "未选择文件。",
-      });
-      return;
-    }
-    const names = list
-      .map((f) => {
-        if (!f) return "";
-        if (f.name) return String(f.name);
-        const fp = String(f.filePath || f.path || "");
-        const parts = fp.split(/[/\\]/);
-        return parts[parts.length - 1] || fp;
-      })
-      .filter(Boolean);
-    const namePreview =
-      names.slice(0, 5).join("、") + (names.length > 5 ? ` 等 ${names.length} 个` : "");
-    updateInboxProgressSummary({
-      headline: `已选择 ${list.length} 个文件`,
-      current: namePreview || `共 ${list.length} 个文件`,
-      countsText: String(list.length),
-      appendDetail: `已选择 ${list.length} 个文件：${namePreview || "（无文件名）"}`,
-    });
-    let r;
-    try {
-      r = await window.digitalMe.enqueueInbox(list);
-    } catch (e) {
-      const msg = String((e && e.message) || e || "未知错误");
-      updateInboxProgressSummary({
-        headline: "材料入库失败",
-        current: msg,
-        appendDetail: "材料入库失败：" + msg,
-      });
-      return;
-    }
-    const addedLen = r && Array.isArray(r.added) ? r.added.length : list.length;
-    hideBuildDoneBanner();
-    updateInboxProgressSummary({
-      headline: "已投入材料",
-      current: doneHint || `已投入 ${addedLen} 个文件。下一步：点「智能构建」。`,
-      countsText: `+${addedLen}`,
-      resetDetail: true,
-      appendDetail: `已投入 ${addedLen} 个文件。可直接点「智能构建」。`,
-    });
-    await refreshInboxPanel();
-  }
-
-  $("btn-inbox-pick").addEventListener("click", () => pickIntoInbox());
+  $("btn-inbox-pick")?.addEventListener("click", () => pickIntoInbox());
 
   const scrollIntake = $("btn-bootstrap-scroll-intake");
   if (scrollIntake) {
@@ -7800,20 +7966,9 @@ function bindMe() {
       renderIntakeForm();
     });
   }
-  const bootResume = $("btn-bootstrap-resume");
-  if (bootResume) {
-    bootResume.addEventListener("click", () =>
-      pickIntoInbox("已提交履历类材料。建议再完成自我评测或提交判断类文件，然后点击「开始构建」。")
-    );
-  }
-  const bootAssess = $("btn-bootstrap-assessment-file");
-  if (bootAssess) {
-    bootAssess.addEventListener("click", () =>
-      pickIntoInbox("已提交判断类材料。若尚无履历，请提交简历或填写「经历概要」，然后点击「开始构建」。")
-    );
-  }
+  // Bootstrap resume/assessment buttons: document delegation in bindBootstrapFileActions.
 
-  $("btn-inbox-organize").addEventListener("click", async () => {
+  $("btn-inbox-organize")?.addEventListener("click", async () => {
     $("btn-inbox-organize").disabled = true;
     hideBuildDoneBanner();
     updateInboxProgressSummary({
@@ -7869,7 +8024,7 @@ function bindMe() {
     });
   }
 
-  $("btn-inbox-smart").addEventListener("click", async () => {
+  $("btn-inbox-smart")?.addEventListener("click", async () => {
     const SMART_BATCH = 20;
     goBuildView();
     setProgressSink("inbox-progress");
@@ -8045,7 +8200,7 @@ function bindMe() {
     }
   });
 
-  $("btn-inbox-confirm-all").addEventListener("click", async () => {
+  $("btn-inbox-confirm-all")?.addEventListener("click", async () => {
     const queue = await window.digitalMe.listInbox();
     const ready = (queue.items || []).filter(
       (it) =>
@@ -8119,7 +8274,7 @@ function bindMe() {
     }
   });
 
-  $("btn-access-add").addEventListener("click", async () => {
+  $("btn-access-add")?.addEventListener("click", async () => {
     const r = await window.digitalMe.addAccessScope();
     if (r.canceled) return;
     if (!r.ok) {
@@ -8140,7 +8295,7 @@ function bindMe() {
     await refreshInboxPanel();
   });
 
-  $("btn-access-scan").addEventListener("click", async () => {
+  $("btn-access-scan")?.addEventListener("click", async () => {
     updateInboxProgressSummary({
       headline: "正在扫描…",
       current: "扫描所有可读文件夹",
@@ -8158,4 +8313,11 @@ function bindMe() {
   });
 }
 
-init();
+init().catch((err) => {
+  console.error("[Digital Me] init failed", err);
+  try {
+    reportInitError("应用初始化失败", err);
+  } catch {
+    /* ignore */
+  }
+});

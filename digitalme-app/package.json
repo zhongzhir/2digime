@@ -12,7 +12,7 @@
     "test:p1-03": "node scripts/test-p1-03-subject-overview.cjs",
     "test:p1-04": "node scripts/test-p1-04-policy-decision-audit.cjs",
     "test:p1-05": "node scripts/test-p1-05-tool-broker.cjs",
-    "test:bootstrap-submit": "node scripts/test-bootstrap-file-submit.cjs",
+    "test:bootstrap-submit": "node scripts/test-bootstrap-file-submit.cjs && node scripts/test-renderer-ui-bindings.cjs",
     "test:p1-phase1": "npm run test:p1-01 && npm run test:p1-02 && npm run test:p1-03 && npm run test:p1-04 && npm run test:p1-05 && npm run test:bootstrap-submit"
   },
   "keywords": [

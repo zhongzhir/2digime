@@ -5,6 +5,20 @@
 
 ---
 
+## 2026-07-17（UI · 引导按钮与问号绑定失效）
+
+### 结论
+
+- 根因：`bindMe` 对页面中不存在的 `btn-me-goto-*` 调用 `addEventListener` 抛错，后续 `bindHelpAndTips` 与引导按钮绑定未执行；`onExternalAgentStarted` 也曾排在 `bindEvents` 之后。
+- 修复：各 `bind*` 隔离错误；引导按钮改为 document 委托；问号支持悬浮/点击/focus，无文案显示「暂无说明」；监听在 init 最早注册。
+
+### 验证
+
+- `npm run test:bootstrap-submit`（含真实页面绑定韧性测试）通过
+- 复验前须完全退出并重启 Digital Me，避免旧 renderer 缓存
+
+---
+
 ## 2026-07-17（构建页 · 引导材料提交反馈）
 
 ### 结论
