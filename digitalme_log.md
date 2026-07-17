@@ -5,6 +5,31 @@
 
 ---
 
+## 2026-07-17（P1-07 · Owner 验收修复：审阅布局与写入状态 · statically_verified）
+
+### Owner 验收发现
+
+- 审阅区 buried 在「更多方式」/页面底部，不可发现
+- 提取完成后即标记 `written`，与真实 Package commit 脱节
+- 智能构建取消后仍可能显示「已写入」
+- 版本区无变化是因为没有真实 commit
+
+### 修复
+
+- 「审阅后写入」移至待处理材料主操作区；审阅区 DOM 上移至待处理列表之后、自我评测之前
+- inbox 新增 `awaiting_review`；仅 PackageStore commit 成功且 revision 有效时标记 `written`
+- `autoWriteDistillResult` / `runMaterialPipeline` 返回 `committed/cancelled/skipped/revision`
+- 审阅队列按 materialKind 顺序处理；放弃恢复 `suggested`
+- 版本区：无 commit 时「尚无可恢复版本」；刷新显示时间戳
+- 新增 `npm run test:p1-07-owner-runtime`（8/8 Electron 行为测试）
+
+### 验证
+
+- `test:p1-07` 38/38；`test:p1-07-owner-runtime` 8/8；`test:p1-phase1` 通过
+- 未触碰真实 Package
+
+---
+
 ## 2026-07-17（P1-07 · Codex 第二轮复核修复 · statically_verified）
 
 ### 结论

@@ -170,9 +170,16 @@ app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
   if (process.env.DIGITALME_OWNER_RUNTIME_TEST === "1") {
-    const harness = require("../scripts/owner-runtime-harness.cjs");
+    const harness =
+      process.env.DIGITALME_P107_OWNER_RUNTIME === "1"
+        ? require("../scripts/p1-07-owner-runtime-harness.cjs")
+        : require("../scripts/owner-runtime-harness.cjs");
+    const run =
+      process.env.DIGITALME_P107_OWNER_RUNTIME === "1"
+        ? harness.runP107OwnerRuntimeHarness
+        : harness.runOwnerRuntimeHarness;
     Promise.resolve()
-      .then(() => harness.runOwnerRuntimeHarness({ BrowserWindow, app }))
+      .then(() => run({ BrowserWindow, app }))
       .then((code) => {
         quitting = true;
         quitForceConfirmed = true;

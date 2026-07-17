@@ -241,7 +241,7 @@ git status --short --branch
 ## 15. 完成定义（DoD）
 
 - [x] 范围内直写路径已关闭，统一 preview → 确认 → PackageStore commit
-- [x] 测试矩阵自动化通过（hermetic；`npm run test:p1-07` 38/38；`test:p1-phase1` 通过）
+- [x] 测试矩阵自动化通过（hermetic；`npm run test:p1-07` 38/38；`test:p1-07-owner-runtime` 8/8；`test:p1-phase1` 通过）
 - [ ] Owner 沙盒验收通过（仅临时测试资料）
 - [ ] Codex 架构 / 安全 / 回归复核通过（第一、二轮发现问题已修复；待再复核）
 - [x] 能力状态表与日志已更新；**仍明确** Policies / 认知页直写 / MCP / 协作未迁
@@ -262,6 +262,15 @@ git status --short --branch
 2. **来源边界**：IPC 不接受 `sourceMeta`；主进程生成 `src_life_` + UUID；测试仅 `injectSourceMeta`。
 3. **归档日志脱敏**：仅固定码 `archive_failed`，不记录 message/路径。
 
+### Owner 验收修复摘要（保持 statically_verified）
+
+1. **审阅可发现**：「审阅后写入」在主操作区；`#builder-review` 位于待处理材料之后、自我评测之前；`renderReview` 自动切构建 lane、滚动并聚焦。
+2. **状态与 commit 绑定**：`awaiting_review` / `written` 仅随真实 Package commit；取消/放弃/预览失败不标 written。
+3. **智能构建**：`committed===true` 才计数与展示「本批已写入」；取消显示「已取消，资料未写入」。
+4. **审阅队列**：按 kind 顺序；commit 成功才 written；放弃恢复 suggested。
+5. **版本区**：无 commit →「尚无可恢复版本」；commit 后刷新 revision/可恢复版本。
+6. **Electron 测试**：`npm run test:p1-07-owner-runtime` 8/8。
+
 ---
 
-**当前状态说明**：Codex 第二轮复核修复已落地（`statically_verified`）。等待再复核与 Owner 临时测试资料验收；通过前不得标 `accepted`。
+**当前状态说明**：Codex 第二轮与 Owner 验收修复已落地（`statically_verified`）。等待再复核与 Owner 临时测试资料验收；通过前不得标 `accepted`。

@@ -592,10 +592,12 @@
                     <div class="inbox-cta-row">
                       <button id="btn-inbox-pick" type="button" data-tip-id="inbox-pick">① 提交文件</button>
                       <button id="btn-inbox-smart" type="button" class="btn-primary" data-tip-id="inbox-smart">② 开始构建</button>
+                      <button id="btn-inbox-review" type="button" class="btn-ghost" data-tip-id="inbox-review">③ 审阅后写入</button>
                       <button id="btn-inbox-cancel" type="button" class="btn-ghost hidden">中断</button>
                     </div>
                   </div>
                   <p class="muted life-hint">两步即可：提交文件 → 开始构建。系统会建议用途并写入数字之我；单次约处理 20 份，过长文本会取开头与结尾。处理过程仅在本页显示。</p>
+                  <p class="muted life-hint inbox-mode-hint">「开始构建」为少决策模式，写入前仍会弹出确认；「审阅后写入」可逐条选择事实、推断与声明后再写入。</p>
                   <p id="inbox-queue-status" class="inbox-queue-status muted"></p>
                   <div id="inbox-progress-card" class="build-progress-card hidden">
                     <div class="build-progress-head">
@@ -619,12 +621,21 @@
                     <summary>更多方式（一般不用）</summary>
                     <div class="inbox-more-actions-row">
                       <button id="btn-inbox-organize" type="button" class="btn-ghost">仅整理不写入</button>
-                      <button id="btn-inbox-confirm-all" type="button" class="btn-ghost">按建议进入审阅</button>
                     </div>
-                    <p class="muted life-hint" style="margin-bottom:0">日常请使用「开始构建」。若需逐条勾选后再写入，可使用审阅方式。</p>
+                    <p class="muted life-hint" style="margin-bottom:0">日常请使用「开始构建」。若需逐条勾选后再写入，请点上方「审阅后写入」。</p>
                   </details>
                   <div id="inbox-empty" class="artifact-empty">尚无材料。请点击「提交文件」，或在下方授权文件夹后扫描。</div>
                   <div id="inbox-list" class="library-list"></div>
+                </div>
+                <div id="builder-review" class="builder-review hidden">
+                  <h3 id="builder-review-title" tabindex="-1">处理结果（勾选要留下的，再写入）</h3>
+                  <p class="review-hint">默认全选。去掉不想写入的条目；至少保留一条才能写入。写入前会生成预览，确认后才会形成新版本。</p>
+                  <div id="review-content"></div>
+                  <div id="builder-write-preview" class="builder-write-preview hidden" aria-live="polite"></div>
+                  <div class="review-actions">
+                    <button id="btn-write" type="button">预览并确认写入</button>
+                    <button id="btn-discard" class="btn-ghost" type="button">放弃</button>
+                  </div>
                 </div>
                 <div class="output-card bootstrap-card" id="bootstrap-guide">
                   <div class="ext-store-head">
@@ -701,16 +712,6 @@
                   </div>
                 </details>
                 <div id="builder-progress" class="builder-progress"></div>
-                <div id="builder-review" class="builder-review hidden">
-                  <h3>处理结果（勾选要留下的，再写入）</h3>
-                  <p class="review-hint">默认全选。去掉不想写入的条目；至少保留一条才能写入。写入前会生成预览，确认后才会形成新版本。</p>
-                  <div id="review-content"></div>
-                  <div id="builder-write-preview" class="builder-write-preview hidden" aria-live="polite"></div>
-                  <div class="review-actions">
-                    <button id="btn-write" type="button">预览并确认写入</button>
-                    <button id="btn-discard" class="btn-ghost" type="button">放弃</button>
-                  </div>
-                </div>
               </div>
 
               <!-- 数字之我：成品与校对 -->
