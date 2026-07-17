@@ -1,6 +1,6 @@
 # P1-04 任务包：PolicyEngine 与可信决策记录最小强制切片
 
-状态：statically_verified（第三轮 Codex 复核要求已落地；待再复核，暂缓 Owner 沙盒验收）
+状态：accepted（25/25 自动验证、三轮 Codex 安全复核与 Owner 真实 Electron 沙盒验收均通过；外部执行体已在验收后关闭）
 阶段：第一阶段 / WP2（策略强制与可信审计切片）
 前置任务：P1-00～P1-03 已接受
 规格依据：`digitalme_phase1_subject_upgrade_plan_v0.1.md` §3 WP2

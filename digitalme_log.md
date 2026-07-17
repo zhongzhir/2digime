@@ -5,6 +5,39 @@
 
 ---
 
+## 2026-07-17（P1-04 accepted · PolicyEngine 与 DecisionAudit 真实验收完成）
+
+### 结论
+
+- 编号：`P1-04`
+- 分支：`codex/p1-04-policy-decision-audit`
+- 实现提交：`9929e8b`、`0e19106`、`6fc6046`
+- 状态：`accepted`
+- 能力状态：PolicyEngine 与 DecisionAudit 外部 CLI 切片提升为 `runtime_verified`；External CLI 仍为 `implemented`、实验性且未沙箱化
+
+### 技术复核证据
+
+- `npm run test:p1-04`：25/25；P1-01～P1-03 全量回归通过；语法检查与 `git diff --check` 通过；
+- 三轮 Codex 安全复核完成；账本删除、篡改、半行、meta 方向错误、跨代连接错误、sender/decision/config 漂移均按 fail-closed 处理；
+- P1-00 Package 基线逐文件一致，清单 SHA-256：`3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a`。
+
+### Owner 验收证据
+
+- 确认摘要可理解：通过；
+- 取消后执行体未启动且存在取消记录：通过；
+- 成功执行与完整事件链：通过；
+- 失败执行与失败记录：通过；
+- 新旧代次可查看且全局完整性正常：通过；
+- 应用重启后记录与完整性状态一致：通过；
+- 验收结束后外部执行体已关闭。
+
+### 边界与下一步
+
+- 该验收只证明一个外部 CLI 切片的策略确认与可信记录链，不证明任意外部程序已安全沙箱化；现有 `shell: true`、完整 `process.env`、任意命令与工作目录风险仍必须由下一任务收敛；
+- 下一唯一主任务：`P1-05 ToolBroker 与外部 CLI 最小隔离切片`，任务包 `digitalme_phase1_task_P1-05_tool_broker.md`；MCP 迁移和外部协作骨架不得并行启动。
+
+---
+
 ## 2026-07-17（P1-04 第三轮修订 · meta 恢复方向与跨代连接）
 
 ### 结论
