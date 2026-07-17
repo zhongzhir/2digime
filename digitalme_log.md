@@ -5,6 +5,23 @@
 
 ---
 
+## 2026-07-17（测试 · Phase1 hermetic，真实 Package 基线拆出）
+
+### 结论
+
+- `npm run test:p1-phase1` 改为仅 hermetic 回归：用确定性临时 Package fixture，不读取、不依赖本机 `digital-me-package/**`
+- P1-04 #19、P1-05 #13、P1-06 #13 改为临时 fixture 指纹校验，并在结束后清理临时目录
+- 真实 Package 相对 P1-00 基线校验拆为独立命令：`npm run test:p1-baseline-real`（本机资料漂移可失败，不阻断功能回归）
+- 未修改生产资料与 SecretStore / PackageStore / Builder / ToolBroker 业务实现
+
+### 验证
+
+- `npm run test:p1-04`：25/25；`npm run test:p1-06`：14/14；`npm run test:p1-phase1`：通过（hermetic）
+- `npm run test:p1-baseline-real`：本机资料相对 P1-00 已漂移则失败（预期可接受，不阻断 phase1）
+- `node --check` 相关测试脚本；`git diff --check`
+
+---
+
 ## 2026-07-17（设置 · 临时资料收窄为高级测试工具）
 
 ### 结论
@@ -20,7 +37,7 @@
 - `npm run test:settings-temp-package`（结构 / 确认 / 取消 / 警告 / 恢复 / 防抖）
 - `npm run test:p1-03` / `test:p1-06` / `test:p1-phase1`
 - `node --check`（main / preload / renderer / sandbox-package-state）；`git diff --check`
-- 说明：若本地 gitignored `digital-me-package/**` 相对 P1-00 基线漂移，P1-04 #19 / P1-06 #12–13 可能失败，与本次设置页收窄无关
+- 说明：真实 Package 基线已拆至 `test:p1-baseline-real`；本机资料漂移不再阻断 hermetic `test:p1-phase1`
 
 ---
 

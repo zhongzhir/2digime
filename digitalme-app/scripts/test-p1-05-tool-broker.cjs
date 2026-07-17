@@ -1,15 +1,15 @@
 "use strict";
 
 /**
- * P1-05 ToolBroker + local_cli isolation slice tests.
+ * P1-05 ToolBroker + local_cli isolation slice tests (hermetic package checks).
  * Uses real child_process paths for Windows-relevant failure cases.
+ * Does not read the real digital-me-package tree; real baseline is test:p1-baseline-real.
  * Run: node scripts/test-p1-05-tool-broker.cjs
  */
 
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const crypto = require("node:crypto");
 const assert = require("node:assert/strict");
 
 const toolBroker = require("../src/tool-broker");
@@ -28,8 +28,11 @@ const externalAgentFlow = require("../src/orchestration/external-agent-flow");
 const agentsLib = require("../src/orchestration/agents");
 const delegateRuntime = require("../src/orchestration/delegate-runtime");
 
-const DEFAULT_PKG = path.join(__dirname, "..", "..", "digital-me-package");
-const P100_BASELINE = path.join(__dirname, "..", "..", "build", "reports", "p1-00-package-baseline.json");
+const {
+  createHermeticPackageFixture,
+  cleanupHermeticPackageFixture,
+  fingerprintPackage,
+} = require("./hermetic-package-fixture.cjs");
 const PRELOAD_PATH = path.join(__dirname, "..", "src", "preload.js");
 const RENDERER_APP = path.join(__dirname, "..", "src", "renderer", "app.js");
 const MAIN_PATH = path.join(__dirname, "..", "src", "main.js");
@@ -97,10 +100,6 @@ function agentsModule(userData, runImpl) {
   };
 }
 
-function sha256File(target) {
-  return crypto.createHash("sha256").update(fs.readFileSync(target)).digest("hex");
-}
-
 /** Same-length UTF-16LE in-place replacements (keeps PE layout; breaks Authenticode). */
 function patchUtf16leStrings(filePath, pairs) {
   let buf = Buffer.from(fs.readFileSync(filePath));
@@ -149,28 +148,6 @@ function replaceExecutableFile(target, fill) {
     /* ignore */
   }
   throw lastErr || new Error("replaceExecutableFile failed");
-}
-
-function walkFiles(root) {
-  const out = [];
-  function walk(dir) {
-    const names = fs.readdirSync(dir).sort();
-    for (const name of names) {
-      const full = path.join(dir, name);
-      const st = fs.lstatSync(full);
-      if (st.isDirectory()) walk(full);
-      else {
-        out.push({
-          relativePath: path.relative(root, full).split(path.sep).join("/"),
-          size: st.size,
-          sha256: sha256File(full),
-        });
-      }
-    }
-  }
-  walk(root);
-  out.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
-  return out;
 }
 
 function nodePlan(args, overrides = {}) {
@@ -728,17 +705,16 @@ async function runAllTests() {
     assert.ok(/codeStopBusy|正在停止/.test(fs.readFileSync(RENDERER_APP, "utf8")));
   });
 
-  await test("13. Package baseline unchanged (P1-00)", () => {
-    assert.ok(fs.existsSync(P100_BASELINE), "missing p1-00 baseline report");
-    const baseline = JSON.parse(fs.readFileSync(P100_BASELINE, "utf8"));
-    assert.ok(baseline && Array.isArray(baseline.files) && baseline.files.length > 0);
-    assert.ok(fs.existsSync(DEFAULT_PKG));
-    const current = walkFiles(DEFAULT_PKG);
-    assert.equal(current.length, baseline.files.length);
-    for (let i = 0; i < baseline.files.length; i++) {
-      assert.equal(current[i].relativePath, baseline.files[i].relativePath);
-      assert.equal(current[i].sha256, baseline.files[i].sha256);
-      assert.equal(current[i].size, baseline.files[i].size);
+  await test("13. hermetic package fixture fingerprint is stable (no real package)", () => {
+    const { packageDir, expected, fingerprint } = createHermeticPackageFixture("p105");
+    try {
+      assert.deepEqual(fingerprint, expected);
+      assert.deepEqual(fingerprintPackage(packageDir), expected);
+      assert.ok(expected.fileCount >= 5);
+      assert.ok(!packageDir.includes("digital-me-package"));
+    } finally {
+      cleanupHermeticPackageFixture(packageDir);
+      assert.equal(fs.existsSync(packageDir), false);
     }
   });
 

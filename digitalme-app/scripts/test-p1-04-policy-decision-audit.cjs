@@ -1,14 +1,14 @@
 "use strict";
 
 /**
- * P1-04 PolicyEngine + DecisionAudit + external CLI gate tests.
+ * P1-04 PolicyEngine + DecisionAudit + external CLI gate tests (hermetic).
+ * Does not read the real digital-me-package tree; real baseline is test:p1-baseline-real.
  * Run: node scripts/test-p1-04-policy-decision-audit.cjs
  */
 
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const crypto = require("node:crypto");
 const assert = require("node:assert/strict");
 const { spawnSync } = require("node:child_process");
 const {
@@ -24,9 +24,11 @@ const externalAgentFlow = require("../src/orchestration/external-agent-flow");
 const agentsLib = require("../src/orchestration/agents");
 const { buildEntryHash } = require("../src/decision-audit/hash");
 const toolBroker = require("../src/tool-broker");
-
-const DEFAULT_PKG = path.join(__dirname, "..", "..", "digital-me-package");
-const P100_BASELINE = path.join(__dirname, "..", "..", "build", "reports", "p1-00-package-baseline.json");
+const {
+  createHermeticPackageFixture,
+  cleanupHermeticPackageFixture,
+  fingerprintPackage,
+} = require("./hermetic-package-fixture.cjs");
 
 let passed = 0;
 let failed = 0;
@@ -180,33 +182,6 @@ function appendManualLedgerEntry(userData, generation, fields, previousHash, seq
   entry.entryHash = buildEntryHash(previousHash, entry);
   fs.appendFileSync(path.join(userData, "decision-audit", `gen-${generation}.jsonl`), JSON.stringify(entry) + "\n", "utf8");
   return entry;
-}
-
-function sha256File(target) {
-  return crypto.createHash("sha256").update(fs.readFileSync(target)).digest("hex");
-}
-
-function walkFiles(root) {
-  const out = [];
-  function walk(dir) {
-    const names = fs.readdirSync(dir).sort();
-    for (const name of names) {
-      const full = path.join(dir, name);
-      const stat = fs.lstatSync(full);
-      if (stat.isDirectory()) {
-        walk(full);
-      } else {
-        out.push({
-          relativePath: path.relative(root, full).split(path.sep).join("/"),
-          size: stat.size,
-          sha256: sha256File(full),
-        });
-      }
-    }
-  }
-  walk(root);
-  out.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
-  return out;
 }
 
 async function runAllTests() {
@@ -977,22 +952,18 @@ async function runAllTests() {
     assert.equal(stableStringify({ b: 1, a: 2 }), stableStringify({ a: 2, b: 1 }));
   });
 
-  await test("19. digital-me-package matches P1-00 per-file baseline and manifest hash", () => {
-    if (!fs.existsSync(DEFAULT_PKG) || !fs.existsSync(P100_BASELINE)) {
-      console.log("SKIP package baseline compare");
-      return;
+  await test("19. hermetic package fixture fingerprint is stable (no real package)", () => {
+    const { packageDir, expected, fingerprint } = createHermeticPackageFixture("p104");
+    try {
+      assert.deepEqual(fingerprint, expected);
+      assert.deepEqual(fingerprintPackage(packageDir), expected);
+      assert.ok(expected.fileCount >= 5);
+      assert.ok(expected.manifestSha256);
+      assert.ok(!packageDir.includes("digital-me-package"));
+    } finally {
+      cleanupHermeticPackageFixture(packageDir);
+      assert.equal(fs.existsSync(packageDir), false);
     }
-    const baseline = JSON.parse(fs.readFileSync(P100_BASELINE, "utf8"));
-    assert.equal(
-      baseline.packageDigest && baseline.packageDigest.manifestSha256,
-      "3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a"
-    );
-    const expected = baseline.files.map((item) => ({
-      relativePath: item.relativePath,
-      size: item.size,
-      sha256: item.sha256,
-    }));
-    assert.deepEqual(walkFiles(DEFAULT_PKG), expected);
   });
 
   await test("20. deleting gen2 after rotate blocks next request and does not roll back to gen1", async () => {

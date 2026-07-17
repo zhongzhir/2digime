@@ -124,6 +124,8 @@ Builder 不得把模型输出直接视为已确认主体事实；写入数据类
 cd digitalme-app
 npm run test:p1-06
 npm run test:p1-phase1
+# 可选：本机真实 Package 相对 P1-00 基线（资料漂移可失败，不纳入 phase1）
+npm run test:p1-baseline-real
 node --check src/builder.js
 node --check src/main.js
 node --check src/preload.js
@@ -131,3 +133,5 @@ node --check src/renderer/app.js
 git diff --check
 git status --short --branch
 ```
+
+说明：`test:p1-phase1` 为 hermetic 功能回归，不读取本机 `digital-me-package/**`；真实基线请用 `test:p1-baseline-real`。

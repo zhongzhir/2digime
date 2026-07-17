@@ -1,7 +1,8 @@
 "use strict";
 
 /**
- * P1-06 Builder → PackageStore write path tests (temp fixtures only).
+ * P1-06 Builder → PackageStore write path tests (temp fixtures only; hermetic).
+ * Does not read the real digital-me-package tree; real baseline is test:p1-baseline-real.
  * Run: npm run test:p1-06
  */
 
@@ -9,7 +10,6 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const assert = require("node:assert/strict");
-const crypto = require("node:crypto");
 const { spawnSync } = require("node:child_process");
 
 const {
@@ -23,9 +23,11 @@ const builderPackageWrite = require("../src/builder/package-write");
 const builder = require("../src/builder");
 
 const ROOT = path.join(__dirname, "..");
-const REPO = path.join(ROOT, "..");
-const P100_BASELINE = path.join(REPO, "build", "reports", "p1-00-package-baseline.json");
-const PACKAGE_DIR = path.join(REPO, "digital-me-package");
+const {
+  createHermeticPackageFixture,
+  cleanupHermeticPackageFixture,
+  fingerprintPackage,
+} = require("./hermetic-package-fixture.cjs");
 
 let passed = 0;
 let failed = 0;
@@ -104,32 +106,6 @@ function sampleAgg() {
     styleObservations: ["用词偏书面，少用口号。"],
     personaNotes: ["做决定前会先问约束条件。"],
   };
-}
-
-function sha256File(abs) {
-  return crypto.createHash("sha256").update(fs.readFileSync(abs)).digest("hex");
-}
-
-function listPackageFiles(dir) {
-  const out = [];
-  function walk(rel) {
-    const abs = path.join(dir, rel);
-    const st = fs.statSync(abs);
-    if (st.isDirectory()) {
-      if (rel === ".digitalme-pkgstore") return;
-      for (const name of fs.readdirSync(abs)) {
-        walk(rel ? rel + "/" + name : name);
-      }
-      return;
-    }
-    out.push({
-      relativePath: rel.replace(/\\/g, "/"),
-      sha256: sha256File(abs),
-      size: st.size,
-    });
-  }
-  walk("");
-  return out.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
 }
 
 function runNodeScript(relScript) {
@@ -470,23 +446,17 @@ async function runAll() {
     runNodeScript("scripts/test-p1-05-stop-ipc.cjs");
   });
 
-  // 13. Package baseline unchanged
-  test("13. Package baseline SHA-256 unchanged (P1-00)", () => {
-    assert.ok(fs.existsSync(P100_BASELINE), "missing p1-00 baseline report");
-    const baseline = JSON.parse(fs.readFileSync(P100_BASELINE, "utf8"));
-    assert.ok(baseline && Array.isArray(baseline.files) && baseline.files.length > 0);
-    assert.equal(
-      baseline.packageDigest && baseline.packageDigest.manifestSha256,
-      "3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a"
-    );
-    const current = listPackageFiles(PACKAGE_DIR).filter((f) => f.relativePath !== "");
-    // Baseline entries are relative to package root.
-    const byPath = new Map(current.map((f) => [f.relativePath, f]));
-    for (const item of baseline.files) {
-      const cur = byPath.get(item.relativePath);
-      assert.ok(cur, "missing " + item.relativePath);
-      assert.equal(cur.sha256, item.sha256, item.relativePath);
-      assert.equal(cur.size, item.size, item.relativePath + " size");
+  // 13. Hermetic fixture integrity (real Package check is test:p1-baseline-real)
+  test("13. hermetic package fixture fingerprint is stable (no real package)", () => {
+    const { packageDir, expected, fingerprint } = createHermeticPackageFixture("p106");
+    try {
+      assert.deepEqual(fingerprint, expected);
+      assert.deepEqual(fingerprintPackage(packageDir), expected);
+      assert.ok(expected.fileCount >= 5);
+      assert.ok(!packageDir.includes("digital-me-package"));
+    } finally {
+      cleanupHermeticPackageFixture(packageDir);
+      assert.equal(fs.existsSync(packageDir), false);
     }
   });
 
