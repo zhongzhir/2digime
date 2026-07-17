@@ -5,7 +5,7 @@
  * Preview creates a candidate change set (package bytes unchanged).
  * Commit requires main-process confirmation + non-expired changeSetId.
  *
- * Identity / Life writes are out of scope — remain on life.writeLifeBack.
+ * Identity / Life writes are out of scope for this module — see life/package-write.js (P1-07).
  */
 
 const fs = require("node:fs");

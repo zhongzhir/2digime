@@ -1,12 +1,13 @@
 # P1-07 任务包：Life / identity 写入路径迁移到 PackageStore
 
-状态：planned（仅任务包与文档；未实现；不得标记 statically_verified / accepted）
+状态：statically_verified（自动化 hermetic 通过；等待 Codex 代码复核与 Owner 临时资料验收；**不得**标记 accepted）
 阶段：第一阶段 / WP1（PackageStore 接入扩展）
 前置任务：P1-00～P1-06（P1-05 可为 statically_verified；P1-06 须 accepted）
 规格依据：`digitalme_phase1_subject_upgrade_plan_v0.1.md` §3 WP1
 审计依据：`digitalme_architecture_audit_20260716.md` F-04、F-05、F-06
 任务包建立：2026-07-17
-实现分支 / 实现提交：待开
+实现分支：`codex/p1-07-life-identity-package-store`
+实现提交：本分支 tip（`feat(package): route Life identity writes through PackageStore`）
 
 ---
 
@@ -31,7 +32,7 @@
 执行前填写其一：
 
 - [ ] Codex
-- [ ] Cursor
+- [x] Cursor
 
 同一时间只能有一个实现者修改本任务范围。
 
@@ -239,13 +240,13 @@ git status --short --branch
 
 ## 15. 完成定义（DoD）
 
-- [ ] 范围内直写路径已关闭，统一 preview → 确认 → PackageStore commit
-- [ ] 测试矩阵自动化通过（hermetic）
+- [x] 范围内直写路径已关闭，统一 preview → 确认 → PackageStore commit
+- [x] 测试矩阵自动化通过（hermetic；`npm run test:p1-07` 27/27；`test:p1-phase1` 通过）
 - [ ] Owner 沙盒验收通过（仅临时测试资料）
 - [ ] Codex 架构 / 安全 / 回归复核通过
-- [ ] 能力状态表与日志已更新；**仍明确** Policies / 认知页直写 / MCP / 协作未迁
-- [ ] 真实 `digital-me-package/**` 未被本任务改动
+- [x] 能力状态表与日志已更新；**仍明确** Policies / 认知页直写 / MCP / 协作未迁
+- [x] 真实 `digital-me-package/**` 未被本任务改动
 
 ---
 
-**当前状态说明**：本文仅为正式任务包（`planned`）。未实现业务代码；等待 Codex 复核任务包后再开实现分支。
+**当前状态说明**：实现与自动化验证完成（`statically_verified`）。等待 Codex 复核与 Owner 临时测试资料验收；通过前不得标 `accepted`。

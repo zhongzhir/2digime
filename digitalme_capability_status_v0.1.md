@@ -13,17 +13,17 @@
 
 | 能力 | 状态 | 证据（文件/测试） | 说明 |
 |---|---|---|---|
-| Builder | `accepted` | `src/builder/package-write.js`；`builder:previewWrite` / `builder:write`；`npm run test:p1-06` 14/14；Owner 临时资料验收；提交 `0e8ba88`、`81ba8f1` | **仅** Builder 观念/人格写入已迁 PackageStore（预览→确认→commit；`dataKind=inference`）；**identity 分支仍直写 Life，待 P1-07** |
+| Builder | `accepted` | `src/builder/package-write.js`；`builder:previewWrite` / `builder:write`；`npm run test:p1-06` 14/14；Owner 临时资料验收；提交 `0e8ba88`、`81ba8f1` | **仅** Builder 观念/人格写入已迁 PackageStore（预览→确认→commit；`dataKind=inference`）；identity 主写回见 P1-07 |
 | Retrieval | `implemented` | `digitalme-app/src/retrieval.js` | TF-IDF-lite 本地检索已接线对话；无自动化回归 |
 | Feedback | `runtime_verified` | `feedback.js` + PackageStore；`npm run test:p1-02` 31/31；Owner 临时资料验收 | 预览不写、确认提交、重启保留、跨重启恢复均通过；仍仅 Feedback 切片接入 |
-| Life Graph | `implemented` | `digitalme-app/src/life.js`；任务包：`digitalme_phase1_task_P1-07_life_identity_package_store.md`（**planned**，未实现） | 事件/维度表/推断可写；**主写路径仍直接写文件**；P1-07 计划将 `writeLifeBack` / `builder:write` identity 迁入 PackageStore；认知页零散编辑不在 P1-07 范围 |
+| Life Graph | `statically_verified`（P1-07 主写回切片） | `src/life/package-write.js`；`builder:previewWrite`/`builder:write` identity；`npm run test:p1-07` 27/27；任务包 P1-07 | **仅** Builder 材料链路的 Life/identity 确认写回已迁 PackageStore；**认知页零散编辑、Policies、MCP、协作仍未迁移**；等待 Codex 复核与 Owner 临时资料验收，不标 accepted |
 | Writing | `implemented` | `digitalme-app/src/outputs/*`；`renderer/app.js` 写作场景 | 文稿库/改稿/导出已实现；未达连续 5 次真实验收门槛 |
 | Research | `implemented` | `digitalme-app/src/research/*` | ResearchNotebook / Agent 循环已实现；安全与评测未闭环 |
 | MCP extensions | `implemented` | `digitalme-app/src/capabilities/*` | 可安装连接并自动调用；默认高风险，**尚未**经 ToolBroker 硬化 |
 | External CLI | `statically_verified` | `src/tool-broker/*`；`external-agent-flow.js`；`npm run test:p1-05` 19/19 + P1-01～04 回归 | 身份契约 + Authenticode + spawn 前 TOCTOU；停止立即生效；`shell:false`；**不是 OS 沙箱**；不标记 accepted |
 | Audit (legacy) | `implemented` | `digitalme-app/src/orchestration/audit-store.js` | 旧 JSON 账本；renderer 已不可追加；不冒充可信链 |
 | DecisionAudit (P1-04) | `runtime_verified` | `src/decision-audit/*`；`src/orchestration/external-agent-flow.js`；`npm run test:p1-04` 25/25 + P1-01～03 回归；Codex 三轮复核；Owner 成功/失败/取消、轮换、重启验收 | append-only JSONL + hash chain；仅向前恢复；跨代连接校验；仅可检测篡改，非签名或不可删除存证；仅外部 CLI 切片接入；P1-05 起绑定 planDigest |
-| PackageStore | `runtime_verified` | `src/package-store/*`；`npm run test:p1-02` 31/31；P1-06 Builder 接入 `test:p1-06`；Owner 临时资料验收 | Feedback + Builder 观念/人格写入已接入；**Life/identity 主写路径待 P1-07（planned）**；Policies / 认知页零散编辑仍直接写 |
+| PackageStore | `runtime_verified` | `src/package-store/*`；`npm run test:p1-02` 31/31；P1-06 / P1-07 接入 | Feedback + Builder 观念 + Life/identity **主 Builder 写回**已接入；**Policies / 认知页零散编辑仍直接写** |
 | Package export/import | `planned` | 规格 v0.4 §7.4.2；审计 F-04/F-05 | 文档有分级导出设想；运行时无完整导出—删除—重导入闭环 |
 | Secret storage | `runtime_verified` | P1-01：提交 `363e58d`、`94f7e13`、`9d3ecc4`；`npm run test:p1-01` 21/21；Owner 真实模型验收 | 重启识别、普通调用、空白保留、替换、清除均通过；扩展撤销 UI 与按工具密钥注入仍属后续 |
 | PolicyEngine (P1-04) | `runtime_verified` | `src/policy-engine/*`；`l0:requestExternalAgent` / `l0:runExternalAgent`；`npm run test:p1-04` 25/25；Codex 三轮复核；Owner 确认/取消/执行验收 | v1 内置规则；fail-closed；P1-05 起 `requestDigest` 绑定 ToolBroker 执行计划；不代表全部工具已统一治理 |

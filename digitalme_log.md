@@ -5,6 +5,28 @@
 
 ---
 
+## 2026-07-17（P1-07 · Life/identity 写回迁入 PackageStore · statically_verified）
+
+### 结论
+
+- 分支：`codex/p1-07-life-identity-package-store`
+- 状态：`statically_verified`（等待 Codex 复核与 Owner 临时测试资料验收；不标 accepted）
+- 新增 `src/life/package-write.js`：`previewLifeIdentityWrite` / `commitLifeIdentityWrite`
+- `builder:previewWrite` / `builder:write` identity 经 PackageStore；`writeLifeBack` / `materials.writeIdentityBack` 直写已阻断
+- 主进程推导 dataKinds；智能构建 identity 取消自动直写，须预览确认且默认不升级 fact/owner_assertion
+- `archiveIdentityRun` 仅在 commit 成功后执行；失败返回 `archiveWarning`，不回滚已成功 commit
+- 未改 Policies / MCP / ToolBroker / 认知页零散编辑 / `digital-me-package/**`
+
+### 验证
+
+- `npm run test:p1-07`：27/27
+- `npm run test:p1-06`：14/14
+- `npm run test:p1-phase1`：通过
+- `npm run test:p1-baseline-real`：本机资料漂移失败（预期可接受）
+- `node --check` 与 `git diff --check` 通过
+
+---
+
 ## 2026-07-17（P1-07 · 任务包建立，planned）
 
 ### 结论

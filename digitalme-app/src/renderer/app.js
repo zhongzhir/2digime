@@ -1379,6 +1379,29 @@ function formatBuilderPreviewSummary(preview) {
   const paths = (preview.affectedPaths || []).join("、") || "（无）";
   const kinds = (preview.dataKinds || []).join("、") || "inference";
   const refs = (preview.sourceRefs || []).join("、") || "—";
+  if (preview.materialKind === "identity") {
+    const fieldLines = [];
+    const fk = preview.fieldKinds || {};
+    for (const [field, kind] of Object.entries(fk)) {
+      if (!kind) continue;
+      fieldLines.push(`${field}→${kind}`);
+    }
+    return [
+      "预览（资料尚未改动）",
+      `基准版本：${preview.baseRevision ?? "—"}`,
+      `数据类别：${kinds}`,
+      fieldLines.length ? `字段分类：${fieldLines.join("；")}` : null,
+      `来源：${refs}`,
+      `将修改：${paths}`,
+      `条目：事件 ${preview.events || 0} · 事实短句 ${preview.facts || 0} · 推断 ${preview.inferences || 0} · 成就 ${preview.outcomes || 0}`,
+      preview.confirmAsFact
+        ? "已包含明确事实确认（事实 / 本人声明可升级）。"
+        : "未做事实确认：事件/事实/成就仅按推断写入，不会形成本人声明。",
+      "确认后才会写入并形成新版本；可放弃。",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
   return [
     "预览（资料尚未改动）",
     `基准版本：${preview.baseRevision ?? "—"}`,
@@ -1388,6 +1411,23 @@ function formatBuilderPreviewSummary(preview) {
     `条目：记忆 ${preview.memories || 0} · 框架 ${preview.frameworks || 0} · 风格 ${preview.styleObservations || 0} · 人格 ${preview.personaNotes || 0}`,
     "确认后才会写入并形成新版本；可放弃。",
   ].join("\n");
+}
+
+function formatIdentityCommitSummary(r) {
+  if (!r) return "";
+  const rev = r.revision != null ? String(r.revision) : "—";
+  const roll = r.rollbackVersion != null ? String(r.rollbackVersion) : "—";
+  const paths = (r.affectedPaths || []).join("、") || "（无）";
+  const kinds = (r.dataKinds || []).join("、") || "—";
+  let msg =
+    `已写入人生事实（${kinds}）。` +
+    `事件 +${r.events || 0}` +
+    (r.inferences ? `，推断 +${r.inferences}` : "") +
+    (r.outcomes ? `，成就 +${r.outcomes}` : "") +
+    (r.people ? `，关系人 +${r.people}` : "") +
+    `。\n新版本：${rev}（可恢复到版本 ${roll}）。\n修改范围：${paths}`;
+  if (r.archiveWarning) msg += "\n" + r.archiveWarning;
+  return msg;
 }
 
 function formatBuilderCommitSummary(r) {
@@ -1439,6 +1479,45 @@ async function previewAndCommitPersonaWrite(agg, src, options = {}) {
   return { ok: true, preview, result: r };
 }
 
+/** Preview + Owner-confirmed commit for identity distill (PackageStore). */
+async function previewAndCommitIdentityWrite(identity, src, options = {}) {
+  if (!window.digitalMe.previewDistillWrite || !window.digitalMe.writeDistill) {
+    throw new Error("当前版本不支持经资料库确认的写入，请完全退出后重新启动应用。");
+  }
+  const confirmAsFact = options.confirmAsFact === true;
+  const preview = await window.digitalMe.previewDistillWrite({
+    materialKind: "identity",
+    identity,
+    filePath: src.filePath,
+    title: src.title,
+    confirmAsFact,
+  });
+  const previewBox = $("builder-write-preview");
+  if (previewBox) {
+    previewBox.textContent = formatBuilderPreviewSummary(preview);
+    previewBox.classList.remove("hidden");
+  }
+  if (options.onPreview) options.onPreview(preview);
+
+  if (options.requireExplicitConfirm !== false) {
+    const ok = window.confirm(
+      "预览已生成，资料尚未改动。\n\n" +
+        formatBuilderPreviewSummary(preview) +
+        "\n\n确认将以上变更写入数字之我资料吗？"
+    );
+    if (!ok) {
+      return { ok: false, cancelled: true, preview };
+    }
+  }
+
+  const r = await window.digitalMe.writeDistill({
+    materialKind: "identity",
+    changeSetId: preview.changeSetId,
+    confirmed: true,
+  });
+  return { ok: true, preview, result: r };
+}
+
 /** Write distill result without checkbox review (智能构建 / 少决策). */
 async function autoWriteDistillResult(result, label) {
   const kind = (result && result.materialKind) || materialKind || "persona";
@@ -1458,23 +1537,51 @@ async function autoWriteDistillResult(result, label) {
       distillResult = null;
       return { ok: true, skipped: true };
     }
-    const r = await window.digitalMe.writeDistill({
-      materialKind: "identity",
-      identity,
-      filePath: src.filePath,
-      title: src.title,
+    // Smart build: never silent fact/owner_assertion — confirmAsFact stays false.
+    const committed = await previewAndCommitIdentityWrite(identity, src, {
+      confirmAsFact: false,
+      requireExplicitConfirm: true,
+      onPreview: (preview) => {
+        const line = formatBuilderPreviewSummary(preview);
+        if (progressSinkId === "inbox-progress") {
+          updateInboxProgressSummary({
+            current: "已生成写入预览（资料未改动）",
+            appendDetail: line,
+          });
+        } else {
+          const pel = progressEl();
+          if (pel) pel.textContent += line + "\n";
+        }
+      },
     });
-    const pel = progressEl();
-    if (pel) {
-      pel.textContent +=
-        `已自动写入人生事实：事件 +${r.events || 0}` +
-        (r.inferences ? `，推断 +${r.inferences}` : "") +
-        (r.outcomes ? `，成就 +${r.outcomes}` : "") +
-        (r.people ? `，关系人 +${r.people}` : "") +
-        "。\n";
+    if (!committed.ok) {
+      const msg = "已放弃写入。资料未改动。";
+      if (progressSinkId === "inbox-progress") {
+        updateInboxProgressSummary({ current: msg, appendDetail: msg });
+      } else {
+        const pel = progressEl();
+        if (pel) pel.textContent += msg + "\n";
+      }
+      return { ok: false, cancelled: true, kind: "identity" };
+    }
+    const r = committed.result;
+    const writeLine = formatIdentityCommitSummary(r);
+    if (progressSinkId === "inbox-progress") {
+      updateInboxProgressSummary({ current: "已写入人生事实", appendDetail: writeLine });
+    } else {
+      const pel = progressEl();
+      if (pel) pel.textContent += writeLine + "\n";
     }
     $("builder-review").classList.add("hidden");
     distillResult = null;
+    try {
+      pkg = await window.digitalMe.loadPackage();
+      renderPackageStatus();
+      await refreshPackageVersionsPanel();
+      await refreshMeView();
+    } catch {
+      /* ignore refresh failures after successful write */
+    }
     return { ok: true, kind: "identity", result: r };
   }
   const agg = personaAggAll(result.agg);
@@ -1800,23 +1907,22 @@ function bindBuilder() {
         $("builder-progress").textContent = "请至少勾选一条再写入。";
         return;
       }
+      // Checking events/facts/outcomes (default unchecked) is the explicit fact confirmation.
+      const confirmAsFact =
+        identity.events.length > 0 || identity.facts.length > 0 || identity.outcomes.length > 0;
       $("btn-write").disabled = true;
       try {
         const label = currentSourceLabel || { filePath: "", title: "社会事实材料" };
-        const r = await window.digitalMe.writeDistill({
-          materialKind: "identity",
-          identity,
-          filePath: label.filePath,
-          title: label.title,
+        const committed = await previewAndCommitIdentityWrite(identity, label, {
+          confirmAsFact,
+          requireExplicitConfirm: true,
         });
-        $("builder-progress").textContent =
-          `已更新可调用画像：事件 +${r.events}，角色 +${r.roles}` +
-          (r.inferences ? `，推断 +${r.inferences}` : "") +
-          (r.outcomes ? `，成就 +${r.outcomes}` : "") +
-          (r.domains ? `，专长信号 +${r.domains}` : "") +
-          (r.org_touchpoints ? `，机构触点 +${r.org_touchpoints}` : "") +
-          (r.people ? `，关系人候选 +${r.people}` : "") +
-          "。可在「我 · 认知」查看。";
+        if (!committed.ok) {
+          $("builder-progress").textContent = "已放弃写入。资料未改动。";
+          return;
+        }
+        const r = committed.result;
+        $("builder-progress").textContent = formatIdentityCommitSummary(r);
         $("builder-review").classList.add("hidden");
         distillResult = null;
         factsPickedFiles = [];
@@ -1824,6 +1930,7 @@ function bindBuilder() {
         pkg = await window.digitalMe.loadPackage();
         lifeGraphCache = null;
         renderPackageStatus();
+        await refreshPackageVersionsPanel();
         await refreshMeView();
         goSelfView("cognition");
       } catch (e) {
@@ -2315,7 +2422,11 @@ function renderReview(res) {
 
   $("btn-discard").classList.remove("hidden");
 
-  const group = (title, dataKind, items, labelFn) => {
+  const group = (title, dataKind, items, labelFn, opts = {}) => {
+    const defaultChecked = opts.defaultChecked !== false;
+    const factHint = opts.factConfirmHint
+      ? `<p class="hint">勾选即表示确认该条目为事实或本人声明；默认不勾选。</p>`
+      : "";
     const head =
       `<div class="review-group-head">` +
       `<h4>${esc(title)}（${items.length}）</h4>` +
@@ -2334,13 +2445,13 @@ function renderReview(res) {
         (item, i) =>
           `<li class="review-item">` +
           `<label>` +
-          `<input type="checkbox" data-kind="${dataKind}" data-i="${i}" checked />` +
+          `<input type="checkbox" data-kind="${dataKind}" data-i="${i}"${defaultChecked ? " checked" : ""} />` +
           `<span>${labelFn(item)}</span>` +
           `</label>` +
           `</li>`
       )
       .join("");
-    return `<div class="review-group" data-kind="${dataKind}">${head}<ul class="review-checklist">${lis}</ul></div>`;
+    return `<div class="review-group" data-kind="${dataKind}">${head}${factHint}<ul class="review-checklist">${lis}</ul></div>`;
   };
 
   if (kind === "identity") {
@@ -2383,12 +2494,16 @@ function renderReview(res) {
       return `${type}${esc(inf.claim)}${conf}${based}`;
     };
     $("review-content").innerHTML =
-      group("人生事件（角色 / 时间 / 机构）", "events", eventList, formatEvent) +
+      group("人生事件（角色 / 时间 / 机构）", "events", eventList, formatEvent, {
+        defaultChecked: false,
+        factConfirmHint: true,
+      }) +
       group(
         "成就与结果",
         "outcomes",
         identity.outcomes || [],
-        (o) => `${esc(o.title)}${o.when ? ` <span class="muted">（${esc(o.when)}）</span>` : ""}`
+        (o) => `${esc(o.title)}${o.when ? ` <span class="muted">（${esc(o.when)}）</span>` : ""}`,
+        { defaultChecked: false, factConfirmHint: true }
       ) +
       group("议题 / 专长信号", "domains", identity.domains || [], (d) => esc(d)) +
       group(
@@ -2411,7 +2526,10 @@ function renderReview(res) {
       ) +
       group("观念线索（待蒸馏）", "mind_hooks", identity.mind_hooks || [], (m) => esc(m)) +
       group("围绕本人的推断（非硬事实）", "inferences", identity.inferences || [], formatInf) +
-      group("补充短句", "facts", identity.facts || [], (f) => esc(f));
+      group("补充短句", "facts", identity.facts || [], (f) => esc(f), {
+        defaultChecked: false,
+        factConfirmHint: true,
+      });
   } else {
     const agg = res.agg || {
       styleObservations: [],

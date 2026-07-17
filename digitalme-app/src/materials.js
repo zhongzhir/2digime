@@ -192,30 +192,16 @@ function registerIdentitySource(pkgDir, sourceMeta) {
   }
 }
 
-function writeIdentityBack(pkgDir, userData, payload) {
-  const { claims, facts, filePath, title } = payload;
-  const base = path.basename(filePath || "identity");
-  const sourceMeta = {
-    id: "src_id_" + base.replace(/[^a-zA-Z0-9]+/g, "_").slice(0, 36) + "_" + Date.now().toString(36),
-    type: "identity_document",
-    title: title || base,
-    author: "",
-    createdAt: isoNow(),
-    location: filePath || "",
-    sensitivity: "private",
-    usedFor: ["identity", "identity-facts"],
-    materialKind: "identity",
-  };
-  registerIdentitySource(pkgDir, sourceMeta);
-  const claimsAdded = writeIdentityClaims(pkgDir, claims, sourceMeta.id);
-  const factsAdded = appendIdentityFacts(pkgDir, facts, sourceMeta.title, sourceMeta.id);
-  archiveIdentityRun(userData, {
-    title: sourceMeta.title,
-    filePath: filePath || "",
-    claims: claims || [],
-    facts: facts || [],
-  });
-  return { claims: claimsAdded, facts: factsAdded, sourceId: sourceMeta.id };
+/**
+ * Legacy identity write — blocked (P1-07).
+ * Must not bypass PackageStore; use life/package-write preview + commit.
+ */
+function writeIdentityBack() {
+  const e = new Error(
+    "身份事实不得再直接写入 Package；请经 PackageStore 预览并确认后提交。"
+  );
+  e.code = "materials_identity_direct_write_blocked";
+  throw e;
 }
 
 module.exports = {

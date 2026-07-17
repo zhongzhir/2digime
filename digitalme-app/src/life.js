@@ -747,79 +747,16 @@ function buildCoverageGaps(pkgDir, pkgExtras = {}) {
   return gaps.slice(0, 3);
 }
 
-function writeLifeBack(pkgDir, payload) {
-  ensureLifeScaffold(pkgDir);
-  const {
-    events,
-    facts,
-    inferences,
-    outcomes,
-    domains,
-    org_touchpoints,
-    alter_candidates,
-    mind_hooks,
-    capability_signals,
-    filePath,
-    title,
-  } = payload;
-  const base = path.basename(filePath || "social");
-  const sourceMeta = {
-    id: "src_life_" + base.replace(/[^a-zA-Z0-9]+/g, "_").slice(0, 36) + "_" + Date.now().toString(36),
-    type: "social_document",
-    title: title || base,
-    author: "",
-    createdAt: isoNow(),
-    location: filePath || "",
-    sensitivity: "private",
-    usedFor: [
-      "life/events",
-      "life/roles",
-      "life/inferences",
-      "life/outcomes",
-      "life/domains",
-      "life/org_touchpoints",
-      "identity",
-    ],
-    materialKind: "identity",
-  };
-  registerSource(pkgDir, sourceMeta);
-
-  const writtenEvents = appendEvents(pkgDir, events, sourceMeta.id);
-  let facetCounts = { roles: 0, relations: 0, outcomes: 0, interests: 0, orgTouch: 0 };
-  for (const ev of writtenEvents) {
-    const c = applyEventToFacets(pkgDir, ev, sourceMeta.id);
-    facetCounts.roles += c.roles;
-    facetCounts.relations += c.relations;
-    facetCounts.outcomes += c.outcomes;
-    facetCounts.interests += c.interests;
-    facetCounts.orgTouch += c.orgTouch || 0;
-  }
-  const claims = syncIdentityClaimsFromRoles(pkgDir, writtenEvents, sourceMeta.id);
-  const factsAdded = appendPlainFacts(pkgDir, facts, sourceMeta.title, sourceMeta.id);
-  const writtenInferences = appendInferences(pkgDir, inferences, sourceMeta.id);
-  const outcomesAdded = appendOutcomesDirect(pkgDir, outcomes, sourceMeta.id);
-  const domainsAdded = appendDomains(pkgDir, domains, sourceMeta.id);
-  const orgsAdded = appendOrgTouchpoints(pkgDir, org_touchpoints, sourceMeta.id);
-  const peopleAdded = appendPeople(pkgDir, alter_candidates, sourceMeta.id);
-  const capsAdded = appendCapabilitySignals(pkgDir, capability_signals, sourceMeta.id);
-  const mindsAdded = appendMindHooks(pkgDir, mind_hooks, sourceMeta.id);
-
-  return {
-    events: writtenEvents.length,
-    roles: facetCounts.roles,
-    relations: facetCounts.relations,
-    outcomes: facetCounts.outcomes + outcomesAdded,
-    interests: facetCounts.interests,
-    claims,
-    facts: factsAdded,
-    inferences: writtenInferences.length,
-    domains: domainsAdded,
-    org_touchpoints: facetCounts.orgTouch + orgsAdded,
-    people: peopleAdded,
-    capability_signals: capsAdded,
-    mind_hooks: mindsAdded,
-    sourceId: sourceMeta.id,
-  };
+/**
+ * Legacy identity write — blocked (P1-07).
+ * Callers must use life/package-write preview + PackageStore commit.
+ */
+function writeLifeBack() {
+  const e = new Error(
+    "人生事实不得再直接写入 Package；请经 PackageStore 预览并确认后提交。"
+  );
+  e.code = "life_direct_write_blocked";
+  throw e;
 }
 
 /** Compact text for system prompt — roles / achievements / domains / capabilities / open inferences. */

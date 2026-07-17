@@ -7,6 +7,7 @@ const os = require("node:os");
 const https = require("node:https");
 const builder = require("./builder");
 const builderPackageWrite = require("./builder/package-write");
+const lifePackageWrite = require("./life/package-write");
 const materials = require("./materials");
 const life = require("./life");
 const policies = require("./policies");
@@ -3311,13 +3312,20 @@ ipcMain.handle("shell:openPath", async (_e, target) => {
   return { ok: true, path: p };
 });
 
-// Preview persona write via PackageStore (bytes unchanged until confirm).
+// Preview write via PackageStore (bytes unchanged until confirm).
 ipcMain.handle("builder:previewWrite", async (_e, payload) => {
   const body = payload && typeof payload === "object" ? payload : {};
-  if (body.materialKind === "identity") {
-    throw new Error("人生事实写入尚未迁入 PackageStore；请使用既有确认写入流程。");
-  }
   const pkgDir = packageDirFromConfig();
+  if (body.materialKind === "identity") {
+    return lifePackageWrite.previewLifeIdentityWrite(pkgDir, {
+      identity: body.identity,
+      filePath: body.filePath,
+      title: body.title,
+      sourceMeta: body.sourceMeta,
+      reason: body.reason,
+      confirmAsFact: body.confirmAsFact === true,
+    });
+  }
   return builderPackageWrite.previewPersonaWrite(pkgDir, {
     agg: body.agg,
     filePath: body.filePath,
@@ -3327,7 +3335,7 @@ ipcMain.handle("builder:previewWrite", async (_e, payload) => {
   });
 });
 
-// Confirm write-back: persona via PackageStore change set; identity still Life (out of P1-06).
+// Confirm write-back: persona / identity via PackageStore change set only.
 ipcMain.handle("builder:write", async (_e, payload) => {
   const body = payload && typeof payload === "object" ? payload : {};
   const cfg = readConfig();
@@ -3335,43 +3343,44 @@ ipcMain.handle("builder:write", async (_e, payload) => {
   const kind = body.materialKind === "identity" ? "identity" : "persona";
 
   if (kind === "identity") {
-    const idPayload = body.identity || {};
-    let events = Array.isArray(idPayload.events) ? idPayload.events : [];
-    if (!events.length && Array.isArray(idPayload.claims)) {
-      events = idPayload.claims.map((c) => ({
-        when: c.when || "",
-        what: c.value,
-        roleLabels: [],
-        org: c.org || "",
-        actors: [],
-        outcome: "",
-        facets: ["roles"],
-        confidence: "medium",
-      }));
+    if (
+      body.identity != null ||
+      body.ops != null ||
+      body.dataKinds != null ||
+      body.affectedPaths != null ||
+      body.filePath != null ||
+      body.title != null
+    ) {
+      const err = new Error(
+        "人生事实提交只接受变更集编号与确认标记，不能再次提交原始内容或写入计划。"
+      );
+      err.code = "identity_commit_payload_rejected";
+      throw err;
     }
-    const result = life.writeLifeBack(pkgDir, {
-      events,
-      facts: idPayload.facts || [],
-      inferences: idPayload.inferences || [],
-      outcomes: idPayload.outcomes || [],
-      domains: idPayload.domains || [],
-      org_touchpoints: idPayload.org_touchpoints || [],
-      alter_candidates: idPayload.alter_candidates || [],
-      mind_hooks: idPayload.mind_hooks || [],
-      capability_signals: idPayload.capability_signals || [],
-      filePath: body.filePath,
-      title: body.title,
+    const result = lifePackageWrite.commitLifeIdentityWrite(pkgDir, {
+      changeSetId: body.changeSetId,
+      confirmed: body.confirmed,
+      confirmation: body.confirmation,
     });
-    materials.archiveIdentityRun(app.getPath("userData"), {
-      title: body.title || "社会事实",
-      filePath: body.filePath || "",
-      claims: events.map((e) => ({ type: "role", value: e.what })),
-      facts: idPayload.facts || [],
-      events,
-      inferences: idPayload.inferences || [],
-      outcomes: idPayload.outcomes || [],
-    });
-    return { materialKind: "identity", ...result };
+    let archiveWarning = null;
+    try {
+      const sm = result.sourceMeta || {};
+      materials.archiveIdentityRun(app.getPath("userData"), {
+        title: sm.title || "社会事实",
+        filePath: sm.location || "",
+        claims: [],
+        facts: [],
+        events: [],
+        inferences: [],
+        outcomes: [],
+      });
+    } catch (archiveErr) {
+      archiveWarning =
+        "资料已写入，但本机运行归档未完成：" +
+        ((archiveErr && archiveErr.message) || String(archiveErr));
+      console.warn("[builder:write identity] archiveIdentityRun failed:", archiveWarning);
+    }
+    return { materialKind: "identity", ...result, archiveWarning };
   }
 
   // Persona: only changeSetId + confirmation — never raw agg/paths from renderer as the write plan.
