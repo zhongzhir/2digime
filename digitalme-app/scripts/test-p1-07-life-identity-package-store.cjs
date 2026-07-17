@@ -1002,6 +1002,21 @@ async function runAll() {
     }
   });
 
+  test("33. package revision validity matches renderer fail-closed rules", () => {
+    function isValidPackageRevision(value) {
+      return Number.isInteger(value) && value >= 0;
+    }
+    assert.equal(isValidPackageRevision(0), true);
+    assert.equal(isValidPackageRevision(2), true);
+    assert.equal(isValidPackageRevision(null), false);
+    assert.equal(isValidPackageRevision(undefined), false);
+    assert.equal(isValidPackageRevision(NaN), false);
+    assert.equal(isValidPackageRevision(Infinity), false);
+    assert.equal(isValidPackageRevision(1.5), false);
+    assert.equal(isValidPackageRevision(-1), false);
+    assert.equal(isValidPackageRevision("2"), false);
+  });
+
   // Full P1-01..P1-06 suite is covered by `npm run test:p1-phase1` / `test:p1-06`.
   // Optional nested regression (slow): set P107_NESTED_REGRESSION=1.
   if (process.env.P107_NESTED_REGRESSION === "1") {

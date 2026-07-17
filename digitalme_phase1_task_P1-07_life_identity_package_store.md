@@ -273,4 +273,14 @@ git status --short --branch
 
 ---
 
-**当前状态说明**：Codex 第二轮与 Owner 验收修复已落地（`statically_verified`）。等待再复核与 Owner 临时测试资料验收；通过前不得标 `accepted`。
+### Owner 验收第二轮修复摘要（保持 statically_verified）
+
+1. **多组审阅不跳页**：第一组 commit 后加载下一组时留在构建 lane；`#builder-review` 保持可见、滚动聚焦；进度「等待你审阅，尚未写入」；全部完成时不自动跳认知页。
+2. **确认取消恢复 suggested**：`cancelCurrentReviewWithoutWrite()` 统一处理 identity/persona 确认取消与「放弃」；清理队列与 pending 状态；文案「已取消，资料未写入。可重新进入审阅。」
+3. **智能构建不隐式 applyMindHooks**：本轮无成功 PackageStore commit 时不调用；取消后 revision 不变。
+4. **revision fail-closed**：`isValidPackageRevision`；非法 revision 不标 written，固定错误文案，不泄漏路径或正文。
+5. **Electron 测试**：`test:p1-07-owner-runtime` 13/13（A identity 取消、B persona 取消、C 多组推进、D hooks 下取消、E 非法 revision）。
+
+---
+
+**当前状态说明**：Owner 验收第二轮修复已落地（`statically_verified`）。等待 Codex 再复核与 Owner 运行验收；通过前不得标 `accepted`。

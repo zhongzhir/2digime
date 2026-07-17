@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-07-17（P1-07 · Owner 验收第二轮：审阅取消与队列流转 · statically_verified）
+
+### c24f60e 后续复核发现
+
+- 多 materialKind 审阅：第一组 commit 后第二组已加载，但被 `goSelfView("cognition")` 切页隐藏
+- identity/persona 确认弹窗取消后 inbox 仍 `awaiting_review`，未恢复 `suggested`
+- 智能构建全部取消后仍无条件调用 `applyMindHooks`，可能产生额外 PackageStore commit
+- Electron 测试未覆盖「第一组 commit 后第二组仍可见」
+
+### 修复
+
+- `completeCurrentReviewCommitted` 返回 `{ hasNext, completed, ok }`；有下一组时留在构建 lane，不跳转认知页，保持 `#builder-review` 可见并聚焦
+- 统一 `cancelCurrentReviewWithoutWrite()`：确认取消与「放弃」均恢复 `suggested`、清理审阅队列与 `distillResult`
+- 智能构建批处理移除自动 `applyMindHooks`；观念线索仍由既有明确入口触发
+- `isValidPackageRevision`：`Number.isInteger(value) && value >= 0`；`packageCommitSucceeded` / `finalizePendingReviewAsWritten` fail-closed
+- custody 写入仍不要求 Package revision，不得伪装 PackageStore commit
+
+### 验证
+
+- `test:p1-07` 39/39；`test:p1-07-owner-runtime` 13/13（含 A–E 新场景）；`test:p1-phase1` 通过
+- 未触碰真实 Package；状态仍为 `statically_verified`，等待 Codex 复核与 Owner 再验收
+
+---
+
 ## 2026-07-17（P1-07 · Owner 验收修复：审阅布局与写入状态 · statically_verified）
 
 ### Owner 验收发现

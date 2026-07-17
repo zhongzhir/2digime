@@ -1571,6 +1571,16 @@ async function autoWriteDistillResult(result, label) {
       return { ...base, cancelled: true, kind: "identity" };
     }
     const r = committed.result;
+    if (!isValidPackageRevision(r.revision)) {
+      const msg = "写入结果缺少有效版本号，未将材料标记为已写入。";
+      if (progressSinkId === "inbox-progress") {
+        updateInboxProgressSummary({ headline: "写入未完成", current: msg, appendDetail: msg });
+      } else {
+        const pel = progressEl();
+        if (pel) pel.textContent += msg + "\n";
+      }
+      return { ...base, kind: "identity" };
+    }
     const writeLine = formatIdentityCommitSummary(r);
     if (progressSinkId === "inbox-progress") {
       updateInboxProgressSummary({ current: "已写入人生事实", appendDetail: writeLine });
@@ -1627,6 +1637,16 @@ async function autoWriteDistillResult(result, label) {
     return { ...base, cancelled: true, kind: "persona" };
   }
   const r = committed.result;
+  if (!isValidPackageRevision(r.revision)) {
+    const msg = "写入结果缺少有效版本号，未将材料标记为已写入。";
+    if (progressSinkId === "inbox-progress") {
+      updateInboxProgressSummary({ headline: "写入未完成", current: msg, appendDetail: msg });
+    } else {
+      const pel = progressEl();
+      if (pel) pel.textContent += msg + "\n";
+    }
+    return { ...base, kind: "persona" };
+  }
   if (result.meta && result.meta.hookIds && result.meta.hookIds.length) {
     try {
       await window.digitalMe.markMindHooksDistilled(result.meta.hookIds);
@@ -1858,39 +1878,51 @@ async function startReviewMode(ready) {
   return loadCurrentReviewGroup();
 }
 
-async function completeCurrentReviewCommitted(revision) {
-  await finalizePendingReviewAsWritten(revision);
+async function completeCurrentReviewCommitted(revision, options = {}) {
+  const { requirePackageRevision = true } = options;
+  const finalizeResult = await finalizePendingReviewAsWritten(revision, { requirePackageRevision });
+  if (!finalizeResult.ok) {
+    reviewModeGroups = [];
+    reviewModeIndex = 0;
+    distillResult = null;
+    $("builder-review")?.classList.add("hidden");
+    const msg = "写入结果缺少有效版本号，未将材料标记为已写入。";
+    if (progressSinkId === "inbox-progress") {
+      updateInboxProgressSummary({
+        headline: "写入未完成",
+        current: msg,
+        appendDetail: msg,
+      });
+    } else {
+      const pel = $("builder-progress");
+      if (pel) pel.textContent = msg;
+    }
+    await refreshInboxPanel();
+    return { hasNext: false, completed: false, ok: false };
+  }
   reviewModeIndex += 1;
-  $("builder-review").classList.add("hidden");
   distillResult = null;
-  if (reviewModeIndex < reviewModeGroups.length) {
-    updateInboxProgressSummary({
-      headline: "继续审阅",
-      current: `已完成一组，继续下一组（${reviewModeIndex + 1}/${reviewModeGroups.length}）`,
-    });
+  const hasNext = reviewModeIndex < reviewModeGroups.length;
+  if (hasNext) {
+    switchMeLane("build");
+    goBuildView();
     await loadCurrentReviewGroup();
-    return;
+    return { hasNext: true, completed: false, ok: true };
   }
   clearReviewModeState();
+  $("builder-review")?.classList.add("hidden");
+  switchMeLane("build");
+  goBuildView();
   updateInboxProgressSummary({
     headline: "审阅写入完成",
     current: "本批审阅已全部确认写入。",
     appendDetail: "审阅写入完成。",
   });
+  return { hasNext: false, completed: true, ok: true };
 }
 
 async function abandonCurrentReview() {
-  await resetPendingReviewToSuggested();
-  reviewModeGroups = [];
-  reviewModeIndex = 0;
-  distillResult = null;
-  $("builder-review").classList.add("hidden");
-  updateInboxProgressSummary({
-    headline: "已放弃审阅",
-    current: "已取消，资料未写入。可在待处理列表重新进入审阅。",
-    appendDetail: "已放弃审阅，资料未写入。",
-  });
-  await refreshInboxPanel();
+  await cancelCurrentReviewWithoutWrite();
 }
 
 function focusReviewPanel() {
@@ -2024,15 +2056,17 @@ function bindBuilder() {
     const kind = distillResult.materialKind || materialKind || "persona";
 
     if (kind === "custody") {
+      let queueResult = { hasNext: false, completed: false, ok: true };
+      if (reviewModeGroups.length && pendingReviewInboxIds.length) {
+        queueResult = await completeCurrentReviewCommitted(null, { requirePackageRevision: false });
+        if (!queueResult.hasNext) distillResult = null;
+        return;
+      }
+      if (pendingReviewInboxIds.length) {
+        await finalizePendingReviewAsWritten(null, { requirePackageRevision: false });
+      }
       $("builder-review").classList.add("hidden");
       distillResult = null;
-      if (pendingReviewInboxIds.length) {
-        if (reviewModeGroups.length) {
-          await completeCurrentReviewCommitted(null);
-        } else {
-          await finalizePendingReviewAsWritten(null);
-        }
-      }
       $("builder-progress").textContent = "保管完成。材料仅留在本机保管库，未写入人格。";
       return;
     }
@@ -2078,30 +2112,10 @@ function bindBuilder() {
           factConfirmedFields,
           requireExplicitConfirm: true,
         });
-        if (!committed.ok) {
-          $("builder-progress").textContent = "已放弃写入。资料未改动。";
-          return;
-        }
-        const r = committed.result;
-        $("builder-progress").textContent = formatIdentityCommitSummary(r);
-        if (pendingReviewInboxIds.length) {
-          if (reviewModeGroups.length) {
-            await completeCurrentReviewCommitted(r.revision);
-          } else {
-            await finalizePendingReviewAsWritten(r.revision);
-          }
-        } else {
-          $("builder-review").classList.add("hidden");
-          distillResult = null;
-        }
-        factsPickedFiles = [];
-        renderFactsPickList();
-        pkg = await window.digitalMe.loadPackage();
-        lifeGraphCache = null;
-        renderPackageStatus();
-        await refreshPackageVersionsPanel();
-        await refreshMeView();
-        goSelfView("cognition");
+        await afterReviewModePackageWrite(committed, {
+          formatSummary: formatIdentityCommitSummary,
+          clearFactsPick: true,
+        });
       } catch (e) {
         $("builder-progress").textContent = "写入出错：" + e.message;
       } finally {
@@ -2126,36 +2140,18 @@ function bindBuilder() {
       const committed = await previewAndCommitPersonaWrite(agg, label, {
         requireExplicitConfirm: true,
       });
-      if (!committed.ok) {
-        $("builder-progress").textContent = "已放弃写入。资料未改动。";
-        return;
-      }
-      const r = committed.result;
-      $("builder-progress").textContent = formatBuilderCommitSummary(r);
-      if (distillResult.meta && distillResult.meta.hookIds && distillResult.meta.hookIds.length) {
-        try {
-          await window.digitalMe.markMindHooksDistilled(distillResult.meta.hookIds);
-        } catch {
-          /* ignore */
-        }
-      }
-      if (pendingReviewInboxIds.length) {
-        if (reviewModeGroups.length) {
-          await completeCurrentReviewCommitted(r.revision);
-        } else {
-          await finalizePendingReviewAsWritten(r.revision);
-        }
-      } else {
-        $("builder-review").classList.add("hidden");
-        distillResult = null;
-      }
-      pkg = await window.digitalMe.loadPackage();
-      renderPackageStatus();
-      if (typeof refreshPackageVersionsPanel === "function") {
-        await refreshPackageVersionsPanel();
-      }
-      await refreshMeView();
-      goSelfView("cognition");
+      await afterReviewModePackageWrite(committed, {
+        formatSummary: formatBuilderCommitSummary,
+        afterSuccess: async () => {
+          if (distillResult.meta && distillResult.meta.hookIds && distillResult.meta.hookIds.length) {
+            try {
+              await window.digitalMe.markMindHooksDistilled(distillResult.meta.hookIds);
+            } catch {
+              /* ignore */
+            }
+          }
+        },
+      });
     } catch (e) {
       $("builder-progress").textContent = "写入出错：" + (e.message || String(e));
     } finally {
@@ -2164,12 +2160,9 @@ function bindBuilder() {
   });
 
   $("btn-discard")?.addEventListener("click", async () => {
-    if (reviewModeGroups.length) {
-      await abandonCurrentReview();
+    if (reviewModeGroups.length || pendingReviewInboxIds.length) {
+      await cancelCurrentReviewWithoutWrite();
       return;
-    }
-    if (pendingReviewInboxIds.length) {
-      await resetPendingReviewToSuggested();
     }
     distillResult = null;
     $("builder-review").classList.add("hidden");
@@ -7884,13 +7877,23 @@ async function markPendingReviewAwaiting() {
   await refreshInboxPanel();
 }
 
-async function finalizePendingReviewAsWritten(revision) {
-  if (!pendingReviewInboxIds.length) return;
-  const meta =
-    typeof revision === "number" ? { revision, committedAt: new Date().toISOString() } : undefined;
+async function finalizePendingReviewAsWritten(revision, options = {}) {
+  const { requirePackageRevision = false } = options;
+  if (!pendingReviewInboxIds.length) return { ok: false, reason: "no_pending" };
+  if (requirePackageRevision && !isValidPackageRevision(revision)) {
+    const ids = [...pendingReviewInboxIds];
+    pendingReviewInboxIds = [];
+    if (ids.length) await markInboxItemsStatus(ids, "suggested");
+    await refreshInboxPanel();
+    return { ok: false, reason: "invalid_revision" };
+  }
+  const meta = isValidPackageRevision(revision)
+    ? { revision, committedAt: new Date().toISOString() }
+    : undefined;
   await markInboxItemsStatus(pendingReviewInboxIds, "written", meta);
   pendingReviewInboxIds = [];
   await refreshInboxPanel();
+  return { ok: true };
 }
 
 async function resetPendingReviewToSuggested() {
@@ -7900,10 +7903,109 @@ async function resetPendingReviewToSuggested() {
   await refreshInboxPanel();
 }
 
+function isValidPackageRevision(value) {
+  return Number.isInteger(value) && value >= 0;
+}
+
 function packageCommitSucceeded(result) {
   if (!result || result.committed !== true) return false;
   if (result.kind === "custody") return true;
-  return typeof result.revision === "number";
+  return isValidPackageRevision(result.revision);
+}
+
+async function cancelCurrentReviewWithoutWrite() {
+  const ids = [...pendingReviewInboxIds];
+  clearReviewModeState();
+  distillResult = null;
+  $("builder-review")?.classList.add("hidden");
+  hideBuildDoneBanner();
+  if (ids.length) await markInboxItemsStatus(ids, "suggested");
+  const msg = "已取消，资料未写入。可重新进入审阅。";
+  if (progressSinkId === "inbox-progress") {
+    updateInboxProgressSummary({
+      headline: "已取消",
+      current: msg,
+      appendDetail: msg,
+    });
+  } else {
+    const pel = $("builder-progress");
+    if (pel) pel.textContent = msg;
+  }
+  await refreshInboxPanel();
+}
+
+async function handleInvalidRevisionWrite() {
+  const ids = [...pendingReviewInboxIds];
+  clearReviewModeState();
+  distillResult = null;
+  $("builder-review")?.classList.add("hidden");
+  hideBuildDoneBanner();
+  if (ids.length) await markInboxItemsStatus(ids, "suggested");
+  const msg = "写入结果缺少有效版本号，未将材料标记为已写入。";
+  if (progressSinkId === "inbox-progress") {
+    updateInboxProgressSummary({
+      headline: "写入未完成",
+      current: msg,
+      appendDetail: msg,
+    });
+  } else {
+    const pel = $("builder-progress");
+    if (pel) pel.textContent = msg;
+  }
+  await refreshInboxPanel();
+}
+
+async function afterReviewModePackageWrite(committed, options = {}) {
+  const { formatSummary, afterSuccess = null, clearFactsPick = false } = options;
+  if (!committed.ok) {
+    if (committed.cancelled) {
+      await cancelCurrentReviewWithoutWrite();
+    } else {
+      $("builder-progress").textContent = "已放弃写入。资料未改动。";
+    }
+    return false;
+  }
+  const r = committed.result;
+  if (!isValidPackageRevision(r.revision)) {
+    await handleInvalidRevisionWrite();
+    return false;
+  }
+  if (afterSuccess) await afterSuccess(r);
+  $("builder-progress").textContent = formatSummary(r);
+  const wasInboxReview = reviewModeGroups.length > 0 || pendingReviewInboxIds.length > 0;
+  if (wasInboxReview) {
+    if (reviewModeGroups.length) {
+      const queueResult = await completeCurrentReviewCommitted(r.revision, {
+        requirePackageRevision: true,
+      });
+      if (!queueResult.ok) return false;
+    } else {
+      const fin = await finalizePendingReviewAsWritten(r.revision, { requirePackageRevision: true });
+      if (!fin.ok) {
+        await handleInvalidRevisionWrite();
+        return false;
+      }
+    }
+  } else {
+    $("builder-review").classList.add("hidden");
+    distillResult = null;
+  }
+  if (clearFactsPick) {
+    factsPickedFiles = [];
+    renderFactsPickList();
+  }
+  pkg = await window.digitalMe.loadPackage();
+  lifeGraphCache = null;
+  renderPackageStatus();
+  await refreshPackageVersionsPanel();
+  if (!wasInboxReview) {
+    await refreshMeView();
+    goSelfView("cognition");
+  } else {
+    switchMeLane("build");
+    goBuildView();
+  }
+  return true;
 }
 
 function formatPkgVersionsRefreshTime(d) {
@@ -8848,18 +8950,6 @@ function bindMe() {
           countsText: `${processed}/${ready.length}`,
         });
       }
-      let hookCount = 0;
-      try {
-        const applied = await window.digitalMe.applyMindHooks();
-        if (applied && applied.ok) {
-          hookCount = applied.hookCount || 0;
-          updateInboxProgressSummary({
-            appendDetail: `已一并写入 ${hookCount} 条观念线索。`,
-          });
-        }
-      } catch {
-        /* none */
-      }
       pkg = await window.digitalMe.loadPackage();
       lifeGraphCache = null;
       renderPackageStatus();
@@ -8871,10 +8961,7 @@ function bindMe() {
       if (truncatedFiles) qualityBits.push(`${truncatedFiles} 份已截断/取头尾`);
       if (likenessTotal) qualityBits.push(`像我校验跳过 ${likenessTotal} 条`);
       if (committedCount > 0) {
-        const summary =
-          `已写入 ${committedCount} 份` +
-          (hookCount ? ` · 观念线索 ${hookCount} 条` : "") +
-          (qualityBits.length ? ` · ${qualityBits.join(" · ")}` : "");
+        const summary = `已写入 ${committedCount} 份` + (qualityBits.length ? ` · ${qualityBits.join(" · ")}` : "");
         updateInboxProgressSummary({
           headline: "本批构建完成",
           current: "结果已写入「数字之我」。可到认知页校对自动采纳项。",
@@ -8898,9 +8985,9 @@ function bindMe() {
       } else if (cancelledCount > 0) {
         updateInboxProgressSummary({
           headline: "已取消",
-          current: "已取消，资料未写入。",
+          current: "已取消，资料未写入。可重新进入审阅。",
           countsText: `${processed}/${ready.length}`,
-          appendDetail: "已取消，资料未写入。",
+          appendDetail: "已取消，资料未写入。可重新进入审阅。",
         });
         hideBuildDoneBanner();
       } else {

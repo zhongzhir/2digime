@@ -46,10 +46,13 @@ function installP107Mocks(userData) {
   fs.writeFileSync(identityFile, "identity fixture\n", "utf8");
 
   const state = {
+    workDir: work,
     packageRevision: 1,
     previousVersionId: null,
     previousRevision: null,
     statusLog: [],
+    applyMindHooksCallCount: 0,
+    writeRevisionOverride: undefined,
     inboxItems: [
       {
         id: "inb_persona",
@@ -154,18 +157,49 @@ function installP107Mocks(userData) {
       err.code = "confirmation_required";
       throw err;
     }
+    const kind = payload.materialKind || "persona";
+    if (state.writeRevisionOverride === "missing") {
+      state.writeRevisionOverride = undefined;
+      return {
+        ok: true,
+        materialKind: kind,
+        changeSetId: payload.changeSetId || "cs_p107_test",
+        affectedPaths: ["memory/long-term-memory.jsonl"],
+        dataKinds: ["inference"],
+      };
+    }
+    if (state.writeRevisionOverride !== undefined) {
+      const revision = state.writeRevisionOverride;
+      state.writeRevisionOverride = undefined;
+      return {
+        ok: true,
+        materialKind: kind,
+        changeSetId: payload.changeSetId || "cs_p107_test",
+        revision,
+        affectedPaths: kind === "identity" ? ["life/events.jsonl"] : ["memory/long-term-memory.jsonl"],
+        dataKinds: ["inference"],
+      };
+    }
     state.previousRevision = state.packageRevision;
     state.previousVersionId = "v" + state.packageRevision;
     state.packageRevision += 1;
     return {
       ok: true,
-      materialKind: payload.materialKind || "persona",
+      materialKind: kind,
       changeSetId: payload.changeSetId || "cs_p107_test",
       revision: state.packageRevision,
       rollbackVersion: state.previousVersionId,
-      affectedPaths: ["memory/long-term-memory.jsonl"],
+      affectedPaths: kind === "identity" ? ["life/events.jsonl"] : ["memory/long-term-memory.jsonl"],
       dataKinds: ["inference"],
     };
+  });
+
+  removeHandler("life:applyMindHooks");
+  ipcMain.handle("life:applyMindHooks", () => {
+    state.applyMindHooksCallCount += 1;
+    state.previousRevision = state.packageRevision;
+    state.packageRevision += 1;
+    return { ok: true, hookCount: 1, revision: state.packageRevision };
   });
 
   removeHandler("packageStore:listVersions");
@@ -200,6 +234,53 @@ async function setConfirm(win, value) {
       window.confirm = () => window.__p107TestConfirm;
     })()`
   );
+}
+
+async function waitReviewVisible(win) {
+  await waitFor(
+    async () =>
+      evalIn(
+        win,
+        `(() => {
+          const r = document.getElementById("builder-review");
+          return r && !r.classList.contains("hidden");
+        })()`
+      ),
+    { label: "review visible", timeoutMs: 30000 }
+  );
+}
+
+async function buildLaneActive(win) {
+  return evalIn(
+    win,
+    `document.getElementById("me-lane-btn-build")?.classList.contains("active") === true`
+  );
+}
+
+function makeIdentityItem(filePath) {
+  return {
+    id: "inb_identity",
+    name: "identity.txt",
+    filePath,
+    size: 20,
+    status: "suggested",
+    suggestedKind: "identity",
+    materialKind: "identity",
+    confidence: "high",
+  };
+}
+
+function makePersonaItem(filePath) {
+  return {
+    id: "inb_persona",
+    name: "persona.txt",
+    filePath,
+    size: 20,
+    status: "suggested",
+    suggestedKind: "persona",
+    materialKind: "persona",
+    confidence: "high",
+  };
 }
 
 async function runP107OwnerRuntimeHarness({ BrowserWindow, app }) {
@@ -324,6 +405,7 @@ async function runP107OwnerRuntimeHarness({ BrowserWindow, app }) {
       { label: "smart cancel headline", timeoutMs: 45000 }
     );
     assert.equal(state.packageRevision, revBefore);
+    assert.equal(state.applyMindHooksCallCount, 0);
     const anyWritten = state.inboxItems.some((it) => it.status === "written");
     assert.equal(anyWritten, false);
     const bannerHidden = await evalIn(
@@ -331,6 +413,11 @@ async function runP107OwnerRuntimeHarness({ BrowserWindow, app }) {
       `document.getElementById("build-done-banner")?.classList.contains("hidden")`
     );
     assert.equal(bannerHidden, true);
+    const cancelMsg = await evalIn(
+      win,
+      `document.getElementById("inbox-progress-current")?.textContent || ""`
+    );
+    assert.match(cancelMsg, /可重新进入审阅/);
     pass("5. smart build cancel keeps revision and avoids written");
   } catch (err) {
     fail("5. smart build cancel keeps revision and avoids written", err);
@@ -429,6 +516,255 @@ async function runP107OwnerRuntimeHarness({ BrowserWindow, app }) {
     pass("8. multi-kind review leaves later groups in suggested");
   } catch (err) {
     fail("8. multi-kind review leaves later groups in suggested", err);
+  }
+
+  // A. identity confirm cancel restores suggested
+  try {
+    const workDir = state.workDir;
+    state.inboxItems = [makeIdentityItem(path.join(workDir, "identity.txt"))];
+    state.statusLog = [];
+    state.applyMindHooksCallCount = 0;
+    state.writeRevisionOverride = undefined;
+    const revBefore = state.packageRevision;
+    await setConfirm(win, false);
+    await evalIn(win, `document.getElementById("btn-inbox-review").click()`);
+    await waitReviewVisible(win);
+    await waitFor(
+      async () => state.inboxItems[0]?.status === "awaiting_review",
+      { label: "identity awaiting before cancel", timeoutMs: 30000 }
+    );
+    await evalIn(win, `document.getElementById("btn-write").click()`);
+    await waitFor(
+      async () => {
+        const h = await evalIn(
+          win,
+          `document.getElementById("inbox-progress-headline")?.textContent || ""`
+        );
+        return h.includes("已取消");
+      },
+      { label: "identity cancel headline", timeoutMs: 15000 }
+    );
+    assert.equal(state.packageRevision, revBefore);
+    assert.equal(state.inboxItems[0].status, "suggested");
+    assert.notEqual(state.inboxItems[0].status, "written");
+    const reviewHidden = await evalIn(
+      win,
+      `document.getElementById("builder-review")?.classList.contains("hidden")`
+    );
+    assert.equal(reviewHidden, true);
+    const bannerHidden = await evalIn(
+      win,
+      `document.getElementById("build-done-banner")?.classList.contains("hidden")`
+    );
+    assert.equal(bannerHidden, true);
+    const cancelMsg = await evalIn(
+      win,
+      `document.getElementById("inbox-progress-current")?.textContent || ""`
+    );
+    assert.match(cancelMsg, /已取消，资料未写入。可重新进入审阅。/);
+    await evalIn(win, `document.getElementById("btn-inbox-review").click()`);
+    await waitReviewVisible(win);
+    pass("A. identity confirm cancel restores suggested and allows re-entry");
+  } catch (err) {
+    fail("A. identity confirm cancel restores suggested and allows re-entry", err);
+  }
+
+  // B. persona confirm cancel restores suggested
+  try {
+    const workDir = state.workDir;
+    state.inboxItems = [makePersonaItem(path.join(workDir, "persona.txt"))];
+    state.statusLog = [];
+    const revBefore = state.packageRevision;
+    await setConfirm(win, false);
+    await evalIn(win, `document.getElementById("btn-inbox-review").click()`);
+    await waitReviewVisible(win);
+    await evalIn(win, `document.getElementById("btn-write").click()`);
+    await waitFor(
+      async () => {
+        const h = await evalIn(
+          win,
+          `document.getElementById("inbox-progress-headline")?.textContent || ""`
+        );
+        return h.includes("已取消");
+      },
+      { label: "persona cancel headline", timeoutMs: 15000 }
+    );
+    assert.equal(state.packageRevision, revBefore);
+    assert.equal(state.inboxItems[0].status, "suggested");
+    const reviewHidden = await evalIn(
+      win,
+      `document.getElementById("builder-review")?.classList.contains("hidden")`
+    );
+    assert.equal(reviewHidden, true);
+    const cancelMsg = await evalIn(
+      win,
+      `document.getElementById("inbox-progress-current")?.textContent || ""`
+    );
+    assert.match(cancelMsg, /已取消，资料未写入。可重新进入审阅。/);
+    await evalIn(win, `document.getElementById("btn-inbox-review").click()`);
+    await waitReviewVisible(win);
+    pass("B. persona confirm cancel restores suggested and allows re-entry");
+  } catch (err) {
+    fail("B. persona confirm cancel restores suggested and allows re-entry", err);
+  }
+
+  // C. multi-kind queue advances after first commit without leaving build lane
+  try {
+    const workDir = state.workDir;
+    state.inboxItems = [
+      makeIdentityItem(path.join(workDir, "identity.txt")),
+      makePersonaItem(path.join(workDir, "persona.txt")),
+    ];
+    state.statusLog = [];
+    state.writeRevisionOverride = undefined;
+    const revBefore = state.packageRevision;
+    await setConfirm(win, true);
+    await evalIn(win, `document.getElementById("btn-inbox-review").click()`);
+    await waitFor(
+      async () => state.inboxItems.find((x) => x.id === "inb_identity")?.status === "awaiting_review",
+      { label: "identity awaiting before commit", timeoutMs: 30000 }
+    );
+    assert.equal(state.inboxItems.find((x) => x.id === "inb_persona").status, "suggested");
+    await evalIn(win, `document.getElementById("btn-write").click()`);
+    await waitFor(
+      async () => state.inboxItems.find((x) => x.id === "inb_identity")?.status === "written",
+      { label: "identity written", timeoutMs: 30000 }
+    );
+    assert.ok(state.packageRevision > revBefore);
+    const revAfterFirst = state.packageRevision;
+    assert.equal(state.inboxItems.find((x) => x.id === "inb_persona").status, "awaiting_review");
+    assert.equal(await buildLaneActive(win), true);
+    await waitReviewVisible(win);
+    const reviewContent = await evalIn(
+      win,
+      `document.getElementById("review-content")?.textContent || ""`
+    );
+    assert.match(reviewContent, /测试记忆/);
+    assert.doesNotMatch(reviewContent, /测试职务/);
+    const progressCurrent = await evalIn(
+      win,
+      `document.getElementById("inbox-progress-current")?.textContent || ""`
+    );
+    assert.match(progressCurrent, /等待你审阅，尚未写入/);
+    const headline = await evalIn(
+      win,
+      `document.getElementById("inbox-progress-headline")?.textContent || ""`
+    );
+    assert.doesNotMatch(headline, /全部完成|审阅写入完成/);
+    const focusInReview = await evalIn(
+      win,
+      `(() => {
+        const ae = document.activeElement;
+        const review = document.getElementById("builder-review");
+        if (!review || review.classList.contains("hidden")) return false;
+        const title = document.getElementById("builder-review-title") || review.querySelector("h3");
+        if (title && ae === title) return true;
+        return !!(ae && review.contains(ae) && ae.matches && ae.matches('input[type="checkbox"]'));
+      })()`
+    );
+    assert.equal(focusInReview, true);
+    await setConfirm(win, false);
+    await evalIn(win, `document.getElementById("btn-write").click()`);
+    await waitFor(
+      async () => state.inboxItems.find((x) => x.id === "inb_persona")?.status === "suggested",
+      { label: "persona restored after cancel", timeoutMs: 15000 }
+    );
+    assert.equal(state.packageRevision, revAfterFirst);
+    assert.equal(state.inboxItems.find((x) => x.id === "inb_identity").status, "written");
+    const reviewHidden = await evalIn(
+      win,
+      `document.getElementById("builder-review")?.classList.contains("hidden")`
+    );
+    assert.equal(reviewHidden, true);
+    const bannerHidden = await evalIn(
+      win,
+      `document.getElementById("build-done-banner")?.classList.contains("hidden")`
+    );
+    assert.equal(bannerHidden, true);
+    await evalIn(win, `document.getElementById("btn-inbox-review").click()`);
+    await waitReviewVisible(win);
+    pass("C. multi-kind queue keeps build lane and advances to second group");
+  } catch (err) {
+    fail("C. multi-kind queue keeps build lane and advances to second group", err);
+  }
+
+  // D. smart build cancel does not call applyMindHooks when hooks would bump revision
+  try {
+    const workDir = state.workDir;
+    state.inboxItems = [makeIdentityItem(path.join(workDir, "identity.txt"))];
+    state.statusLog = [];
+    state.applyMindHooksCallCount = 0;
+    const revBefore = state.packageRevision;
+    await setConfirm(win, false);
+    await evalIn(win, `document.getElementById("btn-inbox-smart").click()`);
+    await waitFor(
+      async () => {
+        const h = await evalIn(
+          win,
+          `document.getElementById("inbox-progress-headline")?.textContent || ""`
+        );
+        return /已取消|未写入/.test(h);
+      },
+      { label: "smart cancel with hooks pending", timeoutMs: 45000 }
+    );
+    assert.equal(state.applyMindHooksCallCount, 0);
+    assert.equal(state.packageRevision, revBefore);
+    assert.equal(state.inboxItems[0].status, "suggested");
+    assert.notEqual(state.inboxItems[0].status, "written");
+    pass("D. smart build cancel skips applyMindHooks and keeps revision");
+  } catch (err) {
+    fail("D. smart build cancel skips applyMindHooks and keeps revision", err);
+  }
+
+  // E. invalid revision never marks written
+  try {
+    const workDir = state.workDir;
+    const invalidCases = [
+      { label: "missing", override: "missing" },
+      { label: "null", override: null },
+      { label: "NaN", override: Number.NaN },
+      { label: "1.5", override: 1.5 },
+      { label: "-1", override: -1 },
+      { label: "string", override: "2" },
+    ];
+    for (const c of invalidCases) {
+      state.inboxItems = [makePersonaItem(path.join(workDir, "persona.txt"))];
+      state.statusLog = [];
+      state.writeRevisionOverride = c.override;
+      const revBefore = state.packageRevision;
+      await setConfirm(win, true);
+      await evalIn(win, `document.getElementById("btn-inbox-review").click()`);
+      await waitReviewVisible(win);
+      await evalIn(win, `document.getElementById("btn-write").click()`);
+      await waitFor(
+        async () => {
+          const msg = await evalIn(
+            win,
+            `document.getElementById("inbox-progress-current")?.textContent || ""`
+          );
+          return msg.includes("写入结果缺少有效版本号");
+        },
+        { label: `invalid revision ${c.label}`, timeoutMs: 15000 }
+      );
+      assert.equal(state.inboxItems[0].status, "suggested", c.label);
+      assert.notEqual(state.inboxItems[0].status, "written", c.label);
+      assert.equal(state.packageRevision, revBefore, c.label);
+      const bannerHidden = await evalIn(
+        win,
+        `document.getElementById("build-done-banner")?.classList.contains("hidden")`
+      );
+      assert.equal(bannerHidden, true, c.label);
+      const msg = await evalIn(
+        win,
+        `document.getElementById("inbox-progress-current")?.textContent || ""`
+      );
+      assert.match(msg, /写入结果缺少有效版本号，未将材料标记为已写入。/, c.label);
+      assert.ok(!msg.includes("C:\\"), c.label);
+      assert.ok(!msg.includes("/Users/"), c.label);
+    }
+    pass("E. invalid revision responses fail closed without marking written");
+  } catch (err) {
+    fail("E. invalid revision responses fail closed without marking written", err);
   }
 
   const failed = results.filter((r) => !r.ok);
