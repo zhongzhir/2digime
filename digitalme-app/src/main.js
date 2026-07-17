@@ -1977,7 +1977,6 @@ ipcMain.handle("l0:runExternalAgent", async (e, payload) => {
       payload || {},
       l0Agents,
       {
-        runCliAgent: l0Agents.runCliAgent,
         onProgress: sendProg,
         signal: ac.signal,
       }

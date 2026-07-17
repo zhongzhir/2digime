@@ -946,20 +946,20 @@
           </div>
         </div>
         <details class="settings-l0" open>
-          <summary>主体编排 · 外部执行体与记录</summary>
-          <p class="hint">编程默认用「本机对话+工具」。若要调度本机其它代码助手，填写命令并启用；每次委派须确认且需允许改文件。</p>
-          <label>外部命令（例如本机助手可执行文件）
-            <input id="cfg-cli-cmd" type="text" placeholder="留空则仅使用本机对话" />
+          <summary>主体编排 · 本地命令工具与记录</summary>
+          <p class="hint">默认关闭。仅可配置已注册的「本地命令工具」：绝对路径可执行文件与已保存的授权工作目录。每次委派须确认，且需允许改动授权目录中的文件。受限执行不是安全沙箱。</p>
+          <label>可执行文件（绝对路径）
+            <input id="cfg-cli-executable" type="text" placeholder="例如本机受信程序的完整路径" />
           </label>
-          <label>工作目录（可选）
-            <input id="cfg-cli-cwd" type="text" placeholder="执行时的当前目录" />
+          <label>授权工作目录（绝对路径）
+            <input id="cfg-cli-cwd-root" type="text" placeholder="外部程序允许使用的工作目录根" />
           </label>
           <label class="code-auth-check">
             <input type="checkbox" id="cfg-cli-enabled" />
-            启用外部命令执行体
+            启用本地命令工具
           </label>
           <div class="modal-actions">
-            <button type="button" id="btn-cli-save" class="btn-ghost">保存执行体配置</button>
+            <button type="button" id="btn-cli-save" class="btn-ghost">保存工具配置</button>
           </div>
           <div class="ext-store-head" style="margin-top:12px">
             <h3 style="font-size:14px;margin:0">近期决策记录</h3>

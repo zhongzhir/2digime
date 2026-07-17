@@ -521,6 +521,12 @@ function buildBaseEntry(state, generation, fields) {
     action: String(fields.action || ""),
     dataScopes: Array.isArray(fields.dataScopes) ? [...fields.dataScopes].sort() : [],
     destination: String(fields.destination || ""),
+    toolId: String(fields.toolId || ""),
+    definitionVersion: String(fields.definitionVersion || ""),
+    planDigest: String(fields.planDigest || ""),
+    envKeyNames: Array.isArray(fields.envKeyNames)
+      ? fields.envKeyNames.map((k) => String(k)).filter(Boolean).sort()
+      : [],
     approval: sanitizeApproval(fields.approval),
     outcome: sanitizeOutcome(fields.outcome),
     previousHash: state.lastHash,

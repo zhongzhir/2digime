@@ -2192,8 +2192,12 @@ async function openSettings() {
   try {
     const cli = await window.digitalMe.l0GetCliAgentConfig?.();
     if (cli) {
-      if ($("cfg-cli-cmd")) $("cfg-cli-cmd").value = cli.command || "";
-      if ($("cfg-cli-cwd")) $("cfg-cli-cwd").value = cli.cwd || "";
+      if ($("cfg-cli-executable")) {
+        $("cfg-cli-executable").value = cli.executable || cli.command || "";
+      }
+      if ($("cfg-cli-cwd-root")) {
+        $("cfg-cli-cwd-root").value = cli.authorizedCwdRoot || cli.cwd || "";
+      }
       if ($("cfg-cli-enabled")) $("cfg-cli-enabled").checked = !!cli.enabled;
     }
   } catch {
@@ -2317,13 +2321,21 @@ async function rollbackToPreviousPackageVersion() {
 }
 
 async function saveCliExecutorSettings() {
-  const command = ($("cfg-cli-cmd")?.value || "").trim();
-  const cwd = ($("cfg-cli-cwd")?.value || "").trim();
+  const executable = ($("cfg-cli-executable")?.value || "").trim();
+  const authorizedCwdRoot = ($("cfg-cli-cwd-root")?.value || "").trim();
   const enabled = !!$("cfg-cli-enabled")?.checked;
   if (!window.digitalMe.l0SaveCliAgent) return;
-  await window.digitalMe.l0SaveCliAgent({ command, cwd, enabled });
-  await refreshCodeExecutorSelect();
-  alert(enabled && command ? "外部执行体已保存。" : "已保存（未启用或未填写命令时仍只用本机对话）。");
+  try {
+    await window.digitalMe.l0SaveCliAgent({ executable, authorizedCwdRoot, enabled });
+    await refreshCodeExecutorSelect();
+    alert(
+      enabled && executable && authorizedCwdRoot
+        ? "本地命令工具已保存。"
+        : "已保存（未启用或配置不完整时仍只用本机对话）。"
+    );
+  } catch (e) {
+    alert("保存失败：" + (e.message || String(e)));
+  }
 }
 
 async function saveSettings() {
@@ -3590,12 +3602,32 @@ function showExternalAgentConfirmModal(summary, expiresAt) {
       return;
     }
     if (title) title.textContent = "确认外部程序执行";
-    if (headline) headline.textContent = (summary && summary.headline) || "即将让本机外部程序执行任务";
+    if (headline) {
+      headline.textContent =
+        (summary && summary.headline) || "即将让本机外部程序执行任务";
+    }
     details.innerHTML = "";
+    const envKeys =
+      summary && Array.isArray(summary.envKeyNames) && summary.envKeyNames.length
+        ? summary.envKeyNames.join("、")
+        : "—";
     const rows = [
-      ["执行体", summary && summary.executorName],
-      ["命令", summary && summary.commandLabel],
+      ["说明", summary && summary.notSandboxNotice],
+      ["工具", summary && summary.executorName],
+      ["工具版本", summary && summary.definitionVersion],
+      ["可执行文件", summary && (summary.executableAbsolute || summary.commandLabel)],
       ["工作目录", summary && summary.cwd],
+      ["环境变量（仅键名）", envKeys],
+      [
+        "超时",
+        summary && summary.timeoutMs ? Math.round(summary.timeoutMs / 1000) + " 秒" : "—",
+      ],
+      [
+        "输出上限",
+        summary && summary.maxOutputBytes
+          ? summary.maxOutputBytes + " 字节"
+          : "—",
+      ],
       ["可能改文件", summary && summary.mayModifyFiles ? "是" : "否"],
       ["数据范围", summary && Array.isArray(summary.dataScopes) ? summary.dataScopes.join("、") : ""],
       ["风险", summary && summary.risk],

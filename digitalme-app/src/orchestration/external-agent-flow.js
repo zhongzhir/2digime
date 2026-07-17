@@ -9,6 +9,7 @@ const {
 const { digestTaskText } = require("../policy-engine/digest");
 const confirmationStore = require("../policy-engine/confirmation-store");
 const decisionAudit = require("../decision-audit");
+const toolBroker = require("../tool-broker");
 
 function senderIdFromEvent(event) {
   return event && event.sender && event.sender.id != null ? String(event.sender.id) : "unknown";
@@ -16,6 +17,7 @@ function senderIdFromEvent(event) {
 
 function auditFieldsFromDecision(decision) {
   const req = decision.request || {};
+  const resource = req.resource || {};
   return {
     decisionId: decision.decisionId,
     policyVersion: decision.policyVersion || POLICY_VERSION,
@@ -25,6 +27,10 @@ function auditFieldsFromDecision(decision) {
     action: req.action || "",
     dataScopes: req.dataScopes || [],
     destination: req.destination || "",
+    toolId: resource.toolId || "",
+    definitionVersion: resource.definitionVersion || "",
+    planDigest: resource.planDigest || "",
+    envKeyNames: resource.envKeyNames || [],
   };
 }
 
@@ -101,6 +107,21 @@ function resolveCliSnapshot(userData, agents) {
   return snapshot;
 }
 
+function prepareBoundPlan(userData, task, scopes) {
+  const prepared = toolBroker.preparePlan(userData, {
+    toolId: toolBroker.LOCAL_CLI_TOOL_ID,
+    taskText: task,
+    dataScopes: scopes,
+  });
+  if (!prepared.ok || !prepared.plan) {
+    const e = new Error("无法生成受控执行计划，已拒绝启动。");
+    e.code = "plan_prepare_failed";
+    e.reasonCodes = prepared.reasonCodes || [];
+    throw e;
+  }
+  return prepared;
+}
+
 /**
  * Phase 1: evaluate policy, issue confirmation token if needed.
  */
@@ -116,20 +137,20 @@ function requestExternalAgent(userData, event, payload, agents) {
     throw new Error("外部执行体未沙箱化，必须先明确确认可改动授权目录中的文件。");
   }
 
-  // decisionId is always minted by the main process; renderer-supplied values are ignored.
+  const prepared = prepareBoundPlan(userData, task, scopes);
   const rawRequest = buildExternalCliRequest({
     taskText: task,
     dataScopes: scopes,
     agent: ag,
     writeIntent,
+    plan: prepared.plan,
+    planDigest: prepared.planDigest,
   });
-  const decision = evaluatePolicy(
-    rawRequest,
-    {
-      cliEnabled: !!ag.enabled && !!ag.command,
-      hasCommand: !!(ag.command && String(ag.command).trim()),
-    }
-  );
+  const decision = evaluatePolicy(rawRequest, {
+    cliEnabled: !!ag.enabled && !!ag.executable,
+    hasCommand: !!(ag.executable && String(ag.executable).trim()),
+    hasPlan: true,
+  });
 
   appendDecisionEvent(userData, decision, "policy_evaluated", {
     outcome: { status: decision.effect, reasonCodes: decision.reasonCodes },
@@ -138,7 +159,7 @@ function requestExternalAgent(userData, event, payload, agents) {
   if (decision.effect === "deny") {
     const msg =
       decision.reasonCodes.includes("cli_not_configured")
-        ? "请先在设置中启用并填写外部命令。"
+        ? "请先在设置中启用并配置已注册的本地命令工具。"
         : "当前请求未通过安全策略，无法委派外部程序。";
     const e = new Error(msg);
     e.code = "policy_denied";
@@ -153,20 +174,18 @@ function requestExternalAgent(userData, event, payload, agents) {
   }
 
   const senderId = senderIdFromEvent(event);
-  const { tokenId, correlationId, expiresAt } = confirmationStore.issueToken(
-    {
-      requestDigest: decision.requestDigest,
-      actor: decision.request.actor,
-      action: decision.request.action,
-      destination: decision.request.destination,
-      dataScopes: decision.request.dataScopes,
-      cwd: decision.request.resource.cwdNormalized || "",
-      senderId,
-      taskDigest: decision.request.taskDigest,
-      decisionId: decision.decisionId,
-      executorConfigFingerprint: decision.request.resource.configFingerprint,
-    },
-  );
+  const { tokenId, correlationId, expiresAt } = confirmationStore.issueToken({
+    requestDigest: decision.requestDigest,
+    actor: decision.request.actor,
+    action: decision.request.action,
+    destination: decision.request.destination,
+    dataScopes: decision.request.dataScopes,
+    cwd: decision.request.resource.cwdNormalized || "",
+    senderId,
+    taskDigest: decision.request.taskDigest,
+    decisionId: decision.decisionId,
+    executorConfigFingerprint: decision.request.resource.configFingerprint,
+  });
 
   appendDecisionEvent(userData, decision, "confirmation_issued", {
     approval: { confirmationId: correlationId },
@@ -181,6 +200,7 @@ function requestExternalAgent(userData, event, payload, agents) {
     summary: decision.confirmationSummary,
     policyVersion: decision.policyVersion,
     requestDigest: decision.requestDigest,
+    planDigest: prepared.planDigest,
   };
 }
 
@@ -320,30 +340,45 @@ function buildDecisionForExecution(userData, event, payload, agents) {
   const ag = resolveCliSnapshot(userData, agents);
   const decisionId = String((payload && payload.decisionId) || "").trim();
   if (!decisionId) throw new Error("缺少原始决策编号，请重新发起确认。");
+  const task = String((payload && payload.task) || "").trim();
+  const prepared = prepareBoundPlan(userData, task, scopes);
   const rawRequest = buildExternalCliRequest({
-    taskText: String((payload && payload.task) || "").trim(),
+    taskText: task,
     dataScopes: scopes,
     agent: ag,
     writeIntent,
+    plan: prepared.plan,
+    planDigest: prepared.planDigest,
   });
   const decision = evaluatePolicy(
     rawRequest,
     {
-      cliEnabled: !!ag.enabled && !!ag.command,
-      hasCommand: !!(ag.command && String(ag.command).trim()),
+      cliEnabled: !!ag.enabled && !!ag.executable,
+      hasCommand: !!(ag.executable && String(ag.executable).trim()),
+      hasPlan: true,
     },
     { decisionId }
   );
-  return { decision, agentSnapshot: ag };
+  return { decision, agentSnapshot: ag, prepared };
 }
 
 /**
- * Phase 2: re-evaluate, consume token, audit-approved, execute.
+ * Phase 2: re-evaluate, consume token, audit-approved, execute via ToolBroker only.
  */
 async function runExternalAgent(userData, event, payload, agents, deps = {}) {
   ensureAuditHealthy(userData);
-  const runCliAgent = deps.runCliAgent || agents.runCliAgent;
+  const executePreparedPlan =
+    deps.executePreparedPlan ||
+    (agents && typeof agents.executePreparedPlan === "function"
+      ? agents.executePreparedPlan.bind(agents)
+      : null) ||
+    toolBroker.executePreparedPlan;
   const onProgress = deps.onProgress || (() => {});
+  let spawnCount = 0;
+  const trackedExecute = async (plan, opts) => {
+    spawnCount += 1;
+    return executePreparedPlan(plan, opts);
+  };
 
   const task = String((payload && payload.task) || "").trim();
   if (!task) throw new Error("任务为空");
@@ -356,7 +391,12 @@ async function runExternalAgent(userData, event, payload, agents, deps = {}) {
     throw new Error("确认须由主进程签发的一次性凭据完成，界面勾选不能代替确认。");
   }
 
-  const { decision, agentSnapshot } = buildDecisionForExecution(userData, event, payload, agents);
+  const { decision, agentSnapshot, prepared } = buildDecisionForExecution(
+    userData,
+    event,
+    payload,
+    agents
+  );
   appendDecisionEvent(userData, decision, "policy_evaluated", {
     outcome: { status: decision.effect, reasonCodes: decision.reasonCodes },
   });
@@ -399,38 +439,50 @@ async function runExternalAgent(userData, event, payload, agents, deps = {}) {
     outcome: { status: "approved" },
   });
 
-  const rid = (payload && payload.requestId) || "dlg_" + Date.now();
   const signal = deps.signal;
 
   appendDecisionEvent(userData, decision, "execution_started", {
     approval: correlationApproval(token),
-    outcome: { status: "started" },
+    outcome: {
+      status: "started",
+      planDigest: prepared.planDigest,
+      toolId: prepared.plan.toolId,
+    },
   });
 
-  onProgress({ phase: "thinking", label: "正在调度外部执行体…" });
+  onProgress({ phase: "thinking", label: "正在调度受控本地工具…" });
 
   let auditIncomplete = false;
   try {
-    const result = await runCliAgent(userData, { task, signal, agentConfig: agentSnapshot });
+    const result = await trackedExecute(prepared.plan, { signal });
     const outputDigest = decisionAudit.digestOutput(result.output || "");
-    const outcomeStatus = result.aborted
-      ? "aborted"
-      : result.ok
-        ? "completed"
-        : "failed";
+    let outcomeStatus = "failed";
+    let eventName = "execution_failed";
+    if (result.aborted) {
+      outcomeStatus = "canceled";
+      eventName = "execution_canceled";
+    } else if (result.timedOut) {
+      outcomeStatus = "timed_out";
+      eventName = "execution_timed_out";
+    } else if (result.ok) {
+      outcomeStatus = "completed";
+      eventName = "execution_completed";
+    }
 
     try {
       appendAuditOrThrow(userData, {
         ...auditFieldsFromDecision(decision),
-        event: result.aborted
-          ? "execution_aborted"
-          : result.ok
-            ? "execution_completed"
-            : "execution_failed",
+        event: eventName,
         approval: correlationApproval(token),
         outcome: {
           status: outcomeStatus,
           exitCode: result.code,
+          truncated: !!result.truncated,
+          timedOut: !!result.timedOut,
+          cancelled: !!result.aborted,
+          orphanRisk: !!result.orphanRisk,
+          stdoutLen: result.stdoutLen,
+          stderrLen: result.stderrLen,
           ...outputDigest,
         },
       });
@@ -443,30 +495,49 @@ async function runExternalAgent(userData, event, payload, agents, deps = {}) {
       return {
         ok: false,
         aborted: true,
+        spawnCount,
         reply: auditIncomplete
-          ? "已停止外部执行体。注意：部分决策记录未能写入（audit_incomplete）。"
-          : "已停止外部执行体。",
-        meta: { capabilitiesUsed: [agentSnapshot.id], auditIncomplete },
+          ? "已停止外部程序。注意：部分决策记录未能写入。"
+          : "已停止外部程序。",
+        meta: { capabilitiesUsed: [agentSnapshot.id], auditIncomplete, spawnCount },
+      };
+    }
+
+    if (result.timedOut) {
+      onProgress({ phase: "done" });
+      return {
+        ok: false,
+        timedOut: true,
+        spawnCount,
+        reply:
+          "外部程序已超时并尝试终止。" +
+          (result.orphanRisk ? "若仍有残留进程，请在系统中手动确认。" : "") +
+          (auditIncomplete ? "\n\n注意：部分决策记录未能写入。" : ""),
+        meta: { capabilitiesUsed: [agentSnapshot.id], auditIncomplete, spawnCount },
       };
     }
 
     const replyPrefix = result.ok
-      ? "外部执行体已结束。\n\n"
-      : "外部执行体结束（可能非零退出码）。\n\n";
-    const reply =
+      ? "外部程序已结束。\n\n"
+      : "外部程序结束（可能非零退出码）。\n\n";
+    let reply =
       replyPrefix +
       (result.output || "（无输出）") +
-      (auditIncomplete ? "\n\n注意：部分决策记录未能写入（audit_incomplete）。" : "");
+      (result.truncated ? "\n\n（输出已截断）" : "") +
+      (auditIncomplete ? "\n\n注意：部分决策记录未能写入。" : "");
 
     onProgress({ phase: "done" });
     return {
       ok: result.ok,
+      spawnCount,
       reply,
       meta: {
         capabilitiesUsed: [agentSnapshot.id],
         usedTools: true,
         executor: agentSnapshot.name,
         auditIncomplete,
+        spawnCount,
+        truncated: !!result.truncated,
       },
     };
   } catch (err) {
@@ -475,17 +546,17 @@ async function runExternalAgent(userData, event, payload, agents, deps = {}) {
         ...auditFieldsFromDecision(decision),
         event: "execution_failed",
         approval: correlationApproval(token),
-        outcome: { status: "error" },
+        outcome: { status: "error", spawnCount },
       });
     } catch {
       auditIncomplete = true;
     }
     onProgress({ phase: "done" });
     const e = new Error(
-      String(err.message || err) +
-        (auditIncomplete ? "（决策记录未完整写入：audit_incomplete）" : "")
+      String(err.message || err) + (auditIncomplete ? "（决策记录未完整写入）" : "")
     );
     e.auditIncomplete = auditIncomplete;
+    e.spawnCount = spawnCount;
     throw e;
   }
 }
@@ -499,4 +570,5 @@ module.exports = {
   senderIdFromEvent,
   resolveDataScopes,
   digestTaskText,
+  prepareBoundPlan,
 };

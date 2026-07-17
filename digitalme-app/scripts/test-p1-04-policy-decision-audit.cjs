@@ -23,6 +23,7 @@ const decisionAudit = require("../src/decision-audit");
 const externalAgentFlow = require("../src/orchestration/external-agent-flow");
 const agentsLib = require("../src/orchestration/agents");
 const { buildEntryHash } = require("../src/decision-audit/hash");
+const toolBroker = require("../src/tool-broker");
 
 const DEFAULT_PKG = path.join(__dirname, "..", "..", "digital-me-package");
 const P100_BASELINE = path.join(__dirname, "..", "..", "build", "reports", "p1-00-package-baseline.json");
@@ -42,7 +43,10 @@ async function test(name, fn) {
 }
 
 function tempUserData(label) {
-  return fs.mkdtempSync(path.join(os.tmpdir(), `dm-p104-${label}-`));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `dm-p104-${label}-`));
+  // Integration paths prepare a ToolBroker plan from userData; keep CLI ready by default.
+  seedLocalCli(dir);
+  return dir;
 }
 
 function cleanup(dir) {
@@ -53,17 +57,55 @@ function cleanup(dir) {
   }
 }
 
+function fakePlan(overrides = {}) {
+  return {
+    toolId: "local_cli",
+    definitionVersion: "p1-05-v1",
+    toolName: "测试工具",
+    executable: "C:\\tools\\cli\\node.exe",
+    executableBasename: "node.exe",
+    executableFingerprint: "fp_" + (overrides._fp || "a"),
+    args: ["demo"],
+    argsTemplate: overrides.argsTemplate || ["{{task}}"],
+    cwd: "C:\\tmp\\work",
+    envKeyNames: ["SystemRoot", "TEMP", "TMP", "WINDIR"],
+    timeoutMs: 60000,
+    maxOutputBytes: 65536,
+    dataScopes: ["env_inherit", "task_text", "workspace_files"],
+    shell: false,
+    ...overrides,
+  };
+}
+
 function cliAgent(overrides = {}) {
   return agentsLib.buildCliAgentSnapshot({
     id: "cli-coder",
     kind: "cli",
     name: "测试执行体",
-    command: "C:\\tools\\cli\\echo.cmd",
-    argsTemplate: ["{{task}}", "--safe"],
-    cwd: "",
+    executable: "C:\\tools\\cli\\node.exe",
+    authorizedCwdRoot: "C:\\tmp\\work",
+    argsTemplate: ["{{task}}"],
     enabled: true,
     ...overrides,
   });
+}
+
+function policyContext(extra = {}) {
+  return { cliEnabled: true, hasCommand: true, hasPlan: true, ...extra };
+}
+
+function seedLocalCli(userData, overrides = {}) {
+  const cwd = overrides.cwd || path.join(userData, "workdir");
+  fs.mkdirSync(cwd, { recursive: true });
+  const saved = toolBroker.saveNarrowSettings(userData, {
+    executable: overrides.executable || process.execPath,
+    authorizedCwdRoot: cwd,
+    enabled: overrides.enabled !== false,
+    timeoutMs: overrides.timeoutMs,
+    maxOutputBytes: overrides.maxOutputBytes,
+  });
+  assert.equal(saved.ok, true, String((saved.reasonCodes || []).join(",")));
+  return cwd;
 }
 
 function agentsModule(agent, runImpl) {
@@ -79,11 +121,20 @@ function agentsModule(agent, runImpl) {
     setAgent(next) {
       current = { ...next };
     },
-    runCliAgent:
+    executePreparedPlan:
       runImpl ||
       (async () => {
         spawnCount += 1;
-        return { ok: true, code: 0, output: "demo-output", aborted: false };
+        return {
+          ok: true,
+          code: 0,
+          output: "demo-output",
+          aborted: false,
+          timedOut: false,
+          truncated: false,
+          stdoutLen: 11,
+          stderrLen: 0,
+        };
       }),
     get spawnCount() {
       return spawnCount;
@@ -95,12 +146,16 @@ function mockEvent(senderId) {
   return { sender: { id: senderId } };
 }
 
-function baseRequest(task = "fix lint, secret=TEST_KEY_DO_NOT_LOG") {
+function baseRequest(task = "fix lint, secret=TEST_KEY_DO_NOT_LOG", planOverrides = {}) {
+  const plan = fakePlan(planOverrides);
+  const planDigest = "plan_" + (planOverrides._fp || "a");
   return buildExternalCliRequest({
     taskText: task,
     dataScopes: ["task_text", "workspace_files", "env_inherit"],
     agent: cliAgent(),
     writeIntent: true,
+    plan,
+    planDigest,
   });
 }
 
@@ -158,7 +213,7 @@ async function runAllTests() {
   confirmationStore.clearAllForTests();
 
   await test("1. external_cli_execute requires confirmation when CLI configured", () => {
-    const decision = evaluatePolicy(baseRequest(), { cliEnabled: true, hasCommand: true });
+    const decision = evaluatePolicy(baseRequest(), policyContext());
     assert.equal(decision.effect, "require_confirmation");
     assert.ok(decision.reasonCodes.includes("external_cli_requires_confirmation"));
     assert.ok(decision.confirmationSummary);
@@ -166,7 +221,7 @@ async function runAllTests() {
   });
 
   await test("2. deny when CLI not configured or workspace_files missing", () => {
-    const decision = evaluatePolicy(baseRequest(), { cliEnabled: false, hasCommand: false });
+    const decision = evaluatePolicy(baseRequest(), policyContext({ cliEnabled: false, hasCommand: false, hasPlan: false }));
     assert.equal(decision.effect, "deny");
     assert.ok(decision.reasonCodes.includes("cli_not_configured"));
     const noWrite = evaluatePolicy(
@@ -175,18 +230,20 @@ async function runAllTests() {
         dataScopes: ["task_text", "env_inherit"],
         agent: cliAgent(),
         writeIntent: false,
+        plan: fakePlan(),
+        planDigest: "plan_a",
       }),
-      { cliEnabled: true, hasCommand: true }
+      policyContext()
     );
     assert.equal(noWrite.effect, "deny");
     assert.ok(noWrite.reasonCodes.includes("workspace_write_confirmation_required"));
   });
 
   await test("3. deny on missing or unknown fields", () => {
-    const bad = evaluatePolicy({ actor: "owner:renderer" }, { cliEnabled: true, hasCommand: true });
+    const bad = evaluatePolicy({ actor: "owner:renderer" }, policyContext());
     assert.equal(bad.effect, "deny");
     assert.ok(bad.reasonCodes.length > 0);
-    const unknown = evaluatePolicy({ ...baseRequest(), action: "unknown_action" }, { cliEnabled: true, hasCommand: true });
+    const unknown = evaluatePolicy({ ...baseRequest(), action: "unknown_action" }, policyContext());
     assert.equal(unknown.effect, "deny");
   });
 
@@ -196,12 +253,16 @@ async function runAllTests() {
       dataScopes: ["workspace_files", "task_text", "env_inherit"],
       agent: cliAgent(),
       writeIntent: true,
+      plan: fakePlan(),
+      planDigest: "plan_a",
     });
     const b = buildExternalCliRequest({
       taskText: "alpha",
       dataScopes: ["env_inherit", "task_text", "workspace_files"],
       agent: cliAgent(),
       writeIntent: true,
+      plan: fakePlan(),
+      planDigest: "plan_a",
     });
     assert.equal(buildRequestDigest(a), buildRequestDigest(b));
     const c = buildExternalCliRequest({
@@ -209,28 +270,40 @@ async function runAllTests() {
       dataScopes: ["env_inherit", "task_text", "workspace_files"],
       agent: cliAgent(),
       writeIntent: true,
+      plan: fakePlan(),
+      planDigest: "plan_a",
     });
     assert.notEqual(buildRequestDigest(a), buildRequestDigest(c));
   });
 
-  await test("5. request digest binds full command path and argsTemplate", () => {
+  await test("5. request digest binds executable fingerprint and argsTemplate", () => {
     const pathA = buildExternalCliRequest({
       taskText: "alpha",
       dataScopes: ["task_text", "workspace_files", "env_inherit"],
-      agent: cliAgent({ command: "C:\\tools\\agent-a\\echo.cmd" }),
+      agent: cliAgent(),
       writeIntent: true,
+      plan: fakePlan({ executable: "C:\\tools\\agent-a\\node.exe", _fp: "a" }),
+      planDigest: "plan_a",
     });
     const pathB = buildExternalCliRequest({
       taskText: "alpha",
       dataScopes: ["task_text", "workspace_files", "env_inherit"],
-      agent: cliAgent({ command: "D:\\other\\echo.cmd" }),
+      agent: cliAgent(),
       writeIntent: true,
+      plan: fakePlan({
+        executable: "D:\\other\\node.exe",
+        executableFingerprint: "fp_b",
+        _fp: "b",
+      }),
+      planDigest: "plan_b",
     });
     const argsChanged = buildExternalCliRequest({
       taskText: "alpha",
       dataScopes: ["task_text", "workspace_files", "env_inherit"],
-      agent: cliAgent({ argsTemplate: ["--mode=apply", "{{task}}"] }),
+      agent: cliAgent(),
       writeIntent: true,
+      plan: fakePlan({ argsTemplate: ["--mode=apply", "{{task}}"], _fp: "c" }),
+      planDigest: "plan_c",
     });
     assert.notEqual(buildRequestDigest(pathA), buildRequestDigest(pathB));
     assert.notEqual(buildRequestDigest(pathA), buildRequestDigest(argsChanged));
@@ -654,7 +727,14 @@ async function runAllTests() {
         },
         ag
       );
-      ag.setAgent(cliAgent({ command: "D:\\changed\\echo.cmd" }));
+      const driftedCwd = path.join(userData, "workdir-drift");
+      fs.mkdirSync(driftedCwd, { recursive: true });
+      const drifted = toolBroker.saveNarrowSettings(userData, {
+        executable: process.execPath,
+        authorizedCwdRoot: driftedCwd,
+        enabled: true,
+      });
+      assert.equal(drifted.ok, true);
       await assert.rejects(
         () =>
           externalAgentFlow.runExternalAgent(
@@ -672,6 +752,8 @@ async function runAllTests() {
         /执行配置与确认时不一致|重新发起/
       );
 
+      // Restore primary cwd then issue a new confirmation; drift timeout afterwards.
+      seedLocalCli(userData);
       const prep2 = externalAgentFlow.requestExternalAgent(
         userData,
         mockEvent(3),
@@ -682,7 +764,13 @@ async function runAllTests() {
         },
         ag
       );
-      ag.setAgent(cliAgent({ argsTemplate: ["--changed", "{{task}}"] }));
+      const timeoutDrift = toolBroker.saveNarrowSettings(userData, {
+        executable: process.execPath,
+        authorizedCwdRoot: path.join(userData, "workdir"),
+        enabled: true,
+        timeoutMs: 120000,
+      });
+      assert.equal(timeoutDrift.ok, true);
       await assert.rejects(
         () =>
           externalAgentFlow.runExternalAgent(

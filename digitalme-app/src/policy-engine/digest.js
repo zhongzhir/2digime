@@ -37,6 +37,16 @@ function buildRequestDigest(request) {
       argsTemplateFingerprint: request.resource.argsTemplateFingerprint || "",
       cwdFingerprint: request.resource.cwdFingerprint || "",
       configFingerprint: request.resource.configFingerprint || "",
+      toolId: request.resource.toolId || "",
+      definitionVersion: request.resource.definitionVersion || "",
+      executableAbsolute: request.resource.executableAbsolute || "",
+      executableFingerprint: request.resource.executableFingerprint || "",
+      planDigest: request.resource.planDigest || "",
+      envKeyNames: Array.isArray(request.resource.envKeyNames)
+        ? [...request.resource.envKeyNames].sort()
+        : [],
+      timeoutMs: Number(request.resource.timeoutMs) || 0,
+      maxOutputBytes: Number(request.resource.maxOutputBytes) || 0,
     },
     taskDigest: request.taskDigest,
     taskLength: request.taskLength,

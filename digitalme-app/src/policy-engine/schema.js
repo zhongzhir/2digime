@@ -1,6 +1,6 @@
 "use strict";
 
-const POLICY_VERSION = "p1-04-v1";
+const POLICY_VERSION = "p1-05-v1";
 
 const ACTORS = new Set(["owner:renderer"]);
 const PURPOSES = new Set(["code_delegate"]);
@@ -72,13 +72,27 @@ function normalizePolicyRequest(raw) {
     if (!isNonEmptyString(resource.argsTemplateFingerprint)) reasonCodes.push("missing_args_fingerprint");
     if (!isNonEmptyString(resource.cwdFingerprint)) reasonCodes.push("missing_cwd_fingerprint");
     if (!isNonEmptyString(resource.configFingerprint)) reasonCodes.push("missing_config_fingerprint");
+    if (!isNonEmptyString(resource.toolId)) reasonCodes.push("missing_tool_id");
+    if (!isNonEmptyString(resource.definitionVersion)) reasonCodes.push("missing_definition_version");
+    if (!isNonEmptyString(resource.executableFingerprint)) reasonCodes.push("missing_executable_fingerprint");
+    if (!isNonEmptyString(resource.planDigest)) reasonCodes.push("missing_plan_digest");
     if (resource.cwdDisplay != null && typeof resource.cwdDisplay !== "string") reasonCodes.push("invalid_cwd");
     if (resource.cwdNormalized != null && typeof resource.cwdNormalized !== "string") {
       reasonCodes.push("invalid_cwd_normalized");
     }
+    if (resource.envKeyNames != null && !Array.isArray(resource.envKeyNames)) {
+      reasonCodes.push("invalid_env_key_names");
+    }
+    if (resource.timeoutMs != null && !Number.isFinite(Number(resource.timeoutMs))) {
+      reasonCodes.push("invalid_timeout");
+    }
   }
 
   if (reasonCodes.length) return { ok: false, reasonCodes };
+
+  const envKeyNames = Array.isArray(resource.envKeyNames)
+    ? resource.envKeyNames.map((k) => String(k)).filter(Boolean).sort()
+    : [];
 
   return {
     ok: true,
@@ -99,6 +113,14 @@ function normalizePolicyRequest(raw) {
         argsTemplateFingerprint: String(resource.argsTemplateFingerprint || "").trim(),
         cwdFingerprint: String(resource.cwdFingerprint || "").trim(),
         configFingerprint: String(resource.configFingerprint || "").trim(),
+        toolId: String(resource.toolId).trim(),
+        definitionVersion: String(resource.definitionVersion).trim(),
+        executableAbsolute: resource.executableAbsolute != null ? String(resource.executableAbsolute).trim() : "",
+        executableFingerprint: String(resource.executableFingerprint).trim(),
+        planDigest: String(resource.planDigest).trim(),
+        envKeyNames,
+        timeoutMs: Number(resource.timeoutMs) || 0,
+        maxOutputBytes: Number(resource.maxOutputBytes) || 0,
       },
       taskDigest: String(raw.taskDigest || "").trim(),
       taskLength: Number(raw.taskLength) || 0,

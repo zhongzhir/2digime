@@ -5,6 +5,45 @@
 
 ---
 
+## 2026-07-17（P1-05 · ToolBroker 与外部 CLI 最小隔离切片）
+
+### 结论
+
+- 编号：`P1-05`
+- 分支：`codex/p1-05-tool-broker`
+- 状态：`statically_verified`（自动测试与故障注入完成；交 Codex 安全复核；**不**直接安排 Owner 验收）
+- 范围：ToolBroker v1 + 注册工具 `local_cli`；与 P1-04 策略/确认/审计链绑定
+- 未做：MCP 迁移、外部协作骨架、OS 沙箱、真实 Package 改写、Builder/Life/Policies 写路径迁移
+
+### 实现摘要
+
+- 新增 `src/tool-broker/`（schema / registry / paths / environment / executor / index）；
+- 执行仅 `spawn(executable, args, { shell: false })`；拒绝 `.bat`/`.cmd`/脚本关联；绝对路径可执行文件指纹（realpath + size/mtime/sha256）；
+- 最小环境：白名单键 + 显式空 `PATH` 钉死，阻断宿主 PATH 劫持；哨兵密钥不进入子进程；
+- 工作目录必须落在已保存授权根内；拒绝逃逸、symlink、UNC/云同步启发式路径；
+- 超时、输出截断、取消/进程树回收；确认摘要标明「受限执行，不是安全沙箱」；
+- 设置页收窄为可执行文件绝对路径 + 授权工作目录 + 启用开关；升级后默认仍关闭；
+- Policy `p1-05-v1`：`requestDigest`/票据绑定 `toolId` / `definitionVersion` / `executableFingerprint` / `planDigest` / env 键名 / 超时。
+
+### 验证
+
+- `npm run test:p1-05`：14/14（含真实 child_process 超时/取消/元字符/环境/截断）；
+- `npm run test:p1-04`：25/25；P1-01～P1-03 回归通过；
+- P1-00 Package 基线逐文件不变，清单 SHA-256：`3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a`。
+
+### 仍未解决（须在复核材料中明示）
+
+- 不是 OS 级沙箱；已授权工具自身的恶意行为无法被本切片阻止；
+- MCP / 网络访问 / 按工具注入密钥未做；
+- Windows 仍可能注入少量固定配置文件变量（HOMEPATH 等）；任意宿主密钥不会被复制，PATH 已钉空；
+- Builder/Life/Policies 等 Package 写路径仍未迁入 PackageStore。
+
+### 下一步
+
+停止实现；提交 Codex 安全复核。通过后再安排 Owner 仅用系统临时本地目录的沙盒验收。
+
+---
+
 ## 2026-07-17（P1-04 accepted · PolicyEngine 与 DecisionAudit 真实验收完成）
 
 ### 结论
