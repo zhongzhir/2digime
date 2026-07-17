@@ -35,6 +35,7 @@ const decisionAudit = require("./decision-audit");
 const { SecretStore } = require("./security/secret-store");
 const { createElectronSafeStorageAdapter } = require("./security/electron-safe-storage-adapter");
 const { ConfigSecretsService, extensionSecretId } = require("./security/config-secrets");
+const { buildRuntimeStamp, stampIsPostOwnerFixes } = require("./runtime-stamp");
 
 // Digital Me Package lives one level up from the app folder by default.
 const DEFAULT_PACKAGE_DIR = path.join(__dirname, "..", "..", "digital-me-package");
@@ -658,6 +659,14 @@ function writeConfig(cfg) {
 }
 
 ipcMain.handle("config:get", () => readPublicConfig());
+ipcMain.handle("runtime:getStamp", () => {
+  const stamp = buildRuntimeStamp();
+  return {
+    ...stamp,
+    postOwnerFixes: stampIsPostOwnerFixes(stamp),
+    ownerRuntimeTest: process.env.DIGITALME_OWNER_RUNTIME_TEST === "1",
+  };
+});
 ipcMain.handle("config:set", (_e, cfg) => {
   getConfigSecrets().setConfigFromRenderer(cfg || {});
   return readPublicConfig();

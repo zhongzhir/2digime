@@ -102,11 +102,117 @@ const DO_SCENES = [
 
 const $ = (id) => document.getElementById(id);
 
+/** Normalize event targets so Text nodes / nested marks still resolve. */
+function eventElement(node) {
+  if (!node) return null;
+  if (node.nodeType === 1) return node;
+  return node.parentElement || null;
+}
+
+function firstMatchingInPath(e, selector) {
+  const path = typeof e.composedPath === "function" ? e.composedPath() : [];
+  for (const n of path) {
+    if (n && n.nodeType === 1 && n.matches && n.matches(selector)) return n;
+  }
+  const el = eventElement(e && e.target);
+  return el && el.closest ? el.closest(selector) : null;
+}
+
+function appendBootLog(line) {
+  const text = String(line || "").trim();
+  if (!text) return;
+  console.error("[Digital Me]", text);
+  try {
+    const log = document.getElementById("ui-boot-log");
+    if (!log) return;
+    const stamp = new Date().toLocaleTimeString();
+    const prev = log.textContent ? log.textContent + "\n" : "";
+    log.textContent = prev + `[${stamp}] ${text}`;
+    log.classList.remove("hidden");
+  } catch {
+    /* ignore */
+  }
+}
+
+function installBootErrorTraps() {
+  if (document.documentElement.dataset.dmBootTraps === "1") return;
+  document.documentElement.dataset.dmBootTraps = "1";
+  window.addEventListener("error", (ev) => {
+    const msg = (ev && ev.message) || "脚本错误";
+    const where = ev && ev.filename ? `（${ev.filename}:${ev.lineno || 0}）` : "";
+    appendBootLog(`页面脚本错误：${msg}${where}`);
+  });
+  window.addEventListener("unhandledrejection", (ev) => {
+    const reason = ev && ev.reason;
+    const msg = reason && reason.message ? reason.message : String(reason || "未处理的失败");
+    appendBootLog(`未处理的异步错误：${msg}`);
+  });
+}
+
+async function applyRuntimeStamp() {
+  if (!window.digitalMe || typeof window.digitalMe.getRuntimeStamp !== "function") {
+    appendBootLog("未能读取运行时版本信息（接口不可用）。请完全退出后重新启动应用。");
+    return null;
+  }
+  try {
+    const stamp = await window.digitalMe.getRuntimeStamp();
+    const shortHead = stamp && stamp.gitHead ? String(stamp.gitHead).slice(0, 7) : "unknown";
+    const appHash =
+      stamp && stamp.files && stamp.files.rendererApp
+        ? stamp.files.rendererApp.sha256Short
+        : "?";
+    const preloadHash =
+      stamp && stamp.files && stamp.files.preload ? stamp.files.preload.sha256Short : "?";
+    const mainHash = stamp && stamp.files && stamp.files.main ? stamp.files.main.sha256Short : "?";
+    document.documentElement.dataset.dmGitHead = shortHead;
+    document.documentElement.dataset.dmAppHash = appHash;
+    document.documentElement.dataset.dmPreloadHash = preloadHash;
+    document.documentElement.dataset.dmMainHash = mainHash;
+    document.documentElement.dataset.dmPostOwnerFixes = stamp && stamp.postOwnerFixes ? "1" : "0";
+    const el = document.getElementById("ui-runtime-stamp");
+    if (el) {
+      el.textContent = `加载版本 ${shortHead} · main ${mainHash} · preload ${preloadHash} · 界面 ${appHash}`;
+      el.classList.remove("hidden");
+      if (!stamp || !stamp.postOwnerFixes) {
+        el.classList.add("ui-runtime-stamp-warn");
+        appendBootLog(
+          "当前加载的界面/主进程文件缺少必要修复标记。请完全退出 Digital Me（含后台进程）后，从本仓库 digitalme-app 目录重新启动。"
+        );
+      }
+    }
+    return stamp;
+  } catch (err) {
+    appendBootLog("读取运行时版本信息失败：" + ((err && err.message) || err));
+    return null;
+  }
+}
+
+/**
+ * Bootstrap file actions + tip bubble must bind before any await / binder that may throw.
+ * Later bindEvents may call these again; they are idempotent via dataset flags.
+ */
+function registerEarlyUiDelegates() {
+  try {
+    bindBootstrapFileActions();
+  } catch (err) {
+    reportBindError("bootstrap-files-early", err);
+  }
+  try {
+    bindHelpAndTips();
+  } catch (err) {
+    reportBindError("help-tips-early", err);
+  }
+}
+
 async function init() {
+  installBootErrorTraps();
+
   // Must register before any await / bindEvents — stop depends on this surviving init failures.
   try {
     if (window.digitalMe && typeof window.digitalMe.onExternalAgentStarted === "function") {
       window.digitalMe.onExternalAgentStarted(onExternalAgentStarted);
+    } else {
+      appendBootLog("停止监听未就绪：请完全退出后重新启动，以确保加载最新预加载脚本。");
     }
     if (window.digitalMe && typeof window.digitalMe.onChatProgress === "function") {
       unsubChatProgress = window.digitalMe.onChatProgress(onChatProgress);
@@ -116,6 +222,16 @@ async function init() {
     }
   } catch (err) {
     console.error("[Digital Me] 进度/停止监听注册失败", err);
+    appendBootLog("进度/停止监听注册失败：" + ((err && err.message) || err));
+  }
+
+  // Before package/model awaits — keep submit buttons and tip marks interactive.
+  registerEarlyUiDelegates();
+
+  try {
+    await applyRuntimeStamp();
+  } catch (err) {
+    appendBootLog("版本标记失败：" + ((err && err.message) || err));
   }
 
   try {
@@ -130,12 +246,14 @@ async function init() {
     await renderModelStatus();
   } catch (err) {
     console.error("[Digital Me] 模型状态失败", err);
+    appendBootLog("模型状态失败：" + ((err && err.message) || err));
   }
 
   try {
     await renderCapabilitiesStatus();
   } catch (err) {
     console.error("[Digital Me] 能力状态失败", err);
+    appendBootLog("能力状态失败：" + ((err && err.message) || err));
   }
 
   bindEvents();
@@ -153,6 +271,7 @@ async function init() {
 function reportInitError(label, err) {
   const msg = `${label}：${(err && err.message) || err || "未知错误"}`;
   console.error("[Digital Me]", msg);
+  appendBootLog(msg);
   try {
     let ban = document.getElementById("ui-init-warning");
     if (!ban) {
@@ -604,13 +723,24 @@ function onResearchProgress(data) {
   }
 }
 
+/** requestId → operationId for events that arrive slightly before sendCode sets locals. */
+const pendingExternalOperationIds = new Map();
+
 function onExternalAgentStarted(data) {
   if (!data || !data.operationId) return;
+  const oid = String(data.operationId);
+  const rid = String(data.requestId || "");
+  if (rid) pendingExternalOperationIds.set(rid, oid);
   // Only bind while a code workspace run is active; require matching requestId when present.
   if (!codeRequestId) return;
-  const rid = String(data.requestId || "");
   if (rid && rid !== codeRequestId) return;
-  codeOperationId = String(data.operationId);
+  codeOperationId = oid;
+}
+
+function adoptPendingCodeOperationId() {
+  if (!codeRequestId) return;
+  const pending = pendingExternalOperationIds.get(codeRequestId);
+  if (pending) codeOperationId = pending;
 }
 
 function onChatProgress(data) {
@@ -3857,6 +3987,7 @@ async function sendCode() {
   codeRequestId = "creq_" + Date.now().toString(36);
   codeOperationId = null;
   codeStopBusy = false;
+  adoptPendingCodeOperationId();
   $("btn-code-send").disabled = true;
   const stopBtn = $("btn-code-stop");
   if (stopBtn) {
@@ -3919,14 +4050,25 @@ async function sendCode() {
         return;
       }
       if (trail) trail.textContent = "正在调度外部执行体（须你已确认）…";
-      const res = await window.digitalMe.l0RunExternalAgent({
+      const runPayload = {
         task: text,
         dataScopes,
         writeIntent: writeAuthorized,
         decisionId: prep.decisionId,
         confirmationToken: prep.confirmationToken,
         requestId: codeRequestId,
-      });
+      };
+      // Poll for main-minted operationId while invoke is in flight (started event).
+      const opPoll = setInterval(() => {
+        adoptPendingCodeOperationId();
+      }, 40);
+      let res;
+      try {
+        res = await window.digitalMe.l0RunExternalAgent(runPayload);
+      } finally {
+        clearInterval(opPoll);
+      }
+      adoptPendingCodeOperationId();
       if (res && res.operationId) codeOperationId = String(res.operationId);
       reply = (res && res.reply) || "";
       caps = (res && res.meta && res.meta.capabilitiesUsed) || [];
@@ -7559,9 +7701,17 @@ function bindHelpAndTips() {
     }, 120);
   }
 
-  function tipTargetFrom(node) {
-    if (!node || !node.closest) return null;
-    return node.closest(".tip-mark, [data-tip-id]");
+  function tipTargetFromEvent(e) {
+    return firstMatchingInPath(e, ".tip-mark, [data-tip-id]");
+  }
+
+  function tipMarkFromEvent(e) {
+    return firstMatchingInPath(e, ".tip-mark");
+  }
+
+  function tipTargetFromNode(node) {
+    const el = eventElement(node);
+    return el && el.closest ? el.closest(".tip-mark, [data-tip-id]") : null;
   }
 
   // Document delegation: survives missed per-node binds and late-rendered tips.
@@ -7570,7 +7720,7 @@ function bindHelpAndTips() {
     document.addEventListener(
       "pointerover",
       (e) => {
-        const el = tipTargetFrom(e.target);
+        const el = tipTargetFromEvent(e);
         if (el) showTip(el);
       },
       true
@@ -7578,10 +7728,10 @@ function bindHelpAndTips() {
     document.addEventListener(
       "pointerout",
       (e) => {
-        const el = tipTargetFrom(e.target);
+        const el = tipTargetFromEvent(e);
         if (!el) return;
-        const related = tipTargetFrom(e.relatedTarget);
-        if (related === el) return;
+        const relatedEl = tipTargetFromNode(e.relatedTarget);
+        if (relatedEl === el) return;
         hideTipSoon();
       },
       true
@@ -7589,7 +7739,7 @@ function bindHelpAndTips() {
     document.addEventListener(
       "focusin",
       (e) => {
-        const el = tipTargetFrom(e.target);
+        const el = tipTargetFromEvent(e);
         if (el) showTip(el);
       },
       true
@@ -7597,7 +7747,7 @@ function bindHelpAndTips() {
     document.addEventListener(
       "focusout",
       (e) => {
-        const el = tipTargetFrom(e.target);
+        const el = tipTargetFromEvent(e);
         if (el) hideTipSoon();
       },
       true
@@ -7605,7 +7755,7 @@ function bindHelpAndTips() {
     document.addEventListener(
       "click",
       (e) => {
-        const mark = e.target && e.target.closest && e.target.closest(".tip-mark");
+        const mark = tipMarkFromEvent(e);
         if (!mark) return;
         e.preventDefault();
         e.stopPropagation();
@@ -7718,7 +7868,9 @@ function bindBootstrapFileActions() {
   document.addEventListener(
     "click",
     (e) => {
-      const btn = e.target && e.target.closest && e.target.closest("button");
+      const resume = firstMatchingInPath(e, "#btn-bootstrap-resume");
+      const assess = firstMatchingInPath(e, "#btn-bootstrap-assessment-file");
+      const btn = resume || assess;
       if (!btn || !btn.id) return;
       if (btn.id === "btn-bootstrap-resume") {
         e.preventDefault();

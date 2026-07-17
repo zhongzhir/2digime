@@ -574,8 +574,14 @@
           <div id="me-body" class="library-layout">
             <div class="library-main">
               <div class="mode-tabs me-lane-tabs" id="me-lane-tabs" role="tablist">
-                <button type="button" class="mode-tab" data-me-lane="build" id="me-lane-btn-build">构建 <span class="tip-mark" data-tip-id="me-lane-build" tabindex="0" role="button" aria-label="构建说明">?</span></button>
-                <button type="button" class="mode-tab active" data-me-lane="self" id="me-lane-btn-self">数字之我 <span class="tip-mark" data-tip-id="me-lane-self" tabindex="0" role="button" aria-label="数字之我说明">?</span></button>
+                <div class="mode-tab-with-tip">
+                  <button type="button" class="mode-tab" data-me-lane="build" id="me-lane-btn-build">构建</button>
+                  <span class="tip-mark" data-tip-id="me-lane-build" tabindex="0" role="button" aria-label="构建说明">?</span>
+                </div>
+                <div class="mode-tab-with-tip">
+                  <button type="button" class="mode-tab active" data-me-lane="self" id="me-lane-btn-self">数字之我</button>
+                  <span class="tip-mark" data-tip-id="me-lane-self" tabindex="0" role="button" aria-label="数字之我说明">?</span>
+                </div>
               </div>
 
               <!-- 构建：进料与加工 -->
@@ -1065,6 +1071,9 @@
     </div>
 
     <div id="tip-bubble" class="tip-bubble hidden" role="tooltip"></div>
+
+    <div id="ui-boot-log" class="ui-boot-log hidden" role="status" aria-live="polite"></div>
+    <div id="ui-runtime-stamp" class="ui-runtime-stamp hidden" aria-hidden="true"></div>
 
     <script src="help.js"></script>
     <script src="app.js"></script>

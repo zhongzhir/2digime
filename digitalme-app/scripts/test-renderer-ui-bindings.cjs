@@ -70,11 +70,25 @@ async function runAll() {
     assert.ok(/aria-label="提交判断类文件"/.test(html));
   });
 
-  test("2. init registers onExternalAgentStarted before bindEvents", () => {
-    const startedIdx = appJs.indexOf("onExternalAgentStarted");
-    const bindIdx = appJs.indexOf("bindEvents()");
-    assert.ok(startedIdx > 0, "onExternalAgentStarted present");
-    assert.ok(bindIdx > startedIdx, "listener registration must precede bindEvents()");
+  test("2. init registers onExternalAgentStarted and early UI delegates before bindEvents", () => {
+    const initStart = appJs.indexOf("async function init()");
+    const bindFn = appJs.indexOf("\nfunction bindEvents()");
+    assert.ok(initStart > 0, "init() present");
+    assert.ok(bindFn > initStart, "bindEvents function follows init");
+    const initRegion = appJs.slice(initStart, bindFn);
+    const earlyIdx = initRegion.indexOf("registerEarlyUiDelegates()");
+    const bindCallIdx = initRegion.indexOf("bindEvents()");
+    assert.ok(earlyIdx > 0, "registerEarlyUiDelegates present in init");
+    assert.ok(bindCallIdx > 0, "bindEvents() call present in init");
+    assert.ok(earlyIdx < bindCallIdx, "early UI delegates must precede bindEvents() inside init");
+    assert.ok(
+      initRegion.indexOf("onExternalAgentStarted") >= 0 &&
+        initRegion.indexOf("onExternalAgentStarted") < bindCallIdx,
+      "onExternalAgentStarted registration must precede bindEvents()"
+    );
+    assert.ok(/appendBootLog/.test(appJs));
+    assert.ok(/getRuntimeStamp/.test(appJs));
+    assert.ok(/mode-tab-with-tip/.test(html), "tip marks must not nest inside mode-tab buttons");
   });
 
   test("3. bindEvents isolates failures; bootstrap + help are separate steps", () => {
@@ -84,6 +98,7 @@ async function runAll() {
     assert.ok(/dmBootstrapDelegate/.test(appJs));
     assert.ok(/dmTipDelegate/.test(appJs));
     assert.ok(/暂无说明/.test(appJs));
+    assert.ok(/firstMatchingInPath/.test(appJs));
     assert.ok(/btn-me-goto-cognition/.test(appJs) && /\?\.addEventListener/.test(appJs));
   });
 
@@ -163,7 +178,8 @@ async function runAll() {
     assert.ok(/bootstrap-duo/.test(helpJs));
     assert.ok(/tipTextFor\(el\) \|\| "暂无说明"/.test(appJs) || /|| "暂无说明"/.test(appJs));
     assert.ok(/pointerover|focusin/.test(appJs));
-    assert.ok(/closest\("\.tip-mark/.test(appJs));
+    assert.ok(/firstMatchingInPath/.test(appJs));
+    assert.ok(/tip-mark/.test(appJs));
   });
 
   test("7. pickIntoInbox is top-level (not trapped inside failing bindMe)", () => {

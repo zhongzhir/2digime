@@ -4,6 +4,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("digitalMe", {
   getConfig: () => ipcRenderer.invoke("config:get"),
+  getRuntimeStamp: () => ipcRenderer.invoke("runtime:getStamp"),
   setConfig: (cfg) => ipcRenderer.invoke("config:set", cfg),
   clearApiKey: () => ipcRenderer.invoke("config:clearApiKey"),
   clearExtensionSecret: (payload) => ipcRenderer.invoke("secrets:clearExtensionEnv", payload),
