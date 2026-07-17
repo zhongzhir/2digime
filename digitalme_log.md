@@ -5,6 +5,17 @@
 
 ---
 
+## 2026-07-17（P1-05 · 真实 IPC 停止路径）
+
+### 结论
+
+- 编号：`P1-05`
+- 状态：仍为 `statically_verified`（不标记 `accepted`）
+- 新增 `test-p1-05-stop-ipc.cjs`：模拟 `l0:external-agent-started` → `l0:stopExternalAgent`，长运行 Node 子进程须 `execution_canceled` 且无 `execution_timed_out`
+- Owner 复验前须完全退出并重启应用，避免旧 Electron/renderer 缓存
+
+---
+
 ## 2026-07-17（UI · 引导按钮与问号绑定失效）
 
 ### 结论

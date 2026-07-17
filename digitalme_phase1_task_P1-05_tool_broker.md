@@ -170,8 +170,9 @@ Owner 验收不能证明已形成 OS 沙箱；它只验收 ToolBroker 约束、�
 ### 停止立即生效（Owner 验收修订）
 
 - 主进程在登记委派后立即通过 `l0:external-agent-started` 向 renderer 暴露 `operationId`；
-- 停止按钮仅使用主进程签发的 `operationId` 调用 `l0:stopExternalAgent`；
-- 成功回收审计为 `execution_canceled`；无法确认回收时提示残留进程风险。
+- renderer 须在发起执行请求前注册 `onExternalAgentStarted`；停止按钮仅使用主进程签发的 `operationId`；
+- 成功回收审计为 `execution_canceled`；超时仅表示真正 timeout；无法确认回收时提示残留进程风险；
+- 自动测试含真实 IPC 路径（`test-p1-05-stop-ipc.cjs`）；Owner 复验前须完全退出并重启应用。
 
 ## 10. 交付格式
 
