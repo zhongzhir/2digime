@@ -90,7 +90,11 @@ function updateLocalCliSettings(userDataPath, patch = {}) {
   const fsMod = require("node:fs");
   const { FORBIDDEN_EXECUTABLE_EXTS, FIXED_LOCAL_CLI_ARGS_TEMPLATE } = require("./schema");
   const { looksLikeNetworkOrCloudSync } = require("./paths");
-  const { verifyLocalCliProfileIdentity, getLocalCliProfile } = require("./profiles");
+  const {
+    verifyLocalCliProfileIdentity,
+    getLocalCliProfile,
+    buildPinnedIdentity,
+  } = require("./profiles");
   const registry = loadRegistry(userDataPath);
   const current = registry.tools[LOCAL_CLI_TOOL_ID] || defaultLocalCliDefinition();
   const nextRaw = {
@@ -119,7 +123,8 @@ function updateLocalCliSettings(userDataPath, patch = {}) {
   }
 
   const reasonCodes = [];
-  let pinnedIdentity = current.pinnedIdentity || null;
+  // Never carry forward a prior pin when executable changes; pin only after code-owned contract match.
+  let pinnedIdentity = null;
   if (nextRaw.executable) {
     if (!pathMod.isAbsolute(nextRaw.executable)) reasonCodes.push("executable_not_absolute");
     if (looksLikeNetworkOrCloudSync(nextRaw.executable)) reasonCodes.push("network_or_cloud_path_rejected");
@@ -128,16 +133,18 @@ function updateLocalCliSettings(userDataPath, patch = {}) {
     if (fsMod.existsSync(nextRaw.executable)) {
       try {
         const real = fsMod.realpathSync(nextRaw.executable);
-        const profileCheck = verifyLocalCliProfileIdentity(real);
+        const st = fsMod.statSync(real);
+        const crypto = require("node:crypto");
+        const sha256 = crypto.createHash("sha256").update(fsMod.readFileSync(real)).digest("hex");
+        const profileCheck = verifyLocalCliProfileIdentity(real, {
+          size: st.size,
+          mtimeMs: Math.floor(st.mtimeMs),
+          sha256,
+        });
         if (!profileCheck.ok) {
           reasonCodes.push(...(profileCheck.reasonCodes || ["profile_identity_mismatch"]));
         } else {
-          pinnedIdentity = {
-            profileId: profileCheck.profileId,
-            originalFilename: profileCheck.identity.originalFilename,
-            internalName: profileCheck.identity.internalName,
-            productName: profileCheck.identity.productName,
-          };
+          pinnedIdentity = buildPinnedIdentity(profileCheck);
         }
       } catch {
         reasonCodes.push("executable_rejected");

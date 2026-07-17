@@ -5,6 +5,34 @@
 
 ---
 
+## 2026-07-17（P1-05 第三轮 Codex 复核修订）
+
+### 结论
+
+- 编号：`P1-05`
+- 分支：`codex/p1-05-tool-broker`
+- 保留提交：`34270b3`、`ef46099`、`28bfa46`（不 amend）
+- 状态：仍为 `statically_verified`；交 Codex **第四轮**安全复核；**不**安排 Owner 验收
+
+### 修订摘要
+
+1. 移除 `generic_pe_task_passthrough`；`local_cli` 仅承认代码所有契约 `local_cli_nodejs_v1`（expected OriginalFilename / InternalName / CompanyName / FileDescription，以及 Authenticode Status=Valid 且 signer 含 OpenJS Foundation）；
+2. `pinnedIdentity` 仅在契约校验通过后写入，首次配置与 prepare 均走同一代码所有校验，禁止自证；
+3. 真实回归：复制 `cmd.exe` 并篡改 VersionInfo 中 cmd/Cmd/CMD 标识为普通名后提交 `/c echo …>marker` → 计划阶段拒绝、`spawn=0`、marker 不存在；
+4. 保留 operationId/sender、orphanRisk、退出二次确认与输出审计修复不回退。
+
+### 验证
+
+- `npm run test:p1-05`：17/17；`npm run test:p1-phase1` 通过；
+- `node --check` 关键模块通过；
+- Package 基线 SHA-256 仍为 `3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a`。
+
+### 下一步
+
+停止实现；提交 Codex 第四轮安全复核。
+
+---
+
 ## 2026-07-17（P1-05 第二轮 Codex 复核修订）
 
 ### 结论

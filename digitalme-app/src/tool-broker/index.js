@@ -22,7 +22,11 @@ const {
 const { resolveAuthorizedCwd, looksLikeNetworkOrCloudSync } = require("./paths");
 const { buildMinimalEnv, listEnvKeyNames } = require("./environment");
 const { executePlan } = require("./executor");
-const { verifyLocalCliProfileIdentity, getLocalCliProfile } = require("./profiles");
+const {
+  verifyLocalCliProfileIdentity,
+  getLocalCliProfile,
+  pinnedIdentityMatches,
+} = require("./profiles");
 const { digestValue, stableStringify } = require("../policy-engine/digest");
 
 function fail(code, message) {
@@ -58,7 +62,13 @@ function resolveExecutable(executableRaw) {
     throw fail("forbidden_executable_type", "不支持通过脚本解释器间接启动的文件类型");
   }
 
-  const profileCheck = verifyLocalCliProfileIdentity(real);
+  const realStat = fs.statSync(real);
+  const sha256 = crypto.createHash("sha256").update(fs.readFileSync(real)).digest("hex");
+  const profileCheck = verifyLocalCliProfileIdentity(real, {
+    size: realStat.size,
+    mtimeMs: Math.floor(realStat.mtimeMs),
+    sha256,
+  });
   if (!profileCheck.ok) {
     throw fail(
       (profileCheck.reasonCodes && profileCheck.reasonCodes[0]) || "profile_identity_mismatch",
@@ -66,8 +76,6 @@ function resolveExecutable(executableRaw) {
     );
   }
 
-  const realStat = fs.statSync(real);
-  const sha256 = crypto.createHash("sha256").update(fs.readFileSync(real)).digest("hex");
   const fingerprint = digestValue(
     stableStringify({
       realPath: real,
@@ -75,8 +83,10 @@ function resolveExecutable(executableRaw) {
       mtimeMs: Math.floor(realStat.mtimeMs),
       sha256,
       profileId: profileCheck.profileId,
+      contractId: profileCheck.contractId,
       originalFilename: profileCheck.identity.originalFilename,
       internalName: profileCheck.identity.internalName,
+      companyName: profileCheck.identity.companyName,
     })
   );
   return {
@@ -151,11 +161,17 @@ function preparePlan(userDataPath, input = {}) {
     } catch {
       rawExecutable = String(registry.tools[toolId].executable || "").trim();
     }
-    // Profile identity gate on the on-disk path (defeats renamed shell hosts).
+    // Profile identity gate on the on-disk path (code-owned contract; not basename / not self-pin).
     if (rawExecutable && path.isAbsolute(rawExecutable) && fs.existsSync(rawExecutable)) {
       try {
         const real = fs.realpathSync(rawExecutable);
-        const profileCheck = verifyLocalCliProfileIdentity(real);
+        const st = fs.statSync(real);
+        const sha256 = crypto.createHash("sha256").update(fs.readFileSync(real)).digest("hex");
+        const profileCheck = verifyLocalCliProfileIdentity(real, {
+          size: st.size,
+          mtimeMs: Math.floor(st.mtimeMs),
+          sha256,
+        });
         if (!profileCheck.ok) {
           return {
             ok: false,
@@ -198,11 +214,15 @@ function preparePlan(userDataPath, input = {}) {
     };
   }
 
-  // Pinned identity (if present) must still match current file identity class.
-  if (definition.pinnedIdentity && definition.pinnedIdentity.originalFilename) {
-    const pinned = String(definition.pinnedIdentity.originalFilename || "").toLowerCase();
-    const current = String((resolvedExe.identity && resolvedExe.identity.originalFilename) || "").toLowerCase();
-    if (pinned && current && pinned !== current) {
+  // pinnedIdentity is a snapshot of a prior code-owned match; it cannot invent trust on its own.
+  if (definition.pinnedIdentity) {
+    if (
+      !pinnedIdentityMatches(
+        definition.pinnedIdentity,
+        resolvedExe.identity,
+        resolvedExe.profileId || getLocalCliProfile().profileId
+      )
+    ) {
       return { ok: false, reasonCodes: ["pinned_identity_mismatch"], plan: null };
     }
   }

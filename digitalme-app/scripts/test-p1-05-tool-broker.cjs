@@ -100,6 +100,25 @@ function sha256File(target) {
   return crypto.createHash("sha256").update(fs.readFileSync(target)).digest("hex");
 }
 
+/** Same-length UTF-16LE in-place replacements (keeps PE layout; breaks Authenticode). */
+function patchUtf16leStrings(filePath, pairs) {
+  let buf = Buffer.from(fs.readFileSync(filePath));
+  for (const [from, to] of pairs) {
+    assert.equal(from.length, to.length, `length mismatch: ${from} / ${to}`);
+    const fromBuf = Buffer.from(from, "utf16le");
+    const toBuf = Buffer.from(to, "utf16le");
+    let idx = buf.indexOf(fromBuf);
+    let hits = 0;
+    while (idx !== -1) {
+      toBuf.copy(buf, idx);
+      hits += 1;
+      idx = buf.indexOf(fromBuf, idx + 2);
+    }
+    assert.ok(hits > 0, `expected UTF-16LE hits for ${JSON.stringify(from)}`);
+  }
+  fs.writeFileSync(filePath, buf);
+}
+
 function walkFiles(root) {
   const out = [];
   function walk(dir) {
@@ -171,8 +190,7 @@ async function runAllTests() {
         });
         assert.equal(rejected.ok, false, exe);
         assert.ok(
-          rejected.reasonCodes.includes("profile_identity_mismatch") ||
-            rejected.reasonCodes.includes("shell_host_identity"),
+          rejected.reasonCodes.includes("profile_identity_mismatch"),
           exe + " => " + rejected.reasonCodes.join(",")
         );
       }
@@ -197,8 +215,8 @@ async function runAllTests() {
     }
   });
 
-  await test("2. renamed cmd.exe copy rejected by profile identity (spawn=0, no marker)", async () => {
-    const userData = tempUserData("cmd-rename");
+  await test("2. VersionInfo-tampered cmd.exe copy rejected (spawn=0, no marker)", async () => {
+    const userData = tempUserData("cmd-vi-tamper");
     const ag = agentsModule(userData);
     try {
       const work = path.join(userData, "workdir");
@@ -209,18 +227,30 @@ async function runAllTests() {
       const renamed = path.join(work, "helper-tool.exe");
       fs.copyFileSync(cmdPath, renamed);
 
+      // Strip cmd/Cmd/CMD VersionInfo labels to ordinary same-length names (old "exclude shell token" model would pass).
+      patchUtf16leStrings(renamed, [
+        ["Cmd.Exe", "AppTool"],
+        ["CMD.EXE", "APPTOOL"],
+        ["cmd.exe", "apptool"],
+      ]);
+      // InternalName value is typically the three-letter "cmd" — rewrite isolated UTF-16 token after common VersionInfo key layout.
+      patchUtf16leStrings(renamed, [["cmd\u0000", "app\u0000"]]);
+
+      const { extractVersionStrings } = require("../src/tool-broker/pe-identity");
+      const vi = extractVersionStrings(renamed);
+      assert.equal(vi.ok, true);
+      const blob = `${vi.originalFilename}|${vi.internalName}|${vi.productName}|${vi.fileDescription}`.toLowerCase();
+      assert.ok(!/\bcmd\b/.test(blob), "tamper must remove cmd identity labels: " + blob);
+
       const saved = toolBroker.saveNarrowSettings(userData, {
         executable: renamed,
         authorizedCwdRoot: work,
         enabled: true,
       });
       assert.equal(saved.ok, false);
-      assert.ok(
-        saved.reasonCodes.includes("profile_identity_mismatch") ||
-          saved.reasonCodes.includes("shell_host_identity")
-      );
+      assert.ok(saved.reasonCodes.includes("profile_identity_mismatch"));
 
-      // Tamper registry to point at renamed cmd copy — preparePlan must still refuse.
+      // Hand-written registry + self-attested pin must not invent trust.
       const registryPath = path.join(userData, "tool-broker", "registry.json");
       fs.mkdirSync(path.dirname(registryPath), { recursive: true });
       fs.writeFileSync(
@@ -232,7 +262,7 @@ async function runAllTests() {
               local_cli: {
                 toolId: "local_cli",
                 definitionVersion: "p1-05-v1",
-                profileId: "local_cli_task_passthrough_v1",
+                profileId: "local_cli_nodejs_v1",
                 name: "本地命令工具",
                 executable: renamed,
                 argsTemplate: ["{{task}}"],
@@ -242,6 +272,16 @@ async function runAllTests() {
                 envAllowlist: ["SystemRoot", "WINDIR", "TEMP", "TMP"],
                 authorizedCwdRoot: work,
                 enabled: true,
+                pinnedIdentity: {
+                  profileId: "local_cli_nodejs_v1",
+                  contractId: "nodejs_openjs_v1",
+                  originalFilename: "node.exe",
+                  internalName: "node",
+                  companyName: "Node.js",
+                  fileDescription: "Node.js JavaScript Runtime",
+                  productName: "Node.js",
+                  signerSubject: "CN=OpenJS Foundation",
+                },
               },
             },
           },
@@ -256,10 +296,7 @@ async function runAllTests() {
         dataScopes: ["task_text", "workspace_files", "env_inherit"],
       });
       assert.equal(prepared.ok, false);
-      assert.ok(
-        prepared.reasonCodes.includes("profile_identity_mismatch") ||
-          prepared.reasonCodes.includes("shell_host_identity")
-      );
+      assert.ok(prepared.reasonCodes.includes("profile_identity_mismatch"));
       assert.equal(ag.spawnCount, 0);
       assert.ok(!fs.existsSync(marker));
     } finally {

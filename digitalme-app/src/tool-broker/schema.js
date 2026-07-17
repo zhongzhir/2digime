@@ -59,7 +59,7 @@ function normalizeToolDefinition(raw) {
     : [];
   const authorizedCwdRoot = String(raw.authorizedCwdRoot || "").trim();
   const enabled = !!raw.enabled;
-  const profileId = String(raw.profileId || "local_cli_task_passthrough_v1").trim();
+  const profileId = String(raw.profileId || "local_cli_nodejs_v1").trim();
 
   if (toolId !== LOCAL_CLI_TOOL_ID) reasonCodes.push("unknown_tool_id");
   if (!isNonEmptyString(definitionVersion)) reasonCodes.push("missing_definition_version");
@@ -72,7 +72,8 @@ function normalizeToolDefinition(raw) {
     reasonCodes.push("invalid_max_output");
   }
   if (!envAllowlist.length) reasonCodes.push("missing_env_allowlist");
-  if (profileId !== "local_cli_task_passthrough_v1") reasonCodes.push("unknown_tool_profile");
+  // Keep schema free of circular requires: only the Node.js profile id is admitted in v1.
+  if (profileId !== "local_cli_nodejs_v1") reasonCodes.push("unknown_tool_profile");
 
   if (reasonCodes.length) return { ok: false, reasonCodes };
 
@@ -100,7 +101,7 @@ function defaultLocalCliDefinition() {
   return {
     toolId: LOCAL_CLI_TOOL_ID,
     definitionVersion: TOOL_BROKER_VERSION,
-    profileId: "local_cli_task_passthrough_v1",
+    profileId: "local_cli_nodejs_v1",
     name: "本地命令工具",
     executable: "",
     argsTemplate: [...FIXED_LOCAL_CLI_ARGS_TEMPLATE],
