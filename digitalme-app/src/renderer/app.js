@@ -546,6 +546,9 @@ function onResearchProgress(data) {
 }
 
 function onChatProgress(data) {
+  if (data && codeRequestId && data.requestId === codeRequestId && data.operationId) {
+    codeOperationId = String(data.operationId);
+  }
   if (!data || data.requestId !== currentRequestId) {
     if (data && researchRequestId && data.requestId === researchRequestId) {
       if (data.phase === "tool") {
@@ -3371,6 +3374,7 @@ function wireSkillZoneCreateButtons() {
 
 let codeHistory = [];
 let codeRequestId = null;
+let codeOperationId = null;
 let codeDelegationHint = "";
 let codeArtifacts = { files: [], links: [], notes: "" };
 
@@ -3762,6 +3766,7 @@ async function sendCode() {
   const writeAuthorized = !!$("code-auth-write")?.checked;
   const executorId = $("code-executor-select")?.value || "builtin";
   codeRequestId = "creq_" + Date.now().toString(36);
+  codeOperationId = null;
   $("btn-code-send").disabled = true;
   $("btn-code-stop")?.classList.remove("hidden");
   const trail = $("code-trail");
@@ -3828,9 +3833,19 @@ async function sendCode() {
         confirmationToken: prep.confirmationToken,
         requestId: codeRequestId,
       });
+      if (res && res.operationId) codeOperationId = String(res.operationId);
       reply = (res && res.reply) || "";
       caps = (res && res.meta && res.meta.capabilitiesUsed) || [];
       executorName = (res && res.meta && res.meta.executor) || "外部执行体";
+      if (res && (res.orphanRisk || (res.meta && res.meta.orphanRisk))) {
+        // Do not treat as a clean stop; keep the risk wording from main process.
+        pending.classList.remove("streaming");
+        pending.className = "msg system-note";
+        pending.textContent = reply || "已尝试停止外部程序，但未能确认进程已结束，可能仍有残留进程。";
+        codeHistory.push({ role: "system-note", content: pending.textContent });
+        await refreshCodeAuditList();
+        return;
+      }
     } else {
       await window.digitalMe.l0SetActiveAgent?.("builtin");
       const apiHistory = codeHistory
@@ -3865,7 +3880,7 @@ async function sendCode() {
         : `执行体：${executorName}。本次未调用外部手脚。`;
     }
     pending.classList.remove("streaming");
-    pending.textContent = reply || "（已停止）";
+    pending.textContent = reply || "（无输出）";
     if (reply) {
       codeHistory.push({ role: "assistant", content: reply });
       attachCodeAssistantActions(pending, reply);
@@ -3874,12 +3889,16 @@ async function sendCode() {
   } catch (e) {
     pending.classList.remove("streaming");
     pending.className = "msg system-note";
-    if (String(e.message || e).includes("abort") || String(e.message || e).includes("取消")) {
+    const msg = String(e.message || e);
+    if (/残留进程|未能确认进程/.test(msg)) {
+      pending.textContent = msg;
+      codeHistory.push({ role: "system-note", content: msg });
+    } else if (msg.includes("abort") || msg.includes("取消")) {
       pending.textContent = "已停止。";
       codeHistory.push({ role: "system-note", content: "已停止。" });
     } else {
-      pending.textContent = "失败：" + (e.message || e);
-      codeHistory.push({ role: "system-note", content: "失败：" + (e.message || e) });
+      pending.textContent = "失败：" + msg;
+      codeHistory.push({ role: "system-note", content: "失败：" + msg });
     }
     await recordL0Audit({
       scene: "code",
@@ -3894,6 +3913,7 @@ async function sendCode() {
     $("btn-code-send").disabled = false;
     $("btn-code-stop")?.classList.add("hidden");
     codeRequestId = null;
+    codeOperationId = null;
     $("code-messages").scrollTop = $("code-messages").scrollHeight;
   }
 }
@@ -5381,10 +5401,12 @@ function bindCodeWorkspace() {
   if (!sendBtn) return;
   sendBtn.addEventListener("click", sendCode);
   $("btn-code-stop")?.addEventListener("click", async () => {
-    if (!codeRequestId) return;
+    if (!codeRequestId && !codeOperationId) return;
     await window.digitalMe.stopChat({ requestId: codeRequestId });
     try {
-      await window.digitalMe.l0StopExternalAgent?.({ requestId: codeRequestId });
+      if (codeOperationId) {
+        await window.digitalMe.l0StopExternalAgent?.({ operationId: codeOperationId });
+      }
     } catch {
       /* ignore */
     }

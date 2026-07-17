@@ -172,16 +172,62 @@ app.on("window-all-closed", () => {
 });
 
 let quitting = false;
+let quitForceConfirmed = false;
 app.on("before-quit", (event) => {
-  if (quitting) return;
+  if (quitting && quitForceConfirmed) return;
+  if (quitting && !quitForceConfirmed) {
+    // Nested quit while dialog pending — keep blocked.
+    event.preventDefault();
+    return;
+  }
   event.preventDefault();
   quitting = true;
   (async () => {
+    let waitResult = { ok: true, remaining: 0, timedOut: false, orphanRisk: false };
     try {
-      await delegateRuntime.abortAllAndWait(delegateRuntime.DEFAULT_QUIT_WAIT_MS);
+      waitResult = await delegateRuntime.abortAllAndWait(delegateRuntime.DEFAULT_QUIT_WAIT_MS);
     } catch {
-      /* ignore */
+      waitResult = { ok: false, remaining: -1, timedOut: true, orphanRisk: true };
     }
+
+    const risky =
+      !waitResult.ok ||
+      !!waitResult.timedOut ||
+      (waitResult.remaining && waitResult.remaining > 0) ||
+      !!waitResult.orphanRisk;
+
+    if (risky) {
+      const detail = [
+        waitResult.timedOut ? "等待外部程序结束已超时。" : "",
+        waitResult.remaining > 0 ? `仍有 ${waitResult.remaining} 个委派未确认结束。` : "",
+        waitResult.orphanRisk ? "可能仍有残留外部进程。" : "",
+        "可选择继续退出（不保证外部进程已终止），或取消以留在应用内手动处理。",
+      ]
+        .filter(Boolean)
+        .join("\n");
+      let response;
+      try {
+        response = await dialog.showMessageBox({
+          type: "warning",
+          title: "外部程序可能仍在运行",
+          message: "退出前未能确认外部程序已全部终止",
+          detail,
+          buttons: ["取消退出", "仍要退出"],
+          defaultId: 0,
+          cancelId: 0,
+          noLink: true,
+        });
+      } catch {
+        response = { response: 0 };
+      }
+      if (!response || response.response !== 1) {
+        quitting = false;
+        quitForceConfirmed = false;
+        return;
+      }
+      quitForceConfirmed = true;
+    }
+
     try {
       const em = await getExtensionManager();
       await em.disconnectAll();
@@ -1974,51 +2020,73 @@ ipcMain.handle("l0:cancelExternalAgentConfirmation", async (e, payload) =>
 
 ipcMain.handle("l0:runExternalAgent", async (e, payload) => {
   const userData = app.getPath("userData");
-  const rid = String((payload && payload.requestId) || "").trim();
-  if (!rid) {
-    throw new Error("缺少请求编号，无法启动外部程序。");
-  }
-  const began = delegateRuntime.begin(rid, e);
+  const clientRequestId = String((payload && payload.requestId) || "").trim();
+  const began = delegateRuntime.begin(e, clientRequestId);
   if (!began.ok) {
     if (began.reason === "duplicate_request_id") {
       throw new Error("相同请求编号的外部委派仍在进行，已拒绝重复启动。");
     }
+    if (began.reason === "missing_sender") {
+      throw new Error("无法识别请求来源窗口，已拒绝启动外部程序。");
+    }
     throw new Error("无法登记外部委派请求。");
   }
-  const ac = began.abort;
-  activeDelegateAborts.set(rid, ac);
+  const { operationId, abort: ac, senderId } = began;
+  activeDelegateAborts.set(operationId, ac);
+  const progressRequestId = clientRequestId || operationId;
   const sendProg = (p) => {
     try {
-      e.sender.send("chat:progress", { requestId: rid, ...p });
+      e.sender.send("chat:progress", {
+        requestId: progressRequestId,
+        operationId,
+        ...p,
+      });
     } catch {
       /* ignore */
     }
   };
-  const runPromise = externalAgentFlow.runExternalAgent(
-    userData,
-    e,
-    payload || {},
-    l0Agents,
-    {
+  sendProg({ phase: "thinking", label: "正在登记外部委派…" });
+  const runPromise = externalAgentFlow
+    .runExternalAgent(userData, e, payload || {}, l0Agents, {
       onProgress: sendProg,
       signal: ac.signal,
-    }
-  );
-  delegateRuntime.attachPromise(rid, runPromise);
+    })
+    .then((result) => {
+      if (result && typeof result === "object") {
+        result.operationId = operationId;
+        if (!result.meta) result.meta = {};
+        result.meta.operationId = operationId;
+        result.meta.senderId = senderId;
+      }
+      return result;
+    });
+  delegateRuntime.attachPromise(operationId, runPromise);
   try {
     return await runPromise;
   } finally {
-    activeDelegateAborts.delete(rid);
-    delegateRuntime.end(rid);
+    activeDelegateAborts.delete(operationId);
+    delegateRuntime.end(operationId);
   }
 });
 
-ipcMain.handle("l0:stopExternalAgent", async (_e, payload) => {
-  const rid = payload && payload.requestId;
-  const ac = rid && activeDelegateAborts.get(rid);
-  if (ac) ac.abort();
-  if (rid) delegateRuntime.abortOne(rid);
-  return { ok: true };
+ipcMain.handle("l0:stopExternalAgent", async (e, payload) => {
+  const operationId = String((payload && payload.operationId) || "").trim();
+  // Legacy requestId alone cannot stop another sender's task: require operationId.
+  if (!operationId) {
+    return { ok: false, reason: "missing_operation_id" };
+  }
+  const result = delegateRuntime.abortOne(e, operationId);
+  if (result.ok && result.operationId) {
+    const ac = activeDelegateAborts.get(result.operationId);
+    if (ac) {
+      try {
+        ac.abort();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  return result;
 });
 
 ipcMain.handle("scenarios:prepare", async (_e, packId) => {

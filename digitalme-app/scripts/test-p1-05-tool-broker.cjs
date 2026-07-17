@@ -144,7 +144,7 @@ async function runAllTests() {
   confirmationStore.clearAllForTests();
   delegateRuntime.clearAllForTests();
 
-  await test("1. unknown tool / shell hosts / free-form executable fail-closed", () => {
+  await test("1. unknown tool / profile identity / free-form executable fail-closed", () => {
     const userData = tempUserData("unknown");
     try {
       const badTool = toolBroker.preparePlan(userData, {
@@ -156,21 +156,25 @@ async function runAllTests() {
       assert.ok(badTool.reasonCodes.includes("unknown_tool_id"));
 
       const hosts = [
-        "C:\\Windows\\System32\\cmd.exe",
-        "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
-        "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
-        "C:\\Windows\\System32\\wscript.exe",
-        "C:\\Windows\\System32\\cscript.exe",
-        "C:\\Windows\\System32\\mshta.exe",
+        path.join(process.env.SystemRoot || "C:\\Windows", "System32", "cmd.exe"),
+        path.join(process.env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
+        path.join(process.env.SystemRoot || "C:\\Windows", "System32", "wscript.exe"),
+        path.join(process.env.SystemRoot || "C:\\Windows", "System32", "cscript.exe"),
+        path.join(process.env.SystemRoot || "C:\\Windows", "System32", "mshta.exe"),
       ];
       for (const exe of hosts) {
+        if (!fs.existsSync(exe)) continue;
         const rejected = toolBroker.saveNarrowSettings(userData, {
           executable: exe,
           authorizedCwdRoot: path.join(userData, "w"),
           enabled: true,
         });
         assert.equal(rejected.ok, false, exe);
-        assert.ok(rejected.reasonCodes.includes("forbidden_shell_host"), exe);
+        assert.ok(
+          rejected.reasonCodes.includes("profile_identity_mismatch") ||
+            rejected.reasonCodes.includes("shell_host_identity"),
+          exe + " => " + rejected.reasonCodes.join(",")
+        );
       }
 
       const rel = toolBroker.saveNarrowSettings(userData, {
@@ -193,24 +197,30 @@ async function runAllTests() {
     }
   });
 
-  await test("2. cmd.exe registration + /c redirect rejected at plan stage (spawn=0, no marker)", async () => {
-    const userData = tempUserData("cmd-reject");
+  await test("2. renamed cmd.exe copy rejected by profile identity (spawn=0, no marker)", async () => {
+    const userData = tempUserData("cmd-rename");
     const ag = agentsModule(userData);
     try {
       const work = path.join(userData, "workdir");
       fs.mkdirSync(work, { recursive: true });
       const marker = path.join(work, "p105-cmd-marker.txt");
       const cmdPath = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "cmd.exe");
+      assert.ok(fs.existsSync(cmdPath));
+      const renamed = path.join(work, "helper-tool.exe");
+      fs.copyFileSync(cmdPath, renamed);
 
       const saved = toolBroker.saveNarrowSettings(userData, {
-        executable: cmdPath,
+        executable: renamed,
         authorizedCwdRoot: work,
         enabled: true,
       });
       assert.equal(saved.ok, false);
-      assert.ok(saved.reasonCodes.includes("forbidden_shell_host"));
+      assert.ok(
+        saved.reasonCodes.includes("profile_identity_mismatch") ||
+          saved.reasonCodes.includes("shell_host_identity")
+      );
 
-      // Even if registry is tampered to point at cmd.exe, preparePlan must fail-closed.
+      // Tamper registry to point at renamed cmd copy — preparePlan must still refuse.
       const registryPath = path.join(userData, "tool-broker", "registry.json");
       fs.mkdirSync(path.dirname(registryPath), { recursive: true });
       fs.writeFileSync(
@@ -222,8 +232,9 @@ async function runAllTests() {
               local_cli: {
                 toolId: "local_cli",
                 definitionVersion: "p1-05-v1",
+                profileId: "local_cli_task_passthrough_v1",
                 name: "本地命令工具",
-                executable: cmdPath,
+                executable: renamed,
                 argsTemplate: ["{{task}}"],
                 allowedActions: ["execute_task"],
                 timeoutMs: 60000,
@@ -245,7 +256,10 @@ async function runAllTests() {
         dataScopes: ["task_text", "workspace_files", "env_inherit"],
       });
       assert.equal(prepared.ok, false);
-      assert.ok(prepared.reasonCodes.includes("forbidden_shell_host"));
+      assert.ok(
+        prepared.reasonCodes.includes("profile_identity_mismatch") ||
+          prepared.reasonCodes.includes("shell_host_identity")
+      );
       assert.equal(ag.spawnCount, 0);
       assert.ok(!fs.existsSync(marker));
     } finally {
@@ -649,35 +663,170 @@ async function runAllTests() {
     }
   });
 
-  await test("14. disabled by default; duplicate requestId rejected; abortAllAndWait", async () => {
+  await test("14. operationId mint; sender-bound stop; cross-sender/unknown no side effects", async () => {
     const bare = fs.mkdtempSync(path.join(os.tmpdir(), "dm-p105-bare-"));
     try {
       const s = toolBroker.getPublicSettings(bare);
       assert.equal(s.enabled, false);
-      assert.equal(s.executable, "");
       assert.deepEqual(s.argsTemplate, ["{{task}}"]);
     } finally {
       cleanup(bare);
     }
 
     delegateRuntime.clearAllForTests();
-    const a = delegateRuntime.begin("req_dup", mockEvent(7));
+    const a = delegateRuntime.begin(mockEvent(7), "req_dup");
     assert.equal(a.ok, true);
-    const b = delegateRuntime.begin("req_dup", mockEvent(7));
+    assert.ok(a.operationId.startsWith("op_"));
+    assert.equal(a.senderId, "7");
+    const b = delegateRuntime.begin(mockEvent(7), "req_dup");
     assert.equal(b.ok, false);
     assert.equal(b.reason, "duplicate_request_id");
-    assert.equal(a.senderId, "7");
+
+    // Other sender with same client requestId is allowed (different key space).
+    const c = delegateRuntime.begin(mockEvent(9), "req_dup");
+    assert.equal(c.ok, true);
+    assert.notEqual(c.operationId, a.operationId);
+
+    // Cross-sender stop must not abort owner task.
+    const cross = delegateRuntime.abortOne(mockEvent(9), a.operationId);
+    assert.equal(cross.ok, false);
+    assert.equal(cross.reason, "sender_mismatch");
+    assert.equal(cross.aborted, false);
+    assert.equal(a.abort.signal.aborted, false);
+
+    const unknown = delegateRuntime.abortOne(mockEvent(7), "op_does_not_exist");
+    assert.equal(unknown.ok, false);
+    assert.equal(unknown.reason, "unknown_operation");
+
+    const okStop = delegateRuntime.abortOne(mockEvent(7), a.operationId);
+    assert.equal(okStop.ok, true);
+    assert.equal(a.abort.signal.aborted, true);
+    // Other sender's task still running.
+    assert.equal(c.abort.signal.aborted, false);
+
+    const repeat = delegateRuntime.abortOne(mockEvent(7), a.operationId);
+    assert.equal(repeat.ok, true); // already aborted controller; still owner match
+    assert.equal(c.abort.signal.aborted, false);
 
     let settled = false;
-    const slow = new Promise((resolve) => setTimeout(() => {
-      settled = true;
-      resolve("done");
-    }, 50));
-    delegateRuntime.attachPromise("req_dup", slow);
+    const slow = new Promise((resolve) =>
+      setTimeout(() => {
+        settled = true;
+        resolve({ ok: true });
+      }, 50)
+    );
+    delegateRuntime.attachPromise(c.operationId, slow);
     const wait = await delegateRuntime.abortAllAndWait(2000);
     assert.equal(wait.ok, true);
     assert.equal(settled, true);
     delegateRuntime.clearAllForTests();
+  });
+
+  await test("15. kill failure → audit orphanRisk + user-facing risk wording (not 已停止)", async () => {
+    const userData = tempUserData("orphan-chain");
+    try {
+      seedLocalCli(userData, { executable: process.execPath });
+      agentsLib.setActiveAgent(userData, "cli-coder");
+      let spawn = 0;
+      const ag = agentsModule(userData, async () => {
+        spawn += 1;
+        return {
+          ok: false,
+          aborted: true,
+          timedOut: false,
+          truncated: false,
+          orphanRisk: true,
+          code: null,
+          output: "",
+          totalBytes: 0,
+          stdoutTotalBytes: 0,
+          stderrTotalBytes: 0,
+          retainedBytes: 0,
+          fullOutputSha256: "aa".repeat(32),
+          retainedSha256: "bb".repeat(32),
+          outputDigestKind: "full",
+        };
+      });
+
+      const prep = externalAgentFlow.requestExternalAgent(
+        userData,
+        mockEvent(15),
+        {
+          task: "--version",
+          dataScopes: ["task_text", "workspace_files", "env_inherit"],
+          writeIntent: true,
+        },
+        ag
+      );
+      const result = await externalAgentFlow.runExternalAgent(
+        userData,
+        mockEvent(15),
+        {
+          task: "--version",
+          dataScopes: ["task_text", "workspace_files", "env_inherit"],
+          writeIntent: true,
+          decisionId: prep.decisionId,
+          confirmationToken: prep.confirmationToken,
+        },
+        ag
+      );
+      assert.equal(spawn, 1);
+      assert.equal(result.orphanRisk, true);
+      assert.equal(result.meta.orphanRisk, true);
+      assert.ok(/残留进程|未能确认进程/.test(result.reply));
+      assert.ok(!/^已停止外部程序/.test(result.reply));
+      assert.ok(!result.reply.includes("已停止外部程序。") || /残留/.test(result.reply));
+
+      const lines = fs
+        .readFileSync(path.join(userData, "decision-audit", "gen-1.jsonl"), "utf8")
+        .trim()
+        .split("\n")
+        .map((l) => JSON.parse(l));
+      const canceled = lines.find((r) => r.event === "execution_canceled");
+      assert.ok(canceled);
+      assert.equal(canceled.outcome.orphanRisk, true);
+    } finally {
+      cleanup(userData);
+    }
+  });
+
+  await test("16. abortAllAndWait reports risk; main before-quit must not silent-exit", async () => {
+    delegateRuntime.clearAllForTests();
+    const began = delegateRuntime.begin(mockEvent(3), "quit_risk");
+    assert.equal(began.ok, true);
+    delegateRuntime.attachPromise(
+      began.operationId,
+      new Promise(() => {
+        /* hang */
+      })
+    );
+    const wait = await delegateRuntime.abortAllAndWait(80);
+    assert.equal(wait.timedOut, true);
+    assert.equal(wait.ok, false);
+    assert.ok(wait.remaining >= 1);
+
+    const mainJs = fs.readFileSync(MAIN_PATH, "utf8");
+    assert.ok(/abortAllAndWait/.test(mainJs));
+    assert.ok(/仍要退出/.test(mainJs));
+    assert.ok(/取消退出/.test(mainJs));
+    assert.ok(/waitResult/.test(mainJs));
+    assert.ok(/risky/.test(mainJs));
+    delegateRuntime.clearAllForTests();
+  });
+
+  await test("17. renderer/main wiring for operationId stop and orphanRisk copy", () => {
+    const appJs = fs.readFileSync(RENDERER_APP, "utf8");
+    const mainJs = fs.readFileSync(MAIN_PATH, "utf8");
+    const brokerIndex = fs.readFileSync(
+      path.join(__dirname, "..", "src", "tool-broker", "index.js"),
+      "utf8"
+    );
+    assert.ok(/codeOperationId/.test(appJs));
+    assert.ok(/operationId: codeOperationId/.test(appJs));
+    assert.ok(/残留进程/.test(appJs));
+    assert.ok(/operationId/.test(mainJs));
+    assert.ok(/sender_mismatch|missing_operation_id/.test(mainJs));
+    assert.ok(/verifyLocalCliProfileIdentity/.test(brokerIndex));
   });
 
   console.log(`\nP1-05 results: ${passed} passed, ${failed} failed`);

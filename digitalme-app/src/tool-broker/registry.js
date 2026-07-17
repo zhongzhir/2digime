@@ -87,18 +87,17 @@ function getToolDefinition(userDataPath, toolId = LOCAL_CLI_TOOL_ID) {
  */
 function updateLocalCliSettings(userDataPath, patch = {}) {
   const pathMod = require("node:path");
-  const {
-    FORBIDDEN_EXECUTABLE_EXTS,
-    isForbiddenExecutableBasename,
-    FIXED_LOCAL_CLI_ARGS_TEMPLATE,
-  } = require("./schema");
+  const fsMod = require("node:fs");
+  const { FORBIDDEN_EXECUTABLE_EXTS, FIXED_LOCAL_CLI_ARGS_TEMPLATE } = require("./schema");
   const { looksLikeNetworkOrCloudSync } = require("./paths");
+  const { verifyLocalCliProfileIdentity, getLocalCliProfile } = require("./profiles");
   const registry = loadRegistry(userDataPath);
   const current = registry.tools[LOCAL_CLI_TOOL_ID] || defaultLocalCliDefinition();
   const nextRaw = {
     ...current,
     toolId: LOCAL_CLI_TOOL_ID,
     definitionVersion: TOOL_BROKER_VERSION,
+    profileId: getLocalCliProfile().profileId,
     name: current.name || "本地命令工具",
     argsTemplate: [...FIXED_LOCAL_CLI_ARGS_TEMPLATE],
     allowedActions: ["execute_task"],
@@ -120,12 +119,32 @@ function updateLocalCliSettings(userDataPath, patch = {}) {
   }
 
   const reasonCodes = [];
+  let pinnedIdentity = current.pinnedIdentity || null;
   if (nextRaw.executable) {
     if (!pathMod.isAbsolute(nextRaw.executable)) reasonCodes.push("executable_not_absolute");
     if (looksLikeNetworkOrCloudSync(nextRaw.executable)) reasonCodes.push("network_or_cloud_path_rejected");
-    if (isForbiddenExecutableBasename(nextRaw.executable)) reasonCodes.push("forbidden_shell_host");
     const ext = pathMod.extname(nextRaw.executable).toLowerCase();
     if (FORBIDDEN_EXECUTABLE_EXTS.has(ext)) reasonCodes.push("forbidden_executable_type");
+    if (fsMod.existsSync(nextRaw.executable)) {
+      try {
+        const real = fsMod.realpathSync(nextRaw.executable);
+        const profileCheck = verifyLocalCliProfileIdentity(real);
+        if (!profileCheck.ok) {
+          reasonCodes.push(...(profileCheck.reasonCodes || ["profile_identity_mismatch"]));
+        } else {
+          pinnedIdentity = {
+            profileId: profileCheck.profileId,
+            originalFilename: profileCheck.identity.originalFilename,
+            internalName: profileCheck.identity.internalName,
+            productName: profileCheck.identity.productName,
+          };
+        }
+      } catch {
+        reasonCodes.push("executable_rejected");
+      }
+    } else if (nextRaw.enabled) {
+      reasonCodes.push("executable_missing");
+    }
   }
   if (nextRaw.authorizedCwdRoot) {
     if (!pathMod.isAbsolute(nextRaw.authorizedCwdRoot)) reasonCodes.push("cwd_not_absolute");
@@ -140,6 +159,7 @@ function updateLocalCliSettings(userDataPath, patch = {}) {
     return { ok: false, reasonCodes, definition: current };
   }
 
+  nextRaw.pinnedIdentity = pinnedIdentity;
   const normalized = normalizeToolDefinition(nextRaw);
   if (!normalized.ok) {
     return { ok: false, reasonCodes: normalized.reasonCodes, definition: current };

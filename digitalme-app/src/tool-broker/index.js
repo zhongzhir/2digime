@@ -10,7 +10,6 @@ const {
   FIXED_LOCAL_CLI_ARGS_TEMPLATE,
   MAX_TASK_CHARS,
   MAX_ARG_COUNT,
-  isForbiddenExecutableBasename,
   normalizeToolDefinition,
 } = require("./schema");
 const {
@@ -23,6 +22,7 @@ const {
 const { resolveAuthorizedCwd, looksLikeNetworkOrCloudSync } = require("./paths");
 const { buildMinimalEnv, listEnvKeyNames } = require("./environment");
 const { executePlan } = require("./executor");
+const { verifyLocalCliProfileIdentity, getLocalCliProfile } = require("./profiles");
 const { digestValue, stableStringify } = require("../policy-engine/digest");
 
 function fail(code, message) {
@@ -41,9 +41,6 @@ function resolveExecutable(executableRaw) {
   if (!path.isAbsolute(raw)) {
     throw fail("executable_not_absolute", "可执行文件须为绝对路径");
   }
-  if (isForbiddenExecutableBasename(raw)) {
-    throw fail("forbidden_shell_host", "不得将命令解释器或脚本宿主注册为本地命令工具");
-  }
   const ext = path.extname(raw).toLowerCase();
   if (FORBIDDEN_EXECUTABLE_EXTS.has(ext)) {
     throw fail("forbidden_executable_type", "不支持通过脚本解释器间接启动的文件类型");
@@ -56,13 +53,19 @@ function resolveExecutable(executableRaw) {
   if (looksLikeNetworkOrCloudSync(real)) {
     throw fail("network_or_cloud_path_rejected", "不支持网络或云同步路径上的可执行文件");
   }
-  if (isForbiddenExecutableBasename(real)) {
-    throw fail("forbidden_shell_host", "不得将命令解释器或脚本宿主注册为本地命令工具");
-  }
   const realExt = path.extname(real).toLowerCase();
   if (FORBIDDEN_EXECUTABLE_EXTS.has(realExt)) {
     throw fail("forbidden_executable_type", "不支持通过脚本解释器间接启动的文件类型");
   }
+
+  const profileCheck = verifyLocalCliProfileIdentity(real);
+  if (!profileCheck.ok) {
+    throw fail(
+      (profileCheck.reasonCodes && profileCheck.reasonCodes[0]) || "profile_identity_mismatch",
+      "可执行文件身份与已注册工具配置不一致"
+    );
+  }
+
   const realStat = fs.statSync(real);
   const sha256 = crypto.createHash("sha256").update(fs.readFileSync(real)).digest("hex");
   const fingerprint = digestValue(
@@ -71,6 +74,9 @@ function resolveExecutable(executableRaw) {
       size: realStat.size,
       mtimeMs: Math.floor(realStat.mtimeMs),
       sha256,
+      profileId: profileCheck.profileId,
+      originalFilename: profileCheck.identity.originalFilename,
+      internalName: profileCheck.identity.internalName,
     })
   );
   return {
@@ -80,6 +86,8 @@ function resolveExecutable(executableRaw) {
     size: realStat.size,
     mtimeMs: Math.floor(realStat.mtimeMs),
     sha256,
+    profileId: profileCheck.profileId,
+    identity: profileCheck.identity,
   };
 }
 
@@ -135,7 +143,6 @@ function preparePlan(userDataPath, input = {}) {
     if (!registry || !registry.tools || !registry.tools[toolId]) {
       return { ok: false, reasonCodes: ["registry_load_failed"], plan: null };
     }
-    // Inspect on-disk executable even when normalize fail-closes to defaults.
     try {
       const disk = JSON.parse(fs.readFileSync(registryPath(userDataPath), "utf8"));
       rawExecutable = String(
@@ -144,8 +151,21 @@ function preparePlan(userDataPath, input = {}) {
     } catch {
       rawExecutable = String(registry.tools[toolId].executable || "").trim();
     }
-    if (rawExecutable && isForbiddenExecutableBasename(rawExecutable)) {
-      return { ok: false, reasonCodes: ["forbidden_shell_host"], plan: null };
+    // Profile identity gate on the on-disk path (defeats renamed shell hosts).
+    if (rawExecutable && path.isAbsolute(rawExecutable) && fs.existsSync(rawExecutable)) {
+      try {
+        const real = fs.realpathSync(rawExecutable);
+        const profileCheck = verifyLocalCliProfileIdentity(real);
+        if (!profileCheck.ok) {
+          return {
+            ok: false,
+            reasonCodes: profileCheck.reasonCodes || ["profile_identity_mismatch"],
+            plan: null,
+          };
+        }
+      } catch {
+        return { ok: false, reasonCodes: ["executable_rejected"], plan: null };
+      }
     }
     const normalized = normalizeToolDefinition(registry.tools[toolId]);
     if (!normalized.ok) {
@@ -158,10 +178,6 @@ function preparePlan(userDataPath, input = {}) {
 
   if (!definition.enabled) {
     return { ok: false, reasonCodes: ["tool_disabled"], plan: null };
-  }
-
-  if (isForbiddenExecutableBasename(definition.executable)) {
-    return { ok: false, reasonCodes: ["forbidden_shell_host"], plan: null };
   }
 
   const scopes = Array.isArray(input.dataScopes)
@@ -180,6 +196,15 @@ function preparePlan(userDataPath, input = {}) {
       reasonCodes: [err.code || "executable_rejected"],
       plan: null,
     };
+  }
+
+  // Pinned identity (if present) must still match current file identity class.
+  if (definition.pinnedIdentity && definition.pinnedIdentity.originalFilename) {
+    const pinned = String(definition.pinnedIdentity.originalFilename || "").toLowerCase();
+    const current = String((resolvedExe.identity && resolvedExe.identity.originalFilename) || "").toLowerCase();
+    if (pinned && current && pinned !== current) {
+      return { ok: false, reasonCodes: ["pinned_identity_mismatch"], plan: null };
+    }
   }
 
   let cwdInfo;
@@ -210,11 +235,13 @@ function preparePlan(userDataPath, input = {}) {
   const plan = Object.freeze({
     toolId: definition.toolId,
     definitionVersion: definition.definitionVersion,
+    profileId: resolvedExe.profileId || getLocalCliProfile().profileId,
     toolName: definition.name,
     action: "execute_task",
     executable: resolvedExe.executable,
     executableBasename: resolvedExe.executableBasename,
     executableFingerprint: resolvedExe.executableFingerprint,
+    identityOriginalFilename: (resolvedExe.identity && resolvedExe.identity.originalFilename) || "",
     args: Object.freeze([...args]),
     argsTemplate: Object.freeze([...FIXED_LOCAL_CLI_ARGS_TEMPLATE]),
     cwd: cwdInfo.cwdReal,
@@ -231,7 +258,9 @@ function preparePlan(userDataPath, input = {}) {
     stableStringify({
       toolId: plan.toolId,
       definitionVersion: plan.definitionVersion,
+      profileId: plan.profileId,
       executableFingerprint: plan.executableFingerprint,
+      identityOriginalFilename: plan.identityOriginalFilename,
       args: plan.args,
       cwd: plan.cwd,
       envKeyNames: plan.envKeyNames,
@@ -377,5 +406,6 @@ module.exports = {
   saveNarrowSettings,
   getToolDefinition,
   loadRegistry,
-  isForbiddenExecutableBasename,
+  verifyLocalCliProfileIdentity,
+  getLocalCliProfile,
 };

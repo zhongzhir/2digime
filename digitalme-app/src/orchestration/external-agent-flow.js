@@ -494,14 +494,33 @@ async function runExternalAgent(userData, event, payload, agents, deps = {}) {
 
     if (result.aborted) {
       onProgress({ phase: "done" });
+      if (result.orphanRisk) {
+        return {
+          ok: false,
+          aborted: true,
+          orphanRisk: true,
+          spawnCount,
+          reply: auditIncomplete
+            ? "已尝试停止外部程序，但未能确认进程已结束，可能仍有残留进程。注意：部分决策记录未能写入。"
+            : "已尝试停止外部程序，但未能确认进程已结束，可能仍有残留进程。请在系统中核对并手动结束相关进程。",
+          meta: {
+            capabilitiesUsed: [agentSnapshot.id],
+            auditIncomplete,
+            spawnCount,
+            orphanRisk: true,
+            stopUnconfirmed: true,
+          },
+        };
+      }
       return {
         ok: false,
         aborted: true,
+        orphanRisk: false,
         spawnCount,
         reply: auditIncomplete
           ? "已停止外部程序。注意：部分决策记录未能写入。"
           : "已停止外部程序。",
-        meta: { capabilitiesUsed: [agentSnapshot.id], auditIncomplete, spawnCount },
+        meta: { capabilitiesUsed: [agentSnapshot.id], auditIncomplete, spawnCount, orphanRisk: false },
       };
     }
 
@@ -510,12 +529,20 @@ async function runExternalAgent(userData, event, payload, agents, deps = {}) {
       return {
         ok: false,
         timedOut: true,
+        orphanRisk: !!result.orphanRisk,
         spawnCount,
         reply:
           "外部程序已超时并尝试终止。" +
-          (result.orphanRisk ? "若仍有残留进程，请在系统中手动确认。" : "") +
+          (result.orphanRisk
+            ? "未能确认进程已结束，可能仍有残留进程，请在系统中手动确认。"
+            : "") +
           (auditIncomplete ? "\n\n注意：部分决策记录未能写入。" : ""),
-        meta: { capabilitiesUsed: [agentSnapshot.id], auditIncomplete, spawnCount },
+        meta: {
+          capabilitiesUsed: [agentSnapshot.id],
+          auditIncomplete,
+          spawnCount,
+          orphanRisk: !!result.orphanRisk,
+        },
       };
     }
 

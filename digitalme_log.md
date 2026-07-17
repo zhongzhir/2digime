@@ -5,6 +5,36 @@
 
 ---
 
+## 2026-07-17（P1-05 第二轮 Codex 复核修订）
+
+### 结论
+
+- 编号：`P1-05`
+- 分支：`codex/p1-05-tool-broker`
+- 保留提交：`34270b3`、`ef46099`（不 amend）
+- 状态：仍为 `statically_verified`；交 Codex **第三轮**安全复核；**不**安排 Owner 验收
+
+### 修订摘要
+
+1. 以代码所有正向 Tool Profile（`local_cli_task_passthrough_v1`）校验 PE VersionInfo 身份，不再把路径 basename 黑名单当信任边界；
+2. 复制 `cmd.exe` 改名为普通 `.exe` 后提交 `/c echo …>marker`：计划阶段 `profile_identity_mismatch`，`spawn=0`、marker 不存在；
+3. `abortOne` / 停止 IPC 校验真实 `webContents.id`；跨 sender、未知 operationId、重复停止不影响其他任务；
+4. 主进程签发 `operationId`；renderer 单独 requestId 不能取得他方控制权；
+5. `orphanRisk=true` 时界面与返回文案明确提示残留风险，不显示干净的「已停止」；DecisionAudit 保留状态；
+6. `before-quit` 检查 `abortAllAndWait`；timeout/remaining/orphanRisk 时弹窗二次确认，禁止静默 `app.exit(0)`。
+
+### 验证
+
+- `npm run test:p1-05`：17/17；`npm run test:p1-phase1` 通过；
+- `node --check` 关键模块通过；
+- Package 基线 SHA-256 仍为 `3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a`。
+
+### 下一步
+
+停止实现；提交 Codex 第三轮安全复核。
+
+---
+
 ## 2026-07-17（P1-05 第一轮 Codex 复核修订）
 
 ### 结论

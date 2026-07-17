@@ -31,36 +31,8 @@ const FORBIDDEN_EXECUTABLE_EXTS = new Set([
   ".msc",
 ]);
 
-/** Shell / script hosts that must never be registered as local_cli (basename, case-insensitive). */
-const FORBIDDEN_EXECUTABLE_BASENAMES = new Set([
-  "cmd.exe",
-  "cmd",
-  "command.com",
-  "powershell.exe",
-  "powershell",
-  "powershell_ise.exe",
-  "pwsh.exe",
-  "pwsh",
-  "wscript.exe",
-  "wscript",
-  "cscript.exe",
-  "cscript",
-  "mshta.exe",
-  "mshta",
-]);
-
 function isNonEmptyString(v) {
   return typeof v === "string" && v.trim().length > 0;
-}
-
-function basenameLower(target) {
-  const s = String(target || "").trim().replace(/\\/g, "/");
-  const base = s.includes("/") ? s.slice(s.lastIndexOf("/") + 1) : s;
-  return base.toLowerCase();
-}
-
-function isForbiddenExecutableBasename(target) {
-  return FORBIDDEN_EXECUTABLE_BASENAMES.has(basenameLower(target));
 }
 
 /**
@@ -76,7 +48,6 @@ function normalizeToolDefinition(raw) {
   const definitionVersion = String(raw.definitionVersion || "").trim();
   const name = String(raw.name || "").trim();
   const executable = String(raw.executable || "").trim();
-  // Enforce code-owned args contract; ignore any widened template from disk/settings.
   const argsTemplate = [...FIXED_LOCAL_CLI_ARGS_TEMPLATE];
   const allowedActions = Array.isArray(raw.allowedActions)
     ? raw.allowedActions.map((item) => String(item).trim()).filter(Boolean)
@@ -88,6 +59,7 @@ function normalizeToolDefinition(raw) {
     : [];
   const authorizedCwdRoot = String(raw.authorizedCwdRoot || "").trim();
   const enabled = !!raw.enabled;
+  const profileId = String(raw.profileId || "local_cli_task_passthrough_v1").trim();
 
   if (toolId !== LOCAL_CLI_TOOL_ID) reasonCodes.push("unknown_tool_id");
   if (!isNonEmptyString(definitionVersion)) reasonCodes.push("missing_definition_version");
@@ -100,9 +72,7 @@ function normalizeToolDefinition(raw) {
     reasonCodes.push("invalid_max_output");
   }
   if (!envAllowlist.length) reasonCodes.push("missing_env_allowlist");
-  if (executable && isForbiddenExecutableBasename(executable)) {
-    reasonCodes.push("forbidden_shell_host");
-  }
+  if (profileId !== "local_cli_task_passthrough_v1") reasonCodes.push("unknown_tool_profile");
 
   if (reasonCodes.length) return { ok: false, reasonCodes };
 
@@ -111,6 +81,7 @@ function normalizeToolDefinition(raw) {
     definition: {
       toolId,
       definitionVersion,
+      profileId,
       name,
       executable,
       argsTemplate,
@@ -120,6 +91,7 @@ function normalizeToolDefinition(raw) {
       envAllowlist: [...new Set(envAllowlist)],
       authorizedCwdRoot,
       enabled,
+      pinnedIdentity: raw.pinnedIdentity && typeof raw.pinnedIdentity === "object" ? raw.pinnedIdentity : null,
     },
   };
 }
@@ -128,6 +100,7 @@ function defaultLocalCliDefinition() {
   return {
     toolId: LOCAL_CLI_TOOL_ID,
     definitionVersion: TOOL_BROKER_VERSION,
+    profileId: "local_cli_task_passthrough_v1",
     name: "本地命令工具",
     executable: "",
     argsTemplate: [...FIXED_LOCAL_CLI_ARGS_TEMPLATE],
@@ -137,6 +110,7 @@ function defaultLocalCliDefinition() {
     envAllowlist: [...DEFAULT_ENV_ALLOWLIST],
     authorizedCwdRoot: "",
     enabled: false,
+    pinnedIdentity: null,
   };
 }
 
@@ -148,11 +122,8 @@ module.exports = {
   DEFAULT_ENV_ALLOWLIST,
   FIXED_LOCAL_CLI_ARGS_TEMPLATE,
   FORBIDDEN_EXECUTABLE_EXTS,
-  FORBIDDEN_EXECUTABLE_BASENAMES,
   MAX_TASK_CHARS,
   MAX_ARG_COUNT,
-  basenameLower,
-  isForbiddenExecutableBasename,
   normalizeToolDefinition,
   defaultLocalCliDefinition,
 };
