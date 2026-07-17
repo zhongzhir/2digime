@@ -166,6 +166,22 @@ app.whenReady().then(() => {
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+  if (process.env.DIGITALME_OWNER_RUNTIME_TEST === "1") {
+    const harness = require("../scripts/owner-runtime-harness.cjs");
+    Promise.resolve()
+      .then(() => harness.runOwnerRuntimeHarness({ BrowserWindow, app }))
+      .then((code) => {
+        quitting = true;
+        quitForceConfirmed = true;
+        app.exit(typeof code === "number" ? code : 0);
+      })
+      .catch((err) => {
+        console.error("[owner-runtime] harness failed", err && err.stack ? err.stack : err);
+        quitting = true;
+        quitForceConfirmed = true;
+        app.exit(1);
+      });
+  }
 });
 
 app.on("window-all-closed", () => {
