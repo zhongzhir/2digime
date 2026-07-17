@@ -87,8 +87,9 @@ function agentsModule(userData, runImpl) {
     executePreparedPlan:
       runImpl ||
       (async (plan, opts) => {
-        spawnCount += 1;
-        return toolBroker.executePreparedPlan(plan, opts);
+        const result = await toolBroker.executePreparedPlan(plan, opts);
+        if (result && result.spawned) spawnCount += 1;
+        return result;
       }),
     get spawnCount() {
       return spawnCount;
@@ -146,8 +147,14 @@ function nodePlan(args, overrides = {}) {
   const env = buildMinimalEnv(["SystemRoot", "WINDIR", "TEMP", "TMP"], process.env, {
     includePath: false,
   });
+  const resolved = toolBroker.resolveExecutable(overrides.executable || process.execPath);
   return {
-    executable: process.execPath,
+    executable: resolved.executable,
+    executableBasename: resolved.executableBasename,
+    executableFingerprint: resolved.executableFingerprint,
+    executableSize: resolved.size,
+    executableMtimeMs: resolved.mtimeMs,
+    executableSha256: resolved.sha256,
     args,
     cwd,
     env,
@@ -864,6 +871,151 @@ async function runAllTests() {
     assert.ok(/operationId/.test(mainJs));
     assert.ok(/sender_mismatch|missing_operation_id/.test(mainJs));
     assert.ok(/verifyLocalCliProfileIdentity/.test(brokerIndex));
+    assert.ok(/assertExecutableUnchangedForSpawn|executable_changed_before_spawn/.test(brokerIndex));
+  });
+
+  await test("18. TOCTOU: replace executable after prepare/confirm → spawn=0 + audit deny", async () => {
+    const { spawn: realSpawn } = require("node:child_process");
+    const cases = [
+      {
+        name: "ordinary-file",
+        replace(target) {
+          fs.writeFileSync(target, "not-a-pe-executable", "utf8");
+        },
+      },
+      {
+        name: "tampered-cmd",
+        replace(target) {
+          const cmdPath = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "cmd.exe");
+          fs.copyFileSync(cmdPath, target);
+          patchUtf16leStrings(target, [
+            ["Cmd.Exe", "AppTool"],
+            ["CMD.EXE", "APPTOOL"],
+            ["cmd.exe", "apptool"],
+          ]);
+          patchUtf16leStrings(target, [["cmd\u0000", "app\u0000"]]);
+        },
+      },
+    ];
+
+    for (const c of cases) {
+      const userData = tempUserData(`toctou-${c.name}`);
+      let actualSpawns = 0;
+      try {
+        const work = path.join(userData, "workdir");
+        fs.mkdirSync(work, { recursive: true });
+        const toolPath = path.join(work, "local-tool.exe");
+        fs.copyFileSync(process.execPath, toolPath);
+        seedLocalCli(userData, { executable: toolPath, cwd: work });
+        agentsLib.setActiveAgent(userData, "cli-coder");
+
+        const prepared = toolBroker.preparePlan(userData, {
+          taskText: "--version",
+          dataScopes: ["task_text", "workspace_files", "env_inherit"],
+        });
+        assert.equal(prepared.ok, true, c.name + " prepare: " + (prepared.reasonCodes || []).join(","));
+        assert.ok(prepared.plan.executableFingerprint);
+        assert.ok(prepared.plan.executableSha256);
+
+        // Direct boundary: replace after prepare, before spawn.
+        c.replace(toolPath);
+        const direct = await toolBroker.executePreparedPlan(prepared.plan, {
+          executorDeps: {
+            spawn: (...args) => {
+              actualSpawns += 1;
+              return realSpawn(...args);
+            },
+          },
+        });
+        assert.equal(direct.ok, false, c.name);
+        assert.equal(direct.spawned, false, c.name);
+        assert.equal(direct.statusCode, "executable_changed_before_spawn", c.name);
+        assert.ok(
+          (direct.reasonCodes || []).includes("executable_changed_before_spawn"),
+          c.name + " reasons=" + (direct.reasonCodes || []).join(",")
+        );
+        assert.equal(actualSpawns, 0, c.name + " direct spawn");
+
+        // Restore good tool, then full confirm chain with replace injected at execute boundary.
+        fs.copyFileSync(process.execPath, toolPath);
+        confirmationStore.clearAllForTests();
+        const ag = {
+          getActiveCliAgentSnapshot() {
+            return agentsLib.getActiveCliAgentSnapshot(userData);
+          },
+          async executePreparedPlan(plan, opts) {
+            c.replace(toolPath);
+            // Self-attested pin must not bypass the spawn gate.
+            const mutated = Object.assign({}, plan, {
+              pinnedIdentity: {
+                profileId: "local_cli_nodejs_v1",
+                originalFilename: "node.exe",
+                internalName: "node",
+                companyName: "Node.js",
+              },
+            });
+            return toolBroker.executePreparedPlan(mutated, {
+              ...opts,
+              executorDeps: {
+                spawn: (...args) => {
+                  actualSpawns += 1;
+                  return realSpawn(...args);
+                },
+              },
+            });
+          },
+        };
+
+        const prep = externalAgentFlow.requestExternalAgent(
+          userData,
+          mockEvent(18),
+          {
+            task: "--version",
+            dataScopes: ["task_text", "workspace_files", "env_inherit"],
+            writeIntent: true,
+          },
+          ag
+        );
+        assert.ok(prep.confirmationToken, c.name);
+
+        const result = await externalAgentFlow.runExternalAgent(
+          userData,
+          mockEvent(18),
+          {
+            task: "--version",
+            dataScopes: ["task_text", "workspace_files", "env_inherit"],
+            writeIntent: true,
+            decisionId: prep.decisionId,
+            confirmationToken: prep.confirmationToken,
+          },
+          ag
+        );
+        assert.equal(result.ok, false, c.name);
+        assert.equal(result.spawnCount, 0, c.name);
+        assert.equal(result.statusCode, "executable_changed_before_spawn", c.name);
+        assert.ok(/启动前发生变化|已取消执行/.test(result.reply), c.name + " reply");
+        assert.equal(actualSpawns, 0, c.name + " chain spawn");
+
+        const lines = fs
+          .readFileSync(path.join(userData, "decision-audit", "gen-1.jsonl"), "utf8")
+          .trim()
+          .split("\n")
+          .map((l) => JSON.parse(l));
+        const denied = lines.find(
+          (r) =>
+            r.event === "execution_failed" &&
+            r.outcome &&
+            Array.isArray(r.outcome.reasonCodes) &&
+            r.outcome.reasonCodes.includes("executable_changed_before_spawn")
+        );
+        assert.ok(denied, c.name + " missing audit deny record");
+        assert.equal(denied.outcome.status, "denied");
+        assert.equal(denied.outcome.spawned, false);
+        assert.equal(denied.outcome.statusCode, "executable_changed_before_spawn");
+      } finally {
+        cleanup(userData);
+      }
+    }
   });
 
   console.log(`\nP1-05 results: ${passed} passed, ${failed} failed`);

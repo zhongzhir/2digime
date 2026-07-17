@@ -1,6 +1,6 @@
 # P1-05 任务包：ToolBroker 与外部 CLI 最小隔离切片
 
-状态：statically_verified（第三轮 Codex 复核修订已落地；须经第四轮安全复核后方可继续；本轮不安排 Owner 验收）
+状态：statically_verified（第四轮 Codex 复核 TOCTOU 修订已落地；须经再复核后方可继续；本轮不安排 Owner 验收；不标记 accepted）
 阶段：第一阶段 / WP3（受控能力执行）
 前置任务：P1-00～P1-04 已接受
 规格依据：`digitalme_phase1_subject_upgrade_plan_v0.1.md` §3 WP3
@@ -160,6 +160,12 @@ Owner 验收不能证明已形成 OS 沙箱；它只验收 ToolBroker 约束、�
 - 禁止 `generic_pe_task_passthrough`（任意 PE + 排除少数 shell token）；
 - v1 仅允许 `local_cli_nodejs_v1`：代码所有 expected OriginalFilename=`node.exe`、InternalName=`node`、CompanyName=`Node.js`、FileDescription 含 `Node.js`；Windows 上另需 Authenticode `Valid` 且 signer 含 `OpenJS Foundation`；
 - `pinnedIdentity` 只记录契约匹配快照，不得由首次任意文件自证；保存与 prepare 均须通过同一代码所有校验。
+
+### 启动边界 TOCTOU（第四轮修订）
+
+- `preparePlan` 通过后到 `spawn` 之前，必须在 `executePreparedPlan` 最终启动边界重新校验：真实路径、size、mtime、SHA-256、VersionInfo 契约、Authenticode；
+- 重新计算的 `executableFingerprint` 必须与已确认计划一致；否则 `spawn=0`，拒绝码 `executable_changed_before_spawn`，并写入脱敏审计；
+- renderer、requestId、`pinnedIdentity` 均不得绕过该校验。
 
 ## 10. 交付格式
 

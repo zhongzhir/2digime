@@ -376,8 +376,10 @@ async function runExternalAgent(userData, event, payload, agents, deps = {}) {
   const onProgress = deps.onProgress || (() => {});
   let spawnCount = 0;
   const trackedExecute = async (plan, opts) => {
-    spawnCount += 1;
-    return executePreparedPlan(plan, opts);
+    const result = await executePreparedPlan(plan, opts);
+    // Only count real spawn attempts; pre-spawn TOCTOU rejects must stay spawn=0.
+    if (result && result.spawned) spawnCount += 1;
+    return result;
   };
 
   const task = String((payload && payload.task) || "").trim();
@@ -456,6 +458,10 @@ async function runExternalAgent(userData, event, payload, agents, deps = {}) {
   try {
     const result = await trackedExecute(prepared.plan, { signal });
     const outputDigest = decisionAudit.digestExecutionOutput(result);
+    const toctouDenied =
+      result.statusCode === "executable_changed_before_spawn" ||
+      (Array.isArray(result.reasonCodes) &&
+        result.reasonCodes.includes("executable_changed_before_spawn"));
     let outcomeStatus = "failed";
     let eventName = "execution_failed";
     if (result.aborted) {
@@ -464,6 +470,9 @@ async function runExternalAgent(userData, event, payload, agents, deps = {}) {
     } else if (result.timedOut) {
       outcomeStatus = "timed_out";
       eventName = "execution_timed_out";
+    } else if (toctouDenied) {
+      outcomeStatus = "denied";
+      eventName = "execution_failed";
     } else if (result.ok) {
       outcomeStatus = "completed";
       eventName = "execution_completed";
@@ -477,6 +486,9 @@ async function runExternalAgent(userData, event, payload, agents, deps = {}) {
         outcome: {
           status: outcomeStatus,
           exitCode: result.code,
+          statusCode: result.statusCode || null,
+          reasonCodes: Array.isArray(result.reasonCodes) ? result.reasonCodes.slice(0, 12) : [],
+          spawned: !!result.spawned,
           truncated: !!result.truncated,
           timedOut: !!result.timedOut,
           cancelled: !!result.aborted,
@@ -542,6 +554,26 @@ async function runExternalAgent(userData, event, payload, agents, deps = {}) {
           auditIncomplete,
           spawnCount,
           orphanRisk: !!result.orphanRisk,
+        },
+      };
+    }
+
+    if (toctouDenied) {
+      onProgress({ phase: "done" });
+      return {
+        ok: false,
+        spawnCount,
+        statusCode: "executable_changed_before_spawn",
+        reasonCodes: result.reasonCodes || ["executable_changed_before_spawn"],
+        reply:
+          "可执行文件在启动前发生变化，已取消执行。" +
+          (auditIncomplete ? "\n\n注意：部分决策记录未能写入。" : ""),
+        meta: {
+          capabilitiesUsed: [agentSnapshot.id],
+          auditIncomplete,
+          spawnCount,
+          statusCode: "executable_changed_before_spawn",
+          reasonCodes: result.reasonCodes || ["executable_changed_before_spawn"],
         },
       };
     }

@@ -261,6 +261,9 @@ function preparePlan(userDataPath, input = {}) {
     executable: resolvedExe.executable,
     executableBasename: resolvedExe.executableBasename,
     executableFingerprint: resolvedExe.executableFingerprint,
+    executableSize: resolvedExe.size,
+    executableMtimeMs: resolvedExe.mtimeMs,
+    executableSha256: resolvedExe.sha256,
     identityOriginalFilename: (resolvedExe.identity && resolvedExe.identity.originalFilename) || "",
     args: Object.freeze([...args]),
     argsTemplate: Object.freeze([...FIXED_LOCAL_CLI_ARGS_TEMPLATE]),
@@ -336,32 +339,100 @@ function revalidatePlan(userDataPath, previousPlan, taskText, dataScopes) {
   return prepared;
 }
 
+function rejectBeforeSpawn(statusCode, extraReasonCodes = []) {
+  const reasonCodes = [...new Set([statusCode, ...extraReasonCodes].filter(Boolean))];
+  return {
+    ok: false,
+    spawned: false,
+    aborted: false,
+    timedOut: false,
+    truncated: false,
+    cancelled: false,
+    code: null,
+    statusCode,
+    reasonCodes,
+    output: "",
+    totalBytes: 0,
+    stdoutTotalBytes: 0,
+    stderrTotalBytes: 0,
+    retainedBytes: 0,
+    fullOutputSha256: "",
+    retainedSha256: "",
+    outputDigestKind: "none",
+    stdoutLen: 0,
+    stderrLen: 0,
+    orphanRisk: false,
+    reclaim: null,
+    message: "可执行文件在启动前已变化或未通过复核，已取消执行。",
+  };
+}
+
+/**
+ * Final spawn-boundary revalidation. pinnedIdentity / renderer / requestId cannot skip this.
+ * Re-resolves realpath, size, mtime, SHA-256, VersionInfo contract, and Authenticode;
+ * recomputed fingerprint must match the confirmed plan.
+ */
+function assertExecutableUnchangedForSpawn(plan) {
+  if (!plan || !plan.executableFingerprint || !plan.executable) {
+    return {
+      ok: false,
+      reasonCodes: ["executable_changed_before_spawn", "missing_plan_fingerprint"],
+    };
+  }
+  let live;
+  try {
+    live = resolveExecutable(plan.executable);
+  } catch (err) {
+    return {
+      ok: false,
+      reasonCodes: [
+        "executable_changed_before_spawn",
+        err && err.code ? String(err.code) : "executable_rejected",
+      ],
+    };
+  }
+  if (live.executable !== plan.executable) {
+    return { ok: false, reasonCodes: ["executable_changed_before_spawn", "realpath_drift"] };
+  }
+  if (
+    Number(live.size) !== Number(plan.executableSize) ||
+    Number(live.mtimeMs) !== Number(plan.executableMtimeMs) ||
+    String(live.sha256 || "") !== String(plan.executableSha256 || "")
+  ) {
+    return {
+      ok: false,
+      reasonCodes: ["executable_changed_before_spawn", "content_metadata_drift"],
+    };
+  }
+  if (live.executableFingerprint !== plan.executableFingerprint) {
+    return {
+      ok: false,
+      reasonCodes: ["executable_changed_before_spawn", "fingerprint_mismatch"],
+    };
+  }
+  return { ok: true, live };
+}
+
 /**
  * Execute a prepared plan. Does not re-check policy; caller must gate.
+ * Always revalidates the on-disk executable immediately before spawn (TOCTOU close).
  */
 async function executePreparedPlan(plan, { signal, executorDeps } = {}) {
   if (!plan || plan.shell !== false) {
-    return {
-      ok: false,
-      aborted: false,
-      code: "invalid_plan",
-      output: "",
-      truncated: false,
-      timedOut: false,
-      cancelled: false,
-      orphanRisk: false,
-      totalBytes: 0,
-      stdoutTotalBytes: 0,
-      stderrTotalBytes: 0,
-      retainedBytes: 0,
-      fullOutputSha256: "",
-      retainedSha256: "",
-      outputDigestKind: "none",
-    };
+    return rejectBeforeSpawn("invalid_plan");
   }
+
+  const gate = assertExecutableUnchangedForSpawn(plan);
+  if (!gate.ok) {
+    return rejectBeforeSpawn(
+      "executable_changed_before_spawn",
+      (gate.reasonCodes || []).filter((c) => c !== "executable_changed_before_spawn")
+    );
+  }
+
   const result = await executePlan(
     {
-      executable: plan.executable,
+      executable: gate.live.executable,
       args: [...plan.args],
       cwd: plan.cwd,
       env: plan._env || buildMinimalEnv(plan.envKeyNames || [], process.env, { includePath: false }),
@@ -375,11 +446,13 @@ async function executePreparedPlan(plan, { signal, executorDeps } = {}) {
   const retained = String(result.stdout || "");
   return {
     ok: !!result.ok,
+    spawned: true,
     aborted: !!result.cancelled,
     timedOut: !!result.timedOut,
     truncated: !!result.truncated,
     code: result.exitCode,
     statusCode: result.code,
+    reasonCodes: [],
     output: retained,
     // Full stream accounting (not limited to retained prefix).
     totalBytes: Number(result.totalBytes) || 0,
@@ -421,6 +494,7 @@ module.exports = {
   revalidatePlan,
   executePreparedPlan,
   resolveExecutable,
+  assertExecutableUnchangedForSpawn,
   expandArgsTemplate,
   getPublicSettings,
   saveNarrowSettings,

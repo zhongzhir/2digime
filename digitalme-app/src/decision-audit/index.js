@@ -111,6 +111,9 @@ function sanitizeOutcome(outcome) {
   if (Array.isArray(outcome.reasonCodes) && outcome.reasonCodes.length) {
     row.reasonCodes = outcome.reasonCodes.map((item) => String(item)).slice(0, 12);
   }
+  if (outcome.statusCode) row.statusCode = String(outcome.statusCode).slice(0, 64);
+  if (outcome.spawned === false) row.spawned = false;
+  if (outcome.spawned === true) row.spawned = true;
   if (outcome.exitCode != null) row.exitCode = Number(outcome.exitCode);
   if (outcome.outputLength != null) row.outputLength = Number(outcome.outputLength);
   if (outcome.outputSha256) row.outputSha256 = String(outcome.outputSha256).slice(0, 64);

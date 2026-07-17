@@ -5,6 +5,33 @@
 
 ---
 
+## 2026-07-17（P1-05 第四轮 Codex 复核修订 · TOCTOU）
+
+### 结论
+
+- 编号：`P1-05`
+- 分支：`codex/p1-05-tool-broker`
+- 保留提交：`34270b3`、`ef46099`、`28bfa46`、`545c276`（不 amend）
+- 状态：仍为 `statically_verified`；交 Codex 再复核；**不**安排 Owner 验收；不标记 `accepted`
+
+### 修订摘要
+
+1. `executePreparedPlan` 在最终 `spawn` 前重新校验真实路径、size、mtime、SHA-256、Node.js VersionInfo 契约与 Authenticode；
+2. 重新计算的 fingerprint 须与已确认计划一致，否则 `spawn=0`、`executable_changed_before_spawn`，并写入脱敏审计（`denied` + reasonCodes）；
+3. `pinnedIdentity` / renderer / requestId 不能绕过该边界；
+4. 故障注入：准备/确认后替换为普通文件或篡改 `cmd.exe`，均拒绝且无实际 spawn。
+
+### 验证
+
+- `npm run test:p1-05`：18/18；`npm run test:p1-phase1` 通过；
+- `node --check` 相关模块通过；`git diff --check` 无错误空白。
+
+### 下一步
+
+停止实现；保持 `statically_verified`，交后续安全复核。
+
+---
+
 ## 2026-07-17（P1-05 第三轮 Codex 复核修订）
 
 ### 结论
