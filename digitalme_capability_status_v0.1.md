@@ -16,7 +16,7 @@
 | Builder | `accepted` | `src/builder/package-write.js`；`builder:previewWrite` / `builder:write`；`npm run test:p1-06` 14/14；Owner 临时资料验收；提交 `0e8ba88`、`81ba8f1` | **仅** Builder 观念/人格写入已迁 PackageStore（预览→确认→commit；`dataKind=inference`）；identity 主写回见 P1-07 |
 | Retrieval | `implemented` | `digitalme-app/src/retrieval.js` | TF-IDF-lite 本地检索已接线对话；无自动化回归 |
 | Feedback | `runtime_verified` | `feedback.js` + PackageStore；`npm run test:p1-02` 31/31；Owner 临时资料验收 | 预览不写、确认提交、重启保留、跨重启恢复均通过；仍仅 Feedback 切片接入 |
-| Life Graph | `statically_verified`（P1-07 主写回切片） | `src/life/package-write.js`；`builder:previewWrite`/`builder:write` identity；`npm run test:p1-07` 27/27；任务包 P1-07 | **仅** Builder 材料链路的 Life/identity 确认写回已迁 PackageStore；**认知页零散编辑、Policies、MCP、协作仍未迁移**；等待 Codex 复核与 Owner 临时资料验收，不标 accepted |
+| Life Graph | `statically_verified`（P1-07 主写回切片） | `src/life/package-write.js`；`builder:previewWrite`/`builder:write` identity；`npm run test:p1-07` 30/30；任务包 P1-07；Codex R1 硬化（字段确认 / 严格读取 / pathKinds） | **仅** Builder 材料链路的 Life/identity 确认写回已迁 PackageStore；**认知页零散编辑、Policies、MCP、协作仍未迁移**；等待 Codex 再复核与 Owner 临时资料验收，不标 accepted |
 | Writing | `implemented` | `digitalme-app/src/outputs/*`；`renderer/app.js` 写作场景 | 文稿库/改稿/导出已实现；未达连续 5 次真实验收门槛 |
 | Research | `implemented` | `digitalme-app/src/research/*` | ResearchNotebook / Agent 循环已实现；安全与评测未闭环 |
 | MCP extensions | `implemented` | `digitalme-app/src/capabilities/*` | 可安装连接并自动调用；默认高风险，**尚未**经 ToolBroker 硬化 |

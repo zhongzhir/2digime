@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * Life / identity writes via PackageStore (P1-07).
+ * Life / identity writes via PackageStore (P1-07, hardened).
  * Preview creates a candidate change set (package bytes unchanged).
  * Commit requires main-process confirmation + non-expired changeSetId.
  *
@@ -15,7 +15,9 @@ const { normalizeEvent } = require("../life");
 
 const ACTOR = "owner:life";
 const MATERIAL_KIND = "identity";
+const META_SCHEMA_VERSION = 1;
 const CHANGESET_TTL_MS = 15 * 60 * 1000;
+const FACT_FIELDS = Object.freeze(["events", "facts", "outcomes"]);
 
 const LIMITS = Object.freeze({
   events: 40,
@@ -45,22 +47,6 @@ function openStore(packageDir, storeHooks) {
     hooks: storeHooks || {},
     ownerId: ACTOR,
   });
-}
-
-function readText(pkgDir, rel) {
-  const abs = path.join(pkgDir, rel);
-  if (!fs.existsSync(abs)) return "";
-  return fs.readFileSync(abs, "utf8");
-}
-
-function readJson(pkgDir, rel, fallback) {
-  const abs = path.join(pkgDir, rel);
-  if (!fs.existsSync(abs)) return fallback;
-  try {
-    return JSON.parse(fs.readFileSync(abs, "utf8"));
-  } catch {
-    return fallback;
-  }
 }
 
 function normKey(s) {
@@ -102,22 +88,72 @@ function trimList(arr, max) {
   return arr;
 }
 
-function parseJsonl(text) {
+/** Whitelist fact confirmation fields from renderer; ignore unknowns. */
+function normalizeFactConfirmedFields(raw) {
+  const allowed = new Set(FACT_FIELDS);
+  const out = [];
+  if (!Array.isArray(raw)) return out;
+  for (const item of raw) {
+    const f = String(item || "");
+    if (allowed.has(f) && !out.includes(f)) out.push(f);
+  }
+  return out;
+}
+
+function fieldConfirmed(fields, name) {
+  return fields.includes(name);
+}
+
+function packageInvalid(rel) {
+  throw err("package_content_invalid", `资料内容无效，无法安全写入：${rel}`);
+}
+
+function readJsonStrict(pkgDir, rel, emptyFactory) {
+  const abs = path.join(pkgDir, rel);
+  if (!fs.existsSync(abs)) return emptyFactory();
+  let text;
+  try {
+    text = fs.readFileSync(abs, "utf8");
+  } catch {
+    packageInvalid(rel);
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    packageInvalid(rel);
+  }
+}
+
+function readTextStrict(pkgDir, rel) {
+  const abs = path.join(pkgDir, rel);
+  if (!fs.existsSync(abs)) return "";
+  try {
+    return fs.readFileSync(abs, "utf8");
+  } catch {
+    packageInvalid(rel);
+  }
+}
+
+/** Parse JSONL strictly — any non-empty illegal line fails closed. */
+function readJsonlStrict(pkgDir, rel) {
+  const abs = path.join(pkgDir, rel);
+  if (!fs.existsSync(abs)) return [];
+  let text;
+  try {
+    text = fs.readFileSync(abs, "utf8");
+  } catch {
+    packageInvalid(rel);
+  }
   const rows = [];
-  for (const line of String(text || "").split("\n")) {
+  for (const line of text.split("\n")) {
     if (!line.trim()) continue;
     try {
       rows.push(JSON.parse(line));
     } catch {
-      /* skip corrupt line */
+      packageInvalid(rel);
     }
   }
   return rows;
-}
-
-function jsonlBody(rows) {
-  if (!rows.length) return "";
-  return rows.map((r) => JSON.stringify(r)).join("\n") + "\n";
 }
 
 function buildSourceMeta(input, createdAt) {
@@ -145,49 +181,6 @@ function buildSourceMeta(input, createdAt) {
       "identity",
     ],
     materialKind: MATERIAL_KIND,
-  };
-}
-
-/**
- * Derive change-set dataKinds from confirmed payload + confirmAsFact.
- * Renderer-supplied dataKinds must never be trusted — ignore them.
- */
-function deriveIdentityDataKinds(identity, confirmAsFact) {
-  const id = identity || {};
-  const kinds = new Set();
-  const pathDataKinds = {};
-
-  const has = (arr) => Array.isArray(arr) && arr.length > 0;
-  const mark = (rel, kind) => {
-    kinds.add(kind);
-    pathDataKinds[rel] = kind;
-  };
-
-  if (has(id.events)) {
-    mark("life/events.jsonl", confirmAsFact ? "fact" : "inference");
-    mark("life/roles.json", confirmAsFact ? "fact" : "inference");
-    mark("life/relations.json", confirmAsFact ? "fact" : "inference");
-    mark("life/interests.json", confirmAsFact ? "fact" : "inference");
-    if (confirmAsFact) mark("identity.json", "owner_assertion");
-  }
-  if (has(id.facts)) {
-    mark("identity-facts.md", confirmAsFact ? "fact" : "inference");
-  }
-  if (has(id.outcomes)) {
-    mark("life/outcomes.json", confirmAsFact ? "fact" : "inference");
-  }
-  if (has(id.domains)) mark("life/domains.json", "inference");
-  if (has(id.org_touchpoints)) mark("life/org_touchpoints.json", "current_state");
-  if (has(id.alter_candidates)) mark("life/people.json", "inference");
-  if (has(id.capability_signals)) mark("life/capability_signals.json", "inference");
-  if (has(id.mind_hooks)) mark("life/mind_hooks.json", "inference");
-  if (has(id.inferences)) mark("life/inferences.jsonl", "inference");
-
-  if (kinds.size) mark("sources/source-index.json", [...kinds][0]);
-
-  return {
-    dataKinds: [...kinds],
-    pathDataKinds,
   };
 }
 
@@ -234,14 +227,51 @@ function countIdentity(identity) {
   );
 }
 
+function createKindAccumulator() {
+  const pathSets = new Map();
+  const fieldKinds = {};
+  return {
+    contribute(rel, kind, field) {
+      if (!rel || !kind) return;
+      if (!pathSets.has(rel)) pathSets.set(rel, new Set());
+      pathSets.get(rel).add(kind);
+      if (field) fieldKinds[field] = kind;
+    },
+    finalize(affectedPaths) {
+      const pathDataKinds = {};
+      const all = new Set();
+      for (const rel of affectedPaths) {
+        const set = pathSets.get(rel);
+        if (!set || !set.size) {
+          throw err("path_kind_incomplete", `缺少路径分类：${rel}`);
+        }
+        const arr = [...set].sort();
+        pathDataKinds[rel] = arr;
+        for (const k of arr) all.add(k);
+      }
+      for (const rel of pathSets.keys()) {
+        if (!affectedPaths.includes(rel)) {
+          throw err("path_kind_extra", `多余路径分类：${rel}`);
+        }
+      }
+      return {
+        pathDataKinds,
+        dataKinds: [...all].sort(),
+        fieldKinds: { ...fieldKinds },
+      };
+    },
+  };
+}
+
 function upsertOrgItems(data, orgs, sourceId, createdAt, makeId, note, confidence) {
   let added = 0;
+  const addedItems = [];
   for (const org of orgs || []) {
     const name = String(org || "").trim();
     if (!name || name.includes("待从正文") || name.includes("（待")) continue;
     const key = normKey(name);
     if ((data.items || []).some((it) => normKey(it.org) === key)) continue;
-    data.items.push({
+    const item = {
       id: makeId("org"),
       org: name,
       kind: "other",
@@ -249,22 +279,25 @@ function upsertOrgItems(data, orgs, sourceId, createdAt, makeId, note, confidenc
       confidence: confidence || "medium",
       sourceRefs: sourceId ? [sourceId] : [],
       createdAt,
-    });
+    };
+    data.items.push(item);
+    addedItems.push(item);
     added += 1;
   }
-  return added;
+  return { added, addedItems };
 }
 
 /**
  * Build PackageStore ops from identity payload. Read-only against packageDir.
- * Does not call ensureLifeScaffold or any package writers.
+ * Classification is derived only from ops that actually change content.
  */
 function identityPayloadToOps(packageDir, identity, sourceMeta, options = {}) {
-  const confirmAsFact = options.confirmAsFact === true;
+  const factConfirmedFields = normalizeFactConfirmedFields(options.factConfirmedFields);
   const createdAt = sourceMeta.createdAt || isoNow();
   const makeId = makeIdFactory(createdAt);
   const sourceId = sourceMeta.id;
-  const ops = [];
+  const kinds = createKindAccumulator();
+  const contentOps = [];
   const counts = {
     events: 0,
     roles: 0,
@@ -280,28 +313,36 @@ function identityPayloadToOps(packageDir, identity, sourceMeta, options = {}) {
     capability_signals: 0,
     mind_hooks: 0,
   };
+  const archiveClaims = [];
+  const archiveFacts = [];
 
-  const putJson = (rel, data) => {
-    ops.push({
+  const eventsKind = fieldConfirmed(factConfirmedFields, "events") ? "fact" : "inference";
+  const factsKind = fieldConfirmed(factConfirmedFields, "facts") ? "fact" : "inference";
+  const outcomesKind = fieldConfirmed(factConfirmedFields, "outcomes") ? "fact" : "inference";
+
+  const putJson = (rel, data, kind, field) => {
+    contentOps.push({
       type: "write_text",
       path: rel,
       content: JSON.stringify(data, null, 2) + "\n",
     });
+    kinds.contribute(rel, kind, field);
   };
 
-  const indexRel = "sources/source-index.json";
-  const indexData = readJson(packageDir, indexRel, { sources: [] });
-  if (!Array.isArray(indexData.sources)) indexData.sources = [];
-  if (!indexData.sources.some((s) => s && s.id === sourceId)) {
-    indexData.sources.push({ ...sourceMeta });
-    putJson(indexRel, indexData);
-  }
-
-  const eventRows = [];
+  // --- events: normalize all; append only new rows; still derive facets for duplicates ---
+  const prevEvents = readJsonlStrict(packageDir, "life/events.jsonl");
+  const seenEventKeys = new Set(
+    prevEvents.map((r) => normKey((r.what || "") + "|" + (r.org || "") + "|" + (r.when || "")))
+  );
+  const eventRows = []; // all valid normalized events (for facet derivation / claims)
+  const newEventRows = []; // rows actually appended
   for (const raw of identity.events || []) {
     const ev = normalizeEvent(raw);
     if (!ev) continue;
-    eventRows.push({
+    const key = normKey(ev.what + "|" + (ev.org || "") + "|" + (ev.when || ""));
+    const isNew = !seenEventKeys.has(key);
+    if (isNew) seenEventKeys.add(key);
+    const row = {
       id: makeId("evt"),
       when: ev.when,
       what: ev.what,
@@ -313,27 +354,48 @@ function identityPayloadToOps(packageDir, identity, sourceMeta, options = {}) {
       confidence: ev.confidence,
       evidence: sourceId ? [sourceId] : [],
       createdAt,
-      dataKindHint: confirmAsFact ? "fact" : "inference",
-    });
+      dataKindHint: eventsKind,
+      _isNew: isNew,
+    };
+    eventRows.push(row);
+    if (isNew) newEventRows.push(row);
   }
-  counts.events = eventRows.length;
+  if (newEventRows.length) {
+    counts.events = newEventRows.length;
+    for (const row of newEventRows) {
+      const { _isNew, ...persist } = row;
+      contentOps.push({ type: "append_jsonl", path: "life/events.jsonl", row: persist });
+    }
+    kinds.contribute("life/events.jsonl", eventsKind, "events");
+  }
+  for (const row of eventRows) delete row._isNew;
 
-  const roles = readJson(packageDir, "life/roles.json", emptyFacet("roles", createdAt));
+  const roles = readJsonStrict(packageDir, "life/roles.json", () => emptyFacet("roles", createdAt));
   if (!Array.isArray(roles.items)) roles.items = [];
-  const relations = readJson(packageDir, "life/relations.json", emptyFacet("relations", createdAt));
+  const relations = readJsonStrict(packageDir, "life/relations.json", () =>
+    emptyFacet("relations", createdAt)
+  );
   if (!Array.isArray(relations.items)) relations.items = [];
-  const outcomes = readJson(packageDir, "life/outcomes.json", emptyFacet("outcomes", createdAt));
+  const outcomes = readJsonStrict(packageDir, "life/outcomes.json", () =>
+    emptyFacet("outcomes", createdAt)
+  );
   if (!Array.isArray(outcomes.items)) outcomes.items = [];
-  const interests = readJson(packageDir, "life/interests.json", emptyFacet("interests", createdAt));
+  const interests = readJsonStrict(packageDir, "life/interests.json", () =>
+    emptyFacet("interests", createdAt)
+  );
   if (!Array.isArray(interests.items)) interests.items = [];
-  const orgTouch = readJson(packageDir, "life/org_touchpoints.json", emptySlice("org_touchpoints", createdAt));
+  const orgTouch = readJsonStrict(packageDir, "life/org_touchpoints.json", () =>
+    emptySlice("org_touchpoints", createdAt)
+  );
   if (!Array.isArray(orgTouch.items)) orgTouch.items = [];
 
   let rolesDirty = false;
   let relationsDirty = false;
-  let outcomesDirty = false;
+  let outcomesDirtyFromEvents = false;
   let interestsDirty = false;
-  let orgDirty = false;
+  let orgDirtyFromEvents = false;
+  let outcomesDirtyDirect = false;
+  let orgDirtyDirect = false;
 
   for (const event of eventRows) {
     const facets = event.facets || ["roles"];
@@ -348,9 +410,8 @@ function identityPayloadToOps(packageDir, identity, sourceMeta, options = {}) {
         if (sourceId && !(existing.sourceRefs || []).includes(sourceId)) {
           existing.sourceRefs = existing.sourceRefs || [];
           existing.sourceRefs.push(sourceId);
+          rolesDirty = true;
         }
-        existing.updatedAt = createdAt;
-        rolesDirty = true;
       } else {
         roles.items.push({
           id: makeId("role"),
@@ -403,9 +464,10 @@ function identityPayloadToOps(packageDir, identity, sourceMeta, options = {}) {
           note: event.what,
           sourceRefs: sourceId ? [sourceId] : [],
           createdAt,
+          dataKindHint: eventsKind,
         });
         counts.outcomes += 1;
-        outcomesDirty = true;
+        outcomesDirtyFromEvents = true;
       }
     }
     if (facets.includes("interests")) {
@@ -428,22 +490,22 @@ function identityPayloadToOps(packageDir, identity, sourceMeta, options = {}) {
     for (const a of event.actors || []) {
       if (looksLikeOrgName(a)) orgs.push(a);
     }
-    const n = upsertOrgItems(orgTouch, orgs, sourceId, createdAt, makeId, event.what, event.confidence);
-    if (n) {
-      counts.org_touchpoints += n;
-      orgDirty = true;
+    const orgRes = upsertOrgItems(
+      orgTouch,
+      orgs,
+      sourceId,
+      createdAt,
+      makeId,
+      event.what,
+      event.confidence
+    );
+    if (orgRes.added) {
+      counts.org_touchpoints += orgRes.added;
+      orgDirtyFromEvents = true;
     }
   }
 
-  if (eventRows.length) {
-    const prev = parseJsonl(readText(packageDir, "life/events.jsonl"));
-    ops.push({
-      type: "write_text",
-      path: "life/events.jsonl",
-      content: jsonlBody(prev.concat(eventRows)),
-    });
-  }
-
+  // Direct outcomes (separate confirmation)
   for (const o of identity.outcomes || []) {
     const title = String((o && (o.title || o.what)) || "").trim();
     if (!title || title.includes("（待")) continue;
@@ -457,13 +519,15 @@ function identityPayloadToOps(packageDir, identity, sourceMeta, options = {}) {
       confidence: (o && o.confidence) || "medium",
       sourceRefs: sourceId ? [sourceId] : [],
       createdAt,
-      dataKindHint: confirmAsFact ? "fact" : "inference",
+      dataKindHint: outcomesKind,
     });
     counts.outcomes += 1;
-    outcomesDirty = true;
+    outcomesDirtyDirect = true;
   }
 
-  const domains = readJson(packageDir, "life/domains.json", emptySlice("domains", createdAt));
+  const domains = readJsonStrict(packageDir, "life/domains.json", () =>
+    emptySlice("domains", createdAt)
+  );
   if (!Array.isArray(domains.items)) domains.items = [];
   let domainsDirty = false;
   for (const d of identity.domains || []) {
@@ -496,10 +560,12 @@ function identityPayloadToOps(packageDir, identity, sourceMeta, options = {}) {
       createdAt,
     });
     counts.org_touchpoints += 1;
-    orgDirty = true;
+    orgDirtyDirect = true;
   }
 
-  const people = readJson(packageDir, "life/people.json", emptySlice("people", createdAt));
+  const people = readJsonStrict(packageDir, "life/people.json", () =>
+    emptySlice("people", createdAt)
+  );
   if (!Array.isArray(people.items)) people.items = [];
   let peopleDirty = false;
   for (const a of identity.alter_candidates || []) {
@@ -521,9 +587,7 @@ function identityPayloadToOps(packageDir, identity, sourceMeta, options = {}) {
     peopleDirty = true;
   }
 
-  const caps = readJson(
-    packageDir,
-    "life/capability_signals.json",
+  const caps = readJsonStrict(packageDir, "life/capability_signals.json", () =>
     emptySlice("capability_signals", createdAt)
   );
   if (!Array.isArray(caps.items)) caps.items = [];
@@ -545,7 +609,9 @@ function identityPayloadToOps(packageDir, identity, sourceMeta, options = {}) {
     capsDirty = true;
   }
 
-  const minds = readJson(packageDir, "life/mind_hooks.json", emptySlice("mind_hooks", createdAt));
+  const minds = readJsonStrict(packageDir, "life/mind_hooks.json", () =>
+    emptySlice("mind_hooks", createdAt)
+  );
   if (!Array.isArray(minds.items)) minds.items = [];
   let mindsDirty = false;
   for (const h of identity.mind_hooks || []) {
@@ -564,141 +630,238 @@ function identityPayloadToOps(packageDir, identity, sourceMeta, options = {}) {
     mindsDirty = true;
   }
 
-  const infClean = (identity.inferences || []).filter((inf) => inf && String(inf.claim || "").trim());
-  if (infClean.length) {
-    const prevInf = parseJsonl(readText(packageDir, "life/inferences.jsonl"));
-    const seen = new Set(prevInf.map((r) => normKey(r.claim)));
-    const added = [];
-    for (const inf of infClean) {
-      const claim = String(inf.claim).trim();
-      const k = normKey(claim);
-      if (seen.has(k)) continue;
-      seen.add(k);
-      added.push({
-        id: makeId("inf"),
-        type: String(inf.type || "activity"),
-        claim,
-        confidence: inf.confidence === "high" || inf.confidence === "low" ? inf.confidence : "medium",
-        basedOn: String(inf.basedOn || "").trim(),
-        status: inf.confidence === "low" ? "open" : "confirmed",
-        sourceRefs: sourceId ? [sourceId] : [],
-        createdAt,
-        dataKindHint: "inference",
-      });
-    }
-    counts.inferences = added.length;
-    if (added.length) {
-      ops.push({
-        type: "write_text",
-        path: "life/inferences.jsonl",
-        content: jsonlBody(prevInf.concat(added)),
-      });
-    }
-  }
-
-  const factClean = (identity.facts || []).filter((f) => typeof f === "string" && f.trim());
-  if (factClean.length) {
-    counts.facts = factClean.length;
-    let before = readText(packageDir, "identity-facts.md");
-    if (!before) {
-      before =
-        "# 社会事实备忘\n\n> 由「社会事实」导入；补充未能结构化为事件的短句。不当作写作风格。\n";
-    }
-    const kindNote = confirmAsFact ? "fact" : "inference";
-    const block =
-      `\n\n## ${sourceMeta.title || "社会事实"}\n` +
-      `> 来源：${sourceId || "local"} · ${createdAt}\n` +
-      `> 数据类别：${kindNote}\n\n` +
-      factClean.map((f) => "- " + f.trim()).join("\n") +
-      "\n";
-    const prefix = before.endsWith("\n") ? before : before + "\n";
-    ops.push({
-      type: "write_text",
-      path: "identity-facts.md",
-      content: prefix + block,
+  // inferences — append_jsonl
+  const prevInf = readJsonlStrict(packageDir, "life/inferences.jsonl");
+  const seenInf = new Set(prevInf.map((r) => normKey(r.claim)));
+  const infRows = [];
+  for (const inf of identity.inferences || []) {
+    if (!inf || !String(inf.claim || "").trim()) continue;
+    const claim = String(inf.claim).trim();
+    const k = normKey(claim);
+    if (seenInf.has(k)) continue;
+    seenInf.add(k);
+    infRows.push({
+      id: makeId("inf"),
+      type: String(inf.type || "activity"),
+      claim,
+      confidence: inf.confidence === "high" || inf.confidence === "low" ? inf.confidence : "medium",
+      basedOn: String(inf.basedOn || "").trim(),
+      status: inf.confidence === "low" ? "open" : "confirmed",
+      sourceRefs: sourceId ? [sourceId] : [],
+      createdAt,
+      dataKindHint: "inference",
     });
   }
-
-  if (confirmAsFact && eventRows.length) {
-    const idPath = "identity.json";
-    let data = readJson(packageDir, idPath, null);
-    if (!data || typeof data !== "object") {
-      data = { displayName: "", digitalMeId: "", identityClaims: [] };
+  if (infRows.length) {
+    counts.inferences = infRows.length;
+    for (const row of infRows) {
+      contentOps.push({ type: "append_jsonl", path: "life/inferences.jsonl", row });
     }
+    kinds.contribute("life/inferences.jsonl", "inference", "inferences");
+  }
+
+  // facts markdown — only append sentences not already present
+  const factClean = (identity.facts || [])
+    .filter((f) => typeof f === "string" && f.trim())
+    .map((f) => f.trim());
+  if (factClean.length) {
+    let before = readTextStrict(packageDir, "identity-facts.md");
+    const existingFactKeys = new Set();
+    for (const line of before.split("\n")) {
+      const m = line.match(/^\s*-\s+(.+)$/);
+      if (m) existingFactKeys.add(normKey(m[1]));
+    }
+    const newFacts = factClean.filter((f) => !existingFactKeys.has(normKey(f)));
+    if (newFacts.length) {
+      counts.facts = newFacts.length;
+      archiveFacts.push(...newFacts);
+      if (!before) {
+        before =
+          "# 社会事实备忘\n\n> 由「社会事实」导入；补充未能结构化为事件的短句。不当作写作风格。\n";
+      }
+      const block =
+        `\n\n## ${sourceMeta.title || "社会事实"}\n` +
+        `> 来源：${sourceId || "local"} · ${createdAt}\n` +
+        `> 数据类别：${factsKind}\n\n` +
+        newFacts.map((f) => "- " + f).join("\n") +
+        "\n";
+      const prefix = before.endsWith("\n") ? before : before + "\n";
+      contentOps.push({
+        type: "write_text",
+        path: "identity-facts.md",
+        content: prefix + block,
+      });
+      kinds.contribute("identity-facts.md", factsKind, "facts");
+    }
+  }
+
+  // identityClaims only when events explicitly confirmed
+  if (fieldConfirmed(factConfirmedFields, "events") && eventRows.length) {
+    const idPath = "identity.json";
+    let data = readJsonStrict(packageDir, idPath, () => ({
+      displayName: "",
+      digitalMeId: "",
+      identityClaims: [],
+    }));
     if (!Array.isArray(data.identityClaims)) data.identityClaims = [];
     const existing = new Set(data.identityClaims.map((c) => normKey(c.value)));
     let added = 0;
     for (const ev of eventRows) {
       const value = ev.what;
       if (!value || existing.has(normKey(value))) continue;
-      data.identityClaims.push({
+      const claim = {
         type: "role",
         value,
         when: ev.when || "",
         org: ev.org || "",
         sourceRefs: sourceId ? [sourceId] : [],
         recordedAt: createdAt,
-      });
+      };
+      data.identityClaims.push(claim);
+      archiveClaims.push(claim);
       existing.add(normKey(value));
       added += 1;
     }
     counts.claims = added;
-    if (added) putJson(idPath, data);
+    if (added) putJson(idPath, data, "owner_assertion", "identityClaims");
   }
 
   if (rolesDirty) {
     roles.updatedAt = createdAt;
     roles.facet = "roles";
-    putJson("life/roles.json", roles);
+    putJson("life/roles.json", roles, eventsKind, "events");
   }
   if (relationsDirty) {
     relations.updatedAt = createdAt;
     relations.facet = "relations";
-    putJson("life/relations.json", relations);
-  }
-  if (outcomesDirty) {
-    outcomes.updatedAt = createdAt;
-    outcomes.facet = "outcomes";
-    putJson("life/outcomes.json", outcomes);
+    putJson("life/relations.json", relations, eventsKind, "events");
   }
   if (interestsDirty) {
     interests.updatedAt = createdAt;
     interests.facet = "interests";
-    putJson("life/interests.json", interests);
+    putJson("life/interests.json", interests, eventsKind, "events");
+  }
+  if (outcomesDirtyFromEvents || outcomesDirtyDirect) {
+    outcomes.updatedAt = createdAt;
+    outcomes.facet = "outcomes";
+    // Path may carry both event-derived and direct outcome kinds.
+    contentOps.push({
+      type: "write_text",
+      path: "life/outcomes.json",
+      content: JSON.stringify(outcomes, null, 2) + "\n",
+    });
+    if (outcomesDirtyFromEvents) kinds.contribute("life/outcomes.json", eventsKind, "events");
+    if (outcomesDirtyDirect) kinds.contribute("life/outcomes.json", outcomesKind, "outcomes");
   }
   if (domainsDirty) {
     domains.updatedAt = createdAt;
     domains.slice = "domains";
-    putJson("life/domains.json", domains);
+    putJson("life/domains.json", domains, "inference", "domains");
   }
-  if (orgDirty) {
+  if (orgDirtyFromEvents || orgDirtyDirect) {
     orgTouch.updatedAt = createdAt;
     orgTouch.slice = "org_touchpoints";
-    putJson("life/org_touchpoints.json", orgTouch);
+    contentOps.push({
+      type: "write_text",
+      path: "life/org_touchpoints.json",
+      content: JSON.stringify(orgTouch, null, 2) + "\n",
+    });
+    kinds.contribute("life/org_touchpoints.json", "current_state", "org_touchpoints");
   }
   if (peopleDirty) {
     people.updatedAt = createdAt;
     people.slice = "people";
-    putJson("life/people.json", people);
+    putJson("life/people.json", people, "inference", "alter_candidates");
   }
   if (capsDirty) {
     caps.updatedAt = createdAt;
     caps.slice = "capability_signals";
-    putJson("life/capability_signals.json", caps);
+    putJson("life/capability_signals.json", caps, "inference", "capability_signals");
   }
   if (mindsDirty) {
     minds.updatedAt = createdAt;
     minds.slice = "mind_hooks";
-    putJson("life/mind_hooks.json", minds);
+    putJson("life/mind_hooks.json", minds, "inference", "mind_hooks");
   }
 
-  const byPath = new Map();
-  for (const op of ops) byPath.set(op.path, op);
-  const deduped = [...byPath.values()];
-  if (!deduped.length) {
+  // Deduplicate content ops by path (last write_text wins; append_jsonl keep all)
+  const writeByPath = new Map();
+  const appendOps = [];
+  for (const op of contentOps) {
+    if (op.type === "append_jsonl") appendOps.push(op);
+    else writeByPath.set(op.path, op);
+  }
+  const substantiveOps = [...appendOps, ...writeByPath.values()];
+  if (!substantiveOps.length) {
     throw err("empty_write", "没有可写入的人生事实条目。");
   }
-  return { ops: deduped, counts };
+
+  // Source index only after substantive content exists
+  const indexRel = "sources/source-index.json";
+  const indexData = readJsonStrict(packageDir, indexRel, () => ({ sources: [] }));
+  if (!Array.isArray(indexData.sources)) indexData.sources = [];
+  if (!indexData.sources.some((s) => s && s.id === sourceId)) {
+    indexData.sources.push({ ...sourceMeta });
+    substantiveOps.push({
+      type: "write_text",
+      path: indexRel,
+      content: JSON.stringify(indexData, null, 2) + "\n",
+    });
+  }
+
+  const affectedPaths = [...new Set(substantiveOps.map((o) => o.path))].sort();
+  const contentPaths = affectedPaths.filter((p) => p !== indexRel);
+  const finalized = kinds.finalize(contentPaths);
+  if (affectedPaths.includes(indexRel)) {
+    // Source index records the full set of kinds from this change set.
+    finalized.pathDataKinds[indexRel] = finalized.dataKinds.length
+      ? [...finalized.dataKinds]
+      : ["inference"];
+  }
+
+  // Re-assert completeness including source path
+  const kindPaths = Object.keys(finalized.pathDataKinds).sort();
+  if (JSON.stringify(kindPaths) !== JSON.stringify(affectedPaths)) {
+    throw err("path_kind_mismatch", "路径分类与变更路径不一致。");
+  }
+
+  return {
+    ops: substantiveOps,
+    counts,
+    dataKinds: finalized.dataKinds,
+    pathDataKinds: finalized.pathDataKinds,
+    fieldKinds: finalized.fieldKinds,
+    factConfirmedFields,
+    archiveRecord: {
+      title: sourceMeta.title || "社会事实",
+      filePath: sourceMeta.location || "",
+      claims: archiveClaims,
+      facts: archiveFacts,
+    },
+  };
+}
+
+/**
+ * Derive kinds from already-built ops result (for tests / API clarity).
+ * Prefer identityPayloadToOps output; this re-runs for a payload snapshot.
+ */
+function deriveIdentityDataKinds(identity, factConfirmedFields) {
+  // Lightweight preview of classification without package dir: not used for commit.
+  // Real classification always comes from identityPayloadToOps.
+  const fields = normalizeFactConfirmedFields(factConfirmedFields);
+  const fieldKinds = {
+    events: fieldConfirmed(fields, "events") ? "fact" : "inference",
+    facts: fieldConfirmed(fields, "facts") ? "fact" : "inference",
+    outcomes: fieldConfirmed(fields, "outcomes") ? "fact" : "inference",
+    identityClaims: fieldConfirmed(fields, "events") ? "owner_assertion" : null,
+    domains: "inference",
+    org_touchpoints: "current_state",
+    alter_candidates: "inference",
+    capability_signals: "inference",
+    mind_hooks: "inference",
+    inferences: "inference",
+  };
+  return { fieldKinds, factConfirmedFields: fields };
 }
 
 function previewLifeIdentityWrite(packageDir, payload, storeHooks) {
@@ -707,13 +870,10 @@ function previewLifeIdentityWrite(packageDir, payload, storeHooks) {
   if (!countIdentity(identity)) {
     throw err("empty_write", "没有可写入的人生事实条目。");
   }
-  const confirmAsFact = body.confirmAsFact === true;
+  const factConfirmedFields = normalizeFactConfirmedFields(body.factConfirmedFields);
   const createdAt = isoNow();
   const sourceMeta = buildSourceMeta(body.sourceMeta || body, createdAt);
-  const { dataKinds, pathDataKinds } = deriveIdentityDataKinds(identity, confirmAsFact);
-  const { ops, counts } = identityPayloadToOps(packageDir, identity, sourceMeta, {
-    confirmAsFact,
-  });
+  const built = identityPayloadToOps(packageDir, identity, sourceMeta, { factConfirmedFields });
 
   const sourceRefs = [sourceMeta.id];
   if (sourceMeta.location) sourceRefs.push(String(sourceMeta.location).slice(0, 500));
@@ -723,14 +883,14 @@ function previewLifeIdentityWrite(packageDir, payload, storeHooks) {
 
   const reason =
     String(body.reason || "").trim() ||
-    `人生事实写入：${sourceMeta.title}（事件 ${counts.events} / 事实短句 ${counts.facts} / 推断 ${counts.inferences}）`;
+    `人生事实写入：${sourceMeta.title}（事件 ${built.counts.events} / 事实短句 ${built.counts.facts} / 推断 ${built.counts.inferences}）`;
 
   const cs = store.createChangeSet({
     actor: ACTOR,
     reason: reason.slice(0, 2000),
     sourceRefs,
-    dataKinds,
-    ops,
+    dataKinds: built.dataKinds,
+    ops: built.ops,
   });
 
   const expiresAt = new Date(Date.now() + CHANGESET_TTL_MS).toISOString();
@@ -738,27 +898,20 @@ function previewLifeIdentityWrite(packageDir, payload, storeHooks) {
   const saved = JSON.parse(fs.readFileSync(csPath, "utf8"));
   saved.expiresAt = expiresAt;
   saved.lifeIdentityMeta = {
+    schemaVersion: META_SCHEMA_VERSION,
     materialKind: MATERIAL_KIND,
     sourceMeta,
-    counts,
-    confirmAsFact,
-    pathDataKinds,
-    fieldKinds: {
-      events: confirmAsFact ? "fact" : "inference",
-      facts: confirmAsFact ? "fact" : "inference",
-      outcomes: confirmAsFact ? "fact" : "inference",
-      identityClaims: confirmAsFact ? "owner_assertion" : null,
-      domains: "inference",
-      org_touchpoints: "current_state",
-      alter_candidates: "inference",
-      capability_signals: "inference",
-      mind_hooks: "inference",
-      inferences: "inference",
-    },
+    counts: built.counts,
+    factConfirmedFields: built.factConfirmedFields,
+    pathDataKinds: built.pathDataKinds,
+    fieldKinds: built.fieldKinds,
+    archiveRecord: built.archiveRecord,
   };
   fs.writeFileSync(csPath, JSON.stringify(saved, null, 2), "utf8");
 
   const storePreview = store.preview(cs.id);
+  const affectedPaths = [...(cs.affectedPaths || [])].sort();
+  assertPathKindsAlign(affectedPaths, built.pathDataKinds, built.dataKinds);
 
   return {
     materialKind: MATERIAL_KIND,
@@ -769,29 +922,50 @@ function previewLifeIdentityWrite(packageDir, payload, storeHooks) {
     expiresAt,
     actor: ACTOR,
     reason: cs.reason,
-    dataKinds,
-    pathDataKinds,
-    fieldKinds: saved.lifeIdentityMeta.fieldKinds,
-    confirmAsFact,
+    dataKinds: built.dataKinds,
+    pathDataKinds: built.pathDataKinds,
+    fieldKinds: built.fieldKinds,
+    factConfirmedFields: built.factConfirmedFields,
     sourceRefs,
     sourceMeta,
-    counts,
-    affectedPaths: cs.affectedPaths,
+    counts: built.counts,
+    affectedPaths,
     storePreview,
-    events: counts.events,
-    roles: counts.roles,
-    relations: counts.relations,
-    outcomes: counts.outcomes,
-    interests: counts.interests,
-    claims: counts.claims,
-    facts: counts.facts,
-    inferences: counts.inferences,
-    domains: counts.domains,
-    org_touchpoints: counts.org_touchpoints,
-    people: counts.people,
-    capability_signals: counts.capability_signals,
-    mind_hooks: counts.mind_hooks,
+    events: built.counts.events,
+    roles: built.counts.roles,
+    relations: built.counts.relations,
+    outcomes: built.counts.outcomes,
+    interests: built.counts.interests,
+    claims: built.counts.claims,
+    facts: built.counts.facts,
+    inferences: built.counts.inferences,
+    domains: built.counts.domains,
+    org_touchpoints: built.counts.org_touchpoints,
+    people: built.counts.people,
+    capability_signals: built.counts.capability_signals,
+    mind_hooks: built.counts.mind_hooks,
   };
+}
+
+function assertPathKindsAlign(affectedPaths, pathDataKinds, dataKinds) {
+  const paths = [...affectedPaths].sort();
+  const kindPaths = Object.keys(pathDataKinds || {}).sort();
+  if (JSON.stringify(paths) !== JSON.stringify(kindPaths)) {
+    throw err("path_kind_mismatch", "路径分类与变更路径不一致。");
+  }
+  const union = new Set();
+  for (const p of paths) {
+    const v = pathDataKinds[p];
+    if (!Array.isArray(v) || !v.length) {
+      throw err("path_kind_incomplete", `缺少路径分类：${p}`);
+    }
+    for (const k of v) union.add(k);
+  }
+  const expected = [...union].sort();
+  const actual = [...(dataKinds || [])].sort();
+  if (JSON.stringify(expected) !== JSON.stringify(actual)) {
+    throw err("data_kinds_mismatch", "数据类别与路径分类汇总不一致。");
+  }
 }
 
 function loadCandidate(packageDir, changeSetId) {
@@ -802,6 +976,36 @@ function loadCandidate(packageDir, changeSetId) {
   return JSON.parse(fs.readFileSync(csPath, "utf8"));
 }
 
+function assertCandidateBound(cs) {
+  if (!cs || typeof cs !== "object") {
+    throw err("changeset_invalid", "变更集无效，已拒绝写入。");
+  }
+  if (cs.actor !== ACTOR) {
+    throw err("changeset_actor_mismatch", "变更集来源不匹配，已拒绝写入。");
+  }
+  if (!cs.expiresAt) {
+    throw err("changeset_expiry_missing", "变更集缺少过期时间，已拒绝写入。");
+  }
+  const exp = Date.parse(cs.expiresAt);
+  if (!Number.isFinite(exp)) {
+    throw err("changeset_expiry_invalid", "变更集过期时间无效，已拒绝写入。");
+  }
+  if (Date.now() > exp) {
+    throw err("changeset_expired", "预览已过期，请重新预览后再确认写入。");
+  }
+  const meta = cs.lifeIdentityMeta;
+  if (!meta || typeof meta !== "object") {
+    throw err("changeset_meta_missing", "变更集缺少人生事实元数据，已拒绝写入。");
+  }
+  if (meta.schemaVersion !== META_SCHEMA_VERSION) {
+    throw err("changeset_meta_version_mismatch", "变更集元数据版本不匹配，已拒绝写入。");
+  }
+  if (meta.materialKind !== MATERIAL_KIND) {
+    throw err("changeset_material_mismatch", "变更集类型不匹配，已拒绝写入。");
+  }
+  assertPathKindsAlign(cs.affectedPaths || [], meta.pathDataKinds, cs.dataKinds);
+}
+
 function commitLifeIdentityWrite(packageDir, payload, storeHooks) {
   const body = payload || {};
   if (
@@ -810,7 +1014,9 @@ function commitLifeIdentityWrite(packageDir, payload, storeHooks) {
     body.dataKinds != null ||
     body.affectedPaths != null ||
     body.filePath != null ||
-    body.title != null
+    body.title != null ||
+    body.factConfirmedFields != null ||
+    body.pathDataKinds != null
   ) {
     throw err(
       "identity_commit_payload_rejected",
@@ -828,19 +1034,8 @@ function commitLifeIdentityWrite(packageDir, payload, storeHooks) {
   }
 
   const cs = loadCandidate(packageDir, changeSetId);
-  if (cs.actor && cs.actor !== ACTOR) {
-    throw err("changeset_actor_mismatch", "变更集来源不匹配，已拒绝写入。");
-  }
-  const meta = cs.lifeIdentityMeta || {};
-  if (meta.materialKind && meta.materialKind !== MATERIAL_KIND) {
-    throw err("changeset_material_mismatch", "变更集类型不匹配，已拒绝写入。");
-  }
-  if (cs.expiresAt) {
-    const exp = Date.parse(cs.expiresAt);
-    if (Number.isFinite(exp) && Date.now() > exp) {
-      throw err("changeset_expired", "预览已过期，请重新预览后再确认写入。");
-    }
-  }
+  assertCandidateBound(cs);
+  const meta = cs.lifeIdentityMeta;
 
   const store = openStore(packageDir, storeHooks);
   store.recover();
@@ -862,10 +1057,16 @@ function commitLifeIdentityWrite(packageDir, payload, storeHooks) {
     dataKinds: cs.dataKinds || [],
     pathDataKinds: meta.pathDataKinds || {},
     fieldKinds: meta.fieldKinds || {},
-    confirmAsFact: !!meta.confirmAsFact,
+    factConfirmedFields: meta.factConfirmedFields || [],
     sourceRefs: cs.sourceRefs || [],
     sourceMeta: meta.sourceMeta || null,
     updatedAt: (manifest && manifest.updatedAt) || isoNow(),
+    archiveRecord: meta.archiveRecord || {
+      title: (meta.sourceMeta && meta.sourceMeta.title) || "社会事实",
+      filePath: (meta.sourceMeta && meta.sourceMeta.location) || "",
+      claims: [],
+      facts: [],
+    },
     events: counts.events || 0,
     roles: counts.roles || 0,
     relations: counts.relations || 0,
@@ -882,16 +1083,57 @@ function commitLifeIdentityWrite(packageDir, payload, storeHooks) {
   };
 }
 
+/**
+ * Orchestrate Package commit + local archive (injectable for tests).
+ * archiveRecord is stripped from the public return value.
+ */
+function runIdentityCommitAndArchive(options = {}) {
+  const {
+    packageDir,
+    payload,
+    storeHooks,
+    userData,
+    commitFn = commitLifeIdentityWrite,
+    archiveFn,
+  } = options;
+  if (typeof archiveFn !== "function") {
+    throw err("archive_fn_required", "缺少归档函数。");
+  }
+  const committed = commitFn(packageDir, payload, storeHooks);
+  const archiveRecord = committed.archiveRecord;
+  const publicResult = { ...committed };
+  delete publicResult.archiveRecord;
+
+  try {
+    archiveFn(userData, {
+      title: (archiveRecord && archiveRecord.title) || "社会事实",
+      filePath: (archiveRecord && archiveRecord.filePath) || "",
+      claims: (archiveRecord && archiveRecord.claims) || [],
+      facts: (archiveRecord && archiveRecord.facts) || [],
+    });
+  } catch (archiveErr) {
+    const msg = (archiveErr && archiveErr.message) || String(archiveErr);
+    publicResult.archiveWarning = "资料已写入，但本机运行归档未完成。";
+    console.warn("[identity-write] archive failed:", String(msg).slice(0, 200));
+  }
+  return publicResult;
+}
+
 module.exports = {
   ACTOR,
   MATERIAL_KIND,
+  META_SCHEMA_VERSION,
   CHANGESET_TTL_MS,
+  FACT_FIELDS,
   LIMITS,
+  normalizeFactConfirmedFields,
   deriveIdentityDataKinds,
   normalizeIdentityPayload,
   identityPayloadToOps,
   previewLifeIdentityWrite,
   commitLifeIdentityWrite,
+  runIdentityCommitAndArchive,
+  assertCandidateBound,
   countIdentity,
   buildSourceMeta,
 };

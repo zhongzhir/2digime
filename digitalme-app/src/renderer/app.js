@@ -1394,9 +1394,9 @@ function formatBuilderPreviewSummary(preview) {
       `来源：${refs}`,
       `将修改：${paths}`,
       `条目：事件 ${preview.events || 0} · 事实短句 ${preview.facts || 0} · 推断 ${preview.inferences || 0} · 成就 ${preview.outcomes || 0}`,
-      preview.confirmAsFact
-        ? "已包含明确事实确认（事实 / 本人声明可升级）。"
-        : "未做事实确认：事件/事实/成就仅按推断写入，不会形成本人声明。",
+      Array.isArray(preview.factConfirmedFields) && preview.factConfirmedFields.length
+        ? `已确认事实字段：${preview.factConfirmedFields.join("、")}`
+        : "未确认事实字段：事件/事实短句/成就仅按推断写入，不会形成本人声明。",
       "确认后才会写入并形成新版本；可放弃。",
     ]
       .filter(Boolean)
@@ -1484,13 +1484,15 @@ async function previewAndCommitIdentityWrite(identity, src, options = {}) {
   if (!window.digitalMe.previewDistillWrite || !window.digitalMe.writeDistill) {
     throw new Error("当前版本不支持经资料库确认的写入，请完全退出后重新启动应用。");
   }
-  const confirmAsFact = options.confirmAsFact === true;
+  const factConfirmedFields = Array.isArray(options.factConfirmedFields)
+    ? options.factConfirmedFields
+    : [];
   const preview = await window.digitalMe.previewDistillWrite({
     materialKind: "identity",
     identity,
     filePath: src.filePath,
     title: src.title,
-    confirmAsFact,
+    factConfirmedFields,
   });
   const previewBox = $("builder-write-preview");
   if (previewBox) {
@@ -1537,9 +1539,9 @@ async function autoWriteDistillResult(result, label) {
       distillResult = null;
       return { ok: true, skipped: true };
     }
-    // Smart build: never silent fact/owner_assertion — confirmAsFact stays false.
+    // Smart build: never silent fact/owner_assertion — empty confirmed fields.
     const committed = await previewAndCommitIdentityWrite(identity, src, {
-      confirmAsFact: false,
+      factConfirmedFields: [],
       requireExplicitConfirm: true,
       onPreview: (preview) => {
         const line = formatBuilderPreviewSummary(preview);
@@ -1907,14 +1909,16 @@ function bindBuilder() {
         $("builder-progress").textContent = "请至少勾选一条再写入。";
         return;
       }
-      // Checking events/facts/outcomes (default unchecked) is the explicit fact confirmation.
-      const confirmAsFact =
-        identity.events.length > 0 || identity.facts.length > 0 || identity.outcomes.length > 0;
+      // Checking events/facts/outcomes (default unchecked) is the explicit field confirmation.
+      const factConfirmedFields = [];
+      if (identity.events.length) factConfirmedFields.push("events");
+      if (identity.facts.length) factConfirmedFields.push("facts");
+      if (identity.outcomes.length) factConfirmedFields.push("outcomes");
       $("btn-write").disabled = true;
       try {
         const label = currentSourceLabel || { filePath: "", title: "社会事实材料" };
         const committed = await previewAndCommitIdentityWrite(identity, label, {
-          confirmAsFact,
+          factConfirmedFields,
           requireExplicitConfirm: true,
         });
         if (!committed.ok) {

@@ -3323,7 +3323,7 @@ ipcMain.handle("builder:previewWrite", async (_e, payload) => {
       title: body.title,
       sourceMeta: body.sourceMeta,
       reason: body.reason,
-      confirmAsFact: body.confirmAsFact === true,
+      factConfirmedFields: body.factConfirmedFields,
     });
   }
   return builderPackageWrite.previewPersonaWrite(pkgDir, {
@@ -3349,7 +3349,9 @@ ipcMain.handle("builder:write", async (_e, payload) => {
       body.dataKinds != null ||
       body.affectedPaths != null ||
       body.filePath != null ||
-      body.title != null
+      body.title != null ||
+      body.factConfirmedFields != null ||
+      body.pathDataKinds != null
     ) {
       const err = new Error(
         "人生事实提交只接受变更集编号与确认标记，不能再次提交原始内容或写入计划。"
@@ -3357,30 +3359,19 @@ ipcMain.handle("builder:write", async (_e, payload) => {
       err.code = "identity_commit_payload_rejected";
       throw err;
     }
-    const result = lifePackageWrite.commitLifeIdentityWrite(pkgDir, {
-      changeSetId: body.changeSetId,
-      confirmed: body.confirmed,
-      confirmation: body.confirmation,
-    });
-    let archiveWarning = null;
-    try {
-      const sm = result.sourceMeta || {};
-      materials.archiveIdentityRun(app.getPath("userData"), {
-        title: sm.title || "社会事实",
-        filePath: sm.location || "",
-        claims: [],
-        facts: [],
-        events: [],
-        inferences: [],
-        outcomes: [],
-      });
-    } catch (archiveErr) {
-      archiveWarning =
-        "资料已写入，但本机运行归档未完成：" +
-        ((archiveErr && archiveErr.message) || String(archiveErr));
-      console.warn("[builder:write identity] archiveIdentityRun failed:", archiveWarning);
-    }
-    return { materialKind: "identity", ...result, archiveWarning };
+    return {
+      materialKind: "identity",
+      ...lifePackageWrite.runIdentityCommitAndArchive({
+        packageDir: pkgDir,
+        payload: {
+          changeSetId: body.changeSetId,
+          confirmed: body.confirmed,
+          confirmation: body.confirmation,
+        },
+        userData: app.getPath("userData"),
+        archiveFn: materials.archiveIdentityRun,
+      }),
+    };
   }
 
   // Persona: only changeSetId + confirmation — never raw agg/paths from renderer as the write plan.

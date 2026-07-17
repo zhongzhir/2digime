@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-07-17（P1-07 · Codex 第一轮复核修复 · statically_verified）
+
+### 结论
+
+- 分支：`codex/p1-07-life-identity-package-store`（不 amend `813e509`）
+- 状态：仍为 `statically_verified`（不标 accepted）
+- 分类改为由最终 ops 生成 `dataKinds` / `pathDataKinds`（支持数组）/ `fieldKinds`；`affectedPaths` 与 `pathDataKinds` 精确对应
+- 删除全局 `confirmAsFact`，改为白名单 `factConfirmedFields: events|facts|outcomes`；智能构建发送空列表
+- 严格读取：损坏 JSON/JSONL → `package_content_invalid`，禁止静默清空重写；events/inferences 优先 `append_jsonl`
+- 禁止 source-only commit：无实质 op → `empty_write`；sourceRef 补充视为实质变更（有测试）
+- change set 严格绑定 actor / lifeIdentityMeta / materialKind / expiresAt / pathKinds
+- `runIdentityCommitAndArchive`：commit 失败不归档；成功归档真实 claims/facts；archive 失败仅 warning，不重试 commit
+- 未改 `digital-me-package/**`、Policies、认知页迁移、外部协作
+
+### 验证
+
+- `npm run test:p1-07`：30/30
+- `npm run test:p1-06`：通过
+- `npm run test:p1-phase1`：通过
+- `node --check`（package-write / life / main / materials / renderer / test）与 `git diff --check` 通过
+- 未触碰真实 Package
+
+---
+
 ## 2026-07-17（P1-07 · Life/identity 写回迁入 PackageStore · statically_verified）
 
 ### 结论
