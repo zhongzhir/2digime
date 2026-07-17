@@ -5,6 +5,25 @@
 
 ---
 
+## 2026-07-17（设置 · 临时资料收窄为高级测试工具）
+
+### 结论
+
+- 将「创建临时演示资料」收窄为设置页「高级 / 测试工具」中的「创建临时测试资料」
+- 点击须二次确认：会切换当前资料目录；不修改常规资料；临时内容不自动合并回常规资料
+- 临时目录状态下显示「当前正在使用临时测试资料」，并提供「恢复常规资料目录」（二次确认）
+- 创建与恢复后刷新首页、版本信息与 SubjectOverview；防重复点击
+- 未改动 SecretStore / PackageStore 核心、Builder、ToolBroker；未修改 `digital-me-package/**`
+
+### 验证
+
+- `npm run test:settings-temp-package`（结构 / 确认 / 取消 / 警告 / 恢复 / 防抖）
+- `npm run test:p1-03` / `test:p1-06` / `test:p1-phase1`
+- `node --check`（main / preload / renderer / sandbox-package-state）；`git diff --check`
+- 说明：若本地 gitignored `digital-me-package/**` 相对 P1-00 基线漂移，P1-04 #19 / P1-06 #12–13 可能失败，与本次设置页收窄无关
+
+---
+
 ## 2026-07-17（P1-06 · Owner 临时资料验收通过）
 
 ### 结论

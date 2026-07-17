@@ -1083,30 +1083,11 @@ function bindChatCoreControls() {
   if ($("btn-clear-apikey")) {
     $("btn-clear-apikey").addEventListener("click", clearApiKeySettings);
   }
-  $("btn-create-demo-pkg")?.addEventListener("click", async () => {
-    if (!window.digitalMe.createDemoPackage) {
-      alert("当前版本不支持创建演示资料。");
-      return;
-    }
-    try {
-      const r = await window.digitalMe.createDemoPackage({ migrateToV02: true });
-      if ($("cfg-pkgdir")) $("cfg-pkgdir").value = r.packageDir || "";
-      await window.digitalMe.setConfig({
-        provider: "openai-compatible",
-        baseURL: ($("cfg-baseurl")?.value || "").trim(),
-        apiKey: ($("cfg-apikey")?.value || "").trim(),
-        model: ($("cfg-model")?.value || "").trim(),
-        packageDir: r.packageDir,
-      });
-      pkg = await window.digitalMe.loadPackage();
-      await refreshPackageVersionsPanel();
-      alert(
-        "已创建临时演示资料，并已设为当前资料目录。\n路径：" +
-          (r.packageDir || "")
-      );
-    } catch (e) {
-      alert("创建失败：" + (e.message || String(e)));
-    }
+  $("btn-create-temp-test-pkg")?.addEventListener("click", () => {
+    createTempTestPackageFlow().catch((e) => alert("创建失败：" + (e.message || String(e))));
+  });
+  $("btn-restore-regular-pkg")?.addEventListener("click", () => {
+    restoreRegularPackageFlow().catch((e) => alert("恢复失败：" + (e.message || String(e))));
   });
   $("btn-pkg-rollback-prev")?.addEventListener("click", () => {
     rollbackToPreviousPackageVersion().catch((e) => alert(e.message || String(e)));
@@ -2510,10 +2491,113 @@ async function openSettings() {
   }
   await refreshSettingsAuditList();
   await refreshPackageVersionsPanel();
+  await refreshSandboxPackageUi();
   const settingsModal = $("settings-modal");
   const settingsBody = settingsModal.querySelector(".settings-modal-body");
   settingsModal.classList.remove("hidden");
   if (settingsBody) settingsBody.scrollTop = 0;
+}
+
+/** Prevent duplicate temp/regular package switches. */
+let sandboxPackageSwitchBusy = false;
+
+const TEMP_PKG_CONFIRM_TEXT =
+  "将创建临时测试资料。\n\n" +
+  "• 将切换当前资料目录\n" +
+  "• 不会修改常规资料\n" +
+  "• 临时资料中的内容不会自动合并回常规资料\n\n" +
+  "是否继续？";
+
+const RESTORE_PKG_CONFIRM_TEXT =
+  "将恢复到常规资料目录。\n\n" +
+  "临时测试资料不会自动合并进常规资料。\n\n" +
+  "是否继续？";
+
+async function refreshSandboxPackageUi() {
+  const banner = $("settings-temp-pkg-banner");
+  const restoreBtn = $("btn-restore-regular-pkg");
+  const createBtn = $("btn-create-temp-test-pkg");
+  let status = { isUsingTemp: false, canRestoreRegular: false, currentPackageDir: "" };
+  try {
+    if (window.digitalMe.getSandboxPackageStatus) {
+      status = (await window.digitalMe.getSandboxPackageStatus()) || status;
+    }
+  } catch {
+    /* ignore */
+  }
+  if (banner) {
+    banner.classList.toggle("hidden", !status.isUsingTemp);
+  }
+  if (restoreBtn) {
+    restoreBtn.classList.toggle("hidden", !status.canRestoreRegular);
+    restoreBtn.disabled = !!sandboxPackageSwitchBusy;
+  }
+  if (createBtn) {
+    createBtn.disabled = !!sandboxPackageSwitchBusy;
+  }
+  if (status.currentPackageDir && $("cfg-pkgdir")) {
+    $("cfg-pkgdir").value = status.currentPackageDir;
+  }
+  return status;
+}
+
+async function refreshAfterPackageDirSwitch() {
+  pkg = await window.digitalMe.loadPackage();
+  renderPackageStatus();
+  await refreshPackageVersionsPanel();
+  try {
+    await refreshMeView();
+  } catch {
+    /* ignore overview failures while settings open */
+  }
+  await refreshSandboxPackageUi();
+}
+
+async function createTempTestPackageFlow() {
+  if (sandboxPackageSwitchBusy) return;
+  if (!window.digitalMe.activateTempDemoPackage) {
+    alert("当前版本不支持创建临时测试资料。");
+    return;
+  }
+  if (!window.confirm(TEMP_PKG_CONFIRM_TEXT)) return;
+
+  sandboxPackageSwitchBusy = true;
+  await refreshSandboxPackageUi();
+  try {
+    const r = await window.digitalMe.activateTempDemoPackage({
+      confirmed: true,
+      migrateToV02: true,
+    });
+    if ($("cfg-pkgdir")) $("cfg-pkgdir").value = r.packageDir || "";
+    await refreshAfterPackageDirSwitch();
+    alert(
+      "已创建临时测试资料，并已切换当前资料目录。\n路径：" + (r.packageDir || "")
+    );
+  } finally {
+    sandboxPackageSwitchBusy = false;
+    await refreshSandboxPackageUi();
+  }
+}
+
+async function restoreRegularPackageFlow() {
+  if (sandboxPackageSwitchBusy) return;
+  if (!window.digitalMe.restoreRegularPackageDir) {
+    alert("当前版本不支持恢复常规资料目录。");
+    return;
+  }
+  if (!window.confirm(RESTORE_PKG_CONFIRM_TEXT)) return;
+
+  sandboxPackageSwitchBusy = true;
+  await refreshSandboxPackageUi();
+  try {
+    const r = await window.digitalMe.restoreRegularPackageDir({ confirmed: true });
+    if ($("cfg-pkgdir")) $("cfg-pkgdir").value = r.packageDir || "";
+    await refreshAfterPackageDirSwitch();
+    alert("已恢复常规资料目录。\n路径：" + (r.packageDir || ""));
+  } finally {
+    sandboxPackageSwitchBusy = false;
+    await refreshSandboxPackageUi();
+  }
 }
 
 /** Settings: package version panel (disk-backed; survives app restart). */

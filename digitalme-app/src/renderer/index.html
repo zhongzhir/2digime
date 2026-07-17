@@ -938,10 +938,9 @@
         <label>数字之我资料目录
           <input id="cfg-pkgdir" type="text" />
         </label>
-        <div class="modal-actions" style="margin-top:0;justify-content:flex-start">
-          <button type="button" id="btn-create-demo-pkg" class="btn-ghost">创建临时演示资料</button>
+        <div id="settings-temp-pkg-banner" class="settings-temp-pkg-banner hidden" role="status" aria-live="polite">
+          当前正在使用临时测试资料
         </div>
-        <p class="hint">演示资料写在系统临时目录，不会改动你平时使用的主体资料。</p>
         <div class="settings-pkg-versions" id="settings-pkg-versions">
           <h3 class="settings-subhead">资料版本</h3>
           <p id="pkg-version-current" class="hint" aria-live="polite">正在读取版本信息…</p>
@@ -952,6 +951,15 @@
             <button type="button" id="btn-pkg-versions-refresh" class="btn-ghost">刷新版本信息</button>
           </div>
         </div>
+        <details class="settings-advanced-tools" id="settings-advanced-tools">
+          <summary>高级 / 测试工具</summary>
+          <p class="hint">仅用于验收、演示与故障复现。请勿在日常使用中切换到临时资料。</p>
+          <div class="modal-actions" style="margin-top:0;justify-content:flex-start;flex-wrap:wrap;gap:8px">
+            <button type="button" id="btn-create-temp-test-pkg" class="btn-ghost">创建临时测试资料</button>
+            <button type="button" id="btn-restore-regular-pkg" class="btn-ghost hidden">恢复常规资料目录</button>
+          </div>
+          <p class="hint">临时资料位于系统临时目录；不会自动合并回常规资料。</p>
+        </details>
         <details class="settings-l0" open>
           <summary>主体编排 · 本地命令工具与记录</summary>
           <p class="hint">默认关闭。仅可配置已注册的「本地命令工具」：绝对路径可执行文件与已保存的授权工作目录。每次委派须确认，且需允许改动授权目录中的文件。受限执行不是安全沙箱。</p>

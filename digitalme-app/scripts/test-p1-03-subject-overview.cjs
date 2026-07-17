@@ -497,6 +497,16 @@ test("21. settings modal stays viewport-bound with sticky reachable actions", ()
   assert.match(appJs, /settingsBody\.scrollTop\s*=\s*0/);
 });
 
+test("22. settings advanced tools fold for temp test package", () => {
+  const rendererDir = path.join(__dirname, "..", "src", "renderer");
+  const html = fs.readFileSync(path.join(rendererDir, "index.html"), "utf8");
+  assert.match(html, /id="settings-advanced-tools"/);
+  assert.match(html, /创建临时测试资料/);
+  assert.match(html, /恢复常规资料目录/);
+  assert.match(html, /当前正在使用临时测试资料/);
+  assert.ok(!/创建临时演示资料/.test(html));
+});
+
 console.log("");
 console.log(`P1-03 results: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

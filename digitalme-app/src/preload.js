@@ -110,6 +110,10 @@ contextBridge.exposeInMainWorld("digitalMe", {
   previewFeedback: (payload) => ipcRenderer.invoke("feedback:preview", payload),
   applyFeedback: (payload) => ipcRenderer.invoke("feedback:apply", payload),
   createDemoPackage: (opts) => ipcRenderer.invoke("packageStore:createDemo", opts),
+  activateTempDemoPackage: (opts) => ipcRenderer.invoke("packageStore:activateTempDemo", opts),
+  restoreRegularPackageDir: (opts) =>
+    ipcRenderer.invoke("packageStore:restoreRegularPackageDir", opts),
+  getSandboxPackageStatus: () => ipcRenderer.invoke("packageStore:getSandboxStatus"),
   inspectPackageStore: (opts) => ipcRenderer.invoke("packageStore:inspect", opts),
   listPackageVersions: () => ipcRenderer.invoke("packageStore:listVersions"),
   getSubjectOverview: () => ipcRenderer.invoke("subject:getOverview"),

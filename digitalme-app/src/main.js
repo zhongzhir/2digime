@@ -37,6 +37,7 @@ const { SecretStore } = require("./security/secret-store");
 const { createElectronSafeStorageAdapter } = require("./security/electron-safe-storage-adapter");
 const { ConfigSecretsService, extensionSecretId } = require("./security/config-secrets");
 const { buildRuntimeStamp, stampIsPostOwnerFixes } = require("./runtime-stamp");
+const sandboxPackageState = require("./sandbox-package-state");
 
 // Digital Me Package lives one level up from the app folder by default.
 const DEFAULT_PACKAGE_DIR = path.join(__dirname, "..", "..", "digital-me-package");
@@ -2958,9 +2959,40 @@ ipcMain.handle("feedback:apply", (_e, payload) => {
 });
 
 // ---------- PackageStore sandbox (tmp demos only; never auto-touch real package) ----------
+const SANDBOX_STATE_PATH = path.join(app.getPath("userData"), "sandbox-package-state.json");
+let sandboxPackageBusy = false;
+
+function readSandboxPackageState() {
+  return sandboxPackageState.loadSandboxState(SANDBOX_STATE_PATH);
+}
+
+function writeSandboxPackageState(state) {
+  return sandboxPackageState.saveSandboxState(SANDBOX_STATE_PATH, state);
+}
+
+function getSandboxPackageStatus() {
+  const state = readSandboxPackageState();
+  const current = path.resolve(packageDirFromConfig());
+  return sandboxPackageState.buildSandboxStatus({
+    currentPackageDir: current,
+    regularPackageDir: state.regularPackageDir,
+    defaultPackageDir: DEFAULT_PACKAGE_DIR,
+  });
+}
+
+function applyPackageDirToConfig(packageDir) {
+  const pub = readPublicConfig();
+  return getConfigSecrets().setConfigFromRenderer({
+    baseURL: pub.baseURL || "",
+    model: pub.model || "",
+    packageDir: String(packageDir || "").trim(),
+    apiKey: "",
+  });
+}
+
 ipcMain.handle("packageStore:createDemo", (_e, opts) => {
   const options = opts && typeof opts === "object" ? opts : {};
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "dm-p102-demo-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), sandboxPackageState.TEMP_PREFIX));
   createMinimalFixture(dir, {
     schemaVersion: options.schemaVersion,
     withMemoryLine: !!options.withMemoryLine,
@@ -2970,7 +3002,112 @@ ipcMain.handle("packageStore:createDemo", (_e, opts) => {
     store.migrateToV02({ actor: "sandbox:demo", toolVersion: "digitalme-app-sandbox" });
   }
   const inspect = store.inspect();
-  return { packageDir: dir, inspect };
+  return { packageDir: dir, inspect, isTemp: true };
+});
+
+ipcMain.handle("packageStore:getSandboxStatus", () => getSandboxPackageStatus());
+
+ipcMain.handle("packageStore:activateTempDemo", (_e, opts) => {
+  if (sandboxPackageBusy) {
+    const err = new Error("正在切换资料目录，请稍候。");
+    err.code = "sandbox_busy";
+    throw err;
+  }
+  sandboxPackageBusy = true;
+  try {
+    const options = opts && typeof opts === "object" ? opts : {};
+    const confirmed =
+      options.confirmed === true ||
+      (options.confirmation && options.confirmation.confirmed === true);
+    if (!confirmed) {
+      const err = new Error("需要明确确认后才能创建并切换到临时测试资料。");
+      err.code = "confirmation_required";
+      throw err;
+    }
+
+    const current = path.resolve(packageDirFromConfig());
+    const prev = readSandboxPackageState();
+    const regularPackageDir = sandboxPackageState.nextRegularPackageDir(
+      current,
+      prev.regularPackageDir,
+      DEFAULT_PACKAGE_DIR
+    );
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), sandboxPackageState.TEMP_PREFIX));
+    createMinimalFixture(dir, {
+      schemaVersion: options.schemaVersion,
+      withMemoryLine: !!options.withMemoryLine,
+    });
+    const store = new PackageStore({ packageDir: dir, ownerId: "sandbox:demo" });
+    if (options.migrateToV02 !== false) {
+      store.migrateToV02({ actor: "sandbox:demo", toolVersion: "digitalme-app-sandbox" });
+    }
+    const inspect = store.inspect();
+
+    writeSandboxPackageState({
+      regularPackageDir,
+      activeTempPackageDir: dir,
+    });
+    applyPackageDirToConfig(dir);
+
+    return {
+      ok: true,
+      packageDir: dir,
+      regularPackageDir,
+      isUsingTemp: true,
+      inspect,
+    };
+  } finally {
+    sandboxPackageBusy = false;
+  }
+});
+
+ipcMain.handle("packageStore:restoreRegularPackageDir", (_e, opts) => {
+  if (sandboxPackageBusy) {
+    const err = new Error("正在切换资料目录，请稍候。");
+    err.code = "sandbox_busy";
+    throw err;
+  }
+  sandboxPackageBusy = true;
+  try {
+    const options = opts && typeof opts === "object" ? opts : {};
+    const confirmed =
+      options.confirmed === true ||
+      (options.confirmation && options.confirmation.confirmed === true);
+    if (!confirmed) {
+      const err = new Error("需要明确确认后才能恢复常规资料目录。");
+      err.code = "confirmation_required";
+      throw err;
+    }
+
+    const status = getSandboxPackageStatus();
+    if (!status.isUsingTemp) {
+      const err = new Error("当前已在使用常规资料目录。");
+      err.code = "not_using_temp";
+      throw err;
+    }
+    const target = path.resolve(status.regularPackageDir || DEFAULT_PACKAGE_DIR);
+    if (sandboxPackageState.isTempDemoPackageDir(target)) {
+      const err = new Error("常规资料目录无效，已拒绝恢复。");
+      err.code = "regular_dir_invalid";
+      throw err;
+    }
+
+    writeSandboxPackageState({
+      regularPackageDir: target,
+      activeTempPackageDir: "",
+    });
+    applyPackageDirToConfig(target);
+
+    return {
+      ok: true,
+      packageDir: target,
+      regularPackageDir: target,
+      isUsingTemp: false,
+    };
+  } finally {
+    sandboxPackageBusy = false;
+  }
 });
 
 ipcMain.handle("packageStore:inspect", (_e, payload) => {

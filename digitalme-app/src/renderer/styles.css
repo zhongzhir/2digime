@@ -1163,6 +1163,35 @@ body {
   margin: 8px 0 16px;
   padding-top: 4px;
 }
+.settings-temp-pkg-banner {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #c4a35a;
+  background: #fff8e8;
+  color: #3a2f1a;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.settings-temp-pkg-banner.hidden {
+  display: none !important;
+}
+.settings-advanced-tools {
+  margin: 8px 0 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fffaf6;
+}
+.settings-advanced-tools > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #5c4033;
+  list-style: none;
+}
+.settings-advanced-tools > summary::-webkit-details-marker {
+  display: none;
+}
 .modal-card label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; margin-bottom: 12px; }
 .modal-card input, .modal-card select, .modal-card textarea {
   background: #fffaf6;
