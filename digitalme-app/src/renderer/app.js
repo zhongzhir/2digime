@@ -7722,17 +7722,70 @@ function bindMe() {
   });
 
   async function pickIntoInbox(doneHint) {
-    const files = await window.digitalMe.pickFile();
+    updateInboxProgressSummary({
+      headline: "正在打开文件选择…",
+      current: "请在系统对话框中选择文件。",
+      resetDetail: true,
+      appendDetail: "正在打开文件选择…",
+    });
+    let files;
+    try {
+      files = await window.digitalMe.pickFile();
+    } catch (e) {
+      const msg = String((e && e.message) || e || "未知错误");
+      updateInboxProgressSummary({
+        headline: "无法打开文件选择",
+        current: msg,
+        appendDetail: "无法打开文件选择：" + msg,
+      });
+      return;
+    }
     const list = Array.isArray(files) ? files : files ? [files] : [];
-    if (!list.length) return;
-    const r = await window.digitalMe.enqueueInbox(list);
+    if (!list.length) {
+      updateInboxProgressSummary({
+        headline: "未选择文件",
+        current: "未选择文件。可再次点击提交。",
+        appendDetail: "未选择文件。",
+      });
+      return;
+    }
+    const names = list
+      .map((f) => {
+        if (!f) return "";
+        if (f.name) return String(f.name);
+        const fp = String(f.filePath || f.path || "");
+        const parts = fp.split(/[/\\]/);
+        return parts[parts.length - 1] || fp;
+      })
+      .filter(Boolean);
+    const namePreview =
+      names.slice(0, 5).join("、") + (names.length > 5 ? ` 等 ${names.length} 个` : "");
+    updateInboxProgressSummary({
+      headline: `已选择 ${list.length} 个文件`,
+      current: namePreview || `共 ${list.length} 个文件`,
+      countsText: String(list.length),
+      appendDetail: `已选择 ${list.length} 个文件：${namePreview || "（无文件名）"}`,
+    });
+    let r;
+    try {
+      r = await window.digitalMe.enqueueInbox(list);
+    } catch (e) {
+      const msg = String((e && e.message) || e || "未知错误");
+      updateInboxProgressSummary({
+        headline: "材料入库失败",
+        current: msg,
+        appendDetail: "材料入库失败：" + msg,
+      });
+      return;
+    }
+    const addedLen = r && Array.isArray(r.added) ? r.added.length : list.length;
     hideBuildDoneBanner();
     updateInboxProgressSummary({
       headline: "已投入材料",
-      current: doneHint || `已投入 ${r.added.length} 个文件。下一步：点「智能构建」。`,
-      countsText: `+${r.added.length}`,
+      current: doneHint || `已投入 ${addedLen} 个文件。下一步：点「智能构建」。`,
+      countsText: `+${addedLen}`,
       resetDetail: true,
-      appendDetail: `已投入 ${r.added.length} 个文件。可直接点「智能构建」。`,
+      appendDetail: `已投入 ${addedLen} 个文件。可直接点「智能构建」。`,
     });
     await refreshInboxPanel();
   }

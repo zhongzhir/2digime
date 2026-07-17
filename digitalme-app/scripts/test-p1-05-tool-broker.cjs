@@ -120,21 +120,35 @@ function patchUtf16leStrings(filePath, pairs) {
   fs.writeFileSync(filePath, buf);
 }
 
-/** Replace a possibly-locked executable via temp + unlink + rename (Windows EBUSY-safe). */
+/** Overwrite a possibly-locked executable (Windows AV/Authenticode handle races). */
 function replaceExecutableFile(target, fill) {
-  const tmp = target + ".replace-tmp";
+  const tmp = target + ".replace-tmp-" + process.pid + "-" + Date.now();
+  fill(tmp);
+  let lastErr = null;
+  const deadline = Date.now() + 8000;
+  while (Date.now() < deadline) {
+    try {
+      fs.copyFileSync(tmp, target);
+      try {
+        fs.unlinkSync(tmp);
+      } catch {
+        /* ignore */
+      }
+      return;
+    } catch (err) {
+      lastErr = err;
+      const start = Date.now();
+      while (Date.now() - start < 120) {
+        /* spin wait for handle release */
+      }
+    }
+  }
   try {
     fs.unlinkSync(tmp);
   } catch {
     /* ignore */
   }
-  fill(tmp);
-  try {
-    fs.unlinkSync(target);
-  } catch {
-    /* ignore */
-  }
-  fs.renameSync(tmp, target);
+  throw lastErr || new Error("replaceExecutableFile failed");
 }
 
 function walkFiles(root) {
@@ -966,7 +980,15 @@ async function runAllTests() {
 
         // Restore good tool, then full confirm chain with replace injected at execute boundary.
         fs.copyFileSync(process.execPath, toolPath);
+        try {
+          const { clearAuthenticodeCacheForTests } = require("../src/tool-broker/authenticode");
+          clearAuthenticodeCacheForTests();
+        } catch {
+          /* ignore */
+        }
         confirmationStore.clearAllForTests();
+        // Brief pause so prior Authenticode probes release file handles on Windows.
+        await new Promise((r) => setTimeout(r, 250));
         const ag = {
           getActiveCliAgentSnapshot() {
             return agentsLib.getActiveCliAgentSnapshot(userData);
