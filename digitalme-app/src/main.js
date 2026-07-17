@@ -2034,6 +2034,16 @@ ipcMain.handle("l0:runExternalAgent", async (e, payload) => {
   const { operationId, abort: ac, senderId } = began;
   activeDelegateAborts.set(operationId, ac);
   const progressRequestId = clientRequestId || operationId;
+  // Expose operationId immediately — do not wait for the long-running invoke to resolve.
+  try {
+    e.sender.send("l0:external-agent-started", {
+      requestId: clientRequestId || "",
+      operationId,
+      senderId,
+    });
+  } catch {
+    /* ignore */
+  }
   const sendProg = (p) => {
     try {
       e.sender.send("chat:progress", {

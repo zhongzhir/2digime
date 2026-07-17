@@ -112,6 +112,9 @@ async function init() {
   if (window.digitalMe.onResearchProgress) {
     window.digitalMe.onResearchProgress(onResearchProgress);
   }
+  if (window.digitalMe.onExternalAgentStarted) {
+    window.digitalMe.onExternalAgentStarted(onExternalAgentStarted);
+  }
   await ensureSession();
   await loadScenarioPacks();
   await refreshCapabilitySurface();
@@ -543,6 +546,15 @@ function onResearchProgress(data) {
   if (data?.label) {
     setResearchToolTrail(`<strong>${escapeHtml(data.label)}</strong>`, true);
   }
+}
+
+function onExternalAgentStarted(data) {
+  if (!data || !data.operationId) return;
+  // Only bind while a code workspace run is active; require matching requestId when present.
+  if (!codeRequestId) return;
+  const rid = String(data.requestId || "");
+  if (rid && rid !== codeRequestId) return;
+  codeOperationId = String(data.operationId);
 }
 
 function onChatProgress(data) {
@@ -3375,6 +3387,7 @@ function wireSkillZoneCreateButtons() {
 let codeHistory = [];
 let codeRequestId = null;
 let codeOperationId = null;
+let codeStopBusy = false;
 let codeDelegationHint = "";
 let codeArtifacts = { files: [], links: [], notes: "" };
 
@@ -3767,8 +3780,13 @@ async function sendCode() {
   const executorId = $("code-executor-select")?.value || "builtin";
   codeRequestId = "creq_" + Date.now().toString(36);
   codeOperationId = null;
+  codeStopBusy = false;
   $("btn-code-send").disabled = true;
-  $("btn-code-stop")?.classList.remove("hidden");
+  const stopBtn = $("btn-code-stop");
+  if (stopBtn) {
+    stopBtn.classList.remove("hidden");
+    stopBtn.disabled = false;
+  }
   const trail = $("code-trail");
   if (trail) {
     trail.classList.remove("hidden");
@@ -3837,6 +3855,19 @@ async function sendCode() {
       reply = (res && res.reply) || "";
       caps = (res && res.meta && res.meta.capabilitiesUsed) || [];
       executorName = (res && res.meta && res.meta.executor) || "外部执行体";
+      if (res && res.aborted) {
+        pending.classList.remove("streaming");
+        pending.className = "msg system-note";
+        if (res.orphanRisk || (res.meta && res.meta.orphanRisk)) {
+          pending.textContent =
+            reply || "已尝试停止外部程序，但未能确认进程已结束，可能仍有残留进程。";
+        } else {
+          pending.textContent = reply || "已停止外部程序。";
+        }
+        codeHistory.push({ role: "system-note", content: pending.textContent });
+        await refreshCodeAuditList();
+        return;
+      }
       if (res && (res.orphanRisk || (res.meta && res.meta.orphanRisk))) {
         // Do not treat as a clean stop; keep the risk wording from main process.
         pending.classList.remove("streaming");
@@ -3910,8 +3941,13 @@ async function sendCode() {
     });
     await refreshCodeAuditList();
   } finally {
+    codeStopBusy = false;
     $("btn-code-send").disabled = false;
-    $("btn-code-stop")?.classList.add("hidden");
+    const stopBtn = $("btn-code-stop");
+    if (stopBtn) {
+      stopBtn.disabled = false;
+      stopBtn.classList.add("hidden");
+    }
     codeRequestId = null;
     codeOperationId = null;
     $("code-messages").scrollTop = $("code-messages").scrollHeight;
@@ -5401,14 +5437,50 @@ function bindCodeWorkspace() {
   if (!sendBtn) return;
   sendBtn.addEventListener("click", sendCode);
   $("btn-code-stop")?.addEventListener("click", async () => {
+    if (codeStopBusy) return;
     if (!codeRequestId && !codeOperationId) return;
-    await window.digitalMe.stopChat({ requestId: codeRequestId });
+    codeStopBusy = true;
+    const send = $("btn-code-send");
+    const stop = $("btn-code-stop");
+    if (send) send.disabled = true;
+    if (stop) stop.disabled = true;
+    const trail = $("code-trail");
+    if (trail) {
+      trail.classList.remove("hidden");
+      trail.textContent = "正在停止…";
+    }
     try {
-      if (codeOperationId) {
-        await window.digitalMe.l0StopExternalAgent?.({ operationId: codeOperationId });
+      let oid = codeOperationId;
+      if (!oid) {
+        const deadline = Date.now() + 5000;
+        while (!oid && Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 25));
+          oid = codeOperationId;
+        }
       }
-    } catch {
-      /* ignore */
+      if (!oid) {
+        if (trail) trail.textContent = "尚未取得停止凭据，无法停止外部执行。";
+        return;
+      }
+      const result = await window.digitalMe.l0StopExternalAgent?.({ operationId: oid });
+      if (!result || !result.ok) {
+        const reason = result && result.reason;
+        if (trail) {
+          if (reason === "sender_mismatch") {
+            trail.textContent = "停止失败：请求来源不匹配。";
+          } else if (reason === "unknown_operation") {
+            trail.textContent = "停止失败：任务已结束或不存在。";
+          } else if (reason === "missing_operation_id") {
+            trail.textContent = "停止失败：缺少主进程签发的操作编号。";
+          } else {
+            trail.textContent = "停止失败：未能发出停止请求。";
+          }
+        }
+        return;
+      }
+      if (trail) trail.textContent = "已发出停止请求，正在等待回收结果…";
+    } catch (e) {
+      if (trail) trail.textContent = "停止失败：" + String((e && e.message) || e);
     }
   });
   $("btn-code-prepare")?.addEventListener("click", async () => {

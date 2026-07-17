@@ -1,6 +1,6 @@
 # P1-05 任务包：ToolBroker 与外部 CLI 最小隔离切片
 
-状态：statically_verified（第四轮 Codex 复核 TOCTOU 修订已落地；须经再复核后方可继续；本轮不安排 Owner 验收；不标记 accepted）
+状态：statically_verified（停止立即生效与主动取消回归已落地；不标记 accepted；须经 Owner 连续验收）
 阶段：第一阶段 / WP3（受控能力执行）
 前置任务：P1-00～P1-04 已接受
 规格依据：`digitalme_phase1_subject_upgrade_plan_v0.1.md` §3 WP3
@@ -166,6 +166,12 @@ Owner 验收不能证明已形成 OS 沙箱；它只验收 ToolBroker 约束、�
 - `preparePlan` 通过后到 `spawn` 之前，必须在 `executePreparedPlan` 最终启动边界重新校验：真实路径、size、mtime、SHA-256、VersionInfo 契约、Authenticode；
 - 重新计算的 `executableFingerprint` 必须与已确认计划一致；否则 `spawn=0`，拒绝码 `executable_changed_before_spawn`，并写入脱敏审计；
 - renderer、requestId、`pinnedIdentity` 均不得绕过该校验。
+
+### 停止立即生效（Owner 验收修订）
+
+- 主进程在登记委派后立即通过 `l0:external-agent-started` 向 renderer 暴露 `operationId`；
+- 停止按钮仅使用主进程签发的 `operationId` 调用 `l0:stopExternalAgent`；
+- 成功回收审计为 `execution_canceled`；无法确认回收时提示残留进程风险。
 
 ## 10. 交付格式
 

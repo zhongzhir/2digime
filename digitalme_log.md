@@ -5,6 +5,23 @@
 
 ---
 
+## 2026-07-17（P1-05 Owner 验收修订 · 停止立即生效）
+
+### 结论
+
+- 编号：`P1-05`
+- 分支：`codex/p1-05-tool-broker`
+- 状态：仍为 `statically_verified`（主动取消测试已通过；不标记 `accepted`）
+
+### 修订摘要
+
+1. 主进程在 `l0:runExternalAgent` 登记后立即发送 `l0:external-agent-started`（含 `operationId`），不再依赖长耗时 IPC 返回；
+2. renderer 保存主进程签发的 `operationId`；停止仅调用 `l0:stopExternalAgent`；
+3. 点击停止后禁用发送/重复停止，等待回收结果；成功为 `execution_canceled`，无法确认则提示残留风险；
+4. 新增真实长运行取消回归（spawn 后取消 → 非 timeout）。
+
+---
+
 ## 2026-07-17（P1-05 第四轮 Codex 复核修订 · TOCTOU）
 
 ### 结论

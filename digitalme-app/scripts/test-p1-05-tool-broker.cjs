@@ -120,6 +120,23 @@ function patchUtf16leStrings(filePath, pairs) {
   fs.writeFileSync(filePath, buf);
 }
 
+/** Replace a possibly-locked executable via temp + unlink + rename (Windows EBUSY-safe). */
+function replaceExecutableFile(target, fill) {
+  const tmp = target + ".replace-tmp";
+  try {
+    fs.unlinkSync(tmp);
+  } catch {
+    /* ignore */
+  }
+  fill(tmp);
+  try {
+    fs.unlinkSync(target);
+  } catch {
+    /* ignore */
+  }
+  fs.renameSync(tmp, target);
+}
+
 function walkFiles(root) {
   const out = [];
   function walk(dir) {
@@ -691,6 +708,10 @@ async function runAllTests() {
     assert.ok(/abortAllAndWait/.test(mainJs));
     assert.ok(/duplicate_request_id|相同请求编号/.test(mainJs));
     assert.ok(/abortForSender/.test(mainJs));
+    assert.ok(/l0:external-agent-started/.test(mainJs));
+    assert.ok(/onExternalAgentStarted/.test(fs.readFileSync(PRELOAD_PATH, "utf8")));
+    assert.ok(/onExternalAgentStarted|l0StopExternalAgent/.test(fs.readFileSync(RENDERER_APP, "utf8")));
+    assert.ok(/codeStopBusy|正在停止/.test(fs.readFileSync(RENDERER_APP, "utf8")));
   });
 
   await test("13. Package baseline unchanged (P1-00)", () => {
@@ -866,12 +887,15 @@ async function runAllTests() {
       "utf8"
     );
     assert.ok(/codeOperationId/.test(appJs));
-    assert.ok(/operationId: codeOperationId/.test(appJs));
+    assert.ok(/operationId:\s*(codeOperationId|oid)/.test(appJs));
     assert.ok(/残留进程/.test(appJs));
     assert.ok(/operationId/.test(mainJs));
     assert.ok(/sender_mismatch|missing_operation_id/.test(mainJs));
     assert.ok(/verifyLocalCliProfileIdentity/.test(brokerIndex));
     assert.ok(/assertExecutableUnchangedForSpawn|executable_changed_before_spawn/.test(brokerIndex));
+    assert.ok(/onExternalAgentStarted/.test(appJs));
+    assert.ok(/codeStopBusy/.test(appJs));
+    assert.ok(/l0StopExternalAgent/.test(appJs));
   });
 
   await test("18. TOCTOU: replace executable after prepare/confirm → spawn=0 + audit deny", async () => {
@@ -880,20 +904,24 @@ async function runAllTests() {
       {
         name: "ordinary-file",
         replace(target) {
-          fs.writeFileSync(target, "not-a-pe-executable", "utf8");
+          replaceExecutableFile(target, (tmp) => {
+            fs.writeFileSync(tmp, "not-a-pe-executable", "utf8");
+          });
         },
       },
       {
         name: "tampered-cmd",
         replace(target) {
-          const cmdPath = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "cmd.exe");
-          fs.copyFileSync(cmdPath, target);
-          patchUtf16leStrings(target, [
-            ["Cmd.Exe", "AppTool"],
-            ["CMD.EXE", "APPTOOL"],
-            ["cmd.exe", "apptool"],
-          ]);
-          patchUtf16leStrings(target, [["cmd\u0000", "app\u0000"]]);
+          replaceExecutableFile(target, (tmp) => {
+            const cmdPath = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "cmd.exe");
+            fs.copyFileSync(cmdPath, tmp);
+            patchUtf16leStrings(tmp, [
+              ["Cmd.Exe", "AppTool"],
+              ["CMD.EXE", "APPTOOL"],
+              ["cmd.exe", "apptool"],
+            ]);
+            patchUtf16leStrings(tmp, [["cmd\u0000", "app\u0000"]]);
+          });
         },
       },
     ];
@@ -1015,6 +1043,122 @@ async function runAllTests() {
       } finally {
         cleanup(userData);
       }
+    }
+  });
+
+  await test("19. long-running cancel after spawn → execution_canceled (not timeout)", async () => {
+    const { spawn: realSpawn } = require("node:child_process");
+    const { isProcessAlive } = require("../src/tool-broker/executor");
+    const userData = tempUserData("live-cancel");
+    try {
+      const work = path.join(userData, "workdir");
+      fs.mkdirSync(work, { recursive: true });
+      const sleepJs = path.join(work, "sleep-long.js");
+      fs.writeFileSync(sleepJs, "setTimeout(() => {}, 120000);\n", "utf8");
+
+      seedLocalCli(userData, {
+        executable: process.execPath,
+        cwd: work,
+        timeoutMs: 60000,
+      });
+      agentsLib.setActiveAgent(userData, "cli-coder");
+
+      const ac = new AbortController();
+      let spawned = false;
+      let childPid = null;
+      const ag = {
+        getActiveCliAgentSnapshot() {
+          return agentsLib.getActiveCliAgentSnapshot(userData);
+        },
+        async executePreparedPlan(plan, opts) {
+          return toolBroker.executePreparedPlan(plan, {
+            ...opts,
+            executorDeps: {
+              spawn: (...args) => {
+                const child = realSpawn(...args);
+                spawned = true;
+                childPid = child.pid;
+                setTimeout(() => {
+                  try {
+                    ac.abort();
+                  } catch {
+                    /* ignore */
+                  }
+                }, 120);
+                return child;
+              },
+            },
+          });
+        },
+      };
+
+      const prep = externalAgentFlow.requestExternalAgent(
+        userData,
+        mockEvent(19),
+        {
+          task: sleepJs,
+          dataScopes: ["task_text", "workspace_files", "env_inherit"],
+          writeIntent: true,
+        },
+        ag
+      );
+      assert.ok(prep.confirmationToken);
+
+      const result = await externalAgentFlow.runExternalAgent(
+        userData,
+        mockEvent(19),
+        {
+          task: sleepJs,
+          dataScopes: ["task_text", "workspace_files", "env_inherit"],
+          writeIntent: true,
+          decisionId: prep.decisionId,
+          confirmationToken: prep.confirmationToken,
+        },
+        ag,
+        { signal: ac.signal }
+      );
+
+      assert.equal(spawned, true, "spawn must have occurred before cancel");
+      assert.ok(childPid, "child pid recorded");
+      assert.equal(result.ok, false);
+      assert.equal(result.aborted, true);
+      assert.notEqual(result.timedOut, true);
+      assert.ok(!result.timedOut);
+
+      // Process must be reclaimed (or orphanRisk explicitly reported).
+      await new Promise((r) => setTimeout(r, 200));
+      if (!result.orphanRisk) {
+        assert.equal(isProcessAlive(childPid), false, "child must be reclaimed");
+      }
+
+      const lines = fs
+        .readFileSync(path.join(userData, "decision-audit", "gen-1.jsonl"), "utf8")
+        .trim()
+        .split("\n")
+        .map((l) => JSON.parse(l));
+      const canceled = lines.find((r) => r.event === "execution_canceled");
+      const timedOut = lines.find((r) => r.event === "execution_timed_out");
+      assert.ok(canceled, "audit must record execution_canceled");
+      assert.ok(!timedOut, "audit must not record execution_timed_out");
+
+      // Repeat stop via delegateRuntime must not disturb other work.
+      delegateRuntime.clearAllForTests();
+      const began = delegateRuntime.begin(mockEvent(19), "post_cancel");
+      assert.equal(began.ok, true);
+      const first = delegateRuntime.abortOne(mockEvent(19), began.operationId);
+      assert.equal(first.ok, true);
+      const second = delegateRuntime.abortOne(mockEvent(19), began.operationId);
+      assert.equal(second.ok, true);
+      assert.equal(began.abort.signal.aborted, true);
+      const other = delegateRuntime.begin(mockEvent(20), "other_ok");
+      assert.equal(other.ok, true);
+      assert.equal(other.abort.signal.aborted, false);
+      const cross = delegateRuntime.abortOne(mockEvent(20), began.operationId);
+      assert.equal(cross.ok, false);
+      assert.equal(other.abort.signal.aborted, false);
+    } finally {
+      cleanup(userData);
+      delegateRuntime.clearAllForTests();
     }
   });
 

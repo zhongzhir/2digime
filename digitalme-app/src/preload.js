@@ -146,6 +146,11 @@ contextBridge.exposeInMainWorld("digitalMe", {
     ipcRenderer.invoke("l0:cancelExternalAgentConfirmation", payload),
   l0RunExternalAgent: (payload) => ipcRenderer.invoke("l0:runExternalAgent", payload),
   l0StopExternalAgent: (payload) => ipcRenderer.invoke("l0:stopExternalAgent", payload),
+  onExternalAgentStarted: (cb) => {
+    const handler = (_e, data) => cb(data);
+    ipcRenderer.on("l0:external-agent-started", handler);
+    return () => ipcRenderer.removeListener("l0:external-agent-started", handler);
+  },
   // Builder
   pickFile: () => ipcRenderer.invoke("builder:pickFile"),
   distill: (payload) => ipcRenderer.invoke("builder:distill", payload),
