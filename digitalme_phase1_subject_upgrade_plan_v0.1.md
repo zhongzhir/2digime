@@ -371,7 +371,7 @@ flowchart LR
 
 首个标准任务包已建立：`digitalme_phase1_task_P1-00_baseline_freeze.md`。后续 P1-01～P1-03 均须沿用其“目标、范围、禁止事项、迁移、验证、人工验收、回滚、证据”结构。
 
-执行状态：P1-00～P1-04、P1-06 均已接受；P1-05 仍为 `statically_verified`（ToolBroker 最小隔离；不标记 accepted）。P1-06（分支 `codex/p1-06-builder-package-store-impl`，提交 `0e8ba88`、`81ba8f1`）已将 Builder 观念/人格写入迁入 PackageStore（preview→确认→commit）；**仅该切片**；identity / Life / Policies、MCP、外部协作均未迁移。下一唯一主任务为 `P1-07 Life/identity 写入路径迁移到 PackageStore`；明确不包含 Policies、MCP、外部协作。
+执行状态：P1-00～P1-04、P1-06 均已接受；P1-05 仍为 `statically_verified`（ToolBroker 最小隔离；不标记 accepted）。P1-06 已将 Builder 观念/人格写入迁入 PackageStore（preview→确认→commit）；**仅该切片**。正式下一任务包已建立：`digitalme_phase1_task_P1-07_life_identity_package_store.md`（状态 `planned`，未实现）。P1-07 范围：`life.writeLifeBack` 与 `builder:write` identity 分支 → preview→确认→PackageStore commit；保留 `fact` / `owner_assertion` / `inference` / `current_state`；**明确不包含** Policies、MCP、ToolBroker、外部协作、Life 读取重构、`package:load` scaffold、真实 Package 基线修改。实现前须经 Codex 复核任务包；不得提前标记 `statically_verified` / `accepted`。
 
 ---
 

@@ -5,6 +5,20 @@
 
 ---
 
+## 2026-07-17（P1-07 · 任务包建立，planned）
+
+### 结论
+
+- 新增正式任务包：`digitalme_phase1_task_P1-07_life_identity_package_store.md`
+- 状态：`planned`（仅文档；未实现业务代码；不得标 statically_verified / accepted）
+- 范围：`life.writeLifeBack` 与 `builder:write` identity → preview→确认→PackageStore commit；保留 `fact` / `owner_assertion` / `inference` / `current_state` 及来源、actor、reason、revision、rollback
+- 明确不包含：Policies、MCP、ToolBroker、外部协作、Life 读取重构、`package:load` scaffold、真实 Package 基线修改
+- 任务包含：测试矩阵、数据类别映射表、现有直接写路径清单、Owner 沙盒验收、风险与回滚
+- 已同步：`digitalme_phase1_subject_upgrade_plan_v0.1.md`、`digitalme_capability_status_v0.1.md`
+- 等待 Codex 复核任务包后再开实现
+
+---
+
 ## 2026-07-17（测试 · Phase1 hermetic，真实 Package 基线拆出）
 
 ### 结论
