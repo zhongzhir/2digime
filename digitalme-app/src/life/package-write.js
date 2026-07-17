@@ -10,6 +10,7 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const crypto = require("node:crypto");
 const { PackageStore, readManifest, storeRootFor } = require("../package-store");
 const { normalizeEvent } = require("../life");
 
@@ -108,15 +109,21 @@ function packageInvalid(rel) {
   throw err("package_content_invalid", `资料内容无效，无法安全写入：${rel}`);
 }
 
-function readJsonStrict(pkgDir, rel, emptyFactory) {
+function isPlainObject(v) {
+  return v != null && typeof v === "object" && !Array.isArray(v);
+}
+
+function readFileTextOrInvalid(pkgDir, rel) {
   const abs = path.join(pkgDir, rel);
-  if (!fs.existsSync(abs)) return emptyFactory();
-  let text;
+  if (!fs.existsSync(abs)) return null;
   try {
-    text = fs.readFileSync(abs, "utf8");
+    return fs.readFileSync(abs, "utf8");
   } catch {
     packageInvalid(rel);
   }
+}
+
+function parseJsonOrInvalid(text, rel) {
   try {
     return JSON.parse(text);
   } catch {
@@ -125,51 +132,144 @@ function readJsonStrict(pkgDir, rel, emptyFactory) {
 }
 
 function readTextStrict(pkgDir, rel) {
-  const abs = path.join(pkgDir, rel);
-  if (!fs.existsSync(abs)) return "";
-  try {
-    return fs.readFileSync(abs, "utf8");
-  } catch {
-    packageInvalid(rel);
-  }
+  const text = readFileTextOrInvalid(pkgDir, rel);
+  return text == null ? "" : text;
 }
 
-/** Parse JSONL strictly — any non-empty illegal line fails closed. */
-function readJsonlStrict(pkgDir, rel) {
-  const abs = path.join(pkgDir, rel);
-  if (!fs.existsSync(abs)) return [];
-  let text;
-  try {
-    text = fs.readFileSync(abs, "utf8");
-  } catch {
+/** Facet JSON: roles / relations / outcomes / interests */
+function readFacetJson(pkgDir, rel, facetName, createdAt) {
+  const text = readFileTextOrInvalid(pkgDir, rel);
+  if (text == null) return emptyFacet(facetName, createdAt);
+  const data = parseJsonOrInvalid(text, rel);
+  if (!isPlainObject(data)) packageInvalid(rel);
+  if (!Object.prototype.hasOwnProperty.call(data, "items") || !Array.isArray(data.items)) {
     packageInvalid(rel);
   }
+  if (
+    Object.prototype.hasOwnProperty.call(data, "facet") &&
+    data.facet != null &&
+    typeof data.facet !== "string"
+  ) {
+    packageInvalid(rel);
+  }
+  return data;
+}
+
+/** Slice JSON: domains / org_touchpoints / people / capability_signals / mind_hooks */
+function readSliceJson(pkgDir, rel, sliceName, createdAt) {
+  const text = readFileTextOrInvalid(pkgDir, rel);
+  if (text == null) return emptySlice(sliceName, createdAt);
+  const data = parseJsonOrInvalid(text, rel);
+  if (!isPlainObject(data)) packageInvalid(rel);
+  if (!Object.prototype.hasOwnProperty.call(data, "items") || !Array.isArray(data.items)) {
+    packageInvalid(rel);
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(data, "slice") &&
+    data.slice != null &&
+    typeof data.slice !== "string"
+  ) {
+    packageInvalid(rel);
+  }
+  return data;
+}
+
+function readSourceIndexJson(pkgDir) {
+  const rel = "sources/source-index.json";
+  const text = readFileTextOrInvalid(pkgDir, rel);
+  if (text == null) return { sources: [] };
+  const data = parseJsonOrInvalid(text, rel);
+  if (!isPlainObject(data)) packageInvalid(rel);
+  if (!Object.prototype.hasOwnProperty.call(data, "sources") || !Array.isArray(data.sources)) {
+    packageInvalid(rel);
+  }
+  return data;
+}
+
+function readIdentityJson(pkgDir) {
+  const rel = "identity.json";
+  const text = readFileTextOrInvalid(pkgDir, rel);
+  if (text == null) {
+    return { displayName: "", digitalMeId: "", identityClaims: [] };
+  }
+  const data = parseJsonOrInvalid(text, rel);
+  if (!isPlainObject(data)) packageInvalid(rel);
+  if (Object.prototype.hasOwnProperty.call(data, "identityClaims")) {
+    if (data.identityClaims != null && !Array.isArray(data.identityClaims)) {
+      packageInvalid(rel);
+    }
+  }
+  return data;
+}
+
+/** JSONL: each non-empty line must parse to a plain object. */
+function readJsonlStrict(pkgDir, rel) {
+  const text = readFileTextOrInvalid(pkgDir, rel);
+  if (text == null) return [];
   const rows = [];
   for (const line of text.split("\n")) {
     if (!line.trim()) continue;
+    let row;
     try {
-      rows.push(JSON.parse(line));
+      row = JSON.parse(line);
     } catch {
       packageInvalid(rel);
     }
+    if (!isPlainObject(row)) packageInvalid(rel);
+    rows.push(row);
   }
   return rows;
 }
 
-function buildSourceMeta(input, createdAt) {
-  const filePath = String((input && input.filePath) || "");
-  const title = String((input && input.title) || path.basename(filePath) || "社会事实材料");
-  const base = path.basename(filePath || title || "identity");
-  const id =
-    (input && input.id) ||
-    "src_life_" + base.replace(/[^a-zA-Z0-9]+/g, "_").slice(0, 36) + "_" + Date.parse(createdAt).toString(36);
+function existingSourceIds(packageDir) {
+  const index = readSourceIndexJson(packageDir);
+  return new Set(
+    (index.sources || []).map((s) => (s && s.id ? String(s.id) : "")).filter(Boolean)
+  );
+}
+
+function generateUniqueSourceId(existingIds) {
+  for (let i = 0; i < 8; i += 1) {
+    const id = "src_life_" + crypto.randomUUID().replace(/-/g, "");
+    if (!existingIds.has(id)) return id;
+  }
+  throw err("source_id_collision", "无法生成唯一来源编号，请重试。");
+}
+
+/**
+ * Build source metadata. ID is always generated unless injectSourceMeta is supplied (tests only).
+ * Renderer/IPC must never supply injectSourceMeta or a trusted source id.
+ */
+function buildSourceMeta(packageDir, input, createdAt, injectSourceMeta) {
+  const filePath = String(
+    (input && input.filePath) ||
+      (injectSourceMeta && (injectSourceMeta.location || injectSourceMeta.filePath)) ||
+      ""
+  );
+  const title = String(
+    (input && input.title) ||
+      (injectSourceMeta && injectSourceMeta.title) ||
+      path.basename(filePath) ||
+      "社会事实材料"
+  );
+  const existingIds = existingSourceIds(packageDir);
+  let id;
+  if (
+    injectSourceMeta &&
+    typeof injectSourceMeta.id === "string" &&
+    injectSourceMeta.id.trim()
+  ) {
+    id = injectSourceMeta.id.trim();
+  } else {
+    id = generateUniqueSourceId(existingIds);
+  }
   return {
     id,
     type: "social_document",
     title,
     author: "",
     createdAt,
-    location: filePath || (input && input.location) || "",
+    location: filePath || (injectSourceMeta && injectSourceMeta.location) || "",
     sensitivity: "private",
     usedFor: [
       "life/events",
@@ -370,24 +470,16 @@ function identityPayloadToOps(packageDir, identity, sourceMeta, options = {}) {
   }
   for (const row of eventRows) delete row._isNew;
 
-  const roles = readJsonStrict(packageDir, "life/roles.json", () => emptyFacet("roles", createdAt));
-  if (!Array.isArray(roles.items)) roles.items = [];
-  const relations = readJsonStrict(packageDir, "life/relations.json", () =>
-    emptyFacet("relations", createdAt)
+  const roles = readFacetJson(packageDir, "life/roles.json", "roles", createdAt);
+  const relations = readFacetJson(packageDir, "life/relations.json", "relations", createdAt);
+  const outcomes = readFacetJson(packageDir, "life/outcomes.json", "outcomes", createdAt);
+  const interests = readFacetJson(packageDir, "life/interests.json", "interests", createdAt);
+  const orgTouch = readSliceJson(
+    packageDir,
+    "life/org_touchpoints.json",
+    "org_touchpoints",
+    createdAt
   );
-  if (!Array.isArray(relations.items)) relations.items = [];
-  const outcomes = readJsonStrict(packageDir, "life/outcomes.json", () =>
-    emptyFacet("outcomes", createdAt)
-  );
-  if (!Array.isArray(outcomes.items)) outcomes.items = [];
-  const interests = readJsonStrict(packageDir, "life/interests.json", () =>
-    emptyFacet("interests", createdAt)
-  );
-  if (!Array.isArray(interests.items)) interests.items = [];
-  const orgTouch = readJsonStrict(packageDir, "life/org_touchpoints.json", () =>
-    emptySlice("org_touchpoints", createdAt)
-  );
-  if (!Array.isArray(orgTouch.items)) orgTouch.items = [];
 
   let rolesDirty = false;
   let relationsDirty = false;
@@ -525,10 +617,7 @@ function identityPayloadToOps(packageDir, identity, sourceMeta, options = {}) {
     outcomesDirtyDirect = true;
   }
 
-  const domains = readJsonStrict(packageDir, "life/domains.json", () =>
-    emptySlice("domains", createdAt)
-  );
-  if (!Array.isArray(domains.items)) domains.items = [];
+  const domains = readSliceJson(packageDir, "life/domains.json", "domains", createdAt);
   let domainsDirty = false;
   for (const d of identity.domains || []) {
     const title = String(d || "").trim();
@@ -563,10 +652,7 @@ function identityPayloadToOps(packageDir, identity, sourceMeta, options = {}) {
     orgDirtyDirect = true;
   }
 
-  const people = readJsonStrict(packageDir, "life/people.json", () =>
-    emptySlice("people", createdAt)
-  );
-  if (!Array.isArray(people.items)) people.items = [];
+  const people = readSliceJson(packageDir, "life/people.json", "people", createdAt);
   let peopleDirty = false;
   for (const a of identity.alter_candidates || []) {
     const name = String((a && a.name) || "").trim();
@@ -587,10 +673,12 @@ function identityPayloadToOps(packageDir, identity, sourceMeta, options = {}) {
     peopleDirty = true;
   }
 
-  const caps = readJsonStrict(packageDir, "life/capability_signals.json", () =>
-    emptySlice("capability_signals", createdAt)
+  const caps = readSliceJson(
+    packageDir,
+    "life/capability_signals.json",
+    "capability_signals",
+    createdAt
   );
-  if (!Array.isArray(caps.items)) caps.items = [];
   let capsDirty = false;
   for (const s of identity.capability_signals || []) {
     const signal = String((s && s.signal) || "").trim();
@@ -609,10 +697,7 @@ function identityPayloadToOps(packageDir, identity, sourceMeta, options = {}) {
     capsDirty = true;
   }
 
-  const minds = readJsonStrict(packageDir, "life/mind_hooks.json", () =>
-    emptySlice("mind_hooks", createdAt)
-  );
-  if (!Array.isArray(minds.items)) minds.items = [];
+  const minds = readSliceJson(packageDir, "life/mind_hooks.json", "mind_hooks", createdAt);
   let mindsDirty = false;
   for (const h of identity.mind_hooks || []) {
     const text = String(h || "").trim();
@@ -698,12 +783,11 @@ function identityPayloadToOps(packageDir, identity, sourceMeta, options = {}) {
   // identityClaims only when events explicitly confirmed
   if (fieldConfirmed(factConfirmedFields, "events") && eventRows.length) {
     const idPath = "identity.json";
-    let data = readJsonStrict(packageDir, idPath, () => ({
-      displayName: "",
-      digitalMeId: "",
-      identityClaims: [],
-    }));
-    if (!Array.isArray(data.identityClaims)) data.identityClaims = [];
+    const data = readIdentityJson(packageDir);
+    // Missing identityClaims is allowed; wrong types already rejected by readIdentityJson.
+    if (!Object.prototype.hasOwnProperty.call(data, "identityClaims")) {
+      data.identityClaims = [];
+    }
     const existing = new Set(data.identityClaims.map((c) => normKey(c.value)));
     let added = 0;
     for (const ev of eventRows) {
@@ -798,8 +882,7 @@ function identityPayloadToOps(packageDir, identity, sourceMeta, options = {}) {
 
   // Source index only after substantive content exists
   const indexRel = "sources/source-index.json";
-  const indexData = readJsonStrict(packageDir, indexRel, () => ({ sources: [] }));
-  if (!Array.isArray(indexData.sources)) indexData.sources = [];
+  const indexData = readSourceIndexJson(packageDir);
   if (!indexData.sources.some((s) => s && s.id === sourceId)) {
     indexData.sources.push({ ...sourceMeta });
     substantiveOps.push({
@@ -872,13 +955,26 @@ function previewLifeIdentityWrite(packageDir, payload, storeHooks) {
   }
   const factConfirmedFields = normalizeFactConfirmedFields(body.factConfirmedFields);
   const createdAt = isoNow();
-  const sourceMeta = buildSourceMeta(body.sourceMeta || body, createdAt);
+  // Ignore body.sourceMeta (renderer-forgeable). Tests may pass injectSourceMeta only.
+  const injectSourceMeta =
+    (body && body.injectSourceMeta) ||
+    (storeHooks && storeHooks.injectSourceMeta) ||
+    null;
+  const hooks =
+    storeHooks && typeof storeHooks === "object" ? { ...storeHooks } : {};
+  delete hooks.injectSourceMeta;
+  const sourceMeta = buildSourceMeta(
+    packageDir,
+    { filePath: body.filePath, title: body.title },
+    createdAt,
+    injectSourceMeta
+  );
   const built = identityPayloadToOps(packageDir, identity, sourceMeta, { factConfirmedFields });
 
   const sourceRefs = [sourceMeta.id];
   if (sourceMeta.location) sourceRefs.push(String(sourceMeta.location).slice(0, 500));
 
-  const store = openStore(packageDir, storeHooks);
+  const store = openStore(packageDir, hooks);
   store.recover();
 
   const reason =
@@ -1111,10 +1207,9 @@ function runIdentityCommitAndArchive(options = {}) {
       claims: (archiveRecord && archiveRecord.claims) || [],
       facts: (archiveRecord && archiveRecord.facts) || [],
     });
-  } catch (archiveErr) {
-    const msg = (archiveErr && archiveErr.message) || String(archiveErr);
+  } catch {
     publicResult.archiveWarning = "资料已写入，但本机运行归档未完成。";
-    console.warn("[identity-write] archive failed:", String(msg).slice(0, 200));
+    console.warn("[identity-write] archive_failed");
   }
   return publicResult;
 }

@@ -108,14 +108,41 @@ function sampleIdentity(overrides = {}) {
 }
 
 function payload(extra = {}) {
-  return {
-    identity: sampleIdentity(),
-    factConfirmedFields: [],
-    sourceMeta: {
+  const {
+    sourceMeta,
+    injectSourceMeta,
+    filePath,
+    title,
+    identity,
+    factConfirmedFields,
+    reason,
+    ...rest
+  } = extra;
+  const inject =
+    injectSourceMeta ||
+    sourceMeta || {
       id: "src_p107",
       title: "P1-07 测试材料",
       location: "C:\\tmp\\p107.txt",
-    },
+    };
+  return {
+    identity: identity || sampleIdentity(),
+    factConfirmedFields: factConfirmedFields != null ? factConfirmedFields : [],
+    filePath: filePath != null ? filePath : inject.location || "C:\\tmp\\p107.txt",
+    title: title != null ? title : inject.title || "P1-07 测试材料",
+    reason: reason != null ? reason : "P1-07 人生事实写入验收",
+    injectSourceMeta: inject,
+    ...rest,
+  };
+}
+
+/** Simulate main IPC identity preview fields (no sourceMeta / inject). */
+function ipcIdentityPreviewPayload(extra = {}) {
+  return {
+    identity: sampleIdentity(),
+    factConfirmedFields: [],
+    filePath: "C:\\tmp\\p107.txt",
+    title: "P1-07 测试材料",
     reason: "P1-07 人生事实写入验收",
     ...extra,
   };
@@ -381,6 +408,109 @@ async function runAll() {
         (e) => e && e.code === "package_content_invalid"
       );
       assert.deepEqual(dirByteFingerprint(d), fp);
+    } finally {
+      cleanup(d);
+    }
+  });
+
+  test("13b. facet items as string rejected; bytes unchanged", () => {
+    const d = makeV02("bad-facet-items");
+    try {
+      fs.mkdirSync(path.join(d, "life"), { recursive: true });
+      fs.writeFileSync(
+        path.join(d, "life", "roles.json"),
+        JSON.stringify({ version: 1, facet: "roles", items: "not-array" }, null, 2),
+        "utf8"
+      );
+      const fp = dirByteFingerprint(d);
+      const rev = readManifest(d).revision;
+      assert.throws(
+        () => lifePackageWrite.previewLifeIdentityWrite(d, payload()),
+        (e) => e && e.code === "package_content_invalid"
+      );
+      assert.deepEqual(dirByteFingerprint(d), fp);
+      assert.equal(readManifest(d).revision, rev);
+    } finally {
+      cleanup(d);
+    }
+  });
+
+  test("13c. slice items as object rejected; bytes unchanged", () => {
+    const d = makeV02("bad-slice-items");
+    try {
+      fs.mkdirSync(path.join(d, "life"), { recursive: true });
+      fs.writeFileSync(
+        path.join(d, "life", "domains.json"),
+        JSON.stringify({ version: 1, slice: "domains", items: { a: 1 } }, null, 2),
+        "utf8"
+      );
+      const fp = dirByteFingerprint(d);
+      assert.throws(
+        () => lifePackageWrite.previewLifeIdentityWrite(d, payload()),
+        (e) => e && e.code === "package_content_invalid"
+      );
+      assert.deepEqual(dirByteFingerprint(d), fp);
+    } finally {
+      cleanup(d);
+    }
+  });
+
+  test("13d. source-index sources non-array rejected; bytes unchanged", () => {
+    const d = makeV02("bad-source-index");
+    try {
+      fs.writeFileSync(
+        path.join(d, "sources", "source-index.json"),
+        JSON.stringify({ sources: { id: "x" } }, null, 2),
+        "utf8"
+      );
+      const fp = dirByteFingerprint(d);
+      assert.throws(
+        () => lifePackageWrite.previewLifeIdentityWrite(d, payload()),
+        (e) => e && e.code === "package_content_invalid"
+      );
+      assert.deepEqual(dirByteFingerprint(d), fp);
+    } finally {
+      cleanup(d);
+    }
+  });
+
+  test("13e. identityClaims non-array rejected; bytes unchanged", () => {
+    const d = makeV02("bad-claims");
+    try {
+      fs.writeFileSync(
+        path.join(d, "identity.json"),
+        JSON.stringify({ displayName: "x", identityClaims: "bad" }, null, 2),
+        "utf8"
+      );
+      const fp = dirByteFingerprint(d);
+      assert.throws(
+        () =>
+          lifePackageWrite.previewLifeIdentityWrite(
+            d,
+            payload({ factConfirmedFields: ["events"] })
+          ),
+        (e) => e && e.code === "package_content_invalid"
+      );
+      assert.deepEqual(dirByteFingerprint(d), fp);
+    } finally {
+      cleanup(d);
+    }
+  });
+
+  test("13f. JSONL string/array/null rows rejected", () => {
+    const d = makeV02("bad-jsonl-types");
+    try {
+      fs.mkdirSync(path.join(d, "life"), { recursive: true });
+      for (const row of ['"just-string"', "[1,2]", "null"]) {
+        fs.writeFileSync(path.join(d, "life", "events.jsonl"), row + "\n", "utf8");
+        const fp = dirByteFingerprint(d);
+        assert.throws(
+          () => lifePackageWrite.previewLifeIdentityWrite(d, payload()),
+          (e) => e && e.code === "package_content_invalid",
+          "row=" + row
+        );
+        assert.deepEqual(dirByteFingerprint(d), fp);
+      }
     } finally {
       cleanup(d);
     }
@@ -786,6 +916,89 @@ async function runAll() {
       assert.deepEqual(stored.lifeIdentityMeta.factConfirmedFields, []);
     } finally {
       cleanup(d);
+    }
+  });
+
+  test("30. forged body.sourceMeta.id ignored; IPC does not pass sourceMeta", () => {
+    const mainSrc = fs.readFileSync(path.join(ROOT, "src", "main.js"), "utf8");
+    const idPreview = mainSrc.slice(
+      mainSrc.indexOf('if (body.materialKind === "identity")'),
+      mainSrc.indexOf("return builderPackageWrite.previewPersonaWrite")
+    );
+    assert.ok(!/sourceMeta\s*:\s*body\.sourceMeta/.test(idPreview));
+    assert.ok(!/injectSourceMeta/.test(idPreview));
+
+    const d = makeV02("forged-src");
+    try {
+      const p = lifePackageWrite.previewLifeIdentityWrite(
+        d,
+        ipcIdentityPreviewPayload({
+          sourceMeta: { id: "forged_evil_id", title: "伪造来源" },
+        })
+      );
+      assert.notEqual(p.sourceMeta.id, "forged_evil_id");
+      assert.match(p.sourceMeta.id, /^src_life_[0-9a-f]{32}$/i);
+      const stored = readCs(d, p.changeSetId);
+      assert.equal(stored.lifeIdentityMeta.sourceMeta.id, p.sourceMeta.id);
+      assert.ok(!JSON.stringify(stored).includes("forged_evil_id"));
+      const index = JSON.parse(
+        stored.ops.find((o) => o.path === "sources/source-index.json").content
+      );
+      assert.ok(!index.sources.some((s) => s && s.id === "forged_evil_id"));
+      assert.ok(index.sources.some((s) => s && s.id === p.sourceMeta.id));
+    } finally {
+      cleanup(d);
+    }
+  });
+
+  test("31. generated source id consistent across preview / change set", () => {
+    const d = makeV02("src-gen");
+    try {
+      const p = lifePackageWrite.previewLifeIdentityWrite(d, ipcIdentityPreviewPayload());
+      assert.match(p.sourceMeta.id, /^src_life_[0-9a-f]{32}$/i);
+      assert.ok(p.sourceRefs.includes(p.sourceMeta.id));
+      const stored = readCs(d, p.changeSetId);
+      assert.equal(stored.lifeIdentityMeta.sourceMeta.id, p.sourceMeta.id);
+      assert.ok((stored.sourceRefs || []).includes(p.sourceMeta.id));
+    } finally {
+      cleanup(d);
+    }
+  });
+
+  test("32. archive error path not leaked to log or public result", () => {
+    const d = makeV02("archive-redact");
+    const userData = tempDir("archive-redact-ud");
+    const secret = "C:\\Users\\secret\\leak\\private-file.txt";
+    const warns = [];
+    const origWarn = console.warn;
+    console.warn = (...args) => {
+      warns.push(args.map(String).join(" "));
+    };
+    try {
+      const p = lifePackageWrite.previewLifeIdentityWrite(
+        d,
+        payload({ factConfirmedFields: ["events", "facts"] })
+      );
+      const r = lifePackageWrite.runIdentityCommitAndArchive({
+        packageDir: d,
+        payload: { changeSetId: p.changeSetId, confirmed: true },
+        userData,
+        archiveFn: () => {
+          throw new Error("ENOENT: no such file or directory, open '" + secret + "'");
+        },
+      });
+      assert.ok(r.archiveWarning);
+      assert.ok(!r.archiveWarning.includes(secret));
+      assert.ok(!JSON.stringify(r).includes(secret));
+      assert.ok(!JSON.stringify(r).includes("Users\\secret"));
+      const logText = warns.join("\n");
+      assert.ok(/archive_failed/.test(logText));
+      assert.ok(!logText.includes(secret));
+      assert.ok(!logText.includes("Users\\secret"));
+    } finally {
+      console.warn = origWarn;
+      cleanup(d);
+      fs.rmSync(userData, { recursive: true, force: true });
     }
   });
 

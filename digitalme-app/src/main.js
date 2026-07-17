@@ -3317,11 +3317,11 @@ ipcMain.handle("builder:previewWrite", async (_e, payload) => {
   const body = payload && typeof payload === "object" ? payload : {};
   const pkgDir = packageDirFromConfig();
   if (body.materialKind === "identity") {
+    // Do not accept renderer sourceMeta / source id — main generates provenance.
     return lifePackageWrite.previewLifeIdentityWrite(pkgDir, {
       identity: body.identity,
       filePath: body.filePath,
       title: body.title,
-      sourceMeta: body.sourceMeta,
       reason: body.reason,
       factConfirmedFields: body.factConfirmedFields,
     });

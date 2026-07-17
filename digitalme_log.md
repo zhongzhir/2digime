@@ -5,6 +5,26 @@
 
 ---
 
+## 2026-07-17（P1-07 · Codex 第二轮复核修复 · statically_verified）
+
+### 结论
+
+- 分支：`codex/p1-07-life-identity-package-store`（不 amend `b4dc2e2`）
+- 状态：仍为 `statically_verified`（不标 accepted）
+- JSON/JSONL 严格结构校验：facet/slice/`source-index`/`identityClaims`/JSONL 行必须为合法结构；错误类型不得静默重置为空数组
+- identity preview IPC 不再接受 `sourceMeta`；来源 id 由主进程 `crypto.randomUUID` 生成；测试可用 `injectSourceMeta`
+- 归档失败日志仅记录固定码 `archive_failed`，不输出 message/路径
+- 未改 `digital-me-package/**`、未开始 P1-08
+
+### 验证
+
+- `npm run test:p1-07`：38/38
+- `npm run test:p1-06` / `test:p1-phase1`：通过
+- `node --check` 与 `git diff --check` 通过
+- 未触碰真实 Package
+
+---
+
 ## 2026-07-17（P1-07 · Codex 第一轮复核修复 · statically_verified）
 
 ### 结论

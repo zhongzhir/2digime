@@ -1,13 +1,13 @@
 # P1-07 任务包：Life / identity 写入路径迁移到 PackageStore
 
-状态：statically_verified（自动化 hermetic 通过；Codex 第一轮复核修复已落地；等待再复核与 Owner 临时资料验收；**不得**标记 accepted）
+状态：statically_verified（自动化 hermetic 通过；Codex 第一、二轮复核修复已落地；等待再复核与 Owner 临时资料验收；**不得**标记 accepted）
 阶段：第一阶段 / WP1（PackageStore 接入扩展）
 前置任务：P1-00～P1-06（P1-05 可为 statically_verified；P1-06 须 accepted）
 规格依据：`digitalme_phase1_subject_upgrade_plan_v0.1.md` §3 WP1
 审计依据：`digitalme_architecture_audit_20260716.md` F-04、F-05、F-06
 任务包建立：2026-07-17
 实现分支：`codex/p1-07-life-identity-package-store`
-实现提交：`813e509` + 本分支后续 `fix(package): harden P1-07 identity write metadata`
+实现提交：`813e509` → `b4dc2e2` → 本分支后续 `fix(package): reject malformed identity package structures`
 
 ---
 
@@ -241,9 +241,9 @@ git status --short --branch
 ## 15. 完成定义（DoD）
 
 - [x] 范围内直写路径已关闭，统一 preview → 确认 → PackageStore commit
-- [x] 测试矩阵自动化通过（hermetic；`npm run test:p1-07` 30/30；`test:p1-phase1` 通过）
+- [x] 测试矩阵自动化通过（hermetic；`npm run test:p1-07` 38/38；`test:p1-phase1` 通过）
 - [ ] Owner 沙盒验收通过（仅临时测试资料）
-- [ ] Codex 架构 / 安全 / 回归复核通过（第一轮发现问题已修复；待再复核）
+- [ ] Codex 架构 / 安全 / 回归复核通过（第一、二轮发现问题已修复；待再复核）
 - [x] 能力状态表与日志已更新；**仍明确** Policies / 认知页直写 / MCP / 协作未迁
 - [x] 真实 `digital-me-package/**` 未被本任务改动
 
@@ -256,6 +256,12 @@ git status --short --branch
 5. **严格 change set 绑定**：actor / meta / materialKind / expiresAt / pathKinds / dataKinds 一致性。
 6. **归档编排**：`runIdentityCommitAndArchive`；失败不归档、成功归档真实内容、archive 失败仅 warning。
 
+### Codex 第二轮复核修复摘要（保持 statically_verified）
+
+1. **结构 fail-closed**：facet/slice/`source-index`/`identity.json`/`events|inferences.jsonl` 校验字段类型；禁止 `items=[]` 静默修复。
+2. **来源边界**：IPC 不接受 `sourceMeta`；主进程生成 `src_life_` + UUID；测试仅 `injectSourceMeta`。
+3. **归档日志脱敏**：仅固定码 `archive_failed`，不记录 message/路径。
+
 ---
 
-**当前状态说明**：Codex 第一轮复核修复已落地（`statically_verified`）。等待再复核与 Owner 临时测试资料验收；通过前不得标 `accepted`。
+**当前状态说明**：Codex 第二轮复核修复已落地（`statically_verified`）。等待再复核与 Owner 临时测试资料验收；通过前不得标 `accepted`。
