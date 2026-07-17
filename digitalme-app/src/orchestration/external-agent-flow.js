@@ -116,17 +116,20 @@ function requestExternalAgent(userData, event, payload, agents) {
     throw new Error("外部执行体未沙箱化，必须先明确确认可改动授权目录中的文件。");
   }
 
-  const decisionId = String((payload && payload.decisionId) || "") || undefined;
+  // decisionId is always minted by the main process; renderer-supplied values are ignored.
   const rawRequest = buildExternalCliRequest({
     taskText: task,
     dataScopes: scopes,
     agent: ag,
     writeIntent,
   });
-  const decision = evaluatePolicy(rawRequest, {
-    cliEnabled: !!ag.enabled && !!ag.command,
-    hasCommand: !!(ag.command && String(ag.command).trim()),
-  }, { decisionId });
+  const decision = evaluatePolicy(
+    rawRequest,
+    {
+      cliEnabled: !!ag.enabled && !!ag.command,
+      hasCommand: !!(ag.command && String(ag.command).trim()),
+    }
+  );
 
   appendDecisionEvent(userData, decision, "policy_evaluated", {
     outcome: { status: decision.effect, reasonCodes: decision.reasonCodes },
@@ -184,7 +187,13 @@ function requestExternalAgent(userData, event, payload, agents) {
 function cancelExternalAgentConfirmation(userData, event, payload) {
   ensureAuditHealthy(userData);
   const tokenId = String((payload && payload.confirmationToken) || "").trim();
-  const result = confirmationStore.revokeToken(tokenId, { reason: "owner_canceled" });
+  const decisionId = String((payload && payload.decisionId) || "").trim();
+  const senderId = senderIdFromEvent(event);
+  const result = confirmationStore.revokeToken(tokenId, {
+    reason: "owner_canceled",
+    senderId,
+    decisionId,
+  });
   if (!result.ok) {
     throw new Error(safeDenyReason(result.reason));
   }
@@ -208,12 +217,13 @@ function cancelExternalAgentConfirmation(userData, event, payload) {
   return { ok: true, decisionId: token.decisionId };
 }
 
-function requestAuditRotate(userData) {
+function requestAuditRotate(userData, event) {
   ensureAuditHealthy(userData);
   const verify = decisionAudit.verify(userData);
   const decisionId = "rot_" + crypto.randomBytes(8).toString("hex");
   const currentGeneration = verify.meta ? verify.meta.currentGeneration : 1;
   const current = verify.generations.find((item) => item.generation === currentGeneration);
+  const senderId = senderIdFromEvent(event);
   const { tokenId, correlationId, expiresAt } = confirmationStore.issueToken({
     requestDigest: `rotate:${currentGeneration}`,
     actor: "owner:settings",
@@ -221,7 +231,7 @@ function requestAuditRotate(userData) {
     destination: "local_ledger",
     dataScopes: [],
     cwd: "",
-    senderId: "settings",
+    senderId,
     taskDigest: `rotate:${currentGeneration}`,
     decisionId,
     executorConfigFingerprint: "decision-audit",
@@ -241,7 +251,7 @@ function requestAuditRotate(userData) {
       status: "awaiting_confirmation",
       expiresAt,
       fromGeneration: currentGeneration,
-      previousGenerationLastHash: current ? current.lastHash : GENESIS_HASH,
+      previousGenerationLastHash: current ? current.lastHash : decisionAudit.GENESIS_HASH,
     },
   });
   return {
@@ -252,13 +262,13 @@ function requestAuditRotate(userData) {
   };
 }
 
-function confirmAuditRotate(userData, payload) {
+function confirmAuditRotate(userData, event, payload) {
   ensureAuditHealthy(userData);
   const tokenId = String((payload && payload.rotationToken) || "").trim();
   const decisionId = String((payload && payload.decisionId) || "").trim();
+  const senderId = senderIdFromEvent(event);
   const verify = decisionAudit.verify(userData);
   const currentGeneration = verify.meta ? verify.meta.currentGeneration : 1;
-  const current = verify.generations.find((item) => item.generation === currentGeneration);
   const consumed = confirmationStore.consumeToken(tokenId, {
     requestDigest: `rotate:${currentGeneration}`,
     actor: "owner:settings",
@@ -266,7 +276,7 @@ function confirmAuditRotate(userData, payload) {
     destination: "local_ledger",
     dataScopes: [],
     cwd: "",
-    senderId: "settings",
+    senderId,
     taskDigest: `rotate:${currentGeneration}`,
     decisionId,
     executorConfigFingerprint: "decision-audit",

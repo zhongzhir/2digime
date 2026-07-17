@@ -49,6 +49,16 @@ function defaultMeta() {
   };
 }
 
+function isPristineEmptyMeta(meta) {
+  return (
+    meta &&
+    meta.currentGeneration === 1 &&
+    meta.lastSequence === 0 &&
+    meta.lastHash === GENESIS_HASH &&
+    (meta.generationCount == null || meta.generationCount === 1)
+  );
+}
+
 function parseMeta(userData) {
   ensureDir(userData);
   const p = metaPath(userData);
@@ -195,7 +205,13 @@ function verifyGeneration(userData, generation) {
       issues.push({ type: "generation_mismatch", line: i + 1, generation, got: entry.generation });
     }
     if (entry.sequence !== expectedSequence) {
-      issues.push({ type: "sequence_gap", expected: expectedSequence, got: entry.sequence, line: i + 1, generation });
+      issues.push({
+        type: "sequence_gap",
+        expected: expectedSequence,
+        got: entry.sequence,
+        line: i + 1,
+        generation,
+      });
     }
     if (entry.previousHash !== previousHash) {
       issues.push({ type: "hash_chain_break", line: i + 1, generation });
@@ -221,6 +237,50 @@ function verifyGeneration(userData, generation) {
     lastHash: previousHash,
     lastSequence: expectedSequence,
   };
+}
+
+function verifyGenerationLinks(generations) {
+  const issues = [];
+  for (let i = 1; i < generations.length; i++) {
+    const prev = generations[i - 1];
+    const curr = generations[i];
+    if (!curr || !curr.exists) continue;
+    if (!curr.entries.length) {
+      issues.push({ type: "missing_generation_rotated", generation: curr.generation });
+      continue;
+    }
+    const first = curr.entries[0];
+    if (first.event !== "generation_rotated") {
+      issues.push({ type: "missing_generation_rotated", generation: curr.generation });
+      continue;
+    }
+    const outcome = first.outcome || {};
+    if (Number(outcome.fromGeneration) !== prev.generation) {
+      issues.push({
+        type: "generation_link_from_mismatch",
+        generation: curr.generation,
+        expected: prev.generation,
+        got: outcome.fromGeneration,
+      });
+    }
+    if (Number(outcome.toGeneration) !== curr.generation) {
+      issues.push({
+        type: "generation_link_to_mismatch",
+        generation: curr.generation,
+        expected: curr.generation,
+        got: outcome.toGeneration,
+      });
+    }
+    if (String(outcome.previousGenerationLastHash || "") !== String(prev.lastHash)) {
+      issues.push({
+        type: "generation_link_hash_mismatch",
+        generation: curr.generation,
+        expected: prev.lastHash,
+        got: outcome.previousGenerationLastHash || "",
+      });
+    }
+  }
+  return issues;
 }
 
 function buildLedgerFact(userData) {
@@ -250,6 +310,7 @@ function buildLedgerFact(userData) {
     generations.push(result);
     if (!result.healthy) issues.push(...result.issues);
   }
+  issues.push(...verifyGenerationLinks(generations));
   const current = generations[generations.length - 1];
   return {
     healthy: issues.length === 0,
@@ -263,65 +324,187 @@ function buildLedgerFact(userData) {
   };
 }
 
-function canRecoverUniquely(metaResult, ledgerFact) {
-  if (!ledgerFact.healthy) return false;
-  if (!metaResult.ok) return ledgerFact.source === "ledger" || ledgerFact.source === "empty";
+function prefixHashAt(generationResult, sequence) {
+  if (sequence === 0) return GENESIS_HASH;
+  if (!generationResult || !generationResult.entries || generationResult.entries.length < sequence) {
+    return null;
+  }
+  return generationResult.entries[sequence - 1].entryHash;
+}
+
+/**
+ * Decide whether meta may be uniquely advanced to the verified ledger tip.
+ * Recovery is forward-only: never roll generation or sequence backward.
+ */
+function assessRecovery(metaResult, ledgerFact) {
+  if (!ledgerFact.healthy) {
+    return { recoverable: false, reason: "ledger_unhealthy" };
+  }
+
+  // Missing or corrupt meta: recover to ledger tip only when ledger exists.
+  // Empty ledger + missing meta is handled as initialize, not recover.
+  // Empty ledger + corrupt meta is unhealthy (cannot prove first-create vs deletion).
+  if (!metaResult.ok) {
+    if (ledgerFact.source === "empty") {
+      return {
+        recoverable: false,
+        reason: metaResult.reason === "meta_missing" ? "needs_initialize" : "meta_corrupt_empty",
+      };
+    }
+    return {
+      recoverable: true,
+      reason: "meta_unreadable_ledger_tip",
+      target: {
+        version: META_VERSION,
+        currentGeneration: ledgerFact.currentGeneration,
+        lastSequence: ledgerFact.lastSequence,
+        lastHash: ledgerFact.lastHash,
+        generationCount: ledgerFact.generationCount,
+      },
+    };
+  }
+
   const meta = metaResult.meta;
-  return (
-    meta.currentGeneration !== ledgerFact.currentGeneration ||
-    meta.lastSequence !== ledgerFact.lastSequence ||
-    meta.lastHash !== ledgerFact.lastHash ||
-    meta.generationCount !== ledgerFact.generationCount
-  );
+
+  // Meta claims history but every ledger disappeared.
+  if (ledgerFact.source === "empty") {
+    if (isPristineEmptyMeta(meta)) {
+      return { recoverable: false, reason: "already_consistent_empty" };
+    }
+    return { recoverable: false, reason: "ledgers_deleted" };
+  }
+
+  const genMap = new Map(ledgerFact.generations.map((g) => [g.generation, g]));
+
+  // Exact tip match (generationCount may lag after older meta writes).
+  if (
+    meta.currentGeneration === ledgerFact.currentGeneration &&
+    meta.lastSequence === ledgerFact.lastSequence &&
+    meta.lastHash === ledgerFact.lastHash
+  ) {
+    if ((meta.generationCount || meta.currentGeneration) === ledgerFact.generationCount) {
+      return { recoverable: false, reason: "already_consistent" };
+    }
+    return {
+      recoverable: true,
+      reason: "generation_count_lag",
+      target: {
+        version: META_VERSION,
+        currentGeneration: ledgerFact.currentGeneration,
+        lastSequence: ledgerFact.lastSequence,
+        lastHash: ledgerFact.lastHash,
+        generationCount: ledgerFact.generationCount,
+      },
+    };
+  }
+
+  // Meta points past existing ledger tip → truncation / deletion.
+  if (meta.currentGeneration > ledgerFact.currentGeneration) {
+    return { recoverable: false, reason: "meta_ahead_generation" };
+  }
+
+  const metaGen = genMap.get(meta.currentGeneration);
+  if (!metaGen || !metaGen.healthy) {
+    return { recoverable: false, reason: "meta_generation_missing" };
+  }
+
+  if (meta.lastSequence > metaGen.lastSequence) {
+    return { recoverable: false, reason: "meta_ahead_sequence" };
+  }
+
+  const expectedPrefixHash = prefixHashAt(metaGen, meta.lastSequence);
+  if (expectedPrefixHash == null || expectedPrefixHash !== meta.lastHash) {
+    return { recoverable: false, reason: "meta_hash_prefix_mismatch" };
+  }
+
+  // Same generation: ledger ahead of a verified meta prefix.
+  if (meta.currentGeneration === ledgerFact.currentGeneration) {
+    if (meta.lastSequence < ledgerFact.lastSequence) {
+      return {
+        recoverable: true,
+        reason: "ledger_ahead_same_generation",
+        target: {
+          version: META_VERSION,
+          currentGeneration: ledgerFact.currentGeneration,
+          lastSequence: ledgerFact.lastSequence,
+          lastHash: ledgerFact.lastHash,
+          generationCount: ledgerFact.generationCount,
+        },
+      };
+    }
+    // same sequence already handled by hash check above
+    return { recoverable: false, reason: "meta_hash_mismatch" };
+  }
+
+  // Rotate crash: meta still at gen N tip; gen N+1..tip exist and link correctly.
+  if (meta.currentGeneration < ledgerFact.currentGeneration) {
+    if (meta.lastSequence !== metaGen.lastSequence || meta.lastHash !== metaGen.lastHash) {
+      return { recoverable: false, reason: "meta_not_at_generation_tip" };
+    }
+    // Links already validated in buildLedgerFact when healthy.
+    return {
+      recoverable: true,
+      reason: "ledger_ahead_after_rotate",
+      target: {
+        version: META_VERSION,
+        currentGeneration: ledgerFact.currentGeneration,
+        lastSequence: ledgerFact.lastSequence,
+        lastHash: ledgerFact.lastHash,
+        generationCount: ledgerFact.generationCount,
+      },
+    };
+  }
+
+  return { recoverable: false, reason: "unrecoverable" };
 }
 
 function resolveState(userData, options = {}) {
   ensureDir(userData);
   const metaResult = parseMeta(userData);
   const ledgerFact = buildLedgerFact(userData);
+  const assessment = assessRecovery(metaResult, ledgerFact);
   const issues = [...ledgerFact.issues];
-  if (!metaResult.ok) issues.push({ type: metaResult.reason });
-  if (metaResult.ok) {
-    const meta = metaResult.meta;
-    if (meta.currentGeneration !== ledgerFact.currentGeneration) {
-      issues.push({
-        type: "meta_generation_mismatch",
-        expected: ledgerFact.currentGeneration,
-        got: meta.currentGeneration,
-      });
-    }
-    if (meta.lastSequence !== ledgerFact.lastSequence) {
-      issues.push({ type: "meta_sequence_mismatch", expected: ledgerFact.lastSequence, got: meta.lastSequence });
-    }
-    if (meta.lastHash !== ledgerFact.lastHash) {
-      issues.push({ type: "meta_hash_mismatch", expected: ledgerFact.lastHash, got: meta.lastHash });
-    }
-  }
 
-  const shouldInit = options.allowInitialize && !metaResult.ok && ledgerFact.source === "empty";
-  if (shouldInit) {
+  if (!metaResult.ok) issues.push({ type: metaResult.reason });
+  if (assessment.reason === "ledgers_deleted") issues.push({ type: "ledgers_deleted" });
+  if (assessment.reason === "meta_ahead_generation") issues.push({ type: "meta_ahead_generation" });
+  if (assessment.reason === "meta_ahead_sequence") issues.push({ type: "meta_ahead_sequence" });
+  if (assessment.reason === "meta_hash_prefix_mismatch" || assessment.reason === "meta_hash_mismatch") {
+    issues.push({ type: "meta_hash_mismatch" });
+  }
+  if (assessment.reason === "meta_corrupt_empty") issues.push({ type: "meta_corrupt_empty" });
+
+  if (options.allowInitialize && assessment.reason === "needs_initialize") {
     const meta = defaultMeta();
     writeMetaAtomic(userData, meta);
-    return { ok: true, recovered: true, state: meta, verify: verify(userData) };
+    return { ok: true, recovered: true, state: meta, verify: verify(userData), assessment };
   }
 
-  if (issues.length === 0 && metaResult.ok) {
-    return { ok: true, recovered: false, state: metaResult.meta, verify: verify(userData) };
+  if (metaResult.ok && assessment.reason === "already_consistent") {
+    return { ok: true, recovered: false, state: metaResult.meta, verify: verify(userData), assessment };
+  }
+  if (metaResult.ok && assessment.reason === "already_consistent_empty") {
+    return { ok: true, recovered: false, state: metaResult.meta, verify: verify(userData), assessment };
   }
 
-  if (options.allowRecover && canRecoverUniquely(metaResult, ledgerFact)) {
-    const recovered = {
-      version: META_VERSION,
-      currentGeneration: ledgerFact.currentGeneration,
-      lastSequence: ledgerFact.lastSequence,
-      lastHash: ledgerFact.lastHash,
-      generationCount: ledgerFact.generationCount,
+  if (options.allowRecover && assessment.recoverable && assessment.target) {
+    writeMetaAtomic(userData, assessment.target);
+    return {
+      ok: true,
+      recovered: true,
+      state: assessment.target,
+      verify: verify(userData),
+      assessment,
     };
-    writeMetaAtomic(userData, recovered);
-    return { ok: true, recovered: true, state: recovered, verify: verify(userData) };
   }
 
-  return { ok: false, recovered: false, issues, verify: verify(userData) };
+  return {
+    ok: false,
+    recovered: false,
+    issues,
+    assessment,
+    verify: verify(userData),
+  };
 }
 
 function buildBaseEntry(state, generation, fields) {
@@ -353,10 +536,20 @@ function appendEntry(userData, fields, options = {}) {
     throw err;
   }
   const generation = options.generation || resolved.state.currentGeneration;
+  if (generation < resolved.state.currentGeneration) {
+    const err = new Error("决策记录完整性异常，已阻止高风险执行。");
+    err.code = "audit_unhealthy";
+    throw err;
+  }
   const state =
     generation === resolved.state.currentGeneration
       ? resolved.state
-      : { version: META_VERSION, currentGeneration: generation, lastSequence: 0, lastHash: GENESIS_HASH };
+      : {
+          version: META_VERSION,
+          currentGeneration: generation,
+          lastSequence: 0,
+          lastHash: GENESIS_HASH,
+        };
   const entry = { ...buildBaseEntry(state, generation, fields) };
   entry.entryHash = buildEntryHash(state.lastHash, entry);
   const lp = ledgerPath(userData, generation);
@@ -383,45 +576,67 @@ function verify(userData) {
   ensureDir(userData);
   const metaResult = parseMeta(userData);
   const ledgerFact = buildLedgerFact(userData);
+  const assessment = assessRecovery(metaResult, ledgerFact);
   const issues = [...ledgerFact.issues];
   let healthy = ledgerFact.healthy;
   let meta = null;
+
   if (!metaResult.ok) {
     healthy = false;
     issues.push({ type: metaResult.reason });
   } else {
     meta = metaResult.meta;
-    if (meta.currentGeneration !== ledgerFact.currentGeneration) {
-      healthy = false;
-      issues.push({ type: "meta_generation_mismatch" });
-    }
-    if (meta.lastSequence !== ledgerFact.lastSequence) {
-      healthy = false;
-      issues.push({ type: "meta_sequence_mismatch" });
-    }
-    if (meta.lastHash !== ledgerFact.lastHash) {
-      healthy = false;
-      issues.push({ type: "meta_hash_mismatch" });
-    }
-    if (meta.generationCount !== ledgerFact.generationCount) {
-      healthy = false;
-      issues.push({ type: "meta_generation_count_mismatch" });
-    }
   }
+
+  if (assessment.reason === "already_consistent" || assessment.reason === "already_consistent_empty") {
+    return {
+      healthy: healthy && metaResult.ok,
+      meta,
+      generations: ledgerFact.generations,
+      issues,
+      availableGenerations: ledgerFact.generations.map((item) => item.generation),
+      assessment,
+    };
+  }
+
+  if (
+    assessment.reason === "ledger_ahead_same_generation" ||
+    assessment.reason === "ledger_ahead_after_rotate" ||
+    assessment.reason === "meta_unreadable_ledger_tip" ||
+    assessment.reason === "generation_count_lag"
+  ) {
+    // Recoverable lag is not healthy until meta is repaired.
+    healthy = false;
+    issues.push({ type: "meta_lagging", reason: assessment.reason });
+  } else if (assessment.reason === "needs_initialize") {
+    healthy = false;
+    issues.push({ type: "meta_missing" });
+  } else if (assessment.reason !== "already_consistent") {
+    healthy = false;
+    if (assessment.reason) issues.push({ type: assessment.reason });
+  }
+
   return {
     healthy,
     meta,
     generations: ledgerFact.generations,
     issues,
     availableGenerations: ledgerFact.generations.map((item) => item.generation),
+    assessment,
   };
 }
 
 function list(userData, { limit, generation } = {}) {
   const full = verify(userData);
   const available = full.availableGenerations;
-  const gen = generation != null ? Number(generation) : full.meta ? full.meta.currentGeneration : available[available.length - 1] || 1;
-  const selected = full.generations.find((item) => item.generation === gen) || verifyGeneration(userData, gen);
+  const gen =
+    generation != null
+      ? Number(generation)
+      : full.meta
+        ? full.meta.currentGeneration
+        : available[available.length - 1] || 1;
+  const selected =
+    full.generations.find((item) => item.generation === gen) || verifyGeneration(userData, gen);
   const n = Math.min(Math.max(Number(limit) || 40, 1), 500);
   return {
     generation: gen,
@@ -495,6 +710,7 @@ module.exports = {
   AUDIT_DIR_NAME,
   auditRoot,
   appendEntry,
+  assessRecovery,
   digestOutput,
   ledgerPath,
   list,

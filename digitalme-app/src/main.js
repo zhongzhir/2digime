@@ -1921,11 +1921,11 @@ ipcMain.handle("decisionAudit:list", async (_e, opts) =>
 ipcMain.handle("decisionAudit:verify", async () =>
   decisionAudit.verify(app.getPath("userData"))
 );
-ipcMain.handle("decisionAudit:requestRotate", async () =>
-  externalAgentFlow.requestAuditRotate(app.getPath("userData"))
+ipcMain.handle("decisionAudit:requestRotate", async (e) =>
+  externalAgentFlow.requestAuditRotate(app.getPath("userData"), e)
 );
-ipcMain.handle("decisionAudit:rotate", async (_e, payload) =>
-  externalAgentFlow.confirmAuditRotate(app.getPath("userData"), payload || {})
+ipcMain.handle("decisionAudit:rotate", async (e, payload) =>
+  externalAgentFlow.confirmAuditRotate(app.getPath("userData"), e, payload || {})
 );
 
 ipcMain.handle("l0:listAgents", async () => l0Agents.listAgents(app.getPath("userData")));

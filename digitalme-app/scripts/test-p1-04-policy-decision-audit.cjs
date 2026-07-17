@@ -844,11 +844,15 @@ async function runAllTests() {
       assert.ok(listed.entries.some((e) => e.event === "confirmation_canceled"));
 
       assert.throws(
-        () => externalAgentFlow.confirmAuditRotate(userData, { decisionId: "x", rotationToken: "fake" }),
+        () =>
+          externalAgentFlow.confirmAuditRotate(userData, mockEvent(9), {
+            decisionId: "x",
+            rotationToken: "fake",
+          }),
         /无效|失效/
       );
-      const rotatePrep = externalAgentFlow.requestAuditRotate(userData);
-      const rotated = externalAgentFlow.confirmAuditRotate(userData, rotatePrep);
+      const rotatePrep = externalAgentFlow.requestAuditRotate(userData, mockEvent(9));
+      const rotated = externalAgentFlow.confirmAuditRotate(userData, mockEvent(9), rotatePrep);
       assert.equal(rotated.currentGeneration, 2);
       const old = decisionAudit.list(userData, { generation: 1, limit: 20 });
       const current = decisionAudit.list(userData, { generation: 2, limit: 20 });
@@ -901,6 +905,339 @@ async function runAllTests() {
       sha256: item.sha256,
     }));
     assert.deepEqual(walkFiles(DEFAULT_PKG), expected);
+  });
+
+  await test("20. deleting gen2 after rotate blocks next request and does not roll back to gen1", async () => {
+    confirmationStore.clearAllForTests();
+    const userData = tempUserData("delete-gen2");
+    const ag = agentsModule(cliAgent());
+    try {
+      externalAgentFlow.requestExternalAgent(
+        userData,
+        mockEvent(1),
+        {
+          task: "seed",
+          dataScopes: ["task_text", "workspace_files", "env_inherit"],
+          writeIntent: true,
+        },
+        ag
+      );
+      const rotatePrep = externalAgentFlow.requestAuditRotate(userData, mockEvent(1));
+      externalAgentFlow.confirmAuditRotate(userData, mockEvent(1), rotatePrep);
+      assert.equal(decisionAudit.verify(userData).meta.currentGeneration, 2);
+      fs.unlinkSync(path.join(userData, "decision-audit", "gen-2.jsonl"));
+      const state = decisionAudit.resolveState(userData, { allowRecover: true });
+      assert.equal(state.ok, false);
+      assert.ok(
+        state.assessment.reason === "meta_ahead_generation" ||
+          state.assessment.reason === "meta_generation_missing" ||
+          (state.verify && state.verify.healthy === false)
+      );
+      assert.throws(
+        () =>
+          externalAgentFlow.requestExternalAgent(
+            userData,
+            mockEvent(1),
+            {
+              task: "after delete",
+              dataScopes: ["task_text", "workspace_files", "env_inherit"],
+              writeIntent: true,
+            },
+            ag
+          ),
+        /完整性异常/
+      );
+      assert.equal(ag.spawnCount, 0);
+      assert.equal(decisionAudit.parseMeta(userData).meta.currentGeneration, 2);
+    } finally {
+      cleanup(userData);
+    }
+  });
+
+  await test("21. meta sequence ahead of ledger and truncated ledger both block", () => {
+    const userData = tempUserData("meta-ahead");
+    try {
+      const first = decisionAudit.appendEntry(userData, {
+        event: "policy_evaluated",
+        decisionId: "dec_a",
+        policyVersion: POLICY_VERSION,
+        requestDigest: "abc",
+        actor: "owner:renderer",
+        purpose: "code_delegate",
+        action: "external_cli_execute",
+        dataScopes: ["task_text", "workspace_files", "env_inherit"],
+        destination: "local_subprocess",
+        outcome: { status: "require_confirmation" },
+      });
+      const second = decisionAudit.appendEntry(userData, {
+        event: "confirmation_issued",
+        decisionId: "dec_a",
+        policyVersion: POLICY_VERSION,
+        requestDigest: "abc",
+        actor: "owner:renderer",
+        purpose: "code_delegate",
+        action: "external_cli_execute",
+        dataScopes: ["task_text", "workspace_files", "env_inherit"],
+        destination: "local_subprocess",
+        outcome: { status: "awaiting_confirmation" },
+      });
+      decisionAudit.writeMetaAtomic(userData, {
+        version: 2,
+        currentGeneration: 1,
+        lastSequence: 99,
+        lastHash: second.entryHash,
+        generationCount: 1,
+      });
+      const ahead = decisionAudit.resolveState(userData, { allowRecover: true });
+      assert.equal(ahead.ok, false);
+      assert.equal(ahead.assessment.reason, "meta_ahead_sequence");
+
+      decisionAudit.writeMetaAtomic(userData, {
+        version: 2,
+        currentGeneration: 1,
+        lastSequence: 2,
+        lastHash: second.entryHash,
+        generationCount: 1,
+      });
+      const lp = path.join(userData, "decision-audit", "gen-1.jsonl");
+      const lines = fs.readFileSync(lp, "utf8").trimEnd().split("\n");
+      fs.writeFileSync(lp, lines[0] + "\n", "utf8");
+      const truncated = decisionAudit.resolveState(userData, { allowRecover: true });
+      assert.equal(truncated.ok, false);
+      assert.ok(
+        truncated.assessment.reason === "meta_ahead_sequence" ||
+          truncated.assessment.reason === "meta_hash_prefix_mismatch" ||
+          truncated.assessment.reason === "ledger_unhealthy"
+      );
+      assert.ok(first.entryHash);
+    } finally {
+      cleanup(userData);
+    }
+  });
+
+  await test("22. legal append/meta-fail and rotate/meta-fail recover forward uniquely", () => {
+    const userData = tempUserData("forward-recover");
+    try {
+      const first = decisionAudit.appendEntry(userData, {
+        event: "policy_evaluated",
+        decisionId: "dec_a",
+        policyVersion: POLICY_VERSION,
+        requestDigest: "abc",
+        actor: "owner:renderer",
+        purpose: "code_delegate",
+        action: "external_cli_execute",
+        dataScopes: ["task_text", "workspace_files", "env_inherit"],
+        destination: "local_subprocess",
+        outcome: { status: "require_confirmation" },
+      });
+      const second = appendManualLedgerEntry(
+        userData,
+        1,
+        {
+          event: "confirmation_issued",
+          decisionId: "dec_a",
+          requestDigest: "abc",
+          actor: "owner:renderer",
+          purpose: "code_delegate",
+          action: "external_cli_execute",
+          dataScopes: ["task_text", "workspace_files", "env_inherit"],
+          destination: "local_subprocess",
+          outcome: { status: "awaiting_confirmation" },
+        },
+        first.entryHash,
+        2
+      );
+      decisionAudit.writeMetaAtomic(userData, {
+        version: 2,
+        currentGeneration: 1,
+        lastSequence: 1,
+        lastHash: first.entryHash,
+        generationCount: 1,
+      });
+      const recovered = decisionAudit.resolveState(userData, { allowRecover: true });
+      assert.equal(recovered.ok, true);
+      assert.equal(recovered.state.lastSequence, 2);
+      assert.equal(recovered.state.lastHash, second.entryHash);
+
+      const rotated = decisionAudit.rotate(userData, { decisionId: "rot_test" });
+      assert.equal(rotated.currentGeneration, 2);
+      const tipBeforeMetaFail = decisionAudit.verify(userData).meta;
+      // Simulate rotate ledger written but meta still on gen1 tip.
+      decisionAudit.writeMetaAtomic(userData, {
+        version: 2,
+        currentGeneration: 1,
+        lastSequence: 2,
+        lastHash: second.entryHash,
+        generationCount: 1,
+      });
+      const recoverRotate = decisionAudit.resolveState(userData, { allowRecover: true });
+      assert.equal(recoverRotate.ok, true);
+      assert.equal(recoverRotate.state.currentGeneration, 2);
+      assert.equal(recoverRotate.state.lastHash, tipBeforeMetaFail.lastHash);
+      assert.equal(recoverRotate.state.lastSequence, tipBeforeMetaFail.lastSequence);
+    } finally {
+      cleanup(userData);
+    }
+  });
+
+  await test("23. tampered previousGenerationLastHash and missing generation_rotated are globally unhealthy", () => {
+    const userData = tempUserData("gen-link");
+    try {
+      decisionAudit.appendEntry(userData, {
+        event: "policy_evaluated",
+        decisionId: "dec_old",
+        policyVersion: POLICY_VERSION,
+        requestDigest: "x",
+        actor: "owner:renderer",
+        purpose: "code_delegate",
+        action: "external_cli_execute",
+        dataScopes: ["task_text", "workspace_files", "env_inherit"],
+        destination: "local_subprocess",
+        outcome: { status: "deny" },
+      });
+      decisionAudit.rotate(userData, { decisionId: "rot_ok" });
+      const lp2 = path.join(userData, "decision-audit", "gen-2.jsonl");
+      const lines = fs.readFileSync(lp2, "utf8").trimEnd().split("\n");
+      const first = JSON.parse(lines[0]);
+      first.outcome.previousGenerationLastHash = "f".repeat(64);
+      // Recompute entryHash so only the link field is semantically wrong after rehash? Spec wants
+      // tampering previousGenerationLastHash to be detected — either via link check on stored value
+      // or via entry hash mismatch. Keep body change and recompute hash so chain is locally valid
+      // but cross-gen link fails.
+      const prevHash = first.previousHash;
+      delete first.entryHash;
+      first.entryHash = buildEntryHash(prevHash, first);
+      lines[0] = JSON.stringify(first);
+      fs.writeFileSync(lp2, lines.join("\n") + "\n", "utf8");
+      decisionAudit.writeMetaAtomic(userData, {
+        version: 2,
+        currentGeneration: 2,
+        lastSequence: 1,
+        lastHash: first.entryHash,
+        generationCount: 2,
+      });
+      const badLink = decisionAudit.verify(userData);
+      assert.equal(badLink.healthy, false);
+      assert.ok(badLink.issues.some((i) => i.type === "generation_link_hash_mismatch"));
+
+      // Replace first event with a non-rotation record.
+      const fake = {
+        generation: 2,
+        sequence: 1,
+        at: new Date().toISOString(),
+        event: "policy_evaluated",
+        decisionId: "dec_fake",
+        policyVersion: POLICY_VERSION,
+        requestDigest: "y",
+        actor: "owner:renderer",
+        purpose: "code_delegate",
+        action: "external_cli_execute",
+        dataScopes: ["task_text", "workspace_files", "env_inherit"],
+        destination: "local_subprocess",
+        approval: null,
+        outcome: { status: "deny" },
+        previousHash: decisionAudit.GENESIS_HASH,
+      };
+      fake.entryHash = buildEntryHash(decisionAudit.GENESIS_HASH, fake);
+      fs.writeFileSync(lp2, JSON.stringify(fake) + "\n", "utf8");
+      decisionAudit.writeMetaAtomic(userData, {
+        version: 2,
+        currentGeneration: 2,
+        lastSequence: 1,
+        lastHash: fake.entryHash,
+        generationCount: 2,
+      });
+      const missingRotated = decisionAudit.verify(userData);
+      assert.equal(missingRotated.healthy, false);
+      assert.ok(missingRotated.issues.some((i) => i.type === "missing_generation_rotated"));
+    } finally {
+      cleanup(userData);
+    }
+  });
+
+  await test("24. renderer-supplied first decisionId is ignored; rotate/cancel reject cross-sender and repeat cancel", async () => {
+    confirmationStore.clearAllForTests();
+    const userData = tempUserData("trusted-ids");
+    const ag = agentsModule(cliAgent());
+    try {
+      const prep = externalAgentFlow.requestExternalAgent(
+        userData,
+        mockEvent(1),
+        {
+          task: "demo",
+          dataScopes: ["task_text", "workspace_files", "env_inherit"],
+          writeIntent: true,
+          decisionId: "dec_attacker_chosen",
+        },
+        ag
+      );
+      assert.notEqual(prep.decisionId, "dec_attacker_chosen");
+      assert.match(prep.decisionId, /^dec_/);
+
+      assert.throws(
+        () =>
+          externalAgentFlow.cancelExternalAgentConfirmation(userData, mockEvent(99), {
+            decisionId: prep.decisionId,
+            confirmationToken: prep.confirmationToken,
+          }),
+        /不一致|校验失败/
+      );
+      externalAgentFlow.cancelExternalAgentConfirmation(userData, mockEvent(1), {
+        decisionId: prep.decisionId,
+        confirmationToken: prep.confirmationToken,
+      });
+      assert.throws(
+        () =>
+          externalAgentFlow.cancelExternalAgentConfirmation(userData, mockEvent(1), {
+            decisionId: prep.decisionId,
+            confirmationToken: prep.confirmationToken,
+          }),
+        /已取消/
+      );
+      const cancels = decisionAudit
+        .list(userData, { limit: 50 })
+        .entries.filter((e) => e.event === "confirmation_canceled");
+      assert.equal(cancels.length, 1);
+
+      const rotatePrep = externalAgentFlow.requestAuditRotate(userData, mockEvent(3));
+      assert.throws(
+        () => externalAgentFlow.confirmAuditRotate(userData, mockEvent(4), rotatePrep),
+        /不一致|校验失败/
+      );
+      const rotated = externalAgentFlow.confirmAuditRotate(userData, mockEvent(3), rotatePrep);
+      assert.equal(rotated.currentGeneration, 2);
+    } finally {
+      cleanup(userData);
+    }
+  });
+
+  await test("25. meta with history but all ledgers deleted is unhealthy and not re-initialized empty", () => {
+    const userData = tempUserData("ledgers-gone");
+    try {
+      decisionAudit.appendEntry(userData, {
+        event: "policy_evaluated",
+        decisionId: "dec_a",
+        policyVersion: POLICY_VERSION,
+        requestDigest: "abc",
+        actor: "owner:renderer",
+        purpose: "code_delegate",
+        action: "external_cli_execute",
+        dataScopes: ["task_text", "workspace_files", "env_inherit"],
+        destination: "local_subprocess",
+        outcome: { status: "deny" },
+      });
+      fs.unlinkSync(path.join(userData, "decision-audit", "gen-1.jsonl"));
+      const state = decisionAudit.resolveState(userData, {
+        allowInitialize: true,
+        allowRecover: true,
+      });
+      assert.equal(state.ok, false);
+      assert.equal(state.assessment.reason, "ledgers_deleted");
+      const meta = decisionAudit.parseMeta(userData).meta;
+      assert.ok(meta.lastSequence > 0);
+    } finally {
+      cleanup(userData);
+    }
   });
 
   console.log("");

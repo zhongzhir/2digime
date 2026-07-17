@@ -5,6 +5,33 @@
 
 ---
 
+## 2026-07-17（P1-04 第三轮修订 · meta 恢复方向与跨代连接）
+
+### 结论
+
+- 编号：`P1-04`
+- 分支：`codex/p1-04-policy-decision-audit`
+- 状态：`statically_verified`（第三轮 Codex 复核要求已落地；待再复核，暂缓 Owner 沙盒验收）
+- 保留提交：`9929e8b`、`0e19106`；本轮另起提交，不 amend、不 push
+
+### 修订摘要
+
+- DecisionAudit：meta 恢复改为仅允许向前；meta 高于账本、截断、同序不同 hash、有 meta 却无 ledger 一律 `audit_unhealthy`；不得静默回退代次；
+- 跨代校验：`generation > 1` 的首条必须为合法 `generation_rotated`，并核对 `fromGeneration` / `toGeneration` / `previousGenerationLastHash`；
+- 首次 `decisionId` 始终由主进程签发；rotate/cancel 票据绑定真实 `webContents.id`；重复 revoke 不重复写取消记录；
+- 边界说明：meta 与 ledger 均缺失时，无法区分“从未创建”与“全部删除后连带丢失 meta”；**只要 meta 仍在，账本删除必须检出**。
+
+### 验证
+
+- `npm run test:p1-04`：25/25；P1-01～P1-03 回归通过；
+- P1-00 Package 基线清单 SHA-256 仍为 `3309ea5b286fdf93fc5e1b4af9a9664b6738aa6bb71902cba676d2d523e6d42a`。
+
+### 下一步
+
+交 Codex 第三轮复核。
+
+---
+
 ## 2026-07-16（P1-04 · PolicyEngine 与可信决策记录切片）
 
 ### 结论

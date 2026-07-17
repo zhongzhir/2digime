@@ -79,15 +79,26 @@ function peekToken(tokenId) {
   return tokens.get(String(tokenId || "").trim()) || null;
 }
 
-function revokeToken(tokenId, meta = {}) {
+/**
+ * Revoke a live token. Already revoked/consumed tokens fail without mutating further.
+ * Expected senderId/decisionId must match when provided.
+ */
+function revokeToken(tokenId, expected = {}) {
   const id = String(tokenId || "").trim();
   if (!id) return { ok: false, reason: "missing_token" };
   const row = tokens.get(id);
   if (!row) return { ok: false, reason: "unknown_token" };
+  if (row.revoked) return { ok: false, reason: "token_revoked" };
   if (row.consumed) return { ok: false, reason: "token_replayed" };
+  if (expected.senderId != null && String(row.senderId) !== String(expected.senderId)) {
+    return { ok: false, reason: "token_binding_mismatch" };
+  }
+  if (expected.decisionId != null && String(row.decisionId) !== String(expected.decisionId)) {
+    return { ok: false, reason: "token_binding_mismatch" };
+  }
   row.revoked = true;
   row.revokedAt = new Date().toISOString();
-  row.revokeReason = String(meta.reason || "canceled");
+  row.revokeReason = String(expected.reason || "canceled");
   return { ok: true, token: { ...row } };
 }
 
