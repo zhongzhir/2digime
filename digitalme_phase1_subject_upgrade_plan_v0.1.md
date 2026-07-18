@@ -1,10 +1,31 @@
 # Digital Me 第一阶段改造升级计划：主体可信化与协作感知
 
-版本：v0.1  
-状态：当前执行计划  
-制定日期：2026-07-16  
-依据：`digitalme_architecture_audit_20260716.md`  
+版本：v0.1
+制定日期：2026-07-16
+依据：`digitalme_architecture_audit_20260716.md`
 适用范围：当前单机 Electron App、Digital Me Package、已有写作/研究/编程/能力扩展，以及外部协作最小骨架
+
+```text
+状态：部分完成；不再作为当前顺序执行计划
+当前主线：P1-PANORAMA
+后续用途：Trusted Beta 技术硬化、风险与依赖依据
+```
+
+> **2026-07-18 阶段切换**：本文保留全部历史 WP、DoD 与风险表述，**不得删除**。当前产品排期以 `digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md` 与 `digitalme_panorama_execution_index_v0.1.md` 为准。未完成硬化项进入 Trusted Beta 候选池；只有安全底线或 Panorama 主路径阻断可以前置；P1-PANORAMA 后由 PAN-06 按用户证据重新排序。
+
+---
+
+## 0. 与 P1-PANORAMA 的关系（2026-07-18）
+
+| 类别 | 处理 |
+|---|---|
+| 已完成能力（SecretStore、PackageStore 切片、Subject Home、PolicyEngine、DecisionAudit、ToolBroker、Builder/Life 主写回等） | **继续复用**，支撑 Panorama 闭环 |
+| 未完成硬化项（Policies 全迁、MCP 全迁、全类型校验、审计密码学、导出—删除—重导入等） | **Trusted Beta 候选池**，见执行索引冻结 backlog |
+| 原 WP 顺序排期 | **暂停作为当前队列**；不把未完成项伪装为取消或完成 |
+| 可前置条件 | 仅安全底线（密钥泄漏、越权、资料损坏）或 Panorama 主路径真实阻断 |
+| 重排时机 | PAN-06 非开发者验证之后 |
+
+下文 §1 起为历史规划正文，内容仍作风险与依赖依据。
 
 ---
 
@@ -240,7 +261,7 @@ flowchart LR
 | 第 6 周 | WP5 | 能力名片、授权草案、本地协作模拟 |
 | 第 7—8 周 | WP6 + 修复 | 评测、红队、迁移恢复、阶段验收 |
 
-强依赖：WP0 → WP1/WP2 → WP3/WP4 → WP5 → WP6。  
+强依赖：WP0 → WP1/WP2 → WP3/WP4 → WP5 → WP6。
 可并行：主体产品面原型可与 PackageStore 开发并行，但不得绕开最终数据契约。
 
 ---

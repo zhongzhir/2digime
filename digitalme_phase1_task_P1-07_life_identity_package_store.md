@@ -1,13 +1,41 @@
 # P1-07 任务包：Life / identity 写入路径迁移到 PackageStore
 
-状态：statically_verified（Owner 验收第二轮已落地；等待 Codex 复核与 Owner 运行验收；**不得**标记 accepted）
-阶段：第一阶段 / WP1（PackageStore 接入扩展）
+状态：`statically_verified` / `owner_partial_verified` / `known_acceptance_gaps` / `frozen_for_panorama`（**不得**标记 accepted；不占用 P1-PANORAMA 主线）
+阶段：第一阶段 / WP1（PackageStore 接入扩展）— **已冻结，转入 Trusted Beta / backlog**
 前置任务：P1-00～P1-06（P1-05 可为 statically_verified；P1-06 须 accepted）
-规格依据：`digitalme_phase1_subject_upgrade_plan_v0.1.md` §3 WP1
+规格依据：`digitalme_phase1_subject_upgrade_plan_v0.1.md` §3 WP1（该计划已降为 Trusted Beta 依据）
 审计依据：`digitalme_architecture_audit_20260716.md` F-04、F-05、F-06
 任务包建立：2026-07-17
 实现分支：`codex/p1-07-life-identity-package-store`
-实现提交：`813e509` → `b4dc2e2` → `dcfd936` → `c24f60e` → **`5ab55dc`**（当前基准）
+实现提交：`813e509` → `b4dc2e2` → `dcfd936` → `c24f60e` → **`5ab55dc`**（代码基准）
+收工文档提交：`8fb8210`（P1-07_DOCS_BASE；历史保留）
+
+---
+
+## 0. 冻结决定（2026-07-18）
+
+因启动 **P1-PANORAMA**，本任务固定为：
+
+```text
+statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_for_panorama
+```
+
+### 已知验收缺口
+
+1. 真实 GUI 多类别审阅：第一组提交后，第二组未被 Owner 观察到自动呈现；
+2. 智能构建的确认交互尚未由 Owner 完整复验。
+
+### 规则
+
+- 不标 `accepted`；
+- 不再占用 Panorama 当前主线；
+- 不修改本任务代码或测试来制造 accepted；
+- 仅资料损坏、越权写入、密钥泄漏或构成 Panorama 主路径阻断时恢复处理；
+- 缺口登记于 `digitalme_panorama_execution_index_v0.1.md` 冻结 backlog。
+
+### 与 2026-07-17 收工纪要的关系
+
+§12 收工纪要作为**历史记录保留**。其中「等待 Codex 复核与 Owner 运行验收」的旧下一门槛，**已被本冻结决定取代**，不得再理解为当前必须执行的任务入口。
 
 ---
 
@@ -283,18 +311,21 @@ git status --short --branch
 
 ---
 
-**当前状态说明**：Owner 验收第二轮修复已落地（`statically_verified`，基准 `5ab55dc`）。等待 Codex 再复核与 Owner 运行验收；通过前不得标 `accepted`。
+**当前状态说明（历史，2026-07-17）**：Owner 验收第二轮修复已落地（`statically_verified`，基准 `5ab55dc`）。当时下一门槛为「等待 Codex 再复核与 Owner 运行验收」。**自 2026-07-18 起已被 §0 冻结决定取代**（`frozen_for_panorama`）；通过前仍不得标 `accepted`。
 
 ---
 
-## 12. 完成状态与交接（2026-07-17 收工）
+## 12. 完成状态与交接（2026-07-17 收工 · 历史保留）
+
+> 本节为收工历史。当前权威状态见文首与 **§0 冻结决定**。文中「续作 / 运行验收」条目转为已知缺口与 backlog，不再作为当前主线入口。
 
 ### 当前基准
 
 - 分支：`codex/p1-07-life-identity-package-store`
 - 提交：`5ab55dc` — fix(ui): close P1-07 review cancellation and queue transitions
-- 状态：`statically_verified`（不 push、不标 accepted）
-- 本地交接：`digitalme-source-5ab55dc.zip`、`p1-07-5ab55dc-stat.txt`、`p1-07-5ab55dc-status.txt`
+- 状态（收工当时）：`statically_verified`（不 push、不标 accepted）
+- 状态（2026-07-18 起）：`statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_for_panorama`
+- 本地交接：`digitalme-source-5ab55dc.zip`、`p1-07-5ab55dc-stat.txt`、`p1-07-5ab55dc-status.txt`（勿纳入 git）
 
 ### 自动化证据
 
@@ -306,16 +337,16 @@ git status --short --branch
 | `npm run test:p1-06` | 14/14 |
 | `npm run test:owner-runtime` | 5/5 |
 
-### Owner 运行验收检查项（续作）
+### Owner 运行验收检查项（已转为已知缺口 / backlog）
 
-1. 多类别审阅：第一组写入后第二组仍在构建页可见，可继续审阅
+1. 多类别审阅：第一组写入后第二组仍在构建页可见，可继续审阅 — **缺口：Owner 未观察到第二组自动呈现**
 2. identity / persona 确认弹窗点「取消」：恢复 `suggested`，可再次「审阅后写入」
 3. 智能构建全部取消：revision 不变，不出现「已写入」横幅
-4. 有 pending 观念线索时智能构建取消：`applyMindHooks` 不得被隐式调用
+4. 有 pending 观念线索时智能构建取消：`applyMindHooks` 不得被隐式调用 — **缺口：智能构建确认交互尚未由 Owner 完整复验**
 5. 版本区：仅真实 commit 后 revision 与可恢复版本变化
 
 **禁止**：恢复或覆盖本机真实 Package 作为默认测试步骤。
 
 ### 明确不在本任务续作范围
 
-P1-08、Policies 迁移、MCP/ToolBroker 扩展、认知页零散编辑、Life 读取重构、`package:load` scaffold。
+P1-08、Policies 迁移、MCP/ToolBroker 扩展、认知页零散编辑、Life 读取重构、`package:load` scaffold。（上述与本任务缺口一并冻结于 Panorama backlog。）
