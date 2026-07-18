@@ -5,6 +5,36 @@
 
 ---
 
+## 2026-07-18 PAN-01 产品全貌首页 · statically_verified
+
+### 决策与范围
+
+在规划基线 `52b0d14`（PAN01_PLAN_BASE）上创建分支 `codex/pan-01-product-panorama-home`，只读升级「数字之我 → 首页」为「全貌」。
+
+| 项 | 结果 |
+|---|---|
+| 结构 | 未新增第三套「我」页；复用构建 / 数字之我 |
+| 默认入口 | 侧栏「我」→ 数字之我 → 全貌；inbox 待处理不劫持 |
+| 四承诺初始态 | 这是我=可用（Package 缺失降级）；属于我/由我管=实验；代表我协作=尚未开放 |
+| 五步初始态 | 构建我=实验；看见我=可用；武装我=实验；授权我=预览；代表我协作=尚未开放 |
+| 状态契约 | 主进程生成 userStatus / userStatusLabel / currentCondition / limitation / navTarget；白名单导航 |
+| 写入 | 无新增主体/意图/边界写入；未修 P1-07；未触碰 `digital-me-package/**` |
+
+### 验证
+
+- `npm run test:pan-01`：12/12
+- `npm run test:pan-01-owner-runtime`：7/7（Loop 1 轮修复 harness 等待后通过）
+- `npm run test:p1-03`：22/22
+- `npm run test:p1-07-owner-runtime`：13/13
+- `npm run test:p1-phase1`：通过
+- `node --check` 已改 JS；`git diff --check` 通过
+
+### 状态
+
+`statically_verified`（**不得**标 accepted）。等待 Codex 复核与 Owner 主路径验收；验收前不启动 PAN-02。
+
+---
+
 ## 2026-07-18 PAN-00 accepted · PAN-01 任务包批准
 
 ### 决策

@@ -4,7 +4,7 @@
 状态：持续更新
 最后更新：2026-07-18
 
-> **当前产品主线（2026-07-18）**：**P1-PANORAMA — Product Panorama Alpha**。执行顺序见 `digitalme_panorama_execution_index_v0.1.md`；总任务见 `digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`。**当前唯一实现任务：PAN-01（产品全貌首页）**——独立任务包 `digitalme_phase1_task_PAN-01_product_panorama_home.md` 已批准，可进入实现；不得自行回到 P1-07 修复或原 P1-08 队列。
+> **当前产品主线（2026-07-18）**：**P1-PANORAMA — Product Panorama Alpha**。执行顺序见 `digitalme_panorama_execution_index_v0.1.md`；总任务见 `digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`。**PAN-01（产品全貌首页）已 `statically_verified`**（规划基线 `52b0d14`；实现分支 `codex/pan-01-product-panorama-home`；**不标 accepted**）。等待 Codex 复核与 Owner 主路径验收；验收前不得启动 PAN-02；不得自行回到 P1-07 修复或原 P1-08 队列。
 >
 > **界面与功能需求源**：桌面应用「用户看见什么、能做什么、何为做完」以 [`digitalme_product_spec_v0.2.md`](digitalme_product_spec_v0.2.md)（文内 **v0.5**）为唯一规格；战略与逻辑架构仍以本文为准；**部署与系统拓扑**以 [`digitalme_architecture_edge_sovereign_v0.1.md`](digitalme_architecture_edge_sovereign_v0.1.md) 为准。开发实行**规格驱动**（无规格不排期）。
 >
@@ -843,4 +843,5 @@ flowchart TB
 56. **L0 控制权加深（2026-07-15）**：编程「像我」降为次要；审计账本落库展示；写作/研究统一挂 L0；本机外部命令执行体委派（确认后）。规格 **v0.3.13**、§5.0.1 / §7.11.4。
 57. **正式架构审计后收敛（2026-07-16）**：架构方向有条件通过，生产就绪不通过；当前为单机 Alpha。第一阶段改为“主体可信化与协作感知”：PackageStore / SecretStore / PolicyEngine / ToolBroker / AuditService / EvalHarness 六内核，主体首页与信任中心，写作/研究/受控执行真实验收，以及默认私有的能力名片、Agent Card 草案、一次性 Interaction Contract 与本地协作模拟。规划+Owner 执行+Cursor/Codex 单任务实现的机制固定化。详见 §2.7、§5.4.1、`digitalme_phase1_subject_upgrade_plan_v0.1.md`。（**执行队列已被 #58 覆盖**：该计划降为 Trusted Beta 硬化依据。）
 58. **启动 P1-PANORAMA / Product Panorama Alpha（2026-07-18）**：因执行过早进入局部精细化、产品全貌与市场认知不足，正式将当前主线从「按底层 WP / 写入迁移逐项硬化」切换为纵向产品闭环。代码基线 `5ab55dc`；文档基线另含 `8fb8210`（仅 P1-07 收工纪要）。P1-07 冻结为 `statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_for_panorama`（不标 accepted）。Product Panorama Alpha 与 Trusted Beta 分开。数字主权为公共叙事总纲，广义数字资产口径；Digital Org 入长期架构但不进当前个人 Alpha。工程状态与用户面五态分开。下一实现任务仅为 PAN-01。详见 §2.8、`digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`、`digitalme_panorama_execution_index_v0.1.md`、产品规格 v0.5。
-59. **PAN-00 accepted 与 PAN-01 任务包批准（2026-07-18）**：Codex 最终复核通过；验收提交 `bc85a14`。PAN-00 正式 `accepted`。独立任务包 `digitalme_phase1_task_PAN-01_product_panorama_home.md` 已批准：只读升级「数字之我 → 首页」为「全貌」；侧栏「我」默认进入全貌；用户面五态由主进程生成；不新增主体写入。当前唯一实现任务为 PAN-01。
+59. **PAN-00 accepted 与 PAN-01 任务包批准（2026-07-18）**：Codex 最终复核通过；验收提交 `bc85a14`。PAN-00 正式 `accepted`。独立任务包 `digitalme_phase1_task_PAN-01_product_panorama_home.md` 已批准：只读升级「数字之我 → 首页」为「全貌」；侧栏「我」默认进入全貌；用户面五态由主进程生成；不新增主体写入。当时唯一实现任务为 PAN-01。
+60. **PAN-01 statically_verified（2026-07-18）**：规划提交 `52b0d14`；实现分支 `codex/pan-01-product-panorama-home`。复用 SubjectOverview，新增主进程 `panorama` 字段（四承诺、五步路线、userStatus/navTarget）；默认入口始终「数字之我 → 全貌」；inbox 不劫持。`test:pan-01` 12/12、`test:pan-01-owner-runtime` 7/7 及阶段回归通过。**不标 accepted**；验收前不启动 PAN-02。

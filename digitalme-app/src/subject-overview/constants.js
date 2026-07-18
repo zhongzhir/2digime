@@ -5,6 +5,34 @@ const { DATA_KINDS } = require("../package-store");
 /** @type {"1"} */
 const SUBJECT_OVERVIEW_CONTRACT_VERSION = "1";
 
+/** @type {"1"} */
+const PANORAMA_STATUS_CONTRACT_VERSION = "1";
+
+const USER_STATUS = Object.freeze({
+  AVAILABLE: "available",
+  EXPERIMENT: "experiment",
+  LOCAL_SIM: "local_sim",
+  PREVIEW: "preview",
+  NOT_OPEN: "not_open",
+});
+
+const USER_STATUS_LABEL = Object.freeze({
+  [USER_STATUS.AVAILABLE]: "可用",
+  [USER_STATUS.EXPERIMENT]: "实验",
+  [USER_STATUS.LOCAL_SIM]: "本地模拟",
+  [USER_STATUS.PREVIEW]: "预览",
+  [USER_STATUS.NOT_OPEN]: "尚未开放",
+});
+
+const PANORAMA_NAV_TARGETS = new Set([
+  "me-build",
+  "me-overview",
+  "me-cognition",
+  "me-boundaries",
+  "capabilities",
+  "settings-package-versions",
+]);
+
 const LAYER_META = Object.freeze({
   evidence: {
     userLabel: "原始材料",
@@ -97,6 +125,10 @@ const CAPABILITY_CATALOG = Object.freeze([
 
 module.exports = {
   SUBJECT_OVERVIEW_CONTRACT_VERSION,
+  PANORAMA_STATUS_CONTRACT_VERSION,
+  USER_STATUS,
+  USER_STATUS_LABEL,
+  PANORAMA_NAV_TARGETS,
   DATA_KINDS,
   LAYER_META,
   CAPABILITY_CATALOG,

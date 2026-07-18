@@ -717,7 +717,7 @@
               <!-- 数字之我：成品与校对 -->
               <div id="me-lane-self" class="me-lane">
                 <div class="mode-tabs" id="me-tabs" role="tablist">
-                  <button type="button" class="mode-tab active" data-me-tab="overview">首页</button>
+                  <button type="button" class="mode-tab active" data-me-tab="overview">全貌</button>
                   <button type="button" class="mode-tab" data-me-tab="cognition">认知</button>
                   <button type="button" class="mode-tab" data-me-tab="timeline">时间线</button>
                   <button type="button" class="mode-tab" data-me-tab="roles">角色</button>
@@ -727,15 +727,35 @@
 
                 <div id="me-panel-overview" class="life-panel">
                   <div id="subject-home" class="subject-home">
-                    <section class="output-card subject-home-hero">
-                      <h2 class="subject-home-title">我的数字之我</h2>
+                    <section class="output-card subject-home-hero panorama-hero">
+                      <h2 id="subject-home-title" class="subject-home-title">尚未命名的 Digital Me</h2>
                       <p id="subject-home-tagline" class="muted life-hint">
-                        它由你的资料、声明、决定和边界持续形成，不是一个通用 AI 账号。
+                        属于本人、持续理解本人、只在本人授权范围内行动。
                       </p>
+                      <p id="subject-home-status-line" class="panorama-status-line" aria-live="polite"></p>
                       <div id="subject-home-identity" class="subject-home-grid" aria-live="polite"></div>
                       <div id="subject-home-package" class="subject-home-meta" aria-live="polite"></div>
+                      <div id="panorama-next-action" class="panorama-next-action" aria-live="polite"></div>
                     </section>
-                    <section class="output-card">
+
+                    <section class="output-card panorama-promises-card" id="panorama-promises-card">
+                      <h3>四个承诺</h3>
+                      <p class="muted life-hint">这是我 · 属于我 · 由我管 · 代表我协作。状态由本机真实信息生成。</p>
+                      <div id="panorama-promises" class="panorama-promise-grid" aria-live="polite"></div>
+                    </section>
+
+                    <section class="output-card panorama-journey-card" id="panorama-journey-card">
+                      <h3>成长路线</h3>
+                      <p class="muted life-hint">构建我 → 看见我 → 武装我 → 授权我 → 代表我协作</p>
+                      <ol id="panorama-journey" class="panorama-journey-list" aria-live="polite"></ol>
+                    </section>
+
+                    <section class="output-card" id="panorama-direction-card">
+                      <h3>我的方向与核心边界</h3>
+                      <div id="panorama-direction" class="subject-home-block" aria-live="polite"></div>
+                    </section>
+
+                    <section class="output-card" id="subject-home-layers-card">
                       <h3>我的构成</h3>
                       <p class="muted life-hint">七类主体数据分层展示；事实、本人声明与系统推断不可混为一谈。</p>
                       <div id="subject-home-layers" class="subject-layer-grid" aria-live="polite"></div>
@@ -744,13 +764,13 @@
                       <h3>最近变化与可恢复</h3>
                       <div id="subject-home-recent" class="subject-home-block" aria-live="polite"></div>
                       <div class="builder-actions" style="margin-top:10px">
-                        <button type="button" id="btn-subject-goto-versions" class="btn-ghost">前往资料版本</button>
-                        <button type="button" id="btn-subject-refresh" class="btn-ghost">刷新首页</button>
+                        <button type="button" id="btn-subject-goto-versions" class="btn-ghost">查看资料版本</button>
+                        <button type="button" id="btn-subject-refresh" class="btn-ghost">刷新全貌</button>
                       </div>
                     </section>
                     <section class="output-card">
                       <h3>我现在能做什么</h3>
-                      <p class="muted life-hint">仅展示真实可用、受限与实验中的能力；不代表对外已公开。</p>
+                      <p class="muted life-hint">成熟度使用：可用 · 实验 · 本地模拟 · 预览 · 尚未开放。运行条件单独说明。</p>
                       <div id="subject-home-capabilities" class="subject-cap-grid" aria-live="polite"></div>
                     </section>
                     <section class="output-card">

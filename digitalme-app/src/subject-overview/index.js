@@ -16,6 +16,7 @@ const { countLayerData } = require("./counts");
 const { assessRecoverabilityReadOnly } = require("./recoverability");
 const { readBoundariesReadOnly, readCollaborationReadOnly } = require("./read-package");
 const { buildCapabilityStatuses } = require("./capabilities");
+const { buildPanoramaSection } = require("./panorama");
 
 function pushWarning(warnings, code, message, extra) {
   if (!warnings.some((w) => w.code === code && w.message === message)) {
@@ -201,7 +202,7 @@ function buildSubjectOverviewV1(packageDir, runtime = {}) {
 
   const healthStatus = mapHealthStatus(inspect);
 
-  return {
+  const base = {
     contractVersion: SUBJECT_OVERVIEW_CONTRACT_VERSION,
     generatedAt: new Date().toISOString(),
     identity: resolveIdentity(manifest, identity, warnings),
@@ -233,6 +234,9 @@ function buildSubjectOverviewV1(packageDir, runtime = {}) {
     collaboration: buildCollaborationSection(collab),
     warnings,
   };
+
+  base.panorama = buildPanoramaSection(base, { packageExists: inspect.exists });
+  return base;
 }
 
 module.exports = {

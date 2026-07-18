@@ -1,14 +1,15 @@
 # PAN-01 任务包：产品全貌首页
 
-版本：v0.1  
-日期：2026-07-18  
-状态：`specified / ready_for_implementation`  
-所属总任务：`P1-PANORAMA：Digital Me 产品全貌 Alpha`  
-前置任务：PAN-00 `accepted`（验收提交 `bc85a14`）  
-建议代码基线：`5ab55dc`  
-建议文档基线：`bc85a14`  
-代码 Owner：Cursor  
-任务类型：Product Panorama Alpha / 只读产品纵向切片  
+版本：v0.2
+日期：2026-07-18
+状态：`statically_verified`（不得标 `accepted`；待 Codex 复核与 Owner 主路径验收）
+所属总任务：`P1-PANORAMA：Digital Me 产品全貌 Alpha`
+前置任务：PAN-00 `accepted`（验收提交 `bc85a14`）
+建议代码基线：`5ab55dc`
+规划基线：`52b0d14`（PAN01_PLAN_BASE）
+实现分支：`codex/pan-01-product-panorama-home`
+代码 Owner：Cursor
+任务类型：Product Panorama Alpha / 只读产品纵向切片
 
 ---
 

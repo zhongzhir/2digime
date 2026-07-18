@@ -1159,8 +1159,16 @@ function switchView(view, btn, opts = {}) {
   }
   if (view === "me") {
     refreshMeView().then(() => {
-      if (opts.meLane) switchMeLane(opts.meLane);
-      else chooseDefaultMeLane();
+      if (opts.meLane) {
+        switchMeLane(opts.meLane);
+        if (opts.meLane === "self" && !opts._skipOverviewTab) {
+          switchMeTab(opts.meTab || meActiveTab || "overview");
+        }
+      } else {
+        // PAN-01: sidebar "我" always opens 数字之我 → 全貌; inbox must not hijack.
+        switchMeLane("self");
+        switchMeTab("overview");
+      }
     });
   }
 }
@@ -1207,12 +1215,180 @@ function goSelfView(tab) {
 }
 
 async function chooseDefaultMeLane() {
-  try {
-    const queue = await window.digitalMe.listInbox();
-    const hasWork = (queue.items || []).some((it) => it.status !== "written");
-    switchMeLane(hasWork ? "build" : "self");
-  } catch {
-    switchMeLane("self");
+  // Kept for compatibility; PAN-01 default entry is always self → overview.
+  switchMeLane("self");
+  switchMeTab("overview");
+}
+
+const PANORAMA_NAV_WHITELIST = new Set([
+  "me-build",
+  "me-overview",
+  "me-cognition",
+  "me-boundaries",
+  "capabilities",
+  "settings-package-versions",
+]);
+
+function navigatePanoramaTarget(target) {
+  if (!PANORAMA_NAV_WHITELIST.has(target)) return false;
+  if (target === "me-build") {
+    goBuildView();
+    return true;
+  }
+  if (target === "me-overview") {
+    goSelfView("overview");
+    const layers = $("subject-home-layers-card") || $("subject-home-layers");
+    if (layers && typeof layers.scrollIntoView === "function") {
+      setTimeout(() => layers.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+    }
+    return true;
+  }
+  if (target === "me-cognition") {
+    goSelfView("cognition");
+    return true;
+  }
+  if (target === "me-boundaries") {
+    goSelfView("boundaries");
+    return true;
+  }
+  if (target === "capabilities") {
+    const nav = document.querySelector('.nav-item[data-view="extensions"]');
+    switchView("extensions", nav);
+    return true;
+  }
+  if (target === "settings-package-versions") {
+    openSettings();
+    return true;
+  }
+  return false;
+}
+
+function appendPanoramaStatus(el, label) {
+  if (!el) return;
+  const badge = document.createElement("span");
+  badge.className = "panorama-status-badge";
+  setSafeText(badge, label || "");
+  el.appendChild(badge);
+}
+
+function renderPanoramaBlocks(panorama) {
+  const titleEl = $("subject-home-title");
+  const taglineEl = $("subject-home-tagline");
+  const statusLineEl = $("subject-home-status-line");
+  const nextEl = $("panorama-next-action");
+  const promisesEl = $("panorama-promises");
+  const journeyEl = $("panorama-journey");
+  const directionEl = $("panorama-direction");
+
+  const hero = (panorama && panorama.hero) || {};
+  if (titleEl) setSafeText(titleEl, hero.title || "尚未命名的 Digital Me");
+  if (taglineEl) setSafeText(taglineEl, hero.tagline || "");
+  if (statusLineEl) setSafeText(statusLineEl, hero.statusLine || "");
+
+  if (nextEl) {
+    clearChildren(nextEl);
+    const next = (panorama && panorama.nextAction) || null;
+    if (next && next.navTarget && next.label) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn-primary";
+      setSafeText(btn, next.label);
+      btn.addEventListener("click", () => navigatePanoramaTarget(next.navTarget));
+      nextEl.appendChild(btn);
+      if (next.reason) {
+        const reason = document.createElement("p");
+        reason.className = "muted";
+        setSafeText(reason, next.reason);
+        nextEl.appendChild(reason);
+      }
+    }
+  }
+
+  if (promisesEl) {
+    clearChildren(promisesEl);
+    for (const p of (panorama && panorama.promises) || []) {
+      const card = document.createElement("div");
+      card.className = "panorama-promise-card";
+      const head = document.createElement("div");
+      head.className = "panorama-promise-head";
+      const h = document.createElement("strong");
+      setSafeText(h, p.title || "");
+      head.appendChild(h);
+      appendPanoramaStatus(head, p.userStatusLabel);
+      card.appendChild(head);
+      const ev = document.createElement("p");
+      ev.className = "muted";
+      setSafeText(ev, p.evidence || "");
+      card.appendChild(ev);
+      if (p.navTarget && p.ctaLabel) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "btn-ghost";
+        setSafeText(btn, p.ctaLabel);
+        btn.addEventListener("click", () => navigatePanoramaTarget(p.navTarget));
+        card.appendChild(btn);
+      } else if (p.userStatus === "not_open") {
+        const note = document.createElement("p");
+        note.className = "muted panorama-no-cta";
+        setSafeText(note, "当前无操作入口");
+        card.appendChild(note);
+      }
+      promisesEl.appendChild(card);
+    }
+  }
+
+  if (journeyEl) {
+    clearChildren(journeyEl);
+    for (const step of (panorama && panorama.journey) || []) {
+      const li = document.createElement("li");
+      li.className = "panorama-journey-item";
+      const head = document.createElement("div");
+      head.className = "panorama-journey-head";
+      const h = document.createElement("strong");
+      setSafeText(h, step.title || "");
+      head.appendChild(h);
+      appendPanoramaStatus(head, step.userStatusLabel);
+      li.appendChild(head);
+      const ev = document.createElement("p");
+      ev.className = "muted";
+      setSafeText(ev, step.evidence || "");
+      li.appendChild(ev);
+      if (step.currentCondition) {
+        const cond = document.createElement("p");
+        cond.className = "muted panorama-condition";
+        setSafeText(cond, `当前条件：${step.currentCondition}`);
+        li.appendChild(cond);
+      }
+      if (step.navTarget && step.ctaLabel) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "btn-ghost";
+        setSafeText(btn, step.ctaLabel);
+        btn.addEventListener("click", () => navigatePanoramaTarget(step.navTarget));
+        li.appendChild(btn);
+      }
+      journeyEl.appendChild(li);
+    }
+  }
+
+  if (directionEl) {
+    clearChildren(directionEl);
+    const d = (panorama && panorama.direction) || {};
+    appendMetaRow(directionEl, d.title || "我的发展意图", d.summary || "尚未建立本人确认的发展意图");
+    if (d.navTarget) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn-ghost";
+      setSafeText(btn, "查看认知");
+      btn.addEventListener("click", () => navigatePanoramaTarget(d.navTarget));
+      directionEl.appendChild(btn);
+    }
+    const boundBtn = document.createElement("button");
+    boundBtn.type = "button";
+    boundBtn.className = "btn-ghost";
+    setSafeText(boundBtn, "查看边界");
+    boundBtn.addEventListener("click", () => navigatePanoramaTarget("me-boundaries"));
+    directionEl.appendChild(boundBtn);
   }
 }
 
@@ -7071,6 +7247,14 @@ const CAPABILITY_STATUS_LABEL = {
   unknown: "未知",
 };
 
+/** Prefer main-process userStatusLabel; never invent maturity from legacy labels. */
+function capabilityMaturityLabel(cap) {
+  if (cap && typeof cap.userStatusLabel === "string" && cap.userStatusLabel) {
+    return cap.userStatusLabel;
+  }
+  return "尚未开放";
+}
+
 const HEALTH_STATUS_LABEL = {
   healthy: "正常",
   unhealthy: "需关注",
@@ -7129,24 +7313,32 @@ async function refreshSubjectHome() {
     const overview = await window.digitalMe.getSubjectOverview();
     const id = overview.identity || {};
     const pkg = overview.package || {};
+    const panorama = overview.panorama || null;
+    renderPanoramaBlocks(panorama);
 
     clearChildren(identityEl);
     appendMetaRow(
       identityEl,
       "主体名称",
-      id.displayName || "未知"
+      (panorama && panorama.hero && panorama.hero.displayName) || id.displayName || "尚未命名"
     );
     appendMetaRow(
       identityEl,
       "所有者",
-      id.ownerDisplayName || (id.ownershipStatus === "self" ? "本人" : "未知")
+      (panorama && panorama.hero && panorama.hero.ownerLabel) ||
+        id.ownerDisplayName ||
+        (id.ownershipStatus === "self" ? "本人" : "尚无法确认")
     );
-    appendMetaRow(identityEl, "归属", id.ownershipStatus === "self" ? "本人管理" : "未知");
+    appendMetaRow(
+      identityEl,
+      "访问范围",
+      (panorama && panorama.hero && panorama.hero.accessLabel) || "当前仅本人可访问"
+    );
     appendMetaRow(identityEl, "隐私", pkg.privacyLabel || "默认私有 · 未公开");
 
     clearChildren(packageEl);
     const rev =
-      typeof pkg.revision === "number" ? `第 ${pkg.revision} 版` : "未知";
+      typeof pkg.revision === "number" ? `第 ${pkg.revision} 版` : "尚无法确认";
     appendMetaRow(packageEl, "资料版本", rev);
     appendMetaRow(
       packageEl,
@@ -7155,8 +7347,8 @@ async function refreshSubjectHome() {
     );
     appendMetaRow(
       packageEl,
-      "健康状态",
-      HEALTH_STATUS_LABEL[pkg.healthStatus] || pkg.healthStatus || "未知"
+      "资料状态",
+      HEALTH_STATUS_LABEL[pkg.healthStatus] || "尚无法确认"
     );
     if (pkg.updatedAt) {
       appendMetaRow(packageEl, "最近更新", String(pkg.updatedAt).slice(0, 10));
@@ -7173,7 +7365,7 @@ async function refreshSubjectHome() {
       setSafeText(title, layer.userLabel || layer.kind);
       const count = document.createElement("span");
       count.className = "subject-layer-count";
-      let countText = "未知";
+      let countText = "尚无法确认";
       if (layer.countStatus === "known" && typeof layer.count === "number") {
         countText = `${layer.count} 条`;
       } else if (layer.countStatus === "partial" && typeof layer.count === "number") {
@@ -7197,7 +7389,7 @@ async function refreshSubjectHome() {
         sourceText.className = "muted";
         const breakdownText = (layer.breakdown || [])
           .map((item) => {
-            const value = typeof item.count === "number" ? `${item.count} 条` : "未知";
+            const value = typeof item.count === "number" ? `${item.count} 条` : "尚无法确认";
             return `${item.source || "来源"}：${value}`;
           })
           .join("；");
@@ -7214,14 +7406,14 @@ async function refreshSubjectHome() {
     clearChildren(recentEl);
     const recent = overview.recentChange || {};
     const recentP = document.createElement("p");
-    setSafeText(recentP, recent.summary || "最近变化：未知");
+    setSafeText(recentP, recent.summary || "最近变化尚无法确认");
     recentEl.appendChild(recentP);
     if (pkg.recoverability) {
       const rec = document.createElement("p");
       rec.className = "muted";
       const recLabel = pkg.recoverability.recoverable
         ? "可恢复"
-        : "暂不可恢复";
+        : "尚无可恢复版本";
       setSafeText(rec, `版本恢复：${recLabel}。${pkg.recoverability.message || ""}`);
       recentEl.appendChild(rec);
     }
@@ -7235,27 +7427,39 @@ async function refreshSubjectHome() {
       const title = document.createElement("strong");
       setSafeText(title, cap.label || cap.id);
       const st = document.createElement("span");
-      st.className = `subject-cap-status status-${cap.status || "unknown"}`;
-      setSafeText(st, CAPABILITY_STATUS_LABEL[cap.status] || cap.status || "未知");
+      st.className = `subject-cap-status status-user-${cap.userStatus || "not_open"}`;
+      setSafeText(st, capabilityMaturityLabel(cap));
       head.appendChild(title);
       head.appendChild(st);
+      card.appendChild(head);
+      if (cap.currentCondition) {
+        const cond = document.createElement("p");
+        cond.className = "muted panorama-condition";
+        setSafeText(cond, `当前条件：${cap.currentCondition}`);
+        card.appendChild(cond);
+      }
       const lim = document.createElement("p");
       lim.className = "muted";
       setSafeText(lim, cap.limitation || "");
-      card.appendChild(head);
       card.appendChild(lim);
       capsEl.appendChild(card);
     }
 
     clearChildren(boundsEl);
     const b = overview.boundaries || {};
-    appendMetaRow(boundsEl, "边界", b.summary || "未知");
+    appendMetaRow(boundsEl, "边界", b.summary || "尚无法确认");
     if (b.pendingWarnings && b.pendingWarnings.length) {
       const p = document.createElement("p");
       p.className = "muted";
       setSafeText(p, b.pendingWarnings.join("；"));
       boundsEl.appendChild(p);
     }
+    const boundBtn = document.createElement("button");
+    boundBtn.type = "button";
+    boundBtn.className = "btn-ghost";
+    setSafeText(boundBtn, "查看边界");
+    boundBtn.addEventListener("click", () => navigatePanoramaTarget("me-boundaries"));
+    boundsEl.appendChild(boundBtn);
 
     clearChildren(collabEl);
     const c = overview.collaboration || {};

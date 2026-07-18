@@ -2473,11 +2473,65 @@ body {
   border-radius: 999px;
   background: #efe8e0;
 }
-.subject-cap-status.status-available { background: #e4f2ea; color: #1f5c3a; }
-.subject-cap-status.status-limited { background: #fff4e5; color: #8a5a00; }
-.subject-cap-status.status-experimental { background: #eef2ff; color: #3b4f9a; }
-.subject-cap-status.status-unavailable { background: #f3f4f6; color: #6b7280; }
-.subject-home-block { font-size: 13px; }
+.subject-cap-status.status-user-available { background: #e4f2ea; color: #1f5c3a; }
+.subject-cap-status.status-user-experiment { background: #fff4e5; color: #8a5a00; }
+.subject-cap-status.status-user-local_sim { background: #eef2ff; color: #3b4f9a; }
+.subject-cap-status.status-user-preview { background: #f3f4f6; color: #4b5563; }
+.subject-cap-status.status-user-not_open { background: #f3f4f6; color: #6b7280; }
+
+.panorama-status-line {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: #5c4033;
+  font-weight: 600;
+}
+.panorama-next-action {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+.panorama-promise-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+.panorama-promise-card,
+.panorama-journey-item {
+  border: 1px solid rgba(92, 64, 51, 0.12);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: rgba(255, 252, 248, 0.9);
+}
+.panorama-promise-head,
+.panorama-journey-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.panorama-status-badge {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f3eee8;
+  color: #5c4033;
+  white-space: nowrap;
+}
+.panorama-journey-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.panorama-condition { font-size: 12px; }
+.panorama-no-cta { font-size: 12px; margin: 6px 0 0; }
 .subject-warning-list { margin: 8px 0 0; padding-left: 18px; font-size: 13px; }
 .subject-warnings { border-color: #e8c9a8; background: #fff8f0; }
 

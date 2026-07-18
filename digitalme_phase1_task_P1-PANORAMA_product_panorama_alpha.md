@@ -2,7 +2,7 @@
 
 版本：v0.3.1
 日期：2026-07-18
-状态：`active / PAN-01_specified`
+状态：`active / PAN-01_statically_verified`
 任务类型：阶段策略调整 / 产品纵向闭环 / 市场认知启动
 建议基线：`5ab55dc`（代码）+ `8fb8210`（P1-07_DOCS_BASE，仅收工文档）；P1-07 保持 `statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_for_panorama`，不因此标记 accepted
 
@@ -816,6 +816,6 @@ P1-PANORAMA 只有在以下条件同时满足时才能标记完成：
 8. 明确“数据”包括事实信息和广泛数字产出物，不采用机械化个人数据变现逻辑；
 9. 将 Digital Org 纳入长期产品架构，但不扩大当前个人 Alpha 的实现范围。
 
-Owner 于 2026-07-18 确认后，PAN-00 已 **accepted**（验收提交 `bc85a14`）。**当前唯一实现任务**为：
+Owner 于 2026-07-18 确认后，PAN-00 已 **accepted**（验收提交 `bc85a14`）。PAN-01 已实现并标为 **`statically_verified`**（规划基线 `52b0d14`；实现分支 `codex/pan-01-product-panorama-home`；**不标 accepted**，待 Codex 复核与 Owner 主路径验收）。**下一实现任务不得自行启动**——等待验收通过后再进入 PAN-02。
 
-> **PAN-01：产品全貌首页**——独立任务包 `digitalme_phase1_task_PAN-01_product_panorama_home.md` 已批准，可进入实现；只读升级现有「数字之我 → 首页」为「全貌」，默认侧栏「我」进入全貌。
+> **PAN-01：产品全貌首页**——已将「数字之我 → 首页」升级为「全貌」；侧栏「我」默认进入全貌；五态与 navTarget 由主进程生成；只读，未新增主体写入。
