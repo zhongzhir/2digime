@@ -1,8 +1,8 @@
 # PAN-01 任务包：产品全貌首页
 
-版本：v0.2.1
+版本：v0.2.2
 日期：2026-07-18
-状态：`statically_verified`（不得标 `accepted`；Codex 第一轮复核修复已合入；待 Codex 再复核与 Owner 主路径验收）
+状态：`statically_verified`（不得标 `accepted`；Codex 第二轮最小复核修复已合入；待 Codex 再复核与 Owner 主路径验收）
 所属总任务：`P1-PANORAMA：Digital Me 产品全貌 Alpha`
 前置任务：PAN-00 `accepted`（验收提交 `bc85a14`）
 建议代码基线：`5ab55dc`

@@ -335,18 +335,30 @@ test("identity.json corrupt: fail-closed", () => {
     const overview = buildSubjectOverviewV1(dir, {});
     assert.equal(dirFingerprint(dir), before);
     assert.ok(overview.warnings.some((w) => w.code === "identity_parse_error"));
-    assert.notEqual(promiseById(overview, "this_is_me").userStatus, USER_STATUS.AVAILABLE);
+    assert.equal(promiseById(overview, "this_is_me").userStatus, USER_STATUS.PREVIEW);
+    const see = overview.panorama.journey.find((j) => j.id === "see");
+    assert.equal(see.userStatus, USER_STATUS.PREVIEW);
     assert.equal(overview.panorama.hero.subjectReadStatus, "read_error");
+    assert.equal(overview.panorama.hero.ownerLabel, "尚无法确认");
+    assert.notEqual(overview.panorama.hero.accessLabel, "当前仅本人可访问");
+    assert.match(overview.panorama.hero.accessLabel, /尚无法确认|读取异常/);
     assert.equal(overview.panorama.hero.statusLine.includes("本机私有"), false);
     assert.equal(overview.panorama.hero.statusLine.includes("资料由你保管"), false);
-    assert.equal(overview.panorama.hero.ownerLabel, "尚无法确认");
+    assert.match(overview.panorama.hero.statusLine, /主体资料读取异常/);
+    // Manifest may still expose default-private *configuration*, not verified access.
+    if (overview.package.privacyStatus === "local_private") {
+      assert.match(overview.panorama.hero.privacyLabel, /^隐私配置：/);
+      assert.equal(overview.panorama.hero.privacyLabel.includes("默认私有"), true);
+    }
+    // 属于我 remains independent when only identity fails
+    assert.equal(promiseById(overview, "belongs_to_me").userStatus, USER_STATUS.EXPERIMENT);
     assertNoLeak(JSON.stringify(overview));
   } finally {
     cleanup(dir);
   }
 });
 
-test("layer JSON corrupt: unknown count, no zero reset, no body leak", () => {
+test("layer JSON corrupt: unknown count and degrade 这是我/看见我", () => {
   const dir = makeV02("layer-corrupt");
   try {
     fs.mkdirSync(path.join(dir, "life"), { recursive: true });
@@ -356,13 +368,69 @@ test("layer JSON corrupt: unknown count, no zero reset, no body leak", () => {
     assert.equal(dirFingerprint(dir), before);
     const state = overview.layers.find((l) => l.kind === "current_state");
     assert.ok(state);
-    // roles corrupt contributes unknown; combined layer must not pretend exact zero-only success
     assert.notEqual(state.countStatus, "known");
     assert.ok(state.countStatus === "unknown" || state.countStatus === "partial");
     if (state.countStatus === "unknown") assert.equal(state.count, null);
+    assert.equal(promiseById(overview, "this_is_me").userStatus, USER_STATUS.PREVIEW);
+    const see = overview.panorama.journey.find((j) => j.id === "see");
+    assert.equal(see.userStatus, USER_STATUS.PREVIEW);
+    assert.equal(promiseById(overview, "this_is_me").currentCondition, "部分主体资料损坏或无法读取");
+    assert.equal(see.currentCondition, "部分主体资料损坏或无法读取");
+    assert.equal(overview.panorama.hero.subjectReadStatus, "content_degraded");
+    // Independent promises not blanket-downgraded by layer damage
+    assert.equal(promiseById(overview, "belongs_to_me").userStatus, USER_STATUS.EXPERIMENT);
+    assert.equal(promiseById(overview, "controlled_by_me").userStatus, USER_STATUS.EXPERIMENT);
     const raw = JSON.stringify(overview);
     assert.equal(raw.includes("{bad"), false);
     assertNoLeak(raw);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("JSONL corrupt degrades 这是我/看见我", () => {
+  const dir = makeV02("jsonl-corrupt");
+  try {
+    fs.mkdirSync(path.join(dir, "life"), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "life", "events.jsonl"),
+      '{"id":"ok","type":"event"}\n{not-json\n',
+      "utf8"
+    );
+    const before = dirFingerprint(dir);
+    const overview = buildSubjectOverviewV1(dir, {});
+    assert.equal(dirFingerprint(dir), before);
+    assert.ok(
+      overview.warnings.some(
+        (w) =>
+          w.code === "jsonl_parse_error" ||
+          w.code === "jsonl_invalid" ||
+          w.code === "json_parse_error"
+      )
+    );
+    assert.equal(promiseById(overview, "this_is_me").userStatus, USER_STATUS.PREVIEW);
+    const see = overview.panorama.journey.find((j) => j.id === "see");
+    assert.equal(see.userStatus, USER_STATUS.PREVIEW);
+    assert.equal(see.currentCondition, "部分主体资料损坏或无法读取");
+    assert.equal(overview.panorama.hero.subjectReadStatus, "content_degraded");
+    assertNoLeak(JSON.stringify(overview));
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("legacy v0.1 readable package is not treated as content damaged", () => {
+  const dir = tempDir("v01-legacy");
+  try {
+    createMinimalFixture(dir);
+    const before = dirFingerprint(dir);
+    const overview = buildSubjectOverviewV1(dir, {});
+    assert.equal(dirFingerprint(dir), before);
+    assert.notEqual(overview.package.healthStatus, "unhealthy");
+    assert.notEqual(overview.panorama.hero.subjectReadStatus, "content_degraded");
+    assert.equal(promiseById(overview, "this_is_me").userStatus, USER_STATUS.AVAILABLE);
+    const see = overview.panorama.journey.find((j) => j.id === "see");
+    assert.equal(see.userStatus, USER_STATUS.AVAILABLE);
   } finally {
     cleanup(dir);
   }

@@ -846,3 +846,4 @@ flowchart TB
 59. **PAN-00 accepted 与 PAN-01 任务包批准（2026-07-18）**：Codex 最终复核通过；验收提交 `bc85a14`。PAN-00 正式 `accepted`。独立任务包 `digitalme_phase1_task_PAN-01_product_panorama_home.md` 已批准：只读升级「数字之我 → 首页」为「全貌」；侧栏「我」默认进入全貌；用户面五态由主进程生成；不新增主体写入。当时唯一实现任务为 PAN-01。
 60. **PAN-01 statically_verified（2026-07-18）**：规划提交 `52b0d14`；实现提交 `01d56d0`；实现分支 `codex/pan-01-product-panorama-home`。复用 SubjectOverview，新增主进程 `panorama` 字段（四承诺、五步路线、userStatus/navTarget）；默认入口始终「数字之我 → 全貌」；inbox 不劫持。**不标 accepted**；验收前不启动 PAN-02。
 61. **PAN-01 Codex 第一轮复核修复（2026-07-18）**：Hero/隐私 fail-closed；四承诺动态证据；发展意图不再用 owner_assertion 冒充；资料版本入口可发现聚焦；hermetic 22/22、owner-runtime 9/9。状态仍为 `statically_verified`。
+62. **PAN-01 Codex 第二轮最小复核修复（2026-07-18）**：身份读取失败时区分隐私配置与访问结论；分层/JSONL 损坏时「这是我」「看见我」降为预览。状态仍为 `statically_verified`；PAN-02 未开始。

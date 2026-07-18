@@ -55,7 +55,7 @@
 | Subject home (P1-03) | `runtime_verified` | `src/subject-overview/*`；`src/package-store/read-only.js`；`subject:getOverview`；P1-03 21/21；Codex 复核与 Owner 真实 Electron 验收 | 严格只读聚合与 SubjectOverview v1；不迁移写路径；Panorama 首页将复用只读聚合 |
 | **P1-PANORAMA** | `active` / `PAN-01_statically_verified` | 总任务包；执行索引；PAN-01 任务包 | 当前产品主线；非代码能力项 |
 | **PAN-00** | `accepted` | 验收提交 `bc85a14`；Codex 最终复核通过 | 战略与规格冻结完成 |
-| **PAN-01** | `statically_verified` | 分支 `codex/pan-01-product-panorama-home`；实现 `01d56d0`；Codex 第一轮复核修复（Hero fail-closed / 承诺证据 / 发展意图 / 资料版本聚焦）；`test:pan-01` 22/22；`test:pan-01-owner-runtime` 9/9 | 产品全貌首页；只读；**不标 accepted**；待 Codex 再复核与 Owner 验收 |
+| **PAN-01** | `statically_verified` | 分支 `codex/pan-01-product-panorama-home`；Codex 第二轮修复（身份访问结论 / 分层损坏降级）；`test:pan-01` 24/24；`test:pan-01-owner-runtime` 9/9 | 产品全貌首页；只读；**不标 accepted**；待 Codex 再复核与 Owner 验收 |
 
 ## P1-07 冻结说明（与任务包 / 执行索引 / log 一致）
 

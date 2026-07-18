@@ -5,6 +5,23 @@
 
 ---
 
+## 2026-07-18 PAN-01 Codex 第二轮最小复核修复 · statically_verified
+
+### 修复
+
+1. **身份读取失败**：区分隐私配置与访问结论；`accessLabel` 不得再为「当前仅本人可访问」；可保留「隐私配置：默认私有 · 未公开」。
+2. **分层/内容损坏**：`content_degraded` 时「这是我」「看见我」降为预览；`currentCondition` 固定为「部分主体资料损坏或无法读取」；不无差别降级「属于我」「由我管」。
+
+### 验证
+
+- `test:pan-01`：24/24；`test:pan-01-owner-runtime`：9/9；阶段回归通过。
+
+### 状态
+
+仍为 `statically_verified`（不标 accepted/runtime_verified）。PAN-02 未开始。
+
+---
+
 ## 2026-07-18 PAN-01 Codex 第一轮复核修复 · statically_verified
 
 ### 复核发现的三类真实性问题

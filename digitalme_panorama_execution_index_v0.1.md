@@ -31,7 +31,7 @@ P1-PANORAMA
 | 当前完成 | PAN-00 `accepted`（`bc85a14`）；PAN-01 `statically_verified`（规划基线 `52b0d14`） |
 | **下一实现任务** | **PAN-02**（须待 PAN-01 Codex 复核与 Owner 主路径验收后再启动） |
 | 启动条件 | 未满足（等待 PAN-01 验收） |
-| 当前阻断项 | 无工程阻断；Codex 第一轮复核修复已合入；仍待再复核与 Owner 验收 |
+| 当前阻断项 | 无工程阻断；Codex 第二轮最小复核修复已合入；仍待再复核与 Owner 验收 |
 | 明确不得启动 | P1-07 修复、原 P1-08、Policies 全面迁移、Digital Org 运行时、公网协作、PAN-02 实现（验收前） |
 
 ---

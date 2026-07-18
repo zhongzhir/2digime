@@ -7,6 +7,35 @@ const {
   PANORAMA_NAV_TARGETS,
 } = require("./constants");
 
+/** Hard integrity failures that always degrade 这是我 / 看见我. */
+const CONTENT_DEGRADE_CODES = new Set([
+  "json_invalid",
+  "jsonl_invalid",
+  "json_parse_error",
+  "jsonl_parse_error",
+  "file_unreadable",
+  "list_files_failed",
+  "readdir_failed",
+]);
+
+/**
+ * json_shape_invalid on identity.json is a count edge case (no identityClaims array),
+ * not subject-layer corruption. Other shape failures still degrade.
+ */
+function warningIndicatesContentDamage(warning) {
+  if (!warning || typeof warning.code !== "string") return false;
+  if (CONTENT_DEGRADE_CODES.has(warning.code)) return true;
+  if (warning.code === "json_shape_invalid") {
+    const p = String(warning.path || "").replace(/\\/g, "/");
+    const base = p.split("/").pop();
+    if (base === "identity.json") return false;
+    return true;
+  }
+  return false;
+}
+
+const LAYER_DEGRADED_CONDITION = "部分主体资料损坏或无法读取";
+
 function isUserStatus(value) {
   return Object.prototype.hasOwnProperty.call(USER_STATUS_LABEL, value);
 }
@@ -59,14 +88,58 @@ function warningCodes(overview) {
   return new Set((overview.warnings || []).map((w) => w && w.code).filter(Boolean));
 }
 
-function subjectReadFailed(overview) {
-  const codes = warningCodes(overview);
-  return codes.has("manifest_parse_error") || codes.has("identity_parse_error");
-}
-
 function packageMissing(overview) {
   const pkg = overview.package || {};
   return pkg.healthStatus === "missing" || overview._packageExists === false;
+}
+
+/**
+ * Subject integrity:
+ * - missing
+ * - read_error (manifest / identity parse)
+ * - content_degraded (layer JSON/JSONL damage or v0.2 unhealthy)
+ * - readable
+ *
+ * Legacy limited/unversioned alone is NOT content_degraded.
+ */
+function resolveSubjectIntegrity(overview) {
+  const pkg = overview.package || {};
+  const codes = warningCodes(overview);
+  const missing = packageMissing(overview);
+  const manifestFail = codes.has("manifest_parse_error");
+  const identityFail = codes.has("identity_parse_error");
+  const readError = manifestFail || identityFail;
+  const unhealthy = pkg.healthStatus === "unhealthy";
+  let contentDegraded = false;
+  if (!missing) {
+    if (unhealthy) contentDegraded = true;
+    else {
+      for (const w of overview.warnings || []) {
+        if (warningIndicatesContentDamage(w)) {
+          contentDegraded = true;
+          break;
+        }
+      }
+    }
+  }
+
+  let subjectReadStatus = "readable";
+  if (missing) subjectReadStatus = "missing";
+  else if (readError) subjectReadStatus = "read_error";
+  else if (contentDegraded) subjectReadStatus = "content_degraded";
+
+  return {
+    missing,
+    manifestFail,
+    identityFail,
+    readError,
+    contentDegraded,
+    subjectReadStatus,
+    /** 这是我 / 看见我 */
+    seeMeDegraded: missing || readError || contentDegraded,
+    /** 属于我：仅缺失或清单损坏；身份损坏与分层损坏不自动等同 */
+    belongsDegraded: missing || manifestFail,
+  };
 }
 
 /**
@@ -74,7 +147,6 @@ function packageMissing(overview) {
  * - owner_assertion alone is NOT confirmed development intent
  * - mind_hooks / interests / capability_signals (development_intent layer) → direction clues
  * - otherwise → none
- * Do not invent confirmed_intent without an explicit, provable structure.
  */
 function buildDirection(layers) {
   const intent = layerCountKnown(layers, "development_intent");
@@ -100,13 +172,8 @@ function buildHero(overview) {
   const pkg = overview.package || {};
   const recent = overview.recentChange || {};
   const collab = overview.collaboration || {};
-  const missing = packageMissing(overview);
-  const readFailed = subjectReadFailed(overview);
-  const privacyKnown = pkg.privacyStatus === "local_private";
-  const privacyLabel =
-    typeof pkg.privacyLabel === "string" && pkg.privacyLabel
-      ? pkg.privacyLabel
-      : "隐私状态尚无法确认";
+  const state = resolveSubjectIntegrity(overview);
+  const privacyConfiguredPrivate = pkg.privacyStatus === "local_private";
 
   const displayName = id.displayName || null;
   const title = displayName
@@ -114,17 +181,35 @@ function buildHero(overview) {
     : "尚未命名的 Digital Me";
 
   let ownerLabel = "尚无法确认";
-  if (!missing && !readFailed) {
+  if (!state.missing && !state.readError) {
     if (id.ownerDisplayName) ownerLabel = id.ownerDisplayName;
     else if (id.ownershipStatus === "self") ownerLabel = "本人";
   }
 
-  const accessLabel = privacyKnown ? "当前仅本人可访问" : "隐私状态尚无法确认";
+  // Privacy *configuration* (from readable manifest) vs verified *access* conclusion.
+  let accessLabel = "隐私状态尚无法确认";
+  let privacyLabel = "隐私状态尚无法确认";
+  if (state.missing || state.manifestFail) {
+    accessLabel = "隐私状态尚无法确认";
+    privacyLabel = "隐私状态尚无法确认";
+  } else if (state.identityFail) {
+    accessLabel = "主体身份读取异常，访问范围尚无法确认";
+    privacyLabel = privacyConfiguredPrivate
+      ? "隐私配置：默认私有 · 未公开"
+      : "隐私状态尚无法确认";
+  } else if (privacyConfiguredPrivate) {
+    accessLabel = "当前仅本人可访问";
+    privacyLabel =
+      typeof pkg.privacyLabel === "string" && pkg.privacyLabel
+        ? pkg.privacyLabel
+        : "默认私有 · 未公开";
+  }
 
-  const revisionLabel =
-    !missing && !readFailed && typeof pkg.revision === "number"
-      ? `当前第 ${pkg.revision} 版`
-      : "版本尚无法确认";
+  const revisionKnown =
+    !state.missing && !state.manifestFail && typeof pkg.revision === "number";
+  const revisionLabel = revisionKnown
+    ? `当前第 ${pkg.revision} 版`
+    : "版本尚无法确认";
 
   const authLabel =
     collab && collab.autoAuthorization === true
@@ -134,35 +219,30 @@ function buildHero(overview) {
         : "无自动对外授权";
 
   let statusLine;
-  let subjectReadStatus;
-  if (missing) {
-    subjectReadStatus = "missing";
+  if (state.missing) {
     statusLine = "本机资料尚未就绪 · 请先构建或检查设置";
-  } else if (readFailed) {
-    subjectReadStatus = "read_error";
+  } else if (state.readError) {
     statusLine = `主体资料读取异常 · ${privacyLabel} · ${authLabel}`;
-  } else if (privacyKnown) {
-    subjectReadStatus = "readable";
+  } else if (privacyConfiguredPrivate) {
     statusLine = `本机私有 · 资料由你保管 · ${revisionLabel} · ${authLabel}`;
   } else {
-    subjectReadStatus = "readable";
     statusLine = `${privacyLabel} · ${revisionLabel} · ${authLabel}`;
   }
 
   return {
     title,
-    displayName: missing || readFailed ? displayName : displayName,
+    displayName,
     ownerLabel,
     accessLabel,
     privacyLabel,
     privacyStatus: pkg.privacyStatus || "unknown",
-    revision: !missing && !readFailed && typeof pkg.revision === "number" ? pkg.revision : null,
+    revision: revisionKnown ? pkg.revision : null,
     revisionLabel,
     recentSummary: recent.summary || "最近变化尚无法确认",
     statusLine,
     tagline: "属于本人、持续理解本人、只在本人授权范围内行动。",
-    packageMissing: missing,
-    subjectReadStatus,
+    packageMissing: state.missing,
+    subjectReadStatus: state.subjectReadStatus,
     authorizationLabel: authLabel,
   };
 }
@@ -179,31 +259,35 @@ function buildPromises(overview) {
   const pkg = overview.package || {};
   const bounds = overview.boundaries || {};
   const collab = overview.collaboration || {};
-  const missing = packageMissing(overview);
-  const readFailed = subjectReadFailed(overview);
-  const subjectUnusable = missing || readFailed;
+  const state = resolveSubjectIntegrity(overview);
 
   let thisIsMe = USER_STATUS.AVAILABLE;
   let thisIsMeEvidence = "主体首页只读聚合已通过运行验收；可查看分层构成。";
   let thisIsMeCondition = "";
-  if (subjectUnusable) {
+  if (state.seeMeDegraded) {
     thisIsMe = USER_STATUS.PREVIEW;
-    thisIsMeEvidence = missing
-      ? "主体资料尚未就绪，无法确认为可用。"
-      : "主体资料读取异常，状态已降级。";
-    thisIsMeCondition = missing ? "本机资料目录不存在或无法访问" : "清单或身份资料无法解析";
+    if (state.missing) {
+      thisIsMeEvidence = "主体资料尚未就绪，无法确认为可用。";
+      thisIsMeCondition = "本机资料目录不存在或无法访问";
+    } else if (state.readError) {
+      thisIsMeEvidence = "主体资料读取异常，状态已降级。";
+      thisIsMeCondition = "清单或身份资料无法解析";
+    } else {
+      thisIsMeEvidence = "部分主体分层资料损坏或无法读取，状态已降级。";
+      thisIsMeCondition = LAYER_DEGRADED_CONDITION;
+    }
   }
 
   let belongs = USER_STATUS.EXPERIMENT;
   let belongsEvidence =
     "资料位于本机资料目录；完整导出与跨端迁移仍未完成。";
   let belongsCondition = "";
-  if (subjectUnusable) {
+  if (state.belongsDegraded) {
     belongs = USER_STATUS.PREVIEW;
-    belongsEvidence = missing
+    belongsEvidence = state.missing
       ? "本机资料目录尚未就绪，所有权与版本结论暂不可用。"
-      : "主体资料读取异常，无法确认版本与保管状态。";
-    belongsCondition = missing ? "资料目录尚未就绪" : "主体资料读取异常";
+      : "资料清单读取异常，无法确认版本与保管状态。";
+    belongsCondition = state.missing ? "资料目录尚未就绪" : "资料清单读取异常";
   } else {
     const revKnown = typeof pkg.revision === "number";
     const recoverable = !!(pkg.recoverability && pkg.recoverability.recoverable);
@@ -282,9 +366,7 @@ function buildPromises(overview) {
 }
 
 function buildJourney(overview) {
-  const missing = packageMissing(overview);
-  const readFailed = subjectReadFailed(overview);
-  const subjectUnusable = missing || readFailed;
+  const state = resolveSubjectIntegrity(overview);
 
   return [
     {
@@ -293,23 +375,27 @@ function buildJourney(overview) {
       userStatus: USER_STATUS.EXPERIMENT,
       userStatusLabel: statusLabel(USER_STATUS.EXPERIMENT),
       evidence: "材料构建主路径真实存在；部分审阅路径仍有已知缺口。",
-      currentCondition: missing ? "资料目录尚未就绪" : "",
+      currentCondition: state.missing ? "资料目录尚未就绪" : "",
       ctaLabel: "继续构建",
       navTarget: sanitizeNavTarget("me-build"),
     },
     {
       id: "see",
       title: "看见我",
-      userStatus: subjectUnusable ? USER_STATUS.PREVIEW : USER_STATUS.AVAILABLE,
-      userStatusLabel: statusLabel(subjectUnusable ? USER_STATUS.PREVIEW : USER_STATUS.AVAILABLE),
-      evidence: subjectUnusable
+      userStatus: state.seeMeDegraded ? USER_STATUS.PREVIEW : USER_STATUS.AVAILABLE,
+      userStatusLabel: statusLabel(
+        state.seeMeDegraded ? USER_STATUS.PREVIEW : USER_STATUS.AVAILABLE
+      ),
+      evidence: state.seeMeDegraded
         ? "主体资料尚不可靠展示，构成查看已降级。"
         : "可查看主体构成与分层摘要。",
-      currentCondition: missing
+      currentCondition: state.missing
         ? "资料目录尚未就绪"
-        : readFailed
+        : state.readError
           ? "主体资料读取异常"
-          : "",
+          : state.contentDegraded
+            ? LAYER_DEGRADED_CONDITION
+            : "",
       ctaLabel: "查看我的构成",
       navTarget: sanitizeNavTarget("me-overview"),
     },
@@ -347,10 +433,11 @@ function buildJourney(overview) {
 }
 
 function buildNextAction(overview) {
-  if (packageMissing(overview) || subjectReadFailed(overview)) {
+  const state = resolveSubjectIntegrity(overview);
+  if (state.missing || state.readError) {
     return {
       label: "继续构建",
-      reason: packageMissing(overview)
+      reason: state.missing
         ? "主体资料尚未就绪，先从构建开始。"
         : "主体资料读取异常，可先检查构建与设置。",
       navTarget: sanitizeNavTarget("me-build"),
@@ -397,8 +484,11 @@ function buildPanoramaSection(overview, meta = {}) {
 module.exports = {
   buildPanoramaSection,
   buildDirection,
+  resolveSubjectIntegrity,
   mapInternalCapabilityToUser,
   sanitizeNavTarget,
   isUserStatus,
   statusLabel,
+  LAYER_DEGRADED_CONDITION,
+  CONTENT_DEGRADE_CODES,
 };
