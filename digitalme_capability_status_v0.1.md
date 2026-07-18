@@ -37,3 +37,10 @@
 2. 第一阶段完成前，不得将 MCP / External CLI / Audit 标记为 `released`。  
 3. 升格为 `statically_verified` 至少需要自动化测试证据；`runtime_verified` 需要真实任务连续验收记录；`released` 需要 Owner 人工验收 + 技术复核。  
 4. 本表由 P1-00 建立；后续任务更新时须同步修改本文件并在 `digitalme_log.md` 留痕。
+
+### P1-07 收工快照（2026-07-17）
+
+- **基准提交**：`5ab55dc`（分支 `codex/p1-07-life-identity-package-store`）
+- **Life Graph**：`statically_verified` — 主 Builder 写回已接 PackageStore；审阅取消 / 多组队列 / revision fail-closed 已测（`test:p1-07` 39/39，`test:p1-07-owner-runtime` 13/13）
+- **下一门槛**：Codex 复核 → Owner 运行验收 → 方可考虑 `accepted`
+- **勿启动**：P1-08、Policies、认知页零散编辑、外部协作闭环

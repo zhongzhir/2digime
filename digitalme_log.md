@@ -5,6 +5,43 @@
 
 ---
 
+## 2026-07-17 收工纪要（P1-07）
+
+今日 P1-07 工作暂停于此。下一日续作以本段与任务包 `digitalme_phase1_task_P1-07_life_identity_package_store.md` 为准。
+
+### 当前基准
+
+| 项 | 值 |
+|---|---|
+| 分支 | `codex/p1-07-life-identity-package-store` |
+| 最新提交 | `5ab55dc` — fix(ui): close P1-07 review cancellation and queue transitions |
+| 任务状态 | `statically_verified`（**不得**标 accepted） |
+| 本地交接包 | `digitalme-source-5ab55dc.zip` |
+| 交接摘要 | `p1-07-5ab55dc-stat.txt`、`p1-07-5ab55dc-status.txt` |
+
+### 本日提交链（P1-07）
+
+`813e509`（Codex 第一轮）→ `b4dc2e2` / `dcfd936`（Codex 第二轮结构）→ `c24f60e`（Owner 验收第一轮：审阅布局与写入状态）→ `5ab55dc`（Owner 验收第二轮：取消/队列/revision fail-closed）
+
+### 自动化证据（`5ab55dc`）
+
+- `test:p1-07` 39/39
+- `test:p1-07-owner-runtime` 13/13
+- `test:p1-phase1`、`test:p1-06`、`test:owner-runtime` 通过
+- 未触碰 `digital-me-package/**`；未 push
+
+### 续作入口（按序）
+
+1. Codex 复核 `5ab55dc`（审阅取消、多组队列、revision fail-closed、Electron A–E）
+2. Owner **运行**验收（临时测试资料；禁止恢复/覆盖本机真实 Package）
+3. 通过后 Life Graph 切片方可标 `accepted`；**勿**在本任务内启动 P1-08、Policies、MCP/ToolBroker 扩展、认知页零散编辑
+
+### 本地未纳入 git
+
+根目录及 `digitalme-app/` 下历史交接 zip / stat / status / bundle 文件均为本地产物，勿提交。
+
+---
+
 ## 2026-07-17（P1-07 · Owner 验收第二轮：审阅取消与队列流转 · statically_verified）
 
 ### c24f60e 后续复核发现

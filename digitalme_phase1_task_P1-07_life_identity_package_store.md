@@ -1,13 +1,13 @@
 # P1-07 任务包：Life / identity 写入路径迁移到 PackageStore
 
-状态：statically_verified（自动化 hermetic 通过；Codex 第一、二轮复核修复已落地；等待再复核与 Owner 临时资料验收；**不得**标记 accepted）
+状态：statically_verified（Owner 验收第二轮已落地；等待 Codex 复核与 Owner 运行验收；**不得**标记 accepted）
 阶段：第一阶段 / WP1（PackageStore 接入扩展）
 前置任务：P1-00～P1-06（P1-05 可为 statically_verified；P1-06 须 accepted）
 规格依据：`digitalme_phase1_subject_upgrade_plan_v0.1.md` §3 WP1
 审计依据：`digitalme_architecture_audit_20260716.md` F-04、F-05、F-06
 任务包建立：2026-07-17
 实现分支：`codex/p1-07-life-identity-package-store`
-实现提交：`813e509` → `b4dc2e2` → 本分支后续 `fix(package): reject malformed identity package structures`
+实现提交：`813e509` → `b4dc2e2` → `dcfd936` → `c24f60e` → **`5ab55dc`**（当前基准）
 
 ---
 
@@ -283,4 +283,39 @@ git status --short --branch
 
 ---
 
-**当前状态说明**：Owner 验收第二轮修复已落地（`statically_verified`）。等待 Codex 再复核与 Owner 运行验收；通过前不得标 `accepted`。
+**当前状态说明**：Owner 验收第二轮修复已落地（`statically_verified`，基准 `5ab55dc`）。等待 Codex 再复核与 Owner 运行验收；通过前不得标 `accepted`。
+
+---
+
+## 12. 完成状态与交接（2026-07-17 收工）
+
+### 当前基准
+
+- 分支：`codex/p1-07-life-identity-package-store`
+- 提交：`5ab55dc` — fix(ui): close P1-07 review cancellation and queue transitions
+- 状态：`statically_verified`（不 push、不标 accepted）
+- 本地交接：`digitalme-source-5ab55dc.zip`、`p1-07-5ab55dc-stat.txt`、`p1-07-5ab55dc-status.txt`
+
+### 自动化证据
+
+| 命令 | 结果 |
+|---|---|
+| `npm run test:p1-07` | 39/39 |
+| `npm run test:p1-07-owner-runtime` | 13/13 |
+| `npm run test:p1-phase1` | 通过 |
+| `npm run test:p1-06` | 14/14 |
+| `npm run test:owner-runtime` | 5/5 |
+
+### Owner 运行验收检查项（续作）
+
+1. 多类别审阅：第一组写入后第二组仍在构建页可见，可继续审阅
+2. identity / persona 确认弹窗点「取消」：恢复 `suggested`，可再次「审阅后写入」
+3. 智能构建全部取消：revision 不变，不出现「已写入」横幅
+4. 有 pending 观念线索时智能构建取消：`applyMindHooks` 不得被隐式调用
+5. 版本区：仅真实 commit 后 revision 与可恢复版本变化
+
+**禁止**：恢复或覆盖本机真实 Package 作为默认测试步骤。
+
+### 明确不在本任务续作范围
+
+P1-08、Policies 迁移、MCP/ToolBroker 扩展、认知页零散编辑、Life 读取重构、`package:load` scaffold。
