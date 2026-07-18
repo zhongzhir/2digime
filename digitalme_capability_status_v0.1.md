@@ -53,8 +53,9 @@
 | ToolBroker (P1-05) | `statically_verified` | `src/tool-broker/*`；`l0:external-agent-started`；`npm run test:p1-05`（含 stop IPC）；主动取消 → `execution_canceled` | 停止须完全重启应用后复验；不标记 accepted |
 | External collaboration | `specified` | `digital-me-package/contracts/*`；规格 v0.5 Panorama 冻结章 | Agent Card / Interaction Contract 数据结构已对齐；无用户面协作闭环；Alpha 以本地模拟交付 |
 | Subject home (P1-03) | `runtime_verified` | `src/subject-overview/*`；`src/package-store/read-only.js`；`subject:getOverview`；P1-03 21/21；Codex 复核与 Owner 真实 Electron 验收 | 严格只读聚合与 SubjectOverview v1；不迁移写路径；Panorama 首页将复用只读聚合 |
-| **P1-PANORAMA** | `active` / `PAN-01_pending_spec` | 总任务包；执行索引 | 当前产品主线；非代码能力项 |
-| **PAN-00** | `statically_verified` | 本提交文档集；不标 accepted | 战略与规格冻结；等待 Codex 复核 |
+| **P1-PANORAMA** | `active` / `PAN-01_specified` | 总任务包；执行索引；PAN-01 任务包 | 当前产品主线；非代码能力项 |
+| **PAN-00** | `accepted` | 验收提交 `bc85a14`；Codex 最终复核通过 | 战略与规格冻结完成 |
+| **PAN-01** | `specified` | `digitalme_phase1_task_PAN-01_product_panorama_home.md` | 产品全貌首页；只读；ready_for_implementation |
 
 ## P1-07 冻结说明（与任务包 / 执行索引 / log 一致）
 

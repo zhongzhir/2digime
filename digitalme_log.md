@@ -5,6 +5,31 @@
 
 ---
 
+## 2026-07-18 PAN-00 accepted · PAN-01 任务包批准
+
+### 决策
+
+1. **PAN-00** 正式标记 `accepted`（Codex 最终复核通过）。
+2. 验收提交：`bc85a14` — `docs(plan): normalize Panorama status language`（状态语言统一；主规划提交为 `9b5de05`）。
+3. 建立并批准独立任务包：`digitalme_phase1_task_PAN-01_product_panorama_home.md`。
+4. 总任务状态：`active / PAN-01_specified`；当前唯一实现任务为 **PAN-01**。
+
+### PAN-01 产品决定（已冻结）
+
+| 项 | 决定 |
+|---|---|
+| 结构 | 不新增第三套「我」页面；复用「构建 / 数字之我」 |
+| 改名 | 现有「数字之我 → 首页」升级为「全貌」 |
+| 默认入口 | 侧栏「我」→ 数字之我 → 全貌；inbox 待处理不得劫持 |
+| 只读 | 不新增主体/意图/边界写入；不修 P1-07；不触碰真实 Package |
+| 用户面五态 | 可用 · 实验 · 本地模拟 · 预览 · 尚未开放（主进程生成） |
+
+### 明确不做
+
+不开始 PAN-02；不标 PAN-01 accepted（实现后最高 `statically_verified`，待 Codex/Owner 验收）。
+
+---
+
 ## 2026-07-18 战略切换：启动 P1-PANORAMA（PAN-00）
 
 ### 决策
@@ -54,9 +79,9 @@ statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_fo
 
 工程状态继续走 planned→…→accepted/released。用户面只允许：可用 · 实验 · 本地模拟 · 预览 · 尚未开放。`implemented`/`statically_verified` 不自动等于「可用」。
 
-### 下一任务
+### 下一任务（已被上文「PAN-00 accepted」条覆盖）
 
-**唯一下一实现任务：PAN-01（产品全貌首页）**。须 Codex 复核本 PAN-00 并建立独立任务包后方可编码。不得开始 PAN-01 实现、不得修复 P1-07、不得标 PAN-00 `accepted`。
+当时下一任务为建立 PAN-01 任务包；现已批准并可实现。
 
 ### PAN-00 范围确认
 

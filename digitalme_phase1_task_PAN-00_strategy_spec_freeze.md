@@ -1,12 +1,22 @@
 # PAN-00 任务包：战略切换与规格冻结
 
-版本：v0.1
+版本：v0.2
 日期：2026-07-18
-状态：`statically_verified`（文档提交后；等待 Codex 复核；**不得**标 accepted）
+状态：`accepted`
 所属总任务：`P1-PANORAMA：Digital Me 产品全貌 Alpha`
 建议实现基线：`5ab55dc`（代码）+ `8fb8210`（P1-07_DOCS_BASE，仅 P1-07 收工文档）
+验收提交：`bc85a14`（含状态语言修正；Codex 最终复核通过）
 任务类型：文档治理 / 规格升版 / 阶段切换
 代码 Owner：Cursor
+
+---
+
+## 0.1 验收记录（2026-07-18）
+
+- Codex 最终复核通过；Owner 确认战略冻结结果。
+- 状态语言统一提交：`bc85a14` — `docs(plan): normalize Panorama status language`。
+- 本任务正式标记 **`accepted`**。
+- 下一实现任务：**PAN-01**（独立任务包 `digitalme_phase1_task_PAN-01_product_panorama_home.md` 已批准）。
 
 ---
 
