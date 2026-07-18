@@ -22,7 +22,12 @@ const {
   PANORAMA_STATUS_CONTRACT_VERSION,
   PANORAMA_NAV_TARGETS,
 } = require("../src/subject-overview/constants");
-const { mapInternalCapabilityToUser, sanitizeNavTarget, isUserStatus } = require("../src/subject-overview/panorama");
+const {
+  mapInternalCapabilityToUser,
+  sanitizeNavTarget,
+  isUserStatus,
+  buildDirection,
+} = require("../src/subject-overview/panorama");
 
 let passed = 0;
 let failed = 0;
@@ -91,6 +96,17 @@ function collectUserStatuses(panorama) {
   return out;
 }
 
+function promiseById(overview, id) {
+  return overview.panorama.promises.find((p) => p.id === id);
+}
+
+function assertNoLeak(raw) {
+  assert.equal(raw.includes("apiKey"), false);
+  assert.equal(raw.includes("sk-"), false);
+  assert.equal(/[A-Za-z]:\\\\|\/Users\/|\/home\//.test(raw), false);
+  assert.equal(raw.includes("persona.md"), false);
+}
+
 test("bytes unchanged around buildSubjectOverviewV1", () => {
   const dir = makeV02("bytes");
   try {
@@ -142,7 +158,6 @@ test("renderer cannot pass or override status via getOverview args", () => {
       panorama: { promises: [{ userStatus: "available" }] },
       identity: { displayName: "HACKED" },
     };
-    // buildSubjectOverviewV1 only accepts runtime flags; forged panorama must be ignored
     const overview = buildSubjectOverviewV1(dir, forged);
     assert.notEqual(overview.identity.displayName, "HACKED");
     assert.notEqual(
@@ -222,11 +237,19 @@ test("missing API key only sets currentCondition", () => {
 test("package missing / unknown name fail-closed", () => {
   const missing = path.join(tempDir("missing-root"), "no-such-package");
   try {
+    const beforeParent = dirFingerprint(path.dirname(missing));
     const overview = buildSubjectOverviewV1(missing, {});
     assert.equal(overview.package.healthStatus, "missing");
     assert.equal(overview.panorama.hero.displayName, null);
     assert.match(overview.panorama.hero.title, /尚未命名/);
-    assert.notEqual(overview.panorama.promises.find((p) => p.id === "this_is_me").userStatus, USER_STATUS.AVAILABLE);
+    assert.match(overview.panorama.hero.statusLine, /本机资料尚未就绪/);
+    assert.equal(overview.panorama.hero.statusLine.includes("本机私有"), false);
+    assert.equal(overview.panorama.hero.statusLine.includes("资料由你保管"), false);
+    assert.equal(overview.package.privacyLabel, "隐私状态尚无法确认");
+    assert.notEqual(promiseById(overview, "this_is_me").userStatus, USER_STATUS.AVAILABLE);
+    assert.equal(promiseById(overview, "belongs_to_me").userStatus, USER_STATUS.PREVIEW);
+    assert.equal(overview.panorama.nextAction.navTarget, "me-build");
+    assert.equal(dirFingerprint(path.dirname(missing)), beforeParent);
   } finally {
     cleanup(path.dirname(missing));
   }
@@ -236,11 +259,7 @@ test("payload has no secrets absolute paths or persona body", () => {
   const dir = makeV02("leak");
   try {
     const overview = buildSubjectOverviewV1(dir, { hasApiKey: true });
-    const raw = JSON.stringify(overview);
-    assert.equal(raw.includes("apiKey"), false);
-    assert.equal(raw.includes("sk-"), false);
-    assert.equal(/[A-Za-z]:\\\\|\/Users\/|\/home\//.test(raw), false);
-    assert.equal(raw.includes("persona.json"), false);
+    assertNoLeak(JSON.stringify(overview));
   } finally {
     cleanup(dir);
   }
@@ -254,7 +273,7 @@ test("contracts examples do not open collaboration", () => {
     fs.writeFileSync(path.join(contracts, "agent-card.example.json"), "{}", "utf8");
     const overview = buildSubjectOverviewV1(dir, {});
     assert.equal(overview.collaboration.authorizationStatus, "none");
-    assert.equal(overview.panorama.promises.find((p) => p.id === "acts_for_me").userStatus, USER_STATUS.NOT_OPEN);
+    assert.equal(promiseById(overview, "acts_for_me").userStatus, USER_STATUS.NOT_OPEN);
   } finally {
     cleanup(dir);
   }
@@ -274,14 +293,237 @@ test("navTarget whitelist only", () => {
     }
     for (const j of overview.panorama.journey) {
       if (j.navTarget) assert.equal(PANORAMA_NAV_TARGETS.has(j.navTarget), true);
-      if (j.userStatus === USER_STATUS.NOT_OPEN || j.userStatus === USER_STATUS.PREVIEW) {
-        if (j.id === "authorize" || j.id === "collaborate") {
-          assert.equal(j.navTarget, null);
-        }
+      if (j.id === "authorize" || j.id === "collaborate") {
+        assert.equal(j.navTarget, null);
       }
     }
   } finally {
     cleanup(dir);
+  }
+});
+
+test("manifest.json corrupt: desensitized warning and Hero fail-closed", () => {
+  const dir = makeV02("manifest-corrupt");
+  try {
+    fs.writeFileSync(path.join(dir, "manifest.json"), "{not-json", "utf8");
+    const before = dirFingerprint(dir);
+    const overview = buildSubjectOverviewV1(dir, {});
+    assert.equal(dirFingerprint(dir), before);
+    assert.ok(overview.warnings.some((w) => w.code === "manifest_parse_error"));
+    assert.equal(
+      overview.warnings.some((w) => /not-json|SyntaxError|[A-Za-z]:\\|\/Users\//.test(w.message || "")),
+      false
+    );
+    assert.notEqual(promiseById(overview, "this_is_me").userStatus, USER_STATUS.AVAILABLE);
+    assert.equal(overview.panorama.hero.statusLine.includes("本机私有"), false);
+    assert.equal(overview.panorama.hero.statusLine.includes("资料由你保管"), false);
+    assert.equal(overview.panorama.hero.accessLabel, "隐私状态尚无法确认");
+    assert.equal(overview.package.privacyStatus, "unknown");
+    assert.equal(overview.package.privacyLabel, "隐私状态尚无法确认");
+    assert.equal(overview.panorama.hero.subjectReadStatus, "read_error");
+    assertNoLeak(JSON.stringify(overview));
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("identity.json corrupt: fail-closed", () => {
+  const dir = makeV02("identity-corrupt");
+  try {
+    fs.writeFileSync(path.join(dir, "identity.json"), "{broken", "utf8");
+    const before = dirFingerprint(dir);
+    const overview = buildSubjectOverviewV1(dir, {});
+    assert.equal(dirFingerprint(dir), before);
+    assert.ok(overview.warnings.some((w) => w.code === "identity_parse_error"));
+    assert.notEqual(promiseById(overview, "this_is_me").userStatus, USER_STATUS.AVAILABLE);
+    assert.equal(overview.panorama.hero.subjectReadStatus, "read_error");
+    assert.equal(overview.panorama.hero.statusLine.includes("本机私有"), false);
+    assert.equal(overview.panorama.hero.statusLine.includes("资料由你保管"), false);
+    assert.equal(overview.panorama.hero.ownerLabel, "尚无法确认");
+    assertNoLeak(JSON.stringify(overview));
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("layer JSON corrupt: unknown count, no zero reset, no body leak", () => {
+  const dir = makeV02("layer-corrupt");
+  try {
+    fs.mkdirSync(path.join(dir, "life"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "life", "roles.json"), "{bad", "utf8");
+    const before = dirFingerprint(dir);
+    const overview = buildSubjectOverviewV1(dir, {});
+    assert.equal(dirFingerprint(dir), before);
+    const state = overview.layers.find((l) => l.kind === "current_state");
+    assert.ok(state);
+    // roles corrupt contributes unknown; combined layer must not pretend exact zero-only success
+    assert.notEqual(state.countStatus, "known");
+    assert.ok(state.countStatus === "unknown" || state.countStatus === "partial");
+    if (state.countStatus === "unknown") assert.equal(state.count, null);
+    const raw = JSON.stringify(overview);
+    assert.equal(raw.includes("{bad"), false);
+    assertNoLeak(raw);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("privacyStatus unknown: no private success claims", () => {
+  const dir = makeV02("privacy-unknown");
+  try {
+    const manifest = JSON.parse(fs.readFileSync(path.join(dir, "manifest.json"), "utf8"));
+    manifest.packageType = "shared";
+    fs.writeFileSync(path.join(dir, "manifest.json"), JSON.stringify(manifest, null, 2), "utf8");
+    const overview = buildSubjectOverviewV1(dir, {});
+    assert.equal(overview.package.privacyStatus, "unknown");
+    assert.equal(overview.package.privacyLabel, "隐私状态尚无法确认");
+    assert.equal(overview.panorama.hero.accessLabel, "隐私状态尚无法确认");
+    assert.equal(overview.panorama.hero.privacyLabel, "隐私状态尚无法确认");
+    assert.equal(overview.panorama.hero.statusLine.includes("本机私有"), false);
+    assert.equal(overview.panorama.hero.statusLine.includes("资料由你保管"), false);
+    assert.match(overview.panorama.hero.statusLine, /隐私状态尚无法确认/);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("ordinary owner_assertion is not confirmed development intent", () => {
+  const dir = makeV02("owner-not-intent");
+  try {
+    const now = new Date().toISOString();
+    fs.appendFileSync(
+      path.join(dir, "memory", "long-term-memory.jsonl"),
+      JSON.stringify({
+        id: "oa_1",
+        type: "long_term",
+        content: "我偏好简洁表达",
+        dataKind: "owner_assertion",
+        ownerConfirmed: true,
+        confirmedBy: "owner",
+        createdAt: now,
+        sourceRefs: ["feedback"],
+      }) + "\n",
+      "utf8"
+    );
+    const overview = buildSubjectOverviewV1(dir, {});
+    const owner = overview.layers.find((l) => l.kind === "owner_assertion");
+    assert.ok(owner && owner.count > 0);
+    assert.equal(overview.panorama.direction.kind, "none");
+    assert.match(overview.panorama.direction.summary, /尚未建立本人确认的发展意图/);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("mind_hooks interests capability_signals are direction clues only", () => {
+  const dir = makeV02("direction-clue");
+  try {
+    fs.mkdirSync(path.join(dir, "life"), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "life", "mind_hooks.json"),
+      JSON.stringify({ items: [{ id: "h1", text: "想加强写作" }] }, null, 2),
+      "utf8"
+    );
+    fs.writeFileSync(
+      path.join(dir, "life", "interests.json"),
+      JSON.stringify({ items: [{ id: "i1", text: "产品设计" }] }, null, 2),
+      "utf8"
+    );
+    const overview = buildSubjectOverviewV1(dir, {});
+    assert.equal(overview.panorama.direction.kind, "direction_clue");
+    assert.equal(overview.panorama.direction.title, "发展方向线索");
+    assert.match(overview.panorama.direction.summary, /方向线索/);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("no direction evidence yields none", () => {
+  const dir = makeV02("direction-none");
+  try {
+    const overview = buildSubjectOverviewV1(dir, {});
+    assert.equal(overview.panorama.direction.kind, "none");
+    assert.equal(buildDirection(overview.layers).kind, "none");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("controlled_by_me evidence reflects boundaries present / missing / corrupt", () => {
+  const withBounds = makeV02("bounds-ok");
+  try {
+    fs.mkdirSync(path.join(withBounds, "policies"), { recursive: true });
+    fs.writeFileSync(
+      path.join(withBounds, "policies", "boundaries.json"),
+      JSON.stringify({ items: [{ id: "b1", enabled: true, text: "不得对外自动授权" }] }, null, 2),
+      "utf8"
+    );
+    const overview = buildSubjectOverviewV1(withBounds, {});
+    const p = promiseById(overview, "controlled_by_me");
+    assert.equal(p.userStatus, USER_STATUS.EXPERIMENT);
+    assert.match(p.evidence, /已启用 1 条边界/);
+    assert.equal(p.currentCondition || "", "");
+  } finally {
+    cleanup(withBounds);
+  }
+
+  const missingBounds = makeV02("bounds-missing");
+  try {
+    const policies = path.join(missingBounds, "policies");
+    if (fs.existsSync(path.join(policies, "boundaries.json"))) {
+      fs.unlinkSync(path.join(policies, "boundaries.json"));
+    }
+    const overview = buildSubjectOverviewV1(missingBounds, {});
+    const p = promiseById(overview, "controlled_by_me");
+    assert.match(p.evidence, /尚未建立边界文件/);
+    assert.match(p.currentCondition || "", /尚未建立/);
+  } finally {
+    cleanup(missingBounds);
+  }
+
+  const corruptBounds = makeV02("bounds-corrupt");
+  try {
+    fs.mkdirSync(path.join(corruptBounds, "policies"), { recursive: true });
+    fs.writeFileSync(path.join(corruptBounds, "policies", "boundaries.json"), "{nope", "utf8");
+    const overview = buildSubjectOverviewV1(corruptBounds, {});
+    const p = promiseById(overview, "controlled_by_me");
+    assert.match(p.evidence, /无法解析/);
+    assert.match(p.currentCondition || "", /无法解析/);
+    assert.ok(overview.warnings.some((w) => w.code === "boundaries_parse_error"));
+    assertNoLeak(JSON.stringify(overview));
+  } finally {
+    cleanup(corruptBounds);
+  }
+});
+
+test("belongs_to_me evidence uses revision recoverability without absolute paths", () => {
+  const dir = makeV02("belongs");
+  try {
+    const overview = buildSubjectOverviewV1(dir, {});
+    const p = promiseById(overview, "belongs_to_me");
+    assert.equal(p.userStatus, USER_STATUS.EXPERIMENT);
+    assert.match(p.evidence, /本机资料目录/);
+    assert.equal(/[A-Za-z]:\\|\/Users\/|\/home\//.test(p.evidence), false);
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("added statuses remain five-state across fail-closed fixtures", () => {
+  const cases = [];
+  const missing = path.join(tempDir("five-missing"), "gone");
+  cases.push(missing);
+  const corrupt = makeV02("five-corrupt");
+  fs.writeFileSync(path.join(corrupt, "manifest.json"), "{x", "utf8");
+  cases.push(corrupt);
+  try {
+    for (const dir of cases) {
+      const overview = buildSubjectOverviewV1(dir, {});
+      for (const s of collectUserStatuses(overview.panorama)) assertFiveState(s);
+    }
+  } finally {
+    cleanup(path.dirname(missing));
+    cleanup(corrupt);
   }
 });
 

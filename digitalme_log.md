@@ -5,6 +5,39 @@
 
 ---
 
+## 2026-07-18 PAN-01 Codex 第一轮复核修复 · statically_verified
+
+### 复核发现的三类真实性问题
+
+1. Hero 在 privacy unknown / 主体读取异常时仍可能声称「本机私有 · 资料由你保管」；renderer 缺省成功文案。
+2. 四承诺证据偏静态：「属于我」「由我管」未随 Package/边界真实状态变化。
+3. `owner_assertion` 总数被误用为「本人确认的发展意图」；资料版本入口只打开设置顶部。
+
+### 修复后的状态派生规则（摘要）
+
+| 场景 | Hero / 承诺 |
+|---|---|
+| Package 缺失 | statusLine=本机资料尚未就绪；这是我/属于我→预览；下一步→构建 |
+| manifest/identity 损坏 | subjectReadStatus=read_error；不声称本机私有/资料由你保管；这是我降级 |
+| privacyStatus=unknown | privacyLabel/accessLabel=隐私状态尚无法确认；Hero 不含本机私有 |
+| 可读且隐私可确认 | 允许「本机私有 · 资料由你保管」 |
+| 发展意图 | 仅 mind_hooks/interests/capability_signals → 发展方向线索；owner_assertion 不得→confirmed_intent |
+| 由我管 | 动态反映边界存在/缺失/损坏与已启用数量；策略底座与边界状态分开 |
+
+资料版本：`settings-package-versions` 与「查看资料版本」按钮均滚动并聚焦 `#settings-pkg-versions`。
+
+### 验证
+
+- `test:pan-01`：22/22
+- `test:pan-01-owner-runtime`：9/9（真实侧栏默认入口与 CTA；无内部函数兜底）
+- `test:p1-03`：22/22；`test:p1-07-owner-runtime`：13/13；`test:p1-phase1`：通过
+
+### 状态
+
+仍为 `statically_verified`（**不**标 accepted / runtime_verified）。PAN-02 未开始。等待 Codex 再复核与 Owner 主路径验收。
+
+---
+
 ## 2026-07-18 PAN-01 产品全貌首页 · statically_verified
 
 ### 决策与范围

@@ -1163,6 +1163,11 @@ body {
   margin: 8px 0 16px;
   padding-top: 4px;
 }
+.settings-pkg-versions.settings-section-focused {
+  outline: 2px solid #8a6a4a;
+  outline-offset: 4px;
+  border-radius: 8px;
+}
 .settings-temp-pkg-banner {
   margin: 0 0 12px;
   padding: 8px 10px;

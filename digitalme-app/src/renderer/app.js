@@ -1158,7 +1158,9 @@ function switchView(view, btn, opts = {}) {
     }
   }
   if (view === "me") {
+    const navGen = ++meNavGeneration;
     refreshMeView().then(() => {
+      if (navGen !== meNavGeneration) return;
       if (opts.meLane) {
         switchMeLane(opts.meLane);
         if (opts.meLane === "self" && !opts._skipOverviewTab) {
@@ -1175,6 +1177,8 @@ function switchView(view, btn, opts = {}) {
 
 let meLane = "self";
 let buildDoneTargetTab = "overview";
+/** Invalidates in-flight me-view default-entry apply when user navigates within 我. */
+let meNavGeneration = 0;
 
 function switchMeLane(lane) {
   meLane = lane === "build" ? "build" : "self";
@@ -1195,6 +1199,7 @@ function switchMeLane(lane) {
 }
 
 function goBuildView() {
+  meNavGeneration += 1;
   const nav = document.querySelector('.nav-item[data-view="me"]');
   if (!$("view-me").classList.contains("hidden")) {
     switchMeLane("build");
@@ -1204,13 +1209,14 @@ function goBuildView() {
 }
 
 function goSelfView(tab) {
+  meNavGeneration += 1;
   const nav = document.querySelector('.nav-item[data-view="me"]');
   if (!$("view-me").classList.contains("hidden")) {
     switchMeLane("self");
     if (tab) switchMeTab(tab);
     return;
   }
-  switchView("me", nav, { meLane: "self" });
+  switchView("me", nav, { meLane: "self", meTab: tab || "overview" });
   if (tab) setTimeout(() => switchMeTab(tab), 0);
 }
 
@@ -1257,7 +1263,7 @@ function navigatePanoramaTarget(target) {
     return true;
   }
   if (target === "settings-package-versions") {
-    openSettings();
+    openSettingsPackageVersions();
     return true;
   }
   return false;
@@ -1320,6 +1326,12 @@ function renderPanoramaBlocks(panorama) {
       ev.className = "muted";
       setSafeText(ev, p.evidence || "");
       card.appendChild(ev);
+      if (p.currentCondition) {
+        const cond = document.createElement("p");
+        cond.className = "muted panorama-condition";
+        setSafeText(cond, `当前条件：${p.currentCondition}`);
+        card.appendChild(cond);
+      }
       if (p.navTarget && p.ctaLabel) {
         const btn = document.createElement("button");
         btn.type = "button";
@@ -2934,7 +2946,7 @@ function renderReview(res) {
   focusReviewPanel();
 }
 
-async function openSettings() {
+async function openSettings(opts = {}) {
   const cfg = await window.digitalMe.getConfig();
   $("cfg-baseurl").value = cfg.baseURL || "";
   $("cfg-apikey").value = "";
@@ -2974,6 +2986,48 @@ async function openSettings() {
   const settingsBody = settingsModal.querySelector(".settings-modal-body");
   settingsModal.classList.remove("hidden");
   if (settingsBody) settingsBody.scrollTop = 0;
+  const versionsSection = $("settings-pkg-versions");
+  if (versionsSection) {
+    versionsSection.classList.remove("settings-section-focused");
+    versionsSection.removeAttribute("data-panorama-focus");
+  }
+  if (opts && opts.focusPackageVersions) {
+    focusSettingsPackageVersions();
+  }
+}
+
+/** Open settings and bring「资料版本」into view with focus. */
+async function openSettingsPackageVersions() {
+  await openSettings({ focusPackageVersions: true });
+}
+
+function focusSettingsPackageVersions() {
+  const settingsModal = $("settings-modal");
+  const settingsBody = settingsModal && settingsModal.querySelector(".settings-modal-body");
+  const section = $("settings-pkg-versions");
+  const heading = $("settings-pkg-versions-heading");
+  if (!section) return;
+  section.classList.add("settings-section-focused");
+  section.setAttribute("data-panorama-focus", "1");
+  if (!section.hasAttribute("tabindex")) section.setAttribute("tabindex", "-1");
+  const scrollTarget = () => {
+    if (typeof section.scrollIntoView === "function") {
+      section.scrollIntoView({ behavior: "smooth", block: "start" });
+    } else if (settingsBody) {
+      settingsBody.scrollTop = Math.max(0, section.offsetTop - 12);
+    }
+    const focusEl = heading || section;
+    try {
+      focusEl.focus({ preventScroll: true });
+    } catch {
+      try {
+        focusEl.focus();
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+  setTimeout(scrollTarget, 40);
 }
 
 /** Prevent duplicate temp/regular package switches. */
@@ -7332,9 +7386,15 @@ async function refreshSubjectHome() {
     appendMetaRow(
       identityEl,
       "访问范围",
-      (panorama && panorama.hero && panorama.hero.accessLabel) || "当前仅本人可访问"
+      (panorama && panorama.hero && panorama.hero.accessLabel) || "尚无法确认"
     );
-    appendMetaRow(identityEl, "隐私", pkg.privacyLabel || "默认私有 · 未公开");
+    appendMetaRow(
+      identityEl,
+      "隐私",
+      (panorama && panorama.hero && panorama.hero.privacyLabel) ||
+        pkg.privacyLabel ||
+        "尚无法确认"
+    );
 
     clearChildren(packageEl);
     const rev =
@@ -8760,7 +8820,9 @@ function bindMe() {
     btn.addEventListener("click", () => switchMeTab(btn.dataset.meTab));
   });
   $("btn-me-goto-inbox")?.addEventListener("click", () => goBuildView());
-  $("btn-subject-goto-versions")?.addEventListener("click", () => openSettings());
+  $("btn-subject-goto-versions")?.addEventListener("click", () => {
+    openSettingsPackageVersions();
+  });
   $("btn-subject-refresh")?.addEventListener("click", () => refreshSubjectHome());
   const refreshSurface = $("btn-me-refresh-surface");
   if (refreshSurface) {

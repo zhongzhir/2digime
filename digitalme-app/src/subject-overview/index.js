@@ -29,23 +29,81 @@ function readIdentityReadOnly(pkgDir, warnings) {
   const identityPath = path.join(pkgDir, "identity.json");
   let manifest = null;
   let identity = null;
+  let manifestPresent = false;
+  let identityPresent = false;
+  let manifestParseOk = false;
+  let identityParseOk = false;
   if (fs.existsSync(manifestPath)) {
+    manifestPresent = true;
     try {
       manifest = readJson(manifestPath, null);
+      if (manifest && typeof manifest === "object") {
+        manifestParseOk = true;
+      } else {
+        manifest = null;
+        pushWarning(warnings, "manifest_parse_error", "资料清单无法解析。");
+      }
     } catch {
       manifest = null;
       pushWarning(warnings, "manifest_parse_error", "资料清单无法解析。");
     }
   }
   if (fs.existsSync(identityPath)) {
+    identityPresent = true;
     try {
       identity = readJson(identityPath, null);
+      if (identity && typeof identity === "object") {
+        identityParseOk = true;
+      } else {
+        identity = null;
+        pushWarning(warnings, "identity_parse_error", "身份资料无法解析。");
+      }
     } catch {
       identity = null;
       pushWarning(warnings, "identity_parse_error", "身份资料无法解析。");
     }
   }
-  return { manifest, identity };
+  return {
+    manifest,
+    identity,
+    manifestPresent,
+    identityPresent,
+    manifestParseOk,
+    identityParseOk,
+  };
+}
+
+function resolvePrivacyStatus({ packageExists, manifest, manifestPresent, manifestParseOk, warnings }) {
+  if (!packageExists) {
+    return {
+      privacyStatus: "unknown",
+      privacyLabel: "隐私状态尚无法确认",
+    };
+  }
+  if (manifestPresent && !manifestParseOk) {
+    return {
+      privacyStatus: "unknown",
+      privacyLabel: "隐私状态尚无法确认",
+    };
+  }
+  if (!manifest) {
+    return {
+      privacyStatus: "unknown",
+      privacyLabel: "隐私状态尚无法确认",
+    };
+  }
+  if (manifest.packageType && manifest.packageType !== "private") {
+    pushWarning(warnings, "privacy_unknown", "资料隐私状态未知，不能确认为本机私有。");
+    return {
+      privacyStatus: "unknown",
+      privacyLabel: "隐私状态尚无法确认",
+    };
+  }
+  // Readable manifest with packageType private or omitted (legacy default-private).
+  return {
+    privacyStatus: "local_private",
+    privacyLabel: "默认私有 · 未公开",
+  };
 }
 
 function resolveIdentity(manifest, identity, warnings) {
@@ -143,12 +201,18 @@ function buildBoundariesSection(boundaries, warnings) {
   const pendingWarnings = [];
   if (!established) pendingWarnings.push("边界尚未完整建立");
   return {
+    exists: !!boundaries.exists,
+    parseOk: boundaries.parseOk !== false,
     established,
-    enabledCount: boundaries.enabledCount,
+    enabledCount: typeof boundaries.enabledCount === "number" ? boundaries.enabledCount : null,
     pendingWarnings,
     summary: established
       ? `已启用 ${boundaries.enabledCount} 条边界规则。`
-      : "边界尚未完整建立，请在「边界」页查看与补充。",
+      : !boundaries.exists
+        ? "尚未建立边界文件。"
+        : !boundaries.parseOk
+          ? "边界文件无法解析，已启用边界尚无法确认。"
+          : "边界尚未完整建立，请在「边界」页查看与补充。",
   };
 }
 
@@ -177,7 +241,8 @@ function buildSubjectOverviewV1(packageDir, runtime = {}) {
   const inspect = inspectPackageReadOnly(pkgDir);
   const versions = listPackageVersionsReadOnly(pkgDir);
   const recover = assessRecoverabilityReadOnly(pkgDir, inspect, versions);
-  const { manifest, identity } = readIdentityReadOnly(pkgDir, warnings);
+  const identityRead = readIdentityReadOnly(pkgDir, warnings);
+  const { manifest, identity } = identityRead;
 
   if (!inspect.exists) {
     pushWarning(warnings, "package_missing", "资料目录不存在或无法访问。");
@@ -194,11 +259,13 @@ function buildSubjectOverviewV1(packageDir, runtime = {}) {
   const layers = buildLayers(pkgDir, warnings);
   const capabilities = buildCapabilityStatuses(runtime);
 
-  let privacyStatus = "local_private";
-  if (manifest && manifest.packageType && manifest.packageType !== "private") {
-    privacyStatus = "unknown";
-    pushWarning(warnings, "privacy_unknown", "资料隐私状态未知，默认按本地私有处理。");
-  }
+  const { privacyStatus, privacyLabel } = resolvePrivacyStatus({
+    packageExists: inspect.exists,
+    manifest,
+    manifestPresent: identityRead.manifestPresent,
+    manifestParseOk: identityRead.manifestParseOk,
+    warnings,
+  });
 
   const healthStatus = mapHealthStatus(inspect);
 
@@ -225,7 +292,13 @@ function buildSubjectOverviewV1(packageDir, runtime = {}) {
       },
       locationLabel: "本机资料目录",
       privacyStatus,
-      privacyLabel: "默认私有 · 未公开",
+      privacyLabel,
+      subjectRead: {
+        manifestPresent: identityRead.manifestPresent,
+        manifestParseOk: identityRead.manifestParseOk,
+        identityPresent: identityRead.identityPresent,
+        identityParseOk: identityRead.identityParseOk,
+      },
     },
     layers,
     recentChange: buildRecentChange(manifest, recover),

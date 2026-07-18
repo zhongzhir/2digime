@@ -35,7 +35,6 @@ function mapInternalCapabilityToUser(internalStatus, runtime = {}) {
   let currentCondition = "";
   if (runtime.missingApiKey) {
     currentCondition = "尚未配置智能引擎";
-    // Do not invent a sixth maturity; keep mapped maturity.
   }
   return {
     userStatus,
@@ -56,26 +55,35 @@ function layerCountKnown(layers, kind) {
   return { known: false, count: null };
 }
 
-function buildDirection(layers, identity) {
-  const intent = layerCountKnown(layers, "development_intent");
-  const owner = layerCountKnown(layers, "owner_assertion");
-  const inference = layerCountKnown(layers, "inference");
+function warningCodes(overview) {
+  return new Set((overview.warnings || []).map((w) => w && w.code).filter(Boolean));
+}
 
-  // Only treat owner_assertion as confirmed intent when count > 0; otherwise clues or none.
-  if (owner.known && owner.count > 0) {
-    return {
-      kind: "confirmed_intent",
-      title: "我的发展意图",
-      summary: `已有 ${owner.count} 条本人声明相关记录。详细内容请在「认知」或「观念与表达」中查看。`,
-      navTarget: sanitizeNavTarget("me-cognition"),
-    };
-  }
-  if ((intent.known && intent.count > 0) || (inference.known && inference.count > 0)) {
-    const n = (intent.count || 0) + (inference.count || 0);
+function subjectReadFailed(overview) {
+  const codes = warningCodes(overview);
+  return codes.has("manifest_parse_error") || codes.has("identity_parse_error");
+}
+
+function packageMissing(overview) {
+  const pkg = overview.package || {};
+  return pkg.healthStatus === "missing" || overview._packageExists === false;
+}
+
+/**
+ * Development intent fail-closed:
+ * - owner_assertion alone is NOT confirmed development intent
+ * - mind_hooks / interests / capability_signals (development_intent layer) → direction clues
+ * - otherwise → none
+ * Do not invent confirmed_intent without an explicit, provable structure.
+ */
+function buildDirection(layers) {
+  const intent = layerCountKnown(layers, "development_intent");
+
+  if (intent.known && intent.count > 0) {
     return {
       kind: "direction_clue",
       title: "发展方向线索",
-      summary: `系统整理出 ${n} 条方向线索，尚未确认为本人发展意图。`,
+      summary: `系统整理出 ${intent.count} 条方向线索，尚未确认为本人发展意图。`,
       navTarget: sanitizeNavTarget("me-cognition"),
     };
   }
@@ -92,63 +100,141 @@ function buildHero(overview) {
   const pkg = overview.package || {};
   const recent = overview.recentChange || {};
   const collab = overview.collaboration || {};
-  const missing = pkg.healthStatus === "missing" || !overview._packageExists;
+  const missing = packageMissing(overview);
+  const readFailed = subjectReadFailed(overview);
+  const privacyKnown = pkg.privacyStatus === "local_private";
+  const privacyLabel =
+    typeof pkg.privacyLabel === "string" && pkg.privacyLabel
+      ? pkg.privacyLabel
+      : "隐私状态尚无法确认";
 
   const displayName = id.displayName || null;
   const title = displayName
     ? `${displayName}的 Digital Me`
     : "尚未命名的 Digital Me";
 
-  const ownerLabel =
-    id.ownerDisplayName ||
-    (id.ownershipStatus === "self" ? "本人" : "未知");
+  let ownerLabel = "尚无法确认";
+  if (!missing && !readFailed) {
+    if (id.ownerDisplayName) ownerLabel = id.ownerDisplayName;
+    else if (id.ownershipStatus === "self") ownerLabel = "本人";
+  }
 
-  const accessLabel =
-    pkg.privacyStatus === "local_private"
-      ? "当前仅本人可访问"
-      : "隐私状态尚无法确认";
+  const accessLabel = privacyKnown ? "当前仅本人可访问" : "隐私状态尚无法确认";
 
   const revisionLabel =
-    typeof pkg.revision === "number" ? `当前第 ${pkg.revision} 版` : "版本尚无法确认";
+    !missing && !readFailed && typeof pkg.revision === "number"
+      ? `当前第 ${pkg.revision} 版`
+      : "版本尚无法确认";
 
-  const authLabel = collab.autoAuthorization
-    ? "存在外部授权"
-    : "无自动外部授权";
+  const authLabel =
+    collab && collab.autoAuthorization === true
+      ? "存在外部授权"
+      : collab && typeof collab.authorizationLabel === "string"
+        ? collab.authorizationLabel
+        : "无自动对外授权";
 
-  const statusLine = missing
-    ? "本机资料尚未就绪 · 请先构建或检查设置"
-    : `本机私有 · 资料由你保管 · ${revisionLabel} · ${authLabel}`;
+  let statusLine;
+  let subjectReadStatus;
+  if (missing) {
+    subjectReadStatus = "missing";
+    statusLine = "本机资料尚未就绪 · 请先构建或检查设置";
+  } else if (readFailed) {
+    subjectReadStatus = "read_error";
+    statusLine = `主体资料读取异常 · ${privacyLabel} · ${authLabel}`;
+  } else if (privacyKnown) {
+    subjectReadStatus = "readable";
+    statusLine = `本机私有 · 资料由你保管 · ${revisionLabel} · ${authLabel}`;
+  } else {
+    subjectReadStatus = "readable";
+    statusLine = `${privacyLabel} · ${revisionLabel} · ${authLabel}`;
+  }
 
   return {
     title,
-    displayName,
+    displayName: missing || readFailed ? displayName : displayName,
     ownerLabel,
     accessLabel,
-    revision: typeof pkg.revision === "number" ? pkg.revision : null,
+    privacyLabel,
+    privacyStatus: pkg.privacyStatus || "unknown",
+    revision: !missing && !readFailed && typeof pkg.revision === "number" ? pkg.revision : null,
     revisionLabel,
     recentSummary: recent.summary || "最近变化尚无法确认",
     statusLine,
     tagline: "属于本人、持续理解本人、只在本人授权范围内行动。",
     packageMissing: missing,
+    subjectReadStatus,
+    authorizationLabel: authLabel,
   };
+}
+
+function capabilityBrief(overview) {
+  const caps = overview.capabilities || [];
+  if (!caps.length) return "能力状态尚无法确认";
+  const available = caps.filter((c) => c.userStatus === USER_STATUS.AVAILABLE).length;
+  const experiment = caps.filter((c) => c.userStatus === USER_STATUS.EXPERIMENT).length;
+  return `能力摘要：可用 ${available} 项，实验 ${experiment} 项`;
 }
 
 function buildPromises(overview) {
   const pkg = overview.package || {};
-  const layers = overview.layers || {};
-  const missing = pkg.healthStatus === "missing" || overview._packageExists === false;
-  const readFailed = (overview.warnings || []).some(
-    (w) => w.code === "manifest_parse_error" || w.code === "identity_parse_error"
-  );
+  const bounds = overview.boundaries || {};
+  const collab = overview.collaboration || {};
+  const missing = packageMissing(overview);
+  const readFailed = subjectReadFailed(overview);
+  const subjectUnusable = missing || readFailed;
 
   let thisIsMe = USER_STATUS.AVAILABLE;
   let thisIsMeEvidence = "主体首页只读聚合已通过运行验收；可查看分层构成。";
-  let thisIsMeNav = sanitizeNavTarget("me-overview");
-  if (missing || readFailed) {
+  let thisIsMeCondition = "";
+  if (subjectUnusable) {
     thisIsMe = USER_STATUS.PREVIEW;
     thisIsMeEvidence = missing
       ? "主体资料尚未就绪，无法确认为可用。"
       : "主体资料读取异常，状态已降级。";
+    thisIsMeCondition = missing ? "本机资料目录不存在或无法访问" : "清单或身份资料无法解析";
+  }
+
+  let belongs = USER_STATUS.EXPERIMENT;
+  let belongsEvidence =
+    "资料位于本机资料目录；完整导出与跨端迁移仍未完成。";
+  let belongsCondition = "";
+  if (subjectUnusable) {
+    belongs = USER_STATUS.PREVIEW;
+    belongsEvidence = missing
+      ? "本机资料目录尚未就绪，所有权与版本结论暂不可用。"
+      : "主体资料读取异常，无法确认版本与保管状态。";
+    belongsCondition = missing ? "资料目录尚未就绪" : "主体资料读取异常";
+  } else {
+    const revKnown = typeof pkg.revision === "number";
+    const recoverable = !!(pkg.recoverability && pkg.recoverability.recoverable);
+    const revPart = revKnown ? `当前第 ${pkg.revision} 版` : "当前版本尚无法确认";
+    const recoverPart = recoverable
+      ? pkg.recoverability.previousRevision != null
+        ? `可恢复到第 ${pkg.recoverability.previousRevision} 版`
+        : "存在可恢复版本"
+      : "尚无可恢复版本";
+    belongsEvidence = `${revPart}；${recoverPart}；资料位于本机资料目录。完整导出与跨端迁移仍未完成。`;
+  }
+
+  let controlled = USER_STATUS.EXPERIMENT;
+  let controlledEvidence = "";
+  let controlledCondition = "";
+  const authPart =
+    collab && typeof collab.authorizationLabel === "string"
+      ? collab.authorizationLabel
+      : "无自动对外授权";
+  const capPart = capabilityBrief(overview);
+  if (!bounds.exists) {
+    controlledEvidence = `尚未建立边界文件；策略底座可支撑实验级控制。${authPart}。${capPart}。完整控制权面板将在后续提供。`;
+    controlledCondition = "边界文件尚未建立";
+  } else if (!bounds.parseOk) {
+    controlledEvidence = `边界文件无法解析，已启用边界尚无法确认；策略底座可支撑实验级控制。${authPart}。${capPart}。完整控制权面板将在后续提供。`;
+    controlledCondition = "边界文件无法解析";
+  } else if (!(bounds.enabledCount > 0)) {
+    controlledEvidence = `边界文件已存在但尚未启用规则；策略底座可支撑实验级控制。${authPart}。${capPart}。完整控制权面板将在后续提供。`;
+    controlledCondition = "尚未启用边界规则";
+  } else {
+    controlledEvidence = `已启用 ${bounds.enabledCount} 条边界；策略底座可支撑实验级控制。${authPart}。${capPart}。完整控制权面板将在后续提供。`;
   }
 
   return [
@@ -158,24 +244,27 @@ function buildPromises(overview) {
       userStatus: thisIsMe,
       userStatusLabel: statusLabel(thisIsMe),
       evidence: thisIsMeEvidence,
+      currentCondition: thisIsMeCondition,
       ctaLabel: "依据什么理解我",
-      navTarget: thisIsMeNav,
+      navTarget: sanitizeNavTarget("me-overview"),
     },
     {
       id: "belongs_to_me",
       title: "属于我",
-      userStatus: USER_STATUS.EXPERIMENT,
-      userStatusLabel: statusLabel(USER_STATUS.EXPERIMENT),
-      evidence: "本机资料与版本路径真实存在；完整导出与跨端迁移仍未完成。",
+      userStatus: belongs,
+      userStatusLabel: statusLabel(belongs),
+      evidence: belongsEvidence,
+      currentCondition: belongsCondition,
       ctaLabel: "查看资料版本",
       navTarget: sanitizeNavTarget("settings-package-versions"),
     },
     {
       id: "controlled_by_me",
       title: "由我管",
-      userStatus: USER_STATUS.EXPERIMENT,
-      userStatusLabel: statusLabel(USER_STATUS.EXPERIMENT),
-      evidence: "边界与策略底座已存在；完整控制权面板将在后续提供。",
+      userStatus: controlled,
+      userStatusLabel: statusLabel(controlled),
+      evidence: controlledEvidence,
+      currentCondition: controlledCondition,
       ctaLabel: "查看边界",
       navTarget: sanitizeNavTarget("me-boundaries"),
     },
@@ -184,7 +273,8 @@ function buildPromises(overview) {
       title: "代表我协作",
       userStatus: USER_STATUS.NOT_OPEN,
       userStatusLabel: statusLabel(USER_STATUS.NOT_OPEN),
-      evidence: "当前默认私有，无自动外部授权。本地协作沙盘尚未开放。",
+      evidence: "当前无自动对外授权。本地协作沙盘尚未开放。",
+      currentCondition: "",
       ctaLabel: null,
       navTarget: null,
     },
@@ -192,8 +282,9 @@ function buildPromises(overview) {
 }
 
 function buildJourney(overview) {
-  const pkg = overview.package || {};
-  const missing = pkg.healthStatus === "missing";
+  const missing = packageMissing(overview);
+  const readFailed = subjectReadFailed(overview);
+  const subjectUnusable = missing || readFailed;
 
   return [
     {
@@ -209,10 +300,16 @@ function buildJourney(overview) {
     {
       id: "see",
       title: "看见我",
-      userStatus: missing ? USER_STATUS.PREVIEW : USER_STATUS.AVAILABLE,
-      userStatusLabel: statusLabel(missing ? USER_STATUS.PREVIEW : USER_STATUS.AVAILABLE),
-      evidence: "可查看主体构成与分层摘要。",
-      currentCondition: "",
+      userStatus: subjectUnusable ? USER_STATUS.PREVIEW : USER_STATUS.AVAILABLE,
+      userStatusLabel: statusLabel(subjectUnusable ? USER_STATUS.PREVIEW : USER_STATUS.AVAILABLE),
+      evidence: subjectUnusable
+        ? "主体资料尚不可靠展示，构成查看已降级。"
+        : "可查看主体构成与分层摘要。",
+      currentCondition: missing
+        ? "资料目录尚未就绪"
+        : readFailed
+          ? "主体资料读取异常"
+          : "",
       ctaLabel: "查看我的构成",
       navTarget: sanitizeNavTarget("me-overview"),
     },
@@ -250,11 +347,12 @@ function buildJourney(overview) {
 }
 
 function buildNextAction(overview) {
-  const pkg = overview.package || {};
-  if (pkg.healthStatus === "missing") {
+  if (packageMissing(overview) || subjectReadFailed(overview)) {
     return {
       label: "继续构建",
-      reason: "主体资料尚未就绪，先从构建开始。",
+      reason: packageMissing(overview)
+        ? "主体资料尚未就绪，先从构建开始。"
+        : "主体资料读取异常，可先检查构建与设置。",
       navTarget: sanitizeNavTarget("me-build"),
     };
   }
@@ -276,7 +374,6 @@ function buildPanoramaSection(overview, meta = {}) {
   };
   const promises = buildPromises(enriched);
   const journey = buildJourney(enriched);
-  // Validate all user statuses are five-state
   for (const item of [...promises, ...journey]) {
     if (!isUserStatus(item.userStatus)) {
       item.userStatus = USER_STATUS.NOT_OPEN;
@@ -284,6 +381,7 @@ function buildPanoramaSection(overview, meta = {}) {
     }
     item.navTarget = sanitizeNavTarget(item.navTarget);
     if (!item.navTarget) item.ctaLabel = null;
+    if (typeof item.currentCondition !== "string") item.currentCondition = "";
   }
 
   return {
@@ -291,13 +389,14 @@ function buildPanoramaSection(overview, meta = {}) {
     hero: buildHero(enriched),
     promises,
     journey,
-    direction: buildDirection(overview.layers, overview.identity),
+    direction: buildDirection(overview.layers),
     nextAction: buildNextAction(enriched),
   };
 }
 
 module.exports = {
   buildPanoramaSection,
+  buildDirection,
   mapInternalCapabilityToUser,
   sanitizeNavTarget,
   isUserStatus,
