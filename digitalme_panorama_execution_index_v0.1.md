@@ -6,11 +6,13 @@
 所属总任务：`P1-PANORAMA：Digital Me 产品全貌 Alpha`（v0.4，三位一体重构）
 代码实现基线：`9dd6fa00e3c09ab65779203045c9858681c37443`（分支 `codex/pan-01r-sovereign-collaboration-loop`；PAN-01R 最终实现）
 文档基线：`35c5aead8879f818ae0e1e90836a8fee557c22c7`（`PAN01R_SPEC_BASE`，历史）；本轮战略修订见 `digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`
-规格依据：`digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`（v0.4）、`digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`、`digitalme_phase1_task_PAN-00_strategy_spec_freeze.md`、`digitalme_phase1_task_PAN-01_product_panorama_home.md`（历史）、`digitalme_phase1_task_PAN-01R_sovereign_collaboration_loop.md`（历史）、`digitalme_product_spec_v0.2.md`（文内 **v0.6**）
+规格依据：`digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`（v0.4）、`digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`、`digitalme_phase1_task_PAN-01S_minimal_product_surface.md`（当前实现任务包）、`digitalme_phase1_task_PAN-00_strategy_spec_freeze.md`、`digitalme_phase1_task_PAN-01_product_panorama_home.md`（历史）、`digitalme_phase1_task_PAN-01R_sovereign_collaboration_loop.md`（历史）、`digitalme_product_spec_v0.2.md`（文内 **v0.6.1**；PAN-01S 澄清见 v0.6.2）
 
-> 本文件是当前阶段唯一执行索引。冲突时：用户体验以产品规格 v0.6 为准；排期以 P1-PANORAMA v0.4 与本索引为准；安全底线优先于 Alpha 速度。
+> 本文件是当前阶段唯一执行索引。冲突时：用户体验以产品规格 v0.6.1 / v0.6.2 为准；排期以 P1-PANORAMA v0.4 与本索引为准；安全底线优先于 Alpha 速度。
 >
-> **v0.2 修订（2026-07-19，PAN-00R）**：第一阶段确立为三位一体 Alpha（理解我 × 武装我 × 连接世界）；PAN-01 / PAN-01R 写入正式裁定（均不 accepted）；旧「PAN-01R 验收通过后启动旧 PAN-02」口径删除；新执行顺序与新任务定义生效。PAN-00R 已 **accepted**（`07b631d` + `6ae2dca`）；**当前唯一任务为起草并冻结 PAN-01S 独立任务包**。
+> **v0.2 修订（2026-07-19，PAN-00R）**：第一阶段确立为三位一体 Alpha；PAN-01 / PAN-01R 写入正式裁定（均不 accepted）；新执行顺序生效。PAN-00R 已 **accepted**（`07b631d` + `6ae2dca` + `0fcd432`）。
+>
+> **v0.2.1 修订（2026-07-19，PAN-01S 规划）**：PAN-01S 独立任务包已起草并冻结（`specified` / `owner_approved_for_implementation` / `frozen_for_implementation` / `not_started`）。**当前唯一任务：Codex 复核任务包后，创建 PAN-01S 实现分支并编码。** 本规划提交不创建实现分支、不修改产品代码；PAN-02～PAN-06 未开始。
 
 ---
 
@@ -22,7 +24,8 @@ P1-PANORAMA（三位一体 Alpha）
 → PAN-00R accepted
 → PAN-01 statically_verified / owner_product_perception_failed / needs_minimal_surface_reset（历史；不 accepted）
 → PAN-01R statically_verified / codex_review_passed / owner_runtime_verified / owner_product_perception_failed / retained_as_internal_collaboration_harness（历史；不 accepted）
-→ PAN-01S task_package_pending（当前唯一任务：起草并冻结独立任务包）
+→ PAN-01S specified / frozen_for_implementation / not_started（任务包已冻结）
+→（Codex 复核后）创建实现分支并编码 ← 当前唯一任务
 → PAN-02 理解通道 Alpha（planned；未开始）
 → PAN-03 能力框架 Alpha（planned；未开始）
 → PAN-04 外部协作骨架 Alpha（planned；未开始）
@@ -32,12 +35,12 @@ P1-PANORAMA（三位一体 Alpha）
 
 | 项 | 当前值 |
 |---|---|
-| 总任务状态 | `active / three_part_alpha_reframed / PAN-01S_pending_spec` |
-| 当前完成 | PAN-00 `accepted`；PAN-00R `accepted`（`07b631d` + `6ae2dca`；Codex 最终复核通过；Owner 确认）；PAN-01 / PAN-01R 已裁定归档（均不 accepted） |
-| **当前唯一任务** | **起草并冻结 PAN-01S 独立任务包** |
-| 启动条件 | PAN-01S **编码**须待独立任务包获 Owner 批准；**不得**创建 PAN-01S 实现分支；不得编码 |
-| 当前阻断项 | 无（PAN-00R 已 accepted）；下一步仅为任务包规划文档 |
-| 明确不得启动 | PAN-01S 实现、PAN-02～PAN-06、P1-07 修复、原 P1-08、Policies 全面迁移、Digital Org 运行时、公网协作 |
+| 总任务状态 | `active / three_part_alpha_reframed / PAN-01S_specified` |
+| 当前完成 | PAN-00 `accepted`；PAN-00R `accepted`（`07b631d` + `6ae2dca` + `0fcd432`）；PAN-01 / PAN-01R 已裁定归档（均不 accepted）；PAN-01S 任务包已冻结（尚未实现） |
+| **当前唯一任务** | **Codex 复核 PAN-01S 任务包后，创建实现分支并编码** |
+| 启动条件 | Codex 复核通过本任务包；在独立实现分支上编码；不得在规划提交中偷跑 |
+| 当前阻断项 | 等待 Codex 复核 `digitalme_phase1_task_PAN-01S_minimal_product_surface.md` |
+| 明确不得启动 | 本规划提交内的产品代码修改；PAN-02～PAN-06；P1-07 修复；原 P1-08；Policies 全面迁移；Digital Org；公网协作 |
 
 ---
 
@@ -46,10 +49,10 @@ P1-PANORAMA（三位一体 Alpha）
 | 任务 | 目标 | 当前状态 | 启动条件 | 完成闸门 | 完成后下一步 |
 |---|---|---|---|---|---|
 | PAN-00 | 战略与规格冻结；建立索引与 backlog | `accepted`（`bc85a14`；历史，不改写） | — | 已完成 | — |
-| PAN-00R | 三位一体重构、极简产品原则冻结、队列重排（仅文档） | `accepted`（`07b631d` + `6ae2dca`；Codex 最终复核通过；Owner 确认） | — | 已完成（docs/strategy） | 起草 PAN-01S 任务包 |
+| PAN-00R | 三位一体重构、极简产品原则冻结、队列重排（仅文档） | `accepted`（`07b631d` + `6ae2dca` + `0fcd432`；Codex 最终复核通过；Owner 确认） | — | 已完成（docs/strategy） | PAN-01S 任务包 |
 | PAN-01（历史） | 产品全貌首页 | `statically_verified` / `owner_product_perception_failed` / `needs_minimal_surface_reset`（不 accepted；不回滚） | — | 已裁定归档 | 表面收口由 PAN-01S 承接 |
 | PAN-01R（历史） | 主权协作闭环 | `statically_verified` / `codex_review_passed` / `owner_runtime_verified` / `owner_product_perception_failed` / `retained_as_internal_collaboration_harness`（不 accepted；证据 `9dd6fa0`、70/70、20/20） | — | 已裁定归档 | 普通用户入口由 PAN-01S 撤下；骨架保留 |
-| PAN-01S | 极简产品表面与复杂度后移 | `specified_in_master / task_package_pending / not_started` | 独立任务包获 Owner 批准后方可编码；**不得**提前创建实现分支 | 「我」页极简收口；四承诺/成长路线迁帮助；PAN-01R 普通用户入口撤下；后台与测试保留 | PAN-02 |
+| PAN-01S | 极简产品表面与复杂度后移 | `specified` / `owner_approved_for_implementation` / `frozen_for_implementation` / `not_started` | Codex 复核任务包后创建实现分支并编码；任务包：`digitalme_phase1_task_PAN-01S_minimal_product_surface.md` | 「我」页极简收口；四承诺/成长路线迁帮助；PAN-01R 普通用户入口撤下；后台与测试保留；实现最高 `statically_verified` | PAN-02 |
 | PAN-02 | 理解通道 Alpha：低负担输入、后台蒸馏、关键纠错、任务相关检索、无关沉默 | `planned`（新定义） | PAN-01S 验收通过 + 独立任务包 | 理解我 Alpha 达标（规格 §7.6 第 1 条） | PAN-03 |
 | PAN-03 | 能力框架 Alpha：统一能力对象、安装/启用/调用/停止/撤销、真实能力样例 | `planned`（新定义） | PAN-02 验收通过 + 独立任务包 | 武装我 Alpha 达标（规格 §7.6 第 2 条） | PAN-04 |
 | PAN-04 | 外部协作骨架 Alpha：请求、接受、最小授权、执行、处置、停止与记录 | `planned`（新定义；可复用 PAN-01R 安全骨架，不复用其失败用户表面） | PAN-03 验收通过 + 独立任务包 | 连接世界 Alpha 达标（规格 §7.6 第 3 条） | PAN-05 |
@@ -150,5 +153,5 @@ statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_fo
 2. 非阻断问题只进 §4 backlog，不自动进开发。
 3. 恢复 backlog 须先写最小阻断说明，不可直接扩 scope。
 4. 更新本索引时同步 `digitalme_capability_status_v0.1.md` 与 `digitalme_log.md`。
-5. PAN-00 已于 `bc85a14` 标记 `accepted`（历史）。PAN-01 与 PAN-01R 按 PAN-00R 裁定归档，均**不得标 `accepted`**、不得回滚、不得删除证据。PAN-00R 已 `accepted`（`07b631d` + `6ae2dca`；docs/strategy acceptance，不是运行能力 released）。
-6. **当前唯一任务**：起草并冻结 PAN-01S 独立任务包。**不得**创建 PAN-01S 实现分支、不得修改产品代码、不得开始 PAN-02～PAN-06；PAN-01S 编码须待独立任务包获 Owner 批准。
+5. PAN-00 已于 `bc85a14` 标记 `accepted`（历史）。PAN-01 与 PAN-01R 按 PAN-00R 裁定归档，均**不得标 `accepted`**、不得回滚、不得删除证据。PAN-00R 已 `accepted`（`07b631d` + `6ae2dca` + `0fcd432`；docs/strategy acceptance，不是运行能力 released）。
+6. **当前唯一任务**：Codex 复核 PAN-01S 任务包后，创建实现分支并编码。任务包已冻结（`digitalme_phase1_task_PAN-01S_minimal_product_surface.md`）；本规划提交**不得**修改产品代码、**不得**开始 PAN-02～PAN-06。实现完成后最高 `statically_verified`；未经 Owner 主路径验收不得 `accepted`。

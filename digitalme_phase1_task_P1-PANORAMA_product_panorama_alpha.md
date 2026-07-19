@@ -2,7 +2,7 @@
 
 版本：v0.4
 日期：2026-07-19
-状态：`active / three_part_alpha_reframed / PAN-01S_pending_spec`
+状态：`active / three_part_alpha_reframed / PAN-01S_specified`
 任务类型：阶段策略调整 / 产品纵向闭环 / 市场认知启动
 文档基线：`9dd6fa0`（PAN-01R 最终实现 HEAD）；战略修订依据 `digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`
 历史基线：`5ab55dc`（代码）+ `8fb8210`（P1-07_DOCS_BASE）；P1-07 保持 `statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_for_panorama`，不因此标记 accepted
@@ -200,8 +200,8 @@ accepted: no
 ```text
 PAN-00 accepted
 → PAN-00R accepted（三位一体重构；`07b631d` + `6ae2dca`）
-→ PAN-01S task_package_pending
-→ PAN-01S 极简产品表面与复杂度后移
+→ PAN-01S specified / frozen_for_implementation / not_started
+→ PAN-01S 极简产品表面与复杂度后移（实现待 Codex 复核任务包后开分支）
 → PAN-02 理解通道 Alpha
 → PAN-03 能力框架 Alpha
 → PAN-04 外部协作骨架 Alpha
@@ -219,18 +219,21 @@ PAN-00 accepted
 
 **PAN-01R（历史）**——主权协作闭环；裁定见 §5.2；保留历史工程证据。
 
-**PAN-01S：极简产品表面与复杂度后移**（`specified_in_master / task_package_pending / not_started`）
+**PAN-01S：极简产品表面与复杂度后移**（`specified` / `owner_approved_for_implementation` / `frozen_for_implementation` / `not_started`）
+
+独立任务包：`digitalme_phase1_task_PAN-01S_minimal_product_surface.md`。
 
 只允许：
 
-- 清理「我」页面默认表面；
-- 四个承诺和成长路线迁入帮助；
+- 清理「我」页面默认表面为极简主体入口；
+- 四个承诺和成长路线迁入帮助（优先复用现有帮助弹窗）；
 - 撤下普通用户 PAN-01R 入口；
-- 将协作验证器后移到高级/开发者入口，或先完全隐藏；
+- 将协作验证器保留为内部／test-only；
+- 侧栏不常驻 Package／模型／能力／品牌；
 - 保留 PAN-01/PAN-01R 后台与测试；
 - 不实现新的蒸馏、能力或公网协作；
 - 不趁机重写整个 renderer；
-- 必须有独立任务包，Owner 批准后才能编码。
+- **本轮规划已冻结；实现须待 Codex 复核本任务包后创建独立实现分支。**
 
 **PAN-02：理解通道 Alpha**——低负担输入；后台蒸馏；关键纠错；任务相关检索；无关主体信息保持沉默；不把每条蒸馏过程暴露给普通用户。
 
@@ -249,8 +252,9 @@ PAN-00 accepted
 
 ### 6.4 当前调度
 
-- 当前唯一任务：**起草并冻结 PAN-01S 独立任务包**；
-- 不得创建 PAN-01S 实现分支、不修改产品代码、不开始 PAN-02～PAN-06；PAN-01S 编码须待独立任务包获 Owner 批准。
+- **当前唯一任务**：Codex 复核 PAN-01S 任务包后，创建 PAN-01S 实现分支并编码；
+- 本规划提交**不**创建实现分支、**不**修改产品代码；
+- PAN-02～PAN-06 保持 `planned` / `not_started`。
 
 ---
 
@@ -437,11 +441,12 @@ statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_fo
 ```text
 PAN-00 accepted
 → PAN-00R accepted
-→ PAN-01S（独立任务包批准后方可编码；当前仅允许起草任务包）
+→ PAN-01S specified / frozen_for_implementation / not_started
+→（Codex 复核任务包后）创建实现分支并编码
 → PAN-02 → PAN-03 → PAN-04 → PAN-05 → PAN-06
 ```
 
-每次只启动一个主实现任务。PAN-05 传播文案可并行起草，但不得与代码任务修改同一文件。当前唯一任务为起草并冻结 PAN-01S 独立任务包；不得创建实现分支、不得修改产品代码。
+每次只启动一个主实现任务。PAN-05 传播文案可并行起草，但不得与代码任务修改同一文件。**当前唯一任务**：Codex 复核 PAN-01S 任务包后，创建 PAN-01S 实现分支并编码。本规划提交不创建实现分支、不修改产品代码。
 
 ### 13.3 子任务完成报告
 
@@ -484,7 +489,9 @@ P1-PANORAMA 不包含：
 
 2026-07-19：PAN-01 实现并 `statically_verified`，Owner 产品感知验收未通过；批准 PAN-01R 并完成实现与两轮 Codex 复核修复（最终 HEAD `9dd6fa0`；70/70；20/20）；Owner 运行验证通过但产品感知验收未通过。
 
-2026-07-19（PAN-00R）：Owner 确立第一阶段三位一体最高定义、极简产品原则、AI 使用主体信息新原则、PAN-01/PAN-01R 正式裁定与新执行队列（本文 v0.4；决策 #67～#71）。随后 Codex 第一轮文档修复（`6ae2dca`）与最终复核通过；Owner 确认；**PAN-00R `accepted`**（决策 #72）。当前唯一任务为起草并冻结 PAN-01S 独立任务包。
+2026-07-19（PAN-00R）：Owner 确立第一阶段三位一体最高定义、极简产品原则、AI 使用主体信息新原则、PAN-01/PAN-01R 正式裁定与新执行队列（本文 v0.4；决策 #67～#71）。随后 Codex 第一轮文档修复（`6ae2dca`）与最终复核通过；Owner 确认；**PAN-00R `accepted`**（决策 #72）。
+
+2026-07-19（PAN-01S 规划）：独立任务包 `digitalme_phase1_task_PAN-01S_minimal_product_surface.md` 起草并冻结；总任务状态 → `active / three_part_alpha_reframed / PAN-01S_specified`（决策 #73）。**当前唯一任务**：Codex 复核任务包后创建实现分支并编码。PAN-02～PAN-06 未开始。
 
 > **PAN-01**：可信只读聚合保留；`needs_minimal_surface_reset`；不 accepted。
 >

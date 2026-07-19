@@ -5,6 +5,35 @@
 
 ---
 
+## 2026-07-19 PAN-01S 规划 · 独立任务包冻结
+
+### 做了什么
+
+起草并冻结 `digitalme_phase1_task_PAN-01S_minimal_product_surface.md`（v0.1）：
+
+- 默认「我」极简主体入口（名称 + ≤2 行说明 + 一主操作 ± 一次操作）；
+- 四承诺／成长路线迁入现有帮助弹窗；
+- 撤下普通用户 PAN-01R CTA；后台与测试保留；
+- 侧栏不常驻 Package／模型／能力／品牌；
+- 异常 fail-closed；测试 A–T；非目标含 PAN-02 不得偷跑。
+
+同步：总任务 → `PAN-01S_specified`；执行索引 v0.2.1；规格 → **v0.6.2**（§3.1.1 澄清，非战略改写）；context 决策 #73；能力表；cursor rule。
+
+### 状态
+
+PAN-01S：`specified` / `owner_approved_for_implementation` / `frozen_for_implementation` / `not_started`
+（`owner_approved_for_implementation` ≠ 实现 accepted）
+
+P1-PANORAMA：`active` / `three_part_alpha_reframed` / `PAN-01S_specified`
+
+本轮 **docs-only**：未创建实现分支；未修改 `digitalme-app/**`；未触碰真实 Package；未提交交接件。
+
+### 下一步
+
+**当前唯一任务：Codex 复核 PAN-01S 任务包后，创建实现分支并编码。** PAN-02～PAN-06 未开始。
+
+---
+
 ## 2026-07-19 PAN-00R 最终验收 · accepted
 
 ### 证据
@@ -20,7 +49,7 @@ PAN-00R 标为 **`accepted`**（docs/strategy acceptance；任务包 v0.1.2）�
 
 ### 下一步
 
-**当前唯一任务：起草并冻结 PAN-01S 独立任务包**。PAN-01S 尚未起草、未创建实现分支、未开始实现。PAN-02～PAN-06 未开始。
+（历史）当时下一任务为起草并冻结 PAN-01S 独立任务包；现已由上方「PAN-01S 规划」条目承接。
 
 ---
 
