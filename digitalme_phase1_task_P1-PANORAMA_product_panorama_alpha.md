@@ -2,7 +2,7 @@
 
 版本：v0.4
 日期：2026-07-19
-状态：`active / three_part_alpha_reframed / PAN-01S_statically_verified`
+状态：`active / three_part_alpha_reframed / PAN-01S.1_specified`
 任务类型：阶段策略调整 / 产品纵向闭环 / 市场认知启动
 文档基线：`9dd6fa0`（PAN-01R 最终实现 HEAD）；战略修订依据 `digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`
 历史基线：`5ab55dc`（代码）+ `8fb8210`（P1-07_DOCS_BASE）；P1-07 保持 `statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_for_panorama`，不因此标记 accepted
@@ -252,7 +252,8 @@ PAN-00 accepted
 
 ### 6.4 当前调度
 
-- **当前唯一任务**：Owner 主路径验收 PAN-01S；不得开始 PAN-02；
+- **当前唯一任务**：实现 PAN-01S.1（主体解释与渐进式构建）；不得标 PAN-01S accepted；不得开始 PAN-02；
+- PAN-01S：`statically_verified` / `owner_changes_requested`；
 - PAN-02～PAN-06 保持 `planned` / `not_started`。
 
 ---

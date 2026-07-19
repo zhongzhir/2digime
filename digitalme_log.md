@@ -5,6 +5,32 @@
 
 ---
 
+## 2026-07-19 PAN-01S.1 规格接受 · 允许修订实现
+
+### 做了什么
+
+docs-only：冻结并接受 `digitalme_phase1_task_PAN-01S.1_subject_clarity_progressive_build.md`。
+
+Owner 对 PAN-01S（`98fb817`）验收未通过：主体解释不足、构建为常驻控制台、评测/材料建议/文件夹占主路径。PAN-01R 入口与帮助迁移通过。
+
+裁定：PAN-01S → `statically_verified` / `owner_changes_requested`（**不** accepted）。PAN-01S.1 只修表达与渐进构建，不启动 PAN-02。
+
+同步：能力表、执行索引 v0.2.5、context 决策 #76、cursor rule、PAN-01S 任务包状态。
+
+### 状态
+
+PAN-01S.1：`specified` / `owner_approved_for_implementation` / `frozen_for_implementation` / `not_started`  
+PAN-01S：`statically_verified` / `owner_changes_requested`（不 accepted）  
+PAN-02：`planned` / `not_started`
+
+本轮 docs-only：未改 `digitalme-app/**`；未触碰 Package；未提交交接件。
+
+### 下一步
+
+**实现 PAN-01S.1；不得标 PAN-01S accepted；不得开始 PAN-02。**
+
+---
+
 ## 2026-07-19 PAN-01S 实现 · statically_verified
 
 ### 做了什么
@@ -20,14 +46,11 @@
 
 ### 状态
 
-PAN-01S：`statically_verified`（**不** accepted；等待 Owner 主路径验收）
-PAN-02～PAN-06：`planned` / `not_started`
-
-未触碰真实 Package；未提交交接件；未 push。
+（历史）当时：`statically_verified`；现已加 `owner_changes_requested`，由上方 PAN-01S.1 承接。
 
 ### 下一步
 
-**当前唯一任务：Owner 主路径验收 PAN-01S；不得开始 PAN-02。**
+（历史）当时等待 Owner 验收；现由 PAN-01S.1 修订承接。
 
 ---
 

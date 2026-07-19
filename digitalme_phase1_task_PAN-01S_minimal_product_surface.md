@@ -2,28 +2,30 @@
 
 版本：v0.1.1
 日期：2026-07-19
-状态：`statically_verified` / `owner_approved_for_implementation` / `frozen_for_implementation` / `codex_review_passed` / `implemented`
+状态：`statically_verified` / `owner_changes_requested` / `implemented`
 所属总任务：`P1-PANORAMA：Digital Me 产品全貌 Alpha`（v0.4，三位一体重构）
 前置任务：PAN-00R `accepted`（`07b631d` + `6ae2dca` + `0fcd432`）
 规划基线：`488d733`（PAN-01S 任务包初稿冻结）；规格修复基线：`2aec151`（v0.1.1 歧义关闭）；规格接受：`269fa10`
 PAN-01R 代码血缘基线：`9dd6fa0`（PAN-01R 最终实现；含 PAN-01 scaffold；**不是**本任务 checkout 起点）
-实现分支：`codex/pan-01s-minimal-product-surface`（从规格接受提交 `269fa10` 创建）
+实现分支：`codex/pan-01s-minimal-product-surface`（从规格接受提交 `269fa10` 创建；实现 `98fb817`）
 代码 Owner：Cursor（实现阶段）
 任务类型：Product Panorama Alpha / 极简产品表面收口（UI 与导航；无新业务能力）
 规格依据：产品规格 **v0.6.3**（§2.0 极简原则、§2.0.1 相关性门、§3.1 / §3.1.1 极简 IA 与默认「我」细则）；`digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`
 
 > **状态语义（强制）**
 >
-> - `statically_verified` 表示实现已完成并通过规定 hermetic / owner-runtime / 回归测试；**不**表示 Owner 主路径验收通过；**不**标 `accepted`；
+> - `statically_verified` 表示工程实现与规定测试已通过；**不**表示 Owner 主路径验收通过；**不**标 `accepted`；
+> - `owner_changes_requested`（2026-07-19）：Owner 验收判定产品表达未通过；修订由 **PAN-01S.1** 承接（见 `digitalme_phase1_task_PAN-01S.1_subject_clarity_progressive_build.md`）；
 > - `codex_review_passed` **仅**表示实现规格（任务包 v0.1.1）已通过 Codex 最终复核；
-> - `codex_review_changes_requested` 为历史过程状态，保留于修订记录与 log；
-> - `accepted` 须待 Owner 主路径验收。
+> - `accepted` 须待 Owner 主路径验收（含 PAN-01S.1 修订后）。
 
 > **v0.1.1 修订（2026-07-19，Codex 第一轮）**：冻结唯一主操作优先级 P0→P4（互斥、顺序求值）；冻结 PAN-01R「无生产入口」；删除模糊「未完成构建」条件；补冲突案例与组合测试。
 >
 > **规格接受（2026-07-19，Codex 最终复核通过）**：实现规格通过；允许从接受提交创建实现分支；状态曾为 `codex_review_passed` / `not_started`。
 >
 > **实现（2026-07-19）**：极简「我」入口、P0→P4、帮助迁移、侧栏收口、PAN-01R 无生产入口；最高 `statically_verified`；**未** accepted；**未**开始 PAN-02。
+>
+> **Owner 验收未通过（2026-07-19）**：视觉减法方向正确，但主体解释与构建渐进性不足；进入 PAN-01S.1 修订；**仍不** accepted。
 ---
 
 ## 0. 任务定位
@@ -460,9 +462,9 @@ PAN-01S **不**重做能力页。
 
 | 项 | 值 |
 |---|---|
-| 本轮（实现） | 极简产品表面已落地；`statically_verified`；等待 Owner 主路径验收 |
-| **唯一下一任务** | **Owner 主路径验收 PAN-01S**（通过后方可考虑 accepted）；**不得开始 PAN-02** |
-| 实现分支名 | `codex/pan-01s-minimal-product-surface` |
+| 本轮 | Owner 验收未通过；进入 PAN-01S.1 |
+| **唯一下一任务** | **实现 PAN-01S.1**（主体解释与渐进式构建）；**不得**标 PAN-01S accepted；**不得开始 PAN-02** |
+| 实现分支名 | `codex/pan-01s-minimal-product-surface`（继续） |
 | PAN-02～PAN-06 | `planned` / `not_started` |
 
-实现最高 `statically_verified`；**不**标 `accepted`；**不**开始 PAN-02。
+PAN-01S 最高仍为 `statically_verified` / `owner_changes_requested`；**不**标 `accepted`。
