@@ -5,6 +5,24 @@
 
 ---
 
+## 2026-07-19 PAN-01R Codex 第二轮最小收口 · statically_verified / codex_review_changes_requested
+
+### 修复
+
+1. DecisionAudit preflight 使用 ok + verify.healthy
+2. completed-before-cancel → abandoned
+3. request reject 先审计后改状态
+4. 执行前推理环境 digest 校验（消费 token 前）
+
+### 验证
+
+test:pan-01r 70/70；owner-runtime 20/20；回归通过
+
+### 状态
+
+statically_verified / codex_review_changes_requested（不标 accepted）。PAN-02 未开始。
+
+---
 ## 2026-07-19 PAN-01R Codex 第一轮复核修复 · statically_verified / codex_review_changes_requested
 
 ### 修复

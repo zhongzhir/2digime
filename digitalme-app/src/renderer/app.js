@@ -1740,25 +1740,34 @@ async function renderPanoramaExpStep4() {
   let runId = null;
   let cancelRequested = false;
   let cancelInFlight = false;
+  let lastCancelRes = null;
   let unsubProgress = null;
 
   async function requestCancel() {
     cancelRequested = true;
     if (!runId) {
       setSafeText(status, "正在请求停止…");
-      return;
+      return null;
     }
-    if (cancelInFlight) return;
+    if (cancelInFlight) return lastCancelRes;
     cancelInFlight = true;
     try {
       const res = await window.digitalMe.cancelPanoramaRun({ runId });
-      setSafeText(
-        status,
-        res && res.ok
-          ? `已${res.status === "abandoned" ? "放弃" : "停止"}：迟到结果将被丢弃`
-          : (res && res.message) || "取消失败"
-      );
-      if (res && res.cancelLabel) setSafeText(cancelBtn, res.cancelLabel);
+      lastCancelRes = res;
+      if (res && res.ok && (res.status === "cancelled" || res.status === "abandoned")) {
+        setSafeText(
+          status,
+          `已${res.status === "abandoned" ? "放弃" : "停止"}：迟到结果将被丢弃`
+        );
+        if (res.cancelLabel) setSafeText(cancelBtn, res.cancelLabel);
+      } else {
+        setSafeText(
+          status,
+          (res && res.message) ||
+            (res && res.status ? `无法停止（当前状态：${res.status}）` : "取消失败")
+        );
+      }
+      return res;
     } finally {
       cancelInFlight = false;
     }
@@ -1770,7 +1779,7 @@ async function renderPanoramaExpStep4() {
         runId = info.runId;
         if (cancelRequested) requestCancel();
       }
-      if (info && info.stage) {
+      if (info && info.stage && !cancelRequested) {
         setSafeText(status, `正在执行（${info.stage}）…`);
       }
     });
@@ -1788,16 +1797,34 @@ async function renderPanoramaExpStep4() {
     panExpState.run = run;
     runId = (run && run.runId) || runId;
 
-    if (cancelRequested && run && run.status === "completed" && runId) {
-      await window.digitalMe.cancelPanoramaRun({ runId });
-      setSafeText(status, "已请求停止；本次结果不进入审阅");
+    if (cancelRequested) {
+      let cancelRes = lastCancelRes;
+      if (runId && (!cancelRes || cancelRes.status === "completed" || cancelInFlight === false)) {
+        cancelRes = (await requestCancel()) || cancelRes;
+      }
+      if (
+        cancelRes &&
+        cancelRes.ok &&
+        (cancelRes.status === "cancelled" || cancelRes.status === "abandoned")
+      ) {
+        setSafeText(status, "已取消，结果不可采纳");
+        return;
+      }
+      // Late cancel could not abandon — show real status, never pretend stopped
+      if (run && (run.status === "cancelled" || run.status === "abandoned")) {
+        setSafeText(status, "已取消，结果不可采纳");
+        return;
+      }
+      setSafeText(
+        status,
+        (cancelRes && cancelRes.message) ||
+          (run && run.message) ||
+          "无法放弃本次结果；请查看真实状态"
+      );
       return;
     }
 
-    if (
-      cancelRequested ||
-      (run && (run.status === "cancelled" || run.status === "abandoned"))
-    ) {
+    if (run && (run.status === "cancelled" || run.status === "abandoned")) {
       setSafeText(status, "已取消，结果不可采纳");
       return;
     }
@@ -1816,7 +1843,12 @@ async function renderPanoramaExpStep4() {
       }
       return;
     }
-    renderPanoramaExpStep5(run);
+    // Only enter step 5 for explicit completed, adoptable-path results when user did not cancel
+    if (run.status === "completed") {
+      renderPanoramaExpStep5(run);
+      return;
+    }
+    setSafeText(status, (run && run.message) || `运行结束（${run.status || "未知"}）`);
   } catch (e) {
     if (typeof unsubProgress === "function") unsubProgress();
     if (cancelRequested) {

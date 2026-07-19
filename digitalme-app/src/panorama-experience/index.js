@@ -225,7 +225,8 @@ function createPanoramaExperience(deps = {}) {
         userData: resolveUserData(userData),
         deps: {
           appendAudit,
-          auditResolveState: (ud) => decisionAudit.resolveState(ud),
+          auditResolveState: (ud, options) => decisionAudit.resolveState(ud, options),
+          auditResolveStateOptions: { allowInitialize: true, allowRecover: true },
         },
       });
     },

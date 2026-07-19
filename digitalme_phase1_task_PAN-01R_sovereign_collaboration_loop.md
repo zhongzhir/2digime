@@ -2,7 +2,7 @@
 
 版本：v0.1.2
 日期：2026-07-19
-状态：`statically_verified` / `codex_review_changes_requested`（不得标 `accepted` / `runtime_verified`；Codex 第一轮复核修复已合入，待再复核与 Owner 主路径验收）
+状态：`statically_verified` / `codex_review_changes_requested`（不得标 `accepted` / `runtime_verified`；Codex 第二轮最小收口已合入；待再复核与 Owner 主路径验收）
 所属总任务：`P1-PANORAMA：Digital Me 产品全貌 Alpha`
 前置任务：PAN-01 `statically_verified` / `owner_product_perception_failed` / `retained_as_scaffold`（不标 accepted；不回滚）
 建议代码基线：`a40c5f8`（分支 `codex/pan-01-product-panorama-home`）

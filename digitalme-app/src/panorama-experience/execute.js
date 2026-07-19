@@ -8,6 +8,7 @@
 const crypto = require("node:crypto");
 const {
   consumeToken,
+  getToken,
   buildInferenceEnvironment,
   publicInferenceEnvironment,
 } = require("./authorization");
@@ -242,14 +243,46 @@ async function confirmAndExecute({ tokenId, senderId, packageDir, userData, deps
     };
   }
 
+  // Peek token and validate inference environment BEFORE consuming
+  const tokPeek = getToken(tokenId);
+  if (!tokPeek) {
+    return { ok: false, code: "token_not_found", message: "授权已失效或不存在" };
+  }
+  if (String(tokPeek.senderId) !== String(senderId)) {
+    return { ok: false, code: "sender_mismatch", message: "发送方不匹配" };
+  }
+  const liveBeforeConsume = buildInferenceEnvironment(getRuntimeConfig);
+  const frozenDigest = tokPeek.inferenceEnvironmentDigest || "";
+  const liveDigest = liveBeforeConsume.inferenceEnvironmentDigest || "";
+  if (!frozenDigest || liveDigest !== frozenDigest) {
+    return {
+      ok: false,
+      code: "inference_environment_changed",
+      message: "推理环境已变化，请重新生成授权预览后再执行",
+      requireNewPreview: true,
+    };
+  }
+
   const consumed = consumeToken(tokenId, senderId, null, now);
   if (!consumed.ok) return consumed;
   const token = consumed.token;
 
-  const runId = "run_" + crypto.randomBytes(10).toString("hex");
+  // Defense in depth: re-check live digest immediately before any model use
   const liveInference = buildInferenceEnvironment(getRuntimeConfig);
-  const inferenceEnvironment =
-    token.inferenceEnvironment || publicInferenceEnvironment(liveInference);
+  if (
+    !token.inferenceEnvironmentDigest ||
+    liveInference.inferenceEnvironmentDigest !== token.inferenceEnvironmentDigest
+  ) {
+    return {
+      ok: false,
+      code: "inference_environment_changed",
+      message: "推理环境已变化，请重新生成授权预览后再执行",
+      requireNewPreview: true,
+    };
+  }
+
+  const runId = "run_" + crypto.randomBytes(10).toString("hex");
+  const inferenceEnvironment = publicInferenceEnvironment(liveInference);
   const abortController = new AbortController();
 
   let personalizedAvailable = !!token.personalizedAvailable;
@@ -578,8 +611,96 @@ function cancelOrAbandonRun({ runId, senderId, userData, deps = {} }) {
   if (String(run.senderId) !== String(senderId)) {
     return { ok: false, code: "sender_mismatch", message: "发送方不匹配" };
   }
+
+  // Already terminal non-running states
+  if (run.status === "cancelled" || run.status === "abandoned") {
+    return {
+      ok: true,
+      runId: run.runId,
+      status: run.status,
+      cancelLabel: run.cancelLabel || (run.status === "abandoned" ? "放弃本次结果" : "停止"),
+      alreadyFinished: true,
+    };
+  }
+
+  if (run.status === "failed") {
+    return {
+      ok: false,
+      code: "already_failed",
+      runId: run.runId,
+      status: "failed",
+      message: run.message || "运行已失败",
+      alreadyFinished: true,
+    };
+  }
+
+  if (run.status === "completed") {
+    if (run.adoptedDeliverableId) {
+      return {
+        ok: false,
+        code: "already_adopted",
+        runId: run.runId,
+        status: "completed",
+        message: "结果已采纳，不能取消或删除",
+        alreadyFinished: true,
+      };
+    }
+    if (run.rejectedAt) {
+      return {
+        ok: false,
+        code: "already_rejected",
+        runId: run.runId,
+        status: "completed",
+        message: "结果已拒绝",
+        alreadyFinished: true,
+      };
+    }
+    // User cancel after completion but before adopt/reject → abandon
+    run.status = "abandoned";
+    run.cancelLabel = "放弃本次结果";
+    run.stage = "abandoned";
+    run.adoptable = false;
+    run.result = null;
+    run.message = "已在结果展示前放弃本次结果";
+    run.code = "result_abandoned";
+
+    if (typeof deps.appendAudit === "function" && userData) {
+      try {
+        deps.appendAudit(userData, {
+          event: "execution_cancelled",
+          decisionId: run.runId,
+          policyVersion: "pan01r-v1",
+          requestDigest: run.requestId,
+          actor: `owner:sender:${senderId}`,
+          purpose: "panorama_sovereign_collaboration",
+          action: "abandon_completed_run",
+          dataScopes: [],
+          destination: "none",
+          outcome: { status: "abandoned", lateCancel: true },
+        });
+      } catch {
+        /* abandon still takes effect */
+      }
+    }
+
+    return {
+      ok: true,
+      runId: run.runId,
+      status: "abandoned",
+      cancelLabel: run.cancelLabel,
+      aborted: false,
+      lateAbandon: true,
+    };
+  }
+
   if (run.status !== "running") {
-    return { ok: true, runId: run.runId, status: run.status, alreadyFinished: true };
+    return {
+      ok: false,
+      code: "invalid_state",
+      runId: run.runId,
+      status: run.status,
+      message: "当前状态不可取消",
+    };
   }
 
   let aborted = false;

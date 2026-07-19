@@ -32,10 +32,16 @@ function auditPreflight(deps, userData) {
     return;
   }
   if (typeof deps.appendAudit !== "function" || !userData) return;
-  // Lightweight writable probe — uses a no-op-safe check via resolveState if available
+  // Real DecisionAudit.resolveState returns { ok, verify: { healthy }, ... } — never state.healthy
   if (typeof deps.auditResolveState === "function") {
-    const st = deps.auditResolveState(userData);
-    if (st && st.healthy === false) {
+    const options =
+      deps.auditResolveStateOptions && typeof deps.auditResolveStateOptions === "object"
+        ? deps.auditResolveStateOptions
+        : { allowInitialize: true, allowRecover: true };
+    const st = deps.auditResolveState(userData, options);
+    const ok = !!(st && st.ok === true);
+    const healthy = !!(st && st.verify && st.verify.healthy === true);
+    if (!ok || !healthy) {
       const err = new Error("audit unhealthy");
       err.code = "audit_unhealthy";
       throw err;

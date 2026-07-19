@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * PAN-01R sovereign collaboration loop — hermetic tests (56 requirements).
+ * PAN-01R sovereign collaboration loop — hermetic tests (70 requirements).
  * Run: npm run test:pan-01r
  */
 
@@ -21,6 +21,9 @@ const {
   KIND_LABELS,
   selectDefaultsForKind,
   MAX_EVIDENCE,
+  adoptResult,
+  cancelOrAbandonRun,
+  getRequest,
   __test,
 } = require("../src/panorama-experience");
 const {
@@ -36,6 +39,12 @@ const {
 const { clearRequestStoreForTests } = require("../src/panorama-experience/request");
 const { clearRunStoreForTests, getRunRecord } = require("../src/panorama-experience/execute");
 const { classifyIdentityClaim } = require("../src/panorama-experience/subject-brief");
+
+function libraryBytes(userData) {
+  const p = path.join(userData, "deliverables-library.json");
+  if (!fs.existsSync(p)) return 0;
+  return fs.statSync(p).size;
+}
 
 let passed = 0;
 let failed = 0;
@@ -2006,6 +2015,475 @@ async function main() {
       });
       const after = dirFingerprint(dir);
       assert.equal(after, before);
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("57. Real shape { ok:false, verify:{healthy:false} } blocks adopt", async () => {
+    resetStores();
+    const dir = makeFixture("adopt-shape-okf");
+    const ud = makeUserData("adopt-shape-okf");
+    try {
+      const { run } = await runHappyPath(dir, ud);
+      assert.equal(run.adoptable, true);
+      const adopt = adoptResult({
+        runId: run.runId,
+        senderId: "1",
+        userData: ud,
+        deps: {
+          appendAudit: (u, f) => decisionAudit.appendEntry(u, f),
+          auditResolveState: () => ({ ok: false, verify: { healthy: false } }),
+        },
+      });
+      assert.equal(adopt.ok, false);
+      assert.equal(adopt.code, "audit_failed");
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("58. { ok:true, verify:{healthy:false} } blocks adopt", async () => {
+    resetStores();
+    const dir = makeFixture("adopt-shape-hf");
+    const ud = makeUserData("adopt-shape-hf");
+    try {
+      const { run } = await runHappyPath(dir, ud);
+      const adopt = adoptResult({
+        runId: run.runId,
+        senderId: "1",
+        userData: ud,
+        deps: {
+          appendAudit: (u, f) => decisionAudit.appendEntry(u, f),
+          auditResolveState: () => ({ ok: true, verify: { healthy: false } }),
+        },
+      });
+      assert.equal(adopt.ok, false);
+      assert.equal(adopt.code, "audit_failed");
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("59. Preflight fail: library item count/bytes unchanged", async () => {
+    resetStores();
+    const dir = makeFixture("adopt-preflight-lib");
+    const ud = makeUserData("adopt-preflight-lib");
+    try {
+      const { run } = await runHappyPath(dir, ud);
+      const beforeCount = library.listDeliverables(ud).length;
+      const beforeBytes = libraryBytes(ud);
+      const adopt = adoptResult({
+        runId: run.runId,
+        senderId: "1",
+        userData: ud,
+        deps: {
+          appendAudit: (u, f) => decisionAudit.appendEntry(u, f),
+          auditResolveState: () => ({ ok: true, verify: { healthy: false } }),
+        },
+      });
+      assert.equal(adopt.ok, false);
+      assert.equal(library.listDeliverables(ud).length, beforeCount);
+      assert.equal(libraryBytes(ud), beforeBytes);
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("60. { ok:true, verify:{healthy:true} } allows adopt", async () => {
+    resetStores();
+    const dir = makeFixture("adopt-shape-ok");
+    const ud = makeUserData("adopt-shape-ok");
+    try {
+      const { run } = await runHappyPath(dir, ud);
+      const adopt = adoptResult({
+        runId: run.runId,
+        senderId: "1",
+        userData: ud,
+        deps: {
+          appendAudit: (u, f) => decisionAudit.appendEntry(u, f),
+          auditResolveState: () => ({ ok: true, verify: { healthy: true } }),
+        },
+      });
+      assert.equal(adopt.ok, true);
+      assert.ok(adopt.deliverableId);
+      assert.ok(library.getDeliverable(ud, adopt.deliverableId));
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("61. completed-before-cancel → abandoned, not adoptable", async () => {
+    resetStores();
+    const dir = makeFixture("late-cancel-abandon");
+    const ud = makeUserData("late-cancel-abandon");
+    try {
+      const { run } = await runHappyPath(dir, ud);
+      assert.equal(run.status, "completed");
+      assert.equal(run.adoptable, true);
+      const cancel = cancelOrAbandonRun({
+        runId: run.runId,
+        senderId: "1",
+        userData: ud,
+        deps: { appendAudit: (u, f) => decisionAudit.appendEntry(u, f) },
+      });
+      assert.equal(cancel.ok, true);
+      assert.equal(cancel.status, "abandoned");
+      assert.equal(cancel.lateAbandon, true);
+      const rec = getRunRecord(run.runId);
+      assert.equal(rec.status, "abandoned");
+      assert.equal(rec.adoptable, false);
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("62. abandoned clears result body", async () => {
+    resetStores();
+    const dir = makeFixture("late-cancel-clear");
+    const ud = makeUserData("late-cancel-clear");
+    try {
+      const { run } = await runHappyPath(dir, ud);
+      assert.ok(run.result && run.result.digitalMeText);
+      cancelOrAbandonRun({
+        runId: run.runId,
+        senderId: "1",
+        userData: ud,
+        deps: { appendAudit: (u, f) => decisionAudit.appendEntry(u, f) },
+      });
+      const rec = getRunRecord(run.runId);
+      assert.equal(rec.status, "abandoned");
+      assert.equal(rec.result, null);
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("63. already adopted cannot be deleted by late cancel", async () => {
+    resetStores();
+    const dir = makeFixture("adopt-then-late-cancel");
+    const ud = makeUserData("adopt-then-late-cancel");
+    try {
+      const { api, run } = await runHappyPath(dir, ud);
+      const adopt = api.adoptResult({ runId: run.runId, senderId: "1", userData: ud });
+      assert.equal(adopt.ok, true);
+      const cancel = api.cancelRun({ runId: run.runId, senderId: "1", userData: ud });
+      assert.equal(cancel.ok, false);
+      assert.equal(cancel.code, "already_adopted");
+      assert.ok(library.getDeliverable(ud, adopt.deliverableId));
+      const rec = getRunRecord(run.runId);
+      assert.equal(rec.status, "completed");
+      assert.equal(rec.adoptedDeliverableId, adopt.deliverableId);
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("64. failed cannot display as cancelled (cancel returns already_failed)", async () => {
+    resetStores();
+    const dir = makeFixture("fail-not-cancel");
+    const ud = makeUserData("fail-not-cancel");
+    try {
+      const api = createPanoramaExperience({
+        callModelStream: async () => {
+          throw new Error("upstream fail");
+        },
+        getRuntimeConfig: configuredRuntime,
+        appendAudit: (u, f) => decisionAudit.appendEntry(u, f),
+        packageDir: dir,
+        userData: ud,
+      });
+      const brief = buildSubjectBrief(dir);
+      const id = brief.evidence.find((e) => e.selectedByDefault).id;
+      const req = api.createRequest({ senderId: "1", packageDir: dir, userData: ud });
+      const preview = api.buildAuthPreview({
+        requestId: req.requestId,
+        senderId: "1",
+        selectedEvidenceIds: [id],
+        packageDir: dir,
+      });
+      const run = await api.confirmFromPreviewThenExecute({
+        previewId: preview.previewId,
+        confirmed: true,
+        senderId: "1",
+        packageDir: dir,
+        userData: ud,
+      });
+      assert.ok(run.status === "failed" || run.ok === false);
+      const cancel = api.cancelRun({ runId: run.runId, senderId: "1", userData: ud });
+      assert.equal(cancel.ok, false);
+      assert.equal(cancel.code, "already_failed");
+      assert.equal(cancel.status, "failed");
+      assert.notEqual(cancel.status, "cancelled");
+      assert.notEqual(cancel.status, "abandoned");
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("65. request reject audit fail → request still open", async () => {
+    resetStores();
+    const dir = makeFixture("req-rej-audit-fail");
+    const ud = makeUserData("req-rej-audit-fail");
+    try {
+      const api = createPanoramaExperience({
+        getRuntimeConfig: configuredRuntime,
+        appendAudit: (u, f) => {
+          if (f.event === "collaboration_request_rejected") {
+            throw Object.assign(new Error("audit boom"), { code: "audit_unhealthy" });
+          }
+          return decisionAudit.appendEntry(u, f);
+        },
+        packageDir: dir,
+        userData: ud,
+      });
+      const req = api.createRequest({ senderId: "1", packageDir: dir, userData: ud });
+      assert.equal(req.status, "open");
+      const rej = api.rejectRequest({ requestId: req.requestId, senderId: "1", userData: ud });
+      assert.equal(rej.ok, false);
+      assert.equal(rej.code, "audit_failed");
+      const still = getRequest(req.requestId);
+      assert.equal(still.status, "open");
+      assert.ok(!still.rejectedAt);
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("66. audit success then rejected", async () => {
+    resetStores();
+    const dir = makeFixture("req-rej-ok");
+    const ud = makeUserData("req-rej-ok");
+    try {
+      const api = createPanoramaExperience({
+        getRuntimeConfig: configuredRuntime,
+        appendAudit: (u, f) => decisionAudit.appendEntry(u, f),
+        packageDir: dir,
+        userData: ud,
+      });
+      const req = api.createRequest({ senderId: "1", packageDir: dir, userData: ud });
+      const rej = api.rejectRequest({ requestId: req.requestId, senderId: "1", userData: ud });
+      assert.equal(rej.ok, true);
+      assert.equal(rej.status, "rejected");
+      const rec = getRequest(req.requestId);
+      assert.equal(rec.status, "rejected");
+      assert.ok(rec.rejectedAt);
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("67. rejected request cannot preview/execute", async () => {
+    resetStores();
+    const dir = makeFixture("req-rej-block");
+    const ud = makeUserData("req-rej-block");
+    try {
+      const api = createPanoramaExperience({
+        callModelStream: stubModel([]),
+        getRuntimeConfig: configuredRuntime,
+        appendAudit: (u, f) => decisionAudit.appendEntry(u, f),
+        packageDir: dir,
+        userData: ud,
+      });
+      const brief = buildSubjectBrief(dir);
+      const ids = brief.evidence.filter((e) => e.selectedByDefault).map((e) => e.id);
+      const req = api.createRequest({
+        senderId: "1",
+        evidenceIds: ids,
+        packageDir: dir,
+        userData: ud,
+      });
+      const rej = api.rejectRequest({ requestId: req.requestId, senderId: "1", userData: ud });
+      assert.equal(rej.ok, true);
+      const preview = api.buildAuthPreview({
+        requestId: req.requestId,
+        senderId: "1",
+        selectedEvidenceIds: ids,
+        packageDir: dir,
+      });
+      assert.equal(preview.ok, false);
+      assert.equal(preview.code, "request_rejected");
+      const grant = api.confirmGrantAndExecute({
+        requestId: req.requestId,
+        senderId: "1",
+        selectedEvidenceIds: ids,
+        packageDir: dir,
+        userData: ud,
+      });
+      const granted = await Promise.resolve(grant);
+      assert.equal(granted.ok, false);
+      assert.equal(granted.code, "request_rejected");
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("68. after preview confirm, before execute, endpoint change → no model call", async () => {
+    resetStores();
+    const dir = makeFixture("env-endpoint-change");
+    const ud = makeUserData("env-endpoint-change");
+    try {
+      let cfg = configuredRuntime();
+      const modelCalls = [];
+      const api = createPanoramaExperience({
+        callModelStream: stubModel(modelCalls),
+        getRuntimeConfig: () => cfg,
+        appendAudit: (u, f) => decisionAudit.appendEntry(u, f),
+        packageDir: dir,
+        userData: ud,
+      });
+      const brief = buildSubjectBrief(dir);
+      const ids = brief.evidence.filter((e) => e.selectedByDefault).map((e) => e.id);
+      const req = api.createRequest({
+        senderId: "1",
+        evidenceIds: ids,
+        packageDir: dir,
+        userData: ud,
+      });
+      const preview = api.buildAuthPreview({
+        requestId: req.requestId,
+        senderId: "1",
+        selectedEvidenceIds: ids,
+        packageDir: dir,
+      });
+      assert.equal(preview.ok, true);
+      const granted = api.confirmFromPreview({
+        previewId: preview.previewId,
+        confirmed: true,
+        senderId: "1",
+        packageDir: dir,
+        userData: ud,
+      });
+      assert.equal(granted.ok, true);
+      assert.ok(granted.tokenId);
+      cfg = {
+        ...cfg,
+        baseURL: "https://other-endpoint.invalid/v1",
+      };
+      const run = await api.confirmAndExecute({
+        tokenId: granted.tokenId,
+        senderId: "1",
+        packageDir: dir,
+        userData: ud,
+      });
+      assert.equal(run.ok, false);
+      assert.equal(run.code, "inference_environment_changed");
+      assert.equal(modelCalls.length, 0);
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("69. model change → no model call", async () => {
+    resetStores();
+    const dir = makeFixture("env-model-change");
+    const ud = makeUserData("env-model-change");
+    try {
+      let cfg = configuredRuntime();
+      const modelCalls = [];
+      const api = createPanoramaExperience({
+        callModelStream: stubModel(modelCalls),
+        getRuntimeConfig: () => cfg,
+        appendAudit: (u, f) => decisionAudit.appendEntry(u, f),
+        packageDir: dir,
+        userData: ud,
+      });
+      const brief = buildSubjectBrief(dir);
+      const ids = brief.evidence.filter((e) => e.selectedByDefault).map((e) => e.id);
+      const req = api.createRequest({
+        senderId: "1",
+        evidenceIds: ids,
+        packageDir: dir,
+        userData: ud,
+      });
+      const preview = api.buildAuthPreview({
+        requestId: req.requestId,
+        senderId: "1",
+        selectedEvidenceIds: ids,
+        packageDir: dir,
+      });
+      const granted = api.confirmFromPreview({
+        previewId: preview.previewId,
+        confirmed: true,
+        senderId: "1",
+        packageDir: dir,
+        userData: ud,
+      });
+      assert.equal(granted.ok, true);
+      cfg = { ...cfg, model: "changed-model-v2" };
+      const run = await api.confirmAndExecute({
+        tokenId: granted.tokenId,
+        senderId: "1",
+        packageDir: dir,
+        userData: ud,
+      });
+      assert.equal(run.ok, false);
+      assert.equal(run.code, "inference_environment_changed");
+      assert.equal(modelCalls.length, 0);
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("70. unchanged env executes normally", async () => {
+    resetStores();
+    const dir = makeFixture("env-unchanged");
+    const ud = makeUserData("env-unchanged");
+    try {
+      const cfg = configuredRuntime();
+      const modelCalls = [];
+      const api = createPanoramaExperience({
+        callModelStream: stubModel(modelCalls),
+        getRuntimeConfig: () => cfg,
+        appendAudit: (u, f) => decisionAudit.appendEntry(u, f),
+        packageDir: dir,
+        userData: ud,
+      });
+      const brief = buildSubjectBrief(dir);
+      const ids = brief.evidence.filter((e) => e.selectedByDefault).map((e) => e.id);
+      const req = api.createRequest({
+        senderId: "1",
+        evidenceIds: ids,
+        packageDir: dir,
+        userData: ud,
+      });
+      const preview = api.buildAuthPreview({
+        requestId: req.requestId,
+        senderId: "1",
+        selectedEvidenceIds: ids,
+        packageDir: dir,
+      });
+      const granted = api.confirmFromPreview({
+        previewId: preview.previewId,
+        confirmed: true,
+        senderId: "1",
+        packageDir: dir,
+        userData: ud,
+      });
+      assert.equal(granted.ok, true);
+      const run = await api.confirmAndExecute({
+        tokenId: granted.tokenId,
+        senderId: "1",
+        packageDir: dir,
+        userData: ud,
+      });
+      assert.equal(run.ok, true);
+      assert.equal(run.status, "completed");
+      assert.ok(modelCalls.length >= 1);
     } finally {
       cleanup(dir);
       cleanup(ud);

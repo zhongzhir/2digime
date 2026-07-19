@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * PAN-01R Owner runtime harness (A–Q checklist).
+ * PAN-01R Owner runtime harness (A–Z checklist).
  * Uses hermetic package + model stub via __PAN01R_TEST_HOOKS__.
  */
 
@@ -785,6 +785,53 @@ async function runPan01rOwnerRuntimeHarness({ BrowserWindow }) {
     pass("Y. receipt cross-sender reject");
   } catch (err) {
     fail("Y. receipt cross-sender reject", err);
+  }
+
+  // Z. late cancel after completed (no progress) → abandoned, no step5
+  try {
+    await evalIn(win, `document.getElementById("panorama-exp-close")?.click()`);
+    await sleep(100);
+    global.__PAN01R_TEST_HOOKS__.suppressRunProgress = true;
+    global.__PAN01R_TEST_HOOKS__.lastRunId = null;
+    global.__PAN01R_TEST_HOOKS__.slowModelMs = 400;
+    await openExperience(win);
+    await walkToStep3(win);
+    await evalIn(
+      win,
+      `([...document.querySelectorAll("#panorama-exp-step3 button")].find((b) => /确认并执行/.test(b.textContent || ""))).click()`
+    );
+    await waitFor(async () => {
+      const ready = await evalIn(win, `!!document.getElementById("panorama-exp-cancel")`);
+      return ready ? true : null;
+    }, { label: "Z cancel button", timeoutMs: 5000 });
+    await evalIn(win, `document.getElementById("panorama-exp-cancel")?.click()`);
+    const ui = await waitFor(async () => {
+      const s = await evalIn(
+        win,
+        `({
+          step4: document.getElementById("panorama-exp-step4")?.innerText || "",
+          step5hidden: document.getElementById("panorama-exp-step5")?.classList.contains("hidden"),
+        })`
+      );
+      // Do not match the cancel button label「停止」alone — wait for terminal cancel/abandon copy
+      if (s.step5hidden && /已取消|已放弃|结果不可采纳|迟到结果将被丢弃/.test(s.step4)) return s;
+      return null;
+    }, { label: "Z abandoned UI", timeoutMs: 20000 });
+    assert.equal(ui.step5hidden, true);
+    assert.match(ui.step4, /已取消|已放弃|结果不可采纳/);
+    const runId = global.__PAN01R_TEST_HOOKS__.lastRunId;
+    assert.ok(runId, "expected lastRunId from onRunCreated");
+    const { getRun } = require("../src/panorama-experience");
+    const rec = getRun(runId);
+    assert.equal(rec.status, "abandoned");
+    assert.equal(!!rec.adoptable, false);
+    global.__PAN01R_TEST_HOOKS__.suppressRunProgress = false;
+    global.__PAN01R_TEST_HOOKS__.slowModelMs = 0;
+    pass("Z. late cancel after completed abandons");
+  } catch (err) {
+    global.__PAN01R_TEST_HOOKS__.suppressRunProgress = false;
+    global.__PAN01R_TEST_HOOKS__.slowModelMs = 0;
+    fail("Z. late cancel after completed abandons", err);
   }
 
   const failed = results.filter((r) => !r.ok);

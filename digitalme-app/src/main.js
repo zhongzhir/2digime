@@ -3268,6 +3268,8 @@ ipcMain.handle("panoramaExperience:confirmAndExecute", async (event, payload) =>
     userData: pan01rUserData(),
     onRunCreated: (info) => {
       try {
+        if (hooks) hooks.lastRunId = info && info.runId;
+        if (hooks && hooks.suppressRunProgress) return;
         if (event && event.sender && !event.sender.isDestroyed()) {
           event.sender.send("panoramaExperience:progress", {
             runId: info && info.runId,

@@ -210,9 +210,8 @@ function rejectRequest(requestId, senderId, userData, deps = {}) {
   if (isRequestExpired(rec, deps.now)) {
     return { ok: false, code: "request_expired", message: "协作请求已过期" };
   }
-  rec.status = "rejected";
-  rec.rejectedAt = new Date(nowMs(deps.now)).toISOString();
 
+  // Audit FIRST; only mutate request after success
   const appendAudit = deps.appendAudit;
   if (typeof appendAudit === "function" && userData) {
     try {
@@ -228,7 +227,7 @@ function rejectRequest(requestId, senderId, userData, deps = {}) {
         destination: "none",
         outcome: { status: "rejected" },
       });
-    } catch (err) {
+    } catch {
       return {
         ok: false,
         code: "audit_failed",
@@ -236,6 +235,9 @@ function rejectRequest(requestId, senderId, userData, deps = {}) {
       };
     }
   }
+
+  rec.status = "rejected";
+  rec.rejectedAt = new Date(nowMs(deps.now)).toISOString();
   return { ok: true, requestId: rec.requestId, status: "rejected" };
 }
 
