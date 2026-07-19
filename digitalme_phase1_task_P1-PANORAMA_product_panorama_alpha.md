@@ -1,8 +1,8 @@
 # Digital Me 总任务 P1-PANORAMA：产品全貌 Alpha
 
-版本：v0.3.1
-日期：2026-07-18
-状态：`active / PAN-01_statically_verified`
+版本：v0.3.2
+日期：2026-07-19
+状态：`active / PAN-01R_frozen_for_implementation`
 任务类型：阶段策略调整 / 产品纵向闭环 / 市场认知启动
 建议基线：`5ab55dc`（代码）+ `8fb8210`（P1-07_DOCS_BASE，仅收工文档）；P1-07 保持 `statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_for_panorama`，不因此标记 accepted
 
@@ -532,6 +532,18 @@ P1-PANORAMA 是总任务，不直接把所有内容交给一个实现分支。�
 
 原则：优先只读聚合；不为首屏新增复杂写入体系。
 
+**当前裁定（2026-07-19）**：`statically_verified` / `owner_product_perception_failed` / `retained_as_scaffold`；不标 accepted；不回滚。产品证明改由 PAN-01R 承接。
+
+## PAN-01R：Digital Me 主权协作闭环
+
+目标：用一条真实可经历的本地模拟协作，证明「主体依据 × 能力 × 授权 × 代表协作 × 结果处置」。
+
+交付：五步体验（理解我 → 协作请求 → 授权 → 双结果对照行动 → 采纳/拒绝与记录）；PAN-01 首屏最小 CTA 与能力口径修复。
+
+独立执行任务包：`digitalme_phase1_task_PAN-01R_sovereign_collaboration_loop.md`。
+
+状态：`specified` / `owner_approved` / `frozen_for_implementation`（`owner_approved` 仅指规格与启动授权，不指实现 accepted）。
+
 ## PAN-02：控制权面板
 
 目标：把现有可信底座转化为用户可见的掌控感。
@@ -762,11 +774,11 @@ P1-PANORAMA 不包含：
 批准后按以下顺序执行：
 
 ```text
-PAN-00 → PAN-01 → PAN-02 → PAN-03 → PAN-04 → PAN-06
-                    ↘ PAN-05 同步推进 ↗
+PAN-00 → PAN-01 → PAN-01R → PAN-02 → PAN-03 → PAN-04 → PAN-06
+                         ↘ PAN-05 同步推进 ↗
 ```
 
-每次只启动一个主实现任务；PAN-05 文案资产可并行起草，但不得与代码任务修改同一文件。
+PAN-02/03/04 在 PAN-01R 验收前为 `paused_until_PAN-01R_acceptance`。每次只启动一个主实现任务；PAN-05 文案资产可并行起草，但不得与代码任务修改同一文件。
 
 ### 15.3 子任务完成报告
 
@@ -816,6 +828,10 @@ P1-PANORAMA 只有在以下条件同时满足时才能标记完成：
 8. 明确“数据”包括事实信息和广泛数字产出物，不采用机械化个人数据变现逻辑；
 9. 将 Digital Org 纳入长期产品架构，但不扩大当前个人 Alpha 的实现范围。
 
-Owner 于 2026-07-18 确认后，PAN-00 已 **accepted**（验收提交 `bc85a14`）。PAN-01 已实现并标为 **`statically_verified`**（规划基线 `52b0d14`；实现分支 `codex/pan-01-product-panorama-home`；**不标 accepted**，待 Codex 复核与 Owner 主路径验收）。**下一实现任务不得自行启动**——等待验收通过后再进入 PAN-02。
+Owner 于 2026-07-18 确认后，PAN-00 已 **accepted**（验收提交 `bc85a14`）。PAN-01 已实现并标为 **`statically_verified`**，但 2026-07-19 Owner 产品感知验收**未通过**；裁定为 `owner_product_perception_failed` / `retained_as_scaffold`（**不标 accepted**；**不回滚**）。
 
-> **PAN-01：产品全貌首页**——已将「数字之我 → 首页」升级为「全貌」；侧栏「我」默认进入全貌；五态与 navTarget 由主进程生成；只读，未新增主体写入。
+Owner 于 2026-07-19 批准 **PAN-01R** 独立任务包并授权：规格冻结提交后直接创建实现分支编码，不等待中间确认。PAN-02/03/04 暂停至 PAN-01R 验收。**唯一下一实现任务：PAN-01R**。
+
+> **PAN-01**：可信只读全貌 scaffold；四承诺与成长路线降为辅助地图。
+>
+> **PAN-01R**：主权协作闭环——用本地模拟研究协作证明属于我、由我控制、代表我行动与结果归我处置。

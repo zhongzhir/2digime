@@ -1,8 +1,8 @@
 # Digital Me 能力状态表
 
 版本：v0.1
-日期：2026-07-18
-依据：`digitalme_architecture_audit_20260716.md`、`digitalme_phase1_subject_upgrade_plan_v0.1.md`（Trusted Beta 依据）、`digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`、代码静态核查
+日期：2026-07-19
+依据：`digitalme_architecture_audit_20260716.md`、`digitalme_phase1_subject_upgrade_plan_v0.1.md`（Trusted Beta 依据）、`digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`、`digitalme_phase1_task_PAN-01R_sovereign_collaboration_loop.md`、代码静态核查
 维护规则：每项只允许一个工程状态；不得仅凭文档声明标记 `statically_verified` / `runtime_verified` / `released` / `accepted`。
 
 ## 工程状态枚举
@@ -53,9 +53,10 @@
 | ToolBroker (P1-05) | `statically_verified` | `src/tool-broker/*`；`l0:external-agent-started`；`npm run test:p1-05`（含 stop IPC）；主动取消 → `execution_canceled` | 停止须完全重启应用后复验；不标记 accepted |
 | External collaboration | `specified` | `digital-me-package/contracts/*`；规格 v0.5 Panorama 冻结章 | Agent Card / Interaction Contract 数据结构已对齐；无用户面协作闭环；Alpha 以本地模拟交付 |
 | Subject home (P1-03) | `runtime_verified` | `src/subject-overview/*`；`src/package-store/read-only.js`；`subject:getOverview`；P1-03 21/21；Codex 复核与 Owner 真实 Electron 验收 | 严格只读聚合与 SubjectOverview v1；不迁移写路径；Panorama 首页将复用只读聚合 |
-| **P1-PANORAMA** | `active` / `PAN-01_statically_verified` | 总任务包；执行索引；PAN-01 任务包 | 当前产品主线；非代码能力项 |
+| **P1-PANORAMA** | `active` / `PAN-01R_frozen_for_implementation` | 总任务包；执行索引；PAN-01R 任务包 | 当前产品主线；非代码能力项；PAN-02/03/04 暂停至 PAN-01R 验收 |
 | **PAN-00** | `accepted` | 验收提交 `bc85a14`；Codex 最终复核通过 | 战略与规格冻结完成 |
-| **PAN-01** | `statically_verified` | 分支 `codex/pan-01-product-panorama-home`；Codex 第二轮修复（身份访问结论 / 分层损坏降级）；`test:pan-01` 24/24；`test:pan-01-owner-runtime` 9/9 | 产品全貌首页；只读；**不标 accepted**；待 Codex 再复核与 Owner 验收 |
+| **PAN-01** | `statically_verified` / `owner_product_perception_failed` / `retained_as_scaffold` | 分支 `codex/pan-01-product-panorama-home`；基线 `a40c5f8`；`test:pan-01` / `test:pan-01-owner-runtime` | 产品全貌 homepage scaffold；只读；**不标 accepted**；不回滚；证明改由 PAN-01R |
+| **PAN-01R** | `specified` / `owner_approved` / `frozen_for_implementation` | `digitalme_phase1_task_PAN-01R_sovereign_collaboration_loop.md` | 主权协作闭环；`owner_approved` 仅规格与启动授权；实现后最多 `statically_verified`；**不得**提前标 accepted |
 
 ## P1-07 冻结说明（与任务包 / 执行索引 / log 一致）
 

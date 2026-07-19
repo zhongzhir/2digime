@@ -1,20 +1,38 @@
 # PAN-01 任务包：产品全貌首页
 
-版本：v0.2.2
-日期：2026-07-18
-状态：`statically_verified`（不得标 `accepted`；Codex 第二轮最小复核修复已合入；待 Codex 再复核与 Owner 主路径验收）
+版本：v0.2.3
+日期：2026-07-19
+状态：`statically_verified` / `owner_product_perception_failed` / `retained_as_scaffold`（不得标 `accepted`；不回滚；产品证明改由 PAN-01R 承接）
 所属总任务：`P1-PANORAMA：Digital Me 产品全貌 Alpha`
 前置任务：PAN-00 `accepted`（验收提交 `bc85a14`）
 建议代码基线：`5ab55dc`
 规划基线：`52b0d14`（PAN01_PLAN_BASE）
-实现基线：`01d56d0`
+实现基线：`a40c5f8`（含 Codex 两轮复核修复）
 实现分支：`codex/pan-01-product-panorama-home`
 代码 Owner：Cursor
-任务类型：Product Panorama Alpha / 只读产品纵向切片
+任务类型：Product Panorama Alpha / 只读产品纵向切片（scaffold）
+后续任务：`PAN-01R`（`digitalme_phase1_task_PAN-01R_sovereign_collaboration_loop.md`）
 
 ---
 
 ## 0. 本任务结论
+
+### 0.1 Owner 产品感知结论（2026-07-19）
+
+PAN-01 工程上 `statically_verified`，但 Owner 产品感知验收**未通过**。统一裁定：
+
+```text
+engineering: statically_verified
+owner: product_perception_failed
+disposition: retained_as_scaffold
+accepted: no
+```
+
+根因：展示并解释了承诺，但没有用一条真实体验证明承诺。「属于我」「由我控制」与「代表我协作」在当前页面主要仍是说明，而非可经历的证据。
+
+**不回滚** PAN-01；保留为可信只读全貌 scaffold。非阻断 UI 细节进入 backlog。产品证明改由 **PAN-01R** 纵向主权协作闭环提供。PAN-02/03/04 在 PAN-01R 验收前暂停。
+
+### 0.2 原任务目标（保留）
 
 PAN-01 要把现有 Subject Home 从“主体数据与工程状态汇总页”升级为普通用户第一次进入“我”时即可理解的 **Digital Me 产品全貌首页**。
 

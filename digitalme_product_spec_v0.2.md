@@ -2,9 +2,10 @@
 
 版本：v0.5
 状态：正式需求源（界面与功能）
-日期：2026-07-18
-关联：`digitalme_context.md`（战略与架构）、`digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`（当前总任务）、`digitalme_panorama_execution_index_v0.1.md`（当前执行索引）、`digitalme_digital_sovereignty_narrative_v0.1.md`（数字主权叙事）、`digitalme_phase1_subject_upgrade_plan_v0.1.md`（Trusted Beta 硬化依据，不再是当前执行队列）、`digitalme_architecture_audit_20260716.md`（审计风险基线）、`digitalme_person_definition_v0.1.md`（人的定义与采集口径）、`digitalme_inbox_access_plan_v0.1.md`（投递箱与可读范围）、`digitalme_architecture_edge_sovereign_v0.1.md`（部署拓扑）、`digitalme_narrative_ai_era_autonomy.md`（对外叙事）、`digitalme_intake_questionnaire.md`（自我评测）
+日期：2026-07-19
+关联：`digitalme_context.md`（战略与架构）、`digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`（当前总任务）、`digitalme_panorama_execution_index_v0.1.md`（当前执行索引）、`digitalme_phase1_task_PAN-01R_sovereign_collaboration_loop.md`（当前实现任务）、`digitalme_digital_sovereignty_narrative_v0.1.md`（数字主权叙事）、`digitalme_phase1_subject_upgrade_plan_v0.1.md`（Trusted Beta 硬化依据，不再是当前执行队列）、`digitalme_architecture_audit_20260716.md`（审计风险基线）、`digitalme_person_definition_v0.1.md`（人的定义与采集口径）、`digitalme_inbox_access_plan_v0.1.md`（投递箱与可读范围）、`digitalme_architecture_edge_sovereign_v0.1.md`（部署拓扑）、`digitalme_narrative_ai_era_autonomy.md`（对外叙事）、`digitalme_intake_questionnaire.md`（自我评测）
 
+> **修订补丁**：主版本仍为 **v0.5**；当前生效加法勘误为 **v0.5.2**（见 §2.2 / §10）。
 ---
 
 ## 0. 文档地位与准入规则
@@ -104,6 +105,7 @@
 
 ### 2.2 修订记录
 
+- **v0.5.2（2026-07-19）**：明确产品全貌不能只靠静态说明，必须由纵向主权闭环（主体依据 × 能力 × 授权 × 代表协作 × 结果处置）提供产品证据；引入 PAN-01R；PAN-01 保留为 scaffold 但不作为产品证明主路径；「本地模拟」仅指协作关系与流程，不得掩盖云模型推理数据去向。
 - **v0.5.1（2026-07-18）**：统一 Panorama 用户面五态；删除当前规范中的「点亮 / 骨架点亮 / 筹备中」等旧状态；将 v0.2 实现顺序明确标为历史失效。
 - **v0.5（2026-07-18）**：Product Panorama Alpha 冻结规格（§7.5）；当前主线切至 P1-PANORAMA；用户面五态；与 Trusted Beta 分离；IA 入口对齐 Panorama；不重写对话/写作/研究既有细则。
 - **v0.3.13（2026-07-15）**：L0 加深——控制权优先（授权·确认·轨迹·审计·回流）；审计账本落库与展示；写作/研究统一挂 L0 控制说明与能力轨迹；编程可委派本机外部命令执行体（用户确认后，非完整对外协议）。
@@ -581,6 +583,21 @@ PAN-01～PAN-04 每项实现必须说明服务其中哪一步。
 
 优先只读聚合；不为首屏新增复杂写入体系。未安全迁移的写入须明确标记候选草案，不得绕开 PackageStore 写入正式主体资产。
 
+**v0.5.2 勘误**：产品全貌**不能只靠静态说明**证明「属于我 / 由我管 / 代表我协作」。四承诺与成长路线可保留为辅助地图，但主要产品证据必须由 **PAN-01R 纵向主权协作闭环**提供（见 §7.5.3a）。PAN-01 在工程上可保留为可信只读 scaffold，但在 Owner 产品感知未通过前不得标为产品验收完成。
+
+#### 7.5.3a 主权协作闭环（PAN-01R · v0.5.2）
+
+用户必须能亲自经历一次受控协作（首个场景：受控研究协作，**本地流程模拟**），并据此说出：依据什么理解我；事实/本人确认/推断/线索如何区分；使用了哪些能力；哪些内容经明确授权；为何不同于通用 AI；哪些边界实际影响结果；协作对象与推理服务分别获得了什么；结果是否被采纳/保存/拒绝；过程记录在哪里。
+
+五步冻结：它如何理解我 → 收到协作请求 → 由我授权 → Digital Me 代表我行动（通用结果与 Digital Me 结果逻辑隔离）→ 看见差异并处置结果。
+
+强制边界：
+
+- 「本地模拟」仅表示协作关系与流程在本机模拟；不连接真实外部伙伴；不发送结果给模拟伙伴；
+- 若推理使用云端模型服务，授权预览必须明确披露选中的任务及主体上下文会发送给该推理服务商；
+- 「属于我」「由我控制」须由真实动作证明（选择依据、缩小范围、拒绝、单次授权、取消/放弃、采纳/拒绝、查看记录），不得仅靠文案或「可编辑内容」冒充；
+- 不修改主体 Package；不自动学习写回；不引入公网协作、合同、支付、Digital Org。
+
 #### 7.5.4 薄版控制权面板（PAN-02）
 
 至少呈现：资料位置、版本与可恢复版本、模型服务、已授权文件夹、已启用能力及数据范围、外部执行体、当前协作授权、最近重要行动、停止全部外部能力、备份/恢复/导出/迁移状态。
@@ -670,7 +687,7 @@ PAN-01～PAN-04 每项实现必须说明服务其中哪一步。
 
 **历史 v0.2 实现顺序（已失效，不再用于排期）**：附件 → 流式/停止 → 多会话 → 工具轨迹可见 → Markdown 画布 + md/docx 导出 → 产物库打通与报告类模板。
 
-**当前唯一执行顺序**以 `digitalme_panorama_execution_index_v0.1.md` 为准；下一实现任务仅为 **PAN-01**。
+**当前唯一执行顺序**以 `digitalme_panorama_execution_index_v0.1.md` 为准；下一实现任务仅为 **PAN-01R**（PAN-02/03/04 暂停至 PAN-01R 验收）。
 
 ---
 
@@ -707,6 +724,7 @@ PAN-01～PAN-04 每项实现必须说明服务其中哪一步。
 | 2026-07-16 | v0.4 | 审计后阶段收敛：主体首页、信任中心、主体资产安全内核、已有能力硬化、外部协作最小感知；旧 L0/审计/CLI 由“已实现”降为“待安全硬化的原型” |
 | 2026-07-18 | v0.5 | Product Panorama Alpha 冻结规格（§7.5）；P1-PANORAMA 为当前主线；用户面五态；Trusted Beta 与 Alpha 分离；不重写对话/写作/研究既有细则 |
 | 2026-07-18 | v0.5.1 | 统一 Panorama 用户面五态；删除当前规范中的「点亮 / 骨架点亮 / 筹备中」等旧状态；将 v0.2 实现顺序明确标为历史失效 |
+| 2026-07-19 | v0.5.2 | 产品全貌须由纵向主权闭环提供证据（PAN-01R）；PAN-01 保留 scaffold；本地模拟不得掩盖云模型数据去向；下一任务改为 PAN-01R |
 | 2026-07-14 | v0.3.8 | 研究三栏（左课题/中对话/右成果）+ threads 持久化 |
 | 2026-07-14 | v0.3.7 | 写作空白稿优先：新建通用文稿 + 发送自动建稿；文种模板折叠次要 |
 | 2026-07-14 | v0.3.3 | 研究同页闭环（A 方案）：默认极简 + 同页导出；材料软标注；到写作改稿可选 |

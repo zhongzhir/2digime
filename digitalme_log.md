@@ -5,6 +5,29 @@
 
 ---
 
+## 2026-07-19 PAN-01R 规格冻结 · specified / owner_approved / frozen_for_implementation
+
+### 决策与范围
+
+1. **PAN-01 裁定**：`statically_verified` / `owner_product_perception_failed` / `retained_as_scaffold`；不标 accepted；不回滚。
+2. **根因**：展示并解释了承诺，但没有用一条真实体验证明承诺。
+3. **PAN-01R**：建立纵向产品证据链——主体依据 × 能力 × 授权 × 代表协作 × 结果处置；首个场景为受控研究协作（本地流程模拟）。
+4. **调度**：PAN-02/03/04 = `paused_until_PAN-01R_acceptance`；PAN-01 非阻断 UI 细节进 backlog；唯一下一任务 = PAN-01R。
+5. **状态语义**：`owner_approved` 仅表示规格与启动授权；实现后 Cursor 最多标 `statically_verified`；`runtime_verified` / `accepted` 待 Codex 与 Owner。
+6. **规格**：产品规格加法勘误 **v0.5.2**——产品全貌不能只靠静态说明，必须由纵向主权闭环提供产品证据。
+7. **边界**：「本地模拟」= 协作关系与流程本机模拟；若使用云端模型，授权预览必须披露推理服务数据去向；不得写成真实外部协作。
+
+### 文档
+
+- 新增 `digitalme_phase1_task_PAN-01R_sovereign_collaboration_loop.md`
+- 同步执行索引、总任务、PAN-01 任务包、能力表、context、产品规格
+
+### 状态
+
+PAN-01R：`specified` / `owner_approved` / `frozen_for_implementation`。PAN-02 未开始。规格提交记为 `PAN01R_SPEC_BASE` 后直接开实现分支。
+
+---
+
 ## 2026-07-18 PAN-01 Codex 第二轮最小复核修复 · statically_verified
 
 ### 修复
