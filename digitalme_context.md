@@ -4,13 +4,13 @@
 状态：持续更新
 最后更新：2026-07-19
 
-> **当前产品主线（2026-07-19，PAN-01S Codex 第一轮文档修复）**：**P1-PANORAMA — 第一阶段三位一体 Alpha（理解我 × 武装我 × 连接世界）**。执行顺序见 `digitalme_panorama_execution_index_v0.1.md`；总任务见 `digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`（v0.4）；战略修订依据见 `digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`（**accepted**）；实现任务包见 `digitalme_phase1_task_PAN-01S_minimal_product_surface.md`（v0.1.1；`codex_review_changes_requested` / `not_started`）。**当前唯一任务：Codex 最终复核 PAN-01S 任务包后，创建实现分支并编码**；PAN-02～PAN-06 未开始。本修复提交不创建实现分支、不修改产品代码。
+> **当前产品主线（2026-07-19，PAN-01S 规格接受）**：**P1-PANORAMA — 第一阶段三位一体 Alpha（理解我 × 武装我 × 连接世界）**。执行顺序见 `digitalme_panorama_execution_index_v0.1.md`；总任务见 `digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`（v0.4）；战略修订依据见 `digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`（**accepted**）；实现任务包见 `digitalme_phase1_task_PAN-01S_minimal_product_surface.md`（v0.1.1；`specified` / `owner_approved_for_implementation` / `frozen_for_implementation` / `codex_review_passed` / `not_started`）。**当前唯一任务：从 PAN-01S 规格接受提交创建 `codex/pan-01s-minimal-product-surface` 并实现 PAN-01S；不得开始 PAN-02。** PAN-02～PAN-06 未开始。
 >
 > **PAN-01** 最终裁定：`statically_verified` / `owner_product_perception_failed` / `needs_minimal_surface_reset`（基线 `a40c5f8`；**不标 accepted**；**不回滚**；表面收口由 PAN-01S 承接）。
 >
 > **PAN-01R** 最终裁定：`statically_verified` / `codex_review_passed` / `owner_runtime_verified` / `owner_product_perception_failed` / `retained_as_internal_collaboration_harness`（最终实现 `9dd6fa0`；70/70 + 20/20；**不标 accepted**）。**PAN-01S Alpha 生产界面必须没有 PAN-01R 入口**（含设置／高级／帮助；仅隔离 test harness；见规格 v0.6.3）。底层授权、取消、审计、adopt/reject、推理环境绑定等保留为内部测试与未来 PAN-04 基础设施。不得自行回到 P1-07 修复或原 P1-08 队列。
 >
-> **界面与功能需求源**：桌面应用「用户看见什么、能做什么、何为做完」以 [`digitalme_product_spec_v0.2.md`](digitalme_product_spec_v0.2.md)（文内 **v0.6.1**）为唯一规格；战略与逻辑架构仍以本文为准；**部署与系统拓扑**以 [`digitalme_architecture_edge_sovereign_v0.1.md`](digitalme_architecture_edge_sovereign_v0.1.md) 为准。开发实行**规格驱动**（无规格不排期）。
+> **界面与功能需求源**：桌面应用「用户看见什么、能做什么、何为做完」以 [`digitalme_product_spec_v0.2.md`](digitalme_product_spec_v0.2.md)（文内 **v0.6.3**）为唯一规格；战略与逻辑架构仍以本文为准；**部署与系统拓扑**以 [`digitalme_architecture_edge_sovereign_v0.1.md`](digitalme_architecture_edge_sovereign_v0.1.md) 为准。开发实行**规格驱动**（无规格不排期）。
 >
 > **公共叙事**：数字主权为目标与核心公共叙事；广义数字资产口径与 Digital Org 长期方向见 [`digitalme_digital_sovereignty_narrative_v0.1.md`](digitalme_digital_sovereignty_narrative_v0.1.md)。Digital Org **不进入**本轮个人 Alpha 实现；P1-PANORAMA 完成后再评估 `DORG-00`。
 >
@@ -291,7 +291,7 @@ flowchart TB
 | `digitalme_narrative_ai_era_autonomy.md` | 对外/对内叙事（含双线简述） |
 | `digital-me-project-positioning-draft.md` | 定位讨论稿（战略原则含双线） |
 
-**近期工程焦点（2026-07-19 覆盖）**：规格 **v0.6.3** + 决策 **#67～#74**——第一阶段三位一体 Alpha；极简产品表面；**PAN-00R accepted**；**PAN-01S 任务包 v0.1.1**（`codex_review_changes_requested`；尚未实现）。原「规格 v0.5 + 决策 #58 产品全貌首页路径」与「规格 v0.4 + 决策 #57 按底层 WP 顺序硬化」为历史策略，证据与风险记录仍有效。
+**近期工程焦点（2026-07-19 覆盖）**：规格 **v0.6.3** + 决策 **#67～#75**——第一阶段三位一体 Alpha；极简产品表面；**PAN-00R accepted**；**PAN-01S 任务包 v0.1.1**（`codex_review_passed`；尚未实现；允许开实现分支）。原「规格 v0.5 + 决策 #58 产品全貌首页路径」与「规格 v0.4 + 决策 #57 按底层 WP 顺序硬化」为历史策略，证据与风险记录仍有效。
 
 ## 4. 系统架构共识（草案）
 
@@ -465,7 +465,7 @@ flowchart TB
 
 > **2026-07-16 审计后重排（历史）**：第一阶段不再扩展能力面，切换为“主体可信化与协作感知”。当时以 `digitalme_phase1_subject_upgrade_plan_v0.1.md` 为执行清单；原 v0.3.13 的 L0/审计/CLI 只能视为原型，不视为已达到安全可用。
 > **2026-07-18 覆盖**：当前执行索引改为 `digitalme_panorama_execution_index_v0.1.md`；原升级计划降为 Trusted Beta 硬化依据（决策 #58）。
-> **2026-07-19 PAN-01S Codex 第一轮覆盖（当前）**：第一阶段确立为三位一体 Alpha；**PAN-00R `accepted`**；**PAN-01S 任务包 v0.1.1**（`specified` / `owner_approved_for_implementation` / `frozen_for_implementation` / `codex_review_changes_requested` / `not_started`）；已关闭主操作优先级与 PAN-01R 生产入口歧义；**当前唯一任务：Codex 最终复核后创建实现分支并编码**；随后按 PAN-02→…→PAN-06 推进。本修复提交不创建实现分支、不修改产品代码、不开始 PAN-02～PAN-06。
+> **2026-07-19 PAN-01S 规格接受覆盖（当前）**：第一阶段确立为三位一体 Alpha；**PAN-00R `accepted`**；**PAN-01S 任务包 v0.1.1**（`specified` / `owner_approved_for_implementation` / `frozen_for_implementation` / `codex_review_passed` / `not_started`）；Codex 最终复核通过；**当前唯一任务：从规格接受提交创建 `codex/pan-01s-minimal-product-surface` 并实现 PAN-01S；不得开始 PAN-02**；随后按 PAN-02→…→PAN-06 推进。
 
 1. **工程与 Package 基线冻结**：Git、Alpha 标记、Package hash 快照、能力状态表；
 2. **主体资产内核**：PackageStore、七类数据、原子版本、候选更新、来源 hash、回滚；
@@ -884,4 +884,5 @@ flowchart TB
 71. **外部反馈推动成长但不直接改写主体（2026-07-19，PAN-00R）**：本人真实行动结果可成 fact 候选；外部反馈先作外部观察 / current_state / inference；系统归纳规律默认 inference；立场、长期意图、人格与边界改变必须本人确认；外部伙伴、模型或工具不得直接写入「我是谁」；写入仍遵守 preview → confirmation → PackageStore commit。
 72. **PAN-00R accepted（2026-07-19）**：战略修订 `07b631d`；Codex 第一轮最小文档修复 `6ae2dca`；Codex 最终复核通过；Owner 战略决策确认。accepted 为 docs/strategy acceptance，不是运行能力 released，也不代表 PAN-01S～PAN-06 已实现。
 73. **PAN-01S 任务包冻结（2026-07-19）**：独立任务包初稿 `488d733`；状态含 `frozen_for_implementation` / `not_started`；规格补齐 v0.6.2 §3.1.1。`owner_approved_for_implementation` 仅表示可在 Codex 复核后实现，**不**等于实现 accepted。
-74. **PAN-01S Codex 第一轮文档修复（2026-07-19）**：任务包 → v0.1.1；规格 → v0.6.3；冻结主操作唯一优先级 P0→P4；废止模糊「未完成构建」；冻结 PAN-01R **无生产入口**（含设置／高级／帮助；仅隔离 test harness）。状态加 `codex_review_changes_requested`。**当前唯一任务**：Codex 最终复核后创建实现分支并编码。PAN-02 不得偷跑；本修复不创建实现分支、不修改产品代码。
+74. **PAN-01S Codex 第一轮文档修复（2026-07-19）**：任务包 → v0.1.1；规格 → v0.6.3；冻结主操作唯一优先级 P0→P4；废止模糊「未完成构建」；冻结 PAN-01R **无生产入口**（含设置／高级／帮助；仅隔离 test harness）。状态加 `codex_review_changes_requested`（历史过程）。当时下一任务为 Codex 最终复核；现由决策 #75 承接。
+75. **PAN-01S 实现规格接受（2026-07-19）**：Codex 最终复核通过；任务包状态改为 `specified` / `owner_approved_for_implementation` / `frozen_for_implementation` / `codex_review_passed` / `not_started`。`codex_review_passed` 只表示实现规格通过，**不**表示已实现或 accepted。**当前唯一任务**：从本规格接受提交创建 `codex/pan-01s-minimal-product-surface` 并实现 PAN-01S；不得开始 PAN-02。实现最高 `statically_verified`；未经 Owner 主路径验收不得 `accepted`。

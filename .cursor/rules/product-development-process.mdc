@@ -37,9 +37,9 @@ Owner / 用户提出的产品想法**可能不全、可错、可非最优**，�
 - 无规格升版就堆功能
 - 用文案按钮冒充能力却无可核对依据
 
-## 三、P1-PANORAMA 阶段规则（2026-07-18 确立；2026-07-19 PAN-01S 任务包冻结后更新）
+## 三、P1-PANORAMA 阶段规则（2026-07-18 确立；2026-07-19 PAN-01S 规格接受后更新）
 
-当前产品主线为 **P1-PANORAMA（三位一体 Alpha）**；执行索引见 `digitalme_panorama_execution_index_v0.1.md`（文内 v0.2.1）。PAN-00R 已 **accepted**。PAN-01S 独立任务包已冻结。
+当前产品主线为 **P1-PANORAMA（三位一体 Alpha）**；执行索引见 `digitalme_panorama_execution_index_v0.1.md`（文内 v0.2.3）。PAN-00R 已 **accepted**。PAN-01S 独立任务包已冻结且实现规格已通过。
 
 1. **每次只执行一个已批准的 PAN 主任务**；不得并行扩大实现范围。
 2. **非阻断问题进入 backlog**，不因局部修饰延迟完整闭环。
@@ -48,5 +48,5 @@ Owner / 用户提出的产品想法**可能不全、可错、可非最优**，�
 5. **工程 `implemented` / `statically_verified` 不自动等于用户面「可用」**。
 6. **若需恢复暂停工作**（含 P1-07 缺口、原 P1-08、Policies 迁移等），先提交最小阻断说明，经复核后只做必要切片，**不可直接扩 scope**。
 7. Digital Org、公网协作、支付结算不进入当前个人 Alpha 实现。
-8. **当前唯一任务：Codex 最终复核 PAN-01S 任务包后，创建实现分支并编码**。任务包：`digitalme_phase1_task_PAN-01S_minimal_product_surface.md`（v0.1.1；`specified` / `frozen_for_implementation` / `codex_review_changes_requested` / `not_started`）。
-9. **禁止在本修复／规划提交中修改产品代码或偷跑 PAN-02**；实现须在独立实现分支进行；实现后最高 `statically_verified`；未经 Owner 主路径验收不得 `accepted`。PAN-02～PAN-06 未开始。未经独立任务包最终复核通过，不得开始其它 PAN 编码；不得自行修复已冻结的 P1-07。PAN-01 / PAN-01R 均已裁定不 accepted（产品感知失败），不得回滚或删除其代码与证据。PAN-01R **无生产入口**（规格 v0.6.3）。
+8. **当前唯一任务：从 PAN-01S 规格接受提交创建 `codex/pan-01s-minimal-product-surface` 并实现 PAN-01S；不得开始 PAN-02。** 任务包：`digitalme_phase1_task_PAN-01S_minimal_product_surface.md`（v0.1.1；`specified` / `owner_approved_for_implementation` / `frozen_for_implementation` / `codex_review_passed` / `not_started`）。
+9. **实现须在独立实现分支进行**；实现后最高 `statically_verified`；未经 Owner 主路径验收不得 `accepted`。PAN-02～PAN-06 未开始。不得自行修复已冻结的 P1-07。PAN-01 / PAN-01R 均已裁定不 accepted（产品感知失败），不得回滚或删除其代码与证据。PAN-01R **无生产入口**（规格 v0.6.3）。

@@ -2,25 +2,27 @@
 
 版本：v0.1.1
 日期：2026-07-19
-状态：`specified` / `owner_approved_for_implementation` / `frozen_for_implementation` / `codex_review_changes_requested` / `not_started`
+状态：`specified` / `owner_approved_for_implementation` / `frozen_for_implementation` / `codex_review_passed` / `not_started`
 所属总任务：`P1-PANORAMA：Digital Me 产品全貌 Alpha`（v0.4，三位一体重构）
 前置任务：PAN-00R `accepted`（`07b631d` + `6ae2dca` + `0fcd432`）
-规划基线：`488d733`（PAN-01S 任务包初稿冻结）
-建议代码基线：`9dd6fa0`（PAN-01R 最终实现；含 PAN-01 scaffold）
-规划分支：`codex/pan-00r-three-part-alpha-reset`（本轮仍仅文档；**不**创建实现分支）
+规划基线：`488d733`（PAN-01S 任务包初稿冻结）；规格修复基线：`2aec151`（v0.1.1 歧义关闭）
+PAN-01R 代码血缘基线：`9dd6fa0`（PAN-01R 最终实现；含 PAN-01 scaffold；**不是**本任务 checkout 起点）
+实现分支：须从本规格接受提交创建 `codex/pan-01s-minimal-product-surface`（**不得** checkout 回 `9dd6fa0` 开发，以免丢失 PAN-00R / PAN-01S 文档提交）
 代码 Owner：Cursor（实现阶段）
 任务类型：Product Panorama Alpha / 极简产品表面收口（UI 与导航；无新业务能力）
 规格依据：产品规格 **v0.6.3**（§2.0 极简原则、§2.0.1 相关性门、§3.1 / §3.1.1 极简 IA 与默认「我」细则）；`digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`
 
 > **状态语义（强制）**
 >
-> - `owner_approved_for_implementation` **仅**表示 Owner 已批准进入 PAN-01S 规划，并同意在本任务包经 Codex 最终复核通过后实现；
-> - `codex_review_changes_requested` 表示 Codex 第一轮总体范围通过，但要求关闭主操作优先级与 PAN-01R 生产入口两项歧义（本版 v0.1.1）；
-> - **不**表示实现结果 `accepted`；**不**表示已实现；
-> - 本轮修复提交后仍**不得**创建实现分支、**不得**修改产品代码；
-> - 实现完成后 Cursor 最多标 `statically_verified`；`accepted` 须待 Owner 主路径验收。
+> - `owner_approved_for_implementation` **仅**表示 Owner 已批准进入 PAN-01S 实现；
+> - `codex_review_passed` **仅**表示实现规格（任务包 v0.1.1）已通过 Codex 最终复核；**不**表示实现结果 `accepted`；**不**表示已实现；
+> - `codex_review_changes_requested` 为历史过程状态（第一轮要求关闭主操作优先级与 PAN-01R 生产入口歧义），保留于修订记录与 log；**当前状态不得**继续写为 `changes_requested`；
+> - 本规格接受提交后，允许创建实现分支并编码；实现完成后 Cursor 最多标 `statically_verified`；`accepted` 须待 Owner 主路径验收；
+> - 本任务包此时仍为 `not_started`。
 
 > **v0.1.1 修订（2026-07-19，Codex 第一轮）**：冻结唯一主操作优先级 P0→P4（互斥、顺序求值）；冻结 PAN-01R「无生产入口」；删除模糊「未完成构建」条件；补冲突案例与组合测试。
+>
+> **规格接受（2026-07-19，Codex 最终复核通过）**：实现规格通过；允许从本接受提交创建实现分支；状态改为 `codex_review_passed` / `not_started`。
 ---
 
 ## 0. 任务定位
@@ -457,9 +459,9 @@ PAN-01S **不**重做能力页。
 
 | 项 | 值 |
 |---|---|
-| 本轮（Codex 第一轮文档修复） | 关闭主操作优先级与 PAN-01R 生产入口歧义（v0.1.1）；仍不创建实现分支 |
-| **唯一下一任务** | **Codex 最终复核本任务包后，创建 PAN-01S 实现分支并编码** |
-| 实现分支建议名 | `codex/pan-01s-minimal-product-surface`（最终复核通过后再建） |
+| 本轮（规格接受） | Codex 最终复核通过；docs-only 状态收尾；允许进入实现 |
+| **唯一下一任务** | **从 PAN-01S 规格接受提交创建 `codex/pan-01s-minimal-product-surface` 并实现 PAN-01S；不得开始 PAN-02** |
+| 实现分支名 | `codex/pan-01s-minimal-product-surface`（从本规格接受提交创建；**不得**从 `9dd6fa0` 另建） |
 | PAN-02～PAN-06 | `planned` / `not_started` |
 
-本修复提交**不**创建实现分支、**不**修改 `digitalme-app/**`。
+本规格接受提交**不**修改 `digitalme-app/**`；实现须在独立实现分支进行。

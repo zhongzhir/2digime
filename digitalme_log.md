@@ -5,6 +5,31 @@
 
 ---
 
+## 2026-07-19 PAN-01S 规格接受 · 允许进入实现
+
+### 做了什么
+
+docs-only 最小规格接受收尾（Codex 最终复核通过后）：
+
+1. 任务包状态统一为 `specified` / `owner_approved_for_implementation` / `frozen_for_implementation` / `codex_review_passed` / `not_started`；
+2. 澄清 `9dd6fa0` 为 PAN-01R 代码血缘基线，实现分支须从本规格接受提交创建，不得 checkout 回 `9dd6fa0`；
+3. context 顶部界面需求源规格版本纠正为 **v0.6.3**；决策 #75；
+4. 同步执行索引 v0.2.3、能力表、总任务、cursor rule。
+
+`codex_review_changes_requested` 仅保留为历史过程（第一轮歧义关闭）；当前状态不再写为 changes_requested。不标实现 accepted；此时仍为 `not_started`。
+
+本轮 **docs-only**：未修改 `digitalme-app/**`；未触碰真实 Package；未提交交接件。
+
+### 状态
+
+PAN-01S：`specified` / `owner_approved_for_implementation` / `frozen_for_implementation` / `codex_review_passed` / `not_started`
+
+### 下一步
+
+**当前唯一任务：从 PAN-01S 规格接受提交创建 `codex/pan-01s-minimal-product-surface` 并实现 PAN-01S；不得开始 PAN-02。**
+
+---
+
 ## 2026-07-19 PAN-01S Codex 第一轮 · 关闭状态与 harness 歧义
 
 ### 做了什么
@@ -19,13 +44,13 @@ docs-only 最小规格修复（任务包 v0.1 → **v0.1.1**；规格 v0.6.2 →
 ### 状态
 
 PAN-01S：`specified` / `owner_approved_for_implementation` / `frozen_for_implementation` / `codex_review_changes_requested` / `not_started`
-（不标 accepted；不写成已实现）
+（历史过程状态；现已由上方「规格接受」条目承接为 `codex_review_passed`）
 
 本轮 **docs-only**：未创建实现分支；未修改 `digitalme-app/**`；未触碰真实 Package；未提交交接件。
 
 ### 下一步
 
-**当前唯一任务：Codex 最终复核 PAN-01S 任务包后，创建实现分支并编码。** PAN-02～PAN-06 未开始。
+（历史）当时下一任务为 Codex 最终复核后开实现分支；现已由上方「规格接受」条目承接。
 
 ---
 
