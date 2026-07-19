@@ -1,14 +1,28 @@
 # PAN-00R 任务包：第一阶段三位一体重构与极简产品原则冻结
 
-版本：v0.1
+版本：v0.1.1
 日期：2026-07-19
-状态：`statically_verified`（仅指本文档收口与全部文档一致性检查完成；**不标 accepted**；待 Codex 文档复核与 Owner 确认）
+状态：`statically_verified` / `codex_review_changes_requested`（仅指文档收口与一致性检查；**不标 accepted**；待 Codex 最终复核与 Owner 确认）
 所属总任务：`P1-PANORAMA：Digital Me 产品全貌 Alpha`（本任务后升版为 v0.4，三位一体重构）
 任务类型：战略修订 / 产品规格升版 / 执行队列重排 / 历史验收结论归档（仅 Markdown 与 Cursor 开发规则）
 文档基线：`9dd6fa00e3c09ab65779203045c9858681c37443`（分支 `codex/pan-01r-sovereign-collaboration-loop` 之 HEAD）
 执行分支：`codex/pan-00r-three-part-alpha-reset`
+规划提交：`07b631d`（v0.1）；本轮为 Codex 第一轮最小文档修复
 
 > 本任务不进行任何产品实现：不修改产品代码、测试、依赖、Package 或交接件；不开始 PAN-01S、PAN-02 或其它实现。
+
+---
+
+## 0.0 Codex 第一轮复核修正（2026-07-19，v0.1.1）
+
+| # | 修正 | 说明 |
+|---|---|---|
+| 1 | 删除默认全量 Package 注入口径 | 产品规格 §2 第 6 条改为「像我按相关性贯穿」；§4.8 同步；不再要求凡生成默认注入全部 Package |
+| 2 | 删除侧栏底部四项强制常驻口径 | §3.1 不再强制常驻 Package 摘要、模型状态、已武装能力、品牌句；具体保留项由 PAN-01S 冻结 |
+| 3 | 明确工具细节按需展开 | 「工具调用可见、可停」改为：停止入口易发现；工具调用与执行细节按需展开，不强制常驻；不削弱停止/取消/高风险确认 |
+| 4 | 将现有 49KB 全量注入标为 PAN-02 待替换旧实现 | context §4.4 保留历史事实，明确：非目标行为、与 v0.6 相关性门冲突、PAN-02 须替换、完成前不得以此证明「像我」达标；本次不改检索/prompt 代码 |
+
+状态仍为 `statically_verified` / `codex_review_changes_requested`；**不标 accepted**；不开始 PAN-01S / PAN-02。
 
 ---
 
@@ -370,8 +384,8 @@ PAN-01S 只允许：
 
 ## 10. 状态语言
 
-- 本任务完成后状态为 `statically_verified`（仅文档收口与一致性检查完成的静态验证含义）；
-- **不标 accepted**；accepted 须待 Codex 文档复核与 Owner 确认；
+- 本任务完成后状态为 `statically_verified` / `codex_review_changes_requested`（仅文档收口与一致性检查完成的静态验证含义；Codex 第一轮修正已合入）；
+- **不标 accepted**；accepted 须待 Codex 最终复核与 Owner 确认；
 - 工程 `statically_verified` 不自动等于用户面「可用」；
 - 用户面能力仍只允许：可用 · 实验 · 本地模拟 · 预览 · 尚未开放。
 

@@ -5,6 +5,25 @@
 
 ---
 
+## 2026-07-19 PAN-00R Codex 第一轮最小文档修复 · statically_verified / codex_review_changes_requested
+
+### 修正
+
+1. 产品规格：删除「凡生成默认注入 Package」；改为「像我按相关性贯穿」
+2. 产品规格 §3.1：删除侧栏底部 Package／模型／能力／品牌强制常驻
+3. 工具调用：停止易发现；细节按需展开（不削弱停止/取消/高风险确认）
+4. context §4.4：49KB 全量注入标为 v0.6 前旧实现，待 PAN-02 替换；本次不改代码
+
+### 文档
+
+- 规格 → **v0.6.1**；PAN-00R 任务包 → **v0.1.1**
+
+### 状态
+
+`statically_verified` / `codex_review_changes_requested`（**不**标 accepted）。PAN-01S / PAN-02 未开始。
+
+---
+
 ## 2026-07-19 PAN-00R 战略修订 · 三位一体重构与极简产品原则冻结（仅文档）
 
 ### Owner 决策（含义摘要，非原话复制）
