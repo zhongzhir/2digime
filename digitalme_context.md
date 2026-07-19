@@ -4,13 +4,13 @@
 状态：持续更新
 最后更新：2026-07-19
 
-> **当前产品主线（2026-07-19）**：**P1-PANORAMA — Product Panorama Alpha**。执行顺序见 `digitalme_panorama_execution_index_v0.1.md`；总任务见 `digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`。
+> **当前产品主线（2026-07-19，PAN-00R 修订）**：**P1-PANORAMA — 第一阶段三位一体 Alpha（理解我 × 武装我 × 连接世界）**。执行顺序见 `digitalme_panorama_execution_index_v0.1.md`（文内 v0.2）；总任务见 `digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`（v0.4）；战略修订依据见 `digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`。**当前唯一下一任务：起草 PAN-01S 独立任务包**（PAN-00R 被 Codex / Owner 接受后）；PAN-02～PAN-06 未开始。
 >
-> **PAN-01** 为 `statically_verified` / `owner_product_perception_failed` / `retained_as_scaffold`（基线 `a40c5f8`；**不标 accepted**；**不回滚**）。
+> **PAN-01** 最终裁定：`statically_verified` / `owner_product_perception_failed` / `needs_minimal_surface_reset`（基线 `a40c5f8`；**不标 accepted**；**不回滚**；表面收口由 PAN-01S 承接）。
 >
-> **PAN-01R** 为 `statically_verified` / `codex_review_changes_requested`（规格 `PAN01R_SPEC_BASE`=`35c5aea`；分支 `codex/pan-01r-sovereign-collaboration-loop`；Codex 第二轮最小收口已合入；**不标 accepted**）。等待 Codex 再复核与 Owner 主路径验收；验收前不得启动 PAN-02/03/04。不得自行回到 P1-07 修复或原 P1-08 队列。
+> **PAN-01R** 最终裁定：`statically_verified` / `codex_review_passed` / `owner_runtime_verified` / `owner_product_perception_failed` / `retained_as_internal_collaboration_harness`（最终实现 `9dd6fa0`；70/70 + 20/20；**不标 accepted**）。普通用户入口后续由 PAN-01S 撤下；底层授权、取消、审计、adopt/reject、推理环境绑定等保留为高级/开发者协作回路验证器。不得自行回到 P1-07 修复或原 P1-08 队列。
 >
-> **界面与功能需求源**：桌面应用「用户看见什么、能做什么、何为做完」以 [`digitalme_product_spec_v0.2.md`](digitalme_product_spec_v0.2.md)（文内 **v0.5**，含 **v0.5.2**）为唯一规格；战略与逻辑架构仍以本文为准；**部署与系统拓扑**以 [`digitalme_architecture_edge_sovereign_v0.1.md`](digitalme_architecture_edge_sovereign_v0.1.md) 为准。开发实行**规格驱动**（无规格不排期）。
+> **界面与功能需求源**：桌面应用「用户看见什么、能做什么、何为做完」以 [`digitalme_product_spec_v0.2.md`](digitalme_product_spec_v0.2.md)（文内 **v0.6**）为唯一规格；战略与逻辑架构仍以本文为准；**部署与系统拓扑**以 [`digitalme_architecture_edge_sovereign_v0.1.md`](digitalme_architecture_edge_sovereign_v0.1.md) 为准。开发实行**规格驱动**（无规格不排期）。
 >
 > **公共叙事**：数字主权为目标与核心公共叙事；广义数字资产口径与 Digital Org 长期方向见 [`digitalme_digital_sovereignty_narrative_v0.1.md`](digitalme_digital_sovereignty_narrative_v0.1.md)。Digital Org **不进入**本轮个人 Alpha 实现；P1-PANORAMA 完成后再评估 `DORG-00`。
 >
@@ -202,14 +202,28 @@ flowchart TB
 
 **排期变更（2026-07-18，决策 #58）**：`digitalme_phase1_subject_upgrade_plan_v0.1.md` **不再作为当前顺序执行计划**；降级为 **Trusted Beta 技术硬化、风险与依赖依据**。当前唯一产品主线为 **P1-PANORAMA**（Product Panorama Alpha），以纵向闭环同时推进 A「数字化构建人」与 B「主体化数字实体」；深度硬化在 PAN-06 依据真实用户证据重排。详见 §2.8。
 
-### 2.8 Product Panorama Alpha / Trusted Beta（2026-07-18）
+### 2.8 第一阶段三位一体 Alpha / Trusted Beta（2026-07-18 确立；2026-07-19 PAN-00R 修订）
+
+**第一阶段最高定义（PAN-00R，取代「在首页完整展示产品全貌」的旧理解）**：Digital Me 第一阶段必须同时完成三个组成部分的 Alpha：
+
+| 组成 | 要点 |
+|---|---|
+| **理解我** | 低负担输入本人资料与日常表达；后台正确蒸馏，区分事实、本人主张、推断、当前状态和边界；用户只处理少量关键纠错与确认；任务相关信息可准确检索；无关主体信息保持沉默；不用密集页面证明理解 |
+| **武装我** | 统一能力框架；真实可体验的能力样例；能力可安装、扩展、替换和撤销；主体信息只在相关时增强结果；AI 能力上限不被蒸馏结果限制 |
+| **连接世界** | 外部请求、授权、执行、停止、结果处置和记录的协作骨架；第一阶段不要求全面公网协作，但须让用户感知未来如何代表本人；外部行动受本人授权和边界约束；结果与反馈形成成长候选；外部输入不得直接改写主体 |
+
+**产品意义**：只有「理解我」是数字档案；「理解我 + 武装我」是个性化 Agent；三者齐备才形成产品与技术意义上的初级数字主体。法律身份、社会承认、规模互操作属于后续阶段，第一阶段不得过度宣称。
+
+**第一阶段闭环**：用户输入自己 → 后台蒸馏并形成可修正的自我 → 调用可扩展能力 → 经本人授权参与外部协作 → 获得结果与反馈 → 形成事实、经验、能力表现或发展线索候选 → 经正确分类及必要确认后推动 Digital Me 成长 → 改善下一次工作与协作。成长回流规则见 PAN-00R 任务包 §2.1（外部输入不得直接改写主体；立场/意图/人格/边界改变须本人确认）。
 
 | 层 | 目标 | 文档 |
 |---|---|---|
-| **Product Panorama Alpha** | 普通用户在 10～15 分钟内理解并走通：构建我 → 看见我 → 武装我 → 授权我 → 代表我协作 → 结果回流并成长 | `digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`；产品规格 v0.5 |
+| **三位一体 Alpha** | 理解我 × 武装我 × 连接世界三部分 Alpha 达标；极简前台 + 复杂后台 | `digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`（v0.4）；产品规格 v0.6 §7.6 |
 | **Trusted Beta** | 按用户证据完成高风险路径、异常、迁移、兼容与安全硬化 | 原第一阶段升级计划（降级后）+ PAN-06 输出 |
 
-四个产品承诺：**这是我 · 属于我 · 由我管 · 代表我协作**。
+四个产品承诺：**这是我 · 属于我 · 由我管 · 代表我协作**——继续有效，但作为帮助与叙事内容，由真实体验兑现，不作为默认首页主体。
+
+**「产品全貌」新定义（PAN-00R）**：不是在一个页面上把所有概念展示出来，而是用户通过几条简洁、真实、可完成的路径，自然建立认识：它逐渐理解我；它能获得能力并帮助我工作；我可以修正和约束它；风险与对外行动由我决定；它能够与世界交互；它会从经历和反馈中成长。
 
 **数字主权**：是 Digital Me 的目标与核心公共叙事。「数据」采用广义口径（事实信息、知识、文章、报告、代码、设计、影音、判断、关系、项目记录及其它数字产出物）；不采用机械化个人数据变现叙事；核心是主体对其合法数字资产与产出物拥有可执行的管理、使用、授权、限制、撤销、迁移和价值安排能力。Digital Me 是数字主权的重要基础设施与支撑方，**不宣称**单靠产品已完成法律、市场与社会制度变革。母稿：`digitalme_digital_sovereignty_narrative_v0.1.md`。
 
@@ -241,6 +255,8 @@ flowchart TB
 20. **能力板块跟随策略（2026-07-13）**：编程、自媒体、营销、写作、商务、运维、重复任务等能力面**不争最强最新、直接导入业界最好**（Claude Code/Codex、编排框架、MCP/Skill 市场等）；Digital Me 负责像我约束、授权、审计与回流。见 §7.11、决策 #37。
 21. **协作服务面分期（2026-07-13）**：对外「能做什么」展示、自动匹配、数字之我出租/受雇、个人数据授权、接零活/分包——方向确认；运行时在架构就绪后分期点亮，不阻塞养我与能力跟随。见 §7.12、决策 #38。
 23. **对话轻入口 + 做事分场景（2026-07-13）**：侧栏「对话 | 做事 | 我 | 能力」；写作合并为唯一交付面；对话「留为文稿」；未就绪场景标筹备中。规格 **v0.3**、决策 #44。
+24. **极简产品原则（2026-07-19，PAN-00R 冻结）**：后台复杂、前台极简；用户体验结果，不观看系统证明自己；个性化默认隐性发生；授权只在风险边界上显性发生；审计、来源和依据可按需展开但不占主界面；日常无感、风险有感；能力无负担、权力有控制；重要异常、冲突或外部行动才打断用户；普通用户界面不得展示产品规格、工程状态或系统设计说明；页面文字大幅减少。前台/后台/帮助/高级四层分层与「产品全貌」新定义见规格 v0.6 §2.0、PAN-00R 任务包 §4。
+25. **AI 使用主体信息原则（2026-07-19，PAN-00R 冻结）**：不采用「回答上限受蒸馏内容限制」逻辑，也不采用「先生成通用答案再机械贴入个人引用」逻辑。**AI 负责能力上限；Digital Me 负责方向、真实性、边界、连续性和本人特征。** 相关性门强制：与任务无关的主体信息不得进入生成；无相关信息时宁可不做个性化。见 §4.4、规格 v0.6 §2.0.1。
 
 ### 3.1 交互体验总则（2026-07-09）
 
@@ -261,9 +277,10 @@ flowchart TB
 
 | 文档 | 作用 |
 |---|---|
-| `digitalme_product_spec_v0.2.md`（文内 **v0.5**） | **界面与功能唯一需求源**：含 Product Panorama Alpha 冻结规格；IA、工作台、产物、蒸馏/Package/能力/审计、DoD、准入规则 |
-| `digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md` | **当前总任务**：产品全貌 Alpha 目标、范围、子任务与体验闭环 |
-| `digitalme_panorama_execution_index_v0.1.md` | **当前执行索引**：PAN 顺序、状态、阻断项、冻结 backlog、启动闸门 |
+| `digitalme_product_spec_v0.2.md`（文内 **v0.6**） | **界面与功能唯一需求源**：极简产品原则、主体信息分层使用规则、三位一体 Alpha DoD；IA、工作台、产物、蒸馏/Package/能力/审计、准入规则 |
+| `digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`（v0.4） | **当前总任务**：三位一体 Alpha 目标、范围、子任务与第一阶段闭环 |
+| `digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md` | **本轮战略修订依据**：三位一体定义、极简原则、PAN-01/PAN-01R 裁定、新队列 |
+| `digitalme_panorama_execution_index_v0.1.md`（文内 v0.2） | **当前执行索引**：PAN 顺序、状态、阻断项、冻结 backlog、启动闸门 |
 | `digitalme_digital_sovereignty_narrative_v0.1.md` | **公共叙事母稿**：数字主权、广义数字资产、Digital Org |
 | `digitalme_architecture_edge_sovereign_v0.1.md` | **部署与系统拓扑唯一详述**：端主权 × 云边平台；多端职责；云模块优先级；百万 DAU 分期；安全基线 |
 | `digitalme_phase1_subject_upgrade_plan_v0.1.md` | **Trusted Beta 硬化与风险依据**（2026-07-18 起不再作为当前顺序执行计划） |
@@ -274,7 +291,7 @@ flowchart TB
 | `digitalme_narrative_ai_era_autonomy.md` | 对外/对内叙事（含双线简述） |
 | `digital-me-project-positioning-draft.md` | 定位讨论稿（战略原则含双线） |
 
-**近期工程焦点（2026-07-18 覆盖）**：规格 **v0.5** + 决策 **#58**——P1-PANORAMA Product Panorama Alpha；纵向闭环；市场教育同步；Trusted Beta 后置按证据排序。原「规格 v0.4 + 决策 #57 按底层 WP 顺序硬化」为历史策略，证据与风险记录仍有效。
+**近期工程焦点（2026-07-19 覆盖）**：规格 **v0.6** + 决策 **#67～#71**——第一阶段三位一体 Alpha；极简产品表面；当前唯一下一任务为起草 PAN-01S 独立任务包。原「规格 v0.5 + 决策 #58 产品全貌首页路径」与「规格 v0.4 + 决策 #57 按底层 WP 顺序硬化」为历史策略，证据与风险记录仍有效。
 
 ## 4. 系统架构共识（草案）
 
@@ -321,6 +338,8 @@ flowchart TB
 - **RAG 检索注入已上线**：`digitalme-app/src/retrieval.js` 按当前问题从底料动态召回最相关条目追加到核心层（v0.1 为本地词法检索，升级路径为嵌入向量）。第 2 层（素材整体向量化）与第 4 层（反馈回流）仍待做。
 
 **与本我复现主线的关系（§2.4）**：四层路径是「从数据到像人」的技术栈；素材类型扩展（写作 / 对话 / 决策 / 行为 / 关系 / 生理情感，见 `digitalme_log.md` 素材类型待办）与格式适配须同步推进，使每层能消费越来越全的人相关数据。§2.5 将输入分流管道与输出多模态呈现纳入同一远景架构。
+
+**相关性门与 AI 能力上限（2026-07-19，PAN-00R 补充）**：「输出像我」不等于「输出受限于蒸馏结果」，也不等于「机械贴入个人引用」。冻结关系为：**AI 负责能力上限；Digital Me 负责方向、真实性、边界、连续性和本人特征。** 主体信息按类型分层起作用——verified fact 为事实锚点；confirmed owner assertion 为立场与意图约束；preference/style/pattern 为软引导；inference/direction clue 为低权重假设；boundary/authorization 为硬约束；**与任务无关的信息不得进入本次生成**。检索只取高度相关的主体信息；没有相关信息时宁可不做个性化，不得强行引用，更不得因主体资料不足而降低通用 AI 本可达到的输出质量。用户默认只看自然结果，依据与审计按需展开。完整规则见规格 v0.6 §2.0.1、PAN-00R 任务包 §3。
 
 ### 4.5 对齐业界互操作协议栈（2026-07-08 结论）
 
@@ -444,6 +463,7 @@ flowchart TB
 
 > **2026-07-16 审计后重排（历史）**：第一阶段不再扩展能力面，切换为“主体可信化与协作感知”。当时以 `digitalme_phase1_subject_upgrade_plan_v0.1.md` 为执行清单；原 v0.3.13 的 L0/审计/CLI 只能视为原型，不视为已达到安全可用。
 > **2026-07-18 覆盖**：当前执行索引改为 `digitalme_panorama_execution_index_v0.1.md`；原升级计划降为 Trusted Beta 硬化依据（决策 #58）。
+> **2026-07-19 PAN-00R 覆盖（当前）**：第一阶段确立为三位一体 Alpha；**当前唯一下一任务为起草 PAN-01S 独立任务包**（极简产品表面与复杂度后移）；随后按 PAN-02 理解通道 → PAN-03 能力框架 → PAN-04 外部协作骨架 → PAN-05 成长飞轮 → PAN-06 非开发者验证推进（执行索引 v0.2；决策 #67～#71）。PAN-00R 接受前不创建 PAN-01S 实现分支、不修改产品代码、不开始 PAN-02～PAN-06。
 
 1. **工程与 Package 基线冻结**：Git、Alpha 标记、Package hash 快照、能力状态表；
 2. **主体资产内核**：PackageStore、七类数据、原子版本、候选更新、来源 hash、回滚；
@@ -855,3 +875,8 @@ flowchart TB
 64. **PAN-01R statically_verified（2026-07-19）**：规格 `PAN01R_SPEC_BASE`=`35c5aea`；实现分支 `codex/pan-01r-sovereign-collaboration-loop`；五步本地模拟主权协作体验 + 双隔离生成 + 单次授权 + adopt/reject；`test:pan-01r` 36/36；`test:pan-01r-owner-runtime` 通过。**不标 accepted**；PAN-02 未开始。
 65. **PAN-01R Codex 第一轮复核修复（2026-07-19）**：identityClaims 永不升格 verified_fact；依据类别平衡；previewId 冻结授权；严格 personalized；停止竞态；grounding_invalid/missing；推理环境本机/远程区分与 digest 绑定；adopt/reject 审计契约；receipt sender 绑定。`test:pan-01r` 56/56；owner-runtime 19/19。状态：`statically_verified` / `codex_review_changes_requested`（不标 accepted）。
 66. **PAN-01R Codex 第二轮最小收口（2026-07-19）**：DecisionAudit preflight 用 ok+verify.healthy；completed-before-cancel→abandoned；request reject 先审计后改状态；执行前推理环境 digest 校验（消费 token 前）。`test:pan-01r` 70/70；owner-runtime 20/20。状态：`statically_verified` / `codex_review_changes_requested`（不标 accepted）。
+67. **第一阶段三位一体 Alpha（2026-07-19，PAN-00R）**：第一阶段最高定义确立为同时完成「理解我 × 武装我 × 连接世界」三部分 Alpha，取代「在首页完整展示产品全貌」的旧理解。只有「理解我」是数字档案；加「武装我」是个性化 Agent；三者齐备才是初级数字主体。第一阶段闭环与成长回流规则冻结（外部输入不直接改写主体）。见 §2.8、总任务 v0.4、PAN-00R 任务包。
+68. **极简产品表面（2026-07-19，PAN-00R）**：冻结十条极简产品原则与前台/后台/帮助/高级四层分层；四承诺与成长路线迁为帮助内容；「产品全貌」重定义为纵向真实体验路径；旧 PAN-02「控制权面板」superseded——控制按风险上下文分散，完整细节进设置/高级。界面收口由 PAN-01S 落实。见 §3 第 24 条、规格 v0.6 §2.0 / §3.1。
+69. **PAN-01 / PAN-01R 产品感知失败裁定（2026-07-19，PAN-00R）**：PAN-01 = `statically_verified / owner_product_perception_failed / needs_minimal_surface_reset`；PAN-01R = `statically_verified / codex_review_passed / owner_runtime_verified / owner_product_perception_failed / retained_as_internal_collaboration_harness`（证据 `9dd6fa0`、70/70、20/20、Codex 二轮复核通过、Owner 走通主路径）。均不 accepted、不回滚、不删代码。PAN-01R 普通用户入口后续由 PAN-01S 撤下，底层安全骨架保留为高级/开发者协作回路验证器。
+70. **AI 与蒸馏结果的新关系（2026-07-19，PAN-00R）**：AI 负责能力上限；Digital Me 负责方向、真实性、边界、连续性和本人特征。主体信息分层起作用（fact 锚点 / assertion 约束 / preference 软引导 / inference 低权重 / boundary 硬约束）；相关性门强制；禁止强制引用 E1/E2、低相关材料塞 prompt、因主体资料不足降低输出质量、正文展示工程证据编号。见 §4.4、规格 v0.6 §2.0.1。
+71. **外部反馈推动成长但不直接改写主体（2026-07-19，PAN-00R）**：本人真实行动结果可成 fact 候选；外部反馈先作外部观察 / current_state / inference；系统归纳规律默认 inference；立场、长期意图、人格与边界改变必须本人确认；外部伙伴、模型或工具不得直接写入「我是谁」；写入仍遵守 preview → confirmation → PackageStore commit。

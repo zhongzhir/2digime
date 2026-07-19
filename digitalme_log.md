@@ -5,6 +5,47 @@
 
 ---
 
+## 2026-07-19 PAN-00R 战略修订 · 三位一体重构与极简产品原则冻结（仅文档）
+
+### Owner 决策（含义摘要，非原话复制）
+
+1. **第一阶段三位一体**：第一阶段必须同时完成「理解我 × 武装我 × 连接世界」三部分 Alpha，取代「在首页完整展示产品全貌」的旧理解；三者齐备才是初级数字主体，第一阶段不得宣称法律身份与社会承认。
+2. **极简产品原则**：后台复杂、前台极简；个性化隐性、风险授权显性；四承诺与成长路线迁入帮助；普通用户界面不得展示工程状态与系统设计说明；「产品全貌」重定义为纵向真实体验路径。
+3. **AI 使用主体信息新原则**：AI 负责能力上限，Digital Me 负责方向、真实性、边界、连续性和本人特征；相关性门强制；禁止强制显式引用与低相关材料塞 prompt。
+4. **PAN-01 裁定**：`statically_verified / owner_product_perception_failed / needs_minimal_surface_reset`；不 accepted；不回滚；由 PAN-01S 收口。
+5. **PAN-01R 裁定**：`statically_verified / codex_review_passed / owner_runtime_verified / owner_product_perception_failed / retained_as_internal_collaboration_harness`（证据 `9dd6fa0`、70/70、20/20）；不 accepted；普通用户入口由 PAN-01S 撤下；底层安全骨架保留为高级/开发者协作回路验证器。
+6. **成长回流**：外部结果与反馈形成成长候选，但不得直接改写主体；立场、意图、人格与边界改变须本人确认。
+
+### 队列变更
+
+旧队列（PAN-01R 验收通过后启动旧 PAN-02 控制权面板 → 旧 PAN-03 → 旧 PAN-04）**被新三位一体队列取代**：
+
+```text
+PAN-00 accepted → PAN-00R statically_verified → PAN-01S task_package_pending → PAN-01S
+→ PAN-02 理解通道 Alpha → PAN-03 能力框架 Alpha → PAN-04 外部协作骨架 Alpha
+→ PAN-05 成长飞轮与传播体验 → PAN-06 非开发者验证与 Trusted Beta 排序
+```
+
+旧 PAN-02「控制权面板」标 superseded；旧 PAN-03/04 保留历史、由新定义取代排期口径。
+
+### 文档变更
+
+- 新增 `digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`（v0.1）
+- 总任务 v0.3.2 → **v0.4**（三位一体重构；状态 `active / three_part_alpha_reframed / PAN-01S_pending_spec`）
+- 产品规格文内 v0.5 → **v0.6**（§2.0 极简原则；§2.0.1 主体信息分层；§3.1 极简 IA；§7.6 三位一体 DoD；§7.5 历史化）
+- 执行索引文内 v0.1 → **v0.2**（基线 `9dd6fa0`；新队列；PAN-01/PAN-01R 裁定）
+- context §2.8 / §3 / §4.4 / §7.1 更新；决策 **#67～#71**
+- 能力表更新 P1-PANORAMA / PAN-01 / PAN-01R；新增 PAN-00R、PAN-01S
+- PAN-01 任务包加最终处置块；PAN-01R 任务包 v0.1.2 → **v0.1.3**（最终处置）
+- `.cursor/rules/product-development-process.mdc` 当前任务指针更新
+
+### 状态与下一步
+
+PAN-00R：`statically_verified`（仅文档收口；**不标 accepted**；待 Codex 文档复核与 Owner 确认）。
+**唯一下一任务：起草并冻结 PAN-01S 独立任务包**（极简产品表面与复杂度后移）。PAN-00R 接受前不创建 PAN-01S 实现分支、不修改产品代码、不开始 PAN-02～PAN-06。不恢复 P1-07。
+
+---
+
 ## 2026-07-19 PAN-01R Codex 第二轮最小收口 · statically_verified / codex_review_changes_requested
 
 ### 修复

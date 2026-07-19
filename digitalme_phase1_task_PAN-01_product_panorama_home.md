@@ -2,7 +2,24 @@
 
 版本：v0.2.3
 日期：2026-07-19
-状态：`statically_verified` / `owner_product_perception_failed` / `retained_as_scaffold`（不得标 `accepted`；不回滚；产品证明改由 PAN-01R 承接）
+状态：`statically_verified` / `owner_product_perception_failed` / `needs_minimal_surface_reset`（不得标 `accepted`；不回滚）
+
+> **最终处置（2026-07-19，PAN-00R 裁定；本块为唯一当前口径，正文其余部分为历史记录）**
+>
+> ```text
+> engineering: statically_verified
+> owner: product_perception_failed
+> disposition: needs_minimal_surface_reset
+> accepted: no
+> ```
+>
+> - 可信只读聚合和 fail-closed 逻辑保留；
+> - 「产品全貌首页」作为密集信息展板失败；
+> - 四个承诺和成长路线不得继续作为普通用户首屏主体，将迁至**帮助内容**；
+> - 不继续打磨卡片和解释文案；
+> - 极简产品表面收口由 **PAN-01S** 完成（见 `digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`、执行索引 v0.2）；
+> - 原「产品证明改由 PAN-01R 承接」为历史口径：PAN-01R 亦已裁定产品感知失败并保留为内部协作回路验证器；
+> - 不改写本任务包历史内容。
 所属总任务：`P1-PANORAMA：Digital Me 产品全貌 Alpha`
 前置任务：PAN-00 `accepted`（验收提交 `bc85a14`）
 建议代码基线：`5ab55dc`

@@ -53,10 +53,12 @@
 | ToolBroker (P1-05) | `statically_verified` | `src/tool-broker/*`；`l0:external-agent-started`；`npm run test:p1-05`（含 stop IPC）；主动取消 → `execution_canceled` | 停止须完全重启应用后复验；不标记 accepted |
 | External collaboration | `specified` | `digital-me-package/contracts/*`；规格 v0.5 Panorama 冻结章 | Agent Card / Interaction Contract 数据结构已对齐；无用户面协作闭环；Alpha 以本地模拟交付 |
 | Subject home (P1-03) | `runtime_verified` | `src/subject-overview/*`；`src/package-store/read-only.js`；`subject:getOverview`；P1-03 21/21；Codex 复核与 Owner 真实 Electron 验收 | 严格只读聚合与 SubjectOverview v1；不迁移写路径；Panorama 首页将复用只读聚合 |
-| **P1-PANORAMA** | `active` / `PAN-01R_statically_verified` | 总任务包；执行索引；PAN-01R 任务包 | 当前产品主线；非代码能力项；PAN-02/03/04 暂停至 PAN-01R 验收 |
-| **PAN-00** | `accepted` | 验收提交 `bc85a14`；Codex 最终复核通过 | 战略与规格冻结完成 |
-| **PAN-01** | `statically_verified` / `owner_product_perception_failed` / `retained_as_scaffold` | 分支 `codex/pan-01-product-panorama-home`；基线 `a40c5f8`；`test:pan-01` / `test:pan-01-owner-runtime` | 产品全貌 homepage scaffold；只读；**不标 accepted**；不回滚；证明改由 PAN-01R |
-| **PAN-01R** | `statically_verified` / `codex_review_changes_requested` | 分支 `codex/pan-01r-sovereign-collaboration-loop`；规格 `35c5aea`；实现 `a47e041`；Codex 第一轮 + 第二轮最小收口已合入；`test:pan-01r` 70/70；`test:pan-01r-owner-runtime` 20/20 | 主权协作闭环；**不标 accepted**；待 Codex 再复核与 Owner 主路径验收 |
+| **P1-PANORAMA** | `active` / `three_part_alpha_reframed` / `PAN-01S_pending_spec` | 总任务包 v0.4；执行索引 v0.2；PAN-00R 任务包 | 当前产品主线（三位一体 Alpha）；非代码能力项；唯一下一任务为起草 PAN-01S 独立任务包 |
+| **PAN-00** | `accepted` | 验收提交 `bc85a14`；Codex 最终复核通过 | 战略与规格冻结完成（历史，不改写） |
+| **PAN-00R** | `statically_verified` | 分支 `codex/pan-00r-three-part-alpha-reset`；任务包 `digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`；仅文档修订 | 三位一体重构与极简产品原则冻结；**不标 accepted**；待 Codex 文档复核与 Owner 确认 |
+| **PAN-01** | `statically_verified` / `owner_product_perception_failed` / `needs_minimal_surface_reset` | 分支 `codex/pan-01-product-panorama-home`；基线 `a40c5f8`；`test:pan-01` / `test:pan-01-owner-runtime` | 工程验证通过；Owner **产品感知**验收未通过（非工程失败）；**不标 accepted**；不回滚；只读聚合与 fail-closed 逻辑保留；表面收口由 PAN-01S 承接 |
+| **PAN-01R** | `statically_verified` / `codex_review_passed` / `owner_runtime_verified` / `owner_product_perception_failed` / `retained_as_internal_collaboration_harness` | 分支 `codex/pan-01r-sovereign-collaboration-loop`；规格 `35c5aea`；最终实现 `9dd6fa0`；`test:pan-01r` 70/70；`test:pan-01r-owner-runtime` 20/20；Codex 两轮复核通过；Owner 走通主要路径 | 工程与运行验证通过；Owner **产品感知**验收未通过（owner runtime 通过 ≠ accepted）；**不标 accepted**；底层授权/取消/审计/adopt-reject/推理环境绑定保留为高级/开发者协作回路验证器；普通用户入口由 PAN-01S 撤下 |
+| **PAN-01S** | `planned`（`specified_in_master / task_package_pending / not_started`） | 总任务 v0.4 §6.2；执行索引 v0.2 | 极简产品表面与复杂度后移；须独立任务包获 Owner 批准后才能编码 |
 
 ## P1-07 冻结说明（与任务包 / 执行索引 / log 一致）
 
@@ -89,4 +91,5 @@ statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_fo
 2. Product Panorama Alpha 完成前，不得将 MCP / External CLI / Audit 标记为 `released`。
 3. 升格为 `statically_verified` 至少需要自动化测试证据；`runtime_verified` 需要真实任务连续验收记录；`accepted`/`released` 需要 Owner 人工验收 + 技术复核。
 4. 本表由 P1-00 建立；后续任务更新时须同步修改本文件并在 `digitalme_log.md` 留痕。
-5. 2026-07-18 起同步维护 P1-PANORAMA / PAN 条目；用户面状态见产品规格 v0.5 与执行索引。
+5. 2026-07-18 起同步维护 P1-PANORAMA / PAN 条目；用户面状态见产品规格 v0.6 与执行索引 v0.2。
+6. **产品感知失败 ≠ 工程失败（2026-07-19）**：PAN-01 / PAN-01R 的 `owner_product_perception_failed` 是产品验收结论，其工程与运行证据（statically_verified / owner_runtime_verified）仍然有效；反之，owner runtime 通过也不自动等于 `accepted`。

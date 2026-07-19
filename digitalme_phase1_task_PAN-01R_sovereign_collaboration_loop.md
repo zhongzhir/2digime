@@ -1,22 +1,45 @@
 # PAN-01R 任务包：Digital Me 主权协作闭环
 
-版本：v0.1.2
+版本：v0.1.3
 日期：2026-07-19
-状态：`statically_verified` / `codex_review_changes_requested`（不得标 `accepted` / `runtime_verified`；Codex 第二轮最小收口已合入；待再复核与 Owner 主路径验收）
-所属总任务：`P1-PANORAMA：Digital Me 产品全貌 Alpha`
-前置任务：PAN-01 `statically_verified` / `owner_product_perception_failed` / `retained_as_scaffold`（不标 accepted；不回滚）
+状态：`statically_verified` / `codex_review_passed` / `owner_runtime_verified` / `owner_product_perception_failed` / `retained_as_internal_collaboration_harness`（**不标 accepted**）
+所属总任务：`P1-PANORAMA：Digital Me 产品全貌 Alpha`（v0.4，三位一体重构）
+前置任务：PAN-01 `statically_verified` / `owner_product_perception_failed` / `needs_minimal_surface_reset`（不标 accepted；不回滚）
 建议代码基线：`a40c5f8`（分支 `codex/pan-01-product-panorama-home`）
 规划基线：`35c5aead8879f818ae0e1e90836a8fee557c22c7`（`PAN01R_SPEC_BASE`）
-实现分支：`codex/pan-01r-sovereign-collaboration-loop`
+实现分支：`codex/pan-01r-sovereign-collaboration-loop`（最终实现 `9dd6fa0`）
 代码 Owner：Cursor
-任务类型：Product Panorama Alpha / 主权协作纵向产品证据链
+任务类型：Product Panorama Alpha / 主权协作纵向产品证据链（历史；保留为内部协作回路验证器）
 
-> **状态语义（强制）**
+> **最终处置（2026-07-19，PAN-00R 裁定；v0.1.3）**
 >
-> - 文首曾用的 `owner_approved` **仅**表示 Owner 已批准规格并授权启动实现；
-> - **不**表示实现结果 `accepted`；
-> - 当前工程状态为 `statically_verified` / `codex_review_changes_requested`；
-> - `runtime_verified` / `accepted` 必须等待 Codex 再复核与 Owner 主路径验收。
+> ```text
+> engineering: statically_verified
+> codex: review_passed
+> owner_runtime: verified
+> owner_product: product_perception_failed
+> disposition: retained_as_internal_collaboration_harness
+> accepted: no
+> ```
+>
+> **工程与运行证据**：最终实现 `9dd6fa0`；`test:pan-01r` 70/70；`test:pan-01r-owner-runtime` 20/20；Codex 第二轮最终静态复核通过；Owner 实际走通主要路径。
+>
+> **Owner 产品验收结论（产品感知失败原因）**：
+>
+> 1. 授权依据与问题相关性明显不足；
+> 2. 强制显式引用造成「不真、不准」的感受；
+> 3. 将内部理解、授权和执行链路直接铺在页面上；
+> 4. 输出质量被不相关主体资料拖累；
+> 5. 对普通用户可能损伤信任。
+>
+> **处置**：
+>
+> - 「体验一次 Digital Me 如何代表我」**不得**继续作为普通用户体验；普通用户入口后续由 **PAN-01S** 撤下；
+> - 底层授权、取消、审计、adopt/reject、推理环境绑定等安全骨架**继续保留**，作为高级/开发者协作回路验证器与未来外部协作（新 PAN-04）的基础设施；
+> - 不继续针对当前五步页面做精细化修复；不删除代码；不回滚提交；不标 accepted；
+> - 下文的五步冻结规格作为**历史工程规格**保留，不删除，不再作为普通用户产品规格。
+>
+> **状态语义（强制）**：文首曾用的 `owner_approved` 仅表示 Owner 已批准规格并授权启动实现，不表示 `accepted`；`owner_runtime_verified` 表示 Owner 完成运行验证，也**不**等于 `accepted`。
 
 ---
 
@@ -55,15 +78,17 @@ PAN-01R **不**继续打磨 PAN-01 的卡片、间距和抽象文案，而是建
 × 结果归我处置
 ```
 
-### 0.3 PAN-01R 完成前的调度冻结
+### 0.3 PAN-01R 完成前的调度冻结（**历史 · 已被 PAN-00R 队列取代**）
 
-| 项 | 状态 |
+> 以下为当时的调度口径，已由执行索引 v0.2 的新队列取代（当前唯一下一任务为起草 PAN-01S 独立任务包）。
+
+| 项 | 状态（历史） |
 |---|---|
-| PAN-02 | `paused_until_PAN-01R_acceptance` |
-| PAN-03 | `paused_until_PAN-01R_acceptance` |
-| PAN-04 | `paused_until_PAN-01R_acceptance` |
-| PAN-01 非阻断 UI 细节 | 进入 backlog |
-| **唯一下一实现任务** | **PAN-01R** |
+| PAN-02 | `paused_until_PAN-01R_acceptance`（superseded） |
+| PAN-03 | `paused_until_PAN-01R_acceptance`（superseded） |
+| PAN-04 | `paused_until_PAN-01R_acceptance`（superseded） |
+| PAN-01 非阻断 UI 细节 | 进入 backlog（后并入 PAN-01S 收口） |
+| 唯一下一实现任务（当时） | PAN-01R |
 
 ---
 

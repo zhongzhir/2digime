@@ -18,6 +18,8 @@
 - 本任务正式标记 **`accepted`**。
 - 下一实现任务：**PAN-01**（独立任务包 `digitalme_phase1_task_PAN-01_product_panorama_home.md` 已批准）。
 
+> **历史注记（2026-07-19）**：本任务包为历史 accepted 记录，内容不改写。其中的阶段定义、任务队列与「下一实现任务」均为 2026-07-18 当时口径；后续由 **PAN-00R 战略修订**补充（三位一体 Alpha、极简产品原则与新队列，见 `digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md` 与执行索引 v0.2）。
+
 ---
 
 ## 0. 本任务结论
