@@ -4,7 +4,7 @@
 日期：2026-07-19
 状态：`active`
 所属总任务：`P1-PANORAMA：Digital Me 产品全貌 Alpha`
-代码实现基线：待实现提交（分支 `codex/pan-01r-sovereign-collaboration-loop`）
+代码实现基线：`a47e04177517ce2b661fecb23c28f08a045a8582`（分支 `codex/pan-01r-sovereign-collaboration-loop`）
 文档基线：`35c5aead8879f818ae0e1e90836a8fee557c22c7`（`PAN01R_SPEC_BASE`）
 规格依据：`digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`、`digitalme_phase1_task_PAN-00_strategy_spec_freeze.md`、`digitalme_phase1_task_PAN-01_product_panorama_home.md`、`digitalme_phase1_task_PAN-01R_sovereign_collaboration_loop.md`、`digitalme_product_spec_v0.2.md`（文内 v0.5 / v0.5.1 / v0.5.2）
 
@@ -29,7 +29,7 @@ P1-PANORAMA
 | 项 | 当前值 |
 |---|---|
 | 总任务状态 | `active / PAN-01R_statically_verified` |
-| 当前完成 | PAN-00 `accepted`；PAN-01 scaffold 保留；PAN-01R `statically_verified`（规划 `35c5aea`） |
+| 当前完成 | PAN-00 `accepted`；PAN-01 scaffold 保留；PAN-01R `statically_verified`（规划 `35c5aea`；实现 `a47e041`） |
 | **下一实现任务** | **无**（等待 PAN-01R Codex 复核与 Owner 主路径验收；验收前不得启动 PAN-02） |
 | 启动条件 | PAN-01R 验收通过后才可启动 PAN-02 |
 | 当前阻断项 | PAN-01R 待 Owner 主路径验收 |
