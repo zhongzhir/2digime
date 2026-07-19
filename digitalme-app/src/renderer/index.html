@@ -16,13 +16,7 @@
           <button class="nav-item" data-view="me">我</button>
           <button class="nav-item" data-view="extensions">能力</button>
         </nav>
-        <div class="section-title">我的状态</div>
-        <div id="pkg-status" class="pkg-status">加载中…</div>
-        <div class="section-title">连接</div>
-        <div id="model-status" class="pkg-status">尚未连接</div>
-        <div id="capabilities-status" class="pkg-status muted-cap">已装载扩展：加载中…</div>
         <button id="btn-settings" class="btn-ghost">设置</button>
-        <div class="footnote">属于你 · 可带走 · 可信任</div>
       </aside>
 
       <main id="main">
@@ -726,80 +720,25 @@
                 </div>
 
                 <div id="me-panel-overview" class="life-panel">
-                  <div id="subject-home" class="subject-home">
-                    <section class="output-card subject-home-hero panorama-hero">
-                      <h2 id="subject-home-title" class="subject-home-title">尚未命名的 Digital Me</h2>
-                      <p id="subject-home-tagline" class="muted life-hint">
-                        属于本人、持续理解本人、只在本人授权范围内行动。
-                      </p>
-                      <p id="subject-home-status-line" class="panorama-status-line" aria-live="polite"></p>
-                      <div id="subject-home-identity" class="subject-home-grid" aria-live="polite"></div>
-                      <div id="subject-home-package" class="subject-home-meta" aria-live="polite"></div>
-                      <div id="panorama-proof-strip" class="panorama-proof-strip" aria-live="polite"></div>
-                      <div id="panorama-next-action" class="panorama-next-action" aria-live="polite"></div>
-                      <div class="builder-actions" style="margin-top:12px">
-                        <button type="button" id="panorama-sovereign-cta" class="btn-primary">
-                          体验一次 Digital Me 如何代表我
-                        </button>
-                      </div>
+                  <div id="subject-home" class="subject-home subject-home-minimal">
+                    <section class="subject-minimal-entry" aria-live="polite">
+                      <h2 id="subject-home-title" class="subject-home-title">我的 Digital Me</h2>
+                      <p id="subject-minimal-summary" class="subject-minimal-summary"></p>
+                      <div id="subject-minimal-actions" class="subject-minimal-actions"></div>
+                      <p id="subject-minimal-reminder" class="subject-minimal-reminder muted hidden"></p>
                     </section>
-
-                    <section id="panorama-experience-panel" class="output-card panorama-experience-panel hidden" aria-live="polite">
+                    <!-- PAN-01R five-step panel: test-harness mount only; no production CTA -->
+                    <section id="panorama-experience-panel" class="output-card panorama-experience-panel hidden" aria-live="polite" hidden>
                       <div class="ext-store-head">
-                        <h3>主权协作体验 · 本地模拟</h3>
+                        <h3>本地模拟协作验证</h3>
                         <button type="button" id="panorama-exp-close" class="btn-ghost">关闭</button>
                       </div>
-                      <p class="muted life-hint">协作关系在本机模拟；若使用云端模型，授权页会说明推理数据去向。</p>
+                      <p class="muted life-hint">仅内部测试进程可用。</p>
                       <div id="panorama-exp-step1" class="panorama-exp-step"></div>
                       <div id="panorama-exp-step2" class="panorama-exp-step hidden"></div>
                       <div id="panorama-exp-step3" class="panorama-exp-step hidden"></div>
                       <div id="panorama-exp-step4" class="panorama-exp-step hidden"></div>
                       <div id="panorama-exp-step5" class="panorama-exp-step hidden"></div>
-                    </section>
-
-                    <section class="output-card panorama-promises-card panorama-secondary" id="panorama-promises-card">
-                      <h3>辅助说明 · 四个承诺</h3>
-                      <p class="muted life-hint">这是我 · 属于我 · 由我管 · 代表我协作。状态由本机真实信息生成。</p>
-                      <div id="panorama-promises" class="panorama-promise-grid" aria-live="polite"></div>
-                    </section>
-
-                    <section class="output-card panorama-journey-card panorama-secondary" id="panorama-journey-card">
-                      <h3>辅助说明 · 成长路线</h3>
-                      <p class="muted life-hint">构建我 → 看见我 → 武装我 → 授权我 → 代表我协作</p>
-                      <ol id="panorama-journey" class="panorama-journey-list" aria-live="polite"></ol>
-                    </section>
-
-                    <section class="output-card" id="panorama-direction-card">
-                      <h3>我的方向与核心边界</h3>
-                      <div id="panorama-direction" class="subject-home-block" aria-live="polite"></div>
-                    </section>
-
-                    <section class="output-card" id="subject-home-layers-card">
-                      <h3>我的构成</h3>
-                      <p class="muted life-hint">七类主体数据分层展示；事实、本人声明与系统推断不可混为一谈。</p>
-                      <div id="subject-home-layers" class="subject-layer-grid" aria-live="polite"></div>
-                    </section>
-                    <section class="output-card">
-                      <h3>最近变化与可恢复</h3>
-                      <div id="subject-home-recent" class="subject-home-block" aria-live="polite"></div>
-                      <div class="builder-actions" style="margin-top:10px">
-                        <button type="button" id="btn-subject-goto-versions" class="btn-ghost">查看资料版本</button>
-                        <button type="button" id="btn-subject-refresh" class="btn-ghost">刷新全貌</button>
-                      </div>
-                    </section>
-                    <section class="output-card">
-                      <h3>我现在能做什么</h3>
-                      <p class="muted life-hint">成熟度使用：可用 · 实验 · 本地模拟 · 预览 · 尚未开放。运行条件单独说明。</p>
-                      <div id="subject-home-capabilities" class="subject-cap-grid" aria-live="polite"></div>
-                    </section>
-                    <section class="output-card">
-                      <h3>边界与对外状态</h3>
-                      <div id="subject-home-boundaries" class="subject-home-block" aria-live="polite"></div>
-                      <div id="subject-home-collaboration" class="subject-home-block" aria-live="polite"></div>
-                    </section>
-                    <section id="subject-home-warnings-card" class="output-card subject-warnings hidden">
-                      <h3>需要注意</h3>
-                      <ul id="subject-home-warnings" class="subject-warning-list"></ul>
                     </section>
                   </div>
                 </div>

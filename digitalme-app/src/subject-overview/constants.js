@@ -24,6 +24,7 @@ const USER_STATUS_LABEL = Object.freeze({
   [USER_STATUS.NOT_OPEN]: "尚未开放",
 });
 
+/** Production navigation whitelist (PAN-01S). panorama-experience is not production. */
 const PANORAMA_NAV_TARGETS = new Set([
   "me-build",
   "me-overview",
@@ -31,8 +32,26 @@ const PANORAMA_NAV_TARGETS = new Set([
   "me-boundaries",
   "capabilities",
   "settings-package-versions",
-  "panorama-experience",
+  "chat",
+  "do",
 ]);
+
+/**
+ * Test-harness-only nav target. Must never appear in production whitelist
+ * or production renderer navigation.
+ */
+const PANORAMA_TEST_ONLY_NAV_TARGETS = new Set(["panorama-experience"]);
+
+const MINIMAL_SURFACE_ACTIONS = Object.freeze({
+  view_problems: "查看问题",
+  continue_build: "继续构建",
+  continue_confirm: "继续确认",
+  continue_refine: "继续完善",
+  view_subject: "查看我的信息",
+  start_work: "开始工作",
+});
+
+const MINIMAL_SURFACE_PRIORITIES = Object.freeze(["P0", "P1", "P2", "P3", "P4"]);
 
 const LAYER_META = Object.freeze({
   evidence: {
@@ -130,6 +149,9 @@ module.exports = {
   USER_STATUS,
   USER_STATUS_LABEL,
   PANORAMA_NAV_TARGETS,
+  PANORAMA_TEST_ONLY_NAV_TARGETS,
+  MINIMAL_SURFACE_ACTIONS,
+  MINIMAL_SURFACE_PRIORITIES,
   DATA_KINDS,
   LAYER_META,
   CAPABILITY_CATALOG,

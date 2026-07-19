@@ -16,6 +16,7 @@ const retrieval = require("./retrieval");
 const feedback = require("./feedback");
 const { PackageStore, buildVersionPanelInfo } = require("./package-store");
 const { buildSubjectOverviewV1 } = require("./subject-overview");
+const { summarizeInboxForOverview } = require("./subject-overview/panorama");
 const { createPanoramaExperience } = require("./panorama-experience");
 const { createMinimalFixture } = require("./package-store/fixture");
 const pptxOutput = require("./outputs/pptx");
@@ -176,17 +177,21 @@ app.whenReady().then(() => {
         ? require("../scripts/p1-07-owner-runtime-harness.cjs")
         : process.env.DIGITALME_PAN01R_OWNER_RUNTIME === "1"
           ? require("../scripts/pan-01r-owner-runtime-harness.cjs")
-          : process.env.DIGITALME_PAN01_OWNER_RUNTIME === "1"
-            ? require("../scripts/pan-01-owner-runtime-harness.cjs")
-            : require("../scripts/owner-runtime-harness.cjs");
+          : process.env.DIGITALME_PAN01S_OWNER_RUNTIME === "1"
+            ? require("../scripts/pan-01s-owner-runtime-harness.cjs")
+            : process.env.DIGITALME_PAN01_OWNER_RUNTIME === "1"
+              ? require("../scripts/pan-01-owner-runtime-harness.cjs")
+              : require("../scripts/owner-runtime-harness.cjs");
     const run =
       process.env.DIGITALME_P107_OWNER_RUNTIME === "1"
         ? harness.runP107OwnerRuntimeHarness
         : process.env.DIGITALME_PAN01R_OWNER_RUNTIME === "1"
           ? harness.runPan01rOwnerRuntimeHarness
-          : process.env.DIGITALME_PAN01_OWNER_RUNTIME === "1"
-            ? harness.runPan01OwnerRuntimeHarness
-            : harness.runOwnerRuntimeHarness;
+          : process.env.DIGITALME_PAN01S_OWNER_RUNTIME === "1"
+            ? harness.runPan01sOwnerRuntimeHarness
+            : process.env.DIGITALME_PAN01_OWNER_RUNTIME === "1"
+              ? harness.runPan01OwnerRuntimeHarness
+              : harness.runOwnerRuntimeHarness;
     Promise.resolve()
       .then(() => run({ BrowserWindow, app }))
       .then((code) => {
@@ -3145,12 +3150,27 @@ ipcMain.handle("packageStore:listVersions", () => {
 ipcMain.handle("subject:getOverview", () => {
   const pkgDir = path.resolve(packageDirFromConfig());
   const pub = readPublicConfig();
+  let inboxSummary = summarizeInboxForOverview(null);
+  try {
+    const queue = inbox.listQueue(app.getPath("userData"));
+    inboxSummary = summarizeInboxForOverview(queue);
+  } catch {
+    /* fail-closed empty summary */
+  }
   return buildSubjectOverviewV1(pkgDir, {
     hasApiKey: !!pub.apiKeyConfigured,
+    inboxSummary,
   });
 });
 
-// ---------- PAN-01R sovereign collaboration experience ----------
+// ---------- PAN-01R sovereign collaboration experience (test harness only) ----------
+function isPan01rTestHarnessEnabled() {
+  return (
+    process.env.DIGITALME_PAN01R_TEST_HARNESS === "1" ||
+    process.env.DIGITALME_PAN01R_OWNER_RUNTIME === "1"
+  );
+}
+
 function pan01rHooks() {
   return global.__PAN01R_TEST_HOOKS__ && typeof global.__PAN01R_TEST_HOOKS__ === "object"
     ? global.__PAN01R_TEST_HOOKS__
@@ -3210,121 +3230,125 @@ function allowFields(payload, keys) {
   return out;
 }
 
-ipcMain.handle("panoramaExperience:getSubjectBrief", (event) => {
-  const api = pan01rApi();
-  return api.getSubjectBrief(pan01rPackageDir());
-});
-
-ipcMain.handle("panoramaExperience:createRequest", (event, payload) => {
-  const body = allowFields(payload, ["topic", "templateId", "evidenceIds"]);
-  const api = pan01rApi();
-  return api.createRequest({
-    senderId: pan01rSenderId(event),
-    topic: body.topic,
-    templateId: body.templateId,
-    evidenceIds: Array.isArray(body.evidenceIds) ? body.evidenceIds.map(String) : undefined,
-    packageDir: pan01rPackageDir(),
-    userData: pan01rUserData(),
+if (isPan01rTestHarnessEnabled()) {
+  ipcMain.handle("panoramaExperience:getSubjectBrief", (event) => {
+    const api = pan01rApi();
+    return api.getSubjectBrief(pan01rPackageDir());
   });
-});
 
-ipcMain.handle("panoramaExperience:buildAuthPreview", (event, payload) => {
-  const body = allowFields(payload, ["requestId", "selectedEvidenceIds"]);
-  const api = pan01rApi();
-  return api.buildAuthPreview({
-    requestId: String(body.requestId || ""),
-    senderId: pan01rSenderId(event),
-    selectedEvidenceIds: Array.isArray(body.selectedEvidenceIds)
-      ? body.selectedEvidenceIds.map(String)
-      : [],
-    packageDir: pan01rPackageDir(),
+  ipcMain.handle("panoramaExperience:createRequest", (event, payload) => {
+    const body = allowFields(payload, ["topic", "templateId", "evidenceIds"]);
+    const api = pan01rApi();
+    return api.createRequest({
+      senderId: pan01rSenderId(event),
+      topic: body.topic,
+      templateId: body.templateId,
+      evidenceIds: Array.isArray(body.evidenceIds) ? body.evidenceIds.map(String) : undefined,
+      packageDir: pan01rPackageDir(),
+      userData: pan01rUserData(),
+    });
   });
-});
 
-ipcMain.handle("panoramaExperience:rejectRequest", (event, payload) => {
-  const body = allowFields(payload, ["requestId"]);
-  const api = pan01rApi();
-  return api.rejectRequest({
-    requestId: String(body.requestId || ""),
-    senderId: pan01rSenderId(event),
-    userData: pan01rUserData(),
+  ipcMain.handle("panoramaExperience:buildAuthPreview", (event, payload) => {
+    const body = allowFields(payload, ["requestId", "selectedEvidenceIds"]);
+    const api = pan01rApi();
+    return api.buildAuthPreview({
+      requestId: String(body.requestId || ""),
+      senderId: pan01rSenderId(event),
+      selectedEvidenceIds: Array.isArray(body.selectedEvidenceIds)
+        ? body.selectedEvidenceIds.map(String)
+        : [],
+      packageDir: pan01rPackageDir(),
+    });
   });
-});
 
-ipcMain.handle("panoramaExperience:confirmAndExecute", async (event, payload) => {
-  // Production allowlist: previewId + confirmed only (no requestId/evidenceIds/tokenId from renderer)
-  const body = allowFields(payload, ["previewId", "confirmed"]);
-  const hooks = pan01rHooks();
-  if (hooks && hooks.captureConfirmPayload) {
-    hooks.lastConfirmPayload = { ...body };
-    hooks.lastConfirmRawKeys = payload && typeof payload === "object" ? Object.keys(payload) : [];
-  }
-  const api = pan01rApi();
-  return api.confirmFromPreviewThenExecute({
-    previewId: body.previewId ? String(body.previewId) : "",
-    confirmed: body.confirmed === true,
-    senderId: pan01rSenderId(event),
-    packageDir: pan01rPackageDir(),
-    userData: pan01rUserData(),
-    onRunCreated: (info) => {
-      try {
-        if (hooks) hooks.lastRunId = info && info.runId;
-        if (hooks && hooks.suppressRunProgress) return;
-        if (event && event.sender && !event.sender.isDestroyed()) {
-          event.sender.send("panoramaExperience:progress", {
-            runId: info && info.runId,
-            status: (info && info.status) || "running",
-            stage: (info && info.stage) || "starting",
-          });
+  ipcMain.handle("panoramaExperience:rejectRequest", (event, payload) => {
+    const body = allowFields(payload, ["requestId"]);
+    const api = pan01rApi();
+    return api.rejectRequest({
+      requestId: String(body.requestId || ""),
+      senderId: pan01rSenderId(event),
+      userData: pan01rUserData(),
+    });
+  });
+
+  ipcMain.handle("panoramaExperience:confirmAndExecute", async (event, payload) => {
+    // Production allowlist: previewId + confirmed only (no requestId/evidenceIds/tokenId from renderer)
+    const body = allowFields(payload, ["previewId", "confirmed"]);
+    const hooks = pan01rHooks();
+    if (hooks && hooks.captureConfirmPayload) {
+      hooks.lastConfirmPayload = { ...body };
+      hooks.lastConfirmRawKeys = payload && typeof payload === "object" ? Object.keys(payload) : [];
+    }
+    const api = pan01rApi();
+    return api.confirmFromPreviewThenExecute({
+      previewId: body.previewId ? String(body.previewId) : "",
+      confirmed: body.confirmed === true,
+      senderId: pan01rSenderId(event),
+      packageDir: pan01rPackageDir(),
+      userData: pan01rUserData(),
+      onRunCreated: (info) => {
+        try {
+          if (hooks) hooks.lastRunId = info && info.runId;
+          if (hooks && hooks.suppressRunProgress) return;
+          if (event && event.sender && !event.sender.isDestroyed()) {
+            event.sender.send("panoramaExperience:progress", {
+              runId: info && info.runId,
+              status: (info && info.status) || "running",
+              stage: (info && info.stage) || "starting",
+            });
+          }
+        } catch {
+          /* ignore */
         }
-      } catch {
-        /* ignore */
-      }
-    },
+      },
+    });
   });
-});
 
-ipcMain.handle("panoramaExperience:cancelRun", (event, payload) => {
-  const body = allowFields(payload, ["runId"]);
-  const api = pan01rApi();
-  return api.cancelRun({
-    runId: String(body.runId || ""),
-    senderId: pan01rSenderId(event),
-    userData: pan01rUserData(),
+  ipcMain.handle("panoramaExperience:cancelRun", (event, payload) => {
+    const body = allowFields(payload, ["runId"]);
+    const api = pan01rApi();
+    return api.cancelRun({
+      runId: String(body.runId || ""),
+      senderId: pan01rSenderId(event),
+      userData: pan01rUserData(),
+    });
   });
-});
 
-ipcMain.handle("panoramaExperience:adoptResult", (event, payload) => {
-  const body = allowFields(payload, ["runId"]);
-  const api = pan01rApi();
-  return api.adoptResult({
-    runId: String(body.runId || ""),
-    senderId: pan01rSenderId(event),
-    userData: pan01rUserData(),
+  ipcMain.handle("panoramaExperience:adoptResult", (event, payload) => {
+    const body = allowFields(payload, ["runId"]);
+    const api = pan01rApi();
+    return api.adoptResult({
+      runId: String(body.runId || ""),
+      senderId: pan01rSenderId(event),
+      userData: pan01rUserData(),
+    });
   });
-});
 
-ipcMain.handle("panoramaExperience:rejectResult", (event, payload) => {
-  const body = allowFields(payload, ["runId", "reasonCategory"]);
-  const api = pan01rApi();
-  return api.rejectResult({
-    runId: String(body.runId || ""),
-    senderId: pan01rSenderId(event),
-    userData: pan01rUserData(),
-    reasonCategory: body.reasonCategory ? String(body.reasonCategory) : undefined,
+  ipcMain.handle("panoramaExperience:rejectResult", (event, payload) => {
+    const body = allowFields(payload, ["runId", "reasonCategory"]);
+    const api = pan01rApi();
+    return api.rejectResult({
+      runId: String(body.runId || ""),
+      senderId: pan01rSenderId(event),
+      userData: pan01rUserData(),
+      reasonCategory: body.reasonCategory ? String(body.reasonCategory) : undefined,
+    });
   });
-});
 
-ipcMain.handle("panoramaExperience:getReceiptSummary", (event, payload) => {
-  const body = allowFields(payload, ["requestId", "runId"]);
-  const api = pan01rApi();
-  return api.getReceiptSummary({
-    requestId: body.requestId ? String(body.requestId) : undefined,
-    runId: body.runId ? String(body.runId) : undefined,
-    senderId: pan01rSenderId(event),
-    userData: pan01rUserData(),
+  ipcMain.handle("panoramaExperience:getReceiptSummary", (event, payload) => {
+    const body = allowFields(payload, ["requestId", "runId"]);
+    const api = pan01rApi();
+    return api.getReceiptSummary({
+      requestId: body.requestId ? String(body.requestId) : undefined,
+      runId: body.runId ? String(body.runId) : undefined,
+      senderId: pan01rSenderId(event),
+      userData: pan01rUserData(),
+    });
   });
-});
+}
+
+// Production: panoramaExperience IPC channels are not registered (no production entry).
 
 ipcMain.handle("packageStore:rollback", (_e, payload) => {
   const body = payload && typeof payload === "object" ? payload : {};

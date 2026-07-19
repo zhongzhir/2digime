@@ -2,7 +2,7 @@
 
 版本：v0.4
 日期：2026-07-19
-状态：`active / three_part_alpha_reframed / PAN-01S_specified`
+状态：`active / three_part_alpha_reframed / PAN-01S_statically_verified`
 任务类型：阶段策略调整 / 产品纵向闭环 / 市场认知启动
 文档基线：`9dd6fa0`（PAN-01R 最终实现 HEAD）；战略修订依据 `digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`
 历史基线：`5ab55dc`（代码）+ `8fb8210`（P1-07_DOCS_BASE）；P1-07 保持 `statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_for_panorama`，不因此标记 accepted
@@ -200,8 +200,8 @@ accepted: no
 ```text
 PAN-00 accepted
 → PAN-00R accepted（三位一体重构；`07b631d` + `6ae2dca`）
-→ PAN-01S specified / frozen_for_implementation / codex_review_passed / not_started
-→ PAN-01S 极简产品表面与复杂度后移（从规格接受提交开实现分支）
+→ PAN-01S statically_verified（不 accepted）
+→ Owner 主路径验收 PAN-01S
 → PAN-02 理解通道 Alpha
 → PAN-03 能力框架 Alpha
 → PAN-04 外部协作骨架 Alpha
@@ -219,21 +219,21 @@ PAN-00 accepted
 
 **PAN-01R（历史）**——主权协作闭环；裁定见 §5.2；保留历史工程证据。
 
-**PAN-01S：极简产品表面与复杂度后移**（`specified` / `owner_approved_for_implementation` / `frozen_for_implementation` / `codex_review_passed` / `not_started`）
+**PAN-01S：极简产品表面与复杂度后移**（`statically_verified`；**不** accepted）
 
 独立任务包：`digitalme_phase1_task_PAN-01S_minimal_product_surface.md`（v0.1.1）。
+实现分支：`codex/pan-01s-minimal-product-surface`。
 
-只允许：
+已完成：
 
 - 清理「我」页面默认表面为极简主体入口（主操作 P0→P4 唯一优先级）；
-- 四个承诺和成长路线迁入帮助（优先复用现有帮助弹窗）；
-- **PAN-01S Alpha 生产界面必须没有 PAN-01R 入口**（含设置／高级／帮助）；
-- 将协作验证保留为内部／test-only 隔离 harness（不进入生产高级区）；
+- 四个承诺和成长路线迁入帮助；
+- **PAN-01S Alpha 生产界面没有 PAN-01R 入口**（含设置／高级／帮助）；
+- 协作验证保留为内部／test-only 隔离 harness；
 - 侧栏不常驻 Package／模型／能力／品牌；
 - 保留 PAN-01/PAN-01R 后台与测试；
-- 不实现新的蒸馏、能力或公网协作；
-- 不趁机重写整个 renderer；
-- **实现规格已通过 Codex 最终复核；从规格接受提交创建独立实现分支并编码。**
+- **不**实现新的蒸馏、能力或公网协作；
+- 工程验证最高 `statically_verified`；等待 Owner 主路径验收。
 
 **PAN-02：理解通道 Alpha**——低负担输入；后台蒸馏；关键纠错；任务相关检索；无关主体信息保持沉默；不把每条蒸馏过程暴露给普通用户。
 
@@ -252,7 +252,7 @@ PAN-00 accepted
 
 ### 6.4 当前调度
 
-- **当前唯一任务**：从 PAN-01S 规格接受提交创建 `codex/pan-01s-minimal-product-surface` 并实现 PAN-01S；不得开始 PAN-02；
+- **当前唯一任务**：Owner 主路径验收 PAN-01S；不得开始 PAN-02；
 - PAN-02～PAN-06 保持 `planned` / `not_started`。
 
 ---
@@ -440,12 +440,12 @@ statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_fo
 ```text
 PAN-00 accepted
 → PAN-00R accepted
-→ PAN-01S specified / frozen_for_implementation / codex_review_passed / not_started
-→ 创建实现分支并实现 PAN-01S
+→ PAN-01S statically_verified（不 accepted）
+→ Owner 主路径验收
 → PAN-02 → PAN-03 → PAN-04 → PAN-05 → PAN-06
 ```
 
-每次只启动一个主实现任务。PAN-05 传播文案可并行起草，但不得与代码任务修改同一文件。**当前唯一任务**：从 PAN-01S 规格接受提交创建 `codex/pan-01s-minimal-product-surface` 并实现 PAN-01S；不得开始 PAN-02。
+每次只启动一个主实现任务。PAN-05 传播文案可并行起草，但不得与代码任务修改同一文件。**当前唯一任务**：Owner 主路径验收 PAN-01S；不得开始 PAN-02。
 
 ### 13.3 子任务完成报告
 
@@ -494,7 +494,9 @@ P1-PANORAMA 不包含：
 
 2026-07-19（PAN-01S Codex 第一轮）：任务包 → v0.1.1；规格 → v0.6.3；关闭主操作优先级与 PAN-01R 生产入口歧义；当时状态含 `codex_review_changes_requested`（历史过程）。
 
-2026-07-19（PAN-01S 规格接受）：Codex 最终复核通过；状态 → `codex_review_passed` / `not_started`。**当前唯一任务**：从规格接受提交创建实现分支并实现 PAN-01S；不得开始 PAN-02。
+2026-07-19（PAN-01S 规格接受）：Codex 最终复核通过；状态 → `codex_review_passed` / `not_started`。
+
+2026-07-19（PAN-01S 实现）：分支 `codex/pan-01s-minimal-product-surface`；状态 → `statically_verified`（**不** accepted）。**当前唯一任务**：Owner 主路径验收；不得开始 PAN-02。
 
 > **PAN-01**：可信只读聚合保留；`needs_minimal_surface_reset`；不 accepted。
 >

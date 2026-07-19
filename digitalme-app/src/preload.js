@@ -2,7 +2,12 @@
 
 const { contextBridge, ipcRenderer } = require("electron");
 
-contextBridge.exposeInMainWorld("digitalMe", {
+/** Main-approved test harness flag only (env set by test launcher). Renderer cannot enable. */
+const PAN01R_TEST_HARNESS =
+  process.env.DIGITALME_PAN01R_TEST_HARNESS === "1" ||
+  process.env.DIGITALME_PAN01R_OWNER_RUNTIME === "1";
+
+const api = {
   getConfig: () => ipcRenderer.invoke("config:get"),
   getRuntimeStamp: () => ipcRenderer.invoke("runtime:getStamp"),
   setConfig: (cfg) => ipcRenderer.invoke("config:set", cfg),
@@ -117,20 +122,6 @@ contextBridge.exposeInMainWorld("digitalMe", {
   inspectPackageStore: (opts) => ipcRenderer.invoke("packageStore:inspect", opts),
   listPackageVersions: () => ipcRenderer.invoke("packageStore:listVersions"),
   getSubjectOverview: () => ipcRenderer.invoke("subject:getOverview"),
-  getPanoramaSubjectBrief: (p) => ipcRenderer.invoke("panoramaExperience:getSubjectBrief", p),
-  createPanoramaRequest: (p) => ipcRenderer.invoke("panoramaExperience:createRequest", p),
-  buildPanoramaAuthPreview: (p) => ipcRenderer.invoke("panoramaExperience:buildAuthPreview", p),
-  rejectPanoramaRequest: (p) => ipcRenderer.invoke("panoramaExperience:rejectRequest", p),
-  confirmPanoramaExecute: (p) => ipcRenderer.invoke("panoramaExperience:confirmAndExecute", p),
-  cancelPanoramaRun: (p) => ipcRenderer.invoke("panoramaExperience:cancelRun", p),
-  adoptPanoramaResult: (p) => ipcRenderer.invoke("panoramaExperience:adoptResult", p),
-  rejectPanoramaResult: (p) => ipcRenderer.invoke("panoramaExperience:rejectResult", p),
-  getPanoramaReceiptSummary: (p) => ipcRenderer.invoke("panoramaExperience:getReceiptSummary", p),
-  onPanoramaRunProgress: (cb) => {
-    const handler = (_e, data) => cb(data);
-    ipcRenderer.on("panoramaExperience:progress", handler);
-    return () => ipcRenderer.removeListener("panoramaExperience:progress", handler);
-  },
   rollbackPackageVersion: (payload) => ipcRenderer.invoke("packageStore:rollback", payload),
   recoverPackageStore: () => ipcRenderer.invoke("packageStore:recover"),
   planPpt: (payload) => ipcRenderer.invoke("output:planPpt", payload),
@@ -200,4 +191,28 @@ contextBridge.exposeInMainWorld("digitalMe", {
     ipcRenderer.on("builder:progress", handler);
     return () => ipcRenderer.removeListener("builder:progress", handler);
   },
-});
+};
+
+// PAN-01S: panorama experience APIs only in main-approved test harness.
+if (PAN01R_TEST_HARNESS) {
+  api.pan01rTestHarness = true;
+  api.getPanoramaSubjectBrief = (p) => ipcRenderer.invoke("panoramaExperience:getSubjectBrief", p);
+  api.createPanoramaRequest = (p) => ipcRenderer.invoke("panoramaExperience:createRequest", p);
+  api.buildPanoramaAuthPreview = (p) =>
+    ipcRenderer.invoke("panoramaExperience:buildAuthPreview", p);
+  api.rejectPanoramaRequest = (p) => ipcRenderer.invoke("panoramaExperience:rejectRequest", p);
+  api.confirmPanoramaExecute = (p) =>
+    ipcRenderer.invoke("panoramaExperience:confirmAndExecute", p);
+  api.cancelPanoramaRun = (p) => ipcRenderer.invoke("panoramaExperience:cancelRun", p);
+  api.adoptPanoramaResult = (p) => ipcRenderer.invoke("panoramaExperience:adoptResult", p);
+  api.rejectPanoramaResult = (p) => ipcRenderer.invoke("panoramaExperience:rejectResult", p);
+  api.getPanoramaReceiptSummary = (p) =>
+    ipcRenderer.invoke("panoramaExperience:getReceiptSummary", p);
+  api.onPanoramaRunProgress = (cb) => {
+    const handler = (_e, data) => cb(data);
+    ipcRenderer.on("panoramaExperience:progress", handler);
+    return () => ipcRenderer.removeListener("panoramaExperience:progress", handler);
+  };
+}
+
+contextBridge.exposeInMainWorld("digitalMe", api);

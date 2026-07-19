@@ -131,6 +131,10 @@ test("panorama structure and status contract fixed", () => {
     assert.ok(Array.isArray(p.promises) && p.promises.length === 4);
     assert.ok(Array.isArray(p.journey) && p.journey.length === 5);
     assert.ok(p.direction && p.nextAction);
+    assert.ok(p.minimalSurface && p.minimalSurface.priority === "P4");
+    assert.equal(p.minimalSurface.primaryAction, "view_subject");
+    assert.equal(p.nextAction.navTarget, "me-cognition");
+    assert.notEqual(p.nextAction.navTarget, "panorama-experience");
   } finally {
     cleanup(dir);
   }
@@ -180,7 +184,7 @@ test("four promises order and initial statuses", () => {
     assert.equal(byId.belongs_to_me.userStatus, USER_STATUS.EXPERIMENT);
     assert.equal(byId.controlled_by_me.userStatus, USER_STATUS.EXPERIMENT);
     assert.equal(byId.acts_for_me.userStatus, USER_STATUS.LOCAL_SIM);
-    assert.equal(byId.acts_for_me.navTarget, "panorama-experience");
+    assert.equal(byId.acts_for_me.navTarget, null);
   } finally {
     cleanup(dir);
   }
@@ -199,7 +203,7 @@ test("journey order and initial statuses", () => {
     assert.equal(byId.authorize.userStatus, USER_STATUS.PREVIEW);
     assert.equal(byId.collaborate.userStatus, USER_STATUS.LOCAL_SIM);
     assert.equal(byId.authorize.navTarget, null);
-    assert.equal(byId.collaborate.navTarget, "panorama-experience");
+    assert.equal(byId.collaborate.navTarget, null);
   } finally {
     cleanup(dir);
   }
@@ -297,7 +301,7 @@ test("navTarget whitelist only", () => {
         assert.equal(j.navTarget, null);
       }
       if (j.id === "collaborate") {
-        assert.equal(j.navTarget, "panorama-experience");
+        assert.equal(j.navTarget, null);
       }
     }
   } finally {

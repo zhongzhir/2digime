@@ -5,6 +5,32 @@
 
 ---
 
+## 2026-07-19 PAN-01S 实现 · statically_verified
+
+### 做了什么
+
+在分支 `codex/pan-01s-minimal-product-surface`（parent 规格接受 `269fa10`）实现极简产品表面：
+
+1. 默认「我」收口为名称 + 短说明 + 单一主操作（P0→P4 主进程派生）；
+2. 撤下四承诺墙、成长路线墙、PAN-01R CTA/五步生产入口、统计墙；
+3. 四承诺与成长路线迁入帮助「认识 Digital Me」；
+4. 侧栏移除 Package／模型／能力／品牌常驻摘要；
+5. 生产 preload / IPC 不暴露 PAN-01R 体验链；仅 test harness（env）可开；
+6. 新增 `test:pan-01s`（19/19）与 `test:pan-01s-owner-runtime`（6/6）；规定回归通过。
+
+### 状态
+
+PAN-01S：`statically_verified`（**不** accepted；等待 Owner 主路径验收）
+PAN-02～PAN-06：`planned` / `not_started`
+
+未触碰真实 Package；未提交交接件；未 push。
+
+### 下一步
+
+**当前唯一任务：Owner 主路径验收 PAN-01S；不得开始 PAN-02。**
+
+---
+
 ## 2026-07-19 PAN-01S 规格接受 · 允许进入实现
 
 ### 做了什么
@@ -16,17 +42,17 @@ docs-only 最小规格接受收尾（Codex 最终复核通过后）：
 3. context 顶部界面需求源规格版本纠正为 **v0.6.3**；决策 #75；
 4. 同步执行索引 v0.2.3、能力表、总任务、cursor rule。
 
-`codex_review_changes_requested` 仅保留为历史过程（第一轮歧义关闭）；当前状态不再写为 changes_requested。不标实现 accepted；此时仍为 `not_started`。
+`codex_review_changes_requested` 仅保留为历史过程（第一轮歧义关闭）；当前状态不再写为 changes_requested。不标实现 accepted；当时仍为 `not_started`。
 
 本轮 **docs-only**：未修改 `digitalme-app/**`；未触碰真实 Package；未提交交接件。
 
 ### 状态
 
-PAN-01S：`specified` / `owner_approved_for_implementation` / `frozen_for_implementation` / `codex_review_passed` / `not_started`
+（历史）当时：`codex_review_passed` / `not_started`；现已由上方「实现」条目承接为 `statically_verified`。
 
 ### 下一步
 
-**当前唯一任务：从 PAN-01S 规格接受提交创建 `codex/pan-01s-minimal-product-surface` 并实现 PAN-01S；不得开始 PAN-02。**
+（历史）当时下一任务为创建实现分支；现已由上方「实现」条目承接。
 
 ---
 

@@ -190,14 +190,18 @@ async function waitPanoramaHome(win) {
             meVisible: !document.getElementById("view-me").classList.contains("hidden"),
             selfVisible: !document.getElementById("me-lane-self").classList.contains("hidden"),
             overviewActive: document.querySelector('#me-tabs .mode-tab[data-me-tab="overview"]').classList.contains("active"),
-            cta: (document.getElementById("panorama-sovereign-cta") && document.getElementById("panorama-sovereign-cta").textContent || "").trim(),
-            promises: (document.getElementById("panorama-promises") && document.getElementById("panorama-promises").children.length) || 0
+            primary: (document.getElementById("subject-minimal-primary") && document.getElementById("subject-minimal-primary").textContent || "").trim(),
+            cta: document.getElementById("panorama-sovereign-cta"),
+            promises: document.getElementById("panorama-promises-card"),
+            harness: !!(window.digitalMe && window.digitalMe.pan01rTestHarness === true)
           })`
         );
         lastDiag = s;
-        return s.meVisible && s.selfVisible && s.overviewActive && /体验一次/.test(s.cta) ? s : null;
+        return s.meVisible && s.selfVisible && s.overviewActive && s.primary && !s.cta && !s.promises && s.harness
+          ? s
+          : null;
       },
-      { label: "panorama CTA visible", timeoutMs: 25000 }
+      { label: "minimal me + harness", timeoutMs: 25000 }
     );
   } catch (err) {
     throw new Error(
@@ -207,13 +211,16 @@ async function waitPanoramaHome(win) {
 }
 
 async function openExperience(win) {
-  await evalIn(win, `document.getElementById("panorama-sovereign-cta").click()`);
+  await evalIn(
+    win,
+    `typeof window.__digitalMeOpenPanoramaExperienceForTest === "function" && window.__digitalMeOpenPanoramaExperienceForTest()`
+  );
   return waitFor(
     async () => {
       const s = await evalIn(
         win,
         `({
-          panelOpen: !document.getElementById("panorama-experience-panel")?.classList.contains("hidden"),
+          panelOpen: !document.getElementById("panorama-experience-panel")?.classList.contains("hidden") && !document.getElementById("panorama-experience-panel")?.hidden,
           step1: !document.getElementById("panorama-exp-step1")?.classList.contains("hidden"),
           body: document.getElementById("panorama-exp-step1")?.innerText || "",
         })`
@@ -256,14 +263,16 @@ async function runPan01rOwnerRuntimeHarness({ BrowserWindow }) {
     return ready ? true : null;
   }, { label: "preload API", timeoutMs: 20000 });
 
-  // A. CTA visible after sidebar 我（先离开再进入，避免默认入口竞态）
+  // A. Minimal me entry after sidebar 我；无生产 CTA（先离开再进入，避免默认入口竞态）
   try {
     const home = await openPanoramaViaSidebarOnly(win);
-    assert.match(home.cta, /体验一次/);
-    assert.match(home.cta, /代表我/);
-    pass("A. CTA visible");
+    assert.ok(home.primary);
+    assert.equal(!!home.cta, false);
+    assert.equal(!!home.promises, false);
+    assert.equal(home.harness, true);
+    pass("A. minimal me visible (no production CTA)");
   } catch (err) {
-    fail("A. CTA visible", err);
+    fail("A. minimal me visible", err);
   }
 
   // B–D. open step1, see evidence types, inference unchecked
@@ -482,17 +491,19 @@ async function runPan01rOwnerRuntimeHarness({ BrowserWindow }) {
     fail("O. receipt summary", err);
   }
 
-  // P. illegal adopt of cancelled — covered lightly: panel success text not shown on reject path above
+  // P. capability口径 — sidebar status removed in PAN-01S; assert home has no capability wall
   try {
     const caps = await evalIn(
       win,
       `({
-        sidebar: document.getElementById("capabilities-status")?.innerText || "",
-        promises: document.getElementById("panorama-promises")?.innerText || "",
+        sidebar: document.getElementById("capabilities-status"),
+        home: document.getElementById("subject-home")?.innerText || "",
+        promises: document.getElementById("panorama-promises"),
       })`
     );
-    assert.match(caps.sidebar, /已装载扩展/);
-    assert.ok(!/能力：暂无/.test(caps.sidebar) || /已装载扩展/.test(caps.sidebar));
+    assert.equal(!!caps.sidebar, false);
+    assert.equal(!!caps.promises, false);
+    assert.ok(!/四个承诺|成长路线|体验一次/.test(caps.home));
     pass("P/Q. capability口径不矛盾");
   } catch (err) {
     fail("P/Q. capability口径", err);
@@ -505,12 +516,14 @@ async function runPan01rOwnerRuntimeHarness({ BrowserWindow }) {
     const labels = await evalIn(
       win,
       `({
-        sidebar: document.getElementById("capabilities-status")?.innerText || "",
+        sidebar: document.getElementById("capabilities-status"),
         body: document.getElementById("subject-home")?.innerText || "",
+        primary: document.getElementById("subject-minimal-primary")?.textContent || "",
       })`
     );
-    assert.match(labels.sidebar, /已装载扩展/);
-    assert.match(labels.body, /可体验能力|本地模拟|受控研究/);
+    assert.equal(!!labels.sidebar, false);
+    assert.ok(labels.primary);
+    assert.ok(!/体验一次 Digital Me 如何代表我/.test(labels.body));
     pass("Q. sidebar vs panorama capability labels");
   } catch (err) {
     fail("Q. capability labels", err);

@@ -16,7 +16,7 @@ const { countLayerData } = require("./counts");
 const { assessRecoverabilityReadOnly } = require("./recoverability");
 const { readBoundariesReadOnly, readCollaborationReadOnly } = require("./read-package");
 const { buildCapabilityStatuses } = require("./capabilities");
-const { buildPanoramaSection } = require("./panorama");
+const { buildPanoramaSection, summarizeInboxForOverview } = require("./panorama");
 
 function pushWarning(warnings, code, message, extra) {
   if (!warnings.some((w) => w.code === code && w.message === message)) {
@@ -233,7 +233,7 @@ function buildCollaborationSection(collab) {
 /**
  * Build SubjectOverview v1 (read-only; must not mutate package bytes).
  * @param {string} packageDir
- * @param {{ hasApiKey?: boolean, readyExtensionCount?: number }} [runtime]
+ * @param {{ hasApiKey?: boolean, readyExtensionCount?: number, inboxSummary?: object }} [runtime]
  */
 function buildSubjectOverviewV1(packageDir, runtime = {}) {
   const pkgDir = path.resolve(String(packageDir || ""));
@@ -308,7 +308,15 @@ function buildSubjectOverviewV1(packageDir, runtime = {}) {
     warnings,
   };
 
-  base.panorama = buildPanoramaSection(base, { packageExists: inspect.exists });
+  const inboxSummary =
+    runtime.inboxSummary && typeof runtime.inboxSummary === "object"
+      ? runtime.inboxSummary
+      : summarizeInboxForOverview(null);
+
+  base.panorama = buildPanoramaSection(base, {
+    packageExists: inspect.exists,
+    inboxSummary,
+  });
   return base;
 }
 

@@ -53,12 +53,12 @@
 | ToolBroker (P1-05) | `statically_verified` | `src/tool-broker/*`；`l0:external-agent-started`；`npm run test:p1-05`（含 stop IPC）；主动取消 → `execution_canceled` | 停止须完全重启应用后复验；不标记 accepted |
 | External collaboration | `specified` | `digital-me-package/contracts/*`；规格 v0.5 Panorama 冻结章 | Agent Card / Interaction Contract 数据结构已对齐；无用户面协作闭环；Alpha 以本地模拟交付 |
 | Subject home (P1-03) | `runtime_verified` | `src/subject-overview/*`；`src/package-store/read-only.js`；`subject:getOverview`；P1-03 21/21；Codex 复核与 Owner 真实 Electron 验收 | 严格只读聚合与 SubjectOverview v1；不迁移写路径；Panorama 首页将复用只读聚合 |
-| **P1-PANORAMA** | `active` / `three_part_alpha_reframed` / `PAN-01S_specified` | 总任务包 v0.4；执行索引 v0.2.3；PAN-00R `accepted`；PAN-01S 任务包 v0.1.1 | 当前产品主线（三位一体 Alpha）；非代码能力项；**当前唯一任务：从规格接受提交创建实现分支并实现 PAN-01S；不得开始 PAN-02** |
+| **P1-PANORAMA** | `active` / `three_part_alpha_reframed` / `PAN-01S_statically_verified` | 总任务包 v0.4；执行索引 v0.2.4；PAN-00R `accepted`；PAN-01S `statically_verified` | 当前产品主线（三位一体 Alpha）；非代码能力项；**当前唯一任务：Owner 主路径验收 PAN-01S；不得开始 PAN-02** |
 | **PAN-00** | `accepted` | 验收提交 `bc85a14`；Codex 最终复核通过 | 战略与规格冻结完成（历史，不改写） |
 | **PAN-00R** | `accepted` | 分支 `codex/pan-00r-three-part-alpha-reset`；任务包 v0.1.2；规格 v0.6.1；证据 `07b631d` + `6ae2dca` + `0fcd432`；Codex 最终复核通过；Owner 确认 | **docs/strategy acceptance**：三位一体重构与极简产品原则冻结；**不是**运行能力 `released`；不代表 PAN-01S～PAN-06 已实现 |
 | **PAN-01** | `statically_verified` / `owner_product_perception_failed` / `needs_minimal_surface_reset` | 分支 `codex/pan-01-product-panorama-home`；基线 `a40c5f8`；`test:pan-01` / `test:pan-01-owner-runtime` | 工程验证通过；Owner **产品感知**验收未通过（非工程失败）；**不标 accepted**；不回滚；只读聚合与 fail-closed 逻辑保留；表面收口由 PAN-01S 承接 |
 | **PAN-01R** | `statically_verified` / `codex_review_passed` / `owner_runtime_verified` / `owner_product_perception_failed` / `retained_as_internal_collaboration_harness` | 分支 `codex/pan-01r-sovereign-collaboration-loop`；规格 `35c5aea`；最终实现 `9dd6fa0`；`test:pan-01r` 70/70；`test:pan-01r-owner-runtime` 20/20；Codex 两轮复核通过；Owner 走通主要路径 | 工程与运行验证通过；Owner **产品感知**验收未通过（owner runtime 通过 ≠ accepted）；**不标 accepted**；底层授权/取消/审计/adopt-reject/推理环境绑定保留为内部 test harness 与未来 PAN-04 基础设施；**不**进入 PAN-01S 生产设置／高级（规格 v0.6.3） |
-| **PAN-01S** | `specified` / `owner_approved_for_implementation` / `frozen_for_implementation` / `codex_review_passed` / `not_started` | 任务包 v0.1.1；规格 v0.6.3 §3.1.1；规划基线 `488d733`；歧义关闭 `2aec151` | 极简产品表面；P0→P4 主操作；PAN-01R 无生产入口；实现规格已通过；**尚未实现**；`codex_review_passed` ≠ accepted；实现后最高 `statically_verified`；须从规格接受提交开实现分支 |
+| **PAN-01S** | `statically_verified` | 分支 `codex/pan-01s-minimal-product-surface`；规格接受 `269fa10`；任务包 v0.1.1；规格 v0.6.3；`test:pan-01s` 19/19；`test:pan-01s-owner-runtime` 6/6；规定回归通过 | 极简「我」入口；P0→P4；帮助迁移；侧栏收口；PAN-01R **无生产入口**；**不标 accepted**；须 Owner 主路径验收；不得开始 PAN-02 |
 
 ## P1-07 冻结说明（与任务包 / 执行索引 / log 一致）
 

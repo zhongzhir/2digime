@@ -2425,6 +2425,24 @@ body {
 }
 
 .subject-home { display: flex; flex-direction: column; gap: 12px; }
+.subject-home-minimal { max-width: 36rem; padding: 24px 8px 40px; }
+.subject-minimal-entry { display: flex; flex-direction: column; gap: 14px; }
+.subject-minimal-summary {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text, #2a2a2a);
+  white-space: pre-line;
+  max-height: 3.2em;
+  overflow: hidden;
+}
+.subject-minimal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.subject-minimal-reminder { margin: 0; font-size: 13px; }
 .subject-home-title { margin: 0 0 6px; font-size: 18px; color: #5c4033; }
 .subject-home-grid,
 .subject-home-meta { display: grid; gap: 8px; margin-top: 10px; }

@@ -5,6 +5,7 @@ const {
   USER_STATUS_LABEL,
   PANORAMA_STATUS_CONTRACT_VERSION,
   PANORAMA_NAV_TARGETS,
+  MINIMAL_SURFACE_ACTIONS,
 } = require("./constants");
 
 /** Hard integrity failures that always degrade 这是我 / 看见我. */
@@ -360,8 +361,9 @@ function buildPromises(overview) {
       evidence:
         "可体验一次受控研究协作（本地模拟协作关系）。结果仅返回给你本人审阅，不会发送给模拟协作伙伴。",
       currentCondition: "",
-      ctaLabel: "体验一次 Digital Me 如何代表我",
-      navTarget: sanitizeNavTarget("panorama-experience"),
+      ctaLabel: null,
+      // PAN-01S: no production entry for collaboration experience
+      navTarget: null,
     },
   ];
 }
@@ -427,39 +429,237 @@ function buildJourney(overview) {
       userStatusLabel: statusLabel(USER_STATUS.LOCAL_SIM),
       evidence: "可体验受控研究协作闭环（本地模拟协作关系）；完整协作沙盘仍待后续。",
       currentCondition: "",
-      ctaLabel: "体验一次 Digital Me 如何代表我",
-      navTarget: sanitizeNavTarget("panorama-experience"),
+      ctaLabel: null,
+      // PAN-01S: no production entry for collaboration experience
+      navTarget: null,
     },
   ];
 }
 
-function buildNextAction(overview) {
-  const state = resolveSubjectIntegrity(overview);
-  if (state.missing || state.readError) {
+/**
+ * Sanitize inbox queue into a summary safe for overview (no paths / bodies).
+ * pending_confirmation maps to the same bucket as awaiting_review (P2).
+ */
+function summarizeInboxForOverview(queue) {
+  const items = queue && Array.isArray(queue.items) ? queue.items : [];
+  const KNOWN = new Set([
+    "queued",
+    "suggested",
+    "processing",
+    "awaiting_review",
+    "pending_confirmation",
+    "written",
+    "skipped",
+    "failed",
+    "failed-retryable",
+  ]);
+  let awaitingReviewCount = 0;
+  let pendingConfirmationCount = 0;
+  let suggestedCount = 0;
+  let failedRetryableCount = 0;
+  let processingCount = 0;
+  let queuedCount = 0;
+  let unknownStatusCount = 0;
+  for (const it of items) {
+    const st = it && typeof it.status === "string" ? it.status : "";
+    if (!st || !KNOWN.has(st)) {
+      unknownStatusCount += 1;
+      continue;
+    }
+    if (st === "awaiting_review") awaitingReviewCount += 1;
+    else if (st === "pending_confirmation") pendingConfirmationCount += 1;
+    else if (st === "suggested") suggestedCount += 1;
+    else if (st === "failed" || st === "failed-retryable") failedRetryableCount += 1;
+    else if (st === "processing") processingCount += 1;
+    else if (st === "queued") queuedCount += 1;
+  }
+  return {
+    awaitingReviewCount,
+    pendingConfirmationCount,
+    suggestedCount,
+    failedRetryableCount,
+    processingCount,
+    queuedCount,
+    unknownStatusCount,
+    hasAwaitingReview: awaitingReviewCount + pendingConfirmationCount > 0,
+    hasActionableTodo: suggestedCount + failedRetryableCount + queuedCount > 0,
+    hasProcessing: processingCount > 0,
+  };
+}
+
+/**
+ * uninitialized mapping (PAN-01S §2.2 P1):
+ * - package missing → missing (P1 via missing)
+ * - package exists but neither usable manifest nor usable identity → uninitialized (P1)
+ * - present files that fail to parse → read_error (P0), not uninitialized
+ * - layer / health content damage → content_degraded (P0), not uninitialized
+ */
+function isPackageUninitialized(overview, state) {
+  if (!state || state.missing || state.readError || state.contentDegraded) return false;
+  const sr = (overview.package && overview.package.subjectRead) || {};
+  const usableManifest = !!(sr.manifestPresent && sr.manifestParseOk);
+  const usableIdentity = !!(sr.identityPresent && sr.identityParseOk);
+  return !usableManifest && !usableIdentity;
+}
+
+function failClosedMinimalSurface(subjectName, summary) {
+  return {
+    subjectName: subjectName || "我的 Digital Me",
+    summary: summary || "当前状态无法确认。",
+    primaryAction: null,
+    primaryActionLabel: null,
+    primaryNavTarget: null,
+    secondaryAction: null,
+    reminder: null,
+    priority: null,
+    failClosed: true,
+  };
+}
+
+function buildSecondary(action, label, navTarget) {
+  const target = sanitizeNavTarget(navTarget);
+  if (!action || !label || !target) return null;
+  return { action, label, navTarget: target };
+}
+
+/**
+ * P0→P4 exclusive primary action for the default 「我」 entry.
+ * Renderer must only render this contract; never recompute priority.
+ */
+function buildMinimalSurface(overview, inboxSummary) {
+  const id = (overview && overview.identity) || {};
+  const subjectName = id.displayName
+    ? `${id.displayName}的 Digital Me`
+    : "我的 Digital Me";
+  const state = resolveSubjectIntegrity(overview || {});
+  const inbox =
+    inboxSummary && typeof inboxSummary === "object"
+      ? inboxSummary
+      : summarizeInboxForOverview(null);
+
+  // P0 — read damage / cannot safely conclude
+  if (state.readError || state.contentDegraded) {
+    const nav = sanitizeNavTarget("settings-package-versions");
     return {
-      label: "继续构建",
-      reason: state.missing
-        ? "主体资料尚未就绪，先从构建开始。"
-        : "主体资料读取异常，可先检查构建与设置。",
-      navTarget: sanitizeNavTarget("me-build"),
+      subjectName,
+      summary: "部分个人信息暂时无法读取。",
+      primaryAction: "view_problems",
+      primaryActionLabel: MINIMAL_SURFACE_ACTIONS.view_problems,
+      primaryNavTarget: nav,
+      secondaryAction: null,
+      reminder: null,
+      priority: "P0",
+      failClosed: !nav,
+    };
+  }
+
+  // P1 — missing or uninitialized (not read damage)
+  if (state.missing || isPackageUninitialized(overview, state)) {
+    const nav = sanitizeNavTarget("me-build");
+    return {
+      subjectName,
+      summary: "你的 Digital Me 还没有完成建立。",
+      primaryAction: "continue_build",
+      primaryActionLabel: MINIMAL_SURFACE_ACTIONS.continue_build,
+      primaryNavTarget: nav,
+      secondaryAction: null,
+      reminder: null,
+      priority: "P1",
+      failClosed: !nav,
+    };
+  }
+
+  // Unknown inbox statuses → fail-closed (do not invent success)
+  if (inbox.unknownStatusCount > 0) {
+    return failClosedMinimalSurface(subjectName, "当前状态无法确认。");
+  }
+
+  // P2 — awaiting confirmation / review
+  if (inbox.hasAwaitingReview) {
+    const nav = sanitizeNavTarget("me-build");
+    return {
+      subjectName,
+      summary: "有一项内容需要你确认。",
+      primaryAction: "continue_confirm",
+      primaryActionLabel: MINIMAL_SURFACE_ACTIONS.continue_confirm,
+      primaryNavTarget: nav,
+      secondaryAction: buildSecondary(
+        "view_subject",
+        "查看详情",
+        "me-cognition"
+      ),
+      reminder: null,
+      priority: "P2",
+      failClosed: !nav,
+    };
+  }
+
+  // P3 — actionable inbox (not processing alone)
+  if (inbox.hasActionableTodo) {
+    const nav = sanitizeNavTarget("me-build");
+    return {
+      subjectName,
+      summary: "有材料待你处理。",
+      primaryAction: "continue_refine",
+      primaryActionLabel: MINIMAL_SURFACE_ACTIONS.continue_refine,
+      primaryNavTarget: nav,
+      secondaryAction: buildSecondary(
+        "view_subject",
+        "查看详情",
+        "me-cognition"
+      ),
+      reminder: null,
+      priority: "P3",
+      failClosed: !nav,
+    };
+  }
+
+  // P4 — readable subject, no P0–P3
+  const nav = sanitizeNavTarget("me-cognition");
+  let reminder = null;
+  if (inbox.hasProcessing) reminder = "正在处理中";
+  else if ((overview.package && overview.package.privacyStatus) === "unknown") {
+    reminder = "隐私状态尚无法确认";
+  }
+  return {
+    subjectName,
+    summary: "可以查看你的数字之我信息。",
+    primaryAction: "view_subject",
+    primaryActionLabel: MINIMAL_SURFACE_ACTIONS.view_subject,
+    primaryNavTarget: nav,
+    secondaryAction: buildSecondary("start_work", MINIMAL_SURFACE_ACTIONS.start_work, "chat"),
+    reminder,
+    priority: "P4",
+    failClosed: !nav,
+  };
+}
+
+function buildNextAction(overview, inboxSummary) {
+  const ms = buildMinimalSurface(overview, inboxSummary);
+  if (!ms || ms.failClosed || !ms.primaryActionLabel || !ms.primaryNavTarget) {
+    return {
+      label: null,
+      reason: (ms && ms.summary) || "当前状态无法确认。",
+      navTarget: null,
     };
   }
   return {
-    label: "体验一次 Digital Me 如何代表我",
-    reason: "用一次受控协作，看清它如何依据你、经你授权后行动。",
-    navTarget: sanitizeNavTarget("panorama-experience"),
+    label: ms.primaryActionLabel,
+    reason: ms.summary || "",
+    navTarget: ms.primaryNavTarget,
   };
 }
 
 /**
  * @param {object} overview - SubjectOverview v1 base object (mutates nothing external)
- * @param {{ packageExists?: boolean }} meta
+ * @param {{ packageExists?: boolean, inboxSummary?: object }} meta
  */
 function buildPanoramaSection(overview, meta = {}) {
   const enriched = {
     ...overview,
     _packageExists: meta.packageExists !== false,
   };
+  const inboxSummary = meta.inboxSummary || summarizeInboxForOverview(null);
   const promises = buildPromises(enriched);
   const journey = buildJourney(enriched);
   for (const item of [...promises, ...journey]) {
@@ -472,19 +672,26 @@ function buildPanoramaSection(overview, meta = {}) {
     if (typeof item.currentCondition !== "string") item.currentCondition = "";
   }
 
+  const minimalSurface = buildMinimalSurface(enriched, inboxSummary);
+
   return {
     statusContractVersion: PANORAMA_STATUS_CONTRACT_VERSION,
     hero: buildHero(enriched),
     promises,
     journey,
     direction: buildDirection(overview.layers),
-    nextAction: buildNextAction(enriched),
+    nextAction: buildNextAction(enriched, inboxSummary),
+    minimalSurface,
   };
 }
 
 module.exports = {
   buildPanoramaSection,
   buildDirection,
+  buildMinimalSurface,
+  buildNextAction,
+  summarizeInboxForOverview,
+  isPackageUninitialized,
   resolveSubjectIntegrity,
   mapInternalCapabilityToUser,
   sanitizeNavTarget,
