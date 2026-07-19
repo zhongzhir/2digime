@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-07-19 PAN-01S Codex 第一轮 · 关闭状态与 harness 歧义
+
+### 做了什么
+
+docs-only 最小规格修复（任务包 v0.1 → **v0.1.1**；规格 v0.6.2 → **v0.6.3**）：
+
+1. 冻结唯一主操作优先级 **P0→P4**（互斥、顺序求值）；废止模糊「未完成构建」；补冲突案例与组合测试 U–Z；
+2. 冻结 PAN-01R **无生产入口**（普通 UI／设置／高级／帮助／preload 均无）；仅隔离 test harness；废止「高级区含协作回路验证器」「可以完全没有入口」歧义口径。
+
+同步：执行索引、能力表、context 决策 #74、总任务摘要。
+
+### 状态
+
+PAN-01S：`specified` / `owner_approved_for_implementation` / `frozen_for_implementation` / `codex_review_changes_requested` / `not_started`
+（不标 accepted；不写成已实现）
+
+本轮 **docs-only**：未创建实现分支；未修改 `digitalme-app/**`；未触碰真实 Package；未提交交接件。
+
+### 下一步
+
+**当前唯一任务：Codex 最终复核 PAN-01S 任务包后，创建实现分支并编码。** PAN-02～PAN-06 未开始。
+
+---
+
 ## 2026-07-19 PAN-01S 规划 · 独立任务包冻结
 
 ### 做了什么
@@ -30,11 +54,7 @@ P1-PANORAMA：`active` / `three_part_alpha_reframed` / `PAN-01S_specified`
 
 ### 下一步
 
-**当前唯一任务：Codex 复核 PAN-01S 任务包后，创建实现分支并编码。** PAN-02～PAN-06 未开始。
-
----
-
-## 2026-07-19 PAN-00R 最终验收 · accepted
+（历史）当时下一任务为 Codex 复核后开实现分支；现由上方「Codex 第一轮」条目承接。
 
 ### 证据
 
