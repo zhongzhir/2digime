@@ -2,7 +2,7 @@
 
 版本：v0.3.2
 日期：2026-07-19
-状态：`active / PAN-01R_frozen_for_implementation`
+状态：`active / PAN-01R_statically_verified`
 任务类型：阶段策略调整 / 产品纵向闭环 / 市场认知启动
 建议基线：`5ab55dc`（代码）+ `8fb8210`（P1-07_DOCS_BASE，仅收工文档）；P1-07 保持 `statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_for_panorama`，不因此标记 accepted
 
@@ -544,6 +544,8 @@ P1-PANORAMA 是总任务，不直接把所有内容交给一个实现分支。�
 
 状态：`specified` / `owner_approved` / `frozen_for_implementation`（`owner_approved` 仅指规格与启动授权，不指实现 accepted）。
 
+实现后工程状态：`statically_verified`（不标 accepted）。
+
 ## PAN-02：控制权面板
 
 目标：把现有可信底座转化为用户可见的掌控感。
@@ -830,7 +832,7 @@ P1-PANORAMA 只有在以下条件同时满足时才能标记完成：
 
 Owner 于 2026-07-18 确认后，PAN-00 已 **accepted**（验收提交 `bc85a14`）。PAN-01 已实现并标为 **`statically_verified`**，但 2026-07-19 Owner 产品感知验收**未通过**；裁定为 `owner_product_perception_failed` / `retained_as_scaffold`（**不标 accepted**；**不回滚**）。
 
-Owner 于 2026-07-19 批准 **PAN-01R** 独立任务包并授权：规格冻结提交后直接创建实现分支编码，不等待中间确认。PAN-02/03/04 暂停至 PAN-01R 验收。**唯一下一实现任务：PAN-01R**。
+Owner 于 2026-07-19 批准 **PAN-01R** 并完成实现工程验证：状态 **`statically_verified`**（规格 `35c5aea`；分支 `codex/pan-01r-sovereign-collaboration-loop`；**不标 accepted**）。PAN-02/03/04 暂停至 PAN-01R Owner 主路径验收。
 
 > **PAN-01**：可信只读全貌 scaffold；四承诺与成长路线降为辅助地图。
 >

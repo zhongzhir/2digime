@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-07-19 PAN-01R 主权协作闭环 · statically_verified
+
+### 实现摘要
+
+1. 新增 `digitalme-app/src/panorama-experience/`（subject-brief / request / authorization / execute / receipt）。
+2. 五步体验：理解我 → 本地模拟请求 → 授权 → 双隔离生成 → 对照处置；首屏 CTA「体验一次 Digital Me 如何代表我」。
+3. 单次短时授权 token；取消经 progress 事件绑定 runId；迟到结果丢弃且不可采纳。
+4. 云端模型数据去向在授权预览披露；协作关系标本地模拟；不发送给模拟伙伴。
+5. adopt 写入本地成果库；reject 不写正文；不写主体 Package；不泄漏密钥/绝对路径。
+6. 侧栏「已装载扩展」与全貌「可体验能力」口径区分。
+
+### 验证
+
+- `test:pan-01r`：36/36
+- `test:pan-01r-owner-runtime`：通过（含 CTA 可见）
+- `test:pan-01` / `test:pan-01-owner-runtime` / `test:p1-03` / `test:p1-07-owner-runtime` / `test:p1-phase1` / `test:owner-runtime`：通过
+- `node --check` 与 `git diff --check`：通过
+
+### 状态
+
+`statically_verified`（**不**标 accepted / runtime_verified）。PAN-02 未开始。
+
+---
+
 ## 2026-07-19 PAN-01R 规格冻结 · specified / owner_approved / frozen_for_implementation
 
 ### 决策与范围

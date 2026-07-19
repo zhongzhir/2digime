@@ -20,7 +20,7 @@
         <div id="pkg-status" class="pkg-status">加载中…</div>
         <div class="section-title">连接</div>
         <div id="model-status" class="pkg-status">尚未连接</div>
-        <div id="capabilities-status" class="pkg-status muted-cap">能力：加载中…</div>
+        <div id="capabilities-status" class="pkg-status muted-cap">已装载扩展：加载中…</div>
         <button id="btn-settings" class="btn-ghost">设置</button>
         <div class="footnote">属于你 · 可带走 · 可信任</div>
       </aside>
@@ -735,17 +735,36 @@
                       <p id="subject-home-status-line" class="panorama-status-line" aria-live="polite"></p>
                       <div id="subject-home-identity" class="subject-home-grid" aria-live="polite"></div>
                       <div id="subject-home-package" class="subject-home-meta" aria-live="polite"></div>
+                      <div id="panorama-proof-strip" class="panorama-proof-strip" aria-live="polite"></div>
                       <div id="panorama-next-action" class="panorama-next-action" aria-live="polite"></div>
+                      <div class="builder-actions" style="margin-top:12px">
+                        <button type="button" id="panorama-sovereign-cta" class="btn-primary">
+                          体验一次 Digital Me 如何代表我
+                        </button>
+                      </div>
                     </section>
 
-                    <section class="output-card panorama-promises-card" id="panorama-promises-card">
-                      <h3>四个承诺</h3>
+                    <section id="panorama-experience-panel" class="output-card panorama-experience-panel hidden" aria-live="polite">
+                      <div class="ext-store-head">
+                        <h3>主权协作体验 · 本地模拟</h3>
+                        <button type="button" id="panorama-exp-close" class="btn-ghost">关闭</button>
+                      </div>
+                      <p class="muted life-hint">协作关系在本机模拟；若使用云端模型，授权页会说明推理数据去向。</p>
+                      <div id="panorama-exp-step1" class="panorama-exp-step"></div>
+                      <div id="panorama-exp-step2" class="panorama-exp-step hidden"></div>
+                      <div id="panorama-exp-step3" class="panorama-exp-step hidden"></div>
+                      <div id="panorama-exp-step4" class="panorama-exp-step hidden"></div>
+                      <div id="panorama-exp-step5" class="panorama-exp-step hidden"></div>
+                    </section>
+
+                    <section class="output-card panorama-promises-card panorama-secondary" id="panorama-promises-card">
+                      <h3>辅助说明 · 四个承诺</h3>
                       <p class="muted life-hint">这是我 · 属于我 · 由我管 · 代表我协作。状态由本机真实信息生成。</p>
                       <div id="panorama-promises" class="panorama-promise-grid" aria-live="polite"></div>
                     </section>
 
-                    <section class="output-card panorama-journey-card" id="panorama-journey-card">
-                      <h3>成长路线</h3>
+                    <section class="output-card panorama-journey-card panorama-secondary" id="panorama-journey-card">
+                      <h3>辅助说明 · 成长路线</h3>
                       <p class="muted life-hint">构建我 → 看见我 → 武装我 → 授权我 → 代表我协作</p>
                       <ol id="panorama-journey" class="panorama-journey-list" aria-live="polite"></ol>
                     </section>

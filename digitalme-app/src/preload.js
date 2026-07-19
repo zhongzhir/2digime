@@ -117,6 +117,20 @@ contextBridge.exposeInMainWorld("digitalMe", {
   inspectPackageStore: (opts) => ipcRenderer.invoke("packageStore:inspect", opts),
   listPackageVersions: () => ipcRenderer.invoke("packageStore:listVersions"),
   getSubjectOverview: () => ipcRenderer.invoke("subject:getOverview"),
+  getPanoramaSubjectBrief: (p) => ipcRenderer.invoke("panoramaExperience:getSubjectBrief", p),
+  createPanoramaRequest: (p) => ipcRenderer.invoke("panoramaExperience:createRequest", p),
+  buildPanoramaAuthPreview: (p) => ipcRenderer.invoke("panoramaExperience:buildAuthPreview", p),
+  rejectPanoramaRequest: (p) => ipcRenderer.invoke("panoramaExperience:rejectRequest", p),
+  confirmPanoramaExecute: (p) => ipcRenderer.invoke("panoramaExperience:confirmAndExecute", p),
+  cancelPanoramaRun: (p) => ipcRenderer.invoke("panoramaExperience:cancelRun", p),
+  adoptPanoramaResult: (p) => ipcRenderer.invoke("panoramaExperience:adoptResult", p),
+  rejectPanoramaResult: (p) => ipcRenderer.invoke("panoramaExperience:rejectResult", p),
+  getPanoramaReceiptSummary: (p) => ipcRenderer.invoke("panoramaExperience:getReceiptSummary", p),
+  onPanoramaRunProgress: (cb) => {
+    const handler = (_e, data) => cb(data);
+    ipcRenderer.on("panoramaExperience:progress", handler);
+    return () => ipcRenderer.removeListener("panoramaExperience:progress", handler);
+  },
   rollbackPackageVersion: (payload) => ipcRenderer.invoke("packageStore:rollback", payload),
   recoverPackageStore: () => ipcRenderer.invoke("packageStore:recover"),
   planPpt: (payload) => ipcRenderer.invoke("output:planPpt", payload),

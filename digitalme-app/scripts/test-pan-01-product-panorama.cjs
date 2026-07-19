@@ -179,8 +179,8 @@ test("four promises order and initial statuses", () => {
     assert.equal(byId.this_is_me.userStatus, USER_STATUS.AVAILABLE);
     assert.equal(byId.belongs_to_me.userStatus, USER_STATUS.EXPERIMENT);
     assert.equal(byId.controlled_by_me.userStatus, USER_STATUS.EXPERIMENT);
-    assert.equal(byId.acts_for_me.userStatus, USER_STATUS.NOT_OPEN);
-    assert.equal(byId.acts_for_me.navTarget, null);
+    assert.equal(byId.acts_for_me.userStatus, USER_STATUS.LOCAL_SIM);
+    assert.equal(byId.acts_for_me.navTarget, "panorama-experience");
   } finally {
     cleanup(dir);
   }
@@ -197,9 +197,9 @@ test("journey order and initial statuses", () => {
     assert.equal(byId.see.userStatus, USER_STATUS.AVAILABLE);
     assert.equal(byId.arm.userStatus, USER_STATUS.EXPERIMENT);
     assert.equal(byId.authorize.userStatus, USER_STATUS.PREVIEW);
-    assert.equal(byId.collaborate.userStatus, USER_STATUS.NOT_OPEN);
+    assert.equal(byId.collaborate.userStatus, USER_STATUS.LOCAL_SIM);
     assert.equal(byId.authorize.navTarget, null);
-    assert.equal(byId.collaborate.navTarget, null);
+    assert.equal(byId.collaborate.navTarget, "panorama-experience");
   } finally {
     cleanup(dir);
   }
@@ -273,7 +273,7 @@ test("contracts examples do not open collaboration", () => {
     fs.writeFileSync(path.join(contracts, "agent-card.example.json"), "{}", "utf8");
     const overview = buildSubjectOverviewV1(dir, {});
     assert.equal(overview.collaboration.authorizationStatus, "none");
-    assert.equal(promiseById(overview, "acts_for_me").userStatus, USER_STATUS.NOT_OPEN);
+    assert.equal(promiseById(overview, "acts_for_me").userStatus, USER_STATUS.LOCAL_SIM);
   } finally {
     cleanup(dir);
   }
@@ -293,8 +293,11 @@ test("navTarget whitelist only", () => {
     }
     for (const j of overview.panorama.journey) {
       if (j.navTarget) assert.equal(PANORAMA_NAV_TARGETS.has(j.navTarget), true);
-      if (j.id === "authorize" || j.id === "collaborate") {
+      if (j.id === "authorize") {
         assert.equal(j.navTarget, null);
+      }
+      if (j.id === "collaborate") {
+        assert.equal(j.navTarget, "panorama-experience");
       }
     }
   } finally {

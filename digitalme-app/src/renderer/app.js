@@ -334,19 +334,19 @@ async function renderCapabilitiesStatus() {
     });
     if (!connected.length) {
       el.innerHTML =
-        '能力：<span class="muted">暂无</span><br/><span class="hint-line">可在「能力」页添加</span>';
+        '已装载扩展：<span class="muted">暂无</span><br/><span class="hint-line">可在「能力」页添加；全貌页另有「可体验能力」摘要</span>';
       if (hint) hint.classList.add("hidden");
       return;
     }
     const names = connected.map((e) => e.name || e.id).join("、");
-    el.innerHTML = `已就绪：<b>${names}</b><br/><span class="hint-line">对话中需要时会自动使用</span>`;
+    el.innerHTML = `已装载扩展：<b>${names}</b><br/><span class="hint-line">对话中需要时会自动使用</span>`;
     if (hint) {
       const scene = activeScenario ? `当前场景：${activeScenario.title}。` : "";
       hint.textContent = `${scene}已准备好：${names}。`;
       hint.classList.remove("hidden");
     }
   } catch {
-    el.textContent = "能力：—";
+    el.textContent = "已装载扩展：—";
   }
 }
 
@@ -993,6 +993,7 @@ function bindEvents() {
     ["code", bindCodeWorkspace],
     ["extensions", bindExtensions],
     ["me", bindMe],
+    ["panorama-experience", bindPanoramaExperience],
     ["bootstrap-files", bindBootstrapFileActions],
     ["help-tips", bindHelpAndTips],
   ];
@@ -1171,6 +1172,10 @@ function switchView(view, btn, opts = {}) {
         switchMeLane("self");
         switchMeTab("overview");
       }
+      // PAN-01R: return to top so sovereign CTA is visible
+      if (!opts.meLane || opts.meLane === "self") {
+        scrollSubjectHomeToTop();
+      }
     });
   }
 }
@@ -1233,7 +1238,25 @@ const PANORAMA_NAV_WHITELIST = new Set([
   "me-boundaries",
   "capabilities",
   "settings-package-versions",
+  "panorama-experience",
 ]);
+
+function scrollSubjectHomeToTop() {
+  const home = $("subject-home");
+  if (home && typeof home.scrollIntoView === "function") {
+    home.scrollIntoView({ behavior: "auto", block: "start" });
+  }
+  const scroller =
+    $("me-panel-overview") ||
+    $("view-me") ||
+    document.querySelector("#view-me .me-scroll") ||
+    document.querySelector("#view-me");
+  if (scroller) scroller.scrollTop = 0;
+  const cta = $("panorama-sovereign-cta");
+  if (cta && typeof cta.scrollIntoView === "function") {
+    setTimeout(() => cta.scrollIntoView({ behavior: "auto", block: "nearest" }), 30);
+  }
+}
 
 function navigatePanoramaTarget(target) {
   if (!PANORAMA_NAV_WHITELIST.has(target)) return false;
@@ -1266,6 +1289,11 @@ function navigatePanoramaTarget(target) {
     openSettingsPackageVersions();
     return true;
   }
+  if (target === "panorama-experience") {
+    goSelfView("overview");
+    setTimeout(() => openPanoramaExperience(), 40);
+    return true;
+  }
   return false;
 }
 
@@ -1285,11 +1313,34 @@ function renderPanoramaBlocks(panorama) {
   const promisesEl = $("panorama-promises");
   const journeyEl = $("panorama-journey");
   const directionEl = $("panorama-direction");
+  const proofEl = $("panorama-proof-strip");
 
   const hero = (panorama && panorama.hero) || {};
   if (titleEl) setSafeText(titleEl, hero.title || "尚未命名的 Digital Me");
   if (taglineEl) setSafeText(taglineEl, hero.tagline || "");
   if (statusLineEl) setSafeText(statusLineEl, hero.statusLine || "");
+
+  if (proofEl) {
+    clearChildren(proofEl);
+    const promises = (panorama && panorama.promises) || [];
+    const thisIsMe = promises.find((p) => p.id === "this_is_me");
+    const controlled = promises.find((p) => p.id === "controlled_by_me");
+    const acts = promises.find((p) => p.id === "acts_for_me");
+    const line1 = document.createElement("p");
+    setSafeText(line1, (thisIsMe && thisIsMe.evidence) || "主体理解依据待加载");
+    proofEl.appendChild(line1);
+    const line2 = document.createElement("p");
+    line2.className = "muted";
+    setSafeText(line2, (controlled && controlled.evidence) || "当前边界状态待加载");
+    proofEl.appendChild(line2);
+    const line3 = document.createElement("p");
+    line3.className = "muted";
+    const capLine =
+      (acts && acts.evidence) ||
+      "可体验能力：受控研究判断（本地模拟）";
+    setSafeText(line3, capLine);
+    proofEl.appendChild(line3);
+  }
 
   if (nextEl) {
     clearChildren(nextEl);
@@ -1402,6 +1453,463 @@ function renderPanoramaBlocks(panorama) {
     boundBtn.addEventListener("click", () => navigatePanoramaTarget("me-boundaries"));
     directionEl.appendChild(boundBtn);
   }
+}
+
+// ---------- PAN-01R sovereign collaboration experience UI ----------
+const panExpState = {
+  brief: null,
+  request: null,
+  selectedIds: [],
+  preview: null,
+  run: null,
+  step: 1,
+};
+
+function showPanoramaExpStep(step) {
+  panExpState.step = step;
+  for (let i = 1; i <= 5; i += 1) {
+    const el = $(`panorama-exp-step${i}`);
+    if (el) el.classList.toggle("hidden", i !== step);
+  }
+}
+
+function closePanoramaExperience() {
+  const panel = $("panorama-experience-panel");
+  if (panel) panel.classList.add("hidden");
+  panExpState.brief = null;
+  panExpState.request = null;
+  panExpState.preview = null;
+  panExpState.run = null;
+  panExpState.selectedIds = [];
+}
+
+async function openPanoramaExperience() {
+  const panel = $("panorama-experience-panel");
+  if (!panel || !window.digitalMe.getPanoramaSubjectBrief) return;
+  panel.classList.remove("hidden");
+  panel.scrollIntoView({ behavior: "smooth", block: "start" });
+  showPanoramaExpStep(1);
+  const step1 = $("panorama-exp-step1");
+  if (step1) setSafeText(step1, "正在加载主体依据…");
+  try {
+    const brief = await window.digitalMe.getPanoramaSubjectBrief({});
+    panExpState.brief = brief;
+    renderPanoramaExpStep1(brief);
+  } catch (e) {
+    if (step1) setSafeText(step1, "加载失败：" + (e.message || e));
+  }
+}
+
+function renderPanoramaExpStep1(brief) {
+  const el = $("panorama-exp-step1");
+  if (!el) return;
+  clearChildren(el);
+  const h = document.createElement("h4");
+  setSafeText(h, "步骤 1 · 它如何理解我");
+  el.appendChild(h);
+  if (brief.warningMessage) {
+    const w = document.createElement("p");
+    w.className = "muted";
+    setSafeText(w, brief.warningMessage);
+    el.appendChild(w);
+  }
+  if (brief.previewMode) {
+    const p = document.createElement("p");
+    p.className = "muted";
+    setSafeText(p, "主体依据不足：当前为通用预览，不能宣称已生成个性化 Digital Me 结果。");
+    el.appendChild(p);
+  }
+  panExpState.selectedIds = (brief.evidence || [])
+    .filter((e) => e.selectedByDefault && e.usableInExperience)
+    .map((e) => e.id);
+  const list = document.createElement("div");
+  list.className = "panorama-exp-evidence-list";
+  for (const ev of brief.evidence || []) {
+    const row = document.createElement("label");
+    row.className = "panorama-exp-evidence-row";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.value = ev.id;
+    cb.checked = panExpState.selectedIds.includes(ev.id);
+    cb.disabled = !ev.usableInExperience;
+    cb.addEventListener("change", () => {
+      if (cb.checked) {
+        if (!panExpState.selectedIds.includes(ev.id)) panExpState.selectedIds.push(ev.id);
+      } else {
+        panExpState.selectedIds = panExpState.selectedIds.filter((id) => id !== ev.id);
+      }
+    });
+    row.appendChild(cb);
+    const text = document.createElement("span");
+    setSafeText(text, `[${ev.kindLabel}] ${ev.shortText}`);
+    row.appendChild(text);
+    list.appendChild(row);
+  }
+  el.appendChild(list);
+  if ((brief.boundaries || []).length) {
+    const bh = document.createElement("p");
+    setSafeText(bh, "本次强制生效的边界（不可作为共享内容取消）：");
+    el.appendChild(bh);
+    const ul = document.createElement("ul");
+    for (const b of brief.boundaries) {
+      const li = document.createElement("li");
+      setSafeText(li, b.shortText);
+      ul.appendChild(li);
+    }
+    el.appendChild(ul);
+  }
+  const next = document.createElement("button");
+  next.type = "button";
+  next.className = "btn-primary";
+  setSafeText(next, "进入协作请求");
+  next.addEventListener("click", () => renderPanoramaExpStep2());
+  el.appendChild(next);
+}
+
+async function renderPanoramaExpStep2() {
+  showPanoramaExpStep(2);
+  const el = $("panorama-exp-step2");
+  if (!el) return;
+  clearChildren(el);
+  const h = document.createElement("h4");
+  setSafeText(h, "步骤 2 · 收到协作请求");
+  el.appendChild(h);
+  const label = document.createElement("label");
+  setSafeText(label, "研究主题");
+  el.appendChild(label);
+  const input = document.createElement("input");
+  input.type = "text";
+  input.id = "panorama-exp-topic";
+  input.maxLength = 200;
+  input.value = "个人研究方向判断";
+  input.style.width = "100%";
+  el.appendChild(input);
+  const msg = document.createElement("p");
+  msg.className = "muted";
+  msg.id = "panorama-exp-step2-msg";
+  el.appendChild(msg);
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "btn-primary";
+  setSafeText(btn, "生成本地模拟请求");
+  btn.addEventListener("click", async () => {
+    setSafeText(msg, "正在创建…");
+    try {
+      const req = await window.digitalMe.createPanoramaRequest({
+        topic: input.value,
+        evidenceIds: panExpState.selectedIds.slice(),
+      });
+      if (!req || !req.ok) {
+        setSafeText(msg, (req && req.message) || "创建失败");
+        return;
+      }
+      panExpState.request = req;
+      renderPanoramaExpStep3();
+    } catch (e) {
+      setSafeText(msg, "创建失败：" + (e.message || e));
+    }
+  });
+  el.appendChild(btn);
+}
+
+async function renderPanoramaExpStep3() {
+  showPanoramaExpStep(3);
+  const el = $("panorama-exp-step3");
+  if (!el || !panExpState.request) return;
+  clearChildren(el);
+  const h = document.createElement("h4");
+  setSafeText(h, "步骤 3 · 由我授权");
+  el.appendChild(h);
+  const msg = document.createElement("p");
+  msg.className = "muted";
+  setSafeText(msg, "正在生成授权预览…");
+  el.appendChild(msg);
+  try {
+    const preview = await window.digitalMe.buildPanoramaAuthPreview({
+      requestId: panExpState.request.requestId,
+      selectedEvidenceIds: panExpState.selectedIds.slice(),
+    });
+    if (!preview || !preview.ok) {
+      setSafeText(msg, (preview && preview.message) || "授权预览失败");
+      return;
+    }
+    panExpState.preview = preview;
+    clearChildren(el);
+    el.appendChild(h);
+    const fields = [
+      ["请求方", preview.requester && preview.requester.label],
+      ["任务", preview.taskSummary],
+      [
+        "能力",
+        (preview.capabilities || []).map((c) => c.label).join("、"),
+      ],
+      [
+        "使用的内容",
+        (preview.selectedEvidence || []).map((e) => e.shortText).join("；") || "无",
+      ],
+      ["授权期限", preview.durationLabel],
+      ["结果去向", preview.resultDestination && preview.resultDestination.label],
+      [
+        "推理环境",
+        preview.inferenceEnvironment &&
+          `${preview.inferenceEnvironment.providerLabel}${
+            preview.inferenceEnvironment.modelLabel
+              ? " · " + preview.inferenceEnvironment.modelLabel
+              : ""
+          }`,
+      ],
+      [
+        "推理数据去向",
+        preview.inferenceEnvironment && preview.inferenceEnvironment.dataDestinationDisclosure,
+      ],
+      [
+        "是否发送给协作对象",
+        preview.inferenceEnvironment && preview.inferenceEnvironment.sentToSimulationPartner
+          ? "会发送"
+          : "不会发送给模拟协作伙伴",
+      ],
+    ];
+    for (const [lab, val] of fields) {
+      const p = document.createElement("p");
+      setSafeText(p, `${lab}：${val || "—"}`);
+      el.appendChild(p);
+    }
+    const shrink = document.createElement("p");
+    shrink.className = "muted";
+    setSafeText(shrink, "可返回步骤 1 取消部分依据以缩小范围。");
+    el.appendChild(shrink);
+    const actions = document.createElement("div");
+    actions.className = "builder-actions";
+    const back = document.createElement("button");
+    back.type = "button";
+    back.className = "btn-ghost";
+    setSafeText(back, "缩小范围");
+    back.addEventListener("click", () => {
+      showPanoramaExpStep(1);
+      if (panExpState.brief) renderPanoramaExpStep1(panExpState.brief);
+    });
+    const reject = document.createElement("button");
+    reject.type = "button";
+    reject.className = "btn-ghost";
+    setSafeText(reject, "拒绝请求");
+    reject.addEventListener("click", async () => {
+      const res = await window.digitalMe.rejectPanoramaRequest({
+        requestId: panExpState.request.requestId,
+      });
+      const note = document.createElement("p");
+      setSafeText(note, res && res.ok ? "已拒绝，未执行。" : (res && res.message) || "拒绝失败");
+      el.appendChild(note);
+    });
+    const confirm = document.createElement("button");
+    confirm.type = "button";
+    confirm.className = "btn-primary";
+    setSafeText(confirm, "确认并执行（仅本次）");
+    confirm.addEventListener("click", () => renderPanoramaExpStep4());
+    actions.appendChild(back);
+    actions.appendChild(reject);
+    actions.appendChild(confirm);
+    el.appendChild(actions);
+  } catch (e) {
+    setSafeText(msg, "授权预览失败：" + (e.message || e));
+  }
+}
+
+async function renderPanoramaExpStep4() {
+  showPanoramaExpStep(4);
+  const el = $("panorama-exp-step4");
+  if (!el || !panExpState.request) return;
+  clearChildren(el);
+  const h = document.createElement("h4");
+  setSafeText(h, "步骤 4 · Digital Me 代表我行动");
+  el.appendChild(h);
+  const status = document.createElement("p");
+  status.id = "panorama-exp-run-status";
+  setSafeText(status, "正在执行（通用结果与 Digital Me 结果彼此隔离）…");
+  el.appendChild(status);
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.className = "btn-ghost";
+  cancelBtn.id = "panorama-exp-cancel";
+  setSafeText(cancelBtn, "停止");
+  el.appendChild(cancelBtn);
+
+  let runId = null;
+  let cancelledByUser = false;
+  let unsubProgress = null;
+  if (typeof window.digitalMe.onPanoramaRunProgress === "function") {
+    unsubProgress = window.digitalMe.onPanoramaRunProgress((info) => {
+      if (info && info.runId) runId = info.runId;
+      if (info && info.stage) {
+        setSafeText(status, `正在执行（${info.stage}）…`);
+      }
+    });
+  }
+  cancelBtn.addEventListener("click", async () => {
+    if (!runId) {
+      setSafeText(status, "正在准备停止…");
+      cancelledByUser = true;
+      return;
+    }
+    cancelledByUser = true;
+    const res = await window.digitalMe.cancelPanoramaRun({ runId });
+    setSafeText(
+      status,
+      res && res.ok
+        ? `已${res.status === "abandoned" ? "放弃" : "停止"}：迟到结果将被丢弃`
+        : (res && res.message) || "取消失败"
+    );
+    if (res && res.cancelLabel) setSafeText(cancelBtn, res.cancelLabel);
+  });
+
+  try {
+    const run = await window.digitalMe.confirmPanoramaExecute({
+      requestId: panExpState.request.requestId,
+      selectedEvidenceIds: panExpState.selectedIds.slice(),
+    });
+    if (typeof unsubProgress === "function") unsubProgress();
+    panExpState.run = run;
+    runId = (run && run.runId) || runId;
+    if (cancelledByUser || (run && (run.status === "cancelled" || run.status === "abandoned"))) {
+      setSafeText(status, "已取消，结果不可采纳");
+      return;
+    }
+    if (!run || run.ok === false || run.status === "failed") {
+      setSafeText(status, (run && run.message) || "执行失败");
+      if (run && run.settingsTarget === "settings") {
+        const link = document.createElement("button");
+        link.type = "button";
+        link.className = "btn-ghost";
+        setSafeText(link, "打开设置");
+        link.addEventListener("click", () => {
+          if (typeof openSettings === "function") openSettings();
+          else if (typeof showSettings === "function") showSettings();
+        });
+        el.appendChild(link);
+      }
+      return;
+    }
+    renderPanoramaExpStep5(run);
+  } catch (e) {
+    if (typeof unsubProgress === "function") unsubProgress();
+    setSafeText(status, "执行失败：" + (e.message || e));
+  }
+}
+
+function renderPanoramaExpStep5(run) {
+  showPanoramaExpStep(5);
+  const el = $("panorama-exp-step5");
+  if (!el) return;
+  clearChildren(el);
+  const h = document.createElement("h4");
+  setSafeText(h, "步骤 5 · 看见差异并处置结果");
+  el.appendChild(h);
+  if (run && run.adoptable === false) {
+    const warn = document.createElement("p");
+    warn.className = "muted";
+    setSafeText(
+      warn,
+      (run && run.message) || "本次结果不可采纳（例如记录未完成或已取消）。"
+    );
+    el.appendChild(warn);
+  }
+  const result = (run && run.result) || {};
+  const grid = document.createElement("div");
+  grid.className = "panorama-exp-compare";
+  const left = document.createElement("div");
+  const lh = document.createElement("strong");
+  setSafeText(lh, "通用 AI 结果");
+  left.appendChild(lh);
+  const lt = document.createElement("pre");
+  setSafeText(lt, result.genericText || "");
+  left.appendChild(lt);
+  const right = document.createElement("div");
+  const rh = document.createElement("strong");
+  setSafeText(rh, "我的 Digital Me 结果");
+  right.appendChild(rh);
+  const rt = document.createElement("pre");
+  setSafeText(rt, result.digitalMeText || "");
+  right.appendChild(rt);
+  grid.appendChild(left);
+  grid.appendChild(right);
+  el.appendChild(grid);
+
+  const cite = document.createElement("p");
+  setSafeText(
+    cite,
+    "生成时使用的依据引用：" +
+      ((result.citations || []).length ? result.citations.join("、") : "无")
+  );
+  el.appendChild(cite);
+  const partner = document.createElement("p");
+  partner.className = "muted";
+  setSafeText(partner, "未发送给模拟协作伙伴");
+  el.appendChild(partner);
+  if (run.inferenceEnvironment && run.inferenceEnvironment.dataDestinationDisclosure) {
+    const disc = document.createElement("p");
+    disc.className = "muted";
+    setSafeText(disc, run.inferenceEnvironment.dataDestinationDisclosure);
+    el.appendChild(disc);
+  }
+
+  const msg = document.createElement("p");
+  msg.id = "panorama-exp-step5-msg";
+  el.appendChild(msg);
+
+  const actions = document.createElement("div");
+  actions.className = "builder-actions";
+  const adopt = document.createElement("button");
+  adopt.type = "button";
+  adopt.className = "btn-primary";
+  setSafeText(adopt, "采纳为我的本地成果");
+  adopt.disabled = !run.adoptable;
+  adopt.addEventListener("click", async () => {
+    const res = await window.digitalMe.adoptPanoramaResult({ runId: run.runId });
+    if (res && res.ok) {
+      setSafeText(msg, (res && res.message) || "已保存为你的本地成果");
+    } else {
+      setSafeText(msg, (res && res.message) || "采纳失败");
+    }
+  });
+  const reject = document.createElement("button");
+  reject.type = "button";
+  reject.className = "btn-ghost";
+  setSafeText(reject, "拒绝本次结果");
+  reject.addEventListener("click", async () => {
+    const res = await window.digitalMe.rejectPanoramaResult({
+      runId: run.runId,
+      reasonCategory: "not_useful",
+    });
+    if (res && res.ok) {
+      setSafeText(msg, (res && res.message) || "已拒绝本次结果");
+    } else {
+      setSafeText(msg, (res && res.message) || "拒绝失败");
+    }
+  });
+  const receipt = document.createElement("button");
+  receipt.type = "button";
+  receipt.className = "btn-ghost";
+  setSafeText(receipt, "查看过程记录");
+  receipt.addEventListener("click", async () => {
+    const res = await window.digitalMe.getPanoramaReceiptSummary({
+      runId: run.runId,
+      requestId: run.requestId,
+    });
+    setSafeText(
+      msg,
+      res && res.ok
+        ? `记录：状态 ${res.runStatus || "—"}；依据 ${res.evidenceCount} 条；本地模拟=${res.localSimulation}`
+        : (res && res.message) || "无法读取记录"
+    );
+  });
+  actions.appendChild(adopt);
+  actions.appendChild(reject);
+  actions.appendChild(receipt);
+  el.appendChild(actions);
+}
+
+function bindPanoramaExperience() {
+  $("panorama-sovereign-cta")?.addEventListener("click", () => openPanoramaExperience());
+  $("panorama-exp-close")?.addEventListener("click", () => closePanoramaExperience());
 }
 
 // ---------- Builder ----------

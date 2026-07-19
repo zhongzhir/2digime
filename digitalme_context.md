@@ -6,9 +6,9 @@
 
 > **当前产品主线（2026-07-19）**：**P1-PANORAMA — Product Panorama Alpha**。执行顺序见 `digitalme_panorama_execution_index_v0.1.md`；总任务见 `digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`。
 >
-> **PAN-01** 为 `statically_verified` / `owner_product_perception_failed` / `retained_as_scaffold`（基线 `a40c5f8`；**不标 accepted**；**不回滚**）。Owner 产品感知未通过：承诺被展示但未被一条真实体验证明。
+> **PAN-01** 为 `statically_verified` / `owner_product_perception_failed` / `retained_as_scaffold`（基线 `a40c5f8`；**不标 accepted**；**不回滚**）。
 >
-> **唯一下一实现任务：PAN-01R**（`digitalme_phase1_task_PAN-01R_sovereign_collaboration_loop.md`）——主权协作闭环；状态 `specified` / `owner_approved` / `frozen_for_implementation`（`owner_approved` 仅规格与启动授权）。PAN-02/03/04 暂停至 PAN-01R 验收。不得自行回到 P1-07 修复或原 P1-08 队列。
+> **PAN-01R** 已 `statically_verified`（规格 `PAN01R_SPEC_BASE`=`35c5aea`；分支 `codex/pan-01r-sovereign-collaboration-loop`；**不标 accepted**）。等待 Codex 复核与 Owner 主路径验收；验收前不得启动 PAN-02/03/04。不得自行回到 P1-07 修复或原 P1-08 队列。
 >
 > **界面与功能需求源**：桌面应用「用户看见什么、能做什么、何为做完」以 [`digitalme_product_spec_v0.2.md`](digitalme_product_spec_v0.2.md)（文内 **v0.5**，含 **v0.5.2**）为唯一规格；战略与逻辑架构仍以本文为准；**部署与系统拓扑**以 [`digitalme_architecture_edge_sovereign_v0.1.md`](digitalme_architecture_edge_sovereign_v0.1.md) 为准。开发实行**规格驱动**（无规格不排期）。
 >
@@ -852,3 +852,4 @@ flowchart TB
 61. **PAN-01 Codex 第一轮复核修复（2026-07-18）**：Hero/隐私 fail-closed；四承诺动态证据；发展意图不再用 owner_assertion 冒充；资料版本入口可发现聚焦；hermetic 22/22、owner-runtime 9/9。状态仍为 `statically_verified`。
 62. **PAN-01 Codex 第二轮最小复核修复（2026-07-18）**：身份读取失败时区分隐私配置与访问结论；分层/JSONL 损坏时「这是我」「看见我」降为预览。状态仍为 `statically_verified`；PAN-02 未开始。
 63. **PAN-01 Owner 产品感知未通过与 PAN-01R 批准（2026-07-19）**：PAN-01 保留为 `statically_verified` / `owner_product_perception_failed` / `retained_as_scaffold`（不 accepted、不回滚）。根因：承诺被展示但未被真实体验证明。批准独立任务包 PAN-01R（主权协作闭环）：规格冻结后直接实现；工程完成后最多 `statically_verified`。PAN-02/03/04 暂停至 PAN-01R 验收。规格补丁 v0.5.2：产品全貌不能只靠静态说明，必须由纵向主权闭环提供产品证据。
+64. **PAN-01R statically_verified（2026-07-19）**：规格 `PAN01R_SPEC_BASE`=`35c5aea`；实现分支 `codex/pan-01r-sovereign-collaboration-loop`；五步本地模拟主权协作体验 + 双隔离生成 + 单次授权 + adopt/reject；`test:pan-01r` 36/36；`test:pan-01r-owner-runtime` 通过。**不标 accepted**；PAN-02 未开始。

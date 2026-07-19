@@ -31,6 +31,7 @@ const PANORAMA_NAV_TARGETS = new Set([
   "me-boundaries",
   "capabilities",
   "settings-package-versions",
+  "panorama-experience",
 ]);
 
 const LAYER_META = Object.freeze({

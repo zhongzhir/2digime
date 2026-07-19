@@ -18,6 +18,8 @@
     "test:p1-07-owner-runtime": "electron scripts/electron-p1-07-owner-runtime-test.cjs",
     "test:pan-01": "node scripts/test-pan-01-product-panorama.cjs",
     "test:pan-01-owner-runtime": "electron scripts/electron-pan-01-owner-runtime-test.cjs",
+    "test:pan-01r": "node scripts/test-pan-01r-sovereign-collaboration.cjs",
+    "test:pan-01r-owner-runtime": "electron scripts/electron-pan-01r-owner-runtime-test.cjs",
     "test:p1-baseline-real": "node scripts/test-p1-baseline-real.cjs",
     "test:bootstrap-submit": "node scripts/test-bootstrap-file-submit.cjs && node scripts/test-renderer-ui-bindings.cjs",
     "test:owner-runtime": "electron scripts/electron-owner-runtime-test.cjs",

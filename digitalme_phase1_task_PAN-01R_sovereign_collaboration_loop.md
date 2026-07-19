@@ -1,21 +1,21 @@
 # PAN-01R 任务包：Digital Me 主权协作闭环
 
-版本：v0.1.0
+版本：v0.1.1
 日期：2026-07-19
-状态：`specified` / `owner_approved` / `frozen_for_implementation`
+状态：`statically_verified`（不得标 `accepted` / `runtime_verified`；待 Codex 复核与 Owner 主路径验收）
 所属总任务：`P1-PANORAMA：Digital Me 产品全貌 Alpha`
 前置任务：PAN-01 `statically_verified` / `owner_product_perception_failed` / `retained_as_scaffold`（不标 accepted；不回滚）
 建议代码基线：`a40c5f8`（分支 `codex/pan-01-product-panorama-home`）
-规划基线：本文件冻结提交记为 `PAN01R_SPEC_BASE`
-实现分支（规格提交后创建）：`codex/pan-01r-sovereign-collaboration-loop`
+规划基线：`35c5aead8879f818ae0e1e90836a8fee557c22c7`（`PAN01R_SPEC_BASE`）
+实现分支：`codex/pan-01r-sovereign-collaboration-loop`
 代码 Owner：Cursor
 任务类型：Product Panorama Alpha / 主权协作纵向产品证据链
 
 > **状态语义（强制）**
 >
-> - 本文档初始状态中的 `owner_approved` **仅**表示 Owner 已批准规格并授权启动实现；
+> - 文首曾用的 `owner_approved` **仅**表示 Owner 已批准规格并授权启动实现；
 > - **不**表示实现结果 `accepted`；
-> - 实现完成后，Cursor **只能**将工程状态更新为 `statically_verified`；
+> - 当前工程状态为 `statically_verified`；
 > - `runtime_verified` / `accepted` 必须等待 Codex 复核与 Owner 主路径验收。
 
 ---

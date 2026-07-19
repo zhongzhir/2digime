@@ -252,7 +252,7 @@ function capabilityBrief(overview) {
   if (!caps.length) return "能力状态尚无法确认";
   const available = caps.filter((c) => c.userStatus === USER_STATUS.AVAILABLE).length;
   const experiment = caps.filter((c) => c.userStatus === USER_STATUS.EXPERIMENT).length;
-  return `能力摘要：可用 ${available} 项，实验 ${experiment} 项`;
+  return `可体验能力：可用 ${available} 项，实验 ${experiment} 项`;
 }
 
 function buildPromises(overview) {
@@ -355,12 +355,13 @@ function buildPromises(overview) {
     {
       id: "acts_for_me",
       title: "代表我协作",
-      userStatus: USER_STATUS.NOT_OPEN,
-      userStatusLabel: statusLabel(USER_STATUS.NOT_OPEN),
-      evidence: "当前无自动对外授权。本地协作沙盘尚未开放。",
+      userStatus: USER_STATUS.LOCAL_SIM,
+      userStatusLabel: statusLabel(USER_STATUS.LOCAL_SIM),
+      evidence:
+        "可体验一次受控研究协作（本地模拟协作关系）。结果仅返回给你本人审阅，不会发送给模拟协作伙伴。",
       currentCondition: "",
-      ctaLabel: null,
-      navTarget: null,
+      ctaLabel: "体验一次 Digital Me 如何代表我",
+      navTarget: sanitizeNavTarget("panorama-experience"),
     },
   ];
 }
@@ -422,12 +423,12 @@ function buildJourney(overview) {
     {
       id: "collaborate",
       title: "代表我协作",
-      userStatus: USER_STATUS.NOT_OPEN,
-      userStatusLabel: statusLabel(USER_STATUS.NOT_OPEN),
-      evidence: "尚无用户面协作闭环。",
+      userStatus: USER_STATUS.LOCAL_SIM,
+      userStatusLabel: statusLabel(USER_STATUS.LOCAL_SIM),
+      evidence: "可体验受控研究协作闭环（本地模拟协作关系）；完整协作沙盘仍待后续。",
       currentCondition: "",
-      ctaLabel: null,
-      navTarget: null,
+      ctaLabel: "体验一次 Digital Me 如何代表我",
+      navTarget: sanitizeNavTarget("panorama-experience"),
     },
   ];
 }
@@ -444,9 +445,9 @@ function buildNextAction(overview) {
     };
   }
   return {
-    label: "查看我的构成",
-    reason: "先看清它依据什么理解你，再决定下一步。",
-    navTarget: sanitizeNavTarget("me-overview"),
+    label: "体验一次 Digital Me 如何代表我",
+    reason: "用一次受控协作，看清它如何依据你、经你授权后行动。",
+    navTarget: sanitizeNavTarget("panorama-experience"),
   };
 }
 

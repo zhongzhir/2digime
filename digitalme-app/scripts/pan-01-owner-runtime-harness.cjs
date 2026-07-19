@@ -174,7 +174,7 @@ async function runPan01OwnerRuntimeHarness({ BrowserWindow }) {
     fail("panorama default entry / content", err);
   }
 
-  // 2) authorize / collaborate have no executable buttons
+  // 2) authorize has no executable buttons; collaborate may open PAN-01R local_sim CTA
   try {
     await openPanoramaViaSidebarOnly(win);
     const gate = await evalIn(
@@ -188,21 +188,22 @@ async function runPan01OwnerRuntimeHarness({ BrowserWindow }) {
         const actPromise = [...(promises?.querySelectorAll(".panorama-promise-card") || [])].find((c) =>
           /代表我协作/.test(c.textContent || "")
         );
+        const cta = document.getElementById("panorama-sovereign-cta");
         return {
           authorizeButtons: authorize ? authorize.querySelectorAll("button").length : -1,
           collabButtons: collab ? collab.querySelectorAll("button").length : -1,
           actPromiseButtons: actPromise ? actPromise.querySelectorAll("button").length : -1,
           collabText: (collab?.innerText || "") + "\\n" + (actPromise?.innerText || ""),
+          ctaText: cta ? cta.textContent.trim() : "",
         };
       })()`
     );
     assert.equal(gate.authorizeButtons, 0);
-    assert.equal(gate.collabButtons, 0);
-    assert.equal(gate.actPromiseButtons, 0);
-    assert.match(gate.collabText, /尚未开放/);
-    pass("授权我 and 代表我协作 have no executable buttons");
+    assert.ok(gate.collabButtons >= 1 || gate.actPromiseButtons >= 1 || gate.ctaText);
+    assert.match(gate.collabText + gate.ctaText, /本地模拟|体验一次/);
+    pass("授权我 closed; 代表我协作 exposes local_sim CTA");
   } catch (err) {
-    fail("authorize/collaborate no CTAs", err);
+    fail("authorize/collaborate CTAs", err);
   }
 
   // 3) 继续构建 — real journey button only
