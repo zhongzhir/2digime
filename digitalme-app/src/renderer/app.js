@@ -1541,7 +1541,11 @@ function renderPanoramaExpStep1(brief) {
     });
     row.appendChild(cb);
     const text = document.createElement("span");
-    setSafeText(text, `[${ev.kindLabel}] ${ev.shortText}`);
+    const confirmLabel = ev.ownerConfirmed ? "是" : "否";
+    setSafeText(
+      text,
+      `[${ev.kindLabel}] ${ev.shortText} · 来源：${ev.sourceLabel || "本机资料"} · 本人确认：${confirmLabel}`
+    );
     row.appendChild(text);
     list.appendChild(row);
   }
@@ -1717,7 +1721,7 @@ async function renderPanoramaExpStep3() {
 async function renderPanoramaExpStep4() {
   showPanoramaExpStep(4);
   const el = $("panorama-exp-step4");
-  if (!el || !panExpState.request) return;
+  if (!el || !panExpState.preview || !panExpState.preview.previewId) return;
   clearChildren(el);
   const h = document.createElement("h4");
   setSafeText(h, "步骤 4 · Digital Me 代表我行动");
@@ -1734,42 +1738,66 @@ async function renderPanoramaExpStep4() {
   el.appendChild(cancelBtn);
 
   let runId = null;
-  let cancelledByUser = false;
+  let cancelRequested = false;
+  let cancelInFlight = false;
   let unsubProgress = null;
+
+  async function requestCancel() {
+    cancelRequested = true;
+    if (!runId) {
+      setSafeText(status, "正在请求停止…");
+      return;
+    }
+    if (cancelInFlight) return;
+    cancelInFlight = true;
+    try {
+      const res = await window.digitalMe.cancelPanoramaRun({ runId });
+      setSafeText(
+        status,
+        res && res.ok
+          ? `已${res.status === "abandoned" ? "放弃" : "停止"}：迟到结果将被丢弃`
+          : (res && res.message) || "取消失败"
+      );
+      if (res && res.cancelLabel) setSafeText(cancelBtn, res.cancelLabel);
+    } finally {
+      cancelInFlight = false;
+    }
+  }
+
   if (typeof window.digitalMe.onPanoramaRunProgress === "function") {
     unsubProgress = window.digitalMe.onPanoramaRunProgress((info) => {
-      if (info && info.runId) runId = info.runId;
+      if (info && info.runId) {
+        runId = info.runId;
+        if (cancelRequested) requestCancel();
+      }
       if (info && info.stage) {
         setSafeText(status, `正在执行（${info.stage}）…`);
       }
     });
   }
-  cancelBtn.addEventListener("click", async () => {
-    if (!runId) {
-      setSafeText(status, "正在准备停止…");
-      cancelledByUser = true;
-      return;
-    }
-    cancelledByUser = true;
-    const res = await window.digitalMe.cancelPanoramaRun({ runId });
-    setSafeText(
-      status,
-      res && res.ok
-        ? `已${res.status === "abandoned" ? "放弃" : "停止"}：迟到结果将被丢弃`
-        : (res && res.message) || "取消失败"
-    );
-    if (res && res.cancelLabel) setSafeText(cancelBtn, res.cancelLabel);
+  cancelBtn.addEventListener("click", () => {
+    requestCancel();
   });
 
   try {
     const run = await window.digitalMe.confirmPanoramaExecute({
-      requestId: panExpState.request.requestId,
-      selectedEvidenceIds: panExpState.selectedIds.slice(),
+      previewId: panExpState.preview.previewId,
+      confirmed: true,
     });
     if (typeof unsubProgress === "function") unsubProgress();
     panExpState.run = run;
     runId = (run && run.runId) || runId;
-    if (cancelledByUser || (run && (run.status === "cancelled" || run.status === "abandoned"))) {
+
+    if (cancelRequested && run && run.status === "completed" && runId) {
+      await window.digitalMe.cancelPanoramaRun({ runId });
+      setSafeText(status, "已请求停止；本次结果不进入审阅");
+      return;
+    }
+
+    if (
+      cancelRequested ||
+      (run && (run.status === "cancelled" || run.status === "abandoned"))
+    ) {
       setSafeText(status, "已取消，结果不可采纳");
       return;
     }
@@ -1791,6 +1819,10 @@ async function renderPanoramaExpStep4() {
     renderPanoramaExpStep5(run);
   } catch (e) {
     if (typeof unsubProgress === "function") unsubProgress();
+    if (cancelRequested) {
+      setSafeText(status, "已取消，结果不可采纳");
+      return;
+    }
     setSafeText(status, "执行失败：" + (e.message || e));
   }
 }
@@ -1803,15 +1835,25 @@ function renderPanoramaExpStep5(run) {
   const h = document.createElement("h4");
   setSafeText(h, "步骤 5 · 看见差异并处置结果");
   el.appendChild(h);
-  if (run && run.adoptable === false) {
+
+  const personalized = !!(run && run.personalizedAvailable && !run.previewMode);
+  const groundingBad =
+    run &&
+    (run.groundingCode === "grounding_invalid" ||
+      run.groundingCode === "grounding_missing" ||
+      run.code === "grounding_invalid" ||
+      run.code === "grounding_missing");
+
+  if (run && (run.adoptable === false || groundingBad)) {
     const warn = document.createElement("p");
     warn.className = "muted";
     setSafeText(
       warn,
-      (run && run.message) || "本次结果不可采纳（例如记录未完成或已取消）。"
+      (run && run.message) || "本次结果不可采纳（例如记录未完成、依据不足或已取消）。"
     );
     el.appendChild(warn);
   }
+
   const result = (run && run.result) || {};
   const grid = document.createElement("div");
   grid.className = "panorama-exp-compare";
@@ -1824,7 +1866,12 @@ function renderPanoramaExpStep5(run) {
   left.appendChild(lt);
   const right = document.createElement("div");
   const rh = document.createElement("strong");
-  setSafeText(rh, "我的 Digital Me 结果");
+  setSafeText(
+    rh,
+    personalized
+      ? run.digitalMeResultTitle || "我的 Digital Me 结果"
+      : run.digitalMeResultTitle || "主体依据不足，仅提供通用预览"
+  );
   right.appendChild(rh);
   const rt = document.createElement("pre");
   setSafeText(rt, result.digitalMeText || "");
@@ -1833,13 +1880,58 @@ function renderPanoramaExpStep5(run) {
   grid.appendChild(right);
   el.appendChild(grid);
 
-  const cite = document.createElement("p");
-  setSafeText(
-    cite,
-    "生成时使用的依据引用：" +
-      ((result.citations || []).length ? result.citations.join("、") : "无")
-  );
-  el.appendChild(cite);
+  const citeMap = result.citeMap || [];
+  if (citeMap.length) {
+    const citeTitle = document.createElement("p");
+    setSafeText(citeTitle, "依据引用对照：");
+    el.appendChild(citeTitle);
+    const table = document.createElement("ul");
+    for (const c of citeMap) {
+      const li = document.createElement("li");
+      setSafeText(
+        li,
+        `${c.citeId} → [${c.kindLabel || ""}] ${c.shortText || ""}${
+          c.sourceLabel ? " · " + c.sourceLabel : ""
+        }`
+      );
+      table.appendChild(li);
+    }
+    el.appendChild(table);
+  } else {
+    const cite = document.createElement("p");
+    setSafeText(
+      cite,
+      "生成时使用的依据引用：" +
+        ((result.citations || []).length ? result.citations.join("、") : "无")
+    );
+    el.appendChild(cite);
+  }
+
+  const boundaries = result.enforcedBoundaries || result.boundaries || [];
+  if (boundaries.length) {
+    const bh = document.createElement("p");
+    setSafeText(bh, "强制生效的边界：");
+    el.appendChild(bh);
+    const ul = document.createElement("ul");
+    for (const b of boundaries) {
+      const li = document.createElement("li");
+      setSafeText(li, b.shortText || "");
+      ul.appendChild(li);
+    }
+    el.appendChild(ul);
+  }
+
+  const unused = result.unusedSummary || [];
+  if (unused.length) {
+    const uh = document.createElement("p");
+    setSafeText(
+      uh,
+      "未使用的依据摘要：" +
+        unused.map((u) => `${u.kindLabel || u.kind}×${u.count}`).join("、")
+    );
+    el.appendChild(uh);
+  }
+
   const partner = document.createElement("p");
   partner.className = "muted";
   setSafeText(partner, "未发送给模拟协作伙伴");
@@ -1851,21 +1943,40 @@ function renderPanoramaExpStep5(run) {
     el.appendChild(disc);
   }
 
+  if (!run.adoptable) {
+    const reason = document.createElement("p");
+    reason.className = "muted";
+    setSafeText(
+      reason,
+      run.message
+        ? `不可采纳原因：${run.message}`
+        : personalized
+          ? "本次结果暂不可采纳"
+          : "主体依据不足，通用预览不可采纳为个性化成果"
+    );
+    el.appendChild(reason);
+  }
+
   const msg = document.createElement("p");
   msg.id = "panorama-exp-step5-msg";
   el.appendChild(msg);
 
+  const canAdopt = !!run.adoptable && !groundingBad;
   const actions = document.createElement("div");
   actions.className = "builder-actions";
   const adopt = document.createElement("button");
   adopt.type = "button";
   adopt.className = "btn-primary";
   setSafeText(adopt, "采纳为我的本地成果");
-  adopt.disabled = !run.adoptable;
+  adopt.disabled = !canAdopt;
   adopt.addEventListener("click", async () => {
     const res = await window.digitalMe.adoptPanoramaResult({ runId: run.runId });
     if (res && res.ok) {
-      setSafeText(msg, (res && res.message) || "已保存为你的本地成果");
+      if (res.committed && res.auditWarning) {
+        setSafeText(msg, "成果已保存，但过程记录失败");
+      } else {
+        setSafeText(msg, (res && res.message) || "已保存为你的本地成果");
+      }
     } else {
       setSafeText(msg, (res && res.message) || "采纳失败");
     }
@@ -1880,7 +1991,7 @@ function renderPanoramaExpStep5(run) {
       reasonCategory: "not_useful",
     });
     if (res && res.ok) {
-      setSafeText(msg, (res && res.message) || "已拒绝本次结果");
+      setSafeText(msg, (res && res.message) || "已拒绝本次结果，未写入成果库");
     } else {
       setSafeText(msg, (res && res.message) || "拒绝失败");
     }

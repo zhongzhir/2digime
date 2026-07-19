@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * PAN-01R sovereign collaboration loop — hermetic tests (36 requirements).
+ * PAN-01R sovereign collaboration loop — hermetic tests (56 requirements).
  * Run: npm run test:pan-01r
  */
 
@@ -17,14 +17,25 @@ const library = require("../src/outputs/library");
 const {
   createPanoramaExperience,
   buildSubjectBrief,
+  computePersonalized,
   KIND_LABELS,
   selectDefaultsForKind,
   MAX_EVIDENCE,
   __test,
 } = require("../src/panorama-experience");
-const { grantAuthorization, consumeToken, clearTokenStoreForTests } = require("../src/panorama-experience/authorization");
+const {
+  grantAuthorization,
+  consumeToken,
+  clearTokenStoreForTests,
+  clearPreviewStoreForTests,
+  buildAuthorizationPreview,
+  confirmFromPreview,
+  buildInferenceEnvironment,
+  getPreview,
+} = require("../src/panorama-experience/authorization");
 const { clearRequestStoreForTests } = require("../src/panorama-experience/request");
 const { clearRunStoreForTests, getRunRecord } = require("../src/panorama-experience/execute");
+const { classifyIdentityClaim } = require("../src/panorama-experience/subject-brief");
 
 let passed = 0;
 let failed = 0;
@@ -222,14 +233,23 @@ async function runHappyPath(pkgDir, userData, extras = {}) {
     packageDir: pkgDir,
     userData,
   });
-  const run = await api.confirmGrantAndExecute({
+  const preview = api.buildAuthPreview({
     requestId: req.requestId,
     senderId: "1",
     selectedEvidenceIds: selected,
     packageDir: pkgDir,
-    userData,
   });
-  return { api, brief, req, run, calls, auditCalls, selected };
+  assert.equal(preview.ok, true);
+  assert.ok(preview.previewId);
+  const run = await api.confirmFromPreviewThenExecute({
+    previewId: preview.previewId,
+    confirmed: true,
+    senderId: "1",
+    packageDir: pkgDir,
+    userData,
+    onRunCreated: extras.onRunCreated,
+  });
+  return { api, brief, req, preview, run, calls, auditCalls, selected };
 }
 
 async function main() {
@@ -846,10 +866,10 @@ async function main() {
         // peek via grant path — get from store by scanning is hard; cancel after short wait
       }
       // Force cancel by resolving after we get run from exec — race: cancel mid-flight
-      // Simpler path: start exec, cancel using runId from a parallel poll of audit... 
-      // Instead: cancel via execute after briefly yielding
+      // Simpler path: start exec, cancel after short wait
       await new Promise((r) => setTimeout(r, 20));
       // Extract runId from in-progress by completing cancel through API once we have result's race
+      // Instead: cancel via execute after briefly yielding
       resolveFirst();
       const run = await execPromise;
       // If completed too fast, simulate cancel discard on a completed-then-cancel is alreadyFinished
@@ -862,6 +882,7 @@ async function main() {
       const gate = new Promise((r) => {
         unblock = r;
       });
+      let earlyRunId = null;
       const api2 = createPanoramaExperience({
         callModelStream: async (cfg, messages, onDelta, options) => {
           await gate;
@@ -880,22 +901,26 @@ async function main() {
       const brief2 = buildSubjectBrief(dir);
       const id2 = brief2.evidence.find((e) => e.selectedByDefault).id;
       const req2 = api2.createRequest({ senderId: "1", packageDir: dir, userData: ud });
-      const p = api2.confirmGrantAndExecute({
+      const preview2 = api2.buildAuthPreview({
         requestId: req2.requestId,
         senderId: "1",
         selectedEvidenceIds: [id2],
         packageDir: dir,
+      });
+      const p = api2.confirmFromPreviewThenExecute({
+        previewId: preview2.previewId,
+        confirmed: true,
+        senderId: "1",
+        packageDir: dir,
         userData: ud,
+        onRunCreated: (info) => {
+          earlyRunId = info.runId;
+        },
       });
       await new Promise((r) => setTimeout(r, 30));
-      // Find running run — grant creates run at start of confirmAndExecute
-      // We need runId: poll getRun is unknown. Use appendAudit side channel:
-      const listed = decisionAudit.list(ud, { limit: 20 });
-      const entries = listed.entries || [];
-      const started = entries.find((e) => e.event === "execution_started");
-      assert.ok(started);
+      assert.ok(earlyRunId);
       const cancelRes = api2.cancelRun({
-        runId: started.decisionId,
+        runId: earlyRunId,
         senderId: "1",
         userData: ud,
       });
@@ -905,7 +930,7 @@ async function main() {
       assert.ok(finalRun.status === "cancelled" || finalRun.status === "abandoned");
       assert.equal(finalRun.adoptable, false);
       assert.ok(!finalRun.result || !finalRun.result.digitalMeText);
-      const rec = getRunRecord(started.decisionId);
+      const rec = getRunRecord(earlyRunId);
       assert.ok(!rec.result || rec.status === "cancelled" || rec.status === "abandoned");
     } finally {
       cleanup(dir);
@@ -922,6 +947,7 @@ async function main() {
       const gate = new Promise((r) => {
         unblock = r;
       });
+      let earlyRunId = null;
       const api = createPanoramaExperience({
         callModelStream: async (cfg, messages, onDelta, options) => {
           await gate;
@@ -940,21 +966,28 @@ async function main() {
       const brief = buildSubjectBrief(dir);
       const id = brief.evidence.find((e) => e.selectedByDefault).id;
       const req = api.createRequest({ senderId: "1", packageDir: dir, userData: ud });
-      const p = api.confirmGrantAndExecute({
+      const preview = api.buildAuthPreview({
         requestId: req.requestId,
         senderId: "1",
         selectedEvidenceIds: [id],
         packageDir: dir,
+      });
+      const p = api.confirmFromPreviewThenExecute({
+        previewId: preview.previewId,
+        confirmed: true,
+        senderId: "1",
+        packageDir: dir,
         userData: ud,
+        onRunCreated: (info) => {
+          earlyRunId = info.runId;
+        },
       });
       await new Promise((r) => setTimeout(r, 30));
-      const started = (decisionAudit.list(ud, { limit: 20 }).entries || []).find(
-        (e) => e.event === "execution_started"
-      );
-      api.cancelRun({ runId: started.decisionId, senderId: "1", userData: ud });
+      assert.ok(earlyRunId);
+      api.cancelRun({ runId: earlyRunId, senderId: "1", userData: ud });
       unblock();
       await p;
-      const adopt = api.adoptResult({ runId: started.decisionId, senderId: "1", userData: ud });
+      const adopt = api.adoptResult({ runId: earlyRunId, senderId: "1", userData: ud });
       assert.equal(adopt.ok, false);
     } finally {
       cleanup(dir);
@@ -1026,6 +1059,11 @@ async function main() {
       assert.ok(run.result);
       assert.ok(run.result.citations.includes("E1"));
       assert.ok(!run.result.citations.includes("E99"));
+      assert.equal(run.adoptable, false);
+      assert.ok(
+        run.groundingCode === "grounding_invalid" || run.code === "grounding_invalid"
+      );
+      assert.match(String(run.message || ""), /未授权|不存在/);
     } finally {
       cleanup(dir);
       cleanup(ud);
@@ -1205,6 +1243,767 @@ async function main() {
     const before = dirFingerprint(dir);
     try {
       await runHappyPath(dir, ud);
+      const after = dirFingerprint(dir);
+      assert.equal(after, before);
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("37. identityClaims 不会升级成 verified_fact", () => {
+    resetStores();
+    const dir = tempDir("claims-no-fact");
+    createMinimalFixture(dir);
+    new PackageStore({ packageDir: dir, ownerId: "t" }).migrateToV02({
+      actor: "t",
+      toolVersion: "t",
+    });
+    try {
+      const identityPath = path.join(dir, "identity.json");
+      const identity = JSON.parse(fs.readFileSync(identityPath, "utf8"));
+      identity.identityClaims = [
+        "字符串陈述不应成为已核实事实",
+        { text: "对象陈述", dataKind: "verified_fact" },
+        { text: "伪事实", dataKind: "fact" },
+      ];
+      fs.writeFileSync(identityPath, JSON.stringify(identity, null, 2), "utf8");
+      // Ensure no identity-facts.md so only claims path is tested
+      const factsMd = path.join(dir, "identity-facts.md");
+      if (fs.existsSync(factsMd)) fs.unlinkSync(factsMd);
+      const brief = buildSubjectBrief(dir);
+      for (const e of brief.evidence) {
+        assert.notEqual(e.kind, "verified_fact");
+      }
+      assert.equal(classifyIdentityClaim("x").kind, "owner_assertion");
+      assert.equal(classifyIdentityClaim({ text: "a", dataKind: "verified_fact" }).kind, "owner_assertion");
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  await test("38. identityClaims owner_assertion 符合 P1-07 分类", () => {
+    resetStores();
+    const dir = tempDir("claims-assert");
+    createMinimalFixture(dir);
+    new PackageStore({ packageDir: dir, ownerId: "t" }).migrateToV02({
+      actor: "t",
+      toolVersion: "t",
+    });
+    try {
+      const identityPath = path.join(dir, "identity.json");
+      const identity = JSON.parse(fs.readFileSync(identityPath, "utf8"));
+      identity.identityClaims = [
+        {
+          text: "已确认的本人陈述",
+          dataKind: "owner_assertion",
+          ownerConfirmed: true,
+        },
+        {
+          text: "未确认的本人陈述",
+          dataKind: "owner_assertion",
+        },
+        {
+          text: "推断陈述",
+          dataKind: "inference",
+        },
+        {
+          text: "未知类型应跳过",
+          dataKind: "mystery_kind",
+        },
+      ];
+      fs.writeFileSync(identityPath, JSON.stringify(identity, null, 2), "utf8");
+      const factsMd = path.join(dir, "identity-facts.md");
+      if (fs.existsSync(factsMd)) fs.unlinkSync(factsMd);
+      const brief = buildSubjectBrief(dir);
+      const confirmed = brief.evidence.find((e) => /已确认的本人陈述/.test(e.shortText));
+      const unconfirmed = brief.evidence.find((e) => /未确认的本人陈述/.test(e.shortText));
+      const inference = brief.evidence.find((e) => /推断陈述/.test(e.shortText));
+      assert.ok(confirmed);
+      assert.equal(confirmed.kind, "owner_assertion");
+      assert.equal(confirmed.ownerConfirmed, true);
+      assert.equal(confirmed.selectedByDefault, true);
+      assert.ok(unconfirmed);
+      assert.equal(unconfirmed.ownerConfirmed, false);
+      assert.equal(unconfirmed.selectedByDefault, false);
+      assert.ok(inference);
+      assert.equal(inference.kind, "inference");
+      assert.ok(!brief.evidence.some((e) => /未知类型/.test(e.shortText)));
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  await test("39. 超过六条事实时 evidence 仍做类别平衡", () => {
+    resetStores();
+    const dir = makeFixture("balance");
+    try {
+      const bullets = Array.from({ length: 10 }, (_, i) => `- 额外事实条目 ${i + 1}`).join("\n");
+      fs.writeFileSync(
+        path.join(dir, "identity-facts.md"),
+        `# 身份事实\n\n- 本人专注人工智能产品研究\n- 工作语言以中文为主\n${bullets}\n`,
+        "utf8"
+      );
+      const brief = buildSubjectBrief(dir);
+      assert.ok(brief.evidence.length <= MAX_EVIDENCE);
+      assert.ok(brief.evidence.length >= 3);
+      const kinds = new Set(brief.evidence.map((e) => e.kind));
+      assert.ok(kinds.has("verified_fact"));
+      assert.ok(kinds.has("owner_assertion") || kinds.has("inference") || kinds.has("direction_clue"));
+      // Not all 12 facts dumped — balance retained other kinds when present
+      const factCount = brief.evidence.filter((e) => e.kind === "verified_fact").length;
+      assert.ok(factCount <= 4);
+      assert.ok(brief.evidence.some((e) => e.kind !== "verified_fact"));
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  await test("40. Step 1 显示 sourceLabel 和确认状态", () => {
+    resetStores();
+    const dir = makeFixture("sourcelabel");
+    try {
+      const brief = buildSubjectBrief(dir);
+      assert.ok(brief.evidence.length >= 1);
+      for (const e of brief.evidence) {
+        assert.ok(e.sourceLabel);
+        assert.equal(typeof e.ownerConfirmed, "boolean");
+        assert.ok(e.kindLabel);
+      }
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  await test("41. 授权不能加入 request 范围外的有效 ID", () => {
+    resetStores();
+    const dir = makeFixture("scope-exp");
+    const ud = makeUserData("scope-exp");
+    try {
+      const api = createPanoramaExperience({
+        getRuntimeConfig: configuredRuntime,
+        appendAudit: (u, f) => decisionAudit.appendEntry(u, f),
+        packageDir: dir,
+        userData: ud,
+      });
+      const brief = buildSubjectBrief(dir);
+      const defaults = brief.evidence.filter((e) => e.selectedByDefault).map((e) => e.id);
+      const outside = brief.evidence.find((e) => !defaults.includes(e.id));
+      assert.ok(outside, "fixture should have non-default evidence");
+      const req = api.createRequest({
+        senderId: "1",
+        evidenceIds: defaults.slice(0, 1),
+        packageDir: dir,
+        userData: ud,
+      });
+      const preview = api.buildAuthPreview({
+        requestId: req.requestId,
+        senderId: "1",
+        selectedEvidenceIds: [defaults[0], outside.id],
+        packageDir: dir,
+      });
+      assert.equal(preview.ok, false);
+      assert.equal(preview.code, "scope_expansion_rejected");
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("42. previewId 绑定 request/sender/scope/task/capability", () => {
+    resetStores();
+    const dir = makeFixture("preview-bind");
+    const ud = makeUserData("preview-bind");
+    try {
+      const api = createPanoramaExperience({
+        getRuntimeConfig: configuredRuntime,
+        packageDir: dir,
+        userData: ud,
+      });
+      const brief = buildSubjectBrief(dir);
+      const ids = brief.evidence.filter((e) => e.selectedByDefault).map((e) => e.id);
+      const req = api.createRequest({
+        senderId: "sender-a",
+        evidenceIds: ids,
+        packageDir: dir,
+        userData: ud,
+      });
+      const preview = api.buildAuthPreview({
+        requestId: req.requestId,
+        senderId: "sender-a",
+        selectedEvidenceIds: ids,
+        packageDir: dir,
+      });
+      assert.equal(preview.ok, true);
+      assert.ok(preview.previewId);
+      const frozen = getPreview(preview.previewId);
+      assert.ok(frozen);
+      assert.equal(frozen.requestId, req.requestId);
+      assert.equal(frozen.senderId, "sender-a");
+      assert.deepEqual(frozen.selectedEvidenceIds.slice().sort(), ids.slice().sort());
+      assert.ok(frozen.taskDigest);
+      assert.ok(frozen.capabilityIds.includes("cap_research_judgment"));
+      assert.ok(frozen.inferenceEnvironmentDigest);
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("43. preview 过期、复用拒绝", () => {
+    resetStores();
+    const dir = makeFixture("preview-ttl");
+    const ud = makeUserData("preview-ttl");
+    try {
+      let clock = Date.now();
+      const api = createPanoramaExperience({
+        getRuntimeConfig: configuredRuntime,
+        appendAudit: (u, f) => decisionAudit.appendEntry(u, f),
+        packageDir: dir,
+        userData: ud,
+        now: () => clock,
+      });
+      const brief = buildSubjectBrief(dir);
+      const ids = brief.evidence.filter((e) => e.selectedByDefault).map((e) => e.id).slice(0, 1);
+      const req = api.createRequest({
+        senderId: "1",
+        evidenceIds: ids,
+        packageDir: dir,
+        userData: ud,
+      });
+      const preview = api.buildAuthPreview({
+        requestId: req.requestId,
+        senderId: "1",
+        selectedEvidenceIds: ids,
+        packageDir: dir,
+      });
+      clock += 6 * 60 * 1000;
+      const expired = confirmFromPreview({
+        previewId: preview.previewId,
+        senderId: "1",
+        confirmed: true,
+        packageDir: dir,
+        userData: ud,
+        getRuntimeConfig: configuredRuntime,
+        appendAudit: (u, f) => decisionAudit.appendEntry(u, f),
+        now: () => clock,
+      });
+      assert.equal(expired.ok, false);
+      assert.equal(expired.code, "preview_expired");
+
+      clock = Date.now();
+      resetStores();
+      const api2 = createPanoramaExperience({
+        getRuntimeConfig: configuredRuntime,
+        appendAudit: (u, f) => decisionAudit.appendEntry(u, f),
+        packageDir: dir,
+        userData: ud,
+        now: () => clock,
+      });
+      const req2 = api2.createRequest({
+        senderId: "1",
+        evidenceIds: ids,
+        packageDir: dir,
+        userData: ud,
+      });
+      const preview2 = api2.buildAuthPreview({
+        requestId: req2.requestId,
+        senderId: "1",
+        selectedEvidenceIds: ids,
+        packageDir: dir,
+      });
+      const first = confirmFromPreview({
+        previewId: preview2.previewId,
+        senderId: "1",
+        confirmed: true,
+        packageDir: dir,
+        userData: ud,
+        getRuntimeConfig: configuredRuntime,
+        appendAudit: (u, f) => decisionAudit.appendEntry(u, f),
+        now: () => clock,
+      });
+      assert.equal(first.ok, true);
+      const reuse = confirmFromPreview({
+        previewId: preview2.previewId,
+        senderId: "1",
+        confirmed: true,
+        packageDir: dir,
+        userData: ud,
+        getRuntimeConfig: configuredRuntime,
+        appendAudit: (u, f) => decisionAudit.appendEntry(u, f),
+        now: () => clock,
+      });
+      assert.equal(reuse.ok, false);
+      assert.equal(reuse.code, "preview_consumed");
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("44. 推理环境变化后拒绝执行", () => {
+    resetStores();
+    const dir = makeFixture("inf-env-change");
+    const ud = makeUserData("inf-env-change");
+    try {
+      let cfg = configuredRuntime();
+      const api = createPanoramaExperience({
+        getRuntimeConfig: () => cfg,
+        appendAudit: (u, f) => decisionAudit.appendEntry(u, f),
+        packageDir: dir,
+        userData: ud,
+      });
+      const brief = buildSubjectBrief(dir);
+      const ids = brief.evidence.filter((e) => e.selectedByDefault).map((e) => e.id).slice(0, 1);
+      const req = api.createRequest({
+        senderId: "1",
+        evidenceIds: ids,
+        packageDir: dir,
+        userData: ud,
+      });
+      const preview = api.buildAuthPreview({
+        requestId: req.requestId,
+        senderId: "1",
+        selectedEvidenceIds: ids,
+        packageDir: dir,
+      });
+      cfg = {
+        ...configuredRuntime(),
+        baseURL: "http://127.0.0.1:11434/v1",
+        model: "local-changed-model",
+      };
+      const denied = confirmFromPreview({
+        previewId: preview.previewId,
+        senderId: "1",
+        confirmed: true,
+        packageDir: dir,
+        userData: ud,
+        getRuntimeConfig: () => cfg,
+        appendAudit: (u, f) => decisionAudit.appendEntry(u, f),
+      });
+      assert.equal(denied.ok, false);
+      assert.equal(denied.code, "inference_environment_changed");
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("45. confirm 未 confirmed=true 不执行", async () => {
+    resetStores();
+    const dir = makeFixture("not-confirmed");
+    const ud = makeUserData("not-confirmed");
+    try {
+      const calls = [];
+      const api = createPanoramaExperience({
+        callModelStream: stubModel(calls),
+        getRuntimeConfig: configuredRuntime,
+        appendAudit: (u, f) => decisionAudit.appendEntry(u, f),
+        packageDir: dir,
+        userData: ud,
+      });
+      const brief = buildSubjectBrief(dir);
+      const ids = brief.evidence.filter((e) => e.selectedByDefault).map((e) => e.id).slice(0, 1);
+      const req = api.createRequest({
+        senderId: "1",
+        evidenceIds: ids,
+        packageDir: dir,
+        userData: ud,
+      });
+      const preview = api.buildAuthPreview({
+        requestId: req.requestId,
+        senderId: "1",
+        selectedEvidenceIds: ids,
+        packageDir: dir,
+      });
+      const denied = await api.confirmFromPreviewThenExecute({
+        previewId: preview.previewId,
+        confirmed: false,
+        senderId: "1",
+        packageDir: dir,
+        userData: ud,
+      });
+      assert.equal(denied.ok, false);
+      assert.equal(denied.code, "not_confirmed");
+      assert.equal(calls.length, 0);
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("46. inference-only 不得显示个性化成功或可采纳", async () => {
+    resetStores();
+    const dir = tempDir("inf-only");
+    createMinimalFixture(dir);
+    new PackageStore({ packageDir: dir, ownerId: "t" }).migrateToV02({
+      actor: "t",
+      toolVersion: "t",
+    });
+    const ud = makeUserData("inf-only");
+    try {
+      const factsMd = path.join(dir, "identity-facts.md");
+      if (fs.existsSync(factsMd)) fs.unlinkSync(factsMd);
+      fs.mkdirSync(path.join(dir, "life"), { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, "life", "inferences.jsonl"),
+        JSON.stringify({ id: "inf_1", statement: "仅有系统推断", status: "open" }) + "\n",
+        "utf8"
+      );
+      const brief = buildSubjectBrief(dir);
+      assert.equal(brief.personalizedAvailable, false);
+      assert.equal(computePersonalized(brief.evidence), false);
+      assert.equal(brief.previewMode, true);
+      const api = createPanoramaExperience({
+        callModelStream: stubModel([]),
+        getRuntimeConfig: configuredRuntime,
+        appendAudit: (u, f) => decisionAudit.appendEntry(u, f),
+        packageDir: dir,
+        userData: ud,
+      });
+      const ids = brief.evidence.map((e) => e.id);
+      const req = api.createRequest({
+        senderId: "1",
+        evidenceIds: ids,
+        packageDir: dir,
+        userData: ud,
+      });
+      const preview = api.buildAuthPreview({
+        requestId: req.requestId,
+        senderId: "1",
+        selectedEvidenceIds: ids,
+        packageDir: dir,
+      });
+      const run = await api.confirmFromPreviewThenExecute({
+        previewId: preview.previewId,
+        confirmed: true,
+        senderId: "1",
+        packageDir: dir,
+        userData: ud,
+      });
+      assert.equal(run.personalizedAvailable, false);
+      assert.equal(run.previewMode, true);
+      assert.equal(run.adoptable, false);
+      assert.notEqual(run.digitalMeResultTitle, "我的 Digital Me 结果");
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("47. zero-evidence 不得显示“我的 Digital Me 结果”", async () => {
+    resetStores();
+    const dir = tempDir("zero-ev");
+    createMinimalFixture(dir);
+    new PackageStore({ packageDir: dir, ownerId: "t" }).migrateToV02({
+      actor: "t",
+      toolVersion: "t",
+    });
+    const ud = makeUserData("zero-ev");
+    try {
+      const factsMd = path.join(dir, "identity-facts.md");
+      if (fs.existsSync(factsMd)) fs.unlinkSync(factsMd);
+      const brief = buildSubjectBrief(dir);
+      assert.equal(brief.personalizedAvailable, false);
+      const api = createPanoramaExperience({
+        callModelStream: stubModel([]),
+        getRuntimeConfig: configuredRuntime,
+        appendAudit: (u, f) => decisionAudit.appendEntry(u, f),
+        packageDir: dir,
+        userData: ud,
+      });
+      const req = api.createRequest({
+        senderId: "1",
+        evidenceIds: [],
+        packageDir: dir,
+        userData: ud,
+      });
+      const preview = api.buildAuthPreview({
+        requestId: req.requestId,
+        senderId: "1",
+        selectedEvidenceIds: [],
+        packageDir: dir,
+      });
+      const run = await api.confirmFromPreviewThenExecute({
+        previewId: preview.previewId,
+        confirmed: true,
+        senderId: "1",
+        packageDir: dir,
+        userData: ud,
+      });
+      assert.equal(run.personalizedAvailable, false);
+      assert.match(run.digitalMeResultTitle || "", /通用预览|依据不足/);
+      assert.ok(!/我的 Digital Me 结果/.test(run.digitalMeResultTitle || ""));
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("48. 未知引用正文不会被当成有效结果展示", async () => {
+    resetStores();
+    const dir = makeFixture("cite-invalid");
+    const ud = makeUserData("cite-invalid");
+    try {
+      const api = createPanoramaExperience({
+        callModelStream: async (cfg, messages) => {
+          const joined = messages.map((m) => m.content).join("\n");
+          if (/已授权主体依据/.test(joined)) return "正文引用了 E99 非法编号";
+          return "generic";
+        },
+        getRuntimeConfig: configuredRuntime,
+        appendAudit: (u, f) => decisionAudit.appendEntry(u, f),
+        packageDir: dir,
+        userData: ud,
+      });
+      const brief = buildSubjectBrief(dir);
+      const ids = brief.evidence.filter((e) => e.selectedByDefault).map((e) => e.id).slice(0, 1);
+      const req = api.createRequest({ senderId: "1", evidenceIds: ids, packageDir: dir, userData: ud });
+      const preview = api.buildAuthPreview({
+        requestId: req.requestId,
+        senderId: "1",
+        selectedEvidenceIds: ids,
+        packageDir: dir,
+      });
+      const run = await api.confirmFromPreviewThenExecute({
+        previewId: preview.previewId,
+        confirmed: true,
+        senderId: "1",
+        packageDir: dir,
+        userData: ud,
+      });
+      assert.equal(run.adoptable, false);
+      assert.equal(run.groundingCode, "grounding_invalid");
+      assert.match(String(run.message || ""), /未授权|不存在/);
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("49. 有主体依据但无有效引用时 grounding_missing", async () => {
+    resetStores();
+    const dir = makeFixture("cite-missing");
+    const ud = makeUserData("cite-missing");
+    try {
+      const api = createPanoramaExperience({
+        callModelStream: async (cfg, messages) => {
+          const joined = messages.map((m) => m.content).join("\n");
+          if (/已授权主体依据/.test(joined)) return "核心判断：未引用任何编号。";
+          return "generic";
+        },
+        getRuntimeConfig: configuredRuntime,
+        appendAudit: (u, f) => decisionAudit.appendEntry(u, f),
+        packageDir: dir,
+        userData: ud,
+      });
+      const brief = buildSubjectBrief(dir);
+      const ids = brief.evidence.filter((e) => e.selectedByDefault).map((e) => e.id).slice(0, 1);
+      assert.equal(computePersonalized(brief.evidence.filter((e) => ids.includes(e.id))), true);
+      const req = api.createRequest({ senderId: "1", evidenceIds: ids, packageDir: dir, userData: ud });
+      const preview = api.buildAuthPreview({
+        requestId: req.requestId,
+        senderId: "1",
+        selectedEvidenceIds: ids,
+        packageDir: dir,
+      });
+      const run = await api.confirmFromPreviewThenExecute({
+        previewId: preview.previewId,
+        confirmed: true,
+        senderId: "1",
+        packageDir: dir,
+        userData: ud,
+      });
+      assert.equal(run.personalizedAvailable, true);
+      assert.equal(run.adoptable, false);
+      assert.equal(run.groundingCode, "grounding_missing");
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("50. receipt sender mismatch", async () => {
+    resetStores();
+    const dir = makeFixture("receipt-sender");
+    const ud = makeUserData("receipt-sender");
+    try {
+      const { api, run } = await runHappyPath(dir, ud);
+      const bad = api.getReceiptSummary({
+        runId: run.runId,
+        senderId: "other-sender",
+        userData: ud,
+      });
+      assert.equal(bad.ok, false);
+      assert.equal(bad.code, "sender_mismatch");
+      assert.equal(bad.topic, undefined);
+      assert.equal(bad.evidenceCount, undefined);
+      const good = api.getReceiptSummary({
+        runId: run.runId,
+        senderId: "1",
+        userData: ud,
+      });
+      assert.equal(good.ok, true);
+      assert.ok(good.topic);
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("51. adopt 后审计失败返回 committed + warning，不重复写", async () => {
+    resetStores();
+    const dir = makeFixture("adopt-warn");
+    const ud = makeUserData("adopt-warn");
+    try {
+      const { api, run } = await runHappyPath(dir, ud, {
+        auditFailOn: "result_adopted",
+        skipRealAudit: true,
+      });
+      // Re-wire adopt with failing result_adopted after real completion audits
+      let adoptCalls = 0;
+      const api2 = createPanoramaExperience({
+        callModelStream: stubModel([]),
+        getRuntimeConfig: configuredRuntime,
+        appendAudit: (u, f) => {
+          if (f.event === "result_adopted") {
+            adoptCalls += 1;
+            throw Object.assign(new Error("audit boom"), { code: "audit_unhealthy" });
+          }
+          return decisionAudit.appendEntry(u, f);
+        },
+        packageDir: dir,
+        userData: ud,
+      });
+      // Use same run via receipt module through fresh facade — run store is shared
+      const first = api2.adoptResult({ runId: run.runId, senderId: "1", userData: ud });
+      assert.equal(first.ok, true);
+      assert.equal(first.committed, true);
+      assert.equal(first.auditWarning, "audit_failed");
+      assert.match(first.message, /已保存.*过程记录失败|成果已保存，但过程记录失败/);
+      const beforeCount = library.listDeliverables(ud).length;
+      const second = api2.adoptResult({ runId: run.runId, senderId: "1", userData: ud });
+      assert.equal(second.ok, true);
+      assert.equal(second.deliverableId, first.deliverableId);
+      assert.equal(library.listDeliverables(ud).length, beforeCount);
+      assert.ok(adoptCalls >= 1);
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("52. reject 审计失败不改变 run 状态", async () => {
+    resetStores();
+    const dir = makeFixture("reject-audit-fail");
+    const ud = makeUserData("reject-audit-fail");
+    try {
+      const { run } = await runHappyPath(dir, ud);
+      const api = createPanoramaExperience({
+        getRuntimeConfig: configuredRuntime,
+        appendAudit: () => {
+          throw Object.assign(new Error("audit boom"), { code: "audit_unhealthy" });
+        },
+        packageDir: dir,
+        userData: ud,
+      });
+      const before = getRunRecord(run.runId);
+      assert.ok(!before.rejectedAt);
+      const rej = api.rejectResult({
+        runId: run.runId,
+        senderId: "1",
+        userData: ud,
+        reasonCategory: "not_useful",
+      });
+      assert.equal(rej.ok, false);
+      assert.equal(rej.code, "audit_failed");
+      const after = getRunRecord(run.runId);
+      assert.ok(!after.rejectedAt);
+      assert.equal(after.adoptable, before.adoptable);
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("53. 已拒绝结果不可采纳", async () => {
+    resetStores();
+    const dir = makeFixture("reject-then-adopt");
+    const ud = makeUserData("reject-then-adopt");
+    try {
+      const { api, run } = await runHappyPath(dir, ud);
+      const rej = api.rejectResult({
+        runId: run.runId,
+        senderId: "1",
+        userData: ud,
+        reasonCategory: "not_useful",
+      });
+      assert.equal(rej.ok, true);
+      const adopt = api.adoptResult({ runId: run.runId, senderId: "1", userData: ud });
+      assert.equal(adopt.ok, false);
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("54. 已采纳结果不能再伪装为未保存的拒绝", async () => {
+    resetStores();
+    const dir = makeFixture("adopt-then-reject");
+    const ud = makeUserData("adopt-then-reject");
+    try {
+      const { api, run } = await runHappyPath(dir, ud);
+      const adopt = api.adoptResult({ runId: run.runId, senderId: "1", userData: ud });
+      assert.equal(adopt.ok, true);
+      const rej = api.rejectResult({
+        runId: run.runId,
+        senderId: "1",
+        userData: ud,
+        reasonCategory: "not_useful",
+      });
+      assert.equal(rej.ok, false);
+      assert.equal(rej.code, "already_adopted");
+    } finally {
+      cleanup(dir);
+      cleanup(ud);
+    }
+  });
+
+  await test("55. local loopback 与 remote endpoint 披露不同", () => {
+    const local = buildInferenceEnvironment(() => ({
+      apiKey: "sk-local",
+      model: "llama",
+      baseURL: "http://127.0.0.1:11434/v1",
+    }));
+    const remote = buildInferenceEnvironment(() => ({
+      apiKey: "sk-remote",
+      model: "gpt",
+      baseURL: "https://api.example.com/v1",
+    }));
+    assert.equal(local.category, "local_loopback");
+    assert.equal(remote.category, "remote_endpoint");
+    assert.match(local.providerLabel, /本机/);
+    assert.match(remote.providerLabel, /远程/);
+    assert.notEqual(local.dataDestinationDisclosure, remote.dataDestinationDisclosure);
+    assert.match(local.dataDestinationDisclosure, /本机推理服务/);
+    assert.match(remote.dataDestinationDisclosure, /远程推理服务/);
+    assert.notEqual(local.inferenceEnvironmentDigest, remote.inferenceEnvironmentDigest);
+  });
+
+  await test("56. before/after Package 字节仍一致", async () => {
+    resetStores();
+    const dir = makeFixture("fp2");
+    const ud = makeUserData("fp2");
+    const before = dirFingerprint(dir);
+    try {
+      const { api, run } = await runHappyPath(dir, ud);
+      api.adoptResult({ runId: run.runId, senderId: "1", userData: ud });
+      api.rejectResult({
+        runId: run.runId,
+        senderId: "1",
+        userData: ud,
+        reasonCategory: "not_useful",
+      });
       const after = dirFingerprint(dir);
       assert.equal(after, before);
     } finally {

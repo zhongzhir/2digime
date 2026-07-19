@@ -18,7 +18,7 @@
 P1-PANORAMA
 → PAN-00 accepted
 → PAN-01 statically_verified / owner_product_perception_failed / retained_as_scaffold
-→ PAN-01R statically_verified（不标 accepted；待 Codex/Owner 验收）
+→ PAN-01R statically_verified / codex_review_changes_requested（不标 accepted；待 Codex 再复核与 Owner 验收）
 → PAN-02 paused_until_PAN-01R_acceptance
 → PAN-03 paused_until_PAN-01R_acceptance
 → PAN-04 paused_until_PAN-01R_acceptance
@@ -43,7 +43,7 @@ P1-PANORAMA
 |---|---|---|---|---|---|
 | PAN-00 | 战略与规格冻结；建立索引与 backlog | `accepted`（`bc85a14`） | Owner 已批准总任务 | 文档一致；Codex 最终复核 | PAN-01 |
 | PAN-01 | 产品全貌首页：主体卡、四承诺、成长路线 | `statically_verified` / `owner_product_perception_failed` / `retained_as_scaffold`（不标 accepted；不回滚） | PAN-00 accepted；独立任务包已批准 | 已工程验证；Owner 产品感知未通过 | PAN-01R |
-| PAN-01R | 主权协作闭环：依据×能力×授权×代表协作×结果处置 | `statically_verified`（不标 accepted） | 规格已冻结并实现 | Codex 复核 + Owner 主路径验收 | PAN-02（验收后） |
+| PAN-01R | 主权协作闭环：依据×能力×授权×代表协作×结果处置 | `statically_verified` / `codex_review_changes_requested`（不标 accepted） | 规格已冻结并实现；Codex 第一轮修复已合入 | Codex 再复核 + Owner 主路径验收 | PAN-02（验收后） |
 | PAN-02 | 薄版控制权面板 | `paused_until_PAN-01R_acceptance` | PAN-01R Owner 主路径通过 | 用户能看见、关闭、撤销、恢复、找记录 | PAN-03 |
 | PAN-03 | 能力获得感：三层 + 三卡 + 立即体验 | `paused_until_PAN-01R_acceptance` | PAN-02 主路径通过 | 至少一项真实小任务完成 | PAN-04 |
 | PAN-04 | 本地协作沙盘与六要素授权 | `paused_until_PAN-01R_acceptance` | PAN-03 主路径通过 | 授权→模拟→采用/拒绝→记录可走通 | PAN-06（主线） |

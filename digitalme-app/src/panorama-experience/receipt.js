@@ -26,6 +26,23 @@ const REJECT_REASON_LABELS = Object.freeze({
   other: "其他",
 });
 
+function auditPreflight(deps, userData) {
+  if (typeof deps.auditPreflight === "function") {
+    deps.auditPreflight(userData);
+    return;
+  }
+  if (typeof deps.appendAudit !== "function" || !userData) return;
+  // Lightweight writable probe — uses a no-op-safe check via resolveState if available
+  if (typeof deps.auditResolveState === "function") {
+    const st = deps.auditResolveState(userData);
+    if (st && st.healthy === false) {
+      const err = new Error("audit unhealthy");
+      err.code = "audit_unhealthy";
+      throw err;
+    }
+  }
+}
+
 function adoptResult({ runId, senderId, userData, deps = {} }) {
   const run = getRunRecord(runId);
   if (!run) return { ok: false, code: "run_not_found", message: "运行不存在" };
@@ -35,22 +52,34 @@ function adoptResult({ runId, senderId, userData, deps = {} }) {
   if (run.status === "cancelled" || run.status === "abandoned") {
     return { ok: false, code: "run_cancelled", message: "已取消的结果不可采纳" };
   }
+  if (run.rejectedAt) {
+    return { ok: false, code: "already_rejected", message: "已拒绝的结果不可采纳" };
+  }
   if (run.status !== "completed" || !run.adoptable || !run.completionAuditOk) {
     return { ok: false, code: "not_adoptable", message: "当前结果不可采纳" };
   }
   if (!run.result || !run.result.digitalMeText) {
     return { ok: false, code: "no_result", message: "没有可保存的结果" };
   }
+
+  // Idempotent: return existing deliverable without rewriting library content
   if (run.adoptedDeliverableId) {
     return {
       ok: true,
+      committed: true,
       deliverableId: run.adoptedDeliverableId,
       message: "已保存为你的本地成果",
       alreadyAdopted: true,
+      auditWarning: run.adoptAuditWarning || undefined,
     };
   }
 
-  // Ignore any renderer-injected body — only use main-process stored Digital Me text.
+  try {
+    auditPreflight(deps, userData);
+  } catch {
+    return { ok: false, code: "audit_failed", message: "决策记录不可用，已阻止采纳" };
+  }
+
   const content = String(run.result.digitalMeText);
   const title = sanitizeShortText(`研究判断：${run.topic || "未命名主题"}`, 80);
 
@@ -64,7 +93,6 @@ function adoptResult({ runId, senderId, userData, deps = {} }) {
       sourceSessionId: run.runId,
       packageRef: null,
     });
-    // Enrich with evidence / capability refs without package paths
     item = library.upsertDeliverable(userData, {
       ...item,
       evidenceRefs: (run.evidenceIds || []).slice(),
@@ -80,9 +108,12 @@ function adoptResult({ runId, senderId, userData, deps = {} }) {
     return { ok: false, code: "library_write_failed", message: "保存本地成果失败" };
   }
 
+  // Commit succeeded — never return ordinary failure after this point
   run.adoptedDeliverableId = item.id;
   run.adoptedAt = new Date().toISOString();
+  run.adoptCommitted = true;
 
+  let auditWarning;
   if (typeof deps.appendAudit === "function") {
     try {
       deps.appendAudit(userData, {
@@ -102,17 +133,21 @@ function adoptResult({ runId, senderId, userData, deps = {} }) {
         },
       });
     } catch {
+      auditWarning = "audit_failed";
+      run.adoptAuditWarning = auditWarning;
       return {
-        ok: false,
-        code: "audit_failed",
-        message: "成果已写入，但决策记录失败",
+        ok: true,
+        committed: true,
         deliverableId: item.id,
+        auditWarning,
+        message: "成果已保存，但过程记录失败",
       };
     }
   }
 
   return {
     ok: true,
+    committed: true,
     deliverableId: item.id,
     message: "已保存为你的本地成果",
   };
@@ -124,6 +159,23 @@ function rejectResult({ runId, senderId, userData, reasonCategory, deps = {} }) 
   if (String(run.senderId) !== String(senderId)) {
     return { ok: false, code: "sender_mismatch", message: "发送方不匹配" };
   }
+  if (run.adoptedDeliverableId) {
+    return {
+      ok: false,
+      code: "already_adopted",
+      message: "结果已写入成果库，不能再拒绝为未保存",
+    };
+  }
+  if (run.rejectedAt) {
+    return {
+      ok: true,
+      alreadyRejected: true,
+      runId: run.runId,
+      reasonCategory: run.rejectReason || "other",
+      reasonLabel: REJECT_REASON_LABELS[run.rejectReason] || REJECT_REASON_LABELS.other,
+      message: "已拒绝本次结果，未写入成果库",
+    };
+  }
   if (run.status !== "completed" && run.status !== "failed") {
     return { ok: false, code: "invalid_state", message: "当前状态不可拒绝结果" };
   }
@@ -131,10 +183,7 @@ function rejectResult({ runId, senderId, userData, reasonCategory, deps = {} }) 
   let reason = String(reasonCategory || "other");
   if (!REJECT_REASON_ALLOWLIST.includes(reason)) reason = "other";
 
-  run.rejectedAt = new Date().toISOString();
-  run.rejectReason = reason;
-  run.adoptable = false;
-
+  // Write audit FIRST; only mutate run on success
   if (typeof deps.appendAudit === "function" && userData) {
     try {
       deps.appendAudit(userData, {
@@ -158,6 +207,10 @@ function rejectResult({ runId, senderId, userData, reasonCategory, deps = {} }) 
     }
   }
 
+  run.rejectedAt = new Date().toISOString();
+  run.rejectReason = reason;
+  run.adoptable = false;
+
   return {
     ok: true,
     runId: run.runId,
@@ -167,10 +220,30 @@ function rejectResult({ runId, senderId, userData, reasonCategory, deps = {} }) 
   };
 }
 
-function getReceiptSummary({ requestId, runId, userData, deps = {} }) {
+function getReceiptSummary({ requestId, runId, senderId, userData, deps = {} }) {
   const run = runId ? getRunRecord(runId) : null;
   const reqId = requestId || (run && run.requestId);
   const req = reqId ? getRequest(reqId) : null;
+
+  if (run) {
+    if (senderId == null || String(run.senderId) !== String(senderId)) {
+      return {
+        ok: false,
+        code: "sender_mismatch",
+        message: "发送方不匹配",
+      };
+    }
+  } else if (req) {
+    if (senderId == null || String(req.senderId) !== String(senderId)) {
+      return {
+        ok: false,
+        code: "sender_mismatch",
+        message: "发送方不匹配",
+      };
+    }
+  } else {
+    return { ok: false, code: "not_found", message: "找不到对应记录" };
+  }
 
   const summary = {
     ok: true,

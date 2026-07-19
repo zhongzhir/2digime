@@ -8,7 +8,7 @@
 >
 > **PAN-01** 为 `statically_verified` / `owner_product_perception_failed` / `retained_as_scaffold`（基线 `a40c5f8`；**不标 accepted**；**不回滚**）。
 >
-> **PAN-01R** 已 `statically_verified`（规格 `PAN01R_SPEC_BASE`=`35c5aea`；分支 `codex/pan-01r-sovereign-collaboration-loop`；**不标 accepted**）。等待 Codex 复核与 Owner 主路径验收；验收前不得启动 PAN-02/03/04。不得自行回到 P1-07 修复或原 P1-08 队列。
+> **PAN-01R** 为 `statically_verified` / `codex_review_changes_requested`（规格 `PAN01R_SPEC_BASE`=`35c5aea`；分支 `codex/pan-01r-sovereign-collaboration-loop`；Codex 第一轮复核修复已合入；**不标 accepted**）。等待 Codex 再复核与 Owner 主路径验收；验收前不得启动 PAN-02/03/04。不得自行回到 P1-07 修复或原 P1-08 队列。
 >
 > **界面与功能需求源**：桌面应用「用户看见什么、能做什么、何为做完」以 [`digitalme_product_spec_v0.2.md`](digitalme_product_spec_v0.2.md)（文内 **v0.5**，含 **v0.5.2**）为唯一规格；战略与逻辑架构仍以本文为准；**部署与系统拓扑**以 [`digitalme_architecture_edge_sovereign_v0.1.md`](digitalme_architecture_edge_sovereign_v0.1.md) 为准。开发实行**规格驱动**（无规格不排期）。
 >
@@ -853,3 +853,4 @@ flowchart TB
 62. **PAN-01 Codex 第二轮最小复核修复（2026-07-18）**：身份读取失败时区分隐私配置与访问结论；分层/JSONL 损坏时「这是我」「看见我」降为预览。状态仍为 `statically_verified`；PAN-02 未开始。
 63. **PAN-01 Owner 产品感知未通过与 PAN-01R 批准（2026-07-19）**：PAN-01 保留为 `statically_verified` / `owner_product_perception_failed` / `retained_as_scaffold`（不 accepted、不回滚）。根因：承诺被展示但未被真实体验证明。批准独立任务包 PAN-01R（主权协作闭环）：规格冻结后直接实现；工程完成后最多 `statically_verified`。PAN-02/03/04 暂停至 PAN-01R 验收。规格补丁 v0.5.2：产品全貌不能只靠静态说明，必须由纵向主权闭环提供产品证据。
 64. **PAN-01R statically_verified（2026-07-19）**：规格 `PAN01R_SPEC_BASE`=`35c5aea`；实现分支 `codex/pan-01r-sovereign-collaboration-loop`；五步本地模拟主权协作体验 + 双隔离生成 + 单次授权 + adopt/reject；`test:pan-01r` 36/36；`test:pan-01r-owner-runtime` 通过。**不标 accepted**；PAN-02 未开始。
+65. **PAN-01R Codex 第一轮复核修复（2026-07-19）**：identityClaims 永不升格 verified_fact；依据类别平衡；previewId 冻结授权；严格 personalized；停止竞态；grounding_invalid/missing；推理环境本机/远程区分与 digest 绑定；adopt/reject 审计契约；receipt sender 绑定。`test:pan-01r` 56/56；owner-runtime 19/19。状态：`statically_verified` / `codex_review_changes_requested`（不标 accepted）。

@@ -6,12 +6,13 @@
  */
 
 const crypto = require("node:crypto");
-const { buildSubjectBrief } = require("./subject-brief");
+const { buildSubjectBrief, listUsableEvidenceIds } = require("./subject-brief");
 
 const REQUEST_TTL_MS = 15 * 60 * 1000;
 const TOPIC_MAX = 200;
 const DEFAULT_TOPIC = "个人研究方向判断";
 const DEFAULT_TEMPLATE_ID = "research_judgment_v1";
+const TEMPLATE_ALLOWLIST = new Set(["research_judgment_v1"]);
 
 const TASK_TEMPLATE =
   "围绕选定主题，形成一份简短的研究判断框架，说明核心判断、依据、不确定性和下一步研究问题。";
@@ -93,24 +94,46 @@ function createResearchRequest(input) {
     return { ok: false, code: "package_required", message: "缺少资料目录" };
   }
 
-  const brief = buildSubjectBrief(packageDir);
-  const usableIds = new Set(
-    (brief.evidence || []).filter((e) => e.usableInExperience).map((e) => e.id)
-  );
-  const requestedIds = Array.isArray(input.evidenceIds) ? input.evidenceIds.map(String) : [];
-  const optionalEvidenceIds =
-    requestedIds.length > 0
-      ? requestedIds.filter((id) => usableIds.has(id))
-      : (brief.evidence || [])
-          .filter((e) => e.usableInExperience && e.selectedByDefault)
-          .map((e) => e.id);
-
-  const t = nowMs(input.now);
-  const requestId = "req_" + crypto.randomBytes(12).toString("hex");
-  const templateId =
+  const rawTemplate =
     typeof input.templateId === "string" && input.templateId.trim()
       ? String(input.templateId).trim().slice(0, 64)
       : DEFAULT_TEMPLATE_ID;
+  if (!TEMPLATE_ALLOWLIST.has(rawTemplate)) {
+    return { ok: false, code: "unknown_template_id", message: "未知的任务模板" };
+  }
+  const templateId = rawTemplate;
+
+  const brief = buildSubjectBrief(packageDir);
+  const usableIds = new Set(listUsableEvidenceIds(brief));
+  const requestedIds = Array.isArray(input.evidenceIds) ? input.evidenceIds.map(String) : [];
+
+  let optionalEvidenceIds;
+  if (requestedIds.length > 0) {
+    const unknown = requestedIds.filter((id) => !usableIds.has(id));
+    if (unknown.length > 0) {
+      return {
+        ok: false,
+        code: "unknown_evidence_id",
+        message: "存在无法识别或不可用的主体依据",
+        unknownIds: unknown,
+      };
+    }
+    // Intersection (all requested are known); preserve order, unique
+    const seen = new Set();
+    optionalEvidenceIds = [];
+    for (const id of requestedIds) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      optionalEvidenceIds.push(id);
+    }
+  } else {
+    optionalEvidenceIds = (brief.evidence || [])
+      .filter((e) => e.usableInExperience && e.selectedByDefault)
+      .map((e) => e.id);
+  }
+
+  const t = nowMs(input.now);
+  const requestId = "req_" + crypto.randomBytes(12).toString("hex");
 
   const rec = {
     requestId,
@@ -230,6 +253,8 @@ module.exports = {
   clearRequestStoreForTests,
   TASK_TEMPLATE,
   DEFAULT_TOPIC,
+  DEFAULT_TEMPLATE_ID,
+  TEMPLATE_ALLOWLIST,
   SIM_REQUESTER,
   ALLOWED_CAPABILITY,
   RESULT_DESTINATION,

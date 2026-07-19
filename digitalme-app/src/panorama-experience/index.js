@@ -88,15 +88,58 @@ function createPanoramaExperience(deps = {}) {
       });
     },
 
-    async confirmAndExecute({ tokenId, senderId, packageDir, userData }) {
-      // grant path is separate — confirmAndExecute expects an already-granted tokenId.
-      // Facade also exposes grantAuthorization for IPC confirm flow.
+    async confirmAndExecute({ tokenId, senderId, packageDir, userData, onRunCreated }) {
       return execute.confirmAndExecute({
         tokenId,
         senderId,
         packageDir: resolvePackageDir(packageDir),
         userData: resolveUserData(userData),
-        deps: { callModelStream, getRuntimeConfig, appendAudit, now },
+        deps: { callModelStream, getRuntimeConfig, appendAudit, now, onRunCreated },
+      });
+    },
+
+    confirmFromPreview({ previewId, senderId, confirmed, packageDir, userData }) {
+      return authorization.confirmFromPreview({
+        previewId,
+        senderId,
+        confirmed,
+        packageDir: resolvePackageDir(packageDir),
+        userData: resolveUserData(userData),
+        getRuntimeConfig,
+        appendAudit,
+        now,
+      });
+    },
+
+    /**
+     * Production confirm path: freeze preview → token → execute.
+     * IPC allowlist is previewId + confirmed only.
+     */
+    async confirmFromPreviewThenExecute({
+      previewId,
+      confirmed,
+      senderId,
+      packageDir,
+      userData,
+      onRunCreated,
+    }) {
+      const granted = authorization.confirmFromPreview({
+        previewId,
+        senderId,
+        confirmed,
+        packageDir: resolvePackageDir(packageDir),
+        userData: resolveUserData(userData),
+        getRuntimeConfig,
+        appendAudit,
+        now,
+      });
+      if (!granted.ok) return granted;
+      return execute.confirmAndExecute({
+        tokenId: granted.tokenId,
+        senderId,
+        packageDir: resolvePackageDir(packageDir),
+        userData: resolveUserData(userData),
+        deps: { callModelStream, getRuntimeConfig, appendAudit, now, onRunCreated },
       });
     },
 
@@ -114,18 +157,30 @@ function createPanoramaExperience(deps = {}) {
     },
 
     /**
-     * Confirm = grant token (if needed) then execute.
-     * IPC confirmAndExecute may pass selectedEvidenceIds + requestId instead of tokenId.
+     * Hermetic / internal helper: grant via preview freeze then execute.
+     * Prefer confirmFromPreviewThenExecute for production IPC.
      */
     async confirmGrantAndExecute({
       requestId,
       tokenId,
+      previewId,
+      confirmed,
       senderId,
       selectedEvidenceIds,
       packageDir,
       userData,
       onRunCreated,
     }) {
+      if (previewId) {
+        return this.confirmFromPreviewThenExecute({
+          previewId,
+          confirmed: confirmed !== false,
+          senderId,
+          packageDir,
+          userData,
+          onRunCreated,
+        });
+      }
       let tid = tokenId;
       if (!tid) {
         const granted = authorization.grantAuthorization({
@@ -168,7 +223,10 @@ function createPanoramaExperience(deps = {}) {
         runId,
         senderId,
         userData: resolveUserData(userData),
-        deps: { appendAudit },
+        deps: {
+          appendAudit,
+          auditResolveState: (ud) => decisionAudit.resolveState(ud),
+        },
       });
     },
 
@@ -182,10 +240,11 @@ function createPanoramaExperience(deps = {}) {
       });
     },
 
-    getReceiptSummary({ requestId, runId, userData }) {
+    getReceiptSummary({ requestId, runId, senderId, userData }) {
       return receipt.getReceiptSummary({
         requestId,
         runId,
+        senderId,
         userData: resolveUserData(userData),
         deps: {
           listAudit: (ud, opts) => {
@@ -201,6 +260,7 @@ function createPanoramaExperience(deps = {}) {
 module.exports = {
   createPanoramaExperience,
   buildSubjectBrief: subjectBrief.buildSubjectBrief,
+  computePersonalized: subjectBrief.computePersonalized,
   KIND_LABELS: subjectBrief.KIND_LABELS,
   selectDefaultsForKind: subjectBrief.selectDefaultsForKind,
   MAX_EVIDENCE: subjectBrief.MAX_EVIDENCE,
@@ -208,6 +268,7 @@ module.exports = {
   getRequest: requestMod.getRequest,
   rejectRequest: requestMod.rejectRequest,
   buildAuthorizationPreview: authorization.buildAuthorizationPreview,
+  confirmFromPreview: authorization.confirmFromPreview,
   grantAuthorization: authorization.grantAuthorization,
   consumeToken: authorization.consumeToken,
   confirmAndExecute: execute.confirmAndExecute,
@@ -217,15 +278,16 @@ module.exports = {
   rejectResult: receipt.rejectResult,
   getReceiptSummary: receipt.getReceiptSummary,
   createExecutor: execute.createExecutor,
-  // test helpers
   __test: {
     clearAll() {
       requestMod.clearRequestStoreForTests();
       authorization.clearTokenStoreForTests();
+      authorization.clearPreviewStoreForTests();
       execute.clearRunStoreForTests();
     },
     clearRequestStore: requestMod.clearRequestStoreForTests,
     clearTokenStore: authorization.clearTokenStoreForTests,
+    clearPreviewStore: authorization.clearPreviewStoreForTests,
     clearRunStore: execute.clearRunStoreForTests,
   },
 };

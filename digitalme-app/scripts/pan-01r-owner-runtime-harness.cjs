@@ -67,6 +67,16 @@ function seedPackage(dir) {
       "\n",
     "utf8"
   );
+  fs.writeFileSync(
+    path.join(dir, "life", "mind_hooks.json"),
+    JSON.stringify({ items: [{ text: "发展线索：加强判断力训练" }] }),
+    "utf8"
+  );
+  fs.writeFileSync(
+    path.join(dir, "life", "events.jsonl"),
+    JSON.stringify({ title: "当前状态：推进产品全貌验收" }) + "\n",
+    "utf8"
+  );
   fs.mkdirSync(path.join(dir, "policies"), { recursive: true });
   fs.writeFileSync(
     path.join(dir, "policies", "boundaries.json"),
@@ -77,24 +87,59 @@ function seedPackage(dir) {
   );
 }
 
-function installModelStub() {
+function installModelStub(overrides = {}) {
+  const prev = global.__PAN01R_TEST_HOOKS__ || {};
   global.__PAN01R_TEST_HOOKS__ = {
-    ...(global.__PAN01R_TEST_HOOKS__ || {}),
-    callModelStream: async (cfg, messages) => {
-      const joined = messages.map((m) => m.content).join("\n");
-      if (/已授权主体依据/.test(joined)) {
-        return "Digital Me：应继续验证产品证据（E1）。未发送给伙伴。";
-      }
-      return "通用：仅依据任务给出的研究判断框架。";
-    },
-    getRuntimeConfig: () => ({
-      provider: "openai-compatible",
-      baseURL: "https://example.invalid/v1",
-      model: "stub-model",
-      apiKey: "sk-stub-not-real",
-      packageDir: "",
-    }),
+    ...prev,
+    callModelStream:
+      overrides.callModelStream ||
+      (async (cfg, messages) => {
+        const hooks = global.__PAN01R_TEST_HOOKS__ || {};
+        if (hooks.slowModelMs) {
+          await sleep(hooks.slowModelMs);
+        }
+        if (typeof hooks.modelResponder === "function") {
+          return hooks.modelResponder(cfg, messages);
+        }
+        const joined = messages.map((m) => m.content).join("\n");
+        if (/已授权主体依据/.test(joined)) {
+          return "Digital Me：应继续验证产品证据（E1）。未发送给伙伴。";
+        }
+        return "通用：仅依据任务给出的研究判断框架。";
+      }),
+    getRuntimeConfig:
+      overrides.getRuntimeConfig ||
+      (() => ({
+        provider: "openai-compatible",
+        baseURL: "https://example.invalid/v1",
+        model: "stub-model",
+        apiKey: "sk-stub-not-real",
+        packageDir: "",
+      })),
+    appendAudit: overrides.appendAudit || prev.appendAudit,
   };
+}
+
+async function walkToStep3(win) {
+  await evalIn(
+    win,
+    `([...document.querySelectorAll("#panorama-exp-step1 button")].find((b) => /进入协作请求/.test(b.textContent || ""))).click()`
+  );
+  await waitFor(async () => {
+    const s = await evalIn(win, `!document.getElementById("panorama-exp-step2")?.classList.contains("hidden")`);
+    return s ? true : null;
+  }, { label: "step2-walk" });
+  await evalIn(
+    win,
+    `([...document.querySelectorAll("#panorama-exp-step2 button")].find((b) => /生成本地模拟请求/.test(b.textContent || ""))).click()`
+  );
+  await waitFor(async () => {
+    const s = await evalIn(
+      win,
+      `!![...document.querySelectorAll("#panorama-exp-step3 button")].find((b) => /确认并执行/.test(b.textContent || ""))`
+    );
+    return s ? true : null;
+  }, { label: "step3-confirm-ready", timeoutMs: 15000 });
 }
 
 async function clickSidebarMe(win) {
@@ -469,6 +514,277 @@ async function runPan01rOwnerRuntimeHarness({ BrowserWindow }) {
     pass("Q. sidebar vs panorama capability labels");
   } catch (err) {
     fail("Q. capability labels", err);
+  }
+
+  // R. step1 shows multiple kinds + sourceLabel + confirmation
+  try {
+    await evalIn(win, `document.getElementById("panorama-exp-close")?.click()`);
+    await sleep(100);
+    const step1 = await openExperience(win);
+    assert.match(step1.body, /来源：/);
+    assert.match(step1.body, /本人确认：/);
+    assert.match(step1.body, /已核实事实|本人确认/);
+    assert.match(step1.body, /系统推断|发展线索|当前状态/);
+    pass("R. step1 kinds sourceLabel confirmation");
+  } catch (err) {
+    fail("R. step1 kinds sourceLabel confirmation", err);
+  }
+
+  // S. confirm only sends previewId + confirmed
+  try {
+    await evalIn(win, `document.getElementById("panorama-exp-close")?.click()`);
+    await sleep(100);
+    await openExperience(win);
+    await walkToStep3(win);
+    global.__PAN01R_TEST_HOOKS__.captureConfirmPayload = true;
+    global.__PAN01R_TEST_HOOKS__.lastConfirmPayload = null;
+    global.__PAN01R_TEST_HOOKS__.lastConfirmRawKeys = null;
+    await evalIn(
+      win,
+      `([...document.querySelectorAll("#panorama-exp-step3 button")].find((b) => /确认并执行/.test(b.textContent || ""))).click()`
+    );
+    await waitFor(() => {
+      const p = global.__PAN01R_TEST_HOOKS__.lastConfirmPayload;
+      return p ? p : null;
+    }, { label: "confirm ipc payload", timeoutMs: 20000 });
+    const body = global.__PAN01R_TEST_HOOKS__.lastConfirmPayload;
+    const rawKeys = global.__PAN01R_TEST_HOOKS__.lastConfirmRawKeys || [];
+    assert.ok(body.previewId);
+    assert.equal(body.confirmed, true);
+    assert.ok(!rawKeys.includes("requestId"));
+    assert.ok(!rawKeys.includes("selectedEvidenceIds"));
+    assert.ok(!rawKeys.includes("tokenId"));
+    assert.deepEqual(Object.keys(body).sort(), ["confirmed", "previewId"]);
+    global.__PAN01R_TEST_HOOKS__.captureConfirmPayload = false;
+    pass("S. confirm only previewId+confirmed");
+  } catch (err) {
+    global.__PAN01R_TEST_HOOKS__.captureConfirmPayload = false;
+    fail("S. confirm only previewId+confirmed", err);
+  }
+
+  // T. immediate stop race after confirm
+  try {
+    await evalIn(win, `document.getElementById("panorama-exp-close")?.click()`);
+    await sleep(100);
+    global.__PAN01R_TEST_HOOKS__.slowModelMs = 2500;
+    await openExperience(win);
+    await walkToStep3(win);
+    await evalIn(
+      win,
+      `([...document.querySelectorAll("#panorama-exp-step3 button")].find((b) => /确认并执行/.test(b.textContent || ""))).click()`
+    );
+    await sleep(80);
+    await evalIn(win, `document.getElementById("panorama-exp-cancel")?.click()`);
+    await sleep(3000);
+    const status = await evalIn(
+      win,
+      `({
+        step4: document.getElementById("panorama-exp-step4")?.innerText || "",
+        step5hidden: document.getElementById("panorama-exp-step5")?.classList.contains("hidden"),
+      })`
+    );
+    assert.equal(status.step5hidden, true);
+    assert.match(status.step4, /停止|取消|请求停止/);
+    global.__PAN01R_TEST_HOOKS__.slowModelMs = 0;
+    pass("T. immediate stop race");
+  } catch (err) {
+    global.__PAN01R_TEST_HOOKS__.slowModelMs = 0;
+    fail("T. immediate stop race", err);
+  }
+
+  // U. result page E1 mapping + boundaries + unused
+  try {
+    await evalIn(win, `document.getElementById("panorama-exp-close")?.click()`);
+    await sleep(100);
+    await openExperience(win);
+    await walkToStep3(win);
+    await evalIn(
+      win,
+      `([...document.querySelectorAll("#panorama-exp-step3 button")].find((b) => /确认并执行/.test(b.textContent || ""))).click()`
+    );
+    const step5 = await waitFor(async () => {
+      const s = await evalIn(
+        win,
+        `({
+          open: !document.getElementById("panorama-exp-step5")?.classList.contains("hidden"),
+          text: document.getElementById("panorama-exp-step5")?.innerText || "",
+        })`
+      );
+      return s.open ? s : null;
+    }, { label: "U step5", timeoutMs: 20000 });
+    assert.match(step5.text, /E1/);
+    assert.match(step5.text, /依据引用对照|已核实|本人确认/);
+    assert.match(step5.text, /边界|不得对外/);
+    assert.match(step5.text, /未使用的依据|未发送给模拟协作伙伴/);
+    pass("U. result citeMap boundaries unused");
+  } catch (err) {
+    fail("U. result citeMap boundaries unused", err);
+  }
+
+  // V. inference-only fixture → no personalized success
+  try {
+    const infDir = fs.mkdtempSync(path.join(os.tmpdir(), "dm-pan01r-inf-"));
+    createMinimalFixture(infDir);
+    new PackageStore({ packageDir: infDir, ownerId: "pan01r-owner" }).migrateToV02({
+      actor: "pan01r-owner",
+      toolVersion: "pan01r-owner",
+    });
+    const factsMd = path.join(infDir, "identity-facts.md");
+    if (fs.existsSync(factsMd)) fs.unlinkSync(factsMd);
+    fs.mkdirSync(path.join(infDir, "life"), { recursive: true });
+    fs.writeFileSync(
+      path.join(infDir, "life", "inferences.jsonl"),
+      JSON.stringify({ id: "inf_only", statement: "仅有系统推断条目", status: "open" }) + "\n",
+      "utf8"
+    );
+    global.__PAN01R_TEST_HOOKS__.packageDir = infDir;
+    await evalIn(win, `document.getElementById("panorama-exp-close")?.click()`);
+    await sleep(100);
+    const step1 = await openExperience(win);
+    assert.match(step1.body, /通用预览|依据不足/);
+    assert.ok(!/我的 Digital Me 结果/.test(step1.body));
+    await walkToStep3(win);
+    await evalIn(
+      win,
+      `([...document.querySelectorAll("#panorama-exp-step3 button")].find((b) => /确认并执行/.test(b.textContent || ""))).click()`
+    );
+    const step5 = await waitFor(async () => {
+      const s = await evalIn(
+        win,
+        `({
+          open: !document.getElementById("panorama-exp-step5")?.classList.contains("hidden"),
+          text: document.getElementById("panorama-exp-step5")?.innerText || "",
+        })`
+      );
+      return s.open ? s : null;
+    }, { label: "V step5", timeoutMs: 20000 });
+    assert.match(step5.text, /通用预览|依据不足/);
+    assert.ok(!/我的 Digital Me 结果/.test(step5.text));
+    global.__PAN01R_TEST_HOOKS__.packageDir = pkgDir;
+    try {
+      fs.rmSync(infDir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
+    pass("V. inference-only no personalized");
+  } catch (err) {
+    global.__PAN01R_TEST_HOOKS__.packageDir = pkgDir;
+    fail("V. inference-only no personalized", err);
+  }
+
+  // W. unknown cite → not adoptable
+  try {
+    global.__PAN01R_TEST_HOOKS__.modelResponder = async (cfg, messages) => {
+      const joined = messages.map((m) => m.content).join("\n");
+      if (/已授权主体依据/.test(joined)) return "引用了未知 E99";
+      return "generic";
+    };
+    await evalIn(win, `document.getElementById("panorama-exp-close")?.click()`);
+    await sleep(100);
+    await openExperience(win);
+    await walkToStep3(win);
+    await evalIn(
+      win,
+      `([...document.querySelectorAll("#panorama-exp-step3 button")].find((b) => /确认并执行/.test(b.textContent || ""))).click()`
+    );
+    const step5 = await waitFor(async () => {
+      const s = await evalIn(
+        win,
+        `({
+          open: !document.getElementById("panorama-exp-step5")?.classList.contains("hidden"),
+          text: document.getElementById("panorama-exp-step5")?.innerText || "",
+          adoptDisabled: !!document.querySelector("#panorama-exp-step5 button.btn-primary")?.disabled,
+        })`
+      );
+      return s.open ? s : null;
+    }, { label: "W step5", timeoutMs: 20000 });
+    assert.equal(step5.adoptDisabled, true);
+    assert.match(step5.text, /未授权|不存在|不可采纳/);
+    delete global.__PAN01R_TEST_HOOKS__.modelResponder;
+    pass("W. unknown cite not adoptable");
+  } catch (err) {
+    delete global.__PAN01R_TEST_HOOKS__.modelResponder;
+    fail("W. unknown cite not adoptable", err);
+  }
+
+  // X. adopt audit warning message
+  try {
+    const decisionAudit = require("../src/decision-audit");
+    global.__PAN01R_TEST_HOOKS__.appendAudit = (ud, fields) => {
+      if (fields && fields.event === "result_adopted") {
+        throw Object.assign(new Error("audit boom"), { code: "audit_unhealthy" });
+      }
+      return decisionAudit.appendEntry(ud, fields);
+    };
+    // Force pan01rApi to rebuild — hooks already read each call via pan01rApi()
+    await evalIn(win, `document.getElementById("panorama-exp-close")?.click()`);
+    await sleep(100);
+    await openExperience(win);
+    await walkToStep3(win);
+    await evalIn(
+      win,
+      `([...document.querySelectorAll("#panorama-exp-step3 button")].find((b) => /确认并执行/.test(b.textContent || ""))).click()`
+    );
+    await waitFor(async () => {
+      const s = await evalIn(win, `!document.getElementById("panorama-exp-step5")?.classList.contains("hidden")`);
+      return s ? true : null;
+    }, { label: "X step5", timeoutMs: 20000 });
+    await evalIn(
+      win,
+      `([...document.querySelectorAll("#panorama-exp-step5 button")].find((b) => /采纳为我的本地成果/.test(b.textContent || ""))).click()`
+    );
+    await sleep(500);
+    const msg = await evalIn(win, `document.getElementById("panorama-exp-step5-msg")?.textContent || ""`);
+    assert.match(msg, /成果已保存，但过程记录失败/);
+    delete global.__PAN01R_TEST_HOOKS__.appendAudit;
+    pass("X. adopt audit warning");
+  } catch (err) {
+    delete global.__PAN01R_TEST_HOOKS__.appendAudit;
+    fail("X. adopt audit warning", err);
+  }
+
+  // Y. receipt cross-sender reject (direct main API — UI cannot change sender)
+  try {
+    const { createPanoramaExperience } = require("../src/panorama-experience");
+    const decisionAudit = require("../src/decision-audit");
+    const api = createPanoramaExperience({
+      callModelStream: global.__PAN01R_TEST_HOOKS__.callModelStream,
+      getRuntimeConfig: global.__PAN01R_TEST_HOOKS__.getRuntimeConfig,
+      appendAudit: (u, f) => decisionAudit.appendEntry(u, f),
+      packageDir: pkgDir,
+      userData,
+    });
+    const brief = api.getSubjectBrief(pkgDir);
+    const ids = brief.evidence.filter((e) => e.selectedByDefault).map((e) => e.id);
+    const req = api.createRequest({
+      senderId: "owner-1",
+      evidenceIds: ids,
+      packageDir: pkgDir,
+      userData,
+    });
+    const preview = api.buildAuthPreview({
+      requestId: req.requestId,
+      senderId: "owner-1",
+      selectedEvidenceIds: ids,
+      packageDir: pkgDir,
+    });
+    const run = await api.confirmFromPreviewThenExecute({
+      previewId: preview.previewId,
+      confirmed: true,
+      senderId: "owner-1",
+      packageDir: pkgDir,
+      userData,
+    });
+    const bad = api.getReceiptSummary({
+      runId: run.runId,
+      senderId: "intruder",
+      userData,
+    });
+    assert.equal(bad.ok, false);
+    assert.equal(bad.code, "sender_mismatch");
+    pass("Y. receipt cross-sender reject");
+  } catch (err) {
+    fail("Y. receipt cross-sender reject", err);
   }
 
   const failed = results.filter((r) => !r.ok);

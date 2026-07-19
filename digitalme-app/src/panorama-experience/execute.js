@@ -6,8 +6,17 @@
  */
 
 const crypto = require("node:crypto");
-const { consumeToken, buildInferenceEnvironment } = require("./authorization");
-const { resolveEvidenceByIds, sanitizeShortText } = require("./subject-brief");
+const {
+  consumeToken,
+  buildInferenceEnvironment,
+  publicInferenceEnvironment,
+} = require("./authorization");
+const {
+  resolveEvidenceByIds,
+  sanitizeShortText,
+  computePersonalized,
+  KIND_LABELS,
+} = require("./subject-brief");
 
 const MAX_EVIDENCE_CHARS = 1800;
 const MAX_BOUNDARY_CHARS = 800;
@@ -82,23 +91,58 @@ function buildDigitalMeSystem(evidence, boundaries) {
   return lines.join("\n");
 }
 
-function parseCitations(text, allowedCiteIds) {
+/**
+ * Parse ALL E\d+ citations from body. Returns { all, valid, unauthorized }.
+ */
+function parseAllCitations(text, allowedCiteIds) {
   const allowed = new Set(allowedCiteIds || []);
-  const found = new Set();
+  const all = new Set();
   const re = /\bE(\d+)\b/g;
   let m;
   const raw = String(text || "");
   while ((m = re.exec(raw))) {
-    const id = `E${m[1]}`;
-    if (allowed.has(id)) found.add(id);
+    all.add(`E${m[1]}`);
   }
-  return [...found].sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+  const sorted = [...all].sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+  const valid = sorted.filter((id) => allowed.has(id));
+  const unauthorized = sorted.filter((id) => !allowed.has(id));
+  return { all: sorted, valid, unauthorized };
+}
+
+/** @deprecated use parseAllCitations; kept for hermetic import compatibility */
+function parseCitations(text, allowedCiteIds) {
+  return parseAllCitations(text, allowedCiteIds).valid;
 }
 
 function safeResultText(text) {
   let s = sanitizeShortText(String(text || ""), MAX_RESULT_CHARS);
   if (!s) s = "（空响应）";
   return s.length > MAX_RESULT_CHARS ? s.slice(0, MAX_RESULT_CHARS) + "…" : s;
+}
+
+function buildCiteMap(authorized) {
+  return authorized.map((ev, idx) => ({
+    citeId: `E${idx + 1}`,
+    evidenceId: ev.id,
+    kind: ev.kind,
+    kindLabel: ev.kindLabel || KIND_LABELS[ev.kind] || ev.kind,
+    shortText: ev.shortText,
+    sourceLabel: ev.sourceLabel,
+    ownerConfirmed: !!ev.ownerConfirmed,
+  }));
+}
+
+function buildUnusedSummary(briefEvidence, authSet) {
+  const counts = new Map();
+  for (const e of briefEvidence || []) {
+    if (!e.usableInExperience) continue;
+    if (authSet.has(e.id)) continue;
+    const kind = e.kind;
+    const prev = counts.get(kind) || { kind, kindLabel: KIND_LABELS[kind] || kind, count: 0 };
+    prev.count += 1;
+    counts.set(kind, prev);
+  }
+  return [...counts.values()];
 }
 
 function publicRunView(run) {
@@ -109,37 +153,65 @@ function publicRunView(run) {
     status: run.status,
     stage: run.stage,
     cancelLabel: run.cancelLabel,
-    inferenceEnvironment: run.inferenceEnvironment,
+    inferenceEnvironment: publicInferenceEnvironment(run.inferenceEnvironment) || run.inferenceEnvironment,
     capabilityIds: run.capabilityIds.slice(),
     evidenceCount: run.evidenceIds.length,
-    personalizedAvailable: run.personalizedAvailable,
-    previewMode: run.previewMode,
+    personalizedAvailable: !!run.personalizedAvailable,
+    previewMode: !!run.previewMode,
     sentToSimulationPartner: false,
     localSimulation: true,
     message: run.message || null,
     code: run.code || null,
+    groundingCode: run.groundingCode || null,
     settingsTarget: run.settingsTarget || null,
     adoptable: !!run.adoptable,
+    digitalMeResultTitle: run.personalizedAvailable
+      ? "我的 Digital Me 结果"
+      : "主体依据不足，仅提供通用预览",
   };
   if (run.status === "completed" && run.result) {
     base.result = {
       genericText: run.result.genericText,
       digitalMeText: run.result.digitalMeText,
-      citations: run.result.citations.slice(),
-      authorizedEvidence: run.result.authorizedEvidence.map((e) => ({
+      citations: (run.result.citations || []).slice(),
+      citeMap: (run.result.citeMap || []).map((c) => ({
+        citeId: c.citeId,
+        evidenceId: c.evidenceId,
+        kind: c.kind,
+        kindLabel: c.kindLabel,
+        shortText: c.shortText,
+        sourceLabel: c.sourceLabel,
+        ownerConfirmed: !!c.ownerConfirmed,
+      })),
+      authorizedEvidence: (run.result.authorizedEvidence || []).map((e) => ({
         id: e.id,
         citeId: e.citeId,
         shortText: e.shortText,
+        kind: e.kind,
         kindLabel: e.kindLabel,
+        sourceLabel: e.sourceLabel,
+        ownerConfirmed: !!e.ownerConfirmed,
       })),
-      boundaries: run.result.boundaries.map((b) => ({
+      enforcedBoundaries: (run.result.enforcedBoundaries || run.result.boundaries || []).map(
+        (b) => ({
+          id: b.id,
+          shortText: b.shortText,
+        })
+      ),
+      boundaries: (run.result.boundaries || []).map((b) => ({
         id: b.id,
         shortText: b.shortText,
         kindLabel: b.kindLabel,
       })),
-      unusedEvidenceIds: run.result.unusedEvidenceIds.slice(),
-      inferenceEnvironment: run.inferenceEnvironment,
+      unusedSummary: (run.result.unusedSummary || []).slice(),
+      unusedEvidenceIds: (run.result.unusedEvidenceIds || []).slice(),
+      inferenceEnvironment:
+        publicInferenceEnvironment(run.inferenceEnvironment) || run.inferenceEnvironment,
       sentToSimulationPartner: false,
+      personalizedAvailable: !!run.personalizedAvailable,
+      previewMode: !!run.previewMode,
+      adoptable: !!run.adoptable,
+      groundingCode: run.groundingCode || null,
     };
   }
   return base;
@@ -175,8 +247,13 @@ async function confirmAndExecute({ tokenId, senderId, packageDir, userData, deps
   const token = consumed.token;
 
   const runId = "run_" + crypto.randomBytes(10).toString("hex");
-  const inferenceEnvironment = buildInferenceEnvironment(getRuntimeConfig);
+  const liveInference = buildInferenceEnvironment(getRuntimeConfig);
+  const inferenceEnvironment =
+    token.inferenceEnvironment || publicInferenceEnvironment(liveInference);
   const abortController = new AbortController();
+
+  let personalizedAvailable = !!token.personalizedAvailable;
+  let previewMode = token.previewMode !== undefined ? !!token.previewMode : !personalizedAvailable;
 
   const run = {
     runId,
@@ -195,8 +272,9 @@ async function confirmAndExecute({ tokenId, senderId, packageDir, userData, deps
     abortController,
     adoptable: false,
     completionAuditOk: false,
-    personalizedAvailable: token.evidenceIds.length > 0,
-    previewMode: token.evidenceIds.length === 0,
+    personalizedAvailable,
+    previewMode,
+    groundingCode: null,
     result: null,
     message: null,
     code: null,
@@ -206,7 +284,6 @@ async function confirmAndExecute({ tokenId, senderId, packageDir, userData, deps
   };
   runStore.set(runId, run);
 
-  // Notify renderer ASAP so cancel can bind runId before model calls finish.
   if (typeof deps.onRunCreated === "function") {
     try {
       deps.onRunCreated({ runId, status: "running", stage: "starting" });
@@ -215,7 +292,6 @@ async function confirmAndExecute({ tokenId, senderId, packageDir, userData, deps
     }
   }
 
-  // Pre-audit — fail-closed before any model call
   if (typeof appendAudit === "function" && userData) {
     try {
       appendAudit(userData, {
@@ -234,6 +310,7 @@ async function confirmAndExecute({ tokenId, senderId, packageDir, userData, deps
           status: "started",
           evidenceCount: token.evidenceIds.length,
           taskDigest: token.taskDigest,
+          personalizedAvailable,
         },
       });
     } catch {
@@ -250,13 +327,10 @@ async function confirmAndExecute({ tokenId, senderId, packageDir, userData, deps
         ...publicRunView(run),
       };
     }
-  } else if (!appendAudit) {
-    // Tests may inject no-op; production always passes appendAudit via facade.
   }
 
   const resolved = resolveEvidenceByIds(packageDir, token.evidenceIds);
   const authorized = resolved.evidence;
-  // Fail-closed if any authorized ID vanished
   if (authorized.length !== token.evidenceIds.length) {
     run.status = "failed";
     run.code = "evidence_resolve_failed";
@@ -265,10 +339,28 @@ async function confirmAndExecute({ tokenId, senderId, packageDir, userData, deps
     return { ok: false, code: run.code, message: run.message, runId, ...publicRunView(run) };
   }
 
-  const citeMap = authorized.map((ev, idx) => ({
-    ...ev,
-    citeId: `E${idx + 1}`,
-  }));
+  const personalizedNow = computePersonalized(authorized);
+  if (token.personalizedAvailable && !personalizedNow) {
+    run.status = "failed";
+    run.code = "personalized_insufficient";
+    run.message = "主体依据已不足以支持个性化结果";
+    run.stage = "failed";
+    run.adoptable = false;
+    return { ok: false, code: run.code, message: run.message, runId, ...publicRunView(run) };
+  }
+  if (!token.personalizedAvailable) {
+    personalizedAvailable = false;
+    previewMode = true;
+    run.personalizedAvailable = false;
+    run.previewMode = true;
+  } else {
+    personalizedAvailable = personalizedNow;
+    previewMode = !personalizedNow;
+    run.personalizedAvailable = personalizedAvailable;
+    run.previewMode = previewMode;
+  }
+
+  const citeMap = buildCiteMap(authorized);
   const allowedCiteIds = citeMap.map((e) => e.citeId);
   const boundaries = resolved.boundaries || [];
 
@@ -283,12 +375,11 @@ async function confirmAndExecute({ tokenId, senderId, packageDir, userData, deps
     { role: "user", content: userTask },
   ];
 
-  // Capture for tests / security audit — never send to renderer
   run._promptAudit = {
     genericHasEvidence: /E\d+|已授权主体依据/.test(
       genericMessages.map((m) => m.content).join("\n")
     ),
-    digitalMeEvidenceIds: citeMap.map((e) => e.id),
+    digitalMeEvidenceIds: citeMap.map((e) => e.evidenceId || e.id),
     genericMessages,
     digitalMeMessages,
   };
@@ -364,22 +455,59 @@ async function confirmAndExecute({ tokenId, senderId, packageDir, userData, deps
     return { ok: true, ...publicRunView(run) };
   }
 
-  const citations = parseCitations(digitalMeText, allowedCiteIds);
+  const parsed = parseAllCitations(digitalMeText, allowedCiteIds);
+  let displayDigitalMe = safeResultText(digitalMeText);
+  let groundingCode = null;
+  let groundingOk = true;
+
+  if (parsed.unauthorized.length > 0) {
+    groundingOk = false;
+    groundingCode = "grounding_invalid";
+    run.message = "结果引用了未授权或不存在的依据";
+    // Keep only valid citations visible; mark body invalid for adopt
+    displayDigitalMe = safeResultText(
+      `${digitalMeText}\n\n（结果引用了未授权或不存在的依据，不可采纳）`
+    );
+  } else if (personalizedAvailable && parsed.valid.length === 0) {
+    groundingOk = false;
+    groundingCode = "grounding_missing";
+    run.message = "个性化结果缺少对已授权依据的引用，不可采纳";
+  }
+
+  run.groundingCode = groundingCode;
+
   const authSet = new Set(token.evidenceIds);
   const unusedEvidenceIds = (resolved.brief.evidence || [])
     .filter((e) => e.usableInExperience && !authSet.has(e.id))
     .map((e) => e.id);
+  const unusedSummary = buildUnusedSummary(resolved.brief.evidence || [], authSet);
+
+  const authorizedEvidence = citeMap.map((c) => ({
+    id: c.evidenceId,
+    citeId: c.citeId,
+    shortText: c.shortText,
+    kind: c.kind,
+    kindLabel: c.kindLabel,
+    sourceLabel: c.sourceLabel,
+    ownerConfirmed: c.ownerConfirmed,
+  }));
 
   run.result = {
     genericText: safeResultText(genericText),
-    digitalMeText: safeResultText(digitalMeText),
-    citations,
-    authorizedEvidence: citeMap,
+    digitalMeText: displayDigitalMe,
+    citations: parsed.valid.slice(),
+    citeMap,
+    authorizedEvidence,
+    enforcedBoundaries: boundaries.map((b) => ({
+      id: b.id,
+      shortText: b.shortText,
+    })),
     boundaries: boundaries.map((b) => ({
       id: b.id,
       shortText: b.shortText,
       kindLabel: b.kindLabel,
     })),
+    unusedSummary,
     unusedEvidenceIds,
     genericDigest: digestText(genericText),
     digitalMeDigest: digestText(digitalMeText),
@@ -402,7 +530,10 @@ async function confirmAndExecute({ tokenId, senderId, packageDir, userData, deps
           status: "completed",
           genericDigest: run.result.genericDigest,
           digitalMeDigest: run.result.digitalMeDigest,
-          citationCount: citations.length,
+          citationCount: parsed.valid.length,
+          groundingCode,
+          personalizedAvailable,
+          previewMode,
         },
       });
       completionAuditOk = true;
@@ -410,20 +541,32 @@ async function confirmAndExecute({ tokenId, senderId, packageDir, userData, deps
       completionAuditOk = false;
     }
   } else {
-    completionAuditOk = true; // hermetic stubs without audit still mark completable when deps say so
+    completionAuditOk = true;
   }
 
   run.completionAuditOk = completionAuditOk;
+  run.status = "completed";
+  run.stage = "completed";
+
+  // adoptable: must pass audit + grounding + not previewMode
   if (!completionAuditOk) {
-    run.status = "completed";
     run.adoptable = false;
     run.stage = "completed_not_adoptable";
     run.message = "结果已生成，但决策记录写入失败，不可采纳";
     run.code = "completion_audit_failed";
+  } else if (!groundingOk) {
+    run.adoptable = false;
+    run.code = groundingCode;
+    run.stage = "completed_not_adoptable";
+  } else if (previewMode || !personalizedAvailable) {
+    run.adoptable = false;
+    run.previewMode = true;
+    run.personalizedAvailable = false;
+    if (!run.message) {
+      run.message = "主体依据不足，仅提供通用预览，不可采纳为个性化结果";
+    }
   } else {
-    run.status = "completed";
     run.adoptable = true;
-    run.stage = "completed";
   }
 
   return { ok: true, ...publicRunView(run) };
@@ -453,7 +596,7 @@ function cancelOrAbandonRun({ runId, senderId, userData, deps = {} }) {
   run.cancelLabel = aborted ? "停止" : "放弃本次结果";
   run.stage = run.status;
   run.adoptable = false;
-  run.result = null; // discard late results
+  run.result = null;
 
   if (typeof deps.appendAudit === "function" && userData) {
     try {
@@ -504,6 +647,7 @@ module.exports = {
   getRun,
   getRunRecord,
   parseCitations,
+  parseAllCitations,
   buildDigitalMeSystem,
   clearRunStoreForTests,
   GENERIC_SYSTEM,

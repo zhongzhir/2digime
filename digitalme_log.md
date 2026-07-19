@@ -5,6 +5,32 @@
 
 ---
 
+## 2026-07-19 PAN-01R Codex 第一轮复核修复 · statically_verified / codex_review_changes_requested
+
+### 修复
+
+1. **identityClaims**：永不升格为 `verified_fact`；按 dataKind 分类；未确认断言默认不选中。
+2. **依据平衡**：分桶收集后确定性选取 3～6 条，事实过多时仍保留其他类别。
+3. **previewId**：授权预览冻结范围；确认仅提交 `previewId` + `confirmed:true`；生产 IPC 不接受 renderer tokenId。
+4. **范围**：selected 必须是 request.optionalEvidenceIds 子集；越权 → `scope_expansion_rejected`。
+5. **personalized**：仅 verified_fact 或已确认 owner_assertion；inference-only / zero-evidence 不得冒充 Digital Me 可采纳。
+6. **停止竞态**：cancelRequested；runId 到达后立即 cancelRun。
+7. **grounding**：未知引用 → `grounding_invalid`；有主体无引用 → `grounding_missing`；结果页展示 E1 对应正文/边界/未授权摘要。
+8. **推理环境**：local_loopback / remote_endpoint / unknown；digest 绑定；变化则拒绝执行。
+9. **adopt/reject**：adopt 后审计失败返回 committed+warning；reject 先审计；sender 绑定 receipt。
+
+### 验证
+
+- `test:pan-01r`：56/56；`test:pan-01r-owner-runtime`：19/19（含 R–Y）
+- 回归：pan-01、p1-03、p1-07-owner-runtime、p1-phase1、owner-runtime 通过
+- `git diff --check a40c5f8..HEAD`：须在本修复提交后无输出
+
+### 状态
+
+`statically_verified` / `codex_review_changes_requested`（**不**标 accepted）。PAN-02 未开始。
+
+---
+
 ## 2026-07-19 PAN-01R 主权协作闭环 · statically_verified
 
 ### 实现摘要

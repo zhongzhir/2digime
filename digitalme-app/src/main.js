@@ -3252,19 +3252,18 @@ ipcMain.handle("panoramaExperience:rejectRequest", (event, payload) => {
 });
 
 ipcMain.handle("panoramaExperience:confirmAndExecute", async (event, payload) => {
-  const body = allowFields(payload, [
-    "requestId",
-    "tokenId",
-    "selectedEvidenceIds",
-  ]);
+  // Production allowlist: previewId + confirmed only (no requestId/evidenceIds/tokenId from renderer)
+  const body = allowFields(payload, ["previewId", "confirmed"]);
+  const hooks = pan01rHooks();
+  if (hooks && hooks.captureConfirmPayload) {
+    hooks.lastConfirmPayload = { ...body };
+    hooks.lastConfirmRawKeys = payload && typeof payload === "object" ? Object.keys(payload) : [];
+  }
   const api = pan01rApi();
-  return api.confirmGrantAndExecute({
-    requestId: body.requestId ? String(body.requestId) : undefined,
-    tokenId: body.tokenId ? String(body.tokenId) : undefined,
+  return api.confirmFromPreviewThenExecute({
+    previewId: body.previewId ? String(body.previewId) : "",
+    confirmed: body.confirmed === true,
     senderId: pan01rSenderId(event),
-    selectedEvidenceIds: Array.isArray(body.selectedEvidenceIds)
-      ? body.selectedEvidenceIds.map(String)
-      : [],
     packageDir: pan01rPackageDir(),
     userData: pan01rUserData(),
     onRunCreated: (info) => {
@@ -3320,6 +3319,7 @@ ipcMain.handle("panoramaExperience:getReceiptSummary", (event, payload) => {
   return api.getReceiptSummary({
     requestId: body.requestId ? String(body.requestId) : undefined,
     runId: body.runId ? String(body.runId) : undefined,
+    senderId: pan01rSenderId(event),
     userData: pan01rUserData(),
   });
 });

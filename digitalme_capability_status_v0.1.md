@@ -56,7 +56,7 @@
 | **P1-PANORAMA** | `active` / `PAN-01R_statically_verified` | 总任务包；执行索引；PAN-01R 任务包 | 当前产品主线；非代码能力项；PAN-02/03/04 暂停至 PAN-01R 验收 |
 | **PAN-00** | `accepted` | 验收提交 `bc85a14`；Codex 最终复核通过 | 战略与规格冻结完成 |
 | **PAN-01** | `statically_verified` / `owner_product_perception_failed` / `retained_as_scaffold` | 分支 `codex/pan-01-product-panorama-home`；基线 `a40c5f8`；`test:pan-01` / `test:pan-01-owner-runtime` | 产品全貌 homepage scaffold；只读；**不标 accepted**；不回滚；证明改由 PAN-01R |
-| **PAN-01R** | `statically_verified` | 分支 `codex/pan-01r-sovereign-collaboration-loop`；规格 `35c5aea`；`test:pan-01r` 36/36；`test:pan-01r-owner-runtime` 通过 | 主权协作闭环；**不标 accepted**；待 Codex 复核与 Owner 主路径验收 |
+| **PAN-01R** | `statically_verified` / `codex_review_changes_requested` | 分支 `codex/pan-01r-sovereign-collaboration-loop`；规格 `35c5aea`；实现 `a47e041`；Codex 第一轮复核修复已合入；`test:pan-01r` 56/56；`test:pan-01r-owner-runtime` 19/19 | 主权协作闭环；**不标 accepted**；待 Codex 再复核与 Owner 主路径验收 |
 
 ## P1-07 冻结说明（与任务包 / 执行索引 / log 一致）
 

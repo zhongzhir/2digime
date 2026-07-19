@@ -1,8 +1,8 @@
 # PAN-01R 任务包：Digital Me 主权协作闭环
 
-版本：v0.1.1
+版本：v0.1.2
 日期：2026-07-19
-状态：`statically_verified`（不得标 `accepted` / `runtime_verified`；待 Codex 复核与 Owner 主路径验收）
+状态：`statically_verified` / `codex_review_changes_requested`（不得标 `accepted` / `runtime_verified`；Codex 第一轮复核修复已合入，待再复核与 Owner 主路径验收）
 所属总任务：`P1-PANORAMA：Digital Me 产品全貌 Alpha`
 前置任务：PAN-01 `statically_verified` / `owner_product_perception_failed` / `retained_as_scaffold`（不标 accepted；不回滚）
 建议代码基线：`a40c5f8`（分支 `codex/pan-01-product-panorama-home`）
@@ -15,8 +15,8 @@
 >
 > - 文首曾用的 `owner_approved` **仅**表示 Owner 已批准规格并授权启动实现；
 > - **不**表示实现结果 `accepted`；
-> - 当前工程状态为 `statically_verified`；
-> - `runtime_verified` / `accepted` 必须等待 Codex 复核与 Owner 主路径验收。
+> - 当前工程状态为 `statically_verified` / `codex_review_changes_requested`；
+> - `runtime_verified` / `accepted` 必须等待 Codex 再复核与 Owner 主路径验收。
 
 ---
 
