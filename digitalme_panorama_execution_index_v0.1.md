@@ -20,7 +20,9 @@
 >
 > **v0.2.4 修订（2026-07-19，PAN-01S 实现）**：分支 `codex/pan-01s-minimal-product-surface`；状态曾为 `statically_verified`（不 accepted）。
 >
-> **v0.2.5 修订（2026-07-19，PAN-01S.1 规格接受）**：Owner 验收未通过 → PAN-01S `owner_changes_requested`；PAN-01S.1 任务包冻结。**当前唯一任务：实现 PAN-01S.1；不得开始 PAN-02；不得标 PAN-01S accepted。**
+> **v0.2.5 修订（2026-07-19，PAN-01S.1 规格接受）**：Owner 验收未通过 → PAN-01S `owner_changes_requested`；PAN-01S.1 任务包冻结。
+>
+> **v0.2.6 修订（2026-07-19，PAN-01S.1 实现）**：分支 `codex/pan-01s-minimal-product-surface`；parent `686fd7b`；状态 → `statically_verified` / `implemented`（**不** accepted）。**当前唯一任务：Owner 验收 PAN-01S.1；不得开始 PAN-02；不得标 PAN-01S accepted。**
 
 ---
 
@@ -33,19 +35,19 @@ P1-PANORAMA（三位一体 Alpha）
 → PAN-01 statically_verified / owner_product_perception_failed / needs_minimal_surface_reset（历史；不 accepted）
 → PAN-01R statically_verified / … / retained_as_internal_collaboration_harness（历史；不 accepted；无生产入口）
 → PAN-01S statically_verified / owner_changes_requested（不 accepted；98fb817）
-→ PAN-01S.1 specified / frozen_for_implementation / not_started ← 当前唯一任务
+→ PAN-01S.1 statically_verified / implemented（不 accepted；parent 686fd7b）← 当前等待 Owner 验收
 → PAN-02 理解通道 Alpha（planned；未开始）
 → …
 ```
 
 | 项 | 当前值 |
 |---|---|
-| 总任务状态 | `active / three_part_alpha_reframed / PAN-01S.1_specified` |
-| 当前完成 | PAN-00 / PAN-00R `accepted`；PAN-01 / PAN-01R 已裁定；PAN-01S 工程通过但 Owner 要求修订 |
-| **当前唯一任务** | **实现 PAN-01S.1（主体解释与渐进式构建）；不得开始 PAN-02；不得标 PAN-01S accepted** |
-| 启动条件 | 规格接受提交完成；在 `codex/pan-01s-minimal-product-surface` 上编码 |
-| 当前阻断项 | 无（等待实现） |
-| 明确不得启动 | PAN-02～PAN-06；P1-07 修复；标 PAN-01S accepted；Digital Org；公网协作 |
+| 总任务状态 | `active / three_part_alpha_reframed / PAN-01S.1_statically_verified` |
+| 当前完成 | PAN-00 / PAN-00R `accepted`；PAN-01 / PAN-01R 已裁定；PAN-01S 工程通过但 Owner 要求修订；PAN-01S.1 工程 `statically_verified` |
+| **当前唯一任务** | **Owner 验收 PAN-01S.1；不得开始 PAN-02；不得标 PAN-01S accepted** |
+| 启动条件 | —（实现已提交；等待 Owner 主路径验收） |
+| 当前阻断项 | 无（等待 Owner 验收） |
+| 明确不得启动 | PAN-02～PAN-06；P1-07 修复；标 PAN-01S / PAN-01S.1 accepted；Digital Org；公网协作 |
 
 ---
 
@@ -58,8 +60,8 @@ P1-PANORAMA（三位一体 Alpha）
 | PAN-01（历史） | 产品全貌首页 | `statically_verified` / `owner_product_perception_failed` / `needs_minimal_surface_reset`（不 accepted；不回滚） | — | 已裁定归档 | 表面收口由 PAN-01S 承接 |
 | PAN-01R（历史） | 主权协作闭环 | `statically_verified` / `codex_review_passed` / `owner_runtime_verified` / `owner_product_perception_failed` / `retained_as_internal_collaboration_harness`（不 accepted；证据 `9dd6fa0`、70/70、20/20） | — | 已裁定归档 | 普通用户入口由 PAN-01S 撤下；骨架保留 |
 | PAN-01S | 极简产品表面与复杂度后移 | `statically_verified` / `owner_changes_requested`（不 accepted） | — | 工程通过；Owner 要求修订 | PAN-01S.1 |
-| PAN-01S.1 | 主体解释与渐进式构建 | `specified` / `frozen_for_implementation` / `not_started` | 规格接受后实现；前置 `98fb817` | 文案矩阵 + B0～B5 + 用后退出；最高 `statically_verified`；不 accepted | Owner 再验收 →（通过后才可考虑）PAN-02 |
-| PAN-02 | 理解通道 Alpha：低负担输入、后台蒸馏、关键纠错、任务相关检索、无关沉默 | `planned`（新定义） | PAN-01S / PAN-01S.1 验收通过 + 独立任务包 | 理解我 Alpha 达标（规格 §7.6 第 1 条） | PAN-03 |
+| PAN-01S.1 | 主体解释与渐进式构建 | `statically_verified` / `implemented`（不 accepted） | 规格接受 `686fd7b`；前置 `98fb817` | 文案矩阵 + B0～B5 + 用后退出；工程已通过；**不** accepted | Owner 再验收 →（通过后才可考虑）PAN-02 |
+| PAN-02 | 理解通道 Alpha：低负担输入、后台蒸馏、关键纠错、任务相关检索、无关沉默 | `planned`（新定义） / `not_started` | PAN-01S / PAN-01S.1 验收通过 + 独立任务包 | 理解我 Alpha 达标（规格 §7.6 第 1 条） | PAN-03 |
 | PAN-03 | 能力框架 Alpha：统一能力对象、安装/启用/调用/停止/撤销、真实能力样例 | `planned`（新定义） | PAN-02 验收通过 + 独立任务包 | 武装我 Alpha 达标（规格 §7.6 第 2 条） | PAN-04 |
 | PAN-04 | 外部协作骨架 Alpha：请求、接受、最小授权、执行、处置、停止与记录 | `planned`（新定义；可复用 PAN-01R 安全骨架，不复用其失败用户表面） | PAN-03 验收通过 + 独立任务包 | 连接世界 Alpha 达标（规格 §7.6 第 3 条） | PAN-05 |
 | PAN-05 | 成长飞轮与传播体验：反馈成长候选、纵向闭环、真实体验传播材料 | `planned`（新定义） | PAN-04 验收通过 | 一次「输入—能力—协作—反馈—成长」闭环走通；传播材料基于真实体验 | PAN-06 |

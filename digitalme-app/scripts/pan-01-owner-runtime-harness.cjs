@@ -2,7 +2,7 @@
 
 /**
  * PAN-01 Owner runtime harness (updated for PAN-01S minimal surface).
- * Hermetic package + real inbox queue so subject:getOverview sees P2「继续确认」.
+ * Hermetic package + real inbox queue so subject:getOverview sees P2 confirm label.
  */
 
 const assert = require("node:assert/strict");
@@ -164,11 +164,11 @@ async function runPan01OwnerRuntimeHarness({ BrowserWindow }) {
   await waitFor(() => !win.webContents.isLoading(), { label: "load complete", timeoutMs: 30000 });
   await sleep(1500);
 
-  // 1) Default entry: inbox pending must not hijack; minimal surface only; P2「继续确认」
+  // 1) Default entry: inbox pending must not hijack; minimal surface only; P2「确认我的理解」
   try {
     const state = await openMinimalViaSidebarOnly(win);
     assert.equal(state.buildHidden, true, "inbox pending must not open build lane");
-    assert.match(state.primary, /继续确认/);
+    assert.match(state.primary, /确认我的理解/);
     assert.equal(!!state.promises, false);
     assert.equal(!!state.journey, false);
     assert.equal(!!state.cta, false);
@@ -199,7 +199,7 @@ async function runPan01OwnerRuntimeHarness({ BrowserWindow }) {
     fail("authorize/collaborate CTAs", err);
   }
 
-  // 3) Primary 继续确认 → build lane
+  // 3) Primary 确认我的理解 → build lane
   try {
     await openMinimalViaSidebarOnly(win);
     await evalIn(win, `document.getElementById("subject-minimal-primary").click()`);
@@ -214,9 +214,9 @@ async function runPan01OwnerRuntimeHarness({ BrowserWindow }) {
       { label: "build lane visible", timeoutMs: 8000 }
     );
     assert.equal(afterBuild.buildVisible, true);
-    pass("继续确认 enters build lane");
+    pass("确认我的理解 enters build lane");
   } catch (err) {
-    fail("继续构建", err);
+    fail("确认我的理解", err);
   }
 
   // 4) Sidebar cleaned

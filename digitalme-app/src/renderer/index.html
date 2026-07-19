@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
@@ -561,13 +561,13 @@
           <header id="topbar" class="me-topbar">
             <div class="me-topbar-main">
               <div id="persona-title">我的数字之我</div>
-              <div id="persona-sub">查看主体构成、版本健康与能力边界；提交材料请到「构建」</div>
+              <div id="persona-sub">了解目前的我，或继续完善认识</div>
             </div>
             <button type="button" id="btn-me-help" class="btn-help" data-help-topic="me" title="打开说明">说明</button>
           </header>
           <div id="me-body" class="library-layout">
             <div class="library-main">
-              <div class="mode-tabs me-lane-tabs" id="me-lane-tabs" role="tablist">
+              <div class="mode-tabs me-lane-tabs me-lane-tabs-demoted hidden" id="me-lane-tabs" role="tablist">
                 <div class="mode-tab-with-tip">
                   <button type="button" class="mode-tab" data-me-lane="build" id="me-lane-btn-build">构建</button>
                   <span class="tip-mark" data-tip-id="me-lane-build" tabindex="0" role="button" aria-label="构建说明">?</span>
@@ -578,49 +578,75 @@
                 </div>
               </div>
 
-              <!-- 构建：进料与加工 -->
+              <!-- 构建：渐进式向导 -->
               <div id="me-lane-build" class="me-lane hidden">
-                <div class="output-card">
-                  <div class="ext-store-head">
-                    <h3>待处理材料 <span class="tip-mark" data-tip-id="inbox-queue" tabindex="0" role="button" aria-label="待处理材料说明">?</span></h3>
-                    <div class="inbox-cta-row">
-                      <button id="btn-inbox-pick" type="button" data-tip-id="inbox-pick">① 提交文件</button>
-                      <button id="btn-inbox-smart" type="button" class="btn-primary" data-tip-id="inbox-smart">② 开始构建</button>
-                      <button id="btn-inbox-review" type="button" class="btn-ghost" data-tip-id="inbox-review">③ 审阅后写入</button>
-                      <button id="btn-inbox-cancel" type="button" class="btn-ghost hidden">中断</button>
-                    </div>
-                  </div>
-                  <p class="muted life-hint">两步即可：提交文件 → 开始构建。系统会建议用途并写入数字之我；单次约处理 20 份，过长文本会取开头与结尾。处理过程仅在本页显示。</p>
-                  <p class="muted life-hint inbox-mode-hint">「开始构建」为少决策模式，写入前仍会弹出确认；「审阅后写入」可逐条选择事实、推断与声明后再写入。</p>
-                  <p id="inbox-queue-status" class="inbox-queue-status muted"></p>
-                  <div id="inbox-progress-card" class="build-progress-card hidden">
-                    <div class="build-progress-head">
-                      <strong id="inbox-progress-headline">准备中…</strong>
-                      <span id="inbox-progress-counts" class="muted"></span>
-                    </div>
-                    <p id="inbox-progress-current" class="build-progress-current muted"></p>
-                    <div id="build-done-banner" class="build-done-banner hidden">
-                      <div class="build-done-copy">
-                        <strong>本批已写入数字之我</strong>
-                        <p class="muted" id="build-done-summary"></p>
-                      </div>
-                      <button type="button" id="btn-build-goto-self" class="btn-primary">查看数字之我</button>
-                    </div>
-                    <details class="build-progress-detail">
-                      <summary>过程明细</summary>
-                      <pre id="inbox-progress" class="builder-progress"></pre>
-                    </details>
-                  </div>
-                  <details class="inbox-more-actions">
-                    <summary>更多方式（一般不用）</summary>
-                    <div class="inbox-more-actions-row">
-                      <button id="btn-inbox-organize" type="button" class="btn-ghost">仅整理不写入</button>
-                    </div>
-                    <p class="muted life-hint" style="margin-bottom:0">日常请使用「开始构建」。若需逐条勾选后再写入，请点上方「审阅后写入」。</p>
-                  </details>
-                  <div id="inbox-empty" class="artifact-empty">尚无材料。请点击「提交文件」，或在下方授权文件夹后扫描。</div>
-                  <div id="inbox-list" class="library-list"></div>
+                <div id="build-flow-backbar" class="build-flow-backbar hidden">
+                  <button type="button" id="btn-build-back-to-me" class="btn-ghost">返回我的 Digital Me</button>
                 </div>
+                <div id="build-wizard" class="output-card build-wizard">
+                  <div id="build-wizard-step">
+                    <div id="build-step-b0" class="build-wizard-panel">
+                      <h3>让我先对你有一个基本了解</h3>
+                      <p class="muted life-hint">你可以导入已有资料，也可以通过几分钟对话开始，不必事先整理完整档案。</p>
+                      <div class="builder-actions">
+                        <button type="button" id="btn-build-b0-import" class="btn-primary">导入已有资料</button>
+                        <button type="button" id="btn-build-b0-later" class="btn-ghost">稍后再说</button>
+                      </div>
+                      <p class="muted life-hint build-wizard-note">
+                        <button type="button" id="btn-build-b0-chat-note" class="btn-link">也可以先去对话里聊聊</button>
+                      </p>
+                    </div>
+                    <div id="build-step-b1" class="build-wizard-panel hidden">
+                      <h3>添加一些你已有的资料</h3>
+                      <p class="muted life-hint">简历、项目材料、文章或决策记录都可以，不必特意整理。</p>
+                      <div class="builder-actions">
+                        <button type="button" id="btn-build-b1-pick" class="btn-primary">选择文件</button>
+                      </div>
+                      <details class="build-step-help">
+                        <summary>什么资料比较有帮助？</summary>
+                        <p class="muted life-hint">履历与经历：简历、任职说明、项目经历等；写清时间、角色、机构与结果。</p>
+                        <p class="muted life-hint">自我评测或判断材料：带取舍与理由的决策记录、复盘、测评摘要；也可在「更多方式」中填写自我评测。</p>
+                        <p class="muted life-hint" style="margin-bottom:0">同一份文件若同时包含多类内容，提交一次即可。不必先备齐两类材料。</p>
+                      </details>
+                    </div>
+                    <div id="build-step-b2" class="build-wizard-panel hidden">
+                      <h3>这些资料已经准备好了</h3>
+                      <p id="build-b2-count-line" class="muted life-hint">本次将处理资料，并先请你确认相关认识，再写入数字之我。</p>
+                      <div class="builder-actions">
+                        <button type="button" id="btn-build-b2-start" class="btn-primary">开始理解</button>
+                      </div>
+                      <details id="build-b2-adjust" class="build-step-help">
+                        <summary>查看或调整资料</summary>
+                        <p id="inbox-queue-status" class="inbox-queue-status muted"></p>
+                        <div id="inbox-empty" class="artifact-empty">尚无材料。请点击「选择文件」，或在「更多方式」中授权文件夹后扫描。</div>
+                        <div id="inbox-list" class="library-list"></div>
+                      </details>
+                    </div>
+                    <div id="build-step-b3" class="build-wizard-panel hidden">
+                      <h3>我正在理解这些资料</h3>
+                      <p class="muted life-hint">处理过程会显示在本页。你可以先返回「我」，稍后再来查看进度。</p>
+                      <div class="builder-actions">
+                        <button type="button" id="btn-build-b3-back" class="btn-primary">返回我的 Digital Me</button>
+                      </div>
+                    </div>
+                    <div id="build-step-b4" class="build-wizard-panel hidden">
+                      <h3>我形成了一些新的认识</h3>
+                      <p class="muted life-hint">请确认哪些内容可以成为「我」的一部分。</p>
+                      <div class="builder-actions">
+                        <button type="button" id="btn-build-b4-confirm" class="btn-primary">确认我的理解</button>
+                        <button type="button" id="btn-build-b4-later" class="btn-ghost">稍后处理</button>
+                      </div>
+                    </div>
+                    <div id="build-step-b5" class="build-wizard-panel hidden">
+                      <h3>这次认识已经完成</h3>
+                      <p id="build-b5-summary" class="muted life-hint">我已经根据本次确认更新了对你的认识</p>
+                      <div class="builder-actions">
+                        <button type="button" id="btn-build-b5-see" class="btn-primary">看看现在的我</button>
+                        <button type="button" id="btn-build-b5-more" class="btn-ghost">继续补充</button>
+                      </div>
+                    </div>
+                  </div>
+
                 <div id="builder-review" class="builder-review hidden">
                   <h3 id="builder-review-title" tabindex="-1">处理结果（勾选要留下的，再写入）</h3>
                   <p class="review-hint">默认全选。去掉不想写入的条目；至少保留一条才能写入。写入前会生成预览，确认后才会形成新版本。</p>
@@ -631,80 +657,107 @@
                     <button id="btn-discard" class="btn-ghost" type="button">放弃</button>
                   </div>
                 </div>
-                <div class="output-card bootstrap-card" id="bootstrap-guide">
+                  <details id="build-wizard-more" class="build-wizard-more">
+                    <summary>更多方式</summary>
+                    <div class="inbox-cta-row inbox-cta-row-secondary">
+                      <button id="btn-inbox-pick" type="button" data-tip-id="inbox-pick">提交文件</button>
+                      <button id="btn-inbox-smart" type="button" class="btn-ghost" data-tip-id="inbox-smart">开始构建</button>
+                      <button id="btn-inbox-review" type="button" class="btn-ghost" data-tip-id="inbox-review">审阅后写入</button>
+                      <button id="btn-inbox-cancel" type="button" class="btn-ghost hidden">中断</button>
+                      <button id="btn-inbox-organize" type="button" class="btn-ghost">仅整理不写入</button>
+                    </div>
+                    <p class="muted life-hint inbox-mode-hint">日常请跟随上方步骤。「开始构建」写入前仍会弹出确认；「审阅后写入」可逐条选择后再写入。</p>
+                    <div class="output-card build-more-card">
+                      <div class="ext-store-head">
+                        <h3>可读文件夹 <span class="tip-mark" data-tip-id="access-scope" tabindex="0" role="button" aria-label="可读文件夹说明">?</span></h3>
+                        <div>
+                          <button id="btn-access-add" type="button">添加文件夹</button>
+                          <button id="btn-access-scan" type="button" class="btn-ghost">扫描新文件</button>
+                        </div>
+                      </div>
+                      <p class="muted life-hint">仅读取你授权的文件夹（Word、文本、Markdown、演示文稿、PDF）。扫描结果会加入待处理材料。不会扫描整台电脑。</p>
+                      <div id="access-empty" class="artifact-empty">尚未授权任何文件夹。</div>
+                      <div id="access-list" class="library-list"></div>
+                    </div>
+                    <div class="output-card build-more-card" id="intake-card">
+                      <div class="ext-store-head">
+                        <h3>自我评测 <span class="tip-mark" data-tip-id="intake-quiz" tabindex="0" role="button" aria-label="自我评测说明">?</span></h3>
+                      </div>
+                      <p class="muted life-hint" id="intake-lead">
+                        用于补充想法、判断与边界。多数题目点选即可。已有履历文件时可跳过「经历概要」。
+                      </p>
+                      <div id="intake-progress-hint" class="intake-progress-hint muted"></div>
+                      <div id="intake-form"></div>
+                      <div class="builder-actions">
+                        <button id="btn-intake-distill" type="button">根据评测开始处理</button>
+                      </div>
+                    </div>
+                    <details class="output-card build-advanced">
+                      <summary>高级：专项导入</summary>
+                      <div id="builder-body" style="margin-top:12px">
+                        <div class="material-kinds" id="material-kinds" role="radiogroup" aria-label="材料类型">
+                          <label class="material-kind">
+                            <input type="radio" name="material-kind" value="persona" checked />
+                            <span class="mk-title">丰富想法与表达</span>
+                            <span class="mk-blurb">文章、方案、带判断的笔记。</span>
+                          </label>
+                          <label class="material-kind">
+                            <input type="radio" name="material-kind" value="custody" />
+                            <span class="mk-title">只存不写入</span>
+                            <span class="mk-blurb">仅保存在本机，不进入会对话的数字之我。</span>
+                          </label>
+                        </div>
+                        <div class="builder-actions">
+                          <button id="btn-pick" type="button">选择想法类材料（可多选）</button>
+                          <button id="btn-distill" type="button" disabled>开始处理</button>
+                        </div>
+                        <div id="pick-list" class="pick-list muted">尚未选择文件。支持 Word、文本、Markdown、演示文稿、PDF。</div>
+                        <hr class="build-hr" />
+                        <p class="muted life-hint">履历与经历专项（简历等）。批量材料请优先使用「提交文件」与「开始构建」。</p>
+                        <div class="builder-actions">
+                          <button id="btn-facts-pick" type="button">选择经历材料（可多选）</button>
+                          <button id="btn-facts-run" type="button" disabled>提取并审阅</button>
+                        </div>
+                        <div id="facts-pick-list" class="pick-list muted">尚未选择文件。</div>
+                      </div>
+                    </details>
+                  </details>
+                </div>
+                <div id="inbox-progress-card" class="build-progress-card hidden">
+                  <div class="build-progress-head">
+                    <strong id="inbox-progress-headline">准备中…</strong>
+                    <span id="inbox-progress-counts" class="muted"></span>
+                  </div>
+                  <p id="inbox-progress-current" class="build-progress-current muted"></p>
+                  <div id="build-done-banner" class="build-done-banner hidden">
+                    <div class="build-done-copy">
+                      <strong>本批已写入数字之我</strong>
+                      <p class="muted" id="build-done-summary"></p>
+                    </div>
+                    <button type="button" id="btn-build-goto-self" class="btn-primary">查看数字之我</button>
+                  </div>
+                  <details class="build-progress-detail">
+                    <summary>过程明细</summary>
+                    <pre id="inbox-progress" class="builder-progress"></pre>
+                  </details>
+                </div>
+                <!-- Preserved off main path for legacy button IDs / harness -->
+                <div class="output-card bootstrap-card hidden" id="bootstrap-guide" hidden>
                   <div class="ext-store-head">
-                    <h3>建议先备齐两类材料 <span class="tip-mark" data-tip-id="bootstrap-duo" tabindex="0" role="button" aria-label="两类材料说明">?</span></h3>
+                    <h3>材料提示 <span class="tip-mark" data-tip-id="bootstrap-duo" tabindex="0" role="button" aria-label="两类材料说明">?</span></h3>
                     <button type="button" id="btn-bootstrap-scroll-intake" class="btn-ghost">去填写评测</button>
                   </div>
-                  <p class="muted life-hint">备齐<strong>履历与经历</strong>、<strong>自我评测或判断材料</strong>后，即可建立数字之我的基本轮廓。同一份文件若同时包含两类内容，提交一次即可。</p>
                   <div class="bootstrap-grid">
                     <div class="bootstrap-item">
-                      <strong>① 履历与经历</strong>
-                      <p class="muted">简历、任职说明、项目经历等；写清时间、角色、机构与结果。</p>
+                      <strong>履历与经历</strong>
                       <button type="button" id="btn-bootstrap-resume" class="btn-ghost" title="选择履历或经历类文件并加入待处理材料" aria-label="提交履历类文件">提交履历类文件</button>
                     </div>
                     <div class="bootstrap-item">
-                      <strong>② 自我评测或判断材料</strong>
-                      <p class="muted">完成本页题目；或提交带取舍与理由的决策记录、复盘、测评摘要。</p>
+                      <strong>自我评测或判断材料</strong>
                       <button type="button" id="btn-bootstrap-assessment-file" class="btn-ghost" title="选择判断或评测类文件并加入待处理材料" aria-label="提交判断类文件">提交判断类文件</button>
                     </div>
                   </div>
-                  <p class="muted life-hint" style="margin-bottom:0">提交后请点击上方「开始构建」。若暂时没有文件，可用下方评测代替第②类；无履历时可填写「经历概要」代替第①类。</p>
                 </div>
-                <div class="output-card">
-                  <div class="ext-store-head">
-                    <h3>可读文件夹 <span class="tip-mark" data-tip-id="access-scope" tabindex="0" role="button" aria-label="可读文件夹说明">?</span></h3>
-                    <div>
-                      <button id="btn-access-add" type="button">添加文件夹</button>
-                      <button id="btn-access-scan" type="button" class="btn-ghost">扫描新文件</button>
-                    </div>
-                  </div>
-                  <p class="muted life-hint">仅读取你授权的文件夹（Word、文本、Markdown、演示文稿、PDF）。扫描结果会加入上方待处理材料。不会扫描整台电脑。</p>
-                  <div id="access-empty" class="artifact-empty">尚未授权任何文件夹。</div>
-                  <div id="access-list" class="library-list"></div>
-                </div>
-                <div class="output-card" id="intake-card">
-                  <div class="ext-store-head">
-                    <h3>自我评测 <span class="tip-mark" data-tip-id="intake-quiz" tabindex="0" role="button" aria-label="自我评测说明">?</span></h3>
-                  </div>
-                  <p class="muted life-hint" id="intake-lead">
-                    用于补充想法、判断与边界。多数题目点选即可。已有履历文件时可跳过「经历概要」。
-                  </p>
-                  <div id="intake-progress-hint" class="intake-progress-hint muted"></div>
-                  <div id="intake-form"></div>
-                  <div class="builder-actions">
-                    <button id="btn-intake-distill" type="button">根据评测开始处理</button>
-                  </div>
-                </div>
-                <details class="output-card build-advanced">
-                  <summary>高级：专项导入</summary>
-                  <div id="builder-body" style="margin-top:12px">
-                    <div class="material-kinds" id="material-kinds" role="radiogroup" aria-label="材料类型">
-                      <label class="material-kind">
-                        <input type="radio" name="material-kind" value="persona" checked />
-                        <span class="mk-title">丰富想法与表达</span>
-                        <span class="mk-blurb">文章、方案、带判断的笔记。</span>
-                      </label>
-                      <label class="material-kind">
-                        <input type="radio" name="material-kind" value="custody" />
-                        <span class="mk-title">只存不写入</span>
-                        <span class="mk-blurb">仅保存在本机，不进入会对话的数字之我。</span>
-                      </label>
-                    </div>
-                    <div class="builder-actions">
-                      <button id="btn-pick" type="button">选择想法类材料（可多选）</button>
-                      <button id="btn-distill" type="button" disabled>开始处理</button>
-                    </div>
-                    <div id="pick-list" class="pick-list muted">尚未选择文件。支持 Word、文本、Markdown、演示文稿、PDF。</div>
-                    <hr class="build-hr" />
-                    <p class="muted life-hint">履历与经历专项（简历等）。批量材料请优先使用上方「提交文件」与「开始构建」。</p>
-                    <div class="builder-actions">
-                      <button id="btn-facts-pick" type="button">选择经历材料（可多选）</button>
-                      <button id="btn-facts-run" type="button" disabled>提取并审阅</button>
-                    </div>
-                    <div id="facts-pick-list" class="pick-list muted">尚未选择文件。</div>
-                  </div>
-                </details>
                 <div id="builder-progress" class="builder-progress"></div>
               </div>
 

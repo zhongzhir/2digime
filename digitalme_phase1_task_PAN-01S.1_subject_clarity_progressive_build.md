@@ -2,19 +2,20 @@
 
 版本：v0.1  
 日期：2026-07-19  
-状态：`specified` / `owner_approved_for_implementation` / `frozen_for_implementation` / `not_started`  
+状态：`statically_verified` / `implemented`（**不** accepted）  
 所属总任务：`P1-PANORAMA`（v0.4）  
 前置实现：`98fb817eb4d177635497ca2a06c1624fe9b214cc`（PAN-01S）  
+规格接受：`686fd7b1ee9a6f7e08f8221889fd67d717a8c4a9`（`docs(plan): accept PAN-01S.1 subject clarity revision`）  
 前置状态：PAN-01S `statically_verified` / `owner_changes_requested`（**不** accepted）  
-实现分支：继续 `codex/pan-01s-minimal-product-surface`（从 `98fb817` 起；docs-only 接受后再编码）  
+实现分支：`codex/pan-01s-minimal-product-surface`（parent `686fd7b`）  
 代码 Owner：Cursor  
 
 > **状态语义**
 >
-> - 本文件为 Owner 验收未通过后的修订任务包；规格接受后允许实现；
-> - 实现后最高 `statically_verified`；**不得**把 PAN-01S 标为 `accepted`；
+> - 本文件为 Owner 验收未通过后的修订任务包；实现已落地为 `statically_verified`；
+> - **不得**把 PAN-01S 或 PAN-01S.1 标为 `accepted`（待 Owner 主路径再验收）；
 > - **不得**开始 PAN-02；
-> - 建议提交：`docs(plan): accept PAN-01S.1 subject clarity revision` → `fix(ui): make subject identity and build flow understandable`。
+> - 规格接受：`docs(plan): accept PAN-01S.1 subject clarity revision`；实现：`fix(ui): make subject identity and build flow understandable`。
 
 角色：Owner（产品验收）＋ Codex（规格与复核）＋ Cursor（本地实现）
 
@@ -350,4 +351,8 @@ PAN-01S.1 不包含：
 
 ### 12.1 规格接受记录（2026-07-19）
 
-本任务包已接受进入实现：`specified` / `owner_approved_for_implementation` / `frozen_for_implementation` / `not_started`。从 `98fb817` 起在分支 `codex/pan-01s-minimal-product-surface` 编码。
+本任务包已接受进入实现：`specified` / `owner_approved_for_implementation` / `frozen_for_implementation` / `not_started`。规格接受提交 `686fd7b`。
+
+### 12.2 实现记录（2026-07-19）
+
+实现提交 parent = `686fd7b`；分支 `codex/pan-01s-minimal-product-surface`。状态 → `statically_verified` / `implemented`（**不** accepted）。回归：`test:pan-01s`、`test:pan-01s-owner-runtime`、`test:pan-01-owner-runtime`、`test:p1-07-owner-runtime`、`test:owner-runtime`、`test:p1-phase1` 全绿。下一步：Owner 主路径验收；不得标 PAN-01S accepted；不得开始 PAN-02。

@@ -4,7 +4,7 @@
 状态：持续更新
 最后更新：2026-07-19
 
-> **当前产品主线（2026-07-19，PAN-01S.1 规格接受）**：**P1-PANORAMA — 第一阶段三位一体 Alpha**。PAN-01S `statically_verified` / `owner_changes_requested`（**不** accepted）。修订任务包见 `digitalme_phase1_task_PAN-01S.1_subject_clarity_progressive_build.md`（`frozen_for_implementation` / `not_started`）。**当前唯一任务：实现 PAN-01S.1；不得开始 PAN-02；不得标 PAN-01S accepted。**
+> **当前产品主线（2026-07-19，PAN-01S.1 实现）**：**P1-PANORAMA — 第一阶段三位一体 Alpha**。PAN-01S `statically_verified` / `owner_changes_requested`（**不** accepted）。PAN-01S.1 `statically_verified` / `implemented`（**不** accepted；parent `686fd7b`）。**当前唯一任务：Owner 验收 PAN-01S.1；不得开始 PAN-02；不得标 PAN-01S accepted。**
 >
 > **PAN-01** 最终裁定：`statically_verified` / `owner_product_perception_failed` / `needs_minimal_surface_reset`（基线 `a40c5f8`；**不标 accepted**；**不回滚**；表面收口由 PAN-01S / PAN-01S.1 承接）。
 >
@@ -291,7 +291,7 @@ flowchart TB
 | `digitalme_narrative_ai_era_autonomy.md` | 对外/对内叙事（含双线简述） |
 | `digital-me-project-positioning-draft.md` | 定位讨论稿（战略原则含双线） |
 
-**近期工程焦点（2026-07-19 覆盖）**：规格 **v0.6.3** + 决策 **#67～#76**——第一阶段三位一体 Alpha；**PAN-00R accepted**；**PAN-01S `statically_verified` / `owner_changes_requested`**；**PAN-01S.1** 主体解释与渐进式构建修订（允许实现；不 accepted）。原「规格 v0.5 + 决策 #58 产品全貌首页路径」与「规格 v0.4 + 决策 #57 按底层 WP 顺序硬化」为历史策略，证据与风险记录仍有效。
+**近期工程焦点（2026-07-19 覆盖）**：规格 **v0.6.3** + 决策 **#67～#76**——第一阶段三位一体 Alpha；**PAN-00R accepted**；**PAN-01S `statically_verified` / `owner_changes_requested`**；**PAN-01S.1 `statically_verified` / `implemented`**（不 accepted；等待 Owner 验收）。原「规格 v0.5 + 决策 #58 产品全貌首页路径」与「规格 v0.4 + 决策 #57 按底层 WP 顺序硬化」为历史策略，证据与风险记录仍有效。
 
 ## 4. 系统架构共识（草案）
 
@@ -465,7 +465,7 @@ flowchart TB
 
 > **2026-07-16 审计后重排（历史）**：第一阶段不再扩展能力面，切换为“主体可信化与协作感知”。当时以 `digitalme_phase1_subject_upgrade_plan_v0.1.md` 为执行清单；原 v0.3.13 的 L0/审计/CLI 只能视为原型，不视为已达到安全可用。
 > **2026-07-18 覆盖**：当前执行索引改为 `digitalme_panorama_execution_index_v0.1.md`；原升级计划降为 Trusted Beta 硬化依据（决策 #58）。
-> **2026-07-19 PAN-01S.1 规格接受覆盖（当前）**：PAN-01S 工程 `statically_verified`，Owner 验收未通过（`owner_changes_requested`）；**PAN-01S.1** 任务包已冻结并接受实现；**当前唯一任务：实现 PAN-01S.1；不得开始 PAN-02；不得标 PAN-01S accepted**。
+> **2026-07-19 PAN-01S.1 实现覆盖（当前）**：PAN-01S 仍为 `statically_verified` / `owner_changes_requested`（**不** accepted）；PAN-01S.1 已实现为 `statically_verified` / `implemented`（**不** accepted；parent `686fd7b`）。**当前唯一任务：Owner 验收 PAN-01S.1；不得开始 PAN-02；不得标 PAN-01S accepted**。
 
 1. **工程与 Package 基线冻结**：Git、Alpha 标记、Package hash 快照、能力状态表；
 2. **主体资产内核**：PackageStore、七类数据、原子版本、候选更新、来源 hash、回滚；

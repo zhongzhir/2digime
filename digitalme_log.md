@@ -5,6 +5,33 @@
 
 ---
 
+## 2026-07-19 PAN-01S.1 实现 · statically_verified
+
+### 做了什么
+
+在分支 `codex/pan-01s-minimal-product-surface`（parent 规格接受 `686fd7b`）实现主体解释与渐进式构建：
+
+1. 默认「我」：稳定主体解释 + 当前状态说明 + 单一主操作（P0～P4 文案矩阵）；
+2. 渐进式构建 B0～B5：一次只呈现当前一步；中途离开可恢复真实进度；
+3. 自我评测、材料建议、已授权文件夹用后退出主路径，管理能力后移可达；
+4. 构建完成后展示真实变化并回到「我」，不长期保留完成卡片；
+5. 保留 P0～P4 优先级与 PAN-01R 生产隔离；
+6. 更新 `test:pan-01s`（21/21）与相关 harness；规定回归全绿。
+
+### 状态
+
+PAN-01S.1：`statically_verified` / `implemented`（**不** accepted）  
+PAN-01S：`statically_verified` / `owner_changes_requested`（**不** accepted）  
+PAN-02：`planned` / `not_started`
+
+未触碰 Package；未标 accepted；未开始 PAN-02；未 push。
+
+### 下一步
+
+**Owner 验收 PAN-01S.1；不得标 PAN-01S accepted；不得开始 PAN-02。**
+
+---
+
 ## 2026-07-19 PAN-01S.1 规格接受 · 允许修订实现
 
 ### 做了什么
@@ -19,15 +46,11 @@ Owner 对 PAN-01S（`98fb817`）验收未通过：主体解释不足、构建为
 
 ### 状态
 
-PAN-01S.1：`specified` / `owner_approved_for_implementation` / `frozen_for_implementation` / `not_started`  
-PAN-01S：`statically_verified` / `owner_changes_requested`（不 accepted）  
-PAN-02：`planned` / `not_started`
-
-本轮 docs-only：未改 `digitalme-app/**`；未触碰 Package；未提交交接件。
+（历史）当时：PAN-01S.1 `not_started`；现已由上方「实现」条目承接为 `statically_verified`。
 
 ### 下一步
 
-**实现 PAN-01S.1；不得标 PAN-01S accepted；不得开始 PAN-02。**
+（历史）当时：实现 PAN-01S.1；现等待 Owner 验收。
 
 ---
 

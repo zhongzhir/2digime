@@ -231,6 +231,21 @@ function buildCollaborationSection(collab) {
 }
 
 /**
+ * Fail-closed: true only when source-index mentions intake-questionnaire.
+ * Any missing file or read error → false.
+ */
+function detectIntakeEvidence(packageDir) {
+  try {
+    const indexPath = path.join(packageDir, "sources", "source-index.json");
+    if (!fs.existsSync(indexPath)) return false;
+    const raw = fs.readFileSync(indexPath, "utf8");
+    return typeof raw === "string" && raw.includes("intake-questionnaire");
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Build SubjectOverview v1 (read-only; must not mutate package bytes).
  * @param {string} packageDir
  * @param {{ hasApiKey?: boolean, readyExtensionCount?: number, inboxSummary?: object }} [runtime]
@@ -316,6 +331,7 @@ function buildSubjectOverviewV1(packageDir, runtime = {}) {
   base.panorama = buildPanoramaSection(base, {
     packageExists: inspect.exists,
     inboxSummary,
+    hasIntakeEvidence: detectIntakeEvidence(pkgDir),
   });
   return base;
 }

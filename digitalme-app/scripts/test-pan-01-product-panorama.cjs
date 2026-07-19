@@ -132,8 +132,8 @@ test("panorama structure and status contract fixed", () => {
     assert.ok(Array.isArray(p.journey) && p.journey.length === 5);
     assert.ok(p.direction && p.nextAction);
     assert.ok(p.minimalSurface && p.minimalSurface.priority === "P4");
-    assert.equal(p.minimalSurface.primaryAction, "view_subject");
-    assert.equal(p.nextAction.navTarget, "me-cognition");
+    assert.equal(p.minimalSurface.primaryAction, "start_work");
+    assert.equal(p.nextAction.navTarget, "chat");
     assert.notEqual(p.nextAction.navTarget, "panorama-experience");
   } finally {
     cleanup(dir);

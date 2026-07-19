@@ -1,8 +1,7 @@
 "use strict";
 
 /**
- * PAN-01S Minimal Product Surface hermetic tests (temp fixtures only).
- * Covers task package §12.1 A–Z (logic / contract layer).
+ * PAN-01S / PAN-01S.1 Minimal Product Surface hermetic tests (temp fixtures only).
  * Run: node scripts/test-pan-01s-minimal-surface.cjs
  */
 
@@ -17,9 +16,12 @@ const { buildSubjectOverviewV1 } = require("../src/subject-overview");
 const {
   PANORAMA_NAV_TARGETS,
   PANORAMA_TEST_ONLY_NAV_TARGETS,
+  SUBJECT_IDENTITY_LINE,
+  MINIMAL_SURFACE_ACTIONS,
 } = require("../src/subject-overview/constants");
 const {
   buildMinimalSurface,
+  buildBuildFlow,
   summarizeInboxForOverview,
   sanitizeNavTarget,
   resolveSubjectIntegrity,
@@ -92,16 +94,24 @@ function msOf(overview) {
   return overview.panorama.minimalSurface;
 }
 
-test("G/L: missing → P1 继续构建, no fake ownership/privacy", () => {
+function assertIdentityTwoLine(summary, line2Snippet) {
+  assert.ok(typeof summary === "string");
+  assert.ok(summary.startsWith(SUBJECT_IDENTITY_LINE));
+  assert.ok(summary.includes("\n"));
+  if (line2Snippet) assert.match(summary, line2Snippet);
+}
+
+test("G/L: missing → P1 让我认识你, no fake ownership/privacy", () => {
   const missing = path.join(tempDir("missing-root"), "no-such-package");
   try {
     const overview = buildSubjectOverviewV1(missing, {});
     const ms = msOf(overview);
     assert.equal(ms.priority, "P1");
     assert.equal(ms.primaryAction, "continue_build");
-    assert.equal(ms.primaryActionLabel, "继续构建");
+    assert.equal(ms.primaryActionLabel, MINIMAL_SURFACE_ACTIONS.continue_build);
+    assert.equal(ms.primaryActionLabel, "让我认识你");
     assert.equal(ms.primaryNavTarget, "me-build");
-    assert.match(ms.summary, /还没有完成建立/);
+    assertIdentityTwoLine(ms.summary, /还不够了解你/);
     assert.equal(overview.package.privacyLabel, "隐私状态尚无法确认");
     assert.equal(ms.summary.includes("属于你"), false);
     assert.equal(ms.summary.includes("状态正常"), false);
@@ -110,7 +120,7 @@ test("G/L: missing → P1 继续构建, no fake ownership/privacy", () => {
   }
 });
 
-test("M: read_error → P0 查看问题", () => {
+test("M: read_error → P0 恢复我的信息", () => {
   const dir = makeV02("read-error");
   try {
     fs.writeFileSync(path.join(dir, "manifest.json"), "{not-json", "utf8");
@@ -118,9 +128,9 @@ test("M: read_error → P0 查看问题", () => {
     const ms = msOf(overview);
     assert.equal(ms.priority, "P0");
     assert.equal(ms.primaryAction, "view_problems");
-    assert.equal(ms.primaryActionLabel, "查看问题");
+    assert.equal(ms.primaryActionLabel, "恢复我的信息");
     assert.equal(ms.primaryNavTarget, "settings-package-versions");
-    assert.match(ms.summary, /无法读取/);
+    assertIdentityTwoLine(ms.summary, /无法读取/);
   } finally {
     cleanup(dir);
   }
@@ -139,13 +149,13 @@ test("M: content_degraded → P0", () => {
     assert.equal(state.contentDegraded || state.subjectReadStatus === "content_degraded", true);
     const ms = msOf(overview);
     assert.equal(ms.priority, "P0");
-    assert.equal(ms.primaryActionLabel, "查看问题");
+    assert.equal(ms.primaryActionLabel, "恢复我的信息");
   } finally {
     cleanup(dir);
   }
 });
 
-test("U: awaiting_review + suggested → P2 继续确认", () => {
+test("U: awaiting_review + suggested → P2 确认我的理解", () => {
   const dir = makeV02("u-conflict");
   try {
     const inbox = summarizeInboxForOverview({
@@ -157,8 +167,9 @@ test("U: awaiting_review + suggested → P2 继续确认", () => {
     const overview = buildSubjectOverviewV1(dir, { inboxSummary: inbox });
     const ms = msOf(overview);
     assert.equal(ms.priority, "P2");
-    assert.equal(ms.primaryActionLabel, "继续确认");
+    assert.equal(ms.primaryActionLabel, "确认我的理解");
     assert.equal(ms.primaryNavTarget, "me-build");
+    assertIdentityTwoLine(ms.summary, /需要你确认/);
   } finally {
     cleanup(dir);
   }
@@ -173,7 +184,7 @@ test("V: read_error + awaiting_review → P0", () => {
     });
     const overview = buildSubjectOverviewV1(dir, { inboxSummary: inbox });
     assert.equal(msOf(overview).priority, "P0");
-    assert.equal(msOf(overview).primaryActionLabel, "查看问题");
+    assert.equal(msOf(overview).primaryActionLabel, "恢复我的信息");
   } finally {
     cleanup(dir);
   }
@@ -185,22 +196,25 @@ test("W: missing + suggested → P1", () => {
     const inbox = summarizeInboxForOverview({ items: [{ status: "suggested" }] });
     const overview = buildSubjectOverviewV1(missing, { inboxSummary: inbox });
     assert.equal(msOf(overview).priority, "P1");
-    assert.equal(msOf(overview).primaryActionLabel, "继续构建");
+    assert.equal(msOf(overview).primaryActionLabel, "让我认识你");
   } finally {
     cleanup(path.dirname(missing));
   }
 });
 
-test("X: processing only + readable → P4 + reminder", () => {
+test("X: processing only + readable → P4 + reminder + chat primary", () => {
   const dir = makeV02("x-proc");
   try {
     const inbox = summarizeInboxForOverview({ items: [{ status: "processing" }] });
     const overview = buildSubjectOverviewV1(dir, { inboxSummary: inbox });
     const ms = msOf(overview);
     assert.equal(ms.priority, "P4");
-    assert.equal(ms.primaryActionLabel, "查看我的信息");
-    assert.equal(ms.primaryNavTarget, "me-cognition");
-    assert.match(ms.reminder || "", /处理中/);
+    assert.equal(ms.primaryAction, "start_work");
+    assert.equal(ms.primaryActionLabel, "开始一次对话");
+    assert.equal(ms.primaryNavTarget, "chat");
+    assert.equal(ms.secondaryAction && ms.secondaryAction.label, "查看目前的我");
+    assert.match(ms.reminder || "", /有内容正在处理中/);
+    assertIdentityTwoLine(ms.summary);
     assert.notEqual(ms.primaryAction, "continue_build");
   } finally {
     cleanup(dir);
@@ -216,6 +230,7 @@ test("Y: unknown inbox status → fail-closed", () => {
     assert.equal(ms.failClosed, true);
     assert.equal(ms.primaryNavTarget, null);
     assert.equal(ms.primaryAction, null);
+    assertIdentityTwoLine(ms.summary, /无法确认/);
   } finally {
     cleanup(dir);
   }
@@ -251,7 +266,8 @@ test("O: renderer cannot inject priority via runtime junk", () => {
       panorama: { minimalSurface: { priority: "P0", primaryActionLabel: "HACK" } },
     });
     assert.equal(msOf(overview).priority, "P4");
-    assert.equal(msOf(overview).primaryActionLabel, "查看我的信息");
+    assert.equal(msOf(overview).primaryActionLabel, "开始一次对话");
+    assert.equal(msOf(overview).primaryAction, "start_work");
   } finally {
     cleanup(dir);
   }
@@ -279,6 +295,7 @@ test("Q: no path/secret leaks in minimalSurface payload", () => {
       }),
     });
     assertNoLeak(JSON.stringify(overview.panorama.minimalSurface));
+    assertNoLeak(JSON.stringify(overview.panorama.buildFlow));
     assertNoLeak(JSON.stringify(overview));
   } finally {
     cleanup(dir);
@@ -291,6 +308,7 @@ test("nextAction aligns with minimalSurface; never panorama-experience", () => {
     const overview = buildSubjectOverviewV1(dir, {});
     assert.equal(overview.panorama.nextAction.navTarget, overview.panorama.minimalSurface.primaryNavTarget);
     assert.equal(overview.panorama.nextAction.label, overview.panorama.minimalSurface.primaryActionLabel);
+    assert.equal(overview.panorama.nextAction.navTarget, "chat");
     assert.notEqual(overview.panorama.nextAction.navTarget, "panorama-experience");
     for (const p of overview.panorama.promises) {
       assert.notEqual(p.navTarget, "panorama-experience");
@@ -303,14 +321,15 @@ test("nextAction aligns with minimalSurface; never panorama-experience", () => {
   }
 });
 
-test("P3: suggested alone → 继续完善", () => {
+test("P3: suggested alone → 继续完善我", () => {
   const dir = makeV02("p3");
   try {
     const overview = buildSubjectOverviewV1(dir, {
       inboxSummary: summarizeInboxForOverview({ items: [{ status: "suggested" }] }),
     });
     assert.equal(msOf(overview).priority, "P3");
-    assert.equal(msOf(overview).primaryActionLabel, "继续完善");
+    assert.equal(msOf(overview).primaryActionLabel, "继续完善我");
+    assertIdentityTwoLine(msOf(overview).summary, /继续完善/);
   } finally {
     cleanup(dir);
   }
@@ -323,7 +342,53 @@ test("pending_confirmation maps to P2", () => {
       inboxSummary: summarizeInboxForOverview({ items: [{ status: "pending_confirmation" }] }),
     });
     assert.equal(msOf(overview).priority, "P2");
-    assert.equal(msOf(overview).primaryActionLabel, "继续确认");
+    assert.equal(msOf(overview).primaryActionLabel, "确认我的理解");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("buildFlow: B0 empty inbox; B2 actionable; B3 processing; B4 awaiting", () => {
+  const dir = makeV02("build-flow");
+  try {
+    const overview = buildSubjectOverviewV1(dir, {});
+    const b0 = overview.panorama.buildFlow;
+    assert.equal(b0.step, "B0");
+    assert.equal(typeof b0.pendingCount, "number");
+    assert.equal(typeof b0.hasIntakeEvidence, "boolean");
+
+    const b2 = buildBuildFlow(overview, summarizeInboxForOverview({
+      items: [{ status: "suggested" }, { status: "queued" }],
+    }), {});
+    assert.equal(b2.step, "B2");
+    assert.equal(b2.pendingCount, 2);
+
+    const b3 = buildBuildFlow(overview, summarizeInboxForOverview({
+      items: [{ status: "processing" }],
+    }), {});
+    assert.equal(b3.step, "B3");
+
+    const b4 = buildBuildFlow(overview, summarizeInboxForOverview({
+      items: [{ status: "awaiting_review" }],
+    }), {});
+    assert.equal(b4.step, "B4");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("buildFlow hasIntakeEvidence from source-index substring", () => {
+  const dir = makeV02("intake-ev");
+  try {
+    const sourcesDir = path.join(dir, "sources");
+    fs.mkdirSync(sourcesDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(sourcesDir, "source-index.json"),
+      JSON.stringify({ sources: [{ id: "x", label: "intake-questionnaire-v0.3" }] }, null, 2),
+      "utf8"
+    );
+    const overview = buildSubjectOverviewV1(dir, {});
+    assert.equal(overview.panorama.buildFlow.hasIntakeEvidence, true);
   } finally {
     cleanup(dir);
   }
@@ -352,7 +417,7 @@ test("S/T/Z: production constants reject harness nav; harness flag is env-only",
   assert.equal(before.includes("getPanoramaSubjectBrief"), false);
 });
 
-test("production HTML has no sovereign CTA / promise walls", () => {
+test("production HTML has wizard + demoted bootstrap; intake under more", () => {
   const html = fs.readFileSync(path.join(__dirname, "../src/renderer/index.html"), "utf8");
   assert.equal(html.includes("panorama-sovereign-cta"), false);
   assert.equal(html.includes("panorama-promises-card"), false);
@@ -363,6 +428,26 @@ test("production HTML has no sovereign CTA / promise walls", () => {
   assert.equal(html.includes("属于你 · 可带走 · 可信任"), false);
   assert.match(html, /subject-minimal-summary/);
   assert.match(html, /subject-minimal-actions/);
+  assert.match(html, /id="build-wizard-step"/);
+  assert.match(html, /id="build-wizard-more"/);
+  assert.match(html, /id="build-step-b0"/);
+  assert.match(html, /id="build-step-b5"/);
+  assert.match(html, /id="btn-build-b0-import"/);
+  assert.match(html, /id="btn-inbox-pick"/);
+  assert.match(html, /id="btn-access-add"/);
+  // bootstrap-guide not on main path (absent or permanently hidden)
+  const bootstrapIdx = html.indexOf('id="bootstrap-guide"');
+  if (bootstrapIdx >= 0) {
+    const slice = html.slice(Math.max(0, bootstrapIdx - 120), bootstrapIdx + 80);
+    assert.match(slice, /hidden/);
+    assert.equal(html.includes("建议先备齐两类材料"), false);
+  }
+  // intake-card inside build-wizard-more
+  const moreIdx = html.indexOf('id="build-wizard-more"');
+  const intakeIdx = html.indexOf('id="intake-card"');
+  assert.ok(moreIdx >= 0 && intakeIdx > moreIdx);
+  const moreClose = html.indexOf("</details>", intakeIdx);
+  assert.ok(moreClose > intakeIdx);
 });
 
 test("help.js contains promises/journey; no PAN-01R CTA", () => {
@@ -375,12 +460,15 @@ test("help.js contains promises/journey; no PAN-01R CTA", () => {
   assert.equal(help.includes("panorama-experience"), false);
 });
 
-test("app.js rejects panorama-experience production entry", () => {
+test("app.js rejects panorama-experience production entry; wires build wizard", () => {
   const appJs = fs.readFileSync(path.join(__dirname, "../src/renderer/app.js"), "utf8");
   assert.match(appJs, /renderMinimalSurface/);
+  assert.match(appJs, /applyBuildWizard/);
+  assert.match(appJs, /refreshBuildFlowFromOverview/);
   assert.match(appJs, /MINIMAL_SURFACE_ACTION_WHITELIST/);
   assert.match(appJs, /pan01rTestHarness !== true/);
   assert.match(appJs, /never recompute P0/);
+  assert.match(appJs, /subject-minimal-line1/);
   // Production whitelist must not include panorama-experience
   const wl = appJs.match(/const PANORAMA_NAV_WHITELIST = new Set\(\[([\s\S]*?)\]\)/);
   assert.ok(wl);

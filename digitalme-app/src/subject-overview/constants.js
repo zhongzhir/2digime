@@ -42,16 +42,22 @@ const PANORAMA_NAV_TARGETS = new Set([
  */
 const PANORAMA_TEST_ONLY_NAV_TARGETS = new Set(["panorama-experience"]);
 
+/** Stable first line of default 「我」 summary (PAN-01S.1). */
+const SUBJECT_IDENTITY_LINE =
+  "这是基于你的经历、判断和边界，持续形成的数字之我。";
+
 const MINIMAL_SURFACE_ACTIONS = Object.freeze({
-  view_problems: "查看问题",
-  continue_build: "继续构建",
-  continue_confirm: "继续确认",
-  continue_refine: "继续完善",
-  view_subject: "查看我的信息",
-  start_work: "开始工作",
+  view_problems: "恢复我的信息",
+  continue_build: "让我认识你",
+  continue_confirm: "确认我的理解",
+  continue_refine: "继续完善我",
+  view_subject: "查看目前的我",
+  start_work: "开始一次对话",
 });
 
 const MINIMAL_SURFACE_PRIORITIES = Object.freeze(["P0", "P1", "P2", "P3", "P4"]);
+
+const BUILD_FLOW_STEPS = Object.freeze(["B0", "B1", "B2", "B3", "B4", "B5"]);
 
 const LAYER_META = Object.freeze({
   evidence: {
@@ -150,8 +156,10 @@ module.exports = {
   USER_STATUS_LABEL,
   PANORAMA_NAV_TARGETS,
   PANORAMA_TEST_ONLY_NAV_TARGETS,
+  SUBJECT_IDENTITY_LINE,
   MINIMAL_SURFACE_ACTIONS,
   MINIMAL_SURFACE_PRIORITIES,
+  BUILD_FLOW_STEPS,
   DATA_KINDS,
   LAYER_META,
   CAPABILITY_CATALOG,

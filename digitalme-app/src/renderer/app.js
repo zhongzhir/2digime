@@ -1149,6 +1149,9 @@ function switchView(view, btn, opts = {}) {
   $("view-do").classList.toggle("hidden", view !== "do");
   $("view-me").classList.toggle("hidden", view !== "me");
   $("view-extensions").classList.toggle("hidden", view !== "extensions");
+  if (view !== "me") {
+    clearBuildSessionState();
+  }
   if (view === "extensions") refreshExtensionsView();
   if (view === "chat") renderCapabilitiesStatus();
   if (view === "do") {
@@ -1186,9 +1189,26 @@ let meLane = "self";
 let buildDoneTargetTab = "overview";
 /** Invalidates in-flight me-view default-entry apply when user navigates within 我. */
 let meNavGeneration = 0;
+let lastBuildFlow = null;
+let buildChoseImport = false;
+/** @type {{ summary: string } | null} */
+let buildSessionComplete = null;
+
+const SUBJECT_IDENTITY_LINE_UI =
+  "这是基于你的经历、判断和边界，持续形成的数字之我。";
+
+function clearBuildSessionState() {
+  buildChoseImport = false;
+  buildSessionComplete = null;
+}
 
 function switchMeLane(lane) {
-  meLane = lane === "build" ? "build" : "self";
+  const next = lane === "build" ? "build" : "self";
+  const changed = meLane !== next;
+  if (next === "self" && meLane === "build") {
+    clearBuildSessionState();
+  }
+  meLane = next;
   document.querySelectorAll("#me-lane-tabs .mode-tab").forEach((b) => {
     b.classList.toggle("active", b.dataset.meLane === meLane);
   });
@@ -1196,13 +1216,33 @@ function switchMeLane(lane) {
   const self = $("me-lane-self");
   if (build) build.classList.toggle("hidden", meLane !== "build");
   if (self) self.classList.toggle("hidden", meLane !== "self");
+  applyBuildWizard();
+  // Only hydrate inbox/overview when entering build. Re-entrant switchMeLane("build")
+  // (focusReviewPanel / goBuildView / post-write) must not storm subject:getOverview —
+  // that blocks packageStore:listVersions and subsequent inbox IPC on the main process.
   if (meLane === "build") {
-    refreshInboxPanel();
-    renderIntakeForm();
+    if (changed) {
+      refreshInboxPanel();
+      renderIntakeForm();
+      refreshBuildFlowFromOverview();
+    }
   } else {
     refreshCapabilitySurface();
     if (meActiveTab) switchMeTab(meActiveTab);
   }
+}
+
+/** Keep build lane visible without re-fetching overview when already there. */
+function ensureMeBuildLaneVisible() {
+  if (meLane === "build") {
+    const build = $("me-lane-build");
+    const self = $("me-lane-self");
+    if (build) build.classList.remove("hidden");
+    if (self) self.classList.add("hidden");
+    applyBuildWizard();
+    return;
+  }
+  switchMeLane("build");
 }
 
 function goBuildView() {
@@ -1318,7 +1358,23 @@ function renderMinimalSurface(ms) {
   const surface = ms && typeof ms === "object" ? ms : null;
   setSafeText(titleEl, (surface && surface.subjectName) || "我的 Digital Me");
   if (summaryEl) {
-    setSafeText(summaryEl, (surface && surface.summary) || "");
+    clearChildren(summaryEl);
+    const raw = (surface && surface.summary) || "";
+    const parts = String(raw).split("\n");
+    const line1 = (parts[0] || "").trim();
+    const line2 = parts.slice(1).join("\n").trim();
+    if (line1) {
+      const s1 = document.createElement("span");
+      s1.className = "subject-minimal-line1";
+      setSafeText(s1, line1);
+      summaryEl.appendChild(s1);
+    }
+    if (line2) {
+      const s2 = document.createElement("span");
+      s2.className = "subject-minimal-line2";
+      setSafeText(s2, line2);
+      summaryEl.appendChild(s2);
+    }
   }
 
   clearChildren(actionsEl);
@@ -1379,6 +1435,80 @@ function renderMinimalSurface(ms) {
       setSafeText(reminderEl, "");
     }
   }
+}
+
+function applyBuildWizard() {
+  const trusted = (lastBuildFlow && lastBuildFlow.step) || "B0";
+  let step = trusted;
+  if (buildSessionComplete) step = "B5";
+  else if (buildChoseImport && trusted === "B0") step = "B1";
+
+  for (let i = 0; i <= 5; i += 1) {
+    const panel = $(`build-step-b${i}`);
+    if (panel) panel.classList.toggle("hidden", step !== `B${i}`);
+  }
+
+  const countLine = $("build-b2-count-line");
+  if (countLine) {
+    const n =
+      lastBuildFlow && typeof lastBuildFlow.pendingCount === "number"
+        ? lastBuildFlow.pendingCount
+        : 0;
+    setSafeText(
+      countLine,
+      `本次将处理 ${n} 份资料，并先请你确认相关认识，再写入数字之我。`
+    );
+  }
+
+  const b5 = $("build-b5-summary");
+  if (b5) {
+    const sum =
+      (buildSessionComplete &&
+        typeof buildSessionComplete.summary === "string" &&
+        buildSessionComplete.summary.trim()) ||
+      "我已经根据本次确认更新了对你的认识";
+    setSafeText(b5, sum);
+  }
+
+  const tabs = $("me-lane-tabs");
+  if (tabs) {
+    // Prefer auto-hide on self; show demoted tabs while in build for escape hatch.
+    tabs.classList.toggle("hidden", meLane === "self");
+  }
+  const backbar = $("build-flow-backbar");
+  if (backbar) backbar.classList.toggle("hidden", meLane !== "build");
+
+  const bootstrap = $("bootstrap-guide");
+  if (bootstrap) {
+    bootstrap.classList.add("hidden");
+    bootstrap.hidden = true;
+  }
+
+  const intake = $("intake-card");
+  if (intake) {
+    intake.classList.toggle(
+      "has-intake-evidence",
+      !!(lastBuildFlow && lastBuildFlow.hasIntakeEvidence)
+    );
+  }
+}
+
+async function refreshBuildFlowFromOverview() {
+  try {
+    if (!window.digitalMe || !window.digitalMe.getSubjectOverview) {
+      lastBuildFlow = null;
+      applyBuildWizard();
+      return;
+    }
+    const overview = await window.digitalMe.getSubjectOverview();
+    lastBuildFlow =
+      overview && overview.panorama && overview.panorama.buildFlow
+        ? overview.panorama.buildFlow
+        : null;
+  } catch {
+    lastBuildFlow = null;
+  }
+  applyBuildWizard();
 }
 
 /** @deprecated walls removed from default surface; kept name for callers */
@@ -2526,6 +2656,11 @@ function showBuildDoneBanner({ summary, deferred, undecided }) {
   if (undecided > 0) parts.push(`${undecided} 份待定需先指定用途`);
   if (sum) sum.textContent = parts.join(" · ") || "可在「数字之我」查看覆盖度与内容。";
   banner.classList.remove("hidden");
+  const completeSummary =
+    (summary && String(summary).trim()) ||
+    "我已经根据本次确认更新了对你的认识";
+  buildSessionComplete = { summary: completeSummary };
+  applyBuildWizard();
   try {
     banner.scrollIntoView({ behavior: "smooth", block: "nearest" });
   } catch {
@@ -2651,6 +2786,7 @@ async function startReviewMode(ready) {
   reviewModeGroups = buildReviewModeGroups(ready);
   reviewModeIndex = 0;
   if (!reviewModeGroups.length) return false;
+  buildSessionComplete = null;
   hideBuildDoneBanner();
   goBuildView();
   setProgressSink("inbox-progress");
@@ -2660,6 +2796,49 @@ async function startReviewMode(ready) {
 
 async function completeCurrentReviewCommitted(revision, options = {}) {
   const { requirePackageRevision = true } = options;
+  if (requirePackageRevision && !isValidPackageRevision(revision)) {
+    reviewModeGroups = [];
+    reviewModeIndex = 0;
+    distillResult = null;
+    $("builder-review")?.classList.add("hidden");
+    const msg = "写入结果缺少有效版本号，未将材料标记为已写入。";
+    if (progressSinkId === "inbox-progress") {
+      updateInboxProgressSummary({
+        headline: "写入未完成",
+        current: msg,
+        appendDetail: msg,
+      });
+    } else {
+      const pel = $("builder-progress");
+      if (pel) pel.textContent = msg;
+    }
+    const ids = [...pendingReviewInboxIds];
+    pendingReviewInboxIds = [];
+    if (ids.length) await markInboxItemsStatus(ids, "suggested");
+    await refreshInboxPanel();
+    return { hasNext: false, completed: false, ok: false };
+  }
+
+  const currentIds = [...pendingReviewInboxIds];
+  const nextIndex = reviewModeIndex + 1;
+  const hasNext = nextIndex < reviewModeGroups.length;
+  const meta = isValidPackageRevision(revision)
+    ? { revision, committedAt: new Date().toISOString() }
+    : undefined;
+
+  // Advance the next group to awaiting_review before marking current written, so
+  // observers never see a half-advanced queue (written + still suggested).
+  if (hasNext) {
+    reviewModeIndex = nextIndex;
+    pendingReviewInboxIds = [];
+    distillResult = null;
+    ensureMeBuildLaneVisible();
+    await loadCurrentReviewGroup();
+    if (currentIds.length) await markInboxItemsStatus(currentIds, "written", meta);
+    await refreshInboxPanel();
+    return { hasNext: true, completed: false, ok: true };
+  }
+
   const finalizeResult = await finalizePendingReviewAsWritten(revision, { requirePackageRevision });
   if (!finalizeResult.ok) {
     reviewModeGroups = [];
@@ -2680,19 +2859,9 @@ async function completeCurrentReviewCommitted(revision, options = {}) {
     await refreshInboxPanel();
     return { hasNext: false, completed: false, ok: false };
   }
-  reviewModeIndex += 1;
-  distillResult = null;
-  const hasNext = reviewModeIndex < reviewModeGroups.length;
-  if (hasNext) {
-    switchMeLane("build");
-    goBuildView();
-    await loadCurrentReviewGroup();
-    return { hasNext: true, completed: false, ok: true };
-  }
   clearReviewModeState();
   $("builder-review")?.classList.add("hidden");
-  switchMeLane("build");
-  goBuildView();
+  ensureMeBuildLaneVisible();
   updateInboxProgressSummary({
     headline: "审阅写入完成",
     current: "本批审阅已全部确认写入。",
@@ -2706,7 +2875,14 @@ async function abandonCurrentReview() {
 }
 
 function focusReviewPanel() {
-  switchMeLane("build");
+  // Pending review → show B4 + review panel without overview refresh storm.
+  if (!buildSessionComplete) {
+    lastBuildFlow = {
+      ...(lastBuildFlow && typeof lastBuildFlow === "object" ? lastBuildFlow : {}),
+      step: "B4",
+    };
+  }
+  ensureMeBuildLaneVisible();
   const reviewEl = $("builder-review");
   if (reviewEl) reviewEl.classList.remove("hidden");
   const titleEl = $("builder-review-title") || document.querySelector("#builder-review h3");
@@ -7979,7 +8155,17 @@ async function refreshSubjectHome() {
   if (!titleEl || !window.digitalMe.getSubjectOverview) return;
   setSafeText(titleEl, "我的 Digital Me");
   const summaryEl = $("subject-minimal-summary");
-  if (summaryEl) setSafeText(summaryEl, "正在加载…");
+  if (summaryEl) {
+    clearChildren(summaryEl);
+    const s1 = document.createElement("span");
+    s1.className = "subject-minimal-line1";
+    setSafeText(s1, SUBJECT_IDENTITY_LINE_UI);
+    summaryEl.appendChild(s1);
+    const s2 = document.createElement("span");
+    s2.className = "subject-minimal-line2";
+    setSafeText(s2, "正在了解当前状态…");
+    summaryEl.appendChild(s2);
+  }
   const actionsEl = $("subject-minimal-actions");
   if (actionsEl) clearChildren(actionsEl);
   try {
@@ -7987,12 +8173,13 @@ async function refreshSubjectHome() {
     const panorama = overview.panorama || null;
     // Only render main-process minimalSurface; never recompute P0-P4 in renderer.
     renderMinimalSurface(panorama && panorama.minimalSurface);
+    if (panorama && panorama.buildFlow) lastBuildFlow = panorama.buildFlow;
     // Home walls are gone; wire count labeling only if a layers container still exists.
     renderSubjectLayerCards($("subject-home-layers"), overview.layers);
   } catch (e) {
     renderMinimalSurface({
       subjectName: "我的 Digital Me",
-      summary: "部分个人信息暂时无法读取。",
+      summary: `${SUBJECT_IDENTITY_LINE_UI}\n当前状态无法确认。`,
       primaryAction: null,
       primaryActionLabel: null,
       primaryNavTarget: null,
@@ -8594,6 +8781,16 @@ async function markInboxItemsStatus(ids, status, processMeta) {
 async function markPendingReviewAwaiting() {
   if (!pendingReviewInboxIds.length) return;
   await markInboxItemsStatus(pendingReviewInboxIds, "awaiting_review");
+  // Surface B4 immediately; do not wait on overview IPC for the wizard step.
+  lastBuildFlow = {
+    ...(lastBuildFlow && typeof lastBuildFlow === "object" ? lastBuildFlow : {}),
+    step: "B4",
+    awaitingCount: Math.max(
+      (lastBuildFlow && lastBuildFlow.awaitingCount) || 0,
+      pendingReviewInboxIds.length
+    ),
+  };
+  applyBuildWizard();
   await refreshInboxPanel();
 }
 
@@ -8691,14 +8888,18 @@ async function afterReviewModePackageWrite(committed, options = {}) {
     return false;
   }
   if (afterSuccess) await afterSuccess(r);
-  $("builder-progress").textContent = formatSummary(r);
+  const progressText =
+    typeof formatSummary === "function" ? formatSummary(r) : "写入完成。";
+  $("builder-progress").textContent = progressText;
   const wasInboxReview = reviewModeGroups.length > 0 || pendingReviewInboxIds.length > 0;
+  let queueHasNext = false;
   if (wasInboxReview) {
     if (reviewModeGroups.length) {
       const queueResult = await completeCurrentReviewCommitted(r.revision, {
         requirePackageRevision: true,
       });
       if (!queueResult.ok) return false;
+      queueHasNext = !!queueResult.hasNext;
     } else {
       const fin = await finalizePendingReviewAsWritten(r.revision, { requirePackageRevision: true });
       if (!fin.ok) {
@@ -8717,14 +8918,27 @@ async function afterReviewModePackageWrite(committed, options = {}) {
   pkg = await window.digitalMe.loadPackage();
   lifeGraphCache = null;
   renderPackageStatus();
+  // Refresh versions before any lane/overview work so the panel cannot stay stuck
+  // on「正在读取版本信息…」behind a subject:getOverview storm.
   await refreshPackageVersionsPanel();
-  if (!wasInboxReview) {
-    await refreshMeView();
-    goSelfView("cognition");
-  } else {
-    switchMeLane("build");
-    goBuildView();
+  if (queueHasNext) {
+    // More review groups remain — stay on B4, do not flip to B5.
+    return true;
   }
+  const bits = [];
+  if (r && typeof r.events === "number" && r.events > 0) bits.push(`经历 ${r.events} 项`);
+  if (r && typeof r.memories === "number" && r.memories > 0) bits.push(`记忆 ${r.memories} 项`);
+  if (r && typeof r.frameworks === "number" && r.frameworks > 0) bits.push(`框架 ${r.frameworks} 项`);
+  if (r && typeof r.personaNotes === "number" && r.personaNotes > 0) {
+    bits.push(`表达观察 ${r.personaNotes} 项`);
+  }
+  buildSessionComplete = {
+    summary: bits.length
+      ? `我新增或更新了：${bits.join("、")}。`
+      : "我已经根据本次确认更新了对你的认识",
+  };
+  // Stay on build so user sees B5; avoid re-entrant overview fetch.
+  ensureMeBuildLaneVisible();
   return true;
 }
 
@@ -8944,6 +9158,7 @@ async function refreshInboxPanel() {
       accessList.appendChild(row);
     }
   }
+  await refreshBuildFlowFromOverview();
 }
 
 async function processInboxItem(it) {
@@ -9288,11 +9503,54 @@ function bindMe() {
   const gotoSelf = $("btn-build-goto-self");
   if (gotoSelf) {
     gotoSelf.addEventListener("click", () => {
+      buildSessionComplete = null;
       goSelfView(buildDoneTargetTab || "overview");
       buildDoneTargetTab = "overview";
       gotoSelf.textContent = "查看数字之我";
     });
   }
+  $("btn-build-back-to-me")?.addEventListener("click", () => {
+    buildSessionComplete = null;
+    goSelfView("overview");
+  });
+  $("btn-build-b0-import")?.addEventListener("click", () => {
+    buildChoseImport = true;
+    applyBuildWizard();
+    $("btn-inbox-pick")?.click();
+  });
+  $("btn-build-b0-chat-note")?.addEventListener("click", () => {
+    navigatePanoramaTarget("chat");
+  });
+  $("btn-build-b0-later")?.addEventListener("click", () => {
+    buildSessionComplete = null;
+    goSelfView("overview");
+  });
+  $("btn-build-b1-pick")?.addEventListener("click", () => {
+    $("btn-inbox-pick")?.click();
+  });
+  $("btn-build-b2-start")?.addEventListener("click", () => {
+    $("btn-inbox-smart")?.click();
+  });
+  $("btn-build-b3-back")?.addEventListener("click", () => {
+    buildSessionComplete = null;
+    goSelfView("overview");
+  });
+  $("btn-build-b4-confirm")?.addEventListener("click", () => {
+    $("btn-inbox-review")?.click();
+  });
+  $("btn-build-b4-later")?.addEventListener("click", () => {
+    buildSessionComplete = null;
+    goSelfView("overview");
+  });
+  $("btn-build-b5-see")?.addEventListener("click", () => {
+    buildSessionComplete = null;
+    goSelfView("cognition");
+  });
+  $("btn-build-b5-more")?.addEventListener("click", () => {
+    buildSessionComplete = null;
+    buildChoseImport = true;
+    applyBuildWizard();
+  });
   const mindBuild = $("btn-mind-goto-build");
   if (mindBuild) mindBuild.addEventListener("click", () => goBuildView());
   $("btn-me-goto-cognition")?.addEventListener("click", () => switchMeTab("cognition"));

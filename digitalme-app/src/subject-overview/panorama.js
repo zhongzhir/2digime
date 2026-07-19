@@ -6,6 +6,7 @@ const {
   PANORAMA_STATUS_CONTRACT_VERSION,
   PANORAMA_NAV_TARGETS,
   MINIMAL_SURFACE_ACTIONS,
+  SUBJECT_IDENTITY_LINE,
 } = require("./constants");
 
 /** Hard integrity failures that always degrade 这是我 / 看见我. */
@@ -502,10 +503,16 @@ function isPackageUninitialized(overview, state) {
   return !usableManifest && !usableIdentity;
 }
 
+function twoLineSummary(line2) {
+  const second = typeof line2 === "string" && line2.trim() ? line2.trim() : "";
+  if (!second) return SUBJECT_IDENTITY_LINE;
+  return `${SUBJECT_IDENTITY_LINE}\n${second}`;
+}
+
 function failClosedMinimalSurface(subjectName, summary) {
   return {
     subjectName: subjectName || "我的 Digital Me",
-    summary: summary || "当前状态无法确认。",
+    summary: summary || twoLineSummary("当前状态无法确认。"),
     primaryAction: null,
     primaryActionLabel: null,
     primaryNavTarget: null,
@@ -520,6 +527,65 @@ function buildSecondary(action, label, navTarget) {
   const target = sanitizeNavTarget(navTarget);
   if (!action || !label || !target) return null;
   return { action, label, navTarget: target };
+}
+
+/**
+ * Prefer rich P4 claim only when package layers support experiences,
+ * interests/domains, and judgment signals. Otherwise use the safer fallback.
+ */
+function canClaimFamiliarSubject(overview) {
+  const layers = (overview && overview.layers) || [];
+  const fact = layerCountKnown(layers, "fact");
+  const current = layerCountKnown(layers, "current_state");
+  const intent = layerCountKnown(layers, "development_intent");
+  const owner = layerCountKnown(layers, "owner_assertion");
+  const inference = layerCountKnown(layers, "inference");
+  const hasExperience =
+    (fact.known && fact.count > 0) || (current.known && current.count > 0);
+  const hasInterest = intent.known && intent.count > 0;
+  const hasJudgment =
+    (owner.known && owner.count > 0) || (inference.known && inference.count > 0);
+  return !!(hasExperience && hasInterest && hasJudgment);
+}
+
+/**
+ * Trusted build-flow step for progressive wizard (B0–B4 from package/inbox).
+ * B1/B5 may be session-overlaid in renderer after user action / successful write.
+ */
+function buildBuildFlow(overview, inboxSummary, meta = {}) {
+  const state = resolveSubjectIntegrity(overview || {});
+  const inbox =
+    inboxSummary && typeof inboxSummary === "object"
+      ? inboxSummary
+      : summarizeInboxForOverview(null);
+  const pendingCount =
+    (inbox.queuedCount || 0) +
+    (inbox.suggestedCount || 0) +
+    (inbox.failedRetryableCount || 0);
+  const awaitingCount =
+    (inbox.awaitingReviewCount || 0) + (inbox.pendingConfirmationCount || 0);
+  const processingCount = inbox.processingCount || 0;
+  const subjectReadable =
+    !state.missing &&
+    !state.readError &&
+    !state.contentDegraded &&
+    !isPackageUninitialized(overview, state);
+  const hasIntakeEvidence = meta.hasIntakeEvidence === true;
+
+  let step = "B0";
+  if (inbox.hasAwaitingReview) step = "B4";
+  else if (inbox.hasProcessing && !inbox.hasActionableTodo) step = "B3";
+  else if (inbox.hasActionableTodo) step = "B2";
+  else step = "B0";
+
+  return {
+    step,
+    pendingCount,
+    awaitingCount,
+    processingCount,
+    subjectReadable,
+    hasIntakeEvidence,
+  };
 }
 
 /**
@@ -540,9 +606,12 @@ function buildMinimalSurface(overview, inboxSummary) {
   // P0 — read damage / cannot safely conclude
   if (state.readError || state.contentDegraded) {
     const nav = sanitizeNavTarget("settings-package-versions");
+    // Subject is not safely readable under P0 → no 「查看目前的我」.
     return {
       subjectName,
-      summary: "部分个人信息暂时无法读取。",
+      summary: twoLineSummary(
+        "我已经形成了部分认识，但目前有些信息无法读取。"
+      ),
       primaryAction: "view_problems",
       primaryActionLabel: MINIMAL_SURFACE_ACTIONS.view_problems,
       primaryNavTarget: nav,
@@ -558,7 +627,9 @@ function buildMinimalSurface(overview, inboxSummary) {
     const nav = sanitizeNavTarget("me-build");
     return {
       subjectName,
-      summary: "你的 Digital Me 还没有完成建立。",
+      summary: twoLineSummary(
+        "我还不够了解你，可以从已有资料或一次简短对话开始。"
+      ),
       primaryAction: "continue_build",
       primaryActionLabel: MINIMAL_SURFACE_ACTIONS.continue_build,
       primaryNavTarget: nav,
@@ -571,23 +642,30 @@ function buildMinimalSurface(overview, inboxSummary) {
 
   // Unknown inbox statuses → fail-closed (do not invent success)
   if (inbox.unknownStatusCount > 0) {
-    return failClosedMinimalSurface(subjectName, "当前状态无法确认。");
+    return failClosedMinimalSurface(
+      subjectName,
+      twoLineSummary("当前状态无法确认。")
+    );
   }
+
+  const viewMeSecondary = buildSecondary(
+    "view_subject",
+    MINIMAL_SURFACE_ACTIONS.view_subject,
+    "me-cognition"
+  );
 
   // P2 — awaiting confirmation / review
   if (inbox.hasAwaitingReview) {
     const nav = sanitizeNavTarget("me-build");
     return {
       subjectName,
-      summary: "有一项内容需要你确认。",
+      summary: twoLineSummary(
+        "我形成了一些新的认识，需要你确认后才会成为“我”的一部分。"
+      ),
       primaryAction: "continue_confirm",
       primaryActionLabel: MINIMAL_SURFACE_ACTIONS.continue_confirm,
       primaryNavTarget: nav,
-      secondaryAction: buildSecondary(
-        "view_subject",
-        "查看详情",
-        "me-cognition"
-      ),
+      secondaryAction: viewMeSecondary,
       reminder: null,
       priority: "P2",
       failClosed: !nav,
@@ -597,40 +675,43 @@ function buildMinimalSurface(overview, inboxSummary) {
   // P3 — actionable inbox (not processing alone)
   if (inbox.hasActionableTodo) {
     const nav = sanitizeNavTarget("me-build");
+    let reminder = null;
+    if (inbox.hasProcessing) reminder = "有内容正在处理中";
     return {
       subjectName,
-      summary: "有材料待你处理。",
+      summary: twoLineSummary(
+        "我已经有了基本轮廓，还有一项内容可以继续完善。"
+      ),
       primaryAction: "continue_refine",
       primaryActionLabel: MINIMAL_SURFACE_ACTIONS.continue_refine,
       primaryNavTarget: nav,
-      secondaryAction: buildSecondary(
-        "view_subject",
-        "查看详情",
-        "me-cognition"
-      ),
-      reminder: null,
+      secondaryAction: viewMeSecondary,
+      reminder,
       priority: "P3",
       failClosed: !nav,
     };
   }
 
-  // P4 — readable subject, no P0–P3
-  const nav = sanitizeNavTarget("me-cognition");
+  // P4 — readable subject, no P0–P3；主操作进入对话
+  const chatNav = sanitizeNavTarget("chat");
   let reminder = null;
-  if (inbox.hasProcessing) reminder = "正在处理中";
+  if (inbox.hasProcessing) reminder = "有内容正在处理中";
   else if ((overview.package && overview.package.privacyStatus) === "unknown") {
     reminder = "隐私状态尚无法确认";
   }
+  const line2 = canClaimFamiliarSubject(overview)
+    ? "我已经了解你的部分经历、关注领域和判断方式，并会在使用中继续成长。"
+    : "我已经形成了初步认识，并会在对话和做事中继续了解你。";
   return {
     subjectName,
-    summary: "可以查看你的数字之我信息。",
-    primaryAction: "view_subject",
-    primaryActionLabel: MINIMAL_SURFACE_ACTIONS.view_subject,
-    primaryNavTarget: nav,
-    secondaryAction: buildSecondary("start_work", MINIMAL_SURFACE_ACTIONS.start_work, "chat"),
+    summary: twoLineSummary(line2),
+    primaryAction: "start_work",
+    primaryActionLabel: MINIMAL_SURFACE_ACTIONS.start_work,
+    primaryNavTarget: chatNav,
+    secondaryAction: viewMeSecondary,
     reminder,
     priority: "P4",
-    failClosed: !nav,
+    failClosed: !chatNav,
   };
 }
 
@@ -673,6 +754,9 @@ function buildPanoramaSection(overview, meta = {}) {
   }
 
   const minimalSurface = buildMinimalSurface(enriched, inboxSummary);
+  const buildFlow = buildBuildFlow(enriched, inboxSummary, {
+    hasIntakeEvidence: meta.hasIntakeEvidence === true,
+  });
 
   return {
     statusContractVersion: PANORAMA_STATUS_CONTRACT_VERSION,
@@ -682,6 +766,7 @@ function buildPanoramaSection(overview, meta = {}) {
     direction: buildDirection(overview.layers),
     nextAction: buildNextAction(enriched, inboxSummary),
     minimalSurface,
+    buildFlow,
   };
 }
 
@@ -689,7 +774,9 @@ module.exports = {
   buildPanoramaSection,
   buildDirection,
   buildMinimalSurface,
+  buildBuildFlow,
   buildNextAction,
+  canClaimFamiliarSubject,
   summarizeInboxForOverview,
   isPackageUninitialized,
   resolveSubjectIntegrity,

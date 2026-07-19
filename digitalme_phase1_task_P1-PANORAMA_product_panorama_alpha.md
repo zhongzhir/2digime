@@ -2,7 +2,7 @@
 
 版本：v0.4
 日期：2026-07-19
-状态：`active / three_part_alpha_reframed / PAN-01S.1_specified`
+状态：`active / three_part_alpha_reframed / PAN-01S.1_statically_verified`
 任务类型：阶段策略调整 / 产品纵向闭环 / 市场认知启动
 文档基线：`9dd6fa0`（PAN-01R 最终实现 HEAD）；战略修订依据 `digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`
 历史基线：`5ab55dc`（代码）+ `8fb8210`（P1-07_DOCS_BASE）；P1-07 保持 `statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_for_panorama`，不因此标记 accepted
@@ -200,8 +200,9 @@ accepted: no
 ```text
 PAN-00 accepted
 → PAN-00R accepted（三位一体重构；`07b631d` + `6ae2dca`）
-→ PAN-01S statically_verified（不 accepted）
-→ Owner 主路径验收 PAN-01S
+→ PAN-01S statically_verified / owner_changes_requested（不 accepted）
+→ PAN-01S.1 statically_verified / implemented（不 accepted）
+→ Owner 主路径验收 PAN-01S.1
 → PAN-02 理解通道 Alpha
 → PAN-03 能力框架 Alpha
 → PAN-04 外部协作骨架 Alpha
@@ -252,8 +253,9 @@ PAN-00 accepted
 
 ### 6.4 当前调度
 
-- **当前唯一任务**：实现 PAN-01S.1（主体解释与渐进式构建）；不得标 PAN-01S accepted；不得开始 PAN-02；
-- PAN-01S：`statically_verified` / `owner_changes_requested`；
+- **当前唯一任务**：Owner 验收 PAN-01S.1；不得标 PAN-01S accepted；不得开始 PAN-02；
+- PAN-01S：`statically_verified` / `owner_changes_requested`（**不** accepted）；
+- PAN-01S.1：`statically_verified` / `implemented`（**不** accepted）；
 - PAN-02～PAN-06 保持 `planned` / `not_started`。
 
 ---
@@ -441,12 +443,13 @@ statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_fo
 ```text
 PAN-00 accepted
 → PAN-00R accepted
-→ PAN-01S statically_verified（不 accepted）
-→ Owner 主路径验收
+→ PAN-01S statically_verified / owner_changes_requested（不 accepted）
+→ PAN-01S.1 statically_verified / implemented（不 accepted）
+→ Owner 主路径验收 PAN-01S.1
 → PAN-02 → PAN-03 → PAN-04 → PAN-05 → PAN-06
 ```
 
-每次只启动一个主实现任务。PAN-05 传播文案可并行起草，但不得与代码任务修改同一文件。**当前唯一任务**：Owner 主路径验收 PAN-01S；不得开始 PAN-02。
+每次只启动一个主实现任务。PAN-05 传播文案可并行起草，但不得与代码任务修改同一文件。**当前唯一任务**：Owner 主路径验收 PAN-01S.1；不得开始 PAN-02；不得标 PAN-01S accepted。
 
 ### 13.3 子任务完成报告
 
@@ -497,7 +500,11 @@ P1-PANORAMA 不包含：
 
 2026-07-19（PAN-01S 规格接受）：Codex 最终复核通过；状态 → `codex_review_passed` / `not_started`。
 
-2026-07-19（PAN-01S 实现）：分支 `codex/pan-01s-minimal-product-surface`；状态 → `statically_verified`（**不** accepted）。**当前唯一任务**：Owner 主路径验收；不得开始 PAN-02。
+2026-07-19（PAN-01S 实现）：分支 `codex/pan-01s-minimal-product-surface`；状态 → `statically_verified`（**不** accepted）。
+
+2026-07-19（PAN-01S.1 规格接受）：Owner 对 PAN-01S 验收未通过 → `owner_changes_requested`；任务包冻结；提交 `686fd7b`。
+
+2026-07-19（PAN-01S.1 实现）：parent `686fd7b`；状态 → `statically_verified` / `implemented`（**不** accepted）。**当前唯一任务**：Owner 主路径验收 PAN-01S.1；不得开始 PAN-02；不得标 PAN-01S accepted。
 
 > **PAN-01**：可信只读聚合保留；`needs_minimal_surface_reset`；不 accepted。
 >
