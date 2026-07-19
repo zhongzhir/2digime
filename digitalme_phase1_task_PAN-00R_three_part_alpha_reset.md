@@ -1,19 +1,34 @@
 # PAN-00R 任务包：第一阶段三位一体重构与极简产品原则冻结
 
-版本：v0.1.1
+版本：v0.1.2
 日期：2026-07-19
-状态：`statically_verified` / `codex_review_changes_requested`（仅指文档收口与一致性检查；**不标 accepted**；待 Codex 最终复核与 Owner 确认）
+状态：`accepted`
 所属总任务：`P1-PANORAMA：Digital Me 产品全貌 Alpha`（本任务后升版为 v0.4，三位一体重构）
 任务类型：战略修订 / 产品规格升版 / 执行队列重排 / 历史验收结论归档（仅 Markdown 与 Cursor 开发规则）
 文档基线：`9dd6fa00e3c09ab65779203045c9858681c37443`（分支 `codex/pan-01r-sovereign-collaboration-loop` 之 HEAD）
 执行分支：`codex/pan-00r-three-part-alpha-reset`
-规划提交：`07b631d`（v0.1）；本轮为 Codex 第一轮最小文档修复
+规划提交：`07b631d`（v0.1 战略修订）；`6ae2dca`（v0.1.1 Codex 第一轮最小文档修复）；本版 v0.1.2 为验收状态收尾
+验收结论：Codex 最终复核通过；Owner 战略决策已确认
 
-> 本任务不进行任何产品实现：不修改产品代码、测试、依赖、Package 或交接件；不开始 PAN-01S、PAN-02 或其它实现。
+> **accepted 含义**：仅指战略、规格和执行队列文档验收完成；**不代表** PAN-01S～PAN-06 已实现。下一步为起草并冻结 PAN-01S 独立任务包；未经 Owner 批准该任务包前，不创建实现分支、不修改产品代码。
 
 ---
 
-## 0.0 Codex 第一轮复核修正（2026-07-19，v0.1.1）
+## 0.0.1 最终验收记录（2026-07-19，v0.1.2）
+
+| 项 | 结论 |
+|---|---|
+| Codex 第一轮要求的两项规格冲突 | 已由 `6ae2dca` 修复（像我按相关性贯穿；侧栏不强制常驻 Package／模型／能力／品牌；工具细节按需展开；49KB 全量注入标为 PAN-02 待替换） |
+| Codex 最终复核 | **通过** |
+| Owner 战略决策 | **已确认** |
+| 本任务状态 | **`accepted`** |
+| accepted 范围 | 战略、规格与队列；**不含** PAN-01S～PAN-06 实现 |
+
+当前唯一下一任务：**起草并冻结 PAN-01S 独立任务包**。不得创建 PAN-01S 实现分支；不得编码；PAN-02～PAN-06 未开始。
+
+---
+
+## 0.0 Codex 第一轮复核修正（2026-07-19，v0.1.1 · 历史过程）
 
 | # | 修正 | 说明 |
 |---|---|---|
@@ -22,7 +37,7 @@
 | 3 | 明确工具细节按需展开 | 「工具调用可见、可停」改为：停止入口易发现；工具调用与执行细节按需展开，不强制常驻；不削弱停止/取消/高风险确认 |
 | 4 | 将现有 49KB 全量注入标为 PAN-02 待替换旧实现 | context §4.4 保留历史事实，明确：非目标行为、与 v0.6 相关性门冲突、PAN-02 须替换、完成前不得以此证明「像我」达标；本次不改检索/prompt 代码 |
 
-状态仍为 `statically_verified` / `codex_review_changes_requested`；**不标 accepted**；不开始 PAN-01S / PAN-02。
+> **历史过程状态（v0.1.1 当时）**：`statically_verified` / `codex_review_changes_requested`；当时不标 accepted。本表保留不删；当前状态见文首 `accepted` 与 §0.0.1。
 
 ---
 
@@ -256,7 +271,7 @@ accepted: no
 
 ```text
 PAN-00 accepted
-→ PAN-00R statically_verified（本任务）
+→ PAN-00R accepted
 → PAN-01S task_package_pending
 → PAN-01S
 → PAN-02 理解通道 Alpha
@@ -269,7 +284,7 @@ PAN-00 accepted
 ### 6.2 存量任务处置
 
 - **PAN-00**：保持历史 `accepted`；不改写历史事实。
-- **PAN-00R（本任务）**：完成后最多标 `statically_verified`；不自动标 accepted；等待 Codex 文档复核与 Owner 确认。
+- **PAN-00R（本任务）**：`accepted`（战略 / 规格 / 队列；证据 `07b631d` + `6ae2dca`；Codex 最终复核通过；Owner 确认）。不代表 PAN-01S～PAN-06 已实现。
 - **PAN-01**：保留历史工程证据；状态按 §5.1 裁定更新。
 - **PAN-01R**：保留历史工程证据；状态按 §5.2 裁定更新。
 
@@ -321,11 +336,12 @@ PAN-01S 只允许：
 
 当前唯一下一任务：**起草并冻结 PAN-01S 独立任务包**。
 
-在 PAN-00R 被 Codex / Owner 接受前：
+约束（PAN-00R 已 accepted）：
 
 - 不创建 PAN-01S 实现分支；
 - 不修改产品代码；
-- 不开始 PAN-02～PAN-06。
+- 不开始 PAN-02～PAN-06；
+- PAN-01S 编码须待独立任务包获 Owner 批准。
 
 ---
 
@@ -384,10 +400,12 @@ PAN-01S 只允许：
 
 ## 10. 状态语言
 
-- 本任务完成后状态为 `statically_verified` / `codex_review_changes_requested`（仅文档收口与一致性检查完成的静态验证含义；Codex 第一轮修正已合入）；
-- **不标 accepted**；accepted 须待 Codex 最终复核与 Owner 确认；
+- 本任务最终状态为 **`accepted`**（战略、规格与队列文档验收；见 §0.0.1）；
+- accepted **不**等于 PAN-01S～PAN-06 已实现，也**不**等于用户面「可用」；
 - 工程 `statically_verified` 不自动等于用户面「可用」；
 - 用户面能力仍只允许：可用 · 实验 · 本地模拟 · 预览 · 尚未开放。
+
+历史过程：v0.1.1 曾为 `statically_verified` / `codex_review_changes_requested`（见 §0.0）。
 
 ---
 
@@ -395,4 +413,4 @@ PAN-01S 只允许：
 
 **起草并冻结 PAN-01S 独立任务包**（`PAN-01S：极简产品表面与复杂度后移`）。
 
-在 PAN-00R 被 Codex / Owner 接受前，不创建 PAN-01S 实现分支、不修改产品代码、不开始 PAN-02～PAN-06。
+不创建 PAN-01S 实现分支、不修改产品代码、不开始 PAN-02～PAN-06；PAN-01S 编码须待独立任务包获 Owner 批准。

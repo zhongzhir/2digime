@@ -4,13 +4,13 @@
 状态：持续更新
 最后更新：2026-07-19
 
-> **当前产品主线（2026-07-19，PAN-00R 修订）**：**P1-PANORAMA — 第一阶段三位一体 Alpha（理解我 × 武装我 × 连接世界）**。执行顺序见 `digitalme_panorama_execution_index_v0.1.md`（文内 v0.2）；总任务见 `digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`（v0.4）；战略修订依据见 `digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`。**当前唯一下一任务：起草 PAN-01S 独立任务包**（PAN-00R 被 Codex / Owner 接受后）；PAN-02～PAN-06 未开始。
+> **当前产品主线（2026-07-19，PAN-00R accepted）**：**P1-PANORAMA — 第一阶段三位一体 Alpha（理解我 × 武装我 × 连接世界）**。执行顺序见 `digitalme_panorama_execution_index_v0.1.md`（文内 v0.2）；总任务见 `digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`（v0.4）；战略修订依据见 `digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`（**accepted**）。**当前唯一任务：起草并冻结 PAN-01S 独立任务包**；PAN-02～PAN-06 未开始。不得创建 PAN-01S 实现分支；不得编码（须待独立任务包获 Owner 批准）。
 >
 > **PAN-01** 最终裁定：`statically_verified` / `owner_product_perception_failed` / `needs_minimal_surface_reset`（基线 `a40c5f8`；**不标 accepted**；**不回滚**；表面收口由 PAN-01S 承接）。
 >
 > **PAN-01R** 最终裁定：`statically_verified` / `codex_review_passed` / `owner_runtime_verified` / `owner_product_perception_failed` / `retained_as_internal_collaboration_harness`（最终实现 `9dd6fa0`；70/70 + 20/20；**不标 accepted**）。普通用户入口后续由 PAN-01S 撤下；底层授权、取消、审计、adopt/reject、推理环境绑定等保留为高级/开发者协作回路验证器。不得自行回到 P1-07 修复或原 P1-08 队列。
 >
-> **界面与功能需求源**：桌面应用「用户看见什么、能做什么、何为做完」以 [`digitalme_product_spec_v0.2.md`](digitalme_product_spec_v0.2.md)（文内 **v0.6**）为唯一规格；战略与逻辑架构仍以本文为准；**部署与系统拓扑**以 [`digitalme_architecture_edge_sovereign_v0.1.md`](digitalme_architecture_edge_sovereign_v0.1.md) 为准。开发实行**规格驱动**（无规格不排期）。
+> **界面与功能需求源**：桌面应用「用户看见什么、能做什么、何为做完」以 [`digitalme_product_spec_v0.2.md`](digitalme_product_spec_v0.2.md)（文内 **v0.6.1**）为唯一规格；战略与逻辑架构仍以本文为准；**部署与系统拓扑**以 [`digitalme_architecture_edge_sovereign_v0.1.md`](digitalme_architecture_edge_sovereign_v0.1.md) 为准。开发实行**规格驱动**（无规格不排期）。
 >
 > **公共叙事**：数字主权为目标与核心公共叙事；广义数字资产口径与 Digital Org 长期方向见 [`digitalme_digital_sovereignty_narrative_v0.1.md`](digitalme_digital_sovereignty_narrative_v0.1.md)。Digital Org **不进入**本轮个人 Alpha 实现；P1-PANORAMA 完成后再评估 `DORG-00`。
 >
@@ -291,7 +291,7 @@ flowchart TB
 | `digitalme_narrative_ai_era_autonomy.md` | 对外/对内叙事（含双线简述） |
 | `digital-me-project-positioning-draft.md` | 定位讨论稿（战略原则含双线） |
 
-**近期工程焦点（2026-07-19 覆盖）**：规格 **v0.6** + 决策 **#67～#71**——第一阶段三位一体 Alpha；极简产品表面；当前唯一下一任务为起草 PAN-01S 独立任务包。原「规格 v0.5 + 决策 #58 产品全貌首页路径」与「规格 v0.4 + 决策 #57 按底层 WP 顺序硬化」为历史策略，证据与风险记录仍有效。
+**近期工程焦点（2026-07-19 覆盖）**：规格 **v0.6.1** + 决策 **#67～#72**——第一阶段三位一体 Alpha；极简产品表面；**PAN-00R accepted**；当前唯一任务为起草并冻结 PAN-01S 独立任务包。原「规格 v0.5 + 决策 #58 产品全貌首页路径」与「规格 v0.4 + 决策 #57 按底层 WP 顺序硬化」为历史策略，证据与风险记录仍有效。
 
 ## 4. 系统架构共识（草案）
 
@@ -465,7 +465,7 @@ flowchart TB
 
 > **2026-07-16 审计后重排（历史）**：第一阶段不再扩展能力面，切换为“主体可信化与协作感知”。当时以 `digitalme_phase1_subject_upgrade_plan_v0.1.md` 为执行清单；原 v0.3.13 的 L0/审计/CLI 只能视为原型，不视为已达到安全可用。
 > **2026-07-18 覆盖**：当前执行索引改为 `digitalme_panorama_execution_index_v0.1.md`；原升级计划降为 Trusted Beta 硬化依据（决策 #58）。
-> **2026-07-19 PAN-00R 覆盖（当前）**：第一阶段确立为三位一体 Alpha；**当前唯一下一任务为起草 PAN-01S 独立任务包**（极简产品表面与复杂度后移）；随后按 PAN-02 理解通道 → PAN-03 能力框架 → PAN-04 外部协作骨架 → PAN-05 成长飞轮 → PAN-06 非开发者验证推进（执行索引 v0.2；决策 #67～#71）。PAN-00R 接受前不创建 PAN-01S 实现分支、不修改产品代码、不开始 PAN-02～PAN-06。
+> **2026-07-19 PAN-00R 覆盖（当前）**：第一阶段确立为三位一体 Alpha；**PAN-00R `accepted`**；**当前唯一任务为起草并冻结 PAN-01S 独立任务包**（极简产品表面与复杂度后移）；随后按 PAN-02 理解通道 → PAN-03 能力框架 → PAN-04 外部协作骨架 → PAN-05 成长飞轮 → PAN-06 非开发者验证推进（执行索引 v0.2；决策 #67～#72）。不得创建 PAN-01S 实现分支、不修改产品代码、不开始 PAN-02～PAN-06；PAN-01S 编码须待独立任务包获 Owner 批准。
 
 1. **工程与 Package 基线冻结**：Git、Alpha 标记、Package hash 快照、能力状态表；
 2. **主体资产内核**：PackageStore、七类数据、原子版本、候选更新、来源 hash、回滚；
@@ -882,3 +882,4 @@ flowchart TB
 69. **PAN-01 / PAN-01R 产品感知失败裁定（2026-07-19，PAN-00R）**：PAN-01 = `statically_verified / owner_product_perception_failed / needs_minimal_surface_reset`；PAN-01R = `statically_verified / codex_review_passed / owner_runtime_verified / owner_product_perception_failed / retained_as_internal_collaboration_harness`（证据 `9dd6fa0`、70/70、20/20、Codex 二轮复核通过、Owner 走通主路径）。均不 accepted、不回滚、不删代码。PAN-01R 普通用户入口后续由 PAN-01S 撤下，底层安全骨架保留为高级/开发者协作回路验证器。
 70. **AI 与蒸馏结果的新关系（2026-07-19，PAN-00R）**：AI 负责能力上限；Digital Me 负责方向、真实性、边界、连续性和本人特征。主体信息分层起作用（fact 锚点 / assertion 约束 / preference 软引导 / inference 低权重 / boundary 硬约束）；相关性门强制；禁止强制引用 E1/E2、低相关材料塞 prompt、因主体资料不足降低输出质量、正文展示工程证据编号。见 §4.4、规格 v0.6 §2.0.1。
 71. **外部反馈推动成长但不直接改写主体（2026-07-19，PAN-00R）**：本人真实行动结果可成 fact 候选；外部反馈先作外部观察 / current_state / inference；系统归纳规律默认 inference；立场、长期意图、人格与边界改变必须本人确认；外部伙伴、模型或工具不得直接写入「我是谁」；写入仍遵守 preview → confirmation → PackageStore commit。
+72. **PAN-00R accepted（2026-07-19）**：战略修订 `07b631d`；Codex 第一轮最小文档修复 `6ae2dca`；Codex 最终复核通过；Owner 战略决策确认。accepted 为 docs/strategy acceptance，不是运行能力 released，也不代表 PAN-01S～PAN-06 已实现。当前唯一任务：起草并冻结 PAN-01S 独立任务包；不得创建实现分支、不得编码、不得开始 PAN-02。

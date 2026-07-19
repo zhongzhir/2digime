@@ -199,7 +199,7 @@ accepted: no
 
 ```text
 PAN-00 accepted
-→ PAN-00R statically_verified（三位一体重构，本轮）
+→ PAN-00R accepted（三位一体重构；`07b631d` + `6ae2dca`）
 → PAN-01S task_package_pending
 → PAN-01S 极简产品表面与复杂度后移
 → PAN-02 理解通道 Alpha
@@ -213,7 +213,7 @@ PAN-00 accepted
 
 **PAN-00：战略与规格切换**——历史 `accepted`（`bc85a14`），不改写历史事实。
 
-**PAN-00R：三位一体重构与极简产品原则冻结**——本轮文档任务；完成后最多 `statically_verified`；等待 Codex 文档复核与 Owner 确认。任务包：`digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`。
+**PAN-00R：三位一体重构与极简产品原则冻结**——`accepted`（战略 / 规格 / 队列；证据 `07b631d` + `6ae2dca`；Codex 最终复核通过；Owner 确认）。不代表 PAN-01S～PAN-06 已实现。任务包：`digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`。
 
 **PAN-01（历史）**——产品全貌首页；裁定见 §5.1；保留历史工程证据。
 
@@ -249,8 +249,8 @@ PAN-00 accepted
 
 ### 6.4 当前调度
 
-- 当前唯一下一任务：**起草并冻结 PAN-01S 独立任务包**；
-- 在 PAN-00R 被 Codex / Owner 接受前：不创建 PAN-01S 实现分支、不修改产品代码、不开始 PAN-02～PAN-06。
+- 当前唯一任务：**起草并冻结 PAN-01S 独立任务包**；
+- 不得创建 PAN-01S 实现分支、不修改产品代码、不开始 PAN-02～PAN-06；PAN-01S 编码须待独立任务包获 Owner 批准。
 
 ---
 
@@ -436,12 +436,12 @@ statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_fo
 
 ```text
 PAN-00 accepted
-→ PAN-00R（本轮，文档）
-→ PAN-01S（独立任务包批准后）
+→ PAN-00R accepted
+→ PAN-01S（独立任务包批准后方可编码；当前仅允许起草任务包）
 → PAN-02 → PAN-03 → PAN-04 → PAN-05 → PAN-06
 ```
 
-每次只启动一个主实现任务。PAN-05 传播文案可并行起草，但不得与代码任务修改同一文件。
+每次只启动一个主实现任务。PAN-05 传播文案可并行起草，但不得与代码任务修改同一文件。当前唯一任务为起草并冻结 PAN-01S 独立任务包；不得创建实现分支、不得修改产品代码。
 
 ### 13.3 子任务完成报告
 
@@ -484,7 +484,7 @@ P1-PANORAMA 不包含：
 
 2026-07-19：PAN-01 实现并 `statically_verified`，Owner 产品感知验收未通过；批准 PAN-01R 并完成实现与两轮 Codex 复核修复（最终 HEAD `9dd6fa0`；70/70；20/20）；Owner 运行验证通过但产品感知验收未通过。
 
-2026-07-19（PAN-00R）：Owner 确立第一阶段三位一体最高定义、极简产品原则、AI 使用主体信息新原则、PAN-01/PAN-01R 正式裁定与新执行队列（本文 v0.4；决策 #67～#71）。
+2026-07-19（PAN-00R）：Owner 确立第一阶段三位一体最高定义、极简产品原则、AI 使用主体信息新原则、PAN-01/PAN-01R 正式裁定与新执行队列（本文 v0.4；决策 #67～#71）。随后 Codex 第一轮文档修复（`6ae2dca`）与最终复核通过；Owner 确认；**PAN-00R `accepted`**（决策 #72）。当前唯一任务为起草并冻结 PAN-01S 独立任务包。
 
 > **PAN-01**：可信只读聚合保留；`needs_minimal_surface_reset`；不 accepted。
 >
