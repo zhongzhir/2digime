@@ -5,6 +5,40 @@
 
 ---
 
+## 2026-07-20 Renderer Foundation R0 修订 1 · 关闭 Codex 第一轮架构歧义
+
+### 做了什么
+
+纯文档修订 `digitalme_renderer_foundation_R0_decision_and_migration_plan.md` → **v0.1.1-draft**（保留初稿提交 `fc56259`，不 amend）：
+
+1. **迁移拓扑**：R1/R2 整窗入口切换；legacy/next 两独立 HTML；启动时 main flag；禁 iframe/webview；禁一窗双状态机；禁新按钮驱动旧隐藏 DOM；「返回经典界面」先经 main 持久化再整窗加载 legacy。  
+2. **SQLite**：拆至 **R2.5** `planned` / `deferred`；R2 继续 JSON sessions；量化触发 + 独立 ADR + Owner 授权；PAN-02 不以 SQLite 为前提。  
+3. **E2E**：Playwright Electron 为主；保留 owner-runtime 作 legacy 回归；禁 Spectron；单测例 60s / 套件 10 min 口径；版本由 R1 spike 锁定。  
+4. **R1 收窄**：仅 shell / Vite / Error Boundary / stamp facade / 整窗开关 / 最小 Playwright / 回滚；不含 chat/我/工作台/SQLite/PAN-02/大规模 preload 重写。  
+5. Owner 五项问题按上列调整。
+
+同步：context（决策 #80）、执行索引、能力表、cursor rule。
+
+### 状态
+
+| 项 | 值 |
+|---|---|
+| R0 | **`spec_revision_1` / `codex_review_changes_requested`**（**不** accepted） |
+| R0 implementation | `not_started`；分支不存在 |
+| R2.5 SQLite | `planned` / `deferred` |
+| PAN-01S 族 | `accepted`（不变） |
+| PAN-02 | `planned` / `blocked` |
+
+### 明确未做
+
+未改源码/测试/配置/依赖；未装依赖；未建实现分支；未启动 R1/PAN-02/应用；未 amend/push；未读真实 Package/sessions。
+
+### 下一门槛
+
+**Codex 再复核** → Owner 答复 §18 →（通过后）另立 R1 任务包。**不得**自行开始 R1。
+
+---
+
 ## 2026-07-20 Renderer Foundation R0 决策/任务包起草 · spec_drafted
 
 ### 做了什么
