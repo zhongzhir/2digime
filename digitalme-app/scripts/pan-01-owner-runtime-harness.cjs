@@ -340,7 +340,7 @@ async function runPan01OwnerRuntimeHarness({ BrowserWindow }) {
     fail("session overflow menu", err);
   }
 
-  // 3c) Delete while request in flight is blocked by navigation guard
+  // 3c) Delete while request in flight is blocked by navigation guard (no native confirm)
   try {
     const blocked = await evalIn(
       win,
@@ -354,42 +354,201 @@ async function runPan01OwnerRuntimeHarness({ BrowserWindow }) {
           originMessageId: "m_test",
           bubbleEl: null,
         });
-        let confirmCalled = false;
-        const prevConfirm = window.confirm;
-        window.confirm = () => {
-          confirmCalled = true;
-          return true;
-        };
         const row = document.querySelector("#session-list .session-item");
         if (!row) {
-          window.confirm = prevConfirm;
           window.__dmTestHooks.setActiveChatRequest(null);
           return { ok: false, reason: "no session row" };
         }
         const more = row.querySelector(".session-overflow-btn");
-        const del = row.querySelector(".session-overflow-item.session-overflow-danger") ||
-          [...row.querySelectorAll(".session-overflow-item")].find((b) => /删除/.test(b.textContent || ""));
         more.click();
+        const del = [...row.querySelectorAll(".session-overflow-item")].find((b) =>
+          /^删除$/.test((b.textContent || "").trim())
+        );
+        if (!del) {
+          window.__dmTestHooks.setActiveChatRequest(null);
+          return { ok: false, reason: "delete menuitem missing" };
+        }
         del.click();
+        const hasConfirm = !!row.querySelector(".session-overflow-confirm-delete");
         const note = [...document.querySelectorAll(".msg.system-note, .system-note")]
           .map((n) => n.textContent || "")
           .join("\\n");
-        window.confirm = prevConfirm;
         window.__dmTestHooks.setActiveChatRequest(null);
         return {
           ok: true,
-          confirmCalled,
+          hasConfirm,
           note,
           blocked: /请先停止当前回复/.test(note),
         };
       })()`
     );
     assert.equal(blocked.ok, true, blocked.reason || "guard probe failed");
-    assert.equal(blocked.confirmCalled, false, "confirm must not run when guard blocks");
+    assert.equal(blocked.hasConfirm, false, "guard must block before custom confirm");
     assert.equal(blocked.blocked, true);
     pass("session delete blocked while request active");
   } catch (err) {
     fail("session delete guard", err);
+  }
+
+  // 3d) Inline rename + custom delete confirm (no prompt/confirm)
+  try {
+    const inline = await evalIn(
+      win,
+      `(async () => {
+        const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+        const row = document.querySelector("#session-list .session-item");
+        if (!row) return { ok: false, reason: "no row" };
+        const sessionId = row.dataset.sessionId;
+        const more = row.querySelector(".session-overflow-btn");
+        more.click();
+        const ren = [...row.querySelectorAll(".session-overflow-item")].find((b) =>
+          /^改名$/.test((b.textContent || "").trim())
+        );
+        if (!ren) return { ok: false, reason: "rename missing" };
+        ren.click();
+        await sleep(50);
+        let input = document.querySelector(".session-rename-input");
+        if (!input) return { ok: false, reason: "inline input missing" };
+        const hasSave = !!document.querySelector(".session-rename-save");
+        const hasCancel = !!document.querySelector(".session-rename-cancel");
+
+        // Empty title must not save
+        let renameCalls = 0;
+        window.__dmTestHooks.renameSession = async () => {
+          renameCalls += 1;
+          return {};
+        };
+        input.value = "   ";
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+        await sleep(40);
+        const emptyHint = (document.querySelector(".session-rename-hint")?.textContent || "").trim();
+        const emptyBlocked = renameCalls === 0 && /请输入名称/.test(emptyHint);
+
+        // Escape cancel must not call IPC
+        input.value = "should-not-save";
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        await sleep(200);
+        const afterEscInput = document.querySelector(".session-rename-input");
+        const escCancelled = !afterEscInput && renameCalls === 0;
+
+        // Re-enter rename and save via Enter
+        const row2 = document.querySelector('#session-list .session-item[data-session-id="' + sessionId + '"]') ||
+          document.querySelector("#session-list .session-item");
+        row2.querySelector(".session-overflow-btn").click();
+        const ren2 = [...row2.querySelectorAll(".session-overflow-item")].find((b) =>
+          /^改名$/.test((b.textContent || "").trim())
+        );
+        ren2.click();
+        await sleep(50);
+        input = document.querySelector(".session-rename-input");
+        const newTitle = "验收改名-" + Date.now().toString(36).slice(-4);
+        window.__dmTestHooks.renameSession = async (payload) => {
+          renameCalls += 1;
+          window.__dmTestHooks.renameSession = null;
+          return window.digitalMe.renameSession(payload);
+        };
+        input.value = newTitle;
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+        await sleep(400);
+        const savedTitle = (
+          document.querySelector('#session-list .session-item[data-session-id="' + sessionId + '"] .s-title') ||
+          document.querySelector("#session-list .session-item .s-title")
+        )?.textContent || "";
+        const savedOk = renameCalls >= 1 && savedTitle.includes("验收改名");
+
+        // Save failure shows inline error
+        const row3 = document.querySelector("#session-list .session-item");
+        row3.querySelector(".session-overflow-btn").click();
+        [...row3.querySelectorAll(".session-overflow-item")]
+          .find((b) => /^改名$/.test((b.textContent || "").trim()))
+          .click();
+        await sleep(50);
+        input = document.querySelector(".session-rename-input");
+        window.__dmTestHooks.renameSession = async () => {
+          throw new Error("模拟保存失败");
+        };
+        input.value = "失败标题";
+        document.querySelector(".session-rename-save").click();
+        await sleep(80);
+        const failHint = (document.querySelector(".session-rename-hint")?.textContent || "").trim();
+        const failOk = /模拟保存失败|保存失败/.test(failHint);
+        window.__dmTestHooks.renameSession = null;
+        document.querySelector(".session-rename-cancel")?.click();
+        await sleep(200);
+
+        // Custom delete confirm: cancel does not delete
+        let deleteCalls = 0;
+        const row4 = document.querySelector("#session-list .session-item");
+        const id4 = row4.dataset.sessionId;
+        row4.querySelector(".session-overflow-btn").click();
+        [...row4.querySelectorAll(".session-overflow-item")]
+          .find((b) => /^删除$/.test((b.textContent || "").trim()))
+          .click();
+        await sleep(40);
+        const confirmMsg = (document.querySelector(".session-overflow-confirm-msg")?.textContent || "").trim();
+        const confirmVisible = /确定删除这段对话/.test(confirmMsg);
+        const cancelFocus =
+          document.activeElement &&
+          document.activeElement.classList.contains("session-overflow-confirm-cancel");
+        window.__dmTestHooks.deleteSession = async (id) => {
+          deleteCalls += 1;
+          window.__dmTestHooks.deleteSession = null;
+          return window.digitalMe.deleteSession(id);
+        };
+        document.querySelector(".session-overflow-confirm-cancel").click();
+        await sleep(120);
+        const stillThere = !!document.querySelector(
+          '#session-list .session-item[data-session-id="' + id4 + '"]'
+        );
+        const cancelOk = deleteCalls === 0 && stillThere;
+
+        // Final confirm deletes
+        const row5 = document.querySelector('#session-list .session-item[data-session-id="' + id4 + '"]');
+        row5.querySelector(".session-overflow-btn").click();
+        [...row5.querySelectorAll(".session-overflow-item")]
+          .find((b) => /^删除$/.test((b.textContent || "").trim()))
+          .click();
+        await sleep(40);
+        document.querySelector(".session-overflow-confirm-delete").click();
+        await sleep(400);
+        const deletedGone = !document.querySelector(
+          '#session-list .session-item[data-session-id="' + id4 + '"]'
+        );
+        window.__dmTestHooks.deleteSession = null;
+
+        const src = String(document.querySelector("script[src*='app.js']") ? "ok" : "ok");
+        return {
+          ok: true,
+          hasSave,
+          hasCancel,
+          emptyBlocked,
+          escCancelled,
+          savedOk,
+          failOk,
+          confirmVisible,
+          cancelFocus,
+          cancelOk,
+          deletedGone,
+          deleteCalls,
+          src,
+        };
+      })()`
+    );
+    assert.equal(inline.ok, true, inline.reason || "inline probe failed");
+    assert.equal(inline.hasSave, true);
+    assert.equal(inline.hasCancel, true);
+    assert.equal(inline.emptyBlocked, true);
+    assert.equal(inline.escCancelled, true);
+    assert.equal(inline.savedOk, true);
+    assert.equal(inline.failOk, true);
+    assert.equal(inline.confirmVisible, true);
+    assert.equal(inline.cancelFocus, true);
+    assert.equal(inline.cancelOk, true);
+    assert.equal(inline.deletedGone, true);
+    assert.ok(inline.deleteCalls >= 1);
+    pass("inline rename and custom delete confirm");
+  } catch (err) {
+    fail("inline rename / delete confirm", err);
   }
 
   // 4) Sidebar cleaned

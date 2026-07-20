@@ -10,6 +10,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const {
   createSessionOverflowMenuController,
+  normalizeSessionTitle,
+  SESSION_TITLE_MAX,
 } = require("../src/session-overflow-menu.js");
 
 let passed = 0;
@@ -116,6 +118,34 @@ test("overflow controller: click inside menu does not close", () => {
   assert.equal(ctl.isOpen(), true);
 });
 
+test("normalizeSessionTitle: trim, empty reject, max length", () => {
+  assert.equal(SESSION_TITLE_MAX, 60);
+  assert.equal(normalizeSessionTitle("  hello  ").ok, true);
+  assert.equal(normalizeSessionTitle("  hello  ").title, "hello");
+  assert.equal(normalizeSessionTitle("   ").ok, false);
+  assert.match(normalizeSessionTitle("").error, /请输入名称/);
+  const long = "字".repeat(80);
+  const n = normalizeSessionTitle(long);
+  assert.equal(n.ok, true);
+  assert.equal(n.title.length, 60);
+});
+
+test("overflow onClose fires when menu closes", () => {
+  let closed = 0;
+  const ctl = createSessionOverflowMenuController({
+    onClose() {
+      closed += 1;
+    },
+  });
+  const btn = mockEl("more");
+  const menu = mockEl("menu");
+  ctl.open(btn, menu, "s1");
+  ctl.close();
+  assert.equal(closed, 1);
+  ctl.handleKeydown({ key: "Escape" });
+  assert.equal(closed, 1);
+});
+
 test("app.js: session list uses overflow menu, not resident 改名/删除", () => {
   const appJs = fs.readFileSync(
     path.join(__dirname, "..", "src", "renderer", "app.js"),
@@ -129,11 +159,19 @@ test("app.js: session list uses overflow menu, not resident 改名/删除", () =
   assert.doesNotMatch(appJs, /\.s-actions/);
   const refreshIdx = appJs.indexOf("async function refreshSessionList");
   assert.ok(refreshIdx > 0);
-  const region = appJs.slice(refreshIdx, refreshIdx + 3500);
+  const region = appJs.slice(refreshIdx, refreshIdx + 12000);
   assert.match(region, /session-overflow-menu/);
   assert.match(region, /textContent = "改名"/);
   assert.match(region, /textContent = "删除"/);
   assert.match(region, /guardChatSessionNavigation\(\)/);
+  assert.match(region, /beginSessionInlineRename/);
+  assert.match(region, /showSessionDeleteConfirm/);
+  assert.match(region, /session-rename-input/);
+  assert.match(region, /确定删除这段对话/);
+  // Session menu path must not use native dialogs
+  assert.doesNotMatch(region, /\bprompt\s*\(/);
+  assert.doesNotMatch(region, /\bconfirm\s*\(/);
+  assert.doesNotMatch(region, /\balert\s*\(/);
   // 改名/删除 live under menu items, not as always-visible s-actions
   assert.doesNotMatch(region, /className = "s-actions"/);
   // Overflow click must not call setActiveSession
@@ -141,6 +179,22 @@ test("app.js: session list uses overflow menu, not resident 改名/删除", () =
   assert.ok(moreClickIdx > 0);
   const moreHandler = region.slice(moreClickIdx - 200, moreClickIdx + 120);
   assert.doesNotMatch(moreHandler, /setActiveSession/);
+});
+
+test("app.js session menu path has zero prompt/confirm/alert", () => {
+  const appJs = fs.readFileSync(
+    path.join(__dirname, "..", "src", "renderer", "app.js"),
+    "utf8"
+  );
+  const start = appJs.indexOf("async function refreshSessionList");
+  const end = appJs.indexOf("async function persistCurrentSession");
+  assert.ok(start > 0 && end > start);
+  const sessionUi = appJs.slice(start, end);
+  assert.doesNotMatch(sessionUi, /\bprompt\s*\(/);
+  assert.doesNotMatch(sessionUi, /\bconfirm\s*\(/);
+  assert.doesNotMatch(sessionUi, /\balert\s*\(/);
+  assert.match(sessionUi, /beginSessionInlineRename/);
+  assert.match(sessionUi, /showSessionDeleteConfirm/);
 });
 
 test("index.html loads session-overflow-menu.js before app.js", () => {

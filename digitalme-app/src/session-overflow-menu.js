@@ -1,9 +1,9 @@
 "use strict";
 
 /**
- * Session list overflow (⋯) menu controller.
+ * Session list overflow (⋯) menu + title helpers.
  * UMD: CommonJS (tests) and browser (renderer script).
- * No third-party menu library.
+ * No third-party menu library. No prompt/confirm/alert.
  */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) {
@@ -13,6 +13,18 @@
   }
 })(typeof self !== "undefined" ? self : this, function () {
   const MENU_Z = 10050;
+  /** Match sessions.renameSession slice(0, 60). */
+  const SESSION_TITLE_MAX = 60;
+
+  function normalizeSessionTitle(raw, maxLen) {
+    const limit =
+      typeof maxLen === "number" && maxLen > 0 ? maxLen : SESSION_TITLE_MAX;
+    const title = String(raw == null ? "" : raw).trim();
+    if (!title) {
+      return { ok: false, error: "请输入名称", title: "" };
+    }
+    return { ok: true, error: null, title: title.slice(0, limit) };
+  }
 
   function positionMenu(trigger, menu) {
     if (!trigger || !menu || typeof trigger.getBoundingClientRect !== "function") return;
@@ -33,26 +45,26 @@
   }
 
   /**
-   * @returns {{
-   *   close: () => void,
-   *   open: (trigger: Element, menu: Element, sessionId: string) => void,
-   *   toggle: (trigger: Element, menu: Element, sessionId: string) => void,
-   *   handleDocumentPointerDown: (target: EventTarget|null) => void,
-   *   handleKeydown: (event: { key?: string }) => void,
-   *   isOpen: () => boolean,
-   *   openSessionId: () => string|null,
-   *   positionMenu: typeof positionMenu
-   * }}
+   * @param {{ onClose?: (state: { trigger: Element, menu: Element, sessionId: string|null }|null) => void }} [options]
    */
-  function createSessionOverflowMenuController() {
+  function createSessionOverflowMenuController(options) {
+    const opts = options && typeof options === "object" ? options : {};
     let openState = null;
 
     function close() {
       if (!openState) return;
-      const { trigger, menu } = openState;
+      const prev = openState;
+      const { trigger, menu } = prev;
       if (menu && menu.classList) menu.classList.add("hidden");
       if (trigger && trigger.setAttribute) trigger.setAttribute("aria-expanded", "false");
       openState = null;
+      if (typeof opts.onClose === "function") {
+        try {
+          opts.onClose(prev);
+        } catch {
+          /* ignore listener errors */
+        }
+      }
     }
 
     function open(trigger, menu, sessionId) {
@@ -117,6 +129,8 @@
   return {
     createSessionOverflowMenuController,
     positionMenu,
+    normalizeSessionTitle,
     MENU_Z,
+    SESSION_TITLE_MAX,
   };
 });

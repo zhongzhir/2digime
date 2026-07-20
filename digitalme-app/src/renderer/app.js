@@ -8,15 +8,36 @@ let pendingAttachments = [];
 let currentSession = null;
 /** @type {{ requestId: string, originSessionId: string|null, originMessageId: string|null, bubbleEl: Element|null }|null} */
 let activeChatRequest = null;
-/** Session list ⋯ menu controller (no third-party lib). */
+/** Session list ⋯ menu controller (no third-party lib; no prompt/confirm). */
 const sessionOverflowApi =
   typeof DigitalMeSessionOverflowMenu !== "undefined" && DigitalMeSessionOverflowMenu
     ? DigitalMeSessionOverflowMenu
     : null;
+const SESSION_TITLE_MAX =
+  (sessionOverflowApi && sessionOverflowApi.SESSION_TITLE_MAX) || 60;
+/** @type {{ kind: 'rename'|'deleteConfirm', sessionId: string, menu?: Element, moreBtn?: Element, session?: object, row?: Element, restoreMenu?: function }|null} */
+let sessionUiMode = null;
 const sessionOverflow =
   sessionOverflowApi && typeof sessionOverflowApi.createSessionOverflowMenuController === "function"
-    ? sessionOverflowApi.createSessionOverflowMenuController()
+    ? sessionOverflowApi.createSessionOverflowMenuController({
+        onClose() {
+          if (sessionUiMode && sessionUiMode.kind === "deleteConfirm") {
+            const restore = sessionUiMode.restoreMenu;
+            sessionUiMode = null;
+            if (typeof restore === "function") restore();
+          }
+        },
+      })
     : null;
+
+function normalizeSessionTitleInput(raw) {
+  if (sessionOverflowApi && typeof sessionOverflowApi.normalizeSessionTitle === "function") {
+    return sessionOverflowApi.normalizeSessionTitle(raw, SESSION_TITLE_MAX);
+  }
+  const title = String(raw == null ? "" : raw).trim();
+  if (!title) return { ok: false, error: "请输入名称", title: "" };
+  return { ok: true, error: null, title: title.slice(0, SESSION_TITLE_MAX) };
+}
 /** @deprecated prefer activeChatRequest.requestId — kept in sync for stop/progress */
 let currentRequestId = null;
 let currentArtifact = null;
@@ -545,8 +566,15 @@ function closeSessionOverflowMenus() {
   if (sessionOverflow) sessionOverflow.close();
 }
 
+function cancelSessionRenameMode() {
+  if (!sessionUiMode || sessionUiMode.kind !== "rename") return;
+  sessionUiMode = null;
+}
+
 async function refreshSessionList() {
   closeSessionOverflowMenus();
+  cancelSessionRenameMode();
+  sessionUiMode = null;
   const listed = await window.digitalMe.listSessions();
   const list = $("session-list");
   list.innerHTML = "";
@@ -560,6 +588,9 @@ async function refreshSessionList() {
     main.className = "session-item-main";
     main.innerHTML = `<span class="s-title">${escapeHtml(s.title || "未命名")}</span>`;
     main.addEventListener("click", async () => {
+      if (sessionUiMode && sessionUiMode.sessionId === s.id && sessionUiMode.kind === "rename") {
+        return;
+      }
       closeSessionOverflowMenus();
       if (!guardChatSessionNavigation()) return;
       await persistCurrentSession();
@@ -590,45 +621,47 @@ async function refreshSessionList() {
     menu.className = "session-overflow-menu hidden";
     menu.setAttribute("role", "menu");
 
-    const ren = document.createElement("button");
-    ren.type = "button";
-    ren.className = "session-overflow-item";
-    ren.setAttribute("role", "menuitem");
-    ren.textContent = "改名";
-    ren.addEventListener("click", async (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      closeSessionOverflowMenus();
-      const t = prompt("给这段对话起个名字", s.title || "");
-      if (t == null) return;
-      await window.digitalMe.renameSession({ id: s.id, title: t });
-      await refreshSessionList();
-    });
+    function fillDefaultMenuItems() {
+      while (menu.firstChild) menu.removeChild(menu.firstChild);
 
-    const del = document.createElement("button");
-    del.type = "button";
-    del.className = "session-overflow-item session-overflow-danger";
-    del.setAttribute("role", "menuitem");
-    del.textContent = "删除";
-    del.addEventListener("click", async (ev) => {
-      ev.preventDefault();
-      ev.stopPropagation();
-      closeSessionOverflowMenus();
-      if (!guardChatSessionNavigation()) return;
-      if (!confirm("删除这段对话？")) return;
-      await window.digitalMe.deleteSession(s.id);
-      if (currentSession && currentSession.id === s.id) {
-        currentSession = null;
-        await ensureSession();
-      } else await refreshSessionList();
-    });
+      const ren = document.createElement("button");
+      ren.type = "button";
+      ren.className = "session-overflow-item";
+      ren.setAttribute("role", "menuitem");
+      ren.textContent = "改名";
+      ren.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        closeSessionOverflowMenus();
+        beginSessionInlineRename(row, s);
+      });
 
-    menu.appendChild(ren);
-    menu.appendChild(del);
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "session-overflow-item session-overflow-danger";
+      del.setAttribute("role", "menuitem");
+      del.textContent = "删除";
+      del.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        // Block early while a reply is in flight (same tip as final confirm).
+        if (!guardChatSessionNavigation()) {
+          closeSessionOverflowMenus();
+          return;
+        }
+        showSessionDeleteConfirm(menu, moreBtn, row, s, fillDefaultMenuItems);
+      });
+
+      menu.appendChild(ren);
+      menu.appendChild(del);
+    }
+
+    fillDefaultMenuItems();
     moreBtn.addEventListener("click", (ev) => {
       ev.preventDefault();
       ev.stopPropagation();
       if (!sessionOverflow) return;
+      if (sessionUiMode && sessionUiMode.kind === "rename") return;
       sessionOverflow.toggle(moreBtn, menu, s.id);
     });
 
@@ -638,6 +671,224 @@ async function refreshSessionList() {
     row.appendChild(overflowWrap);
     list.appendChild(row);
   }
+}
+
+function beginSessionInlineRename(row, session) {
+  if (!row || !session) return;
+  if (sessionUiMode && sessionUiMode.kind === "rename" && sessionUiMode.sessionId !== session.id) {
+    sessionUiMode = null;
+    refreshSessionList()
+      .then(() => {
+        const nextRow = [...document.querySelectorAll("#session-list .session-item")].find(
+          (el) => el.dataset.sessionId === session.id
+        );
+        if (nextRow) beginSessionInlineRename(nextRow, session);
+      })
+      .catch(() => {});
+    return;
+  }
+
+  closeSessionOverflowMenus();
+  sessionUiMode = { kind: "rename", sessionId: session.id, row };
+
+  const main = row.querySelector(".session-item-main");
+  const overflow = row.querySelector(".session-overflow");
+  if (overflow) overflow.classList.add("hidden");
+  if (!main) return;
+
+  const edit = document.createElement("div");
+  edit.className = "session-item-edit";
+  edit.dataset.sessionId = session.id;
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "session-rename-input";
+  input.maxLength = SESSION_TITLE_MAX;
+  input.value = session.title || "";
+  input.setAttribute("aria-label", "会话名称");
+  input.autocomplete = "off";
+
+  const hint = document.createElement("div");
+  hint.className = "session-rename-hint muted hidden";
+  hint.setAttribute("role", "status");
+
+  const actions = document.createElement("div");
+  actions.className = "session-rename-actions";
+
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.className = "session-rename-save";
+  saveBtn.textContent = "保存";
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.className = "session-rename-cancel";
+  cancelBtn.textContent = "取消";
+
+  actions.appendChild(saveBtn);
+  actions.appendChild(cancelBtn);
+  edit.appendChild(input);
+  edit.appendChild(actions);
+  edit.appendChild(hint);
+
+  edit.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+  });
+
+  function showHint(msg) {
+    hint.textContent = msg || "";
+    if (msg) hint.classList.remove("hidden");
+    else hint.classList.add("hidden");
+  }
+
+  async function saveRename() {
+    const normalized = normalizeSessionTitleInput(input.value);
+    if (!normalized.ok) {
+      showHint(normalized.error || "请输入名称");
+      input.focus();
+      return;
+    }
+    saveBtn.disabled = true;
+    cancelBtn.disabled = true;
+    try {
+      const hooks = window.__dmTestHooks;
+      if (hooks && typeof hooks.renameSession === "function") {
+        await hooks.renameSession({ id: session.id, title: normalized.title });
+      } else {
+        await window.digitalMe.renameSession({
+          id: session.id,
+          title: normalized.title,
+        });
+      }
+      sessionUiMode = null;
+      await refreshSessionList();
+    } catch (e) {
+      saveBtn.disabled = false;
+      cancelBtn.disabled = false;
+      showHint((e && e.message) || "保存失败");
+      input.focus();
+    }
+  }
+
+  function cancelRename() {
+    sessionUiMode = null;
+    refreshSessionList().catch(() => {});
+  }
+
+  saveBtn.addEventListener("click", (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    saveRename();
+  });
+  cancelBtn.addEventListener("click", (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    cancelRename();
+  });
+  input.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      saveRename();
+    } else if (ev.key === "Escape" || ev.key === "Esc") {
+      ev.preventDefault();
+      ev.stopPropagation();
+      cancelRename();
+    }
+  });
+
+  main.replaceWith(edit);
+  row.classList.add("session-item-editing");
+  input.focus();
+  input.select();
+}
+
+function showSessionDeleteConfirm(menu, moreBtn, row, session, restoreMenu) {
+  if (!menu || !session) return;
+  while (menu.firstChild) menu.removeChild(menu.firstChild);
+
+  sessionUiMode = {
+    kind: "deleteConfirm",
+    sessionId: session.id,
+    menu,
+    moreBtn,
+    session,
+    row,
+    restoreMenu,
+  };
+
+  const msg = document.createElement("p");
+  msg.className = "session-overflow-confirm-msg";
+  msg.textContent = "确定删除这段对话？";
+
+  const actions = document.createElement("div");
+  actions.className = "session-overflow-confirm-actions";
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.className = "session-overflow-item session-overflow-confirm-cancel";
+  cancelBtn.textContent = "取消";
+
+  const confirmBtn = document.createElement("button");
+  confirmBtn.type = "button";
+  confirmBtn.className = "session-overflow-item session-overflow-danger session-overflow-confirm-delete";
+  confirmBtn.textContent = "删除";
+
+  cancelBtn.addEventListener("click", (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    closeSessionOverflowMenus();
+  });
+
+  confirmBtn.addEventListener("click", async (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (!guardChatSessionNavigation()) {
+      closeSessionOverflowMenus();
+      return;
+    }
+    confirmBtn.disabled = true;
+    cancelBtn.disabled = true;
+    try {
+      const hooks = window.__dmTestHooks;
+      if (hooks && typeof hooks.deleteSession === "function") {
+        await hooks.deleteSession(session.id);
+      } else {
+        await window.digitalMe.deleteSession(session.id);
+      }
+      sessionUiMode = null;
+      closeSessionOverflowMenus();
+      if (currentSession && currentSession.id === session.id) {
+        currentSession = null;
+        await ensureSession();
+      } else {
+        await refreshSessionList();
+      }
+    } catch (e) {
+      confirmBtn.disabled = false;
+      cancelBtn.disabled = false;
+      msg.textContent = (e && e.message) || "删除失败";
+      msg.classList.add("session-overflow-confirm-error");
+    }
+  });
+
+  actions.appendChild(cancelBtn);
+  actions.appendChild(confirmBtn);
+  menu.appendChild(msg);
+  menu.appendChild(actions);
+
+  if (sessionOverflow) {
+    if (!sessionOverflow.isOpen() || sessionOverflow.openSessionId() !== session.id) {
+      sessionOverflow.open(moreBtn, menu, session.id);
+    } else if (typeof sessionOverflow.positionMenu === "function") {
+      sessionOverflow.positionMenu(moreBtn, menu);
+    }
+  } else {
+    menu.classList.remove("hidden");
+    moreBtn.setAttribute("aria-expanded", "true");
+  }
+
+  // Safe default: focus cancel, never auto-delete.
+  cancelBtn.focus();
 }
 
 async function persistCurrentSession() {
@@ -1357,7 +1608,19 @@ function bindChatCoreControls() {
       (e) => sessionOverflow.handleDocumentPointerDown(e.target),
       true
     );
-    document.addEventListener("keydown", (e) => sessionOverflow.handleKeydown(e));
+    document.addEventListener("keydown", (e) => {
+      if (
+        (e.key === "Escape" || e.key === "Esc") &&
+        sessionUiMode &&
+        sessionUiMode.kind === "rename"
+      ) {
+        e.preventDefault();
+        sessionUiMode = null;
+        refreshSessionList().catch(() => {});
+        return;
+      }
+      sessionOverflow.handleKeydown(e);
+    });
     $("session-list")?.addEventListener(
       "scroll",
       () => closeSessionOverflowMenus(),
@@ -1365,7 +1628,7 @@ function bindChatCoreControls() {
     );
   }
 
-  // Owner-runtime only: allow harness to simulate in-flight chat request.
+  // Owner-runtime only: allow harness to simulate in-flight chat request / IPC faults.
   if (window.digitalMe && window.digitalMe.ownerRuntimeTest === true) {
     window.__dmTestHooks = {
       setActiveChatRequest(v) {
@@ -1375,6 +1638,8 @@ function bindChatCoreControls() {
       getActiveChatRequest() {
         return activeChatRequest;
       },
+      renameSession: null,
+      deleteSession: null,
     };
   }
 
