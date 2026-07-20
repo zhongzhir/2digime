@@ -8,6 +8,15 @@ let pendingAttachments = [];
 let currentSession = null;
 /** @type {{ requestId: string, originSessionId: string|null, originMessageId: string|null, bubbleEl: Element|null }|null} */
 let activeChatRequest = null;
+/** Session list ⋯ menu controller (no third-party lib). */
+const sessionOverflowApi =
+  typeof DigitalMeSessionOverflowMenu !== "undefined" && DigitalMeSessionOverflowMenu
+    ? DigitalMeSessionOverflowMenu
+    : null;
+const sessionOverflow =
+  sessionOverflowApi && typeof sessionOverflowApi.createSessionOverflowMenuController === "function"
+    ? sessionOverflowApi.createSessionOverflowMenuController()
+    : null;
 /** @deprecated prefer activeChatRequest.requestId — kept in sync for stop/progress */
 let currentRequestId = null;
 let currentArtifact = null;
@@ -532,41 +541,26 @@ function renderMessagesFromHistory() {
   }
 }
 
+function closeSessionOverflowMenus() {
+  if (sessionOverflow) sessionOverflow.close();
+}
+
 async function refreshSessionList() {
+  closeSessionOverflowMenus();
   const listed = await window.digitalMe.listSessions();
   const list = $("session-list");
   list.innerHTML = "";
   for (const s of listed.sessions) {
-    const btn = document.createElement("button");
-    btn.className = "session-item" + (s.id === listed.activeId ? " active" : "");
-    btn.innerHTML = `<span class="s-title">${escapeHtml(s.title || "未命名")}</span>`;
-    const actions = document.createElement("div");
-    actions.className = "s-actions";
-    const ren = document.createElement("button");
-    ren.textContent = "改名";
-    ren.addEventListener("click", async (ev) => {
-      ev.stopPropagation();
-      const t = prompt("给这段对话起个名字", s.title || "");
-      if (t == null) return;
-      await window.digitalMe.renameSession({ id: s.id, title: t });
-      await refreshSessionList();
-    });
-    const del = document.createElement("button");
-    del.textContent = "删除";
-    del.addEventListener("click", async (ev) => {
-      ev.stopPropagation();
-      if (!guardChatSessionNavigation()) return;
-      if (!confirm("删除这段对话？")) return;
-      await window.digitalMe.deleteSession(s.id);
-      if (currentSession && currentSession.id === s.id) {
-        currentSession = null;
-        await ensureSession();
-      } else await refreshSessionList();
-    });
-    actions.appendChild(ren);
-    actions.appendChild(del);
-    btn.appendChild(actions);
-    btn.addEventListener("click", async () => {
+    const row = document.createElement("div");
+    row.className = "session-item" + (s.id === listed.activeId ? " active" : "");
+    row.dataset.sessionId = s.id;
+
+    const main = document.createElement("button");
+    main.type = "button";
+    main.className = "session-item-main";
+    main.innerHTML = `<span class="s-title">${escapeHtml(s.title || "未命名")}</span>`;
+    main.addEventListener("click", async () => {
+      closeSessionOverflowMenus();
       if (!guardChatSessionNavigation()) return;
       await persistCurrentSession();
       currentSession = await window.digitalMe.setActiveSession(s.id);
@@ -580,7 +574,69 @@ async function refreshSessionList() {
       syncClearLinkedDraftButton();
       await refreshSessionList();
     });
-    list.appendChild(btn);
+
+    const overflowWrap = document.createElement("div");
+    overflowWrap.className = "session-overflow";
+
+    const moreBtn = document.createElement("button");
+    moreBtn.type = "button";
+    moreBtn.className = "session-overflow-btn";
+    moreBtn.setAttribute("aria-label", "更多会话操作");
+    moreBtn.setAttribute("aria-haspopup", "menu");
+    moreBtn.setAttribute("aria-expanded", "false");
+    moreBtn.textContent = "⋯";
+
+    const menu = document.createElement("div");
+    menu.className = "session-overflow-menu hidden";
+    menu.setAttribute("role", "menu");
+
+    const ren = document.createElement("button");
+    ren.type = "button";
+    ren.className = "session-overflow-item";
+    ren.setAttribute("role", "menuitem");
+    ren.textContent = "改名";
+    ren.addEventListener("click", async (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      closeSessionOverflowMenus();
+      const t = prompt("给这段对话起个名字", s.title || "");
+      if (t == null) return;
+      await window.digitalMe.renameSession({ id: s.id, title: t });
+      await refreshSessionList();
+    });
+
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "session-overflow-item session-overflow-danger";
+    del.setAttribute("role", "menuitem");
+    del.textContent = "删除";
+    del.addEventListener("click", async (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      closeSessionOverflowMenus();
+      if (!guardChatSessionNavigation()) return;
+      if (!confirm("删除这段对话？")) return;
+      await window.digitalMe.deleteSession(s.id);
+      if (currentSession && currentSession.id === s.id) {
+        currentSession = null;
+        await ensureSession();
+      } else await refreshSessionList();
+    });
+
+    menu.appendChild(ren);
+    menu.appendChild(del);
+    moreBtn.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (!sessionOverflow) return;
+      sessionOverflow.toggle(moreBtn, menu, s.id);
+    });
+
+    overflowWrap.appendChild(moreBtn);
+    overflowWrap.appendChild(menu);
+    row.appendChild(main);
+    row.appendChild(overflowWrap);
+    list.appendChild(row);
   }
 }
 
@@ -1293,6 +1349,35 @@ function bindChatCoreControls() {
     await openLinkedArtifactInWorkspace();
   });
 
+  // Session ⋯ menu: outside click, Escape, scroll closes (not hover-only).
+  if (sessionOverflow && !window.__dmSessionOverflowBound) {
+    window.__dmSessionOverflowBound = true;
+    document.addEventListener(
+      "pointerdown",
+      (e) => sessionOverflow.handleDocumentPointerDown(e.target),
+      true
+    );
+    document.addEventListener("keydown", (e) => sessionOverflow.handleKeydown(e));
+    $("session-list")?.addEventListener(
+      "scroll",
+      () => closeSessionOverflowMenus(),
+      { passive: true }
+    );
+  }
+
+  // Owner-runtime only: allow harness to simulate in-flight chat request.
+  if (window.digitalMe && window.digitalMe.ownerRuntimeTest === true) {
+    window.__dmTestHooks = {
+      setActiveChatRequest(v) {
+        activeChatRequest = v || null;
+        currentRequestId = v && v.requestId ? v.requestId : null;
+      },
+      getActiveChatRequest() {
+        return activeChatRequest;
+      },
+    };
+  }
+
   document.querySelectorAll("#intent-chips button").forEach((btn) => {
     btn.addEventListener("click", () => {
       const intent = btn.dataset.intent || "";
@@ -1603,6 +1688,15 @@ function navigatePanoramaTarget(target) {
   return false;
 }
 
+function listMinimalSecondaryActions(surface) {
+  if (!surface || typeof surface !== "object") return [];
+  if (Array.isArray(surface.secondaryActions) && surface.secondaryActions.length) {
+    return surface.secondaryActions.filter(Boolean);
+  }
+  if (surface.secondaryAction) return [surface.secondaryAction];
+  return [];
+}
+
 function renderMinimalSurface(ms) {
   const titleEl = $("subject-home-title");
   const summaryEl = $("subject-minimal-summary");
@@ -1648,6 +1742,7 @@ function renderMinimalSurface(ms) {
     btn.type = "button";
     btn.className = "btn-primary";
     btn.id = "subject-minimal-primary";
+    btn.dataset.navTarget = surface.primaryNavTarget;
     setSafeText(btn, surface.primaryActionLabel);
     btn.addEventListener("click", () => {
       // Renderer never recomputes priority; only executes whitelist nav from main.
@@ -1656,22 +1751,32 @@ function renderMinimalSurface(ms) {
     actionsEl.appendChild(btn);
   }
 
-  const sec = surface && surface.secondaryAction;
-  const secOk =
-    actionOk &&
-    sec &&
-    typeof sec === "object" &&
-    typeof sec.action === "string" &&
-    MINIMAL_SURFACE_ACTION_WHITELIST.has(sec.action) &&
-    typeof sec.label === "string" &&
-    sec.label &&
-    typeof sec.navTarget === "string" &&
-    PANORAMA_NAV_WHITELIST.has(sec.navTarget);
-  if (secOk) {
+  const primaryNav = actionOk ? surface.primaryNavTarget : null;
+  let secondaryIdAssigned = false;
+  for (const sec of listMinimalSecondaryActions(surface)) {
+    const secOk =
+      actionOk &&
+      sec &&
+      typeof sec === "object" &&
+      typeof sec.action === "string" &&
+      MINIMAL_SURFACE_ACTION_WHITELIST.has(sec.action) &&
+      typeof sec.label === "string" &&
+      sec.label &&
+      typeof sec.navTarget === "string" &&
+      PANORAMA_NAV_WHITELIST.has(sec.navTarget);
+    if (!secOk) continue;
+    // Dedup: never render a second button that duplicates the primary nav target.
+    if (primaryNav && sec.navTarget === primaryNav) continue;
     const secBtn = document.createElement("button");
     secBtn.type = "button";
     secBtn.className = "btn-ghost";
-    secBtn.id = "subject-minimal-secondary";
+    secBtn.dataset.navTarget = sec.navTarget;
+    if (sec.navTarget === "me-build" || sec.action === "continue_build") {
+      secBtn.id = "subject-minimal-continue-build";
+    } else if (!secondaryIdAssigned) {
+      secBtn.id = "subject-minimal-secondary";
+      secondaryIdAssigned = true;
+    }
     setSafeText(secBtn, sec.label);
     secBtn.addEventListener("click", () => navigatePanoramaTarget(sec.navTarget));
     actionsEl.appendChild(secBtn);

@@ -164,11 +164,11 @@ async function runPan01OwnerRuntimeHarness({ BrowserWindow }) {
   await waitFor(() => !win.webContents.isLoading(), { label: "load complete", timeoutMs: 30000 });
   await sleep(1500);
 
-  // 1) Default entry: inbox pending must not hijack; minimal surface only; P2「确认我的理解」
+  // 1) Default entry: inbox pending must not hijack; minimal surface only; P2「继续了解我」
   try {
     const state = await openMinimalViaSidebarOnly(win);
     assert.equal(state.buildHidden, true, "inbox pending must not open build lane");
-    assert.match(state.primary, /确认我的理解/);
+    assert.match(state.primary, /继续了解我/);
     assert.equal(!!state.promises, false);
     assert.equal(!!state.journey, false);
     assert.equal(!!state.cta, false);
@@ -199,24 +199,197 @@ async function runPan01OwnerRuntimeHarness({ BrowserWindow }) {
     fail("authorize/collaborate CTAs", err);
   }
 
-  // 3) Primary 确认我的理解 → build lane
+  // 3) Primary 继续了解我 → build lane (real navigation, not CSS-only)
   try {
     await openMinimalViaSidebarOnly(win);
+    const before = await evalIn(
+      win,
+      `({
+        primary: (document.getElementById("subject-minimal-primary")?.textContent || "").trim(),
+        primaryNav: document.getElementById("subject-minimal-primary")?.dataset?.navTarget || "",
+        continueExtra: document.getElementById("subject-minimal-continue-build"),
+        labels: [...document.querySelectorAll("#subject-minimal-actions button")].map((b) => (b.textContent || "").trim()),
+      })`
+    );
+    assert.match(before.primary, /继续了解我/);
+    assert.equal(before.primaryNav, "me-build");
+    // P2 primary already me-build → no duplicate continue button
+    assert.equal(!!before.continueExtra, false);
+    assert.equal(before.labels.filter((t) => t === "继续了解我").length, 1);
     await evalIn(win, `document.getElementById("subject-minimal-primary").click()`);
     const afterBuild = await waitFor(
       async () => {
         const s = await evalIn(
           win,
-          `({ buildVisible: !document.getElementById("me-lane-build")?.classList.contains("hidden") })`
+          `({
+            buildVisible: !document.getElementById("me-lane-build")?.classList.contains("hidden"),
+            selfHidden: document.getElementById("me-lane-self")?.classList.contains("hidden"),
+            wizard: document.getElementById("build-wizard-step") || document.getElementById("build-step-b0"),
+          })`
         );
         return s.buildVisible ? s : null;
       },
       { label: "build lane visible", timeoutMs: 8000 }
     );
     assert.equal(afterBuild.buildVisible, true);
-    pass("确认我的理解 enters build lane");
+    assert.equal(afterBuild.selfHidden, true);
+    assert.ok(afterBuild.wizard, "build wizard present after navigate");
+    pass("继续了解我 enters build lane");
   } catch (err) {
-    fail("确认我的理解", err);
+    fail("继续了解我", err);
+  }
+
+  // 3b) Session overflow menu: ⋯ opens menu; click ⋯ does not switch session; Escape closes
+  try {
+    await evalIn(
+      win,
+      `(() => {
+        const chat = document.querySelector('.nav-item[data-view="chat"]');
+        if (chat) chat.click();
+        return true;
+      })()`
+    );
+    await waitFor(
+      async () => {
+        const s = await evalIn(
+          win,
+          `({ chatVisible: !document.getElementById("view-chat")?.classList.contains("hidden") })`
+        );
+        return s.chatVisible ? s : null;
+      },
+      { label: "chat view for sessions", timeoutMs: 8000 }
+    );
+    // Ensure at least two sessions
+    await evalIn(
+      win,
+      `(() => {
+        const btn = document.getElementById("btn-new-session");
+        if (btn) btn.click();
+        return true;
+      })()`
+    );
+    await sleep(400);
+    await evalIn(
+      win,
+      `(() => {
+        const btn = document.getElementById("btn-new-session");
+        if (btn) btn.click();
+        return true;
+      })()`
+    );
+    await sleep(600);
+
+    const menuProbe = await evalIn(
+      win,
+      `(() => {
+        const rows = [...document.querySelectorAll("#session-list .session-item")];
+        if (rows.length < 1) return { ok: false, reason: "no sessions" };
+        const residentRename = [...document.querySelectorAll("#session-list .session-item-main")].some((b) =>
+          /改名|删除/.test(b.textContent || "")
+        );
+        const overflowBtns = [...document.querySelectorAll(".session-overflow-btn")];
+        if (!overflowBtns.length) return { ok: false, reason: "no overflow buttons" };
+        const first = rows[0];
+        const second = rows[1] || rows[0];
+        const activeBefore = document.querySelector("#session-list .session-item.active")?.dataset?.sessionId || "";
+        const more = first.querySelector(".session-overflow-btn");
+        const menu = first.querySelector(".session-overflow-menu");
+        more.click();
+        const open1 = more.getAttribute("aria-expanded") === "true" && menu && !menu.classList.contains("hidden");
+        const items = menu ? [...menu.querySelectorAll('[role="menuitem"]')].map((b) => (b.textContent || "").trim()) : [];
+        // Click overflow on another row — previous should close
+        const more2 = second.querySelector(".session-overflow-btn");
+        const menu2 = second.querySelector(".session-overflow-menu");
+        if (more2 && more2 !== more) more2.click();
+        const prevClosed = menu.classList.contains("hidden");
+        const secondOpen = more2 && more2.getAttribute("aria-expanded") === "true" && menu2 && !menu2.classList.contains("hidden");
+        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        const escClosed = !secondOpen || menu2.classList.contains("hidden");
+        // Re-open and outside click
+        more.click();
+        document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+        const outsideClosed = menu.classList.contains("hidden");
+        const activeAfter = document.querySelector("#session-list .session-item.active")?.dataset?.sessionId || "";
+        return {
+          ok: true,
+          residentRename,
+          overflowCount: overflowBtns.length,
+          open1,
+          items,
+          prevClosed: more2 && more2 !== more ? prevClosed : true,
+          escClosed,
+          outsideClosed,
+          activeBefore,
+          activeAfter,
+          switchChanged: activeBefore !== activeAfter,
+        };
+      })()`
+    );
+    assert.equal(menuProbe.ok, true, menuProbe.reason || "menu probe failed");
+    assert.equal(menuProbe.residentRename, false, "titles must not contain resident 改名/删除");
+    assert.ok(menuProbe.overflowCount >= 1);
+    assert.equal(menuProbe.open1, true);
+    assert.ok(menuProbe.items.includes("改名"));
+    assert.ok(menuProbe.items.includes("删除"));
+    assert.equal(menuProbe.prevClosed, true);
+    assert.equal(menuProbe.escClosed, true);
+    assert.equal(menuProbe.outsideClosed, true);
+    assert.equal(menuProbe.switchChanged, false, "clicking ⋯ must not switch session");
+    pass("session overflow menu open/close without switch");
+  } catch (err) {
+    fail("session overflow menu", err);
+  }
+
+  // 3c) Delete while request in flight is blocked by navigation guard
+  try {
+    const blocked = await evalIn(
+      win,
+      `(() => {
+        if (!window.__dmTestHooks || typeof window.__dmTestHooks.setActiveChatRequest !== "function") {
+          return { ok: false, reason: "test hooks missing" };
+        }
+        window.__dmTestHooks.setActiveChatRequest({
+          requestId: "req_test_block",
+          originSessionId: "s_test",
+          originMessageId: "m_test",
+          bubbleEl: null,
+        });
+        let confirmCalled = false;
+        const prevConfirm = window.confirm;
+        window.confirm = () => {
+          confirmCalled = true;
+          return true;
+        };
+        const row = document.querySelector("#session-list .session-item");
+        if (!row) {
+          window.confirm = prevConfirm;
+          window.__dmTestHooks.setActiveChatRequest(null);
+          return { ok: false, reason: "no session row" };
+        }
+        const more = row.querySelector(".session-overflow-btn");
+        const del = row.querySelector(".session-overflow-item.session-overflow-danger") ||
+          [...row.querySelectorAll(".session-overflow-item")].find((b) => /删除/.test(b.textContent || ""));
+        more.click();
+        del.click();
+        const note = [...document.querySelectorAll(".msg.system-note, .system-note")]
+          .map((n) => n.textContent || "")
+          .join("\\n");
+        window.confirm = prevConfirm;
+        window.__dmTestHooks.setActiveChatRequest(null);
+        return {
+          ok: true,
+          confirmCalled,
+          note,
+          blocked: /请先停止当前回复/.test(note),
+        };
+      })()`
+    );
+    assert.equal(blocked.ok, true, blocked.reason || "guard probe failed");
+    assert.equal(blocked.confirmCalled, false, "confirm must not run when guard blocks");
+    assert.equal(blocked.blocked, true);
+    pass("session delete blocked while request active");
+  } catch (err) {
+    fail("session delete guard", err);
   }
 
   // 4) Sidebar cleaned

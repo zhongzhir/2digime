@@ -149,31 +149,96 @@ body {
 .btn-new-session:hover { background: #fceee6; }
 .session-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
 .session-item {
+  display: flex;
+  align-items: center;
+  gap: 2px;
   text-align: left;
-  padding: 8px 10px;
+  padding: 4px 4px 4px 8px;
   border-radius: 10px;
   border: none;
   background: transparent;
   color: var(--muted);
-  cursor: pointer;
   font-size: 12px;
   font-family: inherit;
   line-height: 1.35;
 }
 .session-item:hover { background: var(--panel-2); color: var(--text); }
-.session-item.active { background: var(--panel-2); color: var(--text); font-weight: 600; }
-.session-item .s-title { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.session-item .s-actions { display: none; gap: 4px; margin-top: 4px; }
-.session-item:hover .s-actions, .session-item.active .s-actions { display: flex; }
-.session-item .s-actions button {
-  font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--panel);
+.session-item.active { background: var(--panel-2); color: var(--text); }
+.session-item-main {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  padding: 4px 2px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+.session-item.active .session-item-main { font-weight: 600; }
+.session-item .s-title {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.session-overflow {
+  flex: 0 0 auto;
+  position: relative;
+}
+.session-overflow-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
   color: var(--muted);
   cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  letter-spacing: 0;
+  opacity: 0.72;
 }
+.session-overflow-btn:hover,
+.session-overflow-btn:focus-visible {
+  background: var(--panel);
+  color: var(--text);
+  opacity: 1;
+  outline: 1px solid var(--border);
+}
+.session-item.active .session-overflow-btn {
+  opacity: 0.88;
+  color: var(--text);
+}
+.session-overflow-menu {
+  min-width: 112px;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel, #fff);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+.session-overflow-menu.hidden { display: none; }
+.session-overflow-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+}
+.session-overflow-item:hover,
+.session-overflow-item:focus-visible {
+  background: var(--panel-2);
+  outline: none;
+}
+.session-overflow-danger { color: #8a3b2a; }
 
 .workbench-center {
   display: flex;

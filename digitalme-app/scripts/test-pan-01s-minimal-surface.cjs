@@ -101,7 +101,7 @@ function assertIdentityTwoLine(summary, line2Snippet) {
   if (line2Snippet) assert.match(summary, line2Snippet);
 }
 
-test("G/L: missing → P1 让我认识你, no fake ownership/privacy", () => {
+test("G/L: missing → P1 继续了解我, no fake ownership/privacy", () => {
   const missing = path.join(tempDir("missing-root"), "no-such-package");
   try {
     const overview = buildSubjectOverviewV1(missing, {});
@@ -109,7 +109,7 @@ test("G/L: missing → P1 让我认识你, no fake ownership/privacy", () => {
     assert.equal(ms.priority, "P1");
     assert.equal(ms.primaryAction, "continue_build");
     assert.equal(ms.primaryActionLabel, MINIMAL_SURFACE_ACTIONS.continue_build);
-    assert.equal(ms.primaryActionLabel, "让我认识你");
+    assert.equal(ms.primaryActionLabel, "继续了解我");
     assert.equal(ms.primaryNavTarget, "me-build");
     assertIdentityTwoLine(ms.summary, /还不够了解你，可以先从已有资料开始/);
     assert.equal(/简短对话|几分钟对话/.test(ms.summary), false);
@@ -121,7 +121,7 @@ test("G/L: missing → P1 让我认识你, no fake ownership/privacy", () => {
   }
 });
 
-test("M: read_error → P0 恢复我的信息", () => {
+test("M: read_error → P0 恢复我的信息 + 继续了解我", () => {
   const dir = makeV02("read-error");
   try {
     fs.writeFileSync(path.join(dir, "manifest.json"), "{not-json", "utf8");
@@ -131,6 +131,9 @@ test("M: read_error → P0 恢复我的信息", () => {
     assert.equal(ms.primaryAction, "view_problems");
     assert.equal(ms.primaryActionLabel, "恢复我的信息");
     assert.equal(ms.primaryNavTarget, "settings-package-versions");
+    assert.equal(ms.secondaryAction.action, "continue_build");
+    assert.equal(ms.secondaryAction.label, "继续了解我");
+    assert.equal(ms.secondaryAction.navTarget, "me-build");
     assertIdentityTwoLine(ms.summary, /无法读取/);
   } finally {
     cleanup(dir);
@@ -156,7 +159,7 @@ test("M: content_degraded → P0", () => {
   }
 });
 
-test("U: awaiting_review + suggested → P2 确认我的理解", () => {
+test("U: awaiting_review + suggested → P2 继续了解我 (me-build, no duplicate)", () => {
   const dir = makeV02("u-conflict");
   try {
     const inbox = summarizeInboxForOverview({
@@ -168,8 +171,10 @@ test("U: awaiting_review + suggested → P2 确认我的理解", () => {
     const overview = buildSubjectOverviewV1(dir, { inboxSummary: inbox });
     const ms = msOf(overview);
     assert.equal(ms.priority, "P2");
-    assert.equal(ms.primaryActionLabel, "确认我的理解");
+    assert.equal(ms.primaryActionLabel, "继续了解我");
     assert.equal(ms.primaryNavTarget, "me-build");
+    assert.equal(ms.secondaryAction && ms.secondaryAction.navTarget, "me-cognition");
+    assert.notEqual(ms.secondaryAction && ms.secondaryAction.label, "继续了解我");
     assertIdentityTwoLine(ms.summary, /需要你确认/);
   } finally {
     cleanup(dir);
@@ -197,13 +202,13 @@ test("W: missing + suggested → P1", () => {
     const inbox = summarizeInboxForOverview({ items: [{ status: "suggested" }] });
     const overview = buildSubjectOverviewV1(missing, { inboxSummary: inbox });
     assert.equal(msOf(overview).priority, "P1");
-    assert.equal(msOf(overview).primaryActionLabel, "让我认识你");
+    assert.equal(msOf(overview).primaryActionLabel, "继续了解我");
   } finally {
     cleanup(path.dirname(missing));
   }
 });
 
-test("X: processing only + readable → P4 + reminder + chat primary", () => {
+test("X: processing only + readable → P4 + reminder + chat primary + build secondary", () => {
   const dir = makeV02("x-proc");
   try {
     const inbox = summarizeInboxForOverview({ items: [{ status: "processing" }] });
@@ -213,7 +218,12 @@ test("X: processing only + readable → P4 + reminder + chat primary", () => {
     assert.equal(ms.primaryAction, "start_work");
     assert.equal(ms.primaryActionLabel, "开始一次对话");
     assert.equal(ms.primaryNavTarget, "chat");
-    assert.equal(ms.secondaryAction && ms.secondaryAction.label, "查看目前的我");
+    assert.equal(ms.secondaryAction && ms.secondaryAction.label, "继续了解我");
+    assert.equal(ms.secondaryAction.navTarget, "me-build");
+    assert.ok(
+      (ms.secondaryActions || []).some((a) => a && a.label === "查看目前的我"),
+      "P4 keeps view_subject as extra secondary"
+    );
     assert.match(ms.reminder || "", /有内容正在处理中/);
     assertIdentityTwoLine(ms.summary);
     assert.notEqual(ms.primaryAction, "continue_build");
@@ -322,14 +332,15 @@ test("nextAction aligns with minimalSurface; never panorama-experience", () => {
   }
 });
 
-test("P3: suggested alone → 继续完善我", () => {
+test("P3: suggested alone → 继续了解我 (me-build primary, no duplicate)", () => {
   const dir = makeV02("p3");
   try {
     const overview = buildSubjectOverviewV1(dir, {
       inboxSummary: summarizeInboxForOverview({ items: [{ status: "suggested" }] }),
     });
     assert.equal(msOf(overview).priority, "P3");
-    assert.equal(msOf(overview).primaryActionLabel, "继续完善我");
+    assert.equal(msOf(overview).primaryActionLabel, "继续了解我");
+    assert.equal(msOf(overview).primaryNavTarget, "me-build");
     assertIdentityTwoLine(msOf(overview).summary, /继续完善/);
   } finally {
     cleanup(dir);
@@ -343,7 +354,7 @@ test("pending_confirmation maps to P2", () => {
       inboxSummary: summarizeInboxForOverview({ items: [{ status: "pending_confirmation" }] }),
     });
     assert.equal(msOf(overview).priority, "P2");
-    assert.equal(msOf(overview).primaryActionLabel, "确认我的理解");
+    assert.equal(msOf(overview).primaryActionLabel, "继续了解我");
   } finally {
     cleanup(dir);
   }
@@ -408,8 +419,88 @@ test("no unsupported conversational build promise in P1/B0; P4 chat primary kept
     assert.equal(p4.primaryAction, "start_work");
     assert.equal(p4.primaryActionLabel, "开始一次对话");
     assert.equal(p4.primaryNavTarget, "chat");
+    assert.equal(p4.secondaryAction.navTarget, "me-build");
+    assert.equal(p4.secondaryAction.label, "继续了解我");
   } finally {
     cleanup(dir);
+  }
+});
+
+test("P0–P4 each expose exactly one me-build entry; P0 keeps restore + continue", () => {
+  function meBuildEntries(ms) {
+    const out = [];
+    if (ms.primaryNavTarget === "me-build") {
+      out.push({ where: "primary", label: ms.primaryActionLabel });
+    }
+    const secs = Array.isArray(ms.secondaryActions)
+      ? ms.secondaryActions
+      : ms.secondaryAction
+        ? [ms.secondaryAction]
+        : [];
+    for (const s of secs) {
+      if (s && s.navTarget === "me-build") out.push({ where: "secondary", label: s.label });
+    }
+    return out;
+  }
+
+  const missing = path.join(tempDir("map-p1"), "gone");
+  try {
+    const p1 = meBuildEntries(msOf(buildSubjectOverviewV1(missing, {})));
+    assert.equal(p1.length, 1);
+    assert.equal(p1[0].where, "primary");
+    assert.equal(p1[0].label, "继续了解我");
+  } finally {
+    cleanup(path.dirname(missing));
+  }
+
+  const p0dir = makeV02("map-p0");
+  try {
+    fs.writeFileSync(path.join(p0dir, "manifest.json"), "{bad", "utf8");
+    const ms = msOf(buildSubjectOverviewV1(p0dir, {}));
+    assert.equal(ms.priority, "P0");
+    assert.equal(ms.primaryActionLabel, "恢复我的信息");
+    const entries = meBuildEntries(ms);
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0].label, "继续了解我");
+  } finally {
+    cleanup(p0dir);
+  }
+
+  const p2dir = makeV02("map-p2");
+  try {
+    const ms = msOf(
+      buildSubjectOverviewV1(p2dir, {
+        inboxSummary: summarizeInboxForOverview({ items: [{ status: "awaiting_review" }] }),
+      })
+    );
+    assert.equal(ms.priority, "P2");
+    assert.equal(meBuildEntries(ms).length, 1);
+    assert.equal(ms.primaryActionLabel, "继续了解我");
+  } finally {
+    cleanup(p2dir);
+  }
+
+  const p3dir = makeV02("map-p3");
+  try {
+    const ms = msOf(
+      buildSubjectOverviewV1(p3dir, {
+        inboxSummary: summarizeInboxForOverview({ items: [{ status: "suggested" }] }),
+      })
+    );
+    assert.equal(ms.priority, "P3");
+    assert.equal(meBuildEntries(ms).length, 1);
+  } finally {
+    cleanup(p3dir);
+  }
+
+  const p4dir = makeV02("map-p4");
+  try {
+    const ms = msOf(buildSubjectOverviewV1(p4dir, {}));
+    assert.equal(ms.priority, "P4");
+    assert.equal(meBuildEntries(ms).length, 1);
+    assert.equal(ms.primaryNavTarget, "chat");
+  } finally {
+    cleanup(p4dir);
   }
 });
 

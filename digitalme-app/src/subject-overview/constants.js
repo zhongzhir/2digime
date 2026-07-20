@@ -48,7 +48,8 @@ const SUBJECT_IDENTITY_LINE =
 
 const MINIMAL_SURFACE_ACTIONS = Object.freeze({
   view_problems: "恢复我的信息",
-  continue_build: "让我认识你",
+  /** Permanent build-entry label on 「我」(P0–P4); me-build primaries share this copy. */
+  continue_build: "继续了解我",
   continue_confirm: "确认我的理解",
   continue_refine: "继续完善我",
   view_subject: "查看目前的我",

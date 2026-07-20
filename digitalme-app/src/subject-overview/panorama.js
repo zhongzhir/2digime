@@ -530,6 +530,53 @@ function buildSecondary(action, label, navTarget) {
 }
 
 /**
+ * Ensure every non-fail-closed surface has exactly one me-build entry.
+ * Dedup: if primary already navigates to me-build, unify its label and do not
+ * add a second identical button; otherwise prepend continue_build as secondary.
+ */
+function ensureContinueBuildAccess(ms) {
+  if (!ms || ms.failClosed) return ms;
+  const continueLabel = MINIMAL_SURFACE_ACTIONS.continue_build;
+  const continueSec = buildSecondary(
+    "continue_build",
+    continueLabel,
+    "me-build"
+  );
+
+  if (ms.primaryNavTarget === "me-build") {
+    ms.primaryActionLabel = continueLabel;
+    const extras = [];
+    if (Array.isArray(ms.secondaryActions)) extras.push(...ms.secondaryActions);
+    else if (ms.secondaryAction) extras.push(ms.secondaryAction);
+    const filtered = extras.filter(
+      (a) =>
+        a &&
+        a.navTarget !== "me-build" &&
+        a.action !== "continue_build" &&
+        a.label !== continueLabel
+    );
+    ms.secondaryActions = filtered.length ? filtered : null;
+    ms.secondaryAction = filtered[0] || null;
+    return ms;
+  }
+
+  const extras = [];
+  if (Array.isArray(ms.secondaryActions)) extras.push(...ms.secondaryActions);
+  else if (ms.secondaryAction) extras.push(ms.secondaryAction);
+  const withoutDup = extras.filter(
+    (a) =>
+      a &&
+      a.navTarget !== "me-build" &&
+      a.action !== "continue_build" &&
+      a.label !== continueLabel
+  );
+  const list = continueSec ? [continueSec, ...withoutDup] : withoutDup;
+  ms.secondaryActions = list.length ? list : null;
+  ms.secondaryAction = list[0] || null;
+  return ms;
+}
+
+/**
  * Prefer rich P4 claim only when package layers support experiences,
  * interests/domains, and judgment signals. Otherwise use the safer fallback.
  */
@@ -607,7 +654,8 @@ function buildMinimalSurface(overview, inboxSummary) {
   if (state.readError || state.contentDegraded) {
     const nav = sanitizeNavTarget("settings-package-versions");
     // Subject is not safely readable under P0 → no 「查看目前的我」.
-    return {
+    // Permanent build entry added via ensureContinueBuildAccess (secondary).
+    return ensureContinueBuildAccess({
       subjectName,
       summary: twoLineSummary(
         "我已经形成了部分认识，但目前有些信息无法读取。"
@@ -619,13 +667,13 @@ function buildMinimalSurface(overview, inboxSummary) {
       reminder: null,
       priority: "P0",
       failClosed: !nav,
-    };
+    });
   }
 
   // P1 — missing or uninitialized (not read damage)
   if (state.missing || isPackageUninitialized(overview, state)) {
     const nav = sanitizeNavTarget("me-build");
-    return {
+    return ensureContinueBuildAccess({
       subjectName,
       summary: twoLineSummary("我还不够了解你，可以先从已有资料开始。"),
       primaryAction: "continue_build",
@@ -635,7 +683,7 @@ function buildMinimalSurface(overview, inboxSummary) {
       reminder: null,
       priority: "P1",
       failClosed: !nav,
-    };
+    });
   }
 
   // Unknown inbox statuses → fail-closed (do not invent success)
@@ -652,22 +700,22 @@ function buildMinimalSurface(overview, inboxSummary) {
     "me-cognition"
   );
 
-  // P2 — awaiting confirmation / review
+  // P2 — awaiting confirmation / review（主操作进构建；文案统一为「继续了解我」）
   if (inbox.hasAwaitingReview) {
     const nav = sanitizeNavTarget("me-build");
-    return {
+    return ensureContinueBuildAccess({
       subjectName,
       summary: twoLineSummary(
         "我形成了一些新的认识，需要你确认后才会成为“我”的一部分。"
       ),
       primaryAction: "continue_confirm",
-      primaryActionLabel: MINIMAL_SURFACE_ACTIONS.continue_confirm,
+      primaryActionLabel: MINIMAL_SURFACE_ACTIONS.continue_build,
       primaryNavTarget: nav,
       secondaryAction: viewMeSecondary,
       reminder: null,
       priority: "P2",
       failClosed: !nav,
-    };
+    });
   }
 
   // P3 — actionable inbox (not processing alone)
@@ -675,22 +723,22 @@ function buildMinimalSurface(overview, inboxSummary) {
     const nav = sanitizeNavTarget("me-build");
     let reminder = null;
     if (inbox.hasProcessing) reminder = "有内容正在处理中";
-    return {
+    return ensureContinueBuildAccess({
       subjectName,
       summary: twoLineSummary(
         "我已经有了基本轮廓，还有一项内容可以继续完善。"
       ),
       primaryAction: "continue_refine",
-      primaryActionLabel: MINIMAL_SURFACE_ACTIONS.continue_refine,
+      primaryActionLabel: MINIMAL_SURFACE_ACTIONS.continue_build,
       primaryNavTarget: nav,
       secondaryAction: viewMeSecondary,
       reminder,
       priority: "P3",
       failClosed: !nav,
-    };
+    });
   }
 
-  // P4 — readable subject, no P0–P3；主操作进入对话
+  // P4 — readable subject, no P0–P3；主操作进入对话；次操作含永久构建入口
   const chatNav = sanitizeNavTarget("chat");
   let reminder = null;
   if (inbox.hasProcessing) reminder = "有内容正在处理中";
@@ -700,7 +748,7 @@ function buildMinimalSurface(overview, inboxSummary) {
   const line2 = canClaimFamiliarSubject(overview)
     ? "我已经了解你的部分经历、关注领域和判断方式，并会在使用中继续成长。"
     : "我已经形成了初步认识，并会在对话和做事中继续了解你。";
-  return {
+  return ensureContinueBuildAccess({
     subjectName,
     summary: twoLineSummary(line2),
     primaryAction: "start_work",
@@ -710,7 +758,7 @@ function buildMinimalSurface(overview, inboxSummary) {
     reminder,
     priority: "P4",
     failClosed: !chatNav,
-  };
+  });
 }
 
 function buildNextAction(overview, inboxSummary) {

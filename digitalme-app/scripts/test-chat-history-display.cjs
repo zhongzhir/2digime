@@ -307,6 +307,9 @@ test("10. app.js wires sessionNavGuard into new/switch/delete handlers", () => {
   assert.ok(switchIdx > 0);
   const switchRegion = appJs.slice(Math.max(0, switchIdx - 350), switchIdx);
   assert.match(switchRegion, /guardChatSessionNavigation\(\)/);
+  // Switch is on session-item-main, not overflow
+  assert.match(appJs, /session-item-main/);
+  assert.match(appJs, /session-overflow-btn/);
 
   // Stop remains available without nav guard (bindChatCoreControls handler)
   const stopBindIdx = appJs.indexOf('$("btn-stop")?.addEventListener');

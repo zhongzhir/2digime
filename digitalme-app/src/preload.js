@@ -7,9 +7,12 @@ const PAN01R_TEST_HARNESS =
   process.env.DIGITALME_PAN01R_TEST_HARNESS === "1" ||
   process.env.DIGITALME_PAN01R_OWNER_RUNTIME === "1";
 
+const OWNER_RUNTIME_TEST = process.env.DIGITALME_OWNER_RUNTIME_TEST === "1";
+
 const api = {
   getConfig: () => ipcRenderer.invoke("config:get"),
   getRuntimeStamp: () => ipcRenderer.invoke("runtime:getStamp"),
+  ownerRuntimeTest: OWNER_RUNTIME_TEST,
   setConfig: (cfg) => ipcRenderer.invoke("config:set", cfg),
   clearApiKey: () => ipcRenderer.invoke("config:clearApiKey"),
   clearExtensionSecret: (payload) => ipcRenderer.invoke("secrets:clearExtensionEnv", payload),
