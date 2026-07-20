@@ -5,6 +5,33 @@
 
 ---
 
+## 2026-07-20 Renderer Foundation R1 有界修订 · codex_changes_requested
+
+### 做了什么
+
+纯文档：按 Codex 复核修订 `digitalme_renderer_foundation_R1_shell_and_entry_switch.md` → **v0.1.1-draft**。
+
+1. 入口权限：普通 renderer 仅 next→legacy；legacy→next 仅 main 开发/E2E；无生产 next 入口；禁 IPC 改持久化默认。  
+2. 失败状态：本进程 fallback latch；effectiveEntry=legacy；保留偏好并记失败，下次可重试；长期隔离不做。  
+3. ready 握手：窗口/页面/generation 绑定；一次性；迟到无效；timer 清理。  
+4. Electron/测试：contextIsolation、禁 nodeIntegration、production 本地产物、dev URL 门禁、故障注入门禁、E2E 隔离。  
+5. 状态改为 **`specified` / `codex_changes_requested` / `not_started`**（去掉 `frozen_for_implementation`）。
+
+### 状态
+
+| 项 | 值 |
+|---|---|
+| R1 | `specified` / **`codex_changes_requested`** / `not_started` |
+| 实现分支 | **不存在**；**未授权** |
+| R0 | `accepted`（不变） |
+| PAN-02 | `planned` / `blocked` |
+
+### 下一门槛
+
+**Codex 再复核**本修订。通过前不得实现。
+
+---
+
 ## 2026-07-20 Renderer Foundation R1 任务包起草 · codex_review_pending
 
 ### 做了什么
@@ -22,7 +49,7 @@
 | 项 | 值 |
 |---|---|
 | R0 | `accepted`（v0.1.2；不变） |
-| R1 | `specified` / `frozen_for_implementation` / **`codex_review_pending`** / `not_started` |
+| R1 | `specified` / `frozen_for_implementation` / **`codex_review_pending`** / `not_started`（历史口径；已被上方有界修订条目覆盖为 `codex_changes_requested`，并去掉 `frozen_for_implementation`） |
 | R1 实现分支 | **不存在** |
 | PAN-02 | `planned` / `blocked` |
 

@@ -39,7 +39,7 @@ Owner / 用户提出的产品想法**可能不全、可错、可非最优**，�
 
 ## 三、P1-PANORAMA 阶段规则（2026-07-18 确立；2026-07-20 PAN-01S 族 accepted 后更新）
 
-当前产品主线为 **P1-PANORAMA（三位一体 Alpha）**；执行索引见 `digitalme_panorama_execution_index_v0.1.md`（文内 **v0.2.12**）。PAN-00R 已 **accepted**。**PAN-01S / PAN-01S.1 / PAN-01S.2 已 `accepted`（baseline `cbde807`）。** Renderer Foundation R0 = **`accepted`**（v0.1.2）。Renderer Foundation R1 = **`specified` / `frozen_for_implementation` / `codex_review_pending` / `not_started`**（`digitalme_renderer_foundation_R1_shell_and_entry_switch.md`；无实现分支）。
+当前产品主线为 **P1-PANORAMA（三位一体 Alpha）**；执行索引见 `digitalme_panorama_execution_index_v0.1.md`（文内 **v0.2.13**）。PAN-00R 已 **accepted**。**PAN-01S / PAN-01S.1 / PAN-01S.2 已 `accepted`（baseline `cbde807`）。** Renderer Foundation R0 = **`accepted`**（v0.1.2）。Renderer Foundation R1 = **`specified` / `codex_changes_requested` / `not_started`**（`digitalme_renderer_foundation_R1_shell_and_entry_switch.md` v0.1.1-draft；**不是** `frozen_for_implementation`；无实现分支；**未授权实现**）。
 
 1. **每次只执行一个已批准的 PAN 主任务**；不得并行扩大实现范围。
 2. **非阻断问题进入 backlog**，不因局部修饰延迟完整闭环。
@@ -48,5 +48,5 @@ Owner / 用户提出的产品想法**可能不全、可错、可非最优**，�
 5. **工程 `implemented` / `statically_verified` 不自动等于用户面「可用」**；自动测试通过不自动等于 `accepted`。
 6. **若需恢复暂停工作**（含 P1-07 缺口、原 P1-08、Policies 迁移等），先提交最小阻断说明，经复核后只做必要切片，**不可直接扩 scope**。
 7. Digital Org、公网协作、支付结算不进入当前个人 Alpha 实现。
-8. **当前唯一任务：Codex 复核 Renderer Foundation R1 任务包；复核通过前不得创建实现分支或修改源码。** R0 决策已 accepted。PAN-02 保持 `planned` / `blocked`。
+8. **当前唯一任务：Codex 再复核 Renderer Foundation R1（`codex_changes_requested`）；未授权实现；不得创建实现分支或修改源码。** R0 决策已 accepted。PAN-02 保持 `planned` / `blocked`。
 9. **未经 Owner 主路径验收不得 `accepted`**。PAN-02～PAN-06 未开始。不得自行修复已冻结的 P1-07。PAN-01 / PAN-01R 均已裁定不 accepted，不得回滚或删除其代码与证据。PAN-01R **无生产入口**（规格 v0.6.3）。
