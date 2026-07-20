@@ -36,10 +36,25 @@ Owner 在真实 Electron 环境对最终运行版本 **`cbde807fd1e40472d66fbe8f
 
 ### 下一门槛
 
-- **PAN-02**：`planned` / `blocked`（待独立任务包与启动授权；**不得**自行开始）
-- **renderer foundation R0**：`planned` / `not_started`（不得在本收口中创建重构分支）
+- **当前唯一任务**：起草并冻结 Renderer Foundation R0 独立决策/任务包；R0 保持 `planned` / `not_started`，未授权实现或创建分支。
+- **PAN-02**：`planned` / `blocked`（待 R0 边界决策后由 Owner/Codex 另行决定启动顺序；**不得**自行开始）
+- R0 不是重开 PAN-01S，而是处理已登记技术债并建立后续开发边界。
 
 未触碰 Package / sessions；未启动应用或重跑测试；未 push。
+
+---
+
+## 2026-07-20 执行顺序修正 · R0 优先于 PAN-02
+
+### 做了什么
+
+纯文档：将「当前唯一任务」从「起草 PAN-02 任务包」修正为「起草并冻结 Renderer Foundation R0 独立决策/任务包」。不改变 PAN-01S / S.1 / S.2 `accepted`（baseline `cbde807`）。不授权 R0 实现或创建分支；不启动 PAN-02。
+
+### 状态
+
+- PAN-01S / S.1 / S.2：`accepted`（不变）
+- R0：`planned` / `not_started`（仅规格起草授权）
+- PAN-02：`planned` / `blocked`
 
 ---
 

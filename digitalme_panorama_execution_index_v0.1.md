@@ -1,6 +1,6 @@
 # Digital Me Product Panorama 执行索引
 
-版本：v0.2.7
+版本：v0.2.8
 日期：2026-07-20
 状态：`active`
 所属总任务：`P1-PANORAMA：Digital Me 产品全貌 Alpha`（v0.4，三位一体重构）
@@ -14,7 +14,9 @@
 >
 > **v0.2.1～v0.2.6（2026-07-19）**：PAN-01S 规划→实现→Owner 要求修订→PAN-01S.1 实现；当时等待 Owner 验收（历史过程）。
 >
-> **v0.2.7 修订（2026-07-20，Owner 真机验收）**：**PAN-01S / PAN-01S.1 / PAN-01S.2 = `accepted`**（Owner real Electron runtime；baseline `cbde807`）。**PAN-02** = `planned` / `blocked`。**renderer foundation R0** = `planned` / `not_started`。不得自行开始 PAN-02 或 renderer 重构。
+> **v0.2.7 修订（2026-07-20，Owner 真机验收）**：**PAN-01S / PAN-01S.1 / PAN-01S.2 = `accepted`**（Owner real Electron runtime；baseline `cbde807`）。**PAN-02** = `planned` / `blocked`。**renderer foundation R0** = `planned` / `not_started`。
+>
+> **v0.2.8 修订（2026-07-20，执行顺序修正）**：确认下一唯一任务为 **起草并冻结 Renderer Foundation R0 独立决策/任务包**（仅规格起草授权；不授权实现或创建分支）。PAN-02 保持 `planned` / `blocked`，须待 R0 边界决策后由 Owner/Codex 另行决定启动顺序。不改变 PAN-01S 族 accepted 结论。
 
 ---
 
@@ -29,8 +31,8 @@ P1-PANORAMA（三位一体 Alpha）
 → PAN-01S accepted（2026-07-20；baseline cbde807）
 → PAN-01S.1 accepted（2026-07-20；baseline cbde807）
 → PAN-01S.2 accepted（2026-07-20；baseline cbde807；对话事故收口）
-→ PAN-02 理解通道 Alpha（planned / blocked；未开始）
-→ renderer foundation R0（planned / not_started；技术债 backlog）
+→ renderer foundation R0（planned / not_started；当前：仅授权起草决策/任务包）← 当前唯一任务
+→ PAN-02 理解通道 Alpha（planned / blocked；R0 边界决策前不得自行启动）
 → …
 ```
 
@@ -38,9 +40,9 @@ P1-PANORAMA（三位一体 Alpha）
 |---|---|
 | 总任务状态 | `active / three_part_alpha_reframed / PAN-01S_family_accepted` |
 | 当前完成 | PAN-00 / PAN-00R `accepted`；PAN-01 / PAN-01R 已裁定（不 accepted）；**PAN-01S / S.1 / S.2 `accepted`** |
-| **当前唯一任务** | **起草并冻结 PAN-02 独立任务包（理解通道 Alpha）；在授权前 PAN-02 保持 `planned` / `blocked`** |
-| Acceptance basis | Owner real Electron runtime；baseline `cbde807`；date 2026-07-20 |
-| 明确不得启动 | 未经批准的 PAN-02 实现；PAN-03～PAN-06；P1-07 修复；Digital Org；公网协作；自行创建 renderer 重构分支 |
+| **当前唯一任务** | **起草并冻结 Renderer Foundation R0 独立决策/任务包；R0 保持 `planned` / `not_started`，未授权实现或创建分支。PAN-02 保持 `planned` / `blocked`；待 R0 边界决策后由 Owner/Codex 另行决定启动顺序。** |
+| Acceptance basis | Owner real Electron runtime；baseline `cbde807`；date 2026-07-20（**不因本顺序修正改变**） |
+| 明确不得启动 | R0 实现或重构分支；未经批准的 PAN-02 任务包/实现；PAN-03～PAN-06；P1-07 修复；Digital Org；公网协作；重开 PAN-01S |
 
 ---
 
@@ -55,8 +57,8 @@ P1-PANORAMA（三位一体 Alpha）
 | PAN-01S | 极简产品表面与复杂度后移 | **`accepted`（2026-07-20；baseline `cbde807`）** | — | Owner real Electron runtime | 收口完成；技术债进 R0 |
 | PAN-01S.1 | 主体解释与渐进式构建 | **`accepted`（2026-07-20；baseline `cbde807`）** | 规格接受 `686fd7b`；前置 `98fb817` | Owner real Electron runtime | 收口完成 |
 | PAN-01S.2 | 对话事故收口（历史显示 / 附件分离 / 关联文稿隔离与恢复） | **`accepted`（2026-07-20；baseline `cbde807`）** | Owner 真机事故发现 | Owner real Electron runtime | 正式独立任务包未入库；以本索引与 log 记录为准，不伪造任务包历史 |
-| PAN-02 | 理解通道 Alpha：低负担输入、后台蒸馏、关键纠错、任务相关检索、无关沉默 | `planned` / **`blocked`** | PAN-01S 族已 accepted + **独立任务包冻结与启动授权** | 理解我 Alpha 达标（规格 §7.6 第 1 条） | PAN-03 |
-| renderer foundation R0 | 渐进重建 renderer 基础（非 PAN 主线） | `planned` / `not_started` | 独立最小阻断说明 + 授权 | 技术债清单收敛 | 按切片推进，不重开 PAN-01S |
+| PAN-02 | 理解通道 Alpha：低负担输入、后台蒸馏、关键纠错、任务相关检索、无关沉默 | `planned` / **`blocked`** | **R0 边界决策完成** + 独立任务包冻结与启动授权 | 理解我 Alpha 达标（规格 §7.6 第 1 条） | PAN-03 |
+| renderer foundation R0 | 渐进重建 renderer 基础（非 PAN 主线；处理已登记技术债并建立后续开发边界） | `planned` / `not_started` | **当前仅授权：起草并冻结独立决策/任务包**；未授权实现或创建分支 | 边界决策冻结；再由 Owner/Codex 决定先实施 R0 或允许 PAN-02 在新边界下启动 | 按切片推进，不重开 PAN-01S |
 | PAN-03 | 能力框架 Alpha | `planned`（新定义） | PAN-02 验收通过 + 独立任务包 | 武装我 Alpha 达标 | PAN-04 |
 | PAN-04 | 外部协作骨架 Alpha | `planned`（新定义） | PAN-03 验收通过 + 独立任务包 | 连接世界 Alpha 达标 | PAN-05 |
 | PAN-05 | 成长飞轮与传播体验 | `planned`（新定义） | PAN-04 验收通过 | 一次闭环走通 | PAN-06 |
@@ -175,4 +177,4 @@ statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_fo
 3. 恢复 backlog 须先写最小阻断说明，不可直接扩 scope。
 4. 更新本索引时同步 `digitalme_capability_status_v0.1.md` 与 `digitalme_log.md`。
 5. PAN-00 已于 `bc85a14` 标记 `accepted`（历史）。PAN-01 与 PAN-01R 按 PAN-00R 裁定归档，均**不得标 `accepted`**、不得回滚、不得删除证据。PAN-00R 已 `accepted`（`07b631d` + `6ae2dca` + `0fcd432`；docs/strategy acceptance，不是运行能力 released）。**PAN-01S / PAN-01S.1 / PAN-01S.2 已于 2026-07-20 `accepted`**（Owner real Electron runtime；baseline `cbde807`）。
-6. **当前唯一任务**：起草并冻结 **PAN-02** 独立任务包；在授权前 PAN-02 保持 `planned` / `blocked`。**不得**自行开始 PAN-02～PAN-06 实现；**不得**自行创建 renderer 重构分支（R0 = `planned` / `not_started`）。非阻断技术债见 §2.3，不重新打开 PAN-01S。
+6. **当前唯一任务**：起草并冻结 **Renderer Foundation R0** 独立决策/任务包；R0 保持 `planned` / `not_started`，未授权实现或创建分支。**PAN-02** 保持 `planned` / `blocked`；待 R0 边界决策后由 Owner/Codex 另行决定启动顺序。**不得**在 R0 边界决策完成前自行启动 PAN-02 任务包或实现；**不得**重开 PAN-01S。非阻断技术债见 §2.3。

@@ -5,7 +5,7 @@
 日期：2026-07-19
 关联：`digitalme_context.md`（战略与架构）、`digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`（当前总任务，v0.4 三位一体）、`digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`（三位一体重构与极简原则冻结）、`digitalme_phase1_task_PAN-01S_minimal_product_surface.md`（极简产品表面实现任务包 v0.1.1）、`digitalme_panorama_execution_index_v0.1.md`（当前执行索引）、`digitalme_phase1_task_PAN-01R_sovereign_collaboration_loop.md`（历史任务包；协作骨架保留为内部 test harness）、`digitalme_digital_sovereignty_narrative_v0.1.md`（数字主权叙事）、`digitalme_phase1_subject_upgrade_plan_v0.1.md`（Trusted Beta 硬化依据，不再是当前执行队列）、`digitalme_architecture_audit_20260716.md`（审计风险基线）、`digitalme_person_definition_v0.1.md`（人的定义与采集口径）、`digitalme_inbox_access_plan_v0.1.md`（投递箱与可读范围）、`digitalme_architecture_edge_sovereign_v0.1.md`（部署拓扑）、`digitalme_narrative_ai_era_autonomy.md`（对外叙事）、`digitalme_intake_questionnaire.md`（自我评测）
 
-> **当前版本**：**v0.6.3**（规格文本冻结于 2026-07-19；主线仍为 v0.6 三位一体与极简原则）。**实现与验收状态（2026-07-20）**：PAN-01S / PAN-01S.1 / PAN-01S.2 已 `accepted`（Owner real Electron runtime；baseline `cbde807`）。本规格文本本身不因验收升版。当前排期见执行索引 v0.2.7；**下一门槛**：PAN-02 = `planned` / `blocked`；renderer foundation R0 = `planned` / `not_started`。v0.5.x / v0.6 / v0.6.1 / v0.6.2 历史修订记录全部保留。
+> **当前版本**：**v0.6.3**（规格文本冻结于 2026-07-19；主线仍为 v0.6 三位一体与极简原则）。**实现与验收状态（2026-07-20）**：PAN-01S / PAN-01S.1 / PAN-01S.2 已 `accepted`（Owner real Electron runtime；baseline `cbde807`）。本规格文本本身不因验收升版。当前排期见执行索引 v0.2.8；**当前唯一任务**：起草并冻结 Renderer Foundation R0 独立决策/任务包；R0 保持 `planned` / `not_started`，未授权实现或创建分支。PAN-02 保持 `planned` / `blocked`；待 R0 边界决策后由 Owner/Codex 另行决定启动顺序。v0.5.x / v0.6 / v0.6.1 / v0.6.2 历史修订记录全部保留。
 ---
 
 ## 0. 文档地位与准入规则
@@ -652,7 +652,7 @@ Skill = 可复用的办事方式（约定、步骤、推荐工具能力、sceneT
 
 ### 7.5 v0.5 — Product Panorama Alpha 冻结规格（**历史 · v0.6 部分 superseded**）
 
-> **v0.6 / v0.6.3 状态注记（2026-07-20 更新）**：本节保留为 v0.5 历史规格。其中安全边界（§7.5.10）、五态标签（§7.5.8）、结果处置规则（§7.5.7）**继续有效**；「产品全貌首页」「四承诺/成长路线作为首屏主体」「PAN-01R 五步体验作为普通用户产品证明」「旧 PAN-02 控制权面板」等要求已被 §2.0 / §3.1 / §3.1.1 / §7.6 取代。当前排期见执行索引 v0.2.7。**PAN-01S / PAN-01S.1 / PAN-01S.2 已于 2026-07-20 `accepted`**（Owner real Electron runtime；baseline `cbde807`）。**当前唯一任务**：起草并冻结 PAN-02 独立任务包；PAN-02 = `planned` / `blocked`；renderer foundation R0 = `planned` / `not_started`。
+> **v0.6 / v0.6.3 状态注记（2026-07-20 更新）**：本节保留为 v0.5 历史规格。其中安全边界（§7.5.10）、五态标签（§7.5.8）、结果处置规则（§7.5.7）**继续有效**；「产品全貌首页」「四承诺/成长路线作为首屏主体」「PAN-01R 五步体验作为普通用户产品证明」「旧 PAN-02 控制权面板」等要求已被 §2.0 / §3.1 / §3.1.1 / §7.6 取代。当前排期见执行索引 v0.2.8。**PAN-01S / PAN-01S.1 / PAN-01S.2 已于 2026-07-20 `accepted`**（Owner real Electron runtime；baseline `cbde807`）。**当前唯一任务**：起草并冻结 Renderer Foundation R0 独立决策/任务包；R0 保持 `planned` / `not_started`，未授权实现或创建分支。PAN-02 保持 `planned` / `blocked`；待 R0 边界决策后由 Owner/Codex 另行决定启动顺序。
 
 **地位（历史）**：曾为 P1-PANORAMA 用户体验与功能范围的冻结需求源。
 **不重写**：§4～§6 既有对话、写作、研究、Skill 等细则继续有效。
@@ -823,7 +823,7 @@ Skill = 可复用的办事方式（约定、步骤、推荐工具能力、sceneT
 
 **历史 v0.2 实现顺序（已失效，不再用于排期）**：附件 → 流式/停止 → 多会话 → 工具轨迹可见 → Markdown 画布 + md/docx 导出 → 产物库打通与报告类模板。
 
-**当前唯一执行顺序**以 `digitalme_panorama_execution_index_v0.1.md`（v0.2.7）为准。**PAN-01S / PAN-01S.1 / PAN-01S.2 已于 2026-07-20 `accepted`**（Owner real Electron runtime；baseline `cbde807`）。**当前唯一任务**：起草并冻结 PAN-02 独立任务包；PAN-02 = `planned` / `blocked`；renderer foundation R0 = `planned` / `not_started`。不得自行开始 PAN-02～PAN-06 实现。
+**当前唯一执行顺序**以 `digitalme_panorama_execution_index_v0.1.md`（v0.2.8）为准。**PAN-01S / PAN-01S.1 / PAN-01S.2 已于 2026-07-20 `accepted`**（Owner real Electron runtime；baseline `cbde807`）。**当前唯一任务**：起草并冻结 Renderer Foundation R0 独立决策/任务包；R0 保持 `planned` / `not_started`，未授权实现或创建分支。PAN-02 保持 `planned` / `blocked`；待 R0 边界决策后由 Owner/Codex 另行决定启动顺序。
 
 ---
 
@@ -865,7 +865,7 @@ Skill = 可复用的办事方式（约定、步骤、推荐工具能力、sceneT
 | 2026-07-19 | v0.6.1 | PAN-00R Codex 第一轮：像我按相关性贯穿（删除默认全量 Package 注入）；侧栏不强制常驻 Package／模型／能力／品牌；工具细节按需展开、停止入口易发现 |
 | 2026-07-19 | v0.6.2 | PAN-01S 任务包冻结澄清：§3.1.1 默认「我」极简入口；帮助落点；PAN-01R 普通入口撤下；异常 fail-closed；不表示已实现 |
 | 2026-07-19 | v0.6.3 | PAN-01S Codex 第一轮：P0→P4 唯一主操作优先级；废止模糊「未完成构建」；PAN-01R 无生产入口（含设置／高级）；test-only 仅隔离 harness；不表示已实现 |
-| 2026-07-20 | v0.6.3 状态注记 | PAN-01S / S.1 / S.2 Owner 真机验收 `accepted`（baseline `cbde807`）；更新文首与 §8 当前唯一任务口径；规格正文不升版 |
+| 2026-07-20 | v0.6.3 状态注记 | PAN-01S / S.1 / S.2 Owner 真机验收 `accepted`（baseline `cbde807`）；后续修正当前唯一任务为优先起草 R0 决策/任务包；规格正文不升版 |
 | 2026-07-14 | v0.3.8 | 研究三栏（左课题/中对话/右成果）+ threads 持久化 |
 | 2026-07-14 | v0.3.7 | 写作空白稿优先：新建通用文稿 + 发送自动建稿；文种模板折叠次要 |
 | 2026-07-14 | v0.3.3 | 研究同页闭环（A 方案）：默认极简 + 同页导出；材料软标注；到写作改稿可选 |

@@ -203,6 +203,7 @@ PAN-00 accepted
 → PAN-01S accepted（2026-07-20；baseline `cbde807`）
 → PAN-01S.1 accepted（2026-07-20；baseline `cbde807`）
 → PAN-01S.2 accepted（2026-07-20；baseline `cbde807`）
+→ renderer foundation R0（planned / not_started；当前仅起草决策/任务包）
 → PAN-02 理解通道 Alpha（planned / blocked）
 → PAN-03 能力框架 Alpha
 → PAN-04 外部协作骨架 Alpha
@@ -240,7 +241,7 @@ PAN-00 accepted
 
 **PAN-01S.2：对话事故收口**（**`accepted`**，2026-07-20；baseline `cbde807`）— 对话历史显示、附件上下文分离、关联文稿正文隔离与恢复入口。正式独立任务包未入库；以执行索引与 `digitalme_log.md` 记录为准。
 
-**PAN-02：理解通道 Alpha**——低负担输入；后台蒸馏；关键纠错；任务相关检索；无关主体信息保持沉默；不把每条蒸馏过程暴露给普通用户。当前 **`planned` / `blocked`**。
+**PAN-02：理解通道 Alpha**——低负担输入；后台蒸馏；关键纠错；任务相关检索；无关主体信息保持沉默；不把每条蒸馏过程暴露给普通用户。当前 **`planned` / `blocked`**（待 R0 边界决策后由 Owner/Codex 另行决定；任务包与实现均不得在 R0 决策完成前自行启动）。
 
 **PAN-03：能力框架 Alpha**——统一能力对象；安装、启用、调用、停止、撤销；至少有真实能力样例；能力可继续扩展；主体增强不限制 AI 通用能力上限。
 
@@ -257,10 +258,10 @@ PAN-00 accepted
 
 ### 6.4 当前调度
 
-- **当前唯一任务**：起草并冻结 PAN-02 独立任务包；授权前 PAN-02 保持 `planned` / `blocked`；
-- PAN-01S / PAN-01S.1 / PAN-01S.2：`accepted`（2026-07-20；Owner real Electron runtime；baseline `cbde807`）；
-- renderer foundation R0：`planned` / `not_started`（技术债 backlog，不重新打开 PAN-01S）；
-- PAN-02～PAN-06 保持 `planned`；PAN-02 当前 **blocked**，不得自行开始实现。
+- **当前唯一任务**：起草并冻结 Renderer Foundation R0 独立决策/任务包；R0 保持 `planned` / `not_started`，未授权实现或创建分支；
+- PAN-01S / PAN-01S.1 / PAN-01S.2：`accepted`（2026-07-20；Owner real Electron runtime；baseline `cbde807`）——**不因本顺序修正改变**；
+- renderer foundation R0：`planned` / `not_started`（仅规格起草授权；不重开 PAN-01S）；
+- PAN-02～PAN-06 保持 `planned`；PAN-02 当前 **blocked**，须待 R0 边界决策后由 Owner/Codex 另行决定启动顺序。
 
 ---
 
@@ -448,10 +449,11 @@ statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_fo
 PAN-00 accepted
 → PAN-00R accepted
 → PAN-01S / PAN-01S.1 / PAN-01S.2 accepted（2026-07-20；baseline `cbde807`）
+→ renderer foundation R0（planned / not_started；仅起草决策/任务包）
 → PAN-02（planned / blocked）→ PAN-03 → PAN-04 → PAN-05 → PAN-06
 ```
 
-每次只启动一个主实现任务。PAN-05 传播文案可并行起草，但不得与代码任务修改同一文件。**当前唯一任务**：起草并冻结 PAN-02 独立任务包；授权前 PAN-02 保持 `planned` / `blocked`；不得自行开始实现或创建 renderer 重构分支。
+每次只启动一个主实现任务。PAN-05 传播文案可并行起草，但不得与代码任务修改同一文件。**当前唯一任务**：起草并冻结 Renderer Foundation R0 独立决策/任务包；R0 保持 `planned` / `not_started`，未授权实现或创建分支。PAN-02 保持 `planned` / `blocked`；待 R0 边界决策后由 Owner/Codex 另行决定启动顺序。
 
 ### 13.3 子任务完成报告
 
@@ -508,7 +510,9 @@ P1-PANORAMA 不包含：
 
 2026-07-19（PAN-01S.1 实现）：parent `686fd7b`；状态曾为 → `statically_verified` / `implemented`（**不** accepted）。**已被 2026-07-20 acceptance superseded。**
 
-2026-07-20（PAN-01S 族 Owner 真机验收）：**PAN-01S / PAN-01S.1 / PAN-01S.2 = `accepted`**；acceptance basis = Owner real Electron runtime；baseline `cbde807`；PAN-02 = `planned` / `blocked`；renderer foundation R0 = `planned` / `not_started`。
+2026-07-20（PAN-01S 族 Owner 真机验收）：**PAN-01S / PAN-01S.1 / PAN-01S.2 = `accepted`**；acceptance basis = Owner real Electron runtime；baseline `cbde807`。
+
+2026-07-20（执行顺序修正）：**当前唯一任务**改为起草并冻结 Renderer Foundation R0 独立决策/任务包；R0 = `planned` / `not_started`（仅规格起草）；PAN-02 = `planned` / `blocked`（待 R0 边界决策）。不改变 accepted 结论。
 
 > **PAN-01**：可信只读聚合保留；`needs_minimal_surface_reset`；不 accepted。
 >

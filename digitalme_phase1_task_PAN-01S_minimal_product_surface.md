@@ -465,9 +465,9 @@ PAN-01S **不**重做能力页。
 | 项 | 值 |
 |---|---|
 | 本轮 | **`accepted`（2026-07-20）**；Owner real Electron runtime；baseline `cbde807` |
-| **下一门槛** | **PAN-02** = `planned` / `blocked`；**renderer foundation R0** = `planned` / `not_started` |
+| **下一门槛** | **起草并冻结 Renderer Foundation R0 独立决策/任务包**；R0 = `planned` / `not_started`（未授权实现）；**PAN-02** = `planned` / `blocked`（待 R0 边界决策） |
 | 实现 / 收口分支 | `codex/pan-01s-minimal-product-surface` → `codex/pan-01s2-chat-incident-close` |
-| PAN-02～PAN-06 | `planned`；PAN-02 当前 **blocked**，不得自行开始 |
+| PAN-02～PAN-06 | `planned`；PAN-02 当前 **blocked**，不得在 R0 边界决策完成前自行启动 |
 
 ---
 

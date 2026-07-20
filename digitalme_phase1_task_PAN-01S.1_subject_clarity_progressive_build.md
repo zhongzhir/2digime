@@ -15,7 +15,7 @@
 > - 本文件为 Owner 对 PAN-01S 验收未通过后的修订任务包；
 > - 工程曾达 `statically_verified` / `implemented`；
 > - **`accepted`（2026-07-20）**：Owner 真实 Electron 运行验收通过；acceptance basis = Owner real Electron runtime；baseline = `cbde807`；
-> - **不得**开始 PAN-02（仍为 `planned` / `blocked`）；非阻断技术债进入 renderer foundation backlog，不重新打开本任务。
+> - **不得**开始 PAN-02（仍为 `planned` / `blocked`，待 R0 边界决策）；非阻断技术债进入 renderer foundation backlog，不重新打开本任务；当前下一任务为起草 R0 决策/任务包（不授权实现）。
 
 角色：Owner（产品验收）＋ Codex（规格与复核）＋ Cursor（本地实现）
 
@@ -364,5 +364,5 @@ PAN-01S.1 不包含：
 - **Accepted baseline：** `cbde807fd1e40472d66fbe8f0810a0835e8bc816`
 - **Accepted date：** 2026-07-20
 - **一并 accepted：** PAN-01S、PAN-01S.2
-- **下一门槛：** PAN-02 = `planned` / `blocked`；renderer foundation R0 = `planned` / `not_started`
+- **下一门槛：** 起草并冻结 Renderer Foundation R0 独立决策/任务包；R0 = `planned` / `not_started`（未授权实现）；PAN-02 = `planned` / `blocked`（待 R0 边界决策）
 - **未发生：** amend、squash、push；未启动 PAN-02；未开始 renderer 重构
