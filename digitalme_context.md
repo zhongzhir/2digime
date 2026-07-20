@@ -4,7 +4,7 @@
 状态：持续更新
 最后更新：2026-07-20
 
-> **当前产品主线（2026-07-20，R0 决策 accepted）**：**P1-PANORAMA — 第一阶段三位一体 Alpha**。**PAN-01S / PAN-01S.1 / PAN-01S.2 均为 `accepted`**（Owner real Electron runtime；accepted baseline `cbde807fd1e40472d66fbe8f0810a0835e8bc816`；accepted date 2026-07-20）。**Renderer Foundation R0** = **`accepted`**（决策/规格接受；任务包 `digitalme_renderer_foundation_R0_decision_and_migration_plan.md` v0.1.2；**不是** R0/R1 代码实现完成）。R0 implementation = `not_started`；实现分支不存在。**当前唯一任务：起草并冻结 R1 独立实施任务包，交 Codex 复核；复核通过前不得创建 R1 实现分支或修改源码。** PAN-02 保持 `planned` / `blocked`（解锁条件见 R0 §16）。
+> **当前产品主线（2026-07-20，R1 任务包起草）**：**P1-PANORAMA — 第一阶段三位一体 Alpha**。**PAN-01S / PAN-01S.1 / PAN-01S.2 均为 `accepted`**（baseline `cbde807`）。**Renderer Foundation R0** = **`accepted`**（v0.1.2；决策接受；implementation `not_started`）。**Renderer Foundation R1** = `specified` / `frozen_for_implementation` / `codex_review_pending` / `not_started`（任务包 `digitalme_renderer_foundation_R1_shell_and_entry_switch.md` v0.1-draft；**实现分支不存在**）。**当前唯一任务：Codex 复核 R1 任务包；复核通过前不得创建实现分支或修改源码。** PAN-02 保持 `planned` / `blocked`。
 > **PAN-01** 最终裁定：`statically_verified` / `owner_product_perception_failed` / `needs_minimal_surface_reset`（基线 `a40c5f8`；**不标 accepted**；**不回滚**；表面收口已由 PAN-01S 族完成）。
 >
 > **PAN-01R** 最终裁定：`statically_verified` / `codex_review_passed` / `owner_runtime_verified` / `owner_product_perception_failed` / `retained_as_internal_collaboration_harness`（最终实现 `9dd6fa0`；70/70 + 20/20；**不标 accepted**）。**生产界面必须没有 PAN-01R 入口**（含设置／高级／帮助；仅隔离 test harness；见规格 v0.6.3）。底层授权、取消、审计、adopt/reject、推理环境绑定等保留为内部测试与未来 PAN-04 基础设施。不得自行回到 P1-07 修复或原 P1-08 队列。
@@ -290,7 +290,7 @@ flowchart TB
 | `digitalme_narrative_ai_era_autonomy.md` | 对外/对内叙事（含双线简述） |
 | `digital-me-project-positioning-draft.md` | 定位讨论稿（战略原则含双线） |
 
-**近期工程焦点（2026-07-20 覆盖）**：规格 **v0.6.3** + 决策 **#67～#81**——第一阶段三位一体 Alpha；**PAN-00R accepted**；**PAN-01S / PAN-01S.1 / PAN-01S.2 `accepted`**（Owner real Electron runtime；baseline `cbde807`）。**Renderer Foundation R0** = **`accepted`**（v0.1.2；决策接受；implementation `not_started`）。**当前唯一任务：起草并冻结 R1 独立实施任务包（Codex 复核通过前不得创建实现分支或改源码）。** **PAN-02** = `planned` / `blocked`。
+**近期工程焦点（2026-07-20 覆盖）**：规格 **v0.6.3** + 决策 **#67～#82**——**R0 决策 `accepted`**；**R1 任务包** = `codex_review_pending` / `not_started`（无实现分支）。**当前唯一任务：Codex 复核 R1。** **PAN-02** = `planned` / `blocked`。PAN-01S 族 `accepted`（baseline `cbde807`）。
 ## 4. 系统架构共识（草案）
 
 > **部署拓扑补充（2026-07-10）**：本节描述逻辑模块（核心层 / 运行层 / 信任层）。物理部署与百万规模扩容面见 [`digitalme_architecture_edge_sovereign_v0.1.md`](digitalme_architecture_edge_sovereign_v0.1.md)（端主权 Runtime + 云边平台 + 能力层）。决策 #3「本地优先 + 云同步」由此文细化。
@@ -463,7 +463,7 @@ flowchart TB
 
 > **2026-07-16 审计后重排（历史）**：第一阶段不再扩展能力面，切换为“主体可信化与协作感知”。当时以 `digitalme_phase1_subject_upgrade_plan_v0.1.md` 为执行清单；原 v0.3.13 的 L0/审计/CLI 只能视为原型，不视为已达到安全可用。
 > **2026-07-18 覆盖**：当前执行索引改为 `digitalme_panorama_execution_index_v0.1.md`；原升级计划降为 Trusted Beta 硬化依据（决策 #58）。
-> **2026-07-20 R0 决策 accepted 覆盖（当前）**：**PAN-01S / PAN-01S.1 / PAN-01S.2 = `accepted`**（baseline `cbde807`）。**Renderer Foundation R0** = **`accepted`**（v0.1.2；决策接受；implementation `not_started`；无实现分支）。**当前唯一任务：起草并冻结 R1 独立实施任务包，交 Codex 复核；复核通过前不得创建 R1 实现分支或修改源码。** PAN-02 保持 `planned` / `blocked`（见 R0 §16）。
+> **2026-07-20 R1 任务包覆盖（当前）**：**R0** = `accepted`（v0.1.2）。**R1** = `specified` / `frozen_for_implementation` / `codex_review_pending` / `not_started`（`digitalme_renderer_foundation_R1_shell_and_entry_switch.md`）。**当前唯一任务：Codex 复核 R1；复核通过前不得创建实现分支或修改源码。** PAN-02 = `planned` / `blocked`。PAN-01S 族 `accepted` 不变。
 > **2026-07-19 PAN-01S.1 实现覆盖（历史；已被 2026-07-20 acceptance superseded）**：PAN-01S 曾为 `statically_verified` / `owner_changes_requested`；PAN-01S.1 曾为 `statically_verified` / `implemented`（不 accepted）。
 
 1. **工程与 Package 基线冻结**：Git、Alpha 标记、Package hash 快照、能力状态表；
@@ -891,3 +891,4 @@ flowchart TB
 79. **Renderer Foundation R0 决策/任务包起草（2026-07-20）**：新增 `digitalme_renderer_foundation_R0_decision_and_migration_plan.md`（v0.1-draft；提交 `fc56259`）。当时状态 `spec_drafted` / `codex_review_pending`。**已被决策 #80 修订。**
 80. **Renderer Foundation R0 修订 1 · 关闭 Codex 第一轮架构歧义（2026-07-20）**：任务包 → v0.1.1-draft。冻结整窗 legacy/next 独立 HTML 入口（禁 iframe/webview、禁一窗双状态机、禁新按钮驱动旧隐藏 DOM；flag 权威在 main）；SQLite 拆至 R2.5 `planned`/`deferred`（R2 继续 JSON sessions；PAN-02 不以 SQLite 为前提）；E2E = Playwright Electron（禁 Spectron；保留 owner-runtime 作 legacy 回归）；收窄 R1 为最小可测可回滚壳；确切 React/Vite/Playwright 版本由 R1 spike 锁定。状态：**`spec_revision_1` / `codex_review_changes_requested`**（**不** accepted）。implementation = `not_started`；无实现分支。下一动作：Codex 再复核；**不得**开始 R1。PAN-01S 族 accepted 不变；PAN-02 仍 `planned` / `blocked`。**已被决策 #81 接受。**
 81. **Renderer Foundation R0 决策 accepted（2026-07-20）**：Owner 确认方案 C 与五项决策；任务包 → **v0.1.2 / `accepted`**（决策接受，非实现完成）。补充：**next 加载失败或 ready 握手失败时，由 main 自动整窗回退 legacy**。修正 `digitalme_context.md` 两处句末多余 `>`。R0 implementation 仍 `not_started`；无实现分支。授权起草 R1 独立实施任务包；**Codex 复核 R1 任务包通过前不得创建实现分支或修改源码**。PAN-01S 族 accepted 不变；PAN-02 仍 `planned` / `blocked`。
+82. **Renderer Foundation R1 任务包起草（2026-07-20）**：新增 `digitalme_renderer_foundation_R1_shell_and_entry_switch.md`（v0.1-draft）。状态：`specified` / `frozen_for_implementation` / `codex_review_pending` / `not_started`。范围：最小 renderer-next shell、TS+React+Vite、整窗 legacy/next、ready 握手、load/ready 失败自动回 legacy、Playwright 最小 E2E、版本 spike 锁定。**Codex 复核通过前不得创建实现分支或修改源码。** R0 保持 `accepted`；PAN-02 仍 `planned` / `blocked`；PAN-01S 族 accepted 不变。

@@ -548,7 +548,7 @@ PAN-02 保持 **`planned` / `blocked`**，直到**同时**满足：
 - [x] R1 范围收窄为最小可测可回滚壳。  
 - [x] Owner 五项问题已接受（§18）。  
 - [x] R0 决策标为 **`accepted`**（决策接受；非实现完成）。  
-- [ ] R1 独立实施任务包已起草并经 Codex 复核（下一文档任务）。  
+- [x] R1 独立实施任务包已起草（`digitalme_renderer_foundation_R1_shell_and_entry_switch.md`；待 Codex 复核）。  
 - [x] 未修改源码/依赖；未创建实现分支。  
 - [x] PAN-01S 族 accepted 未被改写。
 

@@ -5,6 +5,37 @@
 
 ---
 
+## 2026-07-20 Renderer Foundation R1 任务包起草 · codex_review_pending
+
+### 做了什么
+
+新建独立实施任务包：
+
+- **`digitalme_renderer_foundation_R1_shell_and_entry_switch.md`**（v0.1-draft）
+
+冻结 R1 最小范围：renderer-next shell、TS+React+Vite、main 权威整窗入口、ready 握手、load/ready 失败自动回 legacy、Playwright 最小 E2E、版本 spike 锁定。明确不含 chat/我/工作台/SQLite/PAN-02/大规模 preload 重写。
+
+同步 context（决策 #82）、执行索引、能力表、cursor rule。
+
+### 状态
+
+| 项 | 值 |
+|---|---|
+| R0 | `accepted`（v0.1.2；不变） |
+| R1 | `specified` / `frozen_for_implementation` / **`codex_review_pending`** / `not_started` |
+| R1 实现分支 | **不存在** |
+| PAN-02 | `planned` / `blocked` |
+
+### 明确未做
+
+未创建实现分支；未改源码/依赖；未启动应用或 PAN-02。
+
+### 下一门槛
+
+**Codex 复核 R1 任务包**。通过前不得实现。
+
+---
+
 ## 2026-07-20 Renderer Foundation R0 决策 accepted
 
 ### 做了什么
