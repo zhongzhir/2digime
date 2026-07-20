@@ -5,6 +5,41 @@
 
 ---
 
+## 2026-07-20 Renderer Foundation R0 决策/任务包起草 · spec_drafted
+
+### 做了什么
+
+在分支 `codex/pan-01s2-chat-incident-close`（起草基线 HEAD `27e90a9`）只读核对现场与架构边界后，新建正式任务包：
+
+- **`digitalme_renderer_foundation_R0_decision_and_migration_plan.md`**（v0.1-draft）
+
+内容覆盖：方案 C 冻结候选、main/preload/renderer/PackageStore 边界、技术选型（Electron + TS + React + Vite；SQLite 仅运行索引）、状态所有权、chat 三层模型、preload 契约原则、strangler 切片 R1～R6、E2E 门槛、PAN-02 解锁条件、Owner 决策问题（≤5）、禁止事项与验收清单。
+
+同步更新：`digitalme_context.md`、`digitalme_panorama_execution_index_v0.1.md`（→ v0.2.9）、`digitalme_capability_status_v0.1.md`、`.cursor/rules/product-development-process.mdc`。
+
+### 状态
+
+| 项 | 值 |
+|---|---|
+| R0 决策/任务包 | **`spec_drafted` / `codex_review_pending`**（**不** accepted） |
+| R0 implementation | `not_started` |
+| R0 implementation branch | **不存在** |
+| PAN-01S / S.1 / S.2 | `accepted`（不变；baseline `cbde807`） |
+| PAN-02 | `planned` / `blocked` |
+
+### 明确未做
+
+- 未修改任何源码、测试、配置或依赖；
+- 未创建实现分支；未 npm install；未启动 Electron；
+- 未读取真实 Package / sessions / 个人资料；
+- 未开始 R1 或 PAN-02；未 amend / push。
+
+### 下一门槛
+
+**Codex 复核本 R0 决策包** → Owner 答复任务包 §18 决策问题 →（通过后）另立 R1 实现任务包。**不得**自行开始 R1。
+
+---
+
 ## 2026-07-20 PAN-01S / PAN-01S.1 / PAN-01S.2 Owner 真机验收 · accepted
 
 ### 做了什么
@@ -36,8 +71,8 @@ Owner 在真实 Electron 环境对最终运行版本 **`cbde807fd1e40472d66fbe8f
 
 ### 下一门槛
 
-- **当前唯一任务**：起草并冻结 Renderer Foundation R0 独立决策/任务包；R0 保持 `planned` / `not_started`，未授权实现或创建分支。
-- **PAN-02**：`planned` / `blocked`（待 R0 边界决策后由 Owner/Codex 另行决定启动顺序；**不得**自行开始）
+- **（已被上方 R0 决策稿条目覆盖）** 当时：起草并冻结 Renderer Foundation R0 独立决策/任务包。
+- **PAN-02**：`planned` / `blocked`（待 R0 边界确认等门槛；**不得**自行开始）
 - R0 不是重开 PAN-01S，而是处理已登记技术债并建立后续开发边界。
 
 未触碰 Package / sessions；未启动应用或重跑测试；未 push。
