@@ -1283,21 +1283,6 @@ body {
   font-size: 17px;
   color: #5c4033;
 }
-.build-wizard-note {
-  margin: 0;
-}
-.btn-link {
-  background: none;
-  border: none;
-  padding: 0;
-  color: #5c6a7a;
-  text-decoration: underline;
-  cursor: pointer;
-  font: inherit;
-}
-.btn-link:hover {
-  color: #3a4654;
-}
 .build-step-help {
   margin-top: 4px;
   font-size: 13px;

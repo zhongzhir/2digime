@@ -9518,9 +9518,6 @@ function bindMe() {
     applyBuildWizard();
     $("btn-inbox-pick")?.click();
   });
-  $("btn-build-b0-chat-note")?.addEventListener("click", () => {
-    navigatePanoramaTarget("chat");
-  });
   $("btn-build-b0-later")?.addEventListener("click", () => {
     buildSessionComplete = null;
     goSelfView("overview");

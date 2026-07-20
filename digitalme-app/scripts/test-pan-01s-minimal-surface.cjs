@@ -111,7 +111,8 @@ test("G/L: missing → P1 让我认识你, no fake ownership/privacy", () => {
     assert.equal(ms.primaryActionLabel, MINIMAL_SURFACE_ACTIONS.continue_build);
     assert.equal(ms.primaryActionLabel, "让我认识你");
     assert.equal(ms.primaryNavTarget, "me-build");
-    assertIdentityTwoLine(ms.summary, /还不够了解你/);
+    assertIdentityTwoLine(ms.summary, /还不够了解你，可以先从已有资料开始/);
+    assert.equal(/简短对话|几分钟对话/.test(ms.summary), false);
     assert.equal(overview.package.privacyLabel, "隐私状态尚无法确认");
     assert.equal(ms.summary.includes("属于你"), false);
     assert.equal(ms.summary.includes("状态正常"), false);
@@ -372,6 +373,41 @@ test("buildFlow: B0 empty inbox; B2 actionable; B3 processing; B4 awaiting", () 
       items: [{ status: "awaiting_review" }],
     }), {});
     assert.equal(b4.step, "B4");
+  } finally {
+    cleanup(dir);
+  }
+});
+
+test("no unsupported conversational build promise in P1/B0; P4 chat primary kept", () => {
+  const missing = path.join(tempDir("no-chat-build"), "gone");
+  try {
+    const p1 = msOf(buildSubjectOverviewV1(missing, {}));
+    assert.equal(p1.priority, "P1");
+    assert.match(p1.summary, /可以先从已有资料开始/);
+    assert.equal(/简短对话/.test(p1.summary), false);
+    assert.equal(/几分钟对话/.test(p1.summary), false);
+  } finally {
+    cleanup(path.dirname(missing));
+  }
+
+  const html = fs.readFileSync(path.join(__dirname, "../src/renderer/index.html"), "utf8");
+  const b0Block = html.slice(html.indexOf('id="build-step-b0"'), html.indexOf('id="build-step-b1"'));
+  assert.match(b0Block, /你可以从已有的简历、项目材料、文章或决策记录开始，不必事先整理完整档案/);
+  assert.equal(/几分钟对话/.test(b0Block), false);
+  assert.equal(/简短对话/.test(b0Block), false);
+  assert.equal(/先去对话里聊聊/.test(html), false);
+  assert.equal(html.includes("btn-build-b0-chat-note"), false);
+
+  const appSrc = fs.readFileSync(path.join(__dirname, "../src/renderer/app.js"), "utf8");
+  assert.equal(appSrc.includes("btn-build-b0-chat-note"), false);
+
+  const dir = makeV02("p4-chat-kept");
+  try {
+    const p4 = msOf(buildSubjectOverviewV1(dir, {}));
+    assert.equal(p4.priority, "P4");
+    assert.equal(p4.primaryAction, "start_work");
+    assert.equal(p4.primaryActionLabel, "开始一次对话");
+    assert.equal(p4.primaryNavTarget, "chat");
   } finally {
     cleanup(dir);
   }

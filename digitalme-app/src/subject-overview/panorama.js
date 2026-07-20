@@ -627,9 +627,7 @@ function buildMinimalSurface(overview, inboxSummary) {
     const nav = sanitizeNavTarget("me-build");
     return {
       subjectName,
-      summary: twoLineSummary(
-        "我还不够了解你，可以从已有资料或一次简短对话开始。"
-      ),
+      summary: twoLineSummary("我还不够了解你，可以先从已有资料开始。"),
       primaryAction: "continue_build",
       primaryActionLabel: MINIMAL_SURFACE_ACTIONS.continue_build,
       primaryNavTarget: nav,
