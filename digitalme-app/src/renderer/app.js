@@ -6,6 +6,9 @@ let feedbackCtx = null;
 let feedbackPlan = null;
 let pendingAttachments = [];
 let currentSession = null;
+/** @type {{ requestId: string, originSessionId: string|null, originMessageId: string|null, bubbleEl: Element|null }|null} */
+let activeChatRequest = null;
+/** @deprecated prefer activeChatRequest.requestId — kept in sync for stop/progress */
 let currentRequestId = null;
 let currentArtifact = null;
 let linkedLibraryId = null; // chat artifact bound to a library item
@@ -404,6 +407,65 @@ async function refreshCapabilitySurface() {
   }
 }
 
+function chatMsgApi() {
+  return (typeof window !== "undefined" && window.DigitalMeChatMessages) || null;
+}
+
+function mapSessionMessagesToHistory(messages) {
+  const api = chatMsgApi();
+  const out = [];
+  for (const raw of messages || []) {
+    try {
+      if (api) {
+        const n = api.normalizeLoadedMessage(raw);
+        if (n) out.push(n);
+      } else if (raw && (raw.role === "user" || raw.role === "assistant")) {
+        out.push({
+          schemaVersion: 2,
+          id: raw.id || "m_fallback",
+          role: raw.role,
+          displayText: String(raw.displayText || raw.display || "这条历史消息无法显示。"),
+          modelText: String(raw.modelText || "").slice(0, 4000),
+          attachmentRefs: [],
+          createdAt: raw.createdAt || new Date().toISOString(),
+          content: String(raw.modelText || "").slice(0, 4000),
+          _legacyForbidExpand: true,
+        });
+      }
+    } catch {
+      /* skip corrupt row */
+    }
+  }
+  return out;
+}
+
+function setChatBusy(busy) {
+  const sendBtn = $("btn-send");
+  if (sendBtn) {
+    sendBtn.disabled = !!busy;
+    sendBtn.setAttribute("aria-busy", busy ? "true" : "false");
+  }
+  const stopBtn = $("btn-stop");
+  if (stopBtn) {
+    if (busy) stopBtn.classList.remove("hidden");
+    else stopBtn.classList.add("hidden");
+  }
+}
+
+function clearActiveChatRequestIf(requestId) {
+  if (activeChatRequest && activeChatRequest.requestId === requestId) {
+    activeChatRequest = null;
+    currentRequestId = null;
+  }
+}
+
+function syncClearLinkedDraftButton() {
+  const btn = $("btn-clear-linked-draft");
+  if (!btn) return;
+  const show = !!(currentArtifact || linkedLibraryId);
+  btn.classList.toggle("hidden", !show);
+}
+
 async function ensureSession() {
   const listed = await window.digitalMe.listSessions();
   if (listed.activeId) {
@@ -412,31 +474,43 @@ async function ensureSession() {
   if (!currentSession) {
     currentSession = await window.digitalMe.createSession({ title: "新对话" });
   }
-  history = (currentSession.messages || []).map((m) => ({
-    role: m.role,
-    content: m.content,
-  }));
+  history = mapSessionMessagesToHistory(currentSession.messages || []);
   currentArtifact = (currentSession.artifacts && currentSession.artifacts[0]) || null;
   linkedLibraryId = (currentArtifact && currentArtifact.libraryId) || null;
   renderMessagesFromHistory();
   renderArtifact();
+  syncClearLinkedDraftButton();
   await refreshSessionList();
 }
 
 function renderMessagesFromHistory() {
   const box = $("messages");
+  if (!box) return;
   box.innerHTML = "";
   if (!history.length) {
     addMessage("system-note", "今天想聊什么？可以附上材料，或点下方快捷方式。正式成稿请用回复下的「送到工作台」。");
     return;
   }
+  let skipped = 0;
   for (const m of history) {
-    if (m.role === "user" || m.role === "assistant") {
-      addMessage(m.role, m.content, {
+    try {
+      if (m.role !== "user" && m.role !== "assistant") continue;
+      const api = chatMsgApi();
+      const shown = api
+        ? api.legacyDisplayText(m)
+        : { text: m.displayText || "", forbidExpand: !!m._legacyForbidExpand };
+      addMessage(m.role, shown.text, {
         correctable: m.role === "assistant",
-        fullText: m.content,
+        fullText: m.role === "assistant" ? m.modelText || m.displayText || shown.text : shown.text,
+        forbidExpand: !!(shown.forbidExpand || m._legacyForbidExpand || m.role === "user"),
+        messageId: m.id,
       });
+    } catch {
+      skipped += 1;
     }
+  }
+  if (skipped) {
+    addMessage("system-note", "有 " + skipped + " 条历史消息无法显示，已跳过。可新建对话继续使用。");
   }
 }
 
@@ -476,16 +550,14 @@ async function refreshSessionList() {
     btn.addEventListener("click", async () => {
       await persistCurrentSession();
       currentSession = await window.digitalMe.setActiveSession(s.id);
-      history = (currentSession.messages || []).map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
+      history = mapSessionMessagesToHistory(currentSession.messages || []);
       currentArtifact = (currentSession.artifacts && currentSession.artifacts[0]) || null;
       linkedLibraryId = (currentArtifact && currentArtifact.libraryId) || null;
       pendingAttachments = [];
       renderAttachChips();
       renderMessagesFromHistory();
       renderArtifact();
+      syncClearLinkedDraftButton();
       await refreshSessionList();
     });
     list.appendChild(btn);
@@ -494,11 +566,26 @@ async function refreshSessionList() {
 
 async function persistCurrentSession() {
   if (!currentSession) return;
-  currentSession.messages = history.map((m) => ({ role: m.role, content: m.content }));
+  const api = chatMsgApi();
+  currentSession.messages = history.map((m) => {
+    if (api) return api.toPersistableMessage(m);
+    return {
+      schemaVersion: 2,
+      id: m.id,
+      role: m.role,
+      displayText: m.displayText || "",
+      modelText: String(m.modelText || "").slice(0, 4000),
+      attachmentRefs: m.attachmentRefs || [],
+      createdAt: m.createdAt || new Date().toISOString(),
+    };
+  });
   if (currentArtifact) currentSession.artifacts = [currentArtifact];
   if (history.length && (!currentSession.title || currentSession.title === "新对话")) {
     const first = history.find((m) => m.role === "user");
-    if (first) currentSession.title = first.content.replace(/\s+/g, " ").slice(0, 24);
+    if (first) {
+      const titleSource = first.displayText || "";
+      currentSession.title = String(titleSource).replace(/\s+/g, " ").slice(0, 24);
+    }
   }
   currentSession = await window.digitalMe.saveSession(currentSession);
 }
@@ -658,10 +745,33 @@ function addMessage(role, text, opts = {}) {
 
   const wrap = document.createElement("div");
   wrap.className = "msg-wrap " + (role === "user" ? "user-wrap" : "assistant-wrap");
+  if (opts.messageId) wrap.dataset.messageId = String(opts.messageId);
+
   const el = document.createElement("div");
   el.className = "msg " + role;
-  el.textContent = text;
+
+  const api = chatMsgApi();
+  const forbidExpand = !!opts.forbidExpand || role === "user";
+  const plan = api
+    ? api.foldPlan(text, { forbidExpand })
+    : { preview: text, expanded: text, needsFold: false, forbidExpand };
+
+  el.textContent = plan.needsFold ? plan.preview : plan.preview;
   wrap.appendChild(el);
+
+  if (plan.needsFold && !plan.forbidExpand) {
+    let expanded = false;
+    const foldBtn = document.createElement("button");
+    foldBtn.type = "button";
+    foldBtn.className = "msg-fold-toggle";
+    foldBtn.textContent = "展开";
+    foldBtn.addEventListener("click", () => {
+      expanded = !expanded;
+      el.textContent = expanded ? plan.expanded : plan.preview;
+      foldBtn.textContent = expanded ? "收起" : "展开";
+    });
+    wrap.appendChild(foldBtn);
+  }
 
   if (role === "assistant" && text) {
     attachAssistantActions(wrap, opts.fullText || text, {
@@ -749,7 +859,7 @@ function onChatProgress(data) {
   if (data && codeRequestId && data.requestId === codeRequestId && data.operationId) {
     codeOperationId = String(data.operationId);
   }
-  if (!data || data.requestId !== currentRequestId) {
+  if (!data || !activeChatRequest || data.requestId !== activeChatRequest.requestId) {
     if (data && researchRequestId && data.requestId === researchRequestId) {
       if (data.phase === "tool") {
         setResearchToolTrail(`<strong>${escapeHtml(data.label || "正在处理")}</strong>`, true);
@@ -761,15 +871,25 @@ function onChatProgress(data) {
     }
     return;
   }
+  // Do not write streaming deltas into a different session's UI
+  if (
+    activeChatRequest.originSessionId &&
+    currentSession &&
+    currentSession.id !== activeChatRequest.originSessionId
+  ) {
+    return;
+  }
   if (data.phase === "tool") {
     setToolTrail(`<strong>${escapeHtml(data.label || "正在处理")}</strong>`, true);
   } else if (data.phase === "thinking" || data.phase === "writing") {
     setToolTrail(`<strong>${escapeHtml(data.label || "…")}</strong>`, true);
   } else if (data.phase === "delta" && data.full != null) {
-    const pending = document.querySelector("#messages .msg.assistant.streaming");
+    const pending =
+      (activeChatRequest.bubbleEl && activeChatRequest.bubbleEl.isConnected
+        ? activeChatRequest.bubbleEl
+        : null) || document.querySelector("#messages .msg.assistant.streaming");
     if (pending) {
       const preview = stripToolLeakageClient(String(data.full));
-      // While streaming long docs, keep bubble readable
       pending.textContent =
         preview.length > 1200 ? preview.slice(0, 1200) + "\n\n…（完整内容见上方；可用「送到工作台」继续成稿）" : preview;
     }
@@ -895,6 +1015,9 @@ function buildAttachmentContext() {
 }
 
 async function send() {
+  // One in-flight chat request only — Enter / send must not start a second
+  if (activeChatRequest) return;
+
   const input = $("input");
   const text = input.value.trim();
   if (!text && !pendingAttachments.length) return;
@@ -908,49 +1031,79 @@ async function send() {
     return;
   }
 
-  const display =
-    text +
-    (pendingAttachments.length
-      ? (text ? "\n" : "") + pendingAttachments.map((a) => "［附件：" + a.name + "］").join(" ")
-      : "");
+  const api = chatMsgApi();
+  const names = pendingAttachments.map((a) => a.name);
+  const displayText = api
+    ? api.buildUserDisplayText(text, names)
+    : text + (names.length ? "\n" + names.map((n) => "已附上：" + n).join("\n") : "");
+  const modelText = api
+    ? api.buildUserModelText(text, names)
+    : (text || "请结合我附上的材料给出帮助。").slice(0, 4000);
+  const attachmentRefs = api ? api.buildAttachmentRefs(pendingAttachments) : [];
 
+  // requestContent / attachmentContext: this-turn memory only — never persisted
   const attachmentContext = buildAttachmentContext();
-  let userContent = text || "请结合我附上的材料给出帮助。";
-  if (attachmentContext && pendingAttachments.some((a) => a.ok !== false && a.text)) {
-    userContent +=
-      "\n\n---\n以下是我附上的材料正文，请务必基于这些内容回答，不要说无法读取附件：\n\n" +
-      attachmentContext.slice(0, 80000);
-  }
+  const requestContent =
+    attachmentContext && pendingAttachments.some((a) => a.ok !== false && a.text)
+      ? attachmentContext.slice(0, 80000)
+      : "";
+
+  const userMsg = {
+    schemaVersion: 2,
+    id: api ? api.newMessageId() : "m_" + Date.now().toString(36),
+    role: "user",
+    displayText,
+    modelText,
+    attachmentRefs,
+    createdAt: new Date().toISOString(),
+    content: modelText,
+  };
 
   input.value = "";
-  addMessage("user", display);
-  history.push({ role: "user", content: userContent });
+  addMessage("user", displayText, { forbidExpand: true, messageId: userMsg.id });
+  history.push(userMsg);
   pendingAttachments = [];
   renderAttachChips();
 
-  currentRequestId = "req_" + Date.now().toString(36);
-  $("btn-send").disabled = true;
-  $("btn-stop").classList.remove("hidden");
+  const requestId = "req_" + Date.now().toString(36);
+  const originSessionId = (currentSession && currentSession.id) || null;
+  currentRequestId = requestId;
+  setChatBusy(true);
   setToolTrail("<strong>正在思考…</strong>", true);
 
   const pending = addMessage("assistant", "", { correctable: false });
   pending.classList.add("streaming");
+  activeChatRequest = {
+    requestId,
+    originSessionId,
+    originMessageId: userMsg.id,
+    bubbleEl: pending,
+  };
 
   try {
+    const gatewayHistory = api ? api.toModelGatewayHistory(history) : history.map((m) => ({
+      role: m.role,
+      content: m.modelText || m.content || "",
+    }));
     const res = await window.digitalMe.sendChat({
       pkg,
-      history,
-      requestId: currentRequestId,
-      attachmentContext,
+      history: gatewayHistory,
+      requestId,
+      attachmentContext: requestContent || undefined,
       scenarioHint: (activeScenario && activeScenario.systemHint) || "",
     });
     const reply = typeof res === "string" ? res : res.reply || "";
-    pending.classList.remove("streaming");
-    pending.textContent = reply || "（已停止）";
+    // Only mutate UI if we are still on the origin session (or no session id)
+    const sameSession =
+      !originSessionId || !currentSession || currentSession.id === originSessionId;
+    if (sameSession && pending.isConnected) {
+      pending.classList.remove("streaming");
+      pending.textContent = reply || "（已停止）";
+    }
     lastEvidence = (res.meta && res.meta.evidence) || [];
 
     const wrap = pending.parentElement;
-    if (wrap && wrap.classList.contains("assistant-wrap") && reply) {
+    if (sameSession && wrap && wrap.classList.contains("assistant-wrap") && reply) {
       attachAssistantActions(wrap, res.fullReply || reply, {
         correctable: true,
         userQuestion: text || "请结合我附上的材料给出帮助。",
@@ -959,26 +1112,46 @@ async function send() {
       });
     }
 
-    // Persist full model reply in history for continuity
-    if (reply) history.push({ role: "assistant", content: res.fullReply || reply });
-    // Optional: keep artifact for "送到工作台" convenience if model returned one
-    if (res.artifact) {
+    if (reply) {
+      const full = res.fullReply || reply;
+      const assistantMsg = {
+        schemaVersion: 2,
+        id: api ? api.newMessageId() : "m_" + Date.now().toString(36),
+        role: "assistant",
+        displayText: full,
+        modelText: String(full).slice(0, 4000),
+        attachmentRefs: [],
+        createdAt: new Date().toISOString(),
+        content: String(full).slice(0, 4000),
+      };
+      // Always append to the history array that belonged to this request's session
+      if (sameSession) {
+        history.push(assistantMsg);
+      }
+    }
+    if (sameSession && res.artifact) {
       currentArtifact = {
         ...res.artifact,
         libraryId: linkedLibraryId || res.artifact.libraryId || null,
       };
+      syncClearLinkedDraftButton();
     }
-    await persistCurrentSession();
-    await refreshSessionList();
+    if (sameSession) {
+      await persistCurrentSession();
+      await refreshSessionList();
+    }
   } catch (e) {
-    pending.classList.remove("streaming");
-    pending.className = "msg system-note";
-    pending.textContent = "没办成：" + (e.message || "请稍后再试");
+    const sameSession =
+      !originSessionId || !currentSession || currentSession.id === originSessionId;
+    if (sameSession && pending.isConnected) {
+      pending.classList.remove("streaming");
+      pending.className = "msg system-note";
+      pending.textContent = "没办成：" + (e.message || "请稍后再试");
+    }
   } finally {
-    $("btn-send").disabled = false;
-    $("btn-stop").classList.add("hidden");
+    clearActiveChatRequestIf(requestId);
+    setChatBusy(false);
     setToolTrail("", false);
-    currentRequestId = null;
   }
 }
 
@@ -1011,7 +1184,9 @@ function bindEvents() {
 function bindChatCoreControls() {
   $("btn-send")?.addEventListener("click", send);
   $("btn-stop")?.addEventListener("click", async () => {
-    if (currentRequestId) await window.digitalMe.stopChat({ requestId: currentRequestId });
+    if (activeChatRequest && activeChatRequest.requestId) {
+      await window.digitalMe.stopChat({ requestId: activeChatRequest.requestId });
+    }
   });
   $("btn-attach")?.addEventListener("click", async () => {
     const files = await window.digitalMe.pickAttachments();
@@ -1035,7 +1210,16 @@ function bindChatCoreControls() {
     renderAttachChips();
     renderMessagesFromHistory();
     renderArtifact();
+    syncClearLinkedDraftButton();
     await refreshSessionList();
+  });
+  $("btn-clear-linked-draft")?.addEventListener("click", () => {
+    currentArtifact = null;
+    linkedLibraryId = null;
+    if (currentSession) currentSession.artifacts = [];
+    renderArtifact();
+    syncClearLinkedDraftButton();
+    addMessage("system-note", "已关闭当前关联文稿。可继续对话或新建对话。");
   });
 
   document.querySelectorAll("#intent-chips button").forEach((btn) => {

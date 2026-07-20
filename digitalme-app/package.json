@@ -24,6 +24,7 @@
     "test:pan-01s-owner-runtime": "electron scripts/electron-pan-01s-owner-runtime-test.cjs",
     "test:p1-baseline-real": "node scripts/test-p1-baseline-real.cjs",
     "test:bootstrap-submit": "node scripts/test-bootstrap-file-submit.cjs && node scripts/test-renderer-ui-bindings.cjs",
+    "test:chat-history-display": "node scripts/test-chat-history-display.cjs",
     "test:owner-runtime": "electron scripts/electron-owner-runtime-test.cjs",
     "test:p1-phase1": "npm run test:p1-01 && npm run test:p1-02 && npm run test:p1-03 && npm run test:settings-temp-package && npm run test:p1-04 && npm run test:p1-05 && npm run test:p1-06 && npm run test:p1-07 && npm run test:bootstrap-submit && npm run test:owner-runtime"
   },

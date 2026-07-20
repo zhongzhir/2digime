@@ -198,6 +198,27 @@ body {
   line-height: 1.7;
   white-space: pre-wrap;
   font-size: 14px;
+  max-height: min(42vh, 420px);
+  overflow-y: auto;
+}
+.msg-fold-toggle {
+  align-self: flex-start;
+  font-size: 12px;
+  padding: 2px 8px;
+  margin-top: 2px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+.msg-fold-toggle:hover { color: var(--text); border-color: var(--accent); }
+.btn-clear-linked-draft {
+  width: 100%;
+  margin: 0 0 8px;
+  font-size: 12px;
+  padding: 6px 8px;
 }
 .msg.user {
   align-self: flex-end;

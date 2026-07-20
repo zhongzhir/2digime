@@ -28,6 +28,7 @@ const researchAgentLoop = require("./research/agent-loop");
 const researchGrounded = require("./research/grounded");
 const personalSkills = require("./skills/personal");
 const sessions = require("./sessions");
+const chatMessages = require("./chat-message-model");
 const catalog = require("./capabilities/catalog");
 const capabilitySurface = require("./capabilities/surface");
 const l0Orchestration = require("./orchestration/l0");
@@ -1301,6 +1302,7 @@ ipcMain.handle("chat:send", async (e, { pkg, history, requestId, attachmentConte
   if (scenarioHint && String(scenarioHint).trim()) {
     system += "\n\n---\n\n## 当前场景约定\n\n" + String(scenarioHint).trim();
   }
+  // requestContent / attachmentContext: this-turn only; never from persisted history bodies
   if (attachmentContext) {
     system +=
       "\n\n---\n\n## 用户本轮附带的材料（正文已提取，请直接使用）\n\n" +
@@ -1308,7 +1310,9 @@ ipcMain.handle("chat:send", async (e, { pkg, history, requestId, attachmentConte
   }
 
   const dir = cfg.packageDir || DEFAULT_PACKAGE_DIR;
-  const lastUser = [...(history || [])].reverse().find((m) => m.role === "user");
+  // Only role/content for the model — strip displayText / attachmentRefs / DOM leftovers
+  const modelHistory = chatMessages.toModelGatewayHistory(history || []);
+  const lastUser = [...modelHistory].reverse().find((m) => m.role === "user");
   const evidence = [];
   if (lastUser && lastUser.content) {
     try {
@@ -1337,13 +1341,13 @@ ipcMain.handle("chat:send", async (e, { pkg, history, requestId, attachmentConte
 
   let reply = "";
   let meta = { capabilitiesUsed: [], usedTools: false, evidence, requestId: rid };
-  let streamMessages = [{ role: "system", content: system }, ...(history || [])];
+  let streamMessages = [{ role: "system", content: system }, ...modelHistory];
 
   try {
     sendProg({ phase: "thinking", label: "正在思考…" });
     try {
       const em = await getExtensionManager();
-      const toolRun = await runChatWithConnectedTools(cfg, system, history, em, (p) =>
+      const toolRun = await runChatWithConnectedTools(cfg, system, modelHistory, em, (p) =>
         sendProg(p)
       );
       if (toolRun.usedTools) meta.usedTools = true;

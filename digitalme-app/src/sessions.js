@@ -2,6 +2,10 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
+const {
+  safePreviewText,
+  toPersistableMessage,
+} = require("./chat-message-model");
 
 function sessionsPath(userData) {
   return path.join(userData, "workbench-sessions.json");
@@ -49,13 +53,16 @@ function listSessions(userData) {
   const store = loadStore(userData);
   return {
     activeId: store.activeId,
-    sessions: store.sessions.map((s) => ({
-      id: s.id,
-      title: s.title,
-      updatedAt: s.updatedAt,
-      createdAt: s.createdAt,
-      preview: (s.messages.find((m) => m.role === "user") || {}).content?.slice(0, 40) || "",
-    })),
+    sessions: store.sessions.map((s) => {
+      const firstUser = (s.messages || []).find((m) => m && m.role === "user");
+      return {
+        id: s.id,
+        title: s.title,
+        updatedAt: s.updatedAt,
+        createdAt: s.createdAt,
+        preview: firstUser ? safePreviewText(firstUser, 40) : "",
+      };
+    }),
   };
 }
 
@@ -67,11 +74,28 @@ function getSession(userData, id) {
 function saveSession(userData, session) {
   const store = loadStore(userData);
   const i = store.sessions.findIndex((s) => s.id === session.id);
+  // Persist only schema-safe message fields (no requestContent / attachment bodies)
+  if (Array.isArray(session.messages)) {
+    session.messages = session.messages.map((m) => {
+      try {
+        return toPersistableMessage(m);
+      } catch {
+        return {
+          schemaVersion: 2,
+          id: "m_bad_" + Date.now().toString(36),
+          role: m && m.role === "assistant" ? "assistant" : "user",
+          displayText: "这条历史消息无法显示。",
+          modelText: "",
+          attachmentRefs: [],
+          createdAt: new Date().toISOString(),
+        };
+      }
+    });
+  }
   session.updatedAt = new Date().toISOString();
   if (i >= 0) store.sessions[i] = session;
   else store.sessions.unshift(session);
   store.activeId = session.id;
-  // keep newest first
   store.sessions.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
   saveStore(userData, store);
   return session;
@@ -112,4 +136,5 @@ module.exports = {
   renameSession,
   deleteSession,
   setActive,
+  sessionsPath,
 };
