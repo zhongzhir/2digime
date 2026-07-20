@@ -921,10 +921,13 @@ function onChatProgress(data) {
 
 function syncArtifactFromDom() {
   if (!currentArtifact) return;
-  const titleEl = $("artifact-title");
-  const contentEl = $("artifact-content");
-  if (titleEl) currentArtifact.title = titleEl.textContent.trim() || currentArtifact.title || "成稿草稿";
-  if (contentEl) currentArtifact.content = contentEl.innerText || contentEl.textContent || "";
+  // Chat page must not own artifact body. Never overwrite in-memory content
+  // from #artifact-content (which is kept empty on purpose).
+  const titleEl = $("chat-artifact-link-title") || $("artifact-title");
+  if (titleEl) {
+    const t = String(titleEl.textContent || "").trim();
+    if (t && t !== "已关联文稿") currentArtifact.title = t;
+  }
 }
 
 function updateArtifactLibraryButtons() {
@@ -934,45 +937,91 @@ function updateArtifactLibraryButtons() {
   if (keepBtn) {
     keepBtn.textContent = linked ? "更新到文稿并打开" : "留为文稿";
   }
+  // Never show the old "已关联文稿…" hint that lived next to full body preview
   if (hint) {
-    if (linked) {
-      hint.textContent = "已关联文稿。可继续修改后再次「更新到文稿并打开」。";
-      hint.classList.remove("hidden");
-    } else {
-      hint.textContent = "";
-      hint.classList.add("hidden");
-    }
+    hint.textContent = "";
+    hint.classList.add("hidden");
   }
 }
 
+function chatArtifactApi() {
+  return (typeof window !== "undefined" && window.DigitalMeChatArtifactLink) || null;
+}
+
+/** Chat page: compact link card only — never mount artifact.content into DOM. */
 function renderArtifact() {
+  const api = chatArtifactApi();
+  const state = api
+    ? api.buildLinkCardState(currentArtifact, linkedLibraryId)
+    : {
+        visible: !!(currentArtifact || linkedLibraryId),
+        label: "已关联文稿",
+        title: (currentArtifact && currentArtifact.title) || "已关联文稿",
+        libraryId: linkedLibraryId || (currentArtifact && currentArtifact.libraryId) || null,
+      };
+
+  if (api && typeof document !== "undefined") {
+    api.applyLinkCardToDom(document, state);
+  } else {
+    // Fallback: force-clear legacy body nodes
+    const contentEl = $("artifact-content");
+    if (contentEl) contentEl.textContent = "";
+    const panel = $("artifact-panel");
+    if (panel) {
+      panel.classList.add("hidden");
+      panel.classList.remove("has-artifact");
+      panel.setAttribute("aria-hidden", "true");
+    }
+    const card = $("chat-artifact-link");
+    if (card) {
+      if (state.visible) {
+        card.classList.remove("hidden");
+        const t = $("chat-artifact-link-title");
+        if (t) t.textContent = state.title;
+      } else {
+        card.classList.add("hidden");
+      }
+    }
+  }
+
+  // Ensure legacy empty/body stay collapsed
   const empty = $("artifact-empty");
   const body = $("artifact-body");
-  const panel = $("artifact-panel");
-  const details = $("artifact-details");
-  const summaryHint = $("artifact-summary-hint");
-  if (!empty || !body) return;
-  if (!currentArtifact) {
-    empty.classList.remove("hidden");
-    body.classList.add("hidden");
-    if (panel) panel.classList.remove("has-artifact");
-    if (summaryHint) summaryHint.textContent = "有长文时可展开；正式改稿请「留为文稿」";
-    updateArtifactLibraryButtons();
-    return;
-  }
-  empty.classList.add("hidden");
-  body.classList.remove("hidden");
-  if (panel) {
-    panel.classList.add("has-artifact");
-    panel.classList.remove("hidden");
-  }
-  if (details) details.open = true;
-  if (summaryHint) summaryHint.textContent = currentArtifact.title || "已有长文";
-  const titleEl = $("artifact-title");
-  const contentEl = $("artifact-content");
-  if (titleEl) titleEl.textContent = currentArtifact.title || "成稿草稿";
-  if (contentEl) contentEl.textContent = currentArtifact.content || "";
+  if (empty) empty.classList.add("hidden");
+  if (body) body.classList.add("hidden");
+
   updateArtifactLibraryButtons();
+  syncClearLinkedDraftButton();
+}
+
+async function clearLinkedArtifactAssociation() {
+  currentArtifact = null;
+  linkedLibraryId = null;
+  if (currentSession) currentSession.artifacts = [];
+  renderArtifact();
+  try {
+    await persistCurrentSession();
+    addMessage("system-note", "已关闭当前关联文稿。可继续对话或新建对话。");
+  } catch (e) {
+    addMessage(
+      "system-note",
+      "关联文稿已在本页关闭，但保存失败：" + (e.message || "请稍后重试")
+    );
+  }
+}
+
+async function openLinkedArtifactInWorkspace() {
+  if (!currentArtifact && !linkedLibraryId) return;
+  try {
+    if (linkedLibraryId) {
+      await openDoScene("write", { libraryId: linkedLibraryId });
+      return;
+    }
+    // In-memory artifact without library id: save then open writing scene
+    await keepAsDraftAndOpen();
+  } catch (e) {
+    addMessage("system-note", "无法打开文稿：" + (e.message || "请稍后重试"));
+  }
 }
 
 async function saveArtifactToLibrary({ asNew } = {}) {
@@ -1154,7 +1203,7 @@ async function send() {
         ...res.artifact,
         libraryId: linkedLibraryId || res.artifact.libraryId || null,
       };
-      syncClearLinkedDraftButton();
+      renderArtifact();
     }
     if (sameSession) {
       await persistCurrentSession();
@@ -1235,20 +1284,13 @@ function bindChatCoreControls() {
     await refreshSessionList();
   });
   $("btn-clear-linked-draft")?.addEventListener("click", async () => {
-    currentArtifact = null;
-    linkedLibraryId = null;
-    if (currentSession) currentSession.artifacts = [];
-    renderArtifact();
-    syncClearLinkedDraftButton();
-    try {
-      await persistCurrentSession();
-      addMessage("system-note", "已关闭当前关联文稿。可继续对话或新建对话。");
-    } catch (e) {
-      addMessage(
-        "system-note",
-        "关联文稿已在本页关闭，但保存失败：" + (e.message || "请稍后重试")
-      );
-    }
+    await clearLinkedArtifactAssociation();
+  });
+  $("btn-close-linked-draft-card")?.addEventListener("click", async () => {
+    await clearLinkedArtifactAssociation();
+  });
+  $("btn-open-linked-draft")?.addEventListener("click", async () => {
+    await openLinkedArtifactInWorkspace();
   });
 
   document.querySelectorAll("#intent-chips button").forEach((btn) => {

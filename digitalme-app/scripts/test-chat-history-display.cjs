@@ -315,12 +315,173 @@ test("10. app.js wires sessionNavGuard into new/switch/delete handlers", () => {
   assert.doesNotMatch(stopRegion, /guardChatSessionNavigation/);
   assert.match(stopRegion, /digitalMe\.stopChat|stopChat\(/);
 
-  // Clear linked draft must persist
+  // Clear linked draft must persist (via clearLinkedArtifactAssociation)
   const clearIdx = appJs.indexOf('$("btn-clear-linked-draft")?.addEventListener');
   assert.ok(clearIdx > 0, "clear-linked-draft listener must exist");
-  const clearRegion = appJs.slice(clearIdx, clearIdx + 700);
-  assert.match(clearRegion, /persistCurrentSession\(\)/);
-  assert.match(clearRegion, /保存失败/);
+  const clearRegion = appJs.slice(clearIdx, clearIdx + 400);
+  assert.match(clearRegion, /clearLinkedArtifactAssociation\(\)/);
+  assert.match(appJs, /async function clearLinkedArtifactAssociation/);
+  const clearFnIdx = appJs.indexOf("async function clearLinkedArtifactAssociation");
+  const clearFnRegion = appJs.slice(clearFnIdx, clearFnIdx + 550);
+  assert.match(clearFnRegion, /persistCurrentSession\(\)/);
+  assert.match(clearFnRegion, /保存失败/);
+  assert.match(clearFnRegion, /currentSession\.artifacts = \[\]/);
+
+  // renderArtifact must not write artifact.content into chat DOM
+  const renderIdx = appJs.indexOf("function renderArtifact()");
+  assert.ok(renderIdx > 0);
+  const renderRegion = appJs.slice(renderIdx, renderIdx + 1200);
+  assert.doesNotMatch(renderRegion, /contentEl\.textContent\s*=\s*currentArtifact\.content/);
+  assert.match(renderRegion, /buildLinkCardState|applyLinkCardToDom|chat-artifact-link/);
+});
+
+test("11. linked artifact card: 80k body never enters chat DOM", () => {
+  const al = require("../src/chat-artifact-link");
+  const FAKE_BODY =
+    "关联文稿正文开始。手机 " +
+    FAKE_PHONE +
+    " 邮箱 " +
+    FAKE_EMAIL +
+    "。" +
+    "履历段落：".padEnd(80000, "W");
+  assert.ok(FAKE_BODY.length >= 80000);
+
+  // Minimal hermetic DOM harness
+  function makeEl(id) {
+    const classes = new Set();
+    const el = {
+      id,
+      textContent: "",
+      classList: {
+        add: (c) => classes.add(c),
+        remove: (c) => classes.delete(c),
+        contains: (c) => classes.has(c),
+        toggle: (c, force) => {
+          if (force === true) classes.add(c);
+          else if (force === false) classes.delete(c);
+          else if (classes.has(c)) classes.delete(c);
+          else classes.add(c);
+        },
+        _set: classes,
+      },
+      setAttribute: () => {},
+      getAttribute: () => null,
+    };
+    // seed hidden for panel
+    if (id === "artifact-panel" || id === "chat-artifact-link") classes.add("hidden");
+    return el;
+  }
+
+  const els = {};
+  for (const id of [
+    "view-chat",
+    "chat-artifact-link",
+    "chat-artifact-link-label",
+    "chat-artifact-link-title",
+    "btn-open-linked-draft",
+    "btn-close-linked-draft-card",
+    "messages",
+    "composer",
+    "input",
+    "btn-send",
+    "artifact-panel",
+    "artifact-content",
+    "artifact-title",
+    "artifact-link-hint",
+    "artifact-empty",
+    "artifact-body",
+  ]) {
+    els[id] = makeEl(id);
+  }
+  // Simulate pre-bug state: panel had body dumped
+  els["artifact-content"].textContent = FAKE_BODY;
+  els["artifact-panel"].classList.remove("hidden");
+  els["artifact-link-hint"].textContent = "已关联文稿。可继续修改后再次「更新到文稿并打开」。";
+  els["artifact-link-hint"].classList.remove("hidden");
+
+  const doc = {
+    getElementById: (id) => els[id] || null,
+  };
+
+  const artifact = {
+    title: "我的履历草稿",
+    content: FAKE_BODY,
+    libraryId: "lib_test_1",
+  };
+  const state = al.buildLinkCardState(artifact, "lib_test_1");
+  assert.equal(state.visible, true);
+  assert.equal(state.title, "我的履历草稿");
+  assert.ok(!JSON.stringify(state).includes(FAKE_PHONE));
+  assert.ok(!JSON.stringify(state).includes("WWWW"));
+
+  const applied = al.applyLinkCardToDom(doc, state);
+  assert.equal(applied.applied, true);
+  assert.equal(applied.visible, true);
+  assert.equal(els["artifact-content"].textContent, "", "legacy content node cleared");
+  assert.ok(els["artifact-panel"].classList.contains("hidden"), "panel stays hidden");
+  assert.ok(!els["chat-artifact-link"].classList.contains("hidden"), "card visible");
+  assert.equal(els["chat-artifact-link-title"].textContent, "我的履历草稿");
+  assert.ok(els["btn-open-linked-draft"]);
+  assert.ok(els["btn-close-linked-draft-card"]);
+
+  const surface = al.chatSurfaceText(doc);
+  const hits = al.assertNoForbiddenSnippets(surface, [
+    FAKE_PHONE,
+    FAKE_EMAIL,
+    "WWWW",
+    FAKE_BODY.slice(0, 80),
+  ]);
+  assert.deepEqual(hits, [], "chat surface must not contain body/PII: " + hits.join(","));
+
+  // Close association model
+  const cleared = al.buildLinkCardState(null, null);
+  al.applyLinkCardToDom(doc, cleared);
+  assert.ok(els["chat-artifact-link"].classList.contains("hidden"));
+  assert.equal(els["chat-artifact-link-title"].textContent, "");
+
+  // Empty session: no card
+  const none = al.buildLinkCardState(null, null);
+  assert.equal(none.visible, false);
+
+  // Title-only recovery (old session without showing body)
+  const titleOnly = al.buildLinkCardState({ title: "旧会话文稿", libraryId: "x" }, "x");
+  assert.equal(titleOnly.visible, true);
+  assert.equal(titleOnly.title, "旧会话文稿");
+});
+
+test("12. composer controls remain present in chat markup", () => {
+  const html = fs.readFileSync(
+    path.join(__dirname, "..", "src", "renderer", "index.html"),
+    "utf8"
+  );
+  assert.match(html, /id="chat-artifact-link"/);
+  assert.match(html, /id="btn-open-linked-draft"/);
+  assert.match(html, /id="btn-close-linked-draft-card"/);
+  assert.match(html, /id="input"/);
+  assert.match(html, /id="btn-send"/);
+  // Card sits before messages; composer still exists
+  const cardIdx = html.indexOf('id="chat-artifact-link"');
+  const messagesIdx = html.indexOf('id="messages"');
+  const composerIdx = html.indexOf('id="composer"');
+  assert.ok(cardIdx > 0 && messagesIdx > cardIdx, "card before messages");
+  assert.ok(composerIdx > messagesIdx, "composer after messages");
+});
+
+test("13. all renderArtifact call sites avoid writing content to chat DOM", () => {
+  const appJs = fs.readFileSync(
+    path.join(__dirname, "..", "src", "renderer", "app.js"),
+    "utf8"
+  );
+  // No assignment of currentArtifact.content into a DOM textContent/innerText in chat path
+  assert.doesNotMatch(
+    appJs,
+    /artifact-content[\s\S]{0,80}currentArtifact\.content|currentArtifact\.content[\s\S]{0,80}artifact-content/
+  );
+  const calls = [];
+  const re = /renderArtifact\s*\(/g;
+  let m;
+  while ((m = re.exec(appJs))) calls.push(m.index);
+  assert.ok(calls.length >= 4, "expected multiple renderArtifact call sites, got " + calls.length);
 });
 
 console.log("");

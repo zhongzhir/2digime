@@ -36,6 +36,14 @@
                 </div>
                 <button type="button" class="btn-help" data-help-topic="chat" title="打开说明">说明</button>
               </header>
+              <div id="chat-artifact-link" class="chat-artifact-link hidden" aria-live="polite">
+                <div id="chat-artifact-link-label" class="chat-artifact-link-label">已关联文稿</div>
+                <div id="chat-artifact-link-title" class="chat-artifact-link-title"></div>
+                <div class="chat-artifact-link-actions">
+                  <button type="button" id="btn-open-linked-draft" class="btn-ghost">打开文稿</button>
+                  <button type="button" id="btn-close-linked-draft-card">关闭关联</button>
+                </div>
+              </div>
               <div id="messages"></div>
               <div id="tool-trail" class="tool-trail hidden"></div>
               <div id="intent-chips" class="intent-chips">
@@ -1116,6 +1124,7 @@
 
     <script src="help.js"></script>
     <script src="../chat-message-model.js"></script>
+    <script src="../chat-artifact-link.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
