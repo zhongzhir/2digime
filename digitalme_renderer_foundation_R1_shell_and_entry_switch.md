@@ -1,21 +1,22 @@
 # Renderer Foundation R1：最小 shell 与整窗入口切换
 
-版本：v0.1.1-draft  
+版本：v0.1.1  
 日期：2026-07-20  
-状态：`specified` / `codex_changes_requested` / `not_started`  
-性质：**独立实施任务包**（规格修订中）；**尚未获准实现**；**不得**创建实现分支或修改源码  
+状态：`specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`  
+性质：**独立实施任务包**；**实施规格已冻结**；**不是**实现完成或产品验收通过；**implementation 仍为 `not_started`**；实现分支**不存在**；**尚未获得 Owner 创建实现分支与开始 spike 的授权**  
 所属主线：`P1-PANORAMA`（三位一体 Alpha）  
 前置：Renderer Foundation R0 **`accepted`**（v0.1.2；决策接受）  
 依据：`digitalme_renderer_foundation_R0_decision_and_migration_plan.md` §10 / §11 / §14.1 / §15  
-建议实现分支名（**仅在 Codex 复核通过并获实现授权后创建**）：`codex/r1-renderer-next-shell`
+建议实现分支名（**仅在 Owner 明确授权后**，从规格接受提交创建）：`codex/r1-renderer-next-shell`
 
 > **状态语义**
 >
-> - **`specified` / `codex_changes_requested` / `not_started`**：方向与范围获认可，但启动安全契约仍在修订；**不是** `frozen_for_implementation`，**不得**理解为已获准开发；
-> - 实现分支**不存在**；
-> - **禁止**在再复核通过前 `npm install`、改 `package.json`/lockfile、改 `digitalme-app` 源码、启动 Electron、创建实现分支；
+> - **`specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`**：**实施规格已冻结**（Codex 再复核通过）；**不等于**已实现、`statically_verified`、`runtime_verified`、`accepted` 或 `released`；
+> - **implementation = `not_started`**；实现分支**不存在**；
+> - **Owner 实现授权：未获得** — 不得自行创建 `codex/r1-renderer-next-shell`、不得 `npm install`、不得改源码/lockfile、不得启动 Electron；
+> - 获 Owner 授权后，第一步仅为 §5 **兼容性 spike**；版本锁定表在此之前保持 TBD；
 > - **禁止**启动 PAN-02；R2.5 SQLite 保持 `planned` / `deferred`；
-> - 本切片**不**改变 PAN-01S 族 `accepted`；
+> - 本切片**不**改变 PAN-01S 族 `accepted`；R0 **`accepted` 不变**；
 > - 工程完成后最高 `statically_verified`；未经 Owner 真机验收不得将 R1 标为产品面「可用」或删除 legacy。
 
 角色：Owner（验收）＋ Codex（规格复核）＋ Cursor（实现）
@@ -76,9 +77,9 @@
 
 ---
 
-## 5. 兼容性 spike（仅在获准实现后）
+## 5. 兼容性 spike（仅在 Owner 授权创建实现分支后）
 
-获 Codex 再复核通过并授权创建实现分支后，**先**完成 Windows 本地 spike：
+**Owner 明确授权**创建 `codex/r1-renderer-next-shell` 之后，**第一步仅为**本兼容性 spike（不得跳过直接做业务壳）：
 
 1. Vite + Electron 加载 `renderer-next`（显式 dev 与 production-load）。  
 2. Playwright 拉起应用并读到 runtime stamp。  
@@ -87,15 +88,15 @@
 
 Spike 结论写入版本表后方可扩大实现。失败则停止扩 scope，保持生产默认 legacy。
 
-### 5.1 版本锁定表（实现时填写）
+### 5.1 版本锁定表（仅获准实现后的 spike 中填写；当前全部 TBD）
 
-| 包 | 目标族 | 锁定版本（spike 后填） |
+| 包 | 目标族 | 锁定版本 |
 |---|---|---|
-| react / react-dom | React | _TBD_ |
-| vite | Vite | _TBD_ |
-| typescript | TS | _TBD_ |
-| @playwright/test 或等价 | Playwright | _TBD_ |
-| 其他必要插件 | — | _TBD_ |
+| react / react-dom | React | **TBD**（spike 前不得填写臆测版本） |
+| vite | Vite | **TBD** |
+| typescript | TS | **TBD** |
+| @playwright/test 或等价 | Playwright | **TBD** |
+| 其他必要插件 | — | **TBD** |
 
 ---
 
@@ -194,28 +195,41 @@ runtime.signalReady(generation) -> { ok }  // 或由 preload 绑定世代；无�
 
 ### 7.3 复核与验收
 
-- [ ] Codex 再复核通过（状态可升 `codex_review_passed` / 获准实现授权）。  
-- [ ] Owner 抽查：默认 legacy、失败回退、无生产 next 入口。  
-- [ ] **不得**因 R1 将 next 暴露给普通用户作为默认或主入口。
+- [x] Codex 规格再复核通过（本文件 v0.1.1 冻结）。  
+- [ ] **Owner 明确授权**创建实现分支并启动 spike（**当前未满足**）。  
+- [ ] Owner 真机抽查（实现完成后）：默认 legacy、失败回退、无生产 next 入口。  
+- [ ] **不得**因 R1 将 next 暴露给普通用户作为默认或主入口。  
+- [ ] **不得**将本规格冻结误标为 `accepted` / `implemented` / `statically_verified` / `runtime_verified` / `released`。
 
 ---
 
 ## 8. 进入 / 停止条件
 
-**进入（实现）——当前未满足：**
+### 8.1 规格进入条件（相对实现）
 
-1. 本任务包 Codex **再复核通过**（离开 `codex_changes_requested`）；  
-2. 状态含明确实现授权（例如 `frozen_for_implementation` / `codex_review_passed`）；  
-3. Owner/流程授权创建实现分支。
+| 条件 | 当前 |
+|---|---|
+| Codex 规格复核 | **已满足**（`codex_review_passed`） |
+| 规格冻结 | **已满足**（`frozen_for_implementation`；v0.1.1） |
+| Owner 实现授权 | **未满足** |
+| 实现分支 | **不存在** |
+| implementation | **`not_started`** |
 
-**停止：**
+### 8.2 开始编码的进入条件（全部满足后方可）
+
+1. 上表 Codex 复核与规格冻结已满足（已满足）；  
+2. **Owner 明确授权**创建 `codex/r1-renderer-next-shell`（从本规格接受提交拉出）；  
+3. 授权后第一步仅为 §5 兼容性 spike；版本表仍为 TBD 直至 spike 锁定。
+
+### 8.3 停止条件
 
 - 范围滑向 chat/我/工作台/SQLite/PAN-02；  
 - 缺少 latch 或握手加固导致循环/误切；  
 - 一窗双状态机或 iframe 混挂；  
 - 生产暴露 next 入口或 renderer 可改持久化默认；  
 - 关闭 contextIsolation / 开启 nodeIntegration；  
-- 读取真实个人资料/sessions 正文。
+- 读取真实个人资料/sessions 正文；  
+- 未经 Owner 授权自行开分支或装依赖。
 
 ---
 
@@ -242,8 +256,8 @@ runtime.signalReady(generation) -> { ok }  // 或由 preload 绑定世代；无�
 
 ## 11. 明确禁止
 
-1. 在 `codex_changes_requested` 期间创建实现分支或改源码。  
-2. 使用 `frozen_for_implementation` 标签直至再复核通过。  
+1. 将本规格冻结误认为已获 Owner 实现授权或已开始实现。  
+2. 未经 Owner 授权创建实现分支、`npm install`、改源码/lockfile、启动 Electron。  
 3. 普通 renderer 请求 `legacy → next`。  
 4. renderer IPC 改写持久化默认入口。  
 5. 无条件 `signalReady`。  
@@ -251,7 +265,8 @@ runtime.signalReady(generation) -> { ok }  // 或由 preload 绑定世代；无�
 7. iframe/webview 嵌 legacy；一窗双状态机。  
 8. 生产加载 Vite dev URL；query/hash/localStorage 开故障注入。  
 9. 新增 Spectron；触碰真实 Package/sessions 正文。  
-10. 启动 PAN-02；amend / squash / push 作为默认。
+10. 启动 PAN-02 / R2 / R2.5；amend / squash / push 作为默认。  
+11. 将 R1 标为 `accepted` / `implemented` / `statically_verified` / `runtime_verified` / `released`（本轮规格接受不得使用这些标签）。
 
 ---
 
@@ -259,12 +274,18 @@ runtime.signalReady(generation) -> { ok }  // 或由 preload 绑定世代；无�
 
 | 项 | 值 |
 |---|---|
-| 本文件 | **`specified` / `codex_changes_requested` / `not_started`** |
-| 实现分支 | **不存在**（**未授权**） |
-| 预估 | ≤ 一个小里程碑（获准后） |
-| 下一动作 | Codex **再复核**本修订 →（通过后）方可谈实现授权 |
+| 本文件 | **`specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`**（v0.1.1） |
+| 含义 | **实施规格已冻结**；**不是**实现完成 |
+| implementation | **`not_started`** |
+| 实现分支 | **不存在** |
+| Owner 实现授权 | **未获得** |
+| 版本锁定表 | **全部 TBD**（仅获准后的 spike 可填） |
+| 今日收尾 | 不开始实现；不装依赖；不建分支；不启 Electron；不跑产品测试；不开始 R2/R2.5/PAN-02 |
+| 下一等待项 | **等待 Owner 后续明确授权**创建实现分支并启动兼容性 spike |
 | 完成后下一步 | R2 任务包（另文）；不自动开始 |
 | PAN-02 | `planned` / `blocked` |
+| R0 | `accepted`（不变） |
+| PAN-01S 族 | `accepted`（不变） |
 
 ---
 
@@ -272,5 +293,6 @@ runtime.signalReady(generation) -> { ok }  // 或由 preload 绑定世代；无�
 
 | 日期 | 版本 | 说明 |
 |---|---|---|
-| 2026-07-20 | v0.1-draft | 初稿（`2a60c27`）；曾含 `frozen_for_implementation`（已废止于本修订） |
-| 2026-07-20 | v0.1.1-draft | Codex 第一轮：冻结入口权限、失败 latch、ready 世代握手、Electron/测试安全边界；状态改为 `specified` / `codex_changes_requested` / `not_started` |
+| 2026-07-20 | v0.1-draft | 初稿（`2a60c27`）；曾含过早的 `frozen_for_implementation`（历史） |
+| 2026-07-20 | v0.1.1-draft | Codex 第一轮修订（`6107b36`）：入口权限、失败 latch、ready 世代、Electron/测试边界；当时 `codex_changes_requested`（历史） |
+| 2026-07-20 | **v0.1.1** | **Codex 再复核通过**；四项启动安全契约已冻结；状态 → `specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`。**实施规格冻结**；实现尚未授权、尚未开始；版本表保持 TBD |

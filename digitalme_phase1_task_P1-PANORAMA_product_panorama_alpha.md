@@ -203,7 +203,8 @@ PAN-00 accepted
 → PAN-01S accepted（2026-07-20；baseline `cbde807`）
 → PAN-01S.1 accepted（2026-07-20；baseline `cbde807`）
 → PAN-01S.2 accepted（2026-07-20；baseline `cbde807`）
-→ renderer foundation R0（planned / not_started；当前仅起草决策/任务包）
+→ renderer foundation R0 **accepted**（v0.1.2；决策接受）
+→ renderer foundation R1（v0.1.1；specified / codex_review_passed / frozen_for_implementation / not_started；规格冻结，实现未授权）
 → PAN-02 理解通道 Alpha（planned / blocked）
 → PAN-03 能力框架 Alpha
 → PAN-04 外部协作骨架 Alpha
@@ -258,10 +259,11 @@ PAN-00 accepted
 
 ### 6.4 当前调度
 
-- **当前唯一任务**：起草并冻结 Renderer Foundation R0 独立决策/任务包；R0 保持 `planned` / `not_started`，未授权实现或创建分支；
-- PAN-01S / PAN-01S.1 / PAN-01S.2：`accepted`（2026-07-20；Owner real Electron runtime；baseline `cbde807`）——**不因本顺序修正改变**；
-- renderer foundation R0：`planned` / `not_started`（仅规格起草授权；不重开 PAN-01S）；
-- PAN-02～PAN-06 保持 `planned`；PAN-02 当前 **blocked**，须待 R0 边界决策后由 Owner/Codex 另行决定启动顺序。
+- **当前唯一等待项**：等待 Owner 后续明确授权创建 Renderer Foundation R1 实现分支 `codex/r1-renderer-next-shell` 并启动兼容性 spike；
+- PAN-01S / PAN-01S.1 / PAN-01S.2：`accepted`（2026-07-20；Owner real Electron runtime；baseline `cbde807`）；
+- renderer foundation R0：`accepted`（v0.1.2；决策接受；implementation not_started）；
+- renderer foundation R1：`specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`（**v0.1.1**；实施规格已冻结；**不是**实现完成；实现分支不存在；Owner 实现授权未获得）；
+- PAN-02～PAN-06 保持 `planned`；PAN-02 当前 **blocked**（见 R0 §16）；今日不开始 R1 实现 / R2 / R2.5 / PAN-02。
 
 ---
 
@@ -449,11 +451,12 @@ statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_fo
 PAN-00 accepted
 → PAN-00R accepted
 → PAN-01S / PAN-01S.1 / PAN-01S.2 accepted（2026-07-20；baseline `cbde807`）
-→ renderer foundation R0（planned / not_started；仅起草决策/任务包）
+→ renderer foundation R0 accepted（v0.1.2）
+→ renderer foundation R1（v0.1.1；spec frozen / implementation not_started / Owner auth pending）
 → PAN-02（planned / blocked）→ PAN-03 → PAN-04 → PAN-05 → PAN-06
 ```
 
-每次只启动一个主实现任务。PAN-05 传播文案可并行起草，但不得与代码任务修改同一文件。**当前唯一任务**：起草并冻结 Renderer Foundation R0 独立决策/任务包；R0 保持 `planned` / `not_started`，未授权实现或创建分支。PAN-02 保持 `planned` / `blocked`；待 R0 边界决策后由 Owner/Codex 另行决定启动顺序。
+每次只启动一个主实现任务。PAN-05 传播文案可并行起草，但不得与代码任务修改同一文件。**当前唯一等待项**：等待 Owner 后续明确授权创建 R1 实现分支并启动兼容性 spike。R1 实施规格已冻结；implementation `not_started`。PAN-02 保持 `planned` / `blocked`。
 
 ### 13.3 子任务完成报告
 
@@ -512,7 +515,9 @@ P1-PANORAMA 不包含：
 
 2026-07-20（PAN-01S 族 Owner 真机验收）：**PAN-01S / PAN-01S.1 / PAN-01S.2 = `accepted`**；acceptance basis = Owner real Electron runtime；baseline `cbde807`。
 
-2026-07-20（执行顺序修正）：**当前唯一任务**改为起草并冻结 Renderer Foundation R0 独立决策/任务包；R0 = `planned` / `not_started`（仅规格起草）；PAN-02 = `planned` / `blocked`（待 R0 边界决策）。不改变 accepted 结论。
+2026-07-20（执行顺序修正）：当时将**当前唯一任务**改为起草并冻结 Renderer Foundation R0（历史）。
+
+2026-07-20（R1 实施规格接受 · 今日收尾）：R1 → **v0.1.1** / `codex_review_passed` / `frozen_for_implementation` / `not_started`。**当前唯一等待项**：Owner 授权创建实现分支并启动 spike。PAN-02 仍 `planned` / `blocked`。
 
 > **PAN-01**：可信只读聚合保留；`needs_minimal_surface_reset`；不 accepted。
 >

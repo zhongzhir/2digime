@@ -5,6 +5,40 @@
 
 ---
 
+## 2026-07-20 Renderer Foundation R1 实施规格接受 · 今日收尾
+
+### 做了什么
+
+纯文档状态同步：Codex 再复核通过后，将 R1 任务包冻结为 **v0.1.1**：
+
+| 项 | 值 |
+|---|---|
+| 版本 | **v0.1.1**（自 v0.1.1-draft） |
+| 状态 | `specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started` |
+| 含义 | **实施规格已冻结**；**不是**实现完成或产品验收 |
+| implementation | **`not_started`** |
+| 实现分支 | **不存在** |
+| Owner 实现授权 | **未获得** |
+| 版本锁定表 | **全部 TBD** |
+
+同步：context（决策 #84）、执行索引、能力表、cursor rule；总任务包「当前唯一任务」最小同步（若涉及）。
+
+### 明确未做（今日收尾）
+
+未创建实现分支；未装依赖；未改源码/测试/配置/lockfile；未启动 Electron；未跑产品测试；未开始 R2 / R2.5 / PAN-02；未 push。
+
+### 下一等待项
+
+**等待 Owner 后续明确授权**创建 `codex/r1-renderer-next-shell`（从本规格接受提交）并启动兼容性 spike。
+
+### 不变状态
+
+- R0：`accepted`
+- PAN-01S / S.1 / S.2：`accepted`
+- PAN-02：`planned` / `blocked`
+
+---
+
 ## 2026-07-20 Renderer Foundation R1 有界修订 · codex_changes_requested
 
 ### 做了什么
