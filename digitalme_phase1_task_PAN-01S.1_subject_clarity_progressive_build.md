@@ -2,20 +2,20 @@
 
 版本：v0.1  
 日期：2026-07-19  
-状态：`statically_verified` / `implemented`（**不** accepted）  
+状态：`accepted`（2026-07-20；Owner real Electron runtime；baseline `cbde807fd1e40472d66fbe8f0810a0835e8bc816`）  
 所属总任务：`P1-PANORAMA`（v0.4）  
 前置实现：`98fb817eb4d177635497ca2a06c1624fe9b214cc`（PAN-01S）  
 规格接受：`686fd7b1ee9a6f7e08f8221889fd67d717a8c4a9`（`docs(plan): accept PAN-01S.1 subject clarity revision`）  
-前置状态：PAN-01S `statically_verified` / `owner_changes_requested`（**不** accepted）  
-实现分支：`codex/pan-01s-minimal-product-surface`（parent `686fd7b`）  
+前置状态（历史）：PAN-01S 曾为 `statically_verified` / `owner_changes_requested`；现与本任务一并 `accepted`  
+实现分支：`codex/pan-01s-minimal-product-surface`（parent `686fd7b`）→ 收口延续 `codex/pan-01s2-chat-incident-close`  
 代码 Owner：Cursor  
 
 > **状态语义**
 >
-> - 本文件为 Owner 验收未通过后的修订任务包；实现已落地为 `statically_verified`；
-> - **不得**把 PAN-01S 或 PAN-01S.1 标为 `accepted`（待 Owner 主路径再验收）；
-> - **不得**开始 PAN-02；
-> - 规格接受：`docs(plan): accept PAN-01S.1 subject clarity revision`；实现：`fix(ui): make subject identity and build flow understandable`。
+> - 本文件为 Owner 对 PAN-01S 验收未通过后的修订任务包；
+> - 工程曾达 `statically_verified` / `implemented`；
+> - **`accepted`（2026-07-20）**：Owner 真实 Electron 运行验收通过；acceptance basis = Owner real Electron runtime；baseline = `cbde807`；
+> - **不得**开始 PAN-02（仍为 `planned` / `blocked`）；非阻断技术债进入 renderer foundation backlog，不重新打开本任务。
 
 角色：Owner（产品验收）＋ Codex（规格与复核）＋ Cursor（本地实现）
 
@@ -347,7 +347,7 @@ PAN-01S.1 不包含：
 - 是否触碰 Package、是否存在 PAN-01R 生产入口、是否开始 PAN-02；
 - 聚焦源码 zip、代码 diff、docs diff、stat、status，均不纳入提交。
 
-实现完成后停止。不得标记 PAN-01S accepted，不得开始 PAN-02，不得 push；等待 Codex 静态复核和 Owner 主路径验收。
+实现完成后停止。不得开始 PAN-02，不得 push；等待 Codex 静态复核和 Owner 主路径验收。
 
 ### 12.1 规格接受记录（2026-07-19）
 
@@ -355,4 +355,14 @@ PAN-01S.1 不包含：
 
 ### 12.2 实现记录（2026-07-19）
 
-实现提交 parent = `686fd7b`；分支 `codex/pan-01s-minimal-product-surface`。状态 → `statically_verified` / `implemented`（**不** accepted）。回归：`test:pan-01s`、`test:pan-01s-owner-runtime`、`test:pan-01-owner-runtime`、`test:p1-07-owner-runtime`、`test:owner-runtime`、`test:p1-phase1` 全绿。下一步：Owner 主路径验收；不得标 PAN-01S accepted；不得开始 PAN-02。
+实现提交 parent = `686fd7b`；分支 `codex/pan-01s-minimal-product-surface`。状态曾为 → `statically_verified` / `implemented`（**不** accepted）。回归：`test:pan-01s`、`test:pan-01s-owner-runtime`、`test:pan-01-owner-runtime`、`test:p1-07-owner-runtime`、`test:owner-runtime`、`test:p1-phase1` 全绿。
+
+### 12.3 Owner 真机验收 · accepted（2026-07-20）
+
+- **状态：** `accepted`
+- **Acceptance basis：** Owner real Electron runtime
+- **Accepted baseline：** `cbde807fd1e40472d66fbe8f0810a0835e8bc816`
+- **Accepted date：** 2026-07-20
+- **一并 accepted：** PAN-01S、PAN-01S.2
+- **下一门槛：** PAN-02 = `planned` / `blocked`；renderer foundation R0 = `planned` / `not_started`
+- **未发生：** amend、squash、push；未启动 PAN-02；未开始 renderer 重构

@@ -2,9 +2,9 @@
 
 版本：v0.4
 日期：2026-07-19
-状态：`active / three_part_alpha_reframed / PAN-01S.1_statically_verified`
+状态：`active / three_part_alpha_reframed / PAN-01S_family_accepted`
 任务类型：阶段策略调整 / 产品纵向闭环 / 市场认知启动
-文档基线：`9dd6fa0`（PAN-01R 最终实现 HEAD）；战略修订依据 `digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`
+文档基线：`cbde807`（PAN-01S 族 Owner 验收 accepted）；战略修订依据 `digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`
 历史基线：`5ab55dc`（代码）+ `8fb8210`（P1-07_DOCS_BASE）；P1-07 保持 `statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_for_panorama`，不因此标记 accepted
 
 > **v0.4 修订（2026-07-19，PAN-00R）**：以「第一阶段三位一体 Alpha」（理解我 × 武装我 × 连接世界）取代「在首页完整展示产品全貌」的旧理解；冻结极简产品原则与 AI 使用主体信息新原则；记录 PAN-01 / PAN-01R 正式裁定；重排 PAN 执行队列。v0.3.2 及更早的「产品全貌首页 / 10～15 分钟看完所有产品构造」相关要求已历史化，见 §15 历史记录。
@@ -200,10 +200,10 @@ accepted: no
 ```text
 PAN-00 accepted
 → PAN-00R accepted（三位一体重构；`07b631d` + `6ae2dca`）
-→ PAN-01S statically_verified / owner_changes_requested（不 accepted）
-→ PAN-01S.1 statically_verified / implemented（不 accepted）
-→ Owner 主路径验收 PAN-01S.1
-→ PAN-02 理解通道 Alpha
+→ PAN-01S accepted（2026-07-20；baseline `cbde807`）
+→ PAN-01S.1 accepted（2026-07-20；baseline `cbde807`）
+→ PAN-01S.2 accepted（2026-07-20；baseline `cbde807`）
+→ PAN-02 理解通道 Alpha（planned / blocked）
 → PAN-03 能力框架 Alpha
 → PAN-04 外部协作骨架 Alpha
 → PAN-05 成长飞轮与传播体验
@@ -220,23 +220,27 @@ PAN-00 accepted
 
 **PAN-01R（历史）**——主权协作闭环；裁定见 §5.2；保留历史工程证据。
 
-**PAN-01S：极简产品表面与复杂度后移**（`statically_verified`；**不** accepted）
+**PAN-01S：极简产品表面与复杂度后移**（**`accepted`**，2026-07-20；baseline `cbde807`）
 
 独立任务包：`digitalme_phase1_task_PAN-01S_minimal_product_surface.md`（v0.1.1）。
-实现分支：`codex/pan-01s-minimal-product-surface`。
+实现 / 收口分支：`codex/pan-01s-minimal-product-surface` → `codex/pan-01s2-chat-incident-close`。
 
-已完成：
+已完成并经 Owner 真机验收：
 
-- 清理「我」页面默认表面为极简主体入口（主操作 P0→P4 唯一优先级）；
+- 清理「我」页面默认表面为极简主体入口（主操作 P0→P4 唯一优先级；含永久「继续了解我」）；
 - 四个承诺和成长路线迁入帮助；
-- **PAN-01S Alpha 生产界面没有 PAN-01R 入口**（含设置／高级／帮助）；
+- **生产界面没有 PAN-01R 入口**（含设置／高级／帮助）；
 - 协作验证保留为内部／test-only 隔离 harness；
 - 侧栏不常驻 Package／模型／能力／品牌；
+- 会话省略号菜单、行内改名、自定义删除确认（收口修订，同基线）；
 - 保留 PAN-01/PAN-01R 后台与测试；
-- **不**实现新的蒸馏、能力或公网协作；
-- 工程验证最高 `statically_verified`；等待 Owner 主路径验收。
+- **不**实现新的蒸馏、能力或公网协作。
 
-**PAN-02：理解通道 Alpha**——低负担输入；后台蒸馏；关键纠错；任务相关检索；无关主体信息保持沉默；不把每条蒸馏过程暴露给普通用户。
+**PAN-01S.1：主体解释与渐进式构建**（**`accepted`**，2026-07-20；baseline `cbde807`）— 见独立任务包。
+
+**PAN-01S.2：对话事故收口**（**`accepted`**，2026-07-20；baseline `cbde807`）— 对话历史显示、附件上下文分离、关联文稿正文隔离与恢复入口。正式独立任务包未入库；以执行索引与 `digitalme_log.md` 记录为准。
+
+**PAN-02：理解通道 Alpha**——低负担输入；后台蒸馏；关键纠错；任务相关检索；无关主体信息保持沉默；不把每条蒸馏过程暴露给普通用户。当前 **`planned` / `blocked`**。
 
 **PAN-03：能力框架 Alpha**——统一能力对象；安装、启用、调用、停止、撤销；至少有真实能力样例；能力可继续扩展；主体增强不限制 AI 通用能力上限。
 
@@ -253,10 +257,10 @@ PAN-00 accepted
 
 ### 6.4 当前调度
 
-- **当前唯一任务**：Owner 验收 PAN-01S.1；不得标 PAN-01S accepted；不得开始 PAN-02；
-- PAN-01S：`statically_verified` / `owner_changes_requested`（**不** accepted）；
-- PAN-01S.1：`statically_verified` / `implemented`（**不** accepted）；
-- PAN-02～PAN-06 保持 `planned` / `not_started`。
+- **当前唯一任务**：起草并冻结 PAN-02 独立任务包；授权前 PAN-02 保持 `planned` / `blocked`；
+- PAN-01S / PAN-01S.1 / PAN-01S.2：`accepted`（2026-07-20；Owner real Electron runtime；baseline `cbde807`）；
+- renderer foundation R0：`planned` / `not_started`（技术债 backlog，不重新打开 PAN-01S）；
+- PAN-02～PAN-06 保持 `planned`；PAN-02 当前 **blocked**，不得自行开始实现。
 
 ---
 
@@ -443,13 +447,11 @@ statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_fo
 ```text
 PAN-00 accepted
 → PAN-00R accepted
-→ PAN-01S statically_verified / owner_changes_requested（不 accepted）
-→ PAN-01S.1 statically_verified / implemented（不 accepted）
-→ Owner 主路径验收 PAN-01S.1
-→ PAN-02 → PAN-03 → PAN-04 → PAN-05 → PAN-06
+→ PAN-01S / PAN-01S.1 / PAN-01S.2 accepted（2026-07-20；baseline `cbde807`）
+→ PAN-02（planned / blocked）→ PAN-03 → PAN-04 → PAN-05 → PAN-06
 ```
 
-每次只启动一个主实现任务。PAN-05 传播文案可并行起草，但不得与代码任务修改同一文件。**当前唯一任务**：Owner 主路径验收 PAN-01S.1；不得开始 PAN-02；不得标 PAN-01S accepted。
+每次只启动一个主实现任务。PAN-05 传播文案可并行起草，但不得与代码任务修改同一文件。**当前唯一任务**：起草并冻结 PAN-02 独立任务包；授权前 PAN-02 保持 `planned` / `blocked`；不得自行开始实现或创建 renderer 重构分支。
 
 ### 13.3 子任务完成报告
 
@@ -504,7 +506,9 @@ P1-PANORAMA 不包含：
 
 2026-07-19（PAN-01S.1 规格接受）：Owner 对 PAN-01S 验收未通过 → `owner_changes_requested`；任务包冻结；提交 `686fd7b`。
 
-2026-07-19（PAN-01S.1 实现）：parent `686fd7b`；状态 → `statically_verified` / `implemented`（**不** accepted）。**当前唯一任务**：Owner 主路径验收 PAN-01S.1；不得开始 PAN-02；不得标 PAN-01S accepted。
+2026-07-19（PAN-01S.1 实现）：parent `686fd7b`；状态曾为 → `statically_verified` / `implemented`（**不** accepted）。**已被 2026-07-20 acceptance superseded。**
+
+2026-07-20（PAN-01S 族 Owner 真机验收）：**PAN-01S / PAN-01S.1 / PAN-01S.2 = `accepted`**；acceptance basis = Owner real Electron runtime；baseline `cbde807`；PAN-02 = `planned` / `blocked`；renderer foundation R0 = `planned` / `not_started`。
 
 > **PAN-01**：可信只读聚合保留；`needs_minimal_surface_reset`；不 accepted。
 >

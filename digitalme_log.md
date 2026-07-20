@@ -5,12 +5,52 @@
 
 ---
 
+## 2026-07-20 PAN-01S / PAN-01S.1 / PAN-01S.2 Owner 真机验收 · accepted
+
+### 做了什么
+
+Owner 在真实 Electron 环境对最终运行版本 **`cbde807fd1e40472d66fbe8f0810a0835e8bc816`** 逐项验收通过，正式收口：
+
+| 任务 | 最终状态 | 依据 |
+|---|---|---|
+| **PAN-01S** | **`accepted`** | Owner real Electron runtime；含会话省略号菜单、行内改名、自定义删除确认、永久「继续了解我」构建入口等收口修订 |
+| **PAN-01S.1** | **`accepted`** | Owner real Electron runtime；主体解释与渐进构建主路径 |
+| **PAN-01S.2** | **`accepted`** | Owner real Electron runtime；覆盖对话历史显示、附件上下文分离、关联文稿正文隔离与恢复入口（正式独立任务包未入库；本条与执行索引记录为准，不伪造任务包历史） |
+
+**Acceptance basis：** Owner real Electron runtime（自动测试通过**不**作为唯一依据）。  
+**Accepted baseline：** `cbde807`  
+**Accepted date：** 2026-07-20  
+
+独立保留提交（未 amend / squash / push）：`b5997b6`、`acacc6e`、`598e7e9`、`34fb497`、`cbde807`。
+
+### 非阻断技术债 → renderer foundation backlog
+
+不重新打开 PAN-01S。记入 **renderer foundation R0**：`planned` / `not_started`。
+
+1. assistant `displayText` 2000 字限制与 8000 字展开设计不一致；
+2. 会话菜单靠近窗口底部时定位仍需完善；
+3. write/research/code 尚未统一请求并发模型；
+4. `app.js` / `index.html` 仍为大型 renderer 单体；
+5. 其他旧功能仍有 `prompt` / `confirm` / `alert`；
+6. 真实 Electron E2E 覆盖仍不足。
+
+### 下一门槛
+
+- **PAN-02**：`planned` / `blocked`（待独立任务包与启动授权；**不得**自行开始）
+- **renderer foundation R0**：`planned` / `not_started`（不得在本收口中创建重构分支）
+
+未触碰 Package / sessions；未启动应用或重跑测试；未 push。
+
+---
+
 ## 2026-07-20 有界 UI 修订 · 会话省略号菜单 + 「我」永久构建入口
 
-### 状态边界（本轮）
+> **2026-07-20 acceptance superseded：** 下文「不得标 PAN-01S / PAN-01S.1 accepted」为修订当时口径；Owner 真机验收后已由上方「Owner 真机验收 · accepted」条目（基线 `cbde807`）取代。
+
+### 状态边界（本轮 · 历史过程）
 
 - **PAN-01S.2 对话事故**：Owner 真机验收通过；对话正文铺屏问题已关闭。
-- 本轮是后续 UI 修订，**不得**把 PAN-01S / PAN-01S.1 整体标记 `accepted`。
+- 本轮是后续 UI 修订，**当时**不得把 PAN-01S / PAN-01S.1 整体标记 `accepted`（现已 superseded）。
 - 「我」页面构建入口缺失仍属 Owner 验收问题；本轮恢复永久 `me-build` 入口。
 - 未开始 PAN-02；未触碰 Package / 真实 sessions；不 amend、不 push。
 
@@ -21,11 +61,13 @@
 
 ### 下一步
 
-Codex 复核与 Owner 真机验收本轮 UI；仍不得标 PAN-01S / PAN-01S.1 accepted；不得开始 PAN-02。
+（历史）当时：Codex 复核与 Owner 真机验收本轮 UI。现已由上方 acceptance 条目承接。
 
 ---
 
 ## 2026-07-19 PAN-01S.1 实现 · statically_verified
+
+> **2026-07-20 acceptance superseded：** 当时状态 `statically_verified` / `implemented`（不 accepted）及「等待 Owner 验收」口径，已由 2026-07-20 Owner 真机验收（基线 `cbde807`）升格为 **PAN-01S.1 `accepted`**。
 
 ### 做了什么
 
@@ -48,7 +90,9 @@ PAN-02：`planned` / `not_started`
 
 ### 下一步
 
-**Owner 验收 PAN-01S.1；不得标 PAN-01S accepted；不得开始 PAN-02。**
+> **2026-07-20 acceptance superseded：** 等待 Owner 验收的口径已由 `cbde807` Owner 真机验收取代；PAN-01S / S.1 / S.2 现为 `accepted`。
+
+**（历史）Owner 验收 PAN-01S.1；不得标 PAN-01S accepted；不得开始 PAN-02。**
 
 ---
 

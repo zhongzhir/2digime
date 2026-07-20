@@ -2,13 +2,13 @@
 
 版本：v0.1
 状态：持续更新
-最后更新：2026-07-19
+最后更新：2026-07-20
 
-> **当前产品主线（2026-07-19，PAN-01S.1 实现）**：**P1-PANORAMA — 第一阶段三位一体 Alpha**。PAN-01S `statically_verified` / `owner_changes_requested`（**不** accepted）。PAN-01S.1 `statically_verified` / `implemented`（**不** accepted；parent `686fd7b`）。**当前唯一任务：Owner 验收 PAN-01S.1；不得开始 PAN-02；不得标 PAN-01S accepted。**
+> **当前产品主线（2026-07-20，PAN-01S 收口 accepted）**：**P1-PANORAMA — 第一阶段三位一体 Alpha**。**PAN-01S / PAN-01S.1 / PAN-01S.2 均为 `accepted`**（Owner real Electron runtime；accepted baseline `cbde807fd1e40472d66fbe8f0810a0835e8bc816`；accepted date 2026-07-20）。**PAN-02** = `planned` / `blocked`。**renderer foundation R0** = `planned` / `not_started`。**不得自行开始 PAN-02 或 renderer 重构。**
 >
-> **PAN-01** 最终裁定：`statically_verified` / `owner_product_perception_failed` / `needs_minimal_surface_reset`（基线 `a40c5f8`；**不标 accepted**；**不回滚**；表面收口由 PAN-01S / PAN-01S.1 承接）。
+> **PAN-01** 最终裁定：`statically_verified` / `owner_product_perception_failed` / `needs_minimal_surface_reset`（基线 `a40c5f8`；**不标 accepted**；**不回滚**；表面收口已由 PAN-01S 族完成）。
 >
-> **PAN-01R** 最终裁定：`statically_verified` / `codex_review_passed` / `owner_runtime_verified` / `owner_product_perception_failed` / `retained_as_internal_collaboration_harness`（最终实现 `9dd6fa0`；70/70 + 20/20；**不标 accepted**）。**PAN-01S Alpha 生产界面必须没有 PAN-01R 入口**（含设置／高级／帮助；仅隔离 test harness；见规格 v0.6.3）。底层授权、取消、审计、adopt/reject、推理环境绑定等保留为内部测试与未来 PAN-04 基础设施。不得自行回到 P1-07 修复或原 P1-08 队列。
+> **PAN-01R** 最终裁定：`statically_verified` / `codex_review_passed` / `owner_runtime_verified` / `owner_product_perception_failed` / `retained_as_internal_collaboration_harness`（最终实现 `9dd6fa0`；70/70 + 20/20；**不标 accepted**）。**生产界面必须没有 PAN-01R 入口**（含设置／高级／帮助；仅隔离 test harness；见规格 v0.6.3）。底层授权、取消、审计、adopt/reject、推理环境绑定等保留为内部测试与未来 PAN-04 基础设施。不得自行回到 P1-07 修复或原 P1-08 队列。
 >
 > **界面与功能需求源**：桌面应用「用户看见什么、能做什么、何为做完」以 [`digitalme_product_spec_v0.2.md`](digitalme_product_spec_v0.2.md)（文内 **v0.6.3**）为唯一规格；战略与逻辑架构仍以本文为准；**部署与系统拓扑**以 [`digitalme_architecture_edge_sovereign_v0.1.md`](digitalme_architecture_edge_sovereign_v0.1.md) 为准。开发实行**规格驱动**（无规格不排期）。
 >
@@ -291,7 +291,7 @@ flowchart TB
 | `digitalme_narrative_ai_era_autonomy.md` | 对外/对内叙事（含双线简述） |
 | `digital-me-project-positioning-draft.md` | 定位讨论稿（战略原则含双线） |
 
-**近期工程焦点（2026-07-19 覆盖）**：规格 **v0.6.3** + 决策 **#67～#76**——第一阶段三位一体 Alpha；**PAN-00R accepted**；**PAN-01S `statically_verified` / `owner_changes_requested`**；**PAN-01S.1 `statically_verified` / `implemented`**（不 accepted；等待 Owner 验收）。原「规格 v0.5 + 决策 #58 产品全貌首页路径」与「规格 v0.4 + 决策 #57 按底层 WP 顺序硬化」为历史策略，证据与风险记录仍有效。
+**近期工程焦点（2026-07-20 覆盖）**：规格 **v0.6.3** + 决策 **#67～#77**——第一阶段三位一体 Alpha；**PAN-00R accepted**；**PAN-01S / PAN-01S.1 / PAN-01S.2 `accepted`**（Owner real Electron runtime；baseline `cbde807`）。**PAN-02** = `planned` / `blocked`。**renderer foundation R0** = `planned` / `not_started`。原「规格 v0.5 + 决策 #58 产品全貌首页路径」与「规格 v0.4 + 决策 #57 按底层 WP 顺序硬化」为历史策略，证据与风险记录仍有效。
 
 ## 4. 系统架构共识（草案）
 
@@ -465,7 +465,9 @@ flowchart TB
 
 > **2026-07-16 审计后重排（历史）**：第一阶段不再扩展能力面，切换为“主体可信化与协作感知”。当时以 `digitalme_phase1_subject_upgrade_plan_v0.1.md` 为执行清单；原 v0.3.13 的 L0/审计/CLI 只能视为原型，不视为已达到安全可用。
 > **2026-07-18 覆盖**：当前执行索引改为 `digitalme_panorama_execution_index_v0.1.md`；原升级计划降为 Trusted Beta 硬化依据（决策 #58）。
-> **2026-07-19 PAN-01S.1 实现覆盖（当前）**：PAN-01S 仍为 `statically_verified` / `owner_changes_requested`（**不** accepted）；PAN-01S.1 已实现为 `statically_verified` / `implemented`（**不** accepted；parent `686fd7b`）。**当前唯一任务：Owner 验收 PAN-01S.1；不得开始 PAN-02；不得标 PAN-01S accepted**。
+> **2026-07-20 PAN-01S 族 accepted 覆盖（当前）**：**PAN-01S / PAN-01S.1 / PAN-01S.2 = `accepted`**（Owner real Electron runtime；baseline `cbde807`）。**PAN-02** = `planned` / `blocked`。**renderer foundation R0** = `planned` / `not_started`。不得自行开始 PAN-02 或 renderer 重构。
+>
+> **2026-07-19 PAN-01S.1 实现覆盖（历史；已被 2026-07-20 acceptance superseded）**：PAN-01S 曾为 `statically_verified` / `owner_changes_requested`；PAN-01S.1 曾为 `statically_verified` / `implemented`（不 accepted）。
 
 1. **工程与 Package 基线冻结**：Git、Alpha 标记、Package hash 快照、能力状态表；
 2. **主体资产内核**：PackageStore、七类数据、原子版本、候选更新、来源 hash、回滚；
@@ -886,4 +888,5 @@ flowchart TB
 73. **PAN-01S 任务包冻结（2026-07-19）**：独立任务包初稿 `488d733`；状态含 `frozen_for_implementation` / `not_started`；规格补齐 v0.6.2 §3.1.1。`owner_approved_for_implementation` 仅表示可在 Codex 复核后实现，**不**等于实现 accepted。
 74. **PAN-01S Codex 第一轮文档修复（2026-07-19）**：任务包 → v0.1.1；规格 → v0.6.3；冻结主操作唯一优先级 P0→P4；废止模糊「未完成构建」；冻结 PAN-01R **无生产入口**（含设置／高级／帮助；仅隔离 test harness）。状态加 `codex_review_changes_requested`（历史过程）。当时下一任务为 Codex 最终复核；现由决策 #75 承接。
 75. **PAN-01S 实现规格接受（2026-07-19）**：Codex 最终复核通过；任务包状态改为 `specified` / `owner_approved_for_implementation` / `frozen_for_implementation` / `codex_review_passed` / `not_started`。`codex_review_passed` 只表示实现规格通过，**不**表示已实现或 accepted。随后实现完成见能力表 / 执行索引当前状态。
-76. **PAN-01S.1 修订接受（2026-07-19）**：Owner 对 PAN-01S（`98fb817`）主路径验收未通过——主体解释不足、构建仍为常驻控制台、评测/材料建议/文件夹管理占据主路径。裁定 PAN-01S = `statically_verified` / `owner_changes_requested`（**不** accepted）。冻结并接受 PAN-01S.1 任务包：主体解释文案矩阵、渐进式构建 B0～B5、用后退出。**当前唯一任务：实现 PAN-01S.1**；不得开始 PAN-02；不得标 PAN-01S accepted。
+76. **PAN-01S.1 修订接受（2026-07-19）**：Owner 对 PAN-01S（`98fb817`）主路径验收未通过——主体解释不足、构建仍为常驻控制台、评测/材料建议/文件夹管理占据主路径。裁定 PAN-01S = `statically_verified` / `owner_changes_requested`（**不** accepted，历史）。冻结并接受 PAN-01S.1 任务包：主体解释文案矩阵、渐进式构建 B0～B5、用后退出。当时下一任务为实现 PAN-01S.1。**已被决策 #77 superseded。**
+77. **PAN-01S / PAN-01S.1 / PAN-01S.2 Owner 真机验收 accepted（2026-07-20）**：Owner 在真实 Electron 环境对最终运行版本 `cbde807` 逐项验收通过。**Acceptance basis = Owner real Electron runtime**（自动测试通过不是唯一依据）。**PAN-01S / PAN-01S.1 / PAN-01S.2 = `accepted`**。PAN-01S.2 覆盖对话历史显示、附件上下文分离、关联文稿正文隔离与恢复入口（正式独立任务包未入库；以执行索引与 log 记录为准）。会话菜单与永久构建入口属 PAN-01S 收口修订，同基线 `cbde807`。独立保留 `b5997b6`、`acacc6e`、`598e7e9`、`34fb497`、`cbde807`；未 amend / squash / push。**PAN-02** = `planned` / `blocked`。**renderer foundation R0** = `planned` / `not_started`（技术债 backlog，不重新打开 PAN-01S）。不得自行开始 PAN-02 或 renderer 重构。
