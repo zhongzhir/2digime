@@ -1,22 +1,21 @@
 # Renderer Foundation R0：架构决策与渐进迁移规格
 
-版本：v0.1.1-draft  
+版本：v0.1.2  
 日期：2026-07-20  
-状态：`spec_revision_1` / `codex_review_changes_requested`  
-性质：**架构决策与迁移规格**；**不**授权实现；**不**创建实现分支  
+状态：**`accepted`**（决策/规格接受；**不是**代码实现完成）  
+性质：**架构决策与迁移规格**；接受后授权**起草 R1 任务包**；**仍不**授权创建 R1 实现分支或改源码，直至 R1 任务包经 Codex 复核通过  
 所属主线：`P1-PANORAMA`（三位一体 Alpha）  
 前置：PAN-01S / PAN-01S.1 / PAN-01S.2 `accepted`（Owner real Electron runtime；baseline `cbde807`）  
-代码血缘基线（只读）：`cbde807`；初稿提交 `fc56259`；本修订基于 Codex 第一轮架构歧义关闭  
-依据：`digitalme_bounded_architecture_audit_2026-07-20.md`（方案 C）；产品规格 v0.6.3；执行索引 v0.2.9+
+决策血缘：初稿 `fc56259` → 修订 1 `ac8daf3` → 本接受修订  
+依据：`digitalme_bounded_architecture_audit_2026-07-20.md`（方案 C）；产品规格 v0.6.3；执行索引 v0.2.10+
 
 > **状态语义**
 >
-> - `spec_revision_1` / `codex_review_changes_requested`：已按 Codex 第一轮意见修订迁移拓扑、SQLite、E2E、R1 范围；等待再复核；
-> - **不得**标 `accepted`（须 Codex 再复核 + Owner 决策确认）；
-> - **不得**自行创建 `R1` 实现分支或开始编码；
+> - **`accepted`**：Owner 确认方案 C 与修订 1 边界（含整窗拓扑、R2.5 SQLite deferred、Playwright E2E、R1 收窄、next 加载/ready 失败由 main 自动回退 legacy）；属**决策接受**，不等于 R1 已实现；
+> - R0 implementation = `not_started`；实现分支**不存在**；
+> - **当前下一文档任务**：起草并冻结 R1 独立实施任务包；**Codex 复核通过前不得创建 R1 实现分支或修改源码**；
 > - **不得**启动 PAN-02；
-> - 本文件**不**改变 PAN-01S 族 accepted 结论；
-> - R0 implementation = `not_started`；实现分支**不存在**。
+> - 本文件**不**改变 PAN-01S 族 accepted 结论。
 
 ---
 
@@ -34,10 +33,11 @@ Digital Me 的**最大工程资产**在 Electron 主进程、preload、PackageSt
 6. **冻结 chat 三层模型**：`displayText` / `modelText` / `attachmentRefs`。  
 7. **P0～P4 / B0～B5** 由主进程可信派生；renderer **不得**自行推导。  
 8. **新 renderer 主 E2E = Playwright Electron**；禁止新增 Spectron；旧 owner-runtime harness 保留作 legacy 回归并逐步缩减。  
-9. 每个迁移切片必须可回滚；切片经 Owner 真机验收后才可移除对应旧路径。
+9. 每个迁移切片必须可回滚；切片经 Owner 真机验收后才可移除对应旧路径。  
+10. **next 加载失败或 ready 握手失败时，由 main 自动整窗回退 legacy**（生产安全默认；见 §4 / §11.2）。
 
-**当前授权范围：** 本决策包修订与 Codex 再复核。  
-**未授权：** R0/R1 实现、依赖安装、新分支、PAN-02。
+**当前授权范围：** R0 决策已 `accepted`；可起草 R1 独立实施任务包。  
+**未授权：** R1 实现分支、依赖安装改 lockfile（属 R1 实现阶段）、PAN-02、任何产品源码修改（直至 R1 任务包 Codex 复核通过并获实现授权）。
 
 ---
 
@@ -110,18 +110,23 @@ flowchart TB
   Flag -->|legacy| LegacyWin["BrowserWindow loads\nrenderer/index.html"]
   Flag -->|next| NextWin["BrowserWindow loads\nrenderer-next/index.html"]
 
+  NextWin -->|load fail OR ready handshake timeout/fail| AutoFB["main AUTO fallback\nfull-window → legacy"]
+  AutoFB --> LegacyWin
+
   subgraph Legacy["LEGACY entry — independent HTML"]
     LegacyApp["app.js monolith"]
   end
 
   subgraph Next["NEXT entry — independent HTML"]
     Shell["AppShell / Router / ErrorBoundary"]
+    Ready["ready handshake → main"]
     Migrated["Migrated routes only"]
     Placeholder["Unmigrated routes:\nNO embed of legacy DOM\n→ offer 返回经典界面"]
   end
 
   LegacyWin --> Legacy
   NextWin --> Next
+  Shell --> Ready
 
   Placeholder -->|"persist via main API,\nthen full-window reload"| Flag
 
@@ -145,6 +150,7 @@ flowchart TB
   LegacyApp --> API
   Shell --> API
   Migrated --> API
+  Ready --> IPC
   API --> IPC
   IPC --> PS
   IPC --> SO
@@ -163,7 +169,8 @@ flowchart TB
 5. legacy 默认保持生产安全回滚，直到 next 达到本任务包定义的最低可用路由集合并通过 Owner 验收。  
 6. **不允许**一个窗口同时运行两套 renderer 状态机。  
 7. **不允许**新按钮触发旧隐藏 DOM。  
-8. feature flag **权威位于 main**；renderer **不能**自行修改生产默认值。
+8. feature flag **权威位于 main**；renderer **不能**自行修改生产默认值。  
+9. **自动回退（强制）：** 若选择 `next` 后出现 **HTML/资源加载失败**，或 **ready 握手超时/失败**，**main 必须自动**将入口回退为 legacy 并**整窗**加载；不得停留在空白/半初始化 next；须记录可审计原因（不含隐私正文）。
 
 ---
 
@@ -290,7 +297,8 @@ digitalme-app/
 - **不允许** next 内 iframe/webview 嵌 legacy。  
 - **不允许**按路由在同一窗口混挂两套状态机。  
 - next 未迁移路由：展示明确说明 +「返回经典界面」；**先**调用 main 持久化必要状态，**再**将入口切到 legacy 并整窗重载。  
-- 生产默认：`legacy`，直到 next 最低可用路由集合经 Owner 验收（见 §15）。
+- 生产默认：`legacy`，直到 next 最低可用路由集合经 Owner 验收（见 §15）。  
+- **自动回退：** 加载 `next` 时，若 **load 失败** 或 **ready 握手超时/失败**，main **必须自动**整窗加载 `legacy`（见 §11.2）；不得依赖用户手动抢救空白窗。
 
 ---
 
@@ -312,6 +320,18 @@ digitalme-app/
 | **可丢弃的短暂 UI 态** | 焦点、滚动位置、菜单开合、未提交的行内编辑框、Error Boundary 本地错误面板、纯前端折叠/展开、路由栈（next 内） |
 | **飞行中请求** | 以 main request registry 为准；切换前应停止或完成；UI 绑定随窗口销毁，不得假设跨入口续挂同一 React 树 |
 
+### 11.2 next 加载 / ready 握手失败 → main 自动回退 legacy
+
+| 项 | 冻结 |
+|---|---|
+| 触发 | （1）next HTML/关键资源 **load 失败**；（2）next shell **ready 握手超时或显式失败**（超时上限由 R1 任务包锁定，建议默认 ≤10s） |
+| 责任方 | **仅 main** 判定并执行；renderer 不得假装已就绪 |
+| 动作 | 立即整窗加载 **legacy** `renderer/index.html`；会话/Package 权威数据不因回退而损坏 |
+| 会话态 | 自动回退视为异常路径：短暂 UI 态可丢；必要持久化态以 main 已有数据为准；不得为抢救 UI 读取真实隐私正文 |
+| 审计 | 记录失败类别与时间（无堆栈刷用户面；无附件/资料正文） |
+| 生产默认 | 自动回退后，**本次进程**以 legacy 运行；是否改写持久化 `rendererEntry` 默认值由 R1 规定（建议：**不**因单次失败永久改写 Owner 显式选择的 next 偏好，但须保证下次仍安全可启动；开发/E2E 可强制） |
+| E2E | R1 必须覆盖「模拟 next 失败 → 自动落 legacy」至少一条 |
+
 ---
 
 ## 12. 数据保护与回滚方案
@@ -321,8 +341,8 @@ digitalme-app/
 | Package | 不改权威 | PackageStore journal/版本 |
 | sessions JSON | R2 迁移 UI 时不改存储格式权威 | 整窗回 legacy 仍读同一 JSON |
 | SQLite（R2.5 仅） | 独立 ADR；备份；双读验证 | 失败回 JSON；可重建索引 |
-| rendererEntry | main 权威；生产默认 legacy | 一键回 legacy 整窗加载 |
-| 短暂 UI 态 | 不作为权威 | 切换时丢弃（§11.1） |
+| rendererEntry | main 权威；生产默认 legacy | 用户请求回 legacy；**load/ready 失败时 main 自动整窗回 legacy（§11.2）** |
+| 短暂 UI 态 | 不作为权威 | 切换或自动回退时丢弃（§11.1） |
 | 密钥 | SecretStore | 既有 clear 流程 |
 
 **硬规则：** 自动化使用**隔离 fixture userData**；禁止指向真实个人 Package/sessions；**禁止**为调研读取真实 sessions **正文**（未来仅允许脱敏大小/条数/性能指标）。
@@ -448,7 +468,7 @@ R1 完成条件必须是**最小、可测、可回滚**；预计不超过一个�
 
 | 切片 | 进入 | 完成（额外） | 停止（额外） |
 |---|---|---|---|
-| **R1** | R0 决策接受 | Windows 启动；隔离 userData；runtime stamp；**legacy↔next 整窗切换**；Error Boundary；production-load 或等价；Playwright 最小套件在超时内绿；**版本与 lockfile 已锁**；可一键回 legacy | 塞入 chat/我/工作台/SQLite/大规模 preload 重写 |
+| **R1** | R0 决策接受 | Windows 启动；隔离 userData；runtime stamp；**legacy↔next 整窗切换**；Error Boundary；production-load 或等价；Playwright 最小套件在超时内绿；**版本与 lockfile 已锁**；可一键回 legacy；**next load/ready 失败 → main 自动回 legacy（E2E 覆盖）** | 塞入 chat/我/工作台/SQLite/大规模 preload 重写；无自动回退 |
 | **R2** | R1 完成 | E2E #2–#5；JSON sessions；类型化 session/chat API；main 请求注册与并发门禁；无正文铺屏；可回 legacy | 引入 SQLite；恢复单 `content` 模型；嵌 legacy DOM |
 | **R2.5** | 量化触发 + Owner 授权 + 独立 ADR | 备份、双读、回滚证明 | 无触发强上；读真实正文 |
 | **R3** | 建议 R2 完成 | E2E #6–#8；P0 行为保持 | renderer 重算 P0～P4 |
@@ -490,13 +510,15 @@ PAN-02 保持 **`planned` / `blocked`**，直到**同时**满足：
 
 ---
 
-## 18. Owner 决策问题（≤5）
+## 18. Owner 决策问题（≤5）— 已接受记录
 
-1. **是否批准方案 C**（保留 Electron/main/PackageStore；渐进重建 renderer；拒绝全面重写或无限补丁为主策略）？  
-2. **是否批准 TypeScript + React + Vite**，确切版本在 R1 兼容性 spike 后锁定？  
-3. **是否同意将 SQLite 延后为 R2.5 独立 ADR**，R2 继续使用现有 JSON sessions？  
-4. **是否批准整窗入口切换**及顺序 **R1 → R2 → R3**？  
-5. **是否接受 §16 的 PAN-02 解锁门槛**？
+| # | 问题 | Owner 结论（2026-07-20） |
+|---|---|---|
+| 1 | 是否批准方案 C？ | **是** |
+| 2 | 是否批准 TS + React + Vite（确切版本 R1 spike 锁定）？ | **是** |
+| 3 | 是否同意 SQLite 延后至 R2.5，R2 继续 JSON sessions？ | **是** |
+| 4 | 是否批准整窗入口切换及 R1→R2→R3？ | **是**（含 load/ready 失败由 main 自动回退 legacy） |
+| 5 | 是否接受 §16 的 PAN-02 解锁门槛？ | **是**；PAN-02 仍 `planned` / `blocked` |
 
 ---
 
@@ -520,15 +542,15 @@ PAN-02 保持 **`planned` / `blocked`**，直到**同时**满足：
 ## 20. 验收清单（针对本 R0 文档）
 
 - [x] 整窗迁移拓扑歧义已关闭（§4 / §10 / §11）。  
+- [x] next load/ready 失败 → main 自动回退 legacy（§11.2）。  
 - [x] SQLite 拆至 R2.5 deferred；R2 = JSON。  
 - [x] E2E = Playwright Electron；禁 Spectron；超时口径明确。  
 - [x] R1 范围收窄为最小可测可回滚壳。  
-- [x] Owner 问题 ≤5 且已按本轮调整。  
-- [ ] Codex 再复核通过（本提交后）。  
-- [ ] Owner 答复 §18。  
-- [ ] 未修改源码/依赖；未创建实现分支。  
-- [ ] PAN-01S 族 accepted 未被改写。  
-- [ ] **不得**标本轮为 accepted。
+- [x] Owner 五项问题已接受（§18）。  
+- [x] R0 决策标为 **`accepted`**（决策接受；非实现完成）。  
+- [ ] R1 独立实施任务包已起草并经 Codex 复核（下一文档任务）。  
+- [x] 未修改源码/依赖；未创建实现分支。  
+- [x] PAN-01S 族 accepted 未被改写。
 
 ---
 
@@ -536,11 +558,11 @@ PAN-02 保持 **`planned` / `blocked`**，直到**同时**满足：
 
 | 项 | 值 |
 |---|---|
-| 本文件状态 | **`spec_revision_1` / `codex_review_changes_requested`** |
+| 本文件状态 | **`accepted`**（决策/规格；v0.1.2） |
 | R0 implementation | `not_started` |
 | R0 implementation branch | **不存在** |
 | R2.5 SQLite | `planned` / `deferred` |
-| 下一动作 | Codex 再复核 → Owner 答复 §18 →（通过后）另立 R1 实现任务包（含版本 spike） |
+| 下一动作 | **起草并冻结 R1 独立实施任务包** → Codex 复核；**复核通过前不得创建 R1 实现分支或改源码** |
 | PAN-02 | `planned` / `blocked` |
 | PAN-01S / S.1 / S.2 | `accepted`（不变） |
 
@@ -551,4 +573,5 @@ PAN-02 保持 **`planned` / `blocked`**，直到**同时**满足：
 | 日期 | 版本 | 说明 |
 |---|---|---|
 | 2026-07-20 | v0.1-draft | 初稿（`fc56259`）；`spec_drafted` / `codex_review_pending` |
-| 2026-07-20 | v0.1.1-draft | Codex 第一轮：冻结整窗入口拓扑；SQLite→R2.5 deferred；Playwright E2E；收窄 R1；调整 Owner 问题；状态 → `spec_revision_1` / `codex_review_changes_requested` |
+| 2026-07-20 | v0.1.1-draft | Codex 第一轮：整窗拓扑、SQLite→R2.5、Playwright、收窄 R1（`ac8daf3`） |
+| 2026-07-20 | v0.1.2 | **Owner 接受**；补充 next load/ready 失败由 main 自动回退 legacy；修正状态文档多余 `>`；授权起草 R1 任务包（仍禁实现分支） |

@@ -5,6 +5,32 @@
 
 ---
 
+## 2026-07-20 Renderer Foundation R0 决策 accepted
+
+### 做了什么
+
+纯文档：将 R0 标为 **`accepted`**（决策/规格接受；**不是**代码实现完成），任务包 → **v0.1.2**。
+
+1. 修正 `digitalme_context.md` 两处句末多余 `>`（L7 / 覆盖段）。  
+2. 补充冻结：**next 加载失败或 ready 握手失败时，由 main 自动整窗回退 legacy**（§11.2；架构图与 R1 完成条件同步）。  
+3. Owner 五项决策记为已接受（§18）。  
+4. 同步执行索引 / 能力表 / cursor rule / context（决策 #81）。
+
+### 状态
+
+| 项 | 值 |
+|---|---|
+| R0 | **`accepted`**（v0.1.2；决策接受） |
+| R0 implementation | `not_started`；分支不存在 |
+| PAN-01S 族 | `accepted`（不变） |
+| PAN-02 | `planned` / `blocked` |
+
+### 下一门槛
+
+起草并冻结 **R1 独立实施任务包** → Codex 复核；**复核通过前不得创建 R1 实现分支或修改源码**。
+
+---
+
 ## 2026-07-20 Renderer Foundation R0 修订 1 · 关闭 Codex 第一轮架构歧义
 
 ### 做了什么
