@@ -225,6 +225,104 @@ test("7. listSessions preview uses safe text not attachment body", () => {
   }
 });
 
+test("8. untrusted legacy display with fake phone/email/4000-char body must not render", () => {
+  const kimiDisplay =
+    "请帮我润色简历\n［附件：简历.pdf］\n" + FAKE_RESUME_BODY.slice(0, 4000);
+  assert.ok(kimiDisplay.length >= 3500);
+
+  const msg = {
+    role: "user",
+    // No schemaVersion / displayText — only KIMI experiment field
+    display: kimiDisplay,
+    content:
+      "请帮我润色简历\n\n---\n以下是我附上的材料正文，请务必基于这些内容回答，不要说无法读取附件：\n\n" +
+      FAKE_RESUME_BODY,
+  };
+  const shown = cm.legacyDisplayText(msg);
+  assert.ok(!shown.text.includes(FAKE_PHONE), "must not show phone from display");
+  assert.ok(!shown.text.includes(FAKE_EMAIL), "must not show email from display");
+  assert.ok(!shown.text.includes("假履历正文"), "must not show resume body");
+  assert.ok(!shown.text.includes("XXXX"));
+  assert.ok(shown.text.includes("请帮我润色简历") || shown.text.includes("正文已隐藏"));
+  assert.equal(shown.forbidExpand, true);
+  assert.notEqual(shown.source, "display");
+
+  const displayOnly = {
+    role: "user",
+    display: ("无分隔长文" + FAKE_PHONE + FAKE_EMAIL).padEnd(4000, "Z"),
+  };
+  const shown2 = cm.legacyDisplayText(displayOnly);
+  assert.ok(!shown2.text.includes(FAKE_PHONE));
+  assert.ok(!shown2.text.includes(FAKE_EMAIL));
+  assert.ok(!shown2.text.includes("ZZZZ"));
+  assert.ok(shown2.text.includes("正文已隐藏"));
+  assert.equal(shown2.forbidExpand, true);
+
+  const normalized = cm.normalizeLoadedMessage(msg);
+  assert.ok(normalized);
+  assert.ok(!normalized.displayText.includes(FAKE_PHONE));
+  const fold = cm.foldPlan(normalized.displayText, { forbidExpand: true });
+  assert.equal(fold.forbidExpand, true);
+  assert.equal(fold.needsFold, false);
+  assert.equal(fold.expanded, fold.preview);
+});
+
+test("9. sessionNavGuard blocks switch/new/delete while request active", () => {
+  const idle = cm.sessionNavGuard(null);
+  assert.equal(idle.allowed, true);
+  assert.equal(cm.sessionNavGuard({}).allowed, true);
+
+  const busy = cm.sessionNavGuard({
+    requestId: "req_abc",
+    originSessionId: "s1",
+    originMessageId: "m1",
+    bubbleEl: null,
+  });
+  assert.equal(busy.allowed, false);
+  assert.equal(busy.message, cm.SESSION_NAV_BLOCK_MESSAGE);
+  assert.match(busy.message, /请先停止当前回复/);
+});
+
+test("10. app.js wires sessionNavGuard into new/switch/delete handlers", () => {
+  const appJs = fs.readFileSync(
+    path.join(__dirname, "..", "src", "renderer", "app.js"),
+    "utf8"
+  );
+  assert.match(appJs, /function guardChatSessionNavigation\s*\(/);
+  assert.match(appJs, /sessionNavGuard\(activeChatRequest\)/);
+  assert.match(appJs, /请先停止当前回复，再切换对话/);
+
+  const newIdx = appJs.indexOf('$("btn-new-session")');
+  assert.ok(newIdx > 0);
+  const newRegion = appJs.slice(newIdx, newIdx + 500);
+  assert.match(newRegion, /guardChatSessionNavigation\(\)/);
+
+  const delIdx = appJs.indexOf('del.textContent = "删除"');
+  assert.ok(delIdx > 0);
+  const delRegion = appJs.slice(delIdx, delIdx + 450);
+  assert.match(delRegion, /guardChatSessionNavigation\(\)/);
+
+  // Session switch click handler (setActiveSession path)
+  const switchIdx = appJs.indexOf("setActiveSession(s.id)");
+  assert.ok(switchIdx > 0);
+  const switchRegion = appJs.slice(Math.max(0, switchIdx - 350), switchIdx);
+  assert.match(switchRegion, /guardChatSessionNavigation\(\)/);
+
+  // Stop remains available without nav guard (bindChatCoreControls handler)
+  const stopBindIdx = appJs.indexOf('$("btn-stop")?.addEventListener');
+  assert.ok(stopBindIdx > 0, "btn-stop listener must exist");
+  const stopRegion = appJs.slice(stopBindIdx, stopBindIdx + 350);
+  assert.doesNotMatch(stopRegion, /guardChatSessionNavigation/);
+  assert.match(stopRegion, /digitalMe\.stopChat|stopChat\(/);
+
+  // Clear linked draft must persist
+  const clearIdx = appJs.indexOf('$("btn-clear-linked-draft")?.addEventListener');
+  assert.ok(clearIdx > 0, "clear-linked-draft listener must exist");
+  const clearRegion = appJs.slice(clearIdx, clearIdx + 700);
+  assert.match(clearRegion, /persistCurrentSession\(\)/);
+  assert.match(clearRegion, /保存失败/);
+});
+
 console.log("");
 console.log(`chat-history-display: ${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

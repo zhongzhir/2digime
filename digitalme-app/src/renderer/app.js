@@ -420,11 +420,15 @@ function mapSessionMessagesToHistory(messages) {
         const n = api.normalizeLoadedMessage(raw);
         if (n) out.push(n);
       } else if (raw && (raw.role === "user" || raw.role === "assistant")) {
+        // Fallback without module: never trust legacy `display`
         out.push({
           schemaVersion: 2,
           id: raw.id || "m_fallback",
           role: raw.role,
-          displayText: String(raw.displayText || raw.display || "这条历史消息无法显示。"),
+          displayText:
+            raw.schemaVersion === 2 && typeof raw.displayText === "string"
+              ? String(raw.displayText).slice(0, 2000)
+              : "这条历史消息无法显示。",
           modelText: String(raw.modelText || "").slice(0, 4000),
           attachmentRefs: [],
           createdAt: raw.createdAt || new Date().toISOString(),
@@ -437,6 +441,20 @@ function mapSessionMessagesToHistory(messages) {
     }
   }
   return out;
+}
+
+function guardChatSessionNavigation() {
+  const api = chatMsgApi();
+  const g = api
+    ? api.sessionNavGuard(activeChatRequest)
+    : activeChatRequest && activeChatRequest.requestId
+      ? { allowed: false, message: "请先停止当前回复，再切换对话。" }
+      : { allowed: true, message: null };
+  if (!g.allowed) {
+    addMessage("system-note", g.message);
+    return false;
+  }
+  return true;
 }
 
 function setChatBusy(busy) {
@@ -537,6 +555,7 @@ async function refreshSessionList() {
     del.textContent = "删除";
     del.addEventListener("click", async (ev) => {
       ev.stopPropagation();
+      if (!guardChatSessionNavigation()) return;
       if (!confirm("删除这段对话？")) return;
       await window.digitalMe.deleteSession(s.id);
       if (currentSession && currentSession.id === s.id) {
@@ -548,6 +567,7 @@ async function refreshSessionList() {
     actions.appendChild(del);
     btn.appendChild(actions);
     btn.addEventListener("click", async () => {
+      if (!guardChatSessionNavigation()) return;
       await persistCurrentSession();
       currentSession = await window.digitalMe.setActiveSession(s.id);
       history = mapSessionMessagesToHistory(currentSession.messages || []);
@@ -1201,6 +1221,7 @@ function bindChatCoreControls() {
     }
   });
   $("btn-new-session")?.addEventListener("click", async () => {
+    if (!guardChatSessionNavigation()) return;
     await persistCurrentSession();
     currentSession = await window.digitalMe.createSession({ title: "新对话" });
     history = [];
@@ -1213,13 +1234,21 @@ function bindChatCoreControls() {
     syncClearLinkedDraftButton();
     await refreshSessionList();
   });
-  $("btn-clear-linked-draft")?.addEventListener("click", () => {
+  $("btn-clear-linked-draft")?.addEventListener("click", async () => {
     currentArtifact = null;
     linkedLibraryId = null;
     if (currentSession) currentSession.artifacts = [];
     renderArtifact();
     syncClearLinkedDraftButton();
-    addMessage("system-note", "已关闭当前关联文稿。可继续对话或新建对话。");
+    try {
+      await persistCurrentSession();
+      addMessage("system-note", "已关闭当前关联文稿。可继续对话或新建对话。");
+    } catch (e) {
+      addMessage(
+        "system-note",
+        "关联文稿已在本页关闭，但保存失败：" + (e.message || "请稍后重试")
+      );
+    }
   });
 
   document.querySelectorAll("#intent-chips button").forEach((btn) => {
