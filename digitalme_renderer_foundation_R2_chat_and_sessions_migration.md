@@ -2,28 +2,23 @@
 
 版本：v0.1.1
 日期：2026-07-21
-状态：`specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`
-性质：**独立实施任务包**；**实施规格已冻结**（Codex 最终复核通过）；实现分支**已创建**；**本轮仅冻结三项实施前参数合同（纯文档）**；**不是**源码实现；R2-A～R2-F **均未开始**；**Codex 复核参数合同通过且 Owner 再次授权前不得开始编码**
+状态：`specified` / `codex_review_passed` / `frozen_for_implementation` / `implementation_completed` / `awaiting_codex_implementation_review` / `awaiting_owner_runtime`
+性质：**独立实施任务包**；实施规格已冻结；Owner 已授权并完成 R2-A～R2-F 源码实现与自动化测试；**在 Codex 实现复核与 Owner 真机验收通过前不得 `accepted`**
 所属主线：`P1-PANORAMA`（三位一体 Alpha）
 前置：Renderer Foundation R0 **`accepted`**（v0.1.2）；Renderer Foundation R1 **`accepted`**（v0.1.3；baseline `8d7e9b3`）
 依据：`digitalme_renderer_foundation_R0_decision_and_migration_plan.md` §14 / §15 / §16；`digitalme_renderer_foundation_R1_shell_and_entry_switch.md`；执行索引；规格接受提交 `418d0cc`
-实现分支：**`codex/r2-chat-sessions-migration`**（自 `418d0cc` 创建；当前仅参数合同冻结）
+实现分支：**`codex/r2-chat-sessions-migration`**
 
 > **状态语义**
 >
-> - **`codex_review_passed`**：实施规格已通过 Codex 最终复核（历史接受）；
-> - **`frozen_for_implementation`**：规格可作为实现依据；
-> - **`not_started`**：实现尚未开始；R2-A～R2-F 均未编码；
-> - **不得**标记 `implemented` / `statically_verified` / `runtime_verified` / `accepted` / `released`（本轮）；
-> - **七项核心合同、22 项状态所有权、24 类错误恢复、38 项 E2E 结论保持**；
-> - **三项实施前参数**（§21）已按固定值写入本合同；**等待 Codex 复核**；复核通过且 Owner 再次授权前**不得**开始 R2-A 编码；
-> - R1 `accepted` 仅覆盖 next 底座与整窗切换；**next 当前仍是预览空壳**；
-> - 生产默认入口仍为 **legacy**；普通用户**没有**进入 next 的生产入口；
+> - **`implementation_completed`**：R2-A～R2-F 源码与自动化测试已落地（工程完成）；
+> - **`awaiting_codex_implementation_review` / `awaiting_owner_runtime`**：下一等待项；**不得**据此写 `accepted`；
+> - **不得**标记 `accepted` / `released`（本轮实现收口后仍须 Codex + Owner）；
+> - 生产默认入口仍为 **legacy**；next 仅受控 harness / 门禁进入；
 > - R2.5 SQLite 保持 `planned` / `deferred`；PAN-02 保持 `planned` / `blocked`；
-> - **不得**因本参数冻结改写 R0 / R1 / PAN-01S 族已有 `accepted` 记录；
-> - 本文件描述的 API / 门禁 / UI **目标态**与现有代码并存关系见 §3；**不得假装目标 API 已实现**。
+> - **不得**因本实现收口改写 R0 / R1 / PAN-01S 族已有 `accepted` 记录。
 
-角色：Owner（验收 / 实现授权）＋ Codex（规格与参数合同复核）＋ Cursor（实现；**仅在再次授权后**）
+角色：Owner（真机验收）＋ Codex（实现复核）＋ Cursor（已完成实现）
 
 ---
 
@@ -32,14 +27,14 @@
 | 项 | 当前值 |
 |---|---|
 | 任务包版本 | **v0.1.1** |
-| 工程状态 | `specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started` |
-| R2 实现分支 | **`codex/r2-chat-sessions-migration`**（已创建；仅参数合同） |
+| 工程状态 | `specified` / `codex_review_passed` / `frozen_for_implementation` / `implementation_completed` / `awaiting_codex_implementation_review` / `awaiting_owner_runtime` |
+| R2 实现分支 | **`codex/r2-chat-sessions-migration`** |
 | 生产默认入口 | **legacy** |
 | R1 | `accepted`（v0.1.3；baseline `8d7e9b3`） |
-| R2-A～R2-F | **均未开始** |
+| R2-A～R2-F | **实现已完成**（待 Codex 实现复核 + Owner 真机） |
 | R2.5 | `planned` / `deferred` |
 | PAN-02 | `planned` / `blocked`（见 R0 §16；R2 accepted **不**自动解锁） |
-| 本轮授权 | **仅参数合同冻结**；不得开始源码实现 |
+| 本轮状态 | 源码实现已完成；**不得**写 `accepted` |
 
 ---
 
@@ -758,11 +753,10 @@ R2 不迁移工作台，因此：
 
 | 项 | 值 |
 |---|---|
-| 本文件 | **v0.1.1** / `specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started` |
-| 实现分支 | **`codex/r2-chat-sessions-migration`**（已创建） |
-| 当前唯一等待项 | **Codex 复核本参数合同（§21）** |
-| Codex 复核通过且 Owner 再次授权前 | **不得**开始 R2-A～R2-F 编码 |
-| R2-A～R2-F | **均未开始** |
+| 本文件 | **v0.1.1** / `implementation_completed` / `awaiting_codex_implementation_review` / `awaiting_owner_runtime` |
+| 实现分支 | **`codex/r2-chat-sessions-migration`** |
+| 当前唯一等待项 | **Codex 集中复核实现 + Owner 真机验收** |
+| R2-A～R2-F | **实现已完成**（未 `accepted`） |
 | R1 | `accepted`（不变） |
 | R2.5 | `planned` / `deferred` |
 | PAN-02 | `planned` / `blocked` |
@@ -778,3 +772,4 @@ R2 不迁移工作台，因此：
 | 2026-07-21 | v0.1.1-draft | 第一～三轮：七项合同、所有权/恢复/E2E、安全闭环（历史） |
 | 2026-07-21 | **v0.1.1** | **Codex 最终复核通过**；状态 → `specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`。实施规格冻结（历史） |
 | 2026-07-21 | **v0.1.1**（参数合同） | Owner 授权创建实现分支 `codex/r2-chat-sessions-migration`；冻结 §21 三项参数（scenarioHint 白名单、8000 截断文案与 code point 口径、token TTL=300s、rename 最多 4 次/50-150-350ms/`EBUSY|EPERM|EACCES`）；补全 §15 测试合同。**仍 `not_started`**；等待 Codex 复核参数合同与 Owner 再次授权后方可编码 |
+| 2026-07-21 | **v0.1.1**（实现收口） | Owner 授权连续完成 R2-A～R2-F；状态 → `implementation_completed` / `awaiting_codex_implementation_review` / `awaiting_owner_runtime`。**不得 `accepted`**；下一等待项为 Codex 实现复核与 Owner 真机验收 |
