@@ -1,12 +1,12 @@
 # Renderer Foundation R1：最小 shell 与整窗入口切换
 
-版本：v0.1.1  
-日期：2026-07-20  
-状态：`specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`  
-性质：**独立实施任务包**；**实施规格已冻结**；**不是**实现完成或产品验收通过；**implementation 仍为 `not_started`**；实现分支**不存在**；**尚未获得 Owner 创建实现分支与开始 spike 的授权**  
-所属主线：`P1-PANORAMA`（三位一体 Alpha）  
-前置：Renderer Foundation R0 **`accepted`**（v0.1.2；决策接受）  
-依据：`digitalme_renderer_foundation_R0_decision_and_migration_plan.md` §10 / §11 / §14.1 / §15  
+版本：v0.1.1
+日期：2026-07-20
+状态：`specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`
+性质：**独立实施任务包**；**实施规格已冻结**；**不是**实现完成或产品验收通过；**implementation 仍为 `not_started`**；实现分支**不存在**；**尚未获得 Owner 创建实现分支与开始 spike 的授权**
+所属主线：`P1-PANORAMA`（三位一体 Alpha）
+前置：Renderer Foundation R0 **`accepted`**（v0.1.2；决策接受）
+依据：`digitalme_renderer_foundation_R0_decision_and_migration_plan.md` §10 / §11 / §14.1 / §15
 建议实现分支名（**仅在 Owner 明确授权后**，从规格接受提交创建）：`codex/r1-renderer-next-shell`
 
 > **状态语义**
@@ -31,35 +31,35 @@
 
 ## 2. 范围内（必须做）
 
-1. **`renderer-next` 最小目录与构建**（Vite；独立 `index.html`）。  
-2. **TypeScript** 工程基线（`tsconfig`、路径约定）。  
-3. **React shell**：AppShell + 占位路由（无 chat / 我 / 构建 / 工作台业务）。  
-4. **Vite**：开发模式与 **production-load**（见 §6.4）。  
-5. **Error Boundary**：shell 级；故障注入仅经 main/test harness 门禁（见 §6.4）。  
-6. **runtime stamp 类型化 preload facade**：只读 commit/runtime 标识；`apiVersion` 起步。  
-7. **main 权威入口模型**：区分**持久化偏好**、**本进程 effectiveEntry**、**fallback latch**（见 §6.1–§6.2）。生产持久化默认 **`legacy`**。  
-8. **整窗切换**：两独立 HTML 入口；**禁止** iframe/webview；**禁止**一窗双状态机。  
-9. **自动回退 + latch（强制）**：next load/ready 失败 → main 自动整窗 legacy，并设置本进程 fallback latch（见 §6.2）。ready 超时默认 **≤10s**。  
-10. **「返回经典界面」**：普通 next UI 仅可请求 **next → legacy**（见 §6.1）。  
-11. **Playwright Electron 最小 E2E**（见 §7）；隔离 userData、独立进程、非真实 Package 路径。  
-12. **依赖版本锁定**：spike 后写入本任务包 + lockfile；未锁定不得宣称完成或进入 R2。  
+1. **`renderer-next` 最小目录与构建**（Vite；独立 `index.html`）。
+2. **TypeScript** 工程基线（`tsconfig`、路径约定）。
+3. **React shell**：AppShell + 占位路由（无 chat / 我 / 构建 / 工作台业务）。
+4. **Vite**：开发模式与 **production-load**（见 §6.4）。
+5. **Error Boundary**：shell 级；故障注入仅经 main/test harness 门禁（见 §6.4）。
+6. **runtime stamp 类型化 preload facade**：只读 commit/runtime 标识；`apiVersion` 起步。
+7. **main 权威入口模型**：区分**持久化偏好**、**本进程 effectiveEntry**、**fallback latch**（见 §6.1–§6.2）。生产持久化默认 **`legacy`**。
+8. **整窗切换**：两独立 HTML 入口；**禁止** iframe/webview；**禁止**一窗双状态机。
+9. **自动回退 + latch（强制）**：next load/ready 失败 → main 自动整窗 legacy，并设置本进程 fallback latch（见 §6.2）。ready 超时默认 **≤10s**。
+10. **「返回经典界面」**：普通 next UI 仅可请求 **next → legacy**（见 §6.1）。
+11. **Playwright Electron 最小 E2E**（见 §7）；隔离 userData、独立进程、非真实 Package 路径。
+12. **依赖版本锁定**：spike 后写入本任务包 + lockfile；未锁定不得宣称完成或进入 R2。
 13. **Electron 安全基线**：`contextIsolation: true`、`nodeIntegration: false`（见 §6.4）。
 
 ---
 
 ## 3. 范围外（明确不做）
 
-- chat / 会话列表迁移  
-- 「我」或构建向导  
-- 工作台（写作/研究/代码）  
-- SQLite / R2.5  
-- Package 数据迁移  
-- PAN-02 理解通道  
-- 大规模 preload 重写（仅最小 facade）  
-- 删除 legacy renderer  
-- 新增 Spectron  
-- 向普通用户暴露进入 next 的生产入口  
-- 连续失败的长期隔离策略（留后续任务；本轮不扩展）  
+- chat / 会话列表迁移
+- 「我」或构建向导
+- 工作台（写作/研究/代码）
+- SQLite / R2.5
+- Package 数据迁移
+- PAN-02 理解通道
+- 大规模 preload 重写（仅最小 facade）
+- 删除 legacy renderer
+- 新增 Spectron
+- 向普通用户暴露进入 next 的生产入口
+- 连续失败的长期隔离策略（留后续任务；本轮不扩展）
 - 由任意 renderer IPC 改写持久化默认入口
 
 ---
@@ -81,10 +81,10 @@
 
 **Owner 明确授权**创建 `codex/r1-renderer-next-shell` 之后，**第一步仅为**本兼容性 spike（不得跳过直接做业务壳）：
 
-1. Vite + Electron 加载 `renderer-next`（显式 dev 与 production-load）。  
-2. Playwright 拉起应用并读到 runtime stamp。  
-3. **仅经 main/E2E 门禁**进入 next；普通路径只能 next→legacy。  
-4. 模拟 next 失败 → 自动 legacy + latch（同进程不再自动进 next）。  
+1. Vite + Electron 加载 `renderer-next`（显式 dev 与 production-load）。
+2. Playwright 拉起应用并读到 runtime stamp。
+3. **仅经 main/E2E 门禁**进入 next；普通路径只能 next→legacy。
+4. 模拟 next 失败 → 自动 legacy + latch（同进程不再自动进 next）。
 
 Spike 结论写入版本表后方可扩大实现。失败则停止扩 scope，保持生产默认 legacy。
 
@@ -112,9 +112,9 @@ Spike 结论写入版本表后方可扩大实现。失败则停止扩 scope，�
 
 补充规则：
 
-1. `runtime.requestRendererEntry(entry, reason)` **权限收窄**：从普通 preload 面调用时，**仅当** `entry === "legacy"` 且当前 `effectiveEntry === "next"` 时成功；其它方向由 main **拒绝**。  
-2. `legacy → next` **只能**由 main 在开发模式或 E2E harness 门禁下发起（非普通 renderer IPC 参数可伪造）。  
-3. **任何** renderer IPC **不得**改写**持久化**默认 `rendererEntry`（含「下次启动用 next」类偏好的用户可达写入；R1 生产路径不提供该写入）。  
+1. `runtime.requestRendererEntry(entry, reason)` **权限收窄**：从普通 preload 面调用时，**仅当** `entry === "legacy"` 且当前 `effectiveEntry === "next"` 时成功；其它方向由 main **拒绝**。
+2. `legacy → next` **只能**由 main 在开发模式或 E2E harness 门禁下发起（非普通 renderer IPC 参数可伪造）。
+3. **任何** renderer IPC **不得**改写**持久化**默认 `rendererEntry`（含「下次启动用 next」类偏好的用户可达写入；R1 生产路径不提供该写入）。
 4. 查询 API 可返回：`preferredEntry`（持久化偏好，只读）、`effectiveEntry`（本进程实际）、`fallbackLatched`（布尔）。
 
 ### 6.2 失败后状态（load / ready 失败）
@@ -135,9 +135,9 @@ next **加载失败**或 **ready 握手超时/失败**时，main **必须**：
 
 `runtime.signalReady()` **不是**无条件 IPC。冻结：
 
-1. **只接受**同时满足：当前 **BrowserWindow**、当前 **next** 页面、当前 **navigation generation**（或等价世代令牌，由 main 在每次加载 next 时颁发）。  
-2. **一次性消费**：成功接受后，同世代再次 `signalReady` 无效。  
-3. **无效信号**（一律忽略）：旧页面、**legacy** 页面、超时后的迟到信号、世代不匹配、窗口已销毁。  
+1. **只接受**同时满足：当前 **BrowserWindow**、当前 **next** 页面、当前 **navigation generation**（或等价世代令牌，由 main 在每次加载 next 时颁发）。
+2. **一次性消费**：成功接受后，同世代再次 `signalReady` 无效。
+3. **无效信号**（一律忽略）：旧页面、**legacy** 页面、超时后的迟到信号、世代不匹配、窗口已销毁。
 4. **timer**：在握手成功、自动回退、窗口关闭、导航取消时**可靠清理**；禁止泄漏导致误回退或重复回退。
 
 建议面（语义冻结；名称可微调）：
@@ -172,33 +172,33 @@ runtime.signalReady(generation) -> { ok }  // 或由 preload 绑定世代；无�
 
 ### 7.1 工程
 
-- [ ] `renderer-next` 可在 Windows 本地启动（显式 dev）。  
-- [ ] production-load 仅加载本地构建产物。  
-- [ ] TypeScript 检查通过；版本与 lockfile 已锁。  
-- [ ] 生产默认 / 普通用户路径仍为 legacy；无生产「进入 next」入口。  
-- [ ] §6.1–§6.4 契约有测试或可审计实现对应。  
-- [ ] 无真实 Package 写入；E2E 隔离 userData + 独立进程 + 非真实 Package 路径。  
+- [ ] `renderer-next` 可在 Windows 本地启动（显式 dev）。
+- [ ] production-load 仅加载本地构建产物。
+- [ ] TypeScript 检查通过；版本与 lockfile 已锁。
+- [ ] 生产默认 / 普通用户路径仍为 legacy；无生产「进入 next」入口。
+- [ ] §6.1–§6.4 契约有测试或可审计实现对应。
+- [ ] 无真实 Package 写入；E2E 隔离 userData + 独立进程 + 非真实 Package 路径。
 - [ ] 未引入 Spectron；未做范围外功能。
 
 ### 7.2 Playwright Electron 最小套件
 
-- [ ] 启动并校验 runtime stamp。  
-- [ ] 隔离 userData；非真实 Package 路径。  
-- [ ] 默认 legacy 可启动。  
-- [ ] **经 E2E/main 门禁**进入 next 成功。  
-- [ ] 普通 `requestRendererEntry("next")` 被拒绝（若从 next 外调用）。  
-- [ ] next→legacy 请求成功。  
-- [ ] Error Boundary 注入仅 harness 可开；生产路径不可用 query/hash/localStorage 开启。  
-- [ ] next load 或 ready 失败 → 自动 legacy + **latch**（同进程再自动进 next 被拒）。  
-- [ ] 迟到/错误世代 `signalReady` 无效。  
+- [ ] 启动并校验 runtime stamp。
+- [ ] 隔离 userData；非真实 Package 路径。
+- [ ] 默认 legacy 可启动。
+- [ ] **经 E2E/main 门禁**进入 next 成功。
+- [ ] 普通 `requestRendererEntry("next")` 被拒绝（若从 next 外调用）。
+- [ ] next→legacy 请求成功。
+- [ ] Error Boundary 注入仅 harness 可开；生产路径不可用 query/hash/localStorage 开启。
+- [ ] next load 或 ready 失败 → 自动 legacy + **latch**（同进程再自动进 next 被拒）。
+- [ ] 迟到/错误世代 `signalReady` 无效。
 - [ ] 套件在超时口径内完成。
 
 ### 7.3 复核与验收
 
-- [x] Codex 规格再复核通过（本文件 v0.1.1 冻结）。  
-- [ ] **Owner 明确授权**创建实现分支并启动 spike（**当前未满足**）。  
-- [ ] Owner 真机抽查（实现完成后）：默认 legacy、失败回退、无生产 next 入口。  
-- [ ] **不得**因 R1 将 next 暴露给普通用户作为默认或主入口。  
+- [x] Codex 规格再复核通过（本文件 v0.1.1 冻结）。
+- [ ] **Owner 明确授权**创建实现分支并启动 spike（**当前未满足**）。
+- [ ] Owner 真机抽查（实现完成后）：默认 legacy、失败回退、无生产 next 入口。
+- [ ] **不得**因 R1 将 next 暴露给普通用户作为默认或主入口。
 - [ ] **不得**将本规格冻结误标为 `accepted` / `implemented` / `statically_verified` / `runtime_verified` / `released`。
 
 ---
@@ -217,18 +217,18 @@ runtime.signalReady(generation) -> { ok }  // 或由 preload 绑定世代；无�
 
 ### 8.2 开始编码的进入条件（全部满足后方可）
 
-1. 上表 Codex 复核与规格冻结已满足（已满足）；  
-2. **Owner 明确授权**创建 `codex/r1-renderer-next-shell`（从本规格接受提交拉出）；  
+1. 上表 Codex 复核与规格冻结已满足（已满足）；
+2. **Owner 明确授权**创建 `codex/r1-renderer-next-shell`（从本规格接受提交拉出）；
 3. 授权后第一步仅为 §5 兼容性 spike；版本表仍为 TBD 直至 spike 锁定。
 
 ### 8.3 停止条件
 
-- 范围滑向 chat/我/工作台/SQLite/PAN-02；  
-- 缺少 latch 或握手加固导致循环/误切；  
-- 一窗双状态机或 iframe 混挂；  
-- 生产暴露 next 入口或 renderer 可改持久化默认；  
-- 关闭 contextIsolation / 开启 nodeIntegration；  
-- 读取真实个人资料/sessions 正文；  
+- 范围滑向 chat/我/工作台/SQLite/PAN-02；
+- 缺少 latch 或握手加固导致循环/误切；
+- 一窗双状态机或 iframe 混挂；
+- 生产暴露 next 入口或 renderer 可改持久化默认；
+- 关闭 contextIsolation / 开启 nodeIntegration；
+- 读取真实个人资料/sessions 正文；
 - 未经 Owner 授权自行开分支或装依赖。
 
 ---
@@ -246,26 +246,26 @@ runtime.signalReady(generation) -> { ok }  // 或由 preload 绑定世代；无�
 
 ## 10. 交付物清单
 
-1. `renderer-next` 源码与构建配置  
-2. main/preload：入口权限、latch、握手世代、自动回退  
-3. Playwright E2E（含失败 latch 与拒绝升级）  
-4. lockfile 与版本表  
+1. `renderer-next` 源码与构建配置
+2. main/preload：入口权限、latch、握手世代、自动回退
+3. Playwright E2E（含失败 latch 与拒绝升级）
+4. lockfile 与版本表
 5. 实现说明（log；无用户面黑话）
 
 ---
 
 ## 11. 明确禁止
 
-1. 将本规格冻结误认为已获 Owner 实现授权或已开始实现。  
-2. 未经 Owner 授权创建实现分支、`npm install`、改源码/lockfile、启动 Electron。  
-3. 普通 renderer 请求 `legacy → next`。  
-4. renderer IPC 改写持久化默认入口。  
-5. 无条件 `signalReady`。  
-6. 失败后无 latch 导致循环自动进 next。  
-7. iframe/webview 嵌 legacy；一窗双状态机。  
-8. 生产加载 Vite dev URL；query/hash/localStorage 开故障注入。  
-9. 新增 Spectron；触碰真实 Package/sessions 正文。  
-10. 启动 PAN-02 / R2 / R2.5；amend / squash / push 作为默认。  
+1. 将本规格冻结误认为已获 Owner 实现授权或已开始实现。
+2. 未经 Owner 授权创建实现分支、`npm install`、改源码/lockfile、启动 Electron。
+3. 普通 renderer 请求 `legacy → next`。
+4. renderer IPC 改写持久化默认入口。
+5. 无条件 `signalReady`。
+6. 失败后无 latch 导致循环自动进 next。
+7. iframe/webview 嵌 legacy；一窗双状态机。
+8. 生产加载 Vite dev URL；query/hash/localStorage 开故障注入。
+9. 新增 Spectron；触碰真实 Package/sessions 正文。
+10. 启动 PAN-02 / R2 / R2.5；amend / squash / push 作为默认。
 11. 将 R1 标为 `accepted` / `implemented` / `statically_verified` / `runtime_verified` / `released`（本轮规格接受不得使用这些标签）。
 
 ---
