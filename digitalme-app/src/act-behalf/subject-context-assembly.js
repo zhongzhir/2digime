@@ -101,14 +101,45 @@ function kindForSource(source) {
   return "other";
 }
 
-function splitChunks(text, maxLen) {
+/** Markdown / plain headings — never emitted as standalone claims. */
+function isHeadingLine(line) {
+  const t = String(line || "").trim();
+  if (!t) return false;
+  if (/^#{1,6}\s+\S/.test(t)) return true;
+  // Bare section titles used in life summaries (no #) are still headings when alone.
+  return false;
+}
+
+function headingLabel(line) {
+  return String(line || "")
+    .trim()
+    .replace(/^#{1,6}\s+/, "")
+    .trim();
+}
+
+/** List markers: -, *, •, or numbered 1. / 1) */
+function matchListItem(line) {
+  const t = String(line || "").trim();
+  const m = t.match(/^([-*•]|\d+[.)])\s+(\S[\s\S]*)$/);
+  if (!m) return null;
+  return m[2].trim();
+}
+
+/**
+ * Paragraph / sentence chunks for non-list prose (existing contract).
+ * Does not split on single newlines alone.
+ */
+function splitParagraphChunks(text, maxLen) {
   const raw = String(text || "").replace(/\r\n/g, "\n").trim();
   if (!raw) return [];
   const parts = raw
     .split(/\n{2,}|(?<=[。！？；])\s*/)
     .map((p) => p.trim())
     .filter((p) => p.length >= 8);
-  if (!parts.length) return [truncateText(raw, maxLen)];
+  if (!parts.length) {
+    const one = truncateText(raw, maxLen);
+    return one ? [one] : [];
+  }
   const out = [];
   for (const p of parts) {
     if (p.length <= maxLen) out.push(p);
@@ -116,6 +147,73 @@ function splitChunks(text, maxLen) {
     if (out.length >= 40) break;
   }
   return out;
+}
+
+/**
+ * List-aware document units for candidate assembly.
+ * - Each non-empty list bullet / numbered item → one unit (kind: "list")
+ * - Headings update section context only; never become claims
+ * - Non-list prose keeps paragraph/sentence granularity (kind: "para")
+ *
+ * @returns {{ text: string, sectionTitle: string|null, kind: "list"|"para" }[]}
+ */
+function splitDocumentUnits(text, maxLen) {
+  const raw = String(text || "").replace(/\r\n/g, "\n");
+  if (!raw.trim()) return [];
+  const lines = raw.split("\n");
+  /** @type {{ text: string, sectionTitle: string|null, kind: "list"|"para" }[]} */
+  const units = [];
+  let sectionTitle = null;
+  /** @type {string[]} */
+  let paraBuf = [];
+
+  function flushPara() {
+    if (!paraBuf.length) return;
+    const block = paraBuf.join("\n").trim();
+    paraBuf = [];
+    if (!block) return;
+    // Skip if the whole block is only a heading-like leftover.
+    if (isHeadingLine(block) && !matchListItem(block)) return;
+    for (const chunk of splitParagraphChunks(block, maxLen)) {
+      if (!chunk || chunk.length < 8) continue;
+      units.push({ text: chunk, sectionTitle, kind: "para" });
+      if (units.length >= 40) return;
+    }
+  }
+
+  for (const line of lines) {
+    if (units.length >= 40) break;
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushPara();
+      continue;
+    }
+    if (/^#{1,6}\s+\S/.test(trimmed)) {
+      flushPara();
+      sectionTitle = headingLabel(trimmed) || sectionTitle;
+      continue;
+    }
+    const listBody = matchListItem(trimmed);
+    if (listBody != null) {
+      flushPara();
+      if (listBody.length >= 8) {
+        units.push({
+          text: truncateText(listBody, maxLen),
+          sectionTitle,
+          kind: "list",
+        });
+      }
+      continue;
+    }
+    paraBuf.push(trimmed);
+  }
+  flushPara();
+  return units;
+}
+
+/** @deprecated name kept for callers; now list-aware via splitDocumentUnits. */
+function splitChunks(text, maxLen) {
+  return splitDocumentUnits(text, maxLen).map((u) => u.text);
 }
 
 function memoryLineChunks(raw) {
@@ -140,45 +238,53 @@ function memoryLineChunks(raw) {
 
 function collectRawCandidates(pkg) {
   const list = [];
-  const push = (source, label, text, locator) => {
-    const body = String(text || "").trim();
+  const pushUnit = (source, defaultLabel, unit, locator) => {
+    const body = String(unit && unit.text ? unit.text : "").trim();
     if (!body) return;
     list.push({
       source,
-      label,
+      label: (unit && unit.sectionTitle) || defaultLabel,
       text: truncateText(body, MAX_CLAIM_CHARS),
       locator: locator || null,
       path: SOURCE_PATH[source] || source,
+      unitKind: unit && unit.kind ? unit.kind : "para",
     });
   };
 
-  for (const [i, chunk] of splitChunks(pkg && pkg.persona, MAX_CLAIM_CHARS).entries()) {
-    push("persona", "人格与自我描述", chunk, "para:" + i);
-  }
-  for (const [i, chunk] of splitChunks(pkg && pkg.styleGuide, MAX_CLAIM_CHARS).entries()) {
-    push("style", "表达风格", chunk, "para:" + i);
-  }
-  for (const [i, chunk] of splitChunks(pkg && pkg.lifeSummary, MAX_CLAIM_CHARS).entries()) {
-    push("life", "人生与经历摘要", chunk, "para:" + i);
-  }
-  for (const [i, chunk] of splitChunks(pkg && pkg.boundariesSummary, MAX_CLAIM_CHARS).entries()) {
-    push("boundaries", "边界与禁忌", chunk, "para:" + i);
-  }
-  for (const [i, chunk] of splitChunks(pkg && pkg.decisionFrameworks, MAX_CLAIM_CHARS).entries()) {
-    push("frameworks", "判断框架", chunk, "para:" + i);
-  }
+  const pushFromText = (source, defaultLabel, text) => {
+    const units = splitDocumentUnits(text, MAX_CLAIM_CHARS);
+    let listIdx = 0;
+    let paraIdx = 0;
+    for (const unit of units) {
+      if (unit.kind === "list") {
+        pushUnit(source, defaultLabel, unit, "item:" + listIdx);
+        listIdx += 1;
+      } else {
+        pushUnit(source, defaultLabel, unit, "para:" + paraIdx);
+        paraIdx += 1;
+      }
+      if (list.length >= 80) break;
+    }
+  };
+
+  pushFromText("persona", "人格与自我描述", pkg && pkg.persona);
+  pushFromText("style", "表达风格", pkg && pkg.styleGuide);
+  pushFromText("life", "人生与经历摘要", pkg && pkg.lifeSummary);
+  pushFromText("boundaries", "边界与禁忌", pkg && pkg.boundariesSummary);
+  pushFromText("frameworks", "判断框架", pkg && pkg.decisionFrameworks);
   for (const [i, chunk] of memoryLineChunks(pkg && pkg.longTermMemory).entries()) {
-    push("memory", "长期记忆", chunk, "line:" + i);
+    pushUnit(
+      "memory",
+      "长期记忆",
+      { text: chunk, sectionTitle: null, kind: "para" },
+      "line:" + i
+    );
   }
   if (pkg && pkg.identitySummary) {
-    for (const [i, chunk] of splitChunks(pkg.identitySummary, MAX_CLAIM_CHARS).entries()) {
-      push("identity", "身份要点", chunk, "para:" + i);
-    }
+    pushFromText("identity", "身份要点", pkg.identitySummary);
   }
   if (pkg && pkg.preferences) {
-    for (const [i, chunk] of splitChunks(pkg.preferences, MAX_CLAIM_CHARS).entries()) {
-      push("preferences", "偏好", chunk, "para:" + i);
-    }
+    pushFromText("preferences", "偏好", pkg.preferences);
   }
   return list;
 }
@@ -214,19 +320,50 @@ function toClaim(cand, score, confirmationState) {
 
 function buildFallbackClaims(pkg) {
   const seed = buildSelectedSelfContext(pkg || {});
-  return (seed.items || []).map((it) =>
-    toClaim(
-      {
-        source: it.source,
-        label: it.label,
-        text: it.text,
-        locator: "fallback-share",
-        path: SOURCE_PATH[it.source] || it.source,
-      },
-      0,
-      "proposed"
-    )
-  );
+  const claims = [];
+  for (const it of seed.items || []) {
+    const units = splitDocumentUnits(it.text, MAX_CLAIM_CHARS);
+    if (!units.length) {
+      const body = truncateText(it.text, MAX_CLAIM_CHARS);
+      if (!body) continue;
+      claims.push(
+        toClaim(
+          {
+            source: it.source,
+            label: it.label,
+            text: body,
+            locator: "fallback-share",
+            path: SOURCE_PATH[it.source] || it.source,
+          },
+          0,
+          "proposed"
+        )
+      );
+      continue;
+    }
+    let listIdx = 0;
+    let paraIdx = 0;
+    for (const unit of units) {
+      const locator =
+        unit.kind === "list"
+          ? "fallback-share/item:" + listIdx++
+          : "fallback-share/para:" + paraIdx++;
+      claims.push(
+        toClaim(
+          {
+            source: it.source,
+            label: unit.sectionTitle || it.label,
+            text: unit.text,
+            locator,
+            path: SOURCE_PATH[it.source] || it.source,
+          },
+          0,
+          "proposed"
+        )
+      );
+    }
+  }
+  return claims;
 }
 
 function deriveProhibitedUses(pkg) {
@@ -652,4 +789,7 @@ module.exports = {
   allowedPackageSources,
   scoreCandidate,
   collectRawCandidates,
+  splitDocumentUnits,
+  splitParagraphChunks,
+  splitChunks,
 };

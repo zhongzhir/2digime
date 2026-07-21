@@ -6,9 +6,9 @@
 
 > **当前产品主线（2026-07-21，规划基线重建）**：**数字主体第一纵向闭环 — 理解我并产出**。  
 > **最高架构与研发原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)（**v0.1.1 `active`**）。  
-> **当前唯一执行计划**：[`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)（**v0.1.9 `spec_frozen`**；第 1–4 块 Codex `accepted`；Owner 真机验收第 1 步布局阻断已限量修复，**等待 Owner 重新验收第 1 步**；第一闭环整体**尚未** `accepted`）。
+> **当前唯一执行计划**：[`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)（**v0.1.10 `spec_frozen`**；第 1–4 块 Codex `accepted`；Owner 真机验收第 1–3 步 passed；第 4 步候选粒度已限量修复，**等待 Owner 重新执行第 4 步**；第一闭环整体**尚未** `accepted`）。
 > **冻结规格**：[`digitalme_first_vertical_loop_spec_v0.1.md`](digitalme_first_vertical_loop_spec_v0.1.md)（**v0.1.0 `spec_frozen`**）。  
-> **下一项任务**：**等待 Owner 重新执行真机验收第 1 步** — 不得开始下一项开发；不得将第一闭环标为 `accepted`。  
+> **下一项任务**：**等待 Owner 重新执行真机验收第 4 步** — 不得开始下一项开发；不得将第一闭环标为 `accepted`。  
 > **废止/暂停**：不再以 R2 边缘验收、R3 迁移、旧 Skill/MCP/Agent/身份并列 7 任务块、**旧 DM-Core-01A 开发指令**为当前执行主线。R2 代码 **retained as infrastructure**；R3 = **`paused`**；PAN-02～06 相对新主线 **`paused`**。提交 **`55ae01f`** = **`partially_reused_as_first_vertical_loop_scaffold`**。
 > **产品定义（摘要）**：Digital Me 是由本人拥有和控制、以本人为源头持续形成、能够调用外部智能能力，并在明确授权下代表本人感知、判断、表达、行动和协作的个人数字主体系统（全文见架构原则文 §1）。
 >

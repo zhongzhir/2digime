@@ -1,8 +1,8 @@
 # Digital Me 第一纵向闭环短冲刺计划
 
-版本：v0.1.9  
+版本：v0.1.10  
 日期：2026-07-21  
-状态：`spec_frozen` / **当前唯一执行计划**（第 1–4 块 Codex 正式复核 `accepted`；**Owner 真机验收第 1 步曾因布局阻断失败；布局已限量修复，等待 Owner 重新验收第 1 步**；第一闭环整体**尚未** `accepted`）  
+状态：`spec_frozen` / **当前唯一执行计划**（第 1–4 块 Codex `accepted`；Owner 真机验收第 1–3 步 passed；**第 4 步曾因候选删除粒度阻断 failed，列表型 claim 粒度已限量修复，等待 Owner 重新执行第 4 步**；第一闭环整体**尚未** `accepted`）  
 所属架构：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)  
 服务闭环：**第一闭环 — 理解我并产出**  
 **冻结规格（正文）**：[`digitalme_first_vertical_loop_spec_v0.1.md`](digitalme_first_vertical_loop_spec_v0.1.md)（**v0.1.0 `spec_frozen`**）
@@ -101,7 +101,7 @@
 | 6 | （已并入第 2 块）接入只读外搜 | **`accepted`** |
 | **7** | **证据四栏 / 有来源约束的研究与表达成果（第 3 块）** | **`accepted`** |
 | **8** | **Experience Proposal 与回流（第 4 块）** | **`accepted`（Codex）** |
-| 9 | 集中复核 + Owner 验收 + 对照测试 | **进行中：布局阻断已修，等待 Owner 重新执行真机验收第 1 步** |
+| 9 | 集中复核 + Owner 验收 + 对照测试 | **进行中：第 1–3 步 passed；第 4 步候选粒度已修，等待 Owner 重新执行第 4 步** |
 
 ---
 
@@ -110,14 +110,14 @@
 ### 当前
 
 - 执行计划状态：`spec_frozen`；第 1–4 块 Codex 正式复核 **`accepted`**
-- Owner 真机验收第 1 步：曾因经典 renderer 多余 `</div>` 提前闭合 `#app` 导致布局阻断（failed）；**布局已限量修复，等待 Owner 重新验收第 1 步**
-- 第一闭环整体：**尚未** `accepted`（不得因自动测试或布局修复自行升格）
+- Owner 真机验收：第 1–3 步 **passed**；第 4 步曾因列表型来源被装配成多行 claim 导致删除粒度阻断（failed）；**已限量修复，等待 Owner 重新执行第 4 步**
+- 第一闭环整体：**尚未** `accepted`
 - 冻结规格：`digitalme_first_vertical_loop_spec_v0.1.md`
 - **`55ae01f`**：`partially_reused_as_first_vertical_loop_scaffold`
 
 ### 下一项（准确名称）
 
-**等待 Owner 重新执行真机验收第 1 步**（进入「工作台 / 研究与表达」确认布局）；不得开始下一项开发；不得将第一闭环标为 `accepted`。
+**等待 Owner 重新执行真机验收第 4 步**（本人上下文候选单条删除不影响同板块相邻条目）；不得开始下一项开发；不得将第一闭环标为 `accepted`。
 
 ---
 
@@ -143,3 +143,4 @@
 | v0.1.7 | 2026-07-21 | 第 3 块 `accepted`；第 4 块 Experience Proposal 回流 `implemented_pending_codex_review`；下一项仅登记正式验收 |
 | v0.1.8 | 2026-07-21 | 第 4 块限量修正：apply 审计失败按 changeSet 恢复；Package 读取失败阻断；仍 `implemented_pending_codex_review` |
 | v0.1.9 | 2026-07-21 | Owner 真机验收第 1 步发现布局阻断（多余 `</div>` 提前闭合 `#app`）；限量修复 HTML/CSS + DOM 结构回归；**等待 Owner 重新验收第 1 步**；第一闭环整体未 `accepted` |
+| v0.1.10 | 2026-07-21 | Owner 真机验收第 4 步发现候选删除粒度阻断（列表型来源多行合成一条 claim）；装配层列表逐条拆分 + 聚焦回归；**等待 Owner 重新执行第 4 步**；第一闭环未 `accepted` |
