@@ -50,6 +50,16 @@ const { createR2ChatLifecycle } = require("./r2/chat-lifecycle");
 
 const r2ActiveRequest = createActiveRequestRegistry();
 const r2AttachmentTokens = createAttachmentTokenVault();
+r2AttachmentTokens.startSweeper(15_000);
+
+app.on("will-quit", () => {
+  try {
+    r2AttachmentTokens.stopSweeper();
+    r2AttachmentTokens.clearAll();
+  } catch {
+    /* ignore */
+  }
+});
 const r2LegacyHandoff = createLegacyHandoff();
 
 /** Set after r2Chat is constructed — used by R1 fallback path. */
@@ -158,6 +168,7 @@ function createWindow() {
   });
   if (process.argv.includes("--dev")) win.webContents.openDevTools();
   const senderId = String(win.webContents.id);
+  const webContentsId = win.webContents.id;
   win.webContents.on("destroyed", () => {
     try {
       delegateRuntime.abortForSender(senderId);
@@ -166,6 +177,11 @@ function createWindow() {
     }
     try {
       rendererEntryRuntime.controller.clearReadyTimer();
+    } catch {
+      /* ignore */
+    }
+    try {
+      r2AttachmentTokens.clearForWebContents(webContentsId);
     } catch {
       /* ignore */
     }
@@ -1716,6 +1732,15 @@ ipcMain.handle("r2:stopChat", async (_e, payload) =>
   r2Chat.stopChat(payload && payload.requestId)
 );
 ipcMain.handle("r2:getActiveRequest", async () => r2Chat.getActiveRequest());
+ipcMain.handle("r2:acknowledgeChat", async (e, payload) =>
+  r2Chat.acknowledgeChat(e.sender, payload || {})
+);
+ipcMain.handle("r2:clearAttachmentToken", async (_e, payload) => {
+  const token = payload && payload.token;
+  if (!token) return { ok: false, code: "missing_token" };
+  r2AttachmentTokens.clear(token);
+  return { ok: true };
+});
 ipcMain.handle("r2:clearLinkedArtifact", async (_e, payload) =>
   r2Chat.clearLinkedArtifact(payload && payload.sessionId)
 );
@@ -1880,7 +1905,17 @@ ipcMain.handle("r2:testSetAttachmentClock", async (_e, payload) => {
   const ms = Number(payload && payload.nowMonotonicMs);
   if (!Number.isFinite(ms)) return { ok: false, code: "invalid_clock" };
   r2AttachmentTokens.setClock(() => ms);
-  return { ok: true };
+  r2AttachmentTokens.expireStale();
+  return { ok: true, size: r2AttachmentTokens.size() };
+});
+ipcMain.handle("r2:testAttachmentVaultSize", async () => {
+  if (!r2HarnessEnabled()) return { ok: false, code: "harness_required" };
+  return { ok: true, size: r2AttachmentTokens.size() };
+});
+ipcMain.handle("r2:testExpireAttachmentTokens", async () => {
+  if (!r2HarnessEnabled()) return { ok: false, code: "harness_required" };
+  r2AttachmentTokens.expireStale();
+  return { ok: true, size: r2AttachmentTokens.size() };
 });
 
 ipcMain.handle("r2:testSeedSession", async (_e, payload) => {

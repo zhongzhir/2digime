@@ -46,6 +46,8 @@ export type ActiveRequest = {
   startedAt: string;
   status: string;
   sequence?: number;
+  generation?: number;
+  writable?: boolean;
 };
 
 export type ChatEvent = {
@@ -104,6 +106,8 @@ export type R2Api = {
   }>;
   stopChat: (payload?: { requestId?: string }) => Promise<{ ok: boolean; code?: string; message?: string }>;
   getActiveRequest: () => Promise<{ ok: boolean; activeRequest: ActiveRequest | null }>;
+  acknowledgeChat: (payload: { requestId: string }) => Promise<{ ok: boolean; code?: string }>;
+  clearAttachmentToken: (payload: { token: string }) => Promise<{ ok: boolean; code?: string }>;
   pickAttachments: (payload: { sessionId: string }) => Promise<{
     ok: boolean;
     canceled?: boolean;
@@ -124,6 +128,12 @@ export type R2Api = {
     message?: string;
   }>;
   onChatEvent: (cb: (ev: ChatEvent) => void) => () => void;
+  testSetAttachmentClock?: (payload: { nowMonotonicMs: number }) => Promise<{ ok: boolean; size?: number }>;
+  testAttachmentVaultSize?: () => Promise<{ ok: boolean; size: number }>;
+  testExpireAttachmentTokens?: () => Promise<{ ok: boolean; size: number }>;
+  testSeedSession?: (payload: unknown) => Promise<unknown>;
+  testCorruptSessionsFile?: () => Promise<unknown>;
+  testMintAttachmentToken?: (payload: unknown) => Promise<unknown>;
 };
 
 export const ARTIFACT_PREVIEW_TRUNCATE_NOTICE =

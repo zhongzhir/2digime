@@ -3,7 +3,8 @@
 const crypto = require("node:crypto");
 
 /**
- * App-wide single-flight active chat request registry.
+ * App-wide single-flight active chat request registry with generation validity.
+ * Stopped / fallback-invalidated requestIds must not emit events or persist again.
  */
 function createActiveRequestRegistry() {
   /** @type {null | {
@@ -13,9 +14,16 @@ function createActiveRequestRegistry() {
    *   startedAt: string,
    *   status: string,
    *   sequence: number,
+   *   generation: number,
+   *   writable: boolean,
    *   abortController: AbortController,
    * }} */
   let current = null;
+  let generationCounter = 0;
+  /** @type {Set<string>} */
+  const tombstones = new Set();
+  /** @type {Map<string, Array<() => void>>} */
+  const clearWaiters = new Map();
 
   function newRequestId() {
     return "req_" + Date.now().toString(36) + "_" + crypto.randomBytes(4).toString("hex");
@@ -25,16 +33,22 @@ function createActiveRequestRegistry() {
     return "m_" + Date.now().toString(36) + "_" + crypto.randomBytes(4).toString("hex");
   }
 
-  function get() {
-    if (!current) return null;
+  function snapshot(rec) {
+    if (!rec) return null;
     return {
-      requestId: current.requestId,
-      originSessionId: current.originSessionId,
-      assistantMessageId: current.assistantMessageId,
-      startedAt: current.startedAt,
-      status: current.status,
-      sequence: current.sequence,
+      requestId: rec.requestId,
+      originSessionId: rec.originSessionId,
+      assistantMessageId: rec.assistantMessageId,
+      startedAt: rec.startedAt,
+      status: rec.status,
+      sequence: rec.sequence,
+      generation: rec.generation,
+      writable: rec.writable === true,
     };
+  }
+
+  function get() {
+    return snapshot(current);
   }
 
   function assertIdle() {
@@ -52,6 +66,7 @@ function createActiveRequestRegistry() {
   function register({ originSessionId, status } = {}) {
     const idle = assertIdle();
     if (!idle.ok) return idle;
+    generationCounter += 1;
     const abortController = new AbortController();
     current = {
       requestId: newRequestId(),
@@ -60,12 +75,41 @@ function createActiveRequestRegistry() {
       startedAt: new Date().toISOString(),
       status: status || "running",
       sequence: 0,
+      generation: generationCounter,
+      writable: true,
       abortController,
     };
-    return { ok: true, activeRequest: get(), abortController };
+    return { ok: true, activeRequest: get(), abortController, generation: current.generation };
+  }
+
+  /**
+   * True only while this requestId is the live registry entry AND still writable.
+   * Tombstoned / mismatched / cleared requests always return false.
+   */
+  function isCurrentWritable(requestId) {
+    if (!requestId) return false;
+    return !!(current && current.requestId === requestId && current.writable === true);
+  }
+
+  function isCurrent(requestId) {
+    if (!requestId) return false;
+    return !!(current && current.requestId === requestId);
+  }
+
+  function matchesGeneration(requestId, generation) {
+    if (!isCurrent(requestId)) return false;
+    return current.generation === generation;
   }
 
   function nextSequence(requestId) {
+    if (!current || current.requestId !== requestId) return null;
+    if (!current.writable) return null;
+    current.sequence += 1;
+    return current.sequence;
+  }
+
+  /** Allow a single terminal event sequence while request still in registry (incl. after abort). */
+  function nextSequenceForTerminal(requestId) {
     if (!current || current.requestId !== requestId) return null;
     current.sequence += 1;
     return current.sequence;
@@ -82,13 +126,32 @@ function createActiveRequestRegistry() {
     return current.abortController;
   }
 
+  function notifyCleared(requestId) {
+    const waiters = clearWaiters.get(requestId) || [];
+    clearWaiters.delete(requestId);
+    for (const w of waiters) {
+      try {
+        w();
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
   function clear(requestId) {
     if (!current) return false;
     if (requestId && current.requestId !== requestId) return false;
+    const id = current.requestId;
+    tombstones.add(id);
     current = null;
+    notifyCleared(id);
     return true;
   }
 
+  /**
+   * Abort signal + mark not writable. Request stays until clear() so terminal
+   * stopped/error may still persist once. Late work after clear is tombstoned.
+   */
   function abort(requestId) {
     if (!current) return { ok: false, code: "no_active_request" };
     if (requestId && current.requestId !== requestId) {
@@ -100,7 +163,62 @@ function createActiveRequestRegistry() {
       /* ignore */
     }
     current.status = "stopping";
+    current.writable = false;
     return { ok: true, activeRequest: get() };
+  }
+
+  function invalidate(requestId) {
+    if (!current) return false;
+    if (requestId && current.requestId !== requestId) return false;
+    try {
+      current.abortController.abort();
+    } catch {
+      /* ignore */
+    }
+    current.writable = false;
+    current.status = current.status === "running" ? "stopping" : current.status;
+    return true;
+  }
+
+  function waitUntilCleared(requestId, timeoutMs) {
+    const id = String(requestId || "");
+    if (!id) return Promise.resolve(true);
+    if (!current || current.requestId !== id) return Promise.resolve(true);
+    const ms = typeof timeoutMs === "number" && timeoutMs >= 0 ? timeoutMs : 5000;
+    return new Promise((resolve) => {
+      const list = clearWaiters.get(id) || [];
+      const done = () => {
+        clearTimeout(timer);
+        resolve(true);
+      };
+      list.push(done);
+      clearWaiters.set(id, list);
+      const timer = setTimeout(() => {
+        const arr = clearWaiters.get(id) || [];
+        const idx = arr.indexOf(done);
+        if (idx >= 0) arr.splice(idx, 1);
+        if (!arr.length) clearWaiters.delete(id);
+        else clearWaiters.set(id, arr);
+        // Force clear zombie after timeout — still tombstoned so late writes fail
+        if (current && current.requestId === id) {
+          current = null;
+          tombstones.add(id);
+        }
+        resolve(false);
+      }, ms);
+    });
+  }
+
+  function isTombstoned(requestId) {
+    return tombstones.has(String(requestId || ""));
+  }
+
+  /** Test helper */
+  function _resetForTests() {
+    current = null;
+    tombstones.clear();
+    clearWaiters.clear();
+    generationCounter = 0;
   }
 
   return {
@@ -108,12 +226,20 @@ function createActiveRequestRegistry() {
     assertIdle,
     register,
     nextSequence,
+    nextSequenceForTerminal,
     setStatus,
     getAbortController,
     clear,
     abort,
+    invalidate,
+    isCurrent,
+    isCurrentWritable,
+    matchesGeneration,
+    waitUntilCleared,
+    isTombstoned,
     newRequestId,
     newMessageId,
+    _resetForTests,
   };
 }
 

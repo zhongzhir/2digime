@@ -281,6 +281,13 @@ test.describe("R2 chat and sessions", () => {
         return listed.activeId;
       });
 
+      // Pin fake clock before any mint — real hrtime can exceed small baselines and
+      // leave uncleared tokens when the clock is later rewound for TTL checks.
+      const clockPinned = await win.evaluate(async () =>
+        window.digitalMe.r2.testSetAttachmentClock({ nowMonotonicMs: 1_000_000 })
+      );
+      expect(clockPinned.ok).toBeTruthy();
+
       const minted = await win.evaluate(
         async (id) => window.digitalMe.r2.testMintAttachmentToken({ sessionId: id, body: "SECRET80K_" + "Z".repeat(80000) }),
         sessionId
@@ -290,17 +297,24 @@ test.describe("R2 chat and sessions", () => {
       expect(dom.includes("SECRET80K_")).toBeFalsy();
       expect(dom.includes(minted.bodyMarker)).toBeFalsy();
 
-      // TTL: set clock +300s
-      await win.evaluate(async () => {
-        await window.digitalMe.r2.testSetAttachmentClock({ nowMonotonicMs: 5_000_000 });
-      });
+      // TTL: advance past prior mint, mint fresh, then +300s — vault must wipe without sendChat
+      const clockBase = await win.evaluate(async () =>
+        window.digitalMe.r2.testSetAttachmentClock({ nowMonotonicMs: 5_000_000 })
+      );
+      expect(clockBase.ok).toBeTruthy();
+      expect(clockBase.size).toBe(0);
       const minted2 = await win.evaluate(
-        async (id) => window.digitalMe.r2.testMintAttachmentToken({ sessionId: id }),
+        async (id) => window.digitalMe.r2.testMintAttachmentToken({ sessionId: id, body: "EXPIRE_BODY" }),
         sessionId
       );
-      await win.evaluate(async () => {
-        await window.digitalMe.r2.testSetAttachmentClock({ nowMonotonicMs: 5_000_000 + 300_000 });
-      });
+      expect(minted2.ok).toBeTruthy();
+      const expiredClock = await win.evaluate(async () =>
+        window.digitalMe.r2.testSetAttachmentClock({ nowMonotonicMs: 5_000_000 + 300_000 })
+      );
+      expect(expiredClock.ok).toBeTruthy();
+      expect(expiredClock.size).toBe(0);
+      const vaultAfter = await win.evaluate(async () => window.digitalMe.r2.testAttachmentVaultSize());
+      expect(vaultAfter.size).toBe(0);
       const expiredSend = await win.evaluate(
         async ({ id, token }) =>
           window.digitalMe.r2.sendChat({
@@ -311,7 +325,7 @@ test.describe("R2 chat and sessions", () => {
         { id: sessionId, token: minted2.token }
       );
       expect(expiredSend.ok).toBeFalsy();
-      expect(expiredSend.code).toBe("token_expired");
+      expect(["token_expired", "token_not_found"]).toContain(expiredSend.code);
 
       const empty = await win.evaluate(
         async (id) => window.digitalMe.r2.sendChat({ sessionId: id, inputText: "   " }),
@@ -330,25 +344,71 @@ test.describe("R2 chat and sessions", () => {
       );
       expect(badHint.ok).toBeFalsy();
 
-      // Forged complete via IPC send from renderer — should not mutate sessions
-      const before = await win.evaluate(async (id) => window.digitalMe.r2.getSession(id), sessionId);
-      await win.evaluate(() => {
-        // Renderer cannot forge main authority; dispatching a fake event must be ignored by cursor
-        const fake = new CustomEvent("chat:event", {
-          detail: {
-            type: "complete",
-            requestId: "forged",
-            sessionId: "x",
-            messageId: "y",
-            sequence: 999,
-            displayText: "FORGED_COMPLETE",
-          },
+      // Forged / stale sequence via renderer acceptChatEvent entry (same gate as onChatEvent)
+      const gate = await win.evaluate(() => {
+        const accept = window.__r2AcceptChatEvent;
+        if (typeof accept !== "function") return { ok: false, reason: "no_accept" };
+        const base = {
+          triple: { requestId: "r1", sessionId: "s1", messageId: "m1" },
+          seqCursor: 2,
+          streamByMessageId: {},
+          messages: [{ id: "m1", role: "assistant", displayText: "ok" }],
+          active: true,
+          error: null,
+        };
+        const forged = accept(base, {
+          type: "complete",
+          requestId: "forged",
+          sessionId: "s1",
+          messageId: "m1",
+          sequence: 999,
+          displayText: "FORGED_COMPLETE",
         });
-        window.dispatchEvent(fake);
+        const dupSeq = accept(base, {
+          type: "delta",
+          requestId: "r1",
+          sessionId: "s1",
+          messageId: "m1",
+          sequence: 2,
+          textDelta: "x",
+        });
+        const older = accept(base, {
+          type: "delta",
+          requestId: "r1",
+          sessionId: "s1",
+          messageId: "m1",
+          sequence: 1,
+          textDelta: "y",
+        });
+        const okTerm = accept(base, {
+          type: "complete",
+          requestId: "r1",
+          sessionId: "s1",
+          messageId: "m1",
+          sequence: 3,
+          displayText: "最终可见",
+        });
+        return {
+          ok: true,
+          forgedAccepted: forged.accepted,
+          forgedReason: forged.reason,
+          dupAccepted: dupSeq.accepted,
+          olderAccepted: older.accepted,
+          okTermAccepted: okTerm.accepted,
+          okTermActive: okTerm.active,
+          okTermText: okTerm.finalDisplayText,
+        };
       });
-      const after = await win.evaluate(async (id) => window.digitalMe.r2.getSession(id), sessionId);
-      expect(JSON.stringify(after.session)).not.toContain("FORGED_COMPLETE");
-      expect(after.session.messages.length).toBe(before.session.messages.length);
+      expect(gate.ok).toBeTruthy();
+      expect(gate.forgedAccepted).toBeFalsy();
+      expect(gate.dupAccepted).toBeFalsy();
+      expect(gate.olderAccepted).toBeFalsy();
+      expect(gate.okTermAccepted).toBeTruthy();
+      expect(gate.okTermActive).toBeFalsy();
+      expect(gate.okTermText).toBe("最终可见");
+
+      const before = await win.evaluate(async (id) => window.digitalMe.r2.getSession(id), sessionId);
+      expect(JSON.stringify(before.session)).not.toContain("FORGED_COMPLETE");
 
       const dto = await win.evaluate(async (id) => window.digitalMe.r2.getSession(id), sessionId);
       const blob = JSON.stringify(dto.session);
@@ -542,6 +602,118 @@ test.describe("R2 chat and sessions", () => {
       expect(dto.session.messages[0].displayText.includes("正文已隐藏") || dto.session.messages[0].displayText.includes("短问")).toBeTruthy();
     } finally {
       await electronApp.close();
+    }
+  });
+
+  test("zero-delay fake model: complete visible and not busy", async () => {
+    const { electronApp, win } = await launchApp({
+      DIGITALME_R2_FAKE_MODEL_DELAY_MS: "0",
+    });
+    try {
+      await enterNext(win);
+      await win.locator('[data-testid="btn-new-session"]').click();
+      await win.locator('[data-testid="chat-input"]').fill("零延迟");
+      await win.locator('[data-testid="btn-send"]').click();
+      await expect(win.locator('[data-testid="msg-assistant"]').first()).toContainText("测试回复", {
+        timeout: 15_000,
+      });
+      await expect(win.locator('[data-testid="request-in-progress"]')).toHaveCount(0, {
+        timeout: 10_000,
+      });
+      const dto = await win.evaluate(async () => {
+        const listed = await window.digitalMe.r2.listSessions();
+        return window.digitalMe.r2.getSession(listed.activeId);
+      });
+      expect(dto.session.messages.some((m) => (m.displayText || "").includes("测试回复"))).toBeTruthy();
+    } finally {
+      await electronApp.close();
+    }
+  });
+
+  test("reload during request recovers and eventually clears busy", async () => {
+    const { electronApp, win } = await launchApp({
+      DIGITALME_R2_FAKE_MODEL_DELAY_MS: "400",
+    });
+    try {
+      await enterNext(win);
+      await win.locator('[data-testid="btn-new-session"]').click();
+      await win.locator('[data-testid="chat-input"]').fill("刷新恢复");
+      await win.locator('[data-testid="btn-send"]').click();
+      await expect(win.locator('[data-testid="request-in-progress"]')).toBeVisible({ timeout: 5_000 });
+      await win.reload();
+      await win.waitForLoadState("domcontentloaded");
+      // Already on next after reload — enterNext would return already_next.
+      // Ready handshake may be already_consumed; chat root still remounts and reconciles.
+      await waitUntilNext(win);
+      await win.waitForSelector('[data-testid="r2-chat-root"]', { timeout: 15_000 });
+      // Must not stay busy forever — reconcile via getActiveRequest + session reload
+      await expect(win.locator('[data-testid="request-in-progress"]')).toHaveCount(0, {
+        timeout: 20_000,
+      });
+      const texts = await win.locator('[data-testid="msg-user"]').allTextContents();
+      expect(texts.join("\n").includes("刷新恢复")).toBeTruthy();
+    } finally {
+      await electronApp.close();
+    }
+  });
+
+  test("fallback waits; no background session rewrite after settle", async () => {
+    const sharedUd = fs.mkdtempSync(path.join(os.tmpdir(), "dm-r2-fb-"));
+    const { electronApp, win } = await launchApp({
+      DIGITALME_R2_USER_DATA: sharedUd,
+      DIGITALME_R2_FAKE_MODEL_DELAY_MS: "800",
+    });
+    try {
+      await enterNext(win);
+      await win.locator('[data-testid="btn-new-session"]').click();
+      await win.locator('[data-testid="chat-input"]').fill("回退探针");
+      await win.locator('[data-testid="btn-send"]').click();
+      await expect(win.locator('[data-testid="request-in-progress"]')).toBeVisible({ timeout: 5_000 });
+      const before = await win.evaluate(async () => {
+        const listed = await window.digitalMe.r2.listSessions();
+        const s = await window.digitalMe.r2.getSession(listed.activeId);
+        return { id: listed.activeId, raw: JSON.stringify(s.session) };
+      });
+      // Force fallback via ready-fail style: request legacy while (may be) busy is blocked;
+      // instead close and inspect file after abort path using fail-ready on a second launch.
+      await electronApp.close();
+
+      const again = await launchApp({
+        DIGITALME_R2_USER_DATA: sharedUd,
+        DIGITALME_R1_FAIL_READY: "1",
+        DIGITALME_R1_READY_TIMEOUT_MS: "1200",
+        DIGITALME_R2_FAKE_MODEL_DELAY_MS: "2000",
+      });
+      try {
+        const switched = await again.win.evaluate(async () =>
+          window.digitalMe.runtime.testRequestNext("r2_fb_settle")
+        );
+        expect(switched.ok).toBeTruthy();
+        await waitUntilNext(again.win);
+        // Start a chat then let ready fail abort
+        await again.win.locator('[data-testid="btn-new-session"]').click().catch(() => {});
+        await waitUntilLegacy(again.win, 25_000);
+        await again.win.waitForTimeout(1500);
+        const ar = await again.win.evaluate(async () => window.digitalMe.r2.getActiveRequest());
+        expect(ar.activeRequest).toBeFalsy();
+        const sessionsPath = require("node:path").join(sharedUd, "workbench-sessions.json");
+        const mid = fs.readFileSync(sessionsPath, "utf8");
+        await again.win.waitForTimeout(1500);
+        const late = fs.readFileSync(sessionsPath, "utf8");
+        expect(late).toBe(mid);
+        expect(before.id).toBeTruthy();
+      } finally {
+        await again.electronApp.close();
+      }
+    } catch (e) {
+      await electronApp.close().catch(() => {});
+      throw e;
+    } finally {
+      try {
+        fs.rmSync(sharedUd, { recursive: true, force: true });
+      } catch {
+        /* ignore */
+      }
     }
   });
 });

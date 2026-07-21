@@ -11,6 +11,7 @@ import {
   type SessionView,
 } from "./r2/types";
 import { codePointCount, foldPlan, sliceCodePoints } from "./r2/text";
+import { acceptChatEvent, type ChatEventState } from "./r2/acceptChatEvent";
 
 type Stamp = {
   ok?: boolean;
@@ -210,20 +211,63 @@ function ChatWorkbench() {
       }
       const listed = await refreshList();
       if (cancelled) return;
-      const id = listed?.activeId || listed?.sessions?.[0]?.id;
-      if (id) await loadSession(id);
       const ar = await r2.getActiveRequest();
-      if (!cancelled) setActiveRequest(ar.activeRequest);
+      if (cancelled) return;
+      if (ar.activeRequest) {
+        const origin = ar.activeRequest.originSessionId;
+        tripleRef.current = {
+          requestId: ar.activeRequest.requestId,
+          sessionId: origin,
+          messageId: ar.activeRequest.assistantMessageId,
+        };
+        seqCursor.current = typeof ar.activeRequest.sequence === "number" ? ar.activeRequest.sequence : 0;
+        setActiveRequest(ar.activeRequest);
+        if (origin) await loadSession(origin);
+        await r2.acknowledgeChat({ requestId: ar.activeRequest.requestId });
+      } else {
+        const id = listed?.activeId || listed?.sessions?.[0]?.id;
+        if (id) await loadSession(id);
+        setActiveRequest(null);
+      }
     })();
     return () => {
       cancelled = true;
     };
   }, [r2, refreshList, loadSession]);
 
+  // While busy: reconcile — if main cleared activeRequest (missed terminal), reload and unblock.
+  useEffect(() => {
+    if (!r2 || !activeRequest) return;
+    const timer = setInterval(() => {
+      void (async () => {
+        const ar = await r2.getActiveRequest();
+        if (ar.activeRequest) {
+          setActiveRequest(ar.activeRequest);
+          return;
+        }
+        const origin = activeRequest.originSessionId;
+        setActiveRequest(null);
+        tripleRef.current = null;
+        if (origin) await loadSession(origin);
+        await refreshList();
+      })();
+    }, 700);
+    return () => clearInterval(timer);
+  }, [r2, activeRequest, loadSession, refreshList]);
+
   useEffect(() => {
     if (!r2) return;
     const unsub = r2.onChatEvent((ev: ChatEvent) => {
       const t = tripleRef.current;
+      const state: ChatEventState = {
+        triple: t,
+        seqCursor: seqCursor.current,
+        streamByMessageId: {},
+        messages: session?.messages || null,
+        active: !!activeRequest,
+        error: null,
+      };
+      // Apply stream buffer from React state via functional updates below for deltas
       if (!t) return;
       if (
         ev.requestId !== t.requestId ||
@@ -242,7 +286,18 @@ function ChatWorkbench() {
           [ev.messageId]: (prev[ev.messageId] || "") + String(ev.textDelta || ""),
         }));
       } else if (ev.type === "complete" || ev.type === "stopped" || ev.type === "error") {
-        const finalText = String(ev.displayText || "");
+        const accepted = acceptChatEvent(
+          {
+            triple: t,
+            seqCursor: ev.sequence - 1,
+            streamByMessageId: {},
+            messages: session?.messages || null,
+            active: true,
+            error: null,
+          },
+          ev
+        );
+        const finalText = String(accepted.finalDisplayText || ev.displayText || "");
         setStreamBuf((prev) => {
           const next = { ...prev };
           delete next[ev.messageId];
@@ -261,10 +316,19 @@ function ChatWorkbench() {
         setActiveRequest(null);
         tripleRef.current = null;
         void refreshList();
+        void loadSession(ev.sessionId);
       }
     });
-    return unsub;
-  }, [r2, refreshList]);
+
+    // Harness: expose acceptChatEvent for forged/out-of-order unit-style checks in E2E
+    (window as unknown as { __r2AcceptChatEvent?: typeof acceptChatEvent }).__r2AcceptChatEvent =
+      acceptChatEvent;
+
+    return () => {
+      unsub();
+      delete (window as unknown as { __r2AcceptChatEvent?: unknown }).__r2AcceptChatEvent;
+    };
+  }, [r2, refreshList, loadSession, session, activeRequest]);
 
   async function onNewSession() {
     if (!r2 || busy) {
@@ -375,7 +439,9 @@ function ChatWorkbench() {
           assistantMessageId: res.assistantMessageId,
           startedAt: new Date().toISOString(),
           status: "running",
+          sequence: 0,
         });
+        await r2.acknowledgeChat({ requestId: res.requestId });
       }
       await loadSession(session.id);
       await refreshList();
@@ -391,6 +457,11 @@ function ChatWorkbench() {
 
   async function onPickAttachments() {
     if (!r2 || !session || busy) return;
+    if (pendingToken) {
+      await r2.clearAttachmentToken({ token: pendingToken });
+      setPendingToken(null);
+      setPendingAttachNames([]);
+    }
     const res = await r2.pickAttachments({ sessionId: session.id });
     if (!res.ok) {
       setError(res.message || "无法添加材料");

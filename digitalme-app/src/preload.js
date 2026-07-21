@@ -258,6 +258,8 @@ api.r2 = {
   sendChat: (payload) => ipcRenderer.invoke("r2:sendChat", payload),
   stopChat: (payload) => ipcRenderer.invoke("r2:stopChat", payload),
   getActiveRequest: () => ipcRenderer.invoke("r2:getActiveRequest"),
+  acknowledgeChat: (payload) => ipcRenderer.invoke("r2:acknowledgeChat", payload),
+  clearAttachmentToken: (payload) => ipcRenderer.invoke("r2:clearAttachmentToken", payload),
   pickAttachments: (payload) => ipcRenderer.invoke("r2:pickAttachments", payload),
   clearLinkedArtifact: (payload) => ipcRenderer.invoke("r2:clearLinkedArtifact", payload),
   openLinkedArtifact: (payload) => ipcRenderer.invoke("r2:openLinkedArtifact", payload),
@@ -271,6 +273,8 @@ api.r2 = {
 if (R1_SPIKE_HARNESS || process.env.DIGITALME_R2_FAKE_MODEL === "1") {
   api.r2.testSetAttachmentClock = (payload) =>
     ipcRenderer.invoke("r2:testSetAttachmentClock", payload);
+  api.r2.testAttachmentVaultSize = () => ipcRenderer.invoke("r2:testAttachmentVaultSize");
+  api.r2.testExpireAttachmentTokens = () => ipcRenderer.invoke("r2:testExpireAttachmentTokens");
   api.r2.testSeedSession = (payload) => ipcRenderer.invoke("r2:testSeedSession", payload);
   api.r2.testCorruptSessionsFile = () => ipcRenderer.invoke("r2:testCorruptSessionsFile");
   api.r2.testMintAttachmentToken = (payload) =>

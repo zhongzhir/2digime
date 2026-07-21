@@ -160,6 +160,10 @@ async function main() {
     });
     now += 300_000;
     assert.equal(vault.validate(minted2.token, { webContentsId: 1, sessionId: "s1" }).code, "token_expired");
+    assert.equal(vault.size(), 0);
+    assert.equal(vault.debugBodyChars(minted2.token), 0);
+    // Second check after wipe: record gone
+    assert.equal(vault.validate(minted2.token, { webContentsId: 1, sessionId: "s1" }).code, "token_not_found");
 
     const minted3 = vault.create({
       webContentsId: 1,
@@ -310,6 +314,99 @@ async function main() {
     assert.equal(life.validateInputText("hi").ok, true);
     assert.equal(life.validateInputText("字".repeat(2001)).ok, false);
     assert.equal(life.validateInputText("字".repeat(2000)).ok, true);
+  });
+
+  await test("activeRequest: abort invalidates writable; tombstone after clear", () => {
+    const reg = createActiveRequestRegistry();
+    const r = reg.register({ originSessionId: "s1" });
+    assert.equal(r.ok, true);
+    const id = r.activeRequest.requestId;
+    assert.equal(reg.isCurrentWritable(id), true);
+    reg.abort(id);
+    assert.equal(reg.isCurrent(id), true);
+    assert.equal(reg.isCurrentWritable(id), false);
+    assert.equal(reg.nextSequence(id), null);
+    assert.ok(reg.nextSequenceForTerminal(id) >= 1);
+    reg.clear(id);
+    assert.equal(reg.isCurrent(id), false);
+    assert.equal(reg.isTombstoned(id), true);
+  });
+
+  await test("attachment token TTL expire clears vault body without sendChat", () => {
+    let now = 1000;
+    const vault = createAttachmentTokenVault({ nowMonotonicMs: () => now });
+    const minted = vault.create({
+      webContentsId: 1,
+      sessionId: "s1",
+      selection: [{ id: "a1", name: "t.txt", text: "SECRET_BODY_XYZ", ok: true }],
+    });
+    assert.equal(vault.size(), 1);
+    assert.ok(vault.debugBodyChars(minted.token) > 0);
+    now = 1000 + 300_000;
+    vault.expireStale();
+    assert.equal(vault.size(), 0);
+    assert.equal(vault.peek(minted.token), null);
+    assert.equal(vault.debugBodyChars(minted.token), 0);
+    const again = vault.validate(minted.token, { webContentsId: 1, sessionId: "s1" });
+    assert.equal(again.ok, false);
+    assert.equal(again.code, "token_not_found");
+  });
+
+  await test("acceptChatEvent: triple / sequence / terminal partial", () => {
+    const { acceptChatEvent } = require("../src/r2/chat-event-accept");
+    let st = {
+      triple: { requestId: "r1", sessionId: "s1", messageId: "m1" },
+      seqCursor: 0,
+      streamByMessageId: {},
+      messages: [{ id: "m1", role: "assistant", displayText: "" }],
+      active: true,
+      error: null,
+    };
+    const badTriple = acceptChatEvent(st, {
+      requestId: "forged",
+      sessionId: "s1",
+      messageId: "m1",
+      sequence: 1,
+      type: "complete",
+      displayText: "FORGED",
+    });
+    assert.equal(badTriple.accepted, false);
+    assert.equal(badTriple.reason, "triple_mismatch");
+
+    const dup = acceptChatEvent(st, {
+      requestId: "r1",
+      sessionId: "s1",
+      messageId: "m1",
+      sequence: 0,
+      type: "delta",
+      textDelta: "x",
+    });
+    assert.equal(dup.accepted, false);
+    assert.equal(dup.reason, "sequence_stale");
+
+    st = acceptChatEvent(st, {
+      requestId: "r1",
+      sessionId: "s1",
+      messageId: "m1",
+      sequence: 1,
+      type: "delta",
+      textDelta: "部",
+    });
+    assert.equal(st.accepted, true);
+    const term = acceptChatEvent(st, {
+      requestId: "r1",
+      sessionId: "s1",
+      messageId: "m1",
+      sequence: 2,
+      type: "error",
+      displayText: "部分回复",
+      message: "失败说明",
+    });
+    assert.equal(term.accepted, true);
+    assert.equal(term.active, false);
+    assert.equal(term.finalDisplayText, "部分回复");
+    assert.equal(term.error, "失败说明");
+    assert.equal(term.messages[0].displayText, "部分回复");
   });
 
   console.log("\nR2 contracts:", passed, "passed,", failed, "failed");
