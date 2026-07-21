@@ -156,7 +156,30 @@ function createRendererEntryController(opts = {}) {
     readyTimer = setTimeout(() => {
       readyTimer = null;
       readyArmed = false;
-      if (typeof onTimeout === "function") onTimeout(generation);
+      if (typeof onTimeout !== "function") return;
+      try {
+        const result = onTimeout(generation);
+        if (result && typeof result.then === "function") {
+          Promise.resolve(result).catch((err) => {
+            const category =
+              err && err.code
+                ? String(err.code)
+                : err && err.message
+                  ? "timeout_callback_rejected"
+                  : "timeout_callback_rejected";
+            // Sanitize: category + time only; never attach stacks/paths/bodies into latch detail.
+            if (!fallbackLatched) {
+              latchFallback({ category, generation });
+            }
+          });
+        }
+      } catch (err) {
+        const category =
+          err && err.code ? String(err.code) : "timeout_callback_threw";
+        if (!fallbackLatched) {
+          latchFallback({ category, generation });
+        }
+      }
     }, readyTimeoutMs);
     return { ok: true, generation, readyTimeoutMs };
   }

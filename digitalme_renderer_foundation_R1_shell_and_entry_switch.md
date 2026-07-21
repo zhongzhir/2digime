@@ -298,4 +298,4 @@ runtime.signalReady(generation) -> { ok }  // 或由 preload 绑定世代；无�
 | 2026-07-20 | v0.1.1-draft | Codex 第一轮修订（`6107b36`）：入口权限、失败 latch、ready 世代、Electron/测试边界；当时 `codex_changes_requested`（历史） |
 | 2026-07-20 | **v0.1.1** | **Codex 再复核通过**；四项启动安全契约已冻结；状态 → `specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`。**实施规格冻结**；实现尚未授权、尚未开始；版本表保持 TBD |
 | 2026-07-21 | **v0.1.2** | Owner 授权后完成兼容性 spike：锁定依赖版本；main 入口门禁/latch/generation；`renderer-next` production-load；Playwright Electron 最小 E2E。状态曾标 `implemented` / `empirically_verified` / `codex_review_pending`（历史） |
-| 2026-07-21 | **v0.1.3** | Codex 有界修复：ready 竞态（加载前 arm）、显式 generation、导航单飞、Vite dev / Error Boundary E2E、gitignore/typecheck/精确版本。状态 → `implemented` / `spike_partial_verified` / `codex_changes_requested`。**停止扩 scope，等待再复核** |
+| 2026-07-21 | **v0.1.3** | Codex 有界修复轮：ready 竞态、显式 generation、导航单飞、Vite/Error Boundary E2E、工程收尾；随后再修 Error Boundary 真实 render throw、Vite origin 对齐、timeout Promise 捕获。状态保持 `implemented` / `spike_partial_verified` / `codex_changes_requested` |

@@ -6,11 +6,9 @@
  */
 
 const assert = require("node:assert/strict");
-const {
-  createRendererEntryController,
-  parseExplicitGeneration,
-} = require("../src/renderer-entry-controller");
+const { createRendererEntryController, parseExplicitGeneration } = require("../src/renderer-entry-controller");
 const { createRendererEntryRuntime } = require("../src/renderer-entry-runtime");
+const { isNextPageUrl, resolveViteDevUrl, isViteDevPageUrl } = require("../src/renderer-entry-load");
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -244,6 +242,66 @@ async function main() {
     pass("8. runtime signalReady requires explicit generation");
   } catch (err) {
     fail("8. runtime signalReady requires explicit generation", err);
+  } finally {
+    delete process.env.DIGITALME_R1_SPIKE_HARNESS;
+  }
+
+  try {
+    delete process.env.DIGITALME_VITE_DEV;
+    assert.equal(isNextPageUrl("file:///x/renderer-next/dist/index.html"), true);
+    assert.equal(isNextPageUrl("http://127.0.0.1:5199/"), false);
+
+    process.env.DIGITALME_VITE_DEV = "1";
+    process.env.DIGITALME_VITE_DEV_URL = "http://127.0.0.1:5199/";
+    assert.ok(resolveViteDevUrl());
+    assert.equal(isViteDevPageUrl("http://127.0.0.1:5199/"), true);
+    assert.equal(isViteDevPageUrl("http://127.0.0.1:5199/app"), true);
+    assert.equal(isViteDevPageUrl("http://127.0.0.1:5173/"), false);
+    assert.equal(isNextPageUrl("http://127.0.0.1:5199/"), true);
+    assert.equal(isNextPageUrl("http://127.0.0.1:5173/"), false);
+    pass("9. custom vite origin matched by protocol/host/port");
+  } catch (err) {
+    fail("9. custom vite origin matched by protocol/host/port", err);
+  } finally {
+    delete process.env.DIGITALME_VITE_DEV;
+    delete process.env.DIGITALME_VITE_DEV_URL;
+  }
+
+  try {
+    process.env.DIGITALME_R1_SPIKE_HARNESS = "1";
+    const urlRef = { url: "file:///renderer-next/dist/index.html" };
+    const rejections = [];
+    const onUnhandled = (reason) => {
+      rejections.push(reason);
+    };
+    process.on("unhandledRejection", onUnhandled);
+
+    const runtime = createRendererEntryRuntime({
+      readyTimeoutMs: 40,
+      loadNextEntry: async () => {
+        urlRef.url = "file:///renderer-next/dist/index.html";
+        return { ok: true, mode: "production_load" };
+      },
+      loadLegacyEntry: async () => {
+        const err = new Error("legacy_load_boom");
+        err.code = "legacy_load_failed";
+        throw err;
+      },
+      isNextPageUrl: (url) => String(url).includes("renderer-next"),
+    });
+    runtime.bindWindow(fakeWindow(urlRef));
+
+    // Stay on next without signaling ready → timeout → fallback legacy throws.
+    await runtime.navigateNext("timeout_fallback_fail");
+    await sleep(120);
+    process.removeListener("unhandledRejection", onUnhandled);
+
+    assert.equal(runtime.controller.snapshot().fallbackLatched, true);
+    assert.equal(runtime.controller.snapshot().effectiveEntry, "legacy");
+    assert.equal(rejections.length, 0, `unexpected unhandledRejection: ${rejections[0]}`);
+    pass("10. legacy fallback load failure does not unhandledReject");
+  } catch (err) {
+    fail("10. legacy fallback load failure does not unhandledReject", err);
   } finally {
     delete process.env.DIGITALME_R1_SPIKE_HARNESS;
   }

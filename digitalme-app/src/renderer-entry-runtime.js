@@ -90,10 +90,20 @@ function createRendererEntryRuntime(opts = {}) {
     controller.armReadyTimer(generation, async (timedOutGeneration) => {
       if (timedOutGeneration !== controller.snapshot().navigationGeneration) return;
       if (controller.snapshot().effectiveEntry !== "next") return;
-      await fallbackToLegacy({
-        category: "ready_timeout",
-        generation: timedOutGeneration,
-      });
+      if (controller.snapshot().fallbackLatched) return;
+      try {
+        await fallbackToLegacy({
+          category: "ready_timeout",
+          generation: timedOutGeneration,
+        });
+      } catch (err) {
+        // fallbackToLegacy already latches; surface sanitized category only.
+        const category =
+          err && err.code ? String(err.code) : "fallback_legacy_failed";
+        if (!controller.snapshot().fallbackLatched) {
+          controller.latchFallback({ category, generation: timedOutGeneration });
+        }
+      }
     });
 
     try {

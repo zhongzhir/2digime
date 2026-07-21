@@ -35,6 +35,23 @@ function resolveViteDevUrl() {
 }
 
 /**
+ * Match page URL to the resolved Vite dev origin (protocol + hostname + port),
+ * not a hard-coded 5173 or startsWith prefix.
+ */
+function isViteDevPageUrl(url) {
+  if (process.env.DIGITALME_VITE_DEV !== "1") return false;
+  const resolved = resolveViteDevUrl();
+  if (!resolved) return false;
+  try {
+    const page = new URL(String(url || ""));
+    const expected = new URL(resolved);
+    return page.origin === expected.origin;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * @param {import('electron').BrowserWindow} win
  * @param {{ viteDev?: boolean }} opts
  */
@@ -72,8 +89,7 @@ function isNextPageUrl(url) {
   const s = String(url || "");
   if (!s) return false;
   if (s.includes("renderer-next")) return true;
-  if (s.startsWith("http://127.0.0.1:5173") || s.startsWith("http://localhost:5173")) return true;
-  return false;
+  return isViteDevPageUrl(s);
 }
 
 module.exports = {
@@ -81,6 +97,7 @@ module.exports = {
   getNextDistIndexPath,
   nextDistExists,
   resolveViteDevUrl,
+  isViteDevPageUrl,
   loadLegacyEntry,
   loadNextEntry,
   isNextPageUrl,

@@ -34,6 +34,11 @@ declare global {
   }
 }
 
+/** Harness-only: throws during render so Error Boundary must catch via getDerivedStateFromError. */
+function InjectRenderThrow(): ReactNode {
+  throw new Error("injected_shell_render_error");
+}
+
 class ShellErrorBoundary extends Component<
   { children: ReactNode; injectFail?: boolean },
   { error: Error | null }
@@ -42,12 +47,6 @@ class ShellErrorBoundary extends Component<
 
   static getDerivedStateFromError(error: Error) {
     return { error };
-  }
-
-  componentDidMount() {
-    if (this.props.injectFail) {
-      this.setState({ error: new Error("injected_shell_error") });
-    }
   }
 
   render() {
@@ -59,7 +58,12 @@ class ShellErrorBoundary extends Component<
         </div>
       );
     }
-    return this.props.children;
+    return (
+      <>
+        {this.props.injectFail ? <InjectRenderThrow /> : null}
+        {this.props.children}
+      </>
+    );
   }
 }
 

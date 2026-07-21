@@ -5,6 +5,28 @@
 
 ---
 
+## 2026-07-21 Renderer Foundation R1 spike 边界小修
+
+### 做了什么
+
+Codex 再复核后关闭 3 项边界：
+
+1. Error Boundary：harness 子组件在 render 阶段 throw，由 `getDerivedStateFromError` 捕获。
+2. Vite：`isNextPageUrl` 按解析后的 origin（协议/主机/端口）比对；E2E 使用非 5173 动态端口。
+3. ready 超时回调：捕获同步异常与 Promise rejection；legacy 回退失败不产生 unhandledRejection。
+
+状态保持：`implemented` / `spike_partial_verified` / `codex_changes_requested`（v0.1.3）。
+
+### 边界
+
+未继续正式 shell；未启动 R2 / R2.5 / PAN-02；未 amend；未 push。
+
+### 下一等待项
+
+等待 Codex 再复核。
+
+---
+
 ## 2026-07-21 Renderer Foundation R1 spike 有界修复
 
 ### 做了什么
