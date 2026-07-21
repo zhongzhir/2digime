@@ -1728,8 +1728,8 @@ ipcMain.handle("r2:setCurrentSession", async (_e, id) => r2Chat.setCurrentSessio
 ipcMain.handle("r2:sendChat", async (e, payload) =>
   r2Chat.sendChat(e.sender, payload || {}, e.sender.id)
 );
-ipcMain.handle("r2:stopChat", async (_e, payload) =>
-  r2Chat.stopChat(payload && payload.requestId)
+ipcMain.handle("r2:stopChat", async (e, payload) =>
+  r2Chat.stopChat(e.sender, payload && payload.requestId)
 );
 ipcMain.handle("r2:getActiveRequest", async () => r2Chat.getActiveRequest());
 ipcMain.handle("r2:acknowledgeChat", async (e, payload) =>

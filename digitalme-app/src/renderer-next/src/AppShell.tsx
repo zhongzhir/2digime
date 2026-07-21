@@ -11,7 +11,7 @@ import {
   type SessionView,
 } from "./r2/types";
 import { codePointCount, foldPlan, sliceCodePoints } from "./r2/text";
-import { acceptChatEvent, type ChatEventState } from "./r2/acceptChatEvent";
+import { acceptChatEvent } from "./r2/acceptChatEvent";
 
 type Stamp = {
   ok?: boolean;
@@ -152,6 +152,10 @@ function ChatWorkbench() {
     null
   );
   const sendingLock = useRef(false);
+  const sessionRef = useRef(session);
+  const activeRequestRef = useRef(activeRequest);
+  const refreshListRef = useRef<((() => Promise<unknown>) | null)>(null);
+  const loadSessionRef = useRef<(((id: string) => Promise<void>) | null)>(null);
 
   const busy = !!activeRequest;
 
@@ -201,6 +205,11 @@ function ChatWorkbench() {
     },
     [r2]
   );
+
+  sessionRef.current = session;
+  activeRequestRef.current = activeRequest;
+  refreshListRef.current = refreshList;
+  loadSessionRef.current = loadSession;
 
   useEffect(() => {
     let cancelled = false;
@@ -255,48 +264,35 @@ function ChatWorkbench() {
     return () => clearInterval(timer);
   }, [r2, activeRequest, loadSession, refreshList]);
 
+  // Stable chat:event subscription — must not resubscribe when session/activeRequest identity churns.
   useEffect(() => {
     if (!r2) return;
     const unsub = r2.onChatEvent((ev: ChatEvent) => {
       const t = tripleRef.current;
-      const state: ChatEventState = {
-        triple: t,
-        seqCursor: seqCursor.current,
-        streamByMessageId: {},
-        messages: session?.messages || null,
-        active: !!activeRequest,
-        error: null,
-      };
-      // Apply stream buffer from React state via functional updates below for deltas
-      if (!t) return;
-      if (
-        ev.requestId !== t.requestId ||
-        ev.sessionId !== t.sessionId ||
-        ev.messageId !== t.messageId
-      ) {
-        return;
-      }
-      if (typeof ev.sequence !== "number" || ev.sequence <= seqCursor.current) {
-        return;
-      }
-      seqCursor.current = ev.sequence;
+      const accepted = acceptChatEvent(
+        {
+          triple: t,
+          seqCursor: seqCursor.current,
+          streamByMessageId: {},
+          messages: sessionRef.current?.messages || null,
+          active: !!activeRequestRef.current,
+          error: null,
+        },
+        ev
+      );
+      if (!accepted.accepted) return;
+
+      seqCursor.current = accepted.seqCursor;
+
       if (ev.type === "delta") {
         setStreamBuf((prev) => ({
           ...prev,
           [ev.messageId]: (prev[ev.messageId] || "") + String(ev.textDelta || ""),
         }));
-      } else if (ev.type === "complete" || ev.type === "stopped" || ev.type === "error") {
-        const accepted = acceptChatEvent(
-          {
-            triple: t,
-            seqCursor: ev.sequence - 1,
-            streamByMessageId: {},
-            messages: session?.messages || null,
-            active: true,
-            error: null,
-          },
-          ev
-        );
+        return;
+      }
+
+      if (ev.type === "complete" || ev.type === "stopped" || ev.type === "error") {
         const finalText = String(accepted.finalDisplayText || ev.displayText || "");
         setStreamBuf((prev) => {
           const next = { ...prev };
@@ -315,12 +311,11 @@ function ChatWorkbench() {
         if (ev.type === "error") setError(ev.message || "回复失败");
         setActiveRequest(null);
         tripleRef.current = null;
-        void refreshList();
-        void loadSession(ev.sessionId);
+        void refreshListRef.current?.();
+        void loadSessionRef.current?.(ev.sessionId);
       }
     });
 
-    // Harness: expose acceptChatEvent for forged/out-of-order unit-style checks in E2E
     (window as unknown as { __r2AcceptChatEvent?: typeof acceptChatEvent }).__r2AcceptChatEvent =
       acceptChatEvent;
 
@@ -328,7 +323,7 @@ function ChatWorkbench() {
       unsub();
       delete (window as unknown as { __r2AcceptChatEvent?: unknown }).__r2AcceptChatEvent;
     };
-  }, [r2, refreshList, loadSession, session, activeRequest]);
+  }, [r2]);
 
   async function onNewSession() {
     if (!r2 || busy) {

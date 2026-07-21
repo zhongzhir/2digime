@@ -2,11 +2,14 @@
 
 const crypto = require("node:crypto");
 
+/** Bound tombstone set — late events after clear must still be rejected, without unbounded growth. */
+const TOMBSTONE_LIMIT = 64;
+
 /**
  * App-wide single-flight active chat request registry with generation validity.
  * Stopped / fallback-invalidated requestIds must not emit events or persist again.
  */
-function createActiveRequestRegistry() {
+function createActiveRequestRegistry(opts = {}) {
   /** @type {null | {
    *   requestId: string,
    *   originSessionId: string,
@@ -20,10 +23,14 @@ function createActiveRequestRegistry() {
    * }} */
   let current = null;
   let generationCounter = 0;
-  /** @type {Set<string>} */
-  const tombstones = new Set();
+  /** @type {Map<string, true>} insertion-ordered bounded tombstones */
+  const tombstones = new Map();
   /** @type {Map<string, Array<() => void>>} */
   const clearWaiters = new Map();
+  const tombstoneLimit =
+    typeof opts.tombstoneLimit === "number" && opts.tombstoneLimit > 0
+      ? opts.tombstoneLimit
+      : TOMBSTONE_LIMIT;
 
   function newRequestId() {
     return "req_" + Date.now().toString(36) + "_" + crypto.randomBytes(4).toString("hex");
@@ -31,6 +38,19 @@ function createActiveRequestRegistry() {
 
   function newMessageId() {
     return "m_" + Date.now().toString(36) + "_" + crypto.randomBytes(4).toString("hex");
+  }
+
+  function addTombstone(id) {
+    const key = String(id || "");
+    if (!key) return;
+    if (tombstones.has(key)) {
+      tombstones.delete(key);
+    }
+    tombstones.set(key, true);
+    while (tombstones.size > tombstoneLimit) {
+      const oldest = tombstones.keys().next().value;
+      tombstones.delete(oldest);
+    }
   }
 
   function snapshot(rec) {
@@ -84,7 +104,7 @@ function createActiveRequestRegistry() {
 
   /**
    * True only while this requestId is the live registry entry AND still writable.
-   * Tombstoned / mismatched / cleared requests always return false.
+   * Tombstoned / mismatched / cleared / aborted requests always return false.
    */
   function isCurrentWritable(requestId) {
     if (!requestId) return false;
@@ -104,13 +124,6 @@ function createActiveRequestRegistry() {
   function nextSequence(requestId) {
     if (!current || current.requestId !== requestId) return null;
     if (!current.writable) return null;
-    current.sequence += 1;
-    return current.sequence;
-  }
-
-  /** Allow a single terminal event sequence while request still in registry (incl. after abort). */
-  function nextSequenceForTerminal(requestId) {
-    if (!current || current.requestId !== requestId) return null;
     current.sequence += 1;
     return current.sequence;
   }
@@ -142,15 +155,15 @@ function createActiveRequestRegistry() {
     if (!current) return false;
     if (requestId && current.requestId !== requestId) return false;
     const id = current.requestId;
-    tombstones.add(id);
+    addTombstone(id);
     current = null;
     notifyCleared(id);
     return true;
   }
 
   /**
-   * Abort signal + mark not writable. Request stays until clear() so terminal
-   * stopped/error may still persist once. Late work after clear is tombstoned.
+   * Abort signal + mark not writable. No further emit/persist is allowed.
+   * Request stays until clear() so waitUntilCleared can observe completion.
    */
   function abort(requestId) {
     if (!current) return { ok: false, code: "no_active_request" };
@@ -202,7 +215,7 @@ function createActiveRequestRegistry() {
         // Force clear zombie after timeout — still tombstoned so late writes fail
         if (current && current.requestId === id) {
           current = null;
-          tombstones.add(id);
+          addTombstone(id);
         }
         resolve(false);
       }, ms);
@@ -211,6 +224,10 @@ function createActiveRequestRegistry() {
 
   function isTombstoned(requestId) {
     return tombstones.has(String(requestId || ""));
+  }
+
+  function tombstoneSize() {
+    return tombstones.size;
   }
 
   /** Test helper */
@@ -222,11 +239,11 @@ function createActiveRequestRegistry() {
   }
 
   return {
+    TOMBSTONE_LIMIT: tombstoneLimit,
     get,
     assertIdle,
     register,
     nextSequence,
-    nextSequenceForTerminal,
     setStatus,
     getAbortController,
     clear,
@@ -237,6 +254,7 @@ function createActiveRequestRegistry() {
     matchesGeneration,
     waitUntilCleared,
     isTombstoned,
+    tombstoneSize,
     newRequestId,
     newMessageId,
     _resetForTests,
@@ -244,5 +262,6 @@ function createActiveRequestRegistry() {
 }
 
 module.exports = {
+  TOMBSTONE_LIMIT,
   createActiveRequestRegistry,
 };

@@ -20,6 +20,7 @@ const {
 } = require("../src/r2/session-view-dto");
 const sessions = require("../src/sessions");
 const cm = require("../src/chat-message-model");
+const { createR2ChatLifecycle } = require("../src/r2/chat-lifecycle");
 
 let passed = 0;
 let failed = 0;
@@ -326,10 +327,79 @@ async function main() {
     assert.equal(reg.isCurrent(id), true);
     assert.equal(reg.isCurrentWritable(id), false);
     assert.equal(reg.nextSequence(id), null);
-    assert.ok(reg.nextSequenceForTerminal(id) >= 1);
     reg.clear(id);
     assert.equal(reg.isCurrent(id), false);
     assert.equal(reg.isTombstoned(id), true);
+  });
+
+  await test("tombstones are bounded", () => {
+    const reg = createActiveRequestRegistry({ tombstoneLimit: 3 });
+    const ids = [];
+    for (let i = 0; i < 5; i += 1) {
+      const r = reg.register({ originSessionId: "s" + i });
+      assert.equal(r.ok, true);
+      ids.push(r.activeRequest.requestId);
+      reg.clear(r.activeRequest.requestId);
+    }
+    assert.equal(reg.tombstoneSize(), 3);
+    assert.equal(reg.isTombstoned(ids[0]), false);
+    assert.equal(reg.isTombstoned(ids[1]), false);
+    assert.equal(reg.isTombstoned(ids[2]), true);
+    assert.equal(reg.isTombstoned(ids[4]), true);
+  });
+
+  await test("invalidate then finish: sessions file unchanged", async () => {
+    sessions._resetRecoveryLatchForTests();
+    const ud = tempUserData();
+    const prevFake = process.env.DIGITALME_R2_FAKE_MODEL;
+    const prevDelay = process.env.DIGITALME_R2_FAKE_MODEL_DELAY_MS;
+    process.env.DIGITALME_R2_FAKE_MODEL = "1";
+    process.env.DIGITALME_R2_FAKE_MODEL_DELAY_MS = "80";
+    try {
+      const reg = createActiveRequestRegistry();
+      const vault = createAttachmentTokenVault();
+      const fakeSender = { id: 1 };
+      const life = createR2ChatLifecycle({
+        activeRequest: reg,
+        attachmentTokens: vault,
+        getUserData: () => ud,
+        readConfig: () => ({}),
+        buildSystemPrompt: () => "",
+        loadPackageForChat: () => null,
+        callModelStream: async () => "",
+        runChatWithConnectedTools: async () => ({ reply: null }),
+        getExtensionManager: async () => ({}),
+        stripToolLeakage: (t) => t,
+        hasBadChars: () => false,
+        hasDsmlToolMarkup: () => false,
+        retrieval: null,
+        defaultPackageDir: os.tmpdir(),
+        sendToSender: () => {},
+      });
+      const created = await life.createSession({ title: "inv" });
+      assert.equal(created.ok, true);
+      const sessionId = created.session.id;
+      const send = await life.sendChat(
+        fakeSender,
+        { sessionId, inputText: "invalidate探针" },
+        1
+      );
+      assert.equal(send.ok, true);
+      life.acknowledgeChat(fakeSender, { requestId: send.requestId });
+      const before = fs.readFileSync(sessions.sessionsPath(ud), "utf8");
+      reg.invalidate(send.requestId);
+      await reg.waitUntilCleared(send.requestId, 5000);
+      await new Promise((r) => setTimeout(r, 250));
+      const after = fs.readFileSync(sessions.sessionsPath(ud), "utf8");
+      assert.equal(after, before);
+      assert.equal(reg.get(), null);
+    } finally {
+      if (prevFake === undefined) delete process.env.DIGITALME_R2_FAKE_MODEL;
+      else process.env.DIGITALME_R2_FAKE_MODEL = prevFake;
+      if (prevDelay === undefined) delete process.env.DIGITALME_R2_FAKE_MODEL_DELAY_MS;
+      else process.env.DIGITALME_R2_FAKE_MODEL_DELAY_MS = prevDelay;
+      cleanup(ud);
+    }
   });
 
   await test("attachment token TTL expire clears vault body without sendChat", () => {

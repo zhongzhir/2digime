@@ -657,63 +657,158 @@ test.describe("R2 chat and sessions", () => {
     }
   });
 
-  test("fallback waits; no background session rewrite after settle", async () => {
+  test("fallback aborts live request; no late session rewrite", async () => {
+    // Ready-fail path with a request that is proven running before fallback.
     const sharedUd = fs.mkdtempSync(path.join(os.tmpdir(), "dm-r2-fb-"));
+    const CHUNK_MS = 1200;
+    const READY_MS = 4500;
+    // fakeModelStream: 3 chunks + final wait ≈ 4 * CHUNK_MS
+    const MODEL_TOTAL_MS = CHUNK_MS * 4 + 800;
     const { electronApp, win } = await launchApp({
       DIGITALME_R2_USER_DATA: sharedUd,
-      DIGITALME_R2_FAKE_MODEL_DELAY_MS: "800",
+      DIGITALME_R1_FAIL_READY: "1",
+      DIGITALME_R1_READY_TIMEOUT_MS: String(READY_MS),
+      DIGITALME_R2_FAKE_MODEL_DELAY_MS: String(CHUNK_MS),
     });
     try {
-      await enterNext(win);
+      const switched = await win.evaluate(async () =>
+        window.digitalMe.runtime.testRequestNext("r2_fb_live")
+      );
+      expect(switched.ok).toBeTruthy();
+      await waitUntilNext(win);
+      await win.waitForSelector('[data-testid="r2-chat-root"]', { timeout: 15_000 });
+
       await win.locator('[data-testid="btn-new-session"]').click();
-      await win.locator('[data-testid="chat-input"]').fill("回退探针");
+      await win.locator('[data-testid="chat-input"]').fill("回退运行中探针");
       await win.locator('[data-testid="btn-send"]').click();
-      await expect(win.locator('[data-testid="request-in-progress"]')).toBeVisible({ timeout: 5_000 });
-      const before = await win.evaluate(async () => {
+
+      await expect(win.locator('[data-testid="request-in-progress"]')).toBeVisible({
+        timeout: 5_000,
+      });
+      const live = await win.evaluate(async () => window.digitalMe.r2.getActiveRequest());
+      expect(live.activeRequest).toBeTruthy();
+      expect(live.activeRequest.requestId).toBeTruthy();
+      const requestId = live.activeRequest.requestId;
+
+      const snapBeforeFallback = await win.evaluate(async () => {
         const listed = await window.digitalMe.r2.listSessions();
         const s = await window.digitalMe.r2.getSession(listed.activeId);
-        return { id: listed.activeId, raw: JSON.stringify(s.session) };
+        return {
+          sessionId: listed.activeId,
+          assistant: (s.session.messages || [])
+            .filter((m) => m.role === "assistant")
+            .map((m) => ({ id: m.id, displayText: m.displayText || "" })),
+        };
       });
-      // Force fallback via ready-fail style: request legacy while (may be) busy is blocked;
-      // instead close and inspect file after abort path using fail-ready on a second launch.
-      await electronApp.close();
+      expect(snapBeforeFallback.assistant.length).toBeGreaterThan(0);
 
-      const again = await launchApp({
-        DIGITALME_R2_USER_DATA: sharedUd,
-        DIGITALME_R1_FAIL_READY: "1",
-        DIGITALME_R1_READY_TIMEOUT_MS: "1200",
-        DIGITALME_R2_FAKE_MODEL_DELAY_MS: "2000",
-      });
-      try {
-        const switched = await again.win.evaluate(async () =>
-          window.digitalMe.runtime.testRequestNext("r2_fb_settle")
-        );
-        expect(switched.ok).toBeTruthy();
-        await waitUntilNext(again.win);
-        // Start a chat then let ready fail abort
-        await again.win.locator('[data-testid="btn-new-session"]').click().catch(() => {});
-        await waitUntilLegacy(again.win, 25_000);
-        await again.win.waitForTimeout(1500);
-        const ar = await again.win.evaluate(async () => window.digitalMe.r2.getActiveRequest());
-        expect(ar.activeRequest).toBeFalsy();
-        const sessionsPath = require("node:path").join(sharedUd, "workbench-sessions.json");
-        const mid = fs.readFileSync(sessionsPath, "utf8");
-        await again.win.waitForTimeout(1500);
-        const late = fs.readFileSync(sessionsPath, "utf8");
-        expect(late).toBe(mid);
-        expect(before.id).toBeTruthy();
-      } finally {
-        await again.electronApp.close();
-      }
-    } catch (e) {
-      await electronApp.close().catch(() => {});
-      throw e;
+      await waitUntilLegacy(win, READY_MS + 15_000);
+      const entrySnap = await win.evaluate(async () =>
+        window.digitalMe.runtime.testGetEntrySnapshot()
+      );
+      expect(entrySnap.fallbackLatched).toBeTruthy();
+
+      const sessionsPath = path.join(sharedUd, "workbench-sessions.json");
+      const midFile = fs.readFileSync(sessionsPath, "utf8");
+      const midAr = await win.evaluate(async () => window.digitalMe.r2.getActiveRequest());
+      expect(midAr.activeRequest).toBeFalsy();
+
+      const midDto = await win.evaluate(
+        async (id) => window.digitalMe.r2.getSession(id),
+        snapBeforeFallback.sessionId
+      );
+      const midAssistant = JSON.stringify(
+        (midDto.session.messages || [])
+          .filter((m) => m.role === "assistant")
+          .map((m) => ({ id: m.id, displayText: m.displayText || "" }))
+      );
+
+      await win.waitForTimeout(MODEL_TOTAL_MS);
+      const lateFile = fs.readFileSync(sessionsPath, "utf8");
+      expect(lateFile).toBe(midFile);
+      const lateAr = await win.evaluate(async () => window.digitalMe.r2.getActiveRequest());
+      expect(lateAr.activeRequest).toBeFalsy();
+      const lateDto = await win.evaluate(
+        async (id) => window.digitalMe.r2.getSession(id),
+        snapBeforeFallback.sessionId
+      );
+      const lateAssistant = JSON.stringify(
+        (lateDto.session.messages || [])
+          .filter((m) => m.role === "assistant")
+          .map((m) => ({ id: m.id, displayText: m.displayText || "" }))
+      );
+      expect(lateAssistant).toBe(midAssistant);
+      expect(requestId).toBeTruthy();
+      // Still on legacy after settle — no late terminal flipping entry
+      const lateEntry = await win.evaluate(async () =>
+        window.digitalMe.runtime.testGetEntrySnapshot()
+      );
+      expect(lateEntry.fallbackLatched).toBeTruthy();
+      expect(lateEntry.effectiveEntry).toBe("legacy");
     } finally {
+      await electronApp.close();
       try {
         fs.rmSync(sharedUd, { recursive: true, force: true });
       } catch {
         /* ignore */
       }
+    }
+  });
+
+  test("stopChat: no late session rewrite after stop", async () => {
+    const CHUNK_MS = 700;
+    const MODEL_TOTAL_MS = CHUNK_MS * 4 + 800;
+    const { electronApp, win } = await launchApp({
+      DIGITALME_R2_FAKE_MODEL_DELAY_MS: String(CHUNK_MS),
+    });
+    try {
+      await enterNext(win);
+      await win.locator('[data-testid="btn-new-session"]').click();
+      await win.locator('[data-testid="chat-input"]').fill("停止迟到写入");
+      await win.locator('[data-testid="btn-send"]').click();
+      await expect(win.locator('[data-testid="request-in-progress"]')).toBeVisible({
+        timeout: 5_000,
+      });
+      const live = await win.evaluate(async () => window.digitalMe.r2.getActiveRequest());
+      expect(live.activeRequest).toBeTruthy();
+      expect(live.activeRequest.requestId).toBeTruthy();
+
+      await win.locator('[data-testid="btn-stop"]').click();
+      await expect(win.locator('[data-testid="request-in-progress"]')).toHaveCount(0, {
+        timeout: 10_000,
+      });
+
+      const sessionId = await win.evaluate(async () => {
+        const listed = await window.digitalMe.r2.listSessions();
+        return listed.activeId;
+      });
+      const mid = await win.evaluate(async (id) => {
+        const s = await window.digitalMe.r2.getSession(id);
+        return JSON.stringify(
+          (s.session.messages || []).map((m) => ({
+            id: m.id,
+            role: m.role,
+            displayText: m.displayText || "",
+          }))
+        );
+      }, sessionId);
+
+      await win.waitForTimeout(MODEL_TOTAL_MS);
+      const lateAr = await win.evaluate(async () => window.digitalMe.r2.getActiveRequest());
+      expect(lateAr.activeRequest).toBeFalsy();
+      const late = await win.evaluate(async (id) => {
+        const s = await window.digitalMe.r2.getSession(id);
+        return JSON.stringify(
+          (s.session.messages || []).map((m) => ({
+            id: m.id,
+            role: m.role,
+            displayText: m.displayText || "",
+          }))
+        );
+      }, sessionId);
+      expect(late).toBe(mid);
+    } finally {
+      await electronApp.close();
     }
   });
 });

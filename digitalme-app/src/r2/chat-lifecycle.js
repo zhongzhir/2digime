@@ -1,4 +1,4 @@
-"use strict";
+﻿"use strict";
 
 const path = require("node:path");
 const chatMessages = require("../chat-message-model");
@@ -39,9 +39,21 @@ function createR2ChatLifecycle(deps) {
 
   /** @type {Map<string, { armed: boolean, buffer: object[] }>} */
   const armState = new Map();
+  /** @type {Map<string, string>} live accumulated reply text for controlled stop snapshot */
+  const livePartials = new Map();
 
   function userData() {
     return getUserData();
+  }
+
+  function noteLivePartial(requestId, chunk) {
+    if (!requestId) return;
+    const prev = livePartials.get(requestId) || "";
+    livePartials.set(requestId, prev + String(chunk || ""));
+  }
+
+  function clearLivePartial(requestId) {
+    if (requestId) livePartials.delete(requestId);
   }
 
   function ensureArm(requestId) {
@@ -69,18 +81,10 @@ function createR2ChatLifecycle(deps) {
 
   function emitChatEvent(sender, partial) {
     const requestId = partial.requestId;
-    const isTerminal =
-      partial.type === "complete" || partial.type === "stopped" || partial.type === "error";
+    // After abort/invalidate (writable=false), no deltas and no terminals.
+    if (!activeRequest.isCurrentWritable(requestId)) return null;
 
-    if (isTerminal) {
-      if (!activeRequest.isCurrent(requestId)) return null;
-    } else if (!activeRequest.isCurrentWritable(requestId)) {
-      return null;
-    }
-
-    const seq = isTerminal
-      ? activeRequest.nextSequenceForTerminal(requestId)
-      : activeRequest.nextSequence(requestId);
+    const seq = activeRequest.nextSequence(requestId);
     if (seq == null) return null;
 
     const event = {
@@ -485,10 +489,26 @@ function createR2ChatLifecycle(deps) {
     };
   }
 
-  function mayPersist(requestId, terminal) {
-    if (activeRequest.isCurrentWritable(requestId)) return true;
-    if (terminal && activeRequest.isCurrent(requestId)) return true;
-    return false;
+  function mayWrite(requestId) {
+    return activeRequest.isCurrentWritable(requestId);
+  }
+
+  async function persistAssistantText(requestId, sessionId, assistantMessageId, displayText, modelText) {
+    if (!mayWrite(requestId) || sessions.isRecoveryLatched()) return false;
+    await sessions.updateStore(userData(), (store) => {
+      if (!mayWrite(requestId)) return null;
+      const s = store.sessions.find((x) => x.id === sessionId);
+      if (!s) return null;
+      const msg = (s.messages || []).find((m) => m.id === assistantMessageId);
+      if (msg) {
+        msg.displayText = displayText;
+        msg.modelText = modelText;
+        msg.content = modelText;
+      }
+      s.updatedAt = new Date().toISOString();
+      return s;
+    });
+    return true;
   }
 
   async function runModelAndFinish(ctx) {
@@ -566,6 +586,7 @@ function createR2ChatLifecycle(deps) {
       if (useFake) {
         reply = await fakeModelStream((delta) => {
           if (!activeRequest.isCurrentWritable(requestId)) return;
+          noteLivePartial(requestId, delta);
           emitChatEvent(sender, {
             type: "delta",
             requestId,
@@ -602,12 +623,14 @@ function createR2ChatLifecycle(deps) {
               streamMessages,
               (delta) => {
                 if (!activeRequest.isCurrentWritable(requestId)) return;
+                const cleanedDelta = stripToolLeakage(delta);
+                noteLivePartial(requestId, cleanedDelta);
                 emitChatEvent(sender, {
                   type: "delta",
                   requestId,
                   sessionId,
                   messageId: assistantMessageId,
-                  textDelta: stripToolLeakage(delta),
+                  textDelta: cleanedDelta,
                 });
               },
               { signal }
@@ -615,6 +638,7 @@ function createR2ChatLifecycle(deps) {
           } else if (toolRun.reply != null) {
             reply = stripToolLeakage(toolRun.reply);
             if (activeRequest.isCurrentWritable(requestId)) {
+              noteLivePartial(requestId, reply);
               emitChatEvent(sender, {
                 type: "delta",
                 requestId,
@@ -644,12 +668,14 @@ function createR2ChatLifecycle(deps) {
             streamMessages,
             (delta) => {
               if (!activeRequest.isCurrentWritable(requestId)) return;
+              const cleanedDelta = stripToolLeakage(delta);
+              noteLivePartial(requestId, cleanedDelta);
               emitChatEvent(sender, {
                 type: "delta",
                 requestId,
                 sessionId,
                 messageId: assistantMessageId,
-                textDelta: stripToolLeakage(delta),
+                textDelta: cleanedDelta,
               });
             },
             { signal }
@@ -674,23 +700,9 @@ function createR2ChatLifecycle(deps) {
       const displayText = chatMessages.clampDisplayText(cleaned, "assistant");
       const modelText = chatMessages.truncateMarked(cleaned, chatMessages.MODEL_TEXT_MAX).text;
 
-      if (mayPersist(requestId, true) && !sessions.isRecoveryLatched()) {
-        await sessions.updateStore(userData(), (store) => {
-          if (!mayPersist(requestId, true)) return null;
-          const s = store.sessions.find((x) => x.id === sessionId);
-          if (!s) return null;
-          const msg = (s.messages || []).find((m) => m.id === assistantMessageId);
-          if (msg) {
-            msg.displayText = displayText;
-            msg.modelText = modelText;
-            msg.content = modelText;
-          }
-          s.updatedAt = new Date().toISOString();
-          return s;
-        });
-      }
+      await persistAssistantText(requestId, sessionId, assistantMessageId, displayText, modelText);
 
-      if (!activeRequest.isCurrent(requestId)) return;
+      if (!activeRequest.isCurrentWritable(requestId)) return;
 
       activeRequest.setStatus(requestId, "complete");
       emitChatEvent(sender, {
@@ -702,6 +714,11 @@ function createR2ChatLifecycle(deps) {
       });
     } catch (err) {
       const aborted = !!(err && err.aborted) || !activeRequest.isCurrentWritable(requestId);
+      // Stale / aborted / fallback-invalidated: no session write, no terminal emit.
+      if (!activeRequest.isCurrentWritable(requestId)) {
+        return;
+      }
+
       const partial = chatMessages.clampDisplayText(
         stripToolLeakage ? stripToolLeakage(reply || "") : reply || "",
         "assistant"
@@ -709,50 +726,75 @@ function createR2ChatLifecycle(deps) {
       const modelText = chatMessages.truncateMarked(partial, chatMessages.MODEL_TEXT_MAX).text;
 
       try {
-        if (mayPersist(requestId, true) && !sessions.isRecoveryLatched()) {
-          await sessions.updateStore(userData(), (store) => {
-            if (!mayPersist(requestId, true)) return null;
-            const s = store.sessions.find((x) => x.id === sessionId);
-            if (!s) return null;
-            const msg = (s.messages || []).find((m) => m.id === assistantMessageId);
-            if (msg) {
-              msg.displayText = partial;
-              msg.modelText = modelText;
-              msg.content = modelText;
-            }
-            s.updatedAt = new Date().toISOString();
-            return s;
-          });
-        }
+        await persistAssistantText(requestId, sessionId, assistantMessageId, partial, modelText);
       } catch {
         /* ignore */
       }
 
-      if (activeRequest.isCurrent(requestId)) {
-        activeRequest.setStatus(requestId, aborted ? "stopped" : "failed");
-        emitChatEvent(sender, {
-          type: aborted ? "stopped" : "error",
-          requestId,
-          sessionId,
-          messageId: assistantMessageId,
-          displayText: partial,
-          message: aborted ? "已停止" : err && err.message ? err.message : "暂时没办成，请稍后再试。",
-        });
-      }
+      if (!activeRequest.isCurrentWritable(requestId)) return;
+
+      activeRequest.setStatus(requestId, aborted ? "stopped" : "failed");
+      emitChatEvent(sender, {
+        type: aborted ? "stopped" : "error",
+        requestId,
+        sessionId,
+        messageId: assistantMessageId,
+        displayText: partial,
+        message: aborted ? "已停止" : err && err.message ? err.message : "暂时没办成，请稍后再试。",
+      });
     } finally {
       if (token) attachmentTokens.clear(token);
       armState.delete(requestId);
+      clearLivePartial(requestId);
       activeRequest.clear(requestId);
     }
   }
 
-  function stopChat(requestId) {
+  /**
+   * User stop: controlled snapshot of live partial while still writable, emit stopped,
+   * then abort so background work cannot write or emit again. Fallback must not use this.
+   */
+  async function stopChat(sender, requestId) {
     const cur = activeRequest.get();
     if (!cur) return { ok: true, stopped: false };
     if (requestId && cur.requestId !== requestId) {
       return { ok: false, code: "request_mismatch", message: "当前没有匹配的回复可停止。" };
     }
-    return activeRequest.abort(requestId || cur.requestId);
+    const id = requestId || cur.requestId;
+    const sessionId = cur.originSessionId;
+    const assistantMessageId = cur.assistantMessageId;
+
+    if (activeRequest.isCurrentWritable(id)) {
+      const raw = livePartials.get(id) || "";
+      const cleaned = stripToolLeakage ? stripToolLeakage(raw) : raw;
+      const displayText = chatMessages.clampDisplayText(cleaned, "assistant");
+      const modelText = chatMessages.truncateMarked(cleaned, chatMessages.MODEL_TEXT_MAX).text;
+      try {
+        await persistAssistantText(id, sessionId, assistantMessageId, displayText, modelText);
+      } catch {
+        /* ignore */
+      }
+      if (activeRequest.isCurrentWritable(id)) {
+        activeRequest.setStatus(id, "stopped");
+        emitChatEvent(sender, {
+          type: "stopped",
+          requestId: id,
+          sessionId,
+          messageId: assistantMessageId,
+          displayText,
+        });
+      }
+    }
+
+    const aborted = activeRequest.abort(id);
+    // Finalize user stop: tombstone + idle so return-legacy / session ops are not blocked
+    // while background runModelAndFinish winds down (its finally clear is then a no-op).
+    armState.delete(id);
+    clearLivePartial(id);
+    if (activeRequest.isCurrent(id)) {
+      activeRequest.clear(id);
+    }
+    return { ok: true, stopped: true, aborted: !!(aborted && aborted.ok) };
   }
 
   function getActiveRequest() {
@@ -776,6 +818,7 @@ function createR2ChatLifecycle(deps) {
     const cur = activeRequest.get();
     if (!cur) return { ok: true, aborted: false };
     const requestId = cur.requestId;
+    // Fallback: invalidate only — no partial snapshot, no terminal write.
     activeRequest.invalidate(requestId);
     // Wait until runModelAndFinish finally clears — do not pretend clear via setTimeout(0).
     const cleared = await activeRequest.waitUntilCleared(requestId, 8000);
@@ -783,6 +826,7 @@ function createR2ChatLifecycle(deps) {
       activeRequest.clear(requestId);
     }
     armState.delete(requestId);
+    clearLivePartial(requestId);
     return { ok: true, aborted: true, requestId, cleared };
   }
 

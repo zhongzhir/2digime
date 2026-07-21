@@ -1,8 +1,8 @@
 "use strict";
 
 /**
- * Pure chat:event acceptance for renderer (and hermetic tests).
- * Validates request triple + monotonic sequence; returns next cursor state.
+ * Pure chat:event acceptance — single production implementation.
+ * Used by renderer-next (via acceptChatEvent.ts facade) and hermetic contracts tests.
  */
 function acceptChatEvent(state, ev) {
   const prev = state || {
