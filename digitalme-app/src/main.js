@@ -42,6 +42,11 @@ const { createElectronSafeStorageAdapter } = require("./security/electron-safe-s
 const { ConfigSecretsService, extensionSecretId } = require("./security/config-secrets");
 const { buildRuntimeStamp, stampIsPostOwnerFixes } = require("./runtime-stamp");
 const sandboxPackageState = require("./sandbox-package-state");
+const { createRendererEntryRuntime } = require("./renderer-entry-runtime");
+
+const rendererEntryRuntime = createRendererEntryRuntime({
+  readyTimeoutMs: Number(process.env.DIGITALME_R1_READY_TIMEOUT_MS || 8000),
+});
 
 // Digital Me Package lives one level up from the app folder by default.
 const DEFAULT_PACKAGE_DIR = path.join(__dirname, "..", "..", "digital-me-package");
@@ -134,12 +139,21 @@ function createWindow() {
       nodeIntegration: false,
     },
   });
-  win.loadFile(path.join(__dirname, "renderer", "index.html"));
+  rendererEntryRuntime.bindWindow(win);
+  // R1: default remains legacy; next only via harness/dev gate inside runtime.
+  void rendererEntryRuntime.applyInitialEntry().catch((err) => {
+    console.error("[renderer-entry] initial load failed", err && err.stack ? err.stack : err);
+  });
   if (process.argv.includes("--dev")) win.webContents.openDevTools();
   const senderId = String(win.webContents.id);
   win.webContents.on("destroyed", () => {
     try {
       delegateRuntime.abortForSender(senderId);
+    } catch {
+      /* ignore */
+    }
+    try {
+      rendererEntryRuntime.controller.clearReadyTimer();
     } catch {
       /* ignore */
     }
@@ -704,9 +718,44 @@ ipcMain.handle("runtime:getStamp", () => {
   const stamp = buildRuntimeStamp();
   return {
     ...stamp,
+    apiVersion: 1,
     postOwnerFixes: stampIsPostOwnerFixes(stamp),
     ownerRuntimeTest: process.env.DIGITALME_OWNER_RUNTIME_TEST === "1",
   };
+});
+
+ipcMain.handle("runtime:getRendererEntry", () => rendererEntryRuntime.getPublicEntryState());
+
+ipcMain.handle("runtime:getBoundGeneration", () => rendererEntryRuntime.getBoundGeneration());
+
+ipcMain.handle("runtime:requestRendererEntry", (_e, entry, reason) => {
+  return rendererEntryRuntime.handleRequestFromRenderer(entry, reason);
+});
+
+ipcMain.handle("runtime:signalReady", (event, payload) => {
+  const generation =
+    payload && payload.generation != null
+      ? Number(payload.generation)
+      : rendererEntryRuntime.controller.getBoundGeneration();
+  return rendererEntryRuntime.handleSignalReady({
+    generation,
+    webContentsId: event && event.sender ? event.sender.id : null,
+  });
+});
+
+// Harness/dev only — not exposed on ordinary preload facade.
+ipcMain.handle("runtime:testRequestNext", (_e, reason) => {
+  if (!rendererEntryRuntime.controller.isSpikeHarnessEnabled()) {
+    return { ok: false, code: "harness_required" };
+  }
+  return rendererEntryRuntime.handleHarnessRequestNext(reason || "test_harness");
+});
+
+ipcMain.handle("runtime:testGetEntrySnapshot", () => {
+  if (!rendererEntryRuntime.controller.isSpikeHarnessEnabled()) {
+    return { ok: false, code: "harness_required" };
+  }
+  return { ok: true, ...rendererEntryRuntime.controller.snapshot() };
 });
 ipcMain.handle("config:set", (_e, cfg) => {
   getConfigSecrets().setConfigFromRenderer(cfg || {});

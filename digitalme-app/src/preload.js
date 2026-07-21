@@ -9,10 +9,32 @@ const PAN01R_TEST_HARNESS =
 
 const OWNER_RUNTIME_TEST = process.env.DIGITALME_OWNER_RUNTIME_TEST === "1";
 
+const R1_SPIKE_HARNESS =
+  process.env.DIGITALME_R1_SPIKE_HARNESS === "1" ||
+  process.env.DIGITALME_R1_OWNER_RUNTIME === "1";
+
+const R1_FAIL_READY = process.env.DIGITALME_R1_FAIL_READY === "1";
+const R1_INJECT_ERROR_BOUNDARY =
+  R1_SPIKE_HARNESS && process.env.DIGITALME_R1_INJECT_ERROR_BOUNDARY === "1";
+
 const api = {
   getConfig: () => ipcRenderer.invoke("config:get"),
   getRuntimeStamp: () => ipcRenderer.invoke("runtime:getStamp"),
   ownerRuntimeTest: OWNER_RUNTIME_TEST,
+  runtime: {
+    apiVersion: 1,
+    getStamp: () => ipcRenderer.invoke("runtime:getStamp"),
+    getRendererEntry: () => ipcRenderer.invoke("runtime:getRendererEntry"),
+    getBoundGeneration: () => ipcRenderer.invoke("runtime:getBoundGeneration"),
+    requestRendererEntry: (entry, reason) =>
+      ipcRenderer.invoke("runtime:requestRendererEntry", entry, reason),
+    signalReady: (generation) =>
+      ipcRenderer.invoke("runtime:signalReady", {
+        generation: generation == null ? undefined : Number(generation),
+      }),
+    failReadyEnabled: R1_FAIL_READY,
+    injectErrorBoundary: R1_INJECT_ERROR_BOUNDARY,
+  },
   setConfig: (cfg) => ipcRenderer.invoke("config:set", cfg),
   clearApiKey: () => ipcRenderer.invoke("config:clearApiKey"),
   clearExtensionSecret: (payload) => ipcRenderer.invoke("secrets:clearExtensionEnv", payload),
@@ -216,6 +238,14 @@ if (PAN01R_TEST_HARNESS) {
     ipcRenderer.on("panoramaExperience:progress", handler);
     return () => ipcRenderer.removeListener("panoramaExperience:progress", handler);
   };
+}
+
+// R1 spike harness only — ordinary renderer cannot enable via query/hash/localStorage.
+if (R1_SPIKE_HARNESS) {
+  api.r1SpikeHarness = true;
+  api.runtime.testRequestNext = (reason) =>
+    ipcRenderer.invoke("runtime:testRequestNext", reason || "preload_harness");
+  api.runtime.testGetEntrySnapshot = () => ipcRenderer.invoke("runtime:testGetEntrySnapshot");
 }
 
 contextBridge.exposeInMainWorld("digitalMe", api);

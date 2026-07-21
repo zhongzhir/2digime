@@ -5,6 +5,29 @@
 
 ---
 
+## 2026-07-21 Renderer Foundation R1 兼容性 spike
+
+### 做了什么
+
+Owner 授权后，在分支 `codex/r1-renderer-next-shell` 完成 **R1 兼容性 spike**（非业务 shell）：
+
+1. 文档空白清理提交后拉出实现分支。
+2. 锁定：react/react-dom **18.3.1**、vite **5.4.11**、typescript **5.7.3**、@vitejs/plugin-react **4.3.4**、@playwright/test **1.49.1**；Electron **32.3.3**（既有）。
+3. 新建最小 `renderer-next`（Vite + React + TS 占位壳 + runtime stamp）。
+4. main 权威入口：默认 legacy；`DIGITALME_R1_SPIKE_HARNESS` 门禁可进 next；普通 renderer 仅 next→legacy；ready generation 一次性消费；失败自动回 legacy + 本进程 latch。
+5. Playwright Electron 4/4；入口单测 4/4；legacy bootstrap-submit + owner-runtime 冒烟通过。
+6. 任务包 → **v0.1.2** / `implemented` / `empirically_verified` / `codex_review_pending`。
+
+### 边界（明确未做）
+
+未迁移 chat / 会话 /「我」/ 构建 / 工作台；未引入 SQLite；未开始 R2 / R2.5 / PAN-02；未改生产默认入口；未向普通用户暴露 next；未读改真实 Package / sessions / userData；未 push。
+
+### 下一等待项
+
+**等待 Codex 复核**本 spike。复核前不得继续正式 R1 shell 扩展。
+
+---
+
 ## 2026-07-20 Renderer Foundation R1 实施规格接受 · 今日收尾
 
 ### 做了什么
@@ -45,10 +68,10 @@
 
 纯文档：按 Codex 复核修订 `digitalme_renderer_foundation_R1_shell_and_entry_switch.md` → **v0.1.1-draft**。
 
-1. 入口权限：普通 renderer 仅 next→legacy；legacy→next 仅 main 开发/E2E；无生产 next 入口；禁 IPC 改持久化默认。  
-2. 失败状态：本进程 fallback latch；effectiveEntry=legacy；保留偏好并记失败，下次可重试；长期隔离不做。  
-3. ready 握手：窗口/页面/generation 绑定；一次性；迟到无效；timer 清理。  
-4. Electron/测试：contextIsolation、禁 nodeIntegration、production 本地产物、dev URL 门禁、故障注入门禁、E2E 隔离。  
+1. 入口权限：普通 renderer 仅 next→legacy；legacy→next 仅 main 开发/E2E；无生产 next 入口；禁 IPC 改持久化默认。
+2. 失败状态：本进程 fallback latch；effectiveEntry=legacy；保留偏好并记失败，下次可重试；长期隔离不做。
+3. ready 握手：窗口/页面/generation 绑定；一次性；迟到无效；timer 清理。
+4. Electron/测试：contextIsolation、禁 nodeIntegration、production 本地产物、dev URL 门禁、故障注入门禁、E2E 隔离。
 5. 状态改为 **`specified` / `codex_changes_requested` / `not_started`**（去掉 `frozen_for_implementation`）。
 
 ### 状态
@@ -103,9 +126,9 @@
 
 纯文档：将 R0 标为 **`accepted`**（决策/规格接受；**不是**代码实现完成），任务包 → **v0.1.2**。
 
-1. 修正 `digitalme_context.md` 两处句末多余 `>`（L7 / 覆盖段）。  
-2. 补充冻结：**next 加载失败或 ready 握手失败时，由 main 自动整窗回退 legacy**（§11.2；架构图与 R1 完成条件同步）。  
-3. Owner 五项决策记为已接受（§18）。  
+1. 修正 `digitalme_context.md` 两处句末多余 `>`（L7 / 覆盖段）。
+2. 补充冻结：**next 加载失败或 ready 握手失败时，由 main 自动整窗回退 legacy**（§11.2；架构图与 R1 完成条件同步）。
+3. Owner 五项决策记为已接受（§18）。
 4. 同步执行索引 / 能力表 / cursor rule / context（决策 #81）。
 
 ### 状态
@@ -129,10 +152,10 @@
 
 纯文档修订 `digitalme_renderer_foundation_R0_decision_and_migration_plan.md` → **v0.1.1-draft**（保留初稿提交 `fc56259`，不 amend）：
 
-1. **迁移拓扑**：R1/R2 整窗入口切换；legacy/next 两独立 HTML；启动时 main flag；禁 iframe/webview；禁一窗双状态机；禁新按钮驱动旧隐藏 DOM；「返回经典界面」先经 main 持久化再整窗加载 legacy。  
-2. **SQLite**：拆至 **R2.5** `planned` / `deferred`；R2 继续 JSON sessions；量化触发 + 独立 ADR + Owner 授权；PAN-02 不以 SQLite 为前提。  
-3. **E2E**：Playwright Electron 为主；保留 owner-runtime 作 legacy 回归；禁 Spectron；单测例 60s / 套件 10 min 口径；版本由 R1 spike 锁定。  
-4. **R1 收窄**：仅 shell / Vite / Error Boundary / stamp facade / 整窗开关 / 最小 Playwright / 回滚；不含 chat/我/工作台/SQLite/PAN-02/大规模 preload 重写。  
+1. **迁移拓扑**：R1/R2 整窗入口切换；legacy/next 两独立 HTML；启动时 main flag；禁 iframe/webview；禁一窗双状态机；禁新按钮驱动旧隐藏 DOM；「返回经典界面」先经 main 持久化再整窗加载 legacy。
+2. **SQLite**：拆至 **R2.5** `planned` / `deferred`；R2 继续 JSON sessions；量化触发 + 独立 ADR + Owner 授权；PAN-02 不以 SQLite 为前提。
+3. **E2E**：Playwright Electron 为主；保留 owner-runtime 作 legacy 回归；禁 Spectron；单测例 60s / 套件 10 min 口径；版本由 R1 spike 锁定。
+4. **R1 收窄**：仅 shell / Vite / Error Boundary / stamp facade / 整窗开关 / 最小 Playwright / 回滚；不含 chat/我/工作台/SQLite/PAN-02/大规模 preload 重写。
 5. Owner 五项问题按上列调整。
 
 同步：context（决策 #80）、执行索引、能力表、cursor rule。
@@ -204,9 +227,9 @@ Owner 在真实 Electron 环境对最终运行版本 **`cbde807fd1e40472d66fbe8f
 | **PAN-01S.1** | **`accepted`** | Owner real Electron runtime；主体解释与渐进构建主路径 |
 | **PAN-01S.2** | **`accepted`** | Owner real Electron runtime；覆盖对话历史显示、附件上下文分离、关联文稿正文隔离与恢复入口（正式独立任务包未入库；本条与执行索引记录为准，不伪造任务包历史） |
 
-**Acceptance basis：** Owner real Electron runtime（自动测试通过**不**作为唯一依据）。  
-**Accepted baseline：** `cbde807`  
-**Accepted date：** 2026-07-20  
+**Acceptance basis：** Owner real Electron runtime（自动测试通过**不**作为唯一依据）。
+**Accepted baseline：** `cbde807`
+**Accepted date：** 2026-07-20
 
 独立保留提交（未 amend / squash / push）：`b5997b6`、`acacc6e`、`598e7e9`、`34fb497`、`cbde807`。
 
@@ -284,8 +307,8 @@ Owner 在真实 Electron 环境对最终运行版本 **`cbde807fd1e40472d66fbe8f
 
 ### 状态
 
-PAN-01S.1：`statically_verified` / `implemented`（**不** accepted）  
-PAN-01S：`statically_verified` / `owner_changes_requested`（**不** accepted）  
+PAN-01S.1：`statically_verified` / `implemented`（**不** accepted）
+PAN-01S：`statically_verified` / `owner_changes_requested`（**不** accepted）
 PAN-02：`planned` / `not_started`
 
 未触碰 Package；未标 accepted；未开始 PAN-02；未 push。

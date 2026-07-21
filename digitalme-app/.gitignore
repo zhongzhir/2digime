@@ -1,6 +1,7 @@
 node_modules/
 dist/
 out/
+src/renderer-next/dist/
 *.log
 .env
 config.local.json

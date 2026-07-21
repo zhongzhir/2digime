@@ -1,25 +1,24 @@
 # Renderer Foundation R1：最小 shell 与整窗入口切换
 
-版本：v0.1.1
-日期：2026-07-20
-状态：`specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`
-性质：**独立实施任务包**；**实施规格已冻结**；**不是**实现完成或产品验收通过；**implementation 仍为 `not_started`**；实现分支**不存在**；**尚未获得 Owner 创建实现分支与开始 spike 的授权**
+版本：v0.1.2
+日期：2026-07-21
+状态：`implemented` / `empirically_verified` / `codex_review_pending`
+性质：**独立实施任务包**；**实施规格已冻结（v0.1.1）**；本轮已完成 **兼容性 spike**（非正式业务 shell）；**正式 R1 shell 完成度仍待 Codex 复核决定**；**不得**标 `statically_verified` / `runtime_verified` / `accepted` / `released`
 所属主线：`P1-PANORAMA`（三位一体 Alpha）
 前置：Renderer Foundation R0 **`accepted`**（v0.1.2；决策接受）
 依据：`digitalme_renderer_foundation_R0_decision_and_migration_plan.md` §10 / §11 / §14.1 / §15
-建议实现分支名（**仅在 Owner 明确授权后**，从规格接受提交创建）：`codex/r1-renderer-next-shell`
+实现分支：`codex/r1-renderer-next-shell`（Owner 已于 2026-07-21 授权）
 
 > **状态语义**
 >
-> - **`specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`**：**实施规格已冻结**（Codex 再复核通过）；**不等于**已实现、`statically_verified`、`runtime_verified`、`accepted` 或 `released`；
-> - **implementation = `not_started`**；实现分支**不存在**；
-> - **Owner 实现授权：未获得** — 不得自行创建 `codex/r1-renderer-next-shell`、不得 `npm install`、不得改源码/lockfile、不得启动 Electron；
-> - 获 Owner 授权后，第一步仅为 §5 **兼容性 spike**；版本锁定表在此之前保持 TBD；
+> - **`implemented` / `empirically_verified` / `codex_review_pending`**：兼容性 spike 已落地并通过本机实证（Vite build、入口/latch/generation 单测、Playwright Electron、legacy 冒烟）；**不等于** `statically_verified`、`runtime_verified`、`accepted` 或 `released`；
+> - **正式 R1 shell**（完整 AppShell 占位路由与后续表面）**完成度仍待 Codex 复核后决定**；本轮**停止于 spike**；
+> - 生产默认入口仍为 **legacy**；普通用户路径无进入 next 的入口；
 > - **禁止**启动 PAN-02；R2.5 SQLite 保持 `planned` / `deferred`；
 > - 本切片**不**改变 PAN-01S 族 `accepted`；R0 **`accepted` 不变**；
-> - 工程完成后最高 `statically_verified`；未经 Owner 真机验收不得将 R1 标为产品面「可用」或删除 legacy。
+> - 未经 Owner 真机验收不得将 R1 标为产品面「可用」或删除 legacy。
 
-角色：Owner（验收）＋ Codex（规格复核）＋ Cursor（实现）
+角色：Owner（验收）＋ Codex（规格/实现复核）＋ Cursor（实现）
 
 ---
 
@@ -88,15 +87,18 @@
 
 Spike 结论写入版本表后方可扩大实现。失败则停止扩 scope，保持生产默认 legacy。
 
-### 5.1 版本锁定表（仅获准实现后的 spike 中填写；当前全部 TBD）
+### 5.1 版本锁定表（spike 锁定 · Windows / Electron 实证）
 
 | 包 | 目标族 | 锁定版本 |
 |---|---|---|
-| react / react-dom | React | **TBD**（spike 前不得填写臆测版本） |
-| vite | Vite | **TBD** |
-| typescript | TS | **TBD** |
-| @playwright/test 或等价 | Playwright | **TBD** |
-| 其他必要插件 | — | **TBD** |
+| react / react-dom | React | **18.3.1** / **18.3.1** |
+| vite | Vite | **5.4.11** |
+| typescript | TS | **5.7.3** |
+| @vitejs/plugin-react | Vite React 插件 | **4.3.4** |
+| @playwright/test | Playwright | **1.49.1** |
+| electron（既有） | Electron | **32.3.3**（host 实证） |
+
+**兼容性结果（2026-07-21，Windows）**：Node **v24.14.0**；npm **11.9.0**；Electron **32.3.3**。Vite production build 成功；Electron production-load 本地 `renderer-next/dist`；Vite dev URL 仅 `DIGITALME_VITE_DEV=1`；Playwright Electron 4/4 通过；入口/latch/generation 单测 4/4；legacy `bootstrap-submit` + `owner-runtime` 冒烟通过。
 
 ---
 
@@ -172,34 +174,34 @@ runtime.signalReady(generation) -> { ok }  // 或由 preload 绑定世代；无�
 
 ### 7.1 工程
 
-- [ ] `renderer-next` 可在 Windows 本地启动（显式 dev）。
-- [ ] production-load 仅加载本地构建产物。
-- [ ] TypeScript 检查通过；版本与 lockfile 已锁。
-- [ ] 生产默认 / 普通用户路径仍为 legacy；无生产「进入 next」入口。
-- [ ] §6.1–§6.4 契约有测试或可审计实现对应。
-- [ ] 无真实 Package 写入；E2E 隔离 userData + 独立进程 + 非真实 Package 路径。
-- [ ] 未引入 Spectron；未做范围外功能。
+- [x] `renderer-next` 可在 Windows 本地启动（显式 dev 配置已具备；本轮实证以 production-load 为主）。
+- [x] production-load 仅加载本地构建产物。
+- [x] TypeScript 检查通过；版本与 lockfile 已锁。
+- [x] 生产默认 / 普通用户路径仍为 legacy；无生产「进入 next」入口。
+- [x] §6.1–§6.4 契约有测试或可审计实现对应（spike 最小集）。
+- [x] 无真实 Package 写入；E2E 隔离 userData + 独立进程 + 非真实 Package 路径。
+- [x] 未引入 Spectron；未做范围外功能。
 
 ### 7.2 Playwright Electron 最小套件
 
-- [ ] 启动并校验 runtime stamp。
-- [ ] 隔离 userData；非真实 Package 路径。
-- [ ] 默认 legacy 可启动。
-- [ ] **经 E2E/main 门禁**进入 next 成功。
-- [ ] 普通 `requestRendererEntry("next")` 被拒绝（若从 next 外调用）。
-- [ ] next→legacy 请求成功。
-- [ ] Error Boundary 注入仅 harness 可开；生产路径不可用 query/hash/localStorage 开启。
-- [ ] next load 或 ready 失败 → 自动 legacy + **latch**（同进程再自动进 next 被拒）。
-- [ ] 迟到/错误世代 `signalReady` 无效。
-- [ ] 套件在超时口径内完成。
+- [x] 启动并校验 runtime stamp。
+- [x] 隔离 userData；非真实 Package 路径。
+- [x] 默认 legacy 可启动。
+- [x] **经 E2E/main 门禁**进入 next 成功。
+- [x] 普通 `requestRendererEntry("next")` 被拒绝（若从 next 外调用）。
+- [x] next→legacy 请求成功。
+- [ ] Error Boundary 注入仅 harness 可开；生产路径不可用 query/hash/localStorage 开启。（门禁已实现；本轮 E2E 未单列注入用例）
+- [x] next load 或 ready 失败 → 自动 legacy + **latch**（同进程再自动进 next 被拒）。
+- [x] 迟到/错误世代 `signalReady` 无效。
+- [x] 套件在超时口径内完成。
 
 ### 7.3 复核与验收
 
 - [x] Codex 规格再复核通过（本文件 v0.1.1 冻结）。
-- [ ] **Owner 明确授权**创建实现分支并启动 spike（**当前未满足**）。
+- [x] **Owner 明确授权**创建实现分支并启动 spike（2026-07-21）。
 - [ ] Owner 真机抽查（实现完成后）：默认 legacy、失败回退、无生产 next 入口。
-- [ ] **不得**因 R1 将 next 暴露给普通用户作为默认或主入口。
-- [ ] **不得**将本规格冻结误标为 `accepted` / `implemented` / `statically_verified` / `runtime_verified` / `released`。
+- [x] **不得**因 R1 将 next 暴露给普通用户作为默认或主入口。
+- [x] **不得**将本规格冻结误标为 `accepted` / `statically_verified` / `runtime_verified` / `released`（本轮仅 `implemented` / `empirically_verified` / `codex_review_pending`）。
 
 ---
 
@@ -209,17 +211,17 @@ runtime.signalReady(generation) -> { ok }  // 或由 preload 绑定世代；无�
 
 | 条件 | 当前 |
 |---|---|
-| Codex 规格复核 | **已满足**（`codex_review_passed`） |
+| Codex 规格复核 | **已满足**（`codex_review_passed`，v0.1.1） |
 | 规格冻结 | **已满足**（`frozen_for_implementation`；v0.1.1） |
-| Owner 实现授权 | **未满足** |
-| 实现分支 | **不存在** |
-| implementation | **`not_started`** |
+| Owner 实现授权 | **已满足（2026-07-21）** |
+| 实现分支 | **`codex/r1-renderer-next-shell`** |
+| implementation | **spike `implemented` / `empirically_verified`；等待 `codex_review_pending`** |
 
 ### 8.2 开始编码的进入条件（全部满足后方可）
 
 1. 上表 Codex 复核与规格冻结已满足（已满足）；
-2. **Owner 明确授权**创建 `codex/r1-renderer-next-shell`（从本规格接受提交拉出）；
-3. 授权后第一步仅为 §5 兼容性 spike；版本表仍为 TBD 直至 spike 锁定。
+2. **Owner 明确授权**创建 `codex/r1-renderer-next-shell`（已满足）；
+3. 授权后第一步仅为 §5 兼容性 spike（本轮已完成）；扩大正式 shell 前须 Codex 复核。
 
 ### 8.3 停止条件
 
@@ -274,15 +276,14 @@ runtime.signalReady(generation) -> { ok }  // 或由 preload 绑定世代；无�
 
 | 项 | 值 |
 |---|---|
-| 本文件 | **`specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`**（v0.1.1） |
-| 含义 | **实施规格已冻结**；**不是**实现完成 |
-| implementation | **`not_started`** |
-| 实现分支 | **不存在** |
-| Owner 实现授权 | **未获得** |
-| 版本锁定表 | **全部 TBD**（仅获准后的 spike 可填） |
-| 今日收尾 | 不开始实现；不装依赖；不建分支；不启 Electron；不跑产品测试；不开始 R2/R2.5/PAN-02 |
-| 下一等待项 | **等待 Owner 后续明确授权**创建实现分支并启动兼容性 spike |
-| 完成后下一步 | R2 任务包（另文）；不自动开始 |
+| 本文件 | **`implemented` / `empirically_verified` / `codex_review_pending`**（v0.1.2） |
+| 含义 | 兼容性 spike 已实现并本机实证；**正式 shell 完成度待 Codex 复核** |
+| implementation | **spike `implemented`**（非业务 shell 完成） |
+| 实现分支 | **`codex/r1-renderer-next-shell`** |
+| Owner 实现授权 | **已获得（2026-07-21）** |
+| 版本锁定表 | **已填写** |
+| 本轮停止点 | spike 完成并提交后**立即停止**；等待 Codex 复核；**不得**继续正式 R1 shell 扩展 |
+| 完成后下一步 | Codex 复核通过后再决定正式 shell 范围；R2 任务包另文；不自动开始 |
 | PAN-02 | `planned` / `blocked` |
 | R0 | `accepted`（不变） |
 | PAN-01S 族 | `accepted`（不变） |
@@ -296,3 +297,4 @@ runtime.signalReady(generation) -> { ok }  // 或由 preload 绑定世代；无�
 | 2026-07-20 | v0.1-draft | 初稿（`2a60c27`）；曾含过早的 `frozen_for_implementation`（历史） |
 | 2026-07-20 | v0.1.1-draft | Codex 第一轮修订（`6107b36`）：入口权限、失败 latch、ready 世代、Electron/测试边界；当时 `codex_changes_requested`（历史） |
 | 2026-07-20 | **v0.1.1** | **Codex 再复核通过**；四项启动安全契约已冻结；状态 → `specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`。**实施规格冻结**；实现尚未授权、尚未开始；版本表保持 TBD |
+| 2026-07-21 | **v0.1.2** | Owner 授权后完成兼容性 spike：锁定依赖版本；main 入口门禁/latch/generation；`renderer-next` production-load；Playwright Electron 最小 E2E。状态 → `implemented` / `empirically_verified` / `codex_review_pending`。**停止扩 scope，等待 Codex 复核** |
