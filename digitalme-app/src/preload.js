@@ -74,6 +74,8 @@ const api = {
   renameSession: (payload) => ipcRenderer.invoke("sessions:rename", payload),
   deleteSession: (id) => ipcRenderer.invoke("sessions:delete", id),
   setActiveSession: (id) => ipcRenderer.invoke("sessions:setActive", id),
+  /** One-shot legacy handoff from next (libraryId/scene only). */
+  consumeLegacyNavIntent: () => ipcRenderer.invoke("r2:consumeLegacyHandoff"),
   // Exports
   exportMarkdown: (payload) => ipcRenderer.invoke("output:exportMarkdown", payload),
   exportDocx: (payload) => ipcRenderer.invoke("output:exportDocx", payload),
@@ -243,6 +245,32 @@ if (R1_SPIKE_HARNESS) {
   api.runtime.testRequestNext = (reason) =>
     ipcRenderer.invoke("runtime:testRequestNext", reason || "preload_harness");
   api.runtime.testGetEntrySnapshot = () => ipcRenderer.invoke("runtime:testGetEntrySnapshot");
+}
+
+/** R2 narrow API for renderer-next — no saveSession / no attachment bodies. */
+api.r2 = {
+  listSessions: () => ipcRenderer.invoke("r2:listSessions"),
+  getSession: (id) => ipcRenderer.invoke("r2:getSession", id),
+  createSession: (opts) => ipcRenderer.invoke("r2:createSession", opts),
+  renameSession: (payload) => ipcRenderer.invoke("r2:renameSession", payload),
+  deleteSession: (id) => ipcRenderer.invoke("r2:deleteSession", id),
+  setCurrentSession: (id) => ipcRenderer.invoke("r2:setCurrentSession", id),
+  sendChat: (payload) => ipcRenderer.invoke("r2:sendChat", payload),
+  stopChat: (payload) => ipcRenderer.invoke("r2:stopChat", payload),
+  getActiveRequest: () => ipcRenderer.invoke("r2:getActiveRequest"),
+  pickAttachments: (payload) => ipcRenderer.invoke("r2:pickAttachments", payload),
+  clearLinkedArtifact: (payload) => ipcRenderer.invoke("r2:clearLinkedArtifact", payload),
+  openLinkedArtifact: (payload) => ipcRenderer.invoke("r2:openLinkedArtifact", payload),
+  onChatEvent: (cb) => {
+    const handler = (_e, data) => cb(data);
+    ipcRenderer.on("chat:event", handler);
+    return () => ipcRenderer.removeListener("chat:event", handler);
+  },
+};
+
+if (R1_SPIKE_HARNESS || process.env.DIGITALME_R2_FAKE_MODEL === "1") {
+  api.r2.testSetAttachmentClock = (payload) =>
+    ipcRenderer.invoke("r2:testSetAttachmentClock", payload);
 }
 
 contextBridge.exposeInMainWorld("digitalMe", api);

@@ -14,16 +14,21 @@ const cm = require("../src/chat-message-model");
 
 let passed = 0;
 let failed = 0;
+const pending = [];
 
 function test(name, fn) {
-  try {
-    fn();
-    passed += 1;
-    console.log("PASS", name);
-  } catch (err) {
-    failed += 1;
-    console.error("FAIL", name, err && err.stack ? err.stack : err);
-  }
+  pending.push(
+    Promise.resolve()
+      .then(() => fn())
+      .then(() => {
+        passed += 1;
+        console.log("PASS", name);
+      })
+      .catch((err) => {
+        failed += 1;
+        console.error("FAIL", name, err && err.stack ? err.stack : err);
+      })
+  );
 }
 
 function tempUserData() {
@@ -79,10 +84,10 @@ test("1. new user message fields: display/model/refs; requestContent separate", 
   assert.ok(!blob.includes(FAKE_ABS_PATH));
 });
 
-test("2. persist session JSON has no attachment body; reload shows short bubble", () => {
+test("2. persist session JSON has no attachment body; reload shows short bubble", async () => {
   const ud = tempUserData();
   try {
-    const s = sessions.createSession(ud, { title: "测" });
+    const s = await sessions.createSession(ud, { title: "测" });
     const displayText = cm.buildUserDisplayText("请总结", ["材料A.txt"]);
     const modelText = cm.buildUserModelText("请总结", ["材料A.txt"]);
     s.messages = [
@@ -93,7 +98,7 @@ test("2. persist session JSON has no attachment body; reload shows short bubble"
         attachmentRefs: [{ id: "a1", name: "材料A.txt" }],
       }),
     ];
-    sessions.saveSession(ud, s);
+    await sessions.saveSession(ud, s);
     const raw = fs.readFileSync(sessions.sessionsPath(ud), "utf8");
     assert.ok(!raw.includes(FAKE_RESUME_BODY.slice(0, 30)));
     assert.ok(!raw.includes("以下是我附上的材料正文"));
@@ -177,7 +182,7 @@ test("5. concurrency helpers: single flight + gateway history strip", () => {
   assert.equal(gw[0].attachmentRefs, undefined);
 });
 
-test("6. corrupt history normalize skips bad rows; createSession still works", () => {
+test("6. corrupt history normalize skips bad rows; createSession still works", async () => {
   const ud = tempUserData();
   try {
     const rows = [null, { role: "tool" }, { role: "user", content: "hi" }, "bad"];
@@ -188,7 +193,7 @@ test("6. corrupt history normalize skips bad rows; createSession still works", (
     }
     assert.equal(out.length, 1);
     assert.equal(out[0].role, "user");
-    const s = sessions.createSession(ud, { title: "恢复" });
+    const s = await sessions.createSession(ud, { title: "恢复" });
     assert.ok(s.id);
     assert.equal(Array.isArray(s.messages), true);
   } finally {
@@ -196,10 +201,10 @@ test("6. corrupt history normalize skips bad rows; createSession still works", (
   }
 });
 
-test("7. listSessions preview uses safe text not attachment body", () => {
+test("7. listSessions preview uses safe text not attachment body", async () => {
   const ud = tempUserData();
   try {
-    const s = sessions.createSession(ud, { title: "预览" });
+    const s = await sessions.createSession(ud, { title: "预览" });
     s.messages = [
       {
         role: "user",
@@ -487,6 +492,8 @@ test("13. all renderArtifact call sites avoid writing content to chat DOM", () =
   assert.ok(calls.length >= 4, "expected multiple renderArtifact call sites, got " + calls.length);
 });
 
-console.log("");
-console.log(`chat-history-display: ${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+Promise.all(pending).then(() => {
+  console.log("");
+  console.log(`chat-history-display: ${passed} passed, ${failed} failed`);
+  process.exit(failed ? 1 : 0);
+});

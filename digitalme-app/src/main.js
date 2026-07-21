@@ -43,9 +43,21 @@ const { ConfigSecretsService, extensionSecretId } = require("./security/config-s
 const { buildRuntimeStamp, stampIsPostOwnerFixes } = require("./runtime-stamp");
 const sandboxPackageState = require("./sandbox-package-state");
 const { createRendererEntryRuntime } = require("./renderer-entry-runtime");
+const { createActiveRequestRegistry } = require("./r2/active-request");
+const { createAttachmentTokenVault } = require("./r2/attachment-tokens");
+const { createLegacyHandoff } = require("./r2/legacy-handoff");
+const { createR2ChatLifecycle } = require("./r2/chat-lifecycle");
+
+const r2ActiveRequest = createActiveRequestRegistry();
+const r2AttachmentTokens = createAttachmentTokenVault();
+const r2LegacyHandoff = createLegacyHandoff();
+
+/** Set after r2Chat is constructed — used by R1 fallback path. */
+let r2AbortOnFallback = async () => ({ ok: true, aborted: false });
 
 const rendererEntryRuntime = createRendererEntryRuntime({
   readyTimeoutMs: Number(process.env.DIGITALME_R1_READY_TIMEOUT_MS || 8000),
+  onBeforeFallback: async (failure) => r2AbortOnFallback(failure),
 });
 
 // Digital Me Package lives one level up from the app folder by default.
@@ -729,6 +741,19 @@ ipcMain.handle("runtime:getRendererEntry", () => rendererEntryRuntime.getPublicE
 ipcMain.handle("runtime:getBoundGeneration", () => rendererEntryRuntime.getBoundGeneration());
 
 ipcMain.handle("runtime:requestRendererEntry", (_e, entry, reason) => {
+  const target = String(entry || "");
+  const why = String(reason || "");
+  if (target === "legacy" && (why === "user_return" || why === "user_return_legacy")) {
+    const gate = r2ActiveRequest.assertIdle();
+    if (!gate.ok) {
+      return {
+        ok: false,
+        code: "request_in_progress",
+        message: "请先停止当前回复，再返回经典界面。",
+        activeRequest: gate.activeRequest,
+      };
+    }
+  }
   return rendererEntryRuntime.handleRequestFromRenderer(entry, reason);
 });
 
@@ -1579,24 +1604,282 @@ ipcMain.handle("chat:pickAttachments", async () => {
 ipcMain.handle("sessions:list", async () => sessions.listSessions(app.getPath("userData")));
 ipcMain.handle("sessions:get", async (_e, id) => sessions.getSession(app.getPath("userData"), id));
 ipcMain.handle("sessions:create", async (_e, opts) => {
+  if (sessions.isRecoveryLatched()) {
+    throw Object.assign(new Error("会话存档当前无法安全写入。"), {
+      code: "sessions_recovery_latched",
+    });
+  }
   const cfg = readConfig();
   return sessions.createSession(app.getPath("userData"), {
     title: opts?.title,
     packagePath: cfg.packageDir || DEFAULT_PACKAGE_DIR,
   });
 });
-ipcMain.handle("sessions:save", async (_e, session) =>
-  sessions.saveSession(app.getPath("userData"), session)
+ipcMain.handle("sessions:save", async (_e, session) => {
+  if (sessions.isRecoveryLatched()) {
+    throw Object.assign(new Error("会话存档当前无法安全写入。"), {
+      code: "sessions_recovery_latched",
+    });
+  }
+  return sessions.saveSession(app.getPath("userData"), session);
+});
+ipcMain.handle("sessions:rename", async (_e, { id, title }) => {
+  if (sessions.isRecoveryLatched()) {
+    throw Object.assign(new Error("会话存档当前无法安全写入。"), {
+      code: "sessions_recovery_latched",
+    });
+  }
+  return sessions.renameSession(app.getPath("userData"), id, title);
+});
+ipcMain.handle("sessions:delete", async (_e, id) => {
+  if (sessions.isRecoveryLatched()) {
+    throw Object.assign(new Error("会话存档当前无法安全写入。"), {
+      code: "sessions_recovery_latched",
+    });
+  }
+  return sessions.deleteSession(app.getPath("userData"), id);
+});
+ipcMain.handle("sessions:setActive", async (_e, id) => {
+  if (sessions.isRecoveryLatched()) {
+    throw Object.assign(new Error("会话存档当前无法安全写入。"), {
+      code: "sessions_recovery_latched",
+    });
+  }
+  return sessions.setActive(app.getPath("userData"), id);
+});
+
+// ---------- R2 narrow chat / sessions API (renderer-next) ----------
+function loadPackageForR2Chat() {
+  const dir = packageDirFromConfig();
+  tryRecoverConfiguredPackageStore();
+  life.ensureLifeScaffold(dir);
+  policies.ensureBoundariesScaffold(dir);
+  const manifestRaw = safeRead(path.join(dir, "manifest.json"));
+  let manifest = {};
+  try {
+    manifest = JSON.parse(manifestRaw);
+  } catch {
+    /* ignore */
+  }
+  return {
+    dir,
+    exists: !!manifestRaw,
+    manifest,
+    persona: safeRead(path.join(dir, "persona.md")),
+    styleGuide: safeRead(path.join(dir, "style-guide.md")),
+    systemPrompt: safeRead(path.join(dir, "prompts", "system-prompt.md")),
+    decisionFrameworks: safeRead(path.join(dir, "decision-frameworks.json")),
+    preferences: safeRead(path.join(dir, "preferences.json")),
+    longTermMemory: safeRead(path.join(dir, "memory", "long-term-memory.jsonl")),
+    lifeSummary: life.summarizeLifeForPrompt(dir),
+    boundariesSummary: policies.summarizeBoundariesForPrompt(dir),
+  };
+}
+
+const r2Chat = createR2ChatLifecycle({
+  activeRequest: r2ActiveRequest,
+  attachmentTokens: r2AttachmentTokens,
+  getUserData: () => app.getPath("userData"),
+  readConfig,
+  buildSystemPrompt,
+  loadPackageForChat: loadPackageForR2Chat,
+  callModelStream,
+  runChatWithConnectedTools,
+  getExtensionManager,
+  stripToolLeakage,
+  hasBadChars,
+  hasDsmlToolMarkup,
+  retrieval,
+  defaultPackageDir: DEFAULT_PACKAGE_DIR,
+  sendToSender: (sender, channel, data) => {
+    try {
+      if (sender && !sender.isDestroyed()) sender.send(channel, data);
+    } catch {
+      /* ignore */
+    }
+  },
+});
+r2AbortOnFallback = async () => r2Chat.abortActiveForFallback();
+
+ipcMain.handle("r2:listSessions", async () => r2Chat.listSessionsDto());
+ipcMain.handle("r2:getSession", async (_e, id) => r2Chat.getSessionDto(id));
+ipcMain.handle("r2:createSession", async (_e, opts) => r2Chat.createSession(opts || {}));
+ipcMain.handle("r2:renameSession", async (_e, payload) =>
+  r2Chat.renameSession(payload && payload.id, payload && payload.title)
 );
-ipcMain.handle("sessions:rename", async (_e, { id, title }) =>
-  sessions.renameSession(app.getPath("userData"), id, title)
+ipcMain.handle("r2:deleteSession", async (_e, id) => r2Chat.deleteSession(id));
+ipcMain.handle("r2:setCurrentSession", async (_e, id) => r2Chat.setCurrentSession(id));
+ipcMain.handle("r2:sendChat", async (e, payload) =>
+  r2Chat.sendChat(e.sender, payload || {}, e.sender.id)
 );
-ipcMain.handle("sessions:delete", async (_e, id) =>
-  sessions.deleteSession(app.getPath("userData"), id)
+ipcMain.handle("r2:stopChat", async (_e, payload) =>
+  r2Chat.stopChat(payload && payload.requestId)
 );
-ipcMain.handle("sessions:setActive", async (_e, id) =>
-  sessions.setActive(app.getPath("userData"), id)
+ipcMain.handle("r2:getActiveRequest", async () => r2Chat.getActiveRequest());
+ipcMain.handle("r2:clearLinkedArtifact", async (_e, payload) =>
+  r2Chat.clearLinkedArtifact(payload && payload.sessionId)
 );
+ipcMain.handle("r2:pickAttachments", async (e, payload) => {
+  const busy = r2ActiveRequest.assertIdle();
+  if (!busy.ok) {
+    return { ok: false, code: busy.code, message: busy.message };
+  }
+  const sessionId = String((payload && payload.sessionId) || "");
+  if (!sessionId) {
+    return { ok: false, code: "missing_session", message: "请先选择对话。" };
+  }
+  const res = await dialog.showOpenDialog({
+    title: "添加材料",
+    properties: ["openFile", "multiSelections"],
+    filters: [
+      {
+        name: "常用材料",
+        extensions: ["docx", "pdf", "pptx", "txt", "md", "markdown", "png", "jpg", "jpeg", "webp", "gif"],
+      },
+      { name: "所有文件", extensions: ["*"] },
+    ],
+  });
+  if (res.canceled || !res.filePaths.length) {
+    return { ok: true, canceled: true, attachments: [], token: null };
+  }
+  const selection = [];
+  for (const filePath of res.filePaths.slice(0, 5)) {
+    const ext = path.extname(filePath).toLowerCase();
+    const name = path.basename(filePath);
+    const isImage = [".png", ".jpg", ".jpeg", ".webp", ".gif"].includes(ext);
+    let text = "";
+    let note = "";
+    let ok = false;
+    let chars = 0;
+    let size = 0;
+    try {
+      try {
+        size = fs.statSync(filePath).size;
+      } catch {
+        size = 0;
+      }
+      if (isImage) {
+        note = "图片已附上（请用文字说明要点）";
+        text = `[图片附件] ${name}`;
+        ok = true;
+      } else {
+        text = await builder.extractText(filePath);
+        text = String(text || "")
+          .replace(/\n--\s*\d+\s+of\s+\d+\s*--\n/gi, "\n")
+          .trim();
+        if (!text) throw new Error("未提取到可读文字");
+        chars = text.length;
+        if (text.length > 40000) {
+          text = text.slice(0, 40000) + "\n\n…（后文已省略，共约 " + chars + " 字）";
+        }
+        note = "已读入约 " + chars + " 字";
+        ok = true;
+      }
+    } catch (err) {
+      note = "未能读入：" + (err.message || "未知原因");
+      text = "";
+      ok = false;
+    }
+    selection.push({
+      id: "att_" + Date.now().toString(36) + "_" + Math.floor(Math.random() * 1000),
+      name,
+      type: isImage ? "image" : "file",
+      size,
+      ext,
+      isImage,
+      text,
+      note,
+      ok,
+      chars,
+      // path kept only in main vault — never returned to renderer
+      _path: filePath,
+    });
+  }
+  const minted = r2AttachmentTokens.create({
+    webContentsId: e.sender.id,
+    sessionId,
+    selection: selection.map((a) => ({
+      id: a.id,
+      name: a.name,
+      type: a.type,
+      size: a.size,
+      text: a.text,
+      note: a.note,
+      ok: a.ok,
+      chars: a.chars,
+    })),
+  });
+  return {
+    ok: true,
+    canceled: false,
+    token: minted.token,
+    attachments: minted.attachments,
+  };
+});
+
+ipcMain.handle("r2:openLinkedArtifact", async (_e, payload) => {
+  const busy = r2ActiveRequest.assertIdle();
+  if (!busy.ok) {
+    return {
+      ok: false,
+      code: busy.code,
+      message: "请先停止当前回复，再打开关联文稿。",
+    };
+  }
+  const sessionId = String((payload && payload.sessionId) || "");
+  const libraryId = String((payload && payload.libraryId) || "");
+  if (!sessionId || !libraryId) {
+    return { ok: false, code: "invalid_args", message: "无法打开关联文稿。" };
+  }
+  try {
+    const session = sessions.getSession(app.getPath("userData"), sessionId);
+    if (!session) return { ok: false, code: "not_found", message: "找不到该对话。" };
+    const linked =
+      String(session.linkedLibraryId || "") === libraryId ||
+      (session.artifacts || []).some(
+        (a) => a && (String(a.libraryId) === libraryId || String(a.id) === libraryId)
+      );
+    if (!linked) {
+      return { ok: false, code: "not_linked", message: "当前对话未关联该文稿。" };
+    }
+    r2LegacyHandoff.setOpenLibraryItem(libraryId, "library");
+    const nav = await rendererEntryRuntime.handleRequestFromRenderer("legacy", "open_linked_artifact");
+    if (!nav || !nav.ok) {
+      r2LegacyHandoff.clear();
+      return {
+        ok: false,
+        code: (nav && nav.code) || "handoff_failed",
+        message: "未能切换到经典界面打开文稿，请稍后重试。",
+      };
+    }
+    return { ok: true, deferred: !!nav.deferred };
+  } catch (err) {
+    r2LegacyHandoff.clear();
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "open_failed",
+      message: err && err.message ? err.message : "未能打开关联文稿。",
+    };
+  }
+});
+
+ipcMain.handle("r2:consumeLegacyHandoff", async () => {
+  return { ok: true, intent: r2LegacyHandoff.consume() };
+});
+
+// Test/harness helpers for TTL clock (only when fake model or spike harness)
+ipcMain.handle("r2:testSetAttachmentClock", async (_e, payload) => {
+  if (
+    process.env.DIGITALME_R2_FAKE_MODEL !== "1" &&
+    process.env.DIGITALME_R1_SPIKE_HARNESS !== "1"
+  ) {
+    return { ok: false, code: "harness_required" };
+  }
+  const ms = Number(payload && payload.nowMonotonicMs);
+  if (!Number.isFinite(ms)) return { ok: false, code: "invalid_clock" };
+  r2AttachmentTokens.setClock(() => ms);
+  return { ok: true };
+});
 
 ipcMain.handle("output:exportMarkdown", async (_e, { title, content }) => {
   const safe = safeFileStem(title);

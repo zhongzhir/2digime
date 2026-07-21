@@ -6,19 +6,51 @@
  */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) {
-    module.exports = factory();
+    module.exports = factory(require("./r2/code-points"));
   } else {
-    root.DigitalMeChatMessages = factory();
+    root.DigitalMeChatMessages = factory(root.DigitalMeCodePoints || null);
   }
-})(typeof self !== "undefined" ? self : this, function () {
+})(typeof self !== "undefined" ? self : this, function (codePoints) {
   const SCHEMA_VERSION = 2;
   const MODEL_TEXT_MAX = 4000;
-  const DISPLAY_TEXT_MAX = 2000;
+  const USER_DISPLAY_MAX = 2000;
+  const ASSISTANT_DISPLAY_MAX = 8000;
+  /** @deprecated use USER_DISPLAY_MAX — kept for legacy test aliases */
+  const DISPLAY_TEXT_MAX = USER_DISPLAY_MAX;
   const LEGACY_QUESTION_MAX = 500;
   const FOLD_PREVIEW_CHARS = 1600;
   const FOLD_EXPAND_MAX = 8000;
   const LEGACY_ATTACH_SEP = "\n\n---\n以下是我附上的材料正文";
   const SESSION_NAV_BLOCK_MESSAGE = "请先停止当前回复，再切换对话。";
+  const ARTIFACT_PREVIEW_TRUNCATE_NOTICE =
+    "内容较长，当前仅展示前 8000 字。完整内容未写入聊天记录；需要查看时，请打开关联文稿。";
+
+  function cpCount(text) {
+    if (codePoints && typeof codePoints.codePointCount === "function") {
+      return codePoints.codePointCount(text);
+    }
+    let n = 0;
+    for (const _ of String(text || "")) n += 1;
+    return n;
+  }
+
+  function cpSlice(text, max) {
+    if (codePoints && typeof codePoints.sliceCodePoints === "function") {
+      return codePoints.sliceCodePoints(text, max);
+    }
+    let out = "";
+    let n = 0;
+    for (const ch of String(text || "")) {
+      if (n >= max) break;
+      out += ch;
+      n += 1;
+    }
+    return out;
+  }
+
+  function displayMaxForRole(role) {
+    return role === "assistant" ? ASSISTANT_DISPLAY_MAX : USER_DISPLAY_MAX;
+  }
 
   function newMessageId() {
     return "m_" + Date.now().toString(36) + "_" + Math.floor(Math.random() * 1e6).toString(36);
@@ -26,17 +58,19 @@
 
   function truncateMarked(text, max) {
     const s = String(text || "");
-    if (s.length <= max) return { text: s, truncated: false };
+    if (cpCount(s) <= max) return { text: s, truncated: false };
     return {
-      text: s.slice(0, max) + "\n…（已截断，未保存完整材料正文）",
+      text: cpSlice(s, max) + "\n…（已截断，未保存完整材料正文）",
       truncated: true,
     };
   }
 
-  function clampDisplayText(text) {
+  function clampDisplayText(text, role) {
+    const max = displayMaxForRole(role);
     const s = String(text || "");
-    if (s.length <= DISPLAY_TEXT_MAX) return s;
-    return s.slice(0, DISPLAY_TEXT_MAX) + "…";
+    if (cpCount(s) <= max) return s;
+    if (max <= 1) return cpSlice(s, max);
+    return cpSlice(s, max - 1) + "…";
   }
 
   /**
@@ -49,16 +83,16 @@
     const sepIdx = s.indexOf(LEGACY_ATTACH_SEP);
     if (sepIdx >= 0) {
       let q = s.slice(0, sepIdx).trim();
-      if (q.length > LEGACY_QUESTION_MAX) q = q.slice(0, LEGACY_QUESTION_MAX) + "…";
+      if (cpCount(q) > LEGACY_QUESTION_MAX) q = cpSlice(q, LEGACY_QUESTION_MAX) + "…";
       return q || null;
     }
     const mark = s.search(/\n(?:［附件：|已附上：)/);
     if (mark >= 0) {
       let q = s.slice(0, mark).trim();
-      if (q.length > LEGACY_QUESTION_MAX) q = q.slice(0, LEGACY_QUESTION_MAX) + "…";
+      if (cpCount(q) > LEGACY_QUESTION_MAX) q = cpSlice(q, LEGACY_QUESTION_MAX) + "…";
       return q || null;
     }
-    if (s.length <= LEGACY_QUESTION_MAX) return s.trim() || null;
+    if (cpCount(s) <= LEGACY_QUESTION_MAX) return s.trim() || null;
     return null;
   }
 
@@ -84,7 +118,7 @@
     const attachLine = names.length
       ? (text ? "\n" : "") + names.map((n) => "已附上：" + String(n)).join("\n")
       : "";
-    return clampDisplayText(text + attachLine);
+    return clampDisplayText(text + attachLine, "user");
   }
 
   function buildUserModelText(userInput, attachmentNames) {
@@ -116,7 +150,7 @@
 
   /**
    * Legacy / mixed message → safe UI text.
-   * Only schemaVersion===2 displayText is trusted (still length-clamped).
+   * Only schemaVersion===2 displayText is trusted (still length-clamped by role).
    * KIMI experiment `display` is NEVER trusted as UI text.
    */
   function legacyDisplayText(message) {
@@ -138,7 +172,7 @@
         message.displayText.length
       ) {
         return {
-          text: clampDisplayText(message.displayText),
+          text: clampDisplayText(message.displayText, role),
           forbidExpand: role === "user",
           source: "displayText-v2",
         };
@@ -153,7 +187,7 @@
 
       if (role === "assistant") {
         return {
-          text: contentRaw || untrustedDisplay,
+          text: clampDisplayText(contentRaw || untrustedDisplay, "assistant"),
           forbidExpand: false,
           foldable: true,
           source: "assistant",
@@ -166,10 +200,10 @@
           if (contentRaw.indexOf(LEGACY_ATTACH_SEP) >= 0) {
             return safeUserLegacyResult(contentRaw, "legacy-sep");
           }
-          if (fromContent != null && contentRaw.length <= LEGACY_QUESTION_MAX) {
+          if (fromContent != null && cpCount(contentRaw) <= LEGACY_QUESTION_MAX) {
             return { text: fromContent, forbidExpand: false, source: "legacy-short" };
           }
-          if (contentRaw.length > LEGACY_QUESTION_MAX) {
+          if (cpCount(contentRaw) > LEGACY_QUESTION_MAX) {
             return safeUserLegacyResult(contentRaw, "legacy-content");
           }
           if (fromContent != null) {
@@ -203,10 +237,12 @@
   function safePreviewText(message, maxLen) {
     const n = typeof maxLen === "number" ? maxLen : 40;
     const d = legacyDisplayText(message);
-    return String(d.text || "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, n);
+    return cpSlice(
+      String(d.text || "")
+        .replace(/\s+/g, " ")
+        .trim(),
+      n
+    );
   }
 
   function normalizeLoadedMessage(raw) {
@@ -215,7 +251,7 @@
     if (!role) return null;
 
     if (raw.schemaVersion === SCHEMA_VERSION && typeof raw.displayText === "string") {
-      const displayText = clampDisplayText(raw.displayText);
+      const displayText = clampDisplayText(raw.displayText, role);
       const modelText = truncateMarked(
         String(raw.modelText != null ? raw.modelText : displayText),
         MODEL_TEXT_MAX
@@ -251,7 +287,7 @@
       schemaVersion: SCHEMA_VERSION,
       id: String(raw.id || newMessageId()),
       role,
-      displayText: shown.text,
+      displayText: clampDisplayText(shown.text, role),
       modelText,
       attachmentRefs: Array.isArray(raw.attachmentRefs) ? raw.attachmentRefs : [],
       createdAt: String(raw.createdAt || new Date().toISOString()),
@@ -263,7 +299,8 @@
   function toPersistableMessage(m) {
     const role = m.role === "assistant" ? "assistant" : "user";
     const displayText = clampDisplayText(
-      typeof m.displayText === "string" ? m.displayText : legacyDisplayText(m).text
+      typeof m.displayText === "string" ? m.displayText : legacyDisplayText(m).text,
+      role
     );
     const modelText = truncateMarked(
       String(m.modelText != null ? m.modelText : displayText),
@@ -285,9 +322,10 @@
     const out = [];
     for (const m of messages || []) {
       if (!m || (m.role !== "user" && m.role !== "assistant")) continue;
-      const content = String(
-        m.modelText != null ? m.modelText : m.content != null ? m.content : ""
-      ).slice(0, MODEL_TEXT_MAX);
+      const content = truncateMarked(
+        String(m.modelText != null ? m.modelText : m.content != null ? m.content : ""),
+        MODEL_TEXT_MAX
+      ).text;
       out.push({ role: m.role, content });
     }
     return out;
@@ -304,7 +342,7 @@
         forbidExpand: true,
       };
     }
-    if (raw.length <= FOLD_PREVIEW_CHARS) {
+    if (cpCount(raw) <= FOLD_PREVIEW_CHARS) {
       return {
         preview: raw,
         expanded: raw,
@@ -313,11 +351,11 @@
       };
     }
     const expanded =
-      raw.length > FOLD_EXPAND_MAX
-        ? raw.slice(0, FOLD_EXPAND_MAX) + "\n\n…（已达展开上限）"
+      cpCount(raw) > FOLD_EXPAND_MAX
+        ? cpSlice(raw, FOLD_EXPAND_MAX) + "\n\n…（已达展开上限）"
         : raw;
     return {
-      preview: raw.slice(0, FOLD_PREVIEW_CHARS) + "\n\n…",
+      preview: cpSlice(raw, FOLD_PREVIEW_CHARS) + "\n\n…",
       expanded,
       needsFold: true,
       forbidExpand: false,
@@ -348,14 +386,18 @@
     SCHEMA_VERSION,
     MODEL_TEXT_MAX,
     DISPLAY_TEXT_MAX,
+    USER_DISPLAY_MAX,
+    ASSISTANT_DISPLAY_MAX,
     LEGACY_QUESTION_MAX,
     FOLD_PREVIEW_CHARS,
     FOLD_EXPAND_MAX,
     LEGACY_ATTACH_SEP,
     SESSION_NAV_BLOCK_MESSAGE,
+    ARTIFACT_PREVIEW_TRUNCATE_NOTICE,
     newMessageId,
     truncateMarked,
     clampDisplayText,
+    displayMaxForRole,
     extractUserQuestionFromRaw,
     buildUserDisplayText,
     buildUserModelText,

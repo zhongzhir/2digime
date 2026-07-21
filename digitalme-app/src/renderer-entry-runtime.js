@@ -64,6 +64,13 @@ function createRendererEntryRuntime(opts = {}) {
   }
 
   async function fallbackToLegacy(failure) {
+    if (typeof opts.onBeforeFallback === "function") {
+      try {
+        await opts.onBeforeFallback(failure);
+      } catch {
+        /* abort/persist best-effort; still fall back */
+      }
+    }
     controller.latchFallback(failure);
     // Fallback may run while a next navigation still holds the gate.
     const holdGate = navigating;

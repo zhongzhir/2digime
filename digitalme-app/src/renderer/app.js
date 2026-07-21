@@ -299,6 +299,20 @@ async function init() {
     console.error("[Digital Me] 会话/场景初始化失败", err);
     reportInitError("部分初始化未完成", err);
   }
+
+  // R2: consume one-shot next→legacy library handoff (id/scene only; no body).
+  try {
+    if (window.digitalMe && typeof window.digitalMe.consumeLegacyNavIntent === "function") {
+      const handoff = await window.digitalMe.consumeLegacyNavIntent();
+      const intent = handoff && handoff.intent;
+      if (intent && intent.libraryId && typeof openDoScene === "function") {
+        await openDoScene("write", { libraryId: String(intent.libraryId) });
+      }
+    }
+  } catch (err) {
+    console.error("[Digital Me] 关联文稿交接失败", err);
+    appendBootLog("关联文稿交接失败：" + ((err && err.message) || err));
+  }
 }
 
 function reportInitError(label, err) {
