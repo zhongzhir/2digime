@@ -5,6 +5,18 @@
 
 ---
 
+## 2026-07-21 第一闭环实现 · 第 3 块：有来源约束的研究与表达成果
+
+### 做了什么
+
+实现证据四栏与受来源约束的模型生成；成果编辑/revision/采用/否定；持久化与重启恢复；扩展 task-save-boundary 保护 results。不写 Package、不调用 feedback、不新增外搜。聚焦测试 `test:vl1-block3`。第 2 块 → `accepted`；第 3 块 → `implemented_pending_codex_review`。
+
+### 下一任务
+
+**第一闭环实现 · 第 4 块：Experience Proposal 与主体回流**
+
+---
+
 ## 2026-07-21 第一闭环实现 · 第 2 块：真实 Skill 与只读外部调研调用
 
 ### 做了什么

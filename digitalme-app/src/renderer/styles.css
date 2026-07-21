@@ -2949,6 +2949,22 @@ body {
   line-height: 1.45;
   white-space: pre-wrap;
 }
+.act-result-gen-panel {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+.act-four-columns {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 10px;
+}
+#act-final-draft {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 6px;
+}
 @media (max-width: 900px) {
   .act-behalf-layout {
     grid-template-columns: 1fr;

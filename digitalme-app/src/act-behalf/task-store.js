@@ -11,6 +11,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { normalizeTaskIntent } = require("./task-intent");
 const { healRunningInvocations } = require("./research-run");
+const { healRunningResults } = require("./result-generation");
 
 const STORE_VERSION = 2;
 const TASK_SCHEMA_VERSION = 2;
@@ -196,6 +197,8 @@ function normalizeTask(input) {
     // Block 2+: Capability Invocation records (append-only from main process)
     invocations: Array.isArray(input && input.invocations) ? input.invocations : [],
     selectedSkillId: input && input.selectedSkillId ? String(input.selectedSkillId) : null,
+    // Block 3+: research expression results (append-only from main process)
+    results: Array.isArray(input && input.results) ? input.results : [],
     capabilityRefs: Array.isArray(input && input.capabilityRefs) ? input.capabilityRefs : [],
     identityRefs: Array.isArray(input && input.identityRefs) ? input.identityRefs : [],
     authorization: (input && input.authorization) || null,
@@ -228,18 +231,30 @@ function listTasks(userData) {
   };
 }
 
-function getTask(userData, taskId) {
+function getTask(userData, taskId, opts = {}) {
   const store = loadStore(userData);
   const task = (store.tasks || []).find((t) => t.taskId === String(taskId || ""));
   if (!task) {
     return { ok: false, code: "not_found", message: "找不到该任务。" };
   }
   const norm = normalizeTask(task);
+  if (opts && opts.heal === false) {
+    return { ok: true, task: norm, invocationsHealed: false, resultsHealed: false };
+  }
   const healed = healRunningInvocations(norm.invocations);
+  const healedResults = healRunningResults(norm.results);
   if (healed.changed) {
     norm.invocations = healed.invocations;
   }
-  return { ok: true, task: norm, invocationsHealed: healed.changed };
+  if (healedResults.changed) {
+    norm.results = healedResults.results;
+  }
+  return {
+    ok: true,
+    task: norm,
+    invocationsHealed: healed.changed,
+    resultsHealed: healedResults.changed,
+  };
 }
 
 async function saveTask(userData, taskInput) {

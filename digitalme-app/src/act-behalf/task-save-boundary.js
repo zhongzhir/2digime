@@ -22,6 +22,12 @@ const RENDERER_FORBIDDEN_RESEARCH_KEYS = Object.freeze([
   "authorization",
   "audit",
   "modelMeta",
+  "results",
+  "result",
+  "sections",
+  "modelInvocation",
+  "ownerDecision",
+  "revisions",
 ]);
 
 /**
@@ -32,11 +38,15 @@ function takeAuthoritativeResearchFields(existing) {
     return {
       invocations: [],
       selectedSkillId: null,
+      results: [],
       capabilityRefs: [],
       identityRefs: [],
       authorization: null,
       audit: null,
       modelMeta: null,
+      result: "",
+      existingUserPositions: "",
+      digitalMeInferences: "",
     };
   }
   return {
@@ -45,11 +55,15 @@ function takeAuthoritativeResearchFields(existing) {
       existing.selectedSkillId != null && existing.selectedSkillId !== ""
         ? String(existing.selectedSkillId)
         : null,
+    results: Array.isArray(existing.results) ? existing.results.slice() : [],
     capabilityRefs: Array.isArray(existing.capabilityRefs) ? existing.capabilityRefs.slice() : [],
     identityRefs: Array.isArray(existing.identityRefs) ? existing.identityRefs.slice() : [],
     authorization: existing.authorization || null,
     audit: existing.audit || null,
     modelMeta: existing.modelMeta || null,
+    result: String(existing.result || ""),
+    existingUserPositions: String(existing.existingUserPositions || ""),
+    digitalMeInferences: String(existing.digitalMeInferences || ""),
   };
 }
 
@@ -57,14 +71,13 @@ function rendererAttemptedResearchForge(payload) {
   const p = payload && typeof payload === "object" ? payload : {};
   for (const key of RENDERER_FORBIDDEN_RESEARCH_KEYS) {
     if (Object.prototype.hasOwnProperty.call(p, key) && p[key] != null) {
-      // Empty array still counts as an attempt to set invocations
-      if (key === "invocations" && Array.isArray(p[key])) return true;
-      if (key !== "invocations") return true;
+      if ((key === "invocations" || key === "results") && Array.isArray(p[key])) return true;
+      if (key !== "invocations" && key !== "results") return true;
     }
   }
   // Nested forge under a bogus full task dump
   if (p.task && typeof p.task === "object") {
-    for (const key of ["invocations", "selectedSkillId", "discoveredSources"]) {
+    for (const key of ["invocations", "selectedSkillId", "discoveredSources", "results"]) {
       if (Object.prototype.hasOwnProperty.call(p.task, key) && p.task[key] != null) return true;
     }
   }
@@ -136,12 +149,13 @@ function buildDraftSaveRecord({ existing, rendererPayload } = {}) {
     priorSubjectContext: goalFields.priorSubjectContext,
     contextAudit: (existing && existing.contextAudit) || null,
     selectedSelfContext: (existing && existing.selectedSelfContext) || undefined,
-    existingUserPositions: (existing && existing.existingUserPositions) || "",
-    digitalMeInferences: (existing && existing.digitalMeInferences) || "",
-    result: (existing && existing.result) || "",
-    // Authoritative research / audit — never from renderer
+    existingUserPositions: research.existingUserPositions,
+    digitalMeInferences: research.digitalMeInferences,
+    result: research.result,
+    // Authoritative research / audit / results — never from renderer
     invocations: research.invocations,
     selectedSkillId: research.selectedSkillId,
+    results: research.results,
     capabilityRefs: research.capabilityRefs,
     identityRefs: research.identityRefs,
     authorization: research.authorization,
@@ -195,6 +209,10 @@ function withAuthoritativeResearchFields(existing, patch) {
     ...base,
     invocations: research.invocations,
     selectedSkillId: research.selectedSkillId,
+    results: research.results,
+    result: research.result,
+    existingUserPositions: research.existingUserPositions,
+    digitalMeInferences: research.digitalMeInferences,
     capabilityRefs: research.capabilityRefs,
     identityRefs: research.identityRefs,
     authorization: research.authorization,

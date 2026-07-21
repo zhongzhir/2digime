@@ -501,6 +501,42 @@
                   </div>
                   <p id="act-research-status" class="muted write-rail-hint" data-testid="act-research-status"></p>
                   <div id="act-source-list" class="act-source-list" data-testid="act-source-list"></div>
+                  <div id="act-result-gen-panel" class="act-result-gen-panel hidden" data-testid="act-result-gen-panel">
+                    <div class="ext-store-head">
+                      <h3>研究与表达成果</h3>
+                    </div>
+                    <p class="muted write-rail-hint">在调研完成后可生成四栏证据成果。本步不写入主体资料包，不生成资料变更提案。</p>
+                    <div class="builder-actions">
+                      <button id="btn-act-generate-result" type="button" data-testid="btn-act-generate-result" disabled>生成研究与表达成果</button>
+                      <button id="btn-act-generate-without-ext" class="btn-ghost hidden" type="button" data-testid="btn-act-generate-without-ext">无外部来源仍继续生成</button>
+                    </div>
+                    <p id="act-result-gen-status" class="muted write-rail-hint" data-testid="act-result-gen-status"></p>
+                    <div id="act-four-columns" class="act-four-columns hidden" data-testid="act-four-columns">
+                      <div class="output-card">
+                        <h3>本人已有事实或观点</h3>
+                        <p class="muted write-rail-hint">模型整理，供参考；系统实际采用以确认快照为准。</p>
+                        <div id="act-col-subject" class="act-result-body" data-testid="act-col-subject"></div>
+                      </div>
+                      <div class="output-card">
+                        <h3>外部事实及来源</h3>
+                        <div id="act-col-external" class="act-result-body" data-testid="act-col-external"></div>
+                      </div>
+                      <div class="output-card">
+                        <h3>Digital Me 的新推断</h3>
+                        <div id="act-col-inferences" class="act-result-body" data-testid="act-col-inferences"></div>
+                      </div>
+                      <div class="output-card">
+                        <h3>最终可编辑成果</h3>
+                        <p id="act-result-meta" class="muted write-rail-hint" data-testid="act-result-meta"></p>
+                        <textarea id="act-final-draft" rows="10" data-testid="act-final-draft"></textarea>
+                        <div class="builder-actions">
+                          <button id="btn-act-save-result" class="btn-ghost" type="button" data-testid="btn-act-save-result">保存修改</button>
+                          <button id="btn-act-adopt-result" type="button" data-testid="btn-act-adopt-result">采用</button>
+                          <button id="btn-act-reject-result" class="btn-ghost" type="button" data-testid="btn-act-reject-result">否定</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <div id="act-progress" class="builder-progress" data-testid="act-progress"></div>
                 <div id="act-result-panel" class="act-result-panel hidden" data-testid="act-result-panel">

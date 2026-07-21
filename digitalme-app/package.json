@@ -28,6 +28,7 @@
     "test:act-behalf": "node scripts/test-act-behalf-contracts.cjs",
     "test:vl1-block1": "node scripts/test-vl1-block1-context-assembly.cjs",
     "test:vl1-block2": "node scripts/test-vl1-block2-research-invocation.cjs",
+    "test:vl1-block3": "node scripts/test-vl1-block3-result-generation.cjs",
     "test:r2-contracts": "node scripts/test-r2-contracts.cjs",
     "test:owner-runtime": "electron scripts/electron-owner-runtime-test.cjs",
     "test:r1-entry": "node scripts/test-r1-renderer-entry.cjs",

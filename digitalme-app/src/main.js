@@ -44,6 +44,13 @@ const {
   saveDraftFromRenderer,
   withAuthoritativeResearchFields,
 } = require("./act-behalf/task-save-boundary");
+const {
+  generateResearchExpressionResult,
+  saveResultDraftFromRenderer,
+  decideResultFromRenderer,
+  latestCurrentResult,
+  isResultCurrent,
+} = require("./act-behalf/result-generation");
 const researchPresets = require("./skills/research-presets");
 const chatMessages = require("./chat-message-model");
 const catalog = require("./capabilities/catalog");
@@ -1179,8 +1186,7 @@ ipcMain.handle("actBehalf:get", async (_e, taskId) => {
   try {
     const userData = app.getPath("userData");
     const got = actBehalfStore.getTask(userData, taskId);
-    if (got.ok && got.invocationsHealed) {
-      // Persist interrupted normalization so running does not linger on disk
+    if (got.ok && (got.invocationsHealed || got.resultsHealed)) {
       await actBehalfStore.saveTask(userData, got.task);
       return actBehalfStore.getTask(userData, taskId);
     }
@@ -1269,6 +1275,113 @@ ipcMain.handle("actBehalf:getResearchSkill", async () => {
       ok: false,
       code: err && err.code ? err.code : "skill_failed",
       message: err && err.message ? err.message : "无法读取 Skill。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:generateResult", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const taskId = payload && payload.taskId;
+    if (!taskId) {
+      return { ok: false, code: "task_not_found", message: "请先保存任务后再生成成果。" };
+    }
+    if (
+      payload &&
+      (payload.sections ||
+        payload.results ||
+        payload.subjectEvidence ||
+        payload.externalEvidence ||
+        payload.inferences ||
+        payload.finalDraft ||
+        payload.invocations ||
+        payload.discoveredSources ||
+        payload.subjectContext)
+    ) {
+      return {
+        ok: false,
+        code: "untrusted_renderer_result",
+        message: "不允许由界面提交成果或证据内容。",
+      };
+    }
+
+    const cfg = readConfig();
+    const result = await generateResearchExpressionResult({
+      userData,
+      taskId: String(taskId),
+      store: actBehalfStore,
+      skills: personalSkills,
+      continueWithoutExternalSources: !!(payload && payload.continueWithoutExternalSources),
+      callModel: async (messages, options = {}) => {
+        if (!cfg || !cfg.apiKey) {
+          const err = new Error("请先在设置中配置可用的模型，再生成研究与表达成果。");
+          err.code = "no_api_key";
+          throw err;
+        }
+        const content = await callModel(cfg, messages, {
+          temperature: options.temperature != null ? options.temperature : 0.3,
+        });
+        return {
+          content,
+          provider: "configured_model",
+          model: cfg.model || null,
+          usedFake: false,
+        };
+      },
+    });
+    if (result.ok && result.task) {
+      const cur = latestCurrentResult(result.task);
+      return {
+        ...result,
+        resultCurrent: cur ? isResultCurrent(result.task, cur) : false,
+      };
+    }
+    return result;
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "generate_failed",
+      message: err && err.message ? err.message : "无法生成成果。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:saveResultDraft", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    if (
+      payload &&
+      (payload.sections ||
+        payload.revisions ||
+        payload.subjectEvidence ||
+        payload.externalEvidence ||
+        payload.invocations)
+    ) {
+      return {
+        ok: false,
+        code: "untrusted_renderer_result",
+        message: "不允许由界面提交证据或修订历史。",
+      };
+    }
+    return await saveResultDraftFromRenderer(actBehalfStore, userData, payload || {});
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "save_result_failed",
+      message: err && err.message ? err.message : "无法保存成果修改。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:decideResult", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    return await decideResultFromRenderer(actBehalfStore, userData, payload || {});
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "decide_failed",
+      message: err && err.message ? err.message : "无法保存处置决定。",
     };
   }
 });
