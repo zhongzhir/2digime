@@ -26,6 +26,7 @@
     "test:bootstrap-submit": "node scripts/test-bootstrap-file-submit.cjs && node scripts/test-renderer-ui-bindings.cjs",
     "test:chat-history-display": "node scripts/test-chat-history-display.cjs && node scripts/test-session-overflow-menu.cjs",
     "test:act-behalf": "node scripts/test-act-behalf-contracts.cjs",
+    "test:classic-renderer-dom": "electron scripts/test-classic-renderer-dom-structure.cjs",
     "test:vl1-block1": "node scripts/test-vl1-block1-context-assembly.cjs",
     "test:vl1-block2": "node scripts/test-vl1-block2-research-invocation.cjs",
     "test:vl1-block3": "node scripts/test-vl1-block3-result-generation.cjs",

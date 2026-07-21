@@ -2852,19 +2852,32 @@ body {
 .subject-warnings { border-color: #e8c9a8; background: #fff8f0; }
 
 /* Research-express / act-behalf (VL1 block 1) */
+.do-act-behalf {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 .act-behalf-layout {
   display: grid;
   grid-template-columns: minmax(200px, 260px) 1fr;
+  grid-template-rows: minmax(0, 1fr);
   gap: 16px;
   padding: 12px 16px 24px;
   min-height: 0;
   flex: 1;
+  overflow: hidden;
 }
 .act-behalf-main {
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+.act-behalf-rail {
+  min-height: 0;
 }
 .act-behalf-main textarea,
 .act-behalf-main input[type="text"] {

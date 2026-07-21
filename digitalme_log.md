@@ -5,6 +5,18 @@
 
 ---
 
+## 2026-07-21 Owner 真机验收第 1 步布局阻断修复
+
+### 做了什么
+
+Owner 真机验收第 1 步（进入「工作台 / 研究与表达」）发现阻断性布局错误：多余 `</div>` 提前闭合 `#app`，将 `#do-act-behalf` 等踢出主壳。限量修复：删除该结束标签；为 `.do-act-behalf` 补齐纵向 flex 壳与主栏局部 `overflow:auto`；新增 Electron 解析的经典 renderer DOM 结构回归。未使用全局 `overflow:hidden`。未将第一闭环标为 `accepted`。
+
+### 下一任务
+
+**等待 Owner 重新执行真机验收第 1 步**
+
+---
+
 ## 2026-07-21 第 4 块限量修正：apply 审计一致性与 Package 读取失败阻断
 
 ### 做了什么
