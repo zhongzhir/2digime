@@ -51,6 +51,13 @@ const {
   latestCurrentResult,
   isResultCurrent,
 } = require("./act-behalf/result-generation");
+const {
+  createExperienceProposal,
+  saveExperienceProposalReview,
+  previewExperienceProposal,
+  applyExperienceProposal,
+  rejectExperienceProposal,
+} = require("./act-behalf/experience-proposal");
 const researchPresets = require("./skills/research-presets");
 const chatMessages = require("./chat-message-model");
 const catalog = require("./capabilities/catalog");
@@ -1382,6 +1389,143 @@ ipcMain.handle("actBehalf:decideResult", async (_e, payload) => {
       ok: false,
       code: err && err.code ? err.code : "decide_failed",
       message: err && err.message ? err.message : "无法保存处置决定。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:createExperienceProposal", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const taskId = payload && payload.taskId;
+    const resultId = payload && payload.resultId;
+    if (!taskId || !resultId) {
+      return { ok: false, code: "invalid_payload", message: "缺少任务或成果标识。" };
+    }
+    if (
+      payload &&
+      (payload.candidates ||
+        payload.proposals ||
+        payload.packageBaseRef ||
+        payload.modelInvocation ||
+        payload.preview ||
+        payload.apply ||
+        payload.sections ||
+        payload.results)
+    ) {
+      return {
+        ok: false,
+        code: "untrusted_renderer_proposal",
+        message: "不允许由界面提交学习建议或资料包字段。",
+      };
+    }
+    const pkgDir = packageDirFromConfig();
+    const cfg = readConfig();
+    return await createExperienceProposal({
+      userData,
+      taskId: String(taskId),
+      resultId: String(resultId),
+      store: actBehalfStore,
+      packageDir: pkgDir,
+      loadPackage: loadPackageForActBehalf,
+      callModel: async (messages, options = {}) => {
+        if (!cfg || !cfg.apiKey) {
+          const err = new Error("请先在设置中配置可用的模型，再总结学习建议。");
+          err.code = "no_api_key";
+          throw err;
+        }
+        const content = await callModel(cfg, messages, {
+          temperature: options.temperature != null ? options.temperature : 0.2,
+        });
+        return {
+          content,
+          provider: "configured_model",
+          model: cfg.model || null,
+          usedFake: false,
+        };
+      },
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "proposal_failed",
+      message: err && err.message ? err.message : "无法生成学习建议。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:saveExperienceProposalReview", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    if (
+      payload &&
+      (payload.packageBaseRef ||
+        payload.modelInvocation ||
+        payload.preview ||
+        payload.apply ||
+        payload.status ||
+        payload.originalProposedText)
+    ) {
+      return {
+        ok: false,
+        code: "untrusted_renderer_proposal",
+        message: "审阅保存仅接受候选项的采用/修改/排除。",
+      };
+    }
+    return await saveExperienceProposalReview(actBehalfStore, userData, payload || {});
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "review_failed",
+      message: err && err.message ? err.message : "无法保存审阅。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:previewExperienceProposal", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    return await previewExperienceProposal({
+      userData,
+      store: actBehalfStore,
+      packageDir: packageDirFromConfig(),
+      payload: payload || {},
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "preview_failed",
+      message: err && err.message ? err.message : "无法生成变更预览。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:applyExperienceProposal", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    return await applyExperienceProposal({
+      userData,
+      store: actBehalfStore,
+      packageDir: packageDirFromConfig(),
+      payload: payload || {},
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "apply_failed",
+      message: err && err.message ? err.message : "无法写入主体资料包。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:rejectExperienceProposal", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    return await rejectExperienceProposal(actBehalfStore, userData, payload || {});
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "reject_failed",
+      message: err && err.message ? err.message : "无法拒绝学习建议。",
     };
   }
 });

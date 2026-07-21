@@ -12,6 +12,7 @@ const crypto = require("node:crypto");
 const { normalizeTaskIntent } = require("./task-intent");
 const { healRunningInvocations } = require("./research-run");
 const { healRunningResults } = require("./result-generation");
+const { healRunningProposals, markProposalsStale } = require("./experience-proposal");
 
 const STORE_VERSION = 2;
 const TASK_SCHEMA_VERSION = 2;
@@ -199,6 +200,8 @@ function normalizeTask(input) {
     selectedSkillId: input && input.selectedSkillId ? String(input.selectedSkillId) : null,
     // Block 3+: research expression results (append-only from main process)
     results: Array.isArray(input && input.results) ? input.results : [],
+    // Block 4+: Experience Proposals (append-only from main process)
+    proposals: Array.isArray(input && input.proposals) ? input.proposals : [],
     capabilityRefs: Array.isArray(input && input.capabilityRefs) ? input.capabilityRefs : [],
     identityRefs: Array.isArray(input && input.identityRefs) ? input.identityRefs : [],
     authorization: (input && input.authorization) || null,
@@ -239,21 +242,32 @@ function getTask(userData, taskId, opts = {}) {
   }
   const norm = normalizeTask(task);
   if (opts && opts.heal === false) {
-    return { ok: true, task: norm, invocationsHealed: false, resultsHealed: false };
+    return {
+      ok: true,
+      task: norm,
+      invocationsHealed: false,
+      resultsHealed: false,
+      proposalsHealed: false,
+    };
   }
   const healed = healRunningInvocations(norm.invocations);
   const healedResults = healRunningResults(norm.results);
+  const healedProposals = healRunningProposals(norm.proposals);
   if (healed.changed) {
     norm.invocations = healed.invocations;
   }
   if (healedResults.changed) {
     norm.results = healedResults.results;
   }
+  if (healedProposals.changed) {
+    norm.proposals = healedProposals.proposals;
+  }
   return {
     ok: true,
     task: norm,
     invocationsHealed: healed.changed,
     resultsHealed: healedResults.changed,
+    proposalsHealed: healedProposals.changed,
   };
 }
 

@@ -5293,6 +5293,7 @@ let actBehalfState = {
   selectedSkillId: null,
   researchCurrent: false,
   currentResult: null,
+  currentProposal: null,
   resultStale: false,
 };
 
@@ -5611,6 +5612,305 @@ function renderActResultFromTask(task) {
   if (saveBtn) saveBtn.disabled = !editable;
   if (adoptBtn) adoptBtn.disabled = !editable;
   if (rejectBtn) rejectBtn.disabled = !editable;
+  renderActLearnFromTask(task, result, current);
+}
+
+function pickDisplayProposal(task, result) {
+  const list = Array.isArray(task && task.proposals) ? task.proposals : [];
+  if (!result) return null;
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const p = list[i];
+    if (!p) continue;
+    if (p.resultId === result.resultId) return p;
+  }
+  return null;
+}
+
+function setActLearnStatus(text) {
+  const el = $("act-learn-status");
+  if (el) el.textContent = text || "";
+}
+
+function renderActLearnFromTask(task, result, resultCurrent) {
+  const panel = $("act-learn-panel");
+  const listEl = $("act-proposal-candidates");
+  const previewEl = $("act-proposal-preview");
+  const btnCreate = $("btn-act-create-proposal");
+  const btnSave = $("btn-act-save-proposal-review");
+  const btnPreview = $("btn-act-preview-proposal");
+  const btnApply = $("btn-act-apply-proposal");
+  const btnReject = $("btn-act-reject-proposal");
+
+  const canLearn =
+    result &&
+    resultCurrent &&
+    result.status === "succeeded" &&
+    result.ownerDecision === "adopted";
+  if (panel) panel.classList.toggle("hidden", !canLearn && !(result && result.ownerDecision === "adopted"));
+
+  const proposal = pickDisplayProposal(task, result);
+  actBehalfState.currentProposal = proposal || null;
+
+  if (!canLearn) {
+    if (panel && result && result.ownerDecision === "rejected") {
+      panel.classList.remove("hidden");
+      setActLearnStatus("已否定的成果不能进入正式回流。");
+    } else if (!canLearn && panel && result && result.status === "succeeded" && !resultCurrent) {
+      panel.classList.remove("hidden");
+      setActLearnStatus("历史成果，不适用于当前状态，不能总结学习建议。");
+    }
+    if (btnCreate) btnCreate.disabled = true;
+    if (btnSave) btnSave.disabled = true;
+    if (btnPreview) btnPreview.disabled = true;
+    if (btnApply) btnApply.disabled = true;
+    if (btnReject) btnReject.disabled = true;
+    if (listEl) listEl.innerHTML = "";
+    if (previewEl) {
+      previewEl.textContent = "";
+      previewEl.classList.add("hidden");
+    }
+    if (!result || result.ownerDecision !== "adopted") {
+      if (panel && !(result && result.ownerDecision === "rejected") && !(result && !resultCurrent)) {
+        panel.classList.add("hidden");
+      }
+    }
+    return;
+  }
+
+  if (panel) panel.classList.remove("hidden");
+  if (btnCreate) btnCreate.disabled = false;
+
+  if (!proposal) {
+    setActLearnStatus("采用成果不等于写入 Digital Me。可点击「总结本次经验」查看学习建议。");
+    if (listEl) listEl.innerHTML = "";
+    if (previewEl) previewEl.classList.add("hidden");
+    if (btnSave) btnSave.disabled = true;
+    if (btnPreview) btnPreview.disabled = true;
+    if (btnApply) btnApply.disabled = true;
+    if (btnReject) btnReject.disabled = true;
+    return;
+  }
+
+  const stale = !!proposal.stale;
+  if (stale) {
+    setActLearnStatus(
+      "历史学习建议，不适用于当前状态。" + (proposal.staleReason ? " " + proposal.staleReason : "")
+    );
+  } else if (proposal.status === "applied") {
+    setActLearnStatus(
+      "已写入主体资料包。新版本：" +
+        ((proposal.apply && proposal.apply.packageResultVersion) || "—")
+    );
+  } else if (proposal.status === "interrupted") {
+    setActLearnStatus("上次学习建议操作中断，未成功写入。可重新总结。");
+  } else if (proposal.status === "failed") {
+    setActLearnStatus(
+      "学习建议生成失败：" +
+        ((proposal.modelInvocation && proposal.modelInvocation.errorSafeSummary) || "未知错误")
+    );
+  } else if (proposal.status === "previewed") {
+    setActLearnStatus("已生成变更预览。请核对后再次确认写入。预览本身不会修改主体资料包。");
+  } else {
+    setActLearnStatus("请审阅候选经验：可采用、修改后采用，或排除。");
+  }
+
+  const editable =
+    !stale &&
+    proposal.status !== "applied" &&
+    proposal.status !== "rejected" &&
+    proposal.status !== "generating" &&
+    proposal.status !== "previewing" &&
+    proposal.status !== "applying";
+
+  if (listEl) {
+    listEl.innerHTML = "";
+    (proposal.candidates || []).forEach((c) => {
+      const wrap = document.createElement("div");
+      wrap.className = "output-card";
+      wrap.setAttribute("data-candidate-id", c.candidateId);
+      const head = document.createElement("p");
+      head.className = "muted write-rail-hint";
+      head.textContent =
+        `类型：${c.targetKind} · 置信：${c.confidence || "—"}` +
+        (c.caveat ? ` · 注意：${c.caveat}` : "");
+      const rationale = document.createElement("p");
+      rationale.className = "muted write-rail-hint";
+      rationale.textContent =
+        `理由：${c.rationale || "—"}；依据 claims=${(c.basedOnSubjectClaimIds || []).join(",") || "无"}；` +
+        `sections=${(c.basedOnResultSections || []).join(",") || "无"}`;
+      const ta = document.createElement("textarea");
+      ta.rows = 3;
+      ta.value = c.ownerText || c.proposedText || "";
+      ta.disabled = !editable;
+      ta.setAttribute("data-testid", "act-candidate-text-" + c.candidateId);
+      const actions = document.createElement("div");
+      actions.className = "builder-actions";
+      const mkBtn = (label, state, testid) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = c.ownerState === state ? "" : "btn-ghost";
+        b.textContent = label;
+        b.disabled = !editable;
+        b.setAttribute("data-testid", testid);
+        b.addEventListener("click", () => {
+          c.ownerState = state;
+          if (state === "edited" || state === "accepted") c.ownerText = ta.value;
+          renderActLearnFromTask(task, result, resultCurrent);
+        });
+        return b;
+      };
+      actions.appendChild(mkBtn("采用", "accepted", "btn-cand-accept-" + c.candidateId));
+      actions.appendChild(mkBtn("修改后采用", "edited", "btn-cand-edit-" + c.candidateId));
+      actions.appendChild(mkBtn("排除", "excluded", "btn-cand-exclude-" + c.candidateId));
+      ta.addEventListener("change", () => {
+        c.ownerText = ta.value;
+        if (c.ownerState === "accepted" && ta.value !== c.originalProposedText) {
+          c.ownerState = "edited";
+        }
+      });
+      wrap.appendChild(head);
+      wrap.appendChild(rationale);
+      wrap.appendChild(ta);
+      wrap.appendChild(actions);
+      listEl.appendChild(wrap);
+    });
+  }
+
+  if (previewEl) {
+    if (proposal.preview && proposal.preview.status === "succeeded") {
+      previewEl.classList.remove("hidden");
+      previewEl.textContent = JSON.stringify(
+        {
+          previewId: proposal.preview.previewId,
+          packageBaseVersion: proposal.preview.packageBaseVersion,
+          plans: proposal.preview.plans,
+          changes: proposal.preview.changes,
+          warnings: proposal.preview.warnings,
+        },
+        null,
+        2
+      );
+    } else {
+      previewEl.classList.add("hidden");
+      previewEl.textContent = "";
+    }
+  }
+
+  if (btnSave) btnSave.disabled = !editable;
+  if (btnPreview) btnPreview.disabled = !editable;
+  if (btnApply) {
+    btnApply.disabled = !(
+      !stale &&
+      proposal.status === "previewed" &&
+      proposal.preview &&
+      proposal.preview.previewId
+    );
+  }
+  if (btnReject) btnReject.disabled = !editable || proposal.status === "applied";
+}
+
+async function createActExperienceProposal() {
+  const result = actBehalfState.currentResult;
+  if (!result || !actBehalfState.taskId) return;
+  setActLearnStatus("正在总结本次经验…");
+  const res = await window.digitalMe.actBehalfCreateExperienceProposal({
+    taskId: actBehalfState.taskId,
+    resultId: result.resultId,
+  });
+  if (!res || !res.ok) {
+    setActLearnStatus((res && res.message) || "无法生成学习建议。");
+    if (res && res.task) renderActResearchFromTask(res.task);
+    return;
+  }
+  renderActResearchFromTask(res.task);
+  setActLearnStatus(res.message || "学习建议已生成。");
+}
+
+async function saveActProposalReview() {
+  const proposal = actBehalfState.currentProposal;
+  if (!proposal || !actBehalfState.taskId) return;
+  const listEl = $("act-proposal-candidates");
+  const candidates = (proposal.candidates || []).map((c) => {
+    const wrap =
+      listEl && listEl.querySelector('[data-candidate-id="' + c.candidateId + '"]');
+    const ta = wrap && wrap.querySelector("textarea");
+    return {
+      candidateId: c.candidateId,
+      ownerState: c.ownerState,
+      ownerText: ta ? ta.value : c.ownerText,
+    };
+  });
+  const res = await window.digitalMe.actBehalfSaveExperienceProposalReview({
+    taskId: actBehalfState.taskId,
+    proposalId: proposal.proposalId,
+    expectedRevision: proposal.currentRevision,
+    candidates,
+  });
+  if (!res || !res.ok) {
+    setActLearnStatus((res && res.message) || "保存审阅失败。");
+    return;
+  }
+  renderActResearchFromTask(res.task);
+  setActLearnStatus(res.message || "审阅已保存。");
+}
+
+async function previewActProposal() {
+  const proposalBefore = actBehalfState.currentProposal;
+  if (!proposalBefore || !actBehalfState.taskId) return;
+  await saveActProposalReview();
+  const proposal = actBehalfState.currentProposal;
+  if (!proposal || !actBehalfState.taskId) return;
+  const res = await window.digitalMe.actBehalfPreviewExperienceProposal({
+    taskId: actBehalfState.taskId,
+    proposalId: proposal.proposalId,
+    expectedRevision: proposal.currentRevision,
+  });
+  if (!res || !res.ok) {
+    setActLearnStatus((res && res.message) || "预览失败。");
+    if (res && res.task) renderActResearchFromTask(res.task);
+    return;
+  }
+  renderActResearchFromTask(res.task);
+  setActLearnStatus(res.message || "预览已生成。");
+}
+
+async function applyActProposal() {
+  const proposal = actBehalfState.currentProposal;
+  if (!proposal || !actBehalfState.taskId || !proposal.preview) return;
+  const ok = window.confirm(
+    "确认将已审阅的学习内容写入 Digital Me 主体资料包？此操作会生成新的资料包版本。"
+  );
+  if (!ok) return;
+  const res = await window.digitalMe.actBehalfApplyExperienceProposal({
+    taskId: actBehalfState.taskId,
+    proposalId: proposal.proposalId,
+    previewId: proposal.preview.previewId,
+    expectedRevision: proposal.currentRevision,
+    confirm: true,
+  });
+  if (!res || !res.ok) {
+    setActLearnStatus((res && res.message) || "写入失败。");
+    if (res && res.task) renderActResearchFromTask(res.task);
+    return;
+  }
+  renderActResearchFromTask(res.task);
+  setActLearnStatus(res.message || "已写入。");
+}
+
+async function rejectActProposal() {
+  const proposal = actBehalfState.currentProposal;
+  if (!proposal || !actBehalfState.taskId) return;
+  const res = await window.digitalMe.actBehalfRejectExperienceProposal({
+    taskId: actBehalfState.taskId,
+    proposalId: proposal.proposalId,
+    expectedRevision: proposal.currentRevision,
+  });
+  if (!res || !res.ok) {
+    setActLearnStatus((res && res.message) || "拒绝失败。");
+    return;
+  }
+  renderActResearchFromTask(res.task);
+  setActLearnStatus(res.message || "已拒绝。");
 }
 
 async function generateActBehalfResult(opts = {}) {
@@ -5873,6 +6173,7 @@ function resetActBehalfForm() {
     selectedSkillId: null,
     researchCurrent: false,
     currentResult: null,
+    currentProposal: null,
     resultStale: false,
   };
   if ($("act-title")) $("act-title").value = "";
@@ -6051,6 +6352,11 @@ function wireActBehalfUi() {
   $("btn-act-save-result")?.addEventListener("click", () => saveActBehalfResultDraft());
   $("btn-act-adopt-result")?.addEventListener("click", () => decideActBehalfResult("adopted"));
   $("btn-act-reject-result")?.addEventListener("click", () => decideActBehalfResult("rejected"));
+  $("btn-act-create-proposal")?.addEventListener("click", () => createActExperienceProposal());
+  $("btn-act-save-proposal-review")?.addEventListener("click", () => saveActProposalReview());
+  $("btn-act-preview-proposal")?.addEventListener("click", () => previewActProposal());
+  $("btn-act-apply-proposal")?.addEventListener("click", () => applyActProposal());
+  $("btn-act-reject-proposal")?.addEventListener("click", () => rejectActProposal());
 }
 
 

@@ -47,6 +47,16 @@ const api = {
   actBehalfGenerateResult: (payload) => ipcRenderer.invoke("actBehalf:generateResult", payload),
   actBehalfSaveResultDraft: (payload) => ipcRenderer.invoke("actBehalf:saveResultDraft", payload),
   actBehalfDecideResult: (payload) => ipcRenderer.invoke("actBehalf:decideResult", payload),
+  actBehalfCreateExperienceProposal: (payload) =>
+    ipcRenderer.invoke("actBehalf:createExperienceProposal", payload),
+  actBehalfSaveExperienceProposalReview: (payload) =>
+    ipcRenderer.invoke("actBehalf:saveExperienceProposalReview", payload),
+  actBehalfPreviewExperienceProposal: (payload) =>
+    ipcRenderer.invoke("actBehalf:previewExperienceProposal", payload),
+  actBehalfApplyExperienceProposal: (payload) =>
+    ipcRenderer.invoke("actBehalf:applyExperienceProposal", payload),
+  actBehalfRejectExperienceProposal: (payload) =>
+    ipcRenderer.invoke("actBehalf:rejectExperienceProposal", payload),
   getLifeGraph: (opts) => ipcRenderer.invoke("life:getGraph", opts),
   getCognition: () => ipcRenderer.invoke("life:getCognition"),
   generateCognitionReport: () => ipcRenderer.invoke("life:generateCognitionReport"),

@@ -1047,9 +1047,16 @@ async function saveResultDraftFromRenderer(store, userData, payload) {
   };
   results[idx] = updated;
 
+  const inv = require("./experience-proposal").invalidateOpenProposalsForResult(
+    task.proposals,
+    result.resultId,
+    "成果正文已更新，未应用的学习建议已失效。"
+  );
+
   const saved = await store.saveTask(userData, {
     ...task,
     results,
+    proposals: inv.proposals,
     invocations: task.invocations,
     selectedSkillId: task.selectedSkillId,
     subjectContext: task.subjectContext,
@@ -1109,9 +1116,21 @@ async function decideResultFromRenderer(store, userData, payload) {
     decidedAt: new Date().toISOString(),
   };
   results[idx] = updated;
+
+  let proposals = Array.isArray(task.proposals) ? task.proposals : [];
+  if (decision !== OWNER_DECISION.adopted) {
+    const inv = require("./experience-proposal").invalidateOpenProposalsForResult(
+      proposals,
+      result.resultId,
+      "成果已不再处于采用状态，未应用的学习建议已失效。"
+    );
+    proposals = inv.proposals;
+  }
+
   const saved = await store.saveTask(userData, {
     ...task,
     results,
+    proposals,
     invocations: task.invocations,
     selectedSkillId: task.selectedSkillId,
     subjectContext: task.subjectContext,

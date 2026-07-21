@@ -8,6 +8,7 @@
 
 const { normalizeTaskIntent } = require("./task-intent");
 const { applyGoalChangeToStoredTask } = require("./subject-context-assembly");
+const { markProposalsStale } = require("./experience-proposal");
 
 /** Fields the renderer must never author for research audit. */
 const RENDERER_FORBIDDEN_RESEARCH_KEYS = Object.freeze([
@@ -28,6 +29,12 @@ const RENDERER_FORBIDDEN_RESEARCH_KEYS = Object.freeze([
   "modelInvocation",
   "ownerDecision",
   "revisions",
+  "proposals",
+  "proposal",
+  "preview",
+  "apply",
+  "packageBaseRef",
+  "candidates",
 ]);
 
 /**
@@ -39,6 +46,7 @@ function takeAuthoritativeResearchFields(existing) {
       invocations: [],
       selectedSkillId: null,
       results: [],
+      proposals: [],
       capabilityRefs: [],
       identityRefs: [],
       authorization: null,
@@ -56,6 +64,7 @@ function takeAuthoritativeResearchFields(existing) {
         ? String(existing.selectedSkillId)
         : null,
     results: Array.isArray(existing.results) ? existing.results.slice() : [],
+    proposals: Array.isArray(existing.proposals) ? existing.proposals.slice() : [],
     capabilityRefs: Array.isArray(existing.capabilityRefs) ? existing.capabilityRefs.slice() : [],
     identityRefs: Array.isArray(existing.identityRefs) ? existing.identityRefs.slice() : [],
     authorization: existing.authorization || null,
@@ -71,13 +80,18 @@ function rendererAttemptedResearchForge(payload) {
   const p = payload && typeof payload === "object" ? payload : {};
   for (const key of RENDERER_FORBIDDEN_RESEARCH_KEYS) {
     if (Object.prototype.hasOwnProperty.call(p, key) && p[key] != null) {
-      if ((key === "invocations" || key === "results") && Array.isArray(p[key])) return true;
-      if (key !== "invocations" && key !== "results") return true;
+      if (
+        (key === "invocations" || key === "results" || key === "proposals") &&
+        Array.isArray(p[key])
+      ) {
+        return true;
+      }
+      if (key !== "invocations" && key !== "results" && key !== "proposals") return true;
     }
   }
   // Nested forge under a bogus full task dump
   if (p.task && typeof p.task === "object") {
-    for (const key of ["invocations", "selectedSkillId", "discoveredSources", "results"]) {
+    for (const key of ["invocations", "selectedSkillId", "discoveredSources", "results", "proposals"]) {
       if (Object.prototype.hasOwnProperty.call(p.task, key) && p.task[key] != null) return true;
     }
   }
@@ -136,6 +150,11 @@ function buildDraftSaveRecord({ existing, rendererPayload } = {}) {
     status = String(existing.status);
   }
 
+  let proposals = research.proposals;
+  if (goalFields.invalidatedConfirmed) {
+    proposals = markProposalsStale(proposals, "任务目标已变化，未应用的学习建议已失效。").proposals;
+  }
+
   const record = {
     taskId: (existing && existing.taskId) || (payload.taskId ? String(payload.taskId) : undefined),
     createdAt: existing && existing.createdAt,
@@ -152,10 +171,11 @@ function buildDraftSaveRecord({ existing, rendererPayload } = {}) {
     existingUserPositions: research.existingUserPositions,
     digitalMeInferences: research.digitalMeInferences,
     result: research.result,
-    // Authoritative research / audit / results — never from renderer
+    // Authoritative research / audit / results / proposals — never from renderer
     invocations: research.invocations,
     selectedSkillId: research.selectedSkillId,
     results: research.results,
+    proposals,
     capabilityRefs: research.capabilityRefs,
     identityRefs: research.identityRefs,
     authorization: research.authorization,

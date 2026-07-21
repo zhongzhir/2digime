@@ -5,6 +5,18 @@
 
 ---
 
+## 2026-07-21 第一闭环实现 · 第 4 块：Experience Proposal 与主体回流
+
+### 做了什么
+
+从已采用成果生成 Experience Proposal；Owner 逐项审阅/修改/排除；经真实 `feedback:preview` 预览后再显式 `feedback:apply` 写入 Package；任务内保存提案与审计。adopted 不自动写 Package。聚焦测试 `test:vl1-block4`。第 1–3 块 → `accepted`；第 4 块 → `implemented_pending_codex_review`。
+
+### 下一任务
+
+**第一闭环正式验收与 Owner 真机验收**（仅登记，不实施）
+
+---
+
 ## 2026-07-21 第 3 块限量修正：Skill/tool invocation 匹配边界
 
 ### 做了什么

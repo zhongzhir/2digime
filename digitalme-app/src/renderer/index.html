@@ -505,7 +505,7 @@
                     <div class="ext-store-head">
                       <h3>研究与表达成果</h3>
                     </div>
-                    <p class="muted write-rail-hint">在调研完成后可生成四栏证据成果。本步不写入主体资料包，不生成资料变更提案。</p>
+                    <p class="muted write-rail-hint">在调研完成后可生成四栏证据成果。采用成果不等于写入主体资料包。</p>
                     <div class="builder-actions">
                       <button id="btn-act-generate-result" type="button" data-testid="btn-act-generate-result" disabled>生成研究与表达成果</button>
                       <button id="btn-act-generate-without-ext" class="btn-ghost hidden" type="button" data-testid="btn-act-generate-without-ext">无外部来源仍继续生成</button>
@@ -535,6 +535,24 @@
                           <button id="btn-act-reject-result" class="btn-ghost" type="button" data-testid="btn-act-reject-result">否定</button>
                         </div>
                       </div>
+                    </div>
+                    <div id="act-learn-panel" class="act-learn-panel hidden" data-testid="act-learn-panel">
+                      <div class="ext-store-head">
+                        <h3>让 Digital Me 从这次任务中学习</h3>
+                      </div>
+                      <p class="muted write-rail-hint">
+                        采用成果不等于写入 Digital Me。你可以先查看并修改学习建议；预览后再次确认才会写入主体资料包。
+                      </p>
+                      <div class="builder-actions">
+                        <button id="btn-act-create-proposal" type="button" data-testid="btn-act-create-proposal" disabled>总结本次经验</button>
+                        <button id="btn-act-save-proposal-review" class="btn-ghost" type="button" data-testid="btn-act-save-proposal-review" disabled>保存审阅</button>
+                        <button id="btn-act-preview-proposal" type="button" data-testid="btn-act-preview-proposal" disabled>生成变更预览</button>
+                        <button id="btn-act-apply-proposal" type="button" data-testid="btn-act-apply-proposal" disabled>确认写入 Digital Me</button>
+                        <button id="btn-act-reject-proposal" class="btn-ghost" type="button" data-testid="btn-act-reject-proposal" disabled>拒绝本建议</button>
+                      </div>
+                      <p id="act-learn-status" class="muted write-rail-hint" data-testid="act-learn-status"></p>
+                      <div id="act-proposal-candidates" class="act-proposal-candidates" data-testid="act-proposal-candidates"></div>
+                      <pre id="act-proposal-preview" class="act-result-body hidden" data-testid="act-proposal-preview"></pre>
                     </div>
                   </div>
                 </div>

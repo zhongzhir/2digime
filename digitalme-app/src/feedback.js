@@ -120,20 +120,46 @@ function openStore(packageDir, storeHooks) {
 
 /**
  * Classify + build plan + create candidate change set. Does not modify package content.
+ * Optional payload.category overrides auto-classification when it is a known CATEGORIES key.
+ * Optional payload.items: [{ category?, correction, userQuestion?, assistantExcerpt? }]
+ * builds one multi-op change set (still via PackageStore.createChangeSet + preview).
  */
 function previewFeedback(packageDir, payload, storeHooks) {
-  const classified = classifyFeedback(payload || {});
-  const plan = buildWritePlan({ ...(payload || {}), category: classified.category });
-  const dataKinds = ["owner_assertion"];
-  const ops = planToOps(plan);
+  const body = payload && typeof payload === "object" ? payload : {};
+  const items = Array.isArray(body.items) && body.items.length ? body.items : [body];
 
+  const plans = [];
+  for (const item of items) {
+    const row = item && typeof item === "object" ? item : {};
+    const classified = classifyFeedback(row);
+    const category =
+      row.category && CATEGORIES[row.category] ? row.category : classified.category;
+    const plan = buildWritePlan({ ...row, category });
+    plans.push({
+      ...plan,
+      scores: classified.scores,
+    });
+  }
+
+  const primary = plans[0];
+  const ops = [];
+  for (const plan of plans) {
+    ops.push(...planToOps(plan));
+  }
+
+  const dataKinds = ["owner_assertion"];
   const store = openStore(packageDir, storeHooks);
   store.recover();
 
+  const reason =
+    plans.length === 1
+      ? primary.summary || "用户确认的反馈修正"
+      : `Experience Proposal：拟写入 ${plans.length} 项候选经验`;
+
   const cs = store.createChangeSet({
     actor: "owner:feedback",
-    reason: plan.summary || "用户确认的反馈修正",
-    sourceRefs: ["feedback"],
+    reason: reason.slice(0, 500),
+    sourceRefs: ["feedback", "experience_proposal"],
     dataKinds,
     ops,
   });
@@ -141,12 +167,14 @@ function previewFeedback(packageDir, payload, storeHooks) {
   const storePreview = store.preview(cs.id);
 
   return {
-    ...plan,
-    scores: classified.scores,
+    ...primary,
+    plans,
+    scores: primary.scores,
     changeSetId: cs.id,
     baseRevision: cs.baseRevision,
     storePreview,
     dataKinds,
+    itemCount: plans.length,
   };
 }
 
