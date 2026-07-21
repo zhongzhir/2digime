@@ -91,29 +91,83 @@ function confirmedClaimsFromContext(subjectContext) {
   return out.slice(0, MAX_CLAIMS_IN_PROMPT);
 }
 
-function projectExternalEvidenceFromTask(task) {
+function currentSubjectVersion(subjectContext) {
+  return String(
+    (subjectContext && (subjectContext.version || subjectContext.subjectVersion)) || ""
+  ).trim();
+}
+
+function invocationGoal(inv) {
+  return String(
+    (inv && inv.disclosedContext && inv.disclosedContext.goal) ||
+      (inv && inv.input && inv.input.goal) ||
+      ""
+  ).trim();
+}
+
+function invocationSubjectVersion(inv) {
+  return String(
+    (inv && inv.subjectContextVersion) ||
+      (inv && inv.disclosedContext && inv.disclosedContext.subjectVersion) ||
+      ""
+  ).trim();
+}
+
+function strictEqualNonEmpty(a, b) {
+  const x = String(a || "").trim();
+  const y = String(b || "").trim();
+  return !!x && !!y && x === y;
+}
+
+function isAllowedResearchToolInvocation(inv) {
+  if (!inv || inv.kind !== "tool") return false;
+  return String(inv.capabilityId || "") === TOOL_CAPABILITY_ID;
+}
+
+function isMatchingSkillInvocation(inv, { goal, subjectVersion } = {}) {
+  if (!inv || inv.kind !== "skill") return false;
+  if (inv.capabilityId !== ALLOWED_SKILL_ID && inv.skillId !== ALLOWED_SKILL_ID) return false;
+  if (inv.status !== "succeeded") return false;
+  if (!strictEqualNonEmpty(invocationGoal(inv), goal)) return false;
+  if (!strictEqualNonEmpty(invocationSubjectVersion(inv), subjectVersion)) return false;
+  return true;
+}
+
+function isMatchingToolInvocation(inv, { goal, subjectVersion } = {}) {
+  if (!isAllowedResearchToolInvocation(inv)) return false;
+  if (!strictEqualNonEmpty(invocationGoal(inv), goal)) return false;
+  if (!strictEqualNonEmpty(invocationSubjectVersion(inv), subjectVersion)) return false;
+  return true;
+}
+
+function findMatchingSkillInvocation(task, goal) {
   const invs = Array.isArray(task && task.invocations) ? task.invocations : [];
-  const tools = invs.filter((i) => i && i.kind === "tool");
-  const currentGoal = String((task.taskIntent && task.taskIntent.goal) || task.goal || "").trim();
-  // Prefer latest tool invocation matching current goal disclosedContext
-  let tool = null;
-  for (let i = tools.length - 1; i >= 0; i -= 1) {
-    const inv = tools[i];
-    const g = String(
-      (inv.disclosedContext && (inv.disclosedContext.goal || inv.disclosedContext.goalSummary)) || ""
-    ).trim();
-    if (!g || g === currentGoal || g === truncate(currentGoal, 80)) {
-      tool = inv;
-      break;
-    }
+  const subjectVersion = currentSubjectVersion(task && task.subjectContext);
+  const g = String(goal || "").trim();
+  for (let i = invs.length - 1; i >= 0; i -= 1) {
+    if (isMatchingSkillInvocation(invs[i], { goal: g, subjectVersion })) return invs[i];
   }
-  if (!tool && tools.length) tool = tools[tools.length - 1];
+  return null;
+}
+
+function findMatchingToolInvocation(task) {
+  const invs = Array.isArray(task && task.invocations) ? task.invocations : [];
+  const goal = String((task && task.taskIntent && task.taskIntent.goal) || (task && task.goal) || "").trim();
+  const subjectVersion = currentSubjectVersion(task && task.subjectContext);
+  for (let i = invs.length - 1; i >= 0; i -= 1) {
+    if (isMatchingToolInvocation(invs[i], { goal, subjectVersion })) return invs[i];
+  }
+  return null;
+}
+
+function projectExternalEvidenceFromTask(task) {
+  const tool = findMatchingToolInvocation(task);
 
   if (!tool) {
     return {
       toolInvocation: null,
       externalEvidence: [],
-      emptyReason: "尚未完成外部调研调用。",
+      emptyReason: "当前目标与本人上下文版本下，没有匹配的只读外部调研调用。",
       hasReliableSources: false,
       toolStatus: null,
     };
@@ -194,24 +248,6 @@ function projectExternalEvidenceFromTask(task) {
     hasReliableSources: ok,
     toolStatus: tool.status,
   };
-}
-
-function findMatchingSkillInvocation(task, goal) {
-  const invs = Array.isArray(task && task.invocations) ? task.invocations : [];
-  const g = String(goal || "").trim();
-  for (let i = invs.length - 1; i >= 0; i -= 1) {
-    const inv = invs[i];
-    if (!inv || inv.kind !== "skill") continue;
-    if (inv.capabilityId !== ALLOWED_SKILL_ID && inv.skillId !== ALLOWED_SKILL_ID) continue;
-    if (inv.status !== "succeeded") continue;
-    const ig = String(
-      (inv.disclosedContext && (inv.disclosedContext.goal || inv.disclosedContext.goalSummary)) ||
-        (inv.input && inv.input.goal) ||
-        ""
-    ).trim();
-    if (!ig || ig === g || ig === truncate(g, 80)) return inv;
-  }
-  return null;
 }
 
 function assertGeneratePreconditions(task, opts = {}) {
@@ -535,20 +571,18 @@ function isResultCurrent(task, result) {
   const snapGoal = String(
     (task.subjectContext.rankingMeta && task.subjectContext.rankingMeta.goal) || ""
   ).trim();
-  if (!intentGoal || intentGoal !== snapGoal) return false;
+  if (!strictEqualNonEmpty(intentGoal, snapGoal)) return false;
   const refGoal = String(
     (result.taskIntentRef && result.taskIntentRef.goal) ||
       (result.inputSnapshot && result.inputSnapshot.goal) ||
       ""
   ).trim();
-  if (refGoal && refGoal !== intentGoal) return false;
+  if (!strictEqualNonEmpty(refGoal, intentGoal)) return false;
   const refVer = String(
     (result.subjectContextRef && result.subjectContextRef.version) || ""
   ).trim();
-  const curVer = String(
-    task.subjectContext.version || task.subjectContext.subjectVersion || ""
-  ).trim();
-  if (refVer && curVer && refVer !== curVer) return false;
+  const curVer = currentSubjectVersion(task.subjectContext);
+  if (!strictEqualNonEmpty(refVer, curVer)) return false;
   return true;
 }
 
@@ -1098,6 +1132,12 @@ module.exports = {
   MAX_EXTERNAL_IN_PROMPT,
   confirmedClaimsFromContext,
   projectExternalEvidenceFromTask,
+  findMatchingSkillInvocation,
+  findMatchingToolInvocation,
+  isMatchingSkillInvocation,
+  isMatchingToolInvocation,
+  isAllowedResearchToolInvocation,
+  currentSubjectVersion,
   assertGeneratePreconditions,
   buildGenerationMessages,
   extractJsonObject,
@@ -1108,6 +1148,5 @@ module.exports = {
   generateResearchExpressionResult,
   saveResultDraftFromRenderer,
   decideResultFromRenderer,
-  findMatchingSkillInvocation,
   isResearchResultCurrent,
 };

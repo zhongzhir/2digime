@@ -5373,10 +5373,29 @@ function renderActSourceList(sources, opts = {}) {
   }
 }
 
-function latestToolInvocation(invocations) {
-  const list = Array.isArray(invocations) ? invocations : [];
+function matchingResearchToolInvocation(task) {
+  const list = Array.isArray(task && task.invocations) ? task.invocations : [];
+  const goal = String((task && task.taskIntent && task.taskIntent.goal) || (task && task.goal) || "").trim();
+  const subjectVersion = String(
+    (task &&
+      task.subjectContext &&
+      (task.subjectContext.version || task.subjectContext.subjectVersion)) ||
+      ""
+  ).trim();
+  if (!goal || !subjectVersion) return null;
   for (let i = list.length - 1; i >= 0; i -= 1) {
-    if (list[i] && list[i].kind === "tool") return list[i];
+    const inv = list[i];
+    if (!inv || inv.kind !== "tool") continue;
+    if (String(inv.capabilityId || "") !== "research.webSearch") continue;
+    const invGoal = String(
+      (inv.disclosedContext && inv.disclosedContext.goal) || (inv.input && inv.input.goal) || ""
+    ).trim();
+    const invVer = String(
+      inv.subjectContextVersion ||
+        (inv.disclosedContext && inv.disclosedContext.subjectVersion) ||
+        ""
+    ).trim();
+    if (invGoal === goal && invVer === subjectVersion) return inv;
   }
   return null;
 }
@@ -5385,7 +5404,7 @@ function renderActResearchFromTask(task) {
   actBehalfState.invocations = (task && task.invocations) || [];
   actBehalfState.selectedSkillId = (task && task.selectedSkillId) || null;
   updateActResearchPanelVisibility();
-  const tool = latestToolInvocation(actBehalfState.invocations);
+  const tool = matchingResearchToolInvocation(task);
   const goal = String((task && task.taskIntent && task.taskIntent.goal) || (task && task.goal) || "").trim();
   const snapGoal = String(
     (task &&
@@ -5400,19 +5419,11 @@ function renderActResearchFromTask(task) {
     task.subjectContext.confirmationState === "confirmed" &&
     goal &&
     goal === snapGoal;
-  const invGoal = String(
-    (tool && tool.disclosedContext && (tool.disclosedContext.goal || tool.disclosedContext.goalSummary)) ||
-      ""
-  ).trim();
-  const current =
-    contextOk &&
-    tool &&
-    tool.status === "succeeded" &&
-    (!invGoal || invGoal === goal || invGoal === goal.slice(0, 80) || invGoal === goal.slice(0, 80) + "…");
+  const current = !!(contextOk && tool && tool.status === "succeeded");
   actBehalfState.researchCurrent = !!current;
 
   if (!tool) {
-    setActResearchStatus(contextOk ? "尚未开始调研。" : "");
+    setActResearchStatus(contextOk ? "尚未开始与当前目标匹配的调研。" : "");
     renderActSourceList([], { emptyText: "确认本人上下文后，可开始只读外部调研。" });
   } else if (tool.status === "running") {
     setActResearchStatus("正在执行只读外部调研…");
@@ -5429,7 +5440,7 @@ function renderActResearchFromTask(task) {
     setActResearchStatus(
       current
         ? `调研成功：取得 ${n} 条外部来源（仅为证据候选，不是本人事实）。`
-        : `历史调研记录：${n} 条来源（与当前目标不一致，请重新调研）。`
+        : `历史调研记录：${n} 条来源（与当前目标或上下文版本不一致，请重新调研）。`
     );
     renderActSourceList(tool.discoveredSources || [], { stale: !current });
   } else {
@@ -5451,14 +5462,14 @@ function updateActResultGenVisibility(task) {
   const confirmed =
     actBehalfState.confirmed && actBehalfState.confirmed.confirmationState === "confirmed";
   if (panel) panel.classList.toggle("hidden", !confirmed);
-  const tool = latestToolInvocation((task && task.invocations) || actBehalfState.invocations);
-  const canTry = !!(confirmed && actBehalfState.taskId && tool && tool.status !== "running");
+  const tool = matchingResearchToolInvocation(task || { invocations: actBehalfState.invocations, taskIntent: actBehalfState.taskIntent, goal: actBehalfState.goal, subjectContext: actBehalfState.confirmed });
+  const canTry = !!(confirmed && actBehalfState.taskId && (!tool || tool.status !== "running"));
   if (btn) btn.disabled = !canTry;
   const needContinue =
-    tool &&
-    (tool.status === "failed" ||
-      tool.status === "interrupted" ||
-      !(tool.discoveredSources || []).length);
+    !tool ||
+    tool.status === "failed" ||
+    tool.status === "interrupted" ||
+    !(tool.discoveredSources || []).length;
   if (btnNoExt) btnNoExt.classList.toggle("hidden", !(canTry && needContinue));
 }
 
@@ -5479,13 +5490,20 @@ function isDisplayResultCurrent(task, result) {
   const snapGoal = String(
     (task.subjectContext.rankingMeta && task.subjectContext.rankingMeta.goal) || ""
   ).trim();
-  if (!intentGoal || intentGoal !== snapGoal) return false;
+  if (!intentGoal || !snapGoal || intentGoal !== snapGoal) return false;
   const refGoal = String(
     (result.taskIntentRef && result.taskIntentRef.goal) ||
       (result.inputSnapshot && result.inputSnapshot.goal) ||
       ""
   ).trim();
-  if (refGoal && refGoal !== intentGoal) return false;
+  if (!refGoal || refGoal !== intentGoal) return false;
+  const refVer = String(
+    (result.subjectContextRef && result.subjectContextRef.version) || ""
+  ).trim();
+  const curVer = String(
+    task.subjectContext.version || task.subjectContext.subjectVersion || ""
+  ).trim();
+  if (!refVer || !curVer || refVer !== curVer) return false;
   return true;
 }
 

@@ -18,6 +18,7 @@ const {
 const {
   runReadonlyExternalResearch,
   ALLOWED_SKILL_ID,
+  TOOL_CAPABILITY_ID,
 } = require("../src/act-behalf/research-run");
 const {
   generateResearchExpressionResult,
@@ -28,6 +29,8 @@ const {
   materializeResultSections,
   confirmedClaimsFromContext,
   projectExternalEvidenceFromTask,
+  findMatchingSkillInvocation,
+  findMatchingToolInvocation,
   healRunningResults,
   isResultCurrent,
   extractJsonObject,
@@ -146,6 +149,43 @@ async function seedResearchedTask(userData, goal) {
   return out.task;
 }
 
+function subjectVersionOf(task) {
+  return String(
+    (task && task.subjectContext && (task.subjectContext.version || task.subjectContext.subjectVersion)) ||
+      ""
+  ).trim();
+}
+
+function matchingSkillInvocation(goal, subjectVersion, extras = {}) {
+  return {
+    invocationId: extras.invocationId || "inv_skill_ok",
+    kind: "skill",
+    capabilityId: ALLOWED_SKILL_ID,
+    skillId: ALLOWED_SKILL_ID,
+    status: extras.status || "succeeded",
+    disclosedContext: { goal, subjectVersion },
+    subjectContextVersion: subjectVersion,
+    input: { goal },
+    ...extras.rest,
+  };
+}
+
+function matchingToolInvocation(goal, subjectVersion, extras = {}) {
+  return {
+    invocationId: extras.invocationId || "inv_tool_ok",
+    kind: "tool",
+    capabilityId: extras.capabilityId || TOOL_CAPABILITY_ID,
+    skillId: ALLOWED_SKILL_ID,
+    status: extras.status || "succeeded",
+    disclosedContext: { goal, subjectVersion },
+    subjectContextVersion: subjectVersion,
+    provider: extras.provider || "fake",
+    discoveredSources: extras.discoveredSources || [],
+    error: extras.error || null,
+    input: { goal, queries: extras.queries || ["q"] },
+  };
+}
+
 function fakeCallModelFactory(payload) {
   return async (messages) => {
     return {
@@ -217,25 +257,17 @@ async function main() {
     const ud = tempUserData();
     try {
       const task = await seedConfirmedTask(ud, "运行中不可生成");
+      const ver = subjectVersionOf(task);
       await actStore.saveTask(ud, {
         ...task,
         selectedSkillId: ALLOWED_SKILL_ID,
         invocations: [
-          {
-            invocationId: "inv_skill_ok",
-            kind: "skill",
-            capabilityId: ALLOWED_SKILL_ID,
-            status: "succeeded",
-            disclosedContext: { goal: "运行中不可生成" },
-            input: { goal: "运行中不可生成" },
-          },
-          {
+          matchingSkillInvocation("运行中不可生成", ver),
+          matchingToolInvocation("运行中不可生成", ver, {
             invocationId: "inv_tool_run",
-            kind: "tool",
             status: "running",
-            disclosedContext: { goal: "运行中不可生成" },
             discoveredSources: [],
-          },
+          }),
         ],
       });
       const out = await generateResearchExpressionResult({
@@ -384,26 +416,18 @@ async function main() {
     const ud = tempUserData();
     try {
       const task = await seedConfirmedTask(ud, "无来源受限生成");
+      const ver = subjectVersionOf(task);
       await actStore.saveTask(ud, {
         ...task,
         selectedSkillId: ALLOWED_SKILL_ID,
         invocations: [
-          {
-            invocationId: "inv_skill_ok",
-            kind: "skill",
-            capabilityId: ALLOWED_SKILL_ID,
-            status: "succeeded",
-            disclosedContext: { goal: "无来源受限生成" },
-            input: { goal: "无来源受限生成" },
-          },
-          {
+          matchingSkillInvocation("无来源受限生成", ver),
+          matchingToolInvocation("无来源受限生成", ver, {
             invocationId: "inv_tool_fail",
-            kind: "tool",
             status: "failed",
-            disclosedContext: { goal: "无来源受限生成" },
-            error: { message: "搜索失败" },
             discoveredSources: [],
-          },
+            error: { message: "搜索失败" },
+          }),
         ],
       });
       const blocked = await generateResearchExpressionResult({
@@ -826,6 +850,238 @@ async function main() {
         // after heal, generation allowed — acceptable
         assert.ok(pre.ok || pre.code === "external_sources_unavailable" || pre.code === "result_running");
       }
+    } finally {
+      cleanup(ud);
+    }
+  });
+
+  await test("tool invocation for old goal cannot be current external source", async () => {
+    const ud = tempUserData();
+    try {
+      const goal = "当前目标B";
+      const task = await seedConfirmedTask(ud, goal);
+      const ver = subjectVersionOf(task);
+      const sampleSources = [
+        {
+          sourceId: "src_old",
+          title: "旧目标来源",
+          url: "https://example.com/old-goal",
+          snippet: "不应进入当前外部栏",
+          provider: "fake",
+        },
+      ];
+      await actStore.saveTask(ud, {
+        ...task,
+        selectedSkillId: ALLOWED_SKILL_ID,
+        invocations: [
+          matchingSkillInvocation(goal, ver),
+          matchingToolInvocation("旧目标A", ver, {
+            invocationId: "inv_tool_old_goal",
+            discoveredSources: sampleSources,
+          }),
+        ],
+      });
+      const got = (await actStore.getTask(ud, task.taskId)).task;
+      assert.equal(findMatchingToolInvocation(got), null);
+      const ext = projectExternalEvidenceFromTask(got);
+      assert.equal(ext.hasReliableSources, false);
+      assert.equal(ext.externalEvidence.length, 0);
+      assert.equal(ext.toolInvocation, null);
+      const blocked = assertGeneratePreconditions(got, { continueWithoutExternalSources: false });
+      assert.equal(blocked.ok, false);
+      assert.equal(blocked.code, "external_sources_unavailable");
+    } finally {
+      cleanup(ud);
+    }
+  });
+
+  await test("same goal with old subject context version cannot drive generation", async () => {
+    const ud = tempUserData();
+    try {
+      const goal = "同目标旧版本";
+      const task = await seedConfirmedTask(ud, goal);
+      const ver = subjectVersionOf(task);
+      assert.ok(ver);
+      const oldVer = ver + "_old";
+      await actStore.saveTask(ud, {
+        ...task,
+        selectedSkillId: ALLOWED_SKILL_ID,
+        invocations: [
+          matchingSkillInvocation(goal, oldVer, { invocationId: "inv_skill_old_ver" }),
+          matchingToolInvocation(goal, oldVer, {
+            invocationId: "inv_tool_old_ver",
+            discoveredSources: [
+              {
+                sourceId: "src_v",
+                title: "旧版本来源",
+                url: "https://example.com/old-ver",
+                snippet: "旧",
+                provider: "fake",
+              },
+            ],
+          }),
+        ],
+      });
+      const got = (await actStore.getTask(ud, task.taskId)).task;
+      assert.equal(findMatchingSkillInvocation(got, goal), null);
+      assert.equal(findMatchingToolInvocation(got), null);
+      const pre = assertGeneratePreconditions(got, { continueWithoutExternalSources: true });
+      assert.equal(pre.ok, false);
+      assert.equal(pre.code, "skill_invocation_missing");
+      const gen = await generateResearchExpressionResult({
+        userData: ud,
+        taskId: task.taskId,
+        store: actStore,
+        skills: personalSkills,
+        continueWithoutExternalSources: true,
+        callModel: fakeCallModelFactory(),
+        forceFake: true,
+      });
+      assert.equal(gen.ok, false);
+      assert.equal(gen.code, "skill_invocation_missing");
+    } finally {
+      cleanup(ud);
+    }
+  });
+
+  await test("unrelated tool capability cannot enter external evidence column", async () => {
+    const ud = tempUserData();
+    try {
+      const goal = "无关能力隔离";
+      const task = await seedConfirmedTask(ud, goal);
+      const ver = subjectVersionOf(task);
+      await actStore.saveTask(ud, {
+        ...task,
+        selectedSkillId: ALLOWED_SKILL_ID,
+        invocations: [
+          matchingSkillInvocation(goal, ver),
+          matchingToolInvocation(goal, ver, {
+            invocationId: "inv_tool_other",
+            capabilityId: "other.unrelatedCapability",
+            discoveredSources: [
+              {
+                sourceId: "src_x",
+                title: "无关来源",
+                url: "https://example.com/unrelated",
+                snippet: "不应出现",
+                provider: "fake",
+              },
+            ],
+          }),
+        ],
+      });
+      const got = (await actStore.getTask(ud, task.taskId)).task;
+      const ext = projectExternalEvidenceFromTask(got);
+      assert.equal(ext.toolInvocation, null);
+      assert.equal(ext.externalEvidence.length, 0);
+      assert.ok(!JSON.stringify(ext).includes("unrelated"));
+    } finally {
+      cleanup(ud);
+    }
+  });
+
+  await test("subject context version change marks prior result historical for current-validity", async () => {
+    const ud = tempUserData();
+    try {
+      const goal = "上下文版本变更";
+      const task = await seedResearchedTask(ud, goal);
+      const claims = confirmedClaimsFromContext(task.subjectContext);
+      const ext = projectExternalEvidenceFromTask(task);
+      const gen = await generateResearchExpressionResult({
+        userData: ud,
+        taskId: task.taskId,
+        store: actStore,
+        skills: personalSkills,
+        callModel: async () => ({
+          content: JSON.stringify({
+            subjectSummary: "s",
+            inferences: [
+              {
+                text: "推断",
+                basedOnSubjectClaimIds: [claims[0].claimId],
+                basedOnExternalResultRefs: [ext.externalEvidence[0].resultRef],
+                uncertainty: "low",
+              },
+            ],
+            finalDraft: "版本一成果",
+          }),
+          usedFake: true,
+        }),
+        forceFake: true,
+      });
+      assert.equal(gen.ok, true, gen.message);
+      assert.equal(isResultCurrent(gen.task, gen.result), true);
+
+      const bumped = {
+        ...gen.task,
+        subjectContext: {
+          ...gen.task.subjectContext,
+          version: String(subjectVersionOf(gen.task)) + "_v2",
+          subjectVersion: String(subjectVersionOf(gen.task)) + "_v2",
+        },
+      };
+      await actStore.saveTask(ud, bumped);
+      const got = (await actStore.getTask(ud, task.taskId)).task;
+      assert.equal(isResultCurrent(got, got.results[0]), false);
+
+      // Renderer current-validity mirrors version check
+      const refVer = String((got.results[0].subjectContextRef && got.results[0].subjectContextRef.version) || "");
+      const curVer = subjectVersionOf(got);
+      assert.ok(refVer);
+      assert.ok(curVer);
+      assert.notEqual(refVer, curVer);
+    } finally {
+      cleanup(ud);
+    }
+  });
+
+  await test("no matching sources still allows owner continueWithoutExternalSources", async () => {
+    const ud = tempUserData();
+    try {
+      const goal = "无匹配来源显式继续";
+      const task = await seedConfirmedTask(ud, goal);
+      const ver = subjectVersionOf(task);
+      await actStore.saveTask(ud, {
+        ...task,
+        selectedSkillId: ALLOWED_SKILL_ID,
+        invocations: [matchingSkillInvocation(goal, ver)],
+      });
+      const got = (await actStore.getTask(ud, task.taskId)).task;
+      assert.equal(findMatchingToolInvocation(got), null);
+      const blocked = assertGeneratePreconditions(got, { continueWithoutExternalSources: false });
+      assert.equal(blocked.ok, false);
+      assert.equal(blocked.code, "external_sources_unavailable");
+      const claims = confirmedClaimsFromContext(got.subjectContext);
+      const out = await generateResearchExpressionResult({
+        userData: ud,
+        taskId: task.taskId,
+        store: actStore,
+        skills: personalSkills,
+        continueWithoutExternalSources: true,
+        callModel: async (messages) => {
+          assert.ok(messages[0].content.includes("无可用外部来源"));
+          return {
+            content: JSON.stringify({
+              subjectSummary: "s",
+              externalFindings: [],
+              inferences: [
+                {
+                  text: "受限推断",
+                  basedOnSubjectClaimIds: [claims[0].claimId],
+                  basedOnExternalResultRefs: [],
+                  uncertainty: "high",
+                },
+              ],
+              finalDraft: "无匹配来源的受限成果",
+            }),
+            usedFake: true,
+          };
+        },
+        forceFake: true,
+      });
+      assert.equal(out.ok, true, out.message);
+      assert.equal(out.result.sections.externalEvidence.length, 0);
+      assert.equal(out.result.inputSnapshot.continueWithoutExternalSources, true);
     } finally {
       cleanup(ud);
     }

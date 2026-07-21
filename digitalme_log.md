@@ -5,6 +5,18 @@
 
 ---
 
+## 2026-07-21 第 3 块限量修正：Skill/tool invocation 匹配边界
+
+### 做了什么
+
+删除「无匹配时回退到最后一个 tool invocation」；Skill/tool 必须严格匹配当前 goal 与已确认 Subject Context version；tool 仅允许 `research.webSearch`；renderer 当前有效性判断补上 context version。不开始第 4 块。聚焦测试 `test:vl1-block3`（含回归 block1/2/act-behalf）。第 3 块仍为 `implemented_pending_codex_review`。
+
+### 下一任务
+
+等待第 3 块 Codex 复核；**不得自行开始第 4 块**。
+
+---
+
 ## 2026-07-21 第一闭环实现 · 第 3 块：有来源约束的研究与表达成果
 
 ### 做了什么
