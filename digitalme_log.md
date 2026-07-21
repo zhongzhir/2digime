@@ -5,6 +5,20 @@
 
 ---
 
+## 2026-07-21 第 4 块限量修正：apply 审计一致性与 Package 读取失败阻断
+
+### 做了什么
+
+1. apply 前持久化 `pendingApply`（proposalId/previewId/changeSetId/baseVersion/candidateIds）；Package 已提交但任务 applied 审计失败时，按 PackageStore changeSet `status===committed` 幂等恢复为 applied，不得凭 revision 猜测。  
+2. Package 内容无法安全读取时不调用模型，提案记 failed 并返回 `package_unreadable`。  
+不开始正式验收。第 4 块仍为 `implemented_pending_codex_review`。
+
+### 下一任务
+
+**第一闭环正式验收与 Owner 真机验收**（仅登记，不实施）
+
+---
+
 ## 2026-07-21 第一闭环实现 · 第 4 块：Experience Proposal 与主体回流
 
 ### 做了什么

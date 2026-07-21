@@ -314,6 +314,39 @@ class PackageStore {
     return cs;
   }
 
+  /**
+   * Read-only inspect of a change set by id. Does not modify Package or change set.
+   * Used to reconcile apply-audit failures: status "committed" uniquely proves this id was applied.
+   */
+  inspectChangeSet(changeSetId) {
+    const id = String(changeSetId || "").trim();
+    if (!id) {
+      return { ok: false, code: "changeset_not_found", message: "changeset_not_found" };
+    }
+    try {
+      const cs = this._loadChangeSet(id);
+      return {
+        ok: true,
+        id: cs.id,
+        status: String(cs.status || "candidate"),
+        baseRevision: cs.baseRevision,
+        resultRevision: cs.resultRevision != null ? cs.resultRevision : null,
+        committedAt: cs.committedAt || null,
+        resultRootSha256: cs.resultRootSha256 || null,
+        affectedPaths: Array.isArray(cs.affectedPaths) ? cs.affectedPaths.slice() : [],
+        previousRevision:
+          cs.resultRevision != null && cs.baseRevision != null ? cs.baseRevision : null,
+      };
+    } catch (e) {
+      const code = (e && e.code) || "changeset_unreadable";
+      return {
+        ok: false,
+        code: code === "changeset_not_found" ? "changeset_not_found" : "changeset_unreadable",
+        message: code,
+      };
+    }
+  }
+
   _saveChangeSet(cs) {
     writeJsonAtomic(this._changeSetPath(cs.id), cs);
   }

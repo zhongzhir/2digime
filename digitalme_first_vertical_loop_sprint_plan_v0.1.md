@@ -1,8 +1,8 @@
 # Digital Me 第一纵向闭环短冲刺计划
 
-版本：v0.1.7  
+版本：v0.1.8  
 日期：2026-07-21  
-状态：`spec_frozen` / **当前唯一执行计划**（第 1–3 块 `accepted`；第 4 块 `implemented_pending_codex_review`；**下一项仅登记：正式验收与 Owner 真机验收**）  
+状态：`spec_frozen` / **当前唯一执行计划**（第 1–3 块 `accepted`；第 4 块 `implemented_pending_codex_review`（含 apply 审计恢复修正）；**下一项仅登记：正式验收与 Owner 真机验收**）  
 所属架构：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)  
 服务闭环：**第一闭环 — 理解我并产出**  
 **冻结规格（正文）**：[`digitalme_first_vertical_loop_spec_v0.1.md`](digitalme_first_vertical_loop_spec_v0.1.md)（**v0.1.0 `spec_frozen`**）
@@ -139,3 +139,4 @@
 | v0.1.5 | 2026-07-21 | 第 2 块 `accepted`；第 3 块四栏成果 `implemented_pending_codex_review`；下一项 = 第 4 块 |
 | v0.1.6 | 2026-07-21 | 第 3 块限量修正：invocation 严格匹配 goal+Subject Context version；禁止回退末次 tool；仍 `implemented_pending_codex_review`；**勿开始第 4 块** |
 | v0.1.7 | 2026-07-21 | 第 3 块 `accepted`；第 4 块 Experience Proposal 回流 `implemented_pending_codex_review`；下一项仅登记正式验收 |
+| v0.1.8 | 2026-07-21 | 第 4 块限量修正：apply 审计失败按 changeSet 恢复；Package 读取失败阻断；仍 `implemented_pending_codex_review` |

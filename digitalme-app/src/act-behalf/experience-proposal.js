@@ -5,8 +5,10 @@
  * adopted ≠ write Package; Owner must review → preview → explicit confirm apply.
  */
 
+const fs = require("node:fs");
+const path = require("node:path");
 const crypto = require("node:crypto");
-const { readManifest } = require("../package-store");
+const { readManifest, PackageStore } = require("../package-store");
 const feedback = require("../feedback");
 const {
   isResultCurrent,
@@ -107,16 +109,255 @@ function healRunningProposals(proposals) {
   let changed = false;
   for (let i = 0; i < list.length; i += 1) {
     const p = list[i];
-    if (!p || !TRANSIENT_STATUSES.has(p.status)) continue;
+    if (!p) continue;
+    // applying must NOT be blindly interrupted — reconcile via changeSet instead.
+    if (
+      p.status === PROPOSAL_STATUS.generating ||
+      p.status === PROPOSAL_STATUS.previewing
+    ) {
+      list[i] = {
+        ...p,
+        status: PROPOSAL_STATUS.interrupted,
+        updatedAt: new Date().toISOString(),
+        interruptReason: "进程退出时提案操作未完成，已标记为中断。",
+      };
+      changed = true;
+    }
+  }
+  return { proposals: list, changed };
+}
+
+/**
+ * Inspect a PackageStore change set by id. Unique proof that this apply committed.
+ * Does not infer from live Package revision alone.
+ */
+function inspectChangeSetCommit(packageDir, changeSetId) {
+  if (!packageDir || !changeSetId) {
+    return { ok: false, code: "changeset_not_found", message: "changeset_not_found" };
+  }
+  try {
+    const store = new PackageStore({
+      packageDir,
+      ownerId: "owner:feedback",
+    });
+    return store.inspectChangeSet(String(changeSetId));
+  } catch (err) {
+    return {
+      ok: false,
+      code: "changeset_unreadable",
+      message: safeErrorSummary(err) || "changeset_unreadable",
+    };
+  }
+}
+
+/**
+ * Reconcile proposals stuck in applying after Package commit / audit-write failure.
+ * Idempotent: committed changeSet → applied; uncommitted → previewed; unverifiable → interrupted (never applied).
+ */
+function reconcileApplyingProposals(proposals, packageDir) {
+  const list = Array.isArray(proposals) ? proposals.slice() : [];
+  let changed = false;
+  if (!packageDir) return { proposals: list, changed: false };
+
+  for (let i = 0; i < list.length; i += 1) {
+    const p = list[i];
+    if (!p || p.status !== PROPOSAL_STATUS.applying) continue;
+    if (p.status === PROPOSAL_STATUS.applied) continue;
+
+    const pending = p.pendingApply && typeof p.pendingApply === "object" ? p.pendingApply : null;
+    const changeSetId = String(
+      (pending && (pending.changeSetId || pending.previewId)) ||
+        (p.preview && p.preview.previewId) ||
+        ""
+    ).trim();
+
+    if (!changeSetId || !pending) {
+      list[i] = {
+        ...p,
+        status: PROPOSAL_STATUS.interrupted,
+        updatedAt: new Date().toISOString(),
+        interruptReason:
+          "写入过程中断，且缺少可核验的 changeSet 关联信息，未标记为已应用。可重新预览后确认写入。",
+        apply: {
+          ...(p.apply || {}),
+          status: "failed",
+          errorSafeSummary: "unverified_applying_without_pending_apply",
+          completedAt: new Date().toISOString(),
+        },
+      };
+      changed = true;
+      continue;
+    }
+
+    const insp = inspectChangeSetCommit(packageDir, changeSetId);
+    if (insp.ok && insp.status === "committed") {
+      const completedAt = insp.committedAt || new Date().toISOString();
+      list[i] = {
+        ...p,
+        status: PROPOSAL_STATUS.applied,
+        stale: false,
+        pendingApply: pending,
+        apply: {
+          requestedAt: pending.requestedAt || p.updatedAt || completedAt,
+          completedAt,
+          status: "succeeded",
+          previewId: changeSetId,
+          changeSetId,
+          packageBaseVersion: String(pending.packageBaseVersion),
+          packageResultVersion: String(insp.resultRevision),
+          rollbackVersion:
+            insp.previousRevision != null ? "v" + String(insp.previousRevision) : null,
+          rootSha256: insp.resultRootSha256 || null,
+          appliedCandidateIds: Array.isArray(pending.appliedCandidateIds)
+            ? pending.appliedCandidateIds.slice()
+            : [],
+          affectedPaths: Array.isArray(insp.affectedPaths) ? insp.affectedPaths.slice() : [],
+          recoveredFromChangeSet: true,
+          errorSafeSummary: null,
+        },
+        updatedAt: completedAt,
+      };
+      changed = true;
+      continue;
+    }
+
+    if (insp.ok && insp.status !== "committed") {
+      // Change set exists but was never committed — safe to return to previewed for retry.
+      list[i] = {
+        ...p,
+        status: PROPOSAL_STATUS.previewed,
+        pendingApply: null,
+        apply: {
+          requestedAt: pending.requestedAt || null,
+          completedAt: new Date().toISOString(),
+          status: "failed",
+          previewId: changeSetId,
+          changeSetId,
+          packageBaseVersion: String(pending.packageBaseVersion),
+          packageResultVersion: null,
+          appliedCandidateIds: [],
+          errorSafeSummary: "changeset_not_committed",
+        },
+        updatedAt: new Date().toISOString(),
+        interruptReason: null,
+      };
+      changed = true;
+      continue;
+    }
+
+    // Cannot verify (missing / unreadable) — must NOT guess applied from Package revision.
     list[i] = {
       ...p,
       status: PROPOSAL_STATUS.interrupted,
       updatedAt: new Date().toISOString(),
-      interruptReason: "进程退出时提案操作未完成，已标记为中断。",
+      interruptReason:
+        "无法核验本次 changeSet 是否已提交，未标记为已应用。请勿凭资料包版本变化推测。",
+      apply: {
+        requestedAt: pending.requestedAt || null,
+        completedAt: new Date().toISOString(),
+        status: "failed",
+        previewId: changeSetId,
+        changeSetId,
+        packageBaseVersion: String(pending.packageBaseVersion),
+        packageResultVersion: null,
+        appliedCandidateIds: Array.isArray(pending.appliedCandidateIds)
+          ? pending.appliedCandidateIds.slice()
+          : [],
+        errorSafeSummary: insp.code || "changeset_unreadable",
+      },
     };
     changed = true;
   }
+
   return { proposals: list, changed };
+}
+
+function healAndReconcileProposals(proposals, packageDir) {
+  const healed = healRunningProposals(proposals);
+  const reconciled = reconcileApplyingProposals(healed.proposals, packageDir);
+  return {
+    proposals: reconciled.proposals,
+    changed: healed.changed || reconciled.changed,
+  };
+}
+
+/**
+ * Fail closed when Package cannot be safely read for proposal generation.
+ * Manifest-only readability is not enough if content probes fail.
+ */
+function readPackageForProposal(packageDir, loadPackage) {
+  if (!packageDir) {
+    return {
+      ok: false,
+      code: "package_unreadable",
+      message: "缺少主体资料包路径。",
+    };
+  }
+  let manifest;
+  try {
+    manifest = readManifest(packageDir);
+  } catch (err) {
+    return {
+      ok: false,
+      code: "package_unreadable",
+      message: "无法安全读取主体资料包清单。",
+      errorSafeSummary: safeErrorSummary(err),
+    };
+  }
+  if (!manifest || typeof manifest !== "object") {
+    return {
+      ok: false,
+      code: "package_unreadable",
+      message: "主体资料包清单不可用。",
+    };
+  }
+  try {
+    fs.readdirSync(packageDir);
+  } catch (err) {
+    return {
+      ok: false,
+      code: "package_unreadable",
+      message: "无法安全读取主体资料包内容。",
+      errorSafeSummary: safeErrorSummary(err),
+    };
+  }
+  const probes = ["persona.md", "style-guide.md", "manifest.json"];
+  for (const rel of probes) {
+    const full = path.join(packageDir, rel);
+    if (!fs.existsSync(full)) continue;
+    try {
+      fs.readFileSync(full, "utf8");
+    } catch (err) {
+      return {
+        ok: false,
+        code: "package_unreadable",
+        message: "主体资料包内容无法安全读取。",
+        errorSafeSummary: safeErrorSummary(err),
+      };
+    }
+  }
+  let pkg;
+  try {
+    pkg =
+      typeof loadPackage === "function"
+        ? loadPackage()
+        : { dir: packageDir, exists: true, manifest };
+  } catch (err) {
+    return {
+      ok: false,
+      code: "package_unreadable",
+      message: "无法安全读取主体资料包。",
+      errorSafeSummary: safeErrorSummary(err),
+    };
+  }
+  if (!pkg || typeof pkg !== "object") {
+    return {
+      ok: false,
+      code: "package_unreadable",
+      message: "无法安全读取主体资料包。",
+    };
+  }
+  return { ok: true, pkg, manifest };
 }
 
 function markProposalsStale(proposals, reason) {
@@ -498,7 +739,7 @@ async function createExperienceProposal(deps) {
     return { ok: false, code: (got && got.code) || "task_not_found", message: (got && got.message) || "找不到任务。" };
   }
   let task = got.task;
-  const healed = healRunningProposals(task.proposals);
+  const healed = healAndReconcileProposals(task.proposals, packageDir);
   if (healed.changed) {
     const savedHeal = await store.saveTask(userData, { ...task, proposals: healed.proposals });
     task = savedHeal.task;
@@ -510,6 +751,69 @@ async function createExperienceProposal(deps) {
   const result = pre.result;
   const startedAt = (now && now()) || new Date().toISOString();
   const proposalId = newId("prop");
+
+  const pkgRead = readPackageForProposal(packageDir, loadPackage);
+  if (!pkgRead.ok) {
+    const failed = {
+      proposalId,
+      taskId: task.taskId,
+      resultId: result.resultId,
+      resultRevision: Number(result.currentRevision) || 0,
+      kind: PROPOSAL_KIND,
+      status: PROPOSAL_STATUS.failed,
+      stale: false,
+      taskIntentRef: {
+        goal: String((task.taskIntent && task.taskIntent.goal) || task.goal || ""),
+        intentVersionOrDigest: String(
+          (task.taskIntent && (task.taskIntent.updatedAt || task.taskIntent.version)) || ""
+        ),
+      },
+      subjectContextRef: {
+        version: String(
+          (task.subjectContext &&
+            (task.subjectContext.version || task.subjectContext.subjectVersion)) ||
+            ""
+        ),
+      },
+      resultRef: {
+        resultId: result.resultId,
+        revision: Number(result.currentRevision) || 0,
+        ownerDecision: result.ownerDecision,
+      },
+      packageBaseRef: pre.packageBaseRef,
+      candidates: [],
+      modelInvocation: {
+        providerSafeSummary: null,
+        modelSafeSummary: null,
+        startedAt,
+        completedAt: startedAt,
+        status: "failed",
+        errorSafeSummary: pkgRead.errorSafeSummary || pkgRead.code || "package_unreadable",
+        disclosedInputSummary: { modelCalls: 0, packageReadFailed: true },
+      },
+      preview: null,
+      apply: null,
+      currentRevision: 0,
+      revisions: [],
+      createdAt: startedAt,
+      updatedAt: startedAt,
+      rejectedMeta: [],
+    };
+    const prior = Array.isArray(task.proposals) ? task.proposals.slice() : [];
+    const saved = await store.saveTask(userData, {
+      ...task,
+      proposals: prior.concat([failed]),
+    });
+    return {
+      ok: false,
+      code: "package_unreadable",
+      message: pkgRead.message || "无法安全读取主体资料包，未调用模型。",
+      task: saved.task,
+      proposal: failed,
+    };
+  }
+
+  const pkgSummary = boundedPackageSummary(pkgRead.pkg);
   const running = {
     proposalId,
     taskId: task.taskId,
@@ -564,14 +868,6 @@ async function createExperienceProposal(deps) {
   runningTask = savedRunning.task;
 
   const claims = confirmedClaimsFromContext(task.subjectContext);
-  let pkgSummary = "";
-  try {
-    const pkg = typeof loadPackage === "function" ? loadPackage() : { dir: packageDir };
-    pkgSummary = boundedPackageSummary(pkg);
-  } catch {
-    pkgSummary = "";
-  }
-
   const messages = buildProposalMessages({
     intent: task.taskIntent || { goal: task.goal },
     claims,
@@ -800,6 +1096,11 @@ async function previewExperienceProposal(deps) {
   const got = store.getTask(userData, taskId);
   if (!got.ok) return got;
   let task = got.task;
+  const healed = healAndReconcileProposals(task.proposals, packageDir);
+  if (healed.changed) {
+    const savedHeal = await store.saveTask(userData, { ...task, proposals: healed.proposals });
+    task = savedHeal.task;
+  }
   const proposals = Array.isArray(task.proposals) ? task.proposals.slice() : [];
   const idx = proposals.findIndex((p) => p && p.proposalId === String(proposalId));
   if (idx < 0) {
@@ -958,6 +1259,11 @@ async function applyExperienceProposal(deps) {
   const got = store.getTask(userData, taskId);
   if (!got.ok) return got;
   let task = got.task;
+  const healed = healAndReconcileProposals(task.proposals, packageDir);
+  if (healed.changed) {
+    const savedHeal = await store.saveTask(userData, { ...task, proposals: healed.proposals });
+    task = savedHeal.task;
+  }
   const proposals = Array.isArray(task.proposals) ? task.proposals.slice() : [];
   const idx = proposals.findIndex((p) => p && p.proposalId === String(proposalId));
   if (idx < 0) {
@@ -1002,12 +1308,43 @@ async function applyExperienceProposal(deps) {
   }
 
   const requestedAt = new Date().toISOString();
+  const appliedCandidateIds = (proposal.preview.acceptedCandidateIds || []).slice();
+  const pendingApply = {
+    proposalId: String(proposalId),
+    previewId: String(previewId),
+    changeSetId: String(previewId),
+    packageBaseVersion: String(live.version),
+    appliedCandidateIds,
+    requestedAt,
+  };
   proposals[idx] = {
     ...proposal,
     status: PROPOSAL_STATUS.applying,
+    pendingApply,
+    apply: {
+      requestedAt,
+      completedAt: null,
+      status: "pending",
+      previewId: String(previewId),
+      changeSetId: String(previewId),
+      packageBaseVersion: String(live.version),
+      packageResultVersion: null,
+      appliedCandidateIds,
+      errorSafeSummary: null,
+    },
     updatedAt: requestedAt,
   };
-  const savedStart = await store.saveTask(userData, { ...task, proposals });
+  let savedStart;
+  try {
+    savedStart = await store.saveTask(userData, { ...task, proposals });
+  } catch (err) {
+    return {
+      ok: false,
+      code: "audit_write_failed",
+      message: "无法在写入前保存待应用审计，已中止，未修改主体资料包。",
+      errorSafeSummary: safeErrorSummary(err),
+    };
+  }
   task = savedStart.task;
 
   let applied;
@@ -1024,11 +1361,13 @@ async function applyExperienceProposal(deps) {
     const failed = {
       ...(pidx >= 0 ? list[pidx] : proposal),
       status: PROPOSAL_STATUS.previewed,
+      pendingApply: null,
       apply: {
         requestedAt,
         completedAt: new Date().toISOString(),
         status: "failed",
         previewId: String(previewId),
+        changeSetId: String(previewId),
         packageBaseVersion: String(live.version),
         packageResultVersion: null,
         appliedCandidateIds: [],
@@ -1053,11 +1392,12 @@ async function applyExperienceProposal(deps) {
     completedAt,
     status: "succeeded",
     previewId: String(previewId),
+    changeSetId: String(previewId),
     packageBaseVersion: String(live.version),
     packageResultVersion: String(applied.revision),
     rollbackVersion: applied.rollbackVersion != null ? String(applied.rollbackVersion) : null,
     rootSha256: applied.rootSha256 || null,
-    appliedCandidateIds: (proposal.preview.acceptedCandidateIds || []).slice(),
+    appliedCandidateIds,
     affectedPaths: Array.isArray(applied.affectedPaths) ? applied.affectedPaths.slice() : [],
     errorSafeSummary: null,
   };
@@ -1069,6 +1409,7 @@ async function applyExperienceProposal(deps) {
   const updated = {
     ...(pidx >= 0 ? list[pidx] : proposal),
     status: PROPOSAL_STATUS.applied,
+    pendingApply,
     apply: applyRecord,
     updatedAt: completedAt,
   };
@@ -1079,21 +1420,23 @@ async function applyExperienceProposal(deps) {
     saved = await store.saveTask(userData, {
       ...base,
       proposals: list,
-      // Do not touch results / ownerDecision / invocations
       results: base.results,
       invocations: base.invocations,
     });
   } catch (err) {
+    // Package committed; disk proposal still applying + pendingApply — recoverable via changeSet.
     return {
       ok: false,
       code: "audit_write_failed",
       message:
-        "主体资料包已写入，但任务审计未能保存。请保留以下版本信息并联系排查：" +
-        String(applied.revision),
+        "主体资料包已写入，但任务审计未能保存。系统可按 changeSet 恢复为已应用，请重新打开任务。",
       packageResultVersion: String(applied.revision),
       changeSetId: String(previewId),
+      previewId: String(previewId),
       rollbackVersion: applied.rollbackVersion,
+      appliedCandidateIds,
       errorSafeSummary: safeErrorSummary(err),
+      recoverable: true,
     };
   }
 
@@ -1156,6 +1499,10 @@ module.exports = {
   packageBaseRefFromDir,
   boundedPackageSummary,
   healRunningProposals,
+  reconcileApplyingProposals,
+  healAndReconcileProposals,
+  inspectChangeSetCommit,
+  readPackageForProposal,
   markProposalsStale,
   invalidateOpenProposalsForResult,
   assertCreatePreconditions,

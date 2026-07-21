@@ -1192,10 +1192,16 @@ ipcMain.handle("actBehalf:list", async () => {
 ipcMain.handle("actBehalf:get", async (_e, taskId) => {
   try {
     const userData = app.getPath("userData");
-    const got = actBehalfStore.getTask(userData, taskId);
-    if (got.ok && (got.invocationsHealed || got.resultsHealed)) {
+    let packageDir = null;
+    try {
+      packageDir = packageDirFromConfig();
+    } catch {
+      packageDir = null;
+    }
+    const got = actBehalfStore.getTask(userData, taskId, { packageDir });
+    if (got.ok && (got.invocationsHealed || got.resultsHealed || got.proposalsHealed)) {
       await actBehalfStore.saveTask(userData, got.task);
-      return actBehalfStore.getTask(userData, taskId);
+      return actBehalfStore.getTask(userData, taskId, { packageDir });
     }
     return got;
   } catch (err) {

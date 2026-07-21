@@ -34,6 +34,10 @@ const {
   materializeCandidates,
   buildProposalMessages,
   healRunningProposals,
+  reconcileApplyingProposals,
+  healAndReconcileProposals,
+  inspectChangeSetCommit,
+  readPackageForProposal,
   assertCreatePreconditions,
   projectFeedbackItems,
 } = require("../src/act-behalf/experience-proposal");
@@ -1198,6 +1202,275 @@ async function main() {
         afterApply.proposals.filter((p) => p.status === PROPOSAL_STATUS.applied).length,
         1
       );
+    } finally {
+      cleanup(ud);
+      cleanup(pkgDir);
+    }
+  });
+
+  await test("apply audit save failure recovers via changeSet; idempotent; uncommitted not applied (fix 1-11)", async () => {
+    const ud = tempUserData();
+    const pkgDir = makePackageDir();
+    try {
+      const seeded = await seedAdoptedResult(ud, "审计失败可恢复", pkgDir);
+      const created = await createProposalForAdopted(ud, seeded);
+      assert.equal(created.ok, true, created.message);
+      const reviewed = await acceptAllCandidates(ud, created.proposal);
+      const preview = await previewExperienceProposal({
+        userData: ud,
+        store: actStore,
+        packageDir: pkgDir,
+        payload: {
+          taskId: seeded.task.taskId,
+          proposalId: created.proposal.proposalId,
+          expectedRevision: reviewed.proposal.currentRevision,
+        },
+      });
+      assert.equal(preview.ok, true, preview.message);
+      const changeSetId = preview.preview.previewId;
+      const candidateIds = (preview.preview.acceptedCandidateIds || []).slice();
+      const baseRev = Number(readManifest(pkgDir).revision);
+      const fpBefore = dirByteFingerprint(pkgDir);
+
+      let saveCount = 0;
+      const failingStore = {
+        getTask: (...args) => actStore.getTask(...args),
+        saveTask: async (userData, taskInput) => {
+          saveCount += 1;
+          // First save = pendingApply/applying; second save = applied audit (fail this one)
+          if (saveCount >= 2 && taskInput && Array.isArray(taskInput.proposals)) {
+            const p = taskInput.proposals.find(
+              (x) => x && x.proposalId === created.proposal.proposalId
+            );
+            if (p && p.status === PROPOSAL_STATUS.applied) {
+              const err = new Error("injected audit save failure");
+              err.code = "injected_save_fail";
+              throw err;
+            }
+          }
+          return actStore.saveTask(userData, taskInput);
+        },
+      };
+
+      let applyCalls = 0;
+      const origApply = feedback.applyFeedback;
+      feedback.applyFeedback = function patchedApply(...args) {
+        applyCalls += 1;
+        return origApply.apply(this, args);
+      };
+
+      try {
+        const failedAudit = await applyExperienceProposal({
+          userData: ud,
+          store: failingStore,
+          packageDir: pkgDir,
+          payload: {
+            taskId: seeded.task.taskId,
+            proposalId: created.proposal.proposalId,
+            previewId: changeSetId,
+            expectedRevision: preview.proposal.currentRevision,
+            confirm: true,
+          },
+        });
+        assert.equal(failedAudit.ok, false);
+        assert.equal(failedAudit.code, "audit_write_failed");
+        assert.equal(String(failedAudit.changeSetId), String(changeSetId));
+        assert.equal(applyCalls, 1);
+
+        // Package committed
+        const afterRev = Number(readManifest(pkgDir).revision);
+        assert.ok(afterRev > baseRev, "package must be committed");
+        assert.notEqual(dirByteFingerprint(pkgDir), fpBefore);
+
+        // Disk proposal still applying, not wrongly applied
+        const onDisk = actStore.getTask(ud, seeded.task.taskId, { heal: false });
+        const stuck = onDisk.task.proposals.find(
+          (p) => p.proposalId === created.proposal.proposalId
+        );
+        assert.equal(stuck.status, PROPOSAL_STATUS.applying);
+        assert.ok(stuck.pendingApply);
+        assert.equal(String(stuck.pendingApply.changeSetId), String(changeSetId));
+        assert.deepEqual(stuck.pendingApply.appliedCandidateIds, candidateIds);
+
+        // changeSet uniquely committed
+        const insp = inspectChangeSetCommit(pkgDir, changeSetId);
+        assert.equal(insp.ok, true);
+        assert.equal(insp.status, "committed");
+        assert.equal(String(insp.resultRevision), String(afterRev));
+
+        // Recover via getTask heal/reconcile
+        const recovered = actStore.getTask(ud, seeded.task.taskId, { packageDir: pkgDir });
+        assert.equal(recovered.proposalsHealed, true);
+        const prop = recovered.task.proposals.find(
+          (p) => p.proposalId === created.proposal.proposalId
+        );
+        assert.equal(prop.status, PROPOSAL_STATUS.applied);
+        assert.equal(String(prop.apply.packageResultVersion), String(afterRev));
+        assert.equal(String(prop.apply.previewId), String(changeSetId));
+        assert.deepEqual(prop.apply.appliedCandidateIds, candidateIds);
+        assert.equal(prop.apply.recoveredFromChangeSet, true);
+
+        // Persist recovery
+        await actStore.saveTask(ud, recovered.task);
+
+        // Idempotent reconcile — no second Package apply, no new revision
+        const revStable = Number(readManifest(pkgDir).revision);
+        const again1 = reconcileApplyingProposals(recovered.task.proposals, pkgDir);
+        assert.equal(again1.changed, false);
+        const again2 = healAndReconcileProposals(recovered.task.proposals, pkgDir);
+        assert.equal(
+          again2.proposals.find((p) => p.proposalId === created.proposal.proposalId).status,
+          PROPOSAL_STATUS.applied
+        );
+        assert.equal(Number(readManifest(pkgDir).revision), revStable);
+        assert.equal(applyCalls, 1, "reconcile must not call applyFeedback again");
+
+        // Uncommitted applying must not become applied
+        const fakePending = {
+          proposalId: "prop_uncommitted",
+          status: PROPOSAL_STATUS.applying,
+          pendingApply: {
+            proposalId: "prop_uncommitted",
+            previewId: "cs_does_not_exist_" + Date.now(),
+            changeSetId: "cs_does_not_exist_" + Date.now(),
+            packageBaseVersion: String(baseRev),
+            appliedCandidateIds: ["cand_x"],
+            requestedAt: new Date().toISOString(),
+          },
+          preview: { previewId: "cs_does_not_exist_" + Date.now() },
+        };
+        const uncommitted = reconcileApplyingProposals([fakePending], pkgDir);
+        assert.equal(uncommitted.proposals[0].status, PROPOSAL_STATUS.interrupted);
+        assert.notEqual(uncommitted.proposals[0].status, PROPOSAL_STATUS.applied);
+
+        // Candidate (not committed) changeSet → previewed, not applied
+        const csPreview = feedback.previewFeedback(pkgDir, {
+          category: "memory",
+          correction: "仅预览未提交的候选经验",
+        });
+        const applyingUncommitted = {
+          proposalId: "prop_candidate_only",
+          status: PROPOSAL_STATUS.applying,
+          pendingApply: {
+            proposalId: "prop_candidate_only",
+            previewId: csPreview.changeSetId,
+            changeSetId: csPreview.changeSetId,
+            packageBaseVersion: String(readManifest(pkgDir).revision),
+            appliedCandidateIds: ["cand_y"],
+            requestedAt: new Date().toISOString(),
+          },
+        };
+        const backToPreview = reconcileApplyingProposals([applyingUncommitted], pkgDir);
+        assert.equal(backToPreview.proposals[0].status, PROPOSAL_STATUS.previewed);
+        assert.notEqual(backToPreview.proposals[0].status, PROPOSAL_STATUS.applied);
+
+        // applying without pendingApply → interrupted, never applied
+        const noPending = reconcileApplyingProposals(
+          [{ proposalId: "prop_no_pending", status: PROPOSAL_STATUS.applying }],
+          pkgDir
+        );
+        assert.equal(noPending.proposals[0].status, PROPOSAL_STATUS.interrupted);
+      } finally {
+        feedback.applyFeedback = origApply;
+      }
+    } finally {
+      cleanup(ud);
+      cleanup(pkgDir);
+    }
+  });
+
+  await test("package content read failure blocks model and does not write (fix 12-16)", async () => {
+    const ud = tempUserData();
+    const pkgDir = makePackageDir();
+    try {
+      const seeded = await seedAdoptedResult(ud, "资料包读取失败阻断", pkgDir);
+      const okFirst = await createProposalForAdopted(ud, seeded);
+      assert.equal(okFirst.ok, true, okFirst.message);
+      const successId = okFirst.proposal.proposalId;
+      const rejected = await rejectExperienceProposal(actStore, ud, {
+        taskId: seeded.task.taskId,
+        proposalId: successId,
+        expectedRevision: okFirst.proposal.currentRevision,
+      });
+      assert.equal(rejected.ok, true, rejected.message);
+      // Keep a successful prior proposal record (rejected still counts as preserved history)
+      const fpBefore = dirByteFingerprint(pkgDir);
+      const revBefore = Number(readManifest(pkgDir).revision);
+
+      // Re-create path after reject is allowed; inject package read failure
+      let modelCalls = 0;
+      const bad = await createExperienceProposal({
+        userData: ud,
+        taskId: seeded.task.taskId,
+        resultId: seeded.result.resultId,
+        store: actStore,
+        packageDir: pkgDir,
+        loadPackage: () => {
+          const err = new Error("injected package content read failure");
+          err.code = "package_read_failed";
+          throw err;
+        },
+        callModel: async () => {
+          modelCalls += 1;
+          throw new Error("should not be called");
+        },
+        forceFake: true,
+      });
+      assert.equal(bad.ok, false);
+      assert.equal(bad.code, "package_unreadable");
+      assert.equal(modelCalls, 0);
+      assert.equal(Number(readManifest(pkgDir).revision), revBefore);
+      assert.equal(dirByteFingerprint(pkgDir), fpBefore);
+
+      const after = (await actStore.getTask(ud, seeded.task.taskId)).task;
+      const success = after.proposals.find((p) => p.proposalId === successId);
+      assert.ok(success);
+      assert.equal(success.status, PROPOSAL_STATUS.rejected);
+      const failed = after.proposals.find(
+        (p) => p.status === PROPOSAL_STATUS.failed && p.proposalId !== successId
+      );
+      assert.ok(failed);
+      assert.equal(failed.modelInvocation.disclosedInputSummary.modelCalls, 0);
+
+      // manifest readable but content file unreadable
+      const personaPath = path.join(pkgDir, "persona.md");
+      assert.ok(fs.existsSync(personaPath));
+      const prevMode = fs.statSync(personaPath).mode;
+      try {
+        fs.chmodSync(personaPath, 0);
+        let modelCalls2 = 0;
+        const badContent = await createExperienceProposal({
+          userData: ud,
+          taskId: seeded.task.taskId,
+          resultId: seeded.result.resultId,
+          store: actStore,
+          packageDir: pkgDir,
+          loadPackage: () => loadPackageBounded(pkgDir),
+          callModel: async () => {
+            modelCalls2 += 1;
+            return { content: "{}", usedFake: true };
+          },
+          forceFake: true,
+        });
+        // On Windows chmod may not block reads; accept either unreadable or (if OS ignores) skip
+        if (badContent.code === "package_unreadable") {
+          assert.equal(modelCalls2, 0);
+          assert.equal(Number(readManifest(pkgDir).revision), revBefore);
+        } else {
+          // Fallback probe via readPackageForProposal with forced content failure
+          const probe = readPackageForProposal(pkgDir, () => {
+            throw new Error("content probe fail");
+          });
+          assert.equal(probe.ok, false);
+          assert.equal(probe.code, "package_unreadable");
+        }
+      } finally {
+        try {
+          fs.chmodSync(personaPath, prevMode);
+        } catch {
+          /* ignore */
+        }
+      }
     } finally {
       cleanup(ud);
       cleanup(pkgDir);

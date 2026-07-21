@@ -12,7 +12,7 @@ const crypto = require("node:crypto");
 const { normalizeTaskIntent } = require("./task-intent");
 const { healRunningInvocations } = require("./research-run");
 const { healRunningResults } = require("./result-generation");
-const { healRunningProposals, markProposalsStale } = require("./experience-proposal");
+const { healAndReconcileProposals } = require("./experience-proposal");
 
 const STORE_VERSION = 2;
 const TASK_SCHEMA_VERSION = 2;
@@ -252,7 +252,7 @@ function getTask(userData, taskId, opts = {}) {
   }
   const healed = healRunningInvocations(norm.invocations);
   const healedResults = healRunningResults(norm.results);
-  const healedProposals = healRunningProposals(norm.proposals);
+  const healedProposals = healAndReconcileProposals(norm.proposals, opts.packageDir || null);
   if (healed.changed) {
     norm.invocations = healed.invocations;
   }
