@@ -2,6 +2,8 @@
 
 本地桌面应用：加载个人 Digital Me Package，以 AI 为底座，完成"像我"的任务。
 
+> **规划指针（2026-07-21）**：当前产品执行主线见仓库根目录 `digitalme_first_vertical_loop_sprint_plan_v0.1.md`；最高架构原则见 `digitalme_subject_architecture_and_rd_principles_v0.1.md`。下文「当前能力」描述既有桌面应用已实现功能，**不是**当前排期清单。
+
 ## 当前能力（v0.1）
 
 - 加载工作区中的 `digital-me-package/`（人格、风格、判断框架、记忆、系统提示词）；

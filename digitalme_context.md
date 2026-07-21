@@ -4,14 +4,18 @@
 状态：持续更新
 最后更新：2026-07-21
 
-> **当前产品主线（2026-07-21，R2 参数合同冻结）**：**P1-PANORAMA**。**PAN-01S 族 `accepted`**。**R0 / R1** = **`accepted`**。**R2** = **`specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`**（**v0.1.1**；实现分支 **`codex/r2-chat-sessions-migration`** 已创建；三项实施前参数已冻结；R2-A～R2-F **均未开始**）。**当前唯一等待项：Codex 复核参数合同**；Codex 复核通过且 Owner 再次授权前不得开始 R2-A 编码。R2.5 = `planned` / `deferred`。PAN-02 = `planned` / `blocked`。生产默认 **legacy**。
-> **PAN-01** 最终裁定：`statically_verified` / `owner_product_perception_failed` / `needs_minimal_surface_reset`（基线 `a40c5f8`；**不标 accepted**；**不回滚**；表面收口已由 PAN-01S 族完成）。
+> **当前产品主线（2026-07-21，规划基线重建）**：**数字主体第一纵向闭环 — 理解我并产出**。  
+> **最高架构与研发原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)（**v0.1.0 `active`**）。  
+> **当前唯一执行计划**：[`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)（**v0.1.0 `active`**）。  
+> **下一项任务（仅文档）**：**限定范围的仓库实现映射与第一闭环规格冻结** — **不得**直接编码实现。  
+> **废止/暂停**：不再以 R2 边缘验收、R3 迁移、旧 Skill/MCP/Agent/身份并列 7 任务块、旧 **DM-Core-01A** 开发指令为当前执行主线。R2 代码 **retained as infrastructure**；R3 = **`paused`**；PAN-02～06 相对新主线 **`paused`**。  
+> **产品定义（摘要）**：Digital Me 是由本人拥有和控制、以本人为源头持续形成、能够调用外部智能能力，并在明确授权下代表本人感知、判断、表达、行动和协作的个人数字主体系统（全文见架构原则文 §1）。
 >
-> **PAN-01R** 最终裁定：`statically_verified` / `codex_review_passed` / `owner_runtime_verified` / `owner_product_perception_failed` / `retained_as_internal_collaboration_harness`（最终实现 `9dd6fa0`；70/70 + 20/20；**不标 accepted**）。**生产界面必须没有 PAN-01R 入口**（含设置／高级／帮助；仅隔离 test harness；见规格 v0.6.3）。底层授权、取消、审计、adopt/reject、推理环境绑定等保留为内部测试与未来 PAN-04 基础设施。不得自行回到 P1-07 修复或原 P1-08 队列。
+> **历史主线（已降级）**：**P1-PANORAMA** 与 Renderer Foundation（R0/R1 `accepted`；R2 实现保留）见 [`digitalme_panorama_execution_index_v0.1.md`](digitalme_panorama_execution_index_v0.1.md)（**不再作为当前执行索引**；状态标记 `superseded_as_current_execution_index`）。
 >
-> **界面与功能需求源**：桌面应用「用户看见什么、能做什么、何为做完」以 [`digitalme_product_spec_v0.2.md`](digitalme_product_spec_v0.2.md)（文内 **v0.6.3**）为唯一规格；战略与逻辑架构仍以本文为准；**部署与系统拓扑**以 [`digitalme_architecture_edge_sovereign_v0.1.md`](digitalme_architecture_edge_sovereign_v0.1.md) 为准。开发实行**规格驱动**（无规格不排期）。
+> **界面与功能需求源**：桌面应用既有表面细则仍以 [`digitalme_product_spec_v0.2.md`](digitalme_product_spec_v0.2.md)（文内 **v0.6.3**）为参照；**与新主线冲突处以架构原则文与第一闭环计划为准**，规格待后续对齐升版。战略与逻辑架构以本文 + 架构原则文为准；**部署与系统拓扑**以 [`digitalme_architecture_edge_sovereign_v0.1.md`](digitalme_architecture_edge_sovereign_v0.1.md) 为准。
 >
-> **公共叙事**：数字主权为目标与核心公共叙事；广义数字资产口径与 Digital Org 长期方向见 [`digitalme_digital_sovereignty_narrative_v0.1.md`](digitalme_digital_sovereignty_narrative_v0.1.md)。Digital Org **不进入**本轮个人 Alpha 实现；P1-PANORAMA 完成后再评估 `DORG-00`。
+> **公共叙事**：数字主权为目标与核心公共叙事；广义数字资产口径与 Digital Org 长期方向见 [`digitalme_digital_sovereignty_narrative_v0.1.md`](digitalme_digital_sovereignty_narrative_v0.1.md)。Digital Org **不进入**本轮个人闭环实现。
 >
 > **产品身份（2026-07-11）**：Digital Me 是面向**大量真实用户**的通用产品，不是仅为当前 Owner 服务的定制化 Demo。当前 Package / 试用材料仅作验证样本；默认能力、默认文案、默认流程必须以普遍用户为准。见 §3 第 16 条、§5.4、决策 #27–#28。
 
@@ -43,9 +47,9 @@ Digital Me 的系统推进建设，长期按**两条并行主线**组织，不�
 
 > **先把人建成真实动态、可自我管理与发展的数字之我；再把它做成有主体性的数字实体，能主动产出、能与人及 Agent 顺畅合作，从而支撑人在现实与数字两个世界里的存在与发展。**
 
-### 2.0.1 四板块推进共识（2026-07-13；排期含义已于 2026-07-18 被 P1-PANORAMA 覆盖）
+### 2.0.1 四板块推进共识（2026-07-13；排期先后被 P1-PANORAMA 与 2026-07-21 第一纵向闭环覆盖）
 
-在双线指导思想之下，系统长期按四个板块组织（对应建设顺序，非四个并列产品）。**以下「近期取舍」为 2026-07-13 历史策略记录；自 2026-07-18 起，当前排期不再以「①数字之我构建为当前主战场」为准，而以 P1-PANORAMA 纵向闭环同时推进 A/B 双线。**
+在双线指导思想之下，系统长期按四个板块组织（对应建设顺序，非四个并列产品）。**以下「近期取舍」为 2026-07-13 历史策略记录；自 2026-07-18 起曾以 P1-PANORAMA 覆盖；自 2026-07-21 起当前排期以第一纵向闭环计划为准**（见 `digitalme_first_vertical_loop_sprint_plan_v0.1.md`）。
 
 | 板块 | 对应主线 | 核心命题 | 近期取舍（历史；已被 Panorama 覆盖） |
 |------|----------|----------|------------------|
@@ -83,7 +87,7 @@ MVP 的最主要目标是**将人与 AI 结合起来：把人蒸馏进 Digital M
 
 **定位重申**：Digital Me 的目标是**尽可能复现人的真实状态**，并以数字化形态重新武装后投身于数字世界——不是聊天机器人的变体，而是可独立行动、持续演化的**个人数字主体**。
 
-**主线（当前与长期）**：从人的各类可记录数据中**蒸馏提取综合特征**（表达风格、价值立场、判断框架、记忆、偏好、行为模式等），是**本我复现的关键路径**。当前以文本素材（著作、文章、方案、对话转写等）为**材料技术主战场**（非产品排期主线；产品排期见 §2.8 P1-PANORAMA），这条主线须持续完善——包括格式适配、蒸馏算法、多源交叉验证、核心层整合与检索增强。
+**主线（当前与长期）**：从人的各类可记录数据中**蒸馏提取综合特征**（表达风格、价值立场、判断框架、记忆、偏好、行为模式等），是**本我复现的关键路径**。当前以文本素材（著作、文章、方案、对话转写等）为**材料技术主战场**（非产品排期主线；**产品排期**见 `digitalme_first_vertical_loop_sprint_plan_v0.1.md`；§2.8 为三位一体历史定义），这条主线须持续完善——包括格式适配、蒸馏算法、多源交叉验证、核心层整合与检索增强。
 
 **远景（方向确定，分期实现）**：Digital Me 应能处理**与一个人有关的所有可记录、可传递的数据**，无论单条价值量大小。终局愿景是：**将与某人有关的全部信息投入系统，即可在数字世界中得到一个在思想、意识与行为上与真人高度相似的数字之人**。
 
@@ -199,7 +203,7 @@ flowchart TB
 3. **能力真实可用**：写作、研究、受控文件/执行三条主路径连续真实验收；停止用能力数量或 UI 存在证明完成；
 4. **协作最小感知**：本人可读能力名片、Agent Card 草案、一次性 Interaction Contract、本地协作模拟与结果回流。
 
-**排期变更（2026-07-18，决策 #58）**：`digitalme_phase1_subject_upgrade_plan_v0.1.md` **不再作为当前顺序执行计划**；降级为 **Trusted Beta 技术硬化、风险与依赖依据**。当前唯一产品主线为 **P1-PANORAMA**（Product Panorama Alpha），以纵向闭环同时推进 A「数字化构建人」与 B「主体化数字实体」；深度硬化在 PAN-06 依据真实用户证据重排。详见 §2.8。
+**排期变更（2026-07-18，决策 #58；已被决策 #94 覆盖）**：`digitalme_phase1_subject_upgrade_plan_v0.1.md` **不再作为当前顺序执行计划**；降级为 Trusted Beta 依据。当时曾将主线切为 **P1-PANORAMA**。**2026-07-21 起**：当前唯一产品执行主线为 **第一纵向闭环 — 理解我并产出**（见 `digitalme_first_vertical_loop_sprint_plan_v0.1.md`）；P1-PANORAMA 降为历史主线与基础设施状态表。
 
 ### 2.8 第一阶段三位一体 Alpha / Trusted Beta（2026-07-18 确立；2026-07-19 PAN-00R 修订）
 
@@ -228,7 +232,8 @@ flowchart TB
 
 **Digital Org**：纳入长期架构方向；可与 Digital Me 共享主体、资产、能力、授权、协作和审计内核。多成员、角色审批、机构数据授权和价值分配运行时 **不进入**当前个人 Alpha；P1-PANORAMA 完成后再评估 `DORG-00`。
 
-执行索引：`digitalme_panorama_execution_index_v0.1.md`。
+执行索引（历史）：`digitalme_panorama_execution_index_v0.1.md`。  
+**当前执行计划**：`digitalme_first_vertical_loop_sprint_plan_v0.1.md`。
 
 ## 3. 主要结论（当前阶段）
 
@@ -276,21 +281,23 @@ flowchart TB
 
 | 文档 | 作用 |
 |---|---|
-| `digitalme_product_spec_v0.2.md`（文内 **v0.6**） | **界面与功能唯一需求源**：极简产品原则、主体信息分层使用规则、三位一体 Alpha DoD；IA、工作台、产物、蒸馏/Package/能力/审计、准入规则 |
-| `digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`（v0.4） | **当前总任务**：三位一体 Alpha 目标、范围、子任务与第一阶段闭环 |
-| `digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md` | **本轮战略修订依据**：三位一体定义、极简原则、PAN-01/PAN-01R 裁定、新队列 |
-| `digitalme_panorama_execution_index_v0.1.md`（文内 v0.2） | **当前执行索引**：PAN 顺序、状态、阻断项、冻结 backlog、启动闸门 |
+| `digitalme_subject_architecture_and_rd_principles_v0.1.md` | **当前最高架构与研发原则**：产品定义、数字主体循环、能力/身份/验收、纵向闭环、治理 |
+| `digitalme_first_vertical_loop_sprint_plan_v0.1.md` | **当前唯一执行计划**：第一纵向闭环、四合同映射、任务顺序；下一项仅文档冻结 |
+| `digitalme_product_spec_v0.2.md`（文内 **v0.6.3**） | **既有界面与功能细则参照**（与新主线冲突处以架构原则文 / 第一闭环计划为准，待对齐升版） |
+| `digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`（v0.4） | **历史总任务**：三位一体 Alpha（`superseded` 作为当前主线定义） |
+| `digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md` | **历史战略修订依据**：三位一体定义、极简原则、PAN-01/PAN-01R 裁定 |
+| `digitalme_panorama_execution_index_v0.1.md` | **历史执行索引 / 基础设施状态表**（`superseded_as_current_execution_index`；保留 R0–R2 事实） |
 | `digitalme_digital_sovereignty_narrative_v0.1.md` | **公共叙事母稿**：数字主权、广义数字资产、Digital Org |
 | `digitalme_architecture_edge_sovereign_v0.1.md` | **部署与系统拓扑唯一详述**：端主权 × 云边平台；多端职责；云模块优先级；百万 DAU 分期；安全基线 |
-| `digitalme_phase1_subject_upgrade_plan_v0.1.md` | **Trusted Beta 硬化与风险依据**（2026-07-18 起不再作为当前顺序执行计划） |
+| `digitalme_phase1_subject_upgrade_plan_v0.1.md` | **Trusted Beta 硬化与风险依据**（不再作为当前顺序执行计划） |
 | `digitalme_architecture_audit_20260716.md` | **审计风险基线**：代码事实、P0/P1/P2 发现、生产就绪判断与整改依据 |
 | `digitalme_capability_status_v0.1.md` | **工程能力证据表**（不自动决定用户面状态） |
-| 本文 | 战略（含 §2.0 双线、§2.8 Panorama）、逻辑架构（§4）、主权、协议、主体层×能力层、决策索引 |
+| 本文 | 战略（含 §2.0 双线）、逻辑架构（§4）、主权、协议、决策索引；**主线条以文首为准** |
 | `digitalme_data_sovereignty_principle_20260711.md` | **个人数据主权指导思想**：自我定义与自我发展权利；对抗算法黑洞；画像/推荐/匹配开发约束 |
 | `digitalme_narrative_ai_era_autonomy.md` | 对外/对内叙事（含双线简述） |
 | `digital-me-project-positioning-draft.md` | 定位讨论稿（战略原则含双线） |
 
-**近期工程焦点（2026-07-21 覆盖）**：规格 **v0.6.3** + 决策 **#67～#93**——**R0 / R1 `accepted`**；**R2 v0.1.1 = `specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`**（分支已建；参数合同已冻结）。**当前唯一等待项：Codex 复核参数合同。** R2.5 = `planned` / `deferred`；**PAN-02** = `planned` / `blocked`。生产默认 **legacy**。
+**近期工程焦点（2026-07-21 规划基线重建）**：决策 **#94**——数字主体第一纵向闭环；架构原则文 + 第一闭环计划为权威；下一项 = **限定范围的仓库实现映射与第一闭环规格冻结**（仅文档）。R0/R1 retained；R2 retained as infrastructure；R3 paused；旧 DM-Core-01A superseded。
 ## 4. 系统架构共识（草案）
 
 > **部署拓扑补充（2026-07-10）**：本节描述逻辑模块（核心层 / 运行层 / 信任层）。物理部署与百万规模扩容面见 [`digitalme_architecture_edge_sovereign_v0.1.md`](digitalme_architecture_edge_sovereign_v0.1.md)（端主权 Runtime + 云边平台 + 能力层）。决策 #3「本地优先 + 云同步」由此文细化。
@@ -461,10 +468,17 @@ flowchart TB
 
 ### 7.1 近期优先级（建议顺序）
 
+> **2026-07-21 规划基线重建（当前）**：执行计划改为 [`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)；架构原则见 [`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)。**下一项仅为「限定范围的仓库实现映射与第一闭环规格冻结」（文档）**。R3 / 旧 DM-Core-01A / 并列 Skill·MCP·Agent·身份任务块 **不得**作为下一步。
 > **2026-07-16 审计后重排（历史）**：第一阶段不再扩展能力面，切换为“主体可信化与协作感知”。当时以 `digitalme_phase1_subject_upgrade_plan_v0.1.md` 为执行清单；原 v0.3.13 的 L0/审计/CLI 只能视为原型，不视为已达到安全可用。
-> **2026-07-18 覆盖**：当前执行索引改为 `digitalme_panorama_execution_index_v0.1.md`；原升级计划降为 Trusted Beta 硬化依据（决策 #58）。
-> **2026-07-21 R2 参数合同冻结覆盖（当前）**：**R0 / R1** = `accepted`。**R2** = **`specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`**（**v0.1.1**；分支 `codex/r2-chat-sessions-migration`）。**当前唯一等待项：Codex 复核参数合同**。R2.5 = `planned` / `deferred`。PAN-02 = `planned` / `blocked`。生产默认 **legacy**。
+> **2026-07-18 覆盖（历史）**：当时执行索引改为 `digitalme_panorama_execution_index_v0.1.md`；原升级计划降为 Trusted Beta 硬化依据（决策 #58）。
+> **2026-07-21 R2 相关（历史；已降级）**：R0/R1 accepted；R2 实现保留为基础设施，**不再**作为当前验收主线。
 > **2026-07-19 PAN-01S.1 实现覆盖（历史；已被 2026-07-20 acceptance superseded）**：PAN-01S 曾为 `statically_verified` / `owner_changes_requested`；PAN-01S.1 曾为 `statically_verified` / `implemented`（不 accepted）。
+
+1. **限定范围的仓库实现映射与第一闭环规格冻结**（仅文档；当前）；
+2. （待 #1 完成后授权）任务意图与本人上下文装配 → 研究与表达入口 → 真实 Skill → 只读外部信息 → 证据区分 → Experience Proposal 回流 → 对照验收；
+3. 第二～四纵向闭环仅保留接口与方向，不得提前铺开。
+
+（以下 1–7 为 2026-07-16 历史 Trusted Beta 硬化清单，**不再是当前执行顺序**：）
 
 1. **工程与 Package 基线冻结**：Git、Alpha 标记、Package hash 快照、能力状态表；
 2. **主体资产内核**：PackageStore、七类数据、原子版本、候选更新、来源 hash、回滚；
@@ -902,4 +916,5 @@ flowchart TB
 90. **Renderer Foundation R2 第二轮有界文档补全（2026-07-21）**：补全状态所有权/错误恢复/E2E（历史）。**已被决策 #91 承接。**
 91. **Renderer Foundation R2 第三轮最小安全闭环（2026-07-21）**：在不改七项核心合同与 22/24/38 结构前提下，冻结 `sessionsRecoveryLatch`（跨 next/legacy 阻断正式写）、损坏单会话无普通删除入口、`inputText`≤2000 拒绝语义、附件 token 一次性消费。版本仍 **v0.1.1-draft**；状态仍 `specified` / `codex_changes_requested` / `not_started`。实现分支**不存在**。**已被决策 #92 接受。**
 92. **Renderer Foundation R2 实施规格接受（2026-07-21）**：Codex 最终复核通过。任务包 → **v0.1.1**；状态 → `specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`。实施规格已冻结；不是实现完成或产品验收。**已被决策 #93 承接。**
-93. **Renderer Foundation R2 实现分支创建与参数合同冻结（2026-07-21）**：Owner 明确授权创建实现分支 `codex/r2-chat-sessions-migration`（起点 `418d0cc`）；授权范围**仅限**三项实施前参数合同冻结（纯文档），**不**授权编写 R2-A～R2-F 源码。冻结值：`scenarioHint` = `{general_chat, continue_chat, artifact_discussion}`（缺省→`general_chat`）；8000 截断提示原样文案 + Unicode code point 口径；attachment token TTL = **300 秒**（单调时钟）；atomic rename 最多 **4** 次尝试、等待 **50/150/350ms**、仅 `EBUSY|EPERM|EACCES`。本提交**不是**源码实现；R2 仍为 `not_started`。**当前唯一等待项：Codex 复核参数合同**；Codex 复核通过且 Owner 再次授权前不得开始 R2-A 编码。R0 / R1 / PAN-01S 族 `accepted` 不变；R2.5 = `planned` / `deferred`；PAN-02 = `planned` / `blocked`；生产默认 legacy。
+93. **Renderer Foundation R2 实现分支创建与参数合同冻结（2026-07-21）**：Owner 明确授权创建实现分支 `codex/r2-chat-sessions-migration`（起点 `418d0cc`）；授权范围**仅限**三项实施前参数合同冻结（纯文档），**不**授权编写 R2-A～R2-F 源码。冻结值：`scenarioHint` = `{general_chat, continue_chat, artifact_discussion}`（缺省→`general_chat`）；8000 截断提示原样文案 + Unicode code point 口径；attachment token TTL = **300 秒**（单调时钟）；atomic rename 最多 **4** 次尝试、等待 **50/150/350ms**、仅 `EBUSY|EPERM|EACCES`。本提交**不是**源码实现；R2 仍为 `not_started`。**随后 Owner 授权完成 R2 实现（代码保留）**；**已被决策 #94 从「当前主线」降级为基础设施。**
+94. **数字主体规划基线重建（2026-07-21）**：Owner 与 Codex 系统复盘后，废止以 R2 边缘验收、R3 迁移、Skill/MCP/Agent/身份并列任务块、旧 DM-Core-01A 开发指令为当前执行主线。写入最高产品定义与「数字主体循环」于 `digitalme_subject_architecture_and_rd_principles_v0.1.md`；写入第一纵向闭环短冲刺与四合同映射于 `digitalme_first_vertical_loop_sprint_plan_v0.1.md`。`digitalme_panorama_execution_index_v0.1.md` → `superseded_as_current_execution_index`（保留基础设施事实）。R0/R1 `accepted` retained；R2 **retained as infrastructure**（停止追加验收主线）；R3 **`paused`**；PAN-02～06 相对新主线 **`paused`**；旧 DM-Core-01A **`superseded` / 不得执行**。**下一项任务**：**限定范围的仓库实现映射与第一闭环规格冻结**（仅文档，不得直接编码）。

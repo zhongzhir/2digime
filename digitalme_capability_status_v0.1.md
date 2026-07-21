@@ -1,9 +1,11 @@
 # Digital Me 能力状态表
 
 版本：v0.1
-日期：2026-07-19
-依据：`digitalme_architecture_audit_20260716.md`、`digitalme_phase1_subject_upgrade_plan_v0.1.md`（Trusted Beta 依据）、`digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`、`digitalme_phase1_task_PAN-01R_sovereign_collaboration_loop.md`、代码静态核查
+日期：2026-07-21（文首状态同步）
+依据：`digitalme_subject_architecture_and_rd_principles_v0.1.md`（**当前最高架构原则**）、`digitalme_first_vertical_loop_sprint_plan_v0.1.md`（**当前执行计划**）、历史审计与 P1-PANORAMA / PAN 任务包、代码静态核查
 维护规则：每项只允许一个工程状态；不得仅凭文档声明标记 `statically_verified` / `runtime_verified` / `released` / `accepted`。
+
+> **2026-07-21 规划基线重建**：本表记录工程证据，**不是**当前执行计划。排期与下一步以第一纵向闭环计划为准。P1-PANORAMA / R2 验收队列已降级；R3 `paused`；旧 DM-Core-01A `superseded`。
 
 ## 工程状态枚举
 
@@ -53,7 +55,7 @@
 | ToolBroker (P1-05) | `statically_verified` | `src/tool-broker/*`；`l0:external-agent-started`；`npm run test:p1-05`（含 stop IPC）；主动取消 → `execution_canceled` | 停止须完全重启应用后复验；不标记 accepted |
 | External collaboration | `specified` | `digital-me-package/contracts/*`；规格 v0.5 Panorama 冻结章 | Agent Card / Interaction Contract 数据结构已对齐；无用户面协作闭环；Alpha 以本地模拟交付 |
 | Subject home (P1-03) | `runtime_verified` | `src/subject-overview/*`；`src/package-store/read-only.js`；`subject:getOverview`；P1-03 21/21；Codex 复核与 Owner 真实 Electron 验收 | 严格只读聚合与 SubjectOverview v1；不迁移写路径；Panorama 首页将复用只读聚合 |
-| **P1-PANORAMA** | `active` / `three_part_alpha_reframed` / `PAN-01S_family_accepted` / `R0_decision_accepted` / `R1_accepted` / `R2_params_frozen_pending_codex` | 总任务包 v0.4；执行索引 v0.2.23；R0/R1 **accepted**；R2 **v0.1.1**（分支已建；参数合同待复核；未编码） | **当前唯一等待项：Codex 复核参数合同**；**PAN-02** = `planned` / `blocked` |
+| **P1-PANORAMA** | **`superseded_as_current_mainline`**（历史总任务；基础设施事实保留） | 总任务包 v0.4；执行索引 v0.2.25 = 历史状态表；R0/R1 **accepted** retained；R2 **implementation_completed** / **retained as infrastructure** | **不再是当前执行主线**；项目下一步见第一纵向闭环计划；PAN-02～06 相对新主线 **`paused`** |
 | **PAN-00** | `accepted` | 验收提交 `bc85a14`；Codex 最终复核通过 | 战略与规格冻结完成（历史，不改写） |
 | **PAN-00R** | `accepted` | 分支 `codex/pan-00r-three-part-alpha-reset`；任务包 v0.1.2；规格 v0.6.1；证据 `07b631d` + `6ae2dca` + `0fcd432`；Codex 最终复核通过；Owner 确认 | **docs/strategy acceptance**：三位一体重构与极简产品原则冻结；**不是**运行能力 `released`；不代表 PAN-02～PAN-06 已实现 |
 | **PAN-01** | `statically_verified` / `owner_product_perception_failed` / `needs_minimal_surface_reset` | 分支 `codex/pan-01-product-panorama-home`；基线 `a40c5f8`；`test:pan-01` / `test:pan-01-owner-runtime` | 工程验证通过；Owner **产品感知**验收未通过（非工程失败）；**不标 accepted**；不回滚；只读聚合与 fail-closed 逻辑保留；表面收口由 PAN-01S 族完成 |
@@ -63,9 +65,12 @@
 | **PAN-01S.2** | **`accepted`（2026-07-20）** | 对话事故收口；baseline `cbde807`；提交链含 `b5997b6` / `acacc6e` / `598e7e9` | 对话历史显示、附件上下文分离、关联文稿正文隔离与恢复；正式独立任务包未入库，以执行索引与 log 为准 |
 | **renderer foundation R0** | **`accepted`（v0.1.2；决策接受）**；implementation = `not_started`；branch = 不存在 | `digitalme_renderer_foundation_R0_decision_and_migration_plan.md` v0.1.2 | 整窗入口；load/ready 失败自动回 legacy；R2=JSON；R2.5 deferred；Playwright E2E；R1 收窄；**不是**代码实现完成 |
 | **renderer foundation R1** | **`accepted`（v0.1.3；baseline `8d7e9b3`）**；implementation = `completed`；branch = `codex/r1-renderer-next-shell` | `digitalme_renderer_foundation_R1_shell_and_entry_switch.md` v0.1.3；Codex + Owner real Electron runtime 6/6（2026-07-21） | 仅 R1 基础能力；next 仍为预览空壳；业务页未迁移；生产默认 legacy；无普通用户 next 入口；**不**等于整个 renderer 重构完成 |
-| **renderer foundation R2** | **`specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`**（**v0.1.1**）；branch = **`codex/r2-chat-sessions-migration`** | `digitalme_renderer_foundation_R2_chat_and_sessions_migration.md` v0.1.1 | 三项参数已冻结（待 Codex 复核）；R2-A～R2-F **均未开始**；复核通过且 Owner 再次授权前不得编码 |
-| **R2.5 SQLite ADR** | `planned` / **`deferred`** | — | 量化触发 + 独立 ADR + Owner 授权；非 PAN-02 前提；不读真实 sessions 正文 |
-| **PAN-02** | `planned` / **`blocked`** | — | 解锁见 R0 §16；不以 SQLite 为前提；任务包与实现均不得自行启动 |
+| **renderer foundation R2** | **`implementation_completed` / `retained as infrastructure` / `not_current_mainline`**（**v0.1.1**）；branch = **`codex/r2-chat-sessions-migration`** | `digitalme_renderer_foundation_R2_chat_and_sessions_migration.md` | 实现保留；**停止作为当前验收主线**；是否补写 `accepted` 不阻塞第一纵向闭环 |
+| **renderer foundation R3** | **`paused`** | — | **不是**下一步；未经新授权不得启动页面迁移 |
+| **R2.5 SQLite ADR** | `planned` / **`deferred`** | — | 量化触发 + 独立 ADR + Owner 授权；非第一闭环前提 |
+| **PAN-02** | **`paused`**（相对新主线；历史曾 `planned`/`blocked`） | — | 不得按旧解锁条件自行启动；见第一纵向闭环计划 |
+| **旧 DM-Core-01A** | **`superseded` / 不得执行** | 分支 `codex/dm-core-01a-act-behalf` 探索代码 | 不得继续扩展为正式产品主线；可作映射候选 |
+| **第一纵向闭环** | **`active` / 规格冻结前** | `digitalme_first_vertical_loop_sprint_plan_v0.1.md` | **当前唯一任务**：限定范围的仓库实现映射与第一闭环规格冻结（仅文档） |
 
 ## P1-07 冻结说明（与任务包 / 执行索引 / log 一致）
 

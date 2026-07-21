@@ -1,13 +1,18 @@
 # Digital Me 总任务 P1-PANORAMA：产品全貌 Alpha（三位一体重构）
 
 版本：v0.4
-日期：2026-07-19
-状态：`active / three_part_alpha_reframed / PAN-01S_family_accepted`
-任务类型：阶段策略调整 / 产品纵向闭环 / 市场认知启动
+日期：2026-07-21（文首状态同步）
+状态：`superseded_as_current_mainline` / `three_part_alpha_reframed` / `PAN-01S_family_accepted`（历史总任务；基础设施事实保留）
+任务类型：阶段策略调整 / 产品纵向闭环 / 市场认知启动（**历史**）
 文档基线：`cbde807`（PAN-01S 族 Owner 验收 accepted）；战略修订依据 `digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`
 历史基线：`5ab55dc`（代码）+ `8fb8210`（P1-07_DOCS_BASE）；P1-07 保持 `statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_for_panorama`，不因此标记 accepted
 
-> **v0.4 修订（2026-07-19，PAN-00R）**：以「第一阶段三位一体 Alpha」（理解我 × 武装我 × 连接世界）取代「在首页完整展示产品全貌」的旧理解；冻结极简产品原则与 AI 使用主体信息新原则；记录 PAN-01 / PAN-01R 正式裁定；重排 PAN 执行队列。v0.3.2 及更早的「产品全貌首页 / 10～15 分钟看完所有产品构造」相关要求已历史化，见 §15 历史记录。
+> **2026-07-21 规划基线重建（强制）**：本文**不再**作为当前执行总任务。  
+> **当前最高架构原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)  
+> **当前唯一执行计划**：[`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)  
+> 文内「当前唯一等待项 / 当前唯一任务」指向 R0/R2 等处均为**历史快照**；R2 = retained as infrastructure；R3 = `paused`；旧 DM-Core-01A = `superseded`。
+
+> **v0.4 修订（2026-07-19，PAN-00R · 历史）**：以「第一阶段三位一体 Alpha」（理解我 × 武装我 × 连接世界）取代「在首页完整展示产品全貌」的旧理解；冻结极简产品原则与 AI 使用主体信息新原则；记录 PAN-01 / PAN-01R 正式裁定；重排 PAN 执行队列。v0.3.2 及更早的「产品全貌首页 / 10～15 分钟看完所有产品构造」相关要求已历史化，见 §15 历史记录。
 
 ---
 

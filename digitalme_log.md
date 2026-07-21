@@ -5,6 +5,40 @@
 
 ---
 
+## 2026-07-21 数字主体规划基线重建（文档）
+
+### 做了什么
+
+Owner 与 Codex 系统复盘后，将新规划结论写入权威文件（纯文档，无运行代码变更）：
+
+1. 新建 `digitalme_subject_architecture_and_rd_principles_v0.1.md`（最高产品定义、四项价值、数字主体五段循环、能力/身份/验收/治理）；
+2. 新建 `digitalme_first_vertical_loop_sprint_plan_v0.1.md`（第一纵向闭环短冲刺、四合同映射表、任务顺序；**当前唯一执行计划**）；
+3. 更新 `digitalme_context.md`（文首主线、§3.2、§7.1、决策 #94）；
+4. 将 `digitalme_panorama_execution_index_v0.1.md` 标为 `superseded_as_current_execution_index`（v0.2.25）；
+5. 同步产品规格文首与排期注记、能力状态表、P1-PANORAMA 总任务包、R0/R1/R2 任务包文首、Cursor R2 历史指令、`.cursor/rules/product-development-process.mdc`、PAN-00 策略冻结表中的执行计划指针。
+
+### 旧计划状态
+
+| 项 | 标记 |
+|----|------|
+| R0 / R1 | completed / retained as infrastructure |
+| R2 | retained as infrastructure（停止验收主线） |
+| R3 | paused |
+| PAN-02～06 | paused（相对新主线） |
+| Skill/MCP/Agent/身份并列 7 任务块 | superseded |
+| 旧 DM-Core-01A | superseded / 不得执行 |
+| 大规模模块化建设路径 | archived as approach |
+
+### 明确未做
+
+未改运行代码；未启动 R3；未执行/扩展 DM-Core-01A；未开始第一闭环实现编码；未 push。
+
+### 下一任务
+
+**限定范围的仓库实现映射与第一闭环规格冻结**（仅文档；不得直接编码）。
+
+---
+
 ## 2026-07-21 Renderer Foundation R2 实现分支创建与参数合同冻结
 
 ### 做了什么

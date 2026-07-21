@@ -2,23 +2,30 @@
 
 版本：v0.1.1
 日期：2026-07-21
-状态：`specified` / `codex_review_passed` / `frozen_for_implementation` / `implementation_completed` / `awaiting_codex_implementation_review` / `awaiting_owner_runtime`
-性质：**独立实施任务包**；实施规格已冻结；Owner 已授权并完成 R2-A～R2-F 源码实现与自动化测试；**在 Codex 实现复核与 Owner 真机验收通过前不得 `accepted`**
-所属主线：`P1-PANORAMA`（三位一体 Alpha）
+状态：`implementation_completed` / **`retained as infrastructure`** / `not_current_mainline`（原 `awaiting_codex_implementation_review` / `awaiting_owner_runtime` **不再作为项目最高等待项**）
+性质：**独立实施任务包（历史主线）**；实现代码保留为可用基础设施；**是否补写 Owner `accepted` 不阻塞新主线**
+所属主线（历史）：`P1-PANORAMA` → **已被 2026-07-21 规划基线重建降级**
 前置：Renderer Foundation R0 **`accepted`**（v0.1.2）；Renderer Foundation R1 **`accepted`**（v0.1.3；baseline `8d7e9b3`）
-依据：`digitalme_renderer_foundation_R0_decision_and_migration_plan.md` §14 / §15 / §16；`digitalme_renderer_foundation_R1_shell_and_entry_switch.md`；执行索引；规格接受提交 `418d0cc`
+依据：`digitalme_renderer_foundation_R0_decision_and_migration_plan.md` §14 / §15 / §16；`digitalme_renderer_foundation_R1_shell_and_entry_switch.md`；历史执行索引；规格接受提交 `418d0cc`
 实现分支：**`codex/r2-chat-sessions-migration`**
 
-> **状态语义**
->
-> - **`implementation_completed`**：R2-A～R2-F 源码与自动化测试已落地（工程完成）；
-> - **`awaiting_codex_implementation_review` / `awaiting_owner_runtime`**：下一等待项；**不得**据此写 `accepted`；
-> - **不得**标记 `accepted` / `released`（本轮实现收口后仍须 Codex + Owner）；
-> - 生产默认入口仍为 **legacy**；next 仅受控 harness / 门禁进入；
-> - R2.5 SQLite 保持 `planned` / `deferred`；PAN-02 保持 `planned` / `blocked`；
-> - **不得**因本实现收口改写 R0 / R1 / PAN-01S 族已有 `accepted` 记录。
+> **2026-07-21 规划基线重建（强制）**  
+> - R2 = **`retained as infrastructure`**：停止围绕边缘问题追加修复与验收作为当前执行主线。  
+> - **R3 = `paused`**，不是下一步。  
+> - **当前执行计划**：[`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)  
+> - **最高架构原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)  
+> - 下文保留 R2 实施规格与实现事实；文内「当前唯一等待项 = Codex/Owner 验收 R2」仅作**历史快照**，不得指导后续排期。
 
-角色：Owner（真机验收）＋ Codex（实现复核）＋ Cursor（已完成实现）
+> **状态语义（基础设施口径）**
+>
+> - **`implementation_completed`**：R2-A～R2-F 源码与自动化测试已落地；
+> - **`retained as infrastructure`**：可作为 next/legacy 对话基础设施继续存在；**不**要求继续作为产品主线验收队列；
+> - **不得**因未写 `accepted` 阻塞第一纵向闭环规划；补验收属可选、非当前任务；
+> - 生产默认入口仍为 **legacy**；next 仅受控 harness / 门禁进入；
+> - R2.5 SQLite 保持 `planned` / `deferred`；R3 **`paused`**；PAN-02 相对新主线 **`paused`**；
+> - **不得**因本文件改写 R0 / R1 / PAN-01S 族已有 `accepted` 记录。
+
+角色（历史）：Owner（真机）＋ Codex（复核）＋ Cursor（实现）——**当前项目角色已转向第一纵向闭环文档/规格**
 
 ---
 
@@ -755,7 +762,7 @@ R2 不迁移工作台，因此：
 |---|---|
 | 本文件 | **v0.1.1** / `implementation_completed` / `awaiting_codex_implementation_review` / `awaiting_owner_runtime` |
 | 实现分支 | **`codex/r2-chat-sessions-migration`** |
-| 当前唯一等待项 | **Codex 集中复核实现 + Owner 真机验收** |
+| 历史等待项（已降级，非项目下一步） | 曾为 Codex 集中复核实现 + Owner 真机验收；**2026-07-21 起** R2 = `retained as infrastructure`，项目下一步见第一纵向闭环计划 |
 | R2-A～R2-F | **实现已完成**（未 `accepted`） |
 | R1 | `accepted`（不变） |
 | R2.5 | `planned` / `deferred` |

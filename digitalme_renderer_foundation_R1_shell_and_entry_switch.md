@@ -2,9 +2,9 @@
 
 版本：v0.1.3
 日期：2026-07-21
-状态：`accepted`
-性质：**独立实施任务包**；**实施规格已冻结（v0.1.1）**；兼容性 spike 与有界修复已完成；**Owner real Electron runtime 验收通过**；**accepted 仅覆盖 R1 基础能力**（见下方语义），**不**表示业务页面已迁移或整个 renderer 重构完成
-所属主线：`P1-PANORAMA`（三位一体 Alpha）
+状态：`accepted` / **`retained as infrastructure`**
+性质：**独立实施任务包（已完成；基础设施）**；**实施规格已冻结（v0.1.1）**；兼容性 spike 与有界修复已完成；**Owner real Electron runtime 验收通过**；**accepted 仅覆盖 R1 基础能力**，**不**表示业务页面已迁移或整个 renderer 重构完成
+所属主线（历史）：`P1-PANORAMA` → **2026-07-21 起排期以第一纵向闭环为准**
 前置：Renderer Foundation R0 **`accepted`**（v0.1.2；决策接受）
 依据：`digitalme_renderer_foundation_R0_decision_and_migration_plan.md` §10 / §11 / §14.1 / §15
 实现分支：`codex/r1-renderer-next-shell`
@@ -12,17 +12,18 @@ accepted baseline：`8d7e9b3`
 acceptance basis：Codex review passed + Owner real Electron runtime 6/6（2026-07-21）
 implementation：`completed`
 
+> **2026-07-21 规划基线重建**：R1 = retained as infrastructure。R2 = retained as infrastructure（停止验收主线）。**R3 = `paused`**，不是下一步。当前执行计划 → [`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)。
+
 > **状态语义**
 >
 > - **`accepted`（2026-07-21）**：R1 基础能力经 Codex 技术复核与 Owner 真机 6/6 验收；accepted baseline = **`8d7e9b3`**；
 > - **accepted 仅表示**以下基础能力完成：TypeScript + React + Vite 新 renderer 底座；独立 next 页面；main 控制的新旧界面整窗切换；runtime stamp；ready generation；导航单飞；自动回退 legacy；fallback latch；Error Boundary；Playwright Electron 基线；
-> - **next 当前仍是预览空壳**；chat、「我」、构建、工作台、能力、设置**均未迁移**；
+> - **next 当前仍是预览空壳**；chat、「我」、构建、工作台、能力、设置**均未迁移**（R2 已实现对话迁移切片，见 R2 任务包）；
 > - 生产默认入口仍为 **legacy**；**普通用户没有进入 next 的生产入口**；
-> - **不得**将整个 renderer 重构标为完成；**不**代表 R2 / R2.5 / PAN-02 已启动；
-> - **禁止**启动 PAN-02 实现；R2.5 SQLite 保持 `planned` / `deferred`；R2 任务包为 **v0.1.1** / `specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`（分支 `codex/r2-chat-sessions-migration` 已创建；参数合同待 Codex 复核；未获再次授权前不得编码）；
+> - **不得**将整个 renderer 重构标为完成；**不得**据此自行启动 R3；
 > - 本切片**不**改变 PAN-01S 族 `accepted`；R0 **`accepted` 不变**。
 
-角色：Owner（验收）＋ Codex（规格/实现复核）＋ Cursor（实现）
+角色（历史）：Owner（验收）＋ Codex（规格/实现复核）＋ Cursor（实现）
 
 ---
 

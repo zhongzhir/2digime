@@ -90,7 +90,8 @@ PAN-00 完成后，文档层级冻结如下：
 | 战略与逻辑架构 | `digitalme_context.md` | 项目长期目标、双线、主权原则和架构方向 |
 | 当前总任务 | `digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md` | 当前阶段目标、范围、子任务和总体验闭环 |
 | 界面与功能 | `digitalme_product_spec_v0.2.md`（文件名暂不改，文内升至 v0.5） | 用户看见什么、能做什么、何为做完的唯一需求源 |
-| 当前执行索引 | `digitalme_panorama_execution_index_v0.1.md` | PAN 顺序、状态、阻断项、backlog 与启动闸门 |
+| 当前执行计划（2026-07-21 起） | `digitalme_first_vertical_loop_sprint_plan_v0.1.md` | 第一纵向闭环；四合同映射；下一项仅文档冻结 |
+| 历史执行索引（已降级） | `digitalme_panorama_execution_index_v0.1.md` | P1-PANORAMA / Renderer 状态表；`superseded_as_current_execution_index` |
 | 可信硬化依据 | `digitalme_phase1_subject_upgrade_plan_v0.1.md` | 降级为 Trusted Beta 技术硬化与风险依据，不再是当前任务队列 |
 | 工程能力证据 | `digitalme_capability_status_v0.1.md` | 记录实现与验证证据，不决定用户面状态 |
 | 公共叙事母稿 | `digitalme_digital_sovereignty_narrative_v0.1.md` | 数字主权、广义数字资产与 Digital Org 的持续内容源 |

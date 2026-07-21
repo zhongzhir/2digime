@@ -2,19 +2,20 @@
 
 版本：v0.1.2  
 日期：2026-07-20  
-状态：**`accepted`**（决策/规格接受；**不是**代码实现完成）  
-性质：**架构决策与迁移规格**；接受后授权**起草 R1 任务包**；**仍不**授权创建 R1 实现分支或改源码，直至 R1 任务包经 Codex 复核通过  
-所属主线：`P1-PANORAMA`（三位一体 Alpha）  
+状态：**`accepted`** / **`retained as infrastructure`**（决策/规格接受；**不是**代码实现完成；**不是**当前产品执行主线）  
+性质：**架构决策与迁移规格（历史主线资产）**  
+所属主线（历史）：`P1-PANORAMA` → **2026-07-21 起排期以第一纵向闭环为准**  
 前置：PAN-01S / PAN-01S.1 / PAN-01S.2 `accepted`（Owner real Electron runtime；baseline `cbde807`）  
 决策血缘：初稿 `fc56259` → 修订 1 `ac8daf3` → 本接受修订  
-依据：`digitalme_bounded_architecture_audit_2026-07-20.md`（方案 C）；产品规格 v0.6.3；执行索引 v0.2.10+
+依据：`digitalme_bounded_architecture_audit_2026-07-20.md`（方案 C）；产品规格 v0.6.3；历史执行索引
+
+> **2026-07-21 规划基线重建**：R0 决策保留有效；**R3 = `paused`**（不是下一步）。当前执行计划 → [`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)。文内「当前下一文档任务 = 起草 R1」等为**历史快照**。
 
 > **状态语义**
 >
-> - **`accepted`**：Owner 确认方案 C 与修订 1 边界（含整窗拓扑、R2.5 SQLite deferred、Playwright E2E、R1 收窄、next 加载/ready 失败由 main 自动回退 legacy）；属**决策接受**，不等于 R1 已实现；
-> - R0 implementation = `not_started`；实现分支**不存在**；
-> - **当前下一文档任务**：起草并冻结 R1 独立实施任务包；**Codex 复核通过前不得创建 R1 实现分支或修改源码**；
-> - **不得**启动 PAN-02；
+> - **`accepted`**：Owner 确认方案 C 与修订 1 边界；属**决策接受**；
+> - **`retained as infrastructure`**：迁移原则仍可引用；**不**自动构成当前排期；
+> - R0 implementation = `not_started`；实现分支**不存在**（实现由后续 R1/R2 承接）；
 > - 本文件**不**改变 PAN-01S 族 accepted 结论。
 
 ---

@@ -1,11 +1,11 @@
 ---
-description: 产品开发与用户面文案强制规范（Owner 线索须审视对标；文案严谨明白；Panorama 阶段规则）
+description: 产品开发与用户面文案强制规范；数字主体第一纵向闭环阶段规则
 alwaysApply: true
 ---
 
 # 协作与文案强制规范
 
-今日确认的两条原则，与规格 §2.12、`digitalme_context.md` §5.4 一致，会话中必须遵守。
+与规格 §2.12、`digitalme_context.md` §5.4、以及 `digitalme_subject_architecture_and_rd_principles_v0.1.md` 一致，会话中必须遵守。
 
 ## 一、用户面文案
 
@@ -37,16 +37,27 @@ Owner / 用户提出的产品想法**可能不全、可错、可非最优**，�
 - 无规格升版就堆功能
 - 用文案按钮冒充能力却无可核对依据
 
-## 三、P1-PANORAMA 阶段规则（2026-07-18 确立；2026-07-21 R2 实现收口后更新）
+## 三、数字主体第一纵向闭环阶段规则（2026-07-21 确立）
 
-当前产品主线为 **P1-PANORAMA（三位一体 Alpha）**；执行索引见 `digitalme_panorama_execution_index_v0.1.md`（文内 **v0.2.24**）。PAN-00R 已 **accepted**。**PAN-01S / PAN-01S.1 / PAN-01S.2 已 `accepted`（baseline `cbde807`）。** Renderer Foundation R0 = **`accepted`**（v0.1.2）。Renderer Foundation R1 = **`accepted`**（任务包 **v0.1.3**；baseline **`8d7e9b3`**）。Renderer Foundation R2 = **`implementation_completed` / `awaiting_codex_implementation_review` / `awaiting_owner_runtime`**（任务包 **v0.1.1**；实现分支 **`codex/r2-chat-sessions-migration`**；R2-A～R2-F 源码与自动化测试已完成；**通过前不得 `accepted`**）。
+**权威入口**：
 
-1. **每次只执行一个已批准的 PAN 主任务**；不得并行扩大实现范围。
-2. **非阻断问题进入 backlog**，不因局部修饰延迟完整闭环。
+- 架构与研发原则：`digitalme_subject_architecture_and_rd_principles_v0.1.md`
+- 当前执行计划：`digitalme_first_vertical_loop_sprint_plan_v0.1.md`
+- 全局上下文文首：`digitalme_context.md`
+
+**当前主线**：第一纵向闭环 — **理解我并产出**（研究与表达）。  
+**下一项任务**：**限定范围的仓库实现映射与第一闭环规格冻结**（**仅文档**；不得直接编码实现产品功能）。
+
+1. **每次只推进一个已批准任务块**；按纵向闭环顺序，不得并列铺开 Skill / MCP / Agent / DID / 身份平台。
+2. **非阻断问题进入 backlog**；仅四类问题可阻断：主流程不可用、数据损坏丢失、隐私超披露、未授权对外行动。
 3. **用户面能力必须使用冻结状态标签**：可用 · 实验 · 本地模拟 · 预览 · 尚未开放。
 4. **本地模拟不得写成真实外部协作**；失败与取消不得显示成功。
-5. **工程 `implemented` / `statically_verified` 不自动等于用户面「可用」**；自动测试通过不自动等于 `accepted`；**规格 `frozen_for_implementation` 不自动等于已获 Owner 实现授权或已开始编码**；**R1 `accepted` 不自动等于业务页面已迁移或整个 renderer 重构完成**；**R2 `implementation_completed` 不自动等于 `accepted`**。
-6. **若需恢复暂停工作**（含 P1-07 缺口、原 P1-08、Policies 迁移等），先提交最小阻断说明，经复核后只做必要切片，**不可直接扩 scope**。
-7. Digital Org、公网协作、支付结算不进入当前个人 Alpha 实现。
-8. **当前唯一等待项：Codex 集中复核 R2 实现 + Owner 真机验收。** 通过前不得写 R2 `accepted`。R2.5 保持 `planned` / `deferred`。不得开始 R3 / R2.5 / PAN-02。R0 / R1 已 accepted。PAN-02 保持 `planned` / `blocked`。
-9. **未经 Owner 主路径验收不得 `accepted`**。PAN-02～PAN-06 未开始。不得自行修复已冻结的 P1-07。PAN-01 / PAN-01R 均已裁定不 accepted，不得回滚或删除其代码与证据。PAN-01R **无生产入口**（规格 v0.6.3）。
+5. **工程完成 ≠ 用户面可用 ≠ accepted**；规格冻结 ≠ 已获实现授权。
+6. **R0 / R1**：`accepted`，**retained as infrastructure**。  
+7. **R2**：实现代码 **retained as infrastructure**；**停止**作为当前验收/边缘修复主线；不得因 R2 边缘问题阻塞第一闭环规划。  
+8. **R3 renderer 迁移**：**`paused`**，**不是**下一步。  
+9. **旧 DM-Core-01A「代表我完成任务」开发指令**：**`superseded` / 不得执行**。  
+10. **PAN-02～PAN-06** 相对新主线 **`paused`**；不得按旧解锁条件自行启动。  
+11. **P1-PANORAMA 执行索引**仅为历史/基础设施状态表，**不是**当前执行计划。  
+12. Digital Org、公网协作、支付结算、DID/VC/链上存证不进入当前第一闭环实现。  
+13. **未经 Owner 主路径验收不得 `accepted`**。
