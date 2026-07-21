@@ -13,5 +13,9 @@ module.exports = defineConfig({
       name: "r1-spike",
       testMatch: /r1-spike\.spec\.cjs/,
     },
+    {
+      name: "r2-chat-sessions",
+      testMatch: /r2-chat-sessions\.spec\.cjs/,
+    },
   ],
 });

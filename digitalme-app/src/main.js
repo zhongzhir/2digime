@@ -1867,18 +1867,83 @@ ipcMain.handle("r2:consumeLegacyHandoff", async () => {
   return { ok: true, intent: r2LegacyHandoff.consume() };
 });
 
-// Test/harness helpers for TTL clock (only when fake model or spike harness)
+// Test/harness helpers (only when fake model or spike harness)
+function r2HarnessEnabled() {
+  return (
+    process.env.DIGITALME_R2_FAKE_MODEL === "1" ||
+    process.env.DIGITALME_R1_SPIKE_HARNESS === "1"
+  );
+}
+
 ipcMain.handle("r2:testSetAttachmentClock", async (_e, payload) => {
-  if (
-    process.env.DIGITALME_R2_FAKE_MODEL !== "1" &&
-    process.env.DIGITALME_R1_SPIKE_HARNESS !== "1"
-  ) {
-    return { ok: false, code: "harness_required" };
-  }
+  if (!r2HarnessEnabled()) return { ok: false, code: "harness_required" };
   const ms = Number(payload && payload.nowMonotonicMs);
   if (!Number.isFinite(ms)) return { ok: false, code: "invalid_clock" };
   r2AttachmentTokens.setClock(() => ms);
   return { ok: true };
+});
+
+ipcMain.handle("r2:testSeedSession", async (_e, payload) => {
+  if (!r2HarnessEnabled()) return { ok: false, code: "harness_required" };
+  try {
+    const ud = app.getPath("userData");
+    const title = String((payload && payload.title) || "测试对话");
+    const s = await sessions.createSession(ud, { title });
+    const messages = Array.isArray(payload && payload.messages) ? payload.messages : [];
+    s.messages = messages.map((m) => chatMessages.toPersistableMessage(m));
+    if (payload && payload.linkedLibraryId) {
+      s.linkedLibraryId = String(payload.linkedLibraryId);
+      s.artifacts = [
+        {
+          libraryId: String(payload.linkedLibraryId),
+          title: String((payload && payload.linkedTitle) || "测试文稿"),
+        },
+      ];
+    }
+    await sessions.saveSession(ud, s);
+    return { ok: true, sessionId: s.id };
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "seed_failed",
+      message: err && err.message ? err.message : "seed failed",
+    };
+  }
+});
+
+ipcMain.handle("r2:testCorruptSessionsFile", async () => {
+  if (!r2HarnessEnabled()) return { ok: false, code: "harness_required" };
+  const p = sessions.sessionsPath(app.getPath("userData"));
+  fs.writeFileSync(p, "{not-json-corrupt", "utf8");
+  try {
+    sessions.loadStore(app.getPath("userData"));
+  } catch {
+    /* expected — sets latch */
+  }
+  return { ok: true, latched: sessions.isRecoveryLatched(), path: p };
+});
+
+ipcMain.handle("r2:testMintAttachmentToken", async (e, payload) => {
+  if (!r2HarnessEnabled()) return { ok: false, code: "harness_required" };
+  const sessionId = String((payload && payload.sessionId) || "");
+  const body = String((payload && payload.body) || "SECRET_ATTACH_BODY_" + "X".repeat(100));
+  const minted = r2AttachmentTokens.create({
+    webContentsId: e.sender.id,
+    sessionId,
+    selection: [
+      {
+        id: "att_test",
+        name: "secret.txt",
+        type: "text/plain",
+        size: body.length,
+        text: body,
+        ok: true,
+        note: "test",
+        chars: body.length,
+      },
+    ],
+  });
+  return { ok: true, token: minted.token, attachments: minted.attachments, bodyMarker: body.slice(0, 24) };
 });
 
 ipcMain.handle("output:exportMarkdown", async (_e, { title, content }) => {

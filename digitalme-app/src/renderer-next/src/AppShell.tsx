@@ -593,12 +593,12 @@ function ChatWorkbench() {
                 关闭关联
               </button>
             </div>
-            {artifactPreviewNotice ? (
-              <p className="truncate-notice" data-testid="artifact-truncate-notice">
-                {artifactPreviewNotice}
-              </p>
-            ) : null}
           </div>
+        ) : null}
+        {artifactPreviewNotice ? (
+          <p className="truncate-notice" data-testid="artifact-truncate-notice">
+            {artifactPreviewNotice}
+          </p>
         ) : null}
 
         <div className="messages" data-testid="messages">

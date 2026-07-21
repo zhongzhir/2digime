@@ -271,6 +271,10 @@ api.r2 = {
 if (R1_SPIKE_HARNESS || process.env.DIGITALME_R2_FAKE_MODEL === "1") {
   api.r2.testSetAttachmentClock = (payload) =>
     ipcRenderer.invoke("r2:testSetAttachmentClock", payload);
+  api.r2.testSeedSession = (payload) => ipcRenderer.invoke("r2:testSeedSession", payload);
+  api.r2.testCorruptSessionsFile = () => ipcRenderer.invoke("r2:testCorruptSessionsFile");
+  api.r2.testMintAttachmentToken = (payload) =>
+    ipcRenderer.invoke("r2:testMintAttachmentToken", payload);
 }
 
 contextBridge.exposeInMainWorld("digitalMe", api);

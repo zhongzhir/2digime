@@ -66,6 +66,7 @@ function createR2ChatLifecycle(deps) {
 
   async function fakeModelStream(onDelta, signal) {
     const chunks = ["这是", "一段", "测试回复。"];
+    const delayMs = Number(process.env.DIGITALME_R2_FAKE_MODEL_DELAY_MS || 120);
     let full = "";
     for (const c of chunks) {
       if (signal && signal.aborted) {
@@ -75,7 +76,14 @@ function createR2ChatLifecycle(deps) {
       }
       full += c;
       onDelta(c, full);
-      await new Promise((r) => setTimeout(r, 15));
+      await new Promise((r) => setTimeout(r, Number.isFinite(delayMs) ? delayMs : 120));
+    }
+    // Hold active briefly so E2E can exercise nav/return guards.
+    await new Promise((r) => setTimeout(r, Number.isFinite(delayMs) ? delayMs : 120));
+    if (signal && signal.aborted) {
+      const err = new Error("已停止");
+      err.aborted = true;
+      throw err;
     }
     return full;
   }
