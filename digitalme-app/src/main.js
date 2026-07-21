@@ -28,6 +28,9 @@ const researchAgentLoop = require("./research/agent-loop");
 const researchGrounded = require("./research/grounded");
 const personalSkills = require("./skills/personal");
 const sessions = require("./sessions");
+const actBehalfStore = require("./act-behalf/task-store");
+const { buildSelectedSelfContext } = require("./act-behalf/select-self-context");
+const { parseActBehalfOutput, buildActBehalfMessages } = require("./act-behalf/parse-output");
 const chatMessages = require("./chat-message-model");
 const catalog = require("./capabilities/catalog");
 const capabilitySurface = require("./capabilities/surface");
@@ -881,6 +884,176 @@ ipcMain.handle("package:load", () => {
     lifeSummary: life.summarizeLifeForPrompt(dir),
     boundariesSummary: policies.summarizeBoundariesForPrompt(dir),
   };
+});
+
+function loadPackageForActBehalf() {
+  const dir = packageDirFromConfig();
+  tryRecoverConfiguredPackageStore();
+  life.ensureLifeScaffold(dir);
+  policies.ensureBoundariesScaffold(dir);
+  const manifestRaw = safeRead(path.join(dir, "manifest.json"));
+  let manifest = {};
+  try {
+    manifest = JSON.parse(manifestRaw);
+  } catch {
+    /* ignore */
+  }
+  return {
+    dir,
+    exists: !!manifestRaw,
+    manifest,
+    persona: safeRead(path.join(dir, "persona.md")),
+    styleGuide: safeRead(path.join(dir, "style-guide.md")),
+    systemPrompt: safeRead(path.join(dir, "prompts", "system-prompt.md")),
+    decisionFrameworks: safeRead(path.join(dir, "decision-frameworks.json")),
+    preferences: safeRead(path.join(dir, "preferences.json")),
+    longTermMemory: safeRead(path.join(dir, "memory", "long-term-memory.jsonl")),
+    lifeSummary: life.summarizeLifeForPrompt(dir),
+    boundariesSummary: policies.summarizeBoundariesForPrompt(dir),
+  };
+}
+
+function fakeActBehalfModelOutput(request) {
+  return (
+    "## 使用的本人信息\n\n- （测试）已读取本次确认的本人信息摘录\n\n" +
+    "## 本人已有事实或观点\n\n- （测试）根据摘录整理的既有立场\n\n" +
+    "## Digital Me 的新分析或建议\n\n- （测试）针对「" +
+    String(request || "").slice(0, 80) +
+    "」给出的新建议\n\n" +
+    "## 完整结果\n\n（测试）这是一份结合本人信息生成的完整结果草稿，可直接修改后使用。"
+  );
+}
+
+ipcMain.handle("actBehalf:previewContext", async () => {
+  try {
+    const pkg = loadPackageForActBehalf();
+    const selectedSelfContext = buildSelectedSelfContext(pkg);
+    return {
+      ok: true,
+      packageExists: !!pkg.exists,
+      selectedSelfContext,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "preview_failed",
+      message: err && err.message ? err.message : "无法准备本人信息。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:list", async () => {
+  try {
+    return actBehalfStore.listTasks(app.getPath("userData"));
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "list_failed",
+      message: err && err.message ? err.message : "无法列出任务。",
+      tasks: [],
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:get", async (_e, taskId) => {
+  try {
+    return actBehalfStore.getTask(app.getPath("userData"), taskId);
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "get_failed",
+      message: err && err.message ? err.message : "无法读取任务。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:save", async (_e, payload) => {
+  try {
+    const saved = await actBehalfStore.saveTask(app.getPath("userData"), payload || {});
+    return saved;
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "save_failed",
+      message: err && err.message ? err.message : "无法保存任务。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:run", async (_e, payload) => {
+  try {
+    const request = String((payload && payload.request) || "").trim();
+    if (!request) {
+      return { ok: false, code: "empty_request", message: "请输入要完成的任务。" };
+    }
+    const title =
+      String((payload && payload.title) || "").trim() ||
+      request.slice(0, 40) + (request.length > 40 ? "…" : "");
+    const combinedText = String((payload && payload.selectedSelfContextText) || "").trim();
+    const userEdited = !!(payload && payload.userEdited);
+    const items = Array.isArray(payload && payload.selectedSelfContextItems)
+      ? payload.selectedSelfContextItems
+      : [];
+
+    const messages = buildActBehalfMessages({
+      request,
+      title,
+      selectedSelfContextText: combinedText,
+    });
+
+    let raw = "";
+    let modelMeta = { fake: false };
+    if (process.env.DIGITALME_ACT_BEHALF_FAKE === "1") {
+      raw = fakeActBehalfModelOutput(request);
+      modelMeta = { fake: true };
+    } else {
+      const cfg = readConfig();
+      if (!cfg || !cfg.apiKey) {
+        return {
+          ok: false,
+          code: "no_api_key",
+          message: "请先在设置中配置可用的模型，再代表本人完成任务。",
+        };
+      }
+      raw = await callModel(cfg, messages, { temperature: 0.4 });
+      modelMeta = {
+        fake: false,
+        model: cfg.model || "",
+      };
+    }
+
+    const parsed = parseActBehalfOutput(raw);
+    modelMeta.parseOk = parsed.parseOk;
+    modelMeta.usedSelfInfo = parsed.usedSelfInfo;
+
+    const saved = await actBehalfStore.saveTask(app.getPath("userData"), {
+      taskId: payload && payload.taskId ? payload.taskId : undefined,
+      title,
+      request,
+      status: "completed",
+      selectedSelfContext: {
+        items,
+        combinedText,
+        userEdited,
+      },
+      existingUserPositions: parsed.existingUserPositions,
+      digitalMeInferences: parsed.digitalMeInferences,
+      result: parsed.result,
+      modelMeta,
+    });
+
+    return {
+      ok: true,
+      task: saved.task,
+      usedSelfInfo: parsed.usedSelfInfo,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "run_failed",
+      message: err && err.message ? err.message : "任务未能完成，请稍后再试。",
+    };
+  }
 });
 
 ipcMain.handle("life:getGraph", (_e, opts) => {

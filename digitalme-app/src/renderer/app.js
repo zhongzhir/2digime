@@ -79,6 +79,12 @@ const RESEARCH_STAGES = RESEARCH_PROGRESS;
 
 const DO_SCENES = [
   {
+    id: "act_behalf",
+    title: "代表我完成任务",
+    status: "ready",
+    blurb: "确认本人信息后，生成可区分已有内容与新推断的结果。",
+  },
+  {
     id: "write",
     title: "写作",
     status: "ready",
@@ -5161,6 +5167,8 @@ function showDoHub() {
   if (dr) dr.classList.add("hidden");
   const dc = $("do-code");
   if (dc) dc.classList.add("hidden");
+  const da = $("do-act-behalf");
+  if (da) da.classList.add("hidden");
   $("do-placeholder").classList.add("hidden");
   renderDoSceneGrid();
 }
@@ -5201,6 +5209,8 @@ async function openDoScene(sceneId, opts = {}) {
     if (dr0) dr0.classList.add("hidden");
     const dc0 = $("do-code");
     if (dc0) dc0.classList.add("hidden");
+    const da0 = $("do-act-behalf");
+    if (da0) da0.classList.add("hidden");
     $("do-placeholder").classList.remove("hidden");
     $("do-ph-title").textContent = scene.title || "筹备中";
     $("do-ph-sub").textContent = "该场景尚未开放";
@@ -5211,11 +5221,26 @@ async function openDoScene(sceneId, opts = {}) {
   $("do-hub").classList.add("hidden");
   $("do-placeholder").classList.add("hidden");
 
+  if (sceneId === "act_behalf") {
+    doScene = "act_behalf";
+    $("do-write").classList.add("hidden");
+    const drA = $("do-research");
+    if (drA) drA.classList.add("hidden");
+    const dcA = $("do-code");
+    if (dcA) dcA.classList.add("hidden");
+    const da = $("do-act-behalf");
+    if (da) da.classList.remove("hidden");
+    await openActBehalfScene(opts);
+    return;
+  }
+
   if (sceneId === "research") {
     doScene = "research";
     $("do-write").classList.add("hidden");
     const dcR = $("do-code");
     if (dcR) dcR.classList.add("hidden");
+    const daR = $("do-act-behalf");
+    if (daR) daR.classList.add("hidden");
     $("do-research").classList.remove("hidden");
     window.digitalMe.prepareResearchScene?.().catch(() => {});
     await refreshSkillBar("research");
@@ -5228,6 +5253,8 @@ async function openDoScene(sceneId, opts = {}) {
     $("do-write").classList.add("hidden");
     const drC = $("do-research");
     if (drC) drC.classList.add("hidden");
+    const daC = $("do-act-behalf");
+    if (daC) daC.classList.add("hidden");
     $("do-code").classList.remove("hidden");
     await openCodeScene();
     return;
@@ -5238,6 +5265,8 @@ async function openDoScene(sceneId, opts = {}) {
   if (dr) dr.classList.add("hidden");
   const dcW = $("do-code");
   if (dcW) dcW.classList.add("hidden");
+  const daW = $("do-act-behalf");
+  if (daW) daW.classList.add("hidden");
   $("do-write").classList.remove("hidden");
   $("do-write-title").textContent = "写作";
   $("do-write-sub").textContent = "新建文稿或直接描述要写什么；改稿与导出在同一页。";
@@ -5251,6 +5280,215 @@ async function openDoScene(sceneId, opts = {}) {
   };
   await refreshLibraryView();
   if (opts.libraryId) await openLibraryItem(opts.libraryId);
+}
+
+/** DM-Core-01A: act-behalf scene state */
+let actBehalfState = {
+  taskId: null,
+  contextItems: [],
+  contextBaseline: "",
+  userEdited: false,
+};
+
+function setActProgress(text) {
+  const el = $("act-progress");
+  if (el) el.textContent = text || "";
+}
+
+function clearActResultPanel() {
+  const panel = $("act-result-panel");
+  if (panel) panel.classList.add("hidden");
+  for (const id of ["act-used-self", "act-existing", "act-inferences", "act-result"]) {
+    const el = $(id);
+    if (el) el.textContent = "";
+  }
+}
+
+function renderActResult(task, usedSelfInfo) {
+  const panel = $("act-result-panel");
+  if (!panel) return;
+  panel.classList.remove("hidden");
+  const used = $("act-used-self");
+  const existing = $("act-existing");
+  const inferences = $("act-inferences");
+  const result = $("act-result");
+  if (used) {
+    used.textContent =
+      String(usedSelfInfo || (task.modelMeta && task.modelMeta.usedSelfInfo) || "").trim() ||
+      "（无）";
+  }
+  if (existing) existing.textContent = String(task.existingUserPositions || "").trim() || "（无）";
+  if (inferences) inferences.textContent = String(task.digitalMeInferences || "").trim() || "（无）";
+  if (result) result.textContent = String(task.result || "").trim() || "（无）";
+}
+
+async function refreshActTaskList() {
+  const list = $("act-task-list");
+  const empty = $("act-task-empty");
+  if (!list || !window.digitalMe.actBehalfList) return;
+  const res = await window.digitalMe.actBehalfList();
+  list.innerHTML = "";
+  const tasks = (res && res.tasks) || [];
+  if (empty) empty.classList.toggle("hidden", tasks.length > 0);
+  for (const t of tasks) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "library-item";
+    btn.dataset.taskId = t.taskId;
+    btn.innerHTML =
+      `<strong>${escapeHtml(t.title || "未命名任务")}</strong>` +
+      `<span class="muted">${escapeHtml(t.status || "")} · ${escapeHtml(
+        String(t.updatedAt || "").slice(0, 19).replace("T", " ")
+      )}</span>` +
+      `<span class="muted">${escapeHtml(t.requestPreview || "")}</span>`;
+    btn.addEventListener("click", () => openActBehalfTask(t.taskId));
+    list.appendChild(btn);
+  }
+}
+
+async function loadActBehalfContext() {
+  setActProgress("正在摘录本人信息…");
+  const res = await window.digitalMe.actBehalfPreviewContext();
+  if (!res || !res.ok) {
+    setActProgress((res && res.message) || "无法准备本人信息。");
+    return;
+  }
+  const ctx = res.selectedSelfContext || {};
+  actBehalfState.contextItems = ctx.items || [];
+  actBehalfState.contextBaseline = String(ctx.combinedText || "");
+  actBehalfState.userEdited = false;
+  const note = $("act-context-note");
+  if (note) note.textContent = ctx.note || "";
+  const area = $("act-self-context");
+  if (area) area.value = actBehalfState.contextBaseline;
+  setActProgress(res.packageExists ? "" : "未检测到主体资料包；请在下方补充本人信息后继续。");
+}
+
+function resetActBehalfForm() {
+  actBehalfState = {
+    taskId: null,
+    contextItems: [],
+    contextBaseline: "",
+    userEdited: false,
+  };
+  if ($("act-title")) $("act-title").value = "";
+  if ($("act-request")) $("act-request").value = "";
+  if ($("act-self-context")) $("act-self-context").value = "";
+  clearActResultPanel();
+  setActProgress("");
+}
+
+async function openActBehalfScene(opts = {}) {
+  resetActBehalfForm();
+  await refreshActTaskList();
+  await loadActBehalfContext();
+  if (opts.taskId) await openActBehalfTask(opts.taskId);
+}
+
+async function openActBehalfTask(taskId) {
+  const res = await window.digitalMe.actBehalfGet(taskId);
+  if (!res || !res.ok || !res.task) {
+    setActProgress((res && res.message) || "无法打开该任务。");
+    return;
+  }
+  const task = res.task;
+  actBehalfState.taskId = task.taskId;
+  actBehalfState.contextItems =
+    (task.selectedSelfContext && task.selectedSelfContext.items) || [];
+  actBehalfState.contextBaseline =
+    (task.selectedSelfContext && task.selectedSelfContext.combinedText) || "";
+  actBehalfState.userEdited = !!(task.selectedSelfContext && task.selectedSelfContext.userEdited);
+  if ($("act-title")) $("act-title").value = task.title || "";
+  if ($("act-request")) $("act-request").value = task.request || "";
+  if ($("act-self-context")) $("act-self-context").value = actBehalfState.contextBaseline;
+  if (task.status === "completed" || task.result) {
+    renderActResult(task);
+  } else {
+    clearActResultPanel();
+  }
+  setActProgress("已打开已保存任务。");
+}
+
+async function saveActBehalfDraft() {
+  const title = ($("act-title") && $("act-title").value) || "";
+  const request = ($("act-request") && $("act-request").value) || "";
+  const combinedText = ($("act-self-context") && $("act-self-context").value) || "";
+  if (!request.trim() && !combinedText.trim()) {
+    setActProgress("请先填写任务或本人信息，再保存。");
+    return;
+  }
+  const edited = combinedText !== actBehalfState.contextBaseline;
+  const res = await window.digitalMe.actBehalfSave({
+    taskId: actBehalfState.taskId || undefined,
+    title: title.trim() || request.trim().slice(0, 40) || "未命名任务",
+    request,
+    status: "draft",
+    selectedSelfContext: {
+      items: actBehalfState.contextItems,
+      combinedText,
+      userEdited: edited || actBehalfState.userEdited,
+    },
+    existingUserPositions: ($("act-existing") && $("act-existing").textContent) || "",
+    digitalMeInferences: ($("act-inferences") && $("act-inferences").textContent) || "",
+    result: ($("act-result") && $("act-result").textContent) || "",
+  });
+  if (!res || !res.ok) {
+    setActProgress((res && res.message) || "保存失败。");
+    return;
+  }
+  actBehalfState.taskId = res.task.taskId;
+  setActProgress("草稿已保存。");
+  await refreshActTaskList();
+}
+
+async function runActBehalfTask() {
+  const title = ($("act-title") && $("act-title").value) || "";
+  const request = (($("act-request") && $("act-request").value) || "").trim();
+  const combinedText = ($("act-self-context") && $("act-self-context").value) || "";
+  if (!request) {
+    setActProgress("请输入要完成的任务。");
+    return;
+  }
+  const edited = combinedText !== actBehalfState.contextBaseline;
+  const runBtn = $("btn-act-run");
+  if (runBtn) runBtn.disabled = true;
+  setActProgress("正在代表你完成任务…");
+  try {
+    const res = await window.digitalMe.actBehalfRun({
+      taskId: actBehalfState.taskId || undefined,
+      title,
+      request,
+      selectedSelfContextText: combinedText,
+      selectedSelfContextItems: actBehalfState.contextItems,
+      userEdited: edited || actBehalfState.userEdited,
+    });
+    if (!res || !res.ok) {
+      setActProgress((res && res.message) || "任务未能完成。");
+      return;
+    }
+    actBehalfState.taskId = res.task.taskId;
+    renderActResult(res.task, res.usedSelfInfo);
+    setActProgress("任务已完成并保存。可随时从左侧重新打开。");
+    await refreshActTaskList();
+  } finally {
+    if (runBtn) runBtn.disabled = false;
+  }
+}
+
+function wireActBehalfUi() {
+  const back = $("btn-do-back-act");
+  if (back) back.addEventListener("click", showDoHub);
+  $("btn-act-new")?.addEventListener("click", async () => {
+    resetActBehalfForm();
+    await loadActBehalfContext();
+    setActProgress("已新建任务表单。");
+  });
+  $("btn-act-reload-context")?.addEventListener("click", () => loadActBehalfContext());
+  $("btn-act-save")?.addEventListener("click", () => saveActBehalfDraft());
+  $("btn-act-run")?.addEventListener("click", () => runActBehalfTask());
+  $("act-self-context")?.addEventListener("input", () => {
+    actBehalfState.userEdited = true;
+  });
 }
 
 function applyWriteIntents() {
@@ -7758,6 +7996,7 @@ function bindDo() {
   if (backPh) backPh.addEventListener("click", showDoHub);
   const backCode = $("btn-do-back-code");
   if (backCode) backCode.addEventListener("click", showDoHub);
+  wireActBehalfUi();
 }
 
 function bindCodeWorkspace() {

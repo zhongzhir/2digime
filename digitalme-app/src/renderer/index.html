@@ -83,7 +83,7 @@
             <header class="me-topbar">
               <div class="me-topbar-main">
                 <div id="do-hub-title">工作台</div>
-                <div id="do-hub-sub">按场景办事。写作、研究、编程已可用；其余筹备中或工具先行。</div>
+                <div id="do-hub-sub">按场景办事。写作、研究、编程、「代表我完成任务」已可用；其余筹备中或工具先行。</div>
               </div>
               <button type="button" class="btn-help" data-help-topic="do" title="打开说明">说明</button>
             </header>
@@ -428,6 +428,72 @@
                   <button type="button" id="btn-code-clear" class="btn-ghost">清空成果台</button>
                 </div>
               </aside>
+            </div>
+          </div>
+
+          </div>
+
+          <div id="do-act-behalf" class="do-act-behalf hidden" data-testid="do-act-behalf">
+            <header class="me-topbar write-topbar">
+              <div class="me-topbar-main">
+                <button type="button" id="btn-do-back-act" class="btn-ghost btn-do-back">← 场景目录</button>
+                <div>
+                  <div id="do-act-title">代表我完成任务</div>
+                  <div id="do-act-sub" class="muted">输入真实任务 → 确认本次使用的本人信息 → 生成并保存可区分「已有内容 / 新推断」的结果。</div>
+                </div>
+              </div>
+              <button type="button" class="btn-help" data-help-topic="do" title="打开说明">说明</button>
+            </header>
+            <div class="act-behalf-layout">
+              <aside class="write-rail act-behalf-rail">
+                <div class="write-rail-block">
+                  <div class="ext-store-head">
+                    <h3>任务记录</h3>
+                    <button id="btn-act-new" class="btn-ghost" type="button">新建</button>
+                  </div>
+                  <div id="act-task-empty" class="artifact-empty">还没有已保存的任务。</div>
+                  <div id="act-task-list" class="library-list" data-testid="act-task-list"></div>
+                </div>
+              </aside>
+              <div class="act-behalf-main">
+                <label class="library-title-label">任务标题
+                  <input id="act-title" type="text" placeholder="例如：起草本周工作汇报要点" data-testid="act-title" />
+                </label>
+                <label class="library-title-label">任务说明
+                  <textarea id="act-request" rows="5" placeholder="用一两段话说明希望 Digital Me 代表你完成什么…" data-testid="act-request"></textarea>
+                </label>
+                <div class="act-context-block">
+                  <div class="ext-store-head">
+                    <h3>本次使用的本人信息</h3>
+                    <button id="btn-act-reload-context" class="btn-ghost" type="button">重新摘录</button>
+                  </div>
+                  <p id="act-context-note" class="muted write-rail-hint" data-testid="act-context-note"></p>
+                  <textarea id="act-self-context" rows="10" placeholder="将显示与本任务相关的本人信息摘录，可编辑确认后再提交。" data-testid="act-self-context"></textarea>
+                </div>
+                <div class="builder-actions">
+                  <button id="btn-act-run" type="button" data-testid="btn-act-run">代表我完成</button>
+                  <button id="btn-act-save" class="btn-ghost" type="button" data-testid="btn-act-save">保存草稿</button>
+                </div>
+                <div id="act-progress" class="builder-progress" data-testid="act-progress"></div>
+                <div id="act-result-panel" class="act-result-panel hidden" data-testid="act-result-panel">
+                  <div class="output-card">
+                    <h3>使用的本人信息（模型自述）</h3>
+                    <div id="act-used-self" class="act-result-body" data-testid="act-used-self"></div>
+                  </div>
+                  <div class="output-card">
+                    <h3>本人已有事实或观点</h3>
+                    <div id="act-existing" class="act-result-body" data-testid="act-existing"></div>
+                  </div>
+                  <div class="output-card">
+                    <h3>Digital Me 的新分析或建议</h3>
+                    <div id="act-inferences" class="act-result-body" data-testid="act-inferences"></div>
+                  </div>
+                  <div class="output-card">
+                    <h3>完整结果</h3>
+                    <div id="act-result" class="act-result-body" data-testid="act-result"></div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 

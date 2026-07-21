@@ -25,6 +25,7 @@
     "test:p1-baseline-real": "node scripts/test-p1-baseline-real.cjs",
     "test:bootstrap-submit": "node scripts/test-bootstrap-file-submit.cjs && node scripts/test-renderer-ui-bindings.cjs",
     "test:chat-history-display": "node scripts/test-chat-history-display.cjs && node scripts/test-session-overflow-menu.cjs",
+    "test:act-behalf": "node scripts/test-act-behalf-contracts.cjs",
     "test:r2-contracts": "node scripts/test-r2-contracts.cjs",
     "test:owner-runtime": "electron scripts/electron-owner-runtime-test.cjs",
     "test:r1-entry": "node scripts/test-r1-renderer-entry.cjs",
