@@ -303,7 +303,7 @@ runtime.signalReady(generation) -> { ok }  // 必须显式有限整数 generatio
 | 实现分支 | **`codex/r1-renderer-next-shell`** |
 | accepted baseline | **`8d7e9b3`** |
 | acceptance basis | Codex review passed + Owner real Electron runtime 6/6 |
-| 下一任务 | **Codex 再复核 Renderer Foundation R2 任务包**（v0.1.1-draft；七项合同关闭；第二轮补全已写入）；复核通过前不得创建 R2 实现分支或修改源码 |
+| 下一任务 | **Codex 最终复核 Renderer Foundation R2 任务包**（v0.1.1-draft；第三轮安全闭环已写入）；复核通过前不得创建 R2 实现分支或修改源码 |
 | R2 | `specified` / `codex_changes_requested` / `not_started`（v0.1.1-draft） |
 | R2.5 | `planned` / `deferred` |
 | PAN-02 | `planned` / `blocked` |

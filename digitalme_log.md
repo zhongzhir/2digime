@@ -5,6 +5,24 @@
 
 ---
 
+## 2026-07-21 Renderer Foundation R2 第三轮最小安全闭环
+
+### 做了什么
+
+纯文档：在 **v0.1.1-draft** / `codex_changes_requested` 下关闭三歧义——`sessionsRecoveryLatch` 跨 next/legacy 写阻断；损坏单会话无普通删除；`inputText`≤2000 + token 一次性消费。七项合同与 22/24/38 结构保持。
+
+同步：context（#91）、执行索引 v0.2.21、能力表、cursor rule、总任务包、R1 调度（最小）。
+
+### 明确未做
+
+未改源码/测试/配置/依赖/lockfile；未建 R2 分支；未启动应用或测试；未读真实 Package/sessions；未 push。
+
+### 下一等待项
+
+**等待 Codex 最终复核** R2 任务包。
+
+---
+
 ## 2026-07-21 Renderer Foundation R2 第二轮有界文档补全
 
 ### 做了什么

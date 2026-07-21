@@ -260,11 +260,11 @@ PAN-00 accepted
 
 ### 6.4 当前调度
 
-- **当前唯一等待项**：等待 Codex 再复核 Renderer Foundation R2 任务包（**v0.1.1-draft**；七项合同关闭；第二轮已补全所有权/恢复/E2E）；
+- **当前唯一等待项**：等待 Codex 最终复核 Renderer Foundation R2 任务包（**v0.1.1-draft**；第三轮安全闭环已写入）；
 - PAN-01S / PAN-01S.1 / PAN-01S.2：`accepted`（2026-07-20；Owner real Electron runtime；baseline `cbde807`）；
 - renderer foundation R0：`accepted`（v0.1.2；决策接受；implementation not_started）；
 - renderer foundation R1：`accepted`（**v0.1.3**；baseline `8d7e9b3`；implementation `completed`；分支 `codex/r1-renderer-next-shell`）；
-- renderer foundation R2：`specified` / `codex_changes_requested` / `not_started`（**v0.1.1-draft**；实现分支**不存在**；再复核通过前不得实现）；
+- renderer foundation R2：`specified` / `codex_changes_requested` / `not_started`（**v0.1.1-draft**；实现分支**不存在**；最终复核通过前不得实现）；
 - R2.5 SQLite：`planned` / `deferred`；
 - PAN-02～PAN-06 保持 `planned`；PAN-02 当前 **blocked**（见 R0 §16）；不得开始 R2 实现 / R2.5 / PAN-02。
 
@@ -460,7 +460,7 @@ PAN-00 accepted
 → PAN-02（planned / blocked）→ PAN-03 → PAN-04 → PAN-05 → PAN-06
 ```
 
-每次只启动一个主实现任务。PAN-05 传播文案可并行起草，但不得与代码任务修改同一文件。**当前唯一等待项**：Codex 再复核 R2 任务包；R2 = `specified` / `codex_changes_requested` / `not_started`；复核通过前不得创建实现分支或修改源码。PAN-02 保持 `planned` / `blocked`。
+每次只启动一个主实现任务。PAN-05 传播文案可并行起草，但不得与代码任务修改同一文件。**当前唯一等待项**：Codex 最终复核 R2 任务包；R2 = `specified` / `codex_changes_requested` / `not_started`；复核通过前不得创建实现分支或修改源码。PAN-02 保持 `planned` / `blocked`。
 
 ### 13.3 子任务完成报告
 
@@ -529,7 +529,9 @@ P1-PANORAMA 不包含：
 
 2026-07-21（R2 第一轮有界修订）：R2 → **v0.1.1-draft** / `specified` / `codex_changes_requested` / `not_started`。七项合同已关闭（历史）。
 
-2026-07-21（R2 第二轮文档补全）：七项合同**不变**；补全状态所有权/错误恢复/E2E。仍 **v0.1.1-draft** / `codex_changes_requested` / `not_started`。**当前唯一等待项**：Codex 再复核。R2.5 `planned` / `deferred`；PAN-02 `planned` / `blocked`。
+2026-07-21（R2 第二轮文档补全）：七项合同**不变**；补全状态所有权/错误恢复/E2E（历史）。
+
+2026-07-21（R2 第三轮最小安全闭环）：`sessionsRecoveryLatch`；损坏单会话无普通删除；`inputText`≤2000；token 一次性消费。仍 **v0.1.1-draft** / `codex_changes_requested` / `not_started`。**当前唯一等待项**：Codex 最终复核。R2.5 `planned` / `deferred`；PAN-02 `planned` / `blocked`。
 
 > **PAN-01**：可信只读聚合保留；`needs_minimal_surface_reset`；不 accepted。
 >

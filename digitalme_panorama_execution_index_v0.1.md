@@ -1,31 +1,21 @@
 # Digital Me Product Panorama 执行索引
 
-版本：v0.2.20
+版本：v0.2.21
 日期：2026-07-21
 状态：`active`
 所属总任务：`P1-PANORAMA：Digital Me 产品全貌 Alpha`（v0.4，三位一体重构）
 代码实现基线：`cbde807fd1e40472d66fbe8f0810a0835e8bc816`（分支 `codex/pan-01s2-chat-incident-close`；PAN-01S 族 Owner 验收 accepted）
 R1 accepted baseline：`8d7e9b399f1ae871e3bdf1093fc677196bca176e`（分支 `codex/r1-renderer-next-shell`）
 文档基线：`35c5aead8879f818ae0e1e90836a8fee557c22c7`（`PAN01R_SPEC_BASE`，历史）；本轮战略修订见 `digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`
-规格依据：`digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`（v0.4）、`digitalme_renderer_foundation_R0_decision_and_migration_plan.md`（v0.1.2 **accepted**）、`digitalme_renderer_foundation_R1_shell_and_entry_switch.md`（**v0.1.3 `accepted`**）、`digitalme_renderer_foundation_R2_chat_and_sessions_migration.md`（**v0.1.1-draft** / `codex_changes_requested`；七项合同关闭；第二轮补全所有权/恢复/E2E）、`digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`、`digitalme_phase1_task_PAN-01S_minimal_product_surface.md`、`digitalme_phase1_task_PAN-01S.1_subject_clarity_progressive_build.md`、`digitalme_phase1_task_PAN-00_strategy_spec_freeze.md`、`digitalme_phase1_task_PAN-01_product_panorama_home.md`（历史）、`digitalme_phase1_task_PAN-01R_sovereign_collaboration_loop.md`（历史）、`digitalme_product_spec_v0.2.md`（文内 **v0.6.3**）
+规格依据：`digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`（v0.4）、`digitalme_renderer_foundation_R0_decision_and_migration_plan.md`（v0.1.2 **accepted**）、`digitalme_renderer_foundation_R1_shell_and_entry_switch.md`（**v0.1.3 `accepted`**）、`digitalme_renderer_foundation_R2_chat_and_sessions_migration.md`（**v0.1.1-draft** / `codex_changes_requested`；七项合同关闭；第三轮安全闭环已写入）、`digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`、`digitalme_phase1_task_PAN-01S_minimal_product_surface.md`、`digitalme_phase1_task_PAN-01S.1_subject_clarity_progressive_build.md`、`digitalme_phase1_task_PAN-00_strategy_spec_freeze.md`、`digitalme_phase1_task_PAN-01_product_panorama_home.md`（历史）、`digitalme_phase1_task_PAN-01R_sovereign_collaboration_loop.md`（历史）、`digitalme_product_spec_v0.2.md`（文内 **v0.6.3**）
 
 > 本文件是当前阶段唯一执行索引。冲突时：用户体验以产品规格 **v0.6.3** 为准；排期以 P1-PANORAMA v0.4 与本索引为准；安全底线优先于 Alpha 速度。
 >
-> **v0.2.13 修订（2026-07-20，R1 有界修订）**：R1 v0.1.1-draft；当时 `codex_changes_requested`（历史）。
+> **v0.2.13～v0.2.19**：见历史（R1 收口与 R2 起草/第一轮修订）。
 >
-> **v0.2.14 修订（2026-07-20，R1 规格接受 · 今日收尾）**：Codex 再复核通过。R1 → **v0.1.1** / `specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`（历史）。
+> **v0.2.20 修订（2026-07-21，R2 第二轮文档补全）**：七项合同不变；补全所有权/恢复/E2E（历史）。
 >
-> **v0.2.15 修订（2026-07-21，R1 兼容性 spike）**：Owner 授权后完成 spike。R1 → **v0.1.2** / `implemented` / `empirically_verified` / `codex_review_pending`（历史）。
->
-> **v0.2.16 修订（2026-07-21，R1 spike 有界修复）**：Codex 指出 5 项缺陷后完成修复。R1 → **v0.1.3** / `implemented` / `spike_partial_verified` / `codex_changes_requested`（历史）。
->
-> **v0.2.17 修订（2026-07-21，R1 Owner 验收收口）**：Codex 技术复核通过；Owner real Electron runtime **6/6**。R1 → **v0.1.3 / `accepted`**；baseline **`8d7e9b3`**（历史收口）。
->
-> **v0.2.18 修订（2026-07-21，R2 任务包起草）**：新增 R2 **v0.1-draft** → `specified` / `codex_review_pending` / `not_started`（历史）。
->
-> **v0.2.19 修订（2026-07-21，R2 第一轮有界修订）**：R2 → **v0.1.1-draft** / `specified` / `codex_changes_requested` / `not_started`。关闭七项合同（历史）。
->
-> **v0.2.20 修订（2026-07-21，R2 第二轮文档补全）**：七项核心合同**不变**；补全状态所有权、错误恢复、E2E 矩阵。R2 仍 **v0.1.1-draft** / `specified` / `codex_changes_requested` / `not_started`。实现分支**不存在**。**当前唯一等待项：Codex 再复核 R2 任务包。** R2.5 `planned` / `deferred`；PAN-02 `planned` / `blocked`。R0 / R1 / PAN-01S 族 accepted 不变。生产默认 legacy。
+> **v0.2.21 修订（2026-07-21，R2 第三轮最小安全闭环）**：冻结 `sessionsRecoveryLatch`、损坏单会话无普通删除、`inputText`≤2000、token 一次性消费。R2 仍 **v0.1.1-draft** / `specified` / `codex_changes_requested` / `not_started`。实现分支**不存在**。**当前唯一等待项：Codex 最终复核 R2。** R2.5 `planned` / `deferred`；PAN-02 `planned` / `blocked`。R0 / R1 / PAN-01S 族 accepted 不变。生产默认 legacy。
 
 ---
 
@@ -51,7 +41,7 @@ P1-PANORAMA（三位一体 Alpha）
 |---|---|
 | 总任务状态 | `active / three_part_alpha_reframed / PAN-01S_family_accepted / R0_decision_accepted / R1_accepted / R2_codex_changes_requested` |
 | 当前完成 | PAN-00 / PAN-00R `accepted`；PAN-01 / PAN-01R 已裁定（不 accepted）；**PAN-01S / S.1 / S.2 `accepted`**；**R0 决策 `accepted`**；**R1 `accepted`（baseline `8d7e9b3`）**；**R2 七项合同已写入草案（未实现）** |
-| **当前唯一等待项** | **Codex 再复核** Renderer Foundation R2 任务包（**v0.1.1-draft** / `specified` / `codex_changes_requested` / `not_started`；七项合同已关闭；第二轮已补全所有权/恢复/E2E）。实现分支**不存在**；**复核通过前不得创建实现分支或修改源码**。 |
+| **当前唯一等待项** | **Codex 最终复核** Renderer Foundation R2 任务包（**v0.1.1-draft** / `specified` / `codex_changes_requested` / `not_started`；七项合同关闭；第三轮安全闭环已写入）。实现分支**不存在**；**复核通过前不得创建实现分支或修改源码**。 |
 | Acceptance basis（R1） | Codex review passed + Owner real Electron runtime 6/6；baseline `8d7e9b3`；date 2026-07-21 |
 | Acceptance basis（PAN-01S 族） | Owner real Electron runtime；baseline `cbde807`；date 2026-07-20 |
 | 明确不得启动 | R2 实现（待 Codex 再复核）；R2.5；PAN-02～PAN-06；P1-07 修复；Digital Org；公网协作；重开 PAN-01S |
@@ -209,4 +199,4 @@ statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_fo
 3. 恢复 backlog 须先写最小阻断说明，不可直接扩 scope。
 4. 更新本索引时同步 `digitalme_capability_status_v0.1.md` 与 `digitalme_log.md`。
 5. PAN-00 已于 `bc85a14` 标记 `accepted`（历史）。PAN-01 与 PAN-01R 按 PAN-00R 裁定归档，均**不得标 `accepted`**、不得回滚、不得删除证据。PAN-00R 已 `accepted`（`07b631d` + `6ae2dca` + `0fcd432`；docs/strategy acceptance，不是运行能力 released）。**PAN-01S / PAN-01S.1 / PAN-01S.2 已于 2026-07-20 `accepted`**（Owner real Electron runtime；baseline `cbde807`）。**R1 已于 2026-07-21 `accepted`**（baseline `8d7e9b3`）。
-6. **当前唯一等待项**：**Codex 再复核** Renderer Foundation R2 任务包（**v0.1.1-draft** / `specified` / `codex_changes_requested` / `not_started`；七项合同关闭；第二轮文档补全已写入）。实现分支**不存在**。**复核通过前不得创建 R2 实现分支或修改源码。** R2.5 保持 `planned` / `deferred`。R0 / R1 / PAN-01S 族 **`accepted` 不变**。**PAN-02** 保持 `planned` / `blocked`。**不得**重开 PAN-01S。非阻断技术债见 §2.5。不得开始 R2 实现 / R2.5 / PAN-02。
+6. **当前唯一等待项**：**Codex 最终复核** Renderer Foundation R2 任务包（**v0.1.1-draft** / `specified` / `codex_changes_requested` / `not_started`）。实现分支**不存在**。**复核通过前不得创建 R2 实现分支或修改源码。** R2.5 保持 `planned` / `deferred`。R0 / R1 / PAN-01S 族 **`accepted` 不变**。**PAN-02** 保持 `planned` / `blocked`。**不得**重开 PAN-01S。非阻断技术债见 §2.5。不得开始 R2 实现 / R2.5 / PAN-02。

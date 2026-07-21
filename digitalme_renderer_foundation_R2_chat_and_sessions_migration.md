@@ -3,7 +3,7 @@
 版本：v0.1.1-draft
 日期：2026-07-21
 状态：`specified` / `codex_changes_requested` / `not_started`
-性质：**独立实施任务包草案（第二轮有界文档补全）**；七项核心合同已关闭且**不得改动**；本轮仅补全状态所有权、错误恢复与 E2E 矩阵；**Codex 再复核通过前不得创建 R2 实现分支或修改源码**；**当前未授权实现**
+性质：**独立实施任务包草案（第三轮最小安全闭环）**；七项核心合同、22 项所有权、24 类恢复、38 项 E2E **不得改动其既有结论**；本轮仅关闭整文件损坏写屏障、损坏单会话删除歧义、`inputText`/附件 token 消费冻结；**Codex 最终复核通过前不得创建 R2 实现分支或修改源码**；**当前未授权实现**
 所属主线：`P1-PANORAMA`（三位一体 Alpha）
 前置：Renderer Foundation R0 **`accepted`**（v0.1.2）；Renderer Foundation R1 **`accepted`**（v0.1.3；baseline `8d7e9b3`）
 依据：`digitalme_renderer_foundation_R0_decision_and_migration_plan.md` §14 / §15 / §16；`digitalme_renderer_foundation_R1_shell_and_entry_switch.md`；执行索引；代码基线（只读核对）分支 `codex/r1-renderer-next-shell`
@@ -11,7 +11,7 @@
 
 > **状态语义**
 >
-> - **`specified` / `codex_changes_requested` / `not_started`**：第一轮七项核心合同已关闭；第二轮要求补全状态所有权、错误恢复与 Playwright 矩阵后，仍等待 **Codex 再复核**；
+> - **`specified` / `codex_changes_requested` / `not_started`**：七项核心合同已关闭；第二轮补全所有权/恢复/E2E；第三轮关闭损坏写屏障等安全歧义后，仍等待 **Codex 最终复核**；
 > - **不得**使用 `frozen_for_implementation` / `codex_review_passed` / `implemented` / `accepted`（本轮）；
 > - **七项核心合同结论冻结，不得重新讨论或改写**（见 §7.3 / §9 / §10.3 / §9.5 / §9.6）；
 > - R1 `accepted` 仅覆盖 next 底座与整窗切换；**next 当前仍是预览空壳**；
@@ -35,7 +35,7 @@
 | R1 | `accepted`（v0.1.3；baseline `8d7e9b3`） |
 | R2.5 | `planned` / `deferred` |
 | PAN-02 | `planned` / `blocked`（见 R0 §16；R2 accepted **不**自动解锁） |
-| 本轮授权 | **仅文档补全**；再复核通过前不得实现 |
+| 本轮授权 | **仅第三轮安全闭环文档**；最终复核通过前不得实现 |
 
 ---
 
@@ -229,7 +229,7 @@
 | 14 | sequence / 已处理序号 | main 发；renderer 记本地 cursor | main 单调递增 sequence | 否 | 否 | renderer 仅本地 cursor | 乱序/重复 | 丢弃并审计 |
 | 15 | 停止状态 | main `status` + abort | `stopChat` / 异常 abort | 否 | 否 | 是 | 停止失败仍导航 | 保护至 main 确认结束 |
 | 16 | 会话导航保护 | main 依 activeRequest | main 拒绝窄命令 | 否 | 否 | UI 提示副本 | 绕过 IPC | 统一 main 拒绝 |
-| 17 | sessions 持久化/写队列 | main 串行队列 | 仅 main | 临时文件+原子 rename | 读最后成功正式文件 | 是 | 并发写、rename 失败删旧 | 见 §9.6 / §13#22–24 |
+| 17 | sessions 持久化/写队列 / **sessionsRecoveryLatch** | main 串行队列 + 进程级 latch | 仅 main；latch 由整文件解析失败置位，**仅 Owner 另授**可清 | 正式路径仅成功原子写；latch 期间**禁止**写正式文件 | 正式文件仍坏则重启后**重新置 latch** | 是 | 空 store 覆盖、legacy save 绕过 | 见 §12.1 / §13#1/#21/#24 |
 | 18 | rendererEntry | R1 controller | 仅 main | 偏好可持久；effective 进程内 | 默认 legacy | 是 | 循环切换 | latch + 回 legacy |
 | 19 | fallback latch | R1 controller | 仅 main | 进程内 | 清进程重置 | 是 | 反复进 next | 本进程不再自动 next |
 | 20 | runtime stamp / generation | main | 只读 stamp；generation 仅 main | 否 | getStamp/boundGeneration | 是 | 错代 ready | R1 握手合同 |
@@ -269,9 +269,10 @@
 - 仅供 **legacy** 使用；
 - main 按当前合法窗口 / renderer 入口限制调用来源；
 - R2 `accepted` **前不得删除** legacy `sessions:save`；
-- **不**新增第二套 sessions 文件。
+- **不**新增第二套 sessions 文件；
+- 当 **`sessionsRecoveryLatch` 生效**时：legacy `sessions:save` **必须由 main 拒绝**，与 next 窄写一并阻断（§12.1）；不得依赖 renderer 自觉。
 
-消息新增、assistant 占位、流式更新、完成、停止、失败落盘：**全部由 main 执行**（或进入 main 受控写队列）。
+消息新增、assistant 占位、流式更新、完成、停止、失败落盘：**全部由 main 执行**（或进入 main 受控写队列）。**latch 生效期间上述落盘一律不得写入正式 sessions 路径。**
 
 next 允许的写相关窄命令仅：`createSession`、`renameSession`、`deleteSession`、`setCurrentSession`、`clearLinkedArtifact`、`sendChat`、`stopChat`。
 
@@ -303,9 +304,16 @@ sendChat({
 1. `requestId`、`assistantMessageId` **由 main 生成**；
 2. main 从 sessions 权威读历史；从 Package/受控服务读主体上下文；生成 model history；组装 attachment context；
 3. renderer **不得**提交：`pkg`、完整 `history`、`modelText` 数组、`requestContent`、附件正文、任意 system prompt；
-4. `scenarioHint` **白名单**；`inputText` 有明确长度与空值校验；
-5. 模型调用前完成 `activeRequest` 注册；**注册失败不得发起模型请求**；
-6. 用户消息与 assistant 占位由 main 按序持久化或进入受控写队列。
+4. `scenarioHint` **白名单**；
+5. **`inputText` 合同（冻结，编码前不可再议）：**
+   - 去除首尾空白后**不得为空**；
+   - 用户可提交的 `inputText` 最大为 **2000 字**（与用户 `displayText` 持久化上限一致）；
+   - 超限或空值：main **拒绝发送**，返回稳定、可见、可恢复的校验错误；
+   - renderer 可提前提示，但 **main 必须再次校验**；
+   - 拒绝时：**不**生成模型请求；**不**注册 `activeRequest`；**不**创建 assistant 占位；**保留**输入草稿；
+   - **不允许**通过额外字段、附件正文或 history 绕过上限；
+6. 模型调用前完成 `activeRequest` 注册；**注册失败不得发起模型请求**；
+7. 用户消息与 assistant 占位由 main 按序持久化或进入受控写队列（**recovery latch 生效时禁止写入正式路径**）。
 
 **`chat:event`（next）冻结：**
 
@@ -332,15 +340,25 @@ sendChat({
 3. 普通 renderer 不能启用 test harness；query/hash/localStorage 不能开 harness。
 4. PAN-01R test-only 门禁不变。
 
-### 9.5 合同六：附件不透明凭证
+### 9.5 合同六：附件不透明凭证（一次性消费冻结）
 
 next 选附件后，main 仅返回：安全名称、类型、大小、不透明 `attachmentSelectionToken`（或受控 ref）。
 
 renderer **不得**收到：附件正文、本地绝对路径、拼接后的 `attachmentContext`。
 
-正文只保存在 main 当轮受控内存。token 必须：绑定当前窗口；绑定当前会话；有过期时间；一次性或明确消费规则；应用重启后旧 token 失效。
+正文只保存在 main 当轮受控内存。sessions 只存 `attachmentRefs`。不得把真实路径当普通 UI 文案。跨重启再用须重新选择（或另开持久化引用任务）。
 
-`sendChat` 时 main 凭 token 取上下文；完成/失败/停止/超时后清理正文。sessions 只存 `attachmentRefs`。跨重启再用须重新选择（或另开持久化引用任务）。不得把真实路径当普通 UI 文案。
+**一次性消费语义（冻结，编码前不可再议）：**
+
+1. attachment selection token 为**一次性** token；
+2. main 仅在以下条件**全部**验证通过后消费：当前合法窗口匹配；当前会话匹配；token 未过期；token **未被消费**；
+3. 参数校验失败、窗口/会话不匹配或 token 已过期时：**不**发起模型请求；
+4. 模型请求一旦被 main 接受并完成 `activeRequest` 注册，token **即标记为已消费**；
+5. 同一 token 的重复发送**必须失败**，不得产生第二个模型请求；
+6. 完成、失败、停止或超时后清理对应附件正文；
+7. 应用重启后**全部** token 失效；
+8. TTL 具体秒数可保留为剩余未决数字，但「一次性消费」**不再**是未决项；
+9. **不允许**以「有限重试」为由重复消费同一 token；用户需重试带附件请求时，应**重新选择附件并取得新 token**。
 
 ### 9.6 合同七：sessions 原子写与串行化（R2-A，不拖 R2.5）
 
@@ -349,9 +367,9 @@ renderer **不得**收到：附件正文、本地绝对路径、拼接后的 `at
 3. Windows rename 失败：有限次数重试；**不删除**最后一个有效正式文件。
 4. 写入前对 store 做结构校验。
 5. 写入失败：**不得**把 renderer 内存副本当作已保存。
-6. create / rename / delete / setActive / chat 完成·停止 / 清关联：**同一写队列**。
+6. create / rename / delete / setActive / chat 完成·停止 / 清关联：**同一写队列**；**且**写入口必须检查 `sessionsRecoveryLatch`（§12.1）。
 7. 不使用长期悬挂跨进程锁；本轮不引入 SQLite。
-8. 测试覆盖：两连续写顺序正确；写失败保留旧文件；临时文件异常不破坏正式文件；重启读最后一次成功版本。
+8. 测试覆盖：两连续写顺序正确；写失败保留旧文件；临时文件异常不破坏正式文件；重启读最后一次成功版本；**latch 下 next 与 legacy 均不能写正式文件**。
 
 ---
 
@@ -424,17 +442,32 @@ R2 不迁移工作台，因此：
 
 ### 12.1 损坏 sessions 恢复边界（冻结）
 
+#### 12.1.1 损坏单会话
+
 1. **单个会话损坏不得拖垮会话列表**。
 2. 损坏会话显示安全占位与「无法打开」状态。
 3. **不向 renderer 返回**损坏正文或解析堆栈。
-4. 用户**始终能**新建干净会话。
-5. R2 **不得**自动重写或删除损坏的真实会话。
-6. 若**整个正式** `workbench-sessions.json` 无法解析：
-   - main **不得**用空 store **静默覆盖**原文件；
-   - **保留损坏原件**（可旁路改名备份，如 `.corrupt-<timestamp>`，但正式路径不得被空文件顶替）；
-   - 进入**只读 / 受限恢复**状态；
-   - 允许创建隔离的测试或恢复会话之前，必须采用**不会覆盖原文件**的明确策略（例如仅内存会话、或另路径临时 store，且用户可见「原对话文件未改写」说明）；
-7. 真实数据修复或迁移仍需 **Owner 另行授权**。
+4. 普通 R2 恢复界面中：可显示安全占位；可**新建干净会话**；可返回**安全的**经典界面（须满足 §12.1.2 写阻断）；**不得**提供普通「删除损坏会话」作为恢复动作。
+5. R2 **不得**自动删除、重写、修补或规范化覆盖该真实会话。
+6. 删除或修复损坏真实会话属于数据处置，须 **Owner 另行明确授权并另开任务**。
+7. **正常、可解析会话**的用户主动删除功能不受影响。
+
+#### 12.1.2 整个正式 sessions 文件损坏与 `sessionsRecoveryLatch`
+
+1. main 一旦确认正式 `workbench-sessions.json` **整文件无法解析**，必须设置进程级 **`sessionsRecoveryLatch`**（名称可等价，语义必须明确）。
+2. latch 生效期间：
+   - next 的所有 sessions **写命令拒绝**；
+   - legacy **`sessions:save` 也必须由 main 拒绝**；
+   - `create` / `rename` / `delete` / `setActive` / `sendChat`·`stop` 后落盘 / `clearLinkedArtifact` **均不得**写入正式 sessions 路径；
+   - renderer 内默认空 store、内存空列表或兼容降级结果 **不得**成为正式文件写入来源。
+3. 阻断必须在 **main 统一 sessions 写入口或写队列**生效；**不得**仅依靠 renderer 自觉不保存。
+4. **返回 legacy 之前**，main 必须确保 legacy **不能**通过旧 `sessions:save` 覆盖损坏原件。
+5. 若 legacy 无法在只读/受限状态安全打开：**不得**强行进入 legacy；进入**稳定恢复页**；**不**循环切换；明确提示「原对话文件未改写」。
+6. **损坏原件必须原样保留**（旁路备份不得顶替正式路径为空文件）。
+7. 隔离恢复 store：不得使用正式 `workbench-sessions.json` 路径；不得自动顶替正式 store；必须有明确临时/隔离标识；不得误报为真实历史已恢复。
+8. **清除** recovery latch、修复、替换或迁移真实文件，必须由 **Owner 另行授权**，不属于 R2 自动恢复。
+9. 应用重启后若正式文件仍损坏，必须**重新进入** recovery latch，**不能**因进程重启恢复写权限。
+10. 真实数据修复或迁移仍需 Owner 另行授权。
 
 ---
 
@@ -444,8 +477,8 @@ R2 不迁移工作台，因此：
 
 | # | 场景 | 用户看见 | 可重试 | 草稿 | 消息丢失风险 | 脱敏审计 | 导航保护解除 | 新建干净会话 | 返回经典 | 经典也失败 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| 1 | sessions 列表读取失败 | 「无法加载对话列表」+ 原因中性说明 | 是：重试按钮 | N/A | 否（未加载） | 读失败码、无正文 | N/A（无活动请求） | 若整文件损坏见 #24；否则可见入口 | 是 | 稳定故障页；禁循环 |
-| 2 | 单个会话损坏 | 列表仍在；该项「无法打开」 | 否打开；可删（不自动删真数据，须确认） | N/A | 该会话内容不可用 | 会话 id、规范化失败类 | N/A | 是 | 是 | 同上 |
+| 1 | sessions 列表读取失败 | 「无法加载对话列表」+ 原因中性说明 | 是：重试按钮 | N/A | 否（未加载） | 读失败码、无正文 | N/A（无活动请求） | 若**整文件损坏**：置 `sessionsRecoveryLatch`，见 #24；否则可见新建 | 仅当 legacy 写入已被 latch 阻断且可安全打开 | 稳定故障页；禁循环 |
+| 2 | 单个会话损坏 | 列表仍在；该项「无法打开」；**无普通删除恢复入口** | 否打开；**禁止**普通删除损坏会话 | N/A | 该会话内容不可用 | 会话 id、规范化失败类 | N/A | 是（干净会话） | 仅安全路径（latch 规则适用时遵守） | 同上 |
 | 3 | 新建会话失败 | 「无法新建对话」 | 是 | 保留当前输入框草稿 | 否 | create 失败码 | 保持至无活动请求 | 再试新建 | 是 | 同上 |
 | 4 | 会话改名失败 | 「无法改名」；标题回滚 | 是 | N/A | 否 | rename 失败 | 有活动请求则仍保护 | 是 | 是 | 同上 |
 | 5 | 会话删除失败 | 「无法删除」；列表回滚 | 是 | N/A | 否 | delete 失败 | 同上 | 是 | 是 | 同上 |
@@ -464,10 +497,10 @@ R2 不迁移工作台，因此：
 | 18 | next 崩溃或 ready 失败 | 自动回经典或 Error Boundary 提示 | 回经典后重进 harness（非生产） | 尽量交 main | 未保存风险 | crash/ready 超时 | main abort 后清请求 | 回经典后 | **路径 B** | latch+故障页 |
 | 19 | 自动回 legacy 时 abort 失败 | 仍尝试回经典；提示「后台回复可能未完全停止」 | 有限 | — | 僵尸写风险→须丢弃迟到事件 | abort 失败 | 强制标 failed 并丢弃迟到 | 回经典后 | 继续回退 | 故障页禁循环 |
 | 20 | 自动回 legacy 时安全保存失败 | 回经典；提示「有内容可能未保存」 | 回经典后处理 | — | 有 | persist-on-fallback 失败 | 请求已结束/失败 | 是 | 已在回退 | 故障页 |
-| 21 | 返回 legacy 本身失败 | 「无法切换到经典界面」；**不**反复自动跳 | 有限次手动 | 保留 | — | navigate legacy 失败 | 依请求状态 | 是（若仍 next） | 重试；失败则稳定页 | **稳定故障页**；latch 防抖 |
+| 21 | 返回 legacy 本身失败 / 或不安全 | 「无法切换到经典界面」或「原对话文件未改写」；**不**反复自动跳 | 有限次；若因整文件损坏则勿强行进 legacy | 保留 | — | navigate 失败或 latch 阻断 | 依请求状态 | 隔离策略且不覆盖正式文件 | **返回前必须确认 legacy 写入已被 latch 阻断**；无法安全返回则**稳定恢复页** | **稳定故障页**；禁循环 |
 | 22 | sessions 原子 rename 持续失败 | 「无法保存对话」；保留旧正式文件 | 是：有限重试 | 保留 | 新变更未入盘 | rename 失败次数 | 有活动请求保持 | 是 | 是 | 同上 |
 | 23 | 临时文件残留 | 用户通常无感；异常时「保存异常，对话文件未损坏」 | 清理可后台 | N/A | 正式文件应仍有效 | temp leftover | N/A | 是 | 是 | 同上 |
-| 24 | 重启后正式 sessions 文件损坏 | 受限恢复说明；**原文件未被空 store 覆盖** | 重试读；不可静默清空 | N/A | 原数据保留在损坏件 | parse fail；保留路径 | N/A | 仅隔离策略且不覆盖原件 | 是 | 故障页；禁循环 |
+| 24 | 重启后正式 sessions 文件损坏 | 受限恢复说明；**原文件未被空 store 覆盖**；**next 与 legacy 均不能写正式文件**；重启若仍坏则**重新置 latch** | 重试读；不可静默清空；不可清 latch | N/A | 原数据保留在损坏件 | parse fail；latch 置位 | N/A | 仅隔离路径且不覆盖原件；**不得**误报已恢复真历史 | **仅**当写入已阻断且可安全只读打开；否则稳定恢复页 | 故障页；禁循环 |
 
 ---
 
@@ -491,14 +524,20 @@ R2 不迁移工作台，因此：
 - assistant **8000** 持久化、展开、刷新一致；超过 8000 有明确截断提示
 - 用户主动回 legacy 时活动请求被阻止
 - 自动回退时 main 停止活动请求且迟到事件无效
-- next 无法调用通用 `sessions:save`；legacy 过渡期仍可调用
+- next 无法调用通用 `sessions:save`；legacy 过渡期仍可调用（**非** recovery latch）
+- **整文件损坏后：next 窄写不能写正式文件；legacy `sessions:save` 也不能写正式文件**
+- **返回 legacy 不会触发空 store 覆盖；无法安全进入 legacy 时稳定恢复页且不循环**
+- **重启后正式文件仍损坏时重新进入 recovery latch**
+- **损坏单会话无普通删除恢复入口**
+- **`inputText` 空白或超过 2000：不注册请求、不调模型、不建 assistant 占位、草稿保留**
+- **附件 token 只能消费一次；重复/过期/跨窗/跨会话 token 不能启动模型请求**
 - `SessionViewDTO` 不含 modelText/path/正文
 - 类型化 `chat:event` 三元组 + sequence；renderer 伪造 complete 无效
 - `sendChat` 无法注入 history/pkg/system prompt/requestContent
-- 附件正文不进 renderer；token 过期/跨窗口/跨会话失败
 - sessions 写队列与原子替换（连续写、失败保留旧文件、临时异常、重启读成功版）
 - 关联文稿经整窗 legacy handoff 打开；活动请求中打开被阻止
 - legacy 兼容（含原 display 相关）继续通过
+- 上述验证须核对**真实文件状态、真实 IPC 拒绝与真实请求计数**，不得只匹配静态文案
 
 ### 15.3 Playwright Electron 逐项清单（必须真实覆盖）
 
@@ -523,21 +562,21 @@ R2 不迁移工作台，因此：
 19. 旧 schema 消息安全降级。
 20. 8 万字附件正文不进入聊天 DOM。
 21. `SessionViewDTO` 不含 `modelText`、路径或正文。
-22. 附件 token 过期、跨窗口、跨会话均失败。
+22. 附件 token 过期、跨窗口、跨会话均失败；**同一 token 不得二次消费启动模型请求**。
 23. 关联文稿只显示紧凑卡。
 24. 关闭关联文稿立即保存。
 25. 打开关联文稿通过整窗 legacy handoff。
-26. 损坏会话不拖垮列表。
-27. 整个 sessions 文件损坏时**不被空 store 覆盖**。
-28. 模型失败可恢复且草稿 / 已存消息状态明确可辨。
+26. 损坏会话不拖垮列表；**普通恢复界面无删除损坏会话入口**。
+27. 整个 sessions 文件损坏时**不被空 store 覆盖**；**next 窄写与 legacy `sessions:save` 均被 main 拒绝**；重启仍坏则**重新 latch**。
+28. 模型失败可恢复且草稿 / 已存消息状态明确可辨；**`inputText` 空或 >2000 时不注册请求、不调模型、不建占位、草稿保留**。
 29. sessions 连续写顺序正确。
 30. rename 失败保留旧正式文件。
 31. 临时文件异常不破坏正式文件。
 32. next 无法调用通用 `sessions:save`。
-33. legacy 过渡期仍可调用 `sessions:save`。
+33. legacy 过渡期仍可调用 `sessions:save`（**非** recovery latch 时）。
 34. renderer 伪造 `complete` 无效。
-35. 返回 legacy 成功。
-36. 返回 legacy 失败时不循环跳转并显示稳定恢复界面。
+35. 返回 legacy 成功（且不会空 store 覆盖）。
+36. 返回 legacy 失败或**无法安全进入**时不循环跳转并显示稳定恢复界面。
 37. legacy owner-runtime 回归继续通过。
 38. 生产普通路径没有 PAN-01R 测试入口。
 
@@ -589,15 +628,17 @@ R2 不迁移工作台，因此：
 - 七项核心合同落地（结论不变）；角色 display 上限与折叠一致；无「8000→2000」回退
 - **完整状态所有权合同落地**（§8 二十二项）
 - **完整错误恢复矩阵落地**（§13 二十四类）
-- **损坏 sessions 不会被空 store 静默覆盖**（§12.1）
+- **损坏 sessions 不会被空 store 静默覆盖**；**`sessionsRecoveryLatch` 跨 next/legacy 阻断正式写**（§12.1）
+- **损坏单会话无普通删除恢复入口**
+- **`inputText`≤2000 与空值拒绝语义落地**；**附件 token 一次性消费落地**
 - next 窄 API + `chat:event` + main 单飞 + 原子写
-- JSON 兼容；DTO 无敏感字段；附件 token 生效
+- JSON 兼容；DTO 无敏感字段
 - 主动回经典 / 异常回退行为符合 §10.3
-- **Playwright §15.3 主路径与故障路径通过**
-- **返回 legacy 失败不会形成循环**；具备稳定故障/恢复界面
+- **Playwright §15.3 主路径与故障路径通过**（仍 38 项，含本轮扩写）
+- **返回 legacy 失败或无法安全进入不会形成循环**；具备稳定故障/恢复界面
 - **输入草稿与消息持久化结果对用户可辨认**
 - E2E 与 legacy 回归通过；生产默认 legacy；无生产 PAN-01R
-- Codex 再复核通过；Owner 真机验收通过（实现阶段）
+- Codex 最终复核通过；Owner 真机验收通过（实现阶段）
 
 ---
 
@@ -609,8 +650,9 @@ R2 不迁移工作台，因此：
 - 在旧 `app.js` 堆新业务；提前启动 PAN-02
 - **需要自动覆盖、删除或批量修复损坏的真实 sessions**
 - **无法保证整个 sessions 文件损坏时不被空 store 覆盖**
+- **无法在 main 层同时阻断 next 与 legacy 对正式文件的写入**
 - **无法提供稳定故障页或阻止 next/legacy 循环**
-- **测试只能依赖静态字符串而不能验证真实状态**
+- **测试只能依赖静态字符串而不能验证真实状态 / 真实请求计数**
 - E2E 无法验证用户主路径
 
 ---
@@ -618,22 +660,23 @@ R2 不迁移工作台，因此：
 ## 20. 迁移、回滚与发布边界
 
 1. 实现期生产默认 legacy；next 仅门禁进入。
-2. 关键错误可整窗回 legacy（路径 A/B 见 §10.3）。
+2. 关键错误可整窗回 legacy（路径 A/B 见 §10.3）；**整文件损坏时须先保证 legacy 写入已阻断，否则稳定恢复页**（§12.1.2）。
 3. 不删除 legacy chat；不批量迁真实 sessions。
 4. R2 accepted 后是否改生产默认：另行决策。
 5. R2 不自动解锁 PAN-02；仍须 R0 §16；R3 未完成前 PAN-02 继续 blocked。
+6. **清除 `sessionsRecoveryLatch`、修复或替换正式 sessions 文件：须 Owner 另行授权，非 R2 自动路径。**
 
 ---
 
 ## 21. 风险与未决问题（≤3；非实施前阻断合同）
 
-原五项核心未决已全部关闭（见修订记录）。剩余非阻断：
+原核心未决与 `inputText` 上限、token 一次性消费已关闭。剩余：
 
-1. `scenarioHint` 白名单的具体枚举值（R2-A 给出最小集即可，不得借此重开透传）。
-2. 超过 8000 字截断提示的最终用户文案措辞（须有明确提示；用词可微调）。
-3. 附件 token 的具体 TTL 秒数与重试次数上限（须有过期与有限重试；**R2-A 编码前**在 R2-A 规格/实现提交中明确并测试；不得无限重试或借此透传）。
+1. `scenarioHint` 最小白名单具体枚举；
+2. 超过 8000 字截断提示最终措辞；
+3. attachment token 具体 TTL 秒数及原子 rename 有限重试次数。
 
-**无**实施前未关闭的核心合同缺口。
+**明确：** 以上具体值必须在 **R2-A 首个代码提交之前**，通过同分支**独立的合同冻结提交**写明并经 Codex 复核；**未完成该合同冻结提交不得开始 R2-A 编码**；不得在编码过程中临时决定；不得允许任意 scenarioHint、无限 TTL 或无限重试。
 
 ---
 
@@ -642,7 +685,7 @@ R2 不迁移工作台，因此：
 | 项 | 值 |
 |---|---|
 | 本文件 | **v0.1.1-draft** / `specified` / `codex_changes_requested` / `not_started` |
-| 当前唯一等待项 | **Codex 再复核**本 R2 任务包 |
+| 当前唯一等待项 | **Codex 最终复核**本 R2 任务包 |
 | 再复核通过前 | **不得**创建实现分支；**不得**修改源码 |
 | R1 | `accepted`（不变） |
 | R2.5 | `planned` / `deferred` |
@@ -657,4 +700,5 @@ R2 不迁移工作台，因此：
 |---|---|---|
 | 2026-07-21 | v0.1-draft | 初稿；`codex_review_pending`（历史） |
 | 2026-07-21 | v0.1.1-draft | Codex 第一轮有界修订：关闭七项合同（历史结论，本轮不得改写） |
-| 2026-07-21 | **v0.1.1-draft**（第二轮文档补全） | 补全 §8 二十二项状态所有权；§12.1 损坏 sessions 边界；§13 二十四类错误恢复矩阵；§15.3 三十八项 Playwright 清单；强化完成/停止条件。状态仍为 `specified` / `codex_changes_requested` / `not_started`。七项核心合同不变。等待 Codex 再复核 |
+| 2026-07-21 | **v0.1.1-draft**（第二轮文档补全） | 补全 §8/§13/§15.3（历史） |
+| 2026-07-21 | **v0.1.1-draft**（第三轮最小安全闭环） | 冻结 `sessionsRecoveryLatch` 跨 next/legacy 写阻断；损坏单会话无普通删除入口；`inputText`≤2000 拒绝语义；附件 token 一次性消费。扩写 §15.2/§15.3 相关条目（仍 38 项）。七项核心合同与 22/24/38 结构保持。状态仍 `specified` / `codex_changes_requested` / `not_started`。等待 Codex 最终复核 |
