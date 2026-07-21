@@ -53,7 +53,7 @@
 | ToolBroker (P1-05) | `statically_verified` | `src/tool-broker/*`；`l0:external-agent-started`；`npm run test:p1-05`（含 stop IPC）；主动取消 → `execution_canceled` | 停止须完全重启应用后复验；不标记 accepted |
 | External collaboration | `specified` | `digital-me-package/contracts/*`；规格 v0.5 Panorama 冻结章 | Agent Card / Interaction Contract 数据结构已对齐；无用户面协作闭环；Alpha 以本地模拟交付 |
 | Subject home (P1-03) | `runtime_verified` | `src/subject-overview/*`；`src/package-store/read-only.js`；`subject:getOverview`；P1-03 21/21；Codex 复核与 Owner 真实 Electron 验收 | 严格只读聚合与 SubjectOverview v1；不迁移写路径；Panorama 首页将复用只读聚合 |
-| **P1-PANORAMA** | `active` / `three_part_alpha_reframed` / `PAN-01S_family_accepted` / `R0_decision_accepted` / `R1_accepted` / `R2_codex_changes_requested` | 总任务包 v0.4；执行索引 v0.2.19；R0 v0.1.2 **accepted**；R1 **v0.1.3 `accepted`**；R2 任务包 **v0.1.1-draft** | **当前唯一等待项：Codex 再复核 R2 任务包**；复核通过前不得实现；**PAN-02** = `planned` / `blocked` |
+| **P1-PANORAMA** | `active` / `three_part_alpha_reframed` / `PAN-01S_family_accepted` / `R0_decision_accepted` / `R1_accepted` / `R2_codex_changes_requested` | 总任务包 v0.4；执行索引 v0.2.20；R0/R1 **accepted**；R2 **v0.1.1-draft**（七项合同关闭；第二轮补全） | **当前唯一等待项：Codex 再复核 R2**；**PAN-02** = `planned` / `blocked` |
 | **PAN-00** | `accepted` | 验收提交 `bc85a14`；Codex 最终复核通过 | 战略与规格冻结完成（历史，不改写） |
 | **PAN-00R** | `accepted` | 分支 `codex/pan-00r-three-part-alpha-reset`；任务包 v0.1.2；规格 v0.6.1；证据 `07b631d` + `6ae2dca` + `0fcd432`；Codex 最终复核通过；Owner 确认 | **docs/strategy acceptance**：三位一体重构与极简产品原则冻结；**不是**运行能力 `released`；不代表 PAN-02～PAN-06 已实现 |
 | **PAN-01** | `statically_verified` / `owner_product_perception_failed` / `needs_minimal_surface_reset` | 分支 `codex/pan-01-product-panorama-home`；基线 `a40c5f8`；`test:pan-01` / `test:pan-01-owner-runtime` | 工程验证通过；Owner **产品感知**验收未通过（非工程失败）；**不标 accepted**；不回滚；只读聚合与 fail-closed 逻辑保留；表面收口由 PAN-01S 族完成 |
@@ -63,7 +63,7 @@
 | **PAN-01S.2** | **`accepted`（2026-07-20）** | 对话事故收口；baseline `cbde807`；提交链含 `b5997b6` / `acacc6e` / `598e7e9` | 对话历史显示、附件上下文分离、关联文稿正文隔离与恢复；正式独立任务包未入库，以执行索引与 log 为准 |
 | **renderer foundation R0** | **`accepted`（v0.1.2；决策接受）**；implementation = `not_started`；branch = 不存在 | `digitalme_renderer_foundation_R0_decision_and_migration_plan.md` v0.1.2 | 整窗入口；load/ready 失败自动回 legacy；R2=JSON；R2.5 deferred；Playwright E2E；R1 收窄；**不是**代码实现完成 |
 | **renderer foundation R1** | **`accepted`（v0.1.3；baseline `8d7e9b3`）**；implementation = `completed`；branch = `codex/r1-renderer-next-shell` | `digitalme_renderer_foundation_R1_shell_and_entry_switch.md` v0.1.3；Codex + Owner real Electron runtime 6/6（2026-07-21） | 仅 R1 基础能力；next 仍为预览空壳；业务页未迁移；生产默认 legacy；无普通用户 next 入口；**不**等于整个 renderer 重构完成 |
-| **renderer foundation R2** | **`specified` / `codex_changes_requested` / `not_started`**（**v0.1.1-draft**）；branch = **不存在** | `digitalme_renderer_foundation_R2_chat_and_sessions_migration.md` v0.1.1-draft | 七项合同已写入；**Codex 再复核前不得实现** |
+| **renderer foundation R2** | **`specified` / `codex_changes_requested` / `not_started`**（**v0.1.1-draft**）；branch = **不存在** | `digitalme_renderer_foundation_R2_chat_and_sessions_migration.md` v0.1.1-draft | 七项合同关闭；已补全所有权/恢复/E2E；**Codex 再复核前不得实现** |
 | **R2.5 SQLite ADR** | `planned` / **`deferred`** | — | 量化触发 + 独立 ADR + Owner 授权；非 PAN-02 前提；不读真实 sessions 正文 |
 | **PAN-02** | `planned` / **`blocked`** | — | 解锁见 R0 §16；不以 SQLite 为前提；任务包与实现均不得自行启动 |
 

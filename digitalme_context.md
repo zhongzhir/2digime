@@ -4,7 +4,7 @@
 状态：持续更新
 最后更新：2026-07-21
 
-> **当前产品主线（2026-07-21，R2 第一轮有界修订）**：**P1-PANORAMA**。**PAN-01S 族 `accepted`**（baseline `cbde807`）。**R0** = **`accepted`**（v0.1.2）。**R1** = **`accepted`**（任务包 **v0.1.3**；baseline **`8d7e9b3`**）。**R2** = **`specified` / `codex_changes_requested` / `not_started`**（任务包 **v0.1.1-draft**；实现分支**不存在**）。**当前唯一等待项：Codex 再复核 R2 任务包**；复核通过前不得创建 R2 实现分支或改源码。R2.5 = `planned` / `deferred`。PAN-02 = `planned` / `blocked`。生产默认仍为 **legacy**。
+> **当前产品主线（2026-07-21，R2 第二轮文档补全）**：**P1-PANORAMA**。**PAN-01S 族 `accepted`**（baseline `cbde807`）。**R0 / R1** = **`accepted`**。**R2** = **`specified` / `codex_changes_requested` / `not_started`**（任务包 **v0.1.1-draft**；七项核心合同已关闭；已补全状态所有权/错误恢复/E2E 矩阵；实现分支**不存在**）。**当前唯一等待项：Codex 再复核 R2 任务包**；复核通过前不得实现。R2.5 = `planned` / `deferred`。PAN-02 = `planned` / `blocked`。生产默认 **legacy**。
 > **PAN-01** 最终裁定：`statically_verified` / `owner_product_perception_failed` / `needs_minimal_surface_reset`（基线 `a40c5f8`；**不标 accepted**；**不回滚**；表面收口已由 PAN-01S 族完成）。
 >
 > **PAN-01R** 最终裁定：`statically_verified` / `codex_review_passed` / `owner_runtime_verified` / `owner_product_perception_failed` / `retained_as_internal_collaboration_harness`（最终实现 `9dd6fa0`；70/70 + 20/20；**不标 accepted**）。**生产界面必须没有 PAN-01R 入口**（含设置／高级／帮助；仅隔离 test harness；见规格 v0.6.3）。底层授权、取消、审计、adopt/reject、推理环境绑定等保留为内部测试与未来 PAN-04 基础设施。不得自行回到 P1-07 修复或原 P1-08 队列。
@@ -290,7 +290,7 @@ flowchart TB
 | `digitalme_narrative_ai_era_autonomy.md` | 对外/对内叙事（含双线简述） |
 | `digital-me-project-positioning-draft.md` | 定位讨论稿（战略原则含双线） |
 
-**近期工程焦点（2026-07-21 覆盖）**：规格 **v0.6.3** + 决策 **#67～#89**——**R0 / R1 `accepted`**；**R2 v0.1.1-draft = `specified` / `codex_changes_requested` / `not_started`**。**当前唯一等待项：Codex 再复核 R2 任务包。** R2.5 = `planned` / `deferred`；**PAN-02** = `planned` / `blocked`。生产默认 **legacy**。
+**近期工程焦点（2026-07-21 覆盖）**：规格 **v0.6.3** + 决策 **#67～#90**——**R0 / R1 `accepted`**；**R2 v0.1.1-draft = `specified` / `codex_changes_requested` / `not_started`**（七项合同关闭；第二轮补全所有权/恢复/E2E）。**当前唯一等待项：Codex 再复核 R2。** R2.5 = `planned` / `deferred`；**PAN-02** = `planned` / `blocked`。生产默认 **legacy**。
 ## 4. 系统架构共识（草案）
 
 > **部署拓扑补充（2026-07-10）**：本节描述逻辑模块（核心层 / 运行层 / 信任层）。物理部署与百万规模扩容面见 [`digitalme_architecture_edge_sovereign_v0.1.md`](digitalme_architecture_edge_sovereign_v0.1.md)（端主权 Runtime + 云边平台 + 能力层）。决策 #3「本地优先 + 云同步」由此文细化。
@@ -463,7 +463,7 @@ flowchart TB
 
 > **2026-07-16 审计后重排（历史）**：第一阶段不再扩展能力面，切换为“主体可信化与协作感知”。当时以 `digitalme_phase1_subject_upgrade_plan_v0.1.md` 为执行清单；原 v0.3.13 的 L0/审计/CLI 只能视为原型，不视为已达到安全可用。
 > **2026-07-18 覆盖**：当前执行索引改为 `digitalme_panorama_execution_index_v0.1.md`；原升级计划降为 Trusted Beta 硬化依据（决策 #58）。
-> **2026-07-21 R2 第一轮有界修订覆盖（当前）**：**R0 / R1** = `accepted`。**R2** = **`specified` / `codex_changes_requested` / `not_started`**（**v0.1.1-draft**；实现分支不存在）。**当前唯一等待项：Codex 再复核 R2 任务包**；复核通过前不得实现。R2.5 = `planned` / `deferred`。PAN-02 = `planned` / `blocked`。生产默认 **legacy**。
+> **2026-07-21 R2 第二轮文档补全覆盖（当前）**：**R0 / R1** = `accepted`。**R2** = **`specified` / `codex_changes_requested` / `not_started`**（**v0.1.1-draft**；七项合同不变；已补全 §8/§13/§15.3）。**当前唯一等待项：Codex 再复核 R2**。R2.5 = `planned` / `deferred`。PAN-02 = `planned` / `blocked`。生产默认 **legacy**。
 > **2026-07-19 PAN-01S.1 实现覆盖（历史；已被 2026-07-20 acceptance superseded）**：PAN-01S 曾为 `statically_verified` / `owner_changes_requested`；PAN-01S.1 曾为 `statically_verified` / `implemented`（不 accepted）。
 
 1. **工程与 Package 基线冻结**：Git、Alpha 标记、Package hash 快照、能力状态表；
@@ -898,4 +898,5 @@ flowchart TB
 86. **Renderer Foundation R1 spike 有界修复（2026-07-21）**：按 Codex 关闭 ready 竞态、显式 generation、导航单飞、Vite dev / Error Boundary E2E、gitignore/typecheck/精确版本；随后边界小修（真实 render throw、Vite origin、timeout Promise）。任务包曾保持 **v0.1.3** / `implemented` / `spike_partial_verified` / `codex_changes_requested`（历史；已被决策 #87 承接）。
 87. **Renderer Foundation R1 Owner 验收收口（2026-07-21）**：Codex 技术复核通过；Owner real Electron runtime **6/6** 通过。任务包 **v0.1.3** 状态 → **`accepted`**；accepted baseline **`8d7e9b3`**；implementation `completed`。accepted 仅覆盖 R1 基础能力（next 仍为预览空壳；业务页未迁移；生产默认 legacy）。下一任务：**起草并冻结 R2 对话迁移独立任务包**；R2 = `planned` / `not_started`；未授权不得创建实现分支或改源码。R2.5 保持 `planned` / `deferred`；PAN-02 保持 `planned` / `blocked`；R0 与 PAN-01S 族 `accepted` 不变。**已被决策 #88 承接。**
 88. **Renderer Foundation R2 对话迁移任务包起草（2026-07-21）**：新增 `digitalme_renderer_foundation_R2_chat_and_sessions_migration.md`（**v0.1-draft**）。状态曾为：`specified` / `codex_review_pending` / `not_started`（历史）。实现分支**不存在**。**已被决策 #89 修订。**
-89. **Renderer Foundation R2 第一轮有界修订 · 关闭七项合同（2026-07-21）**：任务包 → **v0.1.1-draft**；状态 → `specified` / `codex_changes_requested` / `not_started`。冻结：①角色 display（user 2000 / assistant 8000 / 折叠 1600）；②主动回经典先停、异常回退 main abort；③next 不暴露通用 `sessions:save`，legacy 过渡保留；④next 强制类型化 `chat:event`；⑤窄 `sendChat`，main 组装请求；⑥附件不透明 token；⑦sessions 串行原子写（R2-A）。分支策略：单分支 `codex/r2-chat-sessions-migration`（仅再复核通过且 Owner 授权后创建），A～F 串行独立提交。关联打开：整窗 legacy handoff。实现分支仍**不存在**。**当前唯一等待项：Codex 再复核。** R0 / R1 / PAN-01S 族 `accepted` 不变；R2.5 = `planned` / `deferred`；PAN-02 = `planned` / `blocked`；生产默认 legacy。
+89. **Renderer Foundation R2 第一轮有界修订 · 关闭七项合同（2026-07-21）**：任务包 → **v0.1.1-draft**；状态 → `specified` / `codex_changes_requested` / `not_started`。七项合同冻结（历史过程）。**已被决策 #90 承接为第二轮补全。**
+90. **Renderer Foundation R2 第二轮有界文档补全（2026-07-21）**：在**不改动七项核心合同**前提下，补全状态所有权二十二行、错误恢复二十四类、损坏 sessions 防空覆盖边界、Playwright 三十八项清单，并强化完成/停止条件。版本仍 **v0.1.1-draft**；状态仍 `specified` / `codex_changes_requested` / `not_started`。实现分支**不存在**。**当前唯一等待项：Codex 再复核。** R0 / R1 / PAN-01S 族 `accepted` 不变；R2.5 / PAN-02 不变；生产默认 legacy。

@@ -3,7 +3,7 @@
 版本：v0.1.1-draft
 日期：2026-07-21
 状态：`specified` / `codex_changes_requested` / `not_started`
-性质：**独立实施任务包草案（第一轮有界修订）**；**Codex 再复核通过前不得创建 R2 实现分支或修改源码**；**当前未授权实现**
+性质：**独立实施任务包草案（第二轮有界文档补全）**；七项核心合同已关闭且**不得改动**；本轮仅补全状态所有权、错误恢复与 E2E 矩阵；**Codex 再复核通过前不得创建 R2 实现分支或修改源码**；**当前未授权实现**
 所属主线：`P1-PANORAMA`（三位一体 Alpha）
 前置：Renderer Foundation R0 **`accepted`**（v0.1.2）；Renderer Foundation R1 **`accepted`**（v0.1.3；baseline `8d7e9b3`）
 依据：`digitalme_renderer_foundation_R0_decision_and_migration_plan.md` §14 / §15 / §16；`digitalme_renderer_foundation_R1_shell_and_entry_switch.md`；执行索引；代码基线（只读核对）分支 `codex/r1-renderer-next-shell`
@@ -11,8 +11,9 @@
 
 > **状态语义**
 >
-> - **`specified` / `codex_changes_requested` / `not_started`**：Codex 第一轮复核指出七项合同缺口；本版已关闭；等待 **Codex 再复核**；
+> - **`specified` / `codex_changes_requested` / `not_started`**：第一轮七项核心合同已关闭；第二轮要求补全状态所有权、错误恢复与 Playwright 矩阵后，仍等待 **Codex 再复核**；
 > - **不得**使用 `frozen_for_implementation` / `codex_review_passed` / `implemented` / `accepted`（本轮）；
+> - **七项核心合同结论冻结，不得重新讨论或改写**（见 §7.3 / §9 / §10.3 / §9.5 / §9.6）；
 > - R1 `accepted` 仅覆盖 next 底座与整窗切换；**next 当前仍是预览空壳**；
 > - 生产默认入口仍为 **legacy**；普通用户**没有**进入 next 的生产入口；
 > - R2.5 SQLite 保持 `planned` / `deferred`；PAN-02 保持 `planned` / `blocked`；
@@ -34,7 +35,7 @@
 | R1 | `accepted`（v0.1.3；baseline `8d7e9b3`） |
 | R2.5 | `planned` / `deferred` |
 | PAN-02 | `planned` / `blocked`（见 R0 §16；R2 accepted **不**自动解锁） |
-| 本轮授权 | **仅规格修订**；再复核通过前不得实现 |
+| 本轮授权 | **仅文档补全**；再复核通过前不得实现 |
 
 ---
 
@@ -206,19 +207,43 @@
 
 ---
 
-## 8. 状态所有权表（摘要 + 冻结原则）
+## 8. 状态所有权表（实现级完整表）
 
-| 状态 | 权威 | 谁可改 | 持久化 | renderer |
-|---|---|---|---|---|
-| 会话列表 / activeId / 标题 / 消息 | main | 仅 main（窄命令触发） | JSON 原子写队列 | 仅副本 |
-| displayText | main 落盘权威 | main | 是 | 只读展示 |
-| modelText / attachment 正文 | main | main | modelText 是；正文否 | **不可见** |
-| attachmentSelectionToken | main | main 签发/消费 | 进程内 | 仅持 token |
-| activeRequest | main | main | 进程内 | 只读快照 |
-| chat:event 流 | main | main 发；renderer 不得伪造 complete | 否 | 按序消费 |
-| rendererEntry / latch / stamp | R1 main | main | 见 R1 | 只读 |
+列含义：权威来源｜谁可修改｜是否持久化及位置｜重启如何恢复｜renderer 是否仅副本｜主要竞态/泄漏风险｜错误后恢复。
 
-**原则：** sessions 与请求注册权威在 main；renderer 不直读写文件；流式只写入归属 session/message；renderer 不是第二业务权威。
+| # | 状态 | 权威来源 | 谁可修改 | 持久化 | 重启恢复 | renderer 仅副本？ | 竞态/泄漏风险 | 错误后恢复 |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 会话列表 | main / `sessions.js` 写队列 | 仅 main（窄 IPC 触发） | `workbench-sessions.json` | `listSessions` 读盘 | 是 | 双写、空 store 覆盖 | 见 §13#1/#24；可新建/回经典 |
+| 2 | 当前会话 ID | main `activeId` | 仅 main `setCurrentSession`/create/delete 副作用 | 同上 | 读 `activeId`；无效则 null 或首条策略 | 是 | 请求中切换 | 导航门禁；失败保持原 ID |
+| 3 | 会话标题 | main `session.title` | 仅 main `renameSession` | 同上 | get/list | 是 | 改名与切换竞态 | 回滚 UI；提示失败 |
+| 4 | 消息历史 | main `session.messages` | 仅 main（send/stop/完成/失败路径） | 同上 | `getSession`→DTO | 是 | 流式未落盘当已存 | 完成/停止后再写；失败明示 |
+| 5 | displayText | main 落盘字段 | 仅 main | 消息内；user≤2000；assistant≤8000 | normalize 后进 DTO | 是（只读展示） | 误渲 modelText | 安全占位；不静默变短 |
+| 6 | model context / modelText | main | 仅 main | modelText 持久化；当轮正文否 | 仅 main 内部用于模型 | **不可见** | 泄漏到 DTO/UI | DTO 剥离；审计脱敏 |
+| 7 | attachmentRefs | main | 仅 main 发送路径 | 消息内（无正文） | 随消息 | 是（仅安全字段） | 带 path | 剥离 path |
+| 8 | 附件选择 token 及正文 | main 进程内 vault | 仅 main 签发/消费/清理 | token 进程内；正文内存不当盘 | 重启 token 失效；须重选 | 仅持 token | 跨窗跨会话复用、正文泄漏 | token 失败可重选；清理正文 |
+| 9 | 当前关联文稿 | main session.artifacts | 仅 main clear/open 路径 | JSON | get→卡摘要 | 是（无正文） | 请求中改关联 | 请求中禁止；保存失败提示 |
+| 10 | 当前请求注册表 | main `activeRequest` | 仅 main | 进程内 | 不恢复为进行中 | 只读快照 | 双请求、僵尸写 | stop/fail 清除；迟到丢弃 |
+| 11 | requestId | main 生成 | 仅 main | 审计可记；非业务盘 | 否 | 是 | 伪造 complete | 校验后丢弃 |
+| 12 | originSessionId | `activeRequest` | 仅 main 在 send 绑定 | 进程内 | 否 | 是 | 切页改归属 | 增量只写归属会话 |
+| 13 | assistantMessageId / 流式目标 | `activeRequest` | 仅 main | 完成后随消息 | 否 | 是 | 写错气泡 | 三元组校验 |
+| 14 | sequence / 已处理序号 | main 发；renderer 记本地 cursor | main 单调递增 sequence | 否 | 否 | renderer 仅本地 cursor | 乱序/重复 | 丢弃并审计 |
+| 15 | 停止状态 | main `status` + abort | `stopChat` / 异常 abort | 否 | 否 | 是 | 停止失败仍导航 | 保护至 main 确认结束 |
+| 16 | 会话导航保护 | main 依 activeRequest | main 拒绝窄命令 | 否 | 否 | UI 提示副本 | 绕过 IPC | 统一 main 拒绝 |
+| 17 | sessions 持久化/写队列 | main 串行队列 | 仅 main | 临时文件+原子 rename | 读最后成功正式文件 | 是 | 并发写、rename 失败删旧 | 见 §9.6 / §13#22–24 |
+| 18 | rendererEntry | R1 controller | 仅 main | 偏好可持久；effective 进程内 | 默认 legacy | 是 | 循环切换 | latch + 回 legacy |
+| 19 | fallback latch | R1 controller | 仅 main | 进程内 | 清进程重置 | 是 | 反复进 next | 本进程不再自动 next |
+| 20 | runtime stamp / generation | main | 只读 stamp；generation 仅 main | 否 | getStamp/boundGeneration | 是 | 错代 ready | R1 握手合同 |
+| 21 | 一次性 legacy 导航意图 | main | 仅 main 设置；legacy 消费清除 | 进程内（可短暂） | 重启失效 | next 不可见正文 | 含正文、未清除 | 仅 libraryId/scene；消费即清 |
+| 22 | renderer 输入草稿 | renderer 本地 | renderer（仅草稿） | **默认不**持久到 sessions | 不恢复（除非另授权） | **唯一**非业务权威本地态 | 误当已发送 | 发送失败保留草稿；明示未保存 |
+
+**冻结原则（不变）：**
+
+- sessions 与当前请求权威在 **main**；
+- renderer **不是**第二业务权威；
+- renderer **不**直接读写 sessions 文件；
+- 流式事件只能写入 `originSessionId` 与 `assistantMessageId`；
+- renderer 切页 **不能**改变请求归属；
+- 附件正文、`modelText`、绝对路径 **不**进入 renderer。
 
 ---
 
@@ -395,22 +420,54 @@ R2 不迁移工作台，因此：
 3. schema v2 原样；旧消息只做安全展示适配。
 4. 不批量重写真实历史；实现/测试不读真实 sessions 正文。
 5. Owner 验收用副本或新建测试会话。
-6. 损坏会话不拖垮列表；永久可见「新建对话」「关闭关联」。
+6. 永久可见「新建对话」「关闭关联」。
+
+### 12.1 损坏 sessions 恢复边界（冻结）
+
+1. **单个会话损坏不得拖垮会话列表**。
+2. 损坏会话显示安全占位与「无法打开」状态。
+3. **不向 renderer 返回**损坏正文或解析堆栈。
+4. 用户**始终能**新建干净会话。
+5. R2 **不得**自动重写或删除损坏的真实会话。
+6. 若**整个正式** `workbench-sessions.json` 无法解析：
+   - main **不得**用空 store **静默覆盖**原文件；
+   - **保留损坏原件**（可旁路改名备份，如 `.corrupt-<timestamp>`，但正式路径不得被空文件顶替）；
+   - 进入**只读 / 受限恢复**状态；
+   - 允许创建隔离的测试或恢复会话之前，必须采用**不会覆盖原文件**的明确策略（例如仅内存会话、或另路径临时 store，且用户可见「原对话文件未改写」说明）；
+7. 真实数据修复或迁移仍需 **Owner 另行授权**。
 
 ---
 
-## 13. 错误恢复（含合同二补充）
+## 13. 错误恢复矩阵（逐场景）
 
-| 场景 | 用户看见 | 要点 |
-|---|---|---|
-| 列表/单会话损坏/保存失败 | 明确失败 + 重试/新建/回经典 | 不假装已保存 |
-| 模型失败/流式中断/停止失败 | 可恢复说明；导航保护至 main 确认结束 | 草稿尽量保留 |
-| 主动回经典但有活动请求 | 「请先停止当前回复，再返回经典界面。」 | 不切换 |
-| 自动回退 | 回经典；无僵尸写 | main abort + 丢弃迟到事件 |
-| 关联打开失败 | 留 next 可恢复提示 | 无 DOM 驱动 |
-| 附件 token 无效/过期/跨窗跨会话 | 发送失败说明；可重选 | 无正文泄漏 |
-| API 版本不匹配 / next 崩溃 | 回经典入口 | latch 防循环 |
-| sessions 原子写失败 | 保存失败；保留旧文件 | 见 §9.6 |
+列含义：用户看见｜可重试/入口｜草稿｜消息丢失风险｜脱敏审计｜导航保护解除时机｜新建干净会话｜返回经典｜经典也失败时。
+
+| # | 场景 | 用户看见 | 可重试 | 草稿 | 消息丢失风险 | 脱敏审计 | 导航保护解除 | 新建干净会话 | 返回经典 | 经典也失败 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | sessions 列表读取失败 | 「无法加载对话列表」+ 原因中性说明 | 是：重试按钮 | N/A | 否（未加载） | 读失败码、无正文 | N/A（无活动请求） | 若整文件损坏见 #24；否则可见入口 | 是 | 稳定故障页；禁循环 |
+| 2 | 单个会话损坏 | 列表仍在；该项「无法打开」 | 否打开；可删（不自动删真数据，须确认） | N/A | 该会话内容不可用 | 会话 id、规范化失败类 | N/A | 是 | 是 | 同上 |
+| 3 | 新建会话失败 | 「无法新建对话」 | 是 | 保留当前输入框草稿 | 否 | create 失败码 | 保持至无活动请求 | 再试新建 | 是 | 同上 |
+| 4 | 会话改名失败 | 「无法改名」；标题回滚 | 是 | N/A | 否 | rename 失败 | 有活动请求则仍保护 | 是 | 是 | 同上 |
+| 5 | 会话删除失败 | 「无法删除」；列表回滚 | 是 | N/A | 否 | delete 失败 | 同上 | 是 | 是 | 同上 |
+| 6 | 切换当前会话保存失败 | 「切换前保存失败，仍留在原对话」 | 是：重试保存/切换 | 保留 | 未保存变更有风险 | save/setActive 失败 | 有活动请求仍保护 | 是 | 是 | 同上 |
+| 7 | 用户消息/assistant 占位保存失败 | 「消息未能保存，未开始回复」或「占位保存失败」 | 是：可重发 | **保留** | 未落盘用户消息可能未入历史 | persist 失败阶段 | 未注册请求则无保护；已注册则保持 | 是 | 是 | 同上 |
+| 8 | 流式中增量持久化失败 | 「回复显示可能不完整，正在保存」/失败说明 | 视策略重试写队列 | 保留输入 | 内存增量与盘不一致风险 | 写队列失败、requestId | 保持至请求结束 | 是 | 有活动请求则先停 | 同上 |
+| 9 | 完成落盘失败 | 「回复未成功保存」；UI 标明未保存完整 | 是：重试保存 | 保留 | 已生成文本可能未入盘 | complete persist 失败 | 请求标 failed 后解除 | 是 | 确认结束后可回 | 同上 |
+| 10 | 模型调用失败 | 「暂时无法回复」+ 可重试 | 是：重发 | **保留** | 无完整 assistant 或标失败 | 模型错误类、无密钥 | 请求结束后解除 | 是 | 是 | 同上 |
+| 11 | 流式意外中断 | 「回复中断」；已落盘部分按合同 | 可新请求 | 保留 | 部分 | 中断原因 | 结束后解除 | 是 | 是 | 同上 |
+| 12 | 停止请求失败 | 「正在停止…失败，请再试」；仍禁导航 | 是：再点停止 | 保留 | 低 | stop 失败 | **main 确认结束后**才解除 | 是 | 确认结束后 | 同上 |
+| 13 | 附件 token 过期 | 「附件已失效，请重新选择」 | 是：重选 | 保留文本 | 否 | token expired | N/A | 是 | 是 | 同上 |
+| 14 | 附件 token 跨窗口/跨会话 | 「无法使用该附件，请重新选择」 | 是：重选 | 保留文本 | 否 | token scope 失败 | N/A | 是 | 是 | 同上 |
+| 15 | 关联文稿打开失败 | 「无法打开文稿」；仍留 next | 是 | N/A | 否 | open/handoff 失败 | 有活动请求仍保护 | 是 | 无活动请求时可回 | 同上 |
+| 16 | 关闭关联保存失败 | 「未能关闭关联文稿」；卡状态回滚或明示未保存 | 是 | N/A | 关联状态可能旧 | clear persist 失败 | 同上 | 是 | 是 | 同上 |
+| 17 | preload/API 版本不匹配 | 「界面组件不匹配，请返回经典界面」 | 否业务操作 | 保留尽量 | 否 | apiVersion mismatch | N/A | 若列表可用则可 | **必须**可回 | 稳定故障页 |
+| 18 | next 崩溃或 ready 失败 | 自动回经典或 Error Boundary 提示 | 回经典后重进 harness（非生产） | 尽量交 main | 未保存风险 | crash/ready 超时 | main abort 后清请求 | 回经典后 | **路径 B** | latch+故障页 |
+| 19 | 自动回 legacy 时 abort 失败 | 仍尝试回经典；提示「后台回复可能未完全停止」 | 有限 | — | 僵尸写风险→须丢弃迟到事件 | abort 失败 | 强制标 failed 并丢弃迟到 | 回经典后 | 继续回退 | 故障页禁循环 |
+| 20 | 自动回 legacy 时安全保存失败 | 回经典；提示「有内容可能未保存」 | 回经典后处理 | — | 有 | persist-on-fallback 失败 | 请求已结束/失败 | 是 | 已在回退 | 故障页 |
+| 21 | 返回 legacy 本身失败 | 「无法切换到经典界面」；**不**反复自动跳 | 有限次手动 | 保留 | — | navigate legacy 失败 | 依请求状态 | 是（若仍 next） | 重试；失败则稳定页 | **稳定故障页**；latch 防抖 |
+| 22 | sessions 原子 rename 持续失败 | 「无法保存对话」；保留旧正式文件 | 是：有限重试 | 保留 | 新变更未入盘 | rename 失败次数 | 有活动请求保持 | 是 | 是 | 同上 |
+| 23 | 临时文件残留 | 用户通常无感；异常时「保存异常，对话文件未损坏」 | 清理可后台 | N/A | 正式文件应仍有效 | temp leftover | N/A | 是 | 是 | 同上 |
+| 24 | 重启后正式 sessions 文件损坏 | 受限恢复说明；**原文件未被空 store 覆盖** | 重试读；不可静默清空 | N/A | 原数据保留在损坏件 | parse fail；保留路径 | N/A | 仅隔离策略且不覆盖原件 | 是 | 故障页；禁循环 |
 
 ---
 
@@ -443,11 +500,48 @@ R2 不迁移工作台，因此：
 - 关联文稿经整窗 legacy handoff 打开；活动请求中打开被阻止
 - legacy 兼容（含原 display 相关）继续通过
 
-### 15.3 Playwright 覆盖（含原清单 + 上列关键项）
+### 15.3 Playwright Electron 逐项清单（必须真实覆盖）
 
-默认 legacy；harness 进 next；CRUD；发送/流式/停止；单飞；导航挡；主动回经典挡；自动回退 abort；重启恢复；旧历史；附件/token；关联卡与 handoff；损坏会话；模型失败；禁 query 开 harness。
+1. 默认仍进入 legacy。
+2. 仅合法 harness 进入 next。
+3. query / hash / localStorage **不能**开启 harness。
+4. 新建会话。
+5. 行内改名。
+6. 自定义删除确认。
+7. 发送消息并真实显示流式增量。
+8. 完整回复落盘。
+9. assistant 8000 字展开且刷新后**不**缩成 2000。
+10. 超过 8000 字显示截断提示。
+11. 停止回复。
+12. 连续 Enter、双击、重复 IPC 只产生一个请求。
+13. 请求中切换、新建、删除、改变关联、打开文稿均被阻止。
+14. 请求中主动返回 legacy 被阻止。
+15. 停止完成后可以返回 legacy。
+16. next 崩溃 / ready 失败时 main abort 并自动回 legacy。
+17. 自动回退后迟到 delta 和 complete **不能**写会话。
+18. 重启后恢复最后一次成功持久化版本。
+19. 旧 schema 消息安全降级。
+20. 8 万字附件正文不进入聊天 DOM。
+21. `SessionViewDTO` 不含 `modelText`、路径或正文。
+22. 附件 token 过期、跨窗口、跨会话均失败。
+23. 关联文稿只显示紧凑卡。
+24. 关闭关联文稿立即保存。
+25. 打开关联文稿通过整窗 legacy handoff。
+26. 损坏会话不拖垮列表。
+27. 整个 sessions 文件损坏时**不被空 store 覆盖**。
+28. 模型失败可恢复且草稿 / 已存消息状态明确可辨。
+29. sessions 连续写顺序正确。
+30. rename 失败保留旧正式文件。
+31. 临时文件异常不破坏正式文件。
+32. next 无法调用通用 `sessions:save`。
+33. legacy 过渡期仍可调用 `sessions:save`。
+34. renderer 伪造 `complete` 无效。
+35. 返回 legacy 成功。
+36. 返回 legacy 失败时不循环跳转并显示稳定恢复界面。
+37. legacy owner-runtime 回归继续通过。
+38. 生产普通路径没有 PAN-01R 测试入口。
 
-时限：单用例 ≤60s；最小套件 ≤10min。禁止静态字符串冒充真操作。
+**时限：** 单用例 ≤60 秒；R2 最小 E2E 套件 ≤10 分钟。必须通过真实用户操作与真实状态变化验证；**禁止**以静态字符串匹配冒充功能验证。
 
 ---
 
@@ -492,10 +586,16 @@ R2 不迁移工作台，因此：
 
 ## 18. 完成条件
 
-- 七项合同落地；角色 display 上限与折叠一致；无「8000→2000」回退
+- 七项核心合同落地（结论不变）；角色 display 上限与折叠一致；无「8000→2000」回退
+- **完整状态所有权合同落地**（§8 二十二项）
+- **完整错误恢复矩阵落地**（§13 二十四类）
+- **损坏 sessions 不会被空 store 静默覆盖**（§12.1）
 - next 窄 API + `chat:event` + main 单飞 + 原子写
 - JSON 兼容；DTO 无敏感字段；附件 token 生效
 - 主动回经典 / 异常回退行为符合 §10.3
+- **Playwright §15.3 主路径与故障路径通过**
+- **返回 legacy 失败不会形成循环**；具备稳定故障/恢复界面
+- **输入草稿与消息持久化结果对用户可辨认**
 - E2E 与 legacy 回归通过；生产默认 legacy；无生产 PAN-01R
 - Codex 再复核通过；Owner 真机验收通过（实现阶段）
 
@@ -506,7 +606,12 @@ R2 不迁移工作台，因此：
 - 读或批量迁移真实 sessions；两 renderer 同时写
 - 附件正文进可见消息；引入 SQLite / 启动 R2.5
 - 扩到「我」/构建/工作台；生产默认改 next
-- 在旧 `app.js` 堆新业务；E2E 无法验证主路径；提前启动 PAN-02
+- 在旧 `app.js` 堆新业务；提前启动 PAN-02
+- **需要自动覆盖、删除或批量修复损坏的真实 sessions**
+- **无法保证整个 sessions 文件损坏时不被空 store 覆盖**
+- **无法提供稳定故障页或阻止 next/legacy 循环**
+- **测试只能依赖静态字符串而不能验证真实状态**
+- E2E 无法验证用户主路径
 
 ---
 
@@ -526,7 +631,7 @@ R2 不迁移工作台，因此：
 
 1. `scenarioHint` 白名单的具体枚举值（R2-A 给出最小集即可，不得借此重开透传）。
 2. 超过 8000 字截断提示的最终用户文案措辞（须有明确提示；用词可微调）。
-3. 附件 token 的具体 TTL 秒数与重试次数上限（须有过期与有限重试；具体数字 R2-A 锁定并写入测试）。
+3. 附件 token 的具体 TTL 秒数与重试次数上限（须有过期与有限重试；**R2-A 编码前**在 R2-A 规格/实现提交中明确并测试；不得无限重试或借此透传）。
 
 **无**实施前未关闭的核心合同缺口。
 
@@ -551,4 +656,5 @@ R2 不迁移工作台，因此：
 | 日期 | 版本 | 说明 |
 |---|---|---|
 | 2026-07-21 | v0.1-draft | 初稿；`codex_review_pending`（历史） |
-| 2026-07-21 | **v0.1.1-draft** | Codex 第一轮有界修订：关闭七项合同——①角色 display 2000/8000+折叠；②主动回经典先停 / 异常回退 main abort；③next 不暴露通用 save，legacy 过渡保留；④next 强制 `chat:event`；⑤窄 sendChat，main 组装请求；⑥附件不透明 token；⑦sessions 串行原子写（R2-A）。分支策略：单分支 `codex/r2-chat-sessions-migration`，A～F 独立提交。关联打开：legacy handoff。状态 → `specified` / `codex_changes_requested` / `not_started`。等待 Codex 再复核 |
+| 2026-07-21 | v0.1.1-draft | Codex 第一轮有界修订：关闭七项合同（历史结论，本轮不得改写） |
+| 2026-07-21 | **v0.1.1-draft**（第二轮文档补全） | 补全 §8 二十二项状态所有权；§12.1 损坏 sessions 边界；§13 二十四类错误恢复矩阵；§15.3 三十八项 Playwright 清单；强化完成/停止条件。状态仍为 `specified` / `codex_changes_requested` / `not_started`。七项核心合同不变。等待 Codex 再复核 |

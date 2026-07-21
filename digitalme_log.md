@@ -5,6 +5,24 @@
 
 ---
 
+## 2026-07-21 Renderer Foundation R2 第二轮有界文档补全
+
+### 做了什么
+
+纯文档：在 **v0.1.1-draft** / `specified` / `codex_changes_requested` / `not_started` 下补全 §8 状态所有权（22 项×7 维）、§12.1 损坏 sessions 边界、§13 错误恢复（24 类）、§15.3 Playwright（38 项），并强化完成/停止条件。**七项核心合同未改。**
+
+同步：context（#90）、执行索引 v0.2.20、能力表、cursor rule、总任务包、R1 调度引用（最小）。
+
+### 明确未做
+
+未改源码/测试/配置/依赖/lockfile；未创建 R2 分支；未启动应用或测试；未读真实 Package/sessions；未开始实现；未 push。
+
+### 下一等待项
+
+**等待 Codex 再复核** R2 任务包。
+
+---
+
 ## 2026-07-21 Renderer Foundation R2 第一轮有界修订
 
 ### 做了什么
