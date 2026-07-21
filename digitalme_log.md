@@ -5,6 +5,22 @@
 
 ---
 
+## 2026-07-21 Codex 有条件通过跟进：DM-Core-01A 双对象澄清与四合同字段核验
+
+### 做了什么
+
+纯文档：区分 **① 旧 DM-Core-01A 开发指令（`superseded`）** 与 **② 提交 `55ae01f`（`retained_for_mapping_review`）**；在第一闭环计划 v0.1.1 写入能力边界与四合同逐字段状态；同步废止说明、架构原则、context 决策 #95、能力表、执行索引、cursor rule。
+
+### 明确未做
+
+未修改 `55ae01f` 实现或任何运行代码；未开始第一闭环编码；未 push。
+
+### 下一任务
+
+仍为：**限定范围的仓库实现映射与第一闭环规格冻结**（仅文档）。
+
+---
+
 ## 2026-07-21 数字主体规划基线重建（文档）
 
 ### 做了什么
@@ -26,7 +42,7 @@ Owner 与 Codex 系统复盘后，将新规划结论写入权威文件（纯文�
 | R3 | paused |
 | PAN-02～06 | paused（相对新主线） |
 | Skill/MCP/Agent/身份并列 7 任务块 | superseded |
-| 旧 DM-Core-01A | superseded / 不得执行 |
+| 旧 DM-Core-01A | superseded（**仅指开发指令**）/ 提交 `55ae01f` = retained_for_mapping_review |
 | 大规模模块化建设路径 | archived as approach |
 
 ### 明确未做

@@ -11,7 +11,7 @@
 > **当前最高架构原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)  
 > **当前唯一执行计划**：[`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)  
 > **下一项**：限定范围的仓库实现映射与第一闭环规格冻结（**仅文档**）。  
-> **R2**：`retained as infrastructure`（停止作为当前验收主线）。**R3**：`paused`（不是下一步）。**旧 DM-Core-01A**：`superseded` / 不得执行。  
+> **R2**：`retained as infrastructure`（停止作为当前验收主线）。**R3**：`paused`（不是下一步）。**旧 DM-Core-01A 开发指令**：`superseded`。提交 **`55ae01f`**：`retained_for_mapping_review`。
 > 下文保留 P1-PANORAMA / Renderer Foundation 的历史状态事实，供查阅；冲突时以新权威文件为准。
 
 > **v0.2.24 修订（2026-07-21，R2 实现收口 · 历史）**：R2 = `implementation_completed` / awaiting review（不得 `accepted` 作为主线门槛）。已被 v0.2.25 降级。
@@ -33,7 +33,8 @@
 | R3 | **`paused`** |
 | R2.5 | `planned` / `deferred` |
 | PAN-02～PAN-06 | 相对新主线 **`paused`**（历史 `planned`/`blocked` 记录保留） |
-| 旧 DM-Core-01A | **`superseded` / 不得执行** |
+| 旧 DM-Core-01A 开发指令 | **`superseded`** |
+| 提交 `55ae01f`（act-behalf） | **`retained_for_mapping_review`** |
 | **当前唯一任务** | **限定范围的仓库实现映射与第一闭环规格冻结**（文档；见第一闭环计划） |
 
 ---
@@ -207,4 +208,4 @@ statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_fo
 3. 恢复 backlog 须先写最小阻断说明，不可直接扩 scope。
 4. 更新本索引时同步 `digitalme_capability_status_v0.1.md` 与 `digitalme_log.md`。
 5. PAN-00 已于 `bc85a14` 标记 `accepted`（历史）。PAN-01 与 PAN-01R 按 PAN-00R 裁定归档，均**不得标 `accepted`**、不得回滚、不得删除证据。PAN-00R 已 `accepted`（`07b631d` + `6ae2dca` + `0fcd432`；docs/strategy acceptance，不是运行能力 released）。**PAN-01S / PAN-01S.1 / PAN-01S.2 已于 2026-07-20 `accepted`**（Owner real Electron runtime；baseline `cbde807`）。**R1 已于 2026-07-21 `accepted`**（baseline `8d7e9b3`）。
-6. **本文件角色（v0.2.25）**：历史状态表；**当前执行计划**见 `digitalme_first_vertical_loop_sprint_plan_v0.1.md`。R2 **retained as infrastructure**；R3 **`paused`**；不得继续把「Codex 复核 R2 / 开始 R3」写成项目下一步。旧 DM-Core-01A **不得执行**。
+6. **本文件角色（v0.2.25）**：历史状态表；**当前执行计划**见 `digitalme_first_vertical_loop_sprint_plan_v0.1.md`。R2 **retained as infrastructure**；R3 **`paused`**；不得继续把「Codex 复核 R2 / 开始 R3」写成项目下一步。**旧 DM-Core-01A 开发指令**已 `superseded`；提交 **`55ae01f`** 为 `retained_for_mapping_review`（不得笼统写成「实现不存在」）。

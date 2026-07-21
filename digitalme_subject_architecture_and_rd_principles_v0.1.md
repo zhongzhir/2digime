@@ -1,6 +1,6 @@
 # Digital Me 数字主体架构与研发原则
 
-版本：v0.1.0  
+版本：v0.1.1  
 日期：2026-07-21  
 状态：`active` / **当前最高架构与研发指导**  
 权威关系：战略产品定义与研发治理以本文 + [`digitalme_context.md`](digitalme_context.md) 为准；**当前执行排期**以 [`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md) 为准。历史 P1-PANORAMA / Renderer Foundation 索引降为基础设施与历史排期记录。
@@ -180,7 +180,8 @@ Subject Kernel
 | R2.5 / SQLite | `planned` / `deferred`；非当前主线 |
 | PAN-02～PAN-06 | **`paused` / `blocked` 相对新主线**；历史索引保留 |
 | 旧「Skill/MCP/Agent/身份并列 7 任务块」 | **`superseded`** |
-| 旧 DM-Core-01A「代表我完成任务」开发指令 | **`superseded` / 不得执行**（仓库中已有探索代码视为未授权产品闭环，不得继续扩展为正式主线实现） |
+| **旧 DM-Core-01A 开发指令** | **`superseded`**（不得再按该指令扩展；见 `digitalme_dm_core_01a_superseded_notice_v0.1.md`） |
+| **提交 `55ae01f`（act-behalf）** | **`retained_for_mapping_review`** / `experimental_infrastructure`（已存在实现；**不是**第一闭环完成态；本次不得改代码） |
 | P1-PANORAMA 执行索引 | **历史执行记录 + 基础设施状态表**；**不再声称「当前产品主线」** |
 
 细则与合同映射见 [`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)。
@@ -192,3 +193,4 @@ Subject Kernel
 | 版本 | 日期 | 说明 |
 |------|------|------|
 | v0.1.0 | 2026-07-21 | 规划基线重建：写入最高定义、五段循环、能力/身份/验收/治理；废止旧并列任务与 DM-Core-01A 执行指令 |
+| v0.1.1 | 2026-07-21 | 澄清：旧指令 `superseded` ≠ 否认提交 `55ae01f`；实现为 `retained_for_mapping_review` |

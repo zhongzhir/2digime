@@ -5,7 +5,7 @@
 依据：`digitalme_subject_architecture_and_rd_principles_v0.1.md`（**当前最高架构原则**）、`digitalme_first_vertical_loop_sprint_plan_v0.1.md`（**当前执行计划**）、历史审计与 P1-PANORAMA / PAN 任务包、代码静态核查
 维护规则：每项只允许一个工程状态；不得仅凭文档声明标记 `statically_verified` / `runtime_verified` / `released` / `accepted`。
 
-> **2026-07-21 规划基线重建**：本表记录工程证据，**不是**当前执行计划。排期与下一步以第一纵向闭环计划为准。P1-PANORAMA / R2 验收队列已降级；R3 `paused`；旧 DM-Core-01A `superseded`。
+> **2026-07-21 规划基线重建**：本表记录工程证据，**不是**当前执行计划。排期与下一步以第一纵向闭环计划为准。P1-PANORAMA / R2 验收队列已降级；R3 `paused`；**旧 DM-Core-01A 开发指令** `superseded`；提交 **`55ae01f`** = `retained_for_mapping_review`。
 
 ## 工程状态枚举
 
@@ -69,7 +69,8 @@
 | **renderer foundation R3** | **`paused`** | — | **不是**下一步；未经新授权不得启动页面迁移 |
 | **R2.5 SQLite ADR** | `planned` / **`deferred`** | — | 量化触发 + 独立 ADR + Owner 授权；非第一闭环前提 |
 | **PAN-02** | **`paused`**（相对新主线；历史曾 `planned`/`blocked`） | — | 不得按旧解锁条件自行启动；见第一纵向闭环计划 |
-| **旧 DM-Core-01A** | **`superseded` / 不得执行** | 分支 `codex/dm-core-01a-act-behalf` 探索代码 | 不得继续扩展为正式产品主线；可作映射候选 |
+| **旧 DM-Core-01A 开发指令** | **`superseded`** | 见 `digitalme_dm_core_01a_superseded_notice_v0.1.md` | 不得再按该指令扩展 |
+| **提交 `55ae01f`（act-behalf）** | **`retained_for_mapping_review`** / `experimental_infrastructure` | `digitalme-app/src/act-behalf/*`；commit `55ae01f` | 已存在实现；非第一闭环完成；本次不改代码；映射后再裁定 |
 | **第一纵向闭环** | **`active` / 规格冻结前** | `digitalme_first_vertical_loop_sprint_plan_v0.1.md` | **当前唯一任务**：限定范围的仓库实现映射与第一闭环规格冻结（仅文档） |
 
 ## P1-07 冻结说明（与任务包 / 执行索引 / log 一致）

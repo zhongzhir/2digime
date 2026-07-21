@@ -10,7 +10,7 @@
 > **2026-07-21 规划基线重建（强制）**：本文**不再**作为当前执行总任务。  
 > **当前最高架构原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)  
 > **当前唯一执行计划**：[`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)  
-> 文内「当前唯一等待项 / 当前唯一任务」指向 R0/R2 等处均为**历史快照**；R2 = retained as infrastructure；R3 = `paused`；旧 DM-Core-01A = `superseded`。
+> 文内「当前唯一等待项 / 当前唯一任务」指向 R0/R2 等处均为**历史快照**；R2 = retained as infrastructure；R3 = `paused`；**旧 DM-Core-01A 开发指令** = `superseded`；提交 **`55ae01f`** = `retained_for_mapping_review`。
 
 > **v0.4 修订（2026-07-19，PAN-00R · 历史）**：以「第一阶段三位一体 Alpha」（理解我 × 武装我 × 连接世界）取代「在首页完整展示产品全貌」的旧理解；冻结极简产品原则与 AI 使用主体信息新原则；记录 PAN-01 / PAN-01R 正式裁定；重排 PAN 执行队列。v0.3.2 及更早的「产品全貌首页 / 10～15 分钟看完所有产品构造」相关要求已历史化，见 §15 历史记录。
 
