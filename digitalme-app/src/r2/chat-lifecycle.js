@@ -388,66 +388,93 @@ function createR2ChatLifecycle(deps) {
       };
     }
 
-    // Build model context from sessions authority
-    let pkg = null;
-    try {
-      pkg = typeof loadPackageForChat === "function" ? loadPackageForChat() : null;
-    } catch {
-      pkg = null;
-    }
+    // Return immediately so renderer can arm sequence cursor; stream in background.
+    void runModelAndFinish({
+      sender,
+      requestId,
+      sessionId,
+      assistantMessageId,
+      abortController,
+      token,
+      selection,
+      hintValue: hint.value,
+      cfg,
+      useFake,
+    });
 
-    let system = buildSystemPrompt(pkg);
-    system +=
-      "\n\n---\n\n## 产出方式（必须遵守）\n\n" +
-      "1）普通问答、解释、澄清、追问：把完整回答写在对话里。\n" +
-      "2）若用户附上了材料正文，必须基于材料作答。\n" +
-      "3）禁止声称「已保存到某目录 / 已写入文件」。";
+    return {
+      ok: true,
+      accepted: true,
+      requestId,
+      sessionId,
+      assistantMessageId,
+    };
+  }
 
-    const strategy = SCENARIO_STRATEGY[hint.value];
-    if (strategy) {
-      system += "\n\n---\n\n## 当前请求策略\n\n" + strategy;
-    }
-
-    if (selection && selection.length) {
-      const bodies = selection
-        .filter((a) => a && a.ok !== false && a.text)
-        .map((a) => "### " + a.name + "\n" + String(a.text).slice(0, 40000));
-      if (bodies.length) {
-        system +=
-          "\n\n---\n\n## 用户本轮附带的材料（正文已提取，请直接使用）\n\n" +
-          bodies.join("\n\n").slice(0, 80000);
-      }
-    }
-
-    const fresh = sessions.getSession(userData(), sessionId);
-    const historyMsgs = (fresh && fresh.messages) || [];
-    // Exclude the empty assistant placeholder from model history
-    const forModel = historyMsgs.filter((m) => m.id !== assistantMessageId);
-    const modelHistory = chatMessages.toModelGatewayHistory(forModel);
-
-    const dir = (cfg && cfg.packageDir) || defaultPackageDir;
-    const lastUser = [...modelHistory].reverse().find((m) => m.role === "user");
-    if (lastUser && lastUser.content && retrieval) {
-      try {
-        const result = retrieval.retrieve(dir, lastUser.content);
-        const ctx = retrieval.renderContext(result);
-        if (ctx) system += "\n\n---\n\n" + ctx;
-      } catch {
-        /* ignore */
-      }
-    }
+  async function runModelAndFinish(ctx) {
+    const {
+      sender,
+      requestId,
+      sessionId,
+      assistantMessageId,
+      abortController,
+      token,
+      selection,
+      hintValue,
+      cfg,
+      useFake,
+    } = ctx;
 
     let reply = "";
-    let streamMessages = [{ role: "system", content: system }, ...modelHistory];
-
     try {
-      emitChatEvent(sender, {
-        type: "delta",
-        requestId,
-        sessionId,
-        messageId: assistantMessageId,
-        textDelta: "",
-      });
+      let pkg = null;
+      try {
+        pkg = typeof loadPackageForChat === "function" ? loadPackageForChat() : null;
+      } catch {
+        pkg = null;
+      }
+
+      let system = buildSystemPrompt(pkg);
+      system +=
+        "\n\n---\n\n## 产出方式（必须遵守）\n\n" +
+        "1）普通问答、解释、澄清、追问：把完整回答写在对话里。\n" +
+        "2）若用户附上了材料正文，必须基于材料作答。\n" +
+        "3）禁止声称「已保存到某目录 / 已写入文件」。";
+
+      const strategy = SCENARIO_STRATEGY[hintValue];
+      if (strategy) {
+        system += "\n\n---\n\n## 当前请求策略\n\n" + strategy;
+      }
+
+      if (selection && selection.length) {
+        const bodies = selection
+          .filter((a) => a && a.ok !== false && a.text)
+          .map((a) => "### " + a.name + "\n" + String(a.text).slice(0, 40000));
+        if (bodies.length) {
+          system +=
+            "\n\n---\n\n## 用户本轮附带的材料（正文已提取，请直接使用）\n\n" +
+            bodies.join("\n\n").slice(0, 80000);
+        }
+      }
+
+      const fresh = sessions.getSession(userData(), sessionId);
+      const historyMsgs = (fresh && fresh.messages) || [];
+      const forModel = historyMsgs.filter((m) => m.id !== assistantMessageId);
+      const modelHistory = chatMessages.toModelGatewayHistory(forModel);
+
+      const dir = (cfg && cfg.packageDir) || defaultPackageDir;
+      const lastUser = [...modelHistory].reverse().find((m) => m.role === "user");
+      if (lastUser && lastUser.content && retrieval) {
+        try {
+          const result = retrieval.retrieve(dir, lastUser.content);
+          const ctxR = retrieval.renderContext(result);
+          if (ctxR) system += "\n\n---\n\n" + ctxR;
+        } catch {
+          /* ignore */
+        }
+      }
+
+      let streamMessages = [{ role: "system", content: system }, ...modelHistory];
 
       if (useFake) {
         reply = await fakeModelStream((delta) => {
@@ -528,18 +555,20 @@ function createR2ChatLifecycle(deps) {
       const displayText = chatMessages.clampDisplayText(cleaned, "assistant");
       const modelText = chatMessages.truncateMarked(cleaned, chatMessages.MODEL_TEXT_MAX).text;
 
-      await sessions.updateStore(userData(), (store) => {
-        const s = store.sessions.find((x) => x.id === sessionId);
-        if (!s) return null;
-        const msg = (s.messages || []).find((m) => m.id === assistantMessageId);
-        if (msg) {
-          msg.displayText = displayText;
-          msg.modelText = modelText;
-          msg.content = modelText;
-        }
-        s.updatedAt = new Date().toISOString();
-        return s;
-      });
+      if (!sessions.isRecoveryLatched()) {
+        await sessions.updateStore(userData(), (store) => {
+          const s = store.sessions.find((x) => x.id === sessionId);
+          if (!s) return null;
+          const msg = (s.messages || []).find((m) => m.id === assistantMessageId);
+          if (msg) {
+            msg.displayText = displayText;
+            msg.modelText = modelText;
+            msg.content = modelText;
+          }
+          s.updatedAt = new Date().toISOString();
+          return s;
+        });
+      }
 
       activeRequest.setStatus(requestId, "complete");
       emitChatEvent(sender, {
@@ -549,14 +578,6 @@ function createR2ChatLifecycle(deps) {
         messageId: assistantMessageId,
         displayText,
       });
-
-      return {
-        ok: true,
-        requestId,
-        sessionId,
-        assistantMessageId,
-        displayText,
-      };
     } catch (err) {
       const aborted = !!(err && err.aborted);
       const partial = chatMessages.clampDisplayText(
@@ -581,7 +602,7 @@ function createR2ChatLifecycle(deps) {
           });
         }
       } catch {
-        /* ignore persist on failure path */
+        /* ignore */
       }
 
       activeRequest.setStatus(requestId, aborted ? "stopped" : "failed");
@@ -593,25 +614,6 @@ function createR2ChatLifecycle(deps) {
         displayText: partial,
         message: aborted ? "已停止" : err && err.message ? err.message : "暂时没办成，请稍后再试。",
       });
-
-      if (aborted) {
-        return {
-          ok: true,
-          stopped: true,
-          requestId,
-          sessionId,
-          assistantMessageId,
-          displayText: partial,
-        };
-      }
-      return {
-        ok: false,
-        code: "model_failed",
-        message: err && err.message ? err.message : "暂时没办成，请稍后再试。",
-        requestId,
-        sessionId,
-        assistantMessageId,
-      };
     } finally {
       if (token) attachmentTokens.clear(token);
       activeRequest.clear(requestId);

@@ -6,6 +6,7 @@
   --line: #d5dce0;
   --accent: #2f5d50;
   --surface: #ffffff;
+  --danger: #8b3a3a;
   font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
@@ -32,15 +33,29 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem 1.5rem;
+  padding: 0.75rem 1.25rem;
   border-bottom: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.72);
+  gap: 1rem;
 }
 
 .brand {
-  font-size: 1.25rem;
+  font-size: 1.15rem;
   font-weight: 650;
   letter-spacing: 0.02em;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.meta-inline {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: var(--muted);
 }
 
 .status-tag {
@@ -50,61 +65,299 @@ body {
   padding: 0.2rem 0.55rem;
 }
 
-.shell-main {
-  width: min(40rem, calc(100% - 2rem));
-  margin: 3rem auto;
-  padding: 1.5rem;
+.shell-error {
+  padding: 2rem;
+}
+
+.top-msg,
+.message {
+  margin: 0.5rem 1.25rem;
+  color: var(--muted);
+}
+
+.chat-root {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 16rem 1fr;
+  min-height: 0;
+}
+
+.session-sidebar {
+  border-right: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.55);
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 3.5rem);
+}
+
+.sidebar-toolbar {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.sidebar-toolbar button,
+.composer-actions button,
+.artifact-card-actions button,
+.modal-actions button,
+.shell-header button {
   background: var(--surface);
   border: 1px solid var(--line);
-}
-
-h1 {
-  margin: 0 0 0.5rem;
-  font-size: 1.6rem;
-  font-weight: 600;
-}
-
-.lead {
-  margin: 0 0 1.25rem;
-  color: var(--muted);
-  line-height: 1.5;
-}
-
-.meta {
-  margin: 0 0 1.25rem;
-  display: grid;
-  gap: 0.75rem;
-}
-
-.meta div {
-  display: grid;
-  grid-template-columns: 6rem 1fr;
-  gap: 0.5rem;
-}
-
-dt {
-  color: var(--muted);
-}
-
-dd {
-  margin: 0;
-  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
-}
-
-button {
-  appearance: none;
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: #fff;
-  padding: 0.55rem 0.9rem;
-  font: inherit;
+  color: var(--ink);
+  padding: 0.4rem 0.75rem;
   cursor: pointer;
 }
 
-.message {
+.sidebar-toolbar button:disabled,
+.composer-actions button:disabled,
+.artifact-card-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.5rem 0;
+  overflow: auto;
+  flex: 1;
+}
+
+.session-list li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.25rem;
+  padding: 0.35rem 0.5rem;
+  align-items: start;
+}
+
+.session-list li.active {
+  background: rgba(47, 93, 80, 0.08);
+}
+
+.session-title-btn {
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 0.25rem;
+  cursor: pointer;
+  color: inherit;
+  width: 100%;
+}
+
+.session-title {
+  display: block;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.session-preview {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 0.15rem;
+}
+
+.session-menu-wrap {
+  position: relative;
+}
+
+.menu-trigger {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0.2rem 0.4rem;
+}
+
+.session-menu {
+  position: absolute;
+  right: 0;
+  top: 1.4rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  z-index: 5;
+  min-width: 6rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.session-menu button {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 0.45rem 0.7rem;
+  cursor: pointer;
+}
+
+.empty-sessions {
+  padding: 1rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.chat-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: calc(100vh - 3.5rem);
+}
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.chat-header h1 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.banner {
+  margin: 0.5rem 1.25rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--line);
+  background: #fff8e8;
+  font-size: 0.9rem;
+}
+
+.banner.error {
+  background: #f8ecec;
+  border-color: #e2c4c4;
+  color: var(--danger);
+}
+
+.artifact-card {
+  margin: 0.5rem 1.25rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.artifact-label {
+  display: block;
+  font-size: 0.75rem;
   color: var(--muted);
 }
 
-.shell-error {
-  padding: 2rem;
+.truncate-notice {
+  width: 100%;
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.messages {
+  flex: 1;
+  overflow: auto;
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.msg {
+  max-width: 46rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.msg-user {
+  align-self: flex-end;
+  background: rgba(47, 93, 80, 0.06);
+}
+
+.msg-role {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+
+.msg-body {
+  white-space: pre-wrap;
+  line-height: 1.5;
+  font-size: 0.95rem;
+}
+
+.msg-refs {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.linkish {
+  margin-top: 0.4rem;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.85rem;
+}
+
+.composer {
+  border-top: 1px solid var(--line);
+  padding: 0.85rem 1.25rem 1.1rem;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.composer textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--line);
+  padding: 0.6rem 0.7rem;
+  font: inherit;
+  background: var(--surface);
+}
+
+.composer-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  justify-content: flex-end;
+}
+
+.pending-attach {
+  margin: 0 1.25rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 24, 28, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 1.25rem;
+  width: min(22rem, calc(100% - 2rem));
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
 }
