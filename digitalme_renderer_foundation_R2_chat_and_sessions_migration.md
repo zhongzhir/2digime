@@ -1,21 +1,22 @@
 # Renderer Foundation R2：对话与会话迁移
 
-版本：v0.1-draft
+版本：v0.1.1-draft
 日期：2026-07-21
-状态：`specified` / `codex_review_pending` / `not_started`
-性质：**独立实施任务包草案**；**Codex / Owner 复核通过前不得创建 R2 实现分支或修改源码**；本轮只起草任务包，**不授权实现**
+状态：`specified` / `codex_changes_requested` / `not_started`
+性质：**独立实施任务包草案（第一轮有界修订）**；**Codex 再复核通过前不得创建 R2 实现分支或修改源码**；**当前未授权实现**
 所属主线：`P1-PANORAMA`（三位一体 Alpha）
 前置：Renderer Foundation R0 **`accepted`**（v0.1.2）；Renderer Foundation R1 **`accepted`**（v0.1.3；baseline `8d7e9b3`）
-依据：`digitalme_renderer_foundation_R0_decision_and_migration_plan.md` §14 / §15 / §16；`digitalme_renderer_foundation_R1_shell_and_entry_switch.md`；执行索引 v0.2.17+；代码基线（只读核对）`373fef9` 所在分支 `codex/r1-renderer-next-shell`
-实现分支：**不存在**（建议名待复核后决定，例如 `codex/r2-chat-sessions-migration`；**当前禁止创建**）
+依据：`digitalme_renderer_foundation_R0_decision_and_migration_plan.md` §14 / §15 / §16；`digitalme_renderer_foundation_R1_shell_and_entry_switch.md`；执行索引；代码基线（只读核对）分支 `codex/r1-renderer-next-shell`
+实现分支：**不存在**（冻结名：`codex/r2-chat-sessions-migration`；**仅在 Codex 再复核通过且 Owner 授权后**、从 R2 规格接受提交创建；**当前禁止创建**）
 
 > **状态语义**
 >
-> - **`specified` / `codex_review_pending` / `not_started`**：任务包已起草，等待 Codex 复核；**尚未** `frozen_for_implementation`；**尚未**获得 Owner 实现授权；
+> - **`specified` / `codex_changes_requested` / `not_started`**：Codex 第一轮复核指出七项合同缺口；本版已关闭；等待 **Codex 再复核**；
+> - **不得**使用 `frozen_for_implementation` / `codex_review_passed` / `implemented` / `accepted`（本轮）；
 > - R1 `accepted` 仅覆盖 next 底座与整窗切换；**next 当前仍是预览空壳**；
 > - 生产默认入口仍为 **legacy**；普通用户**没有**进入 next 的生产入口；
 > - R2.5 SQLite 保持 `planned` / `deferred`；PAN-02 保持 `planned` / `blocked`；
-> - **不得**因本草案改写 R0 / R1 / PAN-01S 族已有 `accepted` 记录；
+> - **不得**因本修订改写 R0 / R1 / PAN-01S 族已有 `accepted` 记录；
 > - 本文件描述的 API / 门禁 / UI **目标态**与现有代码并存关系见 §3；**不得假装目标 API 已实现**。
 
 角色：Owner（验收）＋ Codex（规格复核）＋ Cursor（实现；**仅在授权后**）
@@ -26,14 +27,14 @@
 
 | 项 | 当前值 |
 |---|---|
-| 任务包版本 | **v0.1-draft** |
-| 工程状态 | `specified` / `codex_review_pending` / `not_started` |
-| R2 实现分支 | **不存在** |
+| 任务包版本 | **v0.1.1-draft** |
+| 工程状态 | `specified` / `codex_changes_requested` / `not_started` |
+| R2 实现分支 | **不存在**（冻结名见文首；当前禁止创建） |
 | 生产默认入口 | **legacy** |
 | R1 | `accepted`（v0.1.3；baseline `8d7e9b3`） |
 | R2.5 | `planned` / `deferred` |
 | PAN-02 | `planned` / `blocked`（见 R0 §16；R2 accepted **不**自动解锁） |
-| 本轮授权 | **仅起草**；复核通过前不得实现 |
+| 本轮授权 | **仅规格修订**；再复核通过前不得实现 |
 
 ---
 
@@ -43,378 +44,381 @@
 
 ---
 
-## 3. 当前代码事实（只读核对 · 2026-07-21 · HEAD `373fef9`）
-
-以下为**现状事实**，不是 R2 完成声明。实现时以源码为准；任务包合同不得凭印象改名。
+## 3. 当前代码事实（只读核对 · 现状，非完成声明）
 
 ### 3.1 存储
 
 | 项 | 事实 |
 |---|---|
 | 模块 | `digitalme-app/src/sessions.js` |
-| 路径 | `path.join(userData, "workbench-sessions.json")`（`sessionsPath(userData)`） |
-| Store 默认形状 | `{ version: 1, activeId: null, sessions: [] }` |
-| 导出会话字段（create） | `id`, `title`, `createdAt`, `updatedAt`, `messages`, `attachments`, `artifacts`, `packagePath` |
-| 列表摘要 | `{ activeId, sessions: [{ id, title, updatedAt, createdAt, preview }] }` |
+| 路径 | `path.join(userData, "workbench-sessions.json")` |
+| Store 默认 | `{ version: 1, activeId: null, sessions: [] }` |
 | 导出函数 | `sessionsPath`, `loadStore`, `listSessions`, `getSession`, `createSession`, `saveSession`, `renameSession`, `deleteSession`, `setActive` |
-| 标题上限 | rename：`String(title\|\|"未命名").slice(0, 60)`（与 `session-overflow-menu.js` 的 `SESSION_TITLE_MAX = 60` 对齐） |
-| 消息持久化 | `saveSession` 对每条 message 调用 `toPersistableMessage`；失败则 schema v2 占位 `displayText: "这条历史消息无法显示。"` |
+| 标题上限 | rename：`slice(0, 60)` |
 
-### 3.2 消息模型（`chat-message-model.js`）
+### 3.2 消息模型（现状常量；R2 将按 §7.3 角色化修订）
 
-| 常量 | 值 |
+| 常量（现状） | 值 |
 |---|---|
 | `SCHEMA_VERSION` | `2` |
 | `MODEL_TEXT_MAX` | `4000` |
-| `DISPLAY_TEXT_MAX` | `2000` |
-| `LEGACY_QUESTION_MAX` | `500` |
+| `DISPLAY_TEXT_MAX` | `2000`（**单一常量；R2-A/C 必须改为角色相关策略**） |
 | `FOLD_PREVIEW_CHARS` | `1600` |
 | `FOLD_EXPAND_MAX` | `8000` |
-| `LEGACY_ATTACH_SEP` | `"\n\n---\n以下是我附上的材料正文"` |
 | `SESSION_NAV_BLOCK_MESSAGE` | `"请先停止当前回复，再切换对话。"` |
 
-Persistable 字段：`schemaVersion`, `id`, `role`, `displayText`, `modelText`, `attachmentRefs`, `createdAt`。
-`attachmentRefs`：`{ id, name }`，可选 `type`（≤80）、`size`；**不含 path / 正文**。
-关联文稿卡：`chat-artifact-link.js`（`buildLinkCardState` / `applyLinkCardToDom`）；卡状态**不含 content**。
+### 3.3 现有 IPC（现状）
 
-### 3.3 现有 IPC / preload（可复用语义）
-
-| IPC | preload（`window.digitalMe`） | 备注 |
+| IPC | preload | 备注 |
 |---|---|---|
-| `sessions:list` | `listSessions` | 保留语义 |
-| `sessions:get` | `getSession` | 保留语义 |
-| `sessions:create` | `createSession` | 保留语义；main 可注入 `packagePath` |
-| `sessions:save` | `saveSession` | 保留语义；R2 宜收窄为受控保存 |
-| `sessions:rename` | `renameSession` | `{ id, title }` |
-| `sessions:delete` | `deleteSession` | 保留语义 |
-| `sessions:setActive` | `setActiveSession` | 保留语义 |
-| `chat:send` | `sendChat` | payload：`{ pkg, history, requestId, attachmentContext, scenarioHint }` |
+| `sessions:list/get/create/save/rename/delete/setActive` | 对应方法 | `sessions:save` 现状可透传 session 对象 |
+| `chat:send` | `sendChat` | payload 含 `pkg`, `history`, `requestId`, `attachmentContext`, `scenarioHint` |
 | `chat:stop` | `stopChat` | `{ requestId }` |
-| `chat:progress` | `onChatProgress` | main→renderer；含 `requestId` 与 phase |
-| `chat:pickAttachments` | `pickAttachments` | 选文件；正文当轮提取 |
-| `library:importArtifact` 等 | `importArtifactToLibrary` 等 | 关联文稿相关；R2 仅窄化聊天路径所需 |
+| `chat:progress` | `onChatProgress` | legacy 通道；**next 改用 §9.2 `chat:event`** |
+| `chat:pickAttachments` | `pickAttachments` | 现状可能回传过多信息；R2 next 见 §9.5 |
 
-`runtime.apiVersion` 当前为 `1`（R1 stamp facade）。R1 harness：`DIGITALME_R1_SPIKE_HARNESS` / `DIGITALME_R1_OWNER_RUNTIME`；`runtime.testRequestNext` 等 **test-only**。
+### 3.4 并发（现状）
 
-### 3.4 并发与导航（现状 vs 目标）
+- Legacy renderer：`activeChatRequest` 单飞 + `sessionNavGuard`。
+- Main：`activeChatAborts` Map；**未见**全应用单飞。
+- R2 目标：main 结构化 `activeRequest` + 全应用单活动聊天请求（§10）。
 
-| 层 | 现状 |
-|---|---|
-| Renderer（legacy `app.js`） | `activeChatRequest = { requestId, originSessionId, originMessageId, bubbleEl }`；已有请求则 `send()` 直接 return；`sessionNavGuard` 挡切换/新建/删除 |
-| Main | `activeChatAborts: Map` 按 `requestId` 管理 AbortController；**未见**全应用单飞拒绝第二路 `chat:send` |
-| R2 目标 | **main 结构化 `activeRequest` + 全应用单活动聊天请求**（见 §10）；不得继续依赖「仅 renderer 单飞」 |
+### 3.5 `renderer-next`
 
-### 3.5 `renderer-next` 现状
-
-仅空壳：`AppShell.tsx`（stamp、effectiveEntry、ready、「返回经典界面」、Error Boundary、能力标签「预览」）。**无**会话列表、聊天、路由业务页。
-
-### 3.6 已知技术债（R2 必须显式处理或记录）
-
-1. Assistant 持久化经 `clampDisplayText` 上限 **2000**，与折叠展开上限 **8000** 不一致（执行索引 backlog）。
-2. Legacy 流式预览截断 **1200** 与 `FOLD_PREVIEW_CHARS` **1600** 不一致。
-3. Store `version: 1` 无升级分支；消息 schema 以 `schemaVersion === 2` 为准。
+仅空壳（stamp / ready / 返回经典界面）。无会话与聊天业务。
 
 ---
 
 ## 4. 范围内（必须做）
 
-1. `renderer-next` **会话列表**
-2. **新建会话**
-3. **切换会话**
-4. **行内改名**（不使用原生 `prompt`）
-5. **自定义删除确认**（不使用原生 `confirm`）
-6. 会话右侧 **省略号菜单**（改名 / 删除）
-7. **聊天消息显示**（仅 `displayText`）
-8. **发送消息**
-9. **流式响应**显示
-10. **停止当前回复**
-11. **请求中会话导航保护**
-12. **当前会话恢复**（`activeId`）
-13. **应用重启后的历史恢复**
-14. **关联文稿紧凑卡**
-15. **打开关联文稿**的受控去向（不得在聊天页内联全文）
-16. **关闭关联文稿并立即持久化**
-17. **displayText / modelText / attachmentRefs 分离**
-18. **旧历史安全降级**
-19. **main 权威请求注册与并发门禁**
-20. **类型化 preload session/chat API**
-21. **Playwright Electron 真实 E2E**
-22. **整窗返回 legacy**
-23. **production 默认仍为 legacy**
-24. **hermetic sessions**、隔离 userData、非真实 Package
+1. `renderer-next` 会话列表
+2. 新建会话
+3. 切换会话
+4. 行内改名（无原生 `prompt`）
+5. 自定义删除确认（无原生 `confirm`）
+6. 会话右侧省略号菜单
+7. 聊天消息显示（仅安全 `displayText`）
+8. 发送消息（窄 `sendChat`，§9.2）
+9. 流式响应（`chat:event`，§9.2）
+10. 停止当前回复
+11. 请求中会话导航保护
+12. 当前会话恢复（`activeId`）
+13. 应用重启后历史恢复
+14. 关联文稿紧凑卡
+15. 打开关联文稿的受控去向（§11.1 legacy handoff）
+16. 关闭关联文稿并立即由 main 持久化
+17. displayText / modelText / attachmentRefs 分离（§7.3 角色上限）
+18. 旧历史安全降级
+19. main 权威请求注册与并发门禁
+20. 类型化 preload session/chat API（next **无**通用 save）
+21. Playwright Electron 真实 E2E
+22. 整窗返回 legacy（主动 vs 异常路径，§10.3）
+23. production 默认仍为 legacy
+24. hermetic sessions、隔离 userData、非真实 Package
+25. sessions **串行原子写**（§9.6；属 R2-A，不得拖到 R2.5）
+26. 附件 **不透明 selection token**（§9.5）
 
 ---
 
 ## 5. 范围外（明确不做）
 
-- 「我」页面；构建向导；工作台写作/研究/代码；能力页；设置迁移
+- 「我」/ 构建 / 工作台写作研究代码 / 能力 / 设置迁移
 - Package 数据迁移；SQLite；R2.5；PAN-02
 - PAN-01R 生产入口；删除 legacy；iframe / webview
-- 新 renderer 驱动旧隐藏 DOM；用 CSS 隐藏旧页面冒充迁移
-- 大规模 main / preload 无关重写；对现有模型服务无关重构
-- 自动迁移或清理**真实**旧会话；改变生产默认入口为 next
-- 批量重写全部历史；引入跨会话聊天并发（另开任务）
+- 新 renderer 驱动旧隐藏 DOM；CSS 隐藏旧页冒充迁移
+- 在 legacy `app.js` 继续堆新业务冒充迁移
+- 大规模无关 main/preload/模型服务重构
+- 自动迁移或清理真实旧会话；改变生产默认入口为 next
+- 跨会话聊天并发；第二套 sessions 文件
 
 ---
 
 ## 6. 用户主路径
 
 ```text
-默认打开 → legacy 经典界面正常
-→（仅 harness / Owner / E2E 门禁）整窗进入 next 对话页
-→ 看到会话列表 + 当前聊天（或空状态 +「新对话」）
-→ 新建 / 切换 / 行内改名 / 省略号删除（自定义确认）
-→ 输入并发送 → 流式显示回复 → 可停止
-→ 请求中：禁止新建/切换/删除/改关联；提示先停止
-→ 关联文稿仅紧凑卡；可打开受控去向；可关闭并立即保存
-→ 重启后会话与消息仍在（hermetic / 副本验收）
-→ 随时「返回经典界面」；next 失败自动回 legacy
+默认打开 → legacy 正常
+→（harness / Owner / E2E 门禁）整窗进入 next 对话页
+→ 会话列表 + 聊天（或空状态 +「新对话」）
+→ 新建 / 切换 / 行内改名 / 省略号删除
+→ 发送 → chat:event 流式显示 → 可停止
+→ 请求中：禁新建/切换/删除/改关联/打开文稿/主动回经典；提示先停止
+→ 关联文稿仅紧凑卡；打开则 handoff 回 legacy 工作台（无活动请求时）
+→ 重启后会话仍在（hermetic / 副本）
+→ 无活动请求时可「返回经典界面」；崩溃/ready 失败由 main abort 后回 legacy
 ```
 
-用户面文案须严谨、明白、中性；禁止把 `requestId`、P0～P4、schemaVersion、IPC 名等内部词暴露给普通用户。
+用户面禁止暴露 `requestId`、P0～P4、schemaVersion、IPC 名等内部词。
 
 ---
 
 ## 7. 数据模型（字段级合同）
 
-### 7.1 Session（JSON store 内单条）
-
-| 字段 | 类型 / 约束 | 说明 |
-|---|---|---|
-| `id` | string；形如 `s_…` | 稳定主键 |
-| `title` | string；展示与持久化上限 **60** | 空则「未命名」/「新对话」策略与 legacy 对齐 |
-| `messages` | Message[] | 见 §7.2 |
-| `artifacts` | array | 关联文稿引用；聊天页不渲染正文 |
-| `attachments` | array | 会话级附件元数据（若沿用）；正文不入气泡 |
-| `createdAt` | ISO string | |
-| `updatedAt` | ISO string | 保存时更新；列表按此排序 |
-| `packagePath` | string \| null | 可选；不得向普通 UI 泄漏绝对隐私路径文案 |
-
-**当前会话选择：** store 级 `activeId`（`sessions:setActive` / create/save 副作用与现状对齐；R2 须类型化并校验存在性）。
-
-**Store 外壳：** 继续 `{ version, activeId, sessions }`；R2 **不**引入 SQLite。Store `version` 与消息 `schemaVersion` 分离；消息以 **schema v2** 为权威。
-
-### 7.2 Message（persistable）
+### 7.1 Session（main 内部持久化）
 
 | 字段 | 约束 |
 |---|---|
-| `schemaVersion` | 新消息必须为 **`2`** |
-| `id` | string；形如 `m_…` |
-| `role` | `"user"` \| `"assistant"` |
-| `displayText` | UI 唯一可信展示源；持久化经 `clampDisplayText`；上限合同见 §7.3 |
-| `modelText` | 仅供模型历史；**禁止**直接渲染；上限 `MODEL_TEXT_MAX = 4000` |
-| `attachmentRefs` | `{ id, name, type?, size? }[]`；**无正文、无绝对路径必填** |
+| `id` | string；`s_…` |
+| `title` | ≤ **60** |
+| `messages` | Message[] |
+| `artifacts` | 引用；不含正文 |
+| `attachments` | 元数据；不含正文 |
+| `createdAt` / `updatedAt` | ISO string |
+| `packagePath` | 仅 main 内部；**不得**进入 `SessionViewDTO` |
+
+当前会话：`activeId`。Store：`{ version, activeId, sessions }`。**不**引入 SQLite。
+
+### 7.2 Message（main 内部 persistable）
+
+| 字段 | 约束 |
+|---|---|
+| `schemaVersion` | 新消息 **`2`** |
+| `id` | `m_…` |
+| `role` | `user` \| `assistant` |
+| `displayText` | UI 唯一可信源；上限见 §7.3 |
+| `modelText` | ≤ **4000**；禁止直接展示；**不得**进入 `SessionViewDTO` |
+| `attachmentRefs` | `{ id, name, type?, size? }[]`；无正文、无绝对路径 |
 | `createdAt` | ISO string |
 
-### 7.3 冻结展示与折叠规则
+### 7.3 合同一：角色相关 displayText 与折叠（冻结）
 
-1. UI **只能**展示 `displayText`（经安全适配后的结果）。
-2. `modelText` **不得**直接渲染。
-3. 附件正文 **不得**复制进可见气泡。
-4. 附件引用使用结构化 `attachmentRefs`（哈希或受控 id；不得依赖可读绝对路径作为 UI）。
-5. 新消息持久化 **不得**保存当轮拼接后的完整 `requestContent` / 附件正文。
-6. 旧 `content`、旧 `display` 等字段 **默认不可信**（KIMI `display` 永不作为 UI 源）。
-7. 能可靠抽取原问题时 **只显示原问题**（可附「材料正文已隐藏」类安全说明）。
-8. 不能可靠抽取时显示 **安全占位**（如「这条历史消息无法显示。」/「正文已隐藏」）。
-9. **不得**以「截取前 4000 字」作为旧历史修复策略。
-10. 联系方式、履历、附件正文 **不得**因恢复历史而铺满页面。
-11. Assistant 长消息折叠：**预览 `FOLD_PREVIEW_CHARS = 1600`**；**展开上限 `FOLD_EXPAND_MAX = 8000`**。R2 必须统一流式预览与折叠数字，并在实现中消除与 `DISPLAY_TEXT_MAX = 2000` 冲突的产品歧义（建议：UI 展开可读至 8000；持久化 display 策略在实现分片 R2-C 写清并经 Codex 确认，禁止静默丢弃用户可见已展开内容而不说明）。
-12. 损坏消息应 **跳过或安全占位**，不得导致整个会话无法打开。
+| 项 | 冻结值 |
+|---|---|
+| 用户 `displayText` 持久化上限 | **2000** 字 |
+| assistant `displayText` 持久化上限 | **8000** 字 |
+| 折叠预览 | **1600** 字 |
+| 展开 | 显示本条已持久化的全部 assistant `displayText`，最大 **8000** 字 |
+| `modelText` | 最大 **4000**；只供模型历史；禁止直接展示 |
+| 流式过程 | 可展示正在生成内容；**完成落盘**按 assistant **8000** 合同 |
+| 超过 8000 | **必须**追加用户可见截断提示；**禁止**静默截断导致误以为完整 |
+| 实现 | R2-A / R2-C 将单一 `DISPLAY_TEXT_MAX=2000` 改为**角色相关**策略 |
+| 兼容 | legacy 兼容测试必须继续通过 |
+| 禁止 | **不得**出现「刷新后由 8000 变 2000」 |
+
+其余冻结：UI 只展示安全 `displayText`；附件正文不进气泡；不存完整 `requestContent`；旧 `content`/`display` 不可信；能抽原问题则只显示原问题；否则安全占位；不得用「截取前 4000 字」修旧史；损坏消息占位跳过，不得拖垮会话。
+
+### 7.4 SessionViewDTO（next `getSession` 仅此）
+
+**必须分离** main 内部持久化对象与 renderer 视图 DTO。
+
+`SessionViewDTO` **不得包含**：`modelText`、`packagePath`、附件正文、artifact 正文、绝对隐私路径。
+
+可包含：会话 id/title/时间戳；消息的 `id/role/displayText/attachmentRefs(仅安全字段)/createdAt`；关联文稿卡所需安全摘要（title/libraryId 等，无正文）。
 
 ---
 
-## 8. 状态所有权表
+## 8. 状态所有权表（摘要 + 冻结原则）
 
-| 状态 | 权威来源 | 谁可修改 | 持久化 | 重启恢复 | renderer 仅副本？ | 竞态风险 | 错误后恢复 |
-|---|---|---|---|---|---|---|---|
-| 会话列表 | main / `sessions.js` | main（经 IPC） | `workbench-sessions.json` | `sessions:list` | 是 | 双写 | 提示重试；可回 legacy |
-| 当前会话 ID | main `activeId` | main `setActive`/create/save/delete | 是 | `list`/`setActive` | 是 | 请求中切换 | 导航门禁；失败保持原 ID |
-| 会话标题 | main session.title | main `renameSession` | 是 | get/list | 是 | 改名中切换 | 回滚输入；提示失败 |
-| 消息历史 | main session.messages | main `saveSession` + chat 完成路径 | 是 | `getSession` | 是 | 流式未落盘 | 完成/停止后再保存；失败可重试保存 |
-| displayText | message 字段；适配逻辑在共享模型 | main 持久化路径；renderer 只读展示 | 是（v2） | normalize | 是 | 误渲 modelText | 安全占位 |
-| model context | message.modelText；当轮 attachmentContext 仅请求内 | main 组装请求 | modelText 持久化；正文不持久化 | 历史用 modelText | 是 | 正文泄漏 | 禁止写入 display |
-| attachmentRefs | message.attachmentRefs | 发送路径构建 | 是 | 是 | 是 | 带 path | 剥离 path |
-| 当前关联文稿 | session.artifacts + 卡状态 | main 保存；UI 触发 clear/open | 是 | getSession | 是 | 请求中修改 | 请求中禁止；失败提示 |
-| 当前请求 | **main `activeRequest`**（目标） | 仅 main | 进程内 | 不恢复为「进行中」 | renderer 持只读快照 | 双请求 | 停止或标记失败 |
-| requestId | main 生成或校验 | main | 否（审计可记） | 否 | 是 | 伪造完成 | 校验后丢弃 |
-| 请求所属会话 ID | `activeRequest.originSessionId` | main 在 send 时绑定 | 否 | 否 | 是 | 切换会话 | 增量只写归属会话 |
-| 流式目标消息 | `activeRequest.assistantMessageId` | main / 约定消息 id | 完成后随 session | 否 | 是 | 写错气泡 | 校验三元组 |
-| 停止状态 | main abort map + activeRequest.status | `chat:stop` | 否 | 否 | 是 | 停止失败 | 提示重试；仍禁导航至结束 |
-| 会话导航保护 | main 依据 activeRequest | main 拒绝 IPC | 否 | 否 | UI 提示副本 | 绕过 | 统一 main 拒绝 |
-| 持久化状态 | main 写盘结果 | main | 文件 | 读盘 | 是 | 写失败 | 明确错误；保留草稿 |
-| rendererEntry | R1 controller | main | 偏好可持久；effective 进程内 | 默认 legacy | 是 | 循环切换 | latch + 回 legacy |
-| fallback latch | R1 controller | main | 进程内 | 清进程后重置 | 是 | 重进 next | 本进程不再自动 next |
-| runtime stamp | main | 只读 | 否 | getStamp | 是 | — | — |
+| 状态 | 权威 | 谁可改 | 持久化 | renderer |
+|---|---|---|---|---|
+| 会话列表 / activeId / 标题 / 消息 | main | 仅 main（窄命令触发） | JSON 原子写队列 | 仅副本 |
+| displayText | main 落盘权威 | main | 是 | 只读展示 |
+| modelText / attachment 正文 | main | main | modelText 是；正文否 | **不可见** |
+| attachmentSelectionToken | main | main 签发/消费 | 进程内 | 仅持 token |
+| activeRequest | main | main | 进程内 | 只读快照 |
+| chat:event 流 | main | main 发；renderer 不得伪造 complete | 否 | 按序消费 |
+| rendererEntry / latch / stamp | R1 main | main | 见 R1 | 只读 |
 
-**冻结原则：**
-
-- sessions 权威在 **main**；renderer **不**直接读写 sessions 文件；
-- 当前请求注册表权威在 **main**；
-- 每个请求绑定 `originSessionId`（及 `assistantMessageId`）；
-- 流式增量只能写入所属会话与所属消息；
-- renderer 切换页面 **不能**改变请求归属；
-- renderer 状态 **不是**第二业务权威。
+**原则：** sessions 与请求注册权威在 main；renderer 不直读写文件；流式只写入归属 session/message；renderer 不是第二业务权威。
 
 ---
 
 ## 9. main / preload API（目标合同）
 
-> 下列为 R2 **目标**窄化、类型化 API。标注：`保留` = 现有 IPC 语义可复用；`适配` = 保留通道但收紧校验/类型；`新增` = 现状缺失；`废止` = R2 next 路径不得再依赖。
+> 标注：`保留` / `适配` / `新增` / `废止(next)`。**不得假装已实现。**
 
-### 9.1 Sessions
+### 9.1 Sessions（合同三：收窄写入）
 
-| 语义名 | 建议绑定 | 处置 | 说明 |
-|---|---|---|---|
-| `listSessions` | `sessions:list` | 保留→适配 | 返回摘要 DTO；无绝对路径 |
-| `getSession` | `sessions:get` | 保留→适配 | 返回经 normalize 的安全消息视图 + 原始 persist 分离策略在 main |
-| `createSession` | `sessions:create` | 适配 | 请求中拒绝（§10） |
-| `renameSession` | `sessions:rename` | 适配 | title ≤60；请求中拒绝 |
-| `deleteSession` | `sessions:delete` | 适配 | 请求中拒绝 |
-| `setCurrentSession` | `sessions:setActive` | 适配 | 请求中拒绝 |
-| `persistSession` | `sessions:save` 或更窄 `sessions:persist` | 适配/可选新增 | 禁止任意对象透传；只接受校验后 DTO |
-
-### 9.2 Chat
-
-| 语义名 | 建议绑定 | 处置 | 说明 |
-|---|---|---|---|
-| `sendChat` | `chat:send` | 适配 | 必须带 `sessionId`；main 注册 `activeRequest`；拒绝并发 |
-| `stopChat` | `chat:stop` | 适配 | 仅匹配当前 `requestId` |
-| `subscribeChatDelta` | 基于 `chat:progress` phase=`delta` | 适配 | 事件必须含 `requestId`, `sessionId`, `messageId` |
-| `subscribeChatComplete` | `chat:progress` done/stopped | 适配 | 同上 |
-| `subscribeChatError` | `chat:progress` error | 适配 | 同上 |
-| `getActiveRequest` | **新增**只读 IPC 或并入 entry snapshot | 新增 | 返回结构化 activeRequest 或 null |
-| `pickAttachments` | `chat:pickAttachments` | 保留→适配 | 正文仅当轮；不回传绝对路径给 UI 文案 |
-
-### 9.3 Linked artifact（聊天路径）
-
-| 语义名 | 处置 | 说明 |
+| 语义 | 处置 | 说明 |
 |---|---|---|
-| `openLinkedArtifact` | 适配现有 library/open 路径 | 受控去向；聊天页不内联全文 |
-| `clearLinkedArtifact` | 适配 | 清除后 **立即** `persist`；请求中拒绝 |
+| `listSessions` | 适配 | 摘要 DTO；无绝对路径 |
+| `getSession` | 适配 | **仅**返回 `SessionViewDTO`（§7.4） |
+| `createSession` | 适配 | 请求中拒绝 |
+| `renameSession` | 适配 | title≤60；请求中拒绝 |
+| `deleteSession` | 适配 | 请求中拒绝 |
+| `setCurrentSession` | 适配 | 请求中拒绝 |
+| `clearLinkedArtifact` | 适配 | main 立即持久化；请求中拒绝 |
+| **通用 `persistSession` / `sessions:save`** | **next 废止暴露** | next preload **不暴露**；renderer-next **不得**提交任意完整 session 对象 |
+
+**`sessions:save` 过渡期：**
+
+- 仅供 **legacy** 使用；
+- main 按当前合法窗口 / renderer 入口限制调用来源；
+- R2 `accepted` **前不得删除** legacy `sessions:save`；
+- **不**新增第二套 sessions 文件。
+
+消息新增、assistant 占位、流式更新、完成、停止、失败落盘：**全部由 main 执行**（或进入 main 受控写队列）。
+
+next 允许的写相关窄命令仅：`createSession`、`renameSession`、`deleteSession`、`setCurrentSession`、`clearLinkedArtifact`、`sendChat`、`stopChat`。
+
+### 9.2 Chat（合同四 + 合同五）
+
+| 语义 | 处置 | 说明 |
+|---|---|---|
+| `sendChat`（next） | **新增/替换窄合同** | 见下方最小输入；**不**与 legacy 任意对象同通道猜测来源 |
+| `chat:send`（legacy） | 保留兼容 | legacy 继续现有通道；next **不得**走任意透传 |
+| `stopChat` | 适配 | 匹配当前 requestId |
+| `chat:progress` | legacy **暂时保留** | next **不**依赖；禁止「可选补字段假装升级」 |
+| `chat:event` | **新增**（next） | 类型化判别联合；见下 |
+| `getActiveRequest` | 新增 | 结构化或 null |
+
+**next `sendChat` 最小输入（冻结）：**
+
+```text
+sendChat({
+  sessionId,
+  inputText,
+  attachmentSelectionToken?,
+  linkedArtifactId?,
+  scenarioHint?
+})
+```
+
+冻结要求：
+
+1. `requestId`、`assistantMessageId` **由 main 生成**；
+2. main 从 sessions 权威读历史；从 Package/受控服务读主体上下文；生成 model history；组装 attachment context；
+3. renderer **不得**提交：`pkg`、完整 `history`、`modelText` 数组、`requestContent`、附件正文、任意 system prompt；
+4. `scenarioHint` **白名单**；`inputText` 有明确长度与空值校验；
+5. 模型调用前完成 `activeRequest` 注册；**注册失败不得发起模型请求**；
+6. 用户消息与 assistant 占位由 main 按序持久化或进入受控写队列。
+
+**`chat:event`（next）冻结：**
+
+- 类型至少：`delta` | `complete` | `stopped` | `error`；
+- 每事件必含：`requestId`、`sessionId`、`messageId`、`sequence`、`type`；
+- `delta` 另含 `textDelta`；
+- `sequence` 由 main **单调递增**；
+- `complete` **不得**由 renderer 伪造；
+- renderer 只接受：当前登记 requestId + 匹配 sessionId/messageId + sequence 大于已处理值；
+- 重复 / 倒序 / 迟到 / 旧请求：**丢弃并脱敏审计**；
+- main 是 assistant 最终文本与完成状态的权威。
+
+### 9.3 Linked artifact
+
+| 语义 | 处置 |
+|---|---|
+| `openLinkedArtifact` | 见 §11.1（整窗 legacy handoff）；请求中拒绝 |
+| `clearLinkedArtifact` | main 清关联并立即原子持久化 |
 
 ### 9.4 强制约束
 
-1. 能复用的现有 IPC **优先适配**，不平行发明第二套文件存储。
-2. **禁止**任意对象透传；**禁止**暴露 `fs`、Node、绝对隐私路径给普通 UI。
-3. 所有输入校验；IPC sender 必须绑定当前合法窗口（继承 R1）。
-4. 流式事件必须携带 `requestId`、`sessionId`、`messageId`。
-5. renderer **不得**自行伪造请求完成。
-6. 普通 renderer **不能**启用 test harness；query/hash/localStorage **不能**开启 harness。
-7. PAN-01R test-only 门禁保持不变。
-8. **本任务包不宣称上述目标 API 已实现。**
+1. 禁止任意对象透传；禁止暴露 fs/Node/绝对隐私路径给普通 UI。
+2. 输入校验；IPC sender 绑定当前合法窗口。
+3. 普通 renderer 不能启用 test harness；query/hash/localStorage 不能开 harness。
+4. PAN-01R test-only 门禁不变。
+
+### 9.5 合同六：附件不透明凭证
+
+next 选附件后，main 仅返回：安全名称、类型、大小、不透明 `attachmentSelectionToken`（或受控 ref）。
+
+renderer **不得**收到：附件正文、本地绝对路径、拼接后的 `attachmentContext`。
+
+正文只保存在 main 当轮受控内存。token 必须：绑定当前窗口；绑定当前会话；有过期时间；一次性或明确消费规则；应用重启后旧 token 失效。
+
+`sendChat` 时 main 凭 token 取上下文；完成/失败/停止/超时后清理正文。sessions 只存 `attachmentRefs`。跨重启再用须重新选择（或另开持久化引用任务）。不得把真实路径当普通 UI 文案。
+
+### 9.6 合同七：sessions 原子写与串行化（R2-A，不拖 R2.5）
+
+1. main 对 `workbench-sessions.json` 写入 **必须串行**；同一时刻仅一个写操作提交。
+2. 同目录临时文件 → flush/close → **原子 rename** 替换。
+3. Windows rename 失败：有限次数重试；**不删除**最后一个有效正式文件。
+4. 写入前对 store 做结构校验。
+5. 写入失败：**不得**把 renderer 内存副本当作已保存。
+6. create / rename / delete / setActive / chat 完成·停止 / 清关联：**同一写队列**。
+7. 不使用长期悬挂跨进程锁；本轮不引入 SQLite。
+8. 测试覆盖：两连续写顺序正确；写失败保留旧文件；临时文件异常不破坏正式文件；重启读最后一次成功版本。
 
 ---
 
 ## 10. 并发与导航合同
 
-### 10.1 决策（冻结推荐）
+### 10.1 决策（冻结）
 
-- **同一会话同一时刻最多一个活动回复。**
-- **Alpha 阶段：全应用单活动聊天请求**（不同会话亦不可并发）。
-- 若未来需要跨会话并发，**另开任务**；本 R2 不做。
-- **不沿用**容易覆盖的全局裸 `currentRequestId` 作为权威。
-- main 使用结构化 `activeRequest`：
-
-```text
-{
-  requestId,
-  originSessionId,
-  assistantMessageId,
-  startedAt,
-  status  // e.g. running | stopping | completed | failed
-}
-```
+- 同一会话同时最多一个活动回复。
+- Alpha：**全应用单活动聊天请求**。
+- 跨会话并发另开任务。
+- 不沿用裸 `currentRequestId` 作权威。
+- main `activeRequest`：`{ requestId, originSessionId, assistantMessageId, startedAt, status }`。
 
 ### 10.2 请求中禁止 / 允许
 
-**禁止：** 新建会话；切换会话；删除会话；改变关联文稿；第二次 `sendChat`。
-**允许：** 停止当前回复；返回 legacy（须先定义：建议允许返回，但 main 应 abort 或明确提示；默认 **先停止或随返回 abort 当前请求**，并在任务实现时写清，避免僵尸请求）。
+**禁止：** 新建/切换/删除会话；改变关联文稿；打开关联文稿；第二次 `sendChat`；用户主动「返回经典界面」。
 
-停止完成或请求结束后再解除导航保护。
-连续 Enter、双击发送、重复 IPC **只能产生一次请求**。
-迟到 delta / complete、旧 `requestId` **全部丢弃并审计**。
-`finally` **只能**清除与自己 `requestId` 相同的活动请求。
+**允许：** `stopChat`。
+
+停止完成或请求结束后再解除保护。连续 Enter/双击/重复 IPC 只产生一次请求。迟到事件丢弃并审计。`finally` 只清匹配自身 `requestId` 的活动请求。
+
+### 10.3 合同二：返回经典界面（冻结两条路径）
+
+**A. 用户主动点击「返回经典界面」**
+
+- 无活动请求：main **立即**整窗回 legacy。
+- 有活动请求：**阻止**；提示「请先停止当前回复，再返回经典界面。」
+- 不允许 renderer 借切换窗口逃避活动请求。
+- 用户停止成功且 main 确认请求结束后，方可回 legacy。
+
+**B. next 崩溃 / ready 失败 / R1 自动回退**
+
+- 异常路径，不依赖 renderer 按钮。
+- main **必须**主动 stop/abort 当前活动聊天请求；标记 `stopped` 或 `failed`。
+- 丢弃该请求后续迟到事件。
+- 完成必要安全持久化后再回 legacy。
+- **不得**留下后台僵尸回复继续写会话。
+- 即使停止或保存失败，也必须记录脱敏错误，并避免新旧界面循环（沿用 R1 latch）。
 
 ---
 
-## 11. UI 合同（renderer-next 对话页）
+## 11. UI 合同
 
-**必须具备：**
+必备：左侧列表、「新对话」、标题+`⋯`、行内改名、自定义删除、消息列表、用户/assistant 气泡、长答折叠（1600/8000）、关联紧凑卡、输入框、发送、停止、请求中提示、错误恢复入口、「返回经典界面」。
 
-1. 左侧会话列表
-2. 「新对话」
-3. 标题 + 右侧 `⋯`
-4. `⋯` 内「改名」「删除」
-5. 行内改名（无 `prompt`）
-6. 自定义删除确认（无 `confirm`）
-7. 消息列表
-8. 用户气泡
-9. assistant 气泡
-10. 长回答折叠（1600 / 8000）
-11. 关联文稿紧凑卡
-12. 输入框
-13. 发送
-14. 停止
-15. 请求中导航提示（用户可读文案；可沿用「请先停止当前回复，再切换对话。」）
-16. 错误恢复入口（新建对话 / 重试 / 返回经典界面）
-17. 「返回经典界面」
+禁止：聊天页内联全文；附件全文；`prompt`/`confirm`/`alert`；CSS 藏旧页；新按钮驱动旧 DOM；向用户显示内部状态名；失控后只给「重启应用」一种恢复。
 
-**禁止：**
+### 11.1 关联文稿「打开」去向（冻结）
 
-- 聊天页内联关联文稿全文；显示附件全文
-- `prompt` / `confirm` / `alert`
-- CSS 隐藏旧页面冒充迁移；新按钮触发旧 renderer DOM
-- 向普通用户显示 P0～P4、`requestId` 等内部名
-- 页面失控后**只**提供「重启应用」一种恢复方法
+R2 不迁移工作台，因此：
 
-能力状态标签：对话页在 R2 验收前对普通用户仍无生产入口；harness 内可标「预览」或同等冻结标签。
+1. next 点「打开文稿」→ main 先完成当前会话必要持久化。
+2. 若无活动请求：设置**一次性、受控**的 legacy 导航意图 → 整窗回 legacy → legacy 打开既有工作台文稿页。
+3. 一次性意图仅含受控 `libraryId`/scene，**不含正文**；legacy 消费后立即清除。
+4. 有活动请求：阻止并提示先停止。
+5. 打开失败：仍留 next，显示可恢复提示。
+6. 禁止 next 直接调旧隐藏 DOM；禁止聊天页内联正文。
+7. R4 迁移工作台后再替换此过渡路径。
 
 ---
 
 ## 12. 旧历史与数据兼容
 
-1. R2 默认读取现有 **JSON** sessions（`workbench-sessions.json`）。
-2. **不**引入 SQLite。
-3. 新旧 renderer **必须**能读取同一会话数据。
-4. **不允许**两个 renderer 同时写同一会话（整窗互斥；切换前 main 完成必要持久化）。
-5. 整窗切换前由 main 完成必要持久化。
-6. schema v2 **原样使用**。
-7. schema v1 / 旧消息只做**安全展示适配**（`legacyDisplayText` / `normalizeLoadedMessage` 合同）。
-8. **不**在首次启动时批量重写全部真实历史。
-9. 如需迁移：仅允许逐会话、备份、可回滚，且 **Owner 另行授权**。
-10. 本任务实现与测试 **不得**读取真实 sessions 正文。
-11. Owner 验收前使用 **副本** 或人工新建测试会话。
-12. 「损坏会话无法打开」：列表仍可用；该会话占位错误 + 可删除或跳过；提供新建干净会话。
-13. 「新建干净会话」：**永久可见**入口。
-14. 「关闭关联文稿」：**永久可见**入口（卡上关闭），并立即持久化。
+1. 默认读现有 JSON sessions；不引入 SQLite。
+2. 新旧 renderer 可读同一数据；**禁止**两 renderer 同时写（整窗互斥）。
+3. schema v2 原样；旧消息只做安全展示适配。
+4. 不批量重写真实历史；实现/测试不读真实 sessions 正文。
+5. Owner 验收用副本或新建测试会话。
+6. 损坏会话不拖垮列表；永久可见「新建对话」「关闭关联」。
 
 ---
 
-## 13. 错误恢复
+## 13. 错误恢复（含合同二补充）
 
-| 场景 | 用户看到什么 | 可重试？ | 保留输入草稿？ | 可能丢消息？ | 审计 | 返回经典 |
-|---|---|---|---|---|---|---|
-| 会话列表读取失败 | 明确失败说明 + 重试 + 新建/回经典 | 是 | N/A | 否（未加载） | 读失败 | 是 |
-| 单个会话损坏 | 该会话打不开；列表其余可用 | 否打开 / 可删 | N/A | 该会话可能不完整 | 规范化失败 | 是 |
-| 保存失败 | 保存失败，勿切换 | 是 | 是 | 未保存部分有风险 | 写失败 | 是 |
-| 模型调用失败 | 错误说明；可重发 | 是 | 是 | 未完成 assistant 不落盘或标失败 | 错误码 | 是 |
-| 流式中断 | 已生成部分是否保留按完成策略；提示中断 | 可重试新请求 | 是 | 部分 | 中断 | 是 |
-| 停止失败 | 仍显示停止中/失败；保持导航保护直至 main 确认结束 | 是 | 是 | 低 | stop 失败 | 是 |
-| 删除/改名失败 | 操作失败，界面回滚 | 是 | N/A | 否 | 否 | 是 |
-| 关联文稿打开失败 | 无法打开说明 | 是 | N/A | 否 | 是 | 是 |
-| 关闭关联保存失败 | 未关闭成功/未保存 | 是 | N/A | 关联状态可能旧 | 是 | 是 |
-| API 版本不匹配 | 提示需更新/回经典 | 否业务 | 是 | 否 | 版本 | **必须**可回 |
-| renderer-next 崩溃 | Error Boundary + 回经典 | 回经典 | 尽量保留至 main | 未保存风险 | 是 | 自动/按钮 |
-| 返回 legacy 失败 | 严重错误说明；避免循环 | 有限次 | — | — | 是 | latch 防抖 |
+| 场景 | 用户看见 | 要点 |
+|---|---|---|
+| 列表/单会话损坏/保存失败 | 明确失败 + 重试/新建/回经典 | 不假装已保存 |
+| 模型失败/流式中断/停止失败 | 可恢复说明；导航保护至 main 确认结束 | 草稿尽量保留 |
+| 主动回经典但有活动请求 | 「请先停止当前回复，再返回经典界面。」 | 不切换 |
+| 自动回退 | 回经典；无僵尸写 | main abort + 丢弃迟到事件 |
+| 关联打开失败 | 留 next 可恢复提示 | 无 DOM 驱动 |
+| 附件 token 无效/过期/跨窗跨会话 | 发送失败说明；可重选 | 无正文泄漏 |
+| API 版本不匹配 / next 崩溃 | 回经典入口 | latch 防循环 |
+| sessions 原子写失败 | 保存失败；保留旧文件 | 见 §9.6 |
 
 ---
 
 ## 14. 安全与隐私
 
-- hermetic userData；E2E / 单测 **禁止**指向真实 Package / 真实 sessions 正文。
-- 8 万字级附件正文 **不得**进入聊天 DOM（main 当轮 `attachmentContext` 上限现状约 `80000`；UI 仍只显示名称/卡）。
-- 不暴露 API Key、Token、密码。
-- 保持 `contextIsolation: true`、`nodeIntegration: false`。
+- hermetic userData；禁真实 Package/sessions 正文。
+- 附件正文永不进 renderer DOM；路径不作 UI 文案。
+- `contextIsolation: true`；`nodeIntegration: false`。
 - 无生产 PAN-01R 入口。
 
 ---
@@ -423,118 +427,108 @@ Persistable 字段：`schemaVersion`, `id`, `role`, `displayText`, `modelText`, 
 
 ### 15.1 分类
 
-1. 纯函数单测（`chat-message-model`、nav guard、fold、legacy 降级）
-2. main session/chat 合同测试（校验、单飞、事件三元组）
-3. hermetic JSON sessions 测试
-4. renderer 组件测试（列表、气泡、卡、菜单）
-5. Playwright Electron E2E
-6. legacy owner-runtime 回归
-7. 隐私泄漏测试（附件正文 / 路径）
-8. 并发测试（双发、迟到事件）
-9. 故障恢复测试
-10. Owner 真机验收
+纯函数；main 合同；hermetic JSON；组件；Playwright E2E；legacy 回归；隐私；并发；故障恢复；Owner 真机。
 
-### 15.2 Playwright 必须真实覆盖
+### 15.2 必须补充的合同测试
 
-- 默认仍为 legacy
-- harness 进入 next 聊天页
-- 新建会话；行内改名；自定义删除
-- 发送与流式显示；停止回复
-- 连续发送只产生一次请求
-- 请求中切换/新建/删除被阻止
-- 重启后恢复
-- 旧历史安全降级
-- 8 万字附件正文不进入聊天 DOM
-- 关联文稿只显示紧凑卡；关闭关联立即保存
-- 损坏会话不拖垮列表
-- 模型失败可恢复
-- 返回 legacy；next 失败自动回 legacy
-- query/hash/localStorage 不能开启 test harness
+- assistant **8000** 持久化、展开、刷新一致；超过 8000 有明确截断提示
+- 用户主动回 legacy 时活动请求被阻止
+- 自动回退时 main 停止活动请求且迟到事件无效
+- next 无法调用通用 `sessions:save`；legacy 过渡期仍可调用
+- `SessionViewDTO` 不含 modelText/path/正文
+- 类型化 `chat:event` 三元组 + sequence；renderer 伪造 complete 无效
+- `sendChat` 无法注入 history/pkg/system prompt/requestContent
+- 附件正文不进 renderer；token 过期/跨窗口/跨会话失败
+- sessions 写队列与原子替换（连续写、失败保留旧文件、临时异常、重启读成功版）
+- 关联文稿经整窗 legacy handoff 打开；活动请求中打开被阻止
+- legacy 兼容（含原 display 相关）继续通过
 
-**时限：** 单用例 ≤60s；R2 最小 E2E 套件 ≤10min。禁止用静态字符串测试冒充真实用户操作。
+### 15.3 Playwright 覆盖（含原清单 + 上列关键项）
+
+默认 legacy；harness 进 next；CRUD；发送/流式/停止；单飞；导航挡；主动回经典挡；自动回退 abort；重启恢复；旧历史；附件/token；关联卡与 handoff；损坏会话；模型失败；禁 query 开 harness。
+
+时限：单用例 ≤60s；最小套件 ≤10min。禁止静态字符串冒充真操作。
 
 ---
 
 ## 16. Owner 白话验收清单（≤12）
 
 1. 原界面默认正常打开。
-2. 在受控方式下能进入新对话页。
+2. 受控方式下能进入新对话页。
 3. 能新建、改名、删除对话。
-4. 能发送消息并收到完整回复。
-5. 能停止正在生成的回复。
-6. 回复过程中不能误切到别的对话。
-7. 关闭应用再打开，对话还在。
-8. 发送带附件的消息后，正文不会铺满页面。
-9. 关联文稿只显示一张小卡片，不是整篇正文。
-10. 出错后能新建对话，或返回经典界面。
-11. 不白屏、不在新旧界面之间来回乱跳。
-12. 原有真实数据不被破坏（验收用副本/测试会话；不批量改真实历史）。
+4. 能发送消息并收到完整回复；很长回复刷新后不会变短，超长时有明确截断说明。
+5. 能停止正在生成的回复；回复过程中不能误切对话，也不能在未停止时返回经典界面。
+6. 关闭应用再打开，对话还在。
+7. 发送带附件后正文不铺满页面。
+8. 关联文稿只显示小卡片；打开时回到经典界面的文稿页（无回复进行中时）。
+9. 出错后能新建对话或返回经典界面。
+10. 不白屏、不在新旧界面之间来回乱跳。
+11. 程序异常退回经典界面后，不会在后台继续乱写对话。
+12. 原有真实数据不被破坏（验收用副本/测试会话）。
 
 ---
 
-## 17. 实施分片（仅规划，不实施）
+## 17. 实施分片与分支策略（合同十 · 冻结）
 
 | 分片 | 内容 |
 |---|---|
-| **R2-A** | sessions / chat 类型化合同；main `activeRequest`；输入校验 |
-| **R2-B** | 会话列表与管理（新建/切换/改名/删除/菜单） |
-| **R2-C** | 消息显示、折叠统一、旧历史安全适配 |
-| **R2-D** | 发送、流式、停止、单飞门禁、导航保护 |
-| **R2-E** | 附件 / 关联文稿隔离与恢复 |
+| **R2-A** | 类型化合同；角色 display 上限；`activeRequest`；窄 API；sessions **原子写队列**；附件 token 骨架 |
+| **R2-B** | 会话列表与管理 |
+| **R2-C** | 消息显示、折叠、旧历史适配（落实 8000/1600） |
+| **R2-D** | 窄 sendChat、`chat:event`、停止、单飞、导航与主动回经典门禁 |
+| **R2-E** | 附件 token 消费、关联卡、legacy handoff 打开 |
 | **R2-F** | E2E、legacy 回归、Owner 验收 |
 
-规则：分片可分别提交；**不得**同一轮大爆炸替换；每片保持可返回 legacy；任一片失败不得继续下一片；是否单实现分支待 Codex 复核后决定。
+**分支（冻结）：**
+
+- 单一实现分支：`codex/r2-chat-sessions-migration`
+- 仅 Codex 再复核通过 **且** Owner 授权后，从 **R2 规格接受提交** 创建
+- A～F 同分支**串行**；每片**独立提交**；**不用**每片短分支
+- 任一片失败立即停止
+- 建议复核门：A 后 Codex 合同复核；D 后 Codex 主路径复核；F 后 Owner 真机
+- 不得并行 R2.5 / PAN-02；不得在 legacy `app.js` 堆新业务
 
 ---
 
 ## 18. 完成条件
 
-- 类型化 API 合同落地
-- renderer-next 聊天主路径完整
-- JSON sessions 兼容；display/model/attachment 分离
-- main 请求注册与单飞门禁
-- E2E 持续通过；legacy 回归通过
-- 生产默认仍 legacy；无生产 PAN-01R 入口
-- Codex 复核通过；Owner 真机验收通过
+- 七项合同落地；角色 display 上限与折叠一致；无「8000→2000」回退
+- next 窄 API + `chat:event` + main 单飞 + 原子写
+- JSON 兼容；DTO 无敏感字段；附件 token 生效
+- 主动回经典 / 异常回退行为符合 §10.3
+- E2E 与 legacy 回归通过；生产默认 legacy；无生产 PAN-01R
+- Codex 再复核通过；Owner 真机验收通过（实现阶段）
 
 ---
 
 ## 19. 停止条件
 
-- 需要读取或批量迁移真实 sessions
-- 新旧 renderer 同时写会话
-- 附件正文重新进入可见消息
-- 需要引入 SQLite / 启动 R2.5
-- 范围扩到「我」/构建/工作台/设置
-- 生产默认被改为 next
-- 继续在旧 `app.js` 堆新业务冒充迁移
-- E2E 无法真实验证用户主路径
-- PAN-02 被提前启动
+- 读或批量迁移真实 sessions；两 renderer 同时写
+- 附件正文进可见消息；引入 SQLite / 启动 R2.5
+- 扩到「我」/构建/工作台；生产默认改 next
+- 在旧 `app.js` 堆新业务；E2E 无法验证主路径；提前启动 PAN-02
 
 ---
 
 ## 20. 迁移、回滚与发布边界
 
-1. R2 实现期间生产默认 **legacy**。
-2. next 仅经 main 控制的开发 / Owner / E2E 门禁进入。
-3. R2 验收前普通用户无 next 入口。
-4. 任一关键错误可整窗返回 legacy。
-5. 不删除 legacy chat。
-6. 不批量迁移真实 sessions。
-7. R2 `accepted` 后是否改变生产默认：**另行决策**。
-8. R2 **不**自动解锁 PAN-02。
-9. PAN-02 仍须满足 R0 §16 全部条件（含至少 R2+R3 Owner 真机或书面豁免等）。
-10. R3「我/构建」未完成前，PAN-02 继续 `blocked`。
+1. 实现期生产默认 legacy；next 仅门禁进入。
+2. 关键错误可整窗回 legacy（路径 A/B 见 §10.3）。
+3. 不删除 legacy chat；不批量迁真实 sessions。
+4. R2 accepted 后是否改生产默认：另行决策。
+5. R2 不自动解锁 PAN-02；仍须 R0 §16；R3 未完成前 PAN-02 继续 blocked。
 
 ---
 
-## 21. 风险与未决问题（≤5）
+## 21. 风险与未决问题（≤3；非实施前阻断合同）
 
-1. **display 持久化 2000 vs 展开 8000**：产品上如何统一，而不造成「展开后刷新变短」？
-2. **返回 legacy 时进行中请求**：强制 abort 还是阻止返回直至停止？
-3. **`sessions:save` 任意对象透传**的收窄是否拆新 IPC，以免破坏 legacy 过渡期？
-4. **流式 progress 事件**是否在 R2 强制升级为带 `sessionId`/`messageId` 的新载荷（legacy 兼容策略）？
-5. **实现分支策略**：单分支串行分片 vs 每片短分支——待 Codex 裁定。
+原五项核心未决已全部关闭（见修订记录）。剩余非阻断：
+
+1. `scenarioHint` 白名单的具体枚举值（R2-A 给出最小集即可，不得借此重开透传）。
+2. 超过 8000 字截断提示的最终用户文案措辞（须有明确提示；用词可微调）。
+3. 附件 token 的具体 TTL 秒数与重试次数上限（须有过期与有限重试；具体数字 R2-A 锁定并写入测试）。
+
+**无**实施前未关闭的核心合同缺口。
 
 ---
 
@@ -542,9 +536,9 @@ Persistable 字段：`schemaVersion`, `id`, `role`, `displayText`, `modelText`, 
 
 | 项 | 值 |
 |---|---|
-| 本文件 | **v0.1-draft** / `specified` / `codex_review_pending` / `not_started` |
-| 当前唯一等待项 | **Codex 复核本 R2 任务包** |
-| 复核通过前 | **不得**创建 R2 实现分支；**不得**修改源码 |
+| 本文件 | **v0.1.1-draft** / `specified` / `codex_changes_requested` / `not_started` |
+| 当前唯一等待项 | **Codex 再复核**本 R2 任务包 |
+| 再复核通过前 | **不得**创建实现分支；**不得**修改源码 |
 | R1 | `accepted`（不变） |
 | R2.5 | `planned` / `deferred` |
 | PAN-02 | `planned` / `blocked` |
@@ -556,4 +550,5 @@ Persistable 字段：`schemaVersion`, `id`, `role`, `displayText`, `modelText`, 
 
 | 日期 | 版本 | 说明 |
 |---|---|---|
-| 2026-07-21 | **v0.1-draft** | 初稿：基于 `373fef9` 只读代码事实起草；状态 `specified` / `codex_review_pending` / `not_started`；等待 Codex 复核 |
+| 2026-07-21 | v0.1-draft | 初稿；`codex_review_pending`（历史） |
+| 2026-07-21 | **v0.1.1-draft** | Codex 第一轮有界修订：关闭七项合同——①角色 display 2000/8000+折叠；②主动回经典先停 / 异常回退 main abort；③next 不暴露通用 save，legacy 过渡保留；④next 强制 `chat:event`；⑤窄 sendChat，main 组装请求；⑥附件不透明 token；⑦sessions 串行原子写（R2-A）。分支策略：单分支 `codex/r2-chat-sessions-migration`，A～F 独立提交。关联打开：legacy handoff。状态 → `specified` / `codex_changes_requested` / `not_started`。等待 Codex 再复核 |

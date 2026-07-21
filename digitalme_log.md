@@ -5,6 +5,24 @@
 
 ---
 
+## 2026-07-21 Renderer Foundation R2 第一轮有界修订
+
+### 做了什么
+
+纯文档：R2 任务包 → **v0.1.1-draft** / `specified` / `codex_changes_requested` / `not_started`。关闭 Codex 第一轮七项合同（display 角色上限、回经典双路径、窄 sessions 写、`chat:event`、窄 sendChat、附件 token、原子写；单分支分片；关联 legacy handoff）。
+
+同步：context（决策 #89）、执行索引 v0.2.19、能力表、cursor rule、总任务包、R1 调度引用。
+
+### 明确未做
+
+未改源码/测试/配置/依赖/lockfile；未创建 R2 实现分支；未启动应用或测试；未读真实 Package/sessions；未开始 R2/R2.5/PAN-02；未 amend/squash/push。
+
+### 下一等待项
+
+**等待 Codex 再复核**本 R2 任务包；复核通过前不得实现。
+
+---
+
 ## 2026-07-21 Renderer Foundation R2 对话迁移任务包起草
 
 ### 做了什么
