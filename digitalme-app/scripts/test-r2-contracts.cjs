@@ -317,19 +317,31 @@ async function main() {
     assert.equal(life.validateInputText("字".repeat(2000)).ok, true);
   });
 
-  await test("activeRequest: abort invalidates writable; tombstone after clear", () => {
+  await test("activeRequest: claimStop is atomic; fallback invalidate has no stop token", () => {
     const reg = createActiveRequestRegistry();
     const r = reg.register({ originSessionId: "s1" });
     assert.equal(r.ok, true);
     const id = r.activeRequest.requestId;
     assert.equal(reg.isCurrentWritable(id), true);
-    reg.abort(id);
-    assert.equal(reg.isCurrent(id), true);
+    const claimed = reg.claimStop(id);
+    assert.equal(claimed.ok, true);
+    assert.equal(claimed.stopped, true);
+    assert.ok(claimed.claim.stopToken);
     assert.equal(reg.isCurrentWritable(id), false);
+    assert.equal(reg.isStopOwner(id, claimed.claim.stopToken), true);
     assert.equal(reg.nextSequence(id), null);
+    assert.ok(reg.nextSequenceForStop(id, claimed.claim.stopToken) >= 1);
+    assert.equal(reg.claimStop(id).code, "already_stopping");
     reg.clear(id);
-    assert.equal(reg.isCurrent(id), false);
     assert.equal(reg.isTombstoned(id), true);
+
+    const r2 = reg.register({ originSessionId: "s2" });
+    const id2 = r2.activeRequest.requestId;
+    reg.invalidate(id2);
+    assert.equal(reg.isCurrentWritable(id2), false);
+    assert.equal(reg.hasStopClaim(id2), false);
+    assert.equal(reg.claimStop(id2).code, "not_stoppable");
+    reg.clear(id2);
   });
 
   await test("tombstones are bounded", () => {
@@ -392,6 +404,162 @@ async function main() {
       await new Promise((r) => setTimeout(r, 250));
       const after = fs.readFileSync(sessions.sessionsPath(ud), "utf8");
       assert.equal(after, before);
+      assert.equal(reg.get(), null);
+    } finally {
+      if (prevFake === undefined) delete process.env.DIGITALME_R2_FAKE_MODEL;
+      else process.env.DIGITALME_R2_FAKE_MODEL = prevFake;
+      if (prevDelay === undefined) delete process.env.DIGITALME_R2_FAKE_MODEL_DELAY_MS;
+      else process.env.DIGITALME_R2_FAKE_MODEL_DELAY_MS = prevDelay;
+      cleanup(ud);
+    }
+  });
+
+  await test("stop drains in-flight persist; no late rewrite after stop returns", async () => {
+    sessions._resetRecoveryLatchForTests();
+    const ud = tempUserData();
+    const prevFake = process.env.DIGITALME_R2_FAKE_MODEL;
+    const prevDelay = process.env.DIGITALME_R2_FAKE_MODEL_DELAY_MS;
+    process.env.DIGITALME_R2_FAKE_MODEL = "1";
+    process.env.DIGITALME_R2_FAKE_MODEL_DELAY_MS = "0";
+    try {
+      const reg = createActiveRequestRegistry();
+      const vault = createAttachmentTokenVault();
+      const events = [];
+      const fakeSender = { id: 1 };
+      let releasePersist = null;
+      const gate = new Promise((resolve) => {
+        releasePersist = resolve;
+      });
+      let backgroundPersistEntered = false;
+      const life = createR2ChatLifecycle({
+        activeRequest: reg,
+        attachmentTokens: vault,
+        getUserData: () => ud,
+        readConfig: () => ({}),
+        buildSystemPrompt: () => "",
+        loadPackageForChat: () => null,
+        callModelStream: async () => "",
+        runChatWithConnectedTools: async () => ({ reply: null }),
+        getExtensionManager: async () => ({}),
+        stripToolLeakage: (t) => t,
+        hasBadChars: () => false,
+        hasDsmlToolMarkup: () => false,
+        retrieval: null,
+        defaultPackageDir: os.tmpdir(),
+        sendToSender: (_s, _ch, data) => events.push(data),
+      });
+      life._setPersistHookForTests(async ({ phase, stopOwned }) => {
+        if (phase === "before" && !stopOwned) {
+          backgroundPersistEntered = true;
+          await gate;
+        }
+      });
+      const created = await life.createSession({ title: "persist-race" });
+      const sessionId = created.session.id;
+      const send = await life.sendChat(
+        fakeSender,
+        { sessionId, inputText: "持久化竞态" },
+        1
+      );
+      assert.equal(send.ok, true);
+      life.acknowledgeChat(fakeSender, { requestId: send.requestId });
+
+      const deadline = Date.now() + 3000;
+      while (!backgroundPersistEntered && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      assert.equal(backgroundPersistEntered, true, "background persist never entered gate");
+
+      const stopPromise = life.stopChat(fakeSender, send.requestId);
+      await new Promise((r) => setTimeout(r, 80));
+      releasePersist();
+      const stopRes = await stopPromise;
+      assert.equal(stopRes.stopped, true);
+
+      const afterStop = fs.readFileSync(sessions.sessionsPath(ud), "utf8");
+      const dtoMid = JSON.stringify(
+        (await life.getSessionDto(sessionId)).session.messages.map((m) => ({
+          id: m.id,
+          displayText: m.displayText,
+        }))
+      );
+      await new Promise((r) => setTimeout(r, 200));
+      const late = fs.readFileSync(sessions.sessionsPath(ud), "utf8");
+      assert.equal(late, afterStop);
+      const dtoLate = JSON.stringify(
+        (await life.getSessionDto(sessionId)).session.messages.map((m) => ({
+          id: m.id,
+          displayText: m.displayText,
+        }))
+      );
+      assert.equal(dtoLate, dtoMid);
+      const terminals = events.filter(
+        (e) => e && (e.type === "stopped" || e.type === "complete" || e.type === "error")
+      );
+      assert.equal(terminals.length, 1);
+      assert.equal(terminals[0].type, "stopped");
+      life._setPersistHookForTests(null);
+    } finally {
+      if (prevFake === undefined) delete process.env.DIGITALME_R2_FAKE_MODEL;
+      else process.env.DIGITALME_R2_FAKE_MODEL = prevFake;
+      if (prevDelay === undefined) delete process.env.DIGITALME_R2_FAKE_MODEL_DELAY_MS;
+      else process.env.DIGITALME_R2_FAKE_MODEL_DELAY_MS = prevDelay;
+      cleanup(ud);
+    }
+  });
+
+  await test("stop vs complete near-simultaneous: single terminal; return matches", async () => {
+    sessions._resetRecoveryLatchForTests();
+    const ud = tempUserData();
+    const prevFake = process.env.DIGITALME_R2_FAKE_MODEL;
+    const prevDelay = process.env.DIGITALME_R2_FAKE_MODEL_DELAY_MS;
+    process.env.DIGITALME_R2_FAKE_MODEL = "1";
+    process.env.DIGITALME_R2_FAKE_MODEL_DELAY_MS = "40";
+    try {
+      const reg = createActiveRequestRegistry();
+      const vault = createAttachmentTokenVault();
+      const events = [];
+      const fakeSender = { id: 1 };
+      const life = createR2ChatLifecycle({
+        activeRequest: reg,
+        attachmentTokens: vault,
+        getUserData: () => ud,
+        readConfig: () => ({}),
+        buildSystemPrompt: () => "",
+        loadPackageForChat: () => null,
+        callModelStream: async () => "",
+        runChatWithConnectedTools: async () => ({ reply: null }),
+        getExtensionManager: async () => ({}),
+        stripToolLeakage: (t) => t,
+        hasBadChars: () => false,
+        hasDsmlToolMarkup: () => false,
+        retrieval: null,
+        defaultPackageDir: os.tmpdir(),
+        sendToSender: (_s, _ch, data) => events.push(data),
+      });
+      const created = await life.createSession({ title: "term-race" });
+      const send = await life.sendChat(
+        fakeSender,
+        { sessionId: created.session.id, inputText: "终态竞态" },
+        1
+      );
+      life.acknowledgeChat(fakeSender, { requestId: send.requestId });
+
+      // Fire stop near natural completion window (3 chunks + final ≈ 160ms).
+      await new Promise((r) => setTimeout(r, 150));
+      const stopRes = await life.stopChat(fakeSender, send.requestId);
+      await new Promise((r) => setTimeout(r, 300));
+
+      const terminals = events.filter(
+        (e) => e && (e.type === "complete" || e.type === "stopped" || e.type === "error")
+      );
+      assert.equal(terminals.length, 1, "expected exactly one terminal, got " + terminals.length);
+      if (stopRes.stopped) {
+        assert.equal(terminals[0].type, "stopped");
+      } else {
+        assert.equal(stopRes.stopped, false);
+        assert.equal(terminals[0].type, "complete");
+      }
       assert.equal(reg.get(), null);
     } finally {
       if (prevFake === undefined) delete process.env.DIGITALME_R2_FAKE_MODEL;

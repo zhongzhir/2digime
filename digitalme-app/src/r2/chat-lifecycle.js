@@ -1,4 +1,4 @@
-﻿"use strict";
+"use strict";
 
 const path = require("node:path");
 const chatMessages = require("../chat-message-model");
@@ -41,19 +41,56 @@ function createR2ChatLifecycle(deps) {
   const armState = new Map();
   /** @type {Map<string, string>} live accumulated reply text for controlled stop snapshot */
   const livePartials = new Map();
+  /** @type {Map<string, Promise<unknown>>} per-request serial persist queue */
+  const persistQueues = new Map();
+  /** Test seam: delay background (non-stop) persists to simulate in-flight updateStore. */
+  let persistDelayMsForTests = 0;
+  /** @type {null | ((info: { requestId: string, phase: string, stopOwned: boolean }) => Promise<void>|void)} */
+  let persistHookForTests = null;
 
   function userData() {
     return getUserData();
   }
 
   function noteLivePartial(requestId, chunk) {
-    if (!requestId) return;
+    if (!requestId || !activeRequest.isCurrentWritable(requestId)) return;
     const prev = livePartials.get(requestId) || "";
     livePartials.set(requestId, prev + String(chunk || ""));
   }
 
   function clearLivePartial(requestId) {
     if (requestId) livePartials.delete(requestId);
+  }
+
+  function waitPersistDrain(requestId) {
+    const id = String(requestId || "");
+    return Promise.resolve(persistQueues.get(id) || null).then(() => undefined, () => undefined);
+  }
+
+  function enqueuePersist(requestId, work) {
+    const id = String(requestId || "");
+    const prev = persistQueues.get(id) || Promise.resolve();
+    const next = prev.then(
+      () => work(),
+      () => work()
+    );
+    // Keep queue settled so drain always progresses
+    persistQueues.set(
+      id,
+      next.then(
+        () => undefined,
+        () => undefined
+      )
+    );
+    return next;
+  }
+
+  function _setPersistDelayForTests(ms) {
+    persistDelayMsForTests = typeof ms === "number" && ms > 0 ? ms : 0;
+  }
+
+  function _setPersistHookForTests(fn) {
+    persistHookForTests = typeof fn === "function" ? fn : null;
   }
 
   function ensureArm(requestId) {
@@ -79,12 +116,18 @@ function createR2ChatLifecycle(deps) {
     }
   }
 
-  function emitChatEvent(sender, partial) {
+  function emitChatEvent(sender, partial, opts = {}) {
     const requestId = partial.requestId;
-    // After abort/invalidate (writable=false), no deltas and no terminals.
-    if (!activeRequest.isCurrentWritable(requestId)) return null;
+    const stopToken = opts && opts.stopToken;
+    const stopOwned = !!(stopToken && activeRequest.isStopOwner(requestId, stopToken));
 
-    const seq = activeRequest.nextSequence(requestId);
+    // Background path requires writable; stop owner may emit the stopped terminal only.
+    if (!stopOwned && !activeRequest.isCurrentWritable(requestId)) return null;
+    if (stopOwned && partial.type !== "stopped") return null;
+
+    const seq = stopOwned
+      ? activeRequest.nextSequenceForStop(requestId, stopToken)
+      : activeRequest.nextSequence(requestId);
     if (seq == null) return null;
 
     const event = {
@@ -101,6 +144,16 @@ function createR2ChatLifecycle(deps) {
     }
     if (partial.type === "complete" || partial.type === "stopped") {
       event.displayText = String(partial.displayText || "");
+    }
+
+    // Stop terminal always delivers immediately (bypass arm buffer) so UI can settle.
+    if (stopOwned) {
+      try {
+        sendToSender(sender, "chat:event", event);
+      } catch {
+        /* ignore */
+      }
+      return event;
     }
 
     const st = ensureArm(requestId);
@@ -493,22 +546,65 @@ function createR2ChatLifecycle(deps) {
     return activeRequest.isCurrentWritable(requestId);
   }
 
-  async function persistAssistantText(requestId, sessionId, assistantMessageId, displayText, modelText) {
-    if (!mayWrite(requestId) || sessions.isRecoveryLatched()) return false;
-    await sessions.updateStore(userData(), (store) => {
-      if (!mayWrite(requestId)) return null;
-      const s = store.sessions.find((x) => x.id === sessionId);
-      if (!s) return null;
-      const msg = (s.messages || []).find((m) => m.id === assistantMessageId);
-      if (msg) {
-        msg.displayText = displayText;
-        msg.modelText = modelText;
-        msg.content = modelText;
+  async function persistAssistantText(
+    requestId,
+    sessionId,
+    assistantMessageId,
+    displayText,
+    modelText,
+    opts = {}
+  ) {
+    const stopToken = opts && opts.stopToken;
+    const stopOwned = !!(stopToken && activeRequest.isStopOwner(requestId, stopToken));
+    if (!mayWrite(requestId) && !stopOwned) return false;
+    if (sessions.isRecoveryLatched()) return false;
+
+    return enqueuePersist(requestId, async () => {
+      const stillStop = !!(stopToken && activeRequest.isStopOwner(requestId, stopToken));
+      const stillWrite = mayWrite(requestId);
+      if (!stillWrite && !stillStop) return false;
+      if (sessions.isRecoveryLatched()) return false;
+
+      if (persistHookForTests) {
+        await persistHookForTests({
+          requestId,
+          phase: "before",
+          stopOwned: stillStop,
+        });
       }
-      s.updatedAt = new Date().toISOString();
-      return s;
+      if (!stillStop && persistDelayMsForTests > 0) {
+        await new Promise((r) => setTimeout(r, persistDelayMsForTests));
+      }
+      // Re-check after delay / hook — stop may have claimed ownership.
+      const stopNow = !!(stopToken && activeRequest.isStopOwner(requestId, stopToken));
+      const writeNow = mayWrite(requestId);
+      if (!writeNow && !stopNow) return false;
+
+      await sessions.updateStore(userData(), (store) => {
+        const stopInner = !!(stopToken && activeRequest.isStopOwner(requestId, stopToken));
+        const writeInner = mayWrite(requestId);
+        if (!writeInner && !stopInner) return null;
+        const s = store.sessions.find((x) => x.id === sessionId);
+        if (!s) return null;
+        const msg = (s.messages || []).find((m) => m.id === assistantMessageId);
+        if (msg) {
+          msg.displayText = displayText;
+          msg.modelText = modelText;
+          msg.content = modelText;
+        }
+        s.updatedAt = new Date().toISOString();
+        return s;
+      });
+
+      if (persistHookForTests) {
+        await persistHookForTests({
+          requestId,
+          phase: "after",
+          stopOwned: !!(stopToken && activeRequest.isStopOwner(requestId, stopToken)),
+        });
+      }
+      return true;
     });
-    return true;
   }
 
   async function runModelAndFinish(ctx) {
@@ -744,57 +840,82 @@ function createR2ChatLifecycle(deps) {
       });
     } finally {
       if (token) attachmentTokens.clear(token);
+      // User stop owns clear + arm/partial cleanup after claimStop.
+      if (activeRequest.hasStopClaim(requestId)) {
+        return;
+      }
       armState.delete(requestId);
       clearLivePartial(requestId);
+      persistQueues.delete(requestId);
       activeRequest.clear(requestId);
     }
   }
 
   /**
-   * User stop: controlled snapshot of live partial while still writable, emit stopped,
-   * then abort so background work cannot write or emit again. Fallback must not use this.
+   * User stop: claim ownership synchronously first (writable=false), then drain
+   * in-flight persists, write one controlled snapshot, emit stopped, clear.
+   * Fallback must use invalidate — never claimStop.
    */
   async function stopChat(sender, requestId) {
     const cur = activeRequest.get();
-    if (!cur) return { ok: true, stopped: false };
-    if (requestId && cur.requestId !== requestId) {
-      return { ok: false, code: "request_mismatch", message: "当前没有匹配的回复可停止。" };
+    if (!cur) {
+      return { ok: true, stopped: false, code: "already_completed" };
     }
-    const id = requestId || cur.requestId;
-    const sessionId = cur.originSessionId;
-    const assistantMessageId = cur.assistantMessageId;
+    if (requestId && cur.requestId !== requestId) {
+      return { ok: false, code: "request_mismatch", message: "当前没有匹配的回复可停止。", stopped: false };
+    }
 
-    if (activeRequest.isCurrentWritable(id)) {
-      const raw = livePartials.get(id) || "";
-      const cleaned = stripToolLeakage ? stripToolLeakage(raw) : raw;
-      const displayText = chatMessages.clampDisplayText(cleaned, "assistant");
-      const modelText = chatMessages.truncateMarked(cleaned, chatMessages.MODEL_TEXT_MAX).text;
-      try {
-        await persistAssistantText(id, sessionId, assistantMessageId, displayText, modelText);
-      } catch {
-        /* ignore */
-      }
-      if (activeRequest.isCurrentWritable(id)) {
-        activeRequest.setStatus(id, "stopped");
-        emitChatEvent(sender, {
+    const claimed = activeRequest.claimStop(requestId || cur.requestId);
+    if (!claimed.ok) {
+      return {
+        ok: true,
+        stopped: false,
+        code: claimed.code || "already_completed",
+      };
+    }
+
+    const { requestId: id, originSessionId: sessionId, assistantMessageId, stopToken } =
+      claimed.claim;
+
+    // Wait for any in-flight background persist to finish (or abandon) before final snapshot.
+    await waitPersistDrain(id);
+
+    const raw = livePartials.get(id) || "";
+    const cleaned = stripToolLeakage ? stripToolLeakage(raw) : raw;
+    const displayText = chatMessages.clampDisplayText(cleaned, "assistant");
+    const modelText = chatMessages.truncateMarked(cleaned, chatMessages.MODEL_TEXT_MAX).text;
+
+    try {
+      await persistAssistantText(id, sessionId, assistantMessageId, displayText, modelText, {
+        stopToken,
+      });
+    } catch {
+      /* ignore */
+    }
+
+    if (activeRequest.isStopOwner(id, stopToken)) {
+      activeRequest.setStatus(id, "stopped");
+      emitChatEvent(
+        sender,
+        {
           type: "stopped",
           requestId: id,
           sessionId,
           messageId: assistantMessageId,
           displayText,
-        });
-      }
+        },
+        { stopToken }
+      );
     }
 
-    const aborted = activeRequest.abort(id);
-    // Finalize user stop: tombstone + idle so return-legacy / session ops are not blocked
-    // while background runModelAndFinish winds down (its finally clear is then a no-op).
     armState.delete(id);
     clearLivePartial(id);
+    persistQueues.delete(id);
     if (activeRequest.isCurrent(id)) {
       activeRequest.clear(id);
     }
-    return { ok: true, stopped: true, aborted: !!(aborted && aborted.ok) };
+
+    return { ok: true, stopped: true, requestId: id };
   }
 
   function getActiveRequest() {
@@ -820,6 +941,7 @@ function createR2ChatLifecycle(deps) {
     const requestId = cur.requestId;
     // Fallback: invalidate only — no partial snapshot, no terminal write.
     activeRequest.invalidate(requestId);
+    await waitPersistDrain(requestId);
     // Wait until runModelAndFinish finally clears — do not pretend clear via setTimeout(0).
     const cleared = await activeRequest.waitUntilCleared(requestId, 8000);
     if (!cleared && activeRequest.isCurrent(requestId)) {
@@ -846,6 +968,8 @@ function createR2ChatLifecycle(deps) {
     checkUserReturnLegacy,
     abortActiveForFallback,
     validateInputText,
+    _setPersistDelayForTests,
+    _setPersistHookForTests,
   };
 }
 

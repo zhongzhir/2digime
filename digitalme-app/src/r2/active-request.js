@@ -19,6 +19,7 @@ function createActiveRequestRegistry(opts = {}) {
    *   sequence: number,
    *   generation: number,
    *   writable: boolean,
+   *   stopToken: string|null,
    *   abortController: AbortController,
    * }} */
   let current = null;
@@ -64,6 +65,7 @@ function createActiveRequestRegistry(opts = {}) {
       sequence: rec.sequence,
       generation: rec.generation,
       writable: rec.writable === true,
+      stopping: !!rec.stopToken,
     };
   }
 
@@ -97,6 +99,7 @@ function createActiveRequestRegistry(opts = {}) {
       sequence: 0,
       generation: generationCounter,
       writable: true,
+      stopToken: null,
       abortController,
     };
     return { ok: true, activeRequest: get(), abortController, generation: current.generation };
@@ -104,7 +107,7 @@ function createActiveRequestRegistry(opts = {}) {
 
   /**
    * True only while this requestId is the live registry entry AND still writable.
-   * Tombstoned / mismatched / cleared / aborted requests always return false.
+   * Stopping / invalidated / tombstoned requests always return false.
    */
   function isCurrentWritable(requestId) {
     if (!requestId) return false;
@@ -124,6 +127,26 @@ function createActiveRequestRegistry(opts = {}) {
   function nextSequence(requestId) {
     if (!current || current.requestId !== requestId) return null;
     if (!current.writable) return null;
+    current.sequence += 1;
+    return current.sequence;
+  }
+
+  function isStopOwner(requestId, stopToken) {
+    if (!requestId || !stopToken || !current) return false;
+    return (
+      current.requestId === requestId &&
+      current.stopToken != null &&
+      current.stopToken === stopToken
+    );
+  }
+
+  function hasStopClaim(requestId) {
+    return !!(current && current.requestId === requestId && current.stopToken);
+  }
+
+  /** Allow exactly the stop owner to mint one (or more) terminal sequences while not writable. */
+  function nextSequenceForStop(requestId, stopToken) {
+    if (!isStopOwner(requestId, stopToken)) return null;
     current.sequence += 1;
     return current.sequence;
   }
@@ -162,13 +185,63 @@ function createActiveRequestRegistry(opts = {}) {
   }
 
   /**
-   * Abort signal + mark not writable. No further emit/persist is allowed.
-   * Request stays until clear() so waitUntilCleared can observe completion.
+   * Atomically claim user-stop ownership: sync writable→false + stopToken.
+   * Background mayWrite/isCurrentWritable become false immediately.
+   * Fallback invalidate must NOT create a stopToken (no snapshot privilege).
+   */
+  function claimStop(requestId) {
+    if (!current) {
+      return { ok: false, code: "already_completed", stopped: false };
+    }
+    if (requestId && current.requestId !== requestId) {
+      return { ok: false, code: "request_mismatch", stopped: false };
+    }
+    if (current.status === "complete" || current.status === "failed") {
+      return { ok: false, code: "already_completed", stopped: false };
+    }
+    if (current.stopToken) {
+      return { ok: false, code: "already_stopping", stopped: false };
+    }
+    if (!current.writable) {
+      // Fallback-invalidated or otherwise non-writable — no stop snapshot privilege.
+      return { ok: false, code: "not_stoppable", stopped: false };
+    }
+
+    const stopToken = "stop_" + crypto.randomBytes(8).toString("hex");
+    try {
+      current.abortController.abort();
+    } catch {
+      /* ignore */
+    }
+    current.writable = false;
+    current.status = "stopping";
+    current.stopToken = stopToken;
+
+    return {
+      ok: true,
+      stopped: true,
+      claim: {
+        requestId: current.requestId,
+        originSessionId: current.originSessionId,
+        assistantMessageId: current.assistantMessageId,
+        stopToken,
+        generation: current.generation,
+      },
+      activeRequest: get(),
+    };
+  }
+
+  /**
+   * Abort signal + mark not writable without stop snapshot privilege (legacy helper).
+   * Prefer claimStop for user stop; invalidate for fallback.
    */
   function abort(requestId) {
     if (!current) return { ok: false, code: "no_active_request" };
     if (requestId && current.requestId !== requestId) {
       return { ok: false, code: "request_mismatch" };
+    }
+    if (current.stopToken) {
+      return { ok: true, activeRequest: get(), alreadyClaimed: true };
     }
     try {
       current.abortController.abort();
@@ -189,6 +262,7 @@ function createActiveRequestRegistry(opts = {}) {
       /* ignore */
     }
     current.writable = false;
+    // Never grant stopToken — fallback must not snapshot.
     current.status = current.status === "running" ? "stopping" : current.status;
     return true;
   }
@@ -212,7 +286,6 @@ function createActiveRequestRegistry(opts = {}) {
         if (idx >= 0) arr.splice(idx, 1);
         if (!arr.length) clearWaiters.delete(id);
         else clearWaiters.set(id, arr);
-        // Force clear zombie after timeout — still tombstoned so late writes fail
         if (current && current.requestId === id) {
           current = null;
           addTombstone(id);
@@ -230,7 +303,6 @@ function createActiveRequestRegistry(opts = {}) {
     return tombstones.size;
   }
 
-  /** Test helper */
   function _resetForTests() {
     current = null;
     tombstones.clear();
@@ -244,13 +316,17 @@ function createActiveRequestRegistry(opts = {}) {
     assertIdle,
     register,
     nextSequence,
+    nextSequenceForStop,
     setStatus,
     getAbortController,
     clear,
+    claimStop,
     abort,
     invalidate,
     isCurrent,
     isCurrentWritable,
+    isStopOwner,
+    hasStopClaim,
     matchesGeneration,
     waitUntilCleared,
     isTombstoned,

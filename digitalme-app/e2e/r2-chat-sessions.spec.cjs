@@ -811,4 +811,52 @@ test.describe("R2 chat and sessions", () => {
       await electronApp.close();
     }
   });
+
+  test("stop after first delta: no further stream; sessions stable", async () => {
+    const CHUNK_MS = 500;
+    const MODEL_TOTAL_MS = CHUNK_MS * 4 + 1000;
+    const { electronApp, win } = await launchApp({
+      DIGITALME_R2_FAKE_MODEL_DELAY_MS: String(CHUNK_MS),
+    });
+    try {
+      await enterNext(win);
+      await win.locator('[data-testid="btn-new-session"]').click();
+      await win.locator('[data-testid="chat-input"]').fill("先流后停");
+      await win.locator('[data-testid="btn-send"]').click();
+      await expect(win.locator('[data-testid="request-in-progress"]')).toBeVisible({
+        timeout: 5_000,
+      });
+      // First fake chunk is "这是"
+      await expect(win.locator('[data-testid="msg-assistant"]').first()).toContainText("这是", {
+        timeout: 10_000,
+      });
+      const textAtStop = await win.locator('[data-testid="msg-assistant"]').first().innerText();
+      await win.locator('[data-testid="btn-stop"]').click();
+      await expect(win.locator('[data-testid="request-in-progress"]')).toHaveCount(0, {
+        timeout: 10_000,
+      });
+      await win.waitForTimeout(400);
+      const textAfter = await win.locator('[data-testid="msg-assistant"]').first().innerText();
+      // Must not keep appending later chunks ("一段" / "测试回复。") after stop settled
+      expect(textAfter.includes("测试回复")).toBeFalsy();
+      expect(textAfter.length).toBeLessThanOrEqual(textAtStop.length + 8);
+
+      const sessionId = await win.evaluate(async () => {
+        const listed = await window.digitalMe.r2.listSessions();
+        return listed.activeId;
+      });
+      const mid = await win.evaluate(async (id) => {
+        const s = await window.digitalMe.r2.getSession(id);
+        return JSON.stringify(s.session);
+      }, sessionId);
+      await win.waitForTimeout(MODEL_TOTAL_MS);
+      const late = await win.evaluate(async (id) => {
+        const s = await window.digitalMe.r2.getSession(id);
+        return JSON.stringify(s.session);
+      }, sessionId);
+      expect(late).toBe(mid);
+    } finally {
+      await electronApp.close();
+    }
+  });
 });
