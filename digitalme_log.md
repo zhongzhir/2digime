@@ -5,6 +5,24 @@
 
 ---
 
+## 2026-07-21 Renderer Foundation R2 实施规格接受
+
+### 做了什么
+
+纯文档：Codex 最终复核通过后，将 R2 任务包从 **v0.1.1-draft** / `codex_changes_requested` 升为 **v0.1.1** / `specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`。§8「#15 停止状态」现场仅一行（无重复可删）。七项合同、22 项所有权、24 类恢复、38 项 E2E 保持。三项实施前参数门继续保留（不阻止规格接受；挡 R2-A 编码）。
+
+同步：context（决策 #92）、执行索引 v0.2.22、能力表、cursor rule、总任务包、R1 调度（最小）。
+
+### 明确未做
+
+未改源码/测试/配置/依赖/lockfile；未创建 R2 实现分支；未启动应用或测试；未读真实 Package/sessions；未开始 R2-A～R2-F / R2.5 / PAN-02；未 push。
+
+### 下一等待项
+
+**等待 Owner 是否授权创建** R2 实现分支 `codex/r2-chat-sessions-migration`。未获授权前不得创建分支或开始实现。
+
+---
+
 ## 2026-07-21 Renderer Foundation R2 第三轮最小安全闭环
 
 ### 做了什么

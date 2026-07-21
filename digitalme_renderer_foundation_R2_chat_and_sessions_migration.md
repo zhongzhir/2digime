@@ -1,26 +1,29 @@
 # Renderer Foundation R2：对话与会话迁移
 
-版本：v0.1.1-draft
+版本：v0.1.1
 日期：2026-07-21
-状态：`specified` / `codex_changes_requested` / `not_started`
-性质：**独立实施任务包草案（第三轮最小安全闭环）**；七项核心合同、22 项所有权、24 类恢复、38 项 E2E **不得改动其既有结论**；本轮仅关闭整文件损坏写屏障、损坏单会话删除歧义、`inputText`/附件 token 消费冻结；**Codex 最终复核通过前不得创建 R2 实现分支或修改源码**；**当前未授权实现**
+状态：`specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`
+性质：**独立实施任务包**；**实施规格已冻结**（Codex 最终复核通过）；**不是**实现完成或产品验收；实现分支**不存在**；**创建实现分支与开始实现须 Owner 另行明确授权**
 所属主线：`P1-PANORAMA`（三位一体 Alpha）
 前置：Renderer Foundation R0 **`accepted`**（v0.1.2）；Renderer Foundation R1 **`accepted`**（v0.1.3；baseline `8d7e9b3`）
 依据：`digitalme_renderer_foundation_R0_decision_and_migration_plan.md` §14 / §15 / §16；`digitalme_renderer_foundation_R1_shell_and_entry_switch.md`；执行索引；代码基线（只读核对）分支 `codex/r1-renderer-next-shell`
-实现分支：**不存在**（冻结名：`codex/r2-chat-sessions-migration`；**仅在 Codex 再复核通过且 Owner 授权后**、从 R2 规格接受提交创建；**当前禁止创建**）
+实现分支：**不存在**（冻结名：`codex/r2-chat-sessions-migration`；**仅在 Owner 明确授权后**、从本规格接受提交创建；**当前禁止创建**）
 
 > **状态语义**
 >
-> - **`specified` / `codex_changes_requested` / `not_started`**：七项核心合同已关闭；第二轮补全所有权/恢复/E2E；第三轮关闭损坏写屏障等安全歧义后，仍等待 **Codex 最终复核**；
-> - **不得**使用 `frozen_for_implementation` / `codex_review_passed` / `implemented` / `accepted`（本轮）；
-> - **七项核心合同结论冻结，不得重新讨论或改写**（见 §7.3 / §9 / §10.3 / §9.5 / §9.6）；
+> - **`codex_review_passed`**：仅表示实施规格通过 Codex 最终复核；
+> - **`frozen_for_implementation`**：规格可作为实现依据；
+> - **`not_started`**：实现尚未开始；实现分支不存在；
+> - **不得**标记 `implemented` / `statically_verified` / `runtime_verified` / `accepted` / `released`（本轮）；
+> - **七项核心合同、22 项状态所有权、24 类错误恢复、38 项 E2E 结论保持**；
 > - R1 `accepted` 仅覆盖 next 底座与整窗切换；**next 当前仍是预览空壳**；
 > - 生产默认入口仍为 **legacy**；普通用户**没有**进入 next 的生产入口；
 > - R2.5 SQLite 保持 `planned` / `deferred`；PAN-02 保持 `planned` / `blocked`；
-> - **不得**因本修订改写 R0 / R1 / PAN-01S 族已有 `accepted` 记录；
-> - 本文件描述的 API / 门禁 / UI **目标态**与现有代码并存关系见 §3；**不得假装目标 API 已实现**。
+> - **不得**因本接受改写 R0 / R1 / PAN-01S 族已有 `accepted` 记录；
+> - 本文件描述的 API / 门禁 / UI **目标态**与现有代码并存关系见 §3；**不得假装目标 API 已实现**；
+> - **三项实施前参数门**（§21）不阻止本规格接受，但须在 R2-A 首个代码提交前独立冻结并经 Codex 复核。
 
-角色：Owner（验收）＋ Codex（规格复核）＋ Cursor（实现；**仅在授权后**）
+角色：Owner（验收 / 实现授权）＋ Codex（规格复核）＋ Cursor（实现；**仅在授权后**）
 
 ---
 
@@ -28,14 +31,14 @@
 
 | 项 | 当前值 |
 |---|---|
-| 任务包版本 | **v0.1.1-draft** |
-| 工程状态 | `specified` / `codex_changes_requested` / `not_started` |
+| 任务包版本 | **v0.1.1** |
+| 工程状态 | `specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started` |
 | R2 实现分支 | **不存在**（冻结名见文首；当前禁止创建） |
 | 生产默认入口 | **legacy** |
 | R1 | `accepted`（v0.1.3；baseline `8d7e9b3`） |
 | R2.5 | `planned` / `deferred` |
 | PAN-02 | `planned` / `blocked`（见 R0 §16；R2 accepted **不**自动解锁） |
-| 本轮授权 | **仅第三轮安全闭环文档**；最终复核通过前不得实现 |
+| 本轮授权 | **仅规格接受**；未获 Owner 授权前不得创建分支或开始实现 |
 
 ---
 
@@ -676,7 +679,7 @@ R2 不迁移工作台，因此：
 2. 超过 8000 字截断提示最终措辞；
 3. attachment token 具体 TTL 秒数及原子 rename 有限重试次数。
 
-**明确：** 以上具体值必须在 **R2-A 首个代码提交之前**，通过同分支**独立的合同冻结提交**写明并经 Codex 复核；**未完成该合同冻结提交不得开始 R2-A 编码**；不得在编码过程中临时决定；不得允许任意 scenarioHint、无限 TTL 或无限重试。
+**明确：** 以上三项**不阻止**本规格接受（`v0.1.1` / `frozen_for_implementation`）。但必须在 **R2-A 首个代码提交之前**，通过同分支**独立的合同冻结提交**写明并经 Codex 复核；**未完成该合同冻结提交不得开始 R2-A 编码**；不得在编码过程中临时决定；不得允许任意 scenarioHint、无限 TTL 或无限重试。
 
 ---
 
@@ -684,9 +687,10 @@ R2 不迁移工作台，因此：
 
 | 项 | 值 |
 |---|---|
-| 本文件 | **v0.1.1-draft** / `specified` / `codex_changes_requested` / `not_started` |
-| 当前唯一等待项 | **Codex 最终复核**本 R2 任务包 |
-| 再复核通过前 | **不得**创建实现分支；**不得**修改源码 |
+| 本文件 | **v0.1.1** / `specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started` |
+| 当前唯一等待项 | **Owner 是否授权创建 R2 实现分支** `codex/r2-chat-sessions-migration` |
+| 未获 Owner 授权前 | **不得**创建实现分支；**不得**开始 R2-A～R2-F 编码 |
+| R2-A 编码前另需 | 三项参数门独立合同冻结提交 + Codex 复核（§21） |
 | R1 | `accepted`（不变） |
 | R2.5 | `planned` / `deferred` |
 | PAN-02 | `planned` / `blocked` |
@@ -699,6 +703,5 @@ R2 不迁移工作台，因此：
 | 日期 | 版本 | 说明 |
 |---|---|---|
 | 2026-07-21 | v0.1-draft | 初稿；`codex_review_pending`（历史） |
-| 2026-07-21 | v0.1.1-draft | Codex 第一轮有界修订：关闭七项合同（历史结论，本轮不得改写） |
-| 2026-07-21 | **v0.1.1-draft**（第二轮文档补全） | 补全 §8/§13/§15.3（历史） |
-| 2026-07-21 | **v0.1.1-draft**（第三轮最小安全闭环） | 冻结 `sessionsRecoveryLatch` 跨 next/legacy 写阻断；损坏单会话无普通删除入口；`inputText`≤2000 拒绝语义；附件 token 一次性消费。扩写 §15.2/§15.3 相关条目（仍 38 项）。七项核心合同与 22/24/38 结构保持。状态仍 `specified` / `codex_changes_requested` / `not_started`。等待 Codex 最终复核 |
+| 2026-07-21 | v0.1.1-draft | 第一～三轮：七项合同、所有权/恢复/E2E、安全闭环（历史） |
+| 2026-07-21 | **v0.1.1** | **Codex 最终复核通过**；状态 → `specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`。实施规格冻结；实现尚未授权、尚未开始；实现分支不存在。三项参数门仍须在 R2-A 编码前独立冻结。下一等待项：Owner 授权创建实现分支 |
