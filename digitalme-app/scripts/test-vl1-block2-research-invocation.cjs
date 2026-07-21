@@ -548,6 +548,281 @@ async function main() {
     }
   });
 
+  // --- save boundary: production helper used by actBehalf:save ---
+  const { saveDraftFromRenderer, buildDraftSaveRecord } = require("../src/act-behalf/task-save-boundary");
+
+  await test("renderer save without invocations keeps history intact", async () => {
+    const ud = tempUserData();
+    try {
+      const task = await seedConfirmedTask(ud, "保存边界目标甲");
+      const researched = await runReadonlyExternalResearch({
+        userData: ud,
+        taskId: task.taskId,
+        store: actStore,
+        skills: personalSkills,
+        searchWeb: fakeSearchWebFactory(),
+        forceFake: true,
+      });
+      assert.equal(researched.ok, true);
+      const before = researched.task.invocations.slice();
+      assert.ok(before.length >= 2);
+
+      const saved = await saveDraftFromRenderer(actStore, ud, {
+        taskId: task.taskId,
+        title: "标题微调",
+        goal: "保存边界目标甲",
+        status: "draft",
+        taskIntent: { goal: "保存边界目标甲", role: "代表本人做研究与表达" },
+      });
+      assert.equal(saved.ok, true);
+      assert.equal(saved.task.invocations.length, before.length);
+      assert.equal(saved.task.invocations[0].invocationId, before[0].invocationId);
+      assert.equal(
+        saved.task.invocations[before.length - 1].invocationId,
+        before[before.length - 1].invocationId
+      );
+    } finally {
+      cleanup(ud);
+    }
+  });
+
+  await test("renderer forged invocations cannot enter persisted task", async () => {
+    const ud = tempUserData();
+    try {
+      const task = await seedConfirmedTask(ud, "拒收伪造调用");
+      const researched = await runReadonlyExternalResearch({
+        userData: ud,
+        taskId: task.taskId,
+        store: actStore,
+        skills: personalSkills,
+        searchWeb: fakeSearchWebFactory(),
+        forceFake: true,
+      });
+      const beforeLen = researched.task.invocations.length;
+      const saved = await saveDraftFromRenderer(actStore, ud, {
+        taskId: task.taskId,
+        goal: "拒收伪造调用",
+        invocations: [
+          {
+            invocationId: "inv_forged_save",
+            kind: "tool",
+            status: "succeeded",
+            discoveredSources: [{ url: "https://evil.example/x", title: "evil" }],
+          },
+        ],
+        discoveredSources: [{ url: "https://evil.example/y" }],
+        resultRefs: [{ url: "https://evil.example/z" }],
+        sourceRefs: [{ source: "external_web", locator: "https://evil.example/z" }],
+      });
+      assert.equal(saved.ok, true);
+      assert.equal(saved.rejectedRendererResearch, true);
+      assert.equal(saved.task.invocations.length, beforeLen);
+      assert.ok(!saved.task.invocations.some((i) => i.invocationId === "inv_forged_save"));
+      assert.ok(
+        !JSON.stringify(saved.task.invocations).includes("evil.example")
+      );
+    } finally {
+      cleanup(ud);
+    }
+  });
+
+  await test("renderer cannot change existing invocation status or clear history", async () => {
+    const ud = tempUserData();
+    try {
+      const task = await seedConfirmedTask(ud, "状态保护");
+      const researched = await runReadonlyExternalResearch({
+        userData: ud,
+        taskId: task.taskId,
+        store: actStore,
+        skills: personalSkills,
+        searchWeb: fakeSearchWebFactory(),
+        forceFake: true,
+      });
+      const success = researched.task.invocations.find((i) => i.status === "succeeded");
+      assert.ok(success);
+      const mutated = researched.task.invocations.map((i) =>
+        i.invocationId === success.invocationId ? { ...i, status: "failed", error: { message: "hack" } } : i
+      );
+      const cleared = await saveDraftFromRenderer(actStore, ud, {
+        taskId: task.taskId,
+        goal: "状态保护",
+        invocations: [],
+      });
+      assert.equal(cleared.ok, true);
+      assert.ok(cleared.task.invocations.length >= 2);
+      assert.equal(
+        cleared.task.invocations.find((i) => i.invocationId === success.invocationId).status,
+        "succeeded"
+      );
+
+      const statusAttack = await saveDraftFromRenderer(actStore, ud, {
+        taskId: task.taskId,
+        goal: "状态保护",
+        invocations: mutated,
+      });
+      assert.equal(statusAttack.ok, true);
+      assert.equal(
+        statusAttack.task.invocations.find((i) => i.invocationId === success.invocationId).status,
+        "succeeded"
+      );
+    } finally {
+      cleanup(ud);
+    }
+  });
+
+  await test("renderer cannot forge selectedSkillId over authoritative value", async () => {
+    const ud = tempUserData();
+    try {
+      const task = await seedConfirmedTask(ud, "Skill 选择保护");
+      const researched = await runReadonlyExternalResearch({
+        userData: ud,
+        taskId: task.taskId,
+        store: actStore,
+        skills: personalSkills,
+        searchWeb: fakeSearchWebFactory(),
+        forceFake: true,
+      });
+      assert.equal(researched.task.selectedSkillId, ALLOWED_SKILL_ID);
+      const saved = await saveDraftFromRenderer(actStore, ud, {
+        taskId: task.taskId,
+        goal: "Skill 选择保护",
+        selectedSkillId: "psk_preset_quick_brief",
+      });
+      assert.equal(saved.ok, true);
+      assert.equal(saved.task.selectedSkillId, ALLOWED_SKILL_ID);
+    } finally {
+      cleanup(ud);
+    }
+  });
+
+  await test("new task cannot receive forged invocation from renderer payload", async () => {
+    const ud = tempUserData();
+    try {
+      const saved = await saveDraftFromRenderer(actStore, ud, {
+        title: "新任务",
+        goal: "新任务合法目标",
+        status: "draft",
+        taskIntent: { goal: "新任务合法目标" },
+        invocations: [
+          {
+            invocationId: "inv_new_forged",
+            kind: "tool",
+            status: "succeeded",
+            discoveredSources: [{ url: "https://evil.example/new" }],
+          },
+        ],
+        selectedSkillId: "psk_preset_deep_dive",
+      });
+      assert.equal(saved.ok, true);
+      assert.ok(Array.isArray(saved.task.invocations));
+      assert.equal(saved.task.invocations.length, 0);
+      assert.equal(saved.task.selectedSkillId, null);
+      assert.equal(saved.task.taskIntent.goal, "新任务合法目标");
+    } finally {
+      cleanup(ud);
+    }
+  });
+
+  await test("legal goal/intent edits still save; goal change keeps history but not current", async () => {
+    const ud = tempUserData();
+    try {
+      const goal1 = "公开市场与长期框架";
+      const task = await seedConfirmedTask(ud, goal1);
+      const researched = await runReadonlyExternalResearch({
+        userData: ud,
+        taskId: task.taskId,
+        store: actStore,
+        skills: personalSkills,
+        searchWeb: fakeSearchWebFactory(),
+        forceFake: true,
+      });
+      assert.equal(isResearchResultCurrent(researched.task), true);
+      const histLen = researched.task.invocations.length;
+
+      const edited = await saveDraftFromRenderer(actStore, ud, {
+        taskId: task.taskId,
+        goal: goal1,
+        title: "合法改标题",
+        taskIntent: {
+          goal: goal1,
+          role: "代表本人核对公开信息",
+          expectedOutcome: "要点清单",
+        },
+      });
+      assert.equal(edited.ok, true);
+      assert.equal(edited.task.title, "合法改标题");
+      assert.equal(edited.task.taskIntent.role, "代表本人核对公开信息");
+      assert.equal(edited.task.invocations.length, histLen);
+
+      const goal2 = "完全不同的新目标：表达风格润色";
+      const changed = await saveDraftFromRenderer(actStore, ud, {
+        taskId: task.taskId,
+        goal: goal2,
+        status: "draft",
+        taskIntent: { goal: goal2 },
+      });
+      assert.equal(changed.ok, true);
+      assert.equal(changed.invalidatedConfirmed, true);
+      assert.equal(changed.task.invocations.length, histLen);
+      assert.equal(changed.task.subjectContext, null);
+      assert.ok(changed.task.priorSubjectContext);
+      assert.equal(isResearchResultCurrent(changed.task), false);
+    } finally {
+      cleanup(ud);
+    }
+  });
+
+  await test("runReadonlyExternalResearch still appends after boundary save", async () => {
+    const ud = tempUserData();
+    try {
+      const task = await seedConfirmedTask(ud, "追加调用仍可用");
+      await saveDraftFromRenderer(actStore, ud, {
+        taskId: task.taskId,
+        goal: "追加调用仍可用",
+        invocations: [{ invocationId: "should_ignore", status: "succeeded" }],
+      });
+      const out = await runReadonlyExternalResearch({
+        userData: ud,
+        taskId: task.taskId,
+        store: actStore,
+        skills: personalSkills,
+        searchWeb: fakeSearchWebFactory(),
+        forceFake: true,
+      });
+      assert.equal(out.ok, true);
+      assert.ok(out.task.invocations.length >= 2);
+      assert.ok(!out.task.invocations.some((i) => i.invocationId === "should_ignore"));
+      assert.equal(out.toolInvocation.status, "succeeded");
+    } finally {
+      cleanup(ud);
+    }
+  });
+
+  await test("buildDraftSaveRecord never copies nested task.invocations forge", () => {
+    const existing = {
+      taskId: "abt_x",
+      goal: "g",
+      taskIntent: normalizeTaskIntent({ goal: "g" }, "abt_x"),
+      invocations: [{ invocationId: "inv_real", status: "succeeded" }],
+      selectedSkillId: ALLOWED_SKILL_ID,
+    };
+    const built = buildDraftSaveRecord({
+      existing,
+      rendererPayload: {
+        taskId: "abt_x",
+        goal: "g",
+        task: {
+          invocations: [{ invocationId: "inv_nested", status: "succeeded" }],
+          selectedSkillId: "psk_preset_quick_brief",
+        },
+      },
+    });
+    assert.equal(built.record.invocations.length, 1);
+    assert.equal(built.record.invocations[0].invocationId, "inv_real");
+    assert.equal(built.record.selectedSkillId, ALLOWED_SKILL_ID);
+    assert.equal(built.rejectedRendererResearch, true);
+  });
+
   console.log("\nvl1 block2 contracts:", passed, "passed,", failed, "failed");
   if (failed) process.exit(1);
 }

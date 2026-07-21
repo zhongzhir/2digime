@@ -34,13 +34,16 @@ const { normalizeTaskIntent, assertTaskIntentMinimal } = require("./act-behalf/t
 const {
   assembleSubjectContextCandidates,
   confirmSubjectContextWithUserActions,
-  applyGoalChangeToStoredTask,
 } = require("./act-behalf/subject-context-assembly");
 const {
   runReadonlyExternalResearch,
   ALLOWED_SKILL_ID,
   isResearchResultCurrent,
 } = require("./act-behalf/research-run");
+const {
+  saveDraftFromRenderer,
+  withAuthoritativeResearchFields,
+} = require("./act-behalf/task-save-boundary");
 const researchPresets = require("./skills/research-presets");
 const chatMessages = require("./chat-message-model");
 const catalog = require("./capabilities/catalog");
@@ -997,18 +1000,20 @@ ipcMain.handle("actBehalf:previewContext", async (_e, payload) => {
       priorSubjectContext = existing.subjectContext;
     }
 
-    const saved = await actBehalfStore.saveTask(userData, {
-      ...(existing || {}),
-      taskId: (payload && payload.taskId) || (existing && existing.taskId) || undefined,
-      title,
-      request: goal,
-      goal,
-      status: "draft",
-      taskIntent,
-      subjectContextCandidates: assembled.subjectContextDraft,
-      subjectContext: null,
-      priorSubjectContext,
-    });
+    const saved = await actBehalfStore.saveTask(
+      userData,
+      withAuthoritativeResearchFields(existing, {
+        taskId: (payload && payload.taskId) || (existing && existing.taskId) || undefined,
+        title,
+        request: goal,
+        goal,
+        status: "draft",
+        taskIntent,
+        subjectContextCandidates: assembled.subjectContextDraft,
+        subjectContext: null,
+        priorSubjectContext,
+      })
+    );
 
     return {
       ok: true,
@@ -1104,28 +1109,30 @@ ipcMain.handle("actBehalf:confirmContext", async (_e, payload) => {
       authority: "main_process_candidates",
     };
 
-    const saved = await actBehalfStore.saveTask(userData, {
-      ...(existing || {}),
-      taskId: (payload && payload.taskId) || (existing && existing.taskId) || undefined,
-      title,
-      request: goal,
-      goal,
-      status: "context_confirmed",
-      taskIntent,
-      subjectContextCandidates: draft,
-      subjectContext: confirmed,
-      priorSubjectContext: (existing && existing.priorSubjectContext) || null,
-      contextAudit,
-      selectedSelfContext: {
-        items: confirmed.claims.map((c) => ({
-          source: (c.sourceRefs[0] && c.sourceRefs[0].source) || "unknown",
-          label: c.label,
-          text: c.text,
-        })),
-        combinedText: confirmed.claims.map((c) => "### " + c.label + "\n" + c.text).join("\n\n"),
-        userEdited: true,
-      },
-    });
+    const saved = await actBehalfStore.saveTask(
+      userData,
+      withAuthoritativeResearchFields(existing, {
+        taskId: (payload && payload.taskId) || (existing && existing.taskId) || undefined,
+        title,
+        request: goal,
+        goal,
+        status: "context_confirmed",
+        taskIntent,
+        subjectContextCandidates: draft,
+        subjectContext: confirmed,
+        priorSubjectContext: (existing && existing.priorSubjectContext) || null,
+        contextAudit,
+        selectedSelfContext: {
+          items: confirmed.claims.map((c) => ({
+            source: (c.sourceRefs[0] && c.sourceRefs[0].source) || "unknown",
+            label: c.label,
+            text: c.text,
+          })),
+          combinedText: confirmed.claims.map((c) => "### " + c.label + "\n" + c.text).join("\n\n"),
+          userEdited: true,
+        },
+      })
+    );
 
     const intentCheck = assertTaskIntentMinimal({
       ...saved.task.taskIntent,
@@ -1269,64 +1276,8 @@ ipcMain.handle("actBehalf:getResearchSkill", async () => {
 ipcMain.handle("actBehalf:save", async (_e, payload) => {
   try {
     const userData = app.getPath("userData");
-    const goal = String((payload && (payload.goal || payload.request)) || "").trim();
-    const title =
-      String((payload && payload.title) || "").trim() ||
-      (goal ? goal.slice(0, 40) + (goal.length > 40 ? "…" : "") : "未命名任务");
-
-    let existing = null;
-    if (payload && payload.taskId) {
-      const got = actBehalfStore.getTask(userData, payload.taskId);
-      if (got.ok) existing = got.task;
-    }
-
-    // Goal consistency: invalidate confirmed snapshot / stale candidates.
-    // Do not accept renderer-supplied claim bodies as authority.
-    const goalFields = applyGoalChangeToStoredTask(existing, goal);
-
-    const taskIntent = normalizeTaskIntent(
-      {
-        ...(existing && existing.taskIntent),
-        ...(payload && payload.taskIntent),
-        goal,
-        role: (payload && payload.role) || (payload && payload.taskIntent && payload.taskIntent.role),
-        expectedOutcome:
-          (payload && payload.expectedOutcome) ||
-          (payload && payload.taskIntent && payload.taskIntent.expectedOutcome),
-        constraints:
-          (payload && payload.constraints) ||
-          (payload && payload.taskIntent && payload.taskIntent.constraints),
-      },
-      (payload && payload.taskId) || (existing && existing.taskId)
-    );
-
-    let status = "draft";
-    if (goalFields.invalidatedConfirmed) {
-      status = goalFields.status || "draft";
-    } else if (payload && payload.status) {
-      status = String(payload.status);
-    } else if (existing && existing.status) {
-      status = String(existing.status);
-    }
-
-    const saved = await actBehalfStore.saveTask(userData, {
-      ...(existing || {}),
-      taskId: (payload && payload.taskId) || (existing && existing.taskId) || undefined,
-      title,
-      request: goal,
-      goal,
-      taskIntent,
-      status,
-      subjectContextCandidates: goalFields.subjectContextCandidates,
-      subjectContext: goalFields.subjectContext,
-      priorSubjectContext: goalFields.priorSubjectContext,
-      contextAudit: (existing && existing.contextAudit) || null,
-    });
-    return {
-      ...saved,
-      invalidatedConfirmed: goalFields.invalidatedConfirmed,
-      clearedCandidates: goalFields.clearedCandidates,
-    };
+    // Production boundary helper: ignores renderer invocations / selectedSkillId / sources.
+    return await saveDraftFromRenderer(actBehalfStore, userData, payload || {});
   } catch (err) {
     return {
       ok: false,

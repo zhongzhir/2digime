@@ -2,7 +2,7 @@
 
 版本：v0.1.4  
 日期：2026-07-21  
-状态：`spec_frozen` / **当前唯一执行计划**（第 1 块 `accepted`；第 2 块 `implemented_pending_codex_review`；**下一项为第 3 块**）  
+状态：`spec_frozen` / **当前唯一执行计划**（第 1 块 `accepted`；第 2 块 `implemented_pending_codex_review`（含保存边界验收修正）；**下一项为第 3 块**）  
 所属架构：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)  
 服务闭环：**第一闭环 — 理解我并产出**  
 **冻结规格（正文）**：[`digitalme_first_vertical_loop_spec_v0.1.md`](digitalme_first_vertical_loop_spec_v0.1.md)（**v0.1.0 `spec_frozen`**）
