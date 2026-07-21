@@ -1,15 +1,18 @@
 "use strict";
 
 /**
- * Minimal act-behalf task store — hermetic userData JSON with atomic rename.
+ * Act-behalf / research-express task store — hermetic userData JSON with atomic rename.
  * File: <userData>/act-behalf-tasks.json
+ * schemaVersion 2: Task Intent + Subject Context contracts (block 1).
  */
 
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const { normalizeTaskIntent } = require("./task-intent");
 
-const STORE_VERSION = 1;
+const STORE_VERSION = 2;
+const TASK_SCHEMA_VERSION = 2;
 const RENAME_RETRY_WAITS_MS = Object.freeze([50, 150, 350]);
 const RENAME_RETRY_CODES = new Set(["EBUSY", "EPERM", "EACCES"]);
 
@@ -93,30 +96,106 @@ function enqueueWrite(task) {
   return run;
 }
 
+function migrateLegacySelectedSelfContext(legacy) {
+  if (!legacy || typeof legacy !== "object") return null;
+  if (Array.isArray(legacy.claims)) return legacy;
+  const items = Array.isArray(legacy.items) ? legacy.items : [];
+  if (!items.length && !legacy.combinedText) return null;
+  return {
+    subjectId: "legacy:unknown",
+    version: "legacy",
+    subjectVersion: "legacy",
+    claims: items.map((it, idx) => ({
+      id: "legacy_" + idx,
+      kind: "other",
+      label: String(it.label || it.source || "摘录"),
+      text: String(it.text || ""),
+      sourceRefs: [{ source: String(it.source || "unknown") }],
+      confidence: "unknown",
+      confirmationState: legacy.userEdited ? "user_edited" : "proposed",
+    })),
+    sourceRefs: items.map((it) => ({ source: String(it.source || "unknown") })),
+    confidence: "unknown",
+    confirmationState: legacy.userEdited ? "user_edited" : "proposed",
+    scope: "从旧版摘录迁移的候选（未必已确认）",
+    prohibitedUses: [],
+    rankingMeta: { method: "legacy_migration", degraded: true },
+  };
+}
+
 function normalizeTask(input) {
   const now = new Date().toISOString();
+  const taskId = String((input && input.taskId) || newTaskId());
+  const goalFromRequest = String((input && (input.goal || input.request)) || "").trim();
+  const title =
+    String((input && input.title) || "").trim() ||
+    (goalFromRequest ? goalFromRequest.slice(0, 40) + (goalFromRequest.length > 40 ? "…" : "") : "") ||
+    "未命名任务";
+
+  const intentInput =
+    input && input.taskIntent && typeof input.taskIntent === "object"
+      ? { ...input.taskIntent, goal: input.taskIntent.goal || goalFromRequest, taskId }
+      : { goal: goalFromRequest, taskId };
+  const taskIntent = normalizeTaskIntent(intentInput, taskId);
+  taskIntent.taskId = taskId;
+
+  let subjectContextCandidates =
+    input && input.subjectContextCandidates && typeof input.subjectContextCandidates === "object"
+      ? input.subjectContextCandidates
+      : null;
+  let subjectContext =
+    input && input.subjectContext && typeof input.subjectContext === "object"
+      ? input.subjectContext
+      : null;
+
+  const legacy = input && input.selectedSelfContext;
+  if (!subjectContextCandidates && legacy) {
+    subjectContextCandidates = migrateLegacySelectedSelfContext(legacy);
+  }
+  if (!subjectContext && legacy && legacy.userEdited && subjectContextCandidates) {
+    // Old edited contexts are treated as candidate-level, not auto-confirmed contract.
+    subjectContext = null;
+  }
+
+  const selectedSelfContext = legacy || {
+    items: ((subjectContext && subjectContext.claims) || (subjectContextCandidates && subjectContextCandidates.claims) || []).map(
+      (c) => ({
+        source: (c.sourceRefs && c.sourceRefs[0] && c.sourceRefs[0].source) || "unknown",
+        label: c.label || "",
+        text: c.text || "",
+      })
+    ),
+    combinedText: ((subjectContext && subjectContext.claims) || (subjectContextCandidates && subjectContextCandidates.claims) || [])
+      .map((c) => "### " + (c.label || "") + "\n" + (c.text || ""))
+      .join("\n\n"),
+    userEdited: !!(subjectContext && subjectContext.confirmationState === "confirmed"),
+  };
+
   return {
-    schemaVersion: 1,
-    taskId: String(input.taskId || newTaskId()),
-    title: String(input.title || "").trim() || "未命名任务",
-    request: String(input.request || ""),
-    status: String(input.status || "draft"),
-    selectedSelfContext: input.selectedSelfContext || {
-      items: [],
-      combinedText: "",
-      userEdited: false,
-    },
-    existingUserPositions: String(input.existingUserPositions || ""),
-    digitalMeInferences: String(input.digitalMeInferences || ""),
-    result: String(input.result || ""),
-    // Reserved for later capability / identity / authorization / audit expansion
-    capabilityRefs: Array.isArray(input.capabilityRefs) ? input.capabilityRefs : [],
-    identityRefs: Array.isArray(input.identityRefs) ? input.identityRefs : [],
-    authorization: input.authorization || null,
-    audit: input.audit || null,
-    modelMeta: input.modelMeta || null,
-    createdAt: String(input.createdAt || now),
-    updatedAt: String(input.updatedAt || now),
+    schemaVersion: TASK_SCHEMA_VERSION,
+    taskId,
+    title,
+    // legacy mirror of goal
+    request: taskIntent.goal || String((input && input.request) || ""),
+    goal: taskIntent.goal,
+    status: String((input && input.status) || "draft"),
+    taskIntent,
+    subjectContextCandidates,
+    subjectContext,
+    contextAudit: (input && input.contextAudit) || null,
+    selectedSelfContext,
+    existingUserPositions: String((input && input.existingUserPositions) || ""),
+    digitalMeInferences: String((input && input.digitalMeInferences) || ""),
+    result: String((input && input.result) || ""),
+    // Reserved for later blocks — keep empty, do not build platforms
+    invocations: Array.isArray(input && input.invocations) ? input.invocations : [],
+    capabilityRefs: Array.isArray(input && input.capabilityRefs) ? input.capabilityRefs : [],
+    identityRefs: Array.isArray(input && input.identityRefs) ? input.identityRefs : [],
+    authorization: (input && input.authorization) || null,
+    audit: (input && input.audit) || null,
+    modelMeta: (input && input.modelMeta) || null,
+    createdAt: String((input && input.createdAt) || now),
+    updatedAt: String((input && input.updatedAt) || now),
   };
 }
 
@@ -127,14 +206,18 @@ function listTasks(userData) {
     tasks: (store.tasks || [])
       .slice()
       .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")))
-      .map((t) => ({
-        taskId: t.taskId,
-        title: t.title,
-        status: t.status,
-        createdAt: t.createdAt,
-        updatedAt: t.updatedAt,
-        requestPreview: String(t.request || "").slice(0, 120),
-      })),
+      .map((t) => {
+        const norm = normalizeTask(t);
+        return {
+          taskId: norm.taskId,
+          title: norm.title,
+          status: norm.status,
+          createdAt: norm.createdAt,
+          updatedAt: norm.updatedAt,
+          requestPreview: String(norm.taskIntent.goal || norm.request || "").slice(0, 120),
+          contextConfirmed: !!(norm.subjectContext && norm.subjectContext.confirmationState === "confirmed"),
+        };
+      }),
   };
 }
 
@@ -144,7 +227,7 @@ function getTask(userData, taskId) {
   if (!task) {
     return { ok: false, code: "not_found", message: "找不到该任务。" };
   }
-  return { ok: true, task };
+  return { ok: true, task: normalizeTask(task) };
 }
 
 async function saveTask(userData, taskInput) {
@@ -152,9 +235,16 @@ async function saveTask(userData, taskInput) {
   task.updatedAt = new Date().toISOString();
   await enqueueWrite(async () => {
     const store = loadStore(userData);
+    store.version = STORE_VERSION;
     const idx = store.tasks.findIndex((t) => t.taskId === task.taskId);
-    if (idx >= 0) store.tasks[idx] = task;
-    else store.tasks.unshift(task);
+    if (idx >= 0) {
+      // Preserve createdAt from existing record when present
+      const prev = store.tasks[idx];
+      if (prev && prev.createdAt) task.createdAt = String(prev.createdAt);
+      store.tasks[idx] = task;
+    } else {
+      store.tasks.unshift(task);
+    }
     await persistStoreAtomic(userData, store);
   });
   return { ok: true, task };
@@ -172,6 +262,7 @@ async function deleteTask(userData, taskId) {
 
 module.exports = {
   STORE_VERSION,
+  TASK_SCHEMA_VERSION,
   storePath,
   newTaskId,
   loadStore,
@@ -180,4 +271,5 @@ module.exports = {
   saveTask,
   deleteTask,
   normalizeTask,
+  migrateLegacySelectedSelfContext,
 };

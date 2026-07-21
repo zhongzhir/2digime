@@ -438,8 +438,8 @@
               <div class="me-topbar-main">
                 <button type="button" id="btn-do-back-act" class="btn-ghost btn-do-back">← 场景目录</button>
                 <div>
-                  <div id="do-act-title">代表我完成任务</div>
-                  <div id="do-act-sub" class="muted">输入真实任务 → 确认本次使用的本人信息 → 生成并保存可区分「已有内容 / 新推断」的结果。</div>
+                  <div id="do-act-title">研究与表达</div>
+                  <div id="do-act-sub" class="muted">填写研究目标 → 按目标生成本人信息候选 → 确认、删除或补充 → 保存本次快照。</div>
                 </div>
               </div>
               <button type="button" class="btn-help" data-help-topic="do" title="打开说明">说明</button>
@@ -456,39 +456,58 @@
                 </div>
               </aside>
               <div class="act-behalf-main">
-                <label class="library-title-label">任务标题
-                  <input id="act-title" type="text" placeholder="例如：起草本周工作汇报要点" data-testid="act-title" />
+                <label class="library-title-label">任务标题（可选）
+                  <input id="act-title" type="text" placeholder="例如：公开市场事件对本人关注方向的含义" data-testid="act-title" />
                 </label>
-                <label class="library-title-label">任务说明
-                  <textarea id="act-request" rows="5" placeholder="用一两段话说明希望 Digital Me 代表你完成什么…" data-testid="act-request"></textarea>
+                <label class="library-title-label">研究与表达目标（必填）
+                  <textarea id="act-request" rows="4" placeholder="用一两段话说明本次真实研究与表达目标…" data-testid="act-request"></textarea>
                 </label>
+                <details class="act-intent-advanced">
+                  <summary class="muted">更多意图选项（可选）</summary>
+                  <label class="library-title-label">本次角色
+                    <input id="act-role" type="text" placeholder="代表本人做研究与表达" data-testid="act-role" />
+                  </label>
+                  <label class="library-title-label">期望成果
+                    <input id="act-expected" type="text" placeholder="可编辑短文或纪要" data-testid="act-expected" />
+                  </label>
+                </details>
                 <div class="act-context-block">
                   <div class="ext-store-head">
-                    <h3>本次使用的本人信息</h3>
-                    <button id="btn-act-reload-context" class="btn-ghost" type="button">重新摘录</button>
+                    <h3>本人上下文候选</h3>
+                    <button id="btn-act-reload-context" class="btn-ghost" type="button" data-testid="btn-act-reload-context">按目标生成候选</button>
                   </div>
                   <p id="act-context-note" class="muted write-rail-hint" data-testid="act-context-note"></p>
-                  <textarea id="act-self-context" rows="10" placeholder="将显示与本任务相关的本人信息摘录，可编辑确认后再提交。" data-testid="act-self-context"></textarea>
+                  <p id="act-context-status" class="muted write-rail-hint" data-testid="act-context-status"></p>
+                  <div id="act-claim-list" class="act-claim-list" data-testid="act-claim-list"></div>
+                  <label class="library-title-label">补充一条本人信息（可选）
+                    <textarea id="act-supplement" rows="3" placeholder="仅写入本次任务快照，不会删除或改写主体资料包原文。" data-testid="act-supplement"></textarea>
+                  </label>
+                  <textarea id="act-self-context" class="hidden" rows="2" data-testid="act-self-context" aria-hidden="true"></textarea>
                 </div>
                 <div class="builder-actions">
-                  <button id="btn-act-run" type="button" data-testid="btn-act-run">代表我完成</button>
+                  <button id="btn-act-confirm-context" type="button" data-testid="btn-act-confirm-context">确认本次本人上下文</button>
                   <button id="btn-act-save" class="btn-ghost" type="button" data-testid="btn-act-save">保存草稿</button>
+                  <button id="btn-act-run" class="btn-ghost hidden" type="button" data-testid="btn-act-run" disabled title="下一块开放">研究执行（尚未开放）</button>
                 </div>
                 <div id="act-progress" class="builder-progress" data-testid="act-progress"></div>
                 <div id="act-result-panel" class="act-result-panel hidden" data-testid="act-result-panel">
                   <div class="output-card">
+                    <h3>已确认本人上下文摘要</h3>
+                    <div id="act-confirmed-summary" class="act-result-body" data-testid="act-confirmed-summary"></div>
+                  </div>
+                  <div class="output-card hidden">
                     <h3>使用的本人信息（模型自述）</h3>
                     <div id="act-used-self" class="act-result-body" data-testid="act-used-self"></div>
                   </div>
-                  <div class="output-card">
+                  <div class="output-card hidden">
                     <h3>本人已有事实或观点</h3>
                     <div id="act-existing" class="act-result-body" data-testid="act-existing"></div>
                   </div>
-                  <div class="output-card">
+                  <div class="output-card hidden">
                     <h3>Digital Me 的新分析或建议</h3>
                     <div id="act-inferences" class="act-result-body" data-testid="act-inferences"></div>
                   </div>
-                  <div class="output-card">
+                  <div class="output-card hidden">
                     <h3>完整结果</h3>
                     <div id="act-result" class="act-result-body" data-testid="act-result"></div>
                   </div>

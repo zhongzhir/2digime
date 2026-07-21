@@ -2851,7 +2851,7 @@ body {
 .subject-warning-list { margin: 8px 0 0; padding-left: 18px; font-size: 13px; }
 .subject-warnings { border-color: #e8c9a8; background: #fff8f0; }
 
-/* DM-Core-01A act-behalf */
+/* Research-express / act-behalf (VL1 block 1) */
 .act-behalf-layout {
   display: grid;
   grid-template-columns: minmax(200px, 260px) 1fr;
@@ -2872,9 +2872,42 @@ body {
   box-sizing: border-box;
 }
 .act-context-block textarea {
-  min-height: 160px;
+  min-height: 72px;
   font-family: inherit;
   line-height: 1.45;
+}
+.act-claim-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid var(--border, #ddd);
+  padding: 8px;
+  border-radius: 6px;
+}
+.act-claim-row {
+  border-bottom: 1px solid var(--border, #eee);
+  padding-bottom: 8px;
+}
+.act-claim-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.act-claim-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.act-claim-body {
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.act-intent-advanced {
+  margin: 0;
 }
 .act-result-panel {
   display: flex;

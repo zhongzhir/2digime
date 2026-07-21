@@ -70,8 +70,8 @@
 | **R2.5 SQLite ADR** | `planned` / **`deferred`** | — | 量化触发 + 独立 ADR + Owner 授权；非第一闭环前提 |
 | **PAN-02** | **`paused`**（相对新主线；历史曾 `planned`/`blocked`） | — | 不得按旧解锁条件自行启动；见第一纵向闭环计划 |
 | **旧 DM-Core-01A 开发指令** | **`superseded`** | 见 `digitalme_dm_core_01a_superseded_notice_v0.1.md` | 不得再按该指令扩展 |
-| **提交 `55ae01f`（act-behalf）** | **`retained_for_mapping_review`** / `experimental_infrastructure` | `digitalme-app/src/act-behalf/*`；commit `55ae01f` | 已存在实现；非第一闭环完成；本次不改代码；映射后再裁定 |
-| **第一纵向闭环** | **`spec_frozen`** | `digitalme_first_vertical_loop_sprint_plan_v0.1.md` + `digitalme_first_vertical_loop_spec_v0.1.md` | 映射与规格已冻结；**下一项** = 实现任务意图与本人上下文装配（待授权） |
+| **提交 `55ae01f`（act-behalf）** | **`partially_reused_as_first_vertical_loop_scaffold`** | `digitalme-app/src/act-behalf/*`；commit `55ae01f` 起演进 | 规格已裁定；第 1 块复用列表/恢复/callModel 脚手架；固定截取与模型自述证据不作最终闭环 |
+| **第一纵向闭环** | **`spec_frozen` / block1_implemented** | 计划 v0.1.3；规格 v0.1.0；`test:vl1-block1` | 第 1 块：Task Intent + Subject Context 装配已实现；**下一项** = 第 2 块 Skill+只读外搜 |
 
 ## P1-07 冻结说明（与任务包 / 执行索引 / log 一致）
 

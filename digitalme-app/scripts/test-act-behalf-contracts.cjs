@@ -56,7 +56,8 @@ async function main() {
     assert.ok(ctx.items.length >= 2);
     assert.ok(ctx.combinedText.length <= ctx.budget + 50);
     assert.ok(!ctx.combinedText.includes("私密".repeat(1000)));
-    assert.ok(ctx.note.includes("摘录") || ctx.note.includes("不足"));
+    assert.ok(ctx.note.includes("摘录") || ctx.note.includes("不足") || ctx.note.includes("确认"));
+    assert.ok(!ctx.note.includes("与当前任务相关"));
   });
 
   await test("parseActBehalfOutput splits four sections", () => {

@@ -5,6 +5,22 @@
 
 ---
 
+## 2026-07-21 第一闭环实现 · 第 1 块：任务意图与本人上下文装配
+
+### 做了什么
+
+实现 Task Intent 最小字段与 Subject Context 按 goal 相关性排序、确认/删除/补充、快照保存与重启恢复；工作台入口更名为「研究与表达」；扩展 `act-behalf-tasks.json` schema v2；兼容旧 `55ae01f` 任务读取。`55ae01f` 状态更新为 `partially_reused_as_first_vertical_loop_scaffold`。聚焦测试 `test:vl1-block1` + `test:act-behalf`。
+
+### 明确未做
+
+未接 Skill / searchWeb / 研究执行 / 四栏成果 / Experience Proposal / Package 回写 / R3。
+
+### 下一任务
+
+**第一闭环实现 · 第 2 块：真实 Skill 与只读外部调研调用**
+
+---
+
 ## 2026-07-21 第一纵向闭环：仓库映射与规格冻结
 
 ### 做了什么

@@ -181,7 +181,7 @@ Subject Kernel
 | PAN-02～PAN-06 | **`paused` / `blocked` 相对新主线**；历史索引保留 |
 | 旧「Skill/MCP/Agent/身份并列 7 任务块」 | **`superseded`** |
 | **旧 DM-Core-01A 开发指令** | **`superseded`**（不得再按该指令扩展；见 `digitalme_dm_core_01a_superseded_notice_v0.1.md`） |
-| **提交 `55ae01f`（act-behalf）** | **`retained_for_mapping_review`** / `experimental_infrastructure`（已存在实现；**不是**第一闭环完成态；本次不得改代码） |
+| **提交 `55ae01f`（act-behalf）** | **`partially_reused_as_first_vertical_loop_scaffold`**（第 1 块已复用；固定截取与模型自述证据不作最终闭环） |
 | P1-PANORAMA 执行索引 | **历史执行记录 + 基础设施状态表**；**不再声称「当前产品主线」** |
 
 细则与合同映射见 [`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md) 与冻结规格 [`digitalme_first_vertical_loop_spec_v0.1.md`](digitalme_first_vertical_loop_spec_v0.1.md)。

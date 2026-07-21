@@ -80,9 +80,9 @@ const RESEARCH_STAGES = RESEARCH_PROGRESS;
 const DO_SCENES = [
   {
     id: "act_behalf",
-    title: "代表我完成任务",
+    title: "研究与表达",
     status: "ready",
-    blurb: "确认本人信息后，生成可区分已有内容与新推断的结果。",
+    blurb: "按目标装配本人上下文，确认后保存本次快照。",
   },
   {
     id: "write",
@@ -5282,12 +5282,13 @@ async function openDoScene(sceneId, opts = {}) {
   if (opts.libraryId) await openLibraryItem(opts.libraryId);
 }
 
-/** DM-Core-01A: act-behalf scene state */
+/** First vertical loop block 1: research-express Task Intent + Subject Context */
 let actBehalfState = {
   taskId: null,
-  contextItems: [],
-  contextBaseline: "",
-  userEdited: false,
+  draftClaims: [],
+  draftMeta: null,
+  confirmed: null,
+  rankingMeta: null,
 };
 
 function setActProgress(text) {
@@ -5295,31 +5296,85 @@ function setActProgress(text) {
   if (el) el.textContent = text || "";
 }
 
+function setActContextStatus(text) {
+  const el = $("act-context-status");
+  if (el) el.textContent = text || "";
+}
+
 function clearActResultPanel() {
   const panel = $("act-result-panel");
   if (panel) panel.classList.add("hidden");
-  for (const id of ["act-used-self", "act-existing", "act-inferences", "act-result"]) {
-    const el = $(id);
-    if (el) el.textContent = "";
-  }
+  const summary = $("act-confirmed-summary");
+  if (summary) summary.textContent = "";
 }
 
-function renderActResult(task, usedSelfInfo) {
+function renderConfirmedSummary(subjectContext) {
   const panel = $("act-result-panel");
-  if (!panel) return;
-  panel.classList.remove("hidden");
-  const used = $("act-used-self");
-  const existing = $("act-existing");
-  const inferences = $("act-inferences");
-  const result = $("act-result");
-  if (used) {
-    used.textContent =
-      String(usedSelfInfo || (task.modelMeta && task.modelMeta.usedSelfInfo) || "").trim() ||
-      "（无）";
+  const summary = $("act-confirmed-summary");
+  if (!panel || !summary) return;
+  if (!subjectContext || subjectContext.confirmationState !== "confirmed") {
+    panel.classList.add("hidden");
+    summary.textContent = "";
+    return;
   }
-  if (existing) existing.textContent = String(task.existingUserPositions || "").trim() || "（无）";
-  if (inferences) inferences.textContent = String(task.digitalMeInferences || "").trim() || "（无）";
-  if (result) result.textContent = String(task.result || "").trim() || "（无）";
+  panel.classList.remove("hidden");
+  const lines = (subjectContext.claims || []).map((c, i) => {
+    const src =
+      ((c.sourceRefs || [])
+        .map((r) => r.source + (r.locator ? "#" + r.locator : ""))
+        .join("；")) || "无";
+    return `${i + 1}. [${c.kind || "other"}] ${c.text}\n   来源：${src}`;
+  });
+  summary.textContent =
+    `状态：已确认 · 版本 ${subjectContext.version || subjectContext.subjectVersion || "—"}\n` +
+    `主体：${subjectContext.subjectId || "—"}\n` +
+    `范围：${subjectContext.scope || "—"}\n\n` +
+    (lines.join("\n\n") || "（无已确认条目）");
+}
+
+function renderActClaimList() {
+  const list = $("act-claim-list");
+  if (!list) return;
+  list.innerHTML = "";
+  const claims = actBehalfState.draftClaims || [];
+  if (!claims.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "尚未生成候选。请填写目标后点击「按目标生成候选」。";
+    list.appendChild(empty);
+    return;
+  }
+  for (const c of claims) {
+    const row = document.createElement("div");
+    row.className = "act-claim-row";
+    row.dataset.claimId = c.id;
+    const src =
+      ((c.sourceRefs || []).map((r) => r.source).filter(Boolean).join("、")) || "未知来源";
+    const head = document.createElement("div");
+    head.className = "act-claim-head";
+    const meta = document.createElement("span");
+    meta.className = "muted";
+    meta.textContent = `${c.label || c.kind || "条目"} · ${src} · ${c.confirmationState || "proposed"}`;
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "btn-ghost";
+    del.textContent = "删除";
+    del.addEventListener("click", () => {
+      actBehalfState.draftClaims = (actBehalfState.draftClaims || []).filter((x) => x.id !== c.id);
+      renderActClaimList();
+      setActContextStatus(
+        `已从本次候选中移除 1 条（不会删除主体资料原文）。剩余 ${actBehalfState.draftClaims.length} 条。`
+      );
+    });
+    head.appendChild(meta);
+    head.appendChild(del);
+    const body = document.createElement("div");
+    body.className = "act-claim-body";
+    body.textContent = c.text || "";
+    row.appendChild(head);
+    row.appendChild(body);
+    list.appendChild(row);
+  }
 }
 
 async function refreshActTaskList() {
@@ -5335,9 +5390,10 @@ async function refreshActTaskList() {
     btn.type = "button";
     btn.className = "library-item";
     btn.dataset.taskId = t.taskId;
+    const flag = t.contextConfirmed ? "已确认上下文" : t.status || "";
     btn.innerHTML =
       `<strong>${escapeHtml(t.title || "未命名任务")}</strong>` +
-      `<span class="muted">${escapeHtml(t.status || "")} · ${escapeHtml(
+      `<span class="muted">${escapeHtml(flag)} · ${escapeHtml(
         String(t.updatedAt || "").slice(0, 19).replace("T", " ")
       )}</span>` +
       `<span class="muted">${escapeHtml(t.requestPreview || "")}</span>`;
@@ -5347,41 +5403,61 @@ async function refreshActTaskList() {
 }
 
 async function loadActBehalfContext() {
-  setActProgress("正在摘录本人信息…");
-  const res = await window.digitalMe.actBehalfPreviewContext();
+  const goal = ($("act-request") && $("act-request").value.trim()) || "";
+  if (!goal) {
+    setActProgress("请先填写研究与表达目标，再生成本人上下文候选。");
+    return;
+  }
+  setActProgress("正在按目标装配本人信息候选…");
+  const res = await window.digitalMe.actBehalfPreviewContext({ goal });
   if (!res || !res.ok) {
     setActProgress((res && res.message) || "无法准备本人信息。");
     return;
   }
-  const ctx = res.selectedSelfContext || {};
-  actBehalfState.contextItems = ctx.items || [];
-  actBehalfState.contextBaseline = String(ctx.combinedText || "");
-  actBehalfState.userEdited = false;
+  const draft = res.subjectContextDraft || {};
+  actBehalfState.draftClaims = (draft.claims || []).slice();
+  actBehalfState.draftMeta = draft;
+  actBehalfState.rankingMeta = draft.rankingMeta || res.rankingMeta || null;
+  actBehalfState.confirmed = null;
   const note = $("act-context-note");
-  if (note) note.textContent = ctx.note || "";
-  const area = $("act-self-context");
-  if (area) area.value = actBehalfState.contextBaseline;
-  setActProgress(res.packageExists ? "" : "未检测到主体资料包；请在下方补充本人信息后继续。");
+  if (note) note.textContent = res.note || "";
+  renderActClaimList();
+  clearActResultPanel();
+  const method = (actBehalfState.rankingMeta && actBehalfState.rankingMeta.method) || "";
+  const degraded = !!(actBehalfState.rankingMeta && actBehalfState.rankingMeta.degraded);
+  setActContextStatus(
+    degraded
+      ? `候选状态：proposed（降级种子：${method}）。请确认前务必核对。`
+      : `候选状态：proposed · 排序：${method} · ${actBehalfState.draftClaims.length} 条`
+  );
+  setActProgress(
+    res.packageExists ? "候选已生成，请确认、删除或补充。" : "未检测到主体资料包；请补充本人信息后确认。"
+  );
 }
 
 function resetActBehalfForm() {
   actBehalfState = {
     taskId: null,
-    contextItems: [],
-    contextBaseline: "",
-    userEdited: false,
+    draftClaims: [],
+    draftMeta: null,
+    confirmed: null,
+    rankingMeta: null,
   };
   if ($("act-title")) $("act-title").value = "";
   if ($("act-request")) $("act-request").value = "";
+  if ($("act-role")) $("act-role").value = "";
+  if ($("act-expected")) $("act-expected").value = "";
+  if ($("act-supplement")) $("act-supplement").value = "";
   if ($("act-self-context")) $("act-self-context").value = "";
+  renderActClaimList();
   clearActResultPanel();
+  setActContextStatus("");
   setActProgress("");
 }
 
 async function openActBehalfScene(opts = {}) {
   resetActBehalfForm();
   await refreshActTaskList();
-  await loadActBehalfContext();
   if (opts.taskId) await openActBehalfTask(opts.taskId);
 }
 
@@ -5393,44 +5469,65 @@ async function openActBehalfTask(taskId) {
   }
   const task = res.task;
   actBehalfState.taskId = task.taskId;
-  actBehalfState.contextItems =
-    (task.selectedSelfContext && task.selectedSelfContext.items) || [];
-  actBehalfState.contextBaseline =
-    (task.selectedSelfContext && task.selectedSelfContext.combinedText) || "";
-  actBehalfState.userEdited = !!(task.selectedSelfContext && task.selectedSelfContext.userEdited);
+  const intent = task.taskIntent || {};
   if ($("act-title")) $("act-title").value = task.title || "";
-  if ($("act-request")) $("act-request").value = task.request || "";
-  if ($("act-self-context")) $("act-self-context").value = actBehalfState.contextBaseline;
-  if (task.status === "completed" || task.result) {
-    renderActResult(task);
+  if ($("act-request")) $("act-request").value = intent.goal || task.goal || task.request || "";
+  if ($("act-role")) $("act-role").value = intent.role || "";
+  if ($("act-expected")) $("act-expected").value = intent.expectedOutcome || "";
+  if ($("act-supplement")) $("act-supplement").value = "";
+
+  if (task.subjectContext && task.subjectContext.confirmationState === "confirmed") {
+    actBehalfState.confirmed = task.subjectContext;
+    actBehalfState.draftClaims = (task.subjectContext.claims || []).map((c) => ({ ...c }));
+    actBehalfState.draftMeta = task.subjectContextCandidates || task.subjectContext;
+    actBehalfState.rankingMeta =
+      (task.subjectContext && task.subjectContext.rankingMeta) ||
+      (task.contextAudit && task.contextAudit.rankingMeta) ||
+      null;
+    renderActClaimList();
+    renderConfirmedSummary(task.subjectContext);
+    setActContextStatus("已加载：confirmed 快照（重启后恢复）。");
+    setActProgress("已恢复任务意图与确认快照。");
   } else {
+    actBehalfState.confirmed = null;
+    actBehalfState.draftClaims =
+      (task.subjectContextCandidates && task.subjectContextCandidates.claims) || [];
+    actBehalfState.draftMeta = task.subjectContextCandidates || null;
+    actBehalfState.rankingMeta =
+      (task.subjectContextCandidates && task.subjectContextCandidates.rankingMeta) || null;
+    renderActClaimList();
     clearActResultPanel();
+    setActContextStatus(
+      actBehalfState.draftClaims.length ? "已加载候选（尚未确认）。" : "该任务尚无候选，请按目标生成。"
+    );
+    setActProgress("已打开草稿任务。");
   }
-  setActProgress("已打开已保存任务。");
 }
 
 async function saveActBehalfDraft() {
-  const title = ($("act-title") && $("act-title").value) || "";
-  const request = ($("act-request") && $("act-request").value) || "";
-  const combinedText = ($("act-self-context") && $("act-self-context").value) || "";
-  if (!request.trim() && !combinedText.trim()) {
-    setActProgress("请先填写任务或本人信息，再保存。");
+  const goal = ($("act-request") && $("act-request").value.trim()) || "";
+  if (!goal) {
+    setActProgress("请先填写研究与表达目标。");
     return;
   }
-  const edited = combinedText !== actBehalfState.contextBaseline;
+  const title = ($("act-title") && $("act-title").value.trim()) || goal.slice(0, 40);
   const res = await window.digitalMe.actBehalfSave({
     taskId: actBehalfState.taskId || undefined,
-    title: title.trim() || request.trim().slice(0, 40) || "未命名任务",
-    request,
+    title,
+    goal,
+    request: goal,
     status: "draft",
-    selectedSelfContext: {
-      items: actBehalfState.contextItems,
-      combinedText,
-      userEdited: edited || actBehalfState.userEdited,
+    taskIntent: {
+      goal,
+      role: ($("act-role") && $("act-role").value.trim()) || undefined,
+      expectedOutcome: ($("act-expected") && $("act-expected").value.trim()) || undefined,
     },
-    existingUserPositions: ($("act-existing") && $("act-existing").textContent) || "",
-    digitalMeInferences: ($("act-inferences") && $("act-inferences").textContent) || "",
-    result: ($("act-result") && $("act-result").textContent) || "",
+    subjectContextCandidates: actBehalfState.draftMeta
+      ? { ...actBehalfState.draftMeta, claims: actBehalfState.draftClaims }
+      : actBehalfState.draftClaims.length
+        ? { claims: actBehalfState.draftClaims, confirmationState: "proposed" }
+        : null,
+    subjectContext: actBehalfState.confirmed || null,
   });
   if (!res || !res.ok) {
     setActProgress((res && res.message) || "保存失败。");
@@ -5441,38 +5538,45 @@ async function saveActBehalfDraft() {
   await refreshActTaskList();
 }
 
-async function runActBehalfTask() {
-  const title = ($("act-title") && $("act-title").value) || "";
-  const request = (($("act-request") && $("act-request").value) || "").trim();
-  const combinedText = ($("act-self-context") && $("act-self-context").value) || "";
-  if (!request) {
-    setActProgress("请输入要完成的任务。");
+async function confirmActBehalfContext() {
+  const goal = ($("act-request") && $("act-request").value.trim()) || "";
+  if (!goal) {
+    setActProgress("请先填写研究与表达目标。");
     return;
   }
-  const edited = combinedText !== actBehalfState.contextBaseline;
-  const runBtn = $("btn-act-run");
-  if (runBtn) runBtn.disabled = true;
-  setActProgress("正在代表你完成任务…");
-  try {
-    const res = await window.digitalMe.actBehalfRun({
-      taskId: actBehalfState.taskId || undefined,
-      title,
-      request,
-      selectedSelfContextText: combinedText,
-      selectedSelfContextItems: actBehalfState.contextItems,
-      userEdited: edited || actBehalfState.userEdited,
-    });
-    if (!res || !res.ok) {
-      setActProgress((res && res.message) || "任务未能完成。");
-      return;
-    }
-    actBehalfState.taskId = res.task.taskId;
-    renderActResult(res.task, res.usedSelfInfo);
-    setActProgress("任务已完成并保存。可随时从左侧重新打开。");
-    await refreshActTaskList();
-  } finally {
-    if (runBtn) runBtn.disabled = false;
+  const supplement = ($("act-supplement") && $("act-supplement").value.trim()) || "";
+  if (!(actBehalfState.draftClaims || []).length && !supplement) {
+    setActProgress("请先生成候选，或至少补充一条本人信息。");
+    return;
   }
+  const title = ($("act-title") && $("act-title").value.trim()) || goal.slice(0, 40);
+  setActProgress("正在确认并保存本人上下文快照…");
+  const res = await window.digitalMe.actBehalfConfirmContext({
+    taskId: actBehalfState.taskId || undefined,
+    title,
+    goal,
+    role: ($("act-role") && $("act-role").value.trim()) || undefined,
+    expectedOutcome: ($("act-expected") && $("act-expected").value.trim()) || undefined,
+    keepClaimIds: (actBehalfState.draftClaims || []).map((c) => c.id),
+    supplementText: supplement,
+    subjectContextDraft: actBehalfState.draftMeta
+      ? { ...actBehalfState.draftMeta, claims: actBehalfState.draftClaims }
+      : { claims: actBehalfState.draftClaims || [], confirmationState: "proposed" },
+  });
+  if (!res || !res.ok) {
+    setActProgress((res && res.message) || "确认失败。");
+    return;
+  }
+  actBehalfState.taskId = res.task.taskId;
+  actBehalfState.confirmed = res.subjectContext;
+  actBehalfState.draftClaims = (res.subjectContext && res.subjectContext.claims) || [];
+  actBehalfState.draftMeta = res.task.subjectContextCandidates || actBehalfState.draftMeta;
+  if ($("act-supplement")) $("act-supplement").value = "";
+  renderActClaimList();
+  renderConfirmedSummary(res.subjectContext);
+  setActContextStatus("状态：confirmed（仅任务快照；未写回主体资料包）。");
+  setActProgress(res.message || "已确认本次本人上下文。");
+  await refreshActTaskList();
 }
 
 function wireActBehalfUi() {
@@ -5480,16 +5584,14 @@ function wireActBehalfUi() {
   if (back) back.addEventListener("click", showDoHub);
   $("btn-act-new")?.addEventListener("click", async () => {
     resetActBehalfForm();
-    await loadActBehalfContext();
+    await refreshActTaskList();
     setActProgress("已新建任务表单。");
   });
   $("btn-act-reload-context")?.addEventListener("click", () => loadActBehalfContext());
   $("btn-act-save")?.addEventListener("click", () => saveActBehalfDraft());
-  $("btn-act-run")?.addEventListener("click", () => runActBehalfTask());
-  $("act-self-context")?.addEventListener("input", () => {
-    actBehalfState.userEdited = true;
-  });
+  $("btn-act-confirm-context")?.addEventListener("click", () => confirmActBehalfContext());
 }
+
 
 function applyWriteIntents() {
   const box = $("write-intent-chips");

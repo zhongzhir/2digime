@@ -29,8 +29,13 @@ const researchGrounded = require("./research/grounded");
 const personalSkills = require("./skills/personal");
 const sessions = require("./sessions");
 const actBehalfStore = require("./act-behalf/task-store");
-const { buildSelectedSelfContext } = require("./act-behalf/select-self-context");
 const { parseActBehalfOutput, buildActBehalfMessages } = require("./act-behalf/parse-output");
+const { normalizeTaskIntent, assertTaskIntentMinimal } = require("./act-behalf/task-intent");
+const {
+  assembleSubjectContextCandidates,
+  confirmSubjectContextSnapshot,
+  assertNoModelContentAsConfirmedFact,
+} = require("./act-behalf/subject-context-assembly");
 const chatMessages = require("./chat-message-model");
 const catalog = require("./capabilities/catalog");
 const capabilitySurface = require("./capabilities/surface");
@@ -898,6 +903,26 @@ function loadPackageForActBehalf() {
   } catch {
     /* ignore */
   }
+  let identitySummary = "";
+  try {
+    const idRaw = safeRead(path.join(dir, "identity.json"));
+    if (idRaw) {
+      const idObj = JSON.parse(idRaw);
+      const claims = Array.isArray(idObj.identityClaims)
+        ? idObj.identityClaims
+        : Array.isArray(idObj.claims)
+          ? idObj.claims
+          : [];
+      identitySummary = claims
+        .map((c) => String((c && (c.text || c.content || c.summary)) || "").trim())
+        .filter(Boolean)
+        .slice(0, 20)
+        .join("\n\n");
+      if (!identitySummary && idObj.summary) identitySummary = String(idObj.summary);
+    }
+  } catch {
+    /* optional */
+  }
   return {
     dir,
     exists: !!manifestRaw,
@@ -910,6 +935,7 @@ function loadPackageForActBehalf() {
     longTermMemory: safeRead(path.join(dir, "memory", "long-term-memory.jsonl")),
     lifeSummary: life.summarizeLifeForPrompt(dir),
     boundariesSummary: policies.summarizeBoundariesForPrompt(dir),
+    identitySummary,
   };
 }
 
@@ -924,20 +950,141 @@ function fakeActBehalfModelOutput(request) {
   );
 }
 
-ipcMain.handle("actBehalf:previewContext", async () => {
+ipcMain.handle("actBehalf:previewContext", async (_e, payload) => {
   try {
+    const goal = String((payload && (payload.goal || payload.request)) || "").trim();
     const pkg = loadPackageForActBehalf();
-    const selectedSelfContext = buildSelectedSelfContext(pkg);
+    const assembled = assembleSubjectContextCandidates(pkg, { goal });
     return {
       ok: true,
       packageExists: !!pkg.exists,
-      selectedSelfContext,
+      goal,
+      subjectContextDraft: assembled.subjectContextDraft,
+      selectedSelfContext: assembled.selectedSelfContext,
+      note: assembled.note,
+      rankingMeta: assembled.subjectContextDraft && assembled.subjectContextDraft.rankingMeta,
     };
   } catch (err) {
     return {
       ok: false,
       code: err && err.code ? err.code : "preview_failed",
       message: err && err.message ? err.message : "无法准备本人信息。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:confirmContext", async (_e, payload) => {
+  try {
+    const goal = String((payload && (payload.goal || payload.request)) || "").trim();
+    if (!goal) {
+      return { ok: false, code: "empty_goal", message: "请先填写研究与表达目标。" };
+    }
+    const title =
+      String((payload && payload.title) || "").trim() ||
+      goal.slice(0, 40) + (goal.length > 40 ? "…" : "");
+    const pkg = loadPackageForActBehalf();
+
+    let draft = null;
+    if (payload && payload.subjectContextDraft && Array.isArray(payload.subjectContextDraft.claims)) {
+      draft = payload.subjectContextDraft;
+    } else if (payload && payload.taskId) {
+      const existing = actBehalfStore.getTask(app.getPath("userData"), payload.taskId);
+      if (existing.ok && existing.task.subjectContextCandidates) {
+        draft = existing.task.subjectContextCandidates;
+      }
+    }
+    if (!draft) {
+      const assembled = assembleSubjectContextCandidates(pkg, { goal });
+      draft = assembled.subjectContextDraft;
+    }
+
+    const keepClaimIds = Array.isArray(payload && payload.keepClaimIds)
+      ? payload.keepClaimIds
+      : (draft.claims || []).map((c) => c.id);
+    const supplements = Array.isArray(payload && payload.supplements) ? payload.supplements : [];
+    if (payload && payload.supplementText) supplements.push(payload.supplementText);
+
+    const confirmed = confirmSubjectContextSnapshot(draft, {
+      keepClaimIds,
+      supplements,
+      scope: payload && payload.scope,
+      prohibitedUses: payload && payload.prohibitedUses,
+    });
+    const guard = assertNoModelContentAsConfirmedFact(confirmed.claims);
+    if (!guard.ok) {
+      return { ok: false, code: "invalid_confirmation", message: guard.message };
+    }
+
+    const taskIntent = normalizeTaskIntent(
+      {
+        ...(payload && payload.taskIntent),
+        goal,
+        role: payload && payload.role,
+        expectedOutcome: payload && payload.expectedOutcome,
+        constraints: payload && payload.constraints,
+      },
+      payload && payload.taskId
+    );
+
+    const deletedIds = (draft.claims || [])
+      .map((c) => c.id)
+      .filter((id) => !keepClaimIds.map(String).includes(String(id)));
+
+    const contextAudit = {
+      assembledAt: new Date().toISOString(),
+      packagePaths: (draft.rankingMeta && draft.rankingMeta.packagePaths) || [],
+      displayedClaimIds: (draft.claims || []).map((c) => c.id),
+      deletedClaimIds: deletedIds,
+      supplementedCount: supplements.filter((s) => String(s || "").trim()).length,
+      rankingMeta: draft.rankingMeta || null,
+      confirmedClaimIds: (confirmed.claims || []).map((c) => c.id),
+    };
+
+    const saved = await actBehalfStore.saveTask(app.getPath("userData"), {
+      taskId: payload && payload.taskId ? payload.taskId : undefined,
+      title,
+      request: goal,
+      goal,
+      status: "context_confirmed",
+      taskIntent,
+      subjectContextCandidates: draft,
+      subjectContext: confirmed,
+      contextAudit,
+      selectedSelfContext: {
+        items: confirmed.claims.map((c) => ({
+          source: (c.sourceRefs[0] && c.sourceRefs[0].source) || "unknown",
+          label: c.label,
+          text: c.text,
+        })),
+        combinedText: confirmed.claims.map((c) => "### " + c.label + "\n" + c.text).join("\n\n"),
+        userEdited: true,
+      },
+    });
+
+    const intentCheck = assertTaskIntentMinimal({
+      ...saved.task.taskIntent,
+      taskId: saved.task.taskId,
+    });
+    if (!intentCheck.ok) {
+      return {
+        ok: false,
+        code: "intent_incomplete",
+        message: "任务意图字段不完整：" + intentCheck.missing.join(", "),
+      };
+    }
+
+    return {
+      ok: true,
+      task: saved.task,
+      subjectContext: confirmed,
+      taskIntent: saved.task.taskIntent,
+      message: "已确认并保存本次本人上下文快照。研究执行将在下一块开放。",
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "confirm_failed",
+      message: err && err.message ? err.message : "无法确认本人上下文。",
     };
   }
 });
@@ -969,7 +1116,28 @@ ipcMain.handle("actBehalf:get", async (_e, taskId) => {
 
 ipcMain.handle("actBehalf:save", async (_e, payload) => {
   try {
-    const saved = await actBehalfStore.saveTask(app.getPath("userData"), payload || {});
+    const goal = String((payload && (payload.goal || payload.request)) || "").trim();
+    const title =
+      String((payload && payload.title) || "").trim() ||
+      (goal ? goal.slice(0, 40) + (goal.length > 40 ? "…" : "") : "未命名任务");
+    const taskIntent = normalizeTaskIntent(
+      {
+        ...(payload && payload.taskIntent),
+        goal,
+        role: payload && payload.role,
+        expectedOutcome: payload && payload.expectedOutcome,
+        constraints: payload && payload.constraints,
+      },
+      payload && payload.taskId
+    );
+    const saved = await actBehalfStore.saveTask(app.getPath("userData"), {
+      ...(payload || {}),
+      title,
+      request: goal,
+      goal,
+      taskIntent,
+      status: (payload && payload.status) || "draft",
+    });
     return saved;
   } catch (err) {
     return {
