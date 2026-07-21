@@ -5,6 +5,18 @@
 
 ---
 
+## 2026-07-21 第一闭环实现 · 第 2 块：真实 Skill 与只读外部调研调用
+
+### 做了什么
+
+接通 `psk_preset_general_research` 与 `research.webSearch`/`searchWeb`；在已确认 Subject Context 后允许 Owner 启动只读外部调研；持久化 Capability Invocation 与 discoveredSources；重启恢复与 running→interrupted；不写 Package、不调用 feedback:apply、不生成最终研究成果。聚焦测试 `test:vl1-block2`。第 1 块标为 `accepted`；第 2 块 `implemented_pending_codex_review`。
+
+### 下一任务
+
+**第一闭环实现 · 第 3 块：有来源约束的研究与表达成果**
+
+---
+
 ## 2026-07-21 第一闭环实现 · 第 1 块验收修正：确认边界与目标一致性
 
 ### 做了什么

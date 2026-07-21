@@ -71,7 +71,7 @@
 | **PAN-02** | **`paused`**（相对新主线；历史曾 `planned`/`blocked`） | — | 不得按旧解锁条件自行启动；见第一纵向闭环计划 |
 | **旧 DM-Core-01A 开发指令** | **`superseded`** | 见 `digitalme_dm_core_01a_superseded_notice_v0.1.md` | 不得再按该指令扩展 |
 | **提交 `55ae01f`（act-behalf）** | **`partially_reused_as_first_vertical_loop_scaffold`** | `digitalme-app/src/act-behalf/*`；commit `55ae01f` 起演进 | 规格已裁定；第 1 块复用列表/恢复/callModel 脚手架；固定截取与模型自述证据不作最终闭环 |
-| **第一纵向闭环** | **`spec_frozen` / block1_implemented**（确认边界验收修正已合入） | 计划 v0.1.3；规格 v0.1.0；`test:vl1-block1` | 第 1 块：Task Intent + Subject Context；主进程不信任 renderer 完整草稿；**下一项** = 第 2 块 Skill+只读外搜 |
+| **第一纵向闭环** | **`spec_frozen`**；第 1 块 **`accepted`**；第 2 块 **`implemented_pending_codex_review`** | 计划 v0.1.3；规格 v0.1.0；`test:vl1-block1` / `test:vl1-block2` | Skill=`psk_preset_general_research`；外搜=`research.webSearch`；**下一项** = 第 3 块有来源约束成果 |
 
 ## P1-07 冻结说明（与任务包 / 执行索引 / log 一致）
 

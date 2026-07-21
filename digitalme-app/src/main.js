@@ -36,6 +36,12 @@ const {
   confirmSubjectContextWithUserActions,
   applyGoalChangeToStoredTask,
 } = require("./act-behalf/subject-context-assembly");
+const {
+  runReadonlyExternalResearch,
+  ALLOWED_SKILL_ID,
+  isResearchResultCurrent,
+} = require("./act-behalf/research-run");
+const researchPresets = require("./skills/research-presets");
 const chatMessages = require("./chat-message-model");
 const catalog = require("./capabilities/catalog");
 const capabilitySurface = require("./capabilities/surface");
@@ -1164,12 +1170,98 @@ ipcMain.handle("actBehalf:list", async () => {
 
 ipcMain.handle("actBehalf:get", async (_e, taskId) => {
   try {
-    return actBehalfStore.getTask(app.getPath("userData"), taskId);
+    const userData = app.getPath("userData");
+    const got = actBehalfStore.getTask(userData, taskId);
+    if (got.ok && got.invocationsHealed) {
+      // Persist interrupted normalization so running does not linger on disk
+      await actBehalfStore.saveTask(userData, got.task);
+      return actBehalfStore.getTask(userData, taskId);
+    }
+    return got;
   } catch (err) {
     return {
       ok: false,
       code: err && err.code ? err.code : "get_failed",
       message: err && err.message ? err.message : "无法读取任务。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:startResearch", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const taskId = payload && payload.taskId;
+    if (!taskId) {
+      return { ok: false, code: "task_not_found", message: "请先保存并确认任务后再开始调研。" };
+    }
+    // Renderer may only submit taskId + allowed skill id; never trust results/sources.
+    if (payload && (payload.discoveredSources || payload.resultRefs || payload.invocations || payload.toolInvocation)) {
+      return {
+        ok: false,
+        code: "untrusted_renderer_result",
+        message: "不允许由界面提交调研结果。",
+      };
+    }
+
+    personalSkills.ensurePresetResearchSkills(userData);
+
+    // Prepare recommended extensions when possible; DuckDuckGo remains the no-key fallback.
+    try {
+      await ensureExtensionConnected("brave-search");
+    } catch {
+      /* optional */
+    }
+
+    const result = await runReadonlyExternalResearch({
+      userData,
+      taskId: String(taskId),
+      skillId: (payload && payload.skillId) || ALLOWED_SKILL_ID,
+      store: actBehalfStore,
+      skills: personalSkills,
+      searchWeb: async (em, query) => researchWebSearch.searchWeb(em, query),
+      getExtensionManager,
+      // Production path never sets forceFake
+    });
+    return {
+      ...result,
+      researchCurrent: result.task ? isResearchResultCurrent(result.task) : false,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "research_failed",
+      message: err && err.message ? err.message : "外部调研失败。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:getResearchSkill", async () => {
+  try {
+    const userData = app.getPath("userData");
+    personalSkills.ensurePresetResearchSkills(userData);
+    let skill = personalSkills.getSkill(userData, ALLOWED_SKILL_ID);
+    if (!skill) {
+      skill = researchPresets.PRESET_RESEARCH_SKILLS.find((s) => s.id === ALLOWED_SKILL_ID) || null;
+    }
+    if (!skill) {
+      return { ok: false, code: "skill_not_found", message: "无法加载通用调研 Skill。" };
+    }
+    return {
+      ok: true,
+      skill: {
+        id: skill.id,
+        title: skill.title,
+        blurb: skill.blurb,
+        steps: skill.steps || [],
+        recommendedExtensions: skill.recommendedExtensions || [],
+        permissionScope: ["readonly_external_research"],
+      },
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "skill_failed",
+      message: err && err.message ? err.message : "无法读取 Skill。",
     };
   }
 });

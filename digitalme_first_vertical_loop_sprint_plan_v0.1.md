@@ -1,8 +1,8 @@
 # Digital Me 第一纵向闭环短冲刺计划
 
-版本：v0.1.3  
+版本：v0.1.4  
 日期：2026-07-21  
-状态：`spec_frozen` / **当前唯一执行计划**（规格已冻结；第 1 块已实现并完成确认边界验收修正；**下一项为第 2 块**）  
+状态：`spec_frozen` / **当前唯一执行计划**（第 1 块 `accepted`；第 2 块 `implemented_pending_codex_review`；**下一项为第 3 块**）  
 所属架构：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)  
 服务闭环：**第一闭环 — 理解我并产出**  
 **冻结规格（正文）**：[`digitalme_first_vertical_loop_spec_v0.1.md`](digitalme_first_vertical_loop_spec_v0.1.md)（**v0.1.0 `spec_frozen`**）
@@ -95,11 +95,11 @@
 |---|------|------|
 | 1 | 限定范围的仓库实现映射与第一闭环规格冻结 | **`completed`（本文档提交）** |
 | 2 | （已并入 #1）产品结果/主流程/最小合同冻结 | **`completed`** → 见规格文 |
-| **3（进行中/本提交）** | **实现任务意图与本人上下文装配（第一闭环实现 · 第 1 块）** | **`implemented`（本提交）** |
-| 4 | 实现「研究与表达」真实任务入口（与第 1 块入口对齐，后续接执行） | 部分已由第 1 块覆盖入口；执行未开 |
-| 5 | 接入真实 Skill 并证明改变方法 | **下一项** |
-| 6 | 接入只读外搜 | 待 |
-| 7 | 证据四栏 | 待 |
+| **3** | **实现任务意图与本人上下文装配（第一闭环实现 · 第 1 块）** | **`accepted`** |
+| 4 | 实现「研究与表达」真实任务入口（与第 1 块入口对齐，后续接执行） | 入口已由第 1 块覆盖 |
+| **5（本提交）** | **接入真实 Skill + 只读外搜（第一闭环实现 · 第 2 块）** | **`implemented_pending_codex_review`** |
+| 6 | （已并入第 2 块）接入只读外搜 | **`implemented_pending_codex_review`** |
+| 7 | 证据四栏 / 有来源约束的研究与表达成果 | **下一项（第 3 块）** |
 | 8 | Experience Proposal 与回流 | 待 |
 | 9 | 集中复核 + Owner 验收 + 对照测试 | 待 |
 
@@ -109,13 +109,13 @@
 
 ### 当前
 
-- 执行计划状态：`spec_frozen`；第 1 块实现已合入  
-- 冻结规格：`digitalme_first_vertical_loop_spec_v0.1.md`  
+- 执行计划状态：`spec_frozen`；第 1 块 **`accepted`**；第 2 块 **`implemented_pending_codex_review`**
+- 冻结规格：`digitalme_first_vertical_loop_spec_v0.1.md`
 - **`55ae01f`**：`partially_reused_as_first_vertical_loop_scaffold`
 
 ### 下一项（准确名称）
 
-**第一闭环实现 · 第 2 块：真实 Skill 与只读外部调研调用**
+**第一闭环实现 · 第 3 块：有来源约束的研究与表达成果**
 
 ---
 
@@ -135,3 +135,4 @@
 | v0.1.1 | 2026-07-21 | 澄清指令 vs `55ae01f`；四合同字段初核 |
 | v0.1.2 | 2026-07-21 | 映射完成；规格冻结为 `spec_frozen`；下一项改为实现第 1 块 |
 | v0.1.3 | 2026-07-21 | 第 1 块实现合入；`55ae01f` → `partially_reused_as_first_vertical_loop_scaffold`；下一项 = 第 2 块 |
+| v0.1.4 | 2026-07-21 | 第 1 块 `accepted`；第 2 块 Skill+只读外搜 `implemented_pending_codex_review`；下一项 = 第 3 块 |

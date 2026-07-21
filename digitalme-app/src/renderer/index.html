@@ -439,7 +439,7 @@
                 <button type="button" id="btn-do-back-act" class="btn-ghost btn-do-back">← 场景目录</button>
                 <div>
                   <div id="do-act-title">研究与表达</div>
-                  <div id="do-act-sub" class="muted">填写研究目标 → 按目标生成本人信息候选 → 确认、删除或补充 → 保存本次快照。</div>
+                  <div id="do-act-sub" class="muted">填写目标 → 确认本人上下文 → 启动通用调研（只读外搜）→ 查看来源。本阶段不生成最终研究成果。</div>
                 </div>
               </div>
               <button type="button" class="btn-help" data-help-topic="do" title="打开说明">说明</button>
@@ -487,7 +487,20 @@
                 <div class="builder-actions">
                   <button id="btn-act-confirm-context" type="button" data-testid="btn-act-confirm-context">确认本次本人上下文</button>
                   <button id="btn-act-save" class="btn-ghost" type="button" data-testid="btn-act-save">保存草稿</button>
-                  <button id="btn-act-run" class="btn-ghost hidden" type="button" data-testid="btn-act-run" disabled title="下一块开放">研究执行（尚未开放）</button>
+                </div>
+                <div id="act-research-panel" class="act-research-panel hidden" data-testid="act-research-panel">
+                  <div class="ext-store-head">
+                    <h3>通用调研（只读外部调研）</h3>
+                  </div>
+                  <p id="act-research-skill-blurb" class="muted write-rail-hint" data-testid="act-research-skill-blurb">
+                    在本人上下文确认后，可启动通用调研 Skill，进行只读网页检索。本步不会生成最终研究成果，也不会写入主体资料包。
+                  </p>
+                  <p id="act-research-steps" class="muted write-rail-hint" data-testid="act-research-steps"></p>
+                  <div class="builder-actions">
+                    <button id="btn-act-run" type="button" data-testid="btn-act-run" disabled>开始调研</button>
+                  </div>
+                  <p id="act-research-status" class="muted write-rail-hint" data-testid="act-research-status"></p>
+                  <div id="act-source-list" class="act-source-list" data-testid="act-source-list"></div>
                 </div>
                 <div id="act-progress" class="builder-progress" data-testid="act-progress"></div>
                 <div id="act-result-panel" class="act-result-panel hidden" data-testid="act-result-panel">

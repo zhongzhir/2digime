@@ -10,6 +10,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { normalizeTaskIntent } = require("./task-intent");
+const { healRunningInvocations } = require("./research-run");
 
 const STORE_VERSION = 2;
 const TASK_SCHEMA_VERSION = 2;
@@ -192,8 +193,9 @@ function normalizeTask(input) {
     existingUserPositions: String((input && input.existingUserPositions) || ""),
     digitalMeInferences: String((input && input.digitalMeInferences) || ""),
     result: String((input && input.result) || ""),
-    // Reserved for later blocks — keep empty, do not build platforms
+    // Block 2+: Capability Invocation records (append-only from main process)
     invocations: Array.isArray(input && input.invocations) ? input.invocations : [],
+    selectedSkillId: input && input.selectedSkillId ? String(input.selectedSkillId) : null,
     capabilityRefs: Array.isArray(input && input.capabilityRefs) ? input.capabilityRefs : [],
     identityRefs: Array.isArray(input && input.identityRefs) ? input.identityRefs : [],
     authorization: (input && input.authorization) || null,
@@ -232,7 +234,12 @@ function getTask(userData, taskId) {
   if (!task) {
     return { ok: false, code: "not_found", message: "找不到该任务。" };
   }
-  return { ok: true, task: normalizeTask(task) };
+  const norm = normalizeTask(task);
+  const healed = healRunningInvocations(norm.invocations);
+  if (healed.changed) {
+    norm.invocations = healed.invocations;
+  }
+  return { ok: true, task: norm, invocationsHealed: healed.changed };
 }
 
 async function saveTask(userData, taskInput) {

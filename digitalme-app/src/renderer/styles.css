@@ -2920,6 +2920,35 @@ body {
   line-height: 1.5;
   min-height: 2em;
 }
+.act-research-panel {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+.act-source-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+.act-source-row {
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+.act-source-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+.act-source-meta {
+  font-size: 12px;
+  word-break: break-all;
+}
+.act-source-snippet {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
 @media (max-width: 900px) {
   .act-behalf-layout {
     grid-template-columns: 1fr;

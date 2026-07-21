@@ -5282,13 +5282,16 @@ async function openDoScene(sceneId, opts = {}) {
   if (opts.libraryId) await openLibraryItem(opts.libraryId);
 }
 
-/** First vertical loop block 1: research-express Task Intent + Subject Context */
+/** First vertical loop: research-express Task Intent + Subject Context + readonly research */
 let actBehalfState = {
   taskId: null,
   draftClaims: [],
   draftMeta: null,
   confirmed: null,
   rankingMeta: null,
+  invocations: [],
+  selectedSkillId: null,
+  researchCurrent: false,
 };
 
 function setActProgress(text) {
@@ -5301,11 +5304,194 @@ function setActContextStatus(text) {
   if (el) el.textContent = text || "";
 }
 
+function setActResearchStatus(text) {
+  const el = $("act-research-status");
+  if (el) el.textContent = text || "";
+}
+
 function clearActResultPanel() {
   const panel = $("act-result-panel");
   if (panel) panel.classList.add("hidden");
   const summary = $("act-confirmed-summary");
   if (summary) summary.textContent = "";
+}
+
+function clearActResearchSources() {
+  const list = $("act-source-list");
+  if (list) list.innerHTML = "";
+}
+
+function updateActResearchPanelVisibility() {
+  const panel = $("act-research-panel");
+  const btn = $("btn-act-run");
+  const confirmed =
+    actBehalfState.confirmed && actBehalfState.confirmed.confirmationState === "confirmed";
+  if (panel) panel.classList.toggle("hidden", !confirmed);
+  if (btn) {
+    btn.disabled = !confirmed || !actBehalfState.taskId;
+  }
+}
+
+function renderActSourceList(sources, opts = {}) {
+  const list = $("act-source-list");
+  if (!list) return;
+  list.innerHTML = "";
+  if (opts.stale) {
+    const note = document.createElement("p");
+    note.className = "muted";
+    note.textContent = "当前目标或本人上下文已变更，以下为历史调研记录，不能作为本次有效结果。";
+    list.appendChild(note);
+  }
+  const items = Array.isArray(sources) ? sources : [];
+  if (!items.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = opts.emptyText || "尚未取得外部来源。";
+    list.appendChild(empty);
+    return;
+  }
+  for (const s of items) {
+    const row = document.createElement("div");
+    row.className = "act-source-row";
+    const title = document.createElement("div");
+    title.className = "act-source-title";
+    title.textContent = s.title || s.url || "未命名来源";
+    const meta = document.createElement("div");
+    meta.className = "muted act-source-meta";
+    meta.textContent = [s.hostname || "", s.url || "", s.provider ? "来源：" + s.provider : ""]
+      .filter(Boolean)
+      .join(" · ");
+    const snip = document.createElement("div");
+    snip.className = "act-source-snippet";
+    snip.textContent = s.snippet || s.summary || "";
+    row.appendChild(title);
+    row.appendChild(meta);
+    if (snip.textContent) row.appendChild(snip);
+    list.appendChild(row);
+  }
+}
+
+function latestToolInvocation(invocations) {
+  const list = Array.isArray(invocations) ? invocations : [];
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    if (list[i] && list[i].kind === "tool") return list[i];
+  }
+  return null;
+}
+
+function renderActResearchFromTask(task) {
+  actBehalfState.invocations = (task && task.invocations) || [];
+  actBehalfState.selectedSkillId = (task && task.selectedSkillId) || null;
+  updateActResearchPanelVisibility();
+  const tool = latestToolInvocation(actBehalfState.invocations);
+  const goal = String((task && task.taskIntent && task.taskIntent.goal) || (task && task.goal) || "").trim();
+  const snapGoal = String(
+    (task &&
+      task.subjectContext &&
+      task.subjectContext.rankingMeta &&
+      task.subjectContext.rankingMeta.goal) ||
+      ""
+  ).trim();
+  const contextOk =
+    task &&
+    task.subjectContext &&
+    task.subjectContext.confirmationState === "confirmed" &&
+    goal &&
+    goal === snapGoal;
+  const invGoal = String(
+    (tool && tool.disclosedContext && (tool.disclosedContext.goal || tool.disclosedContext.goalSummary)) ||
+      ""
+  ).trim();
+  const current =
+    contextOk &&
+    tool &&
+    tool.status === "succeeded" &&
+    (!invGoal || invGoal === goal || invGoal === goal.slice(0, 80) || invGoal === goal.slice(0, 80) + "…");
+  actBehalfState.researchCurrent = !!current;
+
+  if (!tool) {
+    setActResearchStatus(contextOk ? "尚未开始调研。" : "");
+    renderActSourceList([], { emptyText: "确认本人上下文后，可开始只读外部调研。" });
+    return;
+  }
+
+  if (tool.status === "running") {
+    setActResearchStatus("正在执行只读外部调研…");
+    renderActSourceList([]);
+    return;
+  }
+  if (tool.status === "interrupted") {
+    setActResearchStatus("上次调研在退出前未完成，已标记为中断。可重新开始调研。");
+    renderActSourceList(tool.discoveredSources || [], { stale: !current });
+    return;
+  }
+  if (tool.status === "failed") {
+    const err = (tool.error && tool.error.message) || "调研失败。";
+    setActResearchStatus("调研失败：" + err);
+    renderActSourceList(tool.discoveredSources || [], { stale: !current });
+    return;
+  }
+  if (tool.status === "succeeded") {
+    const n = (tool.discoveredSources || []).length;
+    setActResearchStatus(
+      current
+        ? `调研成功：取得 ${n} 条外部来源（仅为证据候选，不是本人事实；本步不生成最终成果）。`
+        : `历史调研记录：${n} 条来源（与当前目标不一致，请重新调研）。`
+    );
+    renderActSourceList(tool.discoveredSources || [], { stale: !current });
+    return;
+  }
+  setActResearchStatus("调用状态：" + (tool.status || "未知"));
+  renderActSourceList(tool.discoveredSources || [], { stale: !current });
+}
+
+async function ensureActResearchSkillBlurb() {
+  const stepsEl = $("act-research-steps");
+  const blurbEl = $("act-research-skill-blurb");
+  if (!window.digitalMe.actBehalfGetResearchSkill) return;
+  const res = await window.digitalMe.actBehalfGetResearchSkill();
+  if (!res || !res.ok || !res.skill) return;
+  if (blurbEl) {
+    blurbEl.textContent =
+      (res.skill.title || "通用调研") +
+      "：" +
+      (res.skill.blurb || "只读外部调研") +
+      "。权限：仅只读外部研究，不写入主体资料包，不对外发送。";
+  }
+  if (stepsEl && Array.isArray(res.skill.steps) && res.skill.steps.length) {
+    stepsEl.textContent = "步骤：" + res.skill.steps.join(" → ") + "（本块完成检索，不撰写最终成果）。";
+  }
+}
+
+async function startActBehalfResearch() {
+  if (!actBehalfState.taskId) {
+    setActProgress("请先确认并保存任务。");
+    return;
+  }
+  if (!actBehalfState.confirmed || actBehalfState.confirmed.confirmationState !== "confirmed") {
+    setActProgress("请先确认本人上下文。");
+    return;
+  }
+  const btn = $("btn-act-run");
+  if (btn) btn.disabled = true;
+  setActResearchStatus("正在执行只读外部调研…");
+  setActProgress("正在调用通用调研 Skill 与只读外部检索…");
+  const res = await window.digitalMe.actBehalfStartResearch({
+    taskId: actBehalfState.taskId,
+    skillId: "psk_preset_general_research",
+  });
+  if (!res || !res.ok) {
+    if (res && res.task) renderActResearchFromTask(res.task);
+    setActProgress((res && res.message) || "调研失败。");
+    setActResearchStatus((res && res.message) || "调研失败。");
+    updateActResearchPanelVisibility();
+    return;
+  }
+  actBehalfState.invocations = (res.task && res.task.invocations) || [];
+  renderActResearchFromTask(res.task);
+  setActProgress(res.message || "调研完成。");
+  await refreshActTaskList();
+  updateActResearchPanelVisibility();
 }
 
 function renderConfirmedSummary(subjectContext) {
@@ -5430,6 +5616,9 @@ async function loadActBehalfContext() {
   if (note) note.textContent = res.note || "";
   renderActClaimList();
   clearActResultPanel();
+  updateActResearchPanelVisibility();
+  setActResearchStatus("本人上下文候选已更新，需重新确认后才能调研。");
+  clearActResearchSources();
   const method = (actBehalfState.rankingMeta && actBehalfState.rankingMeta.method) || "";
   const degraded = !!(actBehalfState.rankingMeta && actBehalfState.rankingMeta.degraded);
   setActContextStatus(
@@ -5449,6 +5638,9 @@ function resetActBehalfForm() {
     draftMeta: null,
     confirmed: null,
     rankingMeta: null,
+    invocations: [],
+    selectedSkillId: null,
+    researchCurrent: false,
   };
   if ($("act-title")) $("act-title").value = "";
   if ($("act-request")) $("act-request").value = "";
@@ -5458,12 +5650,16 @@ function resetActBehalfForm() {
   if ($("act-self-context")) $("act-self-context").value = "";
   renderActClaimList();
   clearActResultPanel();
+  clearActResearchSources();
   setActContextStatus("");
+  setActResearchStatus("");
   setActProgress("");
+  updateActResearchPanelVisibility();
 }
 
 async function openActBehalfScene(opts = {}) {
   resetActBehalfForm();
+  await ensureActResearchSkillBlurb();
   await refreshActTaskList();
   if (opts.taskId) await openActBehalfTask(opts.taskId);
 }
@@ -5509,6 +5705,7 @@ async function openActBehalfTask(taskId) {
     );
     setActProgress("已打开草稿任务。");
   }
+  renderActResearchFromTask(task);
 }
 
 async function saveActBehalfDraft() {
@@ -5592,6 +5789,8 @@ async function confirmActBehalfContext() {
   renderConfirmedSummary(res.subjectContext);
   setActContextStatus("状态：confirmed（仅任务快照；未写回主体资料包）。");
   setActProgress(res.message || "已确认本次本人上下文。");
+  renderActResearchFromTask(res.task);
+  await ensureActResearchSkillBlurb();
   await refreshActTaskList();
 }
 
@@ -5606,6 +5805,7 @@ function wireActBehalfUi() {
   $("btn-act-reload-context")?.addEventListener("click", () => loadActBehalfContext());
   $("btn-act-save")?.addEventListener("click", () => saveActBehalfDraft());
   $("btn-act-confirm-context")?.addEventListener("click", () => confirmActBehalfContext());
+  $("btn-act-run")?.addEventListener("click", () => startActBehalfResearch());
 }
 
 
