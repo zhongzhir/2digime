@@ -733,12 +733,8 @@ ipcMain.handle("runtime:requestRendererEntry", (_e, entry, reason) => {
 });
 
 ipcMain.handle("runtime:signalReady", (event, payload) => {
-  const generation =
-    payload && payload.generation != null
-      ? Number(payload.generation)
-      : rendererEntryRuntime.controller.getBoundGeneration();
   return rendererEntryRuntime.handleSignalReady({
-    generation,
+    generation: payload ? payload.generation : undefined,
     webContentsId: event && event.sender ? event.sender.id : null,
   });
 });

@@ -1,9 +1,9 @@
 # Renderer Foundation R1：最小 shell 与整窗入口切换
 
-版本：v0.1.2
+版本：v0.1.3
 日期：2026-07-21
-状态：`implemented` / `empirically_verified` / `codex_review_pending`
-性质：**独立实施任务包**；**实施规格已冻结（v0.1.1）**；本轮已完成 **兼容性 spike**（非正式业务 shell）；**正式 R1 shell 完成度仍待 Codex 复核决定**；**不得**标 `statically_verified` / `runtime_verified` / `accepted` / `released`
+状态：`implemented` / `spike_partial_verified` / `codex_changes_requested`
+性质：**独立实施任务包**；**实施规格已冻结（v0.1.1）**；兼容性 spike 已实现；Codex 指出有界缺陷后进入修复轮；**正式 R1 shell 完成度仍待修复复核通过后决定**；**不得**标 `empirically_verified` / `statically_verified` / `runtime_verified` / `accepted` / `released`
 所属主线：`P1-PANORAMA`（三位一体 Alpha）
 前置：Renderer Foundation R0 **`accepted`**（v0.1.2；决策接受）
 依据：`digitalme_renderer_foundation_R0_decision_and_migration_plan.md` §10 / §11 / §14.1 / §15
@@ -11,8 +11,8 @@
 
 > **状态语义**
 >
-> - **`implemented` / `empirically_verified` / `codex_review_pending`**：兼容性 spike 已落地并通过本机实证（Vite build、入口/latch/generation 单测、Playwright Electron、legacy 冒烟）；**不等于** `statically_verified`、`runtime_verified`、`accepted` 或 `released`；
-> - **正式 R1 shell**（完整 AppShell 占位路由与后续表面）**完成度仍待 Codex 复核后决定**；本轮**停止于 spike**；
+> - **`implemented` / `spike_partial_verified` / `codex_changes_requested`**：spike 主体已落地，但 Codex 复核要求关闭 ready 竞态、显式 generation、导航单飞、Vite dev / Error Boundary 实证与工程收尾；**在修复复核通过前不得使用 `empirically_verified`**；
+> - **正式 R1 shell**（完整 AppShell 占位路由与后续表面）**不得**在本修复轮继续扩展；
 > - 生产默认入口仍为 **legacy**；普通用户路径无进入 next 的入口；
 > - **禁止**启动 PAN-02；R2.5 SQLite 保持 `planned` / `deferred`；
 > - 本切片**不**改变 PAN-01S 族 `accepted`；R0 **`accepted` 不变**；
@@ -98,7 +98,7 @@ Spike 结论写入版本表后方可扩大实现。失败则停止扩 scope，�
 | @playwright/test | Playwright | **1.49.1** |
 | electron（既有） | Electron | **32.3.3**（host 实证） |
 
-**兼容性结果（2026-07-21，Windows）**：Node **v24.14.0**；npm **11.9.0**；Electron **32.3.3**。Vite production build 成功；Electron production-load 本地 `renderer-next/dist`；Vite dev URL 仅 `DIGITALME_VITE_DEV=1`；Playwright Electron 4/4 通过；入口/latch/generation 单测 4/4；legacy `bootstrap-submit` + `owner-runtime` 冒烟通过。
+**兼容性结果（2026-07-21，Windows）**：Node **v24.14.0**；npm **11.9.0**；Electron **32.3.3**。Vite production build 成功；Electron production-load 本地 `renderer-next/dist`；Vite dev URL 仅 `DIGITALME_VITE_DEV=1`（E2E 真实启动验证）；Playwright Electron 7/7；入口/latch/generation/单飞单测 8/8；legacy 冒烟通过。`package.json` 对本轮新增依赖使用**精确版本**（无 `^`）。
 
 ---
 
@@ -190,7 +190,7 @@ runtime.signalReady(generation) -> { ok }  // 或由 preload 绑定世代；无�
 - [x] **经 E2E/main 门禁**进入 next 成功。
 - [x] 普通 `requestRendererEntry("next")` 被拒绝（若从 next 外调用）。
 - [x] next→legacy 请求成功。
-- [ ] Error Boundary 注入仅 harness 可开；生产路径不可用 query/hash/localStorage 开启。（门禁已实现；本轮 E2E 未单列注入用例）
+- [x] Error Boundary 注入仅 harness 可开；生产路径不可用 query/hash/localStorage 开启。
 - [x] next load 或 ready 失败 → 自动 legacy + **latch**（同进程再自动进 next 被拒）。
 - [x] 迟到/错误世代 `signalReady` 无效。
 - [x] 套件在超时口径内完成。
@@ -276,13 +276,13 @@ runtime.signalReady(generation) -> { ok }  // 或由 preload 绑定世代；无�
 
 | 项 | 值 |
 |---|---|
-| 本文件 | **`implemented` / `empirically_verified` / `codex_review_pending`**（v0.1.2） |
-| 含义 | 兼容性 spike 已实现并本机实证；**正式 shell 完成度待 Codex 复核** |
-| implementation | **spike `implemented`**（非业务 shell 完成） |
+| 本文件 | **`implemented` / `spike_partial_verified` / `codex_changes_requested`**（v0.1.3） |
+| 含义 | spike 主体成立；Codex 有界修复进行中；**正式 shell 不得扩展** |
+| implementation | **spike `implemented`**（修复轮；非正式 shell 完成） |
 | 实现分支 | **`codex/r1-renderer-next-shell`** |
 | Owner 实现授权 | **已获得（2026-07-21）** |
-| 版本锁定表 | **已填写** |
-| 本轮停止点 | spike 完成并提交后**立即停止**；等待 Codex 复核；**不得**继续正式 R1 shell 扩展 |
+| 版本锁定表 | **已填写**（package.json 精确版本 + lockfile） |
+| 本轮停止点 | 有界修复提交后**立即停止**；等待 Codex 再复核；**不得**继续正式 R1 shell |
 | 完成后下一步 | Codex 复核通过后再决定正式 shell 范围；R2 任务包另文；不自动开始 |
 | PAN-02 | `planned` / `blocked` |
 | R0 | `accepted`（不变） |
@@ -297,4 +297,5 @@ runtime.signalReady(generation) -> { ok }  // 或由 preload 绑定世代；无�
 | 2026-07-20 | v0.1-draft | 初稿（`2a60c27`）；曾含过早的 `frozen_for_implementation`（历史） |
 | 2026-07-20 | v0.1.1-draft | Codex 第一轮修订（`6107b36`）：入口权限、失败 latch、ready 世代、Electron/测试边界；当时 `codex_changes_requested`（历史） |
 | 2026-07-20 | **v0.1.1** | **Codex 再复核通过**；四项启动安全契约已冻结；状态 → `specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`。**实施规格冻结**；实现尚未授权、尚未开始；版本表保持 TBD |
-| 2026-07-21 | **v0.1.2** | Owner 授权后完成兼容性 spike：锁定依赖版本；main 入口门禁/latch/generation；`renderer-next` production-load；Playwright Electron 最小 E2E。状态 → `implemented` / `empirically_verified` / `codex_review_pending`。**停止扩 scope，等待 Codex 复核** |
+| 2026-07-21 | **v0.1.2** | Owner 授权后完成兼容性 spike：锁定依赖版本；main 入口门禁/latch/generation；`renderer-next` production-load；Playwright Electron 最小 E2E。状态曾标 `implemented` / `empirically_verified` / `codex_review_pending`（历史） |
+| 2026-07-21 | **v0.1.3** | Codex 有界修复：ready 竞态（加载前 arm）、显式 generation、导航单飞、Vite dev / Error Boundary E2E、gitignore/typecheck/精确版本。状态 → `implemented` / `spike_partial_verified` / `codex_changes_requested`。**停止扩 scope，等待再复核** |

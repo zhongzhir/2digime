@@ -8,6 +8,25 @@
 
 const DEFAULT_READY_TIMEOUT_MS = 8000;
 
+/**
+ * Explicit generation is required. Missing → generation_required;
+ * non-finite / non-integer / <1 → generation_invalid.
+ * @param {unknown} raw
+ */
+function parseExplicitGeneration(raw) {
+  if (raw === undefined || raw === null) {
+    return { ok: false, code: "generation_required" };
+  }
+  if (typeof raw === "string" && raw.trim() === "") {
+    return { ok: false, code: "generation_required" };
+  }
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1) {
+    return { ok: false, code: "generation_invalid" };
+  }
+  return { ok: true, generation: n };
+}
+
 function createRendererEntryController(opts = {}) {
   const readyTimeoutMs =
     typeof opts.readyTimeoutMs === "number" && opts.readyTimeoutMs > 0
@@ -53,6 +72,7 @@ function createRendererEntryController(opts = {}) {
       fallbackLatched,
       navigationGeneration,
       readyConsumedGeneration,
+      readyArmed,
       lastFailure,
       readyTimeoutMs,
       harnessEnabled: isSpikeHarnessEnabled(),
@@ -142,6 +162,9 @@ function createRendererEntryController(opts = {}) {
   }
 
   function acceptSignalReady({ generation, webContentsId, expectedWebContentsId, isNextPage }) {
+    const parsed = parseExplicitGeneration(generation);
+    if (!parsed.ok) return parsed;
+
     if (effectiveEntry !== "next") {
       return { ok: false, code: "not_next_entry" };
     }
@@ -151,18 +174,18 @@ function createRendererEntryController(opts = {}) {
     if (expectedWebContentsId != null && webContentsId !== expectedWebContentsId) {
       return { ok: false, code: "window_mismatch" };
     }
-    if (generation !== navigationGeneration) {
+    if (parsed.generation !== navigationGeneration) {
       return { ok: false, code: "generation_mismatch" };
     }
-    if (readyConsumedGeneration === generation) {
+    if (readyConsumedGeneration === parsed.generation) {
       return { ok: false, code: "already_consumed" };
     }
     if (!readyArmed) {
       return { ok: false, code: "ready_late" };
     }
-    readyConsumedGeneration = generation;
+    readyConsumedGeneration = parsed.generation;
     clearReadyTimer();
-    return { ok: true, code: "ok", generation };
+    return { ok: true, code: "ok", generation: parsed.generation };
   }
 
   function latchFallback(failure) {
@@ -218,10 +241,12 @@ function createRendererEntryController(opts = {}) {
     getBoundGeneration,
     isSpikeHarnessEnabled,
     isViteDevEnabled,
+    parseExplicitGeneration,
   };
 }
 
 module.exports = {
   createRendererEntryController,
+  parseExplicitGeneration,
   DEFAULT_READY_TIMEOUT_MS,
 };

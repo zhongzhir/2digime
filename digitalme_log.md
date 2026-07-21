@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-07-21 Renderer Foundation R1 spike 有界修复
+
+### 做了什么
+
+按 Codex 复核关闭 5 项：
+
+1. next 加载前完成 generation + ready armed，避免 early ready 被判 `ready_late`。
+2. `signalReady` 必须显式有限整数 generation；缺失/非法 → `generation_required` / `generation_invalid`。
+3. main 导航单飞门禁；连续 `testRequestNext` 第二次 → `navigation_in_progress`。
+4. 增补 Vite dev 真实加载 E2E，以及 Error Boundary 仅 harness 可触发。
+5. `test-results/` 入 `.gitignore`；`test:r1-spike` 含 typecheck；新增依赖去掉 `^` 精确锁定。
+
+任务包 → **v0.1.3** / `implemented` / `spike_partial_verified` / `codex_changes_requested`。
+
+### 边界
+
+未继续正式 shell；未启动 R2 / R2.5 / PAN-02；未 amend `a613f9b`；未 push。
+
+### 下一等待项
+
+**等待 Codex 再复核**本修复提交。
+
+---
+
 ## 2026-07-21 Renderer Foundation R1 兼容性 spike
 
 ### 做了什么

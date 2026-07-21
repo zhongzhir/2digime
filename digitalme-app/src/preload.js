@@ -28,10 +28,7 @@ const api = {
     getBoundGeneration: () => ipcRenderer.invoke("runtime:getBoundGeneration"),
     requestRendererEntry: (entry, reason) =>
       ipcRenderer.invoke("runtime:requestRendererEntry", entry, reason),
-    signalReady: (generation) =>
-      ipcRenderer.invoke("runtime:signalReady", {
-        generation: generation == null ? undefined : Number(generation),
-      }),
+    signalReady: (generation) => ipcRenderer.invoke("runtime:signalReady", { generation }),
     failReadyEnabled: R1_FAIL_READY,
     injectErrorBoundary: R1_INJECT_ERROR_BOUNDARY,
   },

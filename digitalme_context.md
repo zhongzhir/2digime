@@ -4,7 +4,7 @@
 状态：持续更新
 最后更新：2026-07-21
 
-> **当前产品主线（2026-07-21，R1 兼容性 spike）**：**P1-PANORAMA**。**PAN-01S 族 `accepted`**（baseline `cbde807`）。**R0** = **`accepted`**（v0.1.2）。**R1** = `implemented` / `empirically_verified` / `codex_review_pending`（任务包 **v0.1.2**；兼容性 spike 已完成；**正式 shell 完成度待 Codex 复核**；分支 `codex/r1-renderer-next-shell`）。**当前唯一等待项：Codex 复核 R1 spike。** 不得继续正式 shell 扩展；不得开始 R2/R2.5/PAN-02。PAN-02 = `planned` / `blocked`。
+> **当前产品主线（2026-07-21，R1 spike 有界修复）**：**P1-PANORAMA**。**PAN-01S 族 `accepted`**（baseline `cbde807`）。**R0** = **`accepted`**（v0.1.2）。**R1** = `implemented` / `spike_partial_verified` / `codex_changes_requested`（任务包 **v0.1.3**；spike 主体成立；有界修复已提交待再复核；分支 `codex/r1-renderer-next-shell`）。**当前唯一等待项：Codex 再复核 R1 修复。** 不得继续正式 shell；不得开始 R2/R2.5/PAN-02。PAN-02 = `planned` / `blocked`。
 > **PAN-01** 最终裁定：`statically_verified` / `owner_product_perception_failed` / `needs_minimal_surface_reset`（基线 `a40c5f8`；**不标 accepted**；**不回滚**；表面收口已由 PAN-01S 族完成）。
 >
 > **PAN-01R** 最终裁定：`statically_verified` / `codex_review_passed` / `owner_runtime_verified` / `owner_product_perception_failed` / `retained_as_internal_collaboration_harness`（最终实现 `9dd6fa0`；70/70 + 20/20；**不标 accepted**）。**生产界面必须没有 PAN-01R 入口**（含设置／高级／帮助；仅隔离 test harness；见规格 v0.6.3）。底层授权、取消、审计、adopt/reject、推理环境绑定等保留为内部测试与未来 PAN-04 基础设施。不得自行回到 P1-07 修复或原 P1-08 队列。
@@ -290,7 +290,7 @@ flowchart TB
 | `digitalme_narrative_ai_era_autonomy.md` | 对外/对内叙事（含双线简述） |
 | `digital-me-project-positioning-draft.md` | 定位讨论稿（战略原则含双线） |
 
-**近期工程焦点（2026-07-21 覆盖）**：规格 **v0.6.3** + 决策 **#67～#85**——**R0 `accepted`**；**R1 spike v0.1.2** = `implemented` / `empirically_verified` / `codex_review_pending`（分支 `codex/r1-renderer-next-shell`）。**当前唯一等待项：Codex 复核 R1 spike。** **PAN-02** = `planned` / `blocked`。
+**近期工程焦点（2026-07-21 覆盖）**：规格 **v0.6.3** + 决策 **#67～#86**——**R0 `accepted`**；**R1 spike v0.1.3** = `implemented` / `spike_partial_verified` / `codex_changes_requested`（分支 `codex/r1-renderer-next-shell`）。**当前唯一等待项：Codex 再复核 R1 有界修复。** **PAN-02** = `planned` / `blocked`。
 ## 4. 系统架构共识（草案）
 
 > **部署拓扑补充（2026-07-10）**：本节描述逻辑模块（核心层 / 运行层 / 信任层）。物理部署与百万规模扩容面见 [`digitalme_architecture_edge_sovereign_v0.1.md`](digitalme_architecture_edge_sovereign_v0.1.md)（端主权 Runtime + 云边平台 + 能力层）。决策 #3「本地优先 + 云同步」由此文细化。
@@ -463,7 +463,7 @@ flowchart TB
 
 > **2026-07-16 审计后重排（历史）**：第一阶段不再扩展能力面，切换为“主体可信化与协作感知”。当时以 `digitalme_phase1_subject_upgrade_plan_v0.1.md` 为执行清单；原 v0.3.13 的 L0/审计/CLI 只能视为原型，不视为已达到安全可用。
 > **2026-07-18 覆盖**：当前执行索引改为 `digitalme_panorama_execution_index_v0.1.md`；原升级计划降为 Trusted Beta 硬化依据（决策 #58）。
-> **2026-07-21 R1 兼容性 spike 覆盖（当前）**：**R0** = `accepted`。**R1** = `implemented` / `empirically_verified` / `codex_review_pending`（**v0.1.2**；spike 完成；正式 shell 待 Codex）。分支 `codex/r1-renderer-next-shell`。**当前唯一等待项：Codex 复核。** PAN-02 = `planned` / `blocked`。
+> **2026-07-21 R1 spike 有界修复覆盖（当前）**：**R0** = `accepted`。**R1** = `implemented` / `spike_partial_verified` / `codex_changes_requested`（**v0.1.3**；正式 shell 不得扩展）。分支 `codex/r1-renderer-next-shell`。**当前唯一等待项：Codex 再复核。** PAN-02 = `planned` / `blocked`。
 > **2026-07-19 PAN-01S.1 实现覆盖（历史；已被 2026-07-20 acceptance superseded）**：PAN-01S 曾为 `statically_verified` / `owner_changes_requested`；PAN-01S.1 曾为 `statically_verified` / `implemented`（不 accepted）。
 
 1. **工程与 Package 基线冻结**：Git、Alpha 标记、Package hash 快照、能力状态表；
@@ -894,4 +894,5 @@ flowchart TB
 82. **Renderer Foundation R1 任务包起草（2026-07-20）**：新增 `digitalme_renderer_foundation_R1_shell_and_entry_switch.md`（v0.1-draft）。状态：`specified` / `frozen_for_implementation` / `codex_review_pending` / `not_started`。范围：最小 renderer-next shell、TS+React+Vite、整窗 legacy/next、ready 握手、load/ready 失败自动回 legacy、Playwright 最小 E2E、版本 spike 锁定。**Codex 复核通过前不得创建实现分支或修改源码。** R0 保持 `accepted`；PAN-02 仍 `planned` / `blocked`；PAN-01S 族 accepted 不变。**已被决策 #83 修订。**
 83. **Renderer Foundation R1 有界修订 · Codex 启动安全契约（2026-07-20）**：任务包 → v0.1.1-draft。冻结：（1）普通 renderer 仅可 next→legacy；legacy→next 仅 main 开发/E2E 门禁；R1 无生产 next 入口；renderer IPC 不得改持久化默认；（2）失败后本进程 fallback latch + effectiveEntry=legacy；保留持久化偏好并记录失败，下次可重试；长期隔离留后；（3）signalReady 绑定窗口/页面/navigation generation，一次性消费，迟到无效，timer 可靠清理；（4）contextIsolation true、nodeIntegration false；production 仅本地产物；Vite dev URL 仅显式开发；Error Boundary 注入仅 main/harness；E2E 隔离 userData/独立进程/非真实 Package。状态改为 **`specified` / `codex_changes_requested` / `not_started`**（去掉 `frozen_for_implementation`）。**未授权实现**。PAN-02 仍 `planned` / `blocked`。**已被决策 #84 承接。**
 84. **Renderer Foundation R1 实施规格接受 · 今日收尾（2026-07-20）**：Codex 再复核通过。任务包 `digitalme_renderer_foundation_R1_shell_and_entry_switch.md` → **v0.1.1**；状态 → `specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`。含义：**实施规格已冻结**；不是实现完成或产品验收。implementation 仍 `not_started`；实现分支不存在；**Owner 创建实现分支与 spike 的授权尚未获得**。版本锁定表保持 TBD。不得标 accepted/implemented/statically_verified/runtime_verified/released。下一等待项：Owner 明确授权后从本规格接受提交创建 `codex/r1-renderer-next-shell`，第一步仅为兼容性 spike。今日收尾：不实现、不装依赖、不建分支、不启 Electron、不跑产品测试、不开始 R2/R2.5/PAN-02。R0 `accepted` 不变；PAN-01S 族 `accepted` 不变；PAN-02 `planned` / `blocked`。
-85. **Renderer Foundation R1 兼容性 spike（2026-07-21）**：Owner 明确授权后创建分支 `codex/r1-renderer-next-shell`，完成兼容性 spike（非业务 shell）。锁定 react/react-dom 18.3.1、vite 5.4.11、typescript 5.7.3、@vitejs/plugin-react 4.3.4、@playwright/test 1.49.1；Electron 32.3.3。main 入口门禁/latch/generation、`renderer-next` production-load、Playwright Electron 4/4、legacy 冒烟通过。任务包 → **v0.1.2** / `implemented` / `empirically_verified` / `codex_review_pending`。**不得**标 statically_verified/runtime_verified/accepted/released。下一等待项：**Codex 复核**；复核前不得继续正式 R1 shell，不得开始 R2/R2.5/PAN-02。
+85. **Renderer Foundation R1 兼容性 spike（2026-07-21）**：Owner 明确授权后创建分支 `codex/r1-renderer-next-shell`，完成兼容性 spike（非业务 shell）。锁定 react/react-dom 18.3.1、vite 5.4.11、typescript 5.7.3、@vitejs/plugin-react 4.3.4、@playwright/test 1.49.1；Electron 32.3.3。main 入口门禁/latch/generation、`renderer-next` production-load、Playwright Electron、legacy 冒烟通过。任务包曾标 **v0.1.2** / `implemented` / `empirically_verified` / `codex_review_pending`（历史；已被决策 #86 承接）。
+86. **Renderer Foundation R1 spike 有界修复（2026-07-21）**：按 Codex 关闭 ready 竞态、显式 generation、导航单飞、Vite dev / Error Boundary E2E、gitignore/typecheck/精确版本。任务包 → **v0.1.3** / `implemented` / `spike_partial_verified` / `codex_changes_requested`。**不得**继续使用 `empirically_verified` 直至再复核通过。下一等待项：**Codex 再复核**；不得继续正式 R1 shell；不得开始 R2/R2.5/PAN-02。

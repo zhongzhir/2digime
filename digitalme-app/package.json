@@ -27,7 +27,7 @@
     "test:chat-history-display": "node scripts/test-chat-history-display.cjs && node scripts/test-session-overflow-menu.cjs",
     "test:owner-runtime": "electron scripts/electron-owner-runtime-test.cjs",
     "test:r1-entry": "node scripts/test-r1-renderer-entry.cjs",
-    "test:r1-spike": "npm run build:renderer-next && npm run test:r1-entry && npx playwright test -c playwright.config.cjs",
+    "test:r1-spike": "npm run typecheck:renderer-next && npm run build:renderer-next && npm run test:r1-entry && npx playwright test -c playwright.config.cjs",
     "build:renderer-next": "vite build --config src/renderer-next/vite.config.ts",
     "typecheck:renderer-next": "tsc -p src/renderer-next/tsconfig.json --noEmit",
     "dev:renderer-next": "vite --config src/renderer-next/vite.config.ts",
@@ -41,15 +41,15 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "@playwright/test": "^1.49.1",
-    "@types/react": "^18.3.18",
-    "@types/react-dom": "^18.3.5",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@playwright/test": "1.49.1",
+    "@types/react": "18.3.18",
+    "@types/react-dom": "18.3.5",
+    "@vitejs/plugin-react": "4.3.4",
     "electron": "^32.0.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "typescript": "^5.7.3",
-    "vite": "^5.4.11"
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "typescript": "5.7.3",
+    "vite": "5.4.11"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

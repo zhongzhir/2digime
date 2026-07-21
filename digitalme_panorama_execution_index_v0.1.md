@@ -1,12 +1,12 @@
 # Digital Me Product Panorama 执行索引
 
-版本：v0.2.15
+版本：v0.2.16
 日期：2026-07-21
 状态：`active`
 所属总任务：`P1-PANORAMA：Digital Me 产品全貌 Alpha`（v0.4，三位一体重构）
 代码实现基线：`cbde807fd1e40472d66fbe8f0810a0835e8bc816`（分支 `codex/pan-01s2-chat-incident-close`；PAN-01S 族 Owner 验收 accepted）
 文档基线：`35c5aead8879f818ae0e1e90836a8fee557c22c7`（`PAN01R_SPEC_BASE`，历史）；本轮战略修订见 `digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`
-规格依据：`digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`（v0.4）、`digitalme_renderer_foundation_R0_decision_and_migration_plan.md`（v0.1.2 **accepted**）、`digitalme_renderer_foundation_R1_shell_and_entry_switch.md`（**v0.1.2** spike）、`digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`、`digitalme_phase1_task_PAN-01S_minimal_product_surface.md`、`digitalme_phase1_task_PAN-01S.1_subject_clarity_progressive_build.md`、`digitalme_phase1_task_PAN-00_strategy_spec_freeze.md`、`digitalme_phase1_task_PAN-01_product_panorama_home.md`（历史）、`digitalme_phase1_task_PAN-01R_sovereign_collaboration_loop.md`（历史）、`digitalme_product_spec_v0.2.md`（文内 **v0.6.3**）
+规格依据：`digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`（v0.4）、`digitalme_renderer_foundation_R0_decision_and_migration_plan.md`（v0.1.2 **accepted**）、`digitalme_renderer_foundation_R1_shell_and_entry_switch.md`（**v0.1.3**）、`digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md`、`digitalme_phase1_task_PAN-01S_minimal_product_surface.md`、`digitalme_phase1_task_PAN-01S.1_subject_clarity_progressive_build.md`、`digitalme_phase1_task_PAN-00_strategy_spec_freeze.md`、`digitalme_phase1_task_PAN-01_product_panorama_home.md`（历史）、`digitalme_phase1_task_PAN-01R_sovereign_collaboration_loop.md`（历史）、`digitalme_product_spec_v0.2.md`（文内 **v0.6.3**）
 
 > 本文件是当前阶段唯一执行索引。冲突时：用户体验以产品规格 **v0.6.3** 为准；排期以 P1-PANORAMA v0.4 与本索引为准；安全底线优先于 Alpha 速度。
 >
@@ -14,7 +14,9 @@
 >
 > **v0.2.14 修订（2026-07-20，R1 规格接受 · 今日收尾）**：Codex 再复核通过。R1 → **v0.1.1** / `specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`（历史）。
 >
-> **v0.2.15 修订（2026-07-21，R1 兼容性 spike）**：Owner 授权后完成 spike。R1 → **v0.1.2** / `implemented` / `empirically_verified` / `codex_review_pending`；分支 `codex/r1-renderer-next-shell`；版本表已锁。**当前唯一等待项：Codex 复核 spike。** 不得继续正式 shell；不得开始 R2/R2.5/PAN-02。R0 / PAN-01S 族 accepted 不变。
+> **v0.2.15 修订（2026-07-21，R1 兼容性 spike）**：Owner 授权后完成 spike。R1 → **v0.1.2** / `implemented` / `empirically_verified` / `codex_review_pending`（历史）。
+>
+> **v0.2.16 修订（2026-07-21，R1 spike 有界修复）**：Codex 指出 5 项缺陷后完成修复。R1 → **v0.1.3** / `implemented` / `spike_partial_verified` / `codex_changes_requested`。**当前唯一等待项：Codex 再复核。** 不得继续正式 shell；不得开始 R2/R2.5/PAN-02。
 
 ---
 
@@ -30,7 +32,7 @@ P1-PANORAMA（三位一体 Alpha）
 → PAN-01S.1 accepted（2026-07-20；baseline cbde807）
 → PAN-01S.2 accepted（2026-07-20；baseline cbde807；对话事故收口）
 → renderer foundation R0 **accepted**（v0.1.2；决策接受；implementation not_started）
-→ renderer foundation R1（v0.1.2；implemented / empirically_verified / codex_review_pending；spike 完成）← 当前唯一等待项：Codex 复核
+→ renderer foundation R1（v0.1.3；implemented / spike_partial_verified / codex_changes_requested；有界修复）← 当前唯一等待项：Codex 再复核
 → PAN-02 理解通道 Alpha（planned / blocked；见 R0 §16；不以 SQLite 为前提）
 → …
 ```
@@ -39,7 +41,7 @@ P1-PANORAMA（三位一体 Alpha）
 |---|---|
 | 总任务状态 | `active / three_part_alpha_reframed / PAN-01S_family_accepted / R0_decision_accepted / R1_spike_pending_codex_review` |
 | 当前完成 | PAN-00 / PAN-00R `accepted`；PAN-01 / PAN-01R 已裁定（不 accepted）；**PAN-01S / S.1 / S.2 `accepted`**；**R0 决策 `accepted`**；**R1 兼容性 spike 已实现并本机实证** |
-| **当前唯一等待项** | **等待 Codex 复核** R1 spike（分支 `codex/r1-renderer-next-shell`）。正式 R1 shell 完成度待复核决定。PAN-02 保持 `planned` / `blocked`。 |
+| **当前唯一等待项** | **等待 Codex 再复核** R1 spike 有界修复（分支 `codex/r1-renderer-next-shell`；v0.1.3 / `spike_partial_verified` / `codex_changes_requested`）。正式 R1 shell 不得扩展。PAN-02 保持 `planned` / `blocked`。 |
 | Acceptance basis（PAN-01S 族） | Owner real Electron runtime；baseline `cbde807`；date 2026-07-20 |
 | 明确不得启动 | 正式 R1 shell 扩展（待 Codex）；R2 / R2.5；PAN-02～PAN-06；P1-07 修复；Digital Org；公网协作；重开 PAN-01S |
 
@@ -58,7 +60,7 @@ P1-PANORAMA（三位一体 Alpha）
 | PAN-01S.2 | 对话事故收口（历史显示 / 附件分离 / 关联文稿隔离与恢复） | **`accepted`（2026-07-20；baseline `cbde807`）** | Owner 真机事故发现 | Owner real Electron runtime | 正式独立任务包未入库；以本索引与 log 记录为准，不伪造任务包历史 |
 | PAN-02 | 理解通道 Alpha：低负担输入、后台蒸馏、关键纠错、任务相关检索、无关沉默 | `planned` / **`blocked`** | 见 R0 §16：R0 决策确认 + 至少 R2/R3 Owner 真机验收（或书面豁免）+ 独立任务包冻结与启动授权；**不以 SQLite/R2.5 为前提** | 理解我 Alpha 达标（规格 §7.6 第 1 条） | PAN-03 |
 | renderer foundation R0 | 架构决策与渐进迁移规格（非实现；非 PAN 主线） | **`accepted`（v0.1.2；决策接受）**；implementation = `not_started`；branch = 不存在 | 含整窗入口、自动回退 legacy、R2=JSON、R2.5 deferred、Playwright E2E、R1 收窄 | 决策已接受；下一文档任务为 R1 任务包 | R1～R6；不重开 PAN-01S |
-| renderer foundation R1 | 最小 next shell + 整窗开关 + Playwright 骨架 | **`implemented` / `empirically_verified` / `codex_review_pending`**（**v0.1.2**）；branch = `codex/r1-renderer-next-shell` | Owner 已授权；兼容性 spike 完成；版本表已锁 | **等待 Codex 复核**；正式 shell 完成度待定 | R2 |
+| renderer foundation R1 | 最小 next shell + 整窗开关 + Playwright 骨架 | **`implemented` / `spike_partial_verified` / `codex_changes_requested`**（**v0.1.3**）；branch = `codex/r1-renderer-next-shell` | Owner 已授权；spike 主体成立；有界修复待再复核 | **等待 Codex 再复核**；正式 shell 不得扩展 | R2 |
 | R2.5 SQLite ADR | sessions 运行库可行性（非主体权威） | `planned` / **`deferred`** | 量化触发 + 独立 ADR + Owner 授权；不读真实正文 | 备份/双读/回滚证明 | 可选；跳过不影响 PAN-02 |
 | PAN-03 | 能力框架 Alpha | `planned`（新定义） | PAN-02 验收通过 + 独立任务包 | 武装我 Alpha 达标 | PAN-04 |
 | PAN-04 | 外部协作骨架 Alpha | `planned`（新定义） | PAN-03 验收通过 + 独立任务包 | 连接世界 Alpha 达标 | PAN-05 |
@@ -178,4 +180,4 @@ statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_fo
 3. 恢复 backlog 须先写最小阻断说明，不可直接扩 scope。
 4. 更新本索引时同步 `digitalme_capability_status_v0.1.md` 与 `digitalme_log.md`。
 5. PAN-00 已于 `bc85a14` 标记 `accepted`（历史）。PAN-01 与 PAN-01R 按 PAN-00R 裁定归档，均**不得标 `accepted`**、不得回滚、不得删除证据。PAN-00R 已 `accepted`（`07b631d` + `6ae2dca` + `0fcd432`；docs/strategy acceptance，不是运行能力 released）。**PAN-01S / PAN-01S.1 / PAN-01S.2 已于 2026-07-20 `accepted`**（Owner real Electron runtime；baseline `cbde807`）。
-6. **当前唯一等待项**：**等待 Codex 复核** Renderer Foundation R1 兼容性 spike（分支 `codex/r1-renderer-next-shell`；任务包 **v0.1.2** / `implemented` / `empirically_verified` / `codex_review_pending`）。正式 R1 shell 完成度待复核决定。**不得**在复核前继续扩展正式 shell。R0 决策已 **`accepted`**。**PAN-02** 保持 `planned` / `blocked`。**不得**重开 PAN-01S。非阻断技术债见 §2.3。不得开始 R2/R2.5/PAN-02。
+6. **当前唯一等待项**：**等待 Codex 再复核** Renderer Foundation R1 spike 有界修复（分支 `codex/r1-renderer-next-shell`；任务包 **v0.1.3** / `implemented` / `spike_partial_verified` / `codex_changes_requested`）。正式 R1 shell **不得**扩展。R0 决策已 **`accepted`**。**PAN-02** 保持 `planned` / `blocked`。**不得**重开 PAN-01S。非阻断技术债见 §2.3。不得开始 R2/R2.5/PAN-02。
