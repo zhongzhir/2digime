@@ -2,21 +2,25 @@
 
 版本：v0.1.3
 日期：2026-07-21
-状态：`implemented` / `spike_partial_verified` / `codex_changes_requested`
-性质：**独立实施任务包**；**实施规格已冻结（v0.1.1）**；兼容性 spike 已实现；Codex 指出有界缺陷后进入修复轮；**正式 R1 shell 完成度仍待修复复核通过后决定**；**不得**标 `empirically_verified` / `statically_verified` / `runtime_verified` / `accepted` / `released`
+状态：`accepted`
+性质：**独立实施任务包**；**实施规格已冻结（v0.1.1）**；兼容性 spike 与有界修复已完成；**Owner real Electron runtime 验收通过**；**accepted 仅覆盖 R1 基础能力**（见下方语义），**不**表示业务页面已迁移或整个 renderer 重构完成
 所属主线：`P1-PANORAMA`（三位一体 Alpha）
 前置：Renderer Foundation R0 **`accepted`**（v0.1.2；决策接受）
 依据：`digitalme_renderer_foundation_R0_decision_and_migration_plan.md` §10 / §11 / §14.1 / §15
-实现分支：`codex/r1-renderer-next-shell`（Owner 已于 2026-07-21 授权）
+实现分支：`codex/r1-renderer-next-shell`
+accepted baseline：`8d7e9b3`
+acceptance basis：Codex review passed + Owner real Electron runtime 6/6（2026-07-21）
+implementation：`completed`
 
 > **状态语义**
 >
-> - **`implemented` / `spike_partial_verified` / `codex_changes_requested`**：spike 主体已落地，但 Codex 复核要求关闭 ready 竞态、显式 generation、导航单飞、Vite dev / Error Boundary 实证与工程收尾；**在修复复核通过前不得使用 `empirically_verified`**；
-> - **正式 R1 shell**（完整 AppShell 占位路由与后续表面）**不得**在本修复轮继续扩展；
-> - 生产默认入口仍为 **legacy**；普通用户路径无进入 next 的入口；
-> - **禁止**启动 PAN-02；R2.5 SQLite 保持 `planned` / `deferred`；
-> - 本切片**不**改变 PAN-01S 族 `accepted`；R0 **`accepted` 不变**；
-> - 未经 Owner 真机验收不得将 R1 标为产品面「可用」或删除 legacy。
+> - **`accepted`（2026-07-21）**：R1 基础能力经 Codex 技术复核与 Owner 真机 6/6 验收；accepted baseline = **`8d7e9b3`**；
+> - **accepted 仅表示**以下基础能力完成：TypeScript + React + Vite 新 renderer 底座；独立 next 页面；main 控制的新旧界面整窗切换；runtime stamp；ready generation；导航单飞；自动回退 legacy；fallback latch；Error Boundary；Playwright Electron 基线；
+> - **next 当前仍是预览空壳**；chat、「我」、构建、工作台、能力、设置**均未迁移**；
+> - 生产默认入口仍为 **legacy**；**普通用户没有进入 next 的生产入口**；
+> - **不得**将整个 renderer 重构标为完成；**不**代表 R2 / R2.5 / PAN-02 已启动；
+> - **禁止**启动 PAN-02 实现；R2.5 SQLite 保持 `planned` / `deferred`；R2 为 `planned` / `not_started`（仅可起草任务包，未授权不得实现）；
+> - 本切片**不**改变 PAN-01S 族 `accepted`；R0 **`accepted` 不变**。
 
 角色：Owner（验收）＋ Codex（规格/实现复核）＋ Cursor（实现）
 
@@ -98,7 +102,7 @@ Spike 结论写入版本表后方可扩大实现。失败则停止扩 scope，�
 | @playwright/test | Playwright | **1.49.1** |
 | electron（既有） | Electron | **32.3.3**（host 实证） |
 
-**兼容性结果（2026-07-21，Windows）**：Node **v24.14.0**；npm **11.9.0**；Electron **32.3.3**。Vite production build 成功；Electron production-load 本地 `renderer-next/dist`；Vite dev URL 仅 `DIGITALME_VITE_DEV=1`（E2E 真实启动验证）；Playwright Electron 7/7；入口/latch/generation/单飞单测 8/8；legacy 冒烟通过。`package.json` 对本轮新增依赖使用**精确版本**（无 `^`）。
+**兼容性结果（2026-07-21，Windows）**：Node **v24.14.0**；npm **11.9.0**；Electron **32.3.3**。Vite production build 成功；Electron production-load 本地 `renderer-next/dist`；Vite dev URL 仅 `DIGITALME_VITE_DEV=1`（E2E 真实启动验证）；Playwright Electron 通过；入口/latch/generation/单飞单测通过；legacy 冒烟通过。`package.json` 对本轮新增依赖使用**精确版本**（无 `^`）。
 
 ---
 
@@ -141,6 +145,7 @@ next **加载失败**或 **ready 握手超时/失败**时，main **必须**：
 2. **一次性消费**：成功接受后，同世代再次 `signalReady` 无效。
 3. **无效信号**（一律忽略）：旧页面、**legacy** 页面、超时后的迟到信号、世代不匹配、窗口已销毁。
 4. **timer**：在握手成功、自动回退、窗口关闭、导航取消时**可靠清理**；禁止泄漏导致误回退或重复回退。
+5. **显式 generation**：缺失 → `generation_required`；非法 → `generation_invalid`；不得在缺失时自动填当前世代。
 
 建议面（语义冻结；名称可微调）：
 
@@ -154,7 +159,7 @@ runtime.getRendererEntry() -> {
 }
 runtime.requestRendererEntry(entry, reason) -> { ok, code? }
   // 普通 renderer：仅 next→legacy
-runtime.signalReady(generation) -> { ok }  // 或由 preload 绑定世代；无世代则失败
+runtime.signalReady(generation) -> { ok }  // 必须显式有限整数 generation
 ```
 
 ### 6.4 Electron 与测试钩子安全边界
@@ -199,9 +204,23 @@ runtime.signalReady(generation) -> { ok }  // 或由 preload 绑定世代；无�
 
 - [x] Codex 规格再复核通过（本文件 v0.1.1 冻结）。
 - [x] **Owner 明确授权**创建实现分支并启动 spike（2026-07-21）。
-- [ ] Owner 真机抽查（实现完成后）：默认 legacy、失败回退、无生产 next 入口。
+- [x] Codex 技术复核通过（实现与有界修复；2026-07-21）。
+- [x] Owner 真机验收 6/6（2026-07-21；baseline `8d7e9b3`）。
 - [x] **不得**因 R1 将 next 暴露给普通用户作为默认或主入口。
-- [x] **不得**将本规格冻结误标为 `accepted` / `statically_verified` / `runtime_verified` / `released`（本轮仅 `implemented` / `empirically_verified` / `codex_review_pending`）。
+- [x] accepted 仅覆盖 R1 基础能力；不伪造业务迁移完成。
+
+### 7.4 Owner real Electron runtime 验收记录（2026-07-21）
+
+| # | 项目 | 结果 |
+|---|---|---|
+| 1 | 默认打开经典界面 | 通过 |
+| 2 | 新预览界面正常显示 | 通过 |
+| 3 | 运行标识存在且就绪状态为 ok | 通过 |
+| 4 | 点击「返回经典界面」成功 | 通过 |
+| 5 | 模拟新界面失败后自动返回经典界面 | 通过 |
+| 6 | 无白屏、卡死或新旧界面反复跳转 | 通过 |
+
+合计：**6/6 通过**。验收方式：Owner real Electron runtime。accepted baseline：`8d7e9b3`。
 
 ---
 
@@ -215,13 +234,15 @@ runtime.signalReady(generation) -> { ok }  // 或由 preload 绑定世代；无�
 | 规格冻结 | **已满足**（`frozen_for_implementation`；v0.1.1） |
 | Owner 实现授权 | **已满足（2026-07-21）** |
 | 实现分支 | **`codex/r1-renderer-next-shell`** |
-| implementation | **spike `implemented` / `empirically_verified`；等待 `codex_review_pending`** |
+| implementation | **`completed`** |
+| Owner 真机验收 | **已满足（6/6；baseline `8d7e9b3`）** |
+| 工程状态 | **`accepted`** |
 
-### 8.2 开始编码的进入条件（全部满足后方可）
+### 8.2 开始编码的进入条件（历史；已满足）
 
 1. 上表 Codex 复核与规格冻结已满足（已满足）；
 2. **Owner 明确授权**创建 `codex/r1-renderer-next-shell`（已满足）；
-3. 授权后第一步仅为 §5 兼容性 spike（本轮已完成）；扩大正式 shell 前须 Codex 复核。
+3. 授权后第一步仅为 §5 兼容性 spike（已完成）。
 
 ### 8.3 停止条件
 
@@ -242,7 +263,7 @@ runtime.signalReady(generation) -> { ok }  // 或由 preload 绑定世代；无�
 | 单元 | 入口权限 / generation / latch 纯逻辑建议单测 |
 | Playwright Electron | **必须** |
 | 既有 owner-runtime | legacy 回归不破即可 |
-| Owner 真机 | 抽查默认与回退 |
+| Owner 真机 | **已完成 6/6**（2026-07-21） |
 
 ---
 
@@ -258,7 +279,7 @@ runtime.signalReady(generation) -> { ok }  // 或由 preload 绑定世代；无�
 
 ## 11. 明确禁止
 
-1. 将本规格冻结误认为已获 Owner 实现授权或已开始实现。
+1. 将本规格冻结误认为已获 Owner 实现授权或已开始实现。（历史禁止；授权与实现已发生）
 2. 未经 Owner 授权创建实现分支、`npm install`、改源码/lockfile、启动 Electron。
 3. 普通 renderer 请求 `legacy → next`。
 4. renderer IPC 改写持久化默认入口。
@@ -267,8 +288,8 @@ runtime.signalReady(generation) -> { ok }  // 或由 preload 绑定世代；无�
 7. iframe/webview 嵌 legacy；一窗双状态机。
 8. 生产加载 Vite dev URL；query/hash/localStorage 开故障注入。
 9. 新增 Spectron；触碰真实 Package/sessions 正文。
-10. 启动 PAN-02 / R2 / R2.5；amend / squash / push 作为默认。
-11. 将 R1 标为 `accepted` / `implemented` / `statically_verified` / `runtime_verified` / `released`（本轮规格接受不得使用这些标签）。
+10. 启动 PAN-02 / R2 实现 / R2.5；amend / squash / push 作为默认。
+11. 将整个 renderer 重构或业务迁移误标为因 R1 accepted 而完成。
 
 ---
 
@@ -276,14 +297,15 @@ runtime.signalReady(generation) -> { ok }  // 或由 preload 绑定世代；无�
 
 | 项 | 值 |
 |---|---|
-| 本文件 | **`implemented` / `spike_partial_verified` / `codex_changes_requested`**（v0.1.3） |
-| 含义 | spike 主体成立；Codex 有界修复进行中；**正式 shell 不得扩展** |
-| implementation | **spike `implemented`**（修复轮；非正式 shell 完成） |
+| 本文件 | **`accepted`**（v0.1.3；2026-07-21） |
+| 含义 | R1 基础能力 Owner 真机验收通过；next 仍为预览空壳 |
+| implementation | **`completed`** |
 | 实现分支 | **`codex/r1-renderer-next-shell`** |
-| Owner 实现授权 | **已获得（2026-07-21）** |
-| 版本锁定表 | **已填写**（package.json 精确版本 + lockfile） |
-| 本轮停止点 | 有界修复提交后**立即停止**；等待 Codex 再复核；**不得**继续正式 R1 shell |
-| 完成后下一步 | Codex 复核通过后再决定正式 shell 范围；R2 任务包另文；不自动开始 |
+| accepted baseline | **`8d7e9b3`** |
+| acceptance basis | Codex review passed + Owner real Electron runtime 6/6 |
+| 下一任务 | **起草并冻结 Renderer Foundation R2 对话迁移独立任务包**，交 Codex/Owner 复核；**未获授权前不得创建 R2 实现分支或修改源码** |
+| R2 | `planned` / `not_started` |
+| R2.5 | `planned` / `deferred` |
 | PAN-02 | `planned` / `blocked` |
 | R0 | `accepted`（不变） |
 | PAN-01S 族 | `accepted`（不变） |
@@ -298,4 +320,5 @@ runtime.signalReady(generation) -> { ok }  // 或由 preload 绑定世代；无�
 | 2026-07-20 | v0.1.1-draft | Codex 第一轮修订（`6107b36`）：入口权限、失败 latch、ready 世代、Electron/测试边界；当时 `codex_changes_requested`（历史） |
 | 2026-07-20 | **v0.1.1** | **Codex 再复核通过**；四项启动安全契约已冻结；状态 → `specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`。**实施规格冻结**；实现尚未授权、尚未开始；版本表保持 TBD |
 | 2026-07-21 | **v0.1.2** | Owner 授权后完成兼容性 spike：锁定依赖版本；main 入口门禁/latch/generation；`renderer-next` production-load；Playwright Electron 最小 E2E。状态曾标 `implemented` / `empirically_verified` / `codex_review_pending`（历史） |
-| 2026-07-21 | **v0.1.3** | Codex 有界修复轮：ready 竞态、显式 generation、导航单飞、Vite/Error Boundary E2E、工程收尾；随后再修 Error Boundary 真实 render throw、Vite origin 对齐、timeout Promise 捕获。状态保持 `implemented` / `spike_partial_verified` / `codex_changes_requested` |
+| 2026-07-21 | **v0.1.3** | Codex 有界修复轮：ready 竞态、显式 generation、导航单飞、Vite/Error Boundary E2E、工程收尾；随后再修 Error Boundary 真实 render throw、Vite origin 对齐、timeout Promise 捕获。状态曾保持 `implemented` / `spike_partial_verified` / `codex_changes_requested`（历史） |
+| 2026-07-21 | **v0.1.3** | **Owner 验收收口**：Codex 技术复核通过 + Owner real Electron runtime **6/6**；状态 → **`accepted`**；baseline **`8d7e9b3`**；implementation `completed`。下一任务仅为起草 R2 任务包 |

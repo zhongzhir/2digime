@@ -5,6 +5,40 @@
 
 ---
 
+## 2026-07-21 Renderer Foundation R1 Owner 验收收口
+
+### 做了什么
+
+纯文档收口：将 R1 任务包 **v0.1.3** 标为 **`accepted`**。
+
+| 项 | 值 |
+|---|---|
+| 验收日期 | 2026-07-21 |
+| 验收方式 | Owner real Electron runtime |
+| accepted baseline | **`8d7e9b3`** |
+| Codex 技术复核 | 通过 |
+| Owner 验收 | **6/6 通过** |
+| implementation | `completed` |
+| 分支 | `codex/r1-renderer-next-shell` |
+
+Owner 6/6：默认经典界面；新预览正常；运行标识且就绪 ok；返回经典界面；失败自动回经典；无白屏/卡死/反复跳转。
+
+同步：context（决策 #87）、执行索引、能力表、cursor rule、总任务包调度段。
+
+### accepted 范围（明确）
+
+仅 R1 基础能力：TS+React+Vite 底座、独立 next、整窗切换、runtime stamp、ready generation、导航单飞、自动回退、latch、Error Boundary、Playwright 基线。next 仍为预览空壳；业务页未迁移；生产默认 legacy；无普通用户 next 入口。
+
+### 明确未做
+
+未改源码/测试/配置/依赖/lockfile；未创建新分支；未启动应用或测试；未起草 R2 任务包；未启动 R2 / R2.5 / PAN-02；未 push。
+
+### 下一任务
+
+起草并冻结 Renderer Foundation R2 对话迁移独立任务包，交 Codex/Owner 复核；未获授权前不得创建 R2 实现分支或修改源码。R2 = `planned` / `not_started`。
+
+---
+
 ## 2026-07-21 Renderer Foundation R1 spike 边界小修
 
 ### 做了什么
