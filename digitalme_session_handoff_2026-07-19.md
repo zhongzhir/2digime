@@ -6,7 +6,7 @@
 > **2026-07-21 规划基线重建**：本文为 **2026-07-19 历史衔接**，**不再**作为当前状态或下一任务权威。  
 > **当前最高架构原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)  
 > **当前唯一执行计划**：[`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)  
-> **下一项**：限定范围的仓库实现映射与第一闭环规格冻结（仅文档）。R3 `paused`；旧 DM-Core-01A `superseded`。
+> **下一项**：实现任务意图与本人上下文装配（第一闭环实现 · 第 1 块；待授权）。R3 `paused`；`55ae01f` = `retained_for_mapping_review`。
 
 ---
 

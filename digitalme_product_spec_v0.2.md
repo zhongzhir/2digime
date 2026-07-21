@@ -3,7 +3,7 @@
 版本：v0.6.3
 状态：正式需求源（界面与功能细则 · **待与新主线对齐**）
 日期：2026-07-19
-关联：`digitalme_context.md`、`digitalme_subject_architecture_and_rd_principles_v0.1.md`（**当前最高架构原则**）、`digitalme_first_vertical_loop_sprint_plan_v0.1.md`（**当前执行计划**）、历史 P1-PANORAMA / PAN-00R / PAN-01S 等
+关联：`digitalme_context.md`、`digitalme_subject_architecture_and_rd_principles_v0.1.md`（**当前最高架构原则**）、`digitalme_first_vertical_loop_sprint_plan_v0.1.md`（**当前执行计划 · `spec_frozen`**）、`digitalme_first_vertical_loop_spec_v0.1.md`（**第一闭环冻结规格**）、历史 P1-PANORAMA / PAN-00R / PAN-01S 等
 
 > **2026-07-21 规划基线重建**：产品最高定义与当前执行主线已迁至架构原则文与第一纵向闭环计划。本文 **v0.6.3** 仍为既有桌面表面细则的重要参照；**凡与「当前下一步 / 主线排期 / 数字主体循环」冲突者，以新权威文件为准**，本文待后续规格升版对齐。  
 > **不得**再依据本文或旧执行索引将 R3、旧 DM-Core-01A、或 Skill/MCP/Agent 并列建设写成当前执行任务。
@@ -826,7 +826,7 @@ Skill = 可复用的办事方式（约定、步骤、推荐工具能力、sceneT
 
 **历史 v0.2 实现顺序（已失效，不再用于排期）**：附件 → 流式/停止 → 多会话 → 工具轨迹可见 → Markdown 画布 + md/docx 导出 → 产物库打通与报告类模板。
 
-**当前唯一执行计划**以 `digitalme_first_vertical_loop_sprint_plan_v0.1.md` 为准；架构原则见 `digitalme_subject_architecture_and_rd_principles_v0.1.md`。`digitalme_panorama_execution_index_v0.1.md` 仅为历史/基础设施状态表。**PAN-01S 族已 `accepted`**（baseline `cbde807`）。**下一项**：**限定范围的仓库实现映射与第一闭环规格冻结**（仅文档）。R3 `paused`；旧 DM-Core-01A `superseded`。
+**当前唯一执行计划**以 `digitalme_first_vertical_loop_sprint_plan_v0.1.md`（v0.1.2 `spec_frozen`）为准；冻结规格见 `digitalme_first_vertical_loop_spec_v0.1.md`。架构原则见 `digitalme_subject_architecture_and_rd_principles_v0.1.md`。`digitalme_panorama_execution_index_v0.1.md` 仅为历史/基础设施状态表。**下一项**：**实现任务意图与本人上下文装配（第一闭环实现 · 第 1 块）**（待授权）。R3 `paused`；旧 DM-Core-01A 开发指令 `superseded`；`55ae01f` = `retained_for_mapping_review`。
 
 ---
 

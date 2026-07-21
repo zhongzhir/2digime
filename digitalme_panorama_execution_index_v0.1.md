@@ -9,8 +9,9 @@
 
 > **2026-07-21 规划基线重建（强制）**：本文件**不再**作为「当前唯一执行索引」。  
 > **当前最高架构原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)  
-> **当前唯一执行计划**：[`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)  
-> **下一项**：限定范围的仓库实现映射与第一闭环规格冻结（**仅文档**）。  
+> **当前唯一执行计划**：[`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)（**v0.1.2 `spec_frozen`**）  
+> **冻结规格**：[`digitalme_first_vertical_loop_spec_v0.1.md`](digitalme_first_vertical_loop_spec_v0.1.md)  
+> **下一项**：**实现任务意图与本人上下文装配（第一闭环实现 · 第 1 块）**（待实现授权）。  
 > **R2**：`retained as infrastructure`（停止作为当前验收主线）。**R3**：`paused`（不是下一步）。**旧 DM-Core-01A 开发指令**：`superseded`。提交 **`55ae01f`**：`retained_for_mapping_review`。
 > 下文保留 P1-PANORAMA / Renderer Foundation 的历史状态事实，供查阅；冲突时以新权威文件为准。
 
@@ -35,7 +36,7 @@
 | PAN-02～PAN-06 | 相对新主线 **`paused`**（历史 `planned`/`blocked` 记录保留） |
 | 旧 DM-Core-01A 开发指令 | **`superseded`** |
 | 提交 `55ae01f`（act-behalf） | **`retained_for_mapping_review`** |
-| **当前唯一任务** | **限定范围的仓库实现映射与第一闭环规格冻结**（文档；见第一闭环计划） |
+| **当前唯一任务** | **实现任务意图与本人上下文装配（第一闭环实现 · 第 1 块）**（待实现授权；见第一闭环计划 v0.1.2 / 规格 v0.1.0） |
 
 ---
 

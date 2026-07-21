@@ -71,7 +71,7 @@
 | **PAN-02** | **`paused`**（相对新主线；历史曾 `planned`/`blocked`） | — | 不得按旧解锁条件自行启动；见第一纵向闭环计划 |
 | **旧 DM-Core-01A 开发指令** | **`superseded`** | 见 `digitalme_dm_core_01a_superseded_notice_v0.1.md` | 不得再按该指令扩展 |
 | **提交 `55ae01f`（act-behalf）** | **`retained_for_mapping_review`** / `experimental_infrastructure` | `digitalme-app/src/act-behalf/*`；commit `55ae01f` | 已存在实现；非第一闭环完成；本次不改代码；映射后再裁定 |
-| **第一纵向闭环** | **`active` / 规格冻结前** | `digitalme_first_vertical_loop_sprint_plan_v0.1.md` | **当前唯一任务**：限定范围的仓库实现映射与第一闭环规格冻结（仅文档） |
+| **第一纵向闭环** | **`spec_frozen`** | `digitalme_first_vertical_loop_sprint_plan_v0.1.md` + `digitalme_first_vertical_loop_spec_v0.1.md` | 映射与规格已冻结；**下一项** = 实现任务意图与本人上下文装配（待授权） |
 
 ## P1-07 冻结说明（与任务包 / 执行索引 / log 一致）
 

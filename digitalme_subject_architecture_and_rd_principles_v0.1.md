@@ -3,7 +3,7 @@
 版本：v0.1.1  
 日期：2026-07-21  
 状态：`active` / **当前最高架构与研发指导**  
-权威关系：战略产品定义与研发治理以本文 + [`digitalme_context.md`](digitalme_context.md) 为准；**当前执行排期**以 [`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md) 为准。历史 P1-PANORAMA / Renderer Foundation 索引降为基础设施与历史排期记录。
+权威关系：战略产品定义与研发治理以本文 + [`digitalme_context.md`](digitalme_context.md) 为准；**当前执行排期**以 [`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md) 为准；**第一闭环产品/合同细节**以 [`digitalme_first_vertical_loop_spec_v0.1.md`](digitalme_first_vertical_loop_spec_v0.1.md) 为准。历史 P1-PANORAMA / Renderer Foundation 索引降为基础设施与历史排期记录。
 
 ---
 
@@ -184,7 +184,7 @@ Subject Kernel
 | **提交 `55ae01f`（act-behalf）** | **`retained_for_mapping_review`** / `experimental_infrastructure`（已存在实现；**不是**第一闭环完成态；本次不得改代码） |
 | P1-PANORAMA 执行索引 | **历史执行记录 + 基础设施状态表**；**不再声称「当前产品主线」** |
 
-细则与合同映射见 [`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)。
+细则与合同映射见 [`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md) 与冻结规格 [`digitalme_first_vertical_loop_spec_v0.1.md`](digitalme_first_vertical_loop_spec_v0.1.md)。
 
 ---
 

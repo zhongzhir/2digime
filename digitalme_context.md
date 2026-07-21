@@ -5,10 +5,11 @@
 最后更新：2026-07-21
 
 > **当前产品主线（2026-07-21，规划基线重建）**：**数字主体第一纵向闭环 — 理解我并产出**。  
-> **最高架构与研发原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)（**v0.1.0 `active`**）。  
-> **当前唯一执行计划**：[`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)（**v0.1.1 `active`**）。
-> **下一项任务（仅文档）**：**限定范围的仓库实现映射与第一闭环规格冻结** — **不得**直接编码实现。  
-> **废止/暂停**：不再以 R2 边缘验收、R3 迁移、旧 Skill/MCP/Agent/身份并列 7 任务块、**旧 DM-Core-01A 开发指令**为当前执行主线。R2 代码 **retained as infrastructure**；R3 = **`paused`**；PAN-02～06 相对新主线 **`paused`**。提交 **`55ae01f`**（act-behalf）= **`retained_for_mapping_review`**（已存在；非第一闭环完成态；本次不改代码）。
+> **最高架构与研发原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)（**v0.1.1 `active`**）。  
+> **当前唯一执行计划**：[`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)（**v0.1.2 `spec_frozen`**）。  
+> **冻结规格**：[`digitalme_first_vertical_loop_spec_v0.1.md`](digitalme_first_vertical_loop_spec_v0.1.md)（**v0.1.0 `spec_frozen`**）。  
+> **下一项任务**：**实现任务意图与本人上下文装配（第一闭环实现 · 第 1 块）** — 须获实现授权后才编码。  
+> **废止/暂停**：不再以 R2 边缘验收、R3 迁移、旧 Skill/MCP/Agent/身份并列 7 任务块、**旧 DM-Core-01A 开发指令**为当前执行主线。R2 代码 **retained as infrastructure**；R3 = **`paused`**；PAN-02～06 相对新主线 **`paused`**。提交 **`55ae01f`**（act-behalf）= **`retained_for_mapping_review`**（已逐项裁定；实现前不改代码）。
 > **产品定义（摘要）**：Digital Me 是由本人拥有和控制、以本人为源头持续形成、能够调用外部智能能力，并在明确授权下代表本人感知、判断、表达、行动和协作的个人数字主体系统（全文见架构原则文 §1）。
 >
 > **历史主线（已降级）**：**P1-PANORAMA** 与 Renderer Foundation（R0/R1 `accepted`；R2 实现保留）见 [`digitalme_panorama_execution_index_v0.1.md`](digitalme_panorama_execution_index_v0.1.md)（**不再作为当前执行索引**；状态标记 `superseded_as_current_execution_index`）。
@@ -282,7 +283,8 @@ flowchart TB
 | 文档 | 作用 |
 |---|---|
 | `digitalme_subject_architecture_and_rd_principles_v0.1.md` | **当前最高架构与研发原则**：产品定义、数字主体循环、能力/身份/验收、纵向闭环、治理 |
-| `digitalme_first_vertical_loop_sprint_plan_v0.1.md` | **当前唯一执行计划**：第一纵向闭环、四合同映射、任务顺序；下一项仅文档冻结 |
+| `digitalme_first_vertical_loop_sprint_plan_v0.1.md` | **当前唯一执行计划**（v0.1.2 `spec_frozen`）：冲刺状态与任务顺序 |
+| `digitalme_first_vertical_loop_spec_v0.1.md` | **第一闭环冻结规格**（流程、四合同、能力、55ae01f 裁定、验收） |
 | `digitalme_product_spec_v0.2.md`（文内 **v0.6.3**） | **既有界面与功能细则参照**（与新主线冲突处以架构原则文 / 第一闭环计划为准，待对齐升版） |
 | `digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`（v0.4） | **历史总任务**：三位一体 Alpha（`superseded` 作为当前主线定义） |
 | `digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md` | **历史战略修订依据**：三位一体定义、极简原则、PAN-01/PAN-01R 裁定 |
@@ -297,7 +299,7 @@ flowchart TB
 | `digitalme_narrative_ai_era_autonomy.md` | 对外/对内叙事（含双线简述） |
 | `digital-me-project-positioning-draft.md` | 定位讨论稿（战略原则含双线） |
 
-**近期工程焦点（2026-07-21 规划基线重建）**：决策 **#94**——数字主体第一纵向闭环；架构原则文 + 第一闭环计划为权威；下一项 = **限定范围的仓库实现映射与第一闭环规格冻结**（仅文档）。R0/R1 retained；R2 retained as infrastructure；R3 paused；旧 DM-Core-01A superseded。
+**近期工程焦点（2026-07-21）**：决策 **#94–#96**——第一纵向闭环规格已 `spec_frozen`；下一项 = **实现任务意图与本人上下文装配（第一闭环实现 · 第 1 块）**（待授权）。R3 paused；`55ae01f` retained_for_mapping_review（已裁定）。
 ## 4. 系统架构共识（草案）
 
 > **部署拓扑补充（2026-07-10）**：本节描述逻辑模块（核心层 / 运行层 / 信任层）。物理部署与百万规模扩容面见 [`digitalme_architecture_edge_sovereign_v0.1.md`](digitalme_architecture_edge_sovereign_v0.1.md)（端主权 Runtime + 云边平台 + 能力层）。决策 #3「本地优先 + 云同步」由此文细化。
@@ -468,14 +470,14 @@ flowchart TB
 
 ### 7.1 近期优先级（建议顺序）
 
-> **2026-07-21 规划基线重建（当前）**：执行计划改为 [`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)；架构原则见 [`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)。**下一项仅为「限定范围的仓库实现映射与第一闭环规格冻结」（文档）**。R3 / 旧 DM-Core-01A / 并列 Skill·MCP·Agent·身份任务块 **不得**作为下一步。
+> **2026-07-21 规划基线重建（当前）**：执行计划 [`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)（**v0.1.2 `spec_frozen`**）；冻结规格 [`digitalme_first_vertical_loop_spec_v0.1.md`](digitalme_first_vertical_loop_spec_v0.1.md)。**下一项**：**实现任务意图与本人上下文装配（第一闭环实现 · 第 1 块）**（待实现授权）。R3 / 旧 DM-Core-01A 开发指令 / 并列 Skill·MCP·Agent·身份任务块 **不得**作为下一步。
 > **2026-07-16 审计后重排（历史）**：第一阶段不再扩展能力面，切换为“主体可信化与协作感知”。当时以 `digitalme_phase1_subject_upgrade_plan_v0.1.md` 为执行清单；原 v0.3.13 的 L0/审计/CLI 只能视为原型，不视为已达到安全可用。
 > **2026-07-18 覆盖（历史）**：当时执行索引改为 `digitalme_panorama_execution_index_v0.1.md`；原升级计划降为 Trusted Beta 硬化依据（决策 #58）。
 > **2026-07-21 R2 相关（历史；已降级）**：R0/R1 accepted；R2 实现保留为基础设施，**不再**作为当前验收主线。
 > **2026-07-19 PAN-01S.1 实现覆盖（历史；已被 2026-07-20 acceptance superseded）**：PAN-01S 曾为 `statically_verified` / `owner_changes_requested`；PAN-01S.1 曾为 `statically_verified` / `implemented`（不 accepted）。
 
-1. **限定范围的仓库实现映射与第一闭环规格冻结**（仅文档；当前）；
-2. （待 #1 完成后授权）任务意图与本人上下文装配 → 研究与表达入口 → 真实 Skill → 只读外部信息 → 证据区分 → Experience Proposal 回流 → 对照验收；
+1. **限定范围的仓库实现映射与第一闭环规格冻结**（文档；**已完成** → 规格 `spec_frozen`）；
+2. **实现任务意图与本人上下文装配（第一闭环实现 · 第 1 块）**（**当前下一项**；待实现授权）→ 其后：研究与表达入口 → 真实 Skill → 只读外部信息 → 证据区分 → Experience Proposal 回流 → 对照验收；
 3. 第二～四纵向闭环仅保留接口与方向，不得提前铺开。
 
 （以下 1–7 为 2026-07-16 历史 Trusted Beta 硬化清单，**不再是当前执行顺序**：）
@@ -919,3 +921,4 @@ flowchart TB
 93. **Renderer Foundation R2 实现分支创建与参数合同冻结（2026-07-21）**：Owner 明确授权创建实现分支 `codex/r2-chat-sessions-migration`（起点 `418d0cc`）；授权范围**仅限**三项实施前参数合同冻结（纯文档），**不**授权编写 R2-A～R2-F 源码。冻结值：`scenarioHint` = `{general_chat, continue_chat, artifact_discussion}`（缺省→`general_chat`）；8000 截断提示原样文案 + Unicode code point 口径；attachment token TTL = **300 秒**（单调时钟）；atomic rename 最多 **4** 次尝试、等待 **50/150/350ms**、仅 `EBUSY|EPERM|EACCES`。本提交**不是**源码实现；R2 仍为 `not_started`。**随后 Owner 授权完成 R2 实现（代码保留）**；**已被决策 #94 从「当前主线」降级为基础设施。**
 94. **数字主体规划基线重建（2026-07-21）**：Owner 与 Codex 系统复盘后，废止以 R2 边缘验收、R3 迁移、Skill/MCP/Agent/身份并列任务块、**旧 DM-Core-01A 开发指令**为当前执行主线。写入最高产品定义与「数字主体循环」于 `digitalme_subject_architecture_and_rd_principles_v0.1.md`；写入第一纵向闭环短冲刺与四合同映射于 `digitalme_first_vertical_loop_sprint_plan_v0.1.md`。`digitalme_panorama_execution_index_v0.1.md` → `superseded_as_current_execution_index`（保留基础设施事实）。R0/R1 `accepted` retained；R2 **retained as infrastructure**（停止追加验收主线）；R3 **`paused`**；PAN-02～06 相对新主线 **`paused`**。**下一项任务**：**限定范围的仓库实现映射与第一闭环规格冻结**（仅文档，不得直接编码）。
 95. **DM-Core-01A 双对象澄清（2026-07-21，Codex 有条件通过跟进）**：**① 旧开发指令** = `superseded`（不得再按该指令扩展）。**② 提交 `55ae01fd089a232200d90191fa788da5153d88e8`** = **`retained_for_mapping_review`** / `experimental_infrastructure`（规划冻结前已存在实现；不得写成不存在；**不是**第一闭环完成态；本次不得改代码；映射与规格冻结后再裁定复用/调整/废弃）。第一闭环计划升至 v0.1.1（能力边界 + 四合同逐字段状态）。避免笼统「旧 DM-Core-01A 不得执行」造成实现不存在的误读。
+96. **第一纵向闭环规格冻结（2026-07-21）**：完成「限定范围的仓库实现映射与第一闭环规格冻结」。新增 `digitalme_first_vertical_loop_spec_v0.1.md`（`spec_frozen`）；执行计划 → v0.1.2 `spec_frozen`。纠正：`buildSelectedSelfContext` = 固定比例有界摘录（非任务相关选择）；模型自述不得作唯一审计证据。冻结 Skill=`psk_preset_general_research`；外搜=`research.webSearch`/`discoverSources`；`55ae01f` 逐项复用裁定见规格 §6。**下一项**：**实现任务意图与本人上下文装配（第一闭环实现 · 第 1 块）**（待实现授权；本日不编码）。R3 仍 `paused`。

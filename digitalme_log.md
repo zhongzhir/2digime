@@ -5,6 +5,22 @@
 
 ---
 
+## 2026-07-21 第一纵向闭环：仓库映射与规格冻结
+
+### 做了什么
+
+纯文档：只读核查 act-behalf / Package / Skill / research web-search / feedback / retrieval 真实调用路径；新建 `digitalme_first_vertical_loop_spec_v0.1.md`（`spec_frozen`）；执行计划升至 v0.1.2。纠正固定比例摘录≠任务相关、模型自述≠唯一审计证据。冻结 Skill=通用调研、外搜=research.webSearch；完成 `55ae01f` 逐项复用裁定。同步 context 决策 #96、能力表、cursor rule、执行索引指针。
+
+### 明确未做
+
+未改运行代码；未改 `55ae01f` 实现；未开始 Skill/MCP/Proposal 编码；未启动 R3；未 push。
+
+### 下一任务
+
+**实现任务意图与本人上下文装配（第一闭环实现 · 第 1 块）**（待实现授权）。
+
+---
+
 ## 2026-07-21 Codex 有条件通过跟进：DM-Core-01A 双对象澄清与四合同字段核验
 
 ### 做了什么

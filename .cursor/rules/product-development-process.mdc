@@ -42,11 +42,12 @@ Owner / 用户提出的产品想法**可能不全、可错、可非最优**，�
 **权威入口**：
 
 - 架构与研发原则：`digitalme_subject_architecture_and_rd_principles_v0.1.md`
-- 当前执行计划：`digitalme_first_vertical_loop_sprint_plan_v0.1.md`
+- 当前执行计划：`digitalme_first_vertical_loop_sprint_plan_v0.1.md`（**`spec_frozen`**）
+- 冻结规格：`digitalme_first_vertical_loop_spec_v0.1.md`
 - 全局上下文文首：`digitalme_context.md`
 
 **当前主线**：第一纵向闭环 — **理解我并产出**（研究与表达）。  
-**下一项任务**：**限定范围的仓库实现映射与第一闭环规格冻结**（**仅文档**；不得直接编码实现产品功能）。
+**下一项任务**：**实现任务意图与本人上下文装配（第一闭环实现 · 第 1 块）**（须获 Owner 实现授权后才编码；本日规格任务不编码）。
 
 1. **每次只推进一个已批准任务块**；按纵向闭环顺序，不得并列铺开 Skill / MCP / Agent / DID / 身份平台。
 2. **非阻断问题进入 backlog**；仅四类问题可阻断：主流程不可用、数据损坏丢失、隐私超披露、未授权对外行动。
