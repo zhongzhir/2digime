@@ -5,6 +5,31 @@
 
 ---
 
+## 2026-07-21 Renderer Foundation R2 对话迁移任务包起草
+
+### 做了什么
+
+纯文档规格：新建 `digitalme_renderer_foundation_R2_chat_and_sessions_migration.md`（**v0.1-draft**）。
+
+| 项 | 值 |
+|---|---|
+| 状态 | `specified` / `codex_review_pending` / `not_started` |
+| 实现分支 | **不存在** |
+| 前置 | R1 `accepted`（baseline `8d7e9b3`） |
+| 生产默认 | legacy |
+
+同步：context（决策 #88）、执行索引 v0.2.18、能力表、cursor rule、总任务包调度段。
+
+### 明确未做
+
+未改源码/测试/配置/依赖/lockfile；未创建 R2 实现分支；未启动应用或测试；未读真实 Package/sessions；未开始 R2 实现 / R2.5 / PAN-02；未 push。
+
+### 下一等待项
+
+**等待 Codex 复核**本 R2 任务包；复核通过前不得实现。
+
+---
+
 ## 2026-07-21 Renderer Foundation R1 Owner 验收收口
 
 ### 做了什么

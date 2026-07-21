@@ -19,7 +19,7 @@ implementation：`completed`
 > - **next 当前仍是预览空壳**；chat、「我」、构建、工作台、能力、设置**均未迁移**；
 > - 生产默认入口仍为 **legacy**；**普通用户没有进入 next 的生产入口**；
 > - **不得**将整个 renderer 重构标为完成；**不**代表 R2 / R2.5 / PAN-02 已启动；
-> - **禁止**启动 PAN-02 实现；R2.5 SQLite 保持 `planned` / `deferred`；R2 为 `planned` / `not_started`（仅可起草任务包，未授权不得实现）；
+> - **禁止**启动 PAN-02 实现；R2.5 SQLite 保持 `planned` / `deferred`；R2 任务包已起草为 **v0.1-draft** / `specified` / `codex_review_pending` / `not_started`（实现分支不存在；复核通过前不得实现）；
 > - 本切片**不**改变 PAN-01S 族 `accepted`；R0 **`accepted` 不变**。
 
 角色：Owner（验收）＋ Codex（规格/实现复核）＋ Cursor（实现）
@@ -303,7 +303,7 @@ runtime.signalReady(generation) -> { ok }  // 必须显式有限整数 generatio
 | 实现分支 | **`codex/r1-renderer-next-shell`** |
 | accepted baseline | **`8d7e9b3`** |
 | acceptance basis | Codex review passed + Owner real Electron runtime 6/6 |
-| 下一任务 | **起草并冻结 Renderer Foundation R2 对话迁移独立任务包**，交 Codex/Owner 复核；**未获授权前不得创建 R2 实现分支或修改源码** |
+| 下一任务 | **Codex 复核 Renderer Foundation R2 任务包**（v0.1-draft）；复核通过前不得创建 R2 实现分支或修改源码 |
 | R2 | `planned` / `not_started` |
 | R2.5 | `planned` / `deferred` |
 | PAN-02 | `planned` / `blocked` |

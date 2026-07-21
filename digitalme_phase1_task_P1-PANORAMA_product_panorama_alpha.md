@@ -205,7 +205,7 @@ PAN-00 accepted
 → PAN-01S.2 accepted（2026-07-20；baseline `cbde807`）
 → renderer foundation R0 **accepted**（v0.1.2；决策接受）
 → renderer foundation R1 **accepted**（v0.1.3；baseline `8d7e9b3`；Owner 6/6）
-→ renderer foundation R2（planned / not_started；下一任务：起草独立任务包）
+→ renderer foundation R2（v0.1-draft；specified / codex_review_pending / not_started）
 → PAN-02 理解通道 Alpha（planned / blocked）
 → PAN-03 能力框架 Alpha
 → PAN-04 外部协作骨架 Alpha
@@ -260,12 +260,11 @@ PAN-00 accepted
 
 ### 6.4 当前调度
 
-- **当前阶段**：R1 已收口（`accepted`；baseline `8d7e9b3`）。
-- **当前唯一下一任务**：起草并冻结 Renderer Foundation R2 对话迁移独立任务包，交 Codex/Owner 复核；**未获授权前不得创建 R2 实现分支或修改源码**；
+- **当前唯一等待项**：等待 Codex 复核 Renderer Foundation R2 任务包（`digitalme_renderer_foundation_R2_chat_and_sessions_migration.md` **v0.1-draft**）；
 - PAN-01S / PAN-01S.1 / PAN-01S.2：`accepted`（2026-07-20；Owner real Electron runtime；baseline `cbde807`）；
 - renderer foundation R0：`accepted`（v0.1.2；决策接受；implementation not_started）；
-- renderer foundation R1：`accepted`（**v0.1.3**；baseline `8d7e9b3`；Codex review passed + Owner real Electron runtime 6/6；implementation `completed`；分支 `codex/r1-renderer-next-shell`）；
-- renderer foundation R2：`planned` / `not_started`（仅可起草任务包）；
+- renderer foundation R1：`accepted`（**v0.1.3**；baseline `8d7e9b3`；implementation `completed`；分支 `codex/r1-renderer-next-shell`）；
+- renderer foundation R2：`specified` / `codex_review_pending` / `not_started`（**v0.1-draft**；实现分支**不存在**；复核通过前不得实现）；
 - R2.5 SQLite：`planned` / `deferred`；
 - PAN-02～PAN-06 保持 `planned`；PAN-02 当前 **blocked**（见 R0 §16）；不得开始 R2 实现 / R2.5 / PAN-02。
 
@@ -457,11 +456,11 @@ PAN-00 accepted
 → PAN-01S / PAN-01S.1 / PAN-01S.2 accepted（2026-07-20；baseline `cbde807`）
 → renderer foundation R0 accepted（v0.1.2）
 → renderer foundation R1 accepted（v0.1.3；baseline `8d7e9b3`）
-→ renderer foundation R2（planned / not_started；起草任务包）
+→ renderer foundation R2（v0.1-draft；specified / codex_review_pending / not_started）
 → PAN-02（planned / blocked）→ PAN-03 → PAN-04 → PAN-05 → PAN-06
 ```
 
-每次只启动一个主实现任务。PAN-05 传播文案可并行起草，但不得与代码任务修改同一文件。**当前唯一下一任务**：起草并冻结 Renderer Foundation R2 对话迁移独立任务包；R2 = `planned` / `not_started`；未获授权前不得创建实现分支或修改源码。PAN-02 保持 `planned` / `blocked`。
+每次只启动一个主实现任务。PAN-05 传播文案可并行起草，但不得与代码任务修改同一文件。**当前唯一等待项**：Codex 复核 R2 任务包；R2 = `specified` / `codex_review_pending` / `not_started`；复核通过前不得创建实现分支或修改源码。PAN-02 保持 `planned` / `blocked`。
 
 ### 13.3 子任务完成报告
 
@@ -524,7 +523,9 @@ P1-PANORAMA 不包含：
 
 2026-07-20（R1 实施规格接受 · 今日收尾）：R1 → **v0.1.1** / `codex_review_passed` / `frozen_for_implementation` / `not_started`。**当时唯一等待项**：Owner 授权创建实现分支并启动 spike。PAN-02 仍 `planned` / `blocked`。（历史）
 
-2026-07-21（R1 Owner 验收收口）：R1 → **v0.1.3 / `accepted`**；baseline **`8d7e9b3`**；Codex review passed + Owner real Electron runtime 6/6。**当前唯一下一任务**：起草并冻结 R2 独立任务包（`planned` / `not_started`；未授权不得实现）。R2.5 `planned` / `deferred`；PAN-02 `planned` / `blocked`。
+2026-07-21（R1 Owner 验收收口）：R1 → **v0.1.3 / `accepted`**；baseline **`8d7e9b3`**；Codex review passed + Owner real Electron runtime 6/6。（历史）
+
+2026-07-21（R2 任务包起草）：R2 → **v0.1-draft** / `specified` / `codex_review_pending` / `not_started`。实现分支不存在。**当前唯一等待项**：Codex 复核 R2 任务包。R2.5 `planned` / `deferred`；PAN-02 `planned` / `blocked`。
 
 > **PAN-01**：可信只读聚合保留；`needs_minimal_surface_reset`；不 accepted。
 >
