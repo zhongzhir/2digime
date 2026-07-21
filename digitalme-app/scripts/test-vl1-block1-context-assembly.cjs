@@ -13,7 +13,11 @@ const { normalizeTaskIntent, assertTaskIntentMinimal } = require("../src/act-beh
 const {
   assembleSubjectContextCandidates,
   confirmSubjectContextSnapshot,
+  confirmSubjectContextWithUserActions,
+  applyGoalChangeToStoredTask,
   makeUserSupplementClaim,
+  assertNoModelContentAsConfirmedFact,
+  assertAllowedPackageClaimSources,
 } = require("../src/act-behalf/subject-context-assembly");
 const actStore = require("../src/act-behalf/task-store");
 const { buildSelectedSelfContext } = require("../src/act-behalf/select-self-context");
@@ -269,6 +273,164 @@ async function main() {
   await test("makeUserSupplementClaim source marker", () => {
     const c = makeUserSupplementClaim("补充观点");
     assert.equal(c.sourceRefs[0].source, "user_supplement");
+  });
+
+  await test("forged claim text from renderer path cannot enter confirmed snapshot", () => {
+    const goal = "投资判断与本地优先";
+    const assembled = assembleSubjectContextCandidates(samplePkg(), { goal });
+    const auth = assembled.subjectContextDraft;
+    const realId = auth.claims[0].id;
+    const realText = auth.claims[0].text;
+    // Simulate renderer forging claim body while keeping a real id
+    const forgedDraft = {
+      ...auth,
+      claims: auth.claims.map((c, i) =>
+        i === 0 ? { ...c, text: "【伪造】本人愿意公开全部持仓细节。" } : c
+      ),
+    };
+    // Confirm path must use authoritative draft, not forgedDraft
+    const outcome = confirmSubjectContextWithUserActions(auth, {
+      goal,
+      keepClaimIds: [realId],
+      supplements: [],
+    });
+    assert.equal(outcome.ok, true, outcome.message);
+    assert.equal(outcome.confirmed.claims[0].text, realText);
+    assert.ok(!outcome.confirmed.claims[0].text.includes("伪造"));
+    // Sanity: forged draft differs
+    assert.notEqual(forgedDraft.claims[0].text, realText);
+  });
+
+  await test("forged package sourceRef cannot enter confirmed snapshot", () => {
+    const goal = "表达风格";
+    const assembled = assembleSubjectContextCandidates(samplePkg(), { goal });
+    const auth = assembled.subjectContextDraft;
+    const poisoned = {
+      ...auth,
+      claims: [
+        {
+          ...auth.claims[0],
+          sourceRefs: [{ source: "https://evil.example/claim", locator: "x" }],
+        },
+      ],
+    };
+    const outcome = confirmSubjectContextWithUserActions(poisoned, {
+      goal,
+      keepClaimIds: [poisoned.claims[0].id],
+    });
+    assert.equal(outcome.ok, false);
+    assert.equal(outcome.code, "invalid_package_source");
+  });
+
+  await test("model inference hidden behind legal first sourceRef is blocked", () => {
+    const goal = "本地优先";
+    const assembled = assembleSubjectContextCandidates(samplePkg(), { goal });
+    const auth = assembled.subjectContextDraft;
+    const claim = {
+      ...auth.claims[0],
+      sourceRefs: [
+        { source: "persona.md", locator: "para:0" },
+        { source: "model_inference", locator: "hidden" },
+      ],
+      confirmationState: "confirmed",
+    };
+    const guard = assertNoModelContentAsConfirmedFact([claim]);
+    assert.equal(guard.ok, false);
+    const draft = { ...auth, claims: [{ ...claim, confirmationState: "proposed" }] };
+    const outcome = confirmSubjectContextWithUserActions(draft, {
+      goal,
+      keepClaimIds: [claim.id],
+    });
+    assert.equal(outcome.ok, false);
+    assert.ok(
+      outcome.code === "invalid_confirmation" || outcome.message.includes("模型推测")
+    );
+  });
+
+  await test("unknown keepClaimId cannot generate confirmed claim", () => {
+    const goal = "投资判断";
+    const assembled = assembleSubjectContextCandidates(samplePkg(), { goal });
+    const outcome = confirmSubjectContextWithUserActions(assembled.subjectContextDraft, {
+      goal,
+      keepClaimIds: ["clm_totally_fake_id"],
+    });
+    assert.equal(outcome.ok, false);
+    assert.equal(outcome.code, "unknown_claim_ids");
+    assert.ok((outcome.unknownClaimIds || []).includes("clm_totally_fake_id"));
+  });
+
+  await test("user supplement still marked user_supplement by main helper", () => {
+    const goal = "写作克制";
+    const assembled = assembleSubjectContextCandidates(samplePkg(), { goal });
+    const keep = [assembled.subjectContextDraft.claims[0].id];
+    const outcome = confirmSubjectContextWithUserActions(assembled.subjectContextDraft, {
+      goal,
+      keepClaimIds: keep,
+      supplementText: "本次补充：仅讨论公开信息。",
+    });
+    assert.equal(outcome.ok, true, outcome.message);
+    const supp = outcome.confirmed.claims.find((c) =>
+      (c.sourceRefs || []).some((r) => r.source === "user_supplement")
+    );
+    assert.ok(supp);
+    assert.equal(supp.sourceRefs.length, 1);
+    assert.equal(supp.sourceRefs[0].source, "user_supplement");
+  });
+
+  await test("goal change cannot silently confirm stale candidates", () => {
+    const assembled = assembleSubjectContextCandidates(samplePkg(), {
+      goal: "公开市场与长期投资",
+    });
+    const outcome = confirmSubjectContextWithUserActions(assembled.subjectContextDraft, {
+      goal: "完全不同的新目标：表达风格润色",
+      keepClaimIds: [assembled.subjectContextDraft.claims[0].id],
+    });
+    assert.equal(outcome.ok, false);
+    assert.equal(outcome.code, "context_stale_for_goal");
+  });
+
+  await test("confirmed task goal change invalidates snapshot as prior", () => {
+    const goal = "本地优先与本人控制";
+    const assembled = assembleSubjectContextCandidates(samplePkg(), { goal });
+    const confirmed = confirmSubjectContextSnapshot(assembled.subjectContextDraft, {
+      keepClaimIds: [assembled.subjectContextDraft.claims[0].id],
+      supplements: [],
+    });
+    const existing = {
+      goal,
+      taskIntent: { goal },
+      status: "context_confirmed",
+      subjectContextCandidates: assembled.subjectContextDraft,
+      subjectContext: confirmed,
+      priorSubjectContext: null,
+    };
+    const next = applyGoalChangeToStoredTask(existing, "新的研究目标：公开市场事件");
+    assert.equal(next.invalidatedConfirmed, true);
+    assert.equal(next.subjectContext, null);
+    assert.equal(next.priorSubjectContext.confirmationState, "confirmed");
+    assert.equal(next.clearedCandidates, true);
+    assert.equal(next.subjectContextCandidates, null);
+    assert.equal(next.status, "draft");
+  });
+
+  await test("normal delete/supplement/confirm path still works via authoritative API", () => {
+    const goal = "投资判断框架";
+    const assembled = assembleSubjectContextCandidates(samplePkg(), { goal });
+    const ids = assembled.subjectContextDraft.claims.map((c) => c.id);
+    const keep = ids.slice(0, Math.max(1, ids.length - 1));
+    const outcome = confirmSubjectContextWithUserActions(assembled.subjectContextDraft, {
+      goal,
+      keepClaimIds: keep,
+      supplements: ["补充：区分本人观点与外部事实。"],
+    });
+    assert.equal(outcome.ok, true, outcome.message);
+    assert.equal(outcome.confirmed.confirmationState, "confirmed");
+    assert.ok(outcome.confirmed.claims.length >= 2);
+    assert.ok((outcome.deletedClaimIds || []).length >= 0);
+    for (const c of outcome.confirmed.claims) {
+      if ((c.sourceRefs || []).some((r) => r.source === "user_supplement")) continue;
+      assert.equal(assertAllowedPackageClaimSources([c]).ok, true);
+    }
   });
 
   console.log("\nvl1 block1 contracts:", passed, "passed,", failed, "failed");

@@ -33,8 +33,8 @@ const { parseActBehalfOutput, buildActBehalfMessages } = require("./act-behalf/p
 const { normalizeTaskIntent, assertTaskIntentMinimal } = require("./act-behalf/task-intent");
 const {
   assembleSubjectContextCandidates,
-  confirmSubjectContextSnapshot,
-  assertNoModelContentAsConfirmedFact,
+  confirmSubjectContextWithUserActions,
+  applyGoalChangeToStoredTask,
 } = require("./act-behalf/subject-context-assembly");
 const chatMessages = require("./chat-message-model");
 const catalog = require("./capabilities/catalog");
@@ -952,13 +952,63 @@ function fakeActBehalfModelOutput(request) {
 
 ipcMain.handle("actBehalf:previewContext", async (_e, payload) => {
   try {
+    const userData = app.getPath("userData");
     const goal = String((payload && (payload.goal || payload.request)) || "").trim();
+    if (!goal) {
+      return { ok: false, code: "empty_goal", message: "请先填写研究与表达目标。" };
+    }
     const pkg = loadPackageForActBehalf();
     const assembled = assembleSubjectContextCandidates(pkg, { goal });
+
+    let existing = null;
+    if (payload && payload.taskId) {
+      const got = actBehalfStore.getTask(userData, payload.taskId);
+      if (got.ok) existing = got.task;
+    }
+
+    const title =
+      String((payload && payload.title) || "").trim() ||
+      (existing && existing.title) ||
+      goal.slice(0, 40) + (goal.length > 40 ? "…" : "");
+
+    const taskIntent = normalizeTaskIntent(
+      {
+        ...(existing && existing.taskIntent),
+        goal,
+        role: (payload && payload.role) || (existing && existing.taskIntent && existing.taskIntent.role),
+        expectedOutcome:
+          (payload && payload.expectedOutcome) ||
+          (existing && existing.taskIntent && existing.taskIntent.expectedOutcome),
+        constraints:
+          (payload && payload.constraints) ||
+          (existing && existing.taskIntent && existing.taskIntent.constraints),
+      },
+      (payload && payload.taskId) || (existing && existing.taskId)
+    );
+
+    let priorSubjectContext = (existing && existing.priorSubjectContext) || null;
+    if (existing && existing.subjectContext && existing.subjectContext.confirmationState === "confirmed") {
+      priorSubjectContext = existing.subjectContext;
+    }
+
+    const saved = await actBehalfStore.saveTask(userData, {
+      ...(existing || {}),
+      taskId: (payload && payload.taskId) || (existing && existing.taskId) || undefined,
+      title,
+      request: goal,
+      goal,
+      status: "draft",
+      taskIntent,
+      subjectContextCandidates: assembled.subjectContextDraft,
+      subjectContext: null,
+      priorSubjectContext,
+    });
+
     return {
       ok: true,
       packageExists: !!pkg.exists,
       goal,
+      taskId: saved.task.taskId,
       subjectContextDraft: assembled.subjectContextDraft,
       selectedSelfContext: assembled.selectedSelfContext,
       note: assembled.note,
@@ -975,6 +1025,7 @@ ipcMain.handle("actBehalf:previewContext", async (_e, payload) => {
 
 ipcMain.handle("actBehalf:confirmContext", async (_e, payload) => {
   try {
+    const userData = app.getPath("userData");
     const goal = String((payload && (payload.goal || payload.request)) || "").trim();
     if (!goal) {
       return { ok: false, code: "empty_goal", message: "请先填写研究与表达目标。" };
@@ -984,64 +1035,72 @@ ipcMain.handle("actBehalf:confirmContext", async (_e, payload) => {
       goal.slice(0, 40) + (goal.length > 40 ? "…" : "");
     const pkg = loadPackageForActBehalf();
 
-    let draft = null;
-    if (payload && payload.subjectContextDraft && Array.isArray(payload.subjectContextDraft.claims)) {
-      draft = payload.subjectContextDraft;
-    } else if (payload && payload.taskId) {
-      const existing = actBehalfStore.getTask(app.getPath("userData"), payload.taskId);
-      if (existing.ok && existing.task.subjectContextCandidates) {
-        draft = existing.task.subjectContextCandidates;
+    // Never trust payload.subjectContextDraft — only user actions below.
+    let existing = null;
+    if (payload && payload.taskId) {
+      const got = actBehalfStore.getTask(userData, payload.taskId);
+      if (!got.ok) {
+        return { ok: false, code: got.code || "not_found", message: got.message || "找不到该任务。" };
       }
+      existing = got.task;
     }
+
+    let draft =
+      existing && existing.subjectContextCandidates && Array.isArray(existing.subjectContextCandidates.claims)
+        ? existing.subjectContextCandidates
+        : null;
+
     if (!draft) {
+      // No saved candidates yet: re-assemble on main. keepClaimIds must match this set.
       const assembled = assembleSubjectContextCandidates(pkg, { goal });
       draft = assembled.subjectContextDraft;
     }
 
-    const keepClaimIds = Array.isArray(payload && payload.keepClaimIds)
-      ? payload.keepClaimIds
-      : (draft.claims || []).map((c) => c.id);
-    const supplements = Array.isArray(payload && payload.supplements) ? payload.supplements : [];
-    if (payload && payload.supplementText) supplements.push(payload.supplementText);
-
-    const confirmed = confirmSubjectContextSnapshot(draft, {
-      keepClaimIds,
-      supplements,
-      scope: payload && payload.scope,
-      prohibitedUses: payload && payload.prohibitedUses,
+    const outcome = confirmSubjectContextWithUserActions(draft, {
+      goal,
+      keepClaimIds: payload && payload.keepClaimIds,
+      supplements: payload && payload.supplements,
+      supplementText: payload && payload.supplementText,
     });
-    const guard = assertNoModelContentAsConfirmedFact(confirmed.claims);
-    if (!guard.ok) {
-      return { ok: false, code: "invalid_confirmation", message: guard.message };
+    if (!outcome.ok) {
+      return {
+        ok: false,
+        code: outcome.code || "confirm_failed",
+        message: outcome.message || "无法确认本人上下文。",
+        unknownClaimIds: outcome.unknownClaimIds,
+      };
     }
+    const confirmed = outcome.confirmed;
 
     const taskIntent = normalizeTaskIntent(
       {
-        ...(payload && payload.taskIntent),
+        ...(existing && existing.taskIntent),
         goal,
-        role: payload && payload.role,
-        expectedOutcome: payload && payload.expectedOutcome,
-        constraints: payload && payload.constraints,
+        role: (payload && payload.role) || undefined,
+        expectedOutcome: (payload && payload.expectedOutcome) || undefined,
+        constraints: (payload && payload.constraints) || undefined,
       },
-      payload && payload.taskId
+      (payload && payload.taskId) || (existing && existing.taskId)
     );
-
-    const deletedIds = (draft.claims || [])
-      .map((c) => c.id)
-      .filter((id) => !keepClaimIds.map(String).includes(String(id)));
 
     const contextAudit = {
       assembledAt: new Date().toISOString(),
       packagePaths: (draft.rankingMeta && draft.rankingMeta.packagePaths) || [],
       displayedClaimIds: (draft.claims || []).map((c) => c.id),
-      deletedClaimIds: deletedIds,
-      supplementedCount: supplements.filter((s) => String(s || "").trim()).length,
+      deletedClaimIds: outcome.deletedClaimIds || [],
+      supplementedCount: (
+        []
+          .concat((payload && payload.supplements) || [])
+          .concat((payload && payload.supplementText) || [])
+      ).filter((s) => String(s || "").trim()).length,
       rankingMeta: draft.rankingMeta || null,
       confirmedClaimIds: (confirmed.claims || []).map((c) => c.id),
+      authority: "main_process_candidates",
     };
 
-    const saved = await actBehalfStore.saveTask(app.getPath("userData"), {
-      taskId: payload && payload.taskId ? payload.taskId : undefined,
+    const saved = await actBehalfStore.saveTask(userData, {
+      ...(existing || {}),
+      taskId: (payload && payload.taskId) || (existing && existing.taskId) || undefined,
       title,
       request: goal,
       goal,
@@ -1049,6 +1108,7 @@ ipcMain.handle("actBehalf:confirmContext", async (_e, payload) => {
       taskIntent,
       subjectContextCandidates: draft,
       subjectContext: confirmed,
+      priorSubjectContext: (existing && existing.priorSubjectContext) || null,
       contextAudit,
       selectedSelfContext: {
         items: confirmed.claims.map((c) => ({
@@ -1116,29 +1176,65 @@ ipcMain.handle("actBehalf:get", async (_e, taskId) => {
 
 ipcMain.handle("actBehalf:save", async (_e, payload) => {
   try {
+    const userData = app.getPath("userData");
     const goal = String((payload && (payload.goal || payload.request)) || "").trim();
     const title =
       String((payload && payload.title) || "").trim() ||
       (goal ? goal.slice(0, 40) + (goal.length > 40 ? "…" : "") : "未命名任务");
+
+    let existing = null;
+    if (payload && payload.taskId) {
+      const got = actBehalfStore.getTask(userData, payload.taskId);
+      if (got.ok) existing = got.task;
+    }
+
+    // Goal consistency: invalidate confirmed snapshot / stale candidates.
+    // Do not accept renderer-supplied claim bodies as authority.
+    const goalFields = applyGoalChangeToStoredTask(existing, goal);
+
     const taskIntent = normalizeTaskIntent(
       {
+        ...(existing && existing.taskIntent),
         ...(payload && payload.taskIntent),
         goal,
-        role: payload && payload.role,
-        expectedOutcome: payload && payload.expectedOutcome,
-        constraints: payload && payload.constraints,
+        role: (payload && payload.role) || (payload && payload.taskIntent && payload.taskIntent.role),
+        expectedOutcome:
+          (payload && payload.expectedOutcome) ||
+          (payload && payload.taskIntent && payload.taskIntent.expectedOutcome),
+        constraints:
+          (payload && payload.constraints) ||
+          (payload && payload.taskIntent && payload.taskIntent.constraints),
       },
-      payload && payload.taskId
+      (payload && payload.taskId) || (existing && existing.taskId)
     );
-    const saved = await actBehalfStore.saveTask(app.getPath("userData"), {
-      ...(payload || {}),
+
+    let status = "draft";
+    if (goalFields.invalidatedConfirmed) {
+      status = goalFields.status || "draft";
+    } else if (payload && payload.status) {
+      status = String(payload.status);
+    } else if (existing && existing.status) {
+      status = String(existing.status);
+    }
+
+    const saved = await actBehalfStore.saveTask(userData, {
+      ...(existing || {}),
+      taskId: (payload && payload.taskId) || (existing && existing.taskId) || undefined,
       title,
       request: goal,
       goal,
       taskIntent,
-      status: (payload && payload.status) || "draft",
+      status,
+      subjectContextCandidates: goalFields.subjectContextCandidates,
+      subjectContext: goalFields.subjectContext,
+      priorSubjectContext: goalFields.priorSubjectContext,
+      contextAudit: (existing && existing.contextAudit) || null,
     });
-    return saved;
+    return {
+      ...saved,
+      invalidatedConfirmed: goalFields.invalidatedConfirmed,
+      clearedCandidates: goalFields.clearedCandidates,
+    };
   } catch (err) {
     return {
       ok: false,

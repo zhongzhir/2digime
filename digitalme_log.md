@@ -5,6 +5,18 @@
 
 ---
 
+## 2026-07-21 第一闭环实现 · 第 1 块验收修正：确认边界与目标一致性
+
+### 做了什么
+
+主进程确认不再信任 renderer 提交的完整 Subject Context Draft；候选以 preview 保存或主进程重装为准；`keepClaimIds` 校验；全 sourceRefs 模型推测防护；goal 不一致返回 `context_stale_for_goal`；已确认任务改 goal 时快照失效为 prior。聚焦测试 `test:vl1-block1` + `test:act-behalf`。
+
+### 下一任务
+
+**第一闭环实现 · 第 2 块：真实 Skill 与只读外部调研调用**
+
+---
+
 ## 2026-07-21 第一闭环实现 · 第 1 块：任务意图与本人上下文装配
 
 ### 做了什么

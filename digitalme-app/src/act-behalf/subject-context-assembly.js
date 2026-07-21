@@ -367,17 +367,17 @@ function makeUserSupplementClaim(text) {
 }
 
 /**
- * Build confirmed Subject Context snapshot from proposed claims + user actions.
- * Does not mutate Package.
+ * Build confirmed Subject Context snapshot from authoritative candidates + user actions.
+ * scope / prohibitedUses / subject metadata always come from the authoritative draft —
+ * never from renderer-supplied overrides. Does not mutate Package.
  */
-function confirmSubjectContextSnapshot(draft, { keepClaimIds, supplements, scope, prohibitedUses } = {}) {
+function confirmSubjectContextSnapshot(draft, { keepClaimIds, supplements } = {}) {
   const base = draft && typeof draft === "object" ? draft : {};
   const keep = new Set((keepClaimIds || []).map(String));
   const kept = (base.claims || []).filter((c) => keep.has(String(c.id)));
   const confirmedClaims = kept.map((c) => ({
     ...c,
     confirmationState: c.confirmationState === "user_edited" ? "user_edited" : "confirmed",
-    // strip ranking score from durable snapshot optional — keep for audit
   }));
 
   const extra = [];
@@ -409,12 +409,8 @@ function confirmSubjectContextSnapshot(draft, { keepClaimIds, supplements, scope
     sourceRefs,
     confidence: claims.length ? "medium" : "unknown",
     confirmationState: "confirmed",
-    scope: String(scope || base.scope || "本次任务已确认的本人信息快照"),
-    prohibitedUses: Array.isArray(prohibitedUses)
-      ? prohibitedUses.map(String)
-      : Array.isArray(base.prohibitedUses)
-        ? base.prohibitedUses.slice()
-        : [],
+    scope: String(base.scope || "本次任务已确认的本人信息快照"),
+    prohibitedUses: Array.isArray(base.prohibitedUses) ? base.prohibitedUses.slice() : [],
     rankingMeta: base.rankingMeta || null,
     confirmedAt: new Date().toISOString(),
   };
@@ -424,32 +420,236 @@ function aggregateSourceRefs(subjectContext) {
   return (subjectContext && subjectContext.sourceRefs) || [];
 }
 
-function assertNoModelContentAsConfirmedFact(claims) {
-  // Soft guard: claims from model_inference source must not be confirmed.
+const INFERENCE_SOURCES = new Set(["model_inference", "digitalme_inference"]);
+
+function allowedPackageSources() {
+  return new Set(
+    Object.values(SOURCE_PATH).filter((s) => s && s !== "user_supplement")
+  );
+}
+
+/**
+ * Package candidates may only cite known Package source paths.
+ * Checks every sourceRef on each claim (not only the first).
+ */
+function assertAllowedPackageClaimSources(claims) {
+  const allowed = allowedPackageSources();
   for (const c of claims || []) {
-    const src = (c.sourceRefs && c.sourceRefs[0] && c.sourceRefs[0].source) || "";
-    if (
-      (src === "model_inference" || src === "digitalme_inference") &&
-      (c.confirmationState === "confirmed" || c.confirmationState === "user_edited")
-    ) {
-      return { ok: false, message: "模型推测不得确认为本人事实。" };
+    const refs = Array.isArray(c.sourceRefs) ? c.sourceRefs : [];
+    if (!refs.length) {
+      return {
+        ok: false,
+        code: "missing_source_refs",
+        message: "候选条目缺少来源，无法确认。",
+      };
+    }
+    for (const ref of refs) {
+      const src = ref && ref.source != null ? String(ref.source) : "";
+      if (INFERENCE_SOURCES.has(src)) {
+        return {
+          ok: false,
+          code: "invalid_confirmation",
+          message: "模型推测不得确认为本人事实。",
+        };
+      }
+      if (src === "user_supplement") {
+        return {
+          ok: false,
+          code: "invalid_package_source",
+          message: "Package 候选不得使用用户补充来源标记。",
+        };
+      }
+      if (!allowed.has(src)) {
+        return {
+          ok: false,
+          code: "invalid_package_source",
+          message: "候选来源不在本块允许的已知来源集合中。",
+        };
+      }
     }
   }
   return { ok: true };
 }
 
+/**
+ * Soft guard: any inference source among all sourceRefs must not be confirmed.
+ */
+function assertNoModelContentAsConfirmedFact(claims) {
+  for (const c of claims || []) {
+    const state = c && c.confirmationState;
+    if (state !== "confirmed" && state !== "user_edited") continue;
+    for (const ref of c.sourceRefs || []) {
+      const src = ref && ref.source != null ? String(ref.source) : "";
+      if (INFERENCE_SOURCES.has(src)) {
+        return { ok: false, message: "模型推测不得确认为本人事实。" };
+      }
+    }
+  }
+  return { ok: true };
+}
+
+/**
+ * Main-process confirm path: only keepClaimIds + supplement texts are user actions.
+ * Claim bodies / sourceRefs / subject metadata come solely from authoritativeDraft.
+ */
+function confirmSubjectContextWithUserActions(authoritativeDraft, options = {}) {
+  const draft =
+    authoritativeDraft && typeof authoritativeDraft === "object" ? authoritativeDraft : null;
+  if (!draft || !Array.isArray(draft.claims)) {
+    return {
+      ok: false,
+      code: "candidates_missing",
+      message: "请先按当前目标生成候选本人信息。",
+    };
+  }
+
+  const submittedGoal = String(options.goal || "").trim();
+  if (!submittedGoal) {
+    return { ok: false, code: "empty_goal", message: "请先填写研究与表达目标。" };
+  }
+  const draftGoal = String((draft.rankingMeta && draft.rankingMeta.goal) || "").trim();
+  if (draftGoal !== submittedGoal) {
+    return {
+      ok: false,
+      code: "context_stale_for_goal",
+      message: "目标已变更，请重新生成候选后再确认。",
+    };
+  }
+
+  if (!Array.isArray(options.keepClaimIds)) {
+    return {
+      ok: false,
+      code: "keep_claim_ids_required",
+      message: "缺少保留条目列表。",
+    };
+  }
+
+  const authById = new Map(draft.claims.map((c) => [String(c.id), c]));
+  const keepClaimIds = options.keepClaimIds.map(String);
+  const unknownClaimIds = keepClaimIds.filter((id) => !authById.has(id));
+  if (unknownClaimIds.length) {
+    return {
+      ok: false,
+      code: "unknown_claim_ids",
+      unknownClaimIds,
+      message: "部分保留条目无效，请重新生成候选后再确认。",
+    };
+  }
+
+  const kept = keepClaimIds.map((id) => authById.get(id));
+  const pkgCheck = assertAllowedPackageClaimSources(kept);
+  if (!pkgCheck.ok) return pkgCheck;
+
+  const supplements = [];
+  if (Array.isArray(options.supplements)) {
+    for (const s of options.supplements) supplements.push(s);
+  }
+  if (options.supplementText) supplements.push(options.supplementText);
+
+  // Rebuild draft view that only exposes authoritative claim objects for kept IDs.
+  const authoritativeForConfirm = {
+    ...draft,
+    claims: draft.claims.slice(),
+  };
+  const confirmed = confirmSubjectContextSnapshot(authoritativeForConfirm, {
+    keepClaimIds,
+    supplements,
+  });
+
+  const guard = assertNoModelContentAsConfirmedFact(confirmed.claims);
+  if (!guard.ok) {
+    return { ok: false, code: "invalid_confirmation", message: guard.message };
+  }
+
+  for (const c of confirmed.claims || []) {
+    const refs = Array.isArray(c.sourceRefs) ? c.sourceRefs : [];
+    const isSupplement = refs.some((r) => r && r.source === "user_supplement");
+    if (isSupplement) {
+      for (const r of refs) {
+        if (!r || r.source !== "user_supplement") {
+          return {
+            ok: false,
+            code: "invalid_supplement_source",
+            message: "用户补充只能使用系统生成的补充来源标记。",
+          };
+        }
+      }
+    } else {
+      const check = assertAllowedPackageClaimSources([c]);
+      if (!check.ok) return check;
+    }
+  }
+
+  const deletedClaimIds = draft.claims
+    .map((c) => c.id)
+    .filter((id) => !keepClaimIds.includes(String(id)));
+
+  return { ok: true, confirmed, deletedClaimIds, keepClaimIds };
+}
+
+/**
+ * When Owner changes goal on a draft save after confirmation, invalidate the
+ * confirmed snapshot for the new goal without deleting prior audit data.
+ */
+function applyGoalChangeToStoredTask(existing, newGoal) {
+  const goal = String(newGoal || "").trim();
+  const out = {
+    subjectContext: existing && existing.subjectContext ? existing.subjectContext : null,
+    priorSubjectContext:
+      existing && existing.priorSubjectContext ? existing.priorSubjectContext : null,
+    subjectContextCandidates:
+      existing && existing.subjectContextCandidates ? existing.subjectContextCandidates : null,
+    status: existing && existing.status ? String(existing.status) : "draft",
+    invalidatedConfirmed: false,
+    clearedCandidates: false,
+  };
+
+  if (
+    out.subjectContext &&
+    out.subjectContext.confirmationState === "confirmed"
+  ) {
+    const snapGoal = String(
+      (out.subjectContext.rankingMeta && out.subjectContext.rankingMeta.goal) ||
+        (existing && existing.taskIntent && existing.taskIntent.goal) ||
+        (existing && existing.goal) ||
+        ""
+    ).trim();
+    if (snapGoal !== goal) {
+      out.priorSubjectContext = out.subjectContext;
+      out.subjectContext = null;
+      out.invalidatedConfirmed = true;
+      if (out.status === "context_confirmed") out.status = "draft";
+    }
+  }
+
+  if (out.subjectContextCandidates && out.subjectContextCandidates.rankingMeta) {
+    const candGoal = String(out.subjectContextCandidates.rankingMeta.goal || "").trim();
+    if (candGoal && candGoal !== goal) {
+      out.subjectContextCandidates = null;
+      out.clearedCandidates = true;
+    }
+  }
+
+  return out;
+}
+
 module.exports = {
   MAX_CANDIDATES,
   SOURCE_PATH,
+  INFERENCE_SOURCES,
   tokenize,
   resolveSubjectId,
   resolveSubjectVersion,
   assembleSubjectContextCandidates,
   confirmSubjectContextSnapshot,
+  confirmSubjectContextWithUserActions,
+  applyGoalChangeToStoredTask,
   makeUserSupplementClaim,
   buildFallbackClaims,
   aggregateSourceRefs,
   assertNoModelContentAsConfirmedFact,
+  assertAllowedPackageClaimSources,
+  allowedPackageSources,
   scoreCandidate,
   collectRawCandidates,
 };

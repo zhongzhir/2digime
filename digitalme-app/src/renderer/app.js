@@ -5409,11 +5409,18 @@ async function loadActBehalfContext() {
     return;
   }
   setActProgress("正在按目标装配本人信息候选…");
-  const res = await window.digitalMe.actBehalfPreviewContext({ goal });
+  const res = await window.digitalMe.actBehalfPreviewContext({
+    goal,
+    taskId: actBehalfState.taskId || undefined,
+    title: ($("act-title") && $("act-title").value.trim()) || undefined,
+    role: ($("act-role") && $("act-role").value.trim()) || undefined,
+    expectedOutcome: ($("act-expected") && $("act-expected").value.trim()) || undefined,
+  });
   if (!res || !res.ok) {
     setActProgress((res && res.message) || "无法准备本人信息。");
     return;
   }
+  if (res.taskId) actBehalfState.taskId = res.taskId;
   const draft = res.subjectContextDraft || {};
   actBehalfState.draftClaims = (draft.claims || []).slice();
   actBehalfState.draftMeta = draft;
@@ -5522,19 +5529,23 @@ async function saveActBehalfDraft() {
       role: ($("act-role") && $("act-role").value.trim()) || undefined,
       expectedOutcome: ($("act-expected") && $("act-expected").value.trim()) || undefined,
     },
-    subjectContextCandidates: actBehalfState.draftMeta
-      ? { ...actBehalfState.draftMeta, claims: actBehalfState.draftClaims }
-      : actBehalfState.draftClaims.length
-        ? { claims: actBehalfState.draftClaims, confirmationState: "proposed" }
-        : null,
-    subjectContext: actBehalfState.confirmed || null,
   });
   if (!res || !res.ok) {
     setActProgress((res && res.message) || "保存失败。");
     return;
   }
   actBehalfState.taskId = res.task.taskId;
-  setActProgress("草稿已保存。");
+  if (res.invalidatedConfirmed) {
+    actBehalfState.confirmed = null;
+    setActProgress("目标已变更：先前确认的快照已失效，请重新生成候选并确认。");
+  } else if (res.clearedCandidates) {
+    actBehalfState.draftClaims = [];
+    actBehalfState.draftMeta = null;
+    renderActClaimList();
+    setActProgress("目标已变更：旧候选已失效，请重新生成。");
+  } else {
+    setActProgress("草稿已保存。");
+  }
   await refreshActTaskList();
 }
 
@@ -5549,6 +5560,10 @@ async function confirmActBehalfContext() {
     setActProgress("请先生成候选，或至少补充一条本人信息。");
     return;
   }
+  if (!actBehalfState.taskId && (actBehalfState.draftClaims || []).length) {
+    setActProgress("请先生成候选（系统将保存权威候选）后再确认。");
+    return;
+  }
   const title = ($("act-title") && $("act-title").value.trim()) || goal.slice(0, 40);
   setActProgress("正在确认并保存本人上下文快照…");
   const res = await window.digitalMe.actBehalfConfirmContext({
@@ -5559,12 +5574,13 @@ async function confirmActBehalfContext() {
     expectedOutcome: ($("act-expected") && $("act-expected").value.trim()) || undefined,
     keepClaimIds: (actBehalfState.draftClaims || []).map((c) => c.id),
     supplementText: supplement,
-    subjectContextDraft: actBehalfState.draftMeta
-      ? { ...actBehalfState.draftMeta, claims: actBehalfState.draftClaims }
-      : { claims: actBehalfState.draftClaims || [], confirmationState: "proposed" },
   });
   if (!res || !res.ok) {
-    setActProgress((res && res.message) || "确认失败。");
+    if (res && res.code === "context_stale_for_goal") {
+      setActProgress(res.message || "目标已变更，请重新生成候选后再确认。");
+    } else {
+      setActProgress((res && res.message) || "确认失败。");
+    }
     return;
   }
   actBehalfState.taskId = res.task.taskId;

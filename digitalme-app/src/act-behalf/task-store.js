@@ -182,6 +182,11 @@ function normalizeTask(input) {
     taskIntent,
     subjectContextCandidates,
     subjectContext,
+    // Prior confirmed snapshot retained for audit when goal change invalidates confirmation
+    priorSubjectContext:
+      input && input.priorSubjectContext && typeof input.priorSubjectContext === "object"
+        ? input.priorSubjectContext
+        : null,
     contextAudit: (input && input.contextAudit) || null,
     selectedSelfContext,
     existingUserPositions: String((input && input.existingUserPositions) || ""),
