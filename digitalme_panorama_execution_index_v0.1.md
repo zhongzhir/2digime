@@ -98,7 +98,7 @@ R1 `accepted` **仅**覆盖：TS+React+Vite 底座、独立 next 预览空壳、
 - displayText、model context、attachment reference 继续分离；
 - 保留整窗返回 legacy。
 
-规格已冻结；**未获 Owner 授权前不得创建 R2 实现分支或开始实现**。R2-A 编码前另须三项参数门独立合同冻结并经 Codex 复核。
+规格已冻结；R2 实现分支已由 Owner 授权创建，三项实施前参数合同已独立冻结。Codex 参数合同复核收口且 Owner 再次授权前，不得开始 R2-A～R2-F 编码。
 
 ### 2.5 非阻断技术债（renderer foundation backlog）
 
