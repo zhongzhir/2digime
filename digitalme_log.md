@@ -5,6 +5,24 @@
 
 ---
 
+## 2026-07-21 Renderer Foundation R2 实现分支创建与参数合同冻结
+
+### 做了什么
+
+Owner 授权后创建分支 `codex/r2-chat-sessions-migration`（起点 `418d0cc`）。纯文档冻结三项实施前参数：`scenarioHint` 白名单三值与缺省归一；8000 截断原样文案与 Unicode code point 口径；token TTL=300s（单调时钟）；rename 最多 4 次 / 50-150-350ms / `EBUSY|EPERM|EACCES`。补全 §15 测试合同（本轮不写测试代码）。R2 仍 **v0.1.1** / `not_started`；R2-A～R2-F 未开始。
+
+同步：context（决策 #93）、执行索引 v0.2.23、能力表、cursor rule、总任务包、R1 调度（最小）。
+
+### 明确未做
+
+未改源码/测试/配置/依赖/lockfile；未安装依赖；未启动应用/测试/构建；未读真实 Package/sessions/userData；未开始 R2-A～R2-F / R2.5 / PAN-02；未 push。
+
+### 下一等待项
+
+**等待 Codex 复核参数合同**；通过且 Owner 再次授权前不得开始 R2-A 编码。
+
+---
+
 ## 2026-07-21 Renderer Foundation R2 实施规格接受
 
 ### 做了什么

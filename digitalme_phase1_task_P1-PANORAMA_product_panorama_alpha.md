@@ -205,7 +205,7 @@ PAN-00 accepted
 → PAN-01S.2 accepted（2026-07-20；baseline `cbde807`）
 → renderer foundation R0 **accepted**（v0.1.2；决策接受）
 → renderer foundation R1 **accepted**（v0.1.3；baseline `8d7e9b3`；Owner 6/6）
-→ renderer foundation R2（v0.1.1；specified / codex_review_passed / frozen_for_implementation / not_started）
+→ renderer foundation R2（v0.1.1；specified / codex_review_passed / frozen_for_implementation / not_started；分支已建；参数合同待复核）
 → PAN-02 理解通道 Alpha（planned / blocked）
 → PAN-03 能力框架 Alpha
 → PAN-04 外部协作骨架 Alpha
@@ -260,13 +260,13 @@ PAN-00 accepted
 
 ### 6.4 当前调度
 
-- **当前唯一等待项**：等待 Owner 是否授权创建 Renderer Foundation R2 实现分支 `codex/r2-chat-sessions-migration`（任务包 **v0.1.1**；规格已冻结）；未获授权前不得创建分支或开始实现；R2-A 编码前另须三项参数门独立冻结并经 Codex 复核；
+- **当前唯一等待项**：等待 Codex 复核 Renderer Foundation R2 三项实施前参数合同；Codex 复核通过且 Owner 再次授权前不得开始 R2-A 编码；
 - PAN-01S / PAN-01S.1 / PAN-01S.2：`accepted`（2026-07-20；Owner real Electron runtime；baseline `cbde807`）；
 - renderer foundation R0：`accepted`（v0.1.2；决策接受；implementation not_started）；
 - renderer foundation R1：`accepted`（**v0.1.3**；baseline `8d7e9b3`；implementation `completed`；分支 `codex/r1-renderer-next-shell`）；
-- renderer foundation R2：`specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`（**v0.1.1**；实现分支**不存在**）；
+- renderer foundation R2：`specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`（**v0.1.1**；分支 **`codex/r2-chat-sessions-migration`**；R2-A～R2-F 均未开始）；
 - R2.5 SQLite：`planned` / `deferred`；
-- PAN-02～PAN-06 保持 `planned`；PAN-02 当前 **blocked**（见 R0 §16）；不得开始 R2 实现 / R2.5 / PAN-02。
+- PAN-02～PAN-06 保持 `planned`；PAN-02 当前 **blocked**（见 R0 §16）；不得开始 R2-A～R2-F / R2.5 / PAN-02。
 
 ---
 
@@ -456,11 +456,11 @@ PAN-00 accepted
 → PAN-01S / PAN-01S.1 / PAN-01S.2 accepted（2026-07-20；baseline `cbde807`）
 → renderer foundation R0 accepted（v0.1.2）
 → renderer foundation R1 accepted（v0.1.3；baseline `8d7e9b3`）
-→ renderer foundation R2（v0.1.1；specified / codex_review_passed / frozen_for_implementation / not_started）
+→ renderer foundation R2（v0.1.1；specified / codex_review_passed / frozen_for_implementation / not_started；分支已建；参数合同待复核）
 → PAN-02（planned / blocked）→ PAN-03 → PAN-04 → PAN-05 → PAN-06
 ```
 
-每次只启动一个主实现任务。PAN-05 传播文案可并行起草，但不得与代码任务修改同一文件。**当前唯一等待项**：Owner 是否授权创建 R2 实现分支；R2 = `specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`；未获授权前不得创建分支或开始实现。PAN-02 保持 `planned` / `blocked`。
+每次只启动一个主实现任务。PAN-05 传播文案可并行起草，但不得与代码任务修改同一文件。**当前唯一等待项**：Codex 复核 R2 参数合同；R2 = `specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`；Codex 复核通过且 Owner 再次授权前不得开始 R2-A 编码。PAN-02 保持 `planned` / `blocked`。
 
 ### 13.3 子任务完成报告
 
@@ -533,7 +533,9 @@ P1-PANORAMA 不包含：
 
 2026-07-21（R2 第三轮最小安全闭环）：`sessionsRecoveryLatch`；损坏单会话无普通删除；`inputText`≤2000；token 一次性消费。仍 **v0.1.1-draft** / `codex_changes_requested` / `not_started`。（历史）
 
-2026-07-21（R2 实施规格接受）：Codex 最终复核通过。R2 → **v0.1.1** / `specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`。实现分支**不存在**。**当前唯一等待项**：Owner 是否授权创建 R2 实现分支。R2.5 `planned` / `deferred`；PAN-02 `planned` / `blocked`。
+2026-07-21（R2 实施规格接受）：Codex 最终复核通过。R2 → **v0.1.1** / `specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`。（历史）
+
+2026-07-21（R2 实现分支创建与参数合同冻结）：创建 `codex/r2-chat-sessions-migration`；冻结三项参数（纯文档）。R2 仍 **v0.1.1** / `not_started`；R2-A～R2-F 未开始。**当前唯一等待项**：Codex 复核参数合同。R2.5 `planned` / `deferred`；PAN-02 `planned` / `blocked`。
 
 > **PAN-01**：可信只读聚合保留；`needs_minimal_surface_reset`；不 accepted。
 >

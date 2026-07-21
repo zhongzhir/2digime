@@ -19,7 +19,7 @@ implementation：`completed`
 > - **next 当前仍是预览空壳**；chat、「我」、构建、工作台、能力、设置**均未迁移**；
 > - 生产默认入口仍为 **legacy**；**普通用户没有进入 next 的生产入口**；
 > - **不得**将整个 renderer 重构标为完成；**不**代表 R2 / R2.5 / PAN-02 已启动；
-> - **禁止**启动 PAN-02 实现；R2.5 SQLite 保持 `planned` / `deferred`；R2 任务包为 **v0.1.1** / `specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`（实现分支不存在；未获 Owner 授权前不得创建分支或开始实现）；
+> - **禁止**启动 PAN-02 实现；R2.5 SQLite 保持 `planned` / `deferred`；R2 任务包为 **v0.1.1** / `specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`（分支 `codex/r2-chat-sessions-migration` 已创建；参数合同待 Codex 复核；未获再次授权前不得编码）；
 > - 本切片**不**改变 PAN-01S 族 `accepted`；R0 **`accepted` 不变**。
 
 角色：Owner（验收）＋ Codex（规格/实现复核）＋ Cursor（实现）
@@ -303,8 +303,8 @@ runtime.signalReady(generation) -> { ok }  // 必须显式有限整数 generatio
 | 实现分支 | **`codex/r1-renderer-next-shell`** |
 | accepted baseline | **`8d7e9b3`** |
 | acceptance basis | Codex review passed + Owner real Electron runtime 6/6 |
-| 下一任务 | **等待 Owner 是否授权创建** Renderer Foundation R2 实现分支 `codex/r2-chat-sessions-migration`（任务包 **v0.1.1**；规格已冻结）；未获授权前不得创建分支或开始实现 |
-| R2 | `specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`（v0.1.1） |
+| 下一任务 | **等待 Codex 复核** Renderer Foundation R2 参数合同；通过且 Owner 再次授权前不得开始 R2-A 编码 |
+| R2 | `specified` / `codex_review_passed` / `frozen_for_implementation` / `not_started`（v0.1.1；分支 `codex/r2-chat-sessions-migration`） |
 | R2.5 | `planned` / `deferred` |
 | PAN-02 | `planned` / `blocked` |
 | R0 | `accepted`（不变） |
