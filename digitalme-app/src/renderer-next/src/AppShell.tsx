@@ -792,7 +792,12 @@ function NextShell() {
       const generation = bound?.generation ?? undefined;
       const ready = await runtime.signalReady(generation ?? undefined);
       if (cancelled) return;
-      setReadyCode(ready?.ok ? "ok" : ready?.code || "failed");
+      // A full renderer reload remains on the same main-owned navigation
+      // generation. Its original ready signal has already been consumed, which
+      // is a healthy, stable state rather than a user-visible failure.
+      setReadyCode(
+        ready?.ok || ready?.code === "already_consumed" ? "ok" : ready?.code || "failed"
+      );
     }
 
     void boot();

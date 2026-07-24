@@ -234,6 +234,34 @@ test.describe("R1 renderer-next spike", () => {
     }
   });
 
+  test("next shell remains ready and can return to legacy after a renderer reload", async () => {
+    const { electronApp, win } = await launchApp();
+    try {
+      const switched = await win.evaluate(async () => {
+        return window.digitalMe.runtime.testRequestNext("e2e_reload_next");
+      });
+      expect(switched.ok).toBeTruthy();
+
+      await waitUntilNext(win);
+      await expect(win.locator('[data-testid="ready-status"]')).toHaveText("ok", {
+        timeout: 10_000,
+      });
+
+      await win.reload({ waitUntil: "domcontentloaded", timeout: 15_000 });
+      await win.waitForSelector('[data-testid="renderer-next-shell"]', { timeout: 15_000 });
+      await expect(win.locator('[data-testid="ready-status"]')).toHaveText("ok", {
+        timeout: 10_000,
+      });
+
+      await win.locator('[data-testid="return-legacy"]').click();
+      await waitUntilLegacy(win);
+      const entry = await win.evaluate(async () => window.digitalMe.runtime.getRendererEntry());
+      expect(entry.effectiveEntry).toBe("legacy");
+    } finally {
+      await electronApp.close();
+    }
+  });
+
   test("ready failure auto-falls back and latch blocks re-entry", async () => {
     const { electronApp, win } = await launchApp({
       DIGITALME_R1_FAIL_READY: "1",
