@@ -38,6 +38,7 @@
     "test:r1-spike": "npm run typecheck:renderer-next && npm run build:renderer-next && npm run test:r1-entry && npx playwright test -c playwright.config.cjs --project=r1-spike",
     "test:r2-e2e": "npm run typecheck:renderer-next && npm run build:renderer-next && npx playwright test -c playwright.config.cjs --project=r2-chat-sessions",
     "test:r2": "npm run test:r2-contracts && npm run test:r2-e2e",
+    "test:r2-dialogue": "node scripts/test-r2-dialogue.cjs",
     "build:renderer-next": "vite build --config src/renderer-next/vite.config.ts",
     "typecheck:renderer-next": "tsc -p src/renderer-next/tsconfig.json --noEmit",
     "dev:renderer-next": "vite --config src/renderer-next/vite.config.ts",

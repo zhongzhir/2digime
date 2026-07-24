@@ -45,6 +45,9 @@ function createR2ChatLifecycle(deps) {
   const persistQueues = new Map();
   /** Test seam: delay background (non-stop) persists to simulate in-flight updateStore. */
   let persistDelayMsForTests = 0;
+  // Harness-only failure seam. Production never enables it and still uses the
+  // real model path; it lets Electron exercise the UI's recoverable retry.
+  let fakeFailuresRemaining = process.env.DIGITALME_R2_FAKE_MODEL_FAIL_ONCE === "1" ? 1 : 0;
   /** @type {null | ((info: { requestId: string, phase: string, stopOwned: boolean }) => Promise<void>|void)} */
   let persistHookForTests = null;
 
@@ -180,6 +183,14 @@ function createR2ChatLifecycle(deps) {
   }
 
   async function fakeModelStream(onDelta, signal) {
+    if (fakeFailuresRemaining > 0) {
+      fakeFailuresRemaining -= 1;
+      // Match a real provider failure arriving after the renderer has received
+      // and acknowledged the request, rather than failing inside the same IPC
+      // turn before the event channel can be armed.
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      throw new Error("测试模型暂时不可用，请重试。");
+    }
     const chunks = ["这是", "一段", "测试回复。"];
     const delayMs = Number(process.env.DIGITALME_R2_FAKE_MODEL_DELAY_MS || 120);
     let full = "";

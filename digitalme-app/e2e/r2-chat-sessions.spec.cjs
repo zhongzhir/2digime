@@ -214,6 +214,33 @@ test.describe("R2 chat and sessions", () => {
     }
   });
 
+  test("failed reply exposes a real UI retry without duplicate requests", async () => {
+    const { electronApp, win } = await launchApp({
+      DIGITALME_R2_FAKE_MODEL_FAIL_ONCE: "1",
+    });
+    try {
+      await enterNext(win);
+      await win.locator('[data-testid="btn-new-session"]').click();
+      await win.locator('[data-testid="chat-input"]').fill("失败后重试");
+      await win.locator('[data-testid="btn-send"]').click();
+      await expect(win.locator('[data-testid="chat-error"]')).toContainText("测试模型暂时不可用", {
+        timeout: 10_000,
+      });
+      await expect(win.locator('[data-testid="btn-retry"]')).toBeVisible();
+      await win.locator('[data-testid="btn-retry"]').click();
+      await expect(win.locator('[data-testid="msg-assistant"]').last()).toContainText("测试回复", {
+        timeout: 15_000,
+      });
+      await expect(win.locator('[data-testid="request-in-progress"]')).toHaveCount(0, {
+        timeout: 10_000,
+      });
+      expect(await win.locator('[data-testid="msg-user"]').count()).toBe(2);
+      expect(await win.locator('[data-testid="msg-assistant"]').count()).toBe(2);
+    } finally {
+      await electronApp.close();
+    }
+  });
+
   test("long assistant refresh stays >2000; artifact preview truncate", async () => {
     // §15.3 #9 #10
     const { electronApp, win } = await launchApp();

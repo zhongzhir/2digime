@@ -136,6 +136,7 @@ function ChatWorkbench() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [session, setSession] = useState<SessionView | null>(null);
   const [error, setError] = useState<string>("");
+  const [retryDraft, setRetryDraft] = useState("");
   const [banner, setBanner] = useState<string>("");
   const [draft, setDraft] = useState("");
   const [menuId, setMenuId] = useState<string | null>(null);
@@ -156,6 +157,7 @@ function ChatWorkbench() {
   const activeRequestRef = useRef(activeRequest);
   const refreshListRef = useRef<((() => Promise<unknown>) | null)>(null);
   const loadSessionRef = useRef<(((id: string) => Promise<void>) | null)>(null);
+  const submittedTextRef = useRef("");
 
   const busy = !!activeRequest;
 
@@ -308,7 +310,10 @@ function ChatWorkbench() {
             ),
           };
         });
-        if (ev.type === "error") setError(ev.message || "回复失败");
+        if (ev.type === "error") {
+          setError(ev.message || "回复失败");
+          setRetryDraft(submittedTextRef.current);
+        }
         setActiveRequest(null);
         tripleRef.current = null;
         void refreshListRef.current?.();
@@ -392,9 +397,9 @@ function ChatWorkbench() {
     else setSession(null);
   }
 
-  async function onSend() {
+  async function onSend(inputOverride?: string) {
     if (!r2 || !session || busy || sendingLock.current) return;
-    const text = draft;
+    const text = inputOverride ?? draft;
     if (!text.trim()) {
       setError("请输入要发送的内容。");
       return;
@@ -405,6 +410,7 @@ function ChatWorkbench() {
     }
     sendingLock.current = true;
     setError("");
+    setRetryDraft("");
     try {
       const res = await r2.sendChat({
         sessionId: session.id,
@@ -415,9 +421,11 @@ function ChatWorkbench() {
       });
       if (!res.ok) {
         setError(res.message || "发送失败");
+        setRetryDraft(text);
         // keep draft
         return;
       }
+      submittedTextRef.current = text;
       setDraft("");
       setPendingToken(null);
       setPendingAttachNames([]);
@@ -428,14 +436,19 @@ function ChatWorkbench() {
           sessionId: session.id,
           messageId: res.assistantMessageId,
         };
-        setActiveRequest({
+        const nextActiveRequest: ActiveRequest = {
           requestId: res.requestId,
           originSessionId: session.id,
           assistantMessageId: res.assistantMessageId,
           startedAt: new Date().toISOString(),
           status: "running",
           sequence: 0,
-        });
+        };
+        // The main process may flush an already-buffered terminal event as soon
+        // as acknowledgeChat resolves. Keep the event guard current before the
+        // asynchronous React state update is committed.
+        activeRequestRef.current = nextActiveRequest;
+        setActiveRequest(nextActiveRequest);
         await r2.acknowledgeChat({ requestId: res.requestId });
       }
       await loadSession(session.id);
@@ -631,7 +644,16 @@ function ChatWorkbench() {
         ) : null}
         {error ? (
           <div className="banner error" data-testid="chat-error" role="alert">
-            {error}
+            <span>{error}</span>
+            {retryDraft && !busy ? (
+              <button
+                type="button"
+                data-testid="btn-retry"
+                onClick={() => void onSend(retryDraft)}
+              >
+                重试
+              </button>
+            ) : null}
           </div>
         ) : null}
 
