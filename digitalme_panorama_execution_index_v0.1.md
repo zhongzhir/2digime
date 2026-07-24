@@ -1,17 +1,17 @@
 # Digital Me Product Panorama 执行索引
 
-版本：v0.2.25
-日期：2026-07-21
+版本：v0.2.26
+日期：2026-07-24
 状态：`superseded_as_current_execution_index` / **历史与基础设施状态表**
 所属总任务：`P1-PANORAMA`（历史主线；**不再是当前产品执行主线**）
-代码实现基线：`cbde807fd1e40472d66fbe8f0810a0835e8bc816`（PAN-01S 族）；R1 `8d7e9b3`；R2 分支 `codex/r2-chat-sessions-migration`（实现保留）
+代码实现基线：`2f1b7bd`（committed baseline；distill-me + doing-context + identity + collaboration + 全部新增功能）；历史 `cbde807fd1e40472d66fbe8f0810a0835e8bc816`（PAN-01S 族）；R1 `8d7e9b3`；R2 分支 `codex/r2-chat-sessions-migration`（实现保留）
 规格依据：见文内历史列表
 
+> **2026-07-24 committed baseline（`2f1b7bd`）**：83 个文件，+16,427/-487 行。confirmed identity → act context 缺口已关闭；distill-me-acceptance 11/11；PAN-01S 23/23；owner-runtime 9/9；gate4-auto-flow 49/49；vl1-block1 18/18 全绿。Owner Electron 真机验收 `accepted`。依赖闭包完整，干净 checkout 可跑通。**未 push**。R3 继续 `paused`；PAN-02 继续 `planned / blocked`。
 > **2026-07-21 规划基线重建（强制）**：本文件**不再**作为「当前唯一执行索引」。  
 > **当前最高架构原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)  
 > **当前唯一执行计划**：[`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)（**v0.1.2 `spec_frozen`**）  
 > **冻结规格**：[`digitalme_first_vertical_loop_spec_v0.1.md`](digitalme_first_vertical_loop_spec_v0.1.md)  
-> **下一项**：**实现任务意图与本人上下文装配（第一闭环实现 · 第 1 块）**（待实现授权）。  
 > **R2**：`retained as infrastructure`（停止作为当前验收主线）。**R3**：`paused`（不是下一步）。**旧 DM-Core-01A 开发指令**：`superseded`。提交 **`55ae01f`**：`retained_for_mapping_review`。
 > 下文保留 P1-PANORAMA / Renderer Foundation 的历史状态事实，供查阅；冲突时以新权威文件为准。
 

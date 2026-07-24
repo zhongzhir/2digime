@@ -1,8 +1,8 @@
 # Digital Me 项目上下文（参照 Aivestor）
 
-版本：v0.3
+版本：v0.4
 状态：持续更新
-最后更新：2026-07-24（R2 对话运行时回归）
+最后更新：2026-07-24（committed baseline 2f1b7bd）
 
 > **当前产品主线（2026-07-21）**：**产品基线重置 → 主路径原型 → 普通用户验证 → 规格冻结**。  
 > **最高架构与研发原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)（**v0.1.1 `active`**）。  
@@ -12,8 +12,11 @@
 > **身份与协作规划**：[`DigitalMe_identity_collaboration_plan_v0.2_2026-07-22.md`](DigitalMe_identity_collaboration_plan_v0.2_2026-07-22.md)（**v0.2 `implemented`**；ID-01～ID-05 全部完成；423 测试全过）。  
 > **身份与协作开发计划**：[`DigitalMe_identity_collaboration_dev_plan_v0.1_2026-07-22.md`](DigitalMe_identity_collaboration_dev_plan_v0.1_2026-07-22.md)（**v0.1 `active`**；P0 待确认，P1 全部完成，跨账户凭据/协作交换已验证，P2 待开始）。  
 > **客户端产品化与多端规划**：[`digitalme_client_productization_plan_v0.1.md`](digitalme_client_productization_plan_v0.1.md)（**v0.1 `deferred`**；现有功能继续更新优化并完成 Owner Electron 真机验收后，优先实施 Windows 桌面安装版；Web/手机端后续）。  
+> **已提交基线（2026-07-24，`2f1b7bd`）**：`feat(distill-me): wire confirmed identity into act context` — 83 个文件，+16,427/-487 行。包含 distill-me/doing-context/identity/collaboration/cli/mcp-server/editor-extension/model-routing 全部源码、act-behalf 修改、main.js IPC handlers、preload API、renderer UI、package.json 测试脚本、全部测试脚本及相关规划文档。**完整可回滚基线**；依赖闭包已验证；非源码交接件/截图/outputs/账号凭证/邀请文件已排除。**未 push**。
 > **R2 对话运行时（2026-07-24）**：新版 Shell 中的对话与会话链继续作为**保留基础设施**，本轮补齐真实失败后的「重试」入口及其 Electron 验收。`test:r2-dialogue` 聚合验收 **9/9**；R2 契约 **19/19**、Electron **16/16**；R1 **8/8**、PAN-01S **9/9**、doing-context **6/6** 回归通过。自动化结果不替代 Owner 全功能真机验收；生产默认入口仍为 legacy。
-> **下一项任务**：**Owner Electron 真机验收全部功能** — 7 条路径 + MCP Server + CLI + 邮件 + 视频/音频 + 编辑器插件。  
+> **Owner Electron 真机验收（2026-07-24）**：**`accepted`**。Legacy 默认入口、受控新版入口及回退、distill-me 全链路（空状态→输入→生成→查看依据→确认→编辑→删除→导出→重启恢复→模型失败保护）、R2 对话重试、doing-context、PAN-01S、owner-runtime、capability-acceptance、visual-acceptance、model-routing-acceptance 全部通过。
+> **confirmed identity → act context（2026-07-24）**：**`accepted`**。`doing-context.js` `assembleDoingContext` 已读取 `distill-me-identity-facts.json` 中 `status=confirmed` 和 `status=edited` 的条目，保留 `confirmedAt`/`sourceRefs`/`evidenceRefs`/`version`，排除 `proposed`/`rejected`/`deleted`/`revoked`。`distill-me-acceptance` **11/11** 全绿（含 `confirmed-content-enters-act-context` 真实验证）。PAN-01S hermetic **23/23**、PAN-01S owner-runtime **9/9**、gate4-auto-flow **49/49**、vl1-block1 **18/18** 回归通过。
+> **下一项任务**：Owner 授权 push `2f1b7bd` 后，按规划进入下一工作包（R1 renderer 实现 / 身份与能力面 / PAN-02 任务包冻结等；R3 继续 `paused`）。
 > **第一闭环执行计划（已废止）**：[`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)（**`superseded_by_baseline_reset_v0.2`**；原 v0.1.10 `spec_frozen`；Owner 真机验收已停止；第 4 步候选粒度修复 c3f7eb2 仅作为后台资产保留）。  
 > **第一闭环规格（已废止）**：[`digitalme_first_vertical_loop_spec_v0.1.md`](digitalme_first_vertical_loop_spec_v0.1.md)（**`superseded_by_baseline_reset_v0.2`**；新验收合同见基线 v0.2 §12）。  
 > **废止/暂停**：不再以 R2 边缘验收、R3 迁移、旧 Skill/MCP/Agent/身份并列 7 任务块、**旧 DM-Core-01A 开发指令**为当前执行主线。R2 代码 **retained as infrastructure**（最近运行时增量：`248189d`）；R3 = **`paused`**；PAN-02～06 相对新主线 **`paused`**。提交 **`55ae01f`** = **`partially_reused_as_first_vertical_loop_scaffold`**。

@@ -5,6 +5,60 @@
 
 ---
 
+## 2026-07-24 committed baseline 2f1b7bd · accepted / committed
+
+### 基线提交
+
+- **HEAD**：`2f1b7bd feat(distill-me): wire confirmed identity into act context`
+- **previous**：`248189d feat(r2): add recoverable dialogue retry acceptance`
+- **push**：not_done
+- **范围**：83 个文件，+16,427/-487 行
+
+### 已接受状态
+
+| 项 | 状态 |
+|---|---|
+| Owner Electron 真机验收 | accepted |
+| distill-me 产品功能 | accepted |
+| confirmed identity → act context | accepted |
+| PAN-01S | accepted |
+| P1 doing-context | accepted |
+| R0 / R1 / R2 | accepted（R2 retained as infrastructure） |
+| distill-me-acceptance | 11/11 全绿 |
+| dependency closure | confirmed |
+
+### 提交闭包内容
+
+- `src/doing-context.js`：`assembleDoingContext` 读取 `distill-me-identity-facts.json`，过滤 `confirmed` + `edited` 状态，保留 `confirmedAt`/`sourceRefs`/`evidenceRefs`/`version`
+- `scripts/distill-me-acceptance-harness.cjs`：第 217 行 predicate 修复为箭头函数；`confirmed-content-enters-act-context` 从硬编码抛错替换为真实 `assembleDoingContext` 验证
+- `scripts/test-pan-01s-minimal-surface.cjs`：2 处过期断言修复（panorama experience 下线后契约同步）
+- 全部新增源码：`distill-me.js`、`identity/`（5 文件）、`collaboration/`（2 文件）、`cli/`（4 文件）、`mcp-server/`（2 文件）、`editor-extension/`（8 文件）、`model-routing.js`、`subject-overview/credentials.js`
+- 已跟踪修改：`main.js`（IPC handlers）、`preload.js`（API surface）、`renderer/app.js`（UI）、`package.json`（测试脚本）、`act-behalf/*`（5 文件）、`security/config-secrets.js`、`subject-overview/constants.js`
+- 全部测试脚本（26 个 `.cjs` 文件）及相关规划文档（14 个 `.md` 文件）
+
+### 已排除
+
+非源码交接件（`.zip`/`.bundle`/`.txt` 产物）、`.codex-qa/` 截图目录、`outputs/`、`dm-account-b/`、`cred-export.json`、`invite.json`、根目录临时文件
+
+### 回归测试
+
+- `test:distill-me-acceptance` 11/11
+- `test:distill-me` 1/1
+- `test:doing-context-acceptance` 1/1
+- `test:pan-01s-owner-runtime` 9/9
+- `test:pan-01s` 23/23
+- `test:gate4-auto-flow` 49/49
+- `test:vl1-block1` 18/18
+
+### 状态
+
+- R3：`paused`
+- PAN-02：`planned / blocked`
+- 生产默认入口：legacy
+- 未 push
+
+---
+
 ## 2026-07-23 能力上限与下限原则纠正
 
 ### Owner 反馈
