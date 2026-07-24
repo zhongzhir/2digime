@@ -1,16 +1,25 @@
 # Digital Me 项目上下文（参照 Aivestor）
 
-版本：v0.1
+版本：v0.3
 状态：持续更新
-最后更新：2026-07-21
+最后更新：2026-07-24（R2 对话运行时回归）
 
-> **当前产品主线（2026-07-21，规划基线重建）**：**数字主体第一纵向闭环 — 理解我并产出**。  
+> **当前产品主线（2026-07-21）**：**产品基线重置 → 主路径原型 → 普通用户验证 → 规格冻结**。  
 > **最高架构与研发原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)（**v0.1.1 `active`**）。  
-> **当前唯一执行计划**：[`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)（**v0.1.10 `spec_frozen`**；第 1–4 块 Codex `accepted`；Owner 真机验收第 1–3 步 passed；第 4 步候选粒度已限量修复，**等待 Owner 重新执行第 4 步**；第一闭环整体**尚未** `accepted`）。
-> **冻结规格**：[`digitalme_first_vertical_loop_spec_v0.1.md`](digitalme_first_vertical_loop_spec_v0.1.md)（**v0.1.0 `spec_frozen`**）。  
-> **下一项任务**：**等待 Owner 重新执行真机验收第 4 步** — 不得开始下一项开发；不得将第一闭环标为 `accepted`。  
-> **废止/暂停**：不再以 R2 边缘验收、R3 迁移、旧 Skill/MCP/Agent/身份并列 7 任务块、**旧 DM-Core-01A 开发指令**为当前执行主线。R2 代码 **retained as infrastructure**；R3 = **`paused`**；PAN-02～06 相对新主线 **`paused`**。提交 **`55ae01f`** = **`partially_reused_as_first_vertical_loop_scaffold`**。
+> **当前执行基线**：[`DigitalMe_product_baseline_reset_v0.2_2026-07-21.md`](DigitalMe_product_baseline_reset_v0.2_2026-07-21.md)（**v0.2 `active`**；Owner 审核通过关键裁决，包含能力覆盖完整性、唯一数字身份与对外协作等补强项）。  
+> **产品基线重置裁决**：原"研究与表达"候选确认路径判废；第一闭环保持 `not accepted`；工程机制（上下文装配、候选选择、确认快照）降为后台自动编排；不再向 Cursor 下发实现任务，先完成四道门。
+> **当前执行规格**：[`DigitalMe_doing_product_logic_v0.2_2026-07-22.md`](DigitalMe_doing_product_logic_v0.2_2026-07-22.md)（**v0.2 `all_phases_complete`**；Phase 1-3 全部完成；297 测试全过）。  
+> **身份与协作规划**：[`DigitalMe_identity_collaboration_plan_v0.2_2026-07-22.md`](DigitalMe_identity_collaboration_plan_v0.2_2026-07-22.md)（**v0.2 `implemented`**；ID-01～ID-05 全部完成；423 测试全过）。  
+> **身份与协作开发计划**：[`DigitalMe_identity_collaboration_dev_plan_v0.1_2026-07-22.md`](DigitalMe_identity_collaboration_dev_plan_v0.1_2026-07-22.md)（**v0.1 `active`**；P0 待确认，P1 全部完成，跨账户凭据/协作交换已验证，P2 待开始）。  
+> **客户端产品化与多端规划**：[`digitalme_client_productization_plan_v0.1.md`](digitalme_client_productization_plan_v0.1.md)（**v0.1 `deferred`**；现有功能继续更新优化并完成 Owner Electron 真机验收后，优先实施 Windows 桌面安装版；Web/手机端后续）。  
+> **R2 对话运行时（2026-07-24）**：新版 Shell 中的对话与会话链继续作为**保留基础设施**，本轮补齐真实失败后的「重试」入口及其 Electron 验收。`test:r2-dialogue` 聚合验收 **9/9**；R2 契约 **19/19**、Electron **16/16**；R1 **8/8**、PAN-01S **9/9**、doing-context **6/6** 回归通过。自动化结果不替代 Owner 全功能真机验收；生产默认入口仍为 legacy。
+> **下一项任务**：**Owner Electron 真机验收全部功能** — 7 条路径 + MCP Server + CLI + 邮件 + 视频/音频 + 编辑器插件。  
+> **第一闭环执行计划（已废止）**：[`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)（**`superseded_by_baseline_reset_v0.2`**；原 v0.1.10 `spec_frozen`；Owner 真机验收已停止；第 4 步候选粒度修复 c3f7eb2 仅作为后台资产保留）。  
+> **第一闭环规格（已废止）**：[`digitalme_first_vertical_loop_spec_v0.1.md`](digitalme_first_vertical_loop_spec_v0.1.md)（**`superseded_by_baseline_reset_v0.2`**；新验收合同见基线 v0.2 §12）。  
+> **废止/暂停**：不再以 R2 边缘验收、R3 迁移、旧 Skill/MCP/Agent/身份并列 7 任务块、**旧 DM-Core-01A 开发指令**为当前执行主线。R2 代码 **retained as infrastructure**（最近运行时增量：`248189d`）；R3 = **`paused`**；PAN-02～06 相对新主线 **`paused`**。提交 **`55ae01f`** = **`partially_reused_as_first_vertical_loop_scaffold`**。
 > **产品定义（摘要）**：Digital Me 是由本人拥有和控制、以本人为源头持续形成、能够调用外部智能能力，并在明确授权下代表本人感知、判断、表达、行动和协作的个人数字主体系统（全文见架构原则文 §1）。
+>
+> **能力基线纠正（2026-07-23）**：Digital Me 不通过“像我”限制大模型能力；接入模型的通用能力必须完整保留，Digital Me 的能力上限与下限均以接入模型为基线。个人蒸馏结果通过生成前叠加或生成后校对增加价值观、经验、风格、真实性与边界；加入 Digital Me 后通用表现变弱视为设计缺陷。权威原则见 `digitalme_subject_architecture_and_rd_principles_v0.1.md` §3.1、`digitalme_product_spec_v0.2.md` §2.0.1。
 >
 > **历史主线（已降级）**：**P1-PANORAMA** 与 Renderer Foundation（R0/R1 `accepted`；R2 实现保留）见 [`digitalme_panorama_execution_index_v0.1.md`](digitalme_panorama_execution_index_v0.1.md)（**不再作为当前执行索引**；状态标记 `superseded_as_current_execution_index`）。
 >
@@ -262,6 +271,7 @@ flowchart TB
 23. **对话轻入口 + 做事分场景（2026-07-13）**：侧栏「对话 | 做事 | 我 | 能力」；写作合并为唯一交付面；对话「留为文稿」；未就绪场景标筹备中。规格 **v0.3**、决策 #44。
 24. **极简产品原则（2026-07-19，PAN-00R 冻结）**：后台复杂、前台极简；用户体验结果，不观看系统证明自己；个性化默认隐性发生；授权只在风险边界上显性发生；审计、来源和依据可按需展开但不占主界面；日常无感、风险有感；能力无负担、权力有控制；重要异常、冲突或外部行动才打断用户；普通用户界面不得展示产品规格、工程状态或系统设计说明；页面文字大幅减少。前台/后台/帮助/高级四层分层与「产品全貌」新定义见规格 v0.6 §2.0、PAN-00R 任务包 §4。
 25. **AI 使用主体信息原则（2026-07-19，PAN-00R 冻结）**：不采用「回答上限受蒸馏内容限制」逻辑，也不采用「先生成通用答案再机械贴入个人引用」逻辑。**AI 负责能力上限；Digital Me 负责方向、真实性、边界、连续性和本人特征。** 相关性门强制：与任务无关的主体信息不得进入生成；无相关信息时宁可不做个性化。见 §4.4、规格 v0.6 §2.0.1。
+26. **AI 能力基线纠正（2026-07-23）**：Digital Me 的能力上限与下限均以接入大模型为基线，不得因“像我”而削弱通用能力。个人蒸馏结果采用“生成前叠加”或“生成后校对”两种方式增加价值观、经验、风格、真实性与边界；加入 Digital Me 后通用表现变弱视为设计缺陷。见架构原则 §3.1、产品规格 §2.0.1。
 
 ### 3.1 交互体验总则（2026-07-09）
 
@@ -419,9 +429,19 @@ flowchart TB
 
 反馈沉淀到 memory/policy/skill 的新版本，形成可演化系统。
 
-### 5.4 Owner 与 AI 协作规范（产品开发，2026-07-11；2026-07-16 强化）
+### 5.4 Owner 与 AI 协作规范（产品开发，2026-07-11；2026-07-16 强化；2026-07-22 原则对齐）
 
 适用于：本仓库内产品设计、规格修订、界面文案与功能取舍（Cursor / AI 协作开发会话）。
+
+#### 5.4.0 工作原则：AI-NATIVE 创新（2026-07-22）
+
+我们在产品设计和开发中共同遵守以下原则：
+
+1. **每个功能都必须回答：这是 AI 带来的新机制吗？它创造了什么以前不存在的场景？** 如果只是把旧流程数字化（公告板、表格、搜索框），就不值得做。
+2. **AI-NATIVE 的核心是自动化和智能化**：用户设置一次规则和边界，系统就能自动运行、自动匹配、自动协作，不需要用户重复手动操作。广播和自动匹配的价值不在于"发布需求"，而在于它开启了市场调研、产品设计、模型训练、任务分发等大量自动协作的新场景——这些场景以前不存在，商业价值巨大。
+3. **成熟功能直接复制，不重新发明轮子**：市场上已有、行之有效、形成惯例的功能和设计直接模仿同类产品，不浪费精力。
+4. **精力投入在真正的创新上**：主体性建立、数字之我的应用、AI 驱动的自动协作机制——这些才是 Digital Me 的差异化，也是我们值得投入 token 和时间的地方。
+5. **判断标准**：如果一个功能换成"没有 AI 也能做"就完全不成立，那它就是 AI-NATIVE 的；如果去掉 AI 它还是一个可用的传统产品，那它就不是我们要做的。
 
 1. **角色**：Owner 提出目标、约束与**线索**；AI 负责检索、审视、草拟、实现与**主动质检 / 检测审计**；关键判断与高风险确认仍归人。
 2. **Owner 意见 = 假设与线索（强制）**：想法可能不全、可错、可非最优，**不得**直接当规格或 sprint backlog 照搬。AI 须审视后，按下列顺序推进：
@@ -438,6 +458,8 @@ flowchart TB
 5. **文案闸门（与规格 §2.12 一致）**：用户面文案须严谨明白、面向使用场景；禁止讨论腔、开发技术名词、口语化口号进入默认界面。自检：「换成陌生用户是否仍一眼明白」。
 6. **规格优先**：与 §3 第 11 条、产品规格 §0.2 一致——零星试用反馈先 backlog，评审后再改规格升版开发。
 7. **允许反对**：Owner 明确授权 AI 在本规范下提出反对；反对须附理由与更通用方案，不得仅说「不做」。
+8. **不重新发明轮子（2026-07-22）**：市场上已有、行之有效、形成惯例的功能和设计直接模仿同类产品，不需要创新。Digital Me 的创新集中于主体性建立和数字之我的应用，精力和 token 投入在这上面，不浪费在重复造轮子上。
+9. **不做公告牌/BBS 式协作匹配（2026-07-22）**：协作匹配必须是 AI 驱动的全自动机制——Digital Me 理解每个用户的能力、需求和偏好，自动完成语义匹配，主动推荐协作机会。不做公告牌、不做手动搜索、不做关键词匹配。如果一个功能不是基于 AI 带来的新机制、新流程、新场景，不值得去做。
 
 #### 5.4.1 规划、执行、实现与运维的固定机制（2026-07-16）
 

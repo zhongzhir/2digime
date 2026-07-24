@@ -34,6 +34,18 @@ const api = {
   },
   setConfig: (cfg) => ipcRenderer.invoke("config:set", cfg),
   clearApiKey: () => ipcRenderer.invoke("config:clearApiKey"),
+  getDistillMeSnapshot: () => ipcRenderer.invoke("distillMe:get"),
+  createDistillInput: (input) => ipcRenderer.invoke("distillMe:createInput", input),
+  generateIdentityExperienceFacts: (draftId) => ipcRenderer.invoke("distillMe:generate", draftId),
+  transitionDistillItem: (payload) => ipcRenderer.invoke("distillMe:transition", payload),
+  getDistillEvidence: (itemId) => ipcRenderer.invoke("distillMe:evidence", itemId),
+  exportDistillSnapshot: () => ipcRenderer.invoke("distillMe:export"),
+  getDistillAuditLog: () => ipcRenderer.invoke("distillMe:audit"),
+  getDoingContextAudit: () => ipcRenderer.invoke("doingContext:listAudit"),
+  getModelRouting: () => ipcRenderer.invoke("modelRouting:get"),
+  saveModelRouting: (payload) => ipcRenderer.invoke("modelRouting:save", payload),
+  testModelRouting: (payload) => ipcRenderer.invoke("modelRouting:test", payload),
+  getRecentModelRouting: () => ipcRenderer.invoke("modelRouting:recent"),
   clearExtensionSecret: (payload) => ipcRenderer.invoke("secrets:clearExtensionEnv", payload),
   loadPackage: () => ipcRenderer.invoke("package:load"),
   actBehalfPreviewContext: (payload) => ipcRenderer.invoke("actBehalf:previewContext", payload),
@@ -42,10 +54,16 @@ const api = {
   actBehalfGet: (taskId) => ipcRenderer.invoke("actBehalf:get", taskId),
   actBehalfSave: (payload) => ipcRenderer.invoke("actBehalf:save", payload),
   actBehalfRun: (payload) => ipcRenderer.invoke("actBehalf:run", payload),
+  actBehalfAutoGenerate: (payload) => ipcRenderer.invoke("actBehalf:autoGenerate", payload),
+  actBehalfSelectFiles: (payload) => ipcRenderer.invoke("actBehalf:selectFiles", payload),
+  actBehalfSendEmail: (payload) => ipcRenderer.invoke("actBehalf:sendEmail", payload),
+  actBehalfExportVideoAudioScript: (payload) =>
+    ipcRenderer.invoke("actBehalf:exportVideoAudioScript", payload),
   actBehalfStartResearch: (payload) => ipcRenderer.invoke("actBehalf:startResearch", payload),
   actBehalfGetResearchSkill: () => ipcRenderer.invoke("actBehalf:getResearchSkill"),
   actBehalfGenerateResult: (payload) => ipcRenderer.invoke("actBehalf:generateResult", payload),
   actBehalfSaveResultDraft: (payload) => ipcRenderer.invoke("actBehalf:saveResultDraft", payload),
+  actBehalfSaveAutoResult: (payload) => ipcRenderer.invoke("actBehalf:saveAutoResult", payload),
   actBehalfDecideResult: (payload) => ipcRenderer.invoke("actBehalf:decideResult", payload),
   actBehalfCreateExperienceProposal: (payload) =>
     ipcRenderer.invoke("actBehalf:createExperienceProposal", payload),
@@ -167,6 +185,26 @@ const api = {
   inspectPackageStore: (opts) => ipcRenderer.invoke("packageStore:inspect", opts),
   listPackageVersions: () => ipcRenderer.invoke("packageStore:listVersions"),
   getSubjectOverview: () => ipcRenderer.invoke("subject:getOverview"),
+  subjectGetIdentity: () => ipcRenderer.invoke("subject:getIdentity"),
+  subjectSignData: (p) => ipcRenderer.invoke("subject:signData", p),
+  subjectVerifySignature: (p) => ipcRenderer.invoke("subject:verifySignature", p),
+  subjectGetRoleView: () => ipcRenderer.invoke("subject:getRoleView"),
+  subjectSetRole: (p) => ipcRenderer.invoke("subject:setRole", p),
+  subjectGetRoleContext: () => ipcRenderer.invoke("subject:getRoleContext"),
+  subjectIssueVC: (p) => ipcRenderer.invoke("subject:issueVC", p),
+  subjectVerifyVC: (p) => ipcRenderer.invoke("subject:verifyVC", p),
+  subjectPresentCredential: (p) => ipcRenderer.invoke("subject:presentCredential", p),
+  subjectRevokeCredential: (p) => ipcRenderer.invoke("subject:revokeCredential", p),
+  subjectVerifyCredentialStatus: (p) => ipcRenderer.invoke("subject:verifyCredentialStatus", p),
+  subjectListCredentials: () => ipcRenderer.invoke("subject:listCredentials"),
+  collaborationCreate: (p) => ipcRenderer.invoke("collaboration:create", p),
+  collaborationAddInteraction: (p) => ipcRenderer.invoke("collaboration:addInteraction", p),
+  collaborationAddDeliverable: (p) => ipcRenderer.invoke("collaboration:addDeliverable", p),
+  collaborationApproveDeliverable: (p) => ipcRenderer.invoke("collaboration:approveDeliverable", p),
+  collaborationAddFeedback: (p) => ipcRenderer.invoke("collaboration:addFeedback", p),
+  collaborationConfirmFeedback: (p) => ipcRenderer.invoke("collaboration:confirmFeedback", p),
+  collaborationRevoke: (p) => ipcRenderer.invoke("collaboration:revoke", p),
+  collaborationList: () => ipcRenderer.invoke("collaboration:list"),
   rollbackPackageVersion: (payload) => ipcRenderer.invoke("packageStore:rollback", payload),
   recoverPackageStore: () => ipcRenderer.invoke("packageStore:recover"),
   planPpt: (payload) => ipcRenderer.invoke("output:planPpt", payload),
@@ -237,28 +275,6 @@ const api = {
     return () => ipcRenderer.removeListener("builder:progress", handler);
   },
 };
-
-// PAN-01S: panorama experience APIs only in main-approved test harness.
-if (PAN01R_TEST_HARNESS) {
-  api.pan01rTestHarness = true;
-  api.getPanoramaSubjectBrief = (p) => ipcRenderer.invoke("panoramaExperience:getSubjectBrief", p);
-  api.createPanoramaRequest = (p) => ipcRenderer.invoke("panoramaExperience:createRequest", p);
-  api.buildPanoramaAuthPreview = (p) =>
-    ipcRenderer.invoke("panoramaExperience:buildAuthPreview", p);
-  api.rejectPanoramaRequest = (p) => ipcRenderer.invoke("panoramaExperience:rejectRequest", p);
-  api.confirmPanoramaExecute = (p) =>
-    ipcRenderer.invoke("panoramaExperience:confirmAndExecute", p);
-  api.cancelPanoramaRun = (p) => ipcRenderer.invoke("panoramaExperience:cancelRun", p);
-  api.adoptPanoramaResult = (p) => ipcRenderer.invoke("panoramaExperience:adoptResult", p);
-  api.rejectPanoramaResult = (p) => ipcRenderer.invoke("panoramaExperience:rejectResult", p);
-  api.getPanoramaReceiptSummary = (p) =>
-    ipcRenderer.invoke("panoramaExperience:getReceiptSummary", p);
-  api.onPanoramaRunProgress = (cb) => {
-    const handler = (_e, data) => cb(data);
-    ipcRenderer.on("panoramaExperience:progress", handler);
-    return () => ipcRenderer.removeListener("panoramaExperience:progress", handler);
-  };
-}
 
 // R1 spike harness only — ordinary renderer cannot enable via query/hash/localStorage.
 if (R1_SPIKE_HARNESS) {

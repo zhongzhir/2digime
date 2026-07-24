@@ -19,6 +19,7 @@ if (!process.versions.electron) {
 }
 
 process.env.DIGITALME_OWNER_RUNTIME_TEST = "1";
+process.env.DIGITALME_ACT_BEHALF_FAKE = "1";
 
 const { app } = require("electron");
 const toolBroker = require("../src/tool-broker");

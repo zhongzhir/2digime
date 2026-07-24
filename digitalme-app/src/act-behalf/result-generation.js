@@ -6,7 +6,13 @@
  */
 
 const crypto = require("node:crypto");
-const { assertTaskIntentMinimal } = require("./task-intent");
+const { assertTaskIntentMinimal, TASK_TYPES } = require("./task-intent");
+const {
+  emailDraftFromParsed,
+  composeEmailPlainText,
+  videoAudioScriptFromParsed,
+  composeVideoAudioPlainText,
+} = require("./parse-output");
 const {
   ALLOWED_SKILL_ID,
   TOOL_CAPABILITY_ID,
@@ -364,6 +370,12 @@ function buildSubjectEvidenceSection(claims) {
 }
 
 function buildGenerationMessages({ intent, skill, claims, externalEvidence, continueWithoutExternalSources }) {
+  if (String((intent && intent.taskType) || "") === TASK_TYPES.email) {
+    return buildEmailGenerationMessages({ intent, claims });
+  }
+  if (String((intent && intent.taskType) || "") === TASK_TYPES.videoAudio) {
+    return buildVideoAudioGenerationMessages({ intent, claims });
+  }
   const systemHint = String((skill && skill.systemHint) || "").trim();
   const steps = Array.isArray(skill && skill.steps) ? skill.steps.map(String) : [];
   const claimBlock = claims
@@ -425,6 +437,288 @@ function buildGenerationMessages({ intent, skill, claims, externalEvidence, cont
   ];
 }
 
+/**
+ * Email-specific generation prompt (taskType = "email"):
+ * structured email output, owner style/boundaries from confirmed claims,
+ * explicit marks for parts that need user confirmation.
+ */
+function buildEmailGenerationMessages({ intent, claims }) {
+  const claimBlock = (claims || [])
+    .map(
+      (c) =>
+        `- claimId=${c.claimId} kind=${c.kind} state=${c.confirmationState}\n  ${c.text}`
+    )
+    .join("\n");
+
+  const system =
+    "你是 Digital Me 的邮件起草助手，在本地代表用户本人起草邮件。\n" +
+    "输出必须是单个 JSON 对象，不要 Markdown 代码围栏，字段为：\n" +
+    "{\n" +
+    '  "to": "收件人（人名或地址；不确定则留空）",\n' +
+    '  "subject": "邮件主题",\n' +
+    '  "body": "邮件正文（纯文本，可直接发送）",\n' +
+    '  "attachments": ["附件说明，没有则为空数组"],\n' +
+    '  "needsConfirmation": ["需要用户确认或补充的部分，例如不确定的收件人、时间、数字"],\n' +
+    '  "subjectSummary": "对本人已有事实/观点的整理（供参考）",\n' +
+    '  "inferences": [{"text":"...","basedOnSubjectClaimIds":["..."],"uncertainty":"low|medium|high","caveat":"..."}]\n' +
+    "}\n" +
+    "规则：\n" +
+    "1. 只能引用下方给出的 claimId；不得发明新的 ID。\n" +
+    "2. 语气、措辞与格式必须符合已确认本人条目体现的表达风格；不得越过其中声明的边界。\n" +
+    "3. 收件人、时间、金额、承诺等关键事实若无依据，必须留空或写入 needsConfirmation，禁止虚构。\n" +
+    "4. 禁止把推断写成 Owner 已有观点。\n" +
+    "5. 本任务只是起草；邮件不会自动发送，发送前用户必须再次确认。";
+
+  const user =
+    "Task Intent\n" +
+    "- goal: " +
+    intent.goal +
+    "\n- role: " +
+    intent.role +
+    "\n- expectedOutcome: " +
+    intent.expectedOutcome +
+    "\n- constraints: " +
+    JSON.stringify(intent.constraints || []) +
+    "\n\n已确认本人条目（唯一允许的本人事实/观点/风格依据）\n" +
+    (claimBlock || "（无）") +
+    "\n范围：" +
+    String(((claims || [])[0] && claims[0].subjectContextVersion) || "") +
+    "\n\n请生成结构化邮件 JSON。";
+
+  return [
+    { role: "system", content: system },
+    { role: "user", content: user },
+  ];
+}
+
+/**
+ * Materialize email task model output: structured email draft +
+ * claim-validated inferences; no external evidence column.
+ */
+function materializeEmailSections({ parsed, claims }) {
+  const claimIds = new Set((claims || []).map((c) => c.claimId));
+  const subjectEvidence = buildSubjectEvidenceSection(claims);
+  const draft = emailDraftFromParsed(parsed) || {
+    to: "",
+    subject: "",
+    body: "",
+    attachments: [],
+    needsConfirmation: [],
+  };
+
+  const inferences = [];
+  const rawInfs = Array.isArray(parsed && parsed.inferences) ? parsed.inferences : [];
+  for (const inf of rawInfs.slice(0, MAX_INFERENCES)) {
+    if (!inf || typeof inf !== "object") continue;
+    const text = truncate(inf.text || "", MAX_INFERENCE_CHARS);
+    if (!text) continue;
+    const basedClaims = []
+      .concat(inf.basedOnSubjectClaimIds || [])
+      .map(String)
+      .filter((id) => claimIds.has(id));
+    let uncertainty = String(inf.uncertainty || "medium").toLowerCase();
+    if (!["low", "medium", "high"].includes(uncertainty)) uncertainty = "medium";
+    if (!basedClaims.length) uncertainty = "high";
+    inferences.push({
+      inferenceId: newId("inf"),
+      text,
+      basedOnSubjectClaimIds: basedClaims,
+      basedOnExternalResultRefs: [],
+      uncertainty,
+      caveat: truncate(inf.caveat || "", 240) || undefined,
+      evidenceInsufficient: basedClaims.length === 0,
+    });
+  }
+
+  const needsConfirmation = draft.needsConfirmation.slice();
+  if (!draft.to && !needsConfirmation.some((n) => n.includes("收件人"))) {
+    needsConfirmation.push("收件人地址缺失，需要用户填写确认。");
+  }
+
+  return {
+    subjectEvidence,
+    externalEvidence: [],
+    inferences,
+    subjectSummary: truncate((parsed && parsed.subjectSummary) || "", MAX_SUBJECT_SUMMARY_CHARS),
+    email: {
+      to: draft.to,
+      subject: draft.subject,
+      body: draft.body,
+      attachments: draft.attachments,
+      needsConfirmation,
+    },
+    finalDraftText: truncate(composeEmailPlainText(draft), MAX_FINAL_DRAFT_CHARS),
+    parseOk: !!(draft.subject || draft.body || inferences.length),
+  };
+}
+
+/**
+ * Video/audio-specific generation prompt (taskType = "video_audio"):
+ * structured storyboard script output, owner style/creative direction from
+ * confirmed claims, explicit marks for parts that need user confirmation.
+ */
+function buildVideoAudioGenerationMessages({ intent, claims }) {
+  const claimBlock = (claims || [])
+    .map(
+      (c) =>
+        `- claimId=${c.claimId} kind=${c.kind} state=${c.confirmationState}\n  ${c.text}`
+    )
+    .join("\n");
+
+  const system =
+    "你是 Digital Me 的视频/音频创作助手，在本地代表用户本人策划视频/音频作品，" +
+    "产出可直接用于剪映、Descript 等外部制作工具的脚本。\n" +
+    "输出必须是单个 JSON 对象，不要 Markdown 代码围栏，字段为：\n" +
+    "{\n" +
+    '  "title": "作品标题",\n' +
+    '  "duration": "预估总时长（如 60s / 3min）",\n' +
+    '  "scenes": [{"scene":"场景 1","visuals":"画面描述","narration":"旁白/台词","duration":"该场景时长"}],\n' +
+    '  "creativeDirection": "创意方向与风格基调",\n' +
+    '  "productionTips": ["制作建议（适配剪映/Descript 等外部工具），没有则为空数组"],\n' +
+    '  "needsConfirmation": ["需要用户确认或补充的部分，例如不确定的事实、时长、素材"],\n' +
+    '  "subjectSummary": "对本人已有事实/观点的整理（供参考）",\n' +
+    '  "inferences": [{"text":"...","basedOnSubjectClaimIds":["..."],"uncertainty":"low|medium|high","caveat":"..."}]\n' +
+    "}\n" +
+    "规则：\n" +
+    "1. 只能引用下方给出的 claimId；不得发明新的 ID。\n" +
+    "2. 叙事口吻、表达风格与创意偏好必须符合已确认本人条目体现的特点；不得越过其中声明的边界。\n" +
+    "3. 分镜脚本必须结构化：每个场景都包含画面、旁白与时长。\n" +
+    "4. 人名、数据、承诺等关键事实若无依据，必须写入 needsConfirmation，禁止虚构。\n" +
+    "5. 禁止把推断写成 Owner 已有观点。\n" +
+    "6. Digital Me 只负责脚本与创意方向；实际制作由用户在剪映/Descript 等外部工具中完成，不要声称已生成视频或音频文件。";
+
+  const user =
+    "Task Intent\n" +
+    "- goal: " +
+    intent.goal +
+    "\n- role: " +
+    intent.role +
+    "\n- expectedOutcome: " +
+    intent.expectedOutcome +
+    "\n- constraints: " +
+    JSON.stringify(intent.constraints || []) +
+    "\n\n已确认本人条目（唯一允许的本人事实/观点/风格依据）\n" +
+    (claimBlock || "（无）") +
+    "\n范围：" +
+    String(((claims || [])[0] && claims[0].subjectContextVersion) || "") +
+    "\n\n请生成结构化视频/音频脚本 JSON。";
+
+  return [
+    { role: "system", content: system },
+    { role: "user", content: user },
+  ];
+}
+
+/**
+ * Materialize video/audio task model output: structured storyboard script +
+ * claim-validated inferences; no external evidence column.
+ */
+function materializeVideoAudioSections({ parsed, claims }) {
+  const claimIds = new Set((claims || []).map((c) => c.claimId));
+  const subjectEvidence = buildSubjectEvidenceSection(claims);
+  const script = videoAudioScriptFromParsed(parsed) || {
+    title: "",
+    duration: "",
+    scenes: [],
+    creativeDirection: "",
+    productionTips: [],
+    needsConfirmation: [],
+  };
+
+  const inferences = [];
+  const rawInfs = Array.isArray(parsed && parsed.inferences) ? parsed.inferences : [];
+  for (const inf of rawInfs.slice(0, MAX_INFERENCES)) {
+    if (!inf || typeof inf !== "object") continue;
+    const text = truncate(inf.text || "", MAX_INFERENCE_CHARS);
+    if (!text) continue;
+    const basedClaims = []
+      .concat(inf.basedOnSubjectClaimIds || [])
+      .map(String)
+      .filter((id) => claimIds.has(id));
+    let uncertainty = String(inf.uncertainty || "medium").toLowerCase();
+    if (!["low", "medium", "high"].includes(uncertainty)) uncertainty = "medium";
+    if (!basedClaims.length) uncertainty = "high";
+    inferences.push({
+      inferenceId: newId("inf"),
+      text,
+      basedOnSubjectClaimIds: basedClaims,
+      basedOnExternalResultRefs: [],
+      uncertainty,
+      caveat: truncate(inf.caveat || "", 240) || undefined,
+      evidenceInsufficient: basedClaims.length === 0,
+    });
+  }
+
+  const needsConfirmation = script.needsConfirmation.slice();
+  if (!script.scenes.length && !needsConfirmation.some((n) => n.includes("分镜"))) {
+    needsConfirmation.push("分镜脚本为空，需要用户确认或补充。");
+  }
+  const videoAudio = { ...script, needsConfirmation };
+
+  return {
+    subjectEvidence,
+    externalEvidence: [],
+    inferences,
+    subjectSummary: truncate((parsed && parsed.subjectSummary) || "", MAX_SUBJECT_SUMMARY_CHARS),
+    videoAudio,
+    finalDraftText: truncate(composeVideoAudioPlainText(videoAudio), MAX_FINAL_DRAFT_CHARS),
+    parseOk: !!(videoAudio.scenes.length || videoAudio.creativeDirection || inferences.length),
+  };
+}
+
+const EMAIL_SEND_NOT_INTEGRATED_MESSAGE =
+  "发送功能需要邮件服务集成。当前仅完成起草；请复制邮件内容到你的邮件客户端手动发送。";
+
+/**
+ * Email send gate (R3): external send requires explicit owner confirmation.
+ * Actual sending is a placeholder until a mail service is integrated.
+ *
+ * @param {{taskId?:string,to?:string,subject?:string,body?:string,attachments?:string[],confirmed?:boolean}} payload
+ */
+function requestEmailSend(payload) {
+  const p = payload && typeof payload === "object" ? payload : {};
+  const draft = {
+    to: String(p.to || "").trim(),
+    subject: String(p.subject || "").trim(),
+    body: String(p.body || "").trim(),
+    attachments: Array.isArray(p.attachments)
+      ? p.attachments.map((a) => String(a || "").trim()).filter(Boolean).slice(0, 10)
+      : [],
+  };
+  const missing = [];
+  if (!draft.to) missing.push("to");
+  if (!draft.subject) missing.push("subject");
+  if (!draft.body) missing.push("body");
+  if (missing.length) {
+    return {
+      ok: false,
+      code: "email_incomplete",
+      message: "邮件缺少必填项：" + missing.join(", ") + "。",
+      missing,
+      sent: false,
+    };
+  }
+  // R3: 对外发送动作，必须用户明确确认；渲染进程不可绕过。
+  if (p.confirmed !== true) {
+    return {
+      ok: false,
+      code: "confirmation_required",
+      message: "发送邮件属于对外动作（R3），必须用户明确确认后才能继续。",
+      requiresConfirmation: true,
+      sent: false,
+    };
+  }
+  return {
+    ok: false,
+    code: "email_service_not_integrated",
+    message: EMAIL_SEND_NOT_INTEGRATED_MESSAGE,
+    sent: false,
+    confirmed: true,
+    taskId: p.taskId ? String(p.taskId) : undefined,
+    draft,
+  };
+}
+
 function extractJsonObject(raw) {
   const text = String(raw || "").trim();
   if (!text) return null;
@@ -463,7 +757,14 @@ function materializeResultSections({
   externalEvidence,
   subjectContext,
   continueWithoutExternalSources,
+  taskType,
 }) {
+  if (String(taskType || "") === TASK_TYPES.email) {
+    return materializeEmailSections({ parsed, claims });
+  }
+  if (String(taskType || "") === TASK_TYPES.videoAudio) {
+    return materializeVideoAudioSections({ parsed, claims });
+  }
   const claimIds = new Set((claims || []).map((c) => c.claimId));
   const resultRefs = new Set((externalEvidence || []).map((e) => e.resultRef));
   const byResultRef = new Map((externalEvidence || []).map((e) => [e.resultRef, e]));
@@ -842,6 +1143,7 @@ async function generateResearchExpressionResult(deps) {
     externalEvidence: external.externalEvidence,
     subjectContext: task.subjectContext,
     continueWithoutExternalSources: !!continueWithoutExternalSources || !external.hasReliableSources,
+    taskType: pre.intent.taskType,
   });
 
   if (!sections.finalDraftText) {
@@ -912,6 +1214,8 @@ async function generateResearchExpressionResult(deps) {
       inferences: sections.inferences,
       subjectSummary: sections.subjectSummary,
       subjectSummaryNote: "模型整理，供参考；系统实际采用以确认快照为准。",
+      email: sections.email || undefined,
+      videoAudio: sections.videoAudio || undefined,
       finalDraft: {
         initialText: sections.finalDraftText,
         currentText: sections.finalDraftText,
@@ -1159,6 +1463,12 @@ module.exports = {
   currentSubjectVersion,
   assertGeneratePreconditions,
   buildGenerationMessages,
+  buildEmailGenerationMessages,
+  materializeEmailSections,
+  buildVideoAudioGenerationMessages,
+  materializeVideoAudioSections,
+  requestEmailSend,
+  EMAIL_SEND_NOT_INTEGRATED_MESSAGE,
   extractJsonObject,
   materializeResultSections,
   healRunningResults,

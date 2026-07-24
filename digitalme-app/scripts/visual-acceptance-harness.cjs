@@ -1,0 +1,30 @@
+"use strict";
+const fs = require("node:fs");
+const path = require("node:path");
+const assert = require("node:assert/strict");
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function waitFor(fn, label) { for (let i=0;i<100;i+=1) { if (await fn()) return; await sleep(50); } throw new Error(`timeout: ${label}`); }
+async function runVisualAcceptanceHarness({ BrowserWindow }) {
+  const win = BrowserWindow.getAllWindows()[0];
+  await waitFor(() => !win.webContents.isLoading(), "page load"); await sleep(800);
+  const out = process.env.DIGITALME_VISUAL_OUTPUT; fs.mkdirSync(out, { recursive: true });
+  const cases = [{ name:"1280x720-100", size:[1280,720], zoom:1 },{ name:"1280x720-125", size:[1280,720], zoom:1.25 },{ name:"1280x720-150", size:[1280,720], zoom:1.5 },{ name:"1920x1080-100", size:[1920,1080], zoom:1 },{ name:"1920x1080-125", size:[1920,1080], zoom:1.25 },{ name:"1920x1080-150", size:[1920,1080], zoom:1.5 }];
+  const records=[];
+  for (const c of cases) {
+    win.unmaximize(); win.setSize(...c.size); win.webContents.setZoomFactor(c.zoom); await sleep(350);
+    const r = await win.webContents.executeJavaScript(`(() => { const i=document.getElementById('input'), composer=document.getElementById('composer'), stamp=document.getElementById('ui-runtime-stamp'), log=document.getElementById('ui-boot-log'), main=document.getElementById('main'); const ir=i.getBoundingClientRect(), cr=composer.getBoundingClientRect(); const overlap=(x)=>{if(!x||x.classList.contains('hidden'))return false;const r=x.getBoundingClientRect();return r.bottom>cr.top&&r.top<cr.bottom&&r.right>cr.left&&r.left<cr.right}; return {inputVisible:!!(ir.width&&ir.height&&ir.bottom<=innerHeight), inputClickable:document.elementFromPoint(ir.left+10,ir.top+10)===i, noOverlay:!overlap(stamp)&&!overlap(log), noCoreOverflow:main.scrollWidth<=main.clientWidth+1}; })()`);
+    assert.equal(r.inputVisible,true,`${c.name} input visible`); assert.equal(r.inputClickable,true,`${c.name} input clickable`); assert.equal(r.noOverlay,true,`${c.name} no overlay`); assert.equal(r.noCoreOverflow,true,`${c.name} no overflow`);
+    const png=path.join(out,`${c.name}.png`); fs.writeFileSync(png, (await win.webContents.capturePage()).toPNG()); records.push({ ...c, ...r, png, pass:true });
+  }
+  win.maximize(); win.webContents.setZoomFactor(1); await sleep(350); const max=path.join(out,"maximized-1920x1080-100.png");
+  fs.writeFileSync(max, (await win.webContents.capturePage()).toPNG()); records.push({ name:"maximized-1920x1080-100", png:max, pass:true });
+  const fold = await win.webContents.executeJavaScript(`(async () => { const long = Array.from({length:90},(_,i)=>'第 '+(i+1)+' 段：这是用于真实视觉验收的长回复内容，确保折叠与展开有可见高度差。').join('\\n\\n'); const s=await window.digitalMe.createSession({title:'长回复折叠验收'}); s.messages=[{id:'u-fold',role:'user',displayText:'请给出长回复',modelText:'请给出长回复',createdAt:new Date().toISOString()},{id:'a-fold',role:'assistant',displayText:long,modelText:long,createdAt:new Date().toISOString()}]; await window.digitalMe.saveSession(s); await window.digitalMe.setActiveSession(s.id); return s.id; })()`);
+  await win.webContents.reload(); await waitFor(() => !win.webContents.isLoading(), "fold session reload"); await sleep(800);
+  const state = await win.webContents.executeJavaScript(`(() => { const b=document.querySelector('.msg-fold-toggle'), m=document.querySelector('.msg.assistant'); return {button:!!b, text:b&&b.textContent, aria:b&&b.getAttribute('aria-expanded'), height:m&&m.getBoundingClientRect().height}; })()`);
+  assert.equal(state.button,true,"long response has fold button"); assert.equal(state.text,"展开"); assert.equal(state.aria,"false"); const foldPng=path.join(out,"folded-before-expand.png"); fs.writeFileSync(foldPng,(await win.webContents.capturePage()).toPNG());
+  const expanded=await win.webContents.executeJavaScript(`(() => { const b=document.querySelector('.msg-fold-toggle'),m=document.querySelector('.msg.assistant'); b.click(); return {text:b.textContent,aria:b.getAttribute('aria-expanded'),height:m.getBoundingClientRect().height,folded:m.classList.contains('msg-folded')}; })()`); assert.equal(expanded.text,"收起"); assert.equal(expanded.aria,"true"); assert.ok(expanded.height>state.height,"expanded height increases"); assert.equal(expanded.folded,false); const expandPng=path.join(out,"expanded.png"); fs.writeFileSync(expandPng,(await win.webContents.capturePage()).toPNG());
+  const collapsed=await win.webContents.executeJavaScript(`(() => { const b=document.querySelector('.msg-fold-toggle'),m=document.querySelector('.msg.assistant'); b.click(); return {text:b.textContent,aria:b.getAttribute('aria-expanded'),height:m.getBoundingClientRect().height,folded:m.classList.contains('msg-folded')}; })()`); assert.equal(collapsed.text,"展开"); assert.equal(collapsed.aria,"false"); assert.ok(collapsed.height<expanded.height,"collapsed height restores"); assert.equal(collapsed.folded,true);
+  await win.webContents.reload(); await waitFor(() => !win.webContents.isLoading(), "fold reopen reload"); await sleep(800); const reopened=await win.webContents.executeJavaScript(`(() => { const b=document.querySelector('.msg-fold-toggle'),m=document.querySelector('.msg.assistant'); const before=m.getBoundingClientRect().height; b.click(); return {text:b.textContent,aria:b.getAttribute('aria-expanded'),grew:m.getBoundingClientRect().height>before}; })()`); assert.deepEqual(reopened,{text:"收起",aria:"true",grew:true}); const reopenPng=path.join(out,"reopened-expanded.png"); fs.writeFileSync(reopenPng,(await win.webContents.capturePage()).toPNG()); records.push({name:"long-reply-fold-expand-reopen",sessionId:fold,folded:{...state,png:foldPng},expanded:{...expanded,png:expandPng},collapsed,reopened:{...reopened,png:reopenPng},pass:true});
+  fs.writeFileSync(path.join(out,"acceptance.json"), JSON.stringify(records,null,2)); console.log("PASS visual acceptance", JSON.stringify(records)); return 0;
+}
+module.exports={runVisualAcceptanceHarness};

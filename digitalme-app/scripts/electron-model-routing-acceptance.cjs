@@ -1,0 +1,11 @@
+"use strict";
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+if (!process.versions.electron) throw new Error("Run with Electron");
+process.env.DIGITALME_OWNER_RUNTIME_TEST = "1";
+process.env.DIGITALME_MODEL_ROUTING_ACCEPTANCE = "1";
+const { app } = require("electron");
+app.setPath("userData", fs.mkdtempSync(path.join(os.tmpdir(), "dm-model-routing-ui-")));
+process.env.DIGITALME_MODEL_ROUTING_OUTPUT = path.resolve(__dirname, "..", "..", ".codex-qa", "model-routing-acceptance");
+require("../src/main.js");

@@ -251,7 +251,7 @@ test("N: unknown navTarget sanitized to null (fail-closed)", () => {
   assert.equal(sanitizeNavTarget("panorama-experience"), null);
   assert.equal(sanitizeNavTarget("evil-path"), null);
   assert.equal(PANORAMA_NAV_TARGETS.has("panorama-experience"), false);
-  assert.equal(PANORAMA_TEST_ONLY_NAV_TARGETS.has("panorama-experience"), true);
+  assert.equal(PANORAMA_TEST_ONLY_NAV_TARGETS.has("panorama-experience"), false);
   const forged = buildMinimalSurface(
     {
       identity: { displayName: "T" },
@@ -532,16 +532,13 @@ test("S/T/Z: production constants reject harness nav; harness flag is env-only",
     false,
     "hermetic node test must not enable harness by default"
   );
-  // preload source gate
+  // preload source gate: PAN01R_TEST_HARNESS env flag retained for legacy harness compat,
+  // but panorama experience APIs have been removed from preload (offline).
   const preload = fs.readFileSync(path.join(__dirname, "../src/preload.js"), "utf8");
   assert.match(preload, /PAN01R_TEST_HARNESS/);
   assert.match(preload, /DIGITALME_PAN01R_TEST_HARNESS/);
-  assert.ok(preload.includes("getPanoramaSubjectBrief"));
-  // APIs only inside harness branch
-  const harnessBlock = preload.slice(preload.indexOf("if (PAN01R_TEST_HARNESS)"));
-  assert.match(harnessBlock, /getPanoramaSubjectBrief/);
-  const before = preload.slice(0, preload.indexOf("if (PAN01R_TEST_HARNESS)"));
-  assert.equal(before.includes("getPanoramaSubjectBrief"), false);
+  assert.equal(preload.includes("getPanoramaSubjectBrief"), false);
+  assert.equal(preload.includes("panoramaExperience"), false);
 });
 
 test("production HTML has wizard + demoted bootstrap; intake under more", () => {

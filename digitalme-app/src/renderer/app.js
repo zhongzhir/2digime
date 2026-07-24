@@ -80,27 +80,9 @@ const RESEARCH_STAGES = RESEARCH_PROGRESS;
 const DO_SCENES = [
   {
     id: "act_behalf",
-    title: "研究与表达",
+    title: "做事",
     status: "ready",
-    blurb: "按目标装配本人上下文，确认后保存本次快照。",
-  },
-  {
-    id: "write",
-    title: "写作",
-    status: "ready",
-    blurb: "空白开写，改稿与导出同一页。",
-  },
-  {
-    id: "research",
-    title: "研究",
-    status: "ready",
-    blurb: "问一句，得答复，同页导出。",
-  },
-  {
-    id: "code",
-    title: "编程",
-    status: "ready",
-    blurb: "像我约束下委派代码协助，授权后办事。",
+    blurb: "描述目标，直接生成初稿。",
   },
   {
     id: "office",
@@ -231,6 +213,26 @@ async function applyRuntimeStamp() {
  * Later bindEvents may call these again; they are idempotent via dataset flags.
  */
 function registerEarlyUiDelegates() {
+  // Reloaded windows render navigation before asynchronous package/session startup
+  // reaches bindEvents(). Delegate through the same switchView/openDoScene entry
+  // points so the first user click is never lost during that startup interval.
+  if (!document.documentElement.dataset.dmEarlyNavigationDelegate) {
+    document.documentElement.dataset.dmEarlyNavigationDelegate = "1";
+    document.addEventListener("click", (event) => {
+      if (document.documentElement.dataset.dmNavigationBound === "1") return;
+      const nav = firstMatchingInPath(event, ".nav-item[data-view]");
+      if (nav) {
+        event.preventDefault();
+        switchView(nav.dataset.view, nav);
+        return;
+      }
+      const newTask = firstMatchingInPath(event, "#btn-do-new-task");
+      if (newTask) {
+        event.preventDefault();
+        void openDoScene("act_behalf");
+      }
+    });
+  }
   try {
     bindBootstrapFileActions();
   } catch (err) {
@@ -296,6 +298,7 @@ async function init() {
   }
 
   bindEvents();
+  document.documentElement.dataset.dmNavigationBound = "1";
 
   try {
     await ensureSession();
@@ -1112,10 +1115,14 @@ function addMessage(role, text, opts = {}) {
     foldBtn.type = "button";
     foldBtn.className = "msg-fold-toggle";
     foldBtn.textContent = "展开";
+    foldBtn.setAttribute("aria-expanded", "false");
+    el.classList.add("msg-folded");
     foldBtn.addEventListener("click", () => {
       expanded = !expanded;
       el.textContent = expanded ? plan.expanded : plan.preview;
       foldBtn.textContent = expanded ? "收起" : "展开";
+      foldBtn.setAttribute("aria-expanded", String(expanded));
+      el.classList.toggle("msg-folded", !expanded);
     });
     wrap.appendChild(foldBtn);
   }
@@ -1542,7 +1549,14 @@ async function send() {
     if (sameSession && pending.isConnected) {
       pending.classList.remove("streaming");
       pending.className = "msg system-note";
-      pending.textContent = "没办成：" + (e.message || "请稍后再试");
+      const unavailable = /PROVIDER_NOT_CONFIGURED|MODEL_NOT_CONFIGURED|AUTH_FAILED|RATE_LIMITED|NETWORK_ERROR|TIMEOUT|当前模型不可用/.test(String(e.code || "") + " " + String(e.message || ""));
+      pending.textContent = unavailable ? "当前模型不可用。可以检查模型设置，或切换到备用模型。" : "没办成：" + (e.message || "请稍后再试");
+      if (unavailable && pending.parentElement) {
+        const open = document.createElement("button");
+        open.type = "button"; open.className = "btn-ghost"; open.textContent = "打开模型设置";
+        open.addEventListener("click", () => openSettings());
+        pending.parentElement.appendChild(open);
+      }
     }
   } finally {
     clearActiveChatRequestIf(requestId);
@@ -1711,6 +1725,9 @@ function bindChatCoreControls() {
   if ($("btn-clear-apikey")) {
     $("btn-clear-apikey").addEventListener("click", clearApiKeySettings);
   }
+  $("btn-model-routing-refresh")?.addEventListener("click", () => refreshModelRoutingSettings());
+  $("btn-model-routing-test")?.addEventListener("click", () => testModelRoutingConnection());
+  $("btn-model-routing-save")?.addEventListener("click", () => saveModelRoutingSettings());
   $("btn-create-temp-test-pkg")?.addEventListener("click", () => {
     createTempTestPackageFlow().catch((e) => alert("创建失败：" + (e.message || String(e))));
   });
@@ -4361,6 +4378,7 @@ function renderReview(res) {
 
 async function openSettings(opts = {}) {
   const cfg = await window.digitalMe.getConfig();
+  await refreshModelRoutingSettings();
   $("cfg-baseurl").value = cfg.baseURL || "";
   $("cfg-apikey").value = "";
   $("cfg-model").value = cfg.model || "";
@@ -5170,24 +5188,42 @@ function showDoHub() {
   const da = $("do-act-behalf");
   if (da) da.classList.add("hidden");
   $("do-placeholder").classList.add("hidden");
-  renderDoSceneGrid();
+  renderDoTaskList();
 }
 
-function renderDoSceneGrid() {
-  const grid = $("do-scene-grid");
-  if (!grid) return;
-  grid.innerHTML = "";
-  for (const s of DO_SCENES) {
-    const card = document.createElement("button");
-    card.type = "button";
-    card.className = "do-scene-card" + (s.status === "prep" ? " do-scene-prep" : "");
-    card.innerHTML =
-      `<strong>${escapeHtml(s.title)}</strong>` +
-      `<span class="do-scene-blurb">${escapeHtml(s.blurb)}</span>` +
-      (s.status === "prep" ? `<span class="do-scene-badge">筹备中</span>` : `<span class="do-scene-badge ready">可用</span>`);
-    card.addEventListener("click", () => openDoScene(s.id));
-    grid.appendChild(card);
+async function renderDoTaskList() {
+  const list = $("do-task-list");
+  const empty = $("do-task-empty");
+  if (!list) return;
+  list.innerHTML = "";
+  if (!window.digitalMe.actBehalfList) return;
+  const res = await window.digitalMe.actBehalfList();
+  const tasks = (res && res.tasks) || [];
+  if (empty) empty.classList.toggle("hidden", tasks.length > 0);
+  for (const t of tasks) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "library-item";
+    btn.dataset.taskId = t.taskId;
+    const flag = t.contextConfirmed ? "已确认上下文" : t.status || "";
+    btn.innerHTML =
+      `<strong>${escapeHtml(t.title || "未命名任务")}</strong>` +
+      `<span class="muted">${escapeHtml(flag)} · ${escapeHtml(
+        String(t.updatedAt || "").slice(0, 19).replace("T", " ")
+      )}</span>` +
+      `<span class="muted">${escapeHtml(t.requestPreview || "")}</span>`;
+    btn.addEventListener("click", () => {
+      console.log("[do-task-list] clicked taskId:", t.taskId);
+      openDoScene("act_behalf", { taskId: t.taskId });
+    });
+    list.appendChild(btn);
   }
+}
+
+function showTemplatePicker() {
+  // Removed: template picker no longer needed per v0.2 product logic.
+  // All tasks use unified act-behalf flow.
+  openDoScene("act_behalf");
 }
 
 async function openDoScene(sceneId, opts = {}) {
@@ -5234,29 +5270,24 @@ async function openDoScene(sceneId, opts = {}) {
     return;
   }
 
-  if (sceneId === "research") {
-    doScene = "research";
+  // write/research/code scenes removed - redirect to act_behalf with template
+  if (sceneId === "write" || sceneId === "research" || sceneId === "code") {
+    doScene = "act_behalf";
     $("do-write").classList.add("hidden");
-    const dcR = $("do-code");
-    if (dcR) dcR.classList.add("hidden");
-    const daR = $("do-act-behalf");
-    if (daR) daR.classList.add("hidden");
-    $("do-research").classList.remove("hidden");
-    window.digitalMe.prepareResearchScene?.().catch(() => {});
-    await refreshSkillBar("research");
-    await refreshResearchView({ projectId: opts.projectId });
-    return;
-  }
-
-  if (sceneId === "code") {
-    doScene = "code";
-    $("do-write").classList.add("hidden");
-    const drC = $("do-research");
-    if (drC) drC.classList.add("hidden");
-    const daC = $("do-act-behalf");
-    if (daC) daC.classList.add("hidden");
-    $("do-code").classList.remove("hidden");
-    await openCodeScene();
+    const drA = $("do-research");
+    if (drA) drA.classList.add("hidden");
+    const dcA = $("do-code");
+    if (dcA) dcA.classList.add("hidden");
+    const da = $("do-act-behalf");
+    if (da) da.classList.remove("hidden");
+    const template = TASK_TEMPLATES.find((t) => t.id === sceneId);
+    if (template) {
+      const roleEl = $("act-role");
+      const expectedEl = $("act-expected");
+      if (roleEl && template.role) roleEl.value = template.role;
+      if (expectedEl && template.expectedOutcome) expectedEl.value = template.expectedOutcome;
+    }
+    await openActBehalfScene(opts);
     return;
   }
 
@@ -5295,6 +5326,9 @@ let actBehalfState = {
   currentResult: null,
   currentProposal: null,
   resultStale: false,
+  emailDraft: null,
+  videoAudioScript: null,
+  attachedFiles: [],
 };
 
 function setActProgress(text) {
@@ -5310,6 +5344,62 @@ function setActContextStatus(text) {
 function setActResearchStatus(text) {
   const el = $("act-research-status");
   if (el) el.textContent = text || "";
+}
+
+function renderActFileList() {
+  const list = $("act-file-list");
+  if (!list) return;
+  list.innerHTML = "";
+  const files = actBehalfState.attachedFiles || [];
+  if (!files.length) return;
+  for (const f of files) {
+    const row = document.createElement("div");
+    row.className = "act-file-row" + (f.ok ? "" : " act-file-error");
+    row.innerHTML =
+      `<span class="act-file-name">${escapeHtml(f.isFolder ? "📁 " : "📄 ")}${escapeHtml(f.name)}</span>` +
+      `<span class="act-file-note muted">${escapeHtml(f.note || "")}</span>` +
+      `<button type="button" class="btn-ghost act-file-remove" data-file-id="${escapeHtml(f.id)}">移除</button>`;
+    list.appendChild(row);
+  }
+  list.querySelectorAll(".act-file-remove").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      actBehalfState.attachedFiles = (actBehalfState.attachedFiles || []).filter(
+        (f) => f.id !== btn.dataset.fileId
+      );
+      renderActFileList();
+    });
+  });
+}
+
+async function handleActSelectFiles(mode) {
+  if (!window.digitalMe.actBehalfSelectFiles) {
+    setActProgress("文件选择功能不可用。");
+    return;
+  }
+  const res = await window.digitalMe.actBehalfSelectFiles({ mode });
+  if (!res || !res.ok) {
+    setActProgress((res && res.message) || "选择文件失败。");
+    return;
+  }
+  if (res.canceled) return;
+  const newFiles = (res.files || []).filter((f) => f.ok);
+  const failedFiles = (res.files || []).filter((f) => !f.ok);
+  actBehalfState.attachedFiles = (actBehalfState.attachedFiles || []).concat(newFiles);
+  renderActFileList();
+  const total = (actBehalfState.attachedFiles || []).length;
+  let msg = "已添加 " + newFiles.length + " 个" + (mode === "folder" ? "文件夹" : "文件") + "（共 " + total + " 个）。";
+  if (failedFiles.length) {
+    msg += " " + failedFiles.length + " 个文件未能读入。";
+  }
+  setActProgress(msg);
+}
+
+function buildAttachedFilesText() {
+  const files = (actBehalfState.attachedFiles || []).filter((f) => f.ok && f.text);
+  if (!files.length) return "";
+  return files
+    .map((f) => "【附件：" + f.name + "】\n" + f.text)
+    .join("\n\n---\n\n");
 }
 
 function clearActResultPanel() {
@@ -5462,7 +5552,12 @@ function updateActResultGenVisibility(task) {
   const btnNoExt = $("btn-act-generate-without-ext");
   const confirmed =
     actBehalfState.confirmed && actBehalfState.confirmed.confirmationState === "confirmed";
-  if (panel) panel.classList.toggle("hidden", !confirmed);
+  // Show panel if confirmed OR if task has a result (autoGenerate or old-format)
+  const hasResult = !!(task && (
+    (typeof task.result === "string" && task.result.trim()) ||
+    (Array.isArray(task.results) && task.results.length > 0)
+  ));
+  if (panel) panel.classList.toggle("hidden", !confirmed && !hasResult);
   const tool = matchingResearchToolInvocation(task || { invocations: actBehalfState.invocations, taskIntent: actBehalfState.taskIntent, goal: actBehalfState.goal, subjectContext: actBehalfState.confirmed });
   const canTry = !!(confirmed && actBehalfState.taskId && (!tool || tool.status !== "running"));
   if (btn) btn.disabled = !canTry;
@@ -5511,6 +5606,32 @@ function isDisplayResultCurrent(task, result) {
 function renderActResultFromTask(task) {
   updateActResultGenVisibility(task);
   const cols = $("act-four-columns");
+
+  // Handle autoGenerate tasks (task.result is a string)
+  if (typeof task.result === "string" && task.result.trim()) {
+    actBehalfState.currentResult = null;
+    const finalDraftEl = $("act-final-draft");
+    if (finalDraftEl) {
+      finalDraftEl.value = task.result.trim();
+      finalDraftEl.disabled = false;
+    }
+    const metaEl = $("act-result-meta");
+    if (metaEl) {
+      const saved = task.resultSavedAt ? ` · 已保存 ${new Date(task.resultSavedAt).toLocaleString()}` : " · 尚未保存";
+      metaEl.textContent = `成果：${task.title || "未命名成果"} · 类型：${task.taskIntent && task.taskIntent.taskType || "写作"}${saved}`;
+    }
+    const saveBtn = $("btn-act-save-result");
+    if (saveBtn) saveBtn.disabled = false;
+    const adoptBtn = $("btn-act-adopt-result");
+    if (adoptBtn) adoptBtn.disabled = false;
+    const rejectBtn = $("btn-act-reject-result");
+    if (rejectBtn) rejectBtn.disabled = false;
+    setActResultGenStatus(task.resultSavedAt ? "成果已保存。可在「做事 > 任务列表」重新打开并继续修改。" : "初稿已生成。请先检查并修改，然后点击「保存成果」或「采用为成果」。");
+    if (cols) cols.classList.add("hidden");
+    return;
+  }
+
+  // Handle old-format tasks (task.results array)
   const result = pickDisplayResult(task);
   actBehalfState.currentResult = result;
   const current = isDisplayResultCurrent(task, result);
@@ -5523,7 +5644,7 @@ function renderActResultFromTask(task) {
   }
 
   if (result.status === "running") {
-    setActResultGenStatus("正在生成研究与表达成果…");
+    setActResultGenStatus("正在生成成果…");
     if (cols) cols.classList.add("hidden");
     return;
   }
@@ -5918,8 +6039,8 @@ async function generateActBehalfResult(opts = {}) {
     setActProgress("请先保存任务。");
     return;
   }
-  setActResultGenStatus("正在生成研究与表达成果…");
-  setActProgress("正在生成有来源约束的研究与表达成果…");
+  setActResultGenStatus("正在生成成果…");
+  setActProgress("正在生成有来源约束的成果…");
   const res = await window.digitalMe.actBehalfGenerateResult({
     taskId: actBehalfState.taskId,
     continueWithoutExternalSources: !!opts.continueWithoutExternalSources,
@@ -5943,8 +6064,15 @@ async function generateActBehalfResult(opts = {}) {
 
 async function saveActBehalfResultDraft() {
   const result = actBehalfState.currentResult;
-  if (!result || !actBehalfState.taskId) return;
   const text = ($("act-final-draft") && $("act-final-draft").value) || "";
+  if (!actBehalfState.taskId) return;
+  if (!result) {
+    const res = await window.digitalMe.actBehalfSaveAutoResult({ taskId: actBehalfState.taskId, currentText: text });
+    if (!res || !res.ok) { setActResultGenStatus((res && res.message) || "保存成果失败，可继续编辑后重试。"); return; }
+    renderActResultFromTask(res.task);
+    setActResultGenStatus("成果已保存到本机任务库。入口：做事 > 任务列表；可重新打开继续修改。");
+    return;
+  }
   const res = await window.digitalMe.actBehalfSaveResultDraft({
     taskId: actBehalfState.taskId,
     resultId: result.resultId,
@@ -5961,7 +6089,15 @@ async function saveActBehalfResultDraft() {
 
 async function decideActBehalfResult(decision) {
   const result = actBehalfState.currentResult;
-  if (!result || !actBehalfState.taskId) return;
+  if (!actBehalfState.taskId) return;
+  if (!result) {
+    const text = ($("act-final-draft") && $("act-final-draft").value) || "";
+    const res = await window.digitalMe.actBehalfSaveAutoResult({ taskId: actBehalfState.taskId, currentText: text, decision });
+    if (!res || !res.ok) { setActResultGenStatus((res && res.message) || "采用失败，可继续编辑后重试。"); return; }
+    renderActResultFromTask(res.task);
+    setActResultGenStatus("已采用为成果并保存到本机任务库。入口：做事 > 任务列表。");
+    return;
+  }
   const res = await window.digitalMe.actBehalfDecideResult({
     taskId: actBehalfState.taskId,
     resultId: result.resultId,
@@ -6114,7 +6250,7 @@ async function refreshActTaskList() {
         String(t.updatedAt || "").slice(0, 19).replace("T", " ")
       )}</span>` +
       `<span class="muted">${escapeHtml(t.requestPreview || "")}</span>`;
-    btn.addEventListener("click", () => openActBehalfTask(t.taskId));
+    btn.addEventListener("click", () => openDoScene("act_behalf", { taskId: t.taskId }));
     list.appendChild(btn);
   }
 }
@@ -6122,7 +6258,7 @@ async function refreshActTaskList() {
 async function loadActBehalfContext() {
   const goal = ($("act-request") && $("act-request").value.trim()) || "";
   if (!goal) {
-    setActProgress("请先填写研究与表达目标，再生成本人上下文候选。");
+    setActProgress("请先填写任务目标，再生成本人上下文候选。");
     return;
   }
   setActProgress("正在按目标装配本人信息候选…");
@@ -6162,6 +6298,474 @@ async function loadActBehalfContext() {
   );
 }
 
+/* ---------------- Email drafting UI (taskType = "email") ---------------- */
+
+function ensureActEmailPanel() {
+  let panel = $("act-email-panel");
+  if (panel) return panel;
+  const host = $("act-result-main");
+  if (!host) return null;
+  const actionsRow = host.querySelector(".builder-actions");
+  panel = document.createElement("div");
+  panel.id = "act-email-panel";
+  panel.className = "hidden";
+  panel.dataset.testid = "act-email-panel";
+  panel.innerHTML =
+    `<div class="ext-store-head"><span style="font-size:0.85rem; color:var(--muted-foreground)">邮件预览</span></div>` +
+    `<p id="act-email-confirm-notes" class="muted write-rail-hint" data-testid="act-email-confirm-notes"></p>` +
+    `<div id="act-email-edit-view">` +
+    `  <label class="library-title-label">收件人` +
+    `    <input id="act-email-to" type="text" placeholder="收件人地址（需你确认）" data-testid="act-email-to" />` +
+    `  </label>` +
+    `  <label class="library-title-label">主题` +
+    `    <input id="act-email-subject" type="text" data-testid="act-email-subject" />` +
+    `  </label>` +
+    `  <label class="library-title-label">正文` +
+    `    <textarea id="act-email-body" rows="10" data-testid="act-email-body"></textarea>` +
+    `  </label>` +
+    `  <label class="library-title-label">附件（可选，多个用逗号分隔）` +
+    `    <input id="act-email-attachments" type="text" data-testid="act-email-attachments" />` +
+    `  </label>` +
+    `  <div class="builder-actions">` +
+    `    <button id="btn-act-email-prepare" class="btn btn-primary" type="button" data-testid="btn-act-email-prepare">准备发送</button>` +
+    `  </div>` +
+    `</div>` +
+    `<div id="act-email-confirm-view" class="hidden">` +
+    `  <div class="output-card">` +
+    `    <span style="font-size:0.82rem; color:var(--muted-foreground); display:block; margin-bottom:0.3rem">请确认以下邮件内容（对外发送，R3 级确认）</span>` +
+    `    <div id="act-email-confirm-summary" class="act-result-body" data-testid="act-email-confirm-summary"></div>` +
+    `  </div>` +
+    `  <p class="muted write-rail-hint">确认后将调用发送接口。邮件一旦发送不可撤回，请核对收件人、主题与正文。</p>` +
+    `  <div class="builder-actions">` +
+    `    <button id="btn-act-email-confirm-send" class="btn btn-primary" type="button" data-testid="btn-act-email-confirm-send">确认发送</button>` +
+    `    <button id="btn-act-email-back-edit" class="btn-ghost" type="button" data-testid="btn-act-email-back-edit">返回修改</button>` +
+    `  </div>` +
+    `</div>` +
+    `<p id="act-email-status" class="muted write-rail-hint" data-testid="act-email-status"></p>`;
+  host.insertBefore(panel, actionsRow || null);
+
+  $("btn-act-email-prepare")?.addEventListener("click", () => showActEmailConfirmation());
+  $("btn-act-email-back-edit")?.addEventListener("click", () => showActEmailEditView());
+  $("btn-act-email-confirm-send")?.addEventListener("click", () => handleActEmailSend());
+  for (const id of ["act-email-to", "act-email-subject", "act-email-body", "act-email-attachments"]) {
+    $(id)?.addEventListener("input", () => syncActEmailDraftFromFields());
+  }
+  return panel;
+}
+
+function setActEmailStatus(text) {
+  const el = $("act-email-status");
+  if (el) el.textContent = text || "";
+}
+
+function hideActEmailUi() {
+  const panel = $("act-email-panel");
+  if (panel) panel.classList.add("hidden");
+  actBehalfState.emailDraft = null;
+}
+
+function syncActEmailDraftFromFields() {
+  if (!actBehalfState.emailDraft) return;
+  actBehalfState.emailDraft.to = ($("act-email-to") && $("act-email-to").value.trim()) || "";
+  actBehalfState.emailDraft.subject =
+    ($("act-email-subject") && $("act-email-subject").value.trim()) || "";
+  actBehalfState.emailDraft.body = ($("act-email-body") && $("act-email-body").value) || "";
+  actBehalfState.emailDraft.attachments = (($("act-email-attachments") && $("act-email-attachments").value) || "")
+    .split(/[,，;；]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function showActEmailEditView() {
+  const edit = $("act-email-edit-view");
+  const confirm = $("act-email-confirm-view");
+  if (edit) edit.classList.remove("hidden");
+  if (confirm) confirm.classList.add("hidden");
+  setActEmailStatus("");
+}
+
+function renderActEmailPreview(draft) {
+  const panel = ensureActEmailPanel();
+  if (!panel) return;
+  actBehalfState.emailDraft = {
+    to: String((draft && draft.to) || ""),
+    subject: String((draft && draft.subject) || ""),
+    body: String((draft && draft.body) || ""),
+    attachments: Array.isArray(draft && draft.attachments) ? draft.attachments.slice() : [],
+    needsConfirmation: Array.isArray(draft && draft.needsConfirmation)
+      ? draft.needsConfirmation.slice()
+      : [],
+  };
+  if ($("act-email-to")) $("act-email-to").value = actBehalfState.emailDraft.to;
+  if ($("act-email-subject")) $("act-email-subject").value = actBehalfState.emailDraft.subject;
+  if ($("act-email-body")) $("act-email-body").value = actBehalfState.emailDraft.body;
+  if ($("act-email-attachments"))
+    $("act-email-attachments").value = actBehalfState.emailDraft.attachments.join(", ");
+  const notes = $("act-email-confirm-notes");
+  if (notes) {
+    notes.textContent = actBehalfState.emailDraft.needsConfirmation.length
+      ? "需要你确认的部分：" + actBehalfState.emailDraft.needsConfirmation.join("；")
+      : "";
+  }
+  showActEmailEditView();
+  panel.classList.remove("hidden");
+}
+
+function showActEmailConfirmation() {
+  syncActEmailDraftFromFields();
+  const draft = actBehalfState.emailDraft;
+  if (!draft) return;
+  const missing = [];
+  if (!draft.to) missing.push("收件人");
+  if (!draft.subject) missing.push("主题");
+  if (!draft.body.trim()) missing.push("正文");
+  if (missing.length) {
+    setActEmailStatus("请先补全：" + missing.join("、") + "。");
+    return;
+  }
+  const summary = $("act-email-confirm-summary");
+  if (summary) {
+    summary.textContent =
+      "收件人：" + draft.to + "\n" +
+      "主题：" + draft.subject + "\n" +
+      (draft.attachments.length ? "附件：" + draft.attachments.join("、") + "\n" : "") +
+      "\n" + draft.body;
+  }
+  const edit = $("act-email-edit-view");
+  const confirm = $("act-email-confirm-view");
+  if (edit) edit.classList.add("hidden");
+  if (confirm) confirm.classList.remove("hidden");
+  setActEmailStatus("");
+}
+
+async function handleActEmailSend() {
+  syncActEmailDraftFromFields();
+  const draft = actBehalfState.emailDraft;
+  if (!draft) return;
+  if (!window.digitalMe.actBehalfSendEmail) {
+    setActEmailStatus("发送接口不可用。");
+    return;
+  }
+  setActEmailStatus("正在发送…");
+  try {
+    const res = await window.digitalMe.actBehalfSendEmail({
+      taskId: actBehalfState.taskId || undefined,
+      to: draft.to,
+      subject: draft.subject,
+      body: draft.body,
+      attachments: draft.attachments,
+      confirmed: true,
+    });
+    const msg = (res && res.message) || "发送功能需要邮件服务集成。";
+    setActEmailStatus(msg);
+    setActProgress(msg);
+  } catch (err) {
+    setActEmailStatus("发送失败：" + (err && err.message ? err.message : "未知错误"));
+  }
+}
+
+/* ---------------- Video/Audio scripting UI (taskType = "video_audio") ---------------- */
+
+function ensureActVideoAudioPanel() {
+  let panel = $("act-video-audio-panel");
+  if (panel) return panel;
+  const host = $("act-result-main");
+  if (!host) return null;
+  const actionsRow = host.querySelector(".builder-actions");
+  panel = document.createElement("div");
+  panel.id = "act-video-audio-panel";
+  panel.className = "hidden";
+  panel.dataset.testid = "act-video-audio-panel";
+  panel.innerHTML =
+    `<div class="ext-store-head"><span style="font-size:0.85rem; color:var(--muted-foreground)">视频/音频脚本预览</span></div>` +
+    `<p id="act-video-audio-notes" class="muted write-rail-hint" data-testid="act-video-audio-notes"></p>` +
+    `<div class="output-card">` +
+    `  <div id="act-video-audio-meta" class="act-result-body" data-testid="act-video-audio-meta"></div>` +
+    `</div>` +
+    `<div class="output-card">` +
+    `  <span style="font-size:0.82rem; color:var(--muted-foreground); display:block; margin-bottom:0.3rem">分镜脚本</span>` +
+    `  <div id="act-video-audio-scenes" class="act-result-body" data-testid="act-video-audio-scenes"></div>` +
+    `</div>` +
+    `<div class="output-card">` +
+    `  <span style="font-size:0.82rem; color:var(--muted-foreground); display:block; margin-bottom:0.3rem">创意方向</span>` +
+    `  <div id="act-video-audio-creative" class="act-result-body" data-testid="act-video-audio-creative"></div>` +
+    `</div>` +
+    `<div class="output-card">` +
+    `  <span style="font-size:0.82rem; color:var(--muted-foreground); display:block; margin-bottom:0.3rem">制作建议</span>` +
+    `  <div id="act-video-audio-tips" class="act-result-body" data-testid="act-video-audio-tips"></div>` +
+    `</div>` +
+    `<div class="builder-actions">` +
+    `  <button id="btn-act-video-audio-export-md" class="btn btn-primary" type="button" data-testid="btn-act-video-audio-export-md">导出 Markdown</button>` +
+    `  <button id="btn-act-video-audio-export-txt" class="btn-ghost" type="button" data-testid="btn-act-video-audio-export-txt">导出纯文本</button>` +
+    `  <button id="btn-act-video-audio-export-json" class="btn-ghost" type="button" data-testid="btn-act-video-audio-export-json">导出 JSON</button>` +
+    `</div>` +
+    `<p id="act-video-audio-status" class="muted write-rail-hint" data-testid="act-video-audio-status"></p>`;
+  host.insertBefore(panel, actionsRow || null);
+
+  $("btn-act-video-audio-export-md")?.addEventListener("click", () => handleActVideoAudioExport("markdown"));
+  $("btn-act-video-audio-export-txt")?.addEventListener("click", () => handleActVideoAudioExport("text"));
+  $("btn-act-video-audio-export-json")?.addEventListener("click", () => handleActVideoAudioExport("json"));
+  return panel;
+}
+
+function setActVideoAudioStatus(text) {
+  const el = $("act-video-audio-status");
+  if (el) el.textContent = text || "";
+}
+
+function hideActVideoAudioUi() {
+  const panel = $("act-video-audio-panel");
+  if (panel) panel.classList.add("hidden");
+  actBehalfState.videoAudioScript = null;
+}
+
+function renderActVideoAudioPreview(script) {
+  const panel = ensureActVideoAudioPanel();
+  if (!panel) return;
+  const s = script && typeof script === "object" ? script : {};
+  actBehalfState.videoAudioScript = {
+    title: String(s.title || ""),
+    duration: String(s.duration || ""),
+    scenes: Array.isArray(s.scenes) ? s.scenes.slice() : [],
+    creativeDirection: String(s.creativeDirection || ""),
+    productionTips: Array.isArray(s.productionTips) ? s.productionTips.slice() : [],
+    needsConfirmation: Array.isArray(s.needsConfirmation) ? s.needsConfirmation.slice() : [],
+  };
+
+  const meta = $("act-video-audio-meta");
+  if (meta) {
+    meta.textContent =
+      "标题：" + (actBehalfState.videoAudioScript.title || "（待填写）") +
+      "\n预估时长：" + (actBehalfState.videoAudioScript.duration || "（待确认）");
+  }
+
+  const scenesEl = $("act-video-audio-scenes");
+  if (scenesEl) {
+    scenesEl.innerHTML = "";
+    const scenes = actBehalfState.videoAudioScript.scenes;
+    if (!scenes.length) {
+      const empty = document.createElement("p");
+      empty.className = "muted";
+      empty.textContent = "（暂无分镜，需要补充。）";
+      scenesEl.appendChild(empty);
+    }
+    for (const sc of scenes) {
+      const block = document.createElement("div");
+      block.style.marginBottom = "0.5rem";
+      const head = document.createElement("div");
+      head.textContent = String(sc.scene || "场景") + (sc.duration ? "（时长：" + sc.duration + "）" : "");
+      block.appendChild(head);
+      if (sc.visuals) {
+        const v = document.createElement("div");
+        v.className = "muted";
+        v.textContent = "画面：" + sc.visuals;
+        block.appendChild(v);
+      }
+      if (sc.narration) {
+        const n = document.createElement("div");
+        n.className = "muted";
+        n.textContent = "旁白：" + sc.narration;
+        block.appendChild(n);
+      }
+      scenesEl.appendChild(block);
+    }
+  }
+
+  const creative = $("act-video-audio-creative");
+  if (creative) creative.textContent = actBehalfState.videoAudioScript.creativeDirection || "（无）";
+
+  const tips = $("act-video-audio-tips");
+  if (tips) {
+    const list = actBehalfState.videoAudioScript.productionTips;
+    tips.textContent = list.length ? list.map((t) => "- " + t).join("\n") : "（无）";
+  }
+
+  const notes = $("act-video-audio-notes");
+  if (notes) {
+    notes.textContent = actBehalfState.videoAudioScript.needsConfirmation.length
+      ? "需要你确认的部分：" + actBehalfState.videoAudioScript.needsConfirmation.join("；")
+      : "";
+  }
+  setActVideoAudioStatus("脚本与创意方向已生成；请在剪映/Descript 等外部工具中完成制作。");
+  panel.classList.remove("hidden");
+}
+
+async function handleActVideoAudioExport(format) {
+  if (!actBehalfState.videoAudioScript) return;
+  if (!window.digitalMe.actBehalfExportVideoAudioScript) {
+    setActVideoAudioStatus("导出接口不可用。");
+    return;
+  }
+  if (!actBehalfState.taskId) {
+    setActVideoAudioStatus("任务尚未保存，无法导出。");
+    return;
+  }
+  setActVideoAudioStatus("正在导出…");
+  try {
+    const res = await window.digitalMe.actBehalfExportVideoAudioScript({
+      taskId: actBehalfState.taskId,
+      format,
+    });
+    if (res && res.canceled) {
+      setActVideoAudioStatus("已取消导出。");
+      return;
+    }
+    if (!res || !res.ok) {
+      setActVideoAudioStatus((res && res.message) || "导出失败。");
+      return;
+    }
+    setActVideoAudioStatus("已导出：" + res.filePath);
+  } catch (err) {
+    setActVideoAudioStatus("导出失败：" + (err && err.message ? err.message : "未知错误"));
+  }
+}
+
+async function handleAutoGenerate() {
+  const goal = ($("act-request") && $("act-request").value.trim()) || "";
+  if (!goal) {
+    setActProgress("请先填写任务目标。");
+    return;
+  }
+  if (!window.digitalMe.actBehalfAutoGenerate) {
+    setActProgress("自动生成功能不可用。");
+    return;
+  }
+
+  // Build goal with attached files
+  const attachedText = buildAttachedFilesText();
+  const fullGoal = attachedText
+    ? goal + "\n\n---\n\n以下是本次任务的相关文件内容，请参考：\n\n" + attachedText
+    : goal;
+
+  setActProgress("正在自动理解你的目标并生成初稿…");
+  clearActResultPanel();
+  clearActResearchSources();
+  hideActEmailUi();
+  hideActVideoAudioUi();
+
+  try {
+    const res = await window.digitalMe.actBehalfAutoGenerate({
+      goal: fullGoal,
+      taskId: actBehalfState.taskId || undefined,
+      title: ($("act-title") && $("act-title").value.trim()) || undefined,
+      role: ($("act-role") && $("act-role").value.trim()) || undefined,
+      expectedOutcome: ($("act-expected") && $("act-expected").value.trim()) || undefined,
+    });
+
+    if (!res || !res.ok) {
+      setActProgress((res && res.message) || "自动生成失败，请稍后重试。");
+      return;
+    }
+
+    actBehalfState.taskId = res.taskId;
+    actBehalfState.confirmed = res.task && res.task.subjectContext;
+    // Auto tasks persist a plain result string; they must use the dedicated
+    // main-process save boundary rather than the legacy structured-result API.
+    actBehalfState.currentResult = null;
+
+    const result = res.task && res.task.result;
+    console.log("[autoGenerate] result type:", typeof result, "length:", typeof result === "string" ? result.length : "n/a");
+
+    // Show result panel (not research panel)
+    const resultPanel = $("act-result-gen-panel");
+    if (resultPanel) resultPanel.classList.remove("hidden");
+
+    const finalDraftEl = $("act-final-draft");
+    const resultText = typeof result === "string" ? result : (result && result.body) || "";
+    if (finalDraftEl && resultText.trim()) {
+      finalDraftEl.value = resultText.trim();
+      finalDraftEl.disabled = false;
+    } else {
+      setActProgress("已生成，但结果为空或格式异常。");
+      return;
+    }
+
+    // Email tasks: structured preview (to/subject/body) + prepare-send flow
+    if (res.taskType === "email" && res.emailDraft) {
+      renderActEmailPreview(res.emailDraft);
+    }
+
+    // Video/audio tasks: structured script preview (title/duration/scenes/creative direction) + export
+    if (res.taskType === "video_audio" && res.videoAudioScript) {
+      renderActVideoAudioPreview(res.videoAudioScript);
+    }
+
+    const metaEl = $("act-result-meta");
+    if (metaEl) {
+      const used = res.usedSelfInfo ? "已自动使用你的个人信息" : "";
+      metaEl.textContent = `初稿 · ${used} · ${res.autoSelectedCount || 0} 条上下文已后台自动选择`;
+    }
+
+    // Populate backstage view (hidden by default)
+    const subEl = $("act-col-subject");
+    if (subEl) {
+      const items = (res.task && res.task.existingUserPositions) || "";
+      subEl.textContent = items || "（无）";
+    }
+    const extEl = $("act-col-external");
+    if (extEl) {
+      extEl.textContent = "（自动模式下未启动外部调研）";
+    }
+    const infEl = $("act-col-inferences");
+    if (infEl) {
+      const items = (res.task && res.task.digitalMeInferences) || "";
+      infEl.textContent = items || "（无）";
+    }
+    const backstagePanel = $("act-backstage-panel");
+    if (backstagePanel) backstagePanel.classList.add("hidden");
+
+    // Show save/adopt buttons
+    const saveBtn = $("btn-act-save-result");
+    if (saveBtn) saveBtn.disabled = false;
+    const adoptBtn = $("btn-act-adopt-result");
+    if (adoptBtn) adoptBtn.disabled = false;
+    const rejectBtn = $("btn-act-reject-result");
+    if (rejectBtn) rejectBtn.disabled = false;
+
+    // Task-type-specific guidance and copy button
+    const goalText = (res.goal || "").toLowerCase();
+    const isCodeTask = /代码|编程|脚本|code|program|script|开发/.test(goalText);
+    const isEmailTask = res.taskType === "email";
+    const isVideoAudioTask = res.taskType === "video_audio";
+
+    // Show copy button for all tasks
+    const copyBtn = $("btn-act-copy-result");
+    if (copyBtn) {
+      copyBtn.classList.remove("hidden");
+      copyBtn.onclick = () => {
+        const text = $("act-final-draft") && $("act-final-draft").value;
+        if (text) {
+          navigator.clipboard.writeText(text).then(() => {
+            const orig = copyBtn.textContent;
+            copyBtn.textContent = "已复制";
+            setTimeout(() => { copyBtn.textContent = orig; }, 2000);
+          });
+        }
+      };
+    }
+
+    let guidance = "已生成。你可以继续编辑，或点击「采用」让 Digital Me 从中学习。";
+    if (isEmailTask) {
+      guidance += " 点击「准备发送」进入发送确认。";
+    } else if (isVideoAudioTask) {
+      guidance += " 点击「导出脚本」获取可在剪映/Descript 中使用的文件。";
+    } else if (isCodeTask) {
+      guidance += " 点击「复制代码」复制到剪贴板，或「查看依据」了解生成过程。";
+    } else {
+      guidance += " 支持导出、重新生成、查看依据等操作。";
+    }
+    setActResultGenStatus(guidance);
+    const usedOwnerInfo = Number(res.doingContext?.usedCount || 0);
+    setActProgress(usedOwnerInfo > 0
+      ? `完成：已使用 ${usedOwnerInfo} 条本人信息生成初稿。`
+      : "完成：本次未使用本人信息，仍可继续编辑初稿。"
+    );
+  } catch (err) {
+    console.error("[autoGenerate] error:", err);
+    setActProgress("自动生成出错：" + (err && err.message ? err.message : "未知错误"));
+  }
+}
+
 function resetActBehalfForm() {
   actBehalfState = {
     taskId: null,
@@ -6175,6 +6779,9 @@ function resetActBehalfForm() {
     currentResult: null,
     currentProposal: null,
     resultStale: false,
+    emailDraft: null,
+    videoAudioScript: null,
+    attachedFiles: [],
   };
   if ($("act-title")) $("act-title").value = "";
   if ($("act-request")) $("act-request").value = "";
@@ -6183,9 +6790,12 @@ function resetActBehalfForm() {
   if ($("act-supplement")) $("act-supplement").value = "";
   if ($("act-self-context")) $("act-self-context").value = "";
   if ($("act-final-draft")) $("act-final-draft").value = "";
+  renderActFileList();
   renderActClaimList();
   clearActResultPanel();
   clearActResearchSources();
+  hideActEmailUi();
+  hideActVideoAudioUi();
   const cols = $("act-four-columns");
   if (cols) cols.classList.add("hidden");
   setActContextStatus("");
@@ -6244,13 +6854,66 @@ async function openActBehalfTask(taskId) {
     );
     setActProgress("已打开草稿任务。");
   }
+
+  // Display result for autoGenerate tasks (task.result is a string)
+  if (typeof task.result === "string" && task.result.trim()) {
+    const resultPanel = $("act-result-gen-panel");
+    if (resultPanel) resultPanel.classList.remove("hidden");
+    const finalDraftEl = $("act-final-draft");
+    if (finalDraftEl) {
+      finalDraftEl.value = task.result.trim();
+      finalDraftEl.disabled = false;
+    }
+    const metaEl = $("act-result-meta");
+    if (metaEl) metaEl.textContent = "初稿 · 已自动使用你的个人信息";
+    const saveBtn = $("btn-act-save-result");
+    if (saveBtn) saveBtn.disabled = false;
+    const adoptBtn = $("btn-act-adopt-result");
+    if (adoptBtn) adoptBtn.disabled = false;
+    const rejectBtn = $("btn-act-reject-result");
+    if (rejectBtn) rejectBtn.disabled = false;
+
+    // Task-type-specific guidance
+    const taskType = task.taskIntent && task.taskIntent.taskType;
+    let guidance = "已生成。你可以继续编辑，或点击「采用」让 Digital Me 从中学习。";
+    if (taskType === "email") {
+      guidance += " 点击「准备发送」进入发送确认。";
+    } else if (taskType === "video_audio") {
+      guidance += " 点击「导出脚本」获取可在剪映/Descript 中使用的文件。";
+    } else if (taskType === "code" || (intent.goal && /代码|编程|脚本|code|program|script/i.test(intent.goal))) {
+      guidance += " 点击「复制代码」复制到剪贴板，或「查看依据」了解生成过程。";
+    } else {
+      guidance += " 支持导出、重新生成、查看依据等操作。";
+    }
+    setActResultGenStatus(guidance);
+  }
+
+  // Restore email draft if present
+  if (task.emailDraft && typeof task.emailDraft === "object") {
+    actBehalfState.emailDraft = task.emailDraft;
+    const emailPanel = $("act-email-panel");
+    if (emailPanel) {
+      emailPanel.classList.remove("hidden");
+      renderActEmailDraft(task.emailDraft);
+    }
+  }
+
+  // Restore video/audio script if present
+  if (task.videoAudioScript && typeof task.videoAudioScript === "object") {
+    actBehalfState.videoAudioScript = task.videoAudioScript;
+    const vaPanel = ensureActVideoAudioPanel();
+    if (vaPanel) {
+      renderActVideoAudioPreview();
+    }
+  }
+
   renderActResearchFromTask(task);
 }
 
 async function saveActBehalfDraft() {
   const goal = ($("act-request") && $("act-request").value.trim()) || "";
   if (!goal) {
-    setActProgress("请先填写研究与表达目标。");
+    setActProgress("请先填写任务目标。");
     return;
   }
   const title = ($("act-title") && $("act-title").value.trim()) || goal.slice(0, 40);
@@ -6288,7 +6951,7 @@ async function saveActBehalfDraft() {
 async function confirmActBehalfContext() {
   const goal = ($("act-request") && $("act-request").value.trim()) || "";
   if (!goal) {
-    setActProgress("请先填写研究与表达目标。");
+    setActProgress("请先填写任务目标。");
     return;
   }
   const supplement = ($("act-supplement") && $("act-supplement").value.trim()) || "";
@@ -6342,6 +7005,9 @@ function wireActBehalfUi() {
     setActProgress("已新建任务表单。");
   });
   $("btn-act-reload-context")?.addEventListener("click", () => loadActBehalfContext());
+  $("btn-act-auto-generate")?.addEventListener("click", handleAutoGenerate);
+  $("btn-act-add-file")?.addEventListener("click", () => handleActSelectFiles("files"));
+  $("btn-act-add-folder")?.addEventListener("click", () => handleActSelectFiles("folder"));
   $("btn-act-save")?.addEventListener("click", () => saveActBehalfDraft());
   $("btn-act-confirm-context")?.addEventListener("click", () => confirmActBehalfContext());
   $("btn-act-run")?.addEventListener("click", () => startActBehalfResearch());
@@ -6352,11 +7018,29 @@ function wireActBehalfUi() {
   $("btn-act-save-result")?.addEventListener("click", () => saveActBehalfResultDraft());
   $("btn-act-adopt-result")?.addEventListener("click", () => decideActBehalfResult("adopted"));
   $("btn-act-reject-result")?.addEventListener("click", () => decideActBehalfResult("rejected"));
+  $("btn-act-save-result")?.addEventListener("click", () => {
+    const btn = $("btn-act-save-result");
+    if (btn) { const orig = btn.textContent; btn.textContent = "已保存"; setTimeout(() => { btn.textContent = orig; }, 2000); }
+  });
+  $("btn-act-adopt-result")?.addEventListener("click", () => {
+    const btn = $("btn-act-adopt-result");
+    if (btn) { const orig = btn.textContent; btn.textContent = "已采用"; setTimeout(() => { btn.textContent = orig; }, 2000); }
+  });
+  $("btn-act-reject-result")?.addEventListener("click", () => {
+    const btn = $("btn-act-reject-result");
+    if (btn) { const orig = btn.textContent; btn.textContent = "已否定"; setTimeout(() => { btn.textContent = orig; }, 2000); }
+  });
   $("btn-act-create-proposal")?.addEventListener("click", () => createActExperienceProposal());
   $("btn-act-save-proposal-review")?.addEventListener("click", () => saveActProposalReview());
   $("btn-act-preview-proposal")?.addEventListener("click", () => previewActProposal());
   $("btn-act-apply-proposal")?.addEventListener("click", () => applyActProposal());
   $("btn-act-reject-proposal")?.addEventListener("click", () => rejectActProposal());
+  $("btn-act-toggle-backstage")?.addEventListener("click", () => {
+    const panel = $("act-backstage-panel");
+    const btn = $("btn-act-toggle-backstage");
+    if (panel) panel.classList.toggle("hidden");
+    if (btn) btn.textContent = panel && panel.classList.contains("hidden") ? "查看依据" : "收起依据";
+  });
 }
 
 
@@ -6779,6 +7463,7 @@ async function saveCurrentAsSkill(scene) {
     }
     const sk = await window.digitalMe.saveSkillFromContext(payload);
     await refreshSkillZone();
+    await renderCapabilityNormalSurface();
     await refreshSkillBar(scene);
     const prog = $("skill-zone-progress");
     if (prog) {
@@ -8858,13 +9543,15 @@ function bindResearch() {
 }
 
 function bindDo() {
-  renderDoSceneGrid();
+  renderDoTaskList().catch((err) => console.error("[bindDo] renderDoTaskList error:", err));
   const back = $("btn-do-back");
   if (back) back.addEventListener("click", showDoHub);
   const backPh = $("btn-do-back-ph");
   if (backPh) backPh.addEventListener("click", showDoHub);
   const backCode = $("btn-do-back-code");
   if (backCode) backCode.addEventListener("click", showDoHub);
+  const newTaskBtn = $("btn-do-new-task");
+  if (newTaskBtn) newTaskBtn.addEventListener("click", () => openDoScene("act_behalf"));
   wireActBehalfUi();
 }
 
@@ -9195,6 +9882,11 @@ let pendingEnableItem = null;
 
 function bindExtensions() {
   $("btn-ext-refresh").addEventListener("click", refreshExtensionsView);
+  $("btn-capability-go-do").addEventListener("click", () => openDoScene("act_behalf"));
+  $("btn-capability-new-task").addEventListener("click", () => openDoScene("act_behalf"));
+  $("btn-capability-show-public").addEventListener("click", () => {
+    $("capability-store-title")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
   $("btn-ext-save").addEventListener("click", saveExtensionsConfig);
   $("btn-ext-add").addEventListener("click", addExtensionFromForm);
   $("btn-ext-call").addEventListener("click", tryCallExtensionTool);
@@ -9213,6 +9905,7 @@ async function refreshExtensionsView() {
     renderAdvancedStore();
     renderExtensionsList();
     await refreshSkillZone();
+    await renderCapabilityNormalSurface();
   } catch (e) {
     $("ext-progress").textContent = "加载失败：" + e.message;
   }
@@ -9319,6 +10012,96 @@ async function refreshSkillZone() {
   if (prog && !(prog.textContent || "").includes("启用") && !(prog.textContent || "").includes("引入")) {
     prog.textContent = `共 ${all.length} 个 Skill（按场景分类显示）。`;
   }
+}
+
+async function renderCapabilityNormalSurface() {
+  const now = $("capability-now-list");
+  const artifacts = $("capability-artifacts-list");
+  const emptyActions = $("capability-empty-actions");
+  if (!now || !artifacts) return;
+
+  let skills = [];
+  let tasks = [];
+  try { skills = await window.digitalMe.listSkills(); } catch (e) { skills = []; }
+  try {
+    const result = await window.digitalMe.actBehalfList?.();
+    tasks = result?.tasks || [];
+  } catch (e) { tasks = []; }
+
+  const enabled = extensionsConfig || [];
+  const lines = [];
+  if (enabled.length) {
+    lines.push(`<div class="capability-summary-line">已启用 ${enabled.length} 项能力，可在对话和任务中按需要使用。</div>`);
+    lines.push(`<div class="capability-enabled-list">${enabled.map((ext) => {
+      const status = statusForId(ext.id).status;
+      const label = status === "connected" ? "可用" : status === "error" ? "暂时不可用" : "已启用，等待连接";
+      const item = findCatalogItem(ext.catalogId || ext.id);
+      const description = item?.tagline || ext.note || "已添加到你的可用能力中。";
+      return `<div class="capability-enabled-item"><div><strong>${escHtml(ext.name || ext.id)}</strong><span class="capability-status ${status === "error" ? "is-error" : ""}">${label}</span></div><div class="muted">${escHtml(description)}</div><div class="builder-actions"><button type="button" class="btn-capability-disable btn-ghost" data-id="${escHtml(ext.id)}">停用</button></div></div>`;
+    }).join("")}</div>`);
+  }
+  if (skills.length) lines.push(`<div class="capability-summary-line">已有 ${skills.length} 个技能方法，可引入研究、写作或编程场景。</div>`);
+  if (tasks.length) lines.push(`<div class="capability-summary-line">有 ${tasks.length} 个任务或成果可继续处理。</div>`);
+  if (!lines.length) lines.push(`<div class="capability-empty-copy">还没有添加能力、技能或任务。先开始一个任务，或从下方选择一项公共能力。</div>`);
+  now.innerHTML = lines.join("");
+  emptyActions?.classList.toggle("hidden", Boolean(enabled.length || skills.length || tasks.length));
+  now.querySelectorAll(".btn-capability-disable").forEach((btn) => btn.addEventListener("click", () => disableExtension(btn.dataset.id)));
+
+  if (!tasks.length) {
+    artifacts.innerHTML = `<div class="capability-empty-copy">还没有成果。选择“开始任务”后，完成的内容会保存在这里，随时可以重新打开继续修改。</div>`;
+    return;
+  }
+  artifacts.innerHTML = tasks.map((task) => {
+    const status = task.contextConfirmed ? "可以继续" : task.status || "待继续";
+    return `<button type="button" class="capability-artifact-item" data-task-id="${escHtml(task.taskId)}"><strong>${escHtml(task.title || "未命名任务")}</strong><span class="muted">${escHtml(status)} · ${escHtml(String(task.updatedAt || "").slice(0, 19).replace("T", " "))}</span><span class="muted">${escHtml(task.requestPreview || "打开后可继续生成或修改成果。")}</span></button>`;
+  }).join("");
+  artifacts.querySelectorAll(".capability-artifact-item").forEach((btn) => btn.addEventListener("click", () => openDoScene("act_behalf", { taskId: btn.dataset.taskId })));
+}
+
+function modelRouteLabel(routing, taskType) {
+  const route = routing?.routes?.[taskType] || {};
+  const model = (routing?.providers || []).flatMap((provider) => provider.models.map((item) => ({ provider, item }))).find((entry) => entry.item.id === route.primary);
+  if (!model) return "未配置";
+  const fallbackCount = Array.isArray(route.fallbacks) ? route.fallbacks.length : 0;
+  return `${model.provider.name} / ${model.item.displayName}${fallbackCount ? ` · ${fallbackCount} 个备用模型` : " · 未配置备用模型"}`;
+}
+
+async function refreshModelRoutingSettings() {
+  if (!window.digitalMe.getModelRouting) return;
+  const routing = await window.digitalMe.getModelRouting();
+  const summary = $("model-routing-summary");
+  if (summary) {
+    summary.innerHTML = [
+      ["当前对话模型", "chat"], ["成果生成模型", "artifact"], ["质检模型", "review"],
+    ].map(([label, taskType]) => `<div><strong>${label}</strong><span>${escapeHtml(modelRouteLabel(routing, taskType))}</span></div>`).join("");
+  }
+  const editor = $("cfg-model-routing-json");
+  if (editor) editor.value = JSON.stringify({ providers: routing.providers.map((provider) => ({ id: provider.id, name: provider.name, type: provider.type, baseUrl: provider.baseUrl, enabled: provider.enabled, models: provider.models })), routes: routing.routes }, null, 2);
+  const audit = $("model-routing-audit");
+  if (audit && window.digitalMe.getRecentModelRouting) audit.textContent = JSON.stringify(await window.digitalMe.getRecentModelRouting(), null, 2);
+}
+
+async function testModelRoutingConnection() {
+  const feedback = $("model-routing-feedback");
+  if (feedback) feedback.textContent = "正在测试当前对话模型…";
+  const result = await window.digitalMe.testModelRouting({ taskType: "chat" });
+  if (feedback) feedback.textContent = result.ok ? `当前使用的模型：${result.provider} / ${result.model}${result.fallbackUsed ? "（备用模型）" : ""}` : "当前模型不可用。可以检查模型设置，或切换到备用模型。";
+  await refreshModelRoutingSettings();
+}
+
+async function saveModelRoutingSettings() {
+  const feedback = $("model-routing-feedback");
+  let routing;
+  try { routing = JSON.parse($("cfg-model-routing-json").value); } catch (e) { if (feedback) feedback.textContent = "模型配置格式有误，请检查后重试。"; return; }
+  const providerId = $("cfg-routing-provider-id").value.trim();
+  const apiKey = $("cfg-routing-provider-key").value.trim();
+  try {
+    await window.digitalMe.saveModelRouting({ routing, providerKeys: providerId && apiKey ? [{ providerId, apiKey }] : [] });
+    $("cfg-routing-provider-key").value = "";
+    if (feedback) feedback.textContent = "模型配置已保存。密钥不会显示或保存到页面。";
+    await refreshModelRoutingSettings();
+    await renderModelStatus();
+  } catch (e) { if (feedback) feedback.textContent = "保存失败：" + (e.message || String(e)); }
 }
 
 function renderGuide() {
@@ -9582,7 +10365,7 @@ async function confirmEnableExtension() {
     await refreshExtensionsView();
     try {
       const r = await window.digitalMe.connectExtension(item.id);
-      $("ext-progress").textContent = `「${item.name}」已就绪，共 ${(r.tools || []).length} 个工具。可点「查看工具」试用。`;
+      $("ext-progress").textContent = `「${item.name}」已启用并可使用。现在可在对话或任务中使用它。`;
       await refreshExtensionsView();
       await renderCapabilitiesStatus();
     } catch (ce) {
@@ -9599,16 +10382,18 @@ async function confirmEnableExtension() {
 }
 
 async function disableExtension(id) {
+  const item = findCatalogItem(id);
+  const name = item?.name || extensionsConfig.find((ext) => ext.id === id)?.name || id;
   try {
     await window.digitalMe.disableExtension(id);
     if (activeExtensionId === id) {
       activeExtensionId = null;
       $("ext-tools-panel").classList.add("hidden");
     }
-    $("ext-progress").textContent = `已停用「${id}」。`;
+    $("ext-progress").textContent = `已停用「${name}」。之后可随时从“可添加的公共能力”重新启用。`;
     await refreshExtensionsView();
   } catch (e) {
-    $("ext-progress").textContent = "停用失败：" + e.message;
+    $("ext-progress").textContent = `停用「${name}」失败：${e.message}。请重试，或在“高级 / 开发者”查看连接状态。`;
   }
 }
 
@@ -9737,6 +10522,10 @@ async function tryCallExtensionTool() {
 let lifeGraphCache = null;
 let meActiveTab = "overview";
 let boundariesCache = null;
+// Multiple navigation paths can request the same snapshot. Only the latest
+// response may update the distill cards; otherwise an earlier empty snapshot
+// can overwrite the cards rendered after a successful generation.
+let distillMeRefreshGeneration = 0;
 
 const BOUNDARY_SCOPE_LABELS = {
   never_speak_for_me: "不代你表态",
@@ -9750,12 +10539,56 @@ function switchMeTab(tab) {
   document.querySelectorAll("#me-tabs .mode-tab").forEach((b) => {
     b.classList.toggle("active", b.dataset.meTab === tab);
   });
-  ["overview", "cognition", "timeline", "roles", "mind", "boundaries"].forEach((name) => {
+  ["overview", "distill", "cognition", "collaboration", "timeline", "roles", "mind", "boundaries"].forEach((name) => {
     const el = $("me-panel-" + name);
     if (el) el.classList.toggle("hidden", name !== tab);
   });
   if (tab === "cognition") refreshCognitionPanel();
+  if (tab === "collaboration") {
+    Promise.all([loadIdentityDisplay(), loadRoleSelector(), loadCredentialManager(), loadCollaborationManager()]).catch((err) => {
+      console.error("[Digital Me] 加载身份与协作失败", err);
+    });
+  }
   if (tab === "mind") renderMindPersonaPreview();
+  if (tab === "distill") refreshDistillMe();
+}
+
+async function refreshDistillMe() {
+  const summary = $("distill-me-summary"), result = $("distill-me-result"), message = $("distill-me-msg");
+  if (!summary || !result || !window.digitalMe.getDistillMeSnapshot) return;
+  const refreshGeneration = ++distillMeRefreshGeneration;
+  try {
+    const snap=await window.digitalMe.getDistillMeSnapshot();
+    if (refreshGeneration !== distillMeRefreshGeneration) return;
+    const confirmed = Number(snap?.counts?.identity || 0) + Number(snap?.counts?.experience || 0) + Number(snap?.counts?.fact || 0);
+    summary.textContent = confirmed
+      ? `已确认：我是谁 ${snap.counts.identity} 条 · 经历 ${snap.counts.experience} 条 · 事实 ${snap.counts.fact} 条；待确认 ${snap.counts.pending} 条。`
+      : "还没有形成你的主体档案。开始了解我，或补充我的信息。";
+    const rows=[...(Array.isArray(snap?.identity)?snap.identity:[]),...(Array.isArray(snap?.experiences)?snap.experiences:[]),...(Array.isArray(snap?.facts)?snap.facts:[]),...(Array.isArray(snap?.pending)?snap.pending:[])]
+      .filter((item)=>item&&typeof item==="object"&&typeof item.statement==="string"&&item.statement.trim());
+    const cards = rows.map((item) => {
+      const card = document.createElement("div"); card.className = "research-mat-row";
+      const category = item.category === "identity" ? "我是谁" : item.category === "experience" ? "经历" : "事实";
+      const heading = document.createElement("strong"); heading.textContent = category;
+      const statement = document.createElement("div"); statement.textContent = item.statement.trim();
+      const status = document.createElement("div"); status.className = "muted"; status.textContent = String(item.status || "");
+      const actions = document.createElement("div"); actions.className = "builder-actions";
+      [["confirm", "确认"], ["reject", "拒绝"], ["revoke", "撤销"], ["delete", "删除"]].forEach(([action, label]) => {
+        const button = document.createElement("button"); button.type = "button"; button.className = `btn-distill-${action} btn-ghost`; button.textContent = label;
+        button.addEventListener("click", async () => { await window.digitalMe.transitionDistillItem({itemId:item.id,action}); await refreshDistillMe(); });
+        actions.appendChild(button);
+      });
+      const details = document.createElement("details"), detailsSummary = document.createElement("summary"), evidence = document.createElement("span");
+      detailsSummary.textContent = "查看依据"; evidence.className = "muted"; evidence.textContent = String(item.evidenceRefs?.[0]?.excerpt || "").slice(0, 240);
+      details.append(detailsSummary, evidence); actions.appendChild(details); card.append(heading, statement, status, actions);
+      return card;
+    });
+    if (refreshGeneration !== distillMeRefreshGeneration) return;
+    result.replaceChildren(...cards);
+  } catch (error) {
+    console.error("[Digital Me] 蒸馏结果渲染失败", error);
+    if (message) message.textContent = `无法显示蒸馏结果：${error?.message || String(error)}`;
+  }
 }
 
 function renderMindPersonaPreview() {
@@ -9897,6 +10730,344 @@ function appendMetaRow(container, label, value) {
   container.appendChild(row);
 }
 
+async function loadIdentityDisplay() {
+  const identityEl = $("me-identity-display");
+  if (!identityEl) return;
+  if (!window.digitalMe.subjectGetIdentity) {
+    identityEl.textContent = "身份标识不可用";
+    return;
+  }
+  const res = await window.digitalMe.subjectGetIdentity();
+  if (res && res.ok && res.identity) {
+    identityEl.innerHTML = `
+      <div class="me-identity-item">
+        <span class="muted">唯一数字身份：</span>
+        <code class="me-identity-did">${escapeHtml(res.identity.did)}</code>
+        <button type="button" class="btn-ghost" id="btn-copy-identity">复制</button>
+      </div>
+      <div class="me-identity-item muted" style="font-size:0.85rem">
+        创建于 ${new Date(res.identity.createdAt).toLocaleDateString()}
+      </div>
+    `;
+    const copyBtn = $("btn-copy-identity");
+    if (copyBtn) {
+      copyBtn.addEventListener("click", () => {
+        navigator.clipboard.writeText(res.identity.did).then(() => {
+          copyBtn.textContent = "已复制";
+          setTimeout(() => { copyBtn.textContent = "复制"; }, 2000);
+        });
+      });
+    }
+  } else {
+    identityEl.textContent = "身份标识加载失败";
+  }
+}
+
+async function loadRoleSelector() {
+  const roleEl = $("me-role-selector");
+  if (!roleEl) return;
+  if (!window.digitalMe.subjectGetRoleView) {
+    roleEl.textContent = "角色选择不可用";
+    return;
+  }
+  const res = await window.digitalMe.subjectGetRoleView();
+  if (res && res.ok && res.roleView) {
+    const roles = res.roleView.roles || [];
+    const currentRole = res.roleView.currentRole;
+    roleEl.innerHTML = `
+      <div class="me-role-label">当前角色：</div>
+      <div class="me-role-options">
+        ${roles.map((r) => `
+          <button type="button" class="me-role-option ${r.id === currentRole ? "active" : ""}" data-role-id="${r.id}">
+            ${escapeHtml(r.label)}
+          </button>
+        `).join("")}
+      </div>
+      <div class="me-role-description muted">
+        ${escapeHtml((roles.find((r) => r.id === currentRole) || {}).description || "")}
+      </div>
+    `;
+    roleEl.querySelectorAll(".me-role-option").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const roleId = btn.dataset.roleId;
+        const setRes = await window.digitalMe.subjectSetRole({ roleId });
+        if (setRes && setRes.ok) {
+          loadRoleSelector(); // Refresh
+        }
+      });
+    });
+  }
+}
+
+async function loadCredentialManager() {
+  const credEl = $("me-credential-manager");
+  if (!credEl) return;
+  if (!window.digitalMe.subjectListCredentials) {
+    credEl.textContent = "凭据管理不可用";
+    return;
+  }
+
+  // Load credentials list
+  const res = await window.digitalMe.subjectListCredentials();
+  const credentials = (res && res.ok && res.credentials) || [];
+
+  credEl.innerHTML = `
+    <div class="me-cred-header">
+      <h4>对外凭据</h4>
+      <button type="button" class="btn btn-primary" id="btn-generate-credential">生成凭据</button>
+    </div>
+    <div id="me-cred-list" class="me-cred-list">
+      ${credentials.length === 0 ? '<p class="muted">还没有凭据。点击"生成凭据"创建。</p>' : ""}
+      ${credentials.map((c) => `
+        <div class="me-cred-item ${c.revoked ? "revoked" : ""}">
+          <div class="me-cred-info">
+            <div class="me-cred-audience">出示给：${escapeHtml(c.audience)}</div>
+            <div class="me-cred-meta muted">
+              范围：${escapeHtml(c.scope)} · 出示于 ${new Date(c.presentedAt).toLocaleDateString()} · 
+              ${c.revoked ? "已撤销" : "有效至 " + new Date(c.validUntil).toLocaleDateString()}
+            </div>
+          </div>
+          <div class="me-cred-actions">
+            ${!c.revoked ? `<button type="button" class="btn-ghost" data-cred-id="${c.id}" data-action="revoke">撤销</button>` : ""}
+            <button type="button" class="btn-ghost" data-cred-id="${c.id}" data-action="view">查看</button>
+          </div>
+        </div>
+      `).join("")}
+    </div>
+    <div id="me-cred-audit" class="me-cred-audit hidden">
+      <h4>审计日志</h4>
+      <div id="me-audit-list"></div>
+    </div>
+  `;
+
+  // Bind generate button
+  const genBtn = $("btn-generate-credential");
+  if (genBtn) {
+    genBtn.addEventListener("click", async () => {
+      // Show inline form instead of prompt()
+      const formHtml = `
+        <div class="me-cred-form" id="me-cred-form">
+          <div class="me-cred-form-row">
+            <label>出示对象：</label>
+            <input type="text" id="cred-audience" placeholder="如：拟合作的技术团队" />
+          </div>
+          <div class="me-cred-form-row">
+            <label>出示范围：</label>
+            <select id="cred-scope">
+              <option value="full">完整（full）</option>
+              <option value="identity">身份（identity）</option>
+              <option value="experience">经历（experience）</option>
+              <option value="framework">框架（framework）</option>
+              <option value="style">风格（style）</option>
+            </select>
+          </div>
+          <div class="me-cred-form-row">
+            <label>有效期（天）：</label>
+            <input type="number" id="cred-valid-days" value="30" min="1" max="365" />
+          </div>
+          <div class="me-cred-form-actions">
+            <button type="button" class="btn btn-primary" id="btn-cred-confirm">确认生成</button>
+            <button type="button" class="btn-ghost" id="btn-cred-cancel">取消</button>
+          </div>
+        </div>
+      `;
+      
+      // Insert form after the button
+      const formContainer = document.createElement("div");
+      formContainer.innerHTML = formHtml;
+      genBtn.parentNode.insertBefore(formContainer, genBtn.nextSibling);
+      genBtn.classList.add("hidden");
+
+      // Bind confirm button
+      $("btn-cred-confirm").addEventListener("click", async () => {
+        const audience = $("cred-audience").value.trim();
+        const scope = $("cred-scope").value;
+        const validDays = parseInt($("cred-valid-days").value, 10) || 30;
+        
+        if (!audience) {
+          alert("请输入出示对象。");
+          return;
+        }
+        
+        const genRes = await window.digitalMe.subjectPresentCredential({ audience, scope, validDays });
+        if (genRes && genRes.ok) {
+          formContainer.remove();
+          genBtn.classList.remove("hidden");
+          loadCredentialManager(); // Refresh
+        } else {
+          alert("生成失败：" + ((genRes && genRes.message) || "未知错误"));
+        }
+      });
+
+      // Bind cancel button
+      $("btn-cred-cancel").addEventListener("click", () => {
+        formContainer.remove();
+        genBtn.classList.remove("hidden");
+      });
+    });
+  }
+
+  // Bind action buttons
+  credEl.querySelectorAll("[data-action]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const credId = btn.dataset.credId;
+      const action = btn.dataset.action;
+      if (action === "revoke") {
+        if (!confirm("确定要撤销此凭据吗？撤销后对方将无法再验证。")) return;
+        const revRes = await window.digitalMe.subjectRevokeCredential({ credentialId: credId });
+        if (revRes && revRes.ok) {
+          alert("凭据已撤销。");
+          loadCredentialManager(); // Refresh
+        } else {
+          alert("撤销失败：" + ((revRes && revRes.message) || "未知错误"));
+        }
+      } else if (action === "view") {
+        const verifyRes = await window.digitalMe.subjectVerifyCredentialStatus({ credentialId: credId });
+        if (verifyRes && verifyRes.ok) {
+          const status = verifyRes.valid ? "有效" : "无效（" + verifyRes.reason + "）";
+          alert("凭据状态：" + status);
+        }
+      }
+    });
+  });
+}
+
+async function loadCollaborationManager() {
+  const collabEl = $("me-collaboration-manager");
+  if (!collabEl) return;
+  if (!window.digitalMe.collaborationList) {
+    collabEl.textContent = "协作管理不可用";
+    return;
+  }
+
+  const res = await window.digitalMe.collaborationList();
+  const collaborations = (res && res.ok && res.collaborations) || [];
+
+  collabEl.innerHTML = `
+    <div class="me-collab-header">
+      <h4>主体协作</h4>
+      <button type="button" class="btn btn-primary" id="btn-create-collab">发起协作</button>
+    </div>
+    <div id="me-collab-list" class="me-collab-list">
+      ${collaborations.length === 0 ? '<p class="muted">还没有协作。点击"发起协作"开始。</p>' : ""}
+      ${collaborations.map((c) => `
+        <div class="me-collab-item ${c.status}">
+          <div class="me-collab-info">
+            <div class="me-collab-title">${escapeHtml(c.title)}</div>
+            <div class="me-collab-meta muted">
+              ${escapeHtml(c.collaborator.name)} · ${escapeHtml(c.status)} · ${new Date(c.createdAt).toLocaleDateString()}
+            </div>
+          </div>
+          <div class="me-collab-actions">
+            <button type="button" class="btn-ghost" data-collab-id="${c.id}" data-action="view">查看</button>
+            ${c.status !== "revoked" && c.status !== "completed" ? `<button type="button" class="btn-ghost" data-collab-id="${c.id}" data-action="revoke">撤销</button>` : ""}
+          </div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+
+  // Bind create button
+  const createBtn = $("btn-create-collab");
+  if (createBtn) {
+    createBtn.addEventListener("click", async () => {
+      // Show inline form instead of prompt()
+      const formHtml = `
+        <div class="me-collab-form" id="me-collab-form">
+          <div class="me-collab-form-row">
+            <label>协作标题：</label>
+            <input type="text" id="collab-title" placeholder="如：寻找技术合作伙伴" />
+          </div>
+          <div class="me-collab-form-row">
+            <label>协作目标：</label>
+            <textarea id="collab-goal" rows="3" placeholder="如：共同开发一个 AI 产品"></textarea>
+          </div>
+          <div class="me-collab-form-row">
+            <label>你的角色：</label>
+            <select id="collab-role">
+              <option value="founder">创始人</option>
+              <option value="investor">投资人</option>
+              <option value="writer">写作者</option>
+              <option value="researcher">研究者</option>
+            </select>
+          </div>
+          <div class="me-collab-form-row">
+            <label>协作方名称：</label>
+            <input type="text" id="collab-name" placeholder="如：外部 AI 助手" value="外部协作方" />
+          </div>
+          <div class="me-collab-form-actions">
+            <button type="button" class="btn btn-primary" id="btn-collab-confirm">确认发起</button>
+            <button type="button" class="btn-ghost" id="btn-collab-cancel">取消</button>
+          </div>
+        </div>
+      `;
+      
+      // Insert form after the button
+      const formContainer = document.createElement("div");
+      formContainer.innerHTML = formHtml;
+      createBtn.parentNode.insertBefore(formContainer, createBtn.nextSibling);
+      createBtn.classList.add("hidden");
+
+      // Bind confirm button
+      $("btn-collab-confirm").addEventListener("click", async () => {
+        const title = $("collab-title").value.trim();
+        const goal = $("collab-goal").value.trim();
+        const role = $("collab-role").value;
+        const collaboratorName = $("collab-name").value.trim() || "外部协作方";
+        
+        if (!title || !goal) {
+          alert("请填写协作标题和目标。");
+          return;
+        }
+        
+        const createRes = await window.digitalMe.collaborationCreate({
+          title,
+          goal,
+          role,
+          collaboratorName,
+          collaboratorType: "agent",
+          scope: "full",
+          validDays: 30,
+        });
+        if (createRes && createRes.ok) {
+          formContainer.remove();
+          createBtn.classList.remove("hidden");
+          loadCollaborationManager(); // Refresh
+        } else {
+          alert("创建失败：" + ((createRes && createRes.message) || "未知错误"));
+        }
+      });
+
+      // Bind cancel button
+      $("btn-collab-cancel").addEventListener("click", () => {
+        formContainer.remove();
+        createBtn.classList.remove("hidden");
+      });
+    });
+  }
+
+  // Bind action buttons
+  collabEl.querySelectorAll("[data-action]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const collabId = btn.dataset.collabId;
+      const action = btn.dataset.action;
+      if (action === "revoke") {
+        if (!confirm("确定要撤销此协作吗？撤销后授权失效。")) return;
+        const revRes = await window.digitalMe.collaborationRevoke({ collaborationId: collabId });
+        if (revRes && revRes.ok) {
+          alert("协作已撤销。");
+          loadCollaborationManager(); // Refresh
+        } else {
+          alert("撤销失败：" + ((revRes && revRes.message) || "未知错误"));
+        }
+      } else if (action === "view") {
+        // TODO: Show collaboration detail view
+        alert("协作详情查看功能待实现。");
+      }
+    });
+  });
+}
+
 async function refreshSubjectHome() {
   const titleEl = $("subject-home-title");
   if (!titleEl || !window.digitalMe.getSubjectOverview) return;
@@ -9935,6 +11106,26 @@ async function refreshSubjectHome() {
       priority: null,
       failClosed: true,
     });
+  }
+  try {
+    await loadIdentityDisplay();
+  } catch (e) {
+    console.warn("[me] identity display failed:", e && e.message);
+  }
+  try {
+    await loadRoleSelector();
+  } catch (e) {
+    console.warn("[me] role selector failed:", e && e.message);
+  }
+  try {
+    await loadCredentialManager();
+  } catch (e) {
+    console.warn("[me] credential manager failed:", e && e.message);
+  }
+  try {
+    await loadCollaborationManager();
+  } catch (e) {
+    console.warn("[me] collaboration manager failed:", e && e.message);
   }
 }
 
@@ -11231,6 +12422,9 @@ function bindBootstrapFileActions() {
 }
 
 function bindMe() {
+  $("btn-distill-me-start")?.addEventListener("click", async () => { const msg=$("distill-me-msg"), text=$("distill-me-text").value.trim(); if(!text){msg.textContent="请先补充一段关于你的信息。";return;} try { msg.textContent="正在生成主体档案草稿…"; const draft=await window.digitalMe.createDistillInput({text,sourceName:"用户直接输入",sourceKind:"direct"}); await window.digitalMe.generateIdentityExperienceFacts(draft.id); $("distill-me-text").value=""; msg.textContent="草稿已生成。请确认你愿意纳入主体档案的内容。"; await refreshDistillMe(); } catch(e){msg.textContent="当前模型不可用。可以检查模型设置，或切换到备用模型。"; const open=document.createElement("button");open.type="button";open.className="btn-ghost";open.textContent="打开模型设置";open.onclick=()=>openSettings();msg.appendChild(open);} });
+  $("btn-distill-me-cancel")?.addEventListener("click",()=>switchMeTab("overview"));
+  $("btn-distill-export")?.addEventListener("click",async()=>{const r=await window.digitalMe.exportDistillSnapshot(); $("distill-me-msg").textContent="已导出主体档案："+r.path;});
   document.querySelectorAll("#me-lane-tabs .mode-tab").forEach((btn) => {
     btn.addEventListener("click", () => switchMeLane(btn.dataset.meLane));
   });

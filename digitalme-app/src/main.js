@@ -17,7 +17,7 @@ const feedback = require("./feedback");
 const { PackageStore, buildVersionPanelInfo } = require("./package-store");
 const { buildSubjectOverviewV1 } = require("./subject-overview");
 const { summarizeInboxForOverview } = require("./subject-overview/panorama");
-const { createPanoramaExperience } = require("./panorama-experience");
+
 const { createMinimalFixture } = require("./package-store/fixture");
 const pptxOutput = require("./outputs/pptx");
 const documentOutput = require("./outputs/document");
@@ -29,11 +29,12 @@ const researchGrounded = require("./research/grounded");
 const personalSkills = require("./skills/personal");
 const sessions = require("./sessions");
 const actBehalfStore = require("./act-behalf/task-store");
-const { parseActBehalfOutput, buildActBehalfMessages } = require("./act-behalf/parse-output");
-const { normalizeTaskIntent, assertTaskIntentMinimal } = require("./act-behalf/task-intent");
+const { parseActBehalfOutput, buildActBehalfMessages, parseEmailOutput, buildEmailMessages, parseVideoAudioOutput, buildVideoAudioMessages, buildVideoAudioExport } = require("./act-behalf/parse-output");
+const { normalizeTaskIntent, assertTaskIntentMinimal, detectTaskType, TASK_TYPES } = require("./act-behalf/task-intent");
 const {
   assembleSubjectContextCandidates,
   confirmSubjectContextWithUserActions,
+  autoSelectCandidates,
 } = require("./act-behalf/subject-context-assembly");
 const {
   runReadonlyExternalResearch,
@@ -50,6 +51,7 @@ const {
   decideResultFromRenderer,
   latestCurrentResult,
   isResultCurrent,
+  requestEmailSend,
 } = require("./act-behalf/result-generation");
 const {
   createExperienceProposal,
@@ -71,11 +73,33 @@ const decisionAudit = require("./decision-audit");
 const { SecretStore } = require("./security/secret-store");
 const { createElectronSafeStorageAdapter } = require("./security/electron-safe-storage-adapter");
 const { ConfigSecretsService, extensionSecretId } = require("./security/config-secrets");
+const { invokeModelRoute, normalizeModelError } = require("./model-routing");
+const distillMe = require("./distill-me");
+const { assembleDoingContext, renderDoingContextForModel, appendAudit, readAudit: readDoingContextAudit } = require("./doing-context");
 const { buildRuntimeStamp, stampIsPostOwnerFixes } = require("./runtime-stamp");
 const sandboxPackageState = require("./sandbox-package-state");
 const { createRendererEntryRuntime } = require("./renderer-entry-runtime");
 const { createActiveRequestRegistry } = require("./r2/active-request");
 const { createAttachmentTokenVault } = require("./r2/attachment-tokens");
+const { loadOrCreateIdentity, signWithIdentity, verifyWithIdentity } = require("./identity");
+const { loadRoleView, getCurrentRole, setCurrentRole, getRoleContext } = require("./identity/role-view");
+const { issueCredential, verifyCredential, createPresentation } = require("./identity/vc");
+const {
+  presentCredential,
+  revokeCredential,
+  verifyCredentialStatus,
+  listCredentials,
+} = require("./identity/credential-flow");
+const {
+  createCollaboration,
+  addInteraction,
+  addDeliverable,
+  approveDeliverable,
+  addFeedback,
+  confirmFeedbackWriteBack,
+  revokeCollaboration,
+  listCollaborations,
+} = require("./collaboration");
 const { createLegacyHandoff } = require("./r2/legacy-handoff");
 const { createR2ChatLifecycle } = require("./r2/chat-lifecycle");
 
@@ -247,7 +271,17 @@ app.whenReady().then(() => {
   });
   if (process.env.DIGITALME_OWNER_RUNTIME_TEST === "1") {
     const harness =
-      process.env.DIGITALME_P107_OWNER_RUNTIME === "1"
+      process.env.DIGITALME_DOING_CONTEXT_ACCEPTANCE === "1"
+        ? require("../scripts/doing-context-acceptance-harness.cjs")
+        : process.env.DIGITALME_DISTILL_ME_ACCEPTANCE === "1"
+        ? require("../scripts/distill-me-acceptance-harness.cjs")
+        : process.env.DIGITALME_MODEL_ROUTING_ACCEPTANCE === "1"
+        ? require("../scripts/model-routing-acceptance-harness.cjs")
+        : process.env.DIGITALME_CAPABILITY_ACCEPTANCE === "1"
+        ? require("../scripts/capability-acceptance-harness.cjs")
+        : process.env.DIGITALME_VISUAL_ACCEPTANCE === "1"
+        ? require("../scripts/visual-acceptance-harness.cjs")
+        : process.env.DIGITALME_P107_OWNER_RUNTIME === "1"
         ? require("../scripts/p1-07-owner-runtime-harness.cjs")
         : process.env.DIGITALME_PAN01R_OWNER_RUNTIME === "1"
           ? require("../scripts/pan-01r-owner-runtime-harness.cjs")
@@ -257,7 +291,17 @@ app.whenReady().then(() => {
               ? require("../scripts/pan-01-owner-runtime-harness.cjs")
               : require("../scripts/owner-runtime-harness.cjs");
     const run =
-      process.env.DIGITALME_P107_OWNER_RUNTIME === "1"
+      process.env.DIGITALME_DOING_CONTEXT_ACCEPTANCE === "1"
+        ? harness.runDoingContextAcceptanceHarness
+        : process.env.DIGITALME_DISTILL_ME_ACCEPTANCE === "1"
+        ? harness.runDistillMeAcceptanceHarness
+        : process.env.DIGITALME_MODEL_ROUTING_ACCEPTANCE === "1"
+        ? harness.runModelRoutingAcceptanceHarness
+        : process.env.DIGITALME_CAPABILITY_ACCEPTANCE === "1"
+        ? harness.runCapabilityAcceptanceHarness
+        : process.env.DIGITALME_VISUAL_ACCEPTANCE === "1"
+        ? harness.runVisualAcceptanceHarness
+        : process.env.DIGITALME_P107_OWNER_RUNTIME === "1"
         ? harness.runP107OwnerRuntimeHarness
         : process.env.DIGITALME_PAN01R_OWNER_RUNTIME === "1"
           ? harness.runPan01rOwnerRuntimeHarness
@@ -773,6 +817,45 @@ function writeConfig(cfg) {
 }
 
 ipcMain.handle("config:get", () => readPublicConfig());
+ipcMain.handle("distillMe:get", () => distillMe.summary(distillMe.read(packageDirFromConfig())));
+ipcMain.handle("distillMe:createInput", (_e, input) => distillMe.createDraft(packageDirFromConfig(), input));
+ipcMain.handle("distillMe:generate", async (_e, draftId) => {
+  const dir=packageDirFromConfig(), data=distillMe.read(dir), draft=data.drafts.find((item)=>item.id===draftId); if(!draft) throw new Error("未找到输入草稿");
+  const cfg=readConfig(); let parsed;
+  try { const raw=await callModel(cfg,[{role:"system",content:"只返回 JSON：{identity:[{statement,confidence}],experience:[{statement,confidence}],fact:[{statement,confidence}]}。仅提取明确陈述，不要猜测。"},{role:"user",content:draft.text}],{taskType:"artifact",temperature:0.1}); parsed=JSON.parse(raw); await callModel(cfg,[{role:"system",content:"检查以下 JSON 是否仅包含 identity、experience、fact 数组；不改写内容，只返回 OK。"},{role:"user",content:JSON.stringify(parsed).slice(0,12000)}],{taskType:"review",temperature:0}); } catch(err) { const e=new Error("当前模型不可用。可以检查模型设置，或切换到备用模型。"); e.code=err.code||"PROVIDER_ERROR"; throw e; }
+  return distillMe.materialize(dir,draftId,parsed);
+});
+ipcMain.handle("distillMe:transition", (_e,payload) => distillMe.transition(packageDirFromConfig(),payload?.itemId,payload?.action,payload?.patch));
+ipcMain.handle("distillMe:evidence", (_e,itemId) => { const item=distillMe.read(packageDirFromConfig()).items.find((x)=>x.id===itemId); return item?{sourceRefs:item.sourceRefs,evidenceRefs:item.evidenceRefs}:null; });
+ipcMain.handle("distillMe:export", () => distillMe.exportSnapshot(packageDirFromConfig()));
+ipcMain.handle("distillMe:audit", () => distillMe.read(packageDirFromConfig()).audit.map(({id,action,itemId,at})=>({id,action,itemId,at})));
+ipcMain.handle("doingContext:listAudit", () => readDoingContextAudit(app.getPath("userData")).entries);
+ipcMain.handle("modelRouting:get", () => getConfigSecrets().getPublicModelRouting());
+ipcMain.handle("modelRouting:save", (_e, payload) => getConfigSecrets().setModelRoutingFromRenderer(payload));
+const modelRoutingAudit = [];
+function recordModelRoutingAttempt(entry) {
+  modelRoutingAudit.unshift({ ...entry, at: new Date().toISOString() });
+  if (modelRoutingAudit.length > 40) modelRoutingAudit.length = 40;
+}
+ipcMain.handle("modelRouting:recent", () => modelRoutingAudit.slice(0, 20));
+ipcMain.handle("modelRouting:test", async (_e, payload) => {
+  const cfg = readConfig();
+  const taskType = payload?.taskType || "chat";
+  const result = await invokeModelRoute({
+    routing: cfg.modelRouting,
+    taskType,
+    secretStore: getConfigSecrets().secretStore,
+    recordAttempt: recordModelRoutingAttempt,
+    invokeProvider: async (candidate) => {
+      if (candidate.provider.type === "fake") {
+        if (candidate.model.model.includes("fail")) { const err = new Error("fake provider failure"); err.code = "fake_failure"; throw err; }
+        return { content: "fake provider connected" };
+      }
+      return callModelRaw({ provider: candidate.provider.type, baseURL: candidate.provider.baseUrl, model: candidate.model.model, apiKey: candidate.apiKey }, [{ role: "user", content: "连接测试：仅返回 OK。" }], { timeout: 12000 });
+    },
+  });
+  return result.ok ? { ok: true, provider: result.provider, model: result.model, fallbackUsed: result.fallbackUsed, attempts: result.attempts } : { ok: false, errorCode: result.errorCode, friendlyMessage: result.friendlyMessage, settingsAction: result.settingsAction, attempts: result.attempts };
+});
 ipcMain.handle("runtime:getStamp", () => {
   const stamp = buildRuntimeStamp();
   return {
@@ -973,6 +1056,41 @@ function fakeActBehalfModelOutput(request) {
   );
 }
 
+function fakeEmailModelOutput(request) {
+  return JSON.stringify({
+    to: "",
+    subject: "（测试）关于「" + String(request || "").slice(0, 40) + "」的邮件",
+    body:
+      "（测试）您好，\n\n这是一封结合本人信息起草的测试邮件正文，可直接修改后使用。\n\n此致",
+    attachments: [],
+    needsConfirmation: ["收件人地址缺失，需要用户填写确认。"],
+  });
+}
+
+function fakeVideoAudioModelOutput(request) {
+  return JSON.stringify({
+    title: "（测试）" + String(request || "").slice(0, 40),
+    duration: "60s",
+    scenes: [
+      {
+        scene: "场景 1",
+        visuals: "（测试）开场画面，结合本人信息描述的画面。",
+        narration: "（测试）这是一段结合本人信息生成的旁白。",
+        duration: "15s",
+      },
+      {
+        scene: "场景 2",
+        visuals: "（测试）主体内容画面。",
+        narration: "（测试）主体内容旁白，可直接修改后使用。",
+        duration: "45s",
+      },
+    ],
+    creativeDirection: "（测试）创意方向与风格基调。",
+    productionTips: ["（测试）在剪映/Descript 等外部工具中完成制作。"],
+    needsConfirmation: ["（测试）实际素材与出镜形式需要用户确认。"],
+  });
+}
+
 ipcMain.handle("actBehalf:previewContext", async (_e, payload) => {
   try {
     const userData = app.getPath("userData");
@@ -1006,7 +1124,8 @@ ipcMain.handle("actBehalf:previewContext", async (_e, payload) => {
           (payload && payload.constraints) ||
           (existing && existing.taskIntent && existing.taskIntent.constraints),
       },
-      (payload && payload.taskId) || (existing && existing.taskId)
+      (payload && payload.taskId) || (existing && existing.taskId),
+      packageDirFromConfig()
     );
 
     let priorSubjectContext = (existing && existing.priorSubjectContext) || null;
@@ -1105,7 +1224,8 @@ ipcMain.handle("actBehalf:confirmContext", async (_e, payload) => {
         expectedOutcome: (payload && payload.expectedOutcome) || undefined,
         constraints: (payload && payload.constraints) || undefined,
       },
-      (payload && payload.taskId) || (existing && existing.taskId)
+      (payload && payload.taskId) || (existing && existing.taskId),
+      packageDirFromConfig()
     );
 
     const contextAudit = {
@@ -1172,6 +1292,335 @@ ipcMain.handle("actBehalf:confirmContext", async (_e, payload) => {
       ok: false,
       code: err && err.code ? err.code : "confirm_failed",
       message: err && err.message ? err.message : "无法确认本人上下文。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:autoGenerate", async (_e, payload) => {
+  try {
+    const goal = String((payload && payload.goal) || "").trim();
+    if (!goal) {
+      return { ok: false, code: "empty_goal", message: "请输入要完成的目标。" };
+    }
+
+    const pkg = loadPackageForActBehalf();
+    const assembled = autoSelectCandidates(pkg, { goal });
+    const autoClaims = assembled.autoSelectedClaims || [];
+
+    const title = String((payload && payload.title) || "").trim() ||
+      goal.slice(0, 40) + (goal.length > 40 ? "…" : "");
+
+    const taskIntent = normalizeTaskIntent({
+      goal,
+      role: (payload && payload.role) || "",
+      expectedOutcome: (payload && payload.expectedOutcome) || "",
+      constraints: (payload && payload.constraints) || [],
+    }, undefined, packageDirFromConfig());
+    const taskType = detectTaskType(goal);
+    taskIntent.taskType = taskType;
+
+    const userData = app.getPath("userData");
+    const doingContext = assembleDoingContext({
+      packageDir: packageDirFromConfig(),
+      pkg,
+      taskIntent: goal,
+      scene: "act_behalf",
+    });
+    const selectedClaimText = autoClaims
+      .map(c => `[${c.label || c.type || ""}] ${c.text}`)
+      .join("\n\n");
+    const selfContextText = [selectedClaimText, renderDoingContextForModel(doingContext)].filter(Boolean).join("\n\n");
+
+    // Auto-confirm context (no user selection needed)
+    const confirmed = confirmSubjectContextWithUserActions(
+      assembled.subjectContextDraft,
+      {
+        goal,
+        keepClaimIds: autoClaims.map(c => c.id),
+      }
+    );
+    const confirmedClaims = (confirmed.ok && confirmed.subjectContext && confirmed.subjectContext.claims) || [];
+
+    const saveStep1 = await actBehalfStore.saveTask(userData, {
+      taskId: (payload && payload.taskId) || undefined,
+      title,
+      request: goal,
+      goal,
+      status: "context_confirmed",
+      taskIntent,
+      subjectContextCandidates: assembled.subjectContextDraft,
+      subjectContext: {
+        ...confirmed.subjectContext,
+        confirmationState: confirmed.ok ? "confirmed" : "auto_failed",
+      },
+      autoSelectedClaims: autoClaims,
+      doingContext,
+    });
+    const taskId = saveStep1.task.taskId;
+
+    // Build messages and call model directly (skip research for now in auto mode)
+    const isEmailTask = taskType === TASK_TYPES.email;
+    const isVideoAudioTask = taskType === TASK_TYPES.videoAudio;
+    const messages = isEmailTask
+      ? buildEmailMessages({
+          request: goal,
+          title,
+          selectedSelfContextText: selfContextText,
+        })
+      : isVideoAudioTask
+        ? buildVideoAudioMessages({
+            request: goal,
+            title,
+            selectedSelfContextText: selfContextText,
+          })
+        : buildActBehalfMessages({
+            request: goal,
+            title,
+            selectedSelfContextText: selfContextText,
+          });
+
+    let raw = "";
+    let modelMeta = { fake: false };
+    if (process.env.DIGITALME_ACT_BEHALF_FAKE === "1") {
+      raw = isEmailTask
+        ? fakeEmailModelOutput(goal)
+        : isVideoAudioTask
+          ? fakeVideoAudioModelOutput(goal)
+          : fakeActBehalfModelOutput(goal);
+      modelMeta = { fake: true };
+    } else {
+      const cfg = readConfig();
+      if (!cfg || !cfg.apiKey) {
+        return {
+          ok: false,
+          code: "no_api_key",
+          message: "请先在设置中配置可用的模型。",
+        };
+      }
+      raw = await callModel(cfg, messages, { temperature: 0.4 });
+      modelMeta = { fake: false, model: cfg.model || "" };
+    }
+
+    const parsed = isEmailTask
+      ? parseEmailOutput(raw)
+      : isVideoAudioTask
+        ? parseVideoAudioOutput(raw)
+        : parseActBehalfOutput(raw);
+    modelMeta.parseOk = parsed.parseOk;
+    modelMeta.usedSelfInfo = parsed.usedSelfInfo || "";
+    modelMeta.taskType = taskType;
+
+    const emailDraft = isEmailTask
+      ? {
+          to: parsed.to,
+          subject: parsed.subject,
+          body: parsed.body,
+          attachments: parsed.attachments,
+          needsConfirmation: parsed.needsConfirmation,
+        }
+      : null;
+
+    const videoAudioScript = isVideoAudioTask
+      ? {
+          title: parsed.title,
+          duration: parsed.duration,
+          scenes: parsed.scenes,
+          creativeDirection: parsed.creativeDirection,
+          productionTips: parsed.productionTips,
+          needsConfirmation: parsed.needsConfirmation,
+        }
+      : null;
+
+    const saved = await actBehalfStore.saveTask(userData, {
+      taskId,
+      title,
+      request: goal,
+      status: "completed",
+      taskIntent,
+      selectedSelfContext: {
+        items: autoClaims.map(c => ({ id: c.id, label: c.label, text: c.text })),
+        combinedText: selfContextText,
+        userEdited: false,
+      },
+      existingUserPositions: isEmailTask || isVideoAudioTask ? "" : parsed.existingUserPositions,
+      digitalMeInferences: isEmailTask || isVideoAudioTask ? "" : parsed.digitalMeInferences,
+      result: isEmailTask || isVideoAudioTask ? parsed.plainText : parsed.result,
+      emailDraft: emailDraft || undefined,
+      videoAudioScript: videoAudioScript || undefined,
+      modelMeta,
+      doingContext,
+    });
+
+    const auditEntry = appendAudit(userData, {
+      auditRef: doingContext.auditRef,
+      requestId: doingContext.requestId,
+      taskIntent: goal,
+      scene: doingContext.task.scene,
+      confirmedIdentityIds: doingContext.confirmedContext.map((item) => item.id),
+      excludedCount: doingContext.policy.excludedCount,
+      usedConfirmedContextCount: doingContext.confirmedContext.length,
+      at: new Date().toISOString(),
+      result: "completed",
+      // Final model request: confirmed statements only, never raw evidence excerpts.
+      modelRequest: messages.map((message) => ({ role: message.role, content: message.content })),
+    });
+
+    return {
+      ok: true,
+      task: saved.task,
+      taskId,
+      goal,
+      taskType,
+      emailDraft: emailDraft || undefined,
+      videoAudioScript: videoAudioScript || undefined,
+      autoSelectedCount: autoClaims.length,
+      sensitiveCount: (assembled.sensitiveClaims || []).length,
+      packageExists: !!pkg.exists,
+      usedSelfInfo: parsed.usedSelfInfo || "",
+      confirmedClaimsCount: confirmedClaims.length,
+      doingContext: { usedCount: doingContext.confirmedContext.length, applied: doingContext.policy.applied },
+      auditRef: auditEntry.auditRef,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "auto_generate_failed",
+      message: err && err.message ? err.message : "自动生成失败，请稍后再试。",
+    };
+  }
+})
+
+// File/folder selection for act-behalf tasks
+ipcMain.handle("actBehalf:selectFiles", async (_e, payload) => {
+  try {
+    const mode = String((payload && payload.mode) || "files").trim(); // "files" or "folder"
+    const res = await dialog.showOpenDialog({
+      title: mode === "folder" ? "选择文件夹" : "添加文件",
+      properties: mode === "folder" ? ["openDirectory"] : ["openFile", "multiSelections"],
+      filters: mode === "folder" ? [] : [
+        {
+          name: "常用文件",
+          extensions: ["txt", "md", "markdown", "docx", "pdf", "pptx", "js", "ts", "py", "java", "c", "cpp", "h", "json", "xml", "html", "css", "csv", "xlsx"],
+        },
+        { name: "所有文件", extensions: ["*"] },
+      ],
+    });
+    if (res.canceled || !res.filePaths.length) {
+      return { ok: true, canceled: true, files: [] };
+    }
+
+    const files = [];
+    for (const filePath of res.filePaths.slice(0, 10)) {
+      const name = path.basename(filePath);
+      const ext = path.extname(filePath).toLowerCase();
+      let text = "";
+      let note = "";
+      let ok = false;
+      let chars = 0;
+      try {
+        if (mode === "folder") {
+          // For folder, list files in directory
+          const dirFiles = fs.readdirSync(filePath, { withFileTypes: true })
+            .filter((f) => f.isFile())
+            .slice(0, 20)
+            .map((f) => f.name);
+          text = "文件夹内容：\n" + dirFiles.join("\n");
+          note = "已列出 " + dirFiles.length + " 个文件";
+          ok = true;
+          chars = text.length;
+        } else {
+          // For files, extract text
+          const isImage = [".png", ".jpg", ".jpeg", ".webp", ".gif"].includes(ext);
+          if (isImage) {
+            note = "图片已附上（请用文字说明要点）";
+            text = "[图片附件] " + name;
+            ok = true;
+          } else {
+            text = await builder.extractText(filePath);
+            text = String(text || "")
+              .replace(/\n--\s*\d+\s+of\s+\d+\s*--\n/gi, "\n")
+              .trim();
+            if (!text) throw new Error("未提取到可读文字");
+            chars = text.length;
+            if (text.length > 40000) {
+              text = text.slice(0, 40000) + "\n\n…（后文已省略，共约 " + chars + " 字）";
+            }
+            note = "已读入约 " + chars + " 字";
+            ok = true;
+          }
+        }
+      } catch (err) {
+        note = "未能读入：" + (err.message || "未知原因");
+        text = "";
+        ok = false;
+      }
+      files.push({
+        id: "file_" + Date.now().toString(36) + "_" + Math.floor(Math.random() * 1000),
+        name,
+        path: filePath,
+        ext,
+        text,
+        note,
+        ok,
+        chars,
+        isFolder: mode === "folder",
+      });
+    }
+    return { ok: true, canceled: false, files };
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "select_files_failed",
+      message: err && err.message ? err.message : "选择文件失败。",
+    };
+  }
+});;
+
+ipcMain.handle("actBehalf:sendEmail", async (_e, payload) => {
+  try {
+    // R3 对外动作：占位实现。confirmed 校验与发送门控在 requestEmailSend 内完成，
+    // 渲染进程无法绕过用户确认。实际发送待邮件服务集成。
+    return requestEmailSend(payload || {});
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "email_send_failed",
+      message: err && err.message ? err.message : "邮件发送处理失败。",
+      sent: false,
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:exportVideoAudioScript", async (_e, payload) => {
+  try {
+    const taskId = payload && payload.taskId;
+    if (!taskId) {
+      return { ok: false, code: "invalid_payload", message: "缺少任务标识。" };
+    }
+    const got = actBehalfStore.getTask(app.getPath("userData"), taskId);
+    if (!got.ok) {
+      return { ok: false, code: got.code || "task_not_found", message: got.message || "找不到该任务。" };
+    }
+    const script = got.task && got.task.videoAudioScript;
+    if (!script) {
+      return { ok: false, code: "script_not_found", message: "该任务没有可导出的视频/音频脚本。" };
+    }
+    const artifact = buildVideoAudioExport(script, payload && payload.format);
+    if (!artifact.ok) return artifact;
+    const safe = safeFileStem(script.title || got.task.title || "video-audio-script");
+    const res = await dialog.showSaveDialog({
+      title: "导出视频/音频脚本（" + artifact.filterName + "）",
+      defaultPath: path.join(draftsDir(), safe + "." + artifact.ext),
+      filters: [{ name: artifact.filterName, extensions: [artifact.ext] }],
+    });
+    if (res.canceled || !res.filePath) return { ok: true, canceled: true };
+    fs.writeFileSync(res.filePath, artifact.content, "utf8");
+    return { ok: true, canceled: false, filePath: res.filePath, format: artifact.format };
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "export_failed",
+      message: err && err.message ? err.message : "导出脚本失败。",
     };
   }
 });
@@ -1386,6 +1835,26 @@ ipcMain.handle("actBehalf:saveResultDraft", async (_e, payload) => {
   }
 });
 
+// Auto-route tasks keep a lightweight `result` string instead of the evidence
+// result schema.  Save it through the same main-process boundary so "copy" is
+// never mistaken for persistence and the task remains reopenable after restart.
+ipcMain.handle("actBehalf:saveAutoResult", async (_e, payload) => {
+  try {
+    const taskId = String((payload && payload.taskId) || "");
+    const currentText = String((payload && payload.currentText) || "").trim();
+    if (!taskId || !currentText) return { ok: false, code: "invalid_result", message: "没有可保存的成果正文。" };
+    const userData = app.getPath("userData");
+    const got = actBehalfStore.getTask(userData, taskId, { heal: false });
+    if (!got.ok) return got;
+    const adopted = payload && payload.decision === "adopted";
+    const task = { ...got.task, result: currentText, status: adopted ? "result_adopted" : "result_saved", resultSavedAt: new Date().toISOString(), ownerDecision: adopted ? "adopted" : got.task.ownerDecision || "pending" };
+    const saved = await actBehalfStore.saveTask(userData, task);
+    return { ...saved, entry: "做事 > 任务列表" };
+  } catch (err) {
+    return { ok: false, code: "save_result_failed", message: err && err.message ? err.message : "无法保存成果。" };
+  }
+});
+
 ipcMain.handle("actBehalf:decideResult", async (_e, payload) => {
   try {
     const userData = app.getPath("userData");
@@ -1434,13 +1903,9 @@ ipcMain.handle("actBehalf:createExperienceProposal", async (_e, payload) => {
       packageDir: pkgDir,
       loadPackage: loadPackageForActBehalf,
       callModel: async (messages, options = {}) => {
-        if (!cfg || !cfg.apiKey) {
-          const err = new Error("请先在设置中配置可用的模型，再总结学习建议。");
-          err.code = "no_api_key";
-          throw err;
-        }
         const content = await callModel(cfg, messages, {
           temperature: options.temperature != null ? options.temperature : 0.2,
+          taskType: "review",
         });
         return {
           content,
@@ -1848,12 +2313,30 @@ function hasBadChars(text) {
   return String(text || "").includes(REPLACEMENT_CHAR);
 }
 
-function callModel(cfg, messages, options = {}) {
-  return callModelRaw(cfg, messages, options).then((msg) => msg.content || "(空响应)");
+async function callModel(cfg, messages, options = {}) {
+  const route = await invokeModelRoute({
+    routing: cfg.modelRouting,
+    taskType: options.taskType || "artifact",
+    secretStore: getConfigSecrets().secretStore,
+    recordAttempt: recordModelRoutingAttempt,
+    invokeProvider: async (candidate) => {
+      if (candidate.provider.type === "fake") {
+        if (candidate.model.model.includes("fail")) throw new Error("fake provider failure");
+        const system = String(messages?.[0]?.content || "");
+        if (system.includes("identity") && system.includes("experience") && system.includes("fact")) return { content: JSON.stringify({ identity:[{statement:"（测试）李明是产品负责人",confidence:"high"}], experience:[{statement:"（测试）2022 年加入星河团队",confidence:"high"}], fact:[{statement:"（测试）当前负责产品工作",confidence:"high"}] }) };
+        return { content: "（测试）fake provider response" };
+      }
+      return callModelRaw({ provider: candidate.provider.type, baseURL: candidate.provider.baseUrl, model: candidate.model.model, apiKey: candidate.apiKey }, messages, options);
+    },
+  });
+  if (!route.ok) {
+    const err = new Error(route.friendlyMessage); err.code = route.errorCode; err.route = route; throw err;
+  }
+  return route.value.content || "(空响应)";
 }
 
 /** Streaming chat completions; onDelta(textChunk); returns full content. Supports AbortSignal via options.signal. */
-function callModelStream(cfg, messages, onDelta, options = {}) {
+function callModelStreamRaw(cfg, messages, onDelta, options = {}) {
   return new Promise((resolve, reject) => {
     let url;
     try {
@@ -1927,6 +2410,26 @@ function callModelStream(cfg, messages, onDelta, options = {}) {
     req.write(body);
     req.end();
   });
+}
+
+async function callModelStream(cfg, messages, onDelta, options = {}) {
+  const route = await invokeModelRoute({
+    routing: cfg.modelRouting,
+    taskType: options.taskType || "chat",
+    secretStore: getConfigSecrets().secretStore,
+    recordAttempt: recordModelRoutingAttempt,
+    invokeProvider: async (candidate) => {
+      if (candidate.provider.type === "fake") {
+        if (candidate.model.model.includes("fail")) throw new Error("fake provider failure");
+        const text = "（测试）fake provider response";
+        onDelta(text, text);
+        return text;
+      }
+      return callModelStreamRaw({ provider: candidate.provider.type, baseURL: candidate.provider.baseUrl, model: candidate.model.model, apiKey: candidate.apiKey }, messages, onDelta, options);
+    },
+  });
+  if (!route.ok) { const err = new Error(route.friendlyMessage); err.code = route.errorCode; err.route = route; throw err; }
+  return route.value;
 }
 
 const activeChatAborts = new Map();
@@ -2117,7 +2620,6 @@ async function tryHeuristicFetch(cfg, system, history, em, userText) {
 
 ipcMain.handle("chat:send", async (e, { pkg, history, requestId, attachmentContext, scenarioHint }) => {
   const cfg = readConfig();
-  if (!cfg.apiKey) throw new Error("还没有连接智能引擎。请打开设置，填好密钥后再试。");
   let system = buildSystemPrompt(pkg);
   system +=
     "\n\n---\n\n## 产出方式（必须遵守）\n\n" +
@@ -4338,6 +4840,233 @@ ipcMain.handle("subject:getOverview", () => {
   });
 });
 
+// ---------- ID-01 identity (DID) ----------
+ipcMain.handle("subject:getIdentity", async () => {
+  try {
+    const dir = packageDirFromConfig();
+    const identity = loadOrCreateIdentity(dir);
+    return { ok: true, identity };
+  } catch (err) {
+    return { ok: false, code: "identity_error", message: err.message };
+  }
+});
+
+ipcMain.handle("subject:signData", async (_e, payload) => {
+  try {
+    const dir = packageDirFromConfig();
+    const data = String((payload && payload.data) || "");
+    if (!data) return { ok: false, message: "缺少要签名的数据。" };
+    const signature = signWithIdentity(dir, data);
+    return { ok: true, signature };
+  } catch (err) {
+    return { ok: false, code: "sign_error", message: err.message };
+  }
+});
+
+ipcMain.handle("subject:verifySignature", async (_e, payload) => {
+  try {
+    const dir = packageDirFromConfig();
+    const data = String((payload && payload.data) || "");
+    const signature = String((payload && payload.signature) || "");
+    if (!data || !signature) return { ok: false, message: "缺少数据或签名。" };
+    const valid = verifyWithIdentity(dir, data, signature);
+    return { ok: true, valid };
+  } catch (err) {
+    return { ok: false, code: "verify_error", message: err.message };
+  }
+});
+
+// ---------- ID-02 role view (角色身份) ----------
+ipcMain.handle("subject:getRoleView", async () => {
+  try {
+    const dir = packageDirFromConfig();
+    const roleView = loadRoleView(dir);
+    return { ok: true, roleView };
+  } catch (err) {
+    return { ok: false, code: "role_error", message: err.message };
+  }
+});
+
+ipcMain.handle("subject:setRole", async (_e, payload) => {
+  try {
+    const dir = packageDirFromConfig();
+    const roleId = String((payload && payload.roleId) || "");
+    if (!roleId) return { ok: false, message: "缺少角色 ID。" };
+    const roleView = setCurrentRole(dir, roleId);
+    return { ok: true, roleView };
+  } catch (err) {
+    return { ok: false, code: "role_error", message: err.message };
+  }
+});
+
+ipcMain.handle("subject:getRoleContext", async () => {
+  try {
+    const dir = packageDirFromConfig();
+    const context = getRoleContext(dir);
+    return { ok: true, context };
+  } catch (err) {
+    return { ok: false, code: "role_error", message: err.message };
+  }
+});
+
+// ---------- ID-03 VC credential (可验证凭据) ----------
+ipcMain.handle("subject:issueVC", async (_e, payload) => {
+  try {
+    const dir = packageDirFromConfig();
+    const subject = (payload && payload.subject) || {};
+    const opts = {
+      validDays: (payload && payload.validDays) || 30,
+      audience: (payload && payload.audience) || "",
+    };
+    const vc = issueCredential(dir, subject, opts);
+    return { ok: true, vc };
+  } catch (err) {
+    return { ok: false, code: "vc_error", message: err.message };
+  }
+});
+
+ipcMain.handle("subject:verifyVC", async (_e, payload) => {
+  try {
+    const dir = packageDirFromConfig();
+    const vc = (payload && payload.vc) || null;
+    if (!vc) return { ok: false, message: "缺少要验证的凭据。" };
+    const result = verifyCredential(dir, vc);
+    return { ok: true, ...result };
+  } catch (err) {
+    return { ok: false, code: "vc_error", message: err.message };
+  }
+});
+
+// ---------- ID-04 credential flow (凭据出示流程) ----------
+ipcMain.handle("subject:presentCredential", async (_e, payload) => {
+  try {
+    const dir = packageDirFromConfig();
+    const pkg = loadPackageForActBehalf();
+    const audience = String((payload && payload.audience) || "").trim();
+    const validDays = (payload && payload.validDays) || 30;
+    const scope = String((payload && payload.scope) || "full").trim();
+    const result = presentCredential(dir, pkg, { audience, validDays, scope });
+    return result;
+  } catch (err) {
+    return { ok: false, code: "credential_error", message: err.message };
+  }
+});
+
+ipcMain.handle("subject:revokeCredential", async (_e, payload) => {
+  try {
+    const dir = packageDirFromConfig();
+    const credentialId = String((payload && payload.credentialId) || "").trim();
+    if (!credentialId) return { ok: false, message: "缺少凭据 ID。" };
+    const result = revokeCredential(dir, credentialId);
+    return result;
+  } catch (err) {
+    return { ok: false, code: "credential_error", message: err.message };
+  }
+});
+
+ipcMain.handle("subject:verifyCredentialStatus", async (_e, payload) => {
+  try {
+    const dir = packageDirFromConfig();
+    const credentialId = String((payload && payload.credentialId) || "").trim();
+    if (!credentialId) return { ok: false, message: "缺少凭据 ID。" };
+    const result = verifyCredentialStatus(dir, credentialId);
+    return result;
+  } catch (err) {
+    return { ok: false, code: "credential_error", message: err.message };
+  }
+});
+
+ipcMain.handle("subject:listCredentials", async () => {
+  try {
+    const dir = packageDirFromConfig();
+    const result = listCredentials(dir);
+    return result;
+  } catch (err) {
+    return { ok: false, code: "credential_error", message: err.message };
+  }
+});
+
+// ---------- ID-05 collaboration (主体协作闭环) ----------
+ipcMain.handle("collaboration:create", async (_e, payload) => {
+  try {
+    const dir = packageDirFromConfig();
+    const result = createCollaboration(dir, payload || {});
+    return result;
+  } catch (err) {
+    return { ok: false, code: "collaboration_error", message: err.message };
+  }
+});
+
+ipcMain.handle("collaboration:addInteraction", async (_e, payload) => {
+  try {
+    const dir = packageDirFromConfig();
+    const result = addInteraction(dir, payload && payload.collaborationId, payload && payload.interaction);
+    return result;
+  } catch (err) {
+    return { ok: false, code: "collaboration_error", message: err.message };
+  }
+});
+
+ipcMain.handle("collaboration:addDeliverable", async (_e, payload) => {
+  try {
+    const dir = packageDirFromConfig();
+    const result = addDeliverable(dir, payload && payload.collaborationId, payload && payload.deliverable);
+    return result;
+  } catch (err) {
+    return { ok: false, code: "collaboration_error", message: err.message };
+  }
+});
+
+ipcMain.handle("collaboration:approveDeliverable", async (_e, payload) => {
+  try {
+    const dir = packageDirFromConfig();
+    const result = approveDeliverable(dir, payload && payload.collaborationId, payload && payload.deliverableIndex, payload && payload.approvedBy);
+    return result;
+  } catch (err) {
+    return { ok: false, code: "collaboration_error", message: err.message };
+  }
+});
+
+ipcMain.handle("collaboration:addFeedback", async (_e, payload) => {
+  try {
+    const dir = packageDirFromConfig();
+    const result = addFeedback(dir, payload && payload.collaborationId, payload && payload.feedback);
+    return result;
+  } catch (err) {
+    return { ok: false, code: "collaboration_error", message: err.message };
+  }
+});
+
+ipcMain.handle("collaboration:confirmFeedback", async (_e, payload) => {
+  try {
+    const dir = packageDirFromConfig();
+    const result = confirmFeedbackWriteBack(dir, payload && payload.collaborationId, payload && payload.feedbackIndex);
+    return result;
+  } catch (err) {
+    return { ok: false, code: "collaboration_error", message: err.message };
+  }
+});
+
+ipcMain.handle("collaboration:revoke", async (_e, payload) => {
+  try {
+    const dir = packageDirFromConfig();
+    const result = revokeCollaboration(dir, payload && payload.collaborationId);
+    return result;
+  } catch (err) {
+    return { ok: false, code: "collaboration_error", message: err.message };
+  }
+});
+
+ipcMain.handle("collaboration:list", async () => {
+  try {
+    const dir = packageDirFromConfig();
+    const result = listCollaborations(dir);
+    return result;
+  } catch (err) {
+    return { ok: false, code: "collaboration_error", message: err.message };
+  }
+});
+
 // ---------- PAN-01R sovereign collaboration experience (test harness only) ----------
 function isPan01rTestHarnessEnabled() {
   return (
@@ -4405,125 +5134,6 @@ function allowFields(payload, keys) {
   return out;
 }
 
-if (isPan01rTestHarnessEnabled()) {
-  ipcMain.handle("panoramaExperience:getSubjectBrief", (event) => {
-    const api = pan01rApi();
-    return api.getSubjectBrief(pan01rPackageDir());
-  });
-
-  ipcMain.handle("panoramaExperience:createRequest", (event, payload) => {
-    const body = allowFields(payload, ["topic", "templateId", "evidenceIds"]);
-    const api = pan01rApi();
-    return api.createRequest({
-      senderId: pan01rSenderId(event),
-      topic: body.topic,
-      templateId: body.templateId,
-      evidenceIds: Array.isArray(body.evidenceIds) ? body.evidenceIds.map(String) : undefined,
-      packageDir: pan01rPackageDir(),
-      userData: pan01rUserData(),
-    });
-  });
-
-  ipcMain.handle("panoramaExperience:buildAuthPreview", (event, payload) => {
-    const body = allowFields(payload, ["requestId", "selectedEvidenceIds"]);
-    const api = pan01rApi();
-    return api.buildAuthPreview({
-      requestId: String(body.requestId || ""),
-      senderId: pan01rSenderId(event),
-      selectedEvidenceIds: Array.isArray(body.selectedEvidenceIds)
-        ? body.selectedEvidenceIds.map(String)
-        : [],
-      packageDir: pan01rPackageDir(),
-    });
-  });
-
-  ipcMain.handle("panoramaExperience:rejectRequest", (event, payload) => {
-    const body = allowFields(payload, ["requestId"]);
-    const api = pan01rApi();
-    return api.rejectRequest({
-      requestId: String(body.requestId || ""),
-      senderId: pan01rSenderId(event),
-      userData: pan01rUserData(),
-    });
-  });
-
-  ipcMain.handle("panoramaExperience:confirmAndExecute", async (event, payload) => {
-    // Production allowlist: previewId + confirmed only (no requestId/evidenceIds/tokenId from renderer)
-    const body = allowFields(payload, ["previewId", "confirmed"]);
-    const hooks = pan01rHooks();
-    if (hooks && hooks.captureConfirmPayload) {
-      hooks.lastConfirmPayload = { ...body };
-      hooks.lastConfirmRawKeys = payload && typeof payload === "object" ? Object.keys(payload) : [];
-    }
-    const api = pan01rApi();
-    return api.confirmFromPreviewThenExecute({
-      previewId: body.previewId ? String(body.previewId) : "",
-      confirmed: body.confirmed === true,
-      senderId: pan01rSenderId(event),
-      packageDir: pan01rPackageDir(),
-      userData: pan01rUserData(),
-      onRunCreated: (info) => {
-        try {
-          if (hooks) hooks.lastRunId = info && info.runId;
-          if (hooks && hooks.suppressRunProgress) return;
-          if (event && event.sender && !event.sender.isDestroyed()) {
-            event.sender.send("panoramaExperience:progress", {
-              runId: info && info.runId,
-              status: (info && info.status) || "running",
-              stage: (info && info.stage) || "starting",
-            });
-          }
-        } catch {
-          /* ignore */
-        }
-      },
-    });
-  });
-
-  ipcMain.handle("panoramaExperience:cancelRun", (event, payload) => {
-    const body = allowFields(payload, ["runId"]);
-    const api = pan01rApi();
-    return api.cancelRun({
-      runId: String(body.runId || ""),
-      senderId: pan01rSenderId(event),
-      userData: pan01rUserData(),
-    });
-  });
-
-  ipcMain.handle("panoramaExperience:adoptResult", (event, payload) => {
-    const body = allowFields(payload, ["runId"]);
-    const api = pan01rApi();
-    return api.adoptResult({
-      runId: String(body.runId || ""),
-      senderId: pan01rSenderId(event),
-      userData: pan01rUserData(),
-    });
-  });
-
-  ipcMain.handle("panoramaExperience:rejectResult", (event, payload) => {
-    const body = allowFields(payload, ["runId", "reasonCategory"]);
-    const api = pan01rApi();
-    return api.rejectResult({
-      runId: String(body.runId || ""),
-      senderId: pan01rSenderId(event),
-      userData: pan01rUserData(),
-      reasonCategory: body.reasonCategory ? String(body.reasonCategory) : undefined,
-    });
-  });
-
-  ipcMain.handle("panoramaExperience:getReceiptSummary", (event, payload) => {
-    const body = allowFields(payload, ["requestId", "runId"]);
-    const api = pan01rApi();
-    return api.getReceiptSummary({
-      requestId: body.requestId ? String(body.requestId) : undefined,
-      runId: body.runId ? String(body.runId) : undefined,
-      senderId: pan01rSenderId(event),
-      userData: pan01rUserData(),
-    });
-  });
-}
-
-// Production: panoramaExperience IPC channels are not registered (no production entry).
 
 ipcMain.handle("packageStore:rollback", (_e, payload) => {
   const body = payload && typeof payload === "object" ? payload : {};

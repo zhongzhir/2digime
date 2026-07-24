@@ -40,7 +40,7 @@ const PANORAMA_NAV_TARGETS = new Set([
  * Test-harness-only nav target. Must never appear in production whitelist
  * or production renderer navigation.
  */
-const PANORAMA_TEST_ONLY_NAV_TARGETS = new Set(["panorama-experience"]);
+const PANORAMA_TEST_ONLY_NAV_TARGETS = new Set([]);
 
 /** Stable first line of default 「我」 summary (PAN-01S.1). */
 const SUBJECT_IDENTITY_LINE =

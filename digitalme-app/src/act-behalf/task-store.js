@@ -191,10 +191,54 @@ function normalizeTask(input) {
         ? input.priorSubjectContext
         : null,
     contextAudit: (input && input.contextAudit) || null,
+    doingContext:
+      input && input.doingContext && typeof input.doingContext === "object"
+        ? input.doingContext
+        : null,
     selectedSelfContext,
     existingUserPositions: String((input && input.existingUserPositions) || ""),
     digitalMeInferences: String((input && input.digitalMeInferences) || ""),
     result: String((input && input.result) || ""),
+    // Email drafting (taskIntent.taskType === "email"): structured draft, main-process only
+    emailDraft:
+      input && input.emailDraft && typeof input.emailDraft === "object"
+        ? {
+            to: String(input.emailDraft.to || ""),
+            subject: String(input.emailDraft.subject || ""),
+            body: String(input.emailDraft.body || ""),
+            attachments: Array.isArray(input.emailDraft.attachments)
+              ? input.emailDraft.attachments.map((a) => String(a || "").trim()).filter(Boolean)
+              : [],
+            needsConfirmation: Array.isArray(input.emailDraft.needsConfirmation)
+              ? input.emailDraft.needsConfirmation.map((n) => String(n || "").trim()).filter(Boolean)
+              : [],
+          }
+        : null,
+    // Video/audio scripting (taskIntent.taskType === "video_audio"): structured script, main-process only
+    videoAudioScript:
+      input && input.videoAudioScript && typeof input.videoAudioScript === "object"
+        ? {
+            title: String(input.videoAudioScript.title || ""),
+            duration: String(input.videoAudioScript.duration || ""),
+            scenes: Array.isArray(input.videoAudioScript.scenes)
+              ? input.videoAudioScript.scenes
+                  .map((s) => ({
+                    scene: String((s && s.scene) || ""),
+                    visuals: String((s && s.visuals) || ""),
+                    narration: String((s && s.narration) || ""),
+                    duration: String((s && s.duration) || ""),
+                  }))
+                  .filter((s) => s.visuals || s.narration)
+              : [],
+            creativeDirection: String(input.videoAudioScript.creativeDirection || ""),
+            productionTips: Array.isArray(input.videoAudioScript.productionTips)
+              ? input.videoAudioScript.productionTips.map((t) => String(t || "").trim()).filter(Boolean)
+              : [],
+            needsConfirmation: Array.isArray(input.videoAudioScript.needsConfirmation)
+              ? input.videoAudioScript.needsConfirmation.map((n) => String(n || "").trim()).filter(Boolean)
+              : [],
+          }
+        : null,
     // Block 2+: Capability Invocation records (append-only from main process)
     invocations: Array.isArray(input && input.invocations) ? input.invocations : [],
     selectedSkillId: input && input.selectedSkillId ? String(input.selectedSkillId) : null,

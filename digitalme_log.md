@@ -5,6 +5,403 @@
 
 ---
 
+## 2026-07-23 能力上限与下限原则纠正
+
+### Owner 反馈
+
+Owner 明确纠正此前将“像我”与通用能力收缩绑定的判断：Digital Me 不应因为用户蒸馏结果而限制大模型能力。
+
+### 正式产品原则
+
+- Digital Me 的能力上限 = 所接入大模型的能力上限；
+- Digital Me 的能力下限 = 所接入大模型的能力下限；
+- 如果加入 Digital Me 后通用任务表现变弱，应视为设计、编排、检索、复核或工具链缺陷；
+- 个人蒸馏结果是主体性增强层，不是能力阉割层；
+- 两种使用方式均须支持：生成前将价值观、经验、风格和边界叠加进任务；生成后对大模型结果按上述维度校对后再输出；
+- “像我”负责方向、真实性、边界、连续性和本人特征；AI 负责完整通用能力。
+
+### 同步文件
+
+- `digitalme_subject_architecture_and_rd_principles_v0.1.md` §3.1
+- `digitalme_product_spec_v0.2.md` §2.0.1
+- `DigitalMe_doing_product_logic_v0.2_2026-07-22.md` §1.1
+- `digitalme_context.md` 决策 #26
+
+---
+
+## 2026-07-22 跨账户协作验证通过
+
+### 凭据跨账户交换
+
+- `src/identity/credential-exchange.js` — 凭据导出/导入，导出文件包含签发者完整公钥，导入方用文件中的公钥验证签名（不依赖本地身份）
+- 账户 A 导出 `cred_mrw12gin_66ucte` → 账户 B 导入并验证签名通过，issuer 正确显示账户 A 的 DID
+- 已撤销凭据拒绝导出，过期凭据导入标记无效
+- 测试：34 passed
+
+### 协作跨账户交换
+
+- `src/collaboration/exchange.js` — 协作邀请/接受/更新同步，邀请文件包含 from 的 DID 和公钥，更新按时间戳幂等合并，状态只向前流转
+- 账户 A 导出邀请 → 账户 B 接受（状态 `accepted`）→ 双向更新同步（A→B、B→A）
+- 测试：39 passed
+
+### 全部测试结果
+
+**23 套测试 496 断言 0 失败**。
+
+---
+
+### 开发计划
+
+基于 v0.2 身份与协作规划，制定 `DigitalMe_identity_collaboration_dev_plan_v0.1_2026-07-22.md`，按 P0 → P1 → P2 顺序实施。
+
+### ID-01：身份标识生成与展示
+
+- `src/identity/index.js` — Ed25519 密钥生成、DID 派生、identity.json 持久化、签名/验证
+- "我"中显示身份标识，可复制，随 Package 持久化
+- 测试：9 passed
+
+### ID-02：角色身份管理
+
+- `src/identity/role-view.js` — 角色选择、角色视图配置、角色切换，数据持久化到 role-view.json
+- 默认角色：创始人/投资人/写作者/研究者
+- 测试：30 passed
+
+### ID-03：凭据升级为 VC 格式
+
+- `src/identity/vc.js` — W3C VC 2.0 格式 + Ed25519 签名，本地验证，过期自动失效
+- 测试：30 passed
+
+### ID-04：凭据出示流程
+
+- `src/identity/credential-flow.js` — 凭据生成/出示/撤销/审计日志，数据持久化到 credentials.json
+- 测试：39 passed
+
+### ID-05：主体协作闭环验证
+
+- `src/collaboration/index.js` — 协作创建/交互/交付物/批准/反馈/确认写回/撤销，数据持久化到 collaborations.json
+- 协作状态流转：invited → active → delivered → completed / revoked
+- 测试：48 passed
+
+### 全部测试结果
+
+**21 套测试 423 断言 0 失败**：id-01(9) · id-02(30) · id-03(30) · id-04(39) · id-05(48) · act-behalf(4) · gate4-auto-flow(49) · classic-renderer-dom(10) · vl1-block1(18) · vl1-granularity(11) · vl1-block2(23) · vl1-block3(19) · vl1-block4(10) · p1-02(31) · p1-07(39) · email-draft(14) · video-audio(15) · mcp-server(11) · cli(12) · cli-enhanced(15) · editor-extension(16)。
+
+### 下一任务
+
+Owner Electron 真机验收身份与协作功能；P2（协作服务面扩展）。
+
+---
+
+## 2026-07-22 身份与协作规划 v0.2（基于评审全面修订）
+
+### 评审反馈
+
+`digitalme_重要事项与建议_身份协作评审.md` 指出 v0.1 的关键缺陷：身份协作权重不足、五种身份未区分、协作定义不完整、自主性边界不清、"像我"定义抽象、缺少主体协作闭环、缺少第一性对象、验收指标不全面。
+
+### v0.2 修订要点
+
+1. **身份与协作提升为产品核心**：新增"认识我 → 确认我当前以什么身份做什么 → 代表我与其他主体协作 → 将过程、结果和反馈回流到我"闭环，Builder/Runtime/Package 共同服务于主体闭环（来源层/主体层/行动层/协作层/网络层）。
+
+2. **五种身份边界**：明确区分源身份/内在主体身份/角色身份/对外服务身份/任务会话身份，不再用一个"身份"概念覆盖所有场景。
+
+3. **自主性三层边界**：认知自主（独立学习推理）/行动自主（授权范围内执行）/身份自主（不擅自改写根本身份），保留"数字之我走上独立道路"的战略想象，同时形成可验收的产品边界。
+
+4. **"像我"场景化定义**：受场景、角色、证据和授权约束的身份一致性，不是泛化的仿真人格评分。
+
+5. **主体协作闭环**：完整的八步协作过程（发现→任务→授权→执行→交付→反馈→关系→结束），并提供第一条身份—协作产品闭环作为验证对象。
+
+6. **第一性对象**：Subject Identity、Role View、Intent、Authorization Grant、Interaction Contract、Evidence/Lineage 作为第一性对象，DID/Agent Card/MCP/AP2 是协议工件。
+
+7. **八项验收指标**：身份清晰度/授权正确率/身份一致性/协作完成度/证据完整度/撤回有效性/演化可控性/普通人可用性。
+
+### 任务拆分更新
+
+- **P0**：战略定稿（一句话定义、五种身份边界、自主性三层、主体协作闭环产品级定义）
+- **P1**：最小主体体验（身份与能力页面、角色选择、任务级授权、受控协作、交付与责任记录、反馈写回）
+- **P2**：协作服务面扩展（对外展示、多次授权、关系记忆、跨主体匹配、结算市场）
+- **Task ID-01～05**：身份标识、角色身份管理、凭据 VC 升级、凭据出示流程、主体协作闭环验证
+
+### 下一任务
+
+Owner 审核 v0.2 规划，确认后按 P0 → P1 → P2 → Task ID-01～05 顺序实施。
+
+---
+
+### 修复历史任务恢复
+
+`openActBehalfTask` 之前只恢复任务表单数据，不显示结果。修复：
+- 检测 `task.result` 为字符串时，显示到初稿文本框并启用编辑按钮
+- 恢复 `task.emailDraft`（邮件任务的结构化预览）
+- 恢复 `task.videoAudioScript`（视频/音频任务的分镜预览）
+
+### 任务类型引导
+
+生成完成后根据任务类型显示不同的下一步提示：
+- **邮件**："点击「准备发送」进入发送确认"
+- **视频/音频**："点击「导出脚本」获取可在剪映/Descript 中使用的文件"
+- **编程**："点击「复制代码」复制到剪贴板，或「查看依据」了解生成过程"（新增"复制代码"按钮）
+- **通用**："支持导出、重新生成、查看依据等操作"
+
+### 测试结果
+
+全部测试通过：act-behalf(4) · gate4-auto-flow(49) · classic-renderer-dom(10) · email-draft(14) · video-audio(15)。
+
+---
+
+### 修复历史任务点击
+
+`openActBehalfTask` 之前只加载任务表单数据，不显示结果。对于 autoGenerate 任务（`task.result` 是字符串），结果不会显示。修复：检测到 `task.result` 为字符串时，直接显示到初稿文本框，启用保存/采用/否定按钮。
+
+### 文案优化
+
+- "直接生成初稿" → "开始"（更普遍适用，不限于写作任务）
+- 页面说明增加任务类型说明："支持写作、研究、编程、邮件、视频脚本等任务类型，系统自动识别并路由到合适的后台能力"
+- 结果状态文本改为"已生成。你可以继续编辑，或点击「采用」让 Digital Me 从中学习。支持导出、重新生成、查看依据等操作。"
+
+### 测试结果
+
+全部测试通过：act-behalf(4) · gate4-auto-flow(49) · classic-renderer-dom(10) · email-draft(14) · video-audio(15)。
+
+---
+
+### Phase 3-1: 编辑器插件
+
+`src/editor-extension/` — VS Code/Cursor 扩展，程序员在 IDE 中直接使用 Digital Me 个性化上下文。
+
+- **启动连接**：onStartupFinished 激活后通过 stdio 连接 `dm-mcp`
+- **Context View**：7 个 `dm://` 资源（persona/style-guide/boundaries/memory/frameworks/identity/life-summary）树形展示
+- **Credential View**：凭据列表（受众、有效期、Package 指纹）
+- **3 个命令**：`Digital Me: Get Context`、`Digital Me: Generate`、`Digital Me: Generate Credential`
+- TypeScript 编译到 `dist/`，独立运行不依赖 Electron
+
+### Phase 3-2: CLI 增强
+
+`src/cli/commands/` — 新增三个命令：
+
+- `dm run <file> [--exec]` — 运行前审查 + 可选实际执行（超时保护、输出截断）
+- `dm project` — 项目结构分析（package.json/README/配置文件/语言分布）
+- `dm review <file>` — 三栏代码审查（问题/建议/改进方案），使用用户表达风格和边界
+
+### Phase 3-3: 视频/音频协作
+
+视频/音频任务自动识别（"视频/音频/脚本/分镜"等关键词），生成结构化分镜脚本（标题/时长/场景/画面/旁白/创意方向/制作建议），导出 Markdown/纯文本/JSON，适配剪映/Descript 等外部工具。
+
+### 测试结果
+
+全部 16 套测试 **297 断言 0 失败**：editor-extension(16) · cli-enhanced(15) · video-audio(15) · mcp-server(11) · cli(12) · email-draft(14) · act-behalf(4) · gate4-auto-flow(49) · vl1-block1(18) · vl1-granularity(11) · vl1-block2(23) · vl1-block3(19) · vl1-block4(10) · p1-02(31) · p1-07(39) · classic-renderer-dom(10)。
+
+### 全部三个阶段完成
+
+| 阶段 | 内容 | 状态 |
+|---|---|---|
+| Phase 1 | 统一入口 + 写作/研究/文件处理独立完成 + 编程代码初稿 | ✅ |
+| Phase 2 | MCP Server + CLI 终端工具 + 邮件起草 | ✅ |
+| Phase 3 | 编辑器插件 + CLI 增强 + 视频/音频协作 | ✅ |
+
+### 下一任务
+
+Owner Electron 真机验收全部功能。
+
+---
+
+### Phase 2-1: MCP Server
+
+`src/mcp-server/index.js` — 暴露 Digital Me 个性化上下文给外部工具（Cursor/VS Code）。
+
+- **7 个 Resources**：`dm://persona`、`dm://style-guide`、`dm://boundaries`、`dm://memory`、`dm://frameworks`、`dm://identity`、`dm://life-summary`
+- **3 个 Tools**：`dm_get_context(goal)`、`dm_generate(goal, type)`、`dm_credential(audience, validityDays)`
+- 零 Electron 依赖，独立运行，`npm i -g ./src/mcp-server` 后 `dm-mcp` 命令接入 Cursor
+
+### Phase 2-2: CLI 终端工具
+
+`src/cli/index.js` — 程序员在终端里与 Digital Me 协作。
+
+- `dm status` — Package 状态
+- `dm context [goal]` — 个性化上下文
+- `dm generate <goal> [--fake]` — 生成内容
+- `dm credential generate/list/show/revoke` — 凭据管理
+
+### Phase 2-3: 邮件起草
+
+邮件任务自动识别（"邮件/email/发信"关键词），生成结构化邮件（收件人/主题/正文/附件），R3 确认后发送（占位）。
+
+### 测试结果
+
+全部 13 套测试 **255 断言 0 失败**：mcp-server(11) · cli(12) · email-draft(14) · act-behalf(4) · gate4-auto-flow(49) · vl1-block1(18) · vl1-granularity(11) · vl1-block2(23) · vl1-block3(19) · vl1-block4(10) · p1-02(31) · p1-07(39) · classic-renderer-dom(10)。
+
+### 下一任务
+
+Owner Electron 真机验收 7 条路径；Phase 3（编辑器插件 + CLI + 视频/音频协作）。
+
+---
+
+### 产品逻辑确认
+
+Owner 确认：每个做事的能力要么独立达成 95 分位，要么通过与其它工具的协作达成同样目标。编程等能力不能独立达成 95 分位，必须通过协作路径（MCP/插件/CLI 集成到程序员已有环境）。
+
+### 实现改动
+
+- **导航改名**：左侧导航"工作台" → "做事"
+- **移除模板选择器**：新建任务直接打开空白任务表单，不弹模板选择
+- **统一任务界面**：所有任务使用同一个 act-behalf 界面，系统自动判断任务类型路由到合适后台能力
+- **历史任务修复**：任务列表按钮改为 `openDoScene("act_behalf", { taskId })`，正确进入任务详情页
+- **移除 TASK_TEMPLATES**：不再区分写作/研究/编程模板，统一入口
+
+### 测试结果
+
+全部 10 套测试 **214 断言 0 失败**，DOM 结构 10/10 通过。
+
+### 下一任务
+
+Owner Electron 真机验收 7 条路径；身份与协作按 ID-01～ID-04 拆分实现。
+
+---
+
+### 工作台结构重构
+
+Owner 指出："做事"与写作/研究/编程的关系不清晰，并列展示导致用户困惑。
+
+**方案**：统一任务流 + 模板快捷入口。
+
+- `DO_SCENES` 移除 `write`/`research`/`code` 独立场景（保留 `act_behalf` 和筹备中场景）
+- 工作台首页（do-hub）改为任务列表 + "新建任务"按钮
+- "新建任务"弹出模板选择：写作 | 研究 | 编程 | 自定义
+- 模板选择后进入 act-behalf 流程并预填角色/期望成果
+- 旧场景入口重定向到 act-behalf + 模板参数
+
+### 身份与协作规划
+
+完成市场研究（W3C DID/VC、AT Protocol、Solid、OpenAI Memory、Claude Personalization、MCP/A2A），输出 `DigitalMe_identity_collaboration_plan_v0.1_2026-07-22.md`：
+
+- **唯一数字身份**：三层确认、`did:dme:` 标识、本地密钥对
+- **对外凭据**：完整/精简/零知识三类、签发-出示-验证-撤销
+- **协作分期**：零期（本人可见）→ 一期（凭据出示）→ 二期（被雇佣）→ 三期（协作网络）
+- **技术路线**：轻量实现，不碰区块链/resolver
+
+### 测试结果
+
+全部 10 套测试 **214 断言 0 失败**。
+
+### 下一任务
+
+Owner Electron 真机验收 7 条路径；身份与协作按 ID-01～ID-04 拆分实现。
+
+---
+
+### 身份与协作规划
+
+完成市场研究（W3C DID/VC、AT Protocol、Solid、OpenAI Memory、Claude Personalization、MCP/A2A），输出 `DigitalMe_identity_collaboration_plan_v0.1_2026-07-22.md`：
+
+- **唯一数字身份**：三层确认（本人事实/系统推断/自我声明）、`did:dme:` 标识、本地密钥对、可迁移可验证
+- **对外凭据**：完整/精简/零知识三类、签发-出示-验证-撤销流程
+- **协作分期**：零期（本人可见）→ 一期（凭据出示）→ 二期（被雇佣）→ 三期（协作网络）
+- **技术路线**：第一阶段轻量实现（Ed25519 + JSON-LD VC + 本地存储），不碰区块链/resolver
+- **MVP**：身份标识 + 凭据生成/出示/撤销 + 审计日志
+
+### UI 细节修复
+
+- 标签层级克制：高级/候选/依据等标题从 h3/h4 降级为 muted span，不超过"任务标题/任务目标/成果"层级
+- 按钮反馈：保存/采用/否定按钮点击后显示"已保存/已采用/已否定"2 秒
+
+### 下一任务
+
+修复剩余细节 + Owner 真机验收 7 条路径；身份与协作按 ID-01～ID-04 拆分实现。
+
+---
+
+### 产品基线重置 v0.2
+
+Owner 审核 v0.1 后指出两个补强项：1）做事能力面缺编程/演示/多媒体等知识工作者高频任务及 95 分位约束；2）唯一数字身份对外协作——若只有对话+做事，digitalme 跟通用 Agent 没区别。
+
+v0.2 基线新增 §2.4 能力覆盖完整性与 95 分位约束（七大门类）、§5.4 唯一数字身份与对外协作（三层确认/凭据出示/零一二三分期）、§15 门 2 新增第 7 条原型路径。v0.1 改 superseded notice。主路径原型新增路径 7"身份与凭据"。
+
+### Gate 4 实现（G4-01 ~ G4-05）
+
+G4-01：`subject-context-assembly.js` 新增 `autoSelectCandidates`；`main.js` 新增 `actBehalf:autoGenerate` IPC；`preload.js` 新增 bridge。
+
+G4-02：渲染器"研究与表达"标题/标签/按钮改为"做事"/"任务目标"/"生成成果"；`panorama-experience` IPC/preload 引用删除；`task-intent.js` DEFAULT_ROLE 更新。
+
+G4-03：`main.js` `autoGenerate` 扩展为完整链路；渲染器新增"直接生成初稿"按钮 + `handleAutoGenerate`。
+
+G4-04：`scripts/test-gate4-auto-flow.cjs`（7 测试 49 断言），`package.json` 注册 `test:gate4-auto-flow`。
+
+G4-05：`subject-overview/credentials.js`（生成/出示/撤销凭据），`main.js` + `preload.js` 新增 3 个 IPC 通道。
+
+### UI 重构（Owner 反馈驱动）
+
+- **结果区域重构**：默认只显示"成果"卡片（标题 + 初稿 + 操作按钮），四栏证据布局移入 `act-backstage-panel` 默认隐藏，"查看依据"按钮切换。
+- **布局修复**："直接生成初稿"按钮移到目标输入框正下方；上下文候选改为默认折叠。
+- **DOM 修复**：修复 HTML 闭合标签错误（`do-placeholder` 等脱离 `view-do`）。
+- **语法修复**：修复字符串未转义双引号导致的 app.js 语法错误。
+
+### 测试结果
+
+全部 10 套测试 **214 断言 0 失败**：act-behalf(4) · vl1-block1(18) · vl1-granularity(11) · vl1-block2(23) · vl1-block3(19) · vl1-block4(10) · p1-02(31) · p1-07(39) · classic-renderer-dom(10) · gate4-auto-flow(49)。
+
+### 待修细节（明日继续）
+
+Owner 确认逻辑基本正确，仍有细节待修。
+
+### 下一任务
+
+Owner Electron 真机验收走通 7 条路径；修复剩余细节；通过后进入普通用户验证。
+
+---
+
+## 2026-07-21 Gate 4 全部实现（G4-01 ~ G4-05）
+
+### 做了什么
+
+G4-01 IPC重构+autoSelect：`subject-context-assembly.js` 新增 `autoSelectCandidates`，`main.js` 新增 `actBehalf:autoGenerate` IPC handler（完整链路：自动选上下文 → auto-confirm → 调用模型 → 返回结果），`preload.js` 新增 bridge。
+
+G4-02 移除研究与表达入口：渲染器 "研究与表达" 标题/标签/按钮文案改为 "做事"/"任务目标"/"生成成果"；`panorama-experience` IPC/preload 引用删除；`task-intent.js` DEFAULT_ROLE 更新。
+
+G4-03 直接生成初稿：`main.js` `autoGenerate` IPC 扩展为完整生成链路；渲染器新增 "直接生成初稿" 按钮 + `handleAutoGenerate` 处理函数。
+
+G4-04 新测试：`scripts/test-gate4-auto-flow.cjs`（7 测试 49 断言覆盖 autoSelect 全链路），`package.json` 注册 `test:gate4-auto-flow`。
+
+G4-05 凭据最小实现：`subject-overview/credentials.js`（生成/出示/撤销凭据），`main.js` + `preload.js` 新增 3 个 IPC 通道。
+
+### 测试结果
+
+全部 10 套测试 **214 测试 0 失败**：act-behalf(4) · vl1-block1(18) · vl1-granularity(11) · vl1-block2(23) · vl1-block3(19) · vl1-block4(10) · p1-02(31) · p1-07(39) · classic-renderer-dom(10) · gate4-auto-flow(49)。
+
+### 下一任务
+
+Owner 真机验收（npm start Electron），验证 7 条路径可通过：零资料写作·已有"我"写作·查看依据重写·短期/长期学习·发送前确认·管理长期理解·身份凭据。
+
+---
+
+## 2026-07-21 Gate 4 规格冻结与代码迁移
+
+### 做了什么
+
+完成基线 v0.2 §15 门 4：`DigitalMe_gate4_spec_migration_v0.1_2026-07-21.md`。包含代码迁移清单（39 保/4 删/8 改）、新第一闭环规格（产品合同/状态机/13 新IPC/风险矩阵/能力矩阵/14 验收项）、5 块实现任务拆分（G4-01～05）。
+
+### 下一任务
+
+Owner 审核 Gate 4 文档，通过后向 Cursor 下发 G4-01。
+
+---
+
+## 2026-07-21 产品基线重置 v0.2 与原型路径 7
+
+### 做了什么
+
+Owner 在 PAN-01S 对话中指出两次重大产品错误：1）把上下文装配/候选选择暴露为普通用户前置流程；2）把"体现数字之我"机械理解为堆叠来源和系统理解。由此触发产品基线重置。
+
+v0.1 基线（CTO 产品裁决稿）：判废"研究与表达"独立入口和候选确认主路径；确立十条产品原则；重新定义默认主循环；对齐 OpenAI/Claude/Google 最佳实践；定义恢复开发前四道门。
+
+Owner 审核指出的两个补强项：1）做事能力面缺编程/演示/多媒体等知识工作者高频任务及 95 分位约束；2）唯一数字身份对外协作——若只有对话+做事，digitalme 跟通用 Agent 没区别。
+
+v0.2 基线：新增 §2.4 能力覆盖完整性与 95 分位约束，新增 §5.4 唯一数字身份与对外协作（三层确认/凭据/分期），§15 门 2 新增第 7 条原型路径。v0.1 改 superseded。主路径原型新增路径 7："身份与凭据"。
+
+### 下一任务
+
+主路径原型完善（七条已就绪）→ 普通用户验证 → 规格冻结 → 下发实现任务。
+
+---
+
 ## 2026-07-21 Owner 真机验收第 4 步候选删除粒度修复
 
 ### 做了什么
@@ -3975,6 +4372,31 @@ A（真实动态之我 + 自我管理/发展条件）为根基；B（主体性�
 1. 定位确认：**构建 = 进料与加工；数字之我 = 成品与校对**；
 2. 人中心 Agent 窗口暂时、门槛靠本我密度×信任×飞轮，不靠功能清单（战略讨论已对齐，未改航向）；
 3. 正式对外发布仍待产品硬化；轻云/开源分发可后置，当前继续桌面验证。
+
+---
+
+## 2026-07-24（R2 对话运行时：失败重试与回归收口）
+
+### 本次目标
+
+1. 在已保留的新版对话运行时中补齐失败后的可恢复操作；
+2. 以真实 Electron 重新验证会话、流式、停止、重载、成果关联和主体上下文边界；
+3. 形成可机器读取的 R2 聚合验收记录。
+
+### 本次完成
+
+1. 新版 React 对话页增加明确的「重试」动作；仅在 main 返回失败终态后出现，重试仍沿用 main/core 的会话、请求、模型与附件链路；
+2. 修复极早失败事件在 renderer 确认接收前可能丢失的时序：活动请求引用在确认前同步就绪，main 仍是请求和终态唯一权威；
+3. 新增 `test:r2-dialogue`，在隔离 userData 和临时 Package 下汇总九项真实验收：新 Shell 打开、发送流式、停止与重试、会话持久化、切换保护、显示/模型分离、成果关联卡、reload 恢复、主体上下文回归；结果写入 `.codex-qa/r2-dialogue/acceptance.json`；
+4. 验证结果：R2 聚合 **9/9**、R2 contracts **19/19**、R2 Electron **16/16**；R1 **8/8**、PAN-01S **9/9**、doing-context **6/6**；renderer 控制台烟测未发现业务 `console.error` 或页面异常；
+5. 提交：`5d88dc4`（R1 reload 就绪状态）与 `248189d`（R2 可恢复重试与验收）。未读取、修改或污染真实 `digital-me-package`。
+
+### 当前边界与待办
+
+1. R2 仍是**保留基础设施**，不是当前产品主线；不据此启动 R3、R2.5、PAN-02、外部 Agent 或协作市场；
+2. 生产默认入口继续为 legacy；新版对话仅在受控入口下验证；
+3. 自动化通过不替代 Owner 全功能 Electron 真机验收，下一项仍为既定 Owner 验收路径；
+4. 完整工作树仍保留候选基线的既有未提交修改；全局 `git diff --check` 的尾随空格来自既有 `app.js` 与文档改动，本轮 R2 文件的差异检查通过。
 
 ---
 

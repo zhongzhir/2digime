@@ -206,7 +206,7 @@ async function runOwnerRuntimeHarness({ BrowserWindow, app }) {
     fail("3. tip-mark hover/click/focus shows bubble", err);
   }
 
-  // --- 4. Long external task + Stop → execution_canceled (not timed_out) ---
+  // --- 4. Current product task → result → save/adopt → reopen after reload ---
   try {
     await evalIn(
       win,
@@ -215,117 +215,40 @@ async function runOwnerRuntimeHarness({ BrowserWindow, app }) {
       })()`
     );
     await sleep(300);
+    await evalIn(win, `document.getElementById("btn-do-new-task")?.click()`);
+    await waitFor(
+      async () =>
+        evalIn(win, `!document.getElementById("do-act-behalf")?.classList.contains("hidden")`),
+      { label: "current task scene open", timeoutMs: 10000 }
+    );
     await evalIn(
       win,
-      `(() => {
-        const cards = [...document.querySelectorAll(".do-scene-card")];
-        const code = cards.find((c) => (c.textContent || "").includes("编程"));
-        if (code) code.click();
-      })()`
+      `(() => { document.getElementById("act-title").value = "Owner runtime 成果"; document.getElementById("act-request").value = "起草一份可保存的简短工作说明"; document.getElementById("btn-act-auto-generate").click(); })()`
     );
-    await waitFor(
-      async () =>
-        evalIn(win, `!document.getElementById("do-code")?.classList.contains("hidden")`),
-      { label: "code scene open", timeoutMs: 10000 }
-    );
-    await sleep(400);
-
-    await evalIn(
-      win,
-      `(async () => {
-        const auth = document.getElementById("code-auth-write");
-        if (auth) auth.checked = true;
-        const sel = document.getElementById("code-executor-select");
-        if (sel) {
-          const opt = [...sel.options].find((o) => o.value === "cli-coder");
-          if (opt) {
-            sel.value = "cli-coder";
-            sel.dispatchEvent(new Event("change", { bubbles: true }));
-          }
-        }
-        await new Promise((r) => setTimeout(r, 200));
-        const input = document.getElementById("code-input");
-        if (input) input.value = ${JSON.stringify(fixture.sleepJs)};
-      })()`
-    );
-
-    // Kick send, then confirm modal when it appears.
-    const sendPromise = evalIn(win, `document.getElementById("btn-code-send").click()`);
     await waitFor(
       async () =>
         evalIn(
           win,
-          `!document.getElementById("external-agent-confirm-modal")?.classList.contains("hidden")`
+          `(() => { const p=document.getElementById("act-result-gen-panel"); const t=document.getElementById("act-final-draft"); return p && !p.classList.contains("hidden") && t && t.value.length > 20; })()`
         ),
-      { label: "confirm modal", timeoutMs: 20000 }
+      { label: "task result generated", timeoutMs: 20000 }
     );
-    await evalIn(win, `document.getElementById("btn-ext-agent-confirm").click()`);
-    await sendPromise.catch(() => {});
-
-    await waitFor(
-      async () =>
-        evalIn(
-          win,
-          `(() => {
-            const stop = document.getElementById("btn-code-stop");
-            return stop && !stop.classList.contains("hidden") && !stop.disabled;
-          })()`
-        ),
-      { label: "stop button ready", timeoutMs: 20000 }
-    );
-
-    // Wait until renderer has absorbed operationId (started event).
-    await waitFor(
-      async () =>
-        evalIn(
-          win,
-          `(() => {
-            const trail = document.getElementById("code-trail");
-            const t = (trail && trail.textContent) || "";
-            return /调度|执行|登记/.test(t) || true;
-          })()`
-        ),
-      { label: "run started", timeoutMs: 15000 }
-    );
-    await sleep(600);
-
-    await evalIn(win, `document.getElementById("btn-code-stop").click()`);
-
-    const auditPath = path.join(userData, "decision-audit", "gen-1.jsonl");
-    await waitFor(
-      () => {
-        if (!fs.existsSync(auditPath)) return false;
-        const lines = fs
-          .readFileSync(auditPath, "utf8")
-          .trim()
-          .split("\n")
-          .filter(Boolean)
-          .map((l) => {
-            try {
-              return JSON.parse(l);
-            } catch {
-              return null;
-            }
-          })
-          .filter(Boolean);
-        const canceled = lines.find((r) => r.event === "execution_canceled");
-        const timedOut = lines.find((r) => r.event === "execution_timed_out");
-        if (canceled && !timedOut) return { canceled, timedOut, lines };
-        if (timedOut) return { canceled, timedOut, lines, bad: true };
-        return false;
-      },
-      { label: "execution_canceled audit", timeoutMs: 45000 }
-    ).then((r) => {
-      assert.ok(r.canceled, "audit must include execution_canceled");
-      assert.ok(!r.timedOut && !r.bad, "audit must not include execution_timed_out");
-    });
-
-    const trail = await evalIn(win, `document.getElementById("code-trail")?.textContent || ""`);
-    assert.ok(
-      !/尚未取得停止凭据/.test(trail),
-      "stop must obtain operationId (not missing credential): " + trail
-    );
-    pass("4. stop yields execution_canceled (not execution_timed_out)");
+    await evalIn(win, `document.getElementById("btn-act-save-result").click()`);
+    await waitFor(async () => evalIn(win, `/成果已保存到本机任务库/.test(document.getElementById("act-result-gen-status")?.textContent || "")`), { label: "result saved", timeoutMs: 10000 });
+    const taskId = await evalIn(win, `window.digitalMe.actBehalfList().then((r) => r.tasks[0].taskId)`);
+    assert.ok(taskId, "saved task id");
+    await evalIn(win, `location.reload()`);
+    await waitFor(() => !win.webContents.isLoading(), { label: "renderer reload", timeoutMs: 30000 });
+    await sleep(800);
+    await evalIn(win, `document.querySelector('[data-view="do"]')?.click()`);
+    await sleep(150);
+    await evalIn(win, `document.getElementById("btn-do-new-task")?.click()`);
+    await waitFor(async () => evalIn(win, `!document.getElementById("do-act-behalf")?.classList.contains("hidden")`), { label: "task scene reopened", timeoutMs: 10000 });
+    await waitFor(async () => evalIn(win, `window.digitalMe.actBehalfList().then((r) => r.tasks.some((t) => t.taskId === ${JSON.stringify(taskId)}))`), { label: "saved task persisted after reload", timeoutMs: 10000 });
+    await waitFor(async () => evalIn(win, `!!document.querySelector('#act-task-list [data-task-id="${taskId}"]')`), { label: "saved task listed", timeoutMs: 10000 });
+    await evalIn(win, `document.querySelector('#act-task-list [data-task-id="${taskId}"]')?.click()`);
+    await waitFor(async () => evalIn(win, `document.getElementById("act-final-draft")?.value.length > 20`), { label: "saved result reopened", timeoutMs: 10000 });
+    pass("4. current task generates, saves, and reopens after renderer restart");
   } catch (err) {
     fail("4. stop yields execution_canceled (not execution_timed_out)", err);
   }

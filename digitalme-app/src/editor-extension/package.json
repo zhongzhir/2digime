@@ -1,0 +1,84 @@
+{
+  "name": "digitalme-context",
+  "displayName": "Digital Me Context",
+  "description": "Digital Me personalized context in your editor",
+  "version": "0.1.0",
+  "publisher": "digitalme",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["AI", "Chat"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "digitalme",
+          "title": "Digital Me",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "digitalme": [
+        {
+          "id": "digitalme.contextView",
+          "name": "Context"
+        },
+        {
+          "id": "digitalme.credentialView",
+          "name": "Credentials"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "digitalme.getContext",
+        "title": "Digital Me: Get Context"
+      },
+      {
+        "command": "digitalme.generate",
+        "title": "Digital Me: Generate"
+      },
+      {
+        "command": "digitalme.generateCredential",
+        "title": "Digital Me: Generate Credential"
+      }
+    ],
+    "configuration": {
+      "title": "Digital Me",
+      "properties": {
+        "digitalme.mcpServer.command": {
+          "type": "string",
+          "default": "dm-mcp",
+          "description": "Digital Me MCP Server 启动命令（默认 dm-mcp，需在 PATH 中；也可填 node 等解释器）。"
+        },
+        "digitalme.mcpServer.args": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "传给 MCP Server 启动命令的额外参数（如服务器脚本路径）。"
+        },
+        "digitalme.packageDir": {
+          "type": "string",
+          "default": "",
+          "description": "Digital Me Package 目录；留空时由 MCP Server 按默认规则解析。"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  }
+}

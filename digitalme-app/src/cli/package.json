@@ -1,0 +1,10 @@
+{
+  "name": "digitalme-cli",
+  "version": "0.1.0",
+  "description": "Digital Me CLI - collaborate with Digital Me in terminal",
+  "main": "index.js",
+  "bin": {
+    "dm": "index.js"
+  },
+  "type": "commonjs"
+}

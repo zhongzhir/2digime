@@ -9,6 +9,12 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { SecretStore, atomicWriteJson } = require("./secret-store");
+const {
+  defaultRoutingFromLegacy,
+  normalizeRouting,
+  redactModelConfig,
+  providerSecretId,
+} = require("../model-routing");
 
 const MODEL_API_KEY_ID = "model.apiKey";
 const MIGRATION_VERSION = 1;
@@ -302,6 +308,14 @@ class ConfigSecretsService {
     const code = err.code || PLAINTEXT_BACKUP_CLEANUP_FAILED;
     const warning = cleanup.ok ? cleanupFailureWarning() : residualBackupWarning();
     // Before redacted commit: never mutate config.json; preserve original plaintext bytes.
+    const modelRouting = normalizeRouting(raw.modelRouting, raw);
+    if (!apiKey) {
+      const primaryId = modelRouting.routes.chat.primary;
+      const primaryProvider = modelRouting.providers.find((provider) => provider.models.some((model) => model.id === primaryId));
+      if (primaryProvider && this.secretStore.has(providerSecretId(primaryProvider.id))) {
+        try { apiKey = this.secretStore.get(providerSecretId(primaryProvider.id)) || ""; } catch { apiKey = ""; }
+      }
+    }
     return {
       status: "failed",
       warning,
@@ -342,13 +356,15 @@ class ConfigSecretsService {
     const list = Array.isArray(cfg.capabilityExtensions)
       ? cfg.capabilityExtensions.map((e) => this.sanitizeExtension(e, store))
       : [];
+    const modelRouting = normalizeRouting(cfg.modelRouting, cfg);
     return {
       provider: cfg.provider || "openai-compatible",
       baseURL: cfg.baseURL || "",
       model: cfg.model || "",
       packageDir: cfg.packageDir || this.defaultPackageDir,
       apiKey: "",
-      apiKeyConfigured: !!(store && store.has(MODEL_API_KEY_ID)),
+      apiKeyConfigured: !!(store && (store.has(MODEL_API_KEY_ID) || modelRouting.providers.some((provider) => store.has(providerSecretId(provider.id))))),
+      modelRouting: redactModelConfig(modelRouting, store),
       capabilityExtensions: list,
       secretsMigration: cfg.secretsMigration || null,
       secretStoreWarning: cfg.secretStoreWarning || null,
@@ -389,7 +405,8 @@ class ConfigSecretsService {
         configUnreadable: true,
       };
     }
-    const publicCfg = this.toPublicConfig(loaded.config, this.secretStore);
+    const raw = this.ensureModelRoutingMigration(loaded.config);
+    const publicCfg = this.toPublicConfig(raw, this.secretStore);
     let apiKey = "";
     try {
       if (this.secretStore.has(MODEL_API_KEY_ID)) {
@@ -398,16 +415,76 @@ class ConfigSecretsService {
     } catch {
       apiKey = "";
     }
+    const modelRouting = normalizeRouting(raw.modelRouting, raw);
+    if (!apiKey) {
+      const primaryId = modelRouting.routes.chat.primary;
+      const primaryProvider = modelRouting.providers.find((provider) =>
+        provider.models.some((model) => model.id === primaryId)
+      );
+      if (primaryProvider && this.secretStore.has(providerSecretId(primaryProvider.id))) {
+        try {
+          apiKey = this.secretStore.get(providerSecretId(primaryProvider.id)) || "";
+        } catch {
+          apiKey = "";
+        }
+      }
+    }
     return {
       provider: publicCfg.provider,
       baseURL: publicCfg.baseURL,
       model: publicCfg.model,
       packageDir: publicCfg.packageDir,
       apiKey,
-      capabilityExtensions: Array.isArray(loaded.config.capabilityExtensions)
-        ? loaded.config.capabilityExtensions
+      capabilityExtensions: Array.isArray(raw.capabilityExtensions)
+        ? raw.capabilityExtensions
         : [],
+      modelRouting,
     };
+  }
+
+  /** Convert the existing single-model shape once, without storing a plaintext key. */
+  ensureModelRoutingMigration(raw) {
+    if (raw && raw.modelRouting) return raw;
+    const next = { ...(raw || defaultPublicConfig(this.defaultPackageDir)), modelRouting: defaultRoutingFromLegacy(raw || {}) };
+    const providerId = next.modelRouting.providers[0].id;
+    if (this.secretStore.has(MODEL_API_KEY_ID) && !this.secretStore.has(providerSecretId(providerId))) {
+      const legacyKey = this.secretStore.get(MODEL_API_KEY_ID);
+      if (legacyKey) {
+        this.secretStore.set(providerSecretId(providerId), legacyKey);
+        if (!this.secretStore.verify(providerSecretId(providerId), legacyKey)) {
+          const err = new Error("模型密钥迁移校验失败，原配置未覆盖。");
+          err.code = "model_key_migration_failed";
+          throw err;
+        }
+      }
+    }
+    this.writeRawConfig(next);
+    return next;
+  }
+
+  getPublicModelRouting() {
+    const raw = this.ensureModelRoutingMigration(this.readRawConfig());
+    return redactModelConfig(raw.modelRouting, this.secretStore);
+  }
+
+  setModelRoutingFromRenderer(input) {
+    const loaded = this.loadRawConfig();
+    if (loaded.status === "error") {
+      const err = new Error(loaded.message || "config_unreadable"); err.code = loaded.code || "config_unreadable"; throw err;
+    }
+    const raw = this.ensureModelRoutingMigration(loaded.config);
+    const routing = normalizeRouting(input?.routing, raw);
+    for (const item of Array.isArray(input?.providerKeys) ? input.providerKeys : []) {
+      const providerId = String(item?.providerId || "");
+      const value = String(item?.apiKey || "").trim();
+      if (!providerId || !value) continue;
+      if (!routing.providers.some((provider) => provider.id === providerId)) continue;
+      if (!this.secretStore.isEncryptionAvailable()) { const err = new Error("secret_encryption_unavailable"); err.code = "secret_encryption_unavailable"; throw err; }
+      this.secretStore.set(providerSecretId(providerId), value);
+      if (!this.secretStore.verify(providerSecretId(providerId), value)) { const err = new Error("secret_verify_failed"); err.code = "secret_verify_failed"; throw err; }
+    }
+    this.writeRawConfig({ ...raw, modelRouting: routing });
+    return redactModelConfig(routing, this.secretStore);
   }
 
   /**
@@ -440,6 +517,13 @@ class ConfigSecretsService {
     };
     delete next.apiKey;
 
+    // Preserve the legacy settings form for existing users: while it still represents
+    // the automatically migrated single provider, keep its route in sync.
+    const existingRouting = normalizeRouting(raw.modelRouting, raw);
+    if (existingRouting.providers.length === 1 && existingRouting.providers[0].id === "default-openai-compatible") {
+      next.modelRouting = defaultRoutingFromLegacy(next);
+    }
+
     if (typeof input.apiKey === "string" && input.apiKey.trim()) {
       if (!this.secretStore.isEncryptionAvailable()) {
         const err = new Error("secret_encryption_unavailable");
@@ -452,6 +536,10 @@ class ConfigSecretsService {
         const err = new Error("secret_verify_failed");
         err.code = "secret_verify_failed";
         throw err;
+      }
+      const defaultProvider = next.modelRouting?.providers?.[0];
+      if (defaultProvider?.id === "default-openai-compatible") {
+        this.secretStore.set(providerSecretId(defaultProvider.id), value);
       }
     }
 

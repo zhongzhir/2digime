@@ -1,0 +1,13 @@
+{
+  "name": "digitalme-mcp-server",
+  "version": "0.1.0",
+  "description": "Digital Me MCP Server - exposes personalized context to external tools",
+  "main": "index.js",
+  "bin": {
+    "dm-mcp": "index.js"
+  },
+  "type": "commonjs",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  }
+}

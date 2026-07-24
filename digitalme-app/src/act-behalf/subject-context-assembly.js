@@ -770,6 +770,84 @@ function applyGoalChangeToStoredTask(existing, newGoal) {
   return out;
 }
 
+/**
+ * Auto-select top candidates based on goal relevance without user input.
+ * Used for the default "express goal → get result" path.
+ * Returns the same shape as assembleSubjectContextCandidates but with
+ * sensitive/high-risk entries marked for potential confirmation.
+ */
+function autoSelectCandidates(pkg, opts) {
+  const assembled = assembleSubjectContextCandidates(pkg, opts);
+  const draft = assembled.subjectContextDraft;
+  if (!draft || !Array.isArray(draft.claims) || draft.claims.length === 0) {
+    return {
+      ...assembled,
+      autoSelectedClaims: [],
+      autoSelectedCount: 0,
+      sensitiveClaims: [],
+      excludedByAutoSelect: [],
+    };
+  }
+
+  const goal = String((opts && opts.goal) || "");
+  const goalTokens = tokenize(goal);
+
+  const scored = draft.claims.map((c, i) => {
+    const cand = {
+      source: (c.sourceRefs && c.sourceRefs[0] && c.sourceRefs[0].source) || "other",
+      label: c.label,
+      text: c.text,
+    };
+    const s = scoreCandidate(cand, goalTokens);
+    return { claim: c, score: s, index: i };
+  });
+  scored.sort((a, b) => b.score - a.score);
+
+  const MAX_AUTO = 7;
+  const SENSITIVITY_THRESHOLD = 1.2;
+
+  const regular = [];
+  const sensitive = [];
+  for (const item of scored) {
+    if (
+      item.score >= SENSITIVITY_THRESHOLD &&
+      (item.claim.kind === "boundary" || item.claim.kind === "identity")
+    ) {
+      sensitive.push(item);
+    } else {
+      regular.push(item);
+    }
+  }
+
+  const autoSelected = regular.slice(0, MAX_AUTO).map((sc) => sc.claim);
+  const remainingSlots = Math.max(0, MAX_AUTO - autoSelected.length);
+  const autoSensitive = sensitive.slice(0, remainingSlots).map((sc) => sc.claim);
+  const autoSelectedAll = [...autoSelected, ...autoSensitive];
+
+  const autoClaimIds = new Set(autoSelectedAll.map((c) => c.id));
+  const excluded = scored.filter((sc) => !autoClaimIds.has(sc.claim.id));
+
+  return {
+    ...assembled,
+    autoSelectedClaims: autoSelectedAll,
+    autoSelectedCount: autoSelectedAll.length,
+    sensitiveClaims: autoSensitive.map((c) => ({
+      claimId: c.id,
+      text: c.text,
+      source: (c.sourceRefs && c.sourceRefs[0] && c.sourceRefs[0].source) || "unknown",
+      reason: "sensitive_or_high_impact",
+    })),
+    excludedByAutoSelect: excluded.map((item) => ({
+      claimId: item.claim.id,
+      text: item.claim.text,
+      source:
+        (item.claim.sourceRefs && item.claim.sourceRefs[0] && item.claim.sourceRefs[0].source) ||
+        "unknown",
+      score: item.score,
+    })),
+  };
+}
+
 module.exports = {
   MAX_CANDIDATES,
   SOURCE_PATH,
@@ -778,6 +856,7 @@ module.exports = {
   resolveSubjectId,
   resolveSubjectVersion,
   assembleSubjectContextCandidates,
+  autoSelectCandidates,
   confirmSubjectContextSnapshot,
   confirmSubjectContextWithUserActions,
   applyGoalChangeToStoredTask,
