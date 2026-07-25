@@ -121,6 +121,25 @@ const DO_SCENES = [
   },
 ];
 
+/** Legacy scene ids → act_behalf seed defaults (write/research/code scenes removed). */
+const TASK_TEMPLATES = [
+  {
+    id: "write",
+    role: "表达助手",
+    expectedOutcome: "可保存、可重新打开的正式成果正文",
+  },
+  {
+    id: "research",
+    role: "研究助手",
+    expectedOutcome: "有依据、可保存的研究报告",
+  },
+  {
+    id: "code",
+    role: "编程助手",
+    expectedOutcome: "可保存的代码说明或脚本成果",
+  },
+];
+
 const $ = (id) => document.getElementById(id);
 
 /** Normalize event targets so Text nodes / nested marks still resolve. */
@@ -560,7 +579,7 @@ function renderMessagesFromHistory() {
   if (!box) return;
   box.innerHTML = "";
   if (!history.length) {
-    addMessage("system-note", "今天想聊什么？可以附上材料，或点下方快捷方式。正式成稿请用回复下的「送到工作台」。");
+    addMessage("system-note", "今天想聊什么？可以附上材料，或点下方快捷方式。正式成稿请用回复下的「送到做事」。");
     return;
   }
   let skipped = 0;
@@ -1003,7 +1022,7 @@ async function copyTextToClipboard(text) {
 async function sendTextToWorkspace(text, titleHint) {
   const content = String(text || "").trim();
   if (!content) {
-    addMessage("system-note", "没有可送入工作台的内容。");
+    addMessage("system-note", "没有可送入做事的内容。");
     return;
   }
   try {
@@ -1012,10 +1031,13 @@ async function sendTextToWorkspace(text, titleHint) {
       content,
       sourceSessionId: currentSession && currentSession.id,
     });
-    addMessage("system-note", `已送到工作台 · 写作：「${item.title}」。`);
-    await openDoScene("write", { libraryId: item.id });
+    addMessage(
+      "system-note",
+      `已送到做事：「${item.title}」。可在做事中继续改成正式成果并保存到本机任务库。`
+    );
+    await openDoScene("act_behalf", { libraryId: item.id });
   } catch (e) {
-    addMessage("system-note", "送到工作台失败：" + (e.message || "请重试"));
+    addMessage("system-note", "送到做事失败：" + (e.message || "请重试"));
   }
 }
 
@@ -1045,8 +1067,8 @@ function attachAssistantActions(wrap, text, opts = {}) {
     const toWb = document.createElement("button");
     toWb.className = "btn-to-workspace";
     toWb.type = "button";
-    toWb.textContent = "送到工作台";
-    toWb.title = "将本条回复送入工作台 · 写作，继续改成正式文稿";
+    toWb.textContent = "送到做事";
+    toWb.title = "将本条回复送入做事，继续改成正式成果并保存";
     toWb.addEventListener("click", () => sendTextToWorkspace(text, opts.titleHint));
     actions.appendChild(toWb);
   }
@@ -5234,6 +5256,39 @@ function showTemplatePicker() {
 }
 
 async function openDoScene(sceneId, opts = {}) {
+  // Legacy write/research/code scenes redirect to act_behalf BEFORE prep placeholder.
+  if (sceneId === "write" || sceneId === "research" || sceneId === "code") {
+    document.querySelectorAll(".nav-item").forEach((b) => {
+      b.classList.toggle("active", b.dataset.view === "do");
+    });
+    $("view-chat").classList.add("hidden");
+    $("view-do").classList.remove("hidden");
+    $("view-me").classList.add("hidden");
+    $("view-extensions").classList.add("hidden");
+    $("do-hub").classList.add("hidden");
+    $("do-placeholder").classList.add("hidden");
+    $("do-write").classList.add("hidden");
+    const drA = $("do-research");
+    if (drA) drA.classList.add("hidden");
+    const dcA = $("do-code");
+    if (dcA) dcA.classList.add("hidden");
+    const da = $("do-act-behalf");
+    if (da) da.classList.remove("hidden");
+    doScene = "act_behalf";
+    const template = TASK_TEMPLATES.find((t) => t.id === sceneId);
+    if (template) {
+      // Prefill happens inside openActBehalfScene after reset; stash on opts.
+      opts = {
+        ...opts,
+        seedRole: template.role,
+        seedExpected: template.expectedOutcome,
+        legacySceneId: sceneId,
+      };
+    }
+    await openActBehalfScene(opts);
+    return;
+  }
+
   const scene = DO_SCENES.find((s) => s.id === sceneId) || { id: sceneId, status: "prep", title: sceneId };
 
   document.querySelectorAll(".nav-item").forEach((b) => {
@@ -5273,27 +5328,6 @@ async function openDoScene(sceneId, opts = {}) {
     if (dcA) dcA.classList.add("hidden");
     const da = $("do-act-behalf");
     if (da) da.classList.remove("hidden");
-    await openActBehalfScene(opts);
-    return;
-  }
-
-  // write/research/code scenes removed - redirect to act_behalf with template
-  if (sceneId === "write" || sceneId === "research" || sceneId === "code") {
-    doScene = "act_behalf";
-    $("do-write").classList.add("hidden");
-    const drA = $("do-research");
-    if (drA) drA.classList.add("hidden");
-    const dcA = $("do-code");
-    if (dcA) dcA.classList.add("hidden");
-    const da = $("do-act-behalf");
-    if (da) da.classList.remove("hidden");
-    const template = TASK_TEMPLATES.find((t) => t.id === sceneId);
-    if (template) {
-      const roleEl = $("act-role");
-      const expectedEl = $("act-expected");
-      if (roleEl && template.role) roleEl.value = template.role;
-      if (expectedEl && template.expectedOutcome) expectedEl.value = template.expectedOutcome;
-    }
     await openActBehalfScene(opts);
     return;
   }
@@ -5624,8 +5658,18 @@ function renderActResultFromTask(task) {
     }
     const metaEl = $("act-result-meta");
     if (metaEl) {
-      const saved = task.resultSavedAt ? ` · 已保存 ${new Date(task.resultSavedAt).toLocaleString()}` : " · 尚未保存";
-      metaEl.textContent = `成果：${task.title || "未命名成果"} · 类型：${task.taskIntent && task.taskIntent.taskType || "写作"}${saved}`;
+      const saved = task.resultSavedAt
+        ? ` · 已保存 ${new Date(task.resultSavedAt).toLocaleString()}`
+        : " · 尚未保存";
+      const statusLabel =
+        task.status === "result_adopted"
+          ? "已采用"
+          : task.status === "result_saved"
+            ? "已保存"
+            : "草稿";
+      metaEl.textContent = `成果：${task.title || "未命名成果"} · 类型：${
+        (task.taskIntent && task.taskIntent.taskType) || "写作"
+      } · 状态：${statusLabel}${saved} · 任务 ${task.taskId}`;
     }
     const saveBtn = $("btn-act-save-result");
     if (saveBtn) saveBtn.disabled = false;
@@ -6075,9 +6119,24 @@ async function saveActBehalfResultDraft() {
   if (!actBehalfState.taskId) return;
   if (!result) {
     const res = await window.digitalMe.actBehalfSaveAutoResult({ taskId: actBehalfState.taskId, currentText: text });
-    if (!res || !res.ok) { setActResultGenStatus((res && res.message) || "保存成果失败，可继续编辑后重试。"); return; }
+    if (!res || !res.ok) {
+      setActResultGenStatus((res && res.message) || "保存成果失败。可继续编辑后重试，或稍后从「做事 > 任务列表」再打开。");
+      return;
+    }
     renderActResultFromTask(res.task);
-    setActResultGenStatus("成果已保存到本机任务库。入口：做事 > 任务列表；可重新打开继续修改。");
+    const entry = (res && res.entry) || "做事 > 任务列表";
+    setActResultGenStatus(
+      `成果已保存到本机任务库（任务 ${actBehalfState.taskId}）。入口：${entry}；可重新打开继续修改。复制文本不算完成。`
+    );
+    const saveBtn = $("btn-act-save-result");
+    if (saveBtn) {
+      const orig = saveBtn.dataset.label || saveBtn.textContent;
+      saveBtn.dataset.label = orig;
+      saveBtn.textContent = "已保存";
+      setTimeout(() => {
+        saveBtn.textContent = orig;
+      }, 2000);
+    }
     return;
   }
   const res = await window.digitalMe.actBehalfSaveResultDraft({
@@ -6087,11 +6146,20 @@ async function saveActBehalfResultDraft() {
     expectedRevision: result.currentRevision,
   });
   if (!res || !res.ok) {
-    setActResultGenStatus((res && res.message) || "保存失败。");
+    setActResultGenStatus((res && res.message) || "保存失败。可继续编辑后重试。");
     return;
   }
   renderActResearchFromTask(res.task);
-  setActResultGenStatus("成果修改已保存。");
+  setActResultGenStatus(`成果修改已保存（任务 ${actBehalfState.taskId}）。入口：做事 > 任务列表。`);
+  const saveBtn = $("btn-act-save-result");
+  if (saveBtn) {
+    const orig = saveBtn.dataset.label || saveBtn.textContent;
+    saveBtn.dataset.label = orig;
+    saveBtn.textContent = "已保存";
+    setTimeout(() => {
+      saveBtn.textContent = orig;
+    }, 2000);
+  }
 }
 
 async function decideActBehalfResult(decision) {
@@ -6100,9 +6168,26 @@ async function decideActBehalfResult(decision) {
   if (!result) {
     const text = ($("act-final-draft") && $("act-final-draft").value) || "";
     const res = await window.digitalMe.actBehalfSaveAutoResult({ taskId: actBehalfState.taskId, currentText: text, decision });
-    if (!res || !res.ok) { setActResultGenStatus((res && res.message) || "采用失败，可继续编辑后重试。"); return; }
+    if (!res || !res.ok) {
+      setActResultGenStatus((res && res.message) || "采用失败。可继续编辑后重试。");
+      return;
+    }
     renderActResultFromTask(res.task);
-    setActResultGenStatus("已采用为成果并保存到本机任务库。入口：做事 > 任务列表。");
+    setActResultGenStatus(
+      decision === "adopted"
+        ? `已采用为成果并保存到本机任务库（任务 ${actBehalfState.taskId}）。入口：做事 > 任务列表。`
+        : `已否定本成果（任务 ${actBehalfState.taskId}）。记录已保留；可继续编辑后重新保存。`
+    );
+    const btn =
+      decision === "adopted" ? $("btn-act-adopt-result") : $("btn-act-reject-result");
+    if (btn) {
+      const orig = btn.dataset.label || btn.textContent;
+      btn.dataset.label = orig;
+      btn.textContent = decision === "adopted" ? "已采用" : "已否定";
+      setTimeout(() => {
+        btn.textContent = orig;
+      }, 2000);
+    }
     return;
   }
   const res = await window.digitalMe.actBehalfDecideResult({
@@ -6112,7 +6197,7 @@ async function decideActBehalfResult(decision) {
     expectedRevision: result.currentRevision,
   });
   if (!res || !res.ok) {
-    setActResultGenStatus((res && res.message) || "处置失败。");
+    setActResultGenStatus((res && res.message) || "处置失败。可继续编辑后重试。");
     return;
   }
   renderActResearchFromTask(res.task);
@@ -6817,7 +6902,34 @@ async function openActBehalfScene(opts = {}) {
   resetActBehalfForm();
   await ensureActResearchSkillBlurb();
   await refreshActTaskList();
-  if (opts.taskId) await openActBehalfTask(opts.taskId);
+  if (opts.taskId) {
+    await openActBehalfTask(opts.taskId);
+    return;
+  }
+  if (opts.seedRole && $("act-role")) $("act-role").value = opts.seedRole;
+  if (opts.seedExpected && $("act-expected")) $("act-expected").value = opts.seedExpected;
+  if (opts.libraryId) {
+    try {
+      const item = await window.digitalMe.getLibraryItem(opts.libraryId);
+      if (item) {
+        if ($("act-title")) $("act-title").value = item.title || "对话送来的草稿";
+        const body = String(item.content || "").trim();
+        if ($("act-request")) {
+          $("act-request").value = body
+            ? "请基于以下草稿继续完善，产出可保存到本机任务库的正式成果。\n\n" + body.slice(0, 8000)
+            : "请继续完善对话送来的草稿，产出可保存的正式成果。";
+        }
+        if (!opts.seedExpected && $("act-expected")) {
+          $("act-expected").value = "可保存、可重新打开的正式成果正文";
+        }
+        setActProgress(
+          "已从对话载入草稿「" + (item.title || "") + "」。确认目标后可生成并「保存成果」。复制文本不算完成。"
+        );
+      }
+    } catch (e) {
+      setActProgress("载入对话草稿失败：" + ((e && e.message) || "请重试"));
+    }
+  }
 }
 
 async function openActBehalfTask(taskId) {
@@ -7025,18 +7137,6 @@ function wireActBehalfUi() {
   $("btn-act-save-result")?.addEventListener("click", () => saveActBehalfResultDraft());
   $("btn-act-adopt-result")?.addEventListener("click", () => decideActBehalfResult("adopted"));
   $("btn-act-reject-result")?.addEventListener("click", () => decideActBehalfResult("rejected"));
-  $("btn-act-save-result")?.addEventListener("click", () => {
-    const btn = $("btn-act-save-result");
-    if (btn) { const orig = btn.textContent; btn.textContent = "已保存"; setTimeout(() => { btn.textContent = orig; }, 2000); }
-  });
-  $("btn-act-adopt-result")?.addEventListener("click", () => {
-    const btn = $("btn-act-adopt-result");
-    if (btn) { const orig = btn.textContent; btn.textContent = "已采用"; setTimeout(() => { btn.textContent = orig; }, 2000); }
-  });
-  $("btn-act-reject-result")?.addEventListener("click", () => {
-    const btn = $("btn-act-reject-result");
-    if (btn) { const orig = btn.textContent; btn.textContent = "已否定"; setTimeout(() => { btn.textContent = orig; }, 2000); }
-  });
   $("btn-act-create-proposal")?.addEventListener("click", () => createActExperienceProposal());
   $("btn-act-save-proposal-review")?.addEventListener("click", () => saveActProposalReview());
   $("btn-act-preview-proposal")?.addEventListener("click", () => previewActProposal());
