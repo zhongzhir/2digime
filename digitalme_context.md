@@ -276,6 +276,7 @@ flowchart TB
 25. **AI 使用主体信息原则（2026-07-19，PAN-00R 冻结）**：不采用「回答上限受蒸馏内容限制」逻辑，也不采用「先生成通用答案再机械贴入个人引用」逻辑。**AI 负责能力上限；Digital Me 负责方向、真实性、边界、连续性和本人特征。** 相关性门强制：与任务无关的主体信息不得进入生成；无相关信息时宁可不做个性化。见 §4.4、规格 v0.6 §2.0.1。
 26. **AI 能力基线纠正（2026-07-23）**：Digital Me 的能力上限与下限均以接入大模型为基线，不得因“像我”而削弱通用能力。个人蒸馏结果采用“生成前叠加”或“生成后校对”两种方式增加价值观、经验、风格、真实性与边界；加入 Digital Me 后通用表现变弱视为设计缺陷。见架构原则 §3.1、产品规格 §2.0.1。
 27. **校准 vs 限制原则（2026-07-25，VL1-FIX）**：明确数字之我不是限制 AI，而是校准 AI。AI 缺原料时不得限制输出、不得让用户补料；用通用知识答并显式区分来源类别（本人事实 / 外部事实 / 通用推理）。六类校准维度：方向、真实性、风格、价值观、安全、边界。配套规格 §3.4 与决策 #102。
+28. **第一纵向闭环正式收口（2026-07-25）**：第一段「代表你做一项研究与表达任务」主线通过。VL1-FIX 真机验收：成果末段不再出现「用户需要补料」；模型正常发挥 AI 通用能力给出具体产品名；本人事实与通用知识显式区分。配套决策 #103。**待 Cursor/Codex 提交 commit 固化**。下一项 = 第二条纵向闭环规划（待 Owner 决定方向）。
 
 ### 3.1 交互体验总则（2026-07-09）
 
@@ -953,3 +954,4 @@ flowchart TB
 99. **第一闭环实现 · 第 3 块（2026-07-21）**：有来源约束的研究与表达成果与证据四栏；Owner 编辑/采用/否定；不写 Package、不调用 feedback。第 2 块标 `accepted`。随后限量修正：Skill/tool invocation 必须匹配当前 goal + Subject Context version。测试：`test:vl1-block3`。**已 accepted**（baseline `0df7bc5`）。
 100. **第一闭环实现 · 第 4 块（2026-07-21）**：Experience Proposal 与主体回流；adopted ≠ 自动写入；Owner 审阅 → 真实 `feedback:preview` → 显式确认 `feedback:apply`；任务内审计。随后限量修正：apply 审计失败可按 changeSet 恢复；Package 读取失败阻断模型。测试：`test:vl1-block4`。状态 `implemented_pending_codex_review`。**下一项（仅登记）**：**第一闭环正式验收与 Owner 真机验收**。
 102. **校准 vs 限制原则（2026-07-25，VL1-FIX）**：Owner 真机发现研究路径在 autoGenerate 模式下生成「由于本人信息中未提供…需要用户自行补充」，触线。明确原则：数字之我不限制 AI 通用能力上限；数字之我通过方向/真实性/风格/价值观/安全/边界六类校准维度介入。AI 缺原料时用通用知识答，**不得限制输出，不得让用户补料**。三类来源显式区分（本人事实 / 外部事实 / 通用推理）。任务包 `digitalme_phase1_task_VL1-FIX_calibrate_not_limit_prompts_v0.1.md`；规格 §3.4；`result-generation.js` 三个 prompt 已重写；`test:vl1-prompt-calibration` 11 条。待 Owner 真机确认。
+103. **第一纵向闭环正式收口（2026-07-25，VL1-FIX 真机验收后）**：Owner 真机任务「评估 AI 主权协作的当前主流产品图景」07:56 result_saved，VL1-FIX 修复有效：成果末段不再出现「由于本人信息中未提供…需要用户自行补充」；模型用 AI 通用能力给出具体产品名（PersonalAI / LocalAI / OpenDiamond / SingularityNET / Ocean Protocol / 欧盟 AI 公地 / 中国数据要素 X）；本人事实（"基于你的治理观念"）与通用知识显式区分；残留的"建议搜 2025-2026 年真实项目替换"是模型对自身输出留的不确定性标记（uncertainty ≥ medium 当无引用时），不是 prompt 限制，属合理校准。**第一段「代表你做一项研究与表达任务」主线通过**。待 Cursor/Codex 提交 `fix(vl1): calibrate-not-limit generation prompts` commit 固化（6 文件改动）。commit 后第一段基线 = `2f1b7bd` + 待 commit。R3 / R2.5 / PAN-02 仍 `paused` / `planned` / `blocked`，不动。**不 push 远端**（Owner 已确认无远端，本地 commit 即可）。下一项 = **第二条纵向闭环规划**（待 Owner 决定方向）。

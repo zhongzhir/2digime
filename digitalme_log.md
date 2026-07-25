@@ -5,6 +5,37 @@
 
 ---
 
+## 2026-07-25（第一段正式收口 · VL1-FIX 真机验收）
+
+### 本次目标
+
+1. 验证 VL1-FIX 修复（`result-generation.js` 三个 prompt 校准 vs 限制）实际生效；
+2. 收口第一纵向闭环主线。
+
+### 本次完成
+
+1. Owner 真机任务「评估 AI 主权协作的当前主流产品图景」07:56 result_saved，VL1-FIX 真机验收通过：
+   - 成果末段不再出现「由于本人信息中未提供…需要用户自行补充」
+   - 模型用 AI 通用能力答出具体产品名（PersonalAI / LocalAI / OpenDiamond / SingularityNET / Ocean Protocol / 欧盟 AI 公地 / 中国数据要素 X）
+   - 本人事实（「基于你的治理观念」）与通用知识显式区分
+   - 残留的「建议搜 2025-2026 年真实项目替换」是模型对自身输出留的不确定性标记（`uncertainty ≥ medium` 当无引用时），不是 prompt 限制，属合理校准
+2. context.md 决策 #103 + §3 第 28 条起草（第一段正式收口）。
+3. 任务包 `digitalme_phase1_task_VL1-FIX_calibrate_not_limit_prompts_v0.1.md` 实施闭环：起草 → Cursor/Codex 实现 → 自动化 11/11 → 真机验收。
+
+### 待办事项
+
+1. Cursor/Codex 提交 `fix(vl1): calibrate-not-limit generation prompts` commit 固化（6 文件改动：1 源码 + 1 测试 + 1 配置 + 4 文档）；
+2. commit 后第一段基线 = `2f1b7bd` + 待 commit；
+3. 第二条纵向闭环规划（待 Owner 决定方向）。
+
+### 重要信息
+
+1. **第一段正式收口**：校准 vs 限制原则落地，AI 不再被蒸馏结果限制。
+2. **R3 / R2.5 / PAN-02 仍 `paused` / `planned` / `blocked`**，不动。
+3. **不 push 远端**——本地 commit 即可（Owner 已确认无远端）。
+
+---
+
 ## 2026-07-25（VL1-FIX · 校准 vs 限制 prompt 实现）
 
 ### 本次目标
