@@ -1124,6 +1124,12 @@ function addMessage(role, text, opts = {}) {
       foldBtn.textContent = expanded ? "收起" : "展开";
       foldBtn.setAttribute("aria-expanded", String(expanded));
       el.classList.toggle("msg-folded", !expanded);
+      // Keep the toggle in view so height change is obvious after expand/collapse.
+      try {
+        foldBtn.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      } catch {
+        /* ignore */
+      }
     });
     wrap.appendChild(foldBtn);
   }
