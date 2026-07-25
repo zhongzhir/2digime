@@ -10641,6 +10641,9 @@ const BOUNDARY_SCOPE_LABELS = {
 };
 
 function switchMeTab(tab) {
+  // Invalidate in-flight 「我」default-entry apply so async refreshMeView
+  // cannot stomp a tab the user already chose.
+  meNavGeneration += 1;
   meActiveTab = tab;
   if (meLane !== "self") switchMeLane("self");
   document.querySelectorAll("#me-tabs .mode-tab").forEach((b) => {

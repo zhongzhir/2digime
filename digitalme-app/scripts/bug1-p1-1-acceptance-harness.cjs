@@ -24,10 +24,11 @@ async function runBug1P11AcceptanceHarness({ BrowserWindow }) {
   await waitFor(
     () =>
       win.webContents.executeJavaScript(
-        `!document.getElementById('view-me').classList.contains('hidden')`
+        `!document.getElementById('view-me').classList.contains('hidden') && document.querySelector('#me-tabs .mode-tab.active')?.dataset.meTab === 'overview'`
       ),
-    "me view"
+    "me view settled on overview"
   );
+  await sleep(400);
 
   const tabs = ["cognition", "distill", "collaboration"];
   const records = [];
