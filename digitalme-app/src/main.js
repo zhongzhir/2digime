@@ -273,7 +273,9 @@ app.whenReady().then(() => {
   });
   if (process.env.DIGITALME_OWNER_RUNTIME_TEST === "1") {
     const harness =
-      process.env.DIGITALME_BUG1_P1_4 === "1"
+      process.env.DIGITALME_BUG1_P1_5 === "1"
+        ? require("../scripts/bug1-p1-5-acceptance-harness.cjs")
+        : process.env.DIGITALME_BUG1_P1_4 === "1"
         ? require("../scripts/bug1-p1-4-acceptance-harness.cjs")
         : process.env.DIGITALME_BUG1_P1_3 === "1"
         ? require("../scripts/bug1-p1-3-acceptance-harness.cjs")
@@ -307,7 +309,9 @@ app.whenReady().then(() => {
               ? require("../scripts/pan-01-owner-runtime-harness.cjs")
               : require("../scripts/owner-runtime-harness.cjs");
     const run =
-      process.env.DIGITALME_BUG1_P1_4 === "1"
+      process.env.DIGITALME_BUG1_P1_5 === "1"
+        ? harness.runBug1P15AcceptanceHarness
+        : process.env.DIGITALME_BUG1_P1_4 === "1"
         ? harness.runBug1P14AcceptanceHarness
         : process.env.DIGITALME_BUG1_P1_3 === "1"
         ? harness.runBug1P13AcceptanceHarness

@@ -10198,33 +10198,125 @@ async function refreshModelRoutingSettings() {
       ["当前对话模型", "chat"], ["成果生成模型", "artifact"], ["质检模型", "review"],
     ].map(([label, taskType]) => `<div><strong>${label}</strong><span>${escapeHtml(modelRouteLabel(routing, taskType))}</span></div>`).join("");
   }
+  renderModelRoutingTaskUi(routing);
   const editor = $("cfg-model-routing-json");
   if (editor) editor.value = JSON.stringify({ providers: routing.providers.map((provider) => ({ id: provider.id, name: provider.name, type: provider.type, baseUrl: provider.baseUrl, enabled: provider.enabled, models: provider.models })), routes: routing.routes }, null, 2);
   const audit = $("model-routing-audit");
   if (audit && window.digitalMe.getRecentModelRouting) audit.textContent = JSON.stringify(await window.digitalMe.getRecentModelRouting(), null, 2);
 }
 
+function listRoutingModelOptions(routing) {
+  const options = [];
+  for (const provider of routing.providers || []) {
+    if (!provider || provider.enabled === false) continue;
+    for (const model of provider.models || []) {
+      if (!model || model.enabled === false) continue;
+      options.push({
+        id: model.id,
+        label: `${provider.name} / ${model.displayName || model.model || model.id}`,
+      });
+    }
+  }
+  return options;
+}
+
+function renderModelRoutingTaskUi(routing) {
+  const host = $("model-routing-task-ui");
+  if (!host) return;
+  const options = listRoutingModelOptions(routing);
+  const tasks = [
+    { key: "chat", label: "对话（按任务分工）" },
+    { key: "artifact", label: "成果生成（按任务分工）" },
+    { key: "review", label: "质检（按任务分工）" },
+  ];
+  host.innerHTML = tasks
+    .map((task) => {
+      const route = (routing.routes && routing.routes[task.key]) || {};
+      const primary = route.primary || "";
+      const fallbacks = Array.isArray(route.fallbacks) ? route.fallbacks : [];
+      const fallback1 = fallbacks[0] || "";
+      const optsHtml =
+        `<option value="">未配置</option>` +
+        options
+          .map(
+            (opt) =>
+              `<option value="${escapeHtml(opt.id)}">${escapeHtml(opt.label)}</option>`
+          )
+          .join("");
+      return (
+        `<div class="settings-model-task-row" data-task-type="${escapeHtml(task.key)}">` +
+        `<strong>${escapeHtml(task.label)}</strong>` +
+        `<label>默认模型<select class="model-route-primary">${optsHtml}</select></label>` +
+        `<label>备用模型（失败时改用）<select class="model-route-fallback">${optsHtml}</select></label>` +
+        `</div>`
+      );
+    })
+    .join("");
+  host.querySelectorAll(".settings-model-task-row").forEach((row) => {
+    const key = row.dataset.taskType;
+    const route = (routing.routes && routing.routes[key]) || {};
+    const primarySel = row.querySelector(".model-route-primary");
+    const fallbackSel = row.querySelector(".model-route-fallback");
+    if (primarySel) primarySel.value = route.primary || "";
+    if (fallbackSel) fallbackSel.value = (route.fallbacks && route.fallbacks[0]) || "";
+  });
+}
+
+function applyModelRoutingTaskUiToEditor(routing) {
+  const host = $("model-routing-task-ui");
+  if (!host || !routing) return routing;
+  const next = {
+    ...routing,
+    routes: { ...(routing.routes || {}) },
+  };
+  host.querySelectorAll(".settings-model-task-row").forEach((row) => {
+    const key = row.dataset.taskType;
+    const primary = row.querySelector(".model-route-primary")?.value || "";
+    const fallback = row.querySelector(".model-route-fallback")?.value || "";
+    const fallbacks = fallback && fallback !== primary ? [fallback] : [];
+    next.routes[key] = { primary, fallbacks };
+  });
+  return next;
+}
+
 async function testModelRoutingConnection() {
   const feedback = $("model-routing-feedback");
   if (feedback) feedback.textContent = "正在测试当前对话模型…";
   const result = await window.digitalMe.testModelRouting({ taskType: "chat" });
-  if (feedback) feedback.textContent = result.ok ? `当前使用的模型：${result.provider} / ${result.model}${result.fallbackUsed ? "（备用模型）" : ""}` : "当前模型不可用。可以检查模型设置，或切换到备用模型。";
+  if (feedback) {
+    feedback.textContent = result.ok
+      ? `当前使用的模型：${result.provider} / ${result.model}${result.fallbackUsed ? "（备用模型）" : ""}`
+      : "当前模型不可用。可以检查模型设置，或切换到备用模型。";
+  }
   await refreshModelRoutingSettings();
 }
 
 async function saveModelRoutingSettings() {
   const feedback = $("model-routing-feedback");
   let routing;
-  try { routing = JSON.parse($("cfg-model-routing-json").value); } catch (e) { if (feedback) feedback.textContent = "模型配置格式有误，请检查后重试。"; return; }
+  try {
+    routing = JSON.parse($("cfg-model-routing-json").value);
+  } catch (e) {
+    if (feedback) feedback.textContent = "模型配置格式有误，请检查后重试。";
+    return;
+  }
+  routing = applyModelRoutingTaskUiToEditor(routing);
+  const editor = $("cfg-model-routing-json");
+  if (editor) editor.value = JSON.stringify({ providers: routing.providers, routes: routing.routes }, null, 2);
   const providerId = $("cfg-routing-provider-id").value.trim();
   const apiKey = $("cfg-routing-provider-key").value.trim();
   try {
-    await window.digitalMe.saveModelRouting({ routing, providerKeys: providerId && apiKey ? [{ providerId, apiKey }] : [] });
+    await window.digitalMe.saveModelRouting({
+      routing,
+      providerKeys: providerId && apiKey ? [{ providerId, apiKey }] : [],
+    });
     $("cfg-routing-provider-key").value = "";
-    if (feedback) feedback.textContent = "模型配置已保存。密钥不会显示或保存到页面。";
+    if (feedback) feedback.textContent = "模型配置已保存。按任务分工与备用模型已更新；密钥不会显示或保存到页面。";
     await refreshModelRoutingSettings();
     await renderModelStatus();
-  } catch (e) { if (feedback) feedback.textContent = "保存失败：" + (e.message || String(e)); }
+  } catch (e) {
+    if (feedback) feedback.textContent = "保存失败：" + (e.message || String(e));
+  }
 }
 
 function renderGuide() {

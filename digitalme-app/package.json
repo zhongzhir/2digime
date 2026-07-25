@@ -48,6 +48,7 @@
     "test:bug1-p1-2": "electron scripts/electron-bug1-p1-2-acceptance.cjs",
     "test:bug1-p1-3": "electron scripts/electron-bug1-p1-3-acceptance.cjs",
     "test:bug1-p1-4": "electron scripts/electron-bug1-p1-4-acceptance.cjs",
+    "test:bug1-p1-5": "electron scripts/electron-bug1-p1-5-acceptance.cjs",
     "test:capability-acceptance": "electron scripts/electron-capability-acceptance.cjs",
     "test:model-routing": "node scripts/test-model-routing.cjs",
     "test:model-routing-acceptance": "electron scripts/electron-model-routing-acceptance.cjs",
