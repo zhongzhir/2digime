@@ -1819,9 +1819,21 @@ function switchView(view, btn, opts = {}) {
   $("view-chat").classList.toggle("hidden", view !== "chat");
   $("view-do").classList.toggle("hidden", view !== "do");
   $("view-me").classList.toggle("hidden", view !== "me");
+  const viewIdentity = $("view-identity");
+  if (viewIdentity) viewIdentity.classList.toggle("hidden", view !== "identity");
   $("view-extensions").classList.toggle("hidden", view !== "extensions");
   if (view !== "me") {
     clearBuildSessionState();
+  }
+  if (view === "identity") {
+    Promise.all([
+      loadIdentityDisplay(),
+      loadRoleSelector(),
+      loadCredentialManager(),
+      loadCollaborationManager(),
+    ]).catch((err) => {
+      console.error("[Digital Me] 加载身份与协作失败", err);
+    });
   }
   if (view === "extensions") refreshExtensionsView();
   if (view === "chat") renderCapabilitiesStatus();
@@ -5264,6 +5276,8 @@ async function openDoScene(sceneId, opts = {}) {
     $("view-chat").classList.add("hidden");
     $("view-do").classList.remove("hidden");
     $("view-me").classList.add("hidden");
+    const viW = $("view-identity");
+    if (viW) viW.classList.add("hidden");
     $("view-extensions").classList.add("hidden");
     $("do-hub").classList.add("hidden");
     $("do-placeholder").classList.add("hidden");
@@ -5297,6 +5311,8 @@ async function openDoScene(sceneId, opts = {}) {
   $("view-chat").classList.add("hidden");
   $("view-do").classList.remove("hidden");
   $("view-me").classList.add("hidden");
+  const viP = $("view-identity");
+  if (viP) viP.classList.add("hidden");
   $("view-extensions").classList.add("hidden");
 
   if (scene.status === "prep") {
@@ -10651,7 +10667,7 @@ function switchMeTab(tab) {
     b.classList.toggle("active", on);
     b.setAttribute("aria-selected", on ? "true" : "false");
   });
-  ["overview", "distill", "cognition", "collaboration", "timeline", "roles", "mind", "boundaries"].forEach((name) => {
+  ["overview", "distill", "cognition", "timeline", "roles", "mind", "boundaries"].forEach((name) => {
     const el = $("me-panel-" + name);
     if (el) {
       const show = name === tab;
@@ -10660,11 +10676,6 @@ function switchMeTab(tab) {
     }
   });
   if (tab === "cognition") refreshCognitionPanel();
-  if (tab === "collaboration") {
-    Promise.all([loadIdentityDisplay(), loadRoleSelector(), loadCredentialManager(), loadCollaborationManager()]).catch((err) => {
-      console.error("[Digital Me] 加载身份与协作失败", err);
-    });
-  }
   if (tab === "mind") renderMindPersonaPreview();
   if (tab === "distill") refreshDistillMe();
 }

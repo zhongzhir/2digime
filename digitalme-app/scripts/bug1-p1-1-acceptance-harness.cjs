@@ -30,7 +30,7 @@ async function runBug1P11AcceptanceHarness({ BrowserWindow }) {
   );
   await sleep(400);
 
-  const tabs = ["cognition", "distill", "collaboration"];
+  const tabs = ["cognition", "distill"];
   const records = [];
   for (const tab of tabs) {
     await win.webContents.executeJavaScript(
@@ -39,7 +39,7 @@ async function runBug1P11AcceptanceHarness({ BrowserWindow }) {
     await sleep(250);
     const state = await win.webContents.executeJavaScript(`(() => {
       const active = document.querySelector('#me-tabs .mode-tab.active');
-      const panels = ['cognition','distill','collaboration'].map((name) => {
+      const panels = ['cognition','distill'].map((name) => {
         const el = document.getElementById('me-panel-' + name);
         return {
           name,
@@ -54,12 +54,14 @@ async function runBug1P11AcceptanceHarness({ BrowserWindow }) {
         visible,
         panels,
         primaryCount: document.querySelectorAll('#me-tabs .me-tab-primary').length,
+        noCollabTab: !document.querySelector('#me-tabs [data-me-tab="collaboration"]'),
       };
     })()`);
     assert.equal(state.activeTab, tab, tab + " active");
     assert.equal(state.ariaSelected, "true");
     assert.deepEqual(state.visible, [tab], tab + " alone visible");
-    assert.equal(state.primaryCount, 3, "three primary tabs");
+    assert.equal(state.primaryCount, 2, "two primary me tabs");
+    assert.equal(state.noCollabTab, true, "collaboration not under me tabs");
     const png = path.join(out, "me-tab-" + tab + ".png");
     fs.writeFileSync(png, (await win.webContents.capturePage()).toPNG());
     records.push({ tab, ...state, png, pass: true });
