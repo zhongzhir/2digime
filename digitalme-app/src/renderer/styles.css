@@ -39,6 +39,10 @@ body {
   flex-direction: column;
   gap: 12px;
   box-shadow: 4px 0 24px var(--shadow);
+  min-height: 0;
+}
+#btn-settings {
+  margin-top: auto;
 }
 .brand {
   font-size: 21px;
@@ -364,7 +368,6 @@ body {
   #messages { padding: 14px 12px; }
   .composer { padding: 10px 12px 12px; gap: 6px; }
   #input { min-width: 0; height: 56px; }
-  .ui-runtime-stamp { top: auto; bottom: 86px; max-width: 52vw; }
 }
 .btn-clear-linked-draft {
   width: 100%;
@@ -1918,12 +1921,14 @@ body {
 .tip-bubble.hidden { display: none !important; }
 .ui-boot-log {
   position: fixed;
+  /* Keep diagnostics in the sidebar column so they never cover the composer. */
   left: 12px;
-  right: 12px;
-  /* Keep diagnostic state visible without covering the always-available composer. */
-  bottom: max(96px, env(safe-area-inset-bottom));
+  width: min(208px, calc(100vw - 24px));
+  right: auto;
+  top: max(12px, env(safe-area-inset-top));
+  bottom: auto;
   z-index: 10050;
-  max-height: min(28vh, 180px);
+  max-height: min(36vh, 220px);
   overflow: auto;
   margin: 0;
   padding: 10px 12px;
@@ -1938,14 +1943,13 @@ body {
 }
 .ui-boot-log.hidden { display: none !important; }
 .ui-runtime-stamp {
-  position: fixed;
-  left: 12px;
-  right: auto;
-  bottom: max(12px, env(safe-area-inset-bottom));
-  top: auto;
-  z-index: 10040;
-  max-width: min(208px, calc(100vw - 24px));
-  padding: 4px 8px;
+  /* Document-flow footer inside #sidebar — never a fixed overlay on the composer. */
+  position: static;
+  flex-shrink: 0;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 6px 8px;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: rgba(255, 250, 246, 0.92);
@@ -1953,7 +1957,8 @@ body {
   font-size: 10px;
   line-height: 1.35;
   pointer-events: none;
-  opacity: 0.72;
+  opacity: 0.78;
+  word-break: break-word;
 }
 .ui-runtime-stamp.hidden { display: none !important; }
 .ui-runtime-stamp.ui-runtime-stamp-warn {

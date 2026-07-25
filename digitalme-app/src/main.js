@@ -209,6 +209,8 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1100,
     height: 780,
+    minWidth: 1024,
+    minHeight: 680,
     title: "Digital Me",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -271,7 +273,9 @@ app.whenReady().then(() => {
   });
   if (process.env.DIGITALME_OWNER_RUNTIME_TEST === "1") {
     const harness =
-      process.env.DIGITALME_DOING_CONTEXT_ACCEPTANCE === "1"
+      process.env.DIGITALME_BUG1_P0_1 === "1"
+        ? require("../scripts/bug1-p0-1-acceptance-harness.cjs")
+        : process.env.DIGITALME_DOING_CONTEXT_ACCEPTANCE === "1"
         ? require("../scripts/doing-context-acceptance-harness.cjs")
         : process.env.DIGITALME_DISTILL_ME_ACCEPTANCE === "1"
         ? require("../scripts/distill-me-acceptance-harness.cjs")
@@ -291,7 +295,9 @@ app.whenReady().then(() => {
               ? require("../scripts/pan-01-owner-runtime-harness.cjs")
               : require("../scripts/owner-runtime-harness.cjs");
     const run =
-      process.env.DIGITALME_DOING_CONTEXT_ACCEPTANCE === "1"
+      process.env.DIGITALME_BUG1_P0_1 === "1"
+        ? harness.runBug1P01AcceptanceHarness
+        : process.env.DIGITALME_DOING_CONTEXT_ACCEPTANCE === "1"
         ? harness.runDoingContextAcceptanceHarness
         : process.env.DIGITALME_DISTILL_ME_ACCEPTANCE === "1"
         ? harness.runDistillMeAcceptanceHarness

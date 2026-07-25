@@ -192,7 +192,8 @@ async function applyRuntimeStamp() {
     document.documentElement.dataset.dmPostOwnerFixes = stamp && stamp.postOwnerFixes ? "1" : "0";
     const el = document.getElementById("ui-runtime-stamp");
     if (el) {
-      el.textContent = `加载版本 ${shortHead} · main ${mainHash} · preload ${preloadHash} · 界面 ${appHash}`;
+      el.textContent = `版本 ${shortHead}`;
+      el.title = `main ${mainHash} · preload ${preloadHash} · 界面 ${appHash}`;
       el.classList.remove("hidden");
       if (!stamp || !stamp.postOwnerFixes) {
         el.classList.add("ui-runtime-stamp-warn");

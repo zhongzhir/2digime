@@ -41,6 +41,7 @@
     "test:r2-contracts": "node scripts/test-r2-contracts.cjs",
     "test:owner-runtime": "electron scripts/electron-owner-runtime-test.cjs",
     "test:visual-acceptance": "electron scripts/electron-visual-acceptance.cjs",
+    "test:bug1-p0-1": "electron scripts/electron-bug1-p0-1-acceptance.cjs",
     "test:capability-acceptance": "electron scripts/electron-capability-acceptance.cjs",
     "test:model-routing": "node scripts/test-model-routing.cjs",
     "test:model-routing-acceptance": "electron scripts/electron-model-routing-acceptance.cjs",
