@@ -1557,6 +1557,38 @@ body {
 .settings-advanced-tools > summary::-webkit-details-marker {
   display: none;
 }
+.settings-advanced-block {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.settings-advanced-block-title {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--text);
+}
+.settings-model-task-ui {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0 4px;
+}
+.settings-model-task-row {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+.settings-model-task-row strong {
+  font-size: 13px;
+}
+.settings-model-task-row label {
+  margin: 0;
+}
+.settings-model-task-row select {
+  width: 100%;
+}
 .modal-card label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; margin-bottom: 12px; }
 .modal-card input, .modal-card select, .modal-card textarea {
   background: #fffaf6;

@@ -1193,15 +1193,16 @@
       <div class="modal-card settings-modal-card">
         <h2>设置</h2>
         <div class="settings-modal-body">
-        <h3 class="settings-subhead">模型与默认行为</h3>
+        <h3 class="settings-subhead">模型与默认</h3>
         <div id="model-routing-summary" class="settings-model-routing" aria-live="polite"></div>
+        <div id="model-routing-task-ui" class="settings-model-task-ui" aria-live="polite"></div>
         <div class="modal-actions" style="margin-top:0;justify-content:flex-start;flex-wrap:wrap">
           <button type="button" id="btn-model-routing-test">测试连接</button>
           <button type="button" id="btn-model-routing-refresh" class="btn-ghost">刷新模型状态</button>
         </div>
         <p id="model-routing-feedback" class="hint" aria-live="polite"></p>
         <details class="settings-advanced-tools" id="settings-model-routing-advanced">
-          <summary>高级 / 开发者：模型提供方与备用模型</summary>
+          <summary>高级：提供方 JSON 与密钥</summary>
           <p class="hint">按任务分工顺序调用：默认模型失败时才尝试备用模型。此配置不含密钥；密钥只可在下方密码输入框中提交，保存后不会回显。</p>
           <label>提供方、模型与用途路由（JSON）
             <textarea id="cfg-model-routing-json" placeholder='{"providers":[],"routes":{"chat":{"primary":"","fallbacks":[]},"artifact":{"primary":"","fallbacks":[]},"review":{"primary":"","fallbacks":[]}}}'></textarea>
@@ -1228,6 +1229,7 @@
         <label>引擎名称
           <input id="cfg-model" type="text" placeholder="由服务方提供，可在说明中查看" />
         </label>
+
         <h3 class="settings-subhead">数据与隐私</h3>
         <label>数字之我资料目录
           <input id="cfg-pkgdir" type="text" />
@@ -1245,43 +1247,54 @@
             <button type="button" id="btn-pkg-versions-refresh" class="btn-ghost">刷新版本信息</button>
           </div>
         </div>
-        <details class="settings-advanced-tools" id="settings-advanced-tools">
-          <summary>高级 / 测试工具</summary>
-          <p class="hint">仅用于验收、演示与故障复现。请勿在日常使用中切换到临时资料。</p>
-          <div class="modal-actions" style="margin-top:0;justify-content:flex-start;flex-wrap:wrap;gap:8px">
-            <button type="button" id="btn-create-temp-test-pkg" class="btn-ghost">创建临时测试资料</button>
-            <button type="button" id="btn-restore-regular-pkg" class="btn-ghost hidden">恢复常规资料目录</button>
+
+        <h3 class="settings-subhead">外观与界面</h3>
+        <p class="hint" id="settings-appearance-note">当前使用默认暖色界面。更多外观选项将在后续版本提供。</p>
+
+        <h3 class="settings-subhead">通知偏好</h3>
+        <p class="hint" id="settings-notification-note">通知偏好将在后续版本开放。重要异常与需要你确认的操作仍会即时提示。</p>
+
+        <details class="settings-advanced-tools" id="settings-advanced-developer">
+          <summary>高级 / 开发者</summary>
+          <p class="hint">包含测试工具、本地命令、主体编排与系统记录。日常使用无需打开。</p>
+          <div class="settings-advanced-block">
+            <h4 class="settings-advanced-block-title">测试工具</h4>
+            <p class="hint">仅用于验收、演示与故障复现。请勿在日常使用中切换到临时资料。</p>
+            <div class="modal-actions" style="margin-top:0;justify-content:flex-start;flex-wrap:wrap;gap:8px">
+              <button type="button" id="btn-create-temp-test-pkg" class="btn-ghost">创建临时测试资料</button>
+              <button type="button" id="btn-restore-regular-pkg" class="btn-ghost hidden">恢复常规资料目录</button>
+            </div>
+            <p class="hint">临时资料位于系统临时目录；不会自动合并回常规资料。</p>
           </div>
-          <p class="hint">临时资料位于系统临时目录；不会自动合并回常规资料。</p>
-        </details>
-        <details class="settings-advanced-tools settings-l0">
-          <summary>高级 / 开发者：本地命令、主体编排与系统记录</summary>
-          <p class="hint">默认关闭。仅可配置已注册的「本地命令工具」：绝对路径可执行文件与已保存的授权工作目录。每次委派须确认，且需允许改动授权目录中的文件。受限执行不是安全沙箱。</p>
-          <label>可执行文件（绝对路径）
-            <input id="cfg-cli-executable" type="text" placeholder="例如本机受信程序的完整路径" />
-          </label>
-          <label>授权工作目录（绝对路径）
-            <input id="cfg-cli-cwd-root" type="text" placeholder="外部程序允许使用的工作目录根" />
-          </label>
-          <label class="code-auth-check">
-            <input type="checkbox" id="cfg-cli-enabled" />
-            启用本地命令工具
-          </label>
-          <div class="modal-actions">
-            <button type="button" id="btn-cli-save" class="btn-ghost">保存工具配置</button>
-          </div>
-          <div class="ext-store-head" style="margin-top:12px">
-            <h3 style="font-size:14px;margin:0">近期决策记录</h3>
-            <button type="button" id="btn-audit-rotate" class="btn-ghost">开启新记录代次</button>
-          </div>
-          <p class="hint" style="margin:4px 0 8px">由主进程写入的可信决策链；可检测篡改，但不是签名或不可删除存证。</p>
-          <div class="builder-actions" style="margin-bottom:8px">
-            <label class="library-title-label" style="margin:0;min-width:160px">查看代次
-              <select id="settings-audit-generation" class="skill-select" style="margin-top:6px"></select>
+          <div class="settings-advanced-block settings-l0">
+            <h4 class="settings-advanced-block-title">本地命令、主体编排与系统记录</h4>
+            <p class="hint">默认关闭。仅可配置已注册的「本地命令工具」：绝对路径可执行文件与已保存的授权工作目录。每次委派须确认，且需允许改动授权目录中的文件。受限执行不是安全沙箱。</p>
+            <label>可执行文件（绝对路径）
+              <input id="cfg-cli-executable" type="text" placeholder="例如本机受信程序的完整路径" />
             </label>
+            <label>授权工作目录（绝对路径）
+              <input id="cfg-cli-cwd-root" type="text" placeholder="外部程序允许使用的工作目录根" />
+            </label>
+            <label class="code-auth-check">
+              <input type="checkbox" id="cfg-cli-enabled" />
+              启用本地命令工具
+            </label>
+            <div class="modal-actions">
+              <button type="button" id="btn-cli-save" class="btn-ghost">保存工具配置</button>
+            </div>
+            <div class="ext-store-head" style="margin-top:12px">
+              <h3 style="font-size:14px;margin:0">近期决策记录</h3>
+              <button type="button" id="btn-audit-rotate" class="btn-ghost">开启新记录代次</button>
+            </div>
+            <p class="hint" style="margin:4px 0 8px">由主进程写入的可信决策链；可检测篡改，但不是签名或不可删除存证。</p>
+            <div class="builder-actions" style="margin-bottom:8px">
+              <label class="library-title-label" style="margin:0;min-width:160px">查看代次
+                <select id="settings-audit-generation" class="skill-select" style="margin-top:6px"></select>
+              </label>
+            </div>
+            <div id="settings-audit-integrity" class="hint" style="margin:4px 0 8px"></div>
+            <div id="settings-audit-list" class="library-list" style="max-height:180px;overflow:auto"></div>
           </div>
-          <div id="settings-audit-integrity" class="hint" style="margin:4px 0 8px"></div>
-          <div id="settings-audit-list" class="library-list" style="max-height:180px;overflow:auto"></div>
         </details>
         <p class="hint">密钥经本机安全存储保护，界面不会回显。普通使用填好地址与引擎名称即可；首次需填写密钥。</p>
         <p id="cfg-secret-warning" class="hint" style="color:#8a3a12"></p>
