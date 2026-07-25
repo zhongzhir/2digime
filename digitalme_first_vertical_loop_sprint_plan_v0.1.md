@@ -1,21 +1,21 @@
 # Digital Me 第一纵向闭环短冲刺计划
 
-版本：v0.1.10  
-日期：2026-07-21  
-状态：`spec_frozen` / **当前唯一执行计划**（第 1–4 块 Codex `accepted`；Owner 真机验收第 1–3 步 passed；**第 4 步曾因候选删除粒度阻断 failed，列表型 claim 粒度已限量修复，等待 Owner 重新执行第 4 步**；第一闭环整体**尚未** `accepted`）  
-所属架构：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)  
-服务闭环：**第一闭环 — 理解我并产出**  
-**冻结规格（正文）**：[`digitalme_first_vertical_loop_spec_v0.1.md`](digitalme_first_vertical_loop_spec_v0.1.md)（**v0.1.0 `spec_frozen`**）
+版本：v0.1.11
+日期：2026-07-25
+状态：`spec_frozen` / **当前唯一执行计划**（第 1–4 块 Codex `accepted`；Owner 真机验收第 1–3 步 passed；第 4 步候选粒度已修；**VL1-FIX 校准 vs 限制 prompt 已实现，待 Owner 真机确认无「用户补料」触线**；第一闭环整体**尚未** `accepted`）
+所属架构：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)
+服务闭环：**第一闭环 — 理解我并产出**
+**冻结规格（正文）**：[`digitalme_first_vertical_loop_spec_v0.1.md`](digitalme_first_vertical_loop_spec_v0.1.md)（**v0.1.1 `spec_frozen`**）
 
 ---
 
 ## 0. 文档地位
 
-1. 本文是 **2026-07-21 起** 的**当前唯一执行计划**（仓库内**仅本文**可声称此身份）。  
-2. 产品流程、四合同、能力方案、`55ae01f` 裁定与验收以 **冻结规格** 为准；本文保留冲刺状态、旧计划处置与任务顺序。  
-3. [`digitalme_panorama_execution_index_v0.1.md`](digitalme_panorama_execution_index_v0.1.md) = 历史状态表（`superseded_as_current_execution_index`）。  
-4. 未跟踪重复副本（如 `* (1).md`）**不是**权威文件。  
-5. **本阶段已完成**：限定范围的仓库实现映射与第一闭环规格冻结。  
+1. 本文是 **2026-07-21 起** 的**当前唯一执行计划**（仓库内**仅本文**可声称此身份）。
+2. 产品流程、四合同、能力方案、`55ae01f` 裁定与验收以 **冻结规格** 为准；本文保留冲刺状态、旧计划处置与任务顺序。
+3. [`digitalme_panorama_execution_index_v0.1.md`](digitalme_panorama_execution_index_v0.1.md) = 历史状态表（`superseded_as_current_execution_index`）。
+4. 未跟踪重复副本（如 `* (1).md`）**不是**权威文件。
+5. **本阶段已完成**：限定范围的仓库实现映射与第一闭环规格冻结。
 6. **下一项**：代码实现（见 §6）；**不得**在无规格授权前编码。
 
 ---
@@ -101,7 +101,8 @@
 | 6 | （已并入第 2 块）接入只读外搜 | **`accepted`** |
 | **7** | **证据四栏 / 有来源约束的研究与表达成果（第 3 块）** | **`accepted`** |
 | **8** | **Experience Proposal 与回流（第 4 块）** | **`accepted`（Codex）** |
-| 9 | 集中复核 + Owner 验收 + 对照测试 | **进行中：第 1–3 步 passed；第 4 步候选粒度已修，等待 Owner 重新执行第 4 步** |
+| 9 | 集中复核 + Owner 验收 + 对照测试 | **进行中：第 1–3 步 passed；第 4 步候选粒度已修；VL1-FIX 已实现，待真机确认** |
+| **10** | **VL1-FIX：把生成 prompt 从「限制」改写为「校准」** | **`implemented_pending_owner_verify`** |
 
 ---
 
@@ -110,21 +111,22 @@
 ### 当前
 
 - 执行计划状态：`spec_frozen`；第 1–4 块 Codex 正式复核 **`accepted`**
-- Owner 真机验收：第 1–3 步 **passed**；第 4 步曾因列表型来源被装配成多行 claim 导致删除粒度阻断（failed）；**已限量修复，等待 Owner 重新执行第 4 步**
+- Owner 真机验收：第 1–3 步 **passed**；第 4 步候选粒度已限量修复
+- VL1-FIX：生成 prompt 已从「限制」改写为「校准」；自动化 `test:vl1-prompt-calibration` 已就绪
 - 第一闭环整体：**尚未** `accepted`
-- 冻结规格：`digitalme_first_vertical_loop_spec_v0.1.md`
+- 冻结规格：`digitalme_first_vertical_loop_spec_v0.1.md`（v0.1.1，含 §3.4）
 - **`55ae01f`**：`partially_reused_as_first_vertical_loop_scaffold`
 
 ### 下一项（准确名称）
 
-**等待 Owner 重新执行真机验收第 4 步**（本人上下文候选单条删除不影响同板块相邻条目）；不得开始下一项开发；不得将第一闭环标为 `accepted`。
+**Owner 真机验收 VL1-FIX**：新建研究类任务（如「评估 AI 主权协作的当前主流产品图景」），确认成果末段不再出现「由于本人信息中未提供…需要用户自行补充」；同时可继续第 4 步候选删除粒度复验。不得将第一闭环标为 `accepted`。
 
 ---
 
 ## 7. 维护规则
 
-1. 冲突时：架构原则文 > 本文（排期）> 冻结规格（产品/合同细节）与本文一致时以规格字段表为准。  
-2. 不得另立第二份「当前执行计划」。  
+1. 冲突时：架构原则文 > 本文（排期）> 冻结规格（产品/合同细节）与本文一致时以规格字段表为准。
+2. 不得另立第二份「当前执行计划」。
 3. 更新时同步 `digitalme_context.md` 决策 log。
 
 ---
@@ -144,3 +146,4 @@
 | v0.1.8 | 2026-07-21 | 第 4 块限量修正：apply 审计失败按 changeSet 恢复；Package 读取失败阻断；仍 `implemented_pending_codex_review` |
 | v0.1.9 | 2026-07-21 | Owner 真机验收第 1 步发现布局阻断（多余 `</div>` 提前闭合 `#app`）；限量修复 HTML/CSS + DOM 结构回归；**等待 Owner 重新验收第 1 步**；第一闭环整体未 `accepted` |
 | v0.1.10 | 2026-07-21 | Owner 真机验收第 4 步发现候选删除粒度阻断（列表型来源多行合成一条 claim）；装配层列表逐条拆分 + 聚焦回归；**等待 Owner 重新执行第 4 步**；第一闭环未 `accepted` |
+| v0.1.11 | 2026-07-25 | Owner 真机发现「用户需要补料」触线；VL1-FIX 校准 vs 限制 prompt 实现；规格 §3.4；下一项 = Owner 真机确认 VL1-FIX；第一段未收口 |

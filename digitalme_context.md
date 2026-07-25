@@ -275,6 +275,7 @@ flowchart TB
 24. **极简产品原则（2026-07-19，PAN-00R 冻结）**：后台复杂、前台极简；用户体验结果，不观看系统证明自己；个性化默认隐性发生；授权只在风险边界上显性发生；审计、来源和依据可按需展开但不占主界面；日常无感、风险有感；能力无负担、权力有控制；重要异常、冲突或外部行动才打断用户；普通用户界面不得展示产品规格、工程状态或系统设计说明；页面文字大幅减少。前台/后台/帮助/高级四层分层与「产品全貌」新定义见规格 v0.6 §2.0、PAN-00R 任务包 §4。
 25. **AI 使用主体信息原则（2026-07-19，PAN-00R 冻结）**：不采用「回答上限受蒸馏内容限制」逻辑，也不采用「先生成通用答案再机械贴入个人引用」逻辑。**AI 负责能力上限；Digital Me 负责方向、真实性、边界、连续性和本人特征。** 相关性门强制：与任务无关的主体信息不得进入生成；无相关信息时宁可不做个性化。见 §4.4、规格 v0.6 §2.0.1。
 26. **AI 能力基线纠正（2026-07-23）**：Digital Me 的能力上限与下限均以接入大模型为基线，不得因“像我”而削弱通用能力。个人蒸馏结果采用“生成前叠加”或“生成后校对”两种方式增加价值观、经验、风格、真实性与边界；加入 Digital Me 后通用表现变弱视为设计缺陷。见架构原则 §3.1、产品规格 §2.0.1。
+27. **校准 vs 限制原则（2026-07-25，VL1-FIX）**：明确数字之我不是限制 AI，而是校准 AI。AI 缺原料时不得限制输出、不得让用户补料；用通用知识答并显式区分来源类别（本人事实 / 外部事实 / 通用推理）。六类校准维度：方向、真实性、风格、价值观、安全、边界。配套规格 §3.4 与决策 #102。
 
 ### 3.1 交互体验总则（2026-07-09）
 
@@ -296,7 +297,7 @@ flowchart TB
 | 文档 | 作用 |
 |---|---|
 | `digitalme_subject_architecture_and_rd_principles_v0.1.md` | **当前最高架构与研发原则**：产品定义、数字主体循环、能力/身份/验收、纵向闭环、治理 |
-| `digitalme_first_vertical_loop_sprint_plan_v0.1.md` | **当前唯一执行计划**（v0.1.2 `spec_frozen`）：冲刺状态与任务顺序 |
+| `digitalme_first_vertical_loop_sprint_plan_v0.1.md` | **当前唯一执行计划**（v0.1.11 `spec_frozen`）：冲刺状态与任务顺序 |
 | `digitalme_first_vertical_loop_spec_v0.1.md` | **第一闭环冻结规格**（流程、四合同、能力、55ae01f 裁定、验收） |
 | `digitalme_product_spec_v0.2.md`（文内 **v0.6.3**） | **既有界面与功能细则参照**（与新主线冲突处以架构原则文 / 第一闭环计划为准，待对齐升版） |
 | `digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`（v0.4） | **历史总任务**：三位一体 Alpha（`superseded` 作为当前主线定义） |
@@ -951,3 +952,4 @@ flowchart TB
 98. **第一闭环实现 · 第 2 块（2026-07-21）**：接通 `psk_preset_general_research` + `research.webSearch`/`searchWeb`；Capability Invocation 持久化与来源列表；第 1 块标 `accepted`。未实现最终成果/四栏/Proposal/Package 回写。测试：`test:vl1-block2`。随后保存边界验收修正合入。**下一项**曾为第 3 块（见 #99）。
 99. **第一闭环实现 · 第 3 块（2026-07-21）**：有来源约束的研究与表达成果与证据四栏；Owner 编辑/采用/否定；不写 Package、不调用 feedback。第 2 块标 `accepted`。随后限量修正：Skill/tool invocation 必须匹配当前 goal + Subject Context version。测试：`test:vl1-block3`。**已 accepted**（baseline `0df7bc5`）。
 100. **第一闭环实现 · 第 4 块（2026-07-21）**：Experience Proposal 与主体回流；adopted ≠ 自动写入；Owner 审阅 → 真实 `feedback:preview` → 显式确认 `feedback:apply`；任务内审计。随后限量修正：apply 审计失败可按 changeSet 恢复；Package 读取失败阻断模型。测试：`test:vl1-block4`。状态 `implemented_pending_codex_review`。**下一项（仅登记）**：**第一闭环正式验收与 Owner 真机验收**。
+102. **校准 vs 限制原则（2026-07-25，VL1-FIX）**：Owner 真机发现研究路径在 autoGenerate 模式下生成「由于本人信息中未提供…需要用户自行补充」，触线。明确原则：数字之我不限制 AI 通用能力上限；数字之我通过方向/真实性/风格/价值观/安全/边界六类校准维度介入。AI 缺原料时用通用知识答，**不得限制输出，不得让用户补料**。三类来源显式区分（本人事实 / 外部事实 / 通用推理）。任务包 `digitalme_phase1_task_VL1-FIX_calibrate_not_limit_prompts_v0.1.md`；规格 §3.4；`result-generation.js` 三个 prompt 已重写；`test:vl1-prompt-calibration` 11 条。待 Owner 真机确认。

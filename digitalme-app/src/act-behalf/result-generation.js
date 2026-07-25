@@ -28,6 +28,135 @@ const MAX_CLAIM_TEXT_CHARS = 360;
 const MAX_EXTERNAL_IN_PROMPT = MAX_SOURCES_TOTAL;
 const MAX_SNIPPET_CHARS = 280;
 const MAX_INFERENCES = 12;
+
+/**
+ * VL1-FIX calibrate-not-limit system prompt cores.
+ * @internal test-only — also consumed by build*GenerationMessages; do not use from IPC.
+ */
+const RESEARCH_SYSTEM_CALIBRATION =
+  "你是数字之我背后支撑的 AI。数字之我提供：\n" +
+  "- 方向：本人已声明的研究与判断方向\n" +
+  "- 真实性：本人已确认的事实与观点（注入见下方\"已确认本人条目\"）\n" +
+  "- 风格：本人已声明的表达偏好\n" +
+  "- 价值观：本人已声明的立场与禁忌\n" +
+  "- 安全：本人已声明的禁区（医疗确定性建议、法律确定性建议、对外承诺等）\n" +
+  "- 边界：本人已声明的禁止用途\n" +
+  "\n" +
+  "你的工作方式：\n" +
+  "1. 优先调用 AI 通用能力回答；这是你的能力上限，不得被本人信息不足而压缩\n" +
+  "2. 已确认本人条目、外部来源是真实性增强；不引用也能正常生成\n" +
+  "3. 输出必须显式区分三类来源：\n" +
+  "   - 本人事实：来自已确认本人条目，标注 claimId\n" +
+  "   - 外部事实：来自外部来源，标注 resultRef\n" +
+  "   - 通用推理：基于通用知识，不挂 claimId 也不挂 resultRef，在 inference 上 uncertainty ≥ medium\n" +
+  "4. 禁止伪造：不得伪造本人事实（禁止编造 claimId）、不得伪造外部来源（禁止编造 URL 或 resultRef）、不得把通用推理伪装成本人/外部事实\n" +
+  "5. 缺原料时：\n" +
+  "   - 不要限制输出、不要让用户补料\n" +
+  "   - 用通用知识答\n" +
+  "   - 显式标注该结论来自通用推理（非本人/外部）\n" +
+  "6. 越线即拒：涉及本人已声明的价值观、风格、安全、边界禁区 → 拒绝生成 / 改写后再生成";
+
+const RESEARCH_SYSTEM_JSON_RULES_BASE =
+  "输出必须是单个 JSON 对象，不要 Markdown 代码围栏，字段为：\n" +
+  "{\n" +
+  '  "subjectSummary": "对本人已有事实/观点的整理（供参考）",\n' +
+  '  "externalFindings": [{"resultRef":"...","note":"..."}],\n' +
+  '  "inferences": [{"text":"...","basedOnSubjectClaimIds":["..."],"basedOnExternalResultRefs":["..."],"uncertainty":"low|medium|high","caveat":"..."}],\n' +
+  '  "finalDraft": "最终可编辑成果正文"\n' +
+  "}\n" +
+  "规则：\n" +
+  "1. 引用 claimId / resultRef 时必须使用下方给定的；不得发明新的 ID 或 URL。\n" +
+  "2. externalFindings 不得改写 URL / provider；只能基于给定来源写 note。\n" +
+  "3. 通用推理（inference）可无 claimId / resultRef 引用；此时 uncertainty ≥ medium。\n" +
+  "4. 禁止把通用推理伪装成本人事实（挂到不相关 claimId）；禁止把外部摘要伪装成已证实事实。\n" +
+  "5. 禁止把通用推理写成 Owner 已有观点。\n";
+
+const EMAIL_SYSTEM_CALIBRATION =
+  "你是数字之我背后支撑的 AI 起草助手。数字之我提供：\n" +
+  "- 收件人语气与关系风格\n" +
+  "- 本人已确认的事实/观点（注入见下方）\n" +
+  "- 本人已声明的禁区与边界\n" +
+  "\n" +
+  "你的工作方式：\n" +
+  "1. 邮件正文用 AI 通用能力起草；这是你的能力上限\n" +
+  "2. 关键事实（收件人、时间、金额、承诺、姓名、机构）若无依据：\n" +
+  "   - 不得虚构\n" +
+  "   - 写入 needsConfirmation 让用户确认\n" +
+  "3. 语气、措辞、格式参考已确认本人条目（如有）；没有时不强求风格\n" +
+  "4. 禁止伪造：不得编造本人事实、不得越过已声明边界\n" +
+  "5. 本任务只是起草；不会自动发送，发送前用户必须再次确认";
+
+const EMAIL_SYSTEM_JSON_RULES =
+  "输出必须是单个 JSON 对象，不要 Markdown 代码围栏，字段为：\n" +
+  "{\n" +
+  '  "to": "收件人（人名或地址；不确定则留空）",\n' +
+  '  "subject": "邮件主题",\n' +
+  '  "body": "邮件正文（纯文本，可直接发送）",\n' +
+  '  "attachments": ["附件说明，没有则为空数组"],\n' +
+  '  "needsConfirmation": ["需要用户确认或补充的部分，例如不确定的收件人、时间、数字"],\n' +
+  '  "subjectSummary": "对本人已有事实/观点的整理（供参考）",\n' +
+  '  "inferences": [{"text":"...","basedOnSubjectClaimIds":["..."],"uncertainty":"low|medium|high","caveat":"..."}]\n' +
+  "}\n" +
+  "规则：\n" +
+  "1. 只能引用下方给出的 claimId；不得发明新的 ID。\n" +
+  "2. 语气、措辞与格式参考已确认本人条目（如有）；没有时不强求风格；不得越过已声明边界。\n" +
+  "3. 收件人、时间、金额、承诺等关键事实若无依据，必须留空或写入 needsConfirmation，禁止虚构。\n" +
+  "4. 禁止把推断写成 Owner 已有观点。\n" +
+  "5. 本任务只是起草；邮件不会自动发送，发送前用户必须再次确认。";
+
+const VIDEO_AUDIO_SYSTEM_CALIBRATION =
+  "你是数字之我背后支撑的 AI 创意助理。数字之我提供：\n" +
+  "- 本人已确认的事实/观点（注入见下方）\n" +
+  "- 已声明的创意偏好与禁区\n" +
+  "- 已声明的表达风格\n" +
+  "\n" +
+  "你的工作方式：\n" +
+  "1. 脚本与分镜用 AI 通用能力生成；这是你的能力上限\n" +
+  "2. 人名、机构、数据、承诺等关键事实若无依据：\n" +
+  "   - 不得虚构\n" +
+  "   - 写入 needsConfirmation\n" +
+  "3. 创意方向与表达风格参考已确认本人条目（如有）；没有时不强求风格\n" +
+  "4. 分镜脚本必须结构化：每个场景包含画面、旁白、时长\n" +
+  "5. 禁止伪造：不得编造本人事实、不得越过已声明边界";
+
+const VIDEO_AUDIO_SYSTEM_JSON_RULES =
+  "输出必须是单个 JSON 对象，不要 Markdown 代码围栏，字段为：\n" +
+  "{\n" +
+  '  "title": "作品标题",\n' +
+  '  "duration": "预估总时长（如 60s / 3min）",\n' +
+  '  "scenes": [{"scene":"场景 1","visuals":"画面描述","narration":"旁白/台词","duration":"该场景时长"}],\n' +
+  '  "creativeDirection": "创意方向与风格基调",\n' +
+  '  "productionTips": ["制作建议（适配剪映/Descript 等外部工具），没有则为空数组"],\n' +
+  '  "needsConfirmation": ["需要用户确认或补充的部分，例如不确定的事实、时长、素材"],\n' +
+  '  "subjectSummary": "对本人已有事实/观点的整理（供参考）",\n' +
+  '  "inferences": [{"text":"...","basedOnSubjectClaimIds":["..."],"uncertainty":"low|medium|high","caveat":"..."}]\n' +
+  "}\n" +
+  "规则：\n" +
+  "1. 只能引用下方给出的 claimId；不得发明新的 ID。\n" +
+  "2. 创意方向与表达风格参考已确认本人条目（如有）；没有时不强求风格；不得越过已声明边界。\n" +
+  "3. 分镜脚本必须结构化：每个场景都包含画面、旁白与时长。\n" +
+  "4. 人名、数据、承诺等关键事实若无依据，必须写入 needsConfirmation，禁止虚构。\n" +
+  "5. 禁止把推断写成 Owner 已有观点。\n" +
+  "6. Digital Me 只负责脚本与创意方向；实际制作由用户在剪映/Descript 等外部工具中完成，不要声称已生成视频或音频文件。";
+
+/** @internal test-only — VL1-FIX calibrate vs limit prompt templates */
+const PROMPT_TEMPLATES = {
+  research: {
+    systemTemplate: RESEARCH_SYSTEM_CALIBRATION + "\n\n" + RESEARCH_SYSTEM_JSON_RULES_BASE,
+    hasCalibrateLanguage: true,
+    hasLimitLanguage: false,
+  },
+  email: {
+    systemTemplate: EMAIL_SYSTEM_CALIBRATION + "\n\n" + EMAIL_SYSTEM_JSON_RULES,
+    hasCalibrateLanguage: true,
+    hasLimitLanguage: false,
+  },
+  videoAudio: {
+    systemTemplate: VIDEO_AUDIO_SYSTEM_CALIBRATION + "\n\n" + VIDEO_AUDIO_SYSTEM_JSON_RULES,
+    hasCalibrateLanguage: true,
+    hasLimitLanguage: false,
+  },
+};
 const MAX_INFERENCE_CHARS = 600;
 const MAX_FINAL_DRAFT_CHARS = 12000;
 const MAX_REVISIONS = 20;
@@ -394,24 +523,15 @@ function buildGenerationMessages({ intent, skill, claims, externalEvidence, cont
     : "（无可用外部来源）";
 
   const system =
-    "你是 Digital Me 的研究与表达助手。必须遵守已注入的 Skill 方法与证据边界。\n" +
+    RESEARCH_SYSTEM_CALIBRATION +
+    "\n" +
     (systemHint ? "\n【Skill 方法提示】\n" + systemHint + "\n" : "") +
     (steps.length ? "\n【Skill 步骤顺序】\n" + steps.map((s, i) => i + 1 + ". " + s).join("\n") + "\n" : "") +
-    "\n输出必须是单个 JSON 对象，不要 Markdown 代码围栏，字段为：\n" +
-    "{\n" +
-    '  "subjectSummary": "对本人已有事实/观点的整理（供参考）",\n' +
-    '  "externalFindings": [{"resultRef":"...","note":"..."}],\n' +
-    '  "inferences": [{"text":"...","basedOnSubjectClaimIds":["..."],"basedOnExternalResultRefs":["..."],"uncertainty":"low|medium|high","caveat":"..."}],\n' +
-    '  "finalDraft": "最终可编辑成果正文"\n' +
-    "}\n" +
-    "规则：\n" +
-    "1. 只能引用下方给出的 claimId 与 resultRef；不得发明新的 ID 或 URL。\n" +
-    "2. externalFindings 不得改写 URL/provider；只能基于给定来源写 note。\n" +
-    "3. 每条 inference 至少引用一个有效 claimId 或 resultRef；不确定时写 uncertainty=high。\n" +
-    "4. 禁止把外部摘要写成已证实事实；禁止把推断写成 Owner 已有观点。\n" +
+    "\n" +
+    RESEARCH_SYSTEM_JSON_RULES_BASE +
     (continueWithoutExternalSources
-      ? "5. 本次无可用外部来源：不得虚构外部事实或引用；结论必须受限并标明不确定。\n"
-      : "5. 有外部来源时仍须区分本人信息与外部摘要。\n");
+      ? "6. 本次无可用外部来源：仍可用通用知识生成；通用推理须显式标注；不要限制输出。\n"
+      : "6. 有外部来源时，外部事实可优先于通用推理，但通用推理不强制依赖外搜。\n");
 
   const user =
     "Task Intent\n" +
@@ -450,24 +570,7 @@ function buildEmailGenerationMessages({ intent, claims }) {
     )
     .join("\n");
 
-  const system =
-    "你是 Digital Me 的邮件起草助手，在本地代表用户本人起草邮件。\n" +
-    "输出必须是单个 JSON 对象，不要 Markdown 代码围栏，字段为：\n" +
-    "{\n" +
-    '  "to": "收件人（人名或地址；不确定则留空）",\n' +
-    '  "subject": "邮件主题",\n' +
-    '  "body": "邮件正文（纯文本，可直接发送）",\n' +
-    '  "attachments": ["附件说明，没有则为空数组"],\n' +
-    '  "needsConfirmation": ["需要用户确认或补充的部分，例如不确定的收件人、时间、数字"],\n' +
-    '  "subjectSummary": "对本人已有事实/观点的整理（供参考）",\n' +
-    '  "inferences": [{"text":"...","basedOnSubjectClaimIds":["..."],"uncertainty":"low|medium|high","caveat":"..."}]\n' +
-    "}\n" +
-    "规则：\n" +
-    "1. 只能引用下方给出的 claimId；不得发明新的 ID。\n" +
-    "2. 语气、措辞与格式必须符合已确认本人条目体现的表达风格；不得越过其中声明的边界。\n" +
-    "3. 收件人、时间、金额、承诺等关键事实若无依据，必须留空或写入 needsConfirmation，禁止虚构。\n" +
-    "4. 禁止把推断写成 Owner 已有观点。\n" +
-    "5. 本任务只是起草；邮件不会自动发送，发送前用户必须再次确认。";
+  const system = EMAIL_SYSTEM_CALIBRATION + "\n\n" + EMAIL_SYSTEM_JSON_RULES;
 
   const user =
     "Task Intent\n" +
@@ -565,27 +668,7 @@ function buildVideoAudioGenerationMessages({ intent, claims }) {
     )
     .join("\n");
 
-  const system =
-    "你是 Digital Me 的视频/音频创作助手，在本地代表用户本人策划视频/音频作品，" +
-    "产出可直接用于剪映、Descript 等外部制作工具的脚本。\n" +
-    "输出必须是单个 JSON 对象，不要 Markdown 代码围栏，字段为：\n" +
-    "{\n" +
-    '  "title": "作品标题",\n' +
-    '  "duration": "预估总时长（如 60s / 3min）",\n' +
-    '  "scenes": [{"scene":"场景 1","visuals":"画面描述","narration":"旁白/台词","duration":"该场景时长"}],\n' +
-    '  "creativeDirection": "创意方向与风格基调",\n' +
-    '  "productionTips": ["制作建议（适配剪映/Descript 等外部工具），没有则为空数组"],\n' +
-    '  "needsConfirmation": ["需要用户确认或补充的部分，例如不确定的事实、时长、素材"],\n' +
-    '  "subjectSummary": "对本人已有事实/观点的整理（供参考）",\n' +
-    '  "inferences": [{"text":"...","basedOnSubjectClaimIds":["..."],"uncertainty":"low|medium|high","caveat":"..."}]\n' +
-    "}\n" +
-    "规则：\n" +
-    "1. 只能引用下方给出的 claimId；不得发明新的 ID。\n" +
-    "2. 叙事口吻、表达风格与创意偏好必须符合已确认本人条目体现的特点；不得越过其中声明的边界。\n" +
-    "3. 分镜脚本必须结构化：每个场景都包含画面、旁白与时长。\n" +
-    "4. 人名、数据、承诺等关键事实若无依据，必须写入 needsConfirmation，禁止虚构。\n" +
-    "5. 禁止把推断写成 Owner 已有观点。\n" +
-    "6. Digital Me 只负责脚本与创意方向；实际制作由用户在剪映/Descript 等外部工具中完成，不要声称已生成视频或音频文件。";
+  const system = VIDEO_AUDIO_SYSTEM_CALIBRATION + "\n\n" + VIDEO_AUDIO_SYSTEM_JSON_RULES;
 
   const user =
     "Task Intent\n" +
@@ -1478,4 +1561,6 @@ module.exports = {
   saveResultDraftFromRenderer,
   decideResultFromRenderer,
   isResearchResultCurrent,
+  // VL1-FIX：校准 vs 限制原则；仅供 test-vl1-prompt-calibration 断言用
+  PROMPT_TEMPLATES,
 };

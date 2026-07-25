@@ -5,6 +5,33 @@
 
 ---
 
+## 2026-07-25（VL1-FIX · 校准 vs 限制 prompt 实现）
+
+### 本次目标
+
+1. 处理 Owner 真机「用户需要补料」触线；
+2. 把生成 prompt 从「限制」改写为「校准」；
+3. 把「校准 vs 限制」原则写入规格与决策 log。
+
+### 本次完成
+
+1. 重写 `result-generation.js` 研究 / 邮件 / 视频音频三个 system prompt：AI 通用能力为上限；数字之我仅提供方向/真实性/风格/价值观/安全/边界校准；缺原料用通用知识答、不限制输出、不让用户补料；
+2. 导出 `PROMPT_TEMPLATES`（internal test-only）；新增 `scripts/test-vl1-prompt-calibration.cjs` + `npm run test:vl1-prompt-calibration`；
+3. 规格 → v0.1.1（§3.4）；sprint plan → v0.1.11（任务 #10）；context 决策 #102 + §3 第 27 条；任务包 VL1-FIX。
+
+### 待办事项
+
+1. Owner 真机重跑研究类任务（如「评估 AI 主权协作的当前主流产品图景」）确认无「用户需要补料」；
+2. 可并行复验真机验收第 4 步（候选单条删除粒度）；
+3. VL1-FIX 真机通过前，第一纵向闭环不得标 `accepted`。
+
+### 重要信息
+
+1. **VL1-FIX 真机确认前，第一纵向闭环不能标 accepted**。
+2. 产物 JSON 字段未变；未改外搜 / distill-me / UI。
+
+---
+
 ## 2026-07-24 committed baseline 2f1b7bd · accepted / committed
 
 ### 基线提交
