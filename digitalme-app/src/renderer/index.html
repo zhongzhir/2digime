@@ -966,15 +966,17 @@
 
               <!-- 数字之我：成品与校对 -->
               <div id="me-lane-self" class="me-lane">
-                <div class="mode-tabs" id="me-tabs" role="tablist">
-                  <button type="button" class="mode-tab active" data-me-tab="overview">全貌</button>
-                  <button type="button" class="mode-tab" data-me-tab="cognition">认知我</button>
-                  <button type="button" class="mode-tab" data-me-tab="distill">蒸馏我</button>
-                  <button type="button" class="mode-tab" data-me-tab="collaboration">身份与协作</button>
-                  <button type="button" class="mode-tab" data-me-tab="timeline">时间线</button>
-                  <button type="button" class="mode-tab" data-me-tab="roles">角色</button>
-                  <button type="button" class="mode-tab" data-me-tab="mind">观念与表达</button>
-                  <button type="button" class="mode-tab" data-me-tab="boundaries">边界</button>
+                <div class="mode-tabs" id="me-tabs" role="tablist" aria-label="数字之我分区">
+                  <button type="button" class="mode-tab active" data-me-tab="overview" role="tab" aria-selected="true">全貌</button>
+                  <span class="me-tab-group-label" aria-hidden="true">主体</span>
+                  <button type="button" class="mode-tab me-tab-primary" data-me-tab="cognition" role="tab" aria-selected="false">认知我</button>
+                  <button type="button" class="mode-tab me-tab-primary" data-me-tab="distill" role="tab" aria-selected="false">蒸馏我</button>
+                  <button type="button" class="mode-tab me-tab-primary" data-me-tab="collaboration" role="tab" aria-selected="false">身份与协作</button>
+                  <span class="me-tab-group-label" aria-hidden="true">细节</span>
+                  <button type="button" class="mode-tab" data-me-tab="timeline" role="tab" aria-selected="false">时间线</button>
+                  <button type="button" class="mode-tab" data-me-tab="roles" role="tab" aria-selected="false">角色</button>
+                  <button type="button" class="mode-tab" data-me-tab="mind" role="tab" aria-selected="false">观念与表达</button>
+                  <button type="button" class="mode-tab" data-me-tab="boundaries" role="tab" aria-selected="false">边界</button>
                 </div>
 
                 <div id="me-panel-overview" class="life-panel">

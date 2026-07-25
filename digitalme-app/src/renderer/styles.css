@@ -875,6 +875,24 @@ body {
 }
 .mode-tab { background: var(--panel-2); color: var(--muted); border: 1px solid var(--border); padding: 8px 16px; border-radius: 10px; cursor: pointer; font-family: inherit; }
 .mode-tab.active { color: var(--text); border-color: var(--accent); background: #fffaf6; }
+#me-tabs .me-tab-group-label {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  margin-left: 4px;
+  margin-right: 2px;
+  user-select: none;
+}
+#me-tabs .me-tab-primary {
+  font-weight: 600;
+  border-color: #d9c4b0;
+}
+#me-tabs .me-tab-primary.active {
+  box-shadow: 0 0 0 1px rgba(196, 120, 90, 0.25);
+}
+#me-lane-self .life-panel:not(.hidden) {
+  outline: none;
+}
 .mode-panel.hidden { display: none; }
 .material-guide {
   font-size: 13px;

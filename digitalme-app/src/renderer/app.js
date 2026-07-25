@@ -10644,11 +10644,17 @@ function switchMeTab(tab) {
   meActiveTab = tab;
   if (meLane !== "self") switchMeLane("self");
   document.querySelectorAll("#me-tabs .mode-tab").forEach((b) => {
-    b.classList.toggle("active", b.dataset.meTab === tab);
+    const on = b.dataset.meTab === tab;
+    b.classList.toggle("active", on);
+    b.setAttribute("aria-selected", on ? "true" : "false");
   });
   ["overview", "distill", "cognition", "collaboration", "timeline", "roles", "mind", "boundaries"].forEach((name) => {
     const el = $("me-panel-" + name);
-    if (el) el.classList.toggle("hidden", name !== tab);
+    if (el) {
+      const show = name === tab;
+      el.classList.toggle("hidden", !show);
+      el.setAttribute("aria-hidden", show ? "false" : "true");
+    }
   });
   if (tab === "cognition") refreshCognitionPanel();
   if (tab === "collaboration") {
