@@ -35,6 +35,7 @@
     "test:dvl2-04-auto-learn": "node scripts/test-dvl2-04-auto-learn.cjs",
     "test:dvl2-05-context": "node scripts/test-dvl2-05-context-authority.cjs",
     "test:crt-mvp-continuity": "node scripts/test-crt-mvp-continuity.cjs",
+    "test:crt-mvp-01.1-package-dir": "node scripts/test-crt-mvp-01.1-package-dir.cjs",
     "test:dvl2-03-generation-acceptance": "node scripts/run-dvl2-03-generation-acceptance.cjs",
     "test:cli": "node scripts/test-cli.cjs",
     "test:cli-enhanced": "node scripts/test-cli-enhanced.cjs",

@@ -58,6 +58,7 @@ async function confirmPlanAndGenerate(ctx) {
     items,
     callModel,
     imageMode,
+    packageDir,
   } = ctx;
 
   if (!taskId) {
@@ -232,7 +233,7 @@ async function confirmPlanAndGenerate(ctx) {
   const generated = await deliverableGeneration.generateDeliverablePackage(
     userData,
     { packageId },
-    { callModel, imageMode }
+    { callModel, imageMode, packageDir: packageDir || null }
   );
 
   const view = packageStore.getPackageView(userData, packageId);
