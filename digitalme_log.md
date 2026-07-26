@@ -5,6 +5,32 @@
 
 ---
 
+## 2026-07-26 DVL2-03A 一页式任务包起草（待 Codex 集中评审）
+
+### 本次目标
+
+起草 DVL2-03A「首个真实文档成果垂直切片」；压缩规格与实施授权于同一文档；不实施；不创建实现分支。
+
+### 本次完成
+
+1. 新增 `digitalme_phase1_task_DVL2-03A_first_real_document_artifact_v0.1.md`（`v0.1.0-draft`）；
+2. 冻结意图：document → 真实 Markdown + HTML；正式输入 `packageId`；复用 `invokeModelRoute`/`callModel`；
+3. 状态保持：`spec_and_authorization_drafting` / `codex_review_pending`；`implementation_authorized=false`；
+4. 同步 context / log / Cursor rule。
+
+### 待办事项
+
+1. Codex 一次集中评审；
+2. Owner 一次同时：`owner_accepted` + `frozen_for_implementation` + `implementation_authorized`；
+3. 获授权前不得编码。
+
+### 重要信息
+
+1. 上位：DVL2-02 runtime 收口 `ceb6c83`；实现 `20c8832`。
+2. 不再单独建立 implementation authorization 文档。
+
+---
+
 ## 2026-07-26 DVL2-02 Owner 真机验收通过 · 收口为 implemented
 
 ### 本次目标
