@@ -5,6 +5,33 @@
 
 ---
 
+## 2026-07-26 DVL2-02 Owner 规格接受与冻结 · v0.1.1
+
+### 本次目标
+
+Owner 接受 DVL2-02 规格并冻结为 v0.1.1；进入 implementation_authorization 前的实施准备。纯文档提交。不修改实现；不标实施授权；不 push。
+
+### 本次完成
+
+1. DVL2-02 → **v0.1.1** / `specified` / `codex_review_passed` / `owner_accepted` / `frozen_for_implementation`；
+2. 实施仍 `not_started`；`implementation_authorized=false`；规格冻结基线 `578648f31d86594cc2bd56ede2e367122cfa98f8`；
+3. 写入 Owner 接受范围 / 不代表范围、冻结合同摘要、implementation_authorization 门禁；
+4. 最小同步 context / log / Cursor rule；
+5. DVL2-01 继续已收口；DVL2-03 仍 `not_started` / `not_authorized`。
+
+### 待办事项
+
+1. 另行完成 implementation_authorization 评审（分支方案、允许/禁止文件、测试矩阵、Owner 验收路径等）；
+2. 获授权前不得修改 `digitalme-app/**`。
+
+### 重要信息
+
+1. **未修改 `digitalme-app/**`**。
+2. **未标** `implementation_authorized` / `implementation_in_progress` / `implemented`。
+3. **不 push**。
+
+---
+
 ## 2026-07-26 DVL2-02 Codex 规格复核通过 · 等待 Owner 规格接受
 
 ### 本次目标

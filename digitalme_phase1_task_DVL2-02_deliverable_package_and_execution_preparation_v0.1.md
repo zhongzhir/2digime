@@ -1,16 +1,73 @@
 # 任务包 DVL2-02：成果包实例与执行准备
 
-版本：v0.1.0-draft
+版本：v0.1.1
 日期：2026-07-26
-状态：`spec_drafting` / `codex_review_passed` / `ready_for_owner_spec_acceptance`
+状态：`specified` / `codex_review_passed` / `owner_accepted` / `frozen_for_implementation`
 实施：`not_started`
+implementation_authorized：`false`
+规格冻结基线：`578648f31d86594cc2bd56ede2e367122cfa98f8`
 上位合同：
 - [`digitalme_phase1_task_DVL2-00_product_and_data_contracts_v0.1.md`](digitalme_phase1_task_DVL2-00_product_and_data_contracts_v0.1.md)（**DVL2-00 v0.1.1** / `owner_accepted` / `frozen_for_implementation`）
 - [`digitalme_phase1_task_DVL2-01_deliverable_planner_v0.1.md`](digitalme_phase1_task_DVL2-01_deliverable_planner_v0.1.md)（**DVL2-01 v0.1.1** / `accepted_as_implemented` / 实施 `implemented` @ `6e7c384`）
-基线：`e72f7bd31e188f3fdf05c6737dd1078bcc0c8175`
 所属架构：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)
 
-> **正式边界（草案）**：Codex 规格复核已通过；等待 Owner 规格接受。**不是**实现授权；**尚未** Owner 规格接受 / 规格冻结 / 实施授权。不得标 `owner_accepted` / `frozen_for_implementation` / `implementation_authorized` / `implementation_in_progress` / `implemented`。冲突时：架构原则文 > DVL2-00 > DVL2-01 > 本文。发现冻结合同缺口须先回改 DVL2-00，不得在实现中静默偏离。
+> **正式边界（冻结规格 v0.1.1）**：Owner 已接受本规格；合同已冻结为实施准备依据（`owner_accepted` / `frozen_for_implementation`）。**v0.1.1 为冻结规格**；后续实现不得静默偏离；如发现合同缺口，必须先回到规格评审；实现只能在另行授予 `implementation_authorized` 后开始；不得通过实现细节反向修改冻结语义。冲突时：架构原则文 > DVL2-00 > DVL2-01 > 本文。**尚未**授予 `implementation_authorized`；实施仍为 `not_started`。不得标 `implementation_authorized` / `implementation_in_progress` / `implemented` / `owner_runtime_accepted` / `accepted_as_implemented` / `completed`。
+
+### Owner 规格接受记录
+
+**Owner 规格结论**：接受。
+
+**Owner 接受的范围**：
+
+- 接受从 `activeConfirmedVersionId` 创建不可变成果包实例；
+- 接受 DVL2-02 只完成成果包与执行准备，不生成真实成果；
+- 接受 DVL2-02 不创建 `DeliverableVersion` / `ArtifactRef` / `contentHash`；
+- 接受 DVL2-02 仅创建 `PackagePreparationAttempt`；
+- 接受 `Task.deliverableExecution.activePackageId` 的严格语义；
+- 接受新 confirmed 版本创建新 package，旧 package 保留历史且不静默重绑；
+- 接受 archived / soft_deleted / degraded consistency 幂等规则；
+- 接受 `ExecutionSnapshot` 与 `CurrentPreparationReadiness` 分离；
+- 接受成果计划模式主按钮为「准备成果包」；
+- 接受旧版直接执行入口默认隐藏；
+- 接受 DVL2-03 唯一正式输入为 `packageId`；
+- 接受默认简洁层、渐进披露和只确认例外的 UI 原则。
+
+**Owner 接受不代表**：
+
+- 真实 Word / PPT / HTML / 图片生成已实现；
+- DVL2-03 已启动；
+- `implementation_authorized` 已授予；
+- 可开始编码；
+- 已完成 Owner 真机验收；
+- DVL2-02 已 `implemented`。
+
+### 冻结合同摘要（核心）
+
+1. **唯一准备来源**：`Task.deliverablePlanning.activeConfirmedVersionId`
+2. **DVL2-02 运行时对象**：`DeliverablePackage` · `Deliverable` · `PackagePreparationAttempt`
+3. **DVL2-02 不创建**：`DeliverableVersion` · `ArtifactRef` · `contentHash` · `DeliverableGenerationAttempt`
+4. **Task 指针**：`Task.deliverableExecution.activePackageId`
+5. **Store**：`<userData>/deliverable-packages.json`
+6. **Store 顶层**：`schemaVersion` · `revision` · `packages` · `deliverables` · `preparationAttempts` · `updatedAt`
+7. **DVL2-03 正式输入**：`packageId`
+8. **UI 主操作**：准备成果包
+9. **旧执行入口**：默认隐藏，仅兼容/开发模式可见，不与主操作并列
+10. **本阶段状态**：Package = `planned` × `none`；Deliverable = `included` × `planned` × `unreviewed`；「暂不可生成」仅属于动态 readiness / UI 投影
+
+### implementation_authorization 门禁
+
+DVL2-02 实现开始前，必须另行完成：
+
+1. `implementation_authorization` 评审；
+2. 实现分支方案；
+3. 允许修改文件清单；
+4. 禁止范围；
+5. Store / CAS / reconciliation 测试矩阵；
+6. Electron Owner 验收路径；
+7. 不生成真实成果的边界测试；
+8. 实现提交与 Owner runtime acceptance 分离。
+
+在这些完成前，**不得**修改 `digitalme-app/**`。
 
 ---
 
@@ -20,6 +77,7 @@
 2. 解决 Owner / DVL2-01 P1「执行入口衔接」：成果计划模式下的执行准备必须绑定 `Task.deliverablePlanning.activeConfirmedVersionId`。
 3. 落实 Owner 在 DVL2-01 验收提出的减负原则（默认接受、只确认例外、渐进披露）。
 4. **本任务不生成真实 Word / PPT / 网页 / 图片**；**不创建**任何 `DeliverableVersion` / `ArtifactRef` / `contentHash`；不为四类产物伪造路径、下载入口或生成进度。
+5. 本文 **v0.1.1** 已 `owner_accepted` / `frozen_for_implementation`；**不是** `implementation_authorized`；获另行实施授权前不得修改 `digitalme-app/**`。
 
 ---
 
@@ -609,13 +667,13 @@ confirmed 门禁；幂等矩阵 1–6；无 Version/ArtifactRef；`currentVersio
 
 ## 16. 禁止偷跑
 
-不实现四类生成器；不创建 Version/ArtifactRef；不标 `runtimeAvailability=available`；不改造 `package-store/**`；不启动 DVL2-03～05；不解锁暂停项；不把旧 `generateResult` 接到 confirmed 计划；不改 DVL2-00/01 冻结合同正文；本修订阶段不改 `digitalme-app/**`。
+不实现四类生成器；不创建 Version/ArtifactRef；不标 `runtimeAvailability=available`；不改造 `package-store/**`；不启动 DVL2-03～05；不解锁暂停项；不把旧 `generateResult` 接到 confirmed 计划；不改 DVL2-00/01 冻结合同正文；在获 `implementation_authorized` 前不改 `digitalme-app/**`。
 
 ---
 
 ## 17. 退出条件（规格阶段）
 
-Codex 规格复核已通过（`codex_review_passed` / `ready_for_owner_spec_acceptance`）。下一步：（另步）Owner 规格接受并可冻结 →（另批）`implementation_authorized` 后方可编码。当前 **仍不满足** Owner 接受、规格冻结与实施条件。
+Owner 规格接受与冻结已完成（`specified` / `codex_review_passed` / `owner_accepted` / `frozen_for_implementation`）。实施仍为 `not_started`；`implementation_authorized=false`。下一步：另行完成 **implementation_authorization 评审**（见文首门禁）后方可创建实现分支与编码。当前 **仍不满足** 实施授权条件。
 
 ---
 
@@ -647,11 +705,12 @@ Codex 规格复核已通过（`codex_review_passed` / `ready_for_owner_spec_acce
 
 ---
 
-## 19. 明确不做（本收口阶段）
+## 19. 明确不做（本接受/冻结阶段）
 
 - 不修改 `digitalme-app/**`、测试、`package.json`、lockfile；
 - 不创建实现分支；不编码；不生成真实成果；
-- 不标 `owner_accepted` / `frozen_for_implementation` / `implementation_authorized` / `implementation_in_progress` / `implemented`；
+- 不标 `implementation_authorized` / `implementation_in_progress` / `implemented` / `owner_runtime_accepted` / `accepted_as_implemented` / `completed`；
+- 不启动 DVL2-03；
 - 不 push。
 
 ---
@@ -660,8 +719,8 @@ Codex 规格复核已通过（`codex_review_passed` / `ready_for_owner_spec_acce
 
 | 文件 | 动作 |
 |------|------|
-| 本文 | Codex 最终规格复核通过 → `codex_review_passed` / `ready_for_owner_spec_acceptance`；实施仍 `not_started` |
-| `digitalme_context.md` / `digitalme_log.md` / Cursor rule | 最小同步：等待 Owner 规格接受；**未**获实施授权 |
+| 本文 | Owner 接受与规格冻结 → **v0.1.1** / `specified` / `codex_review_passed` / `owner_accepted` / `frozen_for_implementation`；实施仍 `not_started`；`implementation_authorized=false`；冻结基线 `578648f` |
+| `digitalme_context.md` / `digitalme_log.md` / Cursor rule | 最小同步：规格已冻结；等待 implementation_authorization；**不得**开始编码 |
 
 ---
 
@@ -670,5 +729,6 @@ Codex 规格复核已通过（`codex_review_passed` / `ready_for_owner_spec_acce
 | 版本 | 日期 | 说明 |
 |------|------|------|
 | v0.1.0-draft | 2026-07-26 | 初稿：`codex_review_pending`；基线 `690e1fc` |
-| v0.1.0-draft（R1 修订） | 2026-07-26 | **Codex 第一轮文档修订（历史）**：当时状态曾为 `spec_drafting` / `codex_review_changes_requested`。删除 placeholder `DeliverableVersion`；明确 `PackagePreparationAttempt` 边界；`activePackageId` 迁入 `Task.deliverableExecution`；补齐 archived / soft_deleted / degraded 幂等；拆分 `ExecutionSnapshot` 与 `CurrentPreparationReadiness`；旧执行入口默认隐藏；DVL2-03 只接收 `packageId`；Store 去掉运行时 versions。实施仍 `not_started`；基线 `e72f7bd` |
-| **v0.1.0-draft（Codex final review）** | 2026-07-26 | **Codex 最终规格复核通过**。结论：placeholder `DeliverableVersion` 已删除；DVL2-02 仅创建 `DeliverablePackage`、`Deliverable`、`PackagePreparationAttempt`；`currentVersionId` 恒为 `null`；`versionIds` 恒为空；`ArtifactRef`/`contentHash` 不存在；`activePackageId` 位于 `Task.deliverableExecution`；新 confirmed 与旧 package 不静默重绑；archived / soft_deleted / degraded 幂等矩阵已冻结；`ExecutionSnapshot` 与 `CurrentPreparationReadiness` 已分离；旧直接执行入口默认隐藏；DVL2-03 唯一正式输入为 `packageId`；Store 不包含运行时 versions/artifacts；追加 `PackagePreparationAttempt` 实现期一致性测试要求。状态 → `spec_drafting` / `codex_review_passed` / `ready_for_owner_spec_acceptance`。等待 Owner 规格接受；实施仍未授权、未开始（`not_started`）。基线仍为 `e72f7bd` |
+| v0.1.0-draft（R1 修订） | 2026-07-26 | **Codex 第一轮文档修订（历史）**：当时状态曾为 `spec_drafting` / `codex_review_changes_requested`。删除 placeholder Version；明确 preparation attempt；`activePackageId` 迁入 `deliverableExecution`；幂等与 Snapshot/Readiness 分离等。实施仍 `not_started`；基线 `e72f7bd` |
+| v0.1.0-draft（Codex final review） | 2026-07-26 | **Codex 最终规格复核通过（历史）**：当时状态曾为 `spec_drafting` / `codex_review_passed` / `ready_for_owner_spec_acceptance`。等待 Owner 规格接受；实施未授权、未开始。基线 `e72f7bd`（复核收口提交 `578648f`） |
+| **v0.1.1（Owner accepted and frozen）** | 2026-07-26 | **Owner 正式接受并冻结**。Codex 规格复核已通过；Owner 正式接受；状态 → `specified` / `codex_review_passed` / `owner_accepted` / `frozen_for_implementation`；implementation 仍为 `not_started`；`implementation_authorized=false`；规格冻结基线 `578648f31d86594cc2bd56ede2e367122cfa98f8`；未改实现；未启动 DVL2-03；下一步为 implementation_authorization 评审 |
