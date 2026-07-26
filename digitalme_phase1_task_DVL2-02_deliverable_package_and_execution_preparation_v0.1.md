@@ -2,15 +2,15 @@
 
 版本：v0.1.0-draft
 日期：2026-07-26
-状态：`spec_drafting` / `codex_review_pending`
+状态：`spec_drafting` / `codex_review_passed` / `ready_for_owner_spec_acceptance`
 实施：`not_started`
 上位合同：
 - [`digitalme_phase1_task_DVL2-00_product_and_data_contracts_v0.1.md`](digitalme_phase1_task_DVL2-00_product_and_data_contracts_v0.1.md)（**DVL2-00 v0.1.1** / `owner_accepted` / `frozen_for_implementation`）
 - [`digitalme_phase1_task_DVL2-01_deliverable_planner_v0.1.md`](digitalme_phase1_task_DVL2-01_deliverable_planner_v0.1.md)（**DVL2-01 v0.1.1** / `accepted_as_implemented` / 实施 `implemented` @ `6e7c384`）
-基线：`690e1fc1663d44b180a70c1d4f5f777f4eea42d5`
+基线：`e72f7bd31e188f3fdf05c6737dd1078bcc0c8175`
 所属架构：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)
 
-> **正式边界（草案）**：本文仅起草规格，供 Codex / Owner 评审。**不是**实现授权。不得标 `owner_accepted` / `frozen_for_implementation` / `implementation_authorized` / `implementation_in_progress`。冲突时：架构原则文 > DVL2-00 > DVL2-01 > 本文。发现冻结合同缺口须先回改 DVL2-00，不得在实现中静默偏离。
+> **正式边界（草案）**：Codex 规格复核已通过；等待 Owner 规格接受。**不是**实现授权；**尚未** Owner 规格接受 / 规格冻结 / 实施授权。不得标 `owner_accepted` / `frozen_for_implementation` / `implementation_authorized` / `implementation_in_progress` / `implemented`。冲突时：架构原则文 > DVL2-00 > DVL2-01 > 本文。发现冻结合同缺口须先回改 DVL2-00，不得在实现中静默偏离。
 
 ---
 
@@ -19,7 +19,7 @@
 1. 承接 DVL2-00 §13「DVL2-02 成果包与本地交付」与 DVL2-01 §20 交接点：从已确认计划版本建立可恢复的 `DeliverablePackage` 实例。
 2. 解决 Owner / DVL2-01 P1「执行入口衔接」：成果计划模式下的执行准备必须绑定 `Task.deliverablePlanning.activeConfirmedVersionId`。
 3. 落实 Owner 在 DVL2-01 验收提出的减负原则（默认接受、只确认例外、渐进披露）。
-4. **本任务不生成真实 Word / PPT / 网页 / 图片**；不为四类产物伪造 `ArtifactRef`、路径、下载入口或生成进度。
+4. **本任务不生成真实 Word / PPT / 网页 / 图片**；**不创建**任何 `DeliverableVersion` / `ArtifactRef` / `contentHash`；不为四类产物伪造路径、下载入口或生成进度。
 
 ---
 
@@ -27,97 +27,119 @@
 
 ### 1.1 目标
 
-> 用户确认成果计划后，系统建立一个稳定、可恢复、可审阅、可继续执行的成果包实例，并为 DVL2-03 真实生成提供唯一、明确的输入。
+> 用户确认成果计划后，系统建立一个稳定、可恢复、可审阅、可继续执行的成果包实例，并为 DVL2-03 真实生成提供以 **`packageId`** 为唯一正式入参的稳定输入。
 
 目标链路（冻结意图）：
 
 ```text
 Task.deliverablePlanning.activeConfirmedVersionId
-→ 创建执行快照（ExecutionSnapshot）
-→ 创建 DeliverablePackage
-→ 为 included PlannedDeliverable 创建 Deliverable
+→ 创建不可变 ExecutionSnapshot
+→ 创建 DeliverablePackage + included Deliverable
+→ 记录 PackagePreparationAttempt
 → 建立本地持久化
-→ 显示执行准备状态（非伪生成）
+→ 重算并显示 CurrentPreparationReadiness（非伪生成）
 → 支持中断与重启恢复
-→ 为 DVL2-03 提供稳定输入
+→ DVL2-03 以 packageId 启动真实生成
 ```
 
 必须实现的产品能力（获实施授权后）：
 
-1. 仅从 `activeConfirmedVersionId`（或显式指定的 confirmed `versionId`）创建成果包；
-2. 冻结执行快照，后续 plan draft / 新 confirmed **不得**静默改变既有成果包；
-3. 为每个 `planDisposition=included` 的计划项创建 `Deliverable`；
+1. 仅从 `activeConfirmedVersionId` 创建成果包；
+2. 冻结 `ExecutionSnapshot`；后续 draft / 新 confirmed **不得**静默改变既有成果包；
+3. 为每个创建时 `included` 的计划项创建 `Deliverable`（无 Version）；
 4. 本地持久化、原子写、启动 reconciliation、fail-closed；
-5. 幂等「准备成果包」；
-6. 重启后恢复 package / deliverable 元数据与准备状态；
-7. 用户面准确展示「已准备 / 因能力未就绪而暂不可生成」；
-8. 定义审阅合同与占位流程（完整审阅 UI 可延后，但不得写错语义）；
-9. 定义 Attempt / Version / ArtifactRef 对象合同（可无真实文件）；
-10. 明确隔离旧版「开始」直接执行链。
+5. 幂等「准备成果包」（含 archived / soft_deleted / degraded 规则）；
+6. 重启后恢复 package / deliverable / preparation attempt；
+7. 用户面准确展示准备态与「暂不可生成」白话；
+8. 定义审阅合同边界（本阶段无真实 version 可接受）；
+9. 引入 **仅** `PackagePreparationAttempt`；
+10. 旧版直接执行入口默认隐藏并降为兼容入口。
 
 ### 1.2 非目标（明确不实现）
 
-- 真实 Word / PPT / HTML / 图片生成（属 DVL2-03）；
-- 伪造 `ArtifactRef` / `contentHash` / 文件路径 / 下载入口 / 「已生成版本」；
+- 真实 Word / PPT / HTML / 图片生成（DVL2-03）；
+- 创建任何 `DeliverableVersion`（含曾设想的 placeholder / metadata-only）；
+- 创建或伪造 `ArtifactRef` / `contentHash` / 文件路径 / 下载入口 / 「已生成版本」；
+- `DeliverableGenerationAttempt` / validation attempt 运行记录（DVL2-03+）；
 - 完整质量引擎（DVL2-04）；
 - `SubjectCandidate` / 七模块写回（DVL2-05）；
 - 付费、发布、对外分享执行；
 - 重写 renderer-next / 解锁 R3、R2.5、PAN-02；
-- 未经评审复用或改造 `src/package-store/**`（主体 Package 店铺）；
+- 未经评审复用或改造 `src/package-store/**`；
 - 把 `runtimeAvailability` 在无真实验收前标为 `available`。
 
 ### 1.3 与 DVL2-00 表意对齐说明
 
-DVL2-00 §13 写 DVL2-02 含「ArtifactRef；版本；重启恢复；采用与否定」。本草案解释为：
+DVL2-00 §13 写 DVL2-02 含「ArtifactRef；版本；重启恢复；采用与否定」。本修订解释为：
 
 | 合同要求 | DVL2-02 本阶段落地 |
 |----------|-------------------|
-| ArtifactRef | **定义对象与持久化槽位**；仅当真实内容写出后才填有效引用（本阶段保持 `null` / 不创建假引用） |
-| 版本 | 定义 `DeliverableVersion`；允许 metadata-only / placeholder candidate；**禁止**宣称已生成 |
-| 重启恢复 | **必须**：package / deliverable 元数据与准备状态可恢复 |
-| 采用与否定 | **定义合同 + 最小占位流程**；完整审阅 UI 可列为实施子阶段，但语义不可错 |
+| ArtifactRef | **仅保留合同引用说明**；运行时 **不存在**；DVL2-03 真实写出后才创建 |
+| 版本 | **不创建** `DeliverableVersion`；`currentVersionId = null`；`versionIds = []` |
+| 重启恢复 | **必须**：package / deliverable / preparation attempt 可恢复 |
+| 采用与否定 | **定义合同边界**：无真实 version 时不得接受/否定内容；完整审阅 UI 属后续 |
+
+**禁止**：用 placeholder version「占坑后再原地补全」。placeholder **不再存在**。
 
 ---
 
-## 2. 用户主路径（草案）
+## 2. 用户主路径
 
 ```text
 用户已确认成果计划
 → 看到「成果计划已准备，尚未开始执行」
-→ 点击「准备成果包」（唯一成果包执行入口）
-→ 系统校验 activeConfirmedVersionId
-→ 创建或返回既有 DeliverablePackage
-→ 展示准备结果：成果数量、准备状态、阻塞原因（若有）
+→ 点击「准备成果包」
+→ 校验 activeConfirmedVersionId
+→ 幂等创建或返回既有 DeliverablePackage
+→ 展示 CurrentPreparationReadiness（白话）
 → 应用可退出并重启恢复
-→ （DVL2-03）在能力可用时再开始真实生成
+→ （DVL2-03）调用方传入 packageId 启动真实生成
 ```
 
 ### 2.1 入口原则
 
-- 继续使用「做事」主入口；成果包准备是计划确认后的**执行准备阶段**，不是新的一级导航。
-- **唯一成果包执行入口**必须绑定 `Task.deliverablePlanning.activeConfirmedVersionId`。
-- 不得读取 `currentDraftVersionId` 执行；不得绕过 confirmed；不得用「最新版本」替代明确确认版本；不得静默回落到旧版 `actBehalf:generateResult` 研究表达链并伪装为按计划执行。
+- 继续使用「做事」主入口；成果包准备是计划确认后的**执行准备阶段**。
+- **唯一成果包准备入口**必须绑定 `Task.deliverablePlanning.activeConfirmedVersionId`。
+- 不得读取 `currentDraftVersionId`；不得绕过 confirmed；不得用「最新版本」替代明确确认版本。
 
-### 2.2 「开始」按钮产品处理（推荐，待 Owner 确认）
+### 2.2 成果计划模式主按钮（冻结意图）
 
-| 情形 | 推荐处理 |
-|------|----------|
-| 无 `activeConfirmedVersionId` | 不得进入成果包准备；主操作保持规划流或明确禁用 |
-| 有 confirmed，且走成果计划模式 | 主按钮改为 **「准备成果包」**（或等价准确语义）；点击只创建/打开 package，不伪装生成 |
-| 真实生成能力尚不可用 | 准备成功后文案：**「成果包已准备；当前尚无法生成真实文件」**；不得显示生成进度条冒充执行 |
-| 旧版研究表达「开始」 | **隔离保留**：仅对未进入成果计划流程（无 plan 指针）的历史任务可见；须标注「旧版直接执行」；**不得**与「按确认计划准备成果包」混用同一语义 |
+| 情形 | 处理 |
+|------|------|
+| 无 confirmed | 主按钮禁用或提示先确认计划 |
+| 有 confirmed、无有效 package | 主按钮 **「准备成果包」** |
+| 已有有效 package、能力不可用 | 显示 **「成果包已准备；当前尚无法生成真实文件」**；主操作可为「查看成果包准备」 |
+| DVL2-02 全程 | **不出现**「开始生成成果」 |
+
+### 2.3 旧版直接执行入口（兼容）
+
+- **默认隐藏**；
+- 仅兼容模式或开发模式可见；
+- 必须明确标注：**「不会使用已确认成果计划」**；
+- **不得**与「准备成果包」并列为两个主按钮；
+- **不得**增加普通用户选择负担。
 
 ---
 
 ## 3. 领域模型
 
-### 3.1 身份链（强制）
+### 3.1 身份链
+
+**完整身份链（跨任务阶段）**：
 
 ```text
 DeliverablePackage.id
 → Deliverable.id
-→ DeliverableVersion.id
-→ ArtifactRef.contentHash   // 仅真实写出后存在；DVL2-02 不得伪造
+→ DeliverableVersion.id          // 仅 DVL2-03+ 真实生成后存在
+→ ArtifactRef.contentHash        // 仅真实写出后存在
+```
+
+**DVL2-02 运行时实际对象**：
+
+```text
+DeliverablePackage.id
+→ Deliverable.id
+（无 DeliverableVersion；无 ArtifactRef）
 ```
 
 命名禁止：裸名 `Package` 继续专指主体 Package；成果包只能称 `DeliverablePackage`。
@@ -130,38 +152,34 @@ type DeliverablePackage = {
   id: string;                         // delivery_…
   taskId: string;
   sourcePlanId: string;
-  sourcePlanVersionId: string;        // = confirmedPlanVersionId
+  sourcePlanVersionId: string;        // 创建时 confirmed 版本；此后永不可改
   lifecycleStatus: PackageLifecycleStatus;   // 派生，见 §4
   completionStatus: PackageCompletionStatus; // 派生，见 §4
   createdAt: string;
   updatedAt: string;
   deliverableIds: string[];
-  executionSnapshot: ExecutionSnapshot;      // 不可变引用/摘要，见 §5
-  reviewSummary: PackageReviewSummary;       // 可派生缓存
+  executionSnapshot: ExecutionSnapshot;      // 不可变，见 §5
+  reviewSummary: PackageReviewSummary;       // 可派生缓存；本阶段通常为空态
   recovery: PackageRecoveryMetadata;
+  executionPreparation?: ExecutionPreparationRecord; // 可选：准备阶段元数据（非 Version）
+  supersededByPackageId?: string | null;     // 被更新后的新包取代时的关系（非 lifecycle 枚举）
+  sourcePlanSuperseded?: boolean;            // 派生/缓存：其 source 计划版本已不再是 activeConfirmed
   localStore: {
     storeKind: "deliverable_packages_json";
     relativeKey: string;              // 逻辑键；非用户下载路径
   };
-  revision: number;                   // CAS / 乐观并发
+  revision: number;
   softDeletedAt?: string | null;
   archivedAt?: string | null;
 };
 ```
 
-说明：
-
-- 继续使用 DVL2-00 冻结双维：`lifecycleStatus` × `completionStatus`；**不得**合并为单一模糊 `status`。
-- `goal` / `audience` / `usage` / `visibility` 等可从 snapshot 投影到包级只读字段，便于列表展示；权威仍以 snapshot 为准。
-
 ### 3.3 Deliverable（最小字段）
-
-每个 confirmed 计划中 `included` 的 `PlannedDeliverable` 映射为一个 `Deliverable`：
 
 ```ts
 type Deliverable = {
   schemaVersion: 1;
-  id: string;                         // deliverable_…
+  id: string;
   packageId: string;
   sourcePlannedDeliverableId: string;
   kind: string;
@@ -169,13 +187,14 @@ type Deliverable = {
   title: string;
   purpose?: string;
   order: number;
-  dependencies: string[];             // 引用其他 Deliverable.id 或计划项映射后的 id
+  dependencies: string[];             // 映射后的 Deliverable.id
   planDisposition: "included" | "removed";
   generationStatus: DeliverableGenerationStatus;
   reviewStatus: "unreviewed" | "accepted" | "rejected";
-  currentVersionId: string | null;
-  latestAttemptId: string | null;
-  capabilityRequirements: unknown;    // 自计划拷贝；UI 默认不暴露原始结构
+  currentVersionId: null;             // DVL2-02 强制 null
+  versionIds: [];                     // DVL2-02 强制空数组
+  latestPreparationAttemptId: string | null; // 指向 PackagePreparationAttempt（包级）或本项准备痕迹；非 generation
+  capabilityRequirements: unknown;
   riskFlags: unknown[];
   createdAt: string;
   updatedAt: string;
@@ -184,142 +203,137 @@ type Deliverable = {
 
 继续使用冻结三维：`planDisposition` × `generationStatus` × `reviewStatus`。
 
-### 3.4 DeliverableVersion（本阶段）
+### 3.4 DeliverableVersion / ArtifactRef（本阶段禁止创建）
+
+| 规则 | 冻结 |
+|------|------|
+| DVL2-02 创建 | **仅** `DeliverablePackage` + `Deliverable` |
+| DVL2-02 **不**创建 | 任何 `DeliverableVersion` |
+| `currentVersionId` | **恒为 `null`** |
+| `versionIds` | **恒为 `[]`** |
+| `ArtifactRef` | **不存在** |
+| `contentHash` | **不存在** |
+| 真实内容后 | **仅 DVL2-03** 创建 `DeliverableVersion` + `ArtifactRef` |
+| placeholder | **废除**；禁止「先 placeholder 再原地补全/覆盖」 |
+
+执行准备信息写入 `executionPreparation` 或 `PackagePreparationAttempt`，**绝不**写入 `DeliverableVersion`。
+
+### 3.5 PackagePreparationAttempt（DVL2-02 唯一允许的 Attempt）
 
 ```ts
-type DeliverableVersion = {
+type PackagePreparationAttempt = {
   schemaVersion: 1;
-  id: string;                         // dver_…
-  deliverableId: string;
-  version: number;
-  kind: "metadata_placeholder" | "generated"; // DVL2-02 仅允许 metadata_placeholder
-  generationStatus: DeliverableGenerationStatus;
-  reviewStatus: "unreviewed" | "accepted" | "rejected";
-  artifactRef: null;                  // DVL2-02 强制 null
-  contentAvailable: false;            // DVL2-02 强制 false
-  attemptId: string | null;
-  provenance: Record<string, unknown>;
-  supersedesVersionId: string | null;
-  supersededByVersionId: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
-```
-
-**禁止**：在 DVL2-02 创建 `kind=generated`、非空 `artifactRef`、假 `contentHash`、假路径或下载入口。
-
-### 3.5 DeliverableAttempt（推荐：本阶段引入）
-
-```ts
-type DeliverableAttempt = {
-  schemaVersion: 1;
-  id: string;                         // attempt_…
-  deliverableId: string;
-  packageId: string;
-  purpose: "package_preparation" | "generation" | "validation";
+  id: string;                         // pprep_…
+  packageId: string | null;           // 成功前可为 null；成功后必填
+  taskId: string;
+  sourcePlanVersionId: string;
   status: "started" | "succeeded" | "failed" | "interrupted" | "cancelled";
   startedAt: string;
   finishedAt: string | null;
+  errorCode: string | null;
   errorSummary: string | null;        // 用户可读；无密钥
-  producesVersionId: string | null;
+  createdPackageId: string | null;    // 成功时 = 新建或幂等返回的 packageId
+  recoveryMetadata: Record<string, unknown>;
 };
 ```
 
-**推荐**：DVL2-02 **引入** Attempt 对象与持久化。准备包时可写 `purpose=package_preparation` 的成功 attempt；`purpose=generation` 的 attempt **留到 DVL2-03** 再创建。历史 attempt **不得覆盖**。
+**阶段所有权**：
 
-### 3.6 ArtifactRef
+| Attempt | 所有者 | DVL2-02 |
+|---------|--------|---------|
+| `PackagePreparationAttempt` | 本任务 | **允许**运行时创建 |
+| `DeliverableGenerationAttempt` | DVL2-03 | **禁止**预创建运行记录 |
+| validation attempt | DVL2-04 附近 | **禁止** |
 
-完整形状遵循 DVL2-00 §4.6。DVL2-02：
-
-- 合同与 schema **必须**存在；
-- 运行时 **不得**写入伪造引用；
-- `DeliverableVersion.artifactRef` 保持 `null`，直至 DVL2-03 真实写出。
-
-### 3.7 Task 指针扩展（推荐）
+若未来统一 Attempt 超类型，必须带：
 
 ```ts
-// ActBehalfTask 增量（与 deliverablePlanning 并列或内嵌）
-deliverablePlanning: {
+attemptType: "package_preparation" | "deliverable_generation" | "validation"
+```
+
+且 **DVL2-02 运行时只允许 `package_preparation`**。本修订推荐使用独立类型名 `PackagePreparationAttempt`，避免枚举污染。
+
+### 3.6 Task.deliverableExecution（严格）
+
+**不要**把 `activePackageId` 放进 `deliverablePlanning`。
+
+```ts
+Task.deliverablePlanning = {
   planId: string | null;
   currentDraftVersionId: string | null;
   activeConfirmedVersionId: string | null;
-  activePackageId: string | null;     // 新增：当前活动成果包
+};
+
+Task.deliverableExecution = {
+  activePackageId: string | null;
 };
 ```
 
-**推荐**：增加 `activePackageId`。语义：指向该 task 当前用于继续执行/展示的 package；不等于历史唯一 package。
+#### 3.6.1 `activePackageId` 定义
+
+只能指向：**当前 `activeConfirmedVersionId` 对应的、生命周期有效的、可继续准备或（未来）执行的唯一 `DeliverablePackage`**。
+
+#### 3.6.2 写入不变量
+
+```text
+activePackage.taskId
+  == Task.id（或 Task.taskId，与现有 Task 主键字段对齐）
+activePackage.sourcePlanId
+  == Task.deliverablePlanning.planId
+activePackage.sourcePlanVersionId
+  == Task.deliverablePlanning.activeConfirmedVersionId
+同一 taskId + confirmedPlanVersionId 最多一个「有效」package
+（有效 = 非 soft_deleted、非仅历史隔离；archived 见 §7）
+```
+
+#### 3.6.3 `activePackageId` **不**表示
+
+- 最近查看的 package；
+- 最后创建的任意 package；
+- 任意历史 package；
+- 「已完成或已接受」成果包的收藏指针。
 
 ---
 
-## 4. 状态模型（与 DVL2-00 对齐）
+## 4. 状态枚举映射（逐字对齐 DVL2-00）
 
-### 4.1 包级枚举（冻结，不得自创冲突值）
+保留 DVL2-00 已冻结枚举，**不自行修改**、不把 `blocked` / `not_started` 写入包级冻结枚举。
 
-**`lifecycleStatus`**（DVL2-00）：
+### 4.1 DeliverablePackage
 
-`planned` | `in_progress` | `stopping` | `stopped` | `completed` | `interrupted`
+| 维度 | DVL2-00 合法值 | DVL2-02 实际使用值 | 用户面白话（示例） | 持久权威？ | 派生视图？ |
+|------|----------------|-------------------|-------------------|------------|------------|
+| `lifecycleStatus` | `planned` \| `in_progress` \| `stopping` \| `stopped` \| `completed` \| `interrupted` | 典型 **`planned`**（尚未真实生成入队） | 「成果包已建立，尚未开始生成」 | 是（按 DVL2-00 规则派生后写入/缓存须可重算一致） | 派生自 deliverable 集合；可缓存 |
+| `completionStatus` | `none` \| `partial` \| `ready` \| `ready_with_failures` \| `partially_accepted` \| `accepted` \| `failed` | 典型 **`none`** | 「还没有可交付的成品」 | 是（同上） | 派生 |
+| （禁止）`blocked` | — | **不得写入** | — | — | — |
+| （禁止）`not_started` | — | **不得写入**包枚举 | — | — | — |
 
-**`completionStatus`**（DVL2-00）：
+### 4.2 Deliverable
 
-`none` | `partial` | `ready` | `ready_with_failures` | `partially_accepted` | `accepted` | `failed`
+| 维度 | DVL2-00 合法值 | DVL2-02 实际使用值 | 用户面白话（示例） | 持久权威？ | 派生视图？ |
+|------|----------------|-------------------|-------------------|------------|------------|
+| `planDisposition` | `included` \| `removed` | 创建时按计划快照；默认 **`included`** | 「在本成果包内」/「已从计划移除」 | 是 | 否（字段本身权威） |
+| `generationStatus` | `planned` · `queued` · `generating` · `generated` · `validating` · `ready` · `failed` · `cancel_requested` · `cancelled` · `interrupted` · `superseded` | 典型停在 **`planned`**；准备包 **不得**因此进入 `queued`/`generating` | 「尚未生成」 | 是 | 有 version 后可由 current 投影；本阶段无 version，字段本身为权威 |
+| `reviewStatus` | `unreviewed` \| `accepted` \| `rejected` | **`unreviewed`**；无 version 时禁止 `accepted`/`rejected` | 「尚未审阅」 | 是 | 有 version 后绑定 version |
 
-**明确禁止**在包级发明：`blocked`、`not_started` 作为 `completionStatus` / `lifecycleStatus` 新枚举值。
+### 4.3 用户面「暂不可生成 / 等待能力」
 
-### 4.2 单项 `generationStatus`（冻结）
+**只属于** `CurrentPreparationReadiness` 或 `PackagePreparationView`（§5.2 / §10），**不是**包级冻结枚举值。
 
-`planned` · `queued` · `generating` · `generated` · `validating` · `ready` · `failed` · `cancel_requested` · `cancelled` · `interrupted` · `superseded`
-
-### 4.3 DVL2-02 典型状态（能力尚不可用时）
-
-在 document / presentation / webpage / image 的 `runtimeAvailability=unavailable` 时：
-
-| 对象 | 推荐状态 | 说明 |
-|------|----------|------|
-| Package `lifecycleStatus` | `planned` | 尚未入队真实生成 |
-| Package `completionStatus` | `none` | 尚无 ready/accepted/failed |
-| Deliverable `generationStatus` | `planned` | **不得**因「准备包」进入 `queued`/`generating` |
-| Deliverable `reviewStatus` | `unreviewed` | |
-| `currentVersionId` | `null` 或仅指向 metadata_placeholder（且不得当已生成） | 推荐默认 `null`，避免 UI 误读 |
-
-用户面「阻塞 / 尚未可生成」来自 **派生准备态**（§4.4），不是新的包级枚举。
-
-### 4.4 用户面准备态（派生，非持久权威枚举）
-
-```ts
-type PackagePreparationView = {
-  status:
-    | "needs_confirmed_plan"
-    | "ready_to_prepare"
-    | "prepared_waiting_generation"
-    | "partially_executable"
-    | "not_executable"
-    | "degraded";
-  userSummary: string;     // 中性白话
-  blockerSummaries: string[]; // 无内部 ID/枚举原文
-  primaryAction:
-    | "prepare_package"
-    | "open_package"
-    | "wait_for_generation_capability"
-    | "fix_plan"
-    | "none";
-};
-```
-
-派生输入：`activeConfirmedVersionId`、既有 `activePackageId`、`CurrentExecutionReadiness`（DVL2-01）、package 持久化是否完整。
-
-### 4.5 审阅不变量（继承 DVL2-00）
+### 4.4 审阅不变量（继承 DVL2-00；本阶段边界）
 
 - 接受/否定绑定具体 `DeliverableVersion.id`；
-- `currentVersionId` ≠ 已接受；
-- package `completionStatus=accepted` **不**自动等于「用户点过准备」；
-- 新版本不继承旧版本接受状态；
-- DVL2-02 可只做合同 + 占位；不得在无 version 内容时显示「已采用真实成果」。
+- DVL2-02 无 version → **不得**把 package/deliverable 标为内容已接受；
+- `currentVersionId` ≠ 已接受；本阶段 `currentVersionId` 恒 `null`；
+- package `completion=accepted` **不**因「已准备」成立。
 
 ---
 
-## 5. 执行快照（ExecutionSnapshot）
+## 5. ExecutionSnapshot 与 CurrentPreparationReadiness
 
-创建 `DeliverablePackage` 时必须冻结：
+### 5.1 ExecutionSnapshot（不可变）
+
+创建时冻结，之后 **不得修改**：
 
 ```ts
 type ExecutionSnapshot = {
@@ -327,69 +341,123 @@ type ExecutionSnapshot = {
   taskId: string;
   planId: string;
   confirmedPlanVersionId: string;
-  confirmedPlanContent: {
-    // 不可变拷贝或内容哈希 + 结构化摘要；不得只存可变指针
-    versionId: string;
-    understandingSummary: string;
-    items: PlannedDeliverable[];   // included + 创建时的 disposition 快照
-    contentDigest: string;         // sha256 of canonical JSON
+  plannedDeliverables: PlannedDeliverable[]; // 创建时拷贝
+  dependencies: Array<{ fromId: string; toId: string }>;
+  planningAvailabilitySnapshot: unknown;     // 计划确认时的可用性快照
+  riskDeclarations: unknown[];               // 风险声明（非「当前授权是否仍有效」）
+  inputSummary: {
+    goal: string;
+    audience?: string;
+    usage?: string;
+    understandingSummary?: string;
   };
-  planningAvailabilitySnapshot: unknown; // 来自计划版本，创建后不可改
-  capabilityAvailabilityAtCreate: CapabilityAvailabilitySummary;
+  sourcePlanDigest: string;                  // canonical JSON 的 sha256
   createdAt: string;
-  createdBy: "user" | "system";
   triggerSource: "prepare_package_ui" | "prepare_package_ipc" | "recovery_rebind";
-  riskAndAuthorization: {
-    listedRisks: unknown[];
-    authorizationsSatisfied: boolean;
-    notes: string[];
-  };
+};
+```
+
+**不得**把下列动态事实当作 snapshot 永久权威：
+
+- 当前能力是否可用；
+- 当前授权是否有效；
+- 当前依赖是否满足；
+- 当前冲突是否存在；
+- 当前是否可执行。
+
+### 5.2 CurrentPreparationReadiness（可重算）
+
+```ts
+type CurrentPreparationReadiness = {
+  schemaVersion: 1;
+  packageId: string;
+  status:
+    | "ready_for_future_generation"
+    | "waiting_for_capability"
+    | "blocked_by_authorization"
+    | "blocked_by_dependency"
+    | "blocked_by_consistency"
+    | "degraded";
+  capabilityReadiness: "ready" | "unavailable" | "unknown";
+  authorizationReadiness: "satisfied" | "required" | "unknown";
+  dependencyReadiness: "satisfied" | "unsatisfied" | "unknown";
+  consistencyReadiness: "ok" | "degraded" | "fail_closed";
+  requiredUserActions: string[];     // 白话；默认少而准
+  blockerSummaries: string[];        // 白话；无内部 ID/枚举原文
+  evaluatedAt: string;
 };
 ```
 
 规则：
 
-1. 快照在 create 时写入后 **不可变**；
-2. 后续 draft / 新 confirmed **不得**静默改写既有 package 的 snapshot；
-3. 新 confirmed 若需执行，创建 **新** package（见 §8）；
-4. DVL2-03 执行前仍须 **重算** `CurrentExecutionReadiness`；快照只证明「按哪版计划准备」，不证明「此刻仍可生成」。
+1. **可重算**；每次打开/准备/启动前重算；
+2. **不覆盖** `ExecutionSnapshot`；
+3. 「暂不可生成」「等待能力」只出现在本对象或 UI 投影中；
+4. 可与 DVL2-01 `CurrentExecutionReadiness` 组合使用，但本对象以 **package** 为中心。
+
+### 5.3 PackagePreparationView（UI 投影，非权威）
+
+默认层字段：理解摘要、成果数量、准备状态白话、阻塞原因白话、一个主操作。内部 ID/枚举不默认暴露。
 
 ---
 
-## 6. Store 合同
+## 6. 新 confirmed 与旧 package（明确推荐）
 
-### 6.1 推荐方案
+| 规则 | 推荐 |
+|------|------|
+| 旧 package.`sourcePlanVersionId` | **永远不可修改** |
+| 新 confirmed 出现后 | 旧 package **保留为历史** |
+| 绑定 | **不**静默把旧 package 绑到新 confirmed |
+| `Task.deliverableExecution.activePackageId` | **立即清空为 `null`**，并记审计 `active_package_stale_cleared`；同时可将旧包标记 `sourcePlanSuperseded=true`（字段/派生均可，**不是** lifecycle 新枚举） |
+| 用户再点「准备成果包」 | 为 **新** confirmed 版本创建 **新** package，并写入新的 `activePackageId` |
+| 旧 package | **不**自动物理删除 |
+| DVL2-00 无 `superseded` lifecycle 值 | **不得自创** lifecycle 值；用 `supersededByPackageId`（新包创建后回写旧包关系）与/或 `sourcePlanSuperseded=true` 表达 |
+
+**推荐写入序（新 confirmed 后首次准备）**：① 创建新 package（CAS）→ ② 旧包写 `supersededByPackageId`（若定位得到）→ ③ Task.`activePackageId`=新包。
+
+---
+
+## 7. 幂等与一致性矩阵
+
+| # | 情形 | 必须行为 |
+|---|------|----------|
+| 1 | 同一 `taskId + planId + confirmedPlanVersionId` 已有**有效** package | **返回已有 package，不新建** |
+| 2 | 已有 package 为 **archived** | **默认提示恢复**，不静默新建；仅显式「重新建立成果包」才允许新建 |
+| 3 | 已有 package 为 **soft_deleted** | **不**静默恢复；**不**因普通点击新建替代包；必须显式恢复或显式新建，并保留审计 |
+| 4 | 存在两个有效 package | **fail-closed**；**不**按 `updatedAt` 自动选择 |
+| 5 | Package Store 写成功、Task `activePackageId` 写失败 | 标 **`degraded_consistency`**；reconciliation 恢复指针；再次点击前先 reconciliation；**不得**创建第二个 package |
+| 6 | 重复点击 | **必须幂等**；**不得**靠刷新 `updatedAt` 伪造新操作 |
+
+### 7.1 写入顺序与恢复
+
+1. 写 Package Store（package + deliverables + preparationAttempts，CAS）；
+2. 写 Task.`deliverableExecution.activePackageId`（带期望旧值）；
+3. 任一步失败 → degraded + 可重试；启动 reconciliation 以 Package Store 为包权威修复指针；
+4. 损坏 fail-closed；孤儿隔离，不静默 purge。
+
+### 7.2 中断恢复
+
+| 情形 | 处理 |
+|------|------|
+| 仅完成准备后退出 | 重启恢复 package；`generationStatus` 仍为 `planned`；准备态由 readiness 重算；不得伪 completed |
+| 准备写入中崩溃 | 不完整包隔离或回滚上一 revision；preparation attempt → `interrupted`/`failed` |
+| 重试准备 | 遵循幂等矩阵；成功可新建 preparation attempt 记录，**不覆盖**历史 attempt |
+| generation 中断 | **DVL2-03** 合同；本阶段不创建 generation attempt |
+
+---
+
+## 8. Store 合同
+
+### 8.1 推荐
 
 | 项 | 推荐 |
 |----|------|
 | 文件 | `<userData>/deliverable-packages.json` |
-| 模式 | 对齐 `act-behalf-tasks.json` / `deliverable-plans.json`：单文件 JSON、原子 rename、进程内 write queue、`schemaVersion`、revision/CAS |
-| 模块 | **新建** `digitalme-app/src/act-behalf/deliverable-package-store.js`（及 schema / consistency / recovery 辅助） |
-| 与主体 Package | **完全隔离** |
+| 模式 | 对齐 task/plan store：原子 rename、写队列、`schemaVersion`、revision/CAS |
+| 模块 | 新建 `act-behalf/deliverable-package-store.js` 等 |
+| 主体 `package-store/**` | **禁止触碰 / 禁止复用** |
 
-### 6.2 与现有 `src/package-store/**` 的关系（审计结论）
-
-| 现有模块 | 用途 | DVL2-02 关系 |
-|----------|------|--------------|
-| `src/package-store/**` | **主体 Package** 目录店铺（journal、lock、staging、manifest digest） | **禁止触碰 / 禁止复用为成果包存储**；命名冲突风险高 |
-| `experience-proposal.js` 等读取 PackageStore | 主体成长/经验提案 | **禁止**把 DeliverablePackage 写入主体 Package |
-| `result-generation.js` | 旧研究表达成果（文本 JSON 结果） | **必须隔离**；不得伪装为 DeliverablePackage 生成 |
-
-**不得**把成果包塞进主体 Package 目录语义；**不得**未经评审「顺便改造」package-store。
-
-### 6.3 Store 强制要求
-
-1. 原子写（temp + rename）；
-2. 写队列（同进程串行）；
-3. `schemaVersion` + 向前兼容的迁移策略（破坏性迁移须显式任务）；
-4. 损坏时 fail-closed（可读只读诊断，不假装健康）；
-5. package ↔ task ↔ plan 引用一致性检查；
-6. startup reconciliation；
-7. 孤儿 package / deliverable：**隔离**（标记 `orphaned` / 移入隔离区字段），不得静默 purge；
-8. permanent purge 边界：仅显式危险操作 + 审计；默认 soft-delete / archive；
-9. CAS：`revision` 或等价 token；冲突返回可重试错误，不静默覆盖。
-
-### 6.4 建议顶层形状
+### 8.2 顶层形状（DVL2-02）
 
 ```ts
 type DeliverablePackageStoreFile = {
@@ -397,169 +465,91 @@ type DeliverablePackageStoreFile = {
   revision: number;
   packages: Record<string, DeliverablePackage>;
   deliverables: Record<string, Deliverable>;
-  versions: Record<string, DeliverableVersion>;
-  attempts: Record<string, DeliverableAttempt>;
+  preparationAttempts: Record<string, PackagePreparationAttempt>;
   updatedAt: string;
 };
 ```
 
-（若单文件过大再拆；本阶段推荐单文件以降低一致性成本。）
-
----
-
-## 7. 幂等与一致性
-
-### 7.1 推荐决策（明确）
-
-| 问题 | 推荐 |
-|------|------|
-| 同一 `confirmedPlanVersionId` 是否允许多个 **active** package？ | **否**。同一 `(taskId, confirmedPlanVersionId)` 至多一个非归档/非 soft-deleted 的 active package |
-| 重复点击「准备成果包」？ | **幂等**：返回既有 package（更新 `updatedAt` 仅在无语义变化时可省略） |
-| 新 confirmed 计划？ | **创建新 package**；旧 package **保留**（可标记 superseded-by-new-plan 于 recovery/审计，不删） |
-| Task 是否增加 `activePackageId`？ | **是**；指向当前活动包 |
-| 写入顺序 | ① Package Store 写入 package+deliverables（CAS）→ ② Task Store 更新 `activePackageId`（带期望旧指针）→ ③ 失败则 reconciliation 修复指针 |
-| 部分写入 | 允许短暂 degraded；启动 reconciliation 以 Package Store 为包权威、Task 指针可修复；不得假装 completed |
-| 跨进程 | 同机多实例：依赖文件 CAS；冲突失败可见；不做分布式锁幻想 |
-
-### 7.2 一致性修复（startup）
-
-1. `activePackageId` 指向缺失 package → 清空并审计；若存在唯一匹配 `(taskId, activeConfirmedVersionId)` 的合法 package，可恢复指针；
-2. package 的 `sourcePlanVersionId` 与 task `activeConfirmedVersionId` 不一致 → **不改 package**；UI 说明「当前确认计划已变化；既有成果包仍对应旧确认版本」；主操作可「按新确认计划准备新成果包」；
-3. deliverable 缺映射 / 多余 → fail-closed 至只读 + 审计，不自动编造计划外 deliverable。
-
----
-
-## 8. 中断恢复
-
-| 情形 | 处理 |
-|------|------|
-| 应用退出（仅完成准备、无 generation） | 重启后恢复 package；准备态仍为 `prepared_waiting_generation` / `not_executable`；**不得**显示伪 completed |
-| 准备写入中崩溃 | reconciliation：不完整 package 隔离或回滚到上一 revision；不得半包当成功 |
-| 未来 generation 中崩溃（合同预留） | `generationStatus → interrupted`；attempt `interrupted`；重试 **新建** attempt，不覆盖历史 |
-| 迟到结果 | 继承 DVL2-00：不得自动成为 current；不得在 DVL2-02 伪造迟到文件 |
-
-运行状态与最终成果状态继续分离（lifecycle × completion；generation × review）。
+- **不**包含运行时 `versions` / ArtifactRef 集合；
+- `DeliverableVersion` Store 与 `ArtifactRef` Store **留到 DVL2-03**；
+- 若实现为未来保留空槽 `versions: {}`，则必须：**始终为空**；DVL2-02 **不创建**任何 version；**不得**被 UI 或状态逻辑引用；**不是**本阶段权威对象。**推荐直接省略该字段。**
 
 ---
 
 ## 9. 审阅合同（本阶段）
 
-1. 接受/否定 API 与数据模型绑定 `DeliverableVersion.id`；
-2. DVL2-02 **可以**提供「尚无可审阅版本」的空态，而不是假采用；
-3. 完整审阅 UI 可作为实施子阶段 B；不得因未做完整 UI 而写错 `reviewStatus`；
-4. package `reviewSummary` 仅派生缓存。
+1. 接受/否定 API 绑定 `DeliverableVersion.id`；
+2. DVL2-02 无 version → API 必须拒绝内容接受，返回「尚无可审阅版本」；
+3. 完整审阅 UI 可延后；不得写错 `reviewStatus`。
 
 ---
 
-## 10. UI 与减负原则（落实 DVL2-01 Owner 意见）
+## 10. UI 与减负
 
 ### 10.1 默认层只展示
 
-- 系统理解摘要（一句话）；
-- 成果数量；
-- 当前准备状态（白话）；
-- 阻塞原因（白话，至多少量）；
-- **一个**主要操作（准备成果包 / 打开已准备成果包 / 等待生成能力）。
+系统理解摘要；成果数量；当前准备状态；阻塞原因；一个主要操作。
 
-### 10.2 默认不得暴露
+### 10.2 默认不暴露
 
-- dependency ID；
-- 内部状态枚举原文；
-- plan / version / package ID；
-- capability requirement 原始结构；
-- 完整风险对象。
+dependency ID；内部状态枚举原文；plan/version/package ID；capability requirement 原始结构；完整风险对象。
 
 ### 10.3 原则
 
-- 默认接受，只确认例外；
-- 系统先做可撤销假设；
-- 未解决问题不默认变成阻塞问卷；
-- 专业详细信息放在二级展开区；
-- 渐进披露。
+默认接受；只确认例外；渐进披露；系统先做可撤销假设；未解决问题不默认变成阻塞问卷。
 
-### 10.4 确认后 / 准备后文案（推荐）
+### 10.4 文案
 
 | 时机 | 文案 |
 |------|------|
-| 计划确认后（DVL2-01 已冻结） | 成果计划已准备，尚未开始执行。 |
-| 成果包准备成功且生成不可用 | 成果包已准备；当前尚无法生成真实文件。 |
-| 重复准备 | 已有对应成果包，已为你打开。 |
-| 禁止 | 「正在生成文档…」、假路径、假下载、假预览缩略图冒充成品 |
+| 计划确认后（DVL2-01） | 成果计划已准备，尚未开始执行。 |
+| 准备成功且能力不可用 | 成果包已准备；当前尚无法生成真实文件。 |
+| 幂等命中 | 已有对应成果包，已为你打开。 |
+| 禁止 | 「正在生成…」、假路径、假下载、假预览、「开始生成成果」 |
 
 ---
 
 ## 11. IPC 边界（草案）
 
-建议（命名可微调，语义冻结）：
-
 | Channel | 作用 |
 |---------|------|
-| `actBehalf:prepareDeliverablePackage` | 唯一准备入口；校验 confirmed；幂等创建/返回 |
-| `actBehalf:getDeliverablePackage` | 读取包与派生准备态 |
-| `actBehalf:listDeliverablePackagesForTask` | 历史包列表（默认折叠） |
-| `actBehalf:reconcileDeliverablePackages` | 启动/诊断用（可不对 renderer 暴露） |
+| `actBehalf:prepareDeliverablePackage` | 唯一准备入口；校验 confirmed；幂等 |
+| `actBehalf:getDeliverablePackage` | 读包 + 重算 readiness |
+| `actBehalf:listDeliverablePackagesForTask` | 历史包（默认折叠） |
+| `actBehalf:reconcileDeliverablePackages` | 启动/诊断 |
 
-规则：
-
-- renderer **不得**直接写 Store；
-- 准备入口必须在 main 侧校验 `activeConfirmedVersionId`；
-- 不得提供「从 draft 准备」的正式 API。
+renderer 不得直接写 Store；不得提供「从 draft 准备」正式 API。
 
 ---
 
 ## 12. 代码映射（只读审计；≠ 授权修改）
 
-### 12.1 可复用（模式 / 调用）
+### 12.1 可复用
 
-| 资产 | 用途 |
-|------|------|
-| `act-behalf/task-store.js` | userData JSON + 原子写 + write 模式；扩展 `activePackageId` |
-| `act-behalf/deliverable-plan-store.js` | Plan Store / CAS 模式样板 |
-| `act-behalf/deliverable-plan-schema.js` | 计划项字段、included 过滤 |
-| `act-behalf/deliverable-plan-readiness.js` | `CurrentExecutionReadiness` 重算 |
-| `act-behalf/deliverable-plan-consistency.js` | 指针一致性思路 |
-| `main.js` 中 plan IPC 装配方式 | 新 IPC 挂载方式可对齐 |
-| `preload.js` 暴露模式 | 薄封装 |
+`task-store.js`（扩展 `deliverableExecution`）、`deliverable-plan-store.js`、`deliverable-plan-schema.js`、`deliverable-plan-readiness.js`、`deliverable-plan-consistency.js`、`main.js`/`preload.js` 挂载模式。
 
 ### 12.2 必须隔离
 
-| 资产 | 原因 |
-|------|------|
-| `act-behalf/result-generation.js` | 旧研究表达成果链；非 DeliverablePackage |
-| `btn-act-run` / `actBehalf:generateResult` | 旧「开始」；不得伪装按确认计划执行 |
-| 主体成长 / experience-proposal 写 Package | 不同对象生命周期 |
+`result-generation.js`、旧 `actBehalf:generateResult` / 「开始」链。
 
-### 12.3 禁止触碰（本任务未经另批）
+### 12.3 禁止触碰
 
-| 资产 | 原因 |
-|------|------|
-| `src/package-store/**` | 主体 Package 店铺；名称易混；策略完全不同 |
-| DVL2-03 生成器 / 外部图片能力 | 偷跑 |
-| renderer-next / R3 / R2.5 SQLite / PAN-02 | 暂停项 |
-| 真实 userData 密钥、主体隐私内容进规格示例 | 隐私 |
+`src/package-store/**`、renderer-next / R3 / R2.5 / PAN-02、四类真实生成器、DVL2-00/01 冻结合同正文。
 
-### 12.4 候选新增文件（获授权后）
+### 12.4 候选新增（获授权后）
 
 ```text
-digitalme-app/src/act-behalf/deliverable-package-schema.js
-digitalme-app/src/act-behalf/deliverable-package-store.js
-digitalme-app/src/act-behalf/deliverable-package-prepare.js
-digitalme-app/src/act-behalf/deliverable-package-consistency.js
-digitalme-app/src/act-behalf/deliverable-package-recovery.js
-digitalme-app/tests/…（合同/store/幂等/恢复）
+deliverable-package-schema.js
+deliverable-package-store.js
+deliverable-package-prepare.js
+deliverable-package-consistency.js
+deliverable-package-recovery.js
+deliverable-package-readiness.js
 ```
 
-### 12.5 候选有界修改文件（获授权后）
+### 12.5 候选有界修改（获授权后）
 
-```text
-digitalme-app/src/act-behalf/task-store.js          # activePackageId
-digitalme-app/src/main.js                          # IPC + reconciliation 挂载
-digitalme-app/src/preload.js                       # API 暴露
-digitalme-app/src/renderer/app.js                  # 做事页：准备入口文案/按钮隔离（薄适配）
-（可选）package.json scripts                       # 仅测试脚本名；本起草阶段禁止改
-```
-
-**只读审计 ≠ 授权修改。**
+`task-store.js`、`main.js`、`preload.js`、legacy `renderer/app.js`（准备入口 + 旧入口默认隐藏）。
 
 ---
 
@@ -567,110 +557,101 @@ digitalme-app/src/renderer/app.js                  # 做事页：准备入口文
 
 ### 13.1 工程测试（获授权后）
 
-1. schema 校验与拒绝非法状态合并；
-2. 仅 confirmed 可准备；draft / superseded 拒绝；
-3. 幂等准备；新 confirmed → 新 package；
-4. CAS 冲突；
-5. 启动 reconciliation（断指针、孤儿隔离）；
-6. 无 ArtifactRef 伪造；
-7. 能力 unavailable 时 generation 保持 `planned`，包为 `planned`×`none`；
-8. 重启恢复元数据。
+confirmed 门禁；幂等矩阵 1–6；无 Version/ArtifactRef；`currentVersionId=null`；`versionIds=[]`；unavailable 时 generation=`planned`、包=`planned`×`none`；snapshot 不可变；readiness 可重算；重启恢复。
 
-### 13.2 Owner 真机验收：应看到
+### 13.1.1 PackagePreparationAttempt 一致性测试（非阻断；实现期必测）
 
-- 确认计划后可「准备成果包」；
-- 准备后看到成果数量与准备状态；
-- 说明当前尚不能生成真实文件（若能力未就绪）；
-- 重启后成果包仍在；
-- 重复准备不产生重复 active 包；
-- 旧版直接执行（若仍可见）有明确隔离标识。
+这不是新领域范围，只是实现期一致性测试要求。`PackagePreparationAttempt` 必须验证：
 
-### 13.3 Owner 验收：不得看到
+1. `started` / `interrupted` / `failed` attempt **不得**成为 `activePackageId` 依据；
+2. `succeeded` attempt 的 `packageId` 与 `createdPackageId` **必须**一致；
+3. 幂等返回既有 package 时，必须能区分 `created_new` 与 `existing_package`；
+4. attempt 历史**不可覆盖**；
+5. 不完整 attempt **不得**伪装为 package 已准备成功。
 
-- 真实 Word/PPT/HTML/图片文件；
-- 虚假下载、路径、生成进度、成果预览成品；
-- 伪造 contentHash / ArtifactRef；
-- 「已全部生成/已完成交付」等夸大文案；
-- 默认界面上的内部 ID / 枚举堆砌。
+### 13.2 Owner 应看到
+
+可准备成果包；准备态白话；能力未就绪说明；重启仍在；重复准备不双包；旧入口默认不可见。
+
+### 13.3 Owner 不得看到
+
+真文件；假下载/路径/进度/预览；placeholder version；「开始生成成果」；内部 ID 堆砌。
 
 ---
 
-## 14. 风险与未决策（均附推荐）
+## 14. 风险与推荐（摘要）
 
-| # | 问题 | 推荐 | 备选 |
-|---|------|------|------|
-| 1 | 当前无法生成时是否仍创建真实 DeliverablePackage？ | **是**（DVL2-02 核心价值） | 仅 UI 提示——否决：无法给 DVL2-03 稳定输入 |
-| 2 | 同一 confirmed version 多个 active package？ | **否**；幂等返回 | 允许多包——增加选择负担，不默认 |
-| 3 | Task 是否增加 `activePackageId`？ | **是** | 每次按 version 查找——可做但 UX/一致性更差 |
-| 4 | 「开始」是否改为「准备成果包」？ | **成果计划模式：是** | 保留「开始」但改语义——否决：易误解 |
-| 5 | 旧版直接执行入口？ | **隔离+标识**；无 plan 指针任务可保留 | 立即删除——可作后续清理，不阻塞 DVL2-02 |
-| 6 | Store：JSON vs 其他？ | **`<userData>/deliverable-packages.json`** | SQLite——R2.5 deferred，不采用 |
-| 7 | 与 `src/package-store/**`？ | **隔离，禁止复用改造** | 复用——否决：主体包语义冲突 |
-| 8 | DeliverableAttempt 是否引入？ | **是（本阶段）**；generation attempt 留给 DVL2-03 | 延后到 DVL2-03——可，但中断合同会弱 |
-| 9 | interrupted / blocked / not_started 划分？ | **包枚举严格用 DVL2-00**；「阻塞」仅用户面派生；generation 在 DVL2-02 停在 `planned` | 自创 `completionStatus=blocked`——否决 |
-| 10 | DVL2-03 输入合同？ | `activePackageId` + 不可变 `executionSnapshot` + deliverableIds；执行前重算 readiness；仅 `available` 且授权满足者可 `queued` | 直接读 plan——否决：绕过快照 |
-| 11 | Owner 验收看见什么？ | 见 §13.2 / §13.3 | — |
+| # | 问题 | 推荐 |
+|---|------|------|
+| 1 | 无法生成时是否创建真实 Package？ | **是** |
+| 2 | 同 confirmed 多有效 package？ | **否** |
+| 3 | `activePackageId` 位置？ | **`Task.deliverableExecution`** |
+| 4 | 主按钮？ | **「准备成果包」**；无「开始生成成果」 |
+| 5 | 旧执行入口？ | **默认隐藏**兼容入口 |
+| 6 | Store？ | `deliverable-packages.json` |
+| 7 | package-store？ | **隔离禁止** |
+| 8 | Attempt？ | **仅 PackagePreparationAttempt** |
+| 9 | blocked 语义？ | **仅 readiness/视图** |
+| 10 | DVL2-03 输入？ | **唯一正式入参 `packageId`**（见 §18） |
 
 ---
 
-## 15. 实施阶段拆分（仅规划；未授权）
+## 15. 实施阶段拆分（未授权）
 
 | 阶段 | 内容 | 退出 |
 |------|------|------|
-| A | Store + schema + prepare 幂等 + Task 指针 + reconciliation | 合同测试绿 |
-| B | legacy 做事页薄 UI：准备入口、减负默认层、旧入口隔离 | 静态/Electron 烟测 |
-| C | Attempt/Version 占位合同挂载（无真实文件） | 无伪造引用断言 |
-| D | Owner 真机验收 | `owner_runtime_accepted`（另批） |
-
-不得在未获 `implementation_authorized` 前开始 A–D 编码。
+| A | Store + schema + prepare 幂等 + `deliverableExecution` + reconciliation | 合同测试绿 |
+| B | legacy 薄 UI：准备入口、减负默认层、旧入口默认隐藏 | 烟测 |
+| C | **PackagePreparationAttempt** + preparation recovery；**无** DeliverableVersion；**无** ArtifactRef；**无**真实文件 | 无 version/伪造引用断言 |
+| D | Owner 真机验收 | 另批 |
 
 ---
 
 ## 16. 禁止偷跑
 
-1. 不实现四类真实生成器；
-2. 不伪造 ArtifactRef / 路径 / 下载 / 预览成品；
-3. 不把 `runtimeAvailability` 标为 `available`；
-4. 不改造 `src/package-store/**`；
-5. 不启动 DVL2-03～05；
-6. 不解锁 R3 / R2.5 / PAN-02；
-7. 不把旧 `generateResult` 接到 confirmed 计划上冒充执行；
-8. 不修改 DVL2-00 / DVL2-01 冻结合同正文（缺口走正式升版）；
-9. 本草案阶段不修改 `digitalme-app/**`。
+不实现四类生成器；不创建 Version/ArtifactRef；不标 `runtimeAvailability=available`；不改造 `package-store/**`；不启动 DVL2-03～05；不解锁暂停项；不把旧 `generateResult` 接到 confirmed 计划；不改 DVL2-00/01 冻结合同正文；本修订阶段不改 `digitalme-app/**`。
 
 ---
 
 ## 17. 退出条件（规格阶段）
 
-规格可升为可冻结候选，当且仅当：
-
-1. Codex 复核关闭本章未决冲突；
-2. Owner 接受关键推荐或书面改判 §14；
-3. 状态可改为 `codex_review_passed` →（另步）`owner_accepted` / `frozen_for_implementation`；
-4. **另获** `implementation_authorized` 后方可建实现分支与编码。
-
-本草案当前：**不满足**冻结与实施条件。
+Codex 规格复核已通过（`codex_review_passed` / `ready_for_owner_spec_acceptance`）。下一步：（另步）Owner 规格接受并可冻结 →（另批）`implementation_authorized` 后方可编码。当前 **仍不满足** Owner 接受、规格冻结与实施条件。
 
 ---
 
-## 18. DVL2-03 输入合同（预告，非本任务实现）
+## 18. DVL2-03 输入合同（冻结意图；非本任务实现）
 
-DVL2-03 必须：
+**DVL2-03 唯一正式输入是 `packageId`。**
 
-1. 读取 `Task.deliverablePlanning.activePackageId` → `DeliverablePackage`；
-2. 校验 `executionSnapshot.confirmedPlanVersionId` 仍是意图执行的版本（若用户已新确认，须显式选择「按旧包继续」或「准备新包」）；
-3. 重算 `CurrentExecutionReadiness`；
-4. 仅对 `runtimeAvailability=available` 且风险授权满足的 included deliverable 创建 **generation** attempt 并转入 `queued`；
-5. 真实写出后创建 `DeliverableVersion` + 有效 `ArtifactRef`；
-6. 不得从 draft 计划生成；不得绕过 package。
+### 18.1 禁止
+
+- 只传 `taskId` 后由 DVL2-03 自行选择 plan；
+- 从 current draft 执行；
+- 从「最新 plan」推断；
+- 绕过 `DeliverablePackage`；
+- 把 `Task.deliverableExecution.activePackageId` 当作 DVL2-03 **唯一调用合同**（它只用于 UI 默认导航/选择）。
+
+### 18.2 启动前必须验证
+
+1. package 存在；
+2. package 生命周期有效（可继续执行的语义下有效）；
+3. `sourcePlanVersionId` 是明确 confirmed 版本；
+4. `executionSnapshot` 完整；
+5. Deliverable 依赖图合法；
+6. `currentVersionId` 为空 **或** 指向真实 version（DVL2-02 结束时应为空；生成后指向真实 version）；
+7. **不存在** placeholder version；
+8. `CurrentPreparationReadiness` 重算通过（或按门禁允许的子集）；
+9. 授权与风险门禁通过。
+
+通过后：仅为 `available` 且授权满足的项创建 **`DeliverableGenerationAttempt`**，转入 `queued`，真实写出后创建 `DeliverableVersion` + 有效 `ArtifactRef`。
 
 ---
 
-## 19. 明确不做（本起草阶段）
+## 19. 明确不做（本收口阶段）
 
 - 不修改 `digitalme-app/**`、测试、`package.json`、lockfile；
 - 不创建实现分支；不编码；不生成真实成果；
-- 不标 `owner_accepted` / `frozen_for_implementation` / `implementation_authorized` / `implementation_in_progress`；
+- 不标 `owner_accepted` / `frozen_for_implementation` / `implementation_authorized` / `implementation_in_progress` / `implemented`；
 - 不 push。
 
 ---
@@ -679,8 +660,8 @@ DVL2-03 必须：
 
 | 文件 | 动作 |
 |------|------|
-| 本文 | 新建 v0.1.0-draft / `spec_drafting` / `codex_review_pending` / 实施 `not_started` |
-| `digitalme_context.md` / `digitalme_log.md` / Cursor rule | 最小同步：DVL2-02 进入规格起草；**未**获实施授权 |
+| 本文 | Codex 最终规格复核通过 → `codex_review_passed` / `ready_for_owner_spec_acceptance`；实施仍 `not_started` |
+| `digitalme_context.md` / `digitalme_log.md` / Cursor rule | 最小同步：等待 Owner 规格接受；**未**获实施授权 |
 
 ---
 
@@ -688,4 +669,6 @@ DVL2-03 必须：
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
-| **v0.1.0-draft** | 2026-07-26 | 初稿：Owner/CTO 授权起草；待 Codex 复核；实施 `not_started`；基线 `690e1fc` |
+| v0.1.0-draft | 2026-07-26 | 初稿：`codex_review_pending`；基线 `690e1fc` |
+| v0.1.0-draft（R1 修订） | 2026-07-26 | **Codex 第一轮文档修订（历史）**：当时状态曾为 `spec_drafting` / `codex_review_changes_requested`。删除 placeholder `DeliverableVersion`；明确 `PackagePreparationAttempt` 边界；`activePackageId` 迁入 `Task.deliverableExecution`；补齐 archived / soft_deleted / degraded 幂等；拆分 `ExecutionSnapshot` 与 `CurrentPreparationReadiness`；旧执行入口默认隐藏；DVL2-03 只接收 `packageId`；Store 去掉运行时 versions。实施仍 `not_started`；基线 `e72f7bd` |
+| **v0.1.0-draft（Codex final review）** | 2026-07-26 | **Codex 最终规格复核通过**。结论：placeholder `DeliverableVersion` 已删除；DVL2-02 仅创建 `DeliverablePackage`、`Deliverable`、`PackagePreparationAttempt`；`currentVersionId` 恒为 `null`；`versionIds` 恒为空；`ArtifactRef`/`contentHash` 不存在；`activePackageId` 位于 `Task.deliverableExecution`；新 confirmed 与旧 package 不静默重绑；archived / soft_deleted / degraded 幂等矩阵已冻结；`ExecutionSnapshot` 与 `CurrentPreparationReadiness` 已分离；旧直接执行入口默认隐藏；DVL2-03 唯一正式输入为 `packageId`；Store 不包含运行时 versions/artifacts；追加 `PackagePreparationAttempt` 实现期一致性测试要求。状态 → `spec_drafting` / `codex_review_passed` / `ready_for_owner_spec_acceptance`。等待 Owner 规格接受；实施仍未授权、未开始（`not_started`）。基线仍为 `e72f7bd` |

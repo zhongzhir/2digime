@@ -5,6 +5,60 @@
 
 ---
 
+## 2026-07-26 DVL2-02 Codex 规格复核通过 · 等待 Owner 规格接受
+
+### 本次目标
+
+将 DVL2-02 第一轮修订收口为 Codex 规格复核通过；纯文档提交。不修改实现；不创建实现分支；不 push。
+
+### 本次完成
+
+1. DVL2-02 → `spec_drafting` / `codex_review_passed` / `ready_for_owner_spec_acceptance`；实施 `not_started`；`implementation_authorized=false`；
+2. 修订记录追加 Codex final review 结论；保留第一轮曾为 `codex_review_changes_requested` 的事实；
+3. 追加 `PackagePreparationAttempt` 实现期一致性测试要求（非新领域范围）；
+4. 最小同步 context / log / Cursor rule；
+5. DVL2-01 继续已收口；DVL2-03 仍 `not_started` / `not_authorized`。
+
+### 待办事项
+
+1. 等待 Owner 规格接受；
+2. 接受并冻结后另批实施授权；获授权前禁止编码。
+
+### 重要信息
+
+1. **未修改 `digitalme-app/**`**。
+2. **未标** `owner_accepted` / `frozen_for_implementation` / `implementation_authorized`。
+3. **不 push**。
+
+---
+
+## 2026-07-26 DVL2-02 规格第一轮文档修订 · codex_review_changes_requested
+
+### 本次目标
+
+按 Codex 第一轮复核意见修订 DVL2-02 规格草案；最小同步规划索引。不修改实现；不 commit；不 push。
+
+### 本次完成
+
+1. 删除 placeholder / metadata-only `DeliverableVersion`；DVL2-02 仅创建 Package + Deliverable；`currentVersionId = null`；
+2. 明确 `PackagePreparationAttempt` 边界；generation attempt 归属 DVL2-03；
+3. `activePackageId` 迁入 `Task.deliverableExecution` 并冻结不变量；
+4. 补齐 archived / soft_deleted / degraded 幂等；拆分 `ExecutionSnapshot` 与 `CurrentPreparationReadiness`；
+5. 旧执行入口默认隐藏；DVL2-03 唯一正式输入改为 `packageId`；
+6. 状态 → `spec_drafting` / `codex_review_changes_requested`；实施仍 `not_started`。
+
+### 待办事项
+
+1. Codex 再复核关闭 `changes_requested`；
+2. Owner 接受后方可冻结；另批实施授权前禁止编码。
+
+### 重要信息
+
+1. **未修改 `digitalme-app/**`**。
+2. **未 commit、未 push**。
+
+---
+
 ## 2026-07-26 DVL2-02 成果包与执行准备 · 规格起草
 
 ### 本次目标
