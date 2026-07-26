@@ -70,6 +70,18 @@ const api = {
     ipcRenderer.invoke("actBehalf:getDeliverablePackage", payload),
   actBehalfListDeliverablePackagesForTask: (payload) =>
     ipcRenderer.invoke("actBehalf:listDeliverablePackagesForTask", payload),
+  actBehalfGenerateDeliverablePackage: (payload) =>
+    ipcRenderer.invoke("actBehalf:generateDeliverablePackage", payload),
+  actBehalfGenerateDeliverable: (payload) =>
+    ipcRenderer.invoke("actBehalf:generateDeliverable", payload),
+  actBehalfGetDeliverablePackageById: (payload) =>
+    ipcRenderer.invoke("actBehalf:getDeliverablePackageById", payload),
+  actBehalfListDeliverableVersions: (payload) =>
+    ipcRenderer.invoke("actBehalf:listDeliverableVersions", payload),
+  actBehalfOpenArtifact: (payload) => ipcRenderer.invoke("actBehalf:openArtifact", payload),
+  actBehalfRevealArtifact: (payload) => ipcRenderer.invoke("actBehalf:revealArtifact", payload),
+  actBehalfReviewDeliverableVersion: (payload) =>
+    ipcRenderer.invoke("actBehalf:reviewDeliverableVersion", payload),
   actBehalfRun: (payload) => ipcRenderer.invoke("actBehalf:run", payload),
   actBehalfAutoGenerate: (payload) => ipcRenderer.invoke("actBehalf:autoGenerate", payload),
   actBehalfSelectFiles: (payload) => ipcRenderer.invoke("actBehalf:selectFiles", payload),

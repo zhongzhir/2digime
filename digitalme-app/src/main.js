@@ -38,6 +38,8 @@ const deliverablePackageStore = require("./act-behalf/deliverable-package-store"
 const { prepareDeliverablePackage } = require("./act-behalf/deliverable-package-prepare");
 const { recomputeCurrentPreparationReadiness } = require("./act-behalf/deliverable-package-readiness");
 const { reconcileTaskPackages } = require("./act-behalf/deliverable-package-recovery");
+const deliverableGeneration = require("./act-behalf/deliverable-generation");
+const deliverableArtifactFs = require("./act-behalf/deliverable-artifact-fs");
 const { parseActBehalfOutput, buildActBehalfMessages, parseEmailOutput, buildEmailMessages, parseVideoAudioOutput, buildVideoAudioMessages, buildVideoAudioExport } = require("./act-behalf/parse-output");
 const { normalizeTaskIntent, assertTaskIntentMinimal, detectTaskType, TASK_TYPES } = require("./act-behalf/task-intent");
 const {
@@ -315,6 +317,8 @@ app.whenReady().then(() => {
         ? require("../scripts/dvl2-01-planner-acceptance-harness.cjs")
         : process.env.DIGITALME_DVL2_02_PACKAGE_ACCEPTANCE === "1"
         ? require("../scripts/dvl2-02-package-acceptance-harness.cjs")
+        : process.env.DIGITALME_DVL2_03_GENERATION_ACCEPTANCE === "1"
+        ? require("../scripts/dvl2-03-generation-acceptance-harness.cjs")
         : process.env.DIGITALME_VISUAL_ACCEPTANCE === "1"
         ? require("../scripts/visual-acceptance-harness.cjs")
         : process.env.DIGITALME_P107_OWNER_RUNTIME === "1"
@@ -355,6 +359,8 @@ app.whenReady().then(() => {
         ? harness.runDvl201PlannerAcceptanceHarness
         : process.env.DIGITALME_DVL2_02_PACKAGE_ACCEPTANCE === "1"
         ? harness.runDvl202PackageAcceptanceHarness
+        : process.env.DIGITALME_DVL2_03_GENERATION_ACCEPTANCE === "1"
+        ? harness.runDvl203GenerationAcceptanceHarness
         : process.env.DIGITALME_VISUAL_ACCEPTANCE === "1"
         ? harness.runVisualAcceptanceHarness
         : process.env.DIGITALME_P107_OWNER_RUNTIME === "1"
@@ -3009,7 +3015,8 @@ ipcMain.handle("actBehalf:listDeliverablePackagesForTask", async (_e, payload) =
 // Controlled test-only reconciliation entry (harness / contract injection).
 if (
   process.env.DIGITALME_DVL2_02_PACKAGE_ACCEPTANCE === "1" ||
-  process.env.DIGITALME_DVL2_02_TEST_RECONCILE === "1"
+  process.env.DIGITALME_DVL2_02_TEST_RECONCILE === "1" ||
+  process.env.DIGITALME_DVL2_03_GENERATION_ACCEPTANCE === "1"
 ) {
   ipcMain.handle("actBehalf:reconcileDeliverablePackages", async (_e, payload) => {
     try {
@@ -3026,6 +3033,151 @@ if (
     }
   });
 }
+
+function buildGenerationCallModel() {
+  if (process.env.DIGITALME_DVL2_03_MOCK_MODEL === "1" || process.env.DIGITALME_ACT_BEHALF_FAKE === "1") {
+    return null; // generators use deterministic local fallback content
+  }
+  return async (messages, options = {}) => {
+    const cfg = readConfig();
+    return callModel(cfg, messages, { ...(options || {}), taskType: options.taskType || "artifact" });
+  };
+}
+
+function generationImageMode() {
+  if (process.env.DIGITALME_DVL2_03_MOCK_IMAGE === "1") return "mock";
+  return "real";
+}
+
+ipcMain.handle("actBehalf:generateDeliverablePackage", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const packageId = payload && payload.packageId ? String(payload.packageId) : "";
+    if (!packageId) return { ok: false, code: "package_required", message: "缺少成果包标识。" };
+    if (payload && Object.keys(payload).some((k) => k !== "packageId")) {
+      return { ok: false, code: "invalid_generate_input", message: "生成成果包只能传入成果包标识。" };
+    }
+    return await deliverableGeneration.generateDeliverablePackage(
+      userData,
+      { packageId },
+      { callModel: buildGenerationCallModel(), imageMode: generationImageMode() }
+    );
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "generate_package_failed",
+      message: err && err.message ? err.message : "无法生成成果。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:generateDeliverable", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const packageId = payload && payload.packageId ? String(payload.packageId) : "";
+    const deliverableId = payload && payload.deliverableId ? String(payload.deliverableId) : "";
+    if (!packageId || !deliverableId) {
+      return { ok: false, code: "ids_required", message: "缺少成果包或成果标识。" };
+    }
+    return await deliverableGeneration.generateOneDeliverable(
+      userData,
+      { packageId, deliverableId },
+      { callModel: buildGenerationCallModel(), imageMode: generationImageMode() }
+    );
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "generate_deliverable_failed",
+      message: err && err.message ? err.message : "无法生成该项成果。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:getDeliverablePackageById", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const packageId = payload && payload.packageId ? String(payload.packageId) : "";
+    if (!packageId) return { ok: false, code: "package_required", message: "缺少成果包标识。" };
+    return deliverablePackageStore.getPackageView(userData, packageId);
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "get_package_failed",
+      message: err && err.message ? err.message : "无法读取成果包。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:listDeliverableVersions", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const deliverableId = payload && payload.deliverableId ? String(payload.deliverableId) : "";
+    if (!deliverableId) return { ok: false, code: "deliverable_required", message: "缺少成果标识。" };
+    return deliverablePackageStore.listVersionsForDeliverable(userData, deliverableId);
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "list_versions_failed",
+      message: err && err.message ? err.message : "无法列出版本。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:openArtifact", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const artifactRefId = payload && payload.artifactRefId ? String(payload.artifactRefId) : "";
+    if (!artifactRefId) return { ok: false, code: "artifact_required", message: "缺少文件引用。" };
+    const got = deliverablePackageStore.getArtifact(userData, artifactRefId);
+    if (!got.ok) return got;
+    const abs = deliverableArtifactFs.resolveAbsolute(userData, got.artifact.relativePath);
+    const { shell } = require("electron");
+    const err = await shell.openPath(abs);
+    if (err) return { ok: false, code: "open_failed", message: err || "无法打开文件。" };
+    return { ok: true, relativePath: got.artifact.relativePath };
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "open_failed",
+      message: err && err.message ? err.message : "无法打开文件。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:revealArtifact", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const artifactRefId = payload && payload.artifactRefId ? String(payload.artifactRefId) : "";
+    if (!artifactRefId) return { ok: false, code: "artifact_required", message: "缺少文件引用。" };
+    const got = deliverablePackageStore.getArtifact(userData, artifactRefId);
+    if (!got.ok) return got;
+    const abs = deliverableArtifactFs.resolveAbsolute(userData, got.artifact.relativePath);
+    const { shell } = require("electron");
+    shell.showItemInFolder(abs);
+    return { ok: true, relativePath: got.artifact.relativePath };
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "reveal_failed",
+      message: err && err.message ? err.message : "无法打开所在目录。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:reviewDeliverableVersion", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const versionId = payload && payload.versionId ? String(payload.versionId) : "";
+    const decision = payload && payload.decision ? String(payload.decision) : "";
+    return await deliverableGeneration.reviewDeliverableVersion(userData, { versionId, decision });
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "review_failed",
+      message: err && err.message ? err.message : "无法更新审阅状态。",
+    };
+  }
+});
 
 ipcMain.handle("actBehalf:planRecomputeReadiness", async (_e, payload) => {
   try {

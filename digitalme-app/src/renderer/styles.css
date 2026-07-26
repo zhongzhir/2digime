@@ -3148,6 +3148,31 @@ body {
   flex-direction: column;
   gap: 6px;
 }
+.act-generation-panel {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.act-generation-items {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.act-gen-item {
+  border: 1px solid var(--border, #e2e6ee);
+  border-radius: 6px;
+  padding: 10px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.act-gen-item-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 .act-legacy-direct-run {
   margin-top: 8px;
   font-size: 0.85rem;

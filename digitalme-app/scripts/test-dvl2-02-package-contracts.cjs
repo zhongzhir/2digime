@@ -254,10 +254,15 @@ async function main() {
         assert.equal(d.reviewStatus, "unreviewed");
       }
       const raw = JSON.parse(fs.readFileSync(packageStore.storePath(ud), "utf8"));
-      assert.ok(!("versions" in raw) || raw.versions == null);
-      assert.ok(!("artifacts" in raw) || raw.artifacts == null);
+      // DVL2-03 may persist empty version/artifact collections; prepare must not create Version records.
+      assert.ok(!raw.versions || Object.keys(raw.versions).length === 0);
+      assert.ok(!raw.artifacts || Object.keys(raw.artifacts).length === 0);
       assert.ok(!("artifactRefs" in raw) || raw.artifactRefs == null);
       assert.ok(!("contentHashes" in raw) || raw.contentHashes == null);
+      for (const d of Object.values(raw.deliverables || {})) {
+        assert.equal(d.currentVersionId, null);
+        assert.deepEqual(d.versionIds || [], []);
+      }
       const task = actStore.getTask(ud, taskId, { heal: false }).task;
       assert.equal(task.deliverableExecution.activePackageId, res.package.id);
       assertNoArtifactFiles(ud);

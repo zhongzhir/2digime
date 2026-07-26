@@ -1,9 +1,9 @@
 "use strict";
 
 /**
- * DVL2-02 Package Store — <userData>/deliverable-packages.json
+ * DVL2-02/03 Package Store — <userData>/deliverable-packages.json
  * Atomic write + write queue + store-level CAS (expectAbsent / expectedRevision).
- * No versions / artifacts runtime collections.
+ * DVL2-03 adds versions / artifacts / generationAttempts collections.
  */
 
 const fs = require("node:fs");
@@ -32,8 +32,20 @@ function emptyStore() {
     packages: {},
     deliverables: {},
     preparationAttempts: {},
+    versions: {},
+    artifacts: {},
+    generationAttempts: {},
     updatedAt: nowIso(),
   };
+}
+
+function normalizeStoreShape(parsed) {
+  if (!parsed.versions || typeof parsed.versions !== "object") parsed.versions = {};
+  if (!parsed.artifacts || typeof parsed.artifacts !== "object") parsed.artifacts = {};
+  if (!parsed.generationAttempts || typeof parsed.generationAttempts !== "object") {
+    parsed.generationAttempts = {};
+  }
+  return parsed;
 }
 
 function loadStore(userData) {
@@ -67,7 +79,7 @@ function loadStore(userData) {
     e.code = "deliverable_package_unsupported_schema";
     throw e;
   }
-  return parsed;
+  return normalizeStoreShape(parsed);
 }
 
 async function persistStoreAtomic(userData, store) {
@@ -244,6 +256,68 @@ async function appendPreparationAttempt(userData, attempt, expectedRevision) {
   );
 }
 
+function getPackageView(userData, packageId) {
+  const store = loadStore(userData);
+  const pkg = store.packages[String(packageId || "")];
+  if (!pkg) return { ok: false, code: "package_not_found", message: "未找到成果包。" };
+  const deliverables = (pkg.deliverableIds || [])
+    .map((id) => store.deliverables[String(id)])
+    .filter(Boolean)
+    .map(clone);
+  const versions = {};
+  const artifacts = {};
+  for (const d of deliverables) {
+    for (const vid of d.versionIds || []) {
+      if (store.versions[vid]) versions[vid] = clone(store.versions[vid]);
+    }
+    if (d.currentVersionId && store.versions[d.currentVersionId]) {
+      versions[d.currentVersionId] = clone(store.versions[d.currentVersionId]);
+    }
+  }
+  for (const v of Object.values(versions)) {
+    if (v.artifactRef && v.artifactRef.id && store.artifacts[v.artifactRef.id]) {
+      artifacts[v.artifactRef.id] = clone(store.artifacts[v.artifactRef.id]);
+    }
+    if (v.previewRef && v.previewRef.id && store.artifacts[v.previewRef.id]) {
+      artifacts[v.previewRef.id] = clone(store.artifacts[v.previewRef.id]);
+    }
+    for (const a of v.artifactRefs || []) {
+      if (a && a.id && store.artifacts[a.id]) artifacts[a.id] = clone(store.artifacts[a.id]);
+    }
+  }
+  return {
+    ok: true,
+    package: clone(pkg),
+    deliverables,
+    versions,
+    artifacts,
+    revision: store.revision,
+  };
+}
+
+function listVersionsForDeliverable(userData, deliverableId) {
+  const store = loadStore(userData);
+  const d = store.deliverables[String(deliverableId || "")];
+  if (!d) return { ok: false, code: "deliverable_not_found", message: "未找到该项成果。" };
+  const versions = (d.versionIds || [])
+    .map((id) => store.versions[id])
+    .filter(Boolean)
+    .map(clone);
+  return {
+    ok: true,
+    deliverableId: d.id,
+    currentVersionId: d.currentVersionId || null,
+    versions,
+  };
+}
+
+function getArtifact(userData, artifactRefId) {
+  const store = loadStore(userData);
+  const art = store.artifacts && store.artifacts[String(artifactRefId || "")];
+  if (!art) return { ok: false, code: "artifact_not_found", message: "未找到成果文件引用。" };
+  return { ok: true, artifact: clone(art) };
+}
+
 module.exports = {
   STORE_SCHEMA_VERSION,
   storePath,
@@ -252,10 +326,13 @@ module.exports = {
   enqueueWrite,
   mutateStore,
   getPackage,
+  getPackageView,
   listPackagesForTask,
   findPackagesForConfirmed,
   findActivePackageForConfirmed,
   getDeliverablesForPackage,
+  listVersionsForDeliverable,
+  getArtifact,
   saveNewPackageBundle,
   appendPreparationAttempt,
   isActivePackage,

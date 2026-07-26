@@ -7112,6 +7112,9 @@ async function refreshActPackagePrep(taskId, planView) {
     deliverables,
     readiness,
   });
+  if (pkg && pkg.id) {
+    await refreshActGenerationPanel(pkg.id);
+  }
 }
 
 window.__digitalMeRefreshPackagePrep = async function (view) {
@@ -7154,8 +7157,79 @@ async function handleViewDeliverablePackagePrep() {
   const view = await window.digitalMe.actBehalfGetDeliverablePackage({ taskId });
   setActProgress(
     (view && view.readiness && view.readiness.userSummary) ||
-      "成果包已准备；当前尚无法生成真实文件。"
+      "成果包已准备，可以开始生成。"
   );
+  if (view && view.package && view.package.id) {
+    await refreshActGenerationPanel(view.package.id);
+  }
+}
+
+async function refreshActGenerationPanel(packageId) {
+  if (!packageId || !window.digitalMe.actBehalfGetDeliverablePackageById) return;
+  if (!window.DeliverablePlannerUi || !window.DeliverablePlannerUi.renderGenerationPanel) return;
+  const view = await window.digitalMe.actBehalfGetDeliverablePackageById({ packageId });
+  if (view && view.ok) {
+    actBehalfState.activePackageId = packageId;
+    window.DeliverablePlannerUi.renderGenerationPanel(view);
+  }
+}
+
+async function handleGenerateDeliverablePackage() {
+  const taskId = actBehalfState.taskId;
+  if (!taskId) {
+    setActProgress("请先准备成果包。");
+    return;
+  }
+  const pkgView = await window.digitalMe.actBehalfGetDeliverablePackage({ taskId });
+  const packageId =
+    (pkgView && pkgView.package && pkgView.package.id) ||
+    (pkgView && pkgView.deliverableExecution && pkgView.deliverableExecution.activePackageId);
+  if (!packageId) {
+    setActProgress("请先准备成果包。");
+    return;
+  }
+  setActProgress("正在生成成果…");
+  const res = await window.digitalMe.actBehalfGenerateDeliverablePackage({ packageId });
+  setActProgress((res && res.message) || (res && res.ok ? "成果已生成。" : "生成未完成。"));
+  await refreshActGenerationPanel(packageId);
+  await refreshActPackagePrep(taskId);
+}
+
+async function handleGenerationPanelClick(ev) {
+  const btn = ev.target && ev.target.closest ? ev.target.closest("[data-action]") : null;
+  if (!btn) return;
+  const action = btn.getAttribute("data-action");
+  const packageId = actBehalfState.activePackageId;
+  if (action === "open-art") {
+    const id = btn.getAttribute("data-artifact-id");
+    const res = await window.digitalMe.actBehalfOpenArtifact({ artifactRefId: id });
+    if (!res || !res.ok) setActProgress((res && res.message) || "无法打开文件。");
+    return;
+  }
+  if (action === "reveal-art") {
+    const id = btn.getAttribute("data-artifact-id");
+    const res = await window.digitalMe.actBehalfRevealArtifact({ artifactRefId: id });
+    if (!res || !res.ok) setActProgress((res && res.message) || "无法打开所在目录。");
+    return;
+  }
+  if (action === "accept-ver" || action === "reject-ver") {
+    const versionId = btn.getAttribute("data-version-id");
+    const res = await window.digitalMe.actBehalfReviewDeliverableVersion({
+      versionId,
+      decision: action === "accept-ver" ? "accepted" : "rejected",
+    });
+    setActProgress((res && res.message) || "已更新审阅。");
+    if (packageId) await refreshActGenerationPanel(packageId);
+    return;
+  }
+  if (action === "regen") {
+    const deliverableId = btn.getAttribute("data-deliverable-id");
+    if (!packageId || !deliverableId) return;
+    setActProgress("正在重新生成…");
+    const res = await window.digitalMe.actBehalfGenerateDeliverable({ packageId, deliverableId });
+    setActProgress((res && res.message) || (res && res.ok ? "已重新生成。" : "重新生成未成功。"));
+    await refreshActGenerationPanel(packageId);
+  }
 }
 
 async function handleFormDeliverablePlan() {
@@ -7413,6 +7487,8 @@ function wireActBehalfUi() {
   $("btn-act-plan-cancel-draft")?.addEventListener("click", () => handleCancelDeliverablePlanDraft());
   $("btn-act-prepare-package")?.addEventListener("click", () => handlePrepareDeliverablePackage());
   $("btn-act-view-package-prep")?.addEventListener("click", () => handleViewDeliverablePackagePrep());
+  $("btn-act-generate-package")?.addEventListener("click", () => handleGenerateDeliverablePackage());
+  $("act-generation-items")?.addEventListener("click", (ev) => handleGenerationPanelClick(ev));
   {
     const showLegacy =
       !!(window.digitalMe && window.digitalMe.ownerRuntimeTest === true && false) ||
