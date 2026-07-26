@@ -2,8 +2,8 @@
 
 版本：v0.1.0
 日期：2026-07-26
-状态：`authorization_specified` / `authorization_codex_review_passed` / `owner_implementation_authorized`
-实施：`implementation_in_progress`
+状态：`authorization_specified` / `authorization_codex_review_passed` / `owner_implementation_authorized` / `ready_for_owner_runtime_acceptance`
+实施：`implementation_complete_pending_owner_acceptance`
 implementation_authorized：`true`
 implementation_branch：`codex/dvl2-02-deliverable-package-preparation`
 implementation_branch_base：`ad3b6eed2f50bd3f1829028da8d7dc650eb01d31`
@@ -11,8 +11,10 @@ implementation_branch_base：`ad3b6eed2f50bd3f1829028da8d7dc650eb01d31`
 冻结规格提交：`ad3b6eed2f50bd3f1829028da8d7dc650eb01d31`
 冻结实施授权基线：`0a52606b058688865e27b96ed965b22f937fd278`
 规格内容冻结基线：`578648f31d86594cc2bd56ede2e367122cfa98f8`
+实现提交：`20c883298ba9f2e5e707015c4fd6c9dd109ad601`
+Owner 授权记录提交：`b041fde27edb052143a50b466bb5455888b35e4a`
 
-> **正式边界**：Owner 已授予 `implementation_authorized`。按冻结规格与本授权包在分支 `codex/dvl2-02-deliverable-package-preparation`（起点 `ad3b6ee`）实现。**不得**扩大到 DVL2-03；**不得**生成真实成果；**不得** push；实现完成后须等待 Owner runtime acceptance。不得标 `owner_runtime_accepted` / `accepted_as_implemented` / `implemented` / `completed`。冲突时：架构原则文 > DVL2-00 > DVL2-01 > DVL2-02 冻结规格 > 本文。
+> **正式边界**：实现已完成合同测试与两独立 Electron 进程验收，停在 `ready_for_owner_runtime_acceptance`。**不得**标 `implemented` / `owner_runtime_accepted` / `accepted_as_implemented` / `completed`。**不得** push。**不得**扩大到 DVL2-03。冲突时：架构原则文 > DVL2-00 > DVL2-01 > DVL2-02 冻结规格 > 本文。
 
 ### Owner 实施授权记录
 
@@ -26,6 +28,24 @@ Owner 授权原意：
 - 不允许生成真实成果 / DeliverableVersion / ArtifactRef / contentHash；
 - 不允许 push；
 - 实现完成后必须等待 Owner runtime acceptance。
+
+### 实施证据（工程完成，待 Owner 真机）
+
+| 项 | 证据 |
+|----|------|
+| 实现 commit | `20c883298ba9f2e5e707015c4fd6c9dd109ad601` |
+| 新增模块 | `deliverable-package-{schema,store,prepare,consistency,recovery,readiness}.js` |
+| 新增测试 | `test-dvl2-02-package-contracts.cjs`；`run/electron/dvl2-02-package-acceptance*.cjs` |
+| 有界修改 | `task-store.js`、`main.js`、`preload.js`、`renderer/{app.js,deliverable-planner.js,index.html,styles.css}`、`package.json` |
+| Store 路径 | `<userData>/deliverable-packages.json`（顶层含 schemaVersion/revision/packages/deliverables/preparationAttempts/updatedAt；无 versions/artifacts） |
+| CAS / queue | temp+rename；进程内 write queue；queue 内重读 + expectedRevision / expectAbsent |
+| 合同测试 | `npm run test:dvl2-02-package` → 17 passed |
+| Electron Phase A | `.codex-qa/dvl2-02-package-acceptance/phase-a.json` pass；创建 package；deliverables；无真实成果文件；无「开始生成成果」 |
+| Electron Phase B | `.codex-qa/dvl2-02-package-acceptance/phase-b.json` pass；恢复 activePackageId；再次准备 `existing_package` |
+| two-phase summary | `.codex-qa/dvl2-02-package-acceptance/two-phase-summary.json` |
+| 真实模型 / 付费 | 无（`DIGITALME_PLANNER_FORCE_RULE=1` / `DIGITALME_ACT_BEHALF_FAKE=1`） |
+| Version / ArtifactRef / contentHash | 无 |
+| 禁止路径变化 | 无（未改 package-store/**、result-generation.js、renderer-next、entry、sessions、package-lock） |
 
 ---
 
@@ -420,6 +440,9 @@ outcome: "created_new" | "existing_package" | null
 
 ## 19. 修订记录
 
-| **v0.1.0（Owner implementation authorized）** | 2026-07-26 | **Owner 授予实施授权**：`implementation_authorized=true`；实施 `implementation_in_progress`；分支 `codex/dvl2-02-deliverable-package-preparation` @ `ad3b6ee`；不得 push；不得扩大到 DVL2-03；完成后等待 Owner runtime acceptance |
+| 版本 | 日期 | 说明 |
+|------|------|------|
+| **v0.1.0（implementation evidence）** | 2026-07-26 | 实现完成证据：commit `20c8832`；合同测试与两阶段 Electron 通过；状态 `ready_for_owner_runtime_acceptance`；实施 `implementation_complete_pending_owner_acceptance`；**未**标 `implemented` / `owner_runtime_accepted` |
+| **v0.1.0（Owner implementation authorized）** | 2026-07-26 | **Owner 授予实施授权**：`implementation_authorized=true`；实施曾为 `implementation_in_progress`；分支 `codex/dvl2-02-deliverable-package-preparation` @ `ad3b6ee`；不得 push；不得扩大到 DVL2-03；完成后等待 Owner runtime acceptance |
 | **v0.1.0（Codex final authorization review）** | 2026-07-26 | **Codex 最终授权复核通过（历史）**。状态曾为 `authorization_specified` / `codex_review_passed` / `ready_for_owner_implementation_authorization`；`implementation_authorized=false` |
 | v0.1.0-draft | 2026-07-26 | 初稿：`authorization_drafting` / `codex_review_pending`；基线 `ad3b6ee` 起草提交 `0a52606` |

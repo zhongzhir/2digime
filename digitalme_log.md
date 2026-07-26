@@ -5,6 +5,35 @@
 
 ---
 
+## 2026-07-26 DVL2-02 实现完成 · 待 Owner 真机验收
+
+### 本次目标
+
+按 Owner `implementation_authorized` 完成 DVL2-02 成果包准备实现；合同测试 + 两独立 Electron 进程验收；停在 `ready_for_owner_runtime_acceptance`。
+
+### 本次完成
+
+1. 实现 commit：`20c8832`（`feat(act-behalf): implement DVL2-02 package preparation`）；
+2. Store：`<userData>/deliverable-packages.json`；CAS + write queue；幂等 package；reconciliation；
+3. IPC：`prepareDeliverablePackage` / `getDeliverablePackage` / `listDeliverablePackagesForTask`（prepare 仅 `{taskId}`）；
+4. UI：「准备成果包」/「查看成果包准备」；无「开始生成成果」；无真实文件生成；
+5. 测试：`npm run test:dvl2-02-package`（17 pass）；`npm run test:dvl2-02-package-acceptance`（Phase A/B pass）；
+6. 回归：`test:dvl2-01-planner`、`test:act-behalf`、`test:bootstrap-submit`、`test:classic-renderer-dom` 通过；
+7. 状态：`ready_for_owner_runtime_acceptance`；实施 `implementation_complete_pending_owner_acceptance`；**未**标 `implemented`。
+
+### 待办事项
+
+1. Owner 真机验收 DVL2-02；
+2. 通过后方可标 `owner_runtime_accepted` / `accepted_as_implemented`（另批）；
+3. 不得启动 DVL2-03；不得 push。
+
+### 重要信息
+
+1. two-phase summary：`.codex-qa/dvl2-02-package-acceptance/two-phase-summary.json`
+2. 无真实模型、无付费额度、无 DeliverableVersion / ArtifactRef / contentHash、无禁止路径变化。
+
+---
+
 ## 2026-07-26 DVL2-02 Owner 实施授权 · 开始实现
 
 ### 本次目标
@@ -19,7 +48,7 @@
 
 ### 待办事项
 
-1. 完成实现、合同测试与两阶段 Electron 验收；
+1. ~~完成实现、合同测试与两阶段 Electron 验收；~~（已完成，见上节）
 2. 停在 `ready_for_owner_runtime_acceptance`；等待 Owner 真机验收。
 
 ### 重要信息
