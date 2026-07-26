@@ -5,6 +5,178 @@
 
 ---
 
+## 2026-07-26 DVL2-01 Owner 接受与规格冻结
+
+### 本次目标
+
+Owner 正式接受 DVL2-01 v0.1.1；将规格冻结为成果规划器实施合同；独立提交；不开始实现。
+
+### 本次完成
+
+1. Owner 接受 DVL2-01；
+2. CTO 四轮规格复核完成；
+3. 任务、计划、版本、readiness、双存储一致性和删除语义已冻结；
+4. DVL2-01 → **v0.1.1** / `specified` / `codex_review_passed` / `owner_accepted` / `frozen_for_implementation` / `not_started`；
+5. 本轮无代码修改；尚未授权实现；DVL2-02 未启动。
+
+### 待办事项
+
+1. 等待 DVL2-01 implementation authorization；
+2. 授权前不得修改 `digitalme-app/**`；
+3. 不得提前生成真实成果或实施 DVL2-02。
+
+### 重要信息
+
+1. **未修改 `digitalme-app/**`**。
+2. 接受与冻结 **不等于** `implementation_authorized`。
+3. R3 / R2.5 / PAN-02 仍 `paused` / `deferred` / `blocked`。
+4. **不 push**。
+
+---
+
+## 2026-07-26 DVL2-01 CTO 最终技术复核通过 · 等待 Owner 接受
+
+### 本次目标
+
+仅状态收口：记录 CTO 最终技术复核通过，等待 Owner 接受。不改产品/数据合同、实现边界或代码映射正文。
+
+### 本次完成
+
+1. DVL2-01 → **v0.1.1** / `specified` / `codex_review_passed` / `ready_for_owner_acceptance` / `not_started`；
+2. 修订记录整理三轮复核摘要与最终结论；
+3. 同步 context / log / Cursor rule：已复核通过、等待 Owner 接受；仍为纯规格；不得开始编码；DVL2-02 未开始。
+
+### 待办事项
+
+1. Owner 接受 DVL2-01；
+2. 接受前不得 `owner_accepted` / `frozen_for_implementation` / `implementation_authorized`；
+3. 不得开始 DVL2-01 实现或 DVL2-02。
+
+### 重要信息
+
+1. **未修改合同正文与 `digitalme-app/**`**。
+2. **不提交**；先返回状态收口报告。
+3. DVL2-00 继续 `frozen`；R3 / R2.5 / PAN-02 仍 `paused` / `deferred` / `blocked`。
+
+---
+
+## 2026-07-26 DVL2-01 第四轮最终最小修订（codex_changes_requested）
+
+### 本次目标
+
+关闭 Task Store / Plan Store 跨存储一致性与 archive/soft-delete/purge 语义；补齐完整候选路径。不编码、不提交。
+
+### 本次完成
+
+1. 冻结两文件确定性提交顺序、失败矩阵、reconciliation、指针不变量与 fail-closed；
+2. 区分 archive / soft delete / permanent purge；废除「删除即一并物理清理」笼统写法；
+3. 标明现有 `deleteTask` 为物理删除依赖与有界处理；
+4. 候选新增/修改/测试文件改为完整仓库相对路径；
+5. 最小同步 context / log / Cursor rule。
+
+### 待办事项
+
+1. 继续 Codex 复核；
+2. 不得冻结实施或授权编码；
+3. 不得开始实现。
+
+### 重要信息
+
+1. **未修改 `digitalme-app/**` 与 DVL2-00**。
+2. **不提交**。
+3. 状态仍为 `codex_changes_requested` / `not_started`。
+
+---
+
+## 2026-07-26 DVL2-01 第三轮最小修订（codex_changes_requested）
+
+### 本次目标
+
+关闭 Task/Plan 所有权、goal 同步、能力快照与当前 readiness、legacy 有界策略、规划隐私与精确实施清单。不编码、不提交。
+
+### 本次完成
+
+1. 冻结 ActBehalfTask 为任务权威；DeliverablePlan 为 task 下版本化对象；
+2. 冻结 task goal / understanding goal 同步矩阵；
+3. 拆分 PlanningAvailabilitySnapshot 与 CurrentExecutionReadiness；
+4. 冻结 legacy 有界实施与精确候选文件路径；
+5. 冻结规划调用隐私边界；
+6. 明确 DVL2-02 必须从 confirmed plan version 创建 DeliverablePackage；
+7. 最小同步 context / log / Cursor rule。
+
+### 待办事项
+
+1. 继续 Codex 复核；
+2. 不得冻结实施或授权编码；
+3. 不得开始实现。
+
+### 重要信息
+
+1. **未修改 `digitalme-app/**` 与 DVL2-00**。
+2. **不提交**。
+3. 状态仍为 `codex_changes_requested` / `not_started`。
+
+---
+
+## 2026-07-26 DVL2-01 第二轮有界修订（codex_changes_requested）
+
+### 本次目标
+
+按 CTO 第二轮意见修订 DVL2-01 草案：拆分合同支持与运行可用性、冻结 PlanRecord/Version、澄清规划模型边界、增加 readiness/图校验/确认矩阵，并完成只读代码映射。不编码、不提交。
+
+### 本次完成
+
+1. 状态 → `v0.1-draft` / `specified` / `codex_changes_requested` / `not_started`；
+2. 废除单一 `implementationAvailability=supported_now` 用法；
+3. 冻结 PlanRecord 指针与 v1/v2 确认语义；
+4. 明确 model-assisted planning ≠ 成果生成；
+5. 增加 executionReadiness、依赖图校验、确认规则矩阵；
+6. 写入 digitalme-app 只读代码映射与候选文件清单；
+7. 最小同步 context / log / Cursor rule。
+
+### 待办事项
+
+1. 继续 Codex 复核；
+2. 不得标 `frozen_for_implementation` / `implementation_authorized`；
+3. 不得开始编码。
+
+### 重要信息
+
+1. **未修改 `digitalme-app/**` 与 DVL2-00**。
+2. **不提交**。
+3. 当前基线四类合同内产物 = `in_current_product_scope` + `unavailable`。
+
+---
+
+## 2026-07-26 DVL2-01 成果规划器实施任务包起草
+
+### 本次目标
+
+起草 DVL2-01 成果规划器实施规格草案，供 Codex 复核；不开始实现。
+
+### 本次完成
+
+1. 新建 [`digitalme_phase1_task_DVL2-01_deliverable_planner_v0.1.md`](digitalme_phase1_task_DVL2-01_deliverable_planner_v0.1.md)；
+2. 状态：`v0.1-draft` / `specified` / `codex_review_pending` / `not_started`；
+3. 覆盖输入/输出合同、PlannedDeliverable、PlanStatus、追问、自动规划规则、持久化、UI、降级、验收与测试；
+4. 最小同步 context / log / Cursor rule；
+5. 本轮无代码修改；未授权实施。
+
+### 待办事项
+
+1. Codex 复核 DVL2-01 草案；
+2. 复核通过前不得标 `frozen_for_implementation` / `implementation_authorized`；
+3. 不得创建实现分支或开始编码。
+
+### 重要信息
+
+1. **未修改 `digitalme-app/**`**。
+2. **不提交**；先返回 CTO 复核材料。
+3. 上位合同 DVL2-00 v0.1.1 保持冻结，未改合同正文。
+4. R3 / R2.5 / PAN-02 仍 `paused` / `deferred` / `blocked`。
+
+---
+
 ## 2026-07-26 DVL2-00 Owner 接受与规格冻结
 
 ### 本次目标
