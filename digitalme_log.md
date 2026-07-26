@@ -5,6 +5,34 @@
 
 ---
 
+## 2026-07-26 BASELINE-CLEAN-01 仓库卫生与权威状态同步
+
+### 本次目标
+
+1. 在不修改任何运行代码的前提下，完成仓库基线卫生与权威文档状态同步；
+2. 防止新会话把已完成的第一纵向闭环误判为待实施任务。
+
+### 本次完成
+
+1. 当前 HEAD 基线确认为 `9d4f943`（本清理提交之前）；历史 QA、handoff、zip、bundle、patch 等已移出或经 `.gitignore` 忽略；
+2. `.gitignore` 收口：忽略各层 `.codex-qa/`、`outputs/`、测试账户/凭据交换/邀请临时数据、根目录生成的 patch/bundle/zip/stat/status/test log/diff/控制台输出，以及一次性脚本 `digitalme-app/scripts/verify-vl1-fix-no-user-supplement.cjs`；
+3. `参考/`、`运营/` 仅通过 `.git/info/exclude` 本地排除，**不写入** `.gitignore`；
+4. VL1-FIX 任务包入库并升至 `accepted` / v0.2.0（实现 `928aa1a`；文档收口 `e8b6572`）；身份协作评审入库为 `accepted_as_planning_input`；
+5. `digitalme_context.md` 文首与执行指针同步：第一纵向闭环 = `accepted` / `completed`；BUG1-FIX 八项技术修 = `accepted`；当前唯一产品待决 = BUG1 #4 / #6；
+6. **未修改**任何运行代码（含 `digitalme-app/**` 源码）。
+
+### 待办事项
+
+1. Owner/CTO 对 BUG1 #4（多模态成果与 95 分位交付；候选 A/B/C 未冻结）与 BUG1 #6（渐进式构建框架）作产品裁决。
+
+### 重要信息
+
+1. **不增加新的产品决策编号**；本条仅为仓库卫生与权威状态同步。
+2. R3 继续 `paused`；R2.5 继续 `deferred`；PAN-02 继续 `blocked`。
+3. **不 push**。
+
+---
+
 ## 2026-07-26（BUG1-FIX 任务包入库 + #4 #6 研究 + #4 多模态方向）
 
 ### 本次目标

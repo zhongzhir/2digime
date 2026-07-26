@@ -81,3 +81,43 @@ __MACOSX/
 .cursor/projects/
 .agents/cache/
 .codex/cache/
+
+# --- local QA evidence and one-off acceptance artifacts ---
+**/.codex-qa/
+outputs/
+dm-account-b/
+cred-export.json
+invite.json
+update-a.json
+update-b.json
+
+# One-off VL1-FIX runtime acceptance script; retained locally only
+digitalme-app/scripts/verify-vl1-fix-no-user-supplement.cjs
+
+# --- generated handoff and code-review artifacts at repository root ---
+/DigitalMe_*.patch
+/DigitalMe_*_name_status.txt
+/DigitalMe_*_test_log.txt
+/DigitalMe_*_stat.txt
+/DigitalMe_*_status.txt
+/digitalme-*.bundle
+/digitalme-*-source-*.zip
+/digitalme-source-*.zip
+/digitalme-current.bundle
+
+# --- generated audit and test console captures at repository root ---
+/_audit_metrics_tmp.txt
+/_git_diff_check.txt
+/_r2_*.txt
+/_suite*.txt
+/_vite_*_out.txt
+/p1-07-*-stat.txt
+/p1-07-*-status.txt
+/pan-*-diff.txt
+/pan-*-stat.txt
+/pan-*-status.txt
+/r1-*-diff.txt
+/r1-*-stat.txt
+/r1-*-status.txt
+/digitalme-git-log.txt
+/digitalme-git-status.txt

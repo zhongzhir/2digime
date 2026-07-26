@@ -2,24 +2,37 @@
 
 版本：v0.4
 状态：持续更新
-最后更新：2026-07-24（committed baseline 2f1b7bd）
+最后更新：2026-07-26（当前已提交基线 `9d4f943`）
 
-> **当前产品主线（2026-07-21）**：**产品基线重置 → 主路径原型 → 普通用户验证 → 规格冻结**。  
+> **当前产品主线（2026-07-26）**：**第一纵向闭环已 `accepted` / `completed`**；当前唯一产品待决项为 BUG1 #4（多模态成果与 95 分位交付）与 BUG1 #6（渐进式数字之我构建框架）。
 > **最高架构与研发原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)（**v0.1.1 `active`**）。  
 > **当前执行基线**：[`DigitalMe_product_baseline_reset_v0.2_2026-07-21.md`](DigitalMe_product_baseline_reset_v0.2_2026-07-21.md)（**v0.2 `active`**；Owner 审核通过关键裁决，包含能力覆盖完整性、唯一数字身份与对外协作等补强项）。  
-> **产品基线重置裁决**：原"研究与表达"候选确认路径判废；第一闭环保持 `not accepted`；工程机制（上下文装配、候选选择、确认快照）降为后台自动编排；不再向 Cursor 下发实现任务，先完成四道门。
+> **产品基线重置裁决（历史）**：原「研究与表达」候选确认路径判废；工程机制（上下文装配、候选选择、确认快照）降为后台自动编排。**第一纵向闭环后续已于 2026-07-25 正式收口为 `accepted` / `completed`（决策 #103 + `928aa1a` + `e8b6572`），本条不再作为「未验收」有效指针。**
 > **当前执行规格**：[`DigitalMe_doing_product_logic_v0.2_2026-07-22.md`](DigitalMe_doing_product_logic_v0.2_2026-07-22.md)（**v0.2 `all_phases_complete`**；Phase 1-3 全部完成；297 测试全过）。  
-> **身份与协作规划**：[`DigitalMe_identity_collaboration_plan_v0.2_2026-07-22.md`](DigitalMe_identity_collaboration_plan_v0.2_2026-07-22.md)（**v0.2 `implemented`**；ID-01～ID-05 全部完成；423 测试全过）。  
+> **身份与协作规划**：[`DigitalMe_identity_collaboration_plan_v0.2_2026-07-22.md`](DigitalMe_identity_collaboration_plan_v0.2_2026-07-22.md)（**v0.2 `implemented`**；ID-01～ID-05 全部完成；423 测试全过）。规划输入依据：[`digitalme_重要事项与建议_身份协作评审.md`](digitalme_重要事项与建议_身份协作评审.md)（**`accepted_as_planning_input`**）。
 > **身份与协作开发计划**：[`DigitalMe_identity_collaboration_dev_plan_v0.1_2026-07-22.md`](DigitalMe_identity_collaboration_dev_plan_v0.1_2026-07-22.md)（**v0.1 `active`**；P0 待确认，P1 全部完成，跨账户凭据/协作交换已验证，P2 待开始）。  
 > **客户端产品化与多端规划**：[`digitalme_client_productization_plan_v0.1.md`](digitalme_client_productization_plan_v0.1.md)（**v0.1 `deferred`**；现有功能继续更新优化并完成 Owner Electron 真机验收后，优先实施 Windows 桌面安装版；Web/手机端后续）。  
-> **已提交基线（2026-07-24，`2f1b7bd`）**：`feat(distill-me): wire confirmed identity into act context` — 83 个文件，+16,427/-487 行。包含 distill-me/doing-context/identity/collaboration/cli/mcp-server/editor-extension/model-routing 全部源码、act-behalf 修改、main.js IPC handlers、preload API、renderer UI、package.json 测试脚本、全部测试脚本及相关规划文档。**完整可回滚基线**；依赖闭包已验证；非源码交接件/截图/outputs/账号凭证/邀请文件已排除。**未 push**。
-> **R2 对话运行时（2026-07-24）**：新版 Shell 中的对话与会话链继续作为**保留基础设施**，本轮补齐真实失败后的「重试」入口及其 Electron 验收。`test:r2-dialogue` 聚合验收 **9/9**；R2 契约 **19/19**、Electron **16/16**；R1 **8/8**、PAN-01S **9/9**、doing-context **6/6** 回归通过。自动化结果不替代 Owner 全功能真机验收；生产默认入口仍为 legacy。
-> **Owner Electron 真机验收（2026-07-24）**：**`accepted`**。Legacy 默认入口、受控新版入口及回退、distill-me 全链路（空状态→输入→生成→查看依据→确认→编辑→删除→导出→重启恢复→模型失败保护）、R2 对话重试、doing-context、PAN-01S、owner-runtime、capability-acceptance、visual-acceptance、model-routing-acceptance 全部通过。
-> **confirmed identity → act context（2026-07-24）**：**`accepted`**。`doing-context.js` `assembleDoingContext` 已读取 `distill-me-identity-facts.json` 中 `status=confirmed` 和 `status=edited` 的条目，保留 `confirmedAt`/`sourceRefs`/`evidenceRefs`/`version`，排除 `proposed`/`rejected`/`deleted`/`revoked`。`distill-me-acceptance` **11/11** 全绿（含 `confirmed-content-enters-act-context` 真实验证）。PAN-01S hermetic **23/23**、PAN-01S owner-runtime **9/9**、gate4-auto-flow **49/49**、vl1-block1 **18/18** 回归通过。
-> **下一项任务**：Owner 授权 push `2f1b7bd` 后，按规划进入下一工作包（R1 renderer 实现 / 身份与能力面 / PAN-02 任务包冻结等；R3 继续 `paused`）。
-> **第一闭环执行计划（已废止）**：[`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)（**`superseded_by_baseline_reset_v0.2`**；原 v0.1.10 `spec_frozen`；Owner 真机验收已停止；第 4 步候选粒度修复 c3f7eb2 仅作为后台资产保留）。  
-> **第一闭环规格（已废止）**：[`digitalme_first_vertical_loop_spec_v0.1.md`](digitalme_first_vertical_loop_spec_v0.1.md)（**`superseded_by_baseline_reset_v0.2`**；新验收合同见基线 v0.2 §12）。  
-> **废止/暂停**：不再以 R2 边缘验收、R3 迁移、旧 Skill/MCP/Agent/身份并列 7 任务块、**旧 DM-Core-01A 开发指令**为当前执行主线。R2 代码 **retained as infrastructure**（最近运行时增量：`248189d`）；R3 = **`paused`**；PAN-02～06 相对新主线 **`paused`**。提交 **`55ae01f`** = **`partially_reused_as_first_vertical_loop_scaffold`**。
+> **当前已提交基线（2026-07-26，`9d4f943`）**：`docs(status): record 2026-07-26 BUG1 task package + multimodal direction`。关键提交链：
+> - `2f1b7bd`：confirmed identity → act context 整合基线
+> - `928aa1a`：VL1-FIX 实现（`fix(vl1): calibrate-not-limit generation prompts`）
+> - `e8b6572`：第一段正式收口 / VL1-FIX accepted 文档收口
+> - `9e498a3` ～ `940f5fa`：BUG1-FIX 八项技术修
+> - `52e16ab`：BUG1-FIX 任务包 `accepted`
+> - `9d4f943`：2026-07-26 状态与多模态方向同步
+>
+> **第一纵向闭环**：`accepted` / `completed`（决策 #103；实现 `928aa1a`；文档收口 `e8b6572`）。VL1-FIX 任务包 [`digitalme_phase1_task_VL1-FIX_calibrate_not_limit_prompts_v0.1.md`](digitalme_phase1_task_VL1-FIX_calibrate_not_limit_prompts_v0.1.md) = **`accepted` / v0.2.0**。**不得再把第一纵向闭环写成下一待实施任务。**
+> **BUG1-FIX 八项技术修**：`accepted`（`9e498a3`～`940f5fa`；任务包 `52e16ab` / v0.2.0）。
+> **当前唯一产品待决项**：
+> 1. **BUG1 #4**：多模态成果与 95 分位交付（决策 #106；**候选方案尚未最终冻结**）
+> 2. **BUG1 #6**：渐进式数字之我构建框架
+> **多模态候选（#4，未冻结）**：A 做事页预选产物类型 / B 新增创作入口 / C 系统自动识别和分流。待 Owner/CTO 产品裁决。
+> **R2 对话运行时**：保留基础设施；R2 代码 **retained as infrastructure**。生产默认入口仍为 legacy。
+> **Owner Electron 真机验收（2026-07-24）**：`accepted`（distill-me / R2 对话重试 / doing-context / PAN-01S 等）。
+> **confirmed identity → act context（2026-07-24，`2f1b7bd`）**：`accepted`（历史整合基线；**不是**当前 HEAD）。
+> **当前下一项**：Owner/CTO 对 BUG1 #4、#6 作产品裁决；**不得**自行启动实现。R3 继续 **`paused`**；R2.5 SQLite 继续 **`deferred`**；PAN-02 继续 **`blocked`**。
+> **第一闭环执行计划（已完成收口）**：[`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)（第一段 **`accepted` / `completed`**；历史曾标 `superseded_by_baseline_reset_v0.2` 的「未验收」口径已由决策 #103 取代）。
+> **第一闭环规格（已完成收口）**：[`digitalme_first_vertical_loop_spec_v0.1.md`](digitalme_first_vertical_loop_spec_v0.1.md)（含 §3.4 校准原则；第一段已 `accepted`）。
+> **废止/暂停**：不再以 R2 边缘验收、R3 迁移、旧 Skill/MCP/Agent/身份并列 7 任务块、**旧 DM-Core-01A 开发指令**为当前执行主线。R2 代码 **retained as infrastructure**；R3 = **`paused`**；R2.5 = **`deferred`**；PAN-02 = **`blocked`**；PAN-03～06 相对新主线 **`paused`**。提交 **`55ae01f`** = **`partially_reused_as_first_vertical_loop_scaffold`**。
 > **产品定义（摘要）**：Digital Me 是由本人拥有和控制、以本人为源头持续形成、能够调用外部智能能力，并在明确授权下代表本人感知、判断、表达、行动和协作的个人数字主体系统（全文见架构原则文 §1）。
 >
 > **能力基线纠正（2026-07-23）**：Digital Me 不通过“像我”限制大模型能力；接入模型的通用能力必须完整保留，Digital Me 的能力上限与下限均以接入模型为基线。个人蒸馏结果通过生成前叠加或生成后校对增加价值观、经验、风格、真实性与边界；加入 Digital Me 后通用表现变弱视为设计缺陷。权威原则见 `digitalme_subject_architecture_and_rd_principles_v0.1.md` §3.1、`digitalme_product_spec_v0.2.md` §2.0.1。
@@ -216,7 +229,7 @@ flowchart TB
 3. **能力真实可用**：写作、研究、受控文件/执行三条主路径连续真实验收；停止用能力数量或 UI 存在证明完成；
 4. **协作最小感知**：本人可读能力名片、Agent Card 草案、一次性 Interaction Contract、本地协作模拟与结果回流。
 
-**排期变更（2026-07-18，决策 #58；已被决策 #94 覆盖）**：`digitalme_phase1_subject_upgrade_plan_v0.1.md` **不再作为当前顺序执行计划**；降级为 Trusted Beta 依据。当时曾将主线切为 **P1-PANORAMA**。**2026-07-21 起**：当前唯一产品执行主线为 **第一纵向闭环 — 理解我并产出**（见 `digitalme_first_vertical_loop_sprint_plan_v0.1.md`）；P1-PANORAMA 降为历史主线与基础设施状态表。
+**排期变更（2026-07-18，决策 #58；已被决策 #94 覆盖；第一段收口见决策 #103）**：`digitalme_phase1_subject_upgrade_plan_v0.1.md` **不再作为当前顺序执行计划**；降级为 Trusted Beta 依据。当时曾将主线切为 **P1-PANORAMA**。**2026-07-21 起**：曾以 **第一纵向闭环 — 理解我并产出** 为唯一产品执行主线（见 `digitalme_first_vertical_loop_sprint_plan_v0.1.md`）。**2026-07-25 起**：该第一段已 **`accepted` / `completed`**；P1-PANORAMA 仍为历史主线与基础设施状态表。当前产品待决项见文首（BUG1 #4 / #6）。
 
 ### 2.8 第一阶段三位一体 Alpha / Trusted Beta（2026-07-18 确立；2026-07-19 PAN-00R 修订）
 
@@ -276,8 +289,8 @@ flowchart TB
 25. **AI 使用主体信息原则（2026-07-19，PAN-00R 冻结）**：不采用「回答上限受蒸馏内容限制」逻辑，也不采用「先生成通用答案再机械贴入个人引用」逻辑。**AI 负责能力上限；Digital Me 负责方向、真实性、边界、连续性和本人特征。** 相关性门强制：与任务无关的主体信息不得进入生成；无相关信息时宁可不做个性化。见 §4.4、规格 v0.6 §2.0.1。
 26. **AI 能力基线纠正（2026-07-23）**：Digital Me 的能力上限与下限均以接入大模型为基线，不得因“像我”而削弱通用能力。个人蒸馏结果采用“生成前叠加”或“生成后校对”两种方式增加价值观、经验、风格、真实性与边界；加入 Digital Me 后通用表现变弱视为设计缺陷。见架构原则 §3.1、产品规格 §2.0.1。
 27. **校准 vs 限制原则（2026-07-25，VL1-FIX）**：明确数字之我不是限制 AI，而是校准 AI。AI 缺原料时不得限制输出、不得让用户补料；用通用知识答并显式区分来源类别（本人事实 / 外部事实 / 通用推理）。六类校准维度：方向、真实性、风格、价值观、安全、边界。配套规格 §3.4 与决策 #102。
-28. **第一纵向闭环正式收口（2026-07-25）**：第一段「代表你做一项研究与表达任务」主线通过。VL1-FIX 真机验收：成果末段不再出现「用户需要补料」；模型正常发挥 AI 通用能力给出具体产品名；本人事实与通用知识显式区分。配套决策 #103。**待 Cursor/Codex 提交 commit 固化**。下一项 = 第二条纵向闭环规划（待 Owner 决定方向）。
-29. **BUG1-FIX 收口（2026-07-25）**：D 盘 e8b6572 上重做 BUG1 八条技术修（跳过 #4/#6 产品决策项）。P0 布局/折叠/成果闭环 + P1 我页/身份独立/能力收敛/设置清理/多模型路由。配套决策 #104。
+28. **第一纵向闭环正式收口（2026-07-25）**：第一段「代表你做一项研究与表达任务」主线通过。VL1-FIX 真机验收：成果末段不再出现「用户需要补料」；模型正常发挥 AI 通用能力给出具体产品名；本人事实与通用知识显式区分。配套决策 #103；实现 `928aa1a`；文档收口 `e8b6572`。状态 **`accepted` / `completed`**。当前产品待决项见 §3 第 31 条与文首（BUG1 #4 / #6）。
+29. **BUG1-FIX 收口（2026-07-25）**：D 盘 e8b6572 上重做 BUG1 八条技术修（跳过 #4/#6 产品决策项）。P0 布局/折叠/成果闭环 + P1 我页/身份独立/能力收敛/设置清理/多模型路由。配套决策 #104。八项技术修状态 **`accepted`**（`9e498a3`～`940f5fa`）。
 30. **BUG1-FIX 任务包入库（2026-07-26）**：任务包 `digitalme_phase1_task_BUG1-FIX_rebuild_on_d_disk_v0.1.md` 经 Owner 现场抽检通过后入库，状态由 `implemented_pending_owner_spotcheck` 升至 `accepted` / v0.2.0；commit `52e16ab`。配套决策 #105。
 31. **BUG1 #4 多模态方向（2026-07-26，待 Owner 拍板）**：Owner 明确「做事」不只文字，要覆盖文字 / 图 / 视频 / 音频 / 代码 / 网页 / 数据等多模态产物。三候选方案：A「做事页加产物类型选择」/ B「新增创作入口」/ C「场景自动分流」。**待 Owner 选定**。设计原则：能力跟随（不自研，决策 #37）+ 校准不限制（决策 #28）+ 能力可装可卸（§7.8）。配套决策 #106。
 
@@ -301,8 +314,8 @@ flowchart TB
 | 文档 | 作用 |
 |---|---|
 | `digitalme_subject_architecture_and_rd_principles_v0.1.md` | **当前最高架构与研发原则**：产品定义、数字主体循环、能力/身份/验收、纵向闭环、治理 |
-| `digitalme_first_vertical_loop_sprint_plan_v0.1.md` | **当前唯一执行计划**（v0.1.11 `spec_frozen`）：冲刺状态与任务顺序 |
-| `digitalme_first_vertical_loop_spec_v0.1.md` | **第一闭环冻结规格**（流程、四合同、能力、55ae01f 裁定、验收） |
+| `digitalme_first_vertical_loop_sprint_plan_v0.1.md` | **第一纵向闭环执行计划**（v0.1.11；第一段 **`accepted` / `completed`**；不再作为下一待实施任务指针） |
+| `digitalme_first_vertical_loop_spec_v0.1.md` | **第一闭环冻结规格**（流程、四合同、能力、55ae01f 裁定、验收；含 §3.4；第一段已收口） |
 | `digitalme_product_spec_v0.2.md`（文内 **v0.6.3**） | **既有界面与功能细则参照**（与新主线冲突处以架构原则文 / 第一闭环计划为准，待对齐升版） |
 | `digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`（v0.4） | **历史总任务**：三位一体 Alpha（`superseded` 作为当前主线定义） |
 | `digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md` | **历史战略修订依据**：三位一体定义、极简原则、PAN-01/PAN-01R 裁定 |
@@ -317,7 +330,7 @@ flowchart TB
 | `digitalme_narrative_ai_era_autonomy.md` | 对外/对内叙事（含双线简述） |
 | `digital-me-project-positioning-draft.md` | 定位讨论稿（战略原则含双线） |
 
-**近期工程焦点（2026-07-21）**：决策 **#94–#96**——第一纵向闭环规格已 `spec_frozen`；下一项 = **实现任务意图与本人上下文装配（第一闭环实现 · 第 1 块）**（待授权）。R3 paused；`55ae01f` retained_for_mapping_review（已裁定）。
+**近期工程焦点（2026-07-26）**：第一纵向闭环 **`accepted` / `completed`**（决策 #103；`928aa1a` + `e8b6572`）。BUG1-FIX 八项技术修 **`accepted`**（`9e498a3`～`940f5fa`；任务包 `52e16ab`）。当前唯一产品待决项 = BUG1 #4（多模态成果与 95 分位交付；候选 A/B/C 未冻结）与 BUG1 #6（渐进式构建框架）。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。**history（2026-07-21）**：曾将下一项写作「实现任务意图与本人上下文装配（第一闭环实现 · 第 1 块）」——该指针已完成并收口，不再有效。
 ## 4. 系统架构共识（草案）
 
 > **部署拓扑补充（2026-07-10）**：本节描述逻辑模块（核心层 / 运行层 / 信任层）。物理部署与百万规模扩容面见 [`digitalme_architecture_edge_sovereign_v0.1.md`](digitalme_architecture_edge_sovereign_v0.1.md)（端主权 Runtime + 云边平台 + 能力层）。决策 #3「本地优先 + 云同步」由此文细化。
@@ -500,15 +513,16 @@ flowchart TB
 
 ### 7.1 近期优先级（建议顺序）
 
-> **2026-07-21 规划基线重建（当前）**：执行计划 [`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)（**v0.1.2 `spec_frozen`**）；冻结规格 [`digitalme_first_vertical_loop_spec_v0.1.md`](digitalme_first_vertical_loop_spec_v0.1.md)。**下一项**：**实现任务意图与本人上下文装配（第一闭环实现 · 第 1 块）**（待实现授权）。R3 / 旧 DM-Core-01A 开发指令 / 并列 Skill·MCP·Agent·身份任务块 **不得**作为下一步。
+> **2026-07-26 当前执行指针**：第一纵向闭环 **`accepted` / `completed`**。当前唯一产品待决项 = BUG1 #4（多模态成果与 95 分位交付；候选 A/B/C 未冻结）与 BUG1 #6（渐进式数字之我构建框架）。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。不得再把第一纵向闭环写成下一待实施任务。
+> **2026-07-21 规划基线重建（历史）**：当时执行计划 [`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)（**v0.1.2 `spec_frozen`**）；冻结规格 [`digitalme_first_vertical_loop_spec_v0.1.md`](digitalme_first_vertical_loop_spec_v0.1.md)。**当时下一项**曾为「实现任务意图与本人上下文装配（第一闭环实现 · 第 1 块）」——**已完成并收口，不再是有效下一步**。R3 / 旧 DM-Core-01A 开发指令 / 并列 Skill·MCP·Agent·身份任务块 **不得**作为下一步。
 > **2026-07-16 审计后重排（历史）**：第一阶段不再扩展能力面，切换为“主体可信化与协作感知”。当时以 `digitalme_phase1_subject_upgrade_plan_v0.1.md` 为执行清单；原 v0.3.13 的 L0/审计/CLI 只能视为原型，不视为已达到安全可用。
 > **2026-07-18 覆盖（历史）**：当时执行索引改为 `digitalme_panorama_execution_index_v0.1.md`；原升级计划降为 Trusted Beta 硬化依据（决策 #58）。
 > **2026-07-21 R2 相关（历史；已降级）**：R0/R1 accepted；R2 实现保留为基础设施，**不再**作为当前验收主线。
 > **2026-07-19 PAN-01S.1 实现覆盖（历史；已被 2026-07-20 acceptance superseded）**：PAN-01S 曾为 `statically_verified` / `owner_changes_requested`；PAN-01S.1 曾为 `statically_verified` / `implemented`（不 accepted）。
 
 1. **限定范围的仓库实现映射与第一闭环规格冻结**（文档；**已完成** → 规格 `spec_frozen`）；
-2. **实现任务意图与本人上下文装配（第一闭环实现 · 第 1 块）**（**当前下一项**；待实现授权）→ 其后：研究与表达入口 → 真实 Skill → 只读外部信息 → 证据区分 → Experience Proposal 回流 → 对照验收；
-3. 第二～四纵向闭环仅保留接口与方向，不得提前铺开。
+2. **实现任务意图与本人上下文装配（第一闭环实现 · 第 1 块）**（**history / 已完成并收口**；不得再当作当前下一项）→ 其后研究与表达 / Skill / 外搜 / 证据 / Proposal 各块均已完成；第一段整体 **`accepted` / `completed`**；
+3. **当前产品待决（2026-07-26）**：BUG1 #4 多模态成果与 95 分位交付（候选 A/B/C 未冻结）+ BUG1 #6 渐进式构建框架；待 Owner/CTO 裁决后再立任务包。第二～四纵向闭环仅保留接口与方向，不得提前铺开。
 
 （以下 1–7 为 2026-07-16 历史 Trusted Beta 硬化清单，**不再是当前执行顺序**：）
 
@@ -956,8 +970,8 @@ flowchart TB
 98. **第一闭环实现 · 第 2 块（2026-07-21）**：接通 `psk_preset_general_research` + `research.webSearch`/`searchWeb`；Capability Invocation 持久化与来源列表；第 1 块标 `accepted`。未实现最终成果/四栏/Proposal/Package 回写。测试：`test:vl1-block2`。随后保存边界验收修正合入。**下一项**曾为第 3 块（见 #99）。
 99. **第一闭环实现 · 第 3 块（2026-07-21）**：有来源约束的研究与表达成果与证据四栏；Owner 编辑/采用/否定；不写 Package、不调用 feedback。第 2 块标 `accepted`。随后限量修正：Skill/tool invocation 必须匹配当前 goal + Subject Context version。测试：`test:vl1-block3`。**已 accepted**（baseline `0df7bc5`）。
 100. **第一闭环实现 · 第 4 块（2026-07-21）**：Experience Proposal 与主体回流；adopted ≠ 自动写入；Owner 审阅 → 真实 `feedback:preview` → 显式确认 `feedback:apply`；任务内审计。随后限量修正：apply 审计失败可按 changeSet 恢复；Package 读取失败阻断模型。测试：`test:vl1-block4`。状态 `implemented_pending_codex_review`。**下一项（仅登记）**：**第一闭环正式验收与 Owner 真机验收**。
-102. **校准 vs 限制原则（2026-07-25，VL1-FIX）**：Owner 真机发现研究路径在 autoGenerate 模式下生成「由于本人信息中未提供…需要用户自行补充」，触线。明确原则：数字之我不限制 AI 通用能力上限；数字之我通过方向/真实性/风格/价值观/安全/边界六类校准维度介入。AI 缺原料时用通用知识答，**不得限制输出，不得让用户补料**。三类来源显式区分（本人事实 / 外部事实 / 通用推理）。任务包 `digitalme_phase1_task_VL1-FIX_calibrate_not_limit_prompts_v0.1.md`；规格 §3.4；`result-generation.js` 三个 prompt 已重写；`test:vl1-prompt-calibration` 11 条。待 Owner 真机确认。
-103. **第一纵向闭环正式收口（2026-07-25，VL1-FIX 真机验收后）**：Owner 真机任务「评估 AI 主权协作的当前主流产品图景」07:56 result_saved，VL1-FIX 修复有效：成果末段不再出现「由于本人信息中未提供…需要用户自行补充」；模型用 AI 通用能力给出具体产品名（PersonalAI / LocalAI / OpenDiamond / SingularityNET / Ocean Protocol / 欧盟 AI 公地 / 中国数据要素 X）；本人事实（"基于你的治理观念"）与通用知识显式区分；残留的"建议搜 2025-2026 年真实项目替换"是模型对自身输出留的不确定性标记（uncertainty ≥ medium 当无引用时），不是 prompt 限制，属合理校准。**第一段「代表你做一项研究与表达任务」主线通过**。待 Cursor/Codex 提交 `fix(vl1): calibrate-not-limit generation prompts` commit 固化（6 文件改动）。commit 后第一段基线 = `2f1b7bd` + 待 commit。R3 / R2.5 / PAN-02 仍 `paused` / `planned` / `blocked`，不动。**不 push 远端**（Owner 已确认无远端，本地 commit 即可）。下一项 = **第二条纵向闭环规划**（待 Owner 决定方向）。
+102. **校准 vs 限制原则（2026-07-25，VL1-FIX）**：Owner 真机发现研究路径在 autoGenerate 模式下生成「由于本人信息中未提供…需要用户自行补充」，触线。明确原则：数字之我不限制 AI 通用能力上限；数字之我通过方向/真实性/风格/价值观/安全/边界六类校准维度介入。AI 缺原料时用通用知识答，**不得限制输出，不得让用户补料**。三类来源显式区分（本人事实 / 外部事实 / 通用推理）。任务包 `digitalme_phase1_task_VL1-FIX_calibrate_not_limit_prompts_v0.1.md`；规格 §3.4；`result-generation.js` 三个 prompt 已重写；`test:vl1-prompt-calibration` 11 条。实现提交 `928aa1a`；**Owner 真机验收已通过**（见 #103）。
+103. **第一纵向闭环正式收口（2026-07-25，VL1-FIX 真机验收后）**：Owner 真机任务「评估 AI 主权协作的当前主流产品图景」07:56 result_saved，VL1-FIX 修复有效：成果末段不再出现「由于本人信息中未提供…需要用户自行补充」；模型用 AI 通用能力给出具体产品名（PersonalAI / LocalAI / OpenDiamond / SingularityNET / Ocean Protocol / 欧盟 AI 公地 / 中国数据要素 X）；本人事实（"基于你的治理观念"）与通用知识显式区分；残留的"建议搜 2025-2026 年真实项目替换"是模型对自身输出留的不确定性标记（uncertainty ≥ medium 当无引用时），不是 prompt 限制，属合理校准。**第一段「代表你做一项研究与表达任务」主线通过**；状态 **`accepted` / `completed`**。实现提交 `928aa1a`；文档收口 `e8b6572`。R3 / R2.5 / PAN-02 仍 `paused` / `deferred` / `blocked`，不动。**不 push 远端**。当前产品待决项 = BUG1 #4 / #6（见 #105–#106）。
 104. **BUG1-FIX 收口（2026-07-25，D 盘 e8b6572 重做）**：在 D 盘基线从头重做 BUG1 技术修（#1/#2/#3/#5/#7/#8/#9/#10）；云盘 working copy 弃用。P0：版本信息不遮挡输入、长回复折叠高度真实变化、对话「送到做事」+ 成果保存/重开闭环。P1：「我」主 tab 清晰、身份与协作独立侧栏、能力页四类收敛、设置四类清理、按任务分工多模型路由 UI。#4/#6 仍等 Owner 决策。验收目录 `.codex-qa/bug1-fix/`。
 105. **BUG1-FIX 任务包入库（2026-07-26）**：任务包 `digitalme_phase1_task_BUG1-FIX_rebuild_on_d_disk_v0.1.md` 由 Mavis 代办 commit `52e16ab docs(plan): mark BUG1-FIX 任务包 accepted after spotcheck`，标 `accepted` / v0.2.0；零冲突（任务包之前为 untracked 新文件）。本机 commit 链：`52e16ab` → `a5f77a7` → BUG1 8 个 fix commit（`9e498a3` … `940f5fa`）→ `e8b6572` 第一段正式收口。**不 push**（无远端）。下一项 = BUG1 #4 / #6 决策与实施。
 106. **BUG1 #4 多模态产物方向（2026-07-26，Owner 重新定义待拍板）**：Owner 明确「做事」不只是文字，要覆盖**文字 / 图 / 视频 / 音频 / 代码 / 网页 / 数据**等 AI 可生成的产物类型。设计原则：①不自研能力（决策 #37 能力跟随——对接业界最好的）；②能力可装可卸（§7.8）；③校准不限制（决策 #28）；④能力为空时引导装；⑤密钥只在 main 层（§7.8）。Mavis 给三个候选方案：A「做事页加产物类型选择」/ B「新增创作入口」/ C「场景自动分流」。**待 Owner 选定方案**。本决策仅为方向记录；规格、任务包、UI 改动均未实现。
