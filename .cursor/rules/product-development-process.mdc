@@ -43,13 +43,13 @@ Owner / 用户提出的产品想法**可能不全、可错、可非最优**，�
 
 - 架构与研发原则：`digitalme_subject_architecture_and_rd_principles_v0.1.md`
 - 上位合同：`digitalme_phase1_task_DVL2-00_product_and_data_contracts_v0.1.md`（**v0.1.1** / `owner_accepted` / `frozen_for_implementation` / `not_started`）
-- 当前冻结规格：`digitalme_phase1_task_DVL2-02_deliverable_package_and_execution_preparation_v0.1.md`（**v0.1.1** / `frozen_for_implementation`）
-- 实施授权包：`digitalme_phase1_task_DVL2-02_implementation_authorization_v0.1.md`（**v0.1.0** / `ready_for_owner_runtime_acceptance`；`implementation_authorized=true`；实施 `implementation_complete_pending_owner_acceptance`；实现 `20c8832`；分支 `codex/dvl2-02-deliverable-package-preparation` @ `ad3b6ee`）
+- 当前已收口规格：`digitalme_phase1_task_DVL2-02_deliverable_package_and_execution_preparation_v0.1.md`（**v0.1.1** / `frozen_for_implementation`；`accepted_as_implemented`）
+- 实施授权包：`digitalme_phase1_task_DVL2-02_implementation_authorization_v0.1.md`（**v0.1.0** / `owner_runtime_accepted` / `accepted_as_implemented` / `implemented`；实现 `20c8832`）
 - 已收口实施规格：`digitalme_phase1_task_DVL2-01_deliverable_planner_v0.1.md`（**v0.1.1** / `accepted_as_implemented`）
 - 全局上下文文首：`digitalme_context.md`
 
 **当前主线**：第二纵向闭环 — **多模态成果包交付与渐进式主体构建**。
-**当前下一任务**：**Owner 真机验收 DVL2-02**（状态 `ready_for_owner_runtime_acceptance`；实现 `20c8832`）。**不得**标 `implemented` / `owner_runtime_accepted`。**不得** push。DVL2-03 **`not_started` / `not_authorized`**。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+**当前下一任务**：**起草 / Codex 集中评审 DVL2-03A**（压缩流程：无独立 implementation authorization 文档；Owner 一次同时接受规格并授予实施授权）。DVL2-02 已 `implemented`（仅成果包准备，不等于真实生成）。**不得**抢跑实现 / push。DVL2-03 全量 **`not_started` / `not_authorized`**。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
 
 1. **每次只推进一个已批准任务块**；按 DVL2-00 → 01 → 02 → 03 → 04 → 05 顺序，不得偷跑或并列铺开。
 2. **非阻断问题进入 backlog**；仅四类问题可阻断：主流程不可用、数据损坏丢失、隐私超披露、未授权对外行动。

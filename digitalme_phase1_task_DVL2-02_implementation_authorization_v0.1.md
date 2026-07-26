@@ -2,8 +2,8 @@
 
 版本：v0.1.0
 日期：2026-07-26
-状态：`authorization_specified` / `authorization_codex_review_passed` / `owner_implementation_authorized` / `ready_for_owner_runtime_acceptance`
-实施：`implementation_complete_pending_owner_acceptance`
+状态：`specified` / `codex_review_passed` / `owner_accepted` / `frozen_for_implementation` / `implementation_authorized` / `owner_runtime_accepted` / `accepted_as_implemented` / `implemented`
+实施：`implemented`
 implementation_authorized：`true`
 implementation_branch：`codex/dvl2-02-deliverable-package-preparation`
 implementation_branch_base：`ad3b6eed2f50bd3f1829028da8d7dc650eb01d31`
@@ -13,39 +13,51 @@ implementation_branch_base：`ad3b6eed2f50bd3f1829028da8d7dc650eb01d31`
 规格内容冻结基线：`578648f31d86594cc2bd56ede2e367122cfa98f8`
 实现提交：`20c883298ba9f2e5e707015c4fd6c9dd109ad601`
 Owner 授权记录提交：`b041fde27edb052143a50b466bb5455888b35e4a`
+实施证据提交：`866f2b2e3400da81d1afc1a54b6477f679766cc6`
 
-> **正式边界**：实现已完成合同测试与两独立 Electron 进程验收，停在 `ready_for_owner_runtime_acceptance`。**不得**标 `implemented` / `owner_runtime_accepted` / `accepted_as_implemented` / `completed`。**不得** push。**不得**扩大到 DVL2-03。冲突时：架构原则文 > DVL2-00 > DVL2-01 > DVL2-02 冻结规格 > 本文。
+> **正式边界**：DVL2-02 **成果包与执行准备**已实现，且 **Owner 真机验收通过**（`owner_runtime_accepted` / `accepted_as_implemented` / `implemented`）。  
+> **明确不等于**：真实成果生成已实现。DVL2-03 / DVL2-03A **尚未实现**。本任务**没有**生成 Word / PPT / HTML / 图片成果；**没有** DeliverableVersion；**没有** ArtifactRef / contentHash；自动验收路径**没有**真实模型调用。冲突时：架构原则文 > DVL2-00 > DVL2-01 > DVL2-02 冻结规格 > 本文。
+
+### Owner 真机验收记录
+
+**结论**：Owner 真机验收通过（2026-07-26）。
+
+验收范围仅限 DVL2-02：
+
+- 可从 confirmed plan 准备成果包；
+- 可恢复 `activePackageId` 与准备态；
+- 重复准备命中同一有效 package；
+- 不进入真实文件生成。
 
 ### Owner 实施授权记录
 
-**结论**：已授权开始实现。
+**结论**：已授权并已实现。
 
-Owner 授权原意：
+Owner 授权原意（历史）：
 
 - 按冻结规格和实施授权包实现；
 - 允许创建指定实现分支 `codex/dvl2-02-deliverable-package-preparation`，起点 `ad3b6eed2f50bd3f1829028da8d7dc650eb01d31`；
 - 不允许扩大到 DVL2-03；
 - 不允许生成真实成果 / DeliverableVersion / ArtifactRef / contentHash；
 - 不允许 push；
-- 实现完成后必须等待 Owner runtime acceptance。
+- 实现完成后必须等待 Owner runtime acceptance（**本轮已通过**）。
 
-### 实施证据（工程完成，待 Owner 真机）
+### 实施证据（已通过 Owner 真机）
 
 | 项 | 证据 |
 |----|------|
 | 实现 commit | `20c883298ba9f2e5e707015c4fd6c9dd109ad601` |
+| 证据 commit | `866f2b2e3400da81d1afc1a54b6477f679766cc6` |
 | 新增模块 | `deliverable-package-{schema,store,prepare,consistency,recovery,readiness}.js` |
 | 新增测试 | `test-dvl2-02-package-contracts.cjs`；`run/electron/dvl2-02-package-acceptance*.cjs` |
 | 有界修改 | `task-store.js`、`main.js`、`preload.js`、`renderer/{app.js,deliverable-planner.js,index.html,styles.css}`、`package.json` |
 | Store 路径 | `<userData>/deliverable-packages.json`（顶层含 schemaVersion/revision/packages/deliverables/preparationAttempts/updatedAt；无 versions/artifacts） |
 | CAS / queue | temp+rename；进程内 write queue；queue 内重读 + expectedRevision / expectAbsent |
 | 合同测试 | `npm run test:dvl2-02-package` → 17 passed |
-| Electron Phase A | `.codex-qa/dvl2-02-package-acceptance/phase-a.json` pass；创建 package；deliverables；无真实成果文件；无「开始生成成果」 |
-| Electron Phase B | `.codex-qa/dvl2-02-package-acceptance/phase-b.json` pass；恢复 activePackageId；再次准备 `existing_package` |
-| two-phase summary | `.codex-qa/dvl2-02-package-acceptance/two-phase-summary.json` |
-| 真实模型 / 付费 | 无（`DIGITALME_PLANNER_FORCE_RULE=1` / `DIGITALME_ACT_BEHALF_FAKE=1`） |
+| Electron Phase A/B | `.codex-qa/dvl2-02-package-acceptance/`；two-phase summary pass |
+| 真实模型 / 付费（自动验收） | 无（`DIGITALME_PLANNER_FORCE_RULE=1` / `DIGITALME_ACT_BEHALF_FAKE=1`） |
 | Version / ArtifactRef / contentHash | 无 |
-| 禁止路径变化 | 无（未改 package-store/**、result-generation.js、renderer-next、entry、sessions、package-lock） |
+| 禁止路径变化 | 无 |
 
 ---
 
@@ -442,7 +454,8 @@ outcome: "created_new" | "existing_package" | null
 
 | 版本 | 日期 | 说明 |
 |------|------|------|
-| **v0.1.0（implementation evidence）** | 2026-07-26 | 实现完成证据：commit `20c8832`；合同测试与两阶段 Electron 通过；状态 `ready_for_owner_runtime_acceptance`；实施 `implementation_complete_pending_owner_acceptance`；**未**标 `implemented` / `owner_runtime_accepted` |
+| **v0.1.0（Owner runtime accepted）** | 2026-07-26 | **Owner 真机验收通过**：`owner_runtime_accepted` / `accepted_as_implemented` / `implemented`。范围仅 DVL2-02 成果包准备；不等于真实成果生成；无 Version/ArtifactRef/contentHash；DVL2-03 未实现 |
+| **v0.1.0（implementation evidence）** | 2026-07-26 | 实现完成证据：commit `20c8832`；合同测试与两阶段 Electron 通过；状态曾为 `ready_for_owner_runtime_acceptance`；实施曾为 `implementation_complete_pending_owner_acceptance` |
 | **v0.1.0（Owner implementation authorized）** | 2026-07-26 | **Owner 授予实施授权**：`implementation_authorized=true`；实施曾为 `implementation_in_progress`；分支 `codex/dvl2-02-deliverable-package-preparation` @ `ad3b6ee`；不得 push；不得扩大到 DVL2-03；完成后等待 Owner runtime acceptance |
 | **v0.1.0（Codex final authorization review）** | 2026-07-26 | **Codex 最终授权复核通过（历史）**。状态曾为 `authorization_specified` / `codex_review_passed` / `ready_for_owner_implementation_authorization`；`implementation_authorized=false` |
 | v0.1.0-draft | 2026-07-26 | 初稿：`authorization_drafting` / `codex_review_pending`；基线 `ad3b6ee` 起草提交 `0a52606` |

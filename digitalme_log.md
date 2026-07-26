@@ -5,6 +5,31 @@
 
 ---
 
+## 2026-07-26 DVL2-02 Owner 真机验收通过 · 收口为 implemented
+
+### 本次目标
+
+记录 Owner 真机验收通过；将 DVL2-02 收口为 `owner_runtime_accepted` / `accepted_as_implemented` / `implemented`。不实施真实成果生成。
+
+### 本次完成
+
+1. 授权包状态更新为完整验收链（含 `implemented`）；
+2. 明确：仅成果包与执行准备；无 Word/PPT/HTML/图片；无 Version/ArtifactRef/contentHash；
+3. 同步 context / Cursor rule；下一步指向 DVL2-03A 起草（压缩流程）。
+
+### 待办事项
+
+1. 起草 DVL2-03A 一页式任务包；
+2. Codex 一次集中评审；Owner 一次规格接受 + 实施授权；
+3. 不得抢跑 DVL2-03A 实现；不得 push。
+
+### 重要信息
+
+1. 实现 commit 仍为 `20c8832`；证据 `866f2b2`。
+2. DVL2-02 `implemented` ≠ 真实成果生成已实现。
+
+---
+
 ## 2026-07-26 DVL2-02 实现完成 · 待 Owner 真机验收
 
 ### 本次目标
@@ -19,13 +44,13 @@
 4. UI：「准备成果包」/「查看成果包准备」；无「开始生成成果」；无真实文件生成；
 5. 测试：`npm run test:dvl2-02-package`（17 pass）；`npm run test:dvl2-02-package-acceptance`（Phase A/B pass）；
 6. 回归：`test:dvl2-01-planner`、`test:act-behalf`、`test:bootstrap-submit`、`test:classic-renderer-dom` 通过；
-7. 状态：`ready_for_owner_runtime_acceptance`；实施 `implementation_complete_pending_owner_acceptance`；**未**标 `implemented`。
+7. 状态：曾为 `ready_for_owner_runtime_acceptance`；**本日志后一节已 Owner 真机收口**。
 
 ### 待办事项
 
-1. Owner 真机验收 DVL2-02；
-2. 通过后方可标 `owner_runtime_accepted` / `accepted_as_implemented`（另批）；
-3. 不得启动 DVL2-03；不得 push。
+1. ~~Owner 真机验收 DVL2-02；~~（已完成）
+2. ~~通过后方可标 `owner_runtime_accepted` / `accepted_as_implemented`；~~（已完成）
+3. 不得启动 DVL2-03 全量；不得 push。
 
 ### 重要信息
 
