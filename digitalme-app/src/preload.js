@@ -82,6 +82,8 @@ const api = {
   actBehalfRevealArtifact: (payload) => ipcRenderer.invoke("actBehalf:revealArtifact", payload),
   actBehalfReviewDeliverableVersion: (payload) =>
     ipcRenderer.invoke("actBehalf:reviewDeliverableVersion", payload),
+  actBehalfConfirmPlanAndGenerate: (payload) =>
+    ipcRenderer.invoke("actBehalf:confirmPlanAndGenerate", payload),
   actBehalfRun: (payload) => ipcRenderer.invoke("actBehalf:run", payload),
   actBehalfAutoGenerate: (payload) => ipcRenderer.invoke("actBehalf:autoGenerate", payload),
   actBehalfSelectFiles: (payload) => ipcRenderer.invoke("actBehalf:selectFiles", payload),

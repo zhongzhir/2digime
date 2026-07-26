@@ -40,6 +40,7 @@ const { recomputeCurrentPreparationReadiness } = require("./act-behalf/deliverab
 const { reconcileTaskPackages } = require("./act-behalf/deliverable-package-recovery");
 const deliverableGeneration = require("./act-behalf/deliverable-generation");
 const deliverableArtifactFs = require("./act-behalf/deliverable-artifact-fs");
+const { confirmPlanAndGenerate } = require("./act-behalf/deliverable-confirm-and-generate");
 const { parseActBehalfOutput, buildActBehalfMessages, parseEmailOutput, buildEmailMessages, parseVideoAudioOutput, buildVideoAudioMessages, buildVideoAudioExport } = require("./act-behalf/parse-output");
 const { normalizeTaskIntent, assertTaskIntentMinimal, detectTaskType, TASK_TYPES } = require("./act-behalf/task-intent");
 const {
@@ -3175,6 +3176,38 @@ ipcMain.handle("actBehalf:reviewDeliverableVersion", async (_e, payload) => {
       ok: false,
       code: err && err.code ? err.code : "review_failed",
       message: err && err.message ? err.message : "无法更新审阅状态。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:confirmPlanAndGenerate", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const taskId = payload && payload.taskId ? String(payload.taskId) : "";
+    if (!taskId) return { ok: false, code: "task_required", message: "缺少任务。" };
+    return await confirmPlanAndGenerate({
+      userData,
+      taskId,
+      understanding: payload && payload.understanding,
+      items: payload && payload.items,
+      revisionExpected: payload || {},
+      loadPlanForTaskOrFail,
+      assertFreshPlan,
+      extractRevisionExpected,
+      saveTaskPlanPointers,
+      buildDeliverablePlanView,
+      getTask: (ud, id) => actBehalfStore.getTask(ud, id, { heal: false }),
+      getPlan: (ud, planId) => deliverablePlanStore.getPlan(ud, planId),
+      saveTaskExecution: (ud, id, exec) => saveTaskPackageExecution(ud, id, exec),
+      reconcilePackagesForTask: reconcileDeliverablePackagesForTask,
+      callModel: buildGenerationCallModel(),
+      imageMode: generationImageMode(),
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "confirm_and_generate_failed",
+      message: err && err.message ? err.message : "无法生成成果。",
     };
   }
 });

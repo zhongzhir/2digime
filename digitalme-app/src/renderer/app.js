@@ -7060,109 +7060,59 @@ async function restoreActDeliverablePlan(taskId) {
     } else {
       window.DeliverablePlannerUi.hidePlanPanel();
     }
-    await refreshActPackagePrep(taskId, view);
+    await refreshActDeliverableResults(taskId, view);
   } catch {
     /* ignore restore failures for plan panel */
   }
 }
 
-async function refreshActPackagePrep(taskId, planView) {
-  if (!window.DeliverablePlannerUi || !window.DeliverablePlannerUi.renderPackagePrep) return;
+async function refreshActDeliverableResults(taskId, planView) {
+  if (!window.DeliverablePlannerUi) return;
   const view = planView || null;
-  const planning = (view && view.deliverablePlanning) || {};
-  const hasConfirmed = !!(planning && planning.activeConfirmedVersionId);
-  const includedCount = ((view && view.version && view.version.items) || []).filter(
-    (it) => !it.planDisposition || it.planDisposition === "included"
-  ).length;
-  const understanding = view && view.version && view.version.understanding;
-  const oneLine =
-    (understanding &&
-      (understanding.summary ||
-        understanding.oneLineSummary ||
-        (understanding.goal && (understanding.goal.value || understanding.goal)))) ||
-    "";
-
-  if (!taskId || !window.digitalMe.actBehalfGetDeliverablePackage) {
-    window.DeliverablePlannerUi.renderPackagePrep({
-      hasConfirmed,
-      includedCount,
-      oneLineUnderstanding: oneLine ? String(oneLine) : "",
-      package: null,
-      deliverables: [],
-      readiness: null,
-    });
-    return;
-  }
-
+  const hasPlan = !!(view && view.version);
   let pkgView = null;
-  try {
-    pkgView = await window.digitalMe.actBehalfGetDeliverablePackage({ taskId });
-  } catch {
-    pkgView = null;
+  let hasReady = false;
+  let planChanged = false;
+
+  if (taskId && window.digitalMe.actBehalfGetDeliverablePackage) {
+    try {
+      pkgView = await window.digitalMe.actBehalfGetDeliverablePackage({ taskId });
+    } catch {
+      pkgView = null;
+    }
   }
 
   const pkg = pkgView && pkgView.package ? pkgView.package : null;
   const deliverables = (pkgView && pkgView.deliverables) || [];
-  const readiness = (pkgView && pkgView.readiness) || null;
-  window.DeliverablePlannerUi.renderPackagePrep({
-    hasConfirmed,
-    includedCount: deliverables.length ? deliverables.length : includedCount,
-    oneLineUnderstanding: oneLine ? String(oneLine) : "",
-    package: pkg,
-    deliverables,
-    readiness,
-  });
+  hasReady = deliverables.some(
+    (d) => d && d.planDisposition === "included" && (d.generationStatus === "ready" || d.currentVersionId)
+  );
+  const planning = (view && view.deliverablePlanning) || {};
+  planChanged = !!(planning && planning.currentDraftVersionId);
+
   if (pkg && pkg.id) {
+    actBehalfState.activePackageId = pkg.id;
     await refreshActGenerationPanel(pkg.id);
+  } else if (window.DeliverablePlannerUi.renderGenerationPanel) {
+    window.DeliverablePlannerUi.renderGenerationPanel(null);
+  }
+
+  if (window.DeliverablePlannerUi.updatePrimaryGenerateButton) {
+    let mode = "generate";
+    if (hasReady && planChanged) mode = "new_version";
+    else if (hasReady) mode = "regenerate";
+    window.DeliverablePlannerUi.updatePrimaryGenerateButton({
+      mode,
+      disabled: !hasPlan,
+      busy: false,
+    });
   }
 }
 
-window.__digitalMeRefreshPackagePrep = async function (view) {
-  const taskId =
-    (view && view.taskId) ||
-    actBehalfState.taskId ||
-    null;
-  await refreshActPackagePrep(taskId, view);
+window.__digitalMeRefreshDeliverableResults = async function (view) {
+  const taskId = (view && view.taskId) || actBehalfState.taskId || null;
+  await refreshActDeliverableResults(taskId, view);
 };
-
-async function handlePrepareDeliverablePackage() {
-  const taskId = actBehalfState.taskId;
-  if (!taskId) {
-    setActProgress("请先确认成果计划后再准备成果包。");
-    return;
-  }
-  if (!window.digitalMe.actBehalfPrepareDeliverablePackage) {
-    setActProgress("当前版本尚未开放成果包准备。");
-    return;
-  }
-  setActProgress("正在准备成果包…");
-  const res = await window.digitalMe.actBehalfPrepareDeliverablePackage({ taskId });
-  if (!res || !res.ok) {
-    setActProgress((res && res.message) || "无法准备成果包。");
-    await refreshActPackagePrep(taskId);
-    return;
-  }
-  setActProgress(
-    (res.readiness && res.readiness.userSummary) ||
-      res.message ||
-      "成果包已准备；当前尚无法生成真实文件。"
-  );
-  await restoreActDeliverablePlan(taskId);
-}
-
-async function handleViewDeliverablePackagePrep() {
-  const taskId = actBehalfState.taskId;
-  if (!taskId) return;
-  await refreshActPackagePrep(taskId);
-  const view = await window.digitalMe.actBehalfGetDeliverablePackage({ taskId });
-  setActProgress(
-    (view && view.readiness && view.readiness.userSummary) ||
-      "成果包已准备，可以开始生成。"
-  );
-  if (view && view.package && view.package.id) {
-    await refreshActGenerationPanel(view.package.id);
-  }
-}
 
 async function refreshActGenerationPanel(packageId) {
   if (!packageId || !window.digitalMe.actBehalfGetDeliverablePackageById) return;
@@ -7174,25 +7124,65 @@ async function refreshActGenerationPanel(packageId) {
   }
 }
 
-async function handleGenerateDeliverablePackage() {
-  const taskId = actBehalfState.taskId;
-  if (!taskId) {
-    setActProgress("请先准备成果包。");
+async function handleGenerateFromPlan() {
+  if (!actBehalfState.taskId) {
+    setActProgress("请先形成预计交付。");
     return;
   }
-  const pkgView = await window.digitalMe.actBehalfGetDeliverablePackage({ taskId });
-  const packageId =
-    (pkgView && pkgView.package && pkgView.package.id) ||
-    (pkgView && pkgView.deliverableExecution && pkgView.deliverableExecution.activePackageId);
-  if (!packageId) {
-    setActProgress("请先准备成果包。");
+  if (!window.digitalMe.actBehalfConfirmPlanAndGenerate) {
+    setActProgress("当前版本尚未开放成果生成。");
     return;
+  }
+  const goal = ($("act-request") && $("act-request").value.trim()) || "";
+  const understanding =
+    window.DeliverablePlannerUi && window.DeliverablePlannerUi.collectUnderstandingFromDom
+      ? window.DeliverablePlannerUi.collectUnderstandingFromDom(goal)
+      : undefined;
+  const items =
+    window.DeliverablePlannerUi && window.DeliverablePlannerUi.collectItemsFromDom
+      ? window.DeliverablePlannerUi.collectItemsFromDom()
+      : undefined;
+
+  if (window.DeliverablePlannerUi && window.DeliverablePlannerUi.updatePrimaryGenerateButton) {
+    window.DeliverablePlannerUi.updatePrimaryGenerateButton({
+      mode: "generate",
+      busy: true,
+      disabled: false,
+    });
   }
   setActProgress("正在生成成果…");
-  const res = await window.digitalMe.actBehalfGenerateDeliverablePackage({ packageId });
-  setActProgress((res && res.message) || (res && res.ok ? "成果已生成。" : "生成未完成。"));
-  await refreshActGenerationPanel(packageId);
-  await refreshActPackagePrep(taskId);
+
+  const res = await window.digitalMe.actBehalfConfirmPlanAndGenerate({
+    taskId: actBehalfState.taskId,
+    understanding,
+    items,
+    ...(actBehalfState.planRevision || {}),
+  });
+
+  if (res && res.code === "stale_plan_state") {
+    setActProgress("成果要求已变化，正在重新加载…");
+    await restoreActDeliverablePlan(actBehalfState.taskId);
+    return;
+  }
+
+  if (res && res.revision) actBehalfState.planRevision = res.revision;
+  if (res && res.planView && window.DeliverablePlannerUi) {
+    window.DeliverablePlannerUi.renderPlanView(res.planView);
+  }
+  if (res && res.packageId) {
+    actBehalfState.activePackageId = res.packageId;
+    await refreshActGenerationPanel(res.packageId);
+  }
+
+  if (!res || !res.ok) {
+    setActProgress((res && res.message) || "生成未完成。");
+    await refreshActDeliverableResults(actBehalfState.taskId);
+    return;
+  }
+
+  setActProgress(res.message || "成果已生成。");
+  await restoreActDeliverablePlan(actBehalfState.taskId);
+  await refreshActTaskList();
 }
 
 async function handleGenerationPanelClick(ev) {
@@ -7200,7 +7190,7 @@ async function handleGenerationPanelClick(ev) {
   if (!btn) return;
   const action = btn.getAttribute("data-action");
   const packageId = actBehalfState.activePackageId;
-  if (action === "open-art") {
+  if (action === "open-art" || action === "open-primary") {
     const id = btn.getAttribute("data-artifact-id");
     const res = await window.digitalMe.actBehalfOpenArtifact({ artifactRefId: id });
     if (!res || !res.ok) setActProgress((res && res.message) || "无法打开文件。");
@@ -7224,11 +7214,16 @@ async function handleGenerationPanelClick(ev) {
   }
   if (action === "regen") {
     const deliverableId = btn.getAttribute("data-deliverable-id");
-    if (!packageId || !deliverableId) return;
+    if (!packageId || !deliverableId) {
+      // No package yet — fall back to one-click full generate.
+      await handleGenerateFromPlan();
+      return;
+    }
     setActProgress("正在重新生成…");
     const res = await window.digitalMe.actBehalfGenerateDeliverable({ packageId, deliverableId });
     setActProgress((res && res.message) || (res && res.ok ? "已重新生成。" : "重新生成未成功。"));
     await refreshActGenerationPanel(packageId);
+    await refreshActDeliverableResults(actBehalfState.taskId);
   }
 }
 
@@ -7280,7 +7275,7 @@ async function handleFormDeliverablePlan() {
       : res.planningMode === "rule_based"
         ? "（本机规则规划）"
         : "";
-  setActProgress((res.statusBanner || "已形成预计交付，可增删改排后保存或确认。") + modeNote);
+  setActProgress((res.statusBanner || "已形成预计交付，可调整后生成成果。") + modeNote);
   await refreshActTaskList();
 }
 
@@ -7293,7 +7288,7 @@ async function handleSaveDeliverablePlanDraft() {
   const goal = ($("act-request") && $("act-request").value.trim()) || "";
   const understanding = window.DeliverablePlannerUi.collectUnderstandingFromDom(goal);
   const items = window.DeliverablePlannerUi.collectItemsFromDom();
-  setActProgress("正在保存成果计划草稿…");
+  setActProgress("正在保存草稿…");
   const res = await window.digitalMe.actBehalfPlanSaveDraft({
     taskId: actBehalfState.taskId,
     understanding,
@@ -7301,62 +7296,17 @@ async function handleSaveDeliverablePlanDraft() {
     ...(actBehalfState.planRevision || {}),
   });
   if (res && res.code === "stale_plan_state") {
-    setActProgress("成果计划已变化，正在重新加载…");
+    setActProgress("成果要求已变化，正在重新加载…");
     await restoreActDeliverablePlan(actBehalfState.taskId);
     return;
   }
   if (!res || !res.ok) {
-    setActProgress((res && res.message) || "保存成果计划草稿失败。");
+    setActProgress((res && res.message) || "保存草稿失败。");
     return;
   }
   actBehalfState.planRevision = res.revision || null;
   window.DeliverablePlannerUi.renderPlanView(res);
-  setActProgress(res.message || "成果计划草稿已保存。");
-}
-
-async function handleConfirmDeliverablePlan() {
-  if (!actBehalfState.taskId) {
-    setActProgress("请先形成预计交付。");
-    return;
-  }
-  if (window.DeliverablePlannerUi && window.digitalMe.actBehalfPlanSaveDraft) {
-    const goal = ($("act-request") && $("act-request").value.trim()) || "";
-    const understanding = window.DeliverablePlannerUi.collectUnderstandingFromDom(goal);
-    const items = window.DeliverablePlannerUi.collectItemsFromDom();
-    const saved = await window.digitalMe.actBehalfPlanSaveDraft({
-      taskId: actBehalfState.taskId,
-      understanding,
-      items,
-      ...(actBehalfState.planRevision || {}),
-    });
-    if (saved && saved.code === "stale_plan_state") {
-      setActProgress("成果计划已变化，正在重新加载…");
-      await restoreActDeliverablePlan(actBehalfState.taskId);
-      return;
-    }
-    if (!saved || !saved.ok) {
-      setActProgress((saved && saved.message) || "确认前保存草稿失败。");
-      return;
-    }
-    actBehalfState.planRevision = saved.revision || null;
-  }
-  const res = await window.digitalMe.actBehalfPlanConfirm({
-    taskId: actBehalfState.taskId,
-    ...(actBehalfState.planRevision || {}),
-  });
-  if (res && res.code === "stale_plan_state") {
-    setActProgress("成果计划已变化，正在重新加载…");
-    await restoreActDeliverablePlan(actBehalfState.taskId);
-    return;
-  }
-  if (!res || !res.ok) {
-    setActProgress((res && res.message) || "无法确认成果计划。");
-    return;
-  }
-  actBehalfState.planRevision = res.revision || null;
-  if (window.DeliverablePlannerUi) window.DeliverablePlannerUi.renderPlanView(res);
-  await refreshActPackagePrep(actBehalfState.taskId, res);
-  setActProgress(res.message || "成果计划已准备，尚未开始执行。");
+  setActProgress(res.message || "草稿已保存。");
 }
 
 async function handleCancelDeliverablePlanDraft() {
@@ -7483,11 +7433,8 @@ function wireActBehalfUi() {
     if (window.DeliverablePlannerUi) window.DeliverablePlannerUi.addBlankItem();
   });
   $("btn-act-plan-save-draft")?.addEventListener("click", () => handleSaveDeliverablePlanDraft());
-  $("btn-act-plan-confirm")?.addEventListener("click", () => handleConfirmDeliverablePlan());
+  $("btn-act-generate-from-plan")?.addEventListener("click", () => handleGenerateFromPlan());
   $("btn-act-plan-cancel-draft")?.addEventListener("click", () => handleCancelDeliverablePlanDraft());
-  $("btn-act-prepare-package")?.addEventListener("click", () => handlePrepareDeliverablePackage());
-  $("btn-act-view-package-prep")?.addEventListener("click", () => handleViewDeliverablePackagePrep());
-  $("btn-act-generate-package")?.addEventListener("click", () => handleGenerateDeliverablePackage());
   $("act-generation-items")?.addEventListener("click", (ev) => handleGenerationPanelClick(ev));
   {
     const showLegacy =

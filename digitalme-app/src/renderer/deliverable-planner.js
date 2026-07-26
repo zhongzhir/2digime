@@ -238,19 +238,24 @@
     if (!panel) return;
     if (!view || !view.version) {
       panel.classList.add("hidden");
-      renderPackagePrep(null);
+      updatePrimaryGenerateButton({ mode: "generate", disabled: true });
       return;
     }
     panel.classList.remove("hidden");
     if ($("act-plan-status")) {
-      $("act-plan-status").textContent = view.statusBanner || view.message || "";
+      // One-line task understanding only; avoid internal readiness jargon.
+      const u = view.version.understanding || {};
+      const one =
+        u.summary ||
+        u.oneLineSummary ||
+        (u.goal && (u.goal.value || u.goal)) ||
+        view.statusBanner ||
+        "";
+      $("act-plan-status").textContent = one ? String(one) : "";
     }
     if ($("act-plan-readiness")) {
-      const r = view.readiness || {};
-      const parts = [];
-      if (r.userSummary) parts.push(r.userSummary);
-      if (r.status) parts.push("执行条件评估：" + r.status);
-      $("act-plan-readiness").textContent = parts.join(" ");
+      // Hide pre-generation stats / internal readiness from ordinary UI.
+      $("act-plan-readiness").textContent = "";
     }
     renderUnderstanding(view.version.understanding);
     const itemsRoot = $("act-plan-items");
@@ -260,63 +265,24 @@
       fillItemFields(itemsRoot, items);
       bindItemControls(itemsRoot);
     }
-    if (typeof global.__digitalMeRefreshPackagePrep === "function") {
-      global.__digitalMeRefreshPackagePrep(view);
+    if (typeof global.__digitalMeRefreshDeliverableResults === "function") {
+      global.__digitalMeRefreshDeliverableResults(view);
     }
   }
 
-  function renderPackagePrep(state) {
-    const summary = $("act-package-prep-summary");
-    const status = $("act-package-prep-status");
-    const btnPrepare = $("btn-act-prepare-package");
-    const btnView = $("btn-act-view-package-prep");
-    const btnGenerate = $("btn-act-generate-package");
-    if (!summary || !status || !btnPrepare || !btnView) return;
-
-    const hasConfirmed = !!(state && state.hasConfirmed);
-    const hasPackage = !!(state && state.package);
-    const readiness = (state && state.readiness) || null;
-    const itemCount =
-      state && Array.isArray(state.deliverables)
-        ? state.deliverables.filter((d) => d && d.planDisposition === "included").length
-        : state && state.includedCount != null
-          ? Number(state.includedCount)
-          : 0;
-    const oneLine =
-      (state && state.oneLineUnderstanding) ||
-      (state && state.understandingSummary) ||
-      "";
-
-    if (!hasConfirmed) {
-      summary.textContent = "请先确认成果计划，再准备成果包。";
-      status.textContent = "";
-      btnPrepare.classList.add("hidden");
-      btnPrepare.disabled = true;
-      btnView.classList.add("hidden");
-      if (btnGenerate) btnGenerate.classList.add("hidden");
-      return;
-    }
-
-    const parts = [];
-    if (oneLine) parts.push(oneLine);
-    parts.push("预计交付 " + itemCount + " 项");
-    summary.textContent = parts.join(" · ");
-
-    if (!hasPackage) {
-      status.textContent = "尚未准备成果包。";
-      btnPrepare.classList.remove("hidden");
-      btnPrepare.disabled = false;
-      btnView.classList.add("hidden");
-      if (btnGenerate) btnGenerate.classList.add("hidden");
-      return;
-    }
-
-    status.textContent =
-      (readiness && readiness.userSummary) ||
-      "成果包已准备，可以开始生成。";
-    btnPrepare.classList.add("hidden");
-    btnView.classList.remove("hidden");
-    if (btnGenerate) btnGenerate.classList.remove("hidden");
+  function updatePrimaryGenerateButton(state) {
+    const btn = $("btn-act-generate-from-plan");
+    if (!btn) return;
+    const mode = (state && state.mode) || "generate";
+    const busy = !!(state && state.busy);
+    const disabled = !!(state && state.disabled) || busy;
+    let label = "生成成果";
+    if (busy) label = "正在生成…";
+    else if (mode === "regenerate") label = "重新生成成果";
+    else if (mode === "new_version") label = "生成新版本";
+    btn.textContent = label;
+    btn.disabled = disabled;
+    btn.setAttribute("data-mode", mode);
   }
 
   function kindLabelZh(kind) {
@@ -329,6 +295,44 @@
     return map[kind] || kind || "成果";
   }
 
+  function userGenStatus(d) {
+    const s = d && d.generationStatus;
+    if (s === "ready" || (d && d.currentVersionId && s !== "failed" && s !== "generating" && s !== "blocked")) {
+      return "已生成";
+    }
+    if (s === "failed") return "生成失败";
+    if (s === "generating") return "正在生成";
+    if (s === "blocked" || s === "skipped_dependency") return "因依赖失败暂未生成";
+    return "等待生成";
+  }
+
+  function pickPrimaryArtifact(kind, arts) {
+    if (!arts || !arts.length) return null;
+    const prefer = {
+      webpage: ["html"],
+      presentation: ["pptx", "html"],
+      document: ["html", "docx", "md"],
+      image: ["png", "jpg", "jpeg", "webp"],
+    };
+    const order = prefer[kind] || [];
+    for (const fmt of order) {
+      const hit = arts.find((a) => String(a.format || "").toLowerCase() === fmt);
+      if (hit) return hit;
+    }
+    return arts[0];
+  }
+
+  function formatTime(iso) {
+    if (!iso) return "";
+    try {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return String(iso);
+      return d.toLocaleString();
+    } catch {
+      return String(iso);
+    }
+  }
+
   function renderGenerationPanel(view) {
     const panel = $("act-generation-panel");
     const status = $("act-generation-status");
@@ -336,32 +340,36 @@
     if (!panel || !itemsRoot) return;
     if (!view || !view.deliverables || !view.deliverables.length) {
       panel.classList.add("hidden");
+      if (status) status.textContent = "";
       return;
     }
     panel.classList.remove("hidden");
     const included = view.deliverables.filter((d) => d.planDisposition === "included");
-    const ready = included.filter((d) => d.generationStatus === "ready" || d.currentVersionId).length;
-    const failed = included.filter((d) => d.generationStatus === "failed").length;
-    if (status) {
-      status.textContent =
-        "共 " + included.length + " 项 · 已完成 " + ready + " · 未完成 " + failed;
-    }
     const versions = view.versions || {};
+    const anyGenerating = included.some((d) => d.generationStatus === "generating");
+    const anyReady = included.some((d) => d.generationStatus === "ready" || d.currentVersionId);
+    const anyFailed = included.some((d) => d.generationStatus === "failed");
+    if (status) {
+      if (included.length <= 1) {
+        status.textContent = "";
+      } else if (anyGenerating) {
+        status.textContent = "正在生成各项成果…";
+      } else if (anyFailed && anyReady) {
+        status.textContent = "部分成果已生成，部分未成功。";
+      } else if (anyFailed) {
+        status.textContent = "生成未完成。";
+      } else if (anyReady) {
+        status.textContent = "成果已生成。";
+      } else {
+        status.textContent = "";
+      }
+    }
+
     itemsRoot.innerHTML = included
       .map((d) => {
         const ver = d.currentVersionId ? versions[d.currentVersionId] : null;
         const label = kindLabelZh(d.kind);
-        const fmt =
-          (ver && ver.generator && ver.generator.uiFormatLabel) ||
-          (d.kind === "presentation" && !ver ? "" : "");
-        const st =
-          d.generationStatus === "ready"
-            ? "已生成"
-            : d.generationStatus === "failed"
-              ? "未成功"
-              : d.generationStatus === "generating"
-                ? "正在生成"
-                : "尚未生成";
+        const st = userGenStatus(d);
         const arts = (ver && (ver.artifactRefs || []).length
           ? ver.artifactRefs
           : ver && ver.artifactRef
@@ -374,30 +382,54 @@
           seen.add(a.id);
           return true;
         });
-        const openBtns = uniqueArts
-          .map(
-            (a) =>
+        const primary = pickPrimaryArtifact(d.kind, uniqueArts);
+        const secondaryArts = uniqueArts.filter((a) => !primary || a.id !== primary.id);
+        const metaParts = [label, st];
+        if (ver && ver.version != null) metaParts.push("版本 " + ver.version);
+        if (ver && (ver.createdAt || ver.generatedAt)) {
+          metaParts.push(formatTime(ver.createdAt || ver.generatedAt));
+        }
+        if (ver && ver.reviewStatus === "accepted") metaParts.push("已接受");
+        if (ver && ver.reviewStatus === "rejected") metaParts.push("已否定");
+
+        let actions = "";
+        if (st === "已生成" && primary) {
+          actions +=
+            `<button type="button" class="btn btn-primary" data-action="open-primary" data-artifact-id="${primary.id}">打开成果</button>`;
+          actions +=
+            `<button type="button" class="btn-ghost" data-action="accept-ver" data-version-id="${ver.id}">接受此版本</button>`;
+          actions +=
+            `<button type="button" class="btn-ghost" data-action="regen" data-deliverable-id="${d.id}">重新生成</button>`;
+          const moreItems = [];
+          moreItems.push(
+            `<button type="button" class="btn-ghost" data-action="reveal-art" data-artifact-id="${primary.id}">打开所在目录</button>`
+          );
+          if (ver) {
+            moreItems.push(
+              `<button type="button" class="btn-ghost" data-action="reject-ver" data-version-id="${ver.id}">否定此版本</button>`
+            );
+          }
+          secondaryArts.forEach((a) => {
+            moreItems.push(
               `<button type="button" class="btn-ghost" data-action="open-art" data-artifact-id="${a.id}">打开 ${escapeAttr(
-                a.format || "文件"
-              )}</button>` +
-              `<button type="button" class="btn-ghost" data-action="reveal-art" data-artifact-id="${a.id}">打开所在目录</button>`
-          )
-          .join("");
-        const reviewBtns = ver
-          ? `<button type="button" class="btn-ghost" data-action="accept-ver" data-version-id="${ver.id}">接受此版本</button>` +
-            `<button type="button" class="btn-ghost" data-action="reject-ver" data-version-id="${ver.id}">否定此版本</button>` +
-            `<button type="button" class="btn-ghost" data-action="regen" data-deliverable-id="${d.id}">重新生成</button>`
-          : `<button type="button" class="btn-ghost" data-action="regen" data-deliverable-id="${d.id}">生成此项</button>`;
+                a.format || "其他格式"
+              )}</button>`
+            );
+          });
+          actions +=
+            `<details class="act-gen-more"><summary class="muted">更多…</summary><div class="builder-actions">${moreItems.join(
+              ""
+            )}</div></details>`;
+        } else if (st === "生成失败" || st === "因依赖失败暂未生成") {
+          actions +=
+            `<button type="button" class="btn" data-action="regen" data-deliverable-id="${d.id}">重试生成</button>`;
+        }
+
         return (
           `<div class="act-gen-item" data-deliverable-id="${d.id}">` +
           `<div class="act-gen-item-head"><strong>${escapeAttr(d.title || label)}</strong>` +
-          `<span class="muted">${label}${fmt ? " · " + escapeAttr(fmt) : ""} · ${st}` +
-          (ver ? " · 版本 " + ver.version : "") +
-          (ver && ver.reviewStatus && ver.reviewStatus !== "unreviewed"
-            ? " · " + (ver.reviewStatus === "accepted" ? "已接受" : "已否定")
-            : "") +
-          `</span></div>` +
-          `<div class="builder-actions">${openBtns}${reviewBtns}</div>` +
+          `<span class="muted">${metaParts.map(escapeAttr).join(" · ")}</span></div>` +
+          (actions ? `<div class="builder-actions">${actions}</div>` : "") +
           `</div>`
         );
       })
@@ -416,7 +448,9 @@
     if (panel) panel.classList.add("hidden");
     if ($("act-plan-status")) $("act-plan-status").textContent = "";
     if ($("act-plan-readiness")) $("act-plan-readiness").textContent = "";
-    renderPackagePrep(null);
+    const gen = $("act-generation-panel");
+    if (gen) gen.classList.add("hidden");
+    updatePrimaryGenerateButton({ mode: "generate", disabled: true });
   }
 
   function addBlankItem() {
@@ -445,8 +479,8 @@
 
   global.DeliverablePlannerUi = {
     renderPlanView,
-    renderPackagePrep,
     renderGenerationPanel,
+    updatePrimaryGenerateButton,
     hidePlanPanel,
     collectItemsFromDom,
     collectUnderstandingFromDom,

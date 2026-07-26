@@ -506,23 +506,14 @@
                     </div>
                     <div id="act-plan-items" class="act-plan-items" data-testid="act-plan-items"></div>
                   </div>
-                  <div class="builder-actions">
-                    <button id="btn-act-plan-save-draft" class="btn-ghost" type="button" data-testid="btn-act-plan-save-draft">保存成果计划草稿</button>
-                    <button id="btn-act-plan-confirm" class="btn btn-primary" type="button" data-testid="btn-act-plan-confirm">确认成果计划</button>
-                    <button id="btn-act-plan-cancel-draft" class="btn-ghost" type="button" data-testid="btn-act-plan-cancel-draft">取消当前草稿</button>
+                  <div class="builder-actions act-plan-primary-actions">
+                    <button id="btn-act-plan-save-draft" class="btn-ghost" type="button" data-testid="btn-act-plan-save-draft">保存草稿</button>
+                    <button id="btn-act-generate-from-plan" class="btn btn-primary" type="button" data-testid="btn-act-generate-from-plan">生成成果</button>
+                    <button id="btn-act-plan-cancel-draft" class="btn-ghost act-text-secondary" type="button" data-testid="btn-act-plan-cancel-draft">取消当前草稿</button>
                   </div>
-                  <div id="act-package-prep-panel" class="act-package-prep-panel" data-testid="act-package-prep-panel">
-                    <p id="act-package-prep-summary" class="muted write-rail-hint" data-testid="act-package-prep-summary"></p>
-                    <p id="act-package-prep-status" class="muted write-rail-hint" data-testid="act-package-prep-status"></p>
-                    <div class="builder-actions">
-                      <button id="btn-act-prepare-package" class="btn btn-primary hidden" type="button" data-testid="btn-act-prepare-package">准备成果包</button>
-                      <button id="btn-act-view-package-prep" class="btn hidden" type="button" data-testid="btn-act-view-package-prep">查看成果包准备</button>
-                      <button id="btn-act-generate-package" class="btn btn-primary hidden" type="button" data-testid="btn-act-generate-package">生成成果</button>
-                    </div>
-                    <div id="act-generation-panel" class="act-generation-panel hidden" data-testid="act-generation-panel">
-                      <p id="act-generation-status" class="muted write-rail-hint" data-testid="act-generation-status"></p>
-                      <div id="act-generation-items" class="act-generation-items" data-testid="act-generation-items"></div>
-                    </div>
+                  <div id="act-generation-panel" class="act-generation-panel hidden" data-testid="act-generation-panel">
+                    <p id="act-generation-status" class="muted write-rail-hint" data-testid="act-generation-status"></p>
+                    <div id="act-generation-items" class="act-generation-items" data-testid="act-generation-items"></div>
                   </div>
                 </section>
                 <details id="act-legacy-direct-run" class="act-legacy-direct-run hidden" data-testid="act-legacy-direct-run">

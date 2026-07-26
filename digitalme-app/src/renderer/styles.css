@@ -3173,6 +3173,21 @@ body {
   flex-direction: column;
   gap: 4px;
 }
+.act-gen-more {
+  display: inline-block;
+}
+.act-gen-more > summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.85rem;
+}
+.act-plan-primary-actions {
+  align-items: center;
+}
+.act-text-secondary {
+  font-size: 0.85rem;
+  color: var(--muted-foreground, #667085);
+}
 .act-legacy-direct-run {
   margin-top: 8px;
   font-size: 0.85rem;

@@ -2,7 +2,7 @@
 
 版本：v0.4
 状态：持续更新
-最后更新：2026-07-26（DVL2-03 真实成果生成：实现 `7047113`；`ready_for_owner_runtime_acceptance`；分支 `codex/dvl2-03-real-deliverable-generation`；不得 push；不得提前标 `implemented`）
+最后更新：2026-07-26（DVL2-03 一次点击生成 UX 修复；仍 `ready_for_owner_runtime_acceptance`；分支 `codex/dvl2-03-real-deliverable-generation`；不得 push；不得提前标 `implemented`）
 
 > **当前产品主线（2026-07-26）**：**第二纵向闭环** — 多模态成果包交付与渐进式主体构建。第一纵向闭环已 `accepted` / `completed`。
 > **最高架构与研发原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)（**v0.1.1 `active`**）。
@@ -21,7 +21,7 @@
 > 2. **BUG1 #6** = 七模块渐进式数字之我构建框架。
 > 3. 首个正式验收场景 = 为一个项目生成完整对外介绍成果包。
 > 4. 第一轮真实产物 = 正式介绍文档、演示文稿 PPT、单页 HTML、封面图片；视频/音频本轮不实现真实生成，用户面不得宣称已支持。
-> **当前下一任务**：**Owner 真机验收 DVL2-03**（分支 `codex/dvl2-03-real-deliverable-generation`；实现 `7047113`；`ready_for_owner_runtime_acceptance`）。DVL2-02 已 `accepted_as_implemented`。**不得** push；**不得**提前标 `owner_runtime_accepted` / `accepted_as_implemented` / `implemented`。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+> **当前下一任务**：**Owner 真机验收 DVL2-03**（分支 `codex/dvl2-03-real-deliverable-generation`；一次点击生成 UX 已修复；`ready_for_owner_runtime_acceptance`）。DVL2-02 已 `accepted_as_implemented`。**不得** push；**不得**提前标 `owner_runtime_accepted` / `accepted_as_implemented` / `implemented`。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
 > **R2 对话运行时**：保留基础设施；R2 代码 **retained as infrastructure**。生产默认入口仍为 legacy。
 > **Owner Electron 真机验收（2026-07-24）**：`accepted`（distill-me / R2 对话重试 / doing-context / PAN-01S 等）。
 > **confirmed identity → act context（2026-07-24，`2f1b7bd`）**：`accepted`（历史整合基线；**不是**当前 HEAD）。
@@ -483,6 +483,20 @@ flowchart TB
 7. **允许反对**：Owner 明确授权 AI 在本规范下提出反对；反对须附理由与更通用方案，不得仅说「不做」。
 8. **不重新发明轮子（2026-07-22）**：市场上已有、行之有效、形成惯例的功能和设计直接模仿同类产品，不需要创新。Digital Me 的创新集中于主体性建立和数字之我的应用，精力和 token 投入在这上面，不浪费在重复造轮子上。
 9. **不做公告牌/BBS 式协作匹配（2026-07-22）**：协作匹配必须是 AI 驱动的全自动机制——Digital Me 理解每个用户的能力、需求和偏好，自动完成语义匹配，主动推荐协作机会。不做公告牌、不做手动搜索、不做关键词匹配。如果一个功能不是基于 AI 带来的新机制、新流程、新场景，不值得去做。
+
+#### 5.4.2 Owner—CTO—AI 协作效率原则（2026-07-26）
+
+上位文件：[`digitalme_owner_cto_ai_collaboration_principles_v0.1.md`](digitalme_owner_cto_ai_collaboration_principles_v0.1.md)（**v0.1 `active`**）。
+
+执行补充（用户主流程与确认负担）：
+
+1. **内部领域对象不得自然转化为用户操作步骤**（例如 Package / Snapshot / Attempt / reconciliation 可保留在后台，不得成为普通用户必点流程）；
+2. **每增加一个确认、按钮或阶段，必须证明用户确实需要作出新的决策**；
+3. **没有新决策，就不得增加新确认**；
+4. **后台可保留复杂状态机，前台必须呈现简单的用户意图**；
+5. **默认主流程应尽可能一次操作完成**；
+6. **普通实现细节不得升级为 Owner 多轮确认**；
+7. **Owner 验收优先判断真实用户价值，而不是内部对象是否完整**。
 
 #### 5.4.1 规划、执行、实现与运维的固定机制（2026-07-16）
 

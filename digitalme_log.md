@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-07-26 DVL2-03 一次点击生成 · UX 修复（待 Owner 再验收）
+
+### 本次目标
+
+Owner 真机发现多步内部流程暴露为用户操作；改为「定义成果 → 一次点击生成成果 → 使用成果」。
+
+### 本次完成
+
+1. 新增 `actBehalf:confirmPlanAndGenerate`：main 内串联 save/reuse → confirm → prepare/reuse package → generate；
+2. 普通 UI 删除：确认成果计划 / 准备成果包 / 查看成果包准备 / 成果包已准备 / 生成此项；
+3. 唯一主按钮：生成成果 / 重新生成成果 / 生成新版本 / 正在生成…；
+4. 生成后操作合并为：打开成果 · 接受 · 重新生成 · 更多…；
+5. 核心测试：`test:dvl2-03-one-click`；回归 DVL2-01/02/03；
+6. 原则同步：引用 `digitalme_owner_cto_ai_collaboration_principles_v0.1.md` 至 context / log / cursor rule；
+7. 状态仍为：`implementation_complete_pending_owner_acceptance` / `ready_for_owner_runtime_acceptance`。
+
+### 待办事项
+
+1. Owner 真机再验收一次点击主路径；
+2. 通过后再标 `owner_runtime_accepted`；
+3. 不得 push。
+
+---
+
 ## 2026-07-26 DVL2-03 真实成果生成 · 待 Owner 真机验收
 
 ### 本次目标

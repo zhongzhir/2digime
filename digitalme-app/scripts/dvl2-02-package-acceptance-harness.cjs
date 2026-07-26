@@ -99,20 +99,22 @@ async function runPhaseA({ BrowserWindow }) {
   })()`);
   assert.equal(confirmed.ok, true);
 
-  // Harness confirmed via IPC — refresh package prep UI from authoritative state.
+  // Harness confirmed via IPC — refresh results UI from authoritative state.
   await win.webContents.executeJavaScript(`(async () => {
     const taskId = ${JSON.stringify(taskId)};
     const view = await window.digitalMe.actBehalfPlanGet({ taskId });
     if (window.DeliverablePlannerUi) window.DeliverablePlannerUi.renderPlanView(view);
-    if (typeof window.__digitalMeRefreshPackagePrep === 'function') {
+    if (typeof window.__digitalMeRefreshDeliverableResults === 'function') {
+      await window.__digitalMeRefreshDeliverableResults(view);
+    } else if (typeof window.__digitalMeRefreshPackagePrep === 'function') {
       await window.__digitalMeRefreshPackagePrep(view);
     }
   })()`);
 
   await waitFor(
     win.webContents,
-    `() => { const btn=document.querySelector('#btn-act-prepare-package'); return !!(btn && !btn.classList.contains('hidden') && !btn.disabled); }`,
-    "准备成果包按钮可用"
+    `() => { const btn=document.querySelector('#btn-act-generate-from-plan'); return !!(btn && !btn.disabled); }`,
+    "生成成果按钮可用"
   );
 
   const prepared = await win.webContents.executeJavaScript(
@@ -137,11 +139,15 @@ async function runPhaseA({ BrowserWindow }) {
     const body = document.body ? document.body.innerText : '';
     return {
       hasStartGenerate: body.includes('开始生成成果'),
-      prepStatus: (document.querySelector('#act-package-prep-status') || {}).textContent || '',
-      viewVisible: !!(document.querySelector('#btn-act-view-package-prep') && !document.querySelector('#btn-act-view-package-prep').classList.contains('hidden')),
+      hasPrepareBtn: body.includes('准备成果包'),
+      hasConfirmBtn: body.includes('确认成果计划'),
+      hasGenerateBtn: !!(document.querySelector('#btn-act-generate-from-plan')),
     };
   })()`);
   assert.equal(uiText.hasStartGenerate, false, "UI must not show 开始生成成果");
+  assert.equal(uiText.hasPrepareBtn, false, "UI must not show 准备成果包");
+  assert.equal(uiText.hasConfirmBtn, false, "UI must not show 确认成果计划");
+  assert.equal(uiText.hasGenerateBtn, true, "UI must show 生成成果");
 
   await win.webContents.executeJavaScript(
     `window.digitalMe.actBehalfGetDeliverablePackage({ taskId: ${JSON.stringify(taskId)} })`
