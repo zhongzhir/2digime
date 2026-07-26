@@ -2,19 +2,78 @@
 
 版本：v0.1.1
 日期：2026-07-26
-状态：`specified` / `codex_review_passed` / `owner_accepted` / `frozen_for_implementation` / `implementation_authorized` / `implementation_in_progress` / `ready_for_owner_runtime_acceptance`
-实施：`implementation_in_progress`
+状态：`specified` / `codex_review_passed` / `owner_accepted` / `frozen_for_implementation` / `implementation_authorized` / `owner_runtime_accepted` / `accepted_as_implemented`
+实施：`implemented`
+实现基线：`6e7c38401466c08660890080e763430bf1f3a44d`
 上位合同：[`digitalme_phase1_task_DVL2-00_product_and_data_contracts_v0.1.md`](digitalme_phase1_task_DVL2-00_product_and_data_contracts_v0.1.md)（**DVL2-00 v0.1.1** / `owner_accepted` / `frozen_for_implementation`）
-基线：`aa9a8c56186edff9020b0cb0f3633b0571c2a17a`
+规格冻结基线：`aa9a8c56186edff9020b0cb0f3633b0571c2a17a`
 所属架构：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)
 
-> **正式结论（实现复核）**：DVL2-01 已获实施授权并完成两轮集中修复与 CTO 最终实现复核；当前为 `ready_for_owner_runtime_acceptance`。实施状态仍为 `implementation_in_progress`。**不得**标 `implemented` / `completed` / `owner_verified` / `accepted_as_implemented`。下一步为 Owner 真机验收。冲突时：架构原则文 > DVL2-00 > 本文。
+> **正式结论（Owner 真机验收收口）**：DVL2-01 成果规划器已按冻结范围实现并通过 Owner 真机验收（`owner_runtime_accepted` / `accepted_as_implemented`）。此处 `implemented` **仅**表示成果规划器闭环已落地并通过真机验收；**不**表示真实成果生成、成果包交付或按计划执行已经实现。冲突时：架构原则文 > DVL2-00 > 本文。
 
-### Implementation progress（非完成声明）
+### Implementation progress
 
 - 2026-07-26：第一轮集中修复——reconciliation fail-closed、Plan Store 严格校验、revision token、archive/soft-delete 同步、planning audit、两阶段进程重启验收。
 - 2026-07-26：第二轮集中修复——Plan Store 写临界区 CAS、`callModel→string` adapter、生命周期 severity 收敛、版本链校验增强。
-- 2026-07-26：**CTO 最终实现复核通过**（允许创建待 Owner 验收提交）：Store 级 CAS 通过；model-assisted fake 路径通过；lifecycle reconciliation 通过；版本链校验通过；Electron 两阶段进程重启恢复通过。**尚未**完成 Owner 真机验收；**不得**标 `implemented` / `completed`。
+- 2026-07-26：CTO 最终实现复核通过；实现提交 `6e7c384`。
+- 2026-07-26：**Owner 真机验收通过** → `owner_runtime_accepted` / `accepted_as_implemented`；实施 `implemented`（范围限定见上）。
+
+### Owner 真机验收记录
+
+**结论**：通过。
+
+已确认：
+
+- 可从自然语言目标形成预计交付；
+- 可查看任务理解和成果计划；
+- 可对成果项增删改排；
+- 可保存草稿；
+- 应用重启后可恢复；
+- 可确认成果计划；
+- 确认后显示「成果计划已准备，尚未开始执行」；
+- 未生成真实成果文件；
+- 未出现虚假下载、路径、生成进度或成果预览；
+- 当前「开始」仍为旧执行链路，不读取 `activeConfirmedVersionId`；
+- 当前成果计划 UI 信息较完整，但用户决策负担仍可进一步降低。
+
+### 非阻断后续项（P1；不回开 DVL2-01）
+
+**P1：执行入口衔接**
+
+在按成果计划执行能力完成前：
+
+- 已进入成果计划流程的任务，不应让「开始」按钮被误解为执行已确认计划；
+- 建议临时禁用该入口，或明确标注为旧版直接执行；
+- 后续执行入口必须绑定 `Task.deliverablePlanning.activeConfirmedVersionId`；
+- 不得绕过已确认计划进入旧执行链路。
+
+该问题属于后续阶段前置要求，不回开 DVL2-01。
+
+**P1：计划确认减负**
+
+后续 UI 优化采用渐进披露：
+
+默认简洁层：
+
+- 系统对目标的一句话理解；
+- 建议成果数量和摘要；
+- 关键假设；
+- 「按此计划继续」；
+- 「调整计划」。
+
+详细调整层：
+
+- 完整任务理解；
+- 成果类型、格式、优先级；
+- 依赖和风险；
+- 增删改排。
+
+原则：
+
+- 默认接受，只确认例外；
+- 系统先做可撤销假设；
+- 未解决问题不默认变成阻塞问卷；
+- 不向普通用户直接暴露内部依赖 ID、状态枚举等实现字段。
 
 ---
 

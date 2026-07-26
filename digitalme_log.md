@@ -5,6 +5,34 @@
 
 ---
 
+## 2026-07-26 DVL2-01 Owner 真机验收收口
+
+### 本次目标
+
+将 DVL2-01 Owner 真机验收结论写入权威文档并独立提交；不修改实现；不启动 DVL2-02；不 push。
+
+### 本次完成
+
+1. DVL2-01 → `owner_runtime_accepted` / `accepted_as_implemented`；实施 `implemented`；
+2. 实现基线固定为 `6e7c38401466c08660890080e763430bf1f3a44d`；
+3. 明确 `implemented` 仅覆盖成果规划器，不含真实成果生成 / 成果包交付 / 按计划执行；
+4. 写入 Owner 验收记录与两项非阻断 P1（执行入口衔接、计划确认减负 / 渐进披露 / 默认接受）；
+5. 最小同步 context / log / Cursor rule；DVL2-02 仍为 `not_started` / `not_authorized`。
+
+### 待办事项
+
+1. 等待 DVL2-02 任务起草与独立实施授权；
+2. 后续阶段处理 P1：执行入口须绑定 `activeConfirmedVersionId`；计划确认减负；
+3. 不得把「开始」旧链路误解为已按确认计划执行。
+
+### 重要信息
+
+1. **未修改 `digitalme-app/**`**。
+2. R3 / R2.5 / PAN-02 仍 `paused` / `deferred` / `blocked`。
+3. **不 push**。
+
+---
+
 ## 2026-07-26 DVL2-01 CTO 最终实现复核通过 · 待 Owner 真机验收提交
 
 ### 本次目标
