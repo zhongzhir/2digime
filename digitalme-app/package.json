@@ -32,6 +32,7 @@
     "test:dvl2-02-package-acceptance": "node scripts/run-dvl2-02-package-acceptance.cjs",
     "test:dvl2-03-generation": "node scripts/test-dvl2-03-generation-contracts.cjs",
     "test:dvl2-03-one-click": "node scripts/test-dvl2-03-one-click-generate.cjs",
+    "test:dvl2-04-auto-learn": "node scripts/test-dvl2-04-auto-learn.cjs",
     "test:dvl2-03-generation-acceptance": "node scripts/run-dvl2-03-generation-acceptance.cjs",
     "test:cli": "node scripts/test-cli.cjs",
     "test:cli-enhanced": "node scripts/test-cli-enhanced.cjs",

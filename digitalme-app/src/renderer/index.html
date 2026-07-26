@@ -514,6 +514,14 @@
                   <div id="act-generation-panel" class="act-generation-panel hidden" data-testid="act-generation-panel">
                     <p id="act-generation-status" class="muted write-rail-hint" data-testid="act-generation-status"></p>
                     <div id="act-generation-items" class="act-generation-items" data-testid="act-generation-items"></div>
+                    <div id="act-learn-conflict" class="act-learn-conflict hidden" data-testid="act-learn-conflict">
+                      <p id="act-learn-conflict-question" class="write-rail-hint" data-testid="act-learn-conflict-question"></p>
+                      <div class="builder-actions">
+                        <button type="button" class="btn" id="btn-act-learn-keep" data-testid="btn-act-learn-keep" data-choice="keep_existing">保持原来的</button>
+                        <button type="button" class="btn btn-primary" id="btn-act-learn-update" data-testid="btn-act-learn-update" data-choice="apply_new">按新的更新</button>
+                        <button type="button" class="btn-ghost" id="btn-act-learn-once" data-testid="btn-act-learn-once" data-choice="session_only">仅本次使用</button>
+                      </div>
+                    </div>
                   </div>
                 </section>
                 <details id="act-legacy-direct-run" class="act-legacy-direct-run hidden" data-testid="act-legacy-direct-run">

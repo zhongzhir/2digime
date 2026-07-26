@@ -53,7 +53,7 @@ function recomputeExecutionReadiness(version, options) {
       const reason =
         it.contractSupport === "reserved_for_future" || it.contractSupport === "out_of_scope"
           ? "该类型当前版本暂不执行生成。"
-          : "真实成果生成能力尚未实施。";
+          : "该项当前尚不可生成。";
       blockers.push({ itemId: it.id, code: "runtime_unavailable", message: reason });
     }
   }
@@ -70,8 +70,8 @@ function recomputeExecutionReadiness(version, options) {
 
   if (status === "not_executable") {
     blockers.unshift({
-      code: "generation_not_implemented",
-      message: "成果计划已准备，但真实成果生成能力尚未实施。",
+      code: "generation_blocked",
+      message: "当前尚无法生成全部预计成果。",
     });
   }
 
@@ -86,10 +86,10 @@ function recomputeExecutionReadiness(version, options) {
     cacheValid: true,
     userSummary:
       status === "not_executable"
-        ? "成果计划已准备，但真实成果生成能力尚未实施。"
+        ? "当前尚无法生成全部预计成果。"
         : status === "partially_executable"
-          ? "部分预计交付当前尚不可执行生成。"
-          : "当前评估为可执行（以执行前重评为准）。",
+          ? "部分预计交付当前尚不可生成。"
+          : "可以生成成果。",
   };
 }
 

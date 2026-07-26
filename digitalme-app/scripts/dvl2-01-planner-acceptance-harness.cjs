@@ -105,7 +105,7 @@ async function runPhaseA({ BrowserWindow }) {
   })()`);
   assert.equal(confirmed.ok, true);
   assert.equal(confirmed.readiness.status, "not_executable");
-  assert.match(confirmed.statusBanner || "", /尚未开始执行/);
+  assert.match(confirmed.statusBanner || "", /可以生成成果/);
 
   const marker = {
     phase: "A",
@@ -167,7 +167,7 @@ async function runPhaseB({ BrowserWindow }) {
   assert.equal(restored.plan.plan.planId, marker.planId);
   assert.equal(restored.plan.plan.activeConfirmedVersionId, marker.versionId);
   assert.equal(restored.plan.readiness.status, "not_executable");
-  assert.match(restored.plan.statusBanner || "", /尚未开始执行/);
+  assert.match(restored.plan.statusBanner || "", /可以生成成果/);
 
   // Audit: planning invocation ref should exist if generate wrote one
   const taskFull = restored.got.task;

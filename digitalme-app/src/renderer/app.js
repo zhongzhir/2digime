@@ -5604,10 +5604,36 @@ function setActResultGenStatus(text) {
   if (el) el.textContent = text || "";
 }
 
+function taskUsesDvl2Deliverables(task) {
+  if (!task) return false;
+  if (task.deliverablePlanning && (task.deliverablePlanning.planId || task.deliverablePlanning.activeConfirmedVersionId)) {
+    return true;
+  }
+  if (task.deliverableExecution && task.deliverableExecution.activePackageId) return true;
+  return false;
+}
+
+function hideDvl2LegacyLearnAndResultPanels() {
+  const resultPanel = $("act-result-gen-panel");
+  if (resultPanel) resultPanel.classList.add("hidden");
+  const learnPanel = $("act-learn-panel");
+  if (learnPanel) learnPanel.classList.add("hidden");
+}
+
 function updateActResultGenVisibility(task) {
   const panel = $("act-result-gen-panel");
   const btn = $("btn-act-generate-result");
   const btnNoExt = $("btn-act-generate-without-ext");
+  // DVL2 path: never surface VL1 result/learn panels on the default doing page.
+  if (taskUsesDvl2Deliverables(task)) {
+    hideDvl2LegacyLearnAndResultPanels();
+    if (btn) btn.disabled = true;
+    if (btnNoExt) {
+      btnNoExt.classList.add("hidden");
+      btnNoExt.disabled = true;
+    }
+    return;
+  }
   const confirmed =
     actBehalfState.confirmed && actBehalfState.confirmed.confirmationState === "confirmed";
   // Show panel if confirmed OR if task has a result (autoGenerate or old-format)
@@ -5822,6 +5848,11 @@ function setActLearnStatus(text) {
 
 function renderActLearnFromTask(task, result, resultCurrent) {
   const panel = $("act-learn-panel");
+  // DVL2: never revive VL1 candidate-learning UI on the deliverables path.
+  if (taskUsesDvl2Deliverables(task)) {
+    if (panel) panel.classList.add("hidden");
+    return;
+  }
   const listEl = $("act-proposal-candidates");
   const previewEl = $("act-proposal-preview");
   const btnCreate = $("btn-act-create-proposal");
@@ -7055,12 +7086,14 @@ async function restoreActDeliverablePlan(taskId) {
     const view = await window.digitalMe.actBehalfPlanGet({ taskId });
     actBehalfState.planRevision = (view && view.revision) || null;
     if (view && (view.version || view.failClosed)) {
+      hideDvl2LegacyLearnAndResultPanels();
       window.DeliverablePlannerUi.renderPlanView(view);
       if (view.statusBanner) setActProgress(view.statusBanner);
     } else {
       window.DeliverablePlannerUi.hidePlanPanel();
     }
     await refreshActDeliverableResults(taskId, view);
+    await refreshActLearnConflict(taskId);
   } catch {
     /* ignore restore failures for plan panel */
   }
@@ -7113,6 +7146,48 @@ window.__digitalMeRefreshDeliverableResults = async function (view) {
   const taskId = (view && view.taskId) || actBehalfState.taskId || null;
   await refreshActDeliverableResults(taskId, view);
 };
+
+async function refreshActLearnConflict(taskId) {
+  const box = $("act-learn-conflict");
+  const q = $("act-learn-conflict-question");
+  if (!box) return;
+  if (!taskId || !window.digitalMe.actBehalfGetDeliverableLearnJob) {
+    box.classList.add("hidden");
+    if (q) q.textContent = "";
+    actBehalfState.learnConflictJobId = null;
+    return;
+  }
+  let res = null;
+  try {
+    res = await window.digitalMe.actBehalfGetDeliverableLearnJob({ taskId });
+  } catch {
+    res = null;
+  }
+  const job = res && res.job;
+  if (!job || job.status !== "pending_conflict" || !job.conflict || !job.conflict.question) {
+    box.classList.add("hidden");
+    if (q) q.textContent = "";
+    actBehalfState.learnConflictJobId = null;
+    return;
+  }
+  actBehalfState.learnConflictJobId = job.id;
+  if (q) q.textContent = job.conflict.question;
+  box.classList.remove("hidden");
+  // Ensure generation panel visible so the question is reachable.
+  const panel = $("act-generation-panel");
+  if (panel) panel.classList.remove("hidden");
+}
+
+async function handleResolveLearnConflict(choice) {
+  const jobId = actBehalfState.learnConflictJobId;
+  if (!jobId || !window.digitalMe.actBehalfResolveDeliverableLearnConflict) return;
+  const res = await window.digitalMe.actBehalfResolveDeliverableLearnConflict({
+    jobId,
+    choice,
+  });
+  setActProgress((res && res.message) || (res && res.ok ? "已处理。" : "无法处理。"));
+  await refreshActLearnConflict(actBehalfState.taskId);
+}
 
 async function refreshActGenerationPanel(packageId) {
   if (!packageId || !window.digitalMe.actBehalfGetDeliverablePackageById) return;
@@ -7210,6 +7285,11 @@ async function handleGenerationPanelClick(ev) {
     });
     setActProgress((res && res.message) || "已更新审阅。");
     if (packageId) await refreshActGenerationPanel(packageId);
+    if (action === "accept-ver") {
+      // Learning is async; poll briefly for rare conflict questions only.
+      setTimeout(() => refreshActLearnConflict(actBehalfState.taskId), 400);
+      setTimeout(() => refreshActLearnConflict(actBehalfState.taskId), 1500);
+    }
     return;
   }
   if (action === "regen") {
@@ -7436,6 +7516,9 @@ function wireActBehalfUi() {
   $("btn-act-generate-from-plan")?.addEventListener("click", () => handleGenerateFromPlan());
   $("btn-act-plan-cancel-draft")?.addEventListener("click", () => handleCancelDeliverablePlanDraft());
   $("act-generation-items")?.addEventListener("click", (ev) => handleGenerationPanelClick(ev));
+  $("btn-act-learn-keep")?.addEventListener("click", () => handleResolveLearnConflict("keep_existing"));
+  $("btn-act-learn-update")?.addEventListener("click", () => handleResolveLearnConflict("apply_new"));
+  $("btn-act-learn-once")?.addEventListener("click", () => handleResolveLearnConflict("session_only"));
   {
     const showLegacy =
       !!(window.digitalMe && window.digitalMe.ownerRuntimeTest === true && false) ||

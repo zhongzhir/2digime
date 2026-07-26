@@ -5,6 +5,29 @@
 
 ---
 
+## 2026-07-26 DVL2 接受成果 → 自动学习闭环（实现中 / 待验收）
+
+### 本次目标
+
+「接受此版本」后后台自动学习；无冲突零感知；高门槛冲突一条问题；清理 DVL2 旧 VL1 成果/学习面板。
+
+### 本次完成
+
+1. `deliverable-learn-store` + `deliverable-auto-learn`：extract→classify→consolidate→conflict→commit→audit；
+2. `reviewDeliverableVersion(accepted)` 立即返回并异步 enqueue；失败不影响接受；幂等可重试；
+3. 冲突 UI：做事页 `#act-learn-conflict`（保持原来的 / 按新的更新 / 仅本次使用）；
+4. DVL2 路径隐藏 `#act-result-gen-panel` / `#act-learn-panel`；去掉「成果计划已准备，尚未开始执行」；
+5. 测试：`test:dvl2-04-auto-learn` 6 pass；回归 DVL2-01/02/03/one-click；
+6. 状态：仍挂在 DVL2-03 分支待 Owner 验收；**未**标 `owner_runtime_accepted`。
+
+### 待办事项
+
+1. Owner 真机验收接受→学习静默与冲突提问；
+2. 「我」页审计/撤销 UI 可后续；
+3. 不得 push。
+
+---
+
 ## 2026-07-26 DVL2-03 一次点击生成 · UX 修复（待 Owner 再验收）
 
 ### 本次目标

@@ -41,6 +41,7 @@ const { reconcileTaskPackages } = require("./act-behalf/deliverable-package-reco
 const deliverableGeneration = require("./act-behalf/deliverable-generation");
 const deliverableArtifactFs = require("./act-behalf/deliverable-artifact-fs");
 const { confirmPlanAndGenerate } = require("./act-behalf/deliverable-confirm-and-generate");
+const deliverableAutoLearn = require("./act-behalf/deliverable-auto-learn");
 const { parseActBehalfOutput, buildActBehalfMessages, parseEmailOutput, buildEmailMessages, parseVideoAudioOutput, buildVideoAudioMessages, buildVideoAudioExport } = require("./act-behalf/parse-output");
 const { normalizeTaskIntent, assertTaskIntentMinimal, detectTaskType, TASK_TYPES } = require("./act-behalf/task-intent");
 const {
@@ -2112,13 +2113,13 @@ function buildDeliverablePlanView(plan, task, consistencyExtra) {
   if (consistencyExtra && consistencyExtra.failClosed) {
     statusBanner =
       (consistencyExtra && consistencyExtra.message) ||
-      "成果计划一致性异常，已暂停编辑与确认，请先修复。";
+      "成果计划一致性异常，已暂停编辑，请先修复。";
   } else if (confirmed && !draft) {
-    statusBanner = "成果计划已准备，尚未开始执行。";
+    statusBanner = "可以生成成果。";
   } else if (confirmed && draft) {
-    statusBanner = "已有确认计划；当前草稿尚未确认，确认前仍以已确认计划为准。";
+    statusBanner = "当前有未保存的调整；生成时将使用最新内容。";
   } else if (draft) {
-    statusBanner = "成果计划草稿可编辑，尚未确认。";
+    statusBanner = "可调整后生成成果。";
   }
   const revision = deliverablePlanConsistency.revisionTokensFromPlan(plan);
   return {
@@ -2643,7 +2644,7 @@ ipcMain.handle("actBehalf:planConfirm", async (_e, payload) => {
       ...view,
       ok: committed.ok,
       code: committed.code,
-      message: committed.ok ? "成果计划已准备，尚未开始执行。" : committed.message,
+      message: committed.ok ? "可以生成成果。" : committed.message,
       consistency: committed.consistency,
       needsReconcile: committed.needsReconcile || false,
     };
@@ -3170,12 +3171,95 @@ ipcMain.handle("actBehalf:reviewDeliverableVersion", async (_e, payload) => {
     const userData = app.getPath("userData");
     const versionId = payload && payload.versionId ? String(payload.versionId) : "";
     const decision = payload && payload.decision ? String(payload.decision) : "";
-    return await deliverableGeneration.reviewDeliverableVersion(userData, { versionId, decision });
+    const reviewed = await deliverableGeneration.reviewDeliverableVersion(userData, {
+      versionId,
+      decision,
+    });
+    // Accept must return immediately; learning runs in background and must not undo accept.
+    if (reviewed && reviewed.ok && decision === "accepted") {
+      try {
+        const enq = deliverableAutoLearn.enqueueAfterAccept(userData, versionId, {
+          packageDir: packageDirFromConfig(),
+          forceConflict: process.env.DIGITALME_DVL2_LEARN_FORCE_CONFLICT === "1",
+        });
+        reviewed.learnJobId = enq && enq.job ? enq.job.id : null;
+        reviewed.learnQueued = !!(enq && enq.ok);
+      } catch (learnErr) {
+        reviewed.learnQueued = false;
+        reviewed.learnError =
+          learnErr && learnErr.message ? learnErr.message : "后台学习未能启动。";
+      }
+    }
+    return reviewed;
   } catch (err) {
     return {
       ok: false,
       code: err && err.code ? err.code : "review_failed",
       message: err && err.message ? err.message : "无法更新审阅状态。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:getDeliverableLearnJob", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const learnJobs = require("./act-behalf/deliverable-learn-store");
+    const jobId = payload && payload.jobId ? String(payload.jobId) : "";
+    const versionId = payload && payload.versionId ? String(payload.versionId) : "";
+    const taskId = payload && payload.taskId ? String(payload.taskId) : "";
+    if (jobId) return learnJobs.getJob(userData, jobId);
+    if (versionId) return deliverableAutoLearn.getJobByVersionId(userData, versionId);
+    if (taskId) {
+      const jobs = learnJobs.listJobsForTask(userData, taskId);
+      const pending = jobs.find((j) => j.status === "pending_conflict");
+      return {
+        ok: true,
+        job: pending || jobs[0] || null,
+        jobs,
+      };
+    }
+    return { ok: false, code: "query_required", message: "缺少查询条件。" };
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "learn_job_query_failed",
+      message: err && err.message ? err.message : "无法读取学习状态。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:resolveDeliverableLearnConflict", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    return await deliverableAutoLearn.resolveConflict(
+      userData,
+      {
+        jobId: payload && payload.jobId,
+        choice: payload && payload.choice,
+      },
+      { packageDir: packageDirFromConfig() }
+    );
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "resolve_failed",
+      message: err && err.message ? err.message : "无法处理该项确认。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:retryDeliverableLearnJob", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    return await deliverableAutoLearn.retryJob(userData, payload && payload.jobId, {
+      packageDir: packageDirFromConfig(),
+      sync: true,
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "retry_failed",
+      message: err && err.message ? err.message : "无法重试学习。",
     };
   }
 });

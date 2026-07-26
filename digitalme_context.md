@@ -2,7 +2,7 @@
 
 版本：v0.4
 状态：持续更新
-最后更新：2026-07-26（DVL2-03 一次点击生成 UX 修复；仍 `ready_for_owner_runtime_acceptance`；分支 `codex/dvl2-03-real-deliverable-generation`；不得 push；不得提前标 `implemented`）
+最后更新：2026-07-26（DVL2 接受成果自动学习闭环已实现；一次点击生成 UX 已合入；仍 `ready_for_owner_runtime_acceptance`；不得 push；不得提前标 `implemented`）
 
 > **当前产品主线（2026-07-26）**：**第二纵向闭环** — 多模态成果包交付与渐进式主体构建。第一纵向闭环已 `accepted` / `completed`。
 > **最高架构与研发原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)（**v0.1.1 `active`**）。
@@ -21,7 +21,7 @@
 > 2. **BUG1 #6** = 七模块渐进式数字之我构建框架。
 > 3. 首个正式验收场景 = 为一个项目生成完整对外介绍成果包。
 > 4. 第一轮真实产物 = 正式介绍文档、演示文稿 PPT、单页 HTML、封面图片；视频/音频本轮不实现真实生成，用户面不得宣称已支持。
-> **当前下一任务**：**Owner 真机验收 DVL2-03**（分支 `codex/dvl2-03-real-deliverable-generation`；一次点击生成 UX 已修复；`ready_for_owner_runtime_acceptance`）。DVL2-02 已 `accepted_as_implemented`。**不得** push；**不得**提前标 `owner_runtime_accepted` / `accepted_as_implemented` / `implemented`。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+> **当前下一任务**：**Owner 真机验收 DVL2-03**（含一次点击生成 + 接受后自动学习；分支 `codex/dvl2-03-real-deliverable-generation`；`ready_for_owner_runtime_acceptance`）。DVL2-02 已 `accepted_as_implemented`。**不得** push；**不得**提前标 `owner_runtime_accepted` / `accepted_as_implemented` / `implemented`。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
 > **R2 对话运行时**：保留基础设施；R2 代码 **retained as infrastructure**。生产默认入口仍为 legacy。
 > **Owner Electron 真机验收（2026-07-24）**：`accepted`（distill-me / R2 对话重试 / doing-context / PAN-01S 等）。
 > **confirmed identity → act context（2026-07-24，`2f1b7bd`）**：`accepted`（历史整合基线；**不是**当前 HEAD）。
