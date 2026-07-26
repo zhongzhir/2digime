@@ -6,6 +6,11 @@
 
 const crypto = require("node:crypto");
 const { includedItems } = require("./deliverable-plan-schema");
+const { unwrapField } = require("./deliverable-context");
+
+function unwrapProvenance(value) {
+  return unwrapField(value);
+}
 
 function nowIso() {
   return new Date().toISOString();
@@ -60,13 +65,24 @@ function buildExecutionSnapshot({ task, plan, confirmedVersion, triggerSource })
       ? JSON.parse(JSON.stringify(confirmedVersion.risksAndAuthorization))
       : [],
     inputSummary: {
-      goal: String((understanding && understanding.goal) || (task.taskIntent && task.taskIntent.goal) || task.request || ""),
-      audience: understanding && understanding.audience,
-      usage: understanding && understanding.usage,
+      goal:
+        unwrapProvenance(understanding && understanding.goal) ||
+        unwrapProvenance(task && task.taskIntent && task.taskIntent.goal) ||
+        unwrapProvenance(task && task.request) ||
+        unwrapProvenance(task && task.goal) ||
+        "",
+      audience: unwrapProvenance(understanding && understanding.audience) || "",
+      usage: unwrapProvenance(understanding && understanding.usage) || "",
+      constraints: unwrapProvenance(understanding && understanding.constraints) || "",
       understandingSummary:
-        (understanding && (understanding.summary || understanding.oneLineSummary)) ||
-        String((task.taskIntent && task.taskIntent.goal) || "").slice(0, 200),
+        unwrapProvenance(understanding && (understanding.summary || understanding.oneLineSummary)) ||
+        (
+          unwrapProvenance(task && task.taskIntent && task.taskIntent.goal) ||
+          unwrapProvenance(task && task.goal) ||
+          ""
+        ).slice(0, 200),
     },
+    understanding: understanding || {},
     sourcePlanDigest: digestPlanVersion(confirmedVersion),
     createdAt: nowIso(),
     triggerSource: triggerSource || "prepare_package_ipc",

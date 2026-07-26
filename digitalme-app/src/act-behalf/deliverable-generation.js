@@ -9,6 +9,9 @@ const packageStore = require("./deliverable-package-store");
 const { nowIso, newId } = require("./deliverable-package-schema");
 const { commitVersionFiles } = require("./deliverable-artifact-fs");
 const { generateByKind } = require("./deliverable-generators");
+const actBehalfStore = require("./task-store");
+const { assembleSubjectContext } = require("./subject-context-assembler");
+const { unwrapField } = require("./deliverable-context");
 
 function newAttemptId() {
   return newId("dgatt_");
@@ -170,10 +173,43 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
   });
 
   let produced;
+  let taskRecord = null;
+  try {
+    const taskGot = actBehalfStore.getTask(userData, pkg.taskId, { heal: false });
+    taskRecord = taskGot && taskGot.ok ? taskGot.task : null;
+  } catch {
+    taskRecord = null;
+  }
+
+  const snap = (pkg && pkg.executionSnapshot) || {};
+  const input = snap.inputSummary || {};
+  const subjectAssembly = assembleSubjectContext({
+    packageDir: deps.packageDir || null,
+    query: {
+      goal:
+        unwrapField(input.goal) ||
+        unwrapField(taskRecord && taskRecord.goal) ||
+        unwrapField(taskRecord && taskRecord.request) ||
+        "",
+      audience: unwrapField(input.audience) || "",
+      usage: unwrapField(input.usage) || "",
+      constraints: unwrapField(input.constraints) || "",
+      deliverableKind: deliverable.kind,
+      deliverableTitle: deliverable.title,
+      deliverablePurpose: deliverable.purpose,
+      attachmentKeywords: ((taskRecord && taskRecord.referenceMaterials) || [])
+        .map((m) => m && m.name)
+        .filter(Boolean),
+    },
+  });
+
   try {
     produced = await generateByKind(deliverable.kind, {
       pkg,
       deliverable,
+      task: taskRecord,
+      referenceMaterials: (taskRecord && taskRecord.referenceMaterials) || [],
+      subjectAssembly,
       callModel: deps.callModel,
       imageMode: deps.imageMode,
     });
@@ -285,12 +321,60 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
       uiFormatLabel: produced.uiFormatLabel || null,
     },
     provenance: {
-      subjectContextSnapshotId: null,
-      subjectContextSnapshotVersion: null,
+      subjectContextSnapshotId:
+        (produced.generationContext &&
+          produced.generationContext.subjectAssembly &&
+          produced.generationContext.subjectAssembly.assemblyId) ||
+        null,
+      subjectContextSnapshotVersion:
+        (produced.generationContext &&
+          produced.generationContext.subjectAssembly &&
+          produced.generationContext.subjectAssembly.packageVersion) ||
+        null,
       planVersion: pkg.sourcePlanVersionId,
       capabilityInvocationIds: [],
       modelRoute: { taskType: "artifact" },
-      sourceRefs: [],
+      sourceRefs: (produced.generationContext && produced.generationContext.attachmentRefs
+        ? produced.generationContext.attachmentRefs
+            .filter((r) => r && r.included)
+            .map((r) => ({
+              kind: "reference_material",
+              id: r.id,
+              name: r.name,
+              contentHash: r.contentHash,
+            }))
+        : []
+      ).concat([
+        {
+          kind: "task_goal",
+          taskId: pkg.taskId,
+          goal:
+            (produced.generationContext && produced.generationContext.goal) ||
+            null,
+        },
+        {
+          kind: "plan_version",
+          planVersionId: pkg.sourcePlanVersionId,
+        },
+      ]),
+      attachmentRefs:
+        (produced.generationContext && produced.generationContext.attachmentRefs) || [],
+      subjectRefs:
+        (produced.generationContext && produced.generationContext.subjectRefs) || [],
+      memoryRefs: (
+        (produced.generationContext && produced.generationContext.subjectRefs) || []
+      ).filter((r) => r && r.layer === "memory"),
+      assembly:
+        produced.generationContext && produced.generationContext.subjectAssembly
+          ? {
+              assemblyId: produced.generationContext.subjectAssembly.assemblyId,
+              queryKeyDigest: produced.generationContext.subjectAssembly.queryKeyDigest,
+              packageId: produced.generationContext.subjectAssembly.packageId,
+              packageVersion: produced.generationContext.subjectAssembly.packageVersion,
+              budget: produced.generationContext.subjectAssembly.budget,
+              emptyReason: produced.generationContext.subjectAssembly.emptyReason,
+            }
+          : null,
       evidenceRefs: [],
       authorizationRefs: [],
       actor: "user",

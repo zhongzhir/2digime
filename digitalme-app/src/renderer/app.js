@@ -5420,13 +5420,41 @@ function renderActFileList() {
     list.appendChild(row);
   }
   list.querySelectorAll(".act-file-remove").forEach((btn) => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", async () => {
       actBehalfState.attachedFiles = (actBehalfState.attachedFiles || []).filter(
         (f) => f.id !== btn.dataset.fileId
       );
       renderActFileList();
+      if (actBehalfState.taskId) await persistActReferenceMaterials(actBehalfState.taskId);
     });
   });
+}
+
+async function persistActReferenceMaterials(taskId) {
+  if (!taskId || !window.digitalMe.actBehalfSave) return;
+  const materials = (actBehalfState.attachedFiles || []).filter((f) => f && f.ok);
+  try {
+    await window.digitalMe.actBehalfSave({
+      taskId,
+      referenceMaterials: materials.map((f) => ({
+        id: f.id,
+        name: f.name,
+        path: f.path || null,
+        text: f.text || "",
+        note: f.note || "",
+        ok: true,
+        truncated: !!f.truncated,
+        contentHash: f.contentHash || null,
+        charCount: f.chars != null ? f.chars : String(f.text || "").length,
+      })),
+      title: ($("act-title") && $("act-title").value.trim()) || undefined,
+      goal: ($("act-request") && $("act-request").value.trim()) || undefined,
+      request: ($("act-request") && $("act-request").value.trim()) || undefined,
+      status: "draft",
+    });
+  } catch {
+    /* non-blocking */
+  }
 }
 
 async function handleActSelectFiles(mode) {
@@ -5450,6 +5478,20 @@ async function handleActSelectFiles(mode) {
     msg += " " + failedFiles.length + " 个文件未能读入。";
   }
   setActProgress(msg);
+  // Ensure task exists then persist materials for DVL2 generation.
+  if (!actBehalfState.taskId) {
+    const goal = ($("act-request") && $("act-request").value.trim()) || "";
+    if (goal && window.digitalMe.actBehalfSave) {
+      const saved = await window.digitalMe.actBehalfSave({
+        title: ($("act-title") && $("act-title").value.trim()) || goal.slice(0, 40),
+        goal,
+        request: goal,
+        status: "draft",
+      });
+      if (saved && saved.ok && saved.task) actBehalfState.taskId = saved.task.taskId;
+    }
+  }
+  if (actBehalfState.taskId) await persistActReferenceMaterials(actBehalfState.taskId);
 }
 
 function buildAttachedFilesText() {
@@ -5473,14 +5515,15 @@ function clearActResearchSources() {
 }
 
 function updateActResearchPanelVisibility() {
+  // DVL2 默认页不再展示 VL1 调研入口；兼容入口仅在显式 opt-in 时开放。
   const panel = $("act-research-panel");
   const btn = $("btn-act-run");
-  const confirmed =
-    actBehalfState.confirmed && actBehalfState.confirmed.confirmationState === "confirmed";
-  if (panel) panel.classList.toggle("hidden", !confirmed);
-  if (btn) {
-    btn.disabled = !confirmed || !actBehalfState.taskId;
+  if (panel) {
+    panel.classList.add("hidden");
+    panel.setAttribute("hidden", "true");
+    panel.setAttribute("aria-hidden", "true");
   }
+  if (btn) btn.disabled = true;
 }
 
 function renderActSourceList(sources, opts = {}) {
@@ -5621,36 +5664,16 @@ function hideDvl2LegacyLearnAndResultPanels() {
 }
 
 function updateActResultGenVisibility(task) {
-  const panel = $("act-result-gen-panel");
   const btn = $("btn-act-generate-result");
   const btnNoExt = $("btn-act-generate-without-ext");
-  // DVL2 path: never surface VL1 result/learn panels on the default doing page.
-  if (taskUsesDvl2Deliverables(task)) {
-    hideDvl2LegacyLearnAndResultPanels();
-    if (btn) btn.disabled = true;
-    if (btnNoExt) {
-      btnNoExt.classList.add("hidden");
-      btnNoExt.disabled = true;
-    }
-    return;
+  // DVL2 默认页：始终隐藏 VL1 成果/学习面板，避免旧链路污染页面状态。
+  hideDvl2LegacyLearnAndResultPanels();
+  if (btn) btn.disabled = true;
+  if (btnNoExt) {
+    btnNoExt.classList.add("hidden");
+    btnNoExt.disabled = true;
   }
-  const confirmed =
-    actBehalfState.confirmed && actBehalfState.confirmed.confirmationState === "confirmed";
-  // Show panel if confirmed OR if task has a result (autoGenerate or old-format)
-  const hasResult = !!(task && (
-    (typeof task.result === "string" && task.result.trim()) ||
-    (Array.isArray(task.results) && task.results.length > 0)
-  ));
-  if (panel) panel.classList.toggle("hidden", !confirmed && !hasResult);
-  const tool = matchingResearchToolInvocation(task || { invocations: actBehalfState.invocations, taskIntent: actBehalfState.taskIntent, goal: actBehalfState.goal, subjectContext: actBehalfState.confirmed });
-  const canTry = !!(confirmed && actBehalfState.taskId && (!tool || tool.status !== "running"));
-  if (btn) btn.disabled = !canTry;
-  const needContinue =
-    !tool ||
-    tool.status === "failed" ||
-    tool.status === "interrupted" ||
-    !(tool.discoveredSources || []).length;
-  if (btnNoExt) btnNoExt.classList.toggle("hidden", !(canTry && needContinue));
+  void task;
 }
 
 function pickDisplayResult(task) {
@@ -6761,149 +6784,8 @@ async function handleActVideoAudioExport(format) {
 }
 
 async function handleAutoGenerate() {
-  const goal = ($("act-request") && $("act-request").value.trim()) || "";
-  if (!goal) {
-    setActProgress("请先填写任务目标。");
-    return;
-  }
-  if (!window.digitalMe.actBehalfAutoGenerate) {
-    setActProgress("自动生成功能不可用。");
-    return;
-  }
-
-  // Build goal with attached files
-  const attachedText = buildAttachedFilesText();
-  const fullGoal = attachedText
-    ? goal + "\n\n---\n\n以下是本次任务的相关文件内容，请参考：\n\n" + attachedText
-    : goal;
-
-  setActProgress("正在自动理解你的目标并生成初稿…");
-  clearActResultPanel();
-  clearActResearchSources();
-  hideActEmailUi();
-  hideActVideoAudioUi();
-
-  try {
-    const res = await window.digitalMe.actBehalfAutoGenerate({
-      goal: fullGoal,
-      taskId: actBehalfState.taskId || undefined,
-      title: ($("act-title") && $("act-title").value.trim()) || undefined,
-      role: ($("act-role") && $("act-role").value.trim()) || undefined,
-      expectedOutcome: ($("act-expected") && $("act-expected").value.trim()) || undefined,
-    });
-
-    if (!res || !res.ok) {
-      setActProgress((res && res.message) || "自动生成失败，请稍后重试。");
-      return;
-    }
-
-    actBehalfState.taskId = res.taskId;
-    actBehalfState.confirmed = res.task && res.task.subjectContext;
-    // Auto tasks persist a plain result string; they must use the dedicated
-    // main-process save boundary rather than the legacy structured-result API.
-    actBehalfState.currentResult = null;
-
-    const result = res.task && res.task.result;
-    console.log("[autoGenerate] result type:", typeof result, "length:", typeof result === "string" ? result.length : "n/a");
-
-    // Show result panel (not research panel)
-    const resultPanel = $("act-result-gen-panel");
-    if (resultPanel) resultPanel.classList.remove("hidden");
-
-    const finalDraftEl = $("act-final-draft");
-    const resultText = typeof result === "string" ? result : (result && result.body) || "";
-    if (finalDraftEl && resultText.trim()) {
-      finalDraftEl.value = resultText.trim();
-      finalDraftEl.disabled = false;
-    } else {
-      setActProgress("已生成，但结果为空或格式异常。");
-      return;
-    }
-
-    // Email tasks: structured preview (to/subject/body) + prepare-send flow
-    if (res.taskType === "email" && res.emailDraft) {
-      renderActEmailPreview(res.emailDraft);
-    }
-
-    // Video/audio tasks: structured script preview (title/duration/scenes/creative direction) + export
-    if (res.taskType === "video_audio" && res.videoAudioScript) {
-      renderActVideoAudioPreview(res.videoAudioScript);
-    }
-
-    const metaEl = $("act-result-meta");
-    if (metaEl) {
-      const used = res.usedSelfInfo ? "已自动使用你的个人信息" : "";
-      metaEl.textContent = `初稿 · ${used} · ${res.autoSelectedCount || 0} 条上下文已后台自动选择`;
-    }
-
-    // Populate backstage view (hidden by default)
-    const subEl = $("act-col-subject");
-    if (subEl) {
-      const items = (res.task && res.task.existingUserPositions) || "";
-      subEl.textContent = items || "（无）";
-    }
-    const extEl = $("act-col-external");
-    if (extEl) {
-      extEl.textContent = "（自动模式下未启动外部调研）";
-    }
-    const infEl = $("act-col-inferences");
-    if (infEl) {
-      const items = (res.task && res.task.digitalMeInferences) || "";
-      infEl.textContent = items || "（无）";
-    }
-    const backstagePanel = $("act-backstage-panel");
-    if (backstagePanel) backstagePanel.classList.add("hidden");
-
-    // Show save/adopt buttons
-    const saveBtn = $("btn-act-save-result");
-    if (saveBtn) saveBtn.disabled = false;
-    const adoptBtn = $("btn-act-adopt-result");
-    if (adoptBtn) adoptBtn.disabled = false;
-    const rejectBtn = $("btn-act-reject-result");
-    if (rejectBtn) rejectBtn.disabled = false;
-
-    // Task-type-specific guidance and copy button
-    const goalText = (res.goal || "").toLowerCase();
-    const isCodeTask = /代码|编程|脚本|code|program|script|开发/.test(goalText);
-    const isEmailTask = res.taskType === "email";
-    const isVideoAudioTask = res.taskType === "video_audio";
-
-    // Show copy button for all tasks
-    const copyBtn = $("btn-act-copy-result");
-    if (copyBtn) {
-      copyBtn.classList.remove("hidden");
-      copyBtn.onclick = () => {
-        const text = $("act-final-draft") && $("act-final-draft").value;
-        if (text) {
-          navigator.clipboard.writeText(text).then(() => {
-            const orig = copyBtn.textContent;
-            copyBtn.textContent = "已复制";
-            setTimeout(() => { copyBtn.textContent = orig; }, 2000);
-          });
-        }
-      };
-    }
-
-    let guidance = "已生成。你可以继续编辑，或点击「采用」让 Digital Me 从中学习。";
-    if (isEmailTask) {
-      guidance += " 点击「准备发送」进入发送确认。";
-    } else if (isVideoAudioTask) {
-      guidance += " 点击「导出脚本」获取可在剪映/Descript 中使用的文件。";
-    } else if (isCodeTask) {
-      guidance += " 点击「复制代码」复制到剪贴板，或「查看依据」了解生成过程。";
-    } else {
-      guidance += " 支持导出、重新生成、查看依据等操作。";
-    }
-    setActResultGenStatus(guidance);
-    const usedOwnerInfo = Number(res.doingContext?.usedCount || 0);
-    setActProgress(usedOwnerInfo > 0
-      ? `完成：已使用 ${usedOwnerInfo} 条本人信息生成初稿。`
-      : "完成：本次未使用本人信息，仍可继续编辑初稿。"
-    );
-  } catch (err) {
-    console.error("[autoGenerate] error:", err);
-    setActProgress("自动生成出错：" + (err && err.message ? err.message : "未知错误"));
-  }
+  // DVL2 默认页已移除「开始」入口；保留函数以防误接，一律引导主流程。
+  setActProgress("请使用「形成预计交付」与「生成成果」。");
 }
 
 function resetActBehalfForm() {
@@ -6996,6 +6878,21 @@ async function openActBehalfTask(taskId) {
   if ($("act-role")) $("act-role").value = intent.role || "";
   if ($("act-expected")) $("act-expected").value = intent.expectedOutcome || "";
   if ($("act-supplement")) $("act-supplement").value = "";
+
+  actBehalfState.attachedFiles = Array.isArray(task.referenceMaterials)
+    ? task.referenceMaterials.map((m) => ({
+        id: m.id,
+        name: m.name,
+        path: m.path || null,
+        text: m.text || "",
+        note: m.note || "",
+        ok: true,
+        truncated: !!m.truncated,
+        contentHash: m.contentHash || null,
+        chars: m.charCount != null ? m.charCount : String(m.text || "").length,
+      }))
+    : [];
+  renderActFileList();
 
   if (task.subjectContext && task.subjectContext.confirmationState === "confirmed") {
     actBehalfState.confirmed = task.subjectContext;
@@ -7208,6 +7105,7 @@ async function handleGenerateFromPlan() {
     setActProgress("当前版本尚未开放成果生成。");
     return;
   }
+  await persistActReferenceMaterials(actBehalfState.taskId);
   const goal = ($("act-request") && $("act-request").value.trim()) || "";
   const understanding =
     window.DeliverablePlannerUi && window.DeliverablePlannerUi.collectUnderstandingFromDom
@@ -7317,6 +7215,7 @@ async function handleFormDeliverablePlan() {
     setActProgress("当前版本尚未开放成果计划能力。");
     return;
   }
+  if (actBehalfState.taskId) await persistActReferenceMaterials(actBehalfState.taskId);
   setActProgress("正在形成预计交付…");
   const title = ($("act-title") && $("act-title").value.trim()) || goal.slice(0, 40);
   const revision = actBehalfState.planRevision || undefined;
@@ -7347,6 +7246,7 @@ async function handleFormDeliverablePlan() {
   if (res.taskId || (res.task && res.task.taskId)) {
     actBehalfState.taskId = res.taskId || res.task.taskId;
   }
+  if (actBehalfState.taskId) await persistActReferenceMaterials(actBehalfState.taskId);
   actBehalfState.planRevision = res.revision || null;
   if (window.DeliverablePlannerUi) window.DeliverablePlannerUi.renderPlanView(res);
   const modeNote =
@@ -7507,7 +7407,9 @@ function wireActBehalfUi() {
     setActProgress("已新建任务表单。");
   });
   $("btn-act-reload-context")?.addEventListener("click", () => loadActBehalfContext());
-  $("btn-act-auto-generate")?.addEventListener("click", handleAutoGenerate);
+  $("btn-act-auto-generate")?.addEventListener("click", () => {
+    setActProgress("请使用「形成预计交付」与「生成成果」。");
+  });
   $("btn-act-form-plan")?.addEventListener("click", () => handleFormDeliverablePlan());
   $("btn-act-plan-add-item")?.addEventListener("click", () => {
     if (window.DeliverablePlannerUi) window.DeliverablePlannerUi.addBlankItem();

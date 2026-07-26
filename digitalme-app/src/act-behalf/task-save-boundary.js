@@ -171,6 +171,12 @@ function buildDraftSaveRecord({ existing, rendererPayload } = {}) {
     existingUserPositions: research.existingUserPositions,
     digitalMeInferences: research.digitalMeInferences,
     result: research.result,
+    referenceMaterials:
+      payload.referenceMaterials != null
+        ? payload.referenceMaterials
+        : (existing && existing.referenceMaterials) || [],
+    deliverablePlanning: (existing && existing.deliverablePlanning) || undefined,
+    deliverableExecution: (existing && existing.deliverableExecution) || undefined,
     // Authoritative research / audit / results / proposals — never from renderer
     invocations: research.invocations,
     selectedSkillId: research.selectedSkillId,

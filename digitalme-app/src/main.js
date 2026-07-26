@@ -1362,6 +1362,20 @@ ipcMain.handle("actBehalf:confirmContext", async (_e, payload) => {
 
 ipcMain.handle("actBehalf:autoGenerate", async (_e, payload) => {
   try {
+    const userData = app.getPath("userData");
+    const existingId = payload && payload.taskId ? String(payload.taskId) : "";
+    if (existingId) {
+      const existing = actBehalfStore.getTask(userData, existingId, { heal: false });
+      const planning = existing && existing.task && existing.task.deliverablePlanning;
+      if (planning && (planning.planId || planning.activeConfirmedVersionId || planning.currentDraftVersionId)) {
+        return {
+          ok: false,
+          code: "dvl2_use_generate_from_plan",
+          message: "请使用「生成成果」。此入口不再用于成果计划任务。",
+        };
+      }
+    }
+
     const goal = String((payload && payload.goal) || "").trim();
     if (!goal) {
       return { ok: false, code: "empty_goal", message: "请输入要完成的目标。" };
@@ -1380,14 +1394,17 @@ ipcMain.handle("actBehalf:autoGenerate", async (_e, payload) => {
       expectedOutcome: (payload && payload.expectedOutcome) || "",
       constraints: (payload && payload.constraints) || [],
     }, undefined, packageDirFromConfig());
-    const taskType = detectTaskType(goal);
+    // Keyword routing must use the user goal only — never attachment body —
+    // so that words like「脚本」in project docs cannot flip the task into video_audio.
+    const goalOnly = String((payload && payload.userGoal) || goal.split("\n\n---\n")[0] || goal).trim();
+    const taskType = detectTaskType(goalOnly);
     taskIntent.taskType = taskType;
+    taskIntent.goal = goalOnly;
 
-    const userData = app.getPath("userData");
     const doingContext = assembleDoingContext({
       packageDir: packageDirFromConfig(),
       pkg,
-      taskIntent: goal,
+      taskIntent: goalOnly,
       scene: "act_behalf",
     });
     const selectedClaimText = autoClaims
@@ -3062,7 +3079,11 @@ ipcMain.handle("actBehalf:generateDeliverablePackage", async (_e, payload) => {
     return await deliverableGeneration.generateDeliverablePackage(
       userData,
       { packageId },
-      { callModel: buildGenerationCallModel(), imageMode: generationImageMode() }
+      {
+        callModel: buildGenerationCallModel(),
+        imageMode: generationImageMode(),
+        packageDir: packageDirFromConfig(),
+      }
     );
   } catch (err) {
     return {
@@ -3084,7 +3105,11 @@ ipcMain.handle("actBehalf:generateDeliverable", async (_e, payload) => {
     return await deliverableGeneration.generateOneDeliverable(
       userData,
       { packageId, deliverableId },
-      { callModel: buildGenerationCallModel(), imageMode: generationImageMode() }
+      {
+        callModel: buildGenerationCallModel(),
+        imageMode: generationImageMode(),
+        packageDir: packageDirFromConfig(),
+      }
     );
   } catch (err) {
     return {
@@ -3286,6 +3311,7 @@ ipcMain.handle("actBehalf:confirmPlanAndGenerate", async (_e, payload) => {
       reconcilePackagesForTask: reconcileDeliverablePackagesForTask,
       callModel: buildGenerationCallModel(),
       imageMode: generationImageMode(),
+      packageDir: packageDirFromConfig(),
     });
   } catch (err) {
     return {

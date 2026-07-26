@@ -132,6 +132,21 @@ function extractLearningItems({ title, kind, excerpt, source }, callModel) {
     });
   }
 
+  // Continuity markers (e.g. UNIQUE_*): auto-absorb as Active-Low searchable memory.
+  const uniqueHits = String(excerpt || "").match(/UNIQUE_[A-Z0-9_]+/g) || [];
+  const seenTok = new Set();
+  for (const tok of uniqueHits) {
+    if (seenTok.has(tok) || seenTok.size >= 5) continue;
+    seenTok.add(tok);
+    base.push({
+      id: "ex_unique_" + tok.slice(0, 28),
+      layer: "semantic",
+      text: `从已接受成果中保留的要点标记：${tok}`,
+      confidence: "low",
+      oneOffLikely: false,
+    });
+  }
+
   if (typeof callModel === "function") {
     // Optional enrichment; failures fall back to rule extract.
     return Promise.resolve(callModel)
@@ -281,21 +296,12 @@ function detectConflict({ kept, packageDir, forceConflict }) {
         };
       }
     }
-    // Ambiguous one-off vs long-term already filtered in consolidate;
-    // residual ambiguity when text mixes preference language without clear marker:
+    // CRT-MVP Distillation Gate: do NOT ask Owner to confirm ordinary preferences.
+    // Ambiguous one-off vs preference → auto-absorb as Active-Low (already confidence low).
     if (/总是|习惯|偏好|以后都|从今以后/.test(text) && /本次|临时/.test(text)) {
-      return {
-        required: true,
-        reason: "one_off_vs_preference",
-        question: "这句话像长期偏好，也像仅限本次任务。是否记为长期偏好？",
-        options: [
-          { id: "keep_existing", label: "保持原来的" },
-          { id: "apply_new", label: "按新的更新" },
-          { id: "session_only", label: "仅本次使用" },
-        ],
-        recommended: "session_only",
-        pendingItems: [item],
-      };
+      item.confidence = "low";
+      item.activationHint = "active_low_confidence";
+      continue;
     }
   }
 
@@ -320,7 +326,12 @@ function buildOpsFromKept(kept, source) {
         type: memoryType,
         content: item.text,
         theme: item.layer === "episodic" ? "任务经验" : "成果学习",
+        // CRT-MVP: first-time learnings enter as Active-Low; reinforce later.
         confidence: item.confidence || "low",
+        activationState: "active_low_confidence",
+        status: "active",
+        usageCount: 0,
+        reinforcement: 0,
         sensitivity: item.sensitive ? "sensitive" : "private",
         sourceRefs: [
           "deliverable_auto_learn",

@@ -445,7 +445,7 @@
                 <button type="button" id="btn-do-back-act" class="btn-ghost btn-do-back">← 场景目录</button>
                 <div>
                   <div id="do-act-title">做事</div>
-                   <div id="do-act-sub" class="muted">填写目标，Digital Me 在后台自动理解你的任务并调用所需能力。支持写作、研究、编程、邮件、视频脚本等任务类型，系统自动识别并路由到合适的后台能力。如需手动调整上下文，可展开下方高级选项。</div>
+                   <div id="do-act-sub" class="muted">填写任务目标与参考材料，形成预计交付后生成真实成果，再审阅或重新生成。</div>
                 </div>
               </div>
               <button type="button" class="btn-help" data-help-topic="do" title="打开说明">说明</button>
@@ -463,12 +463,15 @@
               </aside>
               <div class="act-behalf-main">
                 <label class="library-title-label">任务标题（可选）
-                  <input id="act-title" type="text" placeholder="例如：公开市场事件对本人关注方向的含义" data-testid="act-title" />
+                  <input id="act-title" type="text" placeholder="例如：Digital Me 投资人介绍材料" data-testid="act-title" />
                 </label>
                 <label class="library-title-label">任务目标
                   <textarea id="act-request" rows="4" placeholder="直接说出你想完成的目标…" data-testid="act-request"></textarea>
                 </label>
                 <div class="act-file-input">
+                  <div class="ext-store-head" style="margin-bottom:0.35rem">
+                    <h4 style="margin:0;font-size:0.92rem">参考材料</h4>
+                  </div>
                   <div class="builder-actions">
                     <button id="btn-act-add-file" class="btn-ghost" type="button" data-testid="btn-act-add-file">添加文件</button>
                     <button id="btn-act-add-folder" class="btn-ghost" type="button" data-testid="btn-act-add-folder">选择文件夹</button>
@@ -485,13 +488,12 @@
                   </label>
                 </details>
                 <div class="builder-actions">
-                   <button id="btn-act-auto-generate" class="btn btn-primary" type="button" data-testid="btn-act-auto-generate">开始</button>
                   <button id="btn-act-form-plan" class="btn" type="button" data-testid="btn-act-form-plan">形成预计交付</button>
                   <button id="btn-act-save" class="btn-ghost" type="button" data-testid="btn-act-save">保存草稿</button>
                 </div>
                 <section id="act-deliverable-plan-panel" class="act-deliverable-plan-panel hidden" data-testid="act-deliverable-plan-panel">
                   <div class="ext-store-head">
-                    <h3>成果计划</h3>
+                    <h3>预计交付</h3>
                   </div>
                   <p id="act-plan-status" class="muted write-rail-hint" data-testid="act-plan-status"></p>
                   <p id="act-plan-readiness" class="muted write-rail-hint" data-testid="act-plan-readiness"></p>
@@ -501,7 +503,7 @@
                   </div>
                   <div class="act-plan-items-block">
                     <div class="ext-store-head">
-                      <h4>预计交付</h4>
+                      <h4>交付项</h4>
                       <button id="btn-act-plan-add-item" class="btn-ghost" type="button" data-testid="btn-act-plan-add-item">新增一项</button>
                     </div>
                     <div id="act-plan-items" class="act-plan-items" data-testid="act-plan-items"></div>

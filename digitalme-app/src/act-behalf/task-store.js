@@ -13,6 +13,7 @@ const { normalizeTaskIntent } = require("./task-intent");
 const { healRunningInvocations } = require("./research-run");
 const { healRunningResults } = require("./result-generation");
 const { healAndReconcileProposals } = require("./experience-proposal");
+const { normalizeReferenceMaterials } = require("./deliverable-context");
 
 const STORE_VERSION = 2;
 const TASK_SCHEMA_VERSION = 2;
@@ -199,6 +200,8 @@ function normalizeTask(input) {
     existingUserPositions: String((input && input.existingUserPositions) || ""),
     digitalMeInferences: String((input && input.digitalMeInferences) || ""),
     result: String((input && input.result) || ""),
+    // DVL2 reference materials — persisted for plan/generation (not VL1-only UI state)
+    referenceMaterials: normalizeReferenceMaterials(input && input.referenceMaterials),
     // Email drafting (taskIntent.taskType === "email"): structured draft, main-process only
     emailDraft:
       input && input.emailDraft && typeof input.emailDraft === "object"
@@ -364,6 +367,10 @@ async function saveTask(userData, taskInput) {
       }
       if (!Object.prototype.hasOwnProperty.call(taskInput || {}, "lifecycleStatus")) {
         task.lifecycleStatus = normalizeLifecycleStatus(prev.lifecycleStatus);
+      }
+      // Draft / plan saves often omit materials — never wipe persisted attachments.
+      if (!Object.prototype.hasOwnProperty.call(taskInput || {}, "referenceMaterials")) {
+        task.referenceMaterials = normalizeReferenceMaterials(prev.referenceMaterials);
       }
       store.tasks[idx] = task;
     } else {
