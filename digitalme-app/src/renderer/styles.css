@@ -3108,13 +3108,46 @@ body {
 .subject-warning-list { margin: 8px 0 0; padding-left: 18px; font-size: 13px; }
 .subject-warnings { border-color: #e8c9a8; background: #fff8f0; }
 
-/* Research-express / act-behalf (VL1 block 1) */
-.do-act-behalf {
-  flex: 1;
+/* DVL2-01 deliverable planner panel (legacy thin UI) */
+.act-deliverable-plan-panel {
+  border: 1px solid var(--border, #d8dde6);
+  border-radius: 8px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  gap: 10px;
+  background: var(--card, #fafbfc);
 }
+.act-plan-dl {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+}
+.act-plan-items {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.act-plan-item {
+  border: 1px solid var(--border, #e2e6ee);
+  border-radius: 6px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #fff;
+}
+.act-plan-item.is-removed {
+  opacity: 0.55;
+}
+.act-plan-item-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+
 .act-behalf-layout {
   display: grid;
   grid-template-columns: minmax(200px, 260px) 1fr;

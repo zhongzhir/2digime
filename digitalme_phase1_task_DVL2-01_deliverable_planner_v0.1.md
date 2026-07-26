@@ -2,13 +2,19 @@
 
 版本：v0.1.1
 日期：2026-07-26
-状态：`specified` / `codex_review_passed` / `owner_accepted` / `frozen_for_implementation`
-实施：`not_started`
+状态：`specified` / `codex_review_passed` / `owner_accepted` / `frozen_for_implementation` / `implementation_authorized` / `implementation_in_progress` / `ready_for_owner_runtime_acceptance`
+实施：`implementation_in_progress`
 上位合同：[`digitalme_phase1_task_DVL2-00_product_and_data_contracts_v0.1.md`](digitalme_phase1_task_DVL2-00_product_and_data_contracts_v0.1.md)（**DVL2-00 v0.1.1** / `owner_accepted` / `frozen_for_implementation`）
-基线：`8a4c4f68bea317df96f4026905e0a0f2ef8ca37e`
+基线：`aa9a8c56186edff9020b0cb0f3633b0571c2a17a`
 所属架构：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)
 
-> **正式结论（Owner 接受与规格冻结）**：Owner 已正式接受本规格（`owner_accepted`）；合同已冻结为成果规划器实施合同（`frozen_for_implementation`）。实施仍为 `not_started`。**尚未获得** `implementation_authorized`。**不得**标 `implementation_started` / `implemented` / `completed`。不得开始编码或创建实现分支；不得启动 DVL2-02。冲突时：架构原则文 > DVL2-00 > 本文。
+> **正式结论（实现复核）**：DVL2-01 已获实施授权并完成两轮集中修复与 CTO 最终实现复核；当前为 `ready_for_owner_runtime_acceptance`。实施状态仍为 `implementation_in_progress`。**不得**标 `implemented` / `completed` / `owner_verified` / `accepted_as_implemented`。下一步为 Owner 真机验收。冲突时：架构原则文 > DVL2-00 > 本文。
+
+### Implementation progress（非完成声明）
+
+- 2026-07-26：第一轮集中修复——reconciliation fail-closed、Plan Store 严格校验、revision token、archive/soft-delete 同步、planning audit、两阶段进程重启验收。
+- 2026-07-26：第二轮集中修复——Plan Store 写临界区 CAS、`callModel→string` adapter、生命周期 severity 收敛、版本链校验增强。
+- 2026-07-26：**CTO 最终实现复核通过**（允许创建待 Owner 验收提交）：Store 级 CAS 通过；model-assisted fake 路径通过；lifecycle reconciliation 通过；版本链校验通过；Electron 两阶段进程重启恢复通过。**尚未**完成 Owner 真机验收；**不得**标 `implemented` / `completed`。
 
 ---
 

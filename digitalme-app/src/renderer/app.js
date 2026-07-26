@@ -5386,6 +5386,7 @@ let actBehalfState = {
   emailDraft: null,
   videoAudioScript: null,
   attachedFiles: [],
+  planRevision: null,
 };
 
 function setActProgress(text) {
@@ -6890,6 +6891,7 @@ function resetActBehalfForm() {
     emailDraft: null,
     videoAudioScript: null,
     attachedFiles: [],
+    planRevision: null,
   };
   if ($("act-title")) $("act-title").value = "";
   if ($("act-request")) $("act-request").value = "";
@@ -6904,6 +6906,7 @@ function resetActBehalfForm() {
   clearActResearchSources();
   hideActEmailUi();
   hideActVideoAudioUi();
+  if (window.DeliverablePlannerUi) window.DeliverablePlannerUi.hidePlanPanel();
   const cols = $("act-four-columns");
   if (cols) cols.classList.add("hidden");
   setActContextStatus("");
@@ -7043,6 +7046,172 @@ async function openActBehalfTask(taskId) {
   }
 
   renderActResearchFromTask(task);
+  await restoreActDeliverablePlan(task.taskId);
+}
+
+async function restoreActDeliverablePlan(taskId) {
+  if (!taskId || !window.digitalMe.actBehalfPlanGet || !window.DeliverablePlannerUi) return;
+  try {
+    const view = await window.digitalMe.actBehalfPlanGet({ taskId });
+    actBehalfState.planRevision = (view && view.revision) || null;
+    if (view && (view.version || view.failClosed)) {
+      window.DeliverablePlannerUi.renderPlanView(view);
+      if (view.statusBanner) setActProgress(view.statusBanner);
+    } else {
+      window.DeliverablePlannerUi.hidePlanPanel();
+    }
+  } catch {
+    /* ignore restore failures for plan panel */
+  }
+}
+
+async function handleFormDeliverablePlan() {
+  const goal = ($("act-request") && $("act-request").value.trim()) || "";
+  if (!goal) {
+    setActProgress("请先填写任务目标。");
+    return;
+  }
+  if (!window.digitalMe.actBehalfPlanGenerate) {
+    setActProgress("当前版本尚未开放成果计划能力。");
+    return;
+  }
+  setActProgress("正在形成预计交付…");
+  const title = ($("act-title") && $("act-title").value.trim()) || goal.slice(0, 40);
+  const revision = actBehalfState.planRevision || undefined;
+  const res = await window.digitalMe.actBehalfPlanGenerate({
+    taskId: actBehalfState.taskId || undefined,
+    title,
+    goal,
+    request: goal,
+    audience: ($("act-plan-u-audience") && $("act-plan-u-audience").value.trim()) || undefined,
+    usage: ($("act-plan-u-usage") && $("act-plan-u-usage").value.trim()) || undefined,
+    ...(revision || {}),
+  });
+  if (res && res.code === "stale_plan_state") {
+    setActProgress("成果计划已变化，正在重新加载…");
+    if (actBehalfState.taskId) await restoreActDeliverablePlan(actBehalfState.taskId);
+    return;
+  }
+  if (!res || !res.ok) {
+    setActProgress((res && res.message) || "无法形成预计交付。");
+    if (res && res.version && window.DeliverablePlannerUi) {
+      window.DeliverablePlannerUi.renderPlanView(res);
+    }
+    if (res && res.failClosed && window.DeliverablePlannerUi) {
+      window.DeliverablePlannerUi.renderPlanView(res);
+    }
+    return;
+  }
+  if (res.taskId || (res.task && res.task.taskId)) {
+    actBehalfState.taskId = res.taskId || res.task.taskId;
+  }
+  actBehalfState.planRevision = res.revision || null;
+  if (window.DeliverablePlannerUi) window.DeliverablePlannerUi.renderPlanView(res);
+  const modeNote =
+    res.planningMode === "rule_based_fallback"
+      ? "（已使用本机规则规划作为备用）"
+      : res.planningMode === "rule_based"
+        ? "（本机规则规划）"
+        : "";
+  setActProgress((res.statusBanner || "已形成预计交付，可增删改排后保存或确认。") + modeNote);
+  await refreshActTaskList();
+}
+
+async function handleSaveDeliverablePlanDraft() {
+  if (!actBehalfState.taskId) {
+    setActProgress("请先形成预计交付。");
+    return;
+  }
+  if (!window.DeliverablePlannerUi || !window.digitalMe.actBehalfPlanSaveDraft) return;
+  const goal = ($("act-request") && $("act-request").value.trim()) || "";
+  const understanding = window.DeliverablePlannerUi.collectUnderstandingFromDom(goal);
+  const items = window.DeliverablePlannerUi.collectItemsFromDom();
+  setActProgress("正在保存成果计划草稿…");
+  const res = await window.digitalMe.actBehalfPlanSaveDraft({
+    taskId: actBehalfState.taskId,
+    understanding,
+    items,
+    ...(actBehalfState.planRevision || {}),
+  });
+  if (res && res.code === "stale_plan_state") {
+    setActProgress("成果计划已变化，正在重新加载…");
+    await restoreActDeliverablePlan(actBehalfState.taskId);
+    return;
+  }
+  if (!res || !res.ok) {
+    setActProgress((res && res.message) || "保存成果计划草稿失败。");
+    return;
+  }
+  actBehalfState.planRevision = res.revision || null;
+  window.DeliverablePlannerUi.renderPlanView(res);
+  setActProgress(res.message || "成果计划草稿已保存。");
+}
+
+async function handleConfirmDeliverablePlan() {
+  if (!actBehalfState.taskId) {
+    setActProgress("请先形成预计交付。");
+    return;
+  }
+  if (window.DeliverablePlannerUi && window.digitalMe.actBehalfPlanSaveDraft) {
+    const goal = ($("act-request") && $("act-request").value.trim()) || "";
+    const understanding = window.DeliverablePlannerUi.collectUnderstandingFromDom(goal);
+    const items = window.DeliverablePlannerUi.collectItemsFromDom();
+    const saved = await window.digitalMe.actBehalfPlanSaveDraft({
+      taskId: actBehalfState.taskId,
+      understanding,
+      items,
+      ...(actBehalfState.planRevision || {}),
+    });
+    if (saved && saved.code === "stale_plan_state") {
+      setActProgress("成果计划已变化，正在重新加载…");
+      await restoreActDeliverablePlan(actBehalfState.taskId);
+      return;
+    }
+    if (!saved || !saved.ok) {
+      setActProgress((saved && saved.message) || "确认前保存草稿失败。");
+      return;
+    }
+    actBehalfState.planRevision = saved.revision || null;
+  }
+  const res = await window.digitalMe.actBehalfPlanConfirm({
+    taskId: actBehalfState.taskId,
+    ...(actBehalfState.planRevision || {}),
+  });
+  if (res && res.code === "stale_plan_state") {
+    setActProgress("成果计划已变化，正在重新加载…");
+    await restoreActDeliverablePlan(actBehalfState.taskId);
+    return;
+  }
+  if (!res || !res.ok) {
+    setActProgress((res && res.message) || "无法确认成果计划。");
+    return;
+  }
+  actBehalfState.planRevision = res.revision || null;
+  if (window.DeliverablePlannerUi) window.DeliverablePlannerUi.renderPlanView(res);
+  setActProgress(res.message || "成果计划已准备，尚未开始执行。");
+}
+
+async function handleCancelDeliverablePlanDraft() {
+  if (!actBehalfState.taskId) {
+    setActProgress("没有可取消的草稿。");
+    return;
+  }
+  const res = await window.digitalMe.actBehalfPlanCancelDraft({
+    taskId: actBehalfState.taskId,
+    ...(actBehalfState.planRevision || {}),
+  });
+  if (res && res.code === "stale_plan_state") {
+    setActProgress("成果计划已变化，正在重新加载…");
+    await restoreActDeliverablePlan(actBehalfState.taskId);
+    return;
+  }
+  if (!res || !res.ok) {
+    setActProgress((res && res.message) || "无法取消草稿。");
+    return;
+  }
+  actBehalfState.planRevision = res.revision || null;
+  if (window.DeliverablePlannerUi) window.DeliverablePlannerUi.renderPlanView(res);
+  setActProgress(res.message || "已取消当前草稿。");
 }
 
 async function saveActBehalfDraft() {
@@ -7141,6 +7310,13 @@ function wireActBehalfUi() {
   });
   $("btn-act-reload-context")?.addEventListener("click", () => loadActBehalfContext());
   $("btn-act-auto-generate")?.addEventListener("click", handleAutoGenerate);
+  $("btn-act-form-plan")?.addEventListener("click", () => handleFormDeliverablePlan());
+  $("btn-act-plan-add-item")?.addEventListener("click", () => {
+    if (window.DeliverablePlannerUi) window.DeliverablePlannerUi.addBlankItem();
+  });
+  $("btn-act-plan-save-draft")?.addEventListener("click", () => handleSaveDeliverablePlanDraft());
+  $("btn-act-plan-confirm")?.addEventListener("click", () => handleConfirmDeliverablePlan());
+  $("btn-act-plan-cancel-draft")?.addEventListener("click", () => handleCancelDeliverablePlanDraft());
   $("btn-act-add-file")?.addEventListener("click", () => handleActSelectFiles("files"));
   $("btn-act-add-folder")?.addEventListener("click", () => handleActSelectFiles("folder"));
   $("btn-act-save")?.addEventListener("click", () => saveActBehalfDraft());

@@ -251,9 +251,28 @@ function normalizeTask(input) {
     authorization: (input && input.authorization) || null,
     audit: (input && input.audit) || null,
     modelMeta: (input && input.modelMeta) || null,
+    deliverablePlanning: normalizeDeliverablePlanning(input && input.deliverablePlanning),
+    lifecycleStatus: normalizeLifecycleStatus(input && input.lifecycleStatus),
     createdAt: String((input && input.createdAt) || now),
     updatedAt: String((input && input.updatedAt) || now),
   };
+}
+
+function normalizeDeliverablePlanning(raw) {
+  if (!raw || typeof raw !== "object") {
+    return { planId: null, currentDraftVersionId: null, activeConfirmedVersionId: null };
+  }
+  return {
+    planId: raw.planId ? String(raw.planId) : null,
+    currentDraftVersionId: raw.currentDraftVersionId ? String(raw.currentDraftVersionId) : null,
+    activeConfirmedVersionId: raw.activeConfirmedVersionId ? String(raw.activeConfirmedVersionId) : null,
+  };
+}
+
+function normalizeLifecycleStatus(raw) {
+  const v = String(raw || "active");
+  if (v === "archived" || v === "soft_deleted" || v === "active") return v;
+  return "active";
 }
 
 function listTasks(userData) {
@@ -326,6 +345,13 @@ async function saveTask(userData, taskInput) {
       // Preserve createdAt from existing record when present
       const prev = store.tasks[idx];
       if (prev && prev.createdAt) task.createdAt = String(prev.createdAt);
+      // Draft saves from renderer omit plan pointers — never wipe them silently.
+      if (!Object.prototype.hasOwnProperty.call(taskInput || {}, "deliverablePlanning")) {
+        task.deliverablePlanning = normalizeDeliverablePlanning(prev.deliverablePlanning);
+      }
+      if (!Object.prototype.hasOwnProperty.call(taskInput || {}, "lifecycleStatus")) {
+        task.lifecycleStatus = normalizeLifecycleStatus(prev.lifecycleStatus);
+      }
       store.tasks[idx] = task;
     } else {
       store.tasks.unshift(task);
@@ -335,14 +361,53 @@ async function saveTask(userData, taskInput) {
   return { ok: true, task };
 }
 
+/**
+ * Physical purge is not the product delete path for DVL2-01.
+ * Confirmed / planned tasks must soft-delete; never leave executable orphans.
+ */
 async function deleteTask(userData, taskId) {
   const id = String(taskId || "");
+  const got = getTask(userData, id, { heal: false });
+  if (got.ok) {
+    const dp = got.task.deliverablePlanning || {};
+    if (dp.planId || dp.activeConfirmedVersionId || dp.currentDraftVersionId) {
+      return {
+        ok: false,
+        code: "use_soft_delete",
+        message: "该任务已关联成果计划，不能直接物理删除；请使用归档或软删除。",
+      };
+    }
+  }
   await enqueueWrite(async () => {
     const store = loadStore(userData);
     store.tasks = (store.tasks || []).filter((t) => t.taskId !== id);
     await persistStoreAtomic(userData, store);
   });
   return { ok: true };
+}
+
+async function softDeleteTask(userData, taskId) {
+  const got = getTask(userData, taskId, { heal: false });
+  if (!got.ok) return got;
+  const task = {
+    ...got.task,
+    lifecycleStatus: "soft_deleted",
+    status: "soft_deleted",
+    updatedAt: new Date().toISOString(),
+  };
+  return saveTask(userData, task);
+}
+
+async function archiveTask(userData, taskId) {
+  const got = getTask(userData, taskId, { heal: false });
+  if (!got.ok) return got;
+  const task = {
+    ...got.task,
+    lifecycleStatus: "archived",
+    status: "archived",
+    updatedAt: new Date().toISOString(),
+  };
+  return saveTask(userData, task);
 }
 
 module.exports = {
@@ -355,6 +420,10 @@ module.exports = {
   getTask,
   saveTask,
   deleteTask,
+  softDeleteTask,
+  archiveTask,
   normalizeTask,
+  normalizeDeliverablePlanning,
+  normalizeLifecycleStatus,
   migrateLegacySelectedSelfContext,
 };

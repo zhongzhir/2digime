@@ -486,8 +486,32 @@
                 </details>
                 <div class="builder-actions">
                    <button id="btn-act-auto-generate" class="btn btn-primary" type="button" data-testid="btn-act-auto-generate">开始</button>
+                  <button id="btn-act-form-plan" class="btn" type="button" data-testid="btn-act-form-plan">形成预计交付</button>
                   <button id="btn-act-save" class="btn-ghost" type="button" data-testid="btn-act-save">保存草稿</button>
                 </div>
+                <section id="act-deliverable-plan-panel" class="act-deliverable-plan-panel hidden" data-testid="act-deliverable-plan-panel">
+                  <div class="ext-store-head">
+                    <h3>成果计划</h3>
+                  </div>
+                  <p id="act-plan-status" class="muted write-rail-hint" data-testid="act-plan-status"></p>
+                  <p id="act-plan-readiness" class="muted write-rail-hint" data-testid="act-plan-readiness"></p>
+                  <div class="act-plan-understanding" data-testid="act-plan-understanding">
+                    <h4>任务理解</h4>
+                    <dl id="act-plan-understanding-dl" class="act-plan-dl"></dl>
+                  </div>
+                  <div class="act-plan-items-block">
+                    <div class="ext-store-head">
+                      <h4>预计交付</h4>
+                      <button id="btn-act-plan-add-item" class="btn-ghost" type="button" data-testid="btn-act-plan-add-item">新增一项</button>
+                    </div>
+                    <div id="act-plan-items" class="act-plan-items" data-testid="act-plan-items"></div>
+                  </div>
+                  <div class="builder-actions">
+                    <button id="btn-act-plan-save-draft" class="btn-ghost" type="button" data-testid="btn-act-plan-save-draft">保存成果计划草稿</button>
+                    <button id="btn-act-plan-confirm" class="btn btn-primary" type="button" data-testid="btn-act-plan-confirm">确认成果计划</button>
+                    <button id="btn-act-plan-cancel-draft" class="btn-ghost" type="button" data-testid="btn-act-plan-cancel-draft">取消当前草稿</button>
+                  </div>
+                </section>
                 <details class="act-context-block" id="act-context-details">
                   <summary class="ext-store-head" style="cursor:pointer; list-style:none">
                     <span style="font-size:0.85rem; color:var(--muted-foreground)">高级：查看/调整本次使用的本人信息</span>
@@ -1394,6 +1418,7 @@
     <script src="../chat-message-model.js"></script>
     <script src="../chat-artifact-link.js"></script>
     <script src="../session-overflow-menu.js"></script>
+    <script src="deliverable-planner.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

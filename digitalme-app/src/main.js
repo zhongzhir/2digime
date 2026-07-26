@@ -29,6 +29,11 @@ const researchGrounded = require("./research/grounded");
 const personalSkills = require("./skills/personal");
 const sessions = require("./sessions");
 const actBehalfStore = require("./act-behalf/task-store");
+const deliverablePlanStore = require("./act-behalf/deliverable-plan-store");
+const deliverablePlanConsistency = require("./act-behalf/deliverable-plan-consistency");
+const deliverablePlanner = require("./act-behalf/deliverable-planner");
+const { recomputeExecutionReadiness } = require("./act-behalf/deliverable-plan-readiness");
+const { validateDependencyGraph } = require("./act-behalf/deliverable-plan-schema");
 const { parseActBehalfOutput, buildActBehalfMessages, parseEmailOutput, buildEmailMessages, parseVideoAudioOutput, buildVideoAudioMessages, buildVideoAudioExport } = require("./act-behalf/parse-output");
 const { normalizeTaskIntent, assertTaskIntentMinimal, detectTaskType, TASK_TYPES } = require("./act-behalf/task-intent");
 const {
@@ -297,6 +302,8 @@ app.whenReady().then(() => {
         ? require("../scripts/model-routing-acceptance-harness.cjs")
         : process.env.DIGITALME_CAPABILITY_ACCEPTANCE === "1"
         ? require("../scripts/capability-acceptance-harness.cjs")
+        : process.env.DIGITALME_DVL2_01_PLANNER_ACCEPTANCE === "1"
+        ? require("../scripts/dvl2-01-planner-acceptance-harness.cjs")
         : process.env.DIGITALME_VISUAL_ACCEPTANCE === "1"
         ? require("../scripts/visual-acceptance-harness.cjs")
         : process.env.DIGITALME_P107_OWNER_RUNTIME === "1"
@@ -333,6 +340,8 @@ app.whenReady().then(() => {
         ? harness.runModelRoutingAcceptanceHarness
         : process.env.DIGITALME_CAPABILITY_ACCEPTANCE === "1"
         ? harness.runCapabilityAcceptanceHarness
+        : process.env.DIGITALME_DVL2_01_PLANNER_ACCEPTANCE === "1"
+        ? harness.runDvl201PlannerAcceptanceHarness
         : process.env.DIGITALME_VISUAL_ACCEPTANCE === "1"
         ? harness.runVisualAcceptanceHarness
         : process.env.DIGITALME_P107_OWNER_RUNTIME === "1"
@@ -2045,6 +2054,789 @@ ipcMain.handle("actBehalf:save", async (_e, payload) => {
       ok: false,
       code: err && err.code ? err.code : "save_failed",
       message: err && err.message ? err.message : "无法保存任务。",
+    };
+  }
+});
+
+/** DVL2-01: narrow plan IPC (prefix actBehalf:plan*). */
+function newPlanningAuditId() {
+  return "plaudit_" + Date.now().toString(36) + "_" + require("node:crypto").randomBytes(3).toString("hex");
+}
+
+function planningInputDigest(fields) {
+  const names = Object.keys(fields || {})
+    .filter((k) => fields[k] != null && String(fields[k]).trim() !== "")
+    .sort();
+  return { fieldNames: names, fieldCount: names.length };
+}
+
+function mapPlanningPurposeToTaskType(purpose) {
+  if (purpose === "deliverable_planning") return "artifact";
+  return purpose || "artifact";
+}
+
+function buildDeliverablePlanView(plan, task, consistencyExtra) {
+  const version = deliverablePlanConsistency.pickDisplayVersion(plan);
+  const readiness = recomputeExecutionReadiness(version);
+  const confirmed =
+    plan && plan.activeConfirmedVersionId && plan.versions
+      ? plan.versions[plan.activeConfirmedVersionId]
+      : null;
+  const draft =
+    plan && plan.currentDraftVersionId && plan.versions ? plan.versions[plan.currentDraftVersionId] : null;
+  const items = ((version && version.items) || []).map((it) => ({
+    ...it,
+    supportStatusLabel: deliverablePlanConsistency.supportStatusLabel(it),
+  }));
+  let statusBanner = "";
+  if (consistencyExtra && consistencyExtra.failClosed) {
+    statusBanner =
+      (consistencyExtra && consistencyExtra.message) ||
+      "成果计划一致性异常，已暂停编辑与确认，请先修复。";
+  } else if (confirmed && !draft) {
+    statusBanner = "成果计划已准备，尚未开始执行。";
+  } else if (confirmed && draft) {
+    statusBanner = "已有确认计划；当前草稿尚未确认，确认前仍以已确认计划为准。";
+  } else if (draft) {
+    statusBanner = "成果计划草稿可编辑，尚未确认。";
+  }
+  const revision = deliverablePlanConsistency.revisionTokensFromPlan(plan);
+  return {
+    ok: !(consistencyExtra && consistencyExtra.failClosed),
+    taskId: task && task.taskId,
+    deliverablePlanning:
+      (consistencyExtra && consistencyExtra.deliverablePlanning) ||
+      (task && task.deliverablePlanning) ||
+      deliverablePlanConsistency.pointersFromRecord(plan),
+    plan,
+    version: version
+      ? {
+          ...version,
+          items,
+        }
+      : null,
+    readiness,
+    statusBanner,
+    revision,
+    consistency: consistencyExtra || { status: "ok" },
+  };
+}
+
+async function saveTaskPlanPointers(userData, taskId, { deliverablePlanning, auditEvent, planningInvocation, extraPatch }) {
+  const got = actBehalfStore.getTask(userData, taskId, { heal: false });
+  if (!got.ok) return got;
+  let audit = got.task.audit;
+  if (auditEvent) {
+    audit = deliverablePlanConsistency.appendAudit({ audit }, auditEvent);
+  }
+  if (planningInvocation) {
+    audit = deliverablePlanConsistency.appendPlanningInvocation({ audit }, planningInvocation);
+  }
+  const next = {
+    ...got.task,
+    ...(extraPatch || {}),
+    deliverablePlanning,
+    audit,
+  };
+  return actBehalfStore.saveTask(userData, next);
+}
+
+function assertPlanMutable(task, plan) {
+  if (deliverablePlanConsistency.isInactiveLifecycle(task && task.lifecycleStatus)) {
+    return { ok: false, code: "task_inactive", message: "已归档或已删除的任务不可继续规划。" };
+  }
+  if (plan && deliverablePlanConsistency.isInactiveLifecycle(plan.lifecycleStatus)) {
+    return { ok: false, code: "plan_inactive", message: "已归档或已删除的成果计划不可编辑或确认。" };
+  }
+  return { ok: true };
+}
+
+async function reconcileDeliverablePlanForTask(userData, taskId) {
+  const got = actBehalfStore.getTask(userData, taskId, { heal: false });
+  if (!got.ok) return got;
+  const plans = deliverablePlanStore.findPlanByTaskId(userData, taskId);
+  // Also check pointer planId directly (may differ from taskId index if rebind attempted)
+  const ptr = got.task.deliverablePlanning || {};
+  if (ptr.planId && !plans.some((p) => p.planId === ptr.planId)) {
+    const byId = deliverablePlanStore.getPlan(userData, ptr.planId);
+    if (!byId.ok) {
+      const result = deliverablePlanConsistency.reconcileTaskAndPlans({
+        task: got.task,
+        plansForTask: [],
+      });
+      const view = buildDeliverablePlanView(null, got.task, {
+        failClosed: true,
+        status: "fail_closed",
+        code: result.code,
+        message: result.message,
+        conflicts: result.conflicts,
+        audits: result.audits,
+        deliverablePlanning: result.deliverablePlanning,
+      });
+      return {
+        ...view,
+        ok: false,
+        failClosed: true,
+        code: result.code || "plan_missing_for_task_pointer",
+        message: result.message,
+        conflicts: result.conflicts,
+        audits: result.audits,
+      };
+    }
+  }
+
+  const result = deliverablePlanConsistency.reconcileTaskAndPlans({
+    task: got.task,
+    plansForTask: plans,
+  });
+
+  // failClosed: never persist patches
+  if (!result.failClosed) {
+    if (result.safePlanPatch) {
+      await deliverablePlanStore.savePlanRecord(userData, result.safePlanPatch, {
+        expectedRevision: result.casExpectedRevision,
+      });
+    }
+    if (result.safeTaskPatch && Object.keys(result.safeTaskPatch).length) {
+      let audit = got.task.audit;
+      for (const ev of result.audits || []) {
+        audit = deliverablePlanConsistency.appendAudit({ audit }, ev);
+      }
+      await actBehalfStore.saveTask(userData, {
+        ...got.task,
+        ...result.safeTaskPatch,
+        audit,
+      });
+    }
+  }
+
+  const refreshed = actBehalfStore.getTask(userData, taskId, { heal: false });
+  const plan =
+    (result.plans && result.plans[0]) ||
+    (refreshed.ok && refreshed.task.deliverablePlanning && refreshed.task.deliverablePlanning.planId
+      ? (() => {
+          const g = deliverablePlanStore.getPlan(userData, refreshed.task.deliverablePlanning.planId);
+          return g.ok ? g.plan : null;
+        })()
+      : null);
+  const view = buildDeliverablePlanView(plan, refreshed.task, {
+    failClosed: !!result.failClosed,
+    status: result.failClosed ? "fail_closed" : "ok",
+    code: result.code,
+    message: result.message,
+    conflicts: result.conflicts || [],
+    audits: result.audits || [],
+    deliverablePlanning: result.deliverablePlanning,
+  });
+  return {
+    ...view,
+    ok: !result.failClosed,
+    failClosed: !!result.failClosed,
+    code: result.failClosed ? result.code || "fail_closed" : undefined,
+    message: result.failClosed
+      ? result.message ||
+        ((result.conflicts && result.conflicts[0] && result.conflicts[0].message) ||
+          "计划一致性冲突，已停止自动修复。")
+      : undefined,
+    conflicts: result.conflicts,
+    audits: result.audits,
+  };
+}
+
+async function loadPlanForTaskOrFail(userData, taskId) {
+  const got = actBehalfStore.getTask(userData, taskId, { heal: false });
+  if (!got.ok) return { ...got, task: null, plan: null };
+  const mutable = assertPlanMutable(got.task, null);
+  if (!mutable.ok) return { ...mutable, task: got.task, plan: null };
+
+  const ptr = got.task.deliverablePlanning || {};
+  if (ptr.planId) {
+    const byId = deliverablePlanStore.getPlan(userData, ptr.planId);
+    if (!byId.ok) {
+      const rec = await reconcileDeliverablePlanForTask(userData, taskId);
+      return { ok: false, code: rec.code || "plan_missing_for_task_pointer", message: rec.message, task: got.task, plan: null, reconcile: rec };
+    }
+  }
+
+  const plans = deliverablePlanStore.findPlanByTaskId(userData, taskId);
+  if (plans.length > 1) {
+    const rec = await reconcileDeliverablePlanForTask(userData, taskId);
+    return { ok: false, code: rec.code || "multiple_plan_records", message: rec.message, task: got.task, plan: null, reconcile: rec };
+  }
+  const plan = plans[0] || null;
+  const inactive = assertPlanMutable(got.task, plan);
+  if (!inactive.ok) return { ...inactive, task: got.task, plan };
+  return { ok: true, task: got.task, plan };
+}
+
+function extractRevisionExpected(payload) {
+  if (!payload || typeof payload !== "object") return null;
+  if (
+    payload.expectedPlanUpdatedAt != null ||
+    payload.expectedCurrentDraftVersionId != null ||
+    payload.expectedActiveConfirmedVersionId != null
+  ) {
+    return {
+      expectedPlanUpdatedAt: payload.expectedPlanUpdatedAt ?? null,
+      expectedCurrentDraftVersionId: payload.expectedCurrentDraftVersionId ?? null,
+      expectedActiveConfirmedVersionId: payload.expectedActiveConfirmedVersionId ?? null,
+    };
+  }
+  if (payload.revision && typeof payload.revision === "object") {
+    return {
+      expectedPlanUpdatedAt: payload.revision.expectedPlanUpdatedAt ?? null,
+      expectedCurrentDraftVersionId: payload.revision.expectedCurrentDraftVersionId ?? null,
+      expectedActiveConfirmedVersionId: payload.revision.expectedActiveConfirmedVersionId ?? null,
+    };
+  }
+  return null;
+}
+
+async function assertFreshPlan(userData, planId, expected) {
+  if (!planId) return { ok: true, plan: null };
+  const fresh = deliverablePlanStore.getPlan(userData, planId);
+  if (!fresh.ok) return fresh;
+  const match = deliverablePlanConsistency.assertRevisionMatch(fresh.plan, expected);
+  if (!match.ok) return match;
+  return { ok: true, plan: fresh.plan };
+}
+
+ipcMain.handle("actBehalf:planEnsure", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    let taskId = payload && payload.taskId ? String(payload.taskId) : "";
+    const goal = String((payload && (payload.goal || payload.request)) || "").trim();
+    if (!taskId) {
+      if (!goal) return { ok: false, code: "empty_goal", message: "请先填写任务目标。" };
+      const saved = await saveDraftFromRenderer(actBehalfStore, userData, payload || {});
+      if (!saved.ok) return saved;
+      taskId = saved.task.taskId;
+    }
+    const got = actBehalfStore.getTask(userData, taskId, { heal: false });
+    if (!got.ok) return got;
+    const inactive = assertPlanMutable(got.task, null);
+    if (!inactive.ok) return inactive;
+
+    const ptr = got.task.deliverablePlanning || {};
+    if (ptr.planId) {
+      const existing = deliverablePlanStore.getPlan(userData, ptr.planId);
+      if (!existing.ok) {
+        return reconcileDeliverablePlanForTask(userData, taskId);
+      }
+      return buildDeliverablePlanView(existing.plan, got.task, { status: "ok" });
+    }
+
+    let plans = deliverablePlanStore.findPlanByTaskId(userData, taskId);
+    if (plans.length > 1) {
+      return reconcileDeliverablePlanForTask(userData, taskId);
+    }
+    if (plans[0]) {
+      return buildDeliverablePlanView(plans[0], got.task, { status: "ok" });
+    }
+
+    // No pointers and no plan — create shell via rule-based suggestion
+    const g = goal || String((got.task.taskIntent && got.task.taskIntent.goal) || got.task.goal || "").trim();
+    const suggestion = deliverablePlanner.ruleBasedPlan({ goal: g || "未命名目标" });
+    const applied = deliverablePlanner.applySuggestionToRecord({
+      taskId,
+      existingRecord: null,
+      suggestion: suggestion.ok
+        ? suggestion
+        : {
+            ok: true,
+            understanding: require("./act-behalf/deliverable-plan-schema").emptyUnderstanding(g),
+            items: [],
+          },
+      goal: g,
+    });
+    const committed = await deliverablePlanConsistency.commitPlanThenTask({
+      userData,
+      planRecord: applied.plan,
+      saveTaskPointers: (args) => saveTaskPlanPointers(userData, taskId, args),
+      auditEvent: { action: "plan_ensure_created" },
+      cas: { expectAbsent: true },
+    });
+    if (!committed.ok) {
+      return {
+        ...committed,
+        ...buildDeliverablePlanView(committed.plan || applied.plan, got.task, {
+          status: committed.consistency || "failed",
+        }),
+      };
+    }
+    return buildDeliverablePlanView(committed.plan, committed.task, { status: "ok" });
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "plan_ensure_failed",
+      message: err && err.message ? err.message : "无法准备成果计划。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:planGenerate", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    let taskId = payload && payload.taskId ? String(payload.taskId) : "";
+    const goal = String((payload && (payload.goal || payload.request)) || "").trim();
+    if (!goal) return { ok: false, code: "empty_goal", message: "请先填写任务目标。" };
+    if (!taskId) {
+      const saved = await saveDraftFromRenderer(actBehalfStore, userData, payload || {});
+      if (!saved.ok) return saved;
+      taskId = saved.task.taskId;
+    } else {
+      await saveDraftFromRenderer(actBehalfStore, userData, { ...(payload || {}), taskId, goal });
+    }
+
+    const loaded = await loadPlanForTaskOrFail(userData, taskId);
+    if (!loaded.ok) return loaded.reconcile || loaded;
+
+    if (loaded.plan) {
+      const expected = extractRevisionExpected(payload);
+      const fresh = await assertFreshPlan(userData, loaded.plan.planId, expected);
+      if (!fresh.ok) return fresh;
+      loaded.plan = fresh.plan;
+    }
+
+    const planningAuditId = newPlanningAuditId();
+    const inputFields = {
+      goal,
+      audience: payload && payload.audience,
+      usage: payload && payload.usage,
+      constraints: payload && payload.constraints,
+      deadline: payload && payload.deadline,
+      expectedQuality: payload && payload.expectedQuality,
+    };
+    const digest = planningInputDigest(inputFields);
+
+    const forceRule =
+      process.env.DIGITALME_PLANNER_FORCE_RULE === "1" ||
+      process.env.DIGITALME_ACT_BEHALF_FAKE === "1" ||
+      !!(payload && payload.forceRule);
+
+    let routeUsed = null;
+    const callModelFn = forceRule
+      ? null
+      : async (messages, options) => {
+          const cfg = readConfig();
+          const purpose = (options && options.purpose) || "deliverable_planning";
+          const taskType = mapPlanningPurposeToTaskType(purpose);
+          try {
+            const content = await callModel(cfg, messages, { ...(options || {}), taskType });
+            routeUsed = { purpose, mappedTaskType: taskType, ok: true };
+            // Frozen adapter contract: return string only (route meta via closure).
+            return String(content == null ? "" : content);
+          } catch (err) {
+            routeUsed = {
+              purpose,
+              mappedTaskType: taskType,
+              ok: false,
+              errorCode: err && err.code,
+            };
+            throw err;
+          }
+        };
+
+    const suggestion = await deliverablePlanner.generatePlanSuggestion(inputFields, {
+      callModel: callModelFn,
+      forceRule,
+    });
+
+    const planningInvocationBase = {
+      id: planningAuditId,
+      taskId,
+      planId: loaded.plan ? loaded.plan.planId : null,
+      versionId: null,
+      mode: suggestion.mode || (forceRule ? "rule_based" : "model_assisted"),
+      purpose: "deliverable_planning",
+      route: routeUsed || (forceRule ? { purpose: "deliverable_planning", mappedTaskType: "artifact", forcedRule: true } : null),
+      ok: !!suggestion.ok,
+      errorCode: suggestion.ok ? null : suggestion.code || null,
+      modelError: suggestion.modelError || null,
+      at: new Date().toISOString(),
+      inputDigest: digest,
+    };
+
+    if (!suggestion.ok) {
+      await saveTaskPlanPointers(userData, taskId, {
+        deliverablePlanning: loaded.task.deliverablePlanning,
+        planningInvocation: planningInvocationBase,
+      });
+      return suggestion;
+    }
+
+    suggestion.planningInvocationRef = planningAuditId;
+
+    const applied = deliverablePlanner.applySuggestionToRecord({
+      taskId,
+      existingRecord: loaded.plan,
+      suggestion,
+      goal,
+    });
+    if (!applied.ok) return applied;
+
+    planningInvocationBase.planId = applied.plan.planId;
+    planningInvocationBase.versionId = applied.version && applied.version.versionId;
+    planningInvocationBase.mode = suggestion.mode;
+
+    const cas = loaded.plan
+      ? { expectedRevision: extractRevisionExpected(payload) || deliverablePlanConsistency.revisionTokensFromPlan(loaded.plan) }
+      : { expectAbsent: true };
+
+    const committed = await deliverablePlanConsistency.commitPlanThenTask({
+      userData,
+      planRecord: applied.plan,
+      saveTaskPointers: (args) =>
+        saveTaskPlanPointers(userData, taskId, {
+          ...args,
+          planningInvocation: planningInvocationBase,
+        }),
+      auditEvent: {
+        action: "plan_generate",
+        mode: suggestion.mode,
+        planningInvocationRef: planningAuditId,
+      },
+      cas,
+    });
+    const view = buildDeliverablePlanView(committed.plan || applied.plan, committed.task || loaded.task, {
+      status: committed.consistency || (committed.ok ? "ok" : "failed"),
+    });
+    return {
+      ...view,
+      ok: committed.ok,
+      code: committed.code,
+      message: committed.message,
+      consistency: committed.consistency,
+      planningMode: suggestion.mode,
+      planningInvocationRef: planningAuditId,
+      modelError: suggestion.modelError || null,
+      needsReconcile: committed.needsReconcile || false,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "plan_generate_failed",
+      message: err && err.message ? err.message : "无法形成预计交付。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:planSaveDraft", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const taskId = payload && payload.taskId ? String(payload.taskId) : "";
+    if (!taskId) return { ok: false, code: "task_required", message: "请先保存任务后再保存成果计划草稿。" };
+    const loaded = await loadPlanForTaskOrFail(userData, taskId);
+    if (!loaded.ok) return loaded.reconcile || loaded;
+    if (!loaded.plan) return { ok: false, code: "plan_not_found", message: "尚未形成成果计划。" };
+
+    const expected = extractRevisionExpected(payload);
+    const fresh = await assertFreshPlan(userData, loaded.plan.planId, expected);
+    if (!fresh.ok) return fresh;
+
+    if (payload && payload.items) {
+      const graph = validateDependencyGraph(payload.items);
+      if (!graph.ok) {
+        return {
+          ok: false,
+          code: "graph_invalid",
+          message: "预计交付依赖关系无效，请先修正。",
+          errors: graph.errors,
+        };
+      }
+    }
+
+    const edited = deliverablePlanner.saveDraftEdits(fresh.plan, {
+      understanding: payload && payload.understanding,
+      items: payload && payload.items,
+    });
+    if (!edited.ok) return edited;
+
+    const committed = await deliverablePlanConsistency.commitPlanThenTask({
+      userData,
+      planRecord: edited.plan,
+      saveTaskPointers: (args) => saveTaskPlanPointers(userData, taskId, args),
+      auditEvent: { action: "plan_save_draft" },
+      cas: {
+        expectedRevision:
+          extractRevisionExpected(payload) || deliverablePlanConsistency.revisionTokensFromPlan(fresh.plan),
+      },
+    });
+    const view = buildDeliverablePlanView(committed.plan || edited.plan, committed.task || loaded.task, {
+      status: committed.consistency || (committed.ok ? "ok" : "failed"),
+    });
+    return {
+      ...view,
+      ok: committed.ok,
+      code: committed.code,
+      message: committed.message || (committed.ok ? "草稿已保存。" : undefined),
+      consistency: committed.consistency,
+      needsReconcile: committed.needsReconcile || false,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "plan_save_failed",
+      message: err && err.message ? err.message : "无法保存成果计划草稿。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:planConfirm", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const taskId = payload && payload.taskId ? String(payload.taskId) : "";
+    if (!taskId) return { ok: false, code: "task_required", message: "请先保存任务后再确认成果计划。" };
+    const loaded = await loadPlanForTaskOrFail(userData, taskId);
+    if (!loaded.ok) return loaded.reconcile || loaded;
+    if (!loaded.plan) return { ok: false, code: "plan_not_found", message: "尚未形成成果计划。" };
+
+    const expected = extractRevisionExpected(payload);
+    const fresh = await assertFreshPlan(userData, loaded.plan.planId, expected);
+    if (!fresh.ok) return fresh;
+
+    const confirmed = deliverablePlanner.confirmDraft(fresh.plan);
+    if (!confirmed.ok) return confirmed;
+
+    const committed = await deliverablePlanConsistency.commitPlanThenTask({
+      userData,
+      planRecord: confirmed.plan,
+      saveTaskPointers: (args) =>
+        saveTaskPlanPointers(userData, taskId, {
+          ...args,
+          extraPatch: { status: "plan_confirmed" },
+        }),
+      auditEvent: { action: "plan_confirm", versionId: confirmed.version.versionId },
+      cas: {
+        expectedRevision:
+          extractRevisionExpected(payload) || deliverablePlanConsistency.revisionTokensFromPlan(fresh.plan),
+      },
+    });
+    const view = buildDeliverablePlanView(committed.plan || confirmed.plan, committed.task || loaded.task, {
+      status: committed.consistency || (committed.ok ? "ok" : "failed"),
+    });
+    return {
+      ...view,
+      ok: committed.ok,
+      code: committed.code,
+      message: committed.ok ? "成果计划已准备，尚未开始执行。" : committed.message,
+      consistency: committed.consistency,
+      needsReconcile: committed.needsReconcile || false,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "plan_confirm_failed",
+      message: err && err.message ? err.message : "无法确认成果计划。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:planCancelDraft", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const taskId = payload && payload.taskId ? String(payload.taskId) : "";
+    if (!taskId) return { ok: false, code: "task_required", message: "缺少任务。" };
+    const loaded = await loadPlanForTaskOrFail(userData, taskId);
+    if (!loaded.ok) return loaded.reconcile || loaded;
+    if (!loaded.plan) return { ok: false, code: "plan_not_found", message: "尚未形成成果计划。" };
+
+    const expected = extractRevisionExpected(payload);
+    const fresh = await assertFreshPlan(userData, loaded.plan.planId, expected);
+    if (!fresh.ok) return fresh;
+
+    const cancelled = deliverablePlanner.cancelDraft(fresh.plan);
+    if (!cancelled.ok) return cancelled;
+
+    const committed = await deliverablePlanConsistency.commitPlanThenTask({
+      userData,
+      planRecord: cancelled.plan,
+      saveTaskPointers: (args) => saveTaskPlanPointers(userData, taskId, args),
+      auditEvent: { action: "plan_cancel_draft" },
+      cas: {
+        expectedRevision:
+          extractRevisionExpected(payload) || deliverablePlanConsistency.revisionTokensFromPlan(fresh.plan),
+      },
+    });
+    const view = buildDeliverablePlanView(committed.plan || cancelled.plan, committed.task || loaded.task, {
+      status: committed.consistency || (committed.ok ? "ok" : "failed"),
+    });
+    return {
+      ...view,
+      ok: committed.ok,
+      code: committed.code,
+      message: committed.message || (committed.ok ? "已取消当前草稿。" : undefined),
+      consistency: committed.consistency,
+      needsReconcile: committed.needsReconcile || false,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "plan_cancel_failed",
+      message: err && err.message ? err.message : "无法取消草稿。",
+    };
+  }
+});
+
+async function syncPlanTaskLifecycle(userData, taskId, lifecycleStatus, expectedRevision) {
+  const got = actBehalfStore.getTask(userData, taskId, { heal: false });
+  if (!got.ok) return got;
+  const plans = deliverablePlanStore.findPlanByTaskId(userData, taskId);
+  const ptr = got.task.deliverablePlanning || {};
+  let plan = plans[0] || null;
+  if (!plan && ptr.planId) {
+    const byId = deliverablePlanStore.getPlan(userData, ptr.planId);
+    if (byId.ok) plan = byId.plan;
+  }
+  if (!plan) {
+    return { ok: false, code: "plan_not_found", message: "该任务没有可同步的成果计划。" };
+  }
+
+  const expected =
+    expectedRevision || deliverablePlanConsistency.revisionTokensFromPlan(plan);
+  const nextPlan = deliverablePlanConsistency.applyLifecycleToPlan(plan, lifecycleStatus);
+  let planResult;
+  try {
+    planResult = await deliverablePlanStore.savePlanRecord(userData, nextPlan, {
+      expectedRevision: expected,
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      code: (err && err.code) || "plan_store_write_failed",
+      message: (err && err.message) || "无法更新成果计划生命周期。",
+      current: err && err.current,
+    };
+  }
+
+  try {
+    const taskSaved = await actBehalfStore.saveTask(userData, {
+      ...got.task,
+      lifecycleStatus,
+      status: lifecycleStatus,
+      deliverablePlanning: deliverablePlanConsistency.pointersFromRecord(planResult.plan),
+      audit: deliverablePlanConsistency.appendAudit(got.task, {
+        action: "lifecycle_" + lifecycleStatus,
+        planId: planResult.plan.planId,
+      }),
+    });
+    return {
+      ok: true,
+      consistency: "ok",
+      plan: planResult.plan,
+      task: taskSaved.task,
+      ...buildDeliverablePlanView(planResult.plan, taskSaved.task, { status: "ok" }),
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      code: "degraded_consistency",
+      message: "计划生命周期已写入，任务状态待同步。",
+      consistency: "degraded_consistency",
+      plan: planResult.plan,
+      needsReconcile: true,
+      taskError: {
+        code: (err && err.code) || "task_store_write_failed",
+        message: (err && err.message) || "任务生命周期写入失败。",
+      },
+    };
+  }
+}
+
+ipcMain.handle("actBehalf:planArchive", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const taskId = payload && payload.taskId ? String(payload.taskId) : "";
+    if (!taskId) return { ok: false, code: "task_required", message: "缺少任务。" };
+    const got = actBehalfStore.getTask(userData, taskId, { heal: false });
+    if (!got.ok) return got;
+    const plans = deliverablePlanStore.findPlanByTaskId(userData, taskId);
+    if (!plans.length) {
+      const ptr = got.task.deliverablePlanning || {};
+      if (ptr.planId) return reconcileDeliverablePlanForTask(userData, taskId);
+      return { ok: false, code: "plan_not_found", message: "尚未形成成果计划。" };
+    }
+    if (plans.length > 1) return reconcileDeliverablePlanForTask(userData, taskId);
+    const expected = extractRevisionExpected(payload);
+    return syncPlanTaskLifecycle(userData, taskId, "archived", expected);
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "plan_archive_failed",
+      message: err && err.message ? err.message : "无法归档成果计划。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:planSoftDelete", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const taskId = payload && payload.taskId ? String(payload.taskId) : "";
+    if (!taskId) return { ok: false, code: "task_required", message: "缺少任务。" };
+    const got = actBehalfStore.getTask(userData, taskId, { heal: false });
+    if (!got.ok) return got;
+    const plans = deliverablePlanStore.findPlanByTaskId(userData, taskId);
+    if (!plans.length) {
+      const ptr = got.task.deliverablePlanning || {};
+      if (ptr.planId) return reconcileDeliverablePlanForTask(userData, taskId);
+      return { ok: false, code: "plan_not_found", message: "尚未形成成果计划。" };
+    }
+    if (plans.length > 1) return reconcileDeliverablePlanForTask(userData, taskId);
+    const expected = extractRevisionExpected(payload);
+    return syncPlanTaskLifecycle(userData, taskId, "soft_deleted", expected);
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "plan_soft_delete_failed",
+      message: err && err.message ? err.message : "无法软删除成果计划。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:planGet", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const taskId = payload && payload.taskId ? String(payload.taskId) : "";
+    if (!taskId) return { ok: false, code: "task_required", message: "缺少任务。" };
+    return reconcileDeliverablePlanForTask(userData, taskId);
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "plan_get_failed",
+      message: err && err.message ? err.message : "无法读取成果计划。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:planRecomputeReadiness", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const taskId = payload && payload.taskId ? String(payload.taskId) : "";
+    if (!taskId) return { ok: false, code: "task_required", message: "缺少任务。" };
+    const view = await reconcileDeliverablePlanForTask(userData, taskId);
+    if (!view.ok && view.failClosed) return view;
+    const readiness = recomputeExecutionReadiness(view.version);
+    return { ...view, readiness, ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "readiness_failed",
+      message: err && err.message ? err.message : "无法重新评估执行条件。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:planReconcile", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const taskId = payload && payload.taskId ? String(payload.taskId) : "";
+    if (!taskId) return { ok: false, code: "task_required", message: "缺少任务。" };
+    return reconcileDeliverablePlanForTask(userData, taskId);
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "plan_reconcile_failed",
+      message: err && err.message ? err.message : "无法核对成果计划一致性。",
     };
   }
 });
