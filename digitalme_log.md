@@ -5,6 +5,37 @@
 
 ---
 
+## 2026-07-26 DVL2-03 真实成果生成 · 待 Owner 真机验收
+
+### 本次目标
+
+压缩流程一次实现 DVL2-03：四类成果真实落盘（document / presentation / webpage / image）；停在 `ready_for_owner_runtime_acceptance`。
+
+### 本次完成
+
+1. 分支：`codex/dvl2-03-real-deliverable-generation`（自 `b755c06`，含 DVL2-02 runtime `ceb6c83`）；
+2. 实现 commit：`7047113`（`feat(deliverables): implement real deliverable generation`）；
+3. 产物目录：`<userData>/deliverable-artifacts/...`；Version / ArtifactRef / contentHash；
+4. 主按钮「生成成果」；打开文件 / 目录；接受/否定绑定版本；重新生成新版本；
+5. 测试：`test:dvl2-03-generation` 6 pass；`test:dvl2-03-generation-acceptance` Phase A/B pass（4 类 ready）；
+6. 回归：`test:dvl2-02-package`、`test:dvl2-01-planner` 通过；
+7. 状态：`implementation_complete_pending_owner_acceptance` / `ready_for_owner_runtime_acceptance`；**未**标 `implemented`。
+
+### 重要信息
+
+1. 自动测试使用 mock 模型与 mock 图片，不消耗付费额度；
+2. 生产图片能力未配置时单项准确失败，不阻塞其他类型；
+3. 未新增 npm 依赖（复用 pptxgenjs + 本地 MD→HTML + 可选 DOCX）；
+4. two-phase summary：`.codex-qa/dvl2-03-generation-acceptance/two-phase-summary.json`
+
+### 待办事项
+
+1. Owner 真机验收（真实模型）；
+2. 通过后再标 `owner_runtime_accepted` / `accepted_as_implemented`；
+3. 不得 push。
+
+---
+
 ## 2026-07-26 DVL2-03A 一页式任务包起草（待 Codex 集中评审）
 
 ### 本次目标

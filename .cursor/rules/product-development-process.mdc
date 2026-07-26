@@ -43,14 +43,14 @@ Owner / 用户提出的产品想法**可能不全、可错、可非最优**，�
 
 - 架构与研发原则：`digitalme_subject_architecture_and_rd_principles_v0.1.md`
 - 上位合同：`digitalme_phase1_task_DVL2-00_product_and_data_contracts_v0.1.md`（**v0.1.1** / `owner_accepted` / `frozen_for_implementation` / `not_started`）
-- 当前已收口规格：`digitalme_phase1_task_DVL2-02_deliverable_package_and_execution_preparation_v0.1.md`（**v0.1.1**；`accepted_as_implemented`）
-- 实施授权包：`digitalme_phase1_task_DVL2-02_implementation_authorization_v0.1.md`（**v0.1.0**；`implemented`；实现 `20c8832`；runtime `ceb6c83`）
-- 当前起草任务包：`digitalme_phase1_task_DVL2-03A_first_real_document_artifact_v0.1.md`（**v0.1.0-draft**；`spec_and_authorization_drafting` / `codex_review_pending`；`implementation_authorized=false`）
-- 已收口实施规格：`digitalme_phase1_task_DVL2-01_deliverable_planner_v0.1.md`（**v0.1.1** / `accepted_as_implemented`）
+- 当前实现分支：`codex/dvl2-03-real-deliverable-generation`（实现 `7047113`；`ready_for_owner_runtime_acceptance`）
+- 当前已收口规格：`digitalme_phase1_task_DVL2-02_...`（`accepted_as_implemented`）；DVL2-03 压缩实现待 Owner 真机
+- 实施授权包：`digitalme_phase1_task_DVL2-02_implementation_authorization_v0.1.md`（DVL2-02 `implemented`；runtime `ceb6c83`）
+- DVL2-03A 草案：历史参考（已被完整 DVL2-03 吸收）
 - 全局上下文文首：`digitalme_context.md`
 
 **当前主线**：第二纵向闭环 — **多模态成果包交付与渐进式主体构建**。
-**当前下一任务**：**Codex 集中评审 DVL2-03A**（压缩流程；无独立授权文档）。**不得**编码 / 创建实现分支 / push。DVL2-02 已 `implemented`（仅成果包准备）。DVL2-03 全量 **`not_started` / `not_authorized`**。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+**当前下一任务**：**Owner 真机验收 DVL2-03**（实现 `7047113`）。**不得** push；**不得**提前标 `implemented`。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
 
 1. **每次只推进一个已批准任务块**；按 DVL2-00 → 01 → 02 → 03 → 04 → 05 顺序，不得偷跑或并列铺开。
 2. **非阻断问题进入 backlog**；仅四类问题可阻断：主流程不可用、数据损坏丢失、隐私超披露、未授权对外行动。
@@ -66,4 +66,4 @@ Owner / 用户提出的产品想法**可能不全、可错、可非最优**，�
 12. **P1-PANORAMA 执行索引**仅为历史/基础设施状态表，**不是**当前执行计划。
 13. Digital Org、公网协作、支付结算、DID/VC/链上存证不进入当前第二闭环实现。
 14. **未经 Owner 主路径验收不得 `accepted`**。
-15. **下一项**：**Codex 集中评审 DVL2-03A**（`digitalme_phase1_task_DVL2-03A_first_real_document_artifact_v0.1.md`；`v0.1.0-draft`；`implementation_authorized=false`）。不得编码；不得创建实现分支；不得 push；不得启动 DVL2-03 全量。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+15. **下一项**：**Owner 真机验收 DVL2-03**（分支 `codex/dvl2-03-real-deliverable-generation`；实现 `7047113`；`ready_for_owner_runtime_acceptance`）。不得 push；不得提前标 `owner_runtime_accepted` / `accepted_as_implemented` / `implemented`。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
