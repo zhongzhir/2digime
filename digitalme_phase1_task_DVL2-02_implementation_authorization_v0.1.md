@@ -2,15 +2,30 @@
 
 版本：v0.1.0
 日期：2026-07-26
-状态：`authorization_specified` / `codex_review_passed` / `ready_for_owner_implementation_authorization`
-实施：`not_started`
-implementation_authorized：`false`
+状态：`authorization_specified` / `authorization_codex_review_passed` / `owner_implementation_authorized`
+实施：`implementation_in_progress`
+implementation_authorized：`true`
+implementation_branch：`codex/dvl2-02-deliverable-package-preparation`
+implementation_branch_base：`ad3b6eed2f50bd3f1829028da8d7dc650eb01d31`
 上位冻结规格：[`digitalme_phase1_task_DVL2-02_deliverable_package_and_execution_preparation_v0.1.md`](digitalme_phase1_task_DVL2-02_deliverable_package_and_execution_preparation_v0.1.md)（**DVL2-02 v0.1.1** / `owner_accepted` / `frozen_for_implementation`）
 冻结规格提交：`ad3b6eed2f50bd3f1829028da8d7dc650eb01d31`
 冻结实施授权基线：`0a52606b058688865e27b96ed965b22f937fd278`
 规格内容冻结基线：`578648f31d86594cc2bd56ede2e367122cfa98f8`
 
-> **正式边界**：本文是 **implementation authorization** 包。Codex 授权复核已通过；等待 Owner 授予 `implementation_authorized`。**当前仍不得编码**。`implementation_authorized` 仍为 `false`。获 Owner 明确实施授权前：不得创建实现分支、不得修改 `digitalme-app/**`。冲突时：架构原则文 > DVL2-00 > DVL2-01 > DVL2-02 冻结规格 > 本文。本文不得静默改写冻结规格语义。不得标 `owner_authorized` / `implementation_authorized=true` / `implementation_in_progress` / `implemented` / `owner_runtime_accepted` / `accepted_as_implemented` / `completed`。
+> **正式边界**：Owner 已授予 `implementation_authorized`。按冻结规格与本授权包在分支 `codex/dvl2-02-deliverable-package-preparation`（起点 `ad3b6ee`）实现。**不得**扩大到 DVL2-03；**不得**生成真实成果；**不得** push；实现完成后须等待 Owner runtime acceptance。不得标 `owner_runtime_accepted` / `accepted_as_implemented` / `implemented` / `completed`。冲突时：架构原则文 > DVL2-00 > DVL2-01 > DVL2-02 冻结规格 > 本文。
+
+### Owner 实施授权记录
+
+**结论**：已授权开始实现。
+
+Owner 授权原意：
+
+- 按冻结规格和实施授权包实现；
+- 允许创建指定实现分支 `codex/dvl2-02-deliverable-package-preparation`，起点 `ad3b6eed2f50bd3f1829028da8d7dc650eb01d31`；
+- 不允许扩大到 DVL2-03；
+- 不允许生成真实成果 / DeliverableVersion / ArtifactRef / contentHash；
+- 不允许 push；
+- 实现完成后必须等待 Owner runtime acceptance。
 
 ---
 
@@ -405,7 +420,6 @@ outcome: "created_new" | "existing_package" | null
 
 ## 19. 修订记录
 
-| 版本 | 日期 | 说明 |
-|------|------|------|
+| **v0.1.0（Owner implementation authorized）** | 2026-07-26 | **Owner 授予实施授权**：`implementation_authorized=true`；实施 `implementation_in_progress`；分支 `codex/dvl2-02-deliverable-package-preparation` @ `ad3b6ee`；不得 push；不得扩大到 DVL2-03；完成后等待 Owner runtime acceptance |
+| **v0.1.0（Codex final authorization review）** | 2026-07-26 | **Codex 最终授权复核通过（历史）**。状态曾为 `authorization_specified` / `codex_review_passed` / `ready_for_owner_implementation_authorization`；`implementation_authorized=false` |
 | v0.1.0-draft | 2026-07-26 | 初稿：`authorization_drafting` / `codex_review_pending`；基线 `ad3b6ee` 起草提交 `0a52606` |
-| **v0.1.0（Codex final authorization review）** | 2026-07-26 | **Codex 最终授权复核通过**。补齐 Gate 合同表述；状态 → `authorization_specified` / `codex_review_passed` / `ready_for_owner_implementation_authorization`；实施仍 `not_started`；`implementation_authorized=false`；冻结实施授权基线 `0a52606`；等待 Owner 授予实施授权；仍不得编码 |

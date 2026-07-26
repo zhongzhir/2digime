@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-07-26 DVL2-02 Owner 实施授权 · 开始实现
+
+### 本次目标
+
+记录 Owner 授予 `implementation_authorized`；在分支 `codex/dvl2-02-deliverable-package-preparation`（起点 `ad3b6ee`）按冻结规格实现。不得 push。
+
+### 本次完成
+
+1. 创建实现分支并 cherry-pick 授权包提交；
+2. 授权包 → `owner_implementation_authorized`；`implementation_authorized=true`；实施 `implementation_in_progress`；
+3. 最小同步 context / log / Cursor rule。
+
+### 待办事项
+
+1. 完成实现、合同测试与两阶段 Electron 验收；
+2. 停在 `ready_for_owner_runtime_acceptance`；等待 Owner 真机验收。
+
+### 重要信息
+
+1. **不得** push；**不得**扩大到 DVL2-03；**不得**生成真实成果。
+2. 实现提交与 Owner runtime acceptance 分离。
+
+---
+
 ## 2026-07-26 DVL2-02 implementation authorization · Codex 最终复核通过
 
 ### 本次目标
