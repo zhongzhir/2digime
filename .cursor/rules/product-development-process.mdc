@@ -1,5 +1,5 @@
 ---
-description: 产品开发与用户面文案强制规范；数字主体第一纵向闭环阶段规则
+description: 产品开发与用户面文案强制规范；第二纵向闭环阶段规则
 alwaysApply: true
 ---
 
@@ -37,30 +37,30 @@ Owner / 用户提出的产品想法**可能不全、可错、可非最优**，�
 - 无规格升版就堆功能
 - 用文案按钮冒充能力却无可核对依据
 
-## 三、数字主体第一纵向闭环阶段规则（2026-07-21 确立）
+## 三、数字主体第二纵向闭环阶段规则（2026-07-26 更新）
 
 **权威入口**：
 
 - 架构与研发原则：`digitalme_subject_architecture_and_rd_principles_v0.1.md`
-- 当前执行计划：`digitalme_first_vertical_loop_sprint_plan_v0.1.md`（**`spec_frozen`**）
-- 冻结规格：`digitalme_first_vertical_loop_spec_v0.1.md`
+- 当前合同：`digitalme_phase1_task_DVL2-00_product_and_data_contracts_v0.1.md`（**v0.1.1** / `owner_accepted` / `frozen_for_implementation` / `not_started`；DVL2-01～05 权威实施合同；**未**获实现授权）
+- 第一纵向闭环：已 `accepted` / `completed`；其执行计划 = `completed` / `superseded_as_current_execution_plan`
 - 全局上下文文首：`digitalme_context.md`
 
-**当前主线**：第一纵向闭环 — **理解我并产出**（研究与表达）。  
-**下一项任务**：**第一闭环实现 · 第 2 块：真实 Skill 与只读外部调研调用**（须获 Owner 实现授权后才编码）。
+**当前主线**：第二纵向闭环 — **多模态成果包交付与渐进式主体构建**。
+**当前下一任务**：**起草 DVL2-01 成果规划器实施任务包**（纯文档）。DVL2-01 **尚未创建**实施分支、**尚未获得** Owner 实施授权。**禁止**未经独立任务包、Codex 复核和 Owner 授权直接编码。
 
-1. **每次只推进一个已批准任务块**；按纵向闭环顺序，不得并列铺开 Skill / MCP / Agent / DID / 身份平台。
+1. **每次只推进一个已批准任务块**；按 DVL2-00 → 01 → 02 → 03 → 04 → 05 顺序，不得偷跑或并列铺开。
 2. **非阻断问题进入 backlog**；仅四类问题可阻断：主流程不可用、数据损坏丢失、隐私超披露、未授权对外行动。
 3. **用户面能力必须使用冻结状态标签**：可用 · 实验 · 本地模拟 · 预览 · 尚未开放。
-4. **本地模拟不得写成真实外部协作**；失败与取消不得显示成功。
+4. **本地模拟不得写成真实外部协作**；失败与取消不得显示成功；视频/音频本轮不得宣称已支持成品。
 5. **工程完成 ≠ 用户面可用 ≠ accepted**；规格冻结 ≠ 已获实现授权。
-6. **R0 / R1**：`accepted`，**retained as infrastructure**。  
-7. **R2**：实现代码 **retained as infrastructure**；**停止**作为当前验收/边缘修复主线；不得因 R2 边缘问题阻塞第一闭环规划。  
-8. **R3 renderer 迁移**：**`paused`**，**不是**下一步。  
-9. **旧 DM-Core-01A「代表我完成任务」开发指令**：**`superseded`**（不得再按该指令扩展）。  
-   提交 **`55ae01f`**：**`partially_reused_as_first_vertical_loop_scaffold`**（第 1 块已复用脚手架；固定截取与模型自述证据不作最终闭环）。
-10. **PAN-02～PAN-06** 相对新主线 **`paused`**；不得按旧解锁条件自行启动。  
-11. **P1-PANORAMA 执行索引**仅为历史/基础设施状态表，**不是**当前执行计划。  
-12. Digital Org、公网协作、支付结算、DID/VC/链上存证不进入当前第一闭环实现。  
-13. **未经 Owner 主路径验收不得 `accepted`**。  
-14. **下一项**：**第一闭环实现 · 第 2 块：真实 Skill 与只读外部调研调用**（须获授权；不得在本规则中自行扩到第 2 块以外）。
+6. **R0 / R1**：`accepted`，**retained as infrastructure**。
+7. **R2**：实现代码 **retained as infrastructure**；**停止**作为当前验收/边缘修复主线。
+8. **R3 renderer 迁移**：**`paused`**，**不是**下一步。
+9. **旧 DM-Core-01A「代表我完成任务」开发指令**：**`superseded`**。提交 **`55ae01f`**：**`partially_reused_as_first_vertical_loop_scaffold`**。
+10. **第一纵向闭环**：`accepted` / `completed`；**不得**再写成下一待实施任务。
+11. **PAN-02～PAN-06** 相对新主线 **`paused`/`blocked`**；不得按旧解锁条件自行启动。
+12. **P1-PANORAMA 执行索引**仅为历史/基础设施状态表，**不是**当前执行计划。
+13. Digital Org、公网协作、支付结算、DID/VC/链上存证不进入当前第二闭环实现。
+14. **未经 Owner 主路径验收不得 `accepted`**。
+15. **下一项**：**起草 DVL2-01 成果规划器实施任务包**（纯文档）。DVL2-00 已冻结。**禁止**未经独立任务包、Codex 复核和 Owner 明确实施授权直接编码。本次 DVL2-00 接受 **不等于** 授权 DVL2-01～05 编码。

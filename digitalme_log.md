@@ -5,6 +5,145 @@
 
 ---
 
+## 2026-07-26 DVL2-00 Owner 接受与规格冻结
+
+### 本次目标
+
+Owner 正式接受 DVL2-00 v0.1.1；将规格冻结为 DVL2-01～05 的实施合同；独立提交；不开始 DVL2-01。
+
+### 本次完成
+
+1. Owner 接受四项产品裁决（C+A、七模块、对外介绍成果包、文档/PPT/HTML/图片）；
+2. CTO 三轮合同复核通过；
+3. DVL2-00 → **v0.1.1** / `specified` / `owner_decisions_recorded` / `codex_review_passed` / `owner_accepted` / `frozen_for_implementation` / `not_started`；
+4. 同步 context / log / Cursor rule：合同已冻结；下一步仅起草 DVL2-01 任务包；
+5. 本轮无代码修改；未授权 DVL2-01 实现。
+
+### 待办事项
+
+1. 起草 DVL2-01 成果规划器实施任务包（纯文档）；
+2. DVL2-01 须另经 Codex 复核与 Owner 实施授权后，方可编码；
+3. 不得新建实现分支或开始 DVL2-01～05 编码。
+
+### 重要信息
+
+1. **未修改 `digitalme-app/**` 与任何源码**。
+2. 本次接受 **不等于** 授权整体 DVL2-01～05 编码；**不得**标 `implementation_authorized`。
+3. R3 / R2.5 / PAN-02 仍 `paused` / `deferred` / `blocked`。
+4. **不 push**。
+
+---
+
+## 2026-07-26 DVL2-00 CTO 最终技术复核通过 · 等待 Owner 接受
+
+### 本次目标
+
+仅状态收口：记录 CTO 最终技术复核通过，等待 Owner 接受。不改产品/数据合同正文。
+
+### 本次完成
+
+1. DVL2-00 → **v0.1.1** / `specified` / `owner_decisions_recorded` / `codex_review_passed` / `ready_for_owner_acceptance` / `not_started`；
+2. 修订记录补齐 R1/R2/R3 与最终结论；
+3. 同步 context / log / Cursor rule：已复核通过、等待 Owner 接受；DVL2-01 未创建、未授权；仍为纯文档。
+
+### 待办事项
+
+1. Owner 接受 DVL2-00；
+2. 接受前不得 `frozen_for_implementation` / `accepted` / `implementation_authorized`；
+3. 不得创建或开始 DVL2-01。
+
+### 重要信息
+
+1. **未修改合同正文与 `digitalme-app/**`**。
+2. **不提交**；先返回 diff 摘要。
+3. R3 / R2.5 / PAN-02 仍 `paused` / `deferred` / `blocked`。
+
+---
+
+## 2026-07-26 DVL2-00 第三轮最小合同修订（codex_changes_requested）
+
+### 本次目标
+
+关闭 CTO 第三轮五项合同歧义；保持草案状态，不标冻结/接受。
+
+### 本次完成
+
+1. 成果包拆分 `lifecycleStatus` × `completionStatus` 及确定性派生表；
+2. 四层身份正式命名并禁止裸 `Package` 指成果包；
+3. 单项拆分 `planDisposition` × `generationStatus` × `reviewStatus`；
+4. 冻结 `currentVersionId` 不变量与外部文件变化规则；
+5. context / Cursor rule 状态已正确，本轮未改。
+
+### 重要信息
+
+1. **纯文档，未修改 `digitalme-app/**`**；未创建 DVL2-01。
+2. 状态仍：`v0.1-draft` / `specified` / `owner_decisions_recorded` / `codex_changes_requested` / `not_started`。
+3. **不提交**；等待 CTO 最终复核。
+
+---
+
+## 2026-07-26 DVL2-00 第二轮有界修订（codex_changes_requested）
+
+### 本次目标
+
+1. 按 CTO 第二轮意见关闭 14 项合同歧义；
+2. 保持 DVL2-00 为草案，不得标冻结/接受/实现授权。
+
+### 本次完成
+
+1. 修订 `digitalme_phase1_task_DVL2-00_product_and_data_contracts_v0.1.md`：状态 → `codex_changes_requested`；
+2. 关闭：单项 partially_ready 默认删除、取消/中断/迟到结果、整体派生优先级、计划确认≠风险授权、ArtifactRef、四层身份、provenance 最小字段、七模块主归属、SubjectCandidate、四类最低门槛、材料不自动入主体、默认私有、图片失败隔离、DVL2-01 只读可用性；
+3. 同步 context / log / Cursor rule 状态指针（仍为草案）。
+
+### 待办事项
+
+1. CTO 再复核；
+2. 通过前不得 `frozen_for_implementation` / `accepted` / `implementation_authorized`；
+3. 不得创建 DVL2-01 或编码。
+
+### 重要信息
+
+1. **纯文档，未修改 `digitalme-app/**`**。
+2. 旧第一纵向闭环计划仍 `completed` / `superseded`。
+3. **不提交**；等待 CTO 复核。
+
+---
+
+## 2026-07-26 DVL2-00 产品与数据合同规格起草
+
+### 本次目标
+
+1. 将 Owner 已批准的 BUG1 #4 / #6 四项正式裁决写入权威文档；
+2. 起草第二纵向闭环 DVL2-00 产品与数据合同规格草案；
+3. 同步执行指针：当前下一任务 = DVL2-00 规格起草（仍待 CTO 复核）。
+
+### 本次完成
+
+1. Owner 四项裁决入库（决策 #107）：
+   - #4 = C + A（自动规划 + 用户轻量修正；不采用 B）；
+   - #6 = 七模块渐进式构建；
+   - 首验场景 = 项目对外介绍成果包；
+   - 第一轮真实产物 = 文档 / PPT / HTML / 封面图（视频音频本轮不实现）。
+2. 新建 `digitalme_phase1_task_DVL2-00_product_and_data_contracts_v0.1.md`（`v0.1-draft` / `specified` / 初稿曾为 `codex_review_pending` / `not_started`；已被第二轮修订为 `codex_changes_requested`）；
+3. 更新 `digitalme_context.md` 文首与决策索引；第一纵向执行计划标 `completed` / `superseded_as_current_execution_plan`；
+4. 最小更新 Cursor rule 当前任务指针。
+
+### 待办事项
+
+1. CTO 复核 DVL2-00 草案（见上方第二轮修订条目）；
+2. Owner 接受后，方可讨论是否标 `frozen_for_implementation` 并另立 DVL2-01；
+3. **在此之前不得编码、不得创建 DVL2-01 实现。**
+
+### 重要信息
+
+1. **本轮纯文档，未修改任何运行代码**（含 `digitalme-app/**`）。
+2. DVL2-00 **尚未** `accepted` / `implementation_authorized`。
+3. R3 / R2.5 / PAN-02 仍 `paused` / `deferred` / `blocked`。
+4. **不直接提交**；等待 CTO 复核后再决定是否提交。
+5. **不 push**。
+
+---
+
 ## 2026-07-26 BASELINE-CLEAN-01 仓库卫生与权威状态同步
 
 ### 本次目标
