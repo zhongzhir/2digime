@@ -5,6 +5,33 @@
 
 ---
 
+## 2026-07-26 DVL2-02 implementation authorization · Codex 最终复核通过
+
+### 本次目标
+
+聚焦复核 DVL2-02 实施授权包五门禁与两项补充合同；同轮补齐文档级实施要求；标记 Codex 授权复核通过。不进入实现；不 push。
+
+### 本次完成
+
+1. 五 Gate + Attempt/IPC 补充合同核验：无 Blocker；
+2. 同轮补齐：`expectedRevision`、`degraded_consistency`、IPC main 权威清单、Electron 无真实模型/无付费、不完整 attempt 不得显示成功；
+3. 授权包 → **v0.1.0** / `authorization_specified` / `codex_review_passed` / `ready_for_owner_implementation_authorization`；
+4. 实施仍 `not_started`；`implementation_authorized=false`；冻结实施授权基线 `0a52606`；
+5. 最小同步 context / log / Cursor rule。
+
+### 待办事项
+
+1. 等待 Owner 授予 `implementation_authorized`；
+2. 获授权前不得创建实现分支、不得编码。
+
+### 重要信息
+
+1. **未修改 `digitalme-app/**`**、未改 DVL2-02 冻结合同正文。
+2. **未创建实现分支**。
+3. **不 push**。
+
+---
+
 ## 2026-07-26 DVL2-02 implementation authorization 草案起草
 
 ### 本次目标
