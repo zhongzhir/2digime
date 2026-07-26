@@ -238,6 +238,7 @@
     if (!panel) return;
     if (!view || !view.version) {
       panel.classList.add("hidden");
+      renderPackagePrep(null);
       return;
     }
     panel.classList.remove("hidden");
@@ -259,6 +260,59 @@
       fillItemFields(itemsRoot, items);
       bindItemControls(itemsRoot);
     }
+    if (typeof global.__digitalMeRefreshPackagePrep === "function") {
+      global.__digitalMeRefreshPackagePrep(view);
+    }
+  }
+
+  function renderPackagePrep(state) {
+    const summary = $("act-package-prep-summary");
+    const status = $("act-package-prep-status");
+    const btnPrepare = $("btn-act-prepare-package");
+    const btnView = $("btn-act-view-package-prep");
+    if (!summary || !status || !btnPrepare || !btnView) return;
+
+    const hasConfirmed = !!(state && state.hasConfirmed);
+    const hasPackage = !!(state && state.package);
+    const readiness = (state && state.readiness) || null;
+    const itemCount =
+      state && Array.isArray(state.deliverables)
+        ? state.deliverables.filter((d) => d && d.planDisposition === "included").length
+        : state && state.includedCount != null
+          ? Number(state.includedCount)
+          : 0;
+    const oneLine =
+      (state && state.oneLineUnderstanding) ||
+      (state && state.understandingSummary) ||
+      "";
+
+    if (!hasConfirmed) {
+      summary.textContent = "请先确认成果计划，再准备成果包。";
+      status.textContent = "";
+      btnPrepare.classList.add("hidden");
+      btnPrepare.disabled = true;
+      btnView.classList.add("hidden");
+      return;
+    }
+
+    const parts = [];
+    if (oneLine) parts.push(oneLine);
+    parts.push("预计交付 " + itemCount + " 项");
+    summary.textContent = parts.join(" · ");
+
+    if (!hasPackage) {
+      status.textContent = "尚未准备成果包。";
+      btnPrepare.classList.remove("hidden");
+      btnPrepare.disabled = false;
+      btnView.classList.add("hidden");
+      return;
+    }
+
+    status.textContent =
+      (readiness && readiness.userSummary) ||
+      "成果包已准备；当前尚无法生成真实文件。";
+    btnPrepare.classList.add("hidden");
+    btnView.classList.remove("hidden");
   }
 
   function hidePlanPanel() {
@@ -266,6 +320,7 @@
     if (panel) panel.classList.add("hidden");
     if ($("act-plan-status")) $("act-plan-status").textContent = "";
     if ($("act-plan-readiness")) $("act-plan-readiness").textContent = "";
+    renderPackagePrep(null);
   }
 
   function addBlankItem() {
@@ -294,6 +349,7 @@
 
   global.DeliverablePlannerUi = {
     renderPlanView,
+    renderPackagePrep,
     hidePlanPanel,
     collectItemsFromDom,
     collectUnderstandingFromDom,

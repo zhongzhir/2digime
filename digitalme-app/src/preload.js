@@ -64,6 +64,12 @@ const api = {
   actBehalfPlanReconcile: (payload) => ipcRenderer.invoke("actBehalf:planReconcile", payload),
   actBehalfPlanArchive: (payload) => ipcRenderer.invoke("actBehalf:planArchive", payload),
   actBehalfPlanSoftDelete: (payload) => ipcRenderer.invoke("actBehalf:planSoftDelete", payload),
+  actBehalfPrepareDeliverablePackage: (payload) =>
+    ipcRenderer.invoke("actBehalf:prepareDeliverablePackage", payload),
+  actBehalfGetDeliverablePackage: (payload) =>
+    ipcRenderer.invoke("actBehalf:getDeliverablePackage", payload),
+  actBehalfListDeliverablePackagesForTask: (payload) =>
+    ipcRenderer.invoke("actBehalf:listDeliverablePackagesForTask", payload),
   actBehalfRun: (payload) => ipcRenderer.invoke("actBehalf:run", payload),
   actBehalfAutoGenerate: (payload) => ipcRenderer.invoke("actBehalf:autoGenerate", payload),
   actBehalfSelectFiles: (payload) => ipcRenderer.invoke("actBehalf:selectFiles", payload),

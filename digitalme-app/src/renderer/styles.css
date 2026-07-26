@@ -3141,6 +3141,17 @@ body {
 .act-plan-item.is-removed {
   opacity: 0.55;
 }
+.act-package-prep-panel {
+  border-top: 1px solid var(--border, #e2e6ee);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.act-legacy-direct-run {
+  margin-top: 8px;
+  font-size: 0.85rem;
+}
 .act-plan-item-head {
   display: flex;
   justify-content: space-between;

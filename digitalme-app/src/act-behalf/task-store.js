@@ -252,6 +252,7 @@ function normalizeTask(input) {
     audit: (input && input.audit) || null,
     modelMeta: (input && input.modelMeta) || null,
     deliverablePlanning: normalizeDeliverablePlanning(input && input.deliverablePlanning),
+    deliverableExecution: normalizeDeliverableExecution(input && input.deliverableExecution),
     lifecycleStatus: normalizeLifecycleStatus(input && input.lifecycleStatus),
     createdAt: String((input && input.createdAt) || now),
     updatedAt: String((input && input.updatedAt) || now),
@@ -266,6 +267,15 @@ function normalizeDeliverablePlanning(raw) {
     planId: raw.planId ? String(raw.planId) : null,
     currentDraftVersionId: raw.currentDraftVersionId ? String(raw.currentDraftVersionId) : null,
     activeConfirmedVersionId: raw.activeConfirmedVersionId ? String(raw.activeConfirmedVersionId) : null,
+  };
+}
+
+function normalizeDeliverableExecution(raw) {
+  if (!raw || typeof raw !== "object") {
+    return { activePackageId: null };
+  }
+  return {
+    activePackageId: raw.activePackageId ? String(raw.activePackageId) : null,
   };
 }
 
@@ -349,6 +359,9 @@ async function saveTask(userData, taskInput) {
       if (!Object.prototype.hasOwnProperty.call(taskInput || {}, "deliverablePlanning")) {
         task.deliverablePlanning = normalizeDeliverablePlanning(prev.deliverablePlanning);
       }
+      if (!Object.prototype.hasOwnProperty.call(taskInput || {}, "deliverableExecution")) {
+        task.deliverableExecution = normalizeDeliverableExecution(prev.deliverableExecution);
+      }
       if (!Object.prototype.hasOwnProperty.call(taskInput || {}, "lifecycleStatus")) {
         task.lifecycleStatus = normalizeLifecycleStatus(prev.lifecycleStatus);
       }
@@ -424,6 +437,7 @@ module.exports = {
   archiveTask,
   normalizeTask,
   normalizeDeliverablePlanning,
+  normalizeDeliverableExecution,
   normalizeLifecycleStatus,
   migrateLegacySelectedSelfContext,
 };

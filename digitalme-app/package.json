@@ -28,6 +28,8 @@
     "test:act-behalf": "node scripts/test-act-behalf-contracts.cjs",
     "test:dvl2-01-planner": "node scripts/test-dvl2-01-planner-contracts.cjs",
     "test:dvl2-01-planner-acceptance": "node scripts/run-dvl2-01-planner-acceptance.cjs",
+    "test:dvl2-02-package": "node scripts/test-dvl2-02-package-contracts.cjs",
+    "test:dvl2-02-package-acceptance": "node scripts/run-dvl2-02-package-acceptance.cjs",
     "test:cli": "node scripts/test-cli.cjs",
     "test:cli-enhanced": "node scripts/test-cli-enhanced.cjs",
     "test:mcp-server": "node scripts/test-mcp-server.cjs",

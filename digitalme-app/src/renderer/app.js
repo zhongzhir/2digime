@@ -7060,9 +7060,102 @@ async function restoreActDeliverablePlan(taskId) {
     } else {
       window.DeliverablePlannerUi.hidePlanPanel();
     }
+    await refreshActPackagePrep(taskId, view);
   } catch {
     /* ignore restore failures for plan panel */
   }
+}
+
+async function refreshActPackagePrep(taskId, planView) {
+  if (!window.DeliverablePlannerUi || !window.DeliverablePlannerUi.renderPackagePrep) return;
+  const view = planView || null;
+  const planning = (view && view.deliverablePlanning) || {};
+  const hasConfirmed = !!(planning && planning.activeConfirmedVersionId);
+  const includedCount = ((view && view.version && view.version.items) || []).filter(
+    (it) => !it.planDisposition || it.planDisposition === "included"
+  ).length;
+  const understanding = view && view.version && view.version.understanding;
+  const oneLine =
+    (understanding &&
+      (understanding.summary ||
+        understanding.oneLineSummary ||
+        (understanding.goal && (understanding.goal.value || understanding.goal)))) ||
+    "";
+
+  if (!taskId || !window.digitalMe.actBehalfGetDeliverablePackage) {
+    window.DeliverablePlannerUi.renderPackagePrep({
+      hasConfirmed,
+      includedCount,
+      oneLineUnderstanding: oneLine ? String(oneLine) : "",
+      package: null,
+      deliverables: [],
+      readiness: null,
+    });
+    return;
+  }
+
+  let pkgView = null;
+  try {
+    pkgView = await window.digitalMe.actBehalfGetDeliverablePackage({ taskId });
+  } catch {
+    pkgView = null;
+  }
+
+  const pkg = pkgView && pkgView.package ? pkgView.package : null;
+  const deliverables = (pkgView && pkgView.deliverables) || [];
+  const readiness = (pkgView && pkgView.readiness) || null;
+  window.DeliverablePlannerUi.renderPackagePrep({
+    hasConfirmed,
+    includedCount: deliverables.length ? deliverables.length : includedCount,
+    oneLineUnderstanding: oneLine ? String(oneLine) : "",
+    package: pkg,
+    deliverables,
+    readiness,
+  });
+}
+
+window.__digitalMeRefreshPackagePrep = async function (view) {
+  const taskId =
+    (view && view.taskId) ||
+    actBehalfState.taskId ||
+    null;
+  await refreshActPackagePrep(taskId, view);
+};
+
+async function handlePrepareDeliverablePackage() {
+  const taskId = actBehalfState.taskId;
+  if (!taskId) {
+    setActProgress("请先确认成果计划后再准备成果包。");
+    return;
+  }
+  if (!window.digitalMe.actBehalfPrepareDeliverablePackage) {
+    setActProgress("当前版本尚未开放成果包准备。");
+    return;
+  }
+  setActProgress("正在准备成果包…");
+  const res = await window.digitalMe.actBehalfPrepareDeliverablePackage({ taskId });
+  if (!res || !res.ok) {
+    setActProgress((res && res.message) || "无法准备成果包。");
+    await refreshActPackagePrep(taskId);
+    return;
+  }
+  setActProgress(
+    (res.readiness && res.readiness.userSummary) ||
+      res.message ||
+      "成果包已准备；当前尚无法生成真实文件。"
+  );
+  await restoreActDeliverablePlan(taskId);
+}
+
+async function handleViewDeliverablePackagePrep() {
+  const taskId = actBehalfState.taskId;
+  if (!taskId) return;
+  await refreshActPackagePrep(taskId);
+  const view = await window.digitalMe.actBehalfGetDeliverablePackage({ taskId });
+  setActProgress(
+    (view && view.readiness && view.readiness.userSummary) ||
+      "成果包已准备；当前尚无法生成真实文件。"
+  );
 }
 
 async function handleFormDeliverablePlan() {
@@ -7188,6 +7281,7 @@ async function handleConfirmDeliverablePlan() {
   }
   actBehalfState.planRevision = res.revision || null;
   if (window.DeliverablePlannerUi) window.DeliverablePlannerUi.renderPlanView(res);
+  await refreshActPackagePrep(actBehalfState.taskId, res);
   setActProgress(res.message || "成果计划已准备，尚未开始执行。");
 }
 
@@ -7317,6 +7411,22 @@ function wireActBehalfUi() {
   $("btn-act-plan-save-draft")?.addEventListener("click", () => handleSaveDeliverablePlanDraft());
   $("btn-act-plan-confirm")?.addEventListener("click", () => handleConfirmDeliverablePlan());
   $("btn-act-plan-cancel-draft")?.addEventListener("click", () => handleCancelDeliverablePlanDraft());
+  $("btn-act-prepare-package")?.addEventListener("click", () => handlePrepareDeliverablePackage());
+  $("btn-act-view-package-prep")?.addEventListener("click", () => handleViewDeliverablePackagePrep());
+  {
+    const showLegacy =
+      !!(window.digitalMe && window.digitalMe.ownerRuntimeTest === true && false) ||
+      false;
+    // Default: hide legacy direct-run wrapper. Opt-in via location search for compat only.
+    const legacyWrap = $("act-legacy-direct-run");
+    const optIn =
+      typeof location !== "undefined" &&
+      /[?&]legacyActRun=1/.test(String(location.search || ""));
+    if (legacyWrap) {
+      if (optIn || showLegacy) legacyWrap.classList.remove("hidden");
+      else legacyWrap.classList.add("hidden");
+    }
+  }
   $("btn-act-add-file")?.addEventListener("click", () => handleActSelectFiles("files"));
   $("btn-act-add-folder")?.addEventListener("click", () => handleActSelectFiles("folder"));
   $("btn-act-save")?.addEventListener("click", () => saveActBehalfDraft());

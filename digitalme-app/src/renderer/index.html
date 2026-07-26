@@ -511,7 +511,19 @@
                     <button id="btn-act-plan-confirm" class="btn btn-primary" type="button" data-testid="btn-act-plan-confirm">确认成果计划</button>
                     <button id="btn-act-plan-cancel-draft" class="btn-ghost" type="button" data-testid="btn-act-plan-cancel-draft">取消当前草稿</button>
                   </div>
+                  <div id="act-package-prep-panel" class="act-package-prep-panel" data-testid="act-package-prep-panel">
+                    <p id="act-package-prep-summary" class="muted write-rail-hint" data-testid="act-package-prep-summary"></p>
+                    <p id="act-package-prep-status" class="muted write-rail-hint" data-testid="act-package-prep-status"></p>
+                    <div class="builder-actions">
+                      <button id="btn-act-prepare-package" class="btn btn-primary hidden" type="button" data-testid="btn-act-prepare-package">准备成果包</button>
+                      <button id="btn-act-view-package-prep" class="btn hidden" type="button" data-testid="btn-act-view-package-prep">查看成果包准备</button>
+                    </div>
+                  </div>
                 </section>
+                <details id="act-legacy-direct-run" class="act-legacy-direct-run hidden" data-testid="act-legacy-direct-run">
+                  <summary class="muted" style="cursor:pointer">兼容入口（不会使用已确认成果计划）</summary>
+                  <p class="muted write-rail-hint">此入口仅供兼容/开发排查，不会使用已确认成果计划。</p>
+                </details>
                 <details class="act-context-block" id="act-context-details">
                   <summary class="ext-store-head" style="cursor:pointer; list-style:none">
                     <span style="font-size:0.85rem; color:var(--muted-foreground)">高级：查看/调整本次使用的本人信息</span>

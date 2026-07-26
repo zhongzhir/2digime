@@ -34,6 +34,10 @@ const deliverablePlanConsistency = require("./act-behalf/deliverable-plan-consis
 const deliverablePlanner = require("./act-behalf/deliverable-planner");
 const { recomputeExecutionReadiness } = require("./act-behalf/deliverable-plan-readiness");
 const { validateDependencyGraph } = require("./act-behalf/deliverable-plan-schema");
+const deliverablePackageStore = require("./act-behalf/deliverable-package-store");
+const { prepareDeliverablePackage } = require("./act-behalf/deliverable-package-prepare");
+const { recomputeCurrentPreparationReadiness } = require("./act-behalf/deliverable-package-readiness");
+const { reconcileTaskPackages } = require("./act-behalf/deliverable-package-recovery");
 const { parseActBehalfOutput, buildActBehalfMessages, parseEmailOutput, buildEmailMessages, parseVideoAudioOutput, buildVideoAudioMessages, buildVideoAudioExport } = require("./act-behalf/parse-output");
 const { normalizeTaskIntent, assertTaskIntentMinimal, detectTaskType, TASK_TYPES } = require("./act-behalf/task-intent");
 const {
@@ -272,6 +276,11 @@ app.whenReady().then(() => {
   }
   // Recover interrupted PackageStore journal only — never auto-migrate schema.
   tryRecoverConfiguredPackageStore();
+  try {
+    reconcileAllDeliverablePackagePointers(app.getPath("userData")).catch(() => {});
+  } catch {
+    /* ignore startup package reconcile failures */
+  }
   createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -304,6 +313,8 @@ app.whenReady().then(() => {
         ? require("../scripts/capability-acceptance-harness.cjs")
         : process.env.DIGITALME_DVL2_01_PLANNER_ACCEPTANCE === "1"
         ? require("../scripts/dvl2-01-planner-acceptance-harness.cjs")
+        : process.env.DIGITALME_DVL2_02_PACKAGE_ACCEPTANCE === "1"
+        ? require("../scripts/dvl2-02-package-acceptance-harness.cjs")
         : process.env.DIGITALME_VISUAL_ACCEPTANCE === "1"
         ? require("../scripts/visual-acceptance-harness.cjs")
         : process.env.DIGITALME_P107_OWNER_RUNTIME === "1"
@@ -342,6 +353,8 @@ app.whenReady().then(() => {
         ? harness.runCapabilityAcceptanceHarness
         : process.env.DIGITALME_DVL2_01_PLANNER_ACCEPTANCE === "1"
         ? harness.runDvl201PlannerAcceptanceHarness
+        : process.env.DIGITALME_DVL2_02_PACKAGE_ACCEPTANCE === "1"
+        ? harness.runDvl202PackageAcceptanceHarness
         : process.env.DIGITALME_VISUAL_ACCEPTANCE === "1"
         ? harness.runVisualAcceptanceHarness
         : process.env.DIGITALME_P107_OWNER_RUNTIME === "1"
@@ -2604,7 +2617,11 @@ ipcMain.handle("actBehalf:planConfirm", async (_e, payload) => {
       saveTaskPointers: (args) =>
         saveTaskPlanPointers(userData, taskId, {
           ...args,
-          extraPatch: { status: "plan_confirmed" },
+          extraPatch: {
+            status: "plan_confirmed",
+            // DVL2-02: new confirmed plan version clears package pointer; old packages retained.
+            deliverableExecution: { activePackageId: null },
+          },
         }),
       auditEvent: { action: "plan_confirm", versionId: confirmed.version.versionId },
       cas: {
@@ -2807,6 +2824,208 @@ ipcMain.handle("actBehalf:planGet", async (_e, payload) => {
     };
   }
 });
+
+/** DVL2-02: package prepare / read — renderer may only pass { taskId } to prepare. */
+async function saveTaskPackageExecution(userData, taskId, deliverableExecution) {
+  const got = actBehalfStore.getTask(userData, taskId, { heal: false });
+  if (!got.ok) {
+    const e = new Error(got.message || "找不到该任务。");
+    e.code = got.code || "task_not_found";
+    throw e;
+  }
+  return actBehalfStore.saveTask(userData, {
+    ...got.task,
+    deliverableExecution: {
+      activePackageId:
+        deliverableExecution && deliverableExecution.activePackageId
+          ? String(deliverableExecution.activePackageId)
+          : null,
+    },
+  });
+}
+
+async function reconcileDeliverablePackagesForTask(userData, taskId) {
+  const got = actBehalfStore.getTask(userData, taskId, { heal: false });
+  if (!got.ok) return got;
+  let recon;
+  try {
+    recon = reconcileTaskPackages(userData, got.task);
+  } catch (err) {
+    return {
+      ok: false,
+      code: (err && err.code) || "package_reconcile_failed",
+      message: (err && err.message) || "无法核对成果包一致性。",
+      failClosed: true,
+    };
+  }
+  const nextId =
+    recon.deliverableExecution && recon.deliverableExecution.activePackageId != null
+      ? String(recon.deliverableExecution.activePackageId)
+      : null;
+  const prevId =
+    got.task.deliverableExecution && got.task.deliverableExecution.activePackageId
+      ? String(got.task.deliverableExecution.activePackageId)
+      : null;
+  let task = got.task;
+  if (recon.ok && nextId !== prevId) {
+    const saved = await saveTaskPackageExecution(userData, taskId, {
+      activePackageId: nextId,
+    });
+    task = saved.task;
+  }
+  const packages = deliverablePackageStore.listPackagesForTask(userData, taskId);
+  const activePackageId =
+    task.deliverableExecution && task.deliverableExecution.activePackageId
+      ? String(task.deliverableExecution.activePackageId)
+      : null;
+  let pkg = null;
+  let deliverables = [];
+  let readiness = null;
+  if (activePackageId) {
+    const gotPkg = deliverablePackageStore.getPackage(userData, activePackageId);
+    if (gotPkg.ok) {
+      pkg = gotPkg.package;
+      deliverables = deliverablePackageStore.getDeliverablesForPackage(userData, activePackageId);
+      readiness = recomputeCurrentPreparationReadiness(pkg, deliverables);
+    }
+  }
+  return {
+    ok: !!recon.ok,
+    code: recon.code,
+    message: recon.message,
+    failClosed: !!recon.failClosed,
+    readonly: !!recon.readonly,
+    events: recon.events || [],
+    taskId,
+    deliverableExecution: { activePackageId },
+    package: pkg,
+    deliverables,
+    packages,
+    readiness,
+  };
+}
+
+async function reconcileAllDeliverablePackagePointers(userData) {
+  const listed = actBehalfStore.listTasks(userData);
+  const tasks = (listed && listed.tasks) || [];
+  for (const t of tasks) {
+    if (!t || !t.taskId) continue;
+    try {
+      await reconcileDeliverablePackagesForTask(userData, t.taskId);
+    } catch {
+      /* fail-closed per task; do not abort startup */
+    }
+  }
+}
+
+ipcMain.handle("actBehalf:prepareDeliverablePackage", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const taskId = payload && payload.taskId ? String(payload.taskId) : "";
+    if (!taskId) return { ok: false, code: "task_required", message: "缺少任务。" };
+    if (payload && Object.keys(payload).some((k) => k !== "taskId")) {
+      return {
+        ok: false,
+        code: "invalid_prepare_input",
+        message: "准备成果包只能传入任务标识。",
+      };
+    }
+    // Degraded / pointer drift: reconcile before prepare so we do not create a second package.
+    await reconcileDeliverablePackagesForTask(userData, taskId);
+    return await prepareDeliverablePackage(
+      userData,
+      { taskId },
+      {
+        getTask: (ud, id) => actBehalfStore.getTask(ud, id, { heal: false }),
+        getPlan: (ud, planId) => deliverablePlanStore.getPlan(ud, planId),
+        saveTaskExecution: (ud, id, exec) => saveTaskPackageExecution(ud, id, exec),
+      }
+    );
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "prepare_package_failed",
+      message: err && err.message ? err.message : "无法准备成果包。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:getDeliverablePackage", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const taskId = payload && payload.taskId ? String(payload.taskId) : "";
+    const packageId = payload && payload.packageId ? String(payload.packageId) : "";
+    if (packageId) {
+      const got = deliverablePackageStore.getPackage(userData, packageId);
+      if (!got.ok) return got;
+      const deliverables = deliverablePackageStore.getDeliverablesForPackage(userData, packageId);
+      const readiness = recomputeCurrentPreparationReadiness(got.package, deliverables);
+      return {
+        ok: true,
+        package: got.package,
+        deliverables,
+        readiness,
+        revision: got.revision,
+      };
+    }
+    if (!taskId) return { ok: false, code: "task_required", message: "缺少任务或成果包标识。" };
+    return reconcileDeliverablePackagesForTask(userData, taskId);
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "get_package_failed",
+      message: err && err.message ? err.message : "无法读取成果包。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:listDeliverablePackagesForTask", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const taskId = payload && payload.taskId ? String(payload.taskId) : "";
+    if (!taskId) return { ok: false, code: "task_required", message: "缺少任务。" };
+    const view = await reconcileDeliverablePackagesForTask(userData, taskId);
+    return {
+      ok: view.ok !== false || !view.failClosed,
+      code: view.code,
+      message: view.message,
+      failClosed: view.failClosed,
+      taskId,
+      deliverableExecution: view.deliverableExecution,
+      packages: view.packages || [],
+      package: view.package || null,
+      deliverables: view.deliverables || [],
+      readiness: view.readiness || null,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "list_packages_failed",
+      message: err && err.message ? err.message : "无法列出成果包。",
+    };
+  }
+});
+
+// Controlled test-only reconciliation entry (harness / contract injection).
+if (
+  process.env.DIGITALME_DVL2_02_PACKAGE_ACCEPTANCE === "1" ||
+  process.env.DIGITALME_DVL2_02_TEST_RECONCILE === "1"
+) {
+  ipcMain.handle("actBehalf:reconcileDeliverablePackages", async (_e, payload) => {
+    try {
+      const userData = app.getPath("userData");
+      const taskId = payload && payload.taskId ? String(payload.taskId) : "";
+      if (!taskId) return { ok: false, code: "task_required", message: "缺少任务。" };
+      return reconcileDeliverablePackagesForTask(userData, taskId);
+    } catch (err) {
+      return {
+        ok: false,
+        code: err && err.code ? err.code : "package_reconcile_failed",
+        message: err && err.message ? err.message : "无法核对成果包。",
+      };
+    }
+  });
+}
 
 ipcMain.handle("actBehalf:planRecomputeReadiness", async (_e, payload) => {
   try {
