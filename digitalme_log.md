@@ -5,6 +5,32 @@
 
 ---
 
+## 2026-07-26 DVL2-02 implementation authorization 草案起草
+
+### 本次目标
+
+起草 DVL2-02 实施授权包，供 Owner / Codex 审查实现范围、分支、文件、测试与验收。不是实施授权；不创建实现分支；不编码；不 push。
+
+### 本次完成
+
+1. 新建 `digitalme_phase1_task_DVL2-02_implementation_authorization_v0.1.md`（v0.1.0-draft；`authorization_drafting` / `codex_review_pending`；`implementation_authorized=false`）；
+2. 推荐实现分支 `codex/dvl2-02-deliverable-package-preparation`，起点 `ad3b6ee`；
+3. 明确允许/禁止文件、Store/CAS/reconciliation/Attempt 矩阵、IPC、UI、两阶段 Electron 与 Owner 真机路径、停止条件；
+4. 最小同步 context / log / Cursor rule；DVL2-02 冻结规格仅增加非合同索引。
+
+### 待办事项
+
+1. Codex / Owner 审查授权草案；
+2. 获 `implementation_authorized` 前不得建分支、不得改 `digitalme-app/**`。
+
+### 重要信息
+
+1. **未修改 `digitalme-app/**`**。
+2. **未创建实现分支**。
+3. **不 push**。
+
+---
+
 ## 2026-07-26 DVL2-02 Owner 规格接受与冻结 · v0.1.1
 
 ### 本次目标

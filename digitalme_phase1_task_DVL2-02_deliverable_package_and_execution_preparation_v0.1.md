@@ -9,6 +9,7 @@ implementation_authorized：`false`
 上位合同：
 - [`digitalme_phase1_task_DVL2-00_product_and_data_contracts_v0.1.md`](digitalme_phase1_task_DVL2-00_product_and_data_contracts_v0.1.md)（**DVL2-00 v0.1.1** / `owner_accepted` / `frozen_for_implementation`）
 - [`digitalme_phase1_task_DVL2-01_deliverable_planner_v0.1.md`](digitalme_phase1_task_DVL2-01_deliverable_planner_v0.1.md)（**DVL2-01 v0.1.1** / `accepted_as_implemented` / 实施 `implemented` @ `6e7c384`）
+实施授权草案（非合同）：[`digitalme_phase1_task_DVL2-02_implementation_authorization_v0.1.md`](digitalme_phase1_task_DVL2-02_implementation_authorization_v0.1.md)（**v0.1.0-draft** / `authorization_drafting` / `codex_review_pending`；`implementation_authorized=false`）
 所属架构：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)
 
 > **正式边界（冻结规格 v0.1.1）**：Owner 已接受本规格；合同已冻结为实施准备依据（`owner_accepted` / `frozen_for_implementation`）。**v0.1.1 为冻结规格**；后续实现不得静默偏离；如发现合同缺口，必须先回到规格评审；实现只能在另行授予 `implementation_authorized` 后开始；不得通过实现细节反向修改冻结语义。冲突时：架构原则文 > DVL2-00 > DVL2-01 > 本文。**尚未**授予 `implementation_authorized`；实施仍为 `not_started`。不得标 `implementation_authorized` / `implementation_in_progress` / `implemented` / `owner_runtime_accepted` / `accepted_as_implemented` / `completed`。
