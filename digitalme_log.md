@@ -5,6 +5,33 @@
 
 ---
 
+## 2026-07-26 DVL2-02 成果包与执行准备 · 规格起草
+
+### 本次目标
+
+在基线 `690e1fc` 上起草 DVL2-02 任务包草案；只读审计代码与上位合同；最小同步规划索引；纯文档提交。不修改实现；不创建实现分支；不 push。
+
+### 本次完成
+
+1. 新建 `digitalme_phase1_task_DVL2-02_deliverable_package_and_execution_preparation_v0.1.md`（v0.1.0-draft；`spec_drafting` / `codex_review_pending`；实施 `not_started`）；
+2. 明确：真实创建 DeliverablePackage、幂等准备、`activePackageId`、与主体 `package-store` 隔离、Attempt 引入、状态对齐 DVL2-00（不以 `blocked` 污染包枚举）；
+3. 落实执行入口「准备成果包」与减负默认层；
+4. 最小同步 context / log / Cursor rule。
+
+### 待办事项
+
+1. Codex 复核 DVL2-02 草案；
+2. Owner 接受或改判 §14 推荐后，方可冻结与另批实施授权；
+3. 获授权前禁止编码与真实生成。
+
+### 重要信息
+
+1. **未修改 `digitalme-app/**`**。
+2. DVL2-01 状态不变。
+3. **不 push**。
+
+---
+
 ## 2026-07-26 DVL2-01 Owner 真机验收收口
 
 ### 本次目标

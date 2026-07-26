@@ -43,12 +43,13 @@ Owner / 用户提出的产品想法**可能不全、可错、可非最优**，�
 
 - 架构与研发原则：`digitalme_subject_architecture_and_rd_principles_v0.1.md`
 - 上位合同：`digitalme_phase1_task_DVL2-00_product_and_data_contracts_v0.1.md`（**v0.1.1** / `owner_accepted` / `frozen_for_implementation` / `not_started`）
-- 当前实施规格：`digitalme_phase1_task_DVL2-01_deliverable_planner_v0.1.md`（**v0.1.1** / `owner_runtime_accepted` / `accepted_as_implemented`；实施 `implemented` @ `6e7c384`；范围仅限成果规划器）
+- 已收口实施规格：`digitalme_phase1_task_DVL2-01_deliverable_planner_v0.1.md`（**v0.1.1** / `accepted_as_implemented`；实施 `implemented` @ `6e7c384`）
+- 当前规格草案：`digitalme_phase1_task_DVL2-02_deliverable_package_and_execution_preparation_v0.1.md`（**v0.1.0-draft** / `spec_drafting` / `codex_review_pending`；实施 `not_started`；**未**获实施授权）
 - 第一纵向闭环：已 `accepted` / `completed`；其执行计划 = `completed` / `superseded_as_current_execution_plan`
 - 全局上下文文首：`digitalme_context.md`
 
 **当前主线**：第二纵向闭环 — **多模态成果包交付与渐进式主体构建**。
-**当前下一任务**：等待 **DVL2-02 任务起草与独立实施授权**（`not_started` / `not_authorized`）。DVL2-01 已收口；其 `implemented` **不**表示真实成果生成已可用。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。P1：执行入口衔接（`activeConfirmedVersionId`）、计划确认减负（渐进披露 / 默认接受）。
+**当前下一任务**：等待 **DVL2-02 规格 Codex 复核与 Owner 接受**（实施 `not_started`；禁止编码）。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
 
 1. **每次只推进一个已批准任务块**；按 DVL2-00 → 01 → 02 → 03 → 04 → 05 顺序，不得偷跑或并列铺开。
 2. **非阻断问题进入 backlog**；仅四类问题可阻断：主流程不可用、数据损坏丢失、隐私超披露、未授权对外行动。
@@ -64,4 +65,4 @@ Owner / 用户提出的产品想法**可能不全、可错、可非最优**，�
 12. **P1-PANORAMA 执行索引**仅为历史/基础设施状态表，**不是**当前执行计划。
 13. Digital Org、公网协作、支付结算、DID/VC/链上存证不进入当前第二闭环实现。
 14. **未经 Owner 主路径验收不得 `accepted`**。
-15. **下一项**：等待 **DVL2-02 任务起草与独立实施授权**（`not_started` / `not_authorized`）。DVL2-01 已 `owner_runtime_accepted` / `accepted_as_implemented`（实施 `implemented` @ `6e7c384`；范围仅限规划器）。禁止提前生成真实成果或实施 DVL2-02；R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+15. **下一项**：等待 **DVL2-02 规格 Codex 复核与 Owner 接受**（`spec_drafting` / `codex_review_pending`；实施 `not_started`）。禁止在未获 `implementation_authorized` 前编码或生成真实成果；R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。

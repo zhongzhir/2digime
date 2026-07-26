@@ -2,7 +2,7 @@
 
 版本：v0.4
 状态：持续更新
-最后更新：2026-07-26（DVL2-01 Owner 真机验收收口：`owner_runtime_accepted` / `accepted_as_implemented`；实施 `implemented` @ `6e7c384`；范围仅限成果规划器）
+最后更新：2026-07-26（DVL2-02 规格起草：`spec_drafting` / `codex_review_pending`；实施 `not_started`；基线 `690e1fc`；DVL2-01 仍为 `accepted_as_implemented`）
 
 > **当前产品主线（2026-07-26）**：**第二纵向闭环** — 多模态成果包交付与渐进式主体构建。第一纵向闭环已 `accepted` / `completed`。
 > **最高架构与研发原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)（**v0.1.1 `active`**）。
@@ -21,7 +21,7 @@
 > 2. **BUG1 #6** = 七模块渐进式数字之我构建框架。
 > 3. 首个正式验收场景 = 为一个项目生成完整对外介绍成果包。
 > 4. 第一轮真实产物 = 正式介绍文档、演示文稿 PPT、单页 HTML、封面图片；视频/音频本轮不实现真实生成，用户面不得宣称已支持。
-> **当前下一任务**：等待 **DVL2-02 任务起草与独立实施授权**（DVL2-01 已 `owner_runtime_accepted` / `accepted_as_implemented`；实施 `implemented`；最终实现提交 `6e7c38401466c08660890080e763430bf1f3a44d`）。DVL2-01 的 `implemented` **仅**表示成果规划器已通过 Owner 真机验收，**不**表示真实成果生成或按计划执行已可用。DVL2-02：**`not_started` / `not_authorized`**。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。登记非阻断 P1：执行入口衔接（须绑定 `activeConfirmedVersionId`）、计划确认减负（渐进披露 / 默认接受）。
+> **当前下一任务**：等待 **DVL2-02 规格 Codex 复核与 Owner 接受**（草案 [`digitalme_phase1_task_DVL2-02_deliverable_package_and_execution_preparation_v0.1.md`](digitalme_phase1_task_DVL2-02_deliverable_package_and_execution_preparation_v0.1.md)；`spec_drafting` / `codex_review_pending`；实施 **`not_started`**；**未**获 `implementation_authorized`）。DVL2-01 已 `owner_runtime_accepted` / `accepted_as_implemented`（`implemented` @ `6e7c384`；仅规划器）。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
 > **R2 对话运行时**：保留基础设施；R2 代码 **retained as infrastructure**。生产默认入口仍为 legacy。
 > **Owner Electron 真机验收（2026-07-24）**：`accepted`（distill-me / R2 对话重试 / doing-context / PAN-01S 等）。
 > **confirmed identity → act context（2026-07-24，`2f1b7bd`）**：`accepted`（历史整合基线；**不是**当前 HEAD）。
@@ -314,7 +314,8 @@ flowchart TB
 | `digitalme_first_vertical_loop_sprint_plan_v0.1.md` | **第一纵向闭环执行计划（历史）**（**`completed` / `superseded_as_current_execution_plan`**） |
 | `digitalme_first_vertical_loop_spec_v0.1.md` | **第一闭环冻结规格**（流程、四合同、能力、55ae01f 裁定、验收；含 §3.4；第一段已收口） |
 | `digitalme_phase1_task_DVL2-00_product_and_data_contracts_v0.1.md` | **第二纵向闭环产品与数据合同（权威）**（v0.1.1；`owner_accepted` / `frozen_for_implementation` / `not_started`；DVL2-01～05 须遵守） |
-| `digitalme_phase1_task_DVL2-01_deliverable_planner_v0.1.md` | **DVL2-01 成果规划器**（v0.1.1；`owner_runtime_accepted` / `accepted_as_implemented`；实施 `implemented` @ `6e7c384`；范围仅限规划器；DVL2-02 `not_started` / `not_authorized`） |
+| `digitalme_phase1_task_DVL2-01_deliverable_planner_v0.1.md` | **DVL2-01 成果规划器**（v0.1.1；`owner_runtime_accepted` / `accepted_as_implemented`；实施 `implemented` @ `6e7c384`；范围仅限规划器） |
+| `digitalme_phase1_task_DVL2-02_deliverable_package_and_execution_preparation_v0.1.md` | **DVL2-02 成果包与执行准备**（v0.1.0-draft；`spec_drafting` / `codex_review_pending`；实施 `not_started`；**未**获实施授权；基线 `690e1fc`） |
 | `digitalme_product_spec_v0.2.md`（文内 **v0.6.3**） | **既有界面与功能细则参照**（与新主线冲突处以架构原则文 / 第一闭环计划为准，待对齐升版） |
 | `digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`（v0.4） | **历史总任务**：三位一体 Alpha（`superseded` 作为当前主线定义） |
 | `digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md` | **历史战略修订依据**：三位一体定义、极简原则、PAN-01/PAN-01R 裁定 |
@@ -329,7 +330,7 @@ flowchart TB
 | `digitalme_narrative_ai_era_autonomy.md` | 对外/对内叙事（含双线简述） |
 | `digital-me-project-positioning-draft.md` | 定位讨论稿（战略原则含双线） |
 
-**近期工程焦点（2026-07-26）**：DVL2-00 已冻结。DVL2-01 已 **`owner_runtime_accepted` / `accepted_as_implemented`**（实施 `implemented`；最终实现提交 `6e7c384`；范围仅限成果规划器）。**当前下一任务** = 等待 **DVL2-02 任务起草与独立实施授权**（`not_started` / `not_authorized`）。登记 P1：执行入口衔接（`activeConfirmedVersionId`）、计划确认减负（渐进披露 / 默认接受）。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+**近期工程焦点（2026-07-26）**：DVL2-00 已冻结。DVL2-01 已收口。DVL2-02 草案已起草（`spec_drafting` / `codex_review_pending`；实施 `not_started`；基线 `690e1fc`）。**当前下一任务** = **DVL2-02 规格复核与 Owner 接受**（**不得**开始编码）。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
 ## 4. 系统架构共识（草案）
 
 > **部署拓扑补充（2026-07-10）**：本节描述逻辑模块（核心层 / 运行层 / 信任层）。物理部署与百万规模扩容面见 [`digitalme_architecture_edge_sovereign_v0.1.md`](digitalme_architecture_edge_sovereign_v0.1.md)（端主权 Runtime + 云边平台 + 能力层）。决策 #3「本地优先 + 云同步」由此文细化。
@@ -512,7 +513,7 @@ flowchart TB
 
 ### 7.1 近期优先级（建议顺序）
 
-> **2026-07-26 当前执行指针**：DVL2-01 已 `owner_runtime_accepted` / `accepted_as_implemented`（实施 `implemented` @ `6e7c384`；[`digitalme_phase1_task_DVL2-01_deliverable_planner_v0.1.md`](digitalme_phase1_task_DVL2-01_deliverable_planner_v0.1.md)）。**当前下一任务** = 等待 DVL2-02 任务起草与独立实施授权（`not_started` / `not_authorized`）。DVL2-00 继续 frozen。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。P1 后续：执行入口衔接、计划确认减负（渐进披露 / 默认接受）。
+> **2026-07-26 当前执行指针**：DVL2-02 草案 [`digitalme_phase1_task_DVL2-02_deliverable_package_and_execution_preparation_v0.1.md`](digitalme_phase1_task_DVL2-02_deliverable_package_and_execution_preparation_v0.1.md)（`spec_drafting` / `codex_review_pending`；实施 `not_started`）。**当前下一任务** = 规格 Codex 复核与 Owner 接受；**未**获实施授权。DVL2-01 继续 `accepted_as_implemented`。DVL2-00 继续 frozen。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
 > **2026-07-26 历史指针（已取代）**：曾将「当前唯一产品待决」写作 BUG1 #4/#6 候选未冻结——**已被决策 #107 正式选定**。
 > **2026-07-21 规划基线重建（历史）**：当时执行计划 [`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)（**v0.1.2 `spec_frozen`**）；冻结规格 [`digitalme_first_vertical_loop_spec_v0.1.md`](digitalme_first_vertical_loop_spec_v0.1.md)。**当时下一项**曾为「实现任务意图与本人上下文装配（第一闭环实现 · 第 1 块）」——**已完成并收口，不再是有效下一步**。R3 / 旧 DM-Core-01A 开发指令 / 并列 Skill·MCP·Agent·身份任务块 **不得**作为下一步。
 > **2026-07-16 审计后重排（历史）**：第一阶段不再扩展能力面，切换为“主体可信化与协作感知”。当时以 `digitalme_phase1_subject_upgrade_plan_v0.1.md` 为执行清单；原 v0.3.13 的 L0/审计/CLI 只能视为原型，不视为已达到安全可用。
@@ -522,7 +523,7 @@ flowchart TB
 
 1. **限定范围的仓库实现映射与第一闭环规格冻结**（文档；**已完成** → 规格 `spec_frozen`）；
 2. **实现任务意图与本人上下文装配（第一闭环实现 · 第 1 块）**（**history / 已完成并收口**；不得再当作当前下一项）→ 其后研究与表达 / Skill / 外搜 / 证据 / Proposal 各块均已完成；第一段整体 **`accepted` / `completed`**；
-3. **当前下一任务（2026-07-26）**：等待 **DVL2-02 任务起草与独立实施授权**。DVL2-01 已 `owner_runtime_accepted` / `accepted_as_implemented`（实施 `implemented` @ `6e7c384`；范围仅限成果规划器）。DVL2-02：`not_started` / `not_authorized`。不得提前实施真实成果生成或按计划执行。其后 DVL2-03～05 均须另获授权。第二～四纵向闭环其余方向仅保留接口，不得提前铺开。
+3. **当前下一任务（2026-07-26）**：等待 **DVL2-02 规格 Codex 复核与 Owner 接受**（草案已存在；实施仍 `not_started`；**未**获 `implementation_authorized`）。不得提前编码、不得真实生成成果。其后 DVL2-03～05 均须另获授权。第二～四纵向闭环其余方向仅保留接口，不得提前铺开。
 
 （以下 1–7 为 2026-07-16 历史 Trusted Beta 硬化清单，**不再是当前执行顺序**：）
 
