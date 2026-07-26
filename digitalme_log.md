@@ -5,6 +5,47 @@
 
 ---
 
+## 2026-07-26（BUG1-FIX 任务包入库 + #4 #6 研究 + #4 多模态方向）
+
+### 本次目标
+
+1. 任务包现场抽检 + 入库（完成 BUG1-FIX 全部闭环）；
+2. 研究 BUG1 #4（做事流程到 95 分位产出物）和 #6（构建框架 7 模块）的同类产品最佳实践 + 标准产品设计规则；
+3. Owner 重新定义 #4 范围（多模态产物），给方案候选。
+
+### 本次完成
+
+1. 任务包现场抽检：8 条技术修（#1/#2/#3/#5/#7/#8/#9/#10）Owner 已走通真机验证（截图、acceptance.json 齐备，目录 `.codex-qa/bug1-fix/`），回归矩阵 5 套全过：
+   - `test:owner-runtime` 5/5
+   - `test:visual-acceptance` 7 组合 + 长回复折叠展开重开全 PASS
+   - `test:doing-context-acceptance` PASS
+   - `test:pan-01s-owner-runtime` 9/9
+   - `test:vl1-block1` 18/18
+2. 任务包入库：Mavis 代办 commit `52e16ab docs(plan): mark BUG1-FIX 任务包 accepted after spotcheck`，1 文件 184 行（新建），零冲突。任务包 v0.2.0，状态由 `implemented_pending_owner_spotcheck` 升至 `accepted`。
+3. #4 / #6 研究：
+   - 搜索 6+ 篇竞品资料（ChatGPT、Claude Opus、Writers Studio、PARA、PKM、Zettelkasten、GTD、AI Agent task delivery、Phoenix QA 等）；
+   - #4 给三方案：草稿到发布流 / 任务交付流 / 可追问交付流；推荐 A + C 混合；
+   - #6 给三方案：PARA 变体 / PKM 完整版 / 渐进式构建；推荐 C（与 PAN-01S.1 B0-B5 思路一致）。
+4. Owner 重新定义 #4：明确「做事」不只文字，要覆盖文字 / 图 / 视频 / 音频 / 代码 / 网页 / 数据等多模态产物。设计原则沿用决策 #37（不自研，对接业界最好）+ #28（校准不限制）+ §7.8（能力可装可卸、密钥只在 main）。重新给三候选：A「做事页加产物类型选择」/ B「新增创作入口」/ C「场景自动分流」；**待 Owner 拍板**。
+
+### 待办事项
+
+1. Owner 选定 #4 候选方案（A / B / C）；
+2. Mavis 出"#4-多模态-产物类型选择 任务包 v0.1"（或对应 B/C 方案的任务包），转给 Cursor/Codex 实施；
+3. #6 候选 C 同样起草任务包（渐进式构建 7 模块）；
+4. 两条新任务包实施 + 验收 + 文档同步。
+
+### 重要信息
+
+1. **第一段正式收口已完成**（决策 #103 + commit `e8b6572`）。
+2. **BUG1 八条技术修已 committed**（决策 #104 + commit `9e498a3` … `940f5fa` + docs `a5f77a7`）。
+3. **任务包已入库**（决策 #105 + commit `52e16ab`）。
+4. **#4 多模态方向已记录**（决策 #106，待 Owner 拍板方案）。
+5. **R3 / R2.5 / PAN-02 仍 `paused` / `deferred` / `blocked`**，不动。
+6. **不 push 远端**（Owner 已确认无远端，本机 commit 即可）。
+
+---
+
 ## 2026-07-25（BUG1-FIX · D 盘 e8b6572 重做）
 
 ### 本次目标
