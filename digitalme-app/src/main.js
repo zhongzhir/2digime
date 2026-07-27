@@ -44,6 +44,8 @@ const { confirmPlanAndGenerate } = require("./act-behalf/deliverable-confirm-and
 const deliverableAutoLearn = require("./act-behalf/deliverable-auto-learn");
 const actionIdentity = require("./act-behalf/action-identity");
 const authorizationStore = require("./act-behalf/authorization-store");
+const { resolveKnowledgeContext } = require("./act-behalf/knowledge-resolver");
+const knowledgeLearning = require("./act-behalf/knowledge-learning");
 
 function enrichPackageViewWithAuthorization(userData, view) {
   if (!view || !view.package) return view;
@@ -4294,6 +4296,17 @@ async function tryHeuristicFetch(cfg, system, history, em, userText) {
   return callModel(cfg, messages);
 }
 
+ipcMain.handle("knowledge:confirmCandidate", async (_e, payload) => {
+  const cfg = readConfig();
+  const dir = cfg.packageDir || DEFAULT_PACKAGE_DIR;
+  const candidate = payload && payload.candidate;
+  const mode = (payload && payload.mode) || "owner_confirmed";
+  if (!candidate || !candidate.claimText) {
+    return { ok: false, code: "invalid_candidate" };
+  }
+  return knowledgeLearning.confirmCandidate(dir, candidate, { mode });
+});
+
 ipcMain.handle("chat:send", async (e, { pkg, history, requestId, attachmentContext, scenarioHint }) => {
   const cfg = readConfig();
   let system = buildSystemPrompt(pkg);
@@ -4317,27 +4330,46 @@ ipcMain.handle("chat:send", async (e, { pkg, history, requestId, attachmentConte
   }
 
   const dir = cfg.packageDir || DEFAULT_PACKAGE_DIR;
+  const rid = requestId || "req_" + Date.now();
   // Only role/content for the model — strip displayText / attachmentRefs / DOM leftovers
   const modelHistory = chatMessages.toModelGatewayHistory(history || []);
   const lastUser = [...modelHistory].reverse().find((m) => m.role === "user");
   const evidence = [];
+  let knowledgeCandidates = [];
+  let knowledgeProvenance = null;
   if (lastUser && lastUser.content) {
     try {
-      const result = retrieval.retrieve(dir, lastUser.content);
-      const ctx = retrieval.renderContext(result);
-      if (ctx) system += "\n\n---\n\n" + ctx;
-      if (result?.memories?.length || result?.frameworks?.length) {
-        for (const m of result.memories || []) {
-          evidence.push({ type: "memory", summary: String(m.text || "").slice(0, 120) });
-        }
-        for (const f of result.frameworks || []) {
-          evidence.push({ type: "framework", summary: String(f.name || f.text || "").slice(0, 120) });
-        }
+      const userQuestion = String(lastUser.content).split("\n---\n")[0].trim();
+      const resolved = resolveKnowledgeContext({
+        query: userQuestion,
+        packageDir: dir,
+        surface: "chat",
+        currentMaterials: attachmentContext
+          ? [{ ok: true, name: "本轮附件", text: String(attachmentContext).slice(0, 80000) }]
+          : [],
+        tokenBudget: 12000,
+      });
+      if (resolved.promptText) {
+        system += "\n\n---\n\n" + resolved.promptText;
       }
+      knowledgeProvenance = resolved.provenance || null;
+      for (const row of resolved.evidenceRows || []) {
+        evidence.push({
+          type: row.claimId ? "project_claim" : "memory",
+          summary: row.summary,
+          source: row.source,
+          status: row.status,
+          claimId: row.claimId || null,
+        });
+      }
+      const candidates = knowledgeLearning.extractCandidatesFromUserInput(userQuestion, {
+        sourceRef: "owner_chat_input:" + rid,
+      });
+      knowledgeCandidates = candidates.filter(
+        (c) => !knowledgeLearning.claimExistsInStore(dir, c.claimText)
+      );
     } catch {}
   }
-
-  const rid = requestId || "req_" + Date.now();
   const ac = new AbortController();
   activeChatAborts.set(rid, ac);
   const sendProg = (payload) => {
@@ -4347,7 +4379,14 @@ ipcMain.handle("chat:send", async (e, { pkg, history, requestId, attachmentConte
   };
 
   let reply = "";
-  let meta = { capabilitiesUsed: [], usedTools: false, evidence, requestId: rid };
+  let meta = {
+    capabilitiesUsed: [],
+    usedTools: false,
+    evidence,
+    knowledgeProvenance,
+    knowledgeCandidates,
+    requestId: rid,
+  };
   let streamMessages = [{ role: "system", content: system }, ...modelHistory];
 
   try {
@@ -5125,6 +5164,19 @@ ipcMain.handle("research:runAgentLoop", async (e, payload) => {
     String(payload.scenarioHint || "").trim() ||
     researchGrounded.buildGroundedSystemAppend(item) +
       " 当前执行四步调研：澄清→检索→读源→成果稿。";
+  let knowledgeAppend = "";
+  try {
+    const dir = cfg.packageDir || DEFAULT_PACKAGE_DIR;
+    const resolved = resolveKnowledgeContext({
+      query: question,
+      packageDir: dir,
+      surface: "research",
+      tokenBudget: 10000,
+    });
+    if (resolved.promptText) knowledgeAppend = "\n\n" + resolved.promptText;
+  } catch {
+    knowledgeAppend = "";
+  }
   const chatTools = await getChatToolsModule();
   const result = await researchAgentLoop.runResearchAgentLoop({
     userData: app.getPath("userData"),
@@ -5139,7 +5191,7 @@ ipcMain.handle("research:runAgentLoop", async (e, payload) => {
     enrichSearchHitsWithFetch,
     getExtensionManager,
     formatToolResult: chatTools.formatToolResult,
-    scenarioHint,
+    scenarioHint: scenarioHint + knowledgeAppend,
   });
   sendProg({ step: "done", phase: "done", label: "调研完成" });
   return { ...result, requestId: rid };
@@ -5655,9 +5707,13 @@ ipcMain.handle("output:planPpt", async (_e, { pkg, brief }) => {
   let system = buildSystemPrompt(pkg);
   const dir = cfg.packageDir || DEFAULT_PACKAGE_DIR;
   try {
-    const result = retrieval.retrieve(dir, brief.topic);
-    const ctx = retrieval.renderContext(result);
-    if (ctx) system += "\n\n---\n\n" + ctx;
+    const resolved = resolveKnowledgeContext({
+      query: String(brief.topic || "").trim(),
+      packageDir: dir,
+      surface: "writing",
+      tokenBudget: 10000,
+    });
+    if (resolved.promptText) system += "\n\n---\n\n" + resolved.promptText;
   } catch {}
 
   const messages = pptxOutput.buildPptPlanMessages({ systemPrompt: system }, brief);

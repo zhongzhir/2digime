@@ -18,17 +18,10 @@ const {
   tagAttachmentRefs,
   isDigitalMeProjectContext,
 } = require("./subject-context-engine");
-const { unwrapField, budgetAttachmentContext } = require("./deliverable-context");
+const { unwrapField } = require("./deliverable-context");
 const actionIdentity = require("./action-identity");
 const authorizationStore = require("./authorization-store");
-const {
-  resolveProjectContext,
-  mergeProjectMaterials,
-} = require("./project-context-registry");
-const {
-  retrieveProjectClaims,
-  renderProjectClaimsSection,
-} = require("./project-knowledge-retrieval");
+const { resolveKnowledgeContext } = require("./knowledge-resolver");
 
 function newAttemptId() {
   return newId("dgatt_");
@@ -252,59 +245,76 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
 
   let projectResolved = null;
   let projectRetrieval = null;
-  if (isDigitalMeProject || policy.requireProjectContext) {
-    projectResolved = resolveProjectContext(deps.packageDir || null, {
-      goal: taskContext.goal,
-      task: taskRecord,
+  const resolved = resolveKnowledgeContext({
+    query: taskContext.goal,
+    packageDir: deps.packageDir || null,
+    surface: "deliverable",
+    task: taskRecord,
+    taskContext,
+    currentMaterials: (taskRecord && taskRecord.referenceMaterials) || [],
+    tokenBudget: 18000,
+  });
+
+  if (
+    (isDigitalMeProject || policy.requireProjectContext) &&
+    resolved.detectedScope &&
+    resolved.detectedScope.projectId &&
+    resolved.detectedScope.confidence === "low" &&
+    resolved.detectedScope.reason === "unresolved"
+  ) {
+    await packageStore.mutateStore(userData, (s) => {
+      const a = s.generationAttempts[attemptId];
+      if (a) {
+        a.status = "failed";
+        a.finishedAt = nowIso();
+        a.errorCode = "project_unresolved";
+        a.errorSummary = "未能识别项目范围，已停止生成。";
+        a.outcome = "failed";
+      }
+      const d = s.deliverables[String(deliverableId)];
+      if (d) {
+        d.generationStatus = "failed";
+        d.updatedAt = nowIso();
+      }
+      return true;
     });
-    if (!projectResolved.ok) {
-      await packageStore.mutateStore(userData, (s) => {
-        const a = s.generationAttempts[attemptId];
-        if (a) {
-          a.status = "failed";
-          a.finishedAt = nowIso();
-          a.errorCode = projectResolved.code;
-          a.errorSummary = projectResolved.message;
-          a.outcome = "failed";
-        }
-        const d = s.deliverables[String(deliverableId)];
-        if (d) {
-          d.generationStatus = "failed";
-          d.updatedAt = nowIso();
-        }
-        return true;
-      });
-      return {
-        ok: false,
-        code: projectResolved.code,
-        message: projectResolved.message,
-        attemptId,
-      };
-    }
-    projectRetrieval = retrieveProjectClaims({
-      claims: projectResolved.claims,
-      query: taskContext.goal,
-      projectId: projectResolved.projectId,
-    });
+    return {
+      ok: false,
+      code: "project_unresolved",
+      message: "未能识别项目范围，已停止生成。",
+      attemptId,
+    };
   }
 
-  const taskMaterials = (taskRecord && taskRecord.referenceMaterials) || [];
-  const mergedMaterials = projectResolved
-    ? mergeProjectMaterials(taskMaterials, projectResolved.materials)
-    : taskMaterials;
-  const attachmentBudget = budgetAttachmentContext(mergedMaterials, 18000);
-  let subjectAssembly = assembleSubjectContext({
-    packageDir: deps.packageDir || null,
-    query: {
-      ...taskContext,
-      attachmentKeywords: mergedMaterials.map((m) => m && m.name).filter(Boolean),
-    },
-    policy,
-    contextClass: classification.contextClass,
-    projectRenderedText: projectRetrieval
-      ? renderProjectClaimsSection(projectRetrieval)
-      : "",
-  });
+  const mergedMaterials = resolved.currentMaterials || [];
+  const attachmentBudget = resolved.attachmentBudget;
+  projectRetrieval = resolved.projectRetrieval;
+  if (resolved.projectContext) {
+    projectResolved = {
+      ok: true,
+      projectId: resolved.projectContext.projectId,
+      projectContextId: resolved.projectContext.projectContextId,
+      displayLabel: resolved.projectContext.displayLabel,
+      claims: resolved.selectedClaims,
+      materials: mergedMaterials.filter((m) => m.note === "project_authoritative_source"),
+    };
+  }
+
+  let subjectAssembly = resolved.subjectAssembly || resolved.subjectKnowledge;
+  if (!subjectAssembly) {
+    subjectAssembly = assembleSubjectContext({
+      packageDir: deps.packageDir || null,
+      query: {
+        ...taskContext,
+        attachmentKeywords: mergedMaterials.map((m) => m && m.name).filter(Boolean),
+      },
+      policy,
+      contextClass: classification.contextClass,
+      projectRenderedText: resolved.projectRetrieval
+        ? require("./project-knowledge-retrieval").renderProjectClaimsSection(resolved.projectRetrieval)
+        : "",
+    });
+  }
   subjectAssembly = finalizeSubjectAssembly(subjectAssembly, {
     classification,
     policy,
@@ -315,6 +325,7 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
     subjectAssembly.projectId = projectResolved.projectId;
     subjectAssembly.projectRetrieval = projectRetrieval;
     subjectAssembly.projectContextLabel = projectResolved.displayLabel;
+    subjectAssembly.knowledgeProvenance = resolved.provenance;
   }
 
   try {

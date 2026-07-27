@@ -124,6 +124,7 @@ function buildDigitalMeSeedClaims() {
 
   const entries = [
     {
+      claimId: "pkc_dm_positioning",
       claimText:
         "Digital Me 是人的数字主体层：以个人数据、记忆、判断、表达、能力和授权规则为基础，本地优先、平台中立、可迁移、可授权、可审计的个人数字主体系统。",
       claimType: "current_fact",
@@ -132,6 +133,7 @@ function buildDigitalMeSeedClaims() {
       sourceRefs: ["digitalme_context.md", "digital-me-project-positioning-draft.md"],
     },
     {
+      claimId: "pkc_dm_no_blockchain_mainline",
       claimText: "区块链不是 Digital Me 的主技术底座；DID/VC/链上存证等仅可作为待评估技术选项，不得写成产品主线。",
       claimType: "confirmed_decision",
       authorityLevel: "frozen_spec",
@@ -139,6 +141,7 @@ function buildDigitalMeSeedClaims() {
       sourceRefs: ["digitalme_context.md", "digitalme_subject_architecture_and_rd_principles_v0.1.md"],
     },
     {
+      claimId: "pkc_dm_no_stablecoin_mainline",
       claimText: "稳定币、代币经济和数字资产交易不是 Digital Me 当前产品主线；当前不做稳定币钱包与完整代币经济。",
       claimType: "confirmed_decision",
       authorityLevel: "owner_confirmed",
@@ -148,6 +151,7 @@ function buildDigitalMeSeedClaims() {
       supersedesMemoryIds: ["core_008", "core_009"],
     },
     {
+      claimId: "pkc_dm_product_lines",
       claimText:
         "产品双线：A 数字化构建数字之我；B 主体化做事与协作。能力层采取跟随策略，直接导入业界最好能力，不争最强最新。",
       claimType: "current_fact",
@@ -156,6 +160,7 @@ function buildDigitalMeSeedClaims() {
       sourceRefs: ["digitalme_context.md"],
     },
     {
+      claimId: "pkc_dm_dvl2_03_status",
       claimText: "DVL2-03 真实成果生成已完成 Owner 真机验收（accepted_as_implemented / owner_runtime_accepted，2026-07-27）。",
       claimType: "current_status",
       authorityLevel: "accepted_runtime_state",
@@ -163,6 +168,7 @@ function buildDigitalMeSeedClaims() {
       sourceRefs: ["digitalme_log.md", "digitalme_context.md"],
     },
     {
+      claimId: "pkc_dm_idcollab_status",
       claimText: "IDCOLLAB-MIN-01 最小行动身份与本地授权语义已实现（ready_for_owner_runtime_reacceptance）。",
       claimType: "current_status",
       authorityLevel: "accepted_runtime_state",
@@ -170,6 +176,7 @@ function buildDigitalMeSeedClaims() {
       sourceRefs: ["digitalme_log.md"],
     },
     {
+      claimId: "pkc_dm_learn_loop_p0",
       claimText: "当前 P0 是学习闭环可靠性修复（LEARN-LOOP-FIX-01）；不得将外部协作网络、Digital Org、支付结算写成已启动能力。",
       claimType: "current_status",
       authorityLevel: "current_project_record",
@@ -177,6 +184,7 @@ function buildDigitalMeSeedClaims() {
       sourceRefs: ["digitalme_log.md", "LEARN_LOOP_FORENSIC_AUDIT_20260727.md"],
     },
     {
+      claimId: "pkc_dm_hist_core006",
       claimText:
         "数字资产须具备真实场景、真实价值、真实交付——这是 Owner 的宏观判断，不是 Digital Me 当前 MVP 产品范围。",
       claimType: "historical_exploration",
@@ -187,6 +195,7 @@ function buildDigitalMeSeedClaims() {
       supersededBy: "pkc_dm_no_stablecoin_mainline",
     },
     {
+      claimId: "pkc_dm_hist_core008",
       claimText:
         "AI 治理中的 UBC（通用基本资本）理念——属于早期探索与宏观政策讨论，不是 Digital Me 当前产品功能。",
       claimType: "historical_exploration",
@@ -197,6 +206,7 @@ function buildDigitalMeSeedClaims() {
       supersededBy: "pkc_dm_no_stablecoin_mainline",
     },
     {
+      claimId: "pkc_dm_hist_core009",
       claimText:
         "稳定币作为数字经济基础设施——属于区块链/金融探索记忆，不是 Digital Me 当前主线。",
       claimType: "historical_exploration",
@@ -209,10 +219,8 @@ function buildDigitalMeSeedClaims() {
   ];
 
   for (const e of entries) {
-    const claimId =
-      e.claimText.includes("稳定币、代币经济") ? "pkc_dm_no_stablecoin_mainline" : newClaimId();
     claims.push({
-      claimId,
+      claimId: e.claimId,
       ...base,
       ...e,
       effectiveFrom: nowIso(),
@@ -282,11 +290,12 @@ function ensureDigitalMeProjectKnowledge(packageDir) {
   store.contextSets[contextSet.projectContextId] = contextSet;
 
   const seedClaims = buildDigitalMeSeedClaims();
+  const seedIds = new Set(seedClaims.map((c) => c.claimId));
   for (const c of seedClaims) {
     const existing = store.claims[c.claimId];
     if (existing && existing.confirmationStatus === "owner_confirmed") {
       store.claims[c.claimId] = { ...existing, updatedAt: nowIso() };
-    } else {
+    } else if (!existing || seedIds.has(existing.claimId)) {
       store.claims[c.claimId] = c;
     }
   }
@@ -318,6 +327,44 @@ function upsertClaim(packageDir, claim) {
   store.claims[claim.claimId] = { ...claim, updatedAt: nowIso() };
   saveClaims(packageDir, store.claims);
   return store.claims[claim.claimId];
+}
+
+function supersedeClaim(packageDir, oldClaimId, newClaimId, meta) {
+  const store = loadStore(packageDir);
+  const old = store.claims[oldClaimId];
+  if (!old) return { ok: false, code: "claim_not_found" };
+  const now = nowIso();
+  store.claims[oldClaimId] = {
+    ...old,
+    supersededBy: newClaimId,
+    confirmationStatus: old.confirmationStatus === "owner_confirmed" ? "superseded" : old.confirmationStatus,
+    updatedAt: now,
+    supersessionMeta: {
+      reason: (meta && meta.reason) || "superseded",
+      sourceRef: (meta && meta.sourceRef) || null,
+      at: now,
+    },
+  };
+  saveClaims(packageDir, store.claims);
+  return { ok: true, oldClaimId, newClaimId };
+}
+
+function revokeClaim(packageDir, claimId, meta) {
+  const store = loadStore(packageDir);
+  const old = store.claims[claimId];
+  if (!old) return { ok: false, code: "claim_not_found" };
+  const now = nowIso();
+  store.claims[claimId] = {
+    ...old,
+    confirmationStatus: "rejected",
+    updatedAt: now,
+    revocationMeta: {
+      reason: (meta && meta.reason) || "revoked",
+      at: now,
+    },
+  };
+  saveClaims(packageDir, store.claims);
+  return { ok: true, claimId };
 }
 
 function loadContextMaterials(packageDir, contextSet, maxCharsPerFile) {
@@ -354,6 +401,8 @@ module.exports = {
   getContextSet,
   getClaimsForProject,
   upsertClaim,
+  supersedeClaim,
+  revokeClaim,
   loadContextMaterials,
   readRepoFile,
   resolveRepoRoot,

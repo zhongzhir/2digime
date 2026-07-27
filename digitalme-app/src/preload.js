@@ -134,6 +134,7 @@ const api = {
   removeBoundary: (payload) => ipcRenderer.invoke("policies:removeBoundary", payload),
   restoreBoundaryDefaults: (payload) => ipcRenderer.invoke("policies:restoreDefaults", payload),
   sendChat: (payload) => ipcRenderer.invoke("chat:send", payload),
+  confirmKnowledgeCandidate: (payload) => ipcRenderer.invoke("knowledge:confirmCandidate", payload),
   stopChat: (payload) => ipcRenderer.invoke("chat:stop", payload),
   pickAttachments: () => ipcRenderer.invoke("chat:pickAttachments"),
   onChatProgress: (cb) => {

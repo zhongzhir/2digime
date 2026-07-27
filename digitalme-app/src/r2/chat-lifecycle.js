@@ -677,11 +677,17 @@ function createR2ChatLifecycle(deps) {
 
       const dir = (cfg && cfg.packageDir) || defaultPackageDir;
       const lastUser = [...modelHistory].reverse().find((m) => m.role === "user");
-      if (lastUser && lastUser.content && retrieval) {
+      if (lastUser && lastUser.content) {
         try {
-          const result = retrieval.retrieve(dir, lastUser.content);
-          const ctxR = retrieval.renderContext(result);
-          if (ctxR) system += "\n\n---\n\n" + ctxR;
+          const { resolveKnowledgeContext } = require("../act-behalf/knowledge-resolver");
+          const userQuestion = String(lastUser.content).split("\n---\n")[0].trim();
+          const resolved = resolveKnowledgeContext({
+            query: userQuestion,
+            packageDir: dir,
+            surface: "chat",
+            tokenBudget: 12000,
+          });
+          if (resolved.promptText) system += "\n\n---\n\n" + resolved.promptText;
         } catch {
           /* ignore */
         }

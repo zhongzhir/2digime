@@ -1098,12 +1098,56 @@ function attachAssistantActions(wrap, text, opts = {}) {
       }
       box = document.createElement("div");
       box.className = "evidence-box";
-      box.textContent =
-        "本轮参考了：\n" + opts.evidence.map((x) => "· " + (x.summary || "")).join("\n");
+      const lines = (opts.evidence || []).map((x) => {
+        const parts = [x.summary || ""];
+        if (x.source) parts.push("来源：" + x.source);
+        if (x.status) parts.push("状态：" + x.status);
+        return "· " + parts.join("｜");
+      });
+      box.textContent = "本轮参考了：\n" + lines.join("\n");
       wrap.appendChild(box);
     });
     actions.appendChild(ev);
   }
+}
+
+function renderKnowledgeCandidatePrompt(wrap, candidates) {
+  if (!wrap || !Array.isArray(candidates) || !candidates.length) return;
+  if (wrap.querySelector(".knowledge-confirm-box")) return;
+  const c = candidates[0];
+  const box = document.createElement("div");
+  box.className = "knowledge-confirm-box";
+  const text = document.createElement("p");
+  text.textContent = c.confirmationPrompt || "是否记住这条？";
+  box.appendChild(text);
+  const actions = document.createElement("div");
+  actions.className = "knowledge-confirm-actions";
+  const mkBtn = (label, mode) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = label;
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      try {
+        if (mode !== "dismiss" && window.digitalMe.confirmKnowledgeCandidate) {
+          await window.digitalMe.confirmKnowledgeCandidate({ candidate: c, mode });
+        }
+        box.remove();
+        if (mode === "owner_confirmed") {
+          addMessage("system-note", "已记住这条项目原则，后续对话和做事会一并使用。");
+        }
+      } catch (err) {
+        btn.disabled = false;
+        addMessage("system-note", "暂时没能保存，请稍后再试。");
+      }
+    });
+    return btn;
+  };
+  actions.appendChild(mkBtn("确认", "owner_confirmed"));
+  actions.appendChild(mkBtn("仅本次使用", "session_only"));
+  actions.appendChild(mkBtn("不记录", "dismiss"));
+  box.appendChild(actions);
+  wrap.appendChild(box);
 }
 
 function addMessage(role, text, opts = {}) {
@@ -1542,6 +1586,8 @@ async function send() {
         evidence: lastEvidence,
         titleHint: guessTitleFromText(res.fullReply || reply),
       });
+      const candidates = (res.meta && res.meta.knowledgeCandidates) || [];
+      if (candidates.length) renderKnowledgeCandidatePrompt(wrap, candidates);
     }
 
     if (reply) {

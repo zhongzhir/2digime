@@ -19,6 +19,7 @@ function rankClaim(claim) {
   let score = auth * 10;
   const type = String(claim.claimType || "");
   if (type === "current_fact" || type === "confirmed_decision") score += 50;
+  else if (type === "work_principle") score += 48;
   else if (type === "current_status") score += 40;
   else if (type === "proposal") score += 10;
   else if (type === "historical_exploration") score -= 80;
@@ -117,7 +118,7 @@ function retrieveProjectClaims(opts) {
 function renderProjectClaimsSection(result) {
   if (!result || !result.claims || !result.claims.length) return "";
   const parts = ["## 当前项目权威事实与状态（须优先遵循；历史探索不得写成现状）"];
-  const order = ["current_fact", "confirmed_decision", "current_status", "proposal"];
+  const order = ["current_fact", "confirmed_decision", "work_principle", "current_status", "proposal"];
   const byType = {};
   for (const c of result.claims) {
     const t = c.claimType || "other";
@@ -132,6 +133,8 @@ function renderProjectClaimsSection(result) {
         ? "已确认事实"
         : t === "confirmed_decision"
           ? "已确认决策"
+          : t === "work_principle"
+            ? "产品原则"
           : t === "current_status"
             ? "当前状态"
             : "建议/提案";
