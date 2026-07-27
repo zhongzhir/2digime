@@ -12,6 +12,7 @@ const {
   buildGenerationContext,
   assertGeneratedContentUsable,
 } = require("./deliverable-context");
+const { promptGuidanceForClass } = require("./subject-context-engine");
 
 function clampText(s, max) {
   const t = String(s || "");
@@ -19,16 +20,40 @@ function clampText(s, max) {
   return t.slice(0, max) + "\n…（已截断）";
 }
 
+function evidenceCorpusFromCtx(ctx) {
+  return [
+    ctx.subjectRenderedText || "",
+    ctx.attachmentText || "",
+    ctx.goal || "",
+    ctx.constraints || "",
+  ].join("\n");
+}
+
 function contextBlock(ctx) {
+  const contextClass = ctx.contextClass || "execution";
+  const policy = (ctx.subjectAssembly && ctx.subjectAssembly.assemblyPolicy) || {
+    allowAiExplorationBlock: !!ctx.allowAiExplorationBlock,
+  };
+  const guidance = promptGuidanceForClass(contextClass, policy);
+
   const subjectBlock = (() => {
     if (ctx.subjectRenderedText && String(ctx.subjectRenderedText).trim()) {
-      return "Digital Me 主体背景（须参考，不得编造未给出的隐私）：\n" + ctx.subjectRenderedText;
+      return (
+        "Digital Me 主体背景（须参考；仅 subject_owned 内容可代表本人；不得编造未给出的隐私）：\n" +
+        ctx.subjectRenderedText
+      );
     }
     const reason =
       (ctx.subjectAssembly && ctx.subjectAssembly.emptyReason) || "no_active_assets";
     return `（本次未装配到已确认主体资产；emptyReason=${reason}。不要声称已了解用户本人。）`;
   })();
+
+  const exploreHint = ctx.allowAiExplorationBlock
+    ? "若需要推演，请单独成段并标明为本次分析/探索（ai_inference / ai_exploration），不得写入主体事实口吻。"
+    : "本次不允许开放探索块；不要提出无依据的商业假设当作已发生事实。";
+
   return [
+    `任务情境（contextClass=${contextClass}）：${guidance}`,
     `任务目标：${ctx.goal || "（缺少任务目标，请勿编造无关业务）"}`,
     ctx.audience ? `受众：${ctx.audience}` : "",
     ctx.usage ? `用途：${ctx.usage}` : "",
@@ -38,8 +63,10 @@ function contextBlock(ctx) {
     ctx.purpose ? `该成果目的：${ctx.purpose}` : "",
     subjectBlock,
     ctx.attachmentText
-      ? "参考材料（必须依据，不得忽略）：\n" + ctx.attachmentText
+      ? "参考材料（必须依据；evidenceKind=task_material；ownership=task_owned；不得升格为主体）：\n" +
+        ctx.attachmentText
       : "（本次未提供参考材料正文）",
+    exploreHint,
     "要求：紧扣上述 Digital Me / 任务上下文；禁止输出与任务无关的虚构公司或融资故事；禁止占位符如「项目名称」「CEO 姓名」「XX%」「功能一」。",
   ]
     .filter(Boolean)
@@ -124,7 +151,12 @@ async function generateDocument({ pkg, deliverable, task, referenceMaterials, su
       `## 说明\n\n面向：${ctx.audience || "目标读者"}。用途：${ctx.usage || ctx.purpose || "介绍"}。\n`;
   }
   md = String(md || "").trim();
-  assertGeneratedContentUsable(md, { kind: "document", goal: ctx.goal });
+  assertGeneratedContentUsable(md, {
+    kind: "document",
+    goal: ctx.goal,
+    contextClass: ctx.contextClass,
+    evidenceCorpus: evidenceCorpusFromCtx(ctx),
+  });
   if (md.length > 80000) md = md.slice(0, 80000);
   const html = markdownToHtml(md, { title: ctx.title });
   const files = {
@@ -188,6 +220,8 @@ async function generatePresentation({ pkg, deliverable, task, referenceMaterials
   assertGeneratedContentUsable(planText + "\n" + (plan.title || ""), {
     kind: "presentation",
     goal: ctx.goal,
+    contextClass: ctx.contextClass,
+    evidenceCorpus: evidenceCorpusFromCtx(ctx),
   });
   const files = {};
   let usedPptx = false;
@@ -229,7 +263,12 @@ async function generateWebpage({ pkg, deliverable, task, referenceMaterials, sub
     if (ctx.attachmentText) md += `\n## 依据材料摘要\n\n${ctx.attachmentText.slice(0, 1500)}\n`;
   }
   md = String(md || "").trim();
-  assertGeneratedContentUsable(md, { kind: "webpage", goal: ctx.goal });
+  assertGeneratedContentUsable(md, {
+    kind: "webpage",
+    goal: ctx.goal,
+    contextClass: ctx.contextClass,
+    evidenceCorpus: evidenceCorpusFromCtx(ctx),
+  });
   const html = markdownToHtml(md, { title: ctx.title });
   return {
     kind: "webpage",

@@ -75,7 +75,7 @@ function budgetAttachmentContext(materials, maxChars) {
   const usedRefs = [];
   let used = 0;
   for (const m of list) {
-    const header = `【参考材料：${m.name}】\n`;
+    const header = `【参考材料（本次任务 · task_material / task_owned）：${m.name}】\n`;
     const remain = limit - used - header.length;
     if (remain <= 80) {
       usedRefs.push({
@@ -84,6 +84,9 @@ function budgetAttachmentContext(materials, maxChars) {
         contentHash: m.contentHash,
         included: false,
         reason: "token_budget_exhausted",
+        evidenceKind: "task_material",
+        ownership: "task_owned",
+        logicalState: null,
       });
       continue;
     }
@@ -97,6 +100,9 @@ function budgetAttachmentContext(materials, maxChars) {
       included: true,
       truncated: m.truncated || body.length < m.text.length,
       charsUsed: body.length,
+      evidenceKind: "task_material",
+      ownership: "task_owned",
+      logicalState: null,
     });
   }
   return {
@@ -155,6 +161,15 @@ function buildGenerationContext({
   const assembly = subjectAssembly && typeof subjectAssembly === "object" ? subjectAssembly : null;
   const subjectRenderedText = assembly && assembly.renderedText ? String(assembly.renderedText) : "";
   const subjectRefs = assembly && Array.isArray(assembly.refs) ? assembly.refs : [];
+  const attachmentRefs =
+    assembly && Array.isArray(assembly.attachmentRefs) && assembly.attachmentRefs.length
+      ? assembly.attachmentRefs
+      : attachmentBudget.usedRefs.map((r) => ({
+          ...r,
+          evidenceKind: "task_material",
+          ownership: "task_owned",
+          logicalState: null,
+        }));
 
   return {
     goal,
@@ -174,10 +189,20 @@ function buildGenerationContext({
     packageId: String((pkg && pkg.id) || ""),
     deliverableId: String((deliverable && deliverable.id) || ""),
     attachmentText: attachmentBudget.text,
-    attachmentRefs: attachmentBudget.usedRefs,
+    attachmentRefs,
     subjectAssembly: assembly,
     subjectRenderedText,
     subjectRefs,
+    contextClass: (assembly && assembly.contextClass) || null,
+    contextClassification: (assembly && assembly.contextClassification) || null,
+    assemblyPolicyDigest: (assembly && assembly.assemblyPolicyDigest) || null,
+    evidenceSummary: (assembly && assembly.evidenceSummary) || null,
+    ownershipSummary: (assembly && assembly.ownershipSummary) || null,
+    allowAiExplorationBlock: !!(
+      assembly &&
+      assembly.assemblyPolicy &&
+      assembly.assemblyPolicy.allowAiExplorationBlock
+    ),
   };
 }
 
@@ -191,7 +216,7 @@ function findPlaceholderIssues(text) {
   return hits;
 }
 
-function assertGeneratedContentUsable(text, { kind, goal } = {}) {
+function assertGeneratedContentUsable(text, { kind, goal, contextClass, evidenceCorpus } = {}) {
   const body = String(text || "").trim();
   if (!body || body.length < 12) {
     const e = new Error("模型未返回有效内容。");
@@ -211,6 +236,12 @@ function assertGeneratedContentUsable(text, { kind, goal } = {}) {
     const e = new Error("生成结果偏离任务上下文，未保存为成果。");
     e.code = "off_topic_content_rejected";
     throw e;
+  }
+  if (contextClass === "representation") {
+    const {
+      assertRepresentationFactsGrounded,
+    } = require("./subject-context-engine");
+    assertRepresentationFactsGrounded(body, evidenceCorpus || "", contextClass);
   }
   void kind;
   return true;

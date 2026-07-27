@@ -19,6 +19,117 @@ const SENSITIVE_RE =
   /身份|价值观|边界|授权|隐私|密钥|密码|不得代表|敏感|政治立场|宗教信仰/;
 const ONE_OFF_RE = /本次|这一次|仅此|临时|只要这一次|不要记成习惯/;
 const CONTRADICT_MARKERS = ["不是", "并非", "不再", "相反", "推翻", "纠正为"];
+const JUDGMENT_RE = /应该先|优先[^。]{0,12}而非|优先选择|在.{0,20}情况下选|取舍|权衡后/;
+const PREFERENCE_RE = /文风|语气|篇幅|结构习惯|表达偏好|以后都用|习惯用|不要写成/;
+const FABRICATED_LEARN_RE =
+  /联合创始人|CTO|CPO|融资\s*[\d.,]+\s*(?:万|亿)|DAU|MAU|NPS|日活|月活|年收入|营收|签约客户|标杆客户|已完成融资/;
+
+/**
+ * Accepting a DeliverableVersion ≠ confirming every fact inside it.
+ * new_fact requires at least one traceable evidence source.
+ */
+function buildFactEvidenceCorpus(collected) {
+  const parts = [];
+  if (collected && collected.taskMaterialText) parts.push(collected.taskMaterialText);
+  if (collected && collected.subjectEvidenceText) parts.push(collected.subjectEvidenceText);
+  if (collected && Array.isArray(collected.ownerExplicitStatements)) {
+    parts.push(collected.ownerExplicitStatements.join("\n"));
+  }
+  // Provenance subject_fact statements already confirmed.
+  const prov = collected && collected.source && collected.source.provenance;
+  if (prov && Array.isArray(prov.subjectRefs)) {
+    for (const r of prov.subjectRefs) {
+      if (r && r.statement && r.evidenceKind === "subject_fact") parts.push(r.statement);
+    }
+  }
+  return parts.join("\n");
+}
+
+function textSupportedByEvidence(text, evidenceCorpus) {
+  const t = String(text || "").trim();
+  const corpus = String(evidenceCorpus || "");
+  if (!t || !corpus) return false;
+  // UNIQUE tokens must appear verbatim in evidence.
+  const uniq = t.match(/UNIQUE_[A-Z0-9_]+/g);
+  if (uniq && uniq.length) {
+    return uniq.every((tok) => corpus.includes(tok));
+  }
+  // Substantive overlap: longest 12+ char window or 60% of shortened text.
+  const compact = t.replace(/\s+/g, "");
+  const corpusCompact = corpus.replace(/\s+/g, "");
+  if (compact.length >= 12 && corpusCompact.includes(compact.slice(0, Math.min(40, compact.length)))) {
+    return true;
+  }
+  const window = compact.slice(0, 24);
+  return window.length >= 8 && corpusCompact.includes(window);
+}
+
+function inferLearnKind(item, evidenceCorpus) {
+  const text = String((item && item.text) || "");
+  if (item.layer === "artifact_history" || item.artifactOnly) {
+    return { learnKind: null, logicalState: "session_only", write: false };
+  }
+  if (item.layer === "episodic") {
+    return {
+      learnKind: null,
+      logicalState: "active_low",
+      write: true,
+      ownership: "subject_owned",
+    };
+  }
+  if (JUDGMENT_RE.test(text)) {
+    return {
+      learnKind: /多次|一贯|总是/.test(text) ? "decision_pattern" : "new_judgment",
+      logicalState: "judgment_candidate",
+      write: true,
+      ownership: "subject_owned",
+    };
+  }
+  if (PREFERENCE_RE.test(text)) {
+    return {
+      learnKind: "expression_preference",
+      logicalState: "active_low",
+      write: true,
+      ownership: "subject_owned",
+    };
+  }
+
+  // Fact-like claims (including UNIQUE_* markers).
+  const looksFact =
+    /UNIQUE_/.test(text) ||
+    FABRICATED_LEARN_RE.test(text) ||
+    /本人|我曾|毕业于|创办|担任|公司是/.test(text);
+
+  if (looksFact) {
+    const supported = textSupportedByEvidence(text, evidenceCorpus);
+    if (!supported) {
+      // Model-only "facts" after whole-version accept must NOT become new_fact.
+      return {
+        learnKind: null,
+        logicalState: "session_only",
+        write: false,
+        rejectReason: "unverified_fact_no_evidence",
+        ownership: "ai_generated",
+      };
+    }
+    return {
+      learnKind: "new_fact",
+      logicalState: "active_low",
+      write: true,
+      ownership: "subject_owned",
+      factEvidence: "traceable",
+    };
+  }
+
+  // Generic semantic line without clear fact/judgment/preference → soft preference-ish memory,
+  // but not new_fact.
+  return {
+    learnKind: "expression_preference",
+    logicalState: "active_low",
+    write: true,
+    ownership: "subject_owned",
+  };
+}
 
 function truncate(s, n) {
   const t = String(s || "");
@@ -48,7 +159,11 @@ function collectSourceFromVersion(userData, versionId) {
     return { ok: false, code: "version_not_found", message: "未找到成果版本。" };
   }
   const deliverable = store.deliverables && store.deliverables[version.deliverableId];
-  const pkg = store.packages && store.packages[version.packageId];
+  const packageId =
+    version.packageId ||
+    (deliverable && deliverable.packageId) ||
+    null;
+  const pkg = packageId && store.packages ? store.packages[String(packageId)] : null;
   const arts = [];
   if (version.artifactRef) arts.push(version.artifactRef);
   if (Array.isArray(version.artifactRefs)) arts.push(...version.artifactRefs);
@@ -61,6 +176,38 @@ function collectSourceFromVersion(userData, versionId) {
   });
   const contentHashes = artifactRefs.map((a) => a.contentHash).filter(Boolean);
   const textParts = artifactRefs.map((a) => readTextArtifact(userData, a)).filter(Boolean);
+
+  // Task materials & subject evidence for fact-gate (accept ≠ confirm every claim).
+  let taskMaterialText = "";
+  let subjectEvidenceText = "";
+  try {
+    const actBehalfStore = require("./task-store");
+    const taskId = (pkg && pkg.taskId) || null;
+    if (taskId) {
+      const got = actBehalfStore.getTask(userData, taskId, { heal: false });
+      const task = got && got.ok ? got.task : null;
+      const mats = (task && task.referenceMaterials) || [];
+      taskMaterialText = mats
+        .map((m) => `${m && m.name ? m.name : ""}\n${m && m.text ? m.text : ""}`)
+        .join("\n");
+    }
+  } catch {
+    taskMaterialText = "";
+  }
+  try {
+    const prov = version.provenance || {};
+    const subj = []
+      .concat(Array.isArray(prov.subjectRefs) ? prov.subjectRefs : [])
+      .concat(Array.isArray(prov.memoryRefs) ? prov.memoryRefs : []);
+    subjectEvidenceText = subj
+      .map((r) => (r && (r.statement || r.assetId)) || "")
+      .filter(Boolean)
+      .join("\n");
+    // Also fold confirmed subject_fact statements if present on assembly layers — N/A here.
+  } catch {
+    subjectEvidenceText = "";
+  }
+
   return {
     ok: true,
     version,
@@ -69,7 +216,7 @@ function collectSourceFromVersion(userData, versionId) {
     source: {
       taskId: (pkg && pkg.taskId) || null,
       planVersionId: (pkg && pkg.sourcePlanVersionId) || null,
-      packageId: version.packageId || null,
+      packageId: packageId || null,
       deliverableId: version.deliverableId || null,
       deliverableVersionId: version.id,
       artifactRefs: artifactRefs.map((a) => ({
@@ -85,18 +232,24 @@ function collectSourceFromVersion(userData, versionId) {
         model: (version.generator && version.generator.model) || null,
         skill: (version.generator && version.generator.skill) || null,
         tool: (version.generator && version.generator.tool) || null,
+        subjectRefs: (version.provenance && version.provenance.subjectRefs) || [],
+        contextClass: (version.provenance && version.provenance.contextClass) || null,
       },
     },
     excerpt: truncate(textParts.join("\n\n"), 8000),
-    title: (deliverable && deliverable.title) || (version.title) || "成果",
+    title: (deliverable && deliverable.title) || version.title || "成果",
     kind: (deliverable && deliverable.kind) || "document",
+    taskMaterialText,
+    subjectEvidenceText,
   };
 }
 
 /**
  * Rule-based extract (also used when callModel absent). Never stores full artifact body.
+ * @param {object} args
+ * @param {string} [args.evidenceCorpus]
  */
-function extractLearningItems({ title, kind, excerpt, source }, callModel) {
+function extractLearningItems({ title, kind, excerpt, source, evidenceCorpus }, callModel) {
   const base = [];
   base.push({
     id: "ex_episodic_1",
@@ -132,7 +285,7 @@ function extractLearningItems({ title, kind, excerpt, source }, callModel) {
     });
   }
 
-  // Continuity markers (e.g. UNIQUE_*): auto-absorb as Active-Low searchable memory.
+  // Continuity markers (e.g. UNIQUE_*): candidate only; fact-gate decides new_fact vs discard.
   const uniqueHits = String(excerpt || "").match(/UNIQUE_[A-Z0-9_]+/g) || [];
   const seenTok = new Set();
   for (const tok of uniqueHits) {
@@ -144,11 +297,12 @@ function extractLearningItems({ title, kind, excerpt, source }, callModel) {
       text: `从已接受成果中保留的要点标记：${tok}`,
       confidence: "low",
       oneOffLikely: false,
+      uniqueToken: tok,
     });
   }
 
+  void evidenceCorpus;
   if (typeof callModel === "function") {
-    // Optional enrichment; failures fall back to rule extract.
     return Promise.resolve(callModel)
       .then(() => base)
       .catch(() => base);
@@ -156,19 +310,25 @@ function extractLearningItems({ title, kind, excerpt, source }, callModel) {
   return Promise.resolve(base);
 }
 
-function classifyItems(extracted) {
+function classifyItems(extracted, evidenceCorpus) {
   return (extracted || []).map((item) => {
     const layer = item.layer || "episodic";
     let writeTarget = "memory_jsonl";
     if (layer === "artifact_history") writeTarget = "audit_only";
     if (layer === "procedural") writeTarget = "memory_jsonl";
     const sensitive = SENSITIVE_RE.test(item.text || "");
+    const inferred = inferLearnKind(item, evidenceCorpus || "");
     return {
       ...item,
       layer,
-      writeTarget,
+      writeTarget: inferred.write === false ? "audit_only" : writeTarget,
       sensitive,
-      packageCategory: layer === "procedural" ? "memory" : "memory",
+      packageCategory: "memory",
+      learnKind: inferred.learnKind,
+      logicalState: inferred.logicalState,
+      ownership: inferred.ownership || "subject_owned",
+      rejectReason: inferred.rejectReason || null,
+      factEvidence: inferred.factEvidence || null,
     };
   });
 }
@@ -178,6 +338,14 @@ function consolidate(classified) {
   const skipped = [];
   const seen = new Set();
   for (const item of classified || []) {
+    if (item.rejectReason === "unverified_fact_no_evidence") {
+      skipped.push({ ...item, action: "skip_unverified_fact" });
+      continue;
+    }
+    if (item.logicalState === "session_only" && item.writeTarget === "audit_only") {
+      skipped.push({ ...item, action: "skip_session_only" });
+      continue;
+    }
     if (item.artifactOnly || item.writeTarget === "audit_only") {
       kept.push({ ...item, action: "audit_only" });
       continue;
@@ -206,7 +374,7 @@ function consolidate(classified) {
     diff: {
       keptCount: kept.length,
       skippedCount: skipped.length,
-      reasons: skipped.map((s) => ({ id: s.id, action: s.action })),
+      reasons: skipped.map((s) => ({ id: s.id, action: s.action, rejectReason: s.rejectReason || null })),
     },
   };
 }
@@ -319,6 +487,13 @@ function buildOpsFromKept(kept, source) {
         : item.layer === "semantic"
           ? "semantic"
           : "episodic";
+    const logicalState = item.logicalState || "active_low";
+    const activationState =
+      logicalState === "judgment_candidate"
+        ? "active_low_confidence"
+        : logicalState === "session_only"
+          ? "session_only"
+          : "active_low_confidence";
     ops.push({
       type: "append_jsonl",
       path: "memory/long-term-memory.jsonl",
@@ -326,10 +501,12 @@ function buildOpsFromKept(kept, source) {
         type: memoryType,
         content: item.text,
         theme: item.layer === "episodic" ? "任务经验" : "成果学习",
-        // CRT-MVP: first-time learnings enter as Active-Low; reinforce later.
         confidence: item.confidence || "low",
-        activationState: "active_low_confidence",
-        status: "active",
+        activationState,
+        logicalState,
+        learnKind: item.learnKind || null,
+        ownership: item.ownership || "subject_owned",
+        status: logicalState === "session_only" ? "session_only" : "active",
         usageCount: 0,
         reinforcement: 0,
         sensitivity: item.sensitive ? "sensitive" : "private",
@@ -340,6 +517,7 @@ function buildOpsFromKept(kept, source) {
         ].filter(Boolean),
         supersedes: item.supersedes || null,
         expiresAt: null,
+        contextClassAtLearn: (source.provenance && source.provenance.contextClass) || null,
         learnProvenance: {
           taskId: source.taskId,
           planVersionId: source.planVersionId,
@@ -348,6 +526,7 @@ function buildOpsFromKept(kept, source) {
           deliverableVersionId: source.deliverableVersionId,
           contentHashes: source.contentHashes || [],
           acceptedAt: source.acceptedAt,
+          factEvidence: item.factEvidence || null,
         },
       },
     });
@@ -446,16 +625,18 @@ async function runLearnJob(userData, jobId, deps) {
       source: { ...job.source, ...collected.source },
     };
 
+    const evidenceCorpus = buildFactEvidenceCorpus(collected);
     const extracted = await extractLearningItems(
       {
         title: collected.title,
         kind: collected.kind,
         excerpt: collected.excerpt,
         source: job.source,
+        evidenceCorpus,
       },
       d.callModel
     );
-    const classified = classifyItems(extracted);
+    const classified = classifyItems(extracted, evidenceCorpus);
     const consolidated = consolidate(classified);
     job = {
       ...job,
@@ -680,4 +861,7 @@ module.exports = {
   retryJob,
   getJobByVersionId,
   JOB_STATUS,
+  buildFactEvidenceCorpus,
+  textSupportedByEvidence,
+  inferLearnKind,
 };

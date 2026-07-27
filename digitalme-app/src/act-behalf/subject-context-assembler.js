@@ -3,7 +3,8 @@
 /**
  * CRT-MVP SubjectContextAssembler
  * Read-only: distillMe + long-term memory → SubjectAssembly (budgeted).
- * Layers schema is forward-compatible; MVP activates identity/knowledge/experience/memory.
+ * CRT-MVP-02: optional contextClass/policy from Subject Context Engine.
+ * Layers schema is forward-compatible; MVP activates identity/knowledge/experience/memory (+ preference when present).
  */
 
 const fs = require("node:fs");
@@ -23,7 +24,13 @@ const LAYER_KEYS = Object.freeze([
   "artifactHistory",
 ]);
 
-const MVP_ACTIVE_LAYERS = Object.freeze(["identity", "knowledge", "experience", "memory"]);
+const MVP_ACTIVE_LAYERS = Object.freeze([
+  "identity",
+  "preference",
+  "knowledge",
+  "experience",
+  "memory",
+]);
 
 function nowIso() {
   return new Date().toISOString();
@@ -51,7 +58,7 @@ function tokenize(text) {
     .slice(0, 80);
 }
 
-function scoreAsset(asset, queryTokens) {
+function scoreAsset(asset, queryTokens, priorityLayers) {
   const hay = tokenize(asset.statement).concat(tokenize(asset.layer));
   let overlap = 0;
   const set = new Set(hay);
@@ -65,8 +72,17 @@ function scoreAsset(asset, queryTokens) {
   else if (c === "low" || asset.activationState === "active_low_confidence") confBoost = 0.5;
   const layerBoost =
     asset.layer === "identity" ? 4 : asset.layer === "judgment" ? 3 : asset.layer === "memory" ? 1 : 2;
-  const recency = asset.updatedAt ? Math.min(2, 1) : 0;
-  return overlap * 3 + confBoost + layerBoost + recency;
+  const pri = Array.isArray(priorityLayers) ? priorityLayers : [];
+  const priBoost = pri.includes(asset.layer) ? 2 : 0;
+  // Judgment candidates rank lower than active experience/knowledge.
+  const candidatePenalty =
+    asset.logicalState === "judgment_candidate" ||
+    asset.learnKind === "new_judgment" ||
+    asset.learnKind === "decision_pattern"
+      ? -1.5
+      : 0;
+  const recency = asset.updatedAt ? 1 : 0;
+  return overlap * 3 + confBoost + layerBoost + priBoost + candidatePenalty + recency;
 }
 
 function packageIdentity(packageDir) {
@@ -106,13 +122,21 @@ function loadDistillAssets(packageDir) {
     else continue;
     const cat = String(item.category || "fact");
     const layer =
-      cat === "identity" ? "identity" : cat === "experience" ? "experience" : "knowledge";
+      cat === "identity"
+        ? "identity"
+        : cat === "experience"
+          ? "experience"
+          : cat === "preference"
+            ? "preference"
+            : "knowledge";
     out.push({
       assetId: String(item.id),
       layer,
       statement: String(item.statement).trim(),
       confidence: item.confidence || (activationState === "active" ? "medium" : "low"),
       activationState,
+      logicalState: activationState === "active" ? "active" : "active_low",
+      learnKind: null,
       source: "distill_me",
       updatedAt: item.updatedAt || item.confirmedAt || item.createdAt || null,
       contentHash: sha256Text(item.statement),
@@ -143,13 +167,25 @@ function loadMemoryAssets(packageDir, maxScan) {
       if (!row) continue;
       const status = String(row.status || row.activationState || "active").toLowerCase();
       if (status === "deprecated" || status === "revoked" || status === "deleted") continue;
+      if (String(row.logicalState || "") === "session_only") continue;
       const statement = String(row.content || row.statement || row.text || "").trim();
       if (!statement || statement.length < 4) continue;
+      const learnKind = row.learnKind ? String(row.learnKind) : null;
+      const logicalState =
+        row.logicalState ||
+        (learnKind === "new_judgment" || learnKind === "decision_pattern"
+          ? "judgment_candidate"
+          : row.activationState ||
+            (String(row.confidence || "").toLowerCase() === "low"
+              ? "active_low_confidence"
+              : "active"));
       const activationState =
         row.activationState ||
-        (String(row.confidence || "").toLowerCase() === "low"
+        (logicalState === "judgment_candidate"
           ? "active_low_confidence"
-          : "active");
+          : String(row.confidence || "").toLowerCase() === "low"
+            ? "active_low_confidence"
+            : "active");
       const id =
         row.id ||
         row.assetId ||
@@ -160,8 +196,11 @@ function loadMemoryAssets(packageDir, maxScan) {
         statement,
         confidence: row.confidence || "low",
         activationState,
+        logicalState,
+        learnKind,
         source: "long_term_memory",
         memoryType: row.type || "semantic",
+        ownership: row.ownership || "subject_owned",
         updatedAt: row.updatedAt || row.createdAt || null,
         contentHash: sha256Text(statement),
         usageCount: Number(row.usageCount || row.reinforcement || 0) || 0,
@@ -173,33 +212,44 @@ function loadMemoryAssets(packageDir, maxScan) {
   }
 }
 
-function defaultLimits(limits) {
+function defaultLimits(limits, policy) {
+  const topK = (policy && policy.layerTopK) || {};
   return {
-    subjectCharsLimit: (limits && limits.subjectCharsLimit) || 8000,
-    maxIdentity: (limits && limits.maxIdentity) || 12,
-    maxKnowledge: (limits && limits.maxKnowledge) || 10,
-    maxExperience: (limits && limits.maxExperience) || 8,
-    maxMemory: (limits && limits.maxMemory) || 8,
+    subjectCharsLimit:
+      (limits && limits.subjectCharsLimit) ||
+      (policy && policy.maxSubjectChars) ||
+      8000,
+    maxIdentity: (limits && limits.maxIdentity) || topK.identity || 12,
+    maxPreference: (limits && limits.maxPreference) || topK.preference || 6,
+    maxKnowledge: (limits && limits.maxKnowledge) || topK.knowledge || 10,
+    maxExperience: (limits && limits.maxExperience) || topK.experience || 8,
+    maxJudgment: (limits && limits.maxJudgment) || topK.judgment || 0,
+    maxMemory: (limits && limits.maxMemory) || topK.memory || 8,
     memoryScan: (limits && limits.memoryScan) || 200,
   };
 }
 
-function selectTop(assets, maxN, queryTokens) {
+function selectTop(assets, maxN, queryTokens, priorityLayers) {
   return assets
-    .map((a) => ({ ...a, _score: scoreAsset(a, queryTokens) + (a.usageCount || 0) * 0.25 }))
+    .map((a) => ({
+      ...a,
+      _score: scoreAsset(a, queryTokens, priorityLayers) + (a.usageCount || 0) * 0.25,
+    }))
     .sort((a, b) => b._score - a._score)
     .slice(0, Math.max(0, maxN));
 }
 
-function renderAndBudget(selectedByLayer, subjectCharsLimit) {
+function renderAndBudget(selectedByLayer, subjectCharsLimit, enabledLayers) {
   const parts = [];
   const refs = [];
   const excludedSample = [];
   let used = 0;
   let truncated = false;
 
-  const order = ["identity", "knowledge", "experience", "memory"];
+  const order = ["identity", "preference", "knowledge", "experience", "judgment", "memory"];
+  const enabled = Array.isArray(enabledLayers) ? enabledLayers : order;
   for (const layer of order) {
+    if (!enabled.includes(layer)) continue;
     const list = selectedByLayer[layer] || [];
     if (!list.length) continue;
     const header = `【${layer}】\n`;
@@ -233,6 +283,9 @@ function renderAndBudget(selectedByLayer, subjectCharsLimit) {
         included: true,
         activationState: asset.activationState || null,
         confidence: asset.confidence || null,
+        learnKind: asset.learnKind || null,
+        logicalState: asset.logicalState || null,
+        statement: asset.statement,
       });
     }
   }
@@ -246,14 +299,51 @@ function renderAndBudget(selectedByLayer, subjectCharsLimit) {
   };
 }
 
+function emptyAssemblyShell({
+  assemblyId,
+  packageId,
+  packageVersion,
+  queryKeyDigest,
+  emptyReason,
+  limits,
+  contextClass,
+}) {
+  return {
+    schemaVersion: 1,
+    assemblyId,
+    assembledAt: nowIso(),
+    packageId,
+    packageVersion,
+    queryKeyDigest,
+    emptyReason,
+    contextClass: contextClass || null,
+    layers: emptyLayers(),
+    renderedText: "",
+    budget: {
+      subjectCharsLimit: limits.subjectCharsLimit,
+      subjectCharsUsed: 0,
+      truncated: false,
+    },
+    policy: { excludedCount: 0, excludedSample: [], skippedByContext: [] },
+    refs: [],
+  };
+}
+
 /**
- * @param {{ packageDir?: string|null, query?: object, limits?: object }} input
+ * @param {{ packageDir?: string|null, query?: object, limits?: object, policy?: object, contextClass?: string }} input
  * @returns {object} SubjectAssembly
  */
 function assembleSubjectContext(input) {
   const packageDir = input && input.packageDir ? String(input.packageDir) : null;
   const query = (input && input.query) || {};
-  const limits = defaultLimits(input && input.limits);
+  const policy = (input && input.policy) || null;
+  const contextClass =
+    (input && input.contextClass) || (policy && policy.contextClass) || null;
+  const limits = defaultLimits(input && input.limits, policy);
+  const enabledLayers =
+    (policy && Array.isArray(policy.enabledLayers) && policy.enabledLayers) ||
+    MVP_ACTIVE_LAYERS.slice();
+  const priorityLayers = (policy && policy.priorityLayers) || ["identity", "knowledge"];
   const { packageId, packageVersion } = packageIdentity(packageDir);
   const assemblyId = newAssemblyId();
   const layers = emptyLayers();
@@ -277,83 +367,85 @@ function assembleSubjectContext(input) {
       audience: query.audience || "",
       kind: query.deliverableKind || "",
       title: query.deliverableTitle || "",
+      contextClass: contextClass || "",
     })
   );
 
   if (!packageDir || !fs.existsSync(packageDir)) {
-    return {
-      schemaVersion: 1,
+    return emptyAssemblyShell({
       assemblyId,
-      assembledAt: nowIso(),
       packageId: null,
       packageVersion: null,
       queryKeyDigest,
       emptyReason: "no_package",
-      layers,
-      renderedText: "",
-      budget: {
-        subjectCharsLimit: limits.subjectCharsLimit,
-        subjectCharsUsed: 0,
-        truncated: false,
-      },
-      policy: { excludedCount: 0, excludedSample: [] },
-      refs: [],
-    };
+      limits,
+      contextClass,
+    });
   }
 
   const distillAssets = loadDistillAssets(packageDir);
   const memoryAssets = loadMemoryAssets(packageDir, limits.memoryScan);
-  const catalog = distillAssets.concat(memoryAssets);
+  const catalog = distillAssets.concat(memoryAssets).filter((a) => enabledLayers.includes(a.layer));
 
   if (!catalog.length) {
-    return {
-      schemaVersion: 1,
+    return emptyAssemblyShell({
       assemblyId,
-      assembledAt: nowIso(),
       packageId,
       packageVersion,
       queryKeyDigest,
       emptyReason: "no_active_assets",
-      layers,
-      renderedText: "",
-      budget: {
-        subjectCharsLimit: limits.subjectCharsLimit,
-        subjectCharsUsed: 0,
-        truncated: false,
-      },
-      policy: { excludedCount: 0, excludedSample: [] },
-      refs: [],
-    };
+      limits,
+      contextClass,
+    });
   }
 
   const byLayer = {
     identity: selectTop(
       catalog.filter((a) => a.layer === "identity"),
       limits.maxIdentity,
-      queryTokens
+      queryTokens,
+      priorityLayers
+    ),
+    preference: selectTop(
+      catalog.filter((a) => a.layer === "preference"),
+      limits.maxPreference,
+      queryTokens,
+      priorityLayers
     ),
     knowledge: selectTop(
       catalog.filter((a) => a.layer === "knowledge"),
       limits.maxKnowledge,
-      queryTokens
+      queryTokens,
+      priorityLayers
     ),
     experience: selectTop(
       catalog.filter((a) => a.layer === "experience"),
       limits.maxExperience,
-      queryTokens
+      queryTokens,
+      priorityLayers
+    ),
+    judgment: selectTop(
+      catalog.filter((a) => a.layer === "judgment"),
+      limits.maxJudgment,
+      queryTokens,
+      priorityLayers
     ),
     memory: selectTop(
       catalog.filter((a) => a.layer === "memory"),
       limits.maxMemory,
-      queryTokens
+      queryTokens,
+      priorityLayers
     ),
   };
 
-  const budgeted = renderAndBudget(byLayer, limits.subjectCharsLimit);
+  const budgeted = renderAndBudget(byLayer, limits.subjectCharsLimit, enabledLayers);
 
-  // Populate layers: MVP-active layers get views; others stay [].
   for (const layer of LAYER_KEYS) {
-    if (!MVP_ACTIVE_LAYERS.includes(layer)) {
+    if (!MVP_ACTIVE_LAYERS.includes(layer) && layer !== "judgment") {
+      layers[layer] = [];
+      continue;
+    }
+    if (!enabledLayers.includes(layer)) {
       layers[layer] = [];
       continue;
     }
@@ -364,6 +456,8 @@ function assembleSubjectContext(input) {
       statement: a.statement,
       confidence: a.confidence,
       activationState: a.activationState || null,
+      logicalState: a.logicalState || null,
+      learnKind: a.learnKind || null,
       source: a.source,
       included: !!a.included,
       truncated: false,
@@ -371,6 +465,7 @@ function assembleSubjectContext(input) {
     }));
   }
 
+  const skippedLayers = LAYER_KEYS.filter((l) => !enabledLayers.includes(l));
   const excludedFromSelect = catalog.length - budgeted.refs.length;
   const emptyReason =
     budgeted.refs.length === 0
@@ -387,6 +482,7 @@ function assembleSubjectContext(input) {
     packageVersion,
     queryKeyDigest,
     emptyReason,
+    contextClass,
     layers,
     renderedText: budgeted.renderedText,
     budget: {
@@ -397,6 +493,9 @@ function assembleSubjectContext(input) {
     policy: {
       excludedCount: Math.max(0, excludedFromSelect),
       excludedSample: budgeted.excludedSample,
+      skippedByContext: skippedLayers.map((layer) => ({ layer, reason: "disabled_by_policy" })),
+      enabledLayers,
+      contextClass,
     },
     refs: budgeted.refs,
   };

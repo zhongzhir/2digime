@@ -11,7 +11,13 @@ const { commitVersionFiles } = require("./deliverable-artifact-fs");
 const { generateByKind } = require("./deliverable-generators");
 const actBehalfStore = require("./task-store");
 const { assembleSubjectContext } = require("./subject-context-assembler");
-const { unwrapField } = require("./deliverable-context");
+const {
+  classifyTaskContext,
+  resolveAssemblyPolicy,
+  finalizeSubjectAssembly,
+  tagAttachmentRefs,
+} = require("./subject-context-engine");
+const { unwrapField, budgetAttachmentContext } = require("./deliverable-context");
 
 function newAttemptId() {
   return newId("dgatt_");
@@ -183,24 +189,36 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
 
   const snap = (pkg && pkg.executionSnapshot) || {};
   const input = snap.inputSummary || {};
-  const subjectAssembly = assembleSubjectContext({
+  const taskContext = {
+    goal:
+      unwrapField(input.goal) ||
+      unwrapField(taskRecord && taskRecord.goal) ||
+      unwrapField(taskRecord && taskRecord.request) ||
+      "",
+    audience: unwrapField(input.audience) || "",
+    usage: unwrapField(input.usage) || "",
+    constraints: unwrapField(input.constraints) || "",
+    deliverableKind: deliverable.kind,
+    deliverableTitle: deliverable.title,
+    deliverablePurpose: deliverable.purpose,
+  };
+  const classification = classifyTaskContext(taskContext);
+  const policy = resolveAssemblyPolicy(classification);
+  const materials = (taskRecord && taskRecord.referenceMaterials) || [];
+  const attachmentBudget = budgetAttachmentContext(materials, 18000);
+  let subjectAssembly = assembleSubjectContext({
     packageDir: deps.packageDir || null,
     query: {
-      goal:
-        unwrapField(input.goal) ||
-        unwrapField(taskRecord && taskRecord.goal) ||
-        unwrapField(taskRecord && taskRecord.request) ||
-        "",
-      audience: unwrapField(input.audience) || "",
-      usage: unwrapField(input.usage) || "",
-      constraints: unwrapField(input.constraints) || "",
-      deliverableKind: deliverable.kind,
-      deliverableTitle: deliverable.title,
-      deliverablePurpose: deliverable.purpose,
-      attachmentKeywords: ((taskRecord && taskRecord.referenceMaterials) || [])
-        .map((m) => m && m.name)
-        .filter(Boolean),
+      ...taskContext,
+      attachmentKeywords: materials.map((m) => m && m.name).filter(Boolean),
     },
+    policy,
+    contextClass: classification.contextClass,
+  });
+  subjectAssembly = finalizeSubjectAssembly(subjectAssembly, {
+    classification,
+    policy,
+    attachmentRefs: attachmentBudget.usedRefs,
   });
 
   try {
@@ -208,7 +226,7 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
       pkg,
       deliverable,
       task: taskRecord,
-      referenceMaterials: (taskRecord && taskRecord.referenceMaterials) || [],
+      referenceMaterials: materials,
       subjectAssembly,
       callModel: deps.callModel,
       imageMode: deps.imageMode,
@@ -334,6 +352,24 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
       planVersion: pkg.sourcePlanVersionId,
       capabilityInvocationIds: [],
       modelRoute: { taskType: "artifact" },
+      contextClass:
+        (produced.generationContext && produced.generationContext.contextClass) ||
+        (produced.generationContext &&
+          produced.generationContext.subjectAssembly &&
+          produced.generationContext.subjectAssembly.contextClass) ||
+        null,
+      contextClassification:
+        (produced.generationContext && produced.generationContext.contextClassification) ||
+        (produced.generationContext &&
+          produced.generationContext.subjectAssembly &&
+          produced.generationContext.subjectAssembly.contextClassification) ||
+        null,
+      assemblyPolicyDigest:
+        (produced.generationContext && produced.generationContext.assemblyPolicyDigest) ||
+        (produced.generationContext &&
+          produced.generationContext.subjectAssembly &&
+          produced.generationContext.subjectAssembly.assemblyPolicyDigest) ||
+        null,
       sourceRefs: (produced.generationContext && produced.generationContext.attachmentRefs
         ? produced.generationContext.attachmentRefs
             .filter((r) => r && r.included)
@@ -342,6 +378,8 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
               id: r.id,
               name: r.name,
               contentHash: r.contentHash,
+              evidenceKind: "task_material",
+              ownership: "task_owned",
             }))
         : []
       ).concat([
@@ -357,13 +395,26 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
           planVersionId: pkg.sourcePlanVersionId,
         },
       ]),
-      attachmentRefs:
-        (produced.generationContext && produced.generationContext.attachmentRefs) || [],
+      attachmentRefs: tagAttachmentRefs(
+        (produced.generationContext && produced.generationContext.attachmentRefs) || []
+      ),
       subjectRefs:
         (produced.generationContext && produced.generationContext.subjectRefs) || [],
       memoryRefs: (
         (produced.generationContext && produced.generationContext.subjectRefs) || []
       ).filter((r) => r && r.layer === "memory"),
+      evidenceSummary:
+        (produced.generationContext && produced.generationContext.evidenceSummary) ||
+        (produced.generationContext &&
+          produced.generationContext.subjectAssembly &&
+          produced.generationContext.subjectAssembly.evidenceSummary) ||
+        null,
+      ownershipSummary:
+        (produced.generationContext && produced.generationContext.ownershipSummary) ||
+        (produced.generationContext &&
+          produced.generationContext.subjectAssembly &&
+          produced.generationContext.subjectAssembly.ownershipSummary) ||
+        null,
       assembly:
         produced.generationContext && produced.generationContext.subjectAssembly
           ? {
@@ -373,6 +424,9 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
               packageVersion: produced.generationContext.subjectAssembly.packageVersion,
               budget: produced.generationContext.subjectAssembly.budget,
               emptyReason: produced.generationContext.subjectAssembly.emptyReason,
+              contextClass: produced.generationContext.subjectAssembly.contextClass || null,
+              assemblyPolicyDigest:
+                produced.generationContext.subjectAssembly.assemblyPolicyDigest || null,
             }
           : null,
       evidenceRefs: [],

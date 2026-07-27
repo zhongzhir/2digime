@@ -252,6 +252,20 @@ async function main() {
       seedDistillWithToken(pkgDir, SUBJECT);
       const goal = "为 Digital Me 写介绍文档";
       const seeded = await seedPlanAndPackage(ud, { goal, kinds: ["document"] });
+      // Fact evidence gate: UNIQUE token must appear in task_material (accept ≠ confirm every claim).
+      const gotTask = actStore.getTask(ud, seeded.taskId, { heal: false }).task;
+      await actStore.saveTask(ud, {
+        ...gotTask,
+        referenceMaterials: [
+          {
+            id: "mat_learn_ev",
+            name: "owner-notes.txt",
+            text: `Owner 明确陈述应保留学习标记 ${LEARN}`,
+            ok: true,
+            contentHash: "sha256:learn_ev",
+          },
+        ],
+      });
       const gen = await generation.generateDeliverablePackage(
         ud,
         { packageId: seeded.packageId },
