@@ -299,7 +299,7 @@ async function main() {
   await test("8-10) placeholder/demo rejected; model failure does not succeed", async () => {
     assert.throws(
       () =>
-        assertGeneratedContentUsable("欢迎来到项目名称，CEO 姓名，增长 XX%", {
+        assertGeneratedContentUsable("项目名称：____\nCEO 姓名：待定\n增长 XX%", {
           kind: "webpage",
         }),
       (err) => err && err.code === "placeholder_content_rejected"
