@@ -51,10 +51,17 @@
     return rows.map((row, index) => {
       const id = row.getAttribute("data-plan-item-id");
       const removed = row.getAttribute("data-plan-disposition") === "removed";
+      const kindVisible = row.querySelector("[data-field=kind-visible]");
+      const kindHidden = row.querySelector("[data-field=kind]");
+      const kind =
+        (kindVisible && kindVisible.value) ||
+        (kindHidden && kindHidden.value) ||
+        "document";
+      if (kindHidden) kindHidden.value = kind;
       return {
         id,
         planDisposition: removed ? "removed" : "included",
-        kind: (row.querySelector("[data-field=kind]") || {}).value || "document",
+        kind,
         title: (row.querySelector("[data-field=title]") || {}).value || "",
         purpose: (row.querySelector("[data-field=purpose]") || {}).value || "",
         format: (row.querySelector("[data-field=format]") || {}).value || "",
@@ -102,31 +109,59 @@
     const dl = $("act-plan-understanding-dl");
     if (!dl) return;
     const understanding = u || {};
+    const goalVal = fieldValue(understanding.goal) === "—" ? "" : fieldValue(understanding.goal);
+    const audienceVal =
+      fieldValue(understanding.audience) === "—" ? "" : fieldValue(understanding.audience);
+    const usageVal = fieldValue(understanding.usage) === "—" ? "" : fieldValue(understanding.usage);
+    const constraintsVal =
+      fieldValue(understanding.constraints) === "—" ? "" : fieldValue(understanding.constraints);
+    const assumptions = (understanding.assumptions || []).join("\n");
+    const questions = (understanding.unresolvedQuestions || []).join("\n");
+    const moreParts = [];
+    if (audienceVal) {
+      moreParts.push(
+        '<label class="library-title-label">受众<input id="act-plan-u-audience" type="text" data-testid="act-plan-u-audience" /></label>'
+      );
+    }
+    if (usageVal) {
+      moreParts.push(
+        '<label class="library-title-label">用途<input id="act-plan-u-usage" type="text" data-testid="act-plan-u-usage" /></label>'
+      );
+    }
+    if (constraintsVal) {
+      moreParts.push(
+        '<label class="library-title-label">约束<textarea id="act-plan-u-constraints" rows="2" data-testid="act-plan-u-constraints"></textarea></label>'
+      );
+    }
+    if (assumptions) {
+      moreParts.push(
+        '<label class="library-title-label">假设<textarea id="act-plan-u-assumptions" rows="2" data-testid="act-plan-u-assumptions"></textarea></label>'
+      );
+    }
+    if (questions) {
+      moreParts.push(
+        '<label class="library-title-label">待确认<textarea id="act-plan-u-questions" rows="2" data-testid="act-plan-u-questions"></textarea></label>'
+      );
+    }
     dl.innerHTML =
       '<label class="library-title-label">目标<textarea id="act-plan-u-goal" rows="2" data-testid="act-plan-u-goal"></textarea></label>' +
-      '<label class="library-title-label">受众<input id="act-plan-u-audience" type="text" data-testid="act-plan-u-audience" /></label>' +
-      '<label class="library-title-label">用途<input id="act-plan-u-usage" type="text" data-testid="act-plan-u-usage" /></label>' +
-      '<label class="library-title-label">约束<textarea id="act-plan-u-constraints" rows="2" data-testid="act-plan-u-constraints"></textarea></label>' +
-      '<label class="library-title-label">假设<textarea id="act-plan-u-assumptions" rows="2" data-testid="act-plan-u-assumptions"></textarea></label>' +
-      '<label class="library-title-label">未解决问题<textarea id="act-plan-u-questions" rows="2" data-testid="act-plan-u-questions"></textarea></label>';
-    if ($("act-plan-u-goal")) $("act-plan-u-goal").value = fieldValue(understanding.goal) === "—" ? "" : fieldValue(understanding.goal);
-    if ($("act-plan-u-audience"))
-      $("act-plan-u-audience").value = fieldValue(understanding.audience) === "—" ? "" : fieldValue(understanding.audience);
-    if ($("act-plan-u-usage"))
-      $("act-plan-u-usage").value = fieldValue(understanding.usage) === "—" ? "" : fieldValue(understanding.usage);
-    if ($("act-plan-u-constraints"))
-      $("act-plan-u-constraints").value =
-        fieldValue(understanding.constraints) === "—" ? "" : fieldValue(understanding.constraints);
-    if ($("act-plan-u-assumptions"))
-      $("act-plan-u-assumptions").value = (understanding.assumptions || []).join("\n");
-    if ($("act-plan-u-questions"))
-      $("act-plan-u-questions").value = (understanding.unresolvedQuestions || []).join("\n");
+      (moreParts.length
+        ? '<details class="act-plan-more-settings" data-testid="act-plan-more-settings"><summary class="muted">更多设置</summary><div class="act-plan-more-body">' +
+          moreParts.join("") +
+          "</div></details>"
+        : "");
+    if ($("act-plan-u-goal")) $("act-plan-u-goal").value = goalVal;
+    if ($("act-plan-u-audience")) $("act-plan-u-audience").value = audienceVal;
+    if ($("act-plan-u-usage")) $("act-plan-u-usage").value = usageVal;
+    if ($("act-plan-u-constraints")) $("act-plan-u-constraints").value = constraintsVal;
+    if ($("act-plan-u-assumptions")) $("act-plan-u-assumptions").value = assumptions;
+    if ($("act-plan-u-questions")) $("act-plan-u-questions").value = questions;
   }
 
   function renderItemRow(item, index) {
     const removed = item.planDisposition === "removed";
-    const support = item.supportStatusLabel || "当前不可执行生成";
-    const risks = (item.riskFlags || []).join("，");
+    const kind = kindLabel(item.kind);
+    const title = item.title || kind;
     return (
       '<article class="act-plan-item' +
       (removed ? " is-removed" : "") +
@@ -139,15 +174,18 @@
       '" data-runtime-availability="' +
       (item.runtimeAvailability || "") +
       '" data-testid="act-plan-item">' +
-      '<div class="act-plan-item-head">' +
-      "<strong>" +
-      kindLabel(item.kind) +
-      "</strong>" +
-      '<span class="muted">' +
-      support +
-      "</span>" +
-      "</div>" +
-      '<label class="library-title-label">类型<select data-field="kind">' +
+      '<input type="hidden" data-field="kind" value="' +
+      escapeAttr(item.kind || "document") +
+      '" />' +
+      '<div class="act-plan-item-head"><strong>' +
+      escapeAttr(title) +
+      "</strong></div>" +
+      '<label class="library-title-label">标题<input data-field="title" type="text" value="" /></label>' +
+      '<label class="library-title-label">用途或要求<textarea data-field="purpose" rows="2"></textarea></label>' +
+      '<details class="act-plan-item-more" data-testid="act-plan-item-more">' +
+      '<summary class="muted">更多设置</summary>' +
+      '<div class="act-plan-item-more-body">' +
+      '<label class="library-title-label">类型<select data-field="kind-visible">' +
       ["document", "presentation", "webpage", "image", "audio", "video"]
         .map(
           (k) =>
@@ -161,8 +199,6 @@
         )
         .join("") +
       "</select></label>" +
-      '<label class="library-title-label">标题<input data-field="title" type="text" value="" /></label>' +
-      '<label class="library-title-label">用途<textarea data-field="purpose" rows="2"></textarea></label>' +
       '<label class="library-title-label">格式<input data-field="format" type="text" /></label>' +
       '<label class="library-title-label">优先级<select data-field="priority">' +
       ["required", "recommended", "optional"]
@@ -178,8 +214,9 @@
         )
         .join("") +
       "</select></label>" +
-      '<label class="library-title-label">依赖项 ID（逗号分隔）<input data-field="dependencies" type="text" /></label>' +
-      '<label class="library-title-label">风险提示<input data-field="riskFlags" type="text" /></label>' +
+      '<label class="library-title-label">依赖项<input data-field="dependencies" type="text" placeholder="留空即可" /></label>' +
+      '<label class="library-title-label">备注<input data-field="riskFlags" type="text" placeholder="留空即可" /></label>' +
+      "</div></details>" +
       '<div class="builder-actions">' +
       '<button type="button" class="btn-ghost" data-action="move-up">上移</button>' +
       '<button type="button" class="btn-ghost" data-action="move-down">下移</button>' +
@@ -187,7 +224,6 @@
       (removed ? "恢复" : "删除") +
       "</button>" +
       "</div>" +
-      (risks ? '<p class="muted write-rail-hint">风险：' + risks + "</p>" : "") +
       "</article>"
     );
   }
@@ -228,6 +264,9 @@
       set("title", item.title);
       set("purpose", item.purpose);
       set("format", item.format);
+      set("kind", item.kind);
+      set("kind-visible", item.kind);
+      set("priority", item.priority);
       set("dependencies", (item.dependencies || []).join(", "));
       set("riskFlags", (item.riskFlags || []).join("，"));
     });
@@ -270,7 +309,8 @@
     }
     updatePrimaryGenerateButton({
       mode: "generate",
-      disabled: materialsStale,
+      disabled: materialsStale || !!(view.authorizationStatus && view.authorizationStatus.canGenerate === false),
+      authRevoked: !!(view.authorizationStatus && view.authorizationStatus.status === "revoked"),
     });
     if (typeof global.__digitalMeRefreshDeliverableResults === "function") {
       global.__digitalMeRefreshDeliverableResults(view);
@@ -282,14 +322,17 @@
     if (!btn) return;
     const mode = (state && state.mode) || "generate";
     const busy = !!(state && state.busy);
-    const disabled = !!(state && state.disabled) || busy;
+    const authRevoked = !!(state && state.authRevoked);
+    const disabled = !!(state && state.disabled) || busy || authRevoked;
     let label = "生成成果";
-    if (busy) label = "正在生成…";
+    if (authRevoked) label = "授权已撤销";
+    else if (busy) label = "正在生成…";
     else if (mode === "regenerate") label = "重新生成成果";
     else if (mode === "new_version") label = "生成新版本";
     btn.textContent = label;
     btn.disabled = disabled;
     btn.setAttribute("data-mode", mode);
+    btn.setAttribute("data-auth-revoked", authRevoked ? "1" : "0");
   }
 
   function kindLabelZh(kind) {
@@ -353,123 +396,157 @@
     panel.classList.remove("hidden");
     const included = view.deliverables.filter((d) => d.planDisposition === "included");
     const versions = view.versions || {};
+    const auth = view.authorizationStatus || {};
+    const authRevoked = auth.status === "revoked";
+    const canGenerate = auth.canGenerate !== false && !authRevoked;
     const anyGenerating = included.some((d) => d.generationStatus === "generating");
     const anyReady = included.some((d) => d.generationStatus === "ready" || d.currentVersionId);
     const anyFailed = included.some((d) => d.generationStatus === "failed");
     if (status) {
-      if (included.length <= 1) {
-        status.textContent = "";
-      } else if (anyGenerating) {
-        status.textContent = "正在生成各项成果…";
-      } else if (anyFailed && anyReady) {
-        status.textContent = "部分成果已生成，部分未成功。";
-      } else if (anyFailed) {
-        status.textContent = "生成未完成。";
-      } else if (anyReady) {
-        status.textContent = "成果已生成。";
+      if (authRevoked) {
+        status.textContent = auth.message || "本次授权已撤销。已有成果会保留，但不能继续生成新版本。";
+        status.classList.add("is-auth-revoked");
       } else {
-        status.textContent = "";
+        status.classList.remove("is-auth-revoked");
+        if (included.length <= 1) {
+          status.textContent = "";
+        } else if (anyGenerating) {
+          status.textContent = "正在生成各项成果…";
+        } else if (anyFailed && anyReady) {
+          status.textContent = "部分成果已生成，部分未成功。";
+        } else if (anyFailed) {
+          status.textContent = "生成未完成。";
+        } else if (anyReady) {
+          status.textContent = "成果已生成。";
+        } else {
+          status.textContent = "";
+        }
       }
     }
 
     const pkg = view.package || {};
     const identitySnap = pkg.identityContextSnapshot || null;
-    const identitySource = (identitySnap && identitySnap.identityContextSource) || pkg.identityContextSource || "";
     const roleLabel =
-      (identitySnap && identitySnap.actingRoleRef && identitySnap.actingRoleRef.displayName) ||
-      "默认本人模式";
-    const identityBlock =
-      `<div class="act-identity-summary muted" data-package-id="${escapeAttr(pkg.id || "")}">` +
-      `<div>由你的 Digital Me 代表你生成 · 成果归你所有 · 最终由你确认</div>` +
-      `<div>执行能力：当前模型与文档工具 · 当前角色：${escapeAttr(roleLabel)}</div>` +
-      (identitySource === "legacy_default_inference"
-        ? `<div>此记录按兼容默认推断展示，不是原始完整授权落盘。</div>`
-        : "") +
-      `<details class="act-gen-more act-identity-details"><summary class="muted">高级：身份与授权</summary>` +
-      `<div class="builder-actions">` +
-      `<button type="button" class="btn-ghost" data-action="refresh-identity" data-package-id="${escapeAttr(
-        pkg.id || ""
-      )}" data-task-id="${escapeAttr(pkg.taskId || "")}">刷新身份摘要</button>` +
-      `<button type="button" class="btn-ghost" data-action="revoke-auth" data-task-id="${escapeAttr(
-        pkg.taskId || ""
-      )}">撤销本次授权</button>` +
-      `<div class="muted act-identity-detail-body">发起者：你 · 代表主体：你 · 行动主体：你的 Digital Me · 授权范围：本任务本地成果生成与学习</div>` +
-      `</div></details></div>`;
+      (identitySnap && identitySnap.actingRoleRef && identitySnap.actingRoleRef.displayName) || "";
+    const executorLabel =
+      identitySnap &&
+      identitySnap.executorRefs &&
+      identitySnap.executorRefs[0] &&
+      (identitySnap.executorRefs[0].modelRef || identitySnap.executorRefs[0].executorType);
+    const summaryBlock = authRevoked
+      ? `<div class="act-auth-revoked-banner" data-testid="act-auth-revoked-banner">${
+          auth.message || "本次授权已撤销。已有成果会保留，但不能继续生成新版本。"
+        }</div>`
+      : `<div class="act-workspace-summary muted" data-testid="act-workspace-summary">由你的 Digital Me 生成，成果归你所有。</div>`;
+
+    const detailsBlock =
+      `<details class="act-gen-details" data-testid="act-gen-details">` +
+      `<summary class="muted">详情</summary>` +
+      `<div class="act-gen-details-body">` +
+      `<div class="muted">本次权限：${escapeAttr(auth.statusLabel || (authRevoked ? "已撤销" : "已授权"))}</div>` +
+      (executorLabel ? `<div class="muted">使用的能力：${escapeAttr(executorLabel)}</div>` : "") +
+      (roleLabel ? `<div class="muted">当前角色：${escapeAttr(roleLabel)}</div>` : "") +
+      `<details class="act-gen-audit" data-testid="act-gen-audit">` +
+      `<summary class="muted">高级审计</summary>` +
+      `<div class="act-gen-audit-body muted">` +
+      `<div>发起者：你</div>` +
+      `<div>成果归属：你</div>` +
+      `<div>行动方：你的 Digital Me</div>` +
+      (auth.authorizationId ? `<div>授权记录：${escapeAttr(auth.authorizationId)}</div>` : "") +
+      (identitySnap && identitySnap.identityContextSource === "legacy_default_inference"
+        ? `<div>来源：兼容推断记录</div>`
+        : `<div>来源：正式快照</div>`) +
+      `</div>` +
+      (auth.canRevoke
+        ? `<div class="builder-actions"><button type="button" class="btn-ghost" data-action="revoke-auth" data-task-id="${escapeAttr(
+            pkg.taskId || ""
+          )}">撤销本次授权</button></div>`
+        : authRevoked
+          ? `<div class="muted">本次授权已撤销</div>`
+          : "") +
+      `</details></div></details>`;
 
     itemsRoot.innerHTML =
-      identityBlock +
+      summaryBlock +
+      detailsBlock +
       included
-      .map((d) => {
-        const ver = d.currentVersionId ? versions[d.currentVersionId] : null;
-        const label = kindLabelZh(d.kind);
-        const st = userGenStatus(d);
-        const arts = (ver && (ver.artifactRefs || []).length
-          ? ver.artifactRefs
-          : ver && ver.artifactRef
-            ? [ver.artifactRef]
-            : []
-        ).concat(ver && ver.previewRef ? [ver.previewRef] : []);
-        const seen = new Set();
-        const uniqueArts = arts.filter((a) => {
-          if (!a || !a.id || seen.has(a.id)) return false;
-          seen.add(a.id);
-          return true;
-        });
-        const primary = pickPrimaryArtifact(d.kind, uniqueArts);
-        const secondaryArts = uniqueArts.filter((a) => !primary || a.id !== primary.id);
-        const metaParts = [label, st];
-        if (ver && ver.version != null) metaParts.push("版本 " + ver.version);
-        if (ver && (ver.createdAt || ver.generatedAt)) {
-          metaParts.push(formatTime(ver.createdAt || ver.generatedAt));
-        }
-        if (ver && ver.reviewStatus === "accepted") metaParts.push("已接受");
-        if (ver && ver.reviewStatus === "rejected") metaParts.push("已否定");
-        if (ver && ver.actingRoleRef && ver.actingRoleRef.displayName) {
-          metaParts.push("角色 " + ver.actingRoleRef.displayName);
-        }
-
-        let actions = "";
-        if (st === "已生成" && primary) {
-          actions +=
-            `<button type="button" class="btn btn-primary" data-action="open-primary" data-artifact-id="${primary.id}">打开成果</button>`;
-          actions +=
-            `<button type="button" class="btn-ghost" data-action="accept-ver" data-version-id="${ver.id}">接受此版本</button>`;
-          actions +=
-            `<button type="button" class="btn-ghost" data-action="regen" data-deliverable-id="${d.id}">重新生成</button>`;
-          const moreItems = [];
-          moreItems.push(
-            `<button type="button" class="btn-ghost" data-action="reveal-art" data-artifact-id="${primary.id}">打开所在目录</button>`
-          );
-          if (ver) {
-            moreItems.push(
-              `<button type="button" class="btn-ghost" data-action="reject-ver" data-version-id="${ver.id}">否定此版本</button>`
-            );
-          }
-          secondaryArts.forEach((a) => {
-            moreItems.push(
-              `<button type="button" class="btn-ghost" data-action="open-art" data-artifact-id="${a.id}">打开 ${escapeAttr(
-                a.format || "其他格式"
-              )}</button>`
-            );
+        .map((d) => {
+          const ver = d.currentVersionId ? versions[d.currentVersionId] : null;
+          const label = kindLabelZh(d.kind);
+          const st = userGenStatus(d);
+          const arts = (ver && (ver.artifactRefs || []).length
+            ? ver.artifactRefs
+            : ver && ver.artifactRef
+              ? [ver.artifactRef]
+              : []
+          ).concat(ver && ver.previewRef ? [ver.previewRef] : []);
+          const seen = new Set();
+          const uniqueArts = arts.filter((a) => {
+            if (!a || !a.id || seen.has(a.id)) return false;
+            seen.add(a.id);
+            return true;
           });
-          actions +=
-            `<details class="act-gen-more"><summary class="muted">更多…</summary><div class="builder-actions">${moreItems.join(
-              ""
-            )}</div></details>`;
-        } else if (st === "生成失败" || st === "因依赖失败暂未生成") {
-          actions +=
-            `<button type="button" class="btn" data-action="regen" data-deliverable-id="${d.id}">重试生成</button>`;
-        }
+          const primary = pickPrimaryArtifact(d.kind, uniqueArts);
+          const secondaryArts = uniqueArts.filter((a) => !primary || a.id !== primary.id);
+          const metaParts = [label, st];
+          if (ver && (ver.createdAt || ver.generatedAt)) {
+            metaParts.push(formatTime(ver.createdAt || ver.generatedAt));
+          }
+          if (ver && ver.reviewStatus === "accepted") metaParts.push("已接受");
+          if (ver && ver.reviewStatus === "rejected") metaParts.push("已否定");
 
-        return (
-          `<div class="act-gen-item" data-deliverable-id="${d.id}">` +
-          `<div class="act-gen-item-head"><strong>${escapeAttr(d.title || label)}</strong>` +
-          `<span class="muted">${metaParts.map(escapeAttr).join(" · ")}</span></div>` +
-          (actions ? `<div class="builder-actions">${actions}</div>` : "") +
-          `</div>`
-        );
-      })
-      .join("");
+          let actions = "";
+          if (st === "已生成" && primary) {
+            actions +=
+              `<button type="button" class="btn btn-primary" data-action="open-primary" data-artifact-id="${primary.id}">打开成果</button>`;
+            actions +=
+              `<button type="button" class="btn-ghost" data-action="accept-ver" data-version-id="${ver.id}">接受</button>`;
+            actions += canGenerate
+              ? `<button type="button" class="btn-ghost" data-action="regen" data-deliverable-id="${d.id}">重新生成</button>`
+              : `<button type="button" class="btn-ghost" disabled title="本次授权已撤销">重新生成</button>`;
+            const moreItems = [];
+            moreItems.push(
+              `<button type="button" class="btn-ghost" data-action="reveal-art" data-artifact-id="${primary.id}">打开所在目录</button>`
+            );
+            if (ver) {
+              moreItems.push(
+                `<button type="button" class="btn-ghost" data-action="reject-ver" data-version-id="${ver.id}">否定此版本</button>`
+              );
+            }
+            secondaryArts.forEach((a) => {
+              moreItems.push(
+                `<button type="button" class="btn-ghost" data-action="open-art" data-artifact-id="${a.id}">打开 ${escapeAttr(
+                  a.format || "其他格式"
+                )}</button>`
+              );
+            });
+            actions +=
+              `<details class="act-gen-more"><summary class="muted">更多…</summary><div class="builder-actions">${moreItems.join(
+                ""
+              )}</div></details>`;
+          } else if ((st === "生成失败" || st === "因依赖失败暂未生成") && canGenerate) {
+            actions +=
+              `<button type="button" class="btn" data-action="regen" data-deliverable-id="${d.id}">重试生成</button>`;
+          } else if ((st === "生成失败" || st === "因依赖失败暂未生成") && !canGenerate) {
+            actions +=
+              `<button type="button" class="btn" disabled title="本次授权已撤销">重试生成</button>`;
+          }
+
+          return (
+            `<div class="act-gen-item" data-deliverable-id="${d.id}">` +
+            `<div class="act-gen-item-head"><strong>${escapeAttr(d.title || label)}</strong>` +
+            `<span class="muted">${metaParts.map(escapeAttr).join(" · ")}</span></div>` +
+            (actions ? `<div class="builder-actions">${actions}</div>` : "") +
+            `</div>`
+          );
+        })
+        .join("");
+
+    updatePrimaryGenerateButton({
+      mode: anyReady ? "regenerate" : "generate",
+      disabled: !canGenerate,
+      authRevoked,
+    });
   }
 
   function escapeAttr(s) {

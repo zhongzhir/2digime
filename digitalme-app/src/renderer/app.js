@@ -5387,6 +5387,8 @@ let actBehalfState = {
   videoAudioScript: null,
   attachedFiles: [],
   planRevision: null,
+  activePackageId: null,
+  taskAuthStatus: null,
 };
 
 function setActProgress(text) {
@@ -7028,8 +7030,10 @@ async function refreshActDeliverableResults(taskId, planView) {
 
   if (pkg && pkg.id) {
     actBehalfState.activePackageId = pkg.id;
+    actBehalfState.taskAuthStatus = (pkgView && pkgView.authorizationStatus) || null;
     await refreshActGenerationPanel(pkg.id);
   } else if (window.DeliverablePlannerUi.renderGenerationPanel) {
+    actBehalfState.taskAuthStatus = null;
     window.DeliverablePlannerUi.renderGenerationPanel(null);
   }
 
@@ -7037,9 +7041,13 @@ async function refreshActDeliverableResults(taskId, planView) {
     let mode = "generate";
     if (hasReady && planChanged) mode = "new_version";
     else if (hasReady) mode = "regenerate";
+    const authRevoked = !!(
+      actBehalfState.taskAuthStatus && actBehalfState.taskAuthStatus.status === "revoked"
+    );
     window.DeliverablePlannerUi.updatePrimaryGenerateButton({
       mode,
-      disabled: !hasPlan,
+      disabled: !hasPlan || authRevoked,
+      authRevoked,
       busy: false,
     });
   }
@@ -7098,6 +7106,7 @@ async function refreshActGenerationPanel(packageId) {
   const view = await window.digitalMe.actBehalfGetDeliverablePackageById({ packageId });
   if (view && view.ok) {
     actBehalfState.activePackageId = packageId;
+    actBehalfState.taskAuthStatus = view.authorizationStatus || null;
     window.DeliverablePlannerUi.renderGenerationPanel(view);
   }
 }
@@ -7150,12 +7159,22 @@ async function handleGenerateFromPlan() {
       res.code === "authorization_not_granted")
   ) {
     setActProgress(res.message || "本次授权已失效，不能继续生成。");
+    actBehalfState.taskAuthStatus = {
+      status: "revoked",
+      canGenerate: false,
+      canLearn: false,
+      message: res.message || "本次授权已撤销。已有成果会保留，但不能继续生成新版本。",
+    };
     if (window.DeliverablePlannerUi && window.DeliverablePlannerUi.updatePrimaryGenerateButton) {
       window.DeliverablePlannerUi.updatePrimaryGenerateButton({
         mode: "generate",
         busy: false,
-        disabled: false,
+        disabled: true,
+        authRevoked: true,
       });
+    }
+    if (actBehalfState.activePackageId) {
+      await refreshActGenerationPanel(actBehalfState.activePackageId);
     }
     return;
   }
@@ -7232,29 +7251,26 @@ async function handleGenerationPanelClick(ev) {
     );
     if (!ok) return;
     const res = await window.digitalMe.actBehalfRevokeAuthorization({ taskId });
-    setActProgress((res && res.message) || (res && res.ok ? "已撤销本次授权。" : "撤销未成功。"));
+    actBehalfState.taskAuthStatus =
+      (res && res.authorizationStatus) ||
+      (res && res.ok
+        ? {
+            status: "revoked",
+            canGenerate: false,
+            canLearn: false,
+            canRevoke: false,
+            statusLabel: "已撤销",
+            message: res.message || "本次授权已撤销。已有成果会保留，但不能继续生成新版本。",
+          }
+        : actBehalfState.taskAuthStatus);
+    setActProgress(
+      (res && res.message) ||
+        (res && res.ok
+          ? "本次授权已撤销。已有成果会保留，但不能继续生成新版本。"
+          : "撤销未成功。")
+    );
     if (packageId) await refreshActGenerationPanel(packageId);
-    return;
-  }
-  if (action === "refresh-identity") {
-    const taskId = btn.getAttribute("data-task-id") || actBehalfState.taskId;
-    const pkgId = btn.getAttribute("data-package-id") || packageId;
-    const res = await window.digitalMe.actBehalfGetActionIdentity({
-      taskId,
-      packageId: pkgId,
-    });
-    if (res && res.ok && res.identitySummary) {
-      const body = document.querySelector(".act-identity-detail-body");
-      if (body) {
-        const auth = (res.authorizationSummary && res.authorizationSummary.statusLabel) || "—";
-        body.textContent =
-          `发起者：你 · 代表主体：你 · 行动主体：你的 Digital Me · 授权状态：${auth}` +
-          (res.identitySummary.legacy ? " · " + res.identitySummary.legacy : "");
-      }
-      setActProgress(res.identitySummary.headline || "身份摘要已更新。");
-    } else {
-      setActProgress((res && res.message) || "无法读取身份摘要。");
-    }
+    await refreshActDeliverableResults(taskId);
     return;
   }
   if (action === "regen") {
@@ -7278,6 +7294,13 @@ async function handleGenerationPanelClick(ev) {
         res.code === "authorization_not_granted")
     ) {
       setActProgress(res.message || "本次授权已失效，不能继续重新生成。");
+      actBehalfState.taskAuthStatus = {
+        status: "revoked",
+        canGenerate: false,
+        canLearn: false,
+        message: res.message,
+      };
+      if (packageId) await refreshActGenerationPanel(packageId);
       return;
     }
     setActProgress((res && res.message) || (res && res.ok ? "已重新生成。" : "重新生成未成功。"));
