@@ -26,6 +26,7 @@
     "test:bootstrap-submit": "node scripts/test-bootstrap-file-submit.cjs && node scripts/test-renderer-ui-bindings.cjs",
     "test:chat-history-display": "node scripts/test-chat-history-display.cjs && node scripts/test-session-overflow-menu.cjs",
     "test:act-behalf": "node scripts/test-act-behalf-contracts.cjs",
+    "test:task-ux-min-01": "node scripts/test-task-ux-min-01.cjs",
     "test:dvl2-01-planner": "node scripts/test-dvl2-01-planner-contracts.cjs",
     "test:dvl2-01-planner-acceptance": "node scripts/run-dvl2-01-planner-acceptance.cjs",
     "test:dvl2-02-package": "node scripts/test-dvl2-02-package-contracts.cjs",
