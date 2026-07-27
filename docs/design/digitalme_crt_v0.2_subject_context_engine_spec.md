@@ -1,17 +1,25 @@
 # Digital Me CRT v0.2  
-## Subject Context Engine 技术规格草案
+## Subject Context Engine 技术规格
 
 | 项 | 值 |
 |----|-----|
 | 文档状态 | `frozen_for_implementation`（已获实现授权；工程完成 ≠ Owner accepted） |
-| 版本 | v0.2.1 |
+| 版本 | v0.2.2 |
 | 日期 | 2026-07-27 |
-| 修订 | Owner Review 已吸收；CRT-MVP-02 授权实施 |
+| 修订 | 吸收上位原则「主体连续性与未来开放」；标题去「草案」；清理过期 `design_draft` /「实现授权前编码」表述。**不改变** CRT-MVP-02 验收状态 |
 | 前置 | CRT v0.1（`digitalme_cognitive_runtime_v0.1.md`）；CRT-MVP-01 / CRT-MVP-01.1（持续性读回已接通） |
-| 产品依据 | `digitalme_subject_model_and_cognitive_algorithm_v0.1.md`（主体模型与认知运行算法） |
+| 产品依据 | `digitalme_subject_model_and_cognitive_algorithm_v0.1.md`（v0.1.1；状态 `owner_accepted` / `active_product_principle`；含「主体连续性与未来开放原则」） |
 | 对齐原则 | `digitalme_subject_architecture_and_rd_principles_v0.1.md` §1–§3.1 |
 | 范围 | **Subject Context Engine**：情境分类 → 按需装配 → 证据边界 → 归属边界 → 学习分类回流 |
 | 明确排除 | Collaboration Runtime；对外授权网关；完整人格评分体系；复杂 ontology；大规模向量 RAG |
+
+### 修订记录
+
+| 版本 | 日期 | 说明 |
+|------|------|------|
+| v0.2 | 2026-07-26 | Subject Context Engine 草案 |
+| v0.2.1 | 2026-07-27 | Owner Review 吸收；`frozen_for_implementation`；CRT-MVP-02 授权实施 |
+| v0.2.2 | 2026-07-27 | 同步上位产品原则「主体连续性与未来开放」；Claim Posture 作为该原则的工程表达之一；标题改为「技术规格」（去草案）；§10.2 改为防范围扩张。CRT-MVP-02 仍为 `ready_for_owner_runtime_acceptance`，不标 `accepted` / `implemented` |
 
 ---
 
@@ -38,6 +46,32 @@ CRT v0.2 要解决的下一断点是：
 - 不增加人格评分体系  
 - 不引入复杂 ontology  
 - 不扩展 Collaboration Runtime  
+
+### 0.1 上位产品原则：主体连续性与未来开放
+
+本规格的 Claim Posture、Evidence Boundary、Context Classification 与生成验收，均服从《主体模型与认知运行算法》**「主体连续性与未来开放原则」**（v0.1.1）。
+
+**核心原则（不得弱化）：**
+
+> Digital Me 的事实边界保护「我是谁、我做过什么、我确认什么」，  
+> 但不限制 AI 帮助我推理未知、构造假设和发现新的可能性。
+
+固化分工：
+
+| 角色 | 职责 |
+|------|------|
+| 过去的我 | 提供连续性 |
+| 当前的我 | 保有决定权 |
+| AI | 扩展未来可能性 |
+
+工程铁律：
+
+> **无事实依据，不等于禁止生成。**  
+> 无事实依据的内容：不得表述为已确认事实；不得表述为 Owner 已有判断；可以表述为 AI 推断、建议、创意或待验证假设。  
+> 不要要求字字有来历、句句有出处。
+
+主体资产用于维护：主体连续性、所有权、表达真实性、行动可追溯性。  
+主体资产不得用于：把人冻结为历史数据集合、用既有 Memory 限制未来判断、禁止科学/商业/战略/创意中的新可能性。
 
 ---
 
@@ -85,7 +119,7 @@ CRT v0.2 Subject Context Engine 是该原则的**第一版可执行算法规格*
 - 不引入复杂 ontology。  
 - 不扩展 Collaboration Runtime / 多主体协作。  
 - 不要求 Owner 当训练员（分类由系统完成；仅高敏/冲突才打断）。  
-- 不在 MVP 实现完整 Active Judgment 产品化（见 §6.2 Judgment Candidate）。
+- 不在 MVP 实现完整 Active Judgment 产品化（见 §7.2 Judgment Candidate）。
 
 ---
 
@@ -170,12 +204,37 @@ Generation Context → Prompt
 | `creation` | 按需 | 偏好高 | 中；创意归 AI，人设归主体 |
 | `execution` | 中（约束与能力边界） | 低–中（流程偏好） | 低 |
 
+**与上位原则对齐（强制）：**
+
+- `exploration` / `decision_support` / `creation`，以及科学研究、商业模式探索、战略推演、未知问题分析：**必须保留** AI 扩展能力；事实与判断只作锚点与边界，不得要求字字来自 Memory。  
+- `representation`：**不是**完全禁止 AI 扩展。允许建议、分析、待验证方案；**禁止**把它们包装为已经发生的事实或 Owner 已确认立场。表中 Exploration「关」指默认不开启开放探索主体块，**不等于**禁止 `inferred` / `hypothetical` 主张姿态。
+
 生成提示强制句式（用户面中性，工程侧约束）：
 
 - 标为 `subject_fact` 的内容：可写成「根据已确认信息…」。  
-- 标为 `subject_judgment` 的内容：可写成「按本人一贯取舍…」——**仅当来源为 Active Judgment 或 Owner 已确认等价资产**；Judgment Candidate 须降级表述（见 §6.2）。  
+- 标为 `subject_judgment` 的内容：可写成「按本人一贯取舍…」——**仅当来源为 Active Judgment 或 Owner 已确认等价资产**；Judgment Candidate 须降级表述（见 §7.2）。  
 - 标为 `ai_inference` / `ai_exploration` 的内容：**不得**写成「我认为 / 我的结论是」（指 Owner），须标明为本次分析或推演。  
 - 标为 `task_material` 的内容：作为**本次任务材料**，不得写成终身主体事实。
+
+### 2.4 Claim Posture（主张姿态）
+
+Claim Posture 是「主体连续性与未来开放原则」在生成侧的最小工程表达，服务 Evidence Boundary 与验收，**不是**独立 ontology。
+
+| 姿态 | 语义 | 规则 |
+|------|------|------|
+| `confirmed` | 已确认事实或已确认主体判断 | 必须有 `subject_owned` / `task_material` 明确证据或可验证来源 |
+| `attributed` | 来自本次任务材料或外部资料 | 可引用；不自动代表 Owner 或进入长期主体事实 |
+| `inferred` | AI 基于现有材料的分析推断 | 不要求 Memory 已有出处；须用分析/可能等姿态表达 |
+| `hypothetical` | 开放方案、未来情景、商业模式、技术路线等假设 | 允许大胆生成；须用可考虑/假设/待验证等姿态 |
+
+**核心规则：** 没有来源的内容不得作为 `confirmed`；但可以作为 `inferred` 或 `hypothetical`。不要实现「每句话必须有出处」。
+
+正式区分（与产品依据一致）：
+
+1. 已确认主体事实  
+2. 已形成主体判断  
+3. AI 分析推断  
+4. 面向未来的开放假设  
 
 ---
 
@@ -278,7 +337,7 @@ AssemblyPolicy {
 }
 ```
 
-**建议默认（草案，实现前可微调数值，不可改语义）：**
+**建议默认（冻结语义下可微调数值，不可改语义）：**
 
 | contextClass | enabled（优先） | allowAiExplorationBlock | sensitivity |
 |--------------|-----------------|-------------------------|-------------|
@@ -293,7 +352,7 @@ AssemblyPolicy {
 关于 Judgment 层（MVP）：
 
 - Assembler 的 `judgment` 层可为空（尚无 Active Judgment 存储）。  
-- 带 `learnKind=new_judgment|decision_pattern` 且逻辑态为 **Judgment Candidate** 的 memory：**不得**默认当作 Active Judgment 灌入「本人判断」硬约束块；至多进入「候选判断 / 待确认」低权块，或仅在 `decision_support` 下以降级措辞出现（见 §6.2）。
+- 带 `learnKind=new_judgment|decision_pattern` 且逻辑态为 **Judgment Candidate** 的 memory：**不得**默认当作 Active Judgment 灌入「本人判断」硬约束块；至多进入「候选判断 / 待确认」低权块，或仅在 `decision_support` 下以降级措辞出现（见 §7.2）。
 
 ### 4.3 对 Assembler 的扩展方式（设计约束）
 
@@ -325,6 +384,8 @@ AssemblyPolicy {
 ---
 
 ## 5. Evidence Boundary
+
+> Evidence Boundary 回答「这段内容从哪里来」。它保护主体连续性与可追溯性，**不得**被解释成「无证据则一律禁止生成」。无证据内容应降级为 `inferred` / `hypothetical`（见 §0.1、§2.4），而不是静默删除一切分析与假设。
 
 ### 5.1 内容来源标识（MVP 全量纳入）
 
@@ -615,7 +676,7 @@ subject-context-engine.js
 | 人格评分体系 / 复杂 ontology | Owner Review 禁止 |
 | 修改 SubjectContextAssembler layers schema、Memory 破坏性 schema | 任务约束 |
 | 扩大到研究/写作独立场景主线 | 仍挂 DVL2 generation |
-| 实现授权前编码 | 本文件仅 `design_draft` |
+| 未经新的范围授权扩大实现 | 防止超出冻结规格继续扩张 |
 
 ### 10.3 复杂度预算
 
@@ -646,13 +707,16 @@ subject-context-engine.js
 | L2b | 装配含 Judgment Candidate | **不得**进入 Active Judgment 硬约束块 |
 | L3 | 再次同情境生成 | prompt/provenance 出现 UNIQUE 学习标记（非 Candidate 伪装 Active） |
 | R1 | DVL2-03 one-click / CRT continuity | 既有回归仍绿 |
+| P0 | 无事实依据的分析/假设（带姿态） | **允许生成**；不得标为 confirmed / Owner 已有判断 |
+| P1 | representation 无依据「已拥有 N 名用户」等 | 拦截高风险事实型断言 |
+| P2 | representation「可探索 / 可考虑 / 待验证」方案 | **保留**；不得误删 |
 
 ### 11.2 Owner 真机（实现授权且工程通过后）
 
 1. 配置有效 Digital Me Package。  
 2. 含糊目标生成：表现为稳健执行，而非主动「代表我创作立场」。  
 3. 做事 → 生成「对外介绍」类成果：可见更像本人的身份/经历，而非无关记忆堆砌。  
-4. 做事 → 生成「开放探索」类成果：能区分本人已有立场、任务材料与本次推演。  
+4. 做事 → 生成「开放探索」类成果：能区分本人已有立场、任务材料与本次推演；**允许** memory 中不存在的新可能性（标明假设/分析）。  
 5. 带附件生成：附件内容不被当成「我一直如此」的主体事实。  
 6. 接受一次含判断结构的成果后：可查到 Judgment Candidate，且再生成不把它当成已确认终身判断硬套。  
 7. **不**将状态标为 Owner accepted，除非 Owner 显式确认。
@@ -665,7 +729,9 @@ subject-context-engine.js
 - 附件以 `subject_owned` 进入主体块或学习污染 Identity。  
 - Judgment Candidate 被当作 Active Judgment。  
 - 学习写入无 `learnKind` 且无法在再生成中按情境区分。  
-- 为通过测试伪造 package / 主体资产。
+- 为通过测试伪造 package / 主体资产。  
+- **将「无事实依据」错误执行成全面禁止 AI 推断、假设与创意**（违反主体连续性与未来开放原则）。  
+- representation 误删已明确标为假设/建议/待验证的方案表述。
 
 ---
 
@@ -674,21 +740,22 @@ subject-context-engine.js
 | 项 | 值 |
 |----|-----|
 | 当前文档状态 | `frozen_for_implementation` |
-| 实现任务 | CRT-MVP-02 Subject Context Engine |
-| 验收状态 | 实现后保持 `ready_for_owner_runtime_acceptance`；未经 Owner 真机确认不得 `accepted` |
-| Owner Review | 已吸收：默认 `execution`；Judgment Candidate；`task_material` MVP；Ownership Boundary |
+| 实现任务 | CRT-MVP-02 Subject Context Engine（含后续最小修正如附件对齐 / Claim Posture） |
+| 验收状态 | **保持** `ready_for_owner_runtime_acceptance`；未经 Owner 真机确认不得 `accepted`；本修订**不**标 `implemented` / `owner_runtime_accepted` |
+| Owner Review | 已吸收：默认 `execution`；Judgment Candidate；`task_material` MVP；Ownership Boundary；**主体连续性与未来开放原则** |
 
 ### 已拍板（不再待决）
 
 1. 信号不足默认类 = **`execution`**（保守，不主动创造主体表达）。  
 2. Judgment MVP = **memory + learnKind**，逻辑态 **Judgment Candidate**；**≠ Active Judgment**。  
-3. **`task_material` 纳入 MVP evidenceKind**；并以 Ownership Boundary 与主体资产隔离。
+3. **`task_material` 纳入 MVP evidenceKind**；并以 Ownership Boundary 与主体资产隔离。  
+4. **无事实依据 ≠ 禁止生成**；无依据内容不得 confirmed / 冒充 Owner 判断，可为 inferred / hypothetical。
 
 ---
 
 ## 13. 参考
 
-- `digitalme_subject_model_and_cognitive_algorithm_v0.1.md`  
+- `digitalme_subject_model_and_cognitive_algorithm_v0.1.md`（v0.1.1；`owner_accepted` / `active_product_principle`；主体连续性与未来开放原则）  
 - `digitalme_cognitive_runtime_v0.1.md`  
 - `digitalme_phase1_task_CRT-MVP-01_cognitive_runtime_continuity_v0.1.md`  
 - CRT-MVP-01.1：`packageDir` 生产贯通修复（`confirmPlanAndGenerate` → Assembler）
