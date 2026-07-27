@@ -14,6 +14,10 @@ const {
   isActivePackage,
 } = require("./deliverable-package-schema");
 const { recomputeCurrentPreparationReadiness } = require("./deliverable-package-readiness");
+const actionIdentity = require("./action-identity");
+const authorizationStore = require("./authorization-store");
+const actBehalfStore = require("./task-store");
+const planConsistency = require("./deliverable-plan-consistency");
 
 function buildAttempt({
   taskId,
@@ -82,14 +86,91 @@ async function prepareDeliverablePackage(userData, input, deps) {
   if (!planGot || !planGot.ok || !planGot.plan) {
     return { ok: false, code: "plan_not_found", message: "未找到成果计划。" };
   }
-  const plan = planGot.plan;
-  const version = plan.versions && plan.versions[confirmedId];
+  let plan = planGot.plan;
+  let version = plan.versions && plan.versions[confirmedId];
   if (!version || version.status !== "confirmed") {
     return {
       ok: false,
       code: "confirmed_version_invalid",
       message: "当前确认的成果计划版本无效。",
     };
+  }
+
+  // IDCOLLAB-MIN-01: ensure identity snapshot + local authorization before package prep.
+  // Covers confirm-via-legacy paths and older confirmed plans without formal fields.
+  const needsIdentity =
+    !version.identityContextSnapshot ||
+    !authorizationStore.findActiveGrantForPlan(userData, taskId, confirmedId);
+  if (needsIdentity) {
+    const identityPrep = await actionIdentity.ensurePlanConfirmationIdentity(userData, {
+      taskId,
+      planVersionId: confirmedId,
+      packageDir: (deps && deps.packageDir) || null,
+      roleHint: null,
+      confirmationRef: "prepare:backfill:" + String(confirmedId),
+      untrusted: {},
+    });
+    if (!identityPrep.ok) {
+      return {
+        ok: false,
+        code: identityPrep.code || "identity_prepare_failed",
+        message: identityPrep.message || "无法建立行动授权。",
+      };
+    }
+    const nextPlan = JSON.parse(JSON.stringify(plan));
+    nextPlan.versions[confirmedId].identityContextSnapshot =
+      identityPrep.identityContextSnapshot;
+    nextPlan.versions[confirmedId].identityContextSource =
+      identityPrep.identityContextSnapshot.identityContextSource;
+    nextPlan.updatedAt = nowIso();
+    const identityCache = actionIdentity.taskIdentityCacheFromSnapshot(
+      identityPrep.identityContextSnapshot
+    );
+    const committed = await planConsistency.commitPlanThenTask({
+      userData,
+      planRecord: nextPlan,
+      saveTaskPointers: async ({ deliverablePlanning }) => {
+        const gotTask = actBehalfStore.getTask(userData, taskId, { heal: false });
+        if (!gotTask.ok || !gotTask.task) {
+          return { ok: false, code: "task_not_found" };
+        }
+        return actBehalfStore.saveTask(userData, {
+          ...gotTask.task,
+          deliverablePlanning,
+          ...identityCache,
+        });
+      },
+      auditEvent: { action: "identity_backfill_on_prepare", versionId: confirmedId },
+      cas: {
+        expectedRevision: planConsistency.revisionTokensFromPlan(plan),
+      },
+    });
+    if (!committed.ok) {
+      // If CAS races, reload and continue if identity now present.
+      const reloaded = deps.getPlan(userData, planId);
+      const reVersion =
+        reloaded &&
+        reloaded.ok &&
+        reloaded.plan &&
+        reloaded.plan.versions &&
+        reloaded.plan.versions[confirmedId];
+      if (
+        !reVersion ||
+        !reVersion.identityContextSnapshot ||
+        !authorizationStore.findActiveGrantForPlan(userData, taskId, confirmedId)
+      ) {
+        return {
+          ok: false,
+          code: committed.code || "identity_backfill_failed",
+          message: committed.message || "无法补齐行动身份与授权。",
+        };
+      }
+      plan = reloaded.plan;
+      version = reVersion;
+    } else {
+      plan = committed.plan || nextPlan;
+      version = plan.versions[confirmedId];
+    }
   }
 
   const store = packageStore.loadStore(userData);
@@ -219,6 +300,25 @@ async function prepareDeliverablePackage(userData, input, deps) {
     archivedAt: null,
     supersededByPackageId: null,
     sourcePlanSuperseded: false,
+    // IDCOLLAB-MIN-01
+    identityContextSnapshot: version.identityContextSnapshot
+      ? JSON.parse(JSON.stringify(version.identityContextSnapshot))
+      : null,
+    identityContextSource: version.identityContextSource ||
+      (version.identityContextSnapshot && version.identityContextSnapshot.identityContextSource) ||
+      null,
+    authorizationRefs:
+      version.identityContextSnapshot && Array.isArray(version.identityContextSnapshot.authorizationRefs)
+        ? JSON.parse(JSON.stringify(version.identityContextSnapshot.authorizationRefs))
+        : [],
+    initiatorSubjectId:
+      (version.identityContextSnapshot && version.identityContextSnapshot.initiatorSubjectId) || null,
+    ownerSubjectId:
+      (version.identityContextSnapshot && version.identityContextSnapshot.ownerSubjectId) || null,
+    representedSubjectId:
+      (version.identityContextSnapshot && version.identityContextSnapshot.representedSubjectId) || null,
+    actingSubjectId:
+      (version.identityContextSnapshot && version.identityContextSnapshot.actingSubjectId) || null,
   };
 
   const revisionBefore = packageStore.loadStore(userData).revision;

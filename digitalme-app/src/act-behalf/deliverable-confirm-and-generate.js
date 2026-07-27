@@ -11,6 +11,8 @@ const { validateDependencyGraph } = require("./deliverable-plan-schema");
 const { prepareDeliverablePackage } = require("./deliverable-package-prepare");
 const deliverableGeneration = require("./deliverable-generation");
 const packageStore = require("./deliverable-package-store");
+const actionIdentity = require("./action-identity");
+const authorizationStore = require("./authorization-store");
 
 function contentKey(understanding, items) {
   const u = understanding || {};
@@ -178,8 +180,30 @@ async function confirmPlanAndGenerate(ctx) {
   if (plan.currentDraftVersionId) {
     const fresh = await ctx.assertFreshPlan(userData, plan.planId, expected);
     if (!fresh.ok) return fresh;
-    const confirmed = deliverablePlanner.confirmDraft(fresh.plan);
+    const draftId = fresh.plan.currentDraftVersionId;
+    const draftVer = draftId && fresh.plan.versions[draftId];
+    const identityPrep = await actionIdentity.ensurePlanConfirmationIdentity(userData, {
+      taskId,
+      planVersionId: draftVer ? draftVer.versionId : draftId,
+      packageDir: packageDir || null,
+      roleHint: null,
+      confirmationRef: "confirm:plan_and_generate:" + String(draftId || ""),
+      untrusted: { understanding, items },
+    });
+    if (!identityPrep.ok) {
+      return {
+        ok: false,
+        code: identityPrep.code || "identity_prepare_failed",
+        message: identityPrep.message || "无法建立行动授权。",
+      };
+    }
+    const confirmed = deliverablePlanner.confirmDraft(fresh.plan, {
+      identityContextSnapshot: identityPrep.identityContextSnapshot,
+    });
     if (!confirmed.ok) return confirmed;
+    const identityCache = actionIdentity.taskIdentityCacheFromSnapshot(
+      identityPrep.identityContextSnapshot
+    );
     const committed = await deliverablePlanConsistency.commitPlanThenTask({
       userData,
       planRecord: confirmed.plan,
@@ -189,11 +213,14 @@ async function confirmPlanAndGenerate(ctx) {
           extraPatch: {
             status: "plan_confirmed",
             deliverableExecution: { activePackageId: null },
+            ...identityCache,
           },
         }),
       auditEvent: {
         action: "plan_confirm_and_generate",
         versionId: confirmed.version.versionId,
+        identityContextId: identityPrep.identityContextSnapshot.identityContextId,
+        authorizationId: identityPrep.authorization.authorizationId,
       },
       cas: {
         expectedRevision:
@@ -213,6 +240,77 @@ async function confirmPlanAndGenerate(ctx) {
       ok: false,
       code: "no_plan_to_generate",
       message: "请先形成预计交付，再生成成果。",
+    };
+  } else {
+    // Already confirmed: ensure identity + authorization exist (idempotent).
+    const confirmedId = plan.activeConfirmedVersionId;
+    const confirmedVer = plan.versions[confirmedId];
+    if (!confirmedVer || !confirmedVer.identityContextSnapshot) {
+      const identityPrep = await actionIdentity.ensurePlanConfirmationIdentity(userData, {
+        taskId,
+        planVersionId: confirmedId,
+        packageDir: packageDir || null,
+        roleHint: null,
+        confirmationRef: "confirm:existing:" + String(confirmedId),
+        untrusted: {},
+      });
+      const nextPlan = JSON.parse(JSON.stringify(plan));
+      if (nextPlan.versions[confirmedId]) {
+        nextPlan.versions[confirmedId].identityContextSnapshot =
+          identityPrep.identityContextSnapshot;
+        nextPlan.versions[confirmedId].identityContextSource =
+          identityPrep.identityContextSnapshot.identityContextSource;
+      }
+      const identityCache = actionIdentity.taskIdentityCacheFromSnapshot(
+        identityPrep.identityContextSnapshot
+      );
+      const committed = await deliverablePlanConsistency.commitPlanThenTask({
+        userData,
+        planRecord: nextPlan,
+        saveTaskPointers: (args) =>
+          ctx.saveTaskPlanPointers(userData, taskId, {
+            ...args,
+            extraPatch: identityCache,
+          }),
+        auditEvent: {
+          action: "identity_backfill_on_generate",
+          versionId: confirmedId,
+        },
+        cas: {
+          expectedRevision: deliverablePlanConsistency.revisionTokensFromPlan(plan),
+        },
+      });
+      if (committed.ok) confirmedPlan = committed.plan || nextPlan;
+    }
+  }
+
+  // Fail-closed: authorization must still be granted before prepare/generate.
+  const activeConfirmedId = confirmedPlan.activeConfirmedVersionId;
+  const activeGrant = authorizationStore.findActiveGrantForPlan(
+    userData,
+    taskId,
+    activeConfirmedId
+  );
+  if (!activeGrant) {
+    return {
+      ok: false,
+      code: "authorization_revoked",
+      message: "本次授权已撤销或无效，不能继续生成成果。",
+      plan: confirmedPlan,
+    };
+  }
+  const authGate = authorizationStore.assertAuthorizationAllows(userData, {
+    authorizationId: activeGrant.authorizationId,
+    taskId,
+    planVersionId: activeConfirmedId,
+    actionType: "local_artifact_write",
+  });
+  if (!authGate.ok) {
+    return {
+      ok: false,
+      code: authGate.code,
+      message: authGate.message,
+      plan: confirmedPlan,
     };
   }
 

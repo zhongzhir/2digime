@@ -251,6 +251,14 @@ function normalizeTask(input) {
     proposals: Array.isArray(input && input.proposals) ? input.proposals : [],
     capabilityRefs: Array.isArray(input && input.capabilityRefs) ? input.capabilityRefs : [],
     identityRefs: Array.isArray(input && input.identityRefs) ? input.identityRefs : [],
+    // IDCOLLAB-MIN-01: cache-only fields (not historical authority)
+    identityContextRef:
+      input && input.identityContextRef ? String(input.identityContextRef) : null,
+    initiatorSubjectId:
+      input && input.initiatorSubjectId ? String(input.initiatorSubjectId) : null,
+    ownerSubjectId: input && input.ownerSubjectId ? String(input.ownerSubjectId) : null,
+    representedSubjectId:
+      input && input.representedSubjectId ? String(input.representedSubjectId) : null,
     authorization: (input && input.authorization) || null,
     audit: (input && input.audit) || null,
     modelMeta: (input && input.modelMeta) || null,

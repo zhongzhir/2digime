@@ -238,6 +238,25 @@ function collectSourceFromVersion(userData, versionId) {
       packageId: packageId || null,
       deliverableId: version.deliverableId || null,
       deliverableVersionId: version.id,
+      sourceDeliverableVersionId: version.id,
+      acceptedBySubjectId:
+        version.acceptedBySubjectId ||
+        version.ownerSubjectId ||
+        (version.identityContextSnapshot && version.identityContextSnapshot.ownerSubjectId) ||
+        "subj_owner_local",
+      representedSubjectId:
+        version.representedSubjectId ||
+        (version.identityContextSnapshot && version.identityContextSnapshot.representedSubjectId) ||
+        "subj_owner_local",
+      writebackTargetSubjectId:
+        (version.identityContextSnapshot && version.identityContextSnapshot.actingSubjectId) ||
+        "subj_dm_local",
+      authorizationRef:
+        (version.authorizationRefs && version.authorizationRefs[0]) ||
+        (version.identityContextSnapshot &&
+          version.identityContextSnapshot.authorizationRefs &&
+          version.identityContextSnapshot.authorizationRefs[0]) ||
+        null,
       artifactRefs: artifactRefs.map((a) => ({
         id: a.id,
         format: a.format,
@@ -788,6 +807,42 @@ async function runLearnJob(userData, jobId, deps) {
 function enqueueAfterAccept(userData, versionId, deps) {
   const collected = collectSourceFromVersion(userData, versionId);
   if (!collected.ok) return collected;
+
+  // IDCOLLAB-MIN-01: learning_writeback requires valid authorization when present.
+  const authRef = collected.source && collected.source.authorizationRef;
+  if (authRef && authRef.authorizationId) {
+    const authorizationStore = require("./authorization-store");
+    const gate = authorizationStore.assertAuthorizationAllows(userData, {
+      authorizationId: authRef.authorizationId,
+      taskId: collected.source.taskId,
+      planVersionId: collected.source.planVersionId,
+      actionType: "learning_writeback",
+    });
+    if (!gate.ok) {
+      return {
+        ok: false,
+        code: gate.code,
+        message: gate.message || "本次授权不允许学习写回。",
+        acceptPreserved: true,
+      };
+    }
+    // Invariant: writeback target must match acting Digital Me / auth grantee.
+    const expectedTarget =
+      (collected.source.writebackTargetSubjectId) || "subj_dm_local";
+    if (
+      gate.record &&
+      gate.record.granteeSubjectId &&
+      String(gate.record.granteeSubjectId) !== String(expectedTarget)
+    ) {
+      return {
+        ok: false,
+        code: "learning_writeback_target_mismatch",
+        message: "学习写回目标与授权主体不一致。",
+        acceptPreserved: true,
+      };
+    }
+  }
+
   const created = createQueuedJob(userData, collected.source);
   if (!created.ok) return created;
 

@@ -82,6 +82,10 @@ const api = {
   actBehalfRevealArtifact: (payload) => ipcRenderer.invoke("actBehalf:revealArtifact", payload),
   actBehalfReviewDeliverableVersion: (payload) =>
     ipcRenderer.invoke("actBehalf:reviewDeliverableVersion", payload),
+  actBehalfGetActionIdentity: (payload) =>
+    ipcRenderer.invoke("actBehalf:getActionIdentity", payload),
+  actBehalfRevokeAuthorization: (payload) =>
+    ipcRenderer.invoke("actBehalf:revokeAuthorization", payload),
   actBehalfGetDeliverableLearnJob: (payload) =>
     ipcRenderer.invoke("actBehalf:getDeliverableLearnJob", payload),
   actBehalfResolveDeliverableLearnConflict: (payload) =>

@@ -7143,6 +7143,22 @@ async function handleGenerateFromPlan() {
     await restoreActDeliverablePlan(actBehalfState.taskId);
     return;
   }
+  if (
+    res &&
+    (res.code === "authorization_revoked" ||
+      res.code === "authorization_expired" ||
+      res.code === "authorization_not_granted")
+  ) {
+    setActProgress(res.message || "本次授权已失效，不能继续生成。");
+    if (window.DeliverablePlannerUi && window.DeliverablePlannerUi.updatePrimaryGenerateButton) {
+      window.DeliverablePlannerUi.updatePrimaryGenerateButton({
+        mode: "generate",
+        busy: false,
+        disabled: false,
+      });
+    }
+    return;
+  }
 
   if (res && res.code === "plan_materials_stale") {
     setActProgress((res && res.message) || "参考材料已变化，请重新形成预计交付后再生成。");
@@ -7209,6 +7225,38 @@ async function handleGenerationPanelClick(ev) {
     }
     return;
   }
+  if (action === "revoke-auth") {
+    const taskId = btn.getAttribute("data-task-id") || actBehalfState.taskId;
+    const ok = window.confirm(
+      "撤销后，Digital Me 将不能继续生成或学习本次任务的新成果；已经生成的文件不会被删除。确定撤销本次授权？"
+    );
+    if (!ok) return;
+    const res = await window.digitalMe.actBehalfRevokeAuthorization({ taskId });
+    setActProgress((res && res.message) || (res && res.ok ? "已撤销本次授权。" : "撤销未成功。"));
+    if (packageId) await refreshActGenerationPanel(packageId);
+    return;
+  }
+  if (action === "refresh-identity") {
+    const taskId = btn.getAttribute("data-task-id") || actBehalfState.taskId;
+    const pkgId = btn.getAttribute("data-package-id") || packageId;
+    const res = await window.digitalMe.actBehalfGetActionIdentity({
+      taskId,
+      packageId: pkgId,
+    });
+    if (res && res.ok && res.identitySummary) {
+      const body = document.querySelector(".act-identity-detail-body");
+      if (body) {
+        const auth = (res.authorizationSummary && res.authorizationSummary.statusLabel) || "—";
+        body.textContent =
+          `发起者：你 · 代表主体：你 · 行动主体：你的 Digital Me · 授权状态：${auth}` +
+          (res.identitySummary.legacy ? " · " + res.identitySummary.legacy : "");
+      }
+      setActProgress(res.identitySummary.headline || "身份摘要已更新。");
+    } else {
+      setActProgress((res && res.message) || "无法读取身份摘要。");
+    }
+    return;
+  }
   if (action === "regen") {
     const deliverableId = btn.getAttribute("data-deliverable-id");
     if (!packageId || !deliverableId) {
@@ -7221,6 +7269,15 @@ async function handleGenerationPanelClick(ev) {
     if (res && res.code === "plan_materials_stale") {
       setActProgress(res.message || "参考材料已变化，请重新形成预计交付后再生成。");
       await restoreActDeliverablePlan(actBehalfState.taskId);
+      return;
+    }
+    if (
+      res &&
+      (res.code === "authorization_revoked" ||
+        res.code === "authorization_expired" ||
+        res.code === "authorization_not_granted")
+    ) {
+      setActProgress(res.message || "本次授权已失效，不能继续重新生成。");
       return;
     }
     setActProgress((res && res.message) || (res && res.ok ? "已重新生成。" : "重新生成未成功。"));

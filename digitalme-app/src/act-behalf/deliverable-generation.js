@@ -18,6 +18,8 @@ const {
   tagAttachmentRefs,
 } = require("./subject-context-engine");
 const { unwrapField, budgetAttachmentContext } = require("./deliverable-context");
+const actionIdentity = require("./action-identity");
+const authorizationStore = require("./authorization-store");
 
 function newAttemptId() {
   return newId("dgatt_");
@@ -162,6 +164,40 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
 
   const materialsGate = assertTaskMaterialsFresh(userData, pkg.taskId);
   if (!materialsGate.ok) return materialsGate;
+
+  // IDCOLLAB-MIN-01: fail-closed authorization gate before generation / regenerate.
+  const authRefs =
+    (pkg.authorizationRefs && pkg.authorizationRefs[0] && pkg.authorizationRefs[0].authorizationId) ||
+    (pkg.identityContextSnapshot &&
+      pkg.identityContextSnapshot.authorizationRefs &&
+      pkg.identityContextSnapshot.authorizationRefs[0] &&
+      pkg.identityContextSnapshot.authorizationRefs[0].authorizationId) ||
+    null;
+  let activeAuthId = authRefs;
+  if (!activeAuthId) {
+    const grant = authorizationStore.findActiveGrantForPlan(
+      userData,
+      pkg.taskId,
+      pkg.sourcePlanVersionId
+    );
+    activeAuthId = grant && grant.authorizationId;
+  }
+  if (!activeAuthId) {
+    return {
+      ok: false,
+      code: "authorization_revoked",
+      message: "本次授权已撤销或无效，不能继续生成成果。",
+    };
+  }
+  const authGate = authorizationStore.assertAuthorizationAllows(userData, {
+    authorizationId: activeAuthId,
+    taskId: pkg.taskId,
+    planVersionId: pkg.sourcePlanVersionId,
+    actionType: "local_artifact_write",
+  });
+  if (!authGate.ok) {
+    return { ok: false, code: authGate.code, message: authGate.message };
+  }
 
   const attemptId = newAttemptId();
   const startedAt = nowIso();
@@ -341,6 +377,24 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
     artifacts.find((a) => a.mimeType === "text/html") ||
     null;
 
+  const executorRef = actionIdentity.makeDefaultModelExecutor({
+    modelRef:
+      (produced.generator && produced.generator.modelRoute && produced.generator.modelRoute.taskType) ||
+      "artifact/default",
+  });
+  let identitySnapshot =
+    (pkg.identityContextSnapshot && JSON.parse(JSON.stringify(pkg.identityContextSnapshot))) ||
+    null;
+  if (!identitySnapshot) {
+    identitySnapshot = actionIdentity.buildLegacyIdentityView({
+      packageDir: deps.packageDir || null,
+    });
+  }
+  identitySnapshot = actionIdentity.attachExecutorToSnapshot(identitySnapshot, executorRef);
+  if (authGate.ref) {
+    identitySnapshot.authorizationRefs = [authGate.ref];
+  }
+
   const version = {
     schemaVersion: 1,
     id: versionId,
@@ -354,6 +408,20 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
     artifactRefs: artifacts,
     contentHash: primary ? primary.contentHash : null,
     contentAvailable: true,
+    // IDCOLLAB-MIN-01 identity audit fields
+    identityContextSnapshot: identitySnapshot,
+    identityContextSource: identitySnapshot.identityContextSource || "native_snapshot",
+    initiatorSubjectId: identitySnapshot.initiatorSubjectId,
+    ownerSubjectId: identitySnapshot.ownerSubjectId,
+    representedSubjectId: identitySnapshot.representedSubjectId,
+    actingSubjectId: identitySnapshot.actingSubjectId,
+    actingRoleRef: identitySnapshot.actingRoleRef || null,
+    participantRefs: identitySnapshot.participantRefs || [],
+    executorRefs: identitySnapshot.executorRefs || [],
+    authorizationRefs: identitySnapshot.authorizationRefs || [],
+    reviewerSubjectId: null,
+    acceptedBySubjectId: null,
+    responsibilityBoundary: identitySnapshot.responsibilityBoundary || [],
     generator: {
       executionMode: "model_plus_local_renderer",
       capabilityId: produced.kind,
@@ -455,7 +523,8 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
             }
           : null,
       evidenceRefs: [],
-      authorizationRefs: [],
+      authorizationRefs: identitySnapshot.authorizationRefs || [],
+      identityContextSnapshot: identitySnapshot,
       actor: "user",
       generatedAt: nowIso(),
     },
@@ -585,10 +654,40 @@ async function reviewDeliverableVersion(userData, { versionId, decision }) {
   const store = packageStore.loadStore(userData);
   const version = store.versions && store.versions[id];
   if (!version) return { ok: false, code: "version_not_found", message: "未找到该版本。" };
+
+  // Accept path: require learning_writeback / artifact_acceptance authorization when present.
+  if (dec === "accepted") {
+    const authId =
+      (version.authorizationRefs &&
+        version.authorizationRefs[0] &&
+        version.authorizationRefs[0].authorizationId) ||
+      (version.identityContextSnapshot &&
+        version.identityContextSnapshot.authorizationRefs &&
+        version.identityContextSnapshot.authorizationRefs[0] &&
+        version.identityContextSnapshot.authorizationRefs[0].authorizationId) ||
+      null;
+    if (authId) {
+      const gate = authorizationStore.assertAuthorizationAllows(userData, {
+        authorizationId: authId,
+        actionType: "artifact_acceptance",
+      });
+      if (!gate.ok) {
+        return { ok: false, code: gate.code, message: gate.message };
+      }
+    }
+  }
+
+  const ownerSubjectId =
+    version.ownerSubjectId ||
+    (version.identityContextSnapshot && version.identityContextSnapshot.ownerSubjectId) ||
+    actionIdentity.STABLE_OWNER_SUBJECT_ID;
+
   await packageStore.mutateStore(userData, (s) => {
     const v = s.versions[id];
     if (!v) return false;
     v.reviewStatus = dec;
+    v.reviewerSubjectId = ownerSubjectId;
+    v.acceptedBySubjectId = dec === "accepted" ? ownerSubjectId : null;
     v.updatedAt = nowIso();
     const d = s.deliverables[v.deliverableId];
     if (d && d.currentVersionId === id) {
@@ -601,6 +700,8 @@ async function reviewDeliverableVersion(userData, { versionId, decision }) {
     ok: true,
     versionId: id,
     reviewStatus: dec,
+    reviewerSubjectId: ownerSubjectId,
+    acceptedBySubjectId: dec === "accepted" ? ownerSubjectId : null,
     message: dec === "accepted" ? "已接受此版本。" : "已否定此版本。",
   };
 }

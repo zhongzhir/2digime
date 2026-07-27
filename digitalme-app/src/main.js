@@ -42,6 +42,8 @@ const deliverableGeneration = require("./act-behalf/deliverable-generation");
 const deliverableArtifactFs = require("./act-behalf/deliverable-artifact-fs");
 const { confirmPlanAndGenerate } = require("./act-behalf/deliverable-confirm-and-generate");
 const deliverableAutoLearn = require("./act-behalf/deliverable-auto-learn");
+const actionIdentity = require("./act-behalf/action-identity");
+const authorizationStore = require("./act-behalf/authorization-store");
 const { parseActBehalfOutput, buildActBehalfMessages, parseEmailOutput, buildEmailMessages, parseVideoAudioOutput, buildVideoAudioMessages, buildVideoAudioExport } = require("./act-behalf/parse-output");
 const { normalizeTaskIntent, assertTaskIntentMinimal, detectTaskType, TASK_TYPES } = require("./act-behalf/task-intent");
 const {
@@ -2764,6 +2766,10 @@ ipcMain.handle("actBehalf:planConfirm", async (_e, payload) => {
     const userData = app.getPath("userData");
     const taskId = payload && payload.taskId ? String(payload.taskId) : "";
     if (!taskId) return { ok: false, code: "task_required", message: "请先保存任务后再确认成果计划。" };
+    // Security: ignore any renderer-supplied owner / representedSubject fields.
+    if (payload && (payload.ownerSubjectId || payload.representedSubjectId || payload.initiatorSubjectId)) {
+      // Do not fail closed on presence alone — silently ignore untrusted fields.
+    }
     const loaded = await loadPlanForTaskOrFail(userData, taskId);
     if (!loaded.ok) return loaded.reconcile || loaded;
     if (!loaded.plan) return { ok: false, code: "plan_not_found", message: "尚未形成成果计划。" };
@@ -2772,9 +2778,32 @@ ipcMain.handle("actBehalf:planConfirm", async (_e, payload) => {
     const fresh = await assertFreshPlan(userData, loaded.plan.planId, expected);
     if (!fresh.ok) return fresh;
 
-    const confirmed = deliverablePlanner.confirmDraft(fresh.plan);
+    const draftId = fresh.plan.currentDraftVersionId;
+    const draftVer = draftId && fresh.plan.versions[draftId];
+    const identityPrep = await actionIdentity.ensurePlanConfirmationIdentity(userData, {
+      taskId,
+      planVersionId: draftVer ? draftVer.versionId : draftId,
+      packageDir: packageDirFromConfig(),
+      roleHint: null,
+      confirmationRef: "confirm:plan:" + String(draftId || ""),
+      untrusted: payload || {},
+    });
+    if (!identityPrep.ok) {
+      return {
+        ok: false,
+        code: identityPrep.code || "identity_prepare_failed",
+        message: identityPrep.message || "无法建立行动授权。",
+      };
+    }
+
+    const confirmed = deliverablePlanner.confirmDraft(fresh.plan, {
+      identityContextSnapshot: identityPrep.identityContextSnapshot,
+    });
     if (!confirmed.ok) return confirmed;
 
+    const identityCache = actionIdentity.taskIdentityCacheFromSnapshot(
+      identityPrep.identityContextSnapshot
+    );
     const committed = await deliverablePlanConsistency.commitPlanThenTask({
       userData,
       planRecord: confirmed.plan,
@@ -2785,9 +2814,15 @@ ipcMain.handle("actBehalf:planConfirm", async (_e, payload) => {
             status: "plan_confirmed",
             // DVL2-02: new confirmed plan version clears package pointer; old packages retained.
             deliverableExecution: { activePackageId: null },
+            ...identityCache,
           },
         }),
-      auditEvent: { action: "plan_confirm", versionId: confirmed.version.versionId },
+      auditEvent: {
+        action: "plan_confirm",
+        versionId: confirmed.version.versionId,
+        identityContextId: identityPrep.identityContextSnapshot.identityContextId,
+        authorizationId: identityPrep.authorization.authorizationId,
+      },
       cas: {
         expectedRevision:
           extractRevisionExpected(payload) || deliverablePlanConsistency.revisionTokensFromPlan(fresh.plan),
@@ -2803,6 +2838,8 @@ ipcMain.handle("actBehalf:planConfirm", async (_e, payload) => {
       message: committed.ok ? "可以生成成果。" : committed.message,
       consistency: committed.consistency,
       needsReconcile: committed.needsReconcile || false,
+      identitySummary: actionIdentity.userFacingIdentitySummary(identityPrep.identityContextSnapshot),
+      authorizationSummary: actionIdentity.authorizationSummary(identityPrep.authorization),
     };
   } catch (err) {
     return {
@@ -3348,6 +3385,10 @@ ipcMain.handle("actBehalf:reviewDeliverableVersion", async (_e, payload) => {
         });
         reviewed.learnJobId = enq && enq.job ? enq.job.id : null;
         reviewed.learnQueued = !!(enq && enq.ok);
+        if (enq && !enq.ok && enq.acceptPreserved) {
+          reviewed.learnQueued = false;
+          reviewed.learnError = enq.message || "学习写回被授权拒绝。";
+        }
       } catch (learnErr) {
         reviewed.learnQueued = false;
         reviewed.learnError =
@@ -3360,6 +3401,120 @@ ipcMain.handle("actBehalf:reviewDeliverableVersion", async (_e, payload) => {
       ok: false,
       code: err && err.code ? err.code : "review_failed",
       message: err && err.message ? err.message : "无法更新审阅状态。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:getActionIdentity", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const taskId = payload && payload.taskId ? String(payload.taskId) : "";
+    const versionId = payload && payload.versionId ? String(payload.versionId) : "";
+    const packageId = payload && payload.packageId ? String(payload.packageId) : "";
+
+    let snapshot = null;
+    let version = null;
+    let pkg = null;
+
+    if (versionId) {
+      const store = deliverablePackageStore.loadStore(userData);
+      version = store.versions && store.versions[versionId];
+      if (version) {
+        snapshot = actionIdentity.resolveIdentityForVersion(version, packageDirFromConfig());
+        const d = store.deliverables && store.deliverables[version.deliverableId];
+        if (d) pkg = store.packages && store.packages[d.packageId];
+      }
+    } else if (packageId) {
+      const got = deliverablePackageStore.getPackage(userData, packageId);
+      if (got.ok) {
+        pkg = got.package;
+        snapshot = pkg.identityContextSnapshot
+          ? JSON.parse(JSON.stringify(pkg.identityContextSnapshot))
+          : actionIdentity.buildLegacyIdentityView({ packageDir: packageDirFromConfig() });
+      }
+    } else if (taskId) {
+      const loaded = await loadPlanForTaskOrFail(userData, taskId);
+      const plan = loaded && loaded.plan;
+      const confirmedId = plan && plan.activeConfirmedVersionId;
+      const confirmed = confirmedId && plan.versions[confirmedId];
+      if (confirmed && confirmed.identityContextSnapshot) {
+        snapshot = JSON.parse(JSON.stringify(confirmed.identityContextSnapshot));
+      } else {
+        snapshot = actionIdentity.buildLegacyIdentityView({ packageDir: packageDirFromConfig() });
+      }
+    } else {
+      return { ok: false, code: "query_required", message: "缺少查询条件。" };
+    }
+
+    const authId =
+      (snapshot &&
+        snapshot.authorizationRefs &&
+        snapshot.authorizationRefs[0] &&
+        snapshot.authorizationRefs[0].authorizationId) ||
+      null;
+    let authRecord = null;
+    if (authId) {
+      const got = authorizationStore.getAuthorization(userData, authId);
+      if (got.ok) authRecord = got.record;
+    } else if (taskId || (pkg && pkg.taskId)) {
+      const tid = taskId || pkg.taskId;
+      const list = authorizationStore.listAuthorizationsForTask(userData, tid);
+      authRecord = list.find((a) => a.effectiveStatus === "granted") || list[0] || null;
+    }
+
+    return {
+      ok: true,
+      identitySummary: actionIdentity.userFacingIdentitySummary(snapshot),
+      authorizationSummary: actionIdentity.authorizationSummary(authRecord),
+      snapshot: {
+        identityContextSource: snapshot && snapshot.identityContextSource,
+        actingRoleRef: snapshot && snapshot.actingRoleRef,
+        executorRefs: (snapshot && snapshot.executorRefs) || [],
+        responsibilityBoundary: (snapshot && snapshot.responsibilityBoundary) || [],
+        ownerSubjectId: snapshot && snapshot.ownerSubjectId,
+        representedSubjectId: snapshot && snapshot.representedSubjectId,
+        actingSubjectId: snapshot && snapshot.actingSubjectId,
+        // Do not expose raw DID / internal ids beyond necessary status fields.
+      },
+      versionReview: version
+        ? {
+            reviewerSubjectId: version.reviewerSubjectId || null,
+            acceptedBySubjectId: version.acceptedBySubjectId || null,
+            reviewStatus: version.reviewStatus || null,
+          }
+        : null,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "identity_get_failed",
+      message: err && err.message ? err.message : "无法读取身份摘要。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:revokeAuthorization", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    let authorizationId = payload && payload.authorizationId ? String(payload.authorizationId) : "";
+    const taskId = payload && payload.taskId ? String(payload.taskId) : "";
+    // Ignore any forged owner fields from renderer.
+    void (payload && payload.ownerSubjectId);
+
+    if (!authorizationId && taskId) {
+      const list = authorizationStore.listAuthorizationsForTask(userData, taskId);
+      const active = list.find((a) => a.effectiveStatus === "granted");
+      authorizationId = active ? active.authorizationId : "";
+    }
+    if (!authorizationId) {
+      return { ok: false, code: "authorization_required", message: "未找到可撤销的授权。" };
+    }
+    return await authorizationStore.revokeAuthorization(userData, authorizationId);
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "revoke_failed",
+      message: err && err.message ? err.message : "撤销授权失败。",
     };
   }
 });

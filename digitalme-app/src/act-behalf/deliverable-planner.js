@@ -615,7 +615,7 @@ function saveDraftEdits(record, { understanding, items }) {
   return { ok: true, plan: next, version: next.versions[next.currentDraftVersionId] };
 }
 
-function confirmDraft(record) {
+function confirmDraft(record, opts) {
   const { canConfirmVersion, buildAvailabilitySnapshot } = require("./deliverable-plan-schema");
   const next = JSON.parse(JSON.stringify(record));
   const draftId = next.currentDraftVersionId;
@@ -635,6 +635,12 @@ function confirmDraft(record) {
   draft.confirmedAt = nowIso();
   draft.updatedAt = nowIso();
   draft.planningAvailabilitySnapshot = buildAvailabilitySnapshot(draft.items);
+  // IDCOLLAB-MIN-01: freeze immutable identity snapshot at planConfirmed.
+  if (opts && opts.identityContextSnapshot && typeof opts.identityContextSnapshot === "object") {
+    draft.identityContextSnapshot = JSON.parse(JSON.stringify(opts.identityContextSnapshot));
+    draft.identityContextSource =
+      opts.identityContextSnapshot.identityContextSource || "native_snapshot";
+  }
   next.activeConfirmedVersionId = draft.versionId;
   next.currentDraftVersionId = null;
   next.updatedAt = nowIso();

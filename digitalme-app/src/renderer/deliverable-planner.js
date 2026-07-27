@@ -372,7 +372,33 @@
       }
     }
 
-    itemsRoot.innerHTML = included
+    const pkg = view.package || {};
+    const identitySnap = pkg.identityContextSnapshot || null;
+    const identitySource = (identitySnap && identitySnap.identityContextSource) || pkg.identityContextSource || "";
+    const roleLabel =
+      (identitySnap && identitySnap.actingRoleRef && identitySnap.actingRoleRef.displayName) ||
+      "默认本人模式";
+    const identityBlock =
+      `<div class="act-identity-summary muted" data-package-id="${escapeAttr(pkg.id || "")}">` +
+      `<div>由你的 Digital Me 代表你生成 · 成果归你所有 · 最终由你确认</div>` +
+      `<div>执行能力：当前模型与文档工具 · 当前角色：${escapeAttr(roleLabel)}</div>` +
+      (identitySource === "legacy_default_inference"
+        ? `<div>此记录按兼容默认推断展示，不是原始完整授权落盘。</div>`
+        : "") +
+      `<details class="act-gen-more act-identity-details"><summary class="muted">高级：身份与授权</summary>` +
+      `<div class="builder-actions">` +
+      `<button type="button" class="btn-ghost" data-action="refresh-identity" data-package-id="${escapeAttr(
+        pkg.id || ""
+      )}" data-task-id="${escapeAttr(pkg.taskId || "")}">刷新身份摘要</button>` +
+      `<button type="button" class="btn-ghost" data-action="revoke-auth" data-task-id="${escapeAttr(
+        pkg.taskId || ""
+      )}">撤销本次授权</button>` +
+      `<div class="muted act-identity-detail-body">发起者：你 · 代表主体：你 · 行动主体：你的 Digital Me · 授权范围：本任务本地成果生成与学习</div>` +
+      `</div></details></div>`;
+
+    itemsRoot.innerHTML =
+      identityBlock +
+      included
       .map((d) => {
         const ver = d.currentVersionId ? versions[d.currentVersionId] : null;
         const label = kindLabelZh(d.kind);
@@ -398,6 +424,9 @@
         }
         if (ver && ver.reviewStatus === "accepted") metaParts.push("已接受");
         if (ver && ver.reviewStatus === "rejected") metaParts.push("已否定");
+        if (ver && ver.actingRoleRef && ver.actingRoleRef.displayName) {
+          metaParts.push("角色 " + ver.actingRoleRef.displayName);
+        }
 
         let actions = "";
         if (st === "已生成" && primary) {
