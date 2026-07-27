@@ -5,6 +5,33 @@
 
 ---
 
+## 2026-07-27 LEARN-LOOP-FIX-01 项目知识权威闭环 · 实施完成
+
+### 背景
+
+`LEARN-LOOP-FORENSIC-01` 证实学习闭环对 **Digital Me 项目事实** 未通过：零任务材料、泛探索记忆误注入、情境误分类、Reviewer 缺口。
+
+### 准确状态（修正此前过度宣称）
+
+- **已实现**：输入记录、学习事件、接受后 enqueue、冲突提问 UI；
+- **未通过（审计前）**：项目知识沉淀、跨任务权威应用、「越用越懂项目」；
+- **本任务修复**：`ProjectContextSet`、`ProjectKnowledgeClaim`、权威检索、情境 `project_document_generation`、项目 Reviewer、学习候选分类。
+
+### 测试
+
+- `test:learn-loop-fix-01`：10 pass；
+- 回归：DVL2-03、DVL2-05、CRT-MVP-02、CRT continuity、IDCOLLAB-MIN-01 全绿。
+
+### 状态
+
+```text
+implemented / codex_verified / ready_for_owner_runtime_acceptance
+```
+
+不得 push。不得标 `project_learning_loop_validated`，待 Owner 真机回归（任务：开始起草 Digital Me 项目的开发计划）。
+
+---
+
 ## 2026-07-27 IDCOLLAB-MIN-01.1 撤销即时生效与界面极简修复
 
 ### 背景
@@ -186,7 +213,7 @@ specified / codex_review_passed / ready_for_owner_acceptance / not_started
 
 ---
 
-## 2026-07-26 DVL2 接受成果 → 自动学习闭环（实现中 / 待验收）
+## 2026-07-26 DVL2 接受成果 → 自动学习（事件记录已实现；项目知识应用待 LEARN-LOOP-FIX-01 验收）
 
 ### 本次目标
 

@@ -21,7 +21,7 @@
 > 2. **BUG1 #6** = 七模块渐进式数字之我构建框架。
 > 3. 首个正式验收场景 = 为一个项目生成完整对外介绍成果包。
 > 4. 第一轮真实产物 = 正式介绍文档、演示文稿 PPT、单页 HTML、封面图片；视频/音频本轮不实现真实生成，用户面不得宣称已支持。
-> **当前下一任务**：**Owner 真机重新验收 IDCOLLAB-MIN-01**（分支 `codex/idcollab-min-01-action-identity`；MIN-01.1 修复：`ready_for_owner_runtime_reacceptance`）。**不得**提前标 `owner_runtime_accepted` / `accepted_as_implemented`。**DVL2-03** 已 `owner_runtime_accepted` / `accepted_as_implemented` / `implemented`（2026-07-27）。**CRT-MVP-02 / 02.1 / 02.2** 已 `owner_runtime_accepted`（2026-07-27）。DVL2-02 已 `accepted_as_implemented`。**不得** push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+> **当前下一任务**：**Owner 真机验收 LEARN-LOOP-FIX-01**（分支 `codex/learn-loop-fix-01-project-authority`；项目知识权威闭环：`ready_for_owner_runtime_acceptance`）。**不得**提前标 `project_learning_loop_validated`。**IDCOLLAB-MIN-01** 待 Owner 重新验收（`ready_for_owner_runtime_reacceptance`）。**DVL2-03** 已 `owner_runtime_accepted` / `accepted_as_implemented`。**不得** push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
 > **R2 对话运行时**：保留基础设施；R2 代码 **retained as infrastructure**。生产默认入口仍为 legacy。
 > **Owner Electron 真机验收（2026-07-24）**：`accepted`（distill-me / R2 对话重试 / doing-context / PAN-01S 等）。
 > **confirmed identity → act context（2026-07-24，`2f1b7bd`）**：`accepted`（历史整合基线；**不是**当前 HEAD）。
