@@ -34,6 +34,7 @@
     "test:dvl2-03-one-click": "node scripts/test-dvl2-03-one-click-generate.cjs",
     "test:idcollab-min-01": "node scripts/test-idcollab-min-01-contracts.cjs",
     "test:learn-loop-fix-01": "node scripts/test-learn-loop-fix-01.cjs",
+    "test:learn-loop-fix-02": "node scripts/test-learn-loop-fix-02.cjs",
     "test:idcollab-min-01.1-ui": "node scripts/test-idcollab-min-01.1-ui-minimal.cjs",
     "test:dvl2-04-auto-learn": "node scripts/test-dvl2-04-auto-learn.cjs",
     "test:dvl2-05-context": "node scripts/test-dvl2-05-context-authority.cjs",
