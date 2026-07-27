@@ -281,6 +281,79 @@ async function main() {
     assert.ok(fs.statSync(abs).size > 0);
   });
 
+  await test("MIN-01.1 immediate revoke blocks regen and prepare re-grant", async () => {
+    const userData = tempUserData();
+    const seeded = await seedDraftPlan(userData, "即时撤销测试。");
+    const ctx = orchestrationCtx(userData, seeded.taskId, seeded.plan);
+    const res = await confirmPlanAndGenerate({ ...ctx, taskId: seeded.taskId });
+    assert.ok(res.ok, res.message || res.code);
+    const view = packageStore.getPackageView(userData, res.packageId);
+    const ver = Object.values(view.versions)[0];
+    const authId = ver.authorizationRefs[0].authorizationId;
+
+    const revoked = await authorizationStore.revokeAuthorization(userData, authId);
+    assert.ok(revoked.ok);
+    assert.equal(revoked.authorizationStatus && revoked.authorizationStatus.status, "revoked");
+
+    const regen = await deliverableGeneration.generateOneDeliverable(
+      userData,
+      { packageId: res.packageId, deliverableId: ver.deliverableId },
+      { callModel: null, imageMode: "mock", packageDir: null }
+    );
+    assert.equal(regen.ok, false);
+    assert.equal(regen.code, "authorization_revoked");
+
+    const prep = await prepareDeliverablePackage(
+      userData,
+      { taskId: seeded.taskId },
+      {
+        getTask: (ud, id) => actStore.getTask(ud, id, { heal: false }),
+        getPlan: (ud, planId) => deliverablePlanStore.getPlan(ud, planId),
+        saveTaskExecution: async (ud, id, exec) => {
+          const got = actStore.getTask(ud, id, { heal: false }).task;
+          return actStore.saveTask(ud, {
+            ...got,
+            deliverableExecution: { activePackageId: exec.activePackageId || null },
+          });
+        },
+      }
+    );
+    assert.equal(prep.ok, false);
+    assert.equal(prep.code, "authorization_revoked");
+
+    const blocked = await authorizationStore.grantTaskAuthorization(userData, {
+      grantorSubjectId: "subj_owner_local",
+      granteeSubjectId: "subj_dm_local",
+      scope: { taskId: seeded.taskId, planVersionId: view.package.sourcePlanVersionId },
+      actionTypes: ["local_artifact_write"],
+    });
+    assert.equal(blocked.result.outcome, "revoked_blocked");
+  });
+
+  await test("MIN-01.1 main fail-closed ignores forged granted status", () => {
+    const userData = tempUserData();
+    // no store file yet — create grant then revoke in memory via grant+revoke
+    return authorizationStore
+      .grantTaskAuthorization(userData, {
+        grantorSubjectId: "subj_owner_local",
+        granteeSubjectId: "subj_dm_local",
+        scope: { taskId: "t1", planVersionId: "pv1" },
+        actionTypes: ["local_artifact_write"],
+      })
+      .then((g) =>
+        authorizationStore.revokeAuthorization(userData, g.result.record.authorizationId)
+      )
+      .then(() => {
+        const gate = authorizationStore.resolveActiveTaskAuthorization(userData, {
+          taskId: "t1",
+          planVersionId: "pv1",
+          actionType: "local_artifact_write",
+        });
+        assert.equal(gate.ok, false);
+        assert.equal(gate.code, "authorization_revoked");
+      });
+  });
+
   await test("E revoke blocks generate/regenerate/learn; history retained", async () => {
     const userData = tempUserData();
     const seeded = await seedDraftPlan(userData, "生成一份介绍文档。");
