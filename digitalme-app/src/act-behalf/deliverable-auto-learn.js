@@ -808,25 +808,24 @@ function enqueueAfterAccept(userData, versionId, deps) {
   const collected = collectSourceFromVersion(userData, versionId);
   if (!collected.ok) return collected;
 
-  // IDCOLLAB-MIN-01: learning_writeback requires valid authorization when present.
-  const authRef = collected.source && collected.source.authorizationRef;
+  // IDCOLLAB-MIN-01: learning_writeback requires live authorization from store.
+  const source = collected.source || {};
+  const authorizationStore = require("./authorization-store");
+  const gate = authorizationStore.resolveActiveTaskAuthorization(userData, {
+    taskId: source.taskId,
+    planVersionId: source.planVersionId,
+    actionType: "learning_writeback",
+  });
+  if (!gate.ok) {
+    return {
+      ok: false,
+      code: gate.code,
+      message: gate.message || "本次授权不允许学习写回。",
+      acceptPreserved: true,
+    };
+  }
+  const authRef = gate.ref || (source.authorizationRef || null);
   if (authRef && authRef.authorizationId) {
-    const authorizationStore = require("./authorization-store");
-    const gate = authorizationStore.assertAuthorizationAllows(userData, {
-      authorizationId: authRef.authorizationId,
-      taskId: collected.source.taskId,
-      planVersionId: collected.source.planVersionId,
-      actionType: "learning_writeback",
-    });
-    if (!gate.ok) {
-      return {
-        ok: false,
-        code: gate.code,
-        message: gate.message || "本次授权不允许学习写回。",
-        acceptPreserved: true,
-      };
-    }
-    // Invariant: writeback target must match acting Digital Me / auth grantee.
     const expectedTarget =
       (collected.source.writebackTargetSubjectId) || "subj_dm_local";
     if (

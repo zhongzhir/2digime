@@ -165,32 +165,8 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
   const materialsGate = assertTaskMaterialsFresh(userData, pkg.taskId);
   if (!materialsGate.ok) return materialsGate;
 
-  // IDCOLLAB-MIN-01: fail-closed authorization gate before generation / regenerate.
-  const authRefs =
-    (pkg.authorizationRefs && pkg.authorizationRefs[0] && pkg.authorizationRefs[0].authorizationId) ||
-    (pkg.identityContextSnapshot &&
-      pkg.identityContextSnapshot.authorizationRefs &&
-      pkg.identityContextSnapshot.authorizationRefs[0] &&
-      pkg.identityContextSnapshot.authorizationRefs[0].authorizationId) ||
-    null;
-  let activeAuthId = authRefs;
-  if (!activeAuthId) {
-    const grant = authorizationStore.findActiveGrantForPlan(
-      userData,
-      pkg.taskId,
-      pkg.sourcePlanVersionId
-    );
-    activeAuthId = grant && grant.authorizationId;
-  }
-  if (!activeAuthId) {
-    return {
-      ok: false,
-      code: "authorization_revoked",
-      message: "本次授权已撤销或无效，不能继续生成成果。",
-    };
-  }
-  const authGate = authorizationStore.assertAuthorizationAllows(userData, {
-    authorizationId: activeAuthId,
+  // IDCOLLAB-MIN-01: always re-read authoritative Authorization Store (never trust snapshot status).
+  const authGate = authorizationStore.resolveActiveTaskAuthorization(userData, {
     taskId: pkg.taskId,
     planVersionId: pkg.sourcePlanVersionId,
     actionType: "local_artifact_write",
@@ -655,20 +631,17 @@ async function reviewDeliverableVersion(userData, { versionId, decision }) {
   const version = store.versions && store.versions[id];
   if (!version) return { ok: false, code: "version_not_found", message: "未找到该版本。" };
 
-  // Accept path: require learning_writeback / artifact_acceptance authorization when present.
+  // Accept path: re-read live authorization from store.
   if (dec === "accepted") {
-    const authId =
-      (version.authorizationRefs &&
-        version.authorizationRefs[0] &&
-        version.authorizationRefs[0].authorizationId) ||
-      (version.identityContextSnapshot &&
-        version.identityContextSnapshot.authorizationRefs &&
-        version.identityContextSnapshot.authorizationRefs[0] &&
-        version.identityContextSnapshot.authorizationRefs[0].authorizationId) ||
-      null;
-    if (authId) {
-      const gate = authorizationStore.assertAuthorizationAllows(userData, {
-        authorizationId: authId,
+    const deliverable = store.deliverables[version.deliverableId];
+    const pkg =
+      deliverable && deliverable.packageId
+        ? store.packages[String(deliverable.packageId)]
+        : null;
+    if (pkg) {
+      const gate = authorizationStore.resolveActiveTaskAuthorization(userData, {
+        taskId: pkg.taskId,
+        planVersionId: pkg.sourcePlanVersionId,
         actionType: "artifact_acceptance",
       });
       if (!gate.ok) {

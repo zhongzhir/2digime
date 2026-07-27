@@ -248,6 +248,13 @@ async function ensurePlanConfirmationIdentity(userData, {
     confirmationRef: confirmationRef || "confirm:plan:" + String(planVersionId),
     status: "granted",
   });
+  if (grant.result.outcome === "revoked_blocked") {
+    return {
+      ok: false,
+      code: "authorization_revoked",
+      message: "本次授权已撤销，不能继续生成或学习新成果。",
+    };
+  }
   const record = grant.result.record;
   const authRef = authorizationStore.toAuthorizationRef(record);
   const identityContextSnapshot = buildNativeIdentityContext({
@@ -330,38 +337,51 @@ function userFacingIdentitySummary(snapshot) {
     snapshot.executorRefs[0] &&
     (snapshot.executorRefs[0].modelRef || snapshot.executorRefs[0].executorType);
   return {
-    headline: "由你的 Digital Me 代表你生成",
+    headline: "由你的 Digital Me 生成，成果归你所有。",
     ownership: "成果归你所有",
     confirmation: "最终由你确认",
     roleLabel: role,
-    executorLabel: exec ? "执行能力：当前模型与文档工具" : "执行能力：当前可用能力",
+    executorLabel: exec ? "使用的能力：当前模型与文档工具" : null,
     identityContextSource: snapshot && snapshot.identityContextSource,
     legacy:
       snapshot && snapshot.identityContextSource === "legacy_default_inference"
-        ? "此记录按兼容默认推断展示，不是原始完整授权落盘。"
+        ? "此记录按兼容方式展示，不是完整原始记录。"
         : null,
   };
 }
 
 function authorizationSummary(record) {
   if (!record) {
-    return { statusLabel: "无授权记录", canRevoke: false };
+    return {
+      status: "none",
+      statusLabel: "无授权记录",
+      canGenerate: false,
+      canLearn: false,
+      canRevoke: false,
+    };
   }
   const eff = authorizationStore.deriveEffectiveStatus(record);
   const labels = {
-    granted: "已授权（本地成果生成与学习）",
+    granted: "已授权",
     revoked: "已撤销",
     expired: "已过期",
     proposed: "待授权",
     consumed: "已使用完毕",
     denied: "未获准",
   };
+  const granted = eff === "granted";
   return {
     authorizationId: record.authorizationId,
     status: eff,
     statusLabel: labels[eff] || eff,
-    canRevoke: eff === "granted",
+    canGenerate: granted,
+    canLearn: granted,
+    canRevoke: granted,
     scopeSummary: "仅限本任务与已确认计划版本",
+    message:
+      eff === "revoked"
+        ? "本次授权已撤销。已有成果会保留，但不能继续生成新版本。"
+        : null,
   };
 }
 

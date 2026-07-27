@@ -96,12 +96,8 @@ async function prepareDeliverablePackage(userData, input, deps) {
     };
   }
 
-  // IDCOLLAB-MIN-01: ensure identity snapshot + local authorization before package prep.
-  // Covers confirm-via-legacy paths and older confirmed plans without formal fields.
-  const needsIdentity =
-    !version.identityContextSnapshot ||
-    !authorizationStore.findActiveGrantForPlan(userData, taskId, confirmedId);
-  if (needsIdentity) {
+  // IDCOLLAB-MIN-01: legacy plans may lack snapshot; never re-grant after explicit revoke.
+  if (!version.identityContextSnapshot) {
     const identityPrep = await actionIdentity.ensurePlanConfirmationIdentity(userData, {
       taskId,
       planVersionId: confirmedId,
@@ -146,7 +142,6 @@ async function prepareDeliverablePackage(userData, input, deps) {
       },
     });
     if (!committed.ok) {
-      // If CAS races, reload and continue if identity now present.
       const reloaded = deps.getPlan(userData, planId);
       const reVersion =
         reloaded &&
@@ -154,11 +149,7 @@ async function prepareDeliverablePackage(userData, input, deps) {
         reloaded.plan &&
         reloaded.plan.versions &&
         reloaded.plan.versions[confirmedId];
-      if (
-        !reVersion ||
-        !reVersion.identityContextSnapshot ||
-        !authorizationStore.findActiveGrantForPlan(userData, taskId, confirmedId)
-      ) {
+      if (!reVersion || !reVersion.identityContextSnapshot) {
         return {
           ok: false,
           code: committed.code || "identity_backfill_failed",
@@ -170,6 +161,19 @@ async function prepareDeliverablePackage(userData, input, deps) {
     } else {
       plan = committed.plan || nextPlan;
       version = plan.versions[confirmedId];
+    }
+  } else {
+    const authGate = authorizationStore.resolveActiveTaskAuthorization(userData, {
+      taskId,
+      planVersionId: confirmedId,
+      actionType: "task_preparation",
+    });
+    if (!authGate.ok) {
+      return {
+        ok: false,
+        code: authGate.code,
+        message: authGate.message,
+      };
     }
   }
 

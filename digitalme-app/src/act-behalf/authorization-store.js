@@ -235,6 +235,17 @@ async function grantTaskAuthorization(userData, input) {
     if (existing) {
       return { outcome: "existing", record: clone(existing) };
     }
+    const revokedSame = Object.values(store.authorizations || {}).find((a) => {
+      if (!a) return false;
+      if (String(a.scope && a.scope.taskId) !== String(desired.scope.taskId)) return false;
+      if (String(a.scope && a.scope.planVersionId || "") !== String(desired.scope.planVersionId || "")) {
+        return false;
+      }
+      return deriveEffectiveStatus(a) === "revoked";
+    });
+    if (revokedSame) {
+      return { outcome: "revoked_blocked", record: clone(revokedSame) };
+    }
     store.authorizations[desired.authorizationId] = desired;
     return { outcome: "created", record: clone(desired) };
   });
@@ -269,10 +280,15 @@ async function revokeAuthorization(userData, authorizationId, opts) {
       outcome: out.result.outcome,
       record: out.result.record,
       revision: out.revision,
+      authorizationStatus: getTaskAuthorizationStatus(
+        userData,
+        out.result.record.scope && out.result.record.scope.taskId,
+        out.result.record.scope && out.result.record.scope.planVersionId
+      ),
       message:
         out.result.outcome === "already_revoked"
           ? "本次授权此前已撤销。"
-          : "已撤销本次授权。撤销后，Digital Me 将不能继续生成或学习本次任务的新成果；已经生成的文件不会被删除。",
+          : "本次授权已撤销。已有成果会保留，但不能继续生成新版本。",
     };
   } catch (err) {
     return {
@@ -315,6 +331,84 @@ function findActiveGrantForPlan(userData, taskId, planVersionId) {
         String(a.scope && a.scope.planVersionId || "") === String(planVersionId || "")
     ) || null
   );
+}
+
+function findRevokedGrantForPlan(userData, taskId, planVersionId) {
+  const list = listAuthorizationsForTask(userData, taskId);
+  return (
+    list.find(
+      (a) =>
+        a.effectiveStatus === "revoked" &&
+        String(a.scope && a.scope.planVersionId || "") === String(planVersionId || "")
+    ) || null
+  );
+}
+
+/**
+ * Authoritative runtime gate: always reads fresh store state.
+ * Never trusts renderer payloads or historical snapshot authorization status.
+ */
+function resolveActiveTaskAuthorization(userData, { taskId, planVersionId, actionType }) {
+  const active = findActiveGrantForPlan(userData, taskId, planVersionId);
+  if (active) {
+    return assertAuthorizationAllows(userData, {
+      authorizationId: active.authorizationId,
+      taskId,
+      planVersionId,
+      actionType,
+    });
+  }
+  if (findRevokedGrantForPlan(userData, taskId, planVersionId)) {
+    return {
+      ok: false,
+      code: "authorization_revoked",
+      message: "本次授权已撤销，不能继续生成或学习新成果。",
+    };
+  }
+  return {
+    ok: false,
+    code: "authorization_not_granted",
+    message: "缺少有效授权，无法继续。",
+  };
+}
+
+function getTaskAuthorizationStatus(userData, taskId, planVersionId) {
+  const active = findActiveGrantForPlan(userData, taskId, planVersionId);
+  if (active) {
+    return {
+      ok: true,
+      status: "granted",
+      statusLabel: "已授权（本地成果生成与学习）",
+      canGenerate: true,
+      canLearn: true,
+      canRevoke: true,
+      authorizationId: active.authorizationId,
+      message: null,
+    };
+  }
+  const revoked = findRevokedGrantForPlan(userData, taskId, planVersionId);
+  if (revoked) {
+    return {
+      ok: true,
+      status: "revoked",
+      statusLabel: "已撤销",
+      canGenerate: false,
+      canLearn: false,
+      canRevoke: false,
+      authorizationId: revoked.authorizationId,
+      message: "本次授权已撤销。已有成果会保留，但不能继续生成新版本。",
+    };
+  }
+  return {
+    ok: true,
+    status: "none",
+    statusLabel: "未授权",
+    canGenerate: false,
+    canLearn: false,
+    canRevoke: false,
+    authorizationId: null,
+    message: "缺少有效授权，无法继续。",
+  };
 }
 
 /**
@@ -417,6 +511,9 @@ module.exports = {
   getAuthorization,
   listAuthorizationsForTask,
   findActiveGrantForPlan,
+  findRevokedGrantForPlan,
+  resolveActiveTaskAuthorization,
+  getTaskAuthorizationStatus,
   assertAuthorizationAllows,
   reconcileAuthorizations,
   toAuthorizationRef,

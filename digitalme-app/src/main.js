@@ -44,6 +44,17 @@ const { confirmPlanAndGenerate } = require("./act-behalf/deliverable-confirm-and
 const deliverableAutoLearn = require("./act-behalf/deliverable-auto-learn");
 const actionIdentity = require("./act-behalf/action-identity");
 const authorizationStore = require("./act-behalf/authorization-store");
+
+function enrichPackageViewWithAuthorization(userData, view) {
+  if (!view || !view.package) return view;
+  const pkg = view.package;
+  const authorizationStatus = authorizationStore.getTaskAuthorizationStatus(
+    userData,
+    pkg.taskId,
+    pkg.sourcePlanVersionId
+  );
+  return { ...view, authorizationStatus };
+}
 const { parseActBehalfOutput, buildActBehalfMessages, parseEmailOutput, buildEmailMessages, parseVideoAudioOutput, buildVideoAudioMessages, buildVideoAudioExport } = require("./act-behalf/parse-output");
 const { normalizeTaskIntent, assertTaskIntentMinimal, detectTaskType, TASK_TYPES } = require("./act-behalf/task-intent");
 const {
@@ -3301,7 +3312,9 @@ ipcMain.handle("actBehalf:getDeliverablePackageById", async (_e, payload) => {
     const userData = app.getPath("userData");
     const packageId = payload && payload.packageId ? String(payload.packageId) : "";
     if (!packageId) return { ok: false, code: "package_required", message: "缺少成果包标识。" };
-    return deliverablePackageStore.getPackageView(userData, packageId);
+    const view = deliverablePackageStore.getPackageView(userData, packageId);
+    if (!view || !view.ok) return view;
+    return enrichPackageViewWithAuthorization(userData, view);
   } catch (err) {
     return {
       ok: false,
@@ -3453,19 +3466,48 @@ ipcMain.handle("actBehalf:getActionIdentity", async (_e, payload) => {
         snapshot.authorizationRefs[0].authorizationId) ||
       null;
     let authRecord = null;
+    let planVersionId = null;
+    if (version) {
+      const d = store.deliverables && store.deliverables[version.deliverableId];
+      const p = d && d.packageId ? store.packages[d.packageId] : pkg;
+      if (p) planVersionId = p.sourcePlanVersionId;
+    } else if (pkg) {
+      planVersionId = pkg.sourcePlanVersionId;
+    } else if (taskId) {
+      const loaded = await loadPlanForTaskOrFail(userData, taskId);
+      planVersionId = loaded && loaded.plan && loaded.plan.activeConfirmedVersionId;
+    }
+    const resolvedTaskId =
+      taskId || (pkg && pkg.taskId) || (version && version.taskId) || null;
+    const authorizationStatus =
+      resolvedTaskId && planVersionId
+        ? authorizationStore.getTaskAuthorizationStatus(userData, resolvedTaskId, planVersionId)
+        : null;
     if (authId) {
       const got = authorizationStore.getAuthorization(userData, authId);
       if (got.ok) authRecord = got.record;
-    } else if (taskId || (pkg && pkg.taskId)) {
-      const tid = taskId || pkg.taskId;
-      const list = authorizationStore.listAuthorizationsForTask(userData, tid);
-      authRecord = list.find((a) => a.effectiveStatus === "granted") || list[0] || null;
+    } else if (resolvedTaskId) {
+      authRecord =
+        authorizationStore.findActiveGrantForPlan(userData, resolvedTaskId, planVersionId) ||
+        authorizationStore.findRevokedGrantForPlan(userData, resolvedTaskId, planVersionId) ||
+        null;
     }
 
     return {
       ok: true,
       identitySummary: actionIdentity.userFacingIdentitySummary(snapshot),
-      authorizationSummary: actionIdentity.authorizationSummary(authRecord),
+      authorizationSummary: authorizationStatus
+        ? {
+            authorizationId: authorizationStatus.authorizationId,
+            status: authorizationStatus.status,
+            statusLabel: authorizationStatus.statusLabel,
+            canGenerate: authorizationStatus.canGenerate,
+            canLearn: authorizationStatus.canLearn,
+            canRevoke: authorizationStatus.canRevoke,
+            message: authorizationStatus.message,
+          }
+        : actionIdentity.authorizationSummary(authRecord),
+      authorizationStatus,
       snapshot: {
         identityContextSource: snapshot && snapshot.identityContextSource,
         actingRoleRef: snapshot && snapshot.actingRoleRef,

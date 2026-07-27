@@ -284,23 +284,9 @@ async function confirmPlanAndGenerate(ctx) {
     }
   }
 
-  // Fail-closed: authorization must still be granted before prepare/generate.
+  // Fail-closed: always resolve from authoritative Authorization Store.
   const activeConfirmedId = confirmedPlan.activeConfirmedVersionId;
-  const activeGrant = authorizationStore.findActiveGrantForPlan(
-    userData,
-    taskId,
-    activeConfirmedId
-  );
-  if (!activeGrant) {
-    return {
-      ok: false,
-      code: "authorization_revoked",
-      message: "本次授权已撤销或无效，不能继续生成成果。",
-      plan: confirmedPlan,
-    };
-  }
-  const authGate = authorizationStore.assertAuthorizationAllows(userData, {
-    authorizationId: activeGrant.authorizationId,
+  const authGate = authorizationStore.resolveActiveTaskAuthorization(userData, {
     taskId,
     planVersionId: activeConfirmedId,
     actionType: "local_artifact_write",
