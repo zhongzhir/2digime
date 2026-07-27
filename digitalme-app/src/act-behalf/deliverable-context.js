@@ -6,18 +6,23 @@
  */
 
 const crypto = require("node:crypto");
+const {
+  findPlaceholderIssues,
+  getBlockingPlaceholderIssues,
+  analyzePlaceholderIssues,
+  validatePlaceholderContent,
+  userFacingIssueSummary,
+  buildFailureEvidence,
+  buildRepairIssueLines,
+} = require("./placeholder-validation");
 
+/** @deprecated Legacy export; prefer analyzePlaceholderIssues(). */
 const PLACEHOLDER_RES = Object.freeze([
-  /项目名称/,
-  /CEO\s*姓名/,
-  /功能一/,
-  /功能二/,
-  /XX\s*%/i,
-  /\[object Object\]/i,
-  /lorem ipsum/i,
-  /占位/,
   /待填写/,
-  /TODO:\s*replace/i,
+  /待补充/,
+  /lorem ipsum/i,
+  /功能一/,
+  /\[object Object\]/i,
 ]);
 
 function unwrapField(value) {
@@ -216,28 +221,22 @@ function buildGenerationContext({
   };
 }
 
-function findPlaceholderIssues(text) {
-  const s = String(text || "");
-  const hits = [];
-  for (const re of PLACEHOLDER_RES) {
-    if (re.test(s)) hits.push(String(re));
-  }
-  if (s.includes("[object Object]")) hits.push("[object Object]");
-  return hits;
-}
-
 function assertGeneratedContentUsable(text, { kind, goal, contextClass, evidenceCorpus, claimPosturePresentation, isDigitalMeProject, projectContextEmpty } = {}) {
   const body = String(text || "").trim();
   if (!body || body.length < 12) {
     const e = new Error("模型未返回有效内容。");
     e.code = "empty_model_output";
+    e.failureStage = "prewrite_validation";
     throw e;
   }
-  const placeholders = findPlaceholderIssues(body);
-  if (placeholders.length) {
-    const e = new Error("生成结果含占位或无效内容，未保存为成果。");
+  const placeholderCheck = validatePlaceholderContent(body);
+  if (placeholderCheck.hasBlocking) {
+    const e = new Error("生成的内容仍包含未填写部分，暂未保存。你可以重试，或补充更明确的要求。");
     e.code = "placeholder_content_rejected";
-    e.placeholders = placeholders;
+    e.placeholders = placeholderCheck.blockingIssues.map((i) => i.ruleId);
+    e.placeholderIssues = placeholderCheck.blockingIssues;
+    e.userIssueSummary = userFacingIssueSummary(placeholderCheck.blockingIssues);
+    e.failureStage = "prewrite_validation";
     throw e;
   }
   const g = String(goal || "");
@@ -280,6 +279,12 @@ module.exports = {
   budgetAttachmentContext,
   buildGenerationContext,
   findPlaceholderIssues,
+  getBlockingPlaceholderIssues,
+  analyzePlaceholderIssues,
+  validatePlaceholderContent,
+  userFacingIssueSummary,
+  buildFailureEvidence,
+  buildRepairIssueLines,
   assertGeneratedContentUsable,
   sha256Text,
   PLACEHOLDER_RES,

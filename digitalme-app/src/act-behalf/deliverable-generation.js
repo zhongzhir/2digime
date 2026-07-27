@@ -8,7 +8,7 @@ const crypto = require("node:crypto");
 const packageStore = require("./deliverable-package-store");
 const { nowIso, newId } = require("./deliverable-package-schema");
 const { commitVersionFiles } = require("./deliverable-artifact-fs");
-const { generateByKind } = require("./deliverable-generators");
+const { generateByKind, generateByKindWithRepair } = require("./deliverable-generators");
 const actBehalfStore = require("./task-store");
 const { assembleSubjectContext } = require("./subject-context-assembler");
 const {
@@ -18,13 +18,57 @@ const {
   tagAttachmentRefs,
   isDigitalMeProjectContext,
 } = require("./subject-context-engine");
-const { unwrapField } = require("./deliverable-context");
+const { unwrapField, buildFailureEvidence, userFacingIssueSummary } = require("./deliverable-context");
 const actionIdentity = require("./action-identity");
 const authorizationStore = require("./authorization-store");
 const { resolveKnowledgeContext } = require("./knowledge-resolver");
 
 function newAttemptId() {
   return newId("dgatt_");
+}
+
+const MAX_PLACEHOLDER_REPAIR_ATTEMPTS = 2;
+
+function userMessageForFailure(err) {
+  if (err && err.code === "placeholder_content_rejected") {
+    return (
+      err.message ||
+      "生成的内容仍包含未填写部分，暂未保存。你可以重试，或补充更明确的要求。"
+    );
+  }
+  return (err && err.message) || "生成失败。";
+}
+
+async function registerGenerationAttempt(userData, attempt, deliverableId, packageId) {
+  await packageStore.mutateStore(userData, (s) => {
+    s.generationAttempts = s.generationAttempts || {};
+    s.generationAttempts[attempt.id] = attempt;
+    const d = s.deliverables[String(deliverableId)];
+    if (d) {
+      d.generationStatus = attempt.status === "repairing" ? "generating" : attempt.status;
+      d.latestGenerationAttemptId = attempt.id;
+      if (attempt.userIssueSummary) d.lastGenerationIssueSummary = attempt.userIssueSummary;
+      d.updatedAt = nowIso();
+    }
+    const p = s.packages[String(packageId)];
+    if (p) {
+      const dels = (p.deliverableIds || []).map((id) => s.deliverables[id]).filter(Boolean);
+      const derived = derivePackageStatuses(dels);
+      p.lifecycleStatus = derived.lifecycleStatus;
+      p.completionStatus = derived.completionStatus;
+      p.updatedAt = nowIso();
+    }
+    return true;
+  });
+}
+
+async function markAttemptOutcome(userData, attemptId, patch) {
+  await packageStore.mutateStore(userData, (s) => {
+    const a = s.generationAttempts[attemptId];
+    if (!a) return false;
+    Object.assign(a, patch);
+    return true;
+  });
 }
 
 function newVersionId() {
@@ -193,27 +237,13 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
     errorSummary: null,
     producedVersionId: null,
     outcome: null,
+    repairPass: 0,
+    parentAttemptId: null,
+    failureEvidence: null,
+    userIssueSummary: null,
   };
 
-  await packageStore.mutateStore(userData, (s) => {
-    s.generationAttempts = s.generationAttempts || {};
-    s.generationAttempts[attemptId] = attempt;
-    const d = s.deliverables[String(deliverableId)];
-    if (d) {
-      d.generationStatus = "generating";
-      d.latestGenerationAttemptId = attemptId;
-      d.updatedAt = nowIso();
-    }
-    const p = s.packages[String(packageId)];
-    if (p) {
-      const dels = (p.deliverableIds || []).map((id) => s.deliverables[id]).filter(Boolean);
-      const derived = derivePackageStatuses(dels);
-      p.lifecycleStatus = derived.lifecycleStatus;
-      p.completionStatus = derived.completionStatus;
-      p.updatedAt = nowIso();
-    }
-    return true;
-  });
+  await registerGenerationAttempt(userData, attempt, deliverableId, packageId);
 
   let produced;
   let taskRecord = null;
@@ -263,7 +293,7 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
     resolved.detectedScope.reason === "unresolved"
   ) {
     await packageStore.mutateStore(userData, (s) => {
-      const a = s.generationAttempts[attemptId];
+      const a = s.generationAttempts[activeAttemptId];
       if (a) {
         a.status = "failed";
         a.finishedAt = nowIso();
@@ -328,34 +358,114 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
     subjectAssembly.knowledgeProvenance = resolved.provenance;
   }
 
+  let activeAttemptId = attemptId;
   try {
-    produced = await generateByKind(deliverable.kind, {
-      pkg,
-      deliverable,
-      task: taskRecord,
-      referenceMaterials: mergedMaterials,
-      subjectAssembly,
-      callModel: deps.callModel,
-      imageMode: deps.imageMode,
-      isDigitalMeProject,
-      projectRetrieval,
-      projectResolved,
-    });
+    produced = await generateByKindWithRepair(
+      deliverable.kind,
+      {
+        pkg,
+        deliverable,
+        task: taskRecord,
+        referenceMaterials: mergedMaterials,
+        subjectAssembly,
+        callModel: deps.callModel,
+        imageMode: deps.imageMode,
+        isDigitalMeProject,
+        projectRetrieval,
+        projectResolved,
+      },
+      {
+        maxRepairAttempts: MAX_PLACEHOLDER_REPAIR_ATTEMPTS,
+        onPlaceholderRejected: async ({ pass, draft, err }) => {
+          const parentAttemptId = activeAttemptId;
+          const evidence = buildFailureEvidence({
+            attemptId: parentAttemptId,
+            deliverableId,
+            draft,
+            issues: err.placeholderIssues,
+            failureCode: err.code,
+            failureStage: err.failureStage || "prewrite_validation",
+          });
+          await markAttemptOutcome(userData, parentAttemptId, {
+            status: "superseded",
+            finishedAt: nowIso(),
+            errorCode: err.code,
+            errorSummary: "成果中还有未完成的模板内容，正在自动修正。",
+            outcome: "repair_initiated",
+            failureEvidence: evidence,
+            userIssueSummary: userFacingIssueSummary(err.placeholderIssues),
+            modelOutputDigest: evidence.modelOutputDigest,
+            outputLength: evidence.outputLength,
+            placeholderIssues: evidence.placeholderIssues,
+            failureStage: err.failureStage || "prewrite_validation",
+          });
+
+          if (pass + 1 > MAX_PLACEHOLDER_REPAIR_ATTEMPTS) return;
+
+          const repairAttemptId = newAttemptId();
+          const repairAttempt = {
+            schemaVersion: 1,
+            id: repairAttemptId,
+            packageId: String(packageId),
+            deliverableId: String(deliverableId),
+            status: "repairing",
+            startedAt: nowIso(),
+            finishedAt: null,
+            modelAdapter: "invokeModelRoute/callModel",
+            inputDigest: attempt.inputDigest,
+            errorCode: null,
+            errorSummary: "成果中还有未完成的模板内容，正在自动修正。",
+            producedVersionId: null,
+            outcome: null,
+            repairPass: pass + 1,
+            parentAttemptId,
+            failureEvidence: null,
+            userIssueSummary: null,
+          };
+          await registerGenerationAttempt(userData, repairAttempt, deliverableId, packageId);
+          activeAttemptId = repairAttemptId;
+        },
+      }
+    );
   } catch (err) {
     const code = (err && err.code) || "generation_failed";
-    const message = (err && err.message) || "生成失败。";
+    const message = userMessageForFailure(err);
+    const evidence =
+      err && err.code === "placeholder_content_rejected"
+        ? buildFailureEvidence({
+            attemptId: activeAttemptId,
+            deliverableId,
+            draft: err.draft || "",
+            issues: err.placeholderIssues,
+            failureCode: err.code,
+            failureStage: err.failureStage || "prewrite_validation",
+          })
+        : null;
     await packageStore.mutateStore(userData, (s) => {
-      const a = s.generationAttempts[attemptId];
+      const a = s.generationAttempts[activeAttemptId];
       if (a) {
         a.status = "failed";
         a.finishedAt = nowIso();
         a.errorCode = code;
         a.errorSummary = message;
         a.outcome = "failed";
+        a.failureStage = (err && err.failureStage) || "model_generation";
+        if (evidence) {
+          a.failureEvidence = evidence;
+          a.placeholderIssues = evidence.placeholderIssues;
+          a.modelOutputDigest = evidence.modelOutputDigest;
+          a.outputLength = evidence.outputLength;
+        }
+        a.userIssueSummary =
+          (err && err.userIssueSummary) || userFacingIssueSummary(err && err.placeholderIssues);
       }
       const d = s.deliverables[String(deliverableId)];
       if (d) {
         d.generationStatus = "failed";
+        d.lastGenerationIssueSummary =
+          (a && a.userIssueSummary) ||
+          (err && err.userIssueSummary) ||
+          userFacingIssueSummary(err && err.placeholderIssues);
         d.updatedAt = nowIso();
       }
       const p = s.packages[String(packageId)];
@@ -366,7 +476,7 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
       }
       return true;
     });
-    return { ok: false, code, message, attemptId };
+    return { ok: false, code, message, attemptId: activeAttemptId, userIssueSummary: err && err.userIssueSummary };
   }
 
   const versionId = newVersionId();
@@ -379,7 +489,7 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
       versionId,
       files: produced.files,
       manifest: {
-        attemptId,
+        attemptId: activeAttemptId,
         kind: produced.kind,
         sourcePlanVersionId: pkg.sourcePlanVersionId,
         sourceSnapshotDigest: pkg.executionSnapshot && pkg.executionSnapshot.sourcePlanDigest,
@@ -389,7 +499,7 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
     });
   } catch (err) {
     await packageStore.mutateStore(userData, (s) => {
-      const a = s.generationAttempts[attemptId];
+      const a = s.generationAttempts[activeAttemptId];
       if (a) {
         a.status = "failed";
         a.finishedAt = nowIso();
@@ -408,7 +518,7 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
       ok: false,
       code: (err && err.code) || "write_failed",
       message: (err && err.message) || "写入成果文件失败。",
-      attemptId,
+      attemptId: activeAttemptId,
     };
   }
 
@@ -451,7 +561,7 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
     id: versionId,
     deliverableId: String(deliverableId),
     version: (Array.isArray(deliverable.versionIds) ? deliverable.versionIds.length : 0) + 1,
-    generationAttemptId: attemptId,
+    generationAttemptId: activeAttemptId,
     generationStatus: "ready",
     reviewStatus: "unreviewed",
     artifactRef: primary,
@@ -599,7 +709,7 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
       s.versions[prevVersionId].updatedAt = nowIso();
     }
     s.versions[versionId] = version;
-    const a = s.generationAttempts[attemptId];
+    const a = s.generationAttempts[activeAttemptId];
     if (a) {
       a.status = "succeeded";
       a.finishedAt = nowIso();
@@ -612,7 +722,8 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
       d.versionIds = Array.isArray(d.versionIds) ? d.versionIds.concat([versionId]) : [versionId];
       d.generationStatus = "ready";
       d.reviewStatus = "unreviewed";
-      d.latestGenerationAttemptId = attemptId;
+      d.latestGenerationAttemptId = activeAttemptId;
+      d.lastGenerationIssueSummary = null;
       d.updatedAt = nowIso();
     }
     const p = s.packages[String(packageId)];
@@ -628,7 +739,7 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
     ok: true,
     packageId,
     deliverableId,
-    attemptId,
+    attemptId: activeAttemptId,
     version,
     artifacts,
     uiFormatLabel: produced.uiFormatLabel || null,
@@ -760,4 +871,5 @@ module.exports = {
   reviewDeliverableVersion,
   topoSortDeliverables,
   derivePackageStatuses,
+  MAX_PLACEHOLDER_REPAIR_ATTEMPTS,
 };

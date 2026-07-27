@@ -345,15 +345,54 @@
     return map[kind] || kind || "成果";
   }
 
-  function userGenStatus(d) {
+  function latestAttemptForDeliverable(d, view) {
+    const attempts = (view && view.generationAttempts) || {};
+    const id = d && d.latestGenerationAttemptId;
+    if (id && attempts[id]) return attempts[id];
+    return null;
+  }
+
+  function userGenStatus(d, view) {
     const s = d && d.generationStatus;
+    const attempt = latestAttemptForDeliverable(d, view);
+    if (attempt && (attempt.status === "repairing" || attempt.outcome === "repair_initiated")) {
+      return "正在自动修正";
+    }
     if (s === "ready" || (d && d.currentVersionId && s !== "failed" && s !== "generating" && s !== "blocked")) {
       return "已生成";
     }
-    if (s === "failed") return "生成失败";
+    if (s === "failed") {
+      return d.lastGenerationIssueSummary ? "未保存" : "生成失败";
+    }
     if (s === "generating") return "正在生成";
     if (s === "blocked" || s === "skipped_dependency") return "因依赖失败暂未生成";
     return "等待生成";
+  }
+
+  function failureHintForDeliverable(d, view) {
+    if (!d || d.generationStatus !== "failed") return "";
+    const attempt = latestAttemptForDeliverable(d, view);
+    if (d.lastGenerationIssueSummary) return String(d.lastGenerationIssueSummary);
+    if (attempt && attempt.userIssueSummary) return String(attempt.userIssueSummary);
+    return "生成的内容仍包含未填写部分，暂未保存。你可以重试，或补充更明确的要求。";
+  }
+
+  function auditIssueLines(d, view) {
+    const attempt = latestAttemptForDeliverable(d, view);
+    const issues =
+      (attempt && attempt.placeholderIssues) ||
+      (attempt && attempt.failureEvidence && attempt.failureEvidence.placeholderIssues) ||
+      [];
+    if (!issues.length) return "";
+    return issues
+      .slice(0, 6)
+      .map(
+        (i) =>
+          `<div>第 ${escapeAttr(i.lineNumber)} 行 · ${escapeAttr(i.ruleId || "issue")} · ${escapeAttr(
+            i.contextSnippet || i.matchedText || ""
+          )}</div>`
+      )
+      .join("");
   }
 
   function pickPrimaryArtifact(kind, arts) {
@@ -399,7 +438,11 @@
     const auth = view.authorizationStatus || {};
     const authRevoked = auth.status === "revoked";
     const canGenerate = auth.canGenerate !== false && !authRevoked;
-    const anyGenerating = included.some((d) => d.generationStatus === "generating");
+    const anyRepairing = included.some((d) => {
+      const att = latestAttemptForDeliverable(d, view);
+      return att && att.status === "repairing";
+    });
+    const anyGenerating = included.some((d) => d.generationStatus === "generating") || anyRepairing;
     const anyReady = included.some((d) => d.generationStatus === "ready" || d.currentVersionId);
     const anyFailed = included.some((d) => d.generationStatus === "failed");
     if (status) {
@@ -409,7 +452,17 @@
       } else {
         status.classList.remove("is-auth-revoked");
         if (included.length <= 1) {
-          status.textContent = "";
+          const only = included[0];
+          const att = only ? latestAttemptForDeliverable(only, view) : null;
+          if (att && att.status === "repairing") {
+            status.textContent = "成果中还有未完成的模板内容，正在自动修正。";
+          } else if (only && only.generationStatus === "failed") {
+            status.textContent = failureHintForDeliverable(only, view);
+          } else {
+            status.textContent = "";
+          }
+        } else if (anyRepairing) {
+          status.textContent = "成果中还有未完成的模板内容，正在自动修正。";
         } else if (anyGenerating) {
           status.textContent = "正在生成各项成果…";
         } else if (anyFailed && anyReady) {
@@ -473,7 +526,9 @@
         .map((d) => {
           const ver = d.currentVersionId ? versions[d.currentVersionId] : null;
           const label = kindLabelZh(d.kind);
-          const st = userGenStatus(d);
+          const st = userGenStatus(d, view);
+          const failHint = failureHintForDeliverable(d, view);
+          const auditLines = auditIssueLines(d, view);
           const arts = (ver && (ver.artifactRefs || []).length
             ? ver.artifactRefs
             : ver && ver.artifactRef
@@ -524,10 +579,19 @@
               `<details class="act-gen-more"><summary class="muted">更多…</summary><div class="builder-actions">${moreItems.join(
                 ""
               )}</div></details>`;
-          } else if ((st === "生成失败" || st === "因依赖失败暂未生成") && canGenerate) {
+          } else if ((st === "未保存" || st === "生成失败" || st === "因依赖失败暂未生成") && canGenerate) {
             actions +=
               `<button type="button" class="btn" data-action="regen" data-deliverable-id="${d.id}">重试生成</button>`;
-          } else if ((st === "生成失败" || st === "因依赖失败暂未生成") && !canGenerate) {
+            if (failHint) {
+              actions +=
+                `<details class="act-gen-issue-details" data-testid="act-gen-issue-details"><summary class="muted">查看问题</summary>` +
+                `<div class="muted act-gen-issue-body"><p>${escapeAttr(failHint)}</p>${
+                  auditLines
+                    ? `<details class="act-gen-audit"><summary class="muted">高级审计</summary><div class="act-gen-audit-body">${auditLines}</div></details>`
+                    : ""
+                }</div></details>`;
+            }
+          } else if ((st === "未保存" || st === "生成失败" || st === "因依赖失败暂未生成") && !canGenerate) {
             actions +=
               `<button type="button" class="btn" disabled title="本次授权已撤销">重试生成</button>`;
           }
@@ -536,6 +600,9 @@
             `<div class="act-gen-item" data-deliverable-id="${d.id}">` +
             `<div class="act-gen-item-head"><strong>${escapeAttr(d.title || label)}</strong>` +
             `<span class="muted">${metaParts.map(escapeAttr).join(" · ")}</span></div>` +
+            (failHint && st !== "已生成" && st !== "正在生成" && st !== "正在自动修正"
+              ? `<p class="muted act-gen-failure-hint">${escapeAttr(failHint)}</p>`
+              : "") +
             (actions ? `<div class="builder-actions">${actions}</div>` : "") +
             `</div>`
           );

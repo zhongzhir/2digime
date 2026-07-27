@@ -11,8 +11,13 @@ const { minimalPngBuffer } = require("./deliverable-artifact-fs");
 const {
   buildGenerationContext,
   assertGeneratedContentUsable,
+  buildRepairIssueLines,
 } = require("./deliverable-context");
 const { promptGuidanceForClass } = require("./subject-context-engine");
+
+const STRUCTURED_DOC_TEMPERATURE = 0.3;
+const STRUCTURED_DOC_REPAIR_TEMPERATURE = 0.25;
+const MAX_INLINE_REPAIR_PASSES = 0;
 
 function clampText(s, max) {
   const t = String(s || "");
@@ -26,6 +31,17 @@ function evidenceCorpusFromCtx(ctx) {
     ctx.attachmentText || "",
     ctx.goal || "",
     ctx.constraints || "",
+  ].join("\n");
+}
+
+function structuredDocumentRequirements() {
+  return [
+    "结构化成果输出要求：",
+    "- 必须输出完整正文，不得保留空白模板或仅标题无内容的章节；",
+    "- 不得出现「待填写」「待补充」「功能一/功能二」等未展开模板项；",
+    "- 字段标签（如项目名称、负责人）后必须填写与当前任务相关的具体内容；",
+    "- 缺少事实时可写「待 Owner 决策」或「尚未确定」，并简要说明原因；",
+    "- 不得输出仅含占位符的表格行或列表项。",
   ].join("\n");
 }
 
@@ -74,7 +90,8 @@ function contextBlock(ctx) {
         ctx.attachmentText
       : "（本次未提供参考材料正文。禁止写「根据公开报告/数据显示/研究表明」等无来源归因套话。）",
     exploreHint,
-    "要求：紧扣上述 Digital Me / 任务上下文；正式正文禁止方括号元标签；禁止输出与任务无关的虚构公司或融资故事当作已确认事实；禁止占位符如「项目名称」「CEO 姓名」「XX%」「功能一」。",
+    structuredDocumentRequirements(),
+    "要求：紧扣上述 Digital Me / 任务上下文；正式正文禁止方括号元标签；禁止输出与任务无关的虚构公司或融资故事当作已确认事实。",
   ]
     .filter(Boolean)
     .join("\n");
@@ -87,11 +104,41 @@ function buildDocumentMessages(ctx) {
       content:
         "你是 Digital Me 的成果写作者。根据任务理解、成果说明与参考材料，输出完整 Markdown 文档。" +
         "使用中文。包含标题与若干小节。不要输出代码围栏包裹整篇。不要编造未给出的隐私事实。" +
-        "若材料不足，基于已给目标做结构化表达，不得换成其他行业或无关产品。",
+        "若材料不足，基于已给目标做结构化表达，不得换成其他行业或无关产品。" +
+        "所有字段必须填实；不得保留模板占位。",
     },
     {
       role: "user",
       content: clampText(contextBlock(ctx) + "\n请直接输出 Markdown 正文。", 24000),
+    },
+  ];
+}
+
+function buildDocumentRepairMessages(ctx, priorDraft, issues) {
+  const issueLines = buildRepairIssueLines(issues).join("\n");
+  return [
+    {
+      role: "system",
+      content:
+        "你是 Digital Me 的成果修订写作者。请在不改变整体结构的前提下，修正草稿中的未填写模板内容。" +
+        "保留已有有效正文，仅替换占位、空白字段和模板项。使用中文 Markdown。",
+    },
+    {
+      role: "user",
+      content: clampText(
+        [
+          contextBlock(ctx),
+          "以下是需要修订的草稿：",
+          priorDraft,
+          "",
+          "检测到的问题：",
+          issueLines,
+          "",
+          "请保留正文结构，但将所有占位内容替换为当前任务的真实内容；缺少事实时使用「待 Owner 决策」并说明原因。",
+          "请直接输出修订后的完整 Markdown 正文。",
+        ].join("\n"),
+        28000
+      ),
     },
   ];
 }
@@ -103,11 +150,37 @@ function buildSlideMessages(ctx) {
       content:
         "你规划演示文稿结构。只输出 JSON：" +
         '{"title":"...","subtitle":"...","closing":"...","slides":[{"title":"...","bullets":["..."]}]}' +
-        " 不要 markdown 代码围栏。使用中文。8-12 页为宜。内容必须服务给定任务，禁止无关行业模板。",
+        " 不要 markdown 代码围栏。使用中文。8-12 页为宜。内容必须服务给定任务，禁止无关行业模板。" +
+        " bullets 必须是完整句子，不得使用待填写或功能一等占位。",
     },
     {
       role: "user",
       content: clampText(contextBlock(ctx), 22000),
+    },
+  ];
+}
+
+function buildSlideRepairMessages(ctx, priorRaw, issues) {
+  const issueLines = buildRepairIssueLines(issues).join("\n");
+  return [
+    {
+      role: "system",
+      content:
+        "你修订演示文稿 JSON 结构。只输出 JSON，不要 markdown 代码围栏。修正占位内容，保留有效结构。",
+    },
+    {
+      role: "user",
+      content: clampText(
+        [
+          contextBlock(ctx),
+          "原 JSON：",
+          priorRaw,
+          "问题：",
+          issueLines,
+          "请输出修订后的完整 JSON。",
+        ].join("\n"),
+        24000
+      ),
     },
   ];
 }
@@ -118,13 +191,17 @@ function buildWebpageMessages(ctx) {
       role: "system",
       content:
         "你撰写单页介绍内容。输出 Markdown（将转为独立 HTML）。使用中文，结构清晰，含标题与要点列表。" +
-        "禁止「项目名称」「功能一」等占位符；必须使用任务与参考材料中的真实名称与表述。",
+        "必须使用任务与参考材料中的真实名称与表述；不得保留未填写字段或模板项。",
     },
     {
       role: "user",
       content: clampText(contextBlock(ctx), 22000),
     },
   ];
+}
+
+function buildWebpageRepairMessages(ctx, priorDraft, issues) {
+  return buildDocumentRepairMessages(ctx, priorDraft, issues);
 }
 
 function requireUsableGoal(ctx) {
@@ -160,24 +237,16 @@ function reviewOptsFromCtx(ctx) {
   };
 }
 
-async function generateDocument(deps) {
-  const ctx = ctxFromDeps(deps);
-  const callModel = deps.callModel;
-  requireUsableGoal(ctx);
-  let md;
-  if (typeof callModel === "function") {
-    md = String(await callModel(buildDocumentMessages(ctx), { taskType: "artifact", temperature: 0.4 }));
-  } else {
-    md =
-      `# ${ctx.title}\n\n## 概述\n\n${ctx.goal}\n\n` +
-      (ctx.subjectRenderedText
-        ? `## 主体背景摘要\n\n${ctx.subjectRenderedText.slice(0, 2000)}\n\n`
-        : "") +
-      (ctx.attachmentText ? `## 材料要点\n\n${ctx.attachmentText.slice(0, 2000)}\n\n` : "") +
-      `## 说明\n\n面向：${ctx.audience || "目标读者"}。用途：${ctx.usage || ctx.purpose || "介绍"}。\n`;
-  }
-  md = String(md || "").trim();
-  assertGeneratedContentUsable(md, reviewOptsFromCtx(ctx));
+async function callStructuredModel(callModel, messages, { repair = false } = {}) {
+  return String(
+    await callModel(messages, {
+      taskType: "artifact",
+      temperature: repair ? STRUCTURED_DOC_REPAIR_TEMPERATURE : STRUCTURED_DOC_TEMPERATURE,
+    })
+  ).trim();
+}
+
+function documentFilesFromMarkdown(md, ctx) {
   if (md.length > 80000) md = md.slice(0, 80000);
   const html = markdownToHtml(md, { title: ctx.title });
   const files = {
@@ -189,6 +258,35 @@ async function generateDocument(deps) {
   } catch {
     /* DOCX optional */
   }
+  return files;
+}
+
+async function draftDocument(deps, repairContext) {
+  const ctx = ctxFromDeps(deps);
+  requireUsableGoal(ctx);
+  const callModel = deps.callModel;
+  let md;
+  const messages =
+    repairContext && repairContext.priorDraft
+      ? buildDocumentRepairMessages(ctx, repairContext.priorDraft, repairContext.issues || [])
+      : buildDocumentMessages(ctx);
+  if (typeof callModel === "function") {
+    md = await callStructuredModel(callModel, messages, { repair: !!repairContext });
+  } else {
+    md =
+      `# ${ctx.title}\n\n## 概述\n\n${ctx.goal}\n\n` +
+      (ctx.subjectRenderedText
+        ? `## 主体背景摘要\n\n${ctx.subjectRenderedText.slice(0, 2000)}\n\n`
+        : "") +
+      (ctx.attachmentText ? `## 材料要点\n\n${ctx.attachmentText.slice(0, 2000)}\n\n` : "") +
+      `## 说明\n\n面向：${ctx.audience || "目标读者"}。用途：${ctx.usage || ctx.purpose || "介绍"}。\n`;
+  }
+  return { md: String(md || "").trim(), ctx, messages };
+}
+
+function finalizeDocument(md, ctx) {
+  assertGeneratedContentUsable(md, reviewOptsFromCtx(ctx));
+  const files = documentFilesFromMarkdown(md, ctx);
   return {
     kind: "document",
     displayFormats: Object.keys(files).map((n) => n.replace(/^artifact\./, "")),
@@ -200,13 +298,22 @@ async function generateDocument(deps) {
   };
 }
 
-async function generatePresentation(deps) {
+async function generateDocument(deps) {
+  const { md, ctx } = await draftDocument(deps, null);
+  return finalizeDocument(md, ctx);
+}
+
+async function draftPresentation(deps, repairContext) {
   const ctx = ctxFromDeps(deps);
   const callModel = deps.callModel;
   requireUsableGoal(ctx);
+  const messages =
+    repairContext && repairContext.priorDraft
+      ? buildSlideRepairMessages(ctx, repairContext.priorDraft, repairContext.issues || [])
+      : buildSlideMessages(ctx);
   let raw;
   if (typeof callModel === "function") {
-    raw = String(await callModel(buildSlideMessages(ctx), { taskType: "artifact", temperature: 0.35 }));
+    raw = await callStructuredModel(callModel, messages, { repair: !!repairContext });
   } else {
     raw = JSON.stringify({
       title: ctx.title,
@@ -223,6 +330,10 @@ async function generatePresentation(deps) {
       ],
     });
   }
+  return { raw: String(raw || "").trim(), ctx, messages };
+}
+
+function finalizePresentation(raw, ctx) {
   let plan;
   try {
     plan = parsePlanJson(raw);
@@ -230,6 +341,7 @@ async function generatePresentation(deps) {
     const e = new Error("模型未返回有效演示结构。");
     e.code = "invalid_slide_structure";
     e.cause = err;
+    e.failureStage = "model_generation";
     throw e;
   }
   const planText = JSON.stringify(plan);
@@ -237,7 +349,7 @@ async function generatePresentation(deps) {
   const files = {};
   let usedPptx = false;
   try {
-    files["artifact.pptx"] = await buildPptx(plan);
+    files["artifact.pptx"] = buildPptx(plan);
     usedPptx = true;
   } catch {
     /* HTML deck fallback */
@@ -257,18 +369,30 @@ async function generatePresentation(deps) {
   };
 }
 
-async function generateWebpage(deps) {
+async function generatePresentation(deps) {
+  const { raw, ctx } = await draftPresentation(deps, null);
+  return finalizePresentation(raw, ctx);
+}
+
+async function draftWebpage(deps, repairContext) {
   const ctx = ctxFromDeps(deps);
   const callModel = deps.callModel;
   requireUsableGoal(ctx);
+  const messages =
+    repairContext && repairContext.priorDraft
+      ? buildWebpageRepairMessages(ctx, repairContext.priorDraft, repairContext.issues || [])
+      : buildWebpageMessages(ctx);
   let md;
   if (typeof callModel === "function") {
-    md = String(await callModel(buildWebpageMessages(ctx), { taskType: "artifact", temperature: 0.4 }));
+    md = await callStructuredModel(callModel, messages, { repair: !!repairContext });
   } else {
     md = `# ${ctx.title}\n\n${ctx.goal}\n\n- ${ctx.purpose || "介绍要点"}\n`;
     if (ctx.attachmentText) md += `\n## 依据材料摘要\n\n${ctx.attachmentText.slice(0, 1500)}\n`;
   }
-  md = String(md || "").trim();
+  return { md: String(md || "").trim(), ctx, messages };
+}
+
+function finalizeWebpage(md, ctx) {
   assertGeneratedContentUsable(md, reviewOptsFromCtx(ctx));
   const html = markdownToHtml(md, { title: ctx.title });
   return {
@@ -283,6 +407,11 @@ async function generateWebpage(deps) {
     generationContext: ctx,
     promptMessages: buildWebpageMessages(ctx),
   };
+}
+
+async function generateWebpage(deps) {
+  const { md, ctx } = await draftWebpage(deps, null);
+  return finalizeWebpage(md, ctx);
 }
 
 async function generateImage(deps) {
@@ -307,6 +436,18 @@ async function generateImage(deps) {
   throw e;
 }
 
+const TEXT_KIND_DRAFTERS = {
+  document: draftDocument,
+  webpage: draftWebpage,
+  presentation: draftPresentation,
+};
+
+const TEXT_KIND_FINALIZERS = {
+  document: (payload, ctx) => finalizeDocument(payload.md, ctx),
+  webpage: (payload, ctx) => finalizeWebpage(payload.md, ctx),
+  presentation: (payload, ctx) => finalizePresentation(payload.raw, ctx),
+};
+
 async function generateByKind(kind, deps) {
   switch (String(kind || "")) {
     case "document":
@@ -325,13 +466,82 @@ async function generateByKind(kind, deps) {
   }
 }
 
+async function generateByKindWithRepair(kind, deps, hooks) {
+  const k = String(kind || "");
+  const drafter = TEXT_KIND_DRAFTERS[k];
+  const finalizer = TEXT_KIND_FINALIZERS[k];
+  if (!drafter || !finalizer) {
+    return generateByKind(kind, deps);
+  }
+
+  let repairContext = null;
+  const maxRepair = typeof hooks.maxRepairAttempts === "number" ? hooks.maxRepairAttempts : 2;
+
+  for (let pass = 0; pass <= maxRepair; pass++) {
+    const payload = await drafter(deps, repairContext);
+    const reviewCtx = payload.ctx;
+    let body = payload.md || payload.raw || "";
+    if (k === "presentation") {
+      try {
+        const plan = JSON.parse(payload.raw || "{}");
+        body = JSON.stringify(plan) + "\n" + (plan.title || "");
+      } catch {
+        body = String(payload.raw || "");
+      }
+    }
+    try {
+      assertGeneratedContentUsable(body, reviewOptsFromCtx(reviewCtx));
+      if (hooks.onDraftValidated) {
+        await hooks.onDraftValidated({
+          pass,
+          draft: body,
+          ctx: reviewCtx,
+          repairContext,
+        });
+      }
+      return finalizer(payload, reviewCtx);
+    } catch (err) {
+      const isPlaceholder = err && err.code === "placeholder_content_rejected";
+      if (hooks.onPlaceholderRejected) {
+        await hooks.onPlaceholderRejected({
+          pass,
+          draft: body,
+          err,
+          ctx: reviewCtx,
+        });
+      }
+      if (!isPlaceholder || pass >= maxRepair) {
+        if (isPlaceholder) err.draft = body;
+        throw err;
+      }
+      repairContext = {
+        priorDraft: k === "presentation" ? payload.raw : payload.md,
+        issues: err.placeholderIssues || [],
+      };
+    }
+  }
+  const e = new Error("生成的内容仍包含未填写部分，暂未保存。你可以重试，或补充更明确的要求。");
+  e.code = "placeholder_content_rejected";
+  throw e;
+}
+
 module.exports = {
   generateByKind,
+  generateByKindWithRepair,
   generateDocument,
   generatePresentation,
   generateWebpage,
   generateImage,
+  draftDocument,
+  draftWebpage,
+  draftPresentation,
+  finalizeDocument,
+  finalizeWebpage,
+  finalizePresentation,
   buildDocumentMessages,
+  buildDocumentRepairMessages,
   buildSlideMessages,
   buildWebpageMessages,
+  STRUCTURED_DOC_TEMPERATURE,
+  MAX_INLINE_REPAIR_PASSES,
 };

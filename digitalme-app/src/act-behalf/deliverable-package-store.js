@@ -285,12 +285,26 @@ function getPackageView(userData, packageId) {
       if (a && a.id && store.artifacts[a.id]) artifacts[a.id] = clone(store.artifacts[a.id]);
     }
   }
+  const generationAttempts = {};
+  const attemptIds = new Set();
+  for (const d of deliverables) {
+    if (d.latestGenerationAttemptId) attemptIds.add(d.latestGenerationAttemptId);
+  }
+  for (const [id, att] of Object.entries(store.generationAttempts || {})) {
+    if ((pkg.deliverableIds || []).includes(att.deliverableId)) {
+      attemptIds.add(id);
+    }
+  }
+  for (const id of attemptIds) {
+    if (store.generationAttempts[id]) generationAttempts[id] = clone(store.generationAttempts[id]);
+  }
   return {
     ok: true,
     package: clone(pkg),
     deliverables,
     versions,
     artifacts,
+    generationAttempts,
     revision: store.revision,
   };
 }
