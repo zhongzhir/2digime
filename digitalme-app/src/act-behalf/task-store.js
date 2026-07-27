@@ -264,12 +264,24 @@ function normalizeTask(input) {
 
 function normalizeDeliverablePlanning(raw) {
   if (!raw || typeof raw !== "object") {
-    return { planId: null, currentDraftVersionId: null, activeConfirmedVersionId: null };
+    return {
+      planId: null,
+      currentDraftVersionId: null,
+      activeConfirmedVersionId: null,
+      plannedMaterialsDigest: null,
+      materialsStale: false,
+      materialsStaleReason: null,
+      materialsStaleAt: null,
+    };
   }
   return {
     planId: raw.planId ? String(raw.planId) : null,
     currentDraftVersionId: raw.currentDraftVersionId ? String(raw.currentDraftVersionId) : null,
     activeConfirmedVersionId: raw.activeConfirmedVersionId ? String(raw.activeConfirmedVersionId) : null,
+    plannedMaterialsDigest: raw.plannedMaterialsDigest ? String(raw.plannedMaterialsDigest) : null,
+    materialsStale: !!raw.materialsStale,
+    materialsStaleReason: raw.materialsStaleReason ? String(raw.materialsStaleReason) : null,
+    materialsStaleAt: raw.materialsStaleAt ? String(raw.materialsStaleAt) : null,
   };
 }
 

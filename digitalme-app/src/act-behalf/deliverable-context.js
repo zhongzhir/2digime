@@ -216,7 +216,7 @@ function findPlaceholderIssues(text) {
   return hits;
 }
 
-function assertGeneratedContentUsable(text, { kind, goal, contextClass, evidenceCorpus } = {}) {
+function assertGeneratedContentUsable(text, { kind, goal, contextClass, evidenceCorpus, claimPosturePresentation } = {}) {
   const body = String(text || "").trim();
   if (!body || body.length < 12) {
     const e = new Error("模型未返回有效内容。");
@@ -243,6 +243,12 @@ function assertGeneratedContentUsable(text, { kind, goal, contextClass, evidence
     } = require("./subject-context-engine");
     assertRepresentationFactsGrounded(body, evidenceCorpus || "", contextClass);
   }
+  const { assertFormalArtifactPresentation } = require("./subject-context-engine");
+  assertFormalArtifactPresentation(body, {
+    contextClass,
+    evidenceCorpus: evidenceCorpus || "",
+    claimPosturePresentation: claimPosturePresentation || "natural",
+  });
   void kind;
   return true;
 }

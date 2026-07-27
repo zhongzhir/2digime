@@ -34,7 +34,13 @@ function contextBlock(ctx) {
   const policy = (ctx.subjectAssembly && ctx.subjectAssembly.assemblyPolicy) || {
     allowAiExplorationBlock: !!ctx.allowAiExplorationBlock,
   };
-  const guidance = promptGuidanceForClass(contextClass, policy);
+  const claimPosturePresentation =
+    ctx.claimPosturePresentation ||
+    (policy && policy.claimPosturePresentation) ||
+    "natural";
+  const guidance = promptGuidanceForClass(contextClass, policy, {
+    claimPosturePresentation,
+  });
 
   const subjectBlock = (() => {
     if (ctx.subjectRenderedText && String(ctx.subjectRenderedText).trim()) {
@@ -49,11 +55,11 @@ function contextBlock(ctx) {
   })();
 
   const exploreHint = ctx.allowAiExplorationBlock
-    ? "若需要推演，请单独成段并标明主张姿态（inferred / hypothetical），不得写成 confirmed 主体事实。"
-    : "本次不允许开放探索块；不要把无依据内容写成 confirmed 事实。允许少量 inferred，须标明分析。";
+    ? "若需要推演，请用自然语言写出分析或待验证方案（例如「未来可考虑」「一种待验证的方案是」），不要写入方括号内部标签。"
+    : "本次不展开开放探索块；不要把无依据内容写成已确认事实。必要时可用自然语言作少量推断。";
 
   return [
-    `任务情境（contextClass=${contextClass}）：${guidance}`,
+    `任务情境（contextClass=${contextClass}；claimPosturePresentation=${claimPosturePresentation}）：${guidance}`,
     `任务目标：${ctx.goal || "（缺少任务目标，请勿编造无关业务）"}`,
     ctx.audience ? `受众：${ctx.audience}` : "",
     ctx.usage ? `用途：${ctx.usage}` : "",
@@ -63,11 +69,11 @@ function contextBlock(ctx) {
     ctx.purpose ? `该成果目的：${ctx.purpose}` : "",
     subjectBlock,
     ctx.attachmentText
-      ? "参考材料（必须依据；evidenceKind=task_material；ownership=task_owned；主张姿态多为 attributed；不得升格为主体 confirmed）：\n" +
+      ? "参考材料（必须依据；evidenceKind=task_material；ownership=task_owned；可写「根据本次材料」；不得升格为主体已确认事实）：\n" +
         ctx.attachmentText
-      : "（本次未提供参考材料正文）",
+      : "（本次未提供参考材料正文。禁止写「根据公开报告/数据显示/研究表明」等无来源归因套话。）",
     exploreHint,
-    "要求：紧扣上述 Digital Me / 任务上下文；禁止输出与任务无关的虚构公司或融资故事当作 confirmed；禁止占位符如「项目名称」「CEO 姓名」「XX%」「功能一」。",
+    "要求：紧扣上述 Digital Me / 任务上下文；正式正文禁止方括号元标签；禁止输出与任务无关的虚构公司或融资故事当作已确认事实；禁止占位符如「项目名称」「CEO 姓名」「XX%」「功能一」。",
   ]
     .filter(Boolean)
     .join("\n");

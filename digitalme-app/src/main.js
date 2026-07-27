@@ -236,6 +236,25 @@ function createWindow() {
   void rendererEntryRuntime.applyInitialEntry().catch((err) => {
     console.error("[renderer-entry] initial load failed", err && err.stack ? err.stack : err);
   });
+  win.webContents.on("context-menu", (_event, params) => {
+    const editable =
+      params.isEditable ||
+      params.inputFieldType === "plainText" ||
+      params.inputFieldType === "password" ||
+      params.editFlags;
+    if (!editable) return;
+    const flags = params.editFlags || {};
+    const menu = Menu.buildFromTemplate([
+      { role: "undo", label: "撤销", enabled: !!flags.canUndo },
+      { type: "separator" },
+      { role: "cut", label: "剪切", enabled: !!flags.canCut },
+      { role: "copy", label: "复制", enabled: !!flags.canCopy },
+      { role: "paste", label: "粘贴", enabled: !!flags.canPaste },
+      { type: "separator" },
+      { role: "selectAll", label: "全选", enabled: !!flags.canSelectAll },
+    ]);
+    menu.popup({ window: win });
+  });
   if (process.argv.includes("--dev")) win.webContents.openDevTools();
   const senderId = String(win.webContents.id);
   const webContentsId = win.webContents.id;
@@ -2229,10 +2248,32 @@ async function saveTaskPlanPointers(userData, taskId, { deliverablePlanning, aud
   if (planningInvocation) {
     audit = deliverablePlanConsistency.appendPlanningInvocation({ audit }, planningInvocation);
   }
+  const prevPtr = got.task.deliverablePlanning || {};
+  const incoming = deliverablePlanning || {};
+  const mergedPlanning = {
+    ...deliverablePlanConsistency.pointersFromRecord(
+      {
+        planId: incoming.planId != null ? incoming.planId : prevPtr.planId,
+        currentDraftVersionId:
+          incoming.currentDraftVersionId != null
+            ? incoming.currentDraftVersionId
+            : prevPtr.currentDraftVersionId,
+        activeConfirmedVersionId:
+          incoming.activeConfirmedVersionId != null
+            ? incoming.activeConfirmedVersionId
+            : prevPtr.activeConfirmedVersionId,
+      },
+      // Prefer explicit incoming materials fields; otherwise keep prior task values.
+      Object.prototype.hasOwnProperty.call(incoming, "plannedMaterialsDigest") ||
+        Object.prototype.hasOwnProperty.call(incoming, "materialsStale")
+        ? incoming
+        : prevPtr
+    ),
+  };
   const next = {
     ...got.task,
     ...(extraPatch || {}),
-    deliverablePlanning,
+    deliverablePlanning: mergedPlanning,
     audit,
   };
   return actBehalfStore.saveTask(userData, next);

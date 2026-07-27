@@ -515,45 +515,71 @@ function finalizeSubjectAssembly(assembly, opts) {
   };
 }
 
-function promptGuidanceForClass(contextClass, policy) {
+const CLAIM_POSTURE_PRESENTATIONS = Object.freeze(["natural", "annotated_review"]);
+const DEFAULT_CLAIM_POSTURE_PRESENTATION = "natural";
+
+const DIGITAL_ME_CORE_ANCHOR =
+  "Digital Me 核心定义（必须保持，不得改写为其他品类）：个人数字主体层；主体性；用户所有；本地优先；平台中立；可迁移、可授权、可持续增强。" +
+  "DID / 联邦学习 / 区块链等仅可作为待评估技术选项（hypothetical），不得未经依据重定义为区块链身份平台、DID/VC 产品、IPFS/跨链项目，或普通数字孪生/数据管理平台。";
+
+function claimPosturePresentationMode(opts) {
+  const raw =
+    (opts && opts.claimPosturePresentation) ||
+    (opts && opts.policy && opts.policy.claimPosturePresentation) ||
+    DEFAULT_CLAIM_POSTURE_PRESENTATION;
+  return CLAIM_POSTURE_PRESENTATIONS.includes(raw) ? raw : DEFAULT_CLAIM_POSTURE_PRESENTATION;
+}
+
+function promptGuidanceForClass(contextClass, policy, opts) {
   const c = contextClass || "execution";
   const allowExplore = !!(policy && policy.allowAiExplorationBlock);
+  const presentation = claimPosturePresentationMode({ ...opts, policy });
+  const natural =
+    presentation === "natural"
+      ? "正式成果用自然语言表达边界（如「目前尚未确认」「未来可考虑」「一种待验证的方案是」「根据本次材料」「从现有信息推断」）。" +
+        "禁止在正文写入方括号元标签，例如 [已确认]、[规划目标]、[分析认为]、[AI建议/待验证]、[假设待验证]。" +
+        "主张姿态仅作内部治理；不要每句机械附标签。"
+      : "审阅标注模式：可用简短姿态提示，但仍避免密集方括号标签。";
+
   const posture =
-    "主张姿态（Claim Posture）：confirmed=已确认事实/已确认判断（须有 subject_owned 或 task_material 明确证据）；" +
-    "attributed=来自本次材料/外部资料（可引用，不自动代表本人终身事实）；" +
-    "inferred=AI 分析推断（用「分析认为/可能/意味着」）；" +
-    "hypothetical=开放假设/方案（用「可考虑/假设/可能/待验证」）。" +
-    "没有来源的内容不得写成 confirmed，但允许作为 inferred 或 hypothetical。不要追求「每句话必须有出处」。";
+    "内部主张姿态：confirmed=已确认事实/判断（须有 subject_owned 或 task_material 证据）；" +
+    "attributed=来自本次材料/外部资料且必须有真实来源引用；" +
+    "inferred=AI 分析推断；hypothetical=开放假设。" +
+    "没有来源不得写成 confirmed 或 attributed，但允许 inferred / hypothetical。" +
+    "禁止伪造「根据公开报告 / 数据显示 / 研究表明」等无来源套话。" +
+    natural;
 
   const byClass = {
     representation:
-      "情境=代表表达。confirmed/attributed 可用；inferred 少量且标明分析；hypothetical 仅作建议/待验证，不能写成现状。" +
-      "禁止无依据内容以 confirmed 方式描述团队、融资、用户量、收入、客户、已实现能力与里程碑。" +
+      "情境=代表表达。可用已确认信息与材料依据；少量分析须用自然推断语气；假设仅作建议/待验证，不能写成现状。" +
+      "禁止无依据内容以已确认口吻描述团队、融资、用户量、收入、客户、已实现能力与里程碑。" +
       "缺事实时写「尚未提供 / 待确认」，不得补造为已发生事实。" +
       posture,
     decision_support:
-      "情境=辅助决策。confirmed 作锚点；inferred 与 hypothetical 均允许。" +
-      "AI 建议必须标明为建议，不得冒充本人既有判断。Judgment Candidate 仅作低权线索。" +
+      "情境=辅助决策。已确认事实作锚点；分析与假设均允许。" +
+      "AI 建议须用建议语气，不得冒充本人既有判断。Judgment Candidate 仅作低权线索。" +
       posture,
     exploration:
-      "情境=开放探索。以 inferred / hypothetical 为主要输出；事实只作锚点。" +
-      "不要求字字来自记忆；允许大胆提出 memory 中不存在的新方案，但不得把假设写回 subject_fact / confirmed。" +
+      "情境=开放探索。以分析与假设为主要输出；事实只作锚点。" +
+      DIGITAL_ME_CORE_ANCHOR +
+      "请给出多个不同方向的方案，并分别说明价值、风险与验证方式；不要只套融资模板。" +
+      "不要求字字来自记忆；允许 memory 中不存在的新方案，但不得把假设写回 subject_fact / confirmed。" +
       posture,
     creation:
-      "情境=创作生成。创意表达自由（多为 ai_generated / hypothetical 语气）。" +
+      "情境=创作生成。创意表达自由。" +
       "不得创造 Owner 的身份事实与项目经营事实。" +
       posture,
     execution:
-      "情境=保守执行。按目标与约束完成，可做必要推理（inferred）。" +
+      "情境=保守执行。按目标与约束完成，可做必要推理。" +
       "不主动创造代表 Owner 的事实或长期立场。" +
       posture,
   };
 
   let extra = byClass[c] || byClass.execution;
   if (allowExplore && c !== "representation") {
-    extra += "允许单独给出「本次分析/推演」段落，并标明非本人既有结论。";
+    extra += "允许单独给出本次分析/推演段落，并用自然语言标明非本人既有结论。";
   } else if (c === "representation") {
-    extra += "禁止把开放探索伪装成已确认主体观点。";
+    extra += "禁止把开放探索伪装成已确认主体观点；仍可用自然语言提出建议与待验证方案。";
   }
   return extra;
 }
@@ -618,6 +644,55 @@ function findUnsupportedFabricatedFacts(text, evidenceCorpus) {
   return hits;
 }
 
+const INTERNAL_CLAIM_TAG_RE =
+  /\[(?:已确认|规划目标|分析认为|AI建议\/?待验证|假设待验证|AI建议|待验证)\]/g;
+
+const FAKE_ATTRIBUTION_RE =
+  /根据(?:公开|行业)?报告|数据显示|研究表明|据报道|引用公开报告|公开统计显示|市场报告指出/;
+
+const PRODUCT_REDEFINITION_RE =
+  /(?:Digital\s*Me|本项目|该产品).{0,40}(?:是|定位为|核心是).{0,40}(?:区块链身份|DID\s*\/?\s*VC|IPFS|跨链|数字孪生平台|数据管理平台)/i;
+
+function findInternalClaimTags(text) {
+  const body = String(text || "");
+  const hits = [];
+  const re = new RegExp(INTERNAL_CLAIM_TAG_RE.source, "g");
+  let m;
+  while ((m = re.exec(body)) !== null) hits.push(m[0]);
+  return hits;
+}
+
+function findFakeAttributedClaims(text, evidenceCorpus) {
+  const body = String(text || "");
+  const corpus = String(evidenceCorpus || "");
+  const hits = [];
+  const re = new RegExp(FAKE_ATTRIBUTION_RE.source, "g");
+  let m;
+  while ((m = re.exec(body)) !== null) {
+    const start = Math.max(0, m.index - 60);
+    const end = Math.min(body.length, m.index + m[0].length + 80);
+    const window = body.slice(start, end);
+    const hasRealSource =
+      /根据本次材料|材料记载|附件《|【参考材料/.test(window) ||
+      (corpus.length > 20 &&
+        (/出处|sourceRef|参考材料/.test(corpus) ||
+          (m[0].length >= 4 && corpus.includes(m[0].slice(0, 4)) && /报告|研究|数据/.test(corpus))));
+    // Stock phrases without concrete material grounding are fake attribution.
+    if (!hasRealSource) hits.push({ snippet: m[0], window: window.slice(0, 80) });
+  }
+  return hits;
+}
+
+function findProductRedefinitionDrift(text, contextClass) {
+  if (contextClass !== "exploration" && contextClass !== "representation") return [];
+  const body = String(text || "");
+  const hits = [];
+  const re = new RegExp(PRODUCT_REDEFINITION_RE.source, "gi");
+  let m;
+  while ((m = re.exec(body)) !== null) hits.push(m[0]);
+  return hits;
+}
+
 function assertRepresentationFactsGrounded(text, evidenceCorpus, contextClass) {
   if (contextClass !== "representation") return true;
   const hits = findUnsupportedFabricatedFacts(text, evidenceCorpus);
@@ -628,6 +703,35 @@ function assertRepresentationFactsGrounded(text, evidenceCorpus, contextClass) {
   e.code = "ungrounded_representation_facts";
   e.hits = hits;
   throw e;
+}
+
+function assertFormalArtifactPresentation(text, opts) {
+  const presentation = claimPosturePresentationMode(opts || {});
+  const body = String(text || "");
+  if (presentation === "natural") {
+    const tags = findInternalClaimTags(body);
+    if (tags.length) {
+      const e = new Error("正式成果含内部主张标签，未保存。请改用自然语言表述。");
+      e.code = "internal_claim_tags_rejected";
+      e.tags = tags;
+      throw e;
+    }
+  }
+  const fake = findFakeAttributedClaims(body, (opts && opts.evidenceCorpus) || "");
+  if (fake.length) {
+    const e = new Error("出现无真实来源的归因表述（如「根据公开报告」），未保存为成果。");
+    e.code = "fake_attribution_rejected";
+    e.hits = fake;
+    throw e;
+  }
+  const drift = findProductRedefinitionDrift(body, opts && opts.contextClass);
+  if (drift.length) {
+    const e = new Error("探索/表达成果将 Digital Me 核心定位替换为其他品类，未保存为成果。");
+    e.code = "product_redefinition_rejected";
+    e.hits = drift;
+    throw e;
+  }
+  return true;
 }
 
 function isExplorationHedged(text) {
@@ -653,12 +757,20 @@ module.exports = {
   tagAttachmentRefs,
   finalizeSubjectAssembly,
   promptGuidanceForClass,
+  claimPosturePresentationMode,
   findUnsupportedFabricatedFacts,
+  findInternalClaimTags,
+  findFakeAttributedClaims,
+  findProductRedefinitionDrift,
   assertRepresentationFactsGrounded,
+  assertFormalArtifactPresentation,
   isExplorationHedged,
   isHedgedClaim,
   sha256Text,
   FABRICATED_FACT_PATTERNS,
   CLAIM_POSTURES,
+  CLAIM_POSTURE_PRESENTATIONS,
+  DEFAULT_CLAIM_POSTURE_PRESENTATION,
+  DIGITAL_ME_CORE_ANCHOR,
   HEDGE_RE,
 };

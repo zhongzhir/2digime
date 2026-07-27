@@ -5434,7 +5434,7 @@ async function persistActReferenceMaterials(taskId) {
   if (!taskId || !window.digitalMe.actBehalfSave) return;
   const materials = (actBehalfState.attachedFiles || []).filter((f) => f && f.ok);
   try {
-    await window.digitalMe.actBehalfSave({
+    const res = await window.digitalMe.actBehalfSave({
       taskId,
       referenceMaterials: materials.map((f) => ({
         id: f.id,
@@ -5452,6 +5452,12 @@ async function persistActReferenceMaterials(taskId) {
       request: ($("act-request") && $("act-request").value.trim()) || undefined,
       status: "draft",
     });
+    if (res && (res.materialsStale || (res.task && res.task.deliverablePlanning && res.task.deliverablePlanning.materialsStale))) {
+      setActProgress("参考材料已变化，请重新形成预计交付后再生成。");
+      if (typeof restoreActDeliverablePlan === "function") {
+        await restoreActDeliverablePlan(taskId);
+      }
+    }
   } catch {
     /* non-blocking */
   }
@@ -7138,6 +7144,19 @@ async function handleGenerateFromPlan() {
     return;
   }
 
+  if (res && res.code === "plan_materials_stale") {
+    setActProgress((res && res.message) || "参考材料已变化，请重新形成预计交付后再生成。");
+    await restoreActDeliverablePlan(actBehalfState.taskId);
+    if (window.DeliverablePlannerUi && window.DeliverablePlannerUi.updatePrimaryGenerateButton) {
+      window.DeliverablePlannerUi.updatePrimaryGenerateButton({
+        mode: "generate",
+        busy: false,
+        disabled: true,
+      });
+    }
+    return;
+  }
+
   if (res && res.revision) actBehalfState.planRevision = res.revision;
   if (res && res.planView && window.DeliverablePlannerUi) {
     window.DeliverablePlannerUi.renderPlanView(res.planView);
@@ -7199,6 +7218,11 @@ async function handleGenerationPanelClick(ev) {
     }
     setActProgress("正在重新生成…");
     const res = await window.digitalMe.actBehalfGenerateDeliverable({ packageId, deliverableId });
+    if (res && res.code === "plan_materials_stale") {
+      setActProgress(res.message || "参考材料已变化，请重新形成预计交付后再生成。");
+      await restoreActDeliverablePlan(actBehalfState.taskId);
+      return;
+    }
     setActProgress((res && res.message) || (res && res.ok ? "已重新生成。" : "重新生成未成功。"));
     await refreshActGenerationPanel(packageId);
     await refreshActDeliverableResults(actBehalfState.taskId);

@@ -3417,3 +3417,6 @@ body {
   font-size: 12px;
   padding: 2px 8px;
 }
+
+#act-plan-status.is-materials-stale { color: #8a4b08; font-weight: 600; }
+

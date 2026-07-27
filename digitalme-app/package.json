@@ -38,6 +38,7 @@
     "test:crt-mvp-01.1-package-dir": "node scripts/test-crt-mvp-01.1-package-dir.cjs",
     "test:crt-mvp-02": "node scripts/test-crt-mvp-02-subject-context-engine.cjs",
     "test:crt-mvp-02.1": "node scripts/test-crt-mvp-02.1-planner-claim-posture.cjs",
+    "test:crt-mvp-02.2": "node scripts/test-crt-mvp-02.2-runtime-defects.cjs",
     "test:dvl2-03-generation-acceptance": "node scripts/run-dvl2-03-generation-acceptance.cjs",
     "test:cli": "node scripts/test-cli.cjs",
     "test:cli-enhanced": "node scripts/test-cli-enhanced.cjs",

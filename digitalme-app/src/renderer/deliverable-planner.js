@@ -242,19 +242,22 @@
       return;
     }
     panel.classList.remove("hidden");
+    const materialsStale = !!(view.materialsStale || (view.statusBanner && /参考材料已变化/.test(String(view.statusBanner))));
     if ($("act-plan-status")) {
-      // One-line task understanding only; avoid internal readiness jargon.
       const u = view.version.understanding || {};
-      const one =
+      const understandingLine =
         u.summary ||
         u.oneLineSummary ||
         (u.goal && (u.goal.value || u.goal)) ||
-        view.statusBanner ||
         "";
+      // Stale materials banner must outrank ordinary understanding text.
+      const one = materialsStale
+        ? view.statusBanner || "参考材料已变化，请重新形成预计交付后再生成。"
+        : understandingLine || view.statusBanner || "";
       $("act-plan-status").textContent = one ? String(one) : "";
+      $("act-plan-status").classList.toggle("is-materials-stale", materialsStale);
     }
     if ($("act-plan-readiness")) {
-      // Hide pre-generation stats / internal readiness from ordinary UI.
       $("act-plan-readiness").textContent = "";
     }
     renderUnderstanding(view.version.understanding);
@@ -265,6 +268,10 @@
       fillItemFields(itemsRoot, items);
       bindItemControls(itemsRoot);
     }
+    updatePrimaryGenerateButton({
+      mode: "generate",
+      disabled: materialsStale,
+    });
     if (typeof global.__digitalMeRefreshDeliverableResults === "function") {
       global.__digitalMeRefreshDeliverableResults(view);
     }

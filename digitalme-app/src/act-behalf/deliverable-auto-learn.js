@@ -320,6 +320,21 @@ function extractLearningItems({ title, kind, excerpt, source, evidenceCorpus }, 
     });
   }
 
+  // Explicit judgment harvest: do not rely on attachment-seeded UNIQUE tokens.
+  const judgmentScan = String(excerpt || "").replace(/\s+/g, " ");
+  const judgmentMatch = judgmentScan.match(
+    /[^。！？\n]{0,40}(?:优先验证|优先[^。]{0,40}而非|应该先|在当前阶段[^。]{0,80}而非)[^。！？\n]{0,80}/
+  );
+  if (judgmentMatch && !base.some((b) => b.layer === "semantic" && JUDGMENT_RE.test(b.text))) {
+    base.push({
+      id: "ex_judgment_harvest",
+      layer: "semantic",
+      text: truncate(judgmentMatch[0].trim(), 200),
+      confidence: "low",
+      oneOffLikely: false,
+    });
+  }
+
   void evidenceCorpus;
   if (typeof callModel === "function") {
     return Promise.resolve(callModel)

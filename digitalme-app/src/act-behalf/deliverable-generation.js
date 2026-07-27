@@ -31,6 +31,26 @@ function newArtifactId() {
   return newId("aref_");
 }
 
+function assertTaskMaterialsFresh(userData, taskId) {
+  if (!taskId) return { ok: true };
+  try {
+    const got = actBehalfStore.getTask(userData, taskId, { heal: false });
+    if (!got || !got.ok || !got.task) return { ok: true };
+    const ptr = got.task.deliverablePlanning || {};
+    if (ptr.materialsStale) {
+      return {
+        ok: false,
+        code: "plan_materials_stale",
+        message: "参考材料已变化，请重新形成预计交付后再生成。",
+        materialsStale: true,
+      };
+    }
+  } catch {
+    /* ignore */
+  }
+  return { ok: true };
+}
+
 function mimeForName(name) {
   if (name.endsWith(".md")) return "text/markdown";
   if (name.endsWith(".html")) return "text/html";
@@ -139,6 +159,9 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
   if (deliverable.planDisposition === "removed") {
     return { ok: false, code: "deliverable_removed", message: "该项已从计划中移除。" };
   }
+
+  const materialsGate = assertTaskMaterialsFresh(userData, pkg.taskId);
+  if (!materialsGate.ok) return materialsGate;
 
   const attemptId = newAttemptId();
   const startedAt = nowIso();
@@ -371,6 +394,7 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
           produced.generationContext.subjectAssembly.assemblyPolicyDigest) ||
         null,
       claimPostures: ["confirmed", "attributed", "inferred", "hypothetical"],
+      claimPosturePresentation: "natural",
       sourceRefs: (produced.generationContext && produced.generationContext.attachmentRefs
         ? produced.generationContext.attachmentRefs
             .filter((r) => r && r.included)
@@ -498,6 +522,8 @@ async function generateDeliverablePackage(userData, { packageId }, deps) {
   if (!pkg || pkg.softDeletedAt) {
     return { ok: false, code: "package_not_found", message: "未找到成果包。" };
   }
+  const materialsGate = assertTaskMaterialsFresh(userData, pkg.taskId);
+  if (!materialsGate.ok) return materialsGate;
   const deliverables = (pkg.deliverableIds || [])
     .map((id) => store.deliverables[id])
     .filter((d) => d && d.planDisposition === "included");

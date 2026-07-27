@@ -19,15 +19,46 @@ function emptyDeliverablePlanning() {
     planId: null,
     currentDraftVersionId: null,
     activeConfirmedVersionId: null,
+    plannedMaterialsDigest: null,
+    materialsStale: false,
+    materialsStaleReason: null,
+    materialsStaleAt: null,
   };
 }
 
-function pointersFromRecord(record) {
-  if (!record) return emptyDeliverablePlanning();
+function materialsFieldsFrom(source) {
+  if (!source || typeof source !== "object") {
+    return {
+      plannedMaterialsDigest: null,
+      materialsStale: false,
+      materialsStaleReason: null,
+      materialsStaleAt: null,
+    };
+  }
+  return {
+    plannedMaterialsDigest: source.plannedMaterialsDigest
+      ? String(source.plannedMaterialsDigest)
+      : null,
+    materialsStale: !!source.materialsStale,
+    materialsStaleReason: source.materialsStaleReason
+      ? String(source.materialsStaleReason)
+      : null,
+    materialsStaleAt: source.materialsStaleAt ? String(source.materialsStaleAt) : null,
+  };
+}
+
+function pointersFromRecord(record, preserveMaterialsFrom) {
+  if (!record) {
+    return {
+      ...emptyDeliverablePlanning(),
+      ...materialsFieldsFrom(preserveMaterialsFrom),
+    };
+  }
   return {
     planId: record.planId || null,
     currentDraftVersionId: record.currentDraftVersionId || null,
     activeConfirmedVersionId: record.activeConfirmedVersionId || null,
+    ...materialsFieldsFrom(preserveMaterialsFrom != null ? preserveMaterialsFrom : record),
   };
 }
 
@@ -314,7 +345,7 @@ function reconcileTaskAndPlans({ task, plansForTask }) {
     }
   }
 
-  const nextPlanning = pointersFromRecord(working);
+  const nextPlanning = pointersFromRecord(working, prevPointers);
   let safeTaskPatch = {};
   if (
     prevPointers.planId !== nextPlanning.planId ||
