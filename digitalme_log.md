@@ -5,6 +5,50 @@
 
 ---
 
+## 2026-07-27 IDCOLLAB-MIN-01 最小行动授权与参与方语义接线 · 实施完成
+
+### 本次目标
+
+按 Owner 已确认决策，实现单主体做事链的最小身份上下文、本地授权主表、快照锁定、revoke fail-closed，以及高级详情最小入口；不改变普通用户一次点击生成主流程。
+
+### Owner 已确认决策（不得再上抛）
+
+1. `representedSubjectId = Owner 本人`；
+2. 独立轻量本地 `AuthorizationRecord` 主表；
+3. revoke = 受控 harness + 高级详情「撤销本次授权」。
+
+### 本次完成
+
+1. 新增 `action-identity-schema.js` / `action-identity.js` / `authorization-store.js`；
+2. 接线 Task / PlanVersion / DeliverablePackage / DeliverableVersion / Learning；
+3. `planConfirmed` 时锁定身份快照并授予任务级授权；prepare 路径对缺字段旧确认计划幂等回填；
+4. 生成 / 重新生成 / 接受 / 学习写回 fail-closed 校验授权；
+5. preload/IPC：`actBehalf:getActionIdentity`、`actBehalf:revokeAuthorization`；
+6. 高级详情展示身份摘要 +「撤销本次授权」；
+7. 合同测试覆盖 A–H（含伪造 owner、revoke、legacy、重启）；
+8. 回归：`test:dvl2-03-one-click` / `generation` / `dvl2-04-auto-learn` 全绿。
+
+### 状态结论
+
+```text
+implemented / codex_verified / ready_for_owner_runtime_acceptance
+```
+
+### 重要边界
+
+1. **不得**提前标 `owner_runtime_accepted` / `accepted_as_implemented`；
+2. **不得**开启外部协作 / Collaboration Runtime / Digital Org；
+3. **不得** push；
+4. `CRT_RUNTIME_AUDIT_20260726.md` 未纳入提交；stash 保留。
+
+### 待办事项
+
+1. Owner 真机验收 IDCOLLAB-MIN-01（场景 A–H）；
+2. 不得开始下一阶段身份协作功能；
+3. 不得 push。
+
+---
+
 ## 2026-07-27 IDCOLLAB-MIN-01 最小行动授权与参与方语义接线规格收口
 
 ### 本次目标

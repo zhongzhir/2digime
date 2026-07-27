@@ -2,9 +2,12 @@
 
 版本：v0.1.2
 日期：2026-07-27
-状态：`specified` / `codex_review_passed` / `ready_for_owner_acceptance`
-实施：`not_started`
-implementation_authorized：`false`
+状态：`implemented` / `codex_verified` / `ready_for_owner_runtime_acceptance`
+实施：`implemented`
+implementation_authorized：`true`
+owner_runtime_accepted：`false`
+accepted_as_implemented：`false`
+实施分支：`codex/idcollab-min-01-action-identity`
 上位依据：
 - [`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)（当前最高架构原则）
 - [`digitalme_phase1_task_DVL2-00_product_and_data_contracts_v0.1.md`](digitalme_phase1_task_DVL2-00_product_and_data_contracts_v0.1.md)（DVL2 上位合同）
@@ -12,7 +15,7 @@ implementation_authorized：`false`
 - [`docs/design/digitalme_crt_v0.2_subject_context_engine_spec.md`](docs/design/digitalme_crt_v0.2_subject_context_engine_spec.md)（CRT v0.2 Subject Context Engine）
 - [`DigitalMe_identity_collaboration_plan_v0.2_2026-07-22.md`](DigitalMe_identity_collaboration_plan_v0.2_2026-07-22.md)（身份与协作长期规划）
 
-> **正式边界**：本文只定义单主体做事链的最小身份、参与方与授权语义，使现有 `Task → Plan → DeliverablePackage → DeliverableVersion → Learning` 具备可审计、可扩展的主体与责任表达。**本文不是**外部协作运行时、多人协作产品、Digital Org、Agent 市场或完整 Collaboration Runtime 的实施授权。未经 Owner 接受，不得标 `owner_accepted` / `frozen_for_implementation` / `implemented`。
+> **正式边界**：本文定义并记录单主体做事链的最小身份、参与方与授权语义实现证据。**本文不是**外部协作运行时、多人协作产品、Digital Org、Agent 市场或完整 Collaboration Runtime 的实施授权。工程完成 ≠ Owner 真机验收；**不得**提前标 `owner_runtime_accepted` / `accepted_as_implemented`。
 
 ---
 
@@ -773,11 +776,46 @@ identityConfidence = inferred_default_single_subject
 
 ### 12.4 最终结论
 
-本文 v0.1.2 通过 Codex 独立复核，状态提升为：
+本文 v0.1.2 曾通过 Codex 独立复核；Owner 已确认实施决策并授权实现。
+
+### 12.5 实施证据（2026-07-27）
+
+Owner 已确认并不得再上抛：
+
+1. `representedSubjectId = Owner 本人`（无项目/组织切换 UI）；
+2. 独立轻量本地 `AuthorizationRecord` 主表（`<userData>/authorizations.json`）；
+3. revoke = 受控 harness + 高级详情「撤销本次授权」。
+
+实现落点：
+
+| 模块 | 路径 |
+|------|------|
+| Schema | `digitalme-app/src/act-behalf/action-identity-schema.js` |
+| Identity helpers | `digitalme-app/src/act-behalf/action-identity.js` |
+| Authorization store | `digitalme-app/src/act-behalf/authorization-store.js` |
+| Plan confirm 锁定 | `deliverable-planner.js` / `deliverable-confirm-and-generate.js` |
+| Package / Version | `deliverable-package-prepare.js` / `deliverable-generation.js` |
+| Learning | `deliverable-auto-learn.js` |
+| IPC / preload | `main.js` / `preload.js` |
+| 高级详情 UI | `renderer/deliverable-planner.js` / `renderer/app.js` |
+| 合同测试 | `scripts/test-idcollab-min-01-contracts.cjs` |
+
+自动化：
 
 ```text
-specified / codex_review_passed / ready_for_owner_acceptance / not_started
+npm run test:idcollab-min-01     → 11 passed
+npm run test:dvl2-03-one-click   → 6 passed
+npm run test:dvl2-03-generation  → 6 passed
+npm run test:dvl2-04-auto-learn  → 6 passed
 ```
+
+当前状态：
+
+```text
+implemented / codex_verified / ready_for_owner_runtime_acceptance
+```
+
+**不得**提前标记 `owner_runtime_accepted` / `accepted_as_implemented`。不得 push。不得开始外部协作或下一阶段身份协作功能。
 
 ---
 
@@ -792,6 +830,8 @@ Owner 若接受并冻结本规格，后续实施只允许：
 5. 增加合同测试与 Electron 验收；
 6. 不得顺带开启公网协作、Digital Org、支付、Agent 市场或完整 Collaboration Runtime。
 
+> 注：上表边界已在本轮实现中遵守；本节保留为历史合同表述。
+
 ---
 
 ## 14. 修订记录
@@ -801,5 +841,6 @@ Owner 若接受并冻结本规格，后续实施只允许：
 | v0.1.0 | 2026-07-27 | 初稿：定义最小主体、参与方、授权、快照、legacy 与验收面 |
 | v0.1.1 | 2026-07-27 | Codex 独立复核后收敛：不建 Participant Store、授权采用本地主表 + 引用、强化 legacy 标记与分层职责 |
 | v0.1.2 | 2026-07-27 | 吸收独立复核补强：Task 缓存字段非权威、PlanVersion 锁定时点、DVL2-00 授权关系、学习写回主体与 revoke 验收入口 |
+| v0.1.2-impl | 2026-07-27 | 实施完成：状态改为 `implemented` / `codex_verified` / `ready_for_owner_runtime_acceptance`；记录实现证据与回归结果 |
 
 **文档结束**

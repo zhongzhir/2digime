@@ -2,7 +2,7 @@
 
 版本：v0.4
 状态：持续更新
-最后更新：2026-07-27（IDCOLLAB-MIN-01 规格完成并经 Codex 独立复核 → `ready_for_owner_acceptance`；DVL2-03 已 `owner_runtime_accepted`；不得 push）
+最后更新：2026-07-27（IDCOLLAB-MIN-01 已实现并 codex_verified → `ready_for_owner_runtime_acceptance`；DVL2-03 已 `owner_runtime_accepted`；不得 push）
 
 > **当前产品主线（2026-07-26）**：**第二纵向闭环** — 多模态成果包交付与渐进式主体构建。第一纵向闭环已 `accepted` / `completed`。
 > **最高架构与研发原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)（**v0.1.1 `active`**）。
@@ -21,7 +21,7 @@
 > 2. **BUG1 #6** = 七模块渐进式数字之我构建框架。
 > 3. 首个正式验收场景 = 为一个项目生成完整对外介绍成果包。
 > 4. 第一轮真实产物 = 正式介绍文档、演示文稿 PPT、单页 HTML、封面图片；视频/音频本轮不实现真实生成，用户面不得宣称已支持。
-> **当前下一任务**：等待 Owner 接受并冻结 **IDCOLLAB-MIN-01**（[`digitalme_phase1_task_IDCOLLAB-MIN-01_action_identity_and_authorization_v0.1.md`](digitalme_phase1_task_IDCOLLAB-MIN-01_action_identity_and_authorization_v0.1.md)；v0.1.2；`specified` / `codex_review_passed` / `ready_for_owner_acceptance` / `not_started`）。**DVL2-03** 已 `owner_runtime_accepted` / `accepted_as_implemented` / `implemented`（2026-07-27）。**CRT-MVP-02 / 02.1 / 02.2** 已 `owner_runtime_accepted`（2026-07-27）。DVL2-02 已 `accepted_as_implemented`。**不得** push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+> **当前下一任务**：**Owner 真机验收 IDCOLLAB-MIN-01**（[`digitalme_phase1_task_IDCOLLAB-MIN-01_action_identity_and_authorization_v0.1.md`](digitalme_phase1_task_IDCOLLAB-MIN-01_action_identity_and_authorization_v0.1.md)；v0.1.2；分支 `codex/idcollab-min-01-action-identity`；状态 `implemented` / `codex_verified` / `ready_for_owner_runtime_acceptance`）。**不得**提前标 `owner_runtime_accepted` / `accepted_as_implemented`。**DVL2-03** 已 `owner_runtime_accepted` / `accepted_as_implemented` / `implemented`（2026-07-27）。**CRT-MVP-02 / 02.1 / 02.2** 已 `owner_runtime_accepted`（2026-07-27）。DVL2-02 已 `accepted_as_implemented`。**不得** push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
 > **R2 对话运行时**：保留基础设施；R2 代码 **retained as infrastructure**。生产默认入口仍为 legacy。
 > **Owner Electron 真机验收（2026-07-24）**：`accepted`（distill-me / R2 对话重试 / doing-context / PAN-01S 等）。
 > **confirmed identity → act context（2026-07-24，`2f1b7bd`）**：`accepted`（历史整合基线；**不是**当前 HEAD）。
