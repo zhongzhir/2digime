@@ -2,10 +2,12 @@
 
 **任务编号**：LEARN-LOOP-FIX-02  
 **标题**：统一知识解析与真实循环学习  
-**版本**：v0.1  
-**状态**：`implemented` / `codex_verified` / `ready_for_owner_runtime_acceptance`  
-**分支**：`codex/learn-loop-fix-02-unified-knowledge`  
+**版本**：v0.1.1
+**状态**：`unified_knowledge_resolution_validated` / `chat_and_task_cross_surface_application_validated` / `owner_runtime_accepted` / `accepted_as_implemented`
+**Owner 真机验收**：2026-07-27
+**分支**：`codex/learn-loop-fix-02-unified-knowledge`
 **基线**：`89184a3`（LEARN-LOOP-FIX-01）
+**实现提交**：`d080a65`（resolver）+ `ebf7fb7`（测试与任务包）
 
 ---
 
@@ -109,7 +111,26 @@ npm run test:crt-mvp-02
 
 ---
 
-## 9. 状态
+## 9. Owner 真机验收结论（2026-07-27）
 
-- `implemented` / `codex_verified` / `ready_for_owner_runtime_acceptance`
-- **不得**标 `minimal_learning_cycle_validated` 直至 Owner 六步真机通过
+**已通过**：
+
+- 对话与做事已使用统一 **Knowledge Resolver**
+- 项目知识可跨**新对话**与**新做事任务**调用
+- 来源可见（「显示依据」含 claim 摘要）
+- 用户修正后 **supersession** 生效
+- 冲突内容要求用户选择，不静默覆盖
+
+**未验证 / 不得宣称**：
+
+- **独立研究 / 写作产品面**的统一验证（`all_surfaces_validated` **不得**写入）
+- 完整自主学习、模型权重持续训练、所有输入自动成为正确知识
+
+## 10. 状态
+
+```text
+unified_knowledge_resolution_validated /
+chat_and_task_cross_surface_application_validated /
+owner_runtime_accepted /
+accepted_as_implemented
+```

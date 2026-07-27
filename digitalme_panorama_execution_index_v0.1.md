@@ -1,13 +1,15 @@
 # Digital Me Product Panorama 执行索引
 
-版本：v0.2.29
+版本：v0.2.30
 日期：2026-07-27
 状态：`superseded_as_current_execution_index` / **历史与基础设施状态表**
 所属总任务：`P1-PANORAMA`（历史主线；**不再是当前产品执行主线**）
 代码实现基线：`2f1b7bd`（committed baseline；distill-me + doing-context + identity + collaboration + 全部新增功能）；历史 `cbde807fd1e40472d66fbe8f0810a0835e8bc816`（PAN-01S 族）；R1 `8d7e9b3`；R2 分支 `codex/r2-chat-sessions-migration`（实现保留）
 规格依据：见文内历史列表
 
-> **2026-07-27 基础设施补充（非本索引主线）**：**DVL2-03-FIX-01** 占位门禁精修（`ready_for_owner_runtime_acceptance`）。**IDCOLLAB-MIN-01** MIN-01.1 `ready_for_owner_runtime_reacceptance`。**DVL2-03** 已 `owner_runtime_accepted`。
+> **2026-07-27 TODAY-CLOSE（非本索引主线）**：以下四项已于 2026-07-27 Owner 真机验收并标 `accepted_as_implemented`：**LEARN-LOOP-FIX-02**、**LEARN-LOOP-FIX-02.1**、**DVL2-03-FIX-01**、**TASK-UX-MIN-01**（功能最小接受；UI 质量 deferred → **UI-UX-FOUNDATION-UPGRADE**）。**IDCOLLAB-MIN-01** 仍为 `specified` / `ready_for_owner_acceptance` / `not_started`。**DVL2-03** 主线已 `owner_runtime_accepted`。不得 push。
+
+> **2026-07-27 基础设施补充（历史一行，已被 TODAY-CLOSE 取代）**：~~DVL2-03-FIX-01 ready_for_owner_runtime_acceptance~~；IDCOLLAB-MIN-01 MIN-01.1 曾 `ready_for_owner_runtime_reacceptance`。
 
 > **2026-07-24 committed baseline（`2f1b7bd`）**：83 个文件，+16,427/-487 行。confirmed identity → act context 缺口已关闭；distill-me-acceptance 11/11；PAN-01S 23/23；owner-runtime 9/9；gate4-auto-flow 49/49；vl1-block1 18/18 全绿。Owner Electron 真机验收 `accepted`。依赖闭包完整，干净 checkout 可跑通。**未 push**。R3 继续 `paused`；PAN-02 继续 `planned / blocked`。
 > **2026-07-21 规划基线重建（强制）**：本文件**不再**作为「当前唯一执行索引」。  
@@ -161,6 +163,11 @@ statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_fo
 | Package 全类型深度校验与迁移 | 原 WP1/WP6 | `paused` | Alpha 复用已接入切片 | Trusted Beta / 迁移验收 | schema 漂移 |
 | 审计密码学增强 | 原审计远景 | `paused` | 现有 DecisionAudit 可支撑 Alpha 记录 | 对外宣称不可篡改前 | 过度承诺 |
 | 非阻断 UI 细节 | 各任务 | `backlog` | 不因局部打磨延迟闭环 | 主路径通过后按证据排序 | 进度假象 |
+| **UI-UX-FOUNDATION-UPGRADE** 整体界面与交互重构 | Owner 判断 / TASK-UX-MIN-01 收口 | `backlog` / `not_started` | TASK-UX-MIN-01 功能最小已接受；不继续局部补丁 | Owner 授权独立任务包后启动 | 补丁式布局累积、视觉/交互质量不足 |
+| **DVL2-03-QUALITY-01** 成果生成实施模式对齐 | Owner 判断 / DVL2-03-FIX-01 收口 | `candidate` / `not_started` | 非 DVL2-03-FIX-01 阻断项 | 独立任务包冻结后启动 | 生成内容范围偏发散、当前阶段适配不足 |
+| TASK-UX 删除后成果保留真机补验 | TASK-UX-MIN-01 Owner 验收 | `known_gap / non_blocking` | 自动化已覆盖软删除语义 | Owner 补验或阻断性发现 | 用户误解删除范围 |
+| TASK-UX 生成中归档保护真机补验 | TASK-UX-MIN-01 Owner 验收 | `known_gap / non_blocking` | 代码已有 generation guard | Owner 补验 | 归档误操作 |
+| LEARN-LOOP 撤销后即时停止调用真机补验 | LEARN-LOOP-FIX-02.1 Owner 验收 | `known_gap / non_blocking` | IDCOLLAB revoke 路径已有 fail-closed | Owner 补验 | 撤销后仍调用旧知识 |
 | PAN-01 非阻断 UI 细节（卡片/间距/抽象文案打磨） | Owner 感知 / PAN-01 | `closed_as_superseded` | PAN-01 裁定为 needs_minimal_surface_reset，不再打磨展板 | —（由 PAN-01S 收口取代） | 用视觉代替证明 |
 | PAN-01R 五步页面精细化修复 | Owner 产品验收 / PAN-00R | `closed_as_superseded` | 普通用户体验撤下，保留为内部验证器 | —（新 PAN-04 复用安全骨架） | 在失败表面上继续投入 |
 | 原 P1-08 | 旧阶段队列 | `paused / superseded_as_queue` | 主线为 P1-PANORAMA | PAN-06 后按用户证据重排 | 误启旧队列 |

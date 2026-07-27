@@ -5,6 +5,118 @@
 
 ---
 
+## 2026-07-27 TODAY-CLOSE-20260727 · 今日工作收口
+
+Owner 真机验收日期：**2026-07-27**。文档收口 commit 见 Git 记录；**不得 push**。
+
+### 今日完成
+
+- 统一知识解析进入**对话**和**做事**链路（LEARN-LOOP-FIX-02）
+- 最小低打扰学习循环通过 Owner 真机验收（LEARN-LOOP-FIX-02.1）
+- 成果生成占位门禁误杀修复并通过真机验收（DVL2-03-FIX-01）
+- 做事任务管理最小闭环通过真机验收（TASK-UX-MIN-01）
+
+### 今日确认的能力
+
+- 项目知识可跨新对话与新任务调用；来源可见
+- 低风险无冲突知识可自动学习；修正可替代旧知识；冲突内容不静默覆盖
+- PRD 可稳定生成、落盘和打开（占位门禁精修 + 最多 2 次自动修订）
+- 任务可搜索、改名、归档、恢复和删除；列表内滚动与分批加载
+
+### 今日未解决（非阻断 / 后续候选）
+
+- 完整自主学习；模型参数学习
+- 独立研究/写作产品面的统一验证
+- 撤销学习的 Owner 真机补验
+- 生成中归档保护的 Owner 真机补验（TASK-UX-MIN-01）
+- 删除任务后成果文件保留的 Owner 真机补验（TASK-UX-MIN-01）
+- 成果内容的当前实施模式对齐 → **DVL2-03-QUALITY-01**（`implementation_mode_alignment`）
+- 整体 UI/UX 升级 → **UI-UX-FOUNDATION-UPGRADE**
+
+### 四项任务最终状态
+
+| 任务 | 状态 |
+|---|---|
+| LEARN-LOOP-FIX-02 | `unified_knowledge_resolution_validated` / `chat_and_task_cross_surface_application_validated` / `owner_runtime_accepted` / `accepted_as_implemented` |
+| LEARN-LOOP-FIX-02.1 | `minimal_low_friction_learning_cycle_validated` / `owner_runtime_accepted` / `accepted_as_implemented` |
+| DVL2-03-FIX-01 | `implemented` / `owner_runtime_accepted` / `accepted_as_implemented` |
+| TASK-UX-MIN-01 | `task_management_minimal_loop_validated` / `owner_runtime_accepted` / `accepted_as_implemented` / `functional_minimum_accepted` / `visual_and_interaction_quality_deferred` |
+
+---
+
+## 2026-07-27 LEARN-LOOP-FIX-02 · 统一知识解析 · Owner 验收收口
+
+### 实施摘要
+
+- `knowledge-resolver.js` 统一入口；对话 `chat:send`、R2、成果生成、写作/PPT、研究已接入
+- 学习候选 → 确认/自动采纳 → 跨面对召回 → supersession
+
+### Owner 真机验收（2026-07-27）
+
+已通过：对话与做事统一 Resolver；跨新对话/新任务调用；来源可见；修正 supersession；冲突需选择。
+
+未验证：独立研究/写作产品面（不得写 `all_surfaces_validated`）。
+
+### 状态
+
+```text
+unified_knowledge_resolution_validated /
+chat_and_task_cross_surface_application_validated /
+owner_runtime_accepted /
+accepted_as_implemented
+```
+
+---
+
+## 2026-07-27 LEARN-LOOP-FIX-02.1 · 低打扰自动学习 · Owner 验收收口
+
+### 实施摘要
+
+- `evaluateLearningAdoption()`：低风险无冲突 → `auto_adopted`；冲突/高风险 → 确认
+
+### Owner 真机验收（2026-07-27）
+
+已通过：自动采纳不弹确认；修正替代旧知识；冲突才确认。自动采纳不得写成 `owner_confirmed`。
+
+非阻断回归：撤销后即时停止调用的真机补验。
+
+### 状态
+
+```text
+minimal_low_friction_learning_cycle_validated /
+owner_runtime_accepted /
+accepted_as_implemented
+```
+
+---
+
+## 2026-07-27 TASK-UX-MIN-01 · 做事任务管理最小闭环 · Owner 验收收口
+
+### 实施摘要
+
+- 改名、归档、恢复、软删除、搜索、固定高度列表、20 条分批加载
+- 分支 `codex/task-ux-min-01-task-management`；提交 `e6ab2eb`～`9b9e051`
+
+### Owner 真机验收（2026-07-27）
+
+已通过：列表滚动、搜索、改名、归档、恢复、删除确认、生成中删除保护、选中回退、重启保持。
+
+非阻断回归：删除后成果保留；生成中不能归档。
+
+UI 质量：`functional_minimum_accepted`；整体升级债务 **UI-UX-FOUNDATION-UPGRADE**。
+
+### 状态
+
+```text
+task_management_minimal_loop_validated /
+owner_runtime_accepted /
+accepted_as_implemented /
+functional_minimum_accepted /
+visual_and_interaction_quality_deferred
+```
+
+---
+
 ## 2026-07-27 LEARN-LOOP-FIX-01 项目知识权威闭环 · 实施完成
 
 ### 背景
@@ -53,18 +165,18 @@ implemented / codex_verified / ready_for_owner_runtime_acceptance
 ### 状态
 
 ```text
-implemented / codex_verified / ready_for_owner_runtime_acceptance
+implemented / owner_runtime_accepted / accepted_as_implemented
 ```
 
-不得 push。不得因自动化通过标 `owner_runtime_accepted`。
+Owner 真机验收：2026-07-27。正常 PRD 已生成、落盘并打开。不得 push。
 
 ---
+
+## 2026-07-27 IDCOLLAB-MIN-01.1 · 撤销即时生效与界面极简 · 修复记录
 
 ### 背景
 
 Owner 真机验收未通过：撤销后同进程仍可重新生成；主界面身份/授权信息过载。
-
-### 修复
 
 1. **授权**：`prepare` 不再在 revoke 后自动 re-grant；`grantTaskAuthorization` 对同 task+planVersion 的 revoked 记录返回 `revoked_blocked`；生成/接受/学习/prepare 统一 `resolveActiveTaskAuthorization` 每次读 Store。
 2. **UI**：主界面只保留一句摘要；计划高级字段与身份/授权收入折叠「更多设置 / 详情 / 高级审计」；撤销后立即禁用按钮并显示横幅。
