@@ -265,9 +265,50 @@ function normalizeTask(input) {
     deliverablePlanning: normalizeDeliverablePlanning(input && input.deliverablePlanning),
     deliverableExecution: normalizeDeliverableExecution(input && input.deliverableExecution),
     lifecycleStatus: normalizeLifecycleStatus(input && input.lifecycleStatus),
+    archivedAt: input && input.archivedAt ? String(input.archivedAt) : null,
+    deletedAt: input && input.deletedAt ? String(input.deletedAt) : null,
     createdAt: String((input && input.createdAt) || now),
     updatedAt: String((input && input.updatedAt) || now),
   };
+}
+
+function taskSearchHaystack(task) {
+  const norm = normalizeTask(task);
+  const parts = [
+    norm.title,
+    norm.goal,
+    norm.request,
+    norm.taskIntent && norm.taskIntent.goal,
+    norm.result && norm.result.slice(0, 200),
+  ];
+  return parts
+    .filter(Boolean)
+    .join("\n")
+    .toLowerCase();
+}
+
+function taskListSummary(norm) {
+  const preview =
+    String(norm.taskIntent && norm.taskIntent.goal ? norm.taskIntent.goal : norm.request || "").slice(0, 120);
+  return {
+    taskId: norm.taskId,
+    title: norm.title,
+    goal: norm.goal || (norm.taskIntent && norm.taskIntent.goal) || "",
+    status: norm.status,
+    lifecycleStatus: norm.lifecycleStatus,
+    createdAt: norm.createdAt,
+    updatedAt: norm.updatedAt,
+    archivedAt: norm.archivedAt,
+    requestPreview: preview,
+    contextConfirmed: !!(norm.subjectContext && norm.subjectContext.confirmationState === "confirmed"),
+  };
+}
+
+function matchesTaskScope(norm, scope) {
+  const life = normalizeLifecycleStatus(norm.lifecycleStatus);
+  if (scope === "archived") return life === "archived";
+  // active: exclude archived and soft_deleted
+  return life !== "archived" && life !== "soft_deleted";
 }
 
 function normalizeDeliverablePlanning(raw) {
@@ -308,25 +349,39 @@ function normalizeLifecycleStatus(raw) {
   return "active";
 }
 
-function listTasks(userData) {
+function listTasks(userData, opts = {}) {
   const store = loadStore(userData);
+  const scope = String(opts.scope || "active");
+  const query = String(opts.query || "")
+    .trim()
+    .toLowerCase();
+  const offset = Math.max(0, Number(opts.offset) || 0);
+  const limitRaw = opts.limit == null ? null : Number(opts.limit);
+  const limit = limitRaw == null || !Number.isFinite(limitRaw) ? null : Math.max(1, limitRaw);
+
+  let filtered = (store.tasks || [])
+    .map((t) => normalizeTask(t))
+    .filter((norm) => matchesTaskScope(norm, scope));
+
+  if (query) {
+    filtered = filtered.filter((norm) => taskSearchHaystack(norm).includes(query));
+  }
+
+  filtered.sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+
+  const total = filtered.length;
+  const page = limit == null ? filtered : filtered.slice(offset, offset + limit);
+  const hasMore = limit != null && offset + page.length < total;
+
   return {
     ok: true,
-    tasks: (store.tasks || [])
-      .slice()
-      .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")))
-      .map((t) => {
-        const norm = normalizeTask(t);
-        return {
-          taskId: norm.taskId,
-          title: norm.title,
-          status: norm.status,
-          createdAt: norm.createdAt,
-          updatedAt: norm.updatedAt,
-          requestPreview: String(norm.taskIntent.goal || norm.request || "").slice(0, 120),
-          contextConfirmed: !!(norm.subjectContext && norm.subjectContext.confirmationState === "confirmed"),
-        };
-      }),
+    scope,
+    query: query || null,
+    offset,
+    limit,
+    total,
+    hasMore,
+    tasks: page.map(taskListSummary),
   };
 }
 
@@ -388,6 +443,12 @@ async function saveTask(userData, taskInput) {
       if (!Object.prototype.hasOwnProperty.call(taskInput || {}, "lifecycleStatus")) {
         task.lifecycleStatus = normalizeLifecycleStatus(prev.lifecycleStatus);
       }
+      if (!Object.prototype.hasOwnProperty.call(taskInput || {}, "archivedAt")) {
+        task.archivedAt = prev.archivedAt ? String(prev.archivedAt) : null;
+      }
+      if (!Object.prototype.hasOwnProperty.call(taskInput || {}, "deletedAt")) {
+        task.deletedAt = prev.deletedAt ? String(prev.deletedAt) : null;
+      }
       // Draft / plan saves often omit materials — never wipe persisted attachments.
       if (!Object.prototype.hasOwnProperty.call(taskInput || {}, "referenceMaterials")) {
         task.referenceMaterials = normalizeReferenceMaterials(prev.referenceMaterials);
@@ -429,11 +490,13 @@ async function deleteTask(userData, taskId) {
 async function softDeleteTask(userData, taskId) {
   const got = getTask(userData, taskId, { heal: false });
   if (!got.ok) return got;
+  const now = new Date().toISOString();
   const task = {
     ...got.task,
     lifecycleStatus: "soft_deleted",
     status: "soft_deleted",
-    updatedAt: new Date().toISOString(),
+    deletedAt: now,
+    updatedAt: now,
   };
   return saveTask(userData, task);
 }
@@ -441,11 +504,32 @@ async function softDeleteTask(userData, taskId) {
 async function archiveTask(userData, taskId) {
   const got = getTask(userData, taskId, { heal: false });
   if (!got.ok) return got;
+  const now = new Date().toISOString();
   const task = {
     ...got.task,
     lifecycleStatus: "archived",
     status: "archived",
-    updatedAt: new Date().toISOString(),
+    archivedAt: now,
+    deletedAt: null,
+    updatedAt: now,
+  };
+  return saveTask(userData, task);
+}
+
+async function restoreTask(userData, taskId) {
+  const got = getTask(userData, taskId, { heal: false });
+  if (!got.ok) return got;
+  if (normalizeLifecycleStatus(got.task.lifecycleStatus) !== "archived") {
+    return { ok: false, code: "not_archived", message: "该任务不在已归档列表中。" };
+  }
+  const now = new Date().toISOString();
+  const prevStatus = got.task.status === "archived" ? "draft" : got.task.status || "draft";
+  const task = {
+    ...got.task,
+    lifecycleStatus: "active",
+    status: prevStatus,
+    archivedAt: null,
+    updatedAt: now,
   };
   return saveTask(userData, task);
 }
@@ -462,6 +546,10 @@ module.exports = {
   deleteTask,
   softDeleteTask,
   archiveTask,
+  restoreTask,
+  taskSearchHaystack,
+  taskListSummary,
+  matchesTaskScope,
   normalizeTask,
   normalizeDeliverablePlanning,
   normalizeDeliverableExecution,

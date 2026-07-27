@@ -29,6 +29,7 @@ const researchGrounded = require("./research/grounded");
 const personalSkills = require("./skills/personal");
 const sessions = require("./sessions");
 const actBehalfStore = require("./act-behalf/task-store");
+const taskLifecycle = require("./act-behalf/task-lifecycle");
 const deliverablePlanStore = require("./act-behalf/deliverable-plan-store");
 const deliverablePlanConsistency = require("./act-behalf/deliverable-plan-consistency");
 const deliverablePlanner = require("./act-behalf/deliverable-planner");
@@ -1740,15 +1741,79 @@ ipcMain.handle("actBehalf:exportVideoAudioScript", async (_e, payload) => {
   }
 });
 
-ipcMain.handle("actBehalf:list", async () => {
+ipcMain.handle("actBehalf:list", async (_e, payload) => {
   try {
-    return actBehalfStore.listTasks(app.getPath("userData"));
+    const opts = payload && typeof payload === "object" ? payload : {};
+    return actBehalfStore.listTasks(app.getPath("userData"), opts);
   } catch (err) {
     return {
       ok: false,
       code: err && err.code ? err.code : "list_failed",
       message: err && err.message ? err.message : "无法列出任务。",
       tasks: [],
+      total: 0,
+      hasMore: false,
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:rename", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const taskId = payload && payload.taskId ? String(payload.taskId) : "";
+    const title = payload && payload.title != null ? String(payload.title) : "";
+    if (!taskId) return { ok: false, code: "task_required", message: "缺少任务。" };
+    return taskLifecycle.renameTaskLifecycle(userData, taskId, title);
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "rename_failed",
+      message: err && err.message ? err.message : "无法改名。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:archiveTask", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const taskId = payload && payload.taskId ? String(payload.taskId) : "";
+    if (!taskId) return { ok: false, code: "task_required", message: "缺少任务。" };
+    return taskLifecycle.archiveTaskLifecycle(userData, taskId);
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "archive_failed",
+      message: err && err.message ? err.message : "无法归档。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:restoreTask", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const taskId = payload && payload.taskId ? String(payload.taskId) : "";
+    if (!taskId) return { ok: false, code: "task_required", message: "缺少任务。" };
+    return taskLifecycle.restoreTaskLifecycle(userData, taskId);
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "restore_failed",
+      message: err && err.message ? err.message : "无法恢复。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:softDeleteTask", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    const taskId = payload && payload.taskId ? String(payload.taskId) : "";
+    if (!taskId) return { ok: false, code: "task_required", message: "缺少任务。" };
+    return taskLifecycle.softDeleteTaskLifecycle(userData, taskId);
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "delete_failed",
+      message: err && err.message ? err.message : "无法删除。",
     };
   }
 });
