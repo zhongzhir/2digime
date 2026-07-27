@@ -70,6 +70,18 @@ async function confirmPlanAndGenerate(ctx) {
   if (!loaded.plan) {
     return { ok: false, code: "plan_not_found", message: "请先形成预计交付。" };
   }
+  if (
+    loaded.task &&
+    loaded.task.deliverablePlanning &&
+    loaded.task.deliverablePlanning.materialsStale
+  ) {
+    return {
+      ok: false,
+      code: "plan_materials_stale",
+      message: "参考材料已变化，请重新形成预计交付后再生成。",
+      materialsStale: true,
+    };
+  }
 
   let plan = loaded.plan;
   let expected = ctx.extractRevisionExpected({ ...(ctx.revisionExpected || {}) });

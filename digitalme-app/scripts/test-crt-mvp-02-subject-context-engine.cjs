@@ -209,7 +209,7 @@ async function main() {
     const policy = resolveAssemblyPolicy(c);
     assert.equal(policy.allowAiExplorationBlock, false);
     const guidance = promptGuidanceForClass(c.contextClass, policy);
-    assert.match(guidance, /强事实边界|禁止创造/);
+    assert.match(guidance, /禁止无依据|confirmed|待确认|主张姿态|Claim Posture/);
     assert.equal(/开放探索块/.test(guidance) && policy.allowAiExplorationBlock, false);
   });
 
@@ -546,9 +546,15 @@ async function main() {
       "representation",
       resolveAssemblyPolicy({ contextClass: "representation" })
     );
-    assert.match(exec, /保守执行|少发挥/);
-    assert.match(rep, /禁止创造|待确认/);
+    assert.match(exec, /保守执行|必要推理|Claim Posture|主张姿态/);
+    assert.match(rep, /待确认|禁止无依据|Claim Posture|主张姿态/);
     assert.notEqual(exec, rep);
+    assert.match(rep, /confirmed/);
+    const explore = promptGuidanceForClass(
+      "exploration",
+      resolveAssemblyPolicy({ contextClass: "exploration" })
+    );
+    assert.match(explore, /hypothetical|inferred/);
   });
 
   console.log(`\nCRT-MVP-02 unit: ${passed} passed, ${failed} failed`);

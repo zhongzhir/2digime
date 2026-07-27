@@ -19,10 +19,12 @@ const SENSITIVE_RE =
   /身份|价值观|边界|授权|隐私|密钥|密码|不得代表|敏感|政治立场|宗教信仰/;
 const ONE_OFF_RE = /本次|这一次|仅此|临时|只要这一次|不要记成习惯/;
 const CONTRADICT_MARKERS = ["不是", "并非", "不再", "相反", "推翻", "纠正为"];
-const JUDGMENT_RE = /应该先|优先[^。]{0,12}而非|优先选择|在.{0,20}情况下选|取舍|权衡后/;
+const JUDGMENT_RE =
+  /应该先|优先验证|优先.{0,40}而非|优先选择|在.{0,30}情况下(?:选|应)|取舍|权衡后|UNIQUE_JUDGMENT/;
 const PREFERENCE_RE = /文风|语气|篇幅|结构习惯|表达偏好|以后都用|习惯用|不要写成/;
+const HYPOTHETICAL_LEARN_RE = /可考虑|假设|待验证|可能方案|未来可|规划目标|试点方案|hypothetical/i;
 const FABRICATED_LEARN_RE =
-  /联合创始人|CTO|CPO|融资\s*[\d.,]+\s*(?:万|亿)|DAU|MAU|NPS|日活|月活|年收入|营收|签约客户|标杆客户|已完成融资/;
+  /联合创始人|CTO|CPO|融资\s*[\d.,]+\s*(?:万|亿)|DAU|MAU|NPS|日活|月活|年收入|营收|签约客户|标杆客户|已完成融资|UNIQUE_UNVERIFIED_FACT/;
 
 /**
  * Accepting a DeliverableVersion ≠ confirming every fact inside it.
@@ -77,6 +79,16 @@ function inferLearnKind(item, evidenceCorpus) {
       ownership: "subject_owned",
     };
   }
+  // Hypothetical / open proposals must not become new_fact.
+  if (HYPOTHETICAL_LEARN_RE.test(text) && !JUDGMENT_RE.test(text)) {
+    return {
+      learnKind: null,
+      logicalState: "session_only",
+      write: false,
+      rejectReason: "hypothetical_not_fact",
+      ownership: "ai_generated",
+    };
+  }
   if (JUDGMENT_RE.test(text)) {
     return {
       learnKind: /多次|一贯|总是/.test(text) ? "decision_pattern" : "new_judgment",
@@ -96,14 +108,21 @@ function inferLearnKind(item, evidenceCorpus) {
 
   // Fact-like claims (including UNIQUE_* markers).
   const looksFact =
-    /UNIQUE_/.test(text) ||
+    /UNIQUE_CONFIRMED_FACT|UNIQUE_UNVERIFIED_FACT|UNIQUE_FAKE_FACT|UNIQUE_FACT/.test(text) ||
     FABRICATED_LEARN_RE.test(text) ||
     /本人|我曾|毕业于|创办|担任|公司是/.test(text);
 
-  if (looksFact) {
+  if (looksFact || /UNIQUE_/.test(text)) {
+    if (/UNIQUE_JUDGMENT/.test(text)) {
+      return {
+        learnKind: "new_judgment",
+        logicalState: "judgment_candidate",
+        write: true,
+        ownership: "subject_owned",
+      };
+    }
     const supported = textSupportedByEvidence(text, evidenceCorpus);
-    if (!supported) {
-      // Model-only "facts" after whole-version accept must NOT become new_fact.
+    if (!supported || /UNIQUE_UNVERIFIED_FACT|UNIQUE_FAKE_FACT/.test(text)) {
       return {
         learnKind: null,
         logicalState: "session_only",
@@ -340,6 +359,10 @@ function consolidate(classified) {
   for (const item of classified || []) {
     if (item.rejectReason === "unverified_fact_no_evidence") {
       skipped.push({ ...item, action: "skip_unverified_fact" });
+      continue;
+    }
+    if (item.rejectReason === "hypothetical_not_fact") {
+      skipped.push({ ...item, action: "skip_hypothetical" });
       continue;
     }
     if (item.logicalState === "session_only" && item.writeTarget === "audit_only") {

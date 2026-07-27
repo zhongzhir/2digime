@@ -518,36 +518,42 @@ function finalizeSubjectAssembly(assembly, opts) {
 function promptGuidanceForClass(contextClass, policy) {
   const c = contextClass || "execution";
   const allowExplore = !!(policy && policy.allowAiExplorationBlock);
-  const commonOwnership =
-    "区分归属：主体资产=subject_owned；本次附件/计划=task_owned+task_material；" +
-    "外部信息=external_owned；你的分析/创意=ai_generated。不得把附件或推演写成终身主体事实。";
+  const posture =
+    "主张姿态（Claim Posture）：confirmed=已确认事实/已确认判断（须有 subject_owned 或 task_material 明确证据）；" +
+    "attributed=来自本次材料/外部资料（可引用，不自动代表本人终身事实）；" +
+    "inferred=AI 分析推断（用「分析认为/可能/意味着」）；" +
+    "hypothetical=开放假设/方案（用「可考虑/假设/可能/待验证」）。" +
+    "没有来源的内容不得写成 confirmed，但允许作为 inferred 或 hypothetical。不要追求「每句话必须有出处」。";
 
   const byClass = {
     representation:
-      "情境=代表表达。强事实边界：禁止创造团队成员、融资金额、用户量、收入、客户、里程碑等未给出的事实。" +
-      "探索默认关闭。缺事实时写「尚未提供 / 待确认」，不得补造。" +
-      commonOwnership,
+      "情境=代表表达。confirmed/attributed 可用；inferred 少量且标明分析；hypothetical 仅作建议/待验证，不能写成现状。" +
+      "禁止无依据内容以 confirmed 方式描述团队、融资、用户量、收入、客户、已实现能力与里程碑。" +
+      "缺事实时写「尚未提供 / 待确认」，不得补造为已发生事实。" +
+      posture,
     decision_support:
-      "情境=辅助决策。可基于事实、经验与已确认判断给方案与风险。" +
+      "情境=辅助决策。confirmed 作锚点；inferred 与 hypothetical 均允许。" +
       "AI 建议必须标明为建议，不得冒充本人既有判断。Judgment Candidate 仅作低权线索。" +
-      commonOwnership,
+      posture,
     exploration:
-      "情境=开放探索。事实只作锚点。允许商业模式/假设/未来场景推演，但必须使用「可考虑 / 假设 / 可能 / 待验证」等探索语义，" +
-      "标记为 ai_exploration，不得写成已发生事实，不得写回事实层。" +
-      commonOwnership,
+      "情境=开放探索。以 inferred / hypothetical 为主要输出；事实只作锚点。" +
+      "不要求字字来自记忆；允许大胆提出 memory 中不存在的新方案，但不得把假设写回 subject_fact / confirmed。" +
+      posture,
     creation:
-      "情境=创作生成。优先表达偏好与适用身份。创意属于 ai_generated。不得创造用户事实。" +
-      commonOwnership,
+      "情境=创作生成。创意表达自由（多为 ai_generated / hypothetical 语气）。" +
+      "不得创造 Owner 的身份事实与项目经营事实。" +
+      posture,
     execution:
-      "情境=保守执行。按目标与约束完成，少发挥。不确定时不得主动代表用户形成新立场，不得扩展身份，少探索、少臆造。" +
-      commonOwnership,
+      "情境=保守执行。按目标与约束完成，可做必要推理（inferred）。" +
+      "不主动创造代表 Owner 的事实或长期立场。" +
+      posture,
   };
 
   let extra = byClass[c] || byClass.execution;
   if (allowExplore && c !== "representation") {
     extra += "允许单独给出「本次分析/推演」段落，并标明非本人既有结论。";
   } else if (c === "representation") {
-    extra += "禁止开放探索块伪装为主体观点。";
+    extra += "禁止把开放探索伪装成已确认主体观点。";
   }
   return extra;
 }
@@ -555,38 +561,59 @@ function promptGuidanceForClass(contextClass, policy) {
 const FABRICATED_FACT_PATTERNS = Object.freeze([
   {
     id: "team",
-    re: /(?:联合创始人|CTO|CPO|团队成员|核心团队).{0,12}(?:加入|负责|带领)|(?:我们有|现有)\s*\d+\s*名?(?:工程师|成员|员工)/,
+    re: /(?:联合创始人|CTO|CPO|团队成员|核心团队|核心成员).{0,16}(?:涵盖|加入|负责|带领|包括)|(?:我们有|现有|已有)\s*\d+\s*名?(?:工程师|成员|员工)/,
   },
   {
     id: "funding",
-    re: /(?:融资|获得)\s*[\d.,]+\s*(?:万|亿|million|billion)|(?:天使轮|A轮|B轮).{0,8}(?:融资|完成)/i,
+    re: /(?:融资|获得)\s*[\d.,]+\s*(?:万|亿|million|billion)|(?:天使轮|A轮|B轮).{0,8}(?:融资|完成)|(?:1|一)\s*个月(?:内)?完成融资/i,
   },
   {
     id: "users",
-    re: /(?:DAU|MAU|日活|月活|用户量|注册用户)\s*[\d.,]+万?|\d+\s*万\+?\s*用户/i,
+    re: /(?:DAU|MAU|日活|月活|用户量|注册用户)\s*[\d.,]+万?|(?:已拥有|已有)\s*\d+\s*名?(?:用户|客户|成员)|\d+\s*万\+?\s*用户/i,
   },
   { id: "revenue", re: /(?:年收入|营收|ARR|MRR)\s*[\d.,]+|收入达到\s*[\d.,]+/i },
   {
     id: "customers",
     re: /(?:签约客户|标杆客户|付费客户).{0,20}(?:包括|有)|已服务\s*\d+\s*家/,
   },
-  { id: "milestone", re: /已完成(?:融资|上线|认证)|获得(?:ISO|专利|牌照)认证/ },
+  {
+    id: "milestone",
+    re: /已完成(?:融资|上线|认证)|获得(?:ISO|专利|牌照)认证|\d+\s*个月盈亏平衡|已有白皮书/,
+  },
   { id: "nps", re: /NPS\s*[≥>=]?\s*\d+/i },
+  {
+    id: "capability_done",
+    re: /已具备(?:联邦学习|TEE|本地推理)|现成技术能力[^。]{0,20}(?:联邦学习|TEE)/,
+  },
 ]);
+
+const HEDGE_RE =
+  /可考虑|假设|建议|待验证|可能方案|规划目标|试点|探索|未来可|初步按|不妨|一种情景|若将来|可作为未来/;
+
+function isHedgedClaim(text, matchIndex, matchLength) {
+  const body = String(text || "");
+  const start = Math.max(0, matchIndex - 40);
+  const end = Math.min(body.length, matchIndex + matchLength + 40);
+  return HEDGE_RE.test(body.slice(start, end));
+}
 
 function findUnsupportedFabricatedFacts(text, evidenceCorpus) {
   const body = String(text || "");
   const corpus = String(evidenceCorpus || "");
   const hits = [];
   for (const p of FABRICATED_FACT_PATTERNS) {
-    const m = body.match(p.re);
-    if (!m) continue;
-    const snippet = m[0];
-    const key = snippet.replace(/\s+/g, "").slice(0, 24);
-    const corpusKey = corpus.replace(/\s+/g, "");
-    if (key && corpusKey.includes(key)) continue;
-    if (corpus.includes(snippet)) continue;
-    hits.push({ id: p.id, snippet });
+    const re = new RegExp(p.re.source, p.re.flags.includes("g") ? p.re.flags : p.re.flags + "g");
+    let m;
+    while ((m = re.exec(body)) !== null) {
+      const snippet = m[0];
+      if (isHedgedClaim(body, m.index, snippet.length)) continue;
+      const key = snippet.replace(/\s+/g, "").slice(0, 24);
+      const corpusKey = corpus.replace(/\s+/g, "");
+      if (key && corpusKey.includes(key)) continue;
+      if (corpus.includes(snippet)) continue;
+      hits.push({ id: p.id, snippet });
+      break;
+    }
   }
   return hits;
 }
@@ -596,7 +623,7 @@ function assertRepresentationFactsGrounded(text, evidenceCorpus, contextClass) {
   const hits = findUnsupportedFabricatedFacts(text, evidenceCorpus);
   if (!hits.length) return true;
   const e = new Error(
-    "代表表达模式下出现无来源的具体事实（团队/融资/用户/收入/客户/里程碑等），未保存为成果。"
+    "代表表达模式下出现无来源的高风险事实断言（团队/融资/用户/收入/客户/里程碑等），未保存为成果。若为假设或建议，请使用「可考虑/假设/待验证」等表述。"
   );
   e.code = "ungrounded_representation_facts";
   e.hits = hits;
@@ -604,8 +631,15 @@ function assertRepresentationFactsGrounded(text, evidenceCorpus, contextClass) {
 }
 
 function isExplorationHedged(text) {
-  return /可考虑|假设|可能|待验证|或可|不妨设想|一种情景/.test(String(text || ""));
+  return HEDGE_RE.test(String(text || ""));
 }
+
+const CLAIM_POSTURES = Object.freeze([
+  "confirmed",
+  "attributed",
+  "inferred",
+  "hypothetical",
+]);
 
 module.exports = {
   CONTEXT_CLASSES,
@@ -622,6 +656,9 @@ module.exports = {
   findUnsupportedFabricatedFacts,
   assertRepresentationFactsGrounded,
   isExplorationHedged,
+  isHedgedClaim,
   sha256Text,
   FABRICATED_FACT_PATTERNS,
+  CLAIM_POSTURES,
+  HEDGE_RE,
 };

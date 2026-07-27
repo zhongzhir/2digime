@@ -370,6 +370,7 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
           produced.generationContext.subjectAssembly &&
           produced.generationContext.subjectAssembly.assemblyPolicyDigest) ||
         null,
+      claimPostures: ["confirmed", "attributed", "inferred", "hypothetical"],
       sourceRefs: (produced.generationContext && produced.generationContext.attachmentRefs
         ? produced.generationContext.attachmentRefs
             .filter((r) => r && r.included)

@@ -49,8 +49,8 @@ function contextBlock(ctx) {
   })();
 
   const exploreHint = ctx.allowAiExplorationBlock
-    ? "若需要推演，请单独成段并标明为本次分析/探索（ai_inference / ai_exploration），不得写入主体事实口吻。"
-    : "本次不允许开放探索块；不要提出无依据的商业假设当作已发生事实。";
+    ? "若需要推演，请单独成段并标明主张姿态（inferred / hypothetical），不得写成 confirmed 主体事实。"
+    : "本次不允许开放探索块；不要把无依据内容写成 confirmed 事实。允许少量 inferred，须标明分析。";
 
   return [
     `任务情境（contextClass=${contextClass}）：${guidance}`,
@@ -63,11 +63,11 @@ function contextBlock(ctx) {
     ctx.purpose ? `该成果目的：${ctx.purpose}` : "",
     subjectBlock,
     ctx.attachmentText
-      ? "参考材料（必须依据；evidenceKind=task_material；ownership=task_owned；不得升格为主体）：\n" +
+      ? "参考材料（必须依据；evidenceKind=task_material；ownership=task_owned；主张姿态多为 attributed；不得升格为主体 confirmed）：\n" +
         ctx.attachmentText
       : "（本次未提供参考材料正文）",
     exploreHint,
-    "要求：紧扣上述 Digital Me / 任务上下文；禁止输出与任务无关的虚构公司或融资故事；禁止占位符如「项目名称」「CEO 姓名」「XX%」「功能一」。",
+    "要求：紧扣上述 Digital Me / 任务上下文；禁止输出与任务无关的虚构公司或融资故事当作 confirmed；禁止占位符如「项目名称」「CEO 姓名」「XX%」「功能一」。",
   ]
     .filter(Boolean)
     .join("\n");

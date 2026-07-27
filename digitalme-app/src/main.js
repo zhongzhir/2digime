@@ -2086,7 +2086,18 @@ ipcMain.handle("actBehalf:save", async (_e, payload) => {
   try {
     const userData = app.getPath("userData");
     // Production boundary helper: ignores renderer invocations / selectedSkillId / sources.
-    return await saveDraftFromRenderer(actBehalfStore, userData, payload || {});
+    const saved = await saveDraftFromRenderer(actBehalfStore, userData, payload || {});
+    if (saved && saved.ok && saved.task && payload && Object.prototype.hasOwnProperty.call(payload, "referenceMaterials")) {
+      try {
+        const aligned = await syncTaskPlanMaterialsAlignment(userData, saved.task);
+        if (aligned && aligned.ok && aligned.task) {
+          return { ...saved, task: aligned.task, materialsStale: !!aligned.materialsStale };
+        }
+      } catch (err) {
+        console.warn("[plan] materials alignment failed", err && err.message ? err.message : err);
+      }
+    }
+    return saved;
   } catch (err) {
     return {
       ok: false,
@@ -2095,6 +2106,47 @@ ipcMain.handle("actBehalf:save", async (_e, payload) => {
     };
   }
 });
+
+/**
+ * When referenceMaterials change vs last planning digest, mark plan understanding stale.
+ * Stored on task.deliverablePlanning to avoid PlanVersion CAS churn.
+ */
+async function syncTaskPlanMaterialsAlignment(userData, task) {
+  if (!task || !task.taskId) return { ok: true, task, materialsStale: false };
+  const ptr = task.deliverablePlanning || null;
+  if (!ptr || !ptr.planId) return { ok: true, task, materialsStale: false };
+  const summaries = deliverablePlanner.summarizeReferenceMaterialsForPlanning(
+    task.referenceMaterials || []
+  );
+  const digest = deliverablePlanner.planningMaterialsDigest(summaries);
+  const planned = ptr.plannedMaterialsDigest || null;
+  const stale = !!(planned && planned !== digest);
+  if (!planned && summaries.length === 0) {
+    return { ok: true, task, materialsStale: false };
+  }
+  // First planning digest missing but materials present after a plan exists → stale.
+  const forceStale = !planned && summaries.length > 0 && !!(ptr.activeConfirmedVersionId || ptr.currentDraftVersionId);
+  const nextStale = stale || forceStale;
+  if (!!ptr.materialsStale === nextStale && (!nextStale || ptr.plannedMaterialsDigest === planned)) {
+    // Still refresh reason when becoming stale.
+    if (!nextStale) return { ok: true, task, materialsStale: false };
+  }
+  const nextPtr = {
+    ...ptr,
+    materialsStale: nextStale,
+    materialsStaleReason: nextStale ? "reference_materials_changed" : null,
+    materialsStaleAt: nextStale ? new Date().toISOString() : null,
+  };
+  const saved = await actBehalfStore.saveTask(userData, {
+    ...task,
+    deliverablePlanning: nextPtr,
+  });
+  return {
+    ok: !!saved.ok,
+    task: saved.task || task,
+    materialsStale: nextStale,
+  };
+}
 
 /** DVL2-01: narrow plan IPC (prefix actBehalf:plan*). */
 function newPlanningAuditId() {
@@ -2131,6 +2183,12 @@ function buildDeliverablePlanView(plan, task, consistencyExtra) {
     statusBanner =
       (consistencyExtra && consistencyExtra.message) ||
       "成果计划一致性异常，已暂停编辑，请先修复。";
+  } else if (
+    task &&
+    task.deliverablePlanning &&
+    task.deliverablePlanning.materialsStale
+  ) {
+    statusBanner = "参考材料已变化，请重新形成预计交付后再生成。";
   } else if (confirmed && !draft) {
     statusBanner = "可以生成成果。";
   } else if (confirmed && draft) {
@@ -2156,6 +2214,7 @@ function buildDeliverablePlanView(plan, task, consistencyExtra) {
     readiness,
     statusBanner,
     revision,
+    materialsStale: !!(task && task.deliverablePlanning && task.deliverablePlanning.materialsStale),
     consistency: consistencyExtra || { status: "ok" },
   };
 }
@@ -2436,6 +2495,15 @@ ipcMain.handle("actBehalf:planGenerate", async (_e, payload) => {
       loaded.plan = fresh.plan;
     }
 
+    // Authoritative materials from task (persisted before planGenerate by renderer).
+    const taskMaterials =
+      (loaded.task && loaded.task.referenceMaterials) ||
+      (payload && payload.referenceMaterials) ||
+      [];
+    const planningMaterials =
+      deliverablePlanner.summarizeReferenceMaterialsForPlanning(taskMaterials);
+    const materialsDigest = deliverablePlanner.planningMaterialsDigest(planningMaterials);
+
     const planningAuditId = newPlanningAuditId();
     const inputFields = {
       goal,
@@ -2444,8 +2512,26 @@ ipcMain.handle("actBehalf:planGenerate", async (_e, payload) => {
       constraints: payload && payload.constraints,
       deadline: payload && payload.deadline,
       expectedQuality: payload && payload.expectedQuality,
+      referenceMaterials: taskMaterials,
+      planningMaterials,
     };
-    const digest = planningInputDigest(inputFields);
+    const digest = planningInputDigest({
+      goal: inputFields.goal,
+      audience: inputFields.audience,
+      usage: inputFields.usage,
+      constraints: inputFields.constraints,
+      deadline: inputFields.deadline,
+      expectedQuality: inputFields.expectedQuality,
+      planningMaterialsDigest: materialsDigest,
+      attachmentCount: planningMaterials.length,
+    });
+    digest.planningAttachmentRefs = planningMaterials.map((m) => ({
+      fileId: m.fileId,
+      filename: m.filename,
+      contentHash: m.contentHash,
+      charCount: m.charCount,
+    }));
+    digest.planningMaterialsDigest = materialsDigest;
 
     const forceRule =
       process.env.DIGITALME_PLANNER_FORCE_RULE === "1" ||
@@ -2524,11 +2610,20 @@ ipcMain.handle("actBehalf:planGenerate", async (_e, payload) => {
     const committed = await deliverablePlanConsistency.commitPlanThenTask({
       userData,
       planRecord: applied.plan,
-      saveTaskPointers: (args) =>
-        saveTaskPlanPointers(userData, taskId, {
+      saveTaskPointers: (args) => {
+        const basePtr = args.deliverablePlanning || {};
+        return saveTaskPlanPointers(userData, taskId, {
           ...args,
+          deliverablePlanning: {
+            ...basePtr,
+            plannedMaterialsDigest: materialsDigest,
+            materialsStale: false,
+            materialsStaleReason: null,
+            materialsStaleAt: null,
+          },
           planningInvocation: planningInvocationBase,
-        }),
+        });
+      },
       auditEvent: {
         action: "plan_generate",
         mode: suggestion.mode,
@@ -2549,6 +2644,9 @@ ipcMain.handle("actBehalf:planGenerate", async (_e, payload) => {
       planningInvocationRef: planningAuditId,
       modelError: suggestion.modelError || null,
       needsReconcile: committed.needsReconcile || false,
+      materialsStale: false,
+      planningMaterialsDigest: materialsDigest,
+      planningAttachmentRefs: digest.planningAttachmentRefs,
     };
   } catch (err) {
     return {

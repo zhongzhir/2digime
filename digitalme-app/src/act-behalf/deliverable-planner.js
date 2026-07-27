@@ -5,6 +5,7 @@
  * Does not create artifact capability invocations or real deliverable files.
  */
 
+const crypto = require("node:crypto");
 const {
   emptyUnderstanding,
   provenanceString,
@@ -17,6 +18,137 @@ const {
   nowIso,
   baselineForKind,
 } = require("./deliverable-plan-schema");
+
+const PLANNING_MATERIAL_BODY_CHARS = 1800;
+const PLANNING_MATERIAL_MAX_FILES = 8;
+
+function sha256Text(text) {
+  return "sha256:" + crypto.createHash("sha256").update(String(text || ""), "utf8").digest("hex");
+}
+
+/**
+ * Compact reference materials for planner context (no vector DB).
+ */
+function summarizeReferenceMaterialsForPlanning(materials, opts) {
+  const maxFiles = (opts && opts.maxFiles) || PLANNING_MATERIAL_MAX_FILES;
+  const bodyChars = (opts && opts.bodyChars) || PLANNING_MATERIAL_BODY_CHARS;
+  const list = Array.isArray(materials) ? materials : [];
+  const out = [];
+  for (const raw of list.slice(0, maxFiles)) {
+    if (!raw || raw.ok === false) continue;
+    const name = String(raw.name || "未命名附件");
+    const full = String(raw.text || "");
+    const truncated = full.length > bodyChars;
+    const excerpt = truncated ? full.slice(0, bodyChars) + "\n…（规划侧已截断）" : full;
+    out.push({
+      fileId: String(raw.id || raw.fileId || sha256Text(name + "|" + full).slice(0, 24)),
+      filename: name,
+      mime: String(raw.mime || raw.mimeType || raw.type || guessMime(name)),
+      contentHash: raw.contentHash || sha256Text(full),
+      charCount: Number(raw.charCount != null ? raw.charCount : full.length) || full.length,
+      excerpt,
+      truncated,
+    });
+  }
+  return out;
+}
+
+function guessMime(name) {
+  const n = String(name || "").toLowerCase();
+  if (n.endsWith(".md")) return "text/markdown";
+  if (n.endsWith(".txt")) return "text/plain";
+  if (n.endsWith(".html") || n.endsWith(".htm")) return "text/html";
+  if (n.endsWith(".docx")) return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (n.endsWith(".pdf")) return "application/pdf";
+  return "application/octet-stream";
+}
+
+function planningMaterialsDigest(summaries) {
+  const payload = (summaries || []).map((m) => ({
+    fileId: m.fileId,
+    filename: m.filename,
+    contentHash: m.contentHash,
+    charCount: m.charCount,
+  }));
+  return sha256Text(JSON.stringify(payload));
+}
+
+function materialsBlob(summaries) {
+  return (summaries || [])
+    .map((m) => `${m.filename}\n${m.excerpt || ""}`)
+    .join("\n\n")
+    .toLowerCase();
+}
+
+/**
+ * Drop unresolved questions that are already answered by attached materials.
+ */
+function filterUnresolvedAgainstMaterials(questions, summaries) {
+  const blob = materialsBlob(summaries);
+  if (!blob.trim()) return Array.isArray(questions) ? questions.slice() : [];
+  return (Array.isArray(questions) ? questions : []).filter((q) => {
+    const s = String(q || "").trim();
+    if (!s) return false;
+    // Heuristic: questions about whether materials exist / what's in attachments.
+    if (/是否(有|已)|有没有|未提供|未附上|是否附/.test(s) && /附件|材料|文件|资料/.test(s)) {
+      return false;
+    }
+    // Audience already named in materials.
+    if (
+      /面向谁|受众|给谁看|主要读者|谁看/.test(s) &&
+      /投资人|合作伙伴|客户|用户|内部|公众|团队|董事会/.test(blob)
+    ) {
+      return false;
+    }
+    // If question keywords substantially appear in materials, drop.
+    const keys = s
+      .replace(/[？?。！!，,、]/g, " ")
+      .split(/\s+/)
+      .filter((t) => t.length >= 2)
+      .slice(0, 6);
+    // Also try character n-grams for CJK questions without spaces.
+    if (keys.length <= 1 && s.length >= 4) {
+      const compact = s.replace(/[？?。！!\s]/g, "");
+      const grams = [];
+      for (let i = 0; i < compact.length - 1 && grams.length < 8; i += 1) {
+        grams.push(compact.slice(i, i + 2));
+      }
+      const hitG = grams.filter((g) => blob.includes(g)).length;
+      if (grams.length >= 3 && hitG >= Math.ceil(grams.length * 0.5)) return false;
+    }
+    const hits = keys.filter((k) => blob.includes(k.toLowerCase())).length;
+    if (keys.length >= 2 && hits >= Math.ceil(keys.length * 0.6)) return false;
+    return true;
+  });
+}
+
+function applyAttachmentAwareAssumptions(understanding, summaries) {
+  const u = {
+    ...understanding,
+    assumptions: Array.isArray(understanding.assumptions) ? understanding.assumptions.slice() : [],
+    unresolvedQuestions: Array.isArray(understanding.unresolvedQuestions)
+      ? understanding.unresolvedQuestions.slice()
+      : [],
+  };
+  const hasMats = Array.isArray(summaries) && summaries.length > 0;
+  if (hasMats) {
+    const names = summaries.map((m) => m.filename).join("、");
+    const assume = `本次已附参考材料（${summaries.length} 个）：${names}。规划与生成应以这些材料为准，不得把材料当作不存在。`;
+    // Remove contradictory assumptions about missing materials.
+    u.assumptions = u.assumptions.filter(
+      (a) => !/未附|未提供.*材料|没有附|尚未附上|未在本次输入|暂无参考材料/.test(String(a || ""))
+    );
+    if (!u.assumptions.some((a) => String(a).includes("已附参考材料"))) {
+      u.assumptions.unshift(assume);
+    }
+    u.unresolvedQuestions = filterUnresolvedAgainstMaterials(u.unresolvedQuestions, summaries);
+  } else {
+    if (!u.assumptions.some((a) => /未附|暂无参考材料|尚未提供参考材料/.test(String(a || "")))) {
+      u.assumptions.push("本次任务暂无参考材料附件；不得臆造附件内容。");
+    }
+  }
+  return u;
+}
 
 function detectScene(goal) {
   const g = String(goal || "");
@@ -157,7 +289,16 @@ function buildRuleBasedItems(goal, understanding) {
   return normalizeOrder(items);
 }
 
-function ruleBasedPlan({ goal, audience, usage, constraints, deadline, expectedQuality }) {
+function ruleBasedPlan(input) {
+  const goal = input && input.goal;
+  const audience = input && input.audience;
+  const usage = input && input.usage;
+  const constraints = input && input.constraints;
+  const deadline = input && input.deadline;
+  const expectedQuality = input && input.expectedQuality;
+  const materialSummaries =
+    (input && input.planningMaterials) ||
+    summarizeReferenceMaterialsForPlanning(input && input.referenceMaterials);
   const g = String(goal || "").trim();
   if (!g) {
     return { ok: false, code: "empty_goal", message: "请先填写任务目标。" };
@@ -176,9 +317,13 @@ function ruleBasedPlan({ goal, audience, usage, constraints, deadline, expectedQ
     understanding.expectedQuality = provenanceString(String(expectedQuality), "user_provided");
   }
   understanding = applyDefaultAssumptions(understanding);
+  understanding = applyAttachmentAwareAssumptions(understanding, materialSummaries);
   const scene = detectScene(g);
   if (!audience && scene.introPackage) {
-    understanding.unresolvedQuestions = ["这次材料主要面向谁？"];
+    understanding.unresolvedQuestions = filterUnresolvedAgainstMaterials(
+      ["这次材料主要面向谁？"],
+      materialSummaries
+    );
   }
   const items = buildRuleBasedItems(g, understanding);
   return {
@@ -187,6 +332,8 @@ function ruleBasedPlan({ goal, audience, usage, constraints, deadline, expectedQ
     understanding,
     items,
     planningInvocationRef: null,
+    planningMaterials: materialSummaries,
+    planningMaterialsDigest: planningMaterialsDigest(materialSummaries),
   };
 }
 
@@ -197,13 +344,19 @@ function buildPlanningModelMessages(input) {
   const constraints = Array.isArray(input.constraints) ? input.constraints : [];
   const deadline = input.deadline ? String(input.deadline) : "";
   const expectedQuality = input.expectedQuality ? String(input.expectedQuality) : "";
+  const materialSummaries =
+    (input && input.planningMaterials) ||
+    summarizeReferenceMaterialsForPlanning(input && input.referenceMaterials);
 
   const system =
-    "你是成果规划助手。只根据用户给出的最小字段，输出一个 JSON 对象，不要输出其它文字。" +
+    "你是成果规划助手。根据用户目标与已附参考材料，输出一个 JSON 对象，不要输出其它文字。" +
     "JSON 字段：understanding{goal,audience,usage,constraints,deadline,expectedQuality,assumptions,unresolvedQuestions}," +
     "items[{kind,title,purpose,priority,format}]。" +
     "kind 仅可：document,presentation,webpage,image,audio,video,dataset,code,dashboard,archive,other。" +
-    "不要编造附件或主体资料；信息不足时用 assumptions，不要拒绝规划。";
+    "若 referenceMaterials 非空：assumptions 必须承认附件真实存在，并基于附件摘要作判断；" +
+    "不要臆测“未附材料/未在本次输入中附上”；不要把附件中已写明的信息再写入 unresolvedQuestions。" +
+    "若 referenceMaterials 为空：可在 assumptions 标明暂无附件，不得编造附件内容。" +
+    "信息不足时用 assumptions，不要拒绝规划。";
 
   const user = JSON.stringify({
     goal,
@@ -212,6 +365,15 @@ function buildPlanningModelMessages(input) {
     constraints,
     deadline: deadline || null,
     expectedQuality: expectedQuality || null,
+    referenceMaterials: materialSummaries.map((m) => ({
+      fileId: m.fileId,
+      filename: m.filename,
+      mime: m.mime,
+      contentHash: m.contentHash,
+      charCount: m.charCount,
+      excerpt: m.excerpt,
+      truncated: m.truncated,
+    })),
   });
 
   return [
@@ -220,7 +382,7 @@ function buildPlanningModelMessages(input) {
   ];
 }
 
-function normalizeModelSuggestion(parsed, goal) {
+function normalizeModelSuggestion(parsed, goal, materialSummaries) {
   const understanding = normalizeUnderstanding(
     {
       goal: { value: goal, provenance: "user_provided" },
@@ -234,7 +396,8 @@ function normalizeModelSuggestion(parsed, goal) {
     },
     goal
   );
-  const fixed = applyDefaultAssumptions(understanding);
+  let fixed = applyDefaultAssumptions(understanding);
+  fixed = applyAttachmentAwareAssumptions(fixed, materialSummaries || []);
   const rawItems = Array.isArray(parsed.items) ? parsed.items : [];
   let items = normalizeOrder(rawItems.map((it, i) => normalizeItem(it, i)));
   // Force baseline availability (never claim currently generatable)
@@ -258,7 +421,13 @@ async function modelAssistedPlan(input, { callModel } = {}) {
   if (typeof callModel !== "function") {
     return { ok: false, code: "no_model", message: "规划模型不可用。" };
   }
-  const messages = buildPlanningModelMessages(input);
+  const materialSummaries =
+    (input && input.planningMaterials) ||
+    summarizeReferenceMaterialsForPlanning(input && input.referenceMaterials);
+  const messages = buildPlanningModelMessages({
+    ...(input || {}),
+    planningMaterials: materialSummaries,
+  });
   let raw;
   try {
     // Contract: callModel(messages, options) → string. Route metadata stays in main closure.
@@ -282,7 +451,7 @@ async function modelAssistedPlan(input, { callModel } = {}) {
   }
   const repaired = repairModelPlanJson(raw);
   if (!repaired.ok) return repaired;
-  const normalized = normalizeModelSuggestion(repaired.value, g);
+  const normalized = normalizeModelSuggestion(repaired.value, g, materialSummaries);
   if (!normalized.ok) return normalized;
   return {
     ok: true,
@@ -290,16 +459,22 @@ async function modelAssistedPlan(input, { callModel } = {}) {
     understanding: normalized.understanding,
     items: normalized.items,
     planningInvocationRef: null,
+    planningMaterials: materialSummaries,
+    planningMaterialsDigest: planningMaterialsDigest(materialSummaries),
   };
 }
 
 async function generatePlanSuggestion(input, options) {
   const opts = options || {};
+  const materialSummaries =
+    (input && input.planningMaterials) ||
+    summarizeReferenceMaterialsForPlanning(input && input.referenceMaterials);
+  const enriched = { ...(input || {}), planningMaterials: materialSummaries };
   // Prefer model when provided; always allow rule fallback.
   if (opts.callModel && opts.forceRule !== true) {
-    const modeled = await modelAssistedPlan(input, { callModel: opts.callModel });
+    const modeled = await modelAssistedPlan(enriched, { callModel: opts.callModel });
     if (modeled.ok) return modeled;
-    const fallback = ruleBasedPlan(input || {});
+    const fallback = ruleBasedPlan(enriched);
     if (fallback.ok) {
       return {
         ...fallback,
@@ -309,11 +484,26 @@ async function generatePlanSuggestion(input, options) {
     }
     return modeled;
   }
-  return ruleBasedPlan(input || {});
+  return ruleBasedPlan(enriched);
 }
 
 function applySuggestionToRecord({ taskId, existingRecord, suggestion, goal }) {
   if (!suggestion || !suggestion.ok) return { ok: false, code: "no_suggestion", message: "没有可用的规划建议。" };
+  const planningMaterials = suggestion.planningMaterials || [];
+  const planningMaterialsDigestValue =
+    suggestion.planningMaterialsDigest || planningMaterialsDigest(planningMaterials);
+  const materialFields = {
+    planningAttachmentRefs: planningMaterials.map((m) => ({
+      fileId: m.fileId,
+      filename: m.filename,
+      mime: m.mime,
+      contentHash: m.contentHash,
+      charCount: m.charCount,
+      truncated: !!m.truncated,
+    })),
+    planningMaterialsDigest: planningMaterialsDigestValue,
+  };
+
   if (!existingRecord) {
     const draft = createDraftVersion({
       planId: undefined,
@@ -324,10 +514,13 @@ function applySuggestionToRecord({ taskId, existingRecord, suggestion, goal }) {
       status: "draft",
       planningInvocationRef: suggestion.planningInvocationRef,
     });
+    Object.assign(draft, materialFields);
     const record = createPlanRecord({ taskId, draftVersion: draft });
     draft.planId = record.planId;
     record.versions[draft.versionId] = draft;
     record.currentDraftVersionId = draft.versionId;
+    record.materialsStale = false;
+    record.materialsStaleReason = null;
     return { ok: true, plan: record, version: draft };
   }
 
@@ -348,8 +541,11 @@ function applySuggestionToRecord({ taskId, existingRecord, suggestion, goal }) {
       cur.items = normalizeOrder(suggestion.items.map((it, i) => normalizeItem(it, i)));
       cur.planningAvailabilitySnapshot = require("./deliverable-plan-schema").buildAvailabilitySnapshot(cur.items);
       cur.planningInvocationRef = suggestion.planningInvocationRef || cur.planningInvocationRef;
+      Object.assign(cur, materialFields);
       cur.updatedAt = nowIso();
       cur.status = "draft";
+      record.materialsStale = false;
+      record.materialsStaleReason = null;
       record.updatedAt = nowIso();
       return { ok: true, plan: record, version: cur };
     }
@@ -365,6 +561,7 @@ function applySuggestionToRecord({ taskId, existingRecord, suggestion, goal }) {
     status: "draft",
     planningInvocationRef: suggestion.planningInvocationRef,
   });
+  Object.assign(draft, materialFields);
   if (record.currentDraftVersionId && record.versions[record.currentDraftVersionId]) {
     const prev = record.versions[record.currentDraftVersionId];
     if (prev.status === "draft" || prev.status === "needs_user_input" || prev.status === "ready_for_confirmation") {
@@ -375,6 +572,8 @@ function applySuggestionToRecord({ taskId, existingRecord, suggestion, goal }) {
   record.versions[draft.versionId] = draft;
   record.versionIds.push(draft.versionId);
   record.currentDraftVersionId = draft.versionId;
+  record.materialsStale = false;
+  record.materialsStaleReason = null;
   record.updatedAt = nowIso();
   return { ok: true, plan: record, version: draft };
 }
@@ -465,6 +664,10 @@ module.exports = {
   generatePlanSuggestion,
   applySuggestionToRecord,
   applyDefaultAssumptions,
+  applyAttachmentAwareAssumptions,
+  summarizeReferenceMaterialsForPlanning,
+  planningMaterialsDigest,
+  filterUnresolvedAgainstMaterials,
   saveDraftEdits,
   confirmDraft,
   cancelDraft,
