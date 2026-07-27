@@ -5,6 +5,52 @@
 
 ---
 
+## 2026-07-27 IDCOLLAB-MIN-01 最小行动授权与参与方语义接线规格收口
+
+### 本次目标
+
+在不修改应用实现代码、不开放外部协作运行时的前提下，为现有 DVL2 做事链补齐最小主体、参与方、授权与责任语义，并形成可供 Owner 接受的实施前规格。
+
+### 本次完成
+
+1. 新增任务包 `digitalme_phase1_task_IDCOLLAB-MIN-01_action_identity_and_authorization_v0.1.md`；
+2. 定义 `SubjectRef`、`ParticipantRef`、`ExecutorRef`、`AuthorizationRef`、`ActionIdentityContext` 与 `responsibilityBoundary`；
+3. 明确与 `Task / PlanVersion / DeliverablePackage / DeliverableVersion / ArtifactRef / Learning Record / CRT` 的分工与接线；
+4. 定义 legacy 兼容策略：读取时推断，强制标记 `identityContextSource=legacy_default_inference`；
+5. 完成独立 Codex 复核并收敛到 v0.1.2；
+6. 同步 `digitalme_context.md` 与 `digitalme_panorama_execution_index_v0.1.md`。
+
+### 独立复核后的关键收敛
+
+1. **不建**独立 Participant Store；
+2. `AuthorizationRef` 不单独承担全部授权事实，后续实施应采用本地权威主表或同等记录；
+3. `representedSubject` / `actingRole` 与 `displayName` 变化区分处理，避免不必要重确认；
+4. legacy 推断不得冒充原始事实；
+5. CRT 与身份/授权系统职责分开，避免重复建设。
+
+### 状态结论
+
+`IDCOLLAB-MIN-01` 当前状态：
+
+```text
+specified / codex_review_passed / ready_for_owner_acceptance / not_started
+```
+
+### 重要边界
+
+1. **不得**修改应用代码；
+2. **不得**开启公网协作、Digital Org、支付、A2A 远程协议运行时；
+3. **不得**重做 DID / VC 基础设施；
+4. **不得** push；
+5. 当前未跟踪文件 `CRT_RUNTIME_AUDIT_20260726.md` 不属于本任务。
+
+### 待办事项
+
+1. 等待 Owner 接受并冻结 `IDCOLLAB-MIN-01`；
+2. 不得 push。
+
+---
+
 ## 2026-07-27 DVL2-03 Owner 真机验收收口
 
 ### 本次目标
