@@ -13,6 +13,8 @@ const { retrieveProjectClaims, renderProjectClaimsSection } = require("./project
 const { detectProjectScope } = require("./project-detection");
 const { PROJECT_IDS } = require("./project-knowledge-schema");
 const { budgetAttachmentContext } = require("./deliverable-context");
+const { confirmationStatusLabel } = require("./learning-adoption-policy");
+const { recordClaimUsage } = require("./knowledge-learning");
 
 function ensurePrincipleClaimsIncluded(result, claims, query) {
   if (!result || !/原则|界面|按需|极简|工作界面|详情页/.test(String(query || ""))) return result;
@@ -22,7 +24,7 @@ function ensurePrincipleClaimsIncluded(result, claims, query) {
     if (claim.supersededBy || claim.confirmationStatus === "rejected") continue;
     if (claim.claimType !== "work_principle") continue;
     if (
-      claim.confirmationStatus !== "owner_confirmed" &&
+      !["owner_confirmed", "auto_adopted", "reinforced"].includes(claim.confirmationStatus) &&
       claim.authorityLevel !== "owner_confirmed"
     ) {
       continue;
@@ -65,7 +67,9 @@ function pickActiveClaims(claims) {
 function statusRank(claim) {
   const auth = String(claim.authorityLevel || "");
   const conf = String(claim.confirmationStatus || "");
-  if (conf === "owner_confirmed" || auth === "owner_confirmed") return 5;
+  if (conf === "owner_confirmed" || auth === "owner_confirmed") return 6;
+  if (conf === "reinforced") return 5;
+  if (conf === "auto_adopted") return 4;
   if (conf === "frozen" || auth === "frozen_spec") return 4;
   if (conf === "accepted" || auth === "accepted_runtime_state") return 3;
   if (conf === "candidate") return 1;
@@ -118,7 +122,7 @@ function renderEvidenceRows(resolved) {
   for (const c of resolved.selectedClaims || []) {
     rows.push({
       summary: String(c.claimText || "").slice(0, 120),
-      source: (c.sourceRefs && c.sourceRefs[0]) || "项目知识",
+      source: formatClaimSource(c),
       status: claimStatusLabel(c),
       claimId: c.claimId,
       authorityLevel: c.authorityLevel,
@@ -135,10 +139,20 @@ function renderEvidenceRows(resolved) {
   return rows;
 }
 
+function formatClaimSource(c) {
+  const ref = (c.sourceRefs && c.sourceRefs[0]) || "";
+  if (/owner_chat_input|direct_user_statement/i.test(ref)) return "你的直接输入";
+  if (/owner_chat_confirm|owner_confirmed/i.test(ref)) return "你已明确确认";
+  if (c.confirmationStatus === "auto_adopted") return "你的直接输入";
+  if (ref.startsWith("digitalme_") || ref.endsWith(".md")) return "项目资料";
+  return ref || "项目知识";
+}
+
 function claimStatusLabel(c) {
-  if (c.confirmationStatus === "owner_confirmed" || c.authorityLevel === "owner_confirmed") {
-    return "当前权威";
+  if (c.confirmationStatus) {
+    return confirmationStatusLabel(c.confirmationStatus);
   }
+  if (c.authorityLevel === "owner_confirmed") return "你已明确确认";
   if (c.claimType === "current_status") return "已验收";
   if (c.claimType === "confirmed_decision") return "当前有效";
   if (c.claimType === "historical_exploration") return "历史探索";
@@ -184,7 +198,7 @@ function resolveKnowledgeContext(opts) {
         c &&
         c.claimType === "work_principle" &&
         !c.supersededBy &&
-        (c.confirmationStatus === "owner_confirmed" || c.authorityLevel === "owner_confirmed")
+        ["owner_confirmed", "auto_adopted", "reinforced"].includes(c.confirmationStatus)
     );
     if (hasPrinciple) {
       detected = {
@@ -232,6 +246,16 @@ function resolveKnowledgeContext(opts) {
         })
       : { claims: [], retrievedClaimIds: [], excludedClaims: [], authoritySummary: null };
   const projectRetrieval = ensurePrincipleClaimsIncluded(projectRetrievalRaw, claims, query);
+
+  if (packageDir && projectRetrieval.retrievedClaimIds) {
+    for (const claimId of projectRetrieval.retrievedClaimIds) {
+      try {
+        recordClaimUsage(packageDir, claimId, { successful: true });
+      } catch {
+        /* ignore */
+      }
+    }
+  }
 
   for (const ex of projectRetrieval.excludedClaims || []) {
     excludedItems.push({ claimId: ex.claimId, reason: ex.reason });

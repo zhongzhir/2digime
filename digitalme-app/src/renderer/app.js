@@ -1111,14 +1111,51 @@ function attachAssistantActions(wrap, text, opts = {}) {
   }
 }
 
-function renderKnowledgeCandidatePrompt(wrap, candidates) {
-  if (!wrap || !Array.isArray(candidates) || !candidates.length) return;
+function renderKnowledgeNotice(notices) {
+  if (!Array.isArray(notices) || !notices.length) return;
+  for (const notice of notices) {
+    const note = document.createElement("div");
+    note.className = "msg system-note knowledge-notice";
+    note.textContent = notice.message || "已记住这项原则。";
+    const actions = document.createElement("span");
+    actions.className = "knowledge-notice-actions";
+    if (notice.claimId && window.digitalMe.confirmKnowledgeCandidate) {
+      const revoke = document.createElement("button");
+      revoke.type = "button";
+      revoke.className = "btn-link";
+      revoke.textContent = "撤销";
+      revoke.addEventListener("click", async () => {
+        try {
+          await window.digitalMe.confirmKnowledgeCandidate({
+            candidate: { claimText: notice.claimText, projectId: "project_digital_me" },
+            mode: "reject",
+            claimId: notice.claimId,
+          });
+          note.textContent = "已撤销这项原则。";
+          actions.remove();
+        } catch {
+          /* ignore */
+        }
+      });
+      actions.appendChild(revoke);
+    }
+    if (actions.childNodes.length) note.appendChild(actions);
+    $("messages").appendChild(note);
+    $("messages").scrollTop = $("messages").scrollHeight;
+    setTimeout(() => {
+      if (note.isConnected) note.remove();
+    }, 12000);
+  }
+}
+
+function renderKnowledgeConflictPrompt(wrap, pending) {
+  if (!wrap || !pending) return;
   if (wrap.querySelector(".knowledge-confirm-box")) return;
-  const c = candidates[0];
+  const c = pending.candidate || pending;
   const box = document.createElement("div");
   box.className = "knowledge-confirm-box";
   const text = document.createElement("p");
-  text.textContent = c.confirmationPrompt || "是否记住这条？";
+  text.textContent = c.confirmationPrompt || "这与当前已确认原则不同，以哪项为准？";
   box.appendChild(text);
   const actions = document.createElement("div");
   actions.className = "knowledge-confirm-actions";
@@ -1133,19 +1170,21 @@ function renderKnowledgeCandidatePrompt(wrap, candidates) {
           await window.digitalMe.confirmKnowledgeCandidate({ candidate: c, mode });
         }
         box.remove();
-        if (mode === "owner_confirmed") {
-          addMessage("system-note", "已记住这条项目原则，后续对话和做事会一并使用。");
+        if (mode === "owner_confirmed" || mode === "auto_adopted") {
+          addMessage("system-note", mode === "owner_confirmed" ? "已采用新说法。" : "已记住这项原则。");
+        } else if (mode === "session_only") {
+          addMessage("system-note", "仅本次对话会使用新说法。");
         }
-      } catch (err) {
+      } catch {
         btn.disabled = false;
         addMessage("system-note", "暂时没能保存，请稍后再试。");
       }
     });
     return btn;
   };
-  actions.appendChild(mkBtn("确认", "owner_confirmed"));
+  actions.appendChild(mkBtn("采用新说法", "owner_confirmed"));
+  actions.appendChild(mkBtn("保留原说法", "dismiss"));
   actions.appendChild(mkBtn("仅本次使用", "session_only"));
-  actions.appendChild(mkBtn("不记录", "dismiss"));
   box.appendChild(actions);
   wrap.appendChild(box);
 }
@@ -1586,8 +1625,10 @@ async function send() {
         evidence: lastEvidence,
         titleHint: guessTitleFromText(res.fullReply || reply),
       });
-      const candidates = (res.meta && res.meta.knowledgeCandidates) || [];
-      if (candidates.length) renderKnowledgeCandidatePrompt(wrap, candidates);
+      const notices = (res.meta && res.meta.knowledgeNotices) || [];
+      if (notices.length) renderKnowledgeNotice(notices);
+      const pending = (res.meta && res.meta.knowledgeCandidates) || [];
+      if (pending.length) renderKnowledgeConflictPrompt(wrap, pending[0]);
     }
 
     if (reply) {

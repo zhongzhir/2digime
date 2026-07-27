@@ -4301,10 +4301,20 @@ ipcMain.handle("knowledge:confirmCandidate", async (_e, payload) => {
   const dir = cfg.packageDir || DEFAULT_PACKAGE_DIR;
   const candidate = payload && payload.candidate;
   const mode = (payload && payload.mode) || "owner_confirmed";
+  if (mode === "reject" && payload && payload.claimId) {
+    const projectStore = require("./act-behalf/project-knowledge-store");
+    return projectStore.revokeClaim(dir, payload.claimId, { reason: "owner_revoked" });
+  }
   if (!candidate || !candidate.claimText) {
     return { ok: false, code: "invalid_candidate" };
   }
-  return knowledgeLearning.confirmCandidate(dir, candidate, { mode });
+  if (mode === "owner_confirmed") {
+    return knowledgeLearning.confirmCandidate(dir, candidate, { mode });
+  }
+  if (mode === "auto_adopted") {
+    return knowledgeLearning.adoptCandidate(dir, candidate, { mode: "auto_adopted" });
+  }
+  return knowledgeLearning.adoptCandidate(dir, candidate, { mode });
 });
 
 ipcMain.handle("chat:send", async (e, { pkg, history, requestId, attachmentContext, scenarioHint }) => {
@@ -4337,6 +4347,8 @@ ipcMain.handle("chat:send", async (e, { pkg, history, requestId, attachmentConte
   const evidence = [];
   let knowledgeCandidates = [];
   let knowledgeProvenance = null;
+  let metaLearningNotices = [];
+  let metaLearningAdopted = [];
   if (lastUser && lastUser.content) {
     try {
       const userQuestion = String(lastUser.content).split("\n---\n")[0].trim();
@@ -4362,12 +4374,12 @@ ipcMain.handle("chat:send", async (e, { pkg, history, requestId, attachmentConte
           claimId: row.claimId || null,
         });
       }
-      const candidates = knowledgeLearning.extractCandidatesFromUserInput(userQuestion, {
+      const learningResult = knowledgeLearning.processUserInputLearning(dir, userQuestion, {
         sourceRef: "owner_chat_input:" + rid,
       });
-      knowledgeCandidates = candidates.filter(
-        (c) => !knowledgeLearning.claimExistsInStore(dir, c.claimText)
-      );
+      knowledgeCandidates = learningResult.pendingConfirmation || [];
+      metaLearningNotices = learningResult.notices || [];
+      metaLearningAdopted = learningResult.adopted || [];
     } catch {}
   }
   const ac = new AbortController();
@@ -4385,6 +4397,8 @@ ipcMain.handle("chat:send", async (e, { pkg, history, requestId, attachmentConte
     evidence,
     knowledgeProvenance,
     knowledgeCandidates,
+    knowledgeNotices: metaLearningNotices,
+    knowledgeAdopted: metaLearningAdopted,
     requestId: rid,
   };
   let streamMessages = [{ role: "system", content: system }, ...modelHistory];

@@ -114,19 +114,15 @@ async function main() {
     cleanup(pkgDir);
   });
 
-  await test("owner confirm + cross-surface retrieval", () => {
+  await test("auto-adopt + cross-surface retrieval", () => {
     const pkgDir = tempDir("llf02-pkg3-");
     createMinimalFixture(pkgDir);
     projectStore.ensureDigitalMeProjectKnowledge(pkgDir);
-    const candidates = knowledgeLearning.extractCandidatesFromUserInput(SAMPLE_PRINCIPLE, {
-      sourceRef: "test_input",
+    const result = knowledgeLearning.processUserInputLearning(pkgDir, SAMPLE_PRINCIPLE, {
+      sourceRef: "owner_chat_input:test",
     });
-    assert.ok(candidates.length >= 1);
-    const confirmed = knowledgeLearning.confirmCandidate(pkgDir, candidates[0], {
-      mode: "owner_confirmed",
-    });
-    assert.equal(confirmed.ok, true);
-    assert.ok(confirmed.claimId);
+    assert.equal(result.adopted.length, 1);
+    assert.equal(result.adopted[0].claim.confirmationStatus, "auto_adopted");
 
     const chat = resolveKnowledgeContext({
       query: "Digital Me 的界面设计最重要的原则是什么",
@@ -137,7 +133,7 @@ async function main() {
     assert.ok(texts.includes(SAMPLE_PRINCIPLE.replace(/。$/, "")));
     const row = chat.evidenceRows.find((r) => r.summary.includes("界面"));
     assert.ok(row);
-    assert.ok(/权威|有效/.test(row.status));
+    assert.ok(/系统已记住|多次使用后已稳定/.test(row.status));
 
     const task = resolveKnowledgeContext({
       query: "为 Digital Me 设计一个任务详情页",
@@ -153,13 +149,16 @@ async function main() {
     const pkgDir = tempDir("llf02-pkg4-");
     createMinimalFixture(pkgDir);
     projectStore.ensureDigitalMeProjectKnowledge(pkgDir);
-    const c1 = knowledgeLearning.extractCandidatesFromUserInput(SAMPLE_PRINCIPLE)[0];
-    const first = knowledgeLearning.confirmCandidate(pkgDir, c1, { mode: "owner_confirmed" });
-    const c2 = knowledgeLearning.extractCandidatesFromUserInput(REVISED_PRINCIPLE, {
+    const c1 = knowledgeLearning.processUserInputLearning(pkgDir, SAMPLE_PRINCIPLE, {
+      sourceRef: "owner_chat_input:test",
+    });
+    assert.equal(c1.adopted.length, 1);
+    const c2 = knowledgeLearning.processUserInputLearning(pkgDir, REVISED_PRINCIPLE, {
       projectId: "project_digital_me",
-    })[0];
-    const second = knowledgeLearning.confirmCandidate(pkgDir, c2, { mode: "owner_confirmed" });
-    assert.ok(second.supersededClaimId);
+      sourceRef: "owner_chat_input:test2",
+    });
+    assert.equal(c2.adopted.length, 1);
+    assert.ok(c2.adopted[0].supersededClaimId);
 
     const resolved = resolveKnowledgeContext({
       query: "界面设计原则",

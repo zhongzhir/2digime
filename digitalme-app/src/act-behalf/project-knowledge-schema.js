@@ -8,6 +8,7 @@ const CLAIM_TYPES = Object.freeze([
   "current_fact",
   "confirmed_decision",
   "current_status",
+  "work_principle",
   "proposal",
   "historical_exploration",
   "rejected_direction",
@@ -39,6 +40,8 @@ const AUTHORITY_RANK = Object.freeze({
 
 const CONFIRMATION_STATUSES = Object.freeze([
   "owner_confirmed",
+  "auto_adopted",
+  "reinforced",
   "frozen",
   "accepted",
   "candidate",

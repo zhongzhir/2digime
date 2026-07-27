@@ -27,6 +27,10 @@ function rankClaim(claim) {
 
   if (claim.confirmationStatus === "owner_confirmed" || claim.confirmationStatus === "frozen") {
     score += 30;
+  } else if (claim.confirmationStatus === "reinforced") {
+    score += 28;
+  } else if (claim.confirmationStatus === "auto_adopted") {
+    score += 25;
   } else if (claim.confirmationStatus === "superseded" || claim.confirmationStatus === "rejected") {
     score -= 60;
   } else if (claim.confirmationStatus === "pending_conflict") {
