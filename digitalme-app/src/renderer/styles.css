@@ -3229,6 +3229,99 @@ body {
 }
 .act-behalf-rail {
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.act-behalf-rail .write-rail-block {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.act-task-list-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+.act-task-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 6px;
+  font: inherit;
+}
+.act-task-tabs {
+  display: flex;
+  gap: 6px;
+}
+.act-task-tab {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.88rem;
+}
+.act-task-tab.active {
+  background: var(--accent, #eef3ff);
+  border-color: var(--accent-border, #b8c9f0);
+  font-weight: 600;
+}
+.act-task-list-scroll {
+  flex: 1;
+  min-height: 0;
+  max-height: min(52vh, 520px);
+  overflow: auto;
+  margin-top: 4px;
+}
+.act-task-list .task-item {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  border: 1px solid var(--border, #e8e8e8);
+  border-radius: 8px;
+  background: var(--card, #fff);
+}
+.act-task-list .task-item.active {
+  border-color: var(--accent-border, #b8c9f0);
+  background: var(--accent, #f5f8ff);
+}
+.act-task-list .task-item-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.act-task-list .task-item-main strong {
+  font-size: 0.92rem;
+  line-height: 1.3;
+  word-break: break-word;
+}
+.act-task-list .task-item-edit {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.act-task-load-more {
+  width: 100%;
+  margin-top: 6px;
+  flex-shrink: 0;
 }
 .act-behalf-main textarea,
 .act-behalf-main input[type="text"] {

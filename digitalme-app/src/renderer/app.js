@@ -5325,9 +5325,12 @@ async function renderDoTaskList() {
   if (!list) return;
   list.innerHTML = "";
   if (!window.digitalMe.actBehalfList) return;
-  const res = await window.digitalMe.actBehalfList();
+  const res = await window.digitalMe.actBehalfList({ scope: "active", offset: 0, limit: 20 });
   const tasks = (res && res.tasks) || [];
-  if (empty) empty.classList.toggle("hidden", tasks.length > 0);
+  if (empty) {
+    empty.textContent = "还没有任务，点击新建开始做事。";
+    empty.classList.toggle("hidden", tasks.length > 0);
+  }
   for (const t of tasks) {
     const btn = document.createElement("button");
     btn.type = "button";
@@ -5341,7 +5344,6 @@ async function renderDoTaskList() {
       )}</span>` +
       `<span class="muted">${escapeHtml(t.requestPreview || "")}</span>`;
     btn.addEventListener("click", () => {
-      console.log("[do-task-list] clicked taskId:", t.taskId);
       openDoScene("act_behalf", { taskId: t.taskId });
     });
     list.appendChild(btn);
@@ -6503,30 +6505,554 @@ function renderActClaimList() {
   }
 }
 
-async function refreshActTaskList() {
-  const list = $("act-task-list");
-  const empty = $("act-task-empty");
-  if (!list || !window.digitalMe.actBehalfList) return;
-  const res = await window.digitalMe.actBehalfList();
-  list.innerHTML = "";
-  const tasks = (res && res.tasks) || [];
-  if (empty) empty.classList.toggle("hidden", tasks.length > 0);
-  for (const t of tasks) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "library-item";
-    btn.dataset.taskId = t.taskId;
-    const flag = t.contextConfirmed ? "已确认上下文" : t.status || "";
-    btn.innerHTML =
-      `<strong>${escapeHtml(t.title || "未命名任务")}</strong>` +
-      `<span class="muted">${escapeHtml(flag)} · ${escapeHtml(
-        String(t.updatedAt || "").slice(0, 19).replace("T", " ")
-      )}</span>` +
-      `<span class="muted">${escapeHtml(t.requestPreview || "")}</span>`;
-    btn.addEventListener("click", () => openDoScene("act_behalf", { taskId: t.taskId }));
-    list.appendChild(btn);
+const TASK_LIST_PAGE_SIZE = 20;
+const TASK_TITLE_MAX = 60;
+
+const actTaskListState = {
+  scope: "active",
+  query: "",
+  offset: 0,
+  tasks: [],
+  total: 0,
+  hasMore: false,
+  loading: false,
+};
+
+/** @type {{ kind: string, taskId?: string, row?: HTMLElement, menu?: HTMLElement, moreBtn?: HTMLElement, task?: object, restoreMenu?: Function } | null} */
+let actTaskUiMode = null;
+
+/** @type {{ taskId: string, menu: HTMLElement, moreBtn: HTMLElement } | null} */
+let actTaskOpenOverflow = null;
+
+function normalizeTaskTitleInput(raw) {
+  const title = String(raw || "").trim();
+  if (!title) return { ok: false, error: "请输入名称", title: "" };
+  if (title.length > TASK_TITLE_MAX) {
+    return { ok: false, error: "名称最多 60 字", title: title.slice(0, TASK_TITLE_MAX) };
+  }
+  return { ok: true, error: null, title };
+}
+
+function closeActTaskOverflowMenus() {
+  if (actTaskOpenOverflow && actTaskOpenOverflow.menu) {
+    actTaskOpenOverflow.menu.classList.add("hidden");
+    if (actTaskOpenOverflow.moreBtn) {
+      actTaskOpenOverflow.moreBtn.setAttribute("aria-expanded", "false");
+    }
+  }
+  actTaskOpenOverflow = null;
+  if (actTaskUiMode && actTaskUiMode.kind === "deleteConfirm") {
+    actTaskUiMode = null;
   }
 }
+
+function actTaskEmptyMessage() {
+  const q = String(actTaskListState.query || "").trim();
+  if (q) return "没有找到匹配的任务。";
+  if (actTaskListState.scope === "archived") return "还没有已归档任务。";
+  return "还没有任务，点击新建开始做事。";
+}
+
+async function fetchActTaskListPage({ append = false } = {}) {
+  if (!window.digitalMe.actBehalfList) return { ok: false, tasks: [] };
+  const offset = append ? actTaskListState.tasks.length : 0;
+  const res = await window.digitalMe.actBehalfList({
+    scope: actTaskListState.scope,
+    query: actTaskListState.query || undefined,
+    offset,
+    limit: TASK_LIST_PAGE_SIZE,
+  });
+  if (!res || !res.ok) return res || { ok: false, tasks: [] };
+  const incoming = (res.tasks || []).slice();
+  actTaskListState.offset = offset;
+  actTaskListState.total = Number(res.total) || incoming.length;
+  actTaskListState.hasMore = !!res.hasMore;
+  actTaskListState.tasks = append ? actTaskListState.tasks.concat(incoming) : incoming;
+  return res;
+}
+
+async function handleActTaskRemovedFromView(taskId) {
+  if (actBehalfState.taskId !== taskId) return;
+  resetActBehalfForm();
+  const res = await window.digitalMe.actBehalfList({
+    scope: "active",
+    offset: 0,
+    limit: 1,
+  });
+  const next = res && res.tasks && res.tasks[0];
+  if (next && next.taskId) {
+    await openActBehalfTask(next.taskId);
+  } else {
+    setActProgress("当前任务已移出列表。可新建任务或从列表选择其他任务。");
+  }
+}
+
+function toggleActTaskOverflow(moreBtn, menu, taskId) {
+  if (
+    actTaskOpenOverflow &&
+    actTaskOpenOverflow.taskId === taskId &&
+    !menu.classList.contains("hidden")
+  ) {
+    closeActTaskOverflowMenus();
+    return;
+  }
+  closeActTaskOverflowMenus();
+  menu.classList.remove("hidden");
+  moreBtn.setAttribute("aria-expanded", "true");
+  actTaskOpenOverflow = { taskId, menu, moreBtn };
+}
+
+function showActTaskDeleteConfirm(menu, moreBtn, row, task, restoreMenu) {
+  while (menu.firstChild) menu.removeChild(menu.firstChild);
+  actTaskUiMode = {
+    kind: "deleteConfirm",
+    taskId: task.taskId,
+    menu,
+    moreBtn,
+    task,
+    row,
+    restoreMenu,
+  };
+
+  const msg = document.createElement("p");
+  msg.className = "session-overflow-confirm-msg";
+  msg.textContent = "删除任务记录？已经保存到本机的成果文件会保留。";
+
+  const actions = document.createElement("div");
+  actions.className = "session-overflow-confirm-actions";
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.className = "session-overflow-item session-overflow-confirm-cancel";
+  cancelBtn.textContent = "取消";
+
+  const confirmBtn = document.createElement("button");
+  confirmBtn.type = "button";
+  confirmBtn.className = "session-overflow-item session-overflow-danger session-overflow-confirm-delete";
+  confirmBtn.textContent = "删除";
+
+  cancelBtn.addEventListener("click", (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    actTaskUiMode = null;
+    closeActTaskOverflowMenus();
+    if (typeof restoreMenu === "function") restoreMenu();
+  });
+
+  confirmBtn.addEventListener("click", async (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    confirmBtn.disabled = true;
+    cancelBtn.disabled = true;
+    try {
+      const res = await window.digitalMe.actBehalfSoftDeleteTask({ taskId: task.taskId });
+      if (!res || !res.ok) {
+        msg.textContent = (res && res.message) || "删除失败";
+        msg.classList.add("session-overflow-confirm-error");
+        confirmBtn.disabled = false;
+        cancelBtn.disabled = false;
+        return;
+      }
+      actTaskUiMode = null;
+      closeActTaskOverflowMenus();
+      await handleActTaskRemovedFromView(task.taskId);
+      await refreshActTaskList();
+    } catch (e) {
+      confirmBtn.disabled = false;
+      cancelBtn.disabled = false;
+      msg.textContent = (e && e.message) || "删除失败";
+      msg.classList.add("session-overflow-confirm-error");
+    }
+  });
+
+  actions.appendChild(cancelBtn);
+  actions.appendChild(confirmBtn);
+  menu.appendChild(msg);
+  menu.appendChild(actions);
+  toggleActTaskOverflow(moreBtn, menu, task.taskId);
+}
+
+function beginActTaskInlineRename(row, task) {
+  if (!row || !task) return;
+  closeActTaskOverflowMenus();
+  actTaskUiMode = { kind: "rename", taskId: task.taskId, row };
+
+  const main = row.querySelector(".task-item-main");
+  const overflow = row.querySelector(".session-overflow");
+  if (overflow) overflow.classList.add("hidden");
+  if (!main) return;
+
+  const edit = document.createElement("div");
+  edit.className = "task-item-edit";
+  edit.dataset.taskId = task.taskId;
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "session-rename-input";
+  input.maxLength = TASK_TITLE_MAX;
+  input.value = task.title || "";
+  input.setAttribute("aria-label", "任务名称");
+  input.autocomplete = "off";
+
+  const hint = document.createElement("div");
+  hint.className = "session-rename-hint muted hidden";
+  hint.setAttribute("role", "status");
+
+  const actions = document.createElement("div");
+  actions.className = "session-rename-actions";
+
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.className = "session-rename-save";
+  saveBtn.textContent = "保存";
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.className = "session-rename-cancel";
+  cancelBtn.textContent = "取消";
+
+  actions.appendChild(saveBtn);
+  actions.appendChild(cancelBtn);
+  edit.appendChild(input);
+  edit.appendChild(actions);
+  edit.appendChild(hint);
+
+  edit.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+  });
+
+  function showHint(msg) {
+    hint.textContent = msg || "";
+    if (msg) hint.classList.remove("hidden");
+    else hint.classList.add("hidden");
+  }
+
+  async function saveRename() {
+    const normalized = normalizeTaskTitleInput(input.value);
+    if (!normalized.ok) {
+      showHint(normalized.error || "请输入名称");
+      input.focus();
+      return;
+    }
+    saveBtn.disabled = true;
+    cancelBtn.disabled = true;
+    try {
+      const res = await window.digitalMe.actBehalfRename({
+        taskId: task.taskId,
+        title: normalized.title,
+      });
+      if (!res || !res.ok) {
+        showHint((res && res.message) || "保存失败");
+        saveBtn.disabled = false;
+        cancelBtn.disabled = false;
+        input.focus();
+        return;
+      }
+      actTaskUiMode = null;
+      if (actBehalfState.taskId === task.taskId && $("act-title")) {
+        $("act-title").value = normalized.title;
+      }
+      await refreshActTaskList();
+    } catch (e) {
+      saveBtn.disabled = false;
+      cancelBtn.disabled = false;
+      showHint((e && e.message) || "保存失败");
+      input.focus();
+    }
+  }
+
+  function cancelRename() {
+    actTaskUiMode = null;
+    refreshActTaskList().catch(() => {});
+  }
+
+  saveBtn.addEventListener("click", (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    saveRename();
+  });
+  cancelBtn.addEventListener("click", (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    cancelRename();
+  });
+  input.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      saveRename();
+    } else if (ev.key === "Escape") {
+      ev.preventDefault();
+      cancelRename();
+    }
+  });
+
+  main.replaceWith(edit);
+  input.focus();
+  input.select();
+}
+
+function renderActTaskListRow(list, task) {
+  const row = document.createElement("div");
+  row.className = "task-item" + (task.taskId === actBehalfState.taskId ? " active" : "");
+  row.dataset.taskId = task.taskId;
+
+  const main = document.createElement("button");
+  main.type = "button";
+  main.className = "task-item-main";
+  const flag = task.contextConfirmed ? "已确认上下文" : task.status || "";
+  main.innerHTML =
+    `<strong>${escapeHtml(task.title || "未命名任务")}</strong>` +
+    `<span class="muted">${escapeHtml(flag)} · ${escapeHtml(
+      String(task.updatedAt || "").slice(0, 19).replace("T", " ")
+    )}</span>` +
+    `<span class="muted">${escapeHtml(task.requestPreview || "")}</span>`;
+  main.addEventListener("click", async () => {
+    if (actTaskUiMode && actTaskUiMode.taskId === task.taskId && actTaskUiMode.kind === "rename") {
+      return;
+    }
+    closeActTaskOverflowMenus();
+    await openDoScene("act_behalf", { taskId: task.taskId });
+  });
+
+  const overflowWrap = document.createElement("div");
+  overflowWrap.className = "session-overflow";
+
+  const moreBtn = document.createElement("button");
+  moreBtn.type = "button";
+  moreBtn.className = "session-overflow-btn";
+  moreBtn.setAttribute("aria-label", "更多任务操作");
+  moreBtn.setAttribute("aria-haspopup", "menu");
+  moreBtn.setAttribute("aria-expanded", "false");
+  moreBtn.textContent = "⋯";
+
+  const menu = document.createElement("div");
+  menu.className = "session-overflow-menu hidden";
+  menu.setAttribute("role", "menu");
+
+  function fillDefaultMenuItems() {
+    while (menu.firstChild) menu.removeChild(menu.firstChild);
+    const isArchived = actTaskListState.scope === "archived";
+
+    if (!isArchived) {
+      const ren = document.createElement("button");
+      ren.type = "button";
+      ren.className = "session-overflow-item";
+      ren.setAttribute("role", "menuitem");
+      ren.textContent = "改名";
+      ren.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        closeActTaskOverflowMenus();
+        beginActTaskInlineRename(row, task);
+      });
+
+      const arch = document.createElement("button");
+      arch.type = "button";
+      arch.className = "session-overflow-item";
+      arch.setAttribute("role", "menuitem");
+      arch.textContent = "归档";
+      arch.addEventListener("click", async (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        closeActTaskOverflowMenus();
+        const res = await window.digitalMe.actBehalfArchiveTask({ taskId: task.taskId });
+        if (!res || !res.ok) {
+          setActProgress((res && res.message) || "无法归档。");
+          return;
+        }
+        await handleActTaskRemovedFromView(task.taskId);
+        await refreshActTaskList();
+      });
+
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "session-overflow-item session-overflow-danger";
+      del.setAttribute("role", "menuitem");
+      del.textContent = "删除";
+      del.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        showActTaskDeleteConfirm(menu, moreBtn, row, task, fillDefaultMenuItems);
+      });
+
+      menu.appendChild(ren);
+      menu.appendChild(arch);
+      menu.appendChild(del);
+    } else {
+      const restore = document.createElement("button");
+      restore.type = "button";
+      restore.className = "session-overflow-item";
+      restore.setAttribute("role", "menuitem");
+      restore.textContent = "恢复";
+      restore.addEventListener("click", async (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        closeActTaskOverflowMenus();
+        const res = await window.digitalMe.actBehalfRestoreTask({ taskId: task.taskId });
+        if (!res || !res.ok) {
+          setActProgress((res && res.message) || "无法恢复。");
+          return;
+        }
+        actTaskListState.scope = "active";
+        updateActTaskTabUi();
+        await refreshActTaskList();
+        setActProgress("任务已恢复到当前列表。");
+      });
+
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "session-overflow-item session-overflow-danger";
+      del.setAttribute("role", "menuitem");
+      del.textContent = "删除";
+      del.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        showActTaskDeleteConfirm(menu, moreBtn, row, task, fillDefaultMenuItems);
+      });
+
+      menu.appendChild(restore);
+      menu.appendChild(del);
+    }
+  }
+
+  fillDefaultMenuItems();
+  moreBtn.addEventListener("click", (ev) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (actTaskUiMode && actTaskUiMode.kind === "rename") return;
+    toggleActTaskOverflow(moreBtn, menu, task.taskId);
+  });
+
+  overflowWrap.appendChild(moreBtn);
+  overflowWrap.appendChild(menu);
+  row.appendChild(main);
+  row.appendChild(overflowWrap);
+  list.appendChild(row);
+}
+
+function updateActTaskTabUi() {
+  const tabActive = $("act-task-tab-active");
+  const tabArchived = $("act-task-tab-archived");
+  if (tabActive) {
+    tabActive.classList.toggle("active", actTaskListState.scope === "active");
+    tabActive.setAttribute("aria-selected", actTaskListState.scope === "active" ? "true" : "false");
+  }
+  if (tabArchived) {
+    tabArchived.classList.toggle("active", actTaskListState.scope === "archived");
+    tabArchived.setAttribute("aria-selected", actTaskListState.scope === "archived" ? "true" : "false");
+  }
+}
+
+function updateActTaskLoadMoreUi() {
+  const btn = $("act-task-load-more");
+  if (!btn) return;
+  const show = actTaskListState.hasMore && actTaskListState.tasks.length > 0;
+  btn.classList.toggle("hidden", !show);
+}
+
+async function refreshActTaskList(opts = {}) {
+  const list = $("act-task-list");
+  const empty = $("act-task-empty");
+  const scroll = $("act-task-list-scroll");
+  if (!list || !window.digitalMe.actBehalfList) return;
+
+  if (opts.scope) actTaskListState.scope = opts.scope;
+  if (opts.query != null) actTaskListState.query = String(opts.query);
+  if (opts.reset !== false && !opts.append) {
+    actTaskListState.tasks = [];
+    actTaskListState.offset = 0;
+  }
+
+  actTaskListState.loading = true;
+  const res = await fetchActTaskListPage({ append: !!opts.append });
+  actTaskListState.loading = false;
+
+  if (actTaskUiMode && actTaskUiMode.kind === "rename") {
+    return;
+  }
+
+  closeActTaskOverflowMenus();
+  list.innerHTML = "";
+  const tasks = actTaskListState.tasks;
+  const isEmpty = !tasks.length;
+  if (empty) {
+    empty.textContent = actTaskEmptyMessage();
+    empty.classList.toggle("hidden", !isEmpty);
+  }
+  for (const t of tasks) {
+    renderActTaskListRow(list, t);
+  }
+  updateActTaskLoadMoreUi();
+  updateActTaskTabUi();
+
+  if (scroll && actBehalfState.taskId) {
+    const activeRow = list.querySelector('.task-item[data-task-id="' + actBehalfState.taskId + '"]');
+    if (activeRow && typeof activeRow.scrollIntoView === "function") {
+      activeRow.scrollIntoView({ block: "nearest" });
+    }
+  }
+}
+
+function wireActTaskListUi() {
+  const search = $("act-task-search");
+  if (search && !search.dataset.wired) {
+    search.dataset.wired = "1";
+    let searchTimer = null;
+    search.addEventListener("input", () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        actTaskListState.query = search.value.trim();
+        refreshActTaskList({ reset: true }).catch(() => {});
+      }, 180);
+    });
+  }
+
+  $("act-task-tab-active")?.addEventListener("click", () => {
+    if (actTaskListState.scope === "active") return;
+    actTaskListState.scope = "active";
+    updateActTaskTabUi();
+    refreshActTaskList({ reset: true }).catch(() => {});
+  });
+
+  $("act-task-tab-archived")?.addEventListener("click", () => {
+    if (actTaskListState.scope === "archived") return;
+    actTaskListState.scope = "archived";
+    updateActTaskTabUi();
+    refreshActTaskList({ reset: true }).catch(() => {});
+  });
+
+  $("act-task-load-more")?.addEventListener("click", () => {
+    if (actTaskListState.loading || !actTaskListState.hasMore) return;
+    refreshActTaskList({ append: true, reset: false }).catch(() => {});
+  });
+
+  const scroll = $("act-task-list-scroll");
+  if (scroll && !scroll.dataset.wired) {
+    scroll.dataset.wired = "1";
+    scroll.addEventListener("scroll", () => {
+      if (actTaskListState.loading || !actTaskListState.hasMore) return;
+      const nearBottom = scroll.scrollTop + scroll.clientHeight >= scroll.scrollHeight - 48;
+      if (nearBottom) {
+        refreshActTaskList({ append: true, reset: false }).catch(() => {});
+      }
+    });
+  }
+
+  document.addEventListener("click", (ev) => {
+    if (!actTaskOpenOverflow) return;
+    const t = ev.target;
+    if (!(t instanceof Element)) return;
+    if (
+      t.closest(".session-overflow") ||
+      t.closest(".session-overflow-menu") ||
+      t.closest(".task-item-edit")
+    ) {
+      return;
+    }
+    closeActTaskOverflowMenus();
+  });
+}
+
 
 async function loadActBehalfContext() {
   const goal = ($("act-request") && $("act-request").value.trim()) || "";
@@ -7605,6 +8131,7 @@ async function confirmActBehalfContext() {
 }
 
 function wireActBehalfUi() {
+  wireActTaskListUi();
   const back = $("btn-do-back-act");
   if (back) back.addEventListener("click", showDoHub);
   $("btn-act-new")?.addEventListener("click", async () => {

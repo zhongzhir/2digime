@@ -93,7 +93,7 @@
               <div class="builder-actions" style="margin-bottom:1rem">
                 <button id="btn-do-new-task" class="btn btn-primary" type="button">新建任务</button>
               </div>
-              <div id="do-task-empty" class="artifact-empty">还没有任务。点击"新建任务"开始。</div>
+              <div id="do-task-empty" class="artifact-empty">还没有任务，点击新建开始做事。</div>
               <div id="do-task-list" class="library-list" data-testid="do-task-list"></div>
             </div>
           </div>
@@ -457,8 +457,50 @@
                     <h3>任务记录</h3>
                     <button id="btn-act-new" class="btn-ghost" type="button">新建</button>
                   </div>
-                  <div id="act-task-empty" class="artifact-empty">还没有已保存的任务。</div>
-                  <div id="act-task-list" class="library-list" data-testid="act-task-list"></div>
+                  <div class="act-task-list-toolbar" data-testid="act-task-list-toolbar">
+                    <input
+                      id="act-task-search"
+                      type="search"
+                      class="act-task-search"
+                      placeholder="搜索任务……"
+                      autocomplete="off"
+                      data-testid="act-task-search"
+                    />
+                    <div class="act-task-tabs" role="tablist">
+                      <button
+                        id="act-task-tab-active"
+                        type="button"
+                        class="act-task-tab active"
+                        role="tab"
+                        aria-selected="true"
+                        data-testid="act-task-tab-active"
+                      >
+                        当前
+                      </button>
+                      <button
+                        id="act-task-tab-archived"
+                        type="button"
+                        class="act-task-tab"
+                        role="tab"
+                        aria-selected="false"
+                        data-testid="act-task-tab-archived"
+                      >
+                        已归档
+                      </button>
+                    </div>
+                  </div>
+                  <div id="act-task-empty" class="artifact-empty">还没有任务，点击新建开始做事。</div>
+                  <div id="act-task-list-scroll" class="act-task-list-scroll" data-testid="act-task-list-scroll">
+                    <div id="act-task-list" class="library-list act-task-list" data-testid="act-task-list"></div>
+                  </div>
+                  <button
+                    id="act-task-load-more"
+                    type="button"
+                    class="btn-ghost act-task-load-more hidden"
+                    data-testid="act-task-load-more"
+                  >
+                    加载更多
+                  </button>
                 </div>
               </aside>
               <div class="act-behalf-main">
