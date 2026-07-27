@@ -5,6 +5,28 @@
 
 ---
 
+## 2026-07-27 IDCOLLAB-MIN-01.1 撤销即时生效与界面极简修复
+
+### 背景
+
+Owner 真机验收未通过：撤销后同进程仍可重新生成；主界面身份/授权信息过载。
+
+### 修复
+
+1. **授权**：`prepare` 不再在 revoke 后自动 re-grant；`grantTaskAuthorization` 对同 task+planVersion 的 revoked 记录返回 `revoked_blocked`；生成/接受/学习/prepare 统一 `resolveActiveTaskAuthorization` 每次读 Store。
+2. **UI**：主界面只保留一句摘要；计划高级字段与身份/授权收入折叠「更多设置 / 详情 / 高级审计」；撤销后立即禁用按钮并显示横幅。
+3. **测试**：新增即时 revoke、UI 极简合同测试；回归全绿。
+
+### 状态
+
+```text
+implemented / codex_verified / ready_for_owner_runtime_reacceptance
+```
+
+不得 push。等待 Owner 重新验收。
+
+---
+
 ## 2026-07-27 IDCOLLAB-MIN-01 最小行动授权与参与方语义接线 · 实施完成
 
 ### 本次目标

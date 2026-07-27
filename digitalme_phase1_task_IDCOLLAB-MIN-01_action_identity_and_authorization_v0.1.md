@@ -2,7 +2,7 @@
 
 版本：v0.1.2
 日期：2026-07-27
-状态：`implemented` / `codex_verified` / `ready_for_owner_runtime_acceptance`
+状态：`implemented` / `codex_verified` / `owner_runtime_acceptance_failed` / `fix_in_progress` → **`ready_for_owner_runtime_reacceptance`**
 实施：`implemented`
 implementation_authorized：`true`
 owner_runtime_accepted：`false`
@@ -780,8 +780,6 @@ identityConfidence = inferred_default_single_subject
 
 ### 12.5 实施证据（2026-07-27）
 
-Owner 已确认并不得再上抛：
-
 1. `representedSubjectId = Owner 本人`（无项目/组织切换 UI）；
 2. 独立轻量本地 `AuthorizationRecord` 主表（`<userData>/authorizations.json`）；
 3. revoke = 受控 harness + 高级详情「撤销本次授权」。
@@ -812,10 +810,36 @@ npm run test:dvl2-04-auto-learn  → 6 passed
 当前状态：
 
 ```text
-implemented / codex_verified / ready_for_owner_runtime_acceptance
+implemented / codex_verified / ready_for_owner_runtime_reacceptance
 ```
 
-**不得**提前标记 `owner_runtime_accepted` / `accepted_as_implemented`。不得 push。不得开始外部协作或下一阶段身份协作功能。
+**不得**提前标记 `owner_runtime_accepted` / `accepted_as_implemented`。不得 push。
+
+### 12.6 Owner 真机验收失败修复（MIN-01.1 · 2026-07-27）
+
+**问题 1 — 撤销未即时生效**
+
+根因：`prepareDeliverablePackage` 在检测到无 active grant 时会**自动重新授予**；`grantTaskAuthorization` 在已有 revoked 记录时仍会创建新 grant。持久化已撤销，但同进程内后续动作可绕过。
+
+修复：
+- 新增 `resolveActiveTaskAuthorization` / `getTaskAuthorizationStatus` / `findRevokedGrantForPlan`；
+- 所有生成/接受/学习/prepare 入口改为每次从 Store 权威读取；
+- revoked 后禁止同 planVersion 重新 grant（`revoked_blocked`）；
+- renderer 撤销后立即刷新面板、禁用按钮、显示撤销横幅。
+
+**问题 2 — 主界面信息过载**
+
+修复：默认只保留一句摘要；计划高级字段与身份/授权内容收入「更多设置」「详情」「高级审计」折叠区；成果卡只显示标题/类型/时间/状态与必要操作。
+
+自动化（修复后）：
+
+```text
+npm run test:idcollab-min-01       → 13 passed
+npm run test:idcollab-min-01.1-ui  → 3 passed
+npm run test:dvl2-03-one-click     → 6 passed
+npm run test:dvl2-03-generation    → 6 passed
+npm run test:dvl2-04-auto-learn    → 6 passed
+```
 
 ---
 
@@ -842,5 +866,6 @@ Owner 若接受并冻结本规格，后续实施只允许：
 | v0.1.1 | 2026-07-27 | Codex 独立复核后收敛：不建 Participant Store、授权采用本地主表 + 引用、强化 legacy 标记与分层职责 |
 | v0.1.2 | 2026-07-27 | 吸收独立复核补强：Task 缓存字段非权威、PlanVersion 锁定时点、DVL2-00 授权关系、学习写回主体与 revoke 验收入口 |
 | v0.1.2-impl | 2026-07-27 | 实施完成：状态改为 `implemented` / `codex_verified` / `ready_for_owner_runtime_acceptance`；记录实现证据与回归结果 |
+| v0.1.2-fix1 | 2026-07-27 | Owner 真机验收失败修复（MIN-01.1）：撤销即时生效；主界面极简与渐进披露；`ready_for_owner_runtime_reacceptance` |
 
 **文档结束**
