@@ -5,6 +5,40 @@
 
 ---
 
+## 2026-07-27 DVL2-03 Owner 真机验收收口
+
+### 本次目标
+
+验收 DVL2-03 真实交付物生成闭环：确认计划→成果包→真实文件→版本/ArtifactRef/hash→接受/否定/重新生成→重启恢复→接受后学习。
+
+### 验收方法
+
+1. 自动化测试 122 项全部通过（DVL2-03 generation/one-click/acceptance + CRT-MVP 全系列 + auto-learn + context-authority + act-behalf + dvl2-02）；
+2. Electron 两阶段验收：Phase A（4 项成果真实落盘）+ Phase B（重启恢复 + 重新生成新版本）；
+3. 代码审查：核实执行入口、文件写入、版本谱系、学习回流、CRT 接线、降级路径。
+
+### 本次完成
+
+1. 新增验收收口文档 `digitalme_phase1_task_DVL2-03_owner_runtime_acceptance_v0.1.md`；
+2. 同步 `digitalme_context.md` 文首指针、§3.2 文件表、执行指针；
+3. 同步 `digitalme_panorama_execution_index_v0.1.md`；
+4. DVL2-03 状态：`owner_runtime_accepted` / `accepted_as_implemented` / `implemented`。
+
+### 重要边界
+
+1. 图片在无外部能力时准确失败，不伪造；
+2. DOCX / PPTX 未实现真实引擎；
+3. `authorizationRefs` 为空（身份协作最小接线未到位）；
+4. **不得** push；
+5. 不开始 IDCOLLAB-MIN-01。
+
+### 待办事项
+
+1. 等待 CTO 下发 `IDCOLLAB-MIN-01` 规格任务；
+2. 不得 push。
+
+---
+
 ## 2026-07-27 CRT-MVP-02 系列 Owner 真机验收收口
 
 ### 本次目标
