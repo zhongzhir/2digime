@@ -6,7 +6,7 @@
 | 文档状态 | `frozen_for_implementation`（已获实现授权；工程完成 ≠ Owner accepted） |
 | 版本 | v0.2.2 |
 | 日期 | 2026-07-27 |
-| 修订 | 吸收上位原则「主体连续性与未来开放」；标题去「草案」；清理过期 `design_draft` /「实现授权前编码」表述。**不改变** CRT-MVP-02 验收状态 |
+| 修订 | Owner 真机冒烟通过后，CRT-MVP-02 / 02.1 / 02.2 标 `owner_runtime_accepted`。规格仍 `frozen_for_implementation`。**不等于** Active Judgment 已实现 |
 | 前置 | CRT v0.1（`digitalme_cognitive_runtime_v0.1.md`）；CRT-MVP-01 / CRT-MVP-01.1（持续性读回已接通） |
 | 产品依据 | `digitalme_subject_model_and_cognitive_algorithm_v0.1.md`（v0.1.1；状态 `owner_accepted` / `active_product_principle`；含「主体连续性与未来开放原则」） |
 | 对齐原则 | `digitalme_subject_architecture_and_rd_principles_v0.1.md` §1–§3.1 |
@@ -19,7 +19,8 @@
 |------|------|------|
 | v0.2 | 2026-07-26 | Subject Context Engine 草案 |
 | v0.2.1 | 2026-07-27 | Owner Review 吸收；`frozen_for_implementation`；CRT-MVP-02 授权实施 |
-| v0.2.2 | 2026-07-27 | 同步上位产品原则「主体连续性与未来开放」；Claim Posture 作为该原则的工程表达之一；标题改为「技术规格」（去草案）；§10.2 改为防范围扩张。CRT-MVP-02 仍为 `ready_for_owner_runtime_acceptance`，不标 `accepted` / `implemented` |
+| v0.2.2 | 2026-07-27 | 同步上位产品原则「主体连续性与未来开放」；Claim Posture；标题去草案；§10.2 防范围扩张 |
+| v0.2.2（验收） | 2026-07-27 | Owner 真机冒烟 4/4 通过；CRT-MVP-02 / 02.1 / 02.2 → `owner_runtime_accepted`。**不**标完整 Active Judgment；**不**扩大 CRT 后续阶段 |
 
 ---
 
@@ -740,9 +741,14 @@ subject-context-engine.js
 | 项 | 值 |
 |----|-----|
 | 当前文档状态 | `frozen_for_implementation` |
-| 实现任务 | CRT-MVP-02 Subject Context Engine（含后续最小修正如附件对齐 / Claim Posture） |
-| 验收状态 | **保持** `ready_for_owner_runtime_acceptance`；未经 Owner 真机确认不得 `accepted`；本修订**不**标 `implemented` / `owner_runtime_accepted` |
-| Owner Review | 已吸收：默认 `execution`；Judgment Candidate；`task_material` MVP；Ownership Boundary；**主体连续性与未来开放原则** |
+| 实现任务 | CRT-MVP-02 Subject Context Engine（含 02.1 附件/Claim Posture；02.2 真机缺陷收口） |
+| 验收状态 | CRT-MVP-02 / 02.1 / 02.2 = **`owner_runtime_accepted`**（Owner 真机冒烟 2026-07-27；详见 `digitalme_phase1_task_CRT-MVP-02_subject_context_engine_v0.1.md`） |
+| 明确未覆盖 | **完整 Active Judgment 未实现**；Collaboration Runtime / 向量 RAG / 复杂 ontology **未**进入本验收 |
+| Owner Review | 已吸收：默认 `execution`；Judgment Candidate；`task_material` MVP；Ownership Boundary；主体连续性与未来开放原则 |
+
+### 非阻断观察（Owner 冒烟）
+
+探索成果偶发「已有用户体系 / 现有用户社群」等未确认现状表述。后续生成质量优化应改为「未来用户体系 / 目标用户 / 后续种子用户」。**不阻断**本系列验收。
 
 ### 已拍板（不再待决）
 
@@ -758,6 +764,7 @@ subject-context-engine.js
 - `digitalme_subject_model_and_cognitive_algorithm_v0.1.md`（v0.1.1；`owner_accepted` / `active_product_principle`；主体连续性与未来开放原则）  
 - `digitalme_cognitive_runtime_v0.1.md`  
 - `digitalme_phase1_task_CRT-MVP-01_cognitive_runtime_continuity_v0.1.md`  
+- `digitalme_phase1_task_CRT-MVP-02_subject_context_engine_v0.1.md`（02 / 02.1 / 02.2 Owner 真机验收收口）  
 - CRT-MVP-01.1：`packageDir` 生产贯通修复（`confirmPlanAndGenerate` → Assembler）
 
 ---

@@ -7,6 +7,8 @@
 代码实现基线：`2f1b7bd`（committed baseline；distill-me + doing-context + identity + collaboration + 全部新增功能）；历史 `cbde807fd1e40472d66fbe8f0810a0835e8bc816`（PAN-01S 族）；R1 `8d7e9b3`；R2 分支 `codex/r2-chat-sessions-migration`（实现保留）
 规格依据：见文内历史列表
 
+> **2026-07-27 基础设施补充（非本索引主线）**：CRT-MVP-02 / 02.1 / 02.2 已 `owner_runtime_accepted`（见 `digitalme_phase1_task_CRT-MVP-02_subject_context_engine_v0.1.md`；决策 #108）。本文件仍为 `superseded_as_current_execution_index`。
+
 > **2026-07-24 committed baseline（`2f1b7bd`）**：83 个文件，+16,427/-487 行。confirmed identity → act context 缺口已关闭；distill-me-acceptance 11/11；PAN-01S 23/23；owner-runtime 9/9；gate4-auto-flow 49/49；vl1-block1 18/18 全绿。Owner Electron 真机验收 `accepted`。依赖闭包完整，干净 checkout 可跑通。**未 push**。R3 继续 `paused`；PAN-02 继续 `planned / blocked`。
 > **2026-07-21 规划基线重建（强制）**：本文件**不再**作为「当前唯一执行索引」。  
 > **当前最高架构原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)  

@@ -2,7 +2,7 @@
 
 版本：v0.4
 状态：持续更新
-最后更新：2026-07-26（DVL2 接受成果自动学习闭环已实现；一次点击生成 UX 已合入；仍 `ready_for_owner_runtime_acceptance`；不得 push；不得提前标 `implemented`）
+最后更新：2026-07-27（CRT-MVP-02 / 02.1 / 02.2 Owner 真机验收 → `owner_runtime_accepted`；**不等于** Active Judgment 已实现；不得 push）
 
 > **当前产品主线（2026-07-26）**：**第二纵向闭环** — 多模态成果包交付与渐进式主体构建。第一纵向闭环已 `accepted` / `completed`。
 > **最高架构与研发原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)（**v0.1.1 `active`**）。
@@ -21,7 +21,7 @@
 > 2. **BUG1 #6** = 七模块渐进式数字之我构建框架。
 > 3. 首个正式验收场景 = 为一个项目生成完整对外介绍成果包。
 > 4. 第一轮真实产物 = 正式介绍文档、演示文稿 PPT、单页 HTML、封面图片；视频/音频本轮不实现真实生成，用户面不得宣称已支持。
-> **当前下一任务**：**Owner 真机验收 DVL2-03**（含一次点击生成 + 接受后自动学习；分支 `codex/dvl2-03-real-deliverable-generation`；`ready_for_owner_runtime_acceptance`）。DVL2-02 已 `accepted_as_implemented`。**不得** push；**不得**提前标 `owner_runtime_accepted` / `accepted_as_implemented` / `implemented`。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+> **当前下一任务**：**Owner 真机验收 DVL2-03**（含一次点击生成 + 接受后自动学习；分支 `codex/dvl2-03-real-deliverable-generation`）。**CRT-MVP-02 / 02.1 / 02.2** 已 `owner_runtime_accepted`（2026-07-27）。DVL2-02 已 `accepted_as_implemented`。**不得** push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
 > **R2 对话运行时**：保留基础设施；R2 代码 **retained as infrastructure**。生产默认入口仍为 legacy。
 > **Owner Electron 真机验收（2026-07-24）**：`accepted`（distill-me / R2 对话重试 / doing-context / PAN-01S 等）。
 > **confirmed identity → act context（2026-07-24，`2f1b7bd`）**：`accepted`（历史整合基线；**不是**当前 HEAD）。
@@ -318,6 +318,10 @@ flowchart TB
 | `digitalme_phase1_task_DVL2-02_deliverable_package_and_execution_preparation_v0.1.md` | **DVL2-02 成果包与执行准备**（**v0.1.1**；`frozen_for_implementation`；实现 `20c8832`；`accepted_as_implemented`） |
 | `digitalme_phase1_task_DVL2-02_implementation_authorization_v0.1.md` | **DVL2-02 实施授权包**（**v0.1.0**；`owner_runtime_accepted` / `accepted_as_implemented` / `implemented`；实现 `20c8832`） |
 | `digitalme_phase1_task_DVL2-03A_first_real_document_artifact_v0.1.md` | **DVL2-03A 草案（历史）**；已被完整 **DVL2-03** 实现路径吸收（不再单独拆分 03A/B/C） |
+| `docs/design/digitalme_crt_v0.2_subject_context_engine_spec.md` | **CRT v0.2 Subject Context Engine 规格**（v0.2.2；`frozen_for_implementation`） |
+| `digitalme_phase1_task_CRT-MVP-01_cognitive_runtime_continuity_v0.1.md` | **CRT-MVP-01 持续性验证**（实现合入；真机状态见任务包） |
+| `digitalme_phase1_task_CRT-MVP-02_subject_context_engine_v0.1.md` | **CRT-MVP-02 系列验收收口**（02 / 02.1 / 02.2 = `owner_runtime_accepted` @ 2026-07-27；**≠** Active Judgment） |
+| `digitalme_subject_model_and_cognitive_algorithm_v0.1.md` | **主体模型与认知算法原则**（v0.1.1；`owner_accepted` / `active_product_principle`；含主体连续性与未来开放） |
 | `digitalme_product_spec_v0.2.md`（文内 **v0.6.3**） | **既有界面与功能细则参照**（与新主线冲突处以架构原则文 / 第一闭环计划为准，待对齐升版） |
 | `digitalme_phase1_task_P1-PANORAMA_product_panorama_alpha.md`（v0.4） | **历史总任务**：三位一体 Alpha（`superseded` 作为当前主线定义） |
 | `digitalme_phase1_task_PAN-00R_three_part_alpha_reset.md` | **历史战略修订依据**：三位一体定义、极简原则、PAN-01/PAN-01R 裁定 |
@@ -332,7 +336,7 @@ flowchart TB
 | `digitalme_narrative_ai_era_autonomy.md` | 对外/对内叙事（含双线简述） |
 | `digital-me-project-positioning-draft.md` | 定位讨论稿（战略原则含双线） |
 
-**近期工程焦点（2026-07-26）**：DVL2-03 **真实成果生成已实现**（`7047113`；`ready_for_owner_runtime_acceptance`）。支持 document / presentation / webpage；image 无配置时准确失败（测试可 mock）。等待 Owner 真机验收。**不得** push；**不得**提前标 `implemented`。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+**近期工程焦点（2026-07-27）**：**CRT-MVP-02 / 02.1 / 02.2** 已 Owner 真机验收为 `owner_runtime_accepted`（冒烟 4/4；任务包 `digitalme_phase1_task_CRT-MVP-02_subject_context_engine_v0.1.md`）。**不**表示完整 Active Judgment 已实现。DVL2-03 仍待独立 Owner 真机验收。**不得** push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
 ## 4. 系统架构共识（草案）
 
 > **部署拓扑补充（2026-07-10）**：本节描述逻辑模块（核心层 / 运行层 / 信任层）。物理部署与百万规模扩容面见 [`digitalme_architecture_edge_sovereign_v0.1.md`](digitalme_architecture_edge_sovereign_v0.1.md)（端主权 Runtime + 云边平台 + 能力层）。决策 #3「本地优先 + 云同步」由此文细化。
@@ -529,7 +533,9 @@ flowchart TB
 
 ### 7.1 近期优先级（建议顺序）
 
-> **2026-07-26 当前执行指针**：DVL2-03 待 Owner 真机验收（实现 `7047113`；分支 `codex/dvl2-03-real-deliverable-generation`）。DVL2-02 runtime `ceb6c83`。不得 push；不得提前标 `implemented`。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+> **2026-07-27 当前执行指针**：CRT-MVP-02 系列已 `owner_runtime_accepted`。DVL2-03 仍待 Owner 真机验收（分支 `codex/dvl2-03-real-deliverable-generation`）。不得 push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+
+> **2026-07-26 执行指针（历史）**：DVL2-03 待 Owner 真机验收（实现 `7047113`；分支 `codex/dvl2-03-real-deliverable-generation`）。DVL2-02 runtime `ceb6c83`。不得 push；不得提前标 `implemented`。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
 > **2026-07-26 历史指针（已取代）**：曾将「当前唯一产品待决」写作 BUG1 #4/#6 候选未冻结——**已被决策 #107 正式选定**。
 > **2026-07-21 规划基线重建（历史）**：当时执行计划 [`digitalme_first_vertical_loop_sprint_plan_v0.1.md`](digitalme_first_vertical_loop_sprint_plan_v0.1.md)（**v0.1.2 `spec_frozen`**）；冻结规格 [`digitalme_first_vertical_loop_spec_v0.1.md`](digitalme_first_vertical_loop_spec_v0.1.md)。**当时下一项**曾为「实现任务意图与本人上下文装配（第一闭环实现 · 第 1 块）」——**已完成并收口，不再是有效下一步**。R3 / 旧 DM-Core-01A 开发指令 / 并列 Skill·MCP·Agent·身份任务块 **不得**作为下一步。
 > **2026-07-16 审计后重排（历史）**：第一阶段不再扩展能力面，切换为“主体可信化与协作感知”。当时以 `digitalme_phase1_subject_upgrade_plan_v0.1.md` 为执行清单；原 v0.3.13 的 L0/审计/CLI 只能视为原型，不视为已达到安全可用。
@@ -539,7 +545,7 @@ flowchart TB
 
 1. **限定范围的仓库实现映射与第一闭环规格冻结**（文档；**已完成** → 规格 `spec_frozen`）；
 2. **实现任务意图与本人上下文装配（第一闭环实现 · 第 1 块）**（**history / 已完成并收口**；不得再当作当前下一项）→ 其后研究与表达 / Skill / 外搜 / 证据 / Proposal 各块均已完成；第一段整体 **`accepted` / `completed`**；
-3. **当前下一任务（2026-07-26）**：**Owner 真机验收 DVL2-03**（实现 `7047113`）。不得 push；不得提前标 `owner_runtime_accepted` / `implemented`。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+3. **当前下一任务（2026-07-27）**：**Owner 真机验收 DVL2-03**。CRT-MVP-02 系列已 `owner_runtime_accepted`（决策 #108）。不得 push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
 
 （以下 1–7 为 2026-07-16 历史 Trusted Beta 硬化清单，**不再是当前执行顺序**：）
 
@@ -993,3 +999,4 @@ flowchart TB
 105. **BUG1-FIX 任务包入库（2026-07-26）**：任务包 `digitalme_phase1_task_BUG1-FIX_rebuild_on_d_disk_v0.1.md` 由 Mavis 代办 commit `52e16ab docs(plan): mark BUG1-FIX 任务包 accepted after spotcheck`，标 `accepted` / v0.2.0；零冲突（任务包之前为 untracked 新文件）。本机 commit 链：`52e16ab` → `a5f77a7` → BUG1 8 个 fix commit（`9e498a3` … `940f5fa`）→ `e8b6572` 第一段正式收口。**不 push**（无远端）。下一项 = BUG1 #4 / #6 决策与实施。
 106. **BUG1 #4 多模态产物方向（2026-07-26，历史方向记录）**：Owner 明确「做事」不只是文字，要覆盖**文字 / 图 / 视频 / 音频 / 代码 / 网页 / 数据**等 AI 可生成的产物类型。设计原则：①不自研能力（决策 #37 能力跟随——对接业界最好的）；②能力可装可卸（§7.8）；③校准不限制（决策 #28）；④能力为空时引导装；⑤密钥只在 main 层（§7.8）。曾给三候选方案：A「做事页加产物类型选择」/ B「新增创作入口」/ C「场景自动分流」。**已被决策 #107 正式选定（C+A，不采用 B）**。
 107. **第二纵向闭环启动 · Owner 四项正式裁决（2026-07-26）**：① BUG1 #4 = **C + A**；② BUG1 #6 = **七模块渐进式数字之我构建框架**；③ 首个正式验收场景 = **为一个项目生成完整的对外介绍成果包**；④ 第一轮真实产物 = 文档/PPT/HTML/封面图片。**DVL2-00 v0.1.1** 已冻结。**DVL2-01** 启动时为 `owner_accepted` / `frozen_for_implementation` / `not_started`（[`digitalme_phase1_task_DVL2-01_deliverable_planner_v0.1.md`](digitalme_phase1_task_DVL2-01_deliverable_planner_v0.1.md)）。**其后**已获实施授权、实现并于 Owner 真机验收收口为 `owner_runtime_accepted` / `accepted_as_implemented`（实施 `implemented` @ `6e7c384`）。**当前下一步** = 等待 DVL2-02 任务起草与独立实施授权（`not_started` / `not_authorized`）。R3 / R2.5 / PAN-02 仍 `paused` / `deferred` / `blocked`。
+108. **CRT-MVP-02 系列 Owner 真机验收收口（2026-07-27）**：Owner 最终冒烟 4/4 通过——①附件变化拦截；②正式成果无内部方括号标签；③开放探索保留创造力且未改写为 DID/区块链平台；④文本框右键菜单。裁定 **CRT-MVP-02 / 02.1 / 02.2 = `owner_runtime_accepted`**。任务包 [`digitalme_phase1_task_CRT-MVP-02_subject_context_engine_v0.1.md`](digitalme_phase1_task_CRT-MVP-02_subject_context_engine_v0.1.md)；规格 [`digitalme_crt_v0.2_subject_context_engine_spec.md`](docs/design/digitalme_crt_v0.2_subject_context_engine_spec.md) 保持 `frozen_for_implementation`。Judgment Candidate 由自动化 J1 与 `.codex-qa/crt-mvp-02.2/acceptance.json` 验证。**不等于**完整 Active Judgment 已实现；**不**将 CRT v0.2 以外后续阶段标完成。非阻断观察：探索成果偶发「已有用户体系 / 现有用户社群」未确认现状表述，后续生成质量优化应改为「未来用户体系 / 目标用户 / 后续种子用户」。**不 push**。
