@@ -118,6 +118,9 @@ function buildGenerationContext({
   task,
   referenceMaterials,
   subjectAssembly,
+  isDigitalMeProject,
+  projectRetrieval,
+  projectResolved,
 }) {
   const snap = (pkg && pkg.executionSnapshot) || {};
   const input = snap.inputSummary || {};
@@ -203,6 +206,13 @@ function buildGenerationContext({
       assembly.assemblyPolicy &&
       assembly.assemblyPolicy.allowAiExplorationBlock
     ),
+    isDigitalMeProject: !!isDigitalMeProject,
+    projectContextId: (assembly && assembly.projectContextId) || (projectResolved && projectResolved.projectContextId) || null,
+    projectId: (assembly && assembly.projectId) || (projectResolved && projectResolved.projectId) || null,
+    projectContextLabel: (assembly && assembly.projectContextLabel) || (projectResolved && projectResolved.displayLabel) || null,
+    projectRetrieval: projectRetrieval || (assembly && assembly.projectRetrieval) || null,
+    retrievedClaimIds: (projectRetrieval && projectRetrieval.retrievedClaimIds) || [],
+    excludedClaims: (projectRetrieval && projectRetrieval.excludedClaims) || [],
   };
 }
 
@@ -216,7 +226,7 @@ function findPlaceholderIssues(text) {
   return hits;
 }
 
-function assertGeneratedContentUsable(text, { kind, goal, contextClass, evidenceCorpus, claimPosturePresentation } = {}) {
+function assertGeneratedContentUsable(text, { kind, goal, contextClass, evidenceCorpus, claimPosturePresentation, isDigitalMeProject, projectContextEmpty } = {}) {
   const body = String(text || "").trim();
   if (!body || body.length < 12) {
     const e = new Error("模型未返回有效内容。");
@@ -237,18 +247,29 @@ function assertGeneratedContentUsable(text, { kind, goal, contextClass, evidence
     e.code = "off_topic_content_rejected";
     throw e;
   }
-  if (contextClass === "representation") {
-    const {
-      assertRepresentationFactsGrounded,
-    } = require("./subject-context-engine");
-    assertRepresentationFactsGrounded(body, evidenceCorpus || "", contextClass);
-  }
-  const { assertFormalArtifactPresentation } = require("./subject-context-engine");
-  assertFormalArtifactPresentation(body, {
+  const reviewOpts = {
     contextClass,
     evidenceCorpus: evidenceCorpus || "",
     claimPosturePresentation: claimPosturePresentation || "natural",
-  });
+    isDigitalMeProject: !!isDigitalMeProject || /Digital\s*Me|数字之我|digitalme/i.test(g),
+    projectContextEmpty: !!projectContextEmpty,
+  };
+  if (contextClass === "representation") {
+    const { assertRepresentationFactsGrounded } = require("./subject-context-engine");
+    assertRepresentationFactsGrounded(body, evidenceCorpus || "", contextClass);
+  } else if (reviewOpts.isDigitalMeProject) {
+    const { findUnsupportedFabricatedFacts, assertProjectAuthorityConsistency } = require("./subject-context-engine");
+    const fabricated = findUnsupportedFabricatedFacts(body, evidenceCorpus || "");
+    if (fabricated.length) {
+      const e = new Error("生成结果含无来源的团队/预算/周期等具体数字，未保存为成果。");
+      e.code = "ungrounded_project_numbers";
+      e.hits = fabricated;
+      throw e;
+    }
+    assertProjectAuthorityConsistency(body, evidenceCorpus || "", reviewOpts);
+  }
+  const { assertFormalArtifactPresentation } = require("./subject-context-engine");
+  assertFormalArtifactPresentation(body, reviewOpts);
   void kind;
   return true;
 }

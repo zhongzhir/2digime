@@ -16,10 +16,19 @@ const {
   resolveAssemblyPolicy,
   finalizeSubjectAssembly,
   tagAttachmentRefs,
+  isDigitalMeProjectContext,
 } = require("./subject-context-engine");
 const { unwrapField, budgetAttachmentContext } = require("./deliverable-context");
 const actionIdentity = require("./action-identity");
 const authorizationStore = require("./authorization-store");
+const {
+  resolveProjectContext,
+  mergeProjectMaterials,
+} = require("./project-context-registry");
+const {
+  retrieveProjectClaims,
+  renderProjectClaimsSection,
+} = require("./project-knowledge-retrieval");
 
 function newAttemptId() {
   return newId("dgatt_");
@@ -239,32 +248,87 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
   };
   const classification = classifyTaskContext(taskContext);
   const policy = resolveAssemblyPolicy(classification);
-  const materials = (taskRecord && taskRecord.referenceMaterials) || [];
-  const attachmentBudget = budgetAttachmentContext(materials, 18000);
+  const isDigitalMeProject = isDigitalMeProjectContext(taskContext);
+
+  let projectResolved = null;
+  let projectRetrieval = null;
+  if (isDigitalMeProject || policy.requireProjectContext) {
+    projectResolved = resolveProjectContext(deps.packageDir || null, {
+      goal: taskContext.goal,
+      task: taskRecord,
+    });
+    if (!projectResolved.ok) {
+      await packageStore.mutateStore(userData, (s) => {
+        const a = s.generationAttempts[attemptId];
+        if (a) {
+          a.status = "failed";
+          a.finishedAt = nowIso();
+          a.errorCode = projectResolved.code;
+          a.errorSummary = projectResolved.message;
+          a.outcome = "failed";
+        }
+        const d = s.deliverables[String(deliverableId)];
+        if (d) {
+          d.generationStatus = "failed";
+          d.updatedAt = nowIso();
+        }
+        return true;
+      });
+      return {
+        ok: false,
+        code: projectResolved.code,
+        message: projectResolved.message,
+        attemptId,
+      };
+    }
+    projectRetrieval = retrieveProjectClaims({
+      claims: projectResolved.claims,
+      query: taskContext.goal,
+      projectId: projectResolved.projectId,
+    });
+  }
+
+  const taskMaterials = (taskRecord && taskRecord.referenceMaterials) || [];
+  const mergedMaterials = projectResolved
+    ? mergeProjectMaterials(taskMaterials, projectResolved.materials)
+    : taskMaterials;
+  const attachmentBudget = budgetAttachmentContext(mergedMaterials, 18000);
   let subjectAssembly = assembleSubjectContext({
     packageDir: deps.packageDir || null,
     query: {
       ...taskContext,
-      attachmentKeywords: materials.map((m) => m && m.name).filter(Boolean),
+      attachmentKeywords: mergedMaterials.map((m) => m && m.name).filter(Boolean),
     },
     policy,
     contextClass: classification.contextClass,
+    projectRenderedText: projectRetrieval
+      ? renderProjectClaimsSection(projectRetrieval)
+      : "",
   });
   subjectAssembly = finalizeSubjectAssembly(subjectAssembly, {
     classification,
     policy,
     attachmentRefs: attachmentBudget.usedRefs,
   });
+  if (projectResolved) {
+    subjectAssembly.projectContextId = projectResolved.projectContextId;
+    subjectAssembly.projectId = projectResolved.projectId;
+    subjectAssembly.projectRetrieval = projectRetrieval;
+    subjectAssembly.projectContextLabel = projectResolved.displayLabel;
+  }
 
   try {
     produced = await generateByKind(deliverable.kind, {
       pkg,
       deliverable,
       task: taskRecord,
-      referenceMaterials: materials,
+      referenceMaterials: mergedMaterials,
       subjectAssembly,
       callModel: deps.callModel,
       imageMode: deps.imageMode,
+      isDigitalMeProject,
+      projectRetrieval,
+      projectResolved,
     });
   } catch (err) {
     const code = (err && err.code) || "generation_failed";

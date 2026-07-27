@@ -12,6 +12,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const distillMe = require("../distill-me");
 const { readManifest } = require("../package-store");
+const { classifyMemoryAsset } = require("./project-knowledge-retrieval");
 
 const LAYER_KEYS = Object.freeze([
   "identity",
@@ -170,6 +171,12 @@ function loadMemoryAssets(packageDir, maxScan) {
       if (String(row.logicalState || "") === "session_only") continue;
       const statement = String(row.content || row.statement || row.text || "").trim();
       if (!statement || statement.length < 4) continue;
+      const assetId =
+        row.id ||
+        row.assetId ||
+        "mem_" + sha256Text(statement + "|" + (row.createdAt || i)).slice(7, 23);
+      const memGovernance = classifyMemoryAsset({ assetId, statement });
+      if (memGovernance.excluded) continue;
       const learnKind = row.learnKind ? String(row.learnKind) : null;
       const logicalState =
         row.logicalState ||
@@ -187,9 +194,7 @@ function loadMemoryAssets(packageDir, maxScan) {
             ? "active_low_confidence"
             : "active");
       const id =
-        row.id ||
-        row.assetId ||
-        "mem_" + sha256Text(statement + "|" + (row.createdAt || i)).slice(7, 23);
+        assetId;
       out.push({
         assetId: String(id),
         layer: "memory",
@@ -440,6 +445,21 @@ function assembleSubjectContext(input) {
 
   const budgeted = renderAndBudget(byLayer, limits.subjectCharsLimit, enabledLayers);
 
+  let renderedText = budgeted.renderedText;
+  const projectPrefix =
+    input && input.projectRenderedText ? String(input.projectRenderedText).trim() : "";
+  if (projectPrefix) {
+    const combined = projectPrefix + (renderedText ? "\n\n" + renderedText : "");
+    if (combined.length <= limits.subjectCharsLimit) {
+      renderedText = combined;
+      budgeted.used = combined.length;
+    } else {
+      renderedText = projectPrefix.slice(0, limits.subjectCharsLimit);
+      budgeted.used = renderedText.length;
+      budgeted.truncated = true;
+    }
+  }
+
   for (const layer of LAYER_KEYS) {
     if (!MVP_ACTIVE_LAYERS.includes(layer) && layer !== "judgment") {
       layers[layer] = [];
@@ -484,7 +504,7 @@ function assembleSubjectContext(input) {
     emptyReason,
     contextClass,
     layers,
-    renderedText: budgeted.renderedText,
+    renderedText: renderedText,
     budget: {
       subjectCharsLimit: limits.subjectCharsLimit,
       subjectCharsUsed: budgeted.used,

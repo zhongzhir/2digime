@@ -14,16 +14,24 @@ const CONTEXT_CLASSES = Object.freeze([
   "exploration",
   "creation",
   "execution",
+  "project_document_generation",
 ]);
 
 /** Explicit-signal conflict priority (highest first). Default fallthrough = execution. */
 const CLASS_PRIORITY = Object.freeze([
+  "project_document_generation",
   "decision_support",
   "representation",
   "exploration",
   "creation",
   "execution",
 ]);
+
+const DIGITAL_ME_PROJECT_RE =
+  /digital\s*me|数字之我|digitalme/i;
+
+const PROJECT_DOC_GOAL_RE =
+  /开发计划|计划书|需求文档|技术设计|时间表|roadmap|里程碑|项目规划|起草.*计划/i;
 
 const EVIDENCE_KINDS = Object.freeze([
   "subject_fact",
@@ -59,9 +67,17 @@ function blobOf(taskContext) {
     .join("\n");
 }
 
+function isDigitalMeProjectContext(taskContext) {
+  const raw = blobOf(taskContext);
+  return DIGITAL_ME_PROJECT_RE.test(raw);
+}
+
 function classifyTaskContext(taskContext) {
   const raw = blobOf(taskContext);
   const text = raw.toLowerCase();
+  const goalOnly = String(
+    (taskContext && taskContext.goal) || (taskContext && taskContext.title) || ""
+  );
   const signals = [];
   const scores = {
     representation: 0,
@@ -69,6 +85,7 @@ function classifyTaskContext(taskContext) {
     exploration: 0,
     creation: 0,
     execution: 0,
+    project_document_generation: 0,
   };
 
   const hit = (re, className, signal, weight) => {
@@ -80,12 +97,39 @@ function classifyTaskContext(taskContext) {
     return false;
   };
 
+  // LEARN-LOOP-FIX-01: project plan/docs — goal-driven, not purpose-template keywords like 风险管理.
+  if (DIGITAL_ME_PROJECT_RE.test(goalOnly) && PROJECT_DOC_GOAL_RE.test(goalOnly)) {
+    scores.project_document_generation += 8;
+    signals.push("goal:project_document");
+  } else if (DIGITAL_ME_PROJECT_RE.test(raw) && PROJECT_DOC_GOAL_RE.test(raw)) {
+    scores.project_document_generation += 6;
+    signals.push("goal:project_document_soft");
+  }
+
   hit(/投资人|对外|官网|简介|介绍材料|答辩|路演|宣传/, "representation", "goal:representation", 3);
   hit(/投资人|对外|公众|客户/, "representation", "audience:external", 2);
   hit(/对外发布|对外介绍|公开介绍/, "representation", "usage:external", 2);
 
-  hit(/对比|是否该|该不该|取舍|权衡|风险|决策|方案选择|怎么选/, "decision_support", "goal:decision", 4);
-  hit(/建议选|优先考虑哪/, "decision_support", "goal:decision_soft", 2);
+  // Decision signals from goal/title only — avoid purpose template bleed (e.g. 风险管理 in deliverable purpose).
+  const decisionBlob = [
+    taskContext && taskContext.goal,
+    taskContext && taskContext.audience,
+    taskContext && taskContext.usage,
+    taskContext && taskContext.constraints,
+    taskContext && taskContext.deliverableTitle,
+  ]
+    .map((x) => String(x || ""))
+    .join("\n");
+  const decisionHit = (re, signal, weight) => {
+    if (re.test(decisionBlob)) {
+      scores.decision_support += weight;
+      if (!signals.includes(signal)) signals.push(signal);
+      return true;
+    }
+    return false;
+  };
+  decisionHit(/对比|是否该|该不该|取舍|权衡|方案选择|怎么选/, "goal:decision", 4);
+  decisionHit(/建议选|优先考虑哪/, "goal:decision_soft", 2);
 
   hit(/探索|假设|可能性|推演|如果|商业模式|未来场景|开放讨论/, "exploration", "goal:exploration", 4);
   hit(/what if|hypothesis/i, "exploration", "goal:exploration_en", 2);
@@ -227,6 +271,25 @@ function resolveAssemblyPolicy(classification) {
       allowAiExplorationBlock: false,
       sensitivity: "normal",
       maxSubjectChars: 6000,
+    },
+    project_document_generation: {
+      enabledLayers: ["identity", "knowledge", "experience", "memory"],
+      priorityLayers: ["knowledge", "identity"],
+      layerTopK: {
+        identity: 6,
+        preference: 4,
+        knowledge: 12,
+        experience: 4,
+        judgment: 0,
+        skill: 0,
+        memory: 4,
+        artifactHistory: 0,
+      },
+      allowAiExplorationBlock: false,
+      allowJudgmentCandidateSoft: false,
+      sensitivity: "strict",
+      maxSubjectChars: 9000,
+      requireProjectContext: true,
     },
   };
 
@@ -530,8 +593,14 @@ function claimPosturePresentationMode(opts) {
   return CLAIM_POSTURE_PRESENTATIONS.includes(raw) ? raw : DEFAULT_CLAIM_POSTURE_PRESENTATION;
 }
 
+const PROJECT_COMPLETION_BOUNDARY =
+  "项目文档补全边界：团队人数、预算、时间表、融资额、具体技术选型、商业模式、监管方案——若权威材料未给出，" +
+  "必须写「待 Owner 决定」「需要进一步估算」或「建议：…」，禁止写成已确认事实。" +
+  "禁止无来源写出：6–8 人团队、300–500 万元预算、15 个月开发周期、稳定币钱包、UBC 代币分配等。";
+
 function promptGuidanceForClass(contextClass, policy, opts) {
   const c = contextClass || "execution";
+  const isDigitalMeProject = !!(opts && opts.isDigitalMeProject);
   const allowExplore = !!(policy && policy.allowAiExplorationBlock);
   const presentation = claimPosturePresentationMode({ ...opts, policy });
   const natural =
@@ -573,10 +642,20 @@ function promptGuidanceForClass(contextClass, policy, opts) {
       "情境=保守执行。按目标与约束完成，可做必要推理。" +
       "不主动创造代表 Owner 的事实或长期立场。" +
       posture,
+    project_document_generation:
+      "情境=项目文档生成。必须优先依据项目权威资料与已确认决策撰写。" +
+      "输出须区分：已确认事实、当前状态、下一步建议、待 Owner 决策、远期方向。" +
+      "不得将稳定币、UBC、代币经济、智能合约交易写成 Digital Me 当前主线。" +
+      "不得把区块链基础设施写成主底座。" +
+      PROJECT_COMPLETION_BOUNDARY +
+      posture,
   };
 
   let extra = byClass[c] || byClass.execution;
-  if (allowExplore && c !== "representation") {
+  if (isDigitalMeProject) {
+    extra = DIGITAL_ME_CORE_ANCHOR + extra + PROJECT_COMPLETION_BOUNDARY;
+  }
+  if (allowExplore && c !== "representation" && c !== "project_document_generation") {
     extra += "允许单独给出本次分析/推演段落，并用自然语言标明非本人既有结论。";
   } else if (c === "representation") {
     extra += "禁止把开放探索伪装成已确认主体观点；仍可用自然语言提出建议与待验证方案。";
@@ -684,13 +763,78 @@ function findFakeAttributedClaims(text, evidenceCorpus) {
 }
 
 function findProductRedefinitionDrift(text, contextClass) {
-  if (contextClass !== "exploration" && contextClass !== "representation") return [];
+  if (
+    contextClass !== "exploration" &&
+    contextClass !== "representation" &&
+    contextClass !== "project_document_generation"
+  ) {
+    return [];
+  }
   const body = String(text || "");
   const hits = [];
   const re = new RegExp(PRODUCT_REDEFINITION_RE.source, "gi");
   let m;
   while ((m = re.exec(body)) !== null) hits.push(m[0]);
   return hits;
+}
+
+const PROJECT_MAINLINE_CONFLICT_RE = Object.freeze([
+  {
+    id: "stablecoin_mainline",
+    re: /(?:稳定币|UBC|通用基本资本|治理代币).{0,24}(?:核心|主线|基础设施|主要功能|内置)/,
+  },
+  {
+    id: "blockchain_mainline",
+    re: /(?:区块链|智能合约|多链).{0,20}(?:主底座|主技术|核心架构|基础设施项目)/,
+  },
+  {
+    id: "fifteen_month_roadmap",
+    re: /(?:第\s*15\s*个月|15\s*个月(?:开发|周期|计划))/,
+  },
+  {
+    id: "team_size",
+    re: /(?:至少\s*)?6[\s\-‑–—]*8\s*人|6\s*到\s*8\s*人/,
+  },
+  {
+    id: "budget_range",
+    re: /300[\s\-‑–—]*500\s*万/,
+  },
+]);
+
+function findProjectAuthorityConflicts(text, evidenceCorpus, opts) {
+  const body = String(text || "");
+  const corpus = String(evidenceCorpus || "");
+  const hits = [];
+  for (const p of PROJECT_MAINLINE_CONFLICT_RE) {
+    const re = new RegExp(p.re.source, p.re.flags.includes("g") ? p.re.flags : p.re.flags + "g");
+    let m;
+    while ((m = re.exec(body)) !== null) {
+      const snippet = m[0];
+      if (isHedgedClaim(body, m.index, snippet.length)) continue;
+      if (corpus.includes(snippet)) continue;
+      hits.push({ id: p.id, snippet });
+      break;
+    }
+  }
+  if (opts && opts.projectContextEmpty) {
+    hits.push({ id: "empty_project_context", snippet: "project_context_empty" });
+  }
+  return hits;
+}
+
+function assertProjectAuthorityConsistency(text, evidenceCorpus, opts) {
+  if (!(opts && opts.isDigitalMeProject)) return true;
+  const hits = findProjectAuthorityConflicts(text, evidenceCorpus, opts);
+  if (!hits.length) return true;
+  const fabricated = findUnsupportedFabricatedFacts(text, evidenceCorpus);
+  const allHits = hits.concat(fabricated);
+  if (!allHits.length) return true;
+  const e = new Error(
+    "项目权威一致性检查未通过：内容与 Digital Me 当前定位冲突，或出现无来源的团队/预算/周期等具体数字。请依据项目资料修正，或将内容标为建议/待确认。"
+  );
+  e.code = "project_authority_conflict";
+  e.hits = allHits;
+  throw e;
 }
 
 function assertRepresentationFactsGrounded(text, evidenceCorpus, contextClass) {
@@ -764,6 +908,9 @@ module.exports = {
   findProductRedefinitionDrift,
   assertRepresentationFactsGrounded,
   assertFormalArtifactPresentation,
+  assertProjectAuthorityConsistency,
+  findProjectAuthorityConflicts,
+  isDigitalMeProjectContext,
   isExplorationHedged,
   isHedgedClaim,
   sha256Text,
@@ -772,5 +919,7 @@ module.exports = {
   CLAIM_POSTURE_PRESENTATIONS,
   DEFAULT_CLAIM_POSTURE_PRESENTATION,
   DIGITAL_ME_CORE_ANCHOR,
+  DIGITAL_ME_PROJECT_RE,
+  PROJECT_COMPLETION_BOUNDARY,
   HEDGE_RE,
 };

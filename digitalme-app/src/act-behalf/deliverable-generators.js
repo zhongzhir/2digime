@@ -40,6 +40,7 @@ function contextBlock(ctx) {
     "natural";
   const guidance = promptGuidanceForClass(contextClass, policy, {
     claimPosturePresentation,
+    isDigitalMeProject: ctx.isDigitalMeProject,
   });
 
   const subjectBlock = (() => {
@@ -135,14 +136,33 @@ function requireUsableGoal(ctx) {
   }
 }
 
-async function generateDocument({ pkg, deliverable, task, referenceMaterials, subjectAssembly, callModel }) {
-  const ctx = buildGenerationContext({
-    pkg,
-    deliverable,
-    task,
-    referenceMaterials,
-    subjectAssembly,
+function ctxFromDeps(deps) {
+  return buildGenerationContext({
+    pkg: deps.pkg,
+    deliverable: deps.deliverable,
+    task: deps.task,
+    referenceMaterials: deps.referenceMaterials,
+    subjectAssembly: deps.subjectAssembly,
+    isDigitalMeProject: deps.isDigitalMeProject,
+    projectRetrieval: deps.projectRetrieval,
+    projectResolved: deps.projectResolved,
   });
+}
+
+function reviewOptsFromCtx(ctx) {
+  return {
+    kind: ctx.kind,
+    goal: ctx.goal,
+    contextClass: ctx.contextClass,
+    evidenceCorpus: evidenceCorpusFromCtx(ctx),
+    isDigitalMeProject: ctx.isDigitalMeProject,
+    projectContextEmpty: !ctx.projectContextId,
+  };
+}
+
+async function generateDocument(deps) {
+  const ctx = ctxFromDeps(deps);
+  const callModel = deps.callModel;
   requireUsableGoal(ctx);
   let md;
   if (typeof callModel === "function") {
@@ -157,12 +177,7 @@ async function generateDocument({ pkg, deliverable, task, referenceMaterials, su
       `## 说明\n\n面向：${ctx.audience || "目标读者"}。用途：${ctx.usage || ctx.purpose || "介绍"}。\n`;
   }
   md = String(md || "").trim();
-  assertGeneratedContentUsable(md, {
-    kind: "document",
-    goal: ctx.goal,
-    contextClass: ctx.contextClass,
-    evidenceCorpus: evidenceCorpusFromCtx(ctx),
-  });
+  assertGeneratedContentUsable(md, reviewOptsFromCtx(ctx));
   if (md.length > 80000) md = md.slice(0, 80000);
   const html = markdownToHtml(md, { title: ctx.title });
   const files = {
@@ -185,14 +200,9 @@ async function generateDocument({ pkg, deliverable, task, referenceMaterials, su
   };
 }
 
-async function generatePresentation({ pkg, deliverable, task, referenceMaterials, subjectAssembly, callModel }) {
-  const ctx = buildGenerationContext({
-    pkg,
-    deliverable,
-    task,
-    referenceMaterials,
-    subjectAssembly,
-  });
+async function generatePresentation(deps) {
+  const ctx = ctxFromDeps(deps);
+  const callModel = deps.callModel;
   requireUsableGoal(ctx);
   let raw;
   if (typeof callModel === "function") {
@@ -223,12 +233,7 @@ async function generatePresentation({ pkg, deliverable, task, referenceMaterials
     throw e;
   }
   const planText = JSON.stringify(plan);
-  assertGeneratedContentUsable(planText + "\n" + (plan.title || ""), {
-    kind: "presentation",
-    goal: ctx.goal,
-    contextClass: ctx.contextClass,
-    evidenceCorpus: evidenceCorpusFromCtx(ctx),
-  });
+  assertGeneratedContentUsable(planText + "\n" + (plan.title || ""), reviewOptsFromCtx(ctx));
   const files = {};
   let usedPptx = false;
   try {
@@ -252,14 +257,9 @@ async function generatePresentation({ pkg, deliverable, task, referenceMaterials
   };
 }
 
-async function generateWebpage({ pkg, deliverable, task, referenceMaterials, subjectAssembly, callModel }) {
-  const ctx = buildGenerationContext({
-    pkg,
-    deliverable,
-    task,
-    referenceMaterials,
-    subjectAssembly,
-  });
+async function generateWebpage(deps) {
+  const ctx = ctxFromDeps(deps);
+  const callModel = deps.callModel;
   requireUsableGoal(ctx);
   let md;
   if (typeof callModel === "function") {
@@ -269,12 +269,7 @@ async function generateWebpage({ pkg, deliverable, task, referenceMaterials, sub
     if (ctx.attachmentText) md += `\n## 依据材料摘要\n\n${ctx.attachmentText.slice(0, 1500)}\n`;
   }
   md = String(md || "").trim();
-  assertGeneratedContentUsable(md, {
-    kind: "webpage",
-    goal: ctx.goal,
-    contextClass: ctx.contextClass,
-    evidenceCorpus: evidenceCorpusFromCtx(ctx),
-  });
+  assertGeneratedContentUsable(md, reviewOptsFromCtx(ctx));
   const html = markdownToHtml(md, { title: ctx.title });
   return {
     kind: "webpage",
@@ -290,23 +285,10 @@ async function generateWebpage({ pkg, deliverable, task, referenceMaterials, sub
   };
 }
 
-async function generateImage({
-  pkg,
-  deliverable,
-  task,
-  referenceMaterials,
-  subjectAssembly,
-  callModel,
-  imageMode,
-}) {
-  void callModel;
-  const ctx = buildGenerationContext({
-    pkg,
-    deliverable,
-    task,
-    referenceMaterials,
-    subjectAssembly,
-  });
+async function generateImage(deps) {
+  void deps.callModel;
+  const ctx = ctxFromDeps(deps);
+  const imageMode = deps.imageMode;
   requireUsableGoal(ctx);
   if (imageMode === "mock") {
     return {

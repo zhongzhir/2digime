@@ -5600,9 +5600,24 @@ function matchingResearchToolInvocation(task) {
   return null;
 }
 
+function updateActProjectContextHint(task) {
+  const el = $("act-project-context-hint");
+  if (!el) return;
+  const goal = String((task && task.goal) || (task && task.request) || "").trim();
+  const isDm = /digital\s*me|数字之我|digitalme/i.test(goal);
+  if (isDm) {
+    el.textContent = "已使用 Digital Me 项目资料";
+    el.classList.remove("hidden");
+  } else {
+    el.textContent = "";
+    el.classList.add("hidden");
+  }
+}
+
 function renderActResearchFromTask(task) {
   actBehalfState.invocations = (task && task.invocations) || [];
   actBehalfState.selectedSkillId = (task && task.selectedSkillId) || null;
+  updateActProjectContextHint(task);
   updateActResearchPanelVisibility();
   const tool = matchingResearchToolInvocation(task);
   const goal = String((task && task.taskIntent && task.taskIntent.goal) || (task && task.goal) || "").trim();

@@ -11,6 +11,9 @@ const { PackageStore, readManifest } = require("../package-store");
 const packageStore = require("./deliverable-package-store");
 const artifactFs = require("./deliverable-artifact-fs");
 const learnStore = require("./deliverable-learn-store");
+const projectKnowledgeStore = require("./project-knowledge-store");
+const { detectProjectFromGoal } = require("./project-context-registry");
+const { newClaimId, nowIso, PROJECT_IDS } = require("./project-knowledge-schema");
 
 const { JOB_STATUS, appendAudit, upsertJob, createQueuedJob, getJobByVersionId, getJob } =
   learnStore;
@@ -591,6 +594,56 @@ function buildOpsFromKept(kept, source) {
   return ops;
 }
 
+function commitProjectKnowledgeCandidates(packageDir, kept, source) {
+  if (!packageDir || !Array.isArray(kept) || !kept.length) return { ok: true, count: 0 };
+  const taskId = source && source.taskId;
+  let goal = "";
+  try {
+    const actBehalfStore = require("./task-store");
+    if (taskId) {
+      const got = actBehalfStore.getTask(source.userData || "", taskId, { heal: false });
+      goal = (got && got.task && (got.task.goal || got.task.request)) || "";
+    }
+  } catch {
+    goal = "";
+  }
+  const detected = detectProjectFromGoal(goal);
+  if (!detected) return { ok: true, count: 0 };
+
+  projectKnowledgeStore.ensureDigitalMeProjectKnowledge(packageDir);
+  let count = 0;
+  for (const item of kept) {
+    if (!item || item.layer !== "semantic" || item.writeTarget === "audit_only") continue;
+    if (item.learnKind === "new_fact" && item.rejectReason) continue;
+    const text = String(item.text || "").trim();
+    if (!text || text.length < 16) continue;
+    if (/本人接受了「/.test(text)) continue;
+    const claim = {
+      claimId: newClaimId(),
+      projectId: PROJECT_IDS.DIGITAL_ME,
+      claimText: text,
+      claimType: "proposal",
+      sourceRefs: [`deliverableVersion:${source.deliverableVersionId}`],
+      authorityLevel: "accepted_artifact",
+      confirmationStatus: "candidate",
+      effectiveFrom: nowIso(),
+      supersededBy: null,
+      contradictedBy: null,
+      scope: "digital_me_project",
+      freshness: nowIso(),
+      confidence: item.confidence || "low",
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+      schemaVersion: 1,
+      sourceDeliverableVersionId: source.deliverableVersionId,
+      learnCategory: "project_knowledge_candidate",
+    };
+    projectKnowledgeStore.upsertClaim(packageDir, claim);
+    count += 1;
+  }
+  return { ok: true, count };
+}
+
 function commitLearning(packageDir, kept, source) {
   const ops = buildOpsFromKept(kept, source);
   if (!ops.length) {
@@ -733,6 +786,16 @@ async function runLearnJob(userData, jobId, deps) {
     }
 
     const commitResult = commitLearning(packageDir, consolidated.kept, job.source);
+    if (commitResult.ok && !commitResult.skipped) {
+      const pkResult = commitProjectKnowledgeCandidates(packageDir, consolidated.kept, {
+        ...job.source,
+        userData,
+      });
+      job = appendAudit(job, {
+        action: "project_knowledge_candidates",
+        count: pkResult.count || 0,
+      });
+    }
     if (!commitResult.ok) {
       // Acceptance must not fail: record skipped write if package missing.
       if (commitResult.code === "package_dir_missing") {
