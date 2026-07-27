@@ -32,7 +32,33 @@ implemented / codex_verified / ready_for_owner_runtime_acceptance
 
 ---
 
-## 2026-07-27 IDCOLLAB-MIN-01.1 撤销即时生效与界面极简修复
+## 2026-07-27 DVL2-03-FIX-01 占位门禁精修与失败自恢复
+
+### 背景
+
+`DVL2-03-FAILURE-AUDIT-01` 证实 PRD 多次失败为写前占位门禁误杀（`/项目名称/`、`/占位/` 等过宽正则）+ 模型模板输出；非 Knowledge Resolver / 授权问题。
+
+### 实施
+
+- 结构化占位分析：区分 blocking / warning / explanatory；仅 blocking 阻止写盘
+- 自动修订：最多 2 次；独立 attemptId；持久化 failureEvidence
+- 用户面：自动修正提示 + 可行动失败摘要 + 高级审计详情
+- 结构化文档 temperature 0.3（仅 artifact 路径）
+
+### 测试
+
+- `test:dvl2-03-placeholder-gate`：6 pass
+- 回归：DVL2-03 generation/one-click、LEARN-LOOP-FIX-02、IDCOLLAB-MIN-01、DVL2-05 全绿
+
+### 状态
+
+```text
+implemented / codex_verified / ready_for_owner_runtime_acceptance
+```
+
+不得 push。不得因自动化通过标 `owner_runtime_accepted`。
+
+---
 
 ### 背景
 
