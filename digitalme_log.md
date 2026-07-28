@@ -5,6 +5,41 @@
 
 ---
 
+## 2026-07-28 TASK-QUALITY-LOOP-01 复杂任务高质量完成闭环 · 实施完成（待 Owner 真机验收）
+
+### 本次目标
+
+验证更高一级产品能力：用户给出复杂目标后，Digital Me 选择合适方法，完成生成、检查、修订与交付，给出达到可直接采用水平的成果。首个验证切片为 PRD/方案文档。结果优先、内部复杂外部克制、低打扰。
+
+### 前置：IDCOLLAB-MIN-01 状态校正（Commit `313f506`）
+
+按 Owner 指令将残留的 `ready_for_owner_acceptance` / `ready_for_owner_runtime_reacceptance` / `not_started` 统一校正为 `implemented` / `revocation_bug_fixed` / `owner_runtime_accepted` / `accepted_as_implemented`，边界 `minimal_identity_collaboration_loop_only` / `external_network_collaboration_not_validated` / `market_and_settlement_not_started`。涉及：任务包头部、context（5 处）、panorama index（2 处）、project-knowledge-store 种子 claim。不重开任务、不重新实现、不扩展外部协作。
+
+### 本次完成（Commit `ba4a521`，分支 `codex/task-quality-loop-01`）
+
+1. 新增 `outcome-criteria.js`：任务模式判断（`current_implementation` / `solution_exploration` / `strategic_planning`）与内部 `OutcomeCriteria` 结构；初稿提示词按模式注入成果要求；
+2. 新增 `deliverable-reviewer.js`：双层 Reviewer（确定性检查：占位复查/关键章节/目标对齐/远期挤占主体/探索收缩/项目事实冲突/空话套话 + 可选模型评审走 `review` 路由，失败优雅降级）；结构化 `ReviewResult`（status/blockingIssues/qualityIssues/suggestedRevisions/scores）；
+3. 管线接线：Reviewer 挂在占位门禁之后、成稿之前；blocking → `review_content_rejected` 复用既有修订循环；占位与质量**共享**修订预算 ≤2 次；两次仍失败 → 不落盘、失败证据（含 reviewResult）持久化、普通语言说明；
+4. 持久化：通过版本 `version.quality.reviewer`；失败侧 attempt `failureEvidence.reviewResult` + `reviewIssues`；重启恢复经既有 store；
+5. `inputSummary` 透传 `expectedQuality`；附带修复 generation `project_unresolved` 分支 TDZ 隐患；
+6. UI 克制：状态文案 `正在生成…` / `正在检查质量并完善成果。` / `成果已生成。`；单项 `正在完善成果`；不展示评分/管线/授权/审计结构；
+7. benchmark fixture：3 个 PRD/方案样本（当前实施/方案探索/战略规划），含缺陷与合格草稿及 Reviewer 预期判断；
+8. 新增 `test:task-quality-loop-01` 13 项全绿；回归：DVL2-03（generation/one-click/placeholder-gate/Electron 两阶段 acceptance）、DVL2-04/05、DVL2-01/02、TASK-UX-MIN-01、IDCOLLAB-MIN-01(+MIN-01.1)、LEARN-LOOP-FIX-01/02/02.1、CRT 全系列、model-routing、vl1-block3、vl1-prompt-calibration、gate4-auto-flow、act-behalf 全绿。
+
+### 状态
+
+```text
+implemented /
+automated_tests_passed /
+owner_runtime_acceptance_pending /
+benchmark_framework_started /
+market_95th_percentile_not_yet_proven
+```
+
+不得 push。等待 Owner 真机验收（场景 A 当前实施型 PRD / 场景 B 方案探索 / 场景 C 质量失败，见任务包 §4）。
+
+---
+
 ## 2026-07-27 TODAY-CLOSE-20260727 · 今日工作收口
 
 Owner 真机验收日期：**2026-07-27**。文档收口 commit 见 Git 记录；**不得 push**。
