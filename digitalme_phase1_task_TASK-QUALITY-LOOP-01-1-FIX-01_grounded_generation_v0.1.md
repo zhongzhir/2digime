@@ -5,6 +5,8 @@
 状态：`implemented` / `automated_tests_passed` / `owner_runtime_acceptance_pending` / `market_95th_percentile_not_proven`  
 实施分支：`codex/task-quality-loop-01-1-fix-grounded-generation`  
 基线：`d5ee05f`（`codex/task-quality-loop-01-1-grounded-review`）  
+实现提交：`a7fbf01`（核心）+ `a55d3c0`（测试）+ `005992d`（文档）  
+HEAD：`005992d`  
 上位：[`digitalme_phase1_task_TASK-QUALITY-LOOP-01-1_grounded_review_v0.1.md`](digitalme_phase1_task_TASK-QUALITY-LOOP-01-1_grounded_review_v0.1.md)
 
 > **正式边界**：本修复只解决「Grounding Gate 正确、生成/修订不服从当前系统事实」这一断点。**不等于** Owner 真机已通过；**不得**标 `owner_runtime_accepted` / `accepted_as_implemented`。
