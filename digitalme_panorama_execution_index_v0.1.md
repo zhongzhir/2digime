@@ -7,7 +7,7 @@
 代码实现基线：`2f1b7bd`（committed baseline；distill-me + doing-context + identity + collaboration + 全部新增功能）；历史 `cbde807fd1e40472d66fbe8f0810a0835e8bc816`（PAN-01S 族）；R1 `8d7e9b3`；R2 分支 `codex/r2-chat-sessions-migration`（实现保留）
 规格依据：见文内历史列表
 
-> **2026-07-28 TODAY（非本索引主线）**：**TASK-QUALITY-LOOP-01**（复杂任务高质量完成闭环，PRD/方案文档首个切片）已实现完成：`implemented` / `automated_tests_passed` / `owner_runtime_acceptance_pending` / `benchmark_framework_started` / `market_95th_percentile_not_yet_proven`；分支 `codex/task-quality-loop-01`；**DVL2-03-QUALITY-01 已被其吸收**。等待 Owner 真机验收。不得 push。
+> **2026-07-28 TODAY（非本索引主线）**：**TASK-QUALITY-LOOP-01**（复杂任务高质量完成闭环，PRD/方案文档首个切片）已实现完成：`implemented` / `automated_tests_passed` / `owner_runtime_acceptance_pending` / `benchmark_framework_started` / `market_95th_percentile_not_yet_proven`；分支 `codex/task-quality-loop-01`；**DVL2-03-QUALITY-01 已被其吸收**。**TASK-QUALITY-LOOP-01.1**（Grounding Review：CurrentSystemSnapshot + AuthorityMap + 7 类 grounding blocking issue）已实现完成：`implemented` / `automated_tests_passed` / `grounding_review_added` / `owner_runtime_acceptance_pending` / `market_95th_percentile_not_proven`；分支 `codex/task-quality-loop-01-1-grounded-review`。均等待 Owner 真机验收。不得 push。
 
 > **2026-07-27 TODAY-CLOSE（非本索引主线）**：以下四项已于 2026-07-27 Owner 真机验收并标 `accepted_as_implemented`：**LEARN-LOOP-FIX-02**、**LEARN-LOOP-FIX-02.1**、**DVL2-03-FIX-01**、**TASK-UX-MIN-01**（功能最小接受；UI 质量 deferred → **UI-UX-FOUNDATION-UPGRADE**）。**IDCOLLAB-MIN-01** 已校正为 `implemented` / `revocation_bug_fixed` / `owner_runtime_accepted` / `accepted_as_implemented`（2026-07-28；`minimal_identity_collaboration_loop_only` / `external_network_collaboration_not_validated` / `market_and_settlement_not_started`）。**DVL2-03** 主线已 `owner_runtime_accepted`。不得 push。
 
@@ -168,6 +168,7 @@ statically_verified / owner_partial_verified / known_acceptance_gaps / frozen_fo
 | **UI-UX-FOUNDATION-UPGRADE** 整体界面与交互重构 | Owner 判断 / TASK-UX-MIN-01 收口 | `backlog` / `not_started` | TASK-UX-MIN-01 功能最小已接受；不继续局部补丁 | Owner 授权独立任务包后启动 | 补丁式布局累积、视觉/交互质量不足 |
 | **DVL2-03-QUALITY-01** 成果生成实施模式对齐 | Owner 判断 / DVL2-03-FIX-01 收口 | `absorbed_by_task_quality_loop_01`（2026-07-28） | 非 DVL2-03-FIX-01 阻断项 | 已由 TASK-QUALITY-LOOP-01 任务模式判断 + Reviewer 远期挤占检查吸收，不另设重复流程 | 生成内容范围偏发散、当前阶段适配不足 |
 | **TASK-QUALITY-LOOP-01** 复杂任务高质量完成闭环 | Owner 指令 2026-07-28 | `implemented` / `automated_tests_passed` / `owner_runtime_acceptance_pending` / `benchmark_framework_started` / `market_95th_percentile_not_yet_proven` | PRD/方案文档首个验证切片；OutcomeCriteria + Reviewer + ≤2 次自动修订 | Owner 真机验收（场景 A/B/C） | 见任务包 §5 未完成边界与风险 |
+| **TASK-QUALITY-LOOP-01.1** 成果真实性与架构一致性复核 | Owner 指令 2026-07-28 | `implemented` / `automated_tests_passed` / `grounding_review_added` / `owner_runtime_acceptance_pending` / `market_95th_percentile_not_proven` | CurrentSystemSnapshot + AuthorityMap + GroundingReview；artifact(3) 失败样本不可通过 | Owner 真机验收（场景 A/B） | 仅 Digital Me 项目当前实施型文本成果；注册表启发式需随演进维护 |
 | TASK-UX 删除后成果保留真机补验 | TASK-UX-MIN-01 Owner 验收 | `known_gap / non_blocking` | 自动化已覆盖软删除语义 | Owner 补验或阻断性发现 | 用户误解删除范围 |
 | TASK-UX 生成中归档保护真机补验 | TASK-UX-MIN-01 Owner 验收 | `known_gap / non_blocking` | 代码已有 generation guard | Owner 补验 | 归档误操作 |
 | LEARN-LOOP 撤销后即时停止调用真机补验 | LEARN-LOOP-FIX-02.1 Owner 验收 | `known_gap / non_blocking` | IDCOLLAB revoke 路径已有 fail-closed | Owner 补验 | 撤销后仍调用旧知识 |

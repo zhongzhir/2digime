@@ -5,6 +5,40 @@
 
 ---
 
+## 2026-07-28 TASK-QUALITY-LOOP-01.1 成果真实性与架构一致性复核（Grounding Review）· 实施完成（待 Owner 真机验收）
+
+### 本次目标
+
+解决 Owner 真机暴露的关键问题：Reviewer 能识别格式缺陷，却不能可靠判断文档是否准确理解当前系统、是否重复建设已有能力、是否与权威对象冲突。失败样本 `artifact(3)`（项目知识功能 PRD）必须在新 Reviewer 下无法直接通过。
+
+### 本次完成（分支 `codex/task-quality-loop-01-1-grounded-review`；`45353e3` 实现 + `2d15531` 测试）
+
+1. **CurrentSystemSnapshot**：能力注册表以真实模块文件验证（未确认标 `unknown` 不补全）；按任务关键词只提取相关能力；持久化检测（JSON present / SQLite absent-deferred / 云同步 absent / 外部 Agent 适配 absent）；已知边界携带 sourceRef；有界事实块注入初稿提示词；
+2. **AuthorityMap**：8 个权威对象（PlanRecord/Task/ArtifactRef/ProjectKnowledge/KnowledgeItem/Authorization/LearningRecord/Provenance），重定义别名正则 + 引用豁免语；
+3. **GroundingReview**（确定性，模型降级不跳过；仅 Digital Me 项目 + 当前实施型 + 文本类）：新增 `current_state_incorrect` / `existing_capability_ignored` / `duplicate_authority_source` / `unsupported_architecture_assumption` / `acceptance_only_tests_crud` / `owner_decision_overreach` / `unsubstantiated_estimate` / `grounding_revision_guidance`；`ReviewResult.grounding` 持久化到版本与失败证据，重启可恢复；
+4. 修订提示携带遗漏能力/正确权威对象/不支持假设/验收改写方向/应移除 Owner 决策项；修订预算不变（≤2 次，共用）；
+5. fixture：失败样本 artifact(3) 全文（预期 7 类 ruleId + 3 个重复实体）+ 合格样本（预期通过）；
+6. 新增 `test:task-quality-loop-01-1` 17 项全绿；回归：TASK-QUALITY-LOOP-01 13 项、DVL2 全系列（含 Electron 两阶段 acceptance）、TASK-UX-MIN-01、IDCOLLAB-MIN-01(+MIN-01.1)、LEARN-LOOP 全系列、act-behalf 全绿；
+7. 默认 UI 无新增内容；grounding 失败用户文案：`成果与当前项目状态存在冲突…请补充或更新相关项目资料后重试。`
+
+### 第一次生成失败调查（有界；真实 userData 证据）
+
+第一次运行三稿连续被占位门禁拦截（`unfilled_field_label` ×2/稿，9269→8775→8763 字），两次修订预算耗尽后安全失败未落盘；用户再次发起后一次成稿、Reviewer pass（模型评审未降级）。**根因 = 模型输出波动，占位门禁正确拦截；非 Reviewer 误伤/超时/降级/格式失败。** 不附带修复；「预算耗尽后自动全新重试」列为后续候选（涉预算合同变更，需 Owner 决策）。
+
+### 状态
+
+```text
+implemented /
+automated_tests_passed /
+grounding_review_added /
+owner_runtime_acceptance_pending /
+market_95th_percentile_not_proven
+```
+
+不得 push。等待 Owner 真机验收（场景 A 重新生成项目知识 PRD / 场景 B 受控失败样本，见任务包 §5）。
+
+---
+
 ## 2026-07-28 TASK-QUALITY-LOOP-01 复杂任务高质量完成闭环 · 实施完成（待 Owner 真机验收）
 
 ### 本次目标

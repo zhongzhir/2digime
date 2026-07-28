@@ -2,7 +2,7 @@
 
 版本：v0.4
 状态：持续更新
-最后更新：2026-07-28（TASK-QUALITY-LOOP-01 质量闭环实现完成待 Owner 真机验收；IDCOLLAB-MIN-01 状态校正；不得 push）
+最后更新：2026-07-28（TASK-QUALITY-LOOP-01.1 Grounding Review 实现完成待 Owner 真机验收；不得 push）
 
 > **当前产品主线（2026-07-26）**：**第二纵向闭环** — 多模态成果包交付与渐进式主体构建。第一纵向闭环已 `accepted` / `completed`。
 > **最高架构与研发原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)（**v0.1.1 `active`**）。
@@ -21,7 +21,7 @@
 > 2. **BUG1 #6** = 七模块渐进式数字之我构建框架。
 > 3. 首个正式验收场景 = 为一个项目生成完整对外介绍成果包。
 > 4. 第一轮真实产物 = 正式介绍文档、演示文稿 PPT、单页 HTML、封面图片；视频/音频本轮不实现真实生成，用户面不得宣称已支持。
-> **当前任务**：**TASK-QUALITY-LOOP-01**（复杂任务高质量完成闭环——PRD/方案文档首个验证切片）已实现完成，状态 `implemented` / `automated_tests_passed` / `owner_runtime_acceptance_pending` / `benchmark_framework_started` / `market_95th_percentile_not_yet_proven`（分支 `codex/task-quality-loop-01`；**等待 Owner 真机验收**，场景见任务包 §4）。**IDCOLLAB-MIN-01** 状态已校正（2026-07-28，Owner 确认撤销修复已真机复验通过）：`implemented` / `revocation_bug_fixed` / `owner_runtime_accepted` / `accepted_as_implemented`（边界：`minimal_identity_collaboration_loop_only` / `external_network_collaboration_not_validated` / `market_and_settlement_not_started`）。**2026-07-27 已收口**：LEARN-LOOP-FIX-02、LEARN-LOOP-FIX-02.1、DVL2-03-FIX-01、TASK-UX-MIN-01（均 `owner_runtime_accepted` / `accepted_as_implemented`）。**不得** push。
+> **当前任务**：**TASK-QUALITY-LOOP-01.1**（成果真实性与架构一致性复核——Grounding Review）已实现完成，状态 `implemented` / `automated_tests_passed` / `grounding_review_added` / `owner_runtime_acceptance_pending` / `market_95th_percentile_not_proven`（分支 `codex/task-quality-loop-01-1-grounded-review`；**等待 Owner 真机验收**，场景 A/B 见任务包 §5）。前序 **TASK-QUALITY-LOOP-01** 同状态待验（分支 `codex/task-quality-loop-01`）。**IDCOLLAB-MIN-01** 状态已校正（2026-07-28）：`implemented` / `revocation_bug_fixed` / `owner_runtime_accepted` / `accepted_as_implemented`（边界：`minimal_identity_collaboration_loop_only` / `external_network_collaboration_not_validated` / `market_and_settlement_not_started`）。**2026-07-27 已收口**：LEARN-LOOP-FIX-02、LEARN-LOOP-FIX-02.1、DVL2-03-FIX-01、TASK-UX-MIN-01（均 `owner_runtime_accepted` / `accepted_as_implemented`）。**不得** push。
 > **R2 对话运行时**：保留基础设施；R2 代码 **retained as infrastructure**。生产默认入口仍为 legacy。
 > **Owner Electron 真机验收（2026-07-24）**：`accepted`（distill-me / R2 对话重试 / doing-context / PAN-01S 等）。
 > **confirmed identity → act context（2026-07-24，`2f1b7bd`）**：`accepted`（历史整合基线；**不是**当前 HEAD）。
@@ -324,6 +324,7 @@ flowchart TB
 | `digitalme_phase1_task_TASK-UX-MIN-01_task_management_v0.1.md` | **TASK-UX-MIN-01 做事任务管理最小闭环**（v0.1.1；`functional_minimum_accepted` / `owner_runtime_accepted` / `accepted_as_implemented` @ 2026-07-27） |
 | `digitalme_phase1_task_IDCOLLAB-MIN-01_action_identity_and_authorization_v0.1.md` | **IDCOLLAB-MIN-01 最小行动授权与参与方语义接线**（v0.1.2；`implemented` / `revocation_bug_fixed` / `owner_runtime_accepted` / `accepted_as_implemented`；边界：最小身份协作闭环，外部网络协作未验证、市场与结算未启动） |
 | `digitalme_phase1_task_TASK-QUALITY-LOOP-01_quality_reviewed_deliverable_loop_v0.1.md` | **TASK-QUALITY-LOOP-01 复杂任务高质量完成闭环**（v0.1.0；`implemented` / `automated_tests_passed` / `owner_runtime_acceptance_pending` / `benchmark_framework_started` / `market_95th_percentile_not_yet_proven`；吸收 DVL2-03-QUALITY-01） |
+| `digitalme_phase1_task_TASK-QUALITY-LOOP-01-1_grounded_review_v0.1.md` | **TASK-QUALITY-LOOP-01.1 成果真实性与架构一致性复核**（v0.1.0；`implemented` / `automated_tests_passed` / `grounding_review_added` / `owner_runtime_acceptance_pending` / `market_95th_percentile_not_proven`；CurrentSystemSnapshot + AuthorityMap + GroundingReview） |
 | `digitalme_phase1_task_DVL2-03A_first_real_document_artifact_v0.1.md` | **DVL2-03A 草案（历史）**；已被完整 **DVL2-03** 实现路径吸收（不再单独拆分 03A/B/C） |
 | `docs/design/digitalme_crt_v0.2_subject_context_engine_spec.md` | **CRT v0.2 Subject Context Engine 规格**（v0.2.2；`frozen_for_implementation`） |
 | `digitalme_phase1_task_CRT-MVP-01_cognitive_runtime_continuity_v0.1.md` | **CRT-MVP-01 持续性验证**（实现合入；真机状态见任务包） |
