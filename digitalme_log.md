@@ -5,6 +5,35 @@
 
 ---
 
+## 2026-07-28 TASK-QUALITY-LOOP-01.1-FIX-01 Grounded Generation 修复 · 实施完成（待 Owner 真机验收）
+
+### 本次目标
+
+修复 Owner 真机连续 3 次项目知识 PRD 被 Grounding Gate 阻断、自动修订无效、用户只能手动重试的问题：让生成阶段服从当前系统事实。
+
+### 本次完成（分支 `codex/task-quality-loop-01-1-fix-grounded-generation`；基线 `d5ee05f`）
+
+1. **权威事实区块**：`CURRENT SYSTEM FACTS — AUTHORITATIVE` + 结构化字段注入初稿/重建/干净重试；
+2. **历史材料降权**：superseded 不进当前事实；planning_only 标注不得覆盖已验收状态；
+3. **Gap Statement**：ExistingCapabilities / ActualGaps 等五元组，冲突则重算，禁止把已有能力写成缺口；
+4. **grounded_rebuild**：四大 grounding blocking 时不带全文失败稿；
+5. **clean regeneration**：初稿 + ≤2 次修订/重建后允许 1 次干净上下文全新生成；模型调用硬上限 16；
+6. 审计字段 `groundedRebuildUsed` / `cleanRegenerationUsed` 持久化；默认 UI 不展示内部机制；
+7. `test:task-quality-loop-01-1-fix-01` 9 项全绿；01.1 / 01 与 DVL2 / TASK-UX / IDCOLLAB / Learning Loop / act-behalf 回归全绿。
+
+### 状态
+
+```text
+implemented /
+automated_tests_passed /
+owner_runtime_acceptance_pending /
+market_95th_percentile_not_proven
+```
+
+不得 push。**Owner 真机尚未通过。**
+
+---
+
 ## 2026-07-28 TASK-QUALITY-LOOP-01.1 成果真实性与架构一致性复核（Grounding Review）· 实施完成（待 Owner 真机验收）
 
 ### 本次目标
