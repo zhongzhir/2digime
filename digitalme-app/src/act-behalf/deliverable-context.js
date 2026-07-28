@@ -16,6 +16,11 @@ const {
   buildFailureEvidence,
   buildRepairIssueLines,
 } = require("./placeholder-validation");
+const {
+  demoteHistoricalMaterials,
+  classifyMaterialAuthority,
+  MATERIAL_AUTHORITY,
+} = require("./grounded-generation");
 
 /** @deprecated Legacy export; prefer analyzePlaceholderIssues(). */
 const PLACEHOLDER_RES = Object.freeze([
@@ -74,14 +79,28 @@ function normalizeReferenceMaterials(list, opts) {
   return out;
 }
 
-function budgetAttachmentContext(materials, maxChars) {
+function budgetAttachmentContext(materials, maxChars, opts) {
   const limit = Number(maxChars) > 0 ? Number(maxChars) : 18000;
-  const list = normalizeReferenceMaterials(materials);
+  const demoteForCurrentImplementation = !!(opts && opts.demoteHistorical);
+  const normalized = normalizeReferenceMaterials(materials);
+  const demoted = demoteForCurrentImplementation
+    ? demoteHistoricalMaterials(normalized, { includeHistoricalAnnotated: false })
+    : { materials: normalized.map((m) => ({ ...m, materialAuthority: classifyMaterialAuthority(m) })), demoted: [] };
+  const list = demoted.materials;
   const parts = [];
   const usedRefs = [];
   let used = 0;
   for (const m of list) {
-    const header = `【参考材料（本次任务 · task_material / task_owned）：${m.name}】\n`;
+    const authority = m.materialAuthority || classifyMaterialAuthority(m) || MATERIAL_AUTHORITY.UNKNOWN;
+    const authorityTag =
+      authority === MATERIAL_AUTHORITY.CURRENT_AUTHORITATIVE
+        ? "current_authoritative"
+        : authority === MATERIAL_AUTHORITY.PLANNING_ONLY
+          ? "planning_only"
+          : authority === MATERIAL_AUTHORITY.HISTORICAL_SUPERSEDED
+            ? "historical_superseded"
+            : "unknown";
+    const header = `【参考材料（${authorityTag} · task_material / task_owned）：${m.name}】\n`;
     const remain = limit - used - header.length;
     if (remain <= 80) {
       usedRefs.push({
@@ -93,6 +112,7 @@ function budgetAttachmentContext(materials, maxChars) {
         evidenceKind: "task_material",
         ownership: "task_owned",
         logicalState: null,
+        materialAuthority: authority,
       });
       continue;
     }
@@ -109,12 +129,26 @@ function budgetAttachmentContext(materials, maxChars) {
       evidenceKind: "task_material",
       ownership: "task_owned",
       logicalState: null,
+      materialAuthority: authority,
+    });
+  }
+  for (const d of demoted.demoted || []) {
+    usedRefs.push({
+      id: d.id,
+      name: d.id || "historical",
+      included: false,
+      reason: d.reason || "historical_superseded",
+      evidenceKind: "task_material",
+      ownership: "task_owned",
+      logicalState: null,
+      materialAuthority: d.materialAuthority || MATERIAL_AUTHORITY.HISTORICAL_SUPERSEDED,
     });
   }
   return {
     text: parts.join("\n\n---\n\n"),
     usedRefs,
     totalChars: used,
+    demotedMaterials: demoted.demoted || [],
   };
 }
 
@@ -129,6 +163,10 @@ function buildGenerationContext({
   projectResolved,
   outcomeCriteria,
   systemFactsText,
+  authoritativeFactsText,
+  gapStatementText,
+  gapStatement,
+  cleanContext,
 }) {
   const snap = (pkg && pkg.executionSnapshot) || {};
   const input = snap.inputSummary || {};
@@ -170,21 +208,32 @@ function buildGenerationContext({
     unwrapField(understanding.expectedQuality) ||
     "";
 
+  const taskMode = outcomeCriteria && outcomeCriteria.taskMode;
+  const demoteHistorical = taskMode === "current_implementation" && !!isDigitalMeProject;
   const materials = referenceMaterials || (task && task.referenceMaterials) || [];
-  const attachmentBudget = budgetAttachmentContext(materials, 18000);
+  const attachmentBudget = cleanContext
+    ? { text: "", usedRefs: [], totalChars: 0, demotedMaterials: [] }
+    : budgetAttachmentContext(materials, 18000, { demoteHistorical });
 
   const assembly = subjectAssembly && typeof subjectAssembly === "object" ? subjectAssembly : null;
-  const subjectRenderedText = assembly && assembly.renderedText ? String(assembly.renderedText) : "";
-  const subjectRefs = assembly && Array.isArray(assembly.refs) ? assembly.refs : [];
+  const subjectRenderedText =
+    cleanContext
+      ? ""
+      : assembly && assembly.renderedText
+        ? String(assembly.renderedText)
+        : "";
+  const subjectRefs = cleanContext ? [] : assembly && Array.isArray(assembly.refs) ? assembly.refs : [];
   const attachmentRefs =
-    assembly && Array.isArray(assembly.attachmentRefs) && assembly.attachmentRefs.length
-      ? assembly.attachmentRefs
-      : attachmentBudget.usedRefs.map((r) => ({
-          ...r,
-          evidenceKind: "task_material",
-          ownership: "task_owned",
-          logicalState: null,
-        }));
+    cleanContext
+      ? []
+      : assembly && Array.isArray(assembly.attachmentRefs) && assembly.attachmentRefs.length
+        ? assembly.attachmentRefs
+        : attachmentBudget.usedRefs.map((r) => ({
+            ...r,
+            evidenceKind: "task_material",
+            ownership: "task_owned",
+            logicalState: null,
+          }));
 
   return {
     goal,
@@ -205,7 +254,8 @@ function buildGenerationContext({
     deliverableId: String((deliverable && deliverable.id) || ""),
     attachmentText: attachmentBudget.text,
     attachmentRefs,
-    subjectAssembly: assembly,
+    demotedMaterials: attachmentBudget.demotedMaterials || [],
+    subjectAssembly: cleanContext ? null : assembly,
     subjectRenderedText,
     subjectRefs,
     contextClass: (assembly && assembly.contextClass) || null,
@@ -222,8 +272,10 @@ function buildGenerationContext({
     projectContextId: (assembly && assembly.projectContextId) || (projectResolved && projectResolved.projectContextId) || null,
     projectId: (assembly && assembly.projectId) || (projectResolved && projectResolved.projectId) || null,
     projectContextLabel: (assembly && assembly.projectContextLabel) || (projectResolved && projectResolved.displayLabel) || null,
-    projectRetrieval: projectRetrieval || (assembly && assembly.projectRetrieval) || null,
-    retrievedClaimIds: (projectRetrieval && projectRetrieval.retrievedClaimIds) || [],
+    projectRetrieval: cleanContext ? null : projectRetrieval || (assembly && assembly.projectRetrieval) || null,
+    retrievedClaimIds: cleanContext
+      ? []
+      : (projectRetrieval && projectRetrieval.retrievedClaimIds) || [],
     excludedClaims: (projectRetrieval && projectRetrieval.excludedClaims) || [],
     expectedQuality,
     outcomeCriteria: outcomeCriteria && typeof outcomeCriteria === "object" ? outcomeCriteria : null,
@@ -232,6 +284,11 @@ function buildGenerationContext({
         ? modeGuidanceFor(outcomeCriteria.taskMode)
         : "",
     systemFactsText: typeof systemFactsText === "string" ? systemFactsText : "",
+    authoritativeFactsText:
+      typeof authoritativeFactsText === "string" ? authoritativeFactsText : "",
+    gapStatementText: typeof gapStatementText === "string" ? gapStatementText : "",
+    gapStatement: gapStatement && typeof gapStatement === "object" ? gapStatement : null,
+    cleanContext: !!cleanContext,
   };
 }
 
@@ -302,4 +359,7 @@ module.exports = {
   assertGeneratedContentUsable,
   sha256Text,
   PLACEHOLDER_RES,
+  classifyMaterialAuthority,
+  demoteHistoricalMaterials,
+  MATERIAL_AUTHORITY,
 };

@@ -121,7 +121,9 @@ function retrieveProjectClaims(opts) {
 
 function renderProjectClaimsSection(result) {
   if (!result || !result.claims || !result.claims.length) return "";
-  const parts = ["## 当前项目权威事实与状态（须优先遵循；历史探索不得写成现状）"];
+  const parts = [
+    "## 当前项目权威事实与状态（须优先遵循；historical_superseded / planning_only 不得写成现状）",
+  ];
   const order = ["current_fact", "confirmed_decision", "work_principle", "current_status", "proposal"];
   const byType = {};
   for (const c of result.claims) {
@@ -141,8 +143,10 @@ function renderProjectClaimsSection(result) {
             ? "产品原则"
           : t === "current_status"
             ? "当前状态"
-            : "建议/提案";
-    parts.push(`### ${label}`);
+            : "建议/提案（planning_only，不得覆盖已验收现状）";
+    const authorityTag =
+      t === "proposal" ? "planning_only" : "current_authoritative";
+    parts.push(`### ${label} [${authorityTag}]`);
     for (const c of list) {
       const src = (c.sourceRefs || []).slice(0, 2).join("、") || "项目资料";
       parts.push(`- ${c.claimText}（来源：${src}）`);

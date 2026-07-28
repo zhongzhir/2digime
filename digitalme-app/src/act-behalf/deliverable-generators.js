@@ -14,6 +14,15 @@ const {
   buildRepairIssueLines,
 } = require("./deliverable-context");
 const { promptGuidanceForClass } = require("./subject-context-engine");
+const {
+  REPAIR_MODES,
+  needsGroundedRebuild,
+  isGroundingFailure,
+  buildGroundedRebuildMessages,
+  buildCleanRegenerationMessages,
+  groundedRebuildStructureGuidance,
+  summarizeForbiddenProblems,
+} = require("./grounded-generation");
 
 const STRUCTURED_DOC_TEMPERATURE = 0.3;
 const STRUCTURED_DOC_REPAIR_TEMPERATURE = 0.25;
@@ -88,10 +97,22 @@ function contextBlock(ctx) {
     return lines;
   })();
 
-  const systemFactsBlock =
-    ctx.systemFactsText && String(ctx.systemFactsText).trim()
-      ? "当前系统现状（权威事实，必须准确反映；不得声称这些能力不存在或处于初级阶段；不得假设未列出的基础设施已存在）：\n" +
+  const systemFactsBlock = (() => {
+    if (ctx.authoritativeFactsText && String(ctx.authoritativeFactsText).trim()) {
+      return String(ctx.authoritativeFactsText).trim();
+    }
+    if (ctx.systemFactsText && String(ctx.systemFactsText).trim()) {
+      return (
+        "当前系统现状（权威事实，必须准确反映；不得声称这些能力不存在或处于初级阶段；不得假设未列出的基础设施已存在）：\n" +
         ctx.systemFactsText
+      );
+    }
+    return "";
+  })();
+
+  const gapBlock =
+    ctx.gapStatementText && String(ctx.gapStatementText).trim()
+      ? String(ctx.gapStatementText).trim()
       : "";
 
   return [
@@ -103,16 +124,18 @@ function contextBlock(ctx) {
     ctx.summary ? `理解摘要：${ctx.summary}` : "",
     `成果标题：${ctx.title}`,
     ctx.purpose ? `该成果目的：${ctx.purpose}` : "",
+    systemFactsBlock,
+    gapBlock,
     subjectBlock,
     ctx.attachmentText
-      ? "参考材料（必须依据；evidenceKind=task_material；ownership=task_owned；可写「根据本次材料」；不得升格为主体已确认事实）：\n" +
+      ? "参考材料（必须依据；若与 CURRENT SYSTEM FACTS 冲突，以系统事实为准；evidenceKind=task_material；ownership=task_owned；可写「根据本次材料」；不得升格为主体已确认事实）：\n" +
         ctx.attachmentText
       : "（本次未提供参考材料正文。禁止写「根据公开报告/数据显示/研究表明」等无来源归因套话。）",
     exploreHint,
-    systemFactsBlock,
     ...outcomeLines,
     structuredDocumentRequirements(),
     "要求：紧扣上述 Digital Me / 任务上下文；正式正文禁止方括号元标签；禁止输出与任务无关的虚构公司或融资故事当作已确认事实。",
+    "若任务模式为 current_implementation：必须以权威系统事实为现状基线；不得把历史「未开始/待实现」表述写成当前状态。",
   ]
     .filter(Boolean)
     .join("\n");
@@ -142,7 +165,8 @@ function buildDocumentRepairMessages(ctx, priorDraft, issues) {
       role: "system",
       content:
         "你是 Digital Me 的成果修订写作者。请在不改变整体结构的前提下，修正草稿中的质量问题（含未填写模板内容、缺失章节、与项目事实冲突、远期内容挤占主体等）。" +
-        "保留已有有效正文，仅修正被指出的问题。使用中文 Markdown。",
+        "保留已有有效正文，仅修正被指出的问题。使用中文 Markdown。" +
+        "若问题与当前系统事实冲突，以权威系统事实为准。",
     },
     {
       role: "user",
@@ -162,6 +186,24 @@ function buildDocumentRepairMessages(ctx, priorDraft, issues) {
       ),
     },
   ];
+}
+
+function messagesForDraft(ctx, repairContext) {
+  const mode = (repairContext && repairContext.mode) || null;
+  if (mode === REPAIR_MODES.CLEAN_REGENERATION) {
+    return buildCleanRegenerationMessages(ctx);
+  }
+  if (mode === REPAIR_MODES.GROUNDED_REBUILD) {
+    return buildGroundedRebuildMessages(ctx, (repairContext && repairContext.issues) || []);
+  }
+  if (repairContext && repairContext.priorDraft) {
+    return buildDocumentRepairMessages(
+      ctx,
+      repairContext.priorDraft,
+      repairContext.issues || []
+    );
+  }
+  return null;
 }
 
 function buildSlideMessages(ctx) {
@@ -234,7 +276,10 @@ function requireUsableGoal(ctx) {
   }
 }
 
-function ctxFromDeps(deps) {
+function ctxFromDeps(deps, repairContext) {
+  const cleanContext =
+    !!(repairContext && repairContext.mode === REPAIR_MODES.CLEAN_REGENERATION) ||
+    !!deps.cleanContext;
   return buildGenerationContext({
     pkg: deps.pkg,
     deliverable: deps.deliverable,
@@ -246,6 +291,10 @@ function ctxFromDeps(deps) {
     projectResolved: deps.projectResolved,
     outcomeCriteria: deps.outcomeCriteria,
     systemFactsText: deps.systemFactsText,
+    authoritativeFactsText: deps.authoritativeFactsText,
+    gapStatementText: deps.gapStatementText,
+    gapStatement: deps.gapStatement,
+    cleanContext,
   });
 }
 
@@ -285,16 +334,36 @@ function documentFilesFromMarkdown(md, ctx) {
 }
 
 async function draftDocument(deps, repairContext) {
-  const ctx = ctxFromDeps(deps);
+  const ctx = ctxFromDeps(deps, repairContext);
   requireUsableGoal(ctx);
   const callModel = deps.callModel;
   let md;
-  const messages =
-    repairContext && repairContext.priorDraft
-      ? buildDocumentRepairMessages(ctx, repairContext.priorDraft, repairContext.issues || [])
-      : buildDocumentMessages(ctx);
+  const mode = repairContext && repairContext.mode;
+  let messages;
+  if (mode === REPAIR_MODES.CLEAN_REGENERATION || mode === REPAIR_MODES.GROUNDED_REBUILD) {
+    messages = messagesForDraft(ctx, repairContext);
+  } else if (repairContext && repairContext.priorDraft) {
+    messages = buildDocumentRepairMessages(ctx, repairContext.priorDraft, repairContext.issues || []);
+  } else {
+    messages = buildDocumentMessages(ctx);
+  }
+  // Guard: grounded rebuild / clean regen must not re-inject the full failed draft.
+  if (
+    (mode === REPAIR_MODES.GROUNDED_REBUILD || mode === REPAIR_MODES.CLEAN_REGENERATION) &&
+    repairContext &&
+    repairContext.priorDraft
+  ) {
+    const joined = JSON.stringify(messages);
+    if (joined.includes(String(repairContext.priorDraft).slice(0, 200))) {
+      const e = new Error("grounded rebuild must not carry full failed draft");
+      e.code = "grounded_rebuild_context_violation";
+      throw e;
+    }
+  }
   if (typeof callModel === "function") {
-    md = await callStructuredModel(callModel, messages, { repair: !!repairContext });
+    md = await callStructuredModel(callModel, messages, {
+      repair: !!repairContext && mode !== REPAIR_MODES.CLEAN_REGENERATION,
+    });
   } else {
     md =
       `# ${ctx.title}\n\n## 概述\n\n${ctx.goal}\n\n` +
@@ -304,7 +373,7 @@ async function draftDocument(deps, repairContext) {
       (ctx.attachmentText ? `## 材料要点\n\n${ctx.attachmentText.slice(0, 2000)}\n\n` : "") +
       `## 说明\n\n面向：${ctx.audience || "目标读者"}。用途：${ctx.usage || ctx.purpose || "介绍"}。\n`;
   }
-  return { md: String(md || "").trim(), ctx, messages };
+  return { md: String(md || "").trim(), ctx, messages, repairMode: mode || null };
 }
 
 function finalizeDocument(md, ctx) {
@@ -327,16 +396,46 @@ async function generateDocument(deps) {
 }
 
 async function draftPresentation(deps, repairContext) {
-  const ctx = ctxFromDeps(deps);
+  const ctx = ctxFromDeps(deps, repairContext);
   const callModel = deps.callModel;
   requireUsableGoal(ctx);
-  const messages =
-    repairContext && repairContext.priorDraft
-      ? buildSlideRepairMessages(ctx, repairContext.priorDraft, repairContext.issues || [])
-      : buildSlideMessages(ctx);
+  const mode = repairContext && repairContext.mode;
+  let messages;
+  if (mode === REPAIR_MODES.CLEAN_REGENERATION) {
+    // Slides: clean regen uses base slide messages with clean context.
+    messages = buildSlideMessages(ctx);
+  } else if (mode === REPAIR_MODES.GROUNDED_REBUILD) {
+    const issueLines = summarizeForbiddenProblems(repairContext.issues || []);
+    messages = [
+      {
+        role: "system",
+        content:
+          "你规划演示文稿结构。只输出 JSON。上一次草稿与当前系统事实冲突，请基于权威事实重新规划，不要局部修补。" +
+          '{"title":"...","subtitle":"...","closing":"...","slides":[{"title":"...","bullets":["..."]}]}',
+      },
+      {
+        role: "user",
+        content: clampText(
+          [
+            contextBlock(ctx),
+            groundedRebuildStructureGuidance(),
+            "禁止再次出现的问题：",
+            issueLines,
+          ].join("\n"),
+          22000
+        ),
+      },
+    ];
+  } else if (repairContext && repairContext.priorDraft) {
+    messages = buildSlideRepairMessages(ctx, repairContext.priorDraft, repairContext.issues || []);
+  } else {
+    messages = buildSlideMessages(ctx);
+  }
   let raw;
   if (typeof callModel === "function") {
-    raw = await callStructuredModel(callModel, messages, { repair: !!repairContext });
+    raw = await callStructuredModel(callModel, messages, {
+      repair: !!repairContext && mode !== REPAIR_MODES.CLEAN_REGENERATION,
+    });
   } else {
     raw = JSON.stringify({
       title: ctx.title,
@@ -353,7 +452,7 @@ async function draftPresentation(deps, repairContext) {
       ],
     });
   }
-  return { raw: String(raw || "").trim(), ctx, messages };
+  return { raw: String(raw || "").trim(), ctx, messages, repairMode: mode || null };
 }
 
 function finalizePresentation(raw, ctx) {
@@ -398,21 +497,28 @@ async function generatePresentation(deps) {
 }
 
 async function draftWebpage(deps, repairContext) {
-  const ctx = ctxFromDeps(deps);
+  const ctx = ctxFromDeps(deps, repairContext);
   const callModel = deps.callModel;
   requireUsableGoal(ctx);
-  const messages =
-    repairContext && repairContext.priorDraft
-      ? buildWebpageRepairMessages(ctx, repairContext.priorDraft, repairContext.issues || [])
-      : buildWebpageMessages(ctx);
+  const mode = repairContext && repairContext.mode;
+  let messages;
+  if (mode === REPAIR_MODES.CLEAN_REGENERATION || mode === REPAIR_MODES.GROUNDED_REBUILD) {
+    messages = messagesForDraft(ctx, repairContext);
+  } else if (repairContext && repairContext.priorDraft) {
+    messages = buildWebpageRepairMessages(ctx, repairContext.priorDraft, repairContext.issues || []);
+  } else {
+    messages = buildWebpageMessages(ctx);
+  }
   let md;
   if (typeof callModel === "function") {
-    md = await callStructuredModel(callModel, messages, { repair: !!repairContext });
+    md = await callStructuredModel(callModel, messages, {
+      repair: !!repairContext && mode !== REPAIR_MODES.CLEAN_REGENERATION,
+    });
   } else {
     md = `# ${ctx.title}\n\n${ctx.goal}\n\n- ${ctx.purpose || "介绍要点"}\n`;
     if (ctx.attachmentText) md += `\n## 依据材料摘要\n\n${ctx.attachmentText.slice(0, 1500)}\n`;
   }
-  return { md: String(md || "").trim(), ctx, messages };
+  return { md: String(md || "").trim(), ctx, messages, repairMode: mode || null };
 }
 
 function finalizeWebpage(md, ctx) {
@@ -499,8 +605,29 @@ async function generateByKindWithRepair(kind, deps, hooks) {
 
   let repairContext = null;
   const maxRepair = typeof hooks.maxRepairAttempts === "number" ? hooks.maxRepairAttempts : 2;
+  const allowCleanRegen = hooks.allowCleanRegeneration !== false;
+  const audit = {
+    groundedRebuildUsed: false,
+    groundedRebuildCount: 0,
+    cleanRegenerationUsed: false,
+    repairModes: [],
+  };
+  // Passes: 0 = first draft; 1..maxRepair = repair/rebuild; optional +1 clean regen.
+  const maxPass = allowCleanRegen ? maxRepair + 1 : maxRepair;
 
-  for (let pass = 0; pass <= maxRepair; pass++) {
+  for (let pass = 0; pass <= maxPass; pass++) {
+    const isCleanRegenSlot = allowCleanRegen && pass === maxRepair + 1;
+    if (isCleanRegenSlot) {
+      if (audit.cleanRegenerationUsed) {
+        // Hard guard: clean regeneration only once.
+        break;
+      }
+      if (!repairContext || repairContext.mode !== REPAIR_MODES.CLEAN_REGENERATION) {
+        break;
+      }
+      audit.cleanRegenerationUsed = true;
+    }
+
     const payload = await drafter(deps, repairContext);
     const reviewCtx = payload.ctx;
     let body = payload.md || payload.raw || "";
@@ -512,6 +639,13 @@ async function generateByKindWithRepair(kind, deps, hooks) {
         body = String(payload.raw || "");
       }
     }
+    if (repairContext && repairContext.mode) {
+      audit.repairModes.push(repairContext.mode);
+      if (repairContext.mode === REPAIR_MODES.GROUNDED_REBUILD) {
+        audit.groundedRebuildUsed = true;
+        audit.groundedRebuildCount += 1;
+      }
+    }
     try {
       assertGeneratedContentUsable(body, reviewOptsFromCtx(reviewCtx));
       if (hooks.onDraftValidated) {
@@ -520,13 +654,53 @@ async function generateByKindWithRepair(kind, deps, hooks) {
           draft: body,
           ctx: reviewCtx,
           repairContext,
+          audit: { ...audit },
         });
       }
-      return finalizer(payload, reviewCtx);
+      const finalized = finalizer(payload, reviewCtx);
+      finalized.groundingAudit = { ...audit };
+      return finalized;
     } catch (err) {
       const isRepairable =
         err &&
         (err.code === "placeholder_content_rejected" || err.code === "review_content_rejected");
+
+      let nextRepairContext = null;
+      if (isRepairable && pass < maxRepair) {
+        const reviewResult = err.reviewResult;
+        const useGroundedRebuild =
+          err.code === "review_content_rejected" && needsGroundedRebuild(reviewResult);
+        if (useGroundedRebuild) {
+          nextRepairContext = {
+            mode: REPAIR_MODES.GROUNDED_REBUILD,
+            priorDraft: null,
+            failedDraftLength: body.length,
+            issues: err.reviewIssues || [],
+            forbiddenSummary: summarizeForbiddenProblems(err.reviewIssues || []),
+          };
+        } else {
+          nextRepairContext = {
+            mode: REPAIR_MODES.LOCAL_REPAIR,
+            priorDraft: k === "presentation" ? payload.raw : payload.md,
+            issues: err.placeholderIssues || err.reviewIssues || [],
+          };
+        }
+      } else if (
+        isRepairable &&
+        allowCleanRegen &&
+        !audit.cleanRegenerationUsed &&
+        pass === maxRepair &&
+        err.code === "review_content_rejected" &&
+        isGroundingFailure(err.reviewResult)
+      ) {
+        nextRepairContext = {
+          mode: REPAIR_MODES.CLEAN_REGENERATION,
+          priorDraft: null,
+          issues: err.reviewIssues || err.placeholderIssues || [],
+          forbiddenSummary: summarizeForbiddenProblems(err.reviewIssues || []),
+        };
+      }
+
       if (hooks.onDraftRejected) {
         await hooks.onDraftRejected({
           pass,
@@ -534,20 +708,25 @@ async function generateByKindWithRepair(kind, deps, hooks) {
           err,
           ctx: reviewCtx,
           repairable: isRepairable,
+          repairContext,
+          nextRepairContext,
+          audit: { ...audit },
         });
       }
-      if (!isRepairable || pass >= maxRepair) {
-        if (isRepairable) err.draft = body;
+      if (!isRepairable) {
         throw err;
       }
-      repairContext = {
-        priorDraft: k === "presentation" ? payload.raw : payload.md,
-        issues: err.placeholderIssues || err.reviewIssues || [],
-      };
+      if (!nextRepairContext) {
+        err.draft = body;
+        err.groundingAudit = { ...audit };
+        throw err;
+      }
+      repairContext = nextRepairContext;
     }
   }
   const e = new Error("生成的内容仍包含未填写部分，暂未保存。你可以重试，或补充更明确的要求。");
   e.code = "placeholder_content_rejected";
+  e.groundingAudit = { ...audit };
   throw e;
 }
 
@@ -570,4 +749,7 @@ module.exports = {
   buildWebpageMessages,
   STRUCTURED_DOC_TEMPERATURE,
   MAX_INLINE_REPAIR_PASSES,
+  REPAIR_MODES,
+  needsGroundedRebuild,
+  isGroundingFailure,
 };

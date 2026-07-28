@@ -34,6 +34,15 @@ const {
   renderSnapshotFacts,
 } = require("./current-system-snapshot");
 const { buildAuthorityMap } = require("./authority-map");
+const {
+  renderAuthoritativeSystemFactsBlock,
+  buildGapStatement,
+  ensureValidGapStatement,
+  renderGapStatementBlock,
+  demoteHistoricalMaterials,
+  REPAIR_MODES,
+  isGroundingFailure,
+} = require("./grounded-generation");
 
 function newAttemptId() {
   return newId("dgatt_");
@@ -43,6 +52,9 @@ function newAttemptId() {
 // gate and quality Reviewer). At most 2 revisions after the first draft.
 const MAX_PLACEHOLDER_REPAIR_ATTEMPTS = 2;
 const MAX_QUALITY_REPAIR_ATTEMPTS = MAX_PLACEHOLDER_REPAIR_ATTEMPTS;
+// FIX-01: hard ceiling on model invocations per generateOneDeliverable
+// (drafts + reviews). Clean regeneration included; never unbounded.
+const MAX_MODEL_CALLS_PER_GENERATION = 16;
 
 function userMessageForFailure(err) {
   if (err && err.code === "placeholder_content_rejected") {
@@ -306,11 +318,14 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
     isDigitalMeProject,
   });
 
-  // TASK-QUALITY-LOOP-01.1: current-system snapshot + authority map for
-  // grounded drafting and review (Digital Me project tasks only).
+  // TASK-QUALITY-LOOP-01.1 / FIX-01: current-system snapshot + authority map
+  // become inviolable drafting constraints for current_implementation.
   let systemSnapshot = null;
   let authorityMap = null;
   let systemFactsText = "";
+  let authoritativeFactsText = "";
+  let gapStatement = null;
+  let gapStatementText = "";
   if (isDigitalMeProject && outcomeCriteria.taskMode === "current_implementation") {
     systemSnapshot = buildCurrentSystemSnapshot({ goal: taskContext.goal });
     authorityMap = buildAuthorityMap();
@@ -321,10 +336,34 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
       sourceRef: e.sourceRef,
     }));
     systemFactsText = renderSnapshotFacts(systemSnapshot, 10);
+    authoritativeFactsText = renderAuthoritativeSystemFactsBlock(systemSnapshot, authorityMap).text;
+    gapStatement = ensureValidGapStatement(
+      buildGapStatement({
+        snapshot: systemSnapshot,
+        authorityMap,
+        goal: taskContext.goal,
+      })
+    );
+    if (!gapStatement.validation || !gapStatement.validation.ok) {
+      // Refuse to draft with a conflicting gap statement; recompute once more empty-safe.
+      gapStatement = ensureValidGapStatement({
+        ...gapStatement,
+        ActualGaps: [],
+        ProposedMinimumChanges: [],
+      });
+    }
+    gapStatementText = renderGapStatementBlock(gapStatement);
   }
 
   let activeAttemptId = attemptId;
   let lastReviewResult = null;
+  let groundingAudit = {
+    groundedRebuildUsed: false,
+    groundedRebuildCount: 0,
+    cleanRegenerationUsed: false,
+    repairModes: [],
+    modelCallCount: 0,
+  };
 
   let projectResolved = null;
   let projectRetrieval = null;
@@ -369,7 +408,16 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
     };
   }
 
-  const mergedMaterials = resolved.currentMaterials || [];
+  // FIX-01: demote superseded / historical materials before generation for
+  // current_implementation tasks so stale "未开始/待实现" cannot override facts.
+  let mergedMaterials = resolved.currentMaterials || [];
+  if (isDigitalMeProject && outcomeCriteria.taskMode === "current_implementation") {
+    const demoted = demoteHistoricalMaterials(mergedMaterials, {
+      includeHistoricalAnnotated: false,
+    });
+    mergedMaterials = demoted.materials;
+    groundingAudit.demotedMaterialCount = (demoted.demoted || []).length;
+  }
   const attachmentBudget = resolved.attachmentBudget;
   projectRetrieval = resolved.projectRetrieval;
   if (resolved.projectContext) {
@@ -411,6 +459,21 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
     subjectAssembly.knowledgeProvenance = resolved.provenance;
   }
 
+  // Hard ceiling on model calls (artifact + review) for this generation run.
+  const baseCallModel = deps.callModel;
+  const boundedCallModel =
+    typeof baseCallModel === "function"
+      ? async (messages, options) => {
+          groundingAudit.modelCallCount += 1;
+          if (groundingAudit.modelCallCount > MAX_MODEL_CALLS_PER_GENERATION) {
+            const e = new Error("生成过程超过安全调用上限，已停止。");
+            e.code = "model_call_budget_exceeded";
+            throw e;
+          }
+          return baseCallModel(messages, options);
+        }
+      : baseCallModel;
+
   try {
     produced = await generateByKindWithRepair(
       deliverable.kind,
@@ -420,26 +483,38 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
         task: taskRecord,
         referenceMaterials: mergedMaterials,
         subjectAssembly,
-        callModel: deps.callModel,
+        callModel: boundedCallModel,
         imageMode: deps.imageMode,
         isDigitalMeProject,
         projectRetrieval,
         projectResolved,
         outcomeCriteria,
         systemFactsText,
+        authoritativeFactsText,
+        gapStatementText,
+        gapStatement,
       },
       {
         maxRepairAttempts: MAX_QUALITY_REPAIR_ATTEMPTS,
-        onDraftValidated: async ({ draft, ctx }) => {
-          // TASK-QUALITY-LOOP-01 quality Reviewer: runs after the deterministic
-          // pre-write gates, before the draft becomes a final artifact.
+        allowCleanRegeneration:
+          isDigitalMeProject && outcomeCriteria.taskMode === "current_implementation",
+        onDraftValidated: async ({ draft, ctx, audit }) => {
+          if (audit) {
+            groundingAudit = {
+              ...groundingAudit,
+              groundedRebuildUsed: !!audit.groundedRebuildUsed,
+              groundedRebuildCount: audit.groundedRebuildCount || 0,
+              cleanRegenerationUsed: !!audit.cleanRegenerationUsed,
+              repairModes: Array.isArray(audit.repairModes) ? audit.repairModes.slice() : [],
+            };
+          }
           const result = await reviewDeliverableContent({
             content: draft,
             kind: deliverable.kind,
             criteria: outcomeCriteria,
             goal: taskContext.goal,
             isDigitalMeProject,
-            callModel: deps.callModel,
+            callModel: boundedCallModel,
             snapshot: systemSnapshot,
             authorityMap,
           });
@@ -455,8 +530,23 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
           }
           void ctx;
         },
-        onDraftRejected: async ({ pass, draft, err, repairable }) => {
+        onDraftRejected: async ({ pass, draft, err, repairable, nextRepairContext, audit }) => {
           if (!repairable) return;
+          if (audit) {
+            groundingAudit = {
+              ...groundingAudit,
+              groundedRebuildUsed: !!audit.groundedRebuildUsed || groundingAudit.groundedRebuildUsed,
+              groundedRebuildCount: Math.max(
+                groundingAudit.groundedRebuildCount || 0,
+                audit.groundedRebuildCount || 0
+              ),
+              cleanRegenerationUsed:
+                !!audit.cleanRegenerationUsed || groundingAudit.cleanRegenerationUsed,
+              repairModes: Array.isArray(audit.repairModes)
+                ? audit.repairModes.slice()
+                : groundingAudit.repairModes,
+            };
+          }
           const isReviewRejection = err && err.code === "review_content_rejected";
           const repairIssues = isReviewRejection ? err.reviewIssues : err.placeholderIssues;
           const parentAttemptId = activeAttemptId;
@@ -479,8 +569,17 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
               grounding: err.reviewResult.grounding,
             };
           }
+          const nextMode = nextRepairContext && nextRepairContext.mode;
+          const willContinue = !!nextRepairContext;
+          if (nextMode === REPAIR_MODES.GROUNDED_REBUILD) {
+            groundingAudit.groundedRebuildUsed = true;
+          }
+          if (nextMode === REPAIR_MODES.CLEAN_REGENERATION) {
+            groundingAudit.cleanRegenerationUsed = true;
+          }
+
           const progressText = isReviewRejection
-            ? "成果质量未完全达标，正在自动完善。"
+            ? "正在检查并完善成果"
             : "成果中还有未完成的模板内容，正在自动修正。";
           await markAttemptOutcome(userData, parentAttemptId, {
             status: "superseded",
@@ -497,9 +596,12 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
             placeholderIssues: evidence.placeholderIssues,
             reviewIssues: isReviewRejection ? repairIssues : undefined,
             failureStage: err.failureStage || "prewrite_validation",
+            groundedRebuildUsed: !!groundingAudit.groundedRebuildUsed,
+            cleanRegenerationUsed: !!groundingAudit.cleanRegenerationUsed,
+            initiatedNextRepairMode: nextMode || undefined,
           });
 
-          if (pass + 1 > MAX_QUALITY_REPAIR_ATTEMPTS) return;
+          if (!willContinue) return;
 
           const repairAttemptId = newAttemptId();
           const repairAttempt = {
@@ -520,13 +622,31 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
             parentAttemptId,
             failureEvidence: null,
             userIssueSummary: null,
+            groundedRebuildUsed: !!groundingAudit.groundedRebuildUsed,
+            cleanRegenerationUsed: nextMode === REPAIR_MODES.CLEAN_REGENERATION,
+            repairMode: nextMode || REPAIR_MODES.LOCAL_REPAIR,
           };
           await registerGenerationAttempt(userData, repairAttempt, deliverableId, packageId);
           activeAttemptId = repairAttemptId;
         },
       }
     );
+    if (produced && produced.groundingAudit) {
+      groundingAudit = {
+        ...groundingAudit,
+        groundedRebuildUsed:
+          !!produced.groundingAudit.groundedRebuildUsed || groundingAudit.groundedRebuildUsed,
+        groundedRebuildCount:
+          produced.groundingAudit.groundedRebuildCount || groundingAudit.groundedRebuildCount,
+        cleanRegenerationUsed:
+          !!produced.groundingAudit.cleanRegenerationUsed || groundingAudit.cleanRegenerationUsed,
+        repairModes: produced.groundingAudit.repairModes || groundingAudit.repairModes,
+      };
+    }
   } catch (err) {
+    if (err && err.groundingAudit) {
+      groundingAudit = { ...groundingAudit, ...err.groundingAudit };
+    }
     const code = (err && err.code) || "generation_failed";
     const message = userMessageForFailure(err);
     const isReviewRejection = err && err.code === "review_content_rejected";
@@ -561,6 +681,15 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
         a.errorSummary = message;
         a.outcome = "failed";
         a.failureStage = (err && err.failureStage) || "model_generation";
+        a.groundedRebuildUsed = !!groundingAudit.groundedRebuildUsed;
+        a.cleanRegenerationUsed = !!groundingAudit.cleanRegenerationUsed;
+        a.groundingAudit = {
+          groundedRebuildUsed: !!groundingAudit.groundedRebuildUsed,
+          groundedRebuildCount: groundingAudit.groundedRebuildCount || 0,
+          cleanRegenerationUsed: !!groundingAudit.cleanRegenerationUsed,
+          repairModes: groundingAudit.repairModes || [],
+          modelCallCount: groundingAudit.modelCallCount || 0,
+        };
         if (evidence) {
           a.failureEvidence = evidence;
           a.placeholderIssues = evidence.placeholderIssues;
@@ -590,7 +719,14 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
       }
       return true;
     });
-    return { ok: false, code, message, attemptId: activeAttemptId, userIssueSummary: err && err.userIssueSummary };
+    return {
+      ok: false,
+      code,
+      message,
+      attemptId: activeAttemptId,
+      userIssueSummary: err && err.userIssueSummary,
+      groundingAudit,
+    };
   }
 
   const versionId = newVersionId();
@@ -806,7 +942,7 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
     quality: lastReviewResult
       ? {
           verdict: "pass",
-          checks: ["placeholder_gate", "authority_gate", "quality_reviewer"],
+          checks: ["placeholder_gate", "authority_gate", "quality_reviewer", "grounded_generation"],
           reviewer: {
             status: lastReviewResult.status,
             taskMode: lastReviewResult.taskMode,
@@ -824,6 +960,15 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
             modelReviewUsed: !!lastReviewResult.modelReviewUsed,
             grounding: lastReviewResult.grounding,
             reviewedAt: lastReviewResult.createdAt,
+          },
+          groundingAudit: {
+            groundedRebuildUsed: !!groundingAudit.groundedRebuildUsed,
+            groundedRebuildCount: groundingAudit.groundedRebuildCount || 0,
+            cleanRegenerationUsed: !!groundingAudit.cleanRegenerationUsed,
+            repairModes: groundingAudit.repairModes || [],
+            modelCallCount: groundingAudit.modelCallCount || 0,
+            demotedMaterialCount: groundingAudit.demotedMaterialCount || 0,
+            gapStatementValid: !!(gapStatement && gapStatement.validation && gapStatement.validation.ok),
           },
         }
       : { verdict: "pass", checks: [] },
@@ -852,6 +997,15 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
       a.finishedAt = nowIso();
       a.producedVersionId = versionId;
       a.outcome = "created_new_version";
+      a.groundedRebuildUsed = !!groundingAudit.groundedRebuildUsed;
+      a.cleanRegenerationUsed = !!groundingAudit.cleanRegenerationUsed;
+      a.groundingAudit = {
+        groundedRebuildUsed: !!groundingAudit.groundedRebuildUsed,
+        groundedRebuildCount: groundingAudit.groundedRebuildCount || 0,
+        cleanRegenerationUsed: !!groundingAudit.cleanRegenerationUsed,
+        repairModes: groundingAudit.repairModes || [],
+        modelCallCount: groundingAudit.modelCallCount || 0,
+      };
     }
     const d = s.deliverables[String(deliverableId)];
     if (d) {
@@ -881,6 +1035,7 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
     artifacts,
     uiFormatLabel: produced.uiFormatLabel || null,
     message: "成果已生成。",
+    groundingAudit,
   };
 }
 
@@ -1010,4 +1165,5 @@ module.exports = {
   derivePackageStatuses,
   MAX_PLACEHOLDER_REPAIR_ATTEMPTS,
   MAX_QUALITY_REPAIR_ATTEMPTS,
+  MAX_MODEL_CALLS_PER_GENERATION,
 };
