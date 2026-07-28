@@ -128,6 +128,7 @@ function buildGenerationContext({
   projectRetrieval,
   projectResolved,
   outcomeCriteria,
+  systemFactsText,
 }) {
   const snap = (pkg && pkg.executionSnapshot) || {};
   const input = snap.inputSummary || {};
@@ -230,6 +231,7 @@ function buildGenerationContext({
       outcomeCriteria && typeof outcomeCriteria === "object"
         ? modeGuidanceFor(outcomeCriteria.taskMode)
         : "",
+    systemFactsText: typeof systemFactsText === "string" ? systemFactsText : "",
   };
 }
 

@@ -88,6 +88,12 @@ function contextBlock(ctx) {
     return lines;
   })();
 
+  const systemFactsBlock =
+    ctx.systemFactsText && String(ctx.systemFactsText).trim()
+      ? "当前系统现状（权威事实，必须准确反映；不得声称这些能力不存在或处于初级阶段；不得假设未列出的基础设施已存在）：\n" +
+        ctx.systemFactsText
+      : "";
+
   return [
     `任务情境（contextClass=${contextClass}；claimPosturePresentation=${claimPosturePresentation}）：${guidance}`,
     `任务目标：${ctx.goal || "（缺少任务目标，请勿编造无关业务）"}`,
@@ -103,6 +109,7 @@ function contextBlock(ctx) {
         ctx.attachmentText
       : "（本次未提供参考材料正文。禁止写「根据公开报告/数据显示/研究表明」等无来源归因套话。）",
     exploreHint,
+    systemFactsBlock,
     ...outcomeLines,
     structuredDocumentRequirements(),
     "要求：紧扣上述 Digital Me / 任务上下文；正式正文禁止方括号元标签；禁止输出与任务无关的虚构公司或融资故事当作已确认事实。",
@@ -238,6 +245,7 @@ function ctxFromDeps(deps) {
     projectRetrieval: deps.projectRetrieval,
     projectResolved: deps.projectResolved,
     outcomeCriteria: deps.outcomeCriteria,
+    systemFactsText: deps.systemFactsText,
   });
 }
 

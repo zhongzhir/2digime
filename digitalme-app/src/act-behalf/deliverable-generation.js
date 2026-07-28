@@ -29,6 +29,11 @@ const {
   userFacingReviewSummary,
   userFacingReviewFailure,
 } = require("./deliverable-reviewer");
+const {
+  buildCurrentSystemSnapshot,
+  renderSnapshotFacts,
+} = require("./current-system-snapshot");
+const { buildAuthorityMap } = require("./authority-map");
 
 function newAttemptId() {
   return newId("dgatt_");
@@ -301,6 +306,23 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
     isDigitalMeProject,
   });
 
+  // TASK-QUALITY-LOOP-01.1: current-system snapshot + authority map for
+  // grounded drafting and review (Digital Me project tasks only).
+  let systemSnapshot = null;
+  let authorityMap = null;
+  let systemFactsText = "";
+  if (isDigitalMeProject && outcomeCriteria.taskMode === "current_implementation") {
+    systemSnapshot = buildCurrentSystemSnapshot({ goal: taskContext.goal });
+    authorityMap = buildAuthorityMap();
+    systemSnapshot.authorityObjects = authorityMap.entries.map((e) => ({
+      entity: e.entity,
+      authoritativeStore: e.authoritativeStore,
+      status: e.status,
+      sourceRef: e.sourceRef,
+    }));
+    systemFactsText = renderSnapshotFacts(systemSnapshot, 10);
+  }
+
   let activeAttemptId = attemptId;
   let lastReviewResult = null;
 
@@ -404,6 +426,7 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
         projectRetrieval,
         projectResolved,
         outcomeCriteria,
+        systemFactsText,
       },
       {
         maxRepairAttempts: MAX_QUALITY_REPAIR_ATTEMPTS,
@@ -417,6 +440,8 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
             goal: taskContext.goal,
             isDigitalMeProject,
             callModel: deps.callModel,
+            snapshot: systemSnapshot,
+            authorityMap,
           });
           lastReviewResult = result;
           if (result.status !== "pass") {
@@ -451,6 +476,7 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
               criteriaDigest: err.reviewResult.criteriaDigest,
               blockingIssueCount: err.reviewResult.blockingIssues.length,
               qualityIssueCount: err.reviewResult.qualityIssues.length,
+              grounding: err.reviewResult.grounding,
             };
           }
           const progressText = isReviewRejection
@@ -523,6 +549,7 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
         criteriaDigest: err.reviewResult.criteriaDigest,
         blockingIssueCount: err.reviewResult.blockingIssues.length,
         qualityIssueCount: err.reviewResult.qualityIssues.length,
+        grounding: err.reviewResult.grounding,
       };
     }
     await packageStore.mutateStore(userData, (s) => {
@@ -795,6 +822,7 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
             suggestedRevisionCount: lastReviewResult.suggestedRevisions.length,
             reviewerDegraded: !!lastReviewResult.reviewerDegraded,
             modelReviewUsed: !!lastReviewResult.modelReviewUsed,
+            grounding: lastReviewResult.grounding,
             reviewedAt: lastReviewResult.createdAt,
           },
         }

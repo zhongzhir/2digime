@@ -13,6 +13,7 @@
 
 const { validatePlaceholderContent } = require("./placeholder-validation");
 const { TASK_MODES } = require("./outcome-criteria");
+const { groundingReview, GROUNDING_RULE_IDS } = require("./grounding-review");
 
 const ISSUE_BLOCKING = "blocking";
 const ISSUE_WARNING = "warning";
@@ -360,6 +361,8 @@ async function reviewDeliverableContent({
   goal,
   isDigitalMeProject,
   callModel,
+  snapshot,
+  authorityMap,
 } = {}) {
   const det = deterministicReview(content, { criteria, kind, goal, isDigitalMeProject });
   let blockingIssues = det.blockingIssues.slice();
@@ -368,6 +371,24 @@ async function reviewDeliverableContent({
   let modelScores = null;
   let reviewerDegraded = false;
   let modelReviewUsed = false;
+
+  // TASK-QUALITY-LOOP-01.1: deterministic GroundingReview for
+  // current-implementation outcomes about the Digital Me project itself.
+  // Runs regardless of model availability (never skipped when degraded).
+  let grounding = null;
+  if (
+    criteria &&
+    criteria.taskMode === TASK_MODES.CURRENT_IMPLEMENTATION &&
+    isDigitalMeProject &&
+    snapshot &&
+    authorityMap
+  ) {
+    const g = groundingReview(content, { goal, snapshot, authorityMap });
+    grounding = g.grounding;
+    blockingIssues = blockingIssues.concat(g.blockingIssues);
+    qualityIssues = qualityIssues.concat(g.qualityIssues);
+    suggestedRevisions = suggestedRevisions.concat(g.suggestedRevisions);
+  }
 
   if (typeof callModel === "function") {
     modelReviewUsed = true;
@@ -412,6 +433,7 @@ async function reviewDeliverableContent({
     scores,
     taskMode: (criteria && criteria.taskMode) || TASK_MODES.CURRENT_IMPLEMENTATION,
     criteriaDigest: (criteria && criteria.criteriaDigest) || null,
+    grounding: grounding || undefined,
     reviewerDegraded,
     modelReviewUsed,
     modelRoute: modelReviewUsed ? { taskType: "review" } : null,
@@ -441,8 +463,15 @@ function userFacingReviewSummary(result) {
 }
 
 function userFacingReviewFailure(result) {
-  const first = result && result.blockingIssues && result.blockingIssues[0];
+  const issues = (result && result.blockingIssues) || [];
+  const first = issues[0];
   const short = first ? String(first.message || "").slice(0, 50) : "质量未达到可直接使用的标准";
+  const hasGrounding = issues.some(
+    (i) => i && (i.source === "grounding" || GROUNDING_RULE_IDS.includes(i.ruleId))
+  );
+  if (hasGrounding) {
+    return `成果与当前项目状态存在冲突（${short}），系统暂时无法可靠完成。请补充或更新相关项目资料后重试。`;
+  }
   return `经过自动完善仍未达到可直接使用的质量：${short}。你可以重试，或补充更明确的要求。`;
 }
 
