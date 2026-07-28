@@ -28,6 +28,7 @@
     "test:act-behalf": "node scripts/test-act-behalf-contracts.cjs",
     "test:task-ux-min-01": "node scripts/test-task-ux-min-01.cjs",
     "test:task-quality-loop-01": "node scripts/test-task-quality-loop-01.cjs",
+    "test:task-quality-loop-01-1": "node scripts/test-task-quality-loop-01-1-grounding.cjs",
     "test:dvl2-01-planner": "node scripts/test-dvl2-01-planner-contracts.cjs",
     "test:dvl2-01-planner-acceptance": "node scripts/run-dvl2-01-planner-acceptance.cjs",
     "test:dvl2-02-package": "node scripts/test-dvl2-02-package-contracts.cjs",
