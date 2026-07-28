@@ -169,7 +169,7 @@ function buildDigitalMeSeedClaims() {
     },
     {
       claimId: "pkc_dm_idcollab_status",
-      claimText: "IDCOLLAB-MIN-01 最小行动身份与本地授权语义已实现（ready_for_owner_runtime_reacceptance）。",
+      claimText: "IDCOLLAB-MIN-01 最小行动身份与本地授权语义已实现并通过 Owner 真机验收（owner_runtime_accepted / accepted_as_implemented；仅限最小身份协作闭环，外部网络协作未验证）。",
       claimType: "current_status",
       authorityLevel: "accepted_runtime_state",
       confirmationStatus: "accepted",

@@ -21,7 +21,7 @@
 > 2. **BUG1 #6** = 七模块渐进式数字之我构建框架。
 > 3. 首个正式验收场景 = 为一个项目生成完整对外介绍成果包。
 > 4. 第一轮真实产物 = 正式介绍文档、演示文稿 PPT、单页 HTML、封面图片；视频/音频本轮不实现真实生成，用户面不得宣称已支持。
-> **当前下一任务**：等待 Owner 指定下一已批准任务块。**IDCOLLAB-MIN-01** 规格仍为 `specified` / `codex_review_passed` / `ready_for_owner_acceptance` / `not_started`（未因今日收口自动启动）。**2026-07-27 已收口**：LEARN-LOOP-FIX-02、LEARN-LOOP-FIX-02.1、DVL2-03-FIX-01、TASK-UX-MIN-01（均 `owner_runtime_accepted` / `accepted_as_implemented`）。**不得** push。
+> **当前下一任务**：等待 Owner 指定下一已批准任务块。**IDCOLLAB-MIN-01** 状态已校正（2026-07-28，Owner 确认撤销修复已真机复验通过）：`implemented` / `revocation_bug_fixed` / `owner_runtime_accepted` / `accepted_as_implemented`（边界：`minimal_identity_collaboration_loop_only` / `external_network_collaboration_not_validated` / `market_and_settlement_not_started`）。**2026-07-27 已收口**：LEARN-LOOP-FIX-02、LEARN-LOOP-FIX-02.1、DVL2-03-FIX-01、TASK-UX-MIN-01（均 `owner_runtime_accepted` / `accepted_as_implemented`）。**不得** push。
 > **R2 对话运行时**：保留基础设施；R2 代码 **retained as infrastructure**。生产默认入口仍为 legacy。
 > **Owner Electron 真机验收（2026-07-24）**：`accepted`（distill-me / R2 对话重试 / doing-context / PAN-01S 等）。
 > **confirmed identity → act context（2026-07-24，`2f1b7bd`）**：`accepted`（历史整合基线；**不是**当前 HEAD）。
@@ -322,7 +322,7 @@ flowchart TB
 | `digitalme_phase1_task_LEARN-LOOP-FIX-02_unified_knowledge_resolution_v0.1.md` | **LEARN-LOOP-FIX-02 统一知识解析**（v0.1.1；`owner_runtime_accepted` / `accepted_as_implemented` @ 2026-07-27） |
 | `digitalme_phase1_task_LEARN-LOOP-FIX-02.1_low_friction_auto_learning_v0.1.md` | **LEARN-LOOP-FIX-02.1 低打扰自动学习**（v0.1.1；`owner_runtime_accepted` / `accepted_as_implemented` @ 2026-07-27） |
 | `digitalme_phase1_task_TASK-UX-MIN-01_task_management_v0.1.md` | **TASK-UX-MIN-01 做事任务管理最小闭环**（v0.1.1；`functional_minimum_accepted` / `owner_runtime_accepted` / `accepted_as_implemented` @ 2026-07-27） |
-| `digitalme_phase1_task_IDCOLLAB-MIN-01_action_identity_and_authorization_v0.1.md` | **IDCOLLAB-MIN-01 最小行动授权与参与方语义接线**（v0.1.2；`specified` / `codex_review_passed` / `ready_for_owner_acceptance`；实施 `not_started`） |
+| `digitalme_phase1_task_IDCOLLAB-MIN-01_action_identity_and_authorization_v0.1.md` | **IDCOLLAB-MIN-01 最小行动授权与参与方语义接线**（v0.1.2；`implemented` / `revocation_bug_fixed` / `owner_runtime_accepted` / `accepted_as_implemented`；边界：最小身份协作闭环，外部网络协作未验证、市场与结算未启动） |
 | `digitalme_phase1_task_DVL2-03A_first_real_document_artifact_v0.1.md` | **DVL2-03A 草案（历史）**；已被完整 **DVL2-03** 实现路径吸收（不再单独拆分 03A/B/C） |
 | `docs/design/digitalme_crt_v0.2_subject_context_engine_spec.md` | **CRT v0.2 Subject Context Engine 规格**（v0.2.2；`frozen_for_implementation`） |
 | `digitalme_phase1_task_CRT-MVP-01_cognitive_runtime_continuity_v0.1.md` | **CRT-MVP-01 持续性验证**（实现合入；真机状态见任务包） |
@@ -342,7 +342,7 @@ flowchart TB
 | `digitalme_narrative_ai_era_autonomy.md` | 对外/对内叙事（含双线简述） |
 | `digital-me-project-positioning-draft.md` | 定位讨论稿（战略原则含双线） |
 
-**近期工程焦点（2026-07-27 收口）**：**LEARN-LOOP-FIX-02 / 02.1**、**DVL2-03-FIX-01**、**TASK-UX-MIN-01** 已于 2026-07-27 Owner 真机验收并标 `accepted_as_implemented`（见 §3.3 能力边界）。**CRT-MVP-02 系列**已 `owner_runtime_accepted`。**IDCOLLAB-MIN-01** 仍待 Owner 接受规格后启动实施。**不得** push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+**近期工程焦点（2026-07-27 收口）**：**LEARN-LOOP-FIX-02 / 02.1**、**DVL2-03-FIX-01**、**TASK-UX-MIN-01** 已于 2026-07-27 Owner 真机验收并标 `accepted_as_implemented`（见 §3.3 能力边界）。**CRT-MVP-02 系列**已 `owner_runtime_accepted`。**IDCOLLAB-MIN-01** 已 `owner_runtime_accepted` / `accepted_as_implemented`（2026-07-28 状态校正；仅限最小身份协作闭环）。**不得** push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
 
 ### 3.3 学习、成果生成与 UI/UX 边界（2026-07-27）
 
@@ -579,7 +579,7 @@ Owner 判断（2026-07-27）：
 
 ### 7.1 近期优先级（建议顺序）
 
-> **2026-07-27 当前执行指针（TODAY-CLOSE）**：**LEARN-LOOP-FIX-02**、**LEARN-LOOP-FIX-02.1**、**DVL2-03-FIX-01**、**TASK-UX-MIN-01** 已于 2026-07-27 Owner 真机验收并标 `accepted_as_implemented`。**IDCOLLAB-MIN-01** 仍为 `specified` / `ready_for_owner_acceptance` / `not_started`。CRT-MVP-02 系列已 `owner_runtime_accepted`。不得 push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+> **2026-07-27 当前执行指针（TODAY-CLOSE）**：**LEARN-LOOP-FIX-02**、**LEARN-LOOP-FIX-02.1**、**DVL2-03-FIX-01**、**TASK-UX-MIN-01** 已于 2026-07-27 Owner 真机验收并标 `accepted_as_implemented`。**IDCOLLAB-MIN-01** 已 `implemented` / `revocation_bug_fixed` / `owner_runtime_accepted` / `accepted_as_implemented`（2026-07-28 状态校正）。CRT-MVP-02 系列已 `owner_runtime_accepted`。不得 push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
 
 > **2026-07-26 执行指针（历史）**：DVL2-03 待 Owner 真机验收（实现 `7047113`；分支 `codex/dvl2-03-real-deliverable-generation`）。DVL2-02 runtime `ceb6c83`。不得 push；不得提前标 `implemented`。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
 > **2026-07-26 历史指针（已取代）**：曾将「当前唯一产品待决」写作 BUG1 #4/#6 候选未冻结——**已被决策 #107 正式选定**。
@@ -591,7 +591,7 @@ Owner 判断（2026-07-27）：
 
 1. **限定范围的仓库实现映射与第一闭环规格冻结**（文档；**已完成** → 规格 `spec_frozen`）；
 2. **实现任务意图与本人上下文装配（第一闭环实现 · 第 1 块）**（**history / 已完成并收口**；不得再当作当前下一项）→ 其后研究与表达 / Skill / 外搜 / 证据 / Proposal 各块均已完成；第一段整体 **`accepted` / `completed`**；
-3. **当前下一任务（2026-07-27 收口后）**：等待 Owner 指定下一已批准任务块；**IDCOLLAB-MIN-01** 仍为待接受规格（`not_started`）。今日已收口四项见 §3.3。不得 push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+3. **当前下一任务（2026-07-27 收口后）**：等待 Owner 指定下一已批准任务块；**IDCOLLAB-MIN-01** 已校正为 `owner_runtime_accepted` / `accepted_as_implemented`（2026-07-28）。今日已收口四项见 §3.3。不得 push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
 
 （以下 1–7 为 2026-07-16 历史 Trusted Beta 硬化清单，**不再是当前执行顺序**：）
 

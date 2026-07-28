@@ -2,11 +2,14 @@
 
 版本：v0.1.2
 日期：2026-07-27
-状态：`implemented` / `codex_verified` / `owner_runtime_acceptance_failed` / `fix_in_progress` → **`ready_for_owner_runtime_reacceptance`**
+状态：`implemented` / `revocation_bug_fixed` / `owner_runtime_accepted` / `accepted_as_implemented`
 实施：`implemented`
 implementation_authorized：`true`
-owner_runtime_accepted：`false`
-accepted_as_implemented：`false`
+owner_runtime_accepted：`true`
+accepted_as_implemented：`true`
+边界：`minimal_identity_collaboration_loop_only` / `external_network_collaboration_not_validated` / `market_and_settlement_not_started`
+
+> **状态校正（2026-07-28，TASK-QUALITY-LOOP-01 实施指令第五节）**：撤销即时生效修复（MIN-01.1）已经 Owner 真机重新验收通过；Owner 确认本文此前残留的 `ready_for_owner_runtime_reacceptance` 与各处 `ready_for_owner_acceptance` / `not_started` 为过期状态，统一校正为上述真实状态。本校正**不重开**本任务、不重新实现身份与撤销、不扩展外部协作网络。
 实施分支：`codex/idcollab-min-01-action-identity`
 上位依据：
 - [`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)（当前最高架构原则）
