@@ -420,7 +420,7 @@ async function main() {
       );
       assert.equal(res.ok, false);
       assert.equal(res.code, "review_content_rejected");
-      assert.equal(draftCalls, 3, "first draft + exactly two revisions");
+      assert.equal(draftCalls, 4, "first draft + 2 rebuilds + 1 clean regeneration");
       assert.ok(res.message.includes("成果与当前项目状态存在冲突"), "grounding failure message: " + res.message);
       assert.ok(!/AuthorityMap|CurrentSystemSnapshot|duplicate_authority_source|grounding/i.test(res.message));
       const view = packageStore.getPackageView(ud, seeded.packageId);
@@ -428,12 +428,14 @@ async function main() {
       assert.equal(d.generationStatus, "failed");
       assert.equal(d.currentVersionId, null);
       const attempts = Object.values(view.generationAttempts || {});
-      assert.equal(attempts.length, 3);
+      assert.equal(attempts.length, 4);
       const failedAttempt = attempts.find((a) => a.status === "failed");
       assert.ok(failedAttempt.failureEvidence.reviewResult.grounding, "grounding persisted in failure evidence");
       assert.ok(failedAttempt.failureEvidence.reviewResult.grounding.duplicateAuthorityObjects.length >= 2);
+      assert.equal(failedAttempt.cleanRegenerationUsed, true, "clean regeneration audited on final failure");
       const artRoot = path.join(ud, "deliverable-artifacts", String(seeded.packageId), String(del.id));
       assert.ok(!fs.existsSync(artRoot), "no artifact directory for failed deliverable");
+      assert.ok(res.groundingAudit && res.groundingAudit.cleanRegenerationUsed);
     } finally {
       cleanup(ud);
     }
