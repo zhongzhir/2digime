@@ -6,6 +6,7 @@
  */
 
 const crypto = require("node:crypto");
+const { modeGuidanceFor } = require("./outcome-criteria");
 const {
   findPlaceholderIssues,
   getBlockingPlaceholderIssues,
@@ -126,6 +127,7 @@ function buildGenerationContext({
   isDigitalMeProject,
   projectRetrieval,
   projectResolved,
+  outcomeCriteria,
 }) {
   const snap = (pkg && pkg.executionSnapshot) || {};
   const input = snap.inputSummary || {};
@@ -162,6 +164,10 @@ function buildGenerationContext({
     unwrapField(understanding.summary) ||
     unwrapField(understanding.oneLineSummary) ||
     goal.slice(0, 200);
+  const expectedQuality =
+    unwrapField(input.expectedQuality) ||
+    unwrapField(understanding.expectedQuality) ||
+    "";
 
   const materials = referenceMaterials || (task && task.referenceMaterials) || [];
   const attachmentBudget = budgetAttachmentContext(materials, 18000);
@@ -218,6 +224,12 @@ function buildGenerationContext({
     projectRetrieval: projectRetrieval || (assembly && assembly.projectRetrieval) || null,
     retrievedClaimIds: (projectRetrieval && projectRetrieval.retrievedClaimIds) || [],
     excludedClaims: (projectRetrieval && projectRetrieval.excludedClaims) || [],
+    expectedQuality,
+    outcomeCriteria: outcomeCriteria && typeof outcomeCriteria === "object" ? outcomeCriteria : null,
+    modeGuidance:
+      outcomeCriteria && typeof outcomeCriteria === "object"
+        ? modeGuidanceFor(outcomeCriteria.taskMode)
+        : "",
   };
 }
 

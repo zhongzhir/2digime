@@ -74,6 +74,7 @@ function buildExecutionSnapshot({ task, plan, confirmedVersion, triggerSource })
       audience: unwrapProvenance(understanding && understanding.audience) || "",
       usage: unwrapProvenance(understanding && understanding.usage) || "",
       constraints: unwrapProvenance(understanding && understanding.constraints) || "",
+      expectedQuality: unwrapProvenance(understanding && understanding.expectedQuality) || "",
       understandingSummary:
         unwrapProvenance(understanding && (understanding.summary || understanding.oneLineSummary)) ||
         (

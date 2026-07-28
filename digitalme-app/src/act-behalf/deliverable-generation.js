@@ -22,12 +22,22 @@ const { unwrapField, buildFailureEvidence, userFacingIssueSummary } = require(".
 const actionIdentity = require("./action-identity");
 const authorizationStore = require("./authorization-store");
 const { resolveKnowledgeContext } = require("./knowledge-resolver");
+const { buildOutcomeCriteria } = require("./outcome-criteria");
+const {
+  reviewDeliverableContent,
+  toRepairIssues,
+  userFacingReviewSummary,
+  userFacingReviewFailure,
+} = require("./deliverable-reviewer");
 
 function newAttemptId() {
   return newId("dgatt_");
 }
 
+// TASK-QUALITY-LOOP-01: total automatic revision budget (shared by placeholder
+// gate and quality Reviewer). At most 2 revisions after the first draft.
 const MAX_PLACEHOLDER_REPAIR_ATTEMPTS = 2;
+const MAX_QUALITY_REPAIR_ATTEMPTS = MAX_PLACEHOLDER_REPAIR_ATTEMPTS;
 
 function userMessageForFailure(err) {
   if (err && err.code === "placeholder_content_rejected") {
@@ -35,6 +45,9 @@ function userMessageForFailure(err) {
       err.message ||
       "生成的内容仍包含未填写部分，暂未保存。你可以重试，或补充更明确的要求。"
     );
+  }
+  if (err && err.code === "review_content_rejected") {
+    return err.message || "成果还没有达到可直接使用的质量，暂未保存。";
   }
   return (err && err.message) || "生成失败。";
 }
@@ -273,6 +286,24 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
   const policy = resolveAssemblyPolicy(classification);
   const isDigitalMeProject = isDigitalMeProjectContext(taskContext);
 
+  // TASK-QUALITY-LOOP-01: internal outcome quality basis for this deliverable.
+  const outcomeCriteria = buildOutcomeCriteria({
+    goal: taskContext.goal,
+    audience: taskContext.audience,
+    usage: taskContext.usage,
+    constraints: taskContext.constraints,
+    expectedQuality:
+      unwrapField(input.expectedQuality) ||
+      unwrapField(snap.understanding && snap.understanding.expectedQuality) ||
+      "",
+    kind: deliverable.kind,
+    title: deliverable.title,
+    isDigitalMeProject,
+  });
+
+  let activeAttemptId = attemptId;
+  let lastReviewResult = null;
+
   let projectResolved = null;
   let projectRetrieval = null;
   const resolved = resolveKnowledgeContext({
@@ -358,7 +389,6 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
     subjectAssembly.knowledgeProvenance = resolved.provenance;
   }
 
-  let activeAttemptId = attemptId;
   try {
     produced = await generateByKindWithRepair(
       deliverable.kind,
@@ -373,34 +403,77 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
         isDigitalMeProject,
         projectRetrieval,
         projectResolved,
+        outcomeCriteria,
       },
       {
-        maxRepairAttempts: MAX_PLACEHOLDER_REPAIR_ATTEMPTS,
-        onPlaceholderRejected: async ({ pass, draft, err }) => {
+        maxRepairAttempts: MAX_QUALITY_REPAIR_ATTEMPTS,
+        onDraftValidated: async ({ draft, ctx }) => {
+          // TASK-QUALITY-LOOP-01 quality Reviewer: runs after the deterministic
+          // pre-write gates, before the draft becomes a final artifact.
+          const result = await reviewDeliverableContent({
+            content: draft,
+            kind: deliverable.kind,
+            criteria: outcomeCriteria,
+            goal: taskContext.goal,
+            isDigitalMeProject,
+            callModel: deps.callModel,
+          });
+          lastReviewResult = result;
+          if (result.status !== "pass") {
+            const e = new Error(userFacingReviewFailure(result));
+            e.code = "review_content_rejected";
+            e.reviewResult = result;
+            e.reviewIssues = toRepairIssues(result);
+            e.userIssueSummary = userFacingReviewSummary(result);
+            e.failureStage = "quality_review";
+            throw e;
+          }
+          void ctx;
+        },
+        onDraftRejected: async ({ pass, draft, err, repairable }) => {
+          if (!repairable) return;
+          const isReviewRejection = err && err.code === "review_content_rejected";
+          const repairIssues = isReviewRejection ? err.reviewIssues : err.placeholderIssues;
           const parentAttemptId = activeAttemptId;
           const evidence = buildFailureEvidence({
             attemptId: parentAttemptId,
             deliverableId,
             draft,
-            issues: err.placeholderIssues,
+            issues: repairIssues,
             failureCode: err.code,
             failureStage: err.failureStage || "prewrite_validation",
           });
+          if (isReviewRejection && err.reviewResult) {
+            evidence.reviewResult = {
+              status: err.reviewResult.status,
+              taskMode: err.reviewResult.taskMode,
+              scores: err.reviewResult.scores,
+              criteriaDigest: err.reviewResult.criteriaDigest,
+              blockingIssueCount: err.reviewResult.blockingIssues.length,
+              qualityIssueCount: err.reviewResult.qualityIssues.length,
+            };
+          }
+          const progressText = isReviewRejection
+            ? "成果质量未完全达标，正在自动完善。"
+            : "成果中还有未完成的模板内容，正在自动修正。";
           await markAttemptOutcome(userData, parentAttemptId, {
             status: "superseded",
             finishedAt: nowIso(),
             errorCode: err.code,
-            errorSummary: "成果中还有未完成的模板内容，正在自动修正。",
+            errorSummary: progressText,
             outcome: "repair_initiated",
             failureEvidence: evidence,
-            userIssueSummary: userFacingIssueSummary(err.placeholderIssues),
+            userIssueSummary: isReviewRejection
+              ? err.userIssueSummary || userFacingReviewSummary(err.reviewResult)
+              : userFacingIssueSummary(err.placeholderIssues),
             modelOutputDigest: evidence.modelOutputDigest,
             outputLength: evidence.outputLength,
             placeholderIssues: evidence.placeholderIssues,
+            reviewIssues: isReviewRejection ? repairIssues : undefined,
             failureStage: err.failureStage || "prewrite_validation",
           });
 
-          if (pass + 1 > MAX_PLACEHOLDER_REPAIR_ATTEMPTS) return;
+          if (pass + 1 > MAX_QUALITY_REPAIR_ATTEMPTS) return;
 
           const repairAttemptId = newAttemptId();
           const repairAttempt = {
@@ -414,7 +487,7 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
             modelAdapter: "invokeModelRoute/callModel",
             inputDigest: attempt.inputDigest,
             errorCode: null,
-            errorSummary: "成果中还有未完成的模板内容，正在自动修正。",
+            errorSummary: progressText,
             producedVersionId: null,
             outcome: null,
             repairPass: pass + 1,
@@ -430,17 +503,28 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
   } catch (err) {
     const code = (err && err.code) || "generation_failed";
     const message = userMessageForFailure(err);
+    const isReviewRejection = err && err.code === "review_content_rejected";
     const evidence =
-      err && err.code === "placeholder_content_rejected"
+      err && (err.code === "placeholder_content_rejected" || isReviewRejection)
         ? buildFailureEvidence({
             attemptId: activeAttemptId,
             deliverableId,
             draft: err.draft || "",
-            issues: err.placeholderIssues,
+            issues: err.placeholderIssues || err.reviewIssues,
             failureCode: err.code,
             failureStage: err.failureStage || "prewrite_validation",
           })
         : null;
+    if (evidence && isReviewRejection && err.reviewResult) {
+      evidence.reviewResult = {
+        status: err.reviewResult.status,
+        taskMode: err.reviewResult.taskMode,
+        scores: err.reviewResult.scores,
+        criteriaDigest: err.reviewResult.criteriaDigest,
+        blockingIssueCount: err.reviewResult.blockingIssues.length,
+        qualityIssueCount: err.reviewResult.qualityIssues.length,
+      };
+    }
     await packageStore.mutateStore(userData, (s) => {
       const a = s.generationAttempts[activeAttemptId];
       if (a) {
@@ -455,6 +539,9 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
           a.placeholderIssues = evidence.placeholderIssues;
           a.modelOutputDigest = evidence.modelOutputDigest;
           a.outputLength = evidence.outputLength;
+        }
+        if (isReviewRejection && err.reviewIssues) {
+          a.reviewIssues = err.reviewIssues;
         }
         a.userIssueSummary =
           (err && err.userIssueSummary) || userFacingIssueSummary(err && err.placeholderIssues);
@@ -689,7 +776,29 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
       actor: "user",
       generatedAt: nowIso(),
     },
-    quality: { verdict: "pass", checks: [] },
+    quality: lastReviewResult
+      ? {
+          verdict: "pass",
+          checks: ["placeholder_gate", "authority_gate", "quality_reviewer"],
+          reviewer: {
+            status: lastReviewResult.status,
+            taskMode: lastReviewResult.taskMode,
+            scores: lastReviewResult.scores,
+            criteriaDigest: lastReviewResult.criteriaDigest,
+            blockingIssueCount: lastReviewResult.blockingIssues.length,
+            qualityIssueCount: lastReviewResult.qualityIssues.length,
+            qualityIssues: lastReviewResult.qualityIssues.slice(0, 8).map((i) => ({
+              ruleId: i.ruleId,
+              message: i.message,
+              lineNumber: i.lineNumber,
+            })),
+            suggestedRevisionCount: lastReviewResult.suggestedRevisions.length,
+            reviewerDegraded: !!lastReviewResult.reviewerDegraded,
+            modelReviewUsed: !!lastReviewResult.modelReviewUsed,
+            reviewedAt: lastReviewResult.createdAt,
+          },
+        }
+      : { verdict: "pass", checks: [] },
     supersedesVersionId: prevVersionId,
     supersededByVersionId: null,
     createdAt: nowIso(),
@@ -872,4 +981,5 @@ module.exports = {
   topoSortDeliverables,
   derivePackageStatuses,
   MAX_PLACEHOLDER_REPAIR_ATTEMPTS,
+  MAX_QUALITY_REPAIR_ATTEMPTS,
 };

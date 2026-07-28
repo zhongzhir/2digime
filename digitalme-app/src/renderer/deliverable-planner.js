@@ -356,7 +356,7 @@
     const s = d && d.generationStatus;
     const attempt = latestAttemptForDeliverable(d, view);
     if (attempt && (attempt.status === "repairing" || attempt.outcome === "repair_initiated")) {
-      return "正在自动修正";
+      return "正在完善成果";
     }
     if (s === "ready" || (d && d.currentVersionId && s !== "failed" && s !== "generating" && s !== "blocked")) {
       return "已生成";
@@ -380,6 +380,7 @@
   function auditIssueLines(d, view) {
     const attempt = latestAttemptForDeliverable(d, view);
     const issues =
+      (attempt && attempt.reviewIssues) ||
       (attempt && attempt.placeholderIssues) ||
       (attempt && attempt.failureEvidence && attempt.failureEvidence.placeholderIssues) ||
       [];
@@ -388,9 +389,7 @@
       .slice(0, 6)
       .map(
         (i) =>
-          `<div>第 ${escapeAttr(i.lineNumber)} 行 · ${escapeAttr(i.ruleId || "issue")} · ${escapeAttr(
-            i.contextSnippet || i.matchedText || ""
-          )}</div>`
+          `<div>${i.message ? escapeAttr(i.message) : `第 ${escapeAttr(i.lineNumber)} 行 · ${escapeAttr(i.ruleId || "issue")} · ${escapeAttr(i.contextSnippet || i.matchedText || "")}`}</div>`
       )
       .join("");
   }
@@ -455,14 +454,14 @@
           const only = included[0];
           const att = only ? latestAttemptForDeliverable(only, view) : null;
           if (att && att.status === "repairing") {
-            status.textContent = "成果中还有未完成的模板内容，正在自动修正。";
+            status.textContent = "正在检查质量并完善成果。";
           } else if (only && only.generationStatus === "failed") {
             status.textContent = failureHintForDeliverable(only, view);
           } else {
             status.textContent = "";
           }
         } else if (anyRepairing) {
-          status.textContent = "成果中还有未完成的模板内容，正在自动修正。";
+          status.textContent = "正在检查质量并完善成果。";
         } else if (anyGenerating) {
           status.textContent = "正在生成各项成果…";
         } else if (anyFailed && anyReady) {
@@ -600,7 +599,7 @@
             `<div class="act-gen-item" data-deliverable-id="${d.id}">` +
             `<div class="act-gen-item-head"><strong>${escapeAttr(d.title || label)}</strong>` +
             `<span class="muted">${metaParts.map(escapeAttr).join(" · ")}</span></div>` +
-            (failHint && st !== "已生成" && st !== "正在生成" && st !== "正在自动修正"
+            (failHint && st !== "已生成" && st !== "正在生成" && st !== "正在完善成果"
               ? `<p class="muted act-gen-failure-hint">${escapeAttr(failHint)}</p>`
               : "") +
             (actions ? `<div class="builder-actions">${actions}</div>` : "") +

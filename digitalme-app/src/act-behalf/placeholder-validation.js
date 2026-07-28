@@ -332,6 +332,11 @@ function buildRepairIssueLines(issues) {
     .filter((i) => i.issueType === ISSUE_BLOCKING)
     .slice(0, 10)
     .map((i) => {
+      // Reviewer-originated issues carry a plain message; render it directly.
+      if (i.message) {
+        const where = Number.isInteger(i.lineNumber) && i.lineNumber > 0 ? `（约第 ${i.lineNumber} 行）` : "";
+        return `· ${String(i.message).slice(0, 120)}${where}`;
+      }
       const hint =
         i.ruleId === "unfilled_field_label"
           ? "未填写字段"

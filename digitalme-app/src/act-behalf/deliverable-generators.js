@@ -75,6 +75,19 @@ function contextBlock(ctx) {
     ? "若需要推演，请用自然语言写出分析或待验证方案（例如「未来可考虑」「一种待验证的方案是」），不要写入方括号内部标签。"
     : "本次不展开开放探索块；不要把无依据内容写成已确认事实。必要时可用自然语言作少量推断。";
 
+  const outcomeLines = (() => {
+    const c = ctx.outcomeCriteria;
+    if (!c || typeof c !== "object") return [];
+    const lines = [`成果要求（任务模式=${c.taskMode || "current_implementation"}）：${ctx.modeGuidance || ""}`];
+    if (Array.isArray(c.requiredSections) && c.requiredSections.length) {
+      lines.push(`成果应包含的关键内容：${c.requiredSections.join("、")}。`);
+    }
+    if (c.expectedQuality) {
+      lines.push(`质量要求：${c.expectedQuality}`);
+    }
+    return lines;
+  })();
+
   return [
     `任务情境（contextClass=${contextClass}；claimPosturePresentation=${claimPosturePresentation}）：${guidance}`,
     `任务目标：${ctx.goal || "（缺少任务目标，请勿编造无关业务）"}`,
@@ -90,6 +103,7 @@ function contextBlock(ctx) {
         ctx.attachmentText
       : "（本次未提供参考材料正文。禁止写「根据公开报告/数据显示/研究表明」等无来源归因套话。）",
     exploreHint,
+    ...outcomeLines,
     structuredDocumentRequirements(),
     "要求：紧扣上述 Digital Me / 任务上下文；正式正文禁止方括号元标签；禁止输出与任务无关的虚构公司或融资故事当作已确认事实。",
   ]
@@ -120,8 +134,8 @@ function buildDocumentRepairMessages(ctx, priorDraft, issues) {
     {
       role: "system",
       content:
-        "你是 Digital Me 的成果修订写作者。请在不改变整体结构的前提下，修正草稿中的未填写模板内容。" +
-        "保留已有有效正文，仅替换占位、空白字段和模板项。使用中文 Markdown。",
+        "你是 Digital Me 的成果修订写作者。请在不改变整体结构的前提下，修正草稿中的质量问题（含未填写模板内容、缺失章节、与项目事实冲突、远期内容挤占主体等）。" +
+        "保留已有有效正文，仅修正被指出的问题。使用中文 Markdown。",
     },
     {
       role: "user",
@@ -134,7 +148,7 @@ function buildDocumentRepairMessages(ctx, priorDraft, issues) {
           "检测到的问题：",
           issueLines,
           "",
-          "请保留正文结构，但将所有占位内容替换为当前任务的真实内容；缺少事实时使用「待 Owner 决策」并说明原因。",
+          "请保留正文结构，逐项修正上述问题；占位内容替换为当前任务的真实内容；缺少事实时使用「待 Owner 决策」并说明原因。",
           "请直接输出修订后的完整 Markdown 正文。",
         ].join("\n"),
         28000
@@ -223,6 +237,7 @@ function ctxFromDeps(deps) {
     isDigitalMeProject: deps.isDigitalMeProject,
     projectRetrieval: deps.projectRetrieval,
     projectResolved: deps.projectResolved,
+    outcomeCriteria: deps.outcomeCriteria,
   });
 }
 
@@ -501,22 +516,25 @@ async function generateByKindWithRepair(kind, deps, hooks) {
       }
       return finalizer(payload, reviewCtx);
     } catch (err) {
-      const isPlaceholder = err && err.code === "placeholder_content_rejected";
-      if (hooks.onPlaceholderRejected) {
-        await hooks.onPlaceholderRejected({
+      const isRepairable =
+        err &&
+        (err.code === "placeholder_content_rejected" || err.code === "review_content_rejected");
+      if (hooks.onDraftRejected) {
+        await hooks.onDraftRejected({
           pass,
           draft: body,
           err,
           ctx: reviewCtx,
+          repairable: isRepairable,
         });
       }
-      if (!isPlaceholder || pass >= maxRepair) {
-        if (isPlaceholder) err.draft = body;
+      if (!isRepairable || pass >= maxRepair) {
+        if (isRepairable) err.draft = body;
         throw err;
       }
       repairContext = {
         priorDraft: k === "presentation" ? payload.raw : payload.md,
-        issues: err.placeholderIssues || [],
+        issues: err.placeholderIssues || err.reviewIssues || [],
       };
     }
   }
