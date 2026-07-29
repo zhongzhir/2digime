@@ -5,6 +5,29 @@
 
 ---
 
+## 2026-07-29 GLOBAL-RENDERER-RESPONSIVENESS-01 全局交互迟滞 · 实施完成（待 Owner 验收）
+
+### 事实
+
+Owner 正式版 `6bff2ad`：打开成果无反馈、普通按钮慢、「文件」菜单延迟 2–3 秒。根因是 main 同步读写约 2.1MB `deliverable-packages.json`（pretty JSON stringify + 重复 loadStore），非单按钮接线。FIX-01C 已暂停（未提交 capture 方案已 discard）。
+
+### 修复
+
+三 store 内存缓存 + 紧凑 JSON 持久化；`wireActBehalfUi`/`bindEvents`/task-list UI 幂等；增强面板刷新节流 250–400ms；打开反馈卡片局部化；清除「已打开草稿任务」粘滞文案。未加 document capture。
+
+### 状态
+
+```text
+implemented / duplicate_listeners_removed /
+renderer_main_thread_work_reduced /
+automated_performance_tests_passed /
+owner_runtime_acceptance_pending
+```
+
+不得 push；不得标 performance_regression_fixed。
+
+---
+
 ## 2026-07-29 TASK-QUALITY-STABILIZE-01-FIX-01B 正式成果按钮端到端接线 · 实施完成（待 Owner 复验）
 
 ### 事实

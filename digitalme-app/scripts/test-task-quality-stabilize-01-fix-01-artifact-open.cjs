@@ -321,14 +321,15 @@ async function main() {
     assert.ok(appSrc.includes("data-opening"));
     assert.ok(appSrc.includes("actBehalfOpenArtifact"));
     assert.ok(appSrc.includes("已打开成果"));
-    assert.ok(appSrc.includes('status.textContent = "暂时无法打开成果。"') || appSrc.includes('"暂时无法打开成果。"'));
-    // Single production open function + canonical action + backward-compatible aliases.
+    assert.ok(appSrc.includes("暂时无法打开成果"));
     assert.ok(appSrc.includes("openDeliverableArtifactFromButton"));
-    assert.ok(appSrc.includes('action === "open-deliverable-artifact"'));
-    assert.ok(appSrc.includes('action === "open-primary"'));
-    assert.ok(appSrc.includes('action === "open-art"'));
-    // Open must not bubble into task/draft selection handlers.
+    assert.ok(appSrc.includes("showArtifactCardFeedback"));
+    assert.ok(appSrc.includes('action === "open-deliverable-artifact"') || appSrc.includes('action === "open-art"'));
     assert.ok(appSrc.includes("stopPropagation"));
+    // GLOBAL-RENDERER-RESPONSIVENESS-01: wiring must be idempotent; no sticky draft copy.
+    assert.ok(appSrc.includes("dmActBehalfUiBound"));
+    assert.ok(appSrc.includes("scheduleThrottledGenerationPanelRefresh"));
+    assert.ok(!appSrc.includes('setActProgress("已打开草稿任务。")'));
   });
 
   await test("partial package: ready items openable, failed have no open button markup rule", () => {

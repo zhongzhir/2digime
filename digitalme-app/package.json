@@ -34,6 +34,7 @@
     "test:task-quality-loop-01-2-fix-01": "node scripts/test-task-quality-loop-01-2-fix-01-auto-completion.cjs",
     "test:task-quality-stabilize-01": "node scripts/test-task-quality-stabilize-01.cjs",
     "test:task-quality-stabilize-01-fix-01": "node scripts/test-task-quality-stabilize-01-fix-01-artifact-open.cjs",
+    "test:global-renderer-responsiveness-01": "node scripts/test-global-renderer-responsiveness-01.cjs",
     "test:artifact-open-acceptance": "electron scripts/electron-artifact-open-acceptance.cjs",
     "test:artifact-open-ui": "electron scripts/electron-artifact-open-ui-acceptance.cjs",
     "test:artifact-open-acceptance:owner": "node scripts/run-owner-artifact-open-acceptance.cjs",

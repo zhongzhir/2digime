@@ -21,6 +21,7 @@ const DRAFT_POINTER_STATUSES = new Set(["draft", "needs_user_input", "ready_for_
 
 /** @type {Promise<void>} */
 let writeQueueTail = Promise.resolve();
+let storeCache = null;
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -34,23 +35,55 @@ function emptyStore() {
   return { version: STORE_VERSION, plans: {} };
 }
 
+function invalidateStoreCache() {
+  storeCache = null;
+}
+
 function loadStore(userData) {
   const p = storePath(userData);
-  if (!fs.existsSync(p)) return emptyStore();
+  if (!fs.existsSync(p)) {
+    invalidateStoreCache();
+    return emptyStore();
+  }
+  let st;
+  try {
+    st = fs.statSync(p);
+  } catch {
+    invalidateStoreCache();
+    return emptyStore();
+  }
+  const key = String(userData || "");
+  if (
+    storeCache &&
+    storeCache.userData === key &&
+    storeCache.mtimeMs === st.mtimeMs &&
+    storeCache.size === st.size &&
+    storeCache.store
+  ) {
+    return storeCache.store;
+  }
   let parsed;
   try {
     parsed = JSON.parse(fs.readFileSync(p, "utf8"));
   } catch (err) {
+    invalidateStoreCache();
     const e = new Error("成果计划存档无法解析，请勿覆盖。");
     e.code = "deliverable_plan_parse_failed";
     e.cause = err;
     throw e;
   }
   if (!parsed || typeof parsed !== "object" || !parsed.plans || typeof parsed.plans !== "object") {
+    invalidateStoreCache();
     const e = new Error("成果计划存档格式无效。");
     e.code = "deliverable_plan_invalid_store";
     throw e;
   }
+  storeCache = {
+    userData: key,
+    mtimeMs: st.mtimeMs,
+    size: st.size,
+    store: parsed,
+  };
   return parsed;
 }
 
@@ -59,11 +92,24 @@ async function persistStoreAtomic(userData, store) {
   const dir = path.dirname(target);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const tmp = target + ".tmp." + process.pid + "." + Date.now();
-  fs.writeFileSync(tmp, JSON.stringify(store, null, 2), "utf8");
+  const payload = JSON.stringify(store);
+  fs.writeFileSync(tmp, payload, "utf8");
   let lastErr = null;
   for (let attempt = 0; attempt < RENAME_RETRY_WAITS_MS.length + 1; attempt += 1) {
     try {
       fs.renameSync(tmp, target);
+      let st = null;
+      try {
+        st = fs.statSync(target);
+      } catch {
+        st = null;
+      }
+      storeCache = {
+        userData: String(userData || ""),
+        mtimeMs: st ? st.mtimeMs : Date.now(),
+        size: st ? st.size : Buffer.byteLength(payload),
+        store,
+      };
       return;
     } catch (err) {
       lastErr = err;
@@ -76,6 +122,7 @@ async function persistStoreAtomic(userData, store) {
   } catch {
     /* ignore */
   }
+  invalidateStoreCache();
   throw lastErr || new Error("成果计划存档写入失败");
 }
 
@@ -427,6 +474,7 @@ module.exports = {
   storePath,
   emptyStore,
   loadStore,
+  invalidateStoreCache,
   persistStoreAtomic,
   enqueueWrite,
   getPlan,

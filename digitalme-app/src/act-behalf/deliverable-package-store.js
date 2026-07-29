@@ -17,6 +17,9 @@ const RENAME_RETRY_CODES = new Set(["EBUSY", "EPERM", "EACCES"]);
 /** @type {Promise<void>} */
 let writeQueueTail = Promise.resolve();
 
+/** In-memory cache — avoid sync re-parse of multi-MB store on every IPC. */
+let storeCache = null;
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -48,13 +51,50 @@ function normalizeStoreShape(parsed) {
   return parsed;
 }
 
+function invalidateStoreCache() {
+  storeCache = null;
+}
+
+function setStoreCache(userData, store, meta) {
+  storeCache = {
+    userData: String(userData || ""),
+    store,
+    mtimeMs: meta && meta.mtimeMs != null ? meta.mtimeMs : null,
+    size: meta && meta.size != null ? meta.size : null,
+    raw: meta && meta.raw != null ? meta.raw : null,
+  };
+}
+
 function loadStore(userData) {
   const p = storePath(userData);
-  if (!fs.existsSync(p)) return emptyStore();
+  if (!fs.existsSync(p)) {
+    invalidateStoreCache();
+    return emptyStore();
+  }
+  let st;
+  try {
+    st = fs.statSync(p);
+  } catch {
+    invalidateStoreCache();
+    return emptyStore();
+  }
+  const key = String(userData || "");
+  if (
+    storeCache &&
+    storeCache.userData === key &&
+    storeCache.mtimeMs === st.mtimeMs &&
+    storeCache.size === st.size &&
+    storeCache.store
+  ) {
+    return storeCache.store;
+  }
+  let raw;
   let parsed;
   try {
-    parsed = JSON.parse(fs.readFileSync(p, "utf8"));
+    raw = fs.readFileSync(p);
+    parsed = JSON.parse(raw.toString("utf8"));
   } catch (err) {
+    invalidateStoreCache();
     const e = new Error("成果包存档无法解析，请勿覆盖。");
     e.code = "deliverable_package_parse_failed";
     e.cause = err;
@@ -70,16 +110,20 @@ function loadStore(userData) {
     !parsed.preparationAttempts ||
     typeof parsed.preparationAttempts !== "object"
   ) {
+    invalidateStoreCache();
     const e = new Error("成果包存档格式无效。");
     e.code = "deliverable_package_invalid_store";
     throw e;
   }
   if (parsed.schemaVersion != null && Number(parsed.schemaVersion) !== STORE_SCHEMA_VERSION) {
+    invalidateStoreCache();
     const e = new Error("成果包存档版本不受支持。");
     e.code = "deliverable_package_unsupported_schema";
     throw e;
   }
-  return normalizeStoreShape(parsed);
+  const store = normalizeStoreShape(parsed);
+  setStoreCache(userData, store, { mtimeMs: st.mtimeMs, size: st.size, raw });
+  return store;
 }
 
 async function persistStoreAtomic(userData, store) {
@@ -87,11 +131,25 @@ async function persistStoreAtomic(userData, store) {
   const dir = path.dirname(target);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const tmp = target + ".tmp." + process.pid + "." + Date.now();
-  fs.writeFileSync(tmp, JSON.stringify(store, null, 2), "utf8");
+  // Compact JSON: pretty-print of multi-MB stores blocks the Electron main thread
+  // long enough to freeze OS menus (Owner: 2–3s File menu lag).
+  const payload = JSON.stringify(store);
+  fs.writeFileSync(tmp, payload, "utf8");
   let lastErr = null;
   for (let attempt = 0; attempt < RENAME_RETRY_WAITS_MS.length + 1; attempt += 1) {
     try {
       fs.renameSync(tmp, target);
+      let st = null;
+      try {
+        st = fs.statSync(target);
+      } catch {
+        st = null;
+      }
+      setStoreCache(userData, store, {
+        mtimeMs: st ? st.mtimeMs : Date.now(),
+        size: st ? st.size : Buffer.byteLength(payload),
+        raw: Buffer.from(payload, "utf8"),
+      });
       return;
     } catch (err) {
       lastErr = err;
@@ -104,6 +162,7 @@ async function persistStoreAtomic(userData, store) {
   } catch {
     /* ignore */
   }
+  invalidateStoreCache();
   throw lastErr || new Error("成果包存档写入失败");
 }
 
@@ -174,9 +233,13 @@ async function mutateStore(userData, mutator, opts) {
   const options = opts && typeof opts === "object" ? opts : {};
   return enqueueWrite(async () => {
     const store = loadStore(userData);
-    const beforeBytes = fs.existsSync(storePath(userData))
-      ? fs.readFileSync(storePath(userData))
-      : Buffer.from("");
+    const key = String(userData || "");
+    const beforeBytes =
+      storeCache && storeCache.userData === key && storeCache.raw
+        ? storeCache.raw
+        : fs.existsSync(storePath(userData))
+          ? fs.readFileSync(storePath(userData))
+          : Buffer.from("");
 
     if (options.expectAbsent === true && options.expectAbsentPackageId) {
       if (store.packages[String(options.expectAbsentPackageId)]) {
@@ -337,6 +400,7 @@ module.exports = {
   storePath,
   emptyStore,
   loadStore,
+  invalidateStoreCache,
   enqueueWrite,
   mutateStore,
   getPackage,

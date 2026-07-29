@@ -2,7 +2,7 @@
 
 版本：v0.4
 状态：持续更新
-最后更新：2026-07-29（TASK-QUALITY-STABILIZE-01-FIX-01B 正式成果按钮端到端接线修复待 Owner 复验；不得 push）
+最后更新：2026-07-29（GLOBAL-RENDERER-RESPONSIVENESS-01 全局交互迟滞修复待 Owner 验收；FIX-01C 已暂停；不得 push）
 
 > **当前产品主线（2026-07-26）**：**第二纵向闭环** — 多模态成果包交付与渐进式主体构建。第一纵向闭环已 `accepted` / `completed`。
 > **最高架构与研发原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)（**v0.1.1 `active`**）。
@@ -21,7 +21,7 @@
 > 2. **BUG1 #6** = 七模块渐进式数字之我构建框架。
 > 3. 首个正式验收场景 = 为一个项目生成完整对外介绍成果包。
 > 4. 第一轮真实产物 = 正式介绍文档、演示文稿 PPT、单页 HTML、封面图片；视频/音频本轮不实现真实生成，用户面不得宣称已支持。
-> **当前任务**：**TASK-QUALITY-STABILIZE-01-FIX-01B**（正式成果按钮端到端接线修复）已实现完成，状态 `implemented` / `formal_renderer_open_path_repaired` / `automated_ui_tests_passed` / `owner_runtime_revalidation_pending`（分支 `codex/task-quality-stabilize-01-fix-artifact-open-ui`；基线 `8229721`）。追踪确认正式路径 DOM→委托→preload `actBehalfOpenArtifact`→IPC `actBehalf:openArtifact`→main `openArtifactSecure`→`shell.openPath` 一致；「已打开草稿任务。」来自任务列表 `openActBehalfTask` 的旧进度残留，非成果按钮；主按钮唯一 action=`open-deliverable-artifact`（`open-primary`/`open-art` 兼容别名），统一 `openDeliverableArtifactFromButton` + `stopPropagation`；新增真实按钮点击 UI 测试 `npm run test:artifact-open-ui`（42 passed）。新增永久字段/Store/IPC 打开体系 = 0。**不得** push；不得标 owner_runtime_accepted。前序 FIX-01A 见对应任务文档。
+> **当前任务**：**GLOBAL-RENDERER-RESPONSIVENESS-01**（全局交互迟滞审计与修复）已实现完成，状态 `implemented` / `duplicate_listeners_removed` / `renderer_main_thread_work_reduced` / `automated_performance_tests_passed` / `owner_runtime_acceptance_pending`（分支 `codex/global-renderer-responsiveness-01`；基线 `6bff2ad`）。根因：Owner `deliverable-packages.json` ≈2.1MB，main 同步 parse/pretty-stringify 阻塞 OS 菜单与 IPC。已：三 store 内存缓存 + 紧凑 JSON 持久化；`wireActBehalfUi`/`bindEvents` 幂等；增强面板刷新节流；打开反馈卡片局部化；清除「已打开草稿任务」粘滞文案。**暂停 FIX-01C**（未加 document capture）。**不得** push；不得标 performance_regression_fixed。Owner 先验菜单/普通按钮响应，再验成果打开。前序 FIX-01B 见对应任务文档。
 > **R2 对话运行时**：保留基础设施；R2 代码 **retained as infrastructure**。生产默认入口仍为 legacy。
 > **Owner Electron 真机验收（2026-07-24）**：`accepted`（distill-me / R2 对话重试 / doing-context / PAN-01S 等）。
 > **confirmed identity → act context（2026-07-24，`2f1b7bd`）**：`accepted`（历史整合基线；**不是**当前 HEAD）。
@@ -330,7 +330,8 @@ flowchart TB
 | `digitalme_phase1_task_TASK-QUALITY-STABILIZE-01_reliable_delivery_v0.1.md` | **TASK-QUALITY-STABILIZE-01 可靠交付与后台增强分离**（v0.1.0；`implemented` / `automated_tests_passed` / `stable_delivery_added` / `owner_runtime_acceptance_pending` / `market_95th_percentile_not_proven`；生产默认 `stable_delivery`） |
 | `digitalme_phase1_task_TASK-QUALITY-STABILIZE-01-FIX-01_artifact_open_v0.1.md` | **FIX-01 成果打开链路**（`implemented`；安全 `openArtifactSecure` + 稳定 ID；待 Owner 真机） |
 | `digitalme_phase1_task_TASK-QUALITY-STABILIZE-01-FIX-01A_open_acceptance_v0.1.md` | **FIX-01A 打开验收 probe 修复**（`implemented` / `acceptance_probe_repaired`；`__dirname` 模块解析；待 Owner 复验） |
-| `digitalme_phase1_task_TASK-QUALITY-STABILIZE-01-FIX-01B_formal_open_wiring_v0.1.md` | **FIX-01B 正式成果按钮端到端接线**（v0.1.0；`implemented` / `formal_renderer_open_path_repaired` / `automated_ui_tests_passed` / `owner_runtime_revalidation_pending`；唯一 action `open-deliverable-artifact` + 单一打开函数 + 真实按钮点击 UI 测试；新增永久字段/Store/IPC 打开体系=0） |
+| `digitalme_phase1_task_TASK-QUALITY-STABILIZE-01-FIX-01B_formal_open_wiring_v0.1.md` | **FIX-01B 正式成果按钮端到端接线**（v0.1.0；`implemented` / `formal_renderer_open_path_repaired` / `automated_ui_tests_passed` / `owner_runtime_revalidation_pending`；唯一 action `open-deliverable-artifact` + 单一打开函数 + 真实按钮点击 UI 测试；新增永久字段/Store/IPC 打开体系=0；因全局响应性回归，Owner 成果打开复验 **blocked**） |
+| `digitalme_phase1_task_GLOBAL-RENDERER-RESPONSIVENESS-01_v0.1.md` | **GLOBAL-RENDERER-RESPONSIVENESS-01 全局交互迟滞**（v0.1.0；`implemented` / `duplicate_listeners_removed` / `renderer_main_thread_work_reduced` / `automated_performance_tests_passed` / `owner_runtime_acceptance_pending`；≈2.1MB package store 缓存+紧凑 JSON；listener 幂等；增强面板节流；FIX-01C 暂停） |
 | `digitalme_phase1_task_DVL2-03A_first_real_document_artifact_v0.1.md` | **DVL2-03A 草案（历史）**；已被完整 **DVL2-03** 实现路径吸收（不再单独拆分 03A/B/C） |
 | `docs/design/digitalme_crt_v0.2_subject_context_engine_spec.md` | **CRT v0.2 Subject Context Engine 规格**（v0.2.2；`frozen_for_implementation`） |
 | `digitalme_phase1_task_CRT-MVP-01_cognitive_runtime_continuity_v0.1.md` | **CRT-MVP-01 持续性验证**（实现合入；真机状态见任务包） |

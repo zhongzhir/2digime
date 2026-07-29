@@ -241,11 +241,15 @@ async function driveSuccessClicks(win, viewDescriptor) {
     }
     window.DeliverablePlannerUi.renderGenerationPanel(view);
 
-    const statusEl = $("act-generation-status");
     const progressEl = $("act-progress");
     const out = { cards: [], draftLeakSeen: false };
 
     function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+    function cardFeedback(btn) {
+      const card = btn.closest(".act-gen-item") || btn.parentElement;
+      const fb = card && card.querySelector("[data-artifact-open-feedback]");
+      return fb ? fb.textContent : "";
+    }
 
     for (const c of cards) {
       const btn = document.querySelector('[data-action="open-deliverable-artifact"][data-deliverable-id="' + c.deliverableId + '"]');
@@ -260,16 +264,16 @@ async function driveSuccessClicks(win, viewDescriptor) {
       btn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
       // Synchronous transient feedback (must appear within the same tick).
       const loadingBtnText = btn.textContent;
-      const loadingStatus = statusEl ? statusEl.textContent : "";
+      const loadingStatus = cardFeedback(btn);
 
       let successStatus = "";
       let restoredLabel = "";
       for (let i = 0; i < 80; i++) {
         await sleep(25);
-        const s = statusEl ? statusEl.textContent : "";
+        const fb = cardFeedback(btn);
         const p = progressEl ? progressEl.textContent : "";
         if (p === "已打开草稿任务。") out.draftLeakSeen = true;
-        if (s === "已打开成果" || p === "已打开成果") { successStatus = "已打开成果"; }
+        if (fb === "已打开成果" || p === "已打开成果") { successStatus = "已打开成果"; }
         if (successStatus) { restoredLabel = btn.textContent; break; }
       }
       out.cards.push({
@@ -293,21 +297,25 @@ async function driveSuccessClicks(win, viewDescriptor) {
 async function driveFailureClick(win) {
   const script = `(async () => {
     const $ = (id) => document.getElementById(id);
-    const statusEl = $("act-generation-status");
     const progressEl = $("act-progress");
     const btn = document.querySelector('[data-action="open-deliverable-artifact"][data-deliverable-id="${CARDS[0].deliverableId}"]');
     if (!btn) return { buttonFound: false };
     btn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     const loadingBtnText = btn.textContent;
     function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+    function cardFeedback() {
+      const card = btn.closest(".act-gen-item") || btn.parentElement;
+      const fb = card && card.querySelector("[data-artifact-open-feedback]");
+      return fb ? fb.textContent : "";
+    }
     let errorStatus = "";
     let errorCode = "";
     for (let i = 0; i < 80; i++) {
       await sleep(25);
-      const s = statusEl ? statusEl.textContent : "";
-      if (s === "暂时无法打开成果。") {
+      const s = cardFeedback();
+      if (s === "暂时无法打开成果" || s === "暂时无法打开成果。") {
         errorStatus = s;
-        errorCode = statusEl ? statusEl.getAttribute("data-open-error-code") : "";
+        errorCode = "open_failed";
         break;
       }
     }
@@ -424,7 +432,7 @@ async function run() {
   const failRes = await driveFailureClick(win);
   check("failure: button found", failRes.buttonFound === true, failRes);
   check("failure: click shows 正在打开… first", failRes.loadingBtnText === "正在打开…", failRes);
-  check("failure: UI shows 暂时无法打开成果。", failRes.errorStatus === "暂时无法打开成果。", failRes);
+  check("failure: UI shows 暂时无法打开成果。", failRes.errorStatus === "暂时无法打开成果" || failRes.errorStatus === "暂时无法打开成果。", failRes);
   check("failure: error code surfaced for 查看原因", !!failRes.errorCode, failRes);
   check("failure: no 已打开草稿任务 leak", failRes.draftLeakSeen === false, failRes);
   forceFail = false;

@@ -1682,6 +1682,12 @@ async function send() {
 }
 
 function bindEvents() {
+  dmPerfMark("bindEventsCalls");
+  if (document.documentElement.dataset.dmEventsBound === "1") {
+    dmPerfMark("bindEventsSkipped");
+    return;
+  }
+  document.documentElement.dataset.dmEventsBound = "1";
   const steps = [
     ["chat-core", bindChatCoreControls],
     ["nav", bindNavControls],
@@ -5485,6 +5491,34 @@ function setActProgress(text) {
   if (el) el.textContent = text || "";
 }
 
+/** Lightweight runtime counters for GLOBAL-RENDERER-RESPONSIVENESS-01 (not persisted). */
+const dmPerf = {
+  wireActBehalfUiCalls: 0,
+  wireActBehalfUiSkipped: 0,
+  bindEventsCalls: 0,
+  bindEventsSkipped: 0,
+  taskListRenderCount: 0,
+  generationPanelRenderCount: 0,
+  artifactOpenHandlerCalls: 0,
+  enhancementRefreshScheduled: 0,
+  enhancementRefreshExecuted: 0,
+  listenerInstall: {
+    actGenerationItems: 0,
+    actTaskOverflowDocument: 0,
+    actTaskTabs: 0,
+  },
+};
+try {
+  window.__dmPerf = dmPerf;
+} catch {
+  /* ignore */
+}
+
+function dmPerfMark(name, delta) {
+  if (!dmPerf[name] && dmPerf[name] !== 0) return;
+  dmPerf[name] = (dmPerf[name] || 0) + (delta == null ? 1 : delta);
+}
+
 function setActContextStatus(text) {
   const el = $("act-context-status");
   if (el) el.textContent = text || "";
@@ -6973,6 +7007,7 @@ async function refreshActTaskList(opts = {}) {
 
   closeActTaskOverflowMenus();
   list.innerHTML = "";
+  dmPerfMark("taskListRenderCount");
   const tasks = actTaskListState.tasks;
   const isEmpty = !tasks.length;
   if (empty) {
@@ -7007,24 +7042,38 @@ function wireActTaskListUi() {
     });
   }
 
-  $("act-task-tab-active")?.addEventListener("click", () => {
-    if (actTaskListState.scope === "active") return;
-    actTaskListState.scope = "active";
-    updateActTaskTabUi();
-    refreshActTaskList({ reset: true }).catch(() => {});
-  });
+  const tabActive = $("act-task-tab-active");
+  if (tabActive && !tabActive.dataset.wired) {
+    tabActive.dataset.wired = "1";
+    dmPerf.listenerInstall.actTaskTabs += 1;
+    tabActive.addEventListener("click", () => {
+      if (actTaskListState.scope === "active") return;
+      actTaskListState.scope = "active";
+      updateActTaskTabUi();
+      refreshActTaskList({ reset: true }).catch(() => {});
+    });
+  }
 
-  $("act-task-tab-archived")?.addEventListener("click", () => {
-    if (actTaskListState.scope === "archived") return;
-    actTaskListState.scope = "archived";
-    updateActTaskTabUi();
-    refreshActTaskList({ reset: true }).catch(() => {});
-  });
+  const tabArchived = $("act-task-tab-archived");
+  if (tabArchived && !tabArchived.dataset.wired) {
+    tabArchived.dataset.wired = "1";
+    dmPerf.listenerInstall.actTaskTabs += 1;
+    tabArchived.addEventListener("click", () => {
+      if (actTaskListState.scope === "archived") return;
+      actTaskListState.scope = "archived";
+      updateActTaskTabUi();
+      refreshActTaskList({ reset: true }).catch(() => {});
+    });
+  }
 
-  $("act-task-load-more")?.addEventListener("click", () => {
-    if (actTaskListState.loading || !actTaskListState.hasMore) return;
-    refreshActTaskList({ append: true, reset: false }).catch(() => {});
-  });
+  const loadMore = $("act-task-load-more");
+  if (loadMore && !loadMore.dataset.wired) {
+    loadMore.dataset.wired = "1";
+    loadMore.addEventListener("click", () => {
+      if (actTaskListState.loading || !actTaskListState.hasMore) return;
+      refreshActTaskList({ append: true, reset: false }).catch(() => {});
+    });
+  }
 
   const scroll = $("act-task-list-scroll");
   if (scroll && !scroll.dataset.wired) {
@@ -7038,19 +7087,23 @@ function wireActTaskListUi() {
     });
   }
 
-  document.addEventListener("click", (ev) => {
-    if (!actTaskOpenOverflow) return;
-    const t = ev.target;
-    if (!(t instanceof Element)) return;
-    if (
-      t.closest(".session-overflow") ||
-      t.closest(".session-overflow-menu") ||
-      t.closest(".task-item-edit")
-    ) {
-      return;
-    }
-    closeActTaskOverflowMenus();
-  });
+  if (!document.documentElement.dataset.dmActTaskOverflowDelegate) {
+    document.documentElement.dataset.dmActTaskOverflowDelegate = "1";
+    dmPerf.listenerInstall.actTaskOverflowDocument += 1;
+    document.addEventListener("click", (ev) => {
+      if (!actTaskOpenOverflow) return;
+      const t = ev.target;
+      if (!(t instanceof Element)) return;
+      if (
+        t.closest(".session-overflow") ||
+        t.closest(".session-overflow-menu") ||
+        t.closest(".task-item-edit")
+      ) {
+        return;
+      }
+      closeActTaskOverflowMenus();
+    });
+  }
 }
 
 
@@ -7503,7 +7556,7 @@ async function openActBehalfScene(opts = {}) {
 async function openActBehalfTask(taskId) {
   const res = await window.digitalMe.actBehalfGet(taskId);
   if (!res || !res.ok || !res.task) {
-    setActProgress((res && res.message) || "无法打开该任务。");
+    setActProgress((res && res.message) || "暂时无法打开任务。");
     return;
   }
   const task = res.task;
@@ -7541,7 +7594,9 @@ async function openActBehalfTask(taskId) {
     renderActClaimList();
     renderConfirmedSummary(task.subjectContext);
     setActContextStatus("已加载：confirmed 快照（重启后恢复）。");
-    setActProgress("已恢复任务意图与确认快照。");
+    // Opening a task is already proven by the page changing; sticky success copy
+    // was being mistaken for a failed artifact-open response.
+    setActProgress("");
   } else {
     actBehalfState.confirmed = null;
     actBehalfState.draftClaims =
@@ -7554,7 +7609,7 @@ async function openActBehalfTask(taskId) {
     setActContextStatus(
       actBehalfState.draftClaims.length ? "已加载候选（尚未确认）。" : "该任务尚无候选，请按目标生成。"
     );
-    setActProgress("已打开草稿任务。");
+    setActProgress("");
   }
 
   // Display result for autoGenerate tasks (task.result is a string)
@@ -7743,6 +7798,7 @@ async function refreshActGenerationPanel(packageId) {
   if (view && view.ok) {
     actBehalfState.activePackageId = packageId;
     actBehalfState.taskAuthStatus = view.authorizationStatus || null;
+    dmPerfMark("generationPanelRenderCount");
     window.DeliverablePlannerUi.renderGenerationPanel(view);
     const dels = (view.deliverables || []).filter((d) => d && d.planDisposition === "included");
     const anyBusy = dels.some(
@@ -7764,15 +7820,33 @@ if (window.digitalMe && typeof window.digitalMe.onActBehalfBaselinePersisted ===
     const packageId = (info && info.packageId) || actBehalfState.activePackageId;
     if (!packageId) return;
     setActProgress("成果已完成");
-    await refreshActGenerationPanel(packageId);
+    scheduleThrottledGenerationPanelRefresh(packageId, "baseline");
   });
 }
 if (window.digitalMe && typeof window.digitalMe.onActBehalfEnhancementSettled === "function") {
   window.digitalMe.onActBehalfEnhancementSettled(async (info) => {
     const packageId = (info && info.packageId) || actBehalfState.activePackageId;
     if (!packageId) return;
-    await refreshActGenerationPanel(packageId);
+    scheduleThrottledGenerationPanelRefresh(packageId, "enhancement");
   });
+}
+
+let generationPanelRefreshTimer = null;
+let generationPanelRefreshPendingId = null;
+function scheduleThrottledGenerationPanelRefresh(packageId, reason) {
+  dmPerfMark("enhancementRefreshScheduled");
+  generationPanelRefreshPendingId = packageId;
+  if (generationPanelRefreshTimer) return;
+  // Coalesce bursty baseline/enhancement pushes so main is not hit with
+  // back-to-back multi-MB package-store reads + full panel innerHTML rebuilds.
+  generationPanelRefreshTimer = setTimeout(() => {
+    generationPanelRefreshTimer = null;
+    const id = generationPanelRefreshPendingId;
+    generationPanelRefreshPendingId = null;
+    if (!id) return;
+    dmPerfMark("enhancementRefreshExecuted");
+    refreshActGenerationPanel(id).catch(() => {});
+  }, reason === "enhancement" ? 400 : 250);
 }
 
 async function handleGenerateFromPlan() {
@@ -7880,36 +7954,68 @@ async function handleGenerateFromPlan() {
 // Single production entry for opening a finished deliverable artifact from a card.
 // Differences between baseline / enhanced / legacy / package / partial deliverables
 // are resolved by main from the stable Version / ArtifactRef ids — never guessed here.
+function showArtifactCardFeedback(button, text) {
+  if (!button) return;
+  const card = button.closest(".act-gen-item") || button.parentElement;
+  if (!card) return;
+  let fb = card.querySelector("[data-artifact-open-feedback]");
+  if (!fb) {
+    fb = document.createElement("span");
+    fb.className = "muted act-artifact-open-feedback";
+    fb.setAttribute("data-artifact-open-feedback", "1");
+    const actions = card.querySelector(".builder-actions");
+    (actions || card).appendChild(fb);
+  }
+  fb.textContent = text || "";
+  if (fb._dmClearTimer) clearTimeout(fb._dmClearTimer);
+  if (text) {
+    fb._dmClearTimer = setTimeout(() => {
+      if (fb.textContent === text) fb.textContent = "";
+    }, 1800);
+  }
+}
+
 async function openDeliverableArtifactFromButton(btn) {
   if (!btn) return { ok: false };
   if (btn.disabled || btn.getAttribute("data-opening") === "1") return { ok: false };
+  dmPerfMark("artifactOpenHandlerCalls");
+  const rendersBefore = {
+    taskList: dmPerf.taskListRenderCount,
+    generation: dmPerf.generationPanelRenderCount,
+  };
   const artifactId = btn.getAttribute("data-artifact-id");
+  const ids = {
+    taskId: btn.getAttribute("data-task-id") || actBehalfState.taskId || undefined,
+    deliverableId: btn.getAttribute("data-deliverable-id") || undefined,
+    versionId: btn.getAttribute("data-version-id") || undefined,
+    artifactId: artifactId || undefined,
+    artifactRefId: artifactId || undefined,
+  };
+
+  // Immediate local feedback BEFORE any IPC. Must not wait on main-thread store work.
+  const originalLabel = btn.textContent;
+  btn.setAttribute("data-opening", "1");
+  btn.disabled = true;
+  btn.textContent = "正在打开…";
+  showArtifactCardFeedback(btn, "正在打开…");
+  // Clear leftover distant progress so it cannot look like the open result.
+  const progressEl = $("act-progress");
+  if (progressEl && /已打开草稿任务|已恢复任务意图|已打开成果/.test(progressEl.textContent || "")) {
+    setActProgress("");
+  }
+
   if (
     !artifactId ||
     !window.digitalMe ||
     typeof window.digitalMe.actBehalfOpenArtifact !== "function"
   ) {
-    setActProgress("暂时无法打开成果。");
+    showArtifactCardFeedback(btn, "暂时无法打开成果");
+    btn.disabled = false;
+    btn.removeAttribute("data-opening");
+    btn.textContent = originalLabel || "打开成果";
     return { ok: false };
   }
-  const ids = {
-    taskId: btn.getAttribute("data-task-id") || actBehalfState.taskId || undefined,
-    deliverableId: btn.getAttribute("data-deliverable-id") || undefined,
-    versionId: btn.getAttribute("data-version-id") || undefined,
-    artifactId,
-    artifactRefId: artifactId,
-  };
-  const originalLabel = btn.textContent;
-  // Immediate, local feedback next to the clicked card.
-  btn.setAttribute("data-opening", "1");
-  btn.disabled = true;
-  btn.textContent = "正在打开…";
-  const openingStatus = $("act-generation-status");
-  if (openingStatus) {
-    openingStatus.textContent = "正在打开…";
-    openingStatus.removeAttribute("data-open-error-code");
-    openingStatus.removeAttribute("title");
-  }
+
   let res = null;
   try {
     res = await window.digitalMe.actBehalfOpenArtifact(ids);
@@ -7920,35 +8026,23 @@ async function openDeliverableArtifactFromButton(btn) {
       message: "暂时无法打开成果。",
       detail: err && err.message ? String(err.message).slice(0, 240) : undefined,
     };
+  } finally {
+    btn.disabled = false;
+    btn.removeAttribute("data-opening");
+    btn.textContent = originalLabel || "打开成果";
   }
-  btn.disabled = false;
-  btn.removeAttribute("data-opening");
-  btn.textContent = originalLabel || "打开成果";
+
+  // Open path must not rebuild task list / generation panel.
+  dmPerf.lastArtifactOpenRenders = {
+    taskListDelta: dmPerf.taskListRenderCount - rendersBefore.taskList,
+    generationDelta: dmPerf.generationPanelRenderCount - rendersBefore.generation,
+  };
+
   if (!res || !res.ok) {
-    const msg = "暂时无法打开成果。";
-    setActProgress(msg);
-    const status = $("act-generation-status");
-    if (status) {
-      status.textContent = msg;
-      status.setAttribute("data-open-error-code", (res && res.code) || "open_failed");
-      if (res && res.detail) status.setAttribute("title", String(res.detail).slice(0, 240));
-    }
+    showArtifactCardFeedback(btn, "暂时无法打开成果");
     return res || { ok: false };
   }
-  setActProgress("已打开成果");
-  const status = $("act-generation-status");
-  if (status) {
-    status.textContent = "已打开成果";
-    status.removeAttribute("data-open-error-code");
-    status.removeAttribute("title");
-  }
-  setTimeout(() => {
-    if (($("act-progress") && $("act-progress").textContent) === "已打开成果") {
-      setActProgress("");
-    }
-    const st = $("act-generation-status");
-    if (st && st.textContent === "已打开成果") st.textContent = "";
-  }, 1800);
+  showArtifactCardFeedback(btn, "已打开成果");
   return res;
 }
 
@@ -7957,14 +8051,7 @@ async function handleGenerationPanelClick(ev) {
   if (!btn) return;
   const action = btn.getAttribute("data-action");
   const packageId = actBehalfState.activePackageId;
-  // Deliverable artifact open uses a single dedicated path. `open-primary` / `open-art`
-  // are retained only as backward-compatible aliases for older rendered cards.
-  if (
-    action === "open-deliverable-artifact" ||
-    action === "open-primary" ||
-    action === "open-art"
-  ) {
-    // Never let the click reach task/draft selection or overflow handlers.
+  if (action === "open-art" || action === "open-primary" || action === "open-deliverable-artifact") {
     if (ev && typeof ev.stopPropagation === "function") ev.stopPropagation();
     await openDeliverableArtifactFromButton(btn);
     return;
@@ -8271,6 +8358,12 @@ async function confirmActBehalfContext() {
 }
 
 function wireActBehalfUi() {
+  dmPerfMark("wireActBehalfUiCalls");
+  if (document.documentElement.dataset.dmActBehalfUiBound === "1") {
+    dmPerfMark("wireActBehalfUiSkipped");
+    return;
+  }
+  document.documentElement.dataset.dmActBehalfUiBound = "1";
   wireActTaskListUi();
   const back = $("btn-do-back-act");
   if (back) back.addEventListener("click", showDoHub);
@@ -8290,7 +8383,12 @@ function wireActBehalfUi() {
   $("btn-act-plan-save-draft")?.addEventListener("click", () => handleSaveDeliverablePlanDraft());
   $("btn-act-generate-from-plan")?.addEventListener("click", () => handleGenerateFromPlan());
   $("btn-act-plan-cancel-draft")?.addEventListener("click", () => handleCancelDeliverablePlanDraft());
-  $("act-generation-items")?.addEventListener("click", (ev) => handleGenerationPanelClick(ev));
+  const genItems = $("act-generation-items");
+  if (genItems && !genItems.dataset.wired) {
+    genItems.dataset.wired = "1";
+    dmPerf.listenerInstall.actGenerationItems += 1;
+    genItems.addEventListener("click", (ev) => handleGenerationPanelClick(ev));
+  }
   $("btn-act-learn-keep")?.addEventListener("click", () => handleResolveLearnConflict("keep_existing"));
   $("btn-act-learn-update")?.addEventListener("click", () => handleResolveLearnConflict("apply_new"));
   $("btn-act-learn-once")?.addEventListener("click", () => handleResolveLearnConflict("session_only"));

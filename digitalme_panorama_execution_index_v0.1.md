@@ -7,9 +7,9 @@
 代码实现基线：`2f1b7bd`（committed baseline；distill-me + doing-context + identity + collaboration + 全部新增功能）；历史 `cbde807fd1e40472d66fbe8f0810a0835e8bc816`（PAN-01S 族）；R1 `8d7e9b3`；R2 分支 `codex/r2-chat-sessions-migration`（实现保留）
 规格依据：见文内历史列表
 
-> **2026-07-29 TODAY（非本索引主线）**：**TASK-QUALITY-STABILIZE-01-FIX-01B**（正式成果按钮端到端接线）已实现：`implemented` / `formal_renderer_open_path_repaired` / `automated_ui_tests_passed` / `owner_runtime_revalidation_pending`；分支 `codex/task-quality-stabilize-01-fix-artifact-open-ui`；基线 `8229721`。追踪确认正式路径 preload/IPC/main 名称一致；「已打开草稿任务。」来自任务列表 `openActBehalfTask` 旧进度残留，非成果按钮；唯一 action `open-deliverable-artifact` + 单一 `openDeliverableArtifactFromButton` + `stopPropagation`；真实按钮点击 UI 测试 `npm run test:artifact-open-ui` 42 passed（含故意失败 + 重启复点）。新增永久字段/Store/IPC 打开体系=0。等待 Owner 正式页复验。不得 push。
+> **2026-07-29 TODAY（非本索引主线）**：**GLOBAL-RENDERER-RESPONSIVENESS-01**（全局交互迟滞）已实现：`implemented` / `duplicate_listeners_removed` / `renderer_main_thread_work_reduced` / `automated_performance_tests_passed` / `owner_runtime_acceptance_pending`；分支 `codex/global-renderer-responsiveness-01`；基线 `6bff2ad`。根因：≈2.1MB package store 同步 parse/pretty-write 阻塞 main/OS 菜单。已缓存三 store + 紧凑 JSON + listener 幂等 + 增强面板节流。FIX-01C 暂停。等待 Owner 先验菜单/按钮响应。不得 push。
 >
-> **2026-07-29（前序）**：**TASK-QUALITY-STABILIZE-01-FIX-01A**（打开验收 probe / UI 反馈）已实现：`implemented` / `automated_tests_passed` / `acceptance_probe_repaired` / `artifact_open_owner_revalidation_pending`；分支 `codex/task-quality-stabilize-01-fix-01a-open-acceptance`；基线 `dce5b29`。FIX-01 Electron 通过结论已撤回。不得 push。
+> **2026-07-29（前序）**：**TASK-QUALITY-STABILIZE-01-FIX-01B**（正式成果按钮端到端接线）已实现：`implemented` / `formal_renderer_open_path_repaired` / `automated_ui_tests_passed` / `owner_runtime_revalidation_pending`；分支 `codex/task-quality-stabilize-01-fix-artifact-open-ui`；基线 `8229721`。因全局响应性回归，成果打开验收 **blocked** 直至 RESPONSIVENESS-01 Owner 通过。不得 push。
 >
 > **2026-07-29（前序）**：**TASK-QUALITY-STABILIZE-01-FIX-01**（成果打开链路）已实现：`implemented` / `automated_tests_passed` / `artifact_open_restored` / `owner_runtime_acceptance_pending`；分支 `codex/task-quality-stabilize-01-fix-artifact-open`；基线 `48af0b4`。不得单独标 Owner 通过。
 >
