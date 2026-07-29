@@ -3167,6 +3167,18 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  position: relative;
+  z-index: 0;
+}
+.act-gen-item .builder-actions {
+  position: relative;
+  z-index: 2;
+}
+.act-gen-item .builder-actions button[data-action="open-deliverable-artifact"] {
+  position: relative;
+  z-index: 3;
+  pointer-events: auto;
+  cursor: pointer;
 }
 .act-gen-item-head {
   display: flex;

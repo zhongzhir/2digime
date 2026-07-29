@@ -7800,6 +7800,11 @@ async function refreshActGenerationPanel(packageId) {
     actBehalfState.taskAuthStatus = view.authorizationStatus || null;
     dmPerfMark("generationPanelRenderCount");
     window.DeliverablePlannerUi.renderGenerationPanel(view);
+    // Safety: bind even if planner hook missed (innerHTML rebuild clears dataset.openBound).
+    const items = $("act-generation-items");
+    if (items && typeof bindArtifactOpenButtons === "function") {
+      bindArtifactOpenButtons(items);
+    }
     const dels = (view.deliverables || []).filter((d) => d && d.planDisposition === "included");
     const anyBusy = dels.some(
       (d) =>
@@ -7951,10 +7956,21 @@ async function handleGenerateFromPlan() {
   await refreshActTaskList();
 }
 
-// Single production entry for opening a finished deliverable artifact from a card.
+// Direct-bound artifact open (FIX-01C). No parent-container delegation for open buttons.
 // Differences between baseline / enhanced / legacy / package / partial deliverables
 // are resolved by main from the stable Version / ArtifactRef ids — never guessed here.
-function showArtifactCardFeedback(button, text) {
+
+function logArtifactOpen(phase, extra) {
+  try {
+    const payload = Object.assign({ phase }, extra || {});
+    // Short fields only — never body / store / absolute paths.
+    console.info("[artifact-open]", payload);
+  } catch {
+    /* ignore */
+  }
+}
+
+function showArtifactOpenErrorNearButton(button, text) {
   if (!button) return;
   const card = button.closest(".act-gen-item") || button.parentElement;
   if (!card) return;
@@ -7971,54 +7987,123 @@ function showArtifactCardFeedback(button, text) {
   if (text) {
     fb._dmClearTimer = setTimeout(() => {
       if (fb.textContent === text) fb.textContent = "";
-    }, 1800);
+    }, 2200);
   }
+}
+
+async function handleArtifactOpenButtonClick(event) {
+  if (event && typeof event.preventDefault === "function") event.preventDefault();
+  if (event && typeof event.stopPropagation === "function") event.stopPropagation();
+  const button = event && event.currentTarget;
+  if (!button) return;
+  await openDeliverableArtifactFromButton(button);
+}
+
+function bindArtifactOpenButtons(container) {
+  if (!container || typeof container.querySelectorAll !== "function") return 0;
+  const buttons = container.querySelectorAll('[data-action="open-deliverable-artifact"]');
+  let bound = 0;
+  for (const button of buttons) {
+    if (button.dataset.openBound === "true") continue;
+    button.dataset.openBound = "true";
+    button.type = button.type || "button";
+    button.addEventListener("click", handleArtifactOpenButtonClick);
+    bound += 1;
+  }
+  try {
+    dmPerf.directOpenButtonsBound = (dmPerf.directOpenButtonsBound || 0) + bound;
+  } catch {
+    /* ignore */
+  }
+  return bound;
+}
+
+// Expose for deliverable-planner after each generation-panel rebuild.
+try {
+  window.bindArtifactOpenButtons = bindArtifactOpenButtons;
+} catch {
+  /* ignore */
 }
 
 async function openDeliverableArtifactFromButton(btn) {
   if (!btn) return { ok: false };
-  if (btn.disabled || btn.getAttribute("data-opening") === "1") return { ok: false };
-  dmPerfMark("artifactOpenHandlerCalls");
-  const rendersBefore = {
-    taskList: dmPerf.taskListRenderCount,
-    generation: dmPerf.generationPanelRenderCount,
-  };
-  const artifactId = btn.getAttribute("data-artifact-id");
-  const ids = {
-    taskId: btn.getAttribute("data-task-id") || actBehalfState.taskId || undefined,
-    deliverableId: btn.getAttribute("data-deliverable-id") || undefined,
-    versionId: btn.getAttribute("data-version-id") || undefined,
-    artifactId: artifactId || undefined,
-    artifactRefId: artifactId || undefined,
-  };
+  // Guard rapid re-entry; still show failure for incomplete dataset below.
+  if (btn.getAttribute("data-opening") === "1") return { ok: false };
+  if (btn.getAttribute("data-open-cooldown") === "1") return { ok: false };
 
-  // Immediate local feedback BEFORE any IPC. Must not wait on main-thread store work.
-  const originalLabel = btn.textContent;
+  // FIRST: visible feedback before any dataset read or preload call.
+  const originalText = (btn.textContent || "打开成果").trim() || "打开成果";
   btn.setAttribute("data-opening", "1");
+  btn.setAttribute("data-did-show-opening", "1");
   btn.disabled = true;
   btn.textContent = "正在打开…";
-  showArtifactCardFeedback(btn, "正在打开…");
+  dmPerfMark("artifactOpenHandlerCalls");
+
+  function clearOpeningState(nextLabel) {
+    btn.disabled = false;
+    btn.removeAttribute("data-opening");
+    btn.textContent = nextLabel || "打开成果";
+    // Brief cooldown so a second click in the same tick / rapid burst cannot double-fire.
+    btn.setAttribute("data-open-cooldown", "1");
+    setTimeout(() => {
+      try {
+        btn.removeAttribute("data-open-cooldown");
+      } catch {
+        /* ignore */
+      }
+    }, 400);
+  }
+
+  const artifactId = (btn.dataset && btn.dataset.artifactId) || btn.getAttribute("data-artifact-id") || "";
+  const taskId =
+    (btn.dataset && btn.dataset.taskId) ||
+    btn.getAttribute("data-task-id") ||
+    actBehalfState.taskId ||
+    "";
+  const deliverableId =
+    (btn.dataset && btn.dataset.deliverableId) || btn.getAttribute("data-deliverable-id") || "";
+  const versionId =
+    (btn.dataset && btn.dataset.versionId) || btn.getAttribute("data-version-id") || "";
+
+  logArtifactOpen("direct_handler_entered", { artifactId: artifactId || null });
+
   // Clear leftover distant progress so it cannot look like the open result.
   const progressEl = $("act-progress");
   if (progressEl && /已打开草稿任务|已恢复任务意图|已打开成果/.test(progressEl.textContent || "")) {
     setActProgress("");
   }
 
-  if (
-    !artifactId ||
-    !window.digitalMe ||
-    typeof window.digitalMe.actBehalfOpenArtifact !== "function"
-  ) {
-    showArtifactCardFeedback(btn, "暂时无法打开成果");
-    btn.disabled = false;
-    btn.removeAttribute("data-opening");
-    btn.textContent = originalLabel || "打开成果";
-    return { ok: false };
+  if (!artifactId) {
+    logArtifactOpen("failure_feedback_rendered", { reason: "missing_artifact_id" });
+    clearOpeningState("打开成果");
+    showArtifactOpenErrorNearButton(btn, "暂时无法打开成果。");
+    return { ok: false, code: "invalid_artifact_reference" };
   }
+
+  if (!window.digitalMe || typeof window.digitalMe.actBehalfOpenArtifact !== "function") {
+    logArtifactOpen("failure_feedback_rendered", { reason: "preload_missing", artifactId });
+    clearOpeningState("打开成果");
+    showArtifactOpenErrorNearButton(btn, "暂时无法打开成果。");
+    return { ok: false, code: "preload_missing" };
+  }
+
+  const ids = {
+    taskId: taskId || undefined,
+    deliverableId: deliverableId || undefined,
+    versionId: versionId || undefined,
+    artifactId,
+    artifactRefId: artifactId,
+  };
 
   let res = null;
   try {
+    logArtifactOpen("preload_call_started", { artifactId });
     res = await window.digitalMe.actBehalfOpenArtifact(ids);
+    logArtifactOpen("preload_result_received", {
+      artifactId,
+      ok: !!(res && res.ok),
+      code: (res && res.code) || null,
+    });
   } catch (err) {
     res = {
       ok: false,
@@ -8026,23 +8111,28 @@ async function openDeliverableArtifactFromButton(btn) {
       message: "暂时无法打开成果。",
       detail: err && err.message ? String(err.message).slice(0, 240) : undefined,
     };
-  } finally {
-    btn.disabled = false;
-    btn.removeAttribute("data-opening");
-    btn.textContent = originalLabel || "打开成果";
+    logArtifactOpen("preload_result_received", { artifactId, ok: false, code: "open_failed" });
   }
-
-  // Open path must not rebuild task list / generation panel.
-  dmPerf.lastArtifactOpenRenders = {
-    taskListDelta: dmPerf.taskListRenderCount - rendersBefore.taskList,
-    generationDelta: dmPerf.generationPanelRenderCount - rendersBefore.generation,
-  };
 
   if (!res || !res.ok) {
-    showArtifactCardFeedback(btn, "暂时无法打开成果");
+    clearOpeningState("打开成果");
+    showArtifactOpenErrorNearButton(btn, "暂时无法打开成果。");
+    logArtifactOpen("failure_feedback_rendered", {
+      artifactId,
+      code: (res && res.code) || "open_failed",
+    });
     return res || { ok: false };
   }
-  showArtifactCardFeedback(btn, "已打开成果");
+
+  btn.textContent = "已打开成果";
+  logArtifactOpen("success_feedback_rendered", { artifactId });
+  setTimeout(() => {
+    if (btn.textContent === "已打开成果" || btn.getAttribute("data-opening") === "1") {
+      clearOpeningState(
+        originalText === "正在打开…" || originalText === "已打开成果" ? "打开成果" : originalText
+      );
+    }
+  }, 1000);
   return res;
 }
 
@@ -8051,7 +8141,12 @@ async function handleGenerationPanelClick(ev) {
   if (!btn) return;
   const action = btn.getAttribute("data-action");
   const packageId = actBehalfState.activePackageId;
-  if (action === "open-art" || action === "open-primary" || action === "open-deliverable-artifact") {
+  // New cards use direct binding on open-deliverable-artifact — do not also handle here.
+  // Historical open-primary / open-art kept only for unre-rendered legacy DOM.
+  if (action === "open-deliverable-artifact") {
+    return;
+  }
+  if (action === "open-art" || action === "open-primary") {
     if (ev && typeof ev.stopPropagation === "function") ev.stopPropagation();
     await openDeliverableArtifactFromButton(btn);
     return;

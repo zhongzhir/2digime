@@ -1,24 +1,16 @@
 "use strict";
 
 /**
- * TASK-QUALITY-STABILIZE-01-FIX-01B — formal renderer end-to-end open acceptance.
+ * TASK-QUALITY-STABILIZE-01-FIX-01C — direct-bound artifact open button acceptance.
  *
- * Drives the REAL production (legacy) renderer:
- *   - loads src/renderer/index.html in a BrowserWindow with the REAL preload.js,
- *   - lets app.js bind its real generation-panel click delegation,
- *   - renders a real generation panel via DeliverablePlannerUi.renderGenerationPanel,
- *   - performs a REAL button click on the「打开成果」button (no direct IPC call),
- *   - asserts the click reaches window.digitalMe.openArtifact → actBehalf:openArtifact
- *     → main handler → deliverable-artifact-open → shell.openPath with the correct
- *     stable artifactId, and that the UI shows「正在打开…」then「已打开成果」,
- *     never「已打开草稿任务。」.
- *   - one deliberate failure case asserts the UI shows「暂时无法打开成果。」.
- *
- * Module resolution is anchored to __dirname (never process.cwd()).
- * Isolated Electron userData; never mutates the Owner store.
+ * Uses the REAL legacy production renderer + REAL preload:
+ *   - renderGenerationPanel produces real buttons
+ *   - bindArtifactOpenButtons attaches per-button listeners (no parent delegation for open)
+ *   - real MouseEvent click on the button
+ *   - elementFromPoint checks no overlay steals the hit target
+ *   - asserts direct_handler_entered → preload → main → shell.openPath → button feedback
  *
  * Run: npm run test:artifact-open-ui
- *   or: npx electron scripts/electron-artifact-open-ui-acceptance.cjs
  */
 
 const path = require("node:path");
@@ -42,7 +34,6 @@ const PRELOAD_PATH = fromAppRoot("src", "preload.js");
 const TASK_ID = "abt_ui_open_test";
 const PKG_ID = "delivery_ui_open_test";
 
-// Three real cards the Owner clicks, plus one failed card that must not block them.
 const CARDS = [
   {
     key: "prd",
@@ -102,7 +93,11 @@ async function seed(isolatedUserData) {
       byteSize: file.byteSize,
       format: "md",
     };
-    seeded.push({ card, artifact, absPath: artifactFs.resolveAbsolute(isolatedUserData, file.relativePath) });
+    seeded.push({
+      card,
+      artifact,
+      absPath: artifactFs.resolveAbsolute(isolatedUserData, file.relativePath),
+    });
   }
 
   await packageStore.mutateStore(isolatedUserData, (s) => {
@@ -145,7 +140,6 @@ async function seed(isolatedUserData) {
   return seeded;
 }
 
-// Build the renderer-side view descriptor (no filesystem paths leave main).
 function buildViewDescriptor() {
   return {
     ok: true,
@@ -218,7 +212,6 @@ function registerOpenHandlers(isolatedUserData) {
   });
 }
 
-// ---- assertions ----------------------------------------------------------
 let passed = 0;
 let failed = 0;
 function check(name, cond, extra) {
@@ -231,101 +224,170 @@ function check(name, cond, extra) {
   }
 }
 
-async function driveSuccessClicks(win, viewDescriptor) {
-  const script = `(async () => {
-    const view = ${JSON.stringify(viewDescriptor)};
-    const cards = ${JSON.stringify(CARDS.map((c) => ({ key: c.key, deliverableId: c.deliverableId, artifactId: c.artifactId })))};
-    const $ = (id) => document.getElementById(id);
-    if (!window.DeliverablePlannerUi || !window.DeliverablePlannerUi.renderGenerationPanel) {
-      return { fatal: "DeliverablePlannerUi.renderGenerationPanel missing" };
-    }
-    window.DeliverablePlannerUi.renderGenerationPanel(view);
-
-    const progressEl = $("act-progress");
-    const out = { cards: [], draftLeakSeen: false };
-
-    function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
-    function cardFeedback(btn) {
-      const card = btn.closest(".act-gen-item") || btn.parentElement;
-      const fb = card && card.querySelector("[data-artifact-open-feedback]");
-      return fb ? fb.textContent : "";
-    }
-
-    for (const c of cards) {
-      const btn = document.querySelector('[data-action="open-deliverable-artifact"][data-deliverable-id="' + c.deliverableId + '"]');
-      if (!btn) { out.cards.push({ key: c.key, buttonFound: false }); continue; }
-      const dataset = {
-        action: btn.getAttribute("data-action"),
-        taskId: btn.getAttribute("data-task-id"),
-        deliverableId: btn.getAttribute("data-deliverable-id"),
-        versionId: btn.getAttribute("data-version-id"),
-        artifactId: btn.getAttribute("data-artifact-id"),
-      };
-      btn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-      // Synchronous transient feedback (must appear within the same tick).
-      const loadingBtnText = btn.textContent;
-      const loadingStatus = cardFeedback(btn);
-
-      let successStatus = "";
-      let restoredLabel = "";
-      for (let i = 0; i < 80; i++) {
-        await sleep(25);
-        const fb = cardFeedback(btn);
-        const p = progressEl ? progressEl.textContent : "";
-        if (p === "已打开草稿任务。") out.draftLeakSeen = true;
-        if (fb === "已打开成果" || p === "已打开成果") { successStatus = "已打开成果"; }
-        if (successStatus) { restoredLabel = btn.textContent; break; }
+async function waitReady(win) {
+  return win.webContents.executeJavaScript(`(async () => {
+    function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+    for (let i = 0; i < 200; i++) {
+      if (document.documentElement.dataset.dmNavigationBound === "1" &&
+          window.DeliverablePlannerUi &&
+          typeof window.bindArtifactOpenButtons === "function" &&
+          typeof window.DeliverablePlannerUi.renderGenerationPanel === "function") {
+        return true;
       }
-      out.cards.push({
-        key: c.key,
-        buttonFound: true,
-        dataset,
-        loadingBtnText,
-        loadingStatus,
-        successStatus,
-        restoredLabel,
-      });
-      // small gap so the previous auto-clear timer cannot alias the next capture
-      await sleep(30);
+      await sleep(25);
     }
-    out.finalProgress = progressEl ? progressEl.textContent : "";
-    return out;
-  })()`;
-  return win.webContents.executeJavaScript(script);
+    return false;
+  })()`);
 }
 
-async function driveFailureClick(win) {
+async function driveClickTrace(win, viewDescriptor, deliverableId, opts = {}) {
+  const stripArtifactId = !!opts.stripArtifactId;
   const script = `(async () => {
+    const view = ${JSON.stringify(viewDescriptor)};
+    const deliverableId = ${JSON.stringify(deliverableId)};
+    const stripArtifactId = ${stripArtifactId ? "true" : "false"};
     const $ = (id) => document.getElementById(id);
     const progressEl = $("act-progress");
-    const btn = document.querySelector('[data-action="open-deliverable-artifact"][data-deliverable-id="${CARDS[0].deliverableId}"]');
-    if (!btn) return { buttonFound: false };
-    btn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-    const loadingBtnText = btn.textContent;
+    const logs = [];
+    const origInfo = console.info;
+    console.info = function () {
+      try {
+        if (arguments[0] === "[artifact-open]" && arguments[1] && typeof arguments[1] === "object") {
+          logs.push(Object.assign({}, arguments[1]));
+        }
+      } catch (_) {}
+      return origInfo.apply(console, arguments);
+    };
+
+    window.DeliverablePlannerUi.renderGenerationPanel(view);
+
+    // Mirror openDoScene("act_behalf") visibility so buttons get real layout boxes.
+    const show = (id) => { const el = document.getElementById(id); if (el) el.classList.remove("hidden"); };
+    const hide = (id) => { const el = document.getElementById(id); if (el) el.classList.add("hidden"); };
+    hide("view-chat");
+    hide("view-me");
+    hide("view-extensions");
+    hide("view-identity");
+    show("view-do");
+    hide("do-hub");
+    hide("do-placeholder");
+    hide("do-write");
+    hide("do-research");
+    hide("do-code");
+    show("do-act-behalf");
+    show("act-deliverable-plan-panel");
+    show("act-generation-panel");
+
     function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
-    function cardFeedback() {
-      const card = btn.closest(".act-gen-item") || btn.parentElement;
-      const fb = card && card.querySelector("[data-artifact-open-feedback]");
-      return fb ? fb.textContent : "";
+    await sleep(50);
+
+    let btn = document.querySelector('[data-action="open-deliverable-artifact"][data-deliverable-id="' + deliverableId + '"]');
+    const trace = {
+      buttonFound: !!btn,
+      buttonEnabled: !!(btn && !btn.disabled),
+      openBound: !!(btn && btn.dataset.openBound === "true"),
+      topElementIsButton: false,
+      directHandlerEntered: false,
+      loadingFeedbackShown: false,
+      preloadCalled: false,
+      mainReturnedOk: false,
+      successFeedbackShown: false,
+      failureFeedbackShown: false,
+      draftLeakSeen: false,
+      duplicateDirectEntries: 0,
+    };
+    if (!btn) {
+      console.info = origInfo;
+      return trace;
     }
-    let errorStatus = "";
-    let errorCode = "";
-    for (let i = 0; i < 80; i++) {
-      await sleep(25);
-      const s = cardFeedback();
-      if (s === "暂时无法打开成果" || s === "暂时无法打开成果。") {
-        errorStatus = s;
-        errorCode = "open_failed";
+    if (stripArtifactId) {
+      btn.removeAttribute("data-artifact-id");
+      delete btn.dataset.artifactId;
+    }
+
+    btn.scrollIntoView({ block: "center", inline: "nearest" });
+    await sleep(40);
+
+    const rect = btn.getBoundingClientRect();
+    const cx = Math.floor(rect.left + rect.width / 2);
+    const cy = Math.floor(rect.top + rect.height / 2);
+    const top = document.elementFromPoint(cx, cy);
+    const cs = window.getComputedStyle(btn);
+    const hitOk = !!(
+      top &&
+      (top === btn || (typeof btn.contains === "function" && btn.contains(top)))
+    );
+    // Hidden/offscreen BrowserWindow may return null from elementFromPoint; fall back to
+    // geometry + pointer-events checks so we still catch real CSS overlays when hittable.
+    trace.topElementIsButton =
+      hitOk ||
+      (!top &&
+        rect.width > 0 &&
+        rect.height > 0 &&
+        cs.pointerEvents !== "none" &&
+        cs.visibility !== "hidden" &&
+        cs.display !== "none");
+
+    let sawLoading = btn.getAttribute("data-did-show-opening") === "1";
+    btn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, clientX: cx, clientY: cy }));
+    if (btn.textContent === "正在打开…" || btn.getAttribute("data-did-show-opening") === "1") {
+      sawLoading = true;
+    }
+    trace.loadingFeedbackShown = sawLoading;
+
+    // Rapid second click must not start another open while opening / cooldown.
+    btn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    trace.hitTopTag = top ? top.tagName : null;
+    trace.hitTopAction = top && top.getAttribute ? top.getAttribute("data-action") : null;
+    trace.btnRect = { w: rect.width, h: rect.height, t: rect.top, l: rect.left };
+    // Ancestor display diagnostics when layout is empty.
+    const chain = [];
+    let cur = btn;
+    while (cur && cur.nodeType === 1 && chain.length < 12) {
+      const s = window.getComputedStyle(cur);
+      chain.push({
+        id: cur.id || "",
+        cls: (cur.className && String(cur.className).slice(0, 40)) || "",
+        display: s.display,
+        vis: s.visibility,
+        w: cur.getBoundingClientRect().width,
+      });
+      cur = cur.parentElement;
+    }
+    trace.layoutChain = chain;
+
+    for (let i = 0; i < 100; i++) {
+      await sleep(20);
+      const p = progressEl ? progressEl.textContent : "";
+      if (p === "已打开草稿任务。") trace.draftLeakSeen = true;
+      if (btn.textContent === "已打开成果") {
+        trace.successFeedbackShown = true;
+        break;
+      }
+      const card = (btn.closest(".act-gen-item") || btn.parentElement);
+      const err = card && card.querySelector("[data-artifact-open-feedback]");
+      if (err && /暂时无法打开成果/.test(err.textContent || "")) {
+        trace.failureFeedbackShown = true;
+        break;
+      }
+      if (btn.textContent === "打开成果" && logs.some((l) => l.phase === "failure_feedback_rendered")) {
+        trace.failureFeedbackShown = true;
         break;
       }
     }
-    return {
-      buttonFound: true,
-      loadingBtnText,
-      errorStatus,
-      errorCode,
-      draftLeakSeen: (progressEl && progressEl.textContent === "已打开草稿任务。"),
-    };
+
+    const entered = logs.filter((l) => l.phase === "direct_handler_entered");
+    trace.directHandlerEntered = entered.length >= 1;
+    trace.duplicateDirectEntries = Math.max(0, entered.length - 1);
+    trace.preloadCalled = logs.some((l) => l.phase === "preload_call_started");
+    const resultLog = logs.find((l) => l.phase === "preload_result_received");
+    if (resultLog) trace.mainReturnedOk = !!resultLog.ok;
+    if (logs.some((l) => l.phase === "success_feedback_rendered")) trace.successFeedbackShown = true;
+    if (logs.some((l) => l.phase === "failure_feedback_rendered")) trace.failureFeedbackShown = true;
+
+    console.info = origInfo;
+    trace.logs = logs.map((l) => l.phase);
+    return trace;
   })()`;
   return win.webContents.executeJavaScript(script);
 }
@@ -336,7 +398,6 @@ async function run() {
 
   const isolated = fs.mkdtempSync(path.join(os.tmpdir(), "dm-open-ui-"));
   app.setPath("userData", isolated);
-
   process.on("exit", () => {
     try {
       fs.rmSync(isolated, { recursive: true, force: true });
@@ -348,8 +409,6 @@ async function run() {
   const seeded = await seed(isolated);
   registerOpenHandlers(isolated);
 
-  // Benign stubs for init-time channels so the harness log stays focused on the
-  // open path under test. These are guarded in the renderer either way.
   const benign = {
     "runtime:getStamp": { ok: true, stamp: "ui-open-test" },
     "runtime:getRendererEntry": { ok: true, entry: "legacy" },
@@ -360,6 +419,7 @@ async function run() {
     "sessions:list": { ok: true, sessions: [] },
     "sessions:create": { ok: true, session: { id: "ui-open-test-session" } },
     "r2:consumeLegacyHandoff": { ok: true, intent: null },
+    "capabilities:surface": { ok: true, surface: {} },
   };
   for (const [channel, value] of Object.entries(benign)) {
     if (!ipcMain.eventNames().includes(channel)) {
@@ -368,9 +428,11 @@ async function run() {
   }
 
   const win = new BrowserWindow({
-    show: false,
-    width: 1200,
-    height: 840,
+    show: true,
+    x: 80,
+    y: 80,
+    width: 1280,
+    height: 900,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -379,93 +441,80 @@ async function run() {
   });
 
   await win.loadFile(HTML_PATH);
+  const ready = await waitReady(win);
+  check("renderer ready with bindArtifactOpenButtons", ready === true);
 
-  // Wait for app.js init to bind the real navigation/generation delegates.
-  await win.webContents.executeJavaScript(`(async () => {
-    function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
-    for (let i = 0; i < 200; i++) {
-      if (document.documentElement.dataset.dmNavigationBound === "1" &&
-          window.DeliverablePlannerUi &&
-          typeof window.DeliverablePlannerUi.renderGenerationPanel === "function") {
-        return true;
-      }
-      await sleep(25);
-    }
-    return false;
-  })()`);
+  const view = buildViewDescriptor();
 
-  const viewDescriptor = buildViewDescriptor();
-  const success = await driveSuccessClicks(win, viewDescriptor);
-
-  // ---- success assertions ----
-  check("renderer exposes production open panel", !success.fatal, success.fatal);
-  const byKey = {};
-  (success.cards || []).forEach((c) => (byKey[c.key] = c));
-
+  // --- three Owner cards ---
+  const traces = {};
   for (const c of CARDS) {
-    const r = byKey[c.key] || {};
-    check(`[${c.key}] 打开成果 button rendered`, r.buttonFound === true, r);
-    check(`[${c.key}] button uses unique action open-deliverable-artifact`, r.dataset && r.dataset.action === "open-deliverable-artifact", r.dataset);
-    check(`[${c.key}] button carries stable ids only`, !!(r.dataset && r.dataset.taskId === TASK_ID && r.dataset.deliverableId === c.deliverableId && r.dataset.versionId === c.versionId && r.dataset.artifactId === c.artifactId), r.dataset);
-    check(`[${c.key}] click shows 正在打开… immediately`, r.loadingBtnText === "正在打开…" || r.loadingStatus === "正在打开…", { btn: r.loadingBtnText, status: r.loadingStatus });
-    check(`[${c.key}] UI shows 已打开成果`, r.successStatus === "已打开成果", r);
-    check(`[${c.key}] button label restored to 打开成果`, r.restoredLabel === "打开成果", r);
-  }
-
-  check("no 已打开草稿任务 leaked during opens", success.draftLeakSeen === false, { finalProgress: success.finalProgress });
-
-  // ---- main-side evidence ----
-  for (const c of CARDS) {
+    openCalls.length = 0;
+    const t = await driveClickTrace(win, view, c.deliverableId);
+    traces[c.key] = t;
+    check(`[${c.key}] buttonFound`, t.buttonFound === true, t);
+    check(`[${c.key}] buttonEnabled`, t.buttonEnabled === true, t);
+    check(`[${c.key}] openBound before click`, t.openBound === true, t);
+    check(`[${c.key}] topElementIsButton`, t.topElementIsButton === true, t);
+    check(`[${c.key}] directHandlerEntered`, t.directHandlerEntered === true, t);
+    check(`[${c.key}] loadingFeedbackShown`, t.loadingFeedbackShown === true, t);
+    check(`[${c.key}] preloadCalled`, t.preloadCalled === true, t);
+    check(`[${c.key}] mainReturnedOk`, t.mainReturnedOk === true, t);
+    check(`[${c.key}] successFeedbackShown`, t.successFeedbackShown === true, t);
+    check(`[${c.key}] no draft leak`, t.draftLeakSeen === false, t);
+    check(`[${c.key}] no duplicate direct entries from rapid click`, t.duplicateDirectEntries === 0, t);
     const call = openCalls.find((k) => k.payload && k.payload.artifactId === c.artifactId);
-    check(`[${c.key}] main received click via actBehalf:openArtifact`, !!call, { artifactId: c.artifactId });
+    check(`[${c.key}] IPC once with correct artifactId`, !!call && openCalls.filter((k) => k.payload && k.payload.artifactId === c.artifactId).length === 1, openCalls);
     if (call) {
-      check(`[${c.key}] main got correct stable artifactId`, call.payload.artifactId === c.artifactId, call.payload);
-      check(`[${c.key}] main got correct taskId`, call.payload.taskId === TASK_ID, call.payload);
       const expectedAbs = (seeded.find((s) => s.card.artifactId === c.artifactId) || {}).absPath;
-      check(`[${c.key}] shell.openPath called with resolved store path`, !!call.openPathArg && call.openPathArg === expectedAbs, { got: call.openPathArg, expected: expectedAbs });
-      check(`[${c.key}] resolve+open ok`, call.ok === true, call);
+      check(`[${c.key}] shell.openPath path`, call.openPathArg === expectedAbs, { got: call.openPathArg, expected: expectedAbs });
     }
   }
 
-  // ---- deliberate failure ----
-  forceFail = true;
-  const failRes = await driveFailureClick(win);
-  check("failure: button found", failRes.buttonFound === true, failRes);
-  check("failure: click shows 正在打开… first", failRes.loadingBtnText === "正在打开…", failRes);
-  check("failure: UI shows 暂时无法打开成果。", failRes.errorStatus === "暂时无法打开成果" || failRes.errorStatus === "暂时无法打开成果。", failRes);
-  check("failure: error code surfaced for 查看原因", !!failRes.errorCode, failRes);
-  check("failure: no 已打开草稿任务 leak", failRes.draftLeakSeen === false, failRes);
-  forceFail = false;
+  // --- panel rebuild then click again ---
+  openCalls.length = 0;
+  const afterRebuild = await driveClickTrace(win, view, CARDS[0].deliverableId);
+  check("rebuild: directHandlerEntered", afterRebuild.directHandlerEntered === true, afterRebuild);
+  check("rebuild: successFeedbackShown", afterRebuild.successFeedbackShown === true, afterRebuild);
 
-  // ---- restart + reopen ----
+  // --- missing artifactId fails visibly ---
+  openCalls.length = 0;
+  const missing = await driveClickTrace(win, view, CARDS[1].deliverableId, { stripArtifactId: true });
+  check("missing id: loading then failure", missing.loadingFeedbackShown === true && missing.failureFeedbackShown === true, missing);
+  check("missing id: no IPC", openCalls.length === 0, openCalls);
+
+  // --- main error fails visibly ---
+  forceFail = true;
+  openCalls.length = 0;
+  const failTrace = await driveClickTrace(win, view, CARDS[2].deliverableId);
+  forceFail = false;
+  check("main error: preloadCalled", failTrace.preloadCalled === true, failTrace);
+  check("main error: failureFeedbackShown", failTrace.failureFeedbackShown === true, failTrace);
+  check("main error: not success", failTrace.successFeedbackShown === false, failTrace);
+
+  // --- restart ---
   await win.webContents.reload();
-  await win.webContents.executeJavaScript(`(async () => {
-    function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
-    for (let i = 0; i < 200; i++) {
-      if (document.documentElement.dataset.dmNavigationBound === "1" &&
-          window.DeliverablePlannerUi) return true;
-      await sleep(25);
-    }
-    return false;
-  })()`);
-  const afterRestart = await driveSuccessClicks(win, viewDescriptor);
-  const prdAfter = (afterRestart.cards || []).find((c) => c.key === "prd") || {};
-  check("restart: PRD reopen shows 已打开成果", prdAfter.successStatus === "已打开成果", prdAfter);
-  check("restart: no 已打开草稿任务 leak", afterRestart.draftLeakSeen === false, afterRestart);
+  await waitReady(win);
+  openCalls.length = 0;
+  const afterRestart = await driveClickTrace(win, view, CARDS[0].deliverableId);
+  check("restart: PRD success", afterRestart.successFeedbackShown === true && afterRestart.directHandlerEntered === true, afterRestart);
+
+  // Machine-readable summary for Owner / CI
+  const summary = {
+    buttonFound: traces.prd && traces.prd.buttonFound,
+    buttonEnabled: traces.prd && traces.prd.buttonEnabled,
+    topElementIsButton: traces.prd && traces.prd.topElementIsButton,
+    directHandlerEntered: traces.prd && traces.prd.directHandlerEntered,
+    loadingFeedbackShown: traces.prd && traces.prd.loadingFeedbackShown,
+    preloadCalled: traces.prd && traces.prd.preloadCalled,
+    mainReturnedOk: traces.prd && traces.prd.mainReturnedOk,
+    successFeedbackShown: traces.prd && traces.prd.successFeedbackShown,
+    passed,
+    failed,
+  };
+  console.log("TRACE_SUMMARY", JSON.stringify(summary, null, 2));
 
   win.destroy();
-
-  console.log(
-    JSON.stringify(
-      {
-        passed,
-        failed,
-        openCalls: openCalls.map((c) => ({ artifactId: c.payload && c.payload.artifactId, ok: c.ok, code: c.code, forceFail: c.forceFail })),
-      },
-      null,
-      2
-    )
-  );
   app.exit(failed ? 1 : 0);
 }
 

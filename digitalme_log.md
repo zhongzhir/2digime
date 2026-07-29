@@ -5,6 +5,27 @@
 
 ---
 
+## 2026-07-29 TASK-QUALITY-STABILIZE-01-FIX-01C 正式成果按钮直接绑定 · 实施完成（待 Owner 复验）
+
+### 事实
+
+Owner @ `0341f30`：菜单/普通按钮已即时，但三个「打开成果」仍无「正在打开…」。判定正式 click handler 未执行。
+
+### 修复
+
+`bindArtifactOpenButtons`：渲染后对每个 `open-deliverable-artifact` 直接绑定（`currentTarget`）；`handleGenerationPanelClick` 不再处理新打开 action；反馈先于 IPC；有界日志；CSS 可点防护；正式 Electron click trace 48 passed。无全局 listener / 新 IPC / 新 Store / 新永久字段。
+
+### 状态
+
+```text
+implemented / direct_artifact_button_binding_added /
+formal_electron_click_trace_passed / owner_runtime_revalidation_pending
+```
+
+不得 push；不得标 artifact_open_validated。
+
+---
+
 ## 2026-07-29 GLOBAL-RENDERER-RESPONSIVENESS-01 全局交互迟滞 · 实施完成（待 Owner 验收）
 
 ### 事实

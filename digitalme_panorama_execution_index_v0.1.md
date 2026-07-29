@@ -7,9 +7,9 @@
 代码实现基线：`2f1b7bd`（committed baseline；distill-me + doing-context + identity + collaboration + 全部新增功能）；历史 `cbde807fd1e40472d66fbe8f0810a0835e8bc816`（PAN-01S 族）；R1 `8d7e9b3`；R2 分支 `codex/r2-chat-sessions-migration`（实现保留）
 规格依据：见文内历史列表
 
-> **2026-07-29 TODAY（非本索引主线）**：**GLOBAL-RENDERER-RESPONSIVENESS-01**（全局交互迟滞）已实现：`implemented` / `duplicate_listeners_removed` / `renderer_main_thread_work_reduced` / `automated_performance_tests_passed` / `owner_runtime_acceptance_pending`；分支 `codex/global-renderer-responsiveness-01`；基线 `6bff2ad`。根因：≈2.1MB package store 同步 parse/pretty-write 阻塞 main/OS 菜单。已缓存三 store + 紧凑 JSON + listener 幂等 + 增强面板节流。FIX-01C 暂停。等待 Owner 先验菜单/按钮响应。不得 push。
+> **2026-07-29 TODAY（非本索引主线）**：**TASK-QUALITY-STABILIZE-01-FIX-01C**（正式成果按钮直接绑定）已实现：`implemented` / `direct_artifact_button_binding_added` / `formal_electron_click_trace_passed` / `owner_runtime_revalidation_pending`；分支 `codex/task-quality-stabilize-01-fix-artifact-direct-binding`；基线 `0341f30`。Owner 确认 RESPONSIVENESS-01 后菜单已即时，但打开成果仍无反馈 → 改为每按钮直接绑定（非 document capture）。正式 UI click trace 48 passed。等待 Owner 复验三个「打开成果」。不得 push。
 >
-> **2026-07-29（前序）**：**TASK-QUALITY-STABILIZE-01-FIX-01B**（正式成果按钮端到端接线）已实现：`implemented` / `formal_renderer_open_path_repaired` / `automated_ui_tests_passed` / `owner_runtime_revalidation_pending`；分支 `codex/task-quality-stabilize-01-fix-artifact-open-ui`；基线 `8229721`。因全局响应性回归，成果打开验收 **blocked** 直至 RESPONSIVENESS-01 Owner 通过。不得 push。
+> **2026-07-29（前序）**：**GLOBAL-RENDERER-RESPONSIVENESS-01**（全局交互迟滞）已实现：`implemented` / `duplicate_listeners_removed` / `renderer_main_thread_work_reduced` / `automated_performance_tests_passed` / `owner_runtime_acceptance_pending`；分支 `codex/global-renderer-responsiveness-01`；基线 `6bff2ad`。根因：≈2.1MB package store 同步 parse/pretty-write 阻塞 main/OS 菜单。不得 push。
 >
 > **2026-07-29（前序）**：**TASK-QUALITY-STABILIZE-01-FIX-01**（成果打开链路）已实现：`implemented` / `automated_tests_passed` / `artifact_open_restored` / `owner_runtime_acceptance_pending`；分支 `codex/task-quality-stabilize-01-fix-artifact-open`；基线 `48af0b4`。不得单独标 Owner 通过。
 >

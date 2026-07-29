@@ -217,7 +217,7 @@ async function main() {
 
   test("artifact open uses card-local feedback and does not sticky-write bottom progress", () => {
     const src = fs.readFileSync(fromAppRoot("src", "renderer", "app.js"), "utf8");
-    assert.ok(src.includes("showArtifactCardFeedback"));
+    assert.ok(src.includes("showArtifactOpenErrorNearButton") || src.includes("bindArtifactOpenButtons"));
     assert.ok(src.includes('btn.textContent = "正在打开…"'));
     assert.ok(!src.includes('setActProgress("已打开草稿任务。")'));
     assert.ok(!src.includes('setActProgress("已打开成果")'));

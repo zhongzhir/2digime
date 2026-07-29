@@ -750,7 +750,7 @@
             }
             secondaryArts.forEach((a) => {
               moreItems.push(
-                `<button type="button" class="btn-ghost" data-action="open-art" data-artifact-id="${escapeAttr(
+                `<button type="button" class="btn-ghost" data-action="open-deliverable-artifact" data-artifact-id="${escapeAttr(
                   a.id
                 )}" data-version-id="${escapeAttr(ver.id)}" data-deliverable-id="${escapeAttr(
                   d.id
@@ -784,6 +784,10 @@
       disabled: !canGenerate || anyGenerating || anyRepairing || onlyFailed,
       authRevoked,
     });
+    // Direct-bind open buttons after every panel rebuild (no parent-container delegation).
+    if (typeof global.bindArtifactOpenButtons === "function") {
+      global.bindArtifactOpenButtons(itemsRoot);
+    }
   }
 
   function escapeAttr(s) {

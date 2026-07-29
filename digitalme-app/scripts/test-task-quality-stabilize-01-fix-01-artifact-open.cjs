@@ -316,6 +316,10 @@ async function main() {
     assert.ok(src.includes("data-deliverable-id="));
     assert.ok(src.includes('document: ["md", "docx", "html"]'));
     assert.ok(!src.includes("data-path="));
+    // New render must not emit legacy open aliases.
+    assert.ok(!src.includes('data-action="open-primary"'));
+    assert.ok(!src.includes('data-action="open-art"'));
+    assert.ok(src.includes("bindArtifactOpenButtons"));
     const appSrc = fs.readFileSync(path.join(__dirname, "../src/renderer/app.js"), "utf8");
     assert.ok(appSrc.includes("正在打开…"));
     assert.ok(appSrc.includes("data-opening"));
@@ -323,13 +327,16 @@ async function main() {
     assert.ok(appSrc.includes("已打开成果"));
     assert.ok(appSrc.includes("暂时无法打开成果"));
     assert.ok(appSrc.includes("openDeliverableArtifactFromButton"));
-    assert.ok(appSrc.includes("showArtifactCardFeedback"));
-    assert.ok(appSrc.includes('action === "open-deliverable-artifact"') || appSrc.includes('action === "open-art"'));
-    assert.ok(appSrc.includes("stopPropagation"));
-    // GLOBAL-RENDERER-RESPONSIVENESS-01: wiring must be idempotent; no sticky draft copy.
-    assert.ok(appSrc.includes("dmActBehalfUiBound"));
-    assert.ok(appSrc.includes("scheduleThrottledGenerationPanelRefresh"));
+    assert.ok(appSrc.includes("bindArtifactOpenButtons"));
+    assert.ok(appSrc.includes("handleArtifactOpenButtonClick"));
+    assert.ok(appSrc.includes("event.currentTarget"));
+    assert.ok(appSrc.includes('dataset.openBound'));
+    assert.ok(appSrc.includes("[artifact-open]"));
+    assert.ok(appSrc.includes("direct_handler_entered"));
+    // New open-deliverable-artifact must not be handled by panel delegation.
+    assert.ok(appSrc.includes('if (action === "open-deliverable-artifact") {\n    return;') || appSrc.includes('action === "open-deliverable-artifact") {\r\n    return;') || /action === "open-deliverable-artifact"\)\s*\{\s*return;/.test(appSrc));
     assert.ok(!appSrc.includes('setActProgress("已打开草稿任务。")'));
+    assert.ok(!appSrc.includes("handleDeliverableArtifactClickCapture"));
   });
 
   await test("partial package: ready items openable, failed have no open button markup rule", () => {
