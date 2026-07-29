@@ -98,6 +98,16 @@ const api = {
     ipcRenderer.invoke("actBehalf:retryDeliverableLearnJob", payload),
   actBehalfConfirmPlanAndGenerate: (payload) =>
     ipcRenderer.invoke("actBehalf:confirmPlanAndGenerate", payload),
+  onActBehalfBaselinePersisted: (cb) => {
+    const handler = (_e, data) => cb(data);
+    ipcRenderer.on("actBehalf:baselinePersisted", handler);
+    return () => ipcRenderer.removeListener("actBehalf:baselinePersisted", handler);
+  },
+  onActBehalfEnhancementSettled: (cb) => {
+    const handler = (_e, data) => cb(data);
+    ipcRenderer.on("actBehalf:enhancementSettled", handler);
+    return () => ipcRenderer.removeListener("actBehalf:enhancementSettled", handler);
+  },
   actBehalfRun: (payload) => ipcRenderer.invoke("actBehalf:run", payload),
   actBehalfAutoGenerate: (payload) => ipcRenderer.invoke("actBehalf:autoGenerate", payload),
   actBehalfSelectFiles: (payload) => ipcRenderer.invoke("actBehalf:selectFiles", payload),

@@ -3322,7 +3322,27 @@ function generationImageMode() {
   return "real";
 }
 
-ipcMain.handle("actBehalf:generateDeliverablePackage", async (_e, payload) => {
+function generationNotifyHooks(e) {
+  return {
+    awaitEnhancement: false,
+    onBaselinePersisted: async (info) => {
+      try {
+        e.sender.send("actBehalf:baselinePersisted", info || {});
+      } catch {
+        /* ignore */
+      }
+    },
+    onEnhancementSettled: async (info) => {
+      try {
+        e.sender.send("actBehalf:enhancementSettled", info || {});
+      } catch {
+        /* ignore */
+      }
+    },
+  };
+}
+
+ipcMain.handle("actBehalf:generateDeliverablePackage", async (e, payload) => {
   try {
     const userData = app.getPath("userData");
     const packageId = payload && payload.packageId ? String(payload.packageId) : "";
@@ -3337,7 +3357,7 @@ ipcMain.handle("actBehalf:generateDeliverablePackage", async (_e, payload) => {
         callModel: buildGenerationCallModel(),
         imageMode: generationImageMode(),
         packageDir: packageDirFromConfig(),
-        useSemanticBlocks: true,
+        ...generationNotifyHooks(e),
       }
     );
   } catch (err) {
@@ -3349,7 +3369,7 @@ ipcMain.handle("actBehalf:generateDeliverablePackage", async (_e, payload) => {
   }
 });
 
-ipcMain.handle("actBehalf:generateDeliverable", async (_e, payload) => {
+ipcMain.handle("actBehalf:generateDeliverable", async (e, payload) => {
   try {
     const userData = app.getPath("userData");
     const packageId = payload && payload.packageId ? String(payload.packageId) : "";
@@ -3364,7 +3384,7 @@ ipcMain.handle("actBehalf:generateDeliverable", async (_e, payload) => {
         callModel: buildGenerationCallModel(),
         imageMode: generationImageMode(),
         packageDir: packageDirFromConfig(),
-        useSemanticBlocks: true,
+        ...generationNotifyHooks(e),
       }
     );
   } catch (err) {
@@ -3694,7 +3714,7 @@ ipcMain.handle("actBehalf:retryDeliverableLearnJob", async (_e, payload) => {
   }
 });
 
-ipcMain.handle("actBehalf:confirmPlanAndGenerate", async (_e, payload) => {
+ipcMain.handle("actBehalf:confirmPlanAndGenerate", async (e, payload) => {
   try {
     const userData = app.getPath("userData");
     const taskId = payload && payload.taskId ? String(payload.taskId) : "";
@@ -3717,7 +3737,7 @@ ipcMain.handle("actBehalf:confirmPlanAndGenerate", async (_e, payload) => {
       callModel: buildGenerationCallModel(),
       imageMode: generationImageMode(),
       packageDir: packageDirFromConfig(),
-      useSemanticBlocks: true,
+      ...generationNotifyHooks(e),
     });
   } catch (err) {
     return {

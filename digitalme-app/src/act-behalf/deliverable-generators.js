@@ -324,6 +324,7 @@ function ctxFromDeps(deps, repairContext) {
     gapStatementText: deps.gapStatementText,
     gapStatement: deps.gapStatement,
     cleanContext,
+    hardGatesOnly: !!deps.hardGatesOnly,
   });
 }
 
@@ -335,6 +336,7 @@ function reviewOptsFromCtx(ctx) {
     evidenceCorpus: evidenceCorpusFromCtx(ctx),
     isDigitalMeProject: ctx.isDigitalMeProject,
     projectContextEmpty: !ctx.projectContextId,
+    hardGatesOnly: !!ctx.hardGatesOnly,
   };
 }
 
@@ -873,6 +875,7 @@ module.exports = {
   finalizeDocument,
   finalizeWebpage,
   finalizePresentation,
+  documentFilesFromMarkdown,
   buildDocumentMessages,
   buildDocumentRepairMessages,
   buildSlideMessages,

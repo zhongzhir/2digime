@@ -334,6 +334,10 @@ async function confirmPlanAndGenerate(ctx) {
       imageMode,
       packageDir: packageDir || null,
       useSemanticBlocks: ctx.useSemanticBlocks === true,
+      awaitEnhancement: ctx.awaitEnhancement,
+      onBaselinePersisted: ctx.onBaselinePersisted,
+      onEnhancementSettled: ctx.onEnhancementSettled,
+      qualityPipelineMode: ctx.qualityPipelineMode,
     }
   );
 

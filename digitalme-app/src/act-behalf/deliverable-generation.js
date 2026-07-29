@@ -8,7 +8,9 @@ const crypto = require("node:crypto");
 const packageStore = require("./deliverable-package-store");
 const { nowIso, newId } = require("./deliverable-package-schema");
 const { commitVersionFiles } = require("./deliverable-artifact-fs");
-const { generateByKind, generateByKindWithRepair } = require("./deliverable-generators");
+const { generateByKind, generateByKindWithRepair, documentFilesFromMarkdown } = require("./deliverable-generators");
+const { isStableDeliveryMode } = require("./quality-pipeline-mode");
+const { runQualityEnhancement } = require("./stable-delivery");
 const actBehalfStore = require("./task-store");
 const { assembleSubjectContext } = require("./subject-context-assembler");
 const {
@@ -59,11 +61,14 @@ const MAX_QUALITY_REPAIR_ATTEMPTS = MAX_PLACEHOLDER_REPAIR_ATTEMPTS;
 const MAX_MODEL_CALLS_PER_GENERATION = 16;
 
 function userMessageForFailure(err) {
-  if (err && err.code === "placeholder_content_rejected") {
+  if (err && (err.code === "obvious_placeholder" || err.code === "placeholder_content_rejected")) {
     return (
       err.message ||
-      "生成的内容仍包含未填写部分，暂未保存。你可以重试，或补充更明确的要求。"
+      "生成的内容仍包含未填写部分，暂未保存。"
     );
+  }
+  if (err && (err.code === "empty_content" || err.code === "empty_model_output")) {
+    return "未能生成可用正文，暂未保存成果。";
   }
   if (err && err.code === "review_content_rejected") {
     return err.message || "成果还没有达到可直接使用的质量，暂未保存。";
@@ -463,12 +468,14 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
   }
 
   // Hard ceiling on model calls (artifact + review) for this generation run.
+  const stableMode = isStableDeliveryMode(deps);
   const baseCallModel = deps.callModel;
+  const callBudget = stableMode ? 8 : MAX_MODEL_CALLS_PER_GENERATION;
   const boundedCallModel =
     typeof baseCallModel === "function"
       ? async (messages, options) => {
           groundingAudit.modelCallCount += 1;
-          if (groundingAudit.modelCallCount > MAX_MODEL_CALLS_PER_GENERATION) {
+          if (groundingAudit.modelCallCount > callBudget) {
             const e = new Error("生成过程超过安全调用上限，已停止。");
             e.code = "model_call_budget_exceeded";
             throw e;
@@ -496,13 +503,16 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
         authoritativeFactsText,
         gapStatementText,
         gapStatement,
-        useSemanticBlocks: deps.useSemanticBlocks === true,
-        disableSemanticBlocks: !!deps.disableSemanticBlocks,
+        // Stable delivery: one-shot whole document; advanced pipeline stays shadow-capable.
+        useSemanticBlocks: stableMode ? false : deps.useSemanticBlocks === true,
+        disableSemanticBlocks: stableMode ? true : !!deps.disableSemanticBlocks,
+        hardGatesOnly: !!stableMode,
       },
       {
-        maxRepairAttempts: MAX_QUALITY_REPAIR_ATTEMPTS,
-        allowCleanRegeneration:
-          isDigitalMeProject && outcomeCriteria.taskMode === "current_implementation",
+        maxRepairAttempts: stableMode ? 0 : MAX_QUALITY_REPAIR_ATTEMPTS,
+        allowCleanRegeneration: stableMode
+          ? false
+          : isDigitalMeProject && outcomeCriteria.taskMode === "current_implementation",
         onDraftValidated: async ({ draft, ctx, audit }) => {
           if (audit) {
             groundingAudit = {
@@ -512,6 +522,13 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
               cleanRegenerationUsed: !!audit.cleanRegenerationUsed,
               repairModes: Array.isArray(audit.repairModes) ? audit.repairModes.slice() : [],
             };
+          }
+          // Stable: Channel A does not block on soft Reviewer / grounding.
+          if (stableMode) {
+            lastReviewResult = null;
+            void draft;
+            void ctx;
+            return;
           }
           const result = await reviewDeliverableContent({
             content: draft,
@@ -536,6 +553,7 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
           void ctx;
         },
         onDraftRejected: async ({ pass, draft, err, repairable, nextRepairContext, audit }) => {
+          if (stableMode) return;
           if (!repairable) return;
           if (audit) {
             groundingAudit = {
@@ -620,19 +638,16 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
             modelAdapter: "invokeModelRoute/callModel",
             inputDigest: attempt.inputDigest,
             errorCode: null,
-            errorSummary: progressText,
+            errorSummary: null,
             producedVersionId: null,
             outcome: null,
             repairPass: pass + 1,
             parentAttemptId,
-            failureEvidence: null,
-            userIssueSummary: null,
-            groundedRebuildUsed: !!groundingAudit.groundedRebuildUsed,
-            cleanRegenerationUsed: nextMode === REPAIR_MODES.CLEAN_REGENERATION,
             repairMode: nextMode || REPAIR_MODES.LOCAL_REPAIR,
           };
           await registerGenerationAttempt(userData, repairAttempt, deliverableId, packageId);
           activeAttemptId = repairAttemptId;
+          void pass;
         },
       }
     );
@@ -978,6 +993,7 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
       identityContextSnapshot: identitySnapshot,
       actor: "user",
       generatedAt: nowIso(),
+      generation_stage: stableMode ? "baseline" : "legacy_advanced",
     },
     quality: lastReviewResult
       ? {
@@ -1008,7 +1024,11 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
             gapStatementValid: !!(gapStatement && gapStatement.validation && gapStatement.validation.ok),
           }).groundingAudit,
         }
-      : { verdict: "pass", checks: [] },
+      : {
+          verdict: "pass",
+          checks: stableMode ? ["baseline_hard_gates"] : [],
+          pipelineMode: stableMode ? "stable_delivery" : "advanced_shadow",
+        },
     supersedesVersionId: prevVersionId,
     supersededByVersionId: null,
     createdAt: nowIso(),
@@ -1034,6 +1054,8 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
       a.finishedAt = nowIso();
       a.producedVersionId = versionId;
       a.outcome = "created_new_version";
+      a.phase =
+        stableMode && deliverable.kind === "document" ? "quality_enhancement" : "completed";
       a.groundedRebuildUsed = !!groundingAudit.groundedRebuildUsed;
       a.cleanRegenerationUsed = !!groundingAudit.cleanRegenerationUsed;
       Object.assign(
@@ -1065,7 +1087,7 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
     return true;
   });
 
-  return {
+  const baselineResult = {
     ok: true,
     packageId,
     deliverableId,
@@ -1075,6 +1097,226 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
     uiFormatLabel: produced.uiFormatLabel || null,
     message: "成果已生成。",
     groundingAudit,
+    enhancement: {
+      attempted: false,
+      enhanced: false,
+      reason: null,
+      modelCalls: 0,
+      pending: false,
+    },
+    pipelineMode: stableMode ? "stable_delivery" : "advanced_shadow",
+  };
+
+  if (typeof deps.onBaselinePersisted === "function") {
+    try {
+      await deps.onBaselinePersisted({
+        packageId,
+        deliverableId,
+        attemptId: activeAttemptId,
+        versionId,
+        pipelineMode: baselineResult.pipelineMode,
+      });
+    } catch {
+      /* UI notify must not fail delivery */
+    }
+  }
+
+  // Channel B: quality enhancement after baseline is already usable.
+  if (!(stableMode && deliverable.kind === "document")) {
+    return baselineResult;
+  }
+
+  const baselineMd = String((produced.files && produced.files["artifact.md"]) || "");
+  const runEnhancementJob = async () => {
+    const enhancementMeta = {
+      attempted: true,
+      enhanced: false,
+      reason: null,
+      modelCalls: 0,
+      pending: false,
+    };
+    let currentVersion = version;
+    let currentArtifacts = artifacts;
+    try {
+      const enh = await runQualityEnhancement({
+        baselineMd,
+        kind: deliverable.kind,
+        criteria: outcomeCriteria,
+        goal: taskContext.goal,
+        isDigitalMeProject,
+        callModel: boundedCallModel,
+        snapshot: systemSnapshot,
+        authorityMap,
+      });
+      enhancementMeta.modelCalls = enh.modelCalls || 0;
+      enhancementMeta.reason = enh.reason || null;
+      if (enh.enhanced && enh.md) {
+        const enhVersionId = newVersionId();
+        const enhCtx = produced.generationContext || { title: deliverable.title, goal: taskContext.goal };
+        const enhFiles = documentFilesFromMarkdown(enh.md, enhCtx);
+        const enhCommitted = await commitVersionFiles(userData, {
+          packageId,
+          deliverableId,
+          versionId: enhVersionId,
+          files: enhFiles,
+          manifest: {
+            attemptId: activeAttemptId,
+            kind: produced.kind,
+            sourcePlanVersionId: pkg.sourcePlanVersionId,
+            modelProvenanceSummary: { adapter: "callModel", taskType: "artifact", stage: "enhanced" },
+          },
+        });
+        const enhArts = enhCommitted.files.map((f) =>
+          makeArtifactRef({
+            versionId: enhVersionId,
+            relativePath: f.relativePath,
+            contentHash: f.contentHash,
+            byteSize: f.byteSize,
+            name: f.name,
+          })
+        );
+        const enhPrimary =
+          enhArts.find((a) => a.relativePath.endsWith("/artifact.md")) ||
+          enhArts.find((a) => a.relativePath.endsWith(".md")) ||
+          enhArts[0];
+        const enhPreview =
+          enhArts.find((a) => a.relativePath.endsWith(".html") && a !== enhPrimary) || null;
+        const enhancedVersion = {
+          ...version,
+          id: enhVersionId,
+          version: (Array.isArray(deliverable.versionIds) ? deliverable.versionIds.length : 0) + 2,
+          artifactRef: enhPrimary,
+          previewRef: enhPreview,
+          artifactRefs: enhArts,
+          contentHash: enhPrimary ? enhPrimary.contentHash : null,
+          supersedesVersionId: versionId,
+          provenance: {
+            ...(version.provenance || {}),
+            generation_stage: "enhanced",
+            generatedAt: nowIso(),
+          },
+          quality: {
+            verdict: "pass",
+            checks: ["baseline_hard_gates", "quality_enhancement"],
+            pipelineMode: "stable_delivery",
+            reviewer: enh.reviewResult
+              ? {
+                  status: enh.reviewResult.status,
+                  blockingIssueCount: (enh.reviewResult.blockingIssues || []).length,
+                  qualityIssueCount: (enh.reviewResult.qualityIssues || []).length,
+                }
+              : null,
+            enhancement: { fromVersionId: versionId, modelCalls: enh.modelCalls },
+          },
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+        };
+        await packageStore.mutateStore(userData, (s) => {
+          for (const art of enhArts) s.artifacts[art.id] = art;
+          if (s.versions[versionId]) {
+            s.versions[versionId].supersededByVersionId = enhVersionId;
+            s.versions[versionId].updatedAt = nowIso();
+          }
+          s.versions[enhVersionId] = enhancedVersion;
+          const d = s.deliverables[String(deliverableId)];
+          if (d) {
+            d.currentVersionId = enhVersionId;
+            d.versionIds = Array.isArray(d.versionIds)
+              ? d.versionIds.concat([enhVersionId])
+              : [versionId, enhVersionId];
+            d.generationStatus = "ready";
+            d.updatedAt = nowIso();
+          }
+          const a = s.generationAttempts[activeAttemptId];
+          if (a) {
+            a.phase = "completed";
+            a.enhancement = { ok: true, versionId: enhVersionId, modelCalls: enh.modelCalls };
+            a.producedVersionId = enhVersionId;
+          }
+          return true;
+        });
+        enhancementMeta.enhanced = true;
+        currentVersion = enhancedVersion;
+        currentArtifacts = enhArts;
+      } else {
+        await markAttemptOutcome(userData, activeAttemptId, {
+          phase: "completed",
+          enhancement: {
+            ok: false,
+            reason: enh.reason || "quality_enhancement_failed",
+            modelCalls: enh.modelCalls || 0,
+          },
+        });
+      }
+    } catch (enhErr) {
+      await markAttemptOutcome(userData, activeAttemptId, {
+        phase: "completed",
+        enhancement: {
+          ok: false,
+          reason: (enhErr && enhErr.code) || (enhErr && enhErr.message) || "quality_enhancement_failed",
+        },
+      });
+      enhancementMeta.reason = (enhErr && enhErr.code) || "quality_enhancement_failed";
+    }
+    if (typeof deps.onEnhancementSettled === "function") {
+      try {
+        await deps.onEnhancementSettled({
+          packageId,
+          deliverableId,
+          attemptId: activeAttemptId,
+          enhancement: enhancementMeta,
+        });
+      } catch {
+        /* ignore */
+      }
+    }
+    return {
+      version: currentVersion,
+      artifacts: currentArtifacts,
+      enhancement: enhancementMeta,
+    };
+  };
+
+  // Production Electron path returns after baseline so UI can open immediately.
+  // Automated tests default to awaiting enhancement for deterministic assertions.
+  if (deps.awaitEnhancement === false) {
+    void runEnhancementJob().catch(async (err) => {
+      try {
+        await markAttemptOutcome(userData, activeAttemptId, {
+          phase: "completed",
+          enhancement: {
+            ok: false,
+            reason: (err && err.code) || (err && err.message) || "quality_enhancement_failed",
+          },
+        });
+      } catch {
+        /* ignore */
+      }
+      if (typeof deps.onEnhancementSettled === "function") {
+        try {
+          await deps.onEnhancementSettled({
+            packageId,
+            deliverableId,
+            attemptId: activeAttemptId,
+            enhancement: { attempted: true, enhanced: false, reason: "quality_enhancement_failed" },
+          });
+        } catch {
+          /* ignore */
+        }
+      }
+    });
+    return {
+      ...baselineResult,
+      enhancement: { attempted: true, enhanced: false, reason: null, modelCalls: 0, pending: true },
+    };
+  }
+
+  const settled = await runEnhancementJob();
+  return {
+    ...baselineResult,
+    version: settled.version,
+    artifacts: settled.artifacts,
+    enhancement: settled.enhancement,
   };
 }
 

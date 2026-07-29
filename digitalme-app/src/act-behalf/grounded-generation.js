@@ -3,10 +3,13 @@
 /**
  * TASK-QUALITY-LOOP-01.1-FIX-01 — Grounded Generation helpers.
  *
+ * experimental_advanced_quality_pipeline — retained for tests / advanced_shadow.
+ * Production default (stable_delivery) does NOT use rebuild/regen as a delivery gate.
+ *
  * Makes CurrentSystemSnapshot an inviolable drafting constraint, demotes
  * historical materials, builds a Gap Statement before PRD drafting, and
  * switches repair strategy from local patch to grounded_rebuild /
- * clean_regeneration when architecture grounding fails.
+ * clean_regeneration when architecture grounding fails (advanced_shadow only).
  */
 
 const fs = require("node:fs");

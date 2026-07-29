@@ -167,6 +167,7 @@ function buildGenerationContext({
   gapStatementText,
   gapStatement,
   cleanContext,
+  hardGatesOnly,
 }) {
   const snap = (pkg && pkg.executionSnapshot) || {};
   const input = snap.inputSummary || {};
@@ -289,16 +290,23 @@ function buildGenerationContext({
     gapStatementText: typeof gapStatementText === "string" ? gapStatementText : "",
     gapStatement: gapStatement && typeof gapStatement === "object" ? gapStatement : null,
     cleanContext: !!cleanContext,
+    hardGatesOnly: !!hardGatesOnly,
   };
 }
 
-function assertGeneratedContentUsable(text, { kind, goal, contextClass, evidenceCorpus, claimPosturePresentation, isDigitalMeProject, projectContextEmpty } = {}) {
+function assertGeneratedContentUsable(text, { kind, goal, contextClass, evidenceCorpus, claimPosturePresentation, isDigitalMeProject, projectContextEmpty, hardGatesOnly } = {}) {
   const body = String(text || "").trim();
   if (!body || body.length < 12) {
     const e = new Error("模型未返回有效内容。");
-    e.code = "empty_model_output";
-    e.failureStage = "prewrite_validation";
+    e.code = "empty_content";
+    e.failureStage = "baseline_validation";
     throw e;
+  }
+  // TASK-QUALITY-STABILIZE-01 Channel A: only empty + obvious placeholders block baseline.
+  if (hardGatesOnly) {
+    const { assertBaselineHardGates, throwHardGate } = require("./stable-hard-gates");
+    throwHardGate(assertBaselineHardGates(body, { goal, kind }));
+    return true;
   }
   const placeholderCheck = validatePlaceholderContent(body);
   if (placeholderCheck.hasBlocking) {

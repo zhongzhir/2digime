@@ -3,6 +3,9 @@
 /**
  * TASK-QUALITY-LOOP-01.2 — Outline + block generation (runtime only).
  *
+ * experimental_advanced_quality_pipeline — retained for tests / advanced_shadow.
+ * Production default (stable_delivery) does NOT use this as a delivery gate.
+ *
  * Intermediate outline/blocks are not permanent authority objects.
  * Final persisted artifacts remain markdown + quality summary + minimal evidence.
  */
