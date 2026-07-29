@@ -43,6 +43,8 @@ const {
   REPAIR_MODES,
   isGroundingFailure,
 } = require("./grounded-generation");
+const { buildAttemptAuditWrite } = require("./attempt-recovery");
+const { deriveUserFacingTaskState } = require("./user-facing-task-view");
 
 function newAttemptId() {
   return newId("dgatt_");
@@ -362,6 +364,7 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
     groundedRebuildCount: 0,
     cleanRegenerationUsed: false,
     repairModes: [],
+    recoveryActions: [],
     modelCallCount: 0,
   };
 
@@ -641,7 +644,13 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
         cleanRegenerationUsed:
           !!produced.groundingAudit.cleanRegenerationUsed || groundingAudit.cleanRegenerationUsed,
         repairModes: produced.groundingAudit.repairModes || groundingAudit.repairModes,
+        recoveryActions: produced.groundingAudit.recoveryActions || groundingAudit.recoveryActions,
       };
+    }
+    if (produced && produced.semanticMeta && Array.isArray(produced.semanticMeta.recoveryActions)) {
+      groundingAudit.recoveryActions = (groundingAudit.recoveryActions || []).concat(
+        produced.semanticMeta.recoveryActions
+      );
     }
   } catch (err) {
     if (err && err.groundingAudit) {
@@ -683,13 +692,15 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
         a.failureStage = (err && err.failureStage) || "model_generation";
         a.groundedRebuildUsed = !!groundingAudit.groundedRebuildUsed;
         a.cleanRegenerationUsed = !!groundingAudit.cleanRegenerationUsed;
-        a.groundingAudit = {
-          groundedRebuildUsed: !!groundingAudit.groundedRebuildUsed,
-          groundedRebuildCount: groundingAudit.groundedRebuildCount || 0,
-          cleanRegenerationUsed: !!groundingAudit.cleanRegenerationUsed,
-          repairModes: groundingAudit.repairModes || [],
-          modelCallCount: groundingAudit.modelCallCount || 0,
-        };
+        Object.assign(
+          a,
+          buildAttemptAuditWrite({
+            recoveryActions: groundingAudit.recoveryActions || [],
+            modelCallCount: groundingAudit.modelCallCount || 0,
+            demotedMaterialCount: groundingAudit.demotedMaterialCount || 0,
+            gapStatementValid: !!(gapStatement && gapStatement.validation && gapStatement.validation.ok),
+          })
+        );
         if (evidence) {
           a.failureEvidence = evidence;
           a.placeholderIssues = evidence.placeholderIssues;
@@ -961,15 +972,12 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
             grounding: lastReviewResult.grounding,
             reviewedAt: lastReviewResult.createdAt,
           },
-          groundingAudit: {
-            groundedRebuildUsed: !!groundingAudit.groundedRebuildUsed,
-            groundedRebuildCount: groundingAudit.groundedRebuildCount || 0,
-            cleanRegenerationUsed: !!groundingAudit.cleanRegenerationUsed,
-            repairModes: groundingAudit.repairModes || [],
+          groundingAudit: buildAttemptAuditWrite({
+            recoveryActions: groundingAudit.recoveryActions || [],
             modelCallCount: groundingAudit.modelCallCount || 0,
             demotedMaterialCount: groundingAudit.demotedMaterialCount || 0,
             gapStatementValid: !!(gapStatement && gapStatement.validation && gapStatement.validation.ok),
-          },
+          }).groundingAudit,
         }
       : { verdict: "pass", checks: [] },
     supersedesVersionId: prevVersionId,
@@ -999,13 +1007,15 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
       a.outcome = "created_new_version";
       a.groundedRebuildUsed = !!groundingAudit.groundedRebuildUsed;
       a.cleanRegenerationUsed = !!groundingAudit.cleanRegenerationUsed;
-      a.groundingAudit = {
-        groundedRebuildUsed: !!groundingAudit.groundedRebuildUsed,
-        groundedRebuildCount: groundingAudit.groundedRebuildCount || 0,
-        cleanRegenerationUsed: !!groundingAudit.cleanRegenerationUsed,
-        repairModes: groundingAudit.repairModes || [],
-        modelCallCount: groundingAudit.modelCallCount || 0,
-      };
+      Object.assign(
+        a,
+        buildAttemptAuditWrite({
+          recoveryActions: groundingAudit.recoveryActions || [],
+          modelCallCount: groundingAudit.modelCallCount || 0,
+          demotedMaterialCount: groundingAudit.demotedMaterialCount || 0,
+          gapStatementValid: !!(gapStatement && gapStatement.validation && gapStatement.validation.ok),
+        })
+      );
     }
     const d = s.deliverables[String(deliverableId)];
     if (d) {
@@ -1166,4 +1176,5 @@ module.exports = {
   MAX_PLACEHOLDER_REPAIR_ATTEMPTS,
   MAX_QUALITY_REPAIR_ATTEMPTS,
   MAX_MODEL_CALLS_PER_GENERATION,
+  deriveUserFacingTaskState,
 };

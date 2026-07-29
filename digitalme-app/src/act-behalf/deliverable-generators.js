@@ -23,6 +23,8 @@ const {
   groundedRebuildStructureGuidance,
   summarizeForbiddenProblems,
 } = require("./grounded-generation");
+const { generateDocumentBySemanticBlocks } = require("./semantic-generation");
+const { RECOVERY_ACTIONS, appendRecoveryAction } = require("./attempt-recovery");
 
 const STRUCTURED_DOC_TEMPERATURE = 0.3;
 const STRUCTURED_DOC_REPAIR_TEMPERATURE = 0.25;
@@ -88,7 +90,12 @@ function contextBlock(ctx) {
     const c = ctx.outcomeCriteria;
     if (!c || typeof c !== "object") return [];
     const lines = [`成果要求（任务模式=${c.taskMode || "current_implementation"}）：${ctx.modeGuidance || ""}`];
-    if (Array.isArray(c.requiredSections) && c.requiredSections.length) {
+    if (Array.isArray(c.requiredSemanticCoverage) && c.requiredSemanticCoverage.length) {
+      const { semanticLabel } = require("./semantic-contract");
+      lines.push(
+        `必须实质回答的问题（标题可自定）：${c.requiredSemanticCoverage.map(semanticLabel).join("、")}。`
+      );
+    } else if (Array.isArray(c.requiredSections) && c.requiredSections.length) {
       lines.push(`成果应包含的关键内容：${c.requiredSections.join("、")}。`);
     }
     if (c.expectedQuality) {
@@ -340,6 +347,57 @@ async function draftDocument(deps, repairContext) {
   let md;
   const mode = repairContext && repairContext.mode;
   let messages;
+  let semanticMeta = null;
+
+  // 01.2: outline→blocks path. Opt-in via deps.useSemanticBlocks so whole-doc
+  // fixtures and adapters remain stable; production may enable per task.
+  const useSemanticBlocks =
+    !repairContext &&
+    deps.useSemanticBlocks === true &&
+    !deps.disableSemanticBlocks &&
+    deps.outcomeCriteria &&
+    Array.isArray(deps.outcomeCriteria.requiredSemanticCoverage) &&
+    deps.outcomeCriteria.requiredSemanticCoverage.length > 0;
+
+  if (useSemanticBlocks) {
+    try {
+      const produced = await generateDocumentBySemanticBlocks({
+        callModel,
+        ctx,
+        outcomeCriteria: deps.outcomeCriteria,
+        isDigitalMeProject: deps.isDigitalMeProject,
+        authoritativeFactsText: deps.authoritativeFactsText || ctx.authoritativeFactsText,
+        gapStatementText: deps.gapStatementText || ctx.gapStatementText,
+        maxBlockRetries: 1,
+      });
+      if (produced && produced.md) {
+        md = produced.md;
+        messages = [];
+        semanticMeta = {
+          outline: produced.outline,
+          blocks: produced.blocks,
+          recoveryActions: produced.recoveryActions || [],
+          contractDigest: produced.contract && produced.contract.contractDigest,
+          coverage: produced.coverage,
+        };
+        return {
+          md: String(md || "").trim(),
+          ctx,
+          messages,
+          repairMode: mode || null,
+          semanticMeta,
+        };
+      }
+    } catch (err) {
+      // Prefer semantic blocks, but fall back to whole-document drafting when the
+      // model/fixture cannot sustain per-block generation. Preserves delivery.
+      semanticMeta = {
+        fallbackToWholeDoc: true,
+        reason: (err && err.code) || "semantic_blocks_failed",
+      };
+    }
+  }
+
   if (mode === REPAIR_MODES.CLEAN_REGENERATION || mode === REPAIR_MODES.GROUNDED_REBUILD) {
     messages = messagesForDraft(ctx, repairContext);
   } else if (repairContext && repairContext.priorDraft) {
@@ -373,10 +431,10 @@ async function draftDocument(deps, repairContext) {
       (ctx.attachmentText ? `## 材料要点\n\n${ctx.attachmentText.slice(0, 2000)}\n\n` : "") +
       `## 说明\n\n面向：${ctx.audience || "目标读者"}。用途：${ctx.usage || ctx.purpose || "介绍"}。\n`;
   }
-  return { md: String(md || "").trim(), ctx, messages, repairMode: mode || null };
+  return { md: String(md || "").trim(), ctx, messages, repairMode: mode || null, semanticMeta };
 }
 
-function finalizeDocument(md, ctx) {
+function finalizeDocument(md, ctx, extra) {
   assertGeneratedContentUsable(md, reviewOptsFromCtx(ctx));
   const files = documentFilesFromMarkdown(md, ctx);
   return {
@@ -387,6 +445,7 @@ function finalizeDocument(md, ctx) {
     contentLabel: "文档",
     generationContext: ctx,
     promptMessages: buildDocumentMessages(ctx),
+    semanticMeta: (extra && extra.semanticMeta) || null,
   };
 }
 
@@ -572,7 +631,7 @@ const TEXT_KIND_DRAFTERS = {
 };
 
 const TEXT_KIND_FINALIZERS = {
-  document: (payload, ctx) => finalizeDocument(payload.md, ctx),
+  document: (payload, ctx) => finalizeDocument(payload.md, ctx, { semanticMeta: payload.semanticMeta }),
   webpage: (payload, ctx) => finalizeWebpage(payload.md, ctx),
   presentation: (payload, ctx) => finalizePresentation(payload.raw, ctx),
 };
@@ -611,6 +670,7 @@ async function generateByKindWithRepair(kind, deps, hooks) {
     groundedRebuildCount: 0,
     cleanRegenerationUsed: false,
     repairModes: [],
+    recoveryActions: [],
   };
   // Passes: 0 = first draft; 1..maxRepair = repair/rebuild; optional +1 clean regen.
   const maxPass = allowCleanRegen ? maxRepair + 1 : maxRepair;
@@ -641,9 +701,18 @@ async function generateByKindWithRepair(kind, deps, hooks) {
     }
     if (repairContext && repairContext.mode) {
       audit.repairModes.push(repairContext.mode);
+      audit.recoveryActions = appendRecoveryAction(audit.recoveryActions, repairContext.mode);
       if (repairContext.mode === REPAIR_MODES.GROUNDED_REBUILD) {
         audit.groundedRebuildUsed = true;
         audit.groundedRebuildCount += 1;
+      }
+      if (repairContext.mode === REPAIR_MODES.CLEAN_REGENERATION) {
+        audit.cleanRegenerationUsed = true;
+      }
+    }
+    if (payload.semanticMeta && Array.isArray(payload.semanticMeta.recoveryActions)) {
+      for (const a of payload.semanticMeta.recoveryActions) {
+        audit.recoveryActions.push(a);
       }
     }
     try {

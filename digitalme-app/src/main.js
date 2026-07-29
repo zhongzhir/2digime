@@ -3337,6 +3337,7 @@ ipcMain.handle("actBehalf:generateDeliverablePackage", async (_e, payload) => {
         callModel: buildGenerationCallModel(),
         imageMode: generationImageMode(),
         packageDir: packageDirFromConfig(),
+        useSemanticBlocks: true,
       }
     );
   } catch (err) {
@@ -3363,6 +3364,7 @@ ipcMain.handle("actBehalf:generateDeliverable", async (_e, payload) => {
         callModel: buildGenerationCallModel(),
         imageMode: generationImageMode(),
         packageDir: packageDirFromConfig(),
+        useSemanticBlocks: true,
       }
     );
   } catch (err) {
@@ -3715,6 +3717,7 @@ ipcMain.handle("actBehalf:confirmPlanAndGenerate", async (_e, payload) => {
       callModel: buildGenerationCallModel(),
       imageMode: generationImageMode(),
       packageDir: packageDirFromConfig(),
+      useSemanticBlocks: true,
     });
   } catch (err) {
     return {

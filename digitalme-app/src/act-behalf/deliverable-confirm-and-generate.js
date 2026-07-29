@@ -329,7 +329,12 @@ async function confirmPlanAndGenerate(ctx) {
   const generated = await deliverableGeneration.generateDeliverablePackage(
     userData,
     { packageId },
-    { callModel, imageMode, packageDir: packageDir || null }
+    {
+      callModel,
+      imageMode,
+      packageDir: packageDir || null,
+      useSemanticBlocks: ctx.useSemanticBlocks === true,
+    }
   );
 
   const view = packageStore.getPackageView(userData, packageId);

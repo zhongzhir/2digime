@@ -2,12 +2,17 @@
 
 /**
  * TASK-QUALITY-LOOP-01 — OutcomeCriteria & task mode detection.
+ * TASK-QUALITY-LOOP-01.2 — Evolved to semantic coverage (not fixed chapter titles).
  *
  * Internal quality basis for the quality-reviewed deliverable loop.
  * Not shown to users by default; not locked to any fixed document type.
  */
 
 const crypto = require("node:crypto");
+const {
+  inferRequiredSemanticCoverage,
+  deriveSemanticContract,
+} = require("./semantic-contract");
 
 const TASK_MODES = Object.freeze({
   CURRENT_IMPLEMENTATION: "current_implementation",
@@ -37,26 +42,11 @@ function detectTaskMode({ goal, usage, expectedQuality } = {}) {
   return TASK_MODES.CURRENT_IMPLEMENTATION;
 }
 
-const PRD_KEYWORD_RE = /(PRD|产品需求文档|需求文档)/i;
-
 /**
- * Infer required sections for the outcome. Only confident, doc-type-driven
- * inferences are returned; keyed on the inferred document intent, never on a
- * fixed document title.
+ * @deprecated 01.2 — fixed chapter titles are no longer the completeness basis.
+ * Kept empty for schema compat; callers should use requiredSemanticCoverage.
  */
-function inferRequiredSections({ goal, title, kind, taskMode }) {
-  const text = `${String(goal || "")}\n${String(title || "")}`;
-  const isMarkdownKind = kind === "document" || kind === "webpage";
-  if (!isMarkdownKind) return [];
-  if (PRD_KEYWORD_RE.test(text)) {
-    return ["背景", "目标", "范围", "功能需求", "验收"];
-  }
-  if (taskMode === TASK_MODES.SOLUTION_EXPLORATION) {
-    return ["当前基础", "方案", "远期"];
-  }
-  if (taskMode === TASK_MODES.STRATEGIC_PLANNING) {
-    return ["现状", "目标", "阶段"];
-  }
+function inferRequiredSections() {
   return [];
 }
 
@@ -87,18 +77,25 @@ function buildOutcomeCriteria({
   isDigitalMeProject,
 } = {}) {
   const taskMode = detectTaskMode({ goal, usage, expectedQuality });
-  const requiredSections = inferRequiredSections({ goal, title, kind, taskMode });
+  const requiredSemanticCoverage = inferRequiredSemanticCoverage({
+    goal,
+    title,
+    kind,
+    taskMode,
+  });
+  const requiredSections = [];
   const projectConstraints = [];
   if (constraints) projectConstraints.push(String(constraints));
   if (isDigitalMeProject) {
     for (const c of DIGITAL_ME_PROJECT_CONSTRAINTS) projectConstraints.push(c);
   }
   const criteria = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     taskMode,
     targetAudience: String(audience || ""),
     intendedUse: String(usage || expectedQuality || ""),
     requiredSections,
+    requiredSemanticCoverage,
     projectConstraints,
     evidenceRequirements: [
       "涉及项目事实的表述须与当前项目权威上下文一致",
@@ -109,12 +106,26 @@ function buildOutcomeCriteria({
       requireCurrentImplementationBasis: taskMode === TASK_MODES.CURRENT_IMPLEMENTATION,
       farFutureMaxRatio: taskMode === TASK_MODES.CURRENT_IMPLEMENTATION ? 0.15 : 1,
     },
-    completenessRequirements: requiredSections.length
-      ? ["关键章节齐全", "每章有实质正文"]
+    completenessRequirements: requiredSemanticCoverage.length
+      ? ["必要语义均有实质回答", "不得以空标题冒充覆盖"]
       : ["结构完整、各节有实质正文"],
     usabilityRequirements: ["可直接打开阅读", "可直接交给后续实施或使用"],
     expectedQuality: String(expectedQuality || ""),
   };
+  const derived = deriveSemanticContract({
+    goal,
+    audience,
+    usage,
+    constraints,
+    expectedQuality,
+    kind,
+    title,
+    isDigitalMeProject,
+    outcomeCriteria: criteria,
+  });
+  criteria.preferredForm = derived.preferredForm;
+  criteria.expectedDepth = derived.expectedDepth;
+  criteria.contractDigest = derived.contractDigest;
   criteria.criteriaDigest =
     "sha256:" +
     crypto
@@ -128,12 +139,13 @@ const MODE_GUIDANCE = Object.freeze({
   [TASK_MODES.CURRENT_IMPLEMENTATION]:
     "本次成果为当前实施模式：必须以当前仓库、现有架构与已确认主线为基础撰写；" +
     "远期方向（如区块链、联邦学习、外部 Agent 网络等）不得占据主体，只能作为明确标记的后续方向简要提及；" +
-    "不得用宏大愿景代替当前可实施设计；内容应可直接交给后续实施。",
+    "不得用宏大愿景代替当前可实施设计；内容应可直接交给后续实施。" +
+    "结构由你按任务自主组织；须覆盖必要语义（已有能力、真实问题与缺口、最小增量、权威对象关系、用户结果、验收与边界），标题名称不固定。",
   [TASK_MODES.SOLUTION_EXPLORATION]:
     "本次成果为方案探索模式：允许并应当比较多个路线，明确区分当前基础与远期方案；" +
-    "不得把任务收缩成当前实施计划；每条路线说明价值、风险与验证方式。",
+    "不得把任务收缩成当前实施计划；每条路线说明价值、风险与验证方式。结构可自定。",
   [TASK_MODES.STRATEGIC_PLANNING]:
-    "本次成果为战略规划模式：允许远期视角与分阶段安排，但须与当前能力基线明确衔接，不得脱离现状空谈。",
+    "本次成果为战略规划模式：允许远期视角与分阶段安排，但须与当前能力基线明确衔接，不得脱离现状空谈。结构可自定。",
 });
 
 function modeGuidanceFor(taskMode) {

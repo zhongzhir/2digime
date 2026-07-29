@@ -14,6 +14,11 @@
 const { validatePlaceholderContent } = require("./placeholder-validation");
 const { TASK_MODES } = require("./outcome-criteria");
 const { groundingReview, GROUNDING_RULE_IDS } = require("./grounding-review");
+const {
+  checkSemanticCoverage,
+  findHollowSemanticHeadings,
+  semanticLabel,
+} = require("./semantic-contract");
 
 const ISSUE_BLOCKING = "blocking";
 const ISSUE_WARNING = "warning";
@@ -51,7 +56,7 @@ function lineOf(text, index) {
   return String(text).slice(0, index).split("\n").length;
 }
 
-function makeIssue({ ruleId, message, text, index, severity, source }) {
+function makeIssue({ ruleId, message, text, index, severity, source, category, affectedSemanticItems, suggestedAction }) {
   const body = String(text || "");
   const i = Number.isInteger(index) ? index : 0;
   return {
@@ -63,6 +68,9 @@ function makeIssue({ ruleId, message, text, index, severity, source }) {
     contextSnippet: body.slice(Math.max(0, i - 20), i + 40).replace(/\s+/g, " ").trim(),
     severity: severity || ISSUE_BLOCKING,
     source: source || "deterministic",
+    category: category || undefined,
+    affectedSemanticItems: Array.isArray(affectedSemanticItems) ? affectedSemanticItems : undefined,
+    suggestedAction: suggestedAction || undefined,
   };
 }
 
@@ -85,6 +93,7 @@ function deterministicReview(content, { criteria, kind, goal, isDigitalMeProject
   const suggestedRevisions = [];
   const c = criteria || {};
   const taskMode = c.taskMode || TASK_MODES.CURRENT_IMPLEMENTATION;
+  const isMarkdownKind = kind === "document" || kind === "webpage" || !kind;
 
   // 1. Placeholder residue (re-check; generation gate normally catches first).
   const ph = validatePlaceholderContent(body);
@@ -101,30 +110,68 @@ function deterministicReview(content, { criteria, kind, goal, isDigitalMeProject
     suggestedRevisions.push("将所有未填写字段与模板项替换为与当前任务相关的真实内容。");
   }
 
-  // 2. Required sections / markers.
-  const sections = Array.isArray(c.requiredSections) ? c.requiredSections : [];
-  const isMarkdownKind = kind === "document" || kind === "webpage" || !kind;
-  const missing = [];
-  for (const sec of sections) {
-    const present =
-      taskMode === TASK_MODES.CURRENT_IMPLEMENTATION && PRD_LIKE.test(String(goal || "")) && isMarkdownKind
-        ? headingPresent(body, sec)
-        : tokenPresent(body, sec);
-    if (!present) missing.push(sec);
-  }
-  for (const sec of missing) {
-    blockingIssues.push(
-      makeIssue({
-        ruleId: "missing_required_section",
-        message: `缺少关键内容「${sec}」。`,
-        text: body,
-        index: 0,
-        severity: ISSUE_BLOCKING,
-      })
-    );
-  }
-  if (missing.length) {
-    suggestedRevisions.push(`补齐缺失的关键内容：${missing.join("、")}。`);
+  // 2. Semantic coverage (01.2) — prefer over fixed chapter titles.
+  const semanticIds = Array.isArray(c.requiredSemanticCoverage) ? c.requiredSemanticCoverage : [];
+  if (semanticIds.length && isMarkdownKind) {
+    const cov = checkSemanticCoverage(body, semanticIds);
+    for (const id of cov.missing) {
+      blockingIssues.push(
+        makeIssue({
+          ruleId: "missing_semantic_coverage",
+          message: `成果尚未充分回答必要问题：「${semanticLabel(id)}」。`,
+          text: body,
+          index: 0,
+          severity: ISSUE_BLOCKING,
+          category: "semantic",
+          affectedSemanticItems: [id],
+          suggestedAction: "semantic_gap_fill",
+        })
+      );
+    }
+    if (cov.missing.length) {
+      suggestedRevisions.push(
+        `补齐缺失语义（不要求固定标题）：${cov.missing.map(semanticLabel).join("、")}。`
+      );
+    }
+    const hollow = findHollowSemanticHeadings(body);
+    for (const h of hollow.slice(0, 3)) {
+      qualityIssues.push(
+        makeIssue({
+          ruleId: "hollow_section_heading",
+          message: `「${h.title}」几乎没有实质内容，空标题不能算作语义覆盖。`,
+          text: body,
+          index: 0,
+          severity: ISSUE_WARNING,
+          category: "semantic",
+        })
+      );
+    }
+  } else {
+    // Compat: legacy requiredSections title checks (pre-01.2 fixtures / callers).
+    const sections = Array.isArray(c.requiredSections) ? c.requiredSections : [];
+    const missing = [];
+    for (const sec of sections) {
+      const present =
+        taskMode === TASK_MODES.CURRENT_IMPLEMENTATION && PRD_LIKE.test(String(goal || "")) && isMarkdownKind
+          ? headingPresent(body, sec)
+          : tokenPresent(body, sec);
+      if (!present) missing.push(sec);
+    }
+    for (const sec of missing) {
+      blockingIssues.push(
+        makeIssue({
+          ruleId: "missing_required_section",
+          message: `缺少关键内容「${sec}」。`,
+          text: body,
+          index: 0,
+          severity: ISSUE_BLOCKING,
+          category: "structure",
+        })
+      );
+    }
+    if (missing.length) {
+      suggestedRevisions.push(`补齐缺失的关键内容：${missing.join("、")}。`);
+    }
   }
 
   // 3. Goal alignment (deterministic, lenient): at least one significant goal token present.
@@ -265,7 +312,12 @@ function computeScores({ blockingIssues, qualityIssues }) {
   const clamp = (v) => Math.max(0, Math.min(1, Math.round(v * 100) / 100));
   return {
     goalAlignment: clamp(1 - 0.4 * b("goal_misaligned")),
-    completeness: clamp(1 - 0.2 * b("missing_required_section") - 0.15 * placeholders),
+    completeness: clamp(
+      1 -
+        0.2 * b("missing_required_section") -
+        0.2 * b("missing_semantic_coverage") -
+        0.15 * placeholders
+    ),
     implementationReadiness: clamp(
       1 - 0.4 * b("far_future_dominant") - 0.4 * b("exploration_collapsed") - 0.1 * w("empty_rhetoric")
     ),
@@ -424,15 +476,37 @@ async function reviewDeliverableContent({
   }
 
   const status = blockingIssues.length ? "fail" : "pass";
+  const issues = blockingIssues
+    .map((i) => ({ ...i, issueType: ISSUE_BLOCKING }))
+    .concat(qualityIssues.map((i) => ({ ...i, issueType: i.issueType || ISSUE_WARNING })));
+  // 01.2: grounding is a ReviewResult dimension, not a parallel result system.
+  const dimensions = {
+    grounding: grounding
+      ? {
+          currentStateAccuracy: grounding.currentStateAccuracy,
+          authorityConsistency: grounding.authorityConsistency,
+          acceptanceValueAlignment: grounding.acceptanceValueAlignment,
+          missingCurrentCapabilities: grounding.missingCurrentCapabilities || [],
+          duplicateAuthorityObjects: grounding.duplicateAuthorityObjects || [],
+        }
+      : undefined,
+    completeness: scores.completeness,
+    goalAlignment: scores.goalAlignment,
+  };
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     status,
+    issues,
     blockingIssues,
     qualityIssues,
     suggestedRevisions,
     scores,
+    dimensions,
+    evidence: [],
+    degraded: !!reviewerDegraded,
     taskMode: (criteria && criteria.taskMode) || TASK_MODES.CURRENT_IMPLEMENTATION,
     criteriaDigest: (criteria && criteria.criteriaDigest) || null,
+    // Compat: keep grounding mirror for FIX-01 readers.
     grounding: grounding || undefined,
     reviewerDegraded,
     modelReviewUsed,
