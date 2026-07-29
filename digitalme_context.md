@@ -2,7 +2,7 @@
 
 版本：v0.4
 状态：持续更新
-最后更新：2026-07-29（TASK-QUALITY-STABILIZE-01-FIX-01C 正式成果按钮直接绑定待 Owner 复验；不得 push）
+最后更新：2026-07-29（TASK-QUALITY-STABILIZE-01-FIX-01D 成果打开单入口收口待 Owner 复验；不得 push）
 
 > **当前产品主线（2026-07-26）**：**第二纵向闭环** — 多模态成果包交付与渐进式主体构建。第一纵向闭环已 `accepted` / `completed`。
 > **最高架构与研发原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)（**v0.1.1 `active`**）。
@@ -21,7 +21,7 @@
 > 2. **BUG1 #6** = 七模块渐进式数字之我构建框架。
 > 3. 首个正式验收场景 = 为一个项目生成完整对外介绍成果包。
 > 4. 第一轮真实产物 = 正式介绍文档、演示文稿 PPT、单页 HTML、封面图片；视频/音频本轮不实现真实生成，用户面不得宣称已支持。
-> **当前任务**：**TASK-QUALITY-STABILIZE-01-FIX-01C**（正式成果按钮直接绑定）已实现完成，状态 `implemented` / `direct_artifact_button_binding_added` / `formal_electron_click_trace_passed` / `owner_runtime_revalidation_pending`（分支 `codex/task-quality-stabilize-01-fix-artifact-direct-binding`；基线 `0341f30`）。Owner 在 RESPONSIVENESS-01 后菜单/按钮已即时，但「打开成果」仍无反馈 → 判定 click handler 未执行。已改为 `bindArtifactOpenButtons` 每按钮直接绑定（`currentTarget`），不再用父容器委托打开；反馈先于 IPC；有界 `[artifact-open]` 日志；正式 UI trace 48 passed。新增永久字段/Store/IPC/全局 listener = 0。**不得** push；不得标 artifact_open_validated。前序 GLOBAL-RENDERER-RESPONSIVENESS-01 见对应任务文档。
+> **当前任务**：**TASK-QUALITY-STABILIZE-01-FIX-01D**（成果打开单入口收口）已实现完成，状态 `implemented` / `single_root_artifact_open_entry_added` / `owner_dom_trace_passed` / `formal_coordinate_click_passed` / `owner_runtime_revalidation_pending`（分支 `codex/task-quality-stabilize-01-fix-artifact-single-entry`；基线 `1ba6a68`）。Owner @ `1ba6a68`：直接绑定仍无「正在打开…」。已删除多套 renderer 接线，改为 `#app` 单次 capture + `composedPath`；正式 DOM dump + 坐标点击 harness 通过。新增永久字段/Store/IPC/main handler = 0；根监听 = 1。**不得** push；不得标 artifact_open_validated。前序 FIX-01C / RESPONSIVENESS-01 见对应任务文档。
 > **R2 对话运行时**：保留基础设施；R2 代码 **retained as infrastructure**。生产默认入口仍为 legacy。
 > **Owner Electron 真机验收（2026-07-24）**：`accepted`（distill-me / R2 对话重试 / doing-context / PAN-01S 等）。
 > **confirmed identity → act context（2026-07-24，`2f1b7bd`）**：`accepted`（历史整合基线；**不是**当前 HEAD）。
@@ -332,7 +332,8 @@ flowchart TB
 | `digitalme_phase1_task_TASK-QUALITY-STABILIZE-01-FIX-01A_open_acceptance_v0.1.md` | **FIX-01A 打开验收 probe 修复**（`implemented` / `acceptance_probe_repaired`；`__dirname` 模块解析；待 Owner 复验） |
 | `digitalme_phase1_task_TASK-QUALITY-STABILIZE-01-FIX-01B_formal_open_wiring_v0.1.md` | **FIX-01B 正式成果按钮端到端接线**（v0.1.0；`implemented` / `formal_renderer_open_path_repaired` / `automated_ui_tests_passed` / `owner_runtime_revalidation_pending`；唯一 action `open-deliverable-artifact` + 单一打开函数 + 真实按钮点击 UI 测试；新增永久字段/Store/IPC 打开体系=0；因全局响应性回归，Owner 成果打开复验 **blocked**） |
 | `digitalme_phase1_task_GLOBAL-RENDERER-RESPONSIVENESS-01_v0.1.md` | **GLOBAL-RENDERER-RESPONSIVENESS-01 全局交互迟滞**（v0.1.0；`implemented` / `duplicate_listeners_removed` / `renderer_main_thread_work_reduced` / `automated_performance_tests_passed` / `owner_runtime_acceptance_pending`；≈2.1MB package store 缓存+紧凑 JSON；listener 幂等；增强面板节流） |
-| `digitalme_phase1_task_TASK-QUALITY-STABILIZE-01-FIX-01C_direct_binding_v0.1.md` | **FIX-01C 正式成果按钮直接绑定**（v0.1.0；`implemented` / `direct_artifact_button_binding_added` / `formal_electron_click_trace_passed` / `owner_runtime_revalidation_pending`；每按钮 `bindArtifactOpenButtons`；无全局 capture；正式 UI trace 48 passed） |
+| `digitalme_phase1_task_TASK-QUALITY-STABILIZE-01-FIX-01C_direct_binding_v0.1.md` | **FIX-01C 正式成果按钮直接绑定**（v0.1.0；`implemented`；Owner @ `1ba6a68` 仍无反馈 → 由 FIX-01D 收口替代生产接线） |
+| `digitalme_phase1_task_TASK-QUALITY-STABILIZE-01-FIX-01D_single_root_entry_v0.1.md` | **FIX-01D 成果打开单入口收口**（v0.1.0；`implemented` / `single_root_artifact_open_entry_added` / `owner_dom_trace_passed` / `formal_coordinate_click_passed` / `owner_runtime_revalidation_pending`；`#app` 单次 capture；正式坐标点击通过） |
 | `digitalme_phase1_task_DVL2-03A_first_real_document_artifact_v0.1.md` | **DVL2-03A 草案（历史）**；已被完整 **DVL2-03** 实现路径吸收（不再单独拆分 03A/B/C） |
 | `docs/design/digitalme_crt_v0.2_subject_context_engine_spec.md` | **CRT v0.2 Subject Context Engine 规格**（v0.2.2；`frozen_for_implementation`） |
 | `digitalme_phase1_task_CRT-MVP-01_cognitive_runtime_continuity_v0.1.md` | **CRT-MVP-01 持续性验证**（实现合入；真机状态见任务包） |

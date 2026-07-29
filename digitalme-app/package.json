@@ -37,6 +37,7 @@
     "test:global-renderer-responsiveness-01": "node scripts/test-global-renderer-responsiveness-01.cjs",
     "test:artifact-open-acceptance": "electron scripts/electron-artifact-open-acceptance.cjs",
     "test:artifact-open-ui": "electron scripts/electron-artifact-open-ui-acceptance.cjs",
+    "test:artifact-open-single-entry:owner": "electron scripts/electron-owner-artifact-open-single-entry.cjs",
     "test:artifact-open-acceptance:owner": "node scripts/run-owner-artifact-open-acceptance.cjs",
     "test:stable-artifact-open-electron": "electron scripts/electron-artifact-open-acceptance.cjs",
     "test:stable-delivery-real-model": "node scripts/test-stable-delivery-real-model.cjs",

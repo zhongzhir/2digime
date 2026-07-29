@@ -3430,21 +3430,48 @@ ipcMain.handle("actBehalf:listDeliverableVersions", async (_e, payload) => {
 });
 
 ipcMain.handle("actBehalf:openArtifact", async (_e, payload) => {
+  const traceId =
+    payload && payload.traceId != null ? String(payload.traceId).slice(0, 80) : "";
   try {
     const userData = app.getPath("userData");
     const { shell } = require("electron");
-    return await deliverableArtifactOpen.openArtifactSecure({
+    const result = await deliverableArtifactOpen.openArtifactSecure({
       userData,
       payload: payload || {},
       shell,
     });
+    if (traceId && result && typeof result === "object") {
+      result._ephemeralTrace = {
+        traceId,
+        mainHandlerEntered: true,
+        main_handler_entered: true,
+        artifactResolved: !!(result && result.ok),
+        artifact_resolved: !!(result && result.ok),
+        openPathResult: result && result.ok ? "" : String((result && (result.detail || result.code)) || "failed").slice(0, 240),
+        open_path_returned:
+          result && result.ok ? "" : String((result && (result.detail || result.code)) || "failed").slice(0, 240),
+      };
+    }
+    return result;
   } catch (err) {
-    return {
+    const failResult = {
       ok: false,
       code: err && err.code ? err.code : "open_failed",
       message: "暂时无法打开成果。",
       detail: err && err.message ? String(err.message).slice(0, 240) : undefined,
     };
+    if (traceId) {
+      failResult._ephemeralTrace = {
+        traceId,
+        mainHandlerEntered: true,
+        main_handler_entered: true,
+        artifactResolved: false,
+        artifact_resolved: false,
+        openPathResult: String((err && err.message) || "open_failed").slice(0, 240),
+        open_path_returned: String((err && err.message) || "open_failed").slice(0, 240),
+      };
+    }
+    return failResult;
   }
 });
 

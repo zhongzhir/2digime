@@ -5,6 +5,27 @@
 
 ---
 
+## 2026-07-29 TASK-QUALITY-STABILIZE-01-FIX-01D 成果打开单入口收口 · 实施完成（待 Owner 复验）
+
+### 事实
+
+Owner @ `1ba6a68`：直接绑定后正式页仍无「正在打开…」。正式 DOM dump 确认按钮由 `renderGenerationPanel` 输出且带稳定 ID；正式窗口加载工作区 `app.js` / `deliverable-planner.js`。
+
+### 修复
+
+删除 `bindArtifactOpenButtons` / `handleArtifactOpenButtonClick` / 面板与历史 open 分支；bootstrap 时在 `#app` 安装一次 capture；`composedPath` 匹配；反馈先于 rAF/IPC。
+
+### 验证
+
+Owner userData 坐标点击 harness（PRD / 用户故事地图 / 功能和数据字典 + 重启）通过；`rootListenerInstallCount=1`；`shell.openPath=""`。静态合同与 UI acceptance 通过。
+
+### 状态
+
+`implemented` / `single_root_artifact_open_entry_added` / `owner_dom_trace_passed` / `formal_coordinate_click_passed` / `owner_runtime_revalidation_pending`  
+分支：`codex/task-quality-stabilize-01-fix-artifact-single-entry`。不得 push；不得标 `artifact_open_validated`。
+
+---
+
 ## 2026-07-29 TASK-QUALITY-STABILIZE-01-FIX-01C 正式成果按钮直接绑定 · 实施完成（待 Owner 复验）
 
 ### 事实

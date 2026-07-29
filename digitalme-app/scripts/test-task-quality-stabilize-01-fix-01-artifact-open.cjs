@@ -311,6 +311,7 @@ async function main() {
       "utf8"
     );
     assert.ok(src.includes('data-action="open-deliverable-artifact"'));
+    assert.ok(src.includes('data-open-deliverable-artifact="true"'));
     assert.ok(src.includes("data-artifact-id="));
     assert.ok(src.includes("data-version-id="));
     assert.ok(src.includes("data-deliverable-id="));
@@ -319,7 +320,7 @@ async function main() {
     // New render must not emit legacy open aliases.
     assert.ok(!src.includes('data-action="open-primary"'));
     assert.ok(!src.includes('data-action="open-art"'));
-    assert.ok(src.includes("bindArtifactOpenButtons"));
+    assert.ok(!src.includes("bindArtifactOpenButtons"));
     const appSrc = fs.readFileSync(path.join(__dirname, "../src/renderer/app.js"), "utf8");
     assert.ok(appSrc.includes("正在打开…"));
     assert.ok(appSrc.includes("data-opening"));
@@ -327,14 +328,21 @@ async function main() {
     assert.ok(appSrc.includes("已打开成果"));
     assert.ok(appSrc.includes("暂时无法打开成果"));
     assert.ok(appSrc.includes("openDeliverableArtifactFromButton"));
-    assert.ok(appSrc.includes("bindArtifactOpenButtons"));
-    assert.ok(appSrc.includes("handleArtifactOpenButtonClick"));
-    assert.ok(appSrc.includes("event.currentTarget"));
-    assert.ok(appSrc.includes('dataset.openBound'));
+    assert.ok(appSrc.includes("bindArtifactOpenRootOnce"));
+    assert.ok(appSrc.includes("handleArtifactOpenAtRootCapture"));
+    assert.ok(appSrc.includes("findArtifactOpenButton"));
+    assert.ok(appSrc.includes("composedPath"));
+    assert.ok(appSrc.includes("requestAnimationFrame"));
+    assert.ok(!appSrc.includes("bindArtifactOpenButtons"));
+    assert.ok(!appSrc.includes("handleArtifactOpenButtonClick"));
     assert.ok(appSrc.includes("[artifact-open]"));
-    assert.ok(appSrc.includes("direct_handler_entered"));
-    // New open-deliverable-artifact must not be handled by panel delegation.
-    assert.ok(appSrc.includes('if (action === "open-deliverable-artifact") {\n    return;') || appSrc.includes('action === "open-deliverable-artifact") {\r\n    return;') || /action === "open-deliverable-artifact"\)\s*\{\s*return;/.test(appSrc));
+    assert.ok(appSrc.includes("root_capture_entered"));
+    // Artifact open must not be handled by panel delegation.
+    assert.ok(
+      /action === "open-deliverable-artifact"[\s\S]{0,120}action === "open-art"[\s\S]{0,80}action === "open-primary"/.test(
+        appSrc
+      ) || appSrc.includes("exclusively handled by #app capture")
+    );
     assert.ok(!appSrc.includes('setActProgress("已打开草稿任务。")'));
     assert.ok(!appSrc.includes("handleDeliverableArtifactClickCapture"));
   });

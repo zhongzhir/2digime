@@ -717,7 +717,7 @@
           let actions = "";
           if (st === "成果已完成" && primary) {
             actions +=
-              `<button type="button" class="btn btn-primary" data-action="open-deliverable-artifact" data-artifact-id="${escapeAttr(
+              `<button type="button" class="btn btn-primary" data-action="open-deliverable-artifact" data-open-deliverable-artifact="true" data-artifact-id="${escapeAttr(
                 primary.id
               )}" data-version-id="${escapeAttr(ver.id)}" data-deliverable-id="${escapeAttr(
                 d.id
@@ -750,7 +750,7 @@
             }
             secondaryArts.forEach((a) => {
               moreItems.push(
-                `<button type="button" class="btn-ghost" data-action="open-deliverable-artifact" data-artifact-id="${escapeAttr(
+                `<button type="button" class="btn-ghost" data-action="open-deliverable-artifact" data-open-deliverable-artifact="true" data-artifact-id="${escapeAttr(
                   a.id
                 )}" data-version-id="${escapeAttr(ver.id)}" data-deliverable-id="${escapeAttr(
                   d.id
@@ -784,10 +784,7 @@
       disabled: !canGenerate || anyGenerating || anyRepairing || onlyFailed,
       authRevoked,
     });
-    // Direct-bind open buttons after every panel rebuild (no parent-container delegation).
-    if (typeof global.bindArtifactOpenButtons === "function") {
-      global.bindArtifactOpenButtons(itemsRoot);
-    }
+    // Artifact open is handled once at #app capture (FIX-01D). Do not bind per render.
   }
 
   function escapeAttr(s) {

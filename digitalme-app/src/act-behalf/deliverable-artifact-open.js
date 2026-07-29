@@ -60,12 +60,9 @@ function fail(code, technicalMessage) {
  * @returns {{ ok: true, abs: string, artifact: object, version: object, deliverable: object, package: object } | { ok: false, code: string, message: string, detail?: string }}
  */
 function resolveOpenableArtifact(userData, payload) {
-  const artifactId = String(
+  let artifactId = String(
     (payload && (payload.artifactId || payload.artifactRefId)) || ""
   ).trim();
-  if (!artifactId) {
-    return fail("invalid_artifact_reference", "missing artifactId");
-  }
 
   // Reject renderer-supplied absolute/relative path injection.
   if (payload && (payload.path || payload.localPath || payload.absolutePath || payload.relativePath)) {
@@ -73,6 +70,31 @@ function resolveOpenableArtifact(userData, payload) {
   }
 
   const store = packageStore.loadStore(userData);
+
+  // Historical buttons may only carry versionId — pick a preferred openable ArtifactRef.
+  if (!artifactId) {
+    const versionIdOnly = String((payload && payload.versionId) || "").trim();
+    const versionOnly = versionIdOnly ? store.versions && store.versions[versionIdOnly] : null;
+    if (!versionOnly) {
+      return fail("invalid_artifact_reference", "missing artifactId");
+    }
+    const refs = [];
+    if (Array.isArray(versionOnly.artifactRefs)) refs.push(...versionOnly.artifactRefs);
+    if (versionOnly.artifactRef) refs.push(versionOnly.artifactRef);
+    if (versionOnly.previewRef) refs.push(versionOnly.previewRef);
+    const prefer = ["md", "markdown", "docx", "html", "htm"];
+    let chosen = null;
+    for (const fmt of prefer) {
+      chosen = refs.find((r) => r && String(r.format || "").toLowerCase() === fmt);
+      if (chosen) break;
+    }
+    if (!chosen) chosen = refs.find((r) => r && r.id);
+    if (!chosen || !chosen.id) {
+      return fail("invalid_artifact_reference", "version has no openable artifact");
+    }
+    artifactId = String(chosen.id);
+  }
+
   const artifact = store.artifacts && store.artifacts[artifactId];
   if (!artifact) {
     return fail("artifact_not_found", "artifact id not in store");

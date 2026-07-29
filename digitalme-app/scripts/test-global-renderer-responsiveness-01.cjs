@@ -217,17 +217,21 @@ async function main() {
 
   test("artifact open uses card-local feedback and does not sticky-write bottom progress", () => {
     const src = fs.readFileSync(fromAppRoot("src", "renderer", "app.js"), "utf8");
-    assert.ok(src.includes("showArtifactOpenErrorNearButton") || src.includes("bindArtifactOpenButtons"));
+    assert.ok(src.includes("showArtifactOpenErrorNearButton") || src.includes("bindArtifactOpenRootOnce"));
     assert.ok(src.includes('btn.textContent = "正在打开…"'));
+    assert.ok(src.includes("handleArtifactOpenAtRootCapture"));
     assert.ok(!src.includes('setActProgress("已打开草稿任务。")'));
     assert.ok(!src.includes('setActProgress("已打开成果")'));
   });
 
-  test("no FIX-01C document capture listener added", () => {
+  test("no FIX-01C document capture listener / no per-button open bind", () => {
     const src = fs.readFileSync(fromAppRoot("src", "renderer", "app.js"), "utf8");
     assert.ok(!src.includes("handleDeliverableArtifactClickCapture"));
     assert.ok(!src.includes("wireDeliverableArtifactCaptureOnce"));
-    assert.ok(!src.includes('addEventListener("click", handleDeliverableArtifactClickCapture, true)'));
+    assert.ok(!src.includes("bindArtifactOpenButtons"));
+    assert.ok(!src.includes("handleArtifactOpenButtonClick"));
+    assert.ok(src.includes("bindArtifactOpenRootOnce"));
+    assert.ok(src.includes('addEventListener("click", handleArtifactOpenAtRootCapture, true)'));
   });
 
   test("production default does not spam large console traces for open path", () => {

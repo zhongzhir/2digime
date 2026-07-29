@@ -5,10 +5,11 @@
  *
  * Uses the REAL legacy production renderer + REAL preload:
  *   - renderGenerationPanel produces real buttons
- *   - bindArtifactOpenButtons attaches per-button listeners (no parent delegation for open)
+ *   - bindArtifactOpenRootOnce installs one #app capture listener
+ *   - findArtifactOpenButton via composedPath
  *   - real MouseEvent click on the button
  *   - elementFromPoint checks no overlay steals the hit target
- *   - asserts direct_handler_entered → preload → main → shell.openPath → button feedback
+ *   - asserts root_capture → feedback → preload → main → shell.openPath → button feedback
  *
  * Run: npm run test:artifact-open-ui
  */
@@ -230,7 +231,7 @@ async function waitReady(win) {
     for (let i = 0; i < 200; i++) {
       if (document.documentElement.dataset.dmNavigationBound === "1" &&
           window.DeliverablePlannerUi &&
-          typeof window.bindArtifactOpenButtons === "function" &&
+          window.__dmArtifactOpenRootInstallCount >= 1 &&
           typeof window.DeliverablePlannerUi.renderGenerationPanel === "function") {
         return true;
       }
@@ -241,11 +242,11 @@ async function waitReady(win) {
 }
 
 async function driveClickTrace(win, viewDescriptor, deliverableId, opts = {}) {
-  const stripArtifactId = !!opts.stripArtifactId;
+  const stripIds = !!opts.stripIds;
   const script = `(async () => {
     const view = ${JSON.stringify(viewDescriptor)};
     const deliverableId = ${JSON.stringify(deliverableId)};
-    const stripArtifactId = ${stripArtifactId ? "true" : "false"};
+    const stripIds = ${stripIds ? "true" : "false"};
     const $ = (id) => document.getElementById(id);
     const progressEl = $("act-progress");
     const logs = [];
@@ -285,8 +286,10 @@ async function driveClickTrace(win, viewDescriptor, deliverableId, opts = {}) {
     const trace = {
       buttonFound: !!btn,
       buttonEnabled: !!(btn && !btn.disabled),
-      openBound: !!(btn && btn.dataset.openBound === "true"),
+      rootInstall: window.__dmArtifactOpenRootInstallCount || 0,
+      openMarker: !!(btn && btn.dataset.openDeliverableArtifact === "true"),
       topElementIsButton: false,
+      rootCaptureEntered: false,
       directHandlerEntered: false,
       loadingFeedbackShown: false,
       preloadCalled: false,
@@ -300,9 +303,11 @@ async function driveClickTrace(win, viewDescriptor, deliverableId, opts = {}) {
       console.info = origInfo;
       return trace;
     }
-    if (stripArtifactId) {
+    if (stripIds) {
       btn.removeAttribute("data-artifact-id");
       delete btn.dataset.artifactId;
+      btn.removeAttribute("data-version-id");
+      delete btn.dataset.versionId;
     }
 
     btn.scrollIntoView({ block: "center", inline: "nearest" });
@@ -328,15 +333,16 @@ async function driveClickTrace(win, viewDescriptor, deliverableId, opts = {}) {
         cs.visibility !== "hidden" &&
         cs.display !== "none");
 
+    // Prefer composedPath root capture — dispatch on the button with bubbles so #app capture sees it.
     let sawLoading = btn.getAttribute("data-did-show-opening") === "1";
-    btn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, clientX: cx, clientY: cy }));
+    btn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, composed: true, clientX: cx, clientY: cy }));
     if (btn.textContent === "正在打开…" || btn.getAttribute("data-did-show-opening") === "1") {
       sawLoading = true;
     }
     trace.loadingFeedbackShown = sawLoading;
 
     // Rapid second click must not start another open while opening / cooldown.
-    btn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    btn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, composed: true }));
     trace.hitTopTag = top ? top.tagName : null;
     trace.hitTopAction = top && top.getAttribute ? top.getAttribute("data-action") : null;
     trace.btnRect = { w: rect.width, h: rect.height, t: rect.top, l: rect.left };
@@ -376,14 +382,20 @@ async function driveClickTrace(win, viewDescriptor, deliverableId, opts = {}) {
       }
     }
 
-    const entered = logs.filter((l) => l.phase === "direct_handler_entered");
-    trace.directHandlerEntered = entered.length >= 1;
+    const entered = logs.filter((l) => l.phase === "root_capture_entered");
+    trace.rootCaptureEntered = entered.length >= 1;
+    trace.directHandlerEntered = trace.rootCaptureEntered;
     trace.duplicateDirectEntries = Math.max(0, entered.length - 1);
-    trace.preloadCalled = logs.some((l) => l.phase === "preload_call_started");
-    const resultLog = logs.find((l) => l.phase === "preload_result_received");
+    trace.preloadCalled = logs.some((l) => l.phase === "preload_called" || l.phase === "preload_call_started");
+    const resultLog = logs.find((l) => l.phase === "renderer_result_received" || l.phase === "preload_result_received");
     if (resultLog) trace.mainReturnedOk = !!resultLog.ok;
     if (logs.some((l) => l.phase === "success_feedback_rendered")) trace.successFeedbackShown = true;
     if (logs.some((l) => l.phase === "failure_feedback_rendered")) trace.failureFeedbackShown = true;
+    const last = window.__dmLastArtifactOpenTrace;
+    if (last) {
+      if (last.rootCaptureEntered) trace.rootCaptureEntered = true;
+      if (last.preloadCalled) trace.preloadCalled = true;
+    }
 
     console.info = origInfo;
     trace.logs = logs.map((l) => l.phase);
@@ -442,7 +454,7 @@ async function run() {
 
   await win.loadFile(HTML_PATH);
   const ready = await waitReady(win);
-  check("renderer ready with bindArtifactOpenButtons", ready === true);
+  check("renderer ready with root artifact open listener", ready === true);
 
   const view = buildViewDescriptor();
 
@@ -454,9 +466,10 @@ async function run() {
     traces[c.key] = t;
     check(`[${c.key}] buttonFound`, t.buttonFound === true, t);
     check(`[${c.key}] buttonEnabled`, t.buttonEnabled === true, t);
-    check(`[${c.key}] openBound before click`, t.openBound === true, t);
+    check(`[${c.key}] rootInstall==1`, t.rootInstall === 1, t);
+    check(`[${c.key}] openMarker`, t.openMarker === true, t);
     check(`[${c.key}] topElementIsButton`, t.topElementIsButton === true, t);
-    check(`[${c.key}] directHandlerEntered`, t.directHandlerEntered === true, t);
+    check(`[${c.key}] rootCaptureEntered`, t.rootCaptureEntered === true || t.directHandlerEntered === true, t);
     check(`[${c.key}] loadingFeedbackShown`, t.loadingFeedbackShown === true, t);
     check(`[${c.key}] preloadCalled`, t.preloadCalled === true, t);
     check(`[${c.key}] mainReturnedOk`, t.mainReturnedOk === true, t);
@@ -479,7 +492,7 @@ async function run() {
 
   // --- missing artifactId fails visibly ---
   openCalls.length = 0;
-  const missing = await driveClickTrace(win, view, CARDS[1].deliverableId, { stripArtifactId: true });
+  const missing = await driveClickTrace(win, view, CARDS[1].deliverableId, { stripIds: true });
   check("missing id: loading then failure", missing.loadingFeedbackShown === true && missing.failureFeedbackShown === true, missing);
   check("missing id: no IPC", openCalls.length === 0, openCalls);
 

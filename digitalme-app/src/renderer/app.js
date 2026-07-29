@@ -254,6 +254,11 @@ function registerEarlyUiDelegates() {
     });
   }
   try {
+    bindArtifactOpenRootOnce();
+  } catch (err) {
+    reportBindError("artifact-open-root", err);
+  }
+  try {
     bindBootstrapFileActions();
   } catch (err) {
     reportBindError("bootstrap-files-early", err);
@@ -5506,6 +5511,7 @@ const dmPerf = {
     actGenerationItems: 0,
     actTaskOverflowDocument: 0,
     actTaskTabs: 0,
+    rootArtifactOpen: 0,
   },
 };
 try {
@@ -7800,11 +7806,6 @@ async function refreshActGenerationPanel(packageId) {
     actBehalfState.taskAuthStatus = view.authorizationStatus || null;
     dmPerfMark("generationPanelRenderCount");
     window.DeliverablePlannerUi.renderGenerationPanel(view);
-    // Safety: bind even if planner hook missed (innerHTML rebuild clears dataset.openBound).
-    const items = $("act-generation-items");
-    if (items && typeof bindArtifactOpenButtons === "function") {
-      bindArtifactOpenButtons(items);
-    }
     const dels = (view.deliverables || []).filter((d) => d && d.planDisposition === "included");
     const anyBusy = dels.some(
       (d) =>
@@ -7956,9 +7957,11 @@ async function handleGenerateFromPlan() {
   await refreshActTaskList();
 }
 
-// Direct-bound artifact open (FIX-01C). No parent-container delegation for open buttons.
+// Single root-capture artifact open (FIX-01D). No per-button / panel open wiring.
 // Differences between baseline / enhanced / legacy / package / partial deliverables
 // are resolved by main from the stable Version / ArtifactRef ids — never guessed here.
+
+let artifactOpenRootBound = false;
 
 function logArtifactOpen(phase, extra) {
   try {
@@ -7991,38 +7994,61 @@ function showArtifactOpenErrorNearButton(button, text) {
   }
 }
 
-async function handleArtifactOpenButtonClick(event) {
-  if (event && typeof event.preventDefault === "function") event.preventDefault();
-  if (event && typeof event.stopPropagation === "function") event.stopPropagation();
-  const button = event && event.currentTarget;
-  if (!button) return;
-  await openDeliverableArtifactFromButton(button);
+function findArtifactOpenButton(event) {
+  if (!event || typeof event.composedPath !== "function") return null;
+  let pathNodes;
+  try {
+    pathNodes = event.composedPath();
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(pathNodes)) return null;
+  for (const node of pathNodes) {
+    if (!node || node.tagName !== "BUTTON") continue;
+    const ds = node.dataset || {};
+    const action = ds.action || node.getAttribute("data-action") || "";
+    if (
+      action === "open-deliverable-artifact" ||
+      action === "open-primary" ||
+      action === "open-art" ||
+      ds.openDeliverableArtifact === "true" ||
+      node.getAttribute("data-open-deliverable-artifact") === "true"
+    ) {
+      return node;
+    }
+  }
+  return null;
 }
 
-function bindArtifactOpenButtons(container) {
-  if (!container || typeof container.querySelectorAll !== "function") return 0;
-  const buttons = container.querySelectorAll('[data-action="open-deliverable-artifact"]');
-  let bound = 0;
-  for (const button of buttons) {
-    if (button.dataset.openBound === "true") continue;
-    button.dataset.openBound = "true";
-    button.type = button.type || "button";
-    button.addEventListener("click", handleArtifactOpenButtonClick);
-    bound += 1;
-  }
+function bindArtifactOpenRootOnce() {
+  if (artifactOpenRootBound) return;
+  const root = document.getElementById("app") || document.body;
+  if (!root || typeof root.addEventListener !== "function") return;
+  root.addEventListener("click", handleArtifactOpenAtRootCapture, true);
+  artifactOpenRootBound = true;
   try {
-    dmPerf.directOpenButtonsBound = (dmPerf.directOpenButtonsBound || 0) + bound;
+    dmPerf.listenerInstall.rootArtifactOpen = (dmPerf.listenerInstall.rootArtifactOpen || 0) + 1;
+    window.__dmArtifactOpenRootInstallCount = dmPerf.listenerInstall.rootArtifactOpen;
   } catch {
     /* ignore */
   }
-  return bound;
 }
 
-// Expose for deliverable-planner after each generation-panel rebuild.
-try {
-  window.bindArtifactOpenButtons = bindArtifactOpenButtons;
-} catch {
-  /* ignore */
+async function handleArtifactOpenAtRootCapture(event) {
+  const button = findArtifactOpenButton(event);
+  if (!button) return;
+  try {
+    window.__dmLastArtifactOpenTrace = {
+      root_capture_entered: true,
+      rootCaptureEntered: true,
+    };
+  } catch {
+    /* ignore */
+  }
+  if (event && typeof event.preventDefault === "function") event.preventDefault();
+  if (event && typeof event.stopPropagation === "function") event.stopPropagation();
+  if (event && typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+  await openDeliverableArtifactFromButton(button);
 }
 
 async function openDeliverableArtifactFromButton(btn) {
@@ -8031,13 +8057,49 @@ async function openDeliverableArtifactFromButton(btn) {
   if (btn.getAttribute("data-opening") === "1") return { ok: false };
   if (btn.getAttribute("data-open-cooldown") === "1") return { ok: false };
 
-  // FIRST: visible feedback before any dataset read or preload call.
+  const traceId =
+    "ao_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 8);
+  const trace = {
+    traceId,
+    actualButtonOuterHTML: String(btn.outerHTML || "").slice(0, 1200),
+    rootListenerInstallCount: (dmPerf.listenerInstall && dmPerf.listenerInstall.rootArtifactOpen) || 0,
+    rootCaptureEntered: true,
+    feedbackRenderedBeforeIpc: false,
+    button_feedback_rendered: false,
+    preloadCalled: false,
+    preload_called: false,
+    mainHandlerEntered: false,
+    main_handler_entered: false,
+    artifactResolved: false,
+    artifact_resolved: false,
+    openPathResult: null,
+    open_path_returned: null,
+    rendererReceivedOk: false,
+    renderer_result_received: false,
+  };
+  try {
+    window.__dmLastArtifactOpenTrace = trace;
+  } catch {
+    /* ignore */
+  }
+
+  // FIRST: visible feedback before any dataset read, store query, panel refresh, or preload.
   const originalText = (btn.textContent || "打开成果").trim() || "打开成果";
   btn.setAttribute("data-opening", "1");
   btn.setAttribute("data-did-show-opening", "1");
   btn.disabled = true;
   btn.textContent = "正在打开…";
+  trace.button_feedback_rendered = true;
+  trace.feedbackRenderedBeforeIpc = true;
   dmPerfMark("artifactOpenHandlerCalls");
+
+  await new Promise((resolve) => {
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => resolve());
+    } else {
+      setTimeout(resolve, 16);
+    }
+  });
 
   function clearOpeningState(nextLabel) {
     btn.disabled = false;
@@ -8065,7 +8127,7 @@ async function openDeliverableArtifactFromButton(btn) {
   const versionId =
     (btn.dataset && btn.dataset.versionId) || btn.getAttribute("data-version-id") || "";
 
-  logArtifactOpen("direct_handler_entered", { artifactId: artifactId || null });
+  logArtifactOpen("root_capture_entered", { artifactId: artifactId || null, traceId });
 
   // Clear leftover distant progress so it cannot look like the open result.
   const progressEl = $("act-progress");
@@ -8073,15 +8135,20 @@ async function openDeliverableArtifactFromButton(btn) {
     setActProgress("");
   }
 
-  if (!artifactId) {
-    logArtifactOpen("failure_feedback_rendered", { reason: "missing_artifact_id" });
+  if (!artifactId && !versionId) {
+    logArtifactOpen("failure_feedback_rendered", { reason: "missing_ids", traceId });
     clearOpeningState("打开成果");
     showArtifactOpenErrorNearButton(btn, "暂时无法打开成果。");
+    try {
+      window.__dmLastArtifactOpenTrace = trace;
+    } catch {
+      /* ignore */
+    }
     return { ok: false, code: "invalid_artifact_reference" };
   }
 
   if (!window.digitalMe || typeof window.digitalMe.actBehalfOpenArtifact !== "function") {
-    logArtifactOpen("failure_feedback_rendered", { reason: "preload_missing", artifactId });
+    logArtifactOpen("failure_feedback_rendered", { reason: "preload_missing", artifactId, traceId });
     clearOpeningState("打开成果");
     showArtifactOpenErrorNearButton(btn, "暂时无法打开成果。");
     return { ok: false, code: "preload_missing" };
@@ -8091,18 +8158,31 @@ async function openDeliverableArtifactFromButton(btn) {
     taskId: taskId || undefined,
     deliverableId: deliverableId || undefined,
     versionId: versionId || undefined,
-    artifactId,
-    artifactRefId: artifactId,
+    artifactId: artifactId || undefined,
+    artifactRefId: artifactId || undefined,
+    traceId,
   };
 
   let res = null;
   try {
-    logArtifactOpen("preload_call_started", { artifactId });
+    logArtifactOpen("preload_called", { artifactId: artifactId || null, traceId });
+    trace.preloadCalled = true;
+    trace.preload_called = true;
     res = await window.digitalMe.actBehalfOpenArtifact(ids);
-    logArtifactOpen("preload_result_received", {
-      artifactId,
+    const et = res && res._ephemeralTrace;
+    if (et) {
+      trace.mainHandlerEntered = !!et.mainHandlerEntered;
+      trace.main_handler_entered = !!et.mainHandlerEntered;
+      trace.artifactResolved = !!et.artifactResolved;
+      trace.artifact_resolved = !!et.artifactResolved;
+      trace.openPathResult = et.openPathResult == null ? null : et.openPathResult;
+      trace.open_path_returned = trace.openPathResult;
+    }
+    logArtifactOpen("renderer_result_received", {
+      artifactId: artifactId || null,
       ok: !!(res && res.ok),
       code: (res && res.code) || null,
+      traceId,
     });
   } catch (err) {
     res = {
@@ -8111,21 +8191,35 @@ async function openDeliverableArtifactFromButton(btn) {
       message: "暂时无法打开成果。",
       detail: err && err.message ? String(err.message).slice(0, 240) : undefined,
     };
-    logArtifactOpen("preload_result_received", { artifactId, ok: false, code: "open_failed" });
+    logArtifactOpen("renderer_result_received", {
+      artifactId: artifactId || null,
+      ok: false,
+      code: "open_failed",
+      traceId,
+    });
+  }
+
+  trace.rendererReceivedOk = !!(res && res.ok);
+  trace.renderer_result_received = true;
+  try {
+    window.__dmLastArtifactOpenTrace = trace;
+  } catch {
+    /* ignore */
   }
 
   if (!res || !res.ok) {
     clearOpeningState("打开成果");
     showArtifactOpenErrorNearButton(btn, "暂时无法打开成果。");
     logArtifactOpen("failure_feedback_rendered", {
-      artifactId,
+      artifactId: artifactId || null,
       code: (res && res.code) || "open_failed",
+      traceId,
     });
     return res || { ok: false };
   }
 
   btn.textContent = "已打开成果";
-  logArtifactOpen("success_feedback_rendered", { artifactId });
+  logArtifactOpen("success_feedback_rendered", { artifactId: artifactId || null, traceId });
   setTimeout(() => {
     if (btn.textContent === "已打开成果" || btn.getAttribute("data-opening") === "1") {
       clearOpeningState(
@@ -8141,14 +8235,12 @@ async function handleGenerationPanelClick(ev) {
   if (!btn) return;
   const action = btn.getAttribute("data-action");
   const packageId = actBehalfState.activePackageId;
-  // New cards use direct binding on open-deliverable-artifact — do not also handle here.
-  // Historical open-primary / open-art kept only for unre-rendered legacy DOM.
-  if (action === "open-deliverable-artifact") {
-    return;
-  }
-  if (action === "open-art" || action === "open-primary") {
-    if (ev && typeof ev.stopPropagation === "function") ev.stopPropagation();
-    await openDeliverableArtifactFromButton(btn);
+  // Artifact open is exclusively handled by #app capture (FIX-01D). Never open here.
+  if (
+    action === "open-deliverable-artifact" ||
+    action === "open-art" ||
+    action === "open-primary"
+  ) {
     return;
   }
   if (action === "reveal-art") {
