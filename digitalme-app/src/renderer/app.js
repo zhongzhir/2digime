@@ -7883,15 +7883,82 @@ async function handleGenerationPanelClick(ev) {
   const action = btn.getAttribute("data-action");
   const packageId = actBehalfState.activePackageId;
   if (action === "open-art" || action === "open-primary") {
-    const id = btn.getAttribute("data-artifact-id");
-    const res = await window.digitalMe.actBehalfOpenArtifact({ artifactRefId: id });
-    if (!res || !res.ok) setActProgress((res && res.message) || "无法打开文件。");
+    if (btn.disabled || btn.getAttribute("data-opening") === "1") return;
+    const artifactId = btn.getAttribute("data-artifact-id");
+    if (!artifactId || !window.digitalMe || typeof window.digitalMe.actBehalfOpenArtifact !== "function") {
+      setActProgress("暂时无法打开成果。");
+      return;
+    }
+    const originalLabel = btn.textContent;
+    btn.setAttribute("data-opening", "1");
+    btn.disabled = true;
+    btn.textContent = "正在打开…";
+    let res = null;
+    try {
+      res = await window.digitalMe.actBehalfOpenArtifact({
+        artifactId,
+        artifactRefId: artifactId,
+        versionId: btn.getAttribute("data-version-id") || undefined,
+        deliverableId: btn.getAttribute("data-deliverable-id") || undefined,
+        taskId: btn.getAttribute("data-task-id") || actBehalfState.taskId || undefined,
+      });
+    } catch (err) {
+      res = {
+        ok: false,
+        code: "open_failed",
+        message: "暂时无法打开成果。",
+        detail: err && err.message ? String(err.message).slice(0, 240) : undefined,
+      };
+    }
+    btn.disabled = false;
+    btn.removeAttribute("data-opening");
+    btn.textContent = originalLabel || "打开成果";
+    if (!res || !res.ok) {
+      const msg = (res && res.message) || "暂时无法打开成果。";
+      setActProgress(msg);
+      const status = $("act-generation-status");
+      if (status) {
+        status.textContent = msg;
+        status.setAttribute("data-open-error-code", (res && res.code) || "open_failed");
+        if (res && res.detail) status.setAttribute("title", String(res.detail).slice(0, 240));
+      }
+    } else {
+      setActProgress("");
+      const status = $("act-generation-status");
+      if (status) {
+        status.textContent = "";
+        status.removeAttribute("data-open-error-code");
+        status.removeAttribute("title");
+      }
+    }
     return;
   }
   if (action === "reveal-art") {
-    const id = btn.getAttribute("data-artifact-id");
-    const res = await window.digitalMe.actBehalfRevealArtifact({ artifactRefId: id });
-    if (!res || !res.ok) setActProgress((res && res.message) || "无法打开所在目录。");
+    if (btn.disabled || btn.getAttribute("data-opening") === "1") return;
+    const artifactId = btn.getAttribute("data-artifact-id");
+    if (!artifactId || !window.digitalMe || typeof window.digitalMe.actBehalfRevealArtifact !== "function") {
+      setActProgress("暂时无法打开成果。");
+      return;
+    }
+    const originalLabel = btn.textContent;
+    btn.setAttribute("data-opening", "1");
+    btn.disabled = true;
+    let res = null;
+    try {
+      res = await window.digitalMe.actBehalfRevealArtifact({
+        artifactId,
+        artifactRefId: artifactId,
+        versionId: btn.getAttribute("data-version-id") || undefined,
+        deliverableId: btn.getAttribute("data-deliverable-id") || undefined,
+        taskId: btn.getAttribute("data-task-id") || actBehalfState.taskId || undefined,
+      });
+    } catch (err) {
+      res = { ok: false, message: "暂时无法打开成果。" };
+    }
+    btn.disabled = false;
+    btn.removeAttribute("data-opening");
+    btn.textContent = originalLabel || "打开所在目录";
+    if (!res || !res.ok) setActProgress((res && res.message) || "暂时无法打开成果。");
     return;
   }
   if (action === "accept-ver" || action === "reject-ver") {

@@ -520,12 +520,17 @@
       .join("");
   }
 
-  function pickPrimaryArtifact(kind, arts) {
+  function pickPrimaryArtifact(kind, arts, preferredRef) {
+    if (preferredRef && preferredRef.id && arts && arts.some((a) => a && a.id === preferredRef.id)) {
+      return preferredRef;
+    }
     if (!arts || !arts.length) return null;
+    // Prefer the content file users can open in an editor/office app.
+    // HTML remains available under「更多…」to avoid silent browser-behind-window opens.
     const prefer = {
       webpage: ["html"],
-      presentation: ["pptx", "html"],
-      document: ["html", "docx", "md"],
+      presentation: ["pptx", "docx", "html"],
+      document: ["md", "docx", "html"],
       image: ["png", "jpg", "jpeg", "webp"],
     };
     const order = prefer[kind] || [];
@@ -670,7 +675,7 @@
             seen.add(a.id);
             return true;
           });
-          const primary = pickPrimaryArtifact(d.kind, uniqueArts);
+          const primary = pickPrimaryArtifact(d.kind, uniqueArts, ver && ver.artifactRef);
           const secondaryArts = uniqueArts.filter((a) => !primary || a.id !== primary.id);
           const hasPersistedArtifact = !!(ver && primary && d.currentVersionId);
 
@@ -712,26 +717,44 @@
           let actions = "";
           if (st === "成果已完成" && primary) {
             actions +=
-              `<button type="button" class="btn btn-primary" data-action="open-primary" data-artifact-id="${primary.id}">打开成果</button>`;
+              `<button type="button" class="btn btn-primary" data-action="open-primary" data-artifact-id="${escapeAttr(
+                primary.id
+              )}" data-version-id="${escapeAttr(ver.id)}" data-deliverable-id="${escapeAttr(
+                d.id
+              )}" data-task-id="${escapeAttr((pkg && pkg.taskId) || "")}">打开成果</button>`;
             actions +=
-              `<button type="button" class="btn-ghost" data-action="accept-ver" data-version-id="${ver.id}">接受</button>`;
+              `<button type="button" class="btn-ghost" data-action="accept-ver" data-version-id="${escapeAttr(
+                ver.id
+              )}">接受</button>`;
             const moreItems = [];
             moreItems.push(
               canGenerate
-                ? `<button type="button" class="btn-ghost" data-action="regen" data-deliverable-id="${d.id}">重新生成</button>`
+                ? `<button type="button" class="btn-ghost" data-action="regen" data-deliverable-id="${escapeAttr(
+                    d.id
+                  )}">重新生成</button>`
                 : `<button type="button" class="btn-ghost" disabled title="本次授权已撤销">重新生成</button>`
             );
             moreItems.push(
-              `<button type="button" class="btn-ghost" data-action="reveal-art" data-artifact-id="${primary.id}">打开所在目录</button>`
+              `<button type="button" class="btn-ghost" data-action="reveal-art" data-artifact-id="${escapeAttr(
+                primary.id
+              )}" data-version-id="${escapeAttr(ver.id)}" data-deliverable-id="${escapeAttr(
+                d.id
+              )}" data-task-id="${escapeAttr((pkg && pkg.taskId) || "")}">打开所在目录</button>`
             );
             if (ver) {
               moreItems.push(
-                `<button type="button" class="btn-ghost" data-action="reject-ver" data-version-id="${ver.id}">否定此版本</button>`
+                `<button type="button" class="btn-ghost" data-action="reject-ver" data-version-id="${escapeAttr(
+                  ver.id
+                )}">否定此版本</button>`
               );
             }
             secondaryArts.forEach((a) => {
               moreItems.push(
-                `<button type="button" class="btn-ghost" data-action="open-art" data-artifact-id="${a.id}">打开 ${escapeAttr(
+                `<button type="button" class="btn-ghost" data-action="open-art" data-artifact-id="${escapeAttr(
+                  a.id
+                )}" data-version-id="${escapeAttr(ver.id)}" data-deliverable-id="${escapeAttr(
+                  d.id
+                )}" data-task-id="${escapeAttr((pkg && pkg.taskId) || "")}">打开 ${escapeAttr(
                   a.format || "其他格式"
                 )}</button>`
               );

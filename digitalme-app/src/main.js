@@ -41,6 +41,7 @@ const { recomputeCurrentPreparationReadiness } = require("./act-behalf/deliverab
 const { reconcileTaskPackages } = require("./act-behalf/deliverable-package-recovery");
 const deliverableGeneration = require("./act-behalf/deliverable-generation");
 const deliverableArtifactFs = require("./act-behalf/deliverable-artifact-fs");
+const deliverableArtifactOpen = require("./act-behalf/deliverable-artifact-open");
 const { confirmPlanAndGenerate } = require("./act-behalf/deliverable-confirm-and-generate");
 const deliverableAutoLearn = require("./act-behalf/deliverable-auto-learn");
 const actionIdentity = require("./act-behalf/action-identity");
@@ -3431,20 +3432,18 @@ ipcMain.handle("actBehalf:listDeliverableVersions", async (_e, payload) => {
 ipcMain.handle("actBehalf:openArtifact", async (_e, payload) => {
   try {
     const userData = app.getPath("userData");
-    const artifactRefId = payload && payload.artifactRefId ? String(payload.artifactRefId) : "";
-    if (!artifactRefId) return { ok: false, code: "artifact_required", message: "缺少文件引用。" };
-    const got = deliverablePackageStore.getArtifact(userData, artifactRefId);
-    if (!got.ok) return got;
-    const abs = deliverableArtifactFs.resolveAbsolute(userData, got.artifact.relativePath);
     const { shell } = require("electron");
-    const err = await shell.openPath(abs);
-    if (err) return { ok: false, code: "open_failed", message: err || "无法打开文件。" };
-    return { ok: true, relativePath: got.artifact.relativePath };
+    return await deliverableArtifactOpen.openArtifactSecure({
+      userData,
+      payload: payload || {},
+      shell,
+    });
   } catch (err) {
     return {
       ok: false,
       code: err && err.code ? err.code : "open_failed",
-      message: err && err.message ? err.message : "无法打开文件。",
+      message: "暂时无法打开成果。",
+      detail: err && err.message ? String(err.message).slice(0, 240) : undefined,
     };
   }
 });
@@ -3452,19 +3451,18 @@ ipcMain.handle("actBehalf:openArtifact", async (_e, payload) => {
 ipcMain.handle("actBehalf:revealArtifact", async (_e, payload) => {
   try {
     const userData = app.getPath("userData");
-    const artifactRefId = payload && payload.artifactRefId ? String(payload.artifactRefId) : "";
-    if (!artifactRefId) return { ok: false, code: "artifact_required", message: "缺少文件引用。" };
-    const got = deliverablePackageStore.getArtifact(userData, artifactRefId);
-    if (!got.ok) return got;
-    const abs = deliverableArtifactFs.resolveAbsolute(userData, got.artifact.relativePath);
     const { shell } = require("electron");
-    shell.showItemInFolder(abs);
-    return { ok: true, relativePath: got.artifact.relativePath };
+    return deliverableArtifactOpen.revealArtifactSecure({
+      userData,
+      payload: payload || {},
+      shell,
+    });
   } catch (err) {
     return {
       ok: false,
-      code: err && err.code ? err.code : "reveal_failed",
-      message: err && err.message ? err.message : "无法打开所在目录。",
+      code: err && err.code ? err.code : "open_failed",
+      message: "暂时无法打开成果。",
+      detail: err && err.message ? String(err.message).slice(0, 240) : undefined,
     };
   }
 });
