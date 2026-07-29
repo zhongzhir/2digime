@@ -7914,7 +7914,7 @@ async function handleGenerationPanelClick(ev) {
     btn.removeAttribute("data-opening");
     btn.textContent = originalLabel || "打开成果";
     if (!res || !res.ok) {
-      const msg = (res && res.message) || "暂时无法打开成果。";
+      const msg = "暂时无法打开成果。";
       setActProgress(msg);
       const status = $("act-generation-status");
       if (status) {
@@ -7923,13 +7923,20 @@ async function handleGenerationPanelClick(ev) {
         if (res && res.detail) status.setAttribute("title", String(res.detail).slice(0, 240));
       }
     } else {
-      setActProgress("");
+      setActProgress("已打开成果");
       const status = $("act-generation-status");
       if (status) {
-        status.textContent = "";
+        status.textContent = "已打开成果";
         status.removeAttribute("data-open-error-code");
         status.removeAttribute("title");
       }
+      setTimeout(() => {
+        if (($("act-progress") && $("act-progress").textContent) === "已打开成果") {
+          setActProgress("");
+        }
+        const st = $("act-generation-status");
+        if (st && st.textContent === "已打开成果") st.textContent = "";
+      }, 1800);
     }
     return;
   }

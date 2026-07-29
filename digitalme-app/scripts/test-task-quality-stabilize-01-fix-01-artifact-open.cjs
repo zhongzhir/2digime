@@ -320,6 +320,8 @@ async function main() {
     assert.ok(appSrc.includes("正在打开…"));
     assert.ok(appSrc.includes("data-opening"));
     assert.ok(appSrc.includes("actBehalfOpenArtifact"));
+    assert.ok(appSrc.includes("已打开成果"));
+    assert.ok(appSrc.includes('status.textContent = "暂时无法打开成果。"') || appSrc.includes('"暂时无法打开成果。"'));
   });
 
   await test("partial package: ready items openable, failed have no open button markup rule", () => {
@@ -329,6 +331,36 @@ async function main() {
     );
     assert.ok(src.includes('if (st === "成果已完成" && primary)'));
     assert.ok(src.includes("成果未能生成"));
+  });
+
+  await test("acceptance harness resolves modules via __dirname not cwd", () => {
+    const harness = fs.readFileSync(
+      path.join(__dirname, "electron-artifact-open-acceptance.cjs"),
+      "utf8"
+    );
+    assert.ok(harness.includes("function fromAppRoot"));
+    assert.ok(harness.includes('path.resolve(__dirname, "..", ...parts)'));
+    assert.ok(harness.includes("main().catch"));
+    assert.ok(!harness.includes('require("./src/'));
+    assert.ok(!/new\s+BrowserWindow/.test(harness));
+    assert.ok(!harness.includes("dialog.show"));
+
+    const prev = process.cwd();
+    try {
+      process.chdir(os.tmpdir());
+      function fromAppRoot(...parts) {
+        return path.resolve(__dirname, "..", ...parts);
+      }
+      const modPath = fromAppRoot("src", "act-behalf", "deliverable-package-store");
+      assert.ok(fs.existsSync(modPath + ".js") || fs.existsSync(modPath));
+      const store = require(modPath);
+      assert.equal(typeof store.loadStore, "function");
+      const openPath = fromAppRoot("src", "act-behalf", "deliverable-artifact-open");
+      const openMod = require(openPath);
+      assert.equal(typeof openMod.openArtifactSecure, "function");
+    } finally {
+      process.chdir(prev);
+    }
   });
 
   console.log("\nartifact-open-fix:", passed, "passed,", failed, "failed");
