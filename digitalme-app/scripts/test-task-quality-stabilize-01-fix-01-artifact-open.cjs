@@ -287,7 +287,7 @@ async function main() {
       let revealed = null;
       const rev = revealPrimaryForSelection({
         userData: ud,
-        selection: { taskId: "abt_sel" },
+        selection: { taskId: "abt_sel", packageId: "delivery_sel" },
         shell: {
           showItemInFolder: (p) => {
             revealed = p;
@@ -296,6 +296,9 @@ async function main() {
       });
       assert.equal(rev.ok, true);
       assert.ok(revealed);
+      const missingPkg = resolvePrimaryForSelection(ud, { taskId: "abt_sel" });
+      assert.equal(missingPkg.ok, false);
+      assert.equal(missingPkg.code, "selection_missing");
       const empty = resolvePrimaryForSelection(ud, { taskId: "abt_none" });
       assert.equal(empty.ok, false);
     } finally {

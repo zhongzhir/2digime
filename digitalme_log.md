@@ -5,6 +5,22 @@
 
 ---
 
+## 2026-07-29 ARTIFACT-ACCESS-MIN-01.1 原生成果菜单上下文一致性修复
+
+状态：`implemented` / `stale_artifact_context_removed` / `native_menu_context_guarded` / `developer_runtime_accepted` / `owner_runtime_acceptance_pending`。
+
+验证命令与结果：
+
+- `node digitalme-app/scripts/test-task-quality-stabilize-01-fix-01-artifact-open.cjs` → `14/14` 通过
+- `node digitalme-app/scripts/test-global-renderer-responsiveness-01.cjs` → `11/11` 通过
+- `node digitalme-app/scripts/run-artifact-access-min-file-menu-acceptance.cjs`（正式窗口真实鼠标）→ `ok: true`
+
+证据目录：`digitalme-app/scripts/_access-min-evidence/2026-07-29T08-35-23-483Z/`。
+
+约束确认：新增永久字段 `0`；新增 Store `0`；新增 IPC `0`；不恢复成果卡「打开成果」按钮；原生菜单仍为当前过渡访问入口；尚未 `owner_runtime_accepted`；尚未 `accepted_as_implemented`。不得 push。
+
+---
+
 ## 2026-07-29 ARTIFACT-ACCESS-MIN-01 开发侧文件菜单验收通过
 
 正式 `electron .` + Owner userData；OS 真实鼠标点击「文件 → 打开当前成果 / 打开成果所在文件夹」；截图见 `digitalme-app/scripts/_access-min-evidence/LATEST/`；重启后再跑通过。状态升为 `developer_runtime_accepted` / `ready_for_owner_spotcheck`。不得 push。

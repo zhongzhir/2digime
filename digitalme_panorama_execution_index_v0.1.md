@@ -7,7 +7,7 @@
 代码实现基线：`2f1b7bd`（committed baseline；distill-me + doing-context + identity + collaboration + 全部新增功能）；历史 `cbde807fd1e40472d66fbe8f0810a0835e8bc816`（PAN-01S 族）；R1 `8d7e9b3`；R2 分支 `codex/r2-chat-sessions-migration`（实现保留）
 规格依据：见文内历史列表
 
-> **2026-07-29 TODAY（非本索引主线）**：**ARTIFACT-ACCESS-MIN-01**（原生文件菜单访问）`implemented` / `developer_runtime_accepted` / `ready_for_owner_spotcheck`；分支 `codex/artifact-access-min-01`。证据 `digitalme-app/scripts/_access-min-evidence/LATEST/`。可 Owner 抽查。不得 push。
+> **2026-07-29 TODAY（非本索引主线）**：**ARTIFACT-ACCESS-MIN-01.1**（原生文件菜单上下文一致性修复）`implemented` / `stale_artifact_context_removed` / `native_menu_context_guarded` / `developer_runtime_accepted` / `owner_runtime_acceptance_pending`；分支 `codex/artifact-access-min-01`。验证：`artifact-open-fix 14/14`、`global-renderer-responsiveness 11/11`、正式窗口真实鼠标验收 `ok: true`。证据 `digitalme-app/scripts/_access-min-evidence/2026-07-29T08-35-23-483Z/`。不恢复成果卡「打开成果」；原生菜单仍为过渡访问入口；尚未 `owner_runtime_accepted` / `accepted_as_implemented`。不得 push。
 >
 > **2026-07-29（前序，已被 ACCESS-MIN 取代）**：**ARTIFACT-OPEN-RESET-01** 卡片 `executeUiCommand("artifact.open")` 策略作废。
 >

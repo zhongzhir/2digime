@@ -181,27 +181,18 @@ function resolveOpenableArtifact(userData, payload) {
  */
 function resolvePrimaryForSelection(userData, selection) {
   const taskId = selection && selection.taskId ? String(selection.taskId) : "";
-  let packageId = selection && selection.packageId ? String(selection.packageId) : "";
-  if (!taskId && !packageId) {
-    return fail("invalid_artifact_reference", "no task or package selected");
+  const packageId = selection && selection.packageId ? String(selection.packageId) : "";
+  if (!taskId || !packageId) {
+    return fail("selection_missing", "taskId/packageId required");
   }
 
   const store = packageStore.loadStore(userData);
-  let pkg = null;
-  if (packageId && store.packages[packageId]) {
-    pkg = store.packages[packageId];
-  } else if (taskId) {
-    const list = Object.values(store.packages || {}).filter(
-      (p) => p && String(p.taskId) === taskId
-    );
-    pkg = list.sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")))[0] || null;
-    if (pkg) packageId = String(pkg.id);
-  }
+  const pkg = store.packages && store.packages[packageId];
   if (!pkg) {
-    return fail("package_not_found", "no package for selection");
+    return fail("selection_invalid", "package not found");
   }
-  if (taskId && String(pkg.taskId) !== taskId) {
-    return fail("invalid_artifact_reference", "package does not belong to task");
+  if (String(pkg.taskId || "") !== taskId) {
+    return fail("selection_invalid", "package does not belong to task");
   }
 
   const deliverableIds = Array.isArray(pkg.deliverableIds) ? pkg.deliverableIds : [];
@@ -262,6 +253,10 @@ function revealPrimaryForSelection(opts) {
     },
     shell: opts.shell,
   });
+}
+
+function isSelectionContextInvalidCode(code) {
+  return code === "selection_missing" || code === "selection_invalid" || code === "package_not_found";
 }
 
 /**
@@ -332,6 +327,7 @@ module.exports = {
   resolvePrimaryForSelection,
   openPrimaryForSelection,
   revealPrimaryForSelection,
+  isSelectionContextInvalidCode,
   openArtifactSecure,
   revealArtifactSecure,
 };

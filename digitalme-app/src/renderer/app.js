@@ -1915,6 +1915,9 @@ function switchView(view, btn, opts = {}) {
   const viewIdentity = $("view-identity");
   if (viewIdentity) viewIdentity.classList.toggle("hidden", view !== "identity");
   $("view-extensions").classList.toggle("hidden", view !== "extensions");
+  if (view !== "do") {
+    setActiveArtifactContext(null, null);
+  }
   if (view !== "me") {
     clearBuildSessionState();
   }
@@ -5313,6 +5316,7 @@ async function openLibraryItem(id) {
 
 function showDoHub() {
   doScene = null;
+  setActiveArtifactContext(null, null);
   $("do-hub").classList.remove("hidden");
   $("do-write").classList.add("hidden");
   const dr = $("do-research");
@@ -6608,17 +6612,8 @@ async function fetchActTaskListPage({ append = false } = {}) {
 async function handleActTaskRemovedFromView(taskId) {
   if (actBehalfState.taskId !== taskId) return;
   resetActBehalfForm();
-  const res = await window.digitalMe.actBehalfList({
-    scope: "active",
-    offset: 0,
-    limit: 1,
-  });
-  const next = res && res.tasks && res.tasks[0];
-  if (next && next.taskId) {
-    await openActBehalfTask(next.taskId);
-  } else {
-    setActProgress("当前任务已移出列表。可新建任务或从列表选择其他任务。");
-  }
+  showDoHub();
+  setActProgress("当前任务已移出列表。可新建任务或从列表选择其他任务。");
 }
 
 function toggleActTaskOverflow(moreBtn, menu, taskId) {
@@ -7517,6 +7512,7 @@ function resetActBehalfForm() {
   setActProgress("");
   updateActResearchPanelVisibility();
   updateActResultGenVisibility(null);
+  setActiveArtifactContext(null, null);
 }
 
 async function openActBehalfScene(opts = {}) {
@@ -7560,7 +7556,7 @@ async function openActBehalfTask(taskId) {
     return;
   }
   const task = res.task;
-  actBehalfState.taskId = task.taskId;
+  setActiveArtifactContext(task.taskId, null);
   const intent = task.taskIntent || {};
   if ($("act-title")) $("act-title").value = task.title || "";
   if ($("act-request")) $("act-request").value = intent.goal || task.goal || task.request || "";
@@ -7721,14 +7717,13 @@ async function refreshActDeliverableResults(taskId, planView) {
   planChanged = !!(planning && planning.currentDraftVersionId);
 
   if (pkg && pkg.id) {
-    actBehalfState.activePackageId = pkg.id;
+    setActiveArtifactContext(actBehalfState.taskId, pkg.id);
     actBehalfState.taskAuthStatus = (pkgView && pkgView.authorizationStatus) || null;
     await refreshActGenerationPanel(pkg.id);
   } else if (window.DeliverablePlannerUi.renderGenerationPanel) {
-    actBehalfState.activePackageId = null;
+    setActiveArtifactContext(actBehalfState.taskId, null);
     actBehalfState.taskAuthStatus = null;
     window.DeliverablePlannerUi.renderGenerationPanel(null);
-    syncActArtifactSelectionToMain();
   }
 
   if (window.DeliverablePlannerUi.updatePrimaryGenerateButton) {
@@ -7799,11 +7794,10 @@ async function refreshActGenerationPanel(packageId) {
   if (!window.DeliverablePlannerUi || !window.DeliverablePlannerUi.renderGenerationPanel) return;
   const view = await window.digitalMe.actBehalfGetDeliverablePackageById({ packageId });
   if (view && view.ok) {
-    actBehalfState.activePackageId = packageId;
+    setActiveArtifactContext(actBehalfState.taskId, packageId);
     actBehalfState.taskAuthStatus = view.authorizationStatus || null;
     dmPerfMark("generationPanelRenderCount");
     window.DeliverablePlannerUi.renderGenerationPanel(view);
-    syncActArtifactSelectionToMain();
     const dels = (view.deliverables || []).filter((d) => d && d.planDisposition === "included");
     const anyBusy = dels.some(
       (d) =>
@@ -7961,13 +7955,35 @@ async function handleGenerateFromPlan() {
 function syncActArtifactSelectionToMain() {
   try {
     if (!window.digitalMe || typeof window.digitalMe.actBehalfSetSelection !== "function") return;
+    const doView = $("view-do");
+    const actView = $("do-act-behalf");
+    const inActTaskView =
+      doScene === "act_behalf" &&
+      !!doView &&
+      !!actView &&
+      !doView.classList.contains("hidden") &&
+      !actView.classList.contains("hidden");
+    const taskId =
+      inActTaskView && actBehalfState.taskId && actBehalfState.activePackageId
+        ? actBehalfState.taskId
+        : null;
+    const packageId =
+      inActTaskView && actBehalfState.taskId && actBehalfState.activePackageId
+        ? actBehalfState.activePackageId
+        : null;
     window.digitalMe.actBehalfSetSelection({
-      taskId: actBehalfState.taskId || null,
-      packageId: actBehalfState.activePackageId || null,
+      taskId: taskId || null,
+      packageId: packageId || null,
     });
   } catch {
     /* ignore */
   }
+}
+
+function setActiveArtifactContext(taskId, packageId) {
+  actBehalfState.taskId = taskId ? String(taskId) : null;
+  actBehalfState.activePackageId = packageId ? String(packageId) : null;
+  syncActArtifactSelectionToMain();
 }
 
 async function handleGenerationPanelClick(ev) {

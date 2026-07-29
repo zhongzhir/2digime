@@ -2,7 +2,7 @@
 
 版本：v0.4
 状态：持续更新
-最后更新：2026-07-29（ARTIFACT-ACCESS-MIN-01 开发侧文件菜单验收通过；`ready_for_owner_spotcheck`；不得 push）
+最后更新：2026-07-29（ARTIFACT-ACCESS-MIN-01.1 上下文一致性修复完成；`owner_runtime_acceptance_pending`；不得 push）
 
 > **当前产品主线（2026-07-26）**：**第二纵向闭环** — 多模态成果包交付与渐进式主体构建。第一纵向闭环已 `accepted` / `completed`。
 > **最高架构与研发原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)（**v0.1.1 `active`**）。
@@ -21,7 +21,7 @@
 > 2. **BUG1 #6** = 七模块渐进式数字之我构建框架。
 > 3. 首个正式验收场景 = 为一个项目生成完整对外介绍成果包。
 > 4. 第一轮真实产物 = 正式介绍文档、演示文稿 PPT、单页 HTML、封面图片；视频/音频本轮不实现真实生成，用户面不得宣称已支持。
-> **当前任务**：**ARTIFACT-ACCESS-MIN-01**（原生文件菜单访问）已实现并由开发侧验收，状态 `implemented` / `legacy_artifact_open_ui_removed` / `native_artifact_access_added` / `developer_runtime_accepted` / `ready_for_owner_spotcheck`（分支 `codex/artifact-access-min-01`；commit `5284e96`+）。证据：`digitalme-app/scripts/_access-min-evidence/LATEST/`。入口：「文件」→「打开当前成果 / 打开成果所在文件夹」。成果卡无打开按钮。可 Owner 抽查；不得提前 `accepted_as_implemented`。不得 push。
+> **当前任务**：**ARTIFACT-ACCESS-MIN-01.1**（原生文件菜单上下文一致性修复）已实现并完成开发侧验证，状态 `implemented` / `stale_artifact_context_removed` / `native_menu_context_guarded` / `developer_runtime_accepted` / `owner_runtime_acceptance_pending`（分支 `codex/artifact-access-min-01`）。验证命令：`node digitalme-app/scripts/test-task-quality-stabilize-01-fix-01-artifact-open.cjs`（14/14）、`node digitalme-app/scripts/test-global-renderer-responsiveness-01.cjs`（11/11）、`node digitalme-app/scripts/run-artifact-access-min-file-menu-acceptance.cjs`（正式窗口真实鼠标，`ok: true`）。证据目录：`digitalme-app/scripts/_access-min-evidence/2026-07-29T08-35-23-483Z/`。成果卡不恢复「打开成果」按钮；原生菜单仍为过渡访问入口；不得提前 `owner_runtime_accepted` / `accepted_as_implemented`。不得 push。
 > **R2 对话运行时**：保留基础设施；R2 代码 **retained as infrastructure**。生产默认入口仍为 legacy。
 > **Owner Electron 真机验收（2026-07-24）**：`accepted`（distill-me / R2 对话重试 / doing-context / PAN-01S 等）。
 > **confirmed identity → act context（2026-07-24，`2f1b7bd`）**：`accepted`（历史整合基线；**不是**当前 HEAD）。
@@ -335,7 +335,8 @@ flowchart TB
 | `digitalme_phase1_task_TASK-QUALITY-STABILIZE-01-FIX-01C_direct_binding_v0.1.md` | **FIX-01C 正式成果按钮直接绑定**（v0.1.0；`implemented`；Owner @ `1ba6a68` 仍无反馈 → 由 FIX-01D 收口替代生产接线） |
 | `digitalme_phase1_task_TASK-QUALITY-STABILIZE-01-FIX-01D_single_root_entry_v0.1.md` | **FIX-01D 单入口（已由 RESET 取代生产接线）**；其 `formal_coordinate_click_passed` / `owner_dom_trace_passed` **作废，不得再作可用性证据** |
 | `digitalme_phase1_task_ARTIFACT-OPEN-RESET-01_v0.1.md` | **RESET-01**（已被 ACCESS-MIN 取代生产策略；卡片命令打开作废） |
-| `digitalme_phase1_task_ARTIFACT-ACCESS-MIN-01_v0.1.md` | **ARTIFACT-ACCESS-MIN-01**（v0.1.0；`implementation_in_progress` / `owner_retest_forbidden`；原生「文件」菜单访问；无成果卡打开按钮） |
+| `digitalme_phase1_task_ARTIFACT-ACCESS-MIN-01_v0.1.md` | **ARTIFACT-ACCESS-MIN-01**（v0.1.0；已完成最小原生菜单访问基线；无成果卡打开按钮） |
+| `digitalme_phase1_task_ARTIFACT-ACCESS-MIN-01.1_v0.1.md` | **ARTIFACT-ACCESS-MIN-01.1**（v0.1.0；`implemented` / `stale_artifact_context_removed` / `native_menu_context_guarded` / `developer_runtime_accepted` / `owner_runtime_acceptance_pending`） |
 | `digitalme_phase1_task_DVL2-03A_first_real_document_artifact_v0.1.md` | **DVL2-03A 草案（历史）**；已被完整 **DVL2-03** 实现路径吸收（不再单独拆分 03A/B/C） |
 | `docs/design/digitalme_crt_v0.2_subject_context_engine_spec.md` | **CRT v0.2 Subject Context Engine 规格**（v0.2.2；`frozen_for_implementation`） |
 | `digitalme_phase1_task_CRT-MVP-01_cognitive_runtime_continuity_v0.1.md` | **CRT-MVP-01 持续性验证**（实现合入；真机状态见任务包） |

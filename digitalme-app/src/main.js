@@ -47,10 +47,10 @@ const deliverableArtifactOpen = require("./act-behalf/deliverable-artifact-open"
 let actArtifactSelection = { taskId: null, packageId: null };
 
 function setActArtifactSelection(payload) {
-  const next = {
-    taskId: payload && payload.taskId ? String(payload.taskId) : null,
-    packageId: payload && payload.packageId ? String(payload.packageId) : null,
-  };
+  const taskId = payload && payload.taskId ? String(payload.taskId) : null;
+  const packageId = payload && payload.packageId ? String(payload.packageId) : null;
+  const hasFullContext = !!(taskId && packageId);
+  const next = hasFullContext ? { taskId, packageId } : { taskId: null, packageId: null };
   const changed =
     next.taskId !== actArtifactSelection.taskId || next.packageId !== actArtifactSelection.packageId;
   actArtifactSelection = next;
@@ -75,7 +75,10 @@ async function handleNativeOpenCurrentArtifact() {
       dialog.showMessageBox({
         type: "warning",
         title: "无法打开成果",
-        message: (res && res.message) || "暂时无法打开成果。",
+        message:
+          (res && deliverableArtifactOpen.isSelectionContextInvalidCode(res.code))
+            ? "请先打开一个已有成果的任务。"
+            : (res && res.message) || "暂时无法打开成果。",
       });
     }
   } catch (err) {
@@ -100,7 +103,10 @@ async function handleNativeRevealCurrentArtifact() {
       dialog.showMessageBox({
         type: "warning",
         title: "无法打开文件夹",
-        message: (res && res.message) || "暂时无法打开成果。",
+        message:
+          (res && deliverableArtifactOpen.isSelectionContextInvalidCode(res.code))
+            ? "请先打开一个已有成果的任务。"
+            : (res && res.message) || "暂时无法打开成果。",
       });
     }
   } catch (err) {
@@ -248,14 +254,23 @@ function getConfigSecrets() {
 }
 
 function buildAppMenu() {
-  const canOpenArtifact = (() => {
+  const menuState = (() => {
     try {
       const hit = deliverableArtifactOpen.resolvePrimaryForSelection(app.getPath("userData"), actArtifactSelection);
-      return !!(hit && hit.ok);
+      if (hit && hit.ok) return { canOpen: true, shouldClearSelection: false };
+      return {
+        canOpen: false,
+        shouldClearSelection:
+          !!(actArtifactSelection.taskId || actArtifactSelection.packageId) &&
+          !!(hit && deliverableArtifactOpen.isSelectionContextInvalidCode(hit.code)),
+      };
     } catch {
-      return false;
+      return { canOpen: false, shouldClearSelection: false };
     }
   })();
+  if (menuState.shouldClearSelection) {
+    setActArtifactSelection(null);
+  }
 
   const template = [
     {
@@ -264,7 +279,7 @@ function buildAppMenu() {
         {
           id: "file-open-current-artifact",
           label: "打开当前成果",
-          enabled: canOpenArtifact,
+          enabled: menuState.canOpen,
           click: () => {
             void handleNativeOpenCurrentArtifact();
           },
@@ -272,7 +287,7 @@ function buildAppMenu() {
         {
           id: "file-reveal-current-artifact",
           label: "打开成果所在文件夹",
-          enabled: canOpenArtifact,
+          enabled: menuState.canOpen,
           click: () => {
             void handleNativeRevealCurrentArtifact();
           },
