@@ -5,6 +5,36 @@
 
 ---
 
+## 2026-07-29 TASK-QUALITY-LOOP-01.2 动态成果契约与 UI 收敛 · 实施完成（待 Owner 真机验收）
+
+### 本次目标
+
+建立「用户目标 → 动态语义契约 → Outline → 语义覆盖 → 分块生成/局部修复 → Reviewer → 单一状态出口」；不写死 PRD 章节；收敛 GenerationAttempt / ReviewResult；去掉任务页重复目标与多重错误提示。
+
+### 本次完成（分支 `codex/task-quality-loop-01-2-semantic-contract`；基线 `a9ff638`）
+
+1. **语义契约**：`semantic-contract.js` + OutcomeCriteria v2 `requiredSemanticCoverage`（非固定章节）；
+2. **分块生成**：`semantic-generation.js` OutlinePlan → blocks → 语义缺口补齐（运行态；不新建 store）；
+3. **Attempt 收敛**：`recoveryActions[]` 统一写入；旧布尔字段兼容读；
+4. **UI 投影**：`deriveUserFacingTaskState`；planner 目标去重、失败态「成果还未完成」+「继续完善」；
+5. `test:task-quality-loop-01-2` 全绿；01 / 01.1 / FIX-01 与 DVL2 / TASK-UX / IDCOLLAB / Learning Loop / Knowledge Resolver / act-behalf 回归全绿。
+
+### 状态
+
+```text
+implemented /
+automated_tests_passed /
+semantic_contract_generation_added /
+generation_state_consolidated /
+task_ui_minimized /
+owner_runtime_acceptance_pending /
+market_95th_percentile_not_proven
+```
+
+不得 push。**Owner 真机尚未通过。**不得标 `architecture_simplified`（旧字段尚未物理删除）。
+
+---
+
 ## 2026-07-28 TASK-QUALITY-LOOP-01.1-FIX-01 Grounded Generation 修复 · 实施完成（待 Owner 真机验收）
 
 ### 本次目标
