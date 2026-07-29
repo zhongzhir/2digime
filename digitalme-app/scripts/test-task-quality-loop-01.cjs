@@ -437,6 +437,7 @@ async function main() {
             return draftCalls === 1 ? E2E_DEFECTIVE_MD : E2E_GOOD_MD;
           },
           imageMode: "mock",
+          qualityPipelineMode: "advanced_shadow",
         }
       );
       assert.equal(res.ok, true, JSON.stringify(res));
@@ -497,6 +498,7 @@ async function main() {
             return E2E_DEFECTIVE_MD;
           },
           imageMode: "mock",
+          qualityPipelineMode: "advanced_shadow",
         }
       );
       assert.equal(res.ok, false);

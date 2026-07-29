@@ -329,7 +329,7 @@ async function main() {
       },
     });
     assert.equal(view.status, USER_STATUS.FAILED);
-    assert.equal(view.statusMessage, "成果未能完成");
+    assert.equal(view.statusMessage, "成果未能生成");
     assert.equal(view.primaryAction, null);
     assert.equal(view.secondaryAction && view.secondaryAction.label, "查看原因");
     assert.equal(view.title, GOAL);
@@ -400,7 +400,7 @@ async function main() {
       "utf8"
     );
     assert.ok(src.includes("goalIsDuplicate"), "hides duplicate understanding goal");
-    assert.ok(src.includes("成果未能完成"), "single failed status copy");
+    assert.ok(src.includes("成果未能生成"), "single failed status copy");
     assert.ok(src.includes("查看原因"), "details are secondary/collapsed");
     assert.ok(src.includes("正在完善成果") || src.includes("正在生成成果"));
     assert.ok(/hide generate while busy|Single primary action/i.test(src));

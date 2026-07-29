@@ -435,6 +435,7 @@ async function main() {
             return draftCalls === 1 ? failureDraft : acceptableDraft;
           },
           imageMode: "mock",
+          qualityPipelineMode: "advanced_shadow",
         }
       );
       assert.equal(res.ok, true, JSON.stringify({ code: res.code, message: res.message }));
@@ -481,6 +482,7 @@ async function main() {
             return acceptableDraft;
           },
           imageMode: "mock",
+          qualityPipelineMode: "advanced_shadow",
         }
       );
       assert.equal(res.ok, true, JSON.stringify({ code: res.code, message: res.message }));
@@ -528,6 +530,7 @@ async function main() {
             return failureDraft;
           },
           imageMode: "mock",
+          qualityPipelineMode: "advanced_shadow",
         }
       );
       assert.equal(res.ok, false);
@@ -564,6 +567,7 @@ async function main() {
             return failureDraft;
           },
           imageMode: "mock",
+          qualityPipelineMode: "advanced_shadow",
         }
       );
       assert.equal(res.ok, false);

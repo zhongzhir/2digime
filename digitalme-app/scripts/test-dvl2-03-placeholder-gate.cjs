@@ -189,6 +189,7 @@ async function main() {
         ud,
         { packageId: seeded.packageId, deliverableId: del.id },
         {
+          qualityPipelineMode: "advanced_shadow",
           callModel: async () => {
             calls += 1;
             return calls === 1 ? badMd : goodMd;
@@ -221,6 +222,7 @@ async function main() {
         ud,
         { packageId: seeded.packageId, deliverableId: del.id },
         {
+          qualityPipelineMode: "advanced_shadow",
           callModel: async () => badMd,
           imageMode: "mock",
         }
@@ -263,6 +265,7 @@ async function main() {
         ud,
         { packageId: seeded.packageId, deliverableId: del.id },
         {
+          qualityPipelineMode: "advanced_shadow",
           callModel: async () => {
             n += 1;
             return n === 1 ? "项目名称：____\n功能一" : goodMd;

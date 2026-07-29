@@ -205,7 +205,7 @@ async function main() {
       },
     });
     assert.equal(view.status, USER_STATUS.FAILED);
-    assert.equal(view.statusMessage, "成果未能完成");
+    assert.equal(view.statusMessage, "成果未能生成");
     assert.equal(view.primaryAction, null);
     assert.equal(view.secondaryAction && view.secondaryAction.label, "查看原因");
     assert.equal(view.title, "Digital Me 项目知识功能 PRD");
@@ -219,7 +219,7 @@ async function main() {
     );
     assert.ok(!src.includes("继续完善"), "继续完善 must be removed from ordinary path");
     assert.ok(!src.includes("成果还未完成"), "old failed copy must be replaced");
-    assert.ok(src.includes("成果未能完成"));
+    assert.ok(src.includes("成果未能生成"));
     assert.ok(src.includes("查看原因"));
     assert.ok(src.includes("renderItemRowSummary"));
     assert.ok(src.includes("修改计划"));
@@ -254,6 +254,7 @@ async function main() {
             return draftCalls === 1 ? CONFLICT_DRAFT : GOOD_DRAFT;
           },
           imageMode: "mock",
+          qualityPipelineMode: "advanced_shadow",
         }
       );
       assert.equal(res.ok, true, JSON.stringify(res));
