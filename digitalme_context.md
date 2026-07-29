@@ -2,7 +2,7 @@
 
 版本：v0.4
 状态：持续更新
-最后更新：2026-07-29（TASK-QUALITY-STABILIZE-01 可靠交付与后台增强分离完成待 Owner 真机验收；不得 push）
+最后更新：2026-07-29（TASK-QUALITY-STABILIZE-01-FIX-01 成果打开链路修复完成待 Owner 真机验收；不得 push）
 
 > **当前产品主线（2026-07-26）**：**第二纵向闭环** — 多模态成果包交付与渐进式主体构建。第一纵向闭环已 `accepted` / `completed`。
 > **最高架构与研发原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)（**v0.1.1 `active`**）。
@@ -21,7 +21,7 @@
 > 2. **BUG1 #6** = 七模块渐进式数字之我构建框架。
 > 3. 首个正式验收场景 = 为一个项目生成完整对外介绍成果包。
 > 4. 第一轮真实产物 = 正式介绍文档、演示文稿 PPT、单页 HTML、封面图片；视频/音频本轮不实现真实生成，用户面不得宣称已支持。
-> **当前任务**：**TASK-QUALITY-STABILIZE-01**（可靠交付主路径与后台质量增强分离）已实现完成，状态 `implemented` / `automated_tests_passed` / `stable_delivery_added` / `owner_runtime_acceptance_pending` / `market_95th_percentile_not_proven`（分支 `codex/task-quality-stabilize-01`；基线 `72f8f20`；**等待 Owner 真机验收**）。前序质量环链路降为 `advanced_shadow` / `experimental_advanced_quality_pipeline`，不再作为生产交付门禁。**不得** push。
+> **当前任务**：**TASK-QUALITY-STABILIZE-01-FIX-01**（成果打开链路修复）已实现完成，状态 `implemented` / `automated_tests_passed` / `artifact_open_restored` / `owner_runtime_acceptance_pending`（分支 `codex/task-quality-stabilize-01-fix-artifact-open`；基线 `48af0b4`；**等待 Owner 真机验收**）。上位 STABILIZE-01 仍为可靠交付架构。**不得** push。
 > **R2 对话运行时**：保留基础设施；R2 代码 **retained as infrastructure**。生产默认入口仍为 legacy。
 > **Owner Electron 真机验收（2026-07-24）**：`accepted`（distill-me / R2 对话重试 / doing-context / PAN-01S 等）。
 > **confirmed identity → act context（2026-07-24，`2f1b7bd`）**：`accepted`（历史整合基线；**不是**当前 HEAD）。

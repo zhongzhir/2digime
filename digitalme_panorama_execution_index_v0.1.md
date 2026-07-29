@@ -7,7 +7,9 @@
 代码实现基线：`2f1b7bd`（committed baseline；distill-me + doing-context + identity + collaboration + 全部新增功能）；历史 `cbde807fd1e40472d66fbe8f0810a0835e8bc816`（PAN-01S 族）；R1 `8d7e9b3`；R2 分支 `codex/r2-chat-sessions-migration`（实现保留）
 规格依据：见文内历史列表
 
-> **2026-07-29 TODAY（非本索引主线）**：**TASK-QUALITY-STABILIZE-01**（可靠交付主路径与后台质量增强分离）已实现完成：`implemented` / `automated_tests_passed` / `stable_delivery_added` / `owner_runtime_acceptance_pending` / `market_95th_percentile_not_proven`；分支 `codex/task-quality-stabilize-01`；基线 `72f8f20`。生产默认 `stable_delivery`；旧质量环为 `advanced_shadow`。等待 Owner 真机验收。不得 push。不得标市场 95% 分位已证明。
+> **2026-07-29 TODAY（非本索引主线）**：**TASK-QUALITY-STABILIZE-01-FIX-01**（成果打开链路）已实现：`implemented` / `automated_tests_passed` / `artifact_open_restored` / `owner_runtime_acceptance_pending`；分支 `codex/task-quality-stabilize-01-fix-artifact-open`；基线 `48af0b4`。等待 Owner 真机再验打开。不得 push。
+>
+> **2026-07-29（前序）**：**TASK-QUALITY-STABILIZE-01**（可靠交付主路径与后台质量增强分离）已实现完成：`implemented` / `automated_tests_passed` / `stable_delivery_added` / `owner_runtime_acceptance_pending` / `market_95th_percentile_not_proven`；分支 `codex/task-quality-stabilize-01`；基线 `72f8f20`。生产默认 `stable_delivery`；旧质量环为 `advanced_shadow`。不得 push。不得标市场 95% 分位已证明。
 >
 > **2026-07-29（前序）**：**TASK-QUALITY-LOOP-01.2**（动态成果契约、语义覆盖生成与任务界面收敛）已实现完成：`implemented` / `automated_tests_passed` / `semantic_contract_generation_added` / `generation_state_consolidated` / `task_ui_minimized` / `owner_runtime_acceptance_pending` / `market_95th_percentile_not_proven`；分支 `codex/task-quality-loop-01-2-semantic-contract`；基线 `a9ff638`。已被 STABILIZE-01 从生产门禁降为 shadow。不得 push。不得标 `architecture_simplified`。
 

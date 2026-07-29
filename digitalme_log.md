@@ -5,6 +5,27 @@
 
 ---
 
+## 2026-07-29 TASK-QUALITY-STABILIZE-01-FIX-01 成果打开链路修复 · 实施完成（待 Owner 真机验收）
+
+### 事实
+
+Owner 真机：基础成果已落盘且 UI 显示正式成果卡，但「打开成果」无反应。核验确认文件存在；原主打开目标为 HTML 优先；打开失败反馈不足。
+
+### 修复
+
+权威 `openArtifactSecure`；renderer 只传稳定 ID；文档优先打开 md；按钮「正在打开…」与一句用户面错误。
+
+### 状态
+
+```text
+implemented / automated_tests_passed / artifact_open_restored /
+owner_runtime_acceptance_pending
+```
+
+不得 push。
+
+---
+
 ## 2026-07-29 TASK-QUALITY-STABILIZE-01 可靠交付与后台增强分离 · 实施完成（待 Owner 真机验收）
 
 ### 裁决
