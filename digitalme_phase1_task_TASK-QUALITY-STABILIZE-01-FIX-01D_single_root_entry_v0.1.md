@@ -2,7 +2,8 @@
 
 版本：v0.1.0  
 日期：2026-07-29  
-状态：`implemented` / `single_root_artifact_open_entry_added` / `owner_dom_trace_passed` / `formal_coordinate_click_passed` / `owner_runtime_revalidation_pending`  
+状态：`superseded_by_ARTIFACT-OPEN-RESET-01` / formal 标签作废  
+> **ARTIFACT-OPEN-RESET-01**：本文件中的 `formal_coordinate_click_passed` / `owner_dom_trace_passed` **不得再作为可用性证据**。  
 实施分支：`codex/task-quality-stabilize-01-fix-artifact-single-entry`  
 基线：`1ba6a68`（`codex/task-quality-stabilize-01-fix-artifact-direct-binding`）
 

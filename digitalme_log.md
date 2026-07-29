@@ -5,6 +5,21 @@
 
 ---
 
+## 2026-07-29 ARTIFACT-OPEN-RESET-01 成果打开最小重建 · 实施中（禁止 Owner 复验）
+
+### 性质
+
+重置，非 FIX-01E。删除 root capture / 直接绑定 / 多套打开兼容；改为与「接受」共享 `#act-generation-items` → `executeUiCommand("artifact.open")`。
+
+### 状态
+
+`implementation_in_progress` / `owner_retest_forbidden`  
+分支：`codex/artifact-open-reset-01`；基线 `48bdc57`。  
+废除误导标签：`formal_coordinate_click_passed` / `owner_dom_trace_passed`。  
+开发者须 `npm start` + 真实鼠标验收后方可升为 `developer_runtime_mouse_accepted`。不得 push。
+
+---
+
 ## 2026-07-29 TASK-QUALITY-STABILIZE-01-FIX-01D 成果打开单入口收口 · 实施完成（待 Owner 复验）
 
 ### 事实

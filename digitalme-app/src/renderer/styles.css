@@ -3174,7 +3174,7 @@ body {
   position: relative;
   z-index: 2;
 }
-.act-gen-item .builder-actions button[data-action="open-deliverable-artifact"] {
+.act-gen-item .builder-actions button[data-command="artifact.open"] {
   position: relative;
   z-index: 3;
   pointer-events: auto;

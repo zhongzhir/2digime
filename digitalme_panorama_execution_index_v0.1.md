@@ -7,9 +7,11 @@
 代码实现基线：`2f1b7bd`（committed baseline；distill-me + doing-context + identity + collaboration + 全部新增功能）；历史 `cbde807fd1e40472d66fbe8f0810a0835e8bc816`（PAN-01S 族）；R1 `8d7e9b3`；R2 分支 `codex/r2-chat-sessions-migration`（实现保留）
 规格依据：见文内历史列表
 
-> **2026-07-29 TODAY（非本索引主线）**：**TASK-QUALITY-STABILIZE-01-FIX-01D**（成果打开单入口收口）已实现：`implemented` / `single_root_artifact_open_entry_added` / `owner_dom_trace_passed` / `formal_coordinate_click_passed` / `owner_runtime_revalidation_pending`；分支 `codex/task-quality-stabilize-01-fix-artifact-single-entry`；基线 `1ba6a68`。Owner 确认直接绑定仍无反馈 → 改为 `#app` 单次 capture。正式 DOM dump + 坐标点击通过。等待 Owner 复验三个「打开成果」。不得 push。
+> **2026-07-29 TODAY（非本索引主线）**：**ARTIFACT-OPEN-RESET-01**（成果打开最小重建）`implementation_in_progress` / `owner_retest_forbidden`；分支 `codex/artifact-open-reset-01`；基线 `48bdc57`。已废止 FIX-01D formal/harness 可用性标签。共享 `executeUiCommand`；待开发者 `npm start` 真实鼠标验收。不得 push；**禁止 Owner 复验**。
 >
-> **2026-07-29（前序）**：**TASK-QUALITY-STABILIZE-01-FIX-01C**（正式成果按钮直接绑定）已实现但 Owner @ `1ba6a68` 仍无反馈；生产接线由 FIX-01D 收口替代。
+> **2026-07-29（前序，接线已重置）**：**TASK-QUALITY-STABILIZE-01-FIX-01D** 单入口方案已被 RESET 取代；其坐标点击 formal 标签作废。
+>
+> **2026-07-29（前序）**：**TASK-QUALITY-STABILIZE-01-FIX-01C**（正式成果按钮直接绑定）已实现但 Owner @ `1ba6a68` 仍无反馈；生产接线由 RESET 收口替代。
 >
 > **2026-07-29（前序）**：**GLOBAL-RENDERER-RESPONSIVENESS-01**（全局交互迟滞）已实现：`implemented` / `duplicate_listeners_removed` / `renderer_main_thread_work_reduced` / `automated_performance_tests_passed` / `owner_runtime_acceptance_pending`；分支 `codex/global-renderer-responsiveness-01`；基线 `6bff2ad`。根因：≈2.1MB package store 同步 parse/pretty-write 阻塞 main/OS 菜单。不得 push。
 >

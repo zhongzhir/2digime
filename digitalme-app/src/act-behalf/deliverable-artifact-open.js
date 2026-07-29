@@ -182,7 +182,29 @@ function resolveOpenableArtifact(userData, payload) {
  * @param {{ openPath: (p: string) => Promise<string> }} opts.shell
  */
 async function openArtifactSecure(opts) {
-  const resolved = resolveOpenableArtifact(opts.userData, opts.payload || {});
+  const payload = opts.payload || {};
+  if (payload.intent === "copyPath") {
+    const resolved = resolveOpenableArtifact(opts.userData, payload);
+    if (!resolved.ok) return resolved;
+    try {
+      const { clipboard } = require("electron");
+      if (!clipboard || typeof clipboard.writeText !== "function") {
+        return fail("open_failed", "clipboard unavailable");
+      }
+      clipboard.writeText(resolved.abs);
+    } catch (e) {
+      return fail("open_failed", (e && e.message) || "clipboard write failed");
+    }
+    return {
+      ok: true,
+      code: "path_copied",
+      artifactId: resolved.artifact.id,
+      versionId: resolved.version.id,
+      deliverableId: resolved.deliverable.id,
+    };
+  }
+
+  const resolved = resolveOpenableArtifact(opts.userData, payload);
   if (!resolved.ok) return resolved;
 
   const shell = opts.shell;

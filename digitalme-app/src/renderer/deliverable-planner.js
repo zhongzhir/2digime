@@ -716,12 +716,13 @@
 
           let actions = "";
           if (st === "成果已完成" && primary) {
+            const idAttrs =
+              ` data-artifact-id="${escapeAttr(primary.id)}"` +
+              ` data-version-id="${escapeAttr(ver.id)}"` +
+              ` data-deliverable-id="${escapeAttr(d.id)}"` +
+              ` data-task-id="${escapeAttr((pkg && pkg.taskId) || "")}"`;
             actions +=
-              `<button type="button" class="btn btn-primary" data-action="open-deliverable-artifact" data-open-deliverable-artifact="true" data-artifact-id="${escapeAttr(
-                primary.id
-              )}" data-version-id="${escapeAttr(ver.id)}" data-deliverable-id="${escapeAttr(
-                d.id
-              )}" data-task-id="${escapeAttr((pkg && pkg.taskId) || "")}">打开成果</button>`;
+              `<button type="button" class="btn btn-primary" data-command="artifact.open"${idAttrs}>打开成果</button>`;
             actions +=
               `<button type="button" class="btn-ghost" data-action="accept-ver" data-version-id="${escapeAttr(
                 ver.id
@@ -735,11 +736,10 @@
                 : `<button type="button" class="btn-ghost" disabled title="本次授权已撤销">重新生成</button>`
             );
             moreItems.push(
-              `<button type="button" class="btn-ghost" data-action="reveal-art" data-artifact-id="${escapeAttr(
-                primary.id
-              )}" data-version-id="${escapeAttr(ver.id)}" data-deliverable-id="${escapeAttr(
-                d.id
-              )}" data-task-id="${escapeAttr((pkg && pkg.taskId) || "")}">打开所在目录</button>`
+              `<button type="button" class="btn-ghost" data-action="reveal-art"${idAttrs}>打开所在文件夹</button>`
+            );
+            moreItems.push(
+              `<button type="button" class="btn-ghost" data-command="artifact.copy-path"${idAttrs}>复制文件路径</button>`
             );
             if (ver) {
               moreItems.push(
@@ -749,12 +749,13 @@
               );
             }
             secondaryArts.forEach((a) => {
+              const secAttrs =
+                ` data-artifact-id="${escapeAttr(a.id)}"` +
+                ` data-version-id="${escapeAttr(ver.id)}"` +
+                ` data-deliverable-id="${escapeAttr(d.id)}"` +
+                ` data-task-id="${escapeAttr((pkg && pkg.taskId) || "")}"`;
               moreItems.push(
-                `<button type="button" class="btn-ghost" data-action="open-deliverable-artifact" data-open-deliverable-artifact="true" data-artifact-id="${escapeAttr(
-                  a.id
-                )}" data-version-id="${escapeAttr(ver.id)}" data-deliverable-id="${escapeAttr(
-                  d.id
-                )}" data-task-id="${escapeAttr((pkg && pkg.taskId) || "")}">打开 ${escapeAttr(
+                `<button type="button" class="btn-ghost" data-command="artifact.open"${secAttrs}>打开 ${escapeAttr(
                   a.format || "其他格式"
                 )}</button>`
               );
@@ -784,7 +785,6 @@
       disabled: !canGenerate || anyGenerating || anyRepairing || onlyFailed,
       authRevoked,
     });
-    // Artifact open is handled once at #app capture (FIX-01D). Do not bind per render.
   }
 
   function escapeAttr(s) {

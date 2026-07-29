@@ -8,6 +8,7 @@ const PAN01R_TEST_HARNESS =
   process.env.DIGITALME_PAN01R_OWNER_RUNTIME === "1";
 
 const OWNER_RUNTIME_TEST = process.env.DIGITALME_OWNER_RUNTIME_TEST === "1";
+const ARTIFACT_OPEN_DIAGNOSTIC = process.env.DIGITALME_ARTIFACT_OPEN_DIAGNOSTIC === "1";
 
 const R1_SPIKE_HARNESS =
   process.env.DIGITALME_R1_SPIKE_HARNESS === "1" ||
@@ -21,6 +22,8 @@ const api = {
   getConfig: () => ipcRenderer.invoke("config:get"),
   getRuntimeStamp: () => ipcRenderer.invoke("runtime:getStamp"),
   ownerRuntimeTest: OWNER_RUNTIME_TEST,
+  /** Dev-only corner chain; Owner default runtime never enables this. */
+  artifactOpenDiagnostic: ARTIFACT_OPEN_DIAGNOSTIC,
   runtime: {
     apiVersion: 1,
     getStamp: () => ipcRenderer.invoke("runtime:getStamp"),

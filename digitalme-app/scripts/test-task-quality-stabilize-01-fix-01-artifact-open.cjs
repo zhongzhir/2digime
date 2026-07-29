@@ -305,46 +305,43 @@ async function main() {
     assert.equal(userMessageForOpenCode("open_failed"), "暂时无法打开成果。");
   });
 
-  await test("renderer open buttons carry stable ids and prefer md", () => {
+  await test("renderer open uses shared panel command entry (not dedicated listeners)", () => {
     const src = fs.readFileSync(
       path.join(__dirname, "../src/renderer/deliverable-planner.js"),
       "utf8"
     );
-    assert.ok(src.includes('data-action="open-deliverable-artifact"'));
-    assert.ok(src.includes('data-open-deliverable-artifact="true"'));
+    assert.ok(src.includes('data-command="artifact.open"'));
+    assert.ok(src.includes('data-command="artifact.copy-path"'));
+    assert.ok(src.includes("打开所在文件夹"));
+    assert.ok(src.includes("复制文件路径"));
     assert.ok(src.includes("data-artifact-id="));
     assert.ok(src.includes("data-version-id="));
     assert.ok(src.includes("data-deliverable-id="));
     assert.ok(src.includes('document: ["md", "docx", "html"]'));
     assert.ok(!src.includes("data-path="));
-    // New render must not emit legacy open aliases.
     assert.ok(!src.includes('data-action="open-primary"'));
     assert.ok(!src.includes('data-action="open-art"'));
+    assert.ok(!src.includes('data-action="open-deliverable-artifact"'));
     assert.ok(!src.includes("bindArtifactOpenButtons"));
     const appSrc = fs.readFileSync(path.join(__dirname, "../src/renderer/app.js"), "utf8");
+    assert.ok(appSrc.includes("executeUiCommand"));
+    assert.ok(appSrc.includes("executeArtifactOpenCommand"));
+    assert.ok(appSrc.includes('case "artifact.open"'));
+    assert.ok(appSrc.includes('case "accept-ver"'));
     assert.ok(appSrc.includes("正在打开…"));
-    assert.ok(appSrc.includes("data-opening"));
+    assert.ok(appSrc.includes("已打开"));
+    assert.ok(appSrc.includes("暂时无法打开"));
     assert.ok(appSrc.includes("actBehalfOpenArtifact"));
-    assert.ok(appSrc.includes("已打开成果"));
-    assert.ok(appSrc.includes("暂时无法打开成果"));
-    assert.ok(appSrc.includes("openDeliverableArtifactFromButton"));
-    assert.ok(appSrc.includes("bindArtifactOpenRootOnce"));
-    assert.ok(appSrc.includes("handleArtifactOpenAtRootCapture"));
-    assert.ok(appSrc.includes("findArtifactOpenButton"));
-    assert.ok(appSrc.includes("composedPath"));
-    assert.ok(appSrc.includes("requestAnimationFrame"));
+    assert.ok(appSrc.includes("handleGenerationPanelClick"));
+    assert.ok(!appSrc.includes("bindArtifactOpenRootOnce"));
+    assert.ok(!appSrc.includes("handleArtifactOpenAtRootCapture"));
+    assert.ok(!appSrc.includes("findArtifactOpenButton"));
     assert.ok(!appSrc.includes("bindArtifactOpenButtons"));
     assert.ok(!appSrc.includes("handleArtifactOpenButtonClick"));
-    assert.ok(appSrc.includes("[artifact-open]"));
-    assert.ok(appSrc.includes("root_capture_entered"));
-    // Artifact open must not be handled by panel delegation.
-    assert.ok(
-      /action === "open-deliverable-artifact"[\s\S]{0,120}action === "open-art"[\s\S]{0,80}action === "open-primary"/.test(
-        appSrc
-      ) || appSrc.includes("exclusively handled by #app capture")
-    );
-    assert.ok(!appSrc.includes('setActProgress("已打开草稿任务。")'));
+    assert.ok(!appSrc.includes("openDeliverableArtifactFromButton"));
+    assert.ok(!appSrc.includes("artifactOpenRootBound"));
     assert.ok(!appSrc.includes("handleDeliverableArtifactClickCapture"));
+    assert.ok(!appSrc.includes('setActProgress("已打开草稿任务。")'));
   });
 
   await test("partial package: ready items openable, failed have no open button markup rule", () => {

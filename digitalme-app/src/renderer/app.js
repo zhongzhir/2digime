@@ -254,11 +254,6 @@ function registerEarlyUiDelegates() {
     });
   }
   try {
-    bindArtifactOpenRootOnce();
-  } catch (err) {
-    reportBindError("artifact-open-root", err);
-  }
-  try {
     bindBootstrapFileActions();
   } catch (err) {
     reportBindError("bootstrap-files-early", err);
@@ -5511,7 +5506,6 @@ const dmPerf = {
     actGenerationItems: 0,
     actTaskOverflowDocument: 0,
     actTaskTabs: 0,
-    rootArtifactOpen: 0,
   },
 };
 try {
@@ -7957,398 +7951,297 @@ async function handleGenerateFromPlan() {
   await refreshActTaskList();
 }
 
-// Single root-capture artifact open (FIX-01D). No per-button / panel open wiring.
-// Differences between baseline / enhanced / legacy / package / partial deliverables
-// are resolved by main from the stable Version / ArtifactRef ids — never guessed here.
+// Generation-panel commands share one listener on #act-generation-items
+// (same path as「接受」). No artifact-open-specific listeners or capture.
 
-let artifactOpenRootBound = false;
-
-function logArtifactOpen(phase, extra) {
-  try {
-    const payload = Object.assign({ phase }, extra || {});
-    // Short fields only — never body / store / absolute paths.
-    console.info("[artifact-open]", payload);
-  } catch {
-    /* ignore */
-  }
+function readUiCommandPayload(btn) {
+  if (!btn) return {};
+  return {
+    taskId: btn.getAttribute("data-task-id") || actBehalfState.taskId || undefined,
+    deliverableId: btn.getAttribute("data-deliverable-id") || undefined,
+    versionId: btn.getAttribute("data-version-id") || undefined,
+    artifactId: btn.getAttribute("data-artifact-id") || undefined,
+    packageId: actBehalfState.activePackageId || undefined,
+  };
 }
 
-function showArtifactOpenErrorNearButton(button, text) {
+function setArtifactCardStatus(button, text) {
   if (!button) return;
   const card = button.closest(".act-gen-item") || button.parentElement;
   if (!card) return;
-  let fb = card.querySelector("[data-artifact-open-feedback]");
-  if (!fb) {
-    fb = document.createElement("span");
-    fb.className = "muted act-artifact-open-feedback";
-    fb.setAttribute("data-artifact-open-feedback", "1");
+  let el = card.querySelector("[data-artifact-open-status]");
+  if (!el) {
+    el = document.createElement("span");
+    el.className = "muted act-artifact-open-status";
+    el.setAttribute("data-artifact-open-status", "1");
     const actions = card.querySelector(".builder-actions");
-    (actions || card).appendChild(fb);
+    (actions || card).appendChild(el);
   }
-  fb.textContent = text || "";
-  if (fb._dmClearTimer) clearTimeout(fb._dmClearTimer);
-  if (text) {
-    fb._dmClearTimer = setTimeout(() => {
-      if (fb.textContent === text) fb.textContent = "";
+  el.textContent = text || "";
+  if (el._dmClearTimer) clearTimeout(el._dmClearTimer);
+  if (text && text !== "正在打开…") {
+    el._dmClearTimer = setTimeout(() => {
+      if (el.textContent === text) el.textContent = "";
     }, 2200);
   }
 }
 
-function findArtifactOpenButton(event) {
-  if (!event || typeof event.composedPath !== "function") return null;
-  let pathNodes;
+function markArtifactOpenDiag(step) {
   try {
-    pathNodes = event.composedPath();
-  } catch {
-    return null;
-  }
-  if (!Array.isArray(pathNodes)) return null;
-  for (const node of pathNodes) {
-    if (!node || node.tagName !== "BUTTON") continue;
-    const ds = node.dataset || {};
-    const action = ds.action || node.getAttribute("data-action") || "";
-    if (
-      action === "open-deliverable-artifact" ||
-      action === "open-primary" ||
-      action === "open-art" ||
-      ds.openDeliverableArtifact === "true" ||
-      node.getAttribute("data-open-deliverable-artifact") === "true"
-    ) {
-      return node;
+    if (!window.digitalMe || window.digitalMe.artifactOpenDiagnostic !== true) return;
+    let box = document.getElementById("dm-artifact-open-diag");
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "dm-artifact-open-diag";
+      box.setAttribute("data-testid", "dm-artifact-open-diag");
+      box.style.cssText =
+        "position:fixed;right:12px;bottom:12px;z-index:99999;background:#111;color:#eee;padding:8px 10px;font:12px/1.4 monospace;border-radius:6px;opacity:0.92;max-width:280px";
+      document.body.appendChild(box);
+      box._steps = { click: false, command: false, preload: false, main: false, openPath: false };
     }
-  }
-  return null;
-}
-
-function bindArtifactOpenRootOnce() {
-  if (artifactOpenRootBound) return;
-  const root = document.getElementById("app") || document.body;
-  if (!root || typeof root.addEventListener !== "function") return;
-  root.addEventListener("click", handleArtifactOpenAtRootCapture, true);
-  artifactOpenRootBound = true;
-  try {
-    dmPerf.listenerInstall.rootArtifactOpen = (dmPerf.listenerInstall.rootArtifactOpen || 0) + 1;
-    window.__dmArtifactOpenRootInstallCount = dmPerf.listenerInstall.rootArtifactOpen;
+    if (box._steps && step in box._steps) box._steps[step] = true;
+    const order = ["click", "command", "preload", "main", "openPath"];
+    box.textContent = order
+      .map((k) => (box._steps[k] ? "●" : "○") + " " + k)
+      .join(" → ");
+    console.info("[artifact-open-cmd]", step);
   } catch {
     /* ignore */
   }
 }
 
-async function handleArtifactOpenAtRootCapture(event) {
-  const button = findArtifactOpenButton(event);
-  if (!button) return;
+function resetArtifactOpenDiag() {
   try {
-    window.__dmLastArtifactOpenTrace = {
-      root_capture_entered: true,
-      rootCaptureEntered: true,
-    };
-  } catch {
-    /* ignore */
-  }
-  if (event && typeof event.preventDefault === "function") event.preventDefault();
-  if (event && typeof event.stopPropagation === "function") event.stopPropagation();
-  if (event && typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
-  await openDeliverableArtifactFromButton(button);
-}
-
-async function openDeliverableArtifactFromButton(btn) {
-  if (!btn) return { ok: false };
-  // Guard rapid re-entry; still show failure for incomplete dataset below.
-  if (btn.getAttribute("data-opening") === "1") return { ok: false };
-  if (btn.getAttribute("data-open-cooldown") === "1") return { ok: false };
-
-  const traceId =
-    "ao_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 8);
-  const trace = {
-    traceId,
-    actualButtonOuterHTML: String(btn.outerHTML || "").slice(0, 1200),
-    rootListenerInstallCount: (dmPerf.listenerInstall && dmPerf.listenerInstall.rootArtifactOpen) || 0,
-    rootCaptureEntered: true,
-    feedbackRenderedBeforeIpc: false,
-    button_feedback_rendered: false,
-    preloadCalled: false,
-    preload_called: false,
-    mainHandlerEntered: false,
-    main_handler_entered: false,
-    artifactResolved: false,
-    artifact_resolved: false,
-    openPathResult: null,
-    open_path_returned: null,
-    rendererReceivedOk: false,
-    renderer_result_received: false,
-  };
-  try {
-    window.__dmLastArtifactOpenTrace = trace;
-  } catch {
-    /* ignore */
-  }
-
-  // FIRST: visible feedback before any dataset read, store query, panel refresh, or preload.
-  const originalText = (btn.textContent || "打开成果").trim() || "打开成果";
-  btn.setAttribute("data-opening", "1");
-  btn.setAttribute("data-did-show-opening", "1");
-  btn.disabled = true;
-  btn.textContent = "正在打开…";
-  trace.button_feedback_rendered = true;
-  trace.feedbackRenderedBeforeIpc = true;
-  dmPerfMark("artifactOpenHandlerCalls");
-
-  await new Promise((resolve) => {
-    if (typeof requestAnimationFrame === "function") {
-      requestAnimationFrame(() => resolve());
-    } else {
-      setTimeout(resolve, 16);
+    if (!window.digitalMe || window.digitalMe.artifactOpenDiagnostic !== true) return;
+    const box = document.getElementById("dm-artifact-open-diag");
+    if (box) {
+      box._steps = { click: false, command: false, preload: false, main: false, openPath: false };
+      box.textContent = "○ click → ○ command → ○ preload → ○ main → ○ openPath";
     }
-  });
-
-  function clearOpeningState(nextLabel) {
-    btn.disabled = false;
-    btn.removeAttribute("data-opening");
-    btn.textContent = nextLabel || "打开成果";
-    // Brief cooldown so a second click in the same tick / rapid burst cannot double-fire.
-    btn.setAttribute("data-open-cooldown", "1");
-    setTimeout(() => {
-      try {
-        btn.removeAttribute("data-open-cooldown");
-      } catch {
-        /* ignore */
-      }
-    }, 400);
+  } catch {
+    /* ignore */
   }
+}
 
-  const artifactId = (btn.dataset && btn.dataset.artifactId) || btn.getAttribute("data-artifact-id") || "";
-  const taskId =
-    (btn.dataset && btn.dataset.taskId) ||
-    btn.getAttribute("data-task-id") ||
-    actBehalfState.taskId ||
-    "";
-  const deliverableId =
-    (btn.dataset && btn.dataset.deliverableId) || btn.getAttribute("data-deliverable-id") || "";
-  const versionId =
-    (btn.dataset && btn.dataset.versionId) || btn.getAttribute("data-version-id") || "";
+async function executeArtifactOpenCommand(payload, ctx) {
+  const button = ctx && ctx.button;
+  resetArtifactOpenDiag();
+  markArtifactOpenDiag("click");
+  markArtifactOpenDiag("command");
 
-  logArtifactOpen("root_capture_entered", { artifactId: artifactId || null, traceId });
-
-  // Clear leftover distant progress so it cannot look like the open result.
-  const progressEl = $("act-progress");
-  if (progressEl && /已打开草稿任务|已恢复任务意图|已打开成果/.test(progressEl.textContent || "")) {
-    setActProgress("");
+  if (button) {
+    button.disabled = true;
   }
+  setArtifactCardStatus(button, "正在打开…");
 
+  const artifactId = (payload && payload.artifactId) || "";
+  const versionId = (payload && payload.versionId) || "";
   if (!artifactId && !versionId) {
-    logArtifactOpen("failure_feedback_rendered", { reason: "missing_ids", traceId });
-    clearOpeningState("打开成果");
-    showArtifactOpenErrorNearButton(btn, "暂时无法打开成果。");
-    try {
-      window.__dmLastArtifactOpenTrace = trace;
-    } catch {
-      /* ignore */
-    }
+    setArtifactCardStatus(button, "暂时无法打开");
+    if (button) button.disabled = false;
     return { ok: false, code: "invalid_artifact_reference" };
   }
-
   if (!window.digitalMe || typeof window.digitalMe.actBehalfOpenArtifact !== "function") {
-    logArtifactOpen("failure_feedback_rendered", { reason: "preload_missing", artifactId, traceId });
-    clearOpeningState("打开成果");
-    showArtifactOpenErrorNearButton(btn, "暂时无法打开成果。");
+    setArtifactCardStatus(button, "暂时无法打开");
+    if (button) button.disabled = false;
     return { ok: false, code: "preload_missing" };
   }
 
-  const ids = {
-    taskId: taskId || undefined,
-    deliverableId: deliverableId || undefined,
-    versionId: versionId || undefined,
-    artifactId: artifactId || undefined,
-    artifactRefId: artifactId || undefined,
-    traceId,
-  };
-
+  markArtifactOpenDiag("preload");
   let res = null;
   try {
-    logArtifactOpen("preload_called", { artifactId: artifactId || null, traceId });
-    trace.preloadCalled = true;
-    trace.preload_called = true;
-    res = await window.digitalMe.actBehalfOpenArtifact(ids);
-    const et = res && res._ephemeralTrace;
-    if (et) {
-      trace.mainHandlerEntered = !!et.mainHandlerEntered;
-      trace.main_handler_entered = !!et.mainHandlerEntered;
-      trace.artifactResolved = !!et.artifactResolved;
-      trace.artifact_resolved = !!et.artifactResolved;
-      trace.openPathResult = et.openPathResult == null ? null : et.openPathResult;
-      trace.open_path_returned = trace.openPathResult;
-    }
-    logArtifactOpen("renderer_result_received", {
-      artifactId: artifactId || null,
-      ok: !!(res && res.ok),
-      code: (res && res.code) || null,
-      traceId,
+    res = await window.digitalMe.actBehalfOpenArtifact({
+      taskId: payload.taskId || undefined,
+      deliverableId: payload.deliverableId || undefined,
+      versionId: versionId || undefined,
+      artifactId: artifactId || undefined,
+      artifactRefId: artifactId || undefined,
     });
   } catch (err) {
-    res = {
-      ok: false,
-      code: "open_failed",
-      message: "暂时无法打开成果。",
-      detail: err && err.message ? String(err.message).slice(0, 240) : undefined,
-    };
-    logArtifactOpen("renderer_result_received", {
-      artifactId: artifactId || null,
-      ok: false,
-      code: "open_failed",
-      traceId,
-    });
+    res = { ok: false, code: "open_failed", message: "暂时无法打开" };
   }
 
-  trace.rendererReceivedOk = !!(res && res.ok);
-  trace.renderer_result_received = true;
-  try {
-    window.__dmLastArtifactOpenTrace = trace;
-  } catch {
-    /* ignore */
-  }
+  markArtifactOpenDiag("main");
+  if (res && res.ok) markArtifactOpenDiag("openPath");
 
+  if (button) button.disabled = false;
   if (!res || !res.ok) {
-    clearOpeningState("打开成果");
-    showArtifactOpenErrorNearButton(btn, "暂时无法打开成果。");
-    logArtifactOpen("failure_feedback_rendered", {
-      artifactId: artifactId || null,
-      code: (res && res.code) || "open_failed",
-      traceId,
-    });
+    setArtifactCardStatus(button, "暂时无法打开");
     return res || { ok: false };
   }
-
-  btn.textContent = "已打开成果";
-  logArtifactOpen("success_feedback_rendered", { artifactId: artifactId || null, traceId });
-  setTimeout(() => {
-    if (btn.textContent === "已打开成果" || btn.getAttribute("data-opening") === "1") {
-      clearOpeningState(
-        originalText === "正在打开…" || originalText === "已打开成果" ? "打开成果" : originalText
-      );
-    }
-  }, 1000);
+  setArtifactCardStatus(button, "已打开");
   return res;
 }
 
-async function handleGenerationPanelClick(ev) {
-  const btn = ev.target && ev.target.closest ? ev.target.closest("[data-action]") : null;
-  if (!btn) return;
-  const action = btn.getAttribute("data-action");
-  const packageId = actBehalfState.activePackageId;
-  // Artifact open is exclusively handled by #app capture (FIX-01D). Never open here.
-  if (
-    action === "open-deliverable-artifact" ||
-    action === "open-art" ||
-    action === "open-primary"
-  ) {
-    return;
+async function executeArtifactRevealCommand(payload, ctx) {
+  const button = ctx && ctx.button;
+  const artifactId = (payload && payload.artifactId) || "";
+  if (!artifactId || !window.digitalMe || typeof window.digitalMe.actBehalfRevealArtifact !== "function") {
+    setArtifactCardStatus(button, "暂时无法打开");
+    return { ok: false };
   }
-  if (action === "reveal-art") {
-    if (btn.disabled || btn.getAttribute("data-opening") === "1") return;
-    const artifactId = btn.getAttribute("data-artifact-id");
-    if (!artifactId || !window.digitalMe || typeof window.digitalMe.actBehalfRevealArtifact !== "function") {
-      setActProgress("暂时无法打开成果。");
-      return;
-    }
-    const originalLabel = btn.textContent;
-    btn.setAttribute("data-opening", "1");
-    btn.disabled = true;
-    let res = null;
-    try {
-      res = await window.digitalMe.actBehalfRevealArtifact({
-        artifactId,
-        artifactRefId: artifactId,
-        versionId: btn.getAttribute("data-version-id") || undefined,
-        deliverableId: btn.getAttribute("data-deliverable-id") || undefined,
-        taskId: btn.getAttribute("data-task-id") || actBehalfState.taskId || undefined,
-      });
-    } catch (err) {
-      res = { ok: false, message: "暂时无法打开成果。" };
-    }
-    btn.disabled = false;
-    btn.removeAttribute("data-opening");
-    btn.textContent = originalLabel || "打开所在目录";
-    if (!res || !res.ok) setActProgress((res && res.message) || "暂时无法打开成果。");
-    return;
-  }
-  if (action === "accept-ver" || action === "reject-ver") {
-    const versionId = btn.getAttribute("data-version-id");
-    const res = await window.digitalMe.actBehalfReviewDeliverableVersion({
-      versionId,
-      decision: action === "accept-ver" ? "accepted" : "rejected",
+  if (button) button.disabled = true;
+  let res = null;
+  try {
+    res = await window.digitalMe.actBehalfRevealArtifact({
+      artifactId,
+      artifactRefId: artifactId,
+      versionId: (payload && payload.versionId) || undefined,
+      deliverableId: (payload && payload.deliverableId) || undefined,
+      taskId: (payload && payload.taskId) || undefined,
     });
-    setActProgress((res && res.message) || "已更新审阅。");
-    if (packageId) await refreshActGenerationPanel(packageId);
-    if (action === "accept-ver") {
-      // Learning is async; poll briefly for rare conflict questions only.
+  } catch {
+    res = { ok: false };
+  }
+  if (button) button.disabled = false;
+  if (!res || !res.ok) setArtifactCardStatus(button, "暂时无法打开");
+  return res;
+}
+
+async function executeArtifactCopyPathCommand(payload, ctx) {
+  const button = ctx && ctx.button;
+  const artifactId = (payload && payload.artifactId) || "";
+  if (!artifactId || !window.digitalMe || typeof window.digitalMe.actBehalfOpenArtifact !== "function") {
+    setArtifactCardStatus(button, "暂时无法打开");
+    return { ok: false };
+  }
+  if (button) button.disabled = true;
+  let res = null;
+  try {
+    res = await window.digitalMe.actBehalfOpenArtifact({
+      intent: "copyPath",
+      artifactId,
+      artifactRefId: artifactId,
+      versionId: (payload && payload.versionId) || undefined,
+      deliverableId: (payload && payload.deliverableId) || undefined,
+      taskId: (payload && payload.taskId) || undefined,
+    });
+  } catch {
+    res = { ok: false };
+  }
+  if (button) button.disabled = false;
+  if (!res || !res.ok) {
+    setArtifactCardStatus(button, "暂时无法打开");
+    return res || { ok: false };
+  }
+  setArtifactCardStatus(button, "已复制路径");
+  return res;
+}
+
+/**
+ * Shared command entry used by generation-panel buttons (接受 / 打开成果 / 更多…).
+ * Wired only via the existing #act-generation-items click listener — no extra listeners.
+ */
+async function executeUiCommand(command, payload, ctx) {
+  const packageId = (payload && payload.packageId) || actBehalfState.activePackageId;
+  switch (command) {
+    case "artifact.open":
+      return executeArtifactOpenCommand(payload || {}, ctx || {});
+    case "reveal-art":
+    case "artifact.reveal":
+      return executeArtifactRevealCommand(payload || {}, ctx || {});
+    case "artifact.copy-path":
+      return executeArtifactCopyPathCommand(payload || {}, ctx || {});
+    case "accept-ver": {
+      const versionId = payload && payload.versionId;
+      const res = await window.digitalMe.actBehalfReviewDeliverableVersion({
+        versionId,
+        decision: "accepted",
+      });
+      setActProgress((res && res.message) || "已更新审阅。");
+      if (packageId) await refreshActGenerationPanel(packageId);
       setTimeout(() => refreshActLearnConflict(actBehalfState.taskId), 400);
       setTimeout(() => refreshActLearnConflict(actBehalfState.taskId), 1500);
+      return res;
     }
-    return;
-  }
-  if (action === "revoke-auth") {
-    const taskId = btn.getAttribute("data-task-id") || actBehalfState.taskId;
-    const ok = window.confirm(
-      "撤销后，Digital Me 将不能继续生成或学习本次任务的新成果；已经生成的文件不会被删除。确定撤销本次授权？"
-    );
-    if (!ok) return;
-    const res = await window.digitalMe.actBehalfRevokeAuthorization({ taskId });
-    actBehalfState.taskAuthStatus =
-      (res && res.authorizationStatus) ||
-      (res && res.ok
-        ? {
-            status: "revoked",
-            canGenerate: false,
-            canLearn: false,
-            canRevoke: false,
-            statusLabel: "已撤销",
-            message: res.message || "本次授权已撤销。已有成果会保留，但不能继续生成新版本。",
-          }
-        : actBehalfState.taskAuthStatus);
-    setActProgress(
-      (res && res.message) ||
-        (res && res.ok
-          ? "本次授权已撤销。已有成果会保留，但不能继续生成新版本。"
-          : "撤销未成功。")
-    );
-    if (packageId) await refreshActGenerationPanel(packageId);
-    await refreshActDeliverableResults(taskId);
-    return;
-  }
-  if (action === "regen") {
-    const deliverableId = btn.getAttribute("data-deliverable-id");
-    if (!packageId || !deliverableId) {
-      // No package yet — fall back to one-click full generate.
-      await handleGenerateFromPlan();
-      return;
-    }
-    setActProgress("正在重新生成…");
-    const res = await window.digitalMe.actBehalfGenerateDeliverable({ packageId, deliverableId });
-    if (res && res.code === "plan_materials_stale") {
-      setActProgress(res.message || "参考材料已变化，请重新形成预计交付后再生成。");
-      await restoreActDeliverablePlan(actBehalfState.taskId);
-      return;
-    }
-    if (
-      res &&
-      (res.code === "authorization_revoked" ||
-        res.code === "authorization_expired" ||
-        res.code === "authorization_not_granted")
-    ) {
-      setActProgress(res.message || "本次授权已失效，不能继续重新生成。");
-      actBehalfState.taskAuthStatus = {
-        status: "revoked",
-        canGenerate: false,
-        canLearn: false,
-        message: res.message,
-      };
+    case "reject-ver": {
+      const versionId = payload && payload.versionId;
+      const res = await window.digitalMe.actBehalfReviewDeliverableVersion({
+        versionId,
+        decision: "rejected",
+      });
+      setActProgress((res && res.message) || "已更新审阅。");
       if (packageId) await refreshActGenerationPanel(packageId);
-      return;
+      return res;
     }
-    setActProgress((res && res.message) || (res && res.ok ? "已重新生成。" : "重新生成未成功。"));
-    await refreshActGenerationPanel(packageId);
-    await refreshActDeliverableResults(actBehalfState.taskId);
+    case "revoke-auth": {
+      const taskId = (payload && payload.taskId) || actBehalfState.taskId;
+      const ok = window.confirm(
+        "撤销后，Digital Me 将不能继续生成或学习本次任务的新成果；已经生成的文件不会被删除。确定撤销本次授权？"
+      );
+      if (!ok) return { ok: false, code: "cancelled" };
+      const res = await window.digitalMe.actBehalfRevokeAuthorization({ taskId });
+      actBehalfState.taskAuthStatus =
+        (res && res.authorizationStatus) ||
+        (res && res.ok
+          ? {
+              status: "revoked",
+              canGenerate: false,
+              canLearn: false,
+              canRevoke: false,
+              statusLabel: "已撤销",
+              message: res.message || "本次授权已撤销。已有成果会保留，但不能继续生成新版本。",
+            }
+          : actBehalfState.taskAuthStatus);
+      setActProgress(
+        (res && res.message) ||
+          (res && res.ok
+            ? "本次授权已撤销。已有成果会保留，但不能继续生成新版本。"
+            : "撤销未成功。")
+      );
+      if (packageId) await refreshActGenerationPanel(packageId);
+      await refreshActDeliverableResults(taskId);
+      return res;
+    }
+    case "regen": {
+      const deliverableId = payload && payload.deliverableId;
+      if (!packageId || !deliverableId) {
+        await handleGenerateFromPlan();
+        return { ok: true, code: "fallback_full_generate" };
+      }
+      setActProgress("正在重新生成…");
+      const res = await window.digitalMe.actBehalfGenerateDeliverable({ packageId, deliverableId });
+      if (res && res.code === "plan_materials_stale") {
+        setActProgress(res.message || "参考材料已变化，请重新形成预计交付后再生成。");
+        await restoreActDeliverablePlan(actBehalfState.taskId);
+        return res;
+      }
+      if (
+        res &&
+        (res.code === "authorization_revoked" ||
+          res.code === "authorization_expired" ||
+          res.code === "authorization_not_granted")
+      ) {
+        setActProgress(res.message || "本次授权已失效，不能继续重新生成。");
+        actBehalfState.taskAuthStatus = {
+          status: "revoked",
+          canGenerate: false,
+          canLearn: false,
+          message: res.message,
+        };
+        if (packageId) await refreshActGenerationPanel(packageId);
+        return res;
+      }
+      setActProgress((res && res.message) || (res && res.ok ? "已重新生成。" : "重新生成未成功。"));
+      await refreshActGenerationPanel(packageId);
+      await refreshActDeliverableResults(actBehalfState.taskId);
+      return res;
+    }
+    default:
+      return { ok: false, code: "unknown_command" };
   }
+}
+
+async function handleGenerationPanelClick(ev) {
+  const btn =
+    ev.target && ev.target.closest
+      ? ev.target.closest("button[data-command], button[data-action]")
+      : null;
+  if (!btn || btn.disabled) return;
+  const command = btn.getAttribute("data-command") || btn.getAttribute("data-action");
+  if (!command) return;
+  const payload = readUiCommandPayload(btn);
+  await executeUiCommand(command, payload, { button: btn });
 }
 
 async function handleFormDeliverablePlan() {

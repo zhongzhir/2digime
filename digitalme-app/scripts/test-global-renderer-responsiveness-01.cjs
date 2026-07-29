@@ -215,23 +215,29 @@ async function main() {
     assert.ok(!enhBlock.includes("await refreshActGenerationPanel"));
   });
 
-  test("artifact open uses card-local feedback and does not sticky-write bottom progress", () => {
+  test("artifact open uses shared executeUiCommand and card-local status", () => {
     const src = fs.readFileSync(fromAppRoot("src", "renderer", "app.js"), "utf8");
-    assert.ok(src.includes("showArtifactOpenErrorNearButton") || src.includes("bindArtifactOpenRootOnce"));
-    assert.ok(src.includes('btn.textContent = "正在打开…"'));
-    assert.ok(src.includes("handleArtifactOpenAtRootCapture"));
+    assert.ok(src.includes("executeUiCommand"));
+    assert.ok(src.includes("executeArtifactOpenCommand"));
+    assert.ok(src.includes("setArtifactCardStatus"));
+    assert.ok(src.includes("正在打开…"));
     assert.ok(!src.includes('setActProgress("已打开草稿任务。")'));
     assert.ok(!src.includes('setActProgress("已打开成果")'));
   });
 
-  test("no FIX-01C document capture listener / no per-button open bind", () => {
+  test("no dedicated artifact-open listeners remain", () => {
     const src = fs.readFileSync(fromAppRoot("src", "renderer", "app.js"), "utf8");
     assert.ok(!src.includes("handleDeliverableArtifactClickCapture"));
     assert.ok(!src.includes("wireDeliverableArtifactCaptureOnce"));
     assert.ok(!src.includes("bindArtifactOpenButtons"));
     assert.ok(!src.includes("handleArtifactOpenButtonClick"));
-    assert.ok(src.includes("bindArtifactOpenRootOnce"));
-    assert.ok(src.includes('addEventListener("click", handleArtifactOpenAtRootCapture, true)'));
+    assert.ok(!src.includes("bindArtifactOpenRootOnce"));
+    assert.ok(!src.includes("handleArtifactOpenAtRootCapture"));
+    assert.ok(!src.includes("findArtifactOpenButton"));
+    assert.ok(!src.includes("openDeliverableArtifactFromButton"));
+    assert.ok(src.includes("handleGenerationPanelClick"));
+    assert.ok(src.includes('case "artifact.open"'));
+    assert.ok(src.includes('case "accept-ver"'));
   });
 
   test("production default does not spam large console traces for open path", () => {
