@@ -30,12 +30,25 @@ function mapInternalPhase(deliverable, attempt) {
     return "refining";
   }
   const s = deliverable && deliverable.generationStatus;
-  if (s === "generating" || s === "queued" || s === "validating") return "generating";
+  // Baseline already usable while Channel B runs — treat as completed for open action.
   if (s === "ready" || (deliverable && deliverable.currentVersionId && s !== "failed")) {
     return "completed";
   }
+  if (s === "generating" || s === "queued" || s === "validating") return "generating";
   if (s === "failed" || s === "blocked" || s === "skipped_dependency") return "failed";
   return "idle";
+}
+
+function isEnhancementPending(attempt) {
+  return !!(attempt && attempt.phase === "quality_enhancement");
+}
+
+function enhancementAuditNote(attempt) {
+  if (!attempt || !attempt.enhancement) return null;
+  if (attempt.enhancement.ok === false) {
+    return "质量增强未完成，已保留基础版本。";
+  }
+  return null;
 }
 
 /**
@@ -124,7 +137,7 @@ function deriveUserFacingTaskState(opts) {
     };
   } else if (phase === "failed") {
     status = USER_STATUS.FAILED;
-    statusMessage = "成果未能完成";
+    statusMessage = "成果未能生成";
     // Ordinary failures must not ask the user to continue the same flow.
     primaryAction = null;
     secondaryAction = { id: "details", label: "查看原因", placement: "secondary" };
@@ -155,6 +168,7 @@ function deriveUserFacingTaskState(opts) {
     summary,
     status,
     statusMessage,
+    enhancingHint: phase === "completed" && isEnhancementPending(attempt) ? "正在进一步完善" : null,
     primaryAction,
     secondaryAction,
     artifact,
@@ -164,8 +178,9 @@ function deriveUserFacingTaskState(opts) {
         ? (primary && primary.lastGenerationIssueSummary) ||
           (attempt && attempt.userIssueSummary) ||
           (attempt && attempt.errorSummary) ||
-          "系统已在一次发起内完成自动修复尝试，仍未能可靠生成成果。"
+          "未能生成可用成果。"
         : null,
+    auditNote: enhancementAuditNote(attempt),
     recoveryActions: normalizeRecoveryActions(attempt || {}),
     phase,
     deliverableId: primary && primary.id,
@@ -184,4 +199,6 @@ module.exports = {
   deriveUserFacingTaskState,
   mapInternalPhase,
   latestAttempt,
+  isEnhancementPending,
+  enhancementAuditNote,
 };

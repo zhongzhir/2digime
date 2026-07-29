@@ -7759,6 +7759,22 @@ async function refreshActGenerationPanel(packageId) {
   }
 }
 
+if (window.digitalMe && typeof window.digitalMe.onActBehalfBaselinePersisted === "function") {
+  window.digitalMe.onActBehalfBaselinePersisted(async (info) => {
+    const packageId = (info && info.packageId) || actBehalfState.activePackageId;
+    if (!packageId) return;
+    setActProgress("成果已完成");
+    await refreshActGenerationPanel(packageId);
+  });
+}
+if (window.digitalMe && typeof window.digitalMe.onActBehalfEnhancementSettled === "function") {
+  window.digitalMe.onActBehalfEnhancementSettled(async (info) => {
+    const packageId = (info && info.packageId) || actBehalfState.activePackageId;
+    if (!packageId) return;
+    await refreshActGenerationPanel(packageId);
+  });
+}
+
 async function handleGenerateFromPlan() {
   if (!actBehalfState.taskId) {
     setActProgress("请先形成预计交付。");

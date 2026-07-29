@@ -470,11 +470,24 @@
       return "成果已完成";
     }
     if (s === "failed") {
-      return "成果未能完成";
+      return "成果未能生成";
     }
     if (s === "generating") return "正在生成成果";
-    if (s === "blocked" || s === "skipped_dependency") return "成果未能完成";
+    if (s === "blocked" || s === "skipped_dependency") return "成果未能生成";
     return "等待生成";
+  }
+
+  function isEnhancing(d, view) {
+    const attempt = latestAttemptForDeliverable(d, view);
+    return !!(attempt && attempt.phase === "quality_enhancement" && d && d.currentVersionId);
+  }
+
+  function enhancementAuditLine(d, view) {
+    const attempt = latestAttemptForDeliverable(d, view);
+    if (attempt && attempt.enhancement && attempt.enhancement.ok === false) {
+      return "质量增强未完成，已保留基础版本。";
+    }
+    return "";
   }
 
   function failureHintForDeliverable(d, view) {
@@ -552,8 +565,9 @@
     const canGenerate = auth.canGenerate !== false && !authRevoked;
     const anyRepairing = included.some((d) => {
       const att = latestAttemptForDeliverable(d, view);
-      return att && att.status === "repairing";
+      return att && (att.status === "repairing" || att.outcome === "repair_initiated");
     });
+    const anyEnhancing = included.some((d) => isEnhancing(d, view));
     const anyGenerating = included.some((d) => d.generationStatus === "generating") || anyRepairing;
     const anyReady = included.some((d) => d.generationStatus === "ready" || d.currentVersionId);
     const anyFailed = included.some((d) => d.generationStatus === "failed");
@@ -578,10 +592,15 @@
         }</div>`
       : "";
 
+    const auditExtras = included
+      .map((d) => enhancementAuditLine(d, view))
+      .filter(Boolean)
+      .slice(0, 1);
     const detailsBlock =
       `<details class="act-gen-details" data-testid="act-gen-details">` +
       `<summary class="muted">详情</summary>` +
       `<div class="act-gen-details-body">` +
+      `<div class="muted">由你的 Digital Me 生成，成果归你所有</div>` +
       `<div class="muted">本次权限：${escapeAttr(auth.statusLabel || (authRevoked ? "已撤销" : "已授权"))}</div>` +
       (executorLabel ? `<div class="muted">使用的能力：${escapeAttr(executorLabel)}</div>` : "") +
       (roleLabel ? `<div class="muted">当前角色：${escapeAttr(roleLabel)}</div>` : "") +
@@ -595,6 +614,9 @@
       (identitySnap && identitySnap.identityContextSource === "legacy_default_inference"
         ? `<div>来源：兼容推断记录</div>`
         : `<div>来源：正式快照</div>`) +
+      (auditExtras.length
+        ? auditExtras.map((line) => `<div>${escapeAttr(line)}</div>`).join("")
+        : "") +
       `</div>` +
       (auth.canRevoke
         ? `<div class="builder-actions"><button type="button" class="btn-ghost" data-action="revoke-auth" data-task-id="${escapeAttr(
@@ -608,14 +630,19 @@
     let globalStatusBlock = "";
     if (authRevoked) {
       // banner already in summaryBlock
-    } else if (anyRepairing) {
+    } else if (anyRepairing && !anyReady) {
       globalStatusBlock = `<div class="act-gen-status-block" data-testid="act-gen-status-block"><strong>正在完善成果</strong></div>`;
-    } else if (anyGenerating) {
+    } else if (anyGenerating && !anyReady) {
       globalStatusBlock = `<div class="act-gen-status-block" data-testid="act-gen-status-block"><strong>正在生成成果</strong></div>`;
     } else if (anyFailed && !anyReady) {
-      globalStatusBlock = `<div class="act-gen-status-block" data-testid="act-gen-status-block"><strong>成果未能完成</strong></div>`;
+      globalStatusBlock = `<div class="act-gen-status-block" data-testid="act-gen-status-block"><strong>成果未能生成</strong></div>`;
     } else if (anyReady && !anyFailed) {
-      globalStatusBlock = `<div class="act-gen-status-block" data-testid="act-gen-status-block"><strong>成果已完成</strong></div>`;
+      globalStatusBlock =
+        `<div class="act-gen-status-block" data-testid="act-gen-status-block"><strong>成果已完成</strong>` +
+        (anyEnhancing
+          ? `<div class="muted" data-testid="act-gen-enhancing-hint">正在进一步完善</div>`
+          : "") +
+        `</div>`;
     } else if (anyFailed && anyReady) {
       globalStatusBlock = `<div class="act-gen-status-block" data-testid="act-gen-status-block"><strong>部分成果已完成</strong></div>`;
     }
@@ -648,7 +675,7 @@
           const hasPersistedArtifact = !!(ver && primary && d.currentVersionId);
 
           // Failed / not persisted: status already shown once above — only optional reason.
-          if (st === "成果未能完成" || (!hasPersistedArtifact && d.generationStatus === "failed")) {
+          if (st === "成果未能生成" || (!hasPersistedArtifact && d.generationStatus === "failed")) {
             let actions = "";
             if (failDetail || auditLines) {
               actions +=
@@ -726,6 +753,7 @@
         .join("");
 
     // Single primary action: hide generate while busy or terminal-failed (no continue button).
+    // Enhancement must NOT block "打开成果".
     const onlyFailed = anyFailed && !anyReady && !anyGenerating && !anyRepairing;
     updatePrimaryGenerateButton({
       mode: anyReady ? "regenerate" : "generate",
