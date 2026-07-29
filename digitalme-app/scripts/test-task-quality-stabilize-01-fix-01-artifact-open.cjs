@@ -13,6 +13,9 @@ const packageStore = require("../src/act-behalf/deliverable-package-store");
 const artifactFs = require("../src/act-behalf/deliverable-artifact-fs");
 const {
   resolveOpenableArtifact,
+  resolvePrimaryForSelection,
+  openPrimaryForSelection,
+  revealPrimaryForSelection,
   openArtifactSecure,
   revealArtifactSecure,
   userMessageForOpenCode,
@@ -252,6 +255,54 @@ async function main() {
     }
   });
 
+  await test("native menu resolves primary artifact from task/package selection", async () => {
+    const ud = tempUserData();
+    try {
+      await seedArtifact(ud, {
+        taskId: "abt_sel",
+        packageId: "delivery_sel",
+        deliverableId: "deliverable_sel",
+        versionId: "dver_sel",
+        artifactId: "aref_sel",
+      });
+      const hit = resolvePrimaryForSelection(ud, {
+        taskId: "abt_sel",
+        packageId: "delivery_sel",
+      });
+      assert.equal(hit.ok, true);
+      assert.equal(hit.artifact.id, "aref_sel");
+      let opened = null;
+      const openRes = await openPrimaryForSelection({
+        userData: ud,
+        selection: { taskId: "abt_sel", packageId: "delivery_sel" },
+        shell: {
+          openPath: async (p) => {
+            opened = p;
+            return "";
+          },
+        },
+      });
+      assert.equal(openRes.ok, true);
+      assert.ok(opened && String(opened).includes("artifact.md"));
+      let revealed = null;
+      const rev = revealPrimaryForSelection({
+        userData: ud,
+        selection: { taskId: "abt_sel" },
+        shell: {
+          showItemInFolder: (p) => {
+            revealed = p;
+          },
+        },
+      });
+      assert.equal(rev.ok, true);
+      assert.ok(revealed);
+      const empty = resolvePrimaryForSelection(ud, { taskId: "abt_none" });
+      assert.equal(empty.ok, false);
+    } finally {
+      cleanup(ud);
+    }
+  });
+
   await test("html and image formats resolve", async () => {
     const ud = tempUserData();
     try {
@@ -305,43 +356,32 @@ async function main() {
     assert.equal(userMessageForOpenCode("open_failed"), "暂时无法打开成果。");
   });
 
-  await test("renderer open uses shared panel command entry (not dedicated listeners)", () => {
+  await test("renderer has no artifact-open buttons or dedicated open handlers", () => {
     const src = fs.readFileSync(
       path.join(__dirname, "../src/renderer/deliverable-planner.js"),
       "utf8"
     );
-    assert.ok(src.includes('data-command="artifact.open"'));
-    assert.ok(src.includes('data-command="artifact.copy-path"'));
-    assert.ok(src.includes("打开所在文件夹"));
-    assert.ok(src.includes("复制文件路径"));
-    assert.ok(src.includes("data-artifact-id="));
-    assert.ok(src.includes("data-version-id="));
-    assert.ok(src.includes("data-deliverable-id="));
-    assert.ok(src.includes('document: ["md", "docx", "html"]'));
-    assert.ok(!src.includes("data-path="));
+    assert.ok(!src.includes(">打开成果</button>"));
+    assert.ok(!src.includes('data-command="artifact.open"'));
+    assert.ok(!src.includes('data-action="open-deliverable-artifact"'));
     assert.ok(!src.includes('data-action="open-primary"'));
     assert.ok(!src.includes('data-action="open-art"'));
-    assert.ok(!src.includes('data-action="open-deliverable-artifact"'));
-    assert.ok(!src.includes("bindArtifactOpenButtons"));
+    assert.ok(!src.includes("reveal-art"));
+    assert.ok(src.includes('data-action="accept-ver"'));
     const appSrc = fs.readFileSync(path.join(__dirname, "../src/renderer/app.js"), "utf8");
-    assert.ok(appSrc.includes("executeUiCommand"));
-    assert.ok(appSrc.includes("executeArtifactOpenCommand"));
-    assert.ok(appSrc.includes('case "artifact.open"'));
-    assert.ok(appSrc.includes('case "accept-ver"'));
-    assert.ok(appSrc.includes("正在打开…"));
-    assert.ok(appSrc.includes("已打开"));
-    assert.ok(appSrc.includes("暂时无法打开"));
-    assert.ok(appSrc.includes("actBehalfOpenArtifact"));
+    assert.ok(appSrc.includes("syncActArtifactSelectionToMain"));
     assert.ok(appSrc.includes("handleGenerationPanelClick"));
+    assert.ok(!appSrc.includes("executeArtifactOpenCommand"));
+    assert.ok(!appSrc.includes("executeUiCommand"));
     assert.ok(!appSrc.includes("bindArtifactOpenRootOnce"));
-    assert.ok(!appSrc.includes("handleArtifactOpenAtRootCapture"));
-    assert.ok(!appSrc.includes("findArtifactOpenButton"));
-    assert.ok(!appSrc.includes("bindArtifactOpenButtons"));
-    assert.ok(!appSrc.includes("handleArtifactOpenButtonClick"));
     assert.ok(!appSrc.includes("openDeliverableArtifactFromButton"));
-    assert.ok(!appSrc.includes("artifactOpenRootBound"));
-    assert.ok(!appSrc.includes("handleDeliverableArtifactClickCapture"));
-    assert.ok(!appSrc.includes('setActProgress("已打开草稿任务。")'));
+    assert.ok(!appSrc.includes("markArtifactOpenDiag"));
+    assert.ok(!appSrc.includes("setArtifactCardStatus"));
+    const mainSrc = fs.readFileSync(path.join(__dirname, "../src/main.js"), "utf8");
+    assert.ok(mainSrc.includes("打开当前成果"));
+    assert.ok(mainSrc.includes("打开成果所在文件夹"));
+    assert.ok(mainSrc.includes("openPrimaryForSelection"));
+    assert.ok(mainSrc.includes("actBehalf:setSelection"));
   });
 
   await test("partial package: ready items openable, failed have no open button markup rule", () => {

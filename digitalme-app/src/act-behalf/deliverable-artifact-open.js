@@ -176,6 +176,95 @@ function resolveOpenableArtifact(userData, payload) {
 }
 
 /**
+ * Resolve the first openable ArtifactRef for the currently selected task/package.
+ * Used by native File menu — no renderer path injection.
+ */
+function resolvePrimaryForSelection(userData, selection) {
+  const taskId = selection && selection.taskId ? String(selection.taskId) : "";
+  let packageId = selection && selection.packageId ? String(selection.packageId) : "";
+  if (!taskId && !packageId) {
+    return fail("invalid_artifact_reference", "no task or package selected");
+  }
+
+  const store = packageStore.loadStore(userData);
+  let pkg = null;
+  if (packageId && store.packages[packageId]) {
+    pkg = store.packages[packageId];
+  } else if (taskId) {
+    const list = Object.values(store.packages || {}).filter(
+      (p) => p && String(p.taskId) === taskId
+    );
+    pkg = list.sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")))[0] || null;
+    if (pkg) packageId = String(pkg.id);
+  }
+  if (!pkg) {
+    return fail("package_not_found", "no package for selection");
+  }
+  if (taskId && String(pkg.taskId) !== taskId) {
+    return fail("invalid_artifact_reference", "package does not belong to task");
+  }
+
+  const deliverableIds = Array.isArray(pkg.deliverableIds) ? pkg.deliverableIds : [];
+  for (const did of deliverableIds) {
+    const d = store.deliverables && store.deliverables[String(did)];
+    if (!d || d.planDisposition === "removed") continue;
+    if (!(d.generationStatus === "ready" || d.currentVersionId)) continue;
+    const versionId = String(d.currentVersionId || "");
+    const version = versionId ? store.versions && store.versions[versionId] : null;
+    if (!version) continue;
+    const refs = [];
+    if (Array.isArray(version.artifactRefs)) refs.push(...version.artifactRefs);
+    if (version.artifactRef) refs.push(version.artifactRef);
+    if (version.previewRef) refs.push(version.previewRef);
+    const prefer = ["md", "markdown", "docx", "html", "htm"];
+    let chosen = null;
+    for (const fmt of prefer) {
+      chosen = refs.find((r) => r && String(r.format || "").toLowerCase() === fmt);
+      if (chosen) break;
+    }
+    if (!chosen) chosen = refs.find((r) => r && r.id);
+    if (!chosen || !chosen.id) continue;
+    return resolveOpenableArtifact(userData, {
+      artifactId: String(chosen.id),
+      versionId,
+      deliverableId: String(d.id),
+      taskId: String(pkg.taskId || taskId || ""),
+    });
+  }
+  return fail("artifact_not_found", "no openable deliverable in package");
+}
+
+async function openPrimaryForSelection(opts) {
+  const resolved = resolvePrimaryForSelection(opts.userData, opts.selection || {});
+  if (!resolved.ok) return resolved;
+  return openArtifactSecure({
+    userData: opts.userData,
+    payload: {
+      artifactId: resolved.artifact.id,
+      versionId: resolved.version.id,
+      deliverableId: resolved.deliverable.id,
+      taskId: resolved.package && resolved.package.taskId,
+    },
+    shell: opts.shell,
+  });
+}
+
+function revealPrimaryForSelection(opts) {
+  const resolved = resolvePrimaryForSelection(opts.userData, opts.selection || {});
+  if (!resolved.ok) return resolved;
+  return revealArtifactSecure({
+    userData: opts.userData,
+    payload: {
+      artifactId: resolved.artifact.id,
+      versionId: resolved.version.id,
+      deliverableId: resolved.deliverable.id,
+      taskId: resolved.package && resolved.package.taskId,
+    },
+    shell: opts.shell,
+  });
+}
+
+/**
  * @param {object} opts
  * @param {string} opts.userData
  * @param {object} opts.payload
@@ -183,27 +272,6 @@ function resolveOpenableArtifact(userData, payload) {
  */
 async function openArtifactSecure(opts) {
   const payload = opts.payload || {};
-  if (payload.intent === "copyPath") {
-    const resolved = resolveOpenableArtifact(opts.userData, payload);
-    if (!resolved.ok) return resolved;
-    try {
-      const { clipboard } = require("electron");
-      if (!clipboard || typeof clipboard.writeText !== "function") {
-        return fail("open_failed", "clipboard unavailable");
-      }
-      clipboard.writeText(resolved.abs);
-    } catch (e) {
-      return fail("open_failed", (e && e.message) || "clipboard write failed");
-    }
-    return {
-      ok: true,
-      code: "path_copied",
-      artifactId: resolved.artifact.id,
-      versionId: resolved.version.id,
-      deliverableId: resolved.deliverable.id,
-    };
-  }
-
   const resolved = resolveOpenableArtifact(opts.userData, payload);
   if (!resolved.ok) return resolved;
 
@@ -261,6 +329,9 @@ module.exports = {
   ALLOWED_OPEN_EXTENSIONS,
   userMessageForOpenCode,
   resolveOpenableArtifact,
+  resolvePrimaryForSelection,
+  openPrimaryForSelection,
+  revealPrimaryForSelection,
   openArtifactSecure,
   revealArtifactSecure,
 };

@@ -5,6 +5,19 @@
 
 ---
 
+## 2026-07-29 ARTIFACT-ACCESS-MIN-01 原生文件菜单访问 · 实施中（禁止 Owner 复验）
+
+### 结论
+
+成果文件与 main 安全打开可用；失败在 renderer 叠加事件体系。本任务撤销 FIX-01A～D / RESET 打开前端，保留 RESPONSIVENESS；入口改为「文件」菜单。
+
+### 状态
+
+`implementation_in_progress` / `owner_retest_forbidden`  
+分支：`codex/artifact-access-min-01`。不得 push。开发者须 `npm start` → 文件 → 打开当前成果 / 打开成果所在文件夹 实测后再升状态。
+
+---
+
 ## 2026-07-29 ARTIFACT-OPEN-RESET-01 成果打开最小重建 · 实施中（禁止 Owner 复验）
 
 ### 性质

@@ -676,7 +676,6 @@
             return true;
           });
           const primary = pickPrimaryArtifact(d.kind, uniqueArts, ver && ver.artifactRef);
-          const secondaryArts = uniqueArts.filter((a) => !primary || a.id !== primary.id);
           const hasPersistedArtifact = !!(ver && primary && d.currentVersionId);
 
           // Failed / not persisted: status already shown once above — only optional reason.
@@ -716,13 +715,7 @@
 
           let actions = "";
           if (st === "成果已完成" && primary) {
-            const idAttrs =
-              ` data-artifact-id="${escapeAttr(primary.id)}"` +
-              ` data-version-id="${escapeAttr(ver.id)}"` +
-              ` data-deliverable-id="${escapeAttr(d.id)}"` +
-              ` data-task-id="${escapeAttr((pkg && pkg.taskId) || "")}"`;
-            actions +=
-              `<button type="button" class="btn btn-primary" data-command="artifact.open"${idAttrs}>打开成果</button>`;
+            // ARTIFACT-ACCESS-MIN-01: no card「打开成果」button (native File menu only).
             actions +=
               `<button type="button" class="btn-ghost" data-action="accept-ver" data-version-id="${escapeAttr(
                 ver.id
@@ -735,12 +728,6 @@
                   )}">重新生成</button>`
                 : `<button type="button" class="btn-ghost" disabled title="本次授权已撤销">重新生成</button>`
             );
-            moreItems.push(
-              `<button type="button" class="btn-ghost" data-action="reveal-art"${idAttrs}>打开所在文件夹</button>`
-            );
-            moreItems.push(
-              `<button type="button" class="btn-ghost" data-command="artifact.copy-path"${idAttrs}>复制文件路径</button>`
-            );
             if (ver) {
               moreItems.push(
                 `<button type="button" class="btn-ghost" data-action="reject-ver" data-version-id="${escapeAttr(
@@ -748,18 +735,6 @@
                 )}">否定此版本</button>`
               );
             }
-            secondaryArts.forEach((a) => {
-              const secAttrs =
-                ` data-artifact-id="${escapeAttr(a.id)}"` +
-                ` data-version-id="${escapeAttr(ver.id)}"` +
-                ` data-deliverable-id="${escapeAttr(d.id)}"` +
-                ` data-task-id="${escapeAttr((pkg && pkg.taskId) || "")}"`;
-              moreItems.push(
-                `<button type="button" class="btn-ghost" data-command="artifact.open"${secAttrs}>打开 ${escapeAttr(
-                  a.format || "其他格式"
-                )}</button>`
-              );
-            });
             actions +=
               `<details class="act-gen-more"><summary class="muted">更多…</summary><div class="builder-actions">${moreItems.join(
                 ""
@@ -777,7 +752,7 @@
         .join("");
 
     // Single primary action: hide generate while busy or terminal-failed (no continue button).
-    // Enhancement must NOT block "打开成果".
+    // Enhancement must NOT block reviewing completed deliverables.
     const onlyFailed = anyFailed && !anyReady && !anyGenerating && !anyRepairing;
     updatePrimaryGenerateButton({
       mode: anyReady ? "regenerate" : "generate",

@@ -42,6 +42,76 @@ const { reconcileTaskPackages } = require("./act-behalf/deliverable-package-reco
 const deliverableGeneration = require("./act-behalf/deliverable-generation");
 const deliverableArtifactFs = require("./act-behalf/deliverable-artifact-fs");
 const deliverableArtifactOpen = require("./act-behalf/deliverable-artifact-open");
+
+/** In-memory only — current act-behalf selection for native File menu (not persisted). */
+let actArtifactSelection = { taskId: null, packageId: null };
+
+function setActArtifactSelection(payload) {
+  const next = {
+    taskId: payload && payload.taskId ? String(payload.taskId) : null,
+    packageId: payload && payload.packageId ? String(payload.packageId) : null,
+  };
+  const changed =
+    next.taskId !== actArtifactSelection.taskId || next.packageId !== actArtifactSelection.packageId;
+  actArtifactSelection = next;
+  if (changed && app.isReady()) {
+    try {
+      buildAppMenu();
+    } catch (err) {
+      console.error("[artifact-access] menu rebuild failed", err && err.message);
+    }
+  }
+}
+
+async function handleNativeOpenCurrentArtifact() {
+  try {
+    const { shell } = require("electron");
+    const res = await deliverableArtifactOpen.openPrimaryForSelection({
+      userData: app.getPath("userData"),
+      selection: actArtifactSelection,
+      shell,
+    });
+    if (!res || !res.ok) {
+      dialog.showMessageBox({
+        type: "warning",
+        title: "无法打开成果",
+        message: (res && res.message) || "暂时无法打开成果。",
+      });
+    }
+  } catch (err) {
+    dialog.showMessageBox({
+      type: "warning",
+      title: "无法打开成果",
+      message: "暂时无法打开成果。",
+      detail: err && err.message ? String(err.message).slice(0, 240) : undefined,
+    });
+  }
+}
+
+async function handleNativeRevealCurrentArtifact() {
+  try {
+    const { shell } = require("electron");
+    const res = deliverableArtifactOpen.revealPrimaryForSelection({
+      userData: app.getPath("userData"),
+      selection: actArtifactSelection,
+      shell,
+    });
+    if (!res || !res.ok) {
+      dialog.showMessageBox({
+        type: "warning",
+        title: "无法打开文件夹",
+        message: (res && res.message) || "暂时无法打开成果。",
+      });
+    }
+  } catch (err) {
+    dialog.showMessageBox({
+      type: "warning",
+      title: "无法打开文件夹",
+      message: "暂时无法打开成果。",
+      detail: err && err.message ? String(err.message).slice(0, 240) : undefined,
+    });
+  }
+}
 const { confirmPlanAndGenerate } = require("./act-behalf/deliverable-confirm-and-generate");
 const deliverableAutoLearn = require("./act-behalf/deliverable-auto-learn");
 const actionIdentity = require("./act-behalf/action-identity");
@@ -178,10 +248,38 @@ function getConfigSecrets() {
 }
 
 function buildAppMenu() {
+  const canOpenArtifact = (() => {
+    try {
+      const hit = deliverableArtifactOpen.resolvePrimaryForSelection(app.getPath("userData"), actArtifactSelection);
+      return !!(hit && hit.ok);
+    } catch {
+      return false;
+    }
+  })();
+
   const template = [
     {
       label: "文件",
-      submenu: [{ role: "quit", label: "退出 Digital Me" }],
+      submenu: [
+        {
+          id: "file-open-current-artifact",
+          label: "打开当前成果",
+          enabled: canOpenArtifact,
+          click: () => {
+            void handleNativeOpenCurrentArtifact();
+          },
+        },
+        {
+          id: "file-reveal-current-artifact",
+          label: "打开成果所在文件夹",
+          enabled: canOpenArtifact,
+          click: () => {
+            void handleNativeRevealCurrentArtifact();
+          },
+        },
+        { type: "separator" },
+        { role: "quit", label: "退出 Digital Me" },
+      ],
     },
     {
       label: "编辑",
@@ -3446,6 +3544,11 @@ ipcMain.handle("actBehalf:openArtifact", async (_e, payload) => {
       detail: err && err.message ? String(err.message).slice(0, 240) : undefined,
     };
   }
+});
+
+/** Lightweight selection sync for native File menu (in-memory only). */
+ipcMain.on("actBehalf:setSelection", (_e, payload) => {
+  setActArtifactSelection(payload || {});
 });
 
 ipcMain.handle("actBehalf:revealArtifact", async (_e, payload) => {
