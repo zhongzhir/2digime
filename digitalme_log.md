@@ -5,6 +5,27 @@
 
 ---
 
+## 2026-07-29 TASK-QUALITY-STABILIZE-01-FIX-01A 打开验收 probe 修复 · 实施完成（待 Owner 复验）
+
+### 事实
+
+Owner 截图显示 `tmp-open-artifact-probe.cjs` 因 `require("./src/...")` 相对路径错误崩溃。FIX-01「Electron open+reopen ok」不得作为 Owner 通过依据。
+
+### 修复
+
+正式 `electron-artifact-open-acceptance.cjs` 使用 `__dirname`→app root；隔离 userData；Owner PRD 复制后 openPath=""；UI 成功短暂「已打开成果」。
+
+### 状态
+
+```text
+implemented / automated_tests_passed / acceptance_probe_repaired /
+artifact_open_owner_revalidation_pending
+```
+
+不得 push。
+
+---
+
 ## 2026-07-29 TASK-QUALITY-STABILIZE-01-FIX-01 成果打开链路修复 · 实施完成（待 Owner 真机验收）
 
 ### 事实

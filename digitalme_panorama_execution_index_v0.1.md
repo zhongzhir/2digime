@@ -7,7 +7,9 @@
 代码实现基线：`2f1b7bd`（committed baseline；distill-me + doing-context + identity + collaboration + 全部新增功能）；历史 `cbde807fd1e40472d66fbe8f0810a0835e8bc816`（PAN-01S 族）；R1 `8d7e9b3`；R2 分支 `codex/r2-chat-sessions-migration`（实现保留）
 规格依据：见文内历史列表
 
-> **2026-07-29 TODAY（非本索引主线）**：**TASK-QUALITY-STABILIZE-01-FIX-01**（成果打开链路）已实现：`implemented` / `automated_tests_passed` / `artifact_open_restored` / `owner_runtime_acceptance_pending`；分支 `codex/task-quality-stabilize-01-fix-artifact-open`；基线 `48af0b4`。等待 Owner 真机再验打开。不得 push。
+> **2026-07-29 TODAY（非本索引主线）**：**TASK-QUALITY-STABILIZE-01-FIX-01A**（打开验收 probe / UI 反馈）已实现：`implemented` / `automated_tests_passed` / `acceptance_probe_repaired` / `artifact_open_owner_revalidation_pending`；分支 `codex/task-quality-stabilize-01-fix-01a-open-acceptance`；基线 `dce5b29`。FIX-01 Electron 通过结论已撤回。等待 Owner 正式页复验。不得 push。
+>
+> **2026-07-29（前序）**：**TASK-QUALITY-STABILIZE-01-FIX-01**（成果打开链路）已实现：`implemented` / `automated_tests_passed` / `artifact_open_restored` / `owner_runtime_acceptance_pending`；分支 `codex/task-quality-stabilize-01-fix-artifact-open`；基线 `48af0b4`。不得单独标 Owner 通过。
 >
 > **2026-07-29（前序）**：**TASK-QUALITY-STABILIZE-01**（可靠交付主路径与后台质量增强分离）已实现完成：`implemented` / `automated_tests_passed` / `stable_delivery_added` / `owner_runtime_acceptance_pending` / `market_95th_percentile_not_proven`；分支 `codex/task-quality-stabilize-01`；基线 `72f8f20`。生产默认 `stable_delivery`；旧质量环为 `advanced_shadow`。不得 push。不得标市场 95% 分位已证明。
 >
