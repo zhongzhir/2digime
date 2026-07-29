@@ -1,0 +1,41 @@
+code=0
+OUT:
+{
+    "windowFound":  true,
+    "openClicked":  true,
+    "revealClicked":  true,
+    "menuOpenEnabled":  true,
+    "shots":  [
+                  "D:\\Projects\\Digital Me\\digitalme-app\\scripts\\_access-min-evidence\\2026-07-29T07-45-21-279Z\\shot-00-top-strip.png",
+                  "D:\\Projects\\Digital Me\\digitalme-app\\scripts\\_access-min-evidence\\2026-07-29T07-45-21-279Z\\shot-01-file-dropdown.png",
+                  "D:\\Projects\\Digital Me\\digitalme-app\\scripts\\_access-min-evidence\\2026-07-29T07-45-21-279Z\\shot-02-after-open.png",
+                  "D:\\Projects\\Digital Me\\digitalme-app\\scripts\\_access-min-evidence\\2026-07-29T07-45-21-279Z\\shot-03-file-dropdown-2.png",
+                  "D:\\Projects\\Digital Me\\digitalme-app\\scripts\\_access-min-evidence\\2026-07-29T07-45-21-279Z\\shot-04-after-reveal.png"
+              ],
+    "notes":  [
+                  "windowRect=-8,-8,1928,1048",
+                  "explorerProcessCount=1",
+                  "os_mouse_sendinput=true"
+              ],
+    "clickPoints":  [
+                        {
+                            "y":  36,
+                            "name":  "file",
+                            "x":  34
+                        },
+                        {
+                            "y":  64,
+                            "name":  "open-current",
+                            "x":  112
+                        },
+                        {
+                            "y":  90,
+                            "name":  "reveal-folder",
+                            "x":  132
+                        }
+                    ],
+    "error":  null
+}
+
+ERR:
+

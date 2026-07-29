@@ -7,7 +7,7 @@
 代码实现基线：`2f1b7bd`（committed baseline；distill-me + doing-context + identity + collaboration + 全部新增功能）；历史 `cbde807fd1e40472d66fbe8f0810a0835e8bc816`（PAN-01S 族）；R1 `8d7e9b3`；R2 分支 `codex/r2-chat-sessions-migration`（实现保留）
 规格依据：见文内历史列表
 
-> **2026-07-29 TODAY（非本索引主线）**：**ARTIFACT-ACCESS-MIN-01**（原生文件菜单访问）`implementation_in_progress` / `owner_retest_forbidden`；分支 `codex/artifact-access-min-01`；基线 `1fad412`。撤销成果卡打开按钮与 FIX/RESET 打开事件；保留 RESPONSIVENESS。入口：「文件」→「打开当前成果」。禁止 Owner 复验。不得 push。
+> **2026-07-29 TODAY（非本索引主线）**：**ARTIFACT-ACCESS-MIN-01**（原生文件菜单访问）`implemented` / `developer_runtime_accepted` / `ready_for_owner_spotcheck`；分支 `codex/artifact-access-min-01`。证据 `digitalme-app/scripts/_access-min-evidence/LATEST/`。可 Owner 抽查。不得 push。
 >
 > **2026-07-29（前序，已被 ACCESS-MIN 取代）**：**ARTIFACT-OPEN-RESET-01** 卡片 `executeUiCommand("artifact.open")` 策略作废。
 >

@@ -5,6 +5,12 @@
 
 ---
 
+## 2026-07-29 ARTIFACT-ACCESS-MIN-01 开发侧文件菜单验收通过
+
+正式 `electron .` + Owner userData；OS 真实鼠标点击「文件 → 打开当前成果 / 打开成果所在文件夹」；截图见 `digitalme-app/scripts/_access-min-evidence/LATEST/`；重启后再跑通过。状态升为 `developer_runtime_accepted` / `ready_for_owner_spotcheck`。不得 push。
+
+---
+
 ## 2026-07-29 ARTIFACT-ACCESS-MIN-01 原生文件菜单访问 · 实施中（禁止 Owner 复验）
 
 ### 结论

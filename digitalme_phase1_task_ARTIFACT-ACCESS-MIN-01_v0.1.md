@@ -2,12 +2,12 @@
 
 版本：v0.1.0  
 日期：2026-07-29  
-状态：`implementation_in_progress` / `owner_retest_forbidden`  
+状态：`implemented` / `legacy_artifact_open_ui_removed` / `native_artifact_access_added` / `developer_runtime_accepted` / `ready_for_owner_spotcheck`  
 实施分支：`codex/artifact-access-min-01`  
-基线：`1fad412`（`codex/artifact-open-reset-01`）
+基线：`1fad412`（`codex/artifact-open-reset-01`）  
+实现 commit：`5284e96`；开发验收证据：`digitalme-app/scripts/_access-min-evidence/LATEST/`
 
-> 不是 FIX-01E。回退 FIX-01A～D 与 RESET-01 的成果打开 **renderer** 链路；**保留** GLOBAL-RENDERER-RESPONSIVENESS-01 与 main 安全打开。  
-> 开发者未完成 `npm start` → 文件菜单实测前：**禁止 Owner 复验**。
+> 开发侧已完成正式 `electron .` + OS 真实鼠标「文件」菜单验收。可请 Owner **抽查**；不得标 `accepted_as_implemented` 直至 Owner 抽查通过。
 
 ---
 
@@ -39,8 +39,6 @@ renderer 仅 `actBehalfSetSelection({ taskId, packageId })`（无路径）。菜
 
 ## 三、状态
 
-当前：`implementation_in_progress` / `owner_retest_forbidden`
-
-开发实测通过后：
-
 `implemented` / `legacy_artifact_open_ui_removed` / `native_artifact_access_added` / `developer_runtime_accepted` / `ready_for_owner_spotcheck`
+
+开发证据：`digitalme-app/scripts/_access-min-evidence/LATEST/`（含「文件」下拉截图与 `summary.json`）。

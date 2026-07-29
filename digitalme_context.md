@@ -2,7 +2,7 @@
 
 版本：v0.4
 状态：持续更新
-最后更新：2026-07-29（ARTIFACT-ACCESS-MIN-01 原生文件菜单访问；`owner_retest_forbidden`；不得 push）
+最后更新：2026-07-29（ARTIFACT-ACCESS-MIN-01 开发侧文件菜单验收通过；`ready_for_owner_spotcheck`；不得 push）
 
 > **当前产品主线（2026-07-26）**：**第二纵向闭环** — 多模态成果包交付与渐进式主体构建。第一纵向闭环已 `accepted` / `completed`。
 > **最高架构与研发原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)（**v0.1.1 `active`**）。
@@ -21,7 +21,7 @@
 > 2. **BUG1 #6** = 七模块渐进式数字之我构建框架。
 > 3. 首个正式验收场景 = 为一个项目生成完整对外介绍成果包。
 > 4. 第一轮真实产物 = 正式介绍文档、演示文稿 PPT、单页 HTML、封面图片；视频/音频本轮不实现真实生成，用户面不得宣称已支持。
-> **当前任务**：**ARTIFACT-ACCESS-MIN-01**（删除失控成果打开前端，原生文件菜单访问）进行中，状态 `implementation_in_progress` / `owner_retest_forbidden`（分支 `codex/artifact-access-min-01`；基线 `1fad412`）。已删除成果卡「打开成果」及 FIX/RESET 打开事件体系；保留 RESPONSIVENESS 与 main 安全打开。访问入口：顶部「文件」→「打开当前成果 / 打开成果所在文件夹」。开发者须 `npm start` 实测菜单后再升状态。**禁止 Owner 复验**。不得 push。
+> **当前任务**：**ARTIFACT-ACCESS-MIN-01**（原生文件菜单访问）已实现并由开发侧验收，状态 `implemented` / `legacy_artifact_open_ui_removed` / `native_artifact_access_added` / `developer_runtime_accepted` / `ready_for_owner_spotcheck`（分支 `codex/artifact-access-min-01`；commit `5284e96`+）。证据：`digitalme-app/scripts/_access-min-evidence/LATEST/`。入口：「文件」→「打开当前成果 / 打开成果所在文件夹」。成果卡无打开按钮。可 Owner 抽查；不得提前 `accepted_as_implemented`。不得 push。
 > **R2 对话运行时**：保留基础设施；R2 代码 **retained as infrastructure**。生产默认入口仍为 legacy。
 > **Owner Electron 真机验收（2026-07-24）**：`accepted`（distill-me / R2 对话重试 / doing-context / PAN-01S 等）。
 > **confirmed identity → act context（2026-07-24，`2f1b7bd`）**：`accepted`（历史整合基线；**不是**当前 HEAD）。

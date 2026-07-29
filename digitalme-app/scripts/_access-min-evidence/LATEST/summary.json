@@ -1,0 +1,56 @@
+{
+  "startedAt": "2026-07-29T07:45:21.345Z",
+  "ownerUserData": "C:\\Users\\46554\\AppData\\Roaming\\digitalme-app",
+  "evidenceDir": "D:\\Projects\\Digital Me\\digitalme-app\\scripts\\_access-min-evidence\\2026-07-29T07-45-21-279Z",
+  "mode": "formal_electron_dot_plus_os_mouse_file_menu",
+  "prepare": {
+    "href": "file:///D:/Projects/Digital%20Me/digitalme-app/src/renderer/index.html",
+    "openButtonCount": 0,
+    "hasSetSelection": true,
+    "scriptsHaveApp": true
+  },
+  "mouse": {
+    "code": 0,
+    "out": "{\r\n    \"windowFound\":  true,\r\n    \"openClicked\":  true,\r\n    \"revealClicked\":  true,\r\n    \"menuOpenEnabled\":  true,\r\n    \"shots\":  [\r\n                  \"D:\\\\Projects\\\\Digital Me\\\\digitalme-app\\\\scripts\\\\_access-min-evidence\\\\2026-07-29T07-45-21-279Z\\\\shot-00-top-strip.png\",\r\n                  \"D:\\\\Projects\\\\Digital Me\\\\digitalme-app\\\\scripts\\\\_access-min-evidence\\\\2026-07-29T07-45-21-279Z\\\\shot-01-file-dropdown.png\",\r\n                  \"D:\\\\Projects\\\\Digital Me\\\\digitalme-app\\\\scripts\\\\_access-min-evidence\\\\2026-07-29T07-45-21-279Z\\\\shot-02-after-open.png\",\r\n                  \"D:\\\\Projects\\\\Digital Me\\\\digitalme-app\\\\scripts\\\\_access-min-evidence\\\\2026-07-29T07-45-21-279Z\\\\shot-03-file-dropdown-2.png\",\r\n                  \"D:\\\\Projects\\\\Digital Me\\\\digitalme-app\\\\scripts\\\\_access-min-evidence\\\\2026-07-29T07-45-21-279Z\\\\shot-04-after-reveal.png\"\r\n              ],\r\n    \"notes\":  [\r\n                  \"windowRect=-8,-8,1928,1048\",\r\n                  \"explorerProcessCount=1\",\r\n                  \"os_mouse_sendinput=true\"\r\n              ],\r\n    \"clickPoints\":  [\r\n                        {\r\n                            \"y\":  36,\r\n                            \"name\":  \"file\",\r\n                            \"x\":  34\r\n                        },\r\n                        {\r\n                            \"y\":  64,\r\n                            \"name\":  \"open-current\",\r\n                            \"x\":  112\r\n                        },\r\n                        {\r\n                            \"y\":  90,\r\n                            \"name\":  \"reveal-folder\",\r\n                            \"x\":  132\r\n                        }\r\n                    ],\r\n    \"error\":  null\r\n}\r\n",
+    "err": ""
+  },
+  "ok": true,
+  "mouseSummary": {
+    "windowFound": true,
+    "openClicked": true,
+    "revealClicked": true,
+    "menuOpenEnabled": true,
+    "shots": [
+      "D:\\Projects\\Digital Me\\digitalme-app\\scripts\\_access-min-evidence\\2026-07-29T07-45-21-279Z\\shot-00-top-strip.png",
+      "D:\\Projects\\Digital Me\\digitalme-app\\scripts\\_access-min-evidence\\2026-07-29T07-45-21-279Z\\shot-01-file-dropdown.png",
+      "D:\\Projects\\Digital Me\\digitalme-app\\scripts\\_access-min-evidence\\2026-07-29T07-45-21-279Z\\shot-02-after-open.png",
+      "D:\\Projects\\Digital Me\\digitalme-app\\scripts\\_access-min-evidence\\2026-07-29T07-45-21-279Z\\shot-03-file-dropdown-2.png",
+      "D:\\Projects\\Digital Me\\digitalme-app\\scripts\\_access-min-evidence\\2026-07-29T07-45-21-279Z\\shot-04-after-reveal.png"
+    ],
+    "notes": [
+      "windowRect=-8,-8,1928,1048",
+      "explorerProcessCount=1",
+      "os_mouse_sendinput=true"
+    ],
+    "clickPoints": [
+      {
+        "y": 36,
+        "name": "file",
+        "x": 34
+      },
+      {
+        "y": 64,
+        "name": "open-current",
+        "x": 112
+      },
+      {
+        "y": 90,
+        "name": "reveal-folder",
+        "x": 132
+      }
+    ],
+    "error": null
+  },
+  "finishedAt": "2026-07-29T07:45:37.676Z",
+  "bootLogTail": "\r\n\r\nDevTools listening on ws://127.0.0.1:9333/devtools/browser/b2d7029d-2554-44a6-9e1d-1f3e941e9f9a\r\n"
+}
