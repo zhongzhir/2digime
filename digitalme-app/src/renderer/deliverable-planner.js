@@ -265,6 +265,46 @@
     );
   }
 
+  /** Confirmed / generating: compact titles only — no persistent edit form. */
+  function renderItemRowSummary(item) {
+    const removed = item.planDisposition === "removed";
+    if (removed) return "";
+    const kind = kindLabel(item.kind);
+    const title = item.title || kind;
+    return (
+      '<article class="act-plan-item act-plan-item-summary" data-plan-item-id="' +
+      escapeAttr(item.id) +
+      '" data-plan-disposition="included" data-testid="act-plan-item-summary">' +
+      '<input type="hidden" data-field="kind" value="' +
+      escapeAttr(item.kind || "document") +
+      '" />' +
+      '<input type="hidden" data-field="title" value="' +
+      escapeAttr(item.title || "") +
+      '" />' +
+      '<input type="hidden" data-field="purpose" value="' +
+      escapeAttr(item.purpose || "") +
+      '" />' +
+      '<input type="hidden" data-field="format" value="' +
+      escapeAttr(item.format || "") +
+      '" />' +
+      '<input type="hidden" data-field="priority" value="' +
+      escapeAttr(item.priority || "recommended") +
+      '" />' +
+      '<input type="hidden" data-field="dependencies" value="' +
+      escapeAttr((item.dependencies || []).join(", ")) +
+      '" />' +
+      '<input type="hidden" data-field="riskFlags" value="' +
+      escapeAttr((item.riskFlags || []).join("，")) +
+      '" />' +
+      '<div class="act-plan-item-head"><strong>' +
+      escapeAttr(title) +
+      '</strong><span class="muted"> · ' +
+      escapeAttr(kind) +
+      "</span></div>" +
+      "</article>"
+    );
+  }
+
   function bindItemControls(root) {
     if (!root) return;
     root.querySelectorAll("[data-action]").forEach((btn) => {
@@ -309,7 +349,7 @@
     });
   }
 
-  function renderPlanView(view) {
+  function renderPlanView(view, opts) {
     const panel = $("act-deliverable-plan-panel");
     if (!panel) return;
     if (!view || !view.version) {
@@ -319,36 +359,65 @@
     }
     panel.classList.remove("hidden");
     const materialsStale = !!(view.materialsStale || (view.statusBanner && /参考材料已变化/.test(String(view.statusBanner))));
+    const planUiMode = (opts && opts.planUiMode) || view.planUiMode || "editing";
+    const editing = planUiMode === "editing";
+    const primaryGoal = String(($("act-request") && $("act-request").value) || "").trim();
+
     if ($("act-plan-status")) {
-      const u = view.version.understanding || {};
-      const understandingLine =
-        u.summary ||
-        u.oneLineSummary ||
-        (u.goal && (u.goal.value || u.goal)) ||
-        "";
-      // Stale materials banner must outrank ordinary understanding text.
-      const one = materialsStale
-        ? view.statusBanner || "参考材料已变化，请重新形成预计交付后再生成。"
-        : understandingLine || view.statusBanner || "";
-      $("act-plan-status").textContent = one ? String(one) : "";
+      // Do not repeat the full user goal under「预计交付」when deliverable titles exist.
+      let one = "";
+      if (materialsStale) {
+        one = view.statusBanner || "参考材料已变化，请重新形成预计交付后再生成。";
+      } else if (view.statusBanner && !/参考材料已变化/.test(String(view.statusBanner))) {
+        const banner = String(view.statusBanner);
+        if (banner !== primaryGoal && !(primaryGoal && (primaryGoal.includes(banner) || banner.includes(primaryGoal)))) {
+          one = banner;
+        }
+      }
+      $("act-plan-status").textContent = one;
       $("act-plan-status").classList.toggle("is-materials-stale", materialsStale);
     }
     if ($("act-plan-readiness")) {
       $("act-plan-readiness").textContent = "";
     }
     renderUnderstanding(view.version.understanding, {
-      primaryGoal: ($("act-request") && $("act-request").value) || "",
+      primaryGoal,
     });
     const itemsRoot = $("act-plan-items");
+    const addBtn = $("btn-act-plan-add-item");
+    const saveDraftBtn = $("btn-act-plan-save-draft");
+    const cancelDraftBtn = $("btn-act-plan-cancel-draft");
     if (itemsRoot) {
       const items = view.version.items || [];
-      itemsRoot.innerHTML = items.map((it, i) => renderItemRow(it, i)).join("");
-      fillItemFields(itemsRoot, items);
-      bindItemControls(itemsRoot);
+      if (editing) {
+        itemsRoot.innerHTML = items.map((it, i) => renderItemRow(it, i)).join("");
+        fillItemFields(itemsRoot, items);
+        bindItemControls(itemsRoot);
+      } else {
+        itemsRoot.innerHTML =
+          items.map((it) => renderItemRowSummary(it)).join("") +
+          (planUiMode === "confirmed" || planUiMode === "failed"
+            ? '<div class="builder-actions"><button type="button" class="btn-ghost" data-action="edit-plan" data-testid="btn-act-edit-plan">修改计划</button></div>'
+            : "");
+        const editBtn = itemsRoot.querySelector("[data-action=edit-plan]");
+        if (editBtn) {
+          editBtn.addEventListener("click", () => {
+            renderPlanView(view, { planUiMode: "editing" });
+          });
+        }
+      }
     }
+    if (addBtn) addBtn.classList.toggle("hidden", !editing);
+    if (saveDraftBtn) saveDraftBtn.classList.toggle("hidden", !editing);
+    if (cancelDraftBtn) cancelDraftBtn.classList.toggle("hidden", !editing);
+
     updatePrimaryGenerateButton({
       mode: "generate",
-      disabled: materialsStale || !!(view.authorizationStatus && view.authorizationStatus.canGenerate === false),
+      disabled:
+        materialsStale ||
+        !!(view.authorizationStatus && view.authorizationStatus.canGenerate === false) ||
+        planUiMode === "generating",
+      busy: planUiMode === "generating",
       authRevoked: !!(view.authorizationStatus && view.authorizationStatus.status === "revoked"),
     });
     if (typeof global.__digitalMeRefreshDeliverableResults === "function") {
@@ -401,16 +470,15 @@
       return "成果已完成";
     }
     if (s === "failed") {
-      return "成果还未完成";
+      return "成果未能完成";
     }
     if (s === "generating") return "正在生成成果";
-    if (s === "blocked" || s === "skipped_dependency") return "成果还未完成";
+    if (s === "blocked" || s === "skipped_dependency") return "成果未能完成";
     return "等待生成";
   }
 
   function failureHintForDeliverable(d, view) {
-    if (!d || d.generationStatus !== "failed") return "";
-    return "有部分内容未能可靠生成，系统已完成自动修复尝试。";
+    return "";
   }
 
   function failureDetailForDeliverable(d, view) {
@@ -418,7 +486,8 @@
     const attempt = latestAttemptForDeliverable(d, view);
     if (d.lastGenerationIssueSummary) return String(d.lastGenerationIssueSummary);
     if (attempt && attempt.userIssueSummary) return String(attempt.userIssueSummary);
-    return "";
+    if (attempt && attempt.errorSummary) return String(attempt.errorSummary);
+    return "系统已在一次发起内完成自动修复尝试，仍未能可靠生成成果。";
   }
 
   function auditIssueLines(d, view) {
@@ -488,26 +557,10 @@
     const anyGenerating = included.some((d) => d.generationStatus === "generating") || anyRepairing;
     const anyReady = included.some((d) => d.generationStatus === "ready" || d.currentVersionId);
     const anyFailed = included.some((d) => d.generationStatus === "failed");
+    // Single status outlet: only the main result area (items), not a duplicate top line.
     if (status) {
-      if (authRevoked) {
-        status.textContent = auth.message || "本次授权已撤销。已有成果会保留，但不能继续生成新版本。";
-        status.classList.add("is-auth-revoked");
-      } else {
-        status.classList.remove("is-auth-revoked");
-        if (anyRepairing) {
-          status.textContent = "正在完善成果";
-        } else if (anyGenerating) {
-          status.textContent = "正在生成成果";
-        } else if (anyFailed && !anyReady) {
-          status.textContent = "成果还未完成";
-        } else if (anyFailed && anyReady) {
-          status.textContent = "部分成果已完成";
-        } else if (anyReady) {
-          status.textContent = "成果已完成";
-        } else {
-          status.textContent = "";
-        }
-      }
+      status.textContent = "";
+      status.classList.remove("is-auth-revoked");
     }
 
     const pkg = view.package || {};
@@ -523,7 +576,7 @@
       ? `<div class="act-auth-revoked-banner" data-testid="act-auth-revoked-banner">${
           auth.message || "本次授权已撤销。已有成果会保留，但不能继续生成新版本。"
         }</div>`
-      : `<div class="act-workspace-summary muted" data-testid="act-workspace-summary">由你的 Digital Me 生成，成果归你所有。</div>`;
+      : "";
 
     const detailsBlock =
       `<details class="act-gen-details" data-testid="act-gen-details">` +
@@ -552,15 +605,30 @@
           : "") +
       `</details></div></details>`;
 
+    let globalStatusBlock = "";
+    if (authRevoked) {
+      // banner already in summaryBlock
+    } else if (anyRepairing) {
+      globalStatusBlock = `<div class="act-gen-status-block" data-testid="act-gen-status-block"><strong>正在完善成果</strong></div>`;
+    } else if (anyGenerating) {
+      globalStatusBlock = `<div class="act-gen-status-block" data-testid="act-gen-status-block"><strong>正在生成成果</strong></div>`;
+    } else if (anyFailed && !anyReady) {
+      globalStatusBlock = `<div class="act-gen-status-block" data-testid="act-gen-status-block"><strong>成果未能完成</strong></div>`;
+    } else if (anyReady && !anyFailed) {
+      globalStatusBlock = `<div class="act-gen-status-block" data-testid="act-gen-status-block"><strong>成果已完成</strong></div>`;
+    } else if (anyFailed && anyReady) {
+      globalStatusBlock = `<div class="act-gen-status-block" data-testid="act-gen-status-block"><strong>部分成果已完成</strong></div>`;
+    }
+
     itemsRoot.innerHTML =
       summaryBlock +
+      globalStatusBlock +
       detailsBlock +
       included
         .map((d) => {
           const ver = d.currentVersionId ? versions[d.currentVersionId] : null;
           const label = kindLabelZh(d.kind);
           const st = userGenStatus(d, view);
-          const failHint = failureHintForDeliverable(d, view);
           const failDetail = failureDetailForDeliverable(d, view);
           const auditLines = auditIssueLines(d, view);
           const arts = (ver && (ver.artifactRefs || []).length
@@ -577,46 +645,37 @@
           });
           const primary = pickPrimaryArtifact(d.kind, uniqueArts);
           const secondaryArts = uniqueArts.filter((a) => !primary || a.id !== primary.id);
+          const hasPersistedArtifact = !!(ver && primary && d.currentVersionId);
 
-          // Failed / not persisted: compact status block — not a formal artifact card.
-          if (st === "成果还未完成") {
+          // Failed / not persisted: status already shown once above — only optional reason.
+          if (st === "成果未能完成" || (!hasPersistedArtifact && d.generationStatus === "failed")) {
             let actions = "";
-            if (canGenerate) {
-              actions +=
-                `<button type="button" class="btn btn-primary" data-action="regen" data-deliverable-id="${d.id}">继续完善</button>`;
-            } else {
-              actions +=
-                `<button type="button" class="btn" disabled title="本次授权已撤销">继续完善</button>`;
-            }
             if (failDetail || auditLines) {
               actions +=
-                `<details class="act-gen-issue-details" data-testid="act-gen-issue-details"><summary class="muted">查看详情</summary>` +
+                `<details class="act-gen-issue-details" data-testid="act-gen-issue-details"><summary class="muted">查看原因</summary>` +
                 `<div class="muted act-gen-issue-body">` +
                 (failDetail ? `<p>${escapeAttr(failDetail)}</p>` : "") +
                 (auditLines
-                  ? `<details class="act-gen-audit"><summary class="muted">高级审计</summary><div class="act-gen-audit-body">${auditLines}</div></details>`
+                  ? `<details class="act-gen-audit"><summary class="muted">技术依据</summary><div class="act-gen-audit-body">${auditLines}</div></details>`
                   : "") +
                 `</div></details>`;
             }
             return (
               `<div class="act-gen-item act-gen-item-pending" data-deliverable-id="${d.id}" data-testid="act-gen-pending">` +
-              `<div class="act-gen-item-head"><strong>成果还未完成</strong></div>` +
-              (failHint ? `<p class="muted act-gen-failure-hint">${escapeAttr(failHint)}</p>` : "") +
               (actions ? `<div class="builder-actions">${actions}</div>` : "") +
               `</div>`
             );
           }
 
           if (st === "正在生成成果" || st === "正在完善成果") {
-            return (
-              `<div class="act-gen-item act-gen-item-busy" data-deliverable-id="${d.id}">` +
-              `<div class="act-gen-item-head"><strong>${escapeAttr(st)}</strong>` +
-              `<span class="muted">${escapeAttr(label)}</span></div>` +
-              `</div>`
-            );
+            return "";
           }
 
-          const metaParts = [label, st];
+          if (!hasPersistedArtifact) {
+            return "";
+          }
+
+          const metaParts = [label];
           if (ver && (ver.createdAt || ver.generatedAt)) {
             metaParts.push(formatTime(ver.createdAt || ver.generatedAt));
           }
@@ -657,7 +716,7 @@
           }
 
           return (
-            `<div class="act-gen-item" data-deliverable-id="${d.id}">` +
+            `<div class="act-gen-item" data-deliverable-id="${d.id}" data-testid="act-gen-artifact-card">` +
             `<div class="act-gen-item-head"><strong>${escapeAttr(d.title || label)}</strong>` +
             `<span class="muted">${metaParts.map(escapeAttr).join(" · ")}</span></div>` +
             (actions ? `<div class="builder-actions">${actions}</div>` : "") +
@@ -666,7 +725,7 @@
         })
         .join("");
 
-    // Single primary action: hide duplicate generate while busy or when failed (continue is on card).
+    // Single primary action: hide generate while busy or terminal-failed (no continue button).
     const onlyFailed = anyFailed && !anyReady && !anyGenerating && !anyRepairing;
     updatePrimaryGenerateButton({
       mode: anyReady ? "regenerate" : "generate",

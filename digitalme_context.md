@@ -2,7 +2,7 @@
 
 版本：v0.4
 状态：持续更新
-最后更新：2026-07-29（TASK-QUALITY-LOOP-01.2 语义契约与 UI 收敛完成待 Owner 真机验收；不得 push）
+最后更新：2026-07-29（TASK-QUALITY-LOOP-01.2-FIX-01 自动完成与单一界面修复完成待 Owner 真机验收；不得 push）
 
 > **当前产品主线（2026-07-26）**：**第二纵向闭环** — 多模态成果包交付与渐进式主体构建。第一纵向闭环已 `accepted` / `completed`。
 > **最高架构与研发原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)（**v0.1.1 `active`**）。
@@ -21,7 +21,7 @@
 > 2. **BUG1 #6** = 七模块渐进式数字之我构建框架。
 > 3. 首个正式验收场景 = 为一个项目生成完整对外介绍成果包。
 > 4. 第一轮真实产物 = 正式介绍文档、演示文稿 PPT、单页 HTML、封面图片；视频/音频本轮不实现真实生成，用户面不得宣称已支持。
-> **当前任务**：**TASK-QUALITY-LOOP-01.2**（动态成果契约、语义覆盖生成与任务界面收敛）已实现完成，状态 `implemented` / `automated_tests_passed` / `semantic_contract_generation_added` / `generation_state_consolidated` / `task_ui_minimized` / `owner_runtime_acceptance_pending` / `market_95th_percentile_not_proven`（分支 `codex/task-quality-loop-01-2-semantic-contract`；**等待 Owner 真机验收**）。前序 **01.1-FIX-01** / **01.1** / **01** 同属待验质量闭环族。**IDCOLLAB-MIN-01** 状态已校正（2026-07-28）：`implemented` / `revocation_bug_fixed` / `owner_runtime_accepted` / `accepted_as_implemented`（边界：`minimal_identity_collaboration_loop_only` / `external_network_collaboration_not_validated` / `market_and_settlement_not_started`）。**2026-07-27 已收口**：LEARN-LOOP-FIX-02、LEARN-LOOP-FIX-02.1、DVL2-03-FIX-01、TASK-UX-MIN-01（均 `owner_runtime_accepted` / `accepted_as_implemented`）。**不得** push。
+> **当前任务**：**TASK-QUALITY-LOOP-01.2-FIX-01**（自动完成闭环与单一任务界面）已实现完成，状态 `implemented` / `automated_tests_passed` / `auto_completion_flow_repaired` / `single_task_view_added` / `owner_runtime_acceptance_pending`（分支 `codex/task-quality-loop-01-2-fix-auto-completion`；**等待 Owner 真机验收**）。前序 **01.2** Owner 真机为 `runtime_generation_failed` / `owner_runtime_not_accepted`。**不得** push。
 > **R2 对话运行时**：保留基础设施；R2 代码 **retained as infrastructure**。生产默认入口仍为 legacy。
 > **Owner Electron 真机验收（2026-07-24）**：`accepted`（distill-me / R2 对话重试 / doing-context / PAN-01S 等）。
 > **confirmed identity → act context（2026-07-24，`2f1b7bd`）**：`accepted`（历史整合基线；**不是**当前 HEAD）。

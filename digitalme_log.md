@@ -5,6 +5,27 @@
 
 ---
 
+## 2026-07-29 TASK-QUALITY-LOOP-01.2-FIX-01 自动完成与单一界面 · 实施完成（待 Owner 真机验收）
+
+### 根因（真机 attempt）
+
+`project_authority_conflict` 在 Reviewer 前硬失败且不在可修复集合；`useSemanticBlocks` 未转发；UI 给出「继续完善」。
+
+### 修复
+
+权威冲突自动修订；语义分块接线；有界整篇 fallback；删除「继续完善」；单一「成果未能完成」状态；计划摘要态。新增永久字段 0。
+
+### 状态
+
+```text
+implemented / automated_tests_passed / auto_completion_flow_repaired /
+single_task_view_added / owner_runtime_acceptance_pending
+```
+
+Owner 真机尚未通过。不得 push。
+
+---
+
 ## 2026-07-29 TASK-QUALITY-LOOP-01.2 动态成果契约与 UI 收敛 · 实施完成（待 Owner 真机验收）
 
 ### 本次目标

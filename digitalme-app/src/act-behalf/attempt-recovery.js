@@ -14,6 +14,8 @@ const RECOVERY_ACTIONS = Object.freeze({
   SEMANTIC_GAP_FILL: "semantic_gap_fill",
   OUTLINE_REPAIR: "outline_repair",
   BLOCK_REPAIR: "block_repair",
+  BLOCK_LOCAL_REPAIR: "block_local_repair",
+  WHOLE_DOCUMENT_FALLBACK: "whole_document_fallback",
 });
 
 function normalizeRecoveryActions(attemptOrAudit) {

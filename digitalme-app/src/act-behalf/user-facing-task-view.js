@@ -57,8 +57,15 @@ function deriveUserFacingTaskState(opts) {
   const authRevoked = auth.status === "revoked";
 
   const title =
-    String((opts && opts.userGoal) || task.goal || task.request || task.title || "").trim() ||
-    "未命名任务";
+    String(
+      (primary && primary.title) ||
+        (opts && opts.userGoal) ||
+        task.goal ||
+        task.request ||
+        task.title ||
+        ""
+    ).trim() || "未命名任务";
+  const fullGoal = String((opts && opts.userGoal) || task.goal || task.request || "").trim();
 
   if (authRevoked) {
     return {
@@ -117,13 +124,10 @@ function deriveUserFacingTaskState(opts) {
     };
   } else if (phase === "failed") {
     status = USER_STATUS.FAILED;
-    statusMessage = "成果还未完成";
-    primaryAction = {
-      id: "continue",
-      label: "继续完善",
-      deliverableId: primary && primary.id,
-    };
-    secondaryAction = { id: "details", label: "查看详情", placement: "secondary" };
+    statusMessage = "成果未能完成";
+    // Ordinary failures must not ask the user to continue the same flow.
+    primaryAction = null;
+    secondaryAction = { id: "details", label: "查看原因", placement: "secondary" };
   }
 
   const understanding = opts && opts.understanding;
@@ -136,8 +140,8 @@ function deriveUserFacingTaskState(opts) {
       String((understanding.summary && understanding.summary.value) || understanding.summary || "").trim() ||
       String((understanding.usage && understanding.usage.value) || understanding.usage || "").trim();
     // Only show summary when it adds value beyond repeating the user goal.
-    if (extra && extra !== title && extra !== uGoal && !title.includes(extra) && extra.length > 8) {
-      if (!uGoal || uGoal === title || title.includes(uGoal) || uGoal.includes(title)) {
+    if (extra && extra !== title && extra !== uGoal && extra !== fullGoal && !title.includes(extra) && !(fullGoal && fullGoal.includes(extra)) && extra.length > 8) {
+      if (!uGoal || uGoal === title || uGoal === fullGoal || title.includes(uGoal) || (fullGoal && (fullGoal.includes(uGoal) || uGoal.includes(fullGoal)))) {
         summary = extra.slice(0, 120);
       } else if (extra !== uGoal) {
         summary = extra.slice(0, 120);
@@ -147,6 +151,7 @@ function deriveUserFacingTaskState(opts) {
 
   return {
     title,
+    fullGoal: fullGoal || null,
     summary,
     status,
     statusMessage,
@@ -158,11 +163,19 @@ function deriveUserFacingTaskState(opts) {
       phase === "failed"
         ? (primary && primary.lastGenerationIssueSummary) ||
           (attempt && attempt.userIssueSummary) ||
-          "有部分内容未能可靠生成，系统已完成自动修复尝试。"
+          (attempt && attempt.errorSummary) ||
+          "系统已在一次发起内完成自动修复尝试，仍未能可靠生成成果。"
         : null,
     recoveryActions: normalizeRecoveryActions(attempt || {}),
     phase,
     deliverableId: primary && primary.id,
+    planUiMode: (() => {
+      if (phase === "generating" || phase === "refining") return "generating";
+      if (phase === "completed") return "completed";
+      if (phase === "failed") return "confirmed";
+      if (opts && opts.planConfirmed) return "confirmed";
+      return "editing";
+    })(),
   };
 }
 

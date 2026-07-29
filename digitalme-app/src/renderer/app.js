@@ -7620,8 +7620,16 @@ async function restoreActDeliverablePlan(taskId) {
     actBehalfState.planRevision = (view && view.revision) || null;
     if (view && (view.version || view.failClosed)) {
       hideDvl2LegacyLearnAndResultPanels();
-      window.DeliverablePlannerUi.renderPlanView(view);
-      if (view.statusBanner) setActProgress(view.statusBanner);
+      let planUiMode = "editing";
+      if (view.version && (view.version.status === "confirmed" || view.activeConfirmedVersionId)) {
+        planUiMode = "confirmed";
+      }
+      if (actBehalfState.activePackageId) planUiMode = "confirmed";
+      window.DeliverablePlannerUi.renderPlanView(view, { planUiMode });
+      actBehalfState._lastPlanView = view;
+      if (view.statusBanner && /参考材料已变化/.test(String(view.statusBanner))) {
+        setActProgress(view.statusBanner);
+      }
     } else {
       window.DeliverablePlannerUi.hidePlanPanel();
     }
@@ -7736,6 +7744,18 @@ async function refreshActGenerationPanel(packageId) {
     actBehalfState.activePackageId = packageId;
     actBehalfState.taskAuthStatus = view.authorizationStatus || null;
     window.DeliverablePlannerUi.renderGenerationPanel(view);
+    const dels = (view.deliverables || []).filter((d) => d && d.planDisposition === "included");
+    const anyBusy = dels.some(
+      (d) =>
+        d.generationStatus === "generating" ||
+        ((view.generationAttempts || {})[d.latestGenerationAttemptId] || {}).status === "repairing"
+    );
+    const anyReady = dels.some((d) => d.generationStatus === "ready" || d.currentVersionId);
+    const anyFailed = dels.some((d) => d.generationStatus === "failed");
+    const planMode = anyBusy ? "generating" : anyReady ? "completed" : anyFailed ? "confirmed" : "confirmed";
+    if (actBehalfState._lastPlanView) {
+      window.DeliverablePlannerUi.renderPlanView(actBehalfState._lastPlanView, { planUiMode: planMode });
+    }
   }
 }
 
@@ -7830,7 +7850,8 @@ async function handleGenerateFromPlan() {
   }
 
   if (!res || !res.ok) {
-    setActProgress((res && res.message) || "生成未完成。");
+    // Status lives in the generation panel — do not repeat a second progress line.
+    setActProgress("");
     await refreshActDeliverableResults(actBehalfState.taskId);
     return;
   }

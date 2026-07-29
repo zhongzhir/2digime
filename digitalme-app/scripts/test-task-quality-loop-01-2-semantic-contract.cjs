@@ -329,8 +329,9 @@ async function main() {
       },
     });
     assert.equal(view.status, USER_STATUS.FAILED);
-    assert.equal(view.statusMessage, "成果还未完成");
-    assert.equal(view.primaryAction && view.primaryAction.label, "继续完善");
+    assert.equal(view.statusMessage, "成果未能完成");
+    assert.equal(view.primaryAction, null);
+    assert.equal(view.secondaryAction && view.secondaryAction.label, "查看原因");
     assert.equal(view.title, GOAL);
     assert.ok(view.detailAvailable);
 
@@ -399,11 +400,11 @@ async function main() {
       "utf8"
     );
     assert.ok(src.includes("goalIsDuplicate"), "hides duplicate understanding goal");
-    assert.ok(src.includes("成果还未完成"), "single failed status copy");
-    assert.ok(src.includes("继续完善"), "single primary continue action");
-    assert.ok(src.includes("查看详情"), "details are secondary/collapsed");
+    assert.ok(src.includes("成果未能完成"), "single failed status copy");
+    assert.ok(src.includes("查看原因"), "details are secondary/collapsed");
     assert.ok(src.includes("正在完善成果") || src.includes("正在生成成果"));
-    assert.ok(/hide duplicate generate|Single primary action/i.test(src));
+    assert.ok(/hide generate while busy|Single primary action/i.test(src));
+    assert.ok(!/继续完善/.test(src), "no continue-repair label on ordinary failure");
     assert.ok(!/重试生成/.test(src), "no parallel retry-generate label");
   });
 

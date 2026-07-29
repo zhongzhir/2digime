@@ -30,6 +30,28 @@ const STRUCTURED_DOC_TEMPERATURE = 0.3;
 const STRUCTURED_DOC_REPAIR_TEMPERATURE = 0.25;
 const MAX_INLINE_REPAIR_PASSES = 0;
 
+/** Convert authority / fabrication gate errors into local-repair issues (no new permanent fields). */
+function authorityConflictRepairIssues(err) {
+  const hits = (err && Array.isArray(err.hits) ? err.hits : []).slice(0, 8);
+  if (!hits.length) {
+    return [
+      {
+        ruleId: (err && err.code) || "project_authority_conflict",
+        message:
+          (err && err.message) ||
+          "内容与项目权威事实冲突或含无来源数字，请删除冲突主张并依据当前系统事实重写。",
+        lineNumber: 1,
+      },
+    ];
+  }
+  return hits.map((h, i) => ({
+    ruleId: String((h && h.id) || (err && err.code) || "project_authority_conflict"),
+    message: `请删除或改写无依据表述：「${String((h && h.snippet) || "").slice(0, 80)}」；不得编造团队规模、预算或未验证主线。`,
+    lineNumber: i + 1,
+    matchedText: h && h.snippet,
+  }));
+}
+
 function clampText(s, max) {
   const t = String(s || "");
   if (t.length <= max) return t;
@@ -389,11 +411,38 @@ async function draftDocument(deps, repairContext) {
         };
       }
     } catch (err) {
-      // Prefer semantic blocks, but fall back to whole-document drafting when the
-      // model/fixture cannot sustain per-block generation. Preserves delivery.
+      // 01.2-FIX-01: do not unconditionally fall back to free whole-document generation.
+      // Only allow one bounded whole-result fallback when no draft body was produced.
+      const reason = (err && err.code) || "semantic_blocks_failed";
+      semanticMeta = {
+        fallbackToWholeDoc: false,
+        reason,
+      };
+      const partial = err && err.partialMd ? String(err.partialMd).trim() : "";
+      if (partial.length >= 80) {
+        return {
+          md: partial,
+          ctx,
+          messages: [],
+          repairMode: mode || null,
+          semanticMeta: {
+            ...semanticMeta,
+            partialBlocksPreserved: true,
+            recoveryActions: [{ action: "block_local_repair", at: new Date().toISOString(), note: reason }],
+          },
+        };
+      }
+      // Bounded whole-doc fallback once — recorded as recovery action, not silent bypass.
       semanticMeta = {
         fallbackToWholeDoc: true,
-        reason: (err && err.code) || "semantic_blocks_failed",
+        reason,
+        recoveryActions: [
+          {
+            action: "whole_document_fallback",
+            at: new Date().toISOString(),
+            note: reason,
+          },
+        ],
       };
     }
   }
@@ -732,26 +781,31 @@ async function generateByKindWithRepair(kind, deps, hooks) {
     } catch (err) {
       const isRepairable =
         err &&
-        (err.code === "placeholder_content_rejected" || err.code === "review_content_rejected");
+        (err.code === "placeholder_content_rejected" ||
+          err.code === "review_content_rejected" ||
+          err.code === "project_authority_conflict" ||
+          err.code === "ungrounded_project_numbers" ||
+          err.code === "internal_claim_tags_rejected");
 
       let nextRepairContext = null;
       if (isRepairable && pass < maxRepair) {
         const reviewResult = err.reviewResult;
         const useGroundedRebuild =
           err.code === "review_content_rejected" && needsGroundedRebuild(reviewResult);
+        const authorityIssues = authorityConflictRepairIssues(err);
         if (useGroundedRebuild) {
           nextRepairContext = {
             mode: REPAIR_MODES.GROUNDED_REBUILD,
             priorDraft: null,
             failedDraftLength: body.length,
-            issues: err.reviewIssues || [],
-            forbiddenSummary: summarizeForbiddenProblems(err.reviewIssues || []),
+            issues: err.reviewIssues || authorityIssues,
+            forbiddenSummary: summarizeForbiddenProblems(err.reviewIssues || authorityIssues),
           };
         } else {
           nextRepairContext = {
             mode: REPAIR_MODES.LOCAL_REPAIR,
             priorDraft: k === "presentation" ? payload.raw : payload.md,
-            issues: err.placeholderIssues || err.reviewIssues || [],
+            issues: err.placeholderIssues || err.reviewIssues || authorityIssues,
           };
         }
       } else if (
@@ -759,14 +813,21 @@ async function generateByKindWithRepair(kind, deps, hooks) {
         allowCleanRegen &&
         !audit.cleanRegenerationUsed &&
         pass === maxRepair &&
-        err.code === "review_content_rejected" &&
-        isGroundingFailure(err.reviewResult)
+        (err.code === "review_content_rejected" ||
+          err.code === "project_authority_conflict" ||
+          err.code === "ungrounded_project_numbers") &&
+        (err.code !== "review_content_rejected" || isGroundingFailure(err.reviewResult))
       ) {
         nextRepairContext = {
           mode: REPAIR_MODES.CLEAN_REGENERATION,
           priorDraft: null,
-          issues: err.reviewIssues || err.placeholderIssues || [],
-          forbiddenSummary: summarizeForbiddenProblems(err.reviewIssues || []),
+          issues:
+            err.reviewIssues ||
+            err.placeholderIssues ||
+            authorityConflictRepairIssues(err),
+          forbiddenSummary: summarizeForbiddenProblems(
+            err.reviewIssues || authorityConflictRepairIssues(err)
+          ),
         };
       }
 

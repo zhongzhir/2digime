@@ -817,7 +817,9 @@ function findProjectAuthorityConflicts(text, evidenceCorpus, opts) {
     }
   }
   if (opts && opts.projectContextEmpty) {
-    hits.push({ id: "empty_project_context", snippet: "project_context_empty" });
+    // Setup/assembly concern — do not treat as a content conflict.
+    // Missing project context is gated earlier (project_unresolved) when required.
+    // Emitting it here caused unrepaired terminal failures and infinite repair loops.
   }
   return hits;
 }
@@ -834,6 +836,7 @@ function assertProjectAuthorityConsistency(text, evidenceCorpus, opts) {
   );
   e.code = "project_authority_conflict";
   e.hits = allHits;
+  e.failureStage = "prewrite_validation";
   throw e;
 }
 

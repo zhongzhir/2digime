@@ -496,6 +496,8 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
         authoritativeFactsText,
         gapStatementText,
         gapStatement,
+        useSemanticBlocks: deps.useSemanticBlocks === true,
+        disableSemanticBlocks: !!deps.disableSemanticBlocks,
       },
       {
         maxRepairAttempts: MAX_QUALITY_REPAIR_ATTEMPTS,
@@ -659,13 +661,29 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
     const code = (err && err.code) || "generation_failed";
     const message = userMessageForFailure(err);
     const isReviewRejection = err && err.code === "review_content_rejected";
+    const isAuthorityRejection =
+      err &&
+      (err.code === "project_authority_conflict" ||
+        err.code === "ungrounded_project_numbers" ||
+        err.code === "internal_claim_tags_rejected");
     const evidence =
-      err && (err.code === "placeholder_content_rejected" || isReviewRejection)
+      err &&
+      (err.code === "placeholder_content_rejected" || isReviewRejection || isAuthorityRejection)
         ? buildFailureEvidence({
             attemptId: activeAttemptId,
             deliverableId,
             draft: err.draft || "",
-            issues: err.placeholderIssues || err.reviewIssues,
+            issues:
+              err.placeholderIssues ||
+              err.reviewIssues ||
+              (Array.isArray(err.hits)
+                ? err.hits.map((h, i) => ({
+                    ruleId: h.id || err.code,
+                    message: h.snippet || err.message,
+                    lineNumber: i + 1,
+                    matchedText: h.snippet,
+                  }))
+                : []),
             failureCode: err.code,
             failureStage: err.failureStage || "prewrite_validation",
           })
@@ -710,8 +728,19 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
         if (isReviewRejection && err.reviewIssues) {
           a.reviewIssues = err.reviewIssues;
         }
+        if (isAuthorityRejection && Array.isArray(err.hits)) {
+          a.reviewIssues = (a.reviewIssues || []).concat(
+            err.hits.map((h, i) => ({
+              ruleId: h.id || err.code,
+              message: h.snippet || message,
+              lineNumber: i + 1,
+            }))
+          );
+        }
         a.userIssueSummary =
-          (err && err.userIssueSummary) || userFacingIssueSummary(err && err.placeholderIssues);
+          (err && err.userIssueSummary) ||
+          userFacingIssueSummary(err && err.placeholderIssues) ||
+          (isAuthorityRejection ? message : null);
       }
       const d = s.deliverables[String(deliverableId)];
       if (d) {

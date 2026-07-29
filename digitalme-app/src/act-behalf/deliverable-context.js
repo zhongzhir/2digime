@@ -334,6 +334,7 @@ function assertGeneratedContentUsable(text, { kind, goal, contextClass, evidence
       const e = new Error("生成结果含无来源的团队/预算/周期等具体数字，未保存为成果。");
       e.code = "ungrounded_project_numbers";
       e.hits = fabricated;
+      e.failureStage = "prewrite_validation";
       throw e;
     }
     assertProjectAuthorityConsistency(body, evidenceCorpus || "", reviewOpts);

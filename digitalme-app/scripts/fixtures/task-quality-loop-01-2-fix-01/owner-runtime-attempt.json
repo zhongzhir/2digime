@@ -1,0 +1,51 @@
+{
+  "fixtureId": "task-quality-loop-01-2-fix-01-owner-runtime",
+  "capturedAt": "2026-07-29T01:23:44.194Z",
+  "note": "Owner runtime acceptance failure on 01.2 HEAD 196447b. Sanitized excerpt for regression.",
+  "taskId": "abt_ms5eh1nc_66ddf4",
+  "packageId": "delivery_ms5ehp6l_cfb39779",
+  "deliverable": {
+    "id": "deliverable_ms5ehp6m_540175cd",
+    "title": "Digital Me 项目知识功能 PRD",
+    "generationStatus": "failed",
+    "currentVersionId": null,
+    "latestGenerationAttemptId": "dgatt_ms5ehp8h_bfbdd34c"
+  },
+  "attempt": {
+    "id": "dgatt_ms5ehp8h_bfbdd34c",
+    "status": "failed",
+    "outcome": "failed",
+    "errorCode": "project_authority_conflict",
+    "errorSummary": "项目权威一致性检查未通过：内容与 Digital Me 当前定位冲突，或出现无来源的团队/预算/周期等具体数字。请依据项目资料修正，或将内容标为建议/待确认。",
+    "failureStage": "model_generation",
+    "repairPass": 0,
+    "recoveryActions": [],
+    "groundedRebuildUsed": false,
+    "cleanRegenerationUsed": false,
+    "groundingAudit": {
+      "groundedRebuildUsed": false,
+      "groundedRebuildCount": 0,
+      "cleanRegenerationUsed": false,
+      "repairModes": [],
+      "modelCallCount": 1,
+      "demotedMaterialCount": 0,
+      "gapStatementValid": true,
+      "recoveryActions": []
+    },
+    "modelCallCount": 1,
+    "failureEvidence": null,
+    "startedAt": "2026-07-29T01:23:06.881Z",
+    "finishedAt": "2026-07-29T01:23:44.193Z",
+    "durationMs": 37312
+  },
+  "diagnosis": {
+    "failurePoint": "assertGeneratedContentUsable → project_authority_conflict (pre-review)",
+    "semanticBlocksWired": false,
+    "note": "useSemanticBlocks was passed from main IPC but never forwarded into generateByKindWithRepair; generation used whole-document path once.",
+    "wholeDocumentFallback": "n/a — semantic blocks never entered",
+    "recoveryActionsExecuted": [],
+    "terminalReason": "error code project_authority_conflict was not in isRepairable; thrown immediately after 1 model call",
+    "uiContinueButtonReason": "failed generationStatus mapped to primaryAction 继续完善",
+    "contributingBug": "empty_project_context was also able to hard-fail content validation and could not be fixed by content repair (removed from content gate in FIX-01)"
+  }
+}
