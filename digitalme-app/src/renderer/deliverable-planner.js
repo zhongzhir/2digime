@@ -717,7 +717,7 @@
           let actions = "";
           if (st === "成果已完成" && primary) {
             actions +=
-              `<button type="button" class="btn btn-primary" data-action="open-primary" data-artifact-id="${escapeAttr(
+              `<button type="button" class="btn btn-primary" data-action="open-deliverable-artifact" data-artifact-id="${escapeAttr(
                 primary.id
               )}" data-version-id="${escapeAttr(ver.id)}" data-deliverable-id="${escapeAttr(
                 d.id

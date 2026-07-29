@@ -5,6 +5,31 @@
 
 ---
 
+## 2026-07-29 TASK-QUALITY-STABILIZE-01-FIX-01B 正式成果按钮端到端接线 · 实施完成（待 Owner 复验）
+
+### 事实
+
+追踪正式 legacy 渲染器 PRD「打开成果」全链路：DOM(`#act-generation-items`) → `handleGenerationPanelClick` → preload `actBehalfOpenArtifact` → IPC `actBehalf:openArtifact` → main `openArtifactSecure` → Store 解析 → `shell.openPath`(返回 `""`) → `{ok:true}` → UI「已打开成果」。原 action `open-primary`；**未**误命中 `openActBehalfTask`。「已打开草稿任务。」来自 `openActBehalfTask`（任务列表行触发），与成果卡不同 DOM/不同 action，系旧进度残留；成果卡与任务卡无父子冒泡关系。
+
+### 修复
+
+主按钮唯一 action `open-deliverable-artifact`（`open-primary`/`open-art` 兼容别名）；抽出单一 `openDeliverableArtifactFromButton(btn)`；成果打开分支 `stopPropagation()`；即时「正在打开…」/「已打开成果」/「暂时无法打开成果。」反馈于 `#act-generation-status`；顺序保持 md→docx→html。新增真实按钮点击 Electron UI 测试 `scripts/electron-artifact-open-ui-acceptance.cjs`（**42 passed / 0 failed**，含故意失败与重启复点）。
+
+### 架构
+
+新增永久字段=0；新增 Store=0；新增 IPC 打开体系=0。
+
+### 状态
+
+```text
+implemented / formal_renderer_open_path_repaired /
+automated_ui_tests_passed / owner_runtime_revalidation_pending
+```
+
+不得 push；不得标 owner_runtime_accepted。
+
+---
+
 ## 2026-07-29 TASK-QUALITY-STABILIZE-01-FIX-01A 打开验收 probe 修复 · 实施完成（待 Owner 复验）
 
 ### 事实

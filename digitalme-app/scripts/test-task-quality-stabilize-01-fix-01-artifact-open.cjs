@@ -310,7 +310,7 @@ async function main() {
       path.join(__dirname, "../src/renderer/deliverable-planner.js"),
       "utf8"
     );
-    assert.ok(src.includes('data-action="open-primary"'));
+    assert.ok(src.includes('data-action="open-deliverable-artifact"'));
     assert.ok(src.includes("data-artifact-id="));
     assert.ok(src.includes("data-version-id="));
     assert.ok(src.includes("data-deliverable-id="));
@@ -322,6 +322,13 @@ async function main() {
     assert.ok(appSrc.includes("actBehalfOpenArtifact"));
     assert.ok(appSrc.includes("已打开成果"));
     assert.ok(appSrc.includes('status.textContent = "暂时无法打开成果。"') || appSrc.includes('"暂时无法打开成果。"'));
+    // Single production open function + canonical action + backward-compatible aliases.
+    assert.ok(appSrc.includes("openDeliverableArtifactFromButton"));
+    assert.ok(appSrc.includes('action === "open-deliverable-artifact"'));
+    assert.ok(appSrc.includes('action === "open-primary"'));
+    assert.ok(appSrc.includes('action === "open-art"'));
+    // Open must not bubble into task/draft selection handlers.
+    assert.ok(appSrc.includes("stopPropagation"));
   });
 
   await test("partial package: ready items openable, failed have no open button markup rule", () => {

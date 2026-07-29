@@ -7877,67 +7877,96 @@ async function handleGenerateFromPlan() {
   await refreshActTaskList();
 }
 
+// Single production entry for opening a finished deliverable artifact from a card.
+// Differences between baseline / enhanced / legacy / package / partial deliverables
+// are resolved by main from the stable Version / ArtifactRef ids — never guessed here.
+async function openDeliverableArtifactFromButton(btn) {
+  if (!btn) return { ok: false };
+  if (btn.disabled || btn.getAttribute("data-opening") === "1") return { ok: false };
+  const artifactId = btn.getAttribute("data-artifact-id");
+  if (
+    !artifactId ||
+    !window.digitalMe ||
+    typeof window.digitalMe.actBehalfOpenArtifact !== "function"
+  ) {
+    setActProgress("暂时无法打开成果。");
+    return { ok: false };
+  }
+  const ids = {
+    taskId: btn.getAttribute("data-task-id") || actBehalfState.taskId || undefined,
+    deliverableId: btn.getAttribute("data-deliverable-id") || undefined,
+    versionId: btn.getAttribute("data-version-id") || undefined,
+    artifactId,
+    artifactRefId: artifactId,
+  };
+  const originalLabel = btn.textContent;
+  // Immediate, local feedback next to the clicked card.
+  btn.setAttribute("data-opening", "1");
+  btn.disabled = true;
+  btn.textContent = "正在打开…";
+  const openingStatus = $("act-generation-status");
+  if (openingStatus) {
+    openingStatus.textContent = "正在打开…";
+    openingStatus.removeAttribute("data-open-error-code");
+    openingStatus.removeAttribute("title");
+  }
+  let res = null;
+  try {
+    res = await window.digitalMe.actBehalfOpenArtifact(ids);
+  } catch (err) {
+    res = {
+      ok: false,
+      code: "open_failed",
+      message: "暂时无法打开成果。",
+      detail: err && err.message ? String(err.message).slice(0, 240) : undefined,
+    };
+  }
+  btn.disabled = false;
+  btn.removeAttribute("data-opening");
+  btn.textContent = originalLabel || "打开成果";
+  if (!res || !res.ok) {
+    const msg = "暂时无法打开成果。";
+    setActProgress(msg);
+    const status = $("act-generation-status");
+    if (status) {
+      status.textContent = msg;
+      status.setAttribute("data-open-error-code", (res && res.code) || "open_failed");
+      if (res && res.detail) status.setAttribute("title", String(res.detail).slice(0, 240));
+    }
+    return res || { ok: false };
+  }
+  setActProgress("已打开成果");
+  const status = $("act-generation-status");
+  if (status) {
+    status.textContent = "已打开成果";
+    status.removeAttribute("data-open-error-code");
+    status.removeAttribute("title");
+  }
+  setTimeout(() => {
+    if (($("act-progress") && $("act-progress").textContent) === "已打开成果") {
+      setActProgress("");
+    }
+    const st = $("act-generation-status");
+    if (st && st.textContent === "已打开成果") st.textContent = "";
+  }, 1800);
+  return res;
+}
+
 async function handleGenerationPanelClick(ev) {
   const btn = ev.target && ev.target.closest ? ev.target.closest("[data-action]") : null;
   if (!btn) return;
   const action = btn.getAttribute("data-action");
   const packageId = actBehalfState.activePackageId;
-  if (action === "open-art" || action === "open-primary") {
-    if (btn.disabled || btn.getAttribute("data-opening") === "1") return;
-    const artifactId = btn.getAttribute("data-artifact-id");
-    if (!artifactId || !window.digitalMe || typeof window.digitalMe.actBehalfOpenArtifact !== "function") {
-      setActProgress("暂时无法打开成果。");
-      return;
-    }
-    const originalLabel = btn.textContent;
-    btn.setAttribute("data-opening", "1");
-    btn.disabled = true;
-    btn.textContent = "正在打开…";
-    let res = null;
-    try {
-      res = await window.digitalMe.actBehalfOpenArtifact({
-        artifactId,
-        artifactRefId: artifactId,
-        versionId: btn.getAttribute("data-version-id") || undefined,
-        deliverableId: btn.getAttribute("data-deliverable-id") || undefined,
-        taskId: btn.getAttribute("data-task-id") || actBehalfState.taskId || undefined,
-      });
-    } catch (err) {
-      res = {
-        ok: false,
-        code: "open_failed",
-        message: "暂时无法打开成果。",
-        detail: err && err.message ? String(err.message).slice(0, 240) : undefined,
-      };
-    }
-    btn.disabled = false;
-    btn.removeAttribute("data-opening");
-    btn.textContent = originalLabel || "打开成果";
-    if (!res || !res.ok) {
-      const msg = "暂时无法打开成果。";
-      setActProgress(msg);
-      const status = $("act-generation-status");
-      if (status) {
-        status.textContent = msg;
-        status.setAttribute("data-open-error-code", (res && res.code) || "open_failed");
-        if (res && res.detail) status.setAttribute("title", String(res.detail).slice(0, 240));
-      }
-    } else {
-      setActProgress("已打开成果");
-      const status = $("act-generation-status");
-      if (status) {
-        status.textContent = "已打开成果";
-        status.removeAttribute("data-open-error-code");
-        status.removeAttribute("title");
-      }
-      setTimeout(() => {
-        if (($("act-progress") && $("act-progress").textContent) === "已打开成果") {
-          setActProgress("");
-        }
-        const st = $("act-generation-status");
-        if (st && st.textContent === "已打开成果") st.textContent = "";
-      }, 1800);
-    }
+  // Deliverable artifact open uses a single dedicated path. `open-primary` / `open-art`
+  // are retained only as backward-compatible aliases for older rendered cards.
+  if (
+    action === "open-deliverable-artifact" ||
+    action === "open-primary" ||
+    action === "open-art"
+  ) {
+    // Never let the click reach task/draft selection or overflow handlers.
+    if (ev && typeof ev.stopPropagation === "function") ev.stopPropagation();
+    await openDeliverableArtifactFromButton(btn);
     return;
   }
   if (action === "reveal-art") {
