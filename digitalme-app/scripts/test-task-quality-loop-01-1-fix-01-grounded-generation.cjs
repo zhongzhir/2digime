@@ -309,6 +309,7 @@ async function main() {
         }),
         authoritativeFactsText: facts,
         gapStatementText: gap,
+        useSemanticBlocks: false,
         callModel: async () => {
           calls += 1;
           return calls === 1 ? failureDraft : goodDraft;

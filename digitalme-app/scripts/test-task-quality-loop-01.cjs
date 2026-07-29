@@ -175,13 +175,16 @@ const E2E_GOOD_MD = [
   "# 团队知识库功能 PRD",
   "",
   "## 背景",
-  "团队需要知识库功能来沉淀与复用项目知识，当前协作中知识分散在多个文档内。",
+  "当前已具备分散文档沉淀能力；真实缺口是跨任务统一检索与修正入口。本 PRD 约束下一步实现。",
   "",
   "## 目标",
-  "让知识在日常任务中被稳定使用，并可被成员修正。",
+  "真实用户问题是成员找不到最新说法；让知识在日常任务中被稳定使用，用户可修正。",
   "",
   "## 范围",
-  "本期包含知识记录与任务内使用；不包含外部协作与公开分享。",
+  "本期范围：知识记录与任务内使用。非范围：外部协作与公开分享。",
+  "",
+  "## 与现有对象的关系",
+  "复用现有任务与成果引用，按权威等级注入相关知识；不新建第二套知识存储。",
   "",
   "## 功能需求",
   "1. 支持记录项目知识，低风险知识自动采纳。",
@@ -189,7 +192,7 @@ const E2E_GOOD_MD = [
   "3. 成员修正后旧知识被替代，冲突请求选择。",
   "",
   "## 验收标准",
-  "1. 新任务可调用已记录知识。",
+  "1. 新对话与新任务可调用已记录知识。",
   "2. 修正后再次生成使用新说法。",
   "3. 自动化测试覆盖记录、调用与修正路径。",
   "",
@@ -232,7 +235,9 @@ async function main() {
       isDigitalMeProject: true,
     });
     assert.equal(c.taskMode, TASK_MODES.CURRENT_IMPLEMENTATION);
-    assert.ok(c.requiredSections.includes("验收"));
+    assert.ok(Array.isArray(c.requiredSemanticCoverage) && c.requiredSemanticCoverage.includes("acceptanceEvidence"));
+    assert.ok(c.requiredSemanticCoverage.includes("currentFoundation"));
+    assert.equal(c.requiredSections.length, 0, "01.2: fixed chapter titles removed");
     assert.ok(c.projectConstraints.some((x) => x.includes("当前仓库")));
     assert.equal(c.implementationAlignment.requireCurrentImplementationBasis, true);
     assert.ok(c.criteriaDigest.startsWith("sha256:"));
@@ -249,7 +254,7 @@ async function main() {
     assert.ok(r.blockingIssues.length > 0);
   });
 
-  // ---- 5. Reviewer finds missing key section ----
+  // ---- 5. Reviewer finds missing semantic coverage (not fixed chapter titles) ----
   await test("reviewer finds missing required section", () => {
     const sample = loadBenchmark().samples[0];
     const criteria = buildOutcomeCriteria({
@@ -265,18 +270,24 @@ async function main() {
       isDigitalMeProject: true,
     });
     assert.equal(
-      acceptable.blockingIssues.filter((i) => i.ruleId === "missing_required_section").length,
+      acceptable.blockingIssues.filter((i) => i.ruleId === "missing_semantic_coverage").length,
       0,
-      "acceptable draft must not miss sections: " + JSON.stringify(acceptable.blockingIssues)
+      "acceptable draft must cover required semantics: " + JSON.stringify(acceptable.blockingIssues)
     );
-    const noAcceptance = sample.drafts.acceptable.replace(/## 验收[\s\S]*?(?=## 边界与约束)/, "");
+    // Remove acceptance evidence substance (not merely a heading rename).
+    const noAcceptance = sample.drafts.acceptable
+      .replace(/## 验收[\s\S]*?(?=## 边界与约束)/, "")
+      .replace(/新对话|supersede|不串用|跨任务|跨对话/g, "（略）");
     const r = deterministicReview(noAcceptance, {
       criteria,
       kind: "document",
       goal: sample.userGoal,
       isDigitalMeProject: true,
     });
-    assert.ok(r.blockingIssues.some((i) => i.ruleId === "missing_required_section"));
+    assert.ok(
+      r.blockingIssues.some((i) => i.ruleId === "missing_semantic_coverage"),
+      "expected missing_semantic_coverage, got " + JSON.stringify(r.blockingIssues.map((i) => i.ruleId))
+    );
   });
 
   // ---- 6. Reviewer finds project fact conflict ----
@@ -492,7 +503,10 @@ async function main() {
       assert.equal(res.code, "review_content_rejected");
       assert.equal(draftCalls, 3, "first draft + exactly two revisions");
       assert.ok(!/Reviewer|blocking|pipeline|attempt|状态机/i.test(res.message), "plain language failure message");
-      assert.ok(res.message.includes("验收"), "failure message explains what is missing");
+      assert.ok(
+        /验收|必要问题|尚未充分|质量|可直接使用/.test(res.message),
+        "failure message explains what is missing: " + res.message
+      );
       const view = packageStore.getPackageView(ud, seeded.packageId);
       const d = view.deliverables[0];
       assert.equal(d.generationStatus, "failed");
