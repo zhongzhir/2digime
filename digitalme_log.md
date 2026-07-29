@@ -5,6 +5,27 @@
 
 ---
 
+## 2026-07-29 TASK-QUALITY-STABILIZE-01 可靠交付与后台增强分离 · 实施完成（待 Owner 真机验收）
+
+### 裁决
+
+连续真机验收表明 Grounding/Reviewer/Semantic/Outline/Repair 等机制存在且自动化通过，但真实用户多次拿不到成果；质量管线已成为交付阻断器。停止继续叠加门禁/重试。
+
+### 架构
+
+生产默认 `stable_delivery`：硬门禁 → 立即落盘 → 后台 ≤3 次模型增强；失败保留基础。旧复杂链路为 `advanced_shadow` / `experimental_advanced_quality_pipeline`。
+
+### 状态
+
+```text
+implemented / automated_tests_passed / stable_delivery_added /
+owner_runtime_acceptance_pending / market_95th_percentile_not_proven
+```
+
+真实模型连续 harness：自动环境 SKIP（需 `DIGITALME_STABLE_REAL=1`），改由 Owner 真机。不得 push。
+
+---
+
 ## 2026-07-29 TASK-QUALITY-LOOP-01.2-FIX-01 自动完成与单一界面 · 实施完成（待 Owner 真机验收）
 
 ### 根因（真机 attempt）

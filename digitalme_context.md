@@ -2,7 +2,7 @@
 
 版本：v0.4
 状态：持续更新
-最后更新：2026-07-29（TASK-QUALITY-LOOP-01.2-FIX-01 自动完成与单一界面修复完成待 Owner 真机验收；不得 push）
+最后更新：2026-07-29（TASK-QUALITY-STABILIZE-01 可靠交付与后台增强分离完成待 Owner 真机验收；不得 push）
 
 > **当前产品主线（2026-07-26）**：**第二纵向闭环** — 多模态成果包交付与渐进式主体构建。第一纵向闭环已 `accepted` / `completed`。
 > **最高架构与研发原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)（**v0.1.1 `active`**）。
@@ -21,7 +21,7 @@
 > 2. **BUG1 #6** = 七模块渐进式数字之我构建框架。
 > 3. 首个正式验收场景 = 为一个项目生成完整对外介绍成果包。
 > 4. 第一轮真实产物 = 正式介绍文档、演示文稿 PPT、单页 HTML、封面图片；视频/音频本轮不实现真实生成，用户面不得宣称已支持。
-> **当前任务**：**TASK-QUALITY-LOOP-01.2-FIX-01**（自动完成闭环与单一任务界面）已实现完成，状态 `implemented` / `automated_tests_passed` / `auto_completion_flow_repaired` / `single_task_view_added` / `owner_runtime_acceptance_pending`（分支 `codex/task-quality-loop-01-2-fix-auto-completion`；**等待 Owner 真机验收**）。前序 **01.2** Owner 真机为 `runtime_generation_failed` / `owner_runtime_not_accepted`。**不得** push。
+> **当前任务**：**TASK-QUALITY-STABILIZE-01**（可靠交付主路径与后台质量增强分离）已实现完成，状态 `implemented` / `automated_tests_passed` / `stable_delivery_added` / `owner_runtime_acceptance_pending` / `market_95th_percentile_not_proven`（分支 `codex/task-quality-stabilize-01`；基线 `72f8f20`；**等待 Owner 真机验收**）。前序质量环链路降为 `advanced_shadow` / `experimental_advanced_quality_pipeline`，不再作为生产交付门禁。**不得** push。
 > **R2 对话运行时**：保留基础设施；R2 代码 **retained as infrastructure**。生产默认入口仍为 legacy。
 > **Owner Electron 真机验收（2026-07-24）**：`accepted`（distill-me / R2 对话重试 / doing-context / PAN-01S 等）。
 > **confirmed identity → act context（2026-07-24，`2f1b7bd`）**：`accepted`（历史整合基线；**不是**当前 HEAD）。
@@ -327,6 +327,7 @@ flowchart TB
 | `digitalme_phase1_task_TASK-QUALITY-LOOP-01-1_grounded_review_v0.1.md` | **TASK-QUALITY-LOOP-01.1 成果真实性与架构一致性复核**（v0.1.0；`implemented` / `automated_tests_passed` / `grounding_review_added` / `owner_runtime_acceptance_pending` / `market_95th_percentile_not_proven`；CurrentSystemSnapshot + AuthorityMap + GroundingReview） |
 | `digitalme_phase1_task_TASK-QUALITY-LOOP-01-1-FIX-01_grounded_generation_v0.1.md` | **TASK-QUALITY-LOOP-01.1-FIX-01 Grounded Generation**（v0.1.0；`implemented` / `automated_tests_passed` / `owner_runtime_acceptance_pending`；权威事实区块 + Gap Statement + grounded_rebuild + clean regeneration） |
 | `digitalme_phase1_task_TASK-QUALITY-LOOP-01-2_semantic_contract_v0.1.md` | **TASK-QUALITY-LOOP-01.2 动态成果契约与 UI 收敛**（v0.1.0；`implemented` / `automated_tests_passed` / `semantic_contract_generation_added` / `generation_state_consolidated` / `task_ui_minimized` / `owner_runtime_acceptance_pending` / `market_95th_percentile_not_proven`） |
+| `digitalme_phase1_task_TASK-QUALITY-STABILIZE-01_reliable_delivery_v0.1.md` | **TASK-QUALITY-STABILIZE-01 可靠交付与后台增强分离**（v0.1.0；`implemented` / `automated_tests_passed` / `stable_delivery_added` / `owner_runtime_acceptance_pending` / `market_95th_percentile_not_proven`；生产默认 `stable_delivery`） |
 | `digitalme_phase1_task_DVL2-03A_first_real_document_artifact_v0.1.md` | **DVL2-03A 草案（历史）**；已被完整 **DVL2-03** 实现路径吸收（不再单独拆分 03A/B/C） |
 | `docs/design/digitalme_crt_v0.2_subject_context_engine_spec.md` | **CRT v0.2 Subject Context Engine 规格**（v0.2.2；`frozen_for_implementation`） |
 | `digitalme_phase1_task_CRT-MVP-01_cognitive_runtime_continuity_v0.1.md` | **CRT-MVP-01 持续性验证**（实现合入；真机状态见任务包） |
