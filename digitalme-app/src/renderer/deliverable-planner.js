@@ -504,6 +504,9 @@
     if (!d || d.generationStatus !== "failed") return "";
     const attempt = latestAttemptForDeliverable(d, view);
     if (d.lastGenerationIssueSummary) return String(d.lastGenerationIssueSummary);
+    if (attempt && attempt.errorCode === "generation_interrupted") {
+      return "上次工作被中断，任务和材料已经保留。";
+    }
     if (attempt && attempt.userIssueSummary) return String(attempt.userIssueSummary);
     if (attempt && attempt.errorSummary) return String(attempt.errorSummary);
     return "系统已在一次发起内完成自动修复尝试，仍未能可靠生成成果。";

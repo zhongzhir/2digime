@@ -43,6 +43,10 @@ const { reconcileTaskPackages } = require("./act-behalf/deliverable-package-reco
 const deliverableGeneration = require("./act-behalf/deliverable-generation");
 const deliverableArtifactFs = require("./act-behalf/deliverable-artifact-fs");
 const deliverableArtifactOpen = require("./act-behalf/deliverable-artifact-open");
+const { runStartupInterruptRecovery } = require("./act-behalf/runtime-interrupt-heal");
+const { drainRecoveryEvents } = require("./json-store-persistence");
+const authorizationStore = require("./act-behalf/authorization-store");
+const deliverableLearnStore = require("./act-behalf/deliverable-learn-store");
 
 /** In-memory only — current act-behalf selection for native File menu (not persisted). */
 let actArtifactSelection = { taskId: null, packageId: null };
@@ -122,7 +126,6 @@ async function handleNativeRevealCurrentArtifact() {
 const { confirmPlanAndGenerate } = require("./act-behalf/deliverable-confirm-and-generate");
 const deliverableAutoLearn = require("./act-behalf/deliverable-auto-learn");
 const actionIdentity = require("./act-behalf/action-identity");
-const authorizationStore = require("./act-behalf/authorization-store");
 const { resolveKnowledgeContext } = require("./act-behalf/knowledge-resolver");
 const knowledgeLearning = require("./act-behalf/knowledge-learning");
 
@@ -439,6 +442,73 @@ app.whenReady().then(() => {
   } catch {
     /* ignore startup package reconcile failures */
   }
+  // MVP-RELEASE-GATE-01D: warm core JSON stores (bak recovery) then heal interrupts.
+  (async () => {
+    const userData = app.getPath("userData");
+    const storeLoadErrors = [];
+    const warmers = [
+      () => actBehalfStore.loadStore(userData),
+      () => deliverablePlanStore.loadStore(userData),
+      () => deliverablePackageStore.loadStore(userData),
+      () => authorizationStore.loadStore(userData),
+      () => deliverableLearnStore.loadStore(userData),
+    ];
+    for (const warm of warmers) {
+      try {
+        warm();
+      } catch (err) {
+        storeLoadErrors.push({
+          code: err && err.code,
+          message: err && err.message,
+        });
+      }
+    }
+    const storeRecoveryEvents = drainRecoveryEvents();
+    let recovery = null;
+    try {
+      recovery = await runStartupInterruptRecovery(userData, { storeRecoveryEvents });
+    } catch (err) {
+      console.error(
+        "[Digital Me] startup interrupt recovery failed",
+        err && err.message ? err.message : err
+      );
+    }
+    if (storeLoadErrors.length) {
+      const dualCorrupt = storeLoadErrors.some(
+        (e) =>
+          e &&
+          (e.code === "act_behalf_parse_failed" ||
+            e.code === "deliverable_package_parse_failed" ||
+            e.code === "deliverable_plan_parse_failed" ||
+            e.code === "authorization_parse_failed" ||
+            e.code === "learn_store_corrupt" ||
+            e.code === "store_corrupt")
+      );
+      if (dualCorrupt) {
+        dialog.showMessageBox({
+          type: "error",
+          title: "暂时无法读取任务数据",
+          message: "暂时无法读取任务数据。",
+          detail: "原文件已保留。请查看应用用户数据目录中的存档与 .bak 备份，或导出诊断信息后再试。",
+        });
+      }
+    } else if (storeRecoveryEvents.length) {
+      console.info(
+        "[Digital Me] recovered store(s) from backup:",
+        storeRecoveryEvents.map((e) => e.targetPath || e.kind).join(", ")
+      );
+    }
+    if (recovery && process.env.DIGITALME_LOG_STARTUP_RECOVERY === "1") {
+      console.info("[Digital Me] startup recovery", JSON.stringify({
+        generationActions: (recovery.generation && recovery.generation.actions) || [],
+        learningActions: (recovery.learning && recovery.learning.actions) || [],
+        artifactMissing: (recovery.artifacts && recovery.artifacts.missingFiles && recovery.artifacts.missingFiles.length) || 0,
+        orphans: (recovery.artifacts && recovery.artifacts.orphansIsolated && recovery.artifacts.orphansIsolated.length) || 0,
+      }));
+    }
+  })().catch((err) => {
+    console.error("[Digital Me] startup recovery wrapper failed", err && err.message ? err.message : err);
+  });
   createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -4458,8 +4528,8 @@ function buildSystemPrompt(pkg) {
   if (pkg.lifeSummary) parts.push(pkg.lifeSummary);
   if (pkg.decisionFrameworks)
     parts.push("## 判断框架（JSON）\n\n" + pkg.decisionFrameworks);
-  if (pkg.longTermMemory)
-    parts.push("## 长期记忆（每行一条 JSON）\n\n" + pkg.longTermMemory);
+  // MVP-RELEASE-GATE-01D: do not dump full longTermMemory here.
+  // Chat and doing share Knowledge Resolver (+ SCE) for authoritative recall.
   return parts.join("\n\n---\n\n");
 }
 

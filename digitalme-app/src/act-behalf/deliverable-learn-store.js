@@ -5,9 +5,12 @@
  * File: <userData>/deliverable-learn-jobs.json
  */
 
-const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const {
+  writeJsonStoreAtomicSync,
+  readJsonStoreWithBackup,
+} = require("../json-store-persistence");
 
 const STORE_NAME = "deliverable-learn-jobs.json";
 
@@ -43,25 +46,33 @@ function emptyStore() {
   return { schemaVersion: 1, jobs: {}, byVersionId: {}, updatedAt: nowIso() };
 }
 
+function validateLearnStore(raw) {
+  return !!(raw && typeof raw === "object");
+}
+
 function loadStore(userData) {
   const p = storePath(userData);
-  if (!fs.existsSync(p)) return emptyStore();
+  let loaded;
   try {
-    const raw = JSON.parse(fs.readFileSync(p, "utf8"));
-    if (!raw || typeof raw !== "object") return emptyStore();
-    return {
-      schemaVersion: 1,
-      jobs: raw.jobs && typeof raw.jobs === "object" ? raw.jobs : {},
-      byVersionId:
-        raw.byVersionId && typeof raw.byVersionId === "object" ? raw.byVersionId : {},
-      updatedAt: raw.updatedAt || nowIso(),
-    };
+    loaded = readJsonStoreWithBackup({
+      targetPath: p,
+      validate: validateLearnStore,
+      emptyWhenMissing: emptyStore,
+      corruptCode: "learn_store_corrupt",
+    });
   } catch (err) {
     const e = new Error("学习作业存储损坏。");
     e.code = "learn_store_corrupt";
     e.cause = err;
     throw e;
   }
+  const raw = loaded.parsed;
+  return {
+    schemaVersion: 1,
+    jobs: raw.jobs && typeof raw.jobs === "object" ? raw.jobs : {},
+    byVersionId: raw.byVersionId && typeof raw.byVersionId === "object" ? raw.byVersionId : {},
+    updatedAt: raw.updatedAt || nowIso(),
+  };
 }
 
 function saveStore(userData, store) {
@@ -71,30 +82,7 @@ function saveStore(userData, store) {
     schemaVersion: 1,
     updatedAt: nowIso(),
   };
-  const data = JSON.stringify(next, null, 2);
-  fs.mkdirSync(path.dirname(p), { recursive: true });
-  const tmp = p + ".tmp." + process.pid + "." + Date.now();
-  try {
-    fs.writeFileSync(tmp, data, "utf8");
-    try {
-      fs.renameSync(tmp, p);
-    } catch {
-      // Windows may deny rename when scanners lock the target; fall back to direct write.
-      fs.writeFileSync(p, data, "utf8");
-      try {
-        fs.unlinkSync(tmp);
-      } catch {
-        /* ignore */
-      }
-    }
-  } catch {
-    fs.writeFileSync(p, data, "utf8");
-    try {
-      fs.unlinkSync(tmp);
-    } catch {
-      /* ignore */
-    }
-  }
+  writeJsonStoreAtomicSync({ targetPath: p, data: next, pretty: true });
   return next;
 }
 
@@ -139,15 +127,19 @@ function createQueuedJob(userData, source) {
   const existing = getJobByVersionId(userData, versionId);
   if (existing.ok) {
     const st = existing.job.status;
-    if (st === JOB_STATUS.committed || st === JOB_STATUS.pending_conflict ||
-        st === JOB_STATUS.resolved_keep || st === JOB_STATUS.resolved_session_only ||
-        st === JOB_STATUS.skipped) {
+    if (
+      st === JOB_STATUS.committed ||
+      st === JOB_STATUS.pending_conflict ||
+      st === JOB_STATUS.resolved_keep ||
+      st === JOB_STATUS.resolved_session_only ||
+      st === JOB_STATUS.skipped
+    ) {
       return { ok: true, job: existing.job, reused: true };
     }
-    if (st === JOB_STATUS.running || st === JOB_STATUS.queued) {
+    if (st === JOB_STATUS.queued) {
       return { ok: true, job: existing.job, reused: true };
     }
-    // failed → allow retry by resetting to queued
+    // failed or zombie running → allow safe retry by resetting to queued
   }
 
   const job = {

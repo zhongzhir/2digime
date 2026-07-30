@@ -5235,7 +5235,17 @@ async function presentActWorkspaceResult(view) {
     }
     if (anyFailed) {
       showActWorkspacePhase("input");
-      setActWorkspaceHint("暂时无法完成这项工作。你的任务要求和任务材料都还在，可以调整后再次开始做。");
+      const interrupted = dels.some(
+        (d) =>
+          d &&
+          d.generationStatus === "failed" &&
+          String(d.lastGenerationIssueSummary || "").includes("被中断")
+      );
+      setActWorkspaceHint(
+        interrupted
+          ? "上次工作被中断，任务和材料已经保留。"
+          : "暂时无法完成这项工作。你的任务要求和任务材料都还在，可以调整后再次开始做。"
+      );
       return;
     }
     return;
@@ -5269,10 +5279,25 @@ async function presentActWorkspaceResult(view) {
   if (!res || !res.ok) {
     if (body) body.innerHTML = "";
     if (errEl) {
-      errEl.textContent = (res && res.message) || "暂时无法在页面中显示成果。";
+      errEl.textContent =
+        (res && res.code === "file_missing"
+          ? "这个成果的本地文件暂时不可用。你可以重新生成。"
+          : null) ||
+        (res && res.message) ||
+        "暂时无法在页面中显示成果。";
       errEl.classList.remove("hidden");
     }
+    const openBtn = $("btn-act-open-local");
+    if (openBtn && res && res.code === "file_missing") {
+      openBtn.disabled = true;
+      openBtn.title = "本地文件暂时不可用";
+    }
     return;
+  }
+  const openBtnOk = $("btn-act-open-local");
+  if (openBtnOk) {
+    openBtnOk.disabled = false;
+    openBtnOk.title = "";
   }
   if (body) {
     if (res.format === "html" || res.format === "htm") {
