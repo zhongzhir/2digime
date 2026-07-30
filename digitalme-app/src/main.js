@@ -3938,6 +3938,7 @@ ipcMain.handle("actBehalf:reviewDeliverableVersion", async (_e, payload) => {
     const reviewed = await deliverableGeneration.reviewDeliverableVersion(userData, {
       versionId,
       decision,
+      packageDir: packageDirFromConfig(),
     });
     // Accept must return immediately; learning runs in background and must not undo accept.
     if (reviewed && reviewed.ok && decision === "accepted") {

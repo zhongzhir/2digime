@@ -59,9 +59,9 @@
         <nav class="nav">
           <button class="nav-item active" data-view="chat">对话</button>
           <button class="nav-item" data-view="do">做事</button>
-          <button class="nav-item" data-view="me">我</button>
-          <button class="nav-item" data-view="identity">身份与协作</button>
-          <button class="nav-item" data-view="extensions">能力</button>
+          <button class="nav-item" data-view="me">我的 Digital Me</button>
+          <button class="nav-item nav-item-secondary hidden" data-view="identity" tabindex="-1" aria-hidden="true">身份与协作</button>
+          <button class="nav-item nav-item-secondary hidden" data-view="extensions" tabindex="-1" aria-hidden="true">能力</button>
         </nav>
         <button id="btn-settings" class="btn-ghost">设置</button>
         <div id="ui-runtime-stamp" class="ui-runtime-stamp hidden" aria-hidden="true"></div>
@@ -515,8 +515,12 @@
         <section id="view-me" class="view hidden">
           <header id="topbar" class="me-topbar">
             <div class="me-topbar-main">
-              <div id="persona-title">我的数字之我</div>
+              <div id="persona-title">我的 Digital Me</div>
               <div id="persona-sub">了解目前的我，或继续完善认识</div>
+              <div class="me-advanced-links muted" style="margin-top:0.35rem;font-size:0.85em;">
+                <button type="button" class="btn-ghost" id="btn-me-open-identity" data-testid="btn-me-open-identity">身份与协作</button>
+                <button type="button" class="btn-ghost" id="btn-me-open-capabilities" data-testid="btn-me-open-capabilities">能力</button>
+              </div>
             </div>
             <button type="button" id="btn-me-help" class="btn-help" data-help-topic="me" title="打开说明">说明</button>
           </header>

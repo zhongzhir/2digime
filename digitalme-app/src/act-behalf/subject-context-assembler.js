@@ -169,6 +169,9 @@ function loadMemoryAssets(packageDir, maxScan) {
       const status = String(row.status || row.activationState || "active").toLowerCase();
       if (status === "deprecated" || status === "revoked" || status === "deleted") continue;
       if (String(row.logicalState || "") === "session_only") continue;
+      // Rejected deliverable versions must not re-enter subject context.
+      if (String(row.revokedReason || "") === "deliverable_version_rejected") continue;
+      if (/^本人接受了「/.test(String(row.content || ""))) continue;
       const statement = String(row.content || row.statement || row.text || "").trim();
       if (!statement || statement.length < 4) continue;
       const assetId =

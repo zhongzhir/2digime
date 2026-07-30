@@ -2294,6 +2294,16 @@ function goSelfView(tab) {
   if (tab) setTimeout(() => switchMeTab(tab), 0);
 }
 
+function goIdentityViewFromMe() {
+  const nav = document.querySelector('.nav-item[data-view="identity"]');
+  switchView("identity", nav);
+}
+
+function goCapabilitiesViewFromMe() {
+  const nav = document.querySelector('.nav-item[data-view="extensions"]');
+  switchView("extensions", nav);
+}
+
 async function chooseDefaultMeLane() {
   // Kept for compatibility; PAN-01 default entry is always self → overview.
   switchMeLane("self");
@@ -12825,6 +12835,8 @@ async function pickIntoInbox(doneHint) {
 
 /** Document-level bootstrap file actions — independent of bindMe success. */
 function bindMe() {
+  $("btn-me-open-identity")?.addEventListener("click", () => goIdentityViewFromMe());
+  $("btn-me-open-capabilities")?.addEventListener("click", () => goCapabilitiesViewFromMe());
   $("btn-distill-me-start")?.addEventListener("click", async () => { const msg=$("distill-me-msg"), text=$("distill-me-text").value.trim(); if(!text){msg.textContent="请先补充一段关于你的信息。";return;} try { msg.textContent="正在生成主体档案草稿…"; const draft=await window.digitalMe.createDistillInput({text,sourceName:"用户直接输入",sourceKind:"direct"}); await window.digitalMe.generateIdentityExperienceFacts(draft.id); $("distill-me-text").value=""; msg.textContent="草稿已生成。请确认你愿意纳入主体档案的内容。"; await refreshDistillMe(); } catch(e){msg.textContent="当前模型不可用。可以检查模型设置，或切换到备用模型。"; const open=document.createElement("button");open.type="button";open.className="btn-ghost";open.textContent="打开模型设置";open.onclick=()=>openSettings();msg.appendChild(open);} });
   $("btn-distill-me-cancel")?.addEventListener("click",()=>switchMeTab("overview"));
   $("btn-distill-export")?.addEventListener("click",async()=>{const r=await window.digitalMe.exportDistillSnapshot(); $("distill-me-msg").textContent="已导出主体档案："+r.path;});

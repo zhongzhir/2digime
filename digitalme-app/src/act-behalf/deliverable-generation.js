@@ -278,6 +278,8 @@ async function generateOneDeliverable(userData, { packageId, deliverableId, revi
     parentAttemptId: null,
     failureEvidence: null,
     userIssueSummary: null,
+    // MVP-RELEASE-GATE-01E: retain user revision guidance on the attempt (existing object).
+    revisionGuidance: String(revisionGuidance || "").trim().slice(0, 8000) || null,
   };
 
   await registerGenerationAttempt(userData, attempt, deliverableId, packageId);
@@ -1386,7 +1388,7 @@ async function generateDeliverablePackage(userData, { packageId }, deps) {
   };
 }
 
-async function reviewDeliverableVersion(userData, { versionId, decision }) {
+async function reviewDeliverableVersion(userData, { versionId, decision, packageDir }) {
   const id = String(versionId || "");
   const dec = String(decision || "");
   if (!id) return { ok: false, code: "version_required", message: "缺少版本。" };
@@ -1435,6 +1437,19 @@ async function reviewDeliverableVersion(userData, { versionId, decision }) {
     }
     return true;
   });
+
+  if (dec === "rejected") {
+    try {
+      const autoLearn = require("./deliverable-auto-learn");
+      autoLearn.suppressRejectedVersion(userData, id, packageDir || null);
+    } catch (err) {
+      console.error(
+        "[reviewDeliverableVersion] suppress rejected failed",
+        err && err.message ? err.message : err
+      );
+    }
+  }
+
   return {
     ok: true,
     versionId: id,

@@ -78,6 +78,15 @@ function inferLearnKind(item, evidenceCorpus) {
     return {
       learnKind: null,
       logicalState: "active_low",
+      write: false,
+      ownership: "subject_owned",
+      rejectReason: "episodic_accept_notice_not_reusable",
+    };
+  }
+  if (item.learnHint === "expression_preference" || (item.fromRevisionGuidance && /偏好|标题|篇幅|结构|开篇/.test(text))) {
+    return {
+      learnKind: "expression_preference",
+      logicalState: "active_low",
       write: true,
       ownership: "subject_owned",
     };
@@ -100,7 +109,7 @@ function inferLearnKind(item, evidenceCorpus) {
       ownership: "subject_owned",
     };
   }
-  if (PREFERENCE_RE.test(text)) {
+  if (PREFERENCE_RE.test(text) || item.fromRevisionDiff) {
     return {
       learnKind: "expression_preference",
       logicalState: "active_low",
@@ -111,9 +120,11 @@ function inferLearnKind(item, evidenceCorpus) {
 
   // Fact-like claims (including UNIQUE_* markers).
   const looksFact =
+    item.learnHint === "project_or_fact" ||
+    /用户确认的修正/.test(text) ||
     /UNIQUE_CONFIRMED_FACT|UNIQUE_UNVERIFIED_FACT|UNIQUE_FAKE_FACT|UNIQUE_FACT/.test(text) ||
     FABRICATED_LEARN_RE.test(text) ||
-    /本人|我曾|毕业于|创办|担任|公司是/.test(text);
+    /本人|我曾|毕业于|创办|担任|公司是|尚未进入|已经完成|产品路线/.test(text);
 
   if (looksFact || /UNIQUE_/.test(text)) {
     if (/UNIQUE_JUDGMENT/.test(text)) {
@@ -124,10 +135,13 @@ function inferLearnKind(item, evidenceCorpus) {
         ownership: "subject_owned",
       };
     }
-    const supported = textSupportedByEvidence(text, evidenceCorpus);
-    if (!supported || /UNIQUE_UNVERIFIED_FACT|UNIQUE_FAKE_FACT/.test(text)) {
+    const supported =
+      item.fromRevisionGuidance ||
+      textSupportedByEvidence(text, evidenceCorpus) ||
+      /用户确认的修正/.test(text);
+    if (!supported) {
       return {
-        learnKind: null,
+        learnKind: "new_fact",
         logicalState: "session_only",
         write: false,
         rejectReason: "unverified_fact_no_evidence",
@@ -139,12 +153,10 @@ function inferLearnKind(item, evidenceCorpus) {
       logicalState: "active_low",
       write: true,
       ownership: "subject_owned",
-      factEvidence: "traceable",
+      factEvidence: "revision_or_materials",
     };
   }
 
-  // Generic semantic line without clear fact/judgment/preference → soft preference-ish memory,
-  // but not new_fact.
   return {
     learnKind: "expression_preference",
     logicalState: "active_low",
@@ -230,6 +242,32 @@ function collectSourceFromVersion(userData, versionId) {
     subjectEvidenceText = "";
   }
 
+  // MVP-RELEASE-GATE-01E: revision guidance from generation attempt; baseline = superseded draft.
+  let revisionGuidance = "";
+  let baselineExcerpt = "";
+  try {
+    const attemptId = version.generationAttemptId;
+    const attempt =
+      attemptId && store.generationAttempts ? store.generationAttempts[String(attemptId)] : null;
+    if (attempt && attempt.revisionGuidance) {
+      revisionGuidance = String(attempt.revisionGuidance);
+    }
+  } catch {
+    revisionGuidance = "";
+  }
+  try {
+    const prevId = version.supersedesVersionId;
+    if (prevId && store.versions && store.versions[String(prevId)]) {
+      const prev = store.versions[String(prevId)];
+      const prevArts = [];
+      if (prev.artifactRef) prevArts.push(prev.artifactRef);
+      if (Array.isArray(prev.artifactRefs)) prevArts.push(...prev.artifactRefs);
+      baselineExcerpt = prevArts.map((a) => readTextArtifact(userData, a)).filter(Boolean).join("\n\n");
+    }
+  } catch {
+    baselineExcerpt = "";
+  }
+
   return {
     ok: true,
     version,
@@ -242,6 +280,8 @@ function collectSourceFromVersion(userData, versionId) {
       deliverableId: version.deliverableId || null,
       deliverableVersionId: version.id,
       sourceDeliverableVersionId: version.id,
+      baselineVersionId: version.supersedesVersionId || null,
+      revisionGuidance: revisionGuidance || null,
       acceptedBySubjectId:
         version.acceptedBySubjectId ||
         version.ownerSubjectId ||
@@ -275,9 +315,13 @@ function collectSourceFromVersion(userData, versionId) {
         tool: (version.generator && version.generator.tool) || null,
         subjectRefs: (version.provenance && version.provenance.subjectRefs) || [],
         contextClass: (version.provenance && version.provenance.contextClass) || null,
+        revisionGuidance: revisionGuidance || null,
+        learningSource: "accepted_current_version",
       },
     },
     excerpt: truncate(textParts.join("\n\n"), 8000),
+    baselineExcerpt: truncate(baselineExcerpt, 8000),
+    revisionGuidance,
     title: (deliverable && deliverable.title) || version.title || "成果",
     kind: (deliverable && deliverable.kind) || "document",
     taskMaterialText,
@@ -286,37 +330,140 @@ function collectSourceFromVersion(userData, versionId) {
 }
 
 /**
- * Rule-based extract (also used when callModel absent). Never stores full artifact body.
+ * Rule-based extract prioritized for accepted revisions (MVP-RELEASE-GATE-01E).
+ * Priority: user revisionGuidance > final accepted body cues > baseline diff > model draft lines.
+ * Never elevates the entire draft; episodic "accepted version X" is audit-only.
  * @param {object} args
  * @param {string} [args.evidenceCorpus]
+ * @param {string} [args.revisionGuidance]
+ * @param {string} [args.baselineExcerpt]
  */
-function extractLearningItems({ title, kind, excerpt, source, evidenceCorpus }, callModel) {
+function extractLearningItems(
+  { title, kind, excerpt, source, evidenceCorpus, revisionGuidance, baselineExcerpt },
+  callModel
+) {
   const base = [];
+  // Audit trail only — not a reusable preference or fact.
   base.push({
     id: "ex_episodic_1",
-    layer: "episodic",
+    layer: "artifact_history",
     text: `本人接受了「${title}」（${kind}）这一成果版本。`,
     confidence: "low",
     oneOffLikely: false,
+    artifactOnly: true,
   });
   base.push({
     id: "ex_artifact_1",
     layer: "artifact_history",
-    text: `成果证据：版本 ${source.deliverableVersionId}`,
+    text: `成果证据：版本 ${source && source.deliverableVersionId}`,
     confidence: "high",
     oneOffLikely: false,
     artifactOnly: true,
   });
 
-  const lines = String(excerpt || "")
+  const guidance = String(revisionGuidance || "").trim();
+  if (guidance) {
+    const gLines = guidance
+      .split(/\n+|；|;|。/)
+      .map((l) => l.replace(/\s+/g, " ").trim())
+      .filter((l) => l.length >= 4 && l.length <= 200);
+    let gi = 0;
+    for (const line of gLines) {
+      if (gi >= 6) break;
+      const isCorrection =
+        /纠正|改成|应为|不是|并非|不再|尚未|不要写成|删掉|去掉|不要再/.test(line);
+      const isPreference =
+        /标题|开篇|开头|篇幅|结构|分点|语气|观点|冲突|铺垫|偏好|以后|习惯|不要过度|减少|增加|保留/.test(
+          line
+        );
+      if (!isCorrection && !isPreference && line.length < 8) continue;
+      gi += 1;
+      base.push({
+        id: "ex_rev_" + gi,
+        layer: "semantic",
+        text: isCorrection
+          ? truncate(`用户确认的修正：${line}`, 200)
+          : truncate(`表达与成果偏好：${line}`, 200),
+        confidence: "medium",
+        oneOffLikely: ONE_OFF_RE.test(line),
+        fromRevisionGuidance: true,
+        learnHint: isCorrection ? "project_or_fact" : "expression_preference",
+      });
+    }
+  }
+
+  // Bounded diff cues (not full dump).
+  const finalText = String(excerpt || "");
+  const baseText = String(baselineExcerpt || "");
+  if (baseText && finalText && baseText !== finalText) {
+    const baseTitle = (baseText.match(/^#\s+(.+)$/m) || [])[1] || "";
+    const finalTitle = (finalText.match(/^#\s+(.+)$/m) || [])[1] || "";
+    if (baseTitle && finalTitle && baseTitle !== finalTitle) {
+      base.push({
+        id: "ex_diff_title",
+        layer: "semantic",
+        text: truncate(`标题偏好：采用「${finalTitle}」这类表达，而不是「${baseTitle}」。`, 200),
+        confidence: "medium",
+        oneOffLikely: false,
+        fromRevisionDiff: true,
+        learnHint: "expression_preference",
+      });
+    }
+    const baseLen = baseText.replace(/\s+/g, "").length;
+    const finalLen = finalText.replace(/\s+/g, "").length;
+    if (baseLen > 80 && finalLen > 80) {
+      const ratio = finalLen / baseLen;
+      if (ratio < 0.75) {
+        base.push({
+          id: "ex_diff_len_short",
+          layer: "semantic",
+          text: "篇幅偏好：同类成果宜更精炼，避免过长铺垫。",
+          confidence: "low",
+          oneOffLikely: false,
+          fromRevisionDiff: true,
+          learnHint: "expression_preference",
+        });
+      } else if (ratio > 1.35) {
+        base.push({
+          id: "ex_diff_len_long",
+          layer: "semantic",
+          text: "篇幅偏好：同类成果可保留更充分的事实与展开。",
+          confidence: "low",
+          oneOffLikely: false,
+          fromRevisionDiff: true,
+          learnHint: "expression_preference",
+        });
+      }
+    }
+    const baseBullets = (baseText.match(/^\s*[-*•]\s+/gm) || []).length;
+    const finalBullets = (finalText.match(/^\s*[-*•]\s+/gm) || []).length;
+    if (baseBullets >= 4 && finalBullets <= Math.max(1, baseBullets - 3)) {
+      base.push({
+        id: "ex_diff_bullets",
+        layer: "semantic",
+        text: "结构偏好：减少机械分点，更多连贯叙述。",
+        confidence: "medium",
+        oneOffLikely: false,
+        fromRevisionDiff: true,
+        learnHint: "expression_preference",
+      });
+    }
+  }
+
+  // Final accepted body lines only (bounded) — not the superseded draft.
+  const lines = finalText
     .split(/\n+/)
     .map((l) => l.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim())
     .filter((l) => l.length >= 12 && l.length <= 180)
     .slice(0, 6);
 
-  for (let i = 0; i < lines.length && base.filter((b) => b.layer === "semantic").length < 3; i += 1) {
+  for (let i = 0; i < lines.length && base.filter((b) => b.layer === "semantic" && !b.fromRevisionGuidance && !b.fromRevisionDiff).length < 2; i += 1) {
     const line = lines[i];
     if (/^(#{1,6}|<!DOCTYPE|html|head|body|script)/i.test(line)) continue;
+    if (/本次|这一次|仅此|临时活动|截止日期/.test(line) && !/应该|优先|偏好/.test(line)) {
+      // Task-specific one-off — skip long-term.
+      continue;
+    }
     base.push({
       id: "ex_sem_" + (i + 1),
       layer: "semantic",
@@ -326,7 +473,6 @@ function extractLearningItems({ title, kind, excerpt, source, evidenceCorpus }, 
     });
   }
 
-  // Continuity markers (e.g. UNIQUE_*): candidate only; fact-gate decides new_fact vs discard.
   const uniqueHits = String(excerpt || "").match(/UNIQUE_[A-Z0-9_]+/g) || [];
   const seenTok = new Set();
   for (const tok of uniqueHits) {
@@ -342,7 +488,6 @@ function extractLearningItems({ title, kind, excerpt, source, evidenceCorpus }, 
     });
   }
 
-  // Explicit judgment harvest: do not rely on attachment-seeded UNIQUE tokens.
   const judgmentScan = String(excerpt || "").replace(/\s+/g, " ");
   const judgmentMatch = judgmentScan.match(
     /[^。！？\n]{0,40}(?:优先验证|优先[^。]{0,40}而非|应该先|在当前阶段[^。]{0,80}而非)[^。！？\n]{0,80}/
@@ -358,8 +503,10 @@ function extractLearningItems({ title, kind, excerpt, source, evidenceCorpus }, 
   }
 
   void evidenceCorpus;
+  // Optional model call must not block: failures fall back to rule base.
   if (typeof callModel === "function") {
-    return Promise.resolve(callModel)
+    return Promise.resolve()
+      .then(() => callModel)
       .then(() => base)
       .catch(() => base);
   }
@@ -615,30 +762,60 @@ function commitProjectKnowledgeCandidates(packageDir, kept, source) {
   for (const item of kept) {
     if (!item || item.layer !== "semantic" || item.writeTarget === "audit_only") continue;
     if (item.learnKind === "new_fact" && item.rejectReason) continue;
+    // Expression preferences stay in subject memory, not project claims.
+    if (item.learnKind === "expression_preference" && !/用户确认的修正|项目|路线|尚未|已经/.test(item.text || "")) {
+      continue;
+    }
     const text = String(item.text || "").trim();
     if (!text || text.length < 16) continue;
     if (/本人接受了「/.test(text)) continue;
+    if (/表达与成果偏好/.test(text) && !/Digital Me|项目/.test(text)) continue;
+
+    const isCorrection = /用户确认的修正|纠正|尚未进入|不再/.test(text);
+    const claimId = newClaimId();
     const claim = {
-      claimId: newClaimId(),
+      claimId,
       projectId: PROJECT_IDS.DIGITAL_ME,
-      claimText: text,
-      claimType: "proposal",
+      claimText: text.replace(/^用户确认的修正：/, "").trim(),
+      claimType: isCorrection || item.learnKind === "new_fact" ? "current_fact" : "proposal",
       sourceRefs: [`deliverableVersion:${source.deliverableVersionId}`],
-      authorityLevel: "accepted_artifact",
-      confirmationStatus: "candidate",
+      authorityLevel: isCorrection ? "owner_confirmed" : "accepted_artifact",
+      confirmationStatus: isCorrection ? "owner_confirmed" : "candidate",
       effectiveFrom: nowIso(),
       supersededBy: null,
       contradictedBy: null,
       scope: "digital_me_project",
       freshness: nowIso(),
-      confidence: item.confidence || "low",
+      confidence: item.confidence || (isCorrection ? "high" : "low"),
       createdAt: nowIso(),
       updatedAt: nowIso(),
       schemaVersion: 1,
       sourceDeliverableVersionId: source.deliverableVersionId,
-      learnCategory: "project_knowledge_candidate",
+      learnCategory: isCorrection ? "accepted_revision_correction" : "project_knowledge_candidate",
     };
     projectKnowledgeStore.upsertClaim(packageDir, claim);
+
+    if (isCorrection) {
+      // Supersede older conflicting active claims with overlapping keywords.
+      const existing = projectKnowledgeStore.getClaimsForProject(packageDir, PROJECT_IDS.DIGITAL_ME) || [];
+      const keywords = claim.claimText
+        .replace(/[^\u4e00-\u9fa5A-Za-z0-9]/g, " ")
+        .split(/\s+/)
+        .filter((w) => w.length >= 2)
+        .slice(0, 6);
+      for (const old of existing) {
+        if (!old || old.claimId === claimId) continue;
+        if (old.confirmationStatus === "rejected" || old.supersededBy) continue;
+        const oldText = String(old.claimText || "");
+        const overlap = keywords.filter((k) => oldText.includes(k)).length;
+        if (overlap >= 2 && oldText !== claim.claimText) {
+          projectKnowledgeStore.supersedeClaim(packageDir, old.claimId, claimId, {
+            reason: "accepted_revision_correction",
+            sourceRef: `deliverableVersion:${source.deliverableVersionId}`,
+          });
+        }
+      }
+    }
     count += 1;
   }
   return { ok: true, count };
@@ -743,6 +920,8 @@ async function runLearnJob(userData, jobId, deps) {
         excerpt: collected.excerpt,
         source: job.source,
         evidenceCorpus,
+        revisionGuidance: collected.revisionGuidance || (job.source && job.source.revisionGuidance) || "",
+        baselineExcerpt: collected.baselineExcerpt || "",
       },
       d.callModel
     );
@@ -786,8 +965,9 @@ async function runLearnJob(userData, jobId, deps) {
     }
 
     const commitResult = commitLearning(packageDir, consolidated.kept, job.source);
-    if (commitResult.ok && !commitResult.skipped) {
-      const pkResult = commitProjectKnowledgeCandidates(packageDir, consolidated.kept, {
+    let pkResult = { ok: true, count: 0 };
+    if (commitResult.ok) {
+      pkResult = commitProjectKnowledgeCandidates(packageDir, consolidated.kept, {
         ...job.source,
         userData,
       });
@@ -870,6 +1050,16 @@ async function runLearnJob(userData, jobId, deps) {
 function enqueueAfterAccept(userData, versionId, deps) {
   const collected = collectSourceFromVersion(userData, versionId);
   if (!collected.ok) return collected;
+
+  // Never learn from a rejected version (safety if called incorrectly).
+  if (collected.version && collected.version.reviewStatus === "rejected") {
+    return {
+      ok: false,
+      code: "rejected_version_not_learned",
+      message: "已否定的成果不会写入长期学习。",
+      acceptPreserved: true,
+    };
+  }
 
   // IDCOLLAB-MIN-01: learning_writeback requires live authorization from store.
   const source = collected.source || {};
@@ -1003,6 +1193,78 @@ async function retryJob(userData, jobId, deps) {
   return runLearnJob(userData, job.id, deps);
 }
 
+/**
+ * On reject: revoke memories/claims sourced from this version; do not treat as satisfaction sample.
+ * Uses existing status/confirmationStatus fields — no new Store.
+ */
+function suppressRejectedVersion(userData, versionId, packageDir) {
+  const vid = String(versionId || "");
+  if (!vid) return { ok: false, code: "version_required" };
+  const result = { ok: true, memoryRevoked: 0, claimsRejected: 0 };
+
+  if (packageDir) {
+    try {
+      const memPath = path.join(packageDir, "memory", "long-term-memory.jsonl");
+      if (fs.existsSync(memPath)) {
+        const lines = fs.readFileSync(memPath, "utf8").split(/\n/);
+        let changed = false;
+        const next = lines.map((line) => {
+          if (!line.trim()) return line;
+          let row;
+          try {
+            row = JSON.parse(line);
+          } catch {
+            return line;
+          }
+          const lp = row && row.learnProvenance;
+          const refs = (row && row.sourceRefs) || [];
+          const hit =
+            (lp && String(lp.deliverableVersionId) === vid) ||
+            refs.some((r) => String(r) === `deliverableVersion:${vid}`);
+          if (!hit) return line;
+          if (row.status === "revoked" || row.status === "deprecated") return line;
+          changed = true;
+          result.memoryRevoked += 1;
+          return JSON.stringify({
+            ...row,
+            status: "revoked",
+            activationState: "revoked",
+            logicalState: "session_only",
+            revokedReason: "deliverable_version_rejected",
+            updatedAt: learnStore.nowIso(),
+          });
+        });
+        if (changed) fs.writeFileSync(memPath, next.join("\n"), "utf8");
+      }
+    } catch (err) {
+      result.memoryError = err && err.message;
+    }
+
+    try {
+      const claims = projectKnowledgeStore.listAllClaims
+        ? projectKnowledgeStore.listAllClaims(packageDir)
+        : projectKnowledgeStore.getClaimsForProject(packageDir, PROJECT_IDS.DIGITAL_ME);
+      for (const c of claims || []) {
+        if (!c) continue;
+        const fromVersion =
+          String(c.sourceDeliverableVersionId || "") === vid ||
+          (Array.isArray(c.sourceRefs) &&
+            c.sourceRefs.some((r) => String(r) === `deliverableVersion:${vid}`));
+        if (!fromVersion) continue;
+        if (c.confirmationStatus === "rejected") continue;
+        projectKnowledgeStore.revokeClaim(packageDir, c.claimId, {
+          reason: "deliverable_version_rejected",
+        });
+        result.claimsRejected += 1;
+      }
+    } catch (err) {
+      result.claimError = err && err.message;
+    }
+  }
+
+  return result;
+}
+
 module.exports = {
   collectSourceFromVersion,
   extractLearningItems,
@@ -1010,10 +1272,12 @@ module.exports = {
   consolidate,
   detectConflict,
   commitLearning,
+  commitProjectKnowledgeCandidates,
   enqueueAfterAccept,
   runLearnJob,
   resolveConflict,
   retryJob,
+  suppressRejectedVersion,
   getJobByVersionId,
   JOB_STATUS,
   buildFactEvidenceCorpus,

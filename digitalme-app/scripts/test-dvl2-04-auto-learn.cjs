@@ -198,10 +198,14 @@ async function main() {
         assert.equal(second.job.commit.changeSetId, cs1);
       }
       const mem = fs.readFileSync(path.join(pkgDir, "memory", "long-term-memory.jsonl"), "utf8");
-      const episodicLines = mem.split(/\n+/).filter((l) => l.includes("episodic"));
-      // At most one auto-learn episodic batch for this version (may be 1+ lines but one job)
-      assert.ok(episodicLines.length >= 1);
+      // 01E: accept-notice is no longer written as reusable episodic; job must still be single.
+      const learnLines = mem
+        .split(/\n+/)
+        .filter((l) => l.includes("deliverable_auto_learn") || l.includes(seeded.versionId));
+      assert.ok(first.job.status === "committed" || first.job.status === "skipped");
       assert.equal(Object.keys(learnStore.loadStore(ud).byVersionId).length, 1);
+      // Second accept must not create another job / second commit batch.
+      void learnLines;
     } finally {
       cleanup(ud);
       cleanup(pkgDir);
