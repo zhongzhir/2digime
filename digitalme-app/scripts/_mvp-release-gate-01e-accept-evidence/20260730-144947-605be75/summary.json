@@ -1,0 +1,16 @@
+﻿{
+    "task":  "MVP-RELEASE-GATE-01E-ACCEPT-01",
+    "candidateVerified":  true,
+    "cleanEnvAvailable":  false,
+    "dualTaskE2EExecuted":  false,
+    "gateRecommendation":  "clean_user_e2e_failed",
+    "blockers":  [
+                     "真正干净无 Node/Git 的 Windows 环境不可用",
+                     "完整双任务 E2E 因此未执行",
+                     "Owner 最终抽查仍不可启动"
+                 ],
+    "p0Count":  "not_assessed_e2e_not_run",
+    "p1Count":  "not_assessed_e2e_not_run",
+    "evidenceDir":  "D:\\Projects\\Digital Me\\digitalme-app\\scripts\\_mvp-release-gate-01e-accept-evidence\\20260730-144947-605be75",
+    "pushed":  false
+}

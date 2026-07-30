@@ -1,0 +1,16 @@
+﻿{
+    "checkedAt":  "2026-07-30T06:49:48.2859040Z",
+    "hostUser":  "agent\\木之易",
+    "interactiveSessions":  [
+                                "USERNAME              SESSIONNAME        ID  STATE   IDLE TIME  LOGON TIME\r\n\u003e木之易             console             1  Active      none   2026/7/30 8:47"
+                            ],
+    "windowsSandboxExe":  false,
+    "machineNodeInstalled":  true,
+    "machineNpmAvailable":  true,
+    "machineGitAvailable":  true,
+    "digitalMeRepoPresent":  true,
+    "cleanVmAvailable":  false,
+    "cleanLocalUserRunnable":  false,
+    "reason":  "Host has machine-wide Node.js and Git; Windows Sandbox binary absent; only developer interactive session active; instruction forbids faking clean E2E via isolated userData on this host.",
+    "verdict":  "clean_environment_unavailable"
+}

@@ -141,7 +141,7 @@ not_pushed
 
 剩余阻断（恰好 2）：
 
-1. 干净用户环境完整双任务 E2E 证据未齐  
+1. 干净用户环境完整双任务 E2E 证据未齐 — **ACCEPT-01：环境不可用，见 `MVP_RELEASE_GATE_01E_ACCEPTANCE_REPORT_20260730.md`（`clean_user_e2e_failed`）**  
 2. Owner 最终抽查未执行  
 
 > 分发「旧产物误报成功 / EBUSY 覆盖失败」阻断已由 **01E-FIX-01** 关闭（见 §12）。单文件 NSIS 仍非本轮目标；目录型 portable 为正式候选形态。

@@ -22,10 +22,12 @@
 
 ## 剩余阻断（≤2）
 
-1. 干净无 Node 机器上的完整陌生用户双任务 E2E 证据未齐  
+1. 干净无 Node 机器上的完整陌生用户双任务 E2E — **ACCEPT-01 未通过**：本机无真正干净环境（见验收报告）  
 2. Owner 最终抽查尚未进行  
 
 ## 证据与报告
 
 - `digitalme-app/scripts/_mvp-release-gate-01e-evidence/`  
-- `MVP_RELEASE_GATE_01E_IMPLEMENTATION_REPORT_20260730.md`（含 §12 Build Integrity Correction）
+- `digitalme-app/scripts/_mvp-release-gate-01e-accept-evidence/`  
+- `MVP_RELEASE_GATE_01E_IMPLEMENTATION_REPORT_20260730.md`（含 §12 Build Integrity Correction）  
+- `MVP_RELEASE_GATE_01E_ACCEPTANCE_REPORT_20260730.md`
