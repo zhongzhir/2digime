@@ -48,6 +48,13 @@ const api = {
   getRecentModelRouting: () => ipcRenderer.invoke("modelRouting:recent"),
   clearExtensionSecret: (payload) => ipcRenderer.invoke("secrets:clearExtensionEnv", payload),
   loadPackage: () => ipcRenderer.invoke("package:load"),
+  getFirstRunState: () => ipcRenderer.invoke("digitalMe:getFirstRunState"),
+  createDigitalMePackage: (payload) => ipcRenderer.invoke("digitalMe:createPackage", payload || {}),
+  selectDigitalMePackage: () => ipcRenderer.invoke("digitalMe:selectImportDirectory"),
+  inspectDigitalMePackage: (payload) =>
+    ipcRenderer.invoke("digitalMe:inspectImportCandidate", payload || {}),
+  activateDigitalMePackage: (payload) =>
+    ipcRenderer.invoke("digitalMe:activateImportedPackage", payload || {}),
   actBehalfPreviewContext: (payload) => ipcRenderer.invoke("actBehalf:previewContext", payload),
   actBehalfConfirmContext: (payload) => ipcRenderer.invoke("actBehalf:confirmContext", payload),
   actBehalfList: (payload) => ipcRenderer.invoke("actBehalf:list", payload),

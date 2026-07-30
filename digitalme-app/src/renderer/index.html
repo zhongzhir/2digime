@@ -7,6 +7,52 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <!-- MVP-RELEASE-GATE-01C: first-run overlay, shown until a Digital Me exists -->
+    <div id="first-run-overlay" class="first-run-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="first-run-title">
+      <div class="first-run-card">
+        <div id="first-run-welcome" class="first-run-panel">
+          <h1 id="first-run-title">欢迎使用 Digital Me</h1>
+          <p class="first-run-desc">Digital Me 是属于你的数字之我：了解你的经历与判断，并在你的授权下代你完成日常任务。</p>
+          <div class="first-run-actions">
+            <button type="button" id="btn-first-run-create" class="btn-primary">创建新的 Digital Me</button>
+            <button type="button" id="btn-first-run-import" class="btn-ghost">导入已有 Digital Me</button>
+          </div>
+          <button type="button" id="btn-first-run-later" class="first-run-later">稍后设置</button>
+          <p class="first-run-model-note">模型可稍后在需要生成时连接，现在无需配置。</p>
+          <div id="first-run-status" class="first-run-status" aria-live="polite"></div>
+        </div>
+
+        <div id="first-run-create-panel" class="first-run-panel hidden">
+          <h2>创建新的 Digital Me</h2>
+          <label class="first-run-field">称呼<span class="req">*</span>
+            <input id="first-run-create-name" type="text" placeholder="例如：李明" autocomplete="off" />
+          </label>
+          <label class="first-run-field">一句话角色描述（可选）
+            <textarea id="first-run-create-role" rows="3" placeholder="例如：产品经理，负责用户增长"></textarea>
+          </label>
+          <div class="first-run-actions">
+            <button type="button" id="btn-first-run-create-submit" class="btn-primary">创建</button>
+            <button type="button" id="btn-first-run-create-back" class="btn-ghost">返回</button>
+          </div>
+          <div id="first-run-create-status" class="first-run-status" aria-live="polite"></div>
+        </div>
+
+        <div id="first-run-import-panel" class="first-run-panel hidden">
+          <h2>导入已有 Digital Me</h2>
+          <p class="muted">选择一个已经创建过的 Digital Me 所在的文件夹。</p>
+          <div class="first-run-actions">
+            <button type="button" id="btn-first-run-import-pick" class="btn-primary">选择文件夹</button>
+          </div>
+          <div id="first-run-import-summary" class="first-run-import-summary hidden"></div>
+          <div class="first-run-actions">
+            <button type="button" id="btn-first-run-import-confirm" class="btn-primary hidden">确认为当前 Digital Me</button>
+            <button type="button" id="btn-first-run-import-back" class="btn-ghost">返回</button>
+          </div>
+          <div id="first-run-import-status" class="first-run-status" aria-live="polite"></div>
+        </div>
+      </div>
+    </div>
+
     <div id="app">
       <aside id="sidebar">
         <div class="brand">Digital Me</div>
@@ -22,6 +68,10 @@
       </aside>
 
       <main id="main">
+        <div id="dm-readiness-strip" class="dm-readiness-strip hidden" role="status" aria-live="polite">
+          <span id="dm-readiness-text" class="dm-readiness-text"></span>
+          <button type="button" id="dm-readiness-action" class="btn-ghost dm-readiness-action hidden"></button>
+        </div>
         <!-- Chat (standard LLM-style) -->
         <section id="view-chat" class="view">
           <div class="workbench-layout chat-standard">
@@ -90,6 +140,7 @@
               <button type="button" class="btn-help" data-help-topic="do" title="打开说明">说明</button>
             </header>
             <div class="do-hub-body">
+              <div id="do-hub-first-run-msg" class="do-hub-first-run-msg hidden" aria-live="polite"></div>
               <div class="builder-actions" style="margin-bottom:1rem">
                 <button id="btn-do-new-task" class="btn btn-primary" type="button">新建任务</button>
               </div>
@@ -459,7 +510,7 @@
                         </ol>
                       </details>
                       <div class="builder-actions">
-                        <button type="button" id="btn-build-b0-import" class="btn-primary">导入已有资料</button>
+                        <button type="button" id="btn-build-b0-import" class="btn-primary">添加资料文件</button>
                         <button type="button" id="btn-build-b0-later" class="btn-ghost">稍后再说</button>
                       </div>
                     </div>

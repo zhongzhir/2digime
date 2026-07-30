@@ -44,6 +44,11 @@ let currentArtifact = null;
 let linkedLibraryId = null; // chat artifact bound to a library item
 let lastEvidence = [];
 let unsubChatProgress = null;
+/** MVP-RELEASE-GATE-01C: first-run overlay + readiness strip state (in-memory only). */
+let firstRunSnapshot = null;
+let firstRunDismissedThisSession = false;
+let firstRunImportCandidate = null;
+let lastModelConfigured = false;
 /** Active scenario pack for this session: { id, title, systemHint } */
 let activeScenario = null;
 /** Current do-scene: null | write | research | placeholder id */
@@ -299,6 +304,13 @@ async function init() {
   }
 
   try {
+    await refreshFirstRunUi();
+  } catch (err) {
+    console.error("[Digital Me] 首次使用状态检查失败", err);
+    appendBootLog("首次使用状态检查失败：" + ((err && err.message) || err));
+  }
+
+  try {
     await renderModelStatus();
   } catch (err) {
     console.error("[Digital Me] 模型状态失败", err);
@@ -368,30 +380,294 @@ function reportBindError(name, err) {
 
 function renderPackageStatus() {
   const statusEl = $("pkg-status");
-  if (!statusEl) return;
   const subEl = $("persona-sub");
-  if (!pkg.exists) {
-    statusEl.textContent = "还没有加载数字之我。请在设置里指定资料目录。";
-    return;
+  if (statusEl) {
+    if (!pkg || !pkg.exists) {
+      statusEl.textContent = "还没有加载数字之我。请在设置里指定资料目录。";
+    } else {
+      const m = pkg.manifest || {};
+      const owner = m.ownerDisplayName || "（未命名）";
+      const domains = (m.distillationScope && m.distillationScope.coveredDomains) || [];
+      statusEl.innerHTML =
+        `<b>${owner}</b><br/>版本 ${m.packageVersion || "?"} · ${m.packageType || ""}` +
+        (domains.length ? `<br/>擅长：${domains.join("、")}` : "");
+      if (subEl) subEl.textContent = domains.length ? "已准备好：" + domains.join("、") : "今天想聊什么？";
+    }
   }
-  const m = pkg.manifest || {};
-  const owner = m.ownerDisplayName || "（未命名）";
-  const domains = (m.distillationScope && m.distillationScope.coveredDomains) || [];
-  statusEl.innerHTML =
-    `<b>${owner}</b><br/>版本 ${m.packageVersion || "?"} · ${m.packageType || ""}` +
-    (domains.length ? `<br/>擅长：${domains.join("、")}` : "");
-  if (subEl) subEl.textContent = domains.length ? "已准备好：" + domains.join("、") : "今天想聊什么？";
+  // #pkg-status is no longer present in the current UI; readiness strip is authoritative.
+  renderReadinessStrip();
 }
 
 async function renderModelStatus() {
   const cfg = await window.digitalMe.getConfig();
+  lastModelConfigured = !!(cfg && cfg.apiKeyConfigured);
   const el = $("model-status");
-  if (!el) return;
-  if (cfg.apiKeyConfigured) {
-    el.innerHTML = `智能引擎已连接<br/><span class="hint-line">可在设置中更换</span>`;
-  } else {
-    el.textContent = "尚未连接（打开设置完成连接）";
+  if (el) {
+    if (cfg.apiKeyConfigured) {
+      el.innerHTML = `智能引擎已连接<br/><span class="hint-line">可在设置中更换</span>`;
+    } else {
+      el.textContent = "尚未连接（打开设置完成连接）";
+    }
   }
+  // #model-status is no longer present in the current UI; readiness strip is authoritative.
+  renderReadinessStrip();
+}
+
+/**
+ * MVP-RELEASE-GATE-01C: compact readiness strip shown outside the first-run overlay.
+ * Reflects current Package + model state without leaking technical terms.
+ */
+function renderReadinessStrip() {
+  const strip = $("dm-readiness-strip");
+  if (!strip) return;
+  const textEl = $("dm-readiness-text");
+  const actionEl = $("dm-readiness-action");
+  const overlay = $("first-run-overlay");
+  if (overlay && !overlay.classList.contains("hidden")) {
+    strip.classList.add("hidden");
+    return;
+  }
+  const fr = (pkg && pkg.firstRun) || firstRunSnapshot || null;
+  const needsSetup = !!(fr && fr.needsFirstRunUi) || !pkg || !pkg.exists;
+  if (needsSetup) {
+    if (textEl) textEl.textContent = "先创建或导入你的 Digital Me";
+    if (actionEl) {
+      actionEl.textContent = "开始设置";
+      actionEl.classList.remove("hidden");
+      actionEl.onclick = () => showFirstRunOverlay();
+    }
+    strip.classList.remove("hidden");
+    return;
+  }
+  const modelConfigured = fr ? !!fr.modelConfigured : lastModelConfigured;
+  if (!modelConfigured) {
+    if (textEl) textEl.textContent = "Digital Me 已准备好。连接模型后即可生成成果。";
+    if (actionEl) {
+      actionEl.textContent = "连接模型";
+      actionEl.classList.remove("hidden");
+      actionEl.onclick = () => openSettings();
+    }
+    strip.classList.remove("hidden");
+    return;
+  }
+  if (textEl) textEl.textContent = "";
+  if (actionEl) actionEl.classList.add("hidden");
+  strip.classList.add("hidden");
+}
+
+/** MVP-RELEASE-GATE-01C: decide whether the first-run overlay must be shown, then sync the strip. */
+async function refreshFirstRunUi() {
+  try {
+    const res = await window.digitalMe.getFirstRunState?.();
+    firstRunSnapshot = res && res.ok !== false ? res : null;
+  } catch (err) {
+    console.error("[Digital Me] 读取首次使用状态失败", err);
+    firstRunSnapshot = null;
+  }
+  const needsOverlay =
+    !firstRunDismissedThisSession &&
+    (!!(firstRunSnapshot && firstRunSnapshot.needsFirstRunUi) || !pkg || !pkg.exists);
+  if (needsOverlay) {
+    showFirstRunOverlay();
+  } else {
+    hideFirstRunOverlay();
+  }
+}
+
+function showFirstRunOverlay() {
+  const overlay = $("first-run-overlay");
+  if (!overlay) return;
+  overlay.classList.remove("hidden");
+  showFirstRunPanel("welcome");
+  renderReadinessStrip();
+}
+
+function hideFirstRunOverlay() {
+  const overlay = $("first-run-overlay");
+  if (!overlay) return;
+  overlay.classList.add("hidden");
+  renderReadinessStrip();
+}
+
+function showFirstRunPanel(name) {
+  const panelIds = {
+    welcome: "first-run-welcome",
+    create: "first-run-create-panel",
+    import: "first-run-import-panel",
+  };
+  for (const [key, id] of Object.entries(panelIds)) {
+    const el = $(id);
+    if (el) el.classList.toggle("hidden", key !== name);
+  }
+  const status = $("first-run-status");
+  if (status) status.textContent = "";
+}
+
+function renderFirstRunImportSummary(inspected) {
+  const summary = $("first-run-import-summary");
+  const confirmBtn = $("btn-first-run-import-confirm");
+  if (!summary) return;
+  if (!inspected) {
+    summary.classList.add("hidden");
+    summary.innerHTML = "";
+    if (confirmBtn) confirmBtn.classList.add("hidden");
+    return;
+  }
+  if (!inspected.ok) {
+    const msg =
+      (inspected.blockingIssues && inspected.blockingIssues[0] && inspected.blockingIssues[0].userMessage) ||
+      "这个文件夹暂时无法导入。";
+    summary.classList.remove("hidden");
+    summary.innerHTML = `<p class="first-run-import-error">${escapeHtml(msg)}</p>`;
+    if (confirmBtn) confirmBtn.classList.add("hidden");
+    return;
+  }
+  const lines = [`<p><strong>${escapeHtml(inspected.displayName || "未命名 Digital Me")}</strong></p>`];
+  if (inspected.updatedAt) {
+    lines.push(
+      `<p class="muted">最近更新：${escapeHtml(String(inspected.updatedAt).slice(0, 16).replace("T", " "))}</p>`
+    );
+  }
+  if (inspected.status === "repairable") {
+    lines.push(`<p class="muted">部分文件可自动修复，确认导入后会自动补全。</p>`);
+  }
+  summary.classList.remove("hidden");
+  summary.innerHTML = lines.join("");
+  if (confirmBtn) confirmBtn.classList.remove("hidden");
+}
+
+function setDoHubFirstRunMessage(text) {
+  const el = $("do-hub-first-run-msg");
+  if (!el) return;
+  el.textContent = text;
+  el.classList.remove("hidden");
+  clearTimeout(setDoHubFirstRunMessage._timer);
+  setDoHubFirstRunMessage._timer = setTimeout(() => {
+    el.classList.add("hidden");
+  }, 6000);
+}
+
+/** Shared success path for create/import: reload Package, hide overlay, land in 做事. Never forces model connection. */
+async function completeFirstRunSetup(firstRunAfter) {
+  firstRunSnapshot = firstRunAfter || firstRunSnapshot;
+  firstRunDismissedThisSession = false;
+  firstRunImportCandidate = null;
+  try {
+    pkg = await window.digitalMe.loadPackage();
+    renderPackageStatus();
+  } catch (err) {
+    console.error("[Digital Me] 重新加载资料失败", err);
+  }
+  hideFirstRunOverlay();
+  const doNav = document.querySelector('.nav-item[data-view="do"]');
+  switchView("do", doNav);
+  setDoHubFirstRunMessage("你的 Digital Me 已准备好，可以开始一个任务。");
+  renderReadinessStrip();
+}
+
+function bindFirstRunEvents() {
+  $("btn-first-run-create")?.addEventListener("click", () => {
+    showFirstRunPanel("create");
+    const nameInput = $("first-run-create-name");
+    const roleInput = $("first-run-create-role");
+    if (nameInput) nameInput.value = "";
+    if (roleInput) roleInput.value = "";
+    nameInput?.focus();
+  });
+
+  $("btn-first-run-import")?.addEventListener("click", () => {
+    firstRunImportCandidate = null;
+    showFirstRunPanel("import");
+    renderFirstRunImportSummary(null);
+  });
+
+  $("btn-first-run-later")?.addEventListener("click", () => {
+    firstRunDismissedThisSession = true;
+    hideFirstRunOverlay();
+  });
+
+  $("btn-first-run-create-back")?.addEventListener("click", () => showFirstRunPanel("welcome"));
+  $("btn-first-run-import-back")?.addEventListener("click", () => {
+    firstRunImportCandidate = null;
+    showFirstRunPanel("welcome");
+  });
+
+  $("btn-first-run-create-submit")?.addEventListener("click", async () => {
+    const nameInput = $("first-run-create-name");
+    const roleInput = $("first-run-create-role");
+    const statusEl = $("first-run-create-status");
+    const submitBtn = $("btn-first-run-create-submit");
+    const displayName = (nameInput?.value || "").trim();
+    if (!displayName) {
+      if (statusEl) statusEl.textContent = "请先填写称呼。";
+      nameInput?.focus();
+      return;
+    }
+    if (submitBtn) submitBtn.disabled = true;
+    if (statusEl) statusEl.textContent = "正在创建……";
+    try {
+      const res = await window.digitalMe.createDigitalMePackage({
+        displayName,
+        roleSummary: (roleInput?.value || "").trim(),
+      });
+      if (!res || res.ok === false) {
+        if (statusEl) statusEl.textContent = (res && res.message) || "暂时无法创建，请稍后重试。";
+        return;
+      }
+      await completeFirstRunSetup(res.firstRun);
+    } catch (err) {
+      console.error("[Digital Me] 创建 Digital Me 失败", err);
+      if (statusEl) statusEl.textContent = "暂时无法创建，请稍后重试。";
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  });
+
+  $("btn-first-run-import-pick")?.addEventListener("click", async () => {
+    const statusEl = $("first-run-import-status");
+    if (statusEl) statusEl.textContent = "";
+    try {
+      const picked = await window.digitalMe.selectDigitalMePackage();
+      if (!picked || picked.ok === false) {
+        if (picked && picked.code !== "cancelled" && statusEl) {
+          statusEl.textContent = picked.message || "未能选择文件夹。";
+        }
+        return;
+      }
+      if (statusEl) statusEl.textContent = "正在检查……";
+      const inspected = await window.digitalMe.inspectDigitalMePackage({ packageDir: picked.packageDir });
+      firstRunImportCandidate = inspected && inspected.ok ? inspected : null;
+      renderFirstRunImportSummary(inspected);
+      if (statusEl) statusEl.textContent = "";
+    } catch (err) {
+      console.error("[Digital Me] 检查导入文件夹失败", err);
+      if (statusEl) statusEl.textContent = "暂时无法检查这个文件夹。";
+    }
+  });
+
+  $("btn-first-run-import-confirm")?.addEventListener("click", async () => {
+    if (!firstRunImportCandidate || !firstRunImportCandidate.packageDir) return;
+    const statusEl = $("first-run-import-status");
+    const confirmBtn = $("btn-first-run-import-confirm");
+    if (confirmBtn) confirmBtn.disabled = true;
+    if (statusEl) statusEl.textContent = "正在导入……";
+    try {
+      const res = await window.digitalMe.activateDigitalMePackage({
+        packageDir: firstRunImportCandidate.packageDir,
+        applyRepairs: firstRunImportCandidate.status === "repairable",
+      });
+      if (!res || res.ok === false) {
+        if (statusEl) statusEl.textContent = (res && res.message) || "暂时无法导入，请稍后重试。";
+        return;
+      }
+      await completeFirstRunSetup(res.firstRun);
+    } catch (err) {
+      console.error("[Digital Me] 导入 Digital Me 失败", err);
+      if (statusEl) statusEl.textContent = "暂时无法导入，请稍后重试。";
+    } finally {
+      if (confirmBtn) confirmBtn.disabled = false;
+    }
+  });
 }
 
 async function renderCapabilitiesStatus() {
@@ -1668,6 +1944,7 @@ function bindEvents() {
   const steps = [
     ["chat-core", bindChatCoreControls],
     ["nav", bindNavControls],
+    ["first-run", bindFirstRunEvents],
     ["builder", bindBuilder],
     ["feedback", bindFeedback],
     ["do", bindDo],

@@ -19,6 +19,7 @@ const { buildSubjectOverviewV1 } = require("./subject-overview");
 const { summarizeInboxForOverview } = require("./subject-overview/panorama");
 
 const { createMinimalFixture } = require("./package-store/fixture");
+const digitalMeLifecycle = require("./digital-me-lifecycle");
 const pptxOutput = require("./outputs/pptx");
 const documentOutput = require("./outputs/document");
 const library = require("./outputs/library");
@@ -231,8 +232,12 @@ const rendererEntryRuntime = createRendererEntryRuntime({
   onBeforeFallback: async (failure) => r2AbortOnFallback(failure),
 });
 
-// Digital Me Package lives one level up from the app folder by default.
-const DEFAULT_PACKAGE_DIR = path.join(__dirname, "..", "..", "digital-me-package");
+/**
+ * MVP-RELEASE-GATE-01C: no implicit repo-side Package.
+ * Empty string = no current Digital Me. New creates go under Documents/Digital Me/.
+ * Legacy demos may still pass an explicit tmp path.
+ */
+const DEFAULT_PACKAGE_DIR = "";
 const CONFIG_PATH = path.join(app.getPath("userData"), "config.json");
 
 let configSecrets = null;
@@ -1154,7 +1159,26 @@ function safeRead(p) {
 }
 
 function packageDirFromConfig() {
-  return readPublicConfig().packageDir || DEFAULT_PACKAGE_DIR;
+  const raw = readPublicConfig().packageDir;
+  const trimmed = raw != null ? String(raw).trim() : "";
+  return trimmed || DEFAULT_PACKAGE_DIR || "";
+}
+
+function hasConfiguredPackageDir() {
+  return !!String(packageDirFromConfig() || "").trim();
+}
+
+function getFirstRunSnapshot() {
+  const packageDir = packageDirFromConfig();
+  const state = digitalMeLifecycle.computeFirstRunState({ packageDir });
+  const pub = readPublicConfig();
+  return {
+    ...state,
+    modelConfigured: !!(pub && pub.apiKeyConfigured),
+    needsFirstRunUi:
+      state.state === digitalMeLifecycle.FIRST_RUN_STATES.NO_CURRENT_PACKAGE ||
+      state.state === digitalMeLifecycle.FIRST_RUN_STATES.PACKAGE_INVALID,
+  };
 }
 
 function isUnderTmpDir(dir) {
@@ -1187,10 +1211,29 @@ function tryRecoverConfiguredPackageStore() {
 
 ipcMain.handle("package:load", () => {
   const dir = packageDirFromConfig();
+  if (!dir) {
+    return {
+      dir: "",
+      exists: false,
+      manifest: {},
+      persona: "",
+      styleGuide: "",
+      systemPrompt: "",
+      decisionFrameworks: "",
+      preferences: "",
+      longTermMemory: "",
+      lifeSummary: "",
+      boundariesSummary: "",
+      firstRun: getFirstRunSnapshot(),
+    };
+  }
   tryRecoverConfiguredPackageStore();
-  life.ensureLifeScaffold(dir);
-  policies.ensureBoundariesScaffold(dir);
   const manifestRaw = safeRead(path.join(dir, "manifest.json"));
+  // Only scaffold into a recognized Package — never into an empty/wrong path.
+  if (manifestRaw) {
+    life.ensureLifeScaffold(dir);
+    policies.ensureBoundariesScaffold(dir);
+  }
   let manifest = {};
   try {
     manifest = JSON.parse(manifestRaw);
@@ -1205,17 +1248,196 @@ ipcMain.handle("package:load", () => {
     decisionFrameworks: safeRead(path.join(dir, "decision-frameworks.json")),
     preferences: safeRead(path.join(dir, "preferences.json")),
     longTermMemory: safeRead(path.join(dir, "memory", "long-term-memory.jsonl")),
-    lifeSummary: life.summarizeLifeForPrompt(dir),
-    boundariesSummary: policies.summarizeBoundariesForPrompt(dir),
+    lifeSummary: manifestRaw ? life.summarizeLifeForPrompt(dir) : "",
+    boundariesSummary: manifestRaw ? policies.summarizeBoundariesForPrompt(dir) : "",
+    firstRun: getFirstRunSnapshot(),
   };
+});
+
+// ---------- MVP-RELEASE-GATE-01C first-run create / import ----------
+ipcMain.handle("digitalMe:getFirstRunState", () => {
+  try {
+    return { ok: true, ...getFirstRunSnapshot() };
+  } catch (err) {
+    return { ok: false, code: "first_run_state_failed", message: "暂时无法判断当前状态。" };
+  }
+});
+
+ipcMain.handle("digitalMe:createPackage", async (_e, payload) => {
+  try {
+    const displayName = payload && payload.displayName != null ? String(payload.displayName) : "";
+    const roleSummary = payload && payload.roleSummary != null ? String(payload.roleSummary) : "";
+    const created = digitalMeLifecycle.createDigitalMePackage({
+      documentsRoot: app.getPath("documents"),
+      displayName,
+      roleSummary,
+    });
+    const previousDir = packageDirFromConfig();
+    try {
+      applyPackageDirToConfig(created.packageDir);
+      const loaded = (() => {
+        const dir = packageDirFromConfig();
+        const raw = safeRead(path.join(dir, "manifest.json"));
+        return !!raw;
+      })();
+      if (!loaded) {
+        applyPackageDirToConfig(previousDir || "");
+        return {
+          ok: false,
+          code: "activate_failed",
+          message: "Digital Me 已写入磁盘，但未能设为当前资料。请重试。",
+        };
+      }
+      return {
+        ok: true,
+        packageDir: created.packageDir,
+        displayName: created.displayName,
+        digitalMeId: created.digitalMeId,
+        firstRun: getFirstRunSnapshot(),
+        modelRequired: false,
+      };
+    } catch (err) {
+      try {
+        applyPackageDirToConfig(previousDir || "");
+      } catch {
+        /* best-effort rollback */
+      }
+      return {
+        ok: false,
+        code: err && err.code ? err.code : "create_failed",
+        message: "暂时无法创建 Digital Me。已保留原有状态。",
+      };
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "create_failed",
+      message:
+        err && err.code === "target_not_empty"
+          ? "目标文件夹不是空的，请换一个名称后重试。"
+          : "暂时无法创建 Digital Me。",
+    };
+  }
+});
+
+ipcMain.handle("digitalMe:selectImportDirectory", async () => {
+  try {
+    const res = await dialog.showOpenDialog({
+      title: "选择已有的 Digital Me 文件夹",
+      properties: ["openDirectory"],
+    });
+    if (res.canceled || !res.filePaths || !res.filePaths[0]) {
+      return { ok: false, code: "cancelled", message: "已取消选择。" };
+    }
+    return { ok: true, packageDir: res.filePaths[0] };
+  } catch (err) {
+    return { ok: false, code: "select_failed", message: "暂时无法打开文件夹选择。" };
+  }
+});
+
+ipcMain.handle("digitalMe:inspectImportCandidate", (_e, payload) => {
+  try {
+    const candidateDir = payload && payload.packageDir ? String(payload.packageDir) : "";
+    const inspected = digitalMeLifecycle.inspectImportCandidate(candidateDir);
+    return { ok: true, ...inspected };
+  } catch (err) {
+    return {
+      ok: false,
+      status: "invalid",
+      blockingIssues: [
+        {
+          code: "inspect_failed",
+          userMessage: "暂时无法检查这个文件夹。原有 Digital Me 没有被修改。",
+        },
+      ],
+      recoverableIssues: [],
+    };
+  }
+});
+
+ipcMain.handle("digitalMe:activateImportedPackage", async (_e, payload) => {
+  const previousDir = packageDirFromConfig();
+  try {
+    const candidateDir = payload && payload.packageDir ? String(payload.packageDir) : "";
+    const applyRepairs = !!(payload && payload.applyRepairs);
+    const inspected = digitalMeLifecycle.inspectImportCandidate(candidateDir);
+    if (!inspected.ok) {
+      return {
+        ok: false,
+        code: "import_rejected",
+        message:
+          (inspected.blockingIssues &&
+            inspected.blockingIssues[0] &&
+            inspected.blockingIssues[0].userMessage) ||
+          "暂时无法导入这个 Digital Me。原有 Digital Me 和文件没有被修改。",
+        inspection: inspected,
+        firstRun: getFirstRunSnapshot(),
+      };
+    }
+    if (applyRepairs || inspected.status === "repairable") {
+      digitalMeLifecycle.applySafeRepairs(inspected.packageDir);
+    }
+    applyPackageDirToConfig(inspected.packageDir);
+    const after = getFirstRunSnapshot();
+    if (
+      after.state === digitalMeLifecycle.FIRST_RUN_STATES.PACKAGE_INVALID ||
+      after.state === digitalMeLifecycle.FIRST_RUN_STATES.NO_CURRENT_PACKAGE
+    ) {
+      applyPackageDirToConfig(previousDir || "");
+      return {
+        ok: false,
+        code: "activate_failed",
+        message: "导入未能完成。原有 Digital Me 没有被修改。",
+        firstRun: getFirstRunSnapshot(),
+      };
+    }
+    return {
+      ok: true,
+      packageDir: inspected.packageDir,
+      displayName: inspected.displayName,
+      inspection: inspected,
+      firstRun: after,
+      copied: false,
+    };
+  } catch (err) {
+    try {
+      applyPackageDirToConfig(previousDir || "");
+    } catch {
+      /* best-effort */
+    }
+    return {
+      ok: false,
+      code: "activate_failed",
+      message: "导入未能完成。原有 Digital Me 没有被修改。",
+      firstRun: getFirstRunSnapshot(),
+    };
+  }
 });
 
 function loadPackageForActBehalf() {
   const dir = packageDirFromConfig();
+  if (!dir) {
+    return {
+      dir: "",
+      exists: false,
+      manifest: {},
+      persona: "",
+      styleGuide: "",
+      systemPrompt: "",
+      decisionFrameworks: "",
+      preferences: "",
+      longTermMemory: "",
+      lifeSummary: "",
+      boundariesSummary: "",
+      identitySummary: "",
+    };
+  }
   tryRecoverConfiguredPackageStore();
-  life.ensureLifeScaffold(dir);
-  policies.ensureBoundariesScaffold(dir);
   const manifestRaw = safeRead(path.join(dir, "manifest.json"));
+  if (manifestRaw) {
+    life.ensureLifeScaffold(dir);
+    policies.ensureBoundariesScaffold(dir);
+  }
   let manifest = {};
   try {
     manifest = JSON.parse(manifestRaw);
@@ -1238,6 +1460,12 @@ function loadPackageForActBehalf() {
         .slice(0, 20)
         .join("\n\n");
       if (!identitySummary && idObj.summary) identitySummary = String(idObj.summary);
+      if (!identitySummary) {
+        const parts = [];
+        if (idObj.displayName) parts.push(`称呼：${idObj.displayName}`);
+        if (idObj.roleSummary) parts.push(`主要工作：${idObj.roleSummary}`);
+        identitySummary = parts.join("。");
+      }
     }
   } catch {
     /* optional */
@@ -1252,8 +1480,8 @@ function loadPackageForActBehalf() {
     decisionFrameworks: safeRead(path.join(dir, "decision-frameworks.json")),
     preferences: safeRead(path.join(dir, "preferences.json")),
     longTermMemory: safeRead(path.join(dir, "memory", "long-term-memory.jsonl")),
-    lifeSummary: life.summarizeLifeForPrompt(dir),
-    boundariesSummary: policies.summarizeBoundariesForPrompt(dir),
+    lifeSummary: manifestRaw ? life.summarizeLifeForPrompt(dir) : "",
+    boundariesSummary: manifestRaw ? policies.summarizeBoundariesForPrompt(dir) : "",
     identitySummary,
   };
 }
@@ -6742,7 +6970,8 @@ ipcMain.handle("packageStore:listVersions", () => {
 });
 
 ipcMain.handle("subject:getOverview", () => {
-  const pkgDir = path.resolve(packageDirFromConfig());
+  const configured = packageDirFromConfig();
+  const pkgDir = configured ? path.resolve(configured) : "";
   const pub = readPublicConfig();
   let inboxSummary = summarizeInboxForOverview(null);
   try {
@@ -6750,6 +6979,13 @@ ipcMain.handle("subject:getOverview", () => {
     inboxSummary = summarizeInboxForOverview(queue);
   } catch {
     /* fail-closed empty summary */
+  }
+  if (!pkgDir) {
+    // Empty packageDir must not resolve to process.cwd().
+    return buildSubjectOverviewV1(path.join(app.getPath("userData"), "__no_digital_me__"), {
+      hasApiKey: !!pub.apiKeyConfigured,
+      inboxSummary,
+    });
   }
   return buildSubjectOverviewV1(pkgDir, {
     hasApiKey: !!pub.apiKeyConfigured,
@@ -6761,7 +6997,22 @@ ipcMain.handle("subject:getOverview", () => {
 ipcMain.handle("subject:getIdentity", async () => {
   try {
     const dir = packageDirFromConfig();
-    const identity = loadOrCreateIdentity(dir);
+    if (!dir) {
+      return { ok: false, code: "no_package", message: "还没有当前 Digital Me。" };
+    }
+    const firstRun = digitalMeLifecycle.computeFirstRunState({ packageDir: dir });
+    if (
+      firstRun.state === digitalMeLifecycle.FIRST_RUN_STATES.NO_CURRENT_PACKAGE ||
+      firstRun.state === digitalMeLifecycle.FIRST_RUN_STATES.PACKAGE_INVALID
+    ) {
+      return { ok: false, code: "no_package", message: "还没有可用的 Digital Me。" };
+    }
+    // Read-only: identity is created only via createDigitalMePackage / explicit import repair.
+    const identityPath = path.join(dir, "identity.json");
+    if (!fs.existsSync(identityPath)) {
+      return { ok: false, code: "identity_missing", message: "当前 Digital Me 尚无身份文件。" };
+    }
+    const identity = JSON.parse(fs.readFileSync(identityPath, "utf8"));
     return { ok: true, identity };
   } catch (err) {
     return { ok: false, code: "identity_error", message: err.message };
