@@ -6,7 +6,6 @@
  * Atomic write + write queue + store-level CAS.
  */
 
-const fs = require("node:fs");
 const path = require("node:path");
 const {
   SCHEMA_VERSION,
@@ -18,17 +17,15 @@ const {
   clone,
   makeAuthorizationRef,
 } = require("./action-identity-schema");
+const {
+  writeJsonStoreAtomic,
+  readJsonStoreWithBackup,
+} = require("../json-store-persistence");
 
 const STORE_SCHEMA_VERSION = 1;
-const RENAME_RETRY_WAITS_MS = Object.freeze([50, 150, 350]);
-const RENAME_RETRY_CODES = new Set(["EBUSY", "EPERM", "EACCES"]);
 
 /** @type {Promise<void>} */
 let writeQueueTail = Promise.resolve();
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 function storePath(userData) {
   return path.join(userData, "authorizations.json");
@@ -43,59 +40,49 @@ function emptyStore() {
   };
 }
 
+function validateAuthStore(parsed) {
+  return !!(
+    parsed &&
+    typeof parsed === "object" &&
+    parsed.authorizations &&
+    typeof parsed.authorizations === "object" &&
+    (parsed.schemaVersion == null || Number(parsed.schemaVersion) === STORE_SCHEMA_VERSION)
+  );
+}
+
 function loadStore(userData) {
   const p = storePath(userData);
-  if (!fs.existsSync(p)) return emptyStore();
-  let parsed;
+  let loaded;
   try {
-    parsed = JSON.parse(fs.readFileSync(p, "utf8"));
+    loaded = readJsonStoreWithBackup({
+      targetPath: p,
+      validate: validateAuthStore,
+      emptyWhenMissing: emptyStore,
+      corruptCode: "authorization_parse_failed",
+    });
   } catch (err) {
-    const e = new Error("授权存档无法解析，请勿覆盖。");
-    e.code = "authorization_parse_failed";
+    const e = new Error(err && err.message ? err.message : "授权存档无法解析，请勿覆盖。");
+    e.code = err && err.code ? err.code : "authorization_parse_failed";
     e.cause = err;
     throw e;
   }
   if (
-    !parsed ||
-    typeof parsed !== "object" ||
-    !parsed.authorizations ||
-    typeof parsed.authorizations !== "object"
+    loaded.parsed.schemaVersion != null &&
+    Number(loaded.parsed.schemaVersion) !== STORE_SCHEMA_VERSION
   ) {
-    const e = new Error("授权存档格式无效。");
-    e.code = "authorization_invalid_store";
-    throw e;
-  }
-  if (parsed.schemaVersion != null && Number(parsed.schemaVersion) !== STORE_SCHEMA_VERSION) {
     const e = new Error("授权存档版本不受支持。");
     e.code = "authorization_unsupported_schema";
     throw e;
   }
-  return parsed;
+  return loaded.parsed;
 }
 
 async function persistStoreAtomic(userData, store) {
-  const target = storePath(userData);
-  const dir = path.dirname(target);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  const tmp = target + ".tmp." + process.pid + "." + Date.now();
-  fs.writeFileSync(tmp, JSON.stringify(store, null, 2), "utf8");
-  let lastErr = null;
-  for (let attempt = 0; attempt < RENAME_RETRY_WAITS_MS.length + 1; attempt += 1) {
-    try {
-      fs.renameSync(tmp, target);
-      return;
-    } catch (err) {
-      lastErr = err;
-      if (!err || !RENAME_RETRY_CODES.has(err.code)) break;
-      if (attempt < RENAME_RETRY_WAITS_MS.length) await sleep(RENAME_RETRY_WAITS_MS[attempt]);
-    }
-  }
-  try {
-    if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
-  } catch {
-    /* ignore */
-  }
-  throw lastErr || new Error("授权存档写入失败");
+  await writeJsonStoreAtomic({
+    targetPath: storePath(userData),
+    data: store,
+    pretty: true,
+  });
 }
 
 function enqueueWrite(task) {

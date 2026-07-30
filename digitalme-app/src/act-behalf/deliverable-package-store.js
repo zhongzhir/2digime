@@ -9,20 +9,18 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { nowIso, isActivePackage } = require("./deliverable-package-schema");
+const {
+  writeJsonStoreAtomic,
+  readJsonStoreWithBackup,
+} = require("../json-store-persistence");
 
 const STORE_SCHEMA_VERSION = 1;
-const RENAME_RETRY_WAITS_MS = Object.freeze([50, 150, 350]);
-const RENAME_RETRY_CODES = new Set(["EBUSY", "EPERM", "EACCES"]);
 
 /** @type {Promise<void>} */
 let writeQueueTail = Promise.resolve();
 
 /** In-memory cache — avoid sync re-parse of multi-MB store on every IPC. */
 let storeCache = null;
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 function storePath(userData) {
   return path.join(userData, "deliverable-packages.json");
@@ -65,105 +63,91 @@ function setStoreCache(userData, store, meta) {
   };
 }
 
+function validatePackageStore(parsed) {
+  return !!(
+    parsed &&
+    typeof parsed === "object" &&
+    parsed.packages &&
+    typeof parsed.packages === "object" &&
+    parsed.deliverables &&
+    typeof parsed.deliverables === "object" &&
+    parsed.preparationAttempts &&
+    typeof parsed.preparationAttempts === "object" &&
+    (parsed.schemaVersion == null || Number(parsed.schemaVersion) === STORE_SCHEMA_VERSION)
+  );
+}
+
 function loadStore(userData) {
   const p = storePath(userData);
-  if (!fs.existsSync(p)) {
-    invalidateStoreCache();
-    return emptyStore();
-  }
-  let st;
-  try {
-    st = fs.statSync(p);
-  } catch {
-    invalidateStoreCache();
-    return emptyStore();
-  }
   const key = String(userData || "");
-  if (
-    storeCache &&
-    storeCache.userData === key &&
-    storeCache.mtimeMs === st.mtimeMs &&
-    storeCache.size === st.size &&
-    storeCache.store
-  ) {
-    return storeCache.store;
+  if (fs.existsSync(p)) {
+    try {
+      const st = fs.statSync(p);
+      if (
+        storeCache &&
+        storeCache.userData === key &&
+        storeCache.mtimeMs === st.mtimeMs &&
+        storeCache.size === st.size &&
+        storeCache.store
+      ) {
+        return storeCache.store;
+      }
+    } catch {
+      /* fall through to full read */
+    }
   }
-  let raw;
-  let parsed;
+
+  let loaded;
   try {
-    raw = fs.readFileSync(p);
-    parsed = JSON.parse(raw.toString("utf8"));
+    loaded = readJsonStoreWithBackup({
+      targetPath: p,
+      validate: validatePackageStore,
+      emptyWhenMissing: emptyStore,
+      corruptCode: "deliverable_package_parse_failed",
+    });
   } catch (err) {
     invalidateStoreCache();
-    const e = new Error("成果包存档无法解析，请勿覆盖。");
-    e.code = "deliverable_package_parse_failed";
+    if (err && err.code === "deliverable_package_parse_failed") throw err;
+    const e = new Error(err && err.message ? err.message : "成果包存档无法解析，请勿覆盖。");
+    e.code = err && err.code ? err.code : "deliverable_package_parse_failed";
     e.cause = err;
     throw e;
   }
+
   if (
-    !parsed ||
-    typeof parsed !== "object" ||
-    !parsed.packages ||
-    typeof parsed.packages !== "object" ||
-    !parsed.deliverables ||
-    typeof parsed.deliverables !== "object" ||
-    !parsed.preparationAttempts ||
-    typeof parsed.preparationAttempts !== "object"
+    loaded.parsed.schemaVersion != null &&
+    Number(loaded.parsed.schemaVersion) !== STORE_SCHEMA_VERSION
   ) {
-    invalidateStoreCache();
-    const e = new Error("成果包存档格式无效。");
-    e.code = "deliverable_package_invalid_store";
-    throw e;
-  }
-  if (parsed.schemaVersion != null && Number(parsed.schemaVersion) !== STORE_SCHEMA_VERSION) {
     invalidateStoreCache();
     const e = new Error("成果包存档版本不受支持。");
     e.code = "deliverable_package_unsupported_schema";
     throw e;
   }
-  const store = normalizeStoreShape(parsed);
-  setStoreCache(userData, store, { mtimeMs: st.mtimeMs, size: st.size, raw });
+
+  const store = normalizeStoreShape(loaded.parsed);
+  setStoreCache(userData, store, {
+    mtimeMs: loaded.mtimeMs != null ? loaded.mtimeMs : Date.now(),
+    size: loaded.size != null ? loaded.size : 0,
+    raw: loaded.raw || null,
+  });
   return store;
 }
 
 async function persistStoreAtomic(userData, store) {
   const target = storePath(userData);
-  const dir = path.dirname(target);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  const tmp = target + ".tmp." + process.pid + "." + Date.now();
-  // Compact JSON: pretty-print of multi-MB stores blocks the Electron main thread
-  // long enough to freeze OS menus (Owner: 2–3s File menu lag).
   const payload = JSON.stringify(store);
-  fs.writeFileSync(tmp, payload, "utf8");
-  let lastErr = null;
-  for (let attempt = 0; attempt < RENAME_RETRY_WAITS_MS.length + 1; attempt += 1) {
-    try {
-      fs.renameSync(tmp, target);
-      let st = null;
-      try {
-        st = fs.statSync(target);
-      } catch {
-        st = null;
-      }
-      setStoreCache(userData, store, {
-        mtimeMs: st ? st.mtimeMs : Date.now(),
-        size: st ? st.size : Buffer.byteLength(payload),
-        raw: Buffer.from(payload, "utf8"),
-      });
-      return;
-    } catch (err) {
-      lastErr = err;
-      if (!err || !RENAME_RETRY_CODES.has(err.code)) break;
-      if (attempt < RENAME_RETRY_WAITS_MS.length) await sleep(RENAME_RETRY_WAITS_MS[attempt]);
-    }
-  }
+  await writeJsonStoreAtomic({ targetPath: target, data: payload });
+  let st = null;
   try {
-    if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
+    st = fs.statSync(target);
   } catch {
-    /* ignore */
+    st = null;
   }
-  invalidateStoreCache();
-  throw lastErr || new Error("成果包存档写入失败");
+  setStoreCache(userData, store, {
+    mtimeMs: st ? st.mtimeMs : Date.now(),
+    size: st ? st.size : Buffer.byteLength(payload),
+    raw: Buffer.from(payload, "utf8"),
+  });
 }
 
 function enqueueWrite(task) {
