@@ -1,0 +1,14 @@
+﻿{
+    "nodeRequired":  false,
+    "classicRenderer":  true,
+    "note":  "directory portable; single-file portable/NSIS blocked by winCodeSign symlink privilege on builder host",
+    "buildStatus":  "portable_closed_alpha_build",
+    "zipSha256":  "B105D6935B5702AD20719ACF73F92F2E6FB88D51AD73BF40399278B43856E4DC",
+    "artifact":  "dist-alpha-build/win-unpacked/Digital Me.exe",
+    "sha256":  "217C7ABC77AAA868B9423FF3E6E8F40F62633CCC4121786FAC64E481AEF3429D",
+    "gitRequired":  false,
+    "bytes":  186328576,
+    "zipArtifact":  "DigitalMe-ClosedAlpha-0.1.0-win-x64-dir.zip",
+    "unsigned":  true,
+    "smartScreenRisk":  "expected"
+}

@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "nav": {
+    "items": [
+      "对话",
+      "做事",
+      "我的 Digital Me"
+    ],
+    "hasMe": true,
+    "hasIdentityPrimary": false,
+    "hasCapPrimary": false
+  },
+  "evidenceDir": "D:\\Projects\\Digital Me\\digitalme-app\\scripts\\_mvp-release-gate-01e-evidence\\electron-2026-07-30T06-18-04-527Z"
+}

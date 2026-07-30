@@ -1,0 +1,32 @@
+{
+  "startedAt": "2026-07-30T06:18:35.785Z",
+  "cases": [
+    {
+      "id": "learn_accepted_source",
+      "ok": true
+    },
+    {
+      "id": "accept_survives_model_fail",
+      "ok": true
+    },
+    {
+      "id": "reject_suppress",
+      "ok": true,
+      "memoryRevoked": 3
+    },
+    {
+      "id": "fact_correction",
+      "ok": true,
+      "hasCorrectionClaim": false,
+      "hasCorrectionMemory": true,
+      "oldSuperseded": false
+    },
+    {
+      "id": "cross_task_preference_recall",
+      "ok": true
+    }
+  ],
+  "finishedAt": "2026-07-30T06:18:37.046Z",
+  "passed": 7,
+  "failed": 0
+}

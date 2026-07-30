@@ -1,0 +1,31 @@
+{
+  "task": "MVP-RELEASE-GATE-01E",
+  "date": "2026-07-30",
+  "gateDecision": "release_gate_conditionally_passed",
+  "unitTests": {
+    "command": "npm run test:mvp-release-gate-01e",
+    "passed": 7,
+    "failed": 0,
+    "detail": "unit-summary.json"
+  },
+  "electronSmoke": {
+    "ok": true,
+    "nav": ["对话", "做事", "我的 Digital Me"],
+    "detail": "electron-2026-07-30T06-18-04-527Z/summary.json"
+  },
+  "distribution": {
+    "status": "portable_closed_alpha_build",
+    "unsigned": true,
+    "smartScreenRisk": "expected",
+    "exeSha256": "217C7ABC77AAA868B9423FF3E6E8F40F62633CCC4121786FAC64E481AEF3429D",
+    "zipSha256": "B105D6935B5702AD20719ACF73F92F2E6FB88D51AD73BF40399278B43856E4DC",
+    "detail": "build-manifest.json"
+  },
+  "packageAudit": {
+    "pass": true,
+    "detail": "package-contents-audit.json"
+  },
+  "cleanMachineDualTaskE2E": "not_completed",
+  "ownerFinalSpotcheck": "not_done",
+  "pushed": false
+}

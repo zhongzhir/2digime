@@ -1,0 +1,17 @@
+﻿{
+  "auditedAt": "2026-07-30T06:25:00.000Z",
+  "asarPath": "dist-alpha-build/win-unpacked/resources/app.asar",
+  "asarEntryCount": 3792,
+  "topLevel": ["node_modules", "package.json", "scripts", "src"],
+  "scriptsContents": ["scripts/.keep"],
+  "sensitivePathHits": [],
+  "checks": {
+    "noEvidenceDirs": true,
+    "noProjectPackageData": true,
+    "noDotEnv": true,
+    "noTestScripts": true,
+    "onlyScriptsKeep": true
+  },
+  "pass": true,
+  "note": "Production dependencies under node_modules are expected for Electron asar; evidence/project/test scripts excluded by electron-builder.yml"
+}
