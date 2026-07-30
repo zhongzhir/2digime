@@ -142,14 +142,14 @@ async function main() {
       resolveQualityPipelineMode({ qualityPipelineMode: "advanced_shadow" }),
       QUALITY_PIPELINE_MODES.ADVANCED_SHADOW
     );
-    // Env alone must not unlock advanced in production (MVP-RELEASE-GATE-01B freeze).
+    // Env alone must not unlock advanced; even ALLOW flag is ignored in production (01D).
     const prevMode = process.env.DIGITALME_QUALITY_PIPELINE_MODE;
     const prevAllow = process.env.DIGITALME_ALLOW_ADVANCED_PIPELINE;
     process.env.DIGITALME_QUALITY_PIPELINE_MODE = "advanced_shadow";
     delete process.env.DIGITALME_ALLOW_ADVANCED_PIPELINE;
     assert.equal(resolveQualityPipelineMode({}), QUALITY_PIPELINE_MODES.STABLE_DELIVERY);
     process.env.DIGITALME_ALLOW_ADVANCED_PIPELINE = "1";
-    assert.equal(resolveQualityPipelineMode({}), QUALITY_PIPELINE_MODES.ADVANCED_SHADOW);
+    assert.equal(resolveQualityPipelineMode({}), QUALITY_PIPELINE_MODES.STABLE_DELIVERY);
     if (prevMode === undefined) delete process.env.DIGITALME_QUALITY_PIPELINE_MODE;
     else process.env.DIGITALME_QUALITY_PIPELINE_MODE = prevMode;
     if (prevAllow === undefined) delete process.env.DIGITALME_ALLOW_ADVANCED_PIPELINE;
