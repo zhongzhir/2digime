@@ -188,20 +188,21 @@ e12c462 docs(release): record closed alpha readiness decision
 - `test:closed-alpha-build-integrity`（10 passed）覆盖旧产物误报路径  
 - 旧 `dist-alpha-build` 标记 `SUPERSEDED.json`（`superseded=true`）；旧 zip 移入 `_superseded/`
 
-### 当前候选产物（构建时 HEAD）
+### 当前候选产物（构建时 HEAD = FIX-01 commit tip）
 
 | 项 | 值 |
 |----|-----|
-| 构建时 Git HEAD | `b0b21a8060d580be0b48dfaab0b35161470a8881`（FIX-01 脚本合入前 tip；合入后将再刷一次 stamp） |
-| buildId | `20260730-143543-b0b21a8` |
-| staging | `digitalme-app/dist-alpha-build-staging/20260730-143543-b0b21a8/` |
-| exe SHA256 | `2ADF53592AC38AFD575ACFC0915660B0B144AE7042200A70EBBA0105B3501356` |
-| asar SHA256 | `8524DB276A5A71F9769E1822EE3C9B9CCABDFBD2414A2D041A12C079335D7AA6` |
-| zip SHA256 | `124899D40E292449003D82A268A241541D4252C580DC2069611067A9CD644D15` |
-| zip 名 | `Digital-Me-Closed-Alpha-b0b21a8.zip` |
+| 构建时 Git HEAD | `605be754664a30076ed041e7e4d1d956a70d45f8` |
+| buildId | `20260730-143923-605be75` |
+| staging | `digitalme-app/dist-alpha-build-staging/20260730-143923-605be75/` |
+| exe SHA256 | `AAC46E8F0E517C02E7244EB82AC5E21D1C1D60B7DBD8C5A756248CB8927720A1` |
+| asar SHA256 | `B23B2BF2BF24605E0D92EA548343041D765D5FEE84863A4600BB7FF7B5DD8038` |
+| zip SHA256 | `E335300C489F18B2A2983FDB9536D95459784BC3132AECA73904AB5E2D414EDF` |
+| zip 名 | `Digital-Me-Closed-Alpha-605be75.zip` |
 | 旧产物 | `dist-alpha-build/SUPERSEDED.json`；旧 `B105D6…` **不是**候选 |
-| 独立启动 | 已 smoke：进程可启动；embeddedGitHead === 构建时 HEAD |
+| 独立启动 | 已 smoke：进程可启动；embeddedGitHead === `605be75…` |
 | EBUSY | 本轮 staging 构建成功，无 EBUSY |
 | Push | **否** |
+| FIX-01 commit | `605be75` |
 
 
