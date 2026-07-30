@@ -153,10 +153,10 @@
           <div id="do-act-behalf" class="do-act-behalf hidden" data-testid="do-act-behalf">
             <header class="me-topbar write-topbar">
               <div class="me-topbar-main">
-                <button type="button" id="btn-do-back-act" class="btn-ghost btn-do-back">← 场景目录</button>
+                <button type="button" id="btn-do-back-act" class="btn-ghost btn-do-back">← 返回</button>
                 <div>
                   <div id="do-act-title">做事</div>
-                   <div id="do-act-sub" class="muted">填写任务目标与参考材料，形成预计交付后生成真实成果，再审阅或重新生成。</div>
+                   <div id="do-act-sub" class="muted">描述工作、添加任务材料，开始做。成果会回到本页，可继续修改或采用。</div>
                 </div>
               </div>
               <button type="button" class="btn-help" data-help-topic="do" title="打开说明">说明</button>
@@ -165,7 +165,7 @@
               <aside class="write-rail act-behalf-rail">
                 <div class="write-rail-block">
                   <div class="ext-store-head">
-                    <h3>任务记录</h3>
+                    <h3>任务</h3>
                     <button id="btn-act-new" class="btn-ghost" type="button">新建</button>
                   </div>
                   <div class="act-task-list-toolbar" data-testid="act-task-list-toolbar">
@@ -215,36 +215,78 @@
                 </div>
               </aside>
               <div class="act-behalf-main">
-                <label class="library-title-label">任务标题（可选）
-                  <input id="act-title" type="text" placeholder="例如：Digital Me 投资人介绍材料" data-testid="act-title" />
-                </label>
-                <label class="library-title-label">任务目标
-                  <textarea id="act-request" rows="4" placeholder="直接说出你想完成的目标…" data-testid="act-request"></textarea>
-                </label>
-                <div class="act-file-input">
-                  <div class="ext-store-head" style="margin-bottom:0.35rem">
-                    <h4 style="margin:0;font-size:0.92rem">参考材料</h4>
+                <div id="act-workspace-input" class="act-workspace-phase" data-testid="act-workspace-input">
+                  <label class="library-title-label act-request-label">描述你希望完成的工作
+                    <textarea
+                      id="act-request"
+                      class="act-request-editor"
+                      rows="12"
+                      placeholder="写清主题、要点、篇幅、受众、风格与结构即可。标题会在开始后自动生成。"
+                      data-testid="act-request"
+                    ></textarea>
+                  </label>
+                  <div id="act-rename-row" class="act-rename-row hidden" data-testid="act-rename-row">
+                    <label class="library-title-label">任务名称
+                      <input id="act-title" type="text" placeholder="可修改自动生成的名称" data-testid="act-title" autocomplete="off" />
+                    </label>
                   </div>
+                  <div class="act-file-input" data-testid="act-materials-block">
+                    <div class="ext-store-head" style="margin-bottom:0.25rem">
+                      <h4 style="margin:0;font-size:0.95rem">任务材料</h4>
+                    </div>
+                    <p class="muted act-materials-hint">添加完成这项工作需要使用的文件、文件夹或已有成果。</p>
+                    <div class="builder-actions">
+                      <button id="btn-act-add-file" class="btn-ghost" type="button" data-testid="btn-act-add-file">添加文件</button>
+                      <button id="btn-act-add-folder" class="btn-ghost" type="button" data-testid="btn-act-add-folder">添加文件夹</button>
+                    </div>
+                    <div id="act-file-list" class="act-file-list" data-testid="act-file-list"></div>
+                  </div>
+                  <div class="builder-actions act-start-actions">
+                    <button id="btn-act-start-do" class="btn btn-primary" type="button" data-testid="btn-act-start-do">开始做</button>
+                    <button id="btn-act-stop" class="btn-ghost hidden" type="button" data-testid="btn-act-stop">停止</button>
+                  </div>
+                  <p id="act-workspace-hint" class="muted write-rail-hint" data-testid="act-workspace-hint" aria-live="polite"></p>
+                </div>
+
+                <div id="act-workspace-running" class="act-workspace-phase hidden" data-testid="act-workspace-running">
+                  <p class="act-running-title"><strong>正在完成这项工作……</strong></p>
+                  <p id="act-running-hint" class="muted" data-testid="act-running-hint">正在整理任务材料</p>
                   <div class="builder-actions">
-                    <button id="btn-act-add-file" class="btn-ghost" type="button" data-testid="btn-act-add-file">添加文件</button>
-                    <button id="btn-act-add-folder" class="btn-ghost" type="button" data-testid="btn-act-add-folder">选择文件夹</button>
+                    <button id="btn-act-stop-running" class="btn-ghost" type="button" data-testid="btn-act-stop-running">停止</button>
                   </div>
-                  <div id="act-file-list" class="act-file-list" data-testid="act-file-list"></div>
                 </div>
-                <details class="act-intent-advanced">
-                  <summary class="muted">更多意图选项（可选）</summary>
-                  <label class="library-title-label">本次角色
-                    <input id="act-role" type="text" placeholder="系统会自动理解你的任务" data-testid="act-role" />
-                  </label>
-                  <label class="library-title-label">期望成果
-                    <input id="act-expected" type="text" placeholder="可编辑短文或纪要" data-testid="act-expected" />
-                  </label>
-                </details>
-                <div class="builder-actions">
-                  <button id="btn-act-form-plan" class="btn" type="button" data-testid="btn-act-form-plan">形成预计交付</button>
-                  <button id="btn-act-save" class="btn-ghost" type="button" data-testid="btn-act-save">保存草稿</button>
+
+                <div id="act-workspace-result" class="act-workspace-phase hidden" data-testid="act-workspace-result">
+                  <h2 id="act-result-heading" class="act-result-heading" data-testid="act-result-heading"></h2>
+                  <article id="act-result-body" class="act-result-markdown" data-testid="act-result-body" tabindex="0"></article>
+                  <div class="act-revision-block" data-testid="act-revision-block">
+                    <label class="library-title-label">继续修改
+                      <textarea
+                        id="act-revision-request"
+                        rows="3"
+                        placeholder="告诉 Digital Me 需要怎样调整……"
+                        data-testid="act-revision-request"
+                      ></textarea>
+                    </label>
+                    <div class="builder-actions">
+                      <button id="btn-act-send-revision" class="btn btn-primary" type="button" data-testid="btn-act-send-revision">发送修改</button>
+                    </div>
+                  </div>
+                  <div class="builder-actions act-result-actions">
+                    <button id="btn-act-accept-result" class="btn" type="button" data-testid="btn-act-accept-result">采用结果</button>
+                    <button id="btn-act-open-local" class="btn-ghost" type="button" data-testid="btn-act-open-local">打开本地文件</button>
+                  </div>
+                  <p id="act-accept-status" class="act-accept-status hidden" data-testid="act-accept-status">已采用</p>
+                  <p id="act-result-error" class="muted write-rail-hint hidden" data-testid="act-result-error"></p>
                 </div>
-                <section id="act-deliverable-plan-panel" class="act-deliverable-plan-panel hidden" data-testid="act-deliverable-plan-panel">
+
+                <!-- Hidden compatibility hooks for planner / generation IPC (not default UI). -->
+                <input id="act-role" type="hidden" value="" data-testid="act-role" />
+                <input id="act-expected" type="hidden" value="" data-testid="act-expected" />
+                <button id="btn-act-form-plan" class="hidden" type="button" tabindex="-1" aria-hidden="true" data-testid="btn-act-form-plan">形成预计交付</button>
+                <button id="btn-act-save" class="hidden" type="button" tabindex="-1" aria-hidden="true" data-testid="btn-act-save">保存草稿</button>
+                <button id="btn-act-generate-from-plan" class="hidden" type="button" tabindex="-1" aria-hidden="true" data-testid="btn-act-generate-from-plan">生成成果</button>
+                <section id="act-deliverable-plan-panel" class="act-deliverable-plan-panel hidden" data-testid="act-deliverable-plan-panel" hidden>
                   <div class="ext-store-head">
                     <h3>预计交付</h3>
                   </div>
@@ -263,7 +305,6 @@
                   </div>
                   <div class="builder-actions act-plan-primary-actions">
                     <button id="btn-act-plan-save-draft" class="btn-ghost" type="button" data-testid="btn-act-plan-save-draft">保存草稿</button>
-                    <button id="btn-act-generate-from-plan" class="btn btn-primary" type="button" data-testid="btn-act-generate-from-plan">生成成果</button>
                     <button id="btn-act-plan-cancel-draft" class="btn-ghost act-text-secondary" type="button" data-testid="btn-act-plan-cancel-draft">取消当前草稿</button>
                   </div>
                   <div id="act-generation-panel" class="act-generation-panel hidden" data-testid="act-generation-panel">
@@ -279,9 +320,9 @@
                     </div>
                   </div>
                 </section>
-                <details class="act-context-block" id="act-context-details">
+                <details class="act-context-block act-task-details-fold" id="act-context-details">
                   <summary class="ext-store-head" style="cursor:pointer; list-style:none">
-                    <span style="font-size:0.85rem; color:var(--muted-foreground)">高级：查看/调整本次使用的本人信息</span>
+                    <span style="font-size:0.85rem; color:var(--muted-foreground)">任务详情</span>
                     <span class="muted" style="margin-left:0.5rem">▸ 展开</span>
                   </summary>
                   <div class="ext-store-head">

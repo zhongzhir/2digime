@@ -1977,15 +1977,49 @@ ipcMain.handle("actBehalf:selectFiles", async (_e, payload) => {
       let chars = 0;
       try {
         if (mode === "folder") {
-          // For folder, list files in directory
-          const dirFiles = fs.readdirSync(filePath, { withFileTypes: true })
-            .filter((f) => f.isFile())
-            .slice(0, 20)
-            .map((f) => f.name);
-          text = "文件夹内容：\n" + dirFiles.join("\n");
-          note = "已列出 " + dirFiles.length + " 个文件";
+          // Bounded folder material: names + optional shallow text samples (not full tree dump).
+          const dirEntries = fs.readdirSync(filePath, { withFileTypes: true });
+          const fileEntries = dirEntries.filter((f) => f.isFile() && !f.name.startsWith("."));
+          const names = fileEntries.slice(0, 40).map((f) => f.name);
+          const sampleParts = [];
+          let budget = 12000;
+          for (const ent of fileEntries.slice(0, 8)) {
+            if (budget <= 0) break;
+            const child = path.join(filePath, ent.name);
+            const childExt = path.extname(ent.name).toLowerCase();
+            if (![".md", ".markdown", ".txt", ".json", ".csv"].includes(childExt)) continue;
+            try {
+              let chunk = await builder.extractText(child);
+              chunk = String(chunk || "").trim();
+              if (!chunk) continue;
+              if (chunk.length > 2500) chunk = chunk.slice(0, 2500) + "…";
+              sampleParts.push(`### ${ent.name}\n${chunk}`);
+              budget -= chunk.length;
+            } catch {
+              /* skip unreadable */
+            }
+          }
+          text =
+            `文件夹「${name}」共 ${fileEntries.length} 个文件。\n文件列表：\n` +
+            names.join("\n") +
+            (sampleParts.length ? `\n\n摘录：\n${sampleParts.join("\n\n")}` : "");
+          note = `${fileEntries.length} 个文件`;
           ok = true;
           chars = text.length;
+          files.push({
+            id: "file_" + Date.now().toString(36) + "_" + Math.floor(Math.random() * 1000),
+            name,
+            path: filePath,
+            ext: "",
+            text,
+            note,
+            ok,
+            chars,
+            isFolder: true,
+            fileCount: fileEntries.length,
+            kindLabel: "文件夹",
+          });
+          continue;
         } else {
           // For files, extract text
           const isImage = [".png", ".jpg", ".jpeg", ".webp", ".gif"].includes(ext);
@@ -2021,7 +2055,8 @@ ipcMain.handle("actBehalf:selectFiles", async (_e, payload) => {
         note,
         ok,
         chars,
-        isFolder: mode === "folder",
+        isFolder: false,
+        kindLabel: kindLabelForExt(ext),
       });
     }
     return { ok: true, canceled: false, files };
@@ -2032,7 +2067,19 @@ ipcMain.handle("actBehalf:selectFiles", async (_e, payload) => {
       message: err && err.message ? err.message : "选择文件失败。",
     };
   }
-});;
+});
+
+function kindLabelForExt(ext) {
+  const e = String(ext || "").toLowerCase();
+  if (e === ".md" || e === ".markdown") return "Markdown 文档";
+  if (e === ".txt") return "文本";
+  if (e === ".docx") return "Word 文档";
+  if (e === ".pdf") return "PDF";
+  if (e === ".pptx") return "演示文稿";
+  if ([".png", ".jpg", ".jpeg", ".webp", ".gif"].includes(e)) return "图片";
+  if (e) return e.replace(".", "").toUpperCase() + " 文件";
+  return "文件";
+}
 
 ipcMain.handle("actBehalf:sendEmail", async (_e, payload) => {
   try {
@@ -3716,12 +3763,16 @@ ipcMain.handle("actBehalf:generateDeliverable", async (e, payload) => {
     const userData = app.getPath("userData");
     const packageId = payload && payload.packageId ? String(payload.packageId) : "";
     const deliverableId = payload && payload.deliverableId ? String(payload.deliverableId) : "";
+    const revisionGuidance =
+      payload && payload.revisionGuidance != null
+        ? String(payload.revisionGuidance).trim().slice(0, 8000)
+        : "";
     if (!packageId || !deliverableId) {
       return { ok: false, code: "ids_required", message: "缺少成果包或成果标识。" };
     }
     return await deliverableGeneration.generateOneDeliverable(
       userData,
-      { packageId, deliverableId },
+      { packageId, deliverableId, revisionGuidance: revisionGuidance || undefined },
       {
         callModel: buildGenerationCallModel(),
         imageMode: generationImageMode(),
@@ -3772,9 +3823,38 @@ ipcMain.handle("actBehalf:listDeliverableVersions", async (_e, payload) => {
 
 /**
  * MVP-RELEASE-GATE-01B: renderer IPC open/reveal dual-path removed.
- * Artifact access temporary fallback = native File menu → secure core only.
- * User-entry rebuild deferred to MVP-RELEASE-GATE-01E (artifact_access_user_entry_rebuild_deferred_to_01E).
+ * TASK-DO-WORKSPACE-UX-01: single secure read + open by store IDs (same resolver as File menu).
  */
+ipcMain.handle("actBehalf:getArtifactContent", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    return deliverableArtifactOpen.readArtifactContent(userData, payload || {});
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "read_failed",
+      message: "暂时无法读取成果正文。",
+    };
+  }
+});
+
+ipcMain.handle("actBehalf:openLocalArtifact", async (_e, payload) => {
+  try {
+    const userData = app.getPath("userData");
+    return await deliverableArtifactOpen.openArtifactSecure({
+      userData,
+      payload: payload || {},
+      shell,
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      code: err && err.code ? err.code : "open_failed",
+      message: "暂时无法打开成果。",
+    };
+  }
+});
+
 /** Lightweight selection sync for native File menu (in-memory only). */
 ipcMain.on("actBehalf:setSelection", (_e, payload) => {
   setActArtifactSelection(payload || {});

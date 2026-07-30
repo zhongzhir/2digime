@@ -231,7 +231,7 @@ function makeArtifactRef({ versionId, relativePath, contentHash, byteSize, name 
  * @param {Function} deps.callModel
  * @param {string} [deps.imageMode] 'mock' | 'real'
  */
-async function generateOneDeliverable(userData, { packageId, deliverableId }, deps) {
+async function generateOneDeliverable(userData, { packageId, deliverableId, revisionGuidance }, deps) {
   const store = packageStore.loadStore(userData);
   const pkg = store.packages[String(packageId)];
   if (!pkg || pkg.softDeletedAt) {
@@ -306,6 +306,13 @@ async function generateOneDeliverable(userData, { packageId, deliverableId }, de
     deliverableTitle: deliverable.title,
     deliverablePurpose: deliverable.purpose,
   };
+  const revisionText = String(revisionGuidance || "").trim();
+  if (revisionText) {
+    taskContext.constraints =
+      (taskContext.constraints ? taskContext.constraints + "\n\n" : "") +
+      "【用户对本成果的修改要求】\n" +
+      revisionText;
+  }
   const classification = classifyTaskContext(taskContext);
   const policy = resolveAssemblyPolicy(classification);
   const isDigitalMeProject = isDigitalMeProjectContext(taskContext);

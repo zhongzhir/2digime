@@ -148,16 +148,18 @@ function dvl2BlocksAutoGenerate(task) {
 }
 
 async function main() {
-  await test("1) DVL2 page HTML has no 开始 button", () => {
+  await test("1) DVL2 page HTML has no auto-start; workspace primary is 开始做", () => {
     const html = fs.readFileSync(
       path.join(__dirname, "..", "src", "renderer", "index.html"),
       "utf8"
     );
     assert.equal(html.includes('id="btn-act-auto-generate"'), false);
     assert.equal(/btn-act-auto-generate[^>]*>开始</.test(html), false);
+    assert.ok(html.includes('id="btn-act-start-do"'));
+    assert.ok(html.includes("开始做"));
     assert.ok(html.includes('id="btn-act-generate-from-plan"'));
     assert.ok(html.includes('id="btn-act-form-plan"'));
-    assert.match(html, /参考材料/);
+    assert.match(html, /任务材料/);
   });
 
   await test("2) attachment keywords must not flip user-goal detectTaskType to video_audio", () => {

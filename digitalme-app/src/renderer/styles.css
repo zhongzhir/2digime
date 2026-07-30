@@ -3602,3 +3602,111 @@ body {
 }
 .do-hub-first-run-msg.hidden { display: none !important; }
 
+/* TASK-DO-WORKSPACE-UX-01 */
+.act-request-editor {
+  min-height: 280px;
+  width: 100%;
+  box-sizing: border-box;
+  resize: none;
+  line-height: 1.55;
+  font: inherit;
+  padding: 12px 14px;
+  border: 1px solid var(--border, #ddd);
+  border-radius: 8px;
+  overflow-y: hidden;
+}
+.act-materials-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.88rem;
+}
+.act-file-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border, #e5e5e5);
+  border-radius: 8px;
+  background: var(--panel, #fafafa);
+}
+.act-file-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.act-file-card .act-file-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.act-start-actions {
+  margin-top: 0.75rem;
+  justify-content: flex-end;
+}
+.act-workspace-phase {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.act-running-title {
+  font-size: 1.05rem;
+  margin: 0.5rem 0 0;
+}
+.act-result-heading {
+  margin: 0.25rem 0 0.5rem;
+  font-size: 1.15rem;
+  font-weight: 650;
+}
+.act-result-markdown {
+  max-width: 46rem;
+  line-height: 1.65;
+  padding: 0.25rem 0 1rem;
+  user-select: text;
+}
+.act-result-markdown h1,
+.act-result-markdown h2,
+.act-result-markdown h3 {
+  margin: 1rem 0 0.4rem;
+  line-height: 1.3;
+}
+.act-result-markdown p,
+.act-result-markdown li {
+  margin: 0.35rem 0;
+}
+.act-result-markdown pre {
+  overflow-x: auto;
+  padding: 0.75rem;
+  background: var(--panel, #f6f6f6);
+  border-radius: 6px;
+}
+.act-result-markdown blockquote {
+  margin: 0.5rem 0;
+  padding-left: 0.75rem;
+  border-left: 3px solid var(--border, #ddd);
+  color: var(--muted-foreground, #666);
+}
+.act-revision-block {
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border, #eee);
+}
+.act-accept-status {
+  color: var(--muted-foreground, #555);
+  font-size: 0.92rem;
+}
+.act-hub-task-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.act-deliverable-plan-panel[hidden],
+.act-deliverable-plan-panel.hidden {
+  display: none !important;
+}
+.act-rename-row {
+  margin-top: 0.25rem;
+}
+

@@ -4943,15 +4943,13 @@ async function renderDoTaskList() {
   for (const t of tasks) {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "library-item";
+    btn.className = "library-item act-hub-task-item";
     btn.dataset.taskId = t.taskId;
-    const flag = t.contextConfirmed ? "已确认上下文" : t.status || "";
+    const statusLabel = userFacingTaskStatus(t);
+    const when = String(t.updatedAt || "").slice(0, 16).replace("T", " ");
     btn.innerHTML =
       `<strong>${escapeHtml(t.title || "未命名任务")}</strong>` +
-      `<span class="muted">${escapeHtml(flag)} · ${escapeHtml(
-        String(t.updatedAt || "").slice(0, 19).replace("T", " ")
-      )}</span>` +
-      `<span class="muted">${escapeHtml(t.requestPreview || "")}</span>`;
+      `<span class="muted">${escapeHtml(statusLabel)}${when ? " · " + escapeHtml(when) : ""}</span>`;
     btn.addEventListener("click", () => {
       openDoScene("act_behalf", { taskId: t.taskId });
     });
@@ -5049,11 +5047,387 @@ let actBehalfState = {
   planRevision: null,
   activePackageId: null,
   taskAuthStatus: null,
+  /** TASK-DO-WORKSPACE-UX-01 runtime view (not persisted). */
+  workspacePhase: "input",
+  workspacePrimary: null,
+  stopRequested: false,
 };
 
 function setActProgress(text) {
   const el = $("act-progress");
   if (el) el.textContent = text || "";
+  const hint = $("act-workspace-hint");
+  if (hint && text) hint.textContent = text;
+}
+
+function deriveTaskTitleFromGoal(goal) {
+  const raw = String(goal || "")
+    .trim()
+    .replace(/\r\n/g, "\n");
+  if (!raw) return "未命名任务";
+  const first = raw.split("\n").find((l) => l.trim()) || raw;
+  let t = first.trim().replace(/\s+/g, " ");
+  if (t.length > 40) t = t.slice(0, 40).replace(/[，,。.\s：:]+$/u, "") + "…";
+  return t || "未命名任务";
+}
+
+function autosizeActRequest() {
+  const el = $("act-request");
+  if (!el) return;
+  el.style.height = "auto";
+  const minH = 280;
+  const maxH = Math.max(320, Math.floor(window.innerHeight * 0.55));
+  const next = Math.min(Math.max(el.scrollHeight, minH), maxH);
+  el.style.height = next + "px";
+  el.style.overflowY = el.scrollHeight > maxH ? "auto" : "hidden";
+}
+
+function setActWorkspaceHint(text) {
+  const hint = $("act-workspace-hint");
+  if (hint) hint.textContent = text || "";
+}
+
+function setActRunningHint(text) {
+  const el = $("act-running-hint");
+  if (el) el.textContent = text || "";
+}
+
+function showActWorkspacePhase(phase) {
+  actBehalfState.workspacePhase = phase || "input";
+  const input = $("act-workspace-input");
+  const running = $("act-workspace-running");
+  const result = $("act-workspace-result");
+  if (input) input.classList.toggle("hidden", phase === "running" || phase === "result");
+  if (running) running.classList.toggle("hidden", phase !== "running");
+  if (result) result.classList.toggle("hidden", phase !== "result");
+  const stopBtn = $("btn-act-stop");
+  if (stopBtn) stopBtn.classList.toggle("hidden", phase !== "running");
+  const rename = $("act-rename-row");
+  if (rename) rename.classList.toggle("hidden", !actBehalfState.taskId || phase === "running");
+}
+
+function renderMarkdownLite(md) {
+  const src = String(md || "");
+  const escaped = escapeHtml(src);
+  const lines = escaped.split("\n");
+  const out = [];
+  let inUl = false;
+  let inOl = false;
+  let inCode = false;
+  let codeBuf = [];
+  const closeLists = () => {
+    if (inUl) {
+      out.push("</ul>");
+      inUl = false;
+    }
+    if (inOl) {
+      out.push("</ol>");
+      inOl = false;
+    }
+  };
+  const inline = (s) =>
+    s
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  for (const line of lines) {
+    if (/^```/.test(line)) {
+      if (inCode) {
+        out.push("<pre><code>" + codeBuf.join("\n") + "</code></pre>");
+        codeBuf = [];
+        inCode = false;
+      } else {
+        closeLists();
+        inCode = true;
+      }
+      continue;
+    }
+    if (inCode) {
+      codeBuf.push(line);
+      continue;
+    }
+    if (/^#{1,3}\s+/.test(line)) {
+      closeLists();
+      const level = (line.match(/^#+/) || ["#"])[0].length;
+      const text = line.replace(/^#{1,3}\s+/, "");
+      out.push(`<h${level}>${inline(text)}</h${level}>`);
+      continue;
+    }
+    if (/^>\s?/.test(line)) {
+      closeLists();
+      out.push(`<blockquote>${inline(line.replace(/^>\s?/, ""))}</blockquote>`);
+      continue;
+    }
+    if (/^[-*]\s+/.test(line)) {
+      if (!inUl) {
+        closeLists();
+        out.push("<ul>");
+        inUl = true;
+      }
+      out.push(`<li>${inline(line.replace(/^[-*]\s+/, ""))}</li>`);
+      continue;
+    }
+    if (/^\d+\.\s+/.test(line)) {
+      if (!inOl) {
+        closeLists();
+        out.push("<ol>");
+        inOl = true;
+      }
+      out.push(`<li>${inline(line.replace(/^\d+\.\s+/, ""))}</li>`);
+      continue;
+    }
+    if (!line.trim()) {
+      closeLists();
+      out.push("");
+      continue;
+    }
+    closeLists();
+    out.push(`<p>${inline(line)}</p>`);
+  }
+  closeLists();
+  if (inCode) out.push("<pre><code>" + codeBuf.join("\n") + "</code></pre>");
+  return out.join("\n");
+}
+
+function pickWorkspacePrimaryFromView(view) {
+  if (!view || !view.deliverables) return null;
+  const included = view.deliverables.filter((d) => d && d.planDisposition === "included");
+  const versions = view.versions || {};
+  for (const d of included) {
+    if (!(d.generationStatus === "ready" || d.currentVersionId)) continue;
+    const ver = d.currentVersionId ? versions[d.currentVersionId] : null;
+    if (!ver) continue;
+    const arts = []
+      .concat(Array.isArray(ver.artifactRefs) ? ver.artifactRefs : [])
+      .concat(ver.artifactRef ? [ver.artifactRef] : [])
+      .concat(ver.previewRef ? [ver.previewRef] : []);
+    const prefer = ["md", "markdown", "txt", "html", "htm", "docx"];
+    let primary = null;
+    for (const fmt of prefer) {
+      primary = arts.find((a) => a && String(a.format || "").toLowerCase() === fmt);
+      if (primary) break;
+    }
+    if (!primary) primary = arts.find((a) => a && a.id);
+    if (!primary || !primary.id) continue;
+    return {
+      deliverableId: String(d.id),
+      versionId: String(ver.id),
+      artifactId: String(primary.id),
+      title: d.title || "成果",
+      reviewStatus: ver.reviewStatus || null,
+      packageId: view.package && view.package.id ? String(view.package.id) : actBehalfState.activePackageId,
+    };
+  }
+  return null;
+}
+
+async function presentActWorkspaceResult(view) {
+  const primary = pickWorkspacePrimaryFromView(view);
+  actBehalfState.workspacePrimary = primary;
+  if (!primary) {
+    const dels = (view && view.deliverables) || [];
+    const anyBusy = dels.some((d) => d && d.generationStatus === "generating");
+    const anyFailed = dels.some((d) => d && d.generationStatus === "failed");
+    if (anyBusy) {
+      showActWorkspacePhase("running");
+      setActRunningHint("正在生成成果");
+      return;
+    }
+    if (anyFailed) {
+      showActWorkspacePhase("input");
+      setActWorkspaceHint("暂时无法完成这项工作。你的任务要求和任务材料都还在，可以调整后再次开始做。");
+      return;
+    }
+    return;
+  }
+  showActWorkspacePhase("result");
+  const heading = $("act-result-heading");
+  if (heading) heading.textContent = ($("act-title") && $("act-title").value.trim()) || primary.title || "成果";
+  const body = $("act-result-body");
+  const errEl = $("act-result-error");
+  if (errEl) {
+    errEl.textContent = "";
+    errEl.classList.add("hidden");
+  }
+  if (body) body.innerHTML = "<p class=\"muted\">正在载入成果……</p>";
+  const acceptStatus = $("act-accept-status");
+  if (acceptStatus) {
+    acceptStatus.classList.toggle("hidden", primary.reviewStatus !== "accepted");
+    if (primary.reviewStatus === "accepted") acceptStatus.textContent = "已采用";
+  }
+  setActiveArtifactContext(actBehalfState.taskId, primary.packageId || actBehalfState.activePackageId);
+  if (!window.digitalMe.actBehalfGetArtifactContent) {
+    if (body) body.innerHTML = "<p class=\"muted\">当前版本无法在页面中预览，请打开本地文件查看。</p>";
+    return;
+  }
+  const res = await window.digitalMe.actBehalfGetArtifactContent({
+    artifactId: primary.artifactId,
+    versionId: primary.versionId,
+    deliverableId: primary.deliverableId,
+    taskId: actBehalfState.taskId,
+  });
+  if (!res || !res.ok) {
+    if (body) body.innerHTML = "";
+    if (errEl) {
+      errEl.textContent = (res && res.message) || "暂时无法在页面中显示成果。";
+      errEl.classList.remove("hidden");
+    }
+    return;
+  }
+  if (body) {
+    if (res.format === "html" || res.format === "htm") {
+      body.textContent = res.content;
+    } else {
+      body.innerHTML = renderMarkdownLite(res.content);
+    }
+  }
+}
+
+async function handleStartDoWork() {
+  const goal = ($("act-request") && $("act-request").value.trim()) || "";
+  if (!goal) {
+    setActWorkspaceHint("请先描述你希望完成的工作。");
+    $("act-request")?.focus();
+    return;
+  }
+  actBehalfState.stopRequested = false;
+  const titleEl = $("act-title");
+  if (titleEl && !titleEl.value.trim()) titleEl.value = deriveTaskTitleFromGoal(goal);
+  showActWorkspacePhase("running");
+  setActRunningHint("正在整理任务材料");
+  setActWorkspaceHint("");
+  try {
+    if (actBehalfState.taskId) await persistActReferenceMaterials(actBehalfState.taskId);
+    setActRunningHint("正在理解任务");
+    await handleFormDeliverablePlan({ fromStartDo: true });
+    if (actBehalfState.stopRequested) {
+      showActWorkspacePhase("input");
+      setActWorkspaceHint("已请求停止。任务与材料已保留。");
+      return;
+    }
+    if (!actBehalfState.taskId) {
+      showActWorkspacePhase("input");
+      return;
+    }
+    setActRunningHint("正在生成成果");
+    await handleGenerateFromPlan({ fromStartDo: true });
+    if (actBehalfState.stopRequested) {
+      showActWorkspacePhase("input");
+      setActWorkspaceHint("已请求停止。正在进行的生成可能仍会完成；已有任务与材料会保留。");
+      return;
+    }
+    if (actBehalfState.activePackageId) {
+      await refreshActGenerationPanel(actBehalfState.activePackageId);
+    } else {
+      showActWorkspacePhase("input");
+    }
+  } catch (err) {
+    console.error("[Digital Me] 开始做失败", err);
+    showActWorkspacePhase("input");
+    setActWorkspaceHint("暂时无法完成这项工作。任务要求和材料仍在，可以稍后重试。");
+  }
+}
+
+function handleActStopRequest() {
+  actBehalfState.stopRequested = true;
+  setActRunningHint("已请求停止；正在进行的生成可能仍会完成");
+  setActWorkspaceHint("已请求停止。任务与材料会保留；已形成的有效成果不会删除。");
+}
+
+async function handleSendRevision() {
+  const guidance = ($("act-revision-request") && $("act-revision-request").value.trim()) || "";
+  if (!guidance) {
+    setActWorkspaceHint("请先写下需要怎样调整。");
+    return;
+  }
+  const primary = actBehalfState.workspacePrimary;
+  const packageId = actBehalfState.activePackageId || (primary && primary.packageId);
+  if (!packageId || !primary || !primary.deliverableId) {
+    setActWorkspaceHint("当前没有可修改的成果。");
+    return;
+  }
+  showActWorkspacePhase("running");
+  setActRunningHint("正在根据你的要求调整成果……");
+  const res = await window.digitalMe.actBehalfGenerateDeliverable({
+    packageId,
+    deliverableId: primary.deliverableId,
+    revisionGuidance: guidance,
+  });
+  if (!res || !res.ok) {
+    showActWorkspacePhase("result");
+    setActWorkspaceHint((res && res.message) || "暂时无法按要求修改，请稍后重试。");
+    return;
+  }
+  if ($("act-revision-request")) $("act-revision-request").value = "";
+  await refreshActGenerationPanel(packageId);
+}
+
+async function handleAcceptWorkspaceResult() {
+  const primary = actBehalfState.workspacePrimary;
+  if (!primary || !primary.versionId) {
+    setActWorkspaceHint("当前没有可采用的成果。");
+    return;
+  }
+  const res = await window.digitalMe.actBehalfReviewDeliverableVersion({
+    versionId: primary.versionId,
+    decision: "accepted",
+  });
+  if (!res || !res.ok) {
+    setActWorkspaceHint((res && res.message) || "暂时无法采用。");
+    return;
+  }
+  const acceptStatus = $("act-accept-status");
+  if (acceptStatus) {
+    acceptStatus.textContent = "已采用";
+    acceptStatus.classList.remove("hidden");
+  }
+  actBehalfState.workspacePrimary = { ...primary, reviewStatus: "accepted" };
+  setTimeout(() => refreshActLearnConflict(actBehalfState.taskId), 400);
+  setTimeout(() => refreshActLearnConflict(actBehalfState.taskId), 1500);
+}
+
+async function handleOpenLocalWorkspaceArtifact() {
+  const primary = actBehalfState.workspacePrimary;
+  const btn = $("btn-act-open-local");
+  if (!primary || !primary.artifactId) {
+    setActWorkspaceHint("当前没有可打开的本地文件。");
+    return;
+  }
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "正在打开…";
+  }
+  try {
+    const res = await window.digitalMe.actBehalfOpenLocalArtifact({
+      artifactId: primary.artifactId,
+      versionId: primary.versionId,
+      deliverableId: primary.deliverableId,
+      taskId: actBehalfState.taskId,
+    });
+    if (!res || !res.ok) {
+      setActWorkspaceHint((res && res.message) || "暂时无法打开成果。");
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "打开本地文件";
+    }
+  }
+}
+
+function userFacingTaskStatus(task) {
+  const st = String((task && task.status) || "").toLowerCase();
+  const gen = task && task.deliverableExecution;
+  if (st === "failed" || st === "error") return "需要处理";
+  if (gen && gen.activePackageId) {
+    // Heuristic: if accepted/completed markers exist
+    if (st === "completed" || st === "done" || st === "accepted") return "已完成";
+    if (st === "running" || st === "generating") return "进行中";
+  }
+  if (st === "completed" || st === "done" || st === "accepted") return "已完成";
+  if (st === "running" || st === "generating" || st === "in_progress") return "进行中";
+  if (st === "draft" || !st) return "进行中";
+  return "进行中";
 }
 
 /** Lightweight runtime counters for GLOBAL-RENDERER-RESPONSIVENESS-01 (not persisted). */
@@ -5101,10 +5475,24 @@ function renderActFileList() {
   if (!files.length) return;
   for (const f of files) {
     const row = document.createElement("div");
-    row.className = "act-file-row" + (f.ok ? "" : " act-file-error");
+    row.className = "act-file-card" + (f.ok ? "" : " act-file-error");
+    const kind =
+      f.kindLabel ||
+      (f.isFolder
+        ? "文件夹"
+        : f.ext === ".md" || f.ext === ".markdown"
+          ? "Markdown 文档"
+          : "文件");
+    const meta = f.isFolder
+      ? f.fileCount != null
+        ? `${f.fileCount} 个文件`
+        : f.note || "文件夹"
+      : kind;
     row.innerHTML =
-      `<span class="act-file-name">${escapeHtml(f.isFolder ? "📁 " : "📄 ")}${escapeHtml(f.name)}</span>` +
-      `<span class="act-file-note muted">${escapeHtml(f.note || "")}</span>` +
+      `<div class="act-file-card-main">` +
+      `<strong class="act-file-name">${escapeHtml(f.name)}</strong>` +
+      `<span class="act-file-note muted">${escapeHtml(meta)}</span>` +
+      `</div>` +
       `<button type="button" class="btn-ghost act-file-remove" data-file-id="${escapeHtml(f.id)}">移除</button>`;
     list.appendChild(row);
   }
@@ -5135,6 +5523,9 @@ async function persistActReferenceMaterials(taskId) {
         truncated: !!f.truncated,
         contentHash: f.contentHash || null,
         charCount: f.chars != null ? f.chars : String(f.text || "").length,
+        isFolder: !!f.isFolder,
+        fileCount: f.fileCount,
+        kindLabel: f.kindLabel || undefined,
       })),
       title: ($("act-title") && $("act-title").value.trim()) || undefined,
       goal: ($("act-request") && $("act-request").value.trim()) || undefined,
@@ -5142,7 +5533,7 @@ async function persistActReferenceMaterials(taskId) {
       status: "draft",
     });
     if (res && (res.materialsStale || (res.task && res.task.deliverablePlanning && res.task.deliverablePlanning.materialsStale))) {
-      setActProgress("参考材料已变化，请重新形成预计交付后再生成。");
+      setActProgress("任务材料已变化，再次开始做会按新材料重新整理。");
       if (typeof restoreActDeliverablePlan === "function") {
         await restoreActDeliverablePlan(taskId);
       }
@@ -5922,13 +6313,12 @@ function renderActTaskListRow(list, task) {
   const main = document.createElement("button");
   main.type = "button";
   main.className = "task-item-main";
-  const flag = task.contextConfirmed ? "已确认上下文" : task.status || "";
+  const flag = userFacingTaskStatus(task);
   main.innerHTML =
     `<strong>${escapeHtml(task.title || "未命名任务")}</strong>` +
     `<span class="muted">${escapeHtml(flag)} · ${escapeHtml(
-      String(task.updatedAt || "").slice(0, 19).replace("T", " ")
-    )}</span>` +
-    `<span class="muted">${escapeHtml(task.requestPreview || "")}</span>`;
+      String(task.updatedAt || "").slice(0, 16).replace("T", " ")
+    )}</span>`;
   main.addEventListener("click", async () => {
     if (actTaskUiMode && actTaskUiMode.taskId === task.taskId && actTaskUiMode.kind === "rename") {
       return;
@@ -6583,6 +6973,11 @@ function resetActBehalfForm() {
     videoAudioScript: null,
     attachedFiles: [],
     planRevision: null,
+    activePackageId: null,
+    taskAuthStatus: null,
+    workspacePhase: "input",
+    workspacePrimary: null,
+    stopRequested: false,
   };
   if ($("act-title")) $("act-title").value = "";
   if ($("act-request")) $("act-request").value = "";
@@ -6591,6 +6986,9 @@ function resetActBehalfForm() {
   if ($("act-supplement")) $("act-supplement").value = "";
   if ($("act-self-context")) $("act-self-context").value = "";
   if ($("act-final-draft")) $("act-final-draft").value = "";
+  if ($("act-revision-request")) $("act-revision-request").value = "";
+  if ($("act-result-body")) $("act-result-body").innerHTML = "";
+  if ($("act-accept-status")) $("act-accept-status").classList.add("hidden");
   renderActFileList();
   renderActClaimList();
   clearActResultPanel();
@@ -6607,6 +7005,8 @@ function resetActBehalfForm() {
   updateActResearchPanelVisibility();
   updateActResultGenVisibility(null);
   setActiveArtifactContext(null, null);
+  showActWorkspacePhase("input");
+  autosizeActRequest();
 }
 
 async function openActBehalfScene(opts = {}) {
@@ -6669,9 +7069,16 @@ async function openActBehalfTask(taskId) {
         truncated: !!m.truncated,
         contentHash: m.contentHash || null,
         chars: m.charCount != null ? m.charCount : String(m.text || "").length,
+        isFolder: !!m.isFolder,
+        fileCount: m.fileCount,
+        kindLabel: m.kindLabel || (m.isFolder ? "文件夹" : undefined),
       }))
     : [];
   renderActFileList();
+  autosizeActRequest();
+  const rename = $("act-rename-row");
+  if (rename) rename.classList.remove("hidden");
+  showActWorkspacePhase("input");
 
   if (task.subjectContext && task.subjectContext.confirmationState === "confirmed") {
     actBehalfState.confirmed = task.subjectContext;
@@ -6724,6 +7131,11 @@ async function openActBehalfTask(taskId) {
   renderActResearchFromTask(task);
   await restoreActDeliverablePlan(task.taskId);
   syncActArtifactSelectionToMain();
+  if (actBehalfState.activePackageId) {
+    await refreshActGenerationPanel(actBehalfState.activePackageId);
+  } else {
+    showActWorkspacePhase("input");
+  }
 }
 
 async function restoreActDeliverablePlan(taskId) {
@@ -6740,8 +7152,13 @@ async function restoreActDeliverablePlan(taskId) {
       if (actBehalfState.activePackageId) planUiMode = "confirmed";
       window.DeliverablePlannerUi.renderPlanView(view, { planUiMode });
       actBehalfState._lastPlanView = view;
-      if (view.statusBanner && /参考材料已变化/.test(String(view.statusBanner))) {
-        setActProgress(view.statusBanner);
+      const panel = $("act-deliverable-plan-panel");
+      if (panel) {
+        panel.classList.add("hidden");
+        panel.hidden = true;
+      }
+      if (view.statusBanner && /任务材料已变化|参考材料已变化/.test(String(view.statusBanner))) {
+        setActProgress("任务材料已变化，再次开始做会按新材料重新整理。");
       }
     } else {
       window.DeliverablePlannerUi.hidePlanPanel();
@@ -6871,6 +7288,7 @@ async function refreshActGenerationPanel(packageId) {
     if (actBehalfState._lastPlanView) {
       window.DeliverablePlannerUi.renderPlanView(actBehalfState._lastPlanView, { planUiMode: planMode });
     }
+    await presentActWorkspaceResult(view);
   }
 }
 
@@ -6908,9 +7326,10 @@ function scheduleThrottledGenerationPanelRefresh(packageId, reason) {
   }, reason === "enhancement" ? 400 : 250);
 }
 
-async function handleGenerateFromPlan() {
+async function handleGenerateFromPlan(opts = {}) {
+  const fromStartDo = !!(opts && opts.fromStartDo);
   if (!actBehalfState.taskId) {
-    setActProgress("请先形成预计交付。");
+    if (!fromStartDo) setActProgress("请先点击「开始做」。");
     return;
   }
   if (!window.digitalMe.actBehalfConfirmPlanAndGenerate) {
@@ -6935,7 +7354,7 @@ async function handleGenerateFromPlan() {
       disabled: false,
     });
   }
-  setActProgress("正在生成成果…");
+  if (!fromStartDo) setActProgress("正在生成成果…");
 
   const res = await window.digitalMe.actBehalfConfirmPlanAndGenerate({
     taskId: actBehalfState.taskId,
@@ -6945,7 +7364,7 @@ async function handleGenerateFromPlan() {
   });
 
   if (res && res.code === "stale_plan_state") {
-    setActProgress("成果要求已变化，正在重新加载…");
+    setActProgress("任务已变化，正在重新整理…");
     await restoreActDeliverablePlan(actBehalfState.taskId);
     return;
   }
@@ -6977,7 +7396,7 @@ async function handleGenerateFromPlan() {
   }
 
   if (res && res.code === "plan_materials_stale") {
-    setActProgress((res && res.message) || "参考材料已变化，请重新形成预计交付后再生成。");
+    setActProgress((res && res.message) || "任务材料已变化，请再次点击「开始做」。");
     await restoreActDeliverablePlan(actBehalfState.taskId);
     if (window.DeliverablePlannerUi && window.DeliverablePlannerUi.updatePrimaryGenerateButton) {
       window.DeliverablePlannerUi.updatePrimaryGenerateButton({
@@ -6999,13 +7418,16 @@ async function handleGenerateFromPlan() {
   }
 
   if (!res || !res.ok) {
-    // Status lives in the generation panel — do not repeat a second progress line.
     setActProgress("");
-    await refreshActDeliverableResults(actBehalfState.taskId);
+    if (!fromStartDo) await refreshActDeliverableResults(actBehalfState.taskId);
+    if (fromStartDo) {
+      showActWorkspacePhase("input");
+      setActWorkspaceHint((res && res.message) || "暂时无法完成这项工作。任务要求和材料仍在。");
+    }
     return;
   }
 
-  setActProgress(res.message || "成果已生成。");
+  if (!fromStartDo) setActProgress(res.message || "成果已生成。");
   await restoreActDeliverablePlan(actBehalfState.taskId);
   await refreshActTaskList();
 }
@@ -7132,19 +7554,22 @@ async function handleGenerationPanelClick(ev) {
   }
 }
 
-async function handleFormDeliverablePlan() {
+async function handleFormDeliverablePlan(opts = {}) {
+  const fromStartDo = !!(opts && opts.fromStartDo);
   const goal = ($("act-request") && $("act-request").value.trim()) || "";
   if (!goal) {
-    setActProgress("请先填写任务目标。");
+    setActProgress("请先描述你希望完成的工作。");
     return;
   }
   if (!window.digitalMe.actBehalfPlanGenerate) {
-    setActProgress("当前版本尚未开放成果计划能力。");
+    setActProgress("当前版本尚未开放任务能力。");
     return;
   }
   if (actBehalfState.taskId) await persistActReferenceMaterials(actBehalfState.taskId);
-  setActProgress("正在形成预计交付…");
-  const title = ($("act-title") && $("act-title").value.trim()) || goal.slice(0, 40);
+  if (!fromStartDo) setActProgress("正在整理任务…");
+  const title =
+    ($("act-title") && $("act-title").value.trim()) || deriveTaskTitleFromGoal(goal);
+  if ($("act-title") && !$("act-title").value.trim()) $("act-title").value = title;
   const revision = actBehalfState.planRevision || undefined;
   const res = await window.digitalMe.actBehalfPlanGenerate({
     taskId: actBehalfState.taskId || undefined,
@@ -7156,12 +7581,12 @@ async function handleFormDeliverablePlan() {
     ...(revision || {}),
   });
   if (res && res.code === "stale_plan_state") {
-    setActProgress("成果计划已变化，正在重新加载…");
+    setActProgress("任务已变化，正在重新加载…");
     if (actBehalfState.taskId) await restoreActDeliverablePlan(actBehalfState.taskId);
     return;
   }
   if (!res || !res.ok) {
-    setActProgress((res && res.message) || "无法形成预计交付。");
+    setActProgress((res && res.message) || "暂时无法开始这项工作。");
     if (res && res.version && window.DeliverablePlannerUi) {
       window.DeliverablePlannerUi.renderPlanView(res);
     }
@@ -7175,14 +7600,16 @@ async function handleFormDeliverablePlan() {
   }
   if (actBehalfState.taskId) await persistActReferenceMaterials(actBehalfState.taskId);
   actBehalfState.planRevision = res.revision || null;
+  actBehalfState._lastPlanView = res;
   if (window.DeliverablePlannerUi) window.DeliverablePlannerUi.renderPlanView(res);
-  const modeNote =
-    res.planningMode === "rule_based_fallback"
-      ? "（已使用本机规则规划作为备用）"
-      : res.planningMode === "rule_based"
-        ? "（本机规则规划）"
-        : "";
-  setActProgress((res.statusBanner || "已形成预计交付，可调整后生成成果。") + modeNote);
+  const panel = $("act-deliverable-plan-panel");
+  if (panel) {
+    panel.classList.add("hidden");
+    panel.hidden = true;
+  }
+  const rename = $("act-rename-row");
+  if (rename && actBehalfState.taskId) rename.classList.remove("hidden");
+  if (!fromStartDo) setActProgress("任务已就绪。");
   await refreshActTaskList();
 }
 
@@ -7342,7 +7769,7 @@ function wireActBehalfUi() {
   });
   $("btn-act-reload-context")?.addEventListener("click", () => loadActBehalfContext());
   $("btn-act-auto-generate")?.addEventListener("click", () => {
-    setActProgress("请使用「形成预计交付」与「生成成果」。");
+    setActProgress("请使用「开始做」。");
   });
   $("btn-act-form-plan")?.addEventListener("click", () => handleFormDeliverablePlan());
   $("btn-act-plan-add-item")?.addEventListener("click", () => {
@@ -7351,6 +7778,25 @@ function wireActBehalfUi() {
   $("btn-act-plan-save-draft")?.addEventListener("click", () => handleSaveDeliverablePlanDraft());
   $("btn-act-generate-from-plan")?.addEventListener("click", () => handleGenerateFromPlan());
   $("btn-act-plan-cancel-draft")?.addEventListener("click", () => handleCancelDeliverablePlanDraft());
+  $("btn-act-start-do")?.addEventListener("click", () => handleStartDoWork());
+  $("btn-act-stop")?.addEventListener("click", () => handleActStopRequest());
+  $("btn-act-stop-running")?.addEventListener("click", () => handleActStopRequest());
+  $("btn-act-send-revision")?.addEventListener("click", () => handleSendRevision());
+  $("btn-act-accept-result")?.addEventListener("click", () => handleAcceptWorkspaceResult());
+  $("btn-act-open-local")?.addEventListener("click", () => handleOpenLocalWorkspaceArtifact());
+  $("act-request")?.addEventListener("input", () => autosizeActRequest());
+  $("act-title")?.addEventListener("change", async () => {
+    if (!actBehalfState.taskId || !window.digitalMe.actBehalfRename) return;
+    const title = ($("act-title") && $("act-title").value.trim()) || "";
+    if (!title) return;
+    try {
+      await window.digitalMe.actBehalfRename({ taskId: actBehalfState.taskId, title });
+      await refreshActTaskList();
+    } catch {
+      /* non-blocking */
+    }
+  });
+  autosizeActRequest();
   const genItems = $("act-generation-items");
   if (genItems && !genItems.dataset.wired) {
     genItems.dataset.wired = "1";

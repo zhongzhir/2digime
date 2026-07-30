@@ -427,20 +427,26 @@
 
   function updatePrimaryGenerateButton(state) {
     const btn = $("btn-act-generate-from-plan");
-    if (!btn) return;
+    const startBtn = $("btn-act-start-do");
     const mode = (state && state.mode) || "generate";
     const busy = !!(state && state.busy);
     const authRevoked = !!(state && state.authRevoked);
     const disabled = !!(state && state.disabled) || busy || authRevoked;
-    let label = "生成成果";
+    let label = "开始做";
     if (authRevoked) label = "授权已撤销";
-    else if (busy) label = "正在生成…";
-    else if (mode === "regenerate") label = "重新生成成果";
-    else if (mode === "new_version") label = "生成新版本";
-    btn.textContent = label;
-    btn.disabled = disabled;
-    btn.setAttribute("data-mode", mode);
-    btn.setAttribute("data-auth-revoked", authRevoked ? "1" : "0");
+    else if (busy) label = "正在完成…";
+    else if (mode === "regenerate" || mode === "new_version") label = "开始做";
+    if (btn) {
+      btn.textContent = label === "开始做" ? "生成成果" : label;
+      btn.disabled = disabled;
+      btn.setAttribute("data-mode", mode);
+      btn.setAttribute("data-auth-revoked", authRevoked ? "1" : "0");
+    }
+    if (startBtn) {
+      startBtn.textContent = label;
+      startBtn.disabled = disabled;
+      startBtn.setAttribute("data-mode", mode);
+    }
   }
 
   function kindLabelZh(kind) {
