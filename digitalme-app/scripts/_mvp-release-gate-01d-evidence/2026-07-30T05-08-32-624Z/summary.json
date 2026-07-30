@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "scenarios": [
+    "A_generation_interrupt_heal",
+    "B_orphan_isolate",
+    "C_store_bak_recover",
+    "D_learning_interrupt_heal"
+  ],
+  "evidenceDir": "D:\\Projects\\Digital Me\\digitalme-app\\scripts\\_mvp-release-gate-01d-evidence\\2026-07-30T05-08-32-624Z"
+}

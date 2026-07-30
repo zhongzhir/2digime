@@ -1,0 +1,71 @@
+{
+  "startedAt": "2026-07-30T05:08:00.827Z",
+  "cases": [
+    {
+      "id": "gen_no_files",
+      "before": "generating",
+      "after": "failed"
+    },
+    {
+      "id": "gen_complete",
+      "after": "succeeded"
+    },
+    {
+      "id": "gen_orphan",
+      "orphans": 1
+    },
+    {
+      "id": "learn_no_assets",
+      "after": "failed_then_queued"
+    },
+    {
+      "id": "learn_with_assets",
+      "after": "committed"
+    },
+    {
+      "id": "store_tasks",
+      "bak": true,
+      "dualCorruptThrows": true
+    },
+    {
+      "id": "store_packages",
+      "bak": true,
+      "dualCorruptThrows": true
+    },
+    {
+      "id": "store_plans",
+      "bak": true,
+      "dualCorruptThrows": true
+    },
+    {
+      "id": "store_authorizations",
+      "bak": true,
+      "dualCorruptThrows": true
+    },
+    {
+      "id": "store_learn",
+      "bak": true,
+      "dualCorruptThrows": true
+    },
+    {
+      "id": "artifact_reconcile",
+      "missing": true,
+      "orphans": 1
+    },
+    {
+      "id": "stable_delivery_locked",
+      "ok": true
+    },
+    {
+      "id": "no_memory_dump",
+      "ok": true
+    },
+    {
+      "id": "knowledge_resolver",
+      "ok": true
+    }
+  ],
+  "finishedAt": "2026-07-30T05:08:01.221Z",
+  "passed": 16,
+  "failed": 0
+}

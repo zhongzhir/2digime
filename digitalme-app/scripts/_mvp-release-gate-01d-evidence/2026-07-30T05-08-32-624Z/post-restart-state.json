@@ -1,0 +1,12 @@
+{
+  "attemptStatus": "failed",
+  "errorCode": "generation_interrupted",
+  "deliverableGenerationStatus": "failed",
+  "learnStatus": "failed",
+  "orphanGone": true,
+  "hasOrphanQuarantine": true,
+  "viewHint": {
+    "firstRun": "package_ready"
+  },
+  "pipelineModeEnvIgnored": true
+}

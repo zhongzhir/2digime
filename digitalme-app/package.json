@@ -41,6 +41,8 @@
     "test:stable-delivery-real-model": "node scripts/test-stable-delivery-real-model.cjs",
     "test:mvp-release-gate-01c": "node scripts/test-mvp-release-gate-01c.cjs",
     "test:mvp-release-gate-01c-electron": "electron scripts/electron-mvp-release-gate-01c-acceptance.cjs",
+    "test:mvp-release-gate-01d": "node scripts/test-mvp-release-gate-01d.cjs",
+    "test:mvp-release-gate-01d-electron": "electron scripts/electron-mvp-release-gate-01d-acceptance.cjs",
     "test:task-do-workspace-ux-01": "node scripts/test-task-do-workspace-ux-01.cjs",
     "test:task-do-workspace-ux-01-electron": "electron scripts/electron-task-do-workspace-ux-01-acceptance.cjs",
     "test:dvl2-01-planner": "node scripts/test-dvl2-01-planner-contracts.cjs",
