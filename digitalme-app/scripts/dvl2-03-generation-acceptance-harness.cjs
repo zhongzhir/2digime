@@ -144,13 +144,23 @@ async function runPhaseB({ BrowserWindow }) {
   assert.ok(first);
   const v1 = first.currentVersionId;
 
-  const opened = await win.webContents.executeJavaScript(`(async () => {
-    const view = await window.digitalMe.actBehalfGetDeliverablePackageById({ packageId: ${JSON.stringify(marker.packageId)} });
-    const d = view.deliverables.find(x => x.currentVersionId);
-    const ver = view.versions[d.currentVersionId];
-    const art = ver.artifactRef || (ver.artifactRefs && ver.artifactRefs[0]);
-    return window.digitalMe.actBehalfOpenArtifact({ artifactRefId: art.id });
-  })()`);
+  const opened = await (async () => {
+    // MVP-RELEASE-GATE-01B: renderer open IPC removed; verify via secure core.
+    const deliverableArtifactOpen = require("../src/act-behalf/deliverable-artifact-open");
+    const { shell } = require("electron");
+    const art =
+      (first.currentVersion && first.currentVersion.artifactRef) ||
+      (view.versions &&
+        view.versions[v1] &&
+        (view.versions[v1].artifactRef ||
+          (view.versions[v1].artifactRefs && view.versions[v1].artifactRefs[0])));
+    assert.ok(art && art.id, "expected artifact ref on current version");
+    return deliverableArtifactOpen.openArtifactSecure({
+      userData,
+      payload: { artifactRefId: art.id },
+      shell,
+    });
+  })();
   assert.equal(opened.ok, true);
 
   const reviewed = await win.webContents.executeJavaScript(

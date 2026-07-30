@@ -3542,47 +3542,14 @@ ipcMain.handle("actBehalf:listDeliverableVersions", async (_e, payload) => {
   }
 });
 
-ipcMain.handle("actBehalf:openArtifact", async (_e, payload) => {
-  try {
-    const userData = app.getPath("userData");
-    const { shell } = require("electron");
-    return await deliverableArtifactOpen.openArtifactSecure({
-      userData,
-      payload: payload || {},
-      shell,
-    });
-  } catch (err) {
-    return {
-      ok: false,
-      code: err && err.code ? err.code : "open_failed",
-      message: "暂时无法打开成果。",
-      detail: err && err.message ? String(err.message).slice(0, 240) : undefined,
-    };
-  }
-});
-
+/**
+ * MVP-RELEASE-GATE-01B: renderer IPC open/reveal dual-path removed.
+ * Artifact access temporary fallback = native File menu → secure core only.
+ * User-entry rebuild deferred to MVP-RELEASE-GATE-01E (artifact_access_user_entry_rebuild_deferred_to_01E).
+ */
 /** Lightweight selection sync for native File menu (in-memory only). */
 ipcMain.on("actBehalf:setSelection", (_e, payload) => {
   setActArtifactSelection(payload || {});
-});
-
-ipcMain.handle("actBehalf:revealArtifact", async (_e, payload) => {
-  try {
-    const userData = app.getPath("userData");
-    const { shell } = require("electron");
-    return deliverableArtifactOpen.revealArtifactSecure({
-      userData,
-      payload: payload || {},
-      shell,
-    });
-  } catch (err) {
-    return {
-      ok: false,
-      code: err && err.code ? err.code : "open_failed",
-      message: "暂时无法打开成果。",
-      detail: err && err.message ? String(err.message).slice(0, 240) : undefined,
-    };
-  }
 });
 
 ipcMain.handle("actBehalf:reviewDeliverableVersion", async (_e, payload) => {

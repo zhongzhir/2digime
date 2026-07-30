@@ -82,8 +82,6 @@ const api = {
     ipcRenderer.invoke("actBehalf:getDeliverablePackageById", payload),
   actBehalfListDeliverableVersions: (payload) =>
     ipcRenderer.invoke("actBehalf:listDeliverableVersions", payload),
-  actBehalfOpenArtifact: (payload) => ipcRenderer.invoke("actBehalf:openArtifact", payload),
-  actBehalfRevealArtifact: (payload) => ipcRenderer.invoke("actBehalf:revealArtifact", payload),
   /** Sync current task/package ids for native File menu (no filesystem paths). */
   actBehalfSetSelection: (payload) => ipcRenderer.send("actBehalf:setSelection", payload || {}),
   actBehalfReviewDeliverableVersion: (payload) =>
