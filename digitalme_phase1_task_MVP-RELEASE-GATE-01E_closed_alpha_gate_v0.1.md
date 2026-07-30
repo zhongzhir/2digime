@@ -3,6 +3,7 @@
 - **状态**：`implemented` / `release_gate_conditionally_passed` / `closed_alpha_blockers_remaining` / `not_ready_for_owner_spotcheck` / `not_pushed`
 - **分支**：`codex/mvp-release-gate-01`
 - **进入基线**：`ff17e80`（01D HEAD 校正后）
+- **最终 tip**：见 `MVP_RELEASE_GATE_01E_IMPLEMENTATION_REPORT_20260730.md` §11
 - **性质**：`learning_loop_effectiveness` / `accepted_revision_reuse` / `rejected_content_suppression` / `closed_alpha_release_validation` / `distribution_hardening`
 
 ## 目标

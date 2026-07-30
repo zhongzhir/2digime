@@ -160,9 +160,10 @@ ebfe9b5 test(learning): validate cross-task reuse and project fact correction
 b9a5d60 build(desktop): add closed alpha Windows distribution
 b231f66 test(release): validate clean-user MVP release gate
 e12c462 docs(release): record closed alpha readiness decision
-
-最终 HEAD：`e12c462da71320141ce5baabb6abd8192dd3660c`
+66ad762 docs(release): pin MVP-RELEASE-GATE-01E final HEAD
+5cdd3a5 docs(release): correct 01E commit chain and tip reference
 ```
 
-最终 HEAD 以本 docs 提交为准；**未 push**。
+最终 HEAD：`5cdd3a59cbb37255f5f298e5998b5bb708bf29b4`；**未 push**。
+
 
