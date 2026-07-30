@@ -160,10 +160,14 @@ ebfe9b5 test(learning): validate cross-task reuse and project fact correction
 b9a5d60 build(desktop): add closed alpha Windows distribution
 b231f66 test(release): validate clean-user MVP release gate
 e12c462 docs(release): record closed alpha readiness decision
-66ad762 docs(release): pin MVP-RELEASE-GATE-01E final HEAD
-5cdd3a5 docs(release): correct 01E commit chain and tip reference
+(+ 后续 docs tip 校正提交)
 ```
 
-最终 HEAD：`5cdd3a59cbb37255f5f298e5998b5bb708bf29b4`；**未 push**。
+| 项 | 值 |
+|----|-----|
+| 01E 功能/测试 tip | `b231f66` |
+| 文档 tip | 以 `git rev-parse HEAD` 为准（本报告所在提交；**未 push**） |
+
+避免在报告正文内嵌「自身 commit hash」造成与 tip 再次冲突（与 01D `8c85f3e` / `3924b05` 教训一致）。
 
 
