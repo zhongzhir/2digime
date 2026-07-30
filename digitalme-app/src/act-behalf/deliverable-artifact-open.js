@@ -32,7 +32,7 @@ const ALLOWED_OPEN_EXTENSIONS = new Set([
 function userMessageForOpenCode(code) {
   switch (code) {
     case "file_missing":
-      return "成果文件已移动或删除。";
+      return "这个成果的本地文件暂时不可用。你可以重新生成。";
     case "artifact_not_found":
     case "invalid_artifact_reference":
       return "成果文件不存在。";
