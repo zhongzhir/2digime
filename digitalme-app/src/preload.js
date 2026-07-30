@@ -105,6 +105,10 @@ const api = {
     ipcRenderer.invoke("actBehalf:retryDeliverableLearnJob", payload),
   actBehalfConfirmPlanAndGenerate: (payload) =>
     ipcRenderer.invoke("actBehalf:confirmPlanAndGenerate", payload),
+  actBehalfGetArtifactContent: (payload) =>
+    ipcRenderer.invoke("actBehalf:getArtifactContent", payload || {}),
+  actBehalfOpenLocalArtifact: (payload) =>
+    ipcRenderer.invoke("actBehalf:openLocalArtifact", payload || {}),
   onActBehalfBaselinePersisted: (cb) => {
     const handler = (_e, data) => cb(data);
     ipcRenderer.on("actBehalf:baselinePersisted", handler);

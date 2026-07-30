@@ -293,6 +293,64 @@ async function openArtifactSecure(opts) {
   };
 }
 
+const TEXT_CONTENT_EXTENSIONS = new Set([".md", ".markdown", ".txt", ".html", ".htm"]);
+const MAX_ARTIFACT_READ_BYTES = 1_500_000;
+
+/**
+ * Read authoritative text body for in-page presentation.
+ * Renderer may only pass store IDs — never filesystem paths.
+ */
+function readArtifactContent(userData, payload) {
+  const resolved = resolveOpenableArtifact(userData, payload || {});
+  if (!resolved.ok) return resolved;
+  const ext = path.extname(resolved.abs).toLowerCase();
+  if (!TEXT_CONTENT_EXTENSIONS.has(ext)) {
+    return {
+      ok: false,
+      code: "not_text_preview",
+      message: "此成果暂不支持在页面中预览，请打开本地文件查看。",
+      artifactId: resolved.artifact.id,
+      versionId: resolved.version.id,
+      deliverableId: resolved.deliverable.id,
+    };
+  }
+  let st;
+  try {
+    st = fs.statSync(resolved.abs);
+  } catch {
+    return fail("file_missing", resolved.abs);
+  }
+  if (st.size > MAX_ARTIFACT_READ_BYTES) {
+    return {
+      ok: false,
+      code: "too_large",
+      message: "成果较长，请打开本地文件查看全文。",
+      artifactId: resolved.artifact.id,
+      versionId: resolved.version.id,
+      deliverableId: resolved.deliverable.id,
+    };
+  }
+  let content = "";
+  try {
+    content = fs.readFileSync(resolved.abs, "utf8");
+  } catch (err) {
+    return fail("open_failed", err && err.message);
+  }
+  return {
+    ok: true,
+    content,
+    format: ext.replace(/^\./, ""),
+    artifactId: resolved.artifact.id,
+    versionId: resolved.version.id,
+    deliverableId: resolved.deliverable.id,
+    reviewStatus: (resolved.version && resolved.version.reviewStatus) || null,
+    title:
+      (resolved.deliverable && resolved.deliverable.title) ||
+      (resolved.artifact && resolved.artifact.title) ||
+      null,
+  };
+}
+
 /**
  * @param {object} opts
  * @param {string} opts.userData
@@ -322,6 +380,7 @@ function revealArtifactSecure(opts) {
 
 module.exports = {
   ALLOWED_OPEN_EXTENSIONS,
+  TEXT_CONTENT_EXTENSIONS,
   userMessageForOpenCode,
   resolveOpenableArtifact,
   resolvePrimaryForSelection,
@@ -330,4 +389,5 @@ module.exports = {
   isSelectionContextInvalidCode,
   openArtifactSecure,
   revealArtifactSecure,
+  readArtifactContent,
 };
