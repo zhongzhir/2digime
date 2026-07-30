@@ -1,0 +1,27 @@
+{
+  "files": [
+    ".identity-private-key.pem",
+    "identity.json",
+    "life/README.md",
+    "life/capability_signals.json",
+    "life/distill-me-identity-facts.json",
+    "life/domains.json",
+    "life/events.jsonl",
+    "life/inferences.jsonl",
+    "life/interests.json",
+    "life/mind_hooks.json",
+    "life/org_touchpoints.json",
+    "life/outcomes.json",
+    "life/people.json",
+    "life/relations.json",
+    "life/roles.json",
+    "manifest.json",
+    "memory/long-term-memory.jsonl",
+    "persona.md",
+    "policies/boundaries.json",
+    "preferences.json",
+    "sources/source-index.json",
+    "style-guide.md"
+  ],
+  "count": 22
+}

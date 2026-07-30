@@ -409,12 +409,16 @@ async function main() {
     }
   });
 
-  await test("12) writing/research independent scenes keep their own start buttons", () => {
+  await test("12) classic surface keeps DVL2 hub; retired research scene stays removed", () => {
     const html = fs.readFileSync(
       path.join(__dirname, "..", "src", "renderer", "index.html"),
       "utf8"
     );
-    assert.ok(html.includes("开始新研究") || html.includes("btn-research-new"));
+    // MVP-RELEASE-GATE-01B removed VL1 do-research / 开始新研究; DVL2 hub is the formal path.
+    assert.equal(html.includes('id="do-research"'), false);
+    assert.equal(html.includes("开始新研究"), false);
+    assert.equal(html.includes('id="btn-research-new"'), false);
+    assert.ok(html.includes('id="do-hub"') || html.includes("data-view=\"do\""));
     assert.equal(html.includes('id="btn-act-auto-generate"'), false);
   });
 

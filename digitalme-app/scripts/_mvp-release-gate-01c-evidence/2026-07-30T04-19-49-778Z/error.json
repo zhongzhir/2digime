@@ -1,0 +1,3 @@
+{
+  "error": "AssertionError [ERR_ASSERTION]: import must not modify source package\n+ actual - expected\n\n+ '8f2b233426bed4bde0b1451d7e5a76f3741977c4d64046db6cd10900cb993b94'\n- '8a3024d3f4d9342e9d138c951abefbffff94a6f86ad07bd8081cd773aac4b206'\n    at runHarness (D:\\Projects\\Digital Me\\digitalme-app\\scripts\\electron-mvp-release-gate-01c-acceptance.cjs:263:10)"
+}
