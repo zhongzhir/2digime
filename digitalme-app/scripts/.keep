@@ -1,0 +1,1 @@
+# keep scripts dir referenced if needed; evidence excluded via electron-builder files globs

@@ -1,5 +1,7 @@
 node_modules/
 dist/
+dist-alpha/
+dist-alpha-build/
 out/
 src/renderer-next/dist/
 test-results/
