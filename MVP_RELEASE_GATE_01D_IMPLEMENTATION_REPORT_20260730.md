@@ -14,17 +14,17 @@
 | 起始分支 | `codex/mvp-release-gate-01` |
 | 起始 HEAD | `d9f43f6b288d27602cec38310c68ecc3d0684f66` |
 | 最终分支 | `codex/mvp-release-gate-01` |
-| 最终 HEAD | 以本轮 commit tip 为准（见下方 commits） |
+| 最终 HEAD | `8c85f3ee5a161b1e2b48c91a51932da753dbe0be` |
 | Push | **未 push** |
 | 工作区 | 既有未跟踪审计/设计稿保留；本轮实现与证据已提交 |
 
-建议 commits：
+Commits：
 
-1. `fix(runtime): heal interrupted generation and learning jobs`
-2. `feat(storage): add recoverable JSON store persistence`
-3. `fix(artifacts): reconcile artifact files with authoritative store`
-4. `refactor(context): unify chat and task knowledge resolution`
-5. `test(mvp): validate release gate execution reliability`
+1. `f3a94df` — `fix(runtime): heal interrupted generation and learning jobs`
+2. `9d20951` — `feat(storage): add recoverable JSON store persistence`
+3. `f4960b3` — `fix(artifacts): reconcile artifact files with authoritative store`
+4. `c800fbe` — `refactor(context): unify chat and task knowledge resolution`
+5. `8c85f3e` — `test(mvp): validate release gate execution reliability`
 
 ---
 
