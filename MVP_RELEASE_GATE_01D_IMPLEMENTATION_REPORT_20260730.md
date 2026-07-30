@@ -14,9 +14,12 @@
 | 起始分支 | `codex/mvp-release-gate-01` |
 | 起始 HEAD | `d9f43f6b288d27602cec38310c68ecc3d0684f66` |
 | 最终分支 | `codex/mvp-release-gate-01` |
-| 最终 HEAD | `8c85f3ee5a161b1e2b48c91a51932da753dbe0be` |
+| 功能/测试收口 tip | `8c85f3ee5a161b1e2b48c91a51932da753dbe0be`（专项测试 + 证据 + 任务包 + 初版报告） |
+| 报告校正 tip（当前 HEAD） | `3924b0586d709bb611980a83daec428ff0413c8d`（仅修正报告中的 HEAD 表述；无功能代码变更） |
 | Push | **未 push** |
 | 工作区 | 既有未跟踪审计/设计稿保留；本轮实现与证据已提交 |
+
+**HEAD 关系（校正）**：`8c85f3e` 是 01D 功能与验收证据收口；`3924b05` 是其后的文档校正提交，且为 `8c85f3e` 的直接后代。二者无分叉。以 **分支 tip `3924b05`** 为进入 01E 的真实基线；评价 01D 能力时以 **`8c85f3e`** 为功能收口。
 
 Commits：
 
@@ -25,6 +28,7 @@ Commits：
 3. `f4960b3` — `fix(artifacts): reconcile artifact files with authoritative store`
 4. `c800fbe` — `refactor(context): unify chat and task knowledge resolution`
 5. `8c85f3e` — `test(mvp): validate release gate execution reliability`
+6. `3924b05` — `docs(mvp): record final HEAD for MVP-RELEASE-GATE-01D report`
 
 ---
 

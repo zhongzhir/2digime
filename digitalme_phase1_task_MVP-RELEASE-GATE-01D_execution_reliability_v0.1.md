@@ -3,6 +3,8 @@
 - **状态**：`implemented` / `ready_for_mvp_release_gate_01e` / `not_pushed`
 - **分支**：`codex/mvp-release-gate-01`
 - **起始 HEAD**：`d9f43f6`
+- **功能收口 tip**：`8c85f3e`
+- **进入 01E 基线 tip**：`3924b05`（含报告 HEAD 校正）
 - **性质**：`execution_reliability` / `generation_interrupt_recovery` / `store_backup_and_recovery` / `artifact_store_reconciliation` / `knowledge_resolution_unification` / `stable_delivery_production_hardening`
 - **上位**：`MVP-RELEASE-GATE-01C` + `TASK-DO-WORKSPACE-UX-01` → 本任务 → `01E`
 
