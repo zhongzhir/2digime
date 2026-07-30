@@ -2,6 +2,10 @@
 
 /**
  * Main-process orchestration for R1 legacy/next whole-window switching.
+ *
+ * MVP-RELEASE-GATE-01B: production product surface is locked to classic (legacy).
+ * renderer-next / R2 retained_as_frozen_infrastructure / not_mvp_product_surface.
+ * Ordinary npm start always loads classic via applyInitialEntry → legacy.
  */
 
 const { createRendererEntryController, parseExplicitGeneration } = require("./renderer-entry-controller");

@@ -144,17 +144,16 @@ async function run() {
     assert.equal(result.meIsBodyChild, false);
     assert.equal(result.extIsBodyChild, false);
   });
-  test("9. #view-do contains expected scene roots including act-behalf", () => {
-    for (const id of [
-      "do-hub",
-      "do-write",
-      "do-research",
-      "do-code",
-      "do-act-behalf",
-      "do-placeholder",
-    ]) {
+  test("9. #view-do contains MVP scene roots; legacy write/research/code removed", () => {
+    for (const id of ["do-hub", "do-act-behalf", "do-placeholder"]) {
       assert.ok(result.viewDoChildren.includes(id), "missing " + id);
     }
+    for (const id of ["do-write", "do-research", "do-code"]) {
+      assert.equal(result.viewDoChildren.includes(id), false, "legacy scene must be gone: " + id);
+    }
+    assert.equal(result.hasWrite, false);
+    assert.equal(result.hasResearch, false);
+    assert.equal(result.hasCode, false);
   });
   test("10. #main still hosts chat/do/extensions/me views", () => {
     for (const id of ["view-chat", "view-do", "view-extensions", "view-me"]) {

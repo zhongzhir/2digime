@@ -343,16 +343,17 @@ async function main() {
     }
   });
 
-  await test("6) UI: DVL2 default has no VL1 learn candidate buttons; conflict hidden by default", async () => {
+  await test("6) UI: DVL2 has learn conflict UI; VL1 learn candidate buttons removed", async () => {
     const root = path.join(__dirname, "..", "src", "renderer");
     const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
     const app = fs.readFileSync(path.join(root, "app.js"), "utf8");
     assert.ok(html.includes('id="act-learn-conflict"'));
     assert.ok(html.includes('class="act-learn-conflict hidden"'));
-    assert.equal(html.includes("总结本次经验") && html.includes('id="btn-act-create-proposal"'), true);
-    // DVL2 path must hide learn panel
+    // MVP-RELEASE-GATE-01B: VL1 learn panel / candidate buttons deleted (not merely hidden)
+    assert.equal(html.includes('id="act-learn-panel"'), false);
+    assert.equal(html.includes('id="btn-act-create-proposal"'), false);
+    assert.equal(html.includes("总结本次经验"), false);
     assert.match(app, /taskUsesDvl2Deliverables/);
-    assert.match(app, /hideDvl2LegacyLearnAndResultPanels/);
     assert.equal(html.includes("成果计划已准备，尚未开始执行"), false);
   });
 

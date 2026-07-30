@@ -254,11 +254,6 @@ function registerEarlyUiDelegates() {
     });
   }
   try {
-    bindBootstrapFileActions();
-  } catch (err) {
-    reportBindError("bootstrap-files-early", err);
-  }
-  try {
     bindHelpAndTips();
   } catch (err) {
     reportBindError("help-tips-early", err);
@@ -335,7 +330,7 @@ async function init() {
       const handoff = await window.digitalMe.consumeLegacyNavIntent();
       const intent = handoff && handoff.intent;
       if (intent && intent.libraryId && typeof openDoScene === "function") {
-        await openDoScene("write", { libraryId: String(intent.libraryId) });
+        await openDoScene("act_behalf", { libraryId: String(intent.libraryId) });
       }
     }
   } catch (err) {
@@ -1460,7 +1455,7 @@ async function openLinkedArtifactInWorkspace() {
   if (!currentArtifact && !linkedLibraryId) return;
   try {
     if (linkedLibraryId) {
-      await openDoScene("write", { libraryId: linkedLibraryId });
+      await openDoScene("act_behalf", { libraryId: linkedLibraryId });
       return;
     }
     // In-memory artifact without library id: save then open writing scene
@@ -1491,29 +1486,11 @@ async function keepAsDraftAndOpen() {
   if (!currentArtifact) return;
   try {
     const item = await saveArtifactToLibrary({ asNew: !linkedLibraryId });
-    addMessage("system-note", `已留为文稿「${item.title}」，正在打开写作工作区。`);
-    await openDoScene(doScene === "research" ? "research" : "write", { libraryId: item.id });
+    addMessage("system-note", `已留为文稿「${item.title}」，正在打开「做事」。`);
+    await openDoScene("act_behalf", { libraryId: item.id });
   } catch (e) {
     addMessage("system-note", "留为文稿失败：" + (e.message || "请重试"));
   }
-}
-
-function openInWriteWorkspace(item, { focusPrompt, scene } = {}) {
-  if (!item) return;
-  linkedLibraryId = item.id;
-  activeLibraryId = item.id;
-  currentArtifact = {
-    title: item.title || "文稿",
-    content: item.content || "",
-    libraryId: item.id,
-  };
-  openDoScene(scene || "write", { libraryId: item.id }).then(() => {
-    const input = $("write-input");
-    if (input && focusPrompt) {
-      input.value = `请基于右侧文稿「${item.title || "文稿"}」继续完善，保持我的表达风格，用 Markdown 输出完整正文。`;
-      input.focus();
-    }
-  });
 }
 
 function buildAttachmentContext() {
@@ -1693,15 +1670,9 @@ function bindEvents() {
     ["nav", bindNavControls],
     ["builder", bindBuilder],
     ["feedback", bindFeedback],
-    ["output", bindOutput],
     ["do", bindDo],
-    ["write", bindWriteWorkspace],
-    ["research", bindResearch],
-    ["code", bindCodeWorkspace],
     ["extensions", bindExtensions],
     ["me", bindMe],
-    ["panorama-experience", bindPanoramaExperience],
-    ["bootstrap-files", bindBootstrapFileActions],
     ["help-tips", bindHelpAndTips],
   ];
   for (const [name, fn] of steps) {
@@ -2277,12 +2248,6 @@ function applyBuildWizard() {
   const backbar = $("build-flow-backbar");
   if (backbar) backbar.classList.toggle("hidden", meLane !== "build");
 
-  const bootstrap = $("bootstrap-guide");
-  if (bootstrap) {
-    bootstrap.classList.add("hidden");
-    bootstrap.hidden = true;
-  }
-
   const intake = $("intake-card");
   if (intake) {
     intake.classList.toggle(
@@ -2313,616 +2278,6 @@ async function refreshBuildFlowFromOverview() {
 /** @deprecated walls removed from default surface; kept name for callers */
 function renderPanoramaBlocks(panorama) {
   renderMinimalSurface(panorama && panorama.minimalSurface);
-}
-
-// ---------- PAN-01R sovereign collaboration experience UI ----------
-const panExpState = {
-  brief: null,
-  request: null,
-  selectedIds: [],
-  preview: null,
-  run: null,
-  step: 1,
-};
-
-function showPanoramaExpStep(step) {
-  panExpState.step = step;
-  for (let i = 1; i <= 5; i += 1) {
-    const el = $(`panorama-exp-step${i}`);
-    if (el) el.classList.toggle("hidden", i !== step);
-  }
-}
-
-function closePanoramaExperience() {
-  const panel = $("panorama-experience-panel");
-  if (panel) {
-    panel.classList.add("hidden");
-    panel.hidden = true;
-  }
-  panExpState.brief = null;
-  panExpState.request = null;
-  panExpState.preview = null;
-  panExpState.run = null;
-  panExpState.selectedIds = [];
-}
-
-async function openPanoramaExperience() {
-  // PAN-01S: production has no entry; only main-approved test harness.
-  if (!window.digitalMe || window.digitalMe.pan01rTestHarness !== true) return;
-  const panel = $("panorama-experience-panel");
-  if (!panel || !window.digitalMe.getPanoramaSubjectBrief) return;
-  panel.hidden = false;
-  panel.classList.remove("hidden");
-  panel.scrollIntoView({ behavior: "smooth", block: "start" });
-  showPanoramaExpStep(1);
-  const step1 = $("panorama-exp-step1");
-  if (step1) setSafeText(step1, "正在加载主体依据…");
-  try {
-    const brief = await window.digitalMe.getPanoramaSubjectBrief({});
-    panExpState.brief = brief;
-    renderPanoramaExpStep1(brief);
-  } catch (e) {
-    if (step1) setSafeText(step1, "加载失败：" + (e.message || e));
-  }
-}
-
-function renderPanoramaExpStep1(brief) {
-  const el = $("panorama-exp-step1");
-  if (!el) return;
-  clearChildren(el);
-  const h = document.createElement("h4");
-  setSafeText(h, "步骤 1 · 它如何理解我");
-  el.appendChild(h);
-  if (brief.warningMessage) {
-    const w = document.createElement("p");
-    w.className = "muted";
-    setSafeText(w, brief.warningMessage);
-    el.appendChild(w);
-  }
-  if (brief.previewMode) {
-    const p = document.createElement("p");
-    p.className = "muted";
-    setSafeText(p, "主体依据不足：当前为通用预览，不能宣称已生成个性化 Digital Me 结果。");
-    el.appendChild(p);
-  }
-  panExpState.selectedIds = (brief.evidence || [])
-    .filter((e) => e.selectedByDefault && e.usableInExperience)
-    .map((e) => e.id);
-  const list = document.createElement("div");
-  list.className = "panorama-exp-evidence-list";
-  for (const ev of brief.evidence || []) {
-    const row = document.createElement("label");
-    row.className = "panorama-exp-evidence-row";
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.value = ev.id;
-    cb.checked = panExpState.selectedIds.includes(ev.id);
-    cb.disabled = !ev.usableInExperience;
-    cb.addEventListener("change", () => {
-      if (cb.checked) {
-        if (!panExpState.selectedIds.includes(ev.id)) panExpState.selectedIds.push(ev.id);
-      } else {
-        panExpState.selectedIds = panExpState.selectedIds.filter((id) => id !== ev.id);
-      }
-    });
-    row.appendChild(cb);
-    const text = document.createElement("span");
-    const confirmLabel = ev.ownerConfirmed ? "是" : "否";
-    setSafeText(
-      text,
-      `[${ev.kindLabel}] ${ev.shortText} · 来源：${ev.sourceLabel || "本机资料"} · 本人确认：${confirmLabel}`
-    );
-    row.appendChild(text);
-    list.appendChild(row);
-  }
-  el.appendChild(list);
-  if ((brief.boundaries || []).length) {
-    const bh = document.createElement("p");
-    setSafeText(bh, "本次强制生效的边界（不可作为共享内容取消）：");
-    el.appendChild(bh);
-    const ul = document.createElement("ul");
-    for (const b of brief.boundaries) {
-      const li = document.createElement("li");
-      setSafeText(li, b.shortText);
-      ul.appendChild(li);
-    }
-    el.appendChild(ul);
-  }
-  const next = document.createElement("button");
-  next.type = "button";
-  next.className = "btn-primary";
-  setSafeText(next, "进入协作请求");
-  next.addEventListener("click", () => renderPanoramaExpStep2());
-  el.appendChild(next);
-}
-
-async function renderPanoramaExpStep2() {
-  showPanoramaExpStep(2);
-  const el = $("panorama-exp-step2");
-  if (!el) return;
-  clearChildren(el);
-  const h = document.createElement("h4");
-  setSafeText(h, "步骤 2 · 收到协作请求");
-  el.appendChild(h);
-  const label = document.createElement("label");
-  setSafeText(label, "研究主题");
-  el.appendChild(label);
-  const input = document.createElement("input");
-  input.type = "text";
-  input.id = "panorama-exp-topic";
-  input.maxLength = 200;
-  input.value = "个人研究方向判断";
-  input.style.width = "100%";
-  el.appendChild(input);
-  const msg = document.createElement("p");
-  msg.className = "muted";
-  msg.id = "panorama-exp-step2-msg";
-  el.appendChild(msg);
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "btn-primary";
-  setSafeText(btn, "生成本地模拟请求");
-  btn.addEventListener("click", async () => {
-    setSafeText(msg, "正在创建…");
-    try {
-      const req = await window.digitalMe.createPanoramaRequest({
-        topic: input.value,
-        evidenceIds: panExpState.selectedIds.slice(),
-      });
-      if (!req || !req.ok) {
-        setSafeText(msg, (req && req.message) || "创建失败");
-        return;
-      }
-      panExpState.request = req;
-      renderPanoramaExpStep3();
-    } catch (e) {
-      setSafeText(msg, "创建失败：" + (e.message || e));
-    }
-  });
-  el.appendChild(btn);
-}
-
-async function renderPanoramaExpStep3() {
-  showPanoramaExpStep(3);
-  const el = $("panorama-exp-step3");
-  if (!el || !panExpState.request) return;
-  clearChildren(el);
-  const h = document.createElement("h4");
-  setSafeText(h, "步骤 3 · 由我授权");
-  el.appendChild(h);
-  const msg = document.createElement("p");
-  msg.className = "muted";
-  setSafeText(msg, "正在生成授权预览…");
-  el.appendChild(msg);
-  try {
-    const preview = await window.digitalMe.buildPanoramaAuthPreview({
-      requestId: panExpState.request.requestId,
-      selectedEvidenceIds: panExpState.selectedIds.slice(),
-    });
-    if (!preview || !preview.ok) {
-      setSafeText(msg, (preview && preview.message) || "授权预览失败");
-      return;
-    }
-    panExpState.preview = preview;
-    clearChildren(el);
-    el.appendChild(h);
-    const fields = [
-      ["请求方", preview.requester && preview.requester.label],
-      ["任务", preview.taskSummary],
-      [
-        "能力",
-        (preview.capabilities || []).map((c) => c.label).join("、"),
-      ],
-      [
-        "使用的内容",
-        (preview.selectedEvidence || []).map((e) => e.shortText).join("；") || "无",
-      ],
-      ["授权期限", preview.durationLabel],
-      ["结果去向", preview.resultDestination && preview.resultDestination.label],
-      [
-        "推理环境",
-        preview.inferenceEnvironment &&
-          `${preview.inferenceEnvironment.providerLabel}${
-            preview.inferenceEnvironment.modelLabel
-              ? " · " + preview.inferenceEnvironment.modelLabel
-              : ""
-          }`,
-      ],
-      [
-        "推理数据去向",
-        preview.inferenceEnvironment && preview.inferenceEnvironment.dataDestinationDisclosure,
-      ],
-      [
-        "是否发送给协作对象",
-        preview.inferenceEnvironment && preview.inferenceEnvironment.sentToSimulationPartner
-          ? "会发送"
-          : "不会发送给模拟协作伙伴",
-      ],
-    ];
-    for (const [lab, val] of fields) {
-      const p = document.createElement("p");
-      setSafeText(p, `${lab}：${val || "—"}`);
-      el.appendChild(p);
-    }
-    const shrink = document.createElement("p");
-    shrink.className = "muted";
-    setSafeText(shrink, "可返回步骤 1 取消部分依据以缩小范围。");
-    el.appendChild(shrink);
-    const actions = document.createElement("div");
-    actions.className = "builder-actions";
-    const back = document.createElement("button");
-    back.type = "button";
-    back.className = "btn-ghost";
-    setSafeText(back, "缩小范围");
-    back.addEventListener("click", () => {
-      showPanoramaExpStep(1);
-      if (panExpState.brief) renderPanoramaExpStep1(panExpState.brief);
-    });
-    const reject = document.createElement("button");
-    reject.type = "button";
-    reject.className = "btn-ghost";
-    setSafeText(reject, "拒绝请求");
-    reject.addEventListener("click", async () => {
-      const res = await window.digitalMe.rejectPanoramaRequest({
-        requestId: panExpState.request.requestId,
-      });
-      const note = document.createElement("p");
-      setSafeText(note, res && res.ok ? "已拒绝，未执行。" : (res && res.message) || "拒绝失败");
-      el.appendChild(note);
-    });
-    const confirm = document.createElement("button");
-    confirm.type = "button";
-    confirm.className = "btn-primary";
-    setSafeText(confirm, "确认并执行（仅本次）");
-    confirm.addEventListener("click", () => renderPanoramaExpStep4());
-    actions.appendChild(back);
-    actions.appendChild(reject);
-    actions.appendChild(confirm);
-    el.appendChild(actions);
-  } catch (e) {
-    setSafeText(msg, "授权预览失败：" + (e.message || e));
-  }
-}
-
-async function renderPanoramaExpStep4() {
-  showPanoramaExpStep(4);
-  const el = $("panorama-exp-step4");
-  if (!el || !panExpState.preview || !panExpState.preview.previewId) return;
-  clearChildren(el);
-  const h = document.createElement("h4");
-  setSafeText(h, "步骤 4 · Digital Me 代表我行动");
-  el.appendChild(h);
-  const status = document.createElement("p");
-  status.id = "panorama-exp-run-status";
-  setSafeText(status, "正在执行（通用结果与 Digital Me 结果彼此隔离）…");
-  el.appendChild(status);
-  const cancelBtn = document.createElement("button");
-  cancelBtn.type = "button";
-  cancelBtn.className = "btn-ghost";
-  cancelBtn.id = "panorama-exp-cancel";
-  setSafeText(cancelBtn, "停止");
-  el.appendChild(cancelBtn);
-
-  let runId = null;
-  let cancelRequested = false;
-  let cancelInFlight = false;
-  let lastCancelRes = null;
-  let unsubProgress = null;
-
-  async function requestCancel() {
-    cancelRequested = true;
-    if (!runId) {
-      setSafeText(status, "正在请求停止…");
-      return null;
-    }
-    if (cancelInFlight) return lastCancelRes;
-    cancelInFlight = true;
-    try {
-      const res = await window.digitalMe.cancelPanoramaRun({ runId });
-      lastCancelRes = res;
-      if (res && res.ok && (res.status === "cancelled" || res.status === "abandoned")) {
-        setSafeText(
-          status,
-          `已${res.status === "abandoned" ? "放弃" : "停止"}：迟到结果将被丢弃`
-        );
-        if (res.cancelLabel) setSafeText(cancelBtn, res.cancelLabel);
-      } else {
-        setSafeText(
-          status,
-          (res && res.message) ||
-            (res && res.status ? `无法停止（当前状态：${res.status}）` : "取消失败")
-        );
-      }
-      return res;
-    } finally {
-      cancelInFlight = false;
-    }
-  }
-
-  if (typeof window.digitalMe.onPanoramaRunProgress === "function") {
-    unsubProgress = window.digitalMe.onPanoramaRunProgress((info) => {
-      if (info && info.runId) {
-        runId = info.runId;
-        if (cancelRequested) requestCancel();
-      }
-      if (info && info.stage && !cancelRequested) {
-        setSafeText(status, `正在执行（${info.stage}）…`);
-      }
-    });
-  }
-  cancelBtn.addEventListener("click", () => {
-    requestCancel();
-  });
-
-  try {
-    const run = await window.digitalMe.confirmPanoramaExecute({
-      previewId: panExpState.preview.previewId,
-      confirmed: true,
-    });
-    if (typeof unsubProgress === "function") unsubProgress();
-    panExpState.run = run;
-    runId = (run && run.runId) || runId;
-
-    if (cancelRequested) {
-      let cancelRes = lastCancelRes;
-      if (runId && (!cancelRes || cancelRes.status === "completed" || cancelInFlight === false)) {
-        cancelRes = (await requestCancel()) || cancelRes;
-      }
-      if (
-        cancelRes &&
-        cancelRes.ok &&
-        (cancelRes.status === "cancelled" || cancelRes.status === "abandoned")
-      ) {
-        setSafeText(status, "已取消，结果不可采纳");
-        return;
-      }
-      // Late cancel could not abandon — show real status, never pretend stopped
-      if (run && (run.status === "cancelled" || run.status === "abandoned")) {
-        setSafeText(status, "已取消，结果不可采纳");
-        return;
-      }
-      setSafeText(
-        status,
-        (cancelRes && cancelRes.message) ||
-          (run && run.message) ||
-          "无法放弃本次结果；请查看真实状态"
-      );
-      return;
-    }
-
-    if (run && (run.status === "cancelled" || run.status === "abandoned")) {
-      setSafeText(status, "已取消，结果不可采纳");
-      return;
-    }
-    if (!run || run.ok === false || run.status === "failed") {
-      setSafeText(status, (run && run.message) || "执行失败");
-      if (run && run.settingsTarget === "settings") {
-        const link = document.createElement("button");
-        link.type = "button";
-        link.className = "btn-ghost";
-        setSafeText(link, "打开设置");
-        link.addEventListener("click", () => {
-          if (typeof openSettings === "function") openSettings();
-          else if (typeof showSettings === "function") showSettings();
-        });
-        el.appendChild(link);
-      }
-      return;
-    }
-    // Only enter step 5 for explicit completed, adoptable-path results when user did not cancel
-    if (run.status === "completed") {
-      renderPanoramaExpStep5(run);
-      return;
-    }
-    setSafeText(status, (run && run.message) || `运行结束（${run.status || "未知"}）`);
-  } catch (e) {
-    if (typeof unsubProgress === "function") unsubProgress();
-    if (cancelRequested) {
-      setSafeText(status, "已取消，结果不可采纳");
-      return;
-    }
-    setSafeText(status, "执行失败：" + (e.message || e));
-  }
-}
-
-function renderPanoramaExpStep5(run) {
-  showPanoramaExpStep(5);
-  const el = $("panorama-exp-step5");
-  if (!el) return;
-  clearChildren(el);
-  const h = document.createElement("h4");
-  setSafeText(h, "步骤 5 · 看见差异并处置结果");
-  el.appendChild(h);
-
-  const personalized = !!(run && run.personalizedAvailable && !run.previewMode);
-  const groundingBad =
-    run &&
-    (run.groundingCode === "grounding_invalid" ||
-      run.groundingCode === "grounding_missing" ||
-      run.code === "grounding_invalid" ||
-      run.code === "grounding_missing");
-
-  if (run && (run.adoptable === false || groundingBad)) {
-    const warn = document.createElement("p");
-    warn.className = "muted";
-    setSafeText(
-      warn,
-      (run && run.message) || "本次结果不可采纳（例如记录未完成、依据不足或已取消）。"
-    );
-    el.appendChild(warn);
-  }
-
-  const result = (run && run.result) || {};
-  const grid = document.createElement("div");
-  grid.className = "panorama-exp-compare";
-  const left = document.createElement("div");
-  const lh = document.createElement("strong");
-  setSafeText(lh, "通用 AI 结果");
-  left.appendChild(lh);
-  const lt = document.createElement("pre");
-  setSafeText(lt, result.genericText || "");
-  left.appendChild(lt);
-  const right = document.createElement("div");
-  const rh = document.createElement("strong");
-  setSafeText(
-    rh,
-    personalized
-      ? run.digitalMeResultTitle || "我的 Digital Me 结果"
-      : run.digitalMeResultTitle || "主体依据不足，仅提供通用预览"
-  );
-  right.appendChild(rh);
-  const rt = document.createElement("pre");
-  setSafeText(rt, result.digitalMeText || "");
-  right.appendChild(rt);
-  grid.appendChild(left);
-  grid.appendChild(right);
-  el.appendChild(grid);
-
-  const citeMap = result.citeMap || [];
-  if (citeMap.length) {
-    const citeTitle = document.createElement("p");
-    setSafeText(citeTitle, "依据引用对照：");
-    el.appendChild(citeTitle);
-    const table = document.createElement("ul");
-    for (const c of citeMap) {
-      const li = document.createElement("li");
-      setSafeText(
-        li,
-        `${c.citeId} → [${c.kindLabel || ""}] ${c.shortText || ""}${
-          c.sourceLabel ? " · " + c.sourceLabel : ""
-        }`
-      );
-      table.appendChild(li);
-    }
-    el.appendChild(table);
-  } else {
-    const cite = document.createElement("p");
-    setSafeText(
-      cite,
-      "生成时使用的依据引用：" +
-        ((result.citations || []).length ? result.citations.join("、") : "无")
-    );
-    el.appendChild(cite);
-  }
-
-  const boundaries = result.enforcedBoundaries || result.boundaries || [];
-  if (boundaries.length) {
-    const bh = document.createElement("p");
-    setSafeText(bh, "强制生效的边界：");
-    el.appendChild(bh);
-    const ul = document.createElement("ul");
-    for (const b of boundaries) {
-      const li = document.createElement("li");
-      setSafeText(li, b.shortText || "");
-      ul.appendChild(li);
-    }
-    el.appendChild(ul);
-  }
-
-  const unused = result.unusedSummary || [];
-  if (unused.length) {
-    const uh = document.createElement("p");
-    setSafeText(
-      uh,
-      "未使用的依据摘要：" +
-        unused.map((u) => `${u.kindLabel || u.kind}×${u.count}`).join("、")
-    );
-    el.appendChild(uh);
-  }
-
-  const partner = document.createElement("p");
-  partner.className = "muted";
-  setSafeText(partner, "未发送给模拟协作伙伴");
-  el.appendChild(partner);
-  if (run.inferenceEnvironment && run.inferenceEnvironment.dataDestinationDisclosure) {
-    const disc = document.createElement("p");
-    disc.className = "muted";
-    setSafeText(disc, run.inferenceEnvironment.dataDestinationDisclosure);
-    el.appendChild(disc);
-  }
-
-  if (!run.adoptable) {
-    const reason = document.createElement("p");
-    reason.className = "muted";
-    setSafeText(
-      reason,
-      run.message
-        ? `不可采纳原因：${run.message}`
-        : personalized
-          ? "本次结果暂不可采纳"
-          : "主体依据不足，通用预览不可采纳为个性化成果"
-    );
-    el.appendChild(reason);
-  }
-
-  const msg = document.createElement("p");
-  msg.id = "panorama-exp-step5-msg";
-  el.appendChild(msg);
-
-  const canAdopt = !!run.adoptable && !groundingBad;
-  const actions = document.createElement("div");
-  actions.className = "builder-actions";
-  const adopt = document.createElement("button");
-  adopt.type = "button";
-  adopt.className = "btn-primary";
-  setSafeText(adopt, "采纳为我的本地成果");
-  adopt.disabled = !canAdopt;
-  adopt.addEventListener("click", async () => {
-    const res = await window.digitalMe.adoptPanoramaResult({ runId: run.runId });
-    if (res && res.ok) {
-      if (res.committed && res.auditWarning) {
-        setSafeText(msg, "成果已保存，但过程记录失败");
-      } else {
-        setSafeText(msg, (res && res.message) || "已保存为你的本地成果");
-      }
-    } else {
-      setSafeText(msg, (res && res.message) || "采纳失败");
-    }
-  });
-  const reject = document.createElement("button");
-  reject.type = "button";
-  reject.className = "btn-ghost";
-  setSafeText(reject, "拒绝本次结果");
-  reject.addEventListener("click", async () => {
-    const res = await window.digitalMe.rejectPanoramaResult({
-      runId: run.runId,
-      reasonCategory: "not_useful",
-    });
-    if (res && res.ok) {
-      setSafeText(msg, (res && res.message) || "已拒绝本次结果，未写入成果库");
-    } else {
-      setSafeText(msg, (res && res.message) || "拒绝失败");
-    }
-  });
-  const receipt = document.createElement("button");
-  receipt.type = "button";
-  receipt.className = "btn-ghost";
-  setSafeText(receipt, "查看过程记录");
-  receipt.addEventListener("click", async () => {
-    const res = await window.digitalMe.getPanoramaReceiptSummary({
-      runId: run.runId,
-      requestId: run.requestId,
-    });
-    setSafeText(
-      msg,
-      res && res.ok
-        ? `记录：状态 ${res.runStatus || "—"}；依据 ${res.evidenceCount} 条；本地模拟=${res.localSimulation}`
-        : (res && res.message) || "无法读取记录"
-    );
-  });
-  actions.appendChild(adopt);
-  actions.appendChild(reject);
-  actions.appendChild(receipt);
-  el.appendChild(actions);
-}
-
-function bindPanoramaExperience() {
-  // No production CTA. Close only; open requires test harness flag on preload.
-  $("panorama-exp-close")?.addEventListener("click", () => closePanoramaExperience());
-  // Expose harness-only opener for owner-runtime (not discoverable via production UI).
-  if (window.digitalMe && window.digitalMe.pan01rTestHarness === true) {
-    window.__digitalMeOpenPanoramaExperienceForTest = () => openPanoramaExperience();
-  }
 }
 
 // ---------- Builder ----------
@@ -5099,37 +4454,9 @@ async function generatePptFromDocument(title, content) {
     alert("没有可用于生成 PPT 的正文。");
     return;
   }
-  if (!pkg) pkg = await window.digitalMe.loadPackage();
-  const topic = (title || "演讲").replace(/^#\s*/, "").slice(0, 60);
-  await openDoScene("write");
-  $("ppt-panel").classList.remove("hidden");
-  $("ppt-topic").value = topic;
-  $("ppt-context").value = text.slice(0, 12000);
-  $("ppt-progress").textContent = "正在根据文稿生成幻灯片结构…";
-  $("btn-ppt-plan").disabled = true;
-  $("btn-ppt-export").disabled = true;
-  $("ppt-preview").classList.add("hidden");
-  try {
-    pptPlan = await window.digitalMe.planPpt({
-      pkg,
-      brief: {
-        topic,
-        occasion: "根据既有文稿汇报",
-        duration: "",
-        audience: "",
-        keyPoints: "",
-        context: text.slice(0, 12000),
-      },
-    });
-    renderPptPreview(pptPlan);
-    $("ppt-progress").textContent = `已根据文稿生成「${pptPlan.title}」，共 ${pptPlan.slides.length} 页。可预览后导出 PPTX。`;
-    $("btn-ppt-export").disabled = false;
-  } catch (e) {
-    $("ppt-progress").textContent = "生成失败：" + e.message;
-    pptPlan = null;
-  } finally {
-    $("btn-ppt-plan").disabled = false;
-  }
+  // The standalone PPT panel was removed with the write workspace; this entry now
+  // only offers a redirect message so callers (e.g. chat's "生成 PPT" action) don't crash.
+  addMessage("system-note", "由文稿直接生成 PPT 的入口已合并到「做事」流程，请在「做事」中新建任务并说明需要的演示文稿。");
 }
 
 function renderLibraryTemplates() {
@@ -5318,11 +4645,6 @@ function showDoHub() {
   doScene = null;
   setActiveArtifactContext(null, null);
   $("do-hub").classList.remove("hidden");
-  $("do-write").classList.add("hidden");
-  const dr = $("do-research");
-  if (dr) dr.classList.add("hidden");
-  const dc = $("do-code");
-  if (dc) dc.classList.add("hidden");
   const da = $("do-act-behalf");
   if (da) da.classList.add("hidden");
   $("do-placeholder").classList.add("hidden");
@@ -5380,11 +4702,6 @@ async function openDoScene(sceneId, opts = {}) {
     $("view-extensions").classList.add("hidden");
     $("do-hub").classList.add("hidden");
     $("do-placeholder").classList.add("hidden");
-    $("do-write").classList.add("hidden");
-    const drA = $("do-research");
-    if (drA) drA.classList.add("hidden");
-    const dcA = $("do-code");
-    if (dcA) dcA.classList.add("hidden");
     const da = $("do-act-behalf");
     if (da) da.classList.remove("hidden");
     doScene = "act_behalf";
@@ -5417,11 +4734,6 @@ async function openDoScene(sceneId, opts = {}) {
   if (scene.status === "prep") {
     doScene = sceneId;
     $("do-hub").classList.add("hidden");
-    $("do-write").classList.add("hidden");
-    const dr0 = $("do-research");
-    if (dr0) dr0.classList.add("hidden");
-    const dc0 = $("do-code");
-    if (dc0) dc0.classList.add("hidden");
     const da0 = $("do-act-behalf");
     if (da0) da0.classList.add("hidden");
     $("do-placeholder").classList.remove("hidden");
@@ -5434,39 +4746,11 @@ async function openDoScene(sceneId, opts = {}) {
   $("do-hub").classList.add("hidden");
   $("do-placeholder").classList.add("hidden");
 
-  if (sceneId === "act_behalf") {
-    doScene = "act_behalf";
-    $("do-write").classList.add("hidden");
-    const drA = $("do-research");
-    if (drA) drA.classList.add("hidden");
-    const dcA = $("do-code");
-    if (dcA) dcA.classList.add("hidden");
-    const da = $("do-act-behalf");
-    if (da) da.classList.remove("hidden");
-    await openActBehalfScene(opts);
-    return;
-  }
-
-  doScene = "write";
-  const dr = $("do-research");
-  if (dr) dr.classList.add("hidden");
-  const dcW = $("do-code");
-  if (dcW) dcW.classList.add("hidden");
-  const daW = $("do-act-behalf");
-  if (daW) daW.classList.add("hidden");
-  $("do-write").classList.remove("hidden");
-  $("do-write-title").textContent = "写作";
-  $("do-write-sub").textContent = "新建文稿或直接描述要写什么；改稿与导出在同一页。";
-  applyWriteIntents();
-  await refreshSkillBar("write");
-  const sk = activeSkillByScene.write;
-  activeScenario = {
-    id: "write",
-    title: "写作",
-    systemHint: (sk && sk.systemHint) || WRITE_SCENE_HINT,
-  };
-  await refreshLibraryView();
-  if (opts.libraryId) await openLibraryItem(opts.libraryId);
+  // act_behalf is the only DO_SCENES entry with status "ready".
+  doScene = "act_behalf";
+  const da = $("do-act-behalf");
+  if (da) da.classList.remove("hidden");
+  await openActBehalfScene(opts);
 }
 
 /** First vertical loop: research-express Task Intent + Subject Context + readonly research */
@@ -5503,7 +4787,6 @@ const dmPerf = {
   bindEventsSkipped: 0,
   taskListRenderCount: 0,
   generationPanelRenderCount: 0,
-  artifactOpenHandlerCalls: 0,
   enhancementRefreshScheduled: 0,
   enhancementRefreshExecuted: 0,
   listenerInstall: {
@@ -5649,17 +4932,8 @@ function clearActResearchSources() {
   if (list) list.innerHTML = "";
 }
 
-function updateActResearchPanelVisibility() {
-  // DVL2 默认页不再展示 VL1 调研入口；兼容入口仅在显式 opt-in 时开放。
-  const panel = $("act-research-panel");
-  const btn = $("btn-act-run");
-  if (panel) {
-    panel.classList.add("hidden");
-    panel.setAttribute("hidden", "true");
-    panel.setAttribute("aria-hidden", "true");
-  }
-  if (btn) btn.disabled = true;
-}
+/** No-op: VL1 research panel and its trigger button were deleted from the DOM; kept as a name for existing callers. */
+function updateActResearchPanelVisibility() {}
 
 function renderActSourceList(sources, opts = {}) {
   const list = $("act-source-list");
@@ -5806,12 +5080,8 @@ function taskUsesDvl2Deliverables(task) {
   return false;
 }
 
-function hideDvl2LegacyLearnAndResultPanels() {
-  const resultPanel = $("act-result-gen-panel");
-  if (resultPanel) resultPanel.classList.add("hidden");
-  const learnPanel = $("act-learn-panel");
-  if (learnPanel) learnPanel.classList.add("hidden");
-}
+/** No-op: VL1 result/learn panels were deleted from the DOM; kept as a name for existing callers. */
+function hideDvl2LegacyLearnAndResultPanels() {}
 
 function updateActResultGenVisibility(task) {
   const btn = $("btn-act-generate-result");
@@ -6000,429 +5270,7 @@ function renderActResultFromTask(task) {
   if (saveBtn) saveBtn.disabled = !editable;
   if (adoptBtn) adoptBtn.disabled = !editable;
   if (rejectBtn) rejectBtn.disabled = !editable;
-  renderActLearnFromTask(task, result, current);
-}
-
-function pickDisplayProposal(task, result) {
-  const list = Array.isArray(task && task.proposals) ? task.proposals : [];
-  if (!result) return null;
-  for (let i = list.length - 1; i >= 0; i -= 1) {
-    const p = list[i];
-    if (!p) continue;
-    if (p.resultId === result.resultId) return p;
-  }
-  return null;
-}
-
-function setActLearnStatus(text) {
-  const el = $("act-learn-status");
-  if (el) el.textContent = text || "";
-}
-
-function renderActLearnFromTask(task, result, resultCurrent) {
-  const panel = $("act-learn-panel");
-  // DVL2: never revive VL1 candidate-learning UI on the deliverables path.
-  if (taskUsesDvl2Deliverables(task)) {
-    if (panel) panel.classList.add("hidden");
-    return;
-  }
-  const listEl = $("act-proposal-candidates");
-  const previewEl = $("act-proposal-preview");
-  const btnCreate = $("btn-act-create-proposal");
-  const btnSave = $("btn-act-save-proposal-review");
-  const btnPreview = $("btn-act-preview-proposal");
-  const btnApply = $("btn-act-apply-proposal");
-  const btnReject = $("btn-act-reject-proposal");
-
-  const canLearn =
-    result &&
-    resultCurrent &&
-    result.status === "succeeded" &&
-    result.ownerDecision === "adopted";
-  if (panel) panel.classList.toggle("hidden", !canLearn && !(result && result.ownerDecision === "adopted"));
-
-  const proposal = pickDisplayProposal(task, result);
-  actBehalfState.currentProposal = proposal || null;
-
-  if (!canLearn) {
-    if (panel && result && result.ownerDecision === "rejected") {
-      panel.classList.remove("hidden");
-      setActLearnStatus("已否定的成果不能进入正式回流。");
-    } else if (!canLearn && panel && result && result.status === "succeeded" && !resultCurrent) {
-      panel.classList.remove("hidden");
-      setActLearnStatus("历史成果，不适用于当前状态，不能总结学习建议。");
-    }
-    if (btnCreate) btnCreate.disabled = true;
-    if (btnSave) btnSave.disabled = true;
-    if (btnPreview) btnPreview.disabled = true;
-    if (btnApply) btnApply.disabled = true;
-    if (btnReject) btnReject.disabled = true;
-    if (listEl) listEl.innerHTML = "";
-    if (previewEl) {
-      previewEl.textContent = "";
-      previewEl.classList.add("hidden");
-    }
-    if (!result || result.ownerDecision !== "adopted") {
-      if (panel && !(result && result.ownerDecision === "rejected") && !(result && !resultCurrent)) {
-        panel.classList.add("hidden");
-      }
-    }
-    return;
-  }
-
-  if (panel) panel.classList.remove("hidden");
-  if (btnCreate) btnCreate.disabled = false;
-
-  if (!proposal) {
-    setActLearnStatus("采用成果不等于写入 Digital Me。可点击「总结本次经验」查看学习建议。");
-    if (listEl) listEl.innerHTML = "";
-    if (previewEl) previewEl.classList.add("hidden");
-    if (btnSave) btnSave.disabled = true;
-    if (btnPreview) btnPreview.disabled = true;
-    if (btnApply) btnApply.disabled = true;
-    if (btnReject) btnReject.disabled = true;
-    return;
-  }
-
-  const stale = !!proposal.stale;
-  if (stale) {
-    setActLearnStatus(
-      "历史学习建议，不适用于当前状态。" + (proposal.staleReason ? " " + proposal.staleReason : "")
-    );
-  } else if (proposal.status === "applied") {
-    setActLearnStatus(
-      "已写入主体资料包。新版本：" +
-        ((proposal.apply && proposal.apply.packageResultVersion) || "—")
-    );
-  } else if (proposal.status === "interrupted") {
-    setActLearnStatus("上次学习建议操作中断，未成功写入。可重新总结。");
-  } else if (proposal.status === "failed") {
-    setActLearnStatus(
-      "学习建议生成失败：" +
-        ((proposal.modelInvocation && proposal.modelInvocation.errorSafeSummary) || "未知错误")
-    );
-  } else if (proposal.status === "previewed") {
-    setActLearnStatus("已生成变更预览。请核对后再次确认写入。预览本身不会修改主体资料包。");
-  } else {
-    setActLearnStatus("请审阅候选经验：可采用、修改后采用，或排除。");
-  }
-
-  const editable =
-    !stale &&
-    proposal.status !== "applied" &&
-    proposal.status !== "rejected" &&
-    proposal.status !== "generating" &&
-    proposal.status !== "previewing" &&
-    proposal.status !== "applying";
-
-  if (listEl) {
-    listEl.innerHTML = "";
-    (proposal.candidates || []).forEach((c) => {
-      const wrap = document.createElement("div");
-      wrap.className = "output-card";
-      wrap.setAttribute("data-candidate-id", c.candidateId);
-      const head = document.createElement("p");
-      head.className = "muted write-rail-hint";
-      head.textContent =
-        `类型：${c.targetKind} · 置信：${c.confidence || "—"}` +
-        (c.caveat ? ` · 注意：${c.caveat}` : "");
-      const rationale = document.createElement("p");
-      rationale.className = "muted write-rail-hint";
-      rationale.textContent =
-        `理由：${c.rationale || "—"}；依据 claims=${(c.basedOnSubjectClaimIds || []).join(",") || "无"}；` +
-        `sections=${(c.basedOnResultSections || []).join(",") || "无"}`;
-      const ta = document.createElement("textarea");
-      ta.rows = 3;
-      ta.value = c.ownerText || c.proposedText || "";
-      ta.disabled = !editable;
-      ta.setAttribute("data-testid", "act-candidate-text-" + c.candidateId);
-      const actions = document.createElement("div");
-      actions.className = "builder-actions";
-      const mkBtn = (label, state, testid) => {
-        const b = document.createElement("button");
-        b.type = "button";
-        b.className = c.ownerState === state ? "" : "btn-ghost";
-        b.textContent = label;
-        b.disabled = !editable;
-        b.setAttribute("data-testid", testid);
-        b.addEventListener("click", () => {
-          c.ownerState = state;
-          if (state === "edited" || state === "accepted") c.ownerText = ta.value;
-          renderActLearnFromTask(task, result, resultCurrent);
-        });
-        return b;
-      };
-      actions.appendChild(mkBtn("采用", "accepted", "btn-cand-accept-" + c.candidateId));
-      actions.appendChild(mkBtn("修改后采用", "edited", "btn-cand-edit-" + c.candidateId));
-      actions.appendChild(mkBtn("排除", "excluded", "btn-cand-exclude-" + c.candidateId));
-      ta.addEventListener("change", () => {
-        c.ownerText = ta.value;
-        if (c.ownerState === "accepted" && ta.value !== c.originalProposedText) {
-          c.ownerState = "edited";
-        }
-      });
-      wrap.appendChild(head);
-      wrap.appendChild(rationale);
-      wrap.appendChild(ta);
-      wrap.appendChild(actions);
-      listEl.appendChild(wrap);
-    });
-  }
-
-  if (previewEl) {
-    if (proposal.preview && proposal.preview.status === "succeeded") {
-      previewEl.classList.remove("hidden");
-      previewEl.textContent = JSON.stringify(
-        {
-          previewId: proposal.preview.previewId,
-          packageBaseVersion: proposal.preview.packageBaseVersion,
-          plans: proposal.preview.plans,
-          changes: proposal.preview.changes,
-          warnings: proposal.preview.warnings,
-        },
-        null,
-        2
-      );
-    } else {
-      previewEl.classList.add("hidden");
-      previewEl.textContent = "";
-    }
-  }
-
-  if (btnSave) btnSave.disabled = !editable;
-  if (btnPreview) btnPreview.disabled = !editable;
-  if (btnApply) {
-    btnApply.disabled = !(
-      !stale &&
-      proposal.status === "previewed" &&
-      proposal.preview &&
-      proposal.preview.previewId
-    );
-  }
-  if (btnReject) btnReject.disabled = !editable || proposal.status === "applied";
-}
-
-async function createActExperienceProposal() {
-  const result = actBehalfState.currentResult;
-  if (!result || !actBehalfState.taskId) return;
-  setActLearnStatus("正在总结本次经验…");
-  const res = await window.digitalMe.actBehalfCreateExperienceProposal({
-    taskId: actBehalfState.taskId,
-    resultId: result.resultId,
-  });
-  if (!res || !res.ok) {
-    setActLearnStatus((res && res.message) || "无法生成学习建议。");
-    if (res && res.task) renderActResearchFromTask(res.task);
-    return;
-  }
-  renderActResearchFromTask(res.task);
-  setActLearnStatus(res.message || "学习建议已生成。");
-}
-
-async function saveActProposalReview() {
-  const proposal = actBehalfState.currentProposal;
-  if (!proposal || !actBehalfState.taskId) return;
-  const listEl = $("act-proposal-candidates");
-  const candidates = (proposal.candidates || []).map((c) => {
-    const wrap =
-      listEl && listEl.querySelector('[data-candidate-id="' + c.candidateId + '"]');
-    const ta = wrap && wrap.querySelector("textarea");
-    return {
-      candidateId: c.candidateId,
-      ownerState: c.ownerState,
-      ownerText: ta ? ta.value : c.ownerText,
-    };
-  });
-  const res = await window.digitalMe.actBehalfSaveExperienceProposalReview({
-    taskId: actBehalfState.taskId,
-    proposalId: proposal.proposalId,
-    expectedRevision: proposal.currentRevision,
-    candidates,
-  });
-  if (!res || !res.ok) {
-    setActLearnStatus((res && res.message) || "保存审阅失败。");
-    return;
-  }
-  renderActResearchFromTask(res.task);
-  setActLearnStatus(res.message || "审阅已保存。");
-}
-
-async function previewActProposal() {
-  const proposalBefore = actBehalfState.currentProposal;
-  if (!proposalBefore || !actBehalfState.taskId) return;
-  await saveActProposalReview();
-  const proposal = actBehalfState.currentProposal;
-  if (!proposal || !actBehalfState.taskId) return;
-  const res = await window.digitalMe.actBehalfPreviewExperienceProposal({
-    taskId: actBehalfState.taskId,
-    proposalId: proposal.proposalId,
-    expectedRevision: proposal.currentRevision,
-  });
-  if (!res || !res.ok) {
-    setActLearnStatus((res && res.message) || "预览失败。");
-    if (res && res.task) renderActResearchFromTask(res.task);
-    return;
-  }
-  renderActResearchFromTask(res.task);
-  setActLearnStatus(res.message || "预览已生成。");
-}
-
-async function applyActProposal() {
-  const proposal = actBehalfState.currentProposal;
-  if (!proposal || !actBehalfState.taskId || !proposal.preview) return;
-  const ok = window.confirm(
-    "确认将已审阅的学习内容写入 Digital Me 主体资料包？此操作会生成新的资料包版本。"
-  );
-  if (!ok) return;
-  const res = await window.digitalMe.actBehalfApplyExperienceProposal({
-    taskId: actBehalfState.taskId,
-    proposalId: proposal.proposalId,
-    previewId: proposal.preview.previewId,
-    expectedRevision: proposal.currentRevision,
-    confirm: true,
-  });
-  if (!res || !res.ok) {
-    setActLearnStatus((res && res.message) || "写入失败。");
-    if (res && res.task) renderActResearchFromTask(res.task);
-    return;
-  }
-  renderActResearchFromTask(res.task);
-  setActLearnStatus(res.message || "已写入。");
-}
-
-async function rejectActProposal() {
-  const proposal = actBehalfState.currentProposal;
-  if (!proposal || !actBehalfState.taskId) return;
-  const res = await window.digitalMe.actBehalfRejectExperienceProposal({
-    taskId: actBehalfState.taskId,
-    proposalId: proposal.proposalId,
-    expectedRevision: proposal.currentRevision,
-  });
-  if (!res || !res.ok) {
-    setActLearnStatus((res && res.message) || "拒绝失败。");
-    return;
-  }
-  renderActResearchFromTask(res.task);
-  setActLearnStatus(res.message || "已拒绝。");
-}
-
-async function generateActBehalfResult(opts = {}) {
-  if (!actBehalfState.taskId) {
-    setActProgress("请先保存任务。");
-    return;
-  }
-  setActResultGenStatus("正在生成成果…");
-  setActProgress("正在生成有来源约束的成果…");
-  const res = await window.digitalMe.actBehalfGenerateResult({
-    taskId: actBehalfState.taskId,
-    continueWithoutExternalSources: !!opts.continueWithoutExternalSources,
-  });
-  if (!res || !res.ok) {
-    if (res && res.code === "external_sources_unavailable") {
-      setActResultGenStatus(res.message || "未取得外部来源。");
-      const btnNoExt = $("btn-act-generate-without-ext");
-      if (btnNoExt) btnNoExt.classList.remove("hidden");
-    } else {
-      setActResultGenStatus((res && res.message) || "生成失败。");
-    }
-    if (res && res.task) renderActResearchFromTask(res.task);
-    setActProgress((res && res.message) || "生成失败。");
-    return;
-  }
-  renderActResearchFromTask(res.task);
-  setActProgress(res.message || "成果已生成。");
-  await refreshActTaskList();
-}
-
-async function saveActBehalfResultDraft() {
-  const result = actBehalfState.currentResult;
-  const text = ($("act-final-draft") && $("act-final-draft").value) || "";
-  if (!actBehalfState.taskId) return;
-  if (!result) {
-    const res = await window.digitalMe.actBehalfSaveAutoResult({ taskId: actBehalfState.taskId, currentText: text });
-    if (!res || !res.ok) {
-      setActResultGenStatus((res && res.message) || "保存成果失败。可继续编辑后重试，或稍后从「做事 > 任务列表」再打开。");
-      return;
-    }
-    renderActResultFromTask(res.task);
-    const entry = (res && res.entry) || "做事 > 任务列表";
-    setActResultGenStatus(
-      `成果已保存到本机任务库（任务 ${actBehalfState.taskId}）。入口：${entry}；可重新打开继续修改。复制文本不算完成。`
-    );
-    const saveBtn = $("btn-act-save-result");
-    if (saveBtn) {
-      const orig = saveBtn.dataset.label || saveBtn.textContent;
-      saveBtn.dataset.label = orig;
-      saveBtn.textContent = "已保存";
-      setTimeout(() => {
-        saveBtn.textContent = orig;
-      }, 2000);
-    }
-    return;
-  }
-  const res = await window.digitalMe.actBehalfSaveResultDraft({
-    taskId: actBehalfState.taskId,
-    resultId: result.resultId,
-    currentText: text,
-    expectedRevision: result.currentRevision,
-  });
-  if (!res || !res.ok) {
-    setActResultGenStatus((res && res.message) || "保存失败。可继续编辑后重试。");
-    return;
-  }
-  renderActResearchFromTask(res.task);
-  setActResultGenStatus(`成果修改已保存（任务 ${actBehalfState.taskId}）。入口：做事 > 任务列表。`);
-  const saveBtn = $("btn-act-save-result");
-  if (saveBtn) {
-    const orig = saveBtn.dataset.label || saveBtn.textContent;
-    saveBtn.dataset.label = orig;
-    saveBtn.textContent = "已保存";
-    setTimeout(() => {
-      saveBtn.textContent = orig;
-    }, 2000);
-  }
-}
-
-async function decideActBehalfResult(decision) {
-  const result = actBehalfState.currentResult;
-  if (!actBehalfState.taskId) return;
-  if (!result) {
-    const text = ($("act-final-draft") && $("act-final-draft").value) || "";
-    const res = await window.digitalMe.actBehalfSaveAutoResult({ taskId: actBehalfState.taskId, currentText: text, decision });
-    if (!res || !res.ok) {
-      setActResultGenStatus((res && res.message) || "采用失败。可继续编辑后重试。");
-      return;
-    }
-    renderActResultFromTask(res.task);
-    setActResultGenStatus(
-      decision === "adopted"
-        ? `已采用为成果并保存到本机任务库（任务 ${actBehalfState.taskId}）。入口：做事 > 任务列表。`
-        : `已否定本成果（任务 ${actBehalfState.taskId}）。记录已保留；可继续编辑后重新保存。`
-    );
-    const btn =
-      decision === "adopted" ? $("btn-act-adopt-result") : $("btn-act-reject-result");
-    if (btn) {
-      const orig = btn.dataset.label || btn.textContent;
-      btn.dataset.label = orig;
-      btn.textContent = decision === "adopted" ? "已采用" : "已否定";
-      setTimeout(() => {
-        btn.textContent = orig;
-      }, 2000);
-    }
-    return;
-  }
-  const res = await window.digitalMe.actBehalfDecideResult({
-    taskId: actBehalfState.taskId,
-    resultId: result.resultId,
-    decision,
-    expectedRevision: result.currentRevision,
-  });
-  if (!res || !res.ok) {
-    setActResultGenStatus((res && res.message) || "处置失败。可继续编辑后重试。");
-    return;
-  }
-  renderActResearchFromTask(res.task);
-  setActResultGenStatus(res.message || "已保存处置。");
+  // VL1 candidate-learning UI (act-learn-panel and its proposal controls) was deleted from the DOM.
 }
 
 async function ensureActResearchSkillBlurb() {
@@ -6441,37 +5289,6 @@ async function ensureActResearchSkillBlurb() {
   if (stepsEl && Array.isArray(res.skill.steps) && res.skill.steps.length) {
     stepsEl.textContent = "步骤：" + res.skill.steps.join(" → ") + "（本块完成检索，不撰写最终成果）。";
   }
-}
-
-async function startActBehalfResearch() {
-  if (!actBehalfState.taskId) {
-    setActProgress("请先确认并保存任务。");
-    return;
-  }
-  if (!actBehalfState.confirmed || actBehalfState.confirmed.confirmationState !== "confirmed") {
-    setActProgress("请先确认本人上下文。");
-    return;
-  }
-  const btn = $("btn-act-run");
-  if (btn) btn.disabled = true;
-  setActResearchStatus("正在执行只读外部调研…");
-  setActProgress("正在调用通用调研 Skill 与只读外部检索…");
-  const res = await window.digitalMe.actBehalfStartResearch({
-    taskId: actBehalfState.taskId,
-    skillId: "psk_preset_general_research",
-  });
-  if (!res || !res.ok) {
-    if (res && res.task) renderActResearchFromTask(res.task);
-    setActProgress((res && res.message) || "调研失败。");
-    setActResearchStatus((res && res.message) || "调研失败。");
-    updateActResearchPanelVisibility();
-    return;
-  }
-  actBehalfState.invocations = (res.task && res.task.invocations) || [];
-  renderActResearchFromTask(res.task);
-  setActProgress(res.message || "调研完成。");
-  await refreshActTaskList();
-  updateActResearchPanelVisibility();
 }
 
 function renderConfirmedSummary(subjectContext) {
@@ -7608,39 +6425,6 @@ async function openActBehalfTask(taskId) {
     setActProgress("");
   }
 
-  // Display result for autoGenerate tasks (task.result is a string)
-  if (typeof task.result === "string" && task.result.trim()) {
-    const resultPanel = $("act-result-gen-panel");
-    if (resultPanel) resultPanel.classList.remove("hidden");
-    const finalDraftEl = $("act-final-draft");
-    if (finalDraftEl) {
-      finalDraftEl.value = task.result.trim();
-      finalDraftEl.disabled = false;
-    }
-    const metaEl = $("act-result-meta");
-    if (metaEl) metaEl.textContent = "初稿 · 已自动使用你的个人信息";
-    const saveBtn = $("btn-act-save-result");
-    if (saveBtn) saveBtn.disabled = false;
-    const adoptBtn = $("btn-act-adopt-result");
-    if (adoptBtn) adoptBtn.disabled = false;
-    const rejectBtn = $("btn-act-reject-result");
-    if (rejectBtn) rejectBtn.disabled = false;
-
-    // Task-type-specific guidance
-    const taskType = task.taskIntent && task.taskIntent.taskType;
-    let guidance = "已生成。你可以继续编辑，或点击「采用」让 Digital Me 从中学习。";
-    if (taskType === "email") {
-      guidance += " 点击「准备发送」进入发送确认。";
-    } else if (taskType === "video_audio") {
-      guidance += " 点击「导出脚本」获取可在剪映/Descript 中使用的文件。";
-    } else if (taskType === "code" || (intent.goal && /代码|编程|脚本|code|program|script/i.test(intent.goal))) {
-      guidance += " 点击「复制代码」复制到剪贴板，或「查看依据」了解生成过程。";
-    } else {
-      guidance += " 支持导出、重新生成、查看依据等操作。";
-    }
-    setActResultGenStatus(guidance);
-  }
-
   // Restore email draft if present
   if (task.emailDraft && typeof task.emailDraft === "object") {
     actBehalfState.emailDraft = task.emailDraft;
@@ -7992,17 +6776,6 @@ async function handleGenerationPanelClick(ev) {
   if (!btn || btn.disabled) return;
   const action = btn.getAttribute("data-action");
   if (!action) return;
-  // Never dispatch file-open from renderer cards.
-  if (
-    action === "open-deliverable-artifact" ||
-    action === "open-primary" ||
-    action === "open-art" ||
-    action === "reveal-art" ||
-    action === "artifact.open" ||
-    action === "artifact.copy-path"
-  ) {
-    return;
-  }
   const packageId = actBehalfState.activePackageId;
   if (action === "accept-ver" || action === "reject-ver") {
     const versionId = btn.getAttribute("data-version-id");
@@ -8310,37 +7083,10 @@ function wireActBehalfUi() {
   $("btn-act-learn-keep")?.addEventListener("click", () => handleResolveLearnConflict("keep_existing"));
   $("btn-act-learn-update")?.addEventListener("click", () => handleResolveLearnConflict("apply_new"));
   $("btn-act-learn-once")?.addEventListener("click", () => handleResolveLearnConflict("session_only"));
-  {
-    const showLegacy =
-      !!(window.digitalMe && window.digitalMe.ownerRuntimeTest === true && false) ||
-      false;
-    // Default: hide legacy direct-run wrapper. Opt-in via location search for compat only.
-    const legacyWrap = $("act-legacy-direct-run");
-    const optIn =
-      typeof location !== "undefined" &&
-      /[?&]legacyActRun=1/.test(String(location.search || ""));
-    if (legacyWrap) {
-      if (optIn || showLegacy) legacyWrap.classList.remove("hidden");
-      else legacyWrap.classList.add("hidden");
-    }
-  }
   $("btn-act-add-file")?.addEventListener("click", () => handleActSelectFiles("files"));
   $("btn-act-add-folder")?.addEventListener("click", () => handleActSelectFiles("folder"));
   $("btn-act-save")?.addEventListener("click", () => saveActBehalfDraft());
   $("btn-act-confirm-context")?.addEventListener("click", () => confirmActBehalfContext());
-  $("btn-act-run")?.addEventListener("click", () => startActBehalfResearch());
-  $("btn-act-generate-result")?.addEventListener("click", () => generateActBehalfResult());
-  $("btn-act-generate-without-ext")?.addEventListener("click", () =>
-    generateActBehalfResult({ continueWithoutExternalSources: true })
-  );
-  $("btn-act-save-result")?.addEventListener("click", () => saveActBehalfResultDraft());
-  $("btn-act-adopt-result")?.addEventListener("click", () => decideActBehalfResult("adopted"));
-  $("btn-act-reject-result")?.addEventListener("click", () => decideActBehalfResult("rejected"));
-  $("btn-act-create-proposal")?.addEventListener("click", () => createActExperienceProposal());
-  $("btn-act-save-proposal-review")?.addEventListener("click", () => saveActProposalReview());
-  $("btn-act-preview-proposal")?.addEventListener("click", () => previewActProposal());
-  $("btn-act-apply-proposal")?.addEventListener("click", () => applyActProposal());
-  $("btn-act-reject-proposal")?.addEventListener("click", () => rejectActProposal());
   $("btn-act-toggle-backstage")?.addEventListener("click", () => {
     const panel = $("act-backstage-panel");
     const btn = $("btn-act-toggle-backstage");
@@ -10730,124 +9476,6 @@ async function runResearchCheck(kind) {
   }
 }
 
-function bindResearchDraftSplit() {
-  const split = $("research-split");
-  const expandBtn = $("btn-research-draft-expand");
-  if (!split) return;
-  expandBtn?.addEventListener("click", () => {
-    const expanded = split.classList.toggle("research-draft-expanded");
-    expandBtn.textContent = expanded ? "收起对话" : "展开编辑";
-  });
-}
-
-function bindResearch() {
-  bindResearchDraftSplit();
-  const back = $("btn-research-back");
-  if (back) back.addEventListener("click", showDoHub);
-  $("btn-research-more")?.addEventListener("click", () => toggleResearchAdvanced(true));
-  $("btn-research-advanced-close")?.addEventListener("click", () => toggleResearchAdvanced(false));
-  $("research-advanced-backdrop")?.addEventListener("click", () => toggleResearchAdvanced(false));
-  $("btn-research-save-current")?.addEventListener("click", saveCurrentDraft);
-  $("btn-research-copy-draft")?.addEventListener("click", async () => {
-    const ok = await copyTextToClipboard(getCurrentDraftText());
-    $("research-draft-progress").textContent = ok ? "已复制成果稿。" : "复制失败。";
-  });
-  $("btn-research-export-md")?.addEventListener("click", () => exportResearchInline("md"));
-  $("btn-research-export-docx")?.addEventListener("click", () => exportResearchInline("docx"));
-  $("rp-current-draft")?.addEventListener("input", () => {
-    if ($("rp-current-draft")) $("rp-current-draft").dataset.userEditing = "1";
-    updateResearchExportUi();
-  });
-  $("rp-current-draft")?.addEventListener("blur", () => {
-    if ($("rp-current-draft")) delete $("rp-current-draft").dataset.userEditing;
-  });
-  $("btn-research-new")?.addEventListener("click", async () => {
-    if ($("rp-proposition")) $("rp-proposition").value = "";
-    await createResearchProject();
-  });
-  $("btn-rp-save-prop")?.addEventListener("click", saveResearchProposition);
-  $("btn-rp-add-mat")?.addEventListener("click", async () => {
-    if (!activeResearch) {
-      showResearchMatFeedback("请先在左侧打开或开始一项研究。");
-      return;
-    }
-    const title = $("rp-mat-title").value.trim();
-    if (!title) {
-      showResearchMatFeedback("请填写材料标题。");
-      return;
-    }
-    try {
-      activeResearch = await window.digitalMe.addResearchSource({
-        id: activeResearch.id,
-        source: {
-          title,
-          urlOrPath: $("rp-mat-source").value.trim(),
-          excerpt: $("rp-mat-note").value.trim(),
-        },
-      });
-      $("rp-mat-title").value = "";
-      $("rp-mat-source").value = "";
-      $("rp-mat-note").value = "";
-      researchList = await window.digitalMe.listResearch();
-      renderResearchWorkspace();
-      syncResearchScenarioHint();
-      showResearchMatFeedback(
-        `已添加「${title}」。当前共 ${researchSources().length} 份参考材料。`
-      );
-    } catch (e) {
-      showResearchMatFeedback("添加失败：" + (e.message || e));
-    }
-  });
-  $("btn-rp-add-local")?.addEventListener("click", async () => {
-    if (!activeResearch) {
-      showResearchMatFeedback("请先在左侧打开或开始一项研究。");
-      return;
-    }
-    try {
-      const r = await window.digitalMe.addResearchLocalSource({ id: activeResearch.id });
-      if (r.canceled) return;
-      activeResearch = r.project;
-      researchList = await window.digitalMe.listResearch();
-      renderResearchWorkspace();
-      syncResearchScenarioHint();
-      showResearchMatFeedback(`已添加本地文件「${r.title}」。当前共 ${researchSources().length} 份。`);
-    } catch (e) {
-      showResearchMatFeedback(e.message || String(e));
-    }
-  });
-  $("btn-research-mark-done")?.addEventListener("click", async () => {
-    if (!activeResearch) return;
-    await markResearchDone(!isResearchDone(activeResearch));
-  });
-  $("btn-research-claims-toggle")?.addEventListener("click", () => {
-    researchClaimsOpen = !researchClaimsOpen;
-    renderResearchClaimsInline();
-  });
-  $("btn-rp-save-draft")?.addEventListener("click", saveResearchDraft);
-  $("btn-rp-export-writing")?.addEventListener("click", exportResearchToWriting);
-  $("rp-draft-content")?.addEventListener("input", updateResearchExportUi);
-  $("rp-current-draft")?.addEventListener("input", updateResearchExportUi);
-  $("btn-research-send")?.addEventListener("click", sendResearch);
-  $("btn-research-stop")?.addEventListener("click", async () => {
-    if (researchRequestId) await window.digitalMe.stopChat({ requestId: researchRequestId });
-  });
-  $("btn-research-gen-draft")?.addEventListener("click", generateResearchStageBody);
-  $("research-input")?.addEventListener("input", autosizeResearchInput);
-  $("research-input")?.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendResearch();
-    }
-  });
-  document.querySelectorAll("[data-research-check]").forEach((btn) => {
-    btn.addEventListener("click", () => runResearchCheck(btn.dataset.researchCheck));
-  });
-  document.querySelectorAll("[data-research-prompt]").forEach((btn) => {
-    btn.addEventListener("click", () => runResearchActionById(btn.dataset.researchPrompt));
-  });
-  autosizeResearchInput();
-}
-
 function bindDo() {
   renderDoTaskList().catch((err) => console.error("[bindDo] renderDoTaskList error:", err));
   const back = $("btn-do-back");
@@ -10859,323 +9487,6 @@ function bindDo() {
   const newTaskBtn = $("btn-do-new-task");
   if (newTaskBtn) newTaskBtn.addEventListener("click", () => openDoScene("act_behalf"));
   wireActBehalfUi();
-}
-
-function bindCodeWorkspace() {
-  const sendBtn = $("btn-code-send");
-  if (!sendBtn) return;
-  sendBtn.addEventListener("click", sendCode);
-  $("btn-code-stop")?.addEventListener("click", async () => {
-    if (codeStopBusy) return;
-    if (!codeRequestId && !codeOperationId) return;
-    codeStopBusy = true;
-    const send = $("btn-code-send");
-    const stop = $("btn-code-stop");
-    if (send) send.disabled = true;
-    if (stop) stop.disabled = true;
-    const trail = $("code-trail");
-    if (trail) {
-      trail.classList.remove("hidden");
-      trail.textContent = "正在停止…";
-    }
-    try {
-      let oid = codeOperationId;
-      if (!oid) {
-        const deadline = Date.now() + 5000;
-        while (!oid && Date.now() < deadline) {
-          await new Promise((r) => setTimeout(r, 25));
-          oid = codeOperationId;
-        }
-      }
-      if (!oid) {
-        if (trail) trail.textContent = "尚未取得停止凭据，无法停止外部执行。";
-        return;
-      }
-      const result = await window.digitalMe.l0StopExternalAgent?.({ operationId: oid });
-      if (!result || !result.ok) {
-        const reason = result && result.reason;
-        if (trail) {
-          if (reason === "sender_mismatch") {
-            trail.textContent = "停止失败：请求来源不匹配。";
-          } else if (reason === "unknown_operation") {
-            trail.textContent = "停止失败：任务已结束或不存在。";
-          } else if (reason === "missing_operation_id") {
-            trail.textContent = "停止失败：缺少主进程签发的操作编号。";
-          } else {
-            trail.textContent = "停止失败：未能发出停止请求。";
-          }
-        }
-        return;
-      }
-      if (trail) trail.textContent = "已发出停止请求，正在等待回收结果…";
-    } catch (e) {
-      if (trail) trail.textContent = "停止失败：" + String((e && e.message) || e);
-    }
-  });
-  $("btn-code-prepare")?.addEventListener("click", async () => {
-    try {
-      const prep = await window.digitalMe.prepareCodeScene?.();
-      const el = $("code-prep-status");
-      if (el) el.textContent = (prep && prep.message) || "已尝试准备。";
-      await refreshCodeScenarioHint();
-    } catch (e) {
-      const el = $("code-prep-status");
-      if (el) el.textContent = e.message || String(e);
-    }
-  });
-  $("code-auth-write")?.addEventListener("change", () => refreshCodeScenarioHint());
-  $("code-workspace-label")?.addEventListener("change", () => refreshCodeScenarioHint());
-  $("code-executor-select")?.addEventListener("change", async () => {
-    const id = $("code-executor-select")?.value || "builtin";
-    try {
-      await window.digitalMe.l0SetActiveAgent?.(id);
-      await refreshCodeScenarioHint();
-    } catch (e) {
-      alert(e.message || String(e));
-      await refreshCodeExecutorSelect();
-    }
-  });
-  $("btn-code-audit-refresh")?.addEventListener("click", () => refreshCodeAuditList());
-  const codeInput = $("code-input");
-  codeInput?.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendCode();
-    }
-  });
-  $("btn-code-copy")?.addEventListener("click", async () => {
-    const t = $("code-result")?.value || "";
-    if (!t) return;
-    try {
-      await navigator.clipboard.writeText(t);
-      const meta = $("code-result-meta");
-      if (meta) meta.textContent = "已复制";
-    } catch {
-      /* ignore */
-    }
-  });
-  $("btn-code-clear")?.addEventListener("click", () => {
-    codeArtifacts = { files: [], links: [], notes: "" };
-    if ($("code-result")) $("code-result").value = "";
-    renderCodeArtifactLists();
-    const meta = $("code-result-meta");
-    if (meta) meta.textContent = "已清空";
-  });
-}
-
-function autosizeWriteInput() {
-  const el = $("write-input");
-  if (!el) return;
-  el.style.height = "auto";
-  const next = Math.min(Math.max(el.scrollHeight, 120), 280);
-  el.style.height = next + "px";
-}
-
-function bindWriteWorkspace() {
-  const sendBtn = $("btn-write-send");
-  if (!sendBtn) return;
-  sendBtn.addEventListener("click", sendWrite);
-  $("btn-write-stop").addEventListener("click", async () => {
-    if (writeRequestId) await window.digitalMe.stopChat({ requestId: writeRequestId });
-  });
-  $("btn-write-attach").addEventListener("click", async () => {
-    const files = await window.digitalMe.pickAttachments();
-    if (!files?.length) return;
-    writePendingAttachments = writePendingAttachments.concat(files);
-    renderWriteAttachChips();
-  });
-  const writeInput = $("write-input");
-  writeInput.addEventListener("input", autosizeWriteInput);
-  writeInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendWrite();
-    }
-  });
-  autosizeWriteInput();
-  document.querySelectorAll("#write-intent-chips button").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      writeInput.value = btn.dataset.writeIntent || "";
-      autosizeWriteInput();
-      writeInput.focus();
-    });
-  });
-}
-
-function bindOutput() {
-  $("btn-library-refresh")?.addEventListener("click", refreshLibraryView);
-  $("btn-library-new-blank")?.addEventListener("click", async () => {
-    try {
-      await createBlankLibraryItem({ title: "未命名文稿" });
-      $("library-detail-title-input")?.focus();
-    } catch {
-      // hint already set
-    }
-  });
-
-  $("btn-library-save").addEventListener("click", async () => {
-    if (!activeLibraryId) return;
-    const prev = await window.digitalMe.getLibraryItem(activeLibraryId);
-    if (!prev) return;
-    const titleInput = $("library-detail-title-input");
-    const title = (titleInput && titleInput.value.trim()) || prev.title;
-    try {
-      await window.digitalMe.saveLibraryItem({
-        ...prev,
-        title,
-        content: $("library-detail-content").value,
-        status: "ready",
-      });
-      $("library-detail-progress").textContent = "已保存。";
-      if (linkedLibraryId === activeLibraryId) {
-        currentArtifact = { title, content: $("library-detail-content").value, libraryId: activeLibraryId };
-      }
-      await refreshLibraryView();
-    } catch (e) {
-      $("library-detail-progress").textContent = "保存失败：" + e.message;
-    }
-  });
-
-  $("btn-library-export-md").addEventListener("click", async () => {
-    if (!activeLibraryId) return;
-    const r = await window.digitalMe.exportLibraryItem({ id: activeLibraryId, format: "md" });
-    if (!r.canceled) $("library-detail-progress").textContent = "已导出：" + r.filePath;
-  });
-
-  $("btn-library-export-docx").addEventListener("click", async () => {
-    if (!activeLibraryId) return;
-    try {
-      const r = await window.digitalMe.exportLibraryItem({ id: activeLibraryId, format: "docx" });
-      if (!r.canceled) $("library-detail-progress").textContent = "已导出：" + r.filePath;
-    } catch (e) {
-      $("library-detail-progress").textContent = "导出失败：" + e.message;
-    }
-  });
-
-  $("btn-library-export-csv").addEventListener("click", async () => {
-    if (!activeLibraryId) return;
-    try {
-      const r = await window.digitalMe.exportLibraryItem({ id: activeLibraryId, format: "csv" });
-      if (!r.canceled) $("library-detail-progress").textContent = "已导出 CSV：" + r.filePath;
-    } catch (e) {
-      $("library-detail-progress").textContent = "导出 CSV 失败：" + e.message;
-    }
-  });
-
-  $("btn-library-more-export")?.addEventListener("click", () => {
-    const box = $("library-more-export");
-    if (box) box.classList.toggle("hidden");
-  });
-
-  $("btn-library-to-ppt").addEventListener("click", async () => {
-    const titleInput = $("library-detail-title-input");
-    const title = (titleInput && titleInput.value) || "演讲";
-    const content = $("library-detail-content").value;
-    await generatePptFromDocument(title, content);
-  });
-
-  $("btn-library-delete").addEventListener("click", async () => {
-    if (!activeLibraryId) return;
-    if (!window.confirm("确定删除这篇文稿？")) return;
-    const deletedId = activeLibraryId;
-    await window.digitalMe.deleteLibraryItem(deletedId);
-    if (linkedLibraryId === deletedId) linkedLibraryId = null;
-    activeLibraryId = null;
-    delete writeHistoryByDoc[deletedId];
-    writeHistory = [];
-    $("library-detail").classList.add("hidden");
-    const empty = $("library-detail-empty");
-    if (empty) empty.classList.remove("hidden");
-    await refreshLibraryView();
-    renderWriteMessages();
-    updateArtifactLibraryButtons();
-  });
-
-  $("btn-ppt-hide").addEventListener("click", () => $("ppt-panel").classList.add("hidden"));
-
-  $("btn-ppt-plan").addEventListener("click", async () => {
-    const topic = $("ppt-topic").value.trim();
-    if (!topic) {
-      $("ppt-progress").textContent = "请填写演讲主题。";
-      return;
-    }
-    const brief = {
-      topic,
-      occasion: $("ppt-occasion").value.trim(),
-      duration: $("ppt-duration").value.trim(),
-      audience: $("ppt-audience").value.trim(),
-      keyPoints: $("ppt-keypoints").value.trim(),
-      context: $("ppt-context").value.trim(),
-    };
-    $("btn-ppt-plan").disabled = true;
-    $("btn-ppt-export").disabled = true;
-    $("ppt-progress").textContent = "正在按你的 Digital Me 规划幻灯片结构…";
-    $("ppt-preview").classList.add("hidden");
-    try {
-      pptPlan = await window.digitalMe.planPpt({ pkg, brief });
-      renderPptPreview(pptPlan);
-      $("ppt-progress").textContent = `已生成「${pptPlan.title}」，共 ${pptPlan.slides.length} 页内容。可预览后导出 PPTX。`;
-      $("btn-ppt-export").disabled = false;
-    } catch (e) {
-      $("ppt-progress").textContent = "生成失败：" + e.message;
-      pptPlan = null;
-    } finally {
-      $("btn-ppt-plan").disabled = false;
-    }
-  });
-
-  $("btn-ppt-export").addEventListener("click", async () => {
-    if (!pptPlan) return;
-    $("btn-ppt-export").disabled = true;
-    try {
-      const r = await window.digitalMe.savePpt(pptPlan);
-      if (r.canceled) {
-        $("ppt-progress").textContent = "已取消保存。";
-      } else {
-        $("ppt-progress").textContent = `已保存：${r.filePath}（${r.slideCount} 页内容 + 封面/结束页）`;
-      }
-    } catch (e) {
-      $("ppt-progress").textContent = "导出失败：" + e.message;
-    } finally {
-      $("btn-ppt-export").disabled = !pptPlan;
-    }
-  });
-
-  $("btn-ppt-import-chat").addEventListener("click", () => {
-    const parts = [];
-    for (let i = history.length - 1; i >= 0 && parts.length < 2; i--) {
-      const m = history[i];
-      if (m.role === "assistant" && m.content && m.content.length > 80) {
-        parts.unshift(m.content.slice(0, 3000));
-      }
-    }
-    if (!parts.length) {
-      $("ppt-progress").textContent = "对话中暂无可用内容，请先生成提纲或正文。";
-      return;
-    }
-    $("ppt-context").value = parts.join("\n\n---\n\n");
-    $("ppt-progress").textContent = "已从最近对话导入背景，可补充主题后点击「生成幻灯片结构」。";
-  });
-}
-
-function renderPptPreview(plan) {
-  const esc = (s) => String(s).replace(/</g, "&lt;");
-  let html = `<div class="ppt-meta"><b>${esc(plan.title)}</b>`;
-  if (plan.subtitle) html += `<br/><span class="muted">${esc(plan.subtitle)}</span>`;
-  if (plan.meta) html += `<br/><span class="muted">${esc(plan.meta)}</span>`;
-  html += `</div>`;
-  for (let i = 0; i < plan.slides.length; i++) {
-    const sl = plan.slides[i];
-    html += `<div class="ppt-slide"><div class="ppt-slide-no">${i + 1}</div>`;
-    html += `<h4>${esc(sl.title)}</h4><ul>`;
-    for (const b of sl.bullets || []) html += `<li>${esc(b)}</li>`;
-    html += `</ul>`;
-    if (sl.notes) html += `<div class="ppt-notes">备注：${esc(sl.notes)}</div>`;
-    html += `</div>`;
-  }
-  $("ppt-slide-count").textContent = String(plan.slides.length);
-  $("ppt-preview-content").innerHTML = html;
-  $("ppt-preview").classList.remove("hidden");
 }
 
 // ---------- Capability extensions ----------
@@ -11322,9 +9633,8 @@ async function refreshSkillZone() {
 
 async function renderCapabilityNormalSurface() {
   const now = $("capability-now-list");
-  const artifacts = $("capability-artifacts-list");
   const emptyActions = $("capability-empty-actions");
-  if (!now || !artifacts) return;
+  if (!now) return;
 
   let skills = [];
   let tasks = [];
@@ -11352,16 +9662,6 @@ async function renderCapabilityNormalSurface() {
   now.innerHTML = lines.join("");
   emptyActions?.classList.toggle("hidden", Boolean(enabled.length || skills.length || tasks.length));
   now.querySelectorAll(".btn-capability-disable").forEach((btn) => btn.addEventListener("click", () => disableExtension(btn.dataset.id)));
-
-  if (!tasks.length) {
-    artifacts.innerHTML = `<div class="capability-empty-copy">还没有成果。选择“开始任务”后，完成的内容会保存在这里，随时可以重新打开继续修改。</div>`;
-    return;
-  }
-  artifacts.innerHTML = tasks.map((task) => {
-    const status = task.contextConfirmed ? "可以继续" : task.status || "待继续";
-    return `<button type="button" class="capability-artifact-item" data-task-id="${escHtml(task.taskId)}"><strong>${escHtml(task.title || "未命名任务")}</strong><span class="muted">${escHtml(status)} · ${escHtml(String(task.updatedAt || "").slice(0, 19).replace("T", " "))}</span><span class="muted">${escHtml(task.requestPreview || "打开后可继续生成或修改成果。")}</span></button>`;
-  }).join("");
-  artifacts.querySelectorAll(".capability-artifact-item").forEach((btn) => btn.addEventListener("click", () => openDoScene("act_behalf", { taskId: btn.dataset.taskId })));
 }
 
 function modelRouteLabel(routing, taskType) {
@@ -13776,53 +12076,6 @@ async function pickIntoInbox(doneHint) {
 }
 
 /** Document-level bootstrap file actions — independent of bindMe success. */
-function bindBootstrapFileActions() {
-  const resume = $("btn-bootstrap-resume");
-  if (resume) {
-    if (!resume.getAttribute("title")) {
-      resume.setAttribute("title", "选择履历或经历类文件并加入待处理材料");
-    }
-    if (!resume.getAttribute("aria-label")) {
-      resume.setAttribute("aria-label", "提交履历类文件");
-    }
-  }
-  const assess = $("btn-bootstrap-assessment-file");
-  if (assess) {
-    if (!assess.getAttribute("title")) {
-      assess.setAttribute("title", "选择判断或评测类文件并加入待处理材料");
-    }
-    if (!assess.getAttribute("aria-label")) {
-      assess.setAttribute("aria-label", "提交判断类文件");
-    }
-  }
-
-  if (document.documentElement.dataset.dmBootstrapDelegate === "1") return;
-  document.documentElement.dataset.dmBootstrapDelegate = "1";
-  document.addEventListener(
-    "click",
-    (e) => {
-      const resume = firstMatchingInPath(e, "#btn-bootstrap-resume");
-      const assess = firstMatchingInPath(e, "#btn-bootstrap-assessment-file");
-      const btn = resume || assess;
-      if (!btn || !btn.id) return;
-      if (btn.id === "btn-bootstrap-resume") {
-        e.preventDefault();
-        pickIntoInbox(
-          "已提交履历类材料。建议再完成自我评测或提交判断类文件，然后点击「开始构建」。"
-        );
-        return;
-      }
-      if (btn.id === "btn-bootstrap-assessment-file") {
-        e.preventDefault();
-        pickIntoInbox(
-          "已提交判断类材料。若尚无履历，请提交简历或填写「经历概要」，然后点击「开始构建」。"
-        );
-      }
-    },
-    false
-  );
-}
-
 function bindMe() {
   $("btn-distill-me-start")?.addEventListener("click", async () => { const msg=$("distill-me-msg"), text=$("distill-me-text").value.trim(); if(!text){msg.textContent="请先补充一段关于你的信息。";return;} try { msg.textContent="正在生成主体档案草稿…"; const draft=await window.digitalMe.createDistillInput({text,sourceName:"用户直接输入",sourceKind:"direct"}); await window.digitalMe.generateIdentityExperienceFacts(draft.id); $("distill-me-text").value=""; msg.textContent="草稿已生成。请确认你愿意纳入主体档案的内容。"; await refreshDistillMe(); } catch(e){msg.textContent="当前模型不可用。可以检查模型设置，或切换到备用模型。"; const open=document.createElement("button");open.type="button";open.className="btn-ghost";open.textContent="打开模型设置";open.onclick=()=>openSettings();msg.appendChild(open);} });
   $("btn-distill-me-cancel")?.addEventListener("click",()=>switchMeTab("overview"));
@@ -14097,8 +12350,6 @@ function bindMe() {
       renderIntakeForm();
     });
   }
-  // Bootstrap resume/assessment buttons: document delegation in bindBootstrapFileActions.
-
   $("btn-inbox-organize")?.addEventListener("click", async () => {
     $("btn-inbox-organize").disabled = true;
     hideBuildDoneBanner();

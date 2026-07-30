@@ -4,7 +4,15 @@
  * R1 renderer entry controller (main-authoritative).
  * Distinguishes preferredEntry (persisted default), effectiveEntry (this process),
  * and fallback latch (process-local anti-loop).
+ *
+ * MVP-RELEASE-GATE-01B: production product surface is locked to classic (legacy).
+ * renderer-next is retained_as_frozen_infrastructure / not_mvp_product_surface.
+ * Ordinary npm start / electron . must always resolve to legacy unless an explicit
+ * test harness env is set (DIGITALME_R1_SPIKE_HARNESS or DIGITALME_R1_OWNER_RUNTIME).
  */
+
+/** MVP production surface — do not change without a new release-gate decision. */
+const MVP_PRODUCT_SURFACE = "legacy";
 
 const DEFAULT_READY_TIMEOUT_MS = 8000;
 
@@ -34,9 +42,9 @@ function createRendererEntryController(opts = {}) {
       : DEFAULT_READY_TIMEOUT_MS;
 
   /** @type {"legacy"|"next"} */
-  let preferredEntry = "legacy";
+  let preferredEntry = MVP_PRODUCT_SURFACE;
   /** @type {"legacy"|"next"} */
-  let effectiveEntry = "legacy";
+  let effectiveEntry = MVP_PRODUCT_SURFACE;
   let fallbackLatched = false;
   let navigationGeneration = 0;
   let readyConsumedGeneration = null;

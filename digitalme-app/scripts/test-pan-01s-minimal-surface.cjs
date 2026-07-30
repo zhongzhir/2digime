@@ -584,19 +584,22 @@ test("help.js contains promises/journey; no PAN-01R CTA", () => {
   assert.equal(help.includes("panorama-experience"), false);
 });
 
-test("app.js rejects panorama-experience production entry; wires build wizard", () => {
+test("app.js wires build wizard; panorama-experience production entry removed", () => {
   const appJs = fs.readFileSync(path.join(__dirname, "../src/renderer/app.js"), "utf8");
   assert.match(appJs, /renderMinimalSurface/);
   assert.match(appJs, /applyBuildWizard/);
   assert.match(appJs, /refreshBuildFlowFromOverview/);
   assert.match(appJs, /MINIMAL_SURFACE_ACTION_WHITELIST/);
-  assert.match(appJs, /pan01rTestHarness !== true/);
   assert.match(appJs, /never recompute P0/);
   assert.match(appJs, /subject-minimal-line1/);
-  // Production whitelist must not include panorama-experience
+  // MVP-RELEASE-GATE-01B: panorama experience UI deleted from production renderer
+  assert.equal(appJs.includes("bindPanoramaExperience"), false);
+  assert.equal(appJs.includes("openPanoramaExperience"), false);
+  assert.equal(appJs.includes("panorama-experience-panel"), false);
   const wl = appJs.match(/const PANORAMA_NAV_WHITELIST = new Set\(\[([\s\S]*?)\]\)/);
-  assert.ok(wl);
-  assert.equal(wl[1].includes("panorama-experience"), false);
+  if (wl) {
+    assert.equal(wl[1].includes("panorama-experience"), false);
+  }
 });
 
 console.log(`\nPAN-01S hermetic: ${passed} passed, ${failed} failed`);
