@@ -1,22 +1,29 @@
 # MVP-RELEASE-GATE-01E — closed alpha Windows distribution (unsigned)
 # Portable build: no Node/Git required on target machine.
+# Output directory is overridden per-build by scripts/build-closed-alpha-portable.cjs
+# to dist-alpha-build-staging/<build-id>/ — never treat legacy dist-alpha-build as success.
 
 appId: local.digitalme.app
 productName: Digital Me
 copyright: Digital Me
 
 directories:
-  output: dist-alpha-build
+  output: dist-alpha-build-staging/_default-do-not-use
   buildResources: build
 
 files:
   - src/**/*
   - package.json
+  - closed-alpha-build-info.json
   - "!**/_*-evidence/**"
   - "!**/project/**"
   - "!**/*.md"
   - "!scripts/**"
   - "scripts/.keep"
+
+extraResources:
+  - from: build/build-info.json
+    to: build-info.json
 
 extraMetadata:
   main: src/main.js
@@ -28,19 +35,13 @@ win:
     - target: dir
       arch:
         - x64
-    - target: portable
-      arch:
-        - x64
-  artifactName: DigitalMe-ClosedAlpha-${version}-win-x64-portable.${ext}
+  artifactName: DigitalMe-ClosedAlpha-${version}-win-x64.${ext}
   # unsigned_closed_alpha_build — SmartScreen may warn; no code signing in this gate.
   signAndEditExecutable: false
   signingHashAlgorithms: []
   verifyUpdateCodeSignature: false
 
 forceCodeSigning: false
-
-portable:
-  artifactName: DigitalMe-ClosedAlpha-${version}-win-x64-portable.${ext}
 
 nsis:
   oneClick: false

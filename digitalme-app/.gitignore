@@ -2,6 +2,9 @@ node_modules/
 dist/
 dist-alpha/
 dist-alpha-build/
+dist-alpha-build-staging/
+closed-alpha-build-info.json
+build/build-info.json
 out/
 src/renderer-next/dist/
 test-results/

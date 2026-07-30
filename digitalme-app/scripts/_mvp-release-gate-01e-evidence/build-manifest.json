@@ -1,14 +1,27 @@
-﻿{
-    "nodeRequired":  false,
-    "classicRenderer":  true,
-    "note":  "directory portable; single-file portable/NSIS blocked by winCodeSign symlink privilege on builder host",
-    "buildStatus":  "portable_closed_alpha_build",
-    "zipSha256":  "B105D6935B5702AD20719ACF73F92F2E6FB88D51AD73BF40399278B43856E4DC",
-    "artifact":  "dist-alpha-build/win-unpacked/Digital Me.exe",
-    "sha256":  "217C7ABC77AAA868B9423FF3E6E8F40F62633CCC4121786FAC64E481AEF3429D",
-    "gitRequired":  false,
-    "bytes":  186328576,
-    "zipArtifact":  "DigitalMe-ClosedAlpha-0.1.0-win-x64-dir.zip",
-    "unsigned":  true,
-    "smartScreenRisk":  "expected"
+{
+  "buildStatus": "portable_closed_alpha_build",
+  "buildOk": true,
+  "unsigned": true,
+  "smartScreenRisk": "expected",
+  "productSurface": "classic",
+  "releaseChannel": "closed-alpha",
+  "gitHead": "b0b21a8060d580be0b48dfaab0b35161470a8881",
+  "gitShort": "b0b21a8",
+  "buildId": "20260730-143543-b0b21a8",
+  "buildStartedAt": "2026-07-30T06:35:43.181Z",
+  "buildFinishedAt": "2026-07-30T06:36:07.420Z",
+  "stagingDir": "dist-alpha-build-staging/20260730-143543-b0b21a8",
+  "artifactExe": "dist-alpha-build-staging/20260730-143543-b0b21a8/win-unpacked/Digital Me.exe",
+  "artifactAsar": "dist-alpha-build-staging/20260730-143543-b0b21a8/win-unpacked/resources/app.asar",
+  "artifactZip": "dist-alpha-build-staging/20260730-143543-b0b21a8/Digital-Me-Closed-Alpha-b0b21a8.zip",
+  "hashes": {
+    "exeSha256": "2ADF53592AC38AFD575ACFC0915660B0B144AE7042200A70EBBA0105B3501356",
+    "asarSha256": "8524DB276A5A71F9769E1822EE3C9B9CCABDFBD2414A2D041A12C079335D7AA6",
+    "zipSha256": "124899D40E292449003D82A268A241541D4252C580DC2069611067A9CD644D15",
+    "exeBytes": 186328576,
+    "asarBytes": 76912451,
+    "zipBytes": 136573388
+  },
+  "legacySupersededMarker": "dist-alpha-build/SUPERSEDED.json",
+  "note": "Fresh staging build; stale dist-alpha-build is not a release candidate."
 }

@@ -7,9 +7,10 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "dist:portable": "electron-builder --win dir --x64 --config electron-builder.yml",
-    "dist:win": "electron-builder --win dir --x64 --config electron-builder.yml",
+    "dist:portable": "node scripts/build-closed-alpha-portable.cjs",
+    "dist:win": "node scripts/build-closed-alpha-portable.cjs",
     "dist:portable:single": "electron-builder --win portable --x64 --config electron-builder.yml",
+    "test:closed-alpha-build-integrity": "node scripts/test-closed-alpha-build-integrity.cjs",
     "test:mvp-release-gate-01e": "node scripts/test-mvp-release-gate-01e.cjs",
     "test:mvp-release-gate-01e-electron": "electron scripts/electron-mvp-release-gate-01e-acceptance.cjs",
     "test:p1-01": "node scripts/test-p1-01-secret-store.cjs && node scripts/test-p1-01-secret-leak-scan.cjs",

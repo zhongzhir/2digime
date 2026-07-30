@@ -66,19 +66,16 @@
 
 | 项 | 说明 |
 |----|------|
-| 工具 | `electron-builder@25.1.8` + `electron-builder.yml` |
-| 命令 | `npm run dist:portable` / `dist:win`（dir 优先） |
-| 产出 | `digitalme-app/dist-alpha-build/win-unpacked/Digital Me.exe`（约 186MB） |
-| 形态 | **portable_closed_alpha_build（目录型）**；另有 dir zip |
+| 工具 | `electron-builder@25.1.8` + wrapper `build-closed-alpha-portable.cjs` |
+| 命令 | `npm run dist:portable`（**禁止**用旧目录存在性判断成功） |
+| 产出 | `dist-alpha-build-staging/<build-id>/win-unpacked/` + `Digital-Me-Closed-Alpha-<short>.zip` |
+| 形态 | **portable_closed_alpha_build（目录型）** |
 | 签名 | `unsigned_closed_alpha_build`；SmartScreen 可能提示 |
-| exe SHA256 | `217C7ABC77AAA868B9423FF3E6E8F40F62633CCC4121786FAC64E481AEF3429D` |
-| zip SHA256 | `B105D6935B5702AD20719ACF73F92F2E6FB88D51AD73BF40399278B43856E4DC` |
-| 单文件 portable/NSIS | 本机因 winCodeSign 解包需符号链接特权失败 |
-| asar 审计 | `package-contents-audit.json`：无 evidence / project 数据 / 测试脚本 / `.env` |
-| 证据 | `_mvp-release-gate-01e-evidence/build-manifest.json` |
+| 旧目录 | `dist-alpha-build/` 已 `SUPERSEDED`；旧 zip `B105D6…` 非候选 |
+| 证据 | `_mvp-release-gate-01e-evidence/build-manifest.json` + §12 |
 | 使用说明 | `docs/product/CLOSED_ALPHA_USAGE_AND_LIMITS_20260730.md` |
 
-用户不需 Node/Git/`npm start`：复制 `win-unpacked`（或解压 dir zip）后双击 `Digital Me.exe`。
+用户不需 Node/Git/`npm start`：解压/复制 staging 的 `win-unpacked` 后双击 `Digital Me.exe`。
 
 ---
 
@@ -142,11 +139,12 @@ not_ready_for_owner_spotcheck /
 not_pushed
 ```
 
-剩余阻断（恰好 3）：
+剩余阻断（恰好 2）：
 
-1. 正式单文件 portable / NSIS 未在本机构建成功（权限/文件锁）  
-2. 干净用户环境完整双任务 E2E 证据未齐  
-3. Owner 最终抽查未执行  
+1. 干净用户环境完整双任务 E2E 证据未齐  
+2. Owner 最终抽查未执行  
+
+> 分发「旧产物误报成功 / EBUSY 覆盖失败」阻断已由 **01E-FIX-01** 关闭（见 §12）。单文件 NSIS 仍非本轮目标；目录型 portable 为正式候选形态。
 
 不得标记：`release_gate_passed` / `mvp_ready` / `closed_alpha_ready`（无条件） / `owner_runtime_accepted`
 
@@ -160,14 +158,50 @@ ebfe9b5 test(learning): validate cross-task reuse and project fact correction
 b9a5d60 build(desktop): add closed alpha Windows distribution
 b231f66 test(release): validate clean-user MVP release gate
 e12c462 docs(release): record closed alpha readiness decision
-(+ 后续 docs tip 校正提交)
+(+ docs tip 校正)
+(+ 01E-FIX-01 build integrity)
 ```
 
 | 项 | 值 |
 |----|-----|
 | 01E 功能/测试 tip | `b231f66` |
-| 文档 tip | 以 `git rev-parse HEAD` 为准（本报告所在提交；**未 push**） |
+| 文档 tip | 以 `git rev-parse HEAD` 为准（**未 push**） |
 
 避免在报告正文内嵌「自身 commit hash」造成与 tip 再次冲突（与 01D `8c85f3e` / `3924b05` 教训一致）。
+
+---
+
+## 12. Build Integrity Correction（MVP-RELEASE-GATE-01E-FIX-01）
+
+### 原误报根因
+
+1. `electron-builder` 因 `Digital Me.exe` / `app.asar` **EBUSY** 失败后，脚本仍用 `Test-Path` 旧目录判定成功。  
+2. 失败后继续读旧 zip SHA256（`B105D6…`）并暗示可用。  
+3. 构建输出固定覆盖 `dist-alpha-build/`，与占用锁冲突。
+
+### 修复方式
+
+- `npm run dist:portable` → `scripts/build-closed-alpha-portable.cjs`  
+- 每次写入独立 `dist-alpha-build-staging/<yyyyMMdd-HHmmss>-<gitShort>/`  
+- 嵌入 `resources/build-info.json` + asar 内 `closed-alpha-build-info.json`（`gitHead` / `buildTime` / `productSurface=classic` / `releaseChannel=closed-alpha`）  
+- 仅当 builder=0、zip=0、文件 mtime≥构建开始、embedded HEAD 匹配、zip 含 exe、manifest 写出后才打印 `BUILD_OK`；否则 `BUILD_FAILED` 且非零退出  
+- `test:closed-alpha-build-integrity`（10 passed）覆盖旧产物误报路径  
+- 旧 `dist-alpha-build` 标记 `SUPERSEDED.json`（`superseded=true`）；旧 zip 移入 `_superseded/`
+
+### 当前候选产物（构建时 HEAD）
+
+| 项 | 值 |
+|----|-----|
+| 构建时 Git HEAD | `b0b21a8060d580be0b48dfaab0b35161470a8881`（FIX-01 脚本合入前 tip；合入后将再刷一次 stamp） |
+| buildId | `20260730-143543-b0b21a8` |
+| staging | `digitalme-app/dist-alpha-build-staging/20260730-143543-b0b21a8/` |
+| exe SHA256 | `2ADF53592AC38AFD575ACFC0915660B0B144AE7042200A70EBBA0105B3501356` |
+| asar SHA256 | `8524DB276A5A71F9769E1822EE3C9B9CCABDFBD2414A2D041A12C079335D7AA6` |
+| zip SHA256 | `124899D40E292449003D82A268A241541D4252C580DC2069611067A9CD644D15` |
+| zip 名 | `Digital-Me-Closed-Alpha-b0b21a8.zip` |
+| 旧产物 | `dist-alpha-build/SUPERSEDED.json`；旧 `B105D6…` **不是**候选 |
+| 独立启动 | 已 smoke：进程可启动；embeddedGitHead === 构建时 HEAD |
+| EBUSY | 本轮 staging 构建成功，无 EBUSY |
+| Push | **否** |
 
 

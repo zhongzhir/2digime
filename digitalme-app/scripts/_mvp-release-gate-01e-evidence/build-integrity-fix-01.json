@@ -1,0 +1,17 @@
+{
+  "task": "MVP-RELEASE-GATE-01E-FIX-01",
+  "ok": true,
+  "gitHead": "b0b21a8060d580be0b48dfaab0b35161470a8881",
+  "buildId": "20260730-143543-b0b21a8",
+  "hashes": {
+    "exeSha256": "2ADF53592AC38AFD575ACFC0915660B0B144AE7042200A70EBBA0105B3501356",
+    "asarSha256": "8524DB276A5A71F9769E1822EE3C9B9CCABDFBD2414A2D041A12C079335D7AA6",
+    "zipSha256": "124899D40E292449003D82A268A241541D4252C580DC2069611067A9CD644D15",
+    "exeBytes": 186328576,
+    "asarBytes": 76912451,
+    "zipBytes": 136573388
+  },
+  "stagingDir": "dist-alpha-build-staging/20260730-143543-b0b21a8",
+  "superseded": true,
+  "pushed": false
+}
