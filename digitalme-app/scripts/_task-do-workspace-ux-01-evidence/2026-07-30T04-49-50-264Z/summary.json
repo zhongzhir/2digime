@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "evidenceDir": "D:\\Projects\\Digital Me\\digitalme-app\\scripts\\_task-do-workspace-ux-01-evidence\\2026-07-30T04-49-50-264Z",
+  "userData": "C:\\Users\\46554\\AppData\\Local\\Temp\\dm-wsux-e2e-qNoMnL",
+  "classicHref": "file:///D:/Projects/Digital%20Me/digitalme-app/src/renderer/index.html",
+  "checks": {
+    "hasMaterials": true,
+    "hasStart": true,
+    "startLabel": "开始做",
+    "noRole": true,
+    "noExpected": true,
+    "planHidden": true,
+    "requestMinHeight": 280
+  }
+}
