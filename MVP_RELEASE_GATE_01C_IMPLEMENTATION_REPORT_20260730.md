@@ -14,11 +14,11 @@
 | 起始分支 | `codex/mvp-release-gate-01` |
 | 起始 HEAD | `92a0dd3e382d0ebbb19443876538a398426102e9` |
 | 最终分支 | `codex/mvp-release-gate-01` |
-| 最终 HEAD | （见 commit 后 `git rev-parse HEAD`） |
-| Commit 1 | `feat(onboarding): rebuild first-run Digital Me creation flow` |
-| Commit 2 | `feat(package): add safe Digital Me package import and activation` |
-| Commit 3 | `test(mvp): validate first-run creation and package import` |
-| 工作区 | 既有未跟踪审计/设计稿保留；本轮实现已提交 |
+| 最终 HEAD | `1796396abf1fa5dec2eca63f2cd94150fecb8cb5` |
+| Commit 1 | `83794b8` — `feat(onboarding): rebuild first-run Digital Me creation flow` |
+| Commit 2 | `07a73a1` — `feat(package): add safe Digital Me package import and activation` |
+| Commit 3 | `1796396` — `test(mvp): validate first-run creation and package import` |
+| 工作区 | 既有未跟踪审计/设计稿保留；本轮实现已提交（报告 HEAD 回填见同文件后续小修正若有） |
 | Push | **未 push** |
 
 ---
