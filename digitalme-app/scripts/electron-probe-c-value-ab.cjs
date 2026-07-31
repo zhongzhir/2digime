@@ -429,7 +429,52 @@ async function runHarness() {
     packageDir: (pkg && (pkg.dir || pkg.packageDir)) || "",
   }))()`);
   writeJson("task-a-accept-meta.json", acceptMeta);
-  await sleep(6000);
+  await sleep(2000);
+
+  // Wait for Learn Job to leave pending_conflict / running → committed|skipped|failed
+  let learnWait = { status: null, polls: 0 };
+  for (let i = 0; i < 30; i += 1) {
+    learnWait.polls = i + 1;
+    const st = await win.webContents.executeJavaScript(`(() => {
+      try {
+        const p = require("path");
+        const fs = require("fs");
+        const ud = require("electron").app.getPath("userData");
+        const candidates = [];
+        function walk(dir, depth) {
+          if (!dir || depth > 4 || !fs.existsSync(dir)) return;
+          for (const name of fs.readdirSync(dir)) {
+            const fp = p.join(dir, name);
+            let s; try { s = fs.statSync(fp); } catch { continue; }
+            if (s.isDirectory()) walk(fp, depth + 1);
+            else if (name === "deliverable-learn-jobs.json") candidates.push(fp);
+          }
+        }
+        walk(ud, 0);
+        let latest = null;
+        for (const fp of candidates) {
+          try {
+            const data = JSON.parse(fs.readFileSync(fp, "utf8"));
+            const jobs = data.jobs || data;
+            for (const j of Object.values(jobs || {})) {
+              if (!j || !j.id) continue;
+              if (!latest || String(j.updatedAt || j.createdAt || "") > String(latest.updatedAt || latest.createdAt || "")) latest = j;
+            }
+          } catch {}
+        }
+        return latest ? { id: latest.id, status: latest.status, conflictReason: latest.conflict && latest.conflict.reason } : null;
+      } catch (e) { return { error: String(e && e.message || e) }; }
+    })()`);
+    learnWait = { ...learnWait, ...(st || {}) };
+    if (st && ["committed", "skipped", "failed", "resolved_keep", "resolved_session_only"].includes(st.status)) break;
+    // If stuck on conflict, production bug — record and continue (FIX-01 should prevent this)
+    if (st && st.status === "pending_conflict") {
+      writeJson("learn-job-pending-conflict.json", st);
+      break;
+    }
+    await sleep(500);
+  }
+  writeJson("learn-job-wait.json", learnWait);
 
   // Learning audit
   const memoryPaths = [];
@@ -494,18 +539,13 @@ async function runHarness() {
           } else if (statement.length > 280) {
             learned.overlearnRisks.push({ reason: "long_statement", statement: statement.slice(0, 160) });
           }
+          // Count only authoritative learnKinds — do not treat first-run identity as expression.
           if (row.learnKind === "boundary" || /^边界[：:]/.test(statement)) learned.boundaries.push(item);
           else if (row.learnKind === "current_fact" || row.learnKind === "new_fact") learned.facts.push(item);
+          else if (row.learnKind === "expression_preference") learned.expression.push(item);
           else if (row.learnKind === "artifact_history" || row.status === "session_only") {
-            /* audit only — not expression */
-          } else if (
-            row.learnKind === "expression_preference" ||
-            /expression_preference|标题|铺垫|分点|观点|冲突|篇幅|趋势|平衡/.test(JSON.stringify(row))
-          ) {
-            learned.expression.push(item);
-          } else if (/boundary|边界|不得|禁止/.test(JSON.stringify(row))) learned.boundaries.push(item);
-          else if (/new_fact|尚未|未进入|验证|本地优先|协作|事实/.test(JSON.stringify(row))) learned.facts.push(item);
-          else if (item.resolverEligible) learned.expression.push(item);
+            /* audit only */
+          }
         } catch {
           /* ignore */
         }
