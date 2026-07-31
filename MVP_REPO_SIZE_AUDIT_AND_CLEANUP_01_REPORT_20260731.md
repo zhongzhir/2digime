@@ -211,8 +211,9 @@
 
 ## Commit / Push
 
-- 建议提交：`chore(repo): audit and clean obsolete build artifacts`
+- 提交：`0927329` — `chore(repo): audit and clean obsolete build artifacts`
 - 本提交仅含：审计产物、清单、报告、`.gitignore`、审计脚本
+- 基线产品提交仍为：`597225e`（未被改写）
 - **不 push**
 
 ## 产物索引
