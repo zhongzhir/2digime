@@ -5,6 +5,40 @@
 
 ---
 
+## 2026-07-31 TODAY-CLOSE · MVP-LEARNING-QUALITY-01 工程验收收口
+
+### 状态
+
+`accepted_as_engineered` / `learning_precision_validated` / `generic_quality_scope_isolation_validated` / `real_model_preference_reuse_confirmed` / `quality_outcome_mixed` / `owner_engineering_accepted` / `not_pushed`
+
+分支：`codex/mvp-release-gate-01`。任务包：`digitalme_phase1_task_MVP-LEARNING-QUALITY-01_v0.1.md`。报告：`MVP_LEARNING_QUALITY_01_FIX_01_REPORT_20260731.md`。
+
+### 已验证
+
+- 真实生产学习链路落盘：expression=4，boundary=1，Learn Job `committed`，无 pending_conflict
+- 静态：`test:mvp-learning-quality-01` 17/17；`test:dvl2-04-auto-learn` 6/6
+- 无 Task A 正文复制；无错误旧事实
+- software / image / video / podcast **静态** scope 隔离
+- document/article **真实** DeepSeek 回归（证据 `probe-c-2026-07-31T13-46-45-511Z`）
+- 通用 `qualityScope` / `resolveQualityExperiences`；新增 Store/IPC/知识源 = 0
+
+### 明确未证明
+
+- 文章结果全面优于普通模型（`valueHypothesisSupported=false`；observableImproveDimensions=1；mixed）
+- 跨模态真实质量验证
+- closed alpha / MVP 产品就绪
+
+### 长期结论
+
+1. 用户修改并采用后，质量经验可分类、落盘、重载并在匹配任务复用。  
+2. 非文章专用：可通过 qualityScope 承载多成果类型。  
+3. 不得把一次采用成果的全部特征自动升为长期全局偏好。  
+4. 学习精度通过 ≠ 每次生成更优；后者交给后续 **MVP-QUALITY-EVALUATION-01**（未启动）。
+
+不得 push。今日停止新增功能 / 调参 / 真实模型回归。
+
+---
+
 ## 2026-07-29 ARTIFACT-ACCESS-MIN-01.1 原生成果菜单上下文一致性修复
 
 状态：`implemented` / `stale_artifact_context_removed` / `native_menu_context_guarded` / `developer_runtime_accepted` / `owner_runtime_acceptance_pending`。

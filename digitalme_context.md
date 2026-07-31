@@ -2,7 +2,7 @@
 
 版本：v0.4
 状态：持续更新
-最后更新：2026-07-29（ARTIFACT-ACCESS-MIN-01.1 上下文一致性修复完成；`owner_runtime_acceptance_pending`；不得 push）
+最后更新：2026-07-31（MVP-LEARNING-QUALITY-01 工程验收收口；`accepted_as_engineered` / `owner_engineering_accepted`；不得 push）
 
 > **当前产品主线（2026-07-26）**：**第二纵向闭环** — 多模态成果包交付与渐进式主体构建。第一纵向闭环已 `accepted` / `completed`。
 > **最高架构与研发原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)（**v0.1.1 `active`**）。
@@ -21,7 +21,8 @@
 > 2. **BUG1 #6** = 七模块渐进式数字之我构建框架。
 > 3. 首个正式验收场景 = 为一个项目生成完整对外介绍成果包。
 > 4. 第一轮真实产物 = 正式介绍文档、演示文稿 PPT、单页 HTML、封面图片；视频/音频本轮不实现真实生成，用户面不得宣称已支持。
-> **当前任务**：**ARTIFACT-ACCESS-MIN-01.1**（原生文件菜单上下文一致性修复）已实现并完成开发侧验证，状态 `implemented` / `stale_artifact_context_removed` / `native_menu_context_guarded` / `developer_runtime_accepted` / `owner_runtime_acceptance_pending`（分支 `codex/artifact-access-min-01`）。验证命令：`node digitalme-app/scripts/test-task-quality-stabilize-01-fix-01-artifact-open.cjs`（14/14）、`node digitalme-app/scripts/test-global-renderer-responsiveness-01.cjs`（11/11）、`node digitalme-app/scripts/run-artifact-access-min-file-menu-acceptance.cjs`（正式窗口真实鼠标，`ok: true`）。证据目录：`digitalme-app/scripts/_access-min-evidence/2026-07-29T08-35-23-483Z/`。成果卡不恢复「打开成果」按钮；原生菜单仍为过渡访问入口；不得提前 `owner_runtime_accepted` / `accepted_as_implemented`。不得 push。
+> **当前任务（2026-07-31）**：**MVP-LEARNING-QUALITY-01** 已工程验收收口（[`digitalme_phase1_task_MVP-LEARNING-QUALITY-01_v0.1.md`](digitalme_phase1_task_MVP-LEARNING-QUALITY-01_v0.1.md)）：`accepted_as_engineered` / `learning_precision_validated` / `generic_quality_scope_isolation_validated` / `real_model_preference_reuse_confirmed` / `quality_outcome_mixed` / `owner_engineering_accepted` / `not_pushed`。分支 `codex/mvp-release-gate-01`。真实 DeepSeek 证据：`probe-c-2026-07-31T13-46-45-511Z`（expression=4，boundary=1，Learn Job committed）。证明「准确学习并真实复用」，**不**证明每次文章结果全面优于普通模型；**不得**写 `all_artifact_quality_validated` / `article_quality_superiority_validated` / `closed_alpha_ready` / `mvp_ready`。**建议下一任务**：`MVP-QUALITY-EVALUATION-01`（跨成果类型质量评估与自动改进；**尚未启动**）。不得继续用学习链路追逐单次文章评分。不得 push。
+> **产品候选**：`20260731-173649-597225e`（do-workflow 产品基线 `597225e`）；学习精度工程在其上收口。
 > **R2 对话运行时**：保留基础设施；R2 代码 **retained as infrastructure**。生产默认入口仍为 legacy。
 > **Owner Electron 真机验收（2026-07-24）**：`accepted`（distill-me / R2 对话重试 / doing-context / PAN-01S 等）。
 > **confirmed identity → act context（2026-07-24，`2f1b7bd`）**：`accepted`（历史整合基线；**不是**当前 HEAD）。
@@ -40,6 +41,8 @@
 > **公共叙事**：数字主权为目标与核心公共叙事；广义数字资产口径与 Digital Org 长期方向见 [`digitalme_digital_sovereignty_narrative_v0.1.md`](digitalme_digital_sovereignty_narrative_v0.1.md)。Digital Org **不进入**本轮个人闭环实现。
 >
 > **产品身份（2026-07-11）**：Digital Me 是面向**大量真实用户**的通用产品，不是仅为当前 Owner 服务的定制化 Demo。当前 Package / 试用材料仅作验证样本；默认能力、默认文案、默认流程必须以普遍用户为准。见 §3 第 16 条、§5.4、决策 #27–#28。
+>
+> **长期结论（2026-07-31 · 学习质量）**：① 用户修改并采用成果后，质量经验可分类、落盘、重载并在下一匹配任务复用。② 通用质量经验经 `qualityScope` 支持 document/software/image/video/podcast 等，**不是**文章专用机制。③ 边界：document/article 已真实模型回归；其他成果类型仅静态 scope 隔离；跨模态真实质量验证未执行。④ 不得把一次采用成果中的全部特征自动学习为长期偏好。
 
 ## 1. 项目背景
 
@@ -313,6 +316,7 @@ flowchart TB
 | `digitalme_subject_architecture_and_rd_principles_v0.1.md` | **当前最高架构与研发原则**：产品定义、数字主体循环、能力/身份/验收、纵向闭环、治理 |
 | `digitalme_first_vertical_loop_sprint_plan_v0.1.md` | **第一纵向闭环执行计划（历史）**（**`completed` / `superseded_as_current_execution_plan`**） |
 | `digitalme_first_vertical_loop_spec_v0.1.md` | **第一闭环冻结规格**（流程、四合同、能力、55ae01f 裁定、验收；含 §3.4；第一段已收口） |
+| `digitalme_phase1_task_MVP-LEARNING-QUALITY-01_v0.1.md` | **MVP-LEARNING-QUALITY-01 学习精度与通用 qualityScope**（`accepted_as_engineered` / `owner_engineering_accepted` @ 2026-07-31；真实证据 `probe-c-2026-07-31T13-46-45-511Z`） |
 | `digitalme_phase1_task_DVL2-00_product_and_data_contracts_v0.1.md` | **第二纵向闭环产品与数据合同（权威）**（v0.1.1；`owner_accepted` / `frozen_for_implementation` / `not_started`；DVL2-01～05 须遵守） |
 | `digitalme_phase1_task_DVL2-01_deliverable_planner_v0.1.md` | **DVL2-01 成果规划器**（v0.1.1；`owner_runtime_accepted` / `accepted_as_implemented`；实施 `implemented` @ `6e7c384`；范围仅限规划器） |
 | `digitalme_phase1_task_DVL2-02_deliverable_package_and_execution_preparation_v0.1.md` | **DVL2-02 成果包与执行准备**（**v0.1.1**；`frozen_for_implementation`；实现 `20c8832`；`accepted_as_implemented`） |
@@ -593,6 +597,8 @@ Owner 判断（2026-07-27）：
 
 ### 7.1 近期优先级（建议顺序）
 
+> **2026-07-31 当前执行指针（TODAY-CLOSE）**：**MVP-LEARNING-QUALITY-01** 已工程验收收口（`accepted_as_engineered` / `owner_engineering_accepted`；任务包 `digitalme_phase1_task_MVP-LEARNING-QUALITY-01_v0.1.md`）。真实 DeepSeek：expression=4 / boundary=1 / Learn Job committed；质量结果 mixed，**不**宣称文章全面优越或 closed alpha ready。**建议下一任务**：`MVP-QUALITY-EVALUATION-01`（**未启动**）。不得 push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+
 > **2026-07-27 当前执行指针（TODAY-CLOSE）**：**LEARN-LOOP-FIX-02**、**LEARN-LOOP-FIX-02.1**、**DVL2-03-FIX-01**、**TASK-UX-MIN-01** 已于 2026-07-27 Owner 真机验收并标 `accepted_as_implemented`。**IDCOLLAB-MIN-01** 已 `implemented` / `revocation_bug_fixed` / `owner_runtime_accepted` / `accepted_as_implemented`（2026-07-28 状态校正）。CRT-MVP-02 系列已 `owner_runtime_accepted`。不得 push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
 
 > **2026-07-26 执行指针（历史）**：DVL2-03 待 Owner 真机验收（实现 `7047113`；分支 `codex/dvl2-03-real-deliverable-generation`）。DVL2-02 runtime `ceb6c83`。不得 push；不得提前标 `implemented`。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
@@ -605,7 +611,9 @@ Owner 判断（2026-07-27）：
 
 1. **限定范围的仓库实现映射与第一闭环规格冻结**（文档；**已完成** → 规格 `spec_frozen`）；
 2. **实现任务意图与本人上下文装配（第一闭环实现 · 第 1 块）**（**history / 已完成并收口**；不得再当作当前下一项）→ 其后研究与表达 / Skill / 外搜 / 证据 / Proposal 各块均已完成；第一段整体 **`accepted` / `completed`**；
-3. **当前任务（2026-07-28）**：**TASK-QUALITY-LOOP-01** 已实现完成，等待 Owner 真机验收（`owner_runtime_acceptance_pending`）；**IDCOLLAB-MIN-01** 已校正为 `owner_runtime_accepted` / `accepted_as_implemented`（2026-07-28）。2026-07-27 已收口四项见 §3.3。不得 push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+3. **当前任务（2026-07-31）**：**MVP-LEARNING-QUALITY-01** 已 `accepted_as_engineered` / `owner_engineering_accepted`（见文首与任务包）。建议下一任务 **MVP-QUALITY-EVALUATION-01**（未启动）。不得用学习链路继续追逐单次文章评分。不得 push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+
+~~3. **当前任务（2026-07-28）**：**TASK-QUALITY-LOOP-01** 已实现完成，等待 Owner 真机验收（`owner_runtime_acceptance_pending`）；**IDCOLLAB-MIN-01** 已校正为 `owner_runtime_accepted` / `accepted_as_implemented`（2026-07-28）。2026-07-27 已收口四项见 §3.3。不得 push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。~~（历史指针；已被 2026-07-31 学习质量收口覆盖）
 
 （以下 1–7 为 2026-07-16 历史 Trusted Beta 硬化清单，**不再是当前执行顺序**：）
 
