@@ -1,10 +1,12 @@
 # MVP-RELEASE-GATE-01E — 封闭内测发布闸门
 
-- **状态**：`implemented` / `release_gate_conditionally_passed` / `closed_alpha_blockers_remaining` / `not_ready_for_owner_spotcheck` / `not_pushed`
+- **状态**：`implemented` / `release_gate_conditionally_passed` / `ready_to_resume_clean_user_acceptance`（FIX-02 后） / `not_ready_for_owner_spotcheck` / `not_pushed`
 - **分支**：`codex/mvp-release-gate-01`
 - **进入基线**：`ff17e80`（01D HEAD 校正后）
-- **FIX-01**：构建真实性（staging + embedded gitHead + 禁止旧产物误报）
-- **最终 tip**：见 `MVP_RELEASE_GATE_01E_IMPLEMENTATION_REPORT_20260730.md` §11–§12
+- **FIX-01**：构建真实性（staging + embedded gitHead）
+- **FIX-02**：模型连接主路径 + renderer 空绑定 + 版本显示（候选 `3d651f0`）
+- **已拒绝候选**：`605be75`（`rejected_acceptance_candidate`）
+- **当前候选**：`20260731-101441-3d651f0` / `Digital-Me-Closed-Alpha-3d651f0.zip`
 - **性质**：`learning_loop_effectiveness` / `accepted_revision_reuse` / `rejected_content_suppression` / `closed_alpha_release_validation` / `distribution_hardening`
 
 ## 目标
