@@ -2115,9 +2115,11 @@ ipcMain.handle("actBehalf:selectFiles", async (_e, payload) => {
           }
         }
       } catch (err) {
-        note = "未能读入：" + (err.message || "未知原因");
-        text = "";
-        ok = false;
+        // Soft degrade: keep the attachment so Start Do is not blocked by one parser miss.
+        note = "未能完整读入文字：" + (err.message || "未知原因") + "。仍保留该材料供任务引用。";
+        text = `[附件：${name}，暂未能提取正文]`;
+        ok = true;
+        chars = text.length;
       }
       files.push({
         id: "file_" + Date.now().toString(36) + "_" + Math.floor(Math.random() * 1000),

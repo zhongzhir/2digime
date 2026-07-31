@@ -5397,19 +5397,51 @@ async function handleStartDoWork() {
   actBehalfState.stopRequested = false;
   const titleEl = $("act-title");
   if (titleEl && !titleEl.value.trim()) titleEl.value = deriveTaskTitleFromGoal(goal);
+  const title =
+    (titleEl && titleEl.value.trim()) || deriveTaskTitleFromGoal(goal);
   showActWorkspacePhase("running");
   setActRunningHint("正在整理任务材料");
   setActWorkspaceHint("");
+  const startBtn = $("btn-act-start-do");
+  if (startBtn) startBtn.disabled = true;
   try {
-    if (actBehalfState.taskId) await persistActReferenceMaterials(actBehalfState.taskId);
+    // Ensure Task exists BEFORE planning so materials can be persisted onto it.
+    if (!actBehalfState.taskId) {
+      if (!window.digitalMe.actBehalfSave) {
+        throw Object.assign(new Error("暂时无法开始这项工作。"), { code: "save_unavailable" });
+      }
+      const created = await window.digitalMe.actBehalfSave({
+        title,
+        goal,
+        request: goal,
+        status: "draft",
+      });
+      if (!created || !created.ok || !created.task) {
+        throw Object.assign(
+          new Error((created && created.message) || "暂时无法开始这项工作。任务要求和材料已经保留，请重试。"),
+          { code: (created && created.code) || "task_create_failed" }
+        );
+      }
+      actBehalfState.taskId = created.task.taskId;
+    }
+
+    // Materials must be on the Task before planGenerate, otherwise the plan is
+    // created empty and the subsequent persist marks materialsStale — blocking generate.
+    const persistRes = await persistActReferenceMaterials(actBehalfState.taskId, {
+      throwOnError: true,
+    });
+    if (persistRes && persistRes.materialsStale) {
+      // Stale from a prior plan: re-plan below will refresh digest.
+    }
+
     setActRunningHint("正在理解任务");
-    await handleFormDeliverablePlan({ fromStartDo: true });
+    const planOk = await handleFormDeliverablePlan({ fromStartDo: true });
     if (actBehalfState.stopRequested) {
       showActWorkspacePhase("input");
       setActWorkspaceHint("已请求停止。任务与材料已保留。");
       return;
     }
-    if (!actBehalfState.taskId) {
+    if (!planOk || !actBehalfState.taskId) {
       showActWorkspacePhase("input");
       return;
     }
@@ -5422,14 +5454,46 @@ async function handleStartDoWork() {
     }
     if (actBehalfState.activePackageId) {
       await refreshActGenerationPanel(actBehalfState.activePackageId);
-    } else {
+    } else if (getActWorkspacePhase() === "running") {
+      // Generate returned without package and without resetting phase.
       showActWorkspacePhase("input");
+      setActWorkspaceHint("暂时无法完成这项工作。任务要求和材料仍在，可以稍后重试。");
     }
   } catch (err) {
     console.error("[Digital Me] 开始做失败", err);
     showActWorkspacePhase("input");
-    setActWorkspaceHint("暂时无法完成这项工作。任务要求和材料仍在，可以稍后重试。");
+    setActWorkspaceHint(userFacingStartDoError(err));
+  } finally {
+    if (startBtn) startBtn.disabled = false;
   }
+}
+
+function getActWorkspacePhase() {
+  const running = $("act-workspace-running");
+  if (running && !running.classList.contains("hidden")) return "running";
+  const result = $("act-workspace-result");
+  if (result && !result.classList.contains("hidden")) return "result";
+  return "input";
+}
+
+function userFacingStartDoError(err) {
+  const code = String((err && err.code) || "");
+  const msg = String((err && err.message) || "");
+  if (
+    code === "PROVIDER_NOT_CONFIGURED" ||
+    code === "MODEL_NOT_CONFIGURED" ||
+    code === "AUTH_FAILED" ||
+    /模型不可用|API Key|连接/.test(msg)
+  ) {
+    return "模型暂时无法使用。请检查模型连接后重试。";
+  }
+  if (code === "material_read_failed" || /材料.*无法读取|未能读入/.test(msg)) {
+    return "部分任务材料暂时无法读取。你可以移除相关材料后重试，其他内容已经保留。";
+  }
+  if (code === "folder_inaccessible" || /无法读取.*文件夹|EACCES|ENOENT/.test(msg)) {
+    return "无法读取这个文件夹。请确认文件夹仍存在并有访问权限。";
+  }
+  return "暂时无法开始这项工作。任务要求和材料已经保留，请重试。";
 }
 
 function handleActStopRequest() {
@@ -5611,8 +5675,13 @@ function renderActFileList() {
   });
 }
 
-async function persistActReferenceMaterials(taskId) {
-  if (!taskId || !window.digitalMe.actBehalfSave) return;
+async function persistActReferenceMaterials(taskId, opts = {}) {
+  if (!taskId || !window.digitalMe.actBehalfSave) {
+    if (opts.throwOnError) {
+      throw Object.assign(new Error("暂时无法保存任务材料。"), { code: "save_unavailable" });
+    }
+    return null;
+  }
   const materials = (actBehalfState.attachedFiles || []).filter((f) => f && f.ok);
   try {
     const res = await window.digitalMe.actBehalfSave({
@@ -5636,14 +5705,27 @@ async function persistActReferenceMaterials(taskId) {
       request: ($("act-request") && $("act-request").value.trim()) || undefined,
       status: "draft",
     });
+    if (!res || !res.ok) {
+      if (opts.throwOnError) {
+        throw Object.assign(
+          new Error((res && res.message) || "暂时无法保存任务材料。"),
+          { code: (res && res.code) || "material_persist_failed" }
+        );
+      }
+      return res;
+    }
     if (res && (res.materialsStale || (res.task && res.task.deliverablePlanning && res.task.deliverablePlanning.materialsStale))) {
-      setActProgress("任务材料已变化，再次开始做会按新材料重新整理。");
-      if (typeof restoreActDeliverablePlan === "function") {
+      if (!opts.silentStaleHint) {
+        setActProgress("任务材料已变化，再次开始做会按新材料重新整理。");
+      }
+      if (typeof restoreActDeliverablePlan === "function" && !opts.skipRestore) {
         await restoreActDeliverablePlan(taskId);
       }
     }
-  } catch {
-    /* non-blocking */
+    return res;
+  } catch (err) {
+    if (opts.throwOnError) throw err;
+    return null;
   }
 }
 
@@ -7500,6 +7582,43 @@ async function handleGenerateFromPlan(opts = {}) {
   }
 
   if (res && res.code === "plan_materials_stale") {
+    if (fromStartDo) {
+      // One automatic re-plan so materials digest and plan stay aligned, then retry generate once.
+      setActRunningHint("任务材料已更新，正在重新整理…");
+      const replanned = await handleFormDeliverablePlan({ fromStartDo: true });
+      if (!replanned) {
+        showActWorkspacePhase("input");
+        return;
+      }
+      const retry = await window.digitalMe.actBehalfConfirmPlanAndGenerate({
+        taskId: actBehalfState.taskId,
+        understanding,
+        items,
+        ...(actBehalfState.planRevision || {}),
+      });
+      if (retry && retry.revision) actBehalfState.planRevision = retry.revision;
+      if (retry && retry.packageId) {
+        actBehalfState.activePackageId = retry.packageId;
+        await refreshActGenerationPanel(retry.packageId);
+      }
+      if (!retry || !retry.ok) {
+        showActWorkspacePhase("input");
+        setActWorkspaceHint(
+          userFacingStartDoError({ code: retry && retry.code, message: retry && retry.message })
+        );
+        if (window.DeliverablePlannerUi && window.DeliverablePlannerUi.updatePrimaryGenerateButton) {
+          window.DeliverablePlannerUi.updatePrimaryGenerateButton({
+            mode: "generate",
+            busy: false,
+            disabled: false,
+          });
+        }
+        return;
+      }
+      await restoreActDeliverablePlan(actBehalfState.taskId);
+      await refreshActTaskList();
+      return;
+    }
     setActProgress((res && res.message) || "任务材料已变化，请再次点击「开始做」。");
     await restoreActDeliverablePlan(actBehalfState.taskId);
     if (window.DeliverablePlannerUi && window.DeliverablePlannerUi.updatePrimaryGenerateButton) {
@@ -7526,7 +7645,16 @@ async function handleGenerateFromPlan(opts = {}) {
     if (!fromStartDo) await refreshActDeliverableResults(actBehalfState.taskId);
     if (fromStartDo) {
       showActWorkspacePhase("input");
-      setActWorkspaceHint((res && res.message) || "暂时无法完成这项工作。任务要求和材料仍在。");
+      setActWorkspaceHint(
+        userFacingStartDoError({ code: res && res.code, message: res && res.message })
+      );
+    }
+    if (window.DeliverablePlannerUi && window.DeliverablePlannerUi.updatePrimaryGenerateButton) {
+      window.DeliverablePlannerUi.updatePrimaryGenerateButton({
+        mode: "generate",
+        busy: false,
+        disabled: false,
+      });
     }
     return;
   }
@@ -7662,14 +7790,23 @@ async function handleFormDeliverablePlan(opts = {}) {
   const fromStartDo = !!(opts && opts.fromStartDo);
   const goal = ($("act-request") && $("act-request").value.trim()) || "";
   if (!goal) {
-    setActProgress("请先描述你希望完成的工作。");
-    return;
+    const msg = "请先描述你希望完成的工作。";
+    if (fromStartDo) setActWorkspaceHint(msg);
+    else setActProgress(msg);
+    return false;
   }
   if (!window.digitalMe.actBehalfPlanGenerate) {
-    setActProgress("当前版本尚未开放任务能力。");
-    return;
+    const msg = "当前版本尚未开放任务能力。";
+    if (fromStartDo) setActWorkspaceHint(msg);
+    else setActProgress(msg);
+    return false;
   }
-  if (actBehalfState.taskId) await persistActReferenceMaterials(actBehalfState.taskId);
+  if (actBehalfState.taskId) {
+    await persistActReferenceMaterials(actBehalfState.taskId, {
+      silentStaleHint: fromStartDo,
+      skipRestore: fromStartDo,
+    });
+  }
   if (!fromStartDo) setActProgress("正在整理任务…");
   const title =
     ($("act-title") && $("act-title").value.trim()) || deriveTaskTitleFromGoal(goal);
@@ -7685,24 +7822,36 @@ async function handleFormDeliverablePlan(opts = {}) {
     ...(revision || {}),
   });
   if (res && res.code === "stale_plan_state") {
-    setActProgress("任务已变化，正在重新加载…");
+    const msg = "任务已变化，正在重新加载…";
+    if (fromStartDo) setActWorkspaceHint(msg);
+    else setActProgress(msg);
     if (actBehalfState.taskId) await restoreActDeliverablePlan(actBehalfState.taskId);
-    return;
+    return false;
   }
   if (!res || !res.ok) {
-    setActProgress((res && res.message) || "暂时无法开始这项工作。");
+    const msg =
+      userFacingStartDoError({ code: res && res.code, message: res && res.message }) ||
+      "暂时无法开始这项工作。";
+    if (fromStartDo) setActWorkspaceHint(msg);
+    else setActProgress((res && res.message) || msg);
     if (res && res.version && window.DeliverablePlannerUi) {
       window.DeliverablePlannerUi.renderPlanView(res);
     }
     if (res && res.failClosed && window.DeliverablePlannerUi) {
       window.DeliverablePlannerUi.renderPlanView(res);
     }
-    return;
+    return false;
   }
   if (res.taskId || (res.task && res.task.taskId)) {
     actBehalfState.taskId = res.taskId || res.task.taskId;
   }
-  if (actBehalfState.taskId) await persistActReferenceMaterials(actBehalfState.taskId);
+  // Re-persist after plan only to keep UI/task aligned; digest should match plannedMaterialsDigest.
+  if (actBehalfState.taskId) {
+    await persistActReferenceMaterials(actBehalfState.taskId, {
+      silentStaleHint: true,
+      skipRestore: true,
+    });
+  }
   actBehalfState.planRevision = res.revision || null;
   actBehalfState._lastPlanView = res;
   if (window.DeliverablePlannerUi) window.DeliverablePlannerUi.renderPlanView(res);
@@ -7715,6 +7864,7 @@ async function handleFormDeliverablePlan(opts = {}) {
   if (rename && actBehalfState.taskId) rename.classList.remove("hidden");
   if (!fromStartDo) setActProgress("任务已就绪。");
   await refreshActTaskList();
+  return true;
 }
 
 async function handleSaveDeliverablePlanDraft() {

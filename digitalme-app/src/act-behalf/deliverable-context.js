@@ -74,6 +74,9 @@ function normalizeReferenceMaterials(list, opts) {
       text,
       note: raw.note ? String(raw.note) : "",
       ok: true,
+      isFolder: !!raw.isFolder,
+      fileCount: raw.fileCount != null ? Number(raw.fileCount) : undefined,
+      kindLabel: raw.kindLabel ? String(raw.kindLabel) : undefined,
     });
   }
   return out;
