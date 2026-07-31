@@ -104,6 +104,14 @@ digitalme-app/scripts/verify-vl1-fix-no-user-supplement.cjs
 /digitalme-*-source-*.zip
 /digitalme-source-*.zip
 /digitalme-current.bundle
+/Digital-Me-Closed-Alpha-*.zip
+/*.zip
+!package-lock.json
+
+# --- local MVP evidence trees (reports stay tracked at repo root) ---
+digitalme-app/scripts/_access-min-evidence/
+digitalme-app/scripts/_mvp-*-evidence/
+digitalme-app/scripts/**/*-evidence/
 
 # --- generated audit and test console captures at repository root ---
 /_audit_metrics_tmp.txt

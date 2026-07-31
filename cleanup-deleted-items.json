@@ -1,0 +1,16 @@
+{
+    "retained":  [
+                     "digitalme-app/dist-alpha-build-staging/20260731-173649-597225e/",
+                     "digitalme-app/scripts/_mvp-release-gate-01e-evidence/",
+                     "digitalme-app/scripts/_mvp-release-gate-01e-fix-05-evidence/",
+                     "digitalme-app/scripts/_evidence-archive-20260731/",
+                     "digitalme-app/node_modules/",
+                     "digital-me-package/",
+                     "source-materials/",
+                     ".digitalme-pkgstore/"
+                 ],
+    "keepBuildId":  "20260731-173649-597225e",
+    "approxDeletedMb":  5150,
+    "note":  "Primary deletion: 9 historical staging builds + dist-alpha-build + dist-alpha + root zips/bundles + archived evidence + qa/temp handoff artifacts. See historical-build-manifest.json.",
+    "deletedAt":  "2026-07-31T10:18:38.1027629Z"
+}

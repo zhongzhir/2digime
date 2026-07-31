@@ -12,3 +12,15 @@ playwright-report/
 *.log
 .env
 config.local.json
+
+# Local MVP evidence / recordings / temp userData (rebuildable; keep formal reports in repo root)
+# Already-tracked evidence under these trees remains tracked; new dumps stay local.
+scripts/_access-min-evidence/
+scripts/_mvp-*-evidence/
+scripts/**/*-evidence/
+scripts/_evidence-archive-*/
+*.zip
+!package-lock.json
+.runtime/
+userData/
+**/win-unpacked/

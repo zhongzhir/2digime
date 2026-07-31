@@ -1,0 +1,209 @@
+{
+    "generatedAt":  "2026-07-31T10:20:00.4521105Z",
+    "command":  "git ls-files",
+    "fileCount":  571,
+    "bytes":  9804125,
+    "mb":  9.35,
+    "top50":  [
+                  {
+                      "path":  "digitalme-app/src/renderer/app.js",
+                      "bytes":  547178
+                  },
+                  {
+                      "path":  "digitalme-app/package-lock.json",
+                      "bytes":  300223
+                  },
+                  {
+                      "path":  "digitalme-app/src/main.js",
+                      "bytes":  293104
+                  },
+                  {
+                      "path":  "digitalme_log.md",
+                      "bytes":  285623
+                  },
+                  {
+                      "path":  "digitalme_context.md",
+                      "bytes":  149289
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_task-do-workspace-ux-01-evidence/2026-07-30T04-47-33-681Z/04-result-timeout.png",
+                      "bytes":  127344
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_task-do-workspace-ux-01-evidence/2026-07-30T04-47-33-681Z/03-after-start.png",
+                      "bytes":  127344
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_task-do-workspace-ux-01-evidence/2026-07-30T04-49-50-264Z/04-in-page-result.png",
+                      "bytes":  127332
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_task-do-workspace-ux-01-evidence/2026-07-30T04-49-50-264Z/03-after-start.png",
+                      "bytes":  127332
+                  },
+                  {
+                      "path":  "digitalme-app/src/renderer/styles.css",
+                      "bytes":  90948
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_access-min-evidence/LATEST/shot-04-after-reveal.png",
+                      "bytes":  90035
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_mvp-release-gate-01c-evidence/2026-07-30T04-18-30-689Z/01-first-run.png",
+                      "bytes":  84026
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_mvp-release-gate-01c-evidence/2026-07-30T04-20-45-472Z/01-first-run.png",
+                      "bytes":  84015
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_mvp-release-gate-01c-evidence/2026-07-30T04-19-49-778Z/01-first-run.png",
+                      "bytes":  83989
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_mvp-release-gate-01c-evidence/2026-07-30T04-20-45-472Z/06-import-summary.png",
+                      "bytes":  83738
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_mvp-release-gate-01c-evidence/2026-07-30T04-20-45-472Z/07-import-success-hub.png",
+                      "bytes":  83738
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_mvp-release-gate-01c-evidence/2026-07-30T04-19-49-778Z/06-import-summary.png",
+                      "bytes":  83635
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/test-pan-01r-sovereign-collaboration.cjs",
+                      "bytes":  83394
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_mvp-release-gate-01c-evidence/2026-07-30T04-20-45-472Z/08-invalid-import.png",
+                      "bytes":  80106
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_task-do-workspace-ux-01-evidence/2026-07-30T04-49-50-264Z/01-task-input.png",
+                      "bytes":  79244
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_task-do-workspace-ux-01-evidence/2026-07-30T04-49-50-264Z/02-long-requirement.png",
+                      "bytes":  79244
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_task-do-workspace-ux-01-evidence/2026-07-30T04-47-33-681Z/01-task-input.png",
+                      "bytes":  79159
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_task-do-workspace-ux-01-evidence/2026-07-30T04-47-33-681Z/02-long-requirement.png",
+                      "bytes":  79159
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_mvp-release-gate-01c-evidence/2026-07-30T04-18-30-689Z/02-create-page.png",
+                      "bytes":  76710
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_mvp-release-gate-01c-evidence/2026-07-30T04-20-45-472Z/02-create-page.png",
+                      "bytes":  76708
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_mvp-release-gate-01c-evidence/2026-07-30T04-19-49-778Z/02-create-page.png",
+                      "bytes":  76683
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_mvp-release-gate-01d-evidence/2026-07-30T05-08-32-624Z/01-after-restart.png",
+                      "bytes":  75561
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_mvp-release-gate-01d-evidence/2026-07-30T05-08-32-624Z/02-healed-state.png",
+                      "bytes":  75561
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_access-min-evidence/LATEST/shot-00-top-strip.png",
+                      "bytes":  74814
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_mvp-release-gate-01c-evidence/2026-07-30T04-20-45-472Z/05-import-page.png",
+                      "bytes":  73688
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_mvp-release-gate-01c-evidence/2026-07-30T04-19-49-778Z/05-import-page.png",
+                      "bytes":  73662
+                  },
+                  {
+                      "path":  "digitalme-app/src/renderer/index.html",
+                      "bytes":  73520
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_mvp-release-gate-01c-evidence/2026-07-30T04-19-49-778Z/04-restart-like-no-onboarding.png",
+                      "bytes":  71324
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_mvp-release-gate-01c-evidence/2026-07-30T04-19-49-778Z/03-create-done-hub.png",
+                      "bytes":  71324
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_mvp-release-gate-01c-evidence/2026-07-30T04-19-49-778Z/07-import-success-hub.png",
+                      "bytes":  71324
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_mvp-release-gate-01c-evidence/2026-07-30T04-18-30-689Z/05-invalid-import-preserved.png",
+                      "bytes":  71323
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_mvp-release-gate-01c-evidence/2026-07-30T04-18-30-689Z/06-import-inspect-ok.png",
+                      "bytes":  71323
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_mvp-release-gate-01c-evidence/2026-07-30T04-18-30-689Z/04-restart-like-no-onboarding.png",
+                      "bytes":  71323
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_mvp-release-gate-01c-evidence/2026-07-30T04-18-30-689Z/03-create-done-hub.png",
+                      "bytes":  71323
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_mvp-release-gate-01c-evidence/2026-07-30T04-20-45-472Z/03-create-done-hub.png",
+                      "bytes":  71315
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/_mvp-release-gate-01c-evidence/2026-07-30T04-20-45-472Z/04-restart-like-no-onboarding.png",
+                      "bytes":  71315
+                  },
+                  {
+                      "path":  "digitalme_product_spec_v0.2.md",
+                      "bytes":  70260
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/test-vl1-block4-experience-proposal.cjs",
+                      "bytes":  56746
+                  },
+                  {
+                      "path":  "digitalme_phase1_task_DVL2-01_deliverable_planner_v0.1.md",
+                      "bytes":  56567
+                  },
+                  {
+                      "path":  "digitalme-app/src/act-behalf/deliverable-generation.js",
+                      "bytes":  56093
+                  },
+                  {
+                      "path":  "digitalme-app/src/act-behalf/result-generation.js",
+                      "bytes":  54997
+                  },
+                  {
+                      "path":  "digitalme_renderer_foundation_R2_chat_and_sessions_migration.md",
+                      "bytes":  52442
+                  },
+                  {
+                      "path":  "digitalme-app/src/act-behalf/experience-proposal.js",
+                      "bytes":  52138
+                  },
+                  {
+                      "path":  "digitalme-app/scripts/test-p1-04-policy-decision-audit.cjs",
+                      "bytes":  46996
+                  },
+                  {
+                      "path":  "digitalme-app/src/act-behalf/deliverable-auto-learn.js",
+                      "bytes":  46394
+                  }
+              ]
+}
