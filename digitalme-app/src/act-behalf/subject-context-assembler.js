@@ -82,8 +82,20 @@ function scoreAsset(asset, queryTokens, priorityLayers) {
     asset.learnKind === "decision_pattern"
       ? -1.5
       : 0;
+  const kindBoost =
+    asset.learnKind === "boundary"
+      ? 5
+      : asset.learnKind === "current_fact"
+        ? 3
+        : asset.learnKind === "expression_preference"
+          ? asset.sourceType === "revision_guidance"
+            ? 2
+            : asset.sourceType === "revision_diff"
+              ? 1.2
+              : 1
+          : 0;
   const recency = asset.updatedAt ? 1 : 0;
-  return overlap * 3 + confBoost + layerBoost + priBoost + candidatePenalty + recency;
+  return overlap * 3 + confBoost + layerBoost + priBoost + candidatePenalty + kindBoost + recency;
 }
 
 function packageIdentity(packageDir) {
@@ -168,12 +180,25 @@ function loadMemoryAssets(packageDir, maxScan) {
       if (!row) continue;
       const status = String(row.status || row.activationState || "active").toLowerCase();
       if (status === "deprecated" || status === "revoked" || status === "deleted") continue;
+      if (row.revoked === true) continue;
       if (String(row.logicalState || "") === "session_only") continue;
       // Rejected deliverable versions must not re-enter subject context.
       if (String(row.revokedReason || "") === "deliverable_version_rejected") continue;
+      // Low-confidence body / overlearn candidates must not resolve into generation.
+      if (row.resolverEligible === false) continue;
+      if (row.overlearnRisk === true && row.learnKind === "expression_preference") continue;
+      if (String(row.learnKind || "") === "artifact_history") continue;
       if (/^本人接受了「/.test(String(row.content || ""))) continue;
       const statement = String(row.content || row.statement || row.text || "").trim();
       if (!statement || statement.length < 4) continue;
+      // Block residual body paragraphs that slipped through without flags.
+      if (
+        statement.length > 120 &&
+        !/表达与成果偏好|边界：|结构偏好|标题偏好|开篇偏好|篇幅偏好/.test(statement) &&
+        /[。！？]/.test(statement)
+      ) {
+        continue;
+      }
       const assetId =
         row.id ||
         row.assetId ||
@@ -198,20 +223,33 @@ function loadMemoryAssets(packageDir, maxScan) {
             : "active");
       const id =
         assetId;
+      const layer =
+        learnKind === "boundary"
+          ? "preference"
+          : learnKind === "expression_preference"
+            ? "preference"
+            : "memory";
       out.push({
         assetId: String(id),
-        layer: "memory",
+        layer,
         statement,
         confidence: row.confidence || "low",
         activationState,
         logicalState,
         learnKind,
         source: "long_term_memory",
+        sourceType: row.sourceType || null,
+        sourceTaskId: row.sourceTaskId || (row.learnProvenance && row.learnProvenance.taskId) || null,
+        sourceVersionId:
+          row.sourceVersionId ||
+          (row.learnProvenance && row.learnProvenance.deliverableVersionId) ||
+          null,
         memoryType: row.type || "semantic",
         ownership: row.ownership || "subject_owned",
         updatedAt: row.updatedAt || row.createdAt || null,
         contentHash: sha256Text(statement),
         usageCount: Number(row.usageCount || row.reinforcement || 0) || 0,
+        resolverEligible: true,
       });
     }
     return out;
@@ -528,6 +566,7 @@ module.exports = {
   assembleSubjectContext,
   loadDistillAssets,
   loadMemoryAssets,
+  scoreAsset,
   LAYER_KEYS,
   MVP_ACTIVE_LAYERS,
   emptyLayers,
