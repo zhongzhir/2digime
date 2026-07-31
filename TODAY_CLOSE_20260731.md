@@ -6,11 +6,12 @@
 
 ## 2. 最终 HEAD
 
-`2b942b96c0f7ba1b68ba5d19abbf4b1b947e6006`（短：`2b942b9`）
+`f55d75713fcbc529bc82245dce53abaf65eca5f3`（短：`f55d757`）
 
 ## 3. 本日新增 commits（本收口批次）
 
 ```
+f55d757 docs(learning): fill today-close HEAD and commit list
 2b942b9 docs(learning): accept scoped quality learning foundation
 83affd3 test(learning): validate production reload and cross-artifact scope isolation
 09a2fa6 fix(learning): connect scoped quality learning to production commit
