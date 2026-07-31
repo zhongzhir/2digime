@@ -6,11 +6,17 @@
 
 ## 2. 最终 HEAD
 
-（提交完成后填入）
+`2b942b96c0f7ba1b68ba5d19abbf4b1b947e6006`（短：`2b942b9`）
 
 ## 3. 本日新增 commits（本收口批次）
 
-见 `git log`（相对收口前 `012ace5`）。
+```
+2b942b9 docs(learning): accept scoped quality learning foundation
+83affd3 test(learning): validate production reload and cross-artifact scope isolation
+09a2fa6 fix(learning): connect scoped quality learning to production commit
+```
+
+（此前同日学习精度基线：`27e4778` / `5e879a8` / `495815d` / `012ace5`）
 
 ## 4. 工作区是否干净
 
