@@ -178,9 +178,9 @@ async function main() {
     assert.ok(appJs.includes("chat: { primary: modelId, fallbacks: [] }"));
   });
 
-  await test("9) start button re-enabled in finally after failure", () => {
-    assert.ok(appJs.includes("if (startBtn) startBtn.disabled = true"));
-    assert.ok(appJs.includes("if (startBtn) startBtn.disabled = false"));
+  await test("9) start button re-enabled via availability render after failure", () => {
+    assert.ok(appJs.includes("actBehalfState.startDoBusy = false"));
+    assert.ok(appJs.includes("renderStartDoAvailability()"));
     assert.ok(appJs.includes("finally {"));
   });
 
