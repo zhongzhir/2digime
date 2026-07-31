@@ -5135,6 +5135,10 @@ let actBehalfState = {
   stopRequested: false,
   /** Runtime-only: true while start-do click pipeline is in flight. */
   startDoBusy: false,
+  /** Runtime-only: last presented result key to avoid repeat full rebuilds. */
+  presentedResultKey: null,
+  /** Runtime-only counter for FIX-05 layout stability evidence. */
+  workspacePresentCount: 0,
 };
 
 function setActProgress(text) {
@@ -5314,6 +5318,9 @@ try {
   window.collectStartDoWorkspaceState = collectStartDoWorkspaceState;
   window.isDigitalMeReadyForStart = isDigitalMeReadyForStart;
   window.isModelReadyForStart = isModelReadyForStart;
+  window.isWorkspaceGenerationInFlight = isWorkspaceGenerationInFlight;
+  window.presentActWorkspaceResult = presentActWorkspaceResult;
+  window.refreshActGenerationPanel = refreshActGenerationPanel;
 } catch {
   /* ignore */
 }
@@ -5433,9 +5440,63 @@ function pickWorkspacePrimaryFromView(view) {
   return null;
 }
 
-async function presentActWorkspaceResult(view) {
+/**
+ * MVP-RELEASE-GATE-01E-FIX-05 Scheme A:
+ * Keep a fixed "running" phase until generation + quality enhancement have settled.
+ * Do not switch to result / rebuild Markdown on baseline tokens or interim refreshes.
+ */
+function latestAttemptForDeliverableView(d, view) {
+  if (!d) return null;
+  const attempts = (view && view.generationAttempts) || {};
+  const id = d.latestGenerationAttemptId;
+  if (id && attempts[id]) return attempts[id];
+  return null;
+}
+
+function isWorkspaceGenerationInFlight(view) {
+  if (actBehalfState.startDoBusy && actBehalfState.workspacePhase === "running") {
+    // Still allow settled views to complete even if startDoBusy briefly lags.
+  }
+  const included = ((view && view.deliverables) || []).filter(
+    (d) => d && d.planDisposition === "included"
+  );
+  if (!included.length) {
+    return !!(actBehalfState.startDoBusy || actBehalfState.workspacePhase === "running");
+  }
+  for (const d of included) {
+    if (d.generationStatus === "generating") return true;
+    const att = latestAttemptForDeliverableView(d, view);
+    if (!att) continue;
+    if (att.status === "repairing" || att.outcome === "repair_initiated") return true;
+    if (att.phase === "quality_enhancement") return true;
+    if (att.enhancement && att.enhancement.pending) return true;
+  }
+  return false;
+}
+
+function workspaceResultPresentationKey(primary) {
+  if (!primary) return null;
+  return [primary.packageId || "", primary.deliverableId || "", primary.versionId || "", primary.artifactId || ""].join(
+    "|"
+  );
+}
+
+async function presentActWorkspaceResult(view, opts = {}) {
+  const force = !!(opts && opts.force);
+  const allowPartial = !!(opts && opts.allowPartial);
+  const inFlight = isWorkspaceGenerationInFlight(view);
   const primary = pickWorkspacePrimaryFromView(view);
   actBehalfState.workspacePrimary = primary;
+
+  // Scheme A: while generation/enhancement is in flight, stay on fixed running UI.
+  if (inFlight && !allowPartial) {
+    if (actBehalfState.workspacePhase !== "running") {
+      showActWorkspacePhase("running");
+    }
+    setActRunningHint(primary ? "正在整理成果" : "正在生成成果");
+    return { presented: false, reason: "generation_in_flight" };
+  }
+
   if (!primary) {
     const dels = (view && view.deliverables) || [];
     const anyBusy = dels.some((d) => d && d.generationStatus === "generating");
@@ -5443,7 +5504,7 @@ async function presentActWorkspaceResult(view) {
     if (anyBusy) {
       showActWorkspacePhase("running");
       setActRunningHint("正在生成成果");
-      return;
+      return { presented: false, reason: "generating" };
     }
     if (anyFailed) {
       showActWorkspacePhase("input");
@@ -5458,10 +5519,18 @@ async function presentActWorkspaceResult(view) {
           ? "上次工作被中断，任务和材料已经保留。"
           : "暂时无法完成这项工作。你的任务要求和任务材料都还在，可以调整后再次开始做。"
       );
-      return;
+      return { presented: false, reason: "failed" };
     }
-    return;
+    return { presented: false, reason: "no_primary" };
   }
+
+  const resultKey = workspaceResultPresentationKey(primary);
+  if (!force && resultKey && resultKey === actBehalfState.presentedResultKey) {
+    if (actBehalfState.workspacePhase !== "result") showActWorkspacePhase("result");
+    return { presented: false, reason: "already_presented", resultKey };
+  }
+
+  actBehalfState.workspacePresentCount = (actBehalfState.workspacePresentCount || 0) + 1;
   showActWorkspacePhase("result");
   const heading = $("act-result-heading");
   if (heading) heading.textContent = ($("act-title") && $("act-title").value.trim()) || primary.title || "成果";
@@ -5471,7 +5540,10 @@ async function presentActWorkspaceResult(view) {
     errEl.textContent = "";
     errEl.classList.add("hidden");
   }
-  if (body) body.innerHTML = "<p class=\"muted\">正在载入成果……</p>";
+  // Avoid clearing a stable body when re-entering the same presentation path.
+  if (body && actBehalfState.presentedResultKey !== resultKey) {
+    body.innerHTML = "<p class=\"muted\">正在载入成果……</p>";
+  }
   const acceptStatus = $("act-accept-status");
   if (acceptStatus) {
     acceptStatus.classList.toggle("hidden", primary.reviewStatus !== "accepted");
@@ -5480,7 +5552,8 @@ async function presentActWorkspaceResult(view) {
   setActiveArtifactContext(actBehalfState.taskId, primary.packageId || actBehalfState.activePackageId);
   if (!window.digitalMe.actBehalfGetArtifactContent) {
     if (body) body.innerHTML = "<p class=\"muted\">当前版本无法在页面中预览，请打开本地文件查看。</p>";
-    return;
+    actBehalfState.presentedResultKey = resultKey;
+    return { presented: true, reason: "no_content_api", resultKey };
   }
   const res = await window.digitalMe.actBehalfGetArtifactContent({
     artifactId: primary.artifactId,
@@ -5488,6 +5561,10 @@ async function presentActWorkspaceResult(view) {
     deliverableId: primary.deliverableId,
     taskId: actBehalfState.taskId,
   });
+  // If a newer present started, abandon this stale load.
+  if (resultKey !== workspaceResultPresentationKey(actBehalfState.workspacePrimary)) {
+    return { presented: false, reason: "stale_primary" };
+  }
   if (!res || !res.ok) {
     if (body) body.innerHTML = "";
     if (errEl) {
@@ -5504,7 +5581,7 @@ async function presentActWorkspaceResult(view) {
       openBtn.disabled = true;
       openBtn.title = "本地文件暂时不可用";
     }
-    return;
+    return { presented: false, reason: "content_error" };
   }
   const openBtnOk = $("btn-act-open-local");
   if (openBtnOk) {
@@ -5518,6 +5595,16 @@ async function presentActWorkspaceResult(view) {
       body.innerHTML = renderMarkdownLite(res.content);
     }
   }
+  actBehalfState.presentedResultKey = resultKey;
+  // One-time gentle focus to the heading after authoritative completion (no repeated scroll).
+  if (heading && typeof heading.scrollIntoView === "function" && !opts.skipScroll) {
+    try {
+      heading.scrollIntoView({ behavior: "auto", block: "nearest" });
+    } catch {
+      /* ignore */
+    }
+  }
+  return { presented: true, reason: "ok", resultKey };
 }
 
 async function handleStartDoWork() {
@@ -5543,6 +5630,8 @@ async function handleStartDoWork() {
   const title =
     (titleEl && titleEl.value.trim()) || deriveTaskTitleFromGoal(goal);
   actBehalfState.startDoBusy = true;
+  actBehalfState.presentedResultKey = null;
+  actBehalfState.workspacePresentCount = 0;
   showActWorkspacePhase("running");
   setActRunningHint("正在整理任务材料");
   setActWorkspaceHint("");
@@ -5597,6 +5686,18 @@ async function handleStartDoWork() {
     }
     if (actBehalfState.activePackageId) {
       await refreshActGenerationPanel(actBehalfState.activePackageId);
+      // If enhancement is still running, remain on fixed running phase until settled.
+      if (
+        actBehalfState.workspacePhase === "running" &&
+        !actBehalfState.presentedResultKey &&
+        !actBehalfState.stopRequested
+      ) {
+        setActRunningHint("正在整理成果");
+        await waitForWorkspaceGenerationSettle(actBehalfState.activePackageId);
+      }
+      if (actBehalfState.workspacePhase === "result") {
+        await refreshActTaskList();
+      }
     } else if (getActWorkspacePhase() === "running") {
       // Generate returned without package and without resetting phase.
       showActWorkspacePhase("input");
@@ -5609,6 +5710,35 @@ async function handleStartDoWork() {
   } finally {
     actBehalfState.startDoBusy = false;
     renderStartDoAvailability();
+  }
+}
+
+async function waitForWorkspaceGenerationSettle(packageId, opts = {}) {
+  if (!packageId || !window.digitalMe.actBehalfGetDeliverablePackageById) return;
+  const timeoutMs = (opts && opts.timeoutMs) || 180000;
+  const started = Date.now();
+  let polls = 0;
+  while (Date.now() - started < timeoutMs) {
+    if (actBehalfState.stopRequested) return;
+    if (actBehalfState.presentedResultKey && actBehalfState.workspacePhase === "result") return;
+    if (actBehalfState.workspacePhase === "input") return;
+    polls += 1;
+    let view = null;
+    try {
+      view = await window.digitalMe.actBehalfGetDeliverablePackageById({ packageId });
+    } catch {
+      view = null;
+    }
+    if (view && view.ok && !isWorkspaceGenerationInFlight(view)) {
+      await refreshActGenerationPanel(packageId, { forcePresent: true });
+      return;
+    }
+    await new Promise((r) => setTimeout(r, 450));
+  }
+  // Bounded timeout: stop busy loop, keep task/materials, allow retry.
+  if (actBehalfState.workspacePhase === "running" && !actBehalfState.presentedResultKey) {
+    showActWorkspacePhase("input");
+    setActWorkspaceHint("暂时无法完成这项工作。任务要求和材料已经保留，请重试。");
   }
 }
 
@@ -5660,6 +5790,7 @@ async function handleSendRevision() {
   }
   showActWorkspacePhase("running");
   setActRunningHint("正在根据你的要求调整成果……");
+  actBehalfState.presentedResultKey = null;
   const res = await window.digitalMe.actBehalfGenerateDeliverable({
     packageId,
     deliverableId: primary.deliverableId,
@@ -5670,8 +5801,12 @@ async function handleSendRevision() {
     setActWorkspaceHint((res && res.message) || "暂时无法按要求修改，请稍后重试。");
     return;
   }
+  await waitForWorkspaceGenerationSettle(packageId);
+  if (actBehalfState.workspacePhase !== "result") {
+    await refreshActGenerationPanel(packageId, { forcePresent: true });
+  }
   if ($("act-revision-request")) $("act-revision-request").value = "";
-  await refreshActGenerationPanel(packageId);
+  setActWorkspaceHint("已按你的要求更新成果。");
 }
 
 async function handleAcceptWorkspaceResult() {
@@ -7311,6 +7446,8 @@ function resetActBehalfForm() {
     workspacePrimary: null,
     stopRequested: false,
     startDoBusy: false,
+    presentedResultKey: null,
+    workspacePresentCount: 0,
   };
   if ($("act-title")) $("act-title").value = "";
   if ($("act-request")) $("act-request").value = "";
@@ -7601,35 +7738,63 @@ async function handleResolveLearnConflict(choice) {
   await refreshActLearnConflict(actBehalfState.taskId);
 }
 
-async function refreshActGenerationPanel(packageId) {
+async function refreshActGenerationPanel(packageId, opts = {}) {
   if (!packageId || !window.digitalMe.actBehalfGetDeliverablePackageById) return;
   if (!window.DeliverablePlannerUi || !window.DeliverablePlannerUi.renderGenerationPanel) return;
   const view = await window.digitalMe.actBehalfGetDeliverablePackageById({ packageId });
-  if (view && view.ok) {
-    setActiveArtifactContext(actBehalfState.taskId, packageId);
-    actBehalfState.taskAuthStatus = view.authorizationStatus || null;
-    dmPerfMark("generationPanelRenderCount");
-    window.DeliverablePlannerUi.renderGenerationPanel(view);
-    const dels = (view.deliverables || []).filter((d) => d && d.planDisposition === "included");
-    const anyBusy = dels.some(
-      (d) =>
-        d.generationStatus === "generating" ||
-        ((view.generationAttempts || {})[d.latestGenerationAttemptId] || {}).status === "repairing"
-    );
-    const anyReady = dels.some((d) => d.generationStatus === "ready" || d.currentVersionId);
-    const anyFailed = dels.some((d) => d.generationStatus === "failed");
-    const planMode = anyBusy ? "generating" : anyReady ? "completed" : anyFailed ? "confirmed" : "confirmed";
-    if (actBehalfState._lastPlanView) {
-      window.DeliverablePlannerUi.renderPlanView(actBehalfState._lastPlanView, { planUiMode: planMode });
-    }
-    await presentActWorkspaceResult(view);
+  if (!(view && view.ok)) return;
+  setActiveArtifactContext(actBehalfState.taskId, packageId);
+  actBehalfState.taskAuthStatus = view.authorizationStatus || null;
+
+  const inFlight = isWorkspaceGenerationInFlight(view);
+  // FIX-05: during in-flight generation, do not rebuild generation panel / result Markdown.
+  if (inFlight && !(opts && opts.forcePresent)) {
+    if (actBehalfState.workspacePhase !== "running") showActWorkspacePhase("running");
+    const primary = pickWorkspacePrimaryFromView(view);
+    setActRunningHint(primary ? "正在整理成果" : "正在生成成果");
+    return { ok: true, skippedHeavyRender: true, inFlight: true };
   }
+
+  dmPerfMark("generationPanelRenderCount");
+  // Keep planner/generation panels hidden on the MVP workspace surface; still refresh internal state.
+  window.DeliverablePlannerUi.renderGenerationPanel(view);
+  const panel = $("act-generation-panel");
+  const planPanel = $("act-deliverable-plan-panel");
+  if (panel) panel.classList.add("hidden");
+  if (planPanel) {
+    planPanel.classList.add("hidden");
+    planPanel.hidden = true;
+  }
+  const dels = (view.deliverables || []).filter((d) => d && d.planDisposition === "included");
+  const anyBusy = dels.some(
+    (d) =>
+      d.generationStatus === "generating" ||
+      ((view.generationAttempts || {})[d.latestGenerationAttemptId] || {}).status === "repairing"
+  );
+  const anyReady = dels.some((d) => d.generationStatus === "ready" || d.currentVersionId);
+  const anyFailed = dels.some((d) => d.generationStatus === "failed");
+  const planMode = anyBusy ? "generating" : anyReady ? "completed" : anyFailed ? "confirmed" : "confirmed";
+  if (actBehalfState._lastPlanView) {
+    window.DeliverablePlannerUi.renderPlanView(actBehalfState._lastPlanView, { planUiMode: planMode });
+    if (planPanel) {
+      planPanel.classList.add("hidden");
+      planPanel.hidden = true;
+    }
+  }
+  const presented = await presentActWorkspaceResult(view, { force: !!(opts && opts.forcePresent) });
+  return { ok: true, skippedHeavyRender: false, inFlight: false, presented };
 }
 
 if (window.digitalMe && typeof window.digitalMe.onActBehalfBaselinePersisted === "function") {
   window.digitalMe.onActBehalfBaselinePersisted(async (info) => {
     const packageId = (info && info.packageId) || actBehalfState.activePackageId;
     if (!packageId) return;
+    // Scheme A: baseline is not final UI. Stay on running; do not rebuild result yet.
+    if (actBehalfState.workspacePhase === "running" || actBehalfState.startDoBusy) {
+      setActRunningHint("正在整理成果");
+      setActProgress("");
+      return;
+    }
     setActProgress("成果已完成");
     scheduleThrottledGenerationPanelRefresh(packageId, "baseline");
   });
@@ -7638,26 +7803,31 @@ if (window.digitalMe && typeof window.digitalMe.onActBehalfEnhancementSettled ==
   window.digitalMe.onActBehalfEnhancementSettled(async (info) => {
     const packageId = (info && info.packageId) || actBehalfState.activePackageId;
     if (!packageId) return;
-    scheduleThrottledGenerationPanelRefresh(packageId, "enhancement");
+    // Authoritative completion for MVP workspace presentation.
+    scheduleThrottledGenerationPanelRefresh(packageId, "settled");
   });
 }
 
 let generationPanelRefreshTimer = null;
 let generationPanelRefreshPendingId = null;
+let generationPanelRefreshReason = null;
 function scheduleThrottledGenerationPanelRefresh(packageId, reason) {
   dmPerfMark("enhancementRefreshScheduled");
   generationPanelRefreshPendingId = packageId;
+  generationPanelRefreshReason = reason || generationPanelRefreshReason;
   if (generationPanelRefreshTimer) return;
-  // Coalesce bursty baseline/enhancement pushes so main is not hit with
-  // back-to-back multi-MB package-store reads + full panel innerHTML rebuilds.
+  const delay =
+    reason === "settled" ? 120 : reason === "enhancement" ? 400 : reason === "baseline" ? 250 : 200;
   generationPanelRefreshTimer = setTimeout(() => {
     generationPanelRefreshTimer = null;
     const id = generationPanelRefreshPendingId;
+    const why = generationPanelRefreshReason;
     generationPanelRefreshPendingId = null;
+    generationPanelRefreshReason = null;
     if (!id) return;
     dmPerfMark("enhancementRefreshExecuted");
-    refreshActGenerationPanel(id).catch(() => {});
-  }, reason === "enhancement" ? 400 : 250);
+    refreshActGenerationPanel(id, { forcePresent: why === "settled" }).catch(() => {});
+  }, delay);
 }
 
 async function handleGenerateFromPlan(opts = {}) {
@@ -7782,6 +7952,11 @@ async function handleGenerateFromPlan(opts = {}) {
   if (res && res.revision) actBehalfState.planRevision = res.revision;
   if (res && res.planView && window.DeliverablePlannerUi) {
     window.DeliverablePlannerUi.renderPlanView(res.planView);
+    const planPanel = $("act-deliverable-plan-panel");
+    if (planPanel) {
+      planPanel.classList.add("hidden");
+      planPanel.hidden = true;
+    }
   }
   if (res && res.packageId) {
     actBehalfState.activePackageId = res.packageId;
@@ -7808,8 +7983,13 @@ async function handleGenerateFromPlan(opts = {}) {
   }
 
   if (!fromStartDo) setActProgress(res.message || "成果已生成。");
-  await restoreActDeliverablePlan(actBehalfState.taskId);
-  await refreshActTaskList();
+  // FIX-05: avoid task-list rebuild churn during start-do; wait until result is presented.
+  if (!fromStartDo) {
+    await restoreActDeliverablePlan(actBehalfState.taskId);
+    await refreshActTaskList();
+  } else if (actBehalfState.workspacePhase === "result") {
+    await refreshActTaskList();
+  }
 }
 
 // Generation-panel actions (接受 / 重新生成 / …). Artifact file open is NOT handled here —

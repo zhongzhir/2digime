@@ -3726,6 +3726,9 @@ button.btn-link.act-start-do-reason-action {
   font-size: 1.05rem;
   margin: 0.5rem 0 0;
 }
+.act-workspace-phase#act-workspace-running {
+  min-height: 180px;
+}
 .act-result-heading {
   margin: 0.25rem 0 0.5rem;
   font-size: 1.15rem;
@@ -3736,6 +3739,19 @@ button.btn-link.act-start-do-reason-action {
   line-height: 1.65;
   padding: 0.25rem 0 1rem;
   user-select: text;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.act-result-markdown pre,
+.act-result-markdown table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.act-result-markdown img {
+  max-width: 100%;
+  height: auto;
 }
 .act-result-markdown h1,
 .act-result-markdown h2,
