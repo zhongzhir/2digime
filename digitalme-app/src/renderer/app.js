@@ -437,6 +437,7 @@ function renderPackageStatus() {
   }
   // #pkg-status is no longer present in the current UI; readiness strip is authoritative.
   renderReadinessStrip();
+  renderStartDoAvailability();
 }
 
 async function renderModelStatus() {
@@ -452,6 +453,7 @@ async function renderModelStatus() {
   }
   // #model-status is no longer present in the current UI; readiness strip is authoritative.
   renderReadinessStrip();
+  renderStartDoAvailability();
 }
 
 /**
@@ -604,6 +606,7 @@ async function completeFirstRunSetup(firstRunAfter) {
   switchView("do", doNav);
   setDoHubFirstRunMessage("你的 Digital Me 已准备好，可以开始一个任务。");
   renderReadinessStrip();
+  renderStartDoAvailability();
 }
 
 function bindFirstRunEvents() {
@@ -5130,6 +5133,8 @@ let actBehalfState = {
   workspacePhase: "input",
   workspacePrimary: null,
   stopRequested: false,
+  /** Runtime-only: true while start-do click pipeline is in flight. */
+  startDoBusy: false,
 };
 
 function setActProgress(text) {
@@ -5183,6 +5188,134 @@ function showActWorkspacePhase(phase) {
   if (stopBtn) stopBtn.classList.toggle("hidden", phase !== "running");
   const rename = $("act-rename-row");
   if (rename) rename.classList.toggle("hidden", !actBehalfState.taskId || phase === "running");
+  renderStartDoAvailability();
+}
+
+/**
+ * MVP-RELEASE-GATE-01E-FIX-04: single derived gate for #btn-act-start-do.
+ * Materials / title / plan / reviewer fallbacks are never hard gates.
+ */
+function isDigitalMeReadyForStart() {
+  if (!pkg || !pkg.exists) return false;
+  const fr = (pkg && pkg.firstRun) || firstRunSnapshot || null;
+  if (fr && fr.needsFirstRunUi) return false;
+  return true;
+}
+
+function isModelReadyForStart() {
+  // Prefer live config flag (updated by renderModelStatus after connect/save).
+  if (lastModelConfigured) return true;
+  if (firstRunSnapshot && typeof firstRunSnapshot.modelConfigured === "boolean") {
+    return !!firstRunSnapshot.modelConfigured;
+  }
+  const fr = pkg && pkg.firstRun;
+  if (fr && typeof fr.modelConfigured === "boolean") return !!fr.modelConfigured;
+  return false;
+}
+
+function collectStartDoWorkspaceState() {
+  return {
+    goal: ($("act-request") && $("act-request").value) || "",
+    workspacePhase: actBehalfState.workspacePhase || getActWorkspacePhase(),
+    startDoBusy: !!actBehalfState.startDoBusy,
+    packageReady: isDigitalMeReadyForStart(),
+    modelReady: isModelReadyForStart(),
+  };
+}
+
+function deriveStartDoAvailability(workspaceState) {
+  const state = workspaceState || {};
+  const goal = String(state.goal || "").trim();
+  const phase = state.workspacePhase || "input";
+  const busy = !!state.startDoBusy;
+  if (busy || phase === "running") {
+    return {
+      enabled: false,
+      reasonCode: "running",
+      reasonText: "",
+      buttonLabel: "正在进行",
+      reasonAction: null,
+    };
+  }
+  if (!state.packageReady) {
+    return {
+      enabled: false,
+      reasonCode: "no_package",
+      reasonText: "先创建或导入你的 Digital Me。",
+      buttonLabel: "开始做",
+      reasonAction: null,
+    };
+  }
+  if (!state.modelReady) {
+    return {
+      enabled: false,
+      reasonCode: "no_model",
+      reasonText: "连接模型后即可开始。",
+      buttonLabel: "开始做",
+      reasonAction: "connect_model",
+    };
+  }
+  if (!goal) {
+    return {
+      enabled: false,
+      reasonCode: "no_goal",
+      reasonText: "先描述你希望完成的工作。",
+      buttonLabel: "开始做",
+      reasonAction: null,
+    };
+  }
+  return {
+    enabled: true,
+    reasonCode: null,
+    reasonText: "",
+    buttonLabel: "开始做",
+    reasonAction: null,
+  };
+}
+
+function renderStartDoAvailability() {
+  const btn = $("btn-act-start-do");
+  const reasonEl = $("act-start-do-reason");
+  const avail = deriveStartDoAvailability(collectStartDoWorkspaceState());
+  if (btn) {
+    btn.disabled = !avail.enabled;
+    btn.textContent = avail.buttonLabel;
+    btn.setAttribute("aria-disabled", avail.enabled ? "false" : "true");
+    btn.classList.toggle("is-start-unavailable", !avail.enabled);
+    if (avail.reasonCode) btn.setAttribute("data-unavailable-reason", avail.reasonCode);
+    else btn.removeAttribute("data-unavailable-reason");
+  }
+  if (reasonEl) {
+    if (avail.enabled || !avail.reasonText) {
+      reasonEl.classList.add("hidden");
+      reasonEl.textContent = "";
+      reasonEl.innerHTML = "";
+    } else {
+      reasonEl.classList.remove("hidden");
+      if (avail.reasonAction === "connect_model") {
+        reasonEl.innerHTML =
+          escapeHtml(avail.reasonText) +
+          ' <button type="button" class="btn-link act-start-do-reason-action" data-testid="act-start-do-connect-model">连接模型</button>';
+        const actionBtn = reasonEl.querySelector(".act-start-do-reason-action");
+        if (actionBtn) {
+          actionBtn.onclick = () => openSettings({ fromReadiness: true, focusModelConnect: true });
+        }
+      } else {
+        reasonEl.textContent = avail.reasonText;
+      }
+    }
+  }
+  return avail;
+}
+
+try {
+  window.deriveStartDoAvailability = deriveStartDoAvailability;
+  window.renderStartDoAvailability = renderStartDoAvailability;
+  window.collectStartDoWorkspaceState = collectStartDoWorkspaceState;
+  window.isDigitalMeReadyForStart = isDigitalMeReadyForStart;
+  window.isModelReadyForStart = isModelReadyForStart;
+} catch {
+  /* ignore */
 }
 
 function renderMarkdownLite(md) {
@@ -5392,6 +5525,16 @@ async function handleStartDoWork() {
   if (!goal) {
     setActWorkspaceHint("请先描述你希望完成的工作。");
     $("act-request")?.focus();
+    renderStartDoAvailability();
+    return;
+  }
+  const gate = deriveStartDoAvailability(collectStartDoWorkspaceState());
+  if (!gate.enabled && gate.reasonCode !== "running") {
+    setActWorkspaceHint(gate.reasonText || "暂时无法开始这项工作。");
+    renderStartDoAvailability();
+    return;
+  }
+  if (actBehalfState.startDoBusy || actBehalfState.workspacePhase === "running") {
     return;
   }
   actBehalfState.stopRequested = false;
@@ -5399,11 +5542,11 @@ async function handleStartDoWork() {
   if (titleEl && !titleEl.value.trim()) titleEl.value = deriveTaskTitleFromGoal(goal);
   const title =
     (titleEl && titleEl.value.trim()) || deriveTaskTitleFromGoal(goal);
+  actBehalfState.startDoBusy = true;
   showActWorkspacePhase("running");
   setActRunningHint("正在整理任务材料");
   setActWorkspaceHint("");
-  const startBtn = $("btn-act-start-do");
-  if (startBtn) startBtn.disabled = true;
+  renderStartDoAvailability();
   try {
     // Ensure Task exists BEFORE planning so materials can be persisted onto it.
     if (!actBehalfState.taskId) {
@@ -5464,7 +5607,8 @@ async function handleStartDoWork() {
     showActWorkspacePhase("input");
     setActWorkspaceHint(userFacingStartDoError(err));
   } finally {
-    if (startBtn) startBtn.disabled = false;
+    actBehalfState.startDoBusy = false;
+    renderStartDoAvailability();
   }
 }
 
@@ -5671,6 +5815,7 @@ function renderActFileList() {
       );
       renderActFileList();
       if (actBehalfState.taskId) await persistActReferenceMaterials(actBehalfState.taskId);
+      renderStartDoAvailability();
     });
   });
 }
@@ -5764,6 +5909,7 @@ async function handleActSelectFiles(mode) {
     }
   }
   if (actBehalfState.taskId) await persistActReferenceMaterials(actBehalfState.taskId);
+  renderStartDoAvailability();
 }
 
 function buildAttachedFilesText() {
@@ -7164,6 +7310,7 @@ function resetActBehalfForm() {
     workspacePhase: "input",
     workspacePrimary: null,
     stopRequested: false,
+    startDoBusy: false,
   };
   if ($("act-title")) $("act-title").value = "";
   if ($("act-request")) $("act-request").value = "";
@@ -7193,6 +7340,7 @@ function resetActBehalfForm() {
   setActiveArtifactContext(null, null);
   showActWorkspacePhase("input");
   autosizeActRequest();
+  renderStartDoAvailability();
 }
 
 async function openActBehalfScene(opts = {}) {
@@ -8038,7 +8186,17 @@ function wireActBehalfUi() {
   $("btn-act-send-revision")?.addEventListener("click", () => handleSendRevision());
   $("btn-act-accept-result")?.addEventListener("click", () => handleAcceptWorkspaceResult());
   $("btn-act-open-local")?.addEventListener("click", () => handleOpenLocalWorkspaceArtifact());
-  $("act-request")?.addEventListener("input", () => autosizeActRequest());
+  const requestEl = $("act-request");
+  if (requestEl) {
+    const refreshStart = () => {
+      autosizeActRequest();
+      renderStartDoAvailability();
+    };
+    requestEl.addEventListener("input", refreshStart);
+    requestEl.addEventListener("change", refreshStart);
+    requestEl.addEventListener("paste", () => setTimeout(refreshStart, 0));
+    requestEl.addEventListener("compositionend", refreshStart);
+  }
   $("act-title")?.addEventListener("change", async () => {
     if (!actBehalfState.taskId || !window.digitalMe.actBehalfRename) return;
     const title = ($("act-title") && $("act-title").value.trim()) || "";
@@ -8051,6 +8209,7 @@ function wireActBehalfUi() {
     }
   });
   autosizeActRequest();
+  renderStartDoAvailability();
   const genItems = $("act-generation-items");
   if (genItems && !genItems.dataset.wired) {
     genItems.dataset.wired = "1";
@@ -10837,12 +10996,14 @@ async function saveFirstModelConnectionAndStart() {
     if (feedback) feedback.textContent = "模型已连接。";
     await refreshModelConnectionSurface();
     await renderModelStatus();
+    renderStartDoAvailability();
     $("settings-modal")?.classList.add("hidden");
     if (settingsOpenedFromReadiness) {
       settingsOpenedFromReadiness = false;
       const doNav = document.querySelector('.nav-item[data-view="do"]');
       switchView("do", doNav);
     }
+    renderStartDoAvailability();
   } catch (e) {
     if (feedback) {
       feedback.textContent = "保存失败，请稍后重试。";

@@ -3702,6 +3702,21 @@ body {
   margin-top: 0.75rem;
   justify-content: flex-end;
 }
+.act-start-do-reason {
+  margin: 0.35rem 0 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+.act-start-do-reason .act-start-do-reason-action,
+button.btn-link.act-start-do-reason-action {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+}
 .act-workspace-phase {
   display: flex;
   flex-direction: column;

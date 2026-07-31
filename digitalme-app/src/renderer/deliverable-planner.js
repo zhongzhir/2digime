@@ -426,26 +426,24 @@
   }
 
   function updatePrimaryGenerateButton(state) {
+    // Only the legacy/hidden plan generate control. Never write #btn-act-start-do —
+    // start-do availability is owned solely by deriveStartDoAvailability / renderStartDoAvailability.
     const btn = $("btn-act-generate-from-plan");
-    const startBtn = $("btn-act-start-do");
     const mode = (state && state.mode) || "generate";
     const busy = !!(state && state.busy);
     const authRevoked = !!(state && state.authRevoked);
     const disabled = !!(state && state.disabled) || busy || authRevoked;
-    let label = "开始做";
+    let label = "生成成果";
     if (authRevoked) label = "授权已撤销";
     else if (busy) label = "正在完成…";
-    else if (mode === "regenerate" || mode === "new_version") label = "开始做";
     if (btn) {
-      btn.textContent = label === "开始做" ? "生成成果" : label;
+      btn.textContent = label;
       btn.disabled = disabled;
       btn.setAttribute("data-mode", mode);
       btn.setAttribute("data-auth-revoked", authRevoked ? "1" : "0");
     }
-    if (startBtn) {
-      startBtn.textContent = label;
-      startBtn.disabled = disabled;
-      startBtn.setAttribute("data-mode", mode);
+    if (typeof global.renderStartDoAvailability === "function") {
+      global.renderStartDoAvailability();
     }
   }
 
