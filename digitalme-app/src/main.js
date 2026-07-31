@@ -1145,7 +1145,10 @@ ipcMain.handle("modelRouting:test", async (_e, payload) => {
   return result.ok ? { ok: true, provider: result.provider, model: result.model, fallbackUsed: result.fallbackUsed, attempts: result.attempts } : { ok: false, errorCode: result.errorCode, friendlyMessage: result.friendlyMessage, settingsAction: result.settingsAction, attempts: result.attempts };
 });
 ipcMain.handle("runtime:getStamp", () => {
-  const stamp = buildRuntimeStamp();
+  const stamp = buildRuntimeStamp({
+    resourcesPath: process.resourcesPath,
+    isPackaged: app.isPackaged,
+  });
   return {
     ...stamp,
     apiVersion: 1,

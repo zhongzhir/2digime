@@ -163,10 +163,19 @@ function firstMatchingInPath(e, selector) {
   return el && el.closest ? el.closest(selector) : null;
 }
 
+function isFormalClosedAlphaSurface() {
+  return (
+    document.documentElement.dataset.dmPackaged === "1" ||
+    document.documentElement.dataset.dmReleaseChannel === "closed-alpha"
+  );
+}
+
 function appendBootLog(line) {
   const text = String(line || "").trim();
   if (!text) return;
   console.error("[Digital Me]", text);
+  // Formal closed-alpha: keep diagnostics in console only; do not cover the product surface.
+  if (isFormalClosedAlphaSurface()) return;
   try {
     const log = document.getElementById("ui-boot-log");
     if (!log) return;
@@ -197,11 +206,22 @@ function installBootErrorTraps() {
 async function applyRuntimeStamp() {
   if (!window.digitalMe || typeof window.digitalMe.getRuntimeStamp !== "function") {
     appendBootLog("未能读取运行时版本信息（接口不可用）。请完全退出后重新启动应用。");
+    const elMissing = document.getElementById("ui-runtime-stamp");
+    if (elMissing) {
+      elMissing.textContent = "版本 0.1.0";
+      elMissing.classList.remove("hidden");
+    }
     return null;
   }
   try {
     const stamp = await window.digitalMe.getRuntimeStamp();
-    const shortHead = stamp && stamp.gitHead ? String(stamp.gitHead).slice(0, 7) : "unknown";
+    const buildInfo = (stamp && stamp.buildInfo) || {};
+    const gitHead = (stamp && stamp.gitHead) || buildInfo.gitHead || "";
+    const shortHead = gitHead ? String(gitHead).slice(0, 7) : "";
+    const appVersion = String((stamp && stamp.appVersion) || buildInfo.appVersion || "0.1.0");
+    const releaseChannel = String(
+      (stamp && stamp.releaseChannel) || buildInfo.releaseChannel || ""
+    );
     const appHash =
       stamp && stamp.files && stamp.files.rendererApp
         ? stamp.files.rendererApp.sha256Short
@@ -209,17 +229,29 @@ async function applyRuntimeStamp() {
     const preloadHash =
       stamp && stamp.files && stamp.files.preload ? stamp.files.preload.sha256Short : "?";
     const mainHash = stamp && stamp.files && stamp.files.main ? stamp.files.main.sha256Short : "?";
-    document.documentElement.dataset.dmGitHead = shortHead;
+    document.documentElement.dataset.dmGitHead = shortHead || "";
     document.documentElement.dataset.dmAppHash = appHash;
     document.documentElement.dataset.dmPreloadHash = preloadHash;
     document.documentElement.dataset.dmMainHash = mainHash;
     document.documentElement.dataset.dmPostOwnerFixes = stamp && stamp.postOwnerFixes ? "1" : "0";
+    document.documentElement.dataset.dmPackaged = stamp && stamp.isPackaged ? "1" : "0";
+    if (releaseChannel) document.documentElement.dataset.dmReleaseChannel = releaseChannel;
     const el = document.getElementById("ui-runtime-stamp");
     if (el) {
-      el.textContent = `版本 ${shortHead}`;
-      el.title = `main ${mainHash} · preload ${preloadHash} · 界面 ${appHash}`;
+      if (releaseChannel === "closed-alpha" && shortHead) {
+        el.textContent = `Closed Alpha · ${shortHead}`;
+      } else if (shortHead) {
+        el.textContent = `版本 ${shortHead}`;
+      } else {
+        el.textContent =
+          releaseChannel === "closed-alpha" ? `版本 ${appVersion} Closed Alpha` : `版本 ${appVersion}`;
+      }
+      el.title = shortHead
+        ? `main ${mainHash} · preload ${preloadHash} · 界面 ${appHash}`
+        : `版本 ${appVersion}`;
       el.classList.remove("hidden");
-      if (!stamp || !stamp.postOwnerFixes) {
+      // Packaged closed-alpha must not warn users to restart from a source repo.
+      if (!stamp.isPackaged && (!stamp || !stamp.postOwnerFixes)) {
         el.classList.add("ui-runtime-stamp-warn");
         appendBootLog(
           "当前加载的界面/主进程文件缺少必要修复标记。请完全退出 Digital Me（含后台进程）后，从本仓库 digitalme-app 目录重新启动。"
@@ -229,6 +261,11 @@ async function applyRuntimeStamp() {
     return stamp;
   } catch (err) {
     appendBootLog("读取运行时版本信息失败：" + ((err && err.message) || err));
+    const el = document.getElementById("ui-runtime-stamp");
+    if (el) {
+      el.textContent = "版本 0.1.0";
+      el.classList.remove("hidden");
+    }
     return null;
   }
 }
@@ -354,6 +391,10 @@ async function init() {
 function reportInitError(label, err) {
   const msg = `${label}：${(err && err.message) || err || "未知错误"}`;
   console.error("[Digital Me]", msg);
+  if (isFormalClosedAlphaSurface()) {
+    // Root causes must still be fixed; formal builds must not keep a persistent debug overlay.
+    return;
+  }
   appendBootLog(msg);
   try {
     let ban = document.getElementById("ui-init-warning");
@@ -445,7 +486,7 @@ function renderReadinessStrip() {
     if (actionEl) {
       actionEl.textContent = "连接模型";
       actionEl.classList.remove("hidden");
-      actionEl.onclick = () => openSettings();
+      actionEl.onclick = () => openSettings({ fromReadiness: true, focusModelConnect: true });
     }
     strip.classList.remove("hidden");
     return;
@@ -2098,6 +2139,26 @@ function bindChatCoreControls() {
   $("btn-model-routing-refresh")?.addEventListener("click", () => refreshModelRoutingSettings());
   $("btn-model-routing-test")?.addEventListener("click", () => testModelRoutingConnection());
   $("btn-model-routing-save")?.addEventListener("click", () => saveModelRoutingSettings());
+  $("btn-first-connect-test")?.addEventListener("click", () => testFirstModelConnection());
+  $("btn-first-connect-save")?.addEventListener("click", () => saveFirstModelConnectionAndStart());
+  $("btn-toggle-first-connect-key")?.addEventListener("click", () => {
+    const input = $("cfg-first-connect-key");
+    const btn = $("btn-toggle-first-connect-key");
+    if (!input || !btn) return;
+    const show = input.type === "password";
+    input.type = show ? "text" : "password";
+    btn.textContent = show ? "隐藏" : "显示";
+    btn.setAttribute("aria-pressed", show ? "true" : "false");
+  });
+  document.querySelectorAll("#model-provider-chips .model-provider-chip").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      firstConnectProviderKey = btn.getAttribute("data-provider") || "deepseek";
+      firstConnectTestPassed = false;
+      showFirstConnectFields();
+      const feedback = $("model-connect-feedback");
+      if (feedback) feedback.textContent = "";
+    });
+  });
   $("btn-create-temp-test-pkg")?.addEventListener("click", () => {
     createTempTestPackageFlow().catch((e) => alert("创建失败：" + (e.message || String(e))));
   });
@@ -4156,12 +4217,14 @@ function renderReview(res) {
 }
 
 async function openSettings(opts = {}) {
+  settingsOpenedFromReadiness = !!(opts && opts.fromReadiness);
+  firstConnectTestPassed = false;
   const cfg = await window.digitalMe.getConfig();
   await refreshModelRoutingSettings();
-  $("cfg-baseurl").value = cfg.baseURL || "";
-  $("cfg-apikey").value = "";
-  $("cfg-model").value = cfg.model || "";
-  $("cfg-pkgdir").value = cfg.packageDir || pkg.dir || "";
+  if ($("cfg-baseurl")) $("cfg-baseurl").value = cfg.baseURL || "";
+  if ($("cfg-apikey")) $("cfg-apikey").value = "";
+  if ($("cfg-model")) $("cfg-model").value = cfg.model || "";
+  if ($("cfg-pkgdir")) $("cfg-pkgdir").value = cfg.packageDir || pkg.dir || "";
   const statusEl = $("cfg-apikey-status");
   if (statusEl) {
     statusEl.textContent = cfg.apiKeyConfigured
@@ -4203,6 +4266,12 @@ async function openSettings(opts = {}) {
   }
   if (opts && opts.focusPackageVersions) {
     focusSettingsPackageVersions();
+  } else if (opts && (opts.focusModelConnect || opts.fromReadiness)) {
+    const panel = $("model-connect-panel") || $("model-connect-summary");
+    if (panel && typeof panel.scrollIntoView === "function") {
+      panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    if (!cfg.apiKeyConfigured) showFirstConnectFields();
   }
 }
 
@@ -10256,17 +10325,17 @@ let activeCategory = "start";
 let pendingEnableItem = null;
 
 function bindExtensions() {
-  $("btn-ext-refresh").addEventListener("click", refreshExtensionsView);
-  $("btn-capability-go-do").addEventListener("click", () => openDoScene("act_behalf"));
-  $("btn-capability-new-task").addEventListener("click", () => openDoScene("act_behalf"));
-  $("btn-capability-show-public").addEventListener("click", () => {
+  // btn-capability-new-task was removed from the closed-alpha surface; do not rebind it.
+  $("btn-ext-refresh")?.addEventListener("click", refreshExtensionsView);
+  $("btn-capability-go-do")?.addEventListener("click", () => openDoScene("act_behalf"));
+  $("btn-capability-show-public")?.addEventListener("click", () => {
     $("capability-store-title")?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
-  $("btn-ext-save").addEventListener("click", saveExtensionsConfig);
-  $("btn-ext-add").addEventListener("click", addExtensionFromForm);
-  $("btn-ext-call").addEventListener("click", tryCallExtensionTool);
-  $("btn-ext-enable-cancel").addEventListener("click", closeEnableModal);
-  $("btn-ext-enable-confirm").addEventListener("click", confirmEnableExtension);
+  $("btn-ext-save")?.addEventListener("click", saveExtensionsConfig);
+  $("btn-ext-add")?.addEventListener("click", addExtensionFromForm);
+  $("btn-ext-call")?.addEventListener("click", tryCallExtensionTool);
+  $("btn-ext-enable-cancel")?.addEventListener("click", closeEnableModal);
+  $("btn-ext-enable-confirm")?.addEventListener("click", confirmEnableExtension);
 }
 
 async function refreshExtensionsView() {
@@ -10422,28 +10491,305 @@ async function renderCapabilityNormalSurface() {
   now.querySelectorAll(".btn-capability-disable").forEach((btn) => btn.addEventListener("click", () => disableExtension(btn.dataset.id)));
 }
 
-function modelRouteLabel(routing, taskType) {
+function modelRouteLabel(routing, taskType, opts = {}) {
+  if (opts.requireConfigured && !opts.apiKeyConfigured) return "尚未连接";
   const route = routing?.routes?.[taskType] || {};
   const model = (routing?.providers || []).flatMap((provider) => provider.models.map((item) => ({ provider, item }))).find((entry) => entry.item.id === route.primary);
   if (!model) return "未配置";
+  if (opts.requireConfigured && !opts.apiKeyConfigured) return "尚未连接";
   const fallbackCount = Array.isArray(route.fallbacks) ? route.fallbacks.length : 0;
-  return `${model.provider.name} / ${model.item.displayName}${fallbackCount ? ` · ${fallbackCount} 个备用模型` : " · 未配置备用模型"}`;
+  return `${model.provider.name} / ${model.item.displayName}${fallbackCount ? ` · ${fallbackCount} 个备用模型` : ""}`;
+}
+
+const FIRST_CONNECT_PROVIDERS = {
+  deepseek: {
+    id: "deepseek",
+    name: "DeepSeek",
+    recommended: true,
+    baseUrl: "https://api.deepseek.com/v1",
+    models: [{ model: "deepseek-chat", displayName: "deepseek-chat" }],
+  },
+  openai: {
+    id: "openai",
+    name: "OpenAI",
+    baseUrl: "https://api.openai.com/v1",
+    models: [
+      { model: "gpt-4o-mini", displayName: "gpt-4o-mini" },
+      { model: "gpt-4o", displayName: "gpt-4o" },
+    ],
+  },
+  other: {
+    id: "other-compatible",
+    name: "其他兼容服务",
+    baseUrl: "",
+    models: [{ model: "gpt-4o-mini", displayName: "自定义模型名" }],
+    customBaseUrl: true,
+  },
+};
+
+let firstConnectProviderKey = "deepseek";
+let firstConnectTestPassed = false;
+let settingsOpenedFromReadiness = false;
+
+function selectedFirstConnectPreset() {
+  return FIRST_CONNECT_PROVIDERS[firstConnectProviderKey] || FIRST_CONNECT_PROVIDERS.deepseek;
+}
+
+function renderFirstConnectProviderChips() {
+  document.querySelectorAll("#model-provider-chips .model-provider-chip").forEach((btn) => {
+    const key = btn.getAttribute("data-provider");
+    btn.classList.toggle("is-selected", key === firstConnectProviderKey);
+  });
+}
+
+function renderFirstConnectModelOptions() {
+  const preset = selectedFirstConnectPreset();
+  const select = $("cfg-first-connect-model");
+  const baseUrlLabel = $("label-first-connect-baseurl");
+  const baseUrlInput = $("cfg-first-connect-baseurl");
+  if (baseUrlLabel) baseUrlLabel.classList.toggle("hidden", !preset.customBaseUrl);
+  if (baseUrlInput && !preset.customBaseUrl) baseUrlInput.value = preset.baseUrl || "";
+  if (!select) return;
+  select.innerHTML = (preset.models || [])
+    .map(
+      (m) =>
+        `<option value="${escapeHtml(m.model)}">${escapeHtml(m.displayName || m.model)}</option>`
+    )
+    .join("");
+  if (preset.models && preset.models[0]) select.value = preset.models[0].model;
+}
+
+function showFirstConnectFields() {
+  const fields = $("model-connect-fields");
+  if (fields) fields.classList.remove("hidden");
+  renderFirstConnectProviderChips();
+  renderFirstConnectModelOptions();
+}
+
+function buildFirstConnectRouting() {
+  const preset = selectedFirstConnectPreset();
+  const modelName = ($("cfg-first-connect-model")?.value || "").trim() || preset.models[0].model;
+  const baseUrl = preset.customBaseUrl
+    ? ($("cfg-first-connect-baseurl")?.value || "").trim()
+    : preset.baseUrl;
+  const providerId = preset.id;
+  const modelId = `${providerId}/${modelName}`;
+  return {
+    version: 1,
+    providers: [
+      {
+        id: providerId,
+        name: preset.name,
+        type: "openai-compatible",
+        baseUrl,
+        enabled: true,
+        models: [
+          {
+            id: modelId,
+            providerId,
+            model: modelName,
+            displayName: modelName,
+            enabled: true,
+          },
+        ],
+      },
+    ],
+    routes: {
+      chat: { primary: modelId, fallbacks: [] },
+      artifact: { primary: modelId, fallbacks: [] },
+      review: { primary: modelId, fallbacks: [] },
+    },
+  };
+}
+
+function friendlyConnectError(providerName, result) {
+  const name = providerName || "模型服务";
+  const code = String((result && result.errorCode) || "");
+  if (code === "AUTH_FAILED" || code === "PROVIDER_NOT_CONFIGURED") {
+    return `无法连接 ${name}。请检查 API Key 或网络后重试。`;
+  }
+  if (code === "NETWORK_ERROR" || code === "TIMEOUT") {
+    return `无法连接 ${name}。请检查网络后重试。`;
+  }
+  return `无法连接 ${name}。请检查 API Key 或网络后重试。`;
+}
+
+async function persistFirstConnectRouting(apiKey) {
+  const routing = buildFirstConnectRouting();
+  const providerId = routing.providers[0].id;
+  const baseUrl = routing.providers[0].baseUrl;
+  const modelName = routing.providers[0].models[0].model;
+  if (!baseUrl) {
+    throw new Error("请填写服务地址");
+  }
+  if (!apiKey) {
+    throw new Error("请输入 API Key");
+  }
+  await window.digitalMe.saveModelRouting({
+    routing,
+    providerKeys: [{ providerId, apiKey }],
+  });
+  // Keep legacy fields aligned for older paths; do not leave a phantom OpenAI default.
+  const current = await window.digitalMe.getConfig();
+  await window.digitalMe.setConfig({
+    baseURL: baseUrl,
+    model: modelName,
+    apiKey: "",
+    packageDir: current.packageDir || $("cfg-pkgdir")?.value?.trim() || "",
+  });
+  return routing;
+}
+
+async function testFirstModelConnection() {
+  const feedback = $("model-connect-feedback");
+  const preset = selectedFirstConnectPreset();
+  const apiKey = ($("cfg-first-connect-key")?.value || "").trim();
+  firstConnectTestPassed = false;
+  if (!apiKey) {
+    if (feedback) feedback.textContent = "请先输入 API Key。";
+    return false;
+  }
+  if (feedback) feedback.textContent = `正在测试 ${preset.name} 连接…`;
+  try {
+    await persistFirstConnectRouting(apiKey);
+    const result = await window.digitalMe.testModelRouting({ taskType: "chat" });
+    if (result && result.ok) {
+      firstConnectTestPassed = true;
+      if (feedback) {
+        feedback.textContent = `连接成功：${preset.name} / ${result.model || ""}`.trim();
+      }
+      await refreshModelConnectionSurface();
+      await renderModelStatus();
+      return true;
+    }
+    if (feedback) feedback.textContent = friendlyConnectError(preset.name, result);
+    return false;
+  } catch (e) {
+    if (feedback) {
+      feedback.textContent = friendlyConnectError(preset.name, { errorCode: e.code }) ||
+        `无法连接 ${preset.name}。请检查 API Key 或网络后重试。`;
+    }
+    return false;
+  }
+}
+
+async function saveFirstModelConnectionAndStart() {
+  const feedback = $("model-connect-feedback");
+  const apiKey = ($("cfg-first-connect-key")?.value || "").trim();
+  try {
+    if (!firstConnectTestPassed) {
+      const ok = await testFirstModelConnection();
+      if (!ok) return;
+    } else if (apiKey) {
+      await persistFirstConnectRouting(apiKey);
+    }
+    if ($("cfg-first-connect-key")) $("cfg-first-connect-key").value = "";
+    if (feedback) feedback.textContent = "模型已连接。";
+    await refreshModelConnectionSurface();
+    await renderModelStatus();
+    $("settings-modal")?.classList.add("hidden");
+    if (settingsOpenedFromReadiness) {
+      settingsOpenedFromReadiness = false;
+      const doNav = document.querySelector('.nav-item[data-view="do"]');
+      switchView("do", doNav);
+    }
+  } catch (e) {
+    if (feedback) {
+      feedback.textContent = "保存失败，请稍后重试。";
+    }
+  }
+}
+
+async function refreshModelConnectionSurface() {
+  const cfg = await window.digitalMe.getConfig();
+  const routing = window.digitalMe.getModelRouting
+    ? await window.digitalMe.getModelRouting()
+    : cfg.modelRouting;
+  const connected = !!(cfg && cfg.apiKeyConfigured);
+  const summary = $("model-connect-summary");
+  const panel = $("model-connect-panel");
+  const statusEl = $("model-connect-status");
+  if (connected) {
+    const label = modelRouteLabel(routing, "chat", {
+      requireConfigured: true,
+      apiKeyConfigured: true,
+    });
+    if (summary) {
+      summary.classList.remove("hidden");
+      summary.innerHTML =
+        `<div class="model-connect-connected"><strong>模型连接</strong><span>${escapeHtml(label)} · 已连接</span>` +
+        `<button type="button" id="btn-model-connect-change" class="btn-ghost">更改</button></div>`;
+      const changeBtn = $("btn-model-connect-change");
+      if (changeBtn) {
+        changeBtn.onclick = () => {
+          summary.classList.add("hidden");
+          if (panel) panel.classList.remove("hidden");
+          showFirstConnectFields();
+        };
+      }
+    }
+    if (panel) panel.classList.add("hidden");
+  } else {
+    if (summary) {
+      summary.classList.add("hidden");
+      summary.innerHTML = "";
+    }
+    if (panel) panel.classList.remove("hidden");
+    if (statusEl) statusEl.textContent = "尚未连接模型";
+    // Do not pre-claim gpt-4o-mini as the active default when no key exists.
+    showFirstConnectFields();
+  }
 }
 
 async function refreshModelRoutingSettings() {
   if (!window.digitalMe.getModelRouting) return;
   const routing = await window.digitalMe.getModelRouting();
+  const cfg = await window.digitalMe.getConfig();
+  const connected = !!(cfg && cfg.apiKeyConfigured);
   const summary = $("model-routing-summary");
   if (summary) {
-    summary.innerHTML = [
-      ["当前对话模型", "chat"], ["成果生成模型", "artifact"], ["质检模型", "review"],
-    ].map(([label, taskType]) => `<div><strong>${label}</strong><span>${escapeHtml(modelRouteLabel(routing, taskType))}</span></div>`).join("");
+    if (!connected) {
+      summary.innerHTML = `<div><strong>模型连接</strong><span>尚未连接</span></div>`;
+    } else {
+      summary.innerHTML = [
+        ["当前对话模型", "chat"],
+        ["成果生成模型", "artifact"],
+        ["质检模型", "review"],
+      ]
+        .map(
+          ([label, taskType]) =>
+            `<div><strong>${label}</strong><span>${escapeHtml(
+              modelRouteLabel(routing, taskType, {
+                requireConfigured: true,
+                apiKeyConfigured: connected,
+              })
+            )}</span></div>`
+        )
+        .join("");
+    }
   }
   renderModelRoutingTaskUi(routing);
   const editor = $("cfg-model-routing-json");
-  if (editor) editor.value = JSON.stringify({ providers: routing.providers.map((provider) => ({ id: provider.id, name: provider.name, type: provider.type, baseUrl: provider.baseUrl, enabled: provider.enabled, models: provider.models })), routes: routing.routes }, null, 2);
+  if (editor)
+    editor.value = JSON.stringify(
+      {
+        providers: routing.providers.map((provider) => ({
+          id: provider.id,
+          name: provider.name,
+          type: provider.type,
+          baseUrl: provider.baseUrl,
+          enabled: provider.enabled,
+          models: provider.models,
+        })),
+        routes: routing.routes,
+      },
+      null,
+      2
+    );
   const audit = $("model-routing-audit");
-  if (audit && window.digitalMe.getRecentModelRouting) audit.textContent = JSON.stringify(await window.digitalMe.getRecentModelRouting(), null, 2);
+  if (audit && window.digitalMe.getRecentModelRouting)
+    audit.textContent = JSON.stringify(await window.digitalMe.getRecentModelRouting(), null, 2);
+  await refreshModelConnectionSurface();
 }
 
 function listRoutingModelOptions(routing) {
@@ -10526,8 +10872,8 @@ async function testModelRoutingConnection() {
   const result = await window.digitalMe.testModelRouting({ taskType: "chat" });
   if (feedback) {
     feedback.textContent = result.ok
-      ? `当前使用的模型：${result.provider} / ${result.model}${result.fallbackUsed ? "（备用模型）" : ""}`
-      : "当前模型不可用。可以检查模型设置，或切换到备用模型。";
+      ? `连接成功：${result.provider} / ${result.model}${result.fallbackUsed ? "（备用模型）" : ""}`
+      : friendlyConnectError(result.provider || "模型服务", result);
   }
   await refreshModelRoutingSettings();
 }

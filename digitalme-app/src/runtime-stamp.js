@@ -39,6 +39,28 @@ function readGitHead(repoRoot) {
   }
 }
 
+function readEmbeddedBuildInfo(opts = {}) {
+  const candidates = [];
+  if (opts.resourcesPath) {
+    candidates.push(path.join(opts.resourcesPath, "build-info.json"));
+  }
+  candidates.push(path.join(SRC_ROOT, "closed-alpha-build-info.json"));
+  candidates.push(path.join(SRC_ROOT, "..", "closed-alpha-build-info.json"));
+  candidates.push(path.join(SRC_ROOT, "..", "build", "build-info.json"));
+  for (const candidate of candidates) {
+    try {
+      if (!candidate || !fs.existsSync(candidate)) continue;
+      const raw = JSON.parse(fs.readFileSync(candidate, "utf8"));
+      if (raw && typeof raw === "object") {
+        return { ...raw, _sourcePath: candidate };
+      }
+    } catch {
+      /* try next */
+    }
+  }
+  return null;
+}
+
 function buildRuntimeStamp(opts = {}) {
   const files = {};
   const markers = {};
@@ -68,12 +90,22 @@ function buildRuntimeStamp(opts = {}) {
   markers.reportBootLog = appJs.includes("appendBootLog");
 
   const repoRoot = path.join(SRC_ROOT, "..", "..");
-  const gitHead = opts.gitHead != null ? opts.gitHead : readGitHead(repoRoot);
+  const buildInfo = readEmbeddedBuildInfo(opts);
+  const gitHead =
+    opts.gitHead != null && String(opts.gitHead).trim()
+      ? opts.gitHead
+      : (buildInfo && buildInfo.gitHead) || readGitHead(repoRoot);
 
   return {
     ok: true,
     srcRoot: SRC_ROOT,
     gitHead,
+    appVersion: (buildInfo && buildInfo.appVersion) || null,
+    releaseChannel: (buildInfo && buildInfo.releaseChannel) || null,
+    productSurface: (buildInfo && buildInfo.productSurface) || null,
+    buildId: (buildInfo && buildInfo.buildId) || null,
+    buildInfo: buildInfo || null,
+    isPackaged: !!opts.isPackaged,
     // Commits that Owner re-check depends on (must be ancestors of running tree).
     requiredAncestorHints: ["596c9df", "b99d472"],
     files,
@@ -101,4 +133,5 @@ module.exports = {
   buildRuntimeStamp,
   stampIsPostOwnerFixes,
   sha256File,
+  readEmbeddedBuildInfo,
 };

@@ -923,44 +923,80 @@
       <div class="modal-card settings-modal-card">
         <h2>设置</h2>
         <div class="settings-modal-body">
-        <h3 class="settings-subhead">模型与默认</h3>
-        <div id="model-routing-summary" class="settings-model-routing" aria-live="polite"></div>
-        <div id="model-routing-task-ui" class="settings-model-task-ui" aria-live="polite"></div>
-        <div class="modal-actions" style="margin-top:0;justify-content:flex-start;flex-wrap:wrap">
-          <button type="button" id="btn-model-routing-test">测试连接</button>
-          <button type="button" id="btn-model-routing-refresh" class="btn-ghost">刷新模型状态</button>
-        </div>
-        <p id="model-routing-feedback" class="hint" aria-live="polite"></p>
-        <details class="settings-advanced-tools" id="settings-model-routing-advanced">
-          <summary>高级：提供方 JSON 与密钥</summary>
-          <p class="hint">按任务分工顺序调用：默认模型失败时才尝试备用模型。此配置不含密钥；密钥只可在下方密码输入框中提交，保存后不会回显。</p>
-          <label>提供方、模型与用途路由（JSON）
-            <textarea id="cfg-model-routing-json" placeholder='{"providers":[],"routes":{"chat":{"primary":"","fallbacks":[]},"artifact":{"primary":"","fallbacks":[]},"review":{"primary":"","fallbacks":[]}}}'></textarea>
-          </label>
-          <label>为提供方保存新密钥（可选）
-            <input id="cfg-routing-provider-id" type="text" placeholder="提供方 ID" autocomplete="off" />
-            <input id="cfg-routing-provider-key" type="password" placeholder="新密钥（保存后不回显）" autocomplete="off" />
-          </label>
-          <div class="modal-actions" style="margin-top:0;justify-content:flex-start">
-            <button type="button" id="btn-model-routing-save" class="btn-ghost">保存模型配置</button>
+        <h3 class="settings-subhead">模型连接</h3>
+        <div id="model-connect-summary" class="settings-model-connect-summary hidden" aria-live="polite"></div>
+        <div id="model-connect-panel" class="settings-model-connect-panel" aria-live="polite">
+          <p id="model-connect-status" class="hint">尚未连接模型</p>
+          <p class="hint">选择服务后即可输入 API Key。一套模型即可用于对话和成果生成。</p>
+          <div class="model-provider-chips" id="model-provider-chips" role="group" aria-label="模型服务">
+            <button type="button" class="model-provider-chip" data-provider="deepseek" data-testid="provider-chip-deepseek">
+              DeepSeek <span class="chip-badge">推荐</span>
+            </button>
+            <button type="button" class="model-provider-chip" data-provider="openai" data-testid="provider-chip-openai">OpenAI</button>
+            <button type="button" class="model-provider-chip" data-provider="other" data-testid="provider-chip-other">其他兼容服务</button>
           </div>
-          <pre id="model-routing-audit" class="ext-call-result"></pre>
-        </details>
-        <label>智能引擎地址
-          <input id="cfg-baseurl" type="text" placeholder="例如 https://api.deepseek.com/v1" />
-        </label>
-        <label>连接密钥
-          <input id="cfg-apikey" type="password" placeholder="留空表示保留已保存的密钥；输入新值则替换" autocomplete="off" />
-        </label>
-        <p id="cfg-apikey-status" class="hint" aria-live="polite"></p>
-        <div class="modal-actions" style="margin-top:0;justify-content:flex-start">
-          <button type="button" id="btn-clear-apikey" class="btn-ghost">清除密钥</button>
+          <div id="model-connect-fields" class="model-connect-fields hidden">
+            <label id="label-first-connect-baseurl" class="hidden">服务地址
+              <input id="cfg-first-connect-baseurl" type="text" placeholder="例如 https://api.example.com/v1" autocomplete="off" />
+            </label>
+            <label>API Key
+              <div class="model-key-row">
+                <input id="cfg-first-connect-key" type="password" placeholder="粘贴 API Key" autocomplete="off" data-testid="cfg-first-connect-key" />
+                <button type="button" id="btn-toggle-first-connect-key" class="btn-ghost" aria-pressed="false">显示</button>
+              </div>
+            </label>
+            <p class="hint model-key-hint">密钥仅保存在本机加密存储，不会写入页面或截图证据。</p>
+            <label>模型
+              <select id="cfg-first-connect-model" data-testid="cfg-first-connect-model"></select>
+            </label>
+            <div class="modal-actions" style="margin-top:0;justify-content:flex-start;flex-wrap:wrap">
+              <button type="button" id="btn-first-connect-test" data-testid="btn-first-connect-test">测试连接</button>
+              <button type="button" id="btn-first-connect-save" class="btn-primary" data-testid="btn-first-connect-save">保存并开始使用</button>
+            </div>
+          </div>
+          <p id="model-connect-feedback" class="hint" aria-live="polite"></p>
         </div>
-        <label>引擎名称
-          <input id="cfg-model" type="text" placeholder="由服务方提供，可在说明中查看" />
-        </label>
+        <details class="settings-advanced-tools" id="settings-model-advanced">
+          <summary>高级模型设置</summary>
+          <p class="hint">可分别指定对话、成果生成与质检模型。首次使用无需配置。</p>
+          <div id="model-routing-summary" class="settings-model-routing" aria-live="polite"></div>
+          <div id="model-routing-task-ui" class="settings-model-task-ui" aria-live="polite"></div>
+          <div class="modal-actions" style="margin-top:0;justify-content:flex-start;flex-wrap:wrap">
+            <button type="button" id="btn-model-routing-test">测试连接</button>
+            <button type="button" id="btn-model-routing-refresh" class="btn-ghost">刷新模型状态</button>
+          </div>
+          <p id="model-routing-feedback" class="hint" aria-live="polite"></p>
+          <details class="settings-advanced-tools" id="settings-model-routing-advanced">
+            <summary>高级：提供方 JSON 与密钥</summary>
+            <p class="hint">按任务分工顺序调用：默认模型失败时才尝试备用模型。此配置不含密钥；密钥只可在下方密码输入框中提交，保存后不会回显。</p>
+            <label>提供方、模型与用途路由（JSON）
+              <textarea id="cfg-model-routing-json" placeholder='{"providers":[],"routes":{"chat":{"primary":"","fallbacks":[]},"artifact":{"primary":"","fallbacks":[]},"review":{"primary":"","fallbacks":[]}}}'></textarea>
+            </label>
+            <label>为提供方保存新密钥（可选）
+              <input id="cfg-routing-provider-id" type="text" placeholder="提供方 ID" autocomplete="off" />
+              <input id="cfg-routing-provider-key" type="password" placeholder="新密钥（保存后不回显）" autocomplete="off" />
+            </label>
+            <div class="modal-actions" style="margin-top:0;justify-content:flex-start">
+              <button type="button" id="btn-model-routing-save" class="btn-ghost">保存模型配置</button>
+            </div>
+            <pre id="model-routing-audit" class="ext-call-result"></pre>
+          </details>
+          <label>智能引擎地址
+            <input id="cfg-baseurl" type="text" placeholder="例如 https://api.deepseek.com/v1" />
+          </label>
+          <label>连接密钥
+            <input id="cfg-apikey" type="password" placeholder="留空表示保留已保存的密钥；输入新值则替换" autocomplete="off" />
+          </label>
+          <p id="cfg-apikey-status" class="hint" aria-live="polite"></p>
+          <div class="modal-actions" style="margin-top:0;justify-content:flex-start">
+            <button type="button" id="btn-clear-apikey" class="btn-ghost">清除密钥</button>
+          </div>
+          <label>引擎名称
+            <input id="cfg-model" type="text" placeholder="由服务方提供，可在说明中查看" />
+          </label>
+        </details>
 
-        <h3 class="settings-subhead">数据与隐私</h3>
+        <h3 class="settings-subhead">其他设置</h3>
         <label>数字之我资料目录
           <input id="cfg-pkgdir" type="text" />
         </label>
