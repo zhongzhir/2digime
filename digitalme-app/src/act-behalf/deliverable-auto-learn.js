@@ -16,6 +16,7 @@ const projectKnowledgeStore = require("./project-knowledge-store");
 const policies = require("../policies");
 const { detectProjectFromGoal } = require("./project-context-registry");
 const { newClaimId, nowIso, PROJECT_IDS } = require("./project-knowledge-schema");
+const qualityScope = require("./quality-experience-scope");
 
 function sha256Short(text) {
   return crypto.createHash("sha256").update(String(text || ""), "utf8").digest("hex").slice(0, 16);
@@ -26,6 +27,9 @@ const { JOB_STATUS, appendAudit, upsertJob, createQueuedJob, getJobByVersionId, 
 
 const SENSITIVE_RE =
   /身份|价值观|边界|授权|隐私|密钥|密码|不得代表|敏感|政治立场|宗教信仰/;
+/** True identity/privacy risk — excludes our learnKind label prefix「边界：」. */
+const IDENTITY_SENSITIVE_BODY_RE =
+  /身份|价值观|授权|隐私|密钥|密码|不得代表|敏感|政治立场|宗教信仰/;
 const ONE_OFF_RE = /本次|这一次|仅此|临时|只要这一次|不要记成习惯/;
 const CONTRADICT_MARKERS = ["不是", "并非", "不再", "相反", "推翻", "纠正为"];
 const JUDGMENT_RE =
@@ -366,6 +370,26 @@ function inferLearnKind(item, evidenceCorpus) {
   };
 }
 
+function sensitiveBodyText(item) {
+  return stripGuidancePrefix(
+    (item && (item.canonicalStatement || item.text)) || ""
+  );
+}
+
+/**
+ * Owner-accepted revision guidance / abstract diffs must not re-enter Owner conflict UX.
+ * Label prefix「边界：」must not alone trip identity sensitivity.
+ */
+function requiresOwnerSensitiveConflict(item) {
+  if (!item) return false;
+  if (item.fromRevisionGuidance || item.fromRevisionDiff) return false;
+  if (item.learnKind === "boundary" || item.learnKind === "expression_preference") {
+    return IDENTITY_SENSITIVE_BODY_RE.test(sensitiveBodyText(item));
+  }
+  const body = sensitiveBodyText(item);
+  return !!(item.sensitive || SENSITIVE_RE.test(body) || IDENTITY_SENSITIVE_BODY_RE.test(body));
+}
+
 function truncate(s, n) {
   const t = String(s || "");
   if (t.length <= n) return t;
@@ -509,6 +533,10 @@ function collectSourceFromVersion(userData, versionId) {
       })),
       contentHashes,
       acceptedAt: learnStore.nowIso(),
+      artifactKind: qualityScope.normalizeArtifactKind(
+        (deliverable && deliverable.kind) || (version && version.kind) || null
+      ),
+      deliverableKind: (deliverable && deliverable.kind) || null,
       provenance: {
         generator: version.generator || null,
         model: (version.generator && version.generator.model) || null,
@@ -540,33 +568,41 @@ function collectSourceFromVersion(userData, versionId) {
  * @param {string} [args.baselineExcerpt]
  */
 function extractLearningItems(
-  { title, kind, excerpt, source, evidenceCorpus, revisionGuidance, baselineExcerpt },
+  { title, kind, excerpt, source, evidenceCorpus, revisionGuidance, baselineExcerpt, artifactKind },
   callModel
 ) {
+  const resolvedKind = qualityScope.normalizeArtifactKind(
+    artifactKind || kind || (source && (source.artifactKind || source.deliverableKind)) || "document"
+  );
+  const withKind = (row) => ({ ...row, artifactKind: resolvedKind });
   const base = [];
   // Audit trail only — not a reusable preference or fact.
-  base.push({
-    id: "ex_episodic_1",
-    layer: "semantic",
-    text: `本人接受了「${title}」（${kind}）这一成果版本。`,
-    confidence: "low",
-    oneOffLikely: false,
-    artifactOnly: true,
-    learnHint: "artifact_history",
-    learnKind: "artifact_history",
-    sourceType: "accepted_version",
-  });
-  base.push({
-    id: "ex_artifact_1",
-    layer: "semantic",
-    text: `成果证据：版本 ${source && source.deliverableVersionId}`,
-    confidence: "high",
-    oneOffLikely: false,
-    artifactOnly: true,
-    learnHint: "artifact_history",
-    learnKind: "artifact_history",
-    sourceType: "accepted_version",
-  });
+  base.push(
+    withKind({
+      id: "ex_episodic_1",
+      layer: "semantic",
+      text: `本人接受了「${title}」（${kind}）这一成果版本。`,
+      confidence: "low",
+      oneOffLikely: false,
+      artifactOnly: true,
+      learnHint: "artifact_history",
+      learnKind: "artifact_history",
+      sourceType: "accepted_version",
+    })
+  );
+  base.push(
+    withKind({
+      id: "ex_artifact_1",
+      layer: "semantic",
+      text: `成果证据：版本 ${source && source.deliverableVersionId}`,
+      confidence: "high",
+      oneOffLikely: false,
+      artifactOnly: true,
+      learnHint: "artifact_history",
+      learnKind: "artifact_history",
+      sourceType: "accepted_version",
+    })
+  );
 
   const guidance = String(revisionGuidance || "").trim();
   const guidanceHash = guidance ? sha256Short(guidance) : null;
@@ -813,23 +849,27 @@ function extractLearningItems(
   }
 
   void evidenceCorpus;
+  const stamped = base.map((row) => (row && row.artifactKind ? row : withKind(row)));
   // Optional model call must not block: failures fall back to rule base.
   if (typeof callModel === "function") {
     return Promise.resolve()
       .then(() => callModel)
-      .then(() => base)
-      .catch(() => base);
+      .then(() => stamped)
+      .catch(() => stamped);
   }
-  return Promise.resolve(base);
+  return Promise.resolve(stamped);
 }
 
-function classifyItems(extracted, evidenceCorpus) {
+function classifyItems(extracted, evidenceCorpus, scopeContext) {
+  const ctx = scopeContext || {};
   return (extracted || []).map((item) => {
     const layer = item.layer || "episodic";
     let writeTarget = "memory_jsonl";
     if (layer === "artifact_history") writeTarget = "audit_only";
     if (layer === "procedural") writeTarget = "memory_jsonl";
-    const sensitive = SENSITIVE_RE.test(item.text || "");
+    const sensitive = IDENTITY_SENSITIVE_BODY_RE.test(
+      stripGuidancePrefix(item.canonicalStatement || item.text || "")
+    );
     const inferred = inferLearnKind(item, evidenceCorpus || "");
     if (inferred.write === false || inferred.writeTargetHint === "audit_only") {
       writeTarget = "audit_only";
@@ -841,13 +881,27 @@ function classifyItems(extracted, evidenceCorpus) {
       inferred.confidenceBoost ||
       item.confidence ||
       (inferred.learnKind === "boundary" ? "high" : "low");
+    const learnKind = inferred.learnKind;
+    const scopedItem = {
+      ...item,
+      learnKind,
+      learnHint: item.learnHint || learnKind,
+      canonicalStatement: item.canonicalStatement || stripGuidancePrefix(item.text),
+    };
+    const qScope = qualityScope.inferQualityScope(scopedItem, {
+      artifactKind: item.artifactKind || ctx.artifactKind || null,
+      projectId: ctx.projectId || null,
+      taskType: ctx.taskType || null,
+      domain: ctx.domain || null,
+      runtimeOrTool: ctx.runtimeOrTool || null,
+    });
     return {
       ...item,
       layer,
       writeTarget,
       sensitive,
-      packageCategory: inferred.learnKind === "boundary" ? "boundary" : "memory",
-      learnKind: inferred.learnKind,
+      packageCategory: learnKind === "boundary" ? "boundary" : "memory",
+      learnKind,
       logicalState: inferred.logicalState,
       ownership: inferred.ownership || "subject_owned",
       rejectReason: inferred.rejectReason || null,
@@ -860,6 +914,8 @@ function classifyItems(extracted, evidenceCorpus) {
       overlearnReasons: inferred.overlearnReasons || item.overlearnReasons || [],
       sourceType: inferred.sourceType || item.sourceType || null,
       confidence,
+      qualityScope: qScope,
+      qualityApplications: qualityScope.defaultQualityApplications(learnKind),
     };
   });
 }
@@ -985,6 +1041,19 @@ function consolidate(classified) {
         lastConfirmedAt: learnStore.nowIso(),
         learnKind: prev.learnKind || preferGuidance.learnKind,
         resolverEligible: prev.resolverEligible !== false && preferGuidance.resolverEligible !== false,
+        qualityScope: qualityScope.mergeScopeRecords(
+          prev.qualityScope || qualityScope.emptyScope(),
+          item.qualityScope || qualityScope.emptyScope()
+        ),
+        qualityApplications: [
+          ...new Set(
+            [].concat(
+              prev.qualityApplications || [],
+              item.qualityApplications || [],
+              qualityScope.defaultQualityApplications(prev.learnKind || item.learnKind)
+            )
+          ),
+        ],
       };
       skipped.push({ ...item, action: "merge_duplicate", mergedInto: prev.id });
       continue;
@@ -1028,6 +1097,7 @@ function consolidate(classified) {
 }
 
 function loadExistingMemorySnippets(packageDir) {
+  if (!packageDir) return [];
   const p = path.join(packageDir, "memory", "long-term-memory.jsonl");
   if (!fs.existsSync(p)) return [];
   try {
@@ -1073,7 +1143,7 @@ function detectConflict({ kept, packageDir, forceConflict }) {
   );
 
   for (const item of kept) {
-    if (item.sensitive || SENSITIVE_RE.test(item.text || "")) {
+    if (requiresOwnerSensitiveConflict(item)) {
       return {
         required: true,
         reason: "sensitive_or_identity",
@@ -1215,6 +1285,14 @@ function buildOpsFromKept(kept, source) {
         resolverEligible,
         overlearnRisk: !!item.overlearnRisk,
         overlearnReasons: item.overlearnReasons || [],
+        qualityScope:
+          item.qualityScope ||
+          qualityScope.inferQualityScope(item, {
+            artifactKind: source.artifactKind || source.deliverableKind || null,
+          }),
+        qualityApplications:
+          item.qualityApplications ||
+          qualityScope.defaultQualityApplications(item.learnKind),
         supersedes: item.supersedes || null,
         expiresAt: null,
         contextClassAtLearn: (source.provenance && source.provenance.contextClass) || null,
@@ -1358,7 +1436,7 @@ function commitProjectKnowledgeCandidates(packageDir, kept, source) {
     const isCorrection =
       /用户确认的修正|纠正|尚未进入|不再/.test(text) || item.learnKind === "current_fact";
     const claimId = newClaimId();
-    const claim = {
+      const claim = {
       claimId,
       projectId: PROJECT_IDS.DIGITAL_ME,
       claimText: text.replace(/^用户确认的修正：/, "").trim(),
@@ -1374,6 +1452,15 @@ function commitProjectKnowledgeCandidates(packageDir, kept, source) {
       supersededBy: null,
       contradictedBy: null,
       scope: "digital_me_project",
+      qualityScope:
+        item.qualityScope ||
+        qualityScope.inferQualityScope(
+          { ...item, learnKind: "current_fact" },
+          {
+            artifactKind: source.artifactKind || null,
+            projectId: PROJECT_IDS.DIGITAL_ME,
+          }
+        ),
       freshness: nowIso(),
       confidence: item.confidence || (isCorrection ? "high" : "low"),
       createdAt: nowIso(),
@@ -1463,10 +1550,23 @@ async function runLearnJob(userData, jobId, deps) {
         evidenceCorpus,
         revisionGuidance: collected.revisionGuidance || (job.source && job.source.revisionGuidance) || "",
         baselineExcerpt: collected.baselineExcerpt || "",
+        artifactKind:
+          (job.source && job.source.artifactKind) ||
+          (collected.source && collected.source.artifactKind) ||
+          collected.kind ||
+          null,
       },
       d.callModel
     );
-    const classified = classifyItems(extracted, evidenceCorpus);
+    const classified = classifyItems(extracted, evidenceCorpus, {
+      artifactKind:
+        (job.source && job.source.artifactKind) ||
+        (collected.source && collected.source.artifactKind) ||
+        collected.kind ||
+        null,
+      projectId: null,
+      taskType: null,
+    });
     const consolidated = consolidate(classified);
     job = {
       ...job,
@@ -1835,4 +1935,6 @@ module.exports = {
   normalizePreferenceKey,
   stripGuidancePrefix,
   buildOpsFromKept,
+  requiresOwnerSensitiveConflict,
+  qualityScope,
 };

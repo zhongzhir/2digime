@@ -160,12 +160,16 @@ function loadDistillAssets(packageDir) {
 
 /**
  * Read memory jsonl — includes active_low_confidence rows from auto-learn.
+ * @param {string} packageDir
+ * @param {number} maxScan
+ * @param {{ artifactKind?: string, deliverableKind?: string, taskType?: string, projectId?: string, domain?: string, runtimeOrTool?: string, application?: string, skipScopeFilter?: boolean }} [scopeQuery]
  */
-function loadMemoryAssets(packageDir, maxScan) {
+function loadMemoryAssets(packageDir, maxScan, scopeQuery) {
   if (!packageDir) return [];
   const p = path.join(packageDir, "memory", "long-term-memory.jsonl");
   if (!fs.existsSync(p)) return [];
   const limit = Number(maxScan) > 0 ? Number(maxScan) : 200;
+  const qualityScope = require("./quality-experience-scope");
   try {
     const lines = fs.readFileSync(p, "utf8").split(/\n+/).filter(Boolean);
     const slice = lines.slice(-limit);
@@ -199,6 +203,35 @@ function loadMemoryAssets(packageDir, maxScan) {
       ) {
         continue;
       }
+
+      // Scope isolation: expression prefs stay on artifact_kind; global boundaries pass.
+      if (!scopeQuery || !scopeQuery.skipScopeFilter) {
+        if (row.qualityScope || row.learnKind === "expression_preference" || row.learnKind === "boundary") {
+          const scope =
+            row.qualityScope ||
+            (row.learnKind === "boundary"
+              ? { level: "global", artifactKinds: [] }
+              : null);
+          if (scope) {
+            const hit = qualityScope.qualityScopeMatches(scope, scopeQuery || {});
+            if (!hit.match) continue;
+          } else if (row.learnKind === "expression_preference") {
+            // Legacy prefs without scope: only inject when query kind absent (avoid silent pollution).
+            const qKind = qualityScope.normalizeArtifactKind(
+              (scopeQuery && (scopeQuery.artifactKind || scopeQuery.deliverableKind)) || null
+            );
+            if (qKind) continue;
+          }
+          if (
+            scopeQuery &&
+            scopeQuery.application &&
+            !qualityScope.applicationAllowed(row, scopeQuery.application)
+          ) {
+            continue;
+          }
+        }
+      }
+
       const assetId =
         row.id ||
         row.assetId ||
@@ -250,12 +283,38 @@ function loadMemoryAssets(packageDir, maxScan) {
         contentHash: sha256Text(statement),
         usageCount: Number(row.usageCount || row.reinforcement || 0) || 0,
         resolverEligible: true,
+        qualityScope: row.qualityScope || null,
+        qualityApplications: row.qualityApplications || null,
+        canonicalStatement: row.canonicalStatement || null,
       });
     }
     return out;
   } catch {
     return [];
   }
+}
+
+/**
+ * Structured quality resolver for generation + future planning/validation slots.
+ * Does not create a second Store — reads the same long-term-memory.jsonl.
+ */
+function resolveQualityExperiences(packageDir, query, opts) {
+  const qualityScope = require("./quality-experience-scope");
+  const options = opts || {};
+  const assets = loadMemoryAssets(
+    packageDir,
+    options.maxScan || 200,
+    query || {}
+  );
+  return assets
+    .filter((a) => a.learnKind === "expression_preference" || a.learnKind === "boundary" || a.learnKind === "current_fact")
+    .map((a) =>
+      qualityScope.toQualityExperience({
+        ...a,
+        content: a.statement,
+        id: a.assetId,
+      })
+    );
 }
 
 function defaultLimits(limits, policy) {
@@ -430,7 +489,14 @@ function assembleSubjectContext(input) {
   }
 
   const distillAssets = loadDistillAssets(packageDir);
-  const memoryAssets = loadMemoryAssets(packageDir, limits.memoryScan);
+  const memoryAssets = loadMemoryAssets(packageDir, limits.memoryScan, {
+    artifactKind: query.deliverableKind || query.artifactKind || query.kind || null,
+    taskType: query.taskType || null,
+    projectId: query.projectId || null,
+    domain: query.domain || null,
+    runtimeOrTool: query.runtimeOrTool || null,
+    application: "generation_context",
+  });
   const catalog = distillAssets.concat(memoryAssets).filter((a) => enabledLayers.includes(a.layer));
 
   if (!catalog.length) {
@@ -566,6 +632,7 @@ module.exports = {
   assembleSubjectContext,
   loadDistillAssets,
   loadMemoryAssets,
+  resolveQualityExperiences,
   scoreAsset,
   LAYER_KEYS,
   MVP_ACTIVE_LAYERS,
