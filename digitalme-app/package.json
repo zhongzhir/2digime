@@ -11,6 +11,7 @@
     "dist:win": "node scripts/build-closed-alpha-portable.cjs",
     "dist:portable:single": "electron-builder --win portable --x64 --config electron-builder.yml",
     "test:closed-alpha-build-integrity": "node scripts/test-closed-alpha-build-integrity.cjs",
+    "test:mvp-do-workflow-rebuild-01": "node scripts/test-mvp-do-workflow-rebuild-01.cjs",
     "test:mvp-release-gate-01e-fix-05": "node scripts/test-mvp-release-gate-01e-fix-05.cjs",
     "test:mvp-release-gate-01e-fix-05-electron": "electron scripts/electron-mvp-release-gate-01e-fix-05-acceptance.cjs",
     "test:mvp-release-gate-01e-fix-04": "node scripts/test-mvp-release-gate-01e-fix-04.cjs",

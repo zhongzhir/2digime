@@ -5178,9 +5178,62 @@ function setActWorkspaceHint(text) {
 function setActRunningHint(text) {
   const el = $("act-running-hint");
   if (el) el.textContent = text || "";
+  if (window.DoWorkspace) window.DoWorkspace.setRuntime({ runningHint: text || "" });
+}
+
+function collectDoWorkspaceInput(extra) {
+  const goal = ($("act-request") && $("act-request").value) || "";
+  return Object.assign(
+    {
+      goal,
+      packageReady: typeof isDigitalMeReadyForStart === "function" ? isDigitalMeReadyForStart() : !!(pkg && pkg.exists),
+      modelReady: typeof isModelReadyForStart === "function" ? isModelReadyForStart() : !!lastModelConfigured,
+      materials: (actBehalfState && actBehalfState.attachedFiles) || [],
+      packageView: actBehalfState && actBehalfState._lastPackageView ? actBehalfState._lastPackageView : null,
+      activePackageId: actBehalfState && actBehalfState.activePackageId,
+      taskId: actBehalfState && actBehalfState.taskId,
+      workspaceHint: ($("act-workspace-hint") && $("act-workspace-hint").textContent) || "",
+    },
+    extra || {}
+  );
+}
+
+function renderDoWorkspaceNow(extra) {
+  if (!window.DoWorkspace) return null;
+  const vm = window.DoWorkspace.deriveDoWorkspaceViewModel(collectDoWorkspaceInput(extra));
+  window.DoWorkspace.renderDoWorkspace(vm, {
+    escapeHtml,
+    openModelConnect: () => openSettings({ fromReadiness: true, focusModelConnect: true }),
+  });
+  // Mirror legacy phase field for older helpers.
+  if (vm.phase === "running" || vm.phase === "revising") actBehalfState.workspacePhase = "running";
+  else if (vm.phase === "result" || vm.phase === "accepted") actBehalfState.workspacePhase = "result";
+  else actBehalfState.workspacePhase = "input";
+  return vm;
 }
 
 function showActWorkspacePhase(phase) {
+  // MVP-DO-WORKFLOW-REBUILD-01: phase changes go through the single render path.
+  if (window.DoWorkspace) {
+    const map = {
+      input: null,
+      running: "running",
+      result: "result",
+    };
+    const hint = map[phase] !== undefined ? map[phase] : phase;
+    if (hint === "running") {
+      window.DoWorkspace.setRuntime({ phaseHint: "running", busy: true });
+    } else if (hint === "result") {
+      window.DoWorkspace.setRuntime({ phaseHint: "result", busy: false, revising: false });
+    } else if (hint === "accepted") {
+      window.DoWorkspace.setRuntime({ phaseHint: "accepted", busy: false, acceptLabelVisible: true });
+    } else {
+      window.DoWorkspace.setRuntime({ phaseHint: null, busy: false, revising: false });
+    }
+    actBehalfState.workspacePhase = phase === "result" ? "result" : phase === "running" ? "running" : "input";
+    renderDoWorkspaceNow();
+    return;
+  }
   actBehalfState.workspacePhase = phase || "input";
   const input = $("act-workspace-input");
   const running = $("act-workspace-running");
@@ -5278,6 +5331,10 @@ function deriveStartDoAvailability(workspaceState) {
 }
 
 function renderStartDoAvailability() {
+  // Single render entry: DoWorkspace owns button/phase/reason visibility.
+  if (window.DoWorkspace) {
+    return renderDoWorkspaceNow();
+  }
   const btn = $("btn-act-start-do");
   const reasonEl = $("act-start-do-reason");
   const avail = deriveStartDoAvailability(collectStartDoWorkspaceState());
@@ -5321,6 +5378,18 @@ try {
   window.isWorkspaceGenerationInFlight = isWorkspaceGenerationInFlight;
   window.presentActWorkspaceResult = presentActWorkspaceResult;
   window.refreshActGenerationPanel = refreshActGenerationPanel;
+  window.renderDoWorkspaceNow = renderDoWorkspaceNow;
+  window.deriveDoWorkspaceViewModel = function (input) {
+    return window.DoWorkspace
+      ? window.DoWorkspace.deriveDoWorkspaceViewModel(input || collectDoWorkspaceInput())
+      : null;
+  };
+  // Canonical product verbs (MVP-DO-WORKFLOW-REBUILD-01).
+  window.startDo = handleStartDoWork;
+  window.reviseCurrentResult = handleSendRevision;
+  window.acceptCurrentResult = handleAcceptWorkspaceResult;
+  window.openLocalResult = handleOpenLocalWorkspaceArtifact;
+  window.stopDo = handleActStopRequest;
 } catch {
   /* ignore */
 }
@@ -5596,6 +5665,22 @@ async function presentActWorkspaceResult(view, opts = {}) {
     }
   }
   actBehalfState.presentedResultKey = resultKey;
+  if (window.DoWorkspace) {
+    window.DoWorkspace.setRuntime({
+      presentedKey: resultKey,
+      presentCount: actBehalfState.workspacePresentCount || 1,
+      resultHeading: ($("act-title") && $("act-title").value.trim()) || primary.title || "成果",
+      resultBodyHtml: res.format === "html" || res.format === "htm" ? "" : renderMarkdownLite(res.content),
+      resultBodyText: String(res.content || ""),
+      resultFormat: res.format || "md",
+      phaseHint: primary.reviewStatus === "accepted" ? "accepted" : "result",
+      busy: false,
+      revising: false,
+      acceptLabelVisible: primary.reviewStatus === "accepted",
+    });
+    actBehalfState._lastPackageView = view;
+    renderDoWorkspaceNow();
+  }
   // One-time gentle focus to the heading after authoritative completion (no repeated scroll).
   if (heading && typeof heading.scrollIntoView === "function" && !opts.skipScroll) {
     try {
@@ -5632,6 +5717,17 @@ async function handleStartDoWork() {
   actBehalfState.startDoBusy = true;
   actBehalfState.presentedResultKey = null;
   actBehalfState.workspacePresentCount = 0;
+  if (window.DoWorkspace) {
+    window.DoWorkspace.resetRuntimePresentation();
+    window.DoWorkspace.setRuntime({
+      busy: true,
+      revising: false,
+      stopRequested: false,
+      phaseHint: "running",
+      runningHint: "正在整理任务材料",
+      lastError: "",
+    });
+  }
   showActWorkspacePhase("running");
   setActRunningHint("正在整理任务材料");
   setActWorkspaceHint("");
@@ -5709,6 +5805,13 @@ async function handleStartDoWork() {
     setActWorkspaceHint(userFacingStartDoError(err));
   } finally {
     actBehalfState.startDoBusy = false;
+    if (window.DoWorkspace) {
+      window.DoWorkspace.setRuntime({
+        busy: false,
+        stopRequested: !!actBehalfState.stopRequested,
+        phaseHint: actBehalfState.workspacePhase === "result" ? "result" : null,
+      });
+    }
     renderStartDoAvailability();
   }
 }
@@ -5791,17 +5894,31 @@ async function handleSendRevision() {
   showActWorkspacePhase("running");
   setActRunningHint("正在根据你的要求调整成果……");
   actBehalfState.presentedResultKey = null;
+  if (window.DoWorkspace) {
+    window.DoWorkspace.setRuntime({
+      revising: true,
+      busy: true,
+      phaseHint: "revising",
+      presentedKey: null,
+      runningHint: "正在根据你的要求调整成果……",
+    });
+    renderDoWorkspaceNow();
+  }
   const res = await window.digitalMe.actBehalfGenerateDeliverable({
     packageId,
     deliverableId: primary.deliverableId,
     revisionGuidance: guidance,
   });
   if (!res || !res.ok) {
+    if (window.DoWorkspace) {
+      window.DoWorkspace.setRuntime({ revising: false, busy: false, phaseHint: "result", lastError: (res && res.message) || "" });
+    }
     showActWorkspacePhase("result");
     setActWorkspaceHint((res && res.message) || "暂时无法按要求修改，请稍后重试。");
     return;
   }
   await waitForWorkspaceGenerationSettle(packageId);
+  if (window.DoWorkspace) window.DoWorkspace.setRuntime({ revising: false, busy: false });
   if (actBehalfState.workspacePhase !== "result") {
     await refreshActGenerationPanel(packageId, { forcePresent: true });
   }
@@ -5829,6 +5946,10 @@ async function handleAcceptWorkspaceResult() {
     acceptStatus.classList.remove("hidden");
   }
   actBehalfState.workspacePrimary = { ...primary, reviewStatus: "accepted" };
+  if (window.DoWorkspace) {
+    window.DoWorkspace.setRuntime({ phaseHint: "accepted", acceptLabelVisible: true });
+    renderDoWorkspaceNow();
+  }
   setTimeout(() => refreshActLearnConflict(actBehalfState.taskId), 400);
   setTimeout(() => refreshActLearnConflict(actBehalfState.taskId), 1500);
 }
@@ -7477,6 +7598,7 @@ function resetActBehalfForm() {
   setActiveArtifactContext(null, null);
   showActWorkspacePhase("input");
   autosizeActRequest();
+  if (window.DoWorkspace) window.DoWorkspace.resetRuntimePresentation();
   renderStartDoAvailability();
 }
 
@@ -7743,13 +7865,23 @@ async function refreshActGenerationPanel(packageId, opts = {}) {
   if (!window.DeliverablePlannerUi || !window.DeliverablePlannerUi.renderGenerationPanel) return;
   const view = await window.digitalMe.actBehalfGetDeliverablePackageById({ packageId });
   if (!(view && view.ok)) return;
+  actBehalfState._lastPackageView = view;
   setActiveArtifactContext(actBehalfState.taskId, packageId);
   actBehalfState.taskAuthStatus = view.authorizationStatus || null;
 
   const inFlight = isWorkspaceGenerationInFlight(view);
   // FIX-05: during in-flight generation, do not rebuild generation panel / result Markdown.
   if (inFlight && !(opts && opts.forcePresent)) {
-    if (actBehalfState.workspacePhase !== "running") showActWorkspacePhase("running");
+    if (window.DoWorkspace) {
+      window.DoWorkspace.setRuntime({
+        busy: true,
+        phaseHint: "running",
+        runningHint: pickWorkspacePrimaryFromView(view) ? "正在整理成果" : "正在生成成果",
+      });
+      renderDoWorkspaceNow();
+    } else if (actBehalfState.workspacePhase !== "running") {
+      showActWorkspacePhase("running");
+    }
     const primary = pickWorkspacePrimaryFromView(view);
     setActRunningHint(primary ? "正在整理成果" : "正在生成成果");
     return { ok: true, skippedHeavyRender: true, inFlight: true };
@@ -8360,12 +8492,24 @@ function wireActBehalfUi() {
   $("btn-act-plan-save-draft")?.addEventListener("click", () => handleSaveDeliverablePlanDraft());
   $("btn-act-generate-from-plan")?.addEventListener("click", () => handleGenerateFromPlan());
   $("btn-act-plan-cancel-draft")?.addEventListener("click", () => handleCancelDeliverablePlanDraft());
-  $("btn-act-start-do")?.addEventListener("click", () => handleStartDoWork());
+  $("btn-act-start-do")?.addEventListener("click", () => {
+    if (typeof startDo === "function") startDo();
+    else handleStartDoWork();
+  });
   $("btn-act-stop")?.addEventListener("click", () => handleActStopRequest());
   $("btn-act-stop-running")?.addEventListener("click", () => handleActStopRequest());
-  $("btn-act-send-revision")?.addEventListener("click", () => handleSendRevision());
-  $("btn-act-accept-result")?.addEventListener("click", () => handleAcceptWorkspaceResult());
-  $("btn-act-open-local")?.addEventListener("click", () => handleOpenLocalWorkspaceArtifact());
+  $("btn-act-send-revision")?.addEventListener("click", () => {
+    if (typeof reviseCurrentResult === "function") reviseCurrentResult();
+    else handleSendRevision();
+  });
+  $("btn-act-accept-result")?.addEventListener("click", () => {
+    if (typeof acceptCurrentResult === "function") acceptCurrentResult();
+    else handleAcceptWorkspaceResult();
+  });
+  $("btn-act-open-local")?.addEventListener("click", () => {
+    if (typeof openLocalResult === "function") openLocalResult();
+    else handleOpenLocalWorkspaceArtifact();
+  });
   const requestEl = $("act-request");
   if (requestEl) {
     const refreshStart = () => {

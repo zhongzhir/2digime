@@ -156,7 +156,7 @@
                 <button type="button" id="btn-do-back-act" class="btn-ghost btn-do-back">← 返回</button>
                 <div>
                   <div id="do-act-title">做事</div>
-                   <div id="do-act-sub" class="muted">描述工作、添加任务材料，开始做。成果会回到本页，可继续修改或采用。</div>
+                   <div id="do-act-sub" class="muted">描述工作、添加任务材料，然后开始做。</div>
                 </div>
               </div>
               <button type="button" class="btn-help" data-help-topic="do" title="打开说明">说明</button>
@@ -216,12 +216,12 @@
               </aside>
               <div class="act-behalf-main">
                 <div id="act-workspace-input" class="act-workspace-phase" data-testid="act-workspace-input">
-                  <label class="library-title-label act-request-label">描述你希望完成的工作
+                  <label class="library-title-label act-request-label">你希望完成什么？
                     <textarea
                       id="act-request"
                       class="act-request-editor"
                       rows="12"
-                      placeholder="写清主题、要点、篇幅、受众、风格与结构即可。标题会在开始后自动生成。"
+                      placeholder="写清主题、要点、篇幅、受众、风格与结构。需要时可补充约束与示例。"
                       data-testid="act-request"
                     ></textarea>
                   </label>
@@ -234,7 +234,7 @@
                     <div class="ext-store-head" style="margin-bottom:0.25rem">
                       <h4 style="margin:0;font-size:0.95rem">任务材料</h4>
                     </div>
-                    <p class="muted act-materials-hint">添加完成这项工作需要使用的文件、文件夹或已有成果。</p>
+                    <p class="muted act-materials-hint">添加完成这项工作需要使用的文件或文件夹。</p>
                     <div class="builder-actions">
                       <button id="btn-act-add-file" class="btn-ghost" type="button" data-testid="btn-act-add-file">添加文件</button>
                       <button id="btn-act-add-folder" class="btn-ghost" type="button" data-testid="btn-act-add-folder">添加文件夹</button>
@@ -281,36 +281,23 @@
                   <p id="act-result-error" class="muted write-rail-hint hidden" data-testid="act-result-error"></p>
                 </div>
 
-                <!-- Hidden compatibility hooks for planner / generation IPC (not default UI). -->
+                <!-- Backend-only hooks: plan/generation remain internal, never user-facing. -->
                 <input id="act-role" type="hidden" value="" data-testid="act-role" />
                 <input id="act-expected" type="hidden" value="" data-testid="act-expected" />
                 <button id="btn-act-form-plan" class="hidden" type="button" tabindex="-1" aria-hidden="true" data-testid="btn-act-form-plan">形成预计交付</button>
                 <button id="btn-act-save" class="hidden" type="button" tabindex="-1" aria-hidden="true" data-testid="btn-act-save">保存草稿</button>
                 <button id="btn-act-generate-from-plan" class="hidden" type="button" tabindex="-1" aria-hidden="true" data-testid="btn-act-generate-from-plan">生成成果</button>
-                <section id="act-deliverable-plan-panel" class="act-deliverable-plan-panel hidden" data-testid="act-deliverable-plan-panel" hidden>
-                  <div class="ext-store-head">
-                    <h3>预计交付</h3>
-                  </div>
-                  <p id="act-plan-status" class="muted write-rail-hint" data-testid="act-plan-status"></p>
-                  <p id="act-plan-readiness" class="muted write-rail-hint" data-testid="act-plan-readiness"></p>
-                  <div class="act-plan-understanding" data-testid="act-plan-understanding">
-                    <h4>任务理解</h4>
-                    <dl id="act-plan-understanding-dl" class="act-plan-dl"></dl>
-                  </div>
-                  <div class="act-plan-items-block">
-                    <div class="ext-store-head">
-                      <h4>交付项</h4>
-                      <button id="btn-act-plan-add-item" class="btn-ghost" type="button" data-testid="btn-act-plan-add-item">新增一项</button>
-                    </div>
-                    <div id="act-plan-items" class="act-plan-items" data-testid="act-plan-items"></div>
-                  </div>
-                  <div class="builder-actions act-plan-primary-actions">
-                    <button id="btn-act-plan-save-draft" class="btn-ghost" type="button" data-testid="btn-act-plan-save-draft">保存草稿</button>
-                    <button id="btn-act-plan-cancel-draft" class="btn-ghost act-text-secondary" type="button" data-testid="btn-act-plan-cancel-draft">取消当前草稿</button>
-                  </div>
-                  <div id="act-generation-panel" class="act-generation-panel hidden" data-testid="act-generation-panel">
-                    <p id="act-generation-status" class="muted write-rail-hint" data-testid="act-generation-status"></p>
-                    <div id="act-generation-items" class="act-generation-items" data-testid="act-generation-items"></div>
+                <section id="act-deliverable-plan-panel" class="act-deliverable-plan-panel hidden" data-testid="act-deliverable-plan-panel" hidden aria-hidden="true">
+                  <p id="act-plan-status" class="hidden"></p>
+                  <p id="act-plan-readiness" class="hidden"></p>
+                  <dl id="act-plan-understanding-dl" class="hidden"></dl>
+                  <div id="act-plan-items" class="hidden"></div>
+                  <button id="btn-act-plan-add-item" class="hidden" type="button" tabindex="-1" aria-hidden="true"></button>
+                  <button id="btn-act-plan-save-draft" class="hidden" type="button" tabindex="-1" aria-hidden="true"></button>
+                  <button id="btn-act-plan-cancel-draft" class="hidden" type="button" tabindex="-1" aria-hidden="true"></button>
+                  <div id="act-generation-panel" class="act-generation-panel hidden" data-testid="act-generation-panel" aria-hidden="true">
+                    <p id="act-generation-status" class="hidden"></p>
+                    <div id="act-generation-items" class="hidden"></div>
                     <div id="act-learn-conflict" class="act-learn-conflict hidden" data-testid="act-learn-conflict">
                       <p id="act-learn-conflict-question" class="write-rail-hint" data-testid="act-learn-conflict-question"></p>
                       <div class="builder-actions">
@@ -321,50 +308,23 @@
                     </div>
                   </div>
                 </section>
-                <details class="act-context-block act-task-details-fold" id="act-context-details">
-                  <summary class="ext-store-head" style="cursor:pointer; list-style:none">
-                    <span style="font-size:0.85rem; color:var(--muted-foreground)">任务详情</span>
-                    <span class="muted" style="margin-left:0.5rem">▸ 展开</span>
-                  </summary>
-                  <div class="ext-store-head">
-                    <span style="font-size:0.85rem; color:var(--muted-foreground)">本人上下文候选</span>
-                    <button id="btn-act-reload-context" class="btn-ghost" type="button" data-testid="btn-act-reload-context">按目标生成候选</button>
-                  </div>
-                  <p id="act-context-note" class="muted write-rail-hint" data-testid="act-context-note"></p>
-                  <p id="act-context-status" class="muted write-rail-hint" data-testid="act-context-status"></p>
-                  <div id="act-claim-list" class="act-claim-list" data-testid="act-claim-list"></div>
-                  <label class="library-title-label">补充一条本人信息（可选）
-                    <textarea id="act-supplement" rows="3" placeholder="仅写入本次任务快照，不会删除或改写主体资料包原文。" data-testid="act-supplement"></textarea>
-                  </label>
-                  <textarea id="act-self-context" class="hidden" rows="2" data-testid="act-self-context" aria-hidden="true"></textarea>
-                  <div class="builder-actions">
-                    <button id="btn-act-confirm-context" type="button" data-testid="btn-act-confirm-context">手动确认上下文（高级）</button>
-                  </div>
-                </details>
-                <div id="act-progress" class="builder-progress" data-testid="act-progress"></div>
+                <div id="act-progress" class="builder-progress hidden" data-testid="act-progress" aria-hidden="true"></div>
                 <p id="act-project-context-hint" class="muted write-rail-hint hidden" data-testid="act-project-context-hint"></p>
-                <div id="act-result-panel" class="act-result-panel hidden" data-testid="act-result-panel">
-                  <div class="output-card">
-                    <h3>已确认本人上下文摘要</h3>
-                    <div id="act-confirmed-summary" class="act-result-body" data-testid="act-confirmed-summary"></div>
-                  </div>
-                  <div class="output-card hidden">
-                    <h3>使用的本人信息（模型自述）</h3>
-                    <div id="act-used-self" class="act-result-body" data-testid="act-used-self"></div>
-                  </div>
-                  <div class="output-card hidden">
-                    <h3>本人已有事实或观点</h3>
-                    <div id="act-existing" class="act-result-body" data-testid="act-existing"></div>
-                  </div>
-                  <div class="output-card hidden">
-                    <h3>Digital Me 的新分析或建议</h3>
-                    <div id="act-inferences" class="act-result-body" data-testid="act-inferences"></div>
-                  </div>
-                  <div class="output-card hidden">
-                    <h3>完整结果</h3>
-                    <div id="act-result" class="act-result-body" data-testid="act-result"></div>
-                  </div>
+                <!-- Retired legacy result cards — ids retained only if old helpers query them. -->
+                <div id="act-result-panel" class="act-result-panel hidden" data-testid="act-result-panel" hidden aria-hidden="true">
+                  <div id="act-confirmed-summary" class="hidden"></div>
+                  <div id="act-used-self" class="hidden"></div>
+                  <div id="act-existing" class="hidden"></div>
+                  <div id="act-inferences" class="hidden"></div>
+                  <div id="act-result" class="hidden"></div>
                 </div>
+                <div id="act-claim-list" class="hidden" aria-hidden="true"></div>
+                <textarea id="act-supplement" class="hidden" aria-hidden="true"></textarea>
+                <textarea id="act-self-context" class="hidden" aria-hidden="true"></textarea>
+                <button id="btn-act-reload-context" class="hidden" type="button" tabindex="-1" aria-hidden="true"></button>
+                <button id="btn-act-confirm-context" class="hidden" type="button" tabindex="-1" aria-hidden="true"></button>
+                <p id="act-context-note" class="hidden" aria-hidden="true"></p>
+                <p id="act-context-status" class="hidden" aria-hidden="true"></p>
               </div>
             </div>
           </div>
@@ -1162,6 +1122,7 @@
     <script src="../chat-artifact-link.js"></script>
     <script src="../session-overflow-menu.js"></script>
     <script src="deliverable-planner.js"></script>
+    <script src="do-workspace.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
