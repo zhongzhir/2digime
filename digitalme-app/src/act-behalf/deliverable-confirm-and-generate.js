@@ -72,17 +72,34 @@ async function confirmPlanAndGenerate(ctx) {
   if (!loaded.plan) {
     return { ok: false, code: "plan_not_found", message: "请先形成预计交付。" };
   }
-  if (
-    loaded.task &&
-    loaded.task.deliverablePlanning &&
-    loaded.task.deliverablePlanning.materialsStale
-  ) {
-    return {
-      ok: false,
-      code: "plan_materials_stale",
-      message: "参考材料已变化，请重新形成预计交付后再生成。",
-      materialsStale: true,
-    };
+  if (loaded.task && loaded.task.deliverablePlanning) {
+    const ptr = loaded.task.deliverablePlanning;
+    const summaries = deliverablePlanner.summarizeReferenceMaterialsForPlanning(
+      loaded.task.referenceMaterials || []
+    );
+    const currentDigest = deliverablePlanner.planningMaterialsDigest(summaries);
+    const plannedDigest = ptr.plannedMaterialsDigest || null;
+    const digestMismatch = !!(plannedDigest && plannedDigest !== currentDigest);
+    // Heal sticky materialsStale when digests already match (truncation re-save artifact).
+    if (ptr.materialsStale && !digestMismatch) {
+      const healed = await ctx.saveTaskPlanPointers(userData, taskId, {
+        deliverablePlanning: {
+          ...ptr,
+          materialsStale: false,
+          materialsStaleReason: null,
+          materialsStaleAt: null,
+          plannedMaterialsDigest: plannedDigest || currentDigest,
+        },
+      });
+      if (healed && healed.task) loaded.task = healed.task;
+    } else if (ptr.materialsStale || digestMismatch) {
+      return {
+        ok: false,
+        code: "plan_materials_stale",
+        message: "参考材料已变化，请重新形成预计交付后再生成。",
+        materialsStale: true,
+      };
+    }
   }
 
   let plan = loaded.plan;

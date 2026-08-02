@@ -124,14 +124,23 @@ function assertTaskMaterialsFresh(userData, taskId) {
     const got = actBehalfStore.getTask(userData, taskId, { heal: false });
     if (!got || !got.ok || !got.task) return { ok: true };
     const ptr = got.task.deliverablePlanning || {};
-    if (ptr.materialsStale) {
-      return {
-        ok: false,
-        code: "plan_materials_stale",
-        message: "参考材料已变化，请重新形成预计交付后再生成。",
-        materialsStale: true,
-      };
+    if (!ptr.materialsStale) return { ok: true };
+    const deliverablePlanner = require("./deliverable-planner");
+    const summaries = deliverablePlanner.summarizeReferenceMaterialsForPlanning(
+      got.task.referenceMaterials || []
+    );
+    const currentDigest = deliverablePlanner.planningMaterialsDigest(summaries);
+    const plannedDigest = ptr.plannedMaterialsDigest || null;
+    if (plannedDigest && plannedDigest === currentDigest) {
+      // Sticky false-positive after truncation re-save — treat as fresh.
+      return { ok: true, healedStickyStale: true };
     }
+    return {
+      ok: false,
+      code: "plan_materials_stale",
+      message: "参考材料已变化，请重新形成预计交付后再生成。",
+      materialsStale: true,
+    };
   } catch {
     /* ignore */
   }

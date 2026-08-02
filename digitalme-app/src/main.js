@@ -2056,11 +2056,21 @@ ipcMain.handle("actBehalf:selectFiles", async (_e, payload) => {
           const names = fileEntries.slice(0, 40).map((f) => f.name);
           const sampleParts = [];
           let budget = 12000;
-          for (const ent of fileEntries.slice(0, 8)) {
+          for (const ent of fileEntries.slice(0, 12)) {
             if (budget <= 0) break;
             const child = path.join(filePath, ent.name);
             const childExt = path.extname(ent.name).toLowerCase();
-            if (![".md", ".markdown", ".txt", ".json", ".csv"].includes(childExt)) continue;
+            const sampleable = [
+              ".md",
+              ".markdown",
+              ".txt",
+              ".json",
+              ".csv",
+              ".docx",
+              ".pdf",
+              ".pptx",
+            ].includes(childExt);
+            if (!sampleable) continue;
             try {
               let chunk = await builder.extractText(child);
               chunk = String(chunk || "").trim();
@@ -2069,7 +2079,7 @@ ipcMain.handle("actBehalf:selectFiles", async (_e, payload) => {
               sampleParts.push(`### ${ent.name}\n${chunk}`);
               budget -= chunk.length;
             } catch {
-              /* skip unreadable */
+              /* skip unsupported / locked / unreadable file; keep folder task alive */
             }
           }
           text =

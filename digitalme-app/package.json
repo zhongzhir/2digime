@@ -86,6 +86,8 @@
     "test:mvp-quality-product-validation-01-unit": "node scripts/test-mvp-quality-product-validation-01-unit.cjs",
     "test:mvp-release-regression-02": "node scripts/run-mvp-release-regression-02.cjs",
     "test:mvp-release-regression-02-path": "electron scripts/electron-mvp-release-regression-02.cjs",
+    "test:mvp-owner-install-blocker-01": "node scripts/test-mvp-owner-install-blocker-01.cjs",
+    "test:mvp-owner-install-blocker-01-electron": "electron scripts/electron-mvp-owner-install-blocker-01.cjs",
     "test:dvl2-05-context": "node scripts/test-dvl2-05-context-authority.cjs",
     "test:crt-mvp-continuity": "node scripts/test-crt-mvp-continuity.cjs",
     "test:crt-mvp-01.1-package-dir": "node scripts/test-crt-mvp-01.1-package-dir.cjs",

@@ -5864,6 +5864,9 @@ function userFacingStartDoError(err) {
   ) {
     return "模型暂时无法使用。请检查模型连接后重试。";
   }
+  if (code === "plan_materials_stale" || /参考材料已变化/.test(msg)) {
+    return "任务材料已更新。请再次点击「开始做」，系统会按最新材料继续。";
+  }
   if (code === "material_read_failed" || /材料.*无法读取|未能读入/.test(msg)) {
     return "部分任务材料暂时无法读取。你可以移除相关材料后重试，其他内容已经保留。";
   }
@@ -5986,16 +5989,21 @@ async function handleOpenLocalWorkspaceArtifact() {
 function userFacingTaskStatus(task) {
   const st = String((task && task.status) || "").toLowerCase();
   const gen = task && task.deliverableExecution;
+  const planning = task && task.deliverablePlanning;
   if (st === "failed" || st === "error") return "需要处理";
-  if (gen && gen.activePackageId) {
-    // Heuristic: if accepted/completed markers exist
-    if (st === "completed" || st === "done" || st === "accepted") return "已完成";
-    if (st === "running" || st === "generating") return "进行中";
-  }
   if (st === "completed" || st === "done" || st === "accepted") return "已完成";
   if (st === "running" || st === "generating" || st === "in_progress") return "进行中";
-  if (st === "draft" || !st) return "进行中";
-  return "进行中";
+  if (gen && gen.activePackageId) {
+    if (st === "running" || st === "generating") return "进行中";
+    return "进行中";
+  }
+  // Draft / planned without an active package is not "running".
+  if (planning && (planning.currentDraftVersionId || planning.planId) && !gen?.activePackageId) {
+    if (planning.materialsStale) return "待重新开始";
+    return "待开始";
+  }
+  if (st === "draft" || !st) return "待开始";
+  return "待开始";
 }
 
 /** Lightweight runtime counters for GLOBAL-RENDERER-RESPONSIVENESS-01 (not persisted). */

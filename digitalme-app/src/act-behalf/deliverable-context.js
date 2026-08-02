@@ -60,17 +60,20 @@ function normalizeReferenceMaterials(list, opts) {
   const out = [];
   for (const raw of Array.isArray(list) ? list.slice(0, maxFiles) : []) {
     if (!raw || raw.ok === false) continue;
-    const full = String(raw.text || "");
-    const truncated = full.length > maxCharsPerFile;
-    const text = truncated ? full.slice(0, maxCharsPerFile) : full;
+    const incoming = String(raw.text || "");
+    const truncatedNow = incoming.length > maxCharsPerFile;
+    // Persist only the kept body. charCount/contentHash must describe that body,
+    // otherwise re-save after truncation flips planningMaterialsDigest and
+    // falsely marks materialsStale (Owner start-do blocker).
+    const text = truncatedNow ? incoming.slice(0, maxCharsPerFile) : incoming;
     if (!text.trim() && !raw.name) continue;
     out.push({
       id: String(raw.id || sha256Text(String(raw.name || "") + "|" + text).slice(0, 24)),
       name: String(raw.name || "未命名附件"),
       path: raw.path ? String(raw.path) : null,
-      charCount: full.length || text.length,
-      truncated: !!truncated || !!raw.truncated,
-      contentHash: raw.contentHash || sha256Text(full || text),
+      charCount: text.length,
+      truncated: truncatedNow || !!raw.truncated,
+      contentHash: sha256Text(text),
       text,
       note: raw.note ? String(raw.note) : "",
       ok: true,
