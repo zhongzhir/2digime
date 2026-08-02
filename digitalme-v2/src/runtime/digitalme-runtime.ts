@@ -7,7 +7,12 @@ import {
   createFakeDocumentAdapter,
   type FakeDocumentAdapterOptions,
 } from '../capability/adapters/fake-document';
-import { createOpenAiCompatibleAdapterStub } from '../capability/adapters/openai-compatible';
+import {
+  createOpenAiCompatibleAdapter,
+  createOpenAiCompatibleAdapterStub,
+  type OpenAiCompatibleAdapterConfig,
+} from '../capability/adapters/openai-compatible';
+import type { SecretAccessor } from '../capability/adapter';
 import type { Task } from '../work-runtime/task';
 import type { ExecutionJob } from '../work-runtime/execution-job';
 import type { ContextSnapshot } from '../work-runtime/context-snapshot';
@@ -27,7 +32,17 @@ import { nowIso, newId } from '../shared/ids';
 
 export interface DigitalMeRuntimeOptions {
   fakeAdapter?: FakeDocumentAdapterOptions;
+  /** 兼容旧选项:是否注册 needs_setup 的 stub。默认 true(当未启用真实模型时)。 */
   registerOpenAiStub?: boolean;
+  /**
+   * 文档能力来源:
+   * - fake:仅 Fake(默认,单元测试)
+   * - openai-compatible:真实模型 Adapter(需 secrets + 配置)
+   * - both:真实优先注册,Fake 作为后备
+   */
+  documentCapability?: 'fake' | 'openai-compatible' | 'both';
+  openaiCompatible?: OpenAiCompatibleAdapterConfig;
+  secrets?: SecretAccessor;
 }
 
 /**
@@ -110,7 +125,6 @@ export class DigitalMeRuntime {
     return this.requireWorkspace().export(input.artifactId, input.format, input.targetPath);
   }
 
-  /** 测试/运维:直接追加边界等事件(仍走 GrowthEvent,不手改视图)。 */
   async appendOwnerEvent(
     partial: Omit<GrowthEvent, 'id' | 'subjectId' | 'occurredAt' | 'source'> & {
       source?: GrowthEvent['source'];
@@ -159,8 +173,17 @@ export class DigitalMeRuntime {
     const contentStore = new ContentStore(path.join(root, 'content'));
 
     const registry = new CapabilityRegistry();
-    registry.register(createFakeDocumentAdapter(this.options.fakeAdapter));
-    if (this.options.registerOpenAiStub !== false) {
+    const mode = this.options.documentCapability ?? 'fake';
+    if (mode === 'openai-compatible' || mode === 'both') {
+      if (!this.options.openaiCompatible) {
+        throw new Error('openaiCompatible config is required when documentCapability uses real model');
+      }
+      registry.register(createOpenAiCompatibleAdapter(this.options.openaiCompatible));
+    }
+    if (mode === 'fake' || mode === 'both') {
+      registry.register(createFakeDocumentAdapter(this.options.fakeAdapter));
+    }
+    if (mode === 'fake' && this.options.registerOpenAiStub !== false) {
       registry.register(createOpenAiCompatibleAdapterStub());
     }
 
@@ -178,6 +201,11 @@ export class DigitalMeRuntime {
       registry,
       eventBus: this.eventBus,
       workRoot: path.join(root, 'work'),
+      ...(this.options.secrets ? { secrets: this.options.secrets } : {}),
+      readExtractedText: async (ref: string) => {
+        const bytes = await contentStore.readBytes(ref);
+        return bytes.toString('utf8');
+      },
       loadSubjectContext: async () => {
         const derived = await subjectService.getDerived();
         return derived.confirmed;

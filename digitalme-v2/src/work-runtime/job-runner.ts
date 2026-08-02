@@ -43,6 +43,8 @@ export interface WorkRuntimeOptions {
     confirmed: ConfirmedExperienceView;
   }) => Promise<ConfirmedExperienceView> | ConfirmedExperienceView;
   secrets?: SecretAccessor;
+  /** 只读解析 Snapshot extractedTextRef;供模型 Adapter 组装材料。 */
+  readExtractedText?: (ref: string) => Promise<string>;
 }
 
 type SubmitInput = CommandMap['work.submitTask']['input'];
@@ -420,6 +422,9 @@ export class WorkRuntime {
             signal: controller.signal,
             secrets,
             workDir,
+            ...(this.opts.readExtractedText
+              ? { readExtractedText: this.opts.readExtractedText }
+              : {}),
           },
         );
       } catch (error) {

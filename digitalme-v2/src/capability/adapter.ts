@@ -30,6 +30,11 @@ export interface ExecutionContext {
   secrets: SecretAccessor;
   /** Adapter 可写的工作目录(file/bundle 载荷的产出位置)。 */
   workDir: string;
+  /**
+   * 只读解析 Snapshot 中的 extractedTextRef。
+   * 由 Runner 注入;Adapter 不得持有 ContentStore。
+   */
+  readExtractedText?(ref: string): Promise<string>;
 }
 
 export interface SecretAccessor {

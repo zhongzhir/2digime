@@ -29,6 +29,7 @@ export * from './capability/adapter';
 export * from './capability/registry';
 export * from './capability/adapters/fake-document';
 export * from './capability/adapters/openai-compatible';
+export * from './capability/adapters/prompt-assemble';
 
 export * from './collaboration/schema';
 export * from './collaboration/local-simulation';

@@ -3,6 +3,7 @@ export * from './fs-atomic';
 export * from './json-store';
 export * from './event-log';
 export * from './secret-store';
+export * from './env-secrets';
 export * from './model-http';
 export * from './zip';
 export * from './extract';
