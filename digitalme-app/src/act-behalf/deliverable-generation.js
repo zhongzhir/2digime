@@ -10,7 +10,9 @@ const { nowIso, newId } = require("./deliverable-package-schema");
 const { commitVersionFiles } = require("./deliverable-artifact-fs");
 const { generateByKind, generateByKindWithRepair, documentFilesFromMarkdown } = require("./deliverable-generators");
 const { isStableDeliveryMode } = require("./quality-pipeline-mode");
-const { runQualityEnhancement } = require("./stable-delivery");
+const { runQualityEnhancement, runSoftwareQualityEnhancement } = require("./stable-delivery");
+const { evaluateArtifact } = require("./quality-evaluation");
+const { toTargetedRepairIssues } = require("./quality-document-evaluator");
 const actBehalfStore = require("./task-store");
 const { assembleSubjectContext } = require("./subject-context-assembler");
 const {
@@ -539,23 +541,92 @@ async function generateOneDeliverable(userData, { packageId, deliverableId, revi
             void ctx;
             return;
           }
-          const result = await reviewDeliverableContent({
+          const kind = String(deliverable.kind || "");
+          if (kind === "software" || kind === "code") {
+            const evaluation = await evaluateArtifact({
+              content: draft,
+              source: draft,
+              files: { "main.js": draft },
+              artifactType: "software",
+              kind: "software",
+              goal: taskContext.goal,
+              viaProductPipeline: true,
+              evaluationIteration: 0,
+            });
+            lastReviewResult = {
+              status: evaluation.status,
+              blockingIssues: (evaluation.checks || [])
+                .filter((c) => !c.passed && c.severity === "blocking")
+                .map((c) => ({ ruleId: c.id, message: c.message })),
+              qualityIssues: (evaluation.checks || [])
+                .filter((c) => !c.passed && c.severity !== "blocking")
+                .map((c) => ({ ruleId: c.id, message: c.message })),
+              suggestedRevisions: (evaluation.actionableRevisions || []).map(
+                (r) => r.guidance || r.message
+              ),
+              scores: { qualityEvaluation: (evaluation.score || 0) / 100 },
+              qualityEvaluation: evaluation,
+              createdAt: evaluation.createdAt,
+            };
+            if (evaluation.status !== "pass") {
+              const e = new Error(userFacingReviewFailure(lastReviewResult));
+              e.code = "review_content_rejected";
+              e.reviewResult = lastReviewResult;
+              e.reviewIssues = toTargetedRepairIssues(evaluation);
+              e.userIssueSummary = userFacingReviewSummary(lastReviewResult);
+              e.failureStage = "quality_review";
+              throw e;
+            }
+            void ctx;
+            return;
+          }
+          const evaluation = await evaluateArtifact({
             content: draft,
+            md: draft,
             kind: deliverable.kind,
+            artifactType: deliverable.kind,
             criteria: outcomeCriteria,
             goal: taskContext.goal,
             isDigitalMeProject,
             callModel: boundedCallModel,
             snapshot: systemSnapshot,
             authorityMap,
+            packageDir: deps.packageDir || null,
+            evaluationIteration: 0,
           });
-          lastReviewResult = result;
-          if (result.status !== "pass") {
-            const e = new Error(userFacingReviewFailure(result));
+          const result = evaluation.reviewResult || {
+            status: evaluation.status,
+            taskMode: (outcomeCriteria && outcomeCriteria.taskMode) || null,
+            blockingIssues: (evaluation.checks || [])
+              .filter((c) => !c.passed && c.severity === "blocking")
+              .map((c) => ({ ruleId: c.id, message: c.message })),
+            qualityIssues: (evaluation.checks || [])
+              .filter((c) => !c.passed && c.severity !== "blocking")
+              .map((c) => ({ ruleId: c.id, message: c.message })),
+            suggestedRevisions: (evaluation.actionableRevisions || []).map(
+              (r) => r.guidance || r.message
+            ),
+            scores: evaluation.reviewResult && evaluation.reviewResult.scores
+              ? evaluation.reviewResult.scores
+              : { qualityEvaluation: (evaluation.score || 0) / 100 },
+            modelReviewUsed: !!(evaluation.reviewResult && evaluation.reviewResult.modelReviewUsed),
+            reviewerDegraded: !!(evaluation.reviewResult && evaluation.reviewResult.reviewerDegraded),
+            criteriaDigest: (outcomeCriteria && outcomeCriteria.criteriaDigest) || null,
+            createdAt: evaluation.createdAt,
+          };
+          lastReviewResult = {
+            ...result,
+            taskMode: result.taskMode || (outcomeCriteria && outcomeCriteria.taskMode) || null,
+            qualityEvaluation: evaluation,
+          };
+          if (evaluation.status !== "pass") {
+            const e = new Error(userFacingReviewFailure(lastReviewResult));
             e.code = "review_content_rejected";
-            e.reviewResult = result;
-            e.reviewIssues = toRepairIssues(result);
-            e.userIssueSummary = userFacingReviewSummary(result);
+            e.reviewResult = lastReviewResult;
+            e.reviewIssues = toTargetedRepairIssues(evaluation).length
+              ? toTargetedRepairIssues(evaluation)
+              : toRepairIssues(result);
+            e.userIssueSummary = userFacingReviewSummary(lastReviewResult);
             e.failureStage = "quality_review";
             throw e;
           }
@@ -1064,7 +1135,12 @@ async function generateOneDeliverable(userData, { packageId, deliverableId, revi
       a.producedVersionId = versionId;
       a.outcome = "created_new_version";
       a.phase =
-        stableMode && deliverable.kind === "document" ? "quality_enhancement" : "completed";
+        stableMode &&
+        (deliverable.kind === "document" ||
+          deliverable.kind === "software" ||
+          deliverable.kind === "code")
+          ? "quality_enhancement"
+          : "completed";
       a.groundedRebuildUsed = !!groundingAudit.groundedRebuildUsed;
       a.cleanRegenerationUsed = !!groundingAudit.cleanRegenerationUsed;
       Object.assign(
@@ -1131,7 +1207,125 @@ async function generateOneDeliverable(userData, { packageId, deliverableId, revi
   }
 
   // Channel B: quality enhancement after baseline is already usable.
-  if (!(stableMode && deliverable.kind === "document")) {
+  const kindForEnhancement = String(deliverable.kind || "");
+  const runDocumentEnhancement = stableMode && kindForEnhancement === "document";
+  const runSoftwareEnhancement =
+    stableMode && (kindForEnhancement === "software" || kindForEnhancement === "code");
+  if (!runDocumentEnhancement && !runSoftwareEnhancement) {
+    return baselineResult;
+  }
+
+  if (runSoftwareEnhancement) {
+    try {
+      const softEnh = await runSoftwareQualityEnhancement({
+        files: produced.files,
+        goal: taskContext.goal,
+        callModel: boundedCallModel,
+        allowedFiles: Object.keys(produced.files || {}),
+        maxRevisions: 2,
+      });
+      baselineResult.enhancement = {
+        attempted: true,
+        enhanced: !!softEnh.enhanced,
+        reason: softEnh.reason || null,
+        modelCalls: softEnh.modelCalls || 0,
+        artifactType: "software",
+        loop: softEnh.loop
+          ? {
+              status: softEnh.loop.status,
+              score: softEnh.loop.score,
+              improved: softEnh.loop.improved,
+              revisionsUsed: softEnh.loop.revisionsUsed,
+              remainingIssues: softEnh.loop.remainingIssues,
+            }
+          : null,
+      };
+      if (softEnh.enhanced && softEnh.files) {
+        const enhVersionId = newVersionId();
+        const enhCommitted = await commitVersionFiles(userData, {
+          packageId,
+          deliverableId,
+          versionId: enhVersionId,
+          files: softEnh.files,
+          manifest: {
+            attemptId: activeAttemptId,
+            kind: "software",
+            sourcePlanVersionId: pkg.sourcePlanVersionId,
+            modelProvenanceSummary: {
+              adapter: "callModel",
+              taskType: "artifact",
+              stage: "software_quality_enhanced",
+            },
+          },
+        });
+        const enhArts = enhCommitted.files.map((f) =>
+          makeArtifactRef({
+            versionId: enhVersionId,
+            relativePath: f.relativePath,
+            contentHash: f.contentHash,
+            byteSize: f.byteSize,
+            name: f.name,
+          })
+        );
+        const enhPrimary =
+          enhArts.find((a) => a.relativePath.endsWith("/main.js")) || enhArts[0];
+        const enhancedVersion = {
+          ...version,
+          id: enhVersionId,
+          version: (Array.isArray(deliverable.versionIds) ? deliverable.versionIds.length : 0) + 2,
+          artifactRef: enhPrimary,
+          previewRef: null,
+          artifactRefs: enhArts,
+          contentHash: enhPrimary ? enhPrimary.contentHash : null,
+          supersedesVersionId: versionId,
+          provenance: {
+            ...(version.provenance || {}),
+            generation_stage: "enhanced",
+            generatedAt: nowIso(),
+          },
+          quality: {
+            verdict: softEnh.loop && softEnh.loop.claimedPass ? "pass" : "improved_with_remaining",
+            checks: ["software_quality_evaluation"],
+            pipelineMode: "stable_delivery",
+            derivedEvaluation: softEnh.loop && softEnh.loop.derivedQuality,
+            enhancement: { fromVersionId: versionId, modelCalls: softEnh.modelCalls },
+          },
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+        };
+        await packageStore.mutateStore(userData, (s) => {
+          for (const art of enhArts) s.artifacts[art.id] = art;
+          if (s.versions[versionId]) {
+            s.versions[versionId].supersededByVersionId = enhVersionId;
+            s.versions[versionId].updatedAt = nowIso();
+          }
+          s.versions[enhVersionId] = enhancedVersion;
+          const d = s.deliverables[deliverableId];
+          if (d) {
+            d.versionIds = Array.isArray(d.versionIds)
+              ? d.versionIds.concat(enhVersionId)
+              : [versionId, enhVersionId];
+            d.currentVersionId = enhVersionId;
+            d.generationStatus = "ready";
+            d.updatedAt = nowIso();
+          }
+        });
+        baselineResult.enhancedVersionId = enhVersionId;
+      } else if (softEnh.loop && softEnh.loop.derivedQuality) {
+        await packageStore.mutateStore(userData, (s) => {
+          if (s.versions[versionId]) {
+            s.versions[versionId].quality = {
+              ...(s.versions[versionId].quality || {}),
+              derivedEvaluation: softEnh.loop.derivedQuality,
+              remainingIssues: softEnh.loop.remainingIssues || [],
+            };
+            s.versions[versionId].updatedAt = nowIso();
+          }
+        });
+      }
+    } catch {
+      /* software enhancement must not fail baseline delivery */
+    }
     return baselineResult;
   }
 
@@ -1156,6 +1350,7 @@ async function generateOneDeliverable(userData, { packageId, deliverableId, revi
         callModel: boundedCallModel,
         snapshot: systemSnapshot,
         authorityMap,
+        packageDir: deps.packageDir || null,
       });
       enhancementMeta.modelCalls = enh.modelCalls || 0;
       enhancementMeta.reason = enh.reason || null;

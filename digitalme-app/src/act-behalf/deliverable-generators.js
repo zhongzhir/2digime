@@ -675,16 +675,142 @@ async function generateImage(deps) {
   throw e;
 }
 
+function stripCodeFences(raw) {
+  let t = String(raw || "").trim();
+  const fence = t.match(/^```(?:js|javascript|cjs|mjs)?\s*([\s\S]*?)```$/i);
+  if (fence) t = fence[1].trim();
+  return t;
+}
+
+function buildSoftwareMessages(ctx) {
+  return [
+    {
+      role: "system",
+      content:
+        "你是 Digital Me 的软件成果实现者。只输出一份可直接用 Node.js 运行的完整 JavaScript 源码。" +
+        "不要 Markdown 说明，不要代码围栏。程序必须可独立运行（node main.js），退出码 0，并在标准输出打印简短结果。" +
+        "不得使用 eval、不得 shell:true，不得删除用户文件。紧扣任务目标。",
+    },
+    {
+      role: "user",
+      content: clampText(
+        [
+          contextBlock(ctx),
+          "请直接输出 main.js 的完整源码（CommonJS 或无模块顶层脚本均可）。",
+        ].join("\n"),
+        20000
+      ),
+    },
+  ];
+}
+
+function buildSoftwareRepairMessages(ctx, priorSource, issues) {
+  const issueLines = buildRepairIssueLines(issues).join("\n");
+  return [
+    {
+      role: "system",
+      content:
+        "你修订已有 Node.js 脚本。只输出完整源码，不要 Markdown。" +
+        "仅修复指出的问题，保留已通过的逻辑与结构，禁止无关重写。",
+    },
+    {
+      role: "user",
+      content: clampText(
+        [
+          contextBlock(ctx),
+          "当前源码：",
+          priorSource,
+          "",
+          "需要修复的问题：",
+          issueLines,
+          "",
+          "请输出修订后的完整 main.js 源码。",
+        ].join("\n"),
+        24000
+      ),
+    },
+  ];
+}
+
+async function draftSoftware(deps, repairContext) {
+  const ctx = ctxFromDeps(deps, repairContext);
+  requireUsableGoal(ctx);
+  const callModel = deps.callModel;
+  const mode = repairContext && repairContext.mode;
+  let messages;
+  if (repairContext && repairContext.priorDraft) {
+    messages = buildSoftwareRepairMessages(
+      ctx,
+      repairContext.priorDraft,
+      repairContext.issues || []
+    );
+  } else {
+    messages = buildSoftwareMessages(ctx);
+  }
+  let source;
+  if (typeof callModel === "function") {
+    source = stripCodeFences(
+      await callStructuredModel(callModel, messages, {
+        repair: !!repairContext && mode !== REPAIR_MODES.CLEAN_REGENERATION,
+      })
+    );
+  } else {
+    // Deterministic stub for tests without a model: runnable, task-echoing script.
+    const goal = String(ctx.goal || "software task").replace(/`/g, "");
+    source = [
+      '"use strict";',
+      `const goal = ${JSON.stringify(goal)};`,
+      'if (!goal || goal.length < 2) { console.error("missing goal"); process.exit(1); }',
+      'console.log("ok:" + goal.slice(0, 120));',
+      "process.exit(0);",
+      "",
+    ].join("\n");
+  }
+  return { md: String(source || "").trim(), source: String(source || "").trim(), ctx, messages, repairMode: mode || null };
+}
+
+function finalizeSoftware(source, ctx) {
+  const src = stripCodeFences(source);
+  if (!String(src).trim()) {
+    const e = new Error("软件成果为空。");
+    e.code = "empty_software_artifact";
+    e.failureStage = "model_generation";
+    throw e;
+  }
+  return {
+    kind: "software",
+    displayFormats: ["js"],
+    primaryFile: "main.js",
+    files: {
+      "main.js": src,
+      "artifact.md": `# ${ctx.title || "软件成果"}\n\n目标：${ctx.goal || ""}\n\n主文件：main.js\n`,
+    },
+    contentLabel: "软件",
+    generationContext: ctx,
+    promptMessages: buildSoftwareMessages(ctx),
+    viaProductPipeline: true,
+  };
+}
+
+async function generateSoftware(deps) {
+  const { source, ctx } = await draftSoftware(deps, null);
+  return finalizeSoftware(source, ctx);
+}
+
 const TEXT_KIND_DRAFTERS = {
   document: draftDocument,
   webpage: draftWebpage,
   presentation: draftPresentation,
+  software: draftSoftware,
+  code: draftSoftware,
 };
 
 const TEXT_KIND_FINALIZERS = {
   document: (payload, ctx) => finalizeDocument(payload.md, ctx, { semanticMeta: payload.semanticMeta }),
   webpage: (payload, ctx) => finalizeWebpage(payload.md, ctx),
   presentation: (payload, ctx) => finalizePresentation(payload.raw, ctx),
+  software: (payload, ctx) => finalizeSoftware(payload.source || payload.md, ctx),
+  code: (payload, ctx) => finalizeSoftware(payload.source || payload.md, ctx),
 };
 
 async function generateByKind(kind, deps) {
@@ -697,6 +823,9 @@ async function generateByKind(kind, deps) {
       return generateWebpage(deps);
     case "image":
       return generateImage(deps);
+    case "software":
+    case "code":
+      return generateSoftware(deps);
     default: {
       const e = new Error("该成果类型尚未接入真实生成。");
       e.code = "kind_not_supported";
@@ -869,15 +998,20 @@ module.exports = {
   generatePresentation,
   generateWebpage,
   generateImage,
+  generateSoftware,
   draftDocument,
   draftWebpage,
   draftPresentation,
+  draftSoftware,
   finalizeDocument,
   finalizeWebpage,
   finalizePresentation,
+  finalizeSoftware,
   documentFilesFromMarkdown,
   buildDocumentMessages,
   buildDocumentRepairMessages,
+  buildSoftwareMessages,
+  buildSoftwareRepairMessages,
   buildSlideMessages,
   buildWebpageMessages,
   STRUCTURED_DOC_TEMPERATURE,
