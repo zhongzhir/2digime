@@ -2,7 +2,7 @@
 
 版本：v0.4
 状态：持续更新
-最后更新：2026-07-31（MVP-LEARNING-QUALITY-01 工程验收收口；`accepted_as_engineered` / `owner_engineering_accepted`；不得 push）
+最后更新：2026-08-02（MVP-RELEASE-REGRESSION-02 发布主路径回归通过；`accepted_as_engineered`；不得 push）
 
 > **当前产品主线（2026-07-26）**：**第二纵向闭环** — 多模态成果包交付与渐进式主体构建。第一纵向闭环已 `accepted` / `completed`。
 > **最高架构与研发原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)（**v0.1.1 `active`**）。
@@ -21,7 +21,7 @@
 > 2. **BUG1 #6** = 七模块渐进式数字之我构建框架。
 > 3. 首个正式验收场景 = 为一个项目生成完整对外介绍成果包。
 > 4. 第一轮真实产物 = 正式介绍文档、演示文稿 PPT、单页 HTML、封面图片；视频/音频本轮不实现真实生成，用户面不得宣称已支持。
-> **当前任务（2026-07-31）**：**MVP-LEARNING-QUALITY-01** 已工程验收收口（[`digitalme_phase1_task_MVP-LEARNING-QUALITY-01_v0.1.md`](digitalme_phase1_task_MVP-LEARNING-QUALITY-01_v0.1.md)）：`accepted_as_engineered` / `learning_precision_validated` / `generic_quality_scope_isolation_validated` / `real_model_preference_reuse_confirmed` / `quality_outcome_mixed` / `owner_engineering_accepted` / `not_pushed`。分支 `codex/mvp-release-gate-01`。真实 DeepSeek 证据：`probe-c-2026-07-31T13-46-45-511Z`（expression=4，boundary=1，Learn Job committed）。证明「准确学习并真实复用」，**不**证明每次文章结果全面优于普通模型；**不得**写 `all_artifact_quality_validated` / `article_quality_superiority_validated` / `closed_alpha_ready` / `mvp_ready`。**建议下一任务**：`MVP-QUALITY-EVALUATION-01`（跨成果类型质量评估与自动改进；**尚未启动**）。不得继续用学习链路追逐单次文章评分。不得 push。
+> **当前任务（2026-08-02）**：**MVP-RELEASE-REGRESSION-02** 已工程验收收口（[`digitalme_phase1_task_MVP-RELEASE-REGRESSION-02_v0.1.md`](digitalme_phase1_task_MVP-RELEASE-REGRESSION-02_v0.1.md) / [`MVP_RELEASE_REGRESSION_02_REPORT_20260802.md`](MVP_RELEASE_REGRESSION_02_REPORT_20260802.md)）：`release_main_path_validated` / `create_and_import_paths_passed` / `restart_recovery_validated` / `accepted_as_engineered` / `not_pushed`。基线 `bd6f031` @ `codex/mvp-release-gate-01`。创建路径 A 与导入路径 B 均真实模型通过；专项回归全绿。**建议**：重建 portable 后由 Owner 做最终安装验收。**不得**写 `closed_alpha_ready` / `mvp_ready`。不得 push。前序：**MVP-QUALITY-PRODUCT-VALIDATION-01**（`bd6f031`）、**MVP-LEARNING-QUALITY-01**（学习精度工程验收）已保留为基线。
 > **产品候选**：`20260731-173649-597225e`（do-workflow 产品基线 `597225e`）；学习精度工程在其上收口。
 > **R2 对话运行时**：保留基础设施；R2 代码 **retained as infrastructure**。生产默认入口仍为 legacy。
 > **Owner Electron 真机验收（2026-07-24）**：`accepted`（distill-me / R2 对话重试 / doing-context / PAN-01S 等）。
@@ -597,6 +597,8 @@ Owner 判断（2026-07-27）：
 
 ### 7.1 近期优先级（建议顺序）
 
+> **2026-08-02 当前执行指针（TODAY-CLOSE）**：**MVP-RELEASE-REGRESSION-02** 已工程验收收口（`release_main_path_validated` / `accepted_as_engineered`；任务包 `digitalme_phase1_task_MVP-RELEASE-REGRESSION-02_v0.1.md`；报告 `MVP_RELEASE_REGRESSION_02_REPORT_20260802.md`）。基线 `bd6f031`。创建/导入双路径真实模型通过。**建议**：重建 portable → Owner 最终安装验收。**不得**宣称 `closed_alpha_ready` / `mvp_ready`。不得 push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+
 > **2026-07-31 当前执行指针（TODAY-CLOSE）**：**MVP-LEARNING-QUALITY-01** 已工程验收收口（`accepted_as_engineered` / `owner_engineering_accepted`；任务包 `digitalme_phase1_task_MVP-LEARNING-QUALITY-01_v0.1.md`）。真实 DeepSeek：expression=4 / boundary=1 / Learn Job committed；质量结果 mixed，**不**宣称文章全面优越或 closed alpha ready。**建议下一任务**：`MVP-QUALITY-EVALUATION-01`（**未启动**）。不得 push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
 
 > **2026-07-27 当前执行指针（TODAY-CLOSE）**：**LEARN-LOOP-FIX-02**、**LEARN-LOOP-FIX-02.1**、**DVL2-03-FIX-01**、**TASK-UX-MIN-01** 已于 2026-07-27 Owner 真机验收并标 `accepted_as_implemented`。**IDCOLLAB-MIN-01** 已 `implemented` / `revocation_bug_fixed` / `owner_runtime_accepted` / `accepted_as_implemented`（2026-07-28 状态校正）。CRT-MVP-02 系列已 `owner_runtime_accepted`。不得 push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
@@ -611,7 +613,9 @@ Owner 判断（2026-07-27）：
 
 1. **限定范围的仓库实现映射与第一闭环规格冻结**（文档；**已完成** → 规格 `spec_frozen`）；
 2. **实现任务意图与本人上下文装配（第一闭环实现 · 第 1 块）**（**history / 已完成并收口**；不得再当作当前下一项）→ 其后研究与表达 / Skill / 外搜 / 证据 / Proposal 各块均已完成；第一段整体 **`accepted` / `completed`**；
-3. **当前任务（2026-07-31）**：**MVP-LEARNING-QUALITY-01** 已 `accepted_as_engineered` / `owner_engineering_accepted`（见文首与任务包）。建议下一任务 **MVP-QUALITY-EVALUATION-01**（未启动）。不得用学习链路继续追逐单次文章评分。不得 push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+3. **当前任务（2026-08-02）**：**MVP-RELEASE-REGRESSION-02** 已 `accepted_as_engineered`（见文首与任务包）。建议重建 portable 后 Owner 安装验收。不得宣称 `closed_alpha_ready` / `mvp_ready`。不得 push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+
+~~3. **当前任务（2026-07-31）**：**MVP-LEARNING-QUALITY-01** 已 `accepted_as_engineered` / `owner_engineering_accepted`（见文首与任务包）。建议下一任务 **MVP-QUALITY-EVALUATION-01**（未启动）。不得用学习链路继续追逐单次文章评分。不得 push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。~~（历史指针；已被 2026-08-02 发布回归收口覆盖）
 
 ~~3. **当前任务（2026-07-28）**：**TASK-QUALITY-LOOP-01** 已实现完成，等待 Owner 真机验收（`owner_runtime_acceptance_pending`）；**IDCOLLAB-MIN-01** 已校正为 `owner_runtime_accepted` / `accepted_as_implemented`（2026-07-28）。2026-07-27 已收口四项见 §3.3。不得 push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。~~（历史指针；已被 2026-07-31 学习质量收口覆盖）
 
