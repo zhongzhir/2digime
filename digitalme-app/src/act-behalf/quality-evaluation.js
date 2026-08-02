@@ -112,11 +112,13 @@ function finalizeEvaluation(partial) {
   if (!ev.actionableRevisions.length) {
     ev.actionableRevisions = revisionsFromFailedChecks(ev.checks);
   }
-  ev.remainingIssues = failed.map((c) => ({
-    checkId: c.id,
-    severity: c.severity,
-    message: c.message,
-  }));
+  ev.remainingIssues = failed
+    .filter((c) => c.severity === "blocking")
+    .map((c) => ({
+      checkId: c.id,
+      severity: c.severity,
+      message: c.message,
+    }));
   // Prefer unified check aggregation; if legacy reviewer passed but our checks fail, stay fail.
   ev.status = blockingFailed.length ? "fail" : "pass";
   ev.passFail = ev.status;
@@ -479,6 +481,7 @@ module.exports = {
   listRegisteredEvaluators,
   evaluateArtifact,
   runQualityClosedLoop,
+  isBetterEvaluation,
   sectionFingerprints,
   diffPreservedSections,
   simpleHash,

@@ -349,8 +349,8 @@ async function main() {
     }
   });
 
-  await test("enhancement budget constant is 3", () => {
-    assert.equal(MAX_ENHANCEMENT_MODEL_CALLS, 3);
+  await test("enhancement budget constant is 6", () => {
+    assert.equal(MAX_ENHANCEMENT_MODEL_CALLS, 6);
   });
 
   await test("no new permanent top-level stores introduced", () => {

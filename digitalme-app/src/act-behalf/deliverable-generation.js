@@ -1354,6 +1354,44 @@ async function generateOneDeliverable(userData, { packageId, deliverableId, revi
       });
       enhancementMeta.modelCalls = enh.modelCalls || 0;
       enhancementMeta.reason = enh.reason || null;
+      enhancementMeta.revisionsUsed = enh.revisionsUsed || 0;
+      if (enh.loop) {
+        enhancementMeta.loop = {
+          status: enh.loop.status,
+          score: enh.loop.score,
+          initialScore: enh.loop.initialScore,
+          improved: enh.loop.improved,
+          revisionsUsed: enh.loop.revisionsUsed,
+          remainingIssues: enh.loop.remainingIssues || [],
+          stoppedReason: enh.loop.stoppedReason || null,
+        };
+      }
+      const baselineEval = enh.baselineEvaluation ||
+        (enh.baselineReview && enh.baselineReview.qualityEvaluation) ||
+        null;
+      const finalQ = enh.qualityEvaluation || null;
+      if (baselineEval || finalQ) {
+        enhancementMeta.productChecks = {
+          initial: baselineEval
+            ? {
+                score: baselineEval.score,
+                status: baselineEval.status,
+                checks: baselineEval.checks,
+                actionableRevisions: baselineEval.actionableRevisions,
+                remainingIssues: baselineEval.remainingIssues,
+              }
+            : null,
+          final: finalQ
+            ? {
+                score: finalQ.score,
+                status: finalQ.status,
+                checks: finalQ.checks,
+                actionableRevisions: finalQ.actionableRevisions,
+                remainingIssues: finalQ.remainingIssues,
+              }
+            : null,
+        };
+      }
       if (enh.enhanced && enh.md) {
         const enhVersionId = newVersionId();
         const enhCtx = produced.generationContext || { title: deliverable.title, goal: taskContext.goal };

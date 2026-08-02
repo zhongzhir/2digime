@@ -257,6 +257,28 @@ async function main() {
     assert.ok(!arch.some((i) => i.message.includes("SecretStore")));
   });
 
+  await test("does not treat negated/deferred capability statements as unsupported claims", () => {
+    const { snapshot, authorityMap } = realSnapshotAndMap();
+    const r = groundingReview(
+      "当前存储基于 JSON 文件；SQLite 持久化、云同步、外部 Agent 适配层均未上线。不引入既有 SQLite 后端。",
+      { goal: GOAL, snapshot, authorityMap }
+    );
+    const arch = r.blockingIssues.filter((i) => i.ruleId === "unsupported_architecture_assumption");
+    assert.equal(arch.length, 0, JSON.stringify(arch));
+    assert.ok(!ruleIds(r).includes("grounding_revision_guidance"));
+  });
+
+  await test("revision guidance is suggested only, never a blocking content defect", () => {
+    const { snapshot, authorityMap } = realSnapshotAndMap();
+    const r = groundingReview(
+      "推荐使用 SQLite 作为持久化后端。总预估工时：9-15 人日。",
+      { goal: GOAL, snapshot, authorityMap }
+    );
+    assert.ok(r.blockingIssues.length >= 1);
+    assert.ok(!r.blockingIssues.some((i) => i.ruleId === "grounding_revision_guidance"));
+    assert.ok(r.suggestedRevisions.some((s) => String(s).includes("修订方向") || String(s).includes("现有基础")));
+  });
+
   // ---- 9. CRUD-only acceptance blocked ----
   await test("blocks acceptance criteria that only test CRUD", () => {
     const { snapshot, authorityMap } = realSnapshotAndMap();

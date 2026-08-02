@@ -11,6 +11,7 @@ const { reviewDeliverableContent } = require("./deliverable-reviewer");
 const { validatePlaceholderContent } = require("./placeholder-validation");
 const qualityScope = require("./quality-experience-scope");
 const assembler = require("./subject-context-assembler");
+const { isMetaGuidanceRuleId } = require("./document-section-revise");
 
 const PLACEHOLDER_RE =
   /(待填写|待补充|TBD|TODO|占位|功能一|功能二|lorem ipsum|xxx+)/i;
@@ -33,6 +34,25 @@ function countHeadings(body) {
 
 function wordishLength(body) {
   return String(body || "").replace(/\s+/g, " ").trim().length;
+}
+
+/** Infer length bounds from goal text like「800 至 1200 字」without hardcoding task answers. */
+function inferLengthBoundsFromGoal(goal) {
+  const g = String(goal || "");
+  const range = g.match(/(\d{2,5})\s*[-–—~至到]\s*(\d{2,5})\s*字/);
+  if (range) {
+    const a = Number(range[1]);
+    const b = Number(range[2]);
+    if (Number.isFinite(a) && Number.isFinite(b) && a > 0 && b >= a) {
+      return { minChars: a, maxChars: b, fromGoal: true };
+    }
+  }
+  const single = g.match(/(?:约|大约|不少于|至少|不超过|至多)?\s*(\d{2,5})\s*字/);
+  if (single && /不超过|至多|以内/.test(g)) {
+    const n = Number(single[1]);
+    if (Number.isFinite(n) && n > 0) return { minChars: Math.floor(n * 0.5), maxChars: n, fromGoal: true };
+  }
+  return { minChars: null, maxChars: null, fromGoal: false };
 }
 
 function loadQualityExperiences(input) {
@@ -127,14 +147,21 @@ function deterministicDocumentChecks(body, input) {
   const checks = [];
   const goal = String(input.goal || "");
   const criteria = input.criteria || {};
+  const inferred = inferLengthBoundsFromGoal(goal);
   const minChars =
     (criteria.length && criteria.length.minChars) ||
-    (criteria.minChars) ||
+    criteria.minChars ||
+    inferred.minChars ||
     280;
   const maxChars =
     (criteria.length && criteria.length.maxChars) ||
-    (criteria.maxChars) ||
+    criteria.maxChars ||
+    inferred.maxChars ||
     80000;
+  const maxBoundFromRequirement =
+    !!(criteria.length && criteria.length.maxChars) ||
+    !!criteria.maxChars ||
+    !!inferred.fromGoal;
   const len = wordishLength(body);
 
   checks.push(
@@ -164,7 +191,14 @@ function deterministicDocumentChecks(body, input) {
     makeCheck({
       id: "length_adequacy",
       passed: len >= minChars && len <= maxChars,
-      severity: len < minChars ? "blocking" : "warning",
+      severity:
+        len < minChars
+          ? "blocking"
+          : len > maxChars && maxBoundFromRequirement
+            ? "blocking"
+            : len > maxChars
+              ? "warning"
+              : "info",
       message:
         len < minChars
           ? `篇幅不足（${len} < ${minChars}）`
@@ -172,7 +206,7 @@ function deterministicDocumentChecks(body, input) {
             ? `篇幅过长（${len} > ${maxChars}）`
             : `篇幅适当（${len}）`,
       category: "length",
-      evidence: { length: len, minChars, maxChars },
+      evidence: { length: len, minChars, maxChars, maxBoundFromRequirement },
     })
   );
 
@@ -253,6 +287,7 @@ async function evaluateDocumentArtifact(input) {
         scores: reviewResult.scores,
       });
       for (const issue of reviewResult.blockingIssues || []) {
+        if (isMetaGuidanceRuleId(issue.ruleId)) continue;
         checks.push(
           makeCheck({
             id: `reviewer_${issue.ruleId || "blocking"}`,
@@ -328,12 +363,15 @@ async function evaluateDocumentArtifact(input) {
   const actionableRevisions = [];
   for (const c of checks) {
     if (!c.passed && c.actionable !== false) {
+      if (isMetaGuidanceRuleId(c.id)) continue;
       actionableRevisions.push({
         checkId: c.id,
         severity: c.severity,
         message: c.message,
         guidance: `仅修复「${c.id}」：${c.message}。不要重写已经合格的章节。`,
         category: c.category,
+        lineNumber: c.evidence && c.evidence.lineNumber,
+        matchedText: c.evidence && (c.evidence.matchedText || c.evidence.ruleId),
       });
     }
   }
@@ -362,21 +400,30 @@ async function evaluateDocumentArtifact(input) {
 function toTargetedRepairIssues(evaluation) {
   return (evaluation.actionableRevisions || [])
     .filter((r) => r.severity === "blocking" || r.severity === "warning")
+    .filter((r) => !isMetaGuidanceRuleId(r.checkId || r.ruleId))
     .slice(0, 12)
-    .map((r, i) => ({
-      issueType: r.severity === "blocking" ? "blocking" : "warning",
-      ruleId: r.checkId || "quality_eval",
-      message: r.guidance || r.message,
-      matchedText: String(r.message || "").slice(0, 60),
-      lineNumber: i + 1,
-      severity: r.severity === "blocking" ? "high" : "medium",
-      source: "quality_evaluation",
-    }));
+    .map((r, i) => {
+      const check = (evaluation.checks || []).find((c) => c && c.id === r.checkId);
+      const lineNumber =
+        (Number.isInteger(r.lineNumber) && r.lineNumber > 0 && r.lineNumber) ||
+        (check && check.evidence && Number.isInteger(check.evidence.lineNumber) && check.evidence.lineNumber) ||
+        i + 1;
+      return {
+        issueType: r.severity === "blocking" ? "blocking" : "warning",
+        ruleId: r.checkId || "quality_eval",
+        message: r.guidance || r.message,
+        matchedText: String(r.matchedText || r.message || "").slice(0, 60),
+        lineNumber,
+        severity: r.severity === "blocking" ? "high" : "medium",
+        source: "quality_evaluation",
+      };
+    });
 }
 
-module.exports = {
+  module.exports = {
   evaluateDocumentArtifact,
   toTargetedRepairIssues,
   deterministicDocumentChecks,
+  inferLengthBoundsFromGoal,
   contentOf,
 };

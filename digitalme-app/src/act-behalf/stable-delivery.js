@@ -3,19 +3,30 @@
 /**
  * TASK-QUALITY-STABILIZE-01 — Channel B quality enhancement (non-blocking).
  * MVP-QUALITY-EVALUATION-01 — document enhancement uses unified evaluateArtifact.
+ * MVP-QUALITY-PRODUCT-VALIDATION-01 — document Channel B: targeted revise ≤2 with isBetterEvaluation.
  *
  * experimental_advanced_quality_pipeline remains available for shadow mode;
  * this module only runs a bounded review→rewrite→review after baseline persist.
  *
- * Max 3 model calls. Failure never deletes baseline / never marks task failed.
+ * Failure never deletes baseline / never marks task failed.
  */
 
-const { reviewDeliverableContent } = require("./deliverable-reviewer");
 const { assertBaselineHardGates } = require("./stable-hard-gates");
-const { evaluateArtifact } = require("./quality-evaluation");
+const { evaluateArtifact, isBetterEvaluation } = require("./quality-evaluation");
 const { toTargetedRepairIssues } = require("./quality-document-evaluator");
+const { buildDocumentRepairMessages } = require("./deliverable-generators");
+const {
+  locateEditableSections,
+  mergePreservingUneditedSections,
+  stripInternalRevisionResidue,
+  buildSectionScopedRepairAddon,
+  compressToMaxChars,
+  splitMarkdownSections,
+} = require("./document-section-revise");
+const { inferLengthBoundsFromGoal } = require("./quality-document-evaluator");
 
-const MAX_ENHANCEMENT_MODEL_CALLS = 3;
+/** Reviews + up to 2 targeted rewrites (product path ≤2 auto revisions). */
+const MAX_ENHANCEMENT_MODEL_CALLS = 6;
 
 function clampText(s, max) {
   const t = String(s || "");
@@ -38,7 +49,9 @@ function scoreReview(result) {
 
 function evaluationToLegacyReview(evaluation) {
   if (!evaluation) return null;
-  if (evaluation.reviewResult) return evaluation.reviewResult;
+  if (evaluation.reviewResult) {
+    return { ...evaluation.reviewResult, qualityEvaluation: evaluation };
+  }
   const blockingIssues = (evaluation.checks || [])
     .filter((c) => !c.passed && c.severity === "blocking")
     .map((c) => ({
@@ -65,7 +78,14 @@ function evaluationToLegacyReview(evaluation) {
   };
 }
 
+function contentChanged(a, b) {
+  return String(a || "").trim() !== String(b || "").trim();
+}
+
 /**
+ * Document Channel B: evaluate → targeted revise (≤2) → re-evaluate.
+ * Uses isBetterEvaluation so model-score noise alone cannot reject a real fix.
+ *
  * @returns {Promise<{
  *   enhanced: boolean,
  *   md: string|null,
@@ -74,6 +94,8 @@ function evaluationToLegacyReview(evaluation) {
  *   modelCalls: number,
  *   reason: string|null,
  *   qualityEvaluation?: object|null,
+ *   revisionsUsed?: number,
+ *   loop?: object|null,
  * }>}
  */
 async function runQualityEnhancement(opts) {
@@ -87,6 +109,7 @@ async function runQualityEnhancement(opts) {
     snapshot,
     authorityMap,
     packageDir,
+    maxRevisions = 2,
   } = opts || {};
 
   let modelCalls = 0;
@@ -125,9 +148,20 @@ async function runQualityEnhancement(opts) {
       md: null,
       reviewResult: baselineReview,
       baselineReview,
+      baselineEvaluation,
       modelCalls,
       reason: "baseline_already_passes",
       qualityEvaluation: baselineEvaluation,
+      revisionsUsed: 0,
+      loop: {
+        status: baselineEvaluation.status,
+        score: baselineEvaluation.score,
+        initialScore: baselineEvaluation.score,
+        improved: false,
+        revisionsUsed: 0,
+        remainingIssues: baselineEvaluation.remainingIssues || [],
+        stoppedReason: "passed_initial",
+      },
     };
   }
 
@@ -137,135 +171,227 @@ async function runQualityEnhancement(opts) {
       md: null,
       reviewResult: baselineReview,
       baselineReview,
+      baselineEvaluation,
       modelCalls,
       reason: "no_model_for_enhancement",
       qualityEvaluation: baselineEvaluation,
+      revisionsUsed: 0,
+      loop: null,
     };
   }
 
-  const issueLines = (baselineEvaluation.actionableRevisions || [])
-    .slice(0, 12)
-    .map((i) => `- ${i.guidance || i.message || i.checkId || "issue"}`)
-    .join("\n");
+  let best = {
+    md: String(baselineMd || ""),
+    evaluation: baselineEvaluation,
+  };
+  let revisionsUsed = 0;
+  let lastCandidateEval = baselineEvaluation;
 
-  let rewritten = "";
-  try {
-    rewritten = String(
-      await bounded(
-        [
-          {
-            role: "system",
-            content:
-              "你在已有可用成果基础上做定向质量完善。输出完整 Markdown 正文。" +
-              "只修复未达标项；保留已经合格的章节与正确事实；不要无意义重写全文；不要输出 JSON 或协议字段。",
-          },
-          {
-            role: "user",
-            content: clampText(
-              [
-                `任务目标：${goal || ""}`,
-                "",
-                "当前正文：",
-                baselineMd,
-                "",
-                "仅修复以下未达标项：",
-                issueLines || "- 提升完整性与完整性",
-                "",
-                "请输出修订后的完整 Markdown。",
-              ].join("\n"),
-              28000
-            ),
-          },
-        ],
-        { taskType: "artifact", temperature: 0.25 }
-      )
-    ).trim();
-  } catch (err) {
-    return {
-      enhanced: false,
-      md: null,
-      reviewResult: baselineReview,
-      baselineReview,
-      modelCalls,
-      reason: (err && err.code) || "enhancement_rewrite_failed",
-      qualityEvaluation: baselineEvaluation,
-    };
+  while (revisionsUsed < maxRevisions) {
+    const issues = toTargetedRepairIssues(best.evaluation).length
+      ? toTargetedRepairIssues(best.evaluation)
+      : (best.evaluation.actionableRevisions || []).map((r, i) => ({
+          ruleId: r.checkId,
+          message: r.guidance || r.message,
+          lineNumber: i + 1,
+        }));
+
+    if (!issues.length) break;
+
+    const editable = locateEditableSections(best.md, issues);
+    const ctx = { goal: goal || "", title: "document", kind: kind || "document" };
+    const repairMessages = buildDocumentRepairMessages(ctx, best.md, issues);
+    // Keep Channel B intent: section-scoped fix; do not rewrite qualified parts.
+    if (repairMessages[0] && repairMessages[0].role === "system") {
+      repairMessages[0].content =
+        "你在已有可用成果基础上做定向质量完善。输出完整 Markdown 正文。" +
+        "只修复未达标项对应章节；未点名章节必须原样保留；不要无意义重写全文；" +
+        "不要输出 JSON、协议字段、修订方向或评估内部指令。";
+    }
+    if (repairMessages[1] && repairMessages[1].role === "user") {
+      repairMessages[1].content =
+        String(repairMessages[1].content || "") + "\n\n" + buildSectionScopedRepairAddon(editable);
+    }
+
+    let rewritten = "";
+    try {
+      rewritten = String(
+        await bounded(repairMessages, { taskType: "artifact", temperature: 0.25 })
+      ).trim();
+    } catch (err) {
+      return {
+        enhanced: false,
+        md: null,
+        reviewResult: baselineReview,
+        baselineReview,
+        baselineEvaluation,
+        modelCalls,
+        reason: (err && err.code) || "enhancement_rewrite_failed",
+        qualityEvaluation: best.evaluation,
+        revisionsUsed,
+        loop: {
+          status: best.evaluation.status,
+          score: best.evaluation.score,
+          initialScore: baselineEvaluation.score,
+          improved: false,
+          revisionsUsed,
+          remainingIssues: best.evaluation.remainingIssues || [],
+          stoppedReason: (err && err.code) || "enhancement_rewrite_failed",
+        },
+      };
+    }
+
+    revisionsUsed += 1;
+
+    if (!rewritten || rewritten.length < 40) {
+      return {
+        enhanced: false,
+        md: null,
+        reviewResult: baselineReview,
+        baselineReview,
+        baselineEvaluation,
+        modelCalls,
+        reason: "empty_enhancement",
+        qualityEvaluation: best.evaluation,
+        revisionsUsed,
+        loop: {
+          status: best.evaluation.status,
+          score: best.evaluation.score,
+          initialScore: baselineEvaluation.score,
+          improved: false,
+          revisionsUsed,
+          remainingIssues: best.evaluation.remainingIssues || [],
+          stoppedReason: "empty_enhancement",
+        },
+      };
+    }
+
+    // Deterministic post-merge: preserve non-targeted sections; strip internal residue.
+    rewritten = stripInternalRevisionResidue(rewritten);
+    const merged = mergePreservingUneditedSections(best.md, rewritten, editable.keys);
+    // If heading labels drifted and merge kept 100% original, fall back to revised text
+    // only when it still contains the same section count (avoid accidental wipe).
+    if (merged === best.md && rewritten !== best.md) {
+      const oSecs = splitMarkdownSections(best.md);
+      const rSecs = splitMarkdownSections(rewritten);
+      rewritten =
+        oSecs.length && rSecs.length && Math.abs(oSecs.length - rSecs.length) <= 1
+          ? rewritten
+          : merged;
+    } else {
+      rewritten = merged;
+    }
+
+    const lengthBounds = inferLengthBoundsFromGoal(goal);
+    const maxChars =
+      (criteria && criteria.maxChars) ||
+      (criteria && criteria.length && criteria.length.maxChars) ||
+      lengthBounds.maxChars;
+    if (maxChars) {
+      rewritten = compressToMaxChars(rewritten, maxChars, editable.keys);
+    }
+
+    const hard = assertBaselineHardGates(rewritten, { kind });
+    if (!hard.ok) {
+      // Skip this candidate; continue if budget remains.
+      continue;
+    }
+
+    let nextEvaluation;
+    try {
+      nextEvaluation = await evaluateArtifact({
+        content: rewritten,
+        md: rewritten,
+        kind: kind || "document",
+        artifactType: kind || "document",
+        criteria,
+        goal,
+        isDigitalMeProject,
+        callModel: bounded,
+        snapshot,
+        authorityMap,
+        packageDir,
+        evaluationIteration: revisionsUsed,
+      });
+    } catch (err) {
+      return {
+        enhanced: false,
+        md: null,
+        reviewResult: baselineReview,
+        baselineReview,
+        baselineEvaluation,
+        modelCalls,
+        reason: (err && err.code) || "enhancement_final_review_failed",
+        qualityEvaluation: best.evaluation,
+        revisionsUsed,
+        loop: {
+          status: best.evaluation.status,
+          score: best.evaluation.score,
+          initialScore: baselineEvaluation.score,
+          improved: false,
+          revisionsUsed,
+          remainingIssues: best.evaluation.remainingIssues || [],
+          stoppedReason: (err && err.code) || "enhancement_final_review_failed",
+        },
+      };
+    }
+
+    lastCandidateEval = nextEvaluation;
+    if (isBetterEvaluation(nextEvaluation, best.evaluation) || nextEvaluation.status === "pass") {
+      best = { md: rewritten, evaluation: nextEvaluation };
+    }
+    if (nextEvaluation.status === "pass") {
+      break;
+    }
   }
 
-  if (!rewritten || rewritten.length < 40) {
-    return {
-      enhanced: false,
-      md: null,
-      reviewResult: baselineReview,
-      baselineReview,
-      modelCalls,
-      reason: "empty_enhancement",
-      qualityEvaluation: baselineEvaluation,
-    };
-  }
+  const improved =
+    contentChanged(best.md, baselineMd) && isBetterEvaluation(best.evaluation, baselineEvaluation);
 
-  const hard = assertBaselineHardGates(rewritten, { kind });
-  if (!hard.ok) {
+  if (!improved) {
     return {
       enhanced: false,
       md: null,
-      reviewResult: baselineReview,
+      reviewResult: evaluationToLegacyReview(lastCandidateEval),
       baselineReview,
+      baselineEvaluation,
       modelCalls,
-      reason: hard.code || "enhanced_hard_gate_failed",
-      qualityEvaluation: baselineEvaluation,
-    };
-  }
-
-  let finalEvaluation;
-  try {
-    finalEvaluation = await evaluateArtifact({
-      content: rewritten,
-      md: rewritten,
-      kind: kind || "document",
-      artifactType: kind || "document",
-      criteria,
-      goal,
-      isDigitalMeProject,
-      callModel: bounded,
-      snapshot,
-      authorityMap,
-      packageDir,
-      evaluationIteration: 1,
-    });
-  } catch (err) {
-    return {
-      enhanced: false,
-      md: null,
-      reviewResult: baselineReview,
-      baselineReview,
-      modelCalls,
-      reason: (err && err.code) || "enhancement_final_review_failed",
-      qualityEvaluation: baselineEvaluation,
-    };
-  }
-
-  const finalReview = evaluationToLegacyReview(finalEvaluation);
-  if (scoreReview(finalEvaluation) <= scoreReview(baselineEvaluation)) {
-    return {
-      enhanced: false,
-      md: null,
-      reviewResult: finalReview,
-      baselineReview,
-      modelCalls,
-      reason: "enhancement_not_better",
-      qualityEvaluation: finalEvaluation,
+      reason: revisionsUsed > 0 ? "enhancement_not_better" : "no_revision_attempted",
+      qualityEvaluation: lastCandidateEval,
+      revisionsUsed,
+      loop: {
+        status: lastCandidateEval.status,
+        score: lastCandidateEval.score,
+        initialScore: baselineEvaluation.score,
+        improved: false,
+        revisionsUsed,
+        remainingIssues: lastCandidateEval.remainingIssues || [],
+        stoppedReason: revisionsUsed >= maxRevisions ? "max_revisions_exhausted" : "enhancement_not_better",
+      },
     };
   }
 
   return {
     enhanced: true,
-    md: rewritten,
-    reviewResult: finalReview,
+    md: best.md,
+    reviewResult: evaluationToLegacyReview(best.evaluation),
     baselineReview,
+    baselineEvaluation,
     modelCalls,
     reason: null,
-    qualityEvaluation: finalEvaluation,
+    qualityEvaluation: best.evaluation,
+    revisionsUsed,
+    loop: {
+      status: best.evaluation.status,
+      score: best.evaluation.score,
+      initialScore: baselineEvaluation.score,
+      improved: true,
+      revisionsUsed,
+      remainingIssues: best.evaluation.remainingIssues || [],
+      stoppedReason:
+        best.evaluation.status === "pass" ? "passed_after_revision" : "improved_with_remaining",
+      qualifiedPartsPreserved: null,
+    },
   };
 }
 

@@ -18,6 +18,7 @@
  */
 
 const { REFERENCE_MARKERS } = require("./authority-map");
+const { isDeniedOrAbsentClaimWindow } = require("./document-section-revise");
 
 const ISSUE_BLOCKING = "blocking";
 const ISSUE_WARNING = "warning";
@@ -167,29 +168,31 @@ function checkUnsupportedArchitecture(body, snapshot) {
   const sqlite = absent("sqlite");
   if (sqlite) {
     const patterns = [
-      /(现有|已有|基于|沿用|使用|延续)[^。\n]{0,12}SQLite/i,
-      /SQLite[^。\n]{0,12}(后端|持久化|数据库)/i,
+      /(现有|已有|基于|沿用|使用|延续|推荐)[^。\n]{0,16}SQLite/i,
+      /SQLite[^。\n]{0,16}(后端|持久化|数据库)/i,
       /在(现有|已有)[^。\n]{0,16}(中|内)?[^。\n]{0,8}(增加|新增)[^。\n]{0,24}表/,
     ];
     for (const re of patterns) {
       const m = re.exec(body);
-      if (m) {
-        issues.push(
-          issue({
-            ruleId: "unsupported_architecture_assumption",
-            message: `文档假设当前系统已具备 SQLite 后端或既有数据表（「${m[0].slice(0, 40)}」），但当前存储为 JSON 文件、SQLite 为 R2.5 deferred（${sqlite.sourceRef}）。不得写成既有事实；如确需引入，应列为候选方案并明确标注。`,
-            text: body,
-            index: m.index,
-          })
-        );
-        break;
-      }
+      if (!m) continue;
+      const win = windowAround(body, m.index, m[0].length, 72);
+      // Negated / deferred statements are boundaries, not "system already has X".
+      if (isDeniedOrAbsentClaimWindow(win)) continue;
+      issues.push(
+        issue({
+          ruleId: "unsupported_architecture_assumption",
+          message: `文档假设当前系统已具备 SQLite 后端或既有数据表（「${m[0].slice(0, 40)}」），但当前存储为 JSON 文件、SQLite 为 R2.5 deferred（${sqlite.sourceRef}）。不得写成既有事实；如确需引入，应列为候选方案并明确标注。`,
+          text: body,
+          index: m.index,
+        })
+      );
+      break;
     }
   }
   const cloud = absent("cloud_sync");
   if (cloud) {
     const m = /已有(的)?云同步/.exec(body);
-    if (m) {
+    if (m && !isDeniedOrAbsentClaimWindow(windowAround(body, m.index, m[0].length, 48))) {
       issues.push(
         issue({
           ruleId: "unsupported_architecture_assumption",
@@ -203,7 +206,7 @@ function checkUnsupportedArchitecture(body, snapshot) {
   const adapter = absent("external_agent_adapter");
   if (adapter) {
     const m = /已有(的)?外部\s*Agent\s*适配(层|器)?/.exec(body);
-    if (m) {
+    if (m && !isDeniedOrAbsentClaimWindow(windowAround(body, m.index, m[0].length, 48))) {
       issues.push(
         issue({
           ruleId: "unsupported_architecture_assumption",
@@ -376,15 +379,11 @@ function groundingReview(content, { goal, snapshot, authorityMap } = {}) {
     suggestedRevisions.push("移除无依据工期/容量数字，或标注为待验证假设并给出依据。");
   }
 
+  // Internal revision guidance for the repair prompt — never a content blocking defect,
+  // and must not appear in remainingIssues / final user-facing body.
   if (blockingIssues.length) {
-    blockingIssues.push(
-      issue({
-        ruleId: "grounding_revision_guidance",
-        message:
-          "修订方向：按「现有基础 → 实际缺口 → 最小新增能力 → 与现有对象的关系 → 用户结果 → 验收」重组方案，不得仅删除错误句子。",
-        text: body,
-        index: 0,
-      })
+    suggestedRevisions.push(
+      "修订方向：按「现有基础 → 实际缺口 → 最小新增能力 → 与现有对象的关系 → 用户结果 → 验收」重组方案，不得仅删除错误句子。"
     );
   }
 
