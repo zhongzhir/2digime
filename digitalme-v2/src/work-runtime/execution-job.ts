@@ -1,3 +1,5 @@
+import { artifactIdForJob } from './artifact';
+
 /**
  * ExecutionJob — 一次执行的唯一权威状态载体(domain model §2.5)。
  * 五态封闭;状态只能由执行器写入。
@@ -9,7 +11,13 @@ export type JobStatus = (typeof JOB_STATUSES)[number];
 
 export type TerminalJobStatus = 'succeeded' | 'failed' | 'cancelled';
 
-export type FailureStage = 'context' | 'capability' | 'model' | 'artifact_write';
+/** 封闭失败阶段;interrupted 仅用于崩溃恢复落点,不参与正常执行分支。 */
+export type FailureStage =
+  | 'context'
+  | 'capability'
+  | 'model'
+  | 'artifact_write'
+  | 'interrupted';
 
 export interface ExecutionJob {
   id: string;
@@ -64,16 +72,50 @@ export function transitionJob(job: ExecutionJob, to: JobStatus, at: string): Exe
 }
 
 /**
- * 崩溃恢复协议(contracts §3.4)。启动时对每个非终态 Job 执行:
- * - 已存在该 Job 的 Artifact → 补交 succeeded(幂等提交的后半段);
- * - queued → 重新入队(尚未产生副作用);
- * - running → 落 failed(阶段保留,提示可重试)。
+ * 崩溃恢复协议(contracts §3.4 + P1.2)。启动扫描封闭动作集:
+ * - Artifact 已写且 Job 非终态 → 补交 succeeded;
+ * - Job succeeded 但 Artifact 缺失 → mark_failed(stage=artifact_write);
+ * - queued → 重新入队;
+ * - running → mark_failed(stage=interrupted);
+ * - 其余终态 → 不动作。
+ * 不扩展 JobStatus;succeeded→failed 仅经 applyRecoveryWrite 落地。
  */
 export type RecoveryAction = 'none' | 'commit_succeeded' | 'requeue' | 'mark_failed';
 
 export function recoverJobOnStartup(job: ExecutionJob, artifactExistsForJob: boolean): RecoveryAction {
+  if (artifactExistsForJob && !isTerminal(job.status)) return 'commit_succeeded';
+  if (job.status === 'succeeded' && !artifactExistsForJob) return 'mark_failed';
   if (isTerminal(job.status)) return 'none';
-  if (artifactExistsForJob) return 'commit_succeeded';
   if (job.status === 'queued') return 'requeue';
   return 'mark_failed';
+}
+
+/**
+ * 恢复写入口:可越过正常转移表(仅启动恢复使用)。
+ * 正常执行路径必须走 transitionJob。
+ */
+export function applyRecoveryWrite(
+  job: ExecutionJob,
+  action: Exclude<RecoveryAction, 'none' | 'requeue'>,
+  at: string,
+  failure?: ExecutionJob['failure'],
+): ExecutionJob {
+  if (action === 'commit_succeeded') {
+    const next: ExecutionJob = {
+      ...job,
+      status: 'succeeded',
+      finishedAt: at,
+      artifactId: artifactIdForJob(job.id),
+    };
+    delete next.failure;
+    return next;
+  }
+  const next: ExecutionJob = {
+    ...job,
+    status: 'failed',
+    finishedAt: at,
+  };
+  if (failure) next.failure = failure;
+  delete next.artifactId;
+  return next;
 }

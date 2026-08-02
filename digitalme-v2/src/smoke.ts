@@ -91,7 +91,14 @@ const crashRunning = transitionJob(makeJob(at), 'running', at);
 check('恢复:running+已有 Artifact → 补交', recoverJobOnStartup(crashRunning, true), 'commit_succeeded');
 check('恢复:running 无 Artifact → failed', recoverJobOnStartup(crashRunning, false), 'mark_failed');
 check('恢复:queued → 重新入队', recoverJobOnStartup(makeJob(at), false), 'requeue');
-check('恢复:终态 → 不动作', recoverJobOnStartup(job2, false), 'none');
+check('恢复:succeeded+有 Artifact → 不动作', recoverJobOnStartup(job2, true), 'none');
+check('恢复:succeeded 无 Artifact → failed', recoverJobOnStartup(job2, false), 'mark_failed');
+const cancelledJob: ExecutionJob = {
+  ...makeJob(at),
+  status: 'cancelled',
+  finishedAt: at,
+};
+check('恢复:cancelled → 不动作', recoverJobOnStartup(cancelledJob, false), 'none');
 
 // --- 成长闭环:具体修改 → candidate → confirmed → 视图复用 ---
 const candidate: GrowthEvent = {

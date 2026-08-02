@@ -1,22 +1,40 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
+import { randomBytes } from 'node:crypto';
 
 /**
  * 原子写原语(摘取重写自 Legacy json-store-persistence 思路,零代码复制):
- * tmp 写入 → 现有文件备份为 .bak → rename 覆盖。
- * rename 在 Windows 上使用 MOVEFILE_REPLACE_EXISTING,可覆盖既有文件。
+ * 唯一 tmp 写入 → 现有文件备份为 .bak → rename 覆盖。
+ * 唯一 tmp 避免并发写互相删除临时文件。
  */
 export async function atomicWriteFile(filePath: string, data: string | Buffer): Promise<void> {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
-  const tmpPath = `${filePath}.tmp`;
+  const tmpPath = `${filePath}.${randomBytes(6).toString('hex')}.tmp`;
   const bakPath = `${filePath}.bak`;
   await fs.writeFile(tmpPath, data);
   try {
-    await fs.copyFile(filePath, bakPath);
+    try {
+      await fs.copyFile(filePath, bakPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    await replaceFile(tmpPath, filePath);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    await fs.unlink(tmpPath).catch(() => undefined);
+    throw error;
   }
-  await fs.rename(tmpPath, filePath);
+}
+
+/** Windows 上 rename 覆盖既有文件可能失败;回退为 unlink + rename。 */
+async function replaceFile(fromPath: string, toPath: string): Promise<void> {
+  try {
+    await fs.rename(fromPath, toPath);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== 'EPERM' && code !== 'EEXIST') throw error;
+    await fs.unlink(toPath).catch(() => undefined);
+    await fs.rename(fromPath, toPath);
+  }
 }
 
 export interface RecoveringReadResult {

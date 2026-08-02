@@ -10,8 +10,9 @@ Digital Me V2 干净实现基线。规格权威见 `../docs/v2/`:
 
 ## 当前状态
 
-- P0/P0.1:契约骨架与状态派生/转移守卫(31 项冒烟)。
-- P1.1:基础设施端口实现完成(JSON ObjectStore、EventLog、SecretStore、Model HTTP、文件抽取、ContentStore、导出器、digest/ID),39 项专项测试全绿。零 Electron 依赖;领域层可脱离壳直接测试。下一步 P1.2(执行器与命令面)前须 CTO 复核。
+- P0/P0.1:契约骨架与状态派生/转移守卫(31+ 项冒烟)。
+- P1.1:基础设施端口实现完成。
+- P1.2:Work Runtime 落地(Task → Job → Snapshot → Adapter → Artifact),含崩溃恢复与 Fake Adapter;下一步 P1.3(Artifact Workspace / 成长回流)前须 CTO 复核。
 
 ## 目录
 
