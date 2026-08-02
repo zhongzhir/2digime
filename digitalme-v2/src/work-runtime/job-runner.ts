@@ -31,8 +31,17 @@ export interface WorkRuntimeOptions {
   eventBus: InMemoryEventBus;
   /** Adapter 工作目录根。 */
   workRoot: string;
-  /** 主体经验注入;P1.2 默认空视图。 */
+  /** 主体经验注入;P1.2 默认空视图。P1.3 可返回全量 confirmed,再经 selectSubjectContext 裁剪。 */
   loadSubjectContext?: () => Promise<ConfirmedExperienceView>;
+  /**
+   * 按当前任务裁剪 confirmed 经验(候选永不进入)。
+   * 未提供时原样使用 loadSubjectContext 结果。
+   */
+  selectSubjectContext?: (input: {
+    goal: string;
+    requestedArtifactType: string;
+    confirmed: ConfirmedExperienceView;
+  }) => Promise<ConfirmedExperienceView> | ConfirmedExperienceView;
   secrets?: SecretAccessor;
 }
 
@@ -367,8 +376,15 @@ export class WorkRuntime {
 
       const workDir = path.join(this.opts.workRoot, 'jobs', job.id);
       await fs.mkdir(workDir, { recursive: true });
-      const subjectContext =
+      const fullContext =
         (await this.opts.loadSubjectContext?.()) ?? emptySubjectContext(this.opts.subjectId);
+      const subjectContext = this.opts.selectSubjectContext
+        ? await this.opts.selectSubjectContext({
+            goal: task.goal,
+            requestedArtifactType: task.requestedArtifactType,
+            confirmed: fullContext,
+          })
+        : fullContext;
       const secrets = this.opts.secrets ?? { get: async () => null };
       const jobMeta = {
         taskId: job.taskId,

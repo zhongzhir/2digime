@@ -68,7 +68,7 @@ export function createFakeDocumentAdapter(
       const text =
         typeof options.text === 'function'
           ? options.text(input)
-          : (options.text ?? `# ${input.goal}\n\n(fake document)`);
+          : defaultFakeDocumentText(input, options.text);
       return {
         artifact: {
           type: 'document',
@@ -78,6 +78,16 @@ export function createFakeDocumentAdapter(
       };
     },
   };
+}
+
+function defaultFakeDocumentText(input: CapabilityInput, override?: string): string {
+  if (override !== undefined) return override;
+  const base = `# ${input.goal}\n\n(fake document)`;
+  if (input.subjectContext.entries.length === 0) return base;
+  const lines = input.subjectContext.entries.map(
+    (e) => `- [${e.eventId}] ${e.title}: ${e.detail}`,
+  );
+  return `${base}\n\n## 沿用经验\n${lines.join('\n')}`;
 }
 
 function sleep(ms: number, signal: AbortSignal, ignoreAbort: boolean): Promise<void> {

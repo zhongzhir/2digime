@@ -10,9 +10,10 @@ Digital Me V2 干净实现基线。规格权威见 `../docs/v2/`:
 
 ## 当前状态
 
-- P0/P0.1:契约骨架与状态派生/转移守卫(31+ 项冒烟)。
-- P1.1:基础设施端口实现完成。
-- P1.2:Work Runtime 落地(Task → Job → Snapshot → Adapter → Artifact),含崩溃恢复与 Fake Adapter;下一步 P1.3(Artifact Workspace / 成长回流)前须 CTO 复核。
+- P0/P0.1:契约骨架与状态派生/转移守卫。
+- P1.1:基础设施端口。
+- P1.2:Work Runtime(Task → Job → Snapshot → Adapter → Artifact)。
+- P1.3:Subject 成长闭环(Package / GrowthEvent / 确认 / 相似任务注入)。下一步 P1.4(薄壳或真实模型接入)前须 CTO 复核。
 
 ## 目录
 

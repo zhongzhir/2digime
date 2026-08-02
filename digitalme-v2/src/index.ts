@@ -5,6 +5,11 @@ export * from './shared/events';
 export * from './subject-core/subject-package';
 export * from './subject-core/growth-event';
 export * from './subject-core/derived-views';
+export * from './subject-core/derive-all';
+export * from './subject-core/diff-evidence';
+export * from './subject-core/experience-selector';
+export * from './subject-core/subject-service';
+export * from './subject-core/package-growth-log';
 
 export * from './work-runtime/task';
 export * from './work-runtime/context-snapshot';
@@ -29,8 +34,10 @@ export * from './collaboration/schema';
 export * from './collaboration/local-simulation';
 
 export * from './artifact-workspace/contracts';
+export * from './artifact-workspace/workspace';
 
 export * from './runtime/commands';
 export * from './runtime/ports';
+export * from './runtime/digitalme-runtime';
 
 export * from './infrastructure';

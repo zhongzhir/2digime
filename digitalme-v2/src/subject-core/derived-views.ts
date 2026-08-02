@@ -18,7 +18,7 @@ export interface ConfirmedExperienceEntry {
   occurredAt: string;
 }
 
-/** 纯函数派生:仅 confirmed 事件进入视图。 */
+/** 纯函数派生:仅 experience_confirmed 进入任务可注入的经验视图。 */
 export function deriveConfirmedExperience(
   subjectId: string,
   events: Iterable<GrowthEvent>,
@@ -28,6 +28,7 @@ export function deriveConfirmedExperience(
   for (const event of events) {
     if (event.subjectId !== subjectId) continue;
     if (event.confidence !== 'confirmed') continue;
+    if (event.type !== 'experience_confirmed') continue;
     entries.push({
       eventId: event.id,
       title: event.payload.title,
