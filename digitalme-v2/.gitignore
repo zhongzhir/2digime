@@ -8,5 +8,7 @@ scripts/_mvp-p16-credential-setup-evidence/
 scripts/_mvp-p17-owner-feedback-evidence/
 scripts/_mvp-p22-real-code-analysis-evidence/
 scripts/_mvp-p23-code-analysis-evidence/
+scripts/_mvp-p2a-zip-candidate-evidence/
+scripts/_mvp-security-fp-audit-evidence/
 release-staging/
 build-meta.json

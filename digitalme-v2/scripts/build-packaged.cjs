@@ -114,7 +114,7 @@ function main() {
     console.error("electron-builder 未安装");
     process.exit(1);
   }
-  run(process.execPath, [ebCli, "--win", "portable", "--x64", "--config", "electron-builder.yml"], {
+  run(process.execPath, [ebCli, "--win", "zip", "--x64", "--config", "electron-builder.yml"], {
     env: {
       ...process.env,
       CSC_IDENTITY_AUTO_DISCOVERY: "false",
@@ -134,12 +134,20 @@ function main() {
   }
   fs.writeFileSync(path.join(staging, "build-meta.json"), `${JSON.stringify(meta, null, 2)}\n`, "utf8");
 
-  const exe = walkFiles(staging).find((f) => f.toLowerCase().endsWith(".exe"));
-  const asar = walkFiles(staging).find((f) => f.toLowerCase().endsWith(".asar"));
+  const allFiles = walkFiles(staging);
+  const zip = allFiles.find((f) => /DigitalMeV2-.*-win-x64\.zip$/i.test(f));
+  const exe =
+    allFiles.find((f) => /DigitalMeV2\.exe$/i.test(path.basename(f)) && /win-unpacked/i.test(f)) ||
+    allFiles.find((f) => /DigitalMeV2\.exe$/i.test(path.basename(f)));
+  const asar = allFiles.find((f) => f.toLowerCase().endsWith(".asar"));
   const integrity = {
     buildId,
     gitHead: meta.gitHead,
     staging,
+    deliveryFormat: "zip",
+    zip: zip
+      ? { path: path.relative(root, zip), sha256: sha256File(zip), bytes: fs.statSync(zip).size }
+      : null,
     exe: exe
       ? { path: path.relative(root, exe), sha256: sha256File(exe), bytes: fs.statSync(exe).size }
       : null,

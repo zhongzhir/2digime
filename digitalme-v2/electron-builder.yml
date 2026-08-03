@@ -1,5 +1,10 @@
 # Digital Me V2 packaged build (electron-builder)
 # Output directory is overridden by scripts/build-packaged.cjs per buildId.
+#
+# SECURITY/FP NOTE (2026-08-03):
+# electron-builder "portable" is an unsigned NSIS self-extract wrapper and is a
+# known heuristic AV false-positive surface (e.g. 360 HEUR/QVM*). Portable is
+# paused as the Owner delivery format. Prefer win-unpacked ZIP.
 
 appId: local.digitalme.v2
 productName: DigitalMeV2
@@ -24,9 +29,8 @@ extraMetadata:
 win:
   signAndEditExecutable: false
   target:
-    - target: portable
+    - target: zip
       arch:
         - x64
-  artifactName: ${productName}-${version}-portable.exe
-portable:
-  artifactName: ${productName}-${version}-portable.exe
+  artifactName: ${productName}-${version}-win-x64.zip
+# portable target intentionally omitted (paused for Owner delivery).
