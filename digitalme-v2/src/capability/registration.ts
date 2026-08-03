@@ -4,6 +4,8 @@
  * P0.1:废除任意模块路径(adapterModule),改为代码内白名单 adapterType + adapterId;
  * 注册数据永不指定可加载代码位置,Adapter 实现由代码静态绑定。
  */
+import type { ContextIngestionPolicy } from '../work-runtime/context-policy';
+
 export type CapabilityKind = 'model' | 'agent' | 'skill' | 'tool' | 'service';
 
 /** Adapter 类型白名单 — 封闭枚举,新增类型必须改代码并过评审。 */
@@ -48,4 +50,10 @@ export interface CapabilityRegistration {
     type: AdapterType;
     adapterId: string;
   };
+  /**
+   * 通用上下文摄取策略(P2.0):由 ContextSnapshotBuilder 在构建期执行,
+   * Adapter 执行期只消费冻结 Snapshot。缺省即现行文档能力行为。
+   * 策略为通用值对象,不得携带场景专用状态。
+   */
+  contextPolicy?: ContextIngestionPolicy;
 }
