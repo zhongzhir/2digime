@@ -4,6 +4,8 @@
   "private": true,
   "description": "Digital Me V2 — personal digital subject system (clean-slate implementation)",
   "type": "commonjs",
+  "author": "Digital Me",
+  "license": "UNLICENSED",
   "main": "electron/main.cjs",
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -13,6 +15,9 @@
     "preflight:electron": "node scripts/electron-preflight.cjs",
     "dev": "node scripts/start-dev.cjs",
     "accept:dev": "node scripts/run-p15-dev-acceptance.cjs",
+    "build:packaged": "node scripts/build-packaged.cjs",
+    "accept:packaged": "node scripts/run-packaged-acceptance.cjs",
+    "smoke:packaged": "node scripts/run-packaged-smoke.cjs",
     "verify": "npm run build && npm run smoke && npm run test && npm run preflight:electron"
   },
   "dependencies": {
@@ -21,6 +26,7 @@
   "devDependencies": {
     "@types/node": "^24.0.0",
     "electron": "^32.0.0",
+    "electron-builder": "^25.1.8",
     "typescript": "^5.9.3"
   }
 }

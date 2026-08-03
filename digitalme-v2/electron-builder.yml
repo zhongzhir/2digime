@@ -1,0 +1,32 @@
+# Digital Me V2 packaged build (electron-builder)
+# Output directory is overridden by scripts/build-packaged.cjs per buildId.
+
+appId: local.digitalme.v2
+productName: DigitalMeV2
+copyright: Digital Me
+directories:
+  output: release-staging/_default
+  buildResources: electron/build-resources
+files:
+  - dist/**/*
+  - electron/**/*
+  - package.json
+  - build-meta.json
+  - "!**/*.map"
+  - "!scripts/**"
+  - "!**/_mvp-*-evidence/**"
+  - "!**/.runtime-model-credential.json"
+  - "!**/secrets*.json"
+asar: true
+asarUnpack: []
+extraMetadata:
+  main: electron/main.cjs
+win:
+  signAndEditExecutable: false
+  target:
+    - target: portable
+      arch:
+        - x64
+  artifactName: ${productName}-${version}-portable.exe
+portable:
+  artifactName: ${productName}-${version}-portable.exe

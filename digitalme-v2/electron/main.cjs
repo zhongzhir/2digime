@@ -1,13 +1,11 @@
 "use strict";
 /**
  * Electron main — 仅命令路由、窗口、文件对话框、文件夹揭示。
- * 业务逻辑全部在 dist/ 领域层。
+ * packaged 与 dev 共用本入口与同一领域运行链(无 packaged 专用业务分支)。
  */
 const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } = require("electron");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
-
-const ROOT = path.resolve(__dirname, "..");
 
 /** @type {import('../dist/runtime/digitalme-runtime').DigitalMeRuntime | null} */
 let runtime = null;
@@ -17,6 +15,8 @@ let bus = null;
 let mainWindow = null;
 /** @type {(() => void) | null} */
 let unsubscribe = null;
+/** @type {null | ((input: any) => Promise<void>)} */
+let saveCredential = null;
 
 const COMMAND_NAMES = new Set([
   "subject.createPackage",
@@ -36,14 +36,29 @@ const COMMAND_NAMES = new Set([
   "collab.simulateInteraction",
 ]);
 
+function resolveAppRoot() {
+  // In both packaged and unpackaged layouts, electron/ lives next to dist/ and package.json.
+  return path.resolve(__dirname, "..");
+}
+
 async function bootstrapRuntime() {
+  const appRoot = resolveAppRoot();
   const {
     createDigitalMeRuntime,
-  } = require(path.join(ROOT, "dist", "runtime", "digitalme-runtime"));
-  const { createCommandBus } = require(path.join(ROOT, "dist", "runtime", "command-bus"));
-  const { resolveDevModelConfig } = require(path.join(__dirname, "bootstrap-secrets.cjs"));
+  } = require(path.join(appRoot, "dist", "runtime", "digitalme-runtime"));
+  const { createCommandBus } = require(path.join(appRoot, "dist", "runtime", "command-bus"));
+  const { resolveModelConfig } = require(path.join(__dirname, "bootstrap-secrets.cjs"));
 
-  const model = await resolveDevModelConfig({ safeStorage });
+  const model = await resolveModelConfig({
+    safeStorage,
+    userDataPath: app.getPath("userData"),
+    isPackaged: app.isPackaged,
+    allowDevRuntimeFile: !app.isPackaged,
+  });
+  if (typeof model.saveCredential === "function") {
+    saveCredential = model.saveCredential;
+  }
+
   const options =
     model.documentCapability === "openai-compatible"
       ? {
@@ -67,7 +82,20 @@ async function bootstrapRuntime() {
   return {
     modelReady: model.ok === true,
     modelMeta: model.modelMeta || null,
+    needsCredentialSetup: !!model.needsCredentialSetup,
+    isPackaged: app.isPackaged,
+    buildMeta: loadBuildMeta(appRoot),
   };
+}
+
+function loadBuildMeta(appRoot) {
+  try {
+    return JSON.parse(
+      require("node:fs").readFileSync(path.join(appRoot, "build-meta.json"), "utf8"),
+    );
+  } catch {
+    return null;
+  }
 }
 
 function createWindow(bootInfo) {
@@ -103,7 +131,7 @@ function registerIpc() {
         const dir = await runtime.getArtifactStorageDir(artifactId);
         shell.showItemInFolder(dir);
       } catch {
-        /* opened flag from domain still returned */
+        /* ignore */
       }
       return result;
     }
@@ -155,10 +183,72 @@ function registerIpc() {
     if (result.canceled || !result.filePaths[0]) return null;
     return result.filePaths[0];
   });
+
+  ipcMain.handle("shell:saveModelCredential", async (_evt, input) => {
+    if (!saveCredential) throw new Error("credential store unavailable");
+    const apiKey = String((input && input.apiKey) || "").trim();
+    const baseUrl = String((input && input.baseUrl) || "").trim();
+    const model = String((input && input.model) || "").trim();
+    if (!apiKey || !baseUrl || !model) throw new Error("请填写完整的模型连接信息");
+    await saveCredential({ apiKey, baseUrl, model, providerId: "openai-compatible" });
+    // 重新装配 runtime 以使用新凭证
+    if (unsubscribe) unsubscribe();
+    if (runtime) await runtime.stop();
+    const boot = await bootstrapRuntime();
+    return { ok: true, modelMeta: boot.modelMeta };
+  });
 }
 
 app.whenReady().then(async () => {
   registerIpc();
+
+  if (process.env.DIGITALME_V2_PACKAGED_ACCEPTANCE === "1") {
+    try {
+      const acceptance = require(path.join(__dirname, "packaged-acceptance.cjs"));
+      const code = await acceptance.run({
+        bootstrapRuntime,
+        getRuntime: () => runtime,
+        getBus: () => bus,
+        createWindow,
+        BrowserWindow,
+        app,
+      });
+      app.exit(code);
+    } catch (err) {
+      console.error(
+        JSON.stringify({
+          ok: false,
+          error: String(err && err.message ? err.message : err),
+        }),
+      );
+      app.exit(1);
+    }
+    return;
+  }
+
+  if (process.env.DIGITALME_V2_PACKAGED_SMOKE === "1") {
+    try {
+      const smoke = require(path.join(__dirname, "packaged-smoke.cjs"));
+      const code = await smoke.run({
+        bootstrapRuntime,
+        getRuntime: () => runtime,
+        getBus: () => bus,
+        createWindow,
+        app,
+      });
+      app.exit(code);
+    } catch (err) {
+      console.error(
+        JSON.stringify({
+          ok: false,
+          error: String(err && err.message ? err.message : err),
+        }),
+      );
+      app.exit(1);
+    }
+    return;
+  }
+
   const bootInfo = await bootstrapRuntime();
   createWindow(bootInfo);
   app.on("activate", () => {
