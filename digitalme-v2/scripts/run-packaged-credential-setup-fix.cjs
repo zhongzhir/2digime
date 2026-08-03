@@ -23,6 +23,9 @@ function latestStaging() {
 }
 
 function findExe(staging) {
+  // Prefer win-unpacked DigitalMeV2.exe for automation(portable self-extract can EPERM under some AV locks).
+  const portable = [];
+  const unpacked = [];
   const stack = [staging];
   while (stack.length) {
     const dir = stack.pop();
@@ -30,10 +33,13 @@ function findExe(staging) {
       const full = path.join(dir, name);
       const st = fs.statSync(full);
       if (st.isDirectory()) stack.push(full);
-      else if (name.toLowerCase().endsWith(".exe") && /portable/i.test(name)) return full;
+      else if (name.toLowerCase().endsWith(".exe")) {
+        if (/DigitalMeV2\.exe$/i.test(name) && /win-unpacked/i.test(full)) unpacked.push(full);
+        else if (/portable/i.test(name)) portable.push(full);
+      }
     }
   }
-  return null;
+  return unpacked[0] || portable[0] || null;
 }
 
 function prepareImportFile() {
