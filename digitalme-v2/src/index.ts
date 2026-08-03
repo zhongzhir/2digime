@@ -39,6 +39,7 @@ export * from './artifact-workspace/workspace';
 
 export * from './runtime/commands';
 export * from './runtime/ports';
+export * from './runtime/command-bus';
 export * from './runtime/digitalme-runtime';
 
 export * from './infrastructure';

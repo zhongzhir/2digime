@@ -28,6 +28,7 @@ import { selectConfirmedExperiences } from '../subject-core/experience-selector'
 import { ArtifactWorkspace } from '../artifact-workspace/workspace';
 import type { CommandMap } from '../runtime/commands';
 import type { GrowthEvent } from '../subject-core/growth-event';
+import { simulateInteraction } from '../collaboration/local-simulation';
 import { nowIso, newId } from '../shared/ids';
 
 export interface DigitalMeRuntimeOptions {
@@ -54,6 +55,7 @@ export class DigitalMeRuntime {
   readonly subject = new SubjectService(this.eventBus);
   private work: WorkRuntime | null = null;
   private workspace: ArtifactWorkspace | null = null;
+  private registry: CapabilityRegistry | null = null;
   private readonly options: DigitalMeRuntimeOptions;
 
   constructor(options: DigitalMeRuntimeOptions = {}) {
@@ -125,6 +127,42 @@ export class DigitalMeRuntime {
     return this.requireWorkspace().export(input.artifactId, input.format, input.targetPath);
   }
 
+  async revealInFolder(
+    input: CommandMap['artifact.revealInFolder']['input'],
+  ): Promise<CommandMap['artifact.revealInFolder']['output']> {
+    await this.requireWorkspace().revealInFolder(input.artifactId);
+    return { opened: true };
+  }
+
+  /** 供 App Shell 打开系统文件夹(不进入命令返回面)。 */
+  async getArtifactStorageDir(artifactId: string): Promise<string> {
+    const artifact = await this.requireWork().getArtifact(artifactId);
+    if (!artifact) throw new Error(`artifact not found: ${artifactId}`);
+    return artifact.storageDir;
+  }
+
+  async listCapabilities(): Promise<CommandMap['capability.list']['output']> {
+    if (!this.registry) return { capabilities: [] };
+    return { capabilities: this.registry.list() };
+  }
+
+  async simulateCollab(
+    input: CommandMap['collab.simulateInteraction']['input'],
+  ): Promise<CommandMap['collab.simulateInteraction']['output']> {
+    const pkg = this.subject.requireActive();
+    const { request, grant } = simulateInteraction({
+      grantor: {
+        subjectId: pkg.id,
+        displayName: pkg.identity.displayName,
+        scheme: 'local',
+      },
+      granteeName: input.granteeName,
+      scope: input.scope,
+      goal: input.goal,
+    });
+    return { requestId: request.id, grantId: grant.id };
+  }
+
   async appendOwnerEvent(
     partial: Omit<GrowthEvent, 'id' | 'subjectId' | 'occurredAt' | 'source'> & {
       source?: GrowthEvent['source'];
@@ -186,6 +224,7 @@ export class DigitalMeRuntime {
     if (mode === 'fake' && this.options.registerOpenAiStub !== false) {
       registry.register(createOpenAiCompatibleAdapterStub());
     }
+    this.registry = registry;
 
     const subjectService = this.subject;
     this.work = new WorkRuntime({

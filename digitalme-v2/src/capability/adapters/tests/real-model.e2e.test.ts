@@ -45,14 +45,25 @@ async function loadAppCredentialViaElectron(): Promise<boolean> {
     return false;
   }
 
-  const electronCli = path.join(appDir, 'node_modules', 'electron', 'cli.js');
-  let command = process.execPath;
-  let args = [electronCli, script];
+  // 优先本包 electron 二进制(参数数组,shell:false);禁止拼接含空格路径的命令字符串。
+  let command: string;
+  let args: string[];
+  let cwd = process.cwd();
   try {
-    await fs.access(electronCli);
+    const electronPath = require('electron') as string;
+    if (typeof electronPath !== 'string') throw new Error('bad electron path');
+    command = electronPath;
+    args = [script];
   } catch {
-    command = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-    args = ['--yes', 'electron', script];
+    const electronCli = path.join(appDir, 'node_modules', 'electron', 'cli.js');
+    try {
+      await fs.access(electronCli);
+      command = process.execPath;
+      args = [electronCli, script];
+      cwd = appDir;
+    } catch {
+      return false;
+    }
   }
 
   return new Promise((resolve) => {
@@ -64,10 +75,10 @@ async function loadAppCredentialViaElectron(): Promise<boolean> {
     };
     try {
       const child = spawn(command, args, {
-        cwd: appDir,
+        cwd,
         env: { ...process.env },
         stdio: ['ignore', 'pipe', 'pipe'],
-        shell: process.platform === 'win32' && command.endsWith('.cmd'),
+        shell: false,
       });
       let out = '';
       child.stdout.on('data', (d) => {

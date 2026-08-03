@@ -4,17 +4,23 @@
   "private": true,
   "description": "Digital Me V2 — personal digital subject system (clean-slate implementation)",
   "type": "commonjs",
+  "main": "electron/main.cjs",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "smoke": "node dist/smoke.js",
-    "test": "node --test --test-concurrency=1 \"dist/infrastructure/tests/*.test.js\" \"dist/work-runtime/tests/*.test.js\" \"dist/subject-core/tests/*.test.js\" \"dist/capability/adapters/tests/*.test.js\"",
-    "verify": "npm run build && npm run smoke && npm run test"
+    "test": "node --test --test-concurrency=1 \"dist/infrastructure/tests/*.test.js\" \"dist/work-runtime/tests/*.test.js\" \"dist/subject-core/tests/*.test.js\" \"dist/capability/adapters/tests/*.test.js\" \"dist/runtime/tests/*.test.js\"",
+    "electron:version": "node scripts/check-electron-version.cjs",
+    "preflight:electron": "node scripts/electron-preflight.cjs",
+    "dev": "node scripts/start-dev.cjs",
+    "accept:dev": "node scripts/run-p15-dev-acceptance.cjs",
+    "verify": "npm run build && npm run smoke && npm run test && npm run preflight:electron"
   },
   "dependencies": {
     "pdf-parse": "^1.1.1"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "electron": "^32.0.0",
     "typescript": "^5.9.3"
   }
 }
