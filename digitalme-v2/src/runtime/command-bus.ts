@@ -40,6 +40,10 @@ export function createCommandBus(runtime: DigitalMeRuntime): CommandBus {
           return (await runtime.retryTask(
             input as CommandMap['work.retryTask']['input'],
           )) as CommandMap[K]['output'];
+        case 'work.reviseArtifact':
+          return (await runtime.reviseArtifact(
+            input as CommandMap['work.reviseArtifact']['input'],
+          )) as CommandMap[K]['output'];
         case 'work.cancelJob':
           return (await runtime.cancelJob(
             input as CommandMap['work.cancelJob']['input'],

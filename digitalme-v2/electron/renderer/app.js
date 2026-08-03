@@ -47,6 +47,9 @@
     artifactPanel: document.getElementById("artifact-panel"),
     artifactEditor: document.getElementById("artifact-editor"),
     saveStatus: document.getElementById("save-status"),
+    versionMeta: document.getElementById("version-meta"),
+    revisionRequest: document.getElementById("revision-request"),
+    revise: document.getElementById("btn-revise"),
     copy: document.getElementById("btn-copy"),
     exportMd: document.getElementById("btn-export-md"),
     exportDocx: document.getElementById("btn-export-docx"),
@@ -63,9 +66,9 @@
   /** @type {'welcome'|'workspace'|'settings'} */
   let currentView = "welcome";
   let returnView = "welcome";
-  let modelReady = false;
-  let modelMeta = null;
-  let modelStatusPayload = null;
+  /** 设置页/展示用元数据;连接态不以本地 flag 为准。 */
+  let shellStatus = null;
+  let displayModelName = null;
   const presets = {
     deepseek: {
       baseUrl: "https://api.deepseek.com/v1",
@@ -102,52 +105,80 @@
     setView("settings");
   }
 
-  function applyModelStatus(info) {
-    modelReady = !!(info && info.modelReady && info.modelMeta);
-    modelMeta = (info && info.modelMeta) || null;
-    modelStatusPayload = (info && info.status) || null;
-    if (modelStatusPayload && modelStatusPayload.presets) {
-      if (modelStatusPayload.presets.deepseek) {
-        presets.deepseek.baseUrl = modelStatusPayload.presets.deepseek.baseUrl || presets.deepseek.baseUrl;
-        presets.deepseek.model = modelStatusPayload.presets.deepseek.model || presets.deepseek.model;
-      }
-    }
+  function deriveConnectedFromCapabilities(capabilities) {
+    const list = Array.isArray(capabilities) ? capabilities : [];
+    return list.some(
+      (c) =>
+        c &&
+        c.availability === "available" &&
+        Array.isArray(c.outputArtifactTypes) &&
+        c.outputArtifactTypes.includes("document"),
+    );
+  }
 
-    const connectedText = modelReady
-      ? `已连接模型 · ${modelMeta.model}`
-      : "未连接模型";
+  /** 唯一连接态来源:CapabilityRegistration.availability。 */
+  async function refreshConnectionFromCapabilities() {
+    let connected = false;
+    try {
+      const { capabilities } = await api.invoke("capability.list", {});
+      connected = deriveConnectedFromCapabilities(capabilities);
+    } catch {
+      connected = false;
+    }
+    applyConnectionUi(connected);
+    return connected;
+  }
+
+  function applyConnectionUi(connected) {
+    const name = displayModelName || (shellStatus && shellStatus.model) || "";
+    const connectedText = connected && name ? `已连接模型 · ${name}` : connected ? "已连接模型" : "未连接模型";
     els.modelStatus.textContent = connectedText;
-    els.welcomeModelStatus.textContent = modelReady
+    els.welcomeModelStatus.textContent = connected
       ? connectedText
       : "未连接模型。请先在设置中连接真实模型。";
-    els.welcomeModelStatus.classList.toggle("error", !modelReady);
-
-    els.modelGate.hidden = modelReady;
-    els.submit.disabled = !modelReady;
-    els.retry.disabled = els.retry.disabled || !modelReady;
-    if (!modelReady) {
+    els.welcomeModelStatus.classList.toggle("error", !connected);
+    els.modelGate.hidden = connected;
+    els.submit.disabled = !connected;
+    if (!connected) {
       els.submit.title = "请先连接模型";
+      els.retry.disabled = true;
+      els.revise.disabled = true;
     } else {
       els.submit.title = "";
+      els.revise.disabled = !activeArtifactId;
     }
-
-    const configured = !!(modelStatusPayload && modelStatusPayload.credentialConfigured) || modelReady;
+    const configured = !!(shellStatus && shellStatus.credentialConfigured) || connected;
     els.modelKeyState.textContent = configured ? "凭证状态：已配置" : "凭证状态：未配置";
     els.deleteModel.disabled = !configured;
   }
 
+  function rememberShellMeta(info) {
+    shellStatus = (info && info.status) || shellStatus;
+    if (info && info.modelMeta && info.modelMeta.model) {
+      displayModelName = info.modelMeta.model;
+    } else if (shellStatus && shellStatus.model) {
+      displayModelName = shellStatus.model;
+    } else if (info && info.modelReady === false) {
+      displayModelName = null;
+    }
+    if (shellStatus && shellStatus.presets && shellStatus.presets.deepseek) {
+      presets.deepseek.baseUrl =
+        shellStatus.presets.deepseek.baseUrl || presets.deepseek.baseUrl;
+      presets.deepseek.model = shellStatus.presets.deepseek.model || presets.deepseek.model;
+    }
+  }
+
   function fillSettingsForm() {
-    const status = modelStatusPayload || {};
-    const preset = status.providerPreset || (status.baseUrl && String(status.baseUrl).includes("deepseek")
-      ? "deepseek"
-      : "openai-compatible");
+    const status = shellStatus || {};
+    const preset =
+      status.providerPreset ||
+      (status.baseUrl && String(status.baseUrl).includes("deepseek")
+        ? "deepseek"
+        : "openai-compatible");
     els.modelProvider.value = preset === "deepseek" ? "deepseek" : "openai-compatible";
     els.modelBaseUrl.value = status.baseUrl || presets[els.modelProvider.value].baseUrl || "";
     els.modelId.value = status.model || presets[els.modelProvider.value].model || "";
     els.modelApiKey.value = "";
-    const configured = !!(status.credentialConfigured) || modelReady;
-    els.modelKeyState.textContent = configured ? "凭证状态：已配置" : "凭证状态：未配置";
-    els.deleteModel.disabled = !configured;
     showStatus(els.settingsStatus, "");
   }
 
@@ -178,6 +209,22 @@
       .replace(/"/g, "&quot;");
   }
 
+  function labelForState(state, userFacingLabel) {
+    if (userFacingLabel) return userFacingLabel;
+    switch (state) {
+      case "waiting":
+        return "等待开始";
+      case "processing":
+        return "正在处理";
+      case "completed":
+        return "已完成";
+      case "attention":
+        return "需要处理";
+      default:
+        return "进行中";
+    }
+  }
+
   async function refreshTasks() {
     const { tasks } = await api.invoke("work.listTasks", { limit: 50 });
     els.taskList.innerHTML = "";
@@ -196,18 +243,13 @@
     }
   }
 
-  function labelForState(state) {
-    switch (state) {
-      case "waiting":
-        return "等待开始";
-      case "processing":
-        return "正在处理";
-      case "completed":
-        return "已完成";
-      case "attention":
-        return "需要处理";
-      default:
-        return "进行中";
+  function renderJobStatus(detail) {
+    // 用户面只显示派生标签,禁止拼接内部 progress / phase。
+    els.jobStatus.textContent = detail.userFacingLabel || labelForState(detail.state);
+    els.jobStatus.classList.toggle("error", detail.state === "attention");
+    els.jobActionable.textContent = "";
+    if (detail.state === "attention") {
+      els.jobActionable.textContent = "可以重试，或调整目标与材料后再试。";
     }
   }
 
@@ -215,25 +257,19 @@
     activeTaskId = taskId;
     const detail = await api.invoke("work.getTask", { taskId });
     activeJobId = detail.latestJob ? detail.latestJob.jobId : null;
-    const note = detail.latestJob && detail.latestJob.progressNote;
-    els.jobStatus.textContent = note
-      ? `${detail.userFacingLabel} · ${note}`
-      : detail.userFacingLabel;
-    els.jobStatus.classList.toggle("error", detail.state === "attention");
-    els.jobActionable.textContent = "";
+    renderJobStatus(detail);
     els.cancel.disabled = !(
       detail.latestJob &&
       (detail.state === "waiting" || detail.state === "processing")
     );
-    els.retry.disabled = !modelReady || detail.state !== "attention";
-    if (detail.state === "attention") {
-      els.jobActionable.textContent = "可以重试，或调整目标与材料后再试。";
-    }
+    const connected = await refreshConnectionFromCapabilities();
+    els.retry.disabled = !connected || detail.state !== "attention";
     activeArtifactId = detail.artifactIds[0] || null;
     if (activeArtifactId) {
       await loadArtifact(activeArtifactId);
     } else {
       els.artifactPanel.hidden = true;
+      els.revise.disabled = true;
     }
     await refreshTasks();
     await refreshExperiences();
@@ -246,6 +282,9 @@
     suppressSave = false;
     els.artifactPanel.hidden = false;
     els.saveStatus.textContent = "已载入最新内容";
+    els.versionMeta.textContent = `版本 ${content.versionCount}`;
+    const connected = await refreshConnectionFromCapabilities();
+    els.revise.disabled = !connected;
   }
 
   async function refreshExperiences() {
@@ -273,6 +312,7 @@
     const overview = await api.invoke("subject.getOverview", {});
     els.pkgTitle.textContent = overview.displayName;
     setView("workspace");
+    await refreshConnectionFromCapabilities();
     await refreshTasks();
     await refreshExperiences();
   }
@@ -331,8 +371,14 @@
         providerId: "openai-compatible",
       });
       els.modelApiKey.value = "";
-      applyModelStatus(result);
-      showStatus(els.settingsStatus, `已保存。当前模型：${result.modelMeta.model}`);
+      rememberShellMeta(result);
+      const connected = await refreshConnectionFromCapabilities();
+      showStatus(
+        els.settingsStatus,
+        connected
+          ? `已保存。当前模型：${(result.modelMeta && result.modelMeta.model) || model}`
+          : "已保存，但能力尚未可用",
+      );
     } catch (err) {
       showStatus(els.settingsStatus, err.message || String(err), true);
     } finally {
@@ -364,12 +410,14 @@
       els.deleteModel.disabled = true;
       const result = await api.deleteModelCredential({});
       els.modelApiKey.value = "";
-      applyModelStatus(result);
+      rememberShellMeta(result);
+      displayModelName = null;
+      await refreshConnectionFromCapabilities();
       showStatus(els.settingsStatus, "已删除模型凭证。请重新连接后再开始处理。");
     } catch (err) {
       showStatus(els.settingsStatus, err.message || String(err), true);
     } finally {
-      els.deleteModel.disabled = !(modelReady || (modelStatusPayload && modelStatusPayload.credentialConfigured));
+      await refreshConnectionFromCapabilities();
     }
   });
 
@@ -392,7 +440,8 @@
 
   els.submit.addEventListener("click", async () => {
     try {
-      if (!modelReady) {
+      const connected = await refreshConnectionFromCapabilities();
+      if (!connected) {
         els.jobStatus.textContent = "请先连接模型";
         els.jobStatus.classList.add("error");
         els.jobActionable.textContent = "前往设置连接真实模型后再开始处理。";
@@ -422,7 +471,43 @@
       els.jobStatus.textContent = err.message || String(err);
       els.jobStatus.classList.add("error");
     } finally {
-      els.submit.disabled = !modelReady;
+      await refreshConnectionFromCapabilities();
+    }
+  });
+
+  els.revise.addEventListener("click", async () => {
+    try {
+      if (!activeTaskId || !activeArtifactId) return;
+      const connected = await refreshConnectionFromCapabilities();
+      if (!connected) {
+        els.jobStatus.textContent = "请先连接模型";
+        els.jobStatus.classList.add("error");
+        return;
+      }
+      const revisionRequest = (els.revisionRequest.value || "").trim();
+      if (!revisionRequest) {
+        els.jobStatus.textContent = "请填写修改要求";
+        els.jobStatus.classList.add("error");
+        return;
+      }
+      els.revise.disabled = true;
+      const { jobId } = await api.invoke("work.reviseArtifact", {
+        taskId: activeTaskId,
+        artifactId: activeArtifactId,
+        revisionRequest,
+      });
+      activeJobId = jobId;
+      els.jobStatus.textContent = "正在修改";
+      els.jobStatus.classList.remove("error");
+      els.jobActionable.textContent = "";
+      els.cancel.disabled = false;
+      els.revisionRequest.value = "";
+      await refreshTasks();
+    } catch (err) {
+      els.jobStatus.textContent = err.message || String(err);
+      els.jobStatus.classList.add("error");
+    } finally {
+      await refreshConnectionFromCapabilities();
     }
   });
 
@@ -434,7 +519,8 @@
 
   els.retry.addEventListener("click", async () => {
     if (!activeTaskId) return;
-    if (!modelReady) {
+    const connected = await refreshConnectionFromCapabilities();
+    if (!connected) {
       els.jobStatus.textContent = "请先连接模型";
       els.jobStatus.classList.add("error");
       return;
@@ -500,20 +586,13 @@
         activeJobId = event.jobId;
         try {
           const detail = await api.invoke("work.getTask", { taskId: event.taskId });
-          const note = event.progressNote || (detail.latestJob && detail.latestJob.progressNote);
-          els.jobStatus.textContent = note
-            ? `${detail.userFacingLabel} · ${note}`
-            : detail.userFacingLabel;
-          els.jobStatus.classList.toggle("error", detail.state === "attention");
+          renderJobStatus(detail);
           els.cancel.disabled = !(
             detail.latestJob &&
             (detail.state === "waiting" || detail.state === "processing")
           );
-          els.retry.disabled = !modelReady || detail.state !== "attention";
-          els.jobActionable.textContent =
-            detail.state === "attention"
-              ? "可以重试，或调整目标与材料后再试。"
-              : "";
+          const connected = await refreshConnectionFromCapabilities();
+          els.retry.disabled = !connected || detail.state !== "attention";
           if (detail.artifactIds[0]) {
             activeArtifactId = detail.artifactIds[0];
             if (event.status === "succeeded") await loadArtifact(activeArtifactId);
@@ -526,23 +605,30 @@
     }
     if (event.kind === "artifact.updated" && event.artifactId === activeArtifactId) {
       els.saveStatus.textContent = "内容已更新";
+      if (activeArtifactId) await loadArtifact(activeArtifactId);
     }
     if (event.kind === "subject.updated") {
       await refreshExperiences();
     }
   });
 
-  api.onBoot((info) => {
-    applyModelStatus(info || {});
+  api.onBoot(async (info) => {
+    rememberShellMeta(info || {});
+    await refreshConnectionFromCapabilities();
     if (currentView === "settings") fillSettingsForm();
   });
 
-  // 初始拉取一次状态(防止 boot 事件早于监听)
   if (typeof api.getModelStatus === "function") {
-    api.getModelStatus().then(applyModelStatus).catch(() => {
-      applyModelStatus({ modelReady: false, needsCredentialSetup: true });
-    });
+    api
+      .getModelStatus()
+      .then(async (info) => {
+        rememberShellMeta(info || {});
+        await refreshConnectionFromCapabilities();
+      })
+      .catch(async () => {
+        await refreshConnectionFromCapabilities();
+      });
   } else {
-    applyModelStatus({ modelReady: false, needsCredentialSetup: true });
+    refreshConnectionFromCapabilities();
   }
 })();

@@ -40,6 +40,13 @@ export interface ExecutionJob {
   };
   /** succeeded 时恰好一个。 */
   artifactId?: string;
+  /**
+   * 修改成果:指向既有 Artifact,成功时追加版本而非新建。
+   * 说明性执行元数据,非新的领域对象类型。
+   */
+  targetArtifactId?: string;
+  /** 用户本次修改要求(与 targetArtifactId 成对出现)。 */
+  revisionRequest?: string;
   costActual?: { tokens?: number; durationMs?: number };
 }
 

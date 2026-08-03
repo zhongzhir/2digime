@@ -8,7 +8,7 @@ import type { ExportFormat } from '../artifact-workspace/contracts';
 
 /**
  * 命令总线契约(runtime contracts §1.1)。
- * UI ↔ 领域层唯一通道;P0.1 为 15 条,上限 20 条。
+ * UI ↔ 领域层唯一通道;当前 16 条,上限 20 条。
  * 新增命令必须对应新的用户决策或新的领域用例,且经 CTO 复核。
  * P0.1 新增 subject.confirmExperience:确认候选经验是真实的新用户决策
  * (成长闭环第 7→8 步),现有命令无法参数化承载。
@@ -47,6 +47,14 @@ export interface CommandMap {
   };
   'work.retryTask': {
     input: { taskId: string };
+    output: { jobId: string };
+  };
+  /**
+   * 对已有成果提出修改要求:同 Task 新 Job,成功后向同一 Artifact 追加 capability 版本。
+   * 失败不破坏当前 head。
+   */
+  'work.reviseArtifact': {
+    input: { taskId: string; artifactId: string; revisionRequest: string };
     output: { jobId: string };
   };
   'work.cancelJob': {
@@ -108,6 +116,7 @@ export const COMMAND_NAMES = [
   'subject.confirmExperience',
   'work.submitTask',
   'work.retryTask',
+  'work.reviseArtifact',
   'work.cancelJob',
   'work.getTask',
   'work.listTasks',

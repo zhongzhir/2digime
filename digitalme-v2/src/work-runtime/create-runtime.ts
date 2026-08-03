@@ -58,6 +58,10 @@ export function createWorkRuntime(options: CreateWorkRuntimeOptions): WorkRuntim
     registry,
     eventBus,
     workRoot: path.join(root, 'work'),
+    readExtractedText: async (ref: string) => {
+      const bytes = await contentStore.readBytes(ref);
+      return bytes.toString('utf8');
+    },
     ...(options.loadSubjectContext ? { loadSubjectContext: options.loadSubjectContext } : {}),
     ...(options.secrets ? { secrets: options.secrets } : {}),
   });

@@ -18,6 +18,7 @@
     "build:packaged": "node scripts/build-packaged.cjs",
     "accept:packaged": "node scripts/run-packaged-acceptance.cjs",
     "accept:credential-setup": "node scripts/run-packaged-credential-setup-fix.cjs",
+    "accept:p17": "node scripts/run-packaged-p17.cjs",
     "smoke:packaged": "node scripts/run-packaged-smoke.cjs",
     "verify": "npm run build && npm run smoke && npm run test && npm run preflight:electron"
   },

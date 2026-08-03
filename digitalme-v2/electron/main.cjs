@@ -32,6 +32,7 @@ const COMMAND_NAMES = new Set([
   "subject.confirmExperience",
   "work.submitTask",
   "work.retryTask",
+  "work.reviseArtifact",
   "work.cancelJob",
   "work.getTask",
   "work.listTasks",
@@ -155,7 +156,9 @@ function registerIpc() {
     if (!COMMAND_NAMES.has(name)) throw new Error(`command not exposed: ${name}`);
 
     if (
-      (name === "work.submitTask" || name === "work.retryTask") &&
+      (name === "work.submitTask" ||
+        name === "work.retryTask" ||
+        name === "work.reviseArtifact") &&
       !(lastBootInfo && lastBootInfo.modelReady)
     ) {
       throw Object.assign(new Error("请先连接模型"), {
@@ -332,6 +335,31 @@ app.whenReady().then(async () => {
         getSaveCredential: () => saveCredential,
         getDeleteCredential: () => deleteCredential,
         getTestConnection: () => testConnection,
+        createWindow,
+        app,
+      });
+      app.exit(code);
+    } catch (err) {
+      console.error(
+        JSON.stringify({
+          ok: false,
+          error: String(err && err.message ? err.message : err),
+        }),
+      );
+      app.exit(1);
+    }
+    return;
+  }
+
+  if (process.env.DIGITALME_V2_P17_ACCEPTANCE === "1") {
+    try {
+      const acceptance = require(path.join(__dirname, "packaged-p17-acceptance.cjs"));
+      const code = await acceptance.run({
+        bootstrapRuntime,
+        getRuntime: () => runtime,
+        getBus: () => bus,
+        getBootInfo: () => lastBootInfo,
+        getDeleteCredential: () => deleteCredential,
         createWindow,
         app,
       });

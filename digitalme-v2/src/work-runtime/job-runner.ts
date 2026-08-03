@@ -146,6 +146,49 @@ export class WorkRuntime {
     });
   }
 
+  /**
+   * 修改成果:同 Task 新 Job;成功向同一 Artifact 追加 capability 版本。
+   * 失败不写 Artifact → 当前 head 保留。
+   */
+  async reviseArtifact(input: {
+    taskId: string;
+    artifactId: string;
+    revisionRequest: string;
+  }): Promise<{ jobId: string }> {
+    const request = String(input.revisionRequest || '').trim();
+    if (!request) throw new Error('请填写修改要求');
+
+    return this.withTaskLock(input.taskId, async () => {
+      const task = await this.opts.taskService.get(input.taskId);
+      if (!task) throw new Error(`task not found: ${input.taskId}`);
+      const artifact = await this.opts.artifactCommitter.get(input.artifactId);
+      if (!artifact) throw new Error(`artifact not found: ${input.artifactId}`);
+      if (artifact.taskId !== input.taskId) {
+        throw new Error('artifact does not belong to this task');
+      }
+      const active = await this.opts.jobStore.findActiveForTask(input.taskId);
+      if (active) {
+        throw new Error(`task already has an active job: ${active.id}`);
+      }
+      const capabilityId =
+        task.capabilityId ??
+        this.opts.registry.selectFor(task.requestedArtifactType)?.registration.id;
+      if (!capabilityId) {
+        throw new Error('no available capability for revise');
+      }
+      const adapter = this.opts.registry.get(capabilityId);
+      if (!adapter || adapter.registration.availability !== 'available') {
+        throw new Error('selected capability is not available');
+      }
+      const job = await this.createQueuedJob(task.id, capabilityId, {
+        targetArtifactId: artifact.id,
+        revisionRequest: request,
+      });
+      this.enqueue(job.id);
+      return { jobId: job.id };
+    });
+  }
+
   async cancelJob(input: { jobId: string }): Promise<{ cancelled: boolean }> {
     const job = await this.opts.jobStore.get(input.jobId);
     if (!job) return { cancelled: false };
@@ -170,21 +213,26 @@ export class WorkRuntime {
     const state = deriveTaskState(jobs);
     const last = latestJob(jobs);
     const artifacts = await this.opts.artifactCommitter.listByTask(task.id);
+    const revising = !!(last && last.revisionRequest && (last.status === 'queued' || last.status === 'running'));
     const output: GetTaskOutput = {
       task,
       state,
-      userFacingLabel: toUserFacingLabel(state),
+      userFacingLabel: toUserFacingLabel(state, { revising: revising && state === 'processing' }),
       artifactIds: artifacts.map((a) => a.id),
     };
     if (last) {
-      const latestJob: NonNullable<GetTaskOutput['latestJob']> = {
+      const latestJobOut: NonNullable<GetTaskOutput['latestJob']> = {
         jobId: last.id,
         status: last.status,
       };
-      if (last.progress?.note !== undefined) {
-        latestJob.progressNote = last.progress.note;
+      // 仅非终态可附带说明性进度;终态禁止拼接内部 phase 文案。
+      if (
+        (last.status === 'queued' || last.status === 'running') &&
+        last.progress?.note !== undefined
+      ) {
+        latestJobOut.progressNote = last.progress.note;
       }
-      output.latestJob = latestJob;
+      output.latestJob = latestJobOut;
     }
     return output;
   }
@@ -273,7 +321,11 @@ export class WorkRuntime {
 
   // --- internals ---
 
-  private async createQueuedJob(taskId: string, capabilityId: string): Promise<ExecutionJob> {
+  private async createQueuedJob(
+    taskId: string,
+    capabilityId: string,
+    meta?: { targetArtifactId?: string; revisionRequest?: string },
+  ): Promise<ExecutionJob> {
     const active = await this.opts.jobStore.findActiveForTask(taskId);
     if (active) {
       throw new Error(`task already has an active job: ${active.id}`);
@@ -284,6 +336,8 @@ export class WorkRuntime {
       capabilityId,
       createdAt: nowIso(),
       status: 'queued',
+      ...(meta?.targetArtifactId ? { targetArtifactId: meta.targetArtifactId } : {}),
+      ...(meta?.revisionRequest ? { revisionRequest: meta.revisionRequest } : {}),
     };
     await this.opts.jobStore.put(job);
     this.publishJob(job);
@@ -392,7 +446,39 @@ export class WorkRuntime {
         taskId: job.taskId,
         capabilityId: job.capabilityId,
         createdAt: job.createdAt,
+        revisionRequest: job.revisionRequest,
+        targetArtifactId: job.targetArtifactId,
       };
+
+      let revisionInput: {
+        request: string;
+        previousText: string;
+        artifactId: string;
+      } | undefined;
+      if (jobMeta.targetArtifactId && jobMeta.revisionRequest) {
+        const target = await this.opts.artifactCommitter.get(jobMeta.targetArtifactId);
+        if (!target) {
+          await this.failJob(job, 'capability', '成果不存在', '请重新打开任务后再试');
+          return;
+        }
+        const head = target.versions.find((v) => v.versionId === target.headVersionId);
+        if (!head || head.content.kind !== 'text') {
+          await this.failJob(job, 'capability', '当前成果无法修改', '仅支持文本成果修改');
+          return;
+        }
+        if (!this.opts.readExtractedText) {
+          await this.failJob(job, 'capability', '无法读取当前成果', '请重试');
+          return;
+        }
+        const previousText = await this.opts.readExtractedText(head.content.ref);
+        revisionInput = {
+          request: jobMeta.revisionRequest,
+          previousText,
+          artifactId: target.id,
+        };
+        job = await this.withProgress(job, 'capability', '正在修改');
+        await this.persistJob(job);
+      }
 
       let output;
       try {
@@ -402,6 +488,7 @@ export class WorkRuntime {
             snapshot,
             subjectContext,
             artifactType: task.requestedArtifactType,
+            ...(revisionInput ? { revision: revisionInput } : {}),
           },
           {
             jobId: job.id,
@@ -414,6 +501,12 @@ export class WorkRuntime {
                   capabilityId: jobMeta.capabilityId,
                   createdAt: jobMeta.createdAt,
                   status: 'running',
+                  ...(jobMeta.revisionRequest
+                    ? { revisionRequest: jobMeta.revisionRequest }
+                    : {}),
+                  ...(jobMeta.targetArtifactId
+                    ? { targetArtifactId: jobMeta.targetArtifactId }
+                    : {}),
                   progress: { note, updatedAt: nowIso() },
                 },
                 note,
@@ -450,17 +543,26 @@ export class WorkRuntime {
         return;
       }
 
-      // --- artifact commit (先写 Artifact,再 succeeded) ---
+      // --- artifact commit / append (先写 Artifact,再 succeeded) ---
       job = await this.withProgress(job, 'artifact_write', '正在保存成果');
       await this.persistJob(job);
       let artifact;
       try {
-        artifact = await this.opts.artifactCommitter.commit({
-          jobId: job.id,
-          taskId: task.id,
-          subjectId: task.subjectId,
-          output,
-        });
+        if (job.targetArtifactId) {
+          artifact = await this.opts.artifactCommitter.appendCapabilityVersion({
+            artifactId: job.targetArtifactId,
+            jobId: job.id,
+            output,
+            ...(job.revisionRequest ? { note: job.revisionRequest } : {}),
+          });
+        } else {
+          artifact = await this.opts.artifactCommitter.commit({
+            jobId: job.id,
+            taskId: task.id,
+            subjectId: task.subjectId,
+            output,
+          });
+        }
       } catch (error) {
         await this.failJob(
           job,
@@ -479,6 +581,9 @@ export class WorkRuntime {
         artifactId: artifact.id,
         snapshotId: snapshot.id,
       };
+      // 终态清除进行中进度,避免 UI 拼接「已完成 · 正在整理成果」
+      delete succeeded.progress;
+      delete succeeded.phase;
       const duration = durationMs(job.startedAt, at);
       if (output.costActual?.tokens !== undefined || duration !== undefined) {
         succeeded.costActual = {
@@ -486,6 +591,7 @@ export class WorkRuntime {
           ...(duration !== undefined ? { durationMs: duration } : {}),
         };
       }
+      this.liveProgress.delete(jobId);
       await this.persistJob(succeeded);
       this.opts.eventBus.publish({
         kind: 'artifact.updated',

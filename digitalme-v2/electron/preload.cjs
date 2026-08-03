@@ -12,6 +12,7 @@ const COMMAND_NAMES = [
   "subject.confirmExperience",
   "work.submitTask",
   "work.retryTask",
+  "work.reviseArtifact",
   "work.cancelJob",
   "work.getTask",
   "work.listTasks",

@@ -374,11 +374,75 @@ test('事件丢失后查询结果一致;用户面无 Legacy 词汇', async () =>
   assert.equal(view.state, 'completed');
   assert.equal(view.userFacingLabel, '已完成');
   assert.equal(view.latestJob?.status, 'succeeded');
+  assert.equal(view.latestJob?.progressNote, undefined);
   const dumped = JSON.stringify(view);
   for (const banned of ['committed', 'Reviewer', 'Channel B', 'generationAttempt', 'adopted', 'materialsStale']) {
     assert.ok(!dumped.includes(banned), `must not leak ${banned}`);
   }
   await runtime.stop();
+});
+
+test('修改成果:同 Artifact 追加 capability 版本;失败保留 head', async () => {
+  const root = await tempRoot();
+  let calls = 0;
+  const runtime = await boot(root, {
+    text: (input) => {
+      calls += 1;
+      if (input.revision) {
+        return `# 修订稿\n${input.revision.request}\n基于:${input.revision.previousText.slice(0, 20)}`;
+      }
+      return '# 初稿\n(fake document)\n原始内容';
+    },
+  });
+  const { taskId, jobId } = await runtime.submitTask({
+    goal: '写初稿',
+    contextRefs: [],
+    requestedArtifactType: 'document',
+  });
+  await waitForJobTerminal(runtime, jobId);
+  const first = await runtime.getTask({ taskId });
+  assert.equal(first.artifactIds.length, 1);
+  const artifactId = first.artifactIds[0] as string;
+  const before = await runtime.getArtifact(artifactId);
+  assert.ok(before);
+  assert.equal(before.versions.length, 1);
+  const headBefore = before.headVersionId;
+
+  const revised = await runtime.reviseArtifact({
+    taskId,
+    artifactId,
+    revisionRequest: '改成更短',
+  });
+  await waitForJobTerminal(runtime, revised.jobId);
+  const afterView = await runtime.getTask({ taskId });
+  assert.equal(afterView.artifactIds.length, 1);
+  assert.equal(afterView.artifactIds[0], artifactId);
+  assert.equal(afterView.userFacingLabel, '已完成');
+  const after = await runtime.getArtifact(artifactId);
+  assert.ok(after);
+  assert.equal(after.versions.length, 2);
+  assert.notEqual(after.headVersionId, headBefore);
+  assert.equal(after.versions[1]?.author, 'capability');
+  assert.ok(calls >= 2);
+
+  // 失败不破坏当前 head
+  await runtime.stop();
+  const runtime2 = await boot(root, {
+    failWith: { message: '模型失败', actionable: '请重试' },
+  });
+  // reopen stores by using same root - createWorkRuntime creates new stores on same root
+  const failRevise = await runtime2.reviseArtifact({
+    taskId,
+    artifactId,
+    revisionRequest: '这次会失败',
+  });
+  const failed = await waitForJobTerminal(runtime2, failRevise.jobId);
+  assert.equal(failed.status, 'failed');
+  const still = await runtime2.getArtifact(artifactId);
+  assert.ok(still);
+  assert.equal(still.versions.length, 2);
+  assert.equal(still.headVersionId, after.headVersionId);
+  await runtime2.stop();
 });
 
 test('runtime 内无 provider 专有字段;openai stub 不抢选择', async () => {

@@ -11,9 +11,10 @@ async function tempDir(prefix: string): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), `dmv2-cmd-${prefix}-`));
 }
 
-test('CommandBus 覆盖全部 15 条命令且不超过上限', async () => {
-  assert.equal(COMMAND_NAMES.length, 15);
+test('CommandBus 覆盖全部命令且不超过上限', async () => {
+  assert.equal(COMMAND_NAMES.length, 16);
   assert.ok(COMMAND_NAMES.length <= COMMAND_COUNT_LIMIT);
+  assert.ok(COMMAND_NAMES.includes('work.reviseArtifact'));
 
   const root = await tempDir('bus');
   const runtime = createDigitalMeRuntime({ documentCapability: 'fake', registerOpenAiStub: false });

@@ -76,6 +76,41 @@ export class ArtifactCommitter {
     return artifact;
   }
 
+  /**
+   * 向既有 Artifact 追加 capability 版本并移动 head。
+   * 失败抛错时不写 Artifact 对象 → 当前 head 保留。
+   */
+  async appendCapabilityVersion(input: {
+    artifactId: string;
+    jobId: string;
+    output: CapabilityOutput;
+    note?: string;
+  }): Promise<Artifact> {
+    const existing = await this.artifactStore.get(input.artifactId);
+    if (!existing) {
+      throw new Error(`artifact not found: ${input.artifactId}`);
+    }
+
+    const content = await this.persistPayload(input.output.artifact.payload);
+    const versionId = newId('artifactVersion');
+    const version: ArtifactVersion = {
+      versionId,
+      createdAt: nowIso(),
+      author: 'capability',
+      content,
+      ...(input.note ? { note: input.note } : {}),
+    };
+    const next: Artifact = {
+      ...existing,
+      jobId: input.jobId,
+      title: input.output.artifact.title || existing.title,
+      versions: [...existing.versions, version],
+      headVersionId: versionId,
+    };
+    await this.artifactStore.put(next);
+    return next;
+  }
+
   private async persistPayload(
     payload: CapabilityOutput['artifact']['payload'],
   ): Promise<ArtifactContent> {

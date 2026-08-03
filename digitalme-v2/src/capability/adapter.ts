@@ -18,6 +18,15 @@ export interface CapabilityInput {
   snapshot: ContextSnapshot;
   subjectContext: ConfirmedExperienceView;
   artifactType: string;
+  /**
+   * 修改成果时由 Runner 注入:当前 head 文本与用户修改要求。
+   * 非持久核心对象;仅一次执行输入。
+   */
+  revision?: {
+    request: string;
+    previousText: string;
+    artifactId: string;
+  };
 }
 
 export interface ExecutionContext {

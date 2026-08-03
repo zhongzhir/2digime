@@ -8,13 +8,15 @@ import type { ExecutionJob } from './execution-job';
 export const TASK_STATES = ['waiting', 'processing', 'completed', 'attention'] as const;
 export type TaskState = (typeof TASK_STATES)[number];
 
-/** 用户面四态文案 — 封闭表,禁止扩展为后台词汇。 */
+/** 用户面文案 — 封闭表;「正在修改」由修订中的 processing 派生,非独立持久态。 */
 export const USER_FACING_LABELS: Record<TaskState, string> = {
   waiting: '等待开始',
   processing: '正在处理',
   completed: '已完成',
   attention: '需要处理',
 };
+
+export const REVISING_LABEL = '正在修改';
 
 /** 同一 Task 下最新 Job:按 createdAt 排序,同刻以 id 决胜(全序,无并列)。 */
 export function latestJob(jobsForTask: readonly ExecutionJob[]): ExecutionJob | undefined {
@@ -47,6 +49,10 @@ export function deriveTaskState(jobsForTask: readonly ExecutionJob[]): TaskState
   }
 }
 
-export function toUserFacingLabel(state: TaskState): string {
+export function toUserFacingLabel(
+  state: TaskState,
+  opts?: { revising?: boolean },
+): string {
+  if (opts?.revising && state === 'processing') return REVISING_LABEL;
   return USER_FACING_LABELS[state];
 }

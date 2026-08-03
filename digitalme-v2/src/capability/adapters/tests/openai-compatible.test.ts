@@ -123,9 +123,41 @@ test('prompt 组装:warning 不进正文;长材料截断;confirmed 可注入', a
   assert.doesNotMatch(assembled.messages[1]?.content as string, /broken|bad\.docx/);
   assert.match(assembled.messages[1]?.content as string, /已确认经验/);
   assert.match(assembled.messages[1]?.content as string, /gevt_1/);
+  assert.match(assembled.messages[1]?.content as string, /# 任务概要/);
+  assert.equal(assembled.taskBrief.artifactType, 'document');
   assert.ok(assembled.truncatedCount >= 1 || assembled.materialCount >= 1);
   assert.equal(assembled.skippedWarningCount, 1);
   assert.ok(!JSON.stringify(assembled).includes('ContextSnapshot'));
+});
+
+test('Task Brief:Owner 获奖报道目标抽取新闻体裁与禁止项', async () => {
+  const { extractTaskBrief } = await import('../prompt-assemble');
+  const goal =
+    '撰写一篇 Digital Me 项目参加 AIGO 比赛的获奖报道，发布到公众号，约 500 字，需要介绍 Digital Me 的优势。';
+  const brief = extractTaskBrief({ goal, artifactType: 'document' }, []);
+  assert.equal(brief.genre, '新闻报道');
+  assert.match(brief.publishScene, /公众号|对外/);
+  assert.match(brief.lengthHint, /500/);
+  assert.ok(brief.mustCover.some((x) => /优势|价值/.test(x)));
+  assert.ok(brief.styleAndForbid.some((x) => /新闻报道|事实开篇/.test(x)));
+  assert.ok(brief.styleAndForbid.some((x) => /规格说明书|白皮书|虚构/.test(x)));
+});
+
+test('修改要求进入 prompt,不发起第二次模型调用', async () => {
+  const assembled = await assembleDocumentPrompt(
+    baseInput({
+      revision: {
+        request: '开篇改成获奖事实',
+        previousText: '# 旧稿\n内容',
+        artifactId: 'art_1',
+      },
+    }),
+    async () => '',
+  );
+  assert.match(assembled.messages[1]?.content as string, /# 修改要求/);
+  assert.match(assembled.messages[1]?.content as string, /开篇改成获奖事实/);
+  assert.match(assembled.messages[1]?.content as string, /# 当前成果\(待改\)/);
+  assert.match(assembled.messages[1]?.content as string, /旧稿/);
 });
 
 async function withMockServer(

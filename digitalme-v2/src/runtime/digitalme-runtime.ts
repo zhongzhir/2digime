@@ -58,11 +58,12 @@ export class DigitalMeRuntime {
   readonly subject = new SubjectService(this.eventBus);
   private work: WorkRuntime | null = null;
   private workspace: ArtifactWorkspace | null = null;
-  private registry: CapabilityRegistry | null = null;
+  private readonly registry: CapabilityRegistry;
   private readonly options: DigitalMeRuntimeOptions;
 
   constructor(options: DigitalMeRuntimeOptions = {}) {
     this.options = options;
+    this.registry = this.buildCapabilityRegistry();
   }
 
   async createPackage(input: CommandMap['subject.createPackage']['input']) {
@@ -94,6 +95,10 @@ export class DigitalMeRuntime {
 
   retryTask(input: CommandMap['work.retryTask']['input']) {
     return this.requireWork().retryTask(input);
+  }
+
+  reviseArtifact(input: CommandMap['work.reviseArtifact']['input']) {
+    return this.requireWork().reviseArtifact(input);
   }
 
   cancelJob(input: CommandMap['work.cancelJob']['input']) {
@@ -145,7 +150,6 @@ export class DigitalMeRuntime {
   }
 
   async listCapabilities(): Promise<CommandMap['capability.list']['output']> {
-    if (!this.registry) return { capabilities: [] };
     return { capabilities: this.registry.list() };
   }
 
@@ -213,28 +217,7 @@ export class DigitalMeRuntime {
     const artifactStore = new JsonObjectStore<Artifact>({ dir: path.join(root, 'artifacts') });
     const contentStore = new ContentStore(path.join(root, 'content'));
 
-    const registry = new CapabilityRegistry();
-    const mode = this.options.documentCapability ?? 'fake';
-    if (mode === 'none') {
-      // 未配置真实模型:不注册可选文档能力,也不注册 Fake。
-      if (this.options.registerOpenAiStub) {
-        registry.register(createOpenAiCompatibleAdapterStub());
-      }
-    } else {
-      if (mode === 'openai-compatible' || mode === 'both') {
-        if (!this.options.openaiCompatible) {
-          throw new Error('openaiCompatible config is required when documentCapability uses real model');
-        }
-        registry.register(createOpenAiCompatibleAdapter(this.options.openaiCompatible));
-      }
-      if (mode === 'fake' || mode === 'both') {
-        registry.register(createFakeDocumentAdapter(this.options.fakeAdapter));
-      }
-      if (mode === 'fake' && this.options.registerOpenAiStub !== false) {
-        registry.register(createOpenAiCompatibleAdapterStub());
-      }
-    }
-    this.registry = registry;
+    const registry = this.registry;
 
     const subjectService = this.subject;
     this.work = new WorkRuntime({
@@ -281,6 +264,30 @@ export class DigitalMeRuntime {
         return tokenizeTopics(`${task.goal} ${task.requestedArtifactType}`);
       },
     });
+  }
+
+  private buildCapabilityRegistry(): CapabilityRegistry {
+    const registry = new CapabilityRegistry();
+    const mode = this.options.documentCapability ?? 'fake';
+    if (mode === 'none') {
+      if (this.options.registerOpenAiStub) {
+        registry.register(createOpenAiCompatibleAdapterStub());
+      }
+      return registry;
+    }
+    if (mode === 'openai-compatible' || mode === 'both') {
+      if (!this.options.openaiCompatible) {
+        throw new Error('openaiCompatible config is required when documentCapability uses real model');
+      }
+      registry.register(createOpenAiCompatibleAdapter(this.options.openaiCompatible));
+    }
+    if (mode === 'fake' || mode === 'both') {
+      registry.register(createFakeDocumentAdapter(this.options.fakeAdapter));
+    }
+    if (mode === 'fake' && this.options.registerOpenAiStub !== false) {
+      registry.register(createOpenAiCompatibleAdapterStub());
+    }
+    return registry;
   }
 
   private requireWork(): WorkRuntime {

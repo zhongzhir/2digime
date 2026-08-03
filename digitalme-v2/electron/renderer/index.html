@@ -100,17 +100,17 @@
           </aside>
 
           <main class="panel grow">
-            <h2>新建任务</h2>
+            <h2>新任务</h2>
             <div id="model-gate" class="model-gate" hidden>
               <p>请先连接模型，才能开始处理任务。</p>
               <button type="button" id="btn-goto-settings" class="primary">前往设置</button>
             </div>
             <label class="field">
-              <span>你想完成什么</span>
+              <span>描述你要完成的工作</span>
               <textarea
                 id="goal"
                 rows="5"
-                placeholder="用一两段话说明目标。例如：根据材料写一份项目进展简报。"
+                placeholder="例如：根据材料写一份项目进展简报。"
               ></textarea>
             </label>
             <div class="materials">
@@ -146,7 +146,21 @@
                 </div>
               </div>
               <p id="save-status" class="meta"></p>
+              <p id="version-meta" class="meta"></p>
               <textarea id="artifact-editor" rows="18" spellcheck="true"></textarea>
+              <div class="revise-box">
+                <label class="field">
+                  <span>继续修改</span>
+                  <textarea
+                    id="revision-request"
+                    rows="3"
+                    placeholder="说明你希望如何改这篇成果。例如：开篇改成获奖事实，语气更像新闻报道。"
+                  ></textarea>
+                </label>
+                <div class="row">
+                  <button type="button" id="btn-revise" class="primary">修改成果</button>
+                </div>
+              </div>
             </section>
           </main>
         </div>

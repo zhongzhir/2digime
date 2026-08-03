@@ -20,6 +20,8 @@ describe('DigitalMeRuntime documentCapability none', () => {
       documentCapability: 'none',
       registerOpenAiStub: false,
     });
+    const before = await runtime.listCapabilities();
+    assert.equal(before.capabilities.length, 0);
     await runtime.createPackage({ displayName: 'none-cap', targetDir: dir });
     const { capabilities } = await runtime.listCapabilities();
     assert.equal(capabilities.length, 0);

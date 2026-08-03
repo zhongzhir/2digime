@@ -187,6 +187,12 @@ select {
   color: var(--ink);
 }
 
+.revise-box {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--line);
+}
+
 .layout {
   display: grid;
   grid-template-columns: 260px 1fr;
