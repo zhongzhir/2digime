@@ -388,6 +388,30 @@ app.whenReady().then(async () => {
     return;
   }
 
+  if (process.env.DIGITALME_V2_P23_ACCEPTANCE === "1") {
+    try {
+      const acceptance = require(path.join(__dirname, "packaged-p23-acceptance.cjs"));
+      const code = await acceptance.run({
+        bootstrapRuntime,
+        getRuntime: () => runtime,
+        getBus: () => bus,
+        getBootInfo: () => lastBootInfo,
+        createWindow,
+        app,
+      });
+      app.exit(code);
+    } catch (err) {
+      console.error(
+        JSON.stringify({
+          ok: false,
+          error: String(err && err.message ? err.message : err),
+        }),
+      );
+      app.exit(1);
+    }
+    return;
+  }
+
   const bootInfo = await bootstrapRuntime();
   createWindow(bootInfo);
   app.on("activate", () => {
