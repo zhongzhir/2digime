@@ -155,9 +155,13 @@
               <p id="save-status" class="meta"></p>
               <p id="version-meta" class="meta"></p>
               <div id="bundle-view" class="bundle-view" hidden>
+                <p id="bundle-quality" class="bundle-quality" hidden></p>
                 <pre id="bundle-report" class="bundle-report"></pre>
-                <div id="bundle-manifest" class="bundle-manifest muted"></div>
-                <ul id="bundle-entries" class="bundle-entries"></ul>
+                <details id="bundle-evidence-panel" class="bundle-evidence-panel">
+                  <summary>分析依据</summary>
+                  <div id="bundle-manifest" class="bundle-manifest muted"></div>
+                  <ul id="bundle-entries" class="bundle-entries"></ul>
+                </details>
               </div>
               <textarea id="artifact-editor" rows="18" spellcheck="true"></textarea>
               <div class="revise-box">
@@ -178,6 +182,8 @@
         </div>
       </section>
     </div>
+    <script src="text-normalize.js"></script>
+    <script src="bundle-quality-ui.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

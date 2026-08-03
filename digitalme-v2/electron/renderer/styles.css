@@ -311,6 +311,79 @@ select {
   font-size: 13.5px;
 }
 
+.bundle-report {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  max-height: 48vh;
+  overflow: auto;
+  font-family: "Source Han Serif SC", "Noto Serif SC", Georgia, serif;
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+
+.bundle-quality {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #c9852f;
+  background: #fff7eb;
+  color: #7a4a0b;
+  font-weight: 600;
+}
+
+.bundle-quality.usable {
+  border-color: var(--line);
+  background: #f4faf8;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.bundle-quality.degraded-scan {
+  border-color: #c9852f;
+  background: #fff3e0;
+  color: #6b3a08;
+  font-weight: 700;
+  box-shadow: inset 3px 0 0 #d97706;
+}
+
+.bundle-quality.needs-attention {
+  border-color: #b45309;
+  background: #fef3c7;
+  color: #78350f;
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 #b45309;
+}
+
+.bundle-evidence-panel {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 12px;
+  background: #fafafa;
+}
+
+.bundle-evidence-panel summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.bundle-manifest {
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.bundle-entries {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
 .experience {
   margin-top: 18px;
   padding-top: 16px;

@@ -48,7 +48,9 @@
     artifactPanel: document.getElementById("artifact-panel"),
     artifactEditor: document.getElementById("artifact-editor"),
     bundleView: document.getElementById("bundle-view"),
+    bundleQuality: document.getElementById("bundle-quality"),
     bundleReport: document.getElementById("bundle-report"),
+    bundleEvidencePanel: document.getElementById("bundle-evidence-panel"),
     bundleManifest: document.getElementById("bundle-manifest"),
     bundleEntries: document.getElementById("bundle-entries"),
     saveStatus: document.getElementById("save-status"),
@@ -324,12 +326,30 @@
     }
   }
 
-  function renderJobStatus(detail) {
+  function isLatestJobFailed(detail) {
+    return !!(detail && detail.latestJob && detail.latestJob.status === "failed");
+  }
+
+  function userFacingFailureReason(detail, eventNote) {
+    const fromEvent = eventNote != null ? String(eventNote).trim() : "";
+    if (fromEvent) return fromEvent;
+    const fromJob =
+      detail && detail.latestJob && detail.latestJob.progressNote != null
+        ? String(detail.latestJob.progressNote).trim()
+        : "";
+    if (fromJob) return fromJob;
+    return "处理未能完成。";
+  }
+
+  function renderJobStatus(detail, eventNote) {
     // 用户面只显示派生标签,禁止拼接内部 progress / phase。
+    const failed = isLatestJobFailed(detail);
     els.jobStatus.textContent = detail.userFacingLabel || labelForState(detail.state);
-    els.jobStatus.classList.toggle("error", detail.state === "attention");
+    els.jobStatus.classList.toggle("error", detail.state === "attention" || failed);
     els.jobActionable.textContent = "";
-    if (detail.state === "attention") {
+    if (failed) {
+      els.jobActionable.textContent = userFacingFailureReason(detail, eventNote);
+    } else if (detail.state === "attention") {
       els.jobActionable.textContent = "可以重试，或调整目标与材料后再试。";
     }
   }
@@ -345,12 +365,18 @@
     );
     const connected = await refreshConnectionFromCapabilities();
     els.retry.disabled = !connected || detail.state !== "attention";
-    activeArtifactId = detail.artifactIds[0] || null;
-    if (activeArtifactId) {
-      await loadArtifact(activeArtifactId);
-    } else {
+    if (isLatestJobFailed(detail)) {
+      activeArtifactId = null;
       els.artifactPanel.hidden = true;
       els.revise.disabled = true;
+    } else {
+      activeArtifactId = detail.artifactIds[0] || null;
+      if (activeArtifactId) {
+        await loadArtifact(activeArtifactId);
+      } else {
+        els.artifactPanel.hidden = true;
+        els.revise.disabled = true;
+      }
     }
     await refreshTasks();
     await refreshExperiences();
@@ -372,18 +398,42 @@
       els.exportMd.hidden = true;
       els.exportDocx.hidden = true;
       els.bundleReport.textContent = content.text || "";
+      if (els.bundleEvidencePanel) els.bundleEvidencePanel.open = false;
       const summary = (content.bundle && content.bundle.manifestSummary) || null;
+      const quality = summary && summary.quality ? summary.quality : null;
+      const qualityUi =
+        (window.DigitalMeBundleQualityUi &&
+          window.DigitalMeBundleQualityUi.resolveBundleQualityUi(quality)) ||
+        {
+          showBanner: false,
+          className: "bundle-quality usable",
+          bannerText: "",
+          saveStatus: "代码项目分析结果（只读）",
+        };
+      if (els.bundleQuality) {
+        if (qualityUi.showBanner) {
+          els.bundleQuality.hidden = false;
+          els.bundleQuality.className = qualityUi.className;
+          els.bundleQuality.textContent = qualityUi.bannerText;
+        } else {
+          els.bundleQuality.hidden = true;
+          els.bundleQuality.className = "bundle-quality";
+          els.bundleQuality.textContent = "";
+        }
+      }
       if (summary) {
         const langs = (summary.languages || [])
           .map((l) => `${l.language} ${l.files}`)
           .join(" · ");
         els.bundleManifest.textContent = [
-          `文件数 ${summary.fileCountScanned}`,
-          langs ? `语言 ${langs}` : null,
+          `扫描文件数 ${summary.fileCountScanned}`,
+          langs ? `语言分布 ${langs}` : null,
           summary.truncated ? "已截断" : "未截断",
           `敏感跳过 ${summary.skippedSensitiveCount}`,
           (summary.warnings || []).length
-            ? `提示：${summary.warnings.join("；")}`
+            ? `提示：${(summary.warnings || [])
+                .filter((w) => !/inferred|debug|snap_c/i.test(String(w)))
+                .join("；")}`
             : null,
         ]
           .filter(Boolean)
@@ -410,20 +460,22 @@
           evidenceSummary = "证据摘要不可用";
         }
       }
-      for (const entry of (content.bundle && content.bundle.entries) || []) {
-        const li = document.createElement("li");
-        if (entry.role === "evidence" && evidenceSummary) {
-          li.textContent = `${entry.role || "条目"} · ${entry.mediaType} · ${evidenceSummary}`;
-        } else {
-          li.textContent = `${entry.role || "条目"} · ${entry.mediaType}`;
-        }
-        els.bundleEntries.appendChild(li);
-      }
+      const roles = ((content.bundle && content.bundle.entries) || [])
+        .map((e) => e.role)
+        .filter(Boolean);
+      const li = document.createElement("li");
+      li.textContent = [
+        roles.includes("manifest") ? "包含清单" : null,
+        evidenceSummary || (roles.includes("evidence") ? "包含证据" : null),
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      if (li.textContent) els.bundleEntries.appendChild(li);
       els.exportMd.hidden = true;
       els.exportDocx.hidden = true;
       els.reveal.hidden = false;
       els.reveal.removeAttribute("hidden");
-      els.saveStatus.textContent = "代码项目分析结果（只读）";
+      els.saveStatus.textContent = qualityUi.saveStatus;
       els.revise.disabled = true;
     } else {
       els.bundleView.hidden = true;
@@ -599,6 +651,40 @@
     });
   }
 
+  function normalizeEditablePaste(event) {
+    const normalize =
+      (window.DigitalMeText && window.DigitalMeText.normalizeNewlines) ||
+      ((t) => String(t ?? "").replace(/\r\n/g, "\n").replace(/\r/g, "\n"));
+    const clipboardData = event.clipboardData || window.clipboardData;
+    if (!clipboardData) return;
+    const raw = clipboardData.getData("text/plain");
+    if (raw == null) return;
+    event.preventDefault();
+    const text = normalize(raw);
+    const target = event.target;
+    if (!(target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement)) return;
+    const start = target.selectionStart ?? target.value.length;
+    const end = target.selectionEnd ?? target.value.length;
+    const before = target.value.slice(0, start);
+    const after = target.value.slice(end);
+    target.value = before + text + after;
+    const pos = before.length + text.length;
+    target.setSelectionRange(pos, pos);
+    target.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  for (const el of [
+    els.goal,
+    els.artifactEditor,
+    els.revisionRequest,
+    els.pkgName,
+    els.modelBaseUrl,
+    els.modelId,
+    els.modelApiKey,
+  ]) {
+    if (el) el.addEventListener("paste", normalizeEditablePaste);
+  }
+
   els.submit.addEventListener("click", async () => {
     try {
       await refreshConnectionFromCapabilities();
@@ -613,7 +699,12 @@
             : "前往设置连接真实模型后再开始处理。";
         return;
       }
-      const goal = (els.goal.value || "").trim();
+      const normalize =
+        (window.DigitalMeText && window.DigitalMeText.normalizeNewlines) ||
+        ((t) => String(t ?? "").replace(/\r\n/g, "\n").replace(/\r/g, "\n"));
+      const goalNormalized = normalize(els.goal.value || "");
+      if (els.goal.value !== goalNormalized) els.goal.value = goalNormalized;
+      const goal = goalNormalized.trim();
       if (!goal) {
         els.jobStatus.textContent = "请先填写任务目标";
         els.jobStatus.classList.add("error");
@@ -752,14 +843,22 @@
         activeJobId = event.jobId;
         try {
           const detail = await api.invoke("work.getTask", { taskId: event.taskId });
-          renderJobStatus(detail);
+          renderJobStatus(detail, event.progressNote);
           els.cancel.disabled = !(
             detail.latestJob &&
             (detail.state === "waiting" || detail.state === "processing")
           );
           const connected = await refreshConnectionFromCapabilities();
           els.retry.disabled = !connected || detail.state !== "attention";
-          if (detail.artifactIds[0]) {
+          if (isLatestJobFailed(detail) || event.status === "failed") {
+            activeArtifactId = null;
+            els.artifactPanel.hidden = true;
+            els.revise.disabled = true;
+            els.jobActionable.textContent = userFacingFailureReason(
+              detail,
+              event.progressNote,
+            );
+          } else if (detail.artifactIds[0]) {
             activeArtifactId = detail.artifactIds[0];
             if (event.status === "succeeded") await loadArtifact(activeArtifactId);
           }
