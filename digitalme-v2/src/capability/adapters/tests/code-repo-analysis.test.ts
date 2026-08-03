@@ -298,25 +298,28 @@ test('P2.2 真实 Adapter:mock 模型产出 bundle;失败分类', async () => {
     await unauthorized.close();
   }
 
-  // 非法 JSON
+  // 非法 JSON → P2.3 确定性 Snapshot 回退(不得无终态僵死)
   const badJson = await listenRaw(200, JSON.stringify({ choices: [{ message: { content: 'not-json' } }] }));
   try {
     const adapter = createCodeRepoAnalysisAdapter({
       baseUrl: `http://127.0.0.1:${badJson.port}/v1`,
       model: 'mock',
     });
-    await assert.rejects(
-      () =>
-        adapter.execute(baseInput({ snapshot }), {
-          jobId: 'job_bad',
-          reportProgress: () => {},
-          signal: new AbortController().signal,
-          secrets: { get: async () => 'k' },
-          workDir: path.join(root, 'wbad'),
-          readExtractedText: async (ref) => (await contentStore.readBytes(ref)).toString('utf8'),
-        }),
-      /结构化|证据|解析|JSON|reportMarkdown/i,
-    );
+    const workDir = path.join(root, 'wbad');
+    await fs.mkdir(workDir, { recursive: true });
+    const out = await adapter.execute(baseInput({ snapshot }), {
+      jobId: 'job_bad',
+      reportProgress: () => {},
+      signal: new AbortController().signal,
+      secrets: { get: async () => 'k' },
+      workDir,
+      readExtractedText: async (ref) => (await contentStore.readBytes(ref)).toString('utf8'),
+    });
+    assert.equal(out.artifact.payload.kind, 'bundle');
+    const reportPath = (out.artifact.payload as { entries: Array<{ role: string; sourcePath: string }> })
+      .entries.find((e) => e.role === 'report')!.sourcePath;
+    const report = await fs.readFile(reportPath, 'utf8');
+    assert.ok(/快照|inferred|推测|结构化/i.test(report));
   } finally {
     await badJson.close();
   }
@@ -465,6 +468,217 @@ function sampleSnapshot(): ContextSnapshot {
     ],
   };
 }
+
+test('P2.3 调用硬预算与 sections 失败时保留 findings', async () => {
+  const { CodeAnalysisCallBudget } = await import('../code-analysis-call-budget');
+  const budget = new CodeAnalysisCallBudget({ maxCalls: 4 });
+  budget.consume('findings');
+  budget.recordRetry('findings', 'non_json');
+  budget.consume('findings');
+  budget.consume('sections');
+  budget.recordRetry('sections', 'empty_response');
+  budget.consume('sections');
+  assert.equal(budget.modelCalls, 4);
+  assert.throws(() => budget.consume('findings'), /budget exceeded/i);
+  assert.equal(budget.report().retries.length, 2);
+
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dmv2-p23-budget-'));
+  const contentStore = new ContentStore(path.join(root, 'content'));
+  const storedA = await contentStore.putText('export const a = 1;\n', 'plain');
+  const storedPkg = await contentStore.putText('{"name":"demo"}\n', 'plain');
+  const snapshot: ContextSnapshot = {
+    id: 'snap_b',
+    taskId: 'task_b',
+    createdAt: new Date().toISOString(),
+    items: [
+      {
+        sourcePath: path.join(root, 'src', 'a.ts'),
+        kind: 'folder-entry',
+        status: 'ok',
+        relativePath: 'src/a.ts',
+        contentDigest: storedA.digest,
+        ...(storedA.content.kind === 'text' ? { extractedTextRef: storedA.content.ref } : {}),
+      },
+      {
+        sourcePath: path.join(root, 'package.json'),
+        kind: 'folder-entry',
+        status: 'ok',
+        relativePath: 'package.json',
+        contentDigest: storedPkg.digest,
+        ...(storedPkg.content.kind === 'text' ? { extractedTextRef: storedPkg.content.ref } : {}),
+      },
+    ],
+  };
+  const findings = {
+    findings: [
+      finding('c1', 'high', 'confirmed', {
+        path: 'src/a.ts',
+        contentDigest: storedA.digest,
+        excerpt: 'export const a = 1',
+      }),
+      finding('c2', 'high', 'confirmed', {
+        path: 'package.json',
+        contentDigest: storedPkg.digest,
+        excerpt: '"name":"demo"',
+      }),
+      finding('c3', 'medium', 'confirmed', {
+        path: 'src/a.ts',
+        contentDigest: storedA.digest,
+        excerpt: 'export const a = 1',
+      }),
+      finding('c4', 'medium', 'inferred'),
+      finding('c5', 'medium', 'uncovered'),
+    ],
+    coverage: { confirmed: ['c1'], inferred: ['c4'], uncovered: ['c5'] },
+  };
+  let call = 0;
+  const server = await listenHandler(() => {
+    call += 1;
+    if (call === 1) return findings;
+    return { broken: true };
+  });
+  try {
+    const adapter = createCodeRepoAnalysisAdapter({
+      baseUrl: `http://127.0.0.1:${server.port}/v1`,
+      model: 'mock',
+      overallTimeoutMs: 30_000,
+    });
+    const workDir = path.join(root, 'work');
+    await fs.mkdir(workDir, { recursive: true });
+    const out = await adapter.execute(baseInput({ snapshot }), {
+      jobId: 'job_p23',
+      reportProgress: () => {},
+      signal: new AbortController().signal,
+      secrets: { get: async () => 'sk-test' },
+      workDir,
+      readExtractedText: async (ref) => (await contentStore.readBytes(ref)).toString('utf8'),
+    });
+    assert.equal(out.artifact.payload.kind, 'bundle');
+    const reportPath = (out.artifact.payload as { entries: Array<{ role: string; sourcePath: string }> })
+      .entries.find((e) => e.role === 'report')!.sourcePath;
+    const report = await fs.readFile(reportPath, 'utf8');
+    assert.ok(/c1|已证实|findings/i.test(report));
+    assert.ok(call <= 4);
+    const budgetFile = JSON.parse(
+      await fs.readFile(path.join(workDir, '_code-analysis-call-budget.json'), 'utf8'),
+    );
+    assert.ok(budgetFile.modelCalls <= 4);
+    assert.ok(budgetFile.retries.some((r: { phase: string }) => r.phase === 'sections'));
+  } finally {
+    await server.close();
+  }
+});
+
+test('P2.3 已确认经验写入报告且含 eventId', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dmv2-p23-xp-'));
+  const contentStore = new ContentStore(path.join(root, 'content'));
+  const storedA = await contentStore.putText('export const a = 1;\n', 'plain');
+  const storedPkg = await contentStore.putText('{"name":"demo"}\n', 'plain');
+  const snapshot: ContextSnapshot = {
+    id: 'snap_x',
+    taskId: 'task_x',
+    createdAt: new Date().toISOString(),
+    items: [
+      {
+        sourcePath: path.join(root, 'a.ts'),
+        kind: 'folder-entry',
+        status: 'ok',
+        relativePath: 'src/a.ts',
+        contentDigest: storedA.digest,
+        ...(storedA.content.kind === 'text' ? { extractedTextRef: storedA.content.ref } : {}),
+      },
+      {
+        sourcePath: path.join(root, 'package.json'),
+        kind: 'folder-entry',
+        status: 'ok',
+        relativePath: 'package.json',
+        contentDigest: storedPkg.digest,
+        ...(storedPkg.content.kind === 'text' ? { extractedTextRef: storedPkg.content.ref } : {}),
+      },
+    ],
+  };
+  let call = 0;
+  const server = await listenHandler(() => {
+    call += 1;
+    if (call === 1) {
+      return {
+        findings: [
+          finding('c1', 'high', 'confirmed', {
+            path: 'src/a.ts',
+            contentDigest: storedA.digest,
+            excerpt: 'export const a = 1',
+          }),
+          finding('c2', 'high', 'confirmed', {
+            path: 'package.json',
+            contentDigest: storedPkg.digest,
+            excerpt: '"name":"demo"',
+          }),
+          finding('c3', 'medium', 'confirmed', {
+            path: 'src/a.ts',
+            contentDigest: storedA.digest,
+            excerpt: 'export const a = 1',
+          }),
+          finding('c4', 'medium', 'inferred'),
+          finding('c5', 'medium', 'uncovered'),
+        ],
+        coverage: { confirmed: [], inferred: [], uncovered: [] },
+      };
+    }
+    return {
+      sections: {
+        overview: 'o',
+        stack: 's',
+        modules: 'm',
+        execution: 'e',
+        risks: 'r',
+        complexity: 'c',
+        recommendations: 'rec',
+        coverage: '已证实 推测 未覆盖',
+      },
+    };
+  });
+  try {
+    const adapter = createCodeRepoAnalysisAdapter({
+      baseUrl: `http://127.0.0.1:${server.port}/v1`,
+      model: 'mock',
+    });
+    const workDir = path.join(root, 'work');
+    await fs.mkdir(workDir, { recursive: true });
+    const out = await adapter.execute(
+      baseInput({
+        snapshot,
+        subjectContext: {
+          subjectId: 's',
+          derivedAt: new Date().toISOString(),
+          entries: [
+            {
+              eventId: 'gevt_p23_marker',
+              title: '零感知运行时',
+              detail: 'P23_ZERO_AWARE_RUNTIME 保持 Work Runtime 对场景零感知',
+              tags: ['code-analysis', '架构'],
+              occurredAt: new Date().toISOString(),
+            },
+          ],
+        },
+      }),
+      {
+        jobId: 'job_xp',
+        reportProgress: () => {},
+        signal: new AbortController().signal,
+        secrets: { get: async () => 'sk-test' },
+        workDir,
+        readExtractedText: async (ref) => (await contentStore.readBytes(ref)).toString('utf8'),
+      },
+    );
+    const reportPath = (out.artifact.payload as { entries: Array<{ role: string; sourcePath: string }> })
+      .entries.find((e) => e.role === 'report')!.sourcePath;
+    const report = await fs.readFile(reportPath, 'utf8');
+    assert.ok(report.includes('APPLIED_EXPERIENCE:gevt_p23_marker'));
+    assert.ok(report.includes('P23_ZERO_AWARE_RUNTIME'));
+  } finally {
+    await server.close();
+  }
+});
 
 function baseInput(overrides: Partial<CapabilityInput> = {}): CapabilityInput {
   return {

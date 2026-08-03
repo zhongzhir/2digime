@@ -392,12 +392,38 @@
         els.bundleManifest.textContent = "";
       }
       els.bundleEntries.innerHTML = "";
+      const evidenceEntry = ((content.bundle && content.bundle.entries) || []).find(
+        (e) => e.role === "evidence",
+      );
+      let evidenceSummary = "";
+      if (evidenceEntry && evidenceEntry.text) {
+        try {
+          const parsed = JSON.parse(evidenceEntry.text);
+          const items = parsed.items || [];
+          evidenceSummary = `证据 ${items.length} 条`;
+          const sample = items
+            .slice(0, 5)
+            .map((it) => `${it.claimId || "?"} → ${it.path || "?"}`)
+            .join("；");
+          if (sample) evidenceSummary += `：${sample}`;
+        } catch {
+          evidenceSummary = "证据摘要不可用";
+        }
+      }
       for (const entry of (content.bundle && content.bundle.entries) || []) {
         const li = document.createElement("li");
-        li.textContent = `${entry.role || "条目"} · ${entry.mediaType}`;
+        if (entry.role === "evidence" && evidenceSummary) {
+          li.textContent = `${entry.role || "条目"} · ${entry.mediaType} · ${evidenceSummary}`;
+        } else {
+          li.textContent = `${entry.role || "条目"} · ${entry.mediaType}`;
+        }
         els.bundleEntries.appendChild(li);
       }
-      els.saveStatus.textContent = "代码项目结构扫描结果（只读）";
+      els.exportMd.hidden = true;
+      els.exportDocx.hidden = true;
+      els.reveal.hidden = false;
+      els.reveal.removeAttribute("hidden");
+      els.saveStatus.textContent = "代码项目分析结果（只读）";
       els.revise.disabled = true;
     } else {
       els.bundleView.hidden = true;

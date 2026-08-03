@@ -7,9 +7,9 @@ import type { CapabilityInput } from '../adapter';
 import type { SnapshotItem } from '../../work-runtime/context-snapshot';
 import type { ChatMessage } from '../../infrastructure/model-http';
 
-export const CODE_PROMPT_TOTAL_CHARS = 36_000;
-export const CODE_PROMPT_FILE_MAX_CHARS = 3_000;
-export const CODE_PROMPT_INDEX_MAX_ENTRIES = 250;
+export const CODE_PROMPT_TOTAL_CHARS = 28_000;
+export const CODE_PROMPT_FILE_MAX_CHARS = 2_400;
+export const CODE_PROMPT_INDEX_MAX_ENTRIES = 200;
 export const CODE_PROMPT_EXPERIENCE_MAX_CHARS = 2_000;
 
 export interface CodeFileSelection {
@@ -79,7 +79,18 @@ const CORE_PATH_HINTS = [
   'electron',
   'domain',
   'core',
+];
+
+/** 关键服务与适配器(优先级介于核心领域与测试之间)。 */
+const SERVICE_ADAPTER_HINTS = [
   'adapter',
+  'adapters',
+  'service',
+  'services',
+  'provider',
+  'gateway',
+  'controller',
+  'handlers',
 ];
 
 export async function assembleCodeAnalysisPrompt(
@@ -195,7 +206,9 @@ export async function assembleCodeAnalysisPrompt(
     `# 用户目标\n${scrubText(input.goal).slice(0, 4_000)}`,
     `# 分析覆盖说明\n${coverageNote}`,
     `# 扫描警告\n${warningLines.length ? warningLines.map((w) => `- ${w}`).join('\n') : '- 无'}`,
-    experience.text ? `# 已确认经验(必须尊重)\n${experience.text}` : '',
+    experience.text
+      ? `# 已确认经验(必须尊重;适用时在结论中写 APPLIED_EXPERIENCE:<eventId>)\n${experience.text}`
+      : '',
     `# 冻结文件索引(相对路径 + digest)\n${indexLines.join('\n')}`,
     `# 送模文件内容(已按优先级与预算选取)\n${fileBlocks || '(无可用正文;仅依据索引与目标分析,不足处标为 uncovered)'}`,
   ].filter(Boolean);
@@ -222,9 +235,12 @@ export function scoreFile(relativePath: string, goal: string): number {
   const base = rel.split('/').pop()?.toLowerCase() || '';
   let score = 20;
   if (CONFIG_BASENAMES.has(base)) score = Math.max(score, 100);
-  if (ENTRY_BASENAMES.has(base)) score = Math.max(score, 80);
+  if (ENTRY_BASENAMES.has(base)) score = Math.max(score, 90);
   const lower = rel.toLowerCase();
-  if (CORE_PATH_HINTS.some((h) => lower.includes(h))) score = Math.max(score, 70);
+  if (CORE_PATH_HINTS.some((h) => lower.includes(h))) score = Math.max(score, 75);
+  if (SERVICE_ADAPTER_HINTS.some((h) => lower.includes(`/${h}/`) || lower.includes(`/${h}.`) || lower.endsWith(`/${h}`))) {
+    score = Math.max(score, 60);
+  }
   if (/(^|\/)(test|tests|__tests__|spec)(\/|$)/i.test(rel) || /\.(test|spec)\./i.test(base)) {
     score = Math.max(score, 40);
   }
@@ -256,7 +272,12 @@ function formatExperiences(
   const blocks: string[] = [];
   let used = 0;
   for (const e of entries) {
-    const block = `- ${scrubText(e.title)}: ${scrubText(e.detail)} [${e.tags.join(',')}]`;
+    const eventId = 'eventId' in e && typeof (e as { eventId?: string }).eventId === 'string'
+      ? (e as { eventId: string }).eventId
+      : '';
+    const block = eventId
+      ? `- eventId=${eventId} | ${scrubText(e.title)}: ${scrubText(e.detail)} [${e.tags.join(',')}]`
+      : `- ${scrubText(e.title)}: ${scrubText(e.detail)} [${e.tags.join(',')}]`;
     if (used + block.length > CODE_PROMPT_EXPERIENCE_MAX_CHARS) break;
     blocks.push(block);
     used += block.length;
