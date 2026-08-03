@@ -198,13 +198,14 @@ function createCredentialOps(store, userDataPath) {
         messages: [
           {
             role: "user",
-            content: "Reply with exactly: ok",
+            content: "请只回复一个字：好",
           },
         ],
-        maxTokens: 16,
-        timeoutMs: 30_000,
+        maxTokens: 64,
+        temperature: 0,
+        timeoutMs: 45_000,
       });
-      const text = String(result.text || "").trim().toLowerCase();
+      const text = String(result.text || "").trim();
       if (!text) {
         throw new Error("模型未返回有效内容");
       }
@@ -212,6 +213,7 @@ function createCredentialOps(store, userDataPath) {
         ok: true,
         model,
         baseUrlHost: hostOf(baseUrl),
+        previewChars: text.length,
       };
     },
   };

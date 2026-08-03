@@ -82,6 +82,25 @@ async function run(deps) {
     }
   };
 
+  try {
+    return await runBody(deps, evidenceDir, checks, note);
+  } catch (err) {
+    const summary = {
+      ok: false,
+      passed: checks.filter((c) => c.ok).length,
+      total: Math.max(checks.length, 1),
+      error: String(err && err.message ? err.message : err),
+      detail: err && err.detail ? err.detail : null,
+      checks,
+    };
+    fs.writeFileSync(path.join(evidenceDir, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`, "utf8");
+    console.error(JSON.stringify({ ok: false, error: summary.error }));
+    return 1;
+  }
+}
+
+async function runBody(deps, evidenceDir, checks, note) {
+
   const cred = readCredentialSource();
   if (!cred) {
     note("credential_source", false, { reason: "missing_test_credential_file" });
