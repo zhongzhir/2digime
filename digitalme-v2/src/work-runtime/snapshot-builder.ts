@@ -3,13 +3,18 @@ import type { ContentStore } from '../infrastructure/content-store';
 import { extractFile, extractFolder, type ExtractionOutcome } from '../infrastructure/extract';
 import { newId, nowIso } from '../shared/ids';
 import type { ContextRef, Task } from './task';
-import type { ContextSnapshot, SnapshotItem } from './context-snapshot';
+import type { ContextSnapshot, SnapshotIngestionMeta, SnapshotItem } from './context-snapshot';
+import {
+  DEFAULT_CONTEXT_INGESTION_POLICY,
+  type ContextIngestionPolicy,
+} from './context-policy';
+import { ingestFolderRecursive, ingestSingleFile } from './recursive-ingest';
 
 /**
  * ContextSnapshotBuilder — Job running 后异步构建不可变快照。
  * Task 1:N Snapshot;Job 1:1 Snapshot;重试默认新建。
- * 字段映射冻结:sourcePath / kind / status / warning? / contentDigest / extractedTextRef。
- * 无 stale / materialsStale / planned digest。
+ * P2.1:按 CapabilityRegistration.contextPolicy 执行通用摄取;
+ * 未声明策略时保持 P1 document 行为逐字节不变。
  */
 export class ContextSnapshotBuilder {
   constructor(
@@ -17,7 +22,24 @@ export class ContextSnapshotBuilder {
     private readonly contentStore: ContentStore,
   ) {}
 
-  async build(task: Task): Promise<ContextSnapshot> {
+  async build(task: Task, policy?: ContextIngestionPolicy): Promise<ContextSnapshot> {
+    const effective = policy ?? DEFAULT_CONTEXT_INGESTION_POLICY;
+    if (effective.folderTraversal === 'recursive') {
+      return this.buildRecursive(task, effective);
+    }
+    return this.buildDocumentDefault(task);
+  }
+
+  async get(id: string): Promise<ContextSnapshot | null> {
+    return this.snapshotStore.get(id);
+  }
+
+  async listByTask(taskId: string): Promise<ContextSnapshot[]> {
+    return this.snapshotStore.list((s) => s.taskId === taskId);
+  }
+
+  /** P1 文档路径 — 不得改动抽取语义。 */
+  private async buildDocumentDefault(task: Task): Promise<ContextSnapshot> {
     const items: SnapshotItem[] = [];
     for (const ref of task.contextRefs) {
       if (ref.kind === 'file') {
@@ -49,12 +71,102 @@ export class ContextSnapshotBuilder {
     return snapshot;
   }
 
-  async get(id: string): Promise<ContextSnapshot | null> {
-    return this.snapshotStore.get(id);
+  private async buildRecursive(
+    task: Task,
+    policy: ContextIngestionPolicy,
+  ): Promise<ContextSnapshot> {
+    const items: SnapshotItem[] = [];
+    const warningSet: string[] = [];
+    let merged: SnapshotIngestionMeta = {
+      truncated: false,
+      skippedSensitiveCount: 0,
+      skippedBudgetCount: 0,
+      totalBytesScanned: 0,
+      fileCountScanned: 0,
+    };
+
+    for (const ref of task.contextRefs) {
+      if (ref.kind === 'file') {
+        const result = await ingestSingleFile(ref.path, policy);
+        for (const file of result.files) {
+          items.push(await this.freezeIngested(file));
+        }
+        warningSet.push(...result.warnings);
+        merged = {
+          ...(result.ingestion.rootName || merged.rootName
+            ? { rootName: merged.rootName ?? result.ingestion.rootName }
+            : {}),
+          truncated: merged.truncated || result.ingestion.truncated,
+          skippedSensitiveCount:
+            merged.skippedSensitiveCount + result.ingestion.skippedSensitiveCount,
+          skippedBudgetCount: merged.skippedBudgetCount + result.ingestion.skippedBudgetCount,
+          totalBytesScanned: merged.totalBytesScanned + result.ingestion.totalBytesScanned,
+          fileCountScanned: merged.fileCountScanned + result.ingestion.fileCountScanned,
+        };
+        continue;
+      }
+
+      const result = await ingestFolderRecursive(ref.path, policy);
+      for (const file of result.files) {
+        items.push(await this.freezeIngested(file));
+      }
+      warningSet.push(...result.warnings);
+      merged = {
+        ...(result.ingestion.rootName || merged.rootName
+          ? { rootName: merged.rootName ?? result.ingestion.rootName }
+          : {}),
+        truncated: merged.truncated || result.ingestion.truncated,
+        skippedSensitiveCount:
+          merged.skippedSensitiveCount + result.ingestion.skippedSensitiveCount,
+        skippedBudgetCount: merged.skippedBudgetCount + result.ingestion.skippedBudgetCount,
+        totalBytesScanned: merged.totalBytesScanned + result.ingestion.totalBytesScanned,
+        fileCountScanned: merged.fileCountScanned + result.ingestion.fileCountScanned,
+      };
+    }
+
+    if (merged.truncated && !warningSet.some((w) => w.includes('时间上限') || w.includes('部分'))) {
+      warningSet.push('已达到扫描预算，输出为部分结果');
+    }
+
+    const snapshot: ContextSnapshot = {
+      id: newId('snapshot'),
+      taskId: task.id,
+      createdAt: nowIso(),
+      items,
+      ingestion: merged,
+    };
+    await this.snapshotStore.put(snapshot);
+    return snapshot;
   }
 
-  async listByTask(taskId: string): Promise<ContextSnapshot[]> {
-    return this.snapshotStore.list((s) => s.taskId === taskId);
+  private async freezeIngested(file: {
+    item: Omit<SnapshotItem, 'extractedTextRef'> & { text?: string };
+  }): Promise<SnapshotItem> {
+    const base = file.item;
+    if (base.status !== 'ok' || base.text === undefined) {
+      const item: SnapshotItem = {
+        sourcePath: base.sourcePath,
+        kind: base.kind,
+        status: 'warning',
+      };
+      if (base.warning !== undefined) item.warning = sanitizeMessage(base.warning);
+      if (base.relativePath !== undefined) item.relativePath = base.relativePath;
+      return item;
+    }
+    const stored = await this.contentStore.putText(base.text, 'plain');
+    const item: SnapshotItem = {
+      sourcePath: base.sourcePath,
+      kind: base.kind,
+      status: 'ok',
+      contentDigest: stored.digest,
+    };
+    if (stored.content.kind === 'text') {
+      item.extractedTextRef = stored.content.ref;
+    }
+    if (base.relativePath !== undefined) item.relativePath = base.relativePath;
+    if (base.bytes !== undefined) item.bytes = base.bytes;
+    if (base.truncated) item.truncated = true;
+    return item;
   }
 
   private async mapOutcome(

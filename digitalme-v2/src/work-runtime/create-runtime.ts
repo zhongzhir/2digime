@@ -4,6 +4,7 @@ import { ContentStore } from '../infrastructure/content-store';
 import { CapabilityRegistry } from '../capability/registry';
 import { createFakeDocumentAdapter, type FakeDocumentAdapterOptions } from '../capability/adapters/fake-document';
 import { createOpenAiCompatibleAdapterStub } from '../capability/adapters/openai-compatible';
+import { createDeterministicCodeAnalysisAdapter } from '../capability/adapters/deterministic-code-analysis';
 import type { Task } from './task';
 import type { ExecutionJob } from './execution-job';
 import type { ContextSnapshot } from './context-snapshot';
@@ -21,6 +22,8 @@ export interface CreateWorkRuntimeOptions {
   fakeAdapter?: FakeDocumentAdapterOptions;
   /** 默认注册 Fake + openai stub。 */
   registerOpenAiStub?: boolean;
+  /** 默认注册 P2.1 确定性代码分析 Adapter(工程验证)。 */
+  registerDeterministicCodeAnalysis?: boolean;
   loadSubjectContext?: WorkRuntimeOptions['loadSubjectContext'];
   secrets?: WorkRuntimeOptions['secrets'];
 }
@@ -42,6 +45,9 @@ export function createWorkRuntime(options: CreateWorkRuntimeOptions): WorkRuntim
   registry.register(createFakeDocumentAdapter(options.fakeAdapter));
   if (options.registerOpenAiStub !== false) {
     registry.register(createOpenAiCompatibleAdapterStub());
+  }
+  if (options.registerDeterministicCodeAnalysis !== false) {
+    registry.register(createDeterministicCodeAnalysisAdapter());
   }
 
   const eventBus = new InMemoryEventBus();

@@ -48,18 +48,108 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
   async getContent(
     artifactId: string,
     versionId?: string,
-  ): Promise<{ artifact: Artifact; content: ArtifactContent; text?: string }> {
+  ): Promise<{
+    artifact: Artifact;
+    content: ArtifactContent;
+    text?: string;
+    bundle?: {
+      entries: Array<{ role?: string; mediaType: string; text?: string }>;
+      manifestSummary?: {
+        fileCountScanned: number;
+        languages: Array<{ language: string; files: number; bytes: number }>;
+        truncated: boolean;
+        skippedSensitiveCount: number;
+        warnings: string[];
+      };
+    };
+  }> {
     const artifact = await this.requireArtifact(artifactId);
     const version = versionId
       ? artifact.versions.find((v) => v.versionId === versionId)
       : headVersion(artifact);
     if (!version) throw new Error(`version not found: ${versionId}`);
-    const result: { artifact: Artifact; content: ArtifactContent; text?: string } = {
+    const result: {
+      artifact: Artifact;
+      content: ArtifactContent;
+      text?: string;
+      bundle?: {
+        entries: Array<{ role?: string; mediaType: string; text?: string }>;
+        manifestSummary?: {
+          fileCountScanned: number;
+          languages: Array<{ language: string; files: number; bytes: number }>;
+          truncated: boolean;
+          skippedSensitiveCount: number;
+          warnings: string[];
+        };
+      };
+    } = {
       artifact,
       content: version.content,
     };
     if (version.content.kind === 'text') {
       result.text = await this.contentStore.getText(version.content);
+    } else if (version.content.kind === 'bundle') {
+      const entries: Array<{ role?: string; mediaType: string; text?: string }> = [];
+      for (const entry of version.content.entries) {
+        const item: { role?: string; mediaType: string; text?: string } = {
+          mediaType: entry.mediaType,
+        };
+        if (entry.role !== undefined) item.role = entry.role;
+        if (
+          entry.mediaType.startsWith('text/') ||
+          entry.mediaType === 'application/json' ||
+          entry.mediaType === 'text/markdown'
+        ) {
+          try {
+            item.text = (await this.contentStore.readBytes(entry.ref)).toString('utf8');
+          } catch {
+            // 单条失败不影响整体
+          }
+        }
+        entries.push(item);
+      }
+      const report = entries.find((e) => e.role === 'report');
+      if (report?.text) result.text = report.text;
+      let manifestSummary:
+        | {
+            fileCountScanned: number;
+            languages: Array<{ language: string; files: number; bytes: number }>;
+            truncated: boolean;
+            skippedSensitiveCount: number;
+            warnings: string[];
+          }
+        | undefined;
+      const manifestEntry = entries.find((e) => e.role === 'manifest');
+      if (manifestEntry?.text) {
+        try {
+          const parsed = JSON.parse(manifestEntry.text) as {
+            repo?: {
+              fileCountScanned?: number;
+              truncated?: boolean;
+              skippedSensitiveCount?: number;
+            };
+            languages?: Array<{ language: string; files: number; bytes: number }>;
+            warnings?: string[];
+          };
+          manifestSummary = {
+            fileCountScanned: parsed.repo?.fileCountScanned ?? 0,
+            languages: parsed.languages ?? [],
+            truncated: parsed.repo?.truncated ?? false,
+            skippedSensitiveCount: parsed.repo?.skippedSensitiveCount ?? 0,
+            warnings: parsed.warnings ?? [],
+          };
+        } catch {
+          // ignore
+        }
+      }
+      result.bundle = {
+        entries: entries.map((e) => ({
+          ...(e.role !== undefined ? { role: e.role } : {}),
+          mediaType: e.mediaType,
+          ...(e.text !== undefined ? { text: e.text } : {}),
+        })),
+        ...(manifestSummary ? { manifestSummary } : {}),
+      };
     }
     return result;
   }

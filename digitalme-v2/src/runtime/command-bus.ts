@@ -64,6 +64,7 @@ export function createCommandBus(runtime: DigitalMeRuntime): CommandBus {
             ...(got.text !== undefined ? { text: got.text } : {}),
             headVersionId: got.artifact.headVersionId,
             versionCount: got.artifact.versions.length,
+            ...(got.bundle !== undefined ? { bundle: got.bundle } : {}),
           } as CommandMap[K]['output'];
         }
         case 'artifact.saveEdit':

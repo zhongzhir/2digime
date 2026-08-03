@@ -33,6 +33,7 @@
     taskList: document.getElementById("task-list"),
     taskEmpty: document.getElementById("task-empty"),
     goal: document.getElementById("goal"),
+    artifactType: document.getElementById("artifact-type"),
     materialList: document.getElementById("material-list"),
     addFiles: document.getElementById("btn-add-files"),
     addFolder: document.getElementById("btn-add-folder"),
@@ -46,6 +47,10 @@
     experienceList: document.getElementById("experience-list"),
     artifactPanel: document.getElementById("artifact-panel"),
     artifactEditor: document.getElementById("artifact-editor"),
+    bundleView: document.getElementById("bundle-view"),
+    bundleReport: document.getElementById("bundle-report"),
+    bundleManifest: document.getElementById("bundle-manifest"),
+    bundleEntries: document.getElementById("bundle-entries"),
     saveStatus: document.getElementById("save-status"),
     versionMeta: document.getElementById("version-meta"),
     revisionRequest: document.getElementById("revision-request"),
@@ -119,14 +124,33 @@
         Array.isArray(c.outputArtifactTypes) &&
         c.outputArtifactTypes.includes("document"),
     );
+    const codeCaps = list.filter(
+      (c) =>
+        c &&
+        Array.isArray(c.outputArtifactTypes) &&
+        c.outputArtifactTypes.includes("code-analysis"),
+    );
     const available = documentCaps.some((c) => c.availability === "available");
+    const codeAvailable = codeCaps.some((c) => c.availability === "available");
     const needsSetup = documentCaps.some((c) => c.availability === "needs_setup");
     return {
       available,
+      codeAvailable,
       needsSetup: !available && needsSetup,
-      /** 仅非 available 时渲染横幅 */
+      /** 文档任务未就绪时渲染横幅;代码分析若本地可用则不挡提交 */
       showGate: !available,
+      capabilities: list,
     };
+  }
+
+  function selectedArtifactType() {
+    return (els.artifactType && els.artifactType.value) || "document";
+  }
+
+  function canSubmit(state) {
+    const type = selectedArtifactType();
+    if (type === "code-analysis") return !!(state && state.codeAvailable);
+    return !!(state && state.available);
   }
 
   /** 唯一连接态来源:CapabilityRegistration.availability。 */
@@ -147,15 +171,27 @@
     return state.available;
   }
 
+  let lastConnectionState = { available: false, codeAvailable: false, showGate: true };
+
   function applyConnectionUi(state) {
+    lastConnectionState = state || lastConnectionState;
     const available = !!(state && state.available);
-    const showGate = state ? !!state.showGate : !available;
+    const submitReady = canSubmit(state);
+    const type = selectedArtifactType();
+    const showGate =
+      type === "code-analysis"
+        ? !submitReady
+        : state
+          ? !!state.showGate
+          : !available;
     const name = displayModelName || (shellStatus && shellStatus.model) || "";
     const connectedText = available
       ? name
         ? `已连接模型 · ${name}`
         : "已连接模型"
-      : "未连接模型";
+      : state && state.codeAvailable
+        ? "代码项目分析可用（结构扫描）"
+        : "未连接模型";
 
     // 顶部与欢迎区、任务横幅共用同一派生结果
     els.modelStatus.textContent = connectedText;
@@ -169,20 +205,28 @@
       els.modelGate.hidden = false;
       els.modelGate.removeAttribute("hidden");
       els.modelGate.style.display = "";
+      if (type === "code-analysis") {
+        els.modelGate.querySelector("p").textContent =
+          "当前环境未启用代码项目分析。请改选文档，或使用工程模式。";
+      } else {
+        els.modelGate.querySelector("p").textContent =
+          "请先连接模型，才能开始处理任务。";
+      }
     } else {
       els.modelGate.hidden = true;
       els.modelGate.setAttribute("hidden", "");
       els.modelGate.style.display = "none";
     }
 
-    els.submit.disabled = !available;
-    if (!available) {
-      els.submit.title = "请先连接模型";
+    els.submit.disabled = !submitReady;
+    if (!submitReady) {
+      els.submit.title =
+        type === "code-analysis" ? "代码项目分析不可用" : "请先连接模型";
       els.retry.disabled = true;
       els.revise.disabled = true;
     } else {
       els.submit.title = "";
-      els.revise.disabled = !activeArtifactId;
+      els.revise.disabled = !activeArtifactId || type === "code-analysis";
     }
     const configured = !!(shellStatus && shellStatus.credentialConfigured) || available;
     els.modelKeyState.textContent = configured ? "凭证状态：已配置" : "凭证状态：未配置";
@@ -314,14 +358,62 @@
 
   async function loadArtifact(artifactId) {
     const content = await api.invoke("artifact.getContent", { artifactId });
-    suppressSave = true;
-    els.artifactEditor.value = content.text || "";
-    suppressSave = false;
+    const isBundle = !!(content.content && content.content.kind === "bundle");
+    activeArtifactId = artifactId;
     els.artifactPanel.hidden = false;
-    els.saveStatus.textContent = "已载入最新内容";
     els.versionMeta.textContent = `版本 ${content.versionCount}`;
-    const connected = await refreshConnectionFromCapabilities();
-    els.revise.disabled = !connected;
+
+    if (isBundle) {
+      els.bundleView.hidden = false;
+      els.bundleView.removeAttribute("hidden");
+      els.artifactEditor.hidden = true;
+      els.artifactEditor.setAttribute("hidden", "");
+      els.revise.closest(".revise-box").hidden = true;
+      els.exportMd.hidden = true;
+      els.exportDocx.hidden = true;
+      els.bundleReport.textContent = content.text || "";
+      const summary = (content.bundle && content.bundle.manifestSummary) || null;
+      if (summary) {
+        const langs = (summary.languages || [])
+          .map((l) => `${l.language} ${l.files}`)
+          .join(" · ");
+        els.bundleManifest.textContent = [
+          `文件数 ${summary.fileCountScanned}`,
+          langs ? `语言 ${langs}` : null,
+          summary.truncated ? "已截断" : "未截断",
+          `敏感跳过 ${summary.skippedSensitiveCount}`,
+          (summary.warnings || []).length
+            ? `提示：${summary.warnings.join("；")}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+      } else {
+        els.bundleManifest.textContent = "";
+      }
+      els.bundleEntries.innerHTML = "";
+      for (const entry of (content.bundle && content.bundle.entries) || []) {
+        const li = document.createElement("li");
+        li.textContent = `${entry.role || "条目"} · ${entry.mediaType}`;
+        els.bundleEntries.appendChild(li);
+      }
+      els.saveStatus.textContent = "代码项目结构扫描结果（只读）";
+      els.revise.disabled = true;
+    } else {
+      els.bundleView.hidden = true;
+      els.bundleView.setAttribute("hidden", "");
+      els.artifactEditor.hidden = false;
+      els.artifactEditor.removeAttribute("hidden");
+      els.revise.closest(".revise-box").hidden = false;
+      els.exportMd.hidden = false;
+      els.exportDocx.hidden = false;
+      suppressSave = true;
+      els.artifactEditor.value = content.text || "";
+      suppressSave = false;
+      els.saveStatus.textContent = "已载入最新内容";
+      const connected = await refreshConnectionFromCapabilities();
+      els.revise.disabled = !connected;
+    }
   }
 
   async function refreshExperiences() {
@@ -475,13 +567,24 @@
     renderMaterials();
   });
 
+  if (els.artifactType) {
+    els.artifactType.addEventListener("change", () => {
+      applyConnectionUi(lastConnectionState);
+    });
+  }
+
   els.submit.addEventListener("click", async () => {
     try {
-      const connected = await refreshConnectionFromCapabilities();
-      if (!connected) {
-        els.jobStatus.textContent = "请先连接模型";
+      await refreshConnectionFromCapabilities();
+      const type = selectedArtifactType();
+      if (!canSubmit(lastConnectionState)) {
+        els.jobStatus.textContent =
+          type === "code-analysis" ? "代码项目分析不可用" : "请先连接模型";
         els.jobStatus.classList.add("error");
-        els.jobActionable.textContent = "前往设置连接真实模型后再开始处理。";
+        els.jobActionable.textContent =
+          type === "code-analysis"
+            ? "当前环境未启用该能力。"
+            : "前往设置连接真实模型后再开始处理。";
         return;
       }
       const goal = (els.goal.value || "").trim();
@@ -494,7 +597,7 @@
       const result = await api.invoke("work.submitTask", {
         goal,
         contextRefs: materials.map((m) => ({ kind: m.kind, path: m.path })),
-        requestedArtifactType: "document",
+        requestedArtifactType: type,
       });
       activeTaskId = result.taskId;
       activeJobId = result.jobId;

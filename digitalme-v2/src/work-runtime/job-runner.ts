@@ -398,9 +398,14 @@ export class WorkRuntime {
       const active: ExecutionJob = job;
 
       // --- context ---
+      // 先取已选能力的通用 contextPolicy,由 SnapshotBuilder 执行;Runner 不解释场景。
+      const selectedAdapter = this.opts.registry.get(job.capabilityId);
       let snapshot;
       try {
-        snapshot = await this.opts.snapshotBuilder.build(task);
+        snapshot = await this.opts.snapshotBuilder.build(
+          task,
+          selectedAdapter?.registration.contextPolicy,
+        );
       } catch (error) {
         if (controller.signal.aborted) {
           await this.cancelRunning(active);
@@ -424,7 +429,7 @@ export class WorkRuntime {
       }
 
       // --- capability ---
-      const adapter = this.opts.registry.get(job.capabilityId);
+      const adapter = selectedAdapter;
       if (!adapter) {
         await this.failJob(job, 'capability', '能力不可用', '请选择其他能力或稍后重试');
         return;

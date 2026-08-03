@@ -79,10 +79,21 @@ export interface CommandMap {
     input: { artifactId: string; versionId?: string };
     output: {
       content: ArtifactContent;
-      /** text 类内容直接内联返回,供页面直显与编辑。 */
+      /** text 类内容直接内联返回,供页面直显与编辑。bundle 时为主报告 Markdown。 */
       text?: string;
       headVersionId: string;
       versionCount: number;
+      /** bundle 成果的条目与摘要(不新增命令)。 */
+      bundle?: {
+        entries: Array<{ role?: string; mediaType: string; text?: string }>;
+        manifestSummary?: {
+          fileCountScanned: number;
+          languages: Array<{ language: string; files: number; bytes: number }>;
+          truncated: boolean;
+          skippedSensitiveCount: number;
+          warnings: string[];
+        };
+      };
     };
   };
   'artifact.saveEdit': {

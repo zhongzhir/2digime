@@ -113,6 +113,13 @@
                 placeholder="例如：根据材料写一份项目进展简报。"
               ></textarea>
             </label>
+            <label class="field">
+              <span>成果类型</span>
+              <select id="artifact-type">
+                <option value="document" selected>文档</option>
+                <option value="code-analysis">代码项目分析</option>
+              </select>
+            </label>
             <div class="materials">
               <div class="row">
                 <button type="button" id="btn-add-files">添加文件</button>
@@ -147,6 +154,11 @@
               </div>
               <p id="save-status" class="meta"></p>
               <p id="version-meta" class="meta"></p>
+              <div id="bundle-view" class="bundle-view" hidden>
+                <pre id="bundle-report" class="bundle-report"></pre>
+                <div id="bundle-manifest" class="bundle-manifest muted"></div>
+                <ul id="bundle-entries" class="bundle-entries"></ul>
+              </div>
               <textarea id="artifact-editor" rows="18" spellcheck="true"></textarea>
               <div class="revise-box">
                 <label class="field">

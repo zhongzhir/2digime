@@ -84,6 +84,11 @@ async function bootstrapRuntime() {
   testConnection = typeof model.testConnection === "function" ? model.testConnection : null;
 
   // App Shell:仅真实模型或无能力。禁止注册 Fake / both。
+  // P2.1 确定性代码分析仅工程模式(未打包或显式环境变量)注册;packaged 默认不注册。
+  const enableDeterministicCode =
+    process.env.DIGITALME_V2_P21_DETERMINISTIC === "1" ||
+    (process.env.DIGITALME_V2_P21_DETERMINISTIC !== "0" && !app.isPackaged);
+
   const options =
     model.documentCapability === "openai-compatible"
       ? {
@@ -91,11 +96,13 @@ async function bootstrapRuntime() {
           openaiCompatible: model.openaiCompatible,
           secrets: model.secrets,
           registerOpenAiStub: false,
+          codeAnalysisCapability: enableDeterministicCode ? "deterministic" : "none",
         }
       : {
           documentCapability: "none",
           registerOpenAiStub: false,
           ...(model.secrets ? { secrets: model.secrets } : {}),
+          codeAnalysisCapability: enableDeterministicCode ? "deterministic" : "none",
         };
 
   runtime = createDigitalMeRuntime(options);

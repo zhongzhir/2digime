@@ -12,6 +12,7 @@ import {
   createOpenAiCompatibleAdapterStub,
   type OpenAiCompatibleAdapterConfig,
 } from '../capability/adapters/openai-compatible';
+import { createDeterministicCodeAnalysisAdapter } from '../capability/adapters/deterministic-code-analysis';
 import type { SecretAccessor } from '../capability/adapter';
 import type { Task } from '../work-runtime/task';
 import type { ExecutionJob } from '../work-runtime/execution-job';
@@ -47,6 +48,12 @@ export interface DigitalMeRuntimeOptions {
   documentCapability?: 'none' | 'fake' | 'openai-compatible' | 'both';
   openaiCompatible?: OpenAiCompatibleAdapterConfig;
   secrets?: SecretAccessor;
+  /**
+   * P2.1 代码分析能力:
+   * - none:不注册(production packaged 默认)
+   * - deterministic:工程验证用确定性 Adapter(不调模型;不进 packaged)
+   */
+  codeAnalysisCapability?: 'none' | 'deterministic';
 }
 
 /**
@@ -273,19 +280,23 @@ export class DigitalMeRuntime {
       if (this.options.registerOpenAiStub) {
         registry.register(createOpenAiCompatibleAdapterStub());
       }
-      return registry;
-    }
-    if (mode === 'openai-compatible' || mode === 'both') {
+    } else if (mode === 'openai-compatible' || mode === 'both') {
       if (!this.options.openaiCompatible) {
         throw new Error('openaiCompatible config is required when documentCapability uses real model');
       }
       registry.register(createOpenAiCompatibleAdapter(this.options.openaiCompatible));
-    }
-    if (mode === 'fake' || mode === 'both') {
+      if (mode === 'both') {
+        registry.register(createFakeDocumentAdapter(this.options.fakeAdapter));
+      }
+    } else if (mode === 'fake') {
       registry.register(createFakeDocumentAdapter(this.options.fakeAdapter));
+      if (this.options.registerOpenAiStub !== false) {
+        registry.register(createOpenAiCompatibleAdapterStub());
+      }
     }
-    if (mode === 'fake' && this.options.registerOpenAiStub !== false) {
-      registry.register(createOpenAiCompatibleAdapterStub());
+
+    if (this.options.codeAnalysisCapability === 'deterministic') {
+      registry.register(createDeterministicCodeAnalysisAdapter());
     }
     return registry;
   }

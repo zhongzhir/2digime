@@ -198,6 +198,40 @@ select {
   border-top: 1px dashed var(--line);
 }
 
+.bundle-view {
+  display: grid;
+  gap: 12px;
+}
+
+.bundle-view[hidden] {
+  display: none !important;
+}
+
+.bundle-report {
+  margin: 0;
+  padding: 12px;
+  background: #f7f5f1;
+  border: 1px solid var(--line);
+  white-space: pre-wrap;
+  font-family: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.bundle-entries {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.bundle-entries li {
+  padding: 4px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .layout {
   display: grid;
   grid-template-columns: 260px 1fr;
