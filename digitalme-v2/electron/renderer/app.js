@@ -78,6 +78,19 @@
   let displayModelName = null;
   /** 防止并发 capability.list 回写乱序。 */
   let connectionRefreshSeq = 0;
+  /** @type {'document'|'bundle'} */
+  let activeArtifactKind = "document";
+  let lastQualityGrade = null;
+  let lastQualityBannerText = "";
+  let copyBlockedFailed = false;
+
+  function setCopyEnabled(enabled) {
+    if (!els.copy) return;
+    els.copy.disabled = !enabled;
+    els.copy.hidden = !enabled;
+    if (!enabled) els.copy.setAttribute("hidden", "");
+    else els.copy.removeAttribute("hidden");
+  }
   const presets = {
     deepseek: {
       baseUrl: "https://api.deepseek.com/v1",
@@ -367,15 +380,19 @@
     els.retry.disabled = !connected || detail.state !== "attention";
     if (isLatestJobFailed(detail)) {
       activeArtifactId = null;
+      copyBlockedFailed = true;
+      setCopyEnabled(false);
       els.artifactPanel.hidden = true;
       els.revise.disabled = true;
     } else {
+      copyBlockedFailed = false;
       activeArtifactId = detail.artifactIds[0] || null;
       if (activeArtifactId) {
         await loadArtifact(activeArtifactId);
       } else {
         els.artifactPanel.hidden = true;
         els.revise.disabled = true;
+        setCopyEnabled(false);
       }
     }
     await refreshTasks();
@@ -386,10 +403,13 @@
     const content = await api.invoke("artifact.getContent", { artifactId });
     const isBundle = !!(content.content && content.content.kind === "bundle");
     activeArtifactId = artifactId;
+    copyBlockedFailed = false;
     els.artifactPanel.hidden = false;
     els.versionMeta.textContent = `版本 ${content.versionCount}`;
+    setCopyEnabled(true);
 
     if (isBundle) {
+      activeArtifactKind = "bundle";
       els.bundleView.hidden = false;
       els.bundleView.removeAttribute("hidden");
       els.artifactEditor.hidden = true;
@@ -410,6 +430,8 @@
           bannerText: "",
           saveStatus: "代码项目分析结果（只读）",
         };
+      lastQualityGrade = quality && quality.grade ? quality.grade : "usable";
+      lastQualityBannerText = qualityUi.bannerText || "";
       if (els.bundleQuality) {
         if (qualityUi.showBanner) {
           els.bundleQuality.hidden = false;
@@ -478,6 +500,9 @@
       els.saveStatus.textContent = qualityUi.saveStatus;
       els.revise.disabled = true;
     } else {
+      activeArtifactKind = "document";
+      lastQualityGrade = null;
+      lastQualityBannerText = "";
       els.bundleView.hidden = true;
       els.bundleView.setAttribute("hidden", "");
       els.artifactEditor.hidden = false;
@@ -809,8 +834,36 @@
   });
 
   els.copy.addEventListener("click", async () => {
-    await navigator.clipboard.writeText(els.artifactEditor.value || "");
-    els.saveStatus.textContent = "已复制到剪贴板";
+    const resolve =
+      (window.DigitalMeBundleCopy && window.DigitalMeBundleCopy.resolveCopyPayload) ||
+      null;
+    if (!resolve) {
+      els.saveStatus.textContent = "复制功能不可用";
+      return;
+    }
+    const payload = resolve({
+      kind: activeArtifactKind,
+      reportText: els.bundleReport ? els.bundleReport.textContent || "" : "",
+      editorText: els.artifactEditor ? els.artifactEditor.value || "" : "",
+      qualityGrade: lastQualityGrade,
+      qualityBannerText: lastQualityBannerText,
+      failed: copyBlockedFailed,
+    });
+    if (!payload.copyEnabled) {
+      setCopyEnabled(false);
+      els.saveStatus.textContent = payload.error || "当前没有可复制的成果";
+      return;
+    }
+    if (!payload.ok || !payload.text) {
+      els.saveStatus.textContent = payload.error || "没有可复制的内容";
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(payload.text);
+      els.saveStatus.textContent = "已复制";
+    } catch {
+      els.saveStatus.textContent = "复制失败，请重试";
+    }
   });
 
   els.exportMd.addEventListener("click", async () => {
@@ -852,6 +905,8 @@
           els.retry.disabled = !connected || detail.state !== "attention";
           if (isLatestJobFailed(detail) || event.status === "failed") {
             activeArtifactId = null;
+            copyBlockedFailed = true;
+            setCopyEnabled(false);
             els.artifactPanel.hidden = true;
             els.revise.disabled = true;
             els.jobActionable.textContent = userFacingFailureReason(
@@ -859,6 +914,7 @@
               event.progressNote,
             );
           } else if (detail.artifactIds[0]) {
+            copyBlockedFailed = false;
             activeArtifactId = detail.artifactIds[0];
             if (event.status === "succeeded") await loadArtifact(activeArtifactId);
           }

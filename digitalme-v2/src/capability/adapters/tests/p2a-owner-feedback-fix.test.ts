@@ -171,3 +171,98 @@ test('resolveBundleQualityUi maps usable / missing / degraded / needs_attention 
   assert.equal(attention.bannerText.includes('degraded_scan_only'), false);
   assert.equal(attention.bannerText.includes('needs_attention'), false);
 });
+
+function loadResolveCopyPayload(): (input: {
+  kind?: 'document' | 'bundle';
+  reportText?: string;
+  editorText?: string;
+  qualityGrade?: string | null;
+  qualityBannerText?: string;
+  failed?: boolean;
+}) => {
+  ok: boolean;
+  text?: string;
+  error?: string;
+  copyEnabled: boolean;
+} {
+  const src = readFileSync(
+    path.resolve(__dirname, '../../../../electron/renderer/bundle-copy.js'),
+    'utf8',
+  );
+  const mod = {
+    exports: {} as {
+      resolveCopyPayload?: (input: {
+        kind?: 'document' | 'bundle';
+        reportText?: string;
+        editorText?: string;
+        qualityGrade?: string | null;
+        qualityBannerText?: string;
+        failed?: boolean;
+      }) => {
+        ok: boolean;
+        text?: string;
+        error?: string;
+        copyEnabled: boolean;
+      };
+    },
+  };
+  // eslint-disable-next-line no-new-func
+  new Function('module', 'exports', src)(mod, mod.exports);
+  const fn = mod.exports.resolveCopyPayload;
+  if (!fn) throw new Error('resolveCopyPayload missing');
+  return fn;
+}
+
+const resolveCopyPayload = loadResolveCopyPayload();
+
+test('resolveCopyPayload: document non-empty matches editor text', () => {
+  const body = '这是一篇文档成果正文。\n第二段。';
+  const out = resolveCopyPayload({ kind: 'document', editorText: body });
+  assert.equal(out.ok, true);
+  assert.equal(out.copyEnabled, true);
+  assert.equal(out.text, body);
+});
+
+test('resolveCopyPayload: bundle copies report only, not manifest/evidence', () => {
+  const report = '# 报告\n\n结论与建议';
+  const out = resolveCopyPayload({
+    kind: 'bundle',
+    reportText: report,
+    editorText: '{"schemaVersion":"should-not-copy"}',
+    qualityGrade: 'usable',
+  });
+  assert.equal(out.ok, true);
+  assert.equal(out.text, report);
+  assert.equal(out.text!.includes('schemaVersion'), false);
+  assert.equal(out.text!.includes('evidence'), false);
+});
+
+test('resolveCopyPayload: degraded includes scan notice without raw grade', () => {
+  const report = '# 结构概览\n\n模块列表';
+  const out = resolveCopyPayload({
+    kind: 'bundle',
+    reportText: report,
+    qualityGrade: 'degraded_scan_only',
+    qualityBannerText: '需要处理：本次仅完成结构扫描，未完成深度分析',
+  });
+  assert.equal(out.ok, true);
+  assert.ok(out.text!.includes('本次仅完成结构扫描，未完成深度分析'));
+  assert.ok(out.text!.includes('模块列表'));
+  assert.equal(out.text!.includes('degraded_scan_only'), false);
+});
+
+test('resolveCopyPayload: failed disables copy; empty body errors', () => {
+  const failed = resolveCopyPayload({
+    kind: 'bundle',
+    reportText: 'x',
+    failed: true,
+  });
+  assert.equal(failed.ok, false);
+  assert.equal(failed.copyEnabled, false);
+  assert.ok(failed.error);
+
+  const empty = resolveCopyPayload({ kind: 'document', editorText: '   ' });
+  assert.equal(empty.ok, false);
+  assert.equal(empty.copyEnabled, true);
+  assert.equal(empty.error, '没有可复制的内容');
+});
