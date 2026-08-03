@@ -272,7 +272,7 @@ async function run(deps) {
         await sleep(800);
         // 选中代码分析结果，驱动 bundle 只读视图
         await win.webContents.executeJavaScript(`(() => {
-          const sel = document.getElementById('task-type');
+          const sel = document.getElementById('artifact-type');
           if (sel) { sel.value = 'code-analysis'; sel.dispatchEvent(new Event('change')); }
           return true;
         })()`);
@@ -280,7 +280,7 @@ async function run(deps) {
         const ui = await win.webContents.executeJavaScript(`(() => {
           const text = document.body ? document.body.innerText : '';
           const html = document.body ? document.body.innerHTML : '';
-          const typeSel = document.getElementById('task-type');
+          const typeSel = document.getElementById('artifact-type');
           const options = typeSel
             ? Array.from(typeSel.options).map((o) => ({ value: o.value, label: o.textContent.trim() }))
             : [];
@@ -293,6 +293,7 @@ async function run(deps) {
           return {
             hasDocType: options.some((o) => o.value === 'document' && /文档/.test(o.label)),
             hasCodeType: options.some((o) => o.value === 'code-analysis' && /代码项目分析/.test(o.label)),
+            options,
             hasRevealControl: !!reveal,
             hasBundleView: !!bundleView,
             hasInternalLeak: /grounded|tool_calls|DSML|MCP\\/npx|一等公民/.test(text + html),
