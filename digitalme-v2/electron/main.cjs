@@ -150,6 +150,7 @@ function createWindow(bootInfo) {
   mainWindow.webContents.on("did-finish-load", () => {
     mainWindow.webContents.send("shell:boot", bootInfo || lastBootInfo);
   });
+  return mainWindow;
 }
 
 async function rebootstrapAndNotify() {

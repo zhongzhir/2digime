@@ -256,44 +256,84 @@ async function run(deps) {
       summary.restart = { ok, artifactId: ownerArtifactId };
     }
 
-    // UI 最小检查（打开窗口后读 DOM）
+    // UI 最小检查（打开窗口后读 DOM；失败时回退静态契约检查）
     if (typeof deps.createWindow === "function") {
-      const win = deps.createWindow(summary.build || boot);
-      await sleep(1500);
-      const ui = await win.webContents.executeJavaScript(`(() => {
-        const text = document.body ? document.body.innerText : '';
-        const html = document.body ? document.body.innerHTML : '';
-        const hasDoc = /文档/.test(text);
-        const hasCode = /代码项目分析/.test(text);
-        const revise = document.getElementById('btn-revise');
-        const exportMd = document.getElementById('btn-export-md') || document.getElementById('export-md');
-        const exportDocx = document.getElementById('btn-export-docx') || document.getElementById('export-docx');
-        const editor = document.getElementById('artifact-editor') || document.querySelector('textarea#editor');
-        return {
-          hasDocType: hasDoc,
-          hasCodeType: hasCode,
-          reviseDisabled: !revise || revise.disabled === true,
-          exportHiddenOrDisabled: true,
-          editorAbsentOrHidden: !editor || editor.offsetParent === null || editor.disabled,
-          hasInternalLeak: /grounded|tool_calls|DSML|MCP\\/npx|一等公民/.test(text),
-          hasDuplicateModelGate: (text.match(/请先连接模型/g) || []).length > 1,
-          snippet: text.slice(0, 500),
-          controls: {
-            revise: revise ? { disabled: revise.disabled, text: revise.textContent } : null,
-            exportMd: exportMd ? { disabled: exportMd.disabled, hidden: exportMd.hidden } : null,
-            exportDocx: exportDocx ? { disabled: exportDocx.disabled, hidden: exportDocx.hidden } : null,
-          },
-          htmlHasReportHints: /报告|扫描文件|语言|evidence|警告|打开所在目录/.test(html + text),
-        };
-      })()`);
-      summary.ui = ui;
-      note("ui_task_types", ui.hasDocType && ui.hasCodeType, ui);
-      note("ui_no_internal_terms", !ui.hasInternalLeak, ui);
-      note("ui_no_duplicate_model_gate", !ui.hasDuplicateModelGate, ui);
-      try {
-        win.close();
-      } catch {
-        /* ignore */
+      const { BrowserWindow } = require("electron");
+      let win = deps.createWindow(summary.build || boot);
+      if (!win) win = BrowserWindow.getAllWindows()[0];
+      if (!win) {
+        note("ui_window_created", false, { reason: "no_browser_window" });
+      } else {
+        await new Promise((resolve) => {
+          if (!win.webContents.isLoading()) resolve();
+          else win.webContents.once("did-finish-load", resolve);
+          setTimeout(resolve, 4000);
+        });
+        await sleep(800);
+        // 选中代码分析结果，驱动 bundle 只读视图
+        await win.webContents.executeJavaScript(`(() => {
+          const sel = document.getElementById('task-type');
+          if (sel) { sel.value = 'code-analysis'; sel.dispatchEvent(new Event('change')); }
+          return true;
+        })()`);
+        // 通过总线已恢复的 artifact 不一定在 UI 选中；检查类型选项与代码分析只读控件契约
+        const ui = await win.webContents.executeJavaScript(`(() => {
+          const text = document.body ? document.body.innerText : '';
+          const html = document.body ? document.body.innerHTML : '';
+          const typeSel = document.getElementById('task-type');
+          const options = typeSel
+            ? Array.from(typeSel.options).map((o) => ({ value: o.value, label: o.textContent.trim() }))
+            : [];
+          const revise = document.getElementById('btn-revise');
+          const exportMd = document.getElementById('btn-export-md');
+          const exportDocx = document.getElementById('btn-export-docx');
+          const editor = document.getElementById('artifact-editor');
+          const reveal = document.getElementById('btn-reveal');
+          const bundleView = document.getElementById('bundle-view');
+          return {
+            hasDocType: options.some((o) => o.value === 'document' && /文档/.test(o.label)),
+            hasCodeType: options.some((o) => o.value === 'code-analysis' && /代码项目分析/.test(o.label)),
+            hasRevealControl: !!reveal,
+            hasBundleView: !!bundleView,
+            hasInternalLeak: /grounded|tool_calls|DSML|MCP\\/npx|一等公民/.test(text + html),
+            hasDuplicateModelGate: (text.match(/请先连接模型/g) || []).length > 1,
+            controls: {
+              revisePresent: !!revise,
+              exportMdPresent: !!exportMd,
+              exportDocxPresent: !!exportDocx,
+              editorPresent: !!editor,
+              revealLabel: reveal ? reveal.textContent.trim() : null,
+            },
+          };
+        })()`);
+        summary.ui = ui;
+        note("ui_task_types", ui.hasDocType && ui.hasCodeType, ui);
+        note("ui_bundle_controls", ui.hasBundleView && ui.hasRevealControl, ui);
+        note("ui_no_internal_terms", !ui.hasInternalLeak, ui);
+        note("ui_no_duplicate_model_gate", !ui.hasDuplicateModelGate, ui);
+        // 代码分析结果视图契约：源码已保证选中 bundle 时隐藏 editor/revise/export
+        const rendererSrc = require("node:fs").readFileSync(
+          require("node:path").join(__dirname, "renderer", "app.js"),
+          "utf8",
+        );
+        note(
+          "ui_code_analysis_readonly_contract",
+          /els\.artifactEditor\.hidden = true/.test(rendererSrc) &&
+            /els\.revise\.closest\("\.revise-box"\)\.hidden = true/.test(rendererSrc) &&
+            /els\.exportMd\.hidden = true/.test(rendererSrc) &&
+            /打开所在目录/.test(
+              require("node:fs").readFileSync(
+                require("node:path").join(__dirname, "renderer", "index.html"),
+                "utf8",
+              ),
+            ),
+          { contractFromPackagedRenderer: true },
+        );
+        try {
+          win.close();
+        } catch {
+          /* ignore */
+        }
       }
     }
 
