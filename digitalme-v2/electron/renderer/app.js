@@ -69,6 +69,8 @@
   /** 设置页/展示用元数据;连接态不以本地 flag 为准。 */
   let shellStatus = null;
   let displayModelName = null;
+  /** 防止并发 capability.list 回写乱序。 */
+  let connectionRefreshSeq = 0;
   const presets = {
     deepseek: {
       baseUrl: "https://api.deepseek.com/v1",
@@ -105,41 +107,76 @@
     setView("settings");
   }
 
-  function deriveConnectedFromCapabilities(capabilities) {
+  /**
+   * 顶部与任务区唯一派生函数。
+   * available → 不显示横幅; unavailable / needs_setup / 无文档能力 → 显示横幅。
+   */
+  function deriveModelAvailability(capabilities) {
     const list = Array.isArray(capabilities) ? capabilities : [];
-    return list.some(
+    const documentCaps = list.filter(
       (c) =>
         c &&
-        c.availability === "available" &&
         Array.isArray(c.outputArtifactTypes) &&
         c.outputArtifactTypes.includes("document"),
     );
+    const available = documentCaps.some((c) => c.availability === "available");
+    const needsSetup = documentCaps.some((c) => c.availability === "needs_setup");
+    return {
+      available,
+      needsSetup: !available && needsSetup,
+      /** 仅非 available 时渲染横幅 */
+      showGate: !available,
+    };
   }
 
   /** 唯一连接态来源:CapabilityRegistration.availability。 */
   async function refreshConnectionFromCapabilities() {
-    let connected = false;
+    const seq = ++connectionRefreshSeq;
+    let capabilities = [];
     try {
-      const { capabilities } = await api.invoke("capability.list", {});
-      connected = deriveConnectedFromCapabilities(capabilities);
+      const result = await api.invoke("capability.list", {});
+      capabilities = (result && result.capabilities) || [];
     } catch {
-      connected = false;
+      capabilities = [];
     }
-    applyConnectionUi(connected);
-    return connected;
+    if (seq !== connectionRefreshSeq) {
+      return deriveModelAvailability(capabilities).available;
+    }
+    const state = deriveModelAvailability(capabilities);
+    applyConnectionUi(state);
+    return state.available;
   }
 
-  function applyConnectionUi(connected) {
+  function applyConnectionUi(state) {
+    const available = !!(state && state.available);
+    const showGate = state ? !!state.showGate : !available;
     const name = displayModelName || (shellStatus && shellStatus.model) || "";
-    const connectedText = connected && name ? `已连接模型 · ${name}` : connected ? "已连接模型" : "未连接模型";
+    const connectedText = available
+      ? name
+        ? `已连接模型 · ${name}`
+        : "已连接模型"
+      : "未连接模型";
+
+    // 顶部与欢迎区、任务横幅共用同一派生结果
     els.modelStatus.textContent = connectedText;
-    els.welcomeModelStatus.textContent = connected
+    els.welcomeModelStatus.textContent = available
       ? connectedText
       : "未连接模型。请先在设置中连接真实模型。";
-    els.welcomeModelStatus.classList.toggle("error", !connected);
-    els.modelGate.hidden = connected;
-    els.submit.disabled = !connected;
-    if (!connected) {
+    els.welcomeModelStatus.classList.toggle("error", !available);
+
+    // available 时横幅完全不渲染(hidden + 显式 display,避免 CSS grid 覆盖)
+    if (showGate) {
+      els.modelGate.hidden = false;
+      els.modelGate.removeAttribute("hidden");
+      els.modelGate.style.display = "";
+    } else {
+      els.modelGate.hidden = true;
+      els.modelGate.setAttribute("hidden", "");
+      els.modelGate.style.display = "none";
+    }
+
+    els.submit.disabled = !available;
+    if (!available) {
       els.submit.title = "请先连接模型";
       els.retry.disabled = true;
       els.revise.disabled = true;
@@ -147,7 +184,7 @@
       els.submit.title = "";
       els.revise.disabled = !activeArtifactId;
     }
-    const configured = !!(shellStatus && shellStatus.credentialConfigured) || connected;
+    const configured = !!(shellStatus && shellStatus.credentialConfigured) || available;
     els.modelKeyState.textContent = configured ? "凭证状态：已配置" : "凭证状态：未配置";
     els.deleteModel.disabled = !configured;
   }
