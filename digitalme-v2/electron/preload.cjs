@@ -52,5 +52,8 @@ contextBridge.exposeInMainWorld("digitalMe", {
     pickOpenDirectory: () => ipcRenderer.invoke("shell:pickOpenDirectory"),
     pickSaveDirectory: () => ipcRenderer.invoke("shell:pickSaveDirectory"),
   },
+  getModelStatus: () => ipcRenderer.invoke("shell:getModelStatus"),
   saveModelCredential: (input) => ipcRenderer.invoke("shell:saveModelCredential", input),
+  testModelConnection: (input) => ipcRenderer.invoke("shell:testModelConnection", input),
+  deleteModelCredential: (input) => ipcRenderer.invoke("shell:deleteModelCredential", input),
 });

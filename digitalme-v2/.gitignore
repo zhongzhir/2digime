@@ -4,5 +4,6 @@ scripts/_mvp-p14-real-capability-evidence/
 scripts/_mvp-p15-dev-acceptance-evidence/
 scripts/_mvp-p16-packaged-acceptance-evidence/
 scripts/_mvp-p16-packaged-smoke-evidence/
+scripts/_mvp-p16-credential-setup-evidence/
 release-staging/
 build-meta.json

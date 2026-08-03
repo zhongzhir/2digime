@@ -37,11 +37,14 @@ export interface DigitalMeRuntimeOptions {
   registerOpenAiStub?: boolean;
   /**
    * 文档能力来源:
-   * - fake:仅 Fake(默认,单元测试)
+   * - none:不注册任何文档能力(App Shell 未配置真实模型时;禁止静默 Fake)
+   * - fake:仅 Fake(仅单元/集成测试)
    * - openai-compatible:真实模型 Adapter(需 secrets + 配置)
-   * - both:真实优先注册,Fake 作为后备
+   * - both:真实优先注册,Fake 作为后备(仅测试)
+   *
+   * App Shell(dev/packaged)不得传入 fake/both。
    */
-  documentCapability?: 'fake' | 'openai-compatible' | 'both';
+  documentCapability?: 'none' | 'fake' | 'openai-compatible' | 'both';
   openaiCompatible?: OpenAiCompatibleAdapterConfig;
   secrets?: SecretAccessor;
 }
@@ -212,17 +215,24 @@ export class DigitalMeRuntime {
 
     const registry = new CapabilityRegistry();
     const mode = this.options.documentCapability ?? 'fake';
-    if (mode === 'openai-compatible' || mode === 'both') {
-      if (!this.options.openaiCompatible) {
-        throw new Error('openaiCompatible config is required when documentCapability uses real model');
+    if (mode === 'none') {
+      // 未配置真实模型:不注册可选文档能力,也不注册 Fake。
+      if (this.options.registerOpenAiStub) {
+        registry.register(createOpenAiCompatibleAdapterStub());
       }
-      registry.register(createOpenAiCompatibleAdapter(this.options.openaiCompatible));
-    }
-    if (mode === 'fake' || mode === 'both') {
-      registry.register(createFakeDocumentAdapter(this.options.fakeAdapter));
-    }
-    if (mode === 'fake' && this.options.registerOpenAiStub !== false) {
-      registry.register(createOpenAiCompatibleAdapterStub());
+    } else {
+      if (mode === 'openai-compatible' || mode === 'both') {
+        if (!this.options.openaiCompatible) {
+          throw new Error('openaiCompatible config is required when documentCapability uses real model');
+        }
+        registry.register(createOpenAiCompatibleAdapter(this.options.openaiCompatible));
+      }
+      if (mode === 'fake' || mode === 'both') {
+        registry.register(createFakeDocumentAdapter(this.options.fakeAdapter));
+      }
+      if (mode === 'fake' && this.options.registerOpenAiStub !== false) {
+        registry.register(createOpenAiCompatibleAdapterStub());
+      }
     }
     this.registry = registry;
 

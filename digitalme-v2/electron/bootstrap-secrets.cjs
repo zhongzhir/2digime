@@ -1,9 +1,9 @@
 "use strict";
 /**
  * V2 模型凭证引导(App Shell only)。
- * - packaged:仅 V2 FileSecretStore + Electron safeStorage,禁止 Legacy 路径;
- * - 一次性导入文件 DIGITALME_V2_CREDENTIAL_IMPORT(JSON),读入后写入 V2 存储,不落 env/日志;
- * - 开发态也可写入同一 V2 存储;可选从既有运行时文件导入(仍不经领域层)。
+ * - packaged/dev:仅 V2 FileSecretStore + Electron safeStorage,禁止 Legacy 路径;
+ * - 未配置凭证时 documentCapability=none(禁止静默 Fake);
+ * - API Key 只进加密 SecretStore,不进 model-config.json / 日志 / 命令行。
  */
 const fs = require("node:fs");
 const path = require("node:path");
@@ -15,6 +15,22 @@ const {
   createElectronSafeStorageCipherAdapter,
   isElectronSafeStorageAvailable,
 } = require("../dist/infrastructure/electron-safe-storage-cipher");
+const { chatComplete } = require("../dist/infrastructure/model-http");
+
+const DEFAULT_PROVIDER_PRESETS = {
+  deepseek: {
+    providerId: "openai-compatible",
+    label: "DeepSeek",
+    baseUrl: "https://api.deepseek.com/v1",
+    model: "deepseek-v4-flash",
+  },
+  "openai-compatible": {
+    providerId: "openai-compatible",
+    label: "OpenAI-compatible",
+    baseUrl: "",
+    model: "",
+  },
+};
 
 function modelConfigPath(userDataPath) {
   return path.join(userDataPath, "model-config.json");
@@ -35,6 +51,7 @@ function readJsonSafe(file) {
 function writeModelConfig(userDataPath, cfg) {
   fs.mkdirSync(userDataPath, { recursive: true });
   const safe = {
+    providerPreset: cfg.providerPreset || "openai-compatible",
     providerId: cfg.providerId || "openai-compatible",
     baseUrl: String(cfg.baseUrl || "").replace(/\/+$/, ""),
     model: String(cfg.model || "").trim(),
@@ -46,11 +63,57 @@ function writeModelConfig(userDataPath, cfg) {
 
 function readModelConfig(userDataPath) {
   const parsed = readJsonSafe(modelConfigPath(userDataPath));
-  if (!parsed || !parsed.baseUrl || !parsed.model) return null;
+  if (!parsed) return null;
   return {
+    providerPreset: parsed.providerPreset || inferPreset(parsed.baseUrl),
     providerId: parsed.providerId || "openai-compatible",
-    baseUrl: String(parsed.baseUrl).replace(/\/+$/, ""),
-    model: String(parsed.model).trim(),
+    baseUrl: String(parsed.baseUrl || "").replace(/\/+$/, ""),
+    model: String(parsed.model || "").trim(),
+  };
+}
+
+function inferPreset(baseUrl) {
+  const host = String(baseUrl || "").toLowerCase();
+  if (host.includes("deepseek.com")) return "deepseek";
+  return "openai-compatible";
+}
+
+function hostOf(baseUrl) {
+  try {
+    return new URL(baseUrl).host;
+  } catch {
+    return "unknown";
+  }
+}
+
+function publicStatus(cfg, credentialConfigured, isPackaged, reason) {
+  return {
+    credentialConfigured: !!credentialConfigured,
+    needsCredentialSetup: !credentialConfigured,
+    providerPreset: (cfg && cfg.providerPreset) || "deepseek",
+    providerId: (cfg && cfg.providerId) || "openai-compatible",
+    baseUrl: (cfg && cfg.baseUrl) || DEFAULT_PROVIDER_PRESETS.deepseek.baseUrl,
+    model: (cfg && cfg.model) || DEFAULT_PROVIDER_PRESETS.deepseek.model,
+    modelMeta: credentialConfigured
+      ? {
+          model: cfg.model,
+          baseUrlHost: hostOf(cfg.baseUrl),
+          source: isPackaged ? "v2_secret_store_packaged" : "v2_secret_store_dev",
+        }
+      : null,
+    reason: reason || null,
+    presets: {
+      deepseek: {
+        label: DEFAULT_PROVIDER_PRESETS.deepseek.label,
+        baseUrl: DEFAULT_PROVIDER_PRESETS.deepseek.baseUrl,
+        model: DEFAULT_PROVIDER_PRESETS.deepseek.model,
+      },
+      "openai-compatible": {
+        label: DEFAULT_PROVIDER_PRESETS["openai-compatible"].label,
+        baseUrl: "",
+        model: "",
+      },
+    },
   };
 }
 
@@ -79,9 +142,79 @@ async function importCredentialOnce(store, userDataPath, importFile) {
   if (!apiKey || !baseUrl || !model) return null;
 
   await store.put(providerCredentialKey(providerId), apiKey);
-  writeModelConfig(userDataPath, { providerId, baseUrl, model });
-  // 不删除导入文件(可能只读);调用方负责放在临时目录。
+  writeModelConfig(userDataPath, {
+    providerPreset: inferPreset(baseUrl),
+    providerId,
+    baseUrl,
+    model,
+  });
   return { providerId, baseUrl, model, source: "credential_import" };
+}
+
+function createCredentialOps(store, userDataPath) {
+  return {
+    saveCredential: async (input) => {
+      const providerId = input.providerId || "openai-compatible";
+      const apiKey = String(input.apiKey || "").trim();
+      const baseUrl = String(input.baseUrl || "").replace(/\/+$/, "");
+      const model = String(input.model || "").trim();
+      if (!apiKey || !baseUrl || !model) {
+        throw new Error("请填写完整的模型连接信息");
+      }
+      await store.put(providerCredentialKey(providerId), apiKey);
+      writeModelConfig(userDataPath, {
+        providerPreset: input.providerPreset || inferPreset(baseUrl),
+        providerId,
+        baseUrl,
+        model,
+      });
+      return { ok: true };
+    },
+    deleteCredential: async (input = {}) => {
+      const cfg = readModelConfig(userDataPath);
+      const providerId =
+        (input && input.providerId) || (cfg && cfg.providerId) || "openai-compatible";
+      await store.delete(providerCredentialKey(providerId));
+      return { ok: true };
+    },
+    testConnection: async (input = {}) => {
+      const cfg = readModelConfig(userDataPath) || {};
+      const providerId =
+        String(input.providerId || cfg.providerId || "openai-compatible").trim() ||
+        "openai-compatible";
+      const baseUrl = String(input.baseUrl || cfg.baseUrl || "")
+        .trim()
+        .replace(/\/+$/, "");
+      const model = String(input.model || cfg.model || "").trim();
+      const apiKeyFromInput = String(input.apiKey || "").trim();
+      const apiKey = apiKeyFromInput || (await store.get(providerCredentialKey(providerId)));
+      if (!apiKey || !baseUrl || !model) {
+        throw new Error("请先填写并保存完整的模型连接信息");
+      }
+      const result = await chatComplete({
+        baseUrl,
+        apiKey,
+        model,
+        messages: [
+          {
+            role: "user",
+            content: "Reply with exactly: ok",
+          },
+        ],
+        maxTokens: 16,
+        timeoutMs: 30_000,
+      });
+      const text = String(result.text || "").trim().toLowerCase();
+      if (!text) {
+        throw new Error("模型未返回有效内容");
+      }
+      return {
+        ok: true,
+        model,
+        baseUrlHost: hostOf(baseUrl),
+      };
+    },
+  };
 }
 
 /**
@@ -95,10 +228,18 @@ async function importCredentialOnce(store, userDataPath, importFile) {
 async function resolveModelConfig(opts) {
   const { safeStorage, userDataPath, isPackaged } = opts;
   if (!isElectronSafeStorageAvailable(safeStorage)) {
+    const cfg = readModelConfig(userDataPath) || {
+      providerPreset: "deepseek",
+      providerId: "openai-compatible",
+      baseUrl: DEFAULT_PROVIDER_PRESETS.deepseek.baseUrl,
+      model: DEFAULT_PROVIDER_PRESETS.deepseek.model,
+    };
     return {
       ok: false,
       reason: "safeStorage_unavailable",
-      documentCapability: "fake",
+      documentCapability: "none",
+      needsCredentialSetup: true,
+      status: publicStatus(cfg, false, isPackaged, "safeStorage_unavailable"),
     };
   }
 
@@ -108,14 +249,13 @@ async function resolveModelConfig(opts) {
     filePath: secretsPath(userDataPath),
     cipher,
   });
+  const ops = createCredentialOps(store, userDataPath);
 
-  // 一次性导入(工程验收 / 首次设置)
   const importFile = process.env.DIGITALME_V2_CREDENTIAL_IMPORT || "";
   if (importFile) {
     await importCredentialOnce(store, userDataPath, importFile);
   }
 
-  // 开发态:可从本机运行时凭证文件导入到 V2 存储(仍不读 Legacy SecretStore)
   if (!isPackaged && opts.allowDevRuntimeFile !== false) {
     const runtimeFile = path.resolve(
       __dirname,
@@ -131,11 +271,12 @@ async function resolveModelConfig(opts) {
   }
 
   let cfg = readModelConfig(userDataPath);
-  if (!cfg) {
+  if (!cfg || !cfg.baseUrl || !cfg.model) {
     cfg = {
+      providerPreset: "deepseek",
       providerId: "openai-compatible",
-      baseUrl: "https://api.deepseek.com/v1",
-      model: "deepseek-v4-flash",
+      baseUrl: DEFAULT_PROVIDER_PRESETS.deepseek.baseUrl,
+      model: DEFAULT_PROVIDER_PRESETS.deepseek.model,
     };
   }
 
@@ -144,8 +285,11 @@ async function resolveModelConfig(opts) {
     return {
       ok: false,
       reason: "no_model_credential",
-      documentCapability: "fake",
+      documentCapability: "none",
       needsCredentialSetup: true,
+      status: publicStatus(cfg, false, isPackaged, "no_model_credential"),
+      secrets: store.accessor(),
+      ...ops,
     };
   }
 
@@ -162,24 +306,12 @@ async function resolveModelConfig(opts) {
     secrets: store.accessor(),
     modelMeta: {
       model: cfg.model,
-      baseUrlHost: (() => {
-        try {
-          return new URL(cfg.baseUrl).host;
-        } catch {
-          return "unknown";
-        }
-      })(),
+      baseUrlHost: hostOf(cfg.baseUrl),
       source: isPackaged ? "v2_secret_store_packaged" : "v2_secret_store_dev",
     },
-    saveCredential: async (input) => {
-      const providerId = input.providerId || "openai-compatible";
-      await store.put(providerCredentialKey(providerId), String(input.apiKey || "").trim());
-      writeModelConfig(userDataPath, {
-        providerId,
-        baseUrl: input.baseUrl,
-        model: input.model,
-      });
-    },
+    status: publicStatus(cfg, true, isPackaged, null),
+    needsCredentialSetup: false,
+    ...ops,
   };
 }
 
@@ -201,4 +333,5 @@ module.exports = {
   readModelConfig,
   secretsPath,
   modelConfigPath,
+  DEFAULT_PROVIDER_PRESETS,
 };

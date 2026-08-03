@@ -26,8 +26,57 @@
           <div class="row">
             <button type="button" id="btn-create-pkg" class="primary">创建主体包</button>
             <button type="button" id="btn-open-pkg">打开已有主体包</button>
+            <button type="button" id="btn-open-settings-welcome" class="ghost">设置</button>
           </div>
+          <p id="welcome-model-status" class="status"></p>
           <p id="welcome-status" class="status" hidden></p>
+        </div>
+      </section>
+
+      <section id="view-settings" class="view" hidden>
+        <header class="topbar">
+          <div>
+            <p class="brand-sm">Digital Me</p>
+            <h1>设置</h1>
+          </div>
+          <button type="button" id="btn-settings-back">返回</button>
+        </header>
+        <div class="welcome-actions settings-panel">
+          <h2>模型连接</h2>
+          <p class="muted">
+            连接真实模型后才能开始处理任务。密钥仅保存在本机安全存储中，界面不会回显明文。
+          </p>
+          <label class="field">
+            <span>服务提供方</span>
+            <select id="model-provider">
+              <option value="deepseek">DeepSeek</option>
+              <option value="openai-compatible">OpenAI-compatible</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Base URL</span>
+            <input id="model-base-url" type="text" placeholder="https://api.example.com/v1" autocomplete="off" />
+          </label>
+          <label class="field">
+            <span>Model ID</span>
+            <input id="model-id" type="text" placeholder="例如 deepseek-v4-flash" autocomplete="off" />
+          </label>
+          <label class="field">
+            <span>API Key</span>
+            <input
+              id="model-api-key"
+              type="password"
+              placeholder="仅在保存时写入，不会回显"
+              autocomplete="new-password"
+            />
+            <span id="model-key-state" class="meta">凭证状态：未配置</span>
+          </label>
+          <div class="row">
+            <button type="button" id="btn-save-model" class="primary">保存</button>
+            <button type="button" id="btn-test-model">测试连接</button>
+            <button type="button" id="btn-delete-model" class="ghost">删除凭证</button>
+          </div>
+          <p id="settings-status" class="status" aria-live="polite"></p>
         </div>
       </section>
 
@@ -37,7 +86,10 @@
             <p class="brand-sm">Digital Me</p>
             <h1 id="pkg-title">主体</h1>
           </div>
-          <p id="model-status" class="meta"></p>
+          <div class="topbar-actions">
+            <p id="model-status" class="meta"></p>
+            <button type="button" id="btn-open-settings" class="ghost">设置</button>
+          </div>
         </header>
 
         <div class="layout">
@@ -49,6 +101,10 @@
 
           <main class="panel grow">
             <h2>新建任务</h2>
+            <div id="model-gate" class="model-gate" hidden>
+              <p>请先连接模型，才能开始处理任务。</p>
+              <button type="button" id="btn-goto-settings" class="primary">前往设置</button>
+            </div>
             <label class="field">
               <span>你想完成什么</span>
               <textarea

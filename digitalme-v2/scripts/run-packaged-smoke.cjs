@@ -12,6 +12,7 @@ function latestStaging() {
   const dirs = fs
     .readdirSync(base)
     .filter((n) => n.startsWith("v2-") && fs.statSync(path.join(base, n)).isDirectory())
+    .filter((n) => !fs.existsSync(path.join(base, n, "REJECTED")))
     .sort();
   return dirs.length ? path.join(base, dirs[dirs.length - 1]) : null;
 }
