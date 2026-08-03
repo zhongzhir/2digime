@@ -53,6 +53,11 @@ export const SENSITIVE_DIR_NAMES = [
   '__pycache__',
   '.idea',
   '.vscode',
+  '.next',
+  '.nuxt',
+  '.turbo',
+  '.cache',
+  '.pnpm-store',
 ] as const;
 
 /** 文件级硬排除(凭证与密钥):命中即跳过,永不打开文件句柄。 */

@@ -157,16 +157,54 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
   async saveEdit(artifactId: string, text: string): Promise<{ version: ArtifactVersion }> {
     const artifact = await this.requireArtifact(artifactId);
     const previous = headVersion(artifact);
-    if (previous.content.kind !== 'text') {
-      throw new Error('only text artifacts can be edited in this release');
+    let previousText = '';
+    let nextContent: ArtifactContent;
+
+    if (previous.content.kind === 'text') {
+      previousText = await this.contentStore.getText(previous.content);
+      const stored = await this.contentStore.putText(text, previous.content.format);
+      nextContent = stored.content;
+    } else if (previous.content.kind === 'bundle') {
+      // P2.2:允许修改 bundle 中的 report 文本以回流成长;其他条目保持不变。
+      const tmpDir = path.join(artifact.storageDir, '_edit-tmp');
+      await fs.mkdir(tmpDir, { recursive: true });
+      const rebuilt: Array<{ sourcePath: string; mediaType: string; role?: string }> = [];
+      for (const entry of previous.content.entries) {
+        const role = entry.role || 'entry';
+        const fileName =
+          role === 'report'
+            ? 'report.md'
+            : role === 'manifest'
+              ? 'manifest.json'
+              : role === 'evidence'
+                ? 'evidence.json'
+                : `${role}.bin`;
+        const target = path.join(tmpDir, fileName);
+        if (role === 'report') {
+          previousText = (await this.contentStore.readBytes(entry.ref)).toString('utf8');
+          await fs.writeFile(target, text, 'utf8');
+        } else {
+          const bytes = await this.contentStore.readBytes(entry.ref);
+          await fs.writeFile(target, bytes);
+        }
+        const item: { sourcePath: string; mediaType: string; role?: string } = {
+          sourcePath: target,
+          mediaType: entry.mediaType,
+        };
+        if (entry.role !== undefined) item.role = entry.role;
+        rebuilt.push(item);
+      }
+      nextContent = await this.contentStore.putBundle(rebuilt);
+      await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => undefined);
+    } else {
+      throw new Error('only text or bundle(report) artifacts can be edited in this release');
     }
-    const previousText = await this.contentStore.getText(previous.content);
-    const stored = await this.contentStore.putText(text, previous.content.format);
+
     const version: ArtifactVersion = {
       versionId: newId('artifactVersion'),
       createdAt: nowIso(),
       author: 'user',
-      content: stored.content,
+      content: nextContent,
     };
     const next: Artifact = {
       ...artifact,

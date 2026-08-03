@@ -76,6 +76,7 @@ test('P2.0 敏感路径排除(Snapshot 构建期):凭证/密钥/生成目录命�
     '.git/config',
     'packages/app/dist/main.js',
     '.vscode/settings.json',
+    '.next/server.js',
   ];
   for (const p of sensitive) {
     assert.equal(isSensitivePath(p), true, `应排除: ${p}`);

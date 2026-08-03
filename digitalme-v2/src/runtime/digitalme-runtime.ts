@@ -13,6 +13,10 @@ import {
   type OpenAiCompatibleAdapterConfig,
 } from '../capability/adapters/openai-compatible';
 import { createDeterministicCodeAnalysisAdapter } from '../capability/adapters/deterministic-code-analysis';
+import {
+  createCodeRepoAnalysisAdapter,
+  createCodeRepoAnalysisAdapterStub,
+} from '../capability/adapters/code-repo-analysis';
 import type { SecretAccessor } from '../capability/adapter';
 import type { Task } from '../work-runtime/task';
 import type { ExecutionJob } from '../work-runtime/execution-job';
@@ -49,11 +53,13 @@ export interface DigitalMeRuntimeOptions {
   openaiCompatible?: OpenAiCompatibleAdapterConfig;
   secrets?: SecretAccessor;
   /**
-   * P2.1 代码分析能力:
-   * - none:不注册(production packaged 默认)
-   * - deterministic:工程验证用确定性 Adapter(不调模型;不进 packaged)
+   * P2.1/P2.2 代码分析能力:
+   * - none:不注册
+   * - needs_setup:注册占位(无凭证,不提供本地替代)
+   * - deterministic:P2.1 工程验证 Adapter(不进 production)
+   * - openai-compatible:P2.2 真实模型分析
    */
-  codeAnalysisCapability?: 'none' | 'deterministic';
+  codeAnalysisCapability?: 'none' | 'needs_setup' | 'deterministic' | 'openai-compatible';
 }
 
 /**
@@ -295,8 +301,15 @@ export class DigitalMeRuntime {
       }
     }
 
-    if (this.options.codeAnalysisCapability === 'deterministic') {
+    if (this.options.codeAnalysisCapability === 'openai-compatible') {
+      if (!this.options.openaiCompatible) {
+        throw new Error('openaiCompatible config is required for real code analysis');
+      }
+      registry.register(createCodeRepoAnalysisAdapter(this.options.openaiCompatible));
+    } else if (this.options.codeAnalysisCapability === 'deterministic') {
       registry.register(createDeterministicCodeAnalysisAdapter());
+    } else if (this.options.codeAnalysisCapability === 'needs_setup') {
+      registry.register(createCodeRepoAnalysisAdapterStub());
     }
     return registry;
   }

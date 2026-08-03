@@ -6,5 +6,6 @@ scripts/_mvp-p16-packaged-acceptance-evidence/
 scripts/_mvp-p16-packaged-smoke-evidence/
 scripts/_mvp-p16-credential-setup-evidence/
 scripts/_mvp-p17-owner-feedback-evidence/
+scripts/_mvp-p22-real-code-analysis-evidence/
 release-staging/
 build-meta.json

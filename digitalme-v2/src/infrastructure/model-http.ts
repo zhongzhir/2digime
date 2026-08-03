@@ -40,6 +40,8 @@ export interface ChatCompleteOptions {
   maxTokens?: number;
   timeoutMs?: number; // 默认 120s
   signal?: AbortSignal;
+  /** OpenAI-compatible response_format,如 { type: 'json_object' }。 */
+  responseFormat?: { type: string };
 }
 
 export interface ChatCompleteResult {
@@ -54,7 +56,14 @@ export async function chatComplete(options: ChatCompleteOptions): Promise<ChatCo
     choices?: Array<{ message?: { content?: string } }>;
     usage?: { total_tokens?: number };
   };
-  const text = body.choices?.[0]?.message?.content;
+  const message = body.choices?.[0]?.message as
+    | { content?: string; reasoning_content?: string }
+    | undefined;
+  let text = message?.content;
+  // 部分推理模型可能把正文放在 reasoning_content,或 content 为空字符串。
+  if ((typeof text !== 'string' || text.trim().length === 0) && typeof message?.reasoning_content === 'string') {
+    text = message.reasoning_content;
+  }
   if (typeof text !== 'string') {
     throw new ModelHttpError('bad_response', 'response missing choices[0].message.content');
   }
@@ -118,6 +127,7 @@ async function requestCompletion(options: ChatCompleteOptions, stream: boolean):
     };
     if (options.temperature !== undefined) payload.temperature = options.temperature;
     if (options.maxTokens !== undefined) payload.max_tokens = options.maxTokens;
+    if (options.responseFormat) payload.response_format = options.responseFormat;
 
     let response: Response;
     try {
