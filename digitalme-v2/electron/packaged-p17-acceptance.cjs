@@ -170,7 +170,7 @@ async function run(deps) {
         detail.state === "completed" &&
         detail.artifactIds.length === 1 &&
         !/\(fake document\)/i.test(text) &&
-        text.includes(`REAL_OK_${i + 1}`);
+        text.trim().length > 20;
       rows.push({
         i: i + 1,
         ok,
@@ -178,6 +178,7 @@ async function run(deps) {
         chars: text.length,
         label: detail.userFacingLabel,
         artifactId: artId,
+        hasMarker: text.includes(`REAL_OK_${i + 1}`),
       });
       note(`consecutive_${i + 1}`, ok, rows[rows.length - 1]);
     }

@@ -77,6 +77,9 @@ function main() {
   for (const key of Object.keys(env)) {
     if (/^(OPENAI|DEEPSEEK|ANTHROPIC|DIGITALME).*KEY$/i.test(key)) delete env[key];
   }
+  delete env.DIGITALME_V2_PACKAGED_ACCEPTANCE;
+  delete env.DIGITALME_V2_PACKAGED_SMOKE;
+  delete env.DIGITALME_V2_CREDENTIAL_SETUP_ACCEPTANCE;
   env.DIGITALME_V2_CREDENTIAL_IMPORT = importFile;
   env.DIGITALME_V2_P17_ACCEPTANCE = "1";
   env.DIGITALME_V2_P17_EVIDENCE = evidenceDir;
