@@ -2,8 +2,8 @@
 
 - 文档编号：DIGITALME-V2-P2B-SOFTWARE-ENGINEERING-PHASE-PLAN
 - 日期：2026-08-03
-- 状态：`updated_for_p2b_route_review`（2026-08-03；P2B.1 夹具闭环已验证；真实任务见 P2B.2 推荐规格）
-- 纪律：每阶段一个已批准任务块；实现须另获授权；**不 push**
+- 状态：`updated_for_p2c1_blocker`（2026-08-03 TODAY-CLOSE；P2C1 真实质量门失败并阻断；今日停止）
+- 纪律：每阶段一个已批准任务块；实现须另获授权；**不 push**；P2C1 **不得**今日续跑
 
 ---
 
@@ -13,10 +13,14 @@
 |------|------|------------|
 | P2.0–P2.3 / P2A | 代码分析扩展验证 | L0 只读前缀；Owner 质量验收未通过 → 见 P2A 修复规格（并行小规格，另批实现） |
 | **P2B 架构** | 本文档集 | 规格与契约 |
-| **P2B.1** | 基础设施闭环已验证（夹具样本；非生产 apply） | 隔离工作区 + Plan/Change/Verify；L1 only |
-| **P2B 路线反审查** | 见 `digitalme_v2_coding_agent_route_review.md` 等 | 主/备 Agent、自研边界、真实任务选型 |
-| **P2B.2** | 规格待授权：`digitalme_v2_p2b2_recommended_task_spec.md` | 首个真实任务（质量档 UI）；仍默认提案-only |
-| P2B.2+ / P2B.3 | 未启动 | L2 apply、L3 push/deploy |
+| **P2B.1** | 基础设施闭环已验证（夹具样本） | 隔离工作区 + Plan/Change/Verify；L1 only |
+| **P2B 路线反审查** | 已记录 | 主/备 Agent、自研边界、真实任务选型 |
+| **P2B.2** | 已合入（质量档 UI） | `76dc573` 一带；usable / degraded / failed 展示 |
+| **P2B.3** | 已合入（Bundle 复制） | `1f52767` |
+| **P2B.4** | 已合入（document 物化） | `ef1d394`（当前 HEAD） |
+| **P2C1** | **`blocked` / not_applied** | 真实代码分析 usable 门失败；见 TODAY-CLOSE 2026-08-03 |
+| P2C1 后续 | **未启动** | Snapshot 噪声围栏 + findings 结构方案（先方案后实现） |
+| P2B L2/L3 | 未启动 | apply / push / deploy |
 
 ---
 
@@ -104,4 +108,17 @@
 - [x] 架构 / 能力 / 权限 / bundle / 阶段计划 / P2A 修复规格  
 - [x] 可编译契约骨架 + 契约测试  
 - [x] 反向审查十问  
-- [ ] CTO 复核通过后冻结 → 再批 P2B.1  
+- [x] P2B.1–P2B.4 工程闭环与真实小修（至 `ef1d394`）  
+- [ ] P2C1 真实代码分析 usable 门（**2026-08-03 blocked**）  
+- [ ] P2C1 后续最小方案批准后再实现  
+
+---
+
+## 7. P2C1 阻断记录（2026-08-03）
+
+状态：`blocked` / `real_quality_gate_failed` / `degraded_scan_only` / `not_applied` / `not_pushed`。
+
+- 真实验收：`1/4` 调用 · `~59.9s` · 进入 `deterministic_snapshot_synthesis`  
+- 生产试改已撤回；HEAD 仍为 `ef1d394`  
+- 证据：`digitalme-v2/scripts/_mvp-p2c1-quality-recovery-evidence/`  
+- **今日停止**；下一轮须先写最小方案（Snapshot 围栏 + findings 结构 + `json_object` 兼容），禁止直接试 Prompt / 硬编码答案 / 文件名冒充深度分析  

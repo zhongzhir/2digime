@@ -5,6 +5,42 @@
 
 ---
 
+## 2026-08-03 TODAY-CLOSE · P2C1 代码分析质量恢复阻断收口
+
+### 状态
+
+`P2C1` / `real_quality_gate_failed` / `degraded_scan_only` / `snapshot_noise_identified` / `structured_output_brittleness_identified` / `production_changes_reverted` / `next_route_defined` / `not_applied` / `not_pushed`
+
+分支：`v2/foundation` · HEAD **`ef1d394`**。任务：`DIGITALME-V2-P2C1-CODE-ANALYSIS-QUALITY-RECOVERY-01`。证据：`digitalme-v2/scripts/_mvp-p2c1-quality-recovery-evidence/`。
+
+### 执行与探测
+
+- Coding Agent：`cursor-agent`（编排会话接管）；Codex CLI 探测 **`auth_failed`**（DashScope 401）= **环境问题**，不否定 Codex 路线
+- 自动测试通过；真实验收 1 次：`modelCalls 1/4` · `~59.9s` · `quality.grade=degraded_scan_only` · `usableGate=false`
+- 无模板墙、无绝对路径泄漏、未冒充 usable
+- 试改 `code-repo-analysis.ts` **已撤回**；**未受控 apply**；**无 commit**；生产工作树相对 HEAD 保持该文件未改
+
+### 根因（记录）
+
+- findings 大 JSON 输出脆弱 → 1 次调用后 `deterministic_snapshot_synthesis`
+- 历史 compact 过短；模板/文件名式 fallback 曾掩盖真实失败
+- Snapshot 含 `scripts/_mvp*`、夹具与验收噪声
+- evidence **形式**覆盖率高、实质不足；五模块字面命中主要来自目标复述/降级文案，**不能**视为深度理解；三项可用深度风险未形成
+
+### 下一路线（仅记录，今日不启动）
+
+- Snapshot 排除 `_mvp*` / evidence / fixtures / 临时产物；架构分析锚定 `subject-core` / `work-runtime` / `capability` / `artifact-workspace` / `collaboration`
+- findings：NDJSON 或按模块分批；核对 `response_format=json_object` 兼容性
+- 禁止硬编码 Digital Me 架构答案；禁止文件名列表/目标复述/确定性模板冒充深度分析
+- usable 须真实模块判断 + 具体风险 + 有效 evidence；总调用 ≤4、总时长 ≤180s
+- **下一轮开始前先形成最小方案，不直接继续试 Prompt**
+
+### 今日停止
+
+不继续实现、不重跑模型、不生成新候选、不构建 ZIP/portable、不 push。
+
+---
+
 ## 2026-07-31 TODAY-CLOSE · MVP-LEARNING-QUALITY-01 工程验收收口
 
 ### 状态

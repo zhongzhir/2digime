@@ -2,9 +2,16 @@
 
 版本：v0.4
 状态：持续更新
-最后更新：2026-08-02（MVP-RELEASE-REGRESSION-02 发布主路径回归通过；`accepted_as_engineered`；不得 push）
+最后更新：2026-08-03（TODAY-CLOSE · P2C1 质量恢复阻断收口；`v2/foundation` @ `ef1d394`；不得 push）
 
 > **当前产品主线（2026-07-26）**：**第二纵向闭环** — 多模态成果包交付与渐进式主体构建。第一纵向闭环已 `accepted` / `completed`。
+> **V2 当前执行分支（2026-08-03）**：`v2/foundation` · HEAD **`ef1d394`** · **未 push**。
+> **今日停止指针**：**DIGITALME-V2-P2C1-CODE-ANALYSIS-QUALITY-RECOVERY-01** =
+> `blocked` / `real_quality_gate_failed` / `degraded_scan_only` / `snapshot_noise_identified` /
+> `structured_output_brittleness_identified` / `production_changes_reverted` / `next_route_defined` /
+> `not_applied` / `not_pushed`。
+> **不得**：今日继续实现、重跑真实模型、凑 usable、构建 ZIP/portable、push。
+> **下一轮（仅记录，未启动）**：先形成最小方案（Snapshot 噪声围栏 + findings NDJSON/分批 + `json_object` 兼容探测），再开任务；禁止硬编码架构答案 / 文件名清单 / 目标复述冒充深度分析。证据：`digitalme-v2/scripts/_mvp-p2c1-quality-recovery-evidence/`。
 > **最高架构与研发原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)（**v0.1.1 `active`**）。
 > **当前执行基线**：[`DigitalMe_product_baseline_reset_v0.2_2026-07-21.md`](DigitalMe_product_baseline_reset_v0.2_2026-07-21.md)（**v0.2 `active`**；Owner 审核通过关键裁决，包含能力覆盖完整性、唯一数字身份与对外协作等补强项）。
 > **产品基线重置裁决（历史）**：原「研究与表达」候选确认路径判废；工程机制（上下文装配、候选选择、确认快照）降为后台自动编排。**第一纵向闭环后续已于 2026-07-25 正式收口为 `accepted` / `completed`（决策 #103 + `928aa1a` + `e8b6572`），本条不再作为「未验收」有效指针。**
@@ -21,7 +28,7 @@
 > 2. **BUG1 #6** = 七模块渐进式数字之我构建框架。
 > 3. 首个正式验收场景 = 为一个项目生成完整对外介绍成果包。
 > 4. 第一轮真实产物 = 正式介绍文档、演示文稿 PPT、单页 HTML、封面图片；视频/音频本轮不实现真实生成，用户面不得宣称已支持。
-> **当前任务（2026-08-02）**：**MVP-RELEASE-REGRESSION-02** 已工程验收收口（[`digitalme_phase1_task_MVP-RELEASE-REGRESSION-02_v0.1.md`](digitalme_phase1_task_MVP-RELEASE-REGRESSION-02_v0.1.md) / [`MVP_RELEASE_REGRESSION_02_REPORT_20260802.md`](MVP_RELEASE_REGRESSION_02_REPORT_20260802.md)）：`release_main_path_validated` / `create_and_import_paths_passed` / `restart_recovery_validated` / `accepted_as_engineered` / `not_pushed`。基线 `bd6f031` @ `codex/mvp-release-gate-01`。创建路径 A 与导入路径 B 均真实模型通过；专项回归全绿。**建议**：重建 portable 后由 Owner 做最终安装验收。**不得**写 `closed_alpha_ready` / `mvp_ready`。不得 push。前序：**MVP-QUALITY-PRODUCT-VALIDATION-01**（`bd6f031`）、**MVP-LEARNING-QUALITY-01**（学习精度工程验收）已保留为基线。
+> **Legacy 任务指针（非 V2 当前）**：MVP-GENERATION-LIFECYCLE-FIX-01 等见历史任务包；**不得**覆盖上文 V2 / P2C1 今日停止指针。
 > **产品候选**：`20260731-173649-597225e`（do-workflow 产品基线 `597225e`）；学习精度工程在其上收口。
 > **R2 对话运行时**：保留基础设施；R2 代码 **retained as infrastructure**。生产默认入口仍为 legacy。
 > **Owner Electron 真机验收（2026-07-24）**：`accepted`（distill-me / R2 对话重试 / doing-context / PAN-01S 等）。
@@ -43,7 +50,8 @@
 > **产品身份（2026-07-11）**：Digital Me 是面向**大量真实用户**的通用产品，不是仅为当前 Owner 服务的定制化 Demo。当前 Package / 试用材料仅作验证样本；默认能力、默认文案、默认流程必须以普遍用户为准。见 §3 第 16 条、§5.4、决策 #27–#28。
 >
 > **长期结论（2026-07-31 · 学习质量）**：① 用户修改并采用成果后，质量经验可分类、落盘、重载并在下一匹配任务复用。② 通用质量经验经 `qualityScope` 支持 document/software/image/video/podcast 等，**不是**文章专用机制。③ 边界：document/article 已真实模型回归；其他成果类型仅静态 scope 隔离；跨模态真实质量验证未执行。④ 不得把一次采用成果中的全部特征自动学习为长期偏好。
-
+>
+> **V2 / 软件工程收口摘要（2026-08-03）**：P2B.1 隔离闭环与 P2B.2–P2B.4 真实小修已合入 `v2/foundation`（至 `ef1d394`）。P2C1 真实代码分析质量门失败并阻断；生产试改已撤回。Codex CLI 本机仍 `auth_failed`（DashScope 401，环境问题，不否定路线）。
 ## 1. 项目背景
 
 Digital Me 旨在解决 AI 时代“人的主体性”问题：个人如何在 AI 能力快速增强的环境中，持续保有并扩展自身的记忆、判断、表达、能力与关系，而不是被平台和模型吸收。
@@ -597,7 +605,9 @@ Owner 判断（2026-07-27）：
 
 ### 7.1 近期优先级（建议顺序）
 
-> **2026-08-02 当前执行指针（TODAY-CLOSE）**：**MVP-RELEASE-REGRESSION-02** 已工程验收收口（`release_main_path_validated` / `accepted_as_engineered`；任务包 `digitalme_phase1_task_MVP-RELEASE-REGRESSION-02_v0.1.md`；报告 `MVP_RELEASE_REGRESSION_02_REPORT_20260802.md`）。基线 `bd6f031`。创建/导入双路径真实模型通过。**建议**：重建 portable → Owner 最终安装验收。**不得**宣称 `closed_alpha_ready` / `mvp_ready`。不得 push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+> **2026-08-02 当前执行指针（TODAY-CLOSE）**：**MVP-PORTABLE-REBUILD-AND-OWNER-ACCEPTANCE-01** 候选 `20260802-184853-144d0d7` 已建（完整性 + 烟测通过；`owner_install_acceptance_pending`）。基线 `144d0d7`。**等待 Owner 安装手测**。通过前不得写 `owner_install_accepted` / `closed_alpha_candidate_ready` / `closed_alpha_ready` / `mvp_ready`。不得 push；本阶段无新代码 commit。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+
+> **2026-08-02 历史指针**：**MVP-RELEASE-REGRESSION-02** 已工程验收收口（`release_main_path_validated` / `accepted_as_engineered`；任务包 `digitalme_phase1_task_MVP-RELEASE-REGRESSION-02_v0.1.md`；报告 `MVP_RELEASE_REGRESSION_02_REPORT_20260802.md`）。基线 `bd6f031`→提交 `144d0d7`。创建/导入双路径真实模型通过。
 
 > **2026-07-31 当前执行指针（TODAY-CLOSE）**：**MVP-LEARNING-QUALITY-01** 已工程验收收口（`accepted_as_engineered` / `owner_engineering_accepted`；任务包 `digitalme_phase1_task_MVP-LEARNING-QUALITY-01_v0.1.md`）。真实 DeepSeek：expression=4 / boundary=1 / Learn Job committed；质量结果 mixed，**不**宣称文章全面优越或 closed alpha ready。**建议下一任务**：`MVP-QUALITY-EVALUATION-01`（**未启动**）。不得 push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
 
