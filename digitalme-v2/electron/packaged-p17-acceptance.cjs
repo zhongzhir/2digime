@@ -60,6 +60,8 @@ async function run(deps) {
   try {
     const boot = await deps.bootstrapRuntime();
     note("model_ready", boot.modelReady === true, { model: boot.modelMeta });
+    // 首次导入完成后清除,避免后续删除凭证再 bootstrap 时被重新导入。
+    delete process.env.DIGITALME_V2_CREDENTIAL_IMPORT;
 
     const runtime = () => deps.getRuntime();
     const bus = () => deps.getBus();
