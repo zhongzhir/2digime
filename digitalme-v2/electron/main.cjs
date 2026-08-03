@@ -4,7 +4,7 @@
  * packaged 与 dev 共用本入口与同一领域运行链(无 packaged 专用业务分支)。
  * 未配置真实模型时不注册 Fake Adapter。
  */
-const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Menu } = require("electron");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
@@ -150,6 +150,17 @@ function createWindow(bootInfo) {
   mainWindow.webContents.on("did-finish-load", () => {
     mainWindow.webContents.send("shell:boot", bootInfo || lastBootInfo);
   });
+  mainWindow.webContents.on("context-menu", (_evt, params) => {
+    if (!params.isEditable) return;
+    const menu = Menu.buildFromTemplate([
+      { role: "cut", label: "剪切", enabled: params.editFlags.canCut },
+      { role: "copy", label: "复制", enabled: params.editFlags.canCopy },
+      { role: "paste", label: "粘贴", enabled: params.editFlags.canPaste },
+      { type: "separator" },
+      { role: "selectAll", label: "全选", enabled: params.editFlags.canSelectAll },
+    ]);
+    menu.popup({ window: mainWindow });
+  });
   return mainWindow;
 }
 
@@ -185,7 +196,12 @@ function registerIpc() {
       const result = await bus.invoke(name, input || {});
       try {
         const dir = await runtime.getArtifactStorageDir(artifactId);
-        shell.showItemInFolder(dir);
+        const fs = require("node:fs");
+        const preferred = ["result.md", "report.md"]
+          .map((name) => path.join(dir, name))
+          .find((p) => fs.existsSync(p));
+        if (preferred) shell.showItemInFolder(preferred);
+        else shell.showItemInFolder(dir);
       } catch {
         /* ignore */
       }

@@ -143,6 +143,83 @@ test('revealInFolder materializes report.md manifest.json evidence.json', async 
   assert.equal(await fs.readFile(path.join(storageDir, 'report.md'), 'utf8'), reportBody);
 });
 
+test('revealInFolder materializes document result.md + manifest; idempotent; latest version', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dmv2-p2b4-doc-'));
+  const contentStore = new ContentStore(path.join(root, 'content'));
+  const artifactStore = new JsonObjectStore<Artifact>({ dir: path.join(root, 'artifacts') });
+  const storageDir = path.join(root, 'artifact-files', 'art_doc');
+  await fs.mkdir(storageDir, { recursive: true });
+
+  const v1 = await contentStore.putText('第一版正文', 'markdown');
+  const artifact: Artifact = {
+    id: 'art_doc',
+    taskId: 'task_doc',
+    subjectId: 'sub_1',
+    jobId: 'job_doc',
+    type: 'document',
+    title: '文档成果',
+    createdAt: new Date().toISOString(),
+    storageDir,
+    headVersionId: 'ver_1',
+    versions: [
+      {
+        versionId: 'ver_1',
+        createdAt: new Date().toISOString(),
+        author: 'capability',
+        content: v1.content,
+      },
+    ],
+  };
+  await artifactStore.put(artifact);
+
+  const workspace = new ArtifactWorkspace({
+    artifactStore,
+    contentStore,
+    subjectService: {
+      appendGrowthEvent: async () => undefined,
+    } as unknown as SubjectService,
+    eventBus: new InMemoryEventBus(),
+  });
+
+  await workspace.revealInFolder('art_doc');
+  let names = await fs.readdir(storageDir);
+  assert.ok(names.includes('result.md'));
+  assert.ok(names.includes('manifest.json'));
+  assert.equal(await fs.readFile(path.join(storageDir, 'result.md'), 'utf8'), '第一版正文');
+  const manifest1 = JSON.parse(await fs.readFile(path.join(storageDir, 'manifest.json'), 'utf8')) as {
+    primaryFile: string;
+    headVersionId: string;
+    schemaVersion: string;
+  };
+  assert.equal(manifest1.primaryFile, 'result.md');
+  assert.equal(manifest1.headVersionId, 'ver_1');
+  assert.equal(manifest1.schemaVersion, 'document-delivery/1');
+  // 敏感扫描：交付 manifest 不得含凭证/userData 路径线索
+  const manifestRaw = await fs.readFile(path.join(storageDir, 'manifest.json'), 'utf8');
+  assert.equal(/SecretStore|userData|sk-[a-zA-Z0-9]{10,}/i.test(manifestRaw), false);
+
+  await workspace.revealInFolder('art_doc');
+  names = await fs.readdir(storageDir);
+  assert.equal(names.filter((n) => n === 'result.md').length, 1);
+  assert.equal(names.filter((n) => n === 'manifest.json').length, 1);
+
+  const v2 = await contentStore.putText('第二版正文-最新', 'markdown');
+  artifact.headVersionId = 'ver_2';
+  artifact.versions.push({
+    versionId: 'ver_2',
+    createdAt: new Date().toISOString(),
+    author: 'user',
+    content: v2.content,
+  });
+  await artifactStore.put(artifact);
+  await workspace.revealInFolder('art_doc');
+  assert.equal(await fs.readFile(path.join(storageDir, 'result.md'), 'utf8'), '第二版正文-最新');
+  const manifest2 = JSON.parse(await fs.readFile(path.join(storageDir, 'manifest.json'), 'utf8')) as {
+    headVersionId: string;
+  };
+  assert.equal(manifest2.headVersionId, 'ver_2');
+});
+
 test('resolveBundleQualityUi maps usable / missing / degraded / needs_attention distinctly', () => {
   const usable = resolveBundleQualityUi({ grade: 'usable' });
   assert.equal(usable.showBanner, false);

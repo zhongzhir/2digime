@@ -60,6 +60,7 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
         truncated: boolean;
         skippedSensitiveCount: number;
         warnings: string[];
+        quality?: { grade: string; reasons: string[] };
       };
     };
   }> {
@@ -80,6 +81,7 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
           truncated: boolean;
           skippedSensitiveCount: number;
           warnings: string[];
+          quality?: { grade: string; reasons: string[] };
         };
       };
     } = {
@@ -117,6 +119,7 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
             truncated: boolean;
             skippedSensitiveCount: number;
             warnings: string[];
+            quality?: { grade: string; reasons: string[] };
           }
         | undefined;
       const manifestEntry = entries.find((e) => e.role === 'manifest');
@@ -130,6 +133,7 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
             };
             languages?: Array<{ language: string; files: number; bytes: number }>;
             warnings?: string[];
+            quality?: { grade: string; reasons: string[] };
           };
           manifestSummary = {
             fileCountScanned: parsed.repo?.fileCountScanned ?? 0,
@@ -137,6 +141,7 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
             truncated: parsed.repo?.truncated ?? false,
             skippedSensitiveCount: parsed.repo?.skippedSensitiveCount ?? 0,
             warnings: parsed.warnings ?? [],
+            ...(parsed.quality ? { quality: parsed.quality } : {}),
           };
         } catch {
           // ignore
@@ -250,8 +255,58 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
     return exportDocx(text, outBase);
   }
 
+  /**
+   * 打开所在目录前，将当前 head 成果物化到 artifact.storageDir（导出视图，非第二事实源）。
+   * - document(text): result.md + manifest.json
+   * - code-analysis bundle: report.md / manifest.json / evidence.json
+   * 重复调用覆盖同名文件，幂等；内容取自当前 head，与页面一致。
+   */
   async revealInFolder(artifactId: string): Promise<void> {
     const artifact = await this.requireArtifact(artifactId);
+    await fs.mkdir(artifact.storageDir, { recursive: true });
+    const got = await this.getContent(artifactId);
+
+    if (got.content.kind === 'text') {
+      const text = got.text ?? '';
+      await fs.writeFile(path.join(artifact.storageDir, 'result.md'), text, 'utf8');
+      const existingDocx = (await fs.readdir(artifact.storageDir)).filter((n) =>
+        /\.docx$/i.test(n),
+      );
+      const manifest: Record<string, unknown> = {
+        schemaVersion: 'document-delivery/1',
+        artifactType: artifact.type,
+        title: artifact.title,
+        headVersionId: artifact.headVersionId,
+        primaryFile: 'result.md',
+        generatedAt: nowIso(),
+      };
+      if (existingDocx.length > 0) {
+        manifest.relatedFiles = existingDocx.map((name) => ({ name, role: 'docx_export' }));
+      }
+      await fs.writeFile(
+        path.join(artifact.storageDir, 'manifest.json'),
+        `${JSON.stringify(manifest, null, 2)}\n`,
+        'utf8',
+      );
+    } else if (got.content.kind === 'bundle' && got.bundle) {
+      const byRole = new Map(
+        got.bundle.entries
+          .filter((e) => e.role && e.text !== undefined)
+          .map((e) => [e.role as string, e.text as string]),
+      );
+      const report = byRole.get('report');
+      const manifest = byRole.get('manifest');
+      const evidence = byRole.get('evidence');
+      if (report !== undefined) {
+        await fs.writeFile(path.join(artifact.storageDir, 'report.md'), report, 'utf8');
+      }
+      if (manifest !== undefined) {
+        await fs.writeFile(path.join(artifact.storageDir, 'manifest.json'), manifest, 'utf8');
+      }
+      if (evidence !== undefined) {
+        await fs.writeFile(path.join(artifact.storageDir, 'evidence.json'), evidence, 'utf8');
+      }
+    }
     await fs.access(artifact.storageDir);
   }
 
