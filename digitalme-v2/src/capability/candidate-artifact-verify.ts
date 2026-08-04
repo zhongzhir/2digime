@@ -13,7 +13,10 @@ export interface CandidateVerificationIssue {
     | 'source_binding_mismatch'
     | 'authorized_data_leakage'
     | 'unsafe_instruction'
-    | 'model_self_grade_not_verification';
+    | 'model_self_grade_not_verification'
+    | 'length_insufficient'
+    | 'content_integrity_mismatch'
+    | 'template_padding_detected';
   message: string;
 }
 
@@ -122,6 +125,65 @@ export function verifyCandidateArtifact(
         message: '成果来源绑定与执行上下文不一致',
       });
     }
+  }
+
+  const integrity = input.output.candidateMeta?.contentIntegrity;
+  if (integrity) {
+    if (integrity.insufficientLength) {
+      issues.push({
+        code: 'length_insufficient',
+        message: '模型原文篇幅不足且修订后仍不满足要求',
+      });
+    }
+    const expectedDigest = sha256(integrity.modelGeneratedContent || '');
+    if (
+      integrity.modelContentDigest &&
+      integrity.modelContentDigest !== expectedDigest
+    ) {
+      issues.push({
+        code: 'content_integrity_mismatch',
+        message: '模型原文摘要与声明不一致',
+      });
+    }
+    if (text && integrity.modelGeneratedContent) {
+      const model = integrity.modelGeneratedContent;
+      // 最终正文不得包含模型原文之外的固定模板风险判断句
+      const TEMPLATE_SUBSTANCE = [
+        '交付范围漂移：若关键决策标准未冻结',
+        '依赖外部能力可用性：外部专业能力中断或超时会拉长关键路径',
+        '材料完整性：授权材料若缺少量化指标，风险判断只能停留在定性层面',
+        '验证与采用门禁：未经验证的候选成果不得进入正式成长链',
+        '（离线占位',
+        'mode=model_length_pad',
+      ];
+      for (const phrase of TEMPLATE_SUBSTANCE) {
+        if (text.includes(phrase) && !model.includes(phrase)) {
+          issues.push({
+            code: 'template_padding_detected',
+            message: '检测到固定模板补写实质内容',
+          });
+          break;
+        }
+      }
+      // 模型原文应可追溯：最终正文应包含模型原文（允许前后仅有标题/目标行）
+      if (model.length >= 20 && !text.includes(model) && !model.includes(text.trim())) {
+        const stripFrame = (s: string) =>
+          s
+            .replace(/^#\s*项目风险摘要\s*/m, '')
+            .replace(/^任务目标：.*$/m, '')
+            .trim();
+        const textCore = stripFrame(text);
+        const modelCore = stripFrame(model);
+        const probe = (modelCore || model).slice(0, Math.min(40, (modelCore || model).length));
+        if (!textCore.includes(probe) && !text.includes(probe)) {
+          issues.push({
+            code: 'content_integrity_mismatch',
+            message: '最终成果无法追溯到模型原文',
+          });
+        }
+      }
+    }
+    // reachedModel 不得单独作为合格依据 — 无额外通过分支
   }
 
   const digest =

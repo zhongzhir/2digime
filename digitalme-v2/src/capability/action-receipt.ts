@@ -22,6 +22,17 @@ export interface ActionReceipt {
   adapterVersion: string;
   endpoint?: string;
   remoteExecutionId?: string;
+  /**
+   * 协议与来源映射(审计)。不得作为用户面文案。
+   * 例: protocol=a2a, version=1.0, remoteTaskId=...
+   */
+  protocolMapping?: {
+    protocol: string;
+    protocolVersion?: string;
+    remoteTaskId?: string;
+    remoteArtifactId?: string;
+    endpointId?: string;
+  };
   /** 实际发送的字段名(非正文)。 */
   sentFields: string[];
   /** 材料路径/摘要引用。 */
@@ -71,6 +82,7 @@ export interface BuildActionReceiptInput {
   adapterVersion: string;
   endpoint?: string;
   remoteExecutionId?: string;
+  protocolMapping?: ActionReceipt['protocolMapping'];
   sentFields: string[];
   materialRefs: Array<{ path?: string; digest?: string }>;
   remoteStatus?: RemoteLifecycleStatus;
@@ -108,6 +120,7 @@ export function buildActionReceipt(input: BuildActionReceiptInput): ActionReceip
   if (input.grantId) receipt.grantId = input.grantId;
   if (input.endpoint) receipt.endpoint = input.endpoint;
   if (input.remoteExecutionId) receipt.remoteExecutionId = input.remoteExecutionId;
+  if (input.protocolMapping) receipt.protocolMapping = { ...input.protocolMapping };
   if (input.remoteStatus) receipt.remoteStatus = input.remoteStatus;
   if (input.timedOut !== undefined) receipt.timedOut = input.timedOut;
   if (input.cancelled !== undefined) receipt.cancelled = input.cancelled;

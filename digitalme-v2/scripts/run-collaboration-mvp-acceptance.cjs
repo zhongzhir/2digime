@@ -30,7 +30,8 @@ const html = fs.readFileSync(path.join(appRoot, 'electron/renderer/index.html'),
 const appJs = fs.readFileSync(path.join(appRoot, 'electron/renderer/app.js'), 'utf8');
 
 for (const re of [
-  /交给另一个数字之我/,
+  /另一个数字之我/,
+  /交给协作对象|交给另一个数字之我/,
   /id="btn-collab-open"/,
   /id="btn-collab-issue"/,
   /id="btn-collab-revoke"/,

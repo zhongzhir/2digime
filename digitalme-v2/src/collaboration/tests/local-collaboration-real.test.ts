@@ -116,6 +116,8 @@ test('real model dual-subject collaboration sample', async () => {
   await fs.mkdir(materials, { recursive: true });
 
   const uniqueX = `青竹枢纽-${Date.now().toString(36)}`;
+  const uniqueXToken = uniqueX.replace(/^青竹枢纽-/, '');
+  const uniqueXPattern = new RegExp(`青竹枢纽[-－—（(]?${uniqueXToken}[）)]?`);
   const uniqueY = `禁区密文-${Date.now().toString(36)}`;
   const matX = path.join(materials, 'authorized-x.md');
   const matY = path.join(materials, 'secret-y.md');
@@ -211,7 +213,7 @@ test('real model dual-subject collaboration sample', async () => {
   assert.equal(executed.reachedModel, true);
   assert.equal(executed.capabilityId, OPENAI_COMPATIBLE_CAPABILITY_ID);
   assert.ok((executed.artifactText || '').length >= 120);
-  assert.match(executed.artifactText || '', new RegExp(uniqueX));
+  assert.match(executed.artifactText || '', uniqueXPattern);
   assert.doesNotMatch(executed.artifactText || '', new RegExp(uniqueY));
   // 排除明显 Fake/模板腔
   assert.doesNotMatch(executed.artifactText || '', /FAKE_DOCUMENT|\[stub\]|lorem ipsum/i);
@@ -254,7 +256,7 @@ test('real model dual-subject collaboration sample', async () => {
   assert.ok(aEvents.some((e) => (e.payload.tags ?? []).includes('collab:external_accept')));
   const mainText = (await runtimeA.getContent({ artifactId: mainArtifactId })).text || '';
   assert.match(mainText, /协作摘要（已采用）/);
-  assert.match(mainText, new RegExp(uniqueX));
+  assert.match(mainText, uniqueXPattern);
   // 整合区引用协作成果；A 主任务本身可持有 Y，但回流摘要不得带入 Y 特有内容
   const collabSection = mainText.slice(mainText.indexOf('协作摘要（已采用）'));
   assert.doesNotMatch(collabSection, new RegExp(uniqueY));
@@ -306,7 +308,7 @@ test('real model dual-subject collaboration sample', async () => {
         baseUrlHost: new URL(modelEnv.baseUrl).host,
         grantId: issued.grantId,
         artifactChars: (executed.artifactText || '').length,
-        mentionsAuthorizedToken: new RegExp(uniqueX).test(executed.artifactText || ''),
+        mentionsAuthorizedToken: uniqueXPattern.test(executed.artifactText || ''),
         mentionsUnauthorizedToken: new RegExp(uniqueY).test(executed.artifactText || ''),
         integratedIntoArtifactId: accepted.integratedIntoArtifactId,
         excerpt: (executed.artifactText || '').slice(0, 600),

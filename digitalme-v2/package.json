@@ -15,6 +15,7 @@
     "accept:collaboration-real": "node scripts/run-collaboration-real-acceptance.cjs",
     "accept:collaboration-product-entry": "node scripts/run-collaboration-product-entry-acceptance.cjs",
     "accept:remote-capability-readiness": "node scripts/run-remote-capability-readiness-acceptance.cjs",
+    "accept:a2a-remote-capability": "node scripts/run-a2a-remote-capability-acceptance.cjs",
     "accept:p2b1": "node scripts/run-p2b1-isolated-code-change.cjs",
     "accept:subject-mvp": "node scripts/run-subject-mvp-acceptance.cjs",
     "accept:subject-ux": "node scripts/run-subject-ux-acceptance.cjs",
@@ -37,9 +38,12 @@
     "verify": "npm run build && npm run smoke && npm run test && npm run test:model-gate && npm run preflight:electron"
   },
   "dependencies": {
+    "@a2a-js/sdk": "^1.0.1",
+    "express": "^5.2.1",
     "pdf-parse": "^1.1.1"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/node": "^24.0.0",
     "electron": "^32.0.0",
     "electron-builder": "^25.1.8",

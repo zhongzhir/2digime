@@ -102,6 +102,24 @@ export async function prepareAndExecuteCapability(input: {
   });
 
   const describe = input.adapter.describe();
+  const provenance = output.candidateMeta?.provenance || '';
+  const protocolMapping = provenance.startsWith('a2a:')
+    ? {
+        protocol: 'a2a',
+        protocolVersion: provenance.split(':')[1] || '1.0',
+        ...(input.job.remoteExecution?.executionId
+          ? { remoteTaskId: input.job.remoteExecution.executionId }
+          : {}),
+        ...(provenance.split(':')[2] ? { endpointId: provenance.split(':')[2] } : {}),
+      }
+    : provenance.startsWith('controlled-remote:') || describe.adapterId.includes('controlled-remote')
+      ? {
+          protocol: 'private-http',
+          ...(input.job.remoteExecution?.executionId
+            ? { remoteTaskId: input.job.remoteExecution.executionId }
+            : {}),
+        }
+      : undefined;
   const receipt = buildActionReceipt({
     receiptId: newId('capability'),
     subjectId: input.subjectId,
@@ -118,6 +136,7 @@ export async function prepareAndExecuteCapability(input: {
     ...(input.job.remoteExecution?.executionId
       ? { remoteExecutionId: input.job.remoteExecution.executionId }
       : {}),
+    ...(protocolMapping ? { protocolMapping } : {}),
     sentFields: [...input.auth.allowedFields],
     materialRefs: (prepared.authorized?.allowedMaterialPaths ?? []).map((p) => ({ path: p })),
     ...(input.job.remoteExecution?.lastRemoteStatus

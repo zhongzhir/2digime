@@ -164,6 +164,18 @@ export interface CapabilityOutput {
     sourceBinding?: string;
     contentDigest?: string;
     producedAt?: string;
+    /**
+     * 成果完整性追溯 — 区分模型原文与确定性格式化。
+     * reachedModel 只表示调用到模型，不表示成果合格。
+     */
+    contentIntegrity?: {
+      modelGeneratedContent: string;
+      modelContentDigest: string;
+      deterministicFormatting: string[];
+      reachedModel?: boolean;
+      revisionAttempted?: boolean;
+      insufficientLength?: boolean;
+    };
   };
 }
 

@@ -149,6 +149,9 @@
     reveal: document.getElementById("btn-reveal"),
     collabOpen: document.getElementById("btn-collab-open"),
     collabForm: document.getElementById("collab-form"),
+    collabTargetMode: document.getElementById("collab-target-mode"),
+    collabLocalPeerBlock: document.getElementById("collab-local-peer-block"),
+    collabExternalHint: document.getElementById("collab-external-hint"),
     collabPeerDir: document.getElementById("collab-peer-dir"),
     collabPickPeer: document.getElementById("btn-collab-pick-peer"),
     collabSubtask: document.getElementById("collab-subtask"),
@@ -1873,6 +1876,22 @@
     els._workCollabMats = items;
   }
 
+  function syncCollabTargetMode() {
+    const mode = els.collabTargetMode ? String(els.collabTargetMode.value || "local-peer") : "local-peer";
+    const external = mode === "external-research";
+    if (els.collabLocalPeerBlock) els.collabLocalPeerBlock.hidden = external;
+    if (els.collabExternalHint) els.collabExternalHint.hidden = !external;
+    if (external && els.collabConfirm) els.collabConfirm.hidden = true;
+  }
+
+  if (els.collabTargetMode) {
+    els.collabTargetMode.addEventListener("change", () => {
+      syncCollabTargetMode();
+      showStatus(els.collabError, "");
+    });
+    syncCollabTargetMode();
+  }
+
   if (els.collabOpen) {
     els.collabOpen.addEventListener("click", () => {
       if (!activeTaskId) {
@@ -1883,6 +1902,7 @@
       fillWorkMaterialChecks();
       if (els.collabConfirm) els.collabConfirm.hidden = true;
       if (els.collabPeerEmpty) els.collabPeerEmpty.hidden = true;
+      syncCollabTargetMode();
       showStatus(els.collabError, "");
     });
   }
@@ -1905,10 +1925,24 @@
 
   if (els.btnCollabPreview) {
     els.btnCollabPreview.addEventListener("click", () => {
+      const mode = els.collabTargetMode ? String(els.collabTargetMode.value || "local-peer") : "local-peer";
       const peer = els.collabPeerDir ? String(els.collabPeerDir.value || "").trim() : "";
       const subtask = els.collabSubtask ? String(els.collabSubtask.value || "").trim() : "";
       const extra = els.collabExtra ? String(els.collabExtra.value || "").trim() : "";
       const mats = selectedMaterialPaths(els._workCollabMats || []);
+      if (mode === "external-research") {
+        if (!subtask) {
+          showStatus(els.collabError, "请填写希望外部能力完成的具体内容", true);
+          return;
+        }
+        renderConfirmPoints(
+          els.collabConfirmPoints,
+          buildConfirmPoints("研究分析能力（已连接的专业能力）", subtask, mats, extra),
+        );
+        if (els.collabConfirm) els.collabConfirm.hidden = false;
+        showStatus(els.collabError, "");
+        return;
+      }
       if (!peer || !subtask) {
         showStatus(els.collabError, "请先选择协作对象并填写协作要求", true);
         return;
@@ -1929,10 +1963,55 @@
         showStatus(els.collabError, "请先开始或选择一个任务", true);
         return;
       }
+      const mode = els.collabTargetMode ? String(els.collabTargetMode.value || "local-peer") : "local-peer";
       const peer = els.collabPeerDir ? String(els.collabPeerDir.value || "").trim() : "";
       const subtask = els.collabSubtask ? String(els.collabSubtask.value || "").trim() : "";
       const extra = els.collabExtra ? String(els.collabExtra.value || "").trim() : "";
       const mats = selectedMaterialPaths(els._workCollabMats || []);
+      if (mode === "external-research") {
+        if (!subtask) {
+          showStatus(els.collabError, "请填写希望外部能力完成的具体内容", true);
+          return;
+        }
+        if (els.collabConfirm && els.collabConfirm.hidden) {
+          renderConfirmPoints(
+            els.collabConfirmPoints,
+            buildConfirmPoints("研究分析能力（已连接的专业能力）", subtask, mats, extra),
+          );
+          els.collabConfirm.hidden = false;
+          return;
+        }
+        try {
+          const caps = await api.invoke("capability.list", {});
+          const list = (caps && caps.capabilities) || [];
+          const research = list.find(
+            (c) =>
+              c &&
+              (c.id === "cap_a2a_research_analysis" ||
+                String(c.displayName || "").includes("研究分析能力") ||
+                String(c.displayName || "").includes("研究分析")),
+          );
+          if (!research) {
+            showStatus(els.collabError, "当前未连接研究分析能力", true);
+            return;
+          }
+          const goal = extra ? `${subtask}\n补充说明：${extra}` : subtask;
+          const result = await api.invoke("work.submitTask", {
+            goal,
+            contextRefs: mats.map((p) => ({ kind: "file", path: p })),
+            requestedArtifactType: "document",
+            capabilityId: research.id,
+          });
+          if (els.collabStatus) els.collabStatus.textContent = "外部能力处理中";
+          activeJobId = result.jobId;
+          showCollabActions(false);
+          showStatus(els.collabError, "");
+          await refreshTasks();
+        } catch (err) {
+          showStatus(els.collabError, collabErrorMessage(err, "issue"), true);
+        }
+        return;
+      }
       if (!peer || !subtask) {
         showStatus(els.collabError, "请选择协作对象并填写协作要求", true);
         return;

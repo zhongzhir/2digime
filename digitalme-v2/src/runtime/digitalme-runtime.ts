@@ -21,6 +21,7 @@ import {
   createControlledRemoteCapabilityAdapter,
   type ControlledRemoteOptions,
 } from '../capability/adapters/controlled-remote';
+import type { A2ARemoteAdapterOptions } from '../capability/adapters/a2a-remote';
 import type { SecretAccessor } from '../capability/adapter';
 import type { Task } from '../work-runtime/task';
 import type { ExecutionJob } from '../work-runtime/execution-job';
@@ -76,6 +77,12 @@ export interface DigitalMeRuntimeOptions {
    */
   remoteCapability?: boolean | ControlledRemoteOptions;
   controlledRemote?: ControlledRemoteOptions;
+  /**
+   * A2A 远端专业能力(白名单端点):
+   * - false/undefined:不注册(App 默认)
+   * - A2ARemoteAdapterOptions:注册 A2ARemoteCapabilityAdapter
+   */
+  a2aRemoteCapability?: false | A2ARemoteAdapterOptions;
 }
 
 /**
@@ -515,6 +522,12 @@ export class DigitalMeRuntime {
         throw new Error('controlledRemote.endpoint is required when remoteCapability is enabled');
       }
       registry.register(createControlledRemoteCapabilityAdapter(cfg));
+    }
+    if (this.options.a2aRemoteCapability) {
+      // 惰性加载:避免 Electron 主进程默认路径静态拉入 @a2a-js/sdk → jose ESM。
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { createA2ARemoteCapabilityAdapter } = require('../capability/adapters/a2a-remote') as typeof import('../capability/adapters/a2a-remote');
+      registry.register(createA2ARemoteCapabilityAdapter(this.options.a2aRemoteCapability));
     }
     return registry;
   }
