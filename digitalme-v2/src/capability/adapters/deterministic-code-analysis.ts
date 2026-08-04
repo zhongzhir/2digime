@@ -273,10 +273,14 @@ function detectConfigs(
 function detectNpmScripts(
   fileViews: Array<{ item: SnapshotItem; text: string }>,
 ): Array<{ name: string; command: string; path: string; digest: string; excerpt: string }> {
-  const pkg = fileViews.find((f) => {
-    const rel = (f.item.relativePath || '').replace(/\\/g, '/');
-    return rel === 'package.json' || rel.endsWith('/package.json');
-  });
+  // 根级 package.json 优先;嵌套包(夹具/子包)不得遮蔽仓库自身脚本
+  const pkg =
+    fileViews.find(
+      (f) => (f.item.relativePath || '').replace(/\\/g, '/') === 'package.json',
+    ) ??
+    fileViews.find((f) =>
+      (f.item.relativePath || '').replace(/\\/g, '/').endsWith('/package.json'),
+    );
   if (!pkg) return [];
   try {
     const parsed = JSON.parse(pkg.text) as { scripts?: Record<string, string> };

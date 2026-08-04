@@ -12,3 +12,5 @@ scripts/_mvp-p2a-zip-candidate-evidence/
 scripts/_mvp-security-fp-audit-evidence/
 release-staging/
 build-meta.json
+
+scripts/_mvp-p2b1-isolated-code-change-evidence/
