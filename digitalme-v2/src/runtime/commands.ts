@@ -28,13 +28,26 @@ export interface CommandMap {
       subjectId: string;
       displayName: string;
       confirmedExperienceCount: number;
-      /** 待确认的候选经验(用户面文案:来自你最近修改的可复用经验)。 */
-      candidateExperiences: Array<{ eventId: string; title: string; detail: string }>;
+      /** 待确认的候选要点(用户面勿展示内部 type 名)。 */
+      candidateExperiences: Array<{
+        eventId: string;
+        title: string;
+        detail: string;
+        type?: string;
+      }>;
+      readiness?: 'empty' | 'needs_confirmation' | 'usable';
+      summaryLine?: string;
+      knowledgeGapCount?: number;
     };
   };
   'subject.confirmExperience': {
     input: { eventIds: string[] };
     output: { confirmedCount: number };
+  };
+  /** 导入单文件到主体 materials/,可选产生候选。 */
+  'subject.importMaterial': {
+    input: { sourcePath: string; distillCandidates?: boolean };
+    output: { materialRef: string; candidateEventIds: string[] };
   };
   'work.submitTask': {
     input: {
@@ -125,6 +138,7 @@ export const COMMAND_NAMES = [
   'subject.openPackage',
   'subject.getOverview',
   'subject.confirmExperience',
+  'subject.importMaterial',
   'work.submitTask',
   'work.retryTask',
   'work.reviseArtifact',

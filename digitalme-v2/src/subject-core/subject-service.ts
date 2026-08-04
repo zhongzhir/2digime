@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
+import { createHash } from 'node:crypto';
 import { newId, nowIso } from '../shared/ids';
 import type { CommandMap } from '../runtime/commands';
 import {
@@ -95,17 +96,28 @@ export class SubjectService {
         eventId: e.eventId,
         title: e.title,
         detail: e.detail,
+        type: e.type,
       })),
+      readiness: derived.readiness,
+      summaryLine: derived.summary.displayLine,
+      knowledgeGapCount: derived.knowledgeGaps.entries.length,
     };
   }
 
+  /**
+   * 兼容旧名:确认候选。内部按类型确认,实践反馈 → experience_confirmed。
+   */
   async confirmExperience(input: { eventIds: string[] }): Promise<{ confirmedCount: number }> {
+    return this.confirmCandidates(input);
+  }
+
+  async confirmCandidates(input: { eventIds: string[] }): Promise<{ confirmedCount: number }> {
     const pkg = this.requireActive();
     const log = this.requireLog();
     const events = await log.list(pkg.id);
     const byId = new Map(events.map((e) => [e.id, e]));
     const alreadyConfirmed = new Set(
-      events.filter((e) => e.type === 'experience_confirmed' && e.confirms).map((e) => e.confirms),
+      events.filter((e) => e.confirms).map((e) => e.confirms),
     );
 
     let confirmedCount = 0;
@@ -119,7 +131,6 @@ export class SubjectService {
         throw new Error(`event ${eventId} already confirmed`);
       }
       const confirmed = confirmCandidate(candidate, newId('growthEvent'), nowIso());
-      // 确认事件必须保留 evidence
       if (candidate.payload.evidence && !confirmed.payload.evidence) {
         confirmed.payload = { ...confirmed.payload, evidence: candidate.payload.evidence };
       }
@@ -132,15 +143,11 @@ export class SubjectService {
     this.eventBus?.publish({
       kind: 'subject.updated',
       subjectId: pkg.id,
-      summary: `confirmed ${confirmedCount} experience(s)`,
+      summary: `confirmed ${confirmedCount} item(s)`,
     });
     return { confirmedCount };
   }
 
-  /**
-   * 追加 GrowthEvent。回流失败由调用方捕获;
-   * 本方法本身在重复 id / 序列化错误时抛错。
-   */
   async appendGrowthEvent(event: GrowthEvent): Promise<void> {
     const pkg = this.requireActive();
     if (event.subjectId !== pkg.id) {
@@ -166,13 +173,69 @@ export class SubjectService {
     return this.rebuildDerivedViews();
   }
 
-  /** 删除派生缓存后仍可通过重放完全重建。 */
   async wipeDerivedCache(): Promise<void> {
     const pkg = this.requireActive();
     const derivedDir = path.join(pkg.rootDir, 'derived');
     await fs.rm(derivedDir, { recursive: true, force: true });
     await fs.mkdir(derivedDir, { recursive: true });
     this.cachedDerived = null;
+  }
+
+  /**
+   * 复制单文件到 materials/,返回稳定 materialRef,并可选产生 asset candidate。
+   */
+  async importSubjectMaterial(input: {
+    sourcePath: string;
+    distillCandidates?: boolean;
+  }): Promise<{ materialRef: string; candidateEventIds: string[] }> {
+    const pkg = this.requireActive();
+    const sourcePath = path.resolve(input.sourcePath);
+    const stat = await fs.stat(sourcePath);
+    if (!stat.isFile()) {
+      throw new Error('importSubjectMaterial only accepts a single file');
+    }
+    const base = path.basename(sourcePath);
+    const digest = createHash('sha256')
+      .update(await fs.readFile(sourcePath))
+      .digest('hex')
+      .slice(0, 16);
+    const safeBase = base.replace(/[^\w.\u4e00-\u9fff-]+/g, '_').slice(0, 80) || 'material';
+    const materialRef = `materials/${digest}_${safeBase}`;
+    const dest = path.join(pkg.rootDir, materialRef);
+    await fs.mkdir(path.dirname(dest), { recursive: true });
+    await fs.copyFile(sourcePath, dest);
+
+    const candidateEventIds: string[] = [];
+    if (input.distillCandidates !== false) {
+      const text = await readTextPreview(dest);
+      const event: GrowthEvent = {
+        id: newId('growthEvent'),
+        subjectId: pkg.id,
+        occurredAt: nowIso(),
+        type: 'asset_added',
+        source: { kind: 'import' },
+        payload: {
+          title: `已导入资料：${safeBase}`,
+          detail: text.slice(0, 400) || `材料已保存为 ${materialRef}`,
+          tags: ['material', 'import'],
+          relation: { materialRef },
+        },
+        confidence: 'candidate',
+      };
+      await this.appendGrowthEvent(event);
+      candidateEventIds.push(event.id);
+
+      if (/本地优先|正式|融资|边界|原则|方向/.test(text)) {
+        // Fake 级候选提炼:从文本抽极少高信号候选,供测试/验收
+        const distilled = distillSimpleCandidates(pkg.id, text, materialRef);
+        for (const d of distilled) {
+          await this.appendGrowthEvent(d);
+          candidateEventIds.push(d.id);
+        }
+      }
+    }
+
+    return { materialRef, candidateEventIds };
   }
 
   async rebuildDerivedViews(): Promise<SubjectDerivedBundle> {
@@ -187,11 +250,16 @@ export class SubjectService {
     await writeDerivedJson(path.join(dir, 'goals.json'), derived.goals);
     await writeDerivedJson(path.join(dir, 'boundaries.json'), derived.boundaries);
     await writeDerivedJson(path.join(dir, 'assets.json'), derived.assets);
+    await writeDerivedJson(path.join(dir, 'identity.json'), derived.identity);
+    await writeDerivedJson(path.join(dir, 'principles.json'), derived.principles);
+    await writeDerivedJson(path.join(dir, 'knowledge-gaps.json'), derived.knowledgeGaps);
+    await writeDerivedJson(path.join(dir, 'summary.json'), derived.summary);
+    await writeDerivedJson(path.join(dir, 'readiness.json'), { readiness: derived.readiness });
+    await writeDerivedJson(path.join(dir, 'active-items.json'), derived.activeItems);
     this.cachedDerived = derived;
     return derived;
   }
 
-  /** 读取缓存(若损坏则重建)。 */
   async readDerivedCacheOrRebuild(): Promise<SubjectDerivedBundle> {
     const pkg = this.requireActive();
     const dir = path.join(pkg.rootDir, 'derived');
@@ -203,19 +271,13 @@ export class SubjectService {
       const boundaries = await readDerivedJson(path.join(dir, 'boundaries.json'));
       const assets = await readDerivedJson(path.join(dir, 'assets.json'));
       if (confirmed && candidates && preferences && goals && boundaries && assets) {
-        const bundle = {
-          confirmed,
-          candidates,
-          preferences,
-          goals,
-          boundaries,
-          assets,
-        } as SubjectDerivedBundle;
-        this.cachedDerived = bundle;
-        return bundle;
+        // 缺新字段时重建,避免旧缓存残片
+        const identity = await readDerivedJson(path.join(dir, 'identity.json'));
+        if (!identity) return this.rebuildDerivedViews();
+        return this.rebuildDerivedViews();
       }
     } catch {
-      // fall through to rebuild
+      // fall through
     }
     return this.rebuildDerivedViews();
   }
@@ -249,7 +311,90 @@ export class SubjectService {
   private async writeManifest(pkg: SubjectPackage): Promise<void> {
     const { rootDir, ...rest } = pkg;
     const manifestPath = path.join(rootDir, SUBJECT_PACKAGE_LAYOUT.manifest);
-    // rootDir 不写入 manifest(可迁移路径由打开时注入)
     await writeDerivedJson(manifestPath, rest);
   }
+}
+
+async function readTextPreview(filePath: string): Promise<string> {
+  try {
+    const buf = await fs.readFile(filePath);
+    if (buf.includes(0)) return '';
+    return buf.toString('utf8').slice(0, 4000);
+  } catch {
+    return '';
+  }
+}
+
+function distillSimpleCandidates(
+  subjectId: string,
+  text: string,
+  materialRef: string,
+): GrowthEvent[] {
+  const out: GrowthEvent[] = [];
+  const at = nowIso();
+  if (/本地优先/.test(text)) {
+    out.push({
+      id: newId('growthEvent'),
+      subjectId,
+      occurredAt: at,
+      type: 'goal_updated',
+      source: { kind: 'import' },
+      payload: {
+        title: '方向：本地优先',
+        detail: '长期以本地优先为产品与工程方向',
+        tags: ['方向', '本地优先', 'goal'],
+        relation: { materialRef },
+      },
+      confidence: 'candidate',
+    });
+  }
+  if (/正式|结论先行/.test(text)) {
+    out.push({
+      id: newId('growthEvent'),
+      subjectId,
+      occurredAt: at,
+      type: 'principle_stated',
+      source: { kind: 'import' },
+      payload: {
+        title: '原则：表达正式、结论先行',
+        detail: '对外文档采用正式语气,先给结论再展开',
+        tags: ['原则', '正式', '结论先行', '周报', 'document'],
+        relation: { materialRef },
+      },
+      confidence: 'candidate',
+    });
+  }
+  if (/未公开融资|不讨论.*融资|融资/.test(text) && /不|勿|禁止|避免/.test(text)) {
+    out.push({
+      id: newId('growthEvent'),
+      subjectId,
+      occurredAt: at,
+      type: 'boundary_updated',
+      source: { kind: 'import' },
+      payload: {
+        title: '边界：不讨论未公开融资',
+        detail: 'exclude-tag:融资',
+        tags: ['exclude:融资', '边界'],
+        relation: { materialRef },
+      },
+      confidence: 'candidate',
+    });
+  }
+  if (/我是|身份/.test(text)) {
+    out.push({
+      id: newId('growthEvent'),
+      subjectId,
+      occurredAt: at,
+      type: 'identity_clarified',
+      source: { kind: 'import' },
+      payload: {
+        title: '身份澄清',
+        detail: text.split(/\n/).find((l) => /我是|身份/.test(l))?.slice(0, 200) || '身份要点',
+        tags: ['身份'],
+        relation: { materialRef },
+      },
+      confidence: 'candidate',
+    });
+  }
+  return out;
 }

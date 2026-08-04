@@ -38,6 +38,28 @@ export class ContextSnapshotBuilder {
     return this.snapshotStore.list((s) => s.taskId === taskId);
   }
 
+  /**
+   * 将选定主体切片冻结进 ContentStore,并写回 Snapshot.subjectContextRef。
+   * 不复制完整 GrowthEvent 日志。
+   */
+  async attachSubjectContext(
+    snapshotId: string,
+    freezeJson: string,
+  ): Promise<ContextSnapshot> {
+    const snapshot = await this.snapshotStore.get(snapshotId);
+    if (!snapshot) throw new Error(`snapshot not found: ${snapshotId}`);
+    const stored = await this.contentStore.putText(freezeJson, 'plain');
+    if (stored.content.kind !== 'text') {
+      throw new Error('subject context freeze must be stored as text');
+    }
+    const next: ContextSnapshot = {
+      ...snapshot,
+      subjectContextRef: stored.content.ref,
+    };
+    await this.snapshotStore.put(next);
+    return next;
+  }
+
   /** P1 文档路径 — 不得改动抽取语义。 */
   private async buildDocumentDefault(task: Task): Promise<ContextSnapshot> {
     const items: SnapshotItem[] = [];

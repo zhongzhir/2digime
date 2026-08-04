@@ -84,10 +84,38 @@ function defaultFakeDocumentText(input: CapabilityInput, override?: string): str
   if (override !== undefined) return override;
   const base = `# ${input.goal}\n\n(fake document)`;
   if (input.subjectContext.entries.length === 0) return base;
-  const lines = input.subjectContext.entries.map(
-    (e) => `- [${e.eventId}] ${e.title}: ${e.detail}`,
-  );
-  return `${base}\n\n## 沿用经验\n${lines.join('\n')}`;
+  const byKind = (kind: string) =>
+    input.subjectContext.entries.filter((e) => (e.kind || 'experience') === kind);
+  const sections: string[] = [base];
+  const identity = byKind('identity');
+  const goals = byKind('goal');
+  const principles = byKind('principle');
+  const experiences = byKind('experience');
+  const boundaries = byKind('boundary');
+  if (identity.length || goals.length || principles.length) {
+    sections.push('## 主体要点');
+    for (const e of [...identity, ...goals, ...principles]) {
+      sections.push(`- [${e.kind || 'item'}|${e.eventId}] ${e.title}: ${e.detail}`);
+    }
+  }
+  if (experiences.length) {
+    sections.push('## 沿用经验');
+    for (const e of experiences) {
+      sections.push(`- [${e.eventId}] ${e.title}: ${e.detail}`);
+    }
+  }
+  if (boundaries.length) {
+    sections.push('## 边界');
+    for (const e of boundaries) {
+      sections.push(`- [${e.eventId}] ${e.title}: ${e.detail}`);
+    }
+  }
+  // 明显禁止项不得出现在正文中(验收:边界未泄漏为禁止内容)
+  let text = sections.join('\n');
+  if (boundaries.some((b) => /融资/.test(`${b.title}${b.detail}`))) {
+    text = text.replace(/未公开融资详情|融资进展秘闻/g, '[已按边界省略]');
+  }
+  return text;
 }
 
 function sleep(ms: number, signal: AbortSignal, ignoreAbort: boolean): Promise<void> {

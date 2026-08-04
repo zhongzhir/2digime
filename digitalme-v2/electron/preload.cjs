@@ -1,6 +1,6 @@
 "use strict";
 /**
- * preload — 仅暴露 15 条领域命令 + 领域事件订阅。
+ * preload — 暴露领域命令 + 领域事件订阅。
  * 文件对话框属于 App Shell 辅助面(非领域命令),单独挂在 dialogs 下。
  */
 const { contextBridge, ipcRenderer } = require("electron");
@@ -10,6 +10,7 @@ const COMMAND_NAMES = [
   "subject.openPackage",
   "subject.getOverview",
   "subject.confirmExperience",
+  "subject.importMaterial",
   "work.submitTask",
   "work.retryTask",
   "work.reviseArtifact",

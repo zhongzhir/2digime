@@ -29,7 +29,8 @@ import { ArtifactCommitter } from '../work-runtime/artifact-commit';
 import { InMemoryEventBus } from '../work-runtime/event-bus';
 import { WorkRuntime } from '../work-runtime/job-runner';
 import { SubjectService } from '../subject-core/subject-service';
-import { selectConfirmedExperiences } from '../subject-core/experience-selector';
+import { selectSubjectInjection } from '../subject-core/experience-selector';
+import type { SubjectContextFreeze } from '../subject-core/subject-context-freeze';
 import { ArtifactWorkspace } from '../artifact-workspace/workspace';
 import type { CommandMap } from '../runtime/commands';
 import type { GrowthEvent } from '../subject-core/growth-event';
@@ -71,6 +72,7 @@ export class DigitalMeRuntime {
   readonly subject = new SubjectService(this.eventBus);
   private work: WorkRuntime | null = null;
   private workspace: ArtifactWorkspace | null = null;
+  private contentStore: ContentStore | null = null;
   private readonly registry: CapabilityRegistry;
   private readonly options: DigitalMeRuntimeOptions;
 
@@ -99,7 +101,11 @@ export class DigitalMeRuntime {
   }
 
   confirmExperience(input: CommandMap['subject.confirmExperience']['input']) {
-    return this.subject.confirmExperience(input);
+    return this.subject.confirmCandidates(input);
+  }
+
+  importSubjectMaterial(input: CommandMap['subject.importMaterial']['input']) {
+    return this.subject.importSubjectMaterial(input);
   }
 
   submitTask(input: CommandMap['work.submitTask']['input']) {
@@ -128,6 +134,20 @@ export class DigitalMeRuntime {
 
   getJob(jobId: string) {
     return this.requireWork().getJob(jobId);
+  }
+
+  getSnapshot(snapshotId: string) {
+    return this.requireWork().getSnapshot(snapshotId);
+  }
+
+  async readSubjectContextFreeze(
+    snapshotId: string,
+  ): Promise<SubjectContextFreeze | null> {
+    const snapshot = await this.getSnapshot(snapshotId);
+    if (!snapshot?.subjectContextRef) return null;
+    if (!this.contentStore) throw new Error('content store not attached');
+    const bytes = await this.contentStore.readBytes(snapshot.subjectContextRef);
+    return JSON.parse(bytes.toString('utf8')) as SubjectContextFreeze;
   }
 
   getArtifact(artifactId: string) {
@@ -229,6 +249,7 @@ export class DigitalMeRuntime {
     });
     const artifactStore = new JsonObjectStore<Artifact>({ dir: path.join(root, 'artifacts') });
     const contentStore = new ContentStore(path.join(root, 'content'));
+    this.contentStore = contentStore;
 
     const registry = this.registry;
 
@@ -255,13 +276,12 @@ export class DigitalMeRuntime {
         const derived = await subjectService.getDerived();
         return derived.confirmed;
       },
-      selectSubjectContext: async ({ goal, requestedArtifactType, confirmed }) => {
+      selectSubjectContext: async ({ goal, requestedArtifactType }) => {
         const derived = await subjectService.getDerived();
-        return selectConfirmedExperiences({
+        return selectSubjectInjection({
           goal,
           requestedArtifactType,
-          confirmed,
-          boundaries: derived.boundaries,
+          derived,
         });
       },
     });

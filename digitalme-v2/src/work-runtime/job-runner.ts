@@ -4,6 +4,8 @@ import type { CapabilityRegistry } from '../capability/registry';
 import type { SecretAccessor } from '../capability/adapter';
 import { newId, nowIso } from '../shared/ids';
 import type { ConfirmedExperienceView } from '../subject-core/derived-views';
+import type { SubjectContextFreeze } from '../subject-core/subject-context-freeze';
+import { buildSubjectContextFreeze } from '../subject-core/subject-context-freeze';
 import type { CommandMap } from '../runtime/commands';
 import {
   applyRecoveryWrite,
@@ -31,20 +33,29 @@ export interface WorkRuntimeOptions {
   eventBus: InMemoryEventBus;
   /** Adapter 工作目录根。 */
   workRoot: string;
-  /** 主体经验注入;P1.2 默认空视图。P1.3 可返回全量 confirmed,再经 selectSubjectContext 裁剪。 */
+  /** 主体经验注入;P1.2 默认空视图。可返回全量 confirmed,再经 selectSubjectContext 裁剪。 */
   loadSubjectContext?: () => Promise<ConfirmedExperienceView>;
   /**
-   * 按当前任务裁剪 confirmed 经验(候选永不进入)。
-   * 未提供时原样使用 loadSubjectContext 结果。
+   * 按当前任务裁剪并选择可注入主体切片(候选永不进入)。
+   * 返回值须含与 Adapter 一致的 subjectContext,以及供 Snapshot 冻结的 freeze。
    */
   selectSubjectContext?: (input: {
     goal: string;
     requestedArtifactType: string;
     confirmed: ConfirmedExperienceView;
-  }) => Promise<ConfirmedExperienceView> | ConfirmedExperienceView;
+  }) =>
+    | Promise<SubjectSelectionResult>
+    | SubjectSelectionResult
+    | Promise<ConfirmedExperienceView>
+    | ConfirmedExperienceView;
   secrets?: SecretAccessor;
   /** 只读解析 Snapshot extractedTextRef;供模型 Adapter 组装材料。 */
   readExtractedText?: (ref: string) => Promise<string>;
+}
+
+export interface SubjectSelectionResult {
+  subjectContext: ConfirmedExperienceView;
+  freeze: SubjectContextFreeze;
 }
 
 type SubmitInput = CommandMap['work.submitTask']['input'];
@@ -311,6 +322,10 @@ export class WorkRuntime {
     return this.opts.snapshotBuilder.listByTask(taskId);
   }
 
+  async getSnapshot(snapshotId: string) {
+    return this.opts.snapshotBuilder.get(snapshotId);
+  }
+
   async getArtifact(artifactId: string) {
     return this.opts.artifactCommitter.get(artifactId);
   }
@@ -439,13 +454,19 @@ export class WorkRuntime {
       await fs.mkdir(workDir, { recursive: true });
       const fullContext =
         (await this.opts.loadSubjectContext?.()) ?? emptySubjectContext(this.opts.subjectId);
-      const subjectContext = this.opts.selectSubjectContext
+      const selectedRaw = this.opts.selectSubjectContext
         ? await this.opts.selectSubjectContext({
             goal: task.goal,
             requestedArtifactType: task.requestedArtifactType,
             confirmed: fullContext,
           })
         : fullContext;
+      const selection = normalizeSelection(this.opts.subjectId, selectedRaw, fullContext);
+      const subjectContext = selection.subjectContext;
+      snapshot = await this.opts.snapshotBuilder.attachSubjectContext(
+        snapshot.id,
+        `${JSON.stringify(selection.freeze, null, 2)}\n`,
+      );
       const secrets = this.opts.secrets ?? { get: async () => null };
       const jobMeta = {
         taskId: job.taskId,
@@ -720,6 +741,42 @@ export class WorkRuntime {
 
 function emptySubjectContext(subjectId: string): ConfirmedExperienceView {
   return { subjectId, derivedAt: nowIso(), entries: [] };
+}
+
+function normalizeSelection(
+  subjectId: string,
+  selected: SubjectSelectionResult | ConfirmedExperienceView,
+  fallback: ConfirmedExperienceView,
+): SubjectSelectionResult {
+  if (
+    selected &&
+    typeof selected === 'object' &&
+    'subjectContext' in selected &&
+    'freeze' in selected
+  ) {
+    return selected;
+  }
+  const view = selected && 'entries' in selected ? selected : fallback;
+  const entries = view.entries.map((e) => ({
+    eventId: e.eventId,
+    kind: e.kind ?? ('experience' as const),
+    title: e.title,
+    detail: e.detail,
+    tags: e.tags,
+    occurredAt: e.occurredAt,
+  }));
+  return {
+    subjectContext: view,
+    freeze: buildSubjectContextFreeze({
+      subjectId: view.subjectId || subjectId,
+      entries,
+      selectionReasons: entries.map((e) => ({
+        eventId: e.eventId,
+        reason: 'manual_none' as const,
+      })),
+      excludedEventIds: [],
+    }),
+  };
 }
 
 function isAbortError(error: unknown): boolean {

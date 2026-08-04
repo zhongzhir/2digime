@@ -30,6 +30,7 @@ const COMMAND_NAMES = new Set([
   "subject.openPackage",
   "subject.getOverview",
   "subject.confirmExperience",
+  "subject.importMaterial",
   "work.submitTask",
   "work.retryTask",
   "work.reviseArtifact",
