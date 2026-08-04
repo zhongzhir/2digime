@@ -75,11 +75,30 @@ export function createCommandBus(runtime: DigitalMeRuntime): CommandBus {
         case 'artifact.getContent': {
           const req = input as CommandMap['artifact.getContent']['input'];
           const got = await runtime.getContent(req);
+          const headVersionId = got.artifact.headVersionId;
+          let ownerDecision: CommandMap['artifact.getContent']['output']['ownerDecision'];
+          try {
+            const decision = await runtime.getArtifactOwnerDecision(
+              req.artifactId,
+              headVersionId,
+            );
+            ownerDecision = {
+              status: decision.status,
+              artifactVersionId: decision.artifactVersionId,
+              ...(decision.decidedAt ? { decidedAt: decision.decidedAt } : {}),
+            };
+          } catch {
+            ownerDecision = {
+              status: 'undecided',
+              artifactVersionId: headVersionId,
+            };
+          }
           return {
             content: got.content,
             ...(got.text !== undefined ? { text: got.text } : {}),
-            headVersionId: got.artifact.headVersionId,
+            headVersionId,
             versionCount: got.artifact.versions.length,
+            ownerDecision,
             ...(got.bundle !== undefined ? { bundle: got.bundle } : {}),
           } as CommandMap[K]['output'];
         }

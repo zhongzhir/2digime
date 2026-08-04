@@ -54,6 +54,8 @@ export function selectConfirmedExperiences(
     .filter((entry) => {
       const tags = entry.tags.map((t) => t.toLowerCase());
       if (tags.some((t) => excluded.has(t))) return false;
+      // 不采用只作负面记录，不作为正向「沿用经验」注入。
+      if (tags.includes('decision:reject')) return false;
       return true;
     })
     .map((entry) => {

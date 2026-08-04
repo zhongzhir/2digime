@@ -32,6 +32,31 @@ body {
   width: 100%;
 }
 
+.decision-box {
+  margin: 12px 0 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(15, 106, 90, 0.04);
+}
+
+.decision-box .decision-actions {
+  margin-top: 8px;
+}
+
+.decision-box .decision-note {
+  margin-top: 10px;
+}
+
+.decision-box .decision-note input {
+  width: 100%;
+}
+
+.decision-box .error {
+  color: var(--danger);
+  margin-top: 6px;
+}
+
 .brand,
 .brand-sm {
   letter-spacing: 0.08em;

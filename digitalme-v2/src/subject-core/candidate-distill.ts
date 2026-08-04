@@ -43,6 +43,10 @@ export function requiresOwnerConfirmation(type: string, tags: readonly string[] 
     return true;
   }
   if (type === 'feedback_recorded') {
+    // 采用/不采用按钮本身即用户决策，不再二次确认打扰。
+    if (tags.includes('decision:accept') || tags.includes('decision:reject')) {
+      return false;
+    }
     // 实践纠正:用户修改成果后的成长确认属于可感知成长路径
     return true;
   }
@@ -62,6 +66,8 @@ export function distillCandidatesFromText(input: {
   materialRef?: string;
   taskId?: string;
   artifactId?: string;
+  artifactVersionId?: string;
+  requestedArtifactType?: string;
 }): GrowthEvent[] {
   const text = input.text.trim();
   if (!text) return [];
@@ -83,6 +89,12 @@ export function distillCandidatesFromText(input: {
   ) => {
     const payload: GrowthEvent['payload'] = { title, detail, tags };
     if (relation) payload.relation = relation;
+    if (input.artifactId && input.artifactVersionId) {
+      payload.evidence = {
+        artifactId: input.artifactId,
+        toVersionId: input.artifactVersionId,
+      };
+    }
     out.push({
       id: newId('growthEvent'),
       subjectId: input.subjectId,
@@ -93,6 +105,23 @@ export function distillCandidatesFromText(input: {
       confidence: 'candidate',
     });
   };
+
+  // 采用/不采用：只写锚定版本的决策事件，不旁生其它候选（按钮即决策）。
+  if (
+    input.sourceKind === 'artifact_acceptance' ||
+    input.sourceKind === 'artifact_rejection'
+  ) {
+    const isReject = input.sourceKind === 'artifact_rejection';
+    const typeTag = (input.requestedArtifactType || 'document').toLowerCase();
+    const decisionTag = isReject ? 'decision:reject' : 'decision:accept';
+    push(
+      'feedback_recorded',
+      isReject ? '本次成果未采用' : '本次成果已采用',
+      text.slice(0, 400),
+      [decisionTag, typeTag],
+    );
+    return out;
+  }
 
   // 显式边界优先
   if (
@@ -164,16 +193,12 @@ export function distillCandidatesFromText(input: {
     }
   }
 
-  if (
-    input.sourceKind === 'artifact_acceptance' ||
-    input.sourceKind === 'artifact_rejection' ||
-    input.sourceKind === 'repeated_correction'
-  ) {
+  if (input.sourceKind === 'repeated_correction') {
     push(
       'feedback_recorded',
-      input.sourceKind === 'artifact_rejection' ? '成果未被认可的要点' : '成果采用中的稳定偏好',
+      '成果采用中的稳定偏好',
       text.slice(0, 400),
-      ['document', '周报', 'needs_confirmation'],
+      [(input.requestedArtifactType || 'document').toLowerCase(), 'needs_confirmation'],
     );
   }
 

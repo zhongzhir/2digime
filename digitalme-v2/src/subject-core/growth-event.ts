@@ -76,7 +76,13 @@ export function confirmCandidate(candidate: GrowthEvent, newEventId: string, at:
     subjectId: candidate.subjectId,
     occurredAt: at,
     type: confirmedTypeForCandidate(candidate.type),
-    source: { kind: 'owner_direct' },
+    // 保留任务/成果溯源，便于采用状态由事件派生（不另建 Store）。
+    source: {
+      kind: candidate.source.kind,
+      ...(candidate.source.taskId ? { taskId: candidate.source.taskId } : {}),
+      ...(candidate.source.artifactId ? { artifactId: candidate.source.artifactId } : {}),
+      ...(candidate.source.jobId ? { jobId: candidate.source.jobId } : {}),
+    },
     payload: { ...candidate.payload },
     confidence: 'confirmed',
     confirms: candidate.id,

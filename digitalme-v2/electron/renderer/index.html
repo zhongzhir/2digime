@@ -186,6 +186,23 @@
                   <button type="button" id="btn-reveal">打开所在目录</button>
                 </div>
               </div>
+              <div class="decision-box" id="artifact-decision-box">
+                <p id="artifact-decision-status" class="meta" aria-live="polite">尚未决定是否采用</p>
+                <div class="row decision-actions" id="artifact-decision-actions">
+                  <button type="button" id="btn-accept-artifact" class="primary">采用</button>
+                  <button type="button" id="btn-reject-artifact">不采用</button>
+                </div>
+                <label class="field decision-note" id="artifact-decision-note-field">
+                  <span>可选说明</span>
+                  <input
+                    type="text"
+                    id="artifact-decision-note"
+                    placeholder="可以写一句原因，也可以留空"
+                    maxlength="200"
+                  />
+                </label>
+                <p id="artifact-decision-error" class="muted tiny error" hidden></p>
+              </div>
               <p id="save-status" class="meta"></p>
               <p id="version-meta" class="meta"></p>
               <div id="bundle-view" class="bundle-view" hidden>

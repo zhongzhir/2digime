@@ -113,6 +113,10 @@ export class DigitalMeRuntime {
     return this.subject.captureInput(input);
   }
 
+  getArtifactOwnerDecision(artifactId: string, artifactVersionId: string) {
+    return this.subject.getArtifactOwnerDecision(artifactId, artifactVersionId);
+  }
+
   importSubjectMaterial(input: CommandMap['subject.importMaterial']['input']) {
     return this.subject.importSubjectMaterial(input);
   }

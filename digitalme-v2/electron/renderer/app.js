@@ -79,6 +79,13 @@
     bundleEntries: document.getElementById("bundle-entries"),
     saveStatus: document.getElementById("save-status"),
     versionMeta: document.getElementById("version-meta"),
+    decisionBox: document.getElementById("artifact-decision-box"),
+    decisionStatus: document.getElementById("artifact-decision-status"),
+    decisionActions: document.getElementById("artifact-decision-actions"),
+    decisionNote: document.getElementById("artifact-decision-note"),
+    decisionError: document.getElementById("artifact-decision-error"),
+    acceptArtifact: document.getElementById("btn-accept-artifact"),
+    rejectArtifact: document.getElementById("btn-reject-artifact"),
     revisionRequest: document.getElementById("revision-request"),
     revise: document.getElementById("btn-revise"),
     copy: document.getElementById("btn-copy"),
@@ -94,6 +101,7 @@
   let activeTaskId = null;
   let activeJobId = null;
   let activeArtifactId = null;
+  let activeHeadVersionId = null;
   let saveTimer = null;
   let suppressSave = false;
   let jobWatchTimer = null;
@@ -383,12 +391,72 @@
 
   function clearArtifactView() {
     activeArtifactId = null;
+    activeHeadVersionId = null;
     copyBlockedFailed = false;
     setCopyEnabled(false);
     els.artifactPanel.hidden = true;
     els.artifactPanel.setAttribute("hidden", "");
     setWorkLayoutArtifact(false);
     if (els.revise) els.revise.disabled = true;
+    renderArtifactDecision({ status: "undecided" });
+    if (els.decisionNote) els.decisionNote.value = "";
+    showStatus(els.decisionError, "");
+  }
+
+  function renderArtifactDecision(decision) {
+    if (!els.decisionStatus) return;
+    const status = decision && decision.status ? decision.status : "undecided";
+    if (status === "accepted") {
+      els.decisionStatus.textContent = "已采用";
+      if (els.decisionActions) els.decisionActions.hidden = true;
+      if (els.decisionNote) els.decisionNote.closest(".decision-note").hidden = true;
+    } else if (status === "rejected") {
+      els.decisionStatus.textContent = "未采用";
+      if (els.decisionActions) els.decisionActions.hidden = false;
+      if (els.decisionNote) els.decisionNote.closest(".decision-note").hidden = false;
+    } else {
+      els.decisionStatus.textContent = "尚未决定是否采用";
+      if (els.decisionActions) els.decisionActions.hidden = false;
+      if (els.decisionNote) els.decisionNote.closest(".decision-note").hidden = false;
+    }
+    if (els.acceptArtifact) els.acceptArtifact.disabled = status === "accepted";
+    if (els.rejectArtifact) els.rejectArtifact.disabled = status === "rejected";
+  }
+
+  async function submitArtifactDecision(kind) {
+    showStatus(els.decisionError, "");
+    if (!activeArtifactId || !activeHeadVersionId || !activeTaskId) {
+      showStatus(els.decisionError, "当前没有可决定的成果", true);
+      return;
+    }
+    const note = els.decisionNote ? String(els.decisionNote.value || "").trim() : "";
+    const goal = els.goal && els.goal.value ? String(els.goal.value).trim() : "";
+    const baseText =
+      kind === "accept"
+        ? note || `采用成果：${goal || "本次任务"}`.slice(0, 400)
+        : note || `未采用成果：${goal || "本次任务"}`.slice(0, 400);
+    const prevLabel = els.decisionStatus ? els.decisionStatus.textContent : "";
+    if (els.acceptArtifact) els.acceptArtifact.disabled = true;
+    if (els.rejectArtifact) els.rejectArtifact.disabled = true;
+    try {
+      const result = await api.invoke("subject.captureInput", {
+        text: baseText,
+        sourceKind: kind === "accept" ? "artifact_acceptance" : "artifact_rejection",
+        taskId: activeTaskId,
+        artifactId: activeArtifactId,
+        artifactVersionId: activeHeadVersionId,
+        requestedArtifactType: "document",
+      });
+      const status =
+        (result && result.ownerDecision) || (kind === "accept" ? "accepted" : "rejected");
+      renderArtifactDecision({ status });
+      if (els.decisionNote && status === "accepted") els.decisionNote.value = "";
+    } catch (err) {
+      renderArtifactDecision({
+        status: prevLabel === "已采用" ? "accepted" : prevLabel === "未采用" ? "rejected" : "undecided",
+      });
+      showStatus(els.decisionError, err.message || "未能保存决定，请重试", true);
+    }
   }
 
   function stopJobWatch() {
@@ -591,12 +659,19 @@
     const content = await api.invoke("artifact.getContent", { artifactId });
     const isBundle = !!(content.content && content.content.kind === "bundle");
     activeArtifactId = artifactId;
+    activeHeadVersionId = content.headVersionId || null;
     copyBlockedFailed = false;
     els.artifactPanel.hidden = false;
     els.artifactPanel.removeAttribute("hidden");
     setWorkLayoutArtifact(true);
     els.versionMeta.textContent = `版本 ${content.versionCount}`;
     setCopyEnabled(true);
+    showStatus(els.decisionError, "");
+    renderArtifactDecision(content.ownerDecision || { status: "undecided" });
+    if (els.decisionBox) {
+      els.decisionBox.hidden = false;
+      els.decisionBox.removeAttribute("hidden");
+    }
 
     if (isBundle) {
       activeArtifactKind = "bundle";
@@ -1227,6 +1302,8 @@
           text: els.artifactEditor.value,
         });
         els.saveStatus.textContent = "已自动保存";
+        // 编辑产生新版本后，采用状态不得沿用到旧版本。
+        if (activeArtifactId) await loadArtifact(activeArtifactId);
       } catch (err) {
         els.saveStatus.textContent = err.message || "保存失败";
       }
@@ -1272,6 +1349,13 @@
     if (!activeArtifactId) return;
     await api.invoke("artifact.revealInFolder", { artifactId: activeArtifactId });
   });
+
+  if (els.acceptArtifact) {
+    els.acceptArtifact.addEventListener("click", () => submitArtifactDecision("accept"));
+  }
+  if (els.rejectArtifact) {
+    els.rejectArtifact.addEventListener("click", () => submitArtifactDecision("reject"));
+  }
 
   api.onEvent(async (event) => {
     if (event.kind === "job.updated") {

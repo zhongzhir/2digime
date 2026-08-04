@@ -5,6 +5,7 @@ scripts/_mvp-p15-dev-acceptance-evidence/
 scripts/_mvp-subject-ux-acceptance-evidence/
 scripts/_mvp-product-shell-acceptance-evidence/
 scripts/_mvp-conversation-shell-acceptance-evidence/
+scripts/_mvp-artifact-feedback-acceptance-evidence/
 scripts/_mvp-p16-packaged-acceptance-evidence/
 scripts/_mvp-p16-packaged-smoke-evidence/
 scripts/_mvp-p16-credential-setup-evidence/

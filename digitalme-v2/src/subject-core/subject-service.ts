@@ -18,6 +18,11 @@ import {
   requiresOwnerConfirmation,
   type SubjectCaptureSourceKind,
 } from './candidate-distill';
+import {
+  deriveArtifactOwnerDecision,
+  hasSameVersionDecision,
+  type ArtifactOwnerDecision,
+} from './artifact-decision';
 import { buildUserFacingSubjectSlices } from './user-facing-overview';
 import { InMemoryEventBus } from '../work-runtime/event-bus';
 
@@ -317,9 +322,20 @@ export class SubjectService {
     this.cachedDerived = null;
   }
 
+  /** 由 GrowthEvent 派生当前 Artifact 版本的采用状态。 */
+  async getArtifactOwnerDecision(
+    artifactId: string,
+    artifactVersionId: string,
+  ): Promise<ArtifactOwnerDecision> {
+    const pkg = this.requireActive();
+    const events = await this.requireLog().list(pkg.id);
+    return deriveArtifactOwnerDecision(events, artifactId, artifactVersionId);
+  }
+
   /**
    * 统一捕获自然语言并生成候选 — 使用即构建的主入口。
    * 当前 Task 仍可直接使用用户原文(goal);未确认候选不进入长期权威注入。
+   * 采用/不采用：用户按钮即决策，写入后自动确认进成长链；同版本同决策幂等。
    */
   async captureInput(input: {
     text: string;
@@ -327,11 +343,46 @@ export class SubjectService {
     materialRef?: string;
     taskId?: string;
     artifactId?: string;
-  }): Promise<{ candidateEventIds: string[]; confirmationSuggestedEventIds: string[] }> {
+    artifactVersionId?: string;
+    requestedArtifactType?: string;
+  }): Promise<{
+    candidateEventIds: string[];
+    confirmationSuggestedEventIds: string[];
+    confirmedEventIds?: string[];
+    idempotent?: boolean;
+    ownerDecision?: 'undecided' | 'accepted' | 'rejected';
+  }> {
     const pkg = this.requireActive();
-    const text = input.text.trim();
+    const isDecision =
+      input.sourceKind === 'artifact_acceptance' || input.sourceKind === 'artifact_rejection';
+    let text = input.text.trim();
+    if (!text && isDecision) {
+      text =
+        input.sourceKind === 'artifact_acceptance'
+          ? '用户采用了本次成果。'
+          : '用户未采用本次成果。';
+    }
     if (!text) {
       return { candidateEventIds: [], confirmationSuggestedEventIds: [] };
+    }
+
+    if (isDecision) {
+      if (!input.artifactId || !input.artifactVersionId) {
+        throw new Error('artifact decision requires artifactId and artifactVersionId');
+      }
+      const desired = input.sourceKind === 'artifact_acceptance' ? 'accepted' : 'rejected';
+      const events = await this.requireLog().list(pkg.id);
+      if (
+        hasSameVersionDecision(events, input.artifactId, input.artifactVersionId, desired)
+      ) {
+        return {
+          candidateEventIds: [],
+          confirmationSuggestedEventIds: [],
+          confirmedEventIds: [],
+          idempotent: true,
+          ownerDecision: desired,
+        };
+      }
     }
 
     // 自我说明/对话:落一份来源到 materials,便于追溯(非表单档案)
@@ -355,6 +406,10 @@ export class SubjectService {
       ...(materialRef ? { materialRef } : {}),
       ...(input.taskId ? { taskId: input.taskId } : {}),
       ...(input.artifactId ? { artifactId: input.artifactId } : {}),
+      ...(input.artifactVersionId ? { artifactVersionId: input.artifactVersionId } : {}),
+      ...(input.requestedArtifactType
+        ? { requestedArtifactType: input.requestedArtifactType }
+        : {}),
     });
 
     const candidateEventIds: string[] = [];
@@ -366,6 +421,22 @@ export class SubjectService {
         confirmationSuggestedEventIds.push(event.id);
       }
     }
+
+    if (isDecision && candidateEventIds.length > 0) {
+      const confirmed = await this.confirmCandidates({ eventIds: candidateEventIds });
+      const decision = await this.getArtifactOwnerDecision(
+        input.artifactId as string,
+        input.artifactVersionId as string,
+      );
+      return {
+        candidateEventIds,
+        confirmationSuggestedEventIds: [],
+        confirmedEventIds: candidateEventIds.slice(0, confirmed.confirmedCount),
+        idempotent: false,
+        ownerDecision: decision.status,
+      };
+    }
+
     return { candidateEventIds, confirmationSuggestedEventIds };
   }
 

@@ -101,8 +101,20 @@ export interface CommandMap {
       materialRef?: string;
       taskId?: string;
       artifactId?: string;
+      /** 采用/不采用必须锚定实际版本；编辑后 head 变化则状态回到未决定。 */
+      artifactVersionId?: string;
+      /** 用于相关任务经验选择（如 document），非用户面文案。 */
+      requestedArtifactType?: string;
     };
-    output: { candidateEventIds: string[]; confirmationSuggestedEventIds: string[] };
+    output: {
+      candidateEventIds: string[];
+      confirmationSuggestedEventIds: string[];
+      /** 采用/不采用自动确认后的事件 id。 */
+      confirmedEventIds?: string[];
+      /** 同版本同决策重复调用时为 true，未新写事件。 */
+      idempotent?: boolean;
+      ownerDecision?: 'undecided' | 'accepted' | 'rejected';
+    };
   };
   /** 导入单文件到主体 materials/,可选产生候选。 */
   'subject.importMaterial': {
@@ -183,6 +195,15 @@ export interface CommandMap {
       text?: string;
       headVersionId: string;
       versionCount: number;
+      /**
+       * 当前 head 版本的采用状态 — 由已落盘 GrowthEvent 派生，非 UI 本地布尔。
+       * undecided | accepted | rejected
+       */
+      ownerDecision?: {
+        status: 'undecided' | 'accepted' | 'rejected';
+        artifactVersionId: string;
+        decidedAt?: string;
+      };
       /** bundle 成果的条目与摘要(不新增命令)。 */
       bundle?: {
         entries: Array<{ role?: string; mediaType: string; text?: string }>;
