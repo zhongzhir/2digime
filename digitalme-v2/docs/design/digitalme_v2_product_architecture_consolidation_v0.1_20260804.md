@@ -241,4 +241,31 @@ owner_accepted
 frozen_for_sequencing
 ```
 
-仍须另开任务块方可实现采用闭环或 Collaboration MVP。
+Collaboration Product Entry 已于 `c017e7b` 合入；采用闭环此前已合入。本文 IA 仍冻结，不因后续能力切片改动导航。
+
+---
+
+## H. 演进方式（2026-08-04 增补；不改变已确认 IA）
+
+当前四个主要产品面（对话、做事、数字之我、协作）**不按各自独立路线纵向无限推进**，而按完整用户价值链轮动：
+
+```text
+主体理解 → 任务执行 → 能力调用 → Artifact 验证与采用
+→ 授权协作 → 成长与恢复 → 下一轮
+```
+
+约束：
+
+- 协作与未来广播必须由主体、能力、授权、验证、审计共同支撑；
+- 整体能力以最弱关键模块为准；
+- 进入主分支必须按产品准备验证或正式产品能力建设，不以一次性实验代码代替；
+- **下一阶段**：远端能力产品准备（`DIGITALME-V2-REMOTE-CAPABILITY-PRODUCT-READINESS-01`），统一 CapabilityAdapter 合同与恢复/验证边界，**不直接建设开放网络、不接真实 A2A、不启动公网广播**。
+
+状态保持：
+
+```text
+owner_accepted
+frozen_for_sequencing
+ia_unchanged
+evolution_policy_appended
+```

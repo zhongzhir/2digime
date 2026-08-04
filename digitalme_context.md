@@ -2,10 +2,16 @@
 
 版本：v0.4
 状态：持续更新
-最后更新：2026-08-03（TODAY-CLOSE · P2C1 质量恢复阻断收口；`v2/foundation` @ `ef1d394`；不得 push）
+最后更新：2026-08-04（Collaboration Product Entry 已提交；跨模块轮动演进与广播假设写入规则；下一任务 Remote Capability Product Readiness；`v2/foundation` @ `c017e7b`；不得 push）
 
+> **当前行动准则（2026-08-04）**：
+> 1. Digital Me 后续采用跨模块轮动演进。
+> 2. 任何主体、做事、能力、协作或网络功能推进前，先审查相邻模块成熟度。
+> 3. 进入主分支的能力必须按可用产品建设，不以一次性实验代码代替。
+> 4. 广播作为长期核心创新假设持续评估，但近期不替代产品基本闭环和 A2A 受控能力接入。
+>
 > **当前产品主线（2026-07-26）**：**第二纵向闭环** — 多模态成果包交付与渐进式主体构建。第一纵向闭环已 `accepted` / `completed`。
-> **V2 当前执行分支（2026-08-03）**：`v2/foundation` · HEAD **`ef1d394`** · **未 push**。
+> **V2 当前执行分支（2026-08-04）**：`v2/foundation` · HEAD **`c017e7b`** · **未 push** · Collaboration Product Entry = `owner_accepted` / `committed`。
 > **今日停止指针**：**DIGITALME-V2-P2C1-CODE-ANALYSIS-QUALITY-RECOVERY-01** =
 > `blocked` / `real_quality_gate_failed` / `degraded_scan_only` / `snapshot_noise_identified` /
 > `structured_output_brittleness_identified` / `production_changes_reverted` / `next_route_defined` /
