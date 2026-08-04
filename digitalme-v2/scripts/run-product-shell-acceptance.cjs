@@ -65,6 +65,8 @@ const required = [
   /id="nav-chat"/,
   /id="nav-subject"/,
   /id="nav-work"/,
+  /id="nav-collab"/,
+  /id="panel-collab"/,
   /id="btn-open-help"/,
   /id="btn-open-settings"/,
   /新建任务/,
@@ -81,10 +83,16 @@ for (const re of required) {
 ok('required shell markers present');
 
 const htmlOnly = fs.readFileSync(path.join(appRoot, 'electron/renderer/index.html'), 'utf8');
-if (/id="nav-collab"|id="panel-collab"/.test(htmlOnly)) {
-  fail('empty collaboration primary nav still present');
+if (!/id="nav-collab"/.test(htmlOnly) || !/id="panel-collab"/.test(htmlOnly)) {
+  fail('collaboration primary nav/panel missing');
 }
-ok('no empty collaboration primary entry');
+if (!/新建协作/.test(htmlOnly) || !/进行中/.test(htmlOnly) || !/已完成/.test(htmlOnly) || !/已撤销/.test(htmlOnly)) {
+  fail('collaboration home sections incomplete');
+}
+if (/AuthorizationGrant|ContextSnapshot|GrowthEvent|Grant ID|Job ID/i.test(htmlOnly)) {
+  fail('internal collaboration terms leaked into shell HTML');
+}
+ok('collaboration primary entry present with home sections');
 
 if (/代码项目分析|value="code-analysis"|value="code-change"/.test(allText)) {
   fail('artifact type still exposes internal capability choices');

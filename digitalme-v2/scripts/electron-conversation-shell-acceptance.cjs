@@ -191,8 +191,12 @@ async function mainSequence() {
     help: !!document.getElementById('btn-open-help'),
     labels: [...document.querySelectorAll('.main-nav .nav-item')].map((b) => b.textContent.trim()),
   })`);
-  check('three_primary_nav_entries', nav.chat && nav.work && nav.subject && !nav.collab, nav);
-  check('nav_order_chat_work_subject', nav.labels.join('|') === '对话|做事|数字之我', nav);
+  check('four_primary_nav_entries', nav.chat && nav.work && nav.subject && nav.collab, nav);
+  check(
+    'nav_order_chat_work_subject_collab',
+    nav.labels.join('|') === '对话|做事|数字之我|协作',
+    nav,
+  );
   check('help_aux_present', nav.help === true);
 
   // 对话独立使用，不创建 Task

@@ -50,8 +50,8 @@ const required = [
   /sourceKind:\s*["']conversation["']/,
 ];
 
-if (/id="nav-collab"/.test(allText)) {
-  fail('empty collaboration primary nav still present');
+if (!/id="nav-collab"/.test(allText) || !/id="panel-collab"/.test(allText)) {
+  fail('collaboration primary entry missing from shell');
 }
 
 for (const re of required) {

@@ -86,6 +86,7 @@
             <button type="button" class="nav-item" data-nav="chat" id="nav-chat">对话</button>
             <button type="button" class="nav-item active" data-nav="work" id="nav-work">做事</button>
             <button type="button" class="nav-item" data-nav="subject" id="nav-subject">数字之我</button>
+            <button type="button" class="nav-item" data-nav="collab" id="nav-collab">协作</button>
           </nav>
           <div class="topbar-actions">
             <button type="button" id="btn-open-help" class="ghost">帮助</button>
@@ -174,6 +175,59 @@
               </div>
               <p id="job-status" class="status" aria-live="polite"></p>
               <p id="job-actionable" class="muted"></p>
+
+              <div class="collab-box" id="collab-box" hidden>
+                <h3 class="section-title">协作</h3>
+                <p class="muted tiny">把当前任务中的一个明确子任务交给本机另一个数字之我。协作成果显示在下方，不覆盖主成果。</p>
+                <button type="button" id="btn-collab-open" class="ghost">交给另一个数字之我</button>
+                <div id="collab-form" class="collab-form" hidden>
+                  <label class="field">
+                    <span>协作对象</span>
+                    <div class="row">
+                      <button type="button" id="btn-collab-pick-peer">选择</button>
+                      <button type="button" id="btn-collab-import-peer" class="ghost">导入数字之我</button>
+                    </div>
+                    <input type="hidden" id="collab-peer-dir" />
+                    <div id="collab-peer-card" class="collab-peer-card" hidden>
+                      <p id="collab-peer-name" class="collab-peer-name"></p>
+                      <p id="collab-peer-brief" class="muted tiny" hidden></p>
+                      <p id="collab-peer-path" class="muted tiny collab-peer-path"></p>
+                    </div>
+                  </label>
+                  <p id="collab-peer-empty" class="muted tiny" hidden>还没有可协作的数字之我。</p>
+                  <label class="field">
+                    <span>想让对方完成什么</span>
+                    <textarea id="collab-subtask" rows="3" placeholder="说明希望对方完成的具体内容"></textarea>
+                  </label>
+                  <label class="field">
+                    <span>可选补充要求</span>
+                    <textarea id="collab-extra" rows="2" placeholder="可留空"></textarea>
+                  </label>
+                  <fieldset class="field collab-materials-field">
+                    <legend>允许共享的材料（须明确勾选）</legend>
+                    <ul id="collab-material-checks" class="collab-material-checks"></ul>
+                    <p id="collab-materials-hint" class="muted tiny">未勾选时，对方看不到你的任务材料。</p>
+                  </fieldset>
+                  <div id="collab-confirm" class="collab-confirm" hidden>
+                    <h4 class="section-title">授权说明</h4>
+                    <ul id="collab-confirm-points" class="collab-confirm-points"></ul>
+                  </div>
+                  <div class="row">
+                    <button type="button" id="btn-collab-preview" class="ghost">查看授权范围</button>
+                    <button type="button" id="btn-collab-issue" class="primary">发出协作</button>
+                  </div>
+                </div>
+                <h4 class="section-title">协作成果</h4>
+                <p id="collab-status" class="meta" aria-live="polite"></p>
+                <pre id="collab-return" class="collab-return" hidden></pre>
+                <div class="row" id="collab-actions" hidden>
+                  <button type="button" id="btn-collab-execute">开始协作执行</button>
+                  <button type="button" id="btn-collab-accept">采用返回成果</button>
+                  <button type="button" id="btn-collab-reject">不采用</button>
+                  <button type="button" id="btn-collab-revoke" class="ghost">撤销授权</button>
+                </div>
+                <p id="collab-error" class="muted tiny error" hidden></p>
+              </div>
             </main>
 
             <section id="artifact-panel" class="panel artifact-side" hidden>
@@ -228,41 +282,90 @@
                   <button type="button" id="btn-revise" class="primary">修改成果</button>
                 </div>
               </div>
-              <div class="collab-box" id="collab-box">
-                <h3 class="section-title">协作</h3>
-                <p class="muted tiny">把当前任务中的一个明确子任务交给本机另一个数字之我。</p>
-                <button type="button" id="btn-collab-open" class="ghost">交给另一个数字之我</button>
-                <div id="collab-form" class="collab-form" hidden>
-                  <label class="field">
-                    <span>协作者主体目录</span>
-                    <div class="row">
-                      <input type="text" id="collab-peer-dir" readonly placeholder="选择本机主体目录" />
-                      <button type="button" id="btn-collab-pick-peer">选择</button>
-                    </div>
-                  </label>
-                  <label class="field">
-                    <span>子任务要求</span>
-                    <textarea id="collab-subtask" rows="3" placeholder="说明希望对方完成的具体内容"></textarea>
-                  </label>
-                  <label class="field">
-                    <span>允许共享的材料（当前任务材料路径，每行一个；留空表示不共享文件）</span>
-                    <textarea id="collab-materials" rows="3" placeholder="可选"></textarea>
-                  </label>
-                  <div class="row">
-                    <button type="button" id="btn-collab-issue" class="primary">确认授权并请求</button>
-                  </div>
-                </div>
-                <p id="collab-status" class="meta" aria-live="polite"></p>
-                <pre id="collab-return" class="collab-return" hidden></pre>
-                <div class="row" id="collab-actions" hidden>
-                  <button type="button" id="btn-collab-execute">开始协作执行</button>
-                  <button type="button" id="btn-collab-accept">采用返回成果</button>
-                  <button type="button" id="btn-collab-reject">不采用</button>
-                  <button type="button" id="btn-collab-revoke" class="ghost">撤销授权</button>
-                </div>
-                <p id="collab-error" class="muted tiny error" hidden></p>
-              </div>
             </section>
+          </div>
+        </section>
+
+        <section id="panel-collab" class="shell-panel" data-panel="collab" hidden>
+          <div id="collab-page-home">
+            <div class="aside-head">
+              <h1 class="page-title">协作</h1>
+              <button type="button" id="btn-collab-page-new" class="primary">新建协作</button>
+            </div>
+            <p class="muted tiny">把明确的子任务交给本机另一个数字之我，并随时查看与撤销授权。</p>
+            <h2 class="section-title">进行中</h2>
+            <ul id="collab-list-active" class="collab-entry-list"></ul>
+            <p id="collab-empty-active" class="muted tiny">暂无进行中的协作。</p>
+            <h2 class="section-title">已完成</h2>
+            <ul id="collab-list-done" class="collab-entry-list"></ul>
+            <p id="collab-empty-done" class="muted tiny">暂无已完成的协作。</p>
+            <h2 class="section-title">已撤销</h2>
+            <ul id="collab-list-revoked" class="collab-entry-list"></ul>
+            <p id="collab-empty-revoked" class="muted tiny">暂无已撤销的协作。</p>
+          </div>
+
+          <div id="collab-page-new" hidden>
+            <button type="button" id="btn-collab-new-back" class="ghost">返回列表</button>
+            <h1 class="page-title">新建协作</h1>
+            <label class="field">
+              <span>协作对象</span>
+              <div class="row">
+                <button type="button" id="btn-collab-page-pick-peer">选择</button>
+                <button type="button" id="btn-collab-page-import-peer" class="ghost">导入数字之我</button>
+              </div>
+              <input type="hidden" id="collab-page-peer-dir" />
+              <div id="collab-page-peer-card" class="collab-peer-card" hidden>
+                <p id="collab-page-peer-name" class="collab-peer-name"></p>
+                <p id="collab-page-peer-brief" class="muted tiny" hidden></p>
+                <p id="collab-page-peer-path" class="muted tiny collab-peer-path"></p>
+              </div>
+            </label>
+            <p id="collab-page-peer-empty" class="muted tiny" hidden>还没有可协作的数字之我。</p>
+            <label class="field">
+              <span>想让对方完成什么</span>
+              <textarea id="collab-page-subtask" rows="3" placeholder="说明希望对方完成的具体内容"></textarea>
+            </label>
+            <label class="field">
+              <span>可选补充要求</span>
+              <textarea id="collab-page-extra" rows="2" placeholder="可留空"></textarea>
+            </label>
+            <fieldset class="field collab-materials-field">
+              <legend>允许共享的材料（须明确勾选）</legend>
+              <div class="row">
+                <button type="button" id="btn-collab-page-add-files">添加材料文件</button>
+              </div>
+              <ul id="collab-page-material-checks" class="collab-material-checks"></ul>
+              <p class="muted tiny">不会自动共享完整任务、主体资料或全部上下文。</p>
+            </fieldset>
+            <div id="collab-page-confirm" class="collab-confirm" hidden>
+              <h2 class="section-title">授权说明</h2>
+              <ul id="collab-page-confirm-points" class="collab-confirm-points"></ul>
+            </div>
+            <div class="row">
+              <button type="button" id="btn-collab-page-preview" class="ghost">查看授权范围</button>
+              <button type="button" id="btn-collab-page-issue" class="primary">发出协作</button>
+            </div>
+            <p id="collab-page-new-error" class="muted tiny error" hidden></p>
+          </div>
+
+          <div id="collab-page-detail" hidden>
+            <button type="button" id="btn-collab-detail-back" class="ghost">返回列表</button>
+            <h1 class="page-title">协作详情</h1>
+            <p id="collab-detail-peer" class="meta"></p>
+            <p id="collab-detail-goal" class="collab-detail-goal"></p>
+            <p id="collab-detail-status" class="meta" aria-live="polite"></p>
+            <h2 class="section-title">已共享材料</h2>
+            <ul id="collab-detail-materials" class="collab-material-checks"></ul>
+            <h2 class="section-title">返回成果</h2>
+            <pre id="collab-detail-return" class="collab-return" hidden></pre>
+            <p id="collab-detail-return-empty" class="muted tiny">尚未返回成果。</p>
+            <div class="row" id="collab-detail-actions">
+              <button type="button" id="btn-collab-detail-execute">开始协作执行</button>
+              <button type="button" id="btn-collab-detail-accept" class="primary">采用</button>
+              <button type="button" id="btn-collab-detail-reject">不采用</button>
+              <button type="button" id="btn-collab-detail-revoke" class="ghost">撤销授权</button>
+            </div>
+            <p id="collab-detail-error" class="muted tiny error" hidden></p>
           </div>
         </section>
 
@@ -280,9 +383,9 @@
             <li><strong>对话</strong>：轻量交流，不会自动生成成果；需要时可转为任务。</li>
             <li><strong>做事</strong>：描述目标、添加材料、开始处理；可修改与导出成果。</li>
             <li><strong>数字之我</strong>：补充说明、添加或移除资料、调整已确认内容。</li>
+            <li><strong>协作</strong>：把明确子任务交给本机另一个数字之我，查看返回成果并随时撤销授权。</li>
             <li><strong>设置</strong>：连接模型服务。未连接时，做事会提示先完成连接。</li>
           </ul>
-          <p class="muted tiny">协作能力属于产品核心主线，可用闭环就绪后会出现在主导航中。</p>
         </div>
       </section>
     </div>

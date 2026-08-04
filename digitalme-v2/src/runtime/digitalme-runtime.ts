@@ -255,15 +255,19 @@ export class DigitalMeRuntime {
 
     const host = new LocalCollaborationHost(this);
     if (action === 'issue') {
-      if (!input.granteePackageDir || !input.issuerTaskId || !input.subtaskGoal) {
-        throw new Error('issue requires granteePackageDir, issuerTaskId, subtaskGoal');
+      if (!input.granteePackageDir || !input.subtaskGoal) {
+        throw new Error('issue requires granteePackageDir, subtaskGoal');
       }
       return host.issue({
         granteePackageDir: input.granteePackageDir,
-        issuerTaskId: input.issuerTaskId,
+        ...(input.issuerTaskId ? { issuerTaskId: input.issuerTaskId } : {}),
         subtaskGoal: input.subtaskGoal,
         allowedMaterialPaths: input.allowedMaterialPaths ?? [],
       });
+    }
+    if (action === 'resolvePeer') {
+      if (!input.granteePackageDir) throw new Error('resolvePeer requires granteePackageDir');
+      return host.resolvePeer(input.granteePackageDir);
     }
     if (action === 'revoke') {
       if (!input.grantId) throw new Error('revoke requires grantId');
@@ -276,12 +280,16 @@ export class DigitalMeRuntime {
         input.extraMaterialPaths ? { extraMaterialPaths: input.extraMaterialPaths } : {},
       );
     }
+    if (action === 'list') {
+      return host.list();
+    }
     if (action === 'status') {
       if (!input.grantId) throw new Error('status requires grantId');
       const got = await host.getStatus(input.grantId);
       return {
         grantId: got.grantId,
         status: got.status,
+        ...(got.ownerDecision ? { ownerDecision: got.ownerDecision } : {}),
         grant: {
           id: got.grant.id,
           status: got.grant.status,
@@ -295,6 +303,12 @@ export class DigitalMeRuntime {
           ...(got.grant.returnedArtifact?.reachedModel !== undefined
             ? { reachedModel: got.grant.returnedArtifact.reachedModel }
             : {}),
+          allowedMaterials: (got.grant.scope.resourceRefs ?? []).map((p) => path.resolve(p)),
+          ...(got.grant.issuerTaskId ? { issuerTaskId: got.grant.issuerTaskId } : {}),
+          ...(got.grant.lastFailure?.message
+            ? { failureMessage: got.grant.lastFailure.message }
+            : {}),
+          ...(got.ownerDecision ? { ownerDecision: got.ownerDecision } : {}),
         },
         ...(got.grant.disclosure?.reachedModel !== undefined
           ? { reachedModel: got.grant.disclosure.reachedModel }

@@ -22,9 +22,17 @@ import {
 
 export interface CollabIssueInput {
   granteePackageDir: string;
-  issuerTaskId: string;
+  /** 可选：做事页发起时关联的 A 侧任务；协作页新建可不传（身份由 Grant 承载）。 */
+  issuerTaskId?: string;
   subtaskGoal: string;
   allowedMaterialPaths: string[];
+}
+
+export interface CollabPeerPreview {
+  displayName: string;
+  packageDir: string;
+  brief?: string;
+  subjectId?: string;
 }
 
 export interface CollabExecuteResult {
@@ -38,6 +46,20 @@ export interface CollabExecuteResult {
   reason?: string;
   reachedModel?: boolean;
   capabilityId?: string;
+}
+
+/** 产品面投影（派生自 Grant + GrowthEvent，非第二权威 Store）。 */
+export interface CollabListItem {
+  grantId: string;
+  status: CollabUserStatus;
+  ownerDecision?: 'accept' | 'reject';
+  subtaskGoal?: string;
+  granteeDisplayName?: string;
+  allowedMaterials: string[];
+  returnedExcerpt?: string;
+  issuerTaskId?: string;
+  failureMessage?: string;
+  reachedModel?: boolean;
 }
 
 function normPath(p: string): string {
@@ -121,7 +143,7 @@ export class LocalCollaborationHost {
         },
         status: 'granted',
         grantedAt: at,
-        issuerTaskId: input.issuerTaskId,
+        ...(input.issuerTaskId ? { issuerTaskId: input.issuerTaskId } : {}),
         subtaskGoal: goal,
         granteePackageDir: granteeDir,
         granteeDisplayName: opened.displayName,
@@ -129,6 +151,38 @@ export class LocalCollaborationHost {
       const store = await this.grantStore();
       await store.put(grant);
       return { requestId, grantId: grant.id, status: 'authorized' };
+    } finally {
+      await granteeRt.stop();
+    }
+  }
+
+  /**
+   * 预览本机协作对象身份（不切换当前活动包、不落盘）。
+   */
+  async resolvePeer(granteePackageDir: string): Promise<CollabPeerPreview> {
+    const granteeDir = path.resolve(granteePackageDir);
+    const granteeRt = this.issuer.createSiblingRuntime();
+    try {
+      const opened = await granteeRt.openPackage({ dir: granteeDir });
+      let brief: string | undefined;
+      try {
+        const overview = await granteeRt.getOverview({});
+        const line =
+          (overview.activeUnderstandings &&
+            overview.activeUnderstandings[0] &&
+            overview.activeUnderstandings[0].text) ||
+          overview.summaryLine ||
+          '';
+        if (line && String(line).trim()) brief = String(line).trim().slice(0, 120);
+      } catch {
+        /* overview 可选 */
+      }
+      return {
+        displayName: opened.displayName,
+        packageDir: granteeDir,
+        subjectId: opened.subjectId,
+        ...(brief ? { brief } : {}),
+      };
     } finally {
       await granteeRt.stop();
     }
@@ -150,11 +204,73 @@ export class LocalCollaborationHost {
     grantId: string;
     status: CollabUserStatus;
     grant: AuthorizationGrant;
+    ownerDecision?: 'accept' | 'reject';
   }> {
     const store = await this.grantStore();
     const grant = await store.get(grantId);
     if (!grant) throw new Error(`grant not found: ${grantId}`);
-    return { grantId, status: deriveUserStatus(grant), grant };
+    const ownerDecision = await this.resolveOwnerDecision(grantId);
+    return {
+      grantId,
+      status: deriveUserStatus(grant),
+      grant,
+      ...(ownerDecision ? { ownerDecision } : {}),
+    };
+  }
+
+  /**
+   * 列出本主体发出的协作授权（读 GrantStore，不另建协作 Store）。
+   */
+  async list(): Promise<{ items: CollabListItem[] }> {
+    const store = await this.grantStore();
+    const grants = await store.list();
+    const items: CollabListItem[] = [];
+    for (const grant of grants) {
+      if (!grant.subtaskGoal && !grant.granteePackageDir) continue;
+      const ownerDecision = await this.resolveOwnerDecision(grant.id);
+      const status = deriveUserStatus(grant);
+      items.push({
+        grantId: grant.id,
+        status,
+        ...(ownerDecision ? { ownerDecision } : {}),
+        ...(grant.subtaskGoal ? { subtaskGoal: grant.subtaskGoal } : {}),
+        ...(grant.granteeDisplayName
+          ? { granteeDisplayName: grant.granteeDisplayName }
+          : {}),
+        allowedMaterials: (grant.scope.resourceRefs ?? []).map(normPath),
+        ...(grant.returnedArtifact?.textExcerpt
+          ? { returnedExcerpt: grant.returnedArtifact.textExcerpt }
+          : {}),
+        ...(grant.issuerTaskId ? { issuerTaskId: grant.issuerTaskId } : {}),
+        ...(grant.lastFailure?.message
+          ? { failureMessage: grant.lastFailure.message }
+          : {}),
+        ...(grant.disclosure?.reachedModel !== undefined
+          ? { reachedModel: grant.disclosure.reachedModel }
+          : grant.returnedArtifact?.reachedModel !== undefined
+            ? { reachedModel: grant.returnedArtifact.reachedModel }
+            : {}),
+      });
+    }
+    items.sort((a, b) => b.grantId.localeCompare(a.grantId));
+    return { items };
+  }
+
+  private async resolveOwnerDecision(
+    grantId: string,
+  ): Promise<'accept' | 'reject' | undefined> {
+    const events = await this.issuer.subject.listGrowthEvents();
+    const needle = `grant ${grantId}`;
+    for (let i = events.length - 1; i >= 0; i -= 1) {
+      const e = events[i];
+      if (!e) continue;
+      const detail = e.payload.detail || '';
+      if (!detail.includes(needle)) continue;
+      const tags = e.payload.tags ?? [];
+      if (tags.includes('collab:external_accept')) return 'accept';
+      if (tags.includes('collab:external_reject')) return 'reject';
+    }
+    return undefined;
   }
 
   async assertMaterialAccess(

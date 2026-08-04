@@ -77,6 +77,14 @@ test('Case1+2+3+4: local dual-subject collaboration grant execute isolate revoke
     path.resolve(matX),
   ]);
 
+  const listed = await busA.invoke('collab.simulateInteraction', { action: 'list' });
+  assert.ok(Array.isArray(listed.items));
+  assert.ok(listed.items.some((i) => i.grantId === issued.grantId));
+  assert.ok(
+    listed.items.every((i) => Array.isArray(i.allowedMaterials)),
+    'list projection must expose allowed materials',
+  );
+
   // Case 2: Y 未授权
   const denyY = await busA.invoke('collab.simulateInteraction', {
     action: 'assertMaterialAccess',
@@ -175,6 +183,71 @@ test('Case1+2+3+4: local dual-subject collaboration grant execute isolate revoke
   await runtimeB2.stop();
 });
 
+test('issue without issuer task; B task only after execute; peer preview', async () => {
+  const root = await tempDir('no-shell-task');
+  const dirA = path.join(root, 'subject-a');
+  const dirB = path.join(root, 'subject-b');
+  const matX = await writeFile(path.join(root, 'x.md'), '授权材料X：仅共享要点。');
+
+  const runtimeA = createDigitalMeRuntime({ documentCapability: 'fake' });
+  const busA = createCommandBus(runtimeA);
+  await runtimeA.createPackage({
+    displayName: '主体甲',
+    targetDir: dirA,
+    initialSelfDescription: '主报告负责人。',
+  });
+  const runtimeB = createDigitalMeRuntime({ documentCapability: 'fake' });
+  await runtimeB.createPackage({
+    displayName: '协作乙',
+    targetDir: dirB,
+    initialSelfDescription: '协助整理摘要。',
+  });
+  await runtimeB.stop();
+
+  const tasksBefore = await runtimeA.listTasks({ limit: 50 });
+  const peer = await busA.invoke('collab.simulateInteraction', {
+    action: 'resolvePeer',
+    granteePackageDir: dirB,
+  });
+  assert.equal(peer.displayName, '协作乙');
+  assert.match(String(peer.packageDir || ''), /subject-b/);
+
+  const issued = await busA.invoke('collab.simulateInteraction', {
+    action: 'issue',
+    granteePackageDir: dirB,
+    subtaskGoal: '根据材料写一段摘要。',
+    allowedMaterialPaths: [matX],
+  });
+  assert.ok(issued.grantId);
+  const tasksAfterIssue = await runtimeA.listTasks({ limit: 50 });
+  assert.equal(
+    tasksAfterIssue.tasks.length,
+    tasksBefore.tasks.length,
+    'issue must not create A-side container task',
+  );
+
+  const runtimeBBefore = createDigitalMeRuntime({ documentCapability: 'fake' });
+  await runtimeBBefore.openPackage({ dir: dirB });
+  const bTasksBefore = await runtimeBBefore.listTasks({ limit: 50 });
+  assert.equal(bTasksBefore.tasks.length, 0);
+  await runtimeBBefore.stop();
+
+  const executed = await busA.invoke('collab.simulateInteraction', {
+    action: 'execute',
+    grantId: issued.grantId as string,
+  });
+  assert.equal(executed.status, 'completed');
+
+  const runtimeBAfter = createDigitalMeRuntime({ documentCapability: 'fake' });
+  await runtimeBAfter.openPackage({ dir: dirB });
+  const bTasks = await runtimeBAfter.listTasks({ limit: 50 });
+  assert.equal(bTasks.tasks.length, 1);
+  const bDetail = await runtimeBAfter.getTask({ taskId: bTasks.tasks[0]!.taskId });
+  assert.equal(bDetail.task.authorization?.grantId, issued.grantId);
+  await runtimeBAfter.stop();
+  await runtimeA.stop();
+});
+
 test('Case4: capability failure does not write collab:fulfilled', async () => {
   const root = await tempDir('fail');
   const dirA = path.join(root, 'subject-a');
@@ -192,7 +265,6 @@ test('Case4: capability failure does not write collab:fulfilled', async () => {
     initialSelfDescription: '测试失败纪律。',
   });
 
-  // 为发 Grant 需要 issuerTaskId；无文档能力时无法 submitTask，写入假 taskId 亦可（execute 不依赖 A 任务执行）。
   const runtimeB = createDigitalMeRuntime({ documentCapability: 'fake' });
   await runtimeB.createPackage({
     displayName: '乙',
@@ -202,10 +274,10 @@ test('Case4: capability failure does not write collab:fulfilled', async () => {
   await runtimeB.stop();
 
   // Issuer 无能力 → sibling 也无能力 → execute 失败且不得 fulfilled
+  // 协作身份由 Grant 承载，issue 无需 A 侧容器 Task。
   const issued = await busA.invoke('collab.simulateInteraction', {
     action: 'issue',
     granteePackageDir: dirB,
-    issuerTaskId: 'task_placeholder',
     subtaskGoal: '应失败的子任务',
     allowedMaterialPaths: [matX],
   });

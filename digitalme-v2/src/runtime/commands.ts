@@ -240,8 +240,9 @@ export interface CommandMap {
     output: { capabilities: CapabilityRegistration[] };
   };
   /**
-   * 本机协作（升级原 simulate 占位）：issue / revoke / execute / status / acceptReturn / assertMaterialAccess。
-   * 仍占 1 个命令位；Grant 持久在 issuer 包内。
+   * 本机协作（升级原 simulate 占位）：
+   * issue / revoke / execute / status / list / acceptReturn / assertMaterialAccess。
+   * 仍占 1 个命令位；Grant 持久在 issuer 包内；list/status 为派生投影。
    */
   'collab.simulateInteraction': {
     input: {
@@ -250,6 +251,8 @@ export interface CommandMap {
         | 'revoke'
         | 'execute'
         | 'status'
+        | 'list'
+        | 'resolvePeer'
         | 'acceptReturn'
         | 'assertMaterialAccess';
       /** 兼容旧冒烟：无 action 时按本地占位模拟。 */
@@ -280,6 +283,23 @@ export interface CommandMap {
       reachedModel?: boolean;
       capabilityId?: string;
       integratedIntoArtifactId?: string;
+      ownerDecision?: 'accept' | 'reject';
+      displayName?: string;
+      packageDir?: string;
+      brief?: string;
+      subjectId?: string;
+      items?: Array<{
+        grantId: string;
+        status: string;
+        ownerDecision?: 'accept' | 'reject';
+        subtaskGoal?: string;
+        granteeDisplayName?: string;
+        allowedMaterials: string[];
+        returnedExcerpt?: string;
+        issuerTaskId?: string;
+        failureMessage?: string;
+        reachedModel?: boolean;
+      }>;
       grant?: {
         id: string;
         status: string;
@@ -287,6 +307,10 @@ export interface CommandMap {
         granteeDisplayName?: string;
         returnedExcerpt?: string;
         reachedModel?: boolean;
+        allowedMaterials?: string[];
+        issuerTaskId?: string;
+        failureMessage?: string;
+        ownerDecision?: 'accept' | 'reject';
       };
     };
   };

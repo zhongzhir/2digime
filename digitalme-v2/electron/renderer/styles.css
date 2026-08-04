@@ -72,7 +72,8 @@ body {
   margin-top: 10px;
 }
 
-.collab-form input[type='text'] {
+.collab-form input[type='text'],
+#collab-page-peer-dir {
   flex: 1;
   min-width: 0;
 }
@@ -86,6 +87,100 @@ body {
   background: rgba(28, 36, 48, 0.03);
   border-radius: 8px;
   font-size: 13px;
+}
+
+.collab-material-checks {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.collab-material-checks li {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 6px 0;
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.collab-confirm {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(28, 36, 48, 0.02);
+}
+
+.collab-confirm-points {
+  margin: 8px 0 0;
+  padding-left: 1.2em;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.collab-entry-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.collab-entry-list li {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 8px 0;
+  cursor: pointer;
+}
+
+.collab-entry-list li:hover {
+  border-color: var(--accent);
+}
+
+.collab-entry-list .entry-title {
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.collab-entry-list .entry-meta {
+  margin: 0;
+  color: var(--muted, #667);
+  font-size: 12px;
+}
+
+.collab-detail-goal {
+  white-space: pre-wrap;
+  margin: 8px 0 12px;
+}
+
+.collab-materials-field {
+  border: none;
+  padding: 0;
+  margin: 12px 0;
+}
+
+.collab-materials-field legend {
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.collab-peer-card {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(28, 36, 48, 0.02);
+}
+
+.collab-peer-name {
+  margin: 0 0 4px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.collab-peer-path {
+  margin: 4px 0 0;
+  word-break: break-all;
 }
 
 .brand,

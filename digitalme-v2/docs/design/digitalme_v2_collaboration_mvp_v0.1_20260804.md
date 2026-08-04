@@ -1,11 +1,11 @@
-# Digital Me V2 — Collaboration MVP（同机双主体）
+﻿# Digital Me V2 — Collaboration MVP（同机双主体）
 
 - **文档编号**：`DIGITALME-V2-COLLABORATION-MVP-01`
 - **版本**：v0.1（2026-08-04）
 - **基线**：`v2/foundation` @ `d38fbf6`
-- **状态**：`collaboration_mvp_validated` / `ready_for_commit_and_owner_path_review`
-- **关联**：`DIGITALME-V2-COLLABORATION-REAL-CAPABILITY-VALIDATION-01`
-- **不做**：主体市场、公网/P2P、消息系统、支付、信誉、群组、实时聊天、主导航「协作」入口恢复
+- **状态**：`collaboration_mvp_validated` / `product_entry_implemented_pending_owner_review` / `not_product_ready`
+- **关联**：`DIGITALME-V2-COLLABORATION-REAL-CAPABILITY-VALIDATION-01`、`DIGITALME-V2-COLLABORATION-PRODUCT-ENTRY-01`
+- **不做**：主体市场、公网/P2P、消息系统、支付、信誉、群组、实时聊天；产品入口实现后仍须 Owner 手验，未授权不得提交/宣称正式开放
 
 ---
 
@@ -20,7 +20,7 @@
 5. A 查看返回成果 → 采用 / 不采用  
 6. A 撤销授权 → B 再执行被领域层拒绝  
 
-主导航不恢复「协作」；成功验收后由下一切片恢复一级入口。
+一级导航「协作」已在 PRODUCT-ENTRY 切片实现（含首页/新建/详情），复用同一 Grant；Owner 手验前不提交、不宣称正式开放。
 
 ---
 
@@ -114,7 +114,7 @@ npm run accept:collaboration-real  # 真实模型单样本（禁止 Fake 冒充�
 
 ## 9. 已知后置项
 
-- 恢复主导航「协作」一级入口（须 Owner 主路径确认）  
+- Owner 主路径手验后，再决定是否提交 PRODUCT-ENTRY 并宣称入口可用  
 - 不采用作为更细负面注入  
 - 远程主体 / P2P / 市场  
-- 主成果合并协作段落的产品化编辑体验  
+- 主成果合并协作段落的产品化编辑体验 

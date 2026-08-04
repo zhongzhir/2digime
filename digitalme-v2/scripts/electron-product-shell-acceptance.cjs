@@ -165,11 +165,15 @@ async function mainSequence() {
   })`);
   check('entered_shell_without_folder_picker', shell.welcomeHidden === true && shell.shellHidden === false);
   check(
-    'three_primary_nav_entries',
-    shell.navSubject && shell.navWork && shell.navChat && !shell.navCollab,
+    'four_primary_nav_entries',
+    shell.navSubject && shell.navWork && shell.navChat && shell.navCollab,
     shell,
   );
-  check('nav_order_chat_work_subject', shell.labels.join('|') === '对话|做事|数字之我', shell);
+  check(
+    'nav_order_chat_work_subject_collab',
+    shell.labels.join('|') === '对话|做事|数字之我|协作',
+    shell,
+  );
   check('aux_help_and_settings', shell.help && shell.settings);
   check('new_task_button_present', shell.newTask === true);
   check(

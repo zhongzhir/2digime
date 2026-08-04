@@ -1,6 +1,6 @@
 /**
  * COLLABORATION-MVP-01 验收：
- * - 静态：做事页低干扰协作入口，无主导航「协作」
+ * - 静态：做事页低干扰协作入口仍在；领域闭环不变
  * - 领域：同机双主体授权/执行/隔离/撤销
  *
  * 用法: npm run accept:collaboration-mvp
@@ -29,11 +29,6 @@ if (build.status !== 0) process.exit(build.status || 1);
 const html = fs.readFileSync(path.join(appRoot, 'electron/renderer/index.html'), 'utf8');
 const appJs = fs.readFileSync(path.join(appRoot, 'electron/renderer/app.js'), 'utf8');
 
-if (/id="nav-collab"/.test(html)) {
-  fail('primary collaboration nav must stay hidden this slice');
-}
-ok('no primary collaboration nav');
-
 for (const re of [
   /交给另一个数字之我/,
   /id="btn-collab-open"/,
@@ -46,7 +41,7 @@ for (const re of [
   const hay = html + '\n' + appJs;
   if (!re.test(hay)) fail(`missing collaboration marker: ${re}`);
 }
-ok('collaboration UI markers present');
+ok('collaboration work-page secondary entry markers present');
 
 if (/GrowthEvent|AuthorizationGrant|ContextSnapshot/i.test(html)) {
   fail('internal terms leaked into collaboration HTML');
