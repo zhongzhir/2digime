@@ -12,6 +12,7 @@ import type {
   ExecutionContext,
 } from '../adapter';
 import type { CapabilityRegistration } from '../registration';
+import { asLocalCapabilityAdapter } from '../local-adapter-lifecycle';
 import type { SnapshotItem } from '../../work-runtime/context-snapshot';
 import { sanitizeMessage } from '../../work-runtime/snapshot-builder';
 import {
@@ -97,7 +98,7 @@ export function buildDeterministicCodeAnalysisRegistration(): CapabilityRegistra
 }
 
 export function createDeterministicCodeAnalysisAdapter(): CapabilityAdapter {
-  return {
+  return asLocalCapabilityAdapter({
     registration: buildDeterministicCodeAnalysisRegistration(),
     async execute(input: CapabilityInput, ctx: ExecutionContext): Promise<CapabilityOutput> {
       if (ctx.signal.aborted) throw abortError();
@@ -212,7 +213,7 @@ export function createDeterministicCodeAnalysisAdapter(): CapabilityAdapter {
         },
       };
     },
-  };
+  });
 }
 
 function assertManifestConsistent(

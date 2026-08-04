@@ -1,12 +1,13 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import type { CapabilityRegistry } from '../capability/registry';
-import type { SecretAccessor } from '../capability/adapter';
+import type { SecretAccessor, RemoteLifecycleStatus } from '../capability/adapter';
 import { newId, nowIso } from '../shared/ids';
 import type { ConfirmedExperienceView } from '../subject-core/derived-views';
 import type { SubjectContextFreeze } from '../subject-core/subject-context-freeze';
 import { buildSubjectContextFreeze } from '../subject-core/subject-context-freeze';
 import type { CommandMap } from '../runtime/commands';
+import type { AuthorizationGrant } from '../collaboration/schema';
 import {
   applyRecoveryWrite,
   isTerminal,
@@ -21,6 +22,11 @@ import { ContextSnapshotBuilder, sanitizeMessage } from './snapshot-builder';
 import { ArtifactCommitter } from './artifact-commit';
 import { InMemoryEventBus } from './event-bus';
 import { deriveTaskState, latestJob, userFacingLabelFromLatestJob } from './derive';
+import {
+  buildJobAuthorizationProjection,
+  prepareAndExecuteCapability,
+  resumeRemoteIfPossible,
+} from './remote-job-bridge';
 
 export interface WorkRuntimeOptions {
   subjectId: string;
@@ -50,6 +56,13 @@ export interface WorkRuntimeOptions {
   secrets?: SecretAccessor;
   /** 只读解析 Snapshot extractedTextRef;供模型 Adapter 组装材料。 */
   readExtractedText?: (ref: string) => Promise<string>;
+  /** 可选:按 grantId 加载授权(远端投影用);不得引入第二协作状态机。 */
+  loadAuthorizationGrant?: (grantId: string) => Promise<AuthorizationGrant | null>;
+  /** 可选:未授权材料特征,供候选验证泄漏检测。 */
+  resolveUnauthorizedMarkers?: (input: {
+    taskId: string;
+    allowedMaterialPaths: string[];
+  }) => Promise<string[]> | string[];
 }
 
 export interface SubjectSelectionResult {
@@ -214,9 +227,45 @@ export class WorkRuntime {
       return { cancelled: true };
     }
 
-    // running:传播 AbortSignal;若不响应,Runner 在 await 返回后最终落 cancelled。
+    // running:先本地 abort / 标记,再尽力通知远端。禁止先阻塞在远端 HTTP 上,
+    // 否则验收等待与远端超时同量级时会出现“取消中卡死直至 wait 超时”。
     const controller = this.abortByJob.get(job.id);
     controller?.abort();
+
+    if (job.remoteExecution) {
+      const marked: ExecutionJob = {
+        ...job,
+        remoteExecution: {
+          ...job.remoteExecution,
+          cancelRequested: true,
+          lastRemoteStatus: 'cancelled',
+        },
+      };
+      await this.persistJob(marked, '正在取消远端执行');
+      const adapter = this.opts.registry.get(job.capabilityId);
+      if (adapter) {
+        try {
+          await adapter.cancel(
+            {
+              executionId: job.remoteExecution.executionId,
+              adapterId: job.remoteExecution.adapterId,
+              ...(job.remoteExecution.endpoint
+                ? { endpoint: job.remoteExecution.endpoint }
+                : {}),
+            },
+            {
+              jobId: job.id,
+              reportProgress: () => undefined,
+              signal: AbortSignal.abort(),
+              secrets: this.opts.secrets ?? { get: async () => null },
+              workDir: path.join(this.opts.workRoot, 'jobs', job.id),
+            },
+          );
+        } catch {
+          /* 取消请求失败仍保持本地取消 */
+        }
+      }
+    }
     return { cancelled: true };
   }
 
@@ -285,6 +334,19 @@ export class WorkRuntime {
     const jobs = await this.opts.jobStore.list();
     for (const job of jobs) {
       const artifactExists = await this.opts.artifactCommitter.existsForJob(job.id);
+
+      // 远端映射恢复:running + remoteExecution → 重新入队以 re-associate,不另建状态机。
+      if (
+        job.status === 'running' &&
+        job.remoteExecution?.executionId &&
+        !artifactExists &&
+        !job.remoteExecution.cancelRequested
+      ) {
+        this.enqueue(job.id);
+        actions.push({ jobId: job.id, action: 'requeue_remote_resume' });
+        continue;
+      }
+
       const action = recoverJobOnStartup(job, artifactExists);
       if (action === 'none') continue;
       const at = nowIso();
@@ -321,10 +383,6 @@ export class WorkRuntime {
       await this.persistJob(next, failure.message);
       actions.push({ jobId: job.id, action });
     }
-
-    // 孤儿 Artifact:Job 不存在 → 隔离目录,不改写权威状态机。
-    // (Artifact Store 内对象保留;标记隔离说明文件。)
-    // 本轮仅扫描与 Job 绑定的幂等 id,额外孤儿由后续运维处理。
 
     return { actions };
   }
@@ -398,7 +456,13 @@ export class WorkRuntime {
     let job = await this.opts.jobStore.get(jobId);
     if (!job) return;
     if (job.status === 'cancelled' || isTerminal(job.status)) return;
-    if (job.status !== 'queued') return;
+
+    const resumingRemote =
+      job.status === 'running' &&
+      !!job.remoteExecution?.executionId &&
+      !job.remoteExecution.cancelRequested;
+
+    if (job.status !== 'queued' && !resumingRemote) return;
 
     const task = await this.opts.taskService.get(job.taskId);
     if (!task) {
@@ -410,50 +474,63 @@ export class WorkRuntime {
     this.abortByJob.set(jobId, controller);
 
     try {
-      let accepted = false;
-      await this.enqueueJobWrite(jobId, async () => {
-        const current = await this.opts.jobStore.get(jobId);
-        if (!current || current.status !== 'queued') return;
-        job = transitionJob(current, 'running', nowIso());
-        job = {
-          ...job,
-          phase: 'context',
-          progress: { note: '正在准备材料', updatedAt: nowIso() },
-        };
-        await this.opts.jobStore.put(job);
-        this.publishJob(job);
-        accepted = true;
-      });
-      if (!accepted || !job) return;
+      if (!resumingRemote) {
+        let accepted = false;
+        await this.enqueueJobWrite(jobId, async () => {
+          const current = await this.opts.jobStore.get(jobId);
+          if (!current || current.status !== 'queued') return;
+          job = transitionJob(current, 'running', nowIso());
+          job = {
+            ...job,
+            phase: 'context',
+            progress: { note: '正在准备材料', updatedAt: nowIso() },
+          };
+          await this.opts.jobStore.put(job);
+          this.publishJob(job);
+          accepted = true;
+        });
+        if (!accepted || !job) return;
+      } else {
+        job = await this.withProgress(job, 'capability', '正在恢复远端执行');
+        await this.persistJob(job);
+      }
       const active: ExecutionJob = job;
 
       // --- context ---
       // 先取已选能力的通用 contextPolicy,由 SnapshotBuilder 执行;Runner 不解释场景。
       const selectedAdapter = this.opts.registry.get(job.capabilityId);
       let snapshot;
-      try {
-        snapshot = await this.opts.snapshotBuilder.build(
-          task,
-          selectedAdapter?.registration.contextPolicy,
-        );
-      } catch (error) {
-        if (controller.signal.aborted) {
-          await this.cancelRunning(active);
+      if (resumingRemote && job.snapshotId) {
+        snapshot = await this.opts.snapshotBuilder.get(job.snapshotId);
+        if (!snapshot) {
+          await this.failJob(active, 'context', '快照缺失', '请重试该任务');
           return;
         }
-        await this.failJob(
-          active,
-          'context',
-          sanitizeMessage((error as Error).message || '材料准备失败'),
-          '请检查材料路径后重试',
-        );
-        return;
+      } else {
+        try {
+          snapshot = await this.opts.snapshotBuilder.build(
+            task,
+            selectedAdapter?.registration.contextPolicy,
+          );
+        } catch (error) {
+          if (controller.signal.aborted) {
+            await this.cancelRunning(active);
+            return;
+          }
+          await this.failJob(
+            active,
+            'context',
+            sanitizeMessage((error as Error).message || '材料准备失败'),
+            '请检查材料路径后重试',
+          );
+          return;
+        }
+        job = { ...active, snapshotId: snapshot.id };
+        job = await this.withProgress(job, 'capability', '正在调用能力');
+        await this.persistJob(job);
       }
-      job = { ...active, snapshotId: snapshot.id };
-      job = await this.withProgress(job, 'capability', '正在调用能力');
-      await this.persistJob(job);
 
-      if (controller.signal.aborted) {
+      if (controller.signal.aborted || job.remoteExecution?.cancelRequested) {
         await this.cancelRunning(job);
         return;
       }
@@ -478,10 +555,12 @@ export class WorkRuntime {
         : fullContext;
       const selection = normalizeSelection(this.opts.subjectId, selectedRaw, fullContext);
       const subjectContext = selection.subjectContext;
-      snapshot = await this.opts.snapshotBuilder.attachSubjectContext(
-        snapshot.id,
-        `${JSON.stringify(selection.freeze, null, 2)}\n`,
-      );
+      if (!resumingRemote) {
+        snapshot = await this.opts.snapshotBuilder.attachSubjectContext(
+          snapshot.id,
+          `${JSON.stringify(selection.freeze, null, 2)}\n`,
+        );
+      }
       const secrets = this.opts.secrets ?? { get: async () => null };
       const jobMeta = {
         taskId: job.taskId,
@@ -521,48 +600,282 @@ export class WorkRuntime {
         await this.persistJob(job);
       }
 
+      const isRemote =
+        adapter.registration.location === 'remote' &&
+        adapter.registration.adapter.type === 'remote-subject';
+
+      const bindRemote = async (
+        ref: {
+          executionId: string;
+          adapterId: string;
+          endpoint?: string;
+          lastRemoteStatus?: RemoteLifecycleStatus;
+        },
+      ) => {
+        const current = await this.opts.jobStore.get(jobId);
+        if (!current || isTerminal(current.status)) return;
+        const next: ExecutionJob = {
+          ...current,
+          remoteExecution: {
+            executionId: ref.executionId,
+            adapterId: ref.adapterId,
+            ...(ref.endpoint ? { endpoint: ref.endpoint } : {}),
+            ...(ref.lastRemoteStatus ? { lastRemoteStatus: ref.lastRemoteStatus } : {}),
+            ...(current.remoteExecution?.cancelRequested ? { cancelRequested: true } : {}),
+            ...(current.remoteExecution?.retryCount !== undefined
+              ? { retryCount: current.remoteExecution.retryCount }
+              : {}),
+          },
+        };
+        job = next;
+        await this.persistJob(next, '已关联远端执行');
+      };
+
+      const updateRemote = async (patch: {
+        lastRemoteStatus?: RemoteLifecycleStatus;
+        executionId?: string;
+      }) => {
+        const current = await this.opts.jobStore.get(jobId);
+        if (!current?.remoteExecution || isTerminal(current.status)) return;
+        const next: ExecutionJob = {
+          ...current,
+          remoteExecution: {
+            ...current.remoteExecution,
+            ...(patch.executionId ? { executionId: patch.executionId } : {}),
+            ...(patch.lastRemoteStatus ? { lastRemoteStatus: patch.lastRemoteStatus } : {}),
+          },
+        };
+        job = next;
+        await this.persistJob(next);
+      };
+
+      const execCtx = {
+        jobId: job.id,
+        reportProgress: (note: string) => {
+          this.liveProgress.set(jobId, note);
+          this.publishJob(
+            {
+              id: jobId,
+              taskId: jobMeta.taskId,
+              capabilityId: jobMeta.capabilityId,
+              createdAt: jobMeta.createdAt,
+              status: 'running' as const,
+              ...(jobMeta.revisionRequest
+                ? { revisionRequest: jobMeta.revisionRequest }
+                : {}),
+              ...(jobMeta.targetArtifactId
+                ? { targetArtifactId: jobMeta.targetArtifactId }
+                : {}),
+              progress: { note, updatedAt: nowIso() },
+            },
+            note,
+          );
+        },
+        signal: controller.signal,
+        secrets,
+        workDir,
+        ...(this.opts.readExtractedText
+          ? { readExtractedText: this.opts.readExtractedText }
+          : {}),
+        bindRemoteExecution: (ref: {
+          executionId: string;
+          adapterId: string;
+          endpoint?: string;
+          lastRemoteStatus?: RemoteLifecycleStatus;
+        }) => {
+          void bindRemote(ref);
+        },
+        updateRemoteExecution: (patch: {
+          lastRemoteStatus?: RemoteLifecycleStatus;
+          executionId?: string;
+        }) => {
+          void updateRemote(patch);
+        },
+      };
+
       let output;
       try {
-        output = await adapter.execute(
-          {
+        if (resumingRemote && job.remoteExecution) {
+          const resumed = await resumeRemoteIfPossible({
+            adapter,
+            job,
+            ctx: execCtx,
+          });
+          if (resumed.kind === 'cancelled') {
+            await this.cancelRunning(job);
+            return;
+          }
+          if (resumed.kind === 'failed') {
+            await this.failJob(
+              job,
+              'capability',
+              sanitizeMessage(resumed.message),
+              '远端恢复失败,请重试',
+            );
+            return;
+          }
+          if (resumed.kind === 'still_running') {
+            // 断线恢复:远端仍在跑 — 继续轮询 recover 直至终态(不新建第二状态机)
+            const deadline = Date.now() + 30_000;
+            let stillRunning = true;
+            while (Date.now() < deadline) {
+              if (controller.signal.aborted) {
+                await this.cancelRunning(job);
+                return;
+              }
+              await new Promise((r) => setTimeout(r, 50));
+              const again = await resumeRemoteIfPossible({ adapter, job, ctx: execCtx });
+              if (again.kind === 'output') {
+                output = again.output;
+                stillRunning = false;
+                break;
+              }
+              if (again.kind === 'cancelled') {
+                await this.cancelRunning(job);
+                return;
+              }
+              if (again.kind === 'failed') {
+                await this.failJob(
+                  job,
+                  'capability',
+                  sanitizeMessage(again.message),
+                  '远端恢复失败,请重试',
+                );
+                return;
+              }
+              stillRunning = again.kind === 'still_running';
+            }
+            if (!output) {
+              await this.failJob(
+                job,
+                'interrupted',
+                stillRunning ? '远端仍在处理且等待超时' : '远端恢复未得到成果',
+                '请稍后重试该任务',
+              );
+              return;
+            }
+          } else if (resumed.kind === 'output') {
+            output = resumed.output;
+          }
+          // none → fall through to normal execute
+        }
+
+        if (!output) {
+          const grant =
+            task.authorization?.grantId && this.opts.loadAuthorizationGrant
+              ? await this.opts.loadAuthorizationGrant(task.authorization.grantId)
+              : null;
+          const rawInput = {
             goal: task.goal,
             snapshot,
             subjectContext,
             artifactType: task.requestedArtifactType,
             ...(revisionInput ? { revision: revisionInput } : {}),
-          },
-          {
+          };
+          const auth = buildJobAuthorizationProjection({
+            task,
+            capabilityInput: rawInput,
+            grant,
+            isRemote,
+          });
+          const markers = this.opts.resolveUnauthorizedMarkers
+            ? await this.opts.resolveUnauthorizedMarkers({
+                taskId: task.id,
+                allowedMaterialPaths: [...auth.allowedMaterials],
+              })
+            : [];
+          const preparedResult = await prepareAndExecuteCapability({
+            adapter,
+            rawInput,
+            auth,
+            ctx: execCtx,
+            isRemote,
+            unauthorizedMarkers: markers,
+            job: (await this.opts.jobStore.get(jobId)) ?? job,
+            task,
+            subjectId: task.subjectId,
+          });
+          output = preparedResult.output;
+        } else if (isRemote) {
+          // 恢复得到的 output 仍须验证并附收据
+          const grant =
+            task.authorization?.grantId && this.opts.loadAuthorizationGrant
+              ? await this.opts.loadAuthorizationGrant(task.authorization.grantId)
+              : null;
+          const rawInput = {
+            goal: task.goal,
+            snapshot,
+            subjectContext,
+            artifactType: task.requestedArtifactType,
+          };
+          const auth = buildJobAuthorizationProjection({
+            task,
+            capabilityInput: rawInput,
+            grant,
+            isRemote,
+          });
+          const markers = this.opts.resolveUnauthorizedMarkers
+            ? await this.opts.resolveUnauthorizedMarkers({
+                taskId: task.id,
+                allowedMaterialPaths: [...auth.allowedMaterials],
+              })
+            : [];
+          const expectedBinding =
+            job.remoteExecution?.executionId || output.candidateMeta?.sourceBinding;
+          const { verifyCandidateArtifact } = await import(
+            '../capability/candidate-artifact-verify'
+          );
+          const { attachReceiptToOutput, buildActionReceipt } = await import(
+            '../capability/action-receipt'
+          );
+          const verification = verifyCandidateArtifact({
+            output,
+            goal: task.goal,
+            expectedArtifactType: task.requestedArtifactType,
+            auth,
+            unauthorizedMarkers: markers,
+            ...(expectedBinding ? { expectedSourceBinding: expectedBinding } : {}),
+            nowIso: nowIso(),
+          });
+          if (verification.verdict !== 'passed') {
+            throw Object.assign(
+              new Error(verification.issues.map((i) => i.message).join('; ')),
+              {
+                stage: 'capability' as const,
+                actionable: '远端成果未通过验证,未写入正式成果',
+              },
+            );
+          }
+          const describe = adapter.describe();
+          const receipt = buildActionReceipt({
+            receiptId: newId('capability'),
+            subjectId: task.subjectId,
+            taskId: task.id,
             jobId: job.id,
-            reportProgress: (note) => {
-              this.liveProgress.set(jobId, note);
-              this.publishJob(
-                {
-                  id: jobId,
-                  taskId: jobMeta.taskId,
-                  capabilityId: jobMeta.capabilityId,
-                  createdAt: jobMeta.createdAt,
-                  status: 'running',
-                  ...(jobMeta.revisionRequest
-                    ? { revisionRequest: jobMeta.revisionRequest }
-                    : {}),
-                  ...(jobMeta.targetArtifactId
-                    ? { targetArtifactId: jobMeta.targetArtifactId }
-                    : {}),
-                  progress: { note, updatedAt: nowIso() },
-                },
-                note,
-              );
-            },
-            signal: controller.signal,
-            secrets,
-            workDir,
-            ...(this.opts.readExtractedText
-              ? { readExtractedText: this.opts.readExtractedText }
+            capabilityId: adapter.registration.id,
+            adapterId: describe.adapterId,
+            adapterType: describe.adapterType,
+            adapterVersion: describe.version,
+            ...(job.remoteExecution?.executionId
+              ? { remoteExecutionId: job.remoteExecution.executionId }
               : {}),
-          },
-        );
+            sentFields: [...auth.allowedFields],
+            materialRefs: [],
+            verification,
+            output,
+            auth,
+            startedAt: job.startedAt || job.createdAt,
+            finishedAt: nowIso(),
+          });
+          output = await attachReceiptToOutput(output, workDir, receipt);
+        }
       } catch (error) {
-        if (controller.signal.aborted || isAbortError(error)) {
+        if (controller.signal.aborted || isAbortError(error) || job.remoteExecution?.cancelRequested) {
+          await this.cancelRunning(job);
+          return;
+        }
+        const lateCollectReject = (error as { code?: string }).code === 'late_collect_rejected';
+        if (lateCollectReject) {
           await this.cancelRunning(job);
           return;
         }
@@ -579,7 +892,7 @@ export class WorkRuntime {
         return;
       }
 
-      if (controller.signal.aborted) {
+      if (controller.signal.aborted || job.remoteExecution?.cancelRequested) {
         await this.cancelRunning(job);
         return;
       }
@@ -605,6 +918,7 @@ export class WorkRuntime {
           });
         }
       } catch (error) {
+        // 远端已完成但本地写入失败:保留 remoteExecution 映射,供重启后 recover 再提交
         await this.failJob(
           job,
           'artifact_write',

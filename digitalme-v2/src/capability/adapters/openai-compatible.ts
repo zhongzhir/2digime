@@ -5,6 +5,7 @@ import type {
   ExecutionContext,
 } from '../adapter';
 import type { CapabilityRegistration } from '../registration';
+import { asLocalCapabilityAdapter } from '../local-adapter-lifecycle';
 import { chatComplete, ModelHttpError } from '../../infrastructure/model-http';
 import { providerCredentialKey } from '../../infrastructure/secret-store';
 import { assembleDocumentPrompt } from './prompt-assemble';
@@ -66,7 +67,7 @@ export function createOpenAiCompatibleAdapter(
   const secretKey = providerCredentialKey(providerId);
   const registration = buildOpenAiCompatibleRegistration(config);
 
-  return {
+  return asLocalCapabilityAdapter({
     registration,
     async execute(input: CapabilityInput, ctx: ExecutionContext): Promise<CapabilityOutput> {
       if (input.artifactType !== 'document') {
@@ -138,7 +139,7 @@ export function createOpenAiCompatibleAdapter(
       }
       return output;
     },
-  };
+  });
 }
 
 /** 保留给无凭证场景的占位注册(availability=needs_setup)。 */

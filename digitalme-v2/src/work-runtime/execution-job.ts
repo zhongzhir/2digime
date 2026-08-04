@@ -48,6 +48,20 @@ export interface ExecutionJob {
   /** 用户本次修改要求(与 targetArtifactId 成对出现)。 */
   revisionRequest?: string;
   costActual?: { tokens?: number; durationMs?: number };
+  /**
+   * 远端执行映射(可选) — 不是第二状态机。
+   * 用户面权威仍是本地 Job 五态;此处仅关联 remote executionId。
+   */
+  remoteExecution?: {
+    executionId: string;
+    adapterId: string;
+    endpoint?: string;
+    lastRemoteStatus?: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+    /** 本地已请求取消后禁止迟到 collect 写入。 */
+    cancelRequested?: boolean;
+    /** 幂等重试计数(最多一次)。 */
+    retryCount?: number;
+  };
 }
 
 /** 合法状态迁移(contracts §3;终态不可再迁移)。 */

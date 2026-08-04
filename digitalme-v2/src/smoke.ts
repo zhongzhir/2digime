@@ -17,6 +17,7 @@ import { deriveTaskState, latestJob, toUserFacingLabel } from './work-runtime/de
 import type { Task } from './work-runtime/task';
 import { CapabilityRegistry } from './capability/registry';
 import type { CapabilityAdapter } from './capability/adapter';
+import { asLocalCapabilityAdapter } from './capability/local-adapter-lifecycle';
 import type { CapabilityRegistration } from './capability/registration';
 import { grantCapabilityPermissions, simulateInteraction } from './collaboration/local-simulation';
 import { COMMAND_NAMES, COMMAND_COUNT_LIMIT } from './runtime/commands';
@@ -148,12 +149,12 @@ check('能力授权来源 owner_direct', capGrant.origin.kind, 'owner_direct');
 
 // --- Adapter 白名单 ---
 function makeAdapter(reg: CapabilityRegistration): CapabilityAdapter {
-  return {
+  return asLocalCapabilityAdapter({
     registration: reg,
     execute: async () => ({
       artifact: { type: 'document', title: 't', payload: { kind: 'text', format: 'markdown', text: '# t' } },
     }),
-  };
+  });
 }
 const goodReg: CapabilityRegistration = {
   id: newId('capability'),

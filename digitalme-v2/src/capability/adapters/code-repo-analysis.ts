@@ -14,6 +14,7 @@ import type {
   CapabilityOutput,
   ExecutionContext,
 } from '../adapter';
+import { asLocalCapabilityAdapter } from '../local-adapter-lifecycle';
 import { chatComplete, ModelHttpError } from '../../infrastructure/model-http';
 import { providerCredentialKey } from '../../infrastructure/secret-store';
 import {
@@ -71,7 +72,7 @@ export function createCodeRepoAnalysisAdapter(
     displayName: config.displayName ?? '代码项目分析',
   };
 
-  return {
+  return asLocalCapabilityAdapter({
     registration,
     async execute(input: CapabilityInput, ctx: ExecutionContext): Promise<CapabilityOutput> {
       if (input.artifactType !== CODE_ANALYSIS_ARTIFACT_TYPE) {
@@ -460,7 +461,7 @@ export function createCodeRepoAnalysisAdapter(
         deadline.dispose();
       }
     },
-  };
+  });
 }
 
 export function createCodeRepoAnalysisAdapterStub(): CapabilityAdapter {

@@ -17,6 +17,10 @@ import {
   createCodeRepoAnalysisAdapter,
   createCodeRepoAnalysisAdapterStub,
 } from '../capability/adapters/code-repo-analysis';
+import {
+  createControlledRemoteCapabilityAdapter,
+  type ControlledRemoteOptions,
+} from '../capability/adapters/controlled-remote';
 import type { SecretAccessor } from '../capability/adapter';
 import type { Task } from '../work-runtime/task';
 import type { ExecutionJob } from '../work-runtime/execution-job';
@@ -37,6 +41,7 @@ import type { CommandMap } from '../runtime/commands';
 import type { GrowthEvent } from '../subject-core/growth-event';
 import { simulateInteraction } from '../collaboration/local-simulation';
 import { LocalCollaborationHost } from '../collaboration/local-collaboration';
+import { GrantStore } from '../collaboration/grant-store';
 import { nowIso, newId } from '../shared/ids';
 
 export interface DigitalMeRuntimeOptions {
@@ -63,6 +68,14 @@ export interface DigitalMeRuntimeOptions {
    * - openai-compatible:P2.2 真实模型分析
    */
   codeAnalysisCapability?: 'none' | 'needs_setup' | 'deterministic' | 'openai-compatible';
+  /**
+   * 受控远端能力(产品准备验收/测试):
+   * - false/undefined:不注册(App 默认)
+   * - true:需同时提供 controlledRemote 配置
+   * - ControlledRemoteOptions:注册 ControlledRemoteCapabilityAdapter
+   */
+  remoteCapability?: boolean | ControlledRemoteOptions;
+  controlledRemote?: ControlledRemoteOptions;
 }
 
 /**
@@ -400,6 +413,7 @@ export class DigitalMeRuntime {
     const registry = this.registry;
 
     const subjectService = this.subject;
+    const grantStorePromise = GrantStore.open(pkg.rootDir);
     this.work = new WorkRuntime({
       subjectId: pkg.id,
       taskService: new TaskService(taskStore),
@@ -429,6 +443,21 @@ export class DigitalMeRuntime {
           requestedArtifactType,
           derived,
         });
+      },
+      loadAuthorizationGrant: async (grantId: string) => {
+        const store = await grantStorePromise;
+        return store.get(grantId);
+      },
+      resolveUnauthorizedMarkers: async ({ allowedMaterialPaths }) => {
+        // 启发式:允许路径之外的常见敏感标记由验证层拦截(验收用)
+        const allowed = new Set(
+          allowedMaterialPaths.map((p) => path.resolve(p).toLowerCase()),
+        );
+        const markers: string[] = ['SECRET_UNAUTHORIZED_PAYLOAD_XYZ'];
+        if (allowed.size > 0) {
+          markers.push('未授权融资细节');
+        }
+        return markers;
       },
     });
 
@@ -476,6 +505,16 @@ export class DigitalMeRuntime {
       registry.register(createDeterministicCodeAnalysisAdapter());
     } else if (this.options.codeAnalysisCapability === 'needs_setup') {
       registry.register(createCodeRepoAnalysisAdapterStub());
+    }
+
+    const remoteOpt = this.options.remoteCapability;
+    if (remoteOpt) {
+      const cfg =
+        typeof remoteOpt === 'object' ? remoteOpt : this.options.controlledRemote;
+      if (!cfg?.endpoint) {
+        throw new Error('controlledRemote.endpoint is required when remoteCapability is enabled');
+      }
+      registry.register(createControlledRemoteCapabilityAdapter(cfg));
     }
     return registry;
   }

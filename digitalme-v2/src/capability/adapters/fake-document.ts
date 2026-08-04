@@ -5,6 +5,7 @@ import type {
   ExecutionContext,
 } from '../adapter';
 import type { CapabilityRegistration } from '../registration';
+import { asLocalCapabilityAdapter } from '../local-adapter-lifecycle';
 
 export interface FakeDocumentAdapterOptions {
   /** 确定性正文;默认回显 goal。 */
@@ -49,7 +50,7 @@ export function createFakeDocumentAdapter(
   options: FakeDocumentAdapterOptions = {},
 ): CapabilityAdapter {
   let executeCount = 0;
-  return {
+  return asLocalCapabilityAdapter({
     registration: { ...FAKE_REGISTRATION },
     async execute(input: CapabilityInput, ctx: ExecutionContext): Promise<CapabilityOutput> {
       executeCount += 1;
@@ -77,7 +78,7 @@ export function createFakeDocumentAdapter(
         },
       };
     },
-  };
+  });
 }
 
 function defaultFakeDocumentText(input: CapabilityInput, override?: string): string {

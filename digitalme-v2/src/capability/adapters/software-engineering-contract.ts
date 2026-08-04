@@ -85,9 +85,6 @@ export function codingAgentMayHold(actions: readonly string[]): boolean {
 
 /** 提议 Adapter 类型（未写入生产 ADAPTER_TYPES）。 */
 export const PROPOSED_ADAPTER_TYPES = [
-  'openai-compatible-model',
-  'local-tool',
-  'remote-subject',
   'coding-agent-cli',
 ] as const;
 
