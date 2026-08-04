@@ -9,8 +9,9 @@
     welcome: document.getElementById("view-welcome"),
     workspace: document.getElementById("view-workspace"),
     settings: document.getElementById("view-settings"),
-    pkgName: document.getElementById("pkg-name"),
+    selfIntro: document.getElementById("self-intro"),
     createPkg: document.getElementById("btn-create-pkg"),
+    createSkip: document.getElementById("btn-create-skip"),
     openPkg: document.getElementById("btn-open-pkg"),
     welcomeStatus: document.getElementById("welcome-status"),
     welcomeModelStatus: document.getElementById("welcome-model-status"),
@@ -32,6 +33,16 @@
     modelStatus: document.getElementById("model-status"),
     taskList: document.getElementById("task-list"),
     taskEmpty: document.getElementById("task-empty"),
+    subjectPanel: document.getElementById("subject-panel"),
+    subjectSummary: document.getElementById("subject-summary"),
+    subjectNowList: document.getElementById("subject-now-list"),
+    subjectNowEmpty: document.getElementById("subject-now-empty"),
+    subjectRecentList: document.getElementById("subject-recent-list"),
+    subjectRecentEmpty: document.getElementById("subject-recent-empty"),
+    subjectUnsureList: document.getElementById("subject-unsure-list"),
+    subjectUnsureEmpty: document.getElementById("subject-unsure-empty"),
+    importSubjectMaterial: document.getElementById("btn-import-subject-material"),
+    subjectImportStatus: document.getElementById("subject-import-status"),
     goal: document.getElementById("goal"),
     artifactType: document.getElementById("artifact-type"),
     materialList: document.getElementById("material-list"),
@@ -43,9 +54,11 @@
     retry: document.getElementById("btn-retry"),
     jobStatus: document.getElementById("job-status"),
     jobActionable: document.getElementById("job-actionable"),
-    experiencePanel: document.getElementById("experience-panel"),
-    experienceList: document.getElementById("experience-list"),
     artifactPanel: document.getElementById("artifact-panel"),
+    appliedUnderstanding: document.getElementById("applied-understanding"),
+    appliedNotice: document.getElementById("applied-notice"),
+    appliedDetails: document.getElementById("applied-details"),
+    appliedItems: document.getElementById("applied-items"),
     artifactEditor: document.getElementById("artifact-editor"),
     bundleView: document.getElementById("bundle-view"),
     bundleQuality: document.getElementById("bundle-quality"),
@@ -378,6 +391,7 @@
     );
     const connected = await refreshConnectionFromCapabilities();
     els.retry.disabled = !connected || detail.state !== "attention";
+    renderAppliedUnderstanding(detail);
     if (isLatestJobFailed(detail)) {
       activeArtifactId = null;
       copyBlockedFailed = true;
@@ -396,7 +410,7 @@
       }
     }
     await refreshTasks();
-    await refreshExperiences();
+    await refreshSubjectPanel();
   }
 
   async function loadArtifact(artifactId) {
@@ -519,48 +533,167 @@
     }
   }
 
-  async function refreshExperiences() {
+  function appendActionButton(row, label, className, onClick) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = label;
+    if (className) btn.className = className;
+    btn.addEventListener("click", onClick);
+    row.appendChild(btn);
+    return btn;
+  }
+
+  async function respondLearning(eventId, action, revisionText) {
+    await api.invoke("subject.respondToLearning", {
+      eventId,
+      action,
+      ...(revisionText ? { revisionText } : {}),
+    });
+    await refreshSubjectPanel();
+  }
+
+  async function refreshSubjectPanel() {
+    if (!els.subjectPanel) return;
     const overview = await api.invoke("subject.getOverview", {});
-    const list = overview.candidateExperiences || [];
-    els.experiencePanel.hidden = list.length === 0;
-    els.experienceList.innerHTML = "";
-    for (const item of list) {
-      const li = document.createElement("li");
-      li.innerHTML = `<strong>${escapeHtml(item.title)}</strong>
-        <div class="muted">${escapeHtml(item.detail)}</div>`;
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.textContent = "保存这条经验";
-      btn.addEventListener("click", async () => {
-        await api.invoke("subject.confirmExperience", { eventIds: [item.eventId] });
-        await refreshExperiences();
-      });
-      li.appendChild(btn);
-      els.experienceList.appendChild(li);
+    if (els.subjectSummary) {
+      els.subjectSummary.textContent = overview.summaryLine || "在做事的过程中，数字之我会逐步更了解你。";
     }
+
+    const now = overview.activeUnderstandings || [];
+    els.subjectNowList.innerHTML = "";
+    els.subjectNowEmpty.hidden = now.length > 0;
+    for (const item of now) {
+      const li = document.createElement("li");
+      li.innerHTML = `<div class="subject-item-text">${escapeHtml(item.text)}</div>`;
+      const row = document.createElement("div");
+      row.className = "subject-actions";
+      appendActionButton(row, "修改", "ghost", async () => {
+        const next = window.prompt("请用一句话写出更准确的说法：", item.text);
+        if (next == null || !String(next).trim()) return;
+        await respondLearning(item.eventId, "revise", String(next).trim());
+      });
+      appendActionButton(row, "不再使用", "ghost", async () => {
+        await respondLearning(item.eventId, "retire");
+      });
+      li.appendChild(row);
+      els.subjectNowList.appendChild(li);
+    }
+
+    const recent = overview.recentLearnings || [];
+    els.subjectRecentList.innerHTML = "";
+    els.subjectRecentEmpty.hidden = recent.length > 0;
+    for (const item of recent) {
+      const li = document.createElement("li");
+      li.innerHTML = `<div class="subject-item-text">${escapeHtml(item.text)}</div>`;
+      const row = document.createElement("div");
+      row.className = "subject-actions";
+      // C 类主动给确认;低风险也提供但不强调
+      appendActionButton(
+        row,
+        "以后这样做",
+        item.suggestConfirm ? "primary-soft" : "ghost",
+        async () => {
+          await respondLearning(item.eventId, "adopt");
+        },
+      );
+      appendActionButton(row, "修改一下", "ghost", async () => {
+        const next = window.prompt("请改成你希望保留的说法：", item.text);
+        if (next == null || !String(next).trim()) return;
+        await respondLearning(item.eventId, "revise", String(next).trim());
+      });
+      appendActionButton(row, "暂时不要", "ghost", async () => {
+        await respondLearning(item.eventId, "dismiss");
+      });
+      li.appendChild(row);
+      els.subjectRecentList.appendChild(li);
+    }
+
+    const questions = overview.helpfulQuestions || [];
+    els.subjectUnsureList.innerHTML = "";
+    els.subjectUnsureEmpty.hidden = questions.length > 0;
+    for (const item of questions) {
+      const li = document.createElement("li");
+      li.innerHTML = `<div class="subject-item-text">${escapeHtml(item.text)}</div>`;
+      const row = document.createElement("div");
+      row.className = "subject-actions";
+      appendActionButton(row, "告诉我", "ghost", async () => {
+        const answer = window.prompt(item.text, "");
+        if (answer == null || !String(answer).trim()) return;
+        await api.invoke("subject.captureInput", {
+          text: String(answer).trim(),
+          sourceKind: "conversation",
+        });
+        await respondLearning(item.eventId, "dismiss");
+      });
+      appendActionButton(row, "忽略", "ghost", async () => {
+        await respondLearning(item.eventId, "dismiss");
+      });
+      li.appendChild(row);
+      els.subjectUnsureList.appendChild(li);
+    }
+  }
+
+  function renderAppliedUnderstanding(detail) {
+    if (!els.appliedUnderstanding) return;
+    const applied = detail && detail.appliedUnderstanding;
+    if (!applied || !applied.notice) {
+      els.appliedUnderstanding.hidden = true;
+      els.appliedUnderstanding.setAttribute("hidden", "");
+      return;
+    }
+    els.appliedUnderstanding.hidden = false;
+    els.appliedUnderstanding.removeAttribute("hidden");
+    els.appliedNotice.textContent = applied.notice;
+    els.appliedItems.innerHTML = "";
+    for (const item of applied.items || []) {
+      const li = document.createElement("li");
+      li.textContent = item.text;
+      els.appliedItems.appendChild(li);
+    }
+    if (els.appliedDetails) els.appliedDetails.open = false;
+  }
+
+  async function createPackageAndEnter(opts) {
+    const skipIntro = !!(opts && opts.skipIntro);
+    const intro = skipIntro ? "" : ((els.selfIntro && els.selfIntro.value) || "").trim();
+    const dir = await api.dialogs.pickSaveDirectory();
+    if (!dir) return;
+    const displayName = intro
+      ? intro.slice(0, 24).replace(/\s+/g, " ")
+      : "我的数字之我";
+    const input = { displayName, targetDir: dir };
+    if (intro) input.initialSelfDescription = intro;
+    await api.invoke("subject.createPackage", input);
+    showStatus(els.welcomeStatus, "");
+    await enterWorkspace();
   }
 
   async function enterWorkspace() {
     const overview = await api.invoke("subject.getOverview", {});
-    els.pkgTitle.textContent = overview.displayName;
+    els.pkgTitle.textContent = overview.displayName || "数字之我";
     setView("workspace");
     await refreshConnectionFromCapabilities();
     await refreshTasks();
-    await refreshExperiences();
+    await refreshSubjectPanel();
   }
 
   els.createPkg.addEventListener("click", async () => {
     try {
-      const name = (els.pkgName.value || "").trim() || "我的主体";
-      const dir = await api.dialogs.pickSaveDirectory();
-      if (!dir) return;
-      await api.invoke("subject.createPackage", { displayName: name, targetDir: dir });
-      showStatus(els.welcomeStatus, "");
-      await enterWorkspace();
+      await createPackageAndEnter({ skipIntro: false });
     } catch (err) {
       showStatus(els.welcomeStatus, err.message || String(err), true);
     }
   });
+
+  if (els.createSkip) {
+    els.createSkip.addEventListener("click", async () => {
+      try {
+        await createPackageAndEnter({ skipIntro: true });
+      } catch (err) {
+        showStatus(els.welcomeStatus, err.message || String(err), true);
+      }
+    });
+  }
 
   els.openPkg.addEventListener("click", async () => {
     try {
@@ -702,12 +835,41 @@
     els.goal,
     els.artifactEditor,
     els.revisionRequest,
-    els.pkgName,
+    els.selfIntro,
     els.modelBaseUrl,
     els.modelId,
     els.modelApiKey,
   ]) {
     if (el) el.addEventListener("paste", normalizeEditablePaste);
+  }
+
+  if (els.importSubjectMaterial) {
+    els.importSubjectMaterial.addEventListener("click", async () => {
+      try {
+        const files = await api.dialogs.pickOpenFiles();
+        if (!files || !files.length) return;
+        els.subjectImportStatus.textContent = "正在了解这份资料…";
+        let important = 0;
+        for (const filePath of files.slice(0, 3)) {
+          const imported = await api.invoke("subject.importMaterial", {
+            sourcePath: filePath,
+            distillCandidates: true,
+          });
+          important += (imported.candidateEventIds || []).length;
+        }
+        await refreshSubjectPanel();
+        const overview = await api.invoke("subject.getOverview", {});
+        const suggested = (overview.confirmationSuggestedEventIds || []).length;
+        els.subjectImportStatus.textContent =
+          suggested > 0
+            ? `已了解。有 ${Math.min(suggested, 3)} 条值得你看一眼的内容，可继续做事。`
+            : important > 0
+              ? "已了解。你可以继续做事，无需马上处理所有内容。"
+              : "资料已保存。你可以继续做事。";
+      } catch (err) {
+        els.subjectImportStatus.textContent = err.message || String(err);
+      }
+    });
   }
 
   els.submit.addEventListener("click", async () => {
@@ -743,12 +905,23 @@
       });
       activeTaskId = result.taskId;
       activeJobId = result.jobId;
+      // 使用即构建:任务要求可被后续「最近学到」消费;失败不阻断任务
+      try {
+        await api.invoke("subject.captureInput", {
+          text: goal,
+          sourceKind: "task_requirement",
+          taskId: result.taskId,
+        });
+      } catch {
+        /* ignore */
+      }
       els.jobStatus.textContent = "等待开始";
       els.jobStatus.classList.remove("error");
       els.jobActionable.textContent = "";
       els.cancel.disabled = false;
       els.retry.disabled = true;
       await refreshTasks();
+      await refreshSubjectPanel();
     } catch (err) {
       els.jobStatus.textContent = err.message || String(err);
       els.jobStatus.classList.add("error");
@@ -826,7 +999,7 @@
           text: els.artifactEditor.value,
         });
         els.saveStatus.textContent = "已自动保存";
-        await refreshExperiences();
+        await refreshSubjectPanel();
       } catch (err) {
         els.saveStatus.textContent = err.message || "保存失败";
       }
@@ -916,7 +1089,11 @@
           } else if (detail.artifactIds[0]) {
             copyBlockedFailed = false;
             activeArtifactId = detail.artifactIds[0];
-            if (event.status === "succeeded") await loadArtifact(activeArtifactId);
+            if (event.status === "succeeded") {
+              renderAppliedUnderstanding(detail);
+              await loadArtifact(activeArtifactId);
+              await refreshSubjectPanel();
+            }
           }
         } catch {
           /* ignore transient */
@@ -927,9 +1104,10 @@
     if (event.kind === "artifact.updated" && event.artifactId === activeArtifactId) {
       els.saveStatus.textContent = "内容已更新";
       if (activeArtifactId) await loadArtifact(activeArtifactId);
+      await refreshSubjectPanel();
     }
     if (event.kind === "subject.updated") {
-      await refreshExperiences();
+      await refreshSubjectPanel();
     }
   });
 

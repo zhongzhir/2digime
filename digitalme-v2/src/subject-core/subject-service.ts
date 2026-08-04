@@ -18,6 +18,7 @@ import {
   requiresOwnerConfirmation,
   type SubjectCaptureSourceKind,
 } from './candidate-distill';
+import { buildUserFacingSubjectSlices } from './user-facing-overview';
 import { InMemoryEventBus } from '../work-runtime/event-bus';
 
 export const SUBJECT_SCHEMA_VERSION = 1 as const;
@@ -108,6 +109,7 @@ export class SubjectService {
   async getOverview(_input: Record<string, never> = {}): Promise<OverviewOutput> {
     const pkg = this.requireActive();
     const derived = await this.getDerived();
+    const slices = buildUserFacingSubjectSlices(derived);
     // readiness 仅为提示,调用方不得据此拒绝 submitTask
     return {
       subjectId: pkg.id,
@@ -127,6 +129,9 @@ export class SubjectService {
       readinessBlocksTasks: false,
       summaryLine: derived.summary.displayLine,
       knowledgeGapCount: derived.knowledgeGaps.entries.length,
+      activeUnderstandings: slices.activeUnderstandings,
+      recentLearnings: slices.recentLearnings,
+      helpfulQuestions: slices.helpfulQuestions,
     };
   }
 
@@ -135,6 +140,109 @@ export class SubjectService {
    */
   async confirmExperience(input: { eventIds: string[] }): Promise<{ confirmedCount: number }> {
     return this.confirmCandidates(input);
+  }
+
+  /**
+   * 轻量响应用户对要点的处理 — 不暴露事件类型名。
+   */
+  async respondToLearning(input: {
+    eventId: string;
+    action: 'adopt' | 'dismiss' | 'retire' | 'revise';
+    revisionText?: string;
+  }): Promise<{ ok: boolean }> {
+    const pkg = this.requireActive();
+    const events = await this.requireLog().list(pkg.id);
+    const target = events.find((e) => e.id === input.eventId);
+    if (!target) throw new Error('item not found');
+
+    if (input.action === 'adopt') {
+      if (target.confidence !== 'candidate') {
+        throw new Error('item is not awaiting confirmation');
+      }
+      await this.confirmCandidates({ eventIds: [input.eventId] });
+      return { ok: true };
+    }
+
+    if (input.action === 'dismiss' || input.action === 'retire') {
+      const correction: GrowthEvent = {
+        id: newId('growthEvent'),
+        subjectId: pkg.id,
+        occurredAt: nowIso(),
+        type: 'subject_corrected',
+        source: { kind: 'owner_direct' },
+        payload: {
+          title: input.action === 'retire' ? '不再使用该要点' : '暂时不采用该要点',
+          detail: target.payload.title,
+          tags: ['action:reject'],
+          relation: { targetEventId: input.eventId },
+        },
+        confidence: 'confirmed',
+      };
+      await this.appendGrowthEvent(correction);
+      return { ok: true };
+    }
+
+    const revision = input.revisionText?.trim();
+    if (!revision) throw new Error('revision text required');
+
+    const reject: GrowthEvent = {
+      id: newId('growthEvent'),
+      subjectId: pkg.id,
+      occurredAt: nowIso(),
+      type: 'subject_corrected',
+      source: { kind: 'owner_direct' },
+      payload: {
+        title: '已按你的修改更新',
+        detail: target.payload.title,
+        tags: ['action:replace'],
+        relation: { targetEventId: input.eventId },
+      },
+      confidence: 'confirmed',
+    };
+    await this.appendGrowthEvent(reject);
+
+    if (target.confidence === 'candidate') {
+      const replacement: GrowthEvent = {
+        id: newId('growthEvent'),
+        subjectId: pkg.id,
+        occurredAt: nowIso(),
+        type: target.type === 'feedback_recorded' ? 'feedback_recorded' : target.type,
+        source: { kind: 'owner_direct' },
+        payload: {
+          title: revision.slice(0, 80),
+          detail: revision,
+          tags: [...(target.payload.tags ?? []).filter((t) => t !== 'needs_confirmation'), 'revised'],
+        },
+        confidence: 'candidate',
+      };
+      await this.appendGrowthEvent(replacement);
+      if (requiresOwnerConfirmation(replacement.type, replacement.payload.tags ?? [])) {
+        // C 类仍保持待确认;用户可再点「以后这样做」
+        return { ok: true };
+      }
+      await this.confirmCandidates({ eventIds: [replacement.id] });
+      return { ok: true };
+    }
+
+    const replacementConfirmed: GrowthEvent = {
+      id: newId('growthEvent'),
+      subjectId: pkg.id,
+      occurredAt: nowIso(),
+      type:
+        target.type === 'experience_confirmed' || target.type === 'feedback_recorded'
+          ? 'experience_confirmed'
+          : target.type,
+      source: { kind: 'owner_direct' },
+      payload: {
+        title: revision.slice(0, 80),
+        detail: revision,
+        tags: [...(target.payload.tags ?? []), 'revised'],
+        relation: { supersedes: input.eventId },
+      },
+      confidence: 'confirmed',
+    };
+    await this.appendGrowthEvent(replacementConfirmed);
+    return { ok: true };
   }
 
   async confirmCandidates(input: { eventIds: string[] }): Promise<{ confirmedCount: number }> {

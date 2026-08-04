@@ -59,11 +59,29 @@ export interface CommandMap {
       readinessBlocksTasks?: boolean;
       summaryLine?: string;
       knowledgeGapCount?: number;
+      /** 现在的我 — 已确认且可能影响任务的少量要点。 */
+      activeUnderstandings?: Array<{ eventId: string; text: string }>;
+      /** 最近学到 — 过程中捕捉、待轻量处理的要点。 */
+      recentLearnings?: Array<{ eventId: string; text: string; suggestConfirm: boolean }>;
+      /** 还不确定 — 对后续任务有帮助的缺口提问(可忽略)。 */
+      helpfulQuestions?: Array<{ eventId: string; text: string }>;
     };
   };
   'subject.confirmExperience': {
     input: { eventIds: string[] };
     output: { confirmedCount: number };
+  };
+  /**
+   * 对「最近学到 / 现在的我」条目的轻量响应。
+   * adopt=以后这样做; dismiss=暂时不要; retire=不再使用; revise=修改一下。
+   */
+  'subject.respondToLearning': {
+    input: {
+      eventId: string;
+      action: 'adopt' | 'dismiss' | 'retire' | 'revise';
+      revisionText?: string;
+    };
+    output: { ok: boolean };
   };
   /**
    * 从自然语言捕获候选 — 来源含自我说明/对话/任务/材料/成果反馈等。
@@ -117,6 +135,11 @@ export interface CommandMap {
       userFacingLabel: string;
       latestJob?: { jobId: string; status: JobStatus; progressNote?: string };
       artifactIds: string[];
+      /** 轻量成长反馈;默认收起「使用了什么」,不含内部链路。 */
+      appliedUnderstanding?: {
+        notice: string;
+        items: Array<{ text: string }>;
+      };
     };
   };
   'work.listTasks': {
@@ -173,6 +196,7 @@ export const COMMAND_NAMES = [
   'subject.openPackage',
   'subject.getOverview',
   'subject.confirmExperience',
+  'subject.respondToLearning',
   'subject.captureInput',
   'subject.importMaterial',
   'work.submitTask',

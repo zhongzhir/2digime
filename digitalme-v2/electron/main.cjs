@@ -30,6 +30,7 @@ const COMMAND_NAMES = new Set([
   "subject.openPackage",
   "subject.getOverview",
   "subject.confirmExperience",
+  "subject.respondToLearning",
   "subject.captureInput",
   "subject.importMaterial",
   "work.submitTask",
@@ -96,8 +97,17 @@ async function bootstrapRuntime() {
         ? "deterministic"
         : "needs_setup";
 
-  const options =
-    model.documentCapability === "openai-compatible"
+  // 仅 UX 专项验收(未打包)可启用 Fake 文档能力;产品路径仍禁止 Fake。
+  const uxAcceptanceFake =
+    !app.isPackaged && process.env.DIGITALME_V2_UX_ACCEPTANCE === "1";
+
+  const options = uxAcceptanceFake
+    ? {
+        documentCapability: "fake",
+        registerOpenAiStub: false,
+        codeAnalysisCapability: "needs_setup",
+      }
+    : model.documentCapability === "openai-compatible"
       ? {
           documentCapability: "openai-compatible",
           openaiCompatible: model.openaiCompatible,

@@ -182,7 +182,7 @@ checkThrows('非白名单 adapter 类型被拒绝', () => registry.register(make
 
 // --- 命令面上限 ---
 check('命令数 ≤ 上限', COMMAND_NAMES.length <= COMMAND_COUNT_LIMIT, true);
-check('命令面当前条数', COMMAND_NAMES.length, 18);
+check('命令面当前条数', COMMAND_NAMES.length, 19);
 
 if (failures > 0) {
   console.error(`\nsmoke FAILED: ${failures} checks`);

@@ -15,17 +15,22 @@
       <section id="view-welcome" class="view">
         <header class="hero">
           <p class="brand">Digital Me</p>
-          <h1>从你的主体资料开始</h1>
-          <p class="lead">创建或打开本地主体包，然后描述任务并附上材料。</p>
+          <h1>建立你的数字之我</h1>
+          <p class="lead">用一句话介绍你自己，就可以开始做事。不必一次整理完整资料。</p>
         </header>
         <div class="welcome-actions">
           <label class="field">
-            <span>主体名称</span>
-            <input id="pkg-name" type="text" placeholder="例如：个人工作主体" />
+            <span>先用一句话介绍你自己，或者告诉我你最近在做什么。</span>
+            <textarea
+              id="self-intro"
+              rows="3"
+              placeholder="例如：我在做 Digital Me，重视真实用户价值和快速验证。"
+            ></textarea>
           </label>
           <div class="row">
-            <button type="button" id="btn-create-pkg" class="primary">创建主体包</button>
-            <button type="button" id="btn-open-pkg">打开已有主体包</button>
+            <button type="button" id="btn-create-pkg" class="primary">开始使用</button>
+            <button type="button" id="btn-create-skip" class="ghost">先跳过，直接开始</button>
+            <button type="button" id="btn-open-pkg">打开已有</button>
             <button type="button" id="btn-open-settings-welcome" class="ghost">设置</button>
           </div>
           <p id="welcome-model-status" class="status"></p>
@@ -84,7 +89,7 @@
         <header class="topbar">
           <div>
             <p class="brand-sm">Digital Me</p>
-            <h1 id="pkg-title">主体</h1>
+            <h1 id="pkg-title">数字之我</h1>
           </div>
           <div class="topbar-actions">
             <p id="model-status" class="meta"></p>
@@ -97,6 +102,40 @@
             <h2>任务</h2>
             <ul id="task-list" class="task-list"></ul>
             <p id="task-empty" class="muted">还没有任务。</p>
+
+            <section id="subject-panel" class="subject-panel" data-testid="subject-panel">
+              <h2>数字之我</h2>
+              <p id="subject-summary" class="muted subject-summary"></p>
+
+              <div class="subject-block" data-section="now">
+                <h3>现在的我</h3>
+                <ul id="subject-now-list" class="subject-list"></ul>
+                <p id="subject-now-empty" class="muted tiny">还没有已确认的要点。做事过程中会逐渐形成。</p>
+              </div>
+
+              <div class="subject-block" data-section="recent">
+                <h3>最近学到</h3>
+                <ul id="subject-recent-list" class="subject-list"></ul>
+                <p id="subject-recent-empty" class="muted tiny">完成任务或修改成果后，这里会出现少量新理解。</p>
+              </div>
+
+              <div class="subject-block" data-section="unsure">
+                <h3>还不确定</h3>
+                <ul id="subject-unsure-list" class="subject-list"></ul>
+                <p id="subject-unsure-empty" class="muted tiny">暂无需要优先了解的问题。可随时忽略。</p>
+              </div>
+
+              <div class="subject-block" data-section="learn-more">
+                <h3>让数字之我更了解你</h3>
+                <p class="muted tiny">
+                  你可以添加项目资料、作品或过去的成果。数字之我会在使用中逐步理解，不需要一次整理完整。
+                </p>
+                <div class="row">
+                  <button type="button" id="btn-import-subject-material">添加资料</button>
+                </div>
+                <p id="subject-import-status" class="meta" aria-live="polite"></p>
+              </div>
+            </section>
           </aside>
 
           <main class="panel grow">
@@ -136,12 +175,6 @@
             <p id="job-status" class="status" aria-live="polite"></p>
             <p id="job-actionable" class="muted"></p>
 
-            <section id="experience-panel" class="experience" hidden>
-              <h2>可复用经验</h2>
-              <p class="muted">来自你最近对成果的修改，确认后会在类似任务中参考。</p>
-              <ul id="experience-list"></ul>
-            </section>
-
             <section id="artifact-panel" class="artifact" hidden>
               <div class="artifact-head">
                 <h2>成果</h2>
@@ -151,6 +184,13 @@
                   <button type="button" id="btn-export-docx">导出 Word</button>
                   <button type="button" id="btn-reveal">打开所在目录</button>
                 </div>
+              </div>
+              <div id="applied-understanding" class="applied-understanding" hidden>
+                <p id="applied-notice" class="applied-notice"></p>
+                <details id="applied-details">
+                  <summary>使用了什么</summary>
+                  <ul id="applied-items" class="applied-items"></ul>
+                </details>
               </div>
               <p id="save-status" class="meta"></p>
               <p id="version-meta" class="meta"></p>

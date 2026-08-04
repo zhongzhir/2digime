@@ -10,6 +10,7 @@ const COMMAND_NAMES = [
   "subject.openPackage",
   "subject.getOverview",
   "subject.confirmExperience",
+  "subject.respondToLearning",
   "subject.captureInput",
   "subject.importMaterial",
   "work.submitTask",

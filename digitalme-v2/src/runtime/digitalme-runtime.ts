@@ -31,6 +31,7 @@ import { WorkRuntime } from '../work-runtime/job-runner';
 import { SubjectService } from '../subject-core/subject-service';
 import { selectSubjectInjection } from '../subject-core/experience-selector';
 import type { SubjectContextFreeze } from '../subject-core/subject-context-freeze';
+import { buildAppliedUnderstanding } from '../subject-core/user-facing-overview';
 import { ArtifactWorkspace } from '../artifact-workspace/workspace';
 import type { CommandMap } from '../runtime/commands';
 import type { GrowthEvent } from '../subject-core/growth-event';
@@ -104,6 +105,10 @@ export class DigitalMeRuntime {
     return this.subject.confirmCandidates(input);
   }
 
+  respondToLearning(input: CommandMap['subject.respondToLearning']['input']) {
+    return this.subject.respondToLearning(input);
+  }
+
   captureSubjectInput(input: CommandMap['subject.captureInput']['input']) {
     return this.subject.captureInput(input);
   }
@@ -128,8 +133,22 @@ export class DigitalMeRuntime {
     return this.requireWork().cancelJob(input);
   }
 
-  getTask(input: CommandMap['work.getTask']['input']) {
-    return this.requireWork().getTask(input);
+  async getTask(input: CommandMap['work.getTask']['input']) {
+    const result = await this.requireWork().getTask(input);
+    const jobId = result.latestJob?.jobId;
+    if (jobId && result.latestJob?.status === 'succeeded') {
+      try {
+        const job = await this.getJob(jobId);
+        if (job?.snapshotId) {
+          const freeze = await this.readSubjectContextFreeze(job.snapshotId);
+          const applied = buildAppliedUnderstanding(freeze);
+          if (applied) result.appliedUnderstanding = applied;
+        }
+      } catch {
+        /* 冻结缺失不阻断任务查询 */
+      }
+    }
+    return result;
   }
 
   listTasks(input: CommandMap['work.listTasks']['input'] = {}) {

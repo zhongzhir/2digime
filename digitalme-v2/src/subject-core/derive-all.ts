@@ -200,6 +200,7 @@ export function deriveAllViews(
     if (event.confidence !== 'candidate') continue;
     if (!(CANDIDATE_QUEUE_TYPES as readonly string[]).includes(event.type)) continue;
     if (confirmedIds.has(event.id)) continue;
+    if (inactive.has(event.id)) continue;
     const entry: CandidateExperienceView['entries'][number] = {
       eventId: event.id,
       type: event.type,
@@ -240,7 +241,7 @@ export function deriveAllViews(
     subjectId,
     derivedAt,
     entries: list
-      .filter((e) => e.type === 'knowledge_gap_noted')
+      .filter((e) => e.type === 'knowledge_gap_noted' && !inactive.has(e.id))
       .map((e) => ({
         eventId: e.id,
         title: e.payload.title,
