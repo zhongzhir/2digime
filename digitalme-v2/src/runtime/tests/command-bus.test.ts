@@ -12,10 +12,11 @@ async function tempDir(prefix: string): Promise<string> {
 }
 
 test('CommandBus 覆盖全部命令且不超过上限', async () => {
-  assert.equal(COMMAND_NAMES.length, 17);
+  assert.equal(COMMAND_NAMES.length, 18);
   assert.ok(COMMAND_NAMES.length <= COMMAND_COUNT_LIMIT);
   assert.ok(COMMAND_NAMES.includes('work.reviseArtifact'));
   assert.ok(COMMAND_NAMES.includes('subject.importMaterial'));
+  assert.ok(COMMAND_NAMES.includes('subject.captureInput'));
 
   const root = await tempDir('bus');
   const runtime = createDigitalMeRuntime({ documentCapability: 'fake', registerOpenAiStub: false });

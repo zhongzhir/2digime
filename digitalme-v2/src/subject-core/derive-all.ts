@@ -11,6 +11,7 @@ export const CANDIDATE_QUEUE_TYPES = [
   'goal_updated',
   'principle_stated',
   'boundary_updated',
+  'preference_observed',
   'feedback_recorded',
   'asset_added',
 ] as const;

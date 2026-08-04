@@ -1,10 +1,10 @@
 # Digital Me V2 — 主体产品语义与 MVP 合同
 
 - 文档编号：`DIGITALME-V2-SUBJECT-PRODUCT-SEMANTICS-AND-MVP-CONTRACT`
-- 版本：v0.1（2026-08-04）
-- 基线：`v2/foundation` @ `a63b177`
-- 状态：`accepted_as_engineered_candidate`（SUBJECT-MVP-01 已按本规格实现；待 Owner 主路径验收）
-- 范围：**审计 + 规格**；本文件不授权实现，不改 UI，不提交代码
+- 版本：v0.1.1（2026-08-04）
+- 基线：`v2/foundation`（SUBJECT-MVP-01 + 产品入口修正）
+- 状态：`accepted_as_engineered_candidate`（工程验收候选；待 Owner 主路径验收）
+- 范围：审计 + 规格 + **产品入口修正**（不改底层架构对象）
 - 上位：`docs/v2/digitalme_v2_domain_model.md`、`digitalme_subject_architecture_and_rd_principles_v0.1.md`
 
 ---
@@ -389,7 +389,59 @@ payload.relation?: {
 5. **材料入库最小命令**（无复杂 UI 也可先 IPC/脚本）。  
 6. **自动化验收**：§9 三任务 + 重启 + wipe derived；禁止内部术语泄漏测试。
 
-**入口纪律**：默认主路径「一段自我说明 + 资料 → 少量确认 → 可用」；无新确认点除非对应 C 类新决策。
+**入口纪律（已修正）**：见 §12。默认主路径「一句话即可开始 → 使用中逐步成长」；无新确认点除非对应 C 类新决策。
+
+---
+
+## 12. 产品入口修正（SUBJECT-MVP-01 补丁）
+
+底层仍保持 **SubjectPackage + GrowthEvent + ContextSnapshot**，不新增平行 Store。产品验收以「一句话即可开始，使用中逐步成长」为准。
+
+### 12.1 最低门槛
+
+```text
+一句话 → 创建 SubjectPackage → 保存来源 → 生成少量候选 → 立即进入对话或做事
+```
+
+- `createPackage.initialSelfDescription` 可选；最短允许一句话。
+- `subjectReadiness` **仅为派生提示**；`readinessBlocksTasks` 恒为 `false`，不得阻断 Task 创建与执行。
+
+### 12.2 扩大候选来源
+
+服务合同 `subject.captureInput` 的 `sourceKind` 必须允许：
+
+```text
+initial_self_description | imported_material | conversation | task_requirement
+artifact_edit | artifact_acceptance | artifact_rejection | repeated_correction | explicit_boundary
+```
+
+不得把候选来源限定为专门主体表单或仅材料导入。本切片可用显式测试调用模拟提炼，不要求完整自动蒸馏管线。
+
+### 12.3 低打扰确认
+
+仅在 C 类触发建议确认：重大身份、长期方向、重大判断原则、明确边界、高风险偏好、冲突或低置信信息。  
+低风险可保持未确认语义，不得冒充已确认权威；不新建 provisional Store。
+
+### 12.4 使用即构建与可感知成长
+
+主体构建不是一次性 onboarding，而是对话、做事、成果修改与采用过程中的持续行为。验收必须覆盖：
+
+1. 只有一句自我说明也能完成 Task 并生成 Artifact；  
+2. 第一次任务中用户明确说明偏好 → 修改并确认 → 第二次相似任务无需再说明且可观察差异；  
+3. 未确认内容不进入长期权威注入；已确认在相关任务复用；无关任务不污染。
+
+### 12.5 用户面用语（后续 UI 统一）
+
+| 使用 | 禁止 |
+|------|------|
+| 现在的我 | GrowthEvent / candidate / confirmed / ContextSnapshot |
+| 最近学到 | 主体合同 |
+| 还不确定 | 填写完整档案 / 完善全部字段 |
+| 让数字之我更了解你 | |
+
+### 12.6 本修正明确不做
+
+复杂 onboarding、七类表单、主体完成度门禁、平行 Profile/Memory/Goal Store、频繁确认弹窗、完整自动蒸馏管线。
 
 ---
 

@@ -104,6 +104,10 @@ export class DigitalMeRuntime {
     return this.subject.confirmCandidates(input);
   }
 
+  captureSubjectInput(input: CommandMap['subject.captureInput']['input']) {
+    return this.subject.captureInput(input);
+  }
+
   importSubjectMaterial(input: CommandMap['subject.importMaterial']['input']) {
     return this.subject.importSubjectMaterial(input);
   }

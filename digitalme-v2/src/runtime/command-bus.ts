@@ -32,6 +32,10 @@ export function createCommandBus(runtime: DigitalMeRuntime): CommandBus {
           return (await runtime.confirmExperience(
             input as CommandMap['subject.confirmExperience']['input'],
           )) as CommandMap[K]['output'];
+        case 'subject.captureInput':
+          return (await runtime.captureSubjectInput(
+            input as CommandMap['subject.captureInput']['input'],
+          )) as CommandMap[K]['output'];
         case 'subject.importMaterial':
           return (await runtime.importSubjectMaterial(
             input as CommandMap['subject.importMaterial']['input'],

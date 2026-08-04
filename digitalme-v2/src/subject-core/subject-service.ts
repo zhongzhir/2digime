@@ -13,6 +13,11 @@ import {
 } from './growth-event';
 import { PackageGrowthLog, readDerivedJson, writeDerivedJson } from './package-growth-log';
 import { deriveAllViews, type SubjectDerivedBundle } from './derive-all';
+import {
+  distillCandidatesFromText,
+  requiresOwnerConfirmation,
+  type SubjectCaptureSourceKind,
+} from './candidate-distill';
 import { InMemoryEventBus } from '../work-runtime/event-bus';
 
 export const SUBJECT_SCHEMA_VERSION = 1 as const;
@@ -24,6 +29,11 @@ type OverviewOutput = CommandMap['subject.getOverview']['output'];
 /**
  * SubjectService — 单实例挂载一个 active SubjectPackage。
  * 领域层不得绕过 GrowthEvent 手改派生视图;派生缓存可删可重建。
+ *
+ * 产品入口纪律:
+ * - 创建后即可做事;subjectReadiness 仅为派生提示,永不阻断 Task;
+ * - 一句话自我说明即可开始;候选可来自对话/任务/材料/成果反馈等;
+ * - 低打扰:仅 C 类建议确认;低风险保持 candidate,不冒充 confirmed。
  */
 export class SubjectService {
   private active: SubjectPackage | null = null;
@@ -67,6 +77,16 @@ export class SubjectService {
 
     this.mount(pkg);
     await this.rebuildDerivedViews();
+
+    const initial = input.initialSelfDescription?.trim();
+    if (initial) {
+      // 一句话即可开始:保存来源并生成少量候选;不要求填写完整档案,不阻断后续 Task
+      await this.captureInput({
+        text: initial,
+        sourceKind: 'initial_self_description',
+      });
+    }
+
     return { subjectId: pkg.id };
   }
 
@@ -88,6 +108,7 @@ export class SubjectService {
   async getOverview(_input: Record<string, never> = {}): Promise<OverviewOutput> {
     const pkg = this.requireActive();
     const derived = await this.getDerived();
+    // readiness 仅为提示,调用方不得据此拒绝 submitTask
     return {
       subjectId: pkg.id,
       displayName: pkg.identity.displayName,
@@ -97,8 +118,13 @@ export class SubjectService {
         title: e.title,
         detail: e.detail,
         type: e.type,
+        requiresConfirmation: requiresOwnerConfirmation(e.type, e.tags),
       })),
+      confirmationSuggestedEventIds: derived.candidates.entries
+        .filter((e) => requiresOwnerConfirmation(e.type, e.tags))
+        .map((e) => e.eventId),
       readiness: derived.readiness,
+      readinessBlocksTasks: false,
       summaryLine: derived.summary.displayLine,
       knowledgeGapCount: derived.knowledgeGaps.entries.length,
     };
@@ -182,7 +208,59 @@ export class SubjectService {
   }
 
   /**
-   * 复制单文件到 materials/,返回稳定 materialRef,并可选产生 asset candidate。
+   * 统一捕获自然语言并生成候选 — 使用即构建的主入口。
+   * 当前 Task 仍可直接使用用户原文(goal);未确认候选不进入长期权威注入。
+   */
+  async captureInput(input: {
+    text: string;
+    sourceKind: SubjectCaptureSourceKind;
+    materialRef?: string;
+    taskId?: string;
+    artifactId?: string;
+  }): Promise<{ candidateEventIds: string[]; confirmationSuggestedEventIds: string[] }> {
+    const pkg = this.requireActive();
+    const text = input.text.trim();
+    if (!text) {
+      return { candidateEventIds: [], confirmationSuggestedEventIds: [] };
+    }
+
+    // 自我说明/对话:落一份来源到 materials,便于追溯(非表单档案)
+    let materialRef = input.materialRef;
+    if (
+      !materialRef &&
+      (input.sourceKind === 'initial_self_description' ||
+        input.sourceKind === 'conversation' ||
+        input.sourceKind === 'task_requirement')
+    ) {
+      materialRef = await this.writeTextMaterial(
+        text,
+        input.sourceKind === 'initial_self_description' ? 'self' : 'note',
+      );
+    }
+
+    const distilled = distillCandidatesFromText({
+      subjectId: pkg.id,
+      text,
+      sourceKind: input.sourceKind,
+      ...(materialRef ? { materialRef } : {}),
+      ...(input.taskId ? { taskId: input.taskId } : {}),
+      ...(input.artifactId ? { artifactId: input.artifactId } : {}),
+    });
+
+    const candidateEventIds: string[] = [];
+    const confirmationSuggestedEventIds: string[] = [];
+    for (const event of distilled) {
+      await this.appendGrowthEvent(event);
+      candidateEventIds.push(event.id);
+      if (requiresOwnerConfirmation(event.type, event.payload.tags ?? [])) {
+        confirmationSuggestedEventIds.push(event.id);
+      }
+    }
+    return { candidateEventIds, confirmationSuggestedEventIds };
+  }
+
+  /**
+   * 复制单文件到 materials/,返回稳定 materialRef,并可选经 captureInput 提炼候选。
    */
   async importSubjectMaterial(input: {
     sourcePath: string;
@@ -208,7 +286,7 @@ export class SubjectService {
     const candidateEventIds: string[] = [];
     if (input.distillCandidates !== false) {
       const text = await readTextPreview(dest);
-      const event: GrowthEvent = {
+      const asset: GrowthEvent = {
         id: newId('growthEvent'),
         subjectId: pkg.id,
         occurredAt: nowIso(),
@@ -222,20 +300,28 @@ export class SubjectService {
         },
         confidence: 'candidate',
       };
-      await this.appendGrowthEvent(event);
-      candidateEventIds.push(event.id);
+      await this.appendGrowthEvent(asset);
+      candidateEventIds.push(asset.id);
 
-      if (/本地优先|正式|融资|边界|原则|方向/.test(text)) {
-        // Fake 级候选提炼:从文本抽极少高信号候选,供测试/验收
-        const distilled = distillSimpleCandidates(pkg.id, text, materialRef);
-        for (const d of distilled) {
-          await this.appendGrowthEvent(d);
-          candidateEventIds.push(d.id);
-        }
-      }
+      const captured = await this.captureInput({
+        text: text || safeBase,
+        sourceKind: 'imported_material',
+        materialRef,
+      });
+      candidateEventIds.push(...captured.candidateEventIds);
     }
 
     return { materialRef, candidateEventIds };
+  }
+
+  private async writeTextMaterial(text: string, prefix: string): Promise<string> {
+    const pkg = this.requireActive();
+    const digest = createHash('sha256').update(text, 'utf8').digest('hex').slice(0, 16);
+    const materialRef = `materials/${prefix}_${digest}.txt`;
+    const dest = path.join(pkg.rootDir, materialRef);
+    await fs.mkdir(path.dirname(dest), { recursive: true });
+    await fs.writeFile(dest, text, 'utf8');
+    return materialRef;
   }
 
   async rebuildDerivedViews(): Promise<SubjectDerivedBundle> {
@@ -323,78 +409,4 @@ async function readTextPreview(filePath: string): Promise<string> {
   } catch {
     return '';
   }
-}
-
-function distillSimpleCandidates(
-  subjectId: string,
-  text: string,
-  materialRef: string,
-): GrowthEvent[] {
-  const out: GrowthEvent[] = [];
-  const at = nowIso();
-  if (/本地优先/.test(text)) {
-    out.push({
-      id: newId('growthEvent'),
-      subjectId,
-      occurredAt: at,
-      type: 'goal_updated',
-      source: { kind: 'import' },
-      payload: {
-        title: '方向：本地优先',
-        detail: '长期以本地优先为产品与工程方向',
-        tags: ['方向', '本地优先', 'goal'],
-        relation: { materialRef },
-      },
-      confidence: 'candidate',
-    });
-  }
-  if (/正式|结论先行/.test(text)) {
-    out.push({
-      id: newId('growthEvent'),
-      subjectId,
-      occurredAt: at,
-      type: 'principle_stated',
-      source: { kind: 'import' },
-      payload: {
-        title: '原则：表达正式、结论先行',
-        detail: '对外文档采用正式语气,先给结论再展开',
-        tags: ['原则', '正式', '结论先行', '周报', 'document'],
-        relation: { materialRef },
-      },
-      confidence: 'candidate',
-    });
-  }
-  if (/未公开融资|不讨论.*融资|融资/.test(text) && /不|勿|禁止|避免/.test(text)) {
-    out.push({
-      id: newId('growthEvent'),
-      subjectId,
-      occurredAt: at,
-      type: 'boundary_updated',
-      source: { kind: 'import' },
-      payload: {
-        title: '边界：不讨论未公开融资',
-        detail: 'exclude-tag:融资',
-        tags: ['exclude:融资', '边界'],
-        relation: { materialRef },
-      },
-      confidence: 'candidate',
-    });
-  }
-  if (/我是|身份/.test(text)) {
-    out.push({
-      id: newId('growthEvent'),
-      subjectId,
-      occurredAt: at,
-      type: 'identity_clarified',
-      source: { kind: 'import' },
-      payload: {
-        title: '身份澄清',
-        detail: text.split(/\n/).find((l) => /我是|身份/.test(l))?.slice(0, 200) || '身份要点',
-        tags: ['身份'],
-        relation: { materialRef },
-      },
-      confidence: 'candidate',
-    });
-  }
-  return out;
 }
