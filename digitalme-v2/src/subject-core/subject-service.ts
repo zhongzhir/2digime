@@ -111,6 +111,7 @@ export class SubjectService {
     const derived = await this.getDerived();
     const slices = buildUserFacingSubjectSlices(derived);
     // readiness 仅为提示,调用方不得据此拒绝 submitTask
+    const materials = await this.listSubjectMaterials();
     return {
       subjectId: pkg.id,
       displayName: pkg.identity.displayName,
@@ -132,6 +133,7 @@ export class SubjectService {
       activeUnderstandings: slices.activeUnderstandings,
       recentLearnings: slices.recentLearnings,
       helpfulQuestions: slices.helpfulQuestions,
+      materials,
     };
   }
 
@@ -422,6 +424,138 @@ export class SubjectService {
     return { materialRef, candidateEventIds };
   }
 
+  /**
+   * 列出 SubjectPackage/materials 下真实文件（不含包外原件）。
+   */
+  async listSubjectMaterials(): Promise<
+    NonNullable<OverviewOutput['materials']>
+  > {
+    const pkg = this.requireActive();
+    const materialsDir = path.join(pkg.rootDir, 'materials');
+    let names: string[] = [];
+    try {
+      names = await fs.readdir(materialsDir);
+    } catch {
+      return [];
+    }
+    const items: NonNullable<OverviewOutput['materials']> = [];
+    for (const name of names) {
+      if (!name || name.startsWith('.')) continue;
+      // 对话/自我说明自动落盘的 note_/self_ 不进「已添加的资料」列表
+      if (name.startsWith('note_') || name.startsWith('self_')) continue;
+      const absolutePath = path.join(materialsDir, name);
+      let st;
+      try {
+        st = await fs.stat(absolutePath);
+      } catch {
+        continue;
+      }
+      if (!st.isFile()) continue;
+      const materialRef = `materials/${name}`;
+      items.push({
+        materialRef,
+        fileName: displayMaterialFileName(name),
+        addedAt: st.mtime.toISOString(),
+        absolutePath,
+      });
+    }
+    items.sort((a, b) => (a.addedAt < b.addedAt ? 1 : a.addedAt > b.addedAt ? -1 : 0));
+    return items;
+  }
+
+  /**
+   * 仅删除包内副本，并软移除指向该资料的引用；不触碰包外原始文件。
+   */
+  async removeSubjectMaterial(input: {
+    materialRef: string;
+  }): Promise<{ removed: boolean }> {
+    const pkg = this.requireActive();
+    const ref = String(input.materialRef || '').replace(/\\/g, '/');
+    if (!ref.startsWith('materials/') || ref.includes('..')) {
+      throw new Error('invalid materialRef');
+    }
+    const dest = path.join(pkg.rootDir, ...ref.split('/'));
+    const resolvedRoot = path.resolve(pkg.rootDir, 'materials');
+    const resolvedDest = path.resolve(dest);
+    if (
+      resolvedDest !== resolvedRoot &&
+      !resolvedDest.startsWith(resolvedRoot + path.sep)
+    ) {
+      throw new Error('material path escapes package');
+    }
+    let removedFile = false;
+    try {
+      await fs.unlink(resolvedDest);
+      removedFile = true;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException)?.code;
+      if (code !== 'ENOENT') throw err;
+    }
+
+    const events = await this.requireLog().list(pkg.id);
+    const alreadyInactive = new Set(
+      events
+        .filter(
+          (e) =>
+            e.type === 'subject_corrected' &&
+            e.confidence === 'confirmed' &&
+            (e.payload.tags || []).some((t) => t === 'action:reject' || t === 'action:replace'),
+        )
+        .map((e) => e.payload.relation?.targetEventId)
+        .filter((id): id is string => typeof id === 'string'),
+    );
+
+    const toInvalidate = new Set<string>();
+    for (const event of events) {
+      if (event.type === 'subject_corrected') continue;
+      if (event.payload?.relation?.materialRef === ref) {
+        toInvalidate.add(event.id);
+      }
+    }
+    // 已确认副本若 confirms 指向上述候选，一并失效，避免悬空注入
+    for (const event of events) {
+      if (event.confirms && toInvalidate.has(event.confirms)) {
+        toInvalidate.add(event.id);
+      }
+    }
+
+    let corrections = 0;
+    for (const eventId of toInvalidate) {
+      if (alreadyInactive.has(eventId)) continue;
+      const event = events.find((e) => e.id === eventId);
+      if (!event) continue;
+      const correction: GrowthEvent = {
+        id: newId('growthEvent'),
+        subjectId: pkg.id,
+        occurredAt: nowIso(),
+        type: 'subject_corrected',
+        source: { kind: 'owner_direct' },
+        payload: {
+          title: '已移除资料引用',
+          detail: event.payload.title || ref,
+          tags: ['action:reject', 'material:removed'],
+          relation: { targetEventId: event.id, materialRef: ref },
+        },
+        confidence: 'confirmed',
+      };
+      await this.appendGrowthEvent(correction);
+      corrections += 1;
+    }
+
+    if (removedFile || corrections > 0) {
+      this.cachedDerived = null;
+      if (corrections === 0) {
+        await this.rebuildDerivedViews();
+      }
+      this.eventBus?.publish({
+        kind: 'subject.updated',
+        subjectId: pkg.id,
+        summary: `removed material ${ref}`,
+      });
+    }
+    return { removed: removedFile || corrections > 0 };
+  }
+
   private async writeTextMaterial(text: string, prefix: string): Promise<string> {
     const pkg = this.requireActive();
     const digest = createHash('sha256').update(text, 'utf8').digest('hex').slice(0, 16);
@@ -507,6 +641,12 @@ export class SubjectService {
     const manifestPath = path.join(rootDir, SUBJECT_PACKAGE_LAYOUT.manifest);
     await writeDerivedJson(manifestPath, rest);
   }
+}
+
+/** 导入文件名常为 `{16hex}_{原名}`；列表展示去掉摘要前缀。 */
+function displayMaterialFileName(storedName: string): string {
+  const m = /^[a-f0-9]{16}_(.+)$/i.exec(storedName);
+  return m?.[1] || storedName;
 }
 
 async function readTextPreview(filePath: string): Promise<string> {

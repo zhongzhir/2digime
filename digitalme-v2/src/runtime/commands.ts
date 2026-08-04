@@ -65,6 +65,13 @@ export interface CommandMap {
       recentLearnings?: Array<{ eventId: string; text: string; suggestConfirm: boolean }>;
       /** 还不确定 — 对后续任务有帮助的缺口提问(可忽略)。 */
       helpfulQuestions?: Array<{ eventId: string; text: string }>;
+      /** SubjectPackage/materials 中已添加资料的轻量列表。 */
+      materials?: Array<{
+        materialRef: string;
+        fileName: string;
+        addedAt: string;
+        absolutePath: string;
+      }>;
     };
   };
   'subject.confirmExperience': {
@@ -102,6 +109,13 @@ export interface CommandMap {
     input: { sourcePath: string; distillCandidates?: boolean };
     output: { materialRef: string; candidateEventIds: string[] };
   };
+  /**
+   * 移除包内资料副本与对应引用；不得删除包外原始文件。
+   */
+  'subject.removeMaterial': {
+    input: { materialRef: string };
+    output: { removed: boolean };
+  };
   'work.submitTask': {
     input: {
       goal: string;
@@ -133,7 +147,15 @@ export interface CommandMap {
       task: Task;
       state: TaskState;
       userFacingLabel: string;
-      latestJob?: { jobId: string; status: JobStatus; progressNote?: string };
+      latestJob?: {
+        jobId: string;
+        status: JobStatus;
+        progressNote?: string;
+        createdAt?: string;
+        startedAt?: string;
+        /** 失败时面向用户的可行动说明。 */
+        actionable?: string;
+      };
       artifactIds: string[];
       /** 轻量成长反馈;默认收起「使用了什么」,不含内部链路。 */
       appliedUnderstanding?: {
@@ -144,7 +166,14 @@ export interface CommandMap {
   };
   'work.listTasks': {
     input: { limit?: number };
-    output: { tasks: Array<{ taskId: string; goal: string; state: TaskState }> };
+    output: {
+      tasks: Array<{
+        taskId: string;
+        goal: string;
+        state: TaskState;
+        userFacingLabel?: string;
+      }>;
+    };
   };
   'artifact.getContent': {
     input: { artifactId: string; versionId?: string };
@@ -199,6 +228,7 @@ export const COMMAND_NAMES = [
   'subject.respondToLearning',
   'subject.captureInput',
   'subject.importMaterial',
+  'subject.removeMaterial',
   'work.submitTask',
   'work.retryTask',
   'work.reviseArtifact',

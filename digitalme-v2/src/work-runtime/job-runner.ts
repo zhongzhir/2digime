@@ -20,8 +20,7 @@ import { JobStore } from './job-store';
 import { ContextSnapshotBuilder, sanitizeMessage } from './snapshot-builder';
 import { ArtifactCommitter } from './artifact-commit';
 import { InMemoryEventBus } from './event-bus';
-import { deriveTaskState, toUserFacingLabel } from './derive';
-import { latestJob } from './derive';
+import { deriveTaskState, latestJob, userFacingLabelFromLatestJob } from './derive';
 
 export interface WorkRuntimeOptions {
   subjectId: string;
@@ -228,20 +227,26 @@ export class WorkRuntime {
     const output: GetTaskOutput = {
       task,
       state,
-      userFacingLabel: toUserFacingLabel(state, { revising: revising && state === 'processing' }),
+      userFacingLabel: userFacingLabelFromLatestJob(jobs, { revising }),
       artifactIds: artifacts.map((a) => a.id),
     };
     if (last) {
       const latestJobOut: NonNullable<GetTaskOutput['latestJob']> = {
         jobId: last.id,
         status: last.status,
+        createdAt: last.createdAt,
       };
+      if (last.startedAt) latestJobOut.startedAt = last.startedAt;
       // 仅非终态可附带说明性进度;终态禁止拼接内部 phase 文案。
       if (
         (last.status === 'queued' || last.status === 'running') &&
         last.progress?.note !== undefined
       ) {
         latestJobOut.progressNote = last.progress.note;
+      }
+      if (last.status === 'failed' && last.failure?.actionable) {
+        latestJobOut.actionable = last.failure.actionable;
+        latestJobOut.progressNote = last.failure.actionable;
       }
       output.latestJob = latestJobOut;
     }
@@ -253,10 +258,16 @@ export class WorkRuntime {
     const result = [];
     for (const task of tasks) {
       const jobs = await this.opts.jobStore.listByTask(task.id);
+      const last = latestJob(jobs);
+      const revising = !!(
+        last?.revisionRequest &&
+        (last.status === 'queued' || last.status === 'running')
+      );
       result.push({
         taskId: task.id,
         goal: task.goal,
         state: deriveTaskState(jobs),
+        userFacingLabel: userFacingLabelFromLatestJob(jobs, { revising }),
       });
     }
     return { tasks: result };
@@ -658,7 +669,7 @@ export class WorkRuntime {
       ...next,
       failure: { stage, message, actionable },
     };
-    await this.persistJob(next, message);
+    await this.persistJob(next, actionable);
   }
 
   private async withProgress(

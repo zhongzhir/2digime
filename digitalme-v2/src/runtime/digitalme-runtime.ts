@@ -117,6 +117,10 @@ export class DigitalMeRuntime {
     return this.subject.importSubjectMaterial(input);
   }
 
+  removeSubjectMaterial(input: CommandMap['subject.removeMaterial']['input']) {
+    return this.subject.removeSubjectMaterial(input);
+  }
+
   submitTask(input: CommandMap['work.submitTask']['input']) {
     return this.requireWork().submitTask(input);
   }

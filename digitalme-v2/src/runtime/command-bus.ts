@@ -44,6 +44,10 @@ export function createCommandBus(runtime: DigitalMeRuntime): CommandBus {
           return (await runtime.importSubjectMaterial(
             input as CommandMap['subject.importMaterial']['input'],
           )) as CommandMap[K]['output'];
+        case 'subject.removeMaterial':
+          return (await runtime.removeSubjectMaterial(
+            input as CommandMap['subject.removeMaterial']['input'],
+          )) as CommandMap[K]['output'];
         case 'work.submitTask':
           return (await runtime.submitTask(
             input as CommandMap['work.submitTask']['input'],

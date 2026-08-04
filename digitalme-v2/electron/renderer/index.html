@@ -16,11 +16,10 @@
         <header class="hero">
           <p class="brand">Digital Me</p>
           <h1>建立你的数字之我</h1>
-          <p class="lead">用一句话介绍你自己，就可以开始做事。不必一次整理完整资料。</p>
         </header>
         <div class="welcome-actions">
           <label class="field">
-            <span>先用一句话介绍你自己，或者告诉我你最近在做什么。</span>
+            <span>用一句话介绍你自己，或者告诉我你最近在做什么</span>
             <textarea
               id="self-intro"
               rows="3"
@@ -29,11 +28,8 @@
           </label>
           <div class="row">
             <button type="button" id="btn-create-pkg" class="primary">开始使用</button>
-            <button type="button" id="btn-create-skip" class="ghost">先跳过，直接开始</button>
-            <button type="button" id="btn-open-pkg">打开已有</button>
-            <button type="button" id="btn-open-settings-welcome" class="ghost">设置</button>
+            <button type="button" id="btn-create-skip" class="ghost">先跳过</button>
           </div>
-          <p id="welcome-model-status" class="status"></p>
           <p id="welcome-status" class="status" hidden></p>
         </div>
       </section>
@@ -48,9 +44,7 @@
         </header>
         <div class="welcome-actions settings-panel">
           <h2>模型连接</h2>
-          <p class="muted">
-            连接真实模型后才能开始处理任务。密钥仅保存在本机安全存储中，界面不会回显明文。
-          </p>
+          <p class="muted">密钥仅保存在本机安全存储中，界面不会回显明文。</p>
           <label class="field">
             <span>服务提供方</span>
             <select id="model-provider">
@@ -85,97 +79,104 @@
         </div>
       </section>
 
-      <section id="view-workspace" class="view" hidden>
-        <header class="topbar">
-          <div>
-            <p class="brand-sm">Digital Me</p>
-            <h1 id="pkg-title">数字之我</h1>
-          </div>
+      <section id="view-shell" class="view" hidden>
+        <header class="topbar shell-topbar">
+          <p class="brand-sm">Digital Me</p>
+          <nav class="main-nav" aria-label="主导航">
+            <button type="button" class="nav-item" data-nav="chat" id="nav-chat">对话</button>
+            <button type="button" class="nav-item active" data-nav="work" id="nav-work">做事</button>
+            <button type="button" class="nav-item" data-nav="subject" id="nav-subject">数字之我</button>
+          </nav>
           <div class="topbar-actions">
-            <p id="model-status" class="meta"></p>
+            <button type="button" id="btn-open-help" class="ghost">帮助</button>
             <button type="button" id="btn-open-settings" class="ghost">设置</button>
           </div>
         </header>
 
-        <div class="layout">
-          <aside class="panel">
-            <h2>任务</h2>
-            <ul id="task-list" class="task-list"></ul>
-            <p id="task-empty" class="muted">还没有任务。</p>
+        <section id="panel-chat" class="shell-panel" data-panel="chat" hidden>
+          <h1 class="page-title">对话</h1>
+          <p class="muted tiny">轻量交流。不会自动生成成果；需要时可转为任务。</p>
+          <div id="chat-context" class="chat-context muted tiny" hidden></div>
+          <ul id="chat-turns" class="chat-turns" aria-live="polite"></ul>
+          <p id="chat-empty" class="muted tiny">还没有对话。写一句话开始即可。</p>
+          <label class="field">
+            <span>你想说的话</span>
+            <textarea id="chat-input" rows="3" placeholder="例如：我最近在做产品验收，希望你记得这一点。"></textarea>
+          </label>
+          <div class="row">
+            <button type="button" id="btn-chat-send" class="primary">发送</button>
+            <button type="button" id="btn-chat-to-task">转为任务</button>
+            <button type="button" id="btn-chat-clear" class="ghost">清空对话</button>
+            <button type="button" id="btn-chat-keep-artifact" class="ghost" disabled title="本轮仅保留入口">留为成果</button>
+          </div>
+          <p id="chat-status" class="meta" aria-live="polite"></p>
+        </section>
 
-            <section id="subject-panel" class="subject-panel" data-testid="subject-panel">
-              <h2>数字之我</h2>
-              <p id="subject-summary" class="muted subject-summary"></p>
+        <section id="panel-subject" class="shell-panel" data-panel="subject" hidden>
+          <h1 class="page-title">数字之我</h1>
+          <p id="subject-brief" class="subject-brief"></p>
+          <label class="field">
+            <span>补充一句话</span>
+            <textarea id="subject-more" rows="2" placeholder="补充你希望被了解的一点。"></textarea>
+          </label>
+          <div class="row">
+            <button type="button" id="btn-subject-capture" class="primary">保存</button>
+            <button type="button" id="btn-import-subject-material">添加资料</button>
+          </div>
+          <p id="subject-action-status" class="meta" aria-live="polite"></p>
+          <h2 class="section-title">已添加的资料</h2>
+          <ul id="subject-material-list" class="subject-list"></ul>
+          <p id="subject-material-empty" class="muted tiny">还没有添加资料。</p>
+          <h2 class="section-title">已确认的重要内容</h2>
+          <ul id="subject-active-list" class="subject-list"></ul>
+          <p id="subject-active-empty" class="muted tiny">暂无已确认内容。</p>
+        </section>
 
-              <div class="subject-block" data-section="now">
-                <h3>现在的我</h3>
-                <ul id="subject-now-list" class="subject-list"></ul>
-                <p id="subject-now-empty" class="muted tiny">还没有已确认的要点。做事过程中会逐渐形成。</p>
+        <section id="panel-work" class="shell-panel" data-panel="work">
+          <div class="work-layout">
+            <aside class="panel">
+              <div class="aside-head">
+                <h2>任务</h2>
+                <button type="button" id="btn-new-task" class="primary">新建任务</button>
               </div>
+              <ul id="task-list" class="task-list"></ul>
+              <p id="task-empty" class="muted">还没有任务。</p>
+            </aside>
 
-              <div class="subject-block" data-section="recent">
-                <h3>最近学到</h3>
-                <ul id="subject-recent-list" class="subject-list"></ul>
-                <p id="subject-recent-empty" class="muted tiny">完成任务或修改成果后，这里会出现少量新理解。</p>
+            <main class="panel grow">
+              <h2 id="work-compose-title">新建任务</h2>
+              <div id="model-gate" class="model-gate" hidden>
+                <p>请先连接模型，才能开始处理任务。</p>
+                <button type="button" id="btn-goto-settings" class="primary">前往设置</button>
               </div>
-
-              <div class="subject-block" data-section="unsure">
-                <h3>还不确定</h3>
-                <ul id="subject-unsure-list" class="subject-list"></ul>
-                <p id="subject-unsure-empty" class="muted tiny">暂无需要优先了解的问题。可随时忽略。</p>
-              </div>
-
-              <div class="subject-block" data-section="learn-more">
-                <h3>让数字之我更了解你</h3>
-                <p class="muted tiny">
-                  你可以添加项目资料、作品或过去的成果。数字之我会在使用中逐步理解，不需要一次整理完整。
-                </p>
+              <label class="field">
+                <span>描述你要完成的工作</span>
+                <textarea
+                  id="goal"
+                  rows="5"
+                  placeholder="例如：根据材料写一份项目进展简报。"
+                ></textarea>
+              </label>
+              <!-- 首轮默认文档交付；不强迫用户选择内部能力类型 -->
+              <input type="hidden" id="artifact-type" value="document" />
+              <div class="materials">
                 <div class="row">
-                  <button type="button" id="btn-import-subject-material">添加资料</button>
+                  <button type="button" id="btn-add-files">添加文件</button>
+                  <button type="button" id="btn-add-folder">添加文件夹</button>
+                  <button type="button" id="btn-clear-materials" class="ghost">清空材料</button>
                 </div>
-                <p id="subject-import-status" class="meta" aria-live="polite"></p>
+                <ul id="material-list" class="material-list"></ul>
               </div>
-            </section>
-          </aside>
-
-          <main class="panel grow">
-            <h2>新任务</h2>
-            <div id="model-gate" class="model-gate" hidden>
-              <p>请先连接模型，才能开始处理任务。</p>
-              <button type="button" id="btn-goto-settings" class="primary">前往设置</button>
-            </div>
-            <label class="field">
-              <span>描述你要完成的工作</span>
-              <textarea
-                id="goal"
-                rows="5"
-                placeholder="例如：根据材料写一份项目进展简报。"
-              ></textarea>
-            </label>
-            <label class="field">
-              <span>成果类型</span>
-              <select id="artifact-type">
-                <option value="document" selected>文档</option>
-                <option value="code-analysis">代码项目分析</option>
-              </select>
-            </label>
-            <div class="materials">
               <div class="row">
-                <button type="button" id="btn-add-files">添加文件</button>
-                <button type="button" id="btn-add-folder">添加文件夹</button>
-                <button type="button" id="btn-clear-materials" class="ghost">清空材料</button>
+                <button type="button" id="btn-submit" class="primary">开始处理</button>
+                <button type="button" id="btn-cancel" disabled>取消</button>
+                <button type="button" id="btn-retry" disabled>重试</button>
               </div>
-              <ul id="material-list" class="material-list"></ul>
-            </div>
-            <div class="row">
-              <button type="button" id="btn-submit" class="primary">开始处理</button>
-              <button type="button" id="btn-cancel" disabled>取消</button>
-              <button type="button" id="btn-retry" disabled>重试</button>
-            </div>
-            <p id="job-status" class="status" aria-live="polite"></p>
-            <p id="job-actionable" class="muted"></p>
+              <p id="job-status" class="status" aria-live="polite"></p>
+              <p id="job-actionable" class="muted"></p>
+            </main>
 
-            <section id="artifact-panel" class="artifact" hidden>
+            <section id="artifact-panel" class="panel artifact-side" hidden>
               <div class="artifact-head">
                 <h2>成果</h2>
                 <div class="row">
@@ -184,13 +185,6 @@
                   <button type="button" id="btn-export-docx">导出 Word</button>
                   <button type="button" id="btn-reveal">打开所在目录</button>
                 </div>
-              </div>
-              <div id="applied-understanding" class="applied-understanding" hidden>
-                <p id="applied-notice" class="applied-notice"></p>
-                <details id="applied-details">
-                  <summary>使用了什么</summary>
-                  <ul id="applied-items" class="applied-items"></ul>
-                </details>
               </div>
               <p id="save-status" class="meta"></p>
               <p id="version-meta" class="meta"></p>
@@ -210,7 +204,7 @@
                   <textarea
                     id="revision-request"
                     rows="3"
-                    placeholder="说明你希望如何改这篇成果。例如：开篇改成获奖事实，语气更像新闻报道。"
+                    placeholder="说明你希望如何改这篇成果。"
                   ></textarea>
                 </label>
                 <div class="row">
@@ -218,7 +212,26 @@
                 </div>
               </div>
             </section>
-          </main>
+          </div>
+        </section>
+
+      </section>
+
+      <section id="view-help" class="view" hidden>
+        <header class="topbar">
+          <p class="brand-sm">Digital Me</p>
+          <button type="button" id="btn-help-back" class="ghost">返回</button>
+        </header>
+        <div class="panel">
+          <h1>帮助</h1>
+          <p>用对话澄清想法，用做事完成可带走的成果，在数字之我中查看与调整已确认的内容。</p>
+          <ul class="help-list">
+            <li><strong>对话</strong>：轻量交流，不会自动生成成果；需要时可转为任务。</li>
+            <li><strong>做事</strong>：描述目标、添加材料、开始处理；可修改与导出成果。</li>
+            <li><strong>数字之我</strong>：补充说明、添加或移除资料、调整已确认内容。</li>
+            <li><strong>设置</strong>：连接模型服务。未连接时，做事会提示先完成连接。</li>
+          </ul>
+          <p class="muted tiny">协作能力属于产品核心主线，可用闭环就绪后会出现在主导航中。</p>
         </div>
       </section>
     </div>

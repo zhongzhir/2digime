@@ -33,6 +33,7 @@ const COMMAND_NAMES = new Set([
   "subject.respondToLearning",
   "subject.captureInput",
   "subject.importMaterial",
+  "subject.removeMaterial",
   "work.submitTask",
   "work.retryTask",
   "work.reviseArtifact",
@@ -268,6 +269,22 @@ function registerIpc() {
     return result.filePaths[0];
   });
 
+  /** 默认主体包目录(userData/subjects/default)，首次无需用户选择文件夹。 */
+  ipcMain.handle("shell:getDefaultSubjectDir", async () => {
+    const fs = require("node:fs");
+    const dir = path.join(app.getPath("userData"), "subjects", "default");
+    fs.mkdirSync(path.dirname(dir), { recursive: true });
+    const manifest = path.join(dir, "manifest.json");
+    let exists = false;
+    try {
+      fs.accessSync(manifest);
+      exists = true;
+    } catch {
+      exists = false;
+    }
+    return { dir, exists };
+  });
+
   ipcMain.handle("shell:getModelStatus", async () => {
     return lastBootInfo || { modelReady: false, needsCredentialSetup: true, status: null };
   });
@@ -311,6 +328,79 @@ function registerIpc() {
       modelMeta: boot.modelMeta,
       status: boot.status,
     };
+  });
+
+  /** 在资源管理器中显示路径（壳层辅助，非领域命令）。 */
+  ipcMain.handle("shell:revealPath", async (_evt, targetPath) => {
+    const p = String(targetPath || "").trim();
+    if (!p) return { opened: false };
+    try {
+      shell.showItemInFolder(p);
+      return { opened: true };
+    } catch {
+      return { opened: false };
+    }
+  });
+
+  /**
+   * 轻量对话 transcript（壳层辅助面）。
+   * 落在 SubjectPackage/ui/conversation.ndjson，不进 growth，不参与派生。
+   */
+  function conversationFilePath() {
+    if (!runtime || !runtime.subject) throw new Error("runtime not ready");
+    const pkg = runtime.subject.getActive();
+    if (!pkg) throw new Error("请先建立数字之我");
+    return path.join(pkg.rootDir, "ui", "conversation.ndjson");
+  }
+
+  ipcMain.handle("shell:conversationList", async () => {
+    const fs = require("node:fs");
+    const file = conversationFilePath();
+    if (!fs.existsSync(file)) return { turns: [] };
+    const text = fs.readFileSync(file, "utf8");
+    const turns = [];
+    for (const line of text.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      try {
+        turns.push(JSON.parse(line));
+      } catch {
+        /* skip corrupt */
+      }
+    }
+    return { turns };
+  });
+
+  ipcMain.handle("shell:conversationAppend", async (_evt, input) => {
+    const fs = require("node:fs");
+    const role = String((input && input.role) || "").trim();
+    const text = String((input && input.text) || "").trim();
+    if (!role || !text) throw new Error("对话内容不能为空");
+    if (role !== "user" && role !== "assistant" && role !== "system") {
+      throw new Error("无效的对话角色");
+    }
+    const file = conversationFilePath();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const turn = {
+      id: `turn_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+      role,
+      text,
+      at: new Date().toISOString(),
+    };
+    fs.appendFileSync(file, `${JSON.stringify(turn)}\n`, "utf8");
+    return { turn };
+  });
+
+  /** 清空对话 transcript；不删除已确认主体内容。 */
+  ipcMain.handle("shell:conversationClear", async () => {
+    const fs = require("node:fs");
+    const file = conversationFilePath();
+    try {
+      if (fs.existsSync(file)) fs.unlinkSync(file);
+    } catch (err) {
+      const code = err && err.code;
+      if (code !== "ENOENT") throw err;
+    }
+    return { cleared: true };
   });
 }
 

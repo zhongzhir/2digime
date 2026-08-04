@@ -13,6 +13,7 @@ const COMMAND_NAMES = [
   "subject.respondToLearning",
   "subject.captureInput",
   "subject.importMaterial",
+  "subject.removeMaterial",
   "work.submitTask",
   "work.retryTask",
   "work.reviseArtifact",
@@ -56,8 +57,15 @@ contextBridge.exposeInMainWorld("digitalMe", {
     pickOpenDirectory: () => ipcRenderer.invoke("shell:pickOpenDirectory"),
     pickSaveDirectory: () => ipcRenderer.invoke("shell:pickSaveDirectory"),
   },
+  getDefaultSubjectDir: () => ipcRenderer.invoke("shell:getDefaultSubjectDir"),
   getModelStatus: () => ipcRenderer.invoke("shell:getModelStatus"),
   saveModelCredential: (input) => ipcRenderer.invoke("shell:saveModelCredential", input),
   testModelConnection: (input) => ipcRenderer.invoke("shell:testModelConnection", input),
   deleteModelCredential: (input) => ipcRenderer.invoke("shell:deleteModelCredential", input),
+  revealPath: (targetPath) => ipcRenderer.invoke("shell:revealPath", targetPath),
+  conversation: {
+    list: () => ipcRenderer.invoke("shell:conversationList"),
+    append: (input) => ipcRenderer.invoke("shell:conversationAppend", input),
+    clear: () => ipcRenderer.invoke("shell:conversationClear"),
+  },
 });

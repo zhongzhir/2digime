@@ -56,3 +56,27 @@ export function toUserFacingLabel(
   if (opts?.revising && state === 'processing') return REVISING_LABEL;
   return USER_FACING_LABELS[state];
 }
+
+/**
+ * 按最新 Job 状态给出用户面文案（失败/取消与「需要处理」区分）。
+ * Task 派生态仍用 deriveTaskState；展示优先走本函数。
+ */
+export function userFacingLabelFromLatestJob(
+  jobsForTask: readonly ExecutionJob[],
+  opts?: { revising?: boolean },
+): string {
+  const last = latestJob(jobsForTask);
+  if (!last) return USER_FACING_LABELS.waiting;
+  switch (last.status) {
+    case 'queued':
+      return USER_FACING_LABELS.waiting;
+    case 'running':
+      return opts?.revising || last.revisionRequest ? REVISING_LABEL : USER_FACING_LABELS.processing;
+    case 'succeeded':
+      return last.artifactId ? USER_FACING_LABELS.completed : USER_FACING_LABELS.attention;
+    case 'failed':
+      return '失败';
+    case 'cancelled':
+      return '已取消';
+  }
+}

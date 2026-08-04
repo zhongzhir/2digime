@@ -14,6 +14,8 @@
     "accept:p2b1": "node scripts/run-p2b1-isolated-code-change.cjs",
     "accept:subject-mvp": "node scripts/run-subject-mvp-acceptance.cjs",
     "accept:subject-ux": "node scripts/run-subject-ux-acceptance.cjs",
+    "accept:product-shell": "node scripts/run-product-shell-acceptance.cjs",
+    "accept:conversation-shell": "node scripts/run-conversation-shell-acceptance.cjs",
     "electron:version": "node scripts/check-electron-version.cjs",
     "preflight:electron": "node scripts/electron-preflight.cjs",
     "dev": "node scripts/start-dev.cjs",

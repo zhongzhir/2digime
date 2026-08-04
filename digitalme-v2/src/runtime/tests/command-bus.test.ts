@@ -12,10 +12,11 @@ async function tempDir(prefix: string): Promise<string> {
 }
 
 test('CommandBus 覆盖全部命令且不超过上限', async () => {
-  assert.equal(COMMAND_NAMES.length, 19);
+  assert.equal(COMMAND_NAMES.length, 20);
   assert.ok(COMMAND_NAMES.length <= COMMAND_COUNT_LIMIT);
   assert.ok(COMMAND_NAMES.includes('work.reviseArtifact'));
   assert.ok(COMMAND_NAMES.includes('subject.importMaterial'));
+  assert.ok(COMMAND_NAMES.includes('subject.removeMaterial'));
   assert.ok(COMMAND_NAMES.includes('subject.captureInput'));
   assert.ok(COMMAND_NAMES.includes('subject.respondToLearning'));
 
