@@ -92,6 +92,21 @@
     exportMd: document.getElementById("btn-export-md"),
     exportDocx: document.getElementById("btn-export-docx"),
     reveal: document.getElementById("btn-reveal"),
+    collabOpen: document.getElementById("btn-collab-open"),
+    collabForm: document.getElementById("collab-form"),
+    collabPeerDir: document.getElementById("collab-peer-dir"),
+    collabPickPeer: document.getElementById("btn-collab-pick-peer"),
+    collabSubtask: document.getElementById("collab-subtask"),
+    collabMaterials: document.getElementById("collab-materials"),
+    collabIssue: document.getElementById("btn-collab-issue"),
+    collabStatus: document.getElementById("collab-status"),
+    collabReturn: document.getElementById("collab-return"),
+    collabActions: document.getElementById("collab-actions"),
+    collabExecute: document.getElementById("btn-collab-execute"),
+    collabAccept: document.getElementById("btn-collab-accept"),
+    collabReject: document.getElementById("btn-collab-reject"),
+    collabRevoke: document.getElementById("btn-collab-revoke"),
+    collabError: document.getElementById("collab-error"),
   };
 
   /** @type {{ kind: 'file'|'folder', path: string }[]} */
@@ -102,6 +117,7 @@
   let activeJobId = null;
   let activeArtifactId = null;
   let activeHeadVersionId = null;
+  let activeGrantId = null;
   let saveTimer = null;
   let suppressSave = false;
   let jobWatchTimer = null;
@@ -392,6 +408,7 @@
   function clearArtifactView() {
     activeArtifactId = null;
     activeHeadVersionId = null;
+    resetCollabUi();
     copyBlockedFailed = false;
     setCopyEnabled(false);
     els.artifactPanel.hidden = true;
@@ -1355,6 +1372,141 @@
   }
   if (els.rejectArtifact) {
     els.rejectArtifact.addEventListener("click", () => submitArtifactDecision("reject"));
+  }
+
+  function resetCollabUi() {
+    activeGrantId = null;
+    if (els.collabForm) els.collabForm.hidden = true;
+    if (els.collabStatus) els.collabStatus.textContent = "";
+    if (els.collabReturn) {
+      els.collabReturn.hidden = true;
+      els.collabReturn.textContent = "";
+    }
+    if (els.collabActions) els.collabActions.hidden = true;
+    showStatus(els.collabError, "");
+  }
+
+  function showCollabActions(show) {
+    if (els.collabActions) els.collabActions.hidden = !show;
+  }
+
+  if (els.collabOpen) {
+    els.collabOpen.addEventListener("click", () => {
+      if (!activeTaskId) {
+        showStatus(els.collabError, "请先开始或选择一个任务", true);
+        return;
+      }
+      if (els.collabForm) els.collabForm.hidden = !els.collabForm.hidden;
+      if (els.collabMaterials && materials.length) {
+        els.collabMaterials.value = materials.map((m) => m.path).join("\n");
+      }
+      showStatus(els.collabError, "");
+    });
+  }
+  if (els.collabPickPeer) {
+    els.collabPickPeer.addEventListener("click", async () => {
+      const dir = await api.dialogs.pickOpenDirectory();
+      if (dir && els.collabPeerDir) els.collabPeerDir.value = dir;
+    });
+  }
+  if (els.collabIssue) {
+    els.collabIssue.addEventListener("click", async () => {
+      showStatus(els.collabError, "");
+      if (!activeTaskId) {
+        showStatus(els.collabError, "请先开始或选择一个任务", true);
+        return;
+      }
+      const peer = els.collabPeerDir ? String(els.collabPeerDir.value || "").trim() : "";
+      const subtask = els.collabSubtask ? String(els.collabSubtask.value || "").trim() : "";
+      const mats = els.collabMaterials
+        ? String(els.collabMaterials.value || "")
+            .split(/\r?\n/)
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : [];
+      if (!peer || !subtask) {
+        showStatus(els.collabError, "请选择协作者目录并填写子任务要求", true);
+        return;
+      }
+      try {
+        const issued = await api.invoke("collab.simulateInteraction", {
+          action: "issue",
+          granteePackageDir: peer,
+          issuerTaskId: activeTaskId,
+          subtaskGoal: subtask,
+          allowedMaterialPaths: mats,
+        });
+        activeGrantId = issued.grantId;
+        if (els.collabStatus) {
+          els.collabStatus.textContent = `已授权 · ${issued.grantId}`;
+        }
+        showCollabActions(true);
+      } catch (err) {
+        showStatus(els.collabError, err.message || "授权失败", true);
+      }
+    });
+  }
+  if (els.collabExecute) {
+    els.collabExecute.addEventListener("click", async () => {
+      showStatus(els.collabError, "");
+      if (!activeGrantId) return;
+      if (els.collabStatus) els.collabStatus.textContent = "协作执行中…";
+      try {
+        const result = await api.invoke("collab.simulateInteraction", {
+          action: "execute",
+          grantId: activeGrantId,
+        });
+        if (result.denied) {
+          showStatus(els.collabError, result.reason || "协作被拒绝", true);
+          if (els.collabStatus) els.collabStatus.textContent = "未执行";
+          return;
+        }
+        if (els.collabStatus) els.collabStatus.textContent = `协作完成 · ${result.status || ""}`;
+        if (els.collabReturn) {
+          els.collabReturn.hidden = false;
+          els.collabReturn.textContent = result.artifactText || result.grant?.returnedExcerpt || "";
+        }
+      } catch (err) {
+        showStatus(els.collabError, err.message || "协作执行失败", true);
+      }
+    });
+  }
+  async function decideCollabReturn(decision) {
+    showStatus(els.collabError, "");
+    if (!activeGrantId) return;
+    try {
+      await api.invoke("collab.simulateInteraction", {
+        action: "acceptReturn",
+        grantId: activeGrantId,
+        decision,
+      });
+      if (els.collabStatus) {
+        els.collabStatus.textContent = decision === "accept" ? "已采用返回成果" : "未采用返回成果";
+      }
+    } catch (err) {
+      showStatus(els.collabError, err.message || "未能保存决定", true);
+    }
+  }
+  if (els.collabAccept) {
+    els.collabAccept.addEventListener("click", () => decideCollabReturn("accept"));
+  }
+  if (els.collabReject) {
+    els.collabReject.addEventListener("click", () => decideCollabReturn("reject"));
+  }
+  if (els.collabRevoke) {
+    els.collabRevoke.addEventListener("click", async () => {
+      showStatus(els.collabError, "");
+      if (!activeGrantId) return;
+      try {
+        await api.invoke("collab.simulateInteraction", {
+          action: "revoke",
+          grantId: activeGrantId,
+        });
+        if (els.collabStatus) els.collabStatus.textContent = "授权已撤销";
+      } catch (err) {
+        showStatus(els.collabError, err.message || "撤销失败", true);
+      }
+    });
   }
 
   api.onEvent(async (event) => {

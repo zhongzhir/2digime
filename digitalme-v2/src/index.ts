@@ -33,6 +33,8 @@ export * from './capability/adapters/prompt-assemble';
 
 export * from './collaboration/schema';
 export * from './collaboration/local-simulation';
+export * from './collaboration/local-collaboration';
+export * from './collaboration/grant-store';
 
 export * from './artifact-workspace/contracts';
 export * from './artifact-workspace/workspace';

@@ -10,7 +10,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "smoke": "node dist/smoke.js",
-    "test": "node --test --test-concurrency=1 \"dist/infrastructure/tests/*.test.js\" \"dist/work-runtime/tests/*.test.js\" \"dist/subject-core/tests/*.test.js\" \"dist/capability/adapters/tests/*.test.js\" \"dist/runtime/tests/*.test.js\" \"dist/engineering/tests/*.test.js\"",
+    "test": "node --test --test-concurrency=1 \"dist/infrastructure/tests/*.test.js\" \"dist/work-runtime/tests/*.test.js\" \"dist/subject-core/tests/*.test.js\" \"dist/capability/adapters/tests/*.test.js\" \"dist/runtime/tests/*.test.js\" \"dist/engineering/tests/*.test.js\" \"dist/collaboration/tests/local-collaboration.test.js\"",
+    "accept:collaboration-mvp": "node scripts/run-collaboration-mvp-acceptance.cjs",
+    "accept:collaboration-real": "node scripts/run-collaboration-real-acceptance.cjs",
     "accept:p2b1": "node scripts/run-p2b1-isolated-code-change.cjs",
     "accept:subject-mvp": "node scripts/run-subject-mvp-acceptance.cjs",
     "accept:subject-ux": "node scripts/run-subject-ux-acceptance.cjs",

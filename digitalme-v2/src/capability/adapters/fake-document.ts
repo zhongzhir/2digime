@@ -82,7 +82,8 @@ export function createFakeDocumentAdapter(
 
 function defaultFakeDocumentText(input: CapabilityInput, override?: string): string {
   if (override !== undefined) return override;
-  const base = `# ${input.goal}\n\n(fake document)`;
+  // 保持可辨识的测试替身标记，同时保证正文长于协作成功门槛（非空壳）。
+  const base = `# ${input.goal}\n\n(fake document)\n\n这是用于本地验证的确定性文档正文，覆盖目标要点并保证可读长度。`;
   if (input.subjectContext.entries.length === 0) return base;
   const byKind = (kind: string) =>
     input.subjectContext.entries.filter((e) => (e.kind || 'experience') === kind);

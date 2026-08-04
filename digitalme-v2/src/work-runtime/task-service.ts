@@ -16,6 +16,7 @@ export class TaskService {
     contextRefs: ContextRef[];
     requestedArtifactType: string;
     capabilityId?: string;
+    authorization?: Task['authorization'];
   }): Promise<Task> {
     const goal = input.goal.trim();
     if (goal.length === 0) {
@@ -43,6 +44,9 @@ export class TaskService {
     };
     if (input.capabilityId !== undefined) {
       task.capabilityId = input.capabilityId;
+    }
+    if (input.authorization) {
+      task.authorization = { ...input.authorization };
     }
     await this.store.put(task);
     return task;

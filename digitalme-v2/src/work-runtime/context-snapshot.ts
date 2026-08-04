@@ -16,6 +16,12 @@ export interface ContextSnapshot {
    * 缺省(文档能力)不写此字段。
    */
   ingestion?: SnapshotIngestionMeta;
+  /** 协作披露溯源（可选）；记录 Grant 与材料摘要，非独立协作状态机。 */
+  authorization?: {
+    grantId: string;
+    issuerSubjectId: string;
+    granteeSubjectId: string;
+  };
 }
 
 export interface SnapshotItem {

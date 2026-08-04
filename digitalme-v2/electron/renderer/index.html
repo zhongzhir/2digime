@@ -228,6 +228,40 @@
                   <button type="button" id="btn-revise" class="primary">修改成果</button>
                 </div>
               </div>
+              <div class="collab-box" id="collab-box">
+                <h3 class="section-title">协作</h3>
+                <p class="muted tiny">把当前任务中的一个明确子任务交给本机另一个数字之我。</p>
+                <button type="button" id="btn-collab-open" class="ghost">交给另一个数字之我</button>
+                <div id="collab-form" class="collab-form" hidden>
+                  <label class="field">
+                    <span>协作者主体目录</span>
+                    <div class="row">
+                      <input type="text" id="collab-peer-dir" readonly placeholder="选择本机主体目录" />
+                      <button type="button" id="btn-collab-pick-peer">选择</button>
+                    </div>
+                  </label>
+                  <label class="field">
+                    <span>子任务要求</span>
+                    <textarea id="collab-subtask" rows="3" placeholder="说明希望对方完成的具体内容"></textarea>
+                  </label>
+                  <label class="field">
+                    <span>允许共享的材料（当前任务材料路径，每行一个；留空表示不共享文件）</span>
+                    <textarea id="collab-materials" rows="3" placeholder="可选"></textarea>
+                  </label>
+                  <div class="row">
+                    <button type="button" id="btn-collab-issue" class="primary">确认授权并请求</button>
+                  </div>
+                </div>
+                <p id="collab-status" class="meta" aria-live="polite"></p>
+                <pre id="collab-return" class="collab-return" hidden></pre>
+                <div class="row" id="collab-actions" hidden>
+                  <button type="button" id="btn-collab-execute">开始协作执行</button>
+                  <button type="button" id="btn-collab-accept">采用返回成果</button>
+                  <button type="button" id="btn-collab-reject">不采用</button>
+                  <button type="button" id="btn-collab-revoke" class="ghost">撤销授权</button>
+                </div>
+                <p id="collab-error" class="muted tiny error" hidden></p>
+              </div>
             </section>
           </div>
         </section>

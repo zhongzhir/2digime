@@ -14,6 +14,15 @@ export interface Task {
   contextRefs: ContextRef[];
   requestedArtifactType: string;
   capabilityId?: string;
+  /**
+   * 可选：本机协作授权溯源（非状态机）。
+   * 写入 Snapshot.authorization，证明披露范围由 Grant 约束。
+   */
+  authorization?: {
+    grantId: string;
+    issuerSubjectId: string;
+    granteeSubjectId: string;
+  };
 }
 
 export interface ContextRef {

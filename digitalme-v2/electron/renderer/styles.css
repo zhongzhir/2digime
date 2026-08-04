@@ -57,6 +57,37 @@ body {
   margin-top: 6px;
 }
 
+.collab-box {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.collab-box .section-title {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+
+.collab-form {
+  margin-top: 10px;
+}
+
+.collab-form input[type='text'] {
+  flex: 1;
+  min-width: 0;
+}
+
+.collab-return {
+  margin-top: 8px;
+  padding: 10px;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  background: rgba(28, 36, 48, 0.03);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
 .brand,
 .brand-sm {
   letter-spacing: 0.08em;

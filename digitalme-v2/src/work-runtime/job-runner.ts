@@ -115,6 +115,7 @@ export class WorkRuntime {
       contextRefs: SubmitInput['contextRefs'];
       requestedArtifactType: string;
       capabilityId?: string;
+      authorization?: SubmitInput['authorization'];
     } = {
       subjectId: this.opts.subjectId,
       goal: input.goal,
@@ -124,6 +125,9 @@ export class WorkRuntime {
     };
     if (input.capabilityId !== undefined) {
       taskInput.capabilityId = input.capabilityId;
+    }
+    if (input.authorization) {
+      taskInput.authorization = input.authorization;
     }
     const task = await this.opts.taskService.create(taskInput);
 

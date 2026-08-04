@@ -36,6 +36,7 @@ import { ArtifactWorkspace } from '../artifact-workspace/workspace';
 import type { CommandMap } from '../runtime/commands';
 import type { GrowthEvent } from '../subject-core/growth-event';
 import { simulateInteraction } from '../collaboration/local-simulation';
+import { LocalCollaborationHost } from '../collaboration/local-collaboration';
 import { nowIso, newId } from '../shared/ids';
 
 export interface DigitalMeRuntimeOptions {
@@ -80,6 +81,18 @@ export class DigitalMeRuntime {
   constructor(options: DigitalMeRuntimeOptions = {}) {
     this.options = options;
     this.registry = this.buildCapabilityRegistry();
+  }
+
+  /**
+   * 为同机协作方创建能力配置一致的独立 Runtime（不共享 SubjectPackage / Store）。
+   */
+  createSiblingRuntime(): DigitalMeRuntime {
+    return createDigitalMeRuntime({ ...this.options });
+  }
+
+  /** 当前文档能力模式（供协作验收区分 Fake / 真实模型）。 */
+  get documentCapabilityMode(): DigitalMeRuntimeOptions['documentCapability'] {
+    return this.options.documentCapability ?? 'fake';
   }
 
   async createPackage(input: CommandMap['subject.createPackage']['input']) {
@@ -220,18 +233,106 @@ export class DigitalMeRuntime {
   async simulateCollab(
     input: CommandMap['collab.simulateInteraction']['input'],
   ): Promise<CommandMap['collab.simulateInteraction']['output']> {
-    const pkg = this.subject.requireActive();
-    const { request, grant } = simulateInteraction({
-      grantor: {
-        subjectId: pkg.id,
-        displayName: pkg.identity.displayName,
-        scheme: 'local',
-      },
-      granteeName: input.granteeName,
-      scope: input.scope,
-      goal: input.goal,
-    });
-    return { requestId: request.id, grantId: grant.id };
+    const action = input.action;
+    if (!action) {
+      // 兼容旧冒烟：内存模拟（不落盘）
+      const pkg = this.subject.requireActive();
+      if (!input.granteeName || !input.scope || !input.goal) {
+        throw new Error('legacy collab.simulateInteraction requires granteeName, scope, goal');
+      }
+      const { request, grant } = simulateInteraction({
+        grantor: {
+          subjectId: pkg.id,
+          displayName: pkg.identity.displayName,
+          scheme: 'local',
+        },
+        granteeName: input.granteeName,
+        scope: input.scope,
+        goal: input.goal,
+      });
+      return { requestId: request.id, grantId: grant.id, status: 'authorized' };
+    }
+
+    const host = new LocalCollaborationHost(this);
+    if (action === 'issue') {
+      if (!input.granteePackageDir || !input.issuerTaskId || !input.subtaskGoal) {
+        throw new Error('issue requires granteePackageDir, issuerTaskId, subtaskGoal');
+      }
+      return host.issue({
+        granteePackageDir: input.granteePackageDir,
+        issuerTaskId: input.issuerTaskId,
+        subtaskGoal: input.subtaskGoal,
+        allowedMaterialPaths: input.allowedMaterialPaths ?? [],
+      });
+    }
+    if (action === 'revoke') {
+      if (!input.grantId) throw new Error('revoke requires grantId');
+      return host.revoke(input.grantId);
+    }
+    if (action === 'execute') {
+      if (!input.grantId) throw new Error('execute requires grantId');
+      return host.execute(
+        input.grantId,
+        input.extraMaterialPaths ? { extraMaterialPaths: input.extraMaterialPaths } : {},
+      );
+    }
+    if (action === 'status') {
+      if (!input.grantId) throw new Error('status requires grantId');
+      const got = await host.getStatus(input.grantId);
+      return {
+        grantId: got.grantId,
+        status: got.status,
+        grant: {
+          id: got.grant.id,
+          status: got.grant.status,
+          ...(got.grant.subtaskGoal ? { subtaskGoal: got.grant.subtaskGoal } : {}),
+          ...(got.grant.granteeDisplayName
+            ? { granteeDisplayName: got.grant.granteeDisplayName }
+            : {}),
+          ...(got.grant.returnedArtifact?.textExcerpt
+            ? { returnedExcerpt: got.grant.returnedArtifact.textExcerpt }
+            : {}),
+          ...(got.grant.returnedArtifact?.reachedModel !== undefined
+            ? { reachedModel: got.grant.returnedArtifact.reachedModel }
+            : {}),
+        },
+        ...(got.grant.disclosure?.reachedModel !== undefined
+          ? { reachedModel: got.grant.disclosure.reachedModel }
+          : {}),
+        ...(got.grant.disclosure?.capabilityId
+          ? { capabilityId: got.grant.disclosure.capabilityId }
+          : {}),
+        ...(got.grant.returnedArtifact
+          ? {
+              artifactId: got.grant.returnedArtifact.artifactId,
+              artifactText: got.grant.returnedArtifact.textExcerpt,
+            }
+          : {}),
+      };
+    }
+    if (action === 'acceptReturn') {
+      if (!input.grantId || !input.decision) {
+        throw new Error('acceptReturn requires grantId and decision');
+      }
+      return host.acceptReturn({
+        grantId: input.grantId,
+        decision: input.decision,
+        ...(input.note ? { note: input.note } : {}),
+      });
+    }
+    if (action === 'assertMaterialAccess') {
+      if (!input.grantId || !input.attemptMaterialPath) {
+        throw new Error('assertMaterialAccess requires grantId and attemptMaterialPath');
+      }
+      const access = await host.assertMaterialAccess(input.grantId, input.attemptMaterialPath);
+      return {
+        grantId: input.grantId,
+        allowed: access.allowed,
+        denied: !access.allowed,
+        ...(access.reason ? { reason: access.reason } : {}),
+      };
+    }
+    throw new Error(`unknown collab action: ${String(action)}`);
   }
 
   async appendOwnerEvent(

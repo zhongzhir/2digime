@@ -57,6 +57,25 @@ export type GrantOrigin =
       requestSummary: { fromDisplayName: string; goal: string };
     };
 
+/** 本机协作允许的动作（首轮封闭）。 */
+export const LOCAL_COLLAB_ACTIONS = [
+  'read_authorized_context',
+  'execute_subtask',
+  'return_artifact',
+] as const;
+
+export type LocalCollabAction = (typeof LOCAL_COLLAB_ACTIONS)[number];
+
+/** 用户面协作投影（派生，非独立权威状态机）。 */
+export type CollabUserStatus =
+  | 'requested'
+  | 'authorized'
+  | 'running'
+  | 'completed'
+  | 'rejected'
+  | 'revoked'
+  | 'failed';
+
 /** 最小权威对象 #8 — 持久化。 */
 export interface AuthorizationGrant {
   id: string;
@@ -68,6 +87,32 @@ export interface AuthorizationGrant {
   grantedAt: string;
   expiresAt?: string;
   revokedAt?: string;
+  /** 本机双包协作扩展（能力授权形态可缺省）。 */
+  issuerTaskId?: string;
+  subtaskGoal?: string;
+  granteePackageDir?: string;
+  granteeDisplayName?: string;
+  /** 实际披露给 B 的材料与快照溯源（执行后写入）。 */
+  disclosure?: {
+    snapshotId?: string;
+    jobId?: string;
+    materialSummaries: Array<{ path: string; contentDigest?: string }>;
+    sentAt: string;
+    /** 是否实际到达模型 Adapter（非 Fake/模板）。 */
+    reachedModel?: boolean;
+    capabilityId?: string;
+    modelTokens?: number;
+    capabilityDurationMs?: number;
+  };
+  returnedArtifact?: {
+    artifactId: string;
+    subjectId: string;
+    headVersionId: string;
+    title?: string;
+    textExcerpt?: string;
+    reachedModel?: boolean;
+  };
+  lastFailure?: { at: string; message: string };
 }
 
 /** 复用 ExecutionJob 五态语义;未来经 remote-subject Adapter 落地。 */

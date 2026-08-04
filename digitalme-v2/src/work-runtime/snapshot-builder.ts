@@ -88,6 +88,7 @@ export class ContextSnapshotBuilder {
       taskId: task.id,
       createdAt: nowIso(),
       items,
+      ...(task.authorization ? { authorization: { ...task.authorization } } : {}),
     };
     await this.snapshotStore.put(snapshot);
     return snapshot;
@@ -156,6 +157,7 @@ export class ContextSnapshotBuilder {
       createdAt: nowIso(),
       items,
       ingestion: merged,
+      ...(task.authorization ? { authorization: { ...task.authorization } } : {}),
     };
     await this.snapshotStore.put(snapshot);
     return snapshot;

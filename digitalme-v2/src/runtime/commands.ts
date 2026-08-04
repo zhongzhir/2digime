@@ -134,6 +134,12 @@ export interface CommandMap {
       contextRefs: ContextRef[];
       requestedArtifactType: string;
       capabilityId?: string;
+      /** 本机协作子任务溯源（可选）；由协作编排写入，非 UI 自建状态。 */
+      authorization?: {
+        grantId: string;
+        issuerSubjectId: string;
+        granteeSubjectId: string;
+      };
     };
     output: { taskId: string; jobId: string };
   };
@@ -233,9 +239,56 @@ export interface CommandMap {
     input: Record<string, never>;
     output: { capabilities: CapabilityRegistration[] };
   };
+  /**
+   * 本机协作（升级原 simulate 占位）：issue / revoke / execute / status / acceptReturn / assertMaterialAccess。
+   * 仍占 1 个命令位；Grant 持久在 issuer 包内。
+   */
   'collab.simulateInteraction': {
-    input: { granteeName: string; scope: AuthorizationScope; goal: string };
-    output: { requestId: string; grantId: string };
+    input: {
+      action?:
+        | 'issue'
+        | 'revoke'
+        | 'execute'
+        | 'status'
+        | 'acceptReturn'
+        | 'assertMaterialAccess';
+      /** 兼容旧冒烟：无 action 时按本地占位模拟。 */
+      granteeName?: string;
+      scope?: AuthorizationScope;
+      goal?: string;
+      grantId?: string;
+      granteePackageDir?: string;
+      issuerTaskId?: string;
+      subtaskGoal?: string;
+      allowedMaterialPaths?: string[];
+      attemptMaterialPath?: string;
+      extraMaterialPaths?: string[];
+      decision?: 'accept' | 'reject';
+      note?: string;
+    };
+    output: {
+      requestId?: string;
+      grantId?: string;
+      status?: string;
+      artifactId?: string;
+      artifactText?: string;
+      denied?: boolean;
+      reason?: string;
+      allowed?: boolean;
+      issuerEventId?: string;
+      granteeEventId?: string;
+      reachedModel?: boolean;
+      capabilityId?: string;
+      integratedIntoArtifactId?: string;
+      grant?: {
+        id: string;
+        status: string;
+        subtaskGoal?: string;
+        granteeDisplayName?: string;
+        returnedExcerpt?: string;
+        reachedModel?: boolean;
+      };
+    };
   };
 }
 
