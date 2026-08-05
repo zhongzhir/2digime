@@ -136,6 +136,9 @@ export interface CommandMap {
       /** 同版本同决策重复调用时为 true，未新写事件。 */
       idempotent?: boolean;
       ownerDecision?: 'undecided' | 'accepted' | 'rejected';
+      /** 验收追溯：蒸馏模式（不上用户面） */
+      distillMode?: 'model' | 'contract' | 'model_fallback_contract' | 'none';
+      normalizeTrace?: unknown[];
     };
   };
   /** 导入单文件到主体 materials/,可选产生候选。 */

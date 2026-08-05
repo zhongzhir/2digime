@@ -1,0 +1,60 @@
+{
+  "status": "revalidation_passed",
+  "generatedAt": "2026-08-05T09:25:16.537Z",
+  "modelMeta": {
+    "model": "deepseek-v4-flash",
+    "providerId": "openai-compatible",
+    "baseUrlHost": "api.deepseek.com"
+  },
+  "scenarios": {
+    "A": {
+      "captureInput_mode": "model",
+      "normalized_category_ok": true,
+      "adoption": "silent",
+      "later_context_selected": true,
+      "taskStatus": "succeeded",
+      "structure": {
+        "conclusionEarly": true,
+        "restrainedLength": true,
+        "decisionHighlight": true
+      },
+      "normalizeTrace": [
+        {
+          "raw": {
+            "title": "项目汇报要求",
+            "text": "以后项目汇报先给结论，控制篇幅，只保留需要我决策的事项。",
+            "category": "working_method",
+            "eventType": "preference_declaration",
+            "scope": "project_report",
+            "temporary": false,
+            "risk": null,
+            "maybeConflict": null,
+            "modelConfidenceSummary": "用户明确表达偏好，无歧义。"
+          },
+          "normalized": {
+            "category": "working_method",
+            "eventType": "preference_observed",
+            "mappedFrom": "working_method"
+          },
+          "ok": true
+        }
+      ],
+      "artifactHead": "# 本周项目汇报\n\n## 结论\n\n本周项目整体按计划推进，暂无需要升级处理的阻断性问题。当前主要风险集中在资源协调与交付时间窗口，需管理层关注并给出决策。\n\n## 进展概述\n\n各模块按既定节奏推进，核心交付物已完成阶段性里程碑。团队协作顺畅，外部依赖整体可控，未出现影响最终交付质量的偏离。\n\n## 待决策事项\n\n1. **资源调配**：下一阶段需确认人力是否按原计划投入，若需调整，将直接影响交付排期。\n2. **优先级确认**：近期新增需求与原计划存在时间冲突，请明确是否调整本期优先级。\n\n## 风险提示\n\n- 交付时间窗口偏紧，若上述两项决策未在本周内明确，存在顺延风险。\n- 目前无其他重大风险项。\n\n---\n\n*注：本次汇报基于已有信息整理。若需补充具体数据、完成百分比或详细里程碑内容，请提供相应材料后再行完善。*",
+      "pass": true
+    },
+    "D": {
+      "shortPendingOrConfirmed": true,
+      "conflictPending": true,
+      "conflictSilentOverwrite": false,
+      "unrelated_confirmations": 0,
+      "jit_triggered": true,
+      "once_affects_snapshot": true,
+      "main_task_status": "succeeded",
+      "pass": true
+    }
+  },
+  "verdict": {
+    "A": true,
+    "D": true
+  }
+}

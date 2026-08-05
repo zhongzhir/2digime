@@ -34,6 +34,8 @@ export interface SubjectInjectionSelectInput {
   includeCoreMatching?: boolean;
   /** JIT 未决或决议排除的事件（冲突保守默认） */
   excludeEventIds?: readonly string[];
+  /** JIT「本次使用 B」等：强制纳入候选条目（仅本 Snapshot） */
+  forceIncludeEventIds?: readonly string[];
 }
 
 export interface SubjectInjectionSelection {
@@ -145,6 +147,7 @@ export function selectSubjectInjection(
   const derived = input.derived;
   const inactive = new Set(derived.inactiveEventIds);
   const jitExclude = new Set(input.excludeEventIds || []);
+  const forceInclude = new Set(input.forceIncludeEventIds || []);
   const tokens = tokenize(input.goal);
   const includeCore = input.includeCoreMatching === true || policy === 'legacy';
 
@@ -157,7 +160,7 @@ export function selectSubjectInjection(
     kind: SubjectEntryKind,
     reason: SelectionReason,
   ) => {
-    if (inactive.has(item.eventId) || jitExclude.has(item.eventId)) {
+    if (inactive.has(item.eventId) || (jitExclude.has(item.eventId) && !forceInclude.has(item.eventId))) {
       excludedEventIds.push(item.eventId);
       return;
     }
@@ -291,6 +294,42 @@ export function selectSubjectInjection(
     if (full?.occurredAt) payload.occurredAt = full.occurredAt;
     push(payload, 'preference', 'keyword_match');
     prefAdded += 1;
+  }
+
+  // JIT 本次强制纳入（可为仍待确认的候选）
+  for (const eventId of forceInclude) {
+    if (frozenEntries.some((e) => e.eventId === eventId)) continue;
+    const active = derived.activeItems.find((a) => a.eventId === eventId);
+    if (active) {
+      push(
+        {
+          eventId: active.eventId,
+          title: active.title,
+          detail: active.detail,
+          tags: [...active.tags, 'jit:once'],
+          occurredAt: active.occurredAt,
+        },
+        active.kind === 'preference' || active.kind === 'principle' || active.kind === 'goal'
+          ? active.kind
+          : 'preference',
+        'keyword_match',
+      );
+      continue;
+    }
+    const cand = derived.candidates.entries.find((c) => c.eventId === eventId);
+    if (cand) {
+      push(
+        {
+          eventId: cand.eventId,
+          title: cand.title,
+          detail: cand.detail,
+          tags: [...cand.tags, 'jit:once'],
+          occurredAt: cand.occurredAt,
+        },
+        'preference',
+        'keyword_match',
+      );
+    }
   }
 
   // 硬边界：始终可注入（明确硬约束），与是否有相关经验无关

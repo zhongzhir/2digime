@@ -28,6 +28,7 @@ import {
   type JitConflictPrompt,
   type JitResolution,
 } from './jit-confirmation';
+import type { SubjectDistillModelRuntime } from './distill-model-runtime';
 import {
   deriveArtifactOwnerDecision,
   hasSameVersionDecision,
@@ -61,8 +62,24 @@ export class SubjectService {
   private jitResolutions = new Map<string, JitResolution>();
   /** 蒸馏诊断（不打扰用户） */
   private lastDistillDiscarded: Array<{ reason: string; title: string }> = [];
+  private lastDistillMode: 'model' | 'contract' | 'model_fallback_contract' | 'none' = 'none';
+  private lastNormalizeTrace: unknown[] = [];
+  private distillRuntime: SubjectDistillModelRuntime | null = null;
 
   constructor(private readonly eventBus?: InMemoryEventBus) {}
+
+  /** 由 Runtime 注入：与做事模型同一 SecretAccessor / openaiCompatible。 */
+  setDistillModelRuntime(runtime: SubjectDistillModelRuntime | null): void {
+    this.distillRuntime = runtime;
+  }
+
+  getLastDistillMode(): typeof this.lastDistillMode {
+    return this.lastDistillMode;
+  }
+
+  getLastNormalizeTrace(): unknown[] {
+    return [...this.lastNormalizeTrace];
+  }
 
   getActive(): SubjectPackage | null {
     return this.active;
@@ -339,6 +356,7 @@ export class SubjectService {
   }): Promise<{
     prompt: JitConflictPrompt | null;
     excludeEventIds: string[];
+    includeEventIds: string[];
     pauseExternalAction: boolean;
   }> {
     const derived = await this.getDerived();
@@ -347,7 +365,12 @@ export class SubjectService {
       derived,
     });
     if (!found) {
-      return { prompt: null, excludeEventIds: [], pauseExternalAction: false };
+      return {
+        prompt: null,
+        excludeEventIds: [],
+        includeEventIds: [],
+        pauseExternalAction: false,
+      };
     }
 
     const resolution =
@@ -362,6 +385,7 @@ export class SubjectService {
       return {
         prompt: null,
         excludeEventIds: excl.excludeEventIds,
+        includeEventIds: excl.includeEventIds,
         pauseExternalAction: excl.pauseExternalAction,
       };
     }
@@ -372,6 +396,7 @@ export class SubjectService {
     return {
       prompt: resolution ? null : found,
       excludeEventIds: excl.excludeEventIds,
+      includeEventIds: excl.includeEventIds,
       pauseExternalAction: excl.pauseExternalAction,
     };
   }
@@ -486,6 +511,9 @@ export class SubjectService {
     confirmedEventIds?: string[];
     idempotent?: boolean;
     ownerDecision?: 'undecided' | 'accepted' | 'rejected';
+    /** 验收追溯：model | contract_fallback（合同为 contract）；不上用户面 */
+    distillMode?: 'model' | 'contract' | 'model_fallback_contract' | 'none';
+    normalizeTrace?: unknown[];
   }> {
     const pkg = this.requireActive();
     const isDecision =
@@ -560,7 +588,7 @@ export class SubjectService {
         });
         this.lastDistillDiscarded = [];
       } else {
-        const result = await structuredDistillToEvents({
+        const distillOpts: Parameters<typeof structuredDistillToEvents>[0] = {
           subjectId: pkg.id,
           text,
           sourceKind: input.sourceKind,
@@ -577,13 +605,24 @@ export class SubjectService {
             ? { sourceCapabilityKind: input.sourceCapabilityKind }
             : {}),
           existingEvents: existing,
-        });
+        };
+        if (this.distillRuntime?.enabled) {
+          distillOpts.chatComplete = this.distillRuntime.chatComplete;
+          distillOpts.model = {
+            baseUrl: this.distillRuntime.model.baseUrl,
+            model: this.distillRuntime.model.model,
+          };
+        }
+        const result = await structuredDistillToEvents(distillOpts);
         distilled = result.events;
         this.lastDistillDiscarded = result.discarded;
+        this.lastDistillMode = result.mode;
+        this.lastNormalizeTrace = result.normalizeTrace || [];
       }
     } catch {
-      // 蒸馏失败不阻断主流程：不落候选，由调用方继续任务
+      // 蒸馏失败不阻断主流程：合同降级由 structuredDistill 内部处理；此处为硬失败
       this.lastDistillDiscarded = [{ reason: 'distill_failure', title: 'distill' }];
+      this.lastDistillMode = this.distillRuntime?.enabled ? 'model_fallback_contract' : 'none';
       distilled = [];
     }
 
@@ -627,6 +666,8 @@ export class SubjectService {
       ...(silentAdoptIds.length
         ? { confirmedEventIds: silentAdoptIds }
         : {}),
+      distillMode: this.lastDistillMode,
+      normalizeTrace: this.lastNormalizeTrace,
     };
   }
 

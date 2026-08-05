@@ -138,7 +138,18 @@ function sourceGrounded(candidate: string, source: string): boolean {
   for (const t of tokens.slice(0, 8)) {
     if (s.includes(t)) hits += 1;
   }
-  return hits >= 2 || (tokens.length === 1 && hits === 1);
+  if (hits >= 2 || (tokens.length === 1 && hits === 1)) return true;
+  // 中文无空格：按双字窗口核对语义落点（避免模型近义改写被误杀）
+  let biHits = 0;
+  const biSeen = new Set<string>();
+  for (let i = 0; i < c.length - 1; i += 1) {
+    const bi = c.slice(i, i + 2);
+    if (!/[\u4e00-\u9fff]{2}/.test(bi) || biSeen.has(bi)) continue;
+    biSeen.add(bi);
+    if (s.includes(bi)) biHits += 1;
+    if (biHits >= 3) return true;
+  }
+  return false;
 }
 
 function nearDuplicate(a: string, b: string): boolean {

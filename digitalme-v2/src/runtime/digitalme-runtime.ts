@@ -36,6 +36,7 @@ import { WorkRuntime } from '../work-runtime/job-runner';
 import type { SubjectSelectionResult } from '../work-runtime/job-runner';
 import { SubjectService } from '../subject-core/subject-service';
 import { selectSubjectInjection } from '../subject-core/experience-selector';
+import { createSubjectDistillModelRuntime } from '../subject-core/distill-model-runtime';
 import type { SubjectContextFreeze } from '../subject-core/subject-context-freeze';
 import { buildAppliedUnderstanding } from '../subject-core/user-facing-overview';
 import { ArtifactWorkspace } from '../artifact-workspace/workspace';
@@ -107,6 +108,14 @@ export class DigitalMeRuntime {
   constructor(options: DigitalMeRuntimeOptions = {}) {
     this.options = options;
     this.registry = this.buildCapabilityRegistry();
+    const distillRt = createSubjectDistillModelRuntime({
+      ...(options.documentCapability !== undefined
+        ? { documentCapability: options.documentCapability }
+        : {}),
+      ...(options.openaiCompatible ? { openaiCompatible: options.openaiCompatible } : {}),
+      ...(options.secrets ? { secrets: options.secrets } : {}),
+    });
+    this.subject.setDistillModelRuntime(distillRt);
   }
 
   /**
@@ -577,11 +586,13 @@ export class DigitalMeRuntime {
         const policy = this.options.executionPolicy ?? 'ai_first';
         const profile = chooseExecutionProfile({ goal, requestedArtifactType });
         let excludeEventIds: string[] = [];
+        let includeEventIds: string[] = [];
         let pauseExternalAction = false;
         let ownerChoicePrompt: SubjectSelectionResult['ownerChoicePrompt'];
         if (taskId) {
           const jit = await subjectService.prepareJitForTask({ taskId, goal });
           excludeEventIds = jit.excludeEventIds;
+          includeEventIds = jit.includeEventIds;
           pauseExternalAction = jit.pauseExternalAction;
           if (jit.prompt) {
             ownerChoicePrompt = {
@@ -602,6 +613,7 @@ export class DigitalMeRuntime {
           includeCoreMatching:
             policy === 'legacy' || profile === 'careful' || profile === 'high_risk',
           excludeEventIds,
+          forceIncludeEventIds: includeEventIds,
         });
         return {
           ...selected,

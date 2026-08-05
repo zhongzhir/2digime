@@ -47,7 +47,11 @@ export function findJitConflict(input: {
   const candidates = input.derived.candidates.entries.filter(
     (c) =>
       (c.tags || []).includes('conflict') ||
-      (c.tags || []).includes('needs_confirmation'),
+      (c.tags || []).includes('needs_confirmation') ||
+      preferenceStyleConflict(
+        confirmed.map((x) => x.title + x.detail).join('||'),
+        c.title + c.detail,
+      ),
   );
 
   for (const cand of candidates) {
@@ -69,17 +73,13 @@ export function findJitConflict(input: {
           },
         ],
       });
-      // 也检测「简洁 vs 完整分析」类产品冲突
-      const soft =
-        (/简洁|短句|少套话/.test(conf.title + conf.detail) &&
-          /完整分析|详细|保留完整/.test(cand.title + cand.detail)) ||
-        (/完整分析|详细|保留完整/.test(conf.title + conf.detail) &&
-          /简洁|短句|少套话/.test(cand.title + cand.detail));
-
+      const soft = preferenceStyleConflict(conf.title + conf.detail, cand.title + cand.detail);
       if (!conflict && !soft) continue;
 
-      // 仅当冲突内容与当前任务相关才 JIT
-      if (!relevantToGoal(input.goal, conf.title + conf.detail) && !relevantToGoal(input.goal, cand.title + cand.detail)) {
+      if (
+        !relevantToGoal(input.goal, conf.title + conf.detail) &&
+        !relevantToGoal(input.goal, cand.title + cand.detail)
+      ) {
         continue;
       }
 
@@ -98,16 +98,18 @@ export function findJitConflict(input: {
     }
   }
 
-  // 两条已确认之间的冲突（较少见）
   for (let i = 0; i < confirmed.length; i += 1) {
     for (let j = i + 1; j < confirmed.length; j += 1) {
       const a = confirmed[i]!;
       const b = confirmed[j]!;
-      const soft =
-        (/简洁|短句/.test(a.title + a.detail) && /完整分析|详细/.test(b.title + b.detail)) ||
-        (/完整分析|详细/.test(a.title + a.detail) && /简洁|短句/.test(b.title + b.detail));
+      const soft = preferenceStyleConflict(a.title + a.detail, b.title + b.detail);
       if (!soft) continue;
-      if (!relevantToGoal(input.goal, a.title + a.detail)) continue;
+      if (
+        !relevantToGoal(input.goal, a.title + a.detail) &&
+        !relevantToGoal(input.goal, b.title + b.detail)
+      ) {
+        continue;
+      }
       const fingerprint = `${a.eventId}|${b.eventId}`;
       if (input.seenFingerprints?.has(fingerprint)) continue;
       return {
@@ -125,13 +127,21 @@ export function findJitConflict(input: {
   return null;
 }
 
+function preferenceStyleConflict(a: string, b: string): boolean {
+  const shortSide = /简洁|短句|少套话|尽量简短|控制篇幅|先给结论|结论先行|简短/;
+  const longSide = /完整分析|保留完整|详细展开|详细论证|细节写全|写长一点/;
+  return (shortSide.test(a) && longSide.test(b)) || (longSide.test(a) && shortSide.test(b));
+}
+
 function relevantToGoal(goal: string, text: string): boolean {
   const g = goal.toLowerCase();
   const t = text.toLowerCase();
-  if (/周报|文档|写作|表达|分析|简洁|完整/.test(g) && /周报|文档|写作|表达|分析|简洁|完整|结论/.test(t)) {
+  if (
+    /周报|汇报|报告|文档|写作|表达|分析|简洁|完整|结论/.test(g) &&
+    /周报|汇报|报告|文档|写作|表达|分析|简洁|完整|结论|决策|篇幅|论证/.test(t)
+  ) {
     return true;
   }
-  // 共享二字
   for (let i = 0; i < g.length - 1; i += 1) {
     const bi = g.slice(i, i + 2);
     if (/[\u4e00-\u9fff]/.test(bi) && t.includes(bi)) return true;
@@ -144,33 +154,45 @@ function short(s: string): string {
 }
 
 /**
- * 应用 JIT 决议到注入排除集。
- * use_once / defer：保守，只保留 eventIdA（旧权威）或都不注入争议项。
- * prefer_*：由调用方 confirm/retire。
+ * 应用 JIT 决议到注入排除/强制纳入集。
+ * use_b_once：排除 A，并强制纳入候选 B（本 Snapshot）。
  */
 export function injectionExclusionsForJit(input: {
   prompt: JitConflictPrompt;
   resolution?: JitResolution | null;
-}): { excludeEventIds: string[]; pauseExternalAction: boolean } {
+}): {
+  excludeEventIds: string[];
+  includeEventIds: string[];
+  pauseExternalAction: boolean;
+} {
   const { prompt, resolution } = input;
   if (!resolution) {
-    // 跳过/未决：保守默认 — 排除候选侧，保留旧权威；高风险则暂停外部行动
     return {
       excludeEventIds: [prompt.eventIdB],
+      includeEventIds: [],
       pauseExternalAction: prompt.highRisk,
     };
   }
   switch (resolution.action) {
     case 'use_a_once':
     case 'prefer_a':
-      return { excludeEventIds: [prompt.eventIdB], pauseExternalAction: false };
+      return {
+        excludeEventIds: [prompt.eventIdB],
+        includeEventIds: [prompt.eventIdA],
+        pauseExternalAction: false,
+      };
     case 'use_b_once':
     case 'prefer_b':
-      return { excludeEventIds: [prompt.eventIdA], pauseExternalAction: false };
+      return {
+        excludeEventIds: [prompt.eventIdA],
+        includeEventIds: [prompt.eventIdB],
+        pauseExternalAction: false,
+      };
     case 'defer':
     default:
       return {
         excludeEventIds: [prompt.eventIdA, prompt.eventIdB],
+        includeEventIds: [],
         pauseExternalAction: prompt.highRisk,
       };
   }

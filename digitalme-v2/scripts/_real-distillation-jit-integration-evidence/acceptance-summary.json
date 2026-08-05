@@ -1,0 +1,15 @@
+{
+  "status": "accept_passed",
+  "generatedAt": "2026-08-05T09:35:37.475Z",
+  "checks": [
+    "captureInput_product_model_runtime",
+    "user_preference_normalized",
+    "model_needs_confirmation_does_not_override",
+    "silent_low_risk_preference",
+    "conflict_pending_jit",
+    "unrelated_zero_confirm",
+    "once_prefer_defer",
+    "model_failure_non_blocking",
+    "no_second_store_or_taxonomy"
+  ]
+}

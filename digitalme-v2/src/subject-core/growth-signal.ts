@@ -23,7 +23,8 @@ export type GrowthAdoptDecision = 'silent_adopt' | 'must_confirm' | 'keep_candid
 const HIGH_RISK_RE =
   /融资|隐私|机密|敏感|身份证|银行卡|转账|支付|汇款|签署|公开发布|对外发布|法律意见|诉讼/;
 
-const EXPLICIT_REMEMBER_RE = /以后这样|以后都|请记住|下次请|从今以后|固定为|一律/;
+const EXPLICIT_REMEMBER_RE =
+  /以后这样|以后都|请记住|下次请|从今以后|固定为|一律|以后给|以后.*汇报|以后.*周报|以后.*先给结论|以后.*结论先行|以后.*控制篇幅|以后.*决策事项/;
 
 const TEMPORARY_RE = /仅本次|只这一次|临时|这次先|本周临时|一次性/;
 
@@ -171,8 +172,10 @@ export function detectAuthorityConflict(input: {
     if (/本地优先/.test(prior) && /云端优先|全部上云|不要本地/.test(text)) return true;
     if (/结论先行/.test(prior) && /先铺垫|不要结论|禁止结论先行/.test(text)) return true;
     if (
-      (/简洁|短句|少套话/.test(prior) && /完整分析|保留完整|详细展开|写长一点/.test(text)) ||
-      (/完整分析|保留完整|详细展开/.test(prior) && /简洁|短句|少套话/.test(text))
+      (/简洁|短句|少套话|尽量简短|控制篇幅|先给结论|结论先行/.test(prior) &&
+        /完整分析|保留完整|详细展开|详细论证|细节写全|写长一点/.test(text)) ||
+      (/完整分析|保留完整|详细展开|详细论证|细节写全/.test(prior) &&
+        /简洁|短句|少套话|尽量简短|控制篇幅|先给结论|结论先行/.test(text))
     ) {
       return true;
     }

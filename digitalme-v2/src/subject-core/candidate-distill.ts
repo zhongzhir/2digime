@@ -37,6 +37,7 @@ const SOURCE_TO_EVENT: Record<SubjectCaptureSourceKind, GrowthEventSourceKind> =
  * 静默可采纳者不进入确认建议列表。
  */
 export function requiresOwnerConfirmation(type: string, tags: readonly string[] = []): boolean {
+  // 确定性静默标记优先；模型 needs_confirmation 不得越权
   if (tags.includes('silent_ok') && !tags.includes('conflict')) return false;
   if (
     type === 'identity_clarified' ||
@@ -55,7 +56,9 @@ export function requiresOwnerConfirmation(type: string, tags: readonly string[] 
   if (type === 'preference_observed' && tags.some((t) => /高风险|敏感|隐私|融资|机密/.test(t))) {
     return true;
   }
-  if (tags.some((t) => t === 'needs_confirmation' || t === 'conflict' || t === 'low_confidence')) {
+  if (tags.includes('conflict')) return true;
+  // 模型建议痕迹（model_suggests_confirm）本身不触发确认；须有本地 needs_confirmation / conflict
+  if (tags.includes('needs_confirmation') || tags.includes('low_confidence')) {
     return true;
   }
   return false;
@@ -194,21 +197,36 @@ export function distillCandidatesFromText(input: {
 
   // 明确“以后这样”的低风险写作偏好 → preference（可静默），不升格为原则
   if (
-    /以后这样|以后都|请记住|下次请/.test(text) &&
-    /简洁|短句|少套话|结论先行|正式|完整分析|保留完整/.test(text)
+    /以后这样|以后都|请记住|下次请|以后给|以后.*汇报|以后.*周报/.test(text) &&
+    /简洁|短句|少套话|结论先行|先讲结论|先给结论|正式|完整分析|保留完整|控制篇幅|决策事项|需要我决策|尽量简短/.test(
+      text,
+    )
   ) {
-    const title = /完整分析|保留完整|详细展开/.test(text)
+    const title = /完整分析|保留完整|详细展开|详细论证/.test(text)
       ? '偏好：保留完整分析'
-      : /结论先行/.test(text)
+      : /结论先行|先讲结论|先给结论/.test(text)
         ? '偏好：结论先行'
-        : '偏好：表达简洁';
+        : /控制篇幅|尽量简短|简洁/.test(text)
+          ? '偏好：控制篇幅'
+          : '偏好：表达简洁';
     push(
       'preference_observed',
       title,
       text.slice(0, 240),
-      ['style', 'preference', 'category:working_method', 'document', '周报'],
+      ['style', 'preference', 'category:working_method', 'document', '周报', '汇报'],
     );
-  } else if (/正式|结论先行/.test(text) && !/完整分析|保留完整/.test(text)) {
+  } else if (
+    /先给结论|先讲结论|结论先行/.test(text) &&
+    /尽量简短|控制篇幅|简洁|短句/.test(text) &&
+    !/完整分析|保留完整|详细论证/.test(text)
+  ) {
+    push(
+      'preference_observed',
+      '偏好：结论先行',
+      text.slice(0, 240),
+      ['style', 'preference', 'category:working_method', 'document', '周报', '汇报'],
+    );
+  } else if (/正式|结论先行/.test(text) && !/完整分析|保留完整|以后这样|请记住|以后给|尽量简短|先给结论/.test(text)) {
     push(
       'principle_stated',
       '原则：表达正式、结论先行',
@@ -218,26 +236,26 @@ export function distillCandidatesFromText(input: {
   }
 
   if (
-    /完整分析|保留完整|详细展开|写长一点/.test(text) &&
+    /完整分析|保留完整|详细展开|详细论证|写长一点/.test(text) &&
     !/以后这样|请记住|仅本次|只这一次/.test(text)
   ) {
     push(
       'preference_observed',
       '偏好：保留完整分析',
       text.slice(0, 240),
-      ['style', '完整分析', 'preference', 'document', '周报'],
+      ['style', '完整分析', 'preference', 'document', '周报', '汇报'],
     );
   }
 
   if (
-    /简洁|短句|少套话|不要空话/.test(text) &&
-    !/正式|结论先行|以后这样|请记住|完整分析|保留完整/.test(text)
+    /简洁|短句|少套话|不要空话|尽量简短/.test(text) &&
+    !/正式|结论先行|先给结论|以后这样|请记住|完整分析|保留完整|详细论证/.test(text)
   ) {
     push(
       'preference_observed',
       '偏好：表达简洁',
       text.slice(0, 240),
-      ['style', '简洁', 'preference'],
+      ['style', '简洁', 'preference', '汇报'],
     );
   }
 
