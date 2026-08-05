@@ -124,8 +124,12 @@ if (/<h2[^>]*>已连接的协作对象<\/h2>/.test(htmlOnly)) {
 }
 {
   const settingsBlock = htmlOnly.slice(htmlOnly.indexOf('view-settings'), htmlOnly.indexOf('view-shell'));
-  if (/外部专业能力|remote-cap-base-url|保存并连接/.test(settingsBlock)) {
+  if (/外部专业能力|remote-cap-base-url|id="btn-remote-cap-save"/.test(settingsBlock)) {
     fail('settings must not host external capability connection UI');
+  }
+  // 模型连接允许「保存」；不得把协作页的「保存并连接」搬进设置
+  if (/保存并连接/.test(settingsBlock)) {
+    fail('settings must not host remote-capability「保存并连接」action');
   }
 }
 if (/AuthorizationGrant|ContextSnapshot|GrowthEvent|Grant ID|Job ID/i.test(htmlOnly)) {

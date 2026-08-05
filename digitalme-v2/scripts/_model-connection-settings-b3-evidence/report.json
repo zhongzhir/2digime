@@ -1,0 +1,421 @@
+{
+  "startedAt": "2026-08-05T10:57:04.898Z",
+  "checks": [
+    {
+      "name": "unconfigured_gate_visible",
+      "ok": true,
+      "detail": {
+        "gateVisible": true,
+        "settingsInNav": false,
+        "secondary": true
+      }
+    },
+    {
+      "name": "settings_secondary",
+      "ok": true,
+      "detail": {
+        "gateVisible": true,
+        "settingsInNav": false,
+        "secondary": true
+      }
+    },
+    {
+      "name": "settings_opened",
+      "ok": true,
+      "detail": {
+        "viewSettings": true,
+        "provider": "deepseek",
+        "providerLabels": [
+          "DeepSeek",
+          "自定义服务"
+        ],
+        "advancedOpen": false,
+        "baseInAdv": true,
+        "modelInAdv": true,
+        "keyType": "password",
+        "keyState": "密钥：尚未保存",
+        "conn": "连接状态：尚未连接",
+        "jargon": false
+      }
+    },
+    {
+      "name": "default_provider_deepseek",
+      "ok": true,
+      "detail": {
+        "viewSettings": true,
+        "provider": "deepseek",
+        "providerLabels": [
+          "DeepSeek",
+          "自定义服务"
+        ],
+        "advancedOpen": false,
+        "baseInAdv": true,
+        "modelInAdv": true,
+        "keyType": "password",
+        "keyState": "密钥：尚未保存",
+        "conn": "连接状态：尚未连接",
+        "jargon": false
+      }
+    },
+    {
+      "name": "provider_labels",
+      "ok": true,
+      "detail": {
+        "viewSettings": true,
+        "provider": "deepseek",
+        "providerLabels": [
+          "DeepSeek",
+          "自定义服务"
+        ],
+        "advancedOpen": false,
+        "baseInAdv": true,
+        "modelInAdv": true,
+        "keyType": "password",
+        "keyState": "密钥：尚未保存",
+        "conn": "连接状态：尚未连接",
+        "jargon": false
+      }
+    },
+    {
+      "name": "advanced_collapsed",
+      "ok": true,
+      "detail": {
+        "viewSettings": true,
+        "provider": "deepseek",
+        "providerLabels": [
+          "DeepSeek",
+          "自定义服务"
+        ],
+        "advancedOpen": false,
+        "baseInAdv": true,
+        "modelInAdv": true,
+        "keyType": "password",
+        "keyState": "密钥：尚未保存",
+        "conn": "连接状态：尚未连接",
+        "jargon": false
+      }
+    },
+    {
+      "name": "advanced_contains_fields",
+      "ok": true,
+      "detail": {
+        "viewSettings": true,
+        "provider": "deepseek",
+        "providerLabels": [
+          "DeepSeek",
+          "自定义服务"
+        ],
+        "advancedOpen": false,
+        "baseInAdv": true,
+        "modelInAdv": true,
+        "keyType": "password",
+        "keyState": "密钥：尚未保存",
+        "conn": "连接状态：尚未连接",
+        "jargon": false
+      }
+    },
+    {
+      "name": "key_password_default",
+      "ok": true,
+      "detail": {
+        "viewSettings": true,
+        "provider": "deepseek",
+        "providerLabels": [
+          "DeepSeek",
+          "自定义服务"
+        ],
+        "advancedOpen": false,
+        "baseInAdv": true,
+        "modelInAdv": true,
+        "keyType": "password",
+        "keyState": "密钥：尚未保存",
+        "conn": "连接状态：尚未连接",
+        "jargon": false
+      }
+    },
+    {
+      "name": "key_not_saved_copy",
+      "ok": true,
+      "detail": {
+        "viewSettings": true,
+        "provider": "deepseek",
+        "providerLabels": [
+          "DeepSeek",
+          "自定义服务"
+        ],
+        "advancedOpen": false,
+        "baseInAdv": true,
+        "modelInAdv": true,
+        "keyType": "password",
+        "keyState": "密钥：尚未保存",
+        "conn": "连接状态：尚未连接",
+        "jargon": false
+      }
+    },
+    {
+      "name": "connection_not_connected",
+      "ok": true,
+      "detail": {
+        "viewSettings": true,
+        "provider": "deepseek",
+        "providerLabels": [
+          "DeepSeek",
+          "自定义服务"
+        ],
+        "advancedOpen": false,
+        "baseInAdv": true,
+        "modelInAdv": true,
+        "keyType": "password",
+        "keyState": "密钥：尚未保存",
+        "conn": "连接状态：尚未连接",
+        "jargon": false
+      }
+    },
+    {
+      "name": "no_jargon",
+      "ok": true,
+      "detail": {
+        "viewSettings": true,
+        "provider": "deepseek",
+        "providerLabels": [
+          "DeepSeek",
+          "自定义服务"
+        ],
+        "advancedOpen": false,
+        "baseInAdv": true,
+        "modelInAdv": true,
+        "keyType": "password",
+        "keyState": "密钥：尚未保存",
+        "conn": "连接状态：尚未连接",
+        "jargon": false
+      }
+    },
+    {
+      "name": "key_show_toggle",
+      "ok": true,
+      "detail": {
+        "type": "text",
+        "btn": "隐藏"
+      }
+    },
+    {
+      "name": "key_hide_toggle",
+      "ok": true,
+      "detail": {
+        "hidden": "password"
+      }
+    },
+    {
+      "name": "bad_key_keeps_input",
+      "ok": true,
+      "detail": {
+        "kept": true
+      }
+    },
+    {
+      "name": "bad_key_user_facing",
+      "ok": true,
+      "detail": {
+        "redacted": true
+      }
+    },
+    {
+      "name": "bad_key_no_secret_leak",
+      "ok": true,
+      "detail": {
+        "conn": "连接状态：无法连接，请检查密钥或高级连接设置",
+        "status": "无法连接，请检查密钥或高级连接设置"
+      }
+    },
+    {
+      "name": "bad_key_tech_optional",
+      "ok": true,
+      "detail": {
+        "techLen": 105
+      }
+    },
+    {
+      "name": "network_keeps_input",
+      "ok": true,
+      "detail": {
+        "kept": true
+      }
+    },
+    {
+      "name": "network_user_facing",
+      "ok": true,
+      "detail": {
+        "redacted": true
+      }
+    },
+    {
+      "name": "save_clears_key_field",
+      "ok": true,
+      "detail": {
+        "key": "",
+        "keyState": "密钥：已保存（不会重新显示）",
+        "conn": "连接状态：已连接",
+        "status": "已保存并连接。",
+        "bodyHasKey": false
+      }
+    },
+    {
+      "name": "save_marks_configured",
+      "ok": true,
+      "detail": {
+        "key": "",
+        "keyState": "密钥：已保存（不会重新显示）",
+        "conn": "连接状态：已连接",
+        "status": "已保存并连接。",
+        "bodyHasKey": false
+      }
+    },
+    {
+      "name": "save_connected_or_ready",
+      "ok": true,
+      "detail": {
+        "key": "",
+        "keyState": "密钥：已保存（不会重新显示）",
+        "conn": "连接状态：已连接",
+        "status": "已保存并连接。",
+        "bodyHasKey": false
+      }
+    },
+    {
+      "name": "save_no_key_in_dom",
+      "ok": true,
+      "detail": {
+        "key": "",
+        "keyState": "密钥：已保存（不会重新显示）",
+        "conn": "连接状态：已连接",
+        "status": "已保存并连接。",
+        "bodyHasKey": false
+      }
+    },
+    {
+      "name": "advanced_can_open",
+      "ok": true
+    },
+    {
+      "name": "custom_opens_advanced",
+      "ok": true,
+      "detail": {
+        "open": true,
+        "status": "自定义服务请填写高级连接中的服务地址与模型名称。"
+      }
+    },
+    {
+      "name": "custom_prompts_required",
+      "ok": true,
+      "detail": {
+        "open": true,
+        "status": "自定义服务请填写高级连接中的服务地址与模型名称。"
+      }
+    },
+    {
+      "name": "restore_recommended",
+      "ok": true,
+      "detail": {
+        "provider": "deepseek",
+        "base": "https://api.deepseek.com/v1",
+        "model": "deepseek-v4-flash"
+      }
+    },
+    {
+      "name": "replace_key_saved",
+      "ok": true,
+      "detail": {
+        "saved": true
+      }
+    },
+    {
+      "name": "return_to_work",
+      "ok": true,
+      "detail": {
+        "shell": true,
+        "work": true,
+        "goal": "写一份连接返回验收说明，保留本目标",
+        "settingsHidden": true
+      }
+    },
+    {
+      "name": "return_keeps_goal",
+      "ok": true,
+      "detail": {
+        "goalLen": 17
+      }
+    },
+    {
+      "name": "reopen_no_key_echo",
+      "ok": true,
+      "detail": {
+        "key": "",
+        "keyState": "密钥：已保存（不会重新显示）",
+        "advancedOpen": false,
+        "body": "DIGITAL ME\n\n设置\n返回\n模型连接\n\n连接后可用于做事与对话。密钥只保存在本机，界面不会显示完整密钥。\n\n服务提供方\nDeepSeek\n自定义服务\nAPI Key\n显示\n密钥：已保存（不会重新显示）\n\n连接状态：已连接\n\n保存\n测试连接\n清除密钥\n高级连接"
+      }
+    },
+    {
+      "name": "reopen_no_secret_in_dom",
+      "ok": true,
+      "detail": {
+        "leaked": false
+      }
+    },
+    {
+      "name": "reopen_advanced_collapsed_for_deepseek",
+      "ok": true,
+      "detail": {
+        "key": "",
+        "keyState": "密钥：已保存（不会重新显示）",
+        "advancedOpen": false,
+        "body": "DIGITAL ME\n\n设置\n返回\n模型连接\n\n连接后可用于做事与对话。密钥只保存在本机，界面不会显示完整密钥。\n\n服务提供方\nDeepSeek\n自定义服务\nAPI Key\n显示\n密钥：已保存（不会重新显示）\n\n连接状态：已连接\n\n保存\n测试连接\n清除密钥\n高级连接"
+      }
+    },
+    {
+      "name": "clear_key",
+      "ok": true,
+      "detail": {
+        "keyState": "密钥：尚未保存",
+        "conn": "连接状态：尚未连接"
+      }
+    },
+    {
+      "name": "clear_backend",
+      "ok": true
+    },
+    {
+      "name": "restart_keeps_config",
+      "ok": true,
+      "detail": {
+        "keyState": "密钥：已保存（不会重新显示）",
+        "key": "",
+        "base": "https://api.deepseek.com/v1"
+      }
+    },
+    {
+      "name": "restart_keeps_advanced_values",
+      "ok": true,
+      "detail": {
+        "keyState": "密钥：已保存（不会重新显示）",
+        "key": "",
+        "base": "https://api.deepseek.com/v1"
+      }
+    },
+    {
+      "name": "small_window_no_overflow",
+      "ok": true,
+      "detail": {
+        "panelWidth": 627.828125,
+        "actionsWidth": 585.828125,
+        "keyRowWidth": 585.828125,
+        "overflowX": true
+      }
+    },
+    {
+      "name": "evidence_precheck_no_raw_secret_names_required",
+      "ok": true
+    }
+  ],
+  "verdict": "passed"
+}

@@ -44,38 +44,66 @@
         </header>
         <div class="welcome-actions settings-panel">
           <h2>模型连接</h2>
-          <p class="muted">密钥仅保存在本机安全存储中，界面不会回显明文。</p>
+          <p class="muted">连接后可用于做事与对话。密钥只保存在本机，界面不会显示完整密钥。</p>
+
           <label class="field">
             <span>服务提供方</span>
             <select id="model-provider">
               <option value="deepseek">DeepSeek</option>
-              <option value="openai-compatible">OpenAI-compatible</option>
+              <option value="openai-compatible">自定义服务</option>
             </select>
           </label>
-          <label class="field">
-            <span>Base URL</span>
-            <input id="model-base-url" type="text" placeholder="https://api.example.com/v1" autocomplete="off" />
-          </label>
-          <label class="field">
-            <span>Model ID</span>
-            <input id="model-id" type="text" placeholder="例如 deepseek-v4-flash" autocomplete="off" />
-          </label>
+
           <label class="field">
             <span>API Key</span>
-            <input
-              id="model-api-key"
-              type="password"
-              placeholder="仅在保存时写入，不会回显"
-              autocomplete="new-password"
-            />
-            <span id="model-key-state" class="meta">凭证状态：未配置</span>
+            <div class="key-input-row">
+              <input
+                id="model-api-key"
+                type="password"
+                placeholder="粘贴你的密钥"
+                autocomplete="new-password"
+              />
+              <button type="button" id="btn-toggle-api-key" class="ghost key-toggle" aria-pressed="false">
+                显示
+              </button>
+            </div>
+            <span id="model-key-state" class="meta">密钥：尚未保存</span>
           </label>
-          <div class="row">
+
+          <p id="model-connection-state" class="connection-state" aria-live="polite">连接状态：尚未连接</p>
+
+          <div class="row settings-actions">
             <button type="button" id="btn-save-model" class="primary">保存</button>
             <button type="button" id="btn-test-model">测试连接</button>
-            <button type="button" id="btn-delete-model" class="ghost">删除凭证</button>
+            <button type="button" id="btn-delete-model" class="ghost">清除密钥</button>
           </div>
+
+          <details id="advanced-connection" class="advanced-connection">
+            <summary>高级连接</summary>
+            <p class="muted tiny">仅在自定义服务或需要调整时使用。普通使用可保持收起。</p>
+            <label class="field">
+              <span>服务地址</span>
+              <input
+                id="model-base-url"
+                type="text"
+                placeholder="例如 https://api.example.com/v1"
+                autocomplete="off"
+              />
+            </label>
+            <label class="field">
+              <span>模型名称</span>
+              <input id="model-id" type="text" placeholder="例如 deepseek-v4-flash" autocomplete="off" />
+            </label>
+            <div class="row">
+              <button type="button" id="btn-restore-model-preset" class="ghost">恢复推荐设置</button>
+            </div>
+          </details>
+
           <p id="settings-status" class="status" aria-live="polite"></p>
+          <details id="settings-tech-detail" class="settings-tech-detail" hidden>
+            <summary>技术摘要</summary>
+            <pre id="settings-tech-body" class="settings-tech-body"></pre>
+          </details>
         </div>
       </section>
 

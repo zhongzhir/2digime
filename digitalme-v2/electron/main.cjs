@@ -336,12 +336,15 @@ function registerIpc() {
   });
 
   ipcMain.handle("shell:saveModelCredential", async (_evt, input) => {
-    if (!saveCredential) throw new Error("凭证存储不可用，请确认系统安全存储已启用");
+    if (!saveCredential) throw new Error("本机安全存储不可用，暂时无法保存密钥");
     const apiKey = String((input && input.apiKey) || "").trim();
     const baseUrl = String((input && input.baseUrl) || "").trim();
     const model = String((input && input.model) || "").trim();
     const providerPreset = String((input && input.providerPreset) || "openai-compatible").trim();
-    if (!apiKey || !baseUrl || !model) throw new Error("请填写完整的模型连接信息");
+    if (!baseUrl || !model) throw new Error("请填写服务地址与模型名称");
+    if (!apiKey && !(input && input.allowExistingKey)) {
+      throw new Error("请输入 API Key 后再保存");
+    }
     await saveCredential({
       apiKey,
       baseUrl,

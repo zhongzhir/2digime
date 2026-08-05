@@ -24,6 +24,7 @@
     "accept:real-distillation-jit-integration": "node scripts/run-real-distillation-jit-integration-acceptance.cjs",
     "accept:growth-perception-bridge": "node scripts/run-growth-perception-bridge-acceptance.cjs",
     "accept:work-experience": "node scripts/run-work-experience-acceptance.cjs",
+    "accept:model-connection-settings": "node scripts/run-model-connection-settings-acceptance.cjs",
     "start:reference-research-agent": "node scripts/start-reference-research-agent.cjs",
     "verify:reference-research-agent": "node scripts/verify-reference-research-agent.cjs",
     "accept:p2b1": "node scripts/run-p2b1-isolated-code-change.cjs",

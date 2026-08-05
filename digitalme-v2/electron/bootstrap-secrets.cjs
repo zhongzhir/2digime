@@ -26,7 +26,7 @@ const DEFAULT_PROVIDER_PRESETS = {
   },
   "openai-compatible": {
     providerId: "openai-compatible",
-    label: "OpenAI-compatible",
+    label: "自定义服务",
     baseUrl: "",
     model: "",
   },
@@ -155,11 +155,17 @@ function createCredentialOps(store, userDataPath) {
   return {
     saveCredential: async (input) => {
       const providerId = input.providerId || "openai-compatible";
-      const apiKey = String(input.apiKey || "").trim();
       const baseUrl = String(input.baseUrl || "").replace(/\/+$/, "");
       const model = String(input.model || "").trim();
-      if (!apiKey || !baseUrl || !model) {
-        throw new Error("请填写完整的模型连接信息");
+      let apiKey = String(input.apiKey || "").trim();
+      if (!apiKey) {
+        apiKey = String((await store.get(providerCredentialKey(providerId))) || "").trim();
+      }
+      if (!apiKey) {
+        throw new Error("请输入 API Key 后再保存");
+      }
+      if (!baseUrl || !model) {
+        throw new Error("请填写服务地址与模型名称");
       }
       await store.put(providerCredentialKey(providerId), apiKey);
       writeModelConfig(userDataPath, {

@@ -125,8 +125,11 @@ for (const bad of [
 if (/settings-external-capability|外部专业能力/.test(html.slice(0, html.indexOf('view-shell')))) {
   // settings view must not contain external capability management
   const settingsBlock = html.slice(html.indexOf('view-settings'), html.indexOf('view-shell'));
-  if (/外部专业能力|remote-cap-base-url|保存并连接/.test(settingsBlock)) {
+  if (/外部专业能力|remote-cap-base-url|id="btn-remote-cap-save"/.test(settingsBlock)) {
     fail('settings page must not contain external capability connection UI');
+  }
+  if (/保存并连接/.test(settingsBlock)) {
+    fail('settings page must not contain remote-capability「保存并连接」action');
   }
 }
 ok('settings page cleaned of external capability UI');

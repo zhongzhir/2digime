@@ -465,6 +465,99 @@ button.ghost {
   margin-top: 0;
 }
 
+.settings-panel {
+  max-width: 560px;
+}
+
+.key-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.key-input-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.key-toggle {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.connection-state {
+  margin: 4px 0 12px;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.connection-state.is-error {
+  color: var(--danger);
+}
+
+.connection-state.is-ok {
+  color: var(--accent);
+}
+
+.settings-actions {
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.advanced-connection {
+  margin: 14px 0 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.advanced-connection > summary {
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 14px;
+}
+
+.advanced-connection[open] > summary {
+  margin-bottom: 10px;
+}
+
+.settings-tech-detail {
+  margin-top: 8px;
+}
+
+.settings-tech-detail > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.settings-tech-body {
+  margin: 8px 0 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: #f7f5f1;
+  border: 1px solid var(--line);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  color: var(--muted);
+  max-height: 140px;
+  overflow: auto;
+}
+
+@media (max-width: 720px) {
+  .settings-panel {
+    max-width: 100%;
+  }
+  .key-input-row {
+    flex-wrap: wrap;
+  }
+  .settings-actions {
+    gap: 8px;
+  }
+}
+
 select {
   width: 100%;
   border: 1px solid var(--line);

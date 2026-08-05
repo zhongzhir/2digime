@@ -25,6 +25,12 @@
     modelId: document.getElementById("model-id"),
     modelApiKey: document.getElementById("model-api-key"),
     modelKeyState: document.getElementById("model-key-state"),
+    modelConnectionState: document.getElementById("model-connection-state"),
+    toggleApiKey: document.getElementById("btn-toggle-api-key"),
+    advancedConnection: document.getElementById("advanced-connection"),
+    restoreModelPreset: document.getElementById("btn-restore-model-preset"),
+    settingsTechDetail: document.getElementById("settings-tech-detail"),
+    settingsTechBody: document.getElementById("settings-tech-body"),
     saveModel: document.getElementById("btn-save-model"),
     testModel: document.getElementById("btn-test-model"),
     deleteModel: document.getElementById("btn-delete-model"),
@@ -280,6 +286,9 @@
       model: "",
     },
   };
+  /** 用户本会话是否改过高级连接字段（避免误覆盖已保存自定义值） */
+  let advancedFieldsDirty = false;
+  let settingsConnectionLabel = "尚未连接";
 
   function showStatus(el, text, isError) {
     if (!el) return;
@@ -448,11 +457,15 @@
       els.submit.title = "";
       els.revise.disabled = !activeArtifactId;
     }
-    const configured = !!(shellStatus && shellStatus.credentialConfigured) || available;
-    if (els.modelKeyState) {
-      els.modelKeyState.textContent = configured ? "凭证状态：已配置" : "凭证状态：未配置";
-    }
+    const configured = isCredentialConfigured() || available;
+    updateKeyStateUi();
     if (els.deleteModel) els.deleteModel.disabled = !configured;
+    if (available) setConnectionStateLabel("已连接", "ok");
+    else if (currentView === "settings") {
+      /* keep latest settings probe label unless freshly unavailable */
+    } else if (!configured) {
+      setConnectionStateLabel("尚未连接", null);
+    }
   }
 
   function rememberShellMeta(info) {
@@ -477,18 +490,129 @@
     }
   }
 
+  function redactSecrets(text) {
+    return String(text || "")
+      .replace(/(api[_-]?key|authorization|bearer)\s*[:=]\s*["']?[^\s"'\\]+/gi, "$1=[已隐藏]")
+      .replace(/\bsk-[a-zA-Z0-9_-]{8,}\b/g, "[已隐藏]")
+      .replace(/\b[a-f0-9]{32,}\b/gi, "[已隐藏]");
+  }
+
+  function userFacingModelError(err, fallback) {
+    const raw = redactSecrets((err && err.message) || String(err || ""));
+    const msg = raw.split("\n")[0].trim();
+    if (/Error invoking remote method|shell:|IPC|ECONNREFUSED|ENOTFOUND|fetch failed|network|timeout|AbortError/i.test(raw)) {
+      return fallback || "无法连接，请检查网络、密钥或高级连接设置";
+    }
+    if (/401|403|Unauthorized|invalid.?api.?key|incorrect.?api.?key|鉴权|密钥/i.test(raw)) {
+      return "无法连接，请检查密钥或高级连接设置";
+    }
+    if (!msg) return fallback || "无法连接，请检查密钥或高级连接设置";
+    if (msg.length > 180) return fallback || "无法连接，请检查密钥或高级连接设置";
+    return msg;
+  }
+
+  function setSettingsTechDetail(raw) {
+    if (!els.settingsTechDetail || !els.settingsTechBody) return;
+    const text = redactSecrets(raw || "").trim();
+    if (!text) {
+      els.settingsTechDetail.hidden = true;
+      els.settingsTechBody.textContent = "";
+      return;
+    }
+    els.settingsTechBody.textContent = text.slice(0, 800);
+    els.settingsTechDetail.hidden = false;
+    els.settingsTechDetail.removeAttribute("open");
+  }
+
+  function setConnectionStateLabel(label, tone) {
+    settingsConnectionLabel = label || "尚未连接";
+    if (!els.modelConnectionState) return;
+    els.modelConnectionState.textContent = `连接状态：${settingsConnectionLabel}`;
+    els.modelConnectionState.classList.toggle("is-error", tone === "error");
+    els.modelConnectionState.classList.toggle("is-ok", tone === "ok");
+  }
+
+  function isCredentialConfigured() {
+    return !!(shellStatus && shellStatus.credentialConfigured);
+  }
+
+  function updateKeyStateUi() {
+    const configured = isCredentialConfigured();
+    if (els.modelKeyState) {
+      els.modelKeyState.textContent = configured ? "密钥：已保存（不会重新显示）" : "密钥：尚未保存";
+    }
+    if (els.deleteModel) els.deleteModel.disabled = !configured;
+    if (els.modelApiKey) {
+      els.modelApiKey.placeholder = configured ? "若要更换密钥，请输入新密钥" : "粘贴你的密钥";
+    }
+  }
+
+  function syncAdvancedOpenForProvider() {
+    if (!els.advancedConnection) return;
+    const custom = els.modelProvider && els.modelProvider.value === "openai-compatible";
+    if (custom) els.advancedConnection.open = true;
+  }
+
+  function applyProviderPreset(opts) {
+    const force = !!(opts && opts.force);
+    const key = els.modelProvider.value;
+    const preset = presets[key] || presets["openai-compatible"];
+    if (key === "deepseek") {
+      if (force || !advancedFieldsDirty) {
+        els.modelBaseUrl.value = preset.baseUrl;
+        els.modelId.value = preset.model;
+        advancedFieldsDirty = false;
+      }
+      if (els.advancedConnection && !(opts && opts.keepAdvancedOpen)) {
+        els.advancedConnection.open = false;
+      }
+    } else {
+      syncAdvancedOpenForProvider();
+      if (force) {
+        els.modelBaseUrl.value = "";
+        els.modelId.value = "";
+        advancedFieldsDirty = false;
+      }
+    }
+  }
+
   function fillSettingsForm() {
     const status = shellStatus || {};
     const preset =
       status.providerPreset ||
       (status.baseUrl && String(status.baseUrl).includes("deepseek")
         ? "deepseek"
-        : "openai-compatible");
-    els.modelProvider.value = preset === "deepseek" ? "deepseek" : "openai-compatible";
-    els.modelBaseUrl.value = status.baseUrl || presets[els.modelProvider.value].baseUrl || "";
-    els.modelId.value = status.model || presets[els.modelProvider.value].model || "";
+        : status.baseUrl
+          ? "openai-compatible"
+          : "deepseek");
+    const provider = preset === "deepseek" ? "deepseek" : "openai-compatible";
+    els.modelProvider.value = provider;
+    const savedBase = status.baseUrl || "";
+    const savedModel = status.model || "";
+    if (provider === "deepseek") {
+      els.modelBaseUrl.value = savedBase || presets.deepseek.baseUrl;
+      els.modelId.value = savedModel || presets.deepseek.model;
+    } else {
+      els.modelBaseUrl.value = savedBase;
+      els.modelId.value = savedModel;
+    }
+    advancedFieldsDirty = false;
     els.modelApiKey.value = "";
+    if (els.modelApiKey) els.modelApiKey.type = "password";
+    if (els.toggleApiKey) {
+      els.toggleApiKey.textContent = "显示";
+      els.toggleApiKey.setAttribute("aria-pressed", "false");
+    }
+    if (els.advancedConnection) {
+      els.advancedConnection.open = provider === "openai-compatible";
+    }
+    updateKeyStateUi();
+    const available = !!(lastConnectionState && lastConnectionState.available);
+    if (available) setConnectionStateLabel("已连接", "ok");
+    else if (isCredentialConfigured()) setConnectionStateLabel("尚未确认（可测试连接）", null);
+    else setConnectionStateLabel("尚未连接", null);
     showStatus(els.settingsStatus, "");
+    setSettingsTechDetail("");
   }
 
   async function fillRemoteCapabilitySettings() {
@@ -510,15 +634,6 @@
 
   function lastBootRemoteCapability() {
     return shellBootInfo && shellBootInfo.remoteCapability ? shellBootInfo.remoteCapability : null;
-  }
-
-  function applyProviderPreset() {
-    const key = els.modelProvider.value;
-    const preset = presets[key] || presets["openai-compatible"];
-    if (key === "deepseek") {
-      els.modelBaseUrl.value = preset.baseUrl;
-      if (!els.modelId.value.trim()) els.modelId.value = preset.model;
-    }
   }
 
   function basenamePath(p) {
@@ -1594,11 +1709,66 @@
     const target = returnView || "shell";
     setView(target);
     if (target === "shell") {
-      void setNav(returnNav || "work");
+      void (async () => {
+        await setNav(returnNav || "work");
+        if ((returnNav || "work") === "work" && workMode === "task" && activeTaskId) {
+          await selectTask(activeTaskId);
+        }
+        if ((returnNav || "work") === "chat") {
+          await refreshChatPanel();
+        }
+      })();
     }
   });
   if (els.helpBack) els.helpBack.addEventListener("click", () => setView(returnView || "shell"));
-  els.modelProvider.addEventListener("change", () => applyProviderPreset());
+  els.modelProvider.addEventListener("change", () => {
+    const next = els.modelProvider.value;
+    if (next === "deepseek") {
+      // 主动选择预设：套用推荐；若用户本会话已改高级字段且不像 DeepSeek，则保留并打开高级区提示
+      const base = String(els.modelBaseUrl.value || "");
+      const customUnlikeDeepseek = advancedFieldsDirty && base && !base.includes("deepseek");
+      if (customUnlikeDeepseek) {
+        if (els.advancedConnection) els.advancedConnection.open = true;
+        showStatus(
+          els.settingsStatus,
+          "已切换到 DeepSeek。当前高级连接仍保留你改过的内容；需要推荐值可点「恢复推荐设置」。",
+        );
+      } else {
+        applyProviderPreset({ force: true });
+      }
+    } else {
+      syncAdvancedOpenForProvider();
+      showStatus(els.settingsStatus, "自定义服务请填写高级连接中的服务地址与模型名称。");
+    }
+  });
+  if (els.modelBaseUrl) {
+    els.modelBaseUrl.addEventListener("input", () => {
+      advancedFieldsDirty = true;
+    });
+  }
+  if (els.modelId) {
+    els.modelId.addEventListener("input", () => {
+      advancedFieldsDirty = true;
+    });
+  }
+  if (els.toggleApiKey) {
+    els.toggleApiKey.addEventListener("click", () => {
+      if (!els.modelApiKey) return;
+      const show = els.modelApiKey.type === "password";
+      els.modelApiKey.type = show ? "text" : "password";
+      els.toggleApiKey.textContent = show ? "隐藏" : "显示";
+      els.toggleApiKey.setAttribute("aria-pressed", show ? "true" : "false");
+    });
+  }
+  if (els.restoreModelPreset) {
+    els.restoreModelPreset.addEventListener("click", () => {
+      els.modelProvider.value = "deepseek";
+      applyProviderPreset({ force: true, keepAdvancedOpen: true });
+      if (els.advancedConnection) els.advancedConnection.open = true;
+      showStatus(els.settingsStatus, "已恢复 DeepSeek 推荐设置。可继续保存。");
+      setSettingsTechDetail("");
+    });
+  }
   if (els.artifactType) {
     els.artifactType.addEventListener("change", () => refreshConnectionFromCapabilities());
   }
@@ -1608,27 +1778,56 @@
       const apiKey = (els.modelApiKey.value || "").trim();
       const baseUrl = (els.modelBaseUrl.value || "").trim();
       const model = (els.modelId.value || "").trim();
-      if (!apiKey) {
+      const configured = isCredentialConfigured();
+      if (!apiKey && !configured) {
         showStatus(els.settingsStatus, "请输入 API Key 后再保存", true);
+        setConnectionStateLabel("尚未连接", "error");
         return;
       }
       if (!baseUrl || !model) {
-        showStatus(els.settingsStatus, "请填写 Base URL 与 Model ID", true);
+        if (els.advancedConnection) els.advancedConnection.open = true;
+        showStatus(els.settingsStatus, "请在高级连接中填写服务地址与模型名称", true);
+        setConnectionStateLabel("尚未连接", "error");
+        return;
+      }
+      if (els.modelProvider.value === "openai-compatible" && (!baseUrl || !model)) {
+        if (els.advancedConnection) els.advancedConnection.open = true;
+        showStatus(els.settingsStatus, "自定义服务需要填写服务地址与模型名称", true);
         return;
       }
       els.saveModel.disabled = true;
+      setConnectionStateLabel("正在检查", null);
+      showStatus(els.settingsStatus, "正在保存…");
+      setSettingsTechDetail("");
       const result = await api.saveModelCredential({
         apiKey,
         baseUrl,
         model,
         providerPreset: els.modelProvider.value,
+        allowExistingKey: !apiKey && configured,
       });
       rememberShellMeta(result || {});
       els.modelApiKey.value = "";
-      showStatus(els.settingsStatus, "已保存模型连接。");
+      if (els.modelApiKey) els.modelApiKey.type = "password";
+      if (els.toggleApiKey) {
+        els.toggleApiKey.textContent = "显示";
+        els.toggleApiKey.setAttribute("aria-pressed", "false");
+      }
+      advancedFieldsDirty = false;
+      updateKeyStateUi();
       await refreshConnectionFromCapabilities();
+      if (lastConnectionState && lastConnectionState.available) {
+        setConnectionStateLabel("已连接", "ok");
+        showStatus(els.settingsStatus, "已保存并连接。");
+      } else {
+        setConnectionStateLabel("尚未确认（可测试连接）", null);
+        showStatus(els.settingsStatus, "已保存密钥。可点「测试连接」确认。");
+      }
     } catch (err) {
-      showStatus(els.settingsStatus, (err && err.message) || "保存失败", true);
+      const facing = userFacingModelError(err, "保存失败，请检查密钥或高级连接设置");
+      showStatus(els.settingsStatus, facing, true);
+      setConnectionStateLabel("无法连接，请检查密钥或高级连接设置", "error");
+      setSettingsTechDetail((err && err.message) || String(err || ""));
     } finally {
       els.saveModel.disabled = false;
     }
@@ -1776,20 +1975,33 @@
   }
 
   els.testModel.addEventListener("click", async () => {
+    const keptKey = els.modelApiKey ? els.modelApiKey.value : "";
     try {
+      setConnectionStateLabel("正在检查", null);
+      showStatus(els.settingsStatus, "正在检查连接…");
+      setSettingsTechDetail("");
       const result = await api.testModelConnection({
         baseUrl: (els.modelBaseUrl.value || "").trim(),
         model: (els.modelId.value || "").trim(),
         apiKey: (els.modelApiKey.value || "").trim() || undefined,
         providerPreset: els.modelProvider.value,
       });
-      showStatus(
-        els.settingsStatus,
-        result && result.ok ? "连接正常。" : (result && result.reason) || "连接失败",
-        !(result && result.ok),
-      );
+      if (els.modelApiKey) els.modelApiKey.value = keptKey;
+      if (result && result.ok) {
+        setConnectionStateLabel("已连接", "ok");
+        showStatus(els.settingsStatus, "连接成功。");
+      } else {
+        const reason = redactSecrets((result && result.reason) || "连接失败");
+        setConnectionStateLabel("无法连接，请检查密钥或高级连接设置", "error");
+        showStatus(els.settingsStatus, "无法连接，请检查密钥或高级连接设置", true);
+        setSettingsTechDetail(reason);
+      }
     } catch (err) {
-      showStatus(els.settingsStatus, err.message || String(err), true);
+      if (els.modelApiKey) els.modelApiKey.value = keptKey;
+      const facing = userFacingModelError(err, "无法连接，请检查密钥或高级连接设置");
+      setConnectionStateLabel("无法连接，请检查密钥或高级连接设置", "error");
+      showStatus(els.settingsStatus, facing, true);
+      setSettingsTechDetail((err && err.message) || String(err || ""));
     }
   });
 
@@ -1797,10 +2009,23 @@
     try {
       const result = await api.deleteModelCredential({});
       rememberShellMeta(result || {});
+      els.modelApiKey.value = "";
+      if (els.modelApiKey) els.modelApiKey.type = "password";
+      if (els.toggleApiKey) {
+        els.toggleApiKey.textContent = "显示";
+        els.toggleApiKey.setAttribute("aria-pressed", "false");
+      }
       await refreshConnectionFromCapabilities();
-      showStatus(els.settingsStatus, "已删除模型凭证。");
+      updateKeyStateUi();
+      setConnectionStateLabel("尚未连接", null);
+      showStatus(els.settingsStatus, "已清除密钥。");
+      setSettingsTechDetail("");
     } catch (err) {
-      showStatus(els.settingsStatus, err.message || String(err), true);
+      showStatus(
+        els.settingsStatus,
+        userFacingModelError(err, "清除失败，请稍后重试"),
+        true,
+      );
       await refreshConnectionFromCapabilities();
     }
   });
