@@ -920,8 +920,25 @@ select {
   border-top: 1px solid var(--line);
 }
 
-.work-assist-entries {
-  margin-bottom: 8px;
+.work-collab-related {
+  margin-top: 6px;
+}
+
+.work-collab-related .collab-return {
+  max-height: 120px;
+  overflow: auto;
+  font-size: 12px;
+}
+
+#collab-page-new .collab-form {
+  margin-top: 8px;
+  border-top: none;
+  padding-top: 0;
+}
+
+#collab-page-subtask,
+#external-cap-goal {
+  min-height: 96px;
 }
 
 .aside-head {

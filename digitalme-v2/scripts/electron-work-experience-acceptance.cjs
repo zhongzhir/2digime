@@ -94,6 +94,11 @@ function registerIpc() {
   ipcMain.handle('shell:deleteModelCredential', async () => ({ ok: true }));
   ipcMain.handle('shell:testModelConnection', async () => ({ ok: true }));
   ipcMain.handle('shell:revealPath', async () => ({ opened: true }));
+  ipcMain.handle('shell:getRemoteCapabilityStatus', async () => ({
+    connected: false,
+    displayName: '研究分析能力',
+    statusLabel: '状态：未连接',
+  }));
   ipcMain.handle('shell:conversationList', async () => ({ turns: [] }));
   ipcMain.handle('shell:conversationAppend', async (_e, input) => ({
     turn: {
@@ -285,21 +290,39 @@ async function mainSequence() {
   check('material_summary_present', /已读取|暂未纳入|文件/.test(done.materialSummary) || done.materialSummary.length > 0, done);
   check('assist_still_light', done.assist.join('|') === '请人帮忙|用专业能力', done);
 
-  // 4) 轻入口携带上下文
-  await uiEval(`() => { document.getElementById('btn-collab-open').click(); return true; }`);
-  await sleep(200);
-  const ctx = await uiEval(`() => ({
-    formVisible: document.getElementById('collab-form')?.hidden === false,
-    subtask: (document.getElementById('collab-subtask')?.value || '').slice(0, 40),
-    longGoalCarried: (document.getElementById('collab-subtask')?.value || '').length > 40,
-  })`);
-  check('assist_opens_with_task_context', ctx.formVisible && ctx.longGoalCarried, ctx);
-
-  // 5) 采用
+  // 4) 采用成果（先于协作轻入口，避免跳转协作页后成果面不可点）
   await uiEval(`() => { document.getElementById('btn-accept-artifact').click(); return true; }`);
-  await sleep(600);
-  const accepted = await uiEval(`() => document.getElementById('artifact-decision-status')?.textContent || ''`);
-  check('accept_artifact', /已采用/.test(accepted), { accepted });
+  await sleep(900);
+  const accepted = await uiEval(`() => ({
+    status: document.getElementById('artifact-decision-status')?.textContent || '',
+    err: document.getElementById('artifact-decision-error')?.textContent || '',
+    errHidden: document.getElementById('artifact-decision-error')?.hidden === true,
+    disabled: document.getElementById('btn-accept-artifact')?.disabled === true,
+  })`);
+  check('accept_artifact', /已采用/.test(accepted.status), accepted);
+
+  // 5) 轻入口携带上下文 → 协作向导
+  await uiEval(`() => { document.getElementById('btn-collab-open').click(); return true; }`);
+  await sleep(300);
+  const ctx = await uiEval(`() => ({
+    panelCollab: document.getElementById('panel-collab')?.hidden === false,
+    pageNew: document.getElementById('collab-page-new')?.hidden === false,
+    subtaskLen: (document.getElementById('collab-page-subtask')?.value || '').length,
+    materials: Array.from(document.querySelectorAll('#collab-page-material-checks input[type=checkbox]')).map(
+      (el) => el.checked,
+    ),
+    workFormGone: !document.getElementById('collab-form'),
+  })`);
+  check(
+    'assist_opens_collab_wizard_with_task_context',
+    ctx.panelCollab && ctx.pageNew && ctx.subtaskLen > 40 && ctx.workFormGone,
+    ctx,
+  );
+  check('assist_materials_not_auto_checked', ctx.materials.every((c) => c === false), ctx);
+
+  // 回到做事页继续布局验收
+  await uiEval(`() => { document.getElementById('nav-work')?.click(); return true; }`);
+  await sleep(400);
 
   // 6) 常用窗口下成果可滚动
   const scrollDesk = await uiEval(`() => {

@@ -67,6 +67,10 @@
     collabEmptyRevoked: document.getElementById("collab-empty-revoked"),
     btnCollabPageNew: document.getElementById("btn-collab-page-new"),
     btnCollabNewBack: document.getElementById("btn-collab-new-back"),
+    collabPageTargetMode: document.getElementById("collab-page-target-mode"),
+    collabPagePeerFlow: document.getElementById("collab-page-peer-flow"),
+    collabPageContextNote: document.getElementById("collab-page-context-note"),
+    btnCollabPageCancel: document.getElementById("btn-collab-page-cancel"),
     collabPagePeerDir: document.getElementById("collab-page-peer-dir"),
     btnCollabPagePickPeer: document.getElementById("btn-collab-page-pick-peer"),
     btnCollabPageImportPeer: document.getElementById("btn-collab-page-import-peer"),
@@ -107,6 +111,7 @@
     collabPagePeerCard: document.getElementById("collab-page-peer-card"),
     collabPagePeerName: document.getElementById("collab-page-peer-name"),
     collabPagePeerBrief: document.getElementById("collab-page-peer-brief"),
+    btnWorkOpenCollabDetail: document.getElementById("btn-work-open-collab-detail"),
     collabPagePeerPath: document.getElementById("collab-page-peer-path"),
     collabBox: document.getElementById("collab-box"),
     chatContext: document.getElementById("chat-context"),
@@ -729,6 +734,9 @@
     els.workLayout.dataset.tasks = open ? "open" : "closed";
   }
 
+  /** @type {{ mode: 'local-peer'|'external-research', issuerTaskId: string|null, subtask: string, materials: {path:string,checked:boolean}[] } | null} */
+  let collabDraftFromWork = null;
+
   function carryTaskContextIntoAssist(kind) {
     const goal = (els.goal && els.goal.value ? els.goal.value : "").trim();
     if (kind === "collab") {
@@ -743,6 +751,93 @@
       }
       fillExternalMaterialChecks();
     }
+  }
+
+  function syncCollabPageMode() {
+    const mode =
+      els.collabPageTargetMode && String(els.collabPageTargetMode.value || "local-peer") === "external-research"
+        ? "external-research"
+        : "local-peer";
+    if (els.collabPagePeerFlow) els.collabPagePeerFlow.hidden = mode !== "local-peer";
+    if (els.externalCapPanel) els.externalCapPanel.hidden = mode !== "external-research";
+    return mode;
+  }
+
+  function applyCollabDraftToWizard() {
+    const draft = collabDraftFromWork;
+    const mode = draft && draft.mode === "external-research" ? "external-research" : "local-peer";
+    if (els.collabPageTargetMode) els.collabPageTargetMode.value = mode;
+    syncCollabPageMode();
+    if (els.collabPageContextNote) {
+      if (draft && draft.issuerTaskId) {
+        els.collabPageContextNote.hidden = false;
+        els.collabPageContextNote.textContent = "已带入当前任务目标与材料候选；发送前请核对授权范围。";
+      } else {
+        els.collabPageContextNote.hidden = true;
+        els.collabPageContextNote.textContent = "";
+      }
+    }
+    if (mode === "local-peer") {
+      if (els.collabPageSubtask) {
+        els.collabPageSubtask.value = draft && draft.subtask ? draft.subtask : "";
+      }
+      if (els.collabPageExtra) els.collabPageExtra.value = "";
+      collabPageMaterials = draft && Array.isArray(draft.materials) ? draft.materials.map((m) => ({ ...m })) : [];
+      renderMaterialChecks(els.collabPageMaterialChecks, collabPageMaterials, () => {
+        if (els.collabPageConfirm) els.collabPageConfirm.hidden = true;
+      });
+      if (els.collabPageConfirm) els.collabPageConfirm.hidden = true;
+    } else {
+      if (els.externalCapGoal) {
+        els.externalCapGoal.value =
+          (draft && draft.subtask) ||
+          "请根据已授权材料，形成 500–800 字结构化项目风险摘要。";
+      }
+      if (els.externalCapExtra) els.externalCapExtra.value = "";
+      externalCapMats =
+        draft && Array.isArray(draft.materials)
+          ? draft.materials.map((m) => ({ path: m.path, checked: false }))
+          : materials.map((m) => ({ path: m.path, checked: false }));
+      renderMaterialChecks(els.externalCapMaterialChecks, externalCapMats, () => {
+        if (els.externalCapConfirm && !els.externalCapConfirm.hidden) {
+          void refreshExternalAuthPreview();
+        }
+      });
+      if (els.externalCapConfirm) els.externalCapConfirm.hidden = true;
+      hideExternalCandidate();
+      if (els.externalCapFailureActions) els.externalCapFailureActions.hidden = true;
+      showStatus(els.externalCapError, "");
+      if (els.externalCapStatus) els.externalCapStatus.textContent = "";
+      void refreshExternalCapabilityCard();
+    }
+  }
+
+  async function openCollabWizardFromWork(kind) {
+    const goal = (els.goal && els.goal.value ? els.goal.value : "").trim();
+    if (!activeTaskId || workMode !== "task") {
+      showStatus(els.collabError, "请先描述目标并开始或选择一个任务", true);
+      if (els.goal && workMode === "compose") els.goal.focus();
+      return;
+    }
+    if (!goal) {
+      showStatus(els.collabError, "请先填写任务目标，再发起协作", true);
+      if (els.goalDetails) els.goalDetails.open = true;
+      if (els.goal) els.goal.focus();
+      return;
+    }
+    collabDraftFromWork = {
+      mode: kind === "external" ? "external-research" : "local-peer",
+      issuerTaskId: activeTaskId,
+      subtask: goal.slice(0, 1200),
+      materials: materials.map((m) => ({ path: m.path, checked: false })),
+    };
+    showStatus(els.collabError, "");
+    await setNav("collab");
+    showCollabPage("new");
+    clearPeerCard(pagePeerCardEls());
+    if (els.collabPagePeerEmpty) els.collabPagePeerEmpty.hidden = true;
+    showStatus(els.collabPageNewError, "");
+    applyCollabDraftToWizard();
   }
 
   function clearMaterialSummary() {
@@ -2312,13 +2407,13 @@
   function collabUserLabel(item) {
     if (!item) return "";
     if (item.status === "revoked") return "已撤销";
-    if (item.status === "failed") return "失败";
-    if (item.status === "running") return "正在完成";
-    if (item.status === "authorized" || item.status === "requested") return "等待对方处理";
-    if (item.ownerDecision === "accept") return "已采用";
-    if (item.ownerDecision === "reject" || item.status === "rejected") return "未采用";
-    if (item.status === "completed") return "已返回成果";
-    return "等待对方处理";
+    if (item.status === "failed") return "未完成";
+    if (item.status === "running") return "正在处理";
+    if (item.status === "authorized" || item.status === "requested") return "等待开始";
+    if (item.ownerDecision === "accept") return "已完成";
+    if (item.ownerDecision === "reject" || item.status === "rejected") return "未完成";
+    if (item.status === "completed") return "需要你确认";
+    return "等待开始";
   }
 
   function collabBucket(item) {
@@ -2326,6 +2421,8 @@
     if (item.ownerDecision === "accept" || item.ownerDecision === "reject" || item.status === "rejected") {
       return "done";
     }
+    // 已返回、待确认：归入「待你处理 / 已完成」，不占进行中列表
+    if (item.status === "completed") return "done";
     return "active";
   }
 
@@ -2403,7 +2500,7 @@
 
   function resetCollabUi() {
     if (els.collabForm) els.collabForm.hidden = true;
-    if (els.externalCapPanel) els.externalCapPanel.hidden = true;
+    // external-cap-panel 已迁入协作向导，勿在做事页重置时隐藏
     if (els.collabConfirm) els.collabConfirm.hidden = true;
     if (els.collabStatus) els.collabStatus.textContent = "";
     if (els.collabReturn) {
@@ -2412,8 +2509,6 @@
     }
     if (els.collabActions) els.collabActions.hidden = true;
     showStatus(els.collabError, "");
-    hideExternalCandidate();
-    stopExternalCapWatch();
   }
 
   function showCollabActions(show) {
@@ -2647,7 +2742,7 @@
   async function executeActiveGrant(statusEl, returnEl, errorEl) {
     showStatus(errorEl, "");
     if (!activeGrantId) return;
-    if (statusEl) statusEl.textContent = "正在完成";
+    if (statusEl) statusEl.textContent = "正在处理";
     try {
       const result = await api.invoke("collab.simulateInteraction", {
         action: "execute",
@@ -2655,15 +2750,15 @@
       });
       if (result.denied) {
         showStatus(errorEl, collabErrorMessage({ message: result.reason }, "execute"), true);
-        if (statusEl) statusEl.textContent = "失败";
+        if (statusEl) statusEl.textContent = "未完成";
         return;
       }
       if (result.status === "failed") {
         showStatus(errorEl, "对方未能完成", true);
-        if (statusEl) statusEl.textContent = "失败";
+        if (statusEl) statusEl.textContent = "未完成";
         return;
       }
-      if (statusEl) statusEl.textContent = "已返回成果";
+      if (statusEl) statusEl.textContent = "需要你确认";
       const text = result.artifactText || "";
       if (returnEl) {
         returnEl.hidden = !text;
@@ -2673,7 +2768,7 @@
       await syncWorkCollabFromDomain();
     } catch (err) {
       showStatus(errorEl, collabErrorMessage(err, "execute"), true);
-      if (statusEl) statusEl.textContent = "失败";
+      if (statusEl) statusEl.textContent = "未完成";
     }
   }
 
@@ -2687,18 +2782,35 @@
         decision,
       });
       if (statusEl) {
-        statusEl.textContent = decision === "accept" ? "已采用" : "未采用";
+        statusEl.textContent = decision === "accept" ? "已完成" : "未完成";
       }
       await refreshCollabHome();
       await syncWorkCollabFromDomain();
-      if (activeTaskId && decision === "accept") {
+      if (decision === "accept") {
+        let targetTask = activeTaskId || null;
         try {
-          const detail = await api.invoke("work.getTask", { taskId: activeTaskId });
-          if (detail.artifactIds && detail.artifactIds[0]) {
-            await loadArtifact(detail.artifactIds[0]);
-          }
+          const st = await api.invoke("collab.simulateInteraction", {
+            action: "status",
+            grantId: activeGrantId,
+          });
+          if (st && st.grant && st.grant.issuerTaskId) targetTask = st.grant.issuerTaskId;
         } catch {
           /* ignore */
+        }
+        if (!targetTask && collabDraftFromWork && collabDraftFromWork.issuerTaskId) {
+          targetTask = collabDraftFromWork.issuerTaskId;
+        }
+        if (targetTask) {
+          await setNav("work");
+          await selectTask(targetTask);
+          try {
+            const detail = await api.invoke("work.getTask", { taskId: targetTask });
+            if (detail.artifactIds && detail.artifactIds[0]) {
+              await loadArtifact(detail.artifactIds[0]);
+            }
+          } catch {
+            /* ignore */
+          }
         }
       }
     } catch (err) {
@@ -2723,6 +2835,7 @@
   }
 
   function fillWorkMaterialChecks() {
+    if (!els.collabMaterialChecks) return;
     const items = materials.map((m) => ({ path: m.path, checked: false }));
     renderMaterialChecks(els.collabMaterialChecks, items, () => {
       if (els.collabConfirm) els.collabConfirm.hidden = true;
@@ -2731,7 +2844,8 @@
   }
 
   function syncCollabTargetMode() {
-    const mode = els.collabTargetMode ? String(els.collabTargetMode.value || "local-peer") : "local-peer";
+    if (!els.collabTargetMode) return;
+    const mode = String(els.collabTargetMode.value || "local-peer");
     const external = mode === "external-research";
     if (els.collabLocalPeerBlock) els.collabLocalPeerBlock.hidden = external;
     if (els.collabExternalHint) els.collabExternalHint.hidden = !external;
@@ -2748,17 +2862,18 @@
 
   if (els.collabOpen) {
     els.collabOpen.addEventListener("click", () => {
-      if (!activeTaskId) {
-        showStatus(els.collabError, "请先开始或选择一个任务", true);
-        return;
+      void openCollabWizardFromWork("collab");
+    });
+  }
+
+  if (els.collabPageTargetMode) {
+    els.collabPageTargetMode.addEventListener("change", () => {
+      const mode = syncCollabPageMode();
+      if (collabDraftFromWork) collabDraftFromWork.mode = mode;
+      showStatus(els.collabPageNewError, "");
+      if (mode === "external-research") {
+        void refreshExternalCapabilityCard();
       }
-      if (els.externalCapPanel) els.externalCapPanel.hidden = true;
-      if (els.collabForm) els.collabForm.hidden = !els.collabForm.hidden;
-      carryTaskContextIntoAssist("collab");
-      if (els.collabConfirm) els.collabConfirm.hidden = true;
-      if (els.collabPeerEmpty) els.collabPeerEmpty.hidden = true;
-      syncCollabTargetMode();
-      showStatus(els.collabError, "");
     });
   }
 
@@ -2973,24 +3088,8 @@
   }
 
   if (els.externalCapOpen) {
-    els.externalCapOpen.addEventListener("click", async () => {
-      if (!activeTaskId) {
-        showStatus(els.collabError, "请先开始或选择一个任务", true);
-        return;
-      }
-      if (els.collabForm) els.collabForm.hidden = true;
-      if (els.externalCapPanel) {
-        els.externalCapPanel.hidden = !els.externalCapPanel.hidden;
-      }
-      if (els.externalCapPanel && !els.externalCapPanel.hidden) {
-        carryTaskContextIntoAssist("external");
-        if (els.externalCapConfirm) els.externalCapConfirm.hidden = true;
-        hideExternalCandidate();
-        if (els.externalCapFailureActions) els.externalCapFailureActions.hidden = true;
-        showStatus(els.externalCapError, "");
-        if (els.externalCapStatus) els.externalCapStatus.textContent = "";
-        await refreshExternalCapabilityCard();
-      }
+    els.externalCapOpen.addEventListener("click", () => {
+      void openCollabWizardFromWork("external");
     });
   }
 
@@ -3115,8 +3214,9 @@
   }
 
   if (els.btnExternalGotoCollab) {
-    els.btnExternalGotoCollab.addEventListener("click", () => {
-      void setNav("collab");
+    els.btnExternalGotoCollab.addEventListener("click", async () => {
+      showCollabPage("home");
+      await refreshCollabHome();
     });
   }
   if (els.btnExternalRetry) {
@@ -3138,20 +3238,21 @@
     });
   }
   if (els.btnExternalUseLocal) {
-    els.btnExternalUseLocal.addEventListener("click", () => {
-      if (els.externalCapPanel) els.externalCapPanel.hidden = true;
+    els.btnExternalUseLocal.addEventListener("click", async () => {
       showStatus(els.externalCapError, "");
       if (els.goal && els.externalCapGoal) {
         const g = String(els.externalCapGoal.value || "").trim();
         if (g && !String(els.goal.value || "").trim()) els.goal.value = g;
       }
+      await setNav("work");
       showStatus(els.jobActionable, "已切换为本地处理：请确认材料后点击「开始处理」。", false);
     });
   }
   if (els.btnExternalBackTask) {
-    els.btnExternalBackTask.addEventListener("click", () => {
-      if (els.externalCapPanel) els.externalCapPanel.hidden = true;
+    els.btnExternalBackTask.addEventListener("click", async () => {
       showStatus(els.externalCapError, "");
+      await setNav("work");
+      if (activeTaskId) await selectTask(activeTaskId);
     });
   }
 
@@ -3179,6 +3280,7 @@
         els.externalCapStatus.textContent = decision === "accept" ? "已采用" : "未采用";
       }
       if (decision === "accept") {
+        await setNav("work");
         await selectTask(externalCapTaskId);
       } else {
         hideExternalCandidate();
@@ -3380,7 +3482,7 @@
           materials: mats,
           issuerTaskId: activeTaskId,
         });
-        if (els.collabStatus) els.collabStatus.textContent = "等待对方处理";
+        if (els.collabStatus) els.collabStatus.textContent = "等待开始";
         showCollabActions(true);
         await refreshCollabHome();
       } catch (err) {
@@ -3392,6 +3494,16 @@
     els.collabExecute.addEventListener("click", () =>
       executeActiveGrant(els.collabStatus, els.collabReturn, els.collabError),
     );
+  }
+  if (els.btnWorkOpenCollabDetail) {
+    els.btnWorkOpenCollabDetail.addEventListener("click", async () => {
+      if (!activeGrantId) {
+        await setNav("collab");
+        return;
+      }
+      await setNav("collab");
+      await openCollabDetail(activeGrantId);
+    });
   }
   if (els.collabAccept) {
     els.collabAccept.addEventListener("click", () =>
@@ -3411,15 +3523,20 @@
 
   if (els.btnCollabPageNew) {
     els.btnCollabPageNew.addEventListener("click", () => {
+      collabDraftFromWork = null;
       showCollabPage("new");
-      collabPageMaterials = [];
-      renderMaterialChecks(els.collabPageMaterialChecks, collabPageMaterials);
-      if (els.collabPageConfirm) els.collabPageConfirm.hidden = true;
       clearPeerCard(pagePeerCardEls());
-      if (els.collabPageSubtask) els.collabPageSubtask.value = "";
-      if (els.collabPageExtra) els.collabPageExtra.value = "";
       if (els.collabPagePeerEmpty) els.collabPagePeerEmpty.hidden = true;
       showStatus(els.collabPageNewError, "");
+      if (els.collabPageTargetMode) els.collabPageTargetMode.value = "local-peer";
+      applyCollabDraftToWizard();
+    });
+  }
+  if (els.btnCollabPageCancel) {
+    els.btnCollabPageCancel.addEventListener("click", async () => {
+      collabDraftFromWork = null;
+      showCollabPage("home");
+      await refreshCollabHome();
     });
   }
   if (els.btnCollabNewBack) {
@@ -3503,7 +3620,16 @@
         return;
       }
       try {
-        const issued = await issueCollaboration({ peer, subtask, extra, materials: mats });
+        const issued = await issueCollaboration({
+          peer,
+          subtask,
+          extra,
+          materials: mats,
+          issuerTaskId: collabDraftFromWork && collabDraftFromWork.issuerTaskId
+            ? collabDraftFromWork.issuerTaskId
+            : null,
+        });
+        collabDraftFromWork = null;
         await openCollabDetail(issued.grantId);
       } catch (err) {
         showStatus(els.collabPageNewError, collabErrorMessage(err, "issue"), true);

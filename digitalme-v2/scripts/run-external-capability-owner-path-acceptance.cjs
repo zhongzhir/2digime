@@ -66,7 +66,7 @@ for (const re of [
   /已取消/,
   /未完成/,
   /尚未连接可用的外部专业能力/,
-  /前往协作/,
+  /前往协作|前往处理|返回协作首页/,
   /对方未在限定时间内完成/,
   /已停止本次外部处理/,
   /未通过完整性检查/,
@@ -186,9 +186,8 @@ if (/openSettings\(\{\s*section:\s*['"]external-capability['"]/.test(appJs)) {
 }
 ok('connection settings wiring (collab-managed; no second store; rebootstrap; policy validate)');
 const panelStart = html.indexOf('id="external-cap-panel"');
-const panelEnd = html.indexOf('id="collab-form"');
-if (panelStart < 0 || panelEnd < 0) fail('external panel / collab form missing');
-const panel = html.slice(panelStart, panelEnd);
+if (panelStart < 0) fail('external panel missing');
+const panel = html.slice(panelStart, panelStart + 4500);
 if (/另一个数字之我/.test(panel)) fail('external panel must not call peer another digital me');
 ok('HTML hides protocol jargon; external ≠ 另一个数字之我');
 

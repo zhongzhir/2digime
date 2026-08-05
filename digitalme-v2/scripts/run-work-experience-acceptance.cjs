@@ -99,7 +99,10 @@ for (const bad of [
 }
 ok('no protocol / internal state leakage in work HTML');
 
-if (!/carryTaskContextIntoAssist/.test(appJs)) {
+if (!/openCollabWizardFromWork/.test(appJs)) {
+  fail('assist light entries must open unified collab wizard with task context');
+}
+if (!/carryTaskContextIntoAssist|openCollabWizardFromWork/.test(appJs)) {
   fail('assist light entries must carry current task context');
 }
 if (!/syncGoalPresentation/.test(appJs)) {

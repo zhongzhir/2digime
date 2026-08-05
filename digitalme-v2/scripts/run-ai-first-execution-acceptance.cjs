@@ -47,7 +47,7 @@ ok('user HTML silent on AI-first internals');
 for (const bad of [/ExecutionProfile/, /targeted_revision_required/, /ai_first_policy/]) {
   if (bad.test(appJs)) fail(`renderer must not surface internal AI-first names: ${bad}`);
 }
-if (!/正在完成/.test(appJs)) fail('renderer must keep silent progress label 正在完成');
+if (!/正在处理|正在完成/.test(appJs)) fail('renderer must keep silent progress label');
 if (!/采用/.test(html) || !/不采用/.test(html)) fail('renderer must keep adopt/reject actions');
 ok('renderer remains silent on execution internals');
 

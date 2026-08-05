@@ -247,117 +247,17 @@
                   <button type="button" id="btn-collab-open" class="ghost">请人帮忙</button>
                   <button type="button" id="btn-external-cap-open" class="ghost">用专业能力</button>
                 </div>
-
-                <div id="external-cap-panel" class="collab-form" hidden>
-                  <div id="external-cap-card" class="external-cap-card">
-                    <p id="external-cap-name" class="collab-peer-name">研究分析能力</p>
-                    <p id="external-cap-desc" class="muted tiny">已连接的专业能力，可根据授权材料形成结构化项目风险摘要。</p>
-                    <p id="external-cap-suitable" class="muted tiny">适合完成：基于明确授权材料的结构化项目风险摘要（约 500–800 字）。</p>
-                    <p id="external-cap-share" class="muted tiny">将共享：仅你勾选的材料与任务要求文字。</p>
-                    <p id="external-cap-eta" class="muted tiny">预计可能耗时：数秒到两分钟。</p>
-                    <p id="external-cap-avail" class="meta" aria-live="polite">当前是否可用：检查中…</p>
+                <div id="work-collab-related" class="work-collab-related">
+                  <p id="collab-status" class="meta" aria-live="polite"></p>
+                  <pre id="collab-return" class="collab-return" hidden></pre>
+                  <div class="row" id="collab-actions" hidden>
+                    <button type="button" id="btn-work-open-collab-detail">前往处理</button>
+                    <button type="button" id="btn-collab-accept">采用</button>
+                    <button type="button" id="btn-collab-reject">不采用</button>
+                    <button type="button" id="btn-collab-revoke" class="ghost">撤销</button>
                   </div>
-                  <label class="field">
-                    <span>任务要求</span>
-                    <textarea id="external-cap-goal" rows="3" placeholder="请根据已授权材料，形成 500–800 字结构化项目风险摘要。"></textarea>
-                  </label>
-                  <label class="field">
-                    <span>可选补充说明</span>
-                    <textarea id="external-cap-extra" rows="2" placeholder="可留空"></textarea>
-                  </label>
-                  <fieldset class="field collab-materials-field">
-                    <legend>允许共享的材料（须明确勾选）</legend>
-                    <ul id="external-cap-material-checks" class="collab-material-checks"></ul>
-                    <p class="muted tiny">未勾选时只发送任务要求文字；不会发送完整数字之我资料、对话记录或其它任务。</p>
-                  </fieldset>
-                  <div id="external-cap-confirm" class="collab-confirm" hidden>
-                    <h4 class="section-title">授权说明</h4>
-                    <ul id="external-cap-confirm-points" class="collab-confirm-points"></ul>
-                  </div>
-                  <div class="row">
-                    <button type="button" id="btn-external-cap-preview" class="ghost">查看授权说明</button>
-                    <button type="button" id="btn-external-cap-issue" class="primary">开始使用</button>
-                    <button type="button" id="btn-external-cap-cancel" class="ghost" disabled>取消</button>
-                  </div>
-                  <p id="external-cap-status" class="meta" aria-live="polite"></p>
-                  <p id="external-cap-error" class="muted tiny error" hidden></p>
-                  <div class="row" id="external-cap-failure-actions" hidden>
-                    <button type="button" id="btn-external-goto-collab">前往协作</button>
-                    <button type="button" id="btn-external-retry">重试</button>
-                    <button type="button" id="btn-external-use-local">改用本地能力</button>
-                    <button type="button" id="btn-external-back-task" class="ghost">返回任务</button>
-                  </div>
-                  <div id="external-cap-result" class="external-cap-result" hidden>
-                    <h4 class="section-title">返回的成果</h4>
-                    <p id="external-cap-source" class="meta">来源：已连接的研究分析能力</p>
-                    <p id="external-cap-returned-at" class="muted tiny"></p>
-                    <p id="external-cap-check-status" class="meta">检查状态：已通过</p>
-                    <pre id="external-cap-body" class="collab-return"></pre>
-                    <div class="row">
-                      <button type="button" id="btn-external-accept" class="primary">采用</button>
-                      <button type="button" id="btn-external-reject">不采用</button>
-                      <button type="button" id="btn-external-regenerate" class="ghost">重新生成</button>
-                    </div>
-                  </div>
+                  <p id="collab-error" class="muted tiny error" hidden></p>
                 </div>
-
-                <div id="collab-form" class="collab-form" hidden>
-                  <label class="field">
-                    <span>交给谁</span>
-                    <select id="collab-target-mode">
-                      <option value="local-peer">另一个数字之我</option>
-                      <option value="external-research">研究分析能力（已连接的专业能力）</option>
-                    </select>
-                  </label>
-                  <div id="collab-local-peer-block">
-                  <label class="field">
-                    <span>协作对象</span>
-                    <div class="row">
-                      <button type="button" id="btn-collab-pick-peer">选择</button>
-                      <button type="button" id="btn-collab-import-peer" class="ghost">导入数字之我</button>
-                    </div>
-                    <input type="hidden" id="collab-peer-dir" />
-                    <div id="collab-peer-card" class="collab-peer-card" hidden>
-                      <p id="collab-peer-name" class="collab-peer-name"></p>
-                      <p id="collab-peer-brief" class="muted tiny" hidden></p>
-                      <p id="collab-peer-path" class="muted tiny collab-peer-path"></p>
-                    </div>
-                  </label>
-                  <p id="collab-peer-empty" class="muted tiny" hidden>还没有可协作的数字之我。</p>
-                  </div>
-                  <p id="collab-external-hint" class="muted tiny" hidden>外部专业能力：研究分析能力 · 来源：已连接的专业能力</p>
-                  <label class="field">
-                    <span>想让对方完成什么</span>
-                    <textarea id="collab-subtask" rows="3" placeholder="说明希望对方完成的具体内容"></textarea>
-                  </label>
-                  <label class="field">
-                    <span>可选补充要求</span>
-                    <textarea id="collab-extra" rows="2" placeholder="可留空"></textarea>
-                  </label>
-                  <fieldset class="field collab-materials-field">
-                    <legend>允许共享的材料（须明确勾选）</legend>
-                    <ul id="collab-material-checks" class="collab-material-checks"></ul>
-                    <p id="collab-materials-hint" class="muted tiny">未勾选时，对方看不到你的任务材料。</p>
-                  </fieldset>
-                  <div id="collab-confirm" class="collab-confirm" hidden>
-                    <h4 class="section-title">授权说明</h4>
-                    <ul id="collab-confirm-points" class="collab-confirm-points"></ul>
-                  </div>
-                  <div class="row">
-                    <button type="button" id="btn-collab-preview" class="ghost">查看授权范围</button>
-                    <button type="button" id="btn-collab-issue" class="primary">发出协作</button>
-                  </div>
-                </div>
-                <h4 class="section-title">协作成果</h4>
-                <p id="collab-status" class="meta" aria-live="polite"></p>
-                <pre id="collab-return" class="collab-return" hidden></pre>
-                <div class="row" id="collab-actions" hidden>
-                  <button type="button" id="btn-collab-execute">开始协作执行</button>
-                  <button type="button" id="btn-collab-accept">采用返回成果</button>
-                  <button type="button" id="btn-collab-reject">不采用</button>
-                  <button type="button" id="btn-collab-revoke" class="ghost">撤销授权</button>
-                </div>
-                <p id="collab-error" class="muted tiny error" hidden></p>
               </div>
             </main>
 
@@ -427,23 +327,23 @@
               <h1 class="page-title">协作</h1>
               <button type="button" id="btn-collab-page-new" class="primary">新建协作</button>
             </div>
-            <p class="muted tiny">管理协作关系与活动：连接其他数字之我或外部专业能力，查看进行中与已完成的协作。当前你的数字之我本身在「数字之我」中管理。</p>
+            <p class="muted tiny">选择可协作的对象或专业能力，查看进行中的事项，并处理返回的结果。</p>
 
-            <h2 class="section-title">协作对象</h2>
+            <h2 class="section-title">可找谁帮忙</h2>
             <div class="collab-connected-peers">
               <div class="collab-peer-manage-card" id="collab-peer-digitalme-card">
                 <p class="collab-peer-name">其他数字之我</p>
-                <p class="muted tiny">本机其他数字之我可作为协作对象（不是你自己）。通过「新建协作」选择或导入。</p>
-                <p class="meta">状态：可在新建协作中选择</p>
+                <p class="muted tiny">本机其他数字之我可作为协作对象。通过「新建协作」选择或导入。</p>
+                <p class="meta">可在新建协作中选择</p>
               </div>
               <div class="collab-peer-manage-card" id="collab-external-cap-manage">
-                <p class="collab-peer-name">外部专业能力</p>
+                <p class="collab-peer-name">专业能力</p>
                 <p id="collab-ext-cap-name" class="meta">研究分析能力</p>
                 <p id="collab-ext-cap-desc" class="muted tiny">
-                  已安装的专业服务，可根据授权材料形成结构化项目风险摘要。这不是另一个数字之我。
+                  可根据授权材料形成结构化项目风险摘要。这不是另一个数字之我。
                 </p>
                 <p id="collab-ext-cap-suitable" class="muted tiny">
-                  适用任务：基于明确授权材料的结构化项目风险摘要（约 500–800 字）。
+                  适合：基于明确授权材料的结构化项目风险摘要（约 500–800 字）。
                 </p>
                 <p id="collab-ext-cap-status" class="meta" aria-live="polite">状态：未连接</p>
                 <div class="row">
@@ -480,8 +380,8 @@
 
             <h2 class="section-title">进行中</h2>
             <ul id="collab-list-active" class="collab-entry-list"></ul>
-            <p id="collab-empty-active" class="muted tiny">暂无进行中的协作。</p>
-            <h2 class="section-title">已完成</h2>
+            <p id="collab-empty-active" class="muted tiny">暂无进行中的协作。可点「新建协作」开始。</p>
+            <h2 class="section-title">待你处理 / 已完成</h2>
             <ul id="collab-list-done" class="collab-entry-list"></ul>
             <p id="collab-empty-done" class="muted tiny">暂无已完成的协作。</p>
             <h2 class="section-title">已撤销</h2>
@@ -492,44 +392,110 @@
           <div id="collab-page-new" hidden>
             <button type="button" id="btn-collab-new-back" class="ghost">返回列表</button>
             <h1 class="page-title">新建协作</h1>
+            <p id="collab-page-context-note" class="muted tiny" hidden></p>
             <label class="field">
-              <span>协作对象</span>
+              <span>协作方式</span>
+              <select id="collab-page-target-mode">
+                <option value="local-peer">请人帮忙（另一个数字之我）</option>
+                <option value="external-research">用专业能力</option>
+              </select>
+            </label>
+
+            <div id="collab-page-peer-flow">
+              <label class="field">
+                <span>协作对象</span>
+                <div class="row">
+                  <button type="button" id="btn-collab-page-pick-peer">选择</button>
+                  <button type="button" id="btn-collab-page-import-peer" class="ghost">导入数字之我</button>
+                </div>
+                <input type="hidden" id="collab-page-peer-dir" />
+                <div id="collab-page-peer-card" class="collab-peer-card" hidden>
+                  <p id="collab-page-peer-name" class="collab-peer-name"></p>
+                  <p id="collab-page-peer-brief" class="muted tiny" hidden></p>
+                  <p id="collab-page-peer-path" class="muted tiny collab-peer-path"></p>
+                </div>
+              </label>
+              <p id="collab-page-peer-empty" class="muted tiny" hidden>还没有可协作的数字之我。</p>
+              <label class="field">
+                <span>想让对方完成什么</span>
+                <textarea id="collab-page-subtask" rows="5" placeholder="说明希望对方完成的具体内容"></textarea>
+              </label>
+              <label class="field">
+                <span>可选补充要求</span>
+                <textarea id="collab-page-extra" rows="2" placeholder="可留空"></textarea>
+              </label>
+              <fieldset class="field collab-materials-field">
+                <legend>允许共享的材料（须明确勾选）</legend>
+                <div class="row">
+                  <button type="button" id="btn-collab-page-add-files">添加材料文件</button>
+                </div>
+                <ul id="collab-page-material-checks" class="collab-material-checks"></ul>
+                <p class="muted tiny">默认不勾选。发送前请核对；未勾选的材料不会共享。</p>
+              </fieldset>
+              <div id="collab-page-confirm" class="collab-confirm" hidden>
+                <h2 class="section-title">授权说明</h2>
+                <ul id="collab-page-confirm-points" class="collab-confirm-points"></ul>
+              </div>
               <div class="row">
-                <button type="button" id="btn-collab-page-pick-peer">选择</button>
-                <button type="button" id="btn-collab-page-import-peer" class="ghost">导入数字之我</button>
+                <button type="button" id="btn-collab-page-preview" class="ghost">查看授权范围</button>
+                <button type="button" id="btn-collab-page-issue" class="primary">发出协作</button>
+                <button type="button" id="btn-collab-page-cancel" class="ghost">取消</button>
               </div>
-              <input type="hidden" id="collab-page-peer-dir" />
-              <div id="collab-page-peer-card" class="collab-peer-card" hidden>
-                <p id="collab-page-peer-name" class="collab-peer-name"></p>
-                <p id="collab-page-peer-brief" class="muted tiny" hidden></p>
-                <p id="collab-page-peer-path" class="muted tiny collab-peer-path"></p>
+            </div>
+
+            <div id="external-cap-panel" class="collab-form" hidden>
+              <div id="external-cap-card" class="external-cap-card">
+                <p id="external-cap-name" class="collab-peer-name">研究分析能力</p>
+                <p id="external-cap-desc" class="muted tiny">已连接的专业能力，可根据授权材料形成结构化项目风险摘要。</p>
+                <p id="external-cap-suitable" class="muted tiny">适合完成：基于明确授权材料的结构化项目风险摘要（约 500–800 字）。</p>
+                <p id="external-cap-share" class="muted tiny">将共享：仅你勾选的材料与任务要求文字。</p>
+                <p id="external-cap-eta" class="muted tiny">预计可能耗时：数秒到两分钟。</p>
+                <p id="external-cap-avail" class="meta" aria-live="polite">当前是否可用：检查中…</p>
               </div>
-            </label>
-            <p id="collab-page-peer-empty" class="muted tiny" hidden>还没有可协作的数字之我。</p>
-            <label class="field">
-              <span>想让对方完成什么</span>
-              <textarea id="collab-page-subtask" rows="3" placeholder="说明希望对方完成的具体内容"></textarea>
-            </label>
-            <label class="field">
-              <span>可选补充要求</span>
-              <textarea id="collab-page-extra" rows="2" placeholder="可留空"></textarea>
-            </label>
-            <fieldset class="field collab-materials-field">
-              <legend>允许共享的材料（须明确勾选）</legend>
+              <label class="field">
+                <span>任务要求</span>
+                <textarea id="external-cap-goal" rows="4" placeholder="请根据已授权材料，形成 500–800 字结构化项目风险摘要。"></textarea>
+              </label>
+              <label class="field">
+                <span>可选补充说明</span>
+                <textarea id="external-cap-extra" rows="2" placeholder="可留空"></textarea>
+              </label>
+              <fieldset class="field collab-materials-field">
+                <legend>允许共享的材料（须明确勾选）</legend>
+                <ul id="external-cap-material-checks" class="collab-material-checks"></ul>
+                <p class="muted tiny">未勾选时只发送任务要求文字；不会发送完整数字之我资料、对话记录或其它任务。</p>
+              </fieldset>
+              <div id="external-cap-confirm" class="collab-confirm" hidden>
+                <h4 class="section-title">授权说明</h4>
+                <ul id="external-cap-confirm-points" class="collab-confirm-points"></ul>
+              </div>
               <div class="row">
-                <button type="button" id="btn-collab-page-add-files">添加材料文件</button>
+                <button type="button" id="btn-external-cap-preview" class="ghost">查看授权说明</button>
+                <button type="button" id="btn-external-cap-issue" class="primary">开始使用</button>
+                <button type="button" id="btn-external-cap-cancel" class="ghost" disabled>取消</button>
               </div>
-              <ul id="collab-page-material-checks" class="collab-material-checks"></ul>
-              <p class="muted tiny">不会自动共享完整任务、主体资料或全部上下文。</p>
-            </fieldset>
-            <div id="collab-page-confirm" class="collab-confirm" hidden>
-              <h2 class="section-title">授权说明</h2>
-              <ul id="collab-page-confirm-points" class="collab-confirm-points"></ul>
+              <p id="external-cap-status" class="meta" aria-live="polite"></p>
+              <p id="external-cap-error" class="muted tiny error" hidden></p>
+              <div class="row" id="external-cap-failure-actions" hidden>
+                <button type="button" id="btn-external-goto-collab">返回协作首页</button>
+                <button type="button" id="btn-external-retry">重试</button>
+                <button type="button" id="btn-external-use-local">改用本地能力</button>
+                <button type="button" id="btn-external-back-task" class="ghost">返回任务</button>
+              </div>
+              <div id="external-cap-result" class="external-cap-result" hidden>
+                <h4 class="section-title">返回的成果</h4>
+                <p id="external-cap-source" class="meta">来源：已连接的研究分析能力</p>
+                <p id="external-cap-returned-at" class="muted tiny"></p>
+                <p id="external-cap-check-status" class="meta">检查状态：已通过</p>
+                <pre id="external-cap-body" class="collab-return"></pre>
+                <div class="row">
+                  <button type="button" id="btn-external-accept" class="primary">采用</button>
+                  <button type="button" id="btn-external-reject">不采用</button>
+                  <button type="button" id="btn-external-regenerate" class="ghost">重新生成</button>
+                </div>
+              </div>
             </div>
-            <div class="row">
-              <button type="button" id="btn-collab-page-preview" class="ghost">查看授权范围</button>
-              <button type="button" id="btn-collab-page-issue" class="primary">发出协作</button>
-            </div>
+
             <p id="collab-page-new-error" class="muted tiny error" hidden></p>
           </div>
 
