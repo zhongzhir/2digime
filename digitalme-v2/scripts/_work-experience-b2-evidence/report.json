@@ -1,0 +1,462 @@
+{
+  "startedAt": "2026-08-05T10:46:08.782Z",
+  "checks": [
+    {
+      "name": "entered_work_landing",
+      "ok": true
+    },
+    {
+      "name": "nav_still_four",
+      "ok": true,
+      "detail": {
+        "welcomeHidden": true,
+        "shellHidden": false,
+        "workVisible": true,
+        "workActive": true,
+        "labels": [
+          "做事",
+          "对话",
+          "数字之我",
+          "协作"
+        ]
+      }
+    },
+    {
+      "name": "blank_compose_focus",
+      "ok": true,
+      "detail": {
+        "composeFocus": true,
+        "goalOpen": true,
+        "minHeight": 220,
+        "artifactHidden": true,
+        "collabHidden": true,
+        "assistLabels": [
+          "请人帮忙",
+          "用专业能力"
+        ],
+        "keepArtifact": false
+      }
+    },
+    {
+      "name": "blank_artifact_quiet",
+      "ok": true,
+      "detail": {
+        "composeFocus": true,
+        "goalOpen": true,
+        "minHeight": 220,
+        "artifactHidden": true,
+        "collabHidden": true,
+        "assistLabels": [
+          "请人帮忙",
+          "用专业能力"
+        ],
+        "keepArtifact": false
+      }
+    },
+    {
+      "name": "blank_collab_hidden_until_task",
+      "ok": true,
+      "detail": {
+        "composeFocus": true,
+        "goalOpen": true,
+        "minHeight": 220,
+        "artifactHidden": true,
+        "collabHidden": true,
+        "assistLabels": [
+          "请人帮忙",
+          "用专业能力"
+        ],
+        "keepArtifact": false
+      }
+    },
+    {
+      "name": "assist_labels_light",
+      "ok": true,
+      "detail": {
+        "composeFocus": true,
+        "goalOpen": true,
+        "minHeight": 220,
+        "artifactHidden": true,
+        "collabHidden": true,
+        "assistLabels": [
+          "请人帮忙",
+          "用专业能力"
+        ],
+        "keepArtifact": false
+      }
+    },
+    {
+      "name": "no_keep_artifact",
+      "ok": true
+    },
+    {
+      "name": "long_goal_over_1000",
+      "ok": true,
+      "detail": {
+        "len": 1009
+      }
+    },
+    {
+      "name": "materials_added",
+      "ok": true,
+      "detail": {
+        "summary": "已添加 2 项",
+        "count": 2,
+        "listMax": "180px"
+      }
+    },
+    {
+      "name": "materials_list_capped",
+      "ok": true,
+      "detail": {
+        "summary": "已添加 2 项",
+        "count": 2,
+        "listMax": "180px"
+      }
+    },
+    {
+      "name": "processing_status_user_facing",
+      "ok": true,
+      "detail": {
+        "processing": "正在处理 · 0 秒"
+      }
+    },
+    {
+      "name": "processing_layout_stable_markers",
+      "ok": true,
+      "detail": {
+        "goalReadonly": true,
+        "assistVisible": true,
+        "rail": true,
+        "bodyHasJobId": false
+      }
+    },
+    {
+      "name": "no_jobid_leak_during_run",
+      "ok": true,
+      "detail": {
+        "goalReadonly": true,
+        "assistVisible": true,
+        "rail": true,
+        "bodyHasJobId": false
+      }
+    },
+    {
+      "name": "task_created",
+      "ok": true,
+      "detail": {
+        "tasks": [
+          {
+            "taskId": "task_msfyos63c4b467763b9b",
+            "goal": "请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。\n\n补充：字数超过一千字的长目标验收。",
+            "state": "processing",
+            "userFacingLabel": "正在处理"
+          }
+        ]
+      }
+    },
+    {
+      "name": "job_created",
+      "ok": true,
+      "detail": {
+        "task": {
+          "id": "task_msfyos63c4b467763b9b",
+          "subjectId": "subj_msfyorbxc7047fe8d43b",
+          "createdAt": "2026-08-05T10:46:11.355Z",
+          "goal": "请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。\n\n补充：字数超过一千字的长目标验收。",
+          "contextRefs": [
+            {
+              "kind": "file",
+              "path": "C:\\Users\\46554\\AppData\\Local\\Temp\\dmv2-work-exp-b2-1785926769413\\note.md"
+            },
+            {
+              "kind": "folder",
+              "path": "C:\\Users\\46554\\AppData\\Local\\Temp\\dmv2-work-exp-b2-1785926769413\\folder"
+            }
+          ],
+          "requestedArtifactType": "document",
+          "capabilityId": "cap_fake_document"
+        },
+        "state": "processing",
+        "userFacingLabel": "正在处理",
+        "artifactIds": [],
+        "latestJob": {
+          "jobId": "job_msfyos6b12af079edfc2",
+          "status": "running",
+          "createdAt": "2026-08-05T10:46:11.363Z",
+          "startedAt": "2026-08-05T10:46:11.381Z",
+          "progressNote": "正在调用能力"
+        },
+        "materialSummary": {
+          "readCount": 14,
+          "skippedCount": 1,
+          "summaryLine": "已读取 14 个文件，1 个文件暂未纳入",
+          "included": [
+            {
+              "path": "C:\\Users\\46554\\AppData\\Local\\Temp\\dmv2-work-exp-b2-1785926769413\\note.md",
+              "displayName": "note.md"
+            },
+            {
+              "path": "C:\\Users\\46554\\AppData\\Local\\Temp\\dmv2-work-exp-b2-1785926769413\\folder\\a.md",
+              "displayName": "a.md"
+            },
+            {
+              "path": "C:\\Users\\46554\\AppData\\Local\\Temp\\dmv2-work-exp-b2-1785926769413\\folder\\extra-0.md",
+              "displayName": "extra-0.md"
+            },
+            {
+              "path": "C:\\Users\\46554\\AppData\\Local\\Temp\\dmv2-work-exp-b2-1785926769413\\folder\\extra-1.md",
+              "displayName": "extra-1.md"
+            },
+            {
+              "path": "C:\\Users\\46554\\AppData\\Local\\Temp\\dmv2-work-exp-b2-1785926769413\\folder\\extra-10.md",
+              "displayName": "extra-10.md"
+            },
+            {
+              "path": "C:\\Users\\46554\\AppData\\Local\\Temp\\dmv2-work-exp-b2-1785926769413\\folder\\extra-11.md",
+              "displayName": "extra-11.md"
+            },
+            {
+              "path": "C:\\Users\\46554\\AppData\\Local\\Temp\\dmv2-work-exp-b2-1785926769413\\folder\\extra-2.md",
+              "displayName": "extra-2.md"
+            },
+            {
+              "path": "C:\\Users\\46554\\AppData\\Local\\Temp\\dmv2-work-exp-b2-1785926769413\\folder\\extra-3.md",
+              "displayName": "extra-3.md"
+            },
+            {
+              "path": "C:\\Users\\46554\\AppData\\Local\\Temp\\dmv2-work-exp-b2-1785926769413\\folder\\extra-4.md",
+              "displayName": "extra-4.md"
+            },
+            {
+              "path": "C:\\Users\\46554\\AppData\\Local\\Temp\\dmv2-work-exp-b2-1785926769413\\folder\\extra-5.md",
+              "displayName": "extra-5.md"
+            },
+            {
+              "path": "C:\\Users\\46554\\AppData\\Local\\Temp\\dmv2-work-exp-b2-1785926769413\\folder\\extra-6.md",
+              "displayName": "extra-6.md"
+            },
+            {
+              "path": "C:\\Users\\46554\\AppData\\Local\\Temp\\dmv2-work-exp-b2-1785926769413\\folder\\extra-7.md",
+              "displayName": "extra-7.md"
+            },
+            {
+              "path": "C:\\Users\\46554\\AppData\\Local\\Temp\\dmv2-work-exp-b2-1785926769413\\folder\\extra-8.md",
+              "displayName": "extra-8.md"
+            },
+            {
+              "path": "C:\\Users\\46554\\AppData\\Local\\Temp\\dmv2-work-exp-b2-1785926769413\\folder\\extra-9.md",
+              "displayName": "extra-9.md"
+            }
+          ],
+          "skipped": [
+            {
+              "path": "C:\\Users\\46554\\AppData\\Local\\Temp\\dmv2-work-exp-b2-1785926769413\\folder\\skip.bin",
+              "displayName": "skip.bin",
+              "reason": "格式暂不支持"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "artifact_visible_primary",
+      "ok": true,
+      "detail": {
+        "hasArtifactClass": true,
+        "goalCollapsed": true,
+        "goalKept": true,
+        "reviseSummary": "用说明修改成果",
+        "reviseOpen": false,
+        "materialSummary": "已读取 14 个文件，1 个文件暂未纳入",
+        "decision": "尚未决定是否采用",
+        "editorLen": 1061,
+        "assist": [
+          "请人帮忙",
+          "用专业能力"
+        ]
+      }
+    },
+    {
+      "name": "goal_collapsed_but_kept",
+      "ok": true,
+      "detail": {
+        "hasArtifactClass": true,
+        "goalCollapsed": true,
+        "goalKept": true,
+        "reviseSummary": "用说明修改成果",
+        "reviseOpen": false,
+        "materialSummary": "已读取 14 个文件，1 个文件暂未纳入",
+        "decision": "尚未决定是否采用",
+        "editorLen": 1061,
+        "assist": [
+          "请人帮忙",
+          "用专业能力"
+        ]
+      }
+    },
+    {
+      "name": "revise_not_competing_open",
+      "ok": true,
+      "detail": {
+        "hasArtifactClass": true,
+        "goalCollapsed": true,
+        "goalKept": true,
+        "reviseSummary": "用说明修改成果",
+        "reviseOpen": false,
+        "materialSummary": "已读取 14 个文件，1 个文件暂未纳入",
+        "decision": "尚未决定是否采用",
+        "editorLen": 1061,
+        "assist": [
+          "请人帮忙",
+          "用专业能力"
+        ]
+      }
+    },
+    {
+      "name": "material_summary_present",
+      "ok": true,
+      "detail": {
+        "hasArtifactClass": true,
+        "goalCollapsed": true,
+        "goalKept": true,
+        "reviseSummary": "用说明修改成果",
+        "reviseOpen": false,
+        "materialSummary": "已读取 14 个文件，1 个文件暂未纳入",
+        "decision": "尚未决定是否采用",
+        "editorLen": 1061,
+        "assist": [
+          "请人帮忙",
+          "用专业能力"
+        ]
+      }
+    },
+    {
+      "name": "assist_still_light",
+      "ok": true,
+      "detail": {
+        "hasArtifactClass": true,
+        "goalCollapsed": true,
+        "goalKept": true,
+        "reviseSummary": "用说明修改成果",
+        "reviseOpen": false,
+        "materialSummary": "已读取 14 个文件，1 个文件暂未纳入",
+        "decision": "尚未决定是否采用",
+        "editorLen": 1061,
+        "assist": [
+          "请人帮忙",
+          "用专业能力"
+        ]
+      }
+    },
+    {
+      "name": "assist_opens_with_task_context",
+      "ok": true,
+      "detail": {
+        "formVisible": true,
+        "subtask": "请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写",
+        "longGoalCarried": true
+      }
+    },
+    {
+      "name": "accept_artifact",
+      "ok": true,
+      "detail": {
+        "accepted": "已采用"
+      }
+    },
+    {
+      "name": "desktop_artifact_readable",
+      "ok": true,
+      "detail": {
+        "sideOverflow": "hidden",
+        "bodyOverflow": "auto",
+        "editorHeight": 280
+      }
+    },
+    {
+      "name": "small_window_stage_switch",
+      "ok": true,
+      "detail": {
+        "stage": "artifact",
+        "tabsVisible": true,
+        "mainHidden": true,
+        "artifactShown": true,
+        "toggleTasks": true
+      }
+    },
+    {
+      "name": "small_window_tabs_or_toggle",
+      "ok": true,
+      "detail": {
+        "stage": "artifact",
+        "tabsVisible": true,
+        "mainHidden": true,
+        "artifactShown": true,
+        "toggleTasks": true
+      }
+    },
+    {
+      "name": "small_window_back_to_center",
+      "ok": true,
+      "detail": {
+        "backCenter": "center"
+      }
+    },
+    {
+      "name": "restart_keeps_goal_materials",
+      "ok": true,
+      "detail": {
+        "modeTitle": "新建任务",
+        "goalLen": 1009,
+        "goalEditable": true,
+        "mats": 2,
+        "artifactHidden": true
+      }
+    },
+    {
+      "name": "task_persists_for_restore",
+      "ok": true,
+      "detail": {
+        "tasks": [
+          {
+            "taskId": "task_msfyos63c4b467763b9b",
+            "goal": "请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。请根据材料撰写一份完整项目进展简报，覆盖背景、进展、风险、下一步。\n\n补充：字数超过一千字的长目标验收。",
+            "state": "completed",
+            "userFacingLabel": "已完成"
+          }
+        ]
+      }
+    },
+    {
+      "name": "entered_work_landing",
+      "ok": true
+    },
+    {
+      "name": "nav_still_four",
+      "ok": true,
+      "detail": {
+        "welcomeHidden": true,
+        "shellHidden": false,
+        "workVisible": true,
+        "workActive": true,
+        "labels": [
+          "做事",
+          "对话",
+          "数字之我",
+          "协作"
+        ]
+      }
+    },
+    {
+      "name": "restart_restores_task_and_artifact",
+      "ok": true,
+      "detail": {
+        "goalLen": 1009,
+        "decision": "已采用",
+        "editorLen": 1061
+      }
+    }
+  ],
+  "verdict": "passed"
+}

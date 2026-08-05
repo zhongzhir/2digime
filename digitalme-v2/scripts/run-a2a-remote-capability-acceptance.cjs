@@ -76,7 +76,7 @@ for (const re of [
   /研究分析能力（已连接的专业能力）/,
   /外部专业能力：研究分析能力/,
   /已连接的专业能力/,
-  /交给协作对象/,
+  /请人帮忙|交给协作对象/,
   /collab-target-mode/,
   /external-research/,
   /cap_a2a_research_analysis/,

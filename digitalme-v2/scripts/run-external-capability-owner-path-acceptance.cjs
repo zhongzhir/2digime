@@ -45,7 +45,7 @@ const productTs = fs.readFileSync(
 const hay = `${html}\n${appJs}\n${styles}\n${productTs}`;
 
 for (const re of [
-  /使用已连接的外部专业能力/,
+  /用专业能力|使用已连接的外部专业能力/,
   /id="btn-external-cap-open"/,
   /id="external-cap-panel"/,
   /研究分析能力/,

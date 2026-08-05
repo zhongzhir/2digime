@@ -135,9 +135,9 @@
           <p id="subject-material-empty" class="muted tiny">还没有添加资料。</p>
         </section>
 
-        <section id="panel-work" class="shell-panel" data-panel="work">
-          <div class="work-layout">
-            <aside class="panel">
+        <section id="panel-work" class="shell-panel work-compose-focus" data-panel="work">
+          <div class="work-layout" data-stage="center" data-tasks="closed">
+            <aside class="panel work-tasks" id="work-tasks">
               <div class="aside-head">
                 <h2>任务</h2>
                 <button type="button" id="btn-new-task" class="primary">新建任务</button>
@@ -146,52 +146,78 @@
               <p id="task-empty" class="muted">还没有任务。写下一件事，从这里开始。</p>
             </aside>
 
-            <main class="panel grow">
-              <h2 id="work-compose-title">新建任务</h2>
+            <main class="panel grow work-main" id="work-main">
+              <div class="work-main-head">
+                <button type="button" id="btn-work-toggle-tasks" class="ghost work-toggle-tasks">任务列表</button>
+                <h2 id="work-compose-title">新建任务</h2>
+                <div class="work-stage-tabs" id="work-stage-tabs" hidden>
+                  <button type="button" class="work-stage-tab active" data-work-stage="center">任务</button>
+                  <button type="button" class="work-stage-tab" data-work-stage="artifact">成果</button>
+                </div>
+              </div>
               <div id="model-gate" class="model-gate" hidden>
                 <p>请先连接模型，才能开始处理任务。</p>
                 <button type="button" id="btn-goto-settings" class="primary">前往设置</button>
               </div>
-              <label class="field">
-                <span>描述你要完成的工作</span>
-                <textarea
-                  id="goal"
-                  rows="5"
-                  placeholder="例如：根据材料写一份项目进展简报。"
-                ></textarea>
-              </label>
+
+              <section class="work-goal-block" aria-label="任务目标">
+                <details id="goal-details" class="goal-details" open>
+                  <summary id="goal-summary-label">你要完成的工作</summary>
+                  <label class="field goal-field">
+                    <span class="visually-hidden">任务目标</span>
+                    <textarea
+                      id="goal"
+                      class="goal-input"
+                      rows="12"
+                      placeholder="写清目标、范围与期望结果。可粘贴较长说明。"
+                    ></textarea>
+                  </label>
+                </details>
+              </section>
+
               <!-- 首轮默认文档交付；不强迫用户选择内部能力类型 -->
               <input type="hidden" id="artifact-type" value="document" />
-              <div class="materials">
-                <div class="row">
-                  <button type="button" id="btn-add-files">添加文件</button>
-                  <button type="button" id="btn-add-folder">添加文件夹</button>
-                  <button type="button" id="btn-clear-materials" class="ghost">清空材料</button>
+
+              <section class="work-materials-block materials" aria-label="材料">
+                <div class="materials-head">
+                  <h3 class="materials-title">材料</h3>
+                  <div class="row materials-actions">
+                    <button type="button" id="btn-add-files">添加文件</button>
+                    <button type="button" id="btn-add-folder">添加文件夹</button>
+                    <button type="button" id="btn-clear-materials" class="ghost">清空</button>
+                  </div>
                 </div>
-                <ul id="material-list" class="material-list"></ul>
+                <details id="material-list-wrap" class="material-list-wrap" open>
+                  <summary id="material-list-summary">尚未添加材料</summary>
+                  <ul id="material-list" class="material-list"></ul>
+                </details>
                 <details id="material-summary" class="material-summary" hidden>
                   <summary id="material-summary-line"></summary>
                   <div id="material-summary-body" class="material-summary-body"></div>
                 </details>
-              </div>
-              <div class="row">
-                <button type="button" id="btn-submit" class="primary">开始处理</button>
-                <button type="button" id="btn-cancel" disabled>取消</button>
-                <button type="button" id="btn-retry" disabled>重试</button>
-              </div>
-              <p id="job-status" class="status" aria-live="polite"></p>
-              <p id="job-actionable" class="muted"></p>
-              <div id="owner-choice-prompt" class="owner-choice" hidden>
-                <p id="owner-choice-question" class="owner-choice-q"></p>
-                <div class="row owner-choice-actions" id="owner-choice-actions"></div>
-              </div>
+              </section>
 
-              <div class="collab-box" id="collab-box" hidden>
-                <h3 class="section-title">协作与专业能力</h3>
-                <p class="muted tiny">把当前任务中的明确子任务交给本机另一个数字之我，或使用已连接的外部专业能力。二者概念不同：外部专业能力不是另一个数字之我。</p>
-                <div class="row">
-                  <button type="button" id="btn-collab-open" class="ghost">交给协作对象</button>
-                  <button type="button" id="btn-external-cap-open" class="ghost">使用已连接的外部专业能力</button>
+              <section class="work-exec-block" aria-label="执行">
+                <div class="row work-exec-actions">
+                  <button type="button" id="btn-submit" class="primary">开始处理</button>
+                  <button type="button" id="btn-cancel" disabled>取消</button>
+                  <button type="button" id="btn-retry" disabled>重试</button>
+                  <button type="button" id="btn-restart-compose" class="ghost" hidden>重新开始</button>
+                </div>
+                <div class="work-status-rail" id="work-status-rail">
+                  <p id="job-status" class="status" aria-live="polite"></p>
+                  <p id="job-actionable" class="muted"></p>
+                </div>
+                <div id="owner-choice-prompt" class="owner-choice" hidden>
+                  <p id="owner-choice-question" class="owner-choice-q"></p>
+                  <div class="row owner-choice-actions" id="owner-choice-actions"></div>
+                </div>
+              </section>
+
+              <div class="collab-box work-assist-lite" id="collab-box" hidden>
+                <div class="row work-assist-entries">
+                  <button type="button" id="btn-collab-open" class="ghost">请人帮忙</button>
+                  <button type="button" id="btn-external-cap-open" class="ghost">用专业能力</button>
                 </div>
 
                 <div id="external-cap-panel" class="collab-form" hidden>
@@ -310,7 +336,7 @@
             <section id="artifact-panel" class="panel artifact-side" hidden>
               <div class="artifact-head">
                 <h2>成果</h2>
-                <div class="row">
+                <div class="row artifact-exports">
                   <button type="button" id="btn-copy">复制</button>
                   <button type="button" id="btn-export-md">导出 Markdown</button>
                   <button type="button" id="btn-export-docx">导出 Word</button>
@@ -346,19 +372,22 @@
                   <ul id="bundle-entries" class="bundle-entries"></ul>
                 </details>
               </div>
-              <textarea id="artifact-editor" rows="18" spellcheck="true"></textarea>
-              <div class="revise-box">
-                <label class="field">
-                  <span>继续修改</span>
-                  <textarea
-                    id="revision-request"
-                    rows="3"
-                    placeholder="说明你希望如何改这篇成果。"
-                  ></textarea>
-                </label>
-                <div class="row">
-                  <button type="button" id="btn-revise" class="primary">修改成果</button>
-                </div>
+              <div class="artifact-body">
+                <textarea id="artifact-editor" rows="18" spellcheck="true" aria-label="成果正文"></textarea>
+                <details class="revise-box" id="revise-box">
+                  <summary>用说明修改成果</summary>
+                  <label class="field">
+                    <span class="visually-hidden">修改说明</span>
+                    <textarea
+                      id="revision-request"
+                      rows="3"
+                      placeholder="说明希望如何改这一版成果。"
+                    ></textarea>
+                  </label>
+                  <div class="row">
+                    <button type="button" id="btn-revise" class="primary">按说明修改</button>
+                  </div>
+                </details>
               </div>
             </section>
           </div>

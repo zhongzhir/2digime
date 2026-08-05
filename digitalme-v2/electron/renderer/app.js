@@ -125,11 +125,17 @@
     newTask: document.getElementById("btn-new-task"),
     workLayout: document.querySelector("#panel-work .work-layout"),
     workComposeTitle: document.getElementById("work-compose-title"),
+    workStageTabs: document.getElementById("work-stage-tabs"),
+    workToggleTasks: document.getElementById("btn-work-toggle-tasks"),
+    goalDetails: document.getElementById("goal-details"),
+    goalSummaryLabel: document.getElementById("goal-summary-label"),
     taskList: document.getElementById("task-list"),
     taskEmpty: document.getElementById("task-empty"),
     goal: document.getElementById("goal"),
     artifactType: document.getElementById("artifact-type"),
     materialList: document.getElementById("material-list"),
+    materialListWrap: document.getElementById("material-list-wrap"),
+    materialListSummary: document.getElementById("material-list-summary"),
     materialSummary: document.getElementById("material-summary"),
     materialSummaryLine: document.getElementById("material-summary-line"),
     materialSummaryBody: document.getElementById("material-summary-body"),
@@ -139,6 +145,7 @@
     submit: document.getElementById("btn-submit"),
     cancel: document.getElementById("btn-cancel"),
     retry: document.getElementById("btn-retry"),
+    restartCompose: document.getElementById("btn-restart-compose"),
     jobStatus: document.getElementById("job-status"),
     jobActionable: document.getElementById("job-actionable"),
     ownerChoicePrompt: document.getElementById("owner-choice-prompt"),
@@ -146,6 +153,7 @@
     ownerChoiceActions: document.getElementById("owner-choice-actions"),
     artifactPanel: document.getElementById("artifact-panel"),
     artifactEditor: document.getElementById("artifact-editor"),
+    reviseBox: document.getElementById("revise-box"),
     bundleView: document.getElementById("bundle-view"),
     bundleQuality: document.getElementById("bundle-quality"),
     bundleReport: document.getElementById("bundle-report"),
@@ -513,13 +521,112 @@
     }
   }
 
+  function basenamePath(p) {
+    const s = String(p || "");
+    const parts = s.split(/[/\\]/);
+    return parts[parts.length - 1] || s;
+  }
+
   function renderMaterials() {
     els.materialList.innerHTML = "";
+    const count = materials.length;
+    if (els.materialListSummary) {
+      els.materialListSummary.textContent =
+        count === 0 ? "尚未添加材料" : `已添加 ${count} 项`;
+    }
+    if (els.materialListWrap) {
+      els.materialListWrap.open = count > 0 && count <= 5;
+      if (count === 0) els.materialListWrap.open = true;
+      if (count > 5) els.materialListWrap.open = false;
+    }
+    const canRemove = workMode === "compose";
     for (const item of materials) {
       const li = document.createElement("li");
+      const meta = document.createElement("div");
+      meta.className = "material-meta";
       const kind = item.kind === "folder" ? "文件夹" : "文件";
-      li.innerHTML = `<strong>${kind}</strong><div class="muted">${escapeHtml(item.path)}</div>`;
+      const name = document.createElement("div");
+      name.className = "material-name";
+      name.textContent = `${kind} · ${basenamePath(item.path)}`;
+      const pathEl = document.createElement("div");
+      pathEl.className = "material-path";
+      pathEl.textContent = item.path;
+      meta.appendChild(name);
+      meta.appendChild(pathEl);
+      li.appendChild(meta);
+      if (canRemove) {
+        const rm = document.createElement("button");
+        rm.type = "button";
+        rm.className = "ghost material-remove";
+        rm.textContent = "移除";
+        rm.addEventListener("click", () => {
+          materials = materials.filter((m) => !(m.path === item.path && m.kind === item.kind));
+          renderMaterials();
+        });
+        li.appendChild(rm);
+      }
       els.materialList.appendChild(li);
+    }
+  }
+
+  function syncGoalPresentation() {
+    if (els.panelWork) {
+      els.panelWork.classList.toggle("work-compose-focus", workMode === "compose");
+    }
+    const hasArtifact = !!(els.artifactPanel && !els.artifactPanel.hidden);
+    const goalText = (els.goal && els.goal.value ? els.goal.value : "").trim();
+    if (els.goalSummaryLabel) {
+      if (workMode === "compose") {
+        els.goalSummaryLabel.textContent = "你要完成的工作";
+      } else if (goalText) {
+        const preview = goalText.length > 72 ? `${goalText.slice(0, 72)}…` : goalText;
+        els.goalSummaryLabel.textContent = hasArtifact ? `任务说明 · ${preview}` : "任务说明";
+      } else {
+        els.goalSummaryLabel.textContent = "任务说明";
+      }
+    }
+    if (els.goalDetails) {
+      if (workMode === "compose") els.goalDetails.open = true;
+      else if (hasArtifact) els.goalDetails.open = false;
+      else els.goalDetails.open = true;
+    }
+    if (els.workStageTabs) {
+      els.workStageTabs.hidden = !hasArtifact;
+    }
+    if (els.workLayout && hasArtifact && els.workLayout.dataset.stage !== "artifact") {
+      /* keep current stage when already on artifact */
+    }
+  }
+
+  function setWorkStage(stage) {
+    if (!els.workLayout) return;
+    const next = stage === "artifact" ? "artifact" : "center";
+    els.workLayout.dataset.stage = next;
+    if (els.workStageTabs) {
+      for (const btn of els.workStageTabs.querySelectorAll("[data-work-stage]")) {
+        btn.classList.toggle("active", btn.getAttribute("data-work-stage") === next);
+      }
+    }
+  }
+
+  function setWorkTasksOpen(open) {
+    if (!els.workLayout) return;
+    els.workLayout.dataset.tasks = open ? "open" : "closed";
+  }
+
+  function carryTaskContextIntoAssist(kind) {
+    const goal = (els.goal && els.goal.value ? els.goal.value : "").trim();
+    if (kind === "collab") {
+      if (els.collabSubtask && !String(els.collabSubtask.value || "").trim() && goal) {
+        els.collabSubtask.value = goal.slice(0, 1200);
+      }
+      fillWorkMaterialChecks();
+    } else if (kind === "external") {
+      if (els.externalCapGoal && !String(els.externalCapGoal.value || "").trim()) {
+        els.externalCapGoal.value =
+          goal || "请根据已授权材料，形成 500–800 字结构化项目风险摘要。";
+      }
+      fillExternalMaterialChecks();
     }
   }
 
@@ -664,6 +771,9 @@
   function setWorkLayoutArtifact(hasArtifact) {
     if (!els.workLayout) return;
     els.workLayout.classList.toggle("has-artifact", !!hasArtifact);
+    if (hasArtifact) setWorkStage(els.workLayout.dataset.stage === "artifact" ? "artifact" : "center");
+    else setWorkStage("center");
+    syncGoalPresentation();
   }
 
   function setCopyEnabled(enabled) {
@@ -793,21 +903,35 @@
     els.retry.disabled = true;
   }
 
-  function startNewTaskComposer() {
+  function startNewTaskComposer(seed) {
     workMode = "compose";
     activeTaskId = null;
     activeJobId = null;
-    materials = [];
+    const seedGoal = seed && seed.goal != null ? String(seed.goal) : "";
+    const seedMats =
+      seed && Array.isArray(seed.materials)
+        ? seed.materials
+            .filter((m) => m && (m.kind === "file" || m.kind === "folder") && m.path)
+            .map((m) => ({ kind: m.kind, path: m.path }))
+        : [];
+    materials = seedMats;
     renderMaterials();
     clearMaterialSummary();
     clearAppliedUnderstanding();
-    els.goal.value = "";
+    els.goal.value = seedGoal;
     els.goal.readOnly = false;
     if (els.workComposeTitle) els.workComposeTitle.textContent = "新建任务";
     clearJobChrome();
     clearArtifactView();
     setWorkCollabVisible(false);
+    if (els.restartCompose) els.restartCompose.hidden = true;
+    setWorkStage("center");
+    setWorkTasksOpen(false);
+    syncGoalPresentation();
     refreshTasks();
+    requestAnimationFrame(() => {
+      if (els.goal && workMode === "compose") els.goal.focus();
+    });
   }
 
   function setWorkCollabVisible(visible) {
@@ -934,6 +1058,12 @@
     els.cancel.disabled = !(job && (status === "queued" || status === "running"));
     els.retry.disabled =
       !connected || !(job && (status === "failed" || status === "cancelled"));
+    if (els.restartCompose) {
+      const showRestart =
+        workMode === "task" &&
+        (!!status && (status === "failed" || status === "cancelled" || status === "succeeded"));
+      els.restartCompose.hidden = !showRestart;
+    }
   }
 
   async function syncActiveTaskStatus(eventNote, eventStatus) {
@@ -992,6 +1122,7 @@
     const connected = await refreshConnectionFromCapabilities();
     applyJobControls(detail, connected);
     setWorkCollabVisible(true);
+    syncGoalPresentation();
 
     if (isJobActive(detail)) {
       startJobWatch(taskId);
@@ -1051,7 +1182,8 @@
       els.bundleView.removeAttribute("hidden");
       els.artifactEditor.hidden = true;
       els.artifactEditor.setAttribute("hidden", "");
-      els.revise.closest(".revise-box").hidden = true;
+      if (els.reviseBox) els.reviseBox.hidden = true;
+      else if (els.revise) els.revise.closest(".revise-box").hidden = true;
       els.bundleReport.textContent = content.text || "";
       if (els.bundleQuality) {
         if (qualityUi.bannerText) {
@@ -1081,7 +1213,13 @@
       els.bundleView.setAttribute("hidden", "");
       els.artifactEditor.hidden = false;
       els.artifactEditor.removeAttribute("hidden");
-      els.revise.closest(".revise-box").hidden = false;
+      if (els.reviseBox) {
+        els.reviseBox.hidden = false;
+        els.reviseBox.removeAttribute("hidden");
+        els.reviseBox.removeAttribute("open");
+      } else if (els.revise) {
+        els.revise.closest(".revise-box").hidden = false;
+      }
       els.exportMd.hidden = false;
       els.exportDocx.hidden = false;
       suppressSave = true;
@@ -1357,6 +1495,26 @@
     setNav("work");
     startNewTaskComposer();
   });
+  if (els.workToggleTasks) {
+    els.workToggleTasks.addEventListener("click", () => {
+      if (!els.workLayout) return;
+      setWorkTasksOpen(els.workLayout.dataset.tasks !== "open");
+    });
+  }
+  if (els.workStageTabs) {
+    els.workStageTabs.addEventListener("click", (ev) => {
+      const btn = ev.target && ev.target.closest ? ev.target.closest("[data-work-stage]") : null;
+      if (!btn) return;
+      setWorkStage(btn.getAttribute("data-work-stage"));
+    });
+  }
+  if (els.restartCompose) {
+    els.restartCompose.addEventListener("click", () => {
+      const goal = els.goal ? String(els.goal.value || "") : "";
+      const mats = materials.slice();
+      startNewTaskComposer({ goal, materials: mats });
+    });
+  }
 
   if (els.chatSend) {
     els.chatSend.addEventListener("click", async () => {
@@ -1648,18 +1806,30 @@
   });
 
   els.addFiles.addEventListener("click", async () => {
+    if (workMode !== "compose") {
+      els.jobActionable.textContent = "如需更换材料，请先点「重新开始」或「新建任务」。";
+      return;
+    }
     const files = await api.dialogs.pickOpenFiles();
     for (const p of files || []) materials.push({ kind: "file", path: p });
     renderMaterials();
   });
 
   els.addFolder.addEventListener("click", async () => {
+    if (workMode !== "compose") {
+      els.jobActionable.textContent = "如需更换材料，请先点「重新开始」或「新建任务」。";
+      return;
+    }
     const folder = await api.dialogs.pickOpenDirectory();
     if (folder) materials.push({ kind: "folder", path: folder });
     renderMaterials();
   });
 
   els.clearMaterials.addEventListener("click", () => {
+    if (workMode !== "compose") {
+      els.jobActionable.textContent = "如需清空材料，请先点「重新开始」或「新建任务」。";
+      return;
+    }
     materials = [];
     renderMaterials();
   });
@@ -1776,6 +1946,8 @@
       activeJobId = result.jobId;
       els.goal.readOnly = true;
       if (els.workComposeTitle) els.workComposeTitle.textContent = "当前任务";
+      setWorkCollabVisible(true);
+      syncGoalPresentation();
       try {
         await api.invoke("subject.captureInput", {
           text: goal,
@@ -1910,12 +2082,6 @@
   }
   if (els.rejectArtifact) {
     els.rejectArtifact.addEventListener("click", () => submitArtifactDecision("reject"));
-  }
-
-  function basenamePath(p) {
-    const s = String(p || "");
-    const parts = s.split(/[/\\]/);
-    return parts[parts.length - 1] || s;
   }
 
   function collabUserLabel(item) {
@@ -2363,7 +2529,7 @@
       }
       if (els.externalCapPanel) els.externalCapPanel.hidden = true;
       if (els.collabForm) els.collabForm.hidden = !els.collabForm.hidden;
-      fillWorkMaterialChecks();
+      carryTaskContextIntoAssist("collab");
       if (els.collabConfirm) els.collabConfirm.hidden = true;
       if (els.collabPeerEmpty) els.collabPeerEmpty.hidden = true;
       syncCollabTargetMode();
@@ -2592,14 +2758,10 @@
         els.externalCapPanel.hidden = !els.externalCapPanel.hidden;
       }
       if (els.externalCapPanel && !els.externalCapPanel.hidden) {
-        fillExternalMaterialChecks();
+        carryTaskContextIntoAssist("external");
         if (els.externalCapConfirm) els.externalCapConfirm.hidden = true;
         hideExternalCandidate();
         if (els.externalCapFailureActions) els.externalCapFailureActions.hidden = true;
-        if (els.externalCapGoal && !String(els.externalCapGoal.value || "").trim()) {
-          els.externalCapGoal.value =
-            "请根据已授权材料，形成 500–800 字结构化项目风险摘要。";
-        }
         showStatus(els.externalCapError, "");
         if (els.externalCapStatus) els.externalCapStatus.textContent = "";
         await refreshExternalCapabilityCard();

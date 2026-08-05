@@ -44,7 +44,7 @@ for (const re of [
   /对方不能做：/,
   /可以随时撤销这次授权/,
   /另一个数字之我/,
-  /交给协作对象|交给另一个数字之我/,
+      /请人帮忙|交给协作对象|交给另一个数字之我/,
   /id="btn-collab-open"/,
   /id="collab-peer-name"/,
   /id="collab-page-peer-name"/,
