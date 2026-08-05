@@ -1,0 +1,136 @@
+{
+  "stages": [
+    {
+      "stage": "baseline_without_accept",
+      "freezeSelectedIds": [],
+      "rubric": {
+        "taskRelevance": true,
+        "structureCompleteness": true,
+        "factConsistency": true,
+        "usesAcceptedExperience": false,
+        "noUnrelatedContent": true,
+        "usable": false,
+        "improvedSignal": false
+      }
+    },
+    {
+      "stage": "external_or_model_generation",
+      "jobId": "job_msfjn7xo0b68de6d492d",
+      "artifactId": "art_msfjn7xo0b68de6d492d",
+      "capabilityId": "cap_fake_document"
+    },
+    {
+      "stage": "verification",
+      "ownerDecision": "undecided",
+      "hasContent": true
+    },
+    {
+      "stage": "owner_accept_growth",
+      "eventId": "gevt_msfjn82f4952a5ca21ce",
+      "tags": [
+        "decision:accept",
+        "document",
+        "artifact:art_msfjn7xo0b68de6d492d",
+        "version:ver_msfjn7yz88fdc33c693a",
+        "capability:cap_a2a_research_analysis",
+        "capabilityVersion:a2a-remote/1",
+        "sourceKind:external_capability"
+      ],
+      "evidence": {
+        "artifactId": "art_msfjn7xo0b68de6d492d",
+        "toVersionId": "ver_msfjn7yz88fdc33c693a"
+      }
+    },
+    {
+      "stage": "related_reuse",
+      "selectedEventIds": [
+        "gevt_msfjn82f4952a5ca21ce"
+      ],
+      "excludedContainsAccept": true,
+      "selectionReason": {
+        "eventId": "gevt_msfjn82f4952a5ca21ce",
+        "reason": "goal_tag"
+      },
+      "rubric": {
+        "taskRelevance": true,
+        "structureCompleteness": true,
+        "factConsistency": true,
+        "usesAcceptedExperience": true,
+        "noUnrelatedContent": true,
+        "usable": true,
+        "improvedSignal": true
+      }
+    },
+    {
+      "stage": "ab_quality_contrast",
+      "qualityImproved": true,
+      "attribution": {
+        "conclusion": "quality_signal_observed",
+        "likelySources": [
+          "accepted_external_experience",
+          "subject_injection_via_freeze"
+        ],
+        "confidence": "medium",
+        "note": "确定性 Fake 对照可见沿用经验段落与独特标记；不能排除模板结构贡献，故非高置信因果。"
+      },
+      "rubricA": {
+        "taskRelevance": true,
+        "structureCompleteness": true,
+        "factConsistency": true,
+        "usesAcceptedExperience": false,
+        "noUnrelatedContent": true,
+        "usable": false,
+        "improvedSignal": false
+      },
+      "rubricB": {
+        "taskRelevance": true,
+        "structureCompleteness": true,
+        "factConsistency": true,
+        "usesAcceptedExperience": true,
+        "noUnrelatedContent": true,
+        "usable": true,
+        "improvedSignal": true
+      }
+    },
+    {
+      "stage": "weak_related_boundary",
+      "selected": true,
+      "reasons": [
+        {
+          "eventId": "gevt_msfjn82f4952a5ca21ce",
+          "reason": "weak_structure_only"
+        }
+      ],
+      "leakedUniqueFact": false
+    },
+    {
+      "stage": "unrelated_zero_pollution",
+      "selectedEventIds": [],
+      "excludedHasAccept": true
+    },
+    {
+      "stage": "reject_not_positive_reuse",
+      "rejectEventCount": 2
+    },
+    {
+      "stage": "version_latest_only",
+      "selected": [
+        "gevt_msfjn8uj9d40fa7606f0"
+      ],
+      "oldAcceptExcluded": true
+    },
+    {
+      "stage": "accept_then_reject_same_version",
+      "selected": []
+    }
+  ],
+  "attribution": {
+    "conclusion": "quality_signal_observed",
+    "likelySources": [
+      "accepted_external_experience",
+      "subject_injection_via_freeze"
+    ],
+    "confidence": "medium",
+    "note": "确定性 Fake 对照可见沿用经验段落与独特标记；不能排除模板结构贡献，故非高置信因果。"
+  }
+}

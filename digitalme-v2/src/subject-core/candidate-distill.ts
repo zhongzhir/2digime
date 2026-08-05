@@ -68,6 +68,11 @@ export function distillCandidatesFromText(input: {
   artifactId?: string;
   artifactVersionId?: string;
   requestedArtifactType?: string;
+  /** 可选：能力 id（验收/溯源用，不进用户面） */
+  capabilityId?: string;
+  capabilityVersion?: string;
+  /** local | external_capability */
+  sourceCapabilityKind?: 'local' | 'external_capability';
 }): GrowthEvent[] {
   const text = input.text.trim();
   if (!text) return [];
@@ -112,13 +117,19 @@ export function distillCandidatesFromText(input: {
     input.sourceKind === 'artifact_rejection'
   ) {
     const isReject = input.sourceKind === 'artifact_rejection';
-    const typeTag = (input.requestedArtifactType || 'document').toLowerCase();
     const decisionTag = isReject ? 'decision:reject' : 'decision:accept';
+    const typeTag = (input.requestedArtifactType || 'document').toLowerCase();
+    const tags = [decisionTag, typeTag];
+    if (input.artifactId) tags.push(`artifact:${input.artifactId}`);
+    if (input.artifactVersionId) tags.push(`version:${input.artifactVersionId}`);
+    if (input.capabilityId) tags.push(`capability:${input.capabilityId}`);
+    if (input.capabilityVersion) tags.push(`capabilityVersion:${input.capabilityVersion}`);
+    if (input.sourceCapabilityKind) tags.push(`sourceKind:${input.sourceCapabilityKind}`);
     push(
       'feedback_recorded',
       isReject ? '本次成果未采用' : '本次成果已采用',
       text.slice(0, 400),
-      [decisionTag, typeTag],
+      tags,
     );
     return out;
   }

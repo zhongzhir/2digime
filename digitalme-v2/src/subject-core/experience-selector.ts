@@ -33,6 +33,8 @@ export interface SubjectInjectionSelection {
 const DEFAULT_MAX_ENTRIES = 5;
 const DEFAULT_MAX_DETAIL_CHARS = 200;
 const MAX_CORE_PER_KIND = 3;
+const WEAK_STRUCTURE_DETAIL =
+  '仅沿用通用结构或表达偏好，不注入该成果中的具体事实。';
 
 /**
  * ConfirmedExperienceSelector — 确定性关键词/标签匹配(实践经验)。
@@ -40,6 +42,8 @@ const MAX_CORE_PER_KIND = 3;
  * - 边界 excludedTags 过滤;
  * - 数量与长度上限;
  * - 每条保留 eventId 可追溯。
+ * - 采用决策：同 Artifact 仅最新正向采用可注入；拒绝与旧版本不正向复用。
+ * - 弱相关：仅保留结构偏好， scrub 具体事实细节。
  */
 export function selectConfirmedExperiences(
   input: ExperienceSelectInput,
@@ -49,40 +53,44 @@ export function selectConfirmedExperiences(
   const maxDetailChars = options.maxDetailChars ?? DEFAULT_MAX_DETAIL_CHARS;
   const excluded = new Set(input.boundaries.excludedTags.map((t) => t.toLowerCase()));
   const tokens = tokenize(input.goal);
+  const artifactType = input.requestedArtifactType.toLowerCase();
 
-  const scored = input.confirmed.entries
-    .filter((entry) => {
-      const tags = entry.tags.map((t) => t.toLowerCase());
-      if (tags.some((t) => excluded.has(t))) return false;
-      // 不采用只作负面记录，不作为正向「沿用经验」注入。
-      if (tags.includes('decision:reject')) return false;
-      return true;
-    })
+  const eligible = resolvePositiveExperiences(input.confirmed.entries).filter((entry) => {
+    const tags = entry.tags.map((t) => t.toLowerCase());
+    if (tags.some((t) => excluded.has(t))) return false;
+    if (tags.includes('decision:reject')) return false;
+    return true;
+  });
+
+  const scored = eligible
     .map((entry) => {
       const hay = tokenize(`${entry.title} ${entry.detail} ${entry.tags.join(' ')}`);
-      let score = 0;
+      let keywordScore = 0;
       for (const token of tokens) {
-        if (token.length >= 2 && hay.has(token)) score += 1;
+        if (token.length >= 2 && hay.has(token)) keywordScore += 1;
       }
-      if (
-        score > 0 &&
-        entry.tags.map((t) => t.toLowerCase()).includes(input.requestedArtifactType.toLowerCase())
-      ) {
-        score += 2;
-      }
-      return { entry, score };
+      const typeBoost =
+        keywordScore > 0 && entry.tags.map((t) => t.toLowerCase()).includes(artifactType);
+      const score = keywordScore + (typeBoost ? 2 : 0);
+      // 弱相关：仅 1 个关键词重叠（类型加分不改变弱相关判定）
+      const weak = keywordScore === 1;
+      return { entry, score, keywordScore, weak };
     })
     .filter((row) => row.score > 0)
     .sort((a, b) => b.score - a.score || b.entry.occurredAt.localeCompare(a.entry.occurredAt));
 
-  const entries = scored.slice(0, maxEntries).map(({ entry }) => ({
-    eventId: entry.eventId,
-    title: entry.title,
-    detail: truncate(entry.detail, maxDetailChars),
-    tags: [...entry.tags],
-    occurredAt: entry.occurredAt,
-    kind: 'experience' as SubjectEntryKind,
-  }));
+  const entries = scored.slice(0, maxEntries).map(({ entry, weak }) => {
+    return {
+      eventId: entry.eventId,
+      title: entry.title,
+      detail: truncate(weak ? WEAK_STRUCTURE_DETAIL : entry.detail, maxDetailChars),
+      tags: weak
+        ? [...entry.tags.filter((t) => !/^decision:|^version:/.test(t)), 'reuse:weak_structure']
+        : [...entry.tags],
+      occurredAt: entry.occurredAt,
+      kind: 'experience' as SubjectEntryKind,
+    };
+  });
 
   return {
     subjectId: input.confirmed.subjectId,
@@ -204,11 +212,10 @@ export function selectSubjectInjection(
     if (!selectedExperienceIds.has(entry.eventId)) excludedEventIds.push(entry.eventId);
   }
   for (const entry of experienceView.entries) {
-    const reason: SelectionReason = entry.tags
-      .map((t) => t.toLowerCase())
-      .includes(input.requestedArtifactType.toLowerCase())
-      ? 'goal_tag'
-      : 'keyword_match';
+    const tags = entry.tags.map((t) => t.toLowerCase());
+    let reason: SelectionReason = 'keyword_match';
+    if (tags.includes('reuse:weak_structure')) reason = 'weak_structure_only';
+    else if (tags.includes(input.requestedArtifactType.toLowerCase())) reason = 'goal_tag';
     push(entry, 'experience', reason);
   }
 
@@ -281,6 +288,52 @@ export function selectSubjectInjection(
   };
 
   return { subjectContext, freeze };
+}
+
+/**
+ * 同 Artifact 的采用/拒绝决策：仅最新决策可参与正向注入；
+ * 最新为拒绝 → 该 Artifact 全部决策排除；最新为采用 → 仅该版本采用进入候选。
+ * 无决策标签的经验保持原样。
+ */
+export function resolvePositiveExperiences<
+  T extends { eventId: string; tags: string[]; occurredAt: string; detail: string; title: string },
+>(entries: readonly T[]): T[] {
+  const decisionEntries: T[] = [];
+  const others: T[] = [];
+  for (const entry of entries) {
+    const tags = entry.tags.map((t) => t.toLowerCase());
+    if (tags.includes('decision:accept') || tags.includes('decision:reject')) {
+      decisionEntries.push(entry);
+    } else {
+      others.push(entry);
+    }
+  }
+
+  const byArtifact = new Map<string, T[]>();
+  for (const entry of decisionEntries) {
+    const key =
+      tagValue(entry.tags, 'artifact:') ||
+      `anon:${entry.eventId}`;
+    const list = byArtifact.get(key) || [];
+    list.push(entry);
+    byArtifact.set(key, list);
+  }
+
+  const kept: T[] = [];
+  for (const group of byArtifact.values()) {
+    const latest = [...group].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))[0];
+    if (!latest) continue;
+    const tags = latest.tags.map((t) => t.toLowerCase());
+    if (tags.includes('decision:reject')) continue;
+    if (tags.includes('decision:accept')) kept.push(latest);
+  }
+
+  return [...others, ...kept];
+}
+
+function tagValue(tags: readonly string[], prefix: string): string | null {
+  const hit = tags.find((t) => t.toLowerCase().startsWith(prefix.toLowerCase()));
+  return hit ? hit.slice(prefix.length) : null;
 }
 
 function scoreText(tokens: Set<string>, text: string): number {

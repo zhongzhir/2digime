@@ -345,6 +345,9 @@ export class SubjectService {
     artifactId?: string;
     artifactVersionId?: string;
     requestedArtifactType?: string;
+    capabilityId?: string;
+    capabilityVersion?: string;
+    sourceCapabilityKind?: 'local' | 'external_capability';
   }): Promise<{
     candidateEventIds: string[];
     confirmationSuggestedEventIds: string[];
@@ -409,6 +412,11 @@ export class SubjectService {
       ...(input.artifactVersionId ? { artifactVersionId: input.artifactVersionId } : {}),
       ...(input.requestedArtifactType
         ? { requestedArtifactType: input.requestedArtifactType }
+        : {}),
+      ...(input.capabilityId ? { capabilityId: input.capabilityId } : {}),
+      ...(input.capabilityVersion ? { capabilityVersion: input.capabilityVersion } : {}),
+      ...(input.sourceCapabilityKind
+        ? { sourceCapabilityKind: input.sourceCapabilityKind }
         : {}),
     });
 

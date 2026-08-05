@@ -10,6 +10,7 @@ export type SelectionReason =
   | 'principle_core'
   | 'keyword_match'
   | 'goal_tag'
+  | 'weak_structure_only'
   | 'boundary_statement'
   | 'manual_none';
 

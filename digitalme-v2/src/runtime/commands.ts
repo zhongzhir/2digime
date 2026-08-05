@@ -105,6 +105,10 @@ export interface CommandMap {
       artifactVersionId?: string;
       /** 用于相关任务经验选择（如 document），非用户面文案。 */
       requestedArtifactType?: string;
+      /** 可选能力溯源（验收/冻结证据用，不进用户面）。 */
+      capabilityId?: string;
+      capabilityVersion?: string;
+      sourceCapabilityKind?: 'local' | 'external_capability';
     };
     output: {
       candidateEventIds: string[];

@@ -644,6 +644,7 @@
         artifactId: activeArtifactId,
         artifactVersionId: activeHeadVersionId,
         requestedArtifactType: "document",
+        sourceCapabilityKind: "local",
       });
       const status =
         (result && result.ownerDecision) || (kind === "accept" ? "accepted" : "rejected");
@@ -2591,6 +2592,8 @@
         artifactId: externalCapArtifactId,
         ...(versionId ? { artifactVersionId: versionId } : {}),
         requestedArtifactType: "document",
+        sourceCapabilityKind: "external_capability",
+        ...(externalCapCapabilityId ? { capabilityId: externalCapCapabilityId } : {}),
       });
       if (els.externalCapStatus) {
         els.externalCapStatus.textContent = decision === "accept" ? "已采用" : "未采用";
