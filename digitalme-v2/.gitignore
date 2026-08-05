@@ -20,3 +20,5 @@ release-staging/
 build-meta.json
 
 scripts/_mvp-p2b1-isolated-code-change-evidence/
+scripts/_experience-redesign-b6-baselines/
+scripts/_experience-redesign-b6-evidence/
