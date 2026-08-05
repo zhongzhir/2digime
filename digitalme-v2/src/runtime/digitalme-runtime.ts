@@ -246,8 +246,101 @@ export class DigitalMeRuntime {
     return artifact.storageDir;
   }
 
-  async listCapabilities(): Promise<CommandMap['capability.list']['output']> {
-    return { capabilities: this.registry.list() };
+  async listCapabilities(
+    input: CommandMap['capability.list']['input'] = {},
+  ): Promise<CommandMap['capability.list']['output']> {
+    const capabilities = this.registry.list();
+    const out: CommandMap['capability.list']['output'] = { capabilities };
+
+    const {
+      previewExternalAuthorization,
+      buildExternalCapabilityCard,
+      materialDisplayNames,
+      A2A_ID,
+    } = await (async () => {
+      const product = await import('../capability/external-capability-product');
+      return {
+        previewExternalAuthorization: product.previewExternalAuthorization,
+        buildExternalCapabilityCard: product.buildExternalCapabilityCard,
+        materialDisplayNames: product.materialDisplayNames,
+        A2A_ID: 'cap_a2a_research_analysis',
+      };
+    })();
+
+    const targetId =
+      input.previewAuthorization?.capabilityId ||
+      capabilities.find((c) => c.id === A2A_ID)?.id ||
+      capabilities.find((c) => /研究分析/.test(c.displayName))?.id;
+
+    const target = targetId ? this.registry.get(targetId) : undefined;
+
+    if (input.previewAuthorization) {
+      const preview = previewExternalAuthorization({
+        goal: input.previewAuthorization.goal,
+        allowedMaterialPaths: input.previewAuthorization.allowedMaterialPaths ?? [],
+        ...(target?.registration.displayName
+          ? { capabilityDisplayName: target.registration.displayName }
+          : { capabilityDisplayName: '研究分析能力' }),
+        ...(input.previewAuthorization.extraNote
+          ? { extraNote: input.previewAuthorization.extraNote }
+          : {}),
+      });
+      out.authorizationPreview = {
+        confirmPoints: preview.confirmPoints,
+        projection: {
+          purpose: preview.projection.purpose,
+          allowedMaterials: [...preview.projection.allowedMaterials],
+          allowRemotePersist: preview.projection.allowRemotePersist,
+          allowRedelegate: preview.projection.allowRedelegate,
+          maxRuntimeMs: preview.projection.maxRuntimeMs,
+        },
+        capabilityDisplayName: preview.capabilityDisplayName,
+      };
+    }
+
+    if (input.includeAvailability || input.previewAuthorization) {
+      let available = false;
+      let availabilityReason: string | undefined = 'unreachable';
+      if (!target) {
+        available = false;
+        availabilityReason = 'credential';
+      } else {
+        try {
+          const check = await target.checkAvailability({});
+          available = !!check.available;
+          if (!available) {
+            const detail = String(check.detail || check.reason || '');
+            availabilityReason = /credential|secret|token|凭证/i.test(detail)
+              ? 'credential'
+              : 'unreachable';
+          }
+        } catch (err) {
+          available = false;
+          const msg = err instanceof Error ? err.message : String(err);
+          availabilityReason = /credential|secret|token|凭证/i.test(msg)
+            ? 'credential'
+            : 'unreachable';
+        }
+      }
+      const mats = input.previewAuthorization?.allowedMaterialPaths ?? [];
+      out.externalCapabilityCard = buildExternalCapabilityCard({
+        capabilityId: target?.registration.id || A2A_ID,
+        available,
+        ...(target?.registration.displayName
+          ? { displayName: target.registration.displayName }
+          : {}),
+        ...(target?.registration.description
+          ? { description: target.registration.description }
+          : {}),
+        ...(target?.registration.latencyEstimate
+          ? { latencyEstimate: target.registration.latencyEstimate }
+          : {}),
+        ...(availabilityReason ? { availabilityReason } : {}),
+        selectedMaterialNames: materialDisplayNames(mats),
+      });
+    }
+
+    return out;
   }
 
   async simulateCollab(

@@ -159,22 +159,24 @@ async function mainSequence() {
     navCollab: !!document.getElementById('nav-collab'),
     help: !!document.getElementById('btn-open-help'),
     settings: !!document.getElementById('btn-open-settings'),
+    settingsInMainNav: !!document.querySelector('.main-nav #btn-open-settings'),
     labels: [...document.querySelectorAll('.main-nav .nav-item')].map((b) => b.textContent.trim()),
     newTask: !!document.getElementById('btn-new-task'),
     body: document.body.innerText,
   })`);
   check('entered_shell_without_folder_picker', shell.welcomeHidden === true && shell.shellHidden === false);
   check(
-    'four_primary_nav_entries',
-    shell.navSubject && shell.navWork && shell.navChat && shell.navCollab,
+    'five_primary_nav_entries',
+    shell.navSubject && shell.navWork && shell.navChat && shell.navCollab && shell.settings,
     shell,
   );
+  check('settings_in_primary_nav', shell.settingsInMainNav === true, shell);
   check(
-    'nav_order_chat_work_subject_collab',
-    shell.labels.join('|') === '对话|做事|数字之我|协作',
+    'nav_order_subject_chat_work_collab_settings',
+    shell.labels.join('|') === '数字之我|对话|做事|协作|设置',
     shell,
   );
-  check('aux_help_and_settings', shell.help && shell.settings);
+  check('help_aux_present', shell.help === true);
   check('new_task_button_present', shell.newTask === true);
   check(
     'no_forbidden_learning_copy',

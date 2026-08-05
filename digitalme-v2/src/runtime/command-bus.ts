@@ -115,7 +115,9 @@ export function createCommandBus(runtime: DigitalMeRuntime): CommandBus {
             input as CommandMap['artifact.revealInFolder']['input'],
           )) as CommandMap[K]['output'];
         case 'capability.list':
-          return (await runtime.listCapabilities()) as CommandMap[K]['output'];
+          return (await runtime.listCapabilities(
+            (input || {}) as CommandMap['capability.list']['input'],
+          )) as CommandMap[K]['output'];
         case 'collab.simulateInteraction':
           return (await runtime.simulateCollab(
             input as CommandMap['collab.simulateInteraction']['input'],

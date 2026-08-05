@@ -29,6 +29,19 @@
     testModel: document.getElementById("btn-test-model"),
     deleteModel: document.getElementById("btn-delete-model"),
     settingsStatus: document.getElementById("settings-status"),
+    remoteCapStatusLabel: document.getElementById("remote-cap-status-label"),
+    remoteCapBaseUrl: document.getElementById("remote-cap-base-url"),
+    btnRemoteCapTest: document.getElementById("btn-remote-cap-test"),
+    btnRemoteCapSave: document.getElementById("btn-remote-cap-save"),
+    btnRemoteCapDisable: document.getElementById("btn-remote-cap-disable"),
+    remoteCapSettingsStatus: document.getElementById("remote-cap-settings-status"),
+    collabExtCapStatus: document.getElementById("collab-ext-cap-status"),
+    collabExtCapConnectPanel: document.getElementById("collab-ext-cap-connect-panel"),
+    collabExtCapAdvanced: document.getElementById("collab-ext-cap-advanced"),
+    btnCollabExtConnect: document.getElementById("btn-collab-ext-connect"),
+    btnCollabExtAuth: document.getElementById("btn-collab-ext-auth"),
+    collabExtCapAuthPanel: document.getElementById("collab-ext-cap-auth-panel"),
+    collabExtCapAuthPoints: document.getElementById("collab-ext-cap-auth-points"),
     navChat: document.getElementById("nav-chat"),
     navSubject: document.getElementById("nav-subject"),
     navWork: document.getElementById("nav-work"),
@@ -148,6 +161,37 @@
     exportDocx: document.getElementById("btn-export-docx"),
     reveal: document.getElementById("btn-reveal"),
     collabOpen: document.getElementById("btn-collab-open"),
+    externalCapOpen: document.getElementById("btn-external-cap-open"),
+    externalCapPanel: document.getElementById("external-cap-panel"),
+    externalCapName: document.getElementById("external-cap-name"),
+    externalCapDesc: document.getElementById("external-cap-desc"),
+    externalCapSuitable: document.getElementById("external-cap-suitable"),
+    externalCapShare: document.getElementById("external-cap-share"),
+    externalCapEta: document.getElementById("external-cap-eta"),
+    externalCapAvail: document.getElementById("external-cap-avail"),
+    externalCapGoal: document.getElementById("external-cap-goal"),
+    externalCapExtra: document.getElementById("external-cap-extra"),
+    externalCapMaterialChecks: document.getElementById("external-cap-material-checks"),
+    externalCapConfirm: document.getElementById("external-cap-confirm"),
+    externalCapConfirmPoints: document.getElementById("external-cap-confirm-points"),
+    btnExternalCapPreview: document.getElementById("btn-external-cap-preview"),
+    btnExternalCapIssue: document.getElementById("btn-external-cap-issue"),
+    btnExternalCapCancel: document.getElementById("btn-external-cap-cancel"),
+    externalCapStatus: document.getElementById("external-cap-status"),
+    externalCapError: document.getElementById("external-cap-error"),
+    externalCapFailureActions: document.getElementById("external-cap-failure-actions"),
+    btnExternalGotoCollab: document.getElementById("btn-external-goto-collab"),
+    btnExternalRetry: document.getElementById("btn-external-retry"),
+    btnExternalUseLocal: document.getElementById("btn-external-use-local"),
+    btnExternalBackTask: document.getElementById("btn-external-back-task"),
+    externalCapResult: document.getElementById("external-cap-result"),
+    externalCapSource: document.getElementById("external-cap-source"),
+    externalCapReturnedAt: document.getElementById("external-cap-returned-at"),
+    externalCapCheckStatus: document.getElementById("external-cap-check-status"),
+    externalCapBody: document.getElementById("external-cap-body"),
+    btnExternalAccept: document.getElementById("btn-external-accept"),
+    btnExternalReject: document.getElementById("btn-external-reject"),
+    btnExternalRegenerate: document.getElementById("btn-external-regenerate"),
     collabForm: document.getElementById("collab-form"),
     collabTargetMode: document.getElementById("collab-target-mode"),
     collabLocalPeerBlock: document.getElementById("collab-local-peer-block"),
@@ -171,6 +215,17 @@
   /** @type {'compose'|'task'} */
   let workMode = "compose";
   let activeTaskId = null;
+  /** @type {string|null} */
+  let externalCapTaskId = null;
+  /** @type {string|null} */
+  let externalCapJobId = null;
+  /** @type {string|null} */
+  let externalCapArtifactId = null;
+  let externalCapWatchTimer = null;
+  /** @type {any[]} */
+  let externalCapMats = [];
+  /** @type {string|null} */
+  let externalCapCapabilityId = null;
   let activeJobId = null;
   let activeArtifactId = null;
   let activeHeadVersionId = null;
@@ -184,10 +239,13 @@
   /** @type {'welcome'|'shell'|'settings'|'help'} */
   let currentView = "welcome";
   let returnView = "welcome";
-  /** @type {'chat'|'subject'|'work'|'collab'} */
+  /** @type {'chat'|'subject'|'work'|'collab'|'settings'} */
   let activeNav = "work";
+  /** @type {'chat'|'subject'|'work'|'collab'} */
+  let returnNav = "work";
   let lastChatUserText = "";
   let shellStatus = null;
+  let shellBootInfo = null;
   let displayModelName = null;
   let connectionRefreshSeq = 0;
   /** @type {'document'|'bundle'} */
@@ -229,8 +287,12 @@
   }
 
   async function setNav(nav) {
+    if (nav === "settings") {
+      openSettings();
+      return;
+    }
     activeNav = nav;
-    for (const btn of [els.navChat, els.navSubject, els.navWork, els.navCollab]) {
+    for (const btn of [els.navSubject, els.navChat, els.navWork, els.navCollab, els.openSettings]) {
       if (!btn) continue;
       btn.classList.toggle("active", btn.dataset.nav === nav);
     }
@@ -249,8 +311,36 @@
 
   function openSettings() {
     returnView = currentView === "settings" ? returnView : currentView;
+    if (activeNav !== "settings") {
+      returnNav =
+        activeNav === "chat" || activeNav === "subject" || activeNav === "work" || activeNav === "collab"
+          ? activeNav
+          : "work";
+    }
+    activeNav = "settings";
+    for (const btn of [els.navSubject, els.navChat, els.navWork, els.navCollab, els.openSettings]) {
+      if (!btn) continue;
+      btn.classList.toggle("active", btn.dataset.nav === "settings");
+    }
     fillSettingsForm();
     setView("settings");
+  }
+
+  const REMOTE_CONNECT_FAIL =
+    "无法连接研究分析能力，请确认服务正在运行并检查地址。";
+
+  function userFacingRemoteError(err, fallback) {
+    const msg = (err && err.message) || String(err || "");
+    if (/Error invoking remote method|shell:|IPC|invoke/i.test(msg)) {
+      return fallback || REMOTE_CONNECT_FAIL;
+    }
+    if (!msg.trim()) return fallback || REMOTE_CONNECT_FAIL;
+    return msg;
+  }
+
+  function setRemoteCapStatusLabel(text) {
+    if (els.collabExtCapStatus) els.collabExtCapStatus.textContent = text;
+    if (els.remoteCapStatusLabel) els.remoteCapStatusLabel.textContent = text;
   }
 
   function openHelp() {
@@ -350,6 +440,12 @@
   }
 
   function rememberShellMeta(info) {
+    if (!info) return;
+    const prevRemote = shellBootInfo && shellBootInfo.remoteCapability;
+    shellBootInfo = { ...(shellBootInfo || {}), ...info };
+    if (!info.remoteCapability && prevRemote) {
+      shellBootInfo.remoteCapability = prevRemote;
+    }
     shellStatus = (info && info.status) || shellStatus;
     if (info && info.modelMeta && info.modelMeta.model) {
       displayModelName = info.modelMeta.model;
@@ -377,6 +473,27 @@
     els.modelId.value = status.model || presets[els.modelProvider.value].model || "";
     els.modelApiKey.value = "";
     showStatus(els.settingsStatus, "");
+  }
+
+  async function fillRemoteCapabilitySettings() {
+    try {
+      const st =
+        typeof api.getRemoteCapabilityStatus === "function"
+          ? await api.getRemoteCapabilityStatus()
+          : lastBootRemoteCapability() || {};
+      if (els.remoteCapBaseUrl) {
+        const next = st.baseUrl || st.resolvedBaseUrl || "";
+        if (next) els.remoteCapBaseUrl.value = next;
+      }
+      setRemoteCapStatusLabel(`状态：${st.statusLabel || "未连接"}`);
+      showStatus(els.remoteCapSettingsStatus, "");
+    } catch {
+      setRemoteCapStatusLabel("状态：未连接");
+    }
+  }
+
+  function lastBootRemoteCapability() {
+    return shellBootInfo && shellBootInfo.remoteCapability ? shellBootInfo.remoteCapability : null;
   }
 
   function applyProviderPreset() {
@@ -663,7 +780,11 @@
     if (failed) {
       els.jobActionable.textContent = userFacingFailureReason(detail, eventNote);
     } else if (cancelled) {
-      els.jobActionable.textContent = "任务已取消。可以重试。";
+      const cancelledMsg =
+        detail && detail.latestJob && detail.latestJob.actionable
+          ? String(detail.latestJob.actionable)
+          : "任务已取消。可以重试。";
+      els.jobActionable.textContent = cancelledMsg;
     } else if (detail.state === "attention") {
       els.jobActionable.textContent = "可以重试，或调整目标与材料后再试。";
     }
@@ -1037,6 +1158,7 @@
   els.navSubject.addEventListener("click", () => setNav("subject"));
   els.navWork.addEventListener("click", () => setNav("work"));
   if (els.navCollab) els.navCollab.addEventListener("click", () => setNav("collab"));
+  // 设置已在主导航；openSettings 监听器下方复用
   els.newTask.addEventListener("click", () => {
     setNav("work");
     startNewTaskComposer();
@@ -1116,7 +1238,13 @@
   els.openSettings.addEventListener("click", () => openSettings());
   if (els.openHelp) els.openHelp.addEventListener("click", () => openHelp());
   els.gotoSettings.addEventListener("click", () => openSettings());
-  els.settingsBack.addEventListener("click", () => setView(returnView || "shell"));
+  els.settingsBack.addEventListener("click", () => {
+    const target = returnView || "shell";
+    setView(target);
+    if (target === "shell") {
+      void setNav(returnNav || "work");
+    }
+  });
   if (els.helpBack) els.helpBack.addEventListener("click", () => setView(returnView || "shell"));
   els.modelProvider.addEventListener("change", () => applyProviderPreset());
   if (els.artifactType) {
@@ -1145,18 +1273,155 @@
       });
       rememberShellMeta(result || {});
       els.modelApiKey.value = "";
-      const connected = await refreshConnectionFromCapabilities();
-      showStatus(
-        els.settingsStatus,
-        connected ? "已保存并连接。" : "已保存。请确认连接信息后重试。",
-        !connected,
-      );
+      showStatus(els.settingsStatus, "已保存模型连接。");
+      await refreshConnectionFromCapabilities();
     } catch (err) {
-      showStatus(els.settingsStatus, err.message || String(err), true);
+      showStatus(els.settingsStatus, (err && err.message) || "保存失败", true);
     } finally {
       els.saveModel.disabled = false;
     }
   });
+
+  if (els.btnRemoteCapTest) {
+    els.btnRemoteCapTest.addEventListener("click", async () => {
+      const baseUrl = els.remoteCapBaseUrl ? String(els.remoteCapBaseUrl.value || "").trim() : "";
+      if (!baseUrl) {
+        showStatus(els.remoteCapSettingsStatus, "请填写服务地址", true);
+        if (els.collabExtCapConnectPanel) els.collabExtCapConnectPanel.hidden = false;
+        if (els.collabExtCapAdvanced) els.collabExtCapAdvanced.open = true;
+        return;
+      }
+      setRemoteCapStatusLabel("状态：正在检查");
+      showStatus(els.remoteCapSettingsStatus, "正在检查连接…");
+      try {
+        const result = await api.testRemoteCapability({ baseUrl });
+        if (result && result.ok) {
+          setRemoteCapStatusLabel("状态：已连接");
+          showStatus(els.remoteCapSettingsStatus, result.message || "连接正常");
+        } else {
+          setRemoteCapStatusLabel("状态：无法连接");
+          showStatus(
+            els.remoteCapSettingsStatus,
+            (result && result.message) || REMOTE_CONNECT_FAIL,
+            true,
+          );
+        }
+      } catch (err) {
+        setRemoteCapStatusLabel("状态：无法连接");
+        showStatus(els.remoteCapSettingsStatus, userFacingRemoteError(err, REMOTE_CONNECT_FAIL), true);
+      }
+    });
+  }
+
+  if (els.btnRemoteCapSave) {
+    els.btnRemoteCapSave.addEventListener("click", async () => {
+      const baseUrl = els.remoteCapBaseUrl ? String(els.remoteCapBaseUrl.value || "").trim() : "";
+      if (!baseUrl) {
+        showStatus(els.remoteCapSettingsStatus, "请填写服务地址", true);
+        return;
+      }
+      setRemoteCapStatusLabel("状态：正在检查");
+      els.btnRemoteCapSave.disabled = true;
+      showStatus(els.remoteCapSettingsStatus, "正在检查并保存…");
+      try {
+        const result = await api.saveRemoteCapability({ baseUrl });
+        if (!result || result.ok === false) {
+          setRemoteCapStatusLabel("状态：无法连接");
+          showStatus(
+            els.remoteCapSettingsStatus,
+            (result && result.message) || REMOTE_CONNECT_FAIL,
+            true,
+          );
+          return;
+        }
+        rememberShellMeta(result || {});
+        setRemoteCapStatusLabel(
+          `状态：${
+            (result.remoteCapability && result.remoteCapability.statusLabel) || "已连接"
+          }`,
+        );
+        showStatus(els.remoteCapSettingsStatus, result.message || "已连接研究分析能力。");
+        if (els.collabExtCapConnectPanel) els.collabExtCapConnectPanel.hidden = true;
+        await refreshConnectionFromCapabilities();
+        await refreshExternalCapabilityCard();
+      } catch (err) {
+        setRemoteCapStatusLabel("状态：无法连接");
+        showStatus(els.remoteCapSettingsStatus, userFacingRemoteError(err, REMOTE_CONNECT_FAIL), true);
+      } finally {
+        els.btnRemoteCapSave.disabled = false;
+      }
+    });
+  }
+
+  if (els.btnRemoteCapDisable) {
+    els.btnRemoteCapDisable.addEventListener("click", async () => {
+      els.btnRemoteCapDisable.disabled = true;
+      try {
+        const result = await api.disableRemoteCapability();
+        rememberShellMeta(result || {});
+        setRemoteCapStatusLabel("状态：未连接");
+        showStatus(els.remoteCapSettingsStatus, result.message || "已停用外部专业能力。");
+        await refreshConnectionFromCapabilities();
+        await refreshExternalCapabilityCard();
+      } catch (err) {
+        showStatus(
+          els.remoteCapSettingsStatus,
+          userFacingRemoteError(err, "停用失败，请稍后重试。"),
+          true,
+        );
+      } finally {
+        els.btnRemoteCapDisable.disabled = false;
+      }
+    });
+  }
+
+  if (els.btnCollabExtConnect) {
+    els.btnCollabExtConnect.addEventListener("click", () => {
+      if (els.collabExtCapConnectPanel) {
+        els.collabExtCapConnectPanel.hidden = false;
+      }
+      if (els.collabExtCapAdvanced) els.collabExtCapAdvanced.open = true;
+      if (els.remoteCapBaseUrl) {
+        try {
+          els.remoteCapBaseUrl.focus();
+        } catch {
+          /* ignore */
+        }
+      }
+    });
+  }
+
+  if (els.btnCollabExtAuth) {
+    els.btnCollabExtAuth.addEventListener("click", async () => {
+      if (!els.collabExtCapAuthPanel || !els.collabExtCapAuthPoints) return;
+      try {
+        const res = await api.invoke("capability.list", {
+          includeAvailability: true,
+          previewAuthorization: {
+            goal: "请根据已授权材料，形成 500–800 字结构化项目风险摘要。",
+            allowedMaterialPaths: [],
+          },
+        });
+        const points =
+          res.authorizationPreview && Array.isArray(res.authorizationPreview.confirmPoints)
+            ? res.authorizationPreview.confirmPoints
+            : [
+                "只会发送你明确勾选的材料与任务要求文字。",
+                "不会发送完整数字之我资料、对话记录或其它任务。",
+                "可随时取消；迟到成果不会加入你的成果。",
+              ];
+        els.collabExtCapAuthPoints.innerHTML = "";
+        for (const p of points) {
+          const li = document.createElement("li");
+          li.textContent = p;
+          els.collabExtCapAuthPoints.appendChild(li);
+        }
+        els.collabExtCapAuthPanel.hidden = false;
+      } catch {
+        showStatus(els.remoteCapSettingsStatus, "暂时无法显示授权边界，请稍后重试。", true);
+      }
+    });
+  }
 
   els.testModel.addEventListener("click", async () => {
     try {
@@ -1553,6 +1818,7 @@
 
   function resetCollabUi() {
     if (els.collabForm) els.collabForm.hidden = true;
+    if (els.externalCapPanel) els.externalCapPanel.hidden = true;
     if (els.collabConfirm) els.collabConfirm.hidden = true;
     if (els.collabStatus) els.collabStatus.textContent = "";
     if (els.collabReturn) {
@@ -1561,6 +1827,8 @@
     }
     if (els.collabActions) els.collabActions.hidden = true;
     showStatus(els.collabError, "");
+    hideExternalCandidate();
+    stopExternalCapWatch();
   }
 
   function showCollabActions(show) {
@@ -1606,6 +1874,7 @@
     fill(els.collabListActive, els.collabEmptyActive, buckets.active);
     fill(els.collabListDone, els.collabEmptyDone, buckets.done);
     fill(els.collabListRevoked, els.collabEmptyRevoked, buckets.revoked);
+    await fillRemoteCapabilitySettings();
   }
 
   async function syncWorkCollabFromDomain() {
@@ -1898,6 +2167,7 @@
         showStatus(els.collabError, "请先开始或选择一个任务", true);
         return;
       }
+      if (els.externalCapPanel) els.externalCapPanel.hidden = true;
       if (els.collabForm) els.collabForm.hidden = !els.collabForm.hidden;
       fillWorkMaterialChecks();
       if (els.collabConfirm) els.collabConfirm.hidden = true;
@@ -1906,6 +2176,461 @@
       showStatus(els.collabError, "");
     });
   }
+
+  function fillExternalMaterialChecks() {
+    externalCapMats = materials.map((m) => ({
+      path: m.path,
+      checked: false,
+    }));
+    renderMaterialChecks(els.externalCapMaterialChecks, externalCapMats, () => {
+      if (els.externalCapConfirm && !els.externalCapConfirm.hidden) {
+        void refreshExternalAuthPreview();
+      }
+    });
+  }
+
+  function hideExternalCandidate() {
+    if (els.externalCapResult) els.externalCapResult.hidden = true;
+    if (els.externalCapBody) els.externalCapBody.textContent = "";
+    if (els.externalCapFailureActions) els.externalCapFailureActions.hidden = true;
+  }
+
+  function stopExternalCapWatch() {
+    if (externalCapWatchTimer) {
+      clearInterval(externalCapWatchTimer);
+      externalCapWatchTimer = null;
+    }
+  }
+
+  function applyExternalCard(card) {
+    if (!card) return;
+    if (els.externalCapName) els.externalCapName.textContent = card.displayName || "研究分析能力";
+    if (els.externalCapDesc) els.externalCapDesc.textContent = card.shortDescription || "";
+    if (els.externalCapSuitable) els.externalCapSuitable.textContent = card.suitableFor || "";
+    if (els.externalCapShare) els.externalCapShare.textContent = card.shareSummary || "";
+    if (els.externalCapEta) els.externalCapEta.textContent = card.estimatedDuration || "";
+    if (els.externalCapAvail) {
+      els.externalCapAvail.textContent = `当前是否可用：${card.availabilityLabel || (card.available ? "当前可用" : "当前不可用")}`;
+    }
+  }
+
+  async function refreshExternalCapabilityCard() {
+    const mats = selectedMaterialPaths(externalCapMats);
+    const goal =
+      (els.externalCapGoal && String(els.externalCapGoal.value || "").trim()) ||
+      "请根据已授权材料，形成 500–800 字结构化项目风险摘要。";
+    try {
+      const res = await api.invoke("capability.list", {
+        includeAvailability: true,
+        previewAuthorization: {
+          goal,
+          allowedMaterialPaths: mats,
+          ...(externalCapCapabilityId ? { capabilityId: externalCapCapabilityId } : {}),
+        },
+      });
+      const list = (res && res.capabilities) || [];
+      const research = list.find(
+        (c) =>
+          c &&
+          (c.id === "cap_a2a_research_analysis" ||
+            String(c.displayName || "").includes("研究分析能力") ||
+            String(c.displayName || "").includes("研究分析")),
+      );
+      if (research) externalCapCapabilityId = research.id;
+      if (res.externalCapabilityCard) applyExternalCard(res.externalCapabilityCard);
+      else if (!research) {
+        applyExternalCard({
+          displayName: "研究分析能力",
+          shortDescription: "已连接的专业能力，可根据授权材料形成结构化项目风险摘要。",
+          suitableFor: "适合完成：基于明确授权材料的结构化项目风险摘要（约 500–800 字）。",
+          shareSummary: "将共享：仅你勾选的材料与任务要求文字。",
+          estimatedDuration: "预计可能耗时：数秒到两分钟。",
+          available: false,
+          availabilityLabel: "尚未连接可用的外部专业能力",
+        });
+      }
+      return res;
+    } catch {
+      applyExternalCard({
+        displayName: "研究分析能力",
+        shortDescription: "已连接的专业能力，可根据授权材料形成结构化项目风险摘要。",
+        suitableFor: "适合完成：基于明确授权材料的结构化项目风险摘要（约 500–800 字）。",
+        shareSummary: "将共享：仅你勾选的材料与任务要求文字。",
+        estimatedDuration: "预计可能耗时：数秒到两分钟。",
+        available: false,
+        availabilityLabel: "尚未连接可用的外部专业能力",
+      });
+      return null;
+    }
+  }
+
+  async function refreshExternalAuthPreview() {
+    const goal = els.externalCapGoal ? String(els.externalCapGoal.value || "").trim() : "";
+    const extra = els.externalCapExtra ? String(els.externalCapExtra.value || "").trim() : "";
+    const mats = selectedMaterialPaths(externalCapMats);
+    if (!goal) {
+      showStatus(els.externalCapError, "请填写任务要求", true);
+      return null;
+    }
+    const res = await api.invoke("capability.list", {
+      includeAvailability: true,
+      previewAuthorization: {
+        goal,
+        allowedMaterialPaths: mats,
+        ...(extra ? { extraNote: extra } : {}),
+        ...(externalCapCapabilityId ? { capabilityId: externalCapCapabilityId } : {}),
+      },
+    });
+    if (res.externalCapabilityCard) applyExternalCard(res.externalCapabilityCard);
+    const points =
+      res.authorizationPreview && Array.isArray(res.authorizationPreview.confirmPoints)
+        ? res.authorizationPreview.confirmPoints
+        : null;
+    if (!points) {
+      showStatus(els.externalCapError, "无法生成授权说明，请稍后重试", true);
+      return null;
+    }
+    renderConfirmPoints(els.externalCapConfirmPoints, points);
+    if (els.externalCapConfirm) els.externalCapConfirm.hidden = false;
+    showStatus(els.externalCapError, "");
+    return res;
+  }
+
+  function showExternalFailureActions(kind) {
+    if (!els.externalCapFailureActions) return;
+    els.externalCapFailureActions.hidden = false;
+    const showGoto = kind === "goto_collab" || kind === "check_connection";
+    const showRetry = kind === "retry_or_local" || showGoto;
+    if (els.btnExternalGotoCollab) els.btnExternalGotoCollab.hidden = !showGoto;
+    if (els.btnExternalRetry) els.btnExternalRetry.hidden = !showRetry;
+    if (els.btnExternalUseLocal) els.btnExternalUseLocal.hidden = kind !== "retry_or_local";
+    if (els.btnExternalBackTask) els.btnExternalBackTask.hidden = false;
+  }
+
+  async function showExternalCandidate(artifactId, returnedAt) {
+    if (!artifactId) return;
+    externalCapArtifactId = artifactId;
+    const content = await api.invoke("artifact.getContent", { artifactId });
+    const text = content && content.text ? String(content.text) : "";
+    if (els.externalCapSource) {
+      els.externalCapSource.textContent = "来源：已连接的研究分析能力";
+    }
+    if (els.externalCapReturnedAt) {
+      els.externalCapReturnedAt.textContent = returnedAt
+        ? `返回时间：${returnedAt}`
+        : "返回时间：刚刚";
+    }
+    if (els.externalCapCheckStatus) {
+      els.externalCapCheckStatus.textContent = "检查状态：已通过";
+    }
+    if (els.externalCapBody) els.externalCapBody.textContent = text;
+    if (els.externalCapResult) els.externalCapResult.hidden = false;
+  }
+
+  async function syncExternalCapStatus() {
+    if (!externalCapTaskId) return;
+    try {
+      const detail = await api.invoke("work.getTask", { taskId: externalCapTaskId });
+      const job = detail && detail.latestJob;
+      if (job) externalCapJobId = job.jobId;
+      const label = detail.userFacingLabel || "";
+      if (els.externalCapStatus) els.externalCapStatus.textContent = label;
+      if (els.btnExternalCapCancel) {
+        els.btnExternalCapCancel.disabled = !(
+          job &&
+          (job.status === "queued" || job.status === "running")
+        );
+      }
+      if (job && job.status === "failed") {
+        stopExternalCapWatch();
+        const msg = job.actionable || "研究分析能力目前无法使用，请稍后重试或改用本地能力。";
+        showStatus(els.externalCapError, msg, true);
+        if (/尚未连接/.test(msg)) showExternalFailureActions("goto_collab");
+        else if (/材料无法按当前授权/.test(msg)) showExternalFailureActions("reselect_materials");
+        else if (/完整性检查/.test(msg)) {
+          if (els.externalCapFailureActions) els.externalCapFailureActions.hidden = true;
+        } else showExternalFailureActions("retry_or_local");
+        return;
+      }
+      if (job && job.status === "cancelled") {
+        stopExternalCapWatch();
+        if (els.externalCapStatus) els.externalCapStatus.textContent = "已取消";
+        showStatus(els.externalCapError, job.actionable || "已停止本次外部处理。", false);
+        hideExternalCandidate();
+        return;
+      }
+      if (job && job.status === "succeeded" && detail.artifactIds && detail.artifactIds[0]) {
+        stopExternalCapWatch();
+        if (els.externalCapStatus) els.externalCapStatus.textContent = "已返回成果";
+        showStatus(els.externalCapError, "");
+        if (els.externalCapFailureActions) els.externalCapFailureActions.hidden = true;
+        await showExternalCandidate(detail.artifactIds[0], job.startedAt || "");
+        await refreshTasks();
+      }
+    } catch (err) {
+      stopExternalCapWatch();
+      showStatus(
+        els.externalCapError,
+        "研究分析能力目前无法使用，请稍后重试或改用本地能力。",
+        true,
+      );
+      showExternalFailureActions("retry_or_local");
+      void err;
+    }
+  }
+
+  function startExternalCapWatch() {
+    stopExternalCapWatch();
+    externalCapWatchTimer = setInterval(() => {
+      void syncExternalCapStatus();
+    }, 1000);
+    void syncExternalCapStatus();
+  }
+
+  if (els.externalCapOpen) {
+    els.externalCapOpen.addEventListener("click", async () => {
+      if (!activeTaskId) {
+        showStatus(els.collabError, "请先开始或选择一个任务", true);
+        return;
+      }
+      if (els.collabForm) els.collabForm.hidden = true;
+      if (els.externalCapPanel) {
+        els.externalCapPanel.hidden = !els.externalCapPanel.hidden;
+      }
+      if (els.externalCapPanel && !els.externalCapPanel.hidden) {
+        fillExternalMaterialChecks();
+        if (els.externalCapConfirm) els.externalCapConfirm.hidden = true;
+        hideExternalCandidate();
+        if (els.externalCapFailureActions) els.externalCapFailureActions.hidden = true;
+        if (els.externalCapGoal && !String(els.externalCapGoal.value || "").trim()) {
+          els.externalCapGoal.value =
+            "请根据已授权材料，形成 500–800 字结构化项目风险摘要。";
+        }
+        showStatus(els.externalCapError, "");
+        if (els.externalCapStatus) els.externalCapStatus.textContent = "";
+        await refreshExternalCapabilityCard();
+      }
+    });
+  }
+
+  if (els.btnExternalCapPreview) {
+    els.btnExternalCapPreview.addEventListener("click", async () => {
+      try {
+        await refreshExternalAuthPreview();
+      } catch (err) {
+        showStatus(els.externalCapError, "无法生成授权说明，请稍后重试", true);
+        void err;
+      }
+    });
+  }
+
+  if (els.btnExternalCapIssue) {
+    els.btnExternalCapIssue.addEventListener("click", async () => {
+      showStatus(els.externalCapError, "");
+      if (!activeTaskId) {
+        showStatus(els.externalCapError, "请先开始或选择一个任务", true);
+        return;
+      }
+      const goal = els.externalCapGoal ? String(els.externalCapGoal.value || "").trim() : "";
+      const extra = els.externalCapExtra ? String(els.externalCapExtra.value || "").trim() : "";
+      const mats = selectedMaterialPaths(externalCapMats);
+      if (!goal) {
+        showStatus(els.externalCapError, "请填写任务要求", true);
+        return;
+      }
+      if (els.externalCapConfirm && els.externalCapConfirm.hidden) {
+        try {
+          await refreshExternalAuthPreview();
+        } catch (err) {
+          showStatus(els.externalCapError, "无法生成授权说明，请稍后重试", true);
+          void err;
+        }
+        return;
+      }
+      try {
+        const listed = await refreshExternalCapabilityCard();
+        const list = (listed && listed.capabilities) || [];
+        const research = list.find(
+          (c) =>
+            c &&
+            (c.id === "cap_a2a_research_analysis" ||
+              String(c.displayName || "").includes("研究分析能力") ||
+              String(c.displayName || "").includes("研究分析")),
+        );
+        if (!research) {
+          showStatus(els.externalCapError, "尚未连接可用的外部专业能力。", true);
+          showExternalFailureActions("goto_collab");
+          return;
+        }
+        if (listed && listed.externalCapabilityCard && !listed.externalCapabilityCard.available) {
+          const label = listed.externalCapabilityCard.availabilityLabel || "";
+          if (/尚未连接/.test(label)) {
+            showStatus(els.externalCapError, "尚未连接可用的外部专业能力。", true);
+            showExternalFailureActions("goto_collab");
+            return;
+          }
+          showStatus(
+            els.externalCapError,
+            "研究分析能力目前无法使用，请稍后重试或改用本地能力。",
+            true,
+          );
+          showExternalFailureActions("retry_or_local");
+          return;
+        }
+        const fullGoal = extra ? `${goal}\n补充说明：${extra}` : goal;
+        const result = await api.invoke("work.submitTask", {
+          goal: fullGoal,
+          contextRefs: mats.map((p) => ({ kind: "file", path: p })),
+          requestedArtifactType: "document",
+          capabilityId: research.id,
+        });
+        externalCapTaskId = result.taskId;
+        externalCapJobId = result.jobId;
+        externalCapArtifactId = null;
+        activeTaskId = result.taskId;
+        activeJobId = result.jobId;
+        hideExternalCandidate();
+        if (els.externalCapFailureActions) els.externalCapFailureActions.hidden = true;
+        if (els.externalCapStatus) els.externalCapStatus.textContent = "准备中";
+        if (els.btnExternalCapCancel) els.btnExternalCapCancel.disabled = false;
+        showStatus(els.externalCapError, "");
+        await refreshTasks();
+        startExternalCapWatch();
+        startJobWatch(result.taskId);
+      } catch (err) {
+        const msg = err && err.message ? String(err.message) : "";
+        if (/credential|secret|尚未连接|api[_-]?key/i.test(msg)) {
+          showStatus(els.externalCapError, "尚未连接可用的外部专业能力。", true);
+          showExternalFailureActions("goto_collab");
+        } else if (/material|授权|projection/i.test(msg)) {
+          showStatus(els.externalCapError, "所选材料无法按当前授权发送，请重新选择。", true);
+          showExternalFailureActions("reselect_materials");
+        } else {
+          showStatus(
+            els.externalCapError,
+            "研究分析能力目前无法使用，请稍后重试或改用本地能力。",
+            true,
+          );
+          showExternalFailureActions("retry_or_local");
+        }
+      }
+    });
+  }
+
+  if (els.btnExternalCapCancel) {
+    els.btnExternalCapCancel.addEventListener("click", async () => {
+      if (!externalCapJobId) return;
+      try {
+        await api.invoke("work.cancelJob", { jobId: externalCapJobId });
+        if (els.externalCapStatus) els.externalCapStatus.textContent = "已取消";
+        showStatus(els.externalCapError, "已停止本次外部处理。", false);
+        hideExternalCandidate();
+        stopExternalCapWatch();
+        await refreshTasks();
+      } catch {
+        showStatus(els.externalCapError, "已停止本次外部处理。", false);
+      }
+    });
+  }
+
+  if (els.btnExternalGotoCollab) {
+    els.btnExternalGotoCollab.addEventListener("click", () => {
+      void setNav("collab");
+    });
+  }
+  if (els.btnExternalRetry) {
+    els.btnExternalRetry.addEventListener("click", async () => {
+      if (externalCapTaskId) {
+        try {
+          const res = await api.invoke("work.retryTask", { taskId: externalCapTaskId });
+          externalCapJobId = res.jobId;
+          hideExternalCandidate();
+          showStatus(els.externalCapError, "");
+          if (els.externalCapFailureActions) els.externalCapFailureActions.hidden = true;
+          startExternalCapWatch();
+        } catch {
+          if (els.btnExternalCapIssue) els.btnExternalCapIssue.click();
+        }
+      } else if (els.btnExternalCapIssue) {
+        els.btnExternalCapIssue.click();
+      }
+    });
+  }
+  if (els.btnExternalUseLocal) {
+    els.btnExternalUseLocal.addEventListener("click", () => {
+      if (els.externalCapPanel) els.externalCapPanel.hidden = true;
+      showStatus(els.externalCapError, "");
+      if (els.goal && els.externalCapGoal) {
+        const g = String(els.externalCapGoal.value || "").trim();
+        if (g && !String(els.goal.value || "").trim()) els.goal.value = g;
+      }
+      showStatus(els.jobActionable, "已切换为本地处理：请确认材料后点击「开始处理」。", false);
+    });
+  }
+  if (els.btnExternalBackTask) {
+    els.btnExternalBackTask.addEventListener("click", () => {
+      if (els.externalCapPanel) els.externalCapPanel.hidden = true;
+      showStatus(els.externalCapError, "");
+    });
+  }
+
+  async function decideExternalCandidate(decision) {
+    if (!externalCapArtifactId || !externalCapTaskId) return;
+    try {
+      const content = await api.invoke("artifact.getContent", {
+        artifactId: externalCapArtifactId,
+      });
+      const versionId = content && content.headVersionId ? content.headVersionId : undefined;
+      await api.invoke("subject.captureInput", {
+        text:
+          decision === "accept"
+            ? "采用已连接的研究分析能力返回的成果"
+            : "不采用外部专业能力返回的成果",
+        sourceKind: decision === "accept" ? "artifact_acceptance" : "artifact_rejection",
+        taskId: externalCapTaskId,
+        artifactId: externalCapArtifactId,
+        ...(versionId ? { artifactVersionId: versionId } : {}),
+        requestedArtifactType: "document",
+      });
+      if (els.externalCapStatus) {
+        els.externalCapStatus.textContent = decision === "accept" ? "已采用" : "未采用";
+      }
+      if (decision === "accept") {
+        await selectTask(externalCapTaskId);
+      } else {
+        hideExternalCandidate();
+      }
+      showStatus(els.externalCapError, "");
+      await refreshTasks();
+    } catch (err) {
+      showStatus(els.externalCapError, "操作未能完成", true);
+      void err;
+    }
+  }
+
+  if (els.btnExternalAccept) {
+    els.btnExternalAccept.addEventListener("click", () => decideExternalCandidate("accept"));
+  }
+  if (els.btnExternalReject) {
+    els.btnExternalReject.addEventListener("click", () => decideExternalCandidate("reject"));
+  }
+  if (els.btnExternalRegenerate) {
+    els.btnExternalRegenerate.addEventListener("click", async () => {
+      if (externalCapTaskId) {
+        try {
+          const res = await api.invoke("work.retryTask", { taskId: externalCapTaskId });
+          externalCapJobId = res.jobId;
+          hideExternalCandidate();
+          if (els.externalCapStatus) els.externalCapStatus.textContent = "准备中";
+          startExternalCapWatch();
+        } catch {
+          if (els.btnExternalCapIssue) els.btnExternalCapIssue.click();
+        }
+      }
+    });
+  }
+
+  // legacy collab open kept above; removed duplicate handler block marker
   async function onPickPeerWork() {
     showStatus(els.collabError, "");
     try {
@@ -1924,7 +2649,7 @@
   }
 
   if (els.btnCollabPreview) {
-    els.btnCollabPreview.addEventListener("click", () => {
+    els.btnCollabPreview.addEventListener("click", async () => {
       const mode = els.collabTargetMode ? String(els.collabTargetMode.value || "local-peer") : "local-peer";
       const peer = els.collabPeerDir ? String(els.collabPeerDir.value || "").trim() : "";
       const subtask = els.collabSubtask ? String(els.collabSubtask.value || "").trim() : "";
@@ -1935,12 +2660,25 @@
           showStatus(els.collabError, "请填写希望外部能力完成的具体内容", true);
           return;
         }
-        renderConfirmPoints(
-          els.collabConfirmPoints,
-          buildConfirmPoints("研究分析能力（已连接的专业能力）", subtask, mats, extra),
-        );
-        if (els.collabConfirm) els.collabConfirm.hidden = false;
-        showStatus(els.collabError, "");
+        try {
+          const res = await api.invoke("capability.list", {
+            previewAuthorization: {
+              goal: subtask,
+              allowedMaterialPaths: mats,
+              ...(extra ? { extraNote: extra } : {}),
+            },
+          });
+          const points =
+            res.authorizationPreview && Array.isArray(res.authorizationPreview.confirmPoints)
+              ? res.authorizationPreview.confirmPoints
+              : null;
+          if (!points) throw new Error("no preview");
+          renderConfirmPoints(els.collabConfirmPoints, points);
+          if (els.collabConfirm) els.collabConfirm.hidden = false;
+          showStatus(els.collabError, "");
+        } catch {
+          showStatus(els.collabError, "无法生成授权说明，请稍后重试", true);
+        }
         return;
       }
       if (!peer || !subtask) {
@@ -1974,15 +2712,28 @@
           return;
         }
         if (els.collabConfirm && els.collabConfirm.hidden) {
-          renderConfirmPoints(
-            els.collabConfirmPoints,
-            buildConfirmPoints("研究分析能力（已连接的专业能力）", subtask, mats, extra),
-          );
-          els.collabConfirm.hidden = false;
+          try {
+            const res = await api.invoke("capability.list", {
+              previewAuthorization: {
+                goal: subtask,
+                allowedMaterialPaths: mats,
+                ...(extra ? { extraNote: extra } : {}),
+              },
+            });
+            const points =
+              res.authorizationPreview && Array.isArray(res.authorizationPreview.confirmPoints)
+                ? res.authorizationPreview.confirmPoints
+                : null;
+            if (!points) throw new Error("no preview");
+            renderConfirmPoints(els.collabConfirmPoints, points);
+            els.collabConfirm.hidden = false;
+          } catch {
+            showStatus(els.collabError, "无法生成授权说明，请稍后重试", true);
+          }
           return;
         }
         try {
-          const caps = await api.invoke("capability.list", {});
+          const caps = await api.invoke("capability.list", { includeAvailability: true });
           const list = (caps && caps.capabilities) || [];
           const research = list.find(
             (c) =>
@@ -1992,7 +2743,7 @@
                 String(c.displayName || "").includes("研究分析")),
           );
           if (!research) {
-            showStatus(els.collabError, "当前未连接研究分析能力", true);
+            showStatus(els.collabError, "尚未连接可用的外部专业能力。", true);
             return;
           }
           const goal = extra ? `${subtask}\n补充说明：${extra}` : subtask;
@@ -2002,13 +2753,27 @@
             requestedArtifactType: "document",
             capabilityId: research.id,
           });
-          if (els.collabStatus) els.collabStatus.textContent = "外部能力处理中";
+          externalCapTaskId = result.taskId;
+          externalCapJobId = result.jobId;
+          activeTaskId = result.taskId;
           activeJobId = result.jobId;
+          if (els.collabStatus) els.collabStatus.textContent = "准备中";
           showCollabActions(false);
           showStatus(els.collabError, "");
           await refreshTasks();
+          startExternalCapWatch();
+          startJobWatch(result.taskId);
         } catch (err) {
-          showStatus(els.collabError, collabErrorMessage(err, "issue"), true);
+          const msg = err && err.message ? String(err.message) : "";
+          if (/credential|尚未连接|secret/i.test(msg)) {
+            showStatus(els.collabError, "尚未连接可用的外部专业能力。", true);
+          } else {
+            showStatus(
+              els.collabError,
+              "研究分析能力目前无法使用，请稍后重试或改用本地能力。",
+              true,
+            );
+          }
         }
         return;
       }

@@ -236,8 +236,41 @@ export interface CommandMap {
     output: { opened: boolean };
   };
   'capability.list': {
-    input: Record<string, never>;
-    output: { capabilities: CapabilityRegistration[] };
+    input: {
+      /** 可选：预览外部能力授权确认（结果来自确定性投影，非 UI 自拟）。 */
+      previewAuthorization?: {
+        goal: string;
+        allowedMaterialPaths?: string[];
+        capabilityId?: string;
+        extraNote?: string;
+      };
+      /** 可选：探测外部能力当前是否可用（不暴露协议细节）。 */
+      includeAvailability?: boolean;
+    };
+    output: {
+      capabilities: CapabilityRegistration[];
+      authorizationPreview?: {
+        confirmPoints: string[];
+        projection: {
+          purpose: string;
+          allowedMaterials: string[];
+          allowRemotePersist: boolean;
+          allowRedelegate: boolean;
+          maxRuntimeMs: number;
+        };
+        capabilityDisplayName: string;
+      };
+      externalCapabilityCard?: {
+        capabilityId: string;
+        displayName: string;
+        shortDescription: string;
+        suitableFor: string;
+        shareSummary: string;
+        estimatedDuration: string;
+        available: boolean;
+        availabilityLabel: string;
+      };
+    };
   };
   /**
    * 本机协作（升级原 simulate 占位）：

@@ -498,7 +498,7 @@ export function createControlledRemoteCapabilityAdapter(
       if (localCancelled.has(ctx.jobId) || ctx.signal.aborted) {
         throw Object.assign(new Error('late collect rejected after cancel'), {
           stage: 'capability' as const,
-          actionable: '任务已取消,不再写入成果',
+          actionable: '已停止本次外部处理。',
           code: 'late_collect_rejected',
         });
       }
@@ -593,7 +593,7 @@ export function createControlledRemoteCapabilityAdapter(
     }
     throw Object.assign(new Error('remote execution timed out'), {
       stage: 'capability' as const,
-      actionable: '远端执行超时,请重试',
+      actionable: '对方未在限定时间内完成，本次任务已停止。',
       code: 'remote_timeout',
     });
   }

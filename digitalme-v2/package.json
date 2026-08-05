@@ -16,6 +16,8 @@
     "accept:collaboration-product-entry": "node scripts/run-collaboration-product-entry-acceptance.cjs",
     "accept:remote-capability-readiness": "node scripts/run-remote-capability-readiness-acceptance.cjs",
     "accept:a2a-remote-capability": "node scripts/run-a2a-remote-capability-acceptance.cjs",
+    "accept:external-capability-owner-path": "node scripts/run-external-capability-owner-path-acceptance.cjs",
+    "start:reference-research-agent": "node scripts/start-reference-research-agent.cjs",
     "accept:p2b1": "node scripts/run-p2b1-isolated-code-change.cjs",
     "accept:subject-mvp": "node scripts/run-subject-mvp-acceptance.cjs",
     "accept:subject-ux": "node scripts/run-subject-ux-acceptance.cjs",

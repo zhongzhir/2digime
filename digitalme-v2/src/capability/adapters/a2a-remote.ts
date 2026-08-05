@@ -115,7 +115,7 @@ export function createA2ARemoteCapabilityAdapter(
   ) {
     throw Object.assign(new Error('endpoint credential must not reuse primary model secret key'), {
       stage: 'capability' as const,
-      actionable: '请为外部专业能力配置独立凭证',
+      actionable: '外部专业能力尚未连接。',
       code: 'credential_reuse_forbidden',
     });
   }
@@ -176,13 +176,13 @@ export function createA2ARemoteCapabilityAdapter(
       if (auth.allowRemotePersist) {
         throw Object.assign(new Error('remote persist is not allowed'), {
           stage: 'capability' as const,
-          actionable: '当前禁止远端持久化授权材料',
+          actionable: '所选材料无法按当前授权发送，请重新选择。',
         });
       }
       if (auth.allowRedelegate) {
         throw Object.assign(new Error('redelegate is not allowed'), {
           stage: 'capability' as const,
-          actionable: '当前禁止再委托',
+          actionable: '所选材料无法按当前授权发送，请重新选择。',
         });
       }
       return applyAuthorizationProjectionToInput(input, auth);
@@ -227,25 +227,29 @@ export function createA2ARemoteCapabilityAdapter(
           endpoint: endpoint.baseUrl,
         };
         ctx.bindRemoteExecution?.({ ...ref, lastRemoteStatus: mapA2AStateToLocal(started.status?.state) });
-        ctx.reportProgress('外部能力处理中');
+        ctx.reportProgress('正在处理');
 
         const terminal = await pollUntilTerminal(client, ref, ctx);
         if (terminal.status === 'cancelled' || localCancelled.has(ctx.jobId) || ctx.signal.aborted) {
           throw abortError();
         }
         if (terminal.status === 'failed') {
+          const isTimeout = /timed out|超时/i.test(terminal.message || '');
           throw Object.assign(new Error(terminal.message || 'external capability failed'), {
             stage: 'capability' as const,
-            actionable: '外部专业能力执行失败',
+            actionable: isTimeout
+              ? '对方未在限定时间内完成，本次任务已停止。'
+              : '研究分析能力目前无法使用，请稍后重试或改用本地能力。',
           });
         }
         if (!terminal.task) {
           throw Object.assign(new Error('external capability completed without task payload'), {
             stage: 'capability' as const,
-            actionable: '外部专业能力未返回成果',
+            actionable: '研究分析能力目前无法使用，请稍后重试或改用本地能力。',
           });
         }
 
+        ctx.reportProgress('正在检查成果');
         const output = await collectFromTask(terminal.task, ref, payload);
         outputs.set(executionId, output);
         ctx.updateRemoteExecution?.({ lastRemoteStatus: 'completed' });
@@ -333,12 +337,18 @@ export function createA2ARemoteCapabilityAdapter(
       }
     },
     async collectArtifact(ref, ctx): Promise<CapabilityOutput> {
+      if (localCancelled.has(ctx.jobId) || ctx.signal.aborted) {
+        throw abortError();
+      }
       const cached = outputs.get(ref.executionId);
       if (cached) return cached;
       const client = await getClient();
       const task = await client.getTask(buildGetTaskRequest(ref.executionId), {
         signal: ctx.signal,
       });
+      if (localCancelled.has(ctx.jobId) || ctx.signal.aborted) {
+        throw abortError();
+      }
       const output = await collectFromTask(task, ref);
       outputs.set(ref.executionId, output);
       return output;
@@ -370,7 +380,7 @@ export function createA2ARemoteCapabilityAdapter(
         const message = statusMessage(task);
         return message ? { status, task, message } : { status, task };
       }
-      ctx.reportProgress('外部能力处理中');
+      ctx.reportProgress('正在处理');
       await sleep(pollIntervalMs);
     }
     return { status: 'failed', message: 'external capability timed out' };
@@ -385,7 +395,7 @@ export function createA2ARemoteCapabilityAdapter(
     if (!extracted.text.trim()) {
       throw Object.assign(new Error('external artifact missing or empty'), {
         stage: 'capability' as const,
-        actionable: '外部成果格式无效',
+        actionable: '已收到结果，但未通过完整性检查，未加入你的成果。',
         code: 'malformed_artifact',
       });
     }
@@ -396,7 +406,7 @@ export function createA2ARemoteCapabilityAdapter(
     if (extracted.contentIntegrity?.insufficientLength) {
       throw Object.assign(new Error('model content insufficient after revision'), {
         stage: 'capability' as const,
-        actionable: '外部成果篇幅不足，未通过完整性要求',
+        actionable: '已收到结果，但未通过完整性检查，未加入你的成果。',
         code: 'length_insufficient',
       });
     }
@@ -485,7 +495,7 @@ function statusMessage(task: Task): string | undefined {
 function abortError(): Error {
   return Object.assign(new Error('aborted'), {
     stage: 'capability' as const,
-    actionable: '任务已取消',
+    actionable: '已停止本次外部处理。',
     code: 'cancelled',
   });
 }

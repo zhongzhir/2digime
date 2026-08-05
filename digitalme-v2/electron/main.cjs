@@ -52,7 +52,7 @@ function resolveAppRoot() {
   return path.resolve(__dirname, "..");
 }
 
-function buildBootInfo(model, appRoot) {
+function buildBootInfo(model, appRoot, remoteCapabilityStatus) {
   const status = model.status || {
     credentialConfigured: model.ok === true,
     needsCredentialSetup: model.ok !== true,
@@ -65,6 +65,7 @@ function buildBootInfo(model, appRoot) {
     isPackaged: app.isPackaged,
     buildMeta: loadBuildMeta(appRoot),
     status,
+    remoteCapability: remoteCapabilityStatus || null,
   };
 }
 
@@ -102,11 +103,48 @@ async function bootstrapRuntime() {
   const uxAcceptanceFake =
     !app.isPackaged && process.env.DIGITALME_V2_UX_ACCEPTANCE === "1";
 
+  // 外部专业能力：优先已保存配置；环境变量仅开发覆盖；停用则不注册。
+  const {
+    readRemoteCapabilityConfig,
+    resolveResearchBaseUrl,
+    publicRemoteCapabilityStatus,
+  } = require(path.join(__dirname, "bootstrap-remote-capability.cjs"));
+  const userDataPath = app.getPath("userData");
+  const savedRemote = readRemoteCapabilityConfig(userDataPath);
+  const resolvedRemote = resolveResearchBaseUrl(userDataPath);
+  let a2aRemoteCapability = undefined;
+  let remoteRegistered = false;
+  let remoteConnectionState = savedRemote.enabled || resolvedRemote.source === "env_override"
+    ? "unreachable"
+    : "disconnected";
+  if (resolvedRemote.enabled && resolvedRemote.baseUrl) {
+    try {
+      const {
+        buildResearchEndpointPolicy,
+        assertEndpointPolicyShape,
+      } = require(path.join(appRoot, "dist", "capability", "remote-endpoint-policy"));
+      const endpoint = buildResearchEndpointPolicy({ baseUrl: resolvedRemote.baseUrl });
+      assertEndpointPolicyShape(endpoint);
+      a2aRemoteCapability = {
+        endpoint,
+        pollIntervalMs: 200,
+      };
+      remoteRegistered = true;
+      remoteConnectionState = "connected";
+    } catch (err) {
+      console.warn("[digitalme] external capability not registered:", err && err.message);
+      remoteRegistered = false;
+      remoteConnectionState = "unreachable";
+      a2aRemoteCapability = undefined;
+    }
+  }
+
   const options = uxAcceptanceFake
     ? {
         documentCapability: "fake",
         registerOpenAiStub: false,
         codeAnalysisCapability: "needs_setup",
+        ...(a2aRemoteCapability ? { a2aRemoteCapability } : {}),
       }
     : model.documentCapability === "openai-compatible"
       ? {
@@ -115,12 +153,14 @@ async function bootstrapRuntime() {
           secrets: model.secrets,
           registerOpenAiStub: false,
           codeAnalysisCapability,
+          ...(a2aRemoteCapability ? { a2aRemoteCapability } : {}),
         }
       : {
           documentCapability: "none",
           registerOpenAiStub: false,
           ...(model.secrets ? { secrets: model.secrets } : {}),
           codeAnalysisCapability,
+          ...(a2aRemoteCapability ? { a2aRemoteCapability } : {}),
         };
 
   runtime = createDigitalMeRuntime(options);
@@ -130,7 +170,13 @@ async function bootstrapRuntime() {
       mainWindow.webContents.send("domain:event", event);
     }
   });
-  lastBootInfo = buildBootInfo(model, appRoot);
+  const remoteStatus = publicRemoteCapabilityStatus({
+    saved: savedRemote,
+    resolved: resolvedRemote,
+    registered: remoteRegistered,
+    connectionState: remoteConnectionState,
+  });
+  lastBootInfo = buildBootInfo(model, appRoot, remoteStatus);
   return lastBootInfo;
 }
 
@@ -327,6 +373,111 @@ function registerIpc() {
       modelReady: boot.modelReady,
       modelMeta: boot.modelMeta,
       status: boot.status,
+    };
+  });
+
+  ipcMain.handle("shell:getRemoteCapabilityStatus", async () => {
+    const {
+      readRemoteCapabilityConfig,
+      resolveResearchBaseUrl,
+      publicRemoteCapabilityStatus,
+    } = require(path.join(__dirname, "bootstrap-remote-capability.cjs"));
+    const userDataPath = app.getPath("userData");
+    const saved = readRemoteCapabilityConfig(userDataPath);
+    const resolved = resolveResearchBaseUrl(userDataPath);
+    const registered = !!(lastBootInfo && lastBootInfo.remoteCapability && lastBootInfo.remoteCapability.registered);
+    const connectionState =
+      (lastBootInfo && lastBootInfo.remoteCapability && lastBootInfo.remoteCapability.connectionState) ||
+      (saved.enabled ? "unreachable" : "disconnected");
+    return publicRemoteCapabilityStatus({
+      saved,
+      resolved,
+      registered,
+      connectionState,
+    });
+  });
+
+  ipcMain.handle("shell:testRemoteCapability", async (_evt, input) => {
+    const {
+      validateResearchEndpoint,
+      normalizeBaseUrl,
+      userFacingConnectError,
+    } = require(path.join(__dirname, "bootstrap-remote-capability.cjs"));
+    const baseUrl = normalizeBaseUrl((input && input.baseUrl) || "");
+    try {
+      const result = await validateResearchEndpoint(baseUrl, resolveAppRoot());
+      return {
+        ok: true,
+        message: "连接正常，可以使用研究分析能力。",
+        diagnostic: result.diagnostic
+          ? {
+              stage: "ok",
+              normalizedBaseUrl: result.diagnostic.normalizedBaseUrl,
+              agentCardUrl: result.diagnostic.agentCardUrl,
+              interfaceUrl: result.diagnostic.interfaceUrl || null,
+              jsonRpcMethod: result.diagnostic.jsonRpcMethod || null,
+              httpStatus: result.diagnostic.httpStatus || null,
+            }
+          : undefined,
+      };
+    } catch (err) {
+      console.warn("[digitalme] testRemoteCapability failed:", {
+        action: "shell:testRemoteCapability",
+        diagnostic: err && err.diagnostic,
+        message: err && err.message,
+      });
+      return {
+        ok: false,
+        message: (err && err.userMessage) || userFacingConnectError(err),
+      };
+    }
+  });
+
+  ipcMain.handle("shell:saveRemoteCapability", async (_evt, input) => {
+    const {
+      validateResearchEndpoint,
+      writeRemoteCapabilityConfig,
+      normalizeBaseUrl,
+      userFacingConnectError,
+    } = require(path.join(__dirname, "bootstrap-remote-capability.cjs"));
+    const baseUrl = normalizeBaseUrl((input && input.baseUrl) || "");
+    try {
+      await validateResearchEndpoint(baseUrl, resolveAppRoot());
+    } catch (err) {
+      const message =
+        (err && err.userMessage) ||
+        userFacingConnectError(err) ||
+        "无法连接研究分析能力，请确认服务正在运行并检查地址。";
+      console.warn("[digitalme] saveRemoteCapability failed:", {
+        action: "shell:saveRemoteCapability",
+        diagnostic: err && err.diagnostic,
+        message: err && err.message,
+        cause: err && err.cause && err.cause.message,
+      });
+      return { ok: false, message };
+    }
+    writeRemoteCapabilityConfig(app.getPath("userData"), {
+      enabled: true,
+      baseUrl,
+    });
+    const boot = await rebootstrapAndNotify();
+    return {
+      ok: true,
+      remoteCapability: boot.remoteCapability,
+      message: "已连接研究分析能力。",
+    };
+  });
+
+  ipcMain.handle("shell:disableRemoteCapability", async () => {
+    const {
+      disableRemoteCapabilityConfig,
+    } = require(path.join(__dirname, "bootstrap-remote-capability.cjs"));
+    disableRemoteCapabilityConfig(app.getPath("userData"));
+    const boot = await rebootstrapAndNotify();
+    return {
+      ok: true,
+      remoteCapability: boot.remoteCapability,
+      message: "已停用外部专业能力。",
     };
   });
 

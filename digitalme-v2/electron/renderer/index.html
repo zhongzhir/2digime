@@ -83,14 +83,14 @@
         <header class="topbar shell-topbar">
           <p class="brand-sm">Digital Me</p>
           <nav class="main-nav" aria-label="主导航">
+            <button type="button" class="nav-item" data-nav="subject" id="nav-subject">数字之我</button>
             <button type="button" class="nav-item" data-nav="chat" id="nav-chat">对话</button>
             <button type="button" class="nav-item active" data-nav="work" id="nav-work">做事</button>
-            <button type="button" class="nav-item" data-nav="subject" id="nav-subject">数字之我</button>
             <button type="button" class="nav-item" data-nav="collab" id="nav-collab">协作</button>
+            <button type="button" class="nav-item" data-nav="settings" id="btn-open-settings">设置</button>
           </nav>
           <div class="topbar-actions">
             <button type="button" id="btn-open-help" class="ghost">帮助</button>
-            <button type="button" id="btn-open-settings" class="ghost">设置</button>
           </div>
         </header>
 
@@ -177,9 +177,66 @@
               <p id="job-actionable" class="muted"></p>
 
               <div class="collab-box" id="collab-box" hidden>
-                <h3 class="section-title">协作</h3>
-                <p class="muted tiny">把当前任务中的明确子任务交给本机另一个数字之我，或已连接的外部专业能力。返回成果显示在下方，不覆盖主成果。</p>
-                <button type="button" id="btn-collab-open" class="ghost">交给协作对象</button>
+                <h3 class="section-title">协作与专业能力</h3>
+                <p class="muted tiny">把当前任务中的明确子任务交给本机另一个数字之我，或使用已连接的外部专业能力。二者概念不同：外部专业能力不是另一个数字之我。</p>
+                <div class="row">
+                  <button type="button" id="btn-collab-open" class="ghost">交给协作对象</button>
+                  <button type="button" id="btn-external-cap-open" class="ghost">使用已连接的外部专业能力</button>
+                </div>
+
+                <div id="external-cap-panel" class="collab-form" hidden>
+                  <div id="external-cap-card" class="external-cap-card">
+                    <p id="external-cap-name" class="collab-peer-name">研究分析能力</p>
+                    <p id="external-cap-desc" class="muted tiny">已连接的专业能力，可根据授权材料形成结构化项目风险摘要。</p>
+                    <p id="external-cap-suitable" class="muted tiny">适合完成：基于明确授权材料的结构化项目风险摘要（约 500–800 字）。</p>
+                    <p id="external-cap-share" class="muted tiny">将共享：仅你勾选的材料与任务要求文字。</p>
+                    <p id="external-cap-eta" class="muted tiny">预计可能耗时：数秒到两分钟。</p>
+                    <p id="external-cap-avail" class="meta" aria-live="polite">当前是否可用：检查中…</p>
+                  </div>
+                  <label class="field">
+                    <span>任务要求</span>
+                    <textarea id="external-cap-goal" rows="3" placeholder="请根据已授权材料，形成 500–800 字结构化项目风险摘要。"></textarea>
+                  </label>
+                  <label class="field">
+                    <span>可选补充说明</span>
+                    <textarea id="external-cap-extra" rows="2" placeholder="可留空"></textarea>
+                  </label>
+                  <fieldset class="field collab-materials-field">
+                    <legend>允许共享的材料（须明确勾选）</legend>
+                    <ul id="external-cap-material-checks" class="collab-material-checks"></ul>
+                    <p class="muted tiny">未勾选时只发送任务要求文字；不会发送完整数字之我资料、对话记录或其它任务。</p>
+                  </fieldset>
+                  <div id="external-cap-confirm" class="collab-confirm" hidden>
+                    <h4 class="section-title">授权说明</h4>
+                    <ul id="external-cap-confirm-points" class="collab-confirm-points"></ul>
+                  </div>
+                  <div class="row">
+                    <button type="button" id="btn-external-cap-preview" class="ghost">查看授权说明</button>
+                    <button type="button" id="btn-external-cap-issue" class="primary">开始使用</button>
+                    <button type="button" id="btn-external-cap-cancel" class="ghost" disabled>取消</button>
+                  </div>
+                  <p id="external-cap-status" class="meta" aria-live="polite"></p>
+                  <p id="external-cap-error" class="muted tiny error" hidden></p>
+                  <div class="row" id="external-cap-failure-actions" hidden>
+                    <button type="button" id="btn-external-goto-collab">前往协作</button>
+                    <button type="button" id="btn-external-retry">重试</button>
+                    <button type="button" id="btn-external-use-local">改用本地能力</button>
+                    <button type="button" id="btn-external-back-task" class="ghost">返回任务</button>
+                  </div>
+                  <div id="external-cap-result" class="external-cap-result" hidden>
+                    <h4 class="section-title">返回的成果</h4>
+                    <p id="external-cap-source" class="meta">来源：已连接的研究分析能力</p>
+                    <p id="external-cap-returned-at" class="muted tiny"></p>
+                    <p id="external-cap-check-status" class="meta">检查状态：已通过</p>
+                    <pre id="external-cap-body" class="collab-return"></pre>
+                    <div class="row">
+                      <button type="button" id="btn-external-accept" class="primary">采用</button>
+                      <button type="button" id="btn-external-reject">不采用</button>
+                      <button type="button" id="btn-external-regenerate" class="ghost">重新生成</button>
+                    </div>
+                  </div>
+                </div>
+
                 <div id="collab-form" class="collab-form" hidden>
                   <label class="field">
                     <span>交给谁</span>
@@ -302,7 +359,57 @@
               <h1 class="page-title">协作</h1>
               <button type="button" id="btn-collab-page-new" class="primary">新建协作</button>
             </div>
-            <p class="muted tiny">把明确的子任务交给本机另一个数字之我，并随时查看与撤销授权。</p>
+            <p class="muted tiny">管理协作关系与活动：连接其他数字之我或外部专业能力，查看进行中与已完成的协作。当前你的数字之我本身在「数字之我」中管理。</p>
+
+            <h2 class="section-title">协作对象</h2>
+            <div class="collab-connected-peers">
+              <div class="collab-peer-manage-card" id="collab-peer-digitalme-card">
+                <p class="collab-peer-name">其他数字之我</p>
+                <p class="muted tiny">本机其他数字之我可作为协作对象（不是你自己）。通过「新建协作」选择或导入。</p>
+                <p class="meta">状态：可在新建协作中选择</p>
+              </div>
+              <div class="collab-peer-manage-card" id="collab-external-cap-manage">
+                <p class="collab-peer-name">外部专业能力</p>
+                <p id="collab-ext-cap-name" class="meta">研究分析能力</p>
+                <p id="collab-ext-cap-desc" class="muted tiny">
+                  已安装的专业服务，可根据授权材料形成结构化项目风险摘要。这不是另一个数字之我。
+                </p>
+                <p id="collab-ext-cap-suitable" class="muted tiny">
+                  适用任务：基于明确授权材料的结构化项目风险摘要（约 500–800 字）。
+                </p>
+                <p id="collab-ext-cap-status" class="meta" aria-live="polite">状态：未连接</p>
+                <div class="row">
+                  <button type="button" id="btn-collab-ext-connect" class="primary">连接</button>
+                  <button type="button" id="btn-remote-cap-test">检查连接</button>
+                  <button type="button" id="btn-remote-cap-disable" class="ghost">停用</button>
+                  <button type="button" id="btn-collab-ext-auth" class="ghost">查看授权边界</button>
+                </div>
+                <div id="collab-ext-cap-connect-panel" class="collab-ext-connect-panel" hidden>
+                  <details id="collab-ext-cap-advanced">
+                    <summary>连接外部专业能力（高级）</summary>
+                    <label class="field">
+                      <span>服务地址</span>
+                      <input
+                        id="remote-cap-base-url"
+                        type="text"
+                        placeholder="例如 http://127.0.0.1:43111"
+                        autocomplete="off"
+                      />
+                    </label>
+                    <div class="row">
+                      <button type="button" id="btn-remote-cap-save" class="primary">保存并连接</button>
+                    </div>
+                  </details>
+                </div>
+                <div id="collab-ext-cap-auth-panel" class="collab-confirm" hidden>
+                  <h3 class="section-title">授权边界</h3>
+                  <ul id="collab-ext-cap-auth-points" class="collab-confirm-points"></ul>
+                </div>
+                <p id="remote-cap-status-label" class="meta" hidden>状态：未连接</p>
+                <p id="remote-cap-settings-status" class="status" aria-live="polite"></p>
+              </div>
+            </div>
+
             <h2 class="section-title">进行中</h2>
             <ul id="collab-list-active" class="collab-entry-list"></ul>
             <p id="collab-empty-active" class="muted tiny">暂无进行中的协作。</p>
@@ -390,11 +497,11 @@
           <h1>帮助</h1>
           <p>用对话澄清想法，用做事完成可带走的成果，在数字之我中查看与调整已确认的内容。</p>
           <ul class="help-list">
-            <li><strong>对话</strong>：轻量交流，不会自动生成成果；需要时可转为任务。</li>
-            <li><strong>做事</strong>：描述目标、添加材料、开始处理；可修改与导出成果。</li>
-            <li><strong>数字之我</strong>：补充说明、添加或移除资料、调整已确认内容。</li>
-            <li><strong>协作</strong>：把明确子任务交给本机另一个数字之我，查看返回成果并随时撤销授权。</li>
-            <li><strong>设置</strong>：连接模型服务。未连接时，做事会提示先完成连接。</li>
+            <li><strong>数字之我</strong>：主体资料、目标与边界、已确认内容与个人资料管理。</li>
+            <li><strong>对话</strong>：与当前数字之我的轻量交流，不会自动生成成果；需要时可转为任务。</li>
+            <li><strong>做事</strong>：描述目标、添加材料、开始处理；可修改与导出成果；可从任务调用已连接的对方或外部能力。</li>
+            <li><strong>协作</strong>：管理协作对象与协作活动（其他数字之我、外部专业能力、进行中/已完成/已撤销）。</li>
+            <li><strong>设置</strong>：模型服务、凭证与应用级运行参数。外部专业能力连接在「协作」中管理。</li>
           </ul>
         </div>
       </section>

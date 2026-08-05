@@ -68,6 +68,55 @@ body {
   font-size: 15px;
 }
 
+.collab-connected-peers {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 20px;
+}
+
+.collab-peer-manage-card {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(15, 106, 90, 0.03);
+}
+
+.collab-ext-connect-panel {
+  margin-top: 10px;
+}
+
+.collab-ext-connect-panel details {
+  margin-top: 4px;
+}
+
+.collab-ext-connect-panel summary {
+  cursor: pointer;
+  color: var(--muted, #5a6a72);
+  font-size: 0.92rem;
+}
+
+.external-capability-settings {
+  margin-top: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(15, 106, 90, 0.03);
+}
+
+.external-cap-card {
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent, #0f6a5a);
+  background: rgba(15, 106, 90, 0.04);
+  border-radius: 0 8px 8px 0;
+}
+
+.external-cap-result {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+
 .collab-form {
   margin-top: 10px;
 }

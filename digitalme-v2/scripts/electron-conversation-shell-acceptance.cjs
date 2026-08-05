@@ -188,13 +188,20 @@ async function mainSequence() {
     work: !!document.getElementById('nav-work'),
     subject: !!document.getElementById('nav-subject'),
     collab: !!document.getElementById('nav-collab'),
+    settings: !!document.getElementById('btn-open-settings'),
+    settingsInMainNav: !!document.querySelector('.main-nav #btn-open-settings'),
     help: !!document.getElementById('btn-open-help'),
     labels: [...document.querySelectorAll('.main-nav .nav-item')].map((b) => b.textContent.trim()),
   })`);
-  check('four_primary_nav_entries', nav.chat && nav.work && nav.subject && nav.collab, nav);
   check(
-    'nav_order_chat_work_subject_collab',
-    nav.labels.join('|') === '对话|做事|数字之我|协作',
+    'five_primary_nav_entries',
+    nav.chat && nav.work && nav.subject && nav.collab && nav.settings,
+    nav,
+  );
+  check('settings_in_primary_nav', nav.settingsInMainNav === true, nav);
+  check(
+    'nav_order_subject_chat_work_collab_settings',
+    nav.labels.join('|') === '数字之我|对话|做事|协作|设置',
     nav,
   );
   check('help_aux_present', nav.help === true);

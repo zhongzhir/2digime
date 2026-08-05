@@ -277,10 +277,22 @@ export class WorkRuntime {
     const last = latestJob(jobs);
     const artifacts = await this.opts.artifactCommitter.listByTask(task.id);
     const revising = !!(last && last.revisionRequest && (last.status === 'queued' || last.status === 'running'));
+    const { isExternalResearchCapabilityId, mapExternalCapabilityFailure } = await import(
+      '../capability/external-capability-product'
+    );
+    const externalCapability = isExternalResearchCapabilityId(
+      last?.capabilityId || task.capabilityId,
+    );
+    const hasArtifact = artifacts.length > 0;
+    let userFacingLabel = userFacingLabelFromLatestJob(jobs, {
+      revising,
+      externalCapability,
+      hasArtifact,
+    });
     const output: GetTaskOutput = {
       task,
       state,
-      userFacingLabel: userFacingLabelFromLatestJob(jobs, { revising }),
+      userFacingLabel,
       artifactIds: artifacts.map((a) => a.id),
     };
     if (last) {
@@ -298,8 +310,17 @@ export class WorkRuntime {
         latestJobOut.progressNote = last.progress.note;
       }
       if (last.status === 'failed' && last.failure?.actionable) {
-        latestJobOut.actionable = last.failure.actionable;
-        latestJobOut.progressNote = last.failure.actionable;
+        const mapped = externalCapability
+          ? mapExternalCapabilityFailure({
+              actionable: last.failure.actionable,
+              message: last.failure.message,
+            })
+          : null;
+        latestJobOut.actionable = mapped?.message || last.failure.actionable;
+        latestJobOut.progressNote = latestJobOut.actionable;
+      }
+      if (last.status === 'cancelled' && externalCapability) {
+        latestJobOut.actionable = mapExternalCapabilityFailure({ cancelled: true }).message;
       }
       output.latestJob = latestJobOut;
     }
@@ -307,6 +328,9 @@ export class WorkRuntime {
   }
 
   async listTasks(input: { limit?: number } = {}): Promise<CommandMap['work.listTasks']['output']> {
+    const { isExternalResearchCapabilityId } = await import(
+      '../capability/external-capability-product'
+    );
     const tasks = await this.opts.taskService.list(input.limit);
     const result = [];
     for (const task of tasks) {
@@ -316,11 +340,19 @@ export class WorkRuntime {
         last?.revisionRequest &&
         (last.status === 'queued' || last.status === 'running')
       );
+      const artifacts = await this.opts.artifactCommitter.listByTask(task.id);
+      const externalCapability = isExternalResearchCapabilityId(
+        last?.capabilityId || task.capabilityId,
+      );
       result.push({
         taskId: task.id,
         goal: task.goal,
         state: deriveTaskState(jobs),
-        userFacingLabel: userFacingLabelFromLatestJob(jobs, { revising }),
+        userFacingLabel: userFacingLabelFromLatestJob(jobs, {
+          revising,
+          externalCapability,
+          hasArtifact: artifacts.length > 0,
+        }),
       });
     }
     return { tasks: result };
@@ -842,7 +874,8 @@ export class WorkRuntime {
               new Error(verification.issues.map((i) => i.message).join('; ')),
               {
                 stage: 'capability' as const,
-                actionable: '远端成果未通过验证,未写入正式成果',
+                actionable: '已收到结果，但未通过完整性检查，未加入你的成果。',
+                code: 'verification_failed',
               },
             );
           }

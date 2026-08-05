@@ -62,6 +62,10 @@ contextBridge.exposeInMainWorld("digitalMe", {
   saveModelCredential: (input) => ipcRenderer.invoke("shell:saveModelCredential", input),
   testModelConnection: (input) => ipcRenderer.invoke("shell:testModelConnection", input),
   deleteModelCredential: (input) => ipcRenderer.invoke("shell:deleteModelCredential", input),
+  getRemoteCapabilityStatus: () => ipcRenderer.invoke("shell:getRemoteCapabilityStatus"),
+  testRemoteCapability: (input) => ipcRenderer.invoke("shell:testRemoteCapability", input),
+  saveRemoteCapability: (input) => ipcRenderer.invoke("shell:saveRemoteCapability", input),
+  disableRemoteCapability: () => ipcRenderer.invoke("shell:disableRemoteCapability"),
   revealPath: (targetPath) => ipcRenderer.invoke("shell:revealPath", targetPath),
   conversation: {
     list: () => ipcRenderer.invoke("shell:conversationList"),

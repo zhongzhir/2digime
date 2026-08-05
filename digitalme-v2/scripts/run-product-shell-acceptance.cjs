@@ -83,11 +83,41 @@ for (const re of required) {
 ok('required shell markers present');
 
 const htmlOnly = fs.readFileSync(path.join(appRoot, 'electron/renderer/index.html'), 'utf8');
+{
+  const navMatch = htmlOnly.match(/class="main-nav"[^>]*>([\s\S]*?)<\/nav>/);
+  if (!navMatch) fail('main-nav missing');
+  const labels = [...navMatch[1].matchAll(/>([^<]+)<\/button>/g)].map((m) => m[1].trim());
+  const expected = ['数字之我', '对话', '做事', '协作', '设置'];
+  if (labels.join('|') !== expected.join('|')) {
+    fail(`primary nav order must be ${expected.join(' / ')}; got ${labels.join(' / ')}`);
+  }
+  if (!/class="main-nav"[\s\S]*id="btn-open-settings"/.test(htmlOnly)) {
+    fail('设置 must be a primary nav item inside main-nav');
+  }
+}
+ok('primary nav frozen as 数字之我 / 对话 / 做事 / 协作 / 设置');
+
 if (!/id="nav-collab"/.test(htmlOnly) || !/id="panel-collab"/.test(htmlOnly)) {
   fail('collaboration primary nav/panel missing');
 }
-if (!/新建协作/.test(htmlOnly) || !/进行中/.test(htmlOnly) || !/已完成/.test(htmlOnly) || !/已撤销/.test(htmlOnly)) {
+if (
+  !/新建协作/.test(htmlOnly) ||
+  !/协作对象/.test(htmlOnly) ||
+  !/其他数字之我/.test(htmlOnly) ||
+  !/进行中/.test(htmlOnly) ||
+  !/已完成/.test(htmlOnly) ||
+  !/已撤销/.test(htmlOnly)
+) {
   fail('collaboration home sections incomplete');
+}
+if (/<h2[^>]*>已连接的协作对象<\/h2>/.test(htmlOnly)) {
+  fail('collab home still uses superseded「已连接的协作对象」section title');
+}
+{
+  const settingsBlock = htmlOnly.slice(htmlOnly.indexOf('view-settings'), htmlOnly.indexOf('view-shell'));
+  if (/外部专业能力|remote-cap-base-url|保存并连接/.test(settingsBlock)) {
+    fail('settings must not host external capability connection UI');
+  }
 }
 if (/AuthorizationGrant|ContextSnapshot|GrowthEvent|Grant ID|Job ID/i.test(htmlOnly)) {
   fail('internal collaboration terms leaked into shell HTML');

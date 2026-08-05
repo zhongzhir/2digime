@@ -63,9 +63,18 @@ export function toUserFacingLabel(
  */
 export function userFacingLabelFromLatestJob(
   jobsForTask: readonly ExecutionJob[],
-  opts?: { revising?: boolean },
+  opts?: { revising?: boolean; externalCapability?: boolean; hasArtifact?: boolean },
 ): string {
   const last = latestJob(jobsForTask);
+    if (opts?.externalCapability) {
+    // 延迟导入避免 derive ↔ product 循环；外部标签封闭表在 product 模块。
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { externalCapabilityUserFacingLabel } = require('../capability/external-capability-product') as typeof import('../capability/external-capability-product');
+    return externalCapabilityUserFacingLabel(
+      last,
+      opts.hasArtifact !== undefined ? { hasArtifact: opts.hasArtifact } : {},
+    );
+  }
   if (!last) return USER_FACING_LABELS.waiting;
   switch (last.status) {
     case 'queued':
