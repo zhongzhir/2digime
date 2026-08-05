@@ -193,14 +193,22 @@ export function distillCandidatesFromText(input: {
   }
 
   // 明确“以后这样”的低风险写作偏好 → preference（可静默），不升格为原则
-  if (/以后这样|以后都|请记住|下次请/.test(text) && /简洁|短句|少套话|结论先行|正式/.test(text)) {
+  if (
+    /以后这样|以后都|请记住|下次请/.test(text) &&
+    /简洁|短句|少套话|结论先行|正式|完整分析|保留完整/.test(text)
+  ) {
+    const title = /完整分析|保留完整|详细展开/.test(text)
+      ? '偏好：保留完整分析'
+      : /结论先行/.test(text)
+        ? '偏好：结论先行'
+        : '偏好：表达简洁';
     push(
       'preference_observed',
-      /结论先行/.test(text) ? '偏好：结论先行' : '偏好：表达简洁',
+      title,
       text.slice(0, 240),
       ['style', 'preference', 'category:working_method', 'document', '周报'],
     );
-  } else if (/正式|结论先行/.test(text)) {
+  } else if (/正式|结论先行/.test(text) && !/完整分析|保留完整/.test(text)) {
     push(
       'principle_stated',
       '原则：表达正式、结论先行',
@@ -209,12 +217,37 @@ export function distillCandidatesFromText(input: {
     );
   }
 
-  if (/简洁|短句|少套话|不要空话/.test(text) && !/正式|结论先行|以后这样|请记住/.test(text)) {
+  if (
+    /完整分析|保留完整|详细展开|写长一点/.test(text) &&
+    !/以后这样|请记住|仅本次|只这一次/.test(text)
+  ) {
+    push(
+      'preference_observed',
+      '偏好：保留完整分析',
+      text.slice(0, 240),
+      ['style', '完整分析', 'preference', 'document', '周报'],
+    );
+  }
+
+  if (
+    /简洁|短句|少套话|不要空话/.test(text) &&
+    !/正式|结论先行|以后这样|请记住|完整分析|保留完整/.test(text)
+  ) {
     push(
       'preference_observed',
       '偏好：表达简洁',
       text.slice(0, 240),
       ['style', '简洁', 'preference'],
+    );
+  }
+
+  // 成果修改后采用 → 工作偏好（可静默，易纠正）
+  if (input.sourceKind === 'artifact_edit' && /简洁|结构|结论|标题|完整|分析/.test(text)) {
+    push(
+      'preference_observed',
+      '偏好：修改后的表达方式',
+      text.slice(0, 240),
+      ['style', 'preference', 'category:working_method', 'document', 'from_edit'],
     );
   }
 

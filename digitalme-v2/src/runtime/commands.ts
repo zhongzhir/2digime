@@ -62,7 +62,13 @@ export interface CommandMap {
       /** 现在的我 — 已确认且可能影响任务的少量要点。 */
       activeUnderstandings?: Array<{ eventId: string; text: string }>;
       /** 最近学到 — 过程中捕捉、待轻量处理的要点。 */
-      recentLearnings?: Array<{ eventId: string; text: string; suggestConfirm: boolean }>;
+      recentLearnings?: Array<{
+        eventId: string;
+        text: string;
+        suggestConfirm: boolean;
+        /** 自然语言来源说明，非内部路径 */
+        sourceNote?: string;
+      }>;
       /** 还不确定 — 对后续任务有帮助的缺口提问(可忽略)。 */
       helpfulQuestions?: Array<{ eventId: string; text: string }>;
       /** SubjectPackage/materials 中已添加资料的轻量列表。 */
@@ -85,8 +91,20 @@ export interface CommandMap {
   'subject.respondToLearning': {
     input: {
       eventId: string;
-      action: 'adopt' | 'dismiss' | 'retire' | 'revise';
+      action:
+        | 'adopt'
+        | 'dismiss'
+        | 'retire'
+        | 'revise'
+        | 'use_a_once'
+        | 'use_b_once'
+        | 'prefer_a'
+        | 'prefer_b'
+        | 'defer';
       revisionText?: string;
+      /** JIT 冲突另一方（自然语言确认用，不展示 id） */
+      peerEventId?: string;
+      taskId?: string;
     };
     output: { ok: boolean };
   };
@@ -144,6 +162,12 @@ export interface CommandMap {
         issuerSubjectId: string;
         granteeSubjectId: string;
       };
+      /** 可选：提交前已做的 JIT 选择 */
+      jitChoice?: {
+        action: 'use_a_once' | 'use_b_once' | 'prefer_a' | 'prefer_b' | 'defer';
+        eventIdA: string;
+        eventIdB: string;
+      };
     };
     output: { taskId: string; jobId: string };
   };
@@ -183,6 +207,18 @@ export interface CommandMap {
       appliedUnderstanding?: {
         notice: string;
         items: Array<{ text: string }>;
+      };
+      /**
+       * 即将使用前的自然语言选择（无内部 id 展示义务由 UI 承担）。
+       * 平时不弹；仅相关任务返回。
+       */
+      ownerChoicePrompt?: {
+        question: string;
+        labelA: string;
+        labelB: string;
+        eventIdA: string;
+        eventIdB: string;
+        highRisk: boolean;
       };
     };
   };

@@ -18,8 +18,16 @@ import {
   requiresOwnerConfirmation,
   type SubjectCaptureSourceKind,
 } from './candidate-distill';
-import { authorityFromEvents } from './growth-signal';
 import { scheduleGrowthWork } from './growth-async';
+import { structuredDistillToEvents } from './structured-distill';
+import { authorityFromEvents } from './growth-signal';
+import {
+  findJitConflict,
+  injectionExclusionsForJit,
+  type JitChoiceAction,
+  type JitConflictPrompt,
+  type JitResolution,
+} from './jit-confirmation';
 import {
   deriveArtifactOwnerDecision,
   hasSameVersionDecision,
@@ -47,6 +55,12 @@ export class SubjectService {
   private active: SubjectPackage | null = null;
   private growthLog: PackageGrowthLog<GrowthEvent> | null = null;
   private cachedDerived: SubjectDerivedBundle | null = null;
+  /** 即将使用前的自然语言冲突确认（不落第二 Store） */
+  private pendingJitByTask = new Map<string, JitConflictPrompt>();
+  private jitSeen = new Set<string>();
+  private jitResolutions = new Map<string, JitResolution>();
+  /** 蒸馏诊断（不打扰用户） */
+  private lastDistillDiscarded: Array<{ reason: string; title: string }> = [];
 
   constructor(private readonly eventBus?: InMemoryEventBus) {}
 
@@ -153,12 +167,40 @@ export class SubjectService {
 
   /**
    * 轻量响应用户对要点的处理 — 不暴露事件类型名。
+   * JIT：use_a_once / use_b_once / prefer_a / prefer_b / defer。
    */
   async respondToLearning(input: {
     eventId: string;
-    action: 'adopt' | 'dismiss' | 'retire' | 'revise';
+    action:
+      | 'adopt'
+      | 'dismiss'
+      | 'retire'
+      | 'revise'
+      | 'use_a_once'
+      | 'use_b_once'
+      | 'prefer_a'
+      | 'prefer_b'
+      | 'defer';
     revisionText?: string;
+    peerEventId?: string;
+    taskId?: string;
   }): Promise<{ ok: boolean }> {
+    const jitActions: JitChoiceAction[] = [
+      'use_a_once',
+      'use_b_once',
+      'prefer_a',
+      'prefer_b',
+      'defer',
+    ];
+    if (jitActions.includes(input.action as JitChoiceAction)) {
+      return this.resolveJitChoice({
+        action: input.action as JitChoiceAction,
+        eventIdA: input.eventId,
+        eventIdB: input.peerEventId || '',
+        ...(input.taskId ? { taskId: input.taskId } : {}),
+      });
+    }
+
     const pkg = this.requireActive();
     const events = await this.requireLog().list(pkg.id);
     const target = events.find((e) => e.id === input.eventId);
@@ -252,6 +294,94 @@ export class SubjectService {
     };
     await this.appendGrowthEvent(replacementConfirmed);
     return { ok: true };
+  }
+
+  /** JIT 决议：仅本次 / 以后优先 / 暂不决定。 */
+  async resolveJitChoice(input: JitResolution): Promise<{ ok: boolean }> {
+    const key = input.taskId || `${input.eventIdA}|${input.eventIdB}`;
+    this.jitResolutions.set(key, input);
+    this.jitResolutions.set(`${input.eventIdA}|${input.eventIdB}`, input);
+    if (input.taskId) this.pendingJitByTask.delete(input.taskId);
+
+    if (input.action === 'prefer_a') {
+      const events = await this.requireLog().list(this.requireActive().id);
+      const b = events.find((e) => e.id === input.eventIdB);
+      if (b?.confidence === 'candidate') {
+        await this.respondToLearning({ eventId: input.eventIdB, action: 'dismiss' });
+      } else if (b) {
+        await this.respondToLearning({ eventId: input.eventIdB, action: 'retire' });
+      }
+      return { ok: true };
+    }
+    if (input.action === 'prefer_b') {
+      const events = await this.requireLog().list(this.requireActive().id);
+      const b = events.find((e) => e.id === input.eventIdB);
+      if (b?.confidence === 'candidate') {
+        await this.confirmCandidates({ eventIds: [input.eventIdB] });
+      }
+      // 旧权威退居：retire A（以后优先 B）
+      const a = events.find((e) => e.id === input.eventIdA);
+      if (a && a.confidence === 'confirmed') {
+        await this.respondToLearning({ eventId: input.eventIdA, action: 'retire' });
+      }
+      return { ok: true };
+    }
+    // use_once / defer：仅任务作用域，不改长期权威
+    return { ok: true };
+  }
+
+  /**
+   * 任务即将注入前：检测冲突、登记自然语言提示、返回应排除的事件与是否暂停外部行动。
+   */
+  async prepareJitForTask(input: {
+    taskId: string;
+    goal: string;
+  }): Promise<{
+    prompt: JitConflictPrompt | null;
+    excludeEventIds: string[];
+    pauseExternalAction: boolean;
+  }> {
+    const derived = await this.getDerived();
+    const found = findJitConflict({
+      goal: input.goal,
+      derived,
+    });
+    if (!found) {
+      return { prompt: null, excludeEventIds: [], pauseExternalAction: false };
+    }
+
+    const resolution =
+      this.jitResolutions.get(input.taskId) ||
+      this.jitResolutions.get(`${found.eventIdA}|${found.eventIdB}`) ||
+      null;
+    const excl = injectionExclusionsForJit({ prompt: found, resolution });
+
+    // 已对同一冲突展示过：不再弹，但仍用保守排除
+    if (this.jitSeen.has(found.fingerprint) && !resolution) {
+      this.pendingJitByTask.set(input.taskId, found);
+      return {
+        prompt: null,
+        excludeEventIds: excl.excludeEventIds,
+        pauseExternalAction: excl.pauseExternalAction,
+      };
+    }
+
+    this.pendingJitByTask.set(input.taskId, found);
+    if (!resolution) this.jitSeen.add(found.fingerprint);
+
+    return {
+      prompt: resolution ? null : found,
+      excludeEventIds: excl.excludeEventIds,
+      pauseExternalAction: excl.pauseExternalAction,
+    };
+  }
+
+  peekJitPrompt(taskId: string): JitConflictPrompt | null {
+    return this.pendingJitByTask.get(taskId) || null;
+  }
+
+  getLastDistillDiscarded(): Array<{ reason: string; title: string }> {
+    return [...this.lastDistillDiscarded];
   }
 
   async confirmCandidates(input: { eventIds: string[] }): Promise<{ confirmedCount: number }> {
@@ -405,26 +535,57 @@ export class SubjectService {
     }
 
     const existing = await this.requireLog().list(pkg.id);
-    const authority = authorityFromEvents(existing);
 
-    const distilled = distillCandidatesFromText({
-      subjectId: pkg.id,
-      text,
-      sourceKind: input.sourceKind,
-      ...(materialRef ? { materialRef } : {}),
-      ...(input.taskId ? { taskId: input.taskId } : {}),
-      ...(input.artifactId ? { artifactId: input.artifactId } : {}),
-      ...(input.artifactVersionId ? { artifactVersionId: input.artifactVersionId } : {}),
-      ...(input.requestedArtifactType
-        ? { requestedArtifactType: input.requestedArtifactType }
-        : {}),
-      ...(input.capabilityId ? { capabilityId: input.capabilityId } : {}),
-      ...(input.capabilityVersion ? { capabilityVersion: input.capabilityVersion } : {}),
-      ...(input.sourceCapabilityKind
-        ? { sourceCapabilityKind: input.sourceCapabilityKind }
-        : {}),
-      authority,
-    });
+    let distilled: GrowthEvent[] = [];
+    try {
+      if (isDecision) {
+        // 采用/不采用为确定性决策事件，不经蒸馏质量门（避免误丢弃）
+        distilled = distillCandidatesFromText({
+          subjectId: pkg.id,
+          text,
+          sourceKind: input.sourceKind,
+          ...(materialRef ? { materialRef } : {}),
+          ...(input.taskId ? { taskId: input.taskId } : {}),
+          ...(input.artifactId ? { artifactId: input.artifactId } : {}),
+          ...(input.artifactVersionId ? { artifactVersionId: input.artifactVersionId } : {}),
+          ...(input.requestedArtifactType
+            ? { requestedArtifactType: input.requestedArtifactType }
+            : {}),
+          ...(input.capabilityId ? { capabilityId: input.capabilityId } : {}),
+          ...(input.capabilityVersion ? { capabilityVersion: input.capabilityVersion } : {}),
+          ...(input.sourceCapabilityKind
+            ? { sourceCapabilityKind: input.sourceCapabilityKind }
+            : {}),
+          authority: authorityFromEvents(existing),
+        });
+        this.lastDistillDiscarded = [];
+      } else {
+        const result = await structuredDistillToEvents({
+          subjectId: pkg.id,
+          text,
+          sourceKind: input.sourceKind,
+          ...(materialRef ? { materialRef } : {}),
+          ...(input.taskId ? { taskId: input.taskId } : {}),
+          ...(input.artifactId ? { artifactId: input.artifactId } : {}),
+          ...(input.artifactVersionId ? { artifactVersionId: input.artifactVersionId } : {}),
+          ...(input.requestedArtifactType
+            ? { requestedArtifactType: input.requestedArtifactType }
+            : {}),
+          ...(input.capabilityId ? { capabilityId: input.capabilityId } : {}),
+          ...(input.capabilityVersion ? { capabilityVersion: input.capabilityVersion } : {}),
+          ...(input.sourceCapabilityKind
+            ? { sourceCapabilityKind: input.sourceCapabilityKind }
+            : {}),
+          existingEvents: existing,
+        });
+        distilled = result.events;
+        this.lastDistillDiscarded = result.discarded;
+      }
+    } catch {
+      // 蒸馏失败不阻断主流程：不落候选，由调用方继续任务
+      this.lastDistillDiscarded = [{ reason: 'distill_failure', title: 'distill' }];
+      distilled = [];
+    }
 
     const candidateEventIds: string[] = [];
     const confirmationSuggestedEventIds: string[] = [];

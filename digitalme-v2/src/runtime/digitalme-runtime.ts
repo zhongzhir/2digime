@@ -33,6 +33,7 @@ import { ContextSnapshotBuilder } from '../work-runtime/snapshot-builder';
 import { ArtifactCommitter } from '../work-runtime/artifact-commit';
 import { InMemoryEventBus } from '../work-runtime/event-bus';
 import { WorkRuntime } from '../work-runtime/job-runner';
+import type { SubjectSelectionResult } from '../work-runtime/job-runner';
 import { SubjectService } from '../subject-core/subject-service';
 import { selectSubjectInjection } from '../subject-core/experience-selector';
 import type { SubjectContextFreeze } from '../subject-core/subject-context-freeze';
@@ -164,7 +165,26 @@ export class DigitalMeRuntime {
   }
 
   submitTask(input: CommandMap['work.submitTask']['input']) {
-    return this.requireWork().submitTask(input);
+    const run = async () => {
+      if (input.jitChoice) {
+        await this.subject.resolveJitChoice({
+          action: input.jitChoice.action,
+          eventIdA: input.jitChoice.eventIdA,
+          eventIdB: input.jitChoice.eventIdB,
+        });
+      }
+      const created = await this.requireWork().submitTask(input);
+      if (input.jitChoice) {
+        await this.subject.resolveJitChoice({
+          action: input.jitChoice.action,
+          eventIdA: input.jitChoice.eventIdA,
+          eventIdB: input.jitChoice.eventIdB,
+          taskId: created.taskId,
+        });
+      }
+      return created;
+    };
+    return run();
   }
 
   retryTask(input: CommandMap['work.retryTask']['input']) {
@@ -193,6 +213,17 @@ export class DigitalMeRuntime {
       } catch {
         /* 冻结缺失不阻断任务查询 */
       }
+    }
+    const jit = this.subject.peekJitPrompt(input.taskId);
+    if (jit) {
+      result.ownerChoicePrompt = {
+        question: jit.question,
+        labelA: jit.labelA,
+        labelB: jit.labelB,
+        eventIdA: jit.eventIdA,
+        eventIdB: jit.eventIdB,
+        highRisk: jit.highRisk,
+      };
     }
     return result;
   }
@@ -541,18 +572,42 @@ export class DigitalMeRuntime {
         const derived = await subjectService.getDerived();
         return derived.confirmed;
       },
-      selectSubjectContext: async ({ goal, requestedArtifactType }) => {
+      selectSubjectContext: async ({ goal, requestedArtifactType, taskId }) => {
         const derived = await subjectService.getDerived();
         const policy = this.options.executionPolicy ?? 'ai_first';
         const profile = chooseExecutionProfile({ goal, requestedArtifactType });
-        return selectSubjectInjection({
+        let excludeEventIds: string[] = [];
+        let pauseExternalAction = false;
+        let ownerChoicePrompt: SubjectSelectionResult['ownerChoicePrompt'];
+        if (taskId) {
+          const jit = await subjectService.prepareJitForTask({ taskId, goal });
+          excludeEventIds = jit.excludeEventIds;
+          pauseExternalAction = jit.pauseExternalAction;
+          if (jit.prompt) {
+            ownerChoicePrompt = {
+              question: jit.prompt.question,
+              labelA: jit.prompt.labelA,
+              labelB: jit.prompt.labelB,
+              eventIdA: jit.prompt.eventIdA,
+              eventIdB: jit.prompt.eventIdB,
+              highRisk: jit.prompt.highRisk,
+            };
+          }
+        }
+        const selected = selectSubjectInjection({
           goal,
           requestedArtifactType,
           derived,
           policy,
           includeCoreMatching:
             policy === 'legacy' || profile === 'careful' || profile === 'high_risk',
+          excludeEventIds,
         });
+        return {
+          ...selected,
+          ...(pauseExternalAction ? { pauseExternalAction: true } : {}),
+          ...(ownerChoicePrompt ? { ownerChoicePrompt } : {}),
+        };
       },
       loadAuthorizationGrant: async (grantId: string) => {
         const store = await grantStorePromise;

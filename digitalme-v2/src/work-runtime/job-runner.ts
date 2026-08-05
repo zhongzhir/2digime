@@ -53,6 +53,7 @@ export interface WorkRuntimeOptions {
     goal: string;
     requestedArtifactType: string;
     confirmed: ConfirmedExperienceView;
+    taskId?: string;
   }) =>
     | Promise<SubjectSelectionResult>
     | SubjectSelectionResult
@@ -73,6 +74,17 @@ export interface WorkRuntimeOptions {
 export interface SubjectSelectionResult {
   subjectContext: ConfirmedExperienceView;
   freeze: SubjectContextFreeze;
+  /** 高风险外部行动暂停（任务其余部分可继续） */
+  pauseExternalAction?: boolean;
+  /** 用户面自然语言选择（内部用，不进 Adapter） */
+  ownerChoicePrompt?: {
+    question: string;
+    labelA: string;
+    labelB: string;
+    eventIdA: string;
+    eventIdB: string;
+    highRisk: boolean;
+  };
 }
 
 type SubmitInput = CommandMap['work.submitTask']['input'];
@@ -591,6 +603,7 @@ export class WorkRuntime {
               goal: task.goal,
               requestedArtifactType: task.requestedArtifactType,
               confirmed: fullContext,
+              taskId: task.id,
             })
           : fullContext;
         selection = normalizeSelection(this.opts.subjectId, selectedRaw, fullContext);
@@ -606,6 +619,14 @@ export class WorkRuntime {
         };
       }
       const subjectContext = selection.subjectContext;
+      if (selection.pauseExternalAction) {
+        job = await this.withProgress(
+          job,
+          'capability',
+          '需你确认后才能继续对外或不可逆操作；其余可安全完成的部分继续整理。',
+        );
+        await this.persistJob(job);
+      }
       if (!resumingRemote) {
         snapshot = await this.opts.snapshotBuilder.attachSubjectContext(
           snapshot.id,
@@ -654,6 +675,16 @@ export class WorkRuntime {
       const isRemote =
         adapter.registration.location === 'remote' &&
         adapter.registration.adapter.type === 'remote-subject';
+
+      if (isRemote && selection.pauseExternalAction) {
+        await this.failJob(
+          job,
+          'capability',
+          '对外行动已暂停',
+          '请先确认冲突偏好后再发起对外或不可逆操作；本地整理可另开任务继续',
+        );
+        return;
+      }
 
       const bindRemote = async (
         ref: {

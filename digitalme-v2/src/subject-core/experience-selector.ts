@@ -32,6 +32,8 @@ export interface SubjectInjectionSelectInput {
   policy?: 'ai_first' | 'legacy';
   /** careful/high_risk 才注入匹配的身份/方向/原则 */
   includeCoreMatching?: boolean;
+  /** JIT 未决或决议排除的事件（冲突保守默认） */
+  excludeEventIds?: readonly string[];
 }
 
 export interface SubjectInjectionSelection {
@@ -142,19 +144,20 @@ export function selectSubjectInjection(
     options.maxEntries ?? (policy === 'ai_first' ? AI_FIRST_MAX_ENTRIES : DEFAULT_MAX_ENTRIES);
   const derived = input.derived;
   const inactive = new Set(derived.inactiveEventIds);
+  const jitExclude = new Set(input.excludeEventIds || []);
   const tokens = tokenize(input.goal);
   const includeCore = input.includeCoreMatching === true || policy === 'legacy';
 
   const frozenEntries: FrozenSubjectEntry[] = [];
   const reasons: Array<{ eventId: string; reason: SelectionReason }> = [];
-  const excludedEventIds: string[] = [...inactive];
+  const excludedEventIds: string[] = [...inactive, ...jitExclude];
 
   const push = (
     item: { eventId: string; title: string; detail: string; tags: string[]; occurredAt?: string },
     kind: SubjectEntryKind,
     reason: SelectionReason,
   ) => {
-    if (inactive.has(item.eventId)) {
+    if (inactive.has(item.eventId) || jitExclude.has(item.eventId)) {
       excludedEventIds.push(item.eventId);
       return;
     }

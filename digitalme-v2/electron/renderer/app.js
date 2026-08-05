@@ -139,6 +139,9 @@
     retry: document.getElementById("btn-retry"),
     jobStatus: document.getElementById("job-status"),
     jobActionable: document.getElementById("job-actionable"),
+    ownerChoicePrompt: document.getElementById("owner-choice-prompt"),
+    ownerChoiceQuestion: document.getElementById("owner-choice-question"),
+    ownerChoiceActions: document.getElementById("owner-choice-actions"),
     artifactPanel: document.getElementById("artifact-panel"),
     artifactEditor: document.getElementById("artifact-editor"),
     bundleView: document.getElementById("bundle-view"),
@@ -764,6 +767,48 @@
     return "处理未能完成。";
   }
 
+  function renderOwnerChoicePrompt(detail) {
+    const box = els.ownerChoicePrompt;
+    const q = els.ownerChoiceQuestion;
+    const actions = els.ownerChoiceActions;
+    if (!box || !q || !actions) return;
+    const prompt = detail && detail.ownerChoicePrompt;
+    if (!prompt || !prompt.question) {
+      box.hidden = true;
+      actions.innerHTML = "";
+      return;
+    }
+    box.hidden = false;
+    q.textContent = String(prompt.question);
+    actions.innerHTML = "";
+    const choices = [
+      { label: "本次使用「" + String(prompt.labelA || "A") + "」", action: "use_a_once" },
+      { label: "本次使用「" + String(prompt.labelB || "B") + "」", action: "use_b_once" },
+      { label: "以后优先「" + String(prompt.labelA || "A") + "」", action: "prefer_a" },
+      { label: "以后优先「" + String(prompt.labelB || "B") + "」", action: "prefer_b" },
+      { label: "暂不决定", action: "defer" },
+    ];
+    for (const c of choices) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "ghost";
+      btn.textContent = c.label;
+      btn.addEventListener("click", async () => {
+        await api.invoke("subject.respondToLearning", {
+          eventId: prompt.eventIdA,
+          peerEventId: prompt.eventIdB,
+          taskId: detail.task && detail.task.id ? detail.task.id : activeTaskId,
+          action: c.action,
+        });
+        box.hidden = true;
+        actions.innerHTML = "";
+        await refreshSubjectPanel();
+        if (activeTaskId) await syncActiveTaskStatus();
+      });
+      actions.appendChild(btn);
+    }
+  }
+
   function renderJobStatus(detail, eventNote) {
     const failed = isLatestJobFailed(detail);
     const cancelled = !!(detail && detail.latestJob && detail.latestJob.status === "cancelled");
@@ -806,6 +851,7 @@
     const detail = await api.invoke("work.getTask", { taskId: activeTaskId });
     activeJobId = detail.latestJob ? detail.latestJob.jobId : activeJobId;
     renderJobStatus(detail, eventNote);
+    renderOwnerChoicePrompt(detail);
     const connected = await refreshConnectionFromCapabilities();
     applyJobControls(detail, connected);
 
@@ -847,6 +893,7 @@
       .map((r) => ({ kind: r.kind, path: r.path }));
     renderMaterials();
     renderJobStatus(detail);
+    renderOwnerChoicePrompt(detail);
     const connected = await refreshConnectionFromCapabilities();
     applyJobControls(detail, connected);
     setWorkCollabVisible(true);
@@ -1006,6 +1053,12 @@
       for (const item of recent) {
         const li = document.createElement("li");
         li.innerHTML = `<div class="subject-item-text">${escapeHtml(item.text)}</div>`;
+        if (item.sourceNote) {
+          const note = document.createElement("p");
+          note.className = "muted tiny";
+          note.textContent = String(item.sourceNote);
+          li.appendChild(note);
+        }
         if (item.suggestConfirm) {
           const row = document.createElement("div");
           row.className = "subject-actions";

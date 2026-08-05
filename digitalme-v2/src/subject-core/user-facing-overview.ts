@@ -16,6 +16,8 @@ export interface RecentLearningItem {
   text: string;
   /** 是否建议轻量确认(C 类);UI 勿展示内部类型名。 */
   suggestConfirm: boolean;
+  /** 自然语言来源说明 */
+  sourceNote?: string;
 }
 
 export interface HelpfulQuestionItem {
@@ -81,11 +83,14 @@ export function buildUserFacingSubjectSlices(derived: SubjectDerivedBundle): {
     });
   for (const item of candidates) {
     if (recentLearnings.length >= MAX_RECENT) break;
-    recentLearnings.push({
+    const row: RecentLearningItem = {
       eventId: item.eventId,
       text: toUserFacingText(item.title, item.detail),
       suggestConfirm: requiresOwnerConfirmation(item.type, item.tags),
-    });
+    };
+    const note = naturalSourceNote(item.tags || []);
+    if (note) row.sourceNote = note;
+    recentLearnings.push(row);
   }
 
   const helpfulQuestions: HelpfulQuestionItem[] = [];
@@ -97,6 +102,25 @@ export function buildUserFacingSubjectSlices(derived: SubjectDerivedBundle): {
   }
 
   return { activeUnderstandings, recentLearnings, helpfulQuestions };
+}
+
+function naturalSourceNote(tags: readonly string[]): string | undefined {
+  if (tags.some((t) => t.includes('from_edit') || t === 'artifact_edit')) {
+    return '来自你修改并采用的成果';
+  }
+  if (tags.some((t) => /sourceKind:conversation|conversation/.test(t))) {
+    return '来自你的说明';
+  }
+  if (tags.includes('category:external_claim') || tags.includes('project_fact')) {
+    return '来自你提供的资料（项目观点，不是你的个人立场）';
+  }
+  if (tags.includes('category:temporary_context') || tags.some((t) => t.startsWith('expiresAt:'))) {
+    return '来自某次任务中的临时要求';
+  }
+  if (tags.includes('conflict') || tags.includes('needs_confirmation')) {
+    return '与已有内容可能不一致，待你确认';
+  }
+  return '来自你近期的使用与反馈';
 }
 
 function gapAsQuestion(raw: string): string {

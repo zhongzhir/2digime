@@ -1,0 +1,16 @@
+{
+  "candidate_accuracy_ok": 4,
+  "candidate_accuracy_total": 4,
+  "erroneous_user_attribution": 0,
+  "duplicate_candidates": 0,
+  "overgeneralize": 0,
+  "silent_conflict_overwrite": 0,
+  "unnecessary_confirmations": 0,
+  "task_extra_wait_ms": 163,
+  "repeated_correction_reduction": true,
+  "distill_failure_blocks_task": false,
+  "unrelated_task_confirmations": 0,
+  "discarded_sample": [],
+  "injected_sample": "偏好：结论先行以后这样写周报：请结论先行，保持简洁。",
+  "after_active_sample": "偏好：保留完整分析"
+}

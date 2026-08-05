@@ -170,6 +170,12 @@ export function detectAuthorityConflict(input: {
     const prior = `${item.title} ${item.detail}`.toLowerCase();
     if (/本地优先/.test(prior) && /云端优先|全部上云|不要本地/.test(text)) return true;
     if (/结论先行/.test(prior) && /先铺垫|不要结论|禁止结论先行/.test(text)) return true;
+    if (
+      (/简洁|短句|少套话/.test(prior) && /完整分析|保留完整|详细展开|写长一点/.test(text)) ||
+      (/完整分析|保留完整|详细展开/.test(prior) && /简洁|短句|少套话/.test(text))
+    ) {
+      return true;
+    }
     if (/不要正式|别正式|反对正式/.test(text) && /正式/.test(prior)) return true;
     if (/不讨论.*融资|exclude:融资/.test(prior) && /可以讨论融资|公开融资细节/.test(text)) {
       return true;
