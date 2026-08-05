@@ -17,12 +17,21 @@ export interface ExperienceSelectInput {
 export interface ExperienceSelectOptions {
   maxEntries?: number;
   maxDetailChars?: number;
+  /**
+   * ai_first（默认）：最多 3 条高相关经验；弱相关不注入。
+   * legacy：保留弱相关 scrub 行为（验收对照）。
+   */
+  policy?: 'ai_first' | 'legacy';
 }
 
 export interface SubjectInjectionSelectInput {
   goal: string;
   requestedArtifactType: string;
   derived: SubjectDerivedBundle;
+  /** 默认 ai_first */
+  policy?: 'ai_first' | 'legacy';
+  /** careful/high_risk 才注入匹配的身份/方向/原则 */
+  includeCoreMatching?: boolean;
 }
 
 export interface SubjectInjectionSelection {
@@ -31,6 +40,7 @@ export interface SubjectInjectionSelection {
 }
 
 const DEFAULT_MAX_ENTRIES = 5;
+const AI_FIRST_MAX_ENTRIES = 3;
 const DEFAULT_MAX_DETAIL_CHARS = 200;
 const MAX_CORE_PER_KIND = 3;
 const WEAK_STRUCTURE_DETAIL =
@@ -43,13 +53,15 @@ const WEAK_STRUCTURE_DETAIL =
  * - 数量与长度上限;
  * - 每条保留 eventId 可追溯。
  * - 采用决策：同 Artifact 仅最新正向采用可注入；拒绝与旧版本不正向复用。
- * - 弱相关：仅保留结构偏好， scrub 具体事实细节。
+ * - ai_first：弱相关默认不注入；legacy：弱相关 scrub 细节。
  */
 export function selectConfirmedExperiences(
   input: ExperienceSelectInput,
   options: ExperienceSelectOptions = {},
 ): ConfirmedExperienceView {
-  const maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES;
+  const policy = options.policy ?? 'ai_first';
+  const maxEntries =
+    options.maxEntries ?? (policy === 'ai_first' ? AI_FIRST_MAX_ENTRIES : DEFAULT_MAX_ENTRIES);
   const maxDetailChars = options.maxDetailChars ?? DEFAULT_MAX_DETAIL_CHARS;
   const excluded = new Set(input.boundaries.excludedTags.map((t) => t.toLowerCase()));
   const tokens = tokenize(input.goal);
@@ -72,19 +84,26 @@ export function selectConfirmedExperiences(
       const typeBoost =
         keywordScore > 0 && entry.tags.map((t) => t.toLowerCase()).includes(artifactType);
       const score = keywordScore + (typeBoost ? 2 : 0);
-      // 弱相关：仅 1 个关键词重叠（类型加分不改变弱相关判定）
       const weak = keywordScore === 1;
       return { entry, score, keywordScore, weak };
     })
-    .filter((row) => row.score > 0)
+    .filter((row) => {
+      if (row.score <= 0) return false;
+      // AI-first：弱相关 / 纯风格不注入
+      if (policy === 'ai_first' && row.weak) return false;
+      // AI-first：至少 2 个关键词命中才算高相关（类型加分不单独够格）
+      if (policy === 'ai_first' && row.keywordScore < 2) return false;
+      return true;
+    })
     .sort((a, b) => b.score - a.score || b.entry.occurredAt.localeCompare(a.entry.occurredAt));
 
   const entries = scored.slice(0, maxEntries).map(({ entry, weak }) => {
+    const scrub = policy === 'legacy' && weak;
     return {
       eventId: entry.eventId,
       title: entry.title,
-      detail: truncate(weak ? WEAK_STRUCTURE_DETAIL : entry.detail, maxDetailChars),
-      tags: weak
+      detail: truncate(scrub ? WEAK_STRUCTURE_DETAIL : entry.detail, maxDetailChars),
+      tags: scrub
         ? [...entry.tags.filter((t) => !/^decision:|^version:/.test(t)), 'reuse:weak_structure']
         : [...entry.tags],
       occurredAt: entry.occurredAt,
@@ -107,12 +126,14 @@ export function selectSubjectInjection(
   input: SubjectInjectionSelectInput,
   options: ExperienceSelectOptions = {},
 ): SubjectInjectionSelection {
+  const policy = input.policy ?? options.policy ?? 'ai_first';
   const maxDetailChars = options.maxDetailChars ?? DEFAULT_MAX_DETAIL_CHARS;
-  const maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES;
+  const maxEntries =
+    options.maxEntries ?? (policy === 'ai_first' ? AI_FIRST_MAX_ENTRIES : DEFAULT_MAX_ENTRIES);
   const derived = input.derived;
   const inactive = new Set(derived.inactiveEventIds);
   const tokens = tokenize(input.goal);
-  const excluded = new Set(derived.boundaries.excludedTags.map((t) => t.toLowerCase()));
+  const includeCore = input.includeCoreMatching === true || policy === 'legacy';
 
   const frozenEntries: FrozenSubjectEntry[] = [];
   const reasons: Array<{ eventId: string; reason: SelectionReason }> = [];
@@ -139,23 +160,27 @@ export function selectSubjectInjection(
     reasons.push({ eventId: item.eventId, reason });
   };
 
-  // 身份:始终可注入(必要 core)
-  for (const item of derived.identity.entries.slice(0, MAX_CORE_PER_KIND)) {
-    const full = derived.activeItems.find((a) => a.eventId === item.eventId);
-    const payload: {
-      eventId: string;
-      title: string;
-      detail: string;
-      tags: string[];
-      occurredAt?: string;
-    } = {
-      eventId: item.eventId,
-      title: item.title,
-      detail: item.detail,
-      tags: item.tags,
-    };
-    if (full?.occurredAt) payload.occurredAt = full.occurredAt;
-    push(payload, 'identity', 'identity_core');
+  // AI-first standard：不默认注入身份/方向/原则（避免「可能有用」膨胀上下文）
+  if (includeCore) {
+    for (const item of derived.identity.entries.slice(0, MAX_CORE_PER_KIND)) {
+      const full = derived.activeItems.find((a) => a.eventId === item.eventId);
+      const payload: {
+        eventId: string;
+        title: string;
+        detail: string;
+        tags: string[];
+        occurredAt?: string;
+      } = {
+        eventId: item.eventId,
+        title: item.title,
+        detail: item.detail,
+        tags: item.tags,
+      };
+      if (full?.occurredAt) payload.occurredAt = full.occurredAt;
+      push(payload, 'identity', 'identity_core');
+    }
+  } else {
+    for (const item of derived.identity.entries) excludedEventIds.push(item.eventId);
   }
 
   const pickMatching = (
@@ -163,6 +188,10 @@ export function selectSubjectInjection(
     kind: SubjectEntryKind,
     reason: SelectionReason,
   ): number => {
+    if (!includeCore) {
+      for (const item of items) excludedEventIds.push(item.eventId);
+      return 0;
+    }
     let added = 0;
     for (const item of items) {
       if (added >= MAX_CORE_PER_KIND) break;
@@ -205,7 +234,7 @@ export function selectSubjectInjection(
       confirmed: derived.confirmed,
       boundaries: derived.boundaries,
     },
-    { maxEntries, maxDetailChars },
+    { maxEntries, maxDetailChars, policy },
   );
   const selectedExperienceIds = new Set(experienceView.entries.map((e) => e.eventId));
   for (const entry of derived.confirmed.entries) {
@@ -219,13 +248,39 @@ export function selectSubjectInjection(
     push(entry, 'experience', reason);
   }
 
+  // 硬边界：始终可注入（明确硬约束），与是否有相关经验无关
+  const hardBoundaries = derived.boundaries.entries.filter((item) =>
+    item.tags.some((t) => /^exclude:/i.test(t) || t === '边界'),
+  );
+  const softBoundaries = derived.boundaries.entries.filter(
+    (item) => !hardBoundaries.some((h) => h.eventId === item.eventId),
+  );
+  for (const item of hardBoundaries.slice(0, MAX_CORE_PER_KIND)) {
+    const full = derived.activeItems.find((a) => a.eventId === item.eventId);
+    const payload: {
+      eventId: string;
+      title: string;
+      detail: string;
+      tags: string[];
+      occurredAt?: string;
+    } = {
+      eventId: item.eventId,
+      title: item.title,
+      detail: item.detail,
+      tags: item.tags,
+    };
+    if (full?.occurredAt) payload.occurredAt = full.occurredAt;
+    push(payload, 'boundary', 'boundary_statement');
+  }
+
   const related =
     matchedGoals > 0 ||
     matchedPrinciples > 0 ||
-    experienceView.entries.length > 0;
+    experienceView.entries.length > 0 ||
+    hardBoundaries.length > 0;
 
-  if (related) {
-    for (const item of derived.boundaries.entries.slice(0, MAX_CORE_PER_KIND)) {
+  if (related && includeCore) {
+    for (const item of softBoundaries.slice(0, MAX_CORE_PER_KIND)) {
       const full = derived.activeItems.find((a) => a.eventId === item.eventId);
       const payload: {
         eventId: string;
@@ -243,22 +298,9 @@ export function selectSubjectInjection(
       push(payload, 'boundary', 'boundary_statement');
     }
   } else {
-    for (const item of derived.boundaries.entries) {
-      excludedEventIds.push(item.eventId);
-    }
-    for (const item of derived.goals.entries) {
-      if (!frozenEntries.some((e) => e.eventId === item.eventId)) {
-        excludedEventIds.push(item.eventId);
-      }
-    }
-    for (const item of derived.principles.entries) {
-      if (!frozenEntries.some((e) => e.eventId === item.eventId)) {
-        excludedEventIds.push(item.eventId);
-      }
-    }
+    for (const item of softBoundaries) excludedEventIds.push(item.eventId);
   }
 
-  // knowledge gaps never inject
   for (const gap of derived.knowledgeGaps.entries) {
     excludedEventIds.push(gap.eventId);
   }

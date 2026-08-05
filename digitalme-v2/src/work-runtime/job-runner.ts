@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import type { CapabilityRegistry } from '../capability/registry';
-import type { SecretAccessor, RemoteLifecycleStatus } from '../capability/adapter';
+import type { SecretAccessor, RemoteLifecycleStatus, CapabilityOutput } from '../capability/adapter';
 import { newId, nowIso } from '../shared/ids';
 import type { ConfirmedExperienceView } from '../subject-core/derived-views';
 import type { SubjectContextFreeze } from '../subject-core/subject-context-freeze';
@@ -27,6 +27,11 @@ import {
   prepareAndExecuteCapability,
   resumeRemoteIfPossible,
 } from './remote-job-bridge';
+import {
+  buildTargetedRevisionRequest,
+  checkOutcome,
+  chooseExecutionProfile,
+} from './ai-first-policy';
 
 export interface WorkRuntimeOptions {
   subjectId: string;
@@ -576,16 +581,30 @@ export class WorkRuntime {
 
       const workDir = path.join(this.opts.workRoot, 'jobs', job.id);
       await fs.mkdir(workDir, { recursive: true });
-      const fullContext =
-        (await this.opts.loadSubjectContext?.()) ?? emptySubjectContext(this.opts.subjectId);
-      const selectedRaw = this.opts.selectSubjectContext
-        ? await this.opts.selectSubjectContext({
-            goal: task.goal,
-            requestedArtifactType: task.requestedArtifactType,
-            confirmed: fullContext,
-          })
-        : fullContext;
-      const selection = normalizeSelection(this.opts.subjectId, selectedRaw, fullContext);
+      // AI-first：主体注入失败不得阻断主成果（学习/派生失败走空切片）
+      let selection: SubjectSelectionResult;
+      try {
+        const fullContext =
+          (await this.opts.loadSubjectContext?.()) ?? emptySubjectContext(this.opts.subjectId);
+        const selectedRaw = this.opts.selectSubjectContext
+          ? await this.opts.selectSubjectContext({
+              goal: task.goal,
+              requestedArtifactType: task.requestedArtifactType,
+              confirmed: fullContext,
+            })
+          : fullContext;
+        selection = normalizeSelection(this.opts.subjectId, selectedRaw, fullContext);
+      } catch {
+        selection = {
+          subjectContext: emptySubjectContext(this.opts.subjectId),
+          freeze: buildSubjectContextFreeze({
+            subjectId: this.opts.subjectId,
+            entries: [],
+            selectionReasons: [],
+            excludedEventIds: [],
+          }),
+        };
+      }
       const subjectContext = selection.subjectContext;
       if (!resumingRemote) {
         snapshot = await this.opts.snapshotBuilder.attachSubjectContext(
@@ -930,6 +949,87 @@ export class WorkRuntime {
         return;
       }
 
+      // AI-first Outcome Check：主生成后最多一次针对性修订（用户主动修改不重复）
+      if (!revisionInput && !isRemote && output) {
+        const text = capabilityOutputText(output);
+        if (text !== null) {
+          const profile = chooseExecutionProfile({
+            goal: task.goal,
+            requestedArtifactType: task.requestedArtifactType,
+          });
+          const hardBoundaryTexts = subjectContext.entries
+            .filter((e) => (e.kind || '') === 'boundary')
+            .map((e) => `${e.title}\n${e.detail}\n${e.tags.join(' ')}`);
+          const outcome = checkOutcome({
+            goal: task.goal,
+            text,
+            hardBoundaryTexts,
+            profile,
+          });
+          if (outcome.verdict === 'targeted_revision_required') {
+            job = await this.withProgress(job, 'capability', '正在修改');
+            await this.persistJob(job);
+            try {
+              const minimalContext: ConfirmedExperienceView = {
+                subjectId: subjectContext.subjectId,
+                derivedAt: subjectContext.derivedAt,
+                entries: subjectContext.entries.filter((e) => (e.kind || '') === 'boundary'),
+              };
+              const grant =
+                task.authorization?.grantId && this.opts.loadAuthorizationGrant
+                  ? await this.opts.loadAuthorizationGrant(task.authorization.grantId)
+                  : null;
+              const reviseRaw = {
+                goal: task.goal,
+                snapshot,
+                subjectContext: minimalContext,
+                artifactType: task.requestedArtifactType,
+                revision: {
+                  request: buildTargetedRevisionRequest(outcome.defects),
+                  previousText: text,
+                  artifactId: 'pending',
+                },
+              };
+              const auth = buildJobAuthorizationProjection({
+                task,
+                capabilityInput: reviseRaw,
+                grant,
+                isRemote: false,
+              });
+              const markers = this.opts.resolveUnauthorizedMarkers
+                ? await this.opts.resolveUnauthorizedMarkers({
+                    taskId: task.id,
+                    allowedMaterialPaths: [...auth.allowedMaterials],
+                  })
+                : [];
+              const revised = await prepareAndExecuteCapability({
+                adapter,
+                rawInput: reviseRaw,
+                auth,
+                ctx: execCtx,
+                isRemote: false,
+                unauthorizedMarkers: markers,
+                job: (await this.opts.jobStore.get(jobId)) ?? job,
+                task,
+                subjectId: task.subjectId,
+              });
+              output = revised.output;
+              // 第二次仍不完美：保留当前结果继续交付，不无限循环
+            } catch {
+              // 修订失败不推翻首次成果
+            }
+          } else if (outcome.verdict === 'blocked' && !text.trim()) {
+            await this.failJob(
+              job,
+              'capability',
+              sanitizeMessage(outcome.defects[0] || '成果不完整'),
+              '请补充任务说明后重试',
+            );
+            return;
+          }
+        }
+      }
+
       // --- artifact commit / append (先写 Artifact,再 succeeded) ---
       job = await this.withProgress(job, 'artifact_write', '正在保存成果');
       await this.persistJob(job);
@@ -1103,6 +1203,12 @@ export class WorkRuntime {
 
 function emptySubjectContext(subjectId: string): ConfirmedExperienceView {
   return { subjectId, derivedAt: nowIso(), entries: [] };
+}
+
+function capabilityOutputText(output: CapabilityOutput): string | null {
+  const payload = output.artifact?.payload;
+  if (payload && payload.kind === 'text') return payload.text;
+  return null;
 }
 
 function normalizeSelection(

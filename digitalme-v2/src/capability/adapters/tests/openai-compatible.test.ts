@@ -123,7 +123,8 @@ test('prompt 组装:warning 不进正文;长材料截断;confirmed 可注入', a
   assert.doesNotMatch(assembled.messages[1]?.content as string, /broken|bad\.docx/);
   assert.match(assembled.messages[1]?.content as string, /已确认经验/);
   assert.match(assembled.messages[1]?.content as string, /gevt_1/);
-  assert.match(assembled.messages[1]?.content as string, /# 任务概要/);
+  assert.match(assembled.messages[1]?.content as string, /# 任务/);
+  assert.doesNotMatch(assembled.messages[1]?.content as string, /# 任务概要\n/);
   assert.equal(assembled.taskBrief.artifactType, 'document');
   assert.ok(assembled.truncatedCount >= 1 || assembled.materialCount >= 1);
   assert.equal(assembled.skippedWarningCount, 1);

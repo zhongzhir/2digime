@@ -107,7 +107,7 @@ test('resolvePositiveExperiences drops artifact after later reject', () => {
   assert.equal(resolvePositiveExperiences(entries).length, 0);
 });
 
-test('weak overlap scrubs concrete facts from injected detail', () => {
+test('ai_first skips weak overlap; legacy scrubs concrete facts', () => {
   const confirmed = {
     subjectId: 's',
     derivedAt: '2026-08-05T12:00:00.000Z',
@@ -121,21 +121,25 @@ test('weak overlap scrubs concrete facts from injected detail', () => {
       },
     ],
   };
-  const view = selectConfirmedExperiences({
+  const input = {
     goal: '写一份会议纪要，结构完整',
     requestedArtifactType: 'document',
     confirmed,
     boundaries: {
       subjectId: 's',
       derivedAt: confirmed.derivedAt,
-      excludedTags: [],
-      excludedAssetTags: [],
-      entries: [],
+      excludedTags: [] as string[],
+      excludedAssetTags: [] as string[],
+      entries: [] as [],
     },
-  });
-  assert.equal(view.entries.length, 1);
-  assert.ok(view.entries[0]!.tags.includes('reuse:weak_structure'));
-  assert.ok(!view.entries[0]!.detail.includes(UNIQUE_FACT));
+  };
+  const aiFirst = selectConfirmedExperiences(input, { policy: 'ai_first' });
+  assert.equal(aiFirst.entries.length, 0);
+
+  const legacy = selectConfirmedExperiences(input, { policy: 'legacy' });
+  assert.equal(legacy.entries.length, 1);
+  assert.ok(legacy.entries[0]!.tags.includes('reuse:weak_structure'));
+  assert.ok(!legacy.entries[0]!.detail.includes(UNIQUE_FACT));
 });
 
 test('external artifact reuse quality loop with A/B and pollution checks', async () => {

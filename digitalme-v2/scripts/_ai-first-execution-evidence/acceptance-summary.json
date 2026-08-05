@@ -1,0 +1,38 @@
+{
+  "status": "accept_passed",
+  "generatedAt": "2026-08-05T07:07:04.199Z",
+  "checks": [
+    "one_primary_model_call",
+    "no_forced_weak_inject",
+    "max_3_strong_experiences",
+    "learning_failure_isolated",
+    "outcome_check_at_most_one_revision",
+    "snapshot_records_actual_use",
+    "ui_silent",
+    "high_risk_profile_detected",
+    "no_second_state_machine"
+  ],
+  "abComparison": {
+    "wechat_article": {
+      "legacySelected": 0,
+      "aiFirstSelected": 0,
+      "legacyCalls": 1,
+      "aiFirstCalls": 1,
+      "durationDeltaMs": -17
+    },
+    "project_plan": {
+      "legacySelected": 0,
+      "aiFirstSelected": 0,
+      "legacyCalls": 1,
+      "aiFirstCalls": 1,
+      "durationDeltaMs": -26
+    },
+    "doc_review": {
+      "legacySelected": 4,
+      "aiFirstSelected": 0,
+      "legacyCalls": 1,
+      "aiFirstCalls": 1,
+      "durationDeltaMs": 4
+    }
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "generatedAt": "2026-08-05T07:07:04.172Z",
+  "rows": [
+    {
+      "policy": "legacy",
+      "task": "wechat_article",
+      "status": "succeeded",
+      "modelCalls": 1,
+      "durationMs": 591,
+      "selectedCount": 0,
+      "experienceCount": 0,
+      "identityCount": 0
+    },
+    {
+      "policy": "legacy",
+      "task": "project_plan",
+      "status": "succeeded",
+      "modelCalls": 1,
+      "durationMs": 572,
+      "selectedCount": 0,
+      "experienceCount": 0,
+      "identityCount": 0
+    },
+    {
+      "policy": "legacy",
+      "task": "doc_review",
+      "status": "succeeded",
+      "modelCalls": 1,
+      "durationMs": 560,
+      "selectedCount": 4,
+      "experienceCount": 4,
+      "identityCount": 0
+    },
+    {
+      "policy": "ai_first",
+      "task": "wechat_article",
+      "status": "succeeded",
+      "modelCalls": 1,
+      "durationMs": 574,
+      "selectedCount": 0,
+      "experienceCount": 0,
+      "identityCount": 0
+    },
+    {
+      "policy": "ai_first",
+      "task": "project_plan",
+      "status": "succeeded",
+      "modelCalls": 1,
+      "durationMs": 546,
+      "selectedCount": 0,
+      "experienceCount": 0,
+      "identityCount": 0
+    },
+    {
+      "policy": "ai_first",
+      "task": "doc_review",
+      "status": "succeeded",
+      "modelCalls": 1,
+      "durationMs": 564,
+      "selectedCount": 0,
+      "experienceCount": 0,
+      "identityCount": 0
+    }
+  ],
+  "byTask": {
+    "wechat_article": {
+      "legacySelected": 0,
+      "aiFirstSelected": 0,
+      "legacyCalls": 1,
+      "aiFirstCalls": 1,
+      "durationDeltaMs": -17
+    },
+    "project_plan": {
+      "legacySelected": 0,
+      "aiFirstSelected": 0,
+      "legacyCalls": 1,
+      "aiFirstCalls": 1,
+      "durationDeltaMs": -26
+    },
+    "doc_review": {
+      "legacySelected": 4,
+      "aiFirstSelected": 0,
+      "legacyCalls": 1,
+      "aiFirstCalls": 1,
+      "durationDeltaMs": 4
+    }
+  }
+}

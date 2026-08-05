@@ -45,17 +45,19 @@ export async function assembleDocumentPrompt(
   const taskBrief = extractTaskBrief(input, materials.sources);
 
   const system = [
-    '你是数字主体的文档能力。根据任务概要、用户目标、给定材料与已确认经验,撰写一份可直接使用的 Markdown 文档。',
-    '严格遵守任务概要中的体裁、场景、受众、长度与禁止项。',
-    '要求:结构清楚、忠于材料、不要编造材料中不存在的关键事实(含赛事、奖项、数据)。',
+    '你是数字主体的文档能力。根据用户目标、给定材料与（若有）已确认经验，撰写一份可直接使用的 Markdown 文档。',
+    '要求:结构清楚、忠于材料、不要编造材料中不存在的关键事实。',
     '若材料不足,明确写出缺口而不是虚构。',
-    '只输出文档正文,不要输出内部协议名或系统字段。',
+    '只输出文档正文,不要输出内部协议名、推理链或系统字段。',
   ].join('\n');
 
   const sections: string[] = [];
-  sections.push(`# 任务概要\n${formatTaskBrief(taskBrief)}`);
-  sections.push(`# 任务目标\n${input.goal.trim()}`);
-  sections.push(`# 成果类型\n${input.artifactType}`);
+  // AI-first：不重复写「任务概要 + 任务目标」；概要只保留体裁/受众/必须覆盖等非重复约束
+  sections.push(`# 任务\n目标：${input.goal.trim()}\n成果类型：${input.artifactType}`);
+  const briefExtras = formatTaskBriefExtras(taskBrief);
+  if (briefExtras) {
+    sections.push(`# 写作约束\n${briefExtras}`);
+  }
 
   if (input.revision) {
     sections.push(`# 修改要求\n${input.revision.request.trim()}`);
@@ -65,19 +67,19 @@ export async function assembleDocumentPrompt(
 
   const experienceBlock = formatExperiences(input.subjectContext.entries);
   if (experienceBlock.text.length > 0) {
-    sections.push(`# 已确认经验(必须尊重)\n${experienceBlock.text}`);
+    sections.push(`# 已确认经验\n${experienceBlock.text}`);
   }
 
   if (materials.text.length > 0) {
     sections.push(`# 材料\n${materials.text}`);
   } else {
-    sections.push('# 材料\n(本次未提供可用材料,请仅依据目标与已确认经验撰写;不得虚构材料中不存在的事实。)');
+    sections.push('# 材料\n(本次未提供可用材料,请仅依据目标撰写;不得虚构未给出的事实。)');
   }
 
   if (input.revision) {
     sections.push('# 输出\n请直接给出修改后的完整 Markdown 文档(不是补丁)。第一行可以是标题。');
   } else {
-    sections.push('# 输出\n请直接给出 Markdown 文档。第一行可以是标题。');
+    sections.push('# 输出\n请直接给出 Markdown 文档。第一行可以是标题。不要输出计划或推理过程。');
   }
 
   return {
@@ -120,18 +122,16 @@ export function extractTaskBrief(
   };
 }
 
-function formatTaskBrief(brief: TaskBrief): string {
+/** AI-first：仅输出非与目标重复的约束，避免「概要 + 目标」双写。 */
+function formatTaskBriefExtras(brief: TaskBrief): string {
   const lines = [
-    `- 目标: ${brief.goal}`,
-    `- 成果类型: ${brief.artifactType}`,
-    `- 发布/使用场景: ${brief.publishScene}`,
+    `- 场景: ${brief.publishScene}`,
     `- 体裁: ${brief.genre}`,
     `- 受众: ${brief.audience}`,
     `- 长度: ${brief.lengthHint}`,
-    `- 必须覆盖: ${brief.mustCover.length ? brief.mustCover.join('；') : '按目标完整表达'}`,
-    `- 风格与禁止: ${brief.styleAndForbid.join('；')}`,
-    `- 材料来源: ${brief.materialSources.length ? brief.materialSources.join('；') : '无附加材料'}`,
   ];
+  if (brief.mustCover.length) lines.push(`- 必须覆盖: ${brief.mustCover.join('；')}`);
+  if (brief.styleAndForbid.length) lines.push(`- 风格与禁止: ${brief.styleAndForbid.join('；')}`);
   return lines.join('\n');
 }
 

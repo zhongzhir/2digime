@@ -44,8 +44,13 @@ import { simulateInteraction } from '../collaboration/local-simulation';
 import { LocalCollaborationHost } from '../collaboration/local-collaboration';
 import { GrantStore } from '../collaboration/grant-store';
 import { nowIso, newId } from '../shared/ids';
+import { chooseExecutionProfile } from '../work-runtime/ai-first-policy';
 
 export interface DigitalMeRuntimeOptions {
+  /**
+   * 执行策略：ai_first（默认）精简注入；legacy 保留旧式弱相关 scrub 与核心身份注入（对照验收）。
+   */
+  executionPolicy?: 'ai_first' | 'legacy';
   fakeAdapter?: FakeDocumentAdapterOptions;
   /** 兼容旧选项:是否注册 needs_setup 的 stub。默认 true(当未启用真实模型时)。 */
   registerOpenAiStub?: boolean;
@@ -538,10 +543,15 @@ export class DigitalMeRuntime {
       },
       selectSubjectContext: async ({ goal, requestedArtifactType }) => {
         const derived = await subjectService.getDerived();
+        const policy = this.options.executionPolicy ?? 'ai_first';
+        const profile = chooseExecutionProfile({ goal, requestedArtifactType });
         return selectSubjectInjection({
           goal,
           requestedArtifactType,
           derived,
+          policy,
+          includeCoreMatching:
+            policy === 'legacy' || profile === 'careful' || profile === 'high_risk',
         });
       },
       loadAuthorizationGrant: async (grantId: string) => {

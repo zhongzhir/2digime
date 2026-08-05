@@ -1,0 +1,36 @@
+{
+  "task": "DIGITALME-V2-AI-FIRST-EXECUTION-SIMPLIFICATION-01",
+  "generatedAt": "2026-08-05T04:10:00.000Z",
+  "oldPipelineSteps": [
+    { "step": "主体检索 getDerived", "mark": "required_best_effort" },
+    { "step": "ContextSnapshot 构建", "mark": "required" },
+    { "step": "身份/方向/原则默认注入", "mark": "remove_from_standard" },
+    { "step": "弱相关经验 scrub 注入", "mark": "remove_from_standard" },
+    { "step": "高相关经验注入", "mark": "optional_max_3" },
+    { "step": "硬边界注入", "mark": "required" },
+    { "step": "Task Brief + 目标双写", "mark": "remove" },
+    { "step": "主模型调用", "mark": "required_once" },
+    { "step": "远端验证链", "mark": "high_risk_only_or_remote" },
+    { "step": "复杂评分", "mark": "remove" },
+    { "step": "用户修订", "mark": "optional" },
+    { "step": "学习/GrowthEvent", "mark": "async" },
+    { "step": "Artifact 回写", "mark": "required" }
+  ],
+  "newPipelineSteps": [
+    { "step": "主体检索（失败不阻断）", "mark": "required_best_effort" },
+    { "step": "最小 ContextSnapshot", "mark": "required" },
+    { "step": "硬边界 + ≤3 高相关经验", "mark": "optional" },
+    { "step": "一次主模型调用", "mark": "required" },
+    { "step": "轻量 Outcome Check", "mark": "required" },
+    { "step": "最多一次针对性修订", "mark": "optional" },
+    { "step": "Artifact 回写", "mark": "required" },
+    { "step": "异步学习", "mark": "async" }
+  ],
+  "verdict": {
+    "replaceDefaultPath": true,
+    "keepStrictPath": ["high_risk_authorization", "remote_candidate_verification", "owner_confirm_for_irreversible"],
+    "hardBoundariesPreserved": true,
+    "learningAsync": true,
+    "uiSilent": true
+  }
+}

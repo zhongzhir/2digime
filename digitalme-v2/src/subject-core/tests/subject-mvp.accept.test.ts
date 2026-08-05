@@ -175,13 +175,13 @@ test('SUBJECT-MVP: one sentence start → task without archive gate → growth r
   const job2 = await waitForJobTerminal(runtime.workRuntime, t2.jobId);
   const freeze2 = await runtime.readSubjectContextFreeze(job2.snapshotId!);
   assert.ok(freeze2!.selectedEventIds.includes(confirmedExp!.id));
-  assert.ok(freeze2!.entries.some((e) => e.kind === 'principle' || e.kind === 'experience'));
+  assert.ok(freeze2!.entries.some((e) => e.kind === 'experience'));
   const text2 = (
     await runtime.getContent({
       artifactId: (await runtime.getTask({ taskId: t2.taskId })).artifactIds[0] as string,
     })
   ).text as string;
-  assert.match(text2, /主体要点|结论先行|正式|沿用经验/);
+  assert.match(text2, /沿用经验/);
 
   // 无关任务不污染
   const t3 = await runtime.submitTask({
@@ -283,18 +283,19 @@ test('SUBJECT-MVP: related → freeze → correct → reuse → unrelated isolat
   assert.ok(job1.snapshotId);
   const freeze1 = await runtime.readSubjectContextFreeze(job1.snapshotId!);
   assert.ok(freeze1);
-  assert.ok(freeze1!.selectedEventIds.length >= 2);
+  // AI-first standard：允许仅硬边界；无相关经验时不强行塞满 Snapshot
+  assert.ok(freeze1!.selectedEventIds.length >= 1);
   const recomputed = computeSubjectContextDigest({
     subjectId: freeze1!.subjectId,
     selectedEventIds: freeze1!.selectedEventIds,
     entries: freeze1!.entries,
   });
   assert.equal(recomputed, freeze1!.subjectContextDigest);
-  assert.ok(freeze1!.entries.some((e) => e.kind === 'goal' || e.kind === 'principle'));
+  assert.ok(freeze1!.entries.some((e) => e.kind === 'boundary'));
 
   const art1 = (await runtime.getTask({ taskId: t1.taskId })).artifactIds[0] as string;
   const text1 = (await runtime.getContent({ artifactId: art1 })).text as string;
-  assert.match(text1, /主体要点|本地优先|结论先行|正式/);
+  assert.match(text1, /边界|融资|fake document|周报/);
   assert.ok(!/未公开融资详情/.test(text1));
 
   // 未确认候选不得注入
