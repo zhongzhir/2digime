@@ -25,6 +25,7 @@
     "accept:growth-perception-bridge": "node scripts/run-growth-perception-bridge-acceptance.cjs",
     "accept:work-experience": "node scripts/run-work-experience-acceptance.cjs",
     "accept:collab-experience": "node scripts/run-collab-experience-b4-acceptance.cjs",
+    "accept:visual-content": "node scripts/run-visual-content-b5-acceptance.cjs",
     "accept:model-connection-settings": "node scripts/run-model-connection-settings-acceptance.cjs",
     "start:reference-research-agent": "node scripts/start-reference-research-agent.cjs",
     "verify:reference-research-agent": "node scripts/verify-reference-research-agent.cjs",

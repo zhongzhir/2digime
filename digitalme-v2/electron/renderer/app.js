@@ -771,7 +771,7 @@
     if (els.collabPageContextNote) {
       if (draft && draft.issuerTaskId) {
         els.collabPageContextNote.hidden = false;
-        els.collabPageContextNote.textContent = "已带入当前任务目标与材料候选；发送前请核对授权范围。";
+        els.collabPageContextNote.textContent = "已带入当前任务；发送前请核对材料与授权。";
       } else {
         els.collabPageContextNote.hidden = true;
         els.collabPageContextNote.textContent = "";

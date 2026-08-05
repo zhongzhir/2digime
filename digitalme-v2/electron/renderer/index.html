@@ -44,7 +44,7 @@
         </header>
         <div class="welcome-actions settings-panel">
           <h2>模型连接</h2>
-          <p class="muted">连接后可用于做事与对话。密钥只保存在本机，界面不会显示完整密钥。</p>
+          <p class="muted">连接模型后即可做事与对话。密钥保存在本机。</p>
 
           <label class="field">
             <span>服务提供方</span>
@@ -80,7 +80,7 @@
 
           <details id="advanced-connection" class="advanced-connection">
             <summary>高级连接</summary>
-            <p class="muted tiny">仅在自定义服务或需要调整时使用。普通使用可保持收起。</p>
+            <p class="muted tiny">仅在自定义服务时需要。普通使用可保持收起。</p>
             <label class="field">
               <span>服务地址</span>
               <input
@@ -122,22 +122,26 @@
           </div>
         </header>
 
-        <section id="panel-chat" class="shell-panel" data-panel="chat" hidden>
+        <section id="panel-chat" class="shell-panel chat-panel" data-panel="chat" hidden>
           <h1 class="page-title">对话</h1>
-          <p class="muted tiny">轻量交流。不会自动生成成果；需要时可转为任务。</p>
-          <div id="chat-context" class="chat-context muted tiny" hidden></div>
-          <ul id="chat-turns" class="chat-turns" aria-live="polite"></ul>
-          <p id="chat-empty" class="muted tiny">还没有对话。写一句话开始即可。</p>
-          <label class="field">
-            <span>你想说的话</span>
-            <textarea id="chat-input" rows="3" placeholder="例如：我最近在做产品验收，希望你记得这一点。"></textarea>
-          </label>
-          <div class="row">
-            <button type="button" id="btn-chat-send" class="primary">发送</button>
-            <button type="button" id="btn-chat-to-task">转为任务</button>
-            <button type="button" id="btn-chat-clear" class="ghost">清空对话</button>
+          <p class="page-lead">交流想法；需要时可转为任务。</p>
+          <div class="chat-stream">
+            <div id="chat-context" class="chat-context muted tiny" hidden></div>
+            <ul id="chat-turns" class="chat-turns" aria-live="polite"></ul>
+            <p id="chat-empty" class="empty-hint">写一句话开始。</p>
           </div>
-          <p id="chat-status" class="meta" aria-live="polite"></p>
+          <div class="chat-composer">
+            <label class="field">
+              <span>你想说的话</span>
+              <textarea id="chat-input" rows="3" placeholder="例如：我最近在做产品验收，希望你记得这一点。"></textarea>
+            </label>
+            <div class="row">
+              <button type="button" id="btn-chat-send" class="primary">发送</button>
+              <button type="button" id="btn-chat-to-task">转为任务</button>
+              <button type="button" id="btn-chat-clear" class="ghost">清空对话</button>
+            </div>
+            <p id="chat-status" class="meta" aria-live="polite"></p>
+          </div>
         </section>
 
         <section id="panel-subject" class="shell-panel" data-panel="subject" hidden>
@@ -154,13 +158,13 @@
           <p id="subject-action-status" class="meta" aria-live="polite"></p>
           <h2 class="section-title">已确认的重要内容</h2>
           <ul id="subject-active-list" class="subject-list"></ul>
-          <p id="subject-active-empty" class="muted tiny">暂无已确认内容。可在此修改或停止使用。</p>
+          <p id="subject-active-empty" class="empty-hint">暂无已确认内容。</p>
           <h2 class="section-title">待你确认的内容</h2>
-          <ul id="subject-recent-list" class="subject-list"></ul>
-          <p id="subject-recent-empty" class="muted tiny">暂无需要确认的新内容。</p>
+          <ul id="subject-recent-list" class="subject-list subject-list-pending"></ul>
+          <p id="subject-recent-empty" class="empty-hint">暂无待确认内容。</p>
           <h2 class="section-title">已添加的资料</h2>
           <ul id="subject-material-list" class="subject-list"></ul>
-          <p id="subject-material-empty" class="muted tiny">还没有添加资料。</p>
+          <p id="subject-material-empty" class="empty-hint">还没有资料。</p>
         </section>
 
         <section id="panel-work" class="shell-panel work-compose-focus" data-panel="work">
@@ -171,7 +175,7 @@
                 <button type="button" id="btn-new-task" class="primary">新建任务</button>
               </div>
               <ul id="task-list" class="task-list"></ul>
-              <p id="task-empty" class="muted">还没有任务。写下一件事，从这里开始。</p>
+              <p id="task-empty" class="empty-hint">还没有任务。写下目标后开始。</p>
             </aside>
 
             <main class="panel grow work-main" id="work-main">
@@ -282,7 +286,7 @@
                   <input
                     type="text"
                     id="artifact-decision-note"
-                    placeholder="可以写一句原因，也可以留空"
+                    placeholder="可选说明，可留空"
                     maxlength="200"
                   />
                 </label>
@@ -327,66 +331,85 @@
               <h1 class="page-title">协作</h1>
               <button type="button" id="btn-collab-page-new" class="primary">新建协作</button>
             </div>
-            <p class="muted tiny">选择可协作的对象或专业能力，查看进行中的事项，并处理返回的结果。</p>
+            <p class="page-lead">找人帮忙或使用专业能力，并处理返回结果。</p>
 
-            <h2 class="section-title">可找谁帮忙</h2>
-            <div class="collab-connected-peers">
-              <div class="collab-peer-manage-card" id="collab-peer-digitalme-card">
-                <p class="collab-peer-name">其他数字之我</p>
-                <p class="muted tiny">本机其他数字之我可作为协作对象。通过「新建协作」选择或导入。</p>
-                <p class="meta">可在新建协作中选择</p>
+            <section class="collab-home-section" aria-labelledby="collab-who-title">
+              <h2 class="section-title" id="collab-who-title">
+                可找谁帮忙
+                <span class="section-hint">对象与能力</span>
+              </h2>
+              <div class="collab-connected-peers">
+                <div class="collab-peer-manage-card" id="collab-peer-digitalme-card">
+                  <p class="collab-peer-name">其他数字之我</p>
+                  <p class="muted tiny">可在「新建协作」中选择或导入。</p>
+                </div>
+                <div class="collab-peer-manage-card" id="collab-external-cap-manage">
+                  <p class="collab-peer-name">专业能力</p>
+                  <p id="collab-ext-cap-name" class="meta">研究分析能力</p>
+                  <p id="collab-ext-cap-desc" class="muted tiny">
+                    基于授权材料形成项目风险摘要。不是另一个数字之我。
+                  </p>
+                  <p id="collab-ext-cap-suitable" class="muted tiny">适合：约 500–800 字结构化摘要。</p>
+                  <p id="collab-ext-cap-status" class="meta" aria-live="polite">状态：未连接</p>
+                  <div class="row">
+                    <button type="button" id="btn-collab-ext-connect" class="primary">连接</button>
+                    <button type="button" id="btn-remote-cap-test">检查连接</button>
+                    <button type="button" id="btn-remote-cap-disable" class="ghost">停用</button>
+                    <button type="button" id="btn-collab-ext-auth" class="ghost">查看授权边界</button>
+                  </div>
+                  <div id="collab-ext-cap-connect-panel" class="collab-ext-connect-panel" hidden>
+                    <details id="collab-ext-cap-advanced">
+                      <summary>连接外部专业能力（高级）</summary>
+                      <label class="field">
+                        <span>服务地址</span>
+                        <input
+                          id="remote-cap-base-url"
+                          type="text"
+                          placeholder="例如 http://127.0.0.1:43111"
+                          autocomplete="off"
+                        />
+                      </label>
+                      <div class="row">
+                        <button type="button" id="btn-remote-cap-save" class="primary">保存并连接</button>
+                      </div>
+                    </details>
+                  </div>
+                  <div id="collab-ext-cap-auth-panel" class="collab-confirm" hidden>
+                    <h3 class="section-title">授权边界</h3>
+                    <ul id="collab-ext-cap-auth-points" class="collab-confirm-points"></ul>
+                  </div>
+                  <p id="remote-cap-status-label" class="meta" hidden>状态：未连接</p>
+                  <p id="remote-cap-settings-status" class="status" aria-live="polite"></p>
+                </div>
               </div>
-              <div class="collab-peer-manage-card" id="collab-external-cap-manage">
-                <p class="collab-peer-name">专业能力</p>
-                <p id="collab-ext-cap-name" class="meta">研究分析能力</p>
-                <p id="collab-ext-cap-desc" class="muted tiny">
-                  可根据授权材料形成结构化项目风险摘要。这不是另一个数字之我。
-                </p>
-                <p id="collab-ext-cap-suitable" class="muted tiny">
-                  适合：基于明确授权材料的结构化项目风险摘要（约 500–800 字）。
-                </p>
-                <p id="collab-ext-cap-status" class="meta" aria-live="polite">状态：未连接</p>
-                <div class="row">
-                  <button type="button" id="btn-collab-ext-connect" class="primary">连接</button>
-                  <button type="button" id="btn-remote-cap-test">检查连接</button>
-                  <button type="button" id="btn-remote-cap-disable" class="ghost">停用</button>
-                  <button type="button" id="btn-collab-ext-auth" class="ghost">查看授权边界</button>
-                </div>
-                <div id="collab-ext-cap-connect-panel" class="collab-ext-connect-panel" hidden>
-                  <details id="collab-ext-cap-advanced">
-                    <summary>连接外部专业能力（高级）</summary>
-                    <label class="field">
-                      <span>服务地址</span>
-                      <input
-                        id="remote-cap-base-url"
-                        type="text"
-                        placeholder="例如 http://127.0.0.1:43111"
-                        autocomplete="off"
-                      />
-                    </label>
-                    <div class="row">
-                      <button type="button" id="btn-remote-cap-save" class="primary">保存并连接</button>
-                    </div>
-                  </details>
-                </div>
-                <div id="collab-ext-cap-auth-panel" class="collab-confirm" hidden>
-                  <h3 class="section-title">授权边界</h3>
-                  <ul id="collab-ext-cap-auth-points" class="collab-confirm-points"></ul>
-                </div>
-                <p id="remote-cap-status-label" class="meta" hidden>状态：未连接</p>
-                <p id="remote-cap-settings-status" class="status" aria-live="polite"></p>
-              </div>
-            </div>
+            </section>
 
-            <h2 class="section-title">进行中</h2>
-            <ul id="collab-list-active" class="collab-entry-list"></ul>
-            <p id="collab-empty-active" class="muted tiny">暂无进行中的协作。可点「新建协作」开始。</p>
-            <h2 class="section-title">待你处理 / 已完成</h2>
-            <ul id="collab-list-done" class="collab-entry-list"></ul>
-            <p id="collab-empty-done" class="muted tiny">暂无已完成的协作。</p>
-            <h2 class="section-title">已撤销</h2>
-            <ul id="collab-list-revoked" class="collab-entry-list"></ul>
-            <p id="collab-empty-revoked" class="muted tiny">暂无已撤销的协作。</p>
+            <section class="collab-home-section" aria-labelledby="collab-active-title">
+              <h2 class="section-title" id="collab-active-title">
+                进行中
+                <span class="section-hint">尚未结束</span>
+              </h2>
+              <ul id="collab-list-active" class="collab-entry-list"></ul>
+              <p id="collab-empty-active" class="empty-hint">暂无进行中的协作。可点「新建协作」。</p>
+            </section>
+
+            <section class="collab-home-section" aria-labelledby="collab-done-title">
+              <h2 class="section-title" id="collab-done-title">
+                待你处理 / 已完成
+                <span class="section-hint">需确认或已结束</span>
+              </h2>
+              <ul id="collab-list-done" class="collab-entry-list"></ul>
+              <p id="collab-empty-done" class="empty-hint">暂无待处理或已完成的协作。</p>
+            </section>
+
+            <section class="collab-home-section" aria-labelledby="collab-revoked-title">
+              <h2 class="section-title" id="collab-revoked-title">
+                已撤销
+                <span class="section-hint">授权已结束</span>
+              </h2>
+              <ul id="collab-list-revoked" class="collab-entry-list"></ul>
+              <p id="collab-empty-revoked" class="empty-hint">暂无已撤销记录。</p>
+            </section>
           </div>
 
           <div id="collab-page-new" hidden>
@@ -430,7 +453,7 @@
                   <button type="button" id="btn-collab-page-add-files">添加材料文件</button>
                 </div>
                 <ul id="collab-page-material-checks" class="collab-material-checks"></ul>
-                <p class="muted tiny">默认不勾选。发送前请核对；未勾选的材料不会共享。</p>
+                <p class="muted tiny">默认不勾选。发送前请核对。</p>
               </fieldset>
               <div id="collab-page-confirm" class="collab-confirm" hidden>
                 <h2 class="section-title">授权说明</h2>
@@ -446,10 +469,10 @@
             <div id="external-cap-panel" class="collab-form" hidden>
               <div id="external-cap-card" class="external-cap-card">
                 <p id="external-cap-name" class="collab-peer-name">研究分析能力</p>
-                <p id="external-cap-desc" class="muted tiny">已连接的专业能力，可根据授权材料形成结构化项目风险摘要。</p>
-                <p id="external-cap-suitable" class="muted tiny">适合完成：基于明确授权材料的结构化项目风险摘要（约 500–800 字）。</p>
-                <p id="external-cap-share" class="muted tiny">将共享：仅你勾选的材料与任务要求文字。</p>
-                <p id="external-cap-eta" class="muted tiny">预计可能耗时：数秒到两分钟。</p>
+                <p id="external-cap-desc" class="muted tiny">已连接的专业能力，可基于授权材料形成项目风险摘要。</p>
+                <p id="external-cap-suitable" class="muted tiny">适合完成：结构化项目风险摘要（约 500–800 字）。</p>
+                <p id="external-cap-share" class="muted tiny">将共享：仅勾选的材料与任务要求文字。</p>
+                <p id="external-cap-eta" class="muted tiny">预计耗时：数秒到两分钟。</p>
                 <p id="external-cap-avail" class="meta" aria-live="polite">当前是否可用：检查中…</p>
               </div>
               <label class="field">
@@ -463,7 +486,7 @@
               <fieldset class="field collab-materials-field">
                 <legend>允许共享的材料（须明确勾选）</legend>
                 <ul id="external-cap-material-checks" class="collab-material-checks"></ul>
-                <p class="muted tiny">未勾选时只发送任务要求文字；不会发送完整数字之我资料、对话记录或其它任务。</p>
+                <p class="muted tiny">未勾选时只发送任务要求文字，不发送其它资料。</p>
               </fieldset>
               <div id="external-cap-confirm" class="collab-confirm" hidden>
                 <h4 class="section-title">授权说明</h4>
@@ -522,20 +545,20 @@
 
       </section>
 
-      <section id="view-help" class="view" hidden>
+            <section id="view-help" class="view" hidden>
         <header class="topbar">
           <p class="brand-sm">Digital Me</p>
           <button type="button" id="btn-help-back" class="ghost">返回</button>
         </header>
-        <div class="panel">
+        <div class="panel help-panel">
           <h1>帮助</h1>
-          <p>用对话澄清想法，用做事完成可带走的成果，在数字之我中查看与调整已确认的内容。</p>
+          <p class="page-lead">几件常用的事：</p>
           <ul class="help-list">
-            <li><strong>数字之我</strong>：主体资料、目标与边界、已确认内容与个人资料管理。</li>
-            <li><strong>对话</strong>：与当前数字之我的轻量交流，不会自动生成成果；需要时可转为任务。</li>
-            <li><strong>做事</strong>：描述目标、添加材料、开始处理；可修改与导出成果；可从任务调用已连接的对方或外部能力。</li>
-            <li><strong>协作</strong>：管理协作对象与协作活动（其他数字之我、外部专业能力、进行中/已完成/已撤销）。</li>
-            <li><strong>设置</strong>：模型服务、凭证与应用级运行参数。外部专业能力连接在「协作」中管理。</li>
+            <li><strong>做事</strong>：写下目标、添加材料、开始处理；成果可修改、采用与导出。</li>
+            <li><strong>对话</strong>：澄清想法；需要时点「转为任务」继续。</li>
+            <li><strong>数字之我</strong>：查看已确认内容，确认新内容，管理资料。</li>
+            <li><strong>协作</strong>：请人帮忙或使用专业能力，并处理返回结果。</li>
+            <li><strong>设置</strong>：连接模型。外部专业能力在「协作」中连接。</li>
           </ul>
         </div>
       </section>

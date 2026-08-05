@@ -207,7 +207,7 @@ async function mainSequence() {
   check('subject_title', subjectView.title === '数字之我');
   check('subject_active_list_present', subjectView.hasActive === true);
   check('subject_material_list_present', subjectView.hasMaterials === true);
-  check('subject_material_empty_hint', /还没有添加资料/.test(subjectView.materialEmpty));
+  check('subject_material_empty_hint', /还没有(添加)?资料/.test(subjectView.materialEmpty));
 
   // 资料真实列表与移除（命令 + UI）
   const overviewBase = await bus.invoke('subject.getOverview', {});
