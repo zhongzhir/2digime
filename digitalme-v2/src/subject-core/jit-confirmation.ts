@@ -87,7 +87,7 @@ export function findJitConflict(input: {
       if (input.seenFingerprints?.has(fingerprint)) continue;
 
       return {
-        question: `你之前更偏向「${short(conf.title || conf.detail)}」，最近一次又提到「${short(cand.title || cand.detail)}」。这次按哪一种处理？`,
+        question: '你以前对这类内容有过不同选择。这次希望怎么处理？',
         labelA: short(conf.title || conf.detail),
         labelB: short(cand.title || cand.detail),
         eventIdA: conf.eventId,
@@ -113,7 +113,7 @@ export function findJitConflict(input: {
       const fingerprint = `${a.eventId}|${b.eventId}`;
       if (input.seenFingerprints?.has(fingerprint)) continue;
       return {
-        question: `你有两种不同偏好：「${short(a.title)}」和「${short(b.title)}」。这次按哪一种处理？`,
+        question: '你以前对这类内容有过不同选择。这次希望怎么处理？',
         labelA: short(a.title),
         labelB: short(b.title),
         eventIdA: a.eventId,

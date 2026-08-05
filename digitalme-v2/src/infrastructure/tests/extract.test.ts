@@ -82,13 +82,17 @@ test('文件夹枚举:单文件失败降级 warning,不终止整体', async () =
   await fs.writeFile(path.join(dir, 'skip.exe'), Buffer.from([0x4d, 0x5a]));
 
   const outcomes = await extractFolder(dir);
-  assert.equal(outcomes.length, 3); // exe 不在支持清单,不产生条目
+  assert.equal(outcomes.length, 4); // exe 以 warning 记录，便于材料透明度
   const ok = outcomes.filter((o) => o.status === 'ok');
   const warnings = outcomes.filter((o) => o.status === 'warning');
   assert.equal(ok.length, 2);
-  assert.equal(warnings.length, 1);
-  assert.match(warnings[0]?.warning as string, /extraction failed/);
-  assert.match(warnings[0]?.sourcePath as string, /bad\.docx$/);
+  assert.equal(warnings.length, 2);
+  const badDocx = warnings.find((w) => /bad\.docx$/.test(w.sourcePath));
+  const skipExe = warnings.find((w) => /skip\.exe$/.test(w.sourcePath));
+  assert.ok(badDocx);
+  assert.match(badDocx!.warning as string, /无法读取|extraction failed/);
+  assert.ok(skipExe);
+  assert.match(skipExe!.warning as string, /格式暂不支持/);
 });
 
 test('不支持类型与缺失文件 → warning 而非抛错', async () => {
@@ -96,7 +100,7 @@ test('不支持类型与缺失文件 → warning 而非抛错', async () => {
   await fs.writeFile(path.join(dir, 'image.png'), Buffer.from([0x89, 0x50]));
   const unsupported = await extractFile(path.join(dir, 'image.png'));
   assert.equal(unsupported.status, 'warning');
-  assert.match(unsupported.warning as string, /unsupported file type/);
+  assert.match(unsupported.warning as string, /格式暂不支持|unsupported/);
   const missing = await extractFile(path.join(dir, 'missing.txt'));
   assert.equal(missing.status, 'warning');
 });

@@ -212,6 +212,16 @@ export interface CommandMap {
         items: Array<{ text: string }>;
       };
       /**
+       * 本次任务材料纳入摘要 — 由最新 Job 的 ContextSnapshot 派生，非永久 Store。
+       */
+      materialSummary?: {
+        readCount: number;
+        skippedCount: number;
+        summaryLine: string;
+        included: Array<{ path: string; displayName: string }>;
+        skipped: Array<{ path: string; displayName: string; reason: string }>;
+      };
+      /**
        * 即将使用前的自然语言选择（无内部 id 展示义务由 UI 承担）。
        * 平时不弹；仅相关任务返回。
        */

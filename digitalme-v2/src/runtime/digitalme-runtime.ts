@@ -39,6 +39,7 @@ import { selectSubjectInjection } from '../subject-core/experience-selector';
 import { createSubjectDistillModelRuntime } from '../subject-core/distill-model-runtime';
 import type { SubjectContextFreeze } from '../subject-core/subject-context-freeze';
 import { buildAppliedUnderstanding } from '../subject-core/user-facing-overview';
+import { buildMaterialSummary } from '../work-runtime/material-summary';
 import { ArtifactWorkspace } from '../artifact-workspace/workspace';
 import type { CommandMap } from '../runtime/commands';
 import type { GrowthEvent } from '../subject-core/growth-event';
@@ -211,16 +212,38 @@ export class DigitalMeRuntime {
   async getTask(input: CommandMap['work.getTask']['input']) {
     const result = await this.requireWork().getTask(input);
     const jobId = result.latestJob?.jobId;
-    if (jobId && result.latestJob?.status === 'succeeded') {
+    if (jobId) {
       try {
         const job = await this.getJob(jobId);
         if (job?.snapshotId) {
-          const freeze = await this.readSubjectContextFreeze(job.snapshotId);
-          const applied = buildAppliedUnderstanding(freeze);
-          if (applied) result.appliedUnderstanding = applied;
+          const snapshot = await this.getSnapshot(job.snapshotId);
+          if (snapshot?.items?.length) {
+            const summary = buildMaterialSummary(snapshot.items);
+            if (summary) {
+              result.materialSummary = {
+                readCount: summary.readCount,
+                skippedCount: summary.skippedCount,
+                summaryLine: summary.summaryLine,
+                included: summary.included.map((e) => ({
+                  path: e.path,
+                  displayName: e.displayName,
+                })),
+                skipped: summary.skipped.map((e) => ({
+                  path: e.path,
+                  displayName: e.displayName,
+                  reason: e.reason || '未能纳入',
+                })),
+              };
+            }
+          }
+          if (result.latestJob?.status === 'succeeded') {
+            const freeze = await this.readSubjectContextFreeze(job.snapshotId);
+            const applied = buildAppliedUnderstanding(freeze);
+            if (applied) result.appliedUnderstanding = applied;
+          }
         }
       } catch {
-        /* 冻结缺失不阻断任务查询 */
+        /* 冻结/快照缺失不阻断任务查询 */
       }
     }
     const jit = this.subject.peekJitPrompt(input.taskId);

@@ -34,7 +34,7 @@ for (const bad of [/GrowthEvent/, /conflictId/, /confidence\s*[:=]/, /分类器/
   }
 }
 if (!/已确认的重要内容|待你确认的内容/.test(html)) fail('subject panel sections missing');
-if (!/ownerChoicePrompt|本次使用|以后优先|暂不决定/.test(appJs)) {
+if (!/ownerChoicePrompt|仅本次使用|以后优先采用|稍后再说/.test(appJs)) {
   fail('renderer should support natural JIT choice options');
 }
 ok('user surface silent + JIT natural options');

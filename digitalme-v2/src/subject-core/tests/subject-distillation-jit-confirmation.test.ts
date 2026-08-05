@@ -231,7 +231,7 @@ test('scenarios 1-12 distillation + JIT confirmation', async () => {
   assert.equal(relatedJob.status, 'succeeded', 'scenario6/9 task completes while pending');
   const relatedView = await runtime.getTask({ taskId: related.taskId });
   assert.ok(relatedView.ownerChoicePrompt, 'scenario6 JIT prompt present');
-  assert.ok(/偏向|按哪一种|这次/.test(relatedView.ownerChoicePrompt!.question));
+  assert.ok(/不同选择|这次希望怎么处理/.test(relatedView.ownerChoicePrompt!.question));
   assert.ok(!/GrowthEvent|conflictId|confidence|分类器/.test(JSON.stringify(relatedView.ownerChoicePrompt)));
 
   const freezeRelated = await runtime.readSubjectContextFreeze(relatedJob.snapshotId!);

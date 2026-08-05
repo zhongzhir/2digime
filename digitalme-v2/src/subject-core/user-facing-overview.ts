@@ -142,17 +142,10 @@ export function buildAppliedUnderstanding(
   freeze: SubjectContextFreeze | null | undefined,
 ): AppliedUnderstanding | undefined {
   if (!freeze || freeze.entries.length === 0) return undefined;
-  const items = freeze.entries.map((e) => ({
+  // 成果区轻量提示：固定文案 + 最多 3 条实际使用条目（不暴露学习机制）
+  const items = freeze.entries.slice(0, 3).map((e) => ({
     text: toUserFacingText(e.title, e.detail),
   }));
-  const kinds = new Set(freeze.entries.map((e) => e.kind));
-  let notice = '已结合你之前确认的内容。';
-  if (kinds.has('principle') && !kinds.has('experience')) {
-    notice = '已结合你之前确认的工作原则。';
-  } else if (kinds.has('experience')) {
-    notice = '这次沿用了你上次修改后的表达方式。';
-  } else if (kinds.has('goal')) {
-    notice = '已结合你确认过的方向。';
-  }
-  return { notice, items };
+  if (items.length === 0) return undefined;
+  return { notice: '已结合你之前确认的内容', items };
 }

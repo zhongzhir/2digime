@@ -265,6 +265,7 @@ export function selectSubjectInjection(
   }
 
   // 已确认偏好：高相关可注入（计入主体切片，易纠正）
+  // ai_first：至少两处目标词命中，且不计内部标签，避免「文档/汇报」类标签误伤无关任务
   const prefSlots = Math.max(0, AI_FIRST_MAX_ENTRIES - experienceView.entries.filter((e) => !e.tags.includes('reuse:weak_structure')).length);
   let prefAdded = 0;
   for (const item of derived.preferences.entries) {
@@ -272,9 +273,9 @@ export function selectSubjectInjection(
       excludedEventIds.push(item.eventId);
       continue;
     }
-    const score = scoreText(tokens, `${item.title} ${item.detail} ${item.tags.join(' ')}`);
-    // 偏好：至少一处相关即可（工作方法类）；避免「必须两词」漏掉明确偏好
-    if (score < 1) {
+    const score = scoreText(tokens, `${item.title} ${item.detail}`);
+    const minScore = policy === 'ai_first' ? 2 : 1;
+    if (score < minScore) {
       excludedEventIds.push(item.eventId);
       continue;
     }

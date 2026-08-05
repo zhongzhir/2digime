@@ -55,15 +55,18 @@ export async function extractFile(filePath: string): Promise<ExtractionOutcome> 
         break;
       }
       default:
-        return warningOutcome(filePath, `unsupported file type: ${ext || '(none)'}`);
+        return warningOutcome(filePath, '格式暂不支持');
     }
     return finalizeText(filePath, rawText);
   } catch (error) {
-    return warningOutcome(filePath, `extraction failed: ${(error as Error).message}`);
+    return warningOutcome(filePath, `无法读取: ${(error as Error).message}`);
   }
 }
 
-/** 递归枚举文件夹内受支持文件;目录读取失败以 warning 条目报告,不中断。 */
+/**
+ * 递归枚举文件夹：受支持文件抽取正文；不支持/失败以 warning 报告（不改变可抽取内容语义）。
+ * 目录读取失败以 warning 条目报告,不中断。
+ */
 export async function extractFolder(folderPath: string): Promise<ExtractionOutcome[]> {
   const outcomes: ExtractionOutcome[] = [];
   await walk(folderPath, outcomes);
@@ -75,7 +78,7 @@ async function walk(dir: string, outcomes: ExtractionOutcome[]): Promise<void> {
   try {
     entries = await fs.readdir(dir, { withFileTypes: true });
   } catch (error) {
-    outcomes.push(warningOutcome(dir, `folder unreadable: ${(error as Error).message}`));
+    outcomes.push(warningOutcome(dir, `无法读取: ${(error as Error).message}`));
     return;
   }
   for (const entry of entries) {
@@ -86,6 +89,9 @@ async function walk(dir: string, outcomes: ExtractionOutcome[]): Promise<void> {
       const ext = path.extname(entry.name).toLowerCase();
       if ((SUPPORTED_EXTENSIONS as readonly string[]).includes(ext)) {
         outcomes.push(await extractFile(fullPath));
+      } else {
+        // 透明度：记录跳过原因；不进入正文抽取（与原先静默跳过的纳入集合一致）
+        outcomes.push(warningOutcome(fullPath, '格式暂不支持'));
       }
     }
   }
@@ -93,6 +99,9 @@ async function walk(dir: string, outcomes: ExtractionOutcome[]): Promise<void> {
 
 function finalizeText(sourcePath: string, rawText: string): ExtractionOutcome {
   const normalized = normalizeText(rawText);
+  if (normalized.length === 0) {
+    return warningOutcome(sourcePath, '空文件');
+  }
   const truncated = normalized.length > MAX_EXTRACT_CHARS;
   const stored = truncated ? normalized.slice(0, MAX_EXTRACT_CHARS) : normalized;
   const outcome: ExtractionOutcome = {

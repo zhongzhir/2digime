@@ -170,6 +170,10 @@
                   <button type="button" id="btn-clear-materials" class="ghost">清空材料</button>
                 </div>
                 <ul id="material-list" class="material-list"></ul>
+                <details id="material-summary" class="material-summary" hidden>
+                  <summary id="material-summary-line"></summary>
+                  <div id="material-summary-body" class="material-summary-body"></div>
+                </details>
               </div>
               <div class="row">
                 <button type="button" id="btn-submit" class="primary">开始处理</button>
@@ -331,6 +335,7 @@
                 </label>
                 <p id="artifact-decision-error" class="muted tiny error" hidden></p>
               </div>
+              <details id="applied-understanding" class="applied-understanding" hidden></details>
               <p id="save-status" class="meta"></p>
               <p id="version-meta" class="meta"></p>
               <div id="bundle-view" class="bundle-view" hidden>

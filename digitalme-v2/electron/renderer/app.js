@@ -131,6 +131,9 @@
     goal: document.getElementById("goal"),
     artifactType: document.getElementById("artifact-type"),
     materialList: document.getElementById("material-list"),
+    materialSummary: document.getElementById("material-summary"),
+    materialSummaryLine: document.getElementById("material-summary-line"),
+    materialSummaryBody: document.getElementById("material-summary-body"),
     addFiles: document.getElementById("btn-add-files"),
     addFolder: document.getElementById("btn-add-folder"),
     clearMaterials: document.getElementById("btn-clear-materials"),
@@ -159,6 +162,7 @@
     decisionError: document.getElementById("artifact-decision-error"),
     acceptArtifact: document.getElementById("btn-accept-artifact"),
     rejectArtifact: document.getElementById("btn-reject-artifact"),
+    appliedUnderstanding: document.getElementById("applied-understanding"),
     revisionRequest: document.getElementById("revision-request"),
     revise: document.getElementById("btn-revise"),
     copy: document.getElementById("btn-copy"),
@@ -520,6 +524,86 @@
     }
   }
 
+  function clearMaterialSummary() {
+    if (!els.materialSummary) return;
+    els.materialSummary.hidden = true;
+    els.materialSummary.removeAttribute("open");
+    if (els.materialSummaryLine) els.materialSummaryLine.textContent = "";
+    if (els.materialSummaryBody) els.materialSummaryBody.innerHTML = "";
+  }
+
+  function renderMaterialSummary(summary) {
+    if (!els.materialSummary || !els.materialSummaryLine || !els.materialSummaryBody) return;
+    if (!summary || !summary.summaryLine) {
+      clearMaterialSummary();
+      return;
+    }
+    els.materialSummary.hidden = false;
+    els.materialSummaryLine.textContent = String(summary.summaryLine);
+    const body = els.materialSummaryBody;
+    body.innerHTML = "";
+    const included = Array.isArray(summary.included) ? summary.included : [];
+    const skipped = Array.isArray(summary.skipped) ? summary.skipped : [];
+    if (included.length > 0) {
+      const h = document.createElement("h4");
+      h.textContent = "已纳入";
+      body.appendChild(h);
+      const ul = document.createElement("ul");
+      for (const entry of included) {
+        const li = document.createElement("li");
+        li.textContent = entry.displayName || basenamePath(entry.path);
+        ul.appendChild(li);
+      }
+      body.appendChild(ul);
+    }
+    if (skipped.length > 0) {
+      const h = document.createElement("h4");
+      h.textContent = "暂未纳入";
+      body.appendChild(h);
+      const ul = document.createElement("ul");
+      for (const entry of skipped) {
+        const li = document.createElement("li");
+        const name = entry.displayName || basenamePath(entry.path);
+        const reason = entry.reason ? `（${entry.reason}）` : "";
+        li.textContent = `${name}${reason}`;
+        ul.appendChild(li);
+      }
+      body.appendChild(ul);
+    }
+  }
+
+  function clearAppliedUnderstanding() {
+    if (!els.appliedUnderstanding) return;
+    els.appliedUnderstanding.hidden = true;
+    els.appliedUnderstanding.removeAttribute("open");
+    els.appliedUnderstanding.innerHTML = "";
+  }
+
+  function renderAppliedUnderstanding(applied) {
+    if (!els.appliedUnderstanding) return;
+    const items =
+      applied && Array.isArray(applied.items)
+        ? applied.items.filter((it) => it && String(it.text || "").trim()).slice(0, 3)
+        : [];
+    if (!applied || !applied.notice || items.length === 0) {
+      clearAppliedUnderstanding();
+      return;
+    }
+    const notice = String(applied.notice).replace(/。$/, "");
+    els.appliedUnderstanding.hidden = false;
+    els.appliedUnderstanding.innerHTML = "";
+    const summary = document.createElement("summary");
+    summary.textContent = notice;
+    els.appliedUnderstanding.appendChild(summary);
+    const ul = document.createElement("ul");
+    for (const item of items) {
+      const li = document.createElement("li");
+      li.textContent = String(item.text).trim();
+      ul.appendChild(li);
+    }
+    els.appliedUnderstanding.appendChild(ul);
+  }
+
   function escapeHtml(s) {
     return String(s)
       .replace(/&/g, "&amp;")
@@ -601,9 +685,12 @@
     els.artifactPanel.setAttribute("hidden", "");
     setWorkLayoutArtifact(false);
     if (els.revise) els.revise.disabled = true;
+    if (els.acceptArtifact) els.acceptArtifact.disabled = true;
+    if (els.rejectArtifact) els.rejectArtifact.disabled = true;
     renderArtifactDecision({ status: "undecided" });
     if (els.decisionNote) els.decisionNote.value = "";
     showStatus(els.decisionError, "");
+    clearAppliedUnderstanding();
   }
 
   function renderArtifactDecision(decision) {
@@ -713,6 +800,8 @@
     activeJobId = null;
     materials = [];
     renderMaterials();
+    clearMaterialSummary();
+    clearAppliedUnderstanding();
     els.goal.value = "";
     els.goal.readOnly = false;
     if (els.workComposeTitle) els.workComposeTitle.textContent = "新建任务";
@@ -781,12 +870,14 @@
     box.hidden = false;
     q.textContent = String(prompt.question);
     actions.innerHTML = "";
+    const labelA = String(prompt.labelA || "第一种");
+    const labelB = String(prompt.labelB || "第二种");
     const choices = [
-      { label: "本次使用「" + String(prompt.labelA || "A") + "」", action: "use_a_once" },
-      { label: "本次使用「" + String(prompt.labelB || "B") + "」", action: "use_b_once" },
-      { label: "以后优先「" + String(prompt.labelA || "A") + "」", action: "prefer_a" },
-      { label: "以后优先「" + String(prompt.labelB || "B") + "」", action: "prefer_b" },
-      { label: "暂不决定", action: "defer" },
+      { label: "仅本次使用「" + labelA + "」", action: "use_a_once" },
+      { label: "仅本次使用「" + labelB + "」", action: "use_b_once" },
+      { label: "以后优先采用「" + labelA + "」", action: "prefer_a" },
+      { label: "以后优先采用「" + labelB + "」", action: "prefer_b" },
+      { label: "稍后再说", action: "defer" },
     ];
     for (const c of choices) {
       const btn = document.createElement("button");
@@ -852,12 +943,14 @@
     activeJobId = detail.latestJob ? detail.latestJob.jobId : activeJobId;
     renderJobStatus(detail, eventNote);
     renderOwnerChoicePrompt(detail);
+    renderMaterialSummary(detail.materialSummary);
     const connected = await refreshConnectionFromCapabilities();
     applyJobControls(detail, connected);
 
     if (isJobActive(detail)) {
       startJobWatch(activeTaskId);
       clearArtifactView();
+      clearAppliedUnderstanding();
     } else {
       stopJobWatch();
       const terminalStatus = detail.latestJob && detail.latestJob.status;
@@ -870,8 +963,10 @@
         copyBlockedFailed = false;
         activeArtifactId = detail.artifactIds[0];
         await loadArtifact(activeArtifactId);
+        renderAppliedUnderstanding(detail.appliedUnderstanding);
       } else {
         clearArtifactView();
+        clearAppliedUnderstanding();
       }
     }
     await refreshTasks();
@@ -894,6 +989,7 @@
     renderMaterials();
     renderJobStatus(detail);
     renderOwnerChoicePrompt(detail);
+    renderMaterialSummary(detail.materialSummary);
     const connected = await refreshConnectionFromCapabilities();
     applyJobControls(detail, connected);
     setWorkCollabVisible(true);
@@ -901,6 +997,7 @@
     if (isJobActive(detail)) {
       startJobWatch(taskId);
       clearArtifactView();
+      clearAppliedUnderstanding();
     } else {
       stopJobWatch();
       if (
@@ -912,8 +1009,10 @@
         copyBlockedFailed = false;
         activeArtifactId = detail.artifactIds[0];
         await loadArtifact(activeArtifactId);
+        renderAppliedUnderstanding(detail.appliedUnderstanding);
       } else {
         clearArtifactView();
+        clearAppliedUnderstanding();
       }
     }
     await refreshTasks();

@@ -73,7 +73,7 @@ export class ContextSnapshotBuilder {
             sourcePath: ref.path,
             kind: 'folder-entry',
             status: 'warning',
-            warning: 'folder empty or contains no supported files',
+            warning: '文件夹内没有可读取的文件',
           });
         } else {
           for (const outcome of outcomes) {
@@ -216,6 +216,7 @@ export class ContextSnapshotBuilder {
     if (stored.content.kind === 'text') {
       item.extractedTextRef = stored.content.ref;
     }
+    if (outcome.truncated) item.truncated = true;
     return item;
   }
 }
