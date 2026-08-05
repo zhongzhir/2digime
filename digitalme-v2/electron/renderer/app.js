@@ -110,7 +110,6 @@
     chatSend: document.getElementById("btn-chat-send"),
     chatClear: document.getElementById("btn-chat-clear"),
     chatToTask: document.getElementById("btn-chat-to-task"),
-    chatKeepArtifact: document.getElementById("btn-chat-keep-artifact"),
     chatStatus: document.getElementById("chat-status"),
     subjectBrief: document.getElementById("subject-brief"),
     subjectMore: document.getElementById("subject-more"),
@@ -301,7 +300,7 @@
       return;
     }
     activeNav = nav;
-    for (const btn of [els.navSubject, els.navChat, els.navWork, els.navCollab, els.openSettings]) {
+    for (const btn of [els.navWork, els.navChat, els.navSubject, els.navCollab]) {
       if (!btn) continue;
       btn.classList.toggle("active", btn.dataset.nav === nav);
     }
@@ -327,9 +326,9 @@
           : "work";
     }
     activeNav = "settings";
-    for (const btn of [els.navSubject, els.navChat, els.navWork, els.navCollab, els.openSettings]) {
+    for (const btn of [els.navWork, els.navChat, els.navSubject, els.navCollab]) {
       if (!btn) continue;
-      btn.classList.toggle("active", btn.dataset.nav === "settings");
+      btn.classList.remove("active");
     }
     fillSettingsForm();
     setView("settings");
@@ -1353,7 +1352,7 @@
   els.navSubject.addEventListener("click", () => setNav("subject"));
   els.navWork.addEventListener("click", () => setNav("work"));
   if (els.navCollab) els.navCollab.addEventListener("click", () => setNav("collab"));
-  // 设置已在主导航；openSettings 监听器下方复用
+  // 设置/帮助为次级入口，不在主导航平权
   els.newTask.addEventListener("click", () => {
     setNav("work");
     startNewTaskComposer();

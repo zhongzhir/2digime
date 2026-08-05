@@ -83,14 +83,14 @@
         <header class="topbar shell-topbar">
           <p class="brand-sm">Digital Me</p>
           <nav class="main-nav" aria-label="主导航">
-            <button type="button" class="nav-item" data-nav="subject" id="nav-subject">数字之我</button>
-            <button type="button" class="nav-item" data-nav="chat" id="nav-chat">对话</button>
             <button type="button" class="nav-item active" data-nav="work" id="nav-work">做事</button>
-            <button type="button" class="nav-item" data-nav="collab" id="nav-collab">协作</button>
-            <button type="button" class="nav-item" data-nav="settings" id="btn-open-settings">设置</button>
+            <button type="button" class="nav-item" data-nav="chat" id="nav-chat">对话</button>
+            <button type="button" class="nav-item" data-nav="subject" id="nav-subject">数字之我</button>
+            <button type="button" class="nav-item nav-item-secondary" data-nav="collab" id="nav-collab">协作</button>
           </nav>
-          <div class="topbar-actions">
-            <button type="button" id="btn-open-help" class="ghost">帮助</button>
+          <div class="topbar-actions" aria-label="次级入口">
+            <button type="button" id="btn-open-help" class="ghost topbar-secondary">帮助</button>
+            <button type="button" id="btn-open-settings" class="ghost topbar-secondary">设置</button>
           </div>
         </header>
 
@@ -108,7 +108,6 @@
             <button type="button" id="btn-chat-send" class="primary">发送</button>
             <button type="button" id="btn-chat-to-task">转为任务</button>
             <button type="button" id="btn-chat-clear" class="ghost">清空对话</button>
-            <button type="button" id="btn-chat-keep-artifact" class="ghost" disabled title="本轮仅保留入口">留为成果</button>
           </div>
           <p id="chat-status" class="meta" aria-live="polite"></p>
         </section>
@@ -144,7 +143,7 @@
                 <button type="button" id="btn-new-task" class="primary">新建任务</button>
               </div>
               <ul id="task-list" class="task-list"></ul>
-              <p id="task-empty" class="muted">还没有任务。</p>
+              <p id="task-empty" class="muted">还没有任务。写下一件事，从这里开始。</p>
             </aside>
 
             <main class="panel grow">

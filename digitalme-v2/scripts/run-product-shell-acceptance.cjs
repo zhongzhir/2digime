@@ -87,15 +87,24 @@ const htmlOnly = fs.readFileSync(path.join(appRoot, 'electron/renderer/index.htm
   const navMatch = htmlOnly.match(/class="main-nav"[^>]*>([\s\S]*?)<\/nav>/);
   if (!navMatch) fail('main-nav missing');
   const labels = [...navMatch[1].matchAll(/>([^<]+)<\/button>/g)].map((m) => m[1].trim());
-  const expected = ['数字之我', '对话', '做事', '协作', '设置'];
+  const expected = ['做事', '对话', '数字之我', '协作'];
   if (labels.join('|') !== expected.join('|')) {
     fail(`primary nav order must be ${expected.join(' / ')}; got ${labels.join(' / ')}`);
   }
-  if (!/class="main-nav"[\s\S]*id="btn-open-settings"/.test(htmlOnly)) {
-    fail('设置 must be a primary nav item inside main-nav');
+  if (/id="btn-open-settings"/.test(navMatch[1])) {
+    fail('设置 must not live in primary main-nav');
+  }
+  if (!/topbar-actions[\s\S]*id="btn-open-settings"/.test(htmlOnly) || !/topbar-actions[\s\S]*id="btn-open-help"/.test(htmlOnly)) {
+    fail('设置与帮助 must live in secondary topbar-actions');
+  }
+  if (/btn-chat-keep-artifact|留为成果/.test(htmlOnly)) {
+    fail('empty-shell chat keep-artifact control must be removed');
+  }
+  if (!/nav-work"[^>]*class="[^"]*active|class="nav-item active"[^>]*id="nav-work"/.test(htmlOnly)) {
+    fail('default landing must highlight 做事 in main-nav');
   }
 }
-ok('primary nav frozen as 数字之我 / 对话 / 做事 / 协作 / 设置');
+ok('primary nav frozen as 做事 / 对话 / 数字之我 / 协作; 设置·帮助 secondary');
 
 if (!/id="nav-collab"/.test(htmlOnly) || !/id="panel-collab"/.test(htmlOnly)) {
   fail('collaboration primary nav/panel missing');

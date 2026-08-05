@@ -97,14 +97,17 @@ ok('owner-path UI markers present');
   const navMatch = html.match(/class="main-nav"[^>]*>([\s\S]*?)<\/nav>/);
   if (!navMatch) fail('main-nav missing');
   const labels = [...navMatch[1].matchAll(/>([^<]+)<\/button>/g)].map((m) => m[1].trim());
-  if (labels.join('|') !== '数字之我|对话|做事|协作|设置') {
-    fail(`primary nav must be 数字之我/对话/做事/协作/设置; got ${labels.join('/')}`);
+  if (labels.join('|') !== '做事|对话|数字之我|协作') {
+    fail(`primary nav must be 做事/对话/数字之我/协作; got ${labels.join('/')}`);
   }
-  if (!/class="main-nav"[\s\S]*id="btn-open-settings"/.test(html)) {
-    fail('设置 must live in primary main-nav');
+  if (/id="btn-open-settings"/.test(navMatch[1])) {
+    fail('设置 must not live in primary main-nav');
+  }
+  if (!/topbar-actions[\s\S]*id="btn-open-settings"/.test(html)) {
+    fail('设置 must live in secondary topbar-actions');
   }
 }
-ok('primary nav frozen; 数字之我 ∥ 协作');
+ok('primary nav frozen as 做事 / 对话 / 数字之我 / 协作; 设置 secondary');
 
 for (const bad of [
   /A2A/,

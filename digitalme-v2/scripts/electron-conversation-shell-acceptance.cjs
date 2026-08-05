@@ -190,20 +190,26 @@ async function mainSequence() {
     collab: !!document.getElementById('nav-collab'),
     settings: !!document.getElementById('btn-open-settings'),
     settingsInMainNav: !!document.querySelector('.main-nav #btn-open-settings'),
+    settingsInSecondary: !!document.querySelector('.topbar-actions #btn-open-settings'),
     help: !!document.getElementById('btn-open-help'),
     labels: [...document.querySelectorAll('.main-nav .nav-item')].map((b) => b.textContent.trim()),
+    workActive: document.getElementById('nav-work')?.classList.contains('active') === true,
+    keepArtifact: !!document.getElementById('btn-chat-keep-artifact'),
   })`);
   check(
-    'five_primary_nav_entries',
+    'four_primary_nav_entries',
     nav.chat && nav.work && nav.subject && nav.collab && nav.settings,
     nav,
   );
-  check('settings_in_primary_nav', nav.settingsInMainNav === true, nav);
+  check('settings_not_in_primary_nav', nav.settingsInMainNav === false, nav);
+  check('settings_secondary', nav.settingsInSecondary === true, nav);
   check(
-    'nav_order_subject_chat_work_collab_settings',
-    nav.labels.join('|') === '数字之我|对话|做事|协作|设置',
+    'nav_order_work_chat_subject_collab',
+    nav.labels.join('|') === '做事|对话|数字之我|协作',
     nav,
   );
+  check('default_landing_work', nav.workActive === true, nav);
+  check('no_chat_keep_artifact_shell', nav.keepArtifact === false, nav);
   check('help_aux_present', nav.help === true);
 
   // 对话独立使用，不创建 Task

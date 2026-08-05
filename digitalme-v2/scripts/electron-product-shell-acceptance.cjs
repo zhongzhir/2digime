@@ -160,22 +160,30 @@ async function mainSequence() {
     help: !!document.getElementById('btn-open-help'),
     settings: !!document.getElementById('btn-open-settings'),
     settingsInMainNav: !!document.querySelector('.main-nav #btn-open-settings'),
+    settingsInSecondary: !!document.querySelector('.topbar-actions #btn-open-settings'),
+    helpInSecondary: !!document.querySelector('.topbar-actions #btn-open-help'),
     labels: [...document.querySelectorAll('.main-nav .nav-item')].map((b) => b.textContent.trim()),
+    workActive: document.getElementById('nav-work')?.classList.contains('active') === true,
+    workVisible: document.getElementById('panel-work')?.hidden === false,
+    keepArtifact: !!document.getElementById('btn-chat-keep-artifact'),
     newTask: !!document.getElementById('btn-new-task'),
     body: document.body.innerText,
   })`);
   check('entered_shell_without_folder_picker', shell.welcomeHidden === true && shell.shellHidden === false);
   check(
-    'five_primary_nav_entries',
+    'four_primary_nav_entries',
     shell.navSubject && shell.navWork && shell.navChat && shell.navCollab && shell.settings,
     shell,
   );
-  check('settings_in_primary_nav', shell.settingsInMainNav === true, shell);
+  check('settings_not_in_primary_nav', shell.settingsInMainNav === false, shell);
+  check('settings_help_secondary', shell.settingsInSecondary === true && shell.helpInSecondary === true, shell);
   check(
-    'nav_order_subject_chat_work_collab_settings',
-    shell.labels.join('|') === '数字之我|对话|做事|协作|设置',
+    'nav_order_work_chat_subject_collab',
+    shell.labels.join('|') === '做事|对话|数字之我|协作',
     shell,
   );
+  check('default_landing_work', shell.workActive === true && shell.workVisible === true, shell);
+  check('no_chat_keep_artifact_shell', shell.keepArtifact === false, shell);
   check('help_aux_present', shell.help === true);
   check('new_task_button_present', shell.newTask === true);
   check(

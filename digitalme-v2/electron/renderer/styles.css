@@ -445,9 +445,20 @@ button.ghost {
 
 .topbar-actions {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.topbar-secondary {
+  color: var(--muted);
+  font-size: 13px;
+  padding: 6px 10px;
+}
+
+.topbar-secondary:hover {
+  color: var(--ink);
 }
 
 .settings-panel h2 {
@@ -550,6 +561,16 @@ select {
   border-color: rgba(15, 106, 90, 0.35);
   background: rgba(15, 106, 90, 0.08);
   font-weight: 650;
+}
+
+/* 协作保留一级入口，但默认视觉权重低于做事主线 */
+.nav-item.nav-item-secondary:not(.active) {
+  color: #7a848f;
+  font-weight: 400;
+}
+
+.nav-item[data-nav="work"]:not(.active) {
+  color: var(--ink);
 }
 
 .shell-panel {
