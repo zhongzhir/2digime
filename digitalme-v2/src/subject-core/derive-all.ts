@@ -5,6 +5,7 @@ import {
   type ConfirmedExperienceView,
   type SubjectEntryKind,
 } from './derived-views';
+import { isExpiredByTags } from './growth-signal';
 
 export const CANDIDATE_QUEUE_TYPES = [
   'identity_clarified',
@@ -128,6 +129,7 @@ function mapConfirmed(
 ): Array<{ eventId: string; title: string; detail: string; tags: string[] }> {
   return list
     .filter((e) => e.type === type && e.confidence === 'confirmed')
+    .filter((e) => !isExpiredByTags(e.payload.tags ?? []))
     .map((e) => ({
       eventId: e.id,
       title: e.payload.title,
@@ -136,10 +138,13 @@ function mapConfirmed(
     }));
 }
 
-/** 收集被纠正/取代而不得再注入的事件 id。 */
+/** 收集被纠正/取代/过期而不得再注入的事件 id。 */
 export function collectInactiveEventIds(events: readonly GrowthEvent[]): string[] {
   const inactive = new Set<string>();
   for (const event of events) {
+    if (isExpiredByTags(event.payload.tags ?? [])) {
+      inactive.add(event.id);
+    }
     if (event.confidence !== 'confirmed') continue;
     const supersedes = event.payload.relation?.supersedes;
     if (supersedes) inactive.add(supersedes);

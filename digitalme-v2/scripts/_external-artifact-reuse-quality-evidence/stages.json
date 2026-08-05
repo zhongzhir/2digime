@@ -15,8 +15,8 @@
     },
     {
       "stage": "external_or_model_generation",
-      "jobId": "job_msfqv4b953c396342e4e",
-      "artifactId": "art_msfqv4b953c396342e4e",
+      "jobId": "job_msfstcm3ce62c4410645",
+      "artifactId": "art_msfstcm3ce62c4410645",
       "capabilityId": "cap_fake_document"
     },
     {
@@ -26,29 +26,32 @@
     },
     {
       "stage": "owner_accept_growth",
-      "eventId": "gevt_msfqv4oj8d0d6238bb53",
+      "eventId": "gevt_msfstcqkea1b78e4a90b",
       "tags": [
         "decision:accept",
         "document",
-        "artifact:art_msfqv4b953c396342e4e",
-        "version:ver_msfqv4l3f72f77322c99",
+        "artifact:art_msfstcm3ce62c4410645",
+        "version:ver_msfstcndfc9be49d3b3f",
         "capability:cap_a2a_research_analysis",
         "capabilityVersion:a2a-remote/1",
-        "sourceKind:external_capability"
+        "sourceKind:external_capability",
+        "category:capability_experience",
+        "signal:strong",
+        "silent_ok"
       ],
       "evidence": {
-        "artifactId": "art_msfqv4b953c396342e4e",
-        "toVersionId": "ver_msfqv4l3f72f77322c99"
+        "artifactId": "art_msfstcm3ce62c4410645",
+        "toVersionId": "ver_msfstcndfc9be49d3b3f"
       }
     },
     {
       "stage": "related_reuse",
       "selectedEventIds": [
-        "gevt_msfqv4oj8d0d6238bb53"
+        "gevt_msfstcqkea1b78e4a90b"
       ],
       "excludedContainsAccept": true,
       "selectionReason": {
-        "eventId": "gevt_msfqv4oj8d0d6238bb53",
+        "eventId": "gevt_msfstcqkea1b78e4a90b",
         "reason": "goal_tag"
       },
       "rubric": {
@@ -94,8 +97,13 @@
     },
     {
       "stage": "weak_related_boundary",
-      "selected": false,
-      "reasons": [],
+      "selected": true,
+      "reasons": [
+        {
+          "eventId": "gevt_msfstcqkea1b78e4a90b",
+          "reason": "weak_structure_only"
+        }
+      ],
       "leakedUniqueFact": false
     },
     {
@@ -110,7 +118,7 @@
     {
       "stage": "version_latest_only",
       "selected": [
-        "gevt_msfqv5cn4a5066bd920d"
+        "gevt_msfstde573d901f288e6"
       ],
       "oldAcceptExcluded": true
     },

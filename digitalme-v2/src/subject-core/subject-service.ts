@@ -18,6 +18,8 @@ import {
   requiresOwnerConfirmation,
   type SubjectCaptureSourceKind,
 } from './candidate-distill';
+import { authorityFromEvents } from './growth-signal';
+import { scheduleGrowthWork } from './growth-async';
 import {
   deriveArtifactOwnerDecision,
   hasSameVersionDecision,
@@ -402,6 +404,9 @@ export class SubjectService {
       );
     }
 
+    const existing = await this.requireLog().list(pkg.id);
+    const authority = authorityFromEvents(existing);
+
     const distilled = distillCandidatesFromText({
       subjectId: pkg.id,
       text,
@@ -418,16 +423,26 @@ export class SubjectService {
       ...(input.sourceCapabilityKind
         ? { sourceCapabilityKind: input.sourceCapabilityKind }
         : {}),
+      authority,
     });
 
     const candidateEventIds: string[] = [];
     const confirmationSuggestedEventIds: string[] = [];
+    const silentAdoptIds: string[] = [];
     for (const event of distilled) {
       await this.appendGrowthEvent(event);
       candidateEventIds.push(event.id);
-      if (requiresOwnerConfirmation(event.type, event.payload.tags ?? [])) {
+      const tags = event.payload.tags ?? [];
+      if (tags.includes('silent_ok') && !requiresOwnerConfirmation(event.type, tags)) {
+        silentAdoptIds.push(event.id);
+      } else if (requiresOwnerConfirmation(event.type, tags)) {
         confirmationSuggestedEventIds.push(event.id);
       }
+    }
+
+    // 低风险静默采纳：写入后立即确认，不打断用户
+    if (silentAdoptIds.length > 0 && !isDecision) {
+      await this.confirmCandidates({ eventIds: silentAdoptIds });
     }
 
     if (isDecision && candidateEventIds.length > 0) {
@@ -445,7 +460,37 @@ export class SubjectService {
       };
     }
 
-    return { candidateEventIds, confirmationSuggestedEventIds };
+    return {
+      candidateEventIds,
+      confirmationSuggestedEventIds,
+      ...(silentAdoptIds.length
+        ? { confirmedEventIds: silentAdoptIds }
+        : {}),
+    };
+  }
+
+  /**
+   * 异步捕获成长信号：主任务只调度，不等待完成；失败有限重试且不抛出。
+   */
+  captureInputAsync(
+    input: {
+      text: string;
+      sourceKind: SubjectCaptureSourceKind;
+      materialRef?: string;
+      taskId?: string;
+      artifactId?: string;
+      artifactVersionId?: string;
+      requestedArtifactType?: string;
+      capabilityId?: string;
+      capabilityVersion?: string;
+      sourceCapabilityKind?: 'local' | 'external_capability';
+    },
+    onDone?: (result: { ok: boolean; attempts: number }) => void,
+  ): void {
+    scheduleGrowthWork(() => this.captureInput(input), {
+      maxAttempts: 2,
+      onDone: (r) => onDone?.({ ok: r.ok, attempts: r.attempts }),
+    });
   }
 
   /**

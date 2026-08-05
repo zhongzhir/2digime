@@ -107,7 +107,7 @@ test('resolvePositiveExperiences drops artifact after later reject', () => {
   assert.equal(resolvePositiveExperiences(entries).length, 0);
 });
 
-test('ai_first skips weak overlap; legacy scrubs concrete facts', () => {
+test('ai_first weak overlap injects structure-only; legacy same scrub', () => {
   const confirmed = {
     subjectId: 's',
     derivedAt: '2026-08-05T12:00:00.000Z',
@@ -134,7 +134,9 @@ test('ai_first skips weak overlap; legacy scrubs concrete facts', () => {
     },
   };
   const aiFirst = selectConfirmedExperiences(input, { policy: 'ai_first' });
-  assert.equal(aiFirst.entries.length, 0);
+  assert.equal(aiFirst.entries.length, 1);
+  assert.ok(aiFirst.entries[0]!.tags.includes('reuse:weak_structure'));
+  assert.ok(!aiFirst.entries[0]!.detail.includes(UNIQUE_FACT));
 
   const legacy = selectConfirmedExperiences(input, { policy: 'legacy' });
   assert.equal(legacy.entries.length, 1);

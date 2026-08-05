@@ -1,6 +1,6 @@
 {
   "status": "accept_passed",
-  "generatedAt": "2026-08-05T07:07:04.199Z",
+  "generatedAt": "2026-08-05T08:01:41.008Z",
   "checks": [
     "one_primary_model_call",
     "no_forced_weak_inject",
@@ -18,21 +18,21 @@
       "aiFirstSelected": 0,
       "legacyCalls": 1,
       "aiFirstCalls": 1,
-      "durationDeltaMs": -17
+      "durationDeltaMs": -18
     },
     "project_plan": {
       "legacySelected": 0,
       "aiFirstSelected": 0,
       "legacyCalls": 1,
       "aiFirstCalls": 1,
-      "durationDeltaMs": -26
+      "durationDeltaMs": -17
     },
     "doc_review": {
       "legacySelected": 4,
-      "aiFirstSelected": 0,
+      "aiFirstSelected": 1,
       "legacyCalls": 1,
       "aiFirstCalls": 1,
-      "durationDeltaMs": 4
+      "durationDeltaMs": 17
     }
   }
 }

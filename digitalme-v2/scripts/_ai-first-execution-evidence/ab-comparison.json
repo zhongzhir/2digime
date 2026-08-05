@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-05T07:07:04.172Z",
+  "generatedAt": "2026-08-05T08:01:40.983Z",
   "rows": [
     {
       "policy": "legacy",
@@ -16,7 +16,7 @@
       "task": "project_plan",
       "status": "succeeded",
       "modelCalls": 1,
-      "durationMs": 572,
+      "durationMs": 559,
       "selectedCount": 0,
       "experienceCount": 0,
       "identityCount": 0
@@ -26,7 +26,7 @@
       "task": "doc_review",
       "status": "succeeded",
       "modelCalls": 1,
-      "durationMs": 560,
+      "durationMs": 577,
       "selectedCount": 4,
       "experienceCount": 4,
       "identityCount": 0
@@ -36,7 +36,7 @@
       "task": "wechat_article",
       "status": "succeeded",
       "modelCalls": 1,
-      "durationMs": 574,
+      "durationMs": 573,
       "selectedCount": 0,
       "experienceCount": 0,
       "identityCount": 0
@@ -46,7 +46,7 @@
       "task": "project_plan",
       "status": "succeeded",
       "modelCalls": 1,
-      "durationMs": 546,
+      "durationMs": 542,
       "selectedCount": 0,
       "experienceCount": 0,
       "identityCount": 0
@@ -56,9 +56,9 @@
       "task": "doc_review",
       "status": "succeeded",
       "modelCalls": 1,
-      "durationMs": 564,
-      "selectedCount": 0,
-      "experienceCount": 0,
+      "durationMs": 594,
+      "selectedCount": 1,
+      "experienceCount": 1,
       "identityCount": 0
     }
   ],
@@ -68,21 +68,21 @@
       "aiFirstSelected": 0,
       "legacyCalls": 1,
       "aiFirstCalls": 1,
-      "durationDeltaMs": -17
+      "durationDeltaMs": -18
     },
     "project_plan": {
       "legacySelected": 0,
       "aiFirstSelected": 0,
       "legacyCalls": 1,
       "aiFirstCalls": 1,
-      "durationDeltaMs": -26
+      "durationDeltaMs": -17
     },
     "doc_review": {
       "legacySelected": 4,
-      "aiFirstSelected": 0,
+      "aiFirstSelected": 1,
       "legacyCalls": 1,
       "aiFirstCalls": 1,
-      "durationDeltaMs": 4
+      "durationDeltaMs": 17
     }
   }
 }

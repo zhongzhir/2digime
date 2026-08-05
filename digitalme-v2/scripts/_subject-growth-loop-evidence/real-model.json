@@ -1,0 +1,7 @@
+{
+  "status": "succeeded",
+  "artifact_ready_time_ms": 117,
+  "growth_completed_time_ms": 163,
+  "growth_after_artifact": true,
+  "note": "凭证存在；本探针验证时序合同（成果先于成长）。完整外网模型对照可替换 documentCapability。"
+}

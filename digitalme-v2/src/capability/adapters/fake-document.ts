@@ -106,6 +106,13 @@ function defaultFakeDocumentText(input: CapabilityInput, override?: string): str
       sections.push(`- [${e.eventId}] ${e.title}: ${e.detail}`);
     }
   }
+  const preferences = byKind('preference');
+  if (preferences.length) {
+    sections.push('## 工作偏好');
+    for (const e of preferences) {
+      sections.push(`- [${e.eventId}] ${e.title}: ${e.detail}`);
+    }
+  }
   if (boundaries.length) {
     sections.push('## 边界');
     for (const e of boundaries) {

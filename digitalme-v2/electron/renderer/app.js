@@ -119,6 +119,8 @@
     subjectActionStatus: document.getElementById("subject-action-status"),
     subjectActiveList: document.getElementById("subject-active-list"),
     subjectActiveEmpty: document.getElementById("subject-active-empty"),
+    subjectRecentList: document.getElementById("subject-recent-list"),
+    subjectRecentEmpty: document.getElementById("subject-recent-empty"),
     subjectMaterialList: document.getElementById("subject-material-list"),
     subjectMaterialEmpty: document.getElementById("subject-material-empty"),
     newTask: document.getElementById("btn-new-task"),
@@ -995,6 +997,46 @@
       row.appendChild(stop);
       li.appendChild(row);
       els.subjectActiveList.appendChild(li);
+    }
+
+    if (els.subjectRecentList && els.subjectRecentEmpty) {
+      const recent = overview.recentLearnings || [];
+      els.subjectRecentList.innerHTML = "";
+      els.subjectRecentEmpty.hidden = recent.length > 0;
+      for (const item of recent) {
+        const li = document.createElement("li");
+        li.innerHTML = `<div class="subject-item-text">${escapeHtml(item.text)}</div>`;
+        if (item.suggestConfirm) {
+          const row = document.createElement("div");
+          row.className = "subject-actions";
+          const adopt = document.createElement("button");
+          adopt.type = "button";
+          adopt.className = "ghost";
+          adopt.textContent = "确认采用";
+          adopt.addEventListener("click", async () => {
+            await api.invoke("subject.respondToLearning", {
+              eventId: item.eventId,
+              action: "adopt",
+            });
+            await refreshSubjectPanel();
+          });
+          const dismiss = document.createElement("button");
+          dismiss.type = "button";
+          dismiss.className = "ghost";
+          dismiss.textContent = "先不采用";
+          dismiss.addEventListener("click", async () => {
+            await api.invoke("subject.respondToLearning", {
+              eventId: item.eventId,
+              action: "dismiss",
+            });
+            await refreshSubjectPanel();
+          });
+          row.appendChild(adopt);
+          row.appendChild(dismiss);
+          li.appendChild(row);
+        }
+        els.subjectRecentList.appendChild(li);
+      }
     }
 
     if (els.subjectMaterialList && els.subjectMaterialEmpty) {

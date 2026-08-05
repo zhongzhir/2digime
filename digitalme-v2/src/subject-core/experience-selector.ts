@@ -53,7 +53,7 @@ const WEAK_STRUCTURE_DETAIL =
  * - 数量与长度上限;
  * - 每条保留 eventId 可追溯。
  * - 采用决策：同 Artifact 仅最新正向采用可注入；拒绝与旧版本不正向复用。
- * - ai_first：弱相关默认不注入；legacy：弱相关 scrub 细节。
+ * - ai_first：高相关最多 3 条；弱相关仅注入通用结构/风格；legacy：弱相关 scrub。
  */
 export function selectConfirmedExperiences(
   input: ExperienceSelectInput,
@@ -71,6 +71,12 @@ export function selectConfirmedExperiences(
     const tags = entry.tags.map((t) => t.toLowerCase());
     if (tags.some((t) => excluded.has(t))) return false;
     if (tags.includes('decision:reject')) return false;
+    // 过期临时内容不注入
+    if (tags.some((t) => t.startsWith('expiresat:'))) {
+      const iso = tags.find((t) => t.startsWith('expiresat:'))!.slice('expiresat:'.length);
+      const ts = Date.parse(iso);
+      if (!Number.isNaN(ts) && ts <= Date.now()) return false;
+    }
     return true;
   });
 
@@ -87,18 +93,22 @@ export function selectConfirmedExperiences(
       const weak = keywordScore === 1;
       return { entry, score, keywordScore, weak };
     })
-    .filter((row) => {
-      if (row.score <= 0) return false;
-      // AI-first：弱相关 / 纯风格不注入
-      if (policy === 'ai_first' && row.weak) return false;
-      // AI-first：至少 2 个关键词命中才算高相关（类型加分不单独够格）
-      if (policy === 'ai_first' && row.keywordScore < 2) return false;
-      return true;
-    })
+    .filter((row) => row.score > 0)
     .sort((a, b) => b.score - a.score || b.entry.occurredAt.localeCompare(a.entry.occurredAt));
 
-  const entries = scored.slice(0, maxEntries).map(({ entry, weak }) => {
-    const scrub = policy === 'legacy' && weak;
+  const strong = scored.filter((row) => !row.weak && row.keywordScore >= 2);
+  const weakRows = scored.filter((row) => row.weak);
+  const picked =
+    policy === 'ai_first'
+      ? [
+          ...strong.slice(0, maxEntries),
+          // 弱相关：仅结构/风格，额外最多 1 条且不挤占高相关名额之外的正文事实
+          ...weakRows.slice(0, Math.max(0, 1)),
+        ].slice(0, maxEntries + 1)
+      : scored.slice(0, maxEntries);
+
+  const entries = picked.map(({ entry, weak }) => {
+    const scrub = weak; // ai_first 与 legacy：弱相关均 scrub 事实
     return {
       eventId: entry.eventId,
       title: entry.title,
@@ -246,6 +256,38 @@ export function selectSubjectInjection(
     if (tags.includes('reuse:weak_structure')) reason = 'weak_structure_only';
     else if (tags.includes(input.requestedArtifactType.toLowerCase())) reason = 'goal_tag';
     push(entry, 'experience', reason);
+  }
+
+  // 已确认偏好：高相关可注入（计入主体切片，易纠正）
+  const prefSlots = Math.max(0, AI_FIRST_MAX_ENTRIES - experienceView.entries.filter((e) => !e.tags.includes('reuse:weak_structure')).length);
+  let prefAdded = 0;
+  for (const item of derived.preferences.entries) {
+    if (prefAdded >= Math.max(prefSlots, 1)) {
+      excludedEventIds.push(item.eventId);
+      continue;
+    }
+    const score = scoreText(tokens, `${item.title} ${item.detail} ${item.tags.join(' ')}`);
+    // 偏好：至少一处相关即可（工作方法类）；避免「必须两词」漏掉明确偏好
+    if (score < 1) {
+      excludedEventIds.push(item.eventId);
+      continue;
+    }
+    const full = derived.activeItems.find((a) => a.eventId === item.eventId);
+    const payload: {
+      eventId: string;
+      title: string;
+      detail: string;
+      tags: string[];
+      occurredAt?: string;
+    } = {
+      eventId: item.eventId,
+      title: item.title,
+      detail: item.detail,
+      tags: item.tags,
+    };
+    if (full?.occurredAt) payload.occurredAt = full.occurredAt;
+    push(payload, 'preference', 'keyword_match');
+    prefAdded += 1;
   }
 
   // 硬边界：始终可注入（明确硬约束），与是否有相关经验无关

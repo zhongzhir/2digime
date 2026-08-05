@@ -1,0 +1,10 @@
+{
+  "status": "accept_passed",
+  "generatedAt": "2026-08-05T08:01:30.975Z",
+  "metrics": {
+    "artifact_ready_time_ms": 83,
+    "growth_failure_blocks_task": false,
+    "unrelated_pollution": 0,
+    "silent_conflict_overwrite": 0
+  }
+}

@@ -141,6 +141,7 @@ test('hard boundary injects even without memory; identity skipped on standard', 
     goals: { subjectId: 's', derivedAt: 't', entries: [] },
     principles: { subjectId: 's', derivedAt: 't', entries: [] },
     confirmed: { subjectId: 's', derivedAt: 't', entries: [] },
+    preferences: { subjectId: 's', derivedAt: 't', entries: [] },
     boundaries: {
       subjectId: 's',
       derivedAt: 't',
