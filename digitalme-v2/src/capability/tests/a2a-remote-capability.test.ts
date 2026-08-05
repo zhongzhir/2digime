@@ -62,3 +62,22 @@ test('agent card matching skill passes', () => {
   assert.equal(result.ok, true);
   assert.deepEqual(result.matchedSkillIds, ['project_risk_brief']);
 });
+
+test('localhost baseUrl matches agent card advertising 127.0.0.1', () => {
+  const policy = buildResearchEndpointPolicy({
+    baseUrl: 'http://localhost:43111',
+  });
+  const result = validateAgentCardAgainstPolicy(policy, {
+    name: 'Research Analysis Agent',
+    supportedInterfaces: [
+      {
+        url: 'http://127.0.0.1:43111/',
+        protocolBinding: 'JSONRPC',
+        protocolVersion: '1.0',
+      },
+    ],
+    skills: [{ id: 'project_risk_brief', name: '项目风险摘要' }],
+  });
+  assert.equal(result.ok, true, result.reasons.join('; '));
+  assert.equal(result.selectedInterfaceUrl, 'http://127.0.0.1:43111');
+});

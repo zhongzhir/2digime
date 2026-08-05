@@ -83,6 +83,14 @@ async function main() {
   const requestHandler = new DefaultRequestHandler(agentCard, taskStore, executor);
 
   const app = express();
+  // Card 声明协议 1.0：缺省版本头时不得回落 SDK 默认 0.3（否则合法 1.0 客户端偶发漏头会 500）。
+  app.use((req, _res, next) => {
+    const key = Object.keys(req.headers).find((h) => h.toLowerCase() === 'a2a-version');
+    if (!key || !String(req.headers[key] || '').trim()) {
+      req.headers['a2a-version'] = A2A_PROTOCOL_VERSION || '1.0';
+    }
+    next();
+  });
   // Private comparison API — engineering only, not product UI.
   app.post('/private/v1/analyze', express.json({ limit: '512kb' }), async (req, res) => {
     try {

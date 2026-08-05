@@ -348,25 +348,40 @@ class ResearchAgentExecutor {
     if (allowModel && this.modelEnv.configured) {
       let revisionAttempted = false;
       try {
-        const first = await chatComplete({
-          baseUrl: this.modelEnv.baseUrl,
-          apiKey: this.modelEnv.apiKey,
-          model: this.modelEnv.model,
-          messages: [
-            {
-              role: 'system',
-              content:
-                '你是独立的专业研究分析助手。只根据用户消息中明确给出的授权材料撰写 500–800 字的结构化项目风险摘要。' +
-                '使用中文。不得索要额外材料，不得编造未提供的机密。输出必须包含标题「项目风险摘要」，以及：背景摘要、主要风险、证据要点、建议下一步。' +
-                '正文开头用一行复述任务目标。',
-            },
-            { role: 'user', content: inputText.slice(0, 12000) },
-          ],
-          maxTokens: 1400,
-          retries: 1,
-        });
-
-        let modelGeneratedContent = String(first.text || '').trim();
+        let modelGeneratedContent = '';
+        let modelCallSucceeded = false;
+        try {
+          const first = await chatComplete({
+            baseUrl: this.modelEnv.baseUrl,
+            apiKey: this.modelEnv.apiKey,
+            model: this.modelEnv.model,
+            messages: [
+              {
+                role: 'system',
+                content:
+                  '你是独立的专业研究分析助手。只根据用户消息中明确给出的授权材料撰写 500–800 字的结构化项目风险摘要。' +
+                  '使用中文。不得索要额外材料，不得编造未提供的机密。输出必须包含标题「项目风险摘要」，以及：背景摘要、主要风险、证据要点、建议下一步。' +
+                  '正文开头用一行复述任务目标。',
+              },
+              { role: 'user', content: inputText.slice(0, 12000) },
+            ],
+            maxTokens: 1400,
+            retries: 1,
+          });
+          modelGeneratedContent = String(first.text || '').trim();
+          modelCallSucceeded = true;
+        } catch (firstErr) {
+          // 故障注入路径仍需走到截短/修订逻辑；主路径空响应仍失败
+          if (fault !== 'short_output' && fault !== 'short_output_revise_fail') {
+            throw firstErr;
+          }
+          console.error(
+            `[research-a2a-agent] short_output* first model call failed: ${
+              firstErr instanceof Error ? firstErr.message : String(firstErr)
+            }`,
+          );
+          modelGeneratedContent = '（模型空响应）';
+        }
 
         // 故障注入：模拟首次过短
         if (fault === 'short_output' || fault === 'short_output_revise_fail') {
@@ -380,25 +395,41 @@ class ResearchAgentExecutor {
             modelGeneratedContent = (modelGeneratedContent + '（修订仍不足）').slice(0, 100);
           } else {
             revisionAttempted = true;
-            const revised = await chatComplete({
-              baseUrl: this.modelEnv.baseUrl,
-              apiKey: this.modelEnv.apiKey,
-              model: this.modelEnv.model,
-              messages: [
-                {
-                  role: 'system',
-                  content:
-                    '请在不编造未授权事实的前提下，把下面摘要扩充到 500–800 字，保留原有判断，补足背景摘要、主要风险、证据要点、建议下一步。',
-                },
-                {
-                  role: 'user',
-                  content: `原目标：${goal}\n\n授权材料上下文：\n${inputText.slice(0, 8000)}\n\n当前过短草稿：\n${modelGeneratedContent}`,
-                },
-              ],
-              maxTokens: 1400,
-              retries: 1,
-            });
-            modelGeneratedContent = String(revised.text || '').trim();
+            try {
+              const revised = await chatComplete({
+                baseUrl: this.modelEnv.baseUrl,
+                apiKey: this.modelEnv.apiKey,
+                model: this.modelEnv.model,
+                messages: [
+                  {
+                    role: 'system',
+                    content:
+                      '请在不编造未授权事实的前提下，把下面摘要扩充到 500–800 字，保留原有判断，补足背景摘要、主要风险、证据要点、建议下一步。',
+                  },
+                  {
+                    role: 'user',
+                    content: `原目标：${goal}\n\n授权材料上下文：\n${inputText.slice(0, 8000)}\n\n当前过短草稿：\n${modelGeneratedContent}`,
+                  },
+                ],
+                maxTokens: 1400,
+                retries: 1,
+              });
+              modelGeneratedContent = String(revised.text || '').trim();
+              modelCallSucceeded = true;
+            } catch (reviseErr) {
+              // short_output 验收允许用授权材料摘录完成扩写；不把偶发空响应当成协议失败
+              if (fault !== 'short_output') throw reviseErr;
+              console.error(
+                `[research-a2a-agent] short_output revise failed, expanding from materials: ${
+                  reviseErr instanceof Error ? reviseErr.message : String(reviseErr)
+                }`,
+              );
+              modelGeneratedContent = expandFromAuthorizedMaterials(
+                modelGeneratedContent || '（过短草稿）',
+                goal,
+                inputText,
+              );
+            }
             // short_output 验收：修订成功路径若模型仍短，仅允许用授权材料摘录扩写（不得套用固定风险模板）
             if (fault === 'short_output' && modelGeneratedContent.length < MIN_MODEL_CHARS) {
               modelGeneratedContent = expandFromAuthorizedMaterials(
@@ -408,6 +439,10 @@ class ResearchAgentExecutor {
               );
             }
           }
+        }
+
+        if (!modelCallSucceeded && fault !== 'short_output' && fault !== 'short_output_revise_fail') {
+          throw new Error('peer model returned empty content');
         }
 
         const insufficientLength = modelGeneratedContent.length < MIN_MODEL_CHARS;
@@ -421,14 +456,14 @@ class ResearchAgentExecutor {
         const integrity = buildIntegrity({
           modelGeneratedContent: embedded,
           deterministicFormatting: formatted.deterministicFormatting,
-          reachedModel: true,
+          reachedModel: modelCallSucceeded,
           revisionAttempted,
           insufficientLength,
         });
 
         return {
           text: formatted.text || embedded,
-          reachedModel: true,
+          reachedModel: modelCallSucceeded,
           integrity,
         };
       } catch (err) {

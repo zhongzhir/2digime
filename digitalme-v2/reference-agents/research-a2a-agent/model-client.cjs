@@ -51,10 +51,16 @@ async function chatComplete({
   maxTokens = 1200,
   signal,
   retries = 1,
+  timeoutMs = 55_000,
 }) {
   const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
   let lastError;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const timeout = AbortSignal.timeout(timeoutMs);
+    const combined =
+      signal && typeof AbortSignal.any === 'function'
+        ? AbortSignal.any([signal, timeout])
+        : signal || timeout;
     try {
       const res = await fetch(url, {
         method: 'POST',
@@ -68,7 +74,7 @@ async function chatComplete({
           max_tokens: maxTokens,
           messages,
         }),
-        signal,
+        signal: combined,
       });
       if (!res.ok) {
         const body = await res.text().catch(() => '');

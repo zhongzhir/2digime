@@ -409,14 +409,14 @@ function registerIpc() {
       return {
         ok: true,
         message: "连接正常，可以使用研究分析能力。",
-        diagnostic: result.diagnostic
+        diagnostic: result.probe
           ? {
               stage: "ok",
-              normalizedBaseUrl: result.diagnostic.normalizedBaseUrl,
-              agentCardUrl: result.diagnostic.agentCardUrl,
-              interfaceUrl: result.diagnostic.interfaceUrl || null,
-              jsonRpcMethod: result.diagnostic.jsonRpcMethod || null,
-              httpStatus: result.diagnostic.httpStatus || null,
+              normalizedBaseUrl: result.probe.diagnostic.normalizedBaseUrl,
+              agentCardUrl: result.probe.diagnostic.agentCardUrl,
+              interfaceUrl: result.probe.diagnostic.interfaceUrl,
+              jsonRpcMethod: result.probe.diagnostic.jsonRpcMethod,
+              httpStatus: result.probe.diagnostic.httpStatus,
             }
           : undefined,
       };

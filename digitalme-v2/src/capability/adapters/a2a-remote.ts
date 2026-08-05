@@ -38,11 +38,11 @@ import {
   buildUserMessage,
   createA2AClientForPolicy,
   extractTaskTextArtifact,
-  fetchAndValidateAgentCard,
   isTaskResult,
   mapA2AStateToLocal,
   type A2AAuthorizedPayload,
 } from '../a2a-wire';
+import { probeA2AConnection } from '../a2a-connection-probe';
 import { nowIso } from '../../shared/ids';
 import type { Client } from '@a2a-js/sdk/client';
 import type { Task } from '@a2a-js/sdk';
@@ -155,7 +155,17 @@ export function createA2ARemoteCapabilityAdapter(
         return { available: false, reason: 'disabled', detail: '外部能力未启用' };
       }
       try {
-        await fetchAndValidateAgentCard(endpoint);
+        const probe = await probeA2AConnection({
+          baseUrl: endpoint.baseUrl,
+          policy: endpoint,
+        });
+        if (!probe.ok) {
+          return {
+            available: false,
+            reason: probe.diagnostic.stage === 'card' ? 'agent_card' : 'unreachable',
+            detail: probe.diagnostic.reasons.join('; ') || 'connection probe failed',
+          };
+        }
         return { available: true, detail: `endpoint=${endpoint.endpointId}` };
       } catch (error) {
         return {

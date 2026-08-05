@@ -268,12 +268,21 @@ function assertHostProtocol(u: URL, policy: RemoteEndpointPolicy): void {
 }
 
 function isLoopbackHost(host: string): boolean {
-  const h = host.toLowerCase();
+  const h = host.toLowerCase().replace(/^\[|\]$/g, '');
   return h === '127.0.0.1' || h === 'localhost' || h === '::1';
 }
 
+/**
+ * 本机回环别名等价：localhost / 127.0.0.1 / ::1。
+ * Agent Card 常广告 127.0.0.1，用户可能输入 localhost；不得因此判为跨主机。
+ * 非回环主机仍须精确匹配，不得放宽。
+ */
 function hostMatches(actual: string, allowed: string): boolean {
-  return actual.toLowerCase() === allowed.toLowerCase();
+  const a = actual.toLowerCase().replace(/^\[|\]$/g, '');
+  const b = allowed.toLowerCase().replace(/^\[|\]$/g, '');
+  if (a === b) return true;
+  if (isLoopbackHost(a) && isLoopbackHost(b)) return true;
+  return false;
 }
 
 function parseUrlStrict(raw: string): URL {

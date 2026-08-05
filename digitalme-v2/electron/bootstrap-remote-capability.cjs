@@ -151,8 +151,8 @@ function userFacingConnectError(err) {
 }
 
 /**
- * 保存前校验：Agent Card + 端点策略（产品路径）。
- * 失败抛出用户可读 Error；后续连接合同修复将改为统一协议探测。
+ * 保存前校验：统一 A2A 连接探测合同（Card + Skill + 无副作用协议探测）。
+ * 失败抛出用户可读 Error（message 已映射）；cause.diagnostic 供主进程脱敏日志。
  */
 async function validateResearchEndpoint(baseUrl, appRoot) {
   const url = normalizeBaseUrl(baseUrl);
@@ -162,37 +162,33 @@ async function validateResearchEndpoint(baseUrl, appRoot) {
     });
   }
   const distRoot = path.join(appRoot, 'dist', 'capability');
-  const { buildResearchEndpointPolicy, assertEndpointPolicyShape } = require(
-    path.join(distRoot, 'remote-endpoint-policy.js'),
+  const { probeA2AConnection, scrubConnectionDiagnostic, connectionProbeUserMessage } = require(
+    path.join(distRoot, 'a2a-connection-probe.js'),
   );
-  const { fetchAndValidateAgentCard } = require(path.join(distRoot, 'a2a-wire.js'));
+  let probe;
   try {
-    const policy = buildResearchEndpointPolicy({ baseUrl: url });
-    assertEndpointPolicyShape(policy);
-    const card = await fetchAndValidateAgentCard(policy);
-    return {
-      policy,
-      card,
-      diagnostic: {
-        stage: 'card',
-        normalizedBaseUrl: url,
-        agentCardUrl: policy.expectedAgentCardUrl,
-        interfaceUrl: null,
-        jsonRpcMethod: null,
-        httpStatus: 200,
-      },
-    };
+    probe = await probeA2AConnection({ baseUrl: url });
   } catch (err) {
     throw Object.assign(new Error(userFacingConnectError(err)), {
       userMessage: userFacingConnectError(err),
       cause: err,
-      diagnostic: {
-        stage: 'card',
-        normalizedBaseUrl: url,
-        reasons: [String((err && err.message) || err)],
-      },
+      diagnostic: { stage: 'protocol_probe', reasons: [String(err && err.message || err)] },
     });
   }
+  if (!probe || !probe.ok) {
+    const message = connectionProbeUserMessage(probe) || userFacingConnectError(new Error((probe.diagnostic.reasons || []).join('; ')));
+    throw Object.assign(new Error(message), {
+      userMessage: message,
+      diagnostic: scrubConnectionDiagnostic(probe.diagnostic),
+      probe,
+    });
+  }
+  return {
+    policy: probe.policy,
+    validation: probe.validation,
+    card: probe.card,
+    probe,
+  };
 }
 
 function publicRemoteCapabilityStatus(input) {

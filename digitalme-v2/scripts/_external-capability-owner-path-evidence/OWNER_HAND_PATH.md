@@ -13,7 +13,11 @@
    cd digitalme-v2
    npm run start:reference-research-agent
    ```
-   看到「已启动」与服务地址后继续。**不要**进入设置页管理外部能力，**不要**设置环境变量。
+   看到「已启动」与服务地址后，再运行：
+   ```
+   npm run verify:reference-research-agent
+   ```
+   确认 `ready_for_connection=true`。**不要**进入设置页管理外部能力，**不要**设置环境变量。
 2. 正常启动 Digital Me 产品壳（`npm run dev` 或既有启动方式）。一级导航应为：数字之我 | 对话 | 做事 | 协作 | 设置。
 3. 打开「协作」→「协作对象」→「外部专业能力」：
    - 点击「连接」；

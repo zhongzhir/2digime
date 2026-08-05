@@ -131,6 +131,9 @@ ok('settings page cleaned of external capability UI');
 if (!pkgJson.scripts || !pkgJson.scripts['start:reference-research-agent']) {
   fail('missing npm run start:reference-research-agent');
 }
+if (!pkgJson.scripts['verify:reference-research-agent']) {
+  fail('missing npm run verify:reference-research-agent');
+}
 if (!/assertAgentReady/.test(lifecycle)) {
   fail('start lifecycle must assert real readiness before success');
 }
@@ -197,6 +200,7 @@ const unit = spawnSync(
     'dist/capability/adapters/tests/controlled-remote.test.js',
     'dist/capability/tests/remote-capability-contract.test.js',
     'dist/capability/tests/a2a-remote-capability.test.js',
+    'dist/capability/tests/a2a-connection-probe.test.js',
   ],
   { stdio: 'inherit', shell: false, cwd: appRoot },
 );
@@ -272,8 +276,26 @@ async function runConnectionSettingsPath() {
       RESEARCH_A2A_PORT: String(43221 + Math.floor(Math.random() * 400)),
     });
     try {
+      const { probeA2AConnection } = require('../dist/capability/a2a-connection-probe.js');
+      const productProbe = await probeA2AConnection({ baseUrl: agent.baseUrl });
+      if (!productProbe.ok) {
+        throw new Error(`product probe failed: ${JSON.stringify(productProbe.diagnostic)}`);
+      }
+      // localhost 与 127.0.0.1 必须等价（根因修复）
+      const localProbe = await probeA2AConnection({
+        baseUrl: agent.baseUrl.replace('127.0.0.1', 'localhost'),
+      });
+      if (!localProbe.ok) {
+        throw new Error(`localhost probe failed: ${JSON.stringify(localProbe.diagnostic)}`);
+      }
+      ok('connection: unified probe succeeds for 127.0.0.1 and localhost');
+
       await remoteBoot.validateResearchEndpoint(agent.baseUrl, appRoot);
-      ok('connection: product validateResearchEndpoint succeeds for live agent');
+      await remoteBoot.validateResearchEndpoint(
+        agent.baseUrl.replace('127.0.0.1', 'localhost'),
+        appRoot,
+      );
+      ok('connection: product validateResearchEndpoint uses same probe contract');
 
       remoteBoot.writeRemoteCapabilityConfig(userData, {
         enabled: true,
@@ -383,6 +405,42 @@ async function runConnectionSettingsPath() {
       }
       ok('connection: restart restores saved config');
 
+      // 独立验证脚本（真实监听）— 必须与产品探测一致，且拒绝 HTTP 500 假阳性
+      const verify = spawnSync('npm', ['run', 'verify:reference-research-agent'], {
+        cwd: appRoot,
+        encoding: 'utf8',
+        shell: true,
+        env: {
+          ...process.env,
+          RESEARCH_A2A_HOST: agent.host,
+          RESEARCH_A2A_PORT: String(agent.port),
+        },
+      });
+      if (verify.status !== 0) {
+        throw new Error(`verify script failed: ${verify.stdout || ''}\n${verify.stderr || ''}`);
+      }
+      let parsedVerify = null;
+      {
+        const text = verify.stdout || '';
+        const start = text.indexOf('{');
+        const end = text.lastIndexOf('}');
+        if (start >= 0 && end > start) parsedVerify = JSON.parse(text.slice(start, end + 1));
+      }
+      if (!parsedVerify || parsedVerify.ready_for_connection !== true) {
+        throw new Error(`verify missing ready_for_connection: ${verify.stdout}`);
+      }
+      if (parsedVerify.a2a_protocol_probe_valid !== true) {
+        throw new Error('verify must require a2a_protocol_probe_valid');
+      }
+      if (parsedVerify.details && parsedVerify.details.httpStatus === 500) {
+        throw new Error('verify must not treat HTTP 500 as ready');
+      }
+      const again = await probeA2AConnection({ baseUrl: agent.baseUrl });
+      if (again.ok !== true) {
+        throw new Error('product probe must remain ok while verify passes');
+      }
+      ok('connection: verify:reference-research-agent passes; agrees with product probe');
+
       // Agent 停止后：校验应失败且不得落为已连接
       await agent.stop();
       let stoppedRejected = false;
@@ -455,6 +513,9 @@ async function runDomainOwnerPath() {
   const handText = fs.readFileSync(handPath, 'utf8');
   if (!/start:reference-research-agent/.test(handText)) {
     fail('OWNER_HAND_PATH must document npm run start:reference-research-agent');
+  }
+  if (!/verify:reference-research-agent/.test(handText)) {
+    fail('OWNER_HAND_PATH must document verify:reference-research-agent');
   }
   if (!/协作/.test(handText) || !/服务地址/.test(handText) || !/检查连接/.test(handText)) {
     fail('OWNER_HAND_PATH must document collab connect flow');

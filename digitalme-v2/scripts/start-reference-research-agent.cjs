@@ -14,6 +14,7 @@ async function main() {
   console.log('');
   console.log('参考研究分析能力已启动');
   console.log(`服务地址：${agent.baseUrl}`);
+  console.log('请先运行：npm run verify:reference-research-agent');
   console.log('然后在 Digital Me → 协作 → 协作对象 → 外部专业能力 中连接。');
   console.log('按 Ctrl+C 停止本服务。');
   console.log('');

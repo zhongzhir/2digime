@@ -67,46 +67,33 @@ async function waitHealthy(controlUrl, timeoutMs = 20_000) {
 }
 
 /**
- * 真实就绪：进程存活 + 端口监听 + Agent Card 可读 + 执行端点有 JSON-RPC 响应。
- * （统一协议探测合同在后续连接合同修复中接入。）
+ * 真实就绪：进程存活 + 端口监听 + 统一 A2A 连接探测合同。
  */
 async function assertAgentReady(input) {
-  const { child, host, port, baseUrl, agentCardUrl } = input;
+  const { child, host, port, baseUrl } = input;
   if (!processAlive(child)) {
     throw new Error('子进程已退出，参考研究能力未真正启动');
   }
   if (!(await portListening(host, port))) {
     throw new Error(`端口未监听：${host}:${port}`);
   }
-  const cardRes = await httpJson(agentCardUrl || `${baseUrl}/.well-known/agent-card.json`);
-  if (!cardRes.ok) {
-    throw new Error(`Agent Card 不可读：HTTP ${cardRes.status}`);
-  }
-  const rpcUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-  const rpc = await httpJson(rpcUrl, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      Accept: 'application/json',
-      'A2A-Version': '1.0',
-    },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 'startup-ready',
-      method: 'GetTask',
-      params: { id: 'startup-ready-probe', tenant: '' },
-    }),
-  });
-  if (rpc.status === 404 || rpc.status === 500 || rpc.status < 200 || rpc.status >= 300) {
-    throw new Error(`A2A 执行端点未就绪：HTTP ${rpc.status}`);
-  }
-  if (!rpc.json || rpc.json.jsonrpc !== '2.0') {
-    throw new Error('A2A 执行端点未返回有效 JSON-RPC');
+  const appRoot = path.resolve(__dirname, '..');
+  const { probeA2AConnection } = require(path.join(
+    appRoot,
+    'dist',
+    'capability',
+    'a2a-connection-probe.js',
+  ));
+  const probe = await probeA2AConnection({ baseUrl });
+  if (!probe.ok) {
+    throw new Error(
+      `A2A 连接探测失败（${probe.diagnostic.stage}）：${(probe.diagnostic.reasons || []).join('; ')}`,
+    );
   }
   if (!processAlive(child)) {
     throw new Error('就绪检查后子进程已退出');
   }
-  return { card: cardRes.json };
+  return { card: probe.card, probe };
 }
 
 async function stopResearchA2AAgent() {
