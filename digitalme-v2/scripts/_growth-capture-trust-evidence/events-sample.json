@@ -1,0 +1,201 @@
+{
+  "count": 17,
+  "sample": [
+    {
+      "type": "preference_observed",
+      "confidence": "confirmed",
+      "title": "偏好：结论先行",
+      "tags": [
+        "style",
+        "preference",
+        "category:working_method",
+        "document",
+        "周报",
+        "汇报",
+        "signal:strong",
+        "sourceRef:materials/note_b5febc8aae981f11.txt",
+        "scope:general",
+        "risk:low",
+        "model_reason:contract:preference_observed",
+        "distill:contract_fallback",
+        "silent_ok",
+        "captureKey:conversation:pref1"
+      ]
+    },
+    {
+      "type": "feedback_recorded",
+      "confidence": "candidate",
+      "title": "本次输入无可沉淀要点",
+      "tags": [
+        "captureKey:task_requirement:task_msh1e4vo817af1377665",
+        "capture:noop",
+        "silent_ok"
+      ]
+    },
+    {
+      "type": "feedback_recorded",
+      "confidence": "candidate",
+      "title": "本次成果未采用",
+      "tags": [
+        "decision:reject",
+        "document",
+        "artifact:art_msh1e4vuafe61c035f59",
+        "version:ver_msh1eezd1ab41ee089c8",
+        "category:capability_experience",
+        "signal:strong",
+        "silent_ok"
+      ]
+    },
+    {
+      "type": "preference_observed",
+      "confidence": "candidate",
+      "title": "结论先行并控制篇幅",
+      "tags": [
+        "raw_category:working_method",
+        "norm_category:working_method",
+        "norm_event:preference_observed",
+        "category:working_method",
+        "scope:general",
+        "risk:low",
+        "model_reason:重复纠正，置信度较高",
+        "distill:model",
+        "signal:strong",
+        "silent_ok"
+      ]
+    },
+    {
+      "type": "experience_confirmed",
+      "confidence": "confirmed",
+      "title": "本次成果未采用",
+      "tags": [
+        "decision:reject",
+        "document",
+        "artifact:art_msh1e4vuafe61c035f59",
+        "version:ver_msh1eezd1ab41ee089c8",
+        "category:capability_experience",
+        "signal:strong",
+        "silent_ok"
+      ]
+    },
+    {
+      "type": "preference_observed",
+      "confidence": "confirmed",
+      "title": "结论先行并控制篇幅",
+      "tags": [
+        "raw_category:working_method",
+        "norm_category:working_method",
+        "norm_event:preference_observed",
+        "category:working_method",
+        "scope:general",
+        "risk:low",
+        "model_reason:重复纠正，置信度较高",
+        "distill:model",
+        "signal:strong",
+        "silent_ok"
+      ]
+    },
+    {
+      "type": "preference_observed",
+      "confidence": "candidate",
+      "title": "写作方式偏好：结论先行、压缩篇幅、列出决策事项",
+      "tags": [
+        "raw_category:working_method",
+        "norm_category:working_method",
+        "norm_event:preference_observed",
+        "model_suggests_confirm",
+        "category:working_method",
+        "scope:general",
+        "risk:low",
+        "model_reason:用户重复要求此写作方式，可能成为长期偏好，但需确认。",
+        "distill:model",
+        "signal:strong",
+        "silent_ok",
+        "captureKey:revision:job_msh1el1ra705b57cbfc0"
+      ]
+    },
+    {
+      "type": "preference_observed",
+      "confidence": "confirmed",
+      "title": "写作方式偏好：结论先行、压缩篇幅、列出决策事项",
+      "tags": [
+        "raw_category:working_method",
+        "norm_category:working_method",
+        "norm_event:preference_observed",
+        "model_suggests_confirm",
+        "category:working_method",
+        "scope:general",
+        "risk:low",
+        "model_reason:用户重复要求此写作方式，可能成为长期偏好，但需确认。",
+        "distill:model",
+        "signal:strong",
+        "silent_ok",
+        "captureKey:revision:job_msh1el1ra705b57cbfc0"
+      ]
+    },
+    {
+      "type": "feedback_recorded",
+      "confidence": "candidate",
+      "title": "本次成果已采用",
+      "tags": [
+        "decision:accept",
+        "document",
+        "artifact:art_msh1e4vuafe61c035f59",
+        "version:ver_msh1f94x563f24ce9939",
+        "category:capability_experience",
+        "signal:strong",
+        "silent_ok"
+      ]
+    },
+    {
+      "type": "experience_confirmed",
+      "confidence": "confirmed",
+      "title": "本次成果已采用",
+      "tags": [
+        "decision:accept",
+        "document",
+        "artifact:art_msh1e4vuafe61c035f59",
+        "version:ver_msh1f94x563f24ce9939",
+        "category:capability_experience",
+        "signal:strong",
+        "silent_ok"
+      ]
+    },
+    {
+      "type": "preference_observed",
+      "confidence": "candidate",
+      "title": "周报写作偏好：结论先行并突出决策事项",
+      "tags": [
+        "raw_category:working_method",
+        "norm_category:working_method",
+        "norm_event:preference_observed",
+        "model_suggests_confirm",
+        "category:working_method",
+        "sourceRef:materials/note_c8e50a0e4abbdbfa.txt",
+        "scope:general",
+        "risk:low",
+        "model_reason:用户明确要求再次采用相同写作方式，推断为稳定偏好。",
+        "distill:model",
+        "signal:medium",
+        "captureKey:task_requirement:task_msh1fle6538611cacc89"
+      ]
+    },
+    {
+      "type": "knowledge_gap_noted",
+      "confidence": "candidate",
+      "title": "还不确定：任务中提到的偏好",
+      "tags": [
+        "gap",
+        "task_requirement",
+        "category:temporary_context",
+        "signal:weak",
+        "expiresAt:2026-08-13T04:50:59.176Z",
+        "sourceRef:materials/note_d9015802415a785d.txt",
+        "scope:temporary",
+        "risk:low",
+        "model_reason:contract:knowledge_gap_noted",
+        "distill:contract_fallback",
+        "captureKey:task_requirement:task_msh1fu8m6e2b25605975"
+      ]
+    }
+  ]
+}

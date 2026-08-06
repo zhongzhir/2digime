@@ -273,8 +273,6 @@
   /** @type {'chat'|'subject'|'work'|'collab'} */
   let returnNav = "work";
   let lastChatUserText = "";
-  /** 已为成长采集调度过的用户消息（防重试重复采集） */
-  let lastChatCapturedText = "";
   /** 最近一次对话回复是否失败（用于重试） */
   let lastChatReplyFailed = false;
   let shellStatus = null;
@@ -1072,7 +1070,17 @@
         artifactVersionId: activeHeadVersionId,
         requestedArtifactType: "document",
         sourceCapabilityKind: "local",
+        ...(note ? (kind === "reject" ? { rejectionReason: note } : {}) : {}),
+        ...(kind === "reject" && lastArtifactRejectionReason
+          ? { rejectionReason: lastArtifactRejectionReason }
+          : {}),
+        ...(els.revisionRequest && String(els.revisionRequest.value || "").trim()
+          ? { revisionRequest: String(els.revisionRequest.value || "").trim() }
+          : {}),
       });
+      if (result && result.captureOutcome === "distill_failed") {
+        showStatus(els.decisionError, "决定已记下，但相关体会还没记全，请稍后再试。", true);
+      }
       const status =
         (result && result.ownerDecision) || (kind === "accept" ? "accepted" : "rejected");
       renderArtifactDecision({ status });
@@ -1788,26 +1796,15 @@
         if (els.chatInput) els.chatInput.value = "";
         await refreshChatPanel();
 
-        // 成长采集旁路：不得阻断或替代对话回复；同一条消息不重复采集
-        if (text !== lastChatCapturedText) {
-          lastChatCapturedText = text;
-          void api
-            .invoke("subject.captureInput", {
-              text,
-              sourceKind: "conversation",
-            })
-            .catch(() => {
-              /* 捕捉失败不影响回复 */
-            });
-        }
-
         if (els.chatStatus) els.chatStatus.textContent = "正在回复…";
         let replyText = "";
         let replyStatus = "complete";
+        let userTurnId = null;
         try {
           const replied = await api.conversation.reply({ text });
           replyText = String((replied && replied.text) || "").trim();
           replyStatus = String((replied && replied.status) || "complete");
+          userTurnId = replied && replied.userTurnId ? String(replied.userTurnId) : null;
         } catch (err) {
           lastChatReplyFailed = true;
           const msg = (err && err.message) || String(err);
@@ -1851,6 +1848,19 @@
         await refreshChatPanel();
         lastChatReplyFailed = false;
         if (els.chatStatus) els.chatStatus.textContent = "已回复。";
+        // 成长由主进程调度；此处仅在失败耗尽后展示克制提示（不暴露内部状态名）
+        if (userTurnId && api.conversation.growthHint) {
+          setTimeout(async () => {
+            try {
+              const hint = await api.conversation.growthHint({ turnId: userTurnId });
+              if (hint && hint.message && els.chatStatus && !lastChatReplyFailed) {
+                els.chatStatus.textContent = `已回复。${hint.message}`;
+              }
+            } catch {
+              /* ignore */
+            }
+          }, 2500);
+        }
       } catch (err) {
         lastChatReplyFailed = true;
         if (els.chatStatus) els.chatStatus.textContent = (err && err.message) || String(err);
@@ -1934,7 +1944,6 @@
         }
         await api.conversation.clear();
         lastChatUserText = "";
-        lastChatCapturedText = "";
         lastChatReplyFailed = false;
         if (els.chatRetry) {
           els.chatRetry.hidden = true;
@@ -2364,12 +2373,21 @@
         els.subjectActionStatus.textContent = "请先写下一句话。";
         return;
       }
-      await api.invoke("subject.captureInput", {
+      const result = await api.invoke("subject.captureInput", {
         text,
         sourceKind: "conversation",
       });
       els.subjectMore.value = "";
-      els.subjectActionStatus.textContent = "已保存。";
+      const outcome = result && result.captureOutcome;
+      if (outcome === "distill_failed") {
+        els.subjectActionStatus.textContent = "刚才这条体会还没记上，请稍后再试。";
+      } else if (outcome === "pending_confirmation") {
+        els.subjectActionStatus.textContent = "有一条新体会待你确认。";
+      } else if (outcome === "nothing_to_learn") {
+        els.subjectActionStatus.textContent = "已收到。这次没有需要记住的新要点。";
+      } else {
+        els.subjectActionStatus.textContent = "已记下。";
+      }
       await refreshSubjectPanel();
     } catch (err) {
       els.subjectActionStatus.textContent = err.message || String(err);
@@ -2435,15 +2453,6 @@
       if (els.workComposeTitle) els.workComposeTitle.textContent = "当前任务";
       setWorkCollabVisible(true);
       syncGoalPresentation();
-      try {
-        await api.invoke("subject.captureInput", {
-          text: goal,
-          sourceKind: "task_requirement",
-          taskId: result.taskId,
-        });
-      } catch {
-        /* ignore */
-      }
       await syncActiveTaskStatus();
       startJobWatch(activeTaskId);
     } catch (err) {

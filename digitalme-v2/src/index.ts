@@ -10,6 +10,8 @@ export * from './subject-core/diff-evidence';
 export * from './subject-core/experience-selector';
 export * from './subject-core/subject-service';
 export * from './subject-core/package-growth-log';
+export * from './subject-core/capture-outcome';
+export * from './subject-core/conversation-transcript';
 
 export * from './work-runtime/task';
 export * from './work-runtime/context-snapshot';

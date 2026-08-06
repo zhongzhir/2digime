@@ -498,7 +498,8 @@ function registerIpc() {
 
   /**
    * 轻量对话 transcript（壳层辅助面）。
-   * 落在 SubjectPackage/ui/conversation.ndjson，不进 growth，不参与派生。
+   * 落在 SubjectPackage/ui/conversation.ndjson。
+   * 成长捕获由主进程在回复完成后调度；状态以追加行记录，不改写历史消息。
    */
   function conversationFilePath() {
     if (!runtime || !runtime.subject) throw new Error("runtime not ready");
@@ -507,7 +508,39 @@ function registerIpc() {
     return path.join(pkg.rootDir, "ui", "conversation.ndjson");
   }
 
+  function isGrowthCaptureStatusRow(row) {
+    return !!(row && row.kind === "growth_capture_status" && typeof row.turnId === "string");
+  }
+
+  function isConversationTurnRow(row) {
+    if (!row || isGrowthCaptureStatusRow(row)) return false;
+    return (
+      typeof row.id === "string" &&
+      (row.role === "user" || row.role === "assistant" || row.role === "system") &&
+      typeof row.text === "string"
+    );
+  }
+
+  function findLatestUserTurnId(file) {
+    const fs = require("node:fs");
+    if (!fs.existsSync(file)) return null;
+    let lastUser = null;
+    for (const line of fs.readFileSync(file, "utf8").split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      try {
+        const row = JSON.parse(line);
+        if (isConversationTurnRow(row) && row.role === "user") lastUser = row;
+      } catch {
+        /* skip */
+      }
+    }
+    return lastUser;
+  }
+
   ipcMain.handle("shell:conversationList", async () => {
+    if (runtime && typeof runtime.listConversationTurns === "function") {
+      return runtime.listConversationTurns();
+    }
     const fs = require("node:fs");
     const file = conversationFilePath();
     if (!fs.existsSync(file)) return { turns: [] };
@@ -516,7 +549,8 @@ function registerIpc() {
     for (const line of text.split(/\r?\n/)) {
       if (!line.trim()) continue;
       try {
-        turns.push(JSON.parse(line));
+        const row = JSON.parse(line);
+        if (isConversationTurnRow(row)) turns.push(row);
       } catch {
         /* skip corrupt */
       }
@@ -557,9 +591,22 @@ function registerIpc() {
     return { cleared: true };
   });
 
+  ipcMain.handle("shell:conversationGrowthHint", async (_evt, input) => {
+    const turnId = String((input && input.turnId) || "").trim();
+    if (!turnId || !runtime || typeof runtime.conversationGrowthHint !== "function") {
+      return { message: null };
+    }
+    try {
+      const hint = await runtime.conversationGrowthHint(turnId);
+      return { message: hint && hint.message ? hint.message : null };
+    } catch {
+      return { message: null };
+    }
+  });
+
   /**
    * 真实对话回复：读取 transcript 上下文后调用已配置模型。
-   * 不经成长蒸馏；成长采集由 renderer 异步旁路，不得替代本路径。
+   * 回复完成后由主进程调度成长捕获（不阻塞回复；renderer 不再旁路提交）。
    */
   ipcMain.handle("shell:conversationReply", async (_evt, input) => {
     const userText = String((input && input.text) || "").trim();
@@ -618,7 +665,7 @@ function registerIpc() {
         if (!line.trim()) continue;
         try {
           const row = JSON.parse(line);
-          if (row && (row.role === "user" || row.role === "assistant") && row.text) {
+          if (isConversationTurnRow(row) && (row.role === "user" || row.role === "assistant") && row.text) {
             turns.push({ role: row.role, text: String(row.text) });
           }
         } catch {
@@ -656,6 +703,21 @@ function registerIpc() {
         ? Math.floor(maxTokensEnv)
         : DEFAULT_CHAT_MAX_TOKENS;
 
+    const userTurn = findLatestUserTurnId(file);
+    const scheduleGrowth = (assistantText) => {
+      if (!runtime || typeof runtime.scheduleConversationGrowthCapture !== "function") return;
+      if (!userTurn || userTurn.text !== userText) return;
+      try {
+        runtime.scheduleConversationGrowthCapture({
+          turnId: userTurn.id,
+          userText,
+          ...(assistantText ? { assistantText: String(assistantText).slice(0, 400) } : {}),
+        });
+      } catch {
+        /* 成长不得阻断回复 */
+      }
+    };
+
     try {
       const result = await chatComplete({
         baseUrl: model.openaiCompatible.baseUrl,
@@ -668,25 +730,33 @@ function registerIpc() {
       });
       const text = String(result.text || "").trim();
       if (result.truncated === true || result.finishReason === "length") {
+        scheduleGrowth(text);
         return {
           text,
           status: "incomplete",
           finishReason: result.finishReason || "length",
+          ...(userTurn ? { userTurnId: userTurn.id } : {}),
         };
       }
       if (!text) {
+        scheduleGrowth("");
         return {
           text: "",
           status: "failed",
           finishReason: result.finishReason || null,
+          ...(userTurn ? { userTurnId: userTurn.id } : {}),
         };
       }
+      scheduleGrowth(text);
       return {
         text,
         status: "complete",
         finishReason: result.finishReason || "stop",
+        ...(userTurn ? { userTurnId: userTurn.id } : {}),
       };
     } catch (err) {
+      // 回复失败仍调度用户句捕获（用户表达已持久化）
+      scheduleGrowth("");
       if (err instanceof ModelHttpError || (err && err.name === "ModelHttpError")) {
         const kind = err.kind || "";
         if (kind === "timeout" || kind === "aborted" || kind === "network") {

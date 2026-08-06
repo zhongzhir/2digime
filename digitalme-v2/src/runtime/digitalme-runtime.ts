@@ -48,6 +48,18 @@ import { LocalCollaborationHost } from '../collaboration/local-collaboration';
 import { GrantStore } from '../collaboration/grant-store';
 import { nowIso, newId } from '../shared/ids';
 import { chooseExecutionProfile } from '../work-runtime/ai-first-policy';
+import {
+  appendConversationRow,
+  conversationFilePath,
+  filterTurnsForUi,
+  listReplayableUserTurns,
+  outcomeToCaptureStatus,
+  readConversationRows,
+  type GrowthCaptureStatusRecord,
+} from '../subject-core/conversation-transcript';
+import { captureOutcomeUserHint, type CaptureOutcome } from '../subject-core/capture-outcome';
+import { extractEditEvidence } from '../subject-core/diff-evidence';
+import { headVersion } from '../work-runtime/artifact';
 
 export interface DigitalMeRuntimeOptions {
   /**
@@ -105,6 +117,7 @@ export class DigitalMeRuntime {
   private contentStore: ContentStore | null = null;
   private readonly registry: CapabilityRegistry;
   private readonly options: DigitalMeRuntimeOptions;
+  private unsubGrowthJobHook: (() => void) | null = null;
 
   constructor(options: DigitalMeRuntimeOptions = {}) {
     this.options = options;
@@ -143,6 +156,8 @@ export class DigitalMeRuntime {
     await this.attachWorkRuntime();
     await this.work?.recoverOnStartup();
     this.work?.start();
+    // 打开包时恢复未完成的成长捕获（非定时轮询）
+    void this.recoverPendingGrowthCaptures();
     return result;
   }
 
@@ -159,7 +174,85 @@ export class DigitalMeRuntime {
   }
 
   captureSubjectInput(input: CommandMap['subject.captureInput']['input']) {
-    return this.subject.captureInput(input);
+    return this.enrichAndCapture(input);
+  }
+
+  private async enrichAndCapture(
+    input: CommandMap['subject.captureInput']['input'],
+  ): Promise<CommandMap['subject.captureInput']['output']> {
+    const enriched = { ...input };
+    const isDecision =
+      input.sourceKind === 'artifact_acceptance' || input.sourceKind === 'artifact_rejection';
+    if (
+      isDecision &&
+      input.taskId &&
+      input.artifactId &&
+      !input.revisionRequest &&
+      !input.editSummary
+    ) {
+      try {
+        const meta = await this.listRecentRevisionMeta(input.taskId, input.artifactId);
+        if (meta) {
+          if (meta.revisionRequest && !enriched.revisionRequest) {
+            enriched.revisionRequest = meta.revisionRequest;
+          }
+          if (meta.rejectionReason && !enriched.rejectionReason) {
+            enriched.rejectionReason = meta.rejectionReason;
+          }
+          if (meta.editSummary && !enriched.editSummary) {
+            enriched.editSummary = meta.editSummary;
+          }
+        }
+      } catch {
+        /* 增强可选 */
+      }
+    }
+    return this.subject.captureInput(enriched);
+  }
+
+  private async listRecentRevisionMeta(
+    taskId: string,
+    artifactId: string,
+  ): Promise<{
+    revisionRequest?: string;
+    rejectionReason?: string;
+    editSummary?: string;
+  } | null> {
+    let revisionRequest: string | undefined;
+    let rejectionReason: string | undefined;
+    const detail = await this.requireWork().getTask({ taskId });
+    const jobId = detail.latestJob?.jobId;
+    if (jobId) {
+      const job = await this.requireWork().getJob(jobId);
+      if (job?.revisionRequest) revisionRequest = job.revisionRequest;
+      if (job?.rejectionReason) rejectionReason = job.rejectionReason;
+    }
+    let editSummary: string | undefined;
+    try {
+      const artifact = await this.requireWork().getArtifact(artifactId);
+      if (artifact && artifact.versions.length >= 2 && this.contentStore) {
+        const head = headVersion(artifact);
+        const prev = [...artifact.versions]
+          .reverse()
+          .find((v) => v.versionId !== head.versionId && v.content.kind === 'text');
+        if (prev && prev.content.kind === 'text' && head.content.kind === 'text') {
+          const before = (await this.contentStore.readBytes(prev.content.ref)).toString('utf8');
+          const after = (await this.contentStore.readBytes(head.content.ref)).toString('utf8');
+          const evidence = extractEditEvidence(before, after);
+          if (evidence.detail || evidence.title) {
+            editSummary = evidence.detail || evidence.title;
+          }
+        }
+      }
+    } catch {
+      /* optional */
+    }
+    if (!revisionRequest && !rejectionReason && !editSummary) return null;
+    return {
+      ...(revisionRequest ? { revisionRequest } : {}),
+      ...(rejectionReason ? { rejectionReason } : {}),
+      ...(editSummary ? { editSummary } : {}),
+    };
   }
 
   getArtifactOwnerDecision(artifactId: string, artifactVersionId: string) {
@@ -192,6 +285,11 @@ export class DigitalMeRuntime {
           taskId: created.taskId,
         });
       }
+      // Task + 初始 Job 已持久化即可调度目标捕获（不依赖执行成功）
+      this.scheduleTaskRequirementCapture({
+        taskId: created.taskId,
+        goal: input.goal,
+      });
       return created;
     };
     return run();
@@ -551,6 +649,10 @@ export class DigitalMeRuntime {
   }
 
   async stop(): Promise<void> {
+    if (this.unsubGrowthJobHook) {
+      this.unsubGrowthJobHook();
+      this.unsubGrowthJobHook = null;
+    }
     if (this.work) await this.work.stop();
   }
 
@@ -671,6 +773,191 @@ export class DigitalMeRuntime {
         if (!task) return [];
         return tokenizeTopics(`${task.goal} ${task.requestedArtifactType}`);
       },
+    });
+
+    // 修订 Job 成功后记录修改要求来源（不阻塞主链）
+    if (this.unsubGrowthJobHook) this.unsubGrowthJobHook();
+    this.unsubGrowthJobHook = this.eventBus.subscribe((event) => {
+      if (event.kind !== 'job.updated' || event.status !== 'succeeded') return;
+      void this.onJobSucceededForGrowth(event.jobId);
+    });
+  }
+
+  /**
+   * 主进程对话捕获入口：基于已持久化 user turn，异步调度，不阻塞回复。
+   */
+  scheduleConversationGrowthCapture(input: {
+    turnId: string;
+    userText: string;
+    assistantText?: string;
+  }): void {
+    let pkg;
+    try {
+      pkg = this.subject.requireActive();
+    } catch {
+      return;
+    }
+    const file = conversationFilePath(pkg.rootDir);
+    const captureKey = `conversation:${input.turnId}`;
+    const pending: GrowthCaptureStatusRecord = {
+      kind: 'growth_capture_status',
+      turnId: input.turnId,
+      status: 'pending',
+      attempts: 0,
+      updatedAt: nowIso(),
+    };
+    void appendConversationRow(file, pending).catch(() => undefined);
+
+    this.subject.captureInputAsync(
+      {
+        text: input.userText,
+        sourceKind: 'conversation',
+        captureKey,
+        ...(input.assistantText
+          ? { assistantContext: input.assistantText.slice(0, 400) }
+          : {}),
+      },
+      (result) => {
+        const outcome: CaptureOutcome = result.captureOutcome || (result.ok ? 'learned' : 'distill_failed');
+        const statusRow: GrowthCaptureStatusRecord = {
+          kind: 'growth_capture_status',
+          turnId: input.turnId,
+          status: outcomeToCaptureStatus(outcome),
+          attempts: result.attempts,
+          updatedAt: nowIso(),
+        };
+        void appendConversationRow(file, statusRow).catch(() => undefined);
+        if (!result.ok || outcome === 'distill_failed') {
+          this.eventBus.publish({
+            kind: 'subject.updated',
+            subjectId: pkg.id,
+            summary: 'growth_capture_retry_exhausted',
+          });
+        }
+      },
+    );
+  }
+
+  /** 列出对话轮次（忽略内部成长状态行）。供 App Shell 使用。 */
+  async listConversationTurns(): Promise<{ turns: Array<{ id: string; role: string; text: string; at: string }> }> {
+    const pkg = this.subject.requireActive();
+    const rows = await readConversationRows(conversationFilePath(pkg.rootDir));
+    return { turns: filterTurnsForUi(rows) };
+  }
+
+  /**
+   * 打开包 / 相关操作完成后的恢复点：重放未完成对话捕获与缺失的任务目标捕获。
+   * 禁止定时全量轮询。
+   */
+  async recoverPendingGrowthCaptures(): Promise<{ replayed: number }> {
+    let replayed = 0;
+    let pkg;
+    try {
+      pkg = this.subject.requireActive();
+    } catch {
+      return { replayed: 0 };
+    }
+
+    const file = conversationFilePath(pkg.rootDir);
+    const rows = await readConversationRows(file);
+    for (const item of listReplayableUserTurns(rows)) {
+      this.scheduleConversationGrowthCapture({
+        turnId: item.turn.id,
+        userText: item.turn.text,
+      });
+      replayed += 1;
+    }
+
+    if (this.work) {
+      const listed = await this.work.listTasks({ limit: 50 });
+      for (const row of listed.tasks) {
+        const taskId = row.taskId;
+        const detail = await this.work.getTask({ taskId }).catch(() => null);
+        if (!detail?.task?.goal) continue;
+        const events = await this.subject.listGrowthEvents();
+        const key = `captureKey:task_requirement:${taskId}`;
+        if (events.some((e) => (e.payload.tags ?? []).includes(key))) continue;
+        this.scheduleTaskRequirementCapture({
+          taskId,
+          goal: detail.task.goal,
+        });
+        replayed += 1;
+      }
+    }
+
+    return { replayed };
+  }
+
+  /** 最近一次对话捕获是否需在聊天气泡旁提示（派生，非 Store）。 */
+  async conversationGrowthHint(turnId: string): Promise<{ message: string } | null> {
+    const pkg = this.subject.requireActive();
+    const rows = await readConversationRows(conversationFilePath(pkg.rootDir));
+    const statuses = new Map<string, GrowthCaptureStatusRecord>();
+    for (const row of rows) {
+      if (row && typeof row === 'object' && (row as GrowthCaptureStatusRecord).kind === 'growth_capture_status') {
+        const s = row as GrowthCaptureStatusRecord;
+        statuses.set(s.turnId, s);
+      }
+    }
+    const st = statuses.get(turnId);
+    if (!st || st.status !== 'failed') return null;
+    const message = captureOutcomeUserHint('distill_failed');
+    return message ? { message } : null;
+  }
+
+  private scheduleTaskRequirementCapture(input: { taskId: string; goal: string }): void {
+    const goal = String(input.goal || '').trim();
+    if (!goal) return;
+    this.subject.captureInputAsync(
+      {
+        text: goal,
+        sourceKind: 'task_requirement',
+        taskId: input.taskId,
+        captureKey: `task_requirement:${input.taskId}`,
+      },
+      () => {
+        /* 结果经 GrowthEvent / captureKey 可重放；不阻塞提交 */
+      },
+    );
+  }
+
+  private async onJobSucceededForGrowth(jobId: string): Promise<void> {
+    if (!this.work) return;
+    const job = await this.work.getJob(jobId);
+    if (!job || job.status !== 'succeeded') return;
+    const revisionRequest = String(job.revisionRequest || '').trim();
+    if (!revisionRequest) return;
+    const rejectionReason = String(job.rejectionReason || '').trim();
+    const artifactId = job.artifactId || job.targetArtifactId;
+    let editSummary = '';
+    if (artifactId && job.targetArtifactId) {
+      try {
+        const artifact = await this.work.getArtifact(artifactId);
+        if (artifact && artifact.versions.length >= 2) {
+          const head = headVersion(artifact);
+          const prev = [...artifact.versions]
+            .reverse()
+            .find((v) => v.versionId !== head.versionId && v.content.kind === 'text');
+          if (prev && prev.content.kind === 'text' && head.content.kind === 'text' && this.contentStore) {
+            const before = (await this.contentStore.readBytes(prev.content.ref)).toString('utf8');
+            const after = (await this.contentStore.readBytes(head.content.ref)).toString('utf8');
+            const evidence = extractEditEvidence(before, after);
+            editSummary = evidence.detail || evidence.title;
+          }
+        }
+      } catch {
+        /* 差异可选 */
+      }
+    }
+    this.subject.captureInputAsync({
+      text: `修改要求：${revisionRequest}`,
+      sourceKind: 'repeated_correction',
+      taskId: job.taskId,
+      ...(artifactId ? { artifactId } : {}),
+      captureKey: `revision:${jobId}`,
+      revisionRequest,
+      ...(rejectionReason ? { rejectionReason } : {}),
+      ...(editSummary ? { editSummary } : {}),
     });
   }
 

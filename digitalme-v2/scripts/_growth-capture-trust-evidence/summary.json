@@ -1,0 +1,30 @@
+{
+  "model": "deepseek-v4-flash",
+  "baseUrlHost": "api.deepseek.com",
+  "checks": {
+    "emptyOutcome": "nothing_to_learn",
+    "emptyNotFailed": true,
+    "prefOutcome": "learned",
+    "prefNotFailedAsSuccess": true,
+    "uiTurnsIgnoreStatus": true,
+    "statusLatest": "ok_learned",
+    "oneOffNotForcedIdentity": true,
+    "taskCapturedAfterSubmit": true,
+    "firstJobStatus": "succeeded",
+    "rejectOutcome": "learned",
+    "rejectDecision": "rejected",
+    "reviseJobStatus": "succeeded",
+    "revisionCapturedAfterSuccess": true,
+    "acceptOutcome": "learned",
+    "acceptDecision": "accepted",
+    "relatedJobStatus": "succeeded",
+    "relatedApplied": true,
+    "unrelatedNotInjectingReportPref": true,
+    "restartEventCount": 17,
+    "restartHasAccept": true,
+    "restartHasTaskCapture": true,
+    "growthFileExists": true,
+    "noProfileStore": true
+  },
+  "ok": true
+}

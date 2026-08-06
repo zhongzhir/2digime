@@ -73,6 +73,7 @@ export function selectConfirmedExperiences(
 
   const eligible = resolvePositiveExperiences(input.confirmed.entries).filter((entry) => {
     const tags = entry.tags.map((t) => t.toLowerCase());
+    if (tags.includes('capture:noop')) return false;
     if (tags.some((t) => excluded.has(t))) return false;
     if (tags.includes('decision:reject')) return false;
     // 过期临时内容不注入

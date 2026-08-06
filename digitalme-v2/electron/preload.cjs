@@ -72,5 +72,6 @@ contextBridge.exposeInMainWorld("digitalMe", {
     append: (input) => ipcRenderer.invoke("shell:conversationAppend", input),
     clear: () => ipcRenderer.invoke("shell:conversationClear"),
     reply: (input) => ipcRenderer.invoke("shell:conversationReply", input),
+    growthHint: (input) => ipcRenderer.invoke("shell:conversationGrowthHint", input),
   },
 });

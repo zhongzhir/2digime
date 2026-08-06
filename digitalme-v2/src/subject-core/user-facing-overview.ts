@@ -76,6 +76,7 @@ export function buildUserFacingSubjectSlices(derived: SubjectDerivedBundle): {
   const recentLearnings: RecentLearningItem[] = [];
   const candidates = [...derived.candidates.entries]
     .filter((e) => e.type !== 'asset_added')
+    .filter((e) => !(e.tags || []).includes('capture:noop'))
     .sort((a, b) => {
       const aC = requiresOwnerConfirmation(a.type, a.tags) ? 0 : 1;
       const bC = requiresOwnerConfirmation(b.type, b.tags) ? 0 : 1;

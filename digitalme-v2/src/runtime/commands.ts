@@ -127,6 +127,14 @@ export interface CommandMap {
       capabilityId?: string;
       capabilityVersion?: string;
       sourceCapabilityKind?: 'local' | 'external_capability';
+      /** 幂等键；写入事件 tags，用于重放去重。 */
+      captureKey?: string;
+      revisionRequest?: string;
+      rejectionReason?: string;
+      /** 版本差异短摘要（非全文）。 */
+      editSummary?: string;
+      /** 助手回复截断，仅作上下文，不得归因 Owner。 */
+      assistantContext?: string;
     };
     output: {
       candidateEventIds: string[];
@@ -136,6 +144,11 @@ export interface CommandMap {
       /** 同版本同决策重复调用时为 true，未新写事件。 */
       idempotent?: boolean;
       ownerDecision?: 'undecided' | 'accepted' | 'rejected';
+      /**
+       * 捕获结果语义（用户面只映射中性文案，不展示枚举名）：
+       * learned / pending_confirmation / nothing_to_learn / distill_failed
+       */
+      captureOutcome: 'learned' | 'pending_confirmation' | 'nothing_to_learn' | 'distill_failed';
       /** 验收追溯：蒸馏模式（不上用户面） */
       distillMode?: 'model' | 'contract' | 'model_fallback_contract' | 'none';
       normalizeTrace?: unknown[];

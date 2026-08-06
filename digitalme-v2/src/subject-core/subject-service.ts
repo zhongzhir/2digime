@@ -36,6 +36,10 @@ import {
 } from './artifact-decision';
 import { buildUserFacingSubjectSlices } from './user-facing-overview';
 import { InMemoryEventBus } from '../work-runtime/event-bus';
+import {
+  deriveCaptureOutcome,
+  type CaptureOutcome,
+} from './capture-outcome';
 
 export const SUBJECT_SCHEMA_VERSION = 1 as const;
 
@@ -493,6 +497,7 @@ export class SubjectService {
    * 统一捕获自然语言并生成候选 — 使用即构建的主入口。
    * 当前 Task 仍可直接使用用户原文(goal);未确认候选不进入长期权威注入。
    * 采用/不采用：用户按钮即决策，写入后自动确认进成长链；同版本同决策幂等。
+   * captureOutcome 区分无可学 / 蒸馏失败 / 待确认 / 已学会；失败不得伪装成功。
    */
   async captureInput(input: {
     text: string;
@@ -505,12 +510,21 @@ export class SubjectService {
     capabilityId?: string;
     capabilityVersion?: string;
     sourceCapabilityKind?: 'local' | 'external_capability';
+    /** 幂等键（如 conversation:turnId / task_requirement:taskId），写入 tags。 */
+    captureKey?: string;
+    /** 修订要求 / 拒绝原因 / 版本差异短摘要 — 仅作蒸馏输入，不存全文。 */
+    revisionRequest?: string;
+    rejectionReason?: string;
+    editSummary?: string;
+    /** 助手回复截断上下文（不得归因于 Owner）。 */
+    assistantContext?: string;
   }): Promise<{
     candidateEventIds: string[];
     confirmationSuggestedEventIds: string[];
     confirmedEventIds?: string[];
     idempotent?: boolean;
     ownerDecision?: 'undecided' | 'accepted' | 'rejected';
+    captureOutcome: CaptureOutcome;
     /** 验收追溯：model | contract_fallback（合同为 contract）；不上用户面 */
     distillMode?: 'model' | 'contract' | 'model_fallback_contract' | 'none';
     normalizeTrace?: unknown[];
@@ -518,6 +532,21 @@ export class SubjectService {
     const pkg = this.requireActive();
     const isDecision =
       input.sourceKind === 'artifact_acceptance' || input.sourceKind === 'artifact_rejection';
+
+    if (input.captureKey) {
+      const existing = await this.requireLog().list(pkg.id);
+      const keyTag = `captureKey:${input.captureKey}`;
+      if (existing.some((e) => (e.payload.tags ?? []).includes(keyTag))) {
+        return {
+          candidateEventIds: [],
+          confirmationSuggestedEventIds: [],
+          confirmedEventIds: [],
+          idempotent: true,
+          captureOutcome: 'learned',
+        };
+      }
+    }
+
     let text = input.text.trim();
     if (!text && isDecision) {
       text =
@@ -526,7 +555,11 @@ export class SubjectService {
           : '用户未采用本次成果。';
     }
     if (!text) {
-      return { candidateEventIds: [], confirmationSuggestedEventIds: [] };
+      return {
+        candidateEventIds: [],
+        confirmationSuggestedEventIds: [],
+        captureOutcome: 'nothing_to_learn',
+      };
     }
 
     if (isDecision) {
@@ -544,6 +577,7 @@ export class SubjectService {
           confirmedEventIds: [],
           idempotent: true,
           ownerDecision: desired,
+          captureOutcome: 'learned',
         };
       }
     }
@@ -563,8 +597,15 @@ export class SubjectService {
     }
 
     const existing = await this.requireLog().list(pkg.id);
+    const experienceText = buildExperienceDistillText({
+      base: text,
+      ...(input.revisionRequest ? { revisionRequest: input.revisionRequest } : {}),
+      ...(input.rejectionReason ? { rejectionReason: input.rejectionReason } : {}),
+      ...(input.editSummary ? { editSummary: input.editSummary } : {}),
+    });
 
     let distilled: GrowthEvent[] = [];
+    let distillFailed = false;
     try {
       if (isDecision) {
         // 采用/不采用为确定性决策事件，不经蒸馏质量门（避免误丢弃）
@@ -587,10 +628,49 @@ export class SubjectService {
           authority: authorityFromEvents(existing),
         });
         this.lastDistillDiscarded = [];
+        this.lastDistillMode = 'contract';
+
+        // 有来源的可复用经验：修改要求 / 拒绝原因 / 版本差异（禁止整篇正文）
+        if (experienceText.length > text.length || input.revisionRequest || input.rejectionReason || input.editSummary) {
+          const expOpts: Parameters<typeof structuredDistillToEvents>[0] = {
+            subjectId: pkg.id,
+            text: experienceText,
+            sourceKind:
+              input.sourceKind === 'artifact_rejection' ? 'repeated_correction' : 'artifact_edit',
+            ...(input.taskId ? { taskId: input.taskId } : {}),
+            ...(input.artifactId ? { artifactId: input.artifactId } : {}),
+            ...(input.artifactVersionId ? { artifactVersionId: input.artifactVersionId } : {}),
+            ...(input.requestedArtifactType
+              ? { requestedArtifactType: input.requestedArtifactType }
+              : {}),
+            existingEvents: existing,
+          };
+          if (this.distillRuntime?.enabled) {
+            expOpts.chatComplete = this.distillRuntime.chatComplete;
+            expOpts.model = {
+              baseUrl: this.distillRuntime.model.baseUrl,
+              model: this.distillRuntime.model.model,
+            };
+          }
+          try {
+            const exp = await structuredDistillToEvents(expOpts);
+            distilled = [...distilled, ...exp.events];
+            this.lastDistillDiscarded = [...this.lastDistillDiscarded, ...exp.discarded];
+            this.lastDistillMode = exp.mode;
+            this.lastNormalizeTrace = exp.normalizeTrace || [];
+          } catch {
+            // 决策事件已可写；附加经验蒸馏失败不抹掉决策，记为部分失败由 outcome 反映
+            distillFailed = distilled.length === 0;
+          }
+        }
       } else {
+        const distillText =
+          input.sourceKind === 'conversation' && input.assistantContext
+            ? `${text}\n\n（对话上下文，非用户观点）\n${input.assistantContext.slice(0, 400)}`
+            : text;
         const distillOpts: Parameters<typeof structuredDistillToEvents>[0] = {
           subjectId: pkg.id,
-          text,
+          text: distillText,
           sourceKind: input.sourceKind,
           ...(materialRef ? { materialRef } : {}),
           ...(input.taskId ? { taskId: input.taskId } : {}),
@@ -620,16 +700,37 @@ export class SubjectService {
         this.lastNormalizeTrace = result.normalizeTrace || [];
       }
     } catch {
-      // 蒸馏失败不阻断主流程：合同降级由 structuredDistill 内部处理；此处为硬失败
+      // 硬失败：不得伪装为空成功
       this.lastDistillDiscarded = [{ reason: 'distill_failure', title: 'distill' }];
-      this.lastDistillMode = this.distillRuntime?.enabled ? 'model_fallback_contract' : 'none';
-      distilled = [];
+      this.lastDistillMode = this.distillRuntime?.enabled ? 'none' : 'none';
+      return {
+        candidateEventIds: [],
+        confirmationSuggestedEventIds: [],
+        distillMode: 'none',
+        captureOutcome: 'distill_failed',
+      };
     }
 
+    if (distillFailed && distilled.length === 0) {
+      return {
+        candidateEventIds: [],
+        confirmationSuggestedEventIds: [],
+        distillMode: this.lastDistillMode,
+        captureOutcome: 'distill_failed',
+      };
+    }
+
+    const captureKeyTag = input.captureKey ? `captureKey:${input.captureKey}` : null;
     const candidateEventIds: string[] = [];
     const confirmationSuggestedEventIds: string[] = [];
     const silentAdoptIds: string[] = [];
     for (const event of distilled) {
+      if (captureKeyTag) {
+        const tags = event.payload.tags ?? [];
+        if (!tags.includes(captureKeyTag)) {
+          event.payload = { ...event.payload, tags: [...tags, captureKeyTag] };
+        }
+      }
       await this.appendGrowthEvent(event);
       candidateEventIds.push(event.id);
       const tags = event.payload.tags ?? [];
@@ -646,33 +747,94 @@ export class SubjectService {
     }
 
     if (isDecision && candidateEventIds.length > 0) {
-      const confirmed = await this.confirmCandidates({ eventIds: candidateEventIds });
+      const decisionOnly = distilled.filter((e) =>
+        (e.payload.tags ?? []).some((t) => t === 'decision:accept' || t === 'decision:reject'),
+      );
+      const toConfirm = decisionOnly.map((e) => e.id);
+      const alsoSilent = silentAdoptIds.filter((id) => !toConfirm.includes(id));
+      if (toConfirm.length > 0) {
+        await this.confirmCandidates({ eventIds: toConfirm });
+      }
+      if (alsoSilent.length > 0) {
+        await this.confirmCandidates({ eventIds: alsoSilent });
+      }
       const decision = await this.getArtifactOwnerDecision(
         input.artifactId as string,
         input.artifactVersionId as string,
       );
+      const captureOutcome = deriveCaptureOutcome({
+        candidateCount: candidateEventIds.length,
+        confirmationSuggestedCount: confirmationSuggestedEventIds.length,
+        confirmedCount: toConfirm.length + alsoSilent.length,
+      });
       return {
         candidateEventIds,
-        confirmationSuggestedEventIds: [],
-        confirmedEventIds: candidateEventIds.slice(0, confirmed.confirmedCount),
+        confirmationSuggestedEventIds,
+        confirmedEventIds: [...toConfirm, ...alsoSilent],
         idempotent: false,
         ownerDecision: decision.status,
+        captureOutcome,
+        distillMode: this.lastDistillMode,
+        normalizeTrace: this.lastNormalizeTrace,
+      };
+    }
+
+    const captureOutcome = deriveCaptureOutcome({
+      candidateCount: candidateEventIds.length,
+      confirmationSuggestedCount: confirmationSuggestedEventIds.length,
+      confirmedCount: silentAdoptIds.length,
+    });
+
+    // 带 captureKey 的空结果仍写回执，供重放幂等；标记 capture:noop，不得注入任务。
+    if (
+      captureOutcome === 'nothing_to_learn' &&
+      captureKeyTag &&
+      candidateEventIds.length === 0
+    ) {
+      const receipt: GrowthEvent = {
+        id: newId('growthEvent'),
+        subjectId: pkg.id,
+        occurredAt: nowIso(),
+        type: 'feedback_recorded',
+        source: {
+          kind:
+            input.sourceKind === 'task_requirement' ||
+            input.sourceKind === 'artifact_acceptance' ||
+            input.sourceKind === 'artifact_rejection'
+              ? 'task_feedback'
+              : 'owner_direct',
+          ...(input.taskId ? { taskId: input.taskId } : {}),
+          ...(input.artifactId ? { artifactId: input.artifactId } : {}),
+        },
+        payload: {
+          title: '本次输入无可沉淀要点',
+          detail: text.slice(0, 200),
+          tags: [captureKeyTag, 'capture:noop', 'silent_ok'],
+        },
+        confidence: 'candidate',
+      };
+      await this.appendGrowthEvent(receipt);
+      return {
+        candidateEventIds: [receipt.id],
+        confirmationSuggestedEventIds: [],
+        distillMode: this.lastDistillMode,
+        normalizeTrace: this.lastNormalizeTrace,
+        captureOutcome: 'nothing_to_learn',
       };
     }
 
     return {
       candidateEventIds,
       confirmationSuggestedEventIds,
-      ...(silentAdoptIds.length
-        ? { confirmedEventIds: silentAdoptIds }
-        : {}),
+      ...(silentAdoptIds.length ? { confirmedEventIds: silentAdoptIds } : {}),
       distillMode: this.lastDistillMode,
       normalizeTrace: this.lastNormalizeTrace,
+      captureOutcome,
     };
   }
 
   /**
-   * 异步捕获成长信号：主任务只调度，不等待完成；失败有限重试且不抛出。
+   * 异步捕获成长信号：主任务只调度，不等待完成；蒸馏失败有限重试。
    */
   captureInputAsync(
     input: {
@@ -686,13 +848,43 @@ export class SubjectService {
       capabilityId?: string;
       capabilityVersion?: string;
       sourceCapabilityKind?: 'local' | 'external_capability';
+      captureKey?: string;
+      revisionRequest?: string;
+      rejectionReason?: string;
+      editSummary?: string;
+      assistantContext?: string;
     },
-    onDone?: (result: { ok: boolean; attempts: number }) => void,
+    onDone?: (result: {
+      ok: boolean;
+      attempts: number;
+      captureOutcome?: CaptureOutcome;
+      error?: string;
+    }) => void,
   ): void {
-    scheduleGrowthWork(() => this.captureInput(input), {
-      maxAttempts: 2,
-      onDone: (r) => onDone?.({ ok: r.ok, attempts: r.attempts }),
-    });
+    scheduleGrowthWork(
+      async () => {
+        const r = await this.captureInput(input);
+        if (r.captureOutcome === 'distill_failed') {
+          throw Object.assign(new Error('distill_failed'), { captureOutcome: r.captureOutcome });
+        }
+        return r;
+      },
+      {
+        maxAttempts: 2,
+        onDone: (r) => {
+          const value = r.value as
+            | { captureOutcome?: CaptureOutcome }
+            | undefined;
+          onDone?.({
+            ok: r.ok,
+            attempts: r.attempts,
+            ...(value?.captureOutcome ? { captureOutcome: value.captureOutcome } : {}),
+            ...(r.error ? { error: r.error } : {}),
+            ...(!r.ok ? { captureOutcome: 'distill_failed' as const } : {}),
+          });
+        },
+      },
+    );
   }
 
   /**
@@ -973,6 +1165,23 @@ export class SubjectService {
 function displayMaterialFileName(storedName: string): string {
   const m = /^[a-f0-9]{16}_(.+)$/i.exec(storedName);
   return m?.[1] || storedName;
+}
+
+/** 组装有来源的短蒸馏文本；禁止塞入成果全文。 */
+function buildExperienceDistillText(input: {
+  base: string;
+  revisionRequest?: string;
+  rejectionReason?: string;
+  editSummary?: string;
+}): string {
+  const parts = [input.base.trim()];
+  const rejection = String(input.rejectionReason || '').trim();
+  if (rejection) parts.push(`拒绝原因：${rejection.slice(0, 300)}`);
+  const revision = String(input.revisionRequest || '').trim();
+  if (revision) parts.push(`修改要求：${revision.slice(0, 300)}`);
+  const edit = String(input.editSummary || '').trim();
+  if (edit) parts.push(`版本差异：${edit.slice(0, 400)}`);
+  return parts.filter(Boolean).join('\n').slice(0, 1200);
 }
 
 async function readTextPreview(filePath: string): Promise<string> {
