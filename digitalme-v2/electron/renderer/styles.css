@@ -686,6 +686,9 @@ select {
 .bundle-report {
   margin: 0;
   padding: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
   background: #f7f5f1;
   border: 1px solid var(--line);
   white-space: pre-wrap;
@@ -694,6 +697,7 @@ select {
   line-height: 1.5;
   max-height: 420px;
   overflow: auto;
+  color: inherit;
 }
 
 .bundle-entries {

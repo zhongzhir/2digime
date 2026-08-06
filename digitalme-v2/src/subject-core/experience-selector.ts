@@ -10,6 +10,8 @@ import {
 export interface ExperienceSelectInput {
   goal: string;
   requestedArtifactType: string;
+  /** 可选弱加权；不得取代目标语义匹配。 */
+  intentKind?: string;
   confirmed: ConfirmedExperienceView;
   boundaries: SubjectDerivedBundle['boundaries'];
 }
@@ -27,6 +29,8 @@ export interface ExperienceSelectOptions {
 export interface SubjectInjectionSelectInput {
   goal: string;
   requestedArtifactType: string;
+  /** 可选弱加权；不得取代目标语义匹配。 */
+  intentKind?: string;
   derived: SubjectDerivedBundle;
   /** 默认 ai_first */
   policy?: 'ai_first' | 'legacy';
@@ -92,9 +96,17 @@ export function selectConfirmedExperiences(
       for (const token of tokens) {
         if (token.length >= 2 && hay.has(token)) keywordScore += 1;
       }
-      const typeBoost =
-        keywordScore > 0 && entry.tags.map((t) => t.toLowerCase()).includes(artifactType);
-      const score = keywordScore + (typeBoost ? 2 : 0);
+      const tagsLower = entry.tags.map((t) => t.toLowerCase());
+      const typeBoost = keywordScore > 0 && tagsLower.includes(artifactType);
+      // intentKind 仅弱加权，且必须已有目标词命中，不得单独切换经验
+      const intentBoost =
+        keywordScore > 0 &&
+        input.intentKind === 'analyze_code' &&
+        (tagsLower.includes('code-analysis') ||
+          tagsLower.includes('method') ||
+          tagsLower.includes('偏好') ||
+          /判断|关注点|工作方法|审查/.test(`${entry.title} ${entry.detail}`));
+      const score = keywordScore + (typeBoost ? 2 : 0) + (intentBoost ? 1 : 0);
       const weak = keywordScore === 1;
       return { entry, score, keywordScore, weak };
     })
@@ -248,6 +260,7 @@ export function selectSubjectInjection(
     {
       goal: input.goal,
       requestedArtifactType: input.requestedArtifactType,
+      ...(input.intentKind ? { intentKind: input.intentKind } : {}),
       confirmed: derived.confirmed,
       boundaries: derived.boundaries,
     },

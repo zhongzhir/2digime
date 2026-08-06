@@ -706,7 +706,7 @@ export class DigitalMeRuntime {
         const derived = await subjectService.getDerived();
         return derived.confirmed;
       },
-      selectSubjectContext: async ({ goal, requestedArtifactType, taskId }) => {
+      selectSubjectContext: async ({ goal, requestedArtifactType, intentKind, taskId }) => {
         const derived = await subjectService.getDerived();
         const policy = this.options.executionPolicy ?? 'ai_first';
         const profile = chooseExecutionProfile({ goal, requestedArtifactType });
@@ -733,6 +733,7 @@ export class DigitalMeRuntime {
         const selected = selectSubjectInjection({
           goal,
           requestedArtifactType,
+          ...(intentKind ? { intentKind } : {}),
           derived,
           policy,
           includeCoreMatching:

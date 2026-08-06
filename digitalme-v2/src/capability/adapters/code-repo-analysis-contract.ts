@@ -16,7 +16,7 @@ import {
 export const CODE_REPO_ANALYSIS_CAPABILITY_ID = 'cap_code_repo_analysis';
 export const CODE_ANALYSIS_ARTIFACT_TYPE = 'code-analysis';
 
-/** 任务页显式成果类型封闭表 — 用户显式选择,不做目标文本推断。 */
+/** 期望产出族封闭表 — 可由意图派生或显式传入，不等于任务类型枚举。 */
 export const REQUESTED_ARTIFACT_TYPES = ['document', CODE_ANALYSIS_ARTIFACT_TYPE] as const;
 export type RequestedArtifactType = (typeof REQUESTED_ARTIFACT_TYPES)[number];
 

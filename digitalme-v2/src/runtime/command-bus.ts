@@ -100,6 +100,7 @@ export function createCommandBus(runtime: DigitalMeRuntime): CommandBus {
             versionCount: got.artifact.versions.length,
             ownerDecision,
             ...(got.bundle !== undefined ? { bundle: got.bundle } : {}),
+            ...(got.evidenceStale ? { evidenceStale: true } : {}),
           } as CommandMap[K]['output'];
         }
         case 'artifact.saveEdit':

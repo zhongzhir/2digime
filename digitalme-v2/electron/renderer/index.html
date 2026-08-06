@@ -299,7 +299,16 @@
               <p id="version-meta" class="meta"></p>
               <div id="bundle-view" class="bundle-view" hidden>
                 <p id="bundle-quality" class="bundle-quality" hidden></p>
-                <pre id="bundle-report" class="bundle-report"></pre>
+                <textarea
+                  id="bundle-report"
+                  class="bundle-report"
+                  rows="16"
+                  spellcheck="true"
+                  aria-label="分析报告（可人工编辑；依据不会自动同步）"
+                ></textarea>
+                <p id="bundle-stale-notice" class="muted tiny" hidden>
+                  报告已人工修改；下方依据与清单仍为生成时的版本，未自动同步。
+                </p>
                 <details id="bundle-evidence-panel" class="bundle-evidence-panel">
                   <summary>分析依据</summary>
                   <div id="bundle-manifest" class="bundle-manifest muted"></div>

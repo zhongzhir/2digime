@@ -52,6 +52,8 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
     artifact: Artifact;
     content: ArtifactContent;
     text?: string;
+    /** 人工改过报告但证据/清单仍为旧版时为 true。 */
+    evidenceStale?: boolean;
     bundle?: {
       entries: Array<{ role?: string; mediaType: string; text?: string }>;
       manifestSummary?: {
@@ -73,6 +75,7 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
       artifact: Artifact;
       content: ArtifactContent;
       text?: string;
+      evidenceStale?: boolean;
       bundle?: {
         entries: Array<{ role?: string; mediaType: string; text?: string }>;
         manifestSummary?: {
@@ -88,6 +91,13 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
       artifact,
       content: version.content,
     };
+    if (
+      version.content.kind === 'bundle' &&
+      version.author === 'user' &&
+      (version.note === 'manual_report_edit' || !version.note)
+    ) {
+      result.evidenceStale = true;
+    }
     if (version.content.kind === 'text') {
       result.text = await this.contentStore.getText(version.content);
     } else if (version.content.kind === 'bundle') {
@@ -210,6 +220,7 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
       createdAt: nowIso(),
       author: 'user',
       content: nextContent,
+      ...(previous.content.kind === 'bundle' ? { note: 'manual_report_edit' } : {}),
     };
     const next: Artifact = {
       ...artifact,

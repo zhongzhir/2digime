@@ -499,15 +499,16 @@ test('P2.1 digitalme-v2 自身仓库识别事实(结构扫描,非质量结论)',
   await runtime.stop();
 });
 
-test('P2.1 Work Runtime 无 code-analysis 专用分支(源码静态检查)', async () => {
+test('P2.1 Work Runtime 经 selectForNeed 承接 code-analysis（禁止写作伪装）', async () => {
   const jobRunnerSrc = await fs.readFile(
     path.resolve(__dirname, '..', '..', '..', 'src', 'work-runtime', 'job-runner.ts'),
     'utf8',
   );
-  assert.ok(!/code-analysis/.test(jobRunnerSrc), 'JobRunner 不得出现 code-analysis 字面量');
+  assert.ok(/selectForNeed/.test(jobRunnerSrc), 'JobRunner 应使用 selectForNeed');
+  assert.ok(/CODE_ANALYSIS_ARTIFACT_TYPE|code-analysis/.test(jobRunnerSrc));
   assert.ok(
-    /contextPolicy/.test(jobRunnerSrc),
-    'JobRunner 应传递 contextPolicy',
+    /不会改用普通写作冒充|无法进行代码分析/.test(jobRunnerSrc),
+    '能力不可用时须给出可行动说明，不得伪装',
   );
-  assert.ok(!/if\s*\(.*code/.test(jobRunnerSrc));
+  assert.ok(/contextPolicy/.test(jobRunnerSrc), 'JobRunner 应传递 contextPolicy');
 });

@@ -1,6 +1,7 @@
 import type { ObjectStore } from '../runtime/ports';
 import { newId, nowIso } from '../shared/ids';
 import type { ContextRef, Task } from './task';
+import type { TaskIntentKind } from './work-intent';
 
 /**
  * TaskService — 纯意图任务的创建与查询。
@@ -15,6 +16,7 @@ export class TaskService {
     goal: string;
     contextRefs: ContextRef[];
     requestedArtifactType: string;
+    intentKind?: TaskIntentKind;
     capabilityId?: string;
     authorization?: Task['authorization'];
   }): Promise<Task> {
@@ -42,6 +44,9 @@ export class TaskService {
       contextRefs: input.contextRefs.map((r) => ({ kind: r.kind, path: r.path })),
       requestedArtifactType: input.requestedArtifactType,
     };
+    if (input.intentKind !== undefined) {
+      task.intentKind = input.intentKind;
+    }
     if (input.capabilityId !== undefined) {
       task.capabilityId = input.capabilityId;
     }

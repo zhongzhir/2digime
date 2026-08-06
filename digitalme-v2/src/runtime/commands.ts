@@ -170,7 +170,13 @@ export interface CommandMap {
     input: {
       goal: string;
       contextRefs: ContextRef[];
-      requestedArtifactType: string;
+      /**
+       * 期望产出族；可省略，由 Runtime 按意图派生。
+       * 显式传入时不得与不可用的代码分析意图冲突地伪装成功。
+       */
+      requestedArtifactType?: string;
+      /** 可选；省略时由 deriveWorkIntent 写入。 */
+      intentKind?: import('../work-runtime/work-intent').TaskIntentKind;
       capabilityId?: string;
       /** 本机协作子任务溯源（可选）；由协作编排写入，非 UI 自建状态。 */
       authorization?: {
@@ -185,7 +191,13 @@ export interface CommandMap {
         eventIdB: string;
       };
     };
-    output: { taskId: string; jobId: string };
+    output: {
+      taskId: string;
+      jobId: string;
+      intentKind?: import('../work-runtime/work-intent').TaskIntentKind;
+      /** 用户可理解的一句说明（如自动选择代码分析时）。 */
+      userFacingNotice?: string;
+    };
   };
   'work.retryTask': {
     input: { taskId: string };
@@ -291,8 +303,13 @@ export interface CommandMap {
           truncated: boolean;
           skippedSensitiveCount: number;
           warnings: string[];
+          quality?: { grade: string; reasons: string[] };
         };
       };
+      /**
+       * 报告为人工编辑，清单/依据仍为旧版；不得冒充已同步。
+       */
+      evidenceStale?: boolean;
     };
   };
   'artifact.saveEdit': {

@@ -4,7 +4,11 @@
  * 关联关系由 Job.taskId / Artifact.taskId / Snapshot.taskId 反向承载,
  * 状态由 derive.ts 从 Job 集合派生。"单活跃 Job"由执行器查询 Job Store 强制,
  * 不依赖 Task 上的镜像字段(消除双事实源)。
+ *
+ * intentKind ≠ capabilityId ≠ requestedArtifactType(期望产出族)。
  */
+import type { TaskIntentKind } from './work-intent';
+
 export interface Task {
   id: string;
   subjectId: string;
@@ -12,7 +16,16 @@ export interface Task {
   /** 任务目标大输入区原文。 */
   goal: string;
   contextRefs: ContextRef[];
+  /**
+   * 期望产出族（如 document / code-analysis）。
+   * 不再单独承担任务分类或能力选择键。
+   */
   requestedArtifactType: string;
+  /**
+   * 可选任务意图（派生后写入，便于重启/重试保持语义）。
+   * 缺省时按旧行为：仅依赖 requestedArtifactType。
+   */
+  intentKind?: TaskIntentKind;
   capabilityId?: string;
   /**
    * 可选：本机协作授权溯源（非状态机）。

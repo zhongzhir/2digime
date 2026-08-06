@@ -27,11 +27,13 @@ import {
   prepareAndExecuteCapability,
   resumeRemoteIfPossible,
 } from './remote-job-bridge';
+import { buildTargetedRevisionRequest } from './ai-first-policy';
 import {
-  buildTargetedRevisionRequest,
-  checkOutcome,
-  chooseExecutionProfile,
-} from './ai-first-policy';
+  capabilityOutputText,
+  dispatchOutcomeCheck,
+} from './outcome-dispatch';
+import { deriveWorkIntent, isTaskIntentKind } from './work-intent';
+import { CODE_ANALYSIS_ARTIFACT_TYPE } from '../capability/adapters/code-repo-analysis-contract';
 
 export interface WorkRuntimeOptions {
   subjectId: string;
@@ -52,6 +54,7 @@ export interface WorkRuntimeOptions {
   selectSubjectContext?: (input: {
     goal: string;
     requestedArtifactType: string;
+    intentKind?: import('./work-intent').TaskIntentKind;
     confirmed: ConfirmedExperienceView;
     taskId?: string;
   }) =>
@@ -125,32 +128,98 @@ export class WorkRuntime {
 
   /**
    * 同步路径:校验 → 写 Task → 写 queued Job → 入队 → 返回。
-   * 禁止扫描/解析/调模型/写 Artifact。
+   * 禁止扫描/解析/调模型/写 Artifact（意图派生仅轻量材料探测）。
    */
-  async submitTask(input: SubmitInput): Promise<{ taskId: string; jobId: string }> {
-    const adapter = this.opts.registry.selectFor(
-      input.requestedArtifactType,
-      input.capabilityId,
-    );
-    if (!adapter) {
-      throw new Error('no available capability for requested artifact type');
+  async submitTask(
+    input: SubmitInput,
+  ): Promise<{
+    taskId: string;
+    jobId: string;
+    intentKind?: import('./work-intent').TaskIntentKind;
+    userFacingNotice?: string;
+  }> {
+    const derived = await deriveWorkIntent({
+      goal: input.goal,
+      contextRefs: input.contextRefs,
+      ...(input.capabilityId ? { explicitCapabilityId: input.capabilityId } : {}),
+    });
+    const intent =
+      input.intentKind && isTaskIntentKind(input.intentKind)
+        ? {
+            ...derived,
+            intentKind: input.intentKind,
+            expectedOutputFamily:
+              input.requestedArtifactType ||
+              (input.intentKind === 'analyze_code'
+                ? CODE_ANALYSIS_ARTIFACT_TYPE
+                : derived.expectedOutputFamily),
+            highConfidence: true,
+            ...(input.intentKind === 'analyze_code'
+              ? { userFacingNotice: '将分析你添加的代码并整理问题清单与依据。' }
+              : {}),
+          }
+        : derived;
+
+    const expectedOutputFamily =
+      String(input.requestedArtifactType || '').trim() || intent.expectedOutputFamily;
+
+    // 显式要求代码分析时，禁止在能力不可用时回退写作
+    const forceAnalyze =
+      intent.intentKind === 'analyze_code' || expectedOutputFamily === CODE_ANALYSIS_ARTIFACT_TYPE;
+
+    const selected = this.opts.registry.selectForNeed({
+      intentKind: intent.intentKind,
+      expectedOutputFamily,
+      materialKinds: intent.materialKinds,
+      ...(input.capabilityId ? { explicitCapabilityId: input.capabilityId } : {}),
+    });
+
+    if (!selected.adapter) {
+      const msg =
+        selected.actionable ||
+        (forceAnalyze
+          ? '当前无法进行代码分析：请先连接模型并添加代码材料后再试。'
+          : 'no available capability for requested artifact type');
+      throw Object.assign(new Error(msg), { actionable: msg });
     }
-    if (adapter.registration.availability !== 'available') {
-      throw new Error('selected capability is not available');
+    if (selected.adapter.registration.availability !== 'available') {
+      const msg =
+        selected.actionable || 'selected capability is not available';
+      throw Object.assign(new Error(msg), { actionable: msg });
     }
+
+    // 若意图为代码分析，确认选中的能力确实产出 code-analysis
+    if (
+      forceAnalyze &&
+      !selected.adapter.registration.outputArtifactTypes.includes(CODE_ANALYSIS_ARTIFACT_TYPE)
+    ) {
+      const msg =
+        '当前无法进行代码分析：没有可用的代码分析能力。不会改用普通写作冒充代码审查。';
+      throw Object.assign(new Error(msg), { actionable: msg });
+    }
+
+    const adapter = selected.adapter;
+    const resolvedFamily =
+      forceAnalyze
+        ? CODE_ANALYSIS_ARTIFACT_TYPE
+        : expectedOutputFamily ||
+          adapter.registration.outputArtifactTypes[0] ||
+          'document';
 
     const taskInput: {
       subjectId: string;
       goal: string;
       contextRefs: SubmitInput['contextRefs'];
       requestedArtifactType: string;
+      intentKind?: import('./work-intent').TaskIntentKind;
       capabilityId?: string;
       authorization?: SubmitInput['authorization'];
     } = {
       subjectId: this.opts.subjectId,
       goal: input.goal,
       contextRefs: input.contextRefs,
-      requestedArtifactType: input.requestedArtifactType,
+      requestedArtifactType: resolvedFamily,
+      intentKind: intent.intentKind,
       capabilityId: adapter.registration.id,
     };
     if (input.capabilityId !== undefined) {
@@ -163,7 +232,12 @@ export class WorkRuntime {
 
     const job = await this.createQueuedJob(task.id, adapter.registration.id);
     this.enqueue(job.id);
-    return { taskId: task.id, jobId: job.id };
+    return {
+      taskId: task.id,
+      jobId: job.id,
+      intentKind: intent.intentKind,
+      ...(intent.userFacingNotice ? { userFacingNotice: intent.userFacingNotice } : {}),
+    };
   }
 
   /**
@@ -180,9 +254,16 @@ export class WorkRuntime {
       }
       const capabilityId =
         task.capabilityId ??
-        this.opts.registry.selectFor(task.requestedArtifactType)?.registration.id;
+        this.opts.registry.selectForNeed({
+          ...(task.intentKind ? { intentKind: task.intentKind } : {}),
+          expectedOutputFamily: task.requestedArtifactType,
+        }).adapter?.registration.id;
       if (!capabilityId) {
-        throw new Error('no available capability for retry');
+        const msg =
+          task.intentKind === 'analyze_code'
+            ? '当前无法重试代码分析：请先连接模型后再试。'
+            : 'no available capability for retry';
+        throw Object.assign(new Error(msg), { actionable: msg });
       }
       const job = await this.createQueuedJob(task.id, capabilityId);
       this.enqueue(job.id);
@@ -218,13 +299,24 @@ export class WorkRuntime {
       }
       const capabilityId =
         task.capabilityId ??
-        this.opts.registry.selectFor(task.requestedArtifactType)?.registration.id;
+        this.opts.registry.selectForNeed({
+          ...(task.intentKind ? { intentKind: task.intentKind } : {}),
+          expectedOutputFamily: task.requestedArtifactType,
+        }).adapter?.registration.id;
       if (!capabilityId) {
-        throw new Error('no available capability for revise');
+        const msg =
+          task.intentKind === 'analyze_code'
+            ? '当前无法按说明重新分析：请先连接模型后再试。'
+            : 'no available capability for revise';
+        throw Object.assign(new Error(msg), { actionable: msg });
       }
       const adapter = this.opts.registry.get(capabilityId);
       if (!adapter || adapter.registration.availability !== 'available') {
-        throw new Error('selected capability is not available');
+        const msg =
+          task.intentKind === 'analyze_code'
+            ? '当前无法进行代码分析：请先连接模型后再试。不会改用普通写作冒充代码审查。'
+            : 'selected capability is not available';
+        throw Object.assign(new Error(msg), { actionable: msg });
       }
       const job = await this.createQueuedJob(task.id, capabilityId, {
         targetArtifactId: artifact.id,
@@ -610,6 +702,7 @@ export class WorkRuntime {
           ? await this.opts.selectSubjectContext({
               goal: task.goal,
               requestedArtifactType: task.requestedArtifactType,
+              ...(task.intentKind ? { intentKind: task.intentKind } : {}),
               confirmed: fullContext,
               taskId: task.id,
             })
@@ -664,15 +757,36 @@ export class WorkRuntime {
           return;
         }
         const head = target.versions.find((v) => v.versionId === target.headVersionId);
-        if (!head || head.content.kind !== 'text') {
-          await this.failJob(job, 'capability', '当前成果无法修改', '仅支持文本成果修改');
+        if (!head) {
+          await this.failJob(job, 'capability', '成果版本不存在', '请重试');
           return;
         }
-        if (!this.opts.readExtractedText) {
-          await this.failJob(job, 'capability', '无法读取当前成果', '请重试');
+        if (head.content.kind === 'file') {
+          await this.failJob(
+            job,
+            'capability',
+            '当前成果不支持按说明修改',
+            '请使用重试重新生成，或采用/拒绝后另开任务',
+          );
           return;
         }
-        const previousText = await this.opts.readExtractedText(head.content.ref);
+        let previousText = '';
+        if (head.content.kind === 'text') {
+          if (!this.opts.readExtractedText) {
+            await this.failJob(job, 'capability', '无法读取当前成果', '请重试');
+            return;
+          }
+          previousText = await this.opts.readExtractedText(head.content.ref);
+        } else if (head.content.kind === 'bundle') {
+          const report = head.content.entries.find((e) => e.role === 'report');
+          if (report && this.opts.readExtractedText) {
+            try {
+              previousText = await this.opts.readExtractedText(report.ref);
+            } catch {
+              previousText = '';
+            }
+          }
+        }
         revisionInput = {
           request: jobMeta.revisionRequest,
           previousText,
@@ -991,24 +1105,85 @@ export class WorkRuntime {
         return;
       }
 
-      // AI-first Outcome Check：主题/字数/修订落实；主生成与用户修订各最多一次针对性补修
+      // Outcome Check：按成果合同分派；无适用检查器显式不适用
       if (!isRemote && output) {
-        const text = capabilityOutputText(output);
-        if (text !== null) {
-          const profile = chooseExecutionProfile({
-            goal: task.goal,
-            requestedArtifactType: task.requestedArtifactType,
-          });
-          const hardBoundaryTexts = subjectContext.entries
-            .filter((e) => (e.kind || '') === 'boundary')
-            .map((e) => `${e.title}\n${e.detail}\n${e.tags.join(' ')}`);
+        const hardBoundaryTexts = subjectContext.entries
+          .filter((e) => (e.kind || '') === 'boundary')
+          .map((e) => `${e.title}\n${e.detail}\n${e.tags.join(' ')}`);
 
-          const runCheck = (currentText: string) =>
-            checkOutcome({
+        let outcome = dispatchOutcomeCheck({
+          goal: task.goal,
+          output,
+          isRemote: false,
+          hardBoundaryTexts,
+          requestedArtifactType: task.requestedArtifactType,
+          ...(revisionInput
+            ? {
+                previousText: revisionInput.previousText,
+                revisionRequest: revisionInput.request,
+              }
+            : {}),
+        });
+
+        if (outcome.checkKind === 'text' && outcome.verdict === 'targeted_revision_required') {
+          const text = capabilityOutputText(output) || '';
+          job = await this.withProgress(job, 'capability', '正在修改');
+          await this.persistJob(job);
+          try {
+            const minimalContext: ConfirmedExperienceView = {
+              subjectId: subjectContext.subjectId,
+              derivedAt: subjectContext.derivedAt,
+              entries: subjectContext.entries.filter((e) => (e.kind || '') === 'boundary'),
+            };
+            const grant =
+              task.authorization?.grantId && this.opts.loadAuthorizationGrant
+                ? await this.opts.loadAuthorizationGrant(task.authorization.grantId)
+                : null;
+            const reviseRaw = {
               goal: task.goal,
-              text: currentText,
+              snapshot,
+              subjectContext: minimalContext,
+              artifactType: task.requestedArtifactType,
+              revision: {
+                request: buildTargetedRevisionRequest(outcome.defects),
+                previousText: text,
+                artifactId: revisionInput?.artifactId || 'pending',
+                ...(revisionInput?.rejectionReason
+                  ? { rejectionReason: revisionInput.rejectionReason }
+                  : {}),
+              },
+            };
+            const auth = buildJobAuthorizationProjection({
+              task,
+              capabilityInput: reviseRaw,
+              grant,
+              isRemote: false,
+            });
+            const markers = this.opts.resolveUnauthorizedMarkers
+              ? await this.opts.resolveUnauthorizedMarkers({
+                  taskId: task.id,
+                  allowedMaterialPaths: [...auth.allowedMaterials],
+                })
+              : [];
+            const revised = await prepareAndExecuteCapability({
+              adapter,
+              rawInput: reviseRaw,
+              auth,
+              ctx: execCtx,
+              isRemote: false,
+              unauthorizedMarkers: markers,
+              job: (await this.opts.jobStore.get(jobId)) ?? job,
+              task,
+              subjectId: task.subjectId,
+            });
+            output = revised.output;
+            outcome = dispatchOutcomeCheck({
+              goal: task.goal,
+              output,
+              isRemote: false,
               hardBoundaryTexts,
-              profile,
+              requestedArtifactType: task.requestedArtifactType,
+              // 自动补修后再检：仍按用户修订合同（若有），不得把系统补修说明当硬缺陷
               ...(revisionInput
                 ? {
                     previousText: revisionInput.previousText,
@@ -1016,69 +1191,24 @@ export class WorkRuntime {
                   }
                 : {}),
             });
-
-          let outcome = runCheck(text);
-          if (outcome.verdict === 'targeted_revision_required') {
-            job = await this.withProgress(job, 'capability', '正在修改');
-            await this.persistJob(job);
-            try {
-              const minimalContext: ConfirmedExperienceView = {
-                subjectId: subjectContext.subjectId,
-                derivedAt: subjectContext.derivedAt,
-                entries: subjectContext.entries.filter((e) => (e.kind || '') === 'boundary'),
-              };
-              const grant =
-                task.authorization?.grantId && this.opts.loadAuthorizationGrant
-                  ? await this.opts.loadAuthorizationGrant(task.authorization.grantId)
-                  : null;
-              const reviseRaw = {
-                goal: task.goal,
-                snapshot,
-                subjectContext: minimalContext,
-                artifactType: task.requestedArtifactType,
-                revision: {
-                  request: buildTargetedRevisionRequest(outcome.defects),
-                  previousText: text,
-                  artifactId: revisionInput?.artifactId || 'pending',
-                  ...(revisionInput?.rejectionReason
-                    ? { rejectionReason: revisionInput.rejectionReason }
-                    : {}),
-                },
-              };
-              const auth = buildJobAuthorizationProjection({
-                task,
-                capabilityInput: reviseRaw,
-                grant,
-                isRemote: false,
-              });
-              const markers = this.opts.resolveUnauthorizedMarkers
-                ? await this.opts.resolveUnauthorizedMarkers({
-                    taskId: task.id,
-                    allowedMaterialPaths: [...auth.allowedMaterials],
-                  })
-                : [];
-              const revised = await prepareAndExecuteCapability({
-                adapter,
-                rawInput: reviseRaw,
-                auth,
-                ctx: execCtx,
-                isRemote: false,
-                unauthorizedMarkers: markers,
-                job: (await this.opts.jobStore.get(jobId)) ?? job,
-                task,
-                subjectId: task.subjectId,
-              });
-              output = revised.output;
-              const revisedText = capabilityOutputText(output);
-              if (revisedText !== null) {
-                outcome = runCheck(revisedText);
-              }
-            } catch {
-              // 自动补修失败：保留当前结果，再按下方 verdict 决定是否可交付
-            }
+          } catch {
+            // 自动补修失败：保留当前结果
           }
+        }
 
-          if (outcome.verdict === 'blocked' && !(capabilityOutputText(output) || '').trim()) {
+        if (outcome.verdict === 'blocked') {
+          if (outcome.checkKind === 'bundle' || outcome.checkKind === 'external') {
+            await this.failJob(
+              job,
+              'capability',
+              sanitizeMessage(outcome.defects[0] || '成果不完整'),
+              outcome.checkKind === 'bundle'
+                ? '请重试分析；若持续失败请缩小仓库范围'
+                : '请按说明修改后重试',
+            );
+            return;
+          }
+          if (outcome.checkKind === 'text' && !(capabilityOutputText(output) || '').trim()) {
             await this.failJob(
               job,
               'capability',
@@ -1087,17 +1217,19 @@ export class WorkRuntime {
             );
             return;
           }
+        }
 
-          // 主题偏离 / 修订无实质变化 / 「不少于」字数未达标：不得标成功
+        // 文本硬缺陷：主题偏离 / 修订无实质变化 / 「不少于」字数
+        if (outcome.checkKind === 'text') {
           const hardDefect = outcome.defects.some((d) =>
             /主题未紧扣|几乎相同|修改说明未落实|不少于约/.test(d),
           );
-          if (outcome.verdict !== 'pass' && hardDefect) {
+          if (hardDefect) {
             await this.failJob(
               job,
               'capability',
-              sanitizeMessage(outcome.defects[0] || '成果未满足任务要求'),
-              '请调整目标、材料或修改说明后重试',
+              sanitizeMessage(outcome.defects[0] || '成果未达到任务要求'),
+              '请调整任务说明或修改要求后重试',
             );
             return;
           }
@@ -1277,12 +1409,6 @@ export class WorkRuntime {
 
 function emptySubjectContext(subjectId: string): ConfirmedExperienceView {
   return { subjectId, derivedAt: nowIso(), entries: [] };
-}
-
-function capabilityOutputText(output: CapabilityOutput): string | null {
-  const payload = output.artifact?.payload;
-  if (payload && payload.kind === 'text') return payload.text;
-  return null;
 }
 
 function normalizeSelection(

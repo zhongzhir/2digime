@@ -355,12 +355,14 @@ test('P2.2 prompt 组装只使用冻结文本且有预算', async () => {
   assert.ok(assembled.selectedFiles.length >= 1);
 });
 
-test('P2.2 Work Runtime 仍无 code-analysis 分支', async () => {
+test('P2.2 Work Runtime 经意图选择 code-analysis，禁止写作伪装', async () => {
   const src = await fs.readFile(
     path.resolve(__dirname, '..', '..', '..', '..', 'src', 'work-runtime', 'job-runner.ts'),
     'utf8',
   );
-  assert.ok(!/code-analysis/.test(src));
+  assert.ok(/selectForNeed/.test(src));
+  assert.ok(/CODE_ANALYSIS_ARTIFACT_TYPE|code-analysis/.test(src));
+  assert.ok(/不会改用普通写作冒充|无法进行代码分析/.test(src));
   assert.ok(/contextPolicy/.test(src));
 });
 

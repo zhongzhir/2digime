@@ -1,0 +1,213 @@
+{
+  "task": "DIGITALME-V2-WORK-RUNTIME-GENERALIZATION-01",
+  "model": "deepseek-v4-flash",
+  "baseUrlHost": "api.deepseek.com",
+  "startedAt": "2026-08-06T06:23:23.503Z",
+  "checks": {
+    "unavailable_no_document_fallback": {
+      "ok": true,
+      "detail": {
+        "reason": "none",
+        "actionable": "当前无法进行代码分析：请先连接模型后再试。不会改用普通写作冒充代码审查。"
+      }
+    },
+    "intent_analyze_code": {
+      "ok": true,
+      "detail": {
+        "intentKind": "analyze_code",
+        "expectedOutputFamily": "code-analysis",
+        "materialKinds": [
+          "code_repo"
+        ],
+        "highConfidence": true,
+        "userFacingNotice": "将分析你添加的代码并整理问题清单与依据。"
+      }
+    },
+    "auto_select_code_analysis": {
+      "ok": true,
+      "detail": {
+        "taskId": "task_msh4qviqa977af85e3f9",
+        "jobId": "job_msh4qviy654bdcb8b390",
+        "intentKind": "analyze_code",
+        "userFacingNotice": "将分析你添加的代码并整理问题清单与依据。"
+      }
+    },
+    "task_persists_intent": {
+      "ok": true,
+      "detail": {
+        "intentKind": "analyze_code",
+        "requestedArtifactType": "code-analysis",
+        "capabilityId": "cap_code_repo_analysis"
+      }
+    },
+    "job_succeeded": {
+      "ok": true,
+      "detail": {
+        "status": "succeeded"
+      }
+    },
+    "bundle_report_manifest_evidence": {
+      "ok": true,
+      "detail": {
+        "roles": [
+          "report",
+          "evidence",
+          "manifest"
+        ],
+        "textLen": 1747
+      }
+    },
+    "bundle_integrity_passed": {
+      "ok": true,
+      "detail": {
+        "roles": [
+          "report",
+          "evidence",
+          "manifest"
+        ]
+      }
+    },
+    "accept_ok": {
+      "ok": true,
+      "detail": {
+        "candidateEventIds": [
+          "gevt_msh4rzgn5103ae65507b"
+        ],
+        "confirmationSuggestedEventIds": [],
+        "confirmedEventIds": [
+          "gevt_msh4rzgn5103ae65507b"
+        ],
+        "idempotent": false,
+        "ownerDecision": "accepted",
+        "captureOutcome": "learned",
+        "distillMode": "contract",
+        "normalizeTrace": [
+          {
+            "raw": {
+              "error": "empty_or_unnormalized_model_json"
+            },
+            "ok": false,
+            "reason": "model_call_failed"
+          }
+        ]
+      }
+    },
+    "revise_succeeded": {
+      "ok": true,
+      "detail": {
+        "jobId": "job_msh4rzlg225c3c0a310d",
+        "status": "succeeded"
+      }
+    },
+    "revise_new_bundle_consistent": {
+      "ok": true,
+      "detail": {
+        "oldHead": "ver_msh4rzbf9eb075c4adef",
+        "newHead": "ver_msh4somx2a08b867abb0",
+        "roles": [
+          "report",
+          "evidence",
+          "manifest"
+        ],
+        "evidenceStale": false
+      }
+    },
+    "reject_ok": {
+      "ok": true,
+      "detail": {
+        "candidateEventIds": [
+          "gevt_msh4sos89594c7ac1640",
+          "gevt_msh4svdy18971fe88acb"
+        ],
+        "confirmationSuggestedEventIds": [
+          "gevt_msh4svdy18971fe88acb"
+        ],
+        "confirmedEventIds": [
+          "gevt_msh4sos89594c7ac1640"
+        ],
+        "idempotent": false,
+        "ownerDecision": "rejected",
+        "captureOutcome": "pending_confirmation",
+        "distillMode": "model_fallback_contract",
+        "normalizeTrace": [
+          {
+            "raw": {
+              "error": "empty_or_unnormalized_model_json"
+            },
+            "ok": false,
+            "reason": "model_call_failed"
+          }
+        ]
+      }
+    },
+    "writing_intent_document": {
+      "ok": true,
+      "detail": {
+        "taskId": "task_msh4svlabbdf7039bb96",
+        "jobId": "job_msh4svlg2f21e253e24f",
+        "intentKind": "create_document"
+      }
+    },
+    "writing_uses_document_family": {
+      "ok": true,
+      "detail": {
+        "requestedArtifactType": "document",
+        "capabilityId": "cap_model_openai_compatible"
+      }
+    },
+    "writing_succeeded": {
+      "ok": true,
+      "detail": {
+        "status": "succeeded"
+      }
+    },
+    "writing_text_artifact": {
+      "ok": true,
+      "detail": {
+        "kind": "text"
+      }
+    },
+    "restart_preserves_intent": {
+      "ok": true,
+      "detail": {
+        "intentKind": "analyze_code",
+        "requestedArtifactType": "code-analysis",
+        "capabilityId": "cap_code_repo_analysis"
+      }
+    },
+    "retry_keeps_code_analysis": {
+      "ok": true,
+      "detail": {
+        "jobId": "job_msh4t163eb1661f4ceaf",
+        "capabilityId": "cap_code_repo_analysis",
+        "status": "succeeded"
+      }
+    },
+    "followup_analyze_code": {
+      "ok": true,
+      "detail": {
+        "taskId": "task_msh4u643b1f1b1004156",
+        "jobId": "job_msh4u64de047ddcb1354",
+        "intentKind": "analyze_code",
+        "userFacingNotice": "将分析你添加的代码并整理问题清单与依据。"
+      }
+    },
+    "followup_ran": {
+      "ok": true,
+      "detail": {
+        "status": "succeeded",
+        "applied": null
+      }
+    },
+    "no_parallel_code_workbench": {
+      "ok": true,
+      "detail": {
+        "hasSelectForNeed": true
+      }
+    }
+  },
+  "failures": [],
+  "repoPath": "C:\\Users\\46554\\AppData\\Local\\Temp\\dmv2-wrg-repo-H66xWn",
+  "finishedAt": "2026-08-06T06:27:03.931Z",
+  "ok": true
+}

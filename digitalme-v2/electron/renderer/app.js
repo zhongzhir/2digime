@@ -169,6 +169,7 @@
     bundleView: document.getElementById("bundle-view"),
     bundleQuality: document.getElementById("bundle-quality"),
     bundleReport: document.getElementById("bundle-report"),
+    bundleStaleNotice: document.getElementById("bundle-stale-notice"),
     bundleEvidencePanel: document.getElementById("bundle-evidence-panel"),
     bundleManifest: document.getElementById("bundle-manifest"),
     bundleEntries: document.getElementById("bundle-entries"),
@@ -258,6 +259,10 @@
   let activeArtifactId = null;
   let lastArtifactRejectionReason = "";
   let activeHeadVersionId = null;
+  /** @type {string} */
+  let activeTaskRequestedArtifactType = "document";
+  /** @type {string|null} */
+  let activeTaskIntentKind = null;
   let activeGrantId = null;
   /** @type {{ path: string, checked: boolean }[]} */
   let collabPageMaterials = [];
@@ -419,7 +424,8 @@
   }
 
   function selectedArtifactType() {
-    return "document";
+    // 产品入口不强迫选成果类型；由 Runtime 按意图派生。
+    return "";
   }
 
   function canSubmit(state) {
@@ -1054,9 +1060,19 @@
     }
     const note = els.decisionNote ? String(els.decisionNote.value || "").trim() : "";
     const goal = els.goal && els.goal.value ? String(els.goal.value).trim() : "";
+    const isCodeAnalysis =
+      activeArtifactKind === "bundle" ||
+      activeTaskRequestedArtifactType === "code-analysis" ||
+      activeTaskIntentKind === "analyze_code";
     const baseText =
       kind === "accept"
-        ? note || `采用成果：${goal || "本次任务"}`.slice(0, 400)
+        ? note ||
+          (isCodeAnalysis
+            ? `采用代码分析：可沿用关注点、判断标准与工作方法。任务：${goal || "本次任务"}`.slice(
+                0,
+                400,
+              )
+            : `采用成果：${goal || "本次任务"}`.slice(0, 400))
         : note || `未采用成果：${goal || "本次任务"}`.slice(0, 400);
     const prevLabel = els.decisionStatus ? els.decisionStatus.textContent : "";
     if (els.acceptArtifact) els.acceptArtifact.disabled = true;
@@ -1068,7 +1084,7 @@
         taskId: activeTaskId,
         artifactId: activeArtifactId,
         artifactVersionId: activeHeadVersionId,
-        requestedArtifactType: "document",
+        requestedArtifactType: activeTaskRequestedArtifactType || "document",
         sourceCapabilityKind: "local",
         ...(note ? (kind === "reject" ? { rejectionReason: note } : {}) : {}),
         ...(kind === "reject" && lastArtifactRejectionReason
@@ -1364,6 +1380,9 @@
     activeJobId = detail.latestJob ? detail.latestJob.jobId : null;
     els.goal.value = detail.task && detail.task.goal ? detail.task.goal : "";
     els.goal.readOnly = true;
+    activeTaskRequestedArtifactType =
+      (detail.task && detail.task.requestedArtifactType) || "document";
+    activeTaskIntentKind = (detail.task && detail.task.intentKind) || null;
     const refs =
       detail.task && Array.isArray(detail.task.contextRefs) ? detail.task.contextRefs : [];
     materials = refs
@@ -1423,27 +1442,54 @@
 
     if (isBundle) {
       activeArtifactKind = "bundle";
+      const qualitySource =
+        content.bundle && content.bundle.manifestSummary
+          ? content.bundle.manifestSummary.quality
+          : null;
       const qualityUi =
         (window.DigitalMeBundleQualityUi &&
-          window.DigitalMeBundleQualityUi.resolveBundleQualityUi(content)) || {
-          grade: null,
+          window.DigitalMeBundleQualityUi.resolveBundleQualityUi(qualitySource)) || {
+          showBanner: false,
+          className: "bundle-quality usable",
           bannerText: "",
           saveStatus: "已载入",
         };
-      lastQualityGrade = qualityUi.grade;
+      lastQualityGrade =
+        qualitySource && qualitySource.grade ? qualitySource.grade : null;
       lastQualityBannerText = qualityUi.bannerText || "";
       els.bundleView.hidden = false;
       els.bundleView.removeAttribute("hidden");
       els.artifactEditor.hidden = true;
       els.artifactEditor.setAttribute("hidden", "");
-      if (els.reviseBox) els.reviseBox.hidden = true;
-      else if (els.revise) els.revise.closest(".revise-box").hidden = true;
-      els.bundleReport.textContent = content.text || "";
+      if (els.reviseBox) {
+        els.reviseBox.hidden = false;
+        els.reviseBox.removeAttribute("hidden");
+        const summary = els.reviseBox.querySelector("summary");
+        if (summary) summary.textContent = "用说明重新执行";
+        if (els.revise) els.revise.textContent = "按说明重新分析";
+      } else if (els.revise) {
+        els.revise.closest(".revise-box").hidden = false;
+      }
+      suppressSave = true;
+      if (els.bundleReport) {
+        if ("value" in els.bundleReport) els.bundleReport.value = content.text || "";
+        else els.bundleReport.textContent = content.text || "";
+      }
+      suppressSave = false;
+      if (els.bundleStaleNotice) {
+        if (content.evidenceStale) {
+          els.bundleStaleNotice.hidden = false;
+          els.bundleStaleNotice.removeAttribute("hidden");
+        } else {
+          els.bundleStaleNotice.hidden = true;
+          els.bundleStaleNotice.setAttribute("hidden", "");
+        }
+      }
       if (els.bundleQuality) {
-        if (qualityUi.bannerText) {
+        if (qualityUi.showBanner && qualityUi.bannerText) {
           els.bundleQuality.hidden = false;
           els.bundleQuality.textContent = qualityUi.bannerText;
-          els.bundleQuality.className = `bundle-quality ${qualityUi.cssClass || ""}`.trim();
+          els.bundleQuality.className = qualityUi.className || "bundle-quality";
         } else {
           els.bundleQuality.hidden = true;
         }
@@ -1452,17 +1498,65 @@
       els.bundleEntries.innerHTML = "";
       if (content.bundle && content.bundle.manifestSummary) {
         const m = content.bundle.manifestSummary;
-        els.bundleManifest.textContent = `扫描 ${m.fileCountScanned || 0} 个文件`;
+        const langs = (m.languages || [])
+          .slice(0, 4)
+          .map((l) => `${l.language || "?"} ${l.files || 0}`)
+          .join("、");
+        els.bundleManifest.textContent = [
+          `扫描 ${m.fileCountScanned || 0} 个文件`,
+          langs ? `语言 ${langs}` : null,
+          m.truncated ? "已截断" : null,
+          m.skippedSensitiveCount ? `敏感跳过 ${m.skippedSensitiveCount}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
       }
+      const evidenceEntry = ((content.bundle && content.bundle.entries) || []).find(
+        (e) => e.role === "evidence",
+      );
+      let evidenceSummary = "";
+      if (evidenceEntry && evidenceEntry.text) {
+        try {
+          const parsed = JSON.parse(evidenceEntry.text);
+          const items = parsed.items || [];
+          evidenceSummary = `证据 ${items.length} 条`;
+          const sample = items
+            .slice(0, 5)
+            .map((it) => `${it.claimId || "?"} → ${it.path || "?"}`)
+            .join("；");
+          if (sample) evidenceSummary += `：${sample}`;
+        } catch {
+          evidenceSummary = "证据摘要不可用";
+        }
+      }
+      const roles = ((content.bundle && content.bundle.entries) || [])
+        .map((e) => e.role)
+        .filter(Boolean);
+      const li = document.createElement("li");
+      li.textContent = [
+        roles.includes("manifest") ? "包含清单" : null,
+        evidenceSummary || (roles.includes("evidence") ? "包含证据" : null),
+        content.evidenceStale ? "依据未随人工改稿更新" : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      if (li.textContent) els.bundleEntries.appendChild(li);
       els.exportMd.hidden = true;
       els.exportDocx.hidden = true;
       els.reveal.hidden = false;
-      els.saveStatus.textContent = qualityUi.saveStatus;
-      els.revise.disabled = true;
+      els.saveStatus.textContent = content.evidenceStale
+        ? "报告为人工编辑；依据未同步更新"
+        : qualityUi.saveStatus;
+      const connected = await refreshConnectionFromCapabilities();
+      els.revise.disabled = !connected;
     } else {
       activeArtifactKind = "document";
       lastQualityGrade = null;
       lastQualityBannerText = "";
+      if (els.bundleStaleNotice) {
+        els.bundleStaleNotice.hidden = true;
+        els.bundleStaleNotice.setAttribute("hidden", "");
+      }
       els.bundleView.hidden = true;
       els.bundleView.setAttribute("hidden", "");
       els.artifactEditor.hidden = false;
@@ -1471,6 +1565,9 @@
         els.reviseBox.hidden = false;
         els.reviseBox.removeAttribute("hidden");
         els.reviseBox.removeAttribute("open");
+        const summary = els.reviseBox.querySelector("summary");
+        if (summary) summary.textContent = "用说明修改成果";
+        if (els.revise) els.revise.textContent = "按说明修改";
       } else if (els.revise) {
         els.revise.closest(".revise-box").hidden = false;
       }
@@ -2441,18 +2538,28 @@
       }
       els.submit.disabled = true;
       clearArtifactView();
-      const result = await api.invoke("work.submitTask", {
+      const payload = {
         goal,
         contextRefs: materials.map((m) => ({ kind: m.kind, path: m.path })),
-        requestedArtifactType: type,
-      });
+      };
+      // 不强迫传成果类型；Runtime 按意图派生。显式仅在隐藏控件有非空值时透传。
+      if (type) payload.requestedArtifactType = type;
+      const result = await api.invoke("work.submitTask", payload);
       workMode = "task";
       activeTaskId = result.taskId;
       activeJobId = result.jobId;
+      activeTaskIntentKind = result.intentKind || null;
+      activeTaskRequestedArtifactType =
+        result.intentKind === "analyze_code" ? "code-analysis" : "document";
       els.goal.readOnly = true;
       if (els.workComposeTitle) els.workComposeTitle.textContent = "当前任务";
       setWorkCollabVisible(true);
       syncGoalPresentation();
+      if (result.userFacingNotice) {
+        els.jobStatus.textContent = result.userFacingNotice;
+        els.jobStatus.classList.remove("error");
+        if (els.jobActionable) els.jobActionable.textContent = "";
+      }
       await syncActiveTaskStatus();
       startJobWatch(activeTaskId);
     } catch (err) {
@@ -2539,6 +2646,35 @@
     }, 500);
   });
 
+  if (els.bundleReport && "addEventListener" in els.bundleReport) {
+    els.bundleReport.addEventListener("input", () => {
+      if (suppressSave || !activeArtifactId || workMode !== "task") return;
+      if (activeArtifactKind !== "bundle") return;
+      els.saveStatus.textContent = "正在保存人工编辑…";
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(async () => {
+        try {
+          const text =
+            "value" in els.bundleReport
+              ? els.bundleReport.value
+              : els.bundleReport.textContent || "";
+          await api.invoke("artifact.saveEdit", {
+            artifactId: activeArtifactId,
+            text,
+          });
+          els.saveStatus.textContent = "已保存人工编辑；依据未同步更新";
+          if (els.bundleStaleNotice) {
+            els.bundleStaleNotice.hidden = false;
+            els.bundleStaleNotice.removeAttribute("hidden");
+          }
+          if (activeArtifactId) await loadArtifact(activeArtifactId);
+        } catch (err) {
+          els.saveStatus.textContent = err.message || "保存失败";
+        }
+      }, 500);
+    });
+  }
+
   els.copy.addEventListener("click", async () => {
     const resolve =
       (window.DigitalMeBundleCopy && window.DigitalMeBundleCopy.resolveCopyPayload) || null;
@@ -2548,8 +2684,12 @@
     }
     const payload = resolve({
       kind: activeArtifactKind,
-      text: els.artifactEditor.value,
-      bundleText: els.bundleReport ? els.bundleReport.textContent : "",
+      editorText: els.artifactEditor.value,
+      reportText: els.bundleReport
+        ? "value" in els.bundleReport
+          ? els.bundleReport.value
+          : els.bundleReport.textContent
+        : "",
       qualityGrade: lastQualityGrade,
       qualityBannerText: lastQualityBannerText,
       failed: copyBlockedFailed,
