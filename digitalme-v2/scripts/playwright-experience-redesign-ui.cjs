@@ -73,6 +73,54 @@ async function waitVisible(page, sel, timeout = 15000) {
   );
 }
 
+async function assertExclusivePanel(page, activeKey, shotName) {
+  const state = await page.evaluate((key) => {
+    const ids = {
+      work: 'panel-work',
+      chat: 'panel-chat',
+      subject: 'panel-subject',
+      collab: 'panel-collab',
+    };
+    const titles = {
+      work: '做事',
+      chat: '对话',
+      subject: '数字之我',
+      collab: '协作',
+    };
+    const out = { activeKey: key, panels: {}, titleOk: false };
+    for (const [k, id] of Object.entries(ids)) {
+      const el = document.getElementById(id);
+      const style = el ? getComputedStyle(el) : null;
+      out.panels[k] = {
+        hiddenAttr: !!(el && el.hidden),
+        display: style ? style.display : null,
+        visible: !!(el && !el.hidden && style && style.display !== 'none'),
+        title: el ? (el.querySelector('.page-title')?.textContent || '').trim() : '',
+      };
+    }
+    const active = out.panels[key];
+    out.titleOk = !!(active && active.title === titles[key]);
+    return out;
+  }, activeKey);
+
+  check(
+    `panel_${activeKey}_only_visible`,
+    state.panels[activeKey]?.visible === true &&
+      Object.entries(state.panels).every(([k, p]) => (k === activeKey ? p.visible : !p.visible)),
+    state,
+  );
+  check(
+    `panel_${activeKey}_others_display_none`,
+    Object.entries(state.panels).every(([k, p]) =>
+      k === activeKey ? p.display !== 'none' : p.display === 'none' || p.hiddenAttr === true,
+    ),
+    state,
+  );
+  check(`panel_${activeKey}_title`, state.titleOk === true, state);
+  if (shotName) await shot(page, shotName);
+  return state;
+}
+
 async function launchApp(envExtra = {}) {
   const app = await electron.launch({
     executablePath: electronBin,
@@ -121,7 +169,21 @@ async function runCrossPage(page, app) {
   );
   check('no_keep_artifact_shell', (await page.locator('#btn-chat-keep-artifact').count()) === 0);
   check('land_on_work', await page.locator('#nav-work').evaluate((el) => el.classList.contains('active')));
-  await shot(page, 'work-empty');
+  await assertExclusivePanel(page, 'work', 'work-empty');
+
+  // 1b) 四主栏互斥（截图覆盖，不只看 active class）
+  await page.click('#nav-chat');
+  await waitVisible(page, '#panel-chat');
+  await assertExclusivePanel(page, 'chat', 'nav-chat-only');
+  await page.click('#nav-subject');
+  await waitVisible(page, '#panel-subject');
+  await assertExclusivePanel(page, 'subject', 'nav-subject-only');
+  await page.click('#nav-collab');
+  await waitVisible(page, '#panel-collab');
+  await assertExclusivePanel(page, 'collab', 'nav-collab-only');
+  await page.click('#nav-work');
+  await waitVisible(page, '#panel-work');
+  await assertExclusivePanel(page, 'work', 'nav-work-only');
 
   // 2) 做事：长目标 + 材料
   const longGoal = `${'请根据材料撰写完整项目进展简报，覆盖背景、进展、风险与下一步。'.repeat(40)}\n补充：B6 长目标验收。`;
@@ -152,17 +214,31 @@ async function runCrossPage(page, app) {
   }, null, { timeout: 45000 });
   await shot(page, 'work-artifact');
 
-  // 4) 对话路径
+  // 4) 对话路径：真实 assistant 回复（非「已记下」替身）
   await page.click('#nav-chat');
   await waitVisible(page, '#panel-chat');
+  await assertExclusivePanel(page, 'chat');
   check('chat_composer_present', (await page.locator('.chat-composer #chat-input').count()) === 1);
   for (let i = 0; i < 4; i += 1) {
     await page.fill('#chat-input', `B6 对话轮次 ${i + 1}：请记住验收要点。`);
     await page.click('#btn-chat-send');
-    await page.waitForTimeout(350);
+    await page.waitForFunction(
+      () => {
+        const status = document.getElementById('chat-status')?.textContent || '';
+        const turns = document.getElementById('chat-turns')?.innerText || '';
+        return /已回复|回复失败/.test(status) || /验收助手/.test(turns);
+      },
+      null,
+      { timeout: 15000 },
+    );
   }
   const turns = await page.locator('#chat-turns .chat-turn').count();
   check('chat_multi_turn', turns >= 6, { turns });
+  const chatBody = await page.locator('#chat-turns').innerText();
+  check('chat_has_assistant_reply', /验收助手/.test(chatBody), { chatBody: chatBody.slice(0, 240) });
+  check('chat_not_ack_only', !/已记下。需要做成具体工作时/.test(chatBody), {
+    chatBody: chatBody.slice(0, 240),
+  });
   await shot(page, 'chat-long');
   await page.click('#btn-chat-to-task');
   await waitVisible(page, '#panel-work');
@@ -172,6 +248,7 @@ async function runCrossPage(page, app) {
   // 5) 数字之我
   await page.click('#nav-subject');
   await waitVisible(page, '#panel-subject');
+  await assertExclusivePanel(page, 'subject');
   const subjectBody = await page.locator('#panel-subject').innerText();
   check(
     'subject_no_internal_fields',
@@ -194,6 +271,7 @@ async function runCrossPage(page, app) {
   }, null, { timeout: 20000 });
   await page.click('#btn-collab-open');
   await waitVisible(page, '#panel-collab');
+  await assertExclusivePanel(page, 'collab');
   await waitVisible(page, '#collab-page-new');
   const subtask = await page.locator('#collab-page-subtask').inputValue();
   check('collab_goal_prefilled', /B6 协作入口绑定任务/.test(subtask), { subtask: subtask.slice(0, 60) });
@@ -278,12 +356,13 @@ async function runCrossPage(page, app) {
   check('small_window_stage_tabs', small.hasArtifact ? small.tabsVisible === true : true, small);
   await shot(page, 'work-small-window');
 
-  // 9) 重载恢复（已有数字之我）
+  // 9) 重载恢复（已有数字之我）；不得同时展示多个主页面
   await page.reload();
   await page.waitForLoadState('domcontentloaded');
   await page.waitForTimeout(800);
   await enterShell(page);
   check('reload_lands_work', await page.locator('#panel-work').evaluate((el) => el.hidden === false));
+  await assertExclusivePanel(page, 'work', 'reload-work-only');
   const tasks = await page.locator('#task-list li').count();
   check('reload_tasks_restored', tasks >= 1, { tasks });
 }

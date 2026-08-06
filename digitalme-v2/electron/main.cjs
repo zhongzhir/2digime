@@ -556,6 +556,160 @@ function registerIpc() {
     }
     return { cleared: true };
   });
+
+  /**
+   * 真实对话回复：读取 transcript 上下文后调用已配置模型。
+   * 不经成长蒸馏；成长采集由 renderer 异步旁路，不得替代本路径。
+   */
+  ipcMain.handle("shell:conversationReply", async (_evt, input) => {
+    const userText = String((input && input.text) || "").trim();
+    if (!userText) {
+      throw Object.assign(new Error("请先写一句话"), {
+        actionable: "请输入内容后再发送",
+      });
+    }
+    if (!lastBootInfo || !lastBootInfo.modelReady) {
+      throw Object.assign(new Error("请先连接模型"), {
+        actionable: "打开设置，配置并测试模型连接后再对话",
+      });
+    }
+
+    const appRoot = resolveAppRoot();
+    const { resolveModelConfig } = require(path.join(__dirname, "bootstrap-secrets.cjs"));
+    const { providerCredentialKey } = require(path.join(
+      appRoot,
+      "dist",
+      "infrastructure",
+      "secret-store",
+    ));
+    const { chatComplete, ModelHttpError, DEFAULT_CHAT_MAX_TOKENS } = require(path.join(
+      appRoot,
+      "dist",
+      "infrastructure",
+      "model-http",
+    ));
+
+    const model = await resolveModelConfig({
+      safeStorage,
+      userDataPath: app.getPath("userData"),
+      isPackaged: app.isPackaged,
+      allowDevRuntimeFile: !app.isPackaged,
+    });
+    if (!model.ok || !model.openaiCompatible || !model.secrets) {
+      throw Object.assign(new Error("请先连接模型"), {
+        actionable: "打开设置，配置并测试模型连接后再对话",
+      });
+    }
+
+    const providerId = model.openaiCompatible.providerId || "openai-compatible";
+    const apiKey = await model.secrets.get(providerCredentialKey(providerId));
+    if (!apiKey) {
+      throw Object.assign(new Error("请先连接模型"), {
+        actionable: "打开设置，配置并测试模型连接后再对话",
+      });
+    }
+
+    const fs = require("node:fs");
+    const file = conversationFilePath();
+    /** @type {{ role: string, text: string }[]} */
+    const turns = [];
+    if (fs.existsSync(file)) {
+      for (const line of fs.readFileSync(file, "utf8").split(/\r?\n/)) {
+        if (!line.trim()) continue;
+        try {
+          const row = JSON.parse(line);
+          if (row && (row.role === "user" || row.role === "assistant") && row.text) {
+            turns.push({ role: row.role, text: String(row.text) });
+          }
+        } catch {
+          /* skip */
+        }
+      }
+    }
+
+    // 取最近若干轮，保证末条是当前用户消息
+    const recent = turns.slice(-12);
+    if (
+      !recent.length ||
+      recent[recent.length - 1].role !== "user" ||
+      recent[recent.length - 1].text !== userText
+    ) {
+      recent.push({ role: "user", text: userText });
+    }
+
+    const messages = [
+      {
+        role: "system",
+        content:
+          "你是用户的数字之我助手。根据对话上下文直接、具体地回答最终答复正文。不要用「已记下」代替回答；不要假装已完成任务；不要输出分析过程、推理提纲或内部标签。",
+      },
+      ...recent.map((t) => ({
+        role: t.role === "assistant" ? "assistant" : "user",
+        content: t.text,
+      })),
+    ];
+
+    // 测试/验收可覆盖：DIGITALME_CHAT_MAX_TOKENS；人为截断可用较小值
+    const maxTokensEnv = Number(process.env.DIGITALME_CHAT_MAX_TOKENS || "");
+    const maxTokens =
+      Number.isFinite(maxTokensEnv) && maxTokensEnv > 0
+        ? Math.floor(maxTokensEnv)
+        : DEFAULT_CHAT_MAX_TOKENS;
+
+    try {
+      const result = await chatComplete({
+        baseUrl: model.openaiCompatible.baseUrl,
+        apiKey,
+        model: model.openaiCompatible.model,
+        messages,
+        temperature: 0.4,
+        maxTokens,
+        timeoutMs: model.openaiCompatible.timeoutMs || 180_000,
+      });
+      const text = String(result.text || "").trim();
+      if (result.truncated === true || result.finishReason === "length") {
+        return {
+          text,
+          status: "incomplete",
+          finishReason: result.finishReason || "length",
+        };
+      }
+      if (!text) {
+        return {
+          text: "",
+          status: "failed",
+          finishReason: result.finishReason || null,
+        };
+      }
+      return {
+        text,
+        status: "complete",
+        finishReason: result.finishReason || "stop",
+      };
+    } catch (err) {
+      if (err instanceof ModelHttpError || (err && err.name === "ModelHttpError")) {
+        const kind = err.kind || "";
+        if (kind === "timeout" || kind === "aborted" || kind === "network") {
+          const errObj = new Error(
+            `${String(err.message || "模型调用中断").slice(0, 300)}。回复未完成，可重试`,
+          );
+          errObj.code = "CHAT_INCOMPLETE";
+          throw errObj;
+        }
+        let actionable = "请稍后重试";
+        if (kind === "unauthorized") actionable = "请检查模型凭证是否有效";
+        else if (kind === "rate_limited") actionable = "请求过于频繁，请稍后再试";
+        else if (kind === "server_error") actionable = "模型服务暂时不可用，请稍后重试";
+        throw new Error(`${String(err.message || "模型调用失败").slice(0, 300)}。${actionable}`);
+      }
+      if (err && typeof err.message === "string" && /请重试|请检查|请稍后|请先|可重试/.test(err.message)) {
+        throw err;
+      }
+      throw new Error(
+        `${String((err && err.message) || err || "模型调用失败").slice(0, 300)}。请稍后重试，或到设置中测试模型连接`,
+      );
+    }
+  });
 }
 
 app.whenReady().then(async () => {

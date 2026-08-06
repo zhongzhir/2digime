@@ -145,6 +145,11 @@ function registerIpc() {
     }
     return { cleared: true };
   });
+  ipcMain.handle('shell:conversationReply', async (_e, input) => ({
+    text: `（验收助手）我知道你在问：${String((input && input.text) || '').slice(0, 100)}`,
+    status: 'complete',
+    finishReason: 'stop',
+  }));
 }
 
 async function createWindow() {
@@ -224,8 +229,15 @@ async function mainSequence() {
   }`);
   await waitUi(`() => {
     const text = document.getElementById('chat-turns')?.innerText || '';
-    return /请记住我正在做验收/.test(text) ? text : false;
+    return /请记住我正在做验收/.test(text) && /验收助手/.test(text) ? text : false;
   }`, 8000);
+  const chatStatus = await uiEval(`() => document.getElementById('chat-status')?.textContent || ''`);
+  check('chat_assistant_reply_not_ack_only', !/已记下/.test(chatStatus || ''), { chatStatus });
+  const turnsText = await uiEval(`() => document.getElementById('chat-turns')?.innerText || ''`);
+  check('chat_has_assistant_reply', /验收助手/.test(turnsText), { turnsText: String(turnsText).slice(0, 200) });
+  check('chat_not_fake_ack_reply', !/已记下。需要做成具体工作时/.test(turnsText), {
+    turnsText: String(turnsText).slice(0, 200),
+  });
   const tasksAfterChat = await bus.invoke('work.listTasks', { limit: 20 });
   check(
     'chat_does_not_create_task',

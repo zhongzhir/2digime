@@ -119,6 +119,7 @@
     chatEmpty: document.getElementById("chat-empty"),
     chatInput: document.getElementById("chat-input"),
     chatSend: document.getElementById("btn-chat-send"),
+    chatRetry: document.getElementById("btn-chat-retry"),
     chatClear: document.getElementById("btn-chat-clear"),
     chatToTask: document.getElementById("btn-chat-to-task"),
     chatStatus: document.getElementById("chat-status"),
@@ -255,6 +256,7 @@
   let externalCapCapabilityId = null;
   let activeJobId = null;
   let activeArtifactId = null;
+  let lastArtifactRejectionReason = "";
   let activeHeadVersionId = null;
   let activeGrantId = null;
   /** @type {{ path: string, checked: boolean }[]} */
@@ -271,6 +273,10 @@
   /** @type {'chat'|'subject'|'work'|'collab'} */
   let returnNav = "work";
   let lastChatUserText = "";
+  /** 已为成长采集调度过的用户消息（防重试重复采集） */
+  let lastChatCapturedText = "";
+  /** 最近一次对话回复是否失败（用于重试） */
+  let lastChatReplyFailed = false;
   let shellStatus = null;
   let shellBootInfo = null;
   let displayModelName = null;
@@ -326,10 +332,20 @@
       if (!btn) continue;
       btn.classList.toggle("active", btn.dataset.nav === nav);
     }
-    if (els.panelChat) els.panelChat.hidden = nav !== "chat";
-    if (els.panelSubject) els.panelSubject.hidden = nav !== "subject";
-    if (els.panelWork) els.panelWork.hidden = nav !== "work";
-    if (els.panelCollab) els.panelCollab.hidden = nav !== "collab";
+    const panels = [
+      [els.panelChat, "chat"],
+      [els.panelSubject, "subject"],
+      [els.panelWork, "work"],
+      [els.panelCollab, "collab"],
+    ];
+    for (const [panel, key] of panels) {
+      if (!panel) continue;
+      const show = nav === key;
+      panel.hidden = !show;
+      if (show) panel.removeAttribute("hidden");
+      else panel.setAttribute("hidden", "");
+      panel.setAttribute("aria-hidden", show ? "false" : "true");
+    }
     if (nav === "chat") await refreshChatPanel();
     if (nav === "subject") await refreshSubjectPanel();
     if (nav === "work") await refreshTasks();
@@ -1061,6 +1077,26 @@
         (result && result.ownerDecision) || (kind === "accept" ? "accepted" : "rejected");
       renderArtifactDecision({ status });
       if (els.decisionNote && status === "accepted") els.decisionNote.value = "";
+      if (kind === "reject" && status === "rejected") {
+        if (els.decisionStatus) {
+          els.decisionStatus.textContent = note
+            ? "已记录为未采用，并保存了你的说明。可继续填写修改要求并按说明修改。"
+            : "已记录为未采用。请说明如何修改后继续。";
+        }
+        if (els.saveStatus) els.saveStatus.textContent = "已记录你的决定。";
+        // 不采用后自然进入修订：打开修订区；有说明则预填
+        if (els.reviseBox) {
+          els.reviseBox.hidden = false;
+          els.reviseBox.removeAttribute("hidden");
+          els.reviseBox.open = true;
+        }
+        if (note && els.revisionRequest) {
+          if (!(els.revisionRequest.value || "").trim()) {
+            els.revisionRequest.value = note;
+          }
+        }
+        lastArtifactRejectionReason = note || baseText;
+      }
     } catch (err) {
       renderArtifactDecision({
         status: prevLabel === "已采用" ? "accepted" : prevLabel === "未采用" ? "rejected" : "undecided",
@@ -1737,28 +1773,153 @@
         if (!api.conversation || typeof api.conversation.append !== "function") {
           throw new Error("对话功能不可用");
         }
+        if (typeof api.conversation.reply !== "function") {
+          throw new Error("对话回复功能不可用");
+        }
         els.chatSend.disabled = true;
+        if (els.chatRetry) {
+          els.chatRetry.hidden = true;
+          els.chatRetry.setAttribute("hidden", "");
+        }
+        lastChatReplyFailed = false;
         if (els.chatStatus) els.chatStatus.textContent = "正在发送…";
         await api.conversation.append({ role: "user", text });
         lastChatUserText = text;
-        try {
-          await api.invoke("subject.captureInput", {
-            text,
-            sourceKind: "conversation",
-          });
-        } catch {
-          /* 捕捉失败不阻断对话落盘 */
-        }
-        await api.conversation.append({
-          role: "assistant",
-          text: "已记下。需要做成具体工作时，可点「转为任务」。",
-        });
         if (els.chatInput) els.chatInput.value = "";
         await refreshChatPanel();
-        if (els.chatStatus) els.chatStatus.textContent = "已发送。";
+
+        // 成长采集旁路：不得阻断或替代对话回复；同一条消息不重复采集
+        if (text !== lastChatCapturedText) {
+          lastChatCapturedText = text;
+          void api
+            .invoke("subject.captureInput", {
+              text,
+              sourceKind: "conversation",
+            })
+            .catch(() => {
+              /* 捕捉失败不影响回复 */
+            });
+        }
+
+        if (els.chatStatus) els.chatStatus.textContent = "正在回复…";
+        let replyText = "";
+        let replyStatus = "complete";
+        try {
+          const replied = await api.conversation.reply({ text });
+          replyText = String((replied && replied.text) || "").trim();
+          replyStatus = String((replied && replied.status) || "complete");
+        } catch (err) {
+          lastChatReplyFailed = true;
+          const msg = (err && err.message) || String(err);
+          const incomplete = /回复未完成|CHAT_INCOMPLETE|timeout|网络|中断/i.test(msg);
+          if (els.chatStatus) {
+            els.chatStatus.textContent = incomplete
+              ? "回复未完成，可重试"
+              : `无法回复，请重试。${msg}`;
+          }
+          if (els.chatRetry) {
+            els.chatRetry.hidden = false;
+            els.chatRetry.removeAttribute("hidden");
+          }
+          await refreshChatPanel();
+          return;
+        }
+        // 不完整：可落盘部分正文；空正文也不得伪装「已回复」
+        if (replyStatus === "incomplete") {
+          lastChatReplyFailed = true;
+          if (replyText) {
+            await api.conversation.append({ role: "assistant", text: replyText });
+            await refreshChatPanel();
+          }
+          if (els.chatStatus) els.chatStatus.textContent = "回复未完成，可重试";
+          if (els.chatRetry) {
+            els.chatRetry.hidden = false;
+            els.chatRetry.removeAttribute("hidden");
+          }
+          return;
+        }
+        if (!replyText || replyStatus === "failed") {
+          lastChatReplyFailed = true;
+          if (els.chatStatus) els.chatStatus.textContent = "无法回复，请重试";
+          if (els.chatRetry) {
+            els.chatRetry.hidden = false;
+            els.chatRetry.removeAttribute("hidden");
+          }
+          return;
+        }
+        await api.conversation.append({ role: "assistant", text: replyText });
+        await refreshChatPanel();
+        lastChatReplyFailed = false;
+        if (els.chatStatus) els.chatStatus.textContent = "已回复。";
       } catch (err) {
+        lastChatReplyFailed = true;
         if (els.chatStatus) els.chatStatus.textContent = (err && err.message) || String(err);
+        if (els.chatRetry) {
+          els.chatRetry.hidden = false;
+          els.chatRetry.removeAttribute("hidden");
+        }
       } finally {
+        if (els.chatSend) els.chatSend.disabled = false;
+      }
+    });
+  }
+
+  if (els.chatRetry) {
+    els.chatRetry.addEventListener("click", async () => {
+      const text = lastChatUserText;
+      if (!text) {
+        if (els.chatStatus) els.chatStatus.textContent = "没有可重试的消息。";
+        return;
+      }
+      if (!api.conversation || typeof api.conversation.reply !== "function") {
+        if (els.chatStatus) els.chatStatus.textContent = "对话回复功能不可用";
+        return;
+      }
+      els.chatRetry.disabled = true;
+      if (els.chatSend) els.chatSend.disabled = true;
+      if (els.chatStatus) els.chatStatus.textContent = "正在回复…";
+      try {
+        // 重试：不重复写入用户消息，不重复成长采集
+        const replied = await api.conversation.reply({ text });
+        const replyText = String((replied && replied.text) || "").trim();
+        const replyStatus = String((replied && replied.status) || "complete");
+        if (replyStatus === "incomplete") {
+          lastChatReplyFailed = true;
+          if (replyText) {
+            await api.conversation.append({ role: "assistant", text: replyText });
+            await refreshChatPanel();
+          }
+          if (els.chatStatus) els.chatStatus.textContent = "回复未完成，可重试";
+          els.chatRetry.hidden = false;
+          els.chatRetry.removeAttribute("hidden");
+          return;
+        }
+        if (!replyText || replyStatus === "failed") {
+          lastChatReplyFailed = true;
+          if (els.chatStatus) els.chatStatus.textContent = "无法回复，请重试";
+          els.chatRetry.hidden = false;
+          els.chatRetry.removeAttribute("hidden");
+          return;
+        }
+        await api.conversation.append({ role: "assistant", text: replyText });
+        await refreshChatPanel();
+        lastChatReplyFailed = false;
+        els.chatRetry.hidden = true;
+        els.chatRetry.setAttribute("hidden", "");
+        if (els.chatStatus) els.chatStatus.textContent = "已回复。";
+      } catch (err) {
+        lastChatReplyFailed = true;
+        const msg = (err && err.message) || String(err);
+        const incomplete = /回复未完成|CHAT_INCOMPLETE|timeout|网络|中断/i.test(msg);
+        if (els.chatStatus) {
+          els.chatStatus.textContent = incomplete
+            ? "回复未完成，可重试"
+            : `无法回复，请重试。${msg}`;
+        }
+        els.chatRetry.hidden = false;
+        els.chatRetry.removeAttribute("hidden");
+      } finally {
+        els.chatRetry.disabled = false;
         if (els.chatSend) els.chatSend.disabled = false;
       }
     });
@@ -1773,6 +1934,12 @@
         }
         await api.conversation.clear();
         lastChatUserText = "";
+        lastChatCapturedText = "";
+        lastChatReplyFailed = false;
+        if (els.chatRetry) {
+          els.chatRetry.hidden = true;
+          els.chatRetry.setAttribute("hidden", "");
+        }
         await refreshChatPanel();
         if (els.chatStatus) els.chatStatus.textContent = "对话已清空。";
       } catch (err) {
@@ -2302,10 +2469,16 @@
         els.jobStatus.classList.add("error");
         return;
       }
+      const rejectionReason = String(
+        lastArtifactRejectionReason ||
+          (els.decisionNote && els.decisionNote.value) ||
+          "",
+      ).trim();
       const result = await api.invoke("work.reviseArtifact", {
         taskId: activeTaskId,
         artifactId: activeArtifactId,
         revisionRequest,
+        ...(rejectionReason ? { rejectionReason } : {}),
       });
       activeJobId = result.jobId;
       await syncActiveTaskStatus();

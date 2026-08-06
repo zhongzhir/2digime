@@ -23,11 +23,63 @@ test.before(async () => {
       res.write('data: {"choices":[{"delta":{"content":"lo"}}]}\n\n');
       res.write('data: [DONE]\n\n');
       res.end();
+    } else if (req.url?.startsWith('/reasoning-only/')) {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          choices: [
+            {
+              message: { role: 'assistant', content: '', reasoning_content: '内部分析过程不得外泄' },
+              finish_reason: 'stop',
+            },
+          ],
+        }),
+      );
+    } else if (req.url?.startsWith('/truncated/')) {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          choices: [
+            {
+              message: { role: 'assistant', content: '这是被截断的半句' },
+              finish_reason: 'length',
+            },
+          ],
+        }),
+      );
+    } else if (req.url?.startsWith('/truncated-empty/')) {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          choices: [
+            {
+              message: { role: 'assistant', content: '', reasoning_content: '内部分析占满了 token' },
+              finish_reason: 'length',
+            },
+          ],
+        }),
+      );
+    } else if (req.url?.startsWith('/with-reasoning/')) {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: '最终答复正文',
+                reasoning_content: '用户想要什么：分析过程',
+              },
+              finish_reason: 'stop',
+            },
+          ],
+        }),
+      );
     } else {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(
         JSON.stringify({
-          choices: [{ message: { content: 'Hello from model' } }],
+          choices: [{ message: { content: 'Hello from model' }, finish_reason: 'stop' }],
           usage: { total_tokens: 42 },
         }),
       );
@@ -102,4 +154,40 @@ test('流式最小版:增量上报并拼合全文', async () => {
   });
   assert.equal(result.text, 'Hello');
   assert.deepEqual(deltas, ['Hel', 'lo']);
+});
+
+test('reasoning_content 不得进入用户正文；仅 content 为空时失败', async () => {
+  const ok = await chatComplete({
+    ...baseOptions,
+    baseUrl: `${baseOrigin}/with-reasoning`,
+  });
+  assert.equal(ok.text, '最终答复正文');
+  assert.equal(ok.finishReason, 'stop');
+  assert.equal(ok.truncated, undefined);
+  assert.ok(!ok.text.includes('分析过程'));
+
+  await assert.rejects(
+    () => chatComplete({ ...baseOptions, baseUrl: `${baseOrigin}/reasoning-only` }),
+    (error: unknown) => error instanceof ModelHttpError && error.kind === 'bad_response',
+  );
+});
+
+test('finish_reason=length → truncated', async () => {
+  const result = await chatComplete({
+    ...baseOptions,
+    baseUrl: `${baseOrigin}/truncated`,
+  });
+  assert.equal(result.text, '这是被截断的半句');
+  assert.equal(result.finishReason, 'length');
+  assert.equal(result.truncated, true);
+});
+
+test('finish_reason=length 且 content 为空 → truncated 空正文（不得回退 reasoning）', async () => {
+  const result = await chatComplete({
+    ...baseOptions,
+    baseUrl: `${baseOrigin}/truncated-empty`,
+  });
+  assert.equal(result.text, '');
+  assert.equal(result.finishReason, 'length');
+  assert.equal(result.truncated, true);
 });

@@ -22,3 +22,6 @@ build-meta.json
 scripts/_mvp-p2b1-isolated-code-change-evidence/
 scripts/_experience-redesign-b6-baselines/
 scripts/_experience-redesign-b6-evidence/
+scripts/_owner-acceptance-blockers-01-evidence/
+scripts/_owner-acceptance-blockers-01-real-preflight-evidence/
+scripts/_conversation-output-integrity-evidence/

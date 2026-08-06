@@ -137,6 +137,7 @@
             </label>
             <div class="row">
               <button type="button" id="btn-chat-send" class="primary">发送</button>
+              <button type="button" id="btn-chat-retry" class="ghost" hidden>重试回复</button>
               <button type="button" id="btn-chat-to-task">转为任务</button>
               <button type="button" id="btn-chat-clear" class="ghost">清空对话</button>
             </div>
@@ -168,6 +169,7 @@
         </section>
 
         <section id="panel-work" class="shell-panel work-compose-focus" data-panel="work">
+          <h1 class="page-title">做事</h1>
           <div class="work-layout" data-stage="center" data-tasks="closed">
             <aside class="panel work-tasks" id="work-tasks">
               <div class="aside-head">
@@ -287,7 +289,7 @@
                     type="text"
                     id="artifact-decision-note"
                     placeholder="可选说明，可留空"
-                    maxlength="200"
+                    maxlength="400"
                   />
                 </label>
                 <p id="artifact-decision-error" class="muted tiny error" hidden></p>

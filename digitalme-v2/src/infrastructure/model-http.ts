@@ -47,47 +47,81 @@ export interface ChatCompleteOptions {
 export interface ChatCompleteResult {
   text: string;
   usage?: { totalTokens?: number };
+  /** OpenAI-compatible finish_reason: stop | length | content_filter | ... */
+  finishReason?: string;
+  /** true when provider stopped due to token/length limit (or equivalent). */
+  truncated?: boolean;
 }
 
 const DEFAULT_TIMEOUT_MS = 120_000;
+/** 对话长文默认上限；调用方可覆盖。 */
+export const DEFAULT_CHAT_MAX_TOKENS = 4096;
 
 export async function chatComplete(options: ChatCompleteOptions): Promise<ChatCompleteResult> {
   const body = JSON.parse(await requestCompletion(options, false)) as {
-    choices?: Array<{ message?: { content?: string } }>;
+    choices?: Array<{
+      message?: { content?: string | null; reasoning_content?: string | null };
+      finish_reason?: string | null;
+    }>;
     usage?: { total_tokens?: number };
   };
-  const message = body.choices?.[0]?.message as
-    | { content?: string; reasoning_content?: string }
-    | undefined;
-  let text = message?.content;
-  // 部分推理模型可能把正文放在 reasoning_content,或 content 为空字符串。
-  if ((typeof text !== 'string' || text.trim().length === 0) && typeof message?.reasoning_content === 'string') {
-    text = message.reasoning_content;
+  const choice = body.choices?.[0];
+  const message = choice?.message;
+  const finishReason = typeof choice?.finish_reason === 'string' ? choice.finish_reason : undefined;
+  // 用户面只取 final content；reasoning_content 一律不进入返回正文（即使 content 为空）。
+  const content = message?.content;
+  const contentText = typeof content === 'string' ? content : '';
+  const truncated = finishReason === 'length';
+  if (contentText.trim().length === 0) {
+    // token 上限耗尽且无 final 正文：仍标 truncated，供上层显示「回复未完成」
+    if (truncated) {
+      return {
+        text: '',
+        finishReason,
+        truncated: true,
+      };
+    }
+    throw new ModelHttpError(
+      'bad_response',
+      'response missing usable choices[0].message.content (reasoning discarded)',
+    );
   }
-  if (typeof text !== 'string') {
-    throw new ModelHttpError('bad_response', 'response missing choices[0].message.content');
-  }
-  const result: ChatCompleteResult = { text };
+  const result: ChatCompleteResult = {
+    text: contentText,
+    ...(finishReason ? { finishReason } : {}),
+    ...(truncated ? { truncated: true } : {}),
+  };
   if (typeof body.usage?.total_tokens === 'number') {
     result.usage = { totalTokens: body.usage.total_tokens };
   }
   return result;
 }
 
-/** 流式最小版:SSE 增量经 onDelta 上报,返回完整文本。 */
+/** 流式最小版:SSE 增量经 onDelta 上报,返回完整文本。忽略 reasoning 增量。 */
 export async function chatCompleteStream(
   options: ChatCompleteOptions & { onDelta: (delta: string) => void },
 ): Promise<ChatCompleteResult> {
   const raw = await requestCompletion(options, true);
   let text = '';
+  let finishReason: string | undefined;
   for (const line of raw.split('\n')) {
     const trimmed = line.trim();
     if (!trimmed.startsWith('data:')) continue;
     const payload = trimmed.slice('data:'.length).trim();
     if (payload === '[DONE]') break;
     try {
-      const chunk = JSON.parse(payload) as { choices?: Array<{ delta?: { content?: string } }> };
-      const delta = chunk.choices?.[0]?.delta?.content;
+      const chunk = JSON.parse(payload) as {
+        choices?: Array<{
+          delta?: { content?: string; reasoning_content?: string };
+          finish_reason?: string | null;
+        }>;
+      };
+      const choice = chunk.choices?.[0];
+      if (typeof choice?.finish_reason === 'string' && choice.finish_reason) {
+        finishReason = choice.finish_reason;
+      }
+      // 只追加 final content delta；reasoning_content 丢弃
+      const delta = choice?.delta?.content;
       if (typeof delta === 'string' && delta.length > 0) {
         text += delta;
         options.onDelta(delta);
@@ -99,7 +133,12 @@ export async function chatCompleteStream(
   if (text.length === 0) {
     throw new ModelHttpError('bad_response', 'stream produced no content');
   }
-  return { text };
+  const truncated = finishReason === 'length';
+  return {
+    text,
+    ...(finishReason ? { finishReason } : {}),
+    ...(truncated ? { truncated: true } : {}),
+  };
 }
 
 async function requestCompletion(options: ChatCompleteOptions, stream: boolean): Promise<string> {

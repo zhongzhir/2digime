@@ -47,6 +47,7 @@ const required = [
   /shell:conversationList/,
   /shell:conversationAppend/,
   /shell:conversationClear/,
+  /shell:conversationReply/,
   /sourceKind:\s*["']conversation["']/,
 ];
 

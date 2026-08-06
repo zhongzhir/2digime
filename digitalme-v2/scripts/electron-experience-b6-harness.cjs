@@ -30,10 +30,22 @@ fs.mkdirSync(defaultDir, { recursive: true });
 const matFile = path.join(fixturesRoot, 'note.md');
 const matFolder = path.join(fixturesRoot, 'mixed-folder');
 const unsupported = path.join(matFolder, 'skip.bin');
+const markerPdf = path.join(fixturesRoot, 'owner-marker.pdf');
+const corruptPdf = path.join(fixturesRoot, 'owner-corrupt.pdf');
+const MARKER = process.env.DIGITALME_B6_PDF_MARKER || 'OWNER_BLOCKER_UNIQUE_FACT_7f3a9c';
 fs.writeFileSync(matFile, 'B6 验收材料：项目进展要点与风险。\n', 'utf8');
 fs.mkdirSync(matFolder, { recursive: true });
 fs.writeFileSync(path.join(matFolder, 'ok.txt'), '支持的文本材料。\n', 'utf8');
 fs.writeFileSync(unsupported, Buffer.from([0, 1, 2, 3, 4]));
+const { makeTextPdf, makeCorruptPdf } = require('./lib/make-text-pdf.cjs');
+makeTextPdf(markerPdf, MARKER);
+makeCorruptPdf(corruptPdf);
+
+/** @type {string[]} */
+let pickOpenFilesResult = [matFile];
+if (process.env.DIGITALME_B6_PICK_FILES) {
+  pickOpenFilesResult = process.env.DIGITALME_B6_PICK_FILES.split('|').filter(Boolean);
+}
 
 /** @type {import('../dist/runtime/digitalme-runtime').DigitalMeRuntime} */
 let runtime;
@@ -53,6 +65,11 @@ let lastSavedApiKey = '';
 /** @type {{ id: string, role: string, text: string, at: string }[]} */
 const chatTurns = [];
 let chatSeq = 0;
+let chatFailOnce = false;
+/** @type {string[]} */
+let lastCapabilityMaterials = [];
+let lastCapabilityRevision = '';
+let lastCapabilityText = '';
 
 function modelStatusPayload() {
   return {
@@ -77,7 +94,14 @@ async function bootstrap() {
     documentCapability: 'fake',
     registerOpenAiStub: false,
     codeAnalysisCapability: 'needs_setup',
-    fakeAdapter: { delayMs: Number(process.env.DIGITALME_B6_FAKE_DELAY_MS || 1200) },
+    fakeAdapter: {
+      delayMs: Number(process.env.DIGITALME_B6_FAKE_DELAY_MS || 1200),
+      onExecute: (info) => {
+        lastCapabilityMaterials = (info.materialSnippets || []).slice();
+        lastCapabilityRevision = String((info.input && info.input.revision && info.input.revision.request) || '');
+        lastCapabilityText = String(info.text || '');
+      },
+    },
   });
   bus = createCommandBus(runtime);
 }
@@ -89,7 +113,7 @@ function registerIpc() {
     if (!allowed.has(name)) throw new Error(`command not exposed: ${name}`);
     return bus.invoke(name, input || {});
   });
-  ipcMain.handle('shell:pickOpenFiles', async () => [matFile]);
+  ipcMain.handle('shell:pickOpenFiles', async () => pickOpenFilesResult.slice());
   ipcMain.handle('shell:pickOpenDirectory', async () => matFolder);
   ipcMain.handle('shell:pickSaveDirectory', async () => {
     throw new Error('pickSaveDirectory must not be required for first entry');
@@ -158,22 +182,47 @@ function registerIpc() {
     chatTurns.length = 0;
     return { cleared: true };
   });
+  ipcMain.handle('shell:conversationReply', async (_e, input) => {
+    if (process.env.DIGITALME_B6_CHAT_FAIL === '1' || chatFailOnce) {
+      chatFailOnce = false;
+      throw new Error('模型暂时不可用。请稍后重试');
+    }
+    const text = String((input && input.text) || '').trim();
+    const fixed =
+      process.env.DIGITALME_B6_CHAT_REPLY ||
+      `（验收助手）我听到了：${text.slice(0, 120) || '（空）'}`;
+    return { text: fixed, status: 'complete', finishReason: 'stop' };
+  });
 
   // Playwright 可调用的测试钩子（仅 harness）
   ipcMain.handle('b6:setTestMode', async (_e, mode) => {
     testMode = String(mode || 'success');
     return { testMode };
   });
+  ipcMain.handle('b6:setChatFailOnce', async () => {
+    chatFailOnce = true;
+    return { chatFailOnce: true };
+  });
+  ipcMain.handle('b6:setPickFiles', async (_e, files) => {
+    pickOpenFilesResult = Array.isArray(files) ? files.map(String) : [];
+    return { pickOpenFilesResult: pickOpenFilesResult.slice() };
+  });
   ipcMain.handle('b6:getMeta', async () => ({
     userData,
     defaultDir,
     matFile,
     matFolder,
+    markerPdf,
+    corruptPdf,
+    marker: MARKER,
     lastSavedApiKeyPresent: !!lastSavedApiKey,
     lastSavedApiKeyLooksFull: /sk-[a-z0-9]{8,}/i.test(lastSavedApiKey),
     modelReady,
     credentialConfigured,
     chatCount: chatTurns.length,
+    lastCapabilityMaterials: lastCapabilityMaterials.slice(),
+    lastCapabilityRevision: lastCapabilityRevision,
+    lastCapabilityTextPreview: lastCapabilityText.slice(0, 800),
   }));
 }
 
@@ -214,6 +263,32 @@ app.whenReady().then(async () => {
     await bootstrap();
     registerIpc();
     await createWindow();
+    // 供 Playwright electronApp.evaluate 读取（仅 harness）
+    global.__digitalmeB6 = {
+      getMeta: async () => ({
+        userData,
+        defaultDir,
+        matFile,
+        matFolder,
+        markerPdf,
+        corruptPdf,
+        marker: MARKER,
+        modelReady,
+        credentialConfigured,
+        chatCount: chatTurns.length,
+        lastCapabilityMaterials: lastCapabilityMaterials.slice(),
+        lastCapabilityRevision: lastCapabilityRevision,
+        lastCapabilityTextPreview: lastCapabilityText.slice(0, 800),
+      }),
+      setPickFiles: (files) => {
+        pickOpenFilesResult = Array.isArray(files) ? files.map(String) : [];
+        return pickOpenFilesResult.slice();
+      },
+      setChatFailOnce: () => {
+        chatFailOnce = true;
+        return true;
+      },
+    };
     // 标记就绪，供 Playwright 轮询
     process.stdout.write(`B6_HARNESS_READY userData=${userData}\n`);
   } catch (err) {

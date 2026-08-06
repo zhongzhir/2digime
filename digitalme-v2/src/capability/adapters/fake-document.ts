@@ -9,7 +9,7 @@ import { asLocalCapabilityAdapter } from '../local-adapter-lifecycle';
 
 export interface FakeDocumentAdapterOptions {
   /** 确定性正文;默认回显 goal。 */
-  text?: string | ((input: CapabilityInput) => string);
+  text?: string | ((input: CapabilityInput, extras?: { materialSnippets: string[] }) => string);
   title?: string;
   /** 模拟耗时。 */
   delayMs?: number;
@@ -19,6 +19,12 @@ export interface FakeDocumentAdapterOptions {
   failTimes?: number;
   /** 忽略 AbortSignal(用于测 Runner 最终落 cancelled)。 */
   ignoreAbort?: boolean;
+  /** 测试钩子：每次执行后回调（不得用于产品面）。 */
+  onExecute?: (info: {
+    input: CapabilityInput;
+    materialSnippets: string[];
+    text: string;
+  }) => void;
 }
 
 const FAKE_REGISTRATION: CapabilityRegistration = {
@@ -66,10 +72,12 @@ export function createFakeDocumentAdapter(
         err.actionable = options.failWith.actionable;
         throw err;
       }
+      const materialSnippets = await collectMaterialSnippets(input, ctx.readExtractedText);
       const text =
         typeof options.text === 'function'
-          ? options.text(input)
-          : defaultFakeDocumentText(input, options.text);
+          ? options.text(input, { materialSnippets })
+          : defaultFakeDocumentText(input, options.text, materialSnippets);
+      options.onExecute?.({ input, materialSnippets, text });
       return {
         artifact: {
           type: 'document',
@@ -81,14 +89,48 @@ export function createFakeDocumentAdapter(
   });
 }
 
-function defaultFakeDocumentText(input: CapabilityInput, override?: string): string {
+function defaultFakeDocumentText(
+  input: CapabilityInput,
+  override?: string,
+  materialSnippets: string[] = [],
+): string {
   if (override !== undefined) return override;
-  // 保持可辨识的测试替身标记，同时保证正文长于协作成功门槛（非空壳）。
-  const base = `# ${input.goal}\n\n(fake document)\n\n这是用于本地验证的确定性文档正文，覆盖目标要点并保证可读长度。`;
-  if (input.subjectContext.entries.length === 0) return base;
+  const goal = input.goal.trim();
+  const revisionNote = input.revision?.request?.trim() || '';
+  const rejection = input.revision?.rejectionReason?.trim() || '';
+  // 标题紧扣目标；修订时必须产生可见正文变化，避免“版本号变、正文不变”
+  const title = revisionNote
+    ? `# ${goal}（已按说明修改）`
+    : `# ${goal}`;
+  const sections: string[] = [
+    title,
+    '',
+    '(fake document)',
+    '',
+    '这是用于本地验证的确定性文档正文，围绕任务目标撰写，不以某一篇材料整篇顶替答案。',
+  ];
+  if (rejection) {
+    sections.push('', `不采用理由已吸收：${rejection.slice(0, 240)}`);
+  }
+  if (revisionNote) {
+    sections.push('', `## 修改说明落实\n${revisionNote}`);
+  }
+
+  // 仅摘录与目标相关的材料片段；无关长文不整篇粘贴
+  const relevant = materialSnippets.filter((s) => materialLikelyRelevant(goal, s));
+  const chosen = (relevant.length ? relevant : materialSnippets).slice(0, 4);
+  if (chosen.length > 0) {
+    sections.push('', '## 依据材料摘录');
+    for (const snippet of chosen) {
+      sections.push(snippet.slice(0, 1200));
+    }
+  }
+
+  if (input.subjectContext.entries.length === 0) {
+    return padToGoalLength(sections.join('\n'), goal, revisionNote);
+  }
   const byKind = (kind: string) =>
     input.subjectContext.entries.filter((e) => (e.kind || 'experience') === kind);
-  const sections: string[] = [base];
   const identity = byKind('identity');
   const goals = byKind('goal');
   const principles = byKind('principle');
@@ -119,12 +161,51 @@ function defaultFakeDocumentText(input: CapabilityInput, override?: string): str
       sections.push(`- [${e.eventId}] ${e.title}: ${e.detail}`);
     }
   }
-  // 明显禁止项不得出现在正文中(验收:边界未泄漏为禁止内容)
-  let text = sections.join('\n');
+  let text = padToGoalLength(sections.join('\n'), goal, revisionNote);
   if (boundaries.some((b) => /融资/.test(`${b.title}${b.detail}`))) {
     text = text.replace(/未公开融资详情|融资进展秘闻/g, '[已按边界省略]');
   }
   return text;
+}
+
+function materialLikelyRelevant(goal: string, snippet: string): boolean {
+  const tokens = goal.match(/[A-Za-z][A-Za-z0-9_-]{2,}/g) || [];
+  const hay = snippet.toLowerCase();
+  return tokens.some((t) => hay.includes(t.toLowerCase()));
+}
+
+function padToGoalLength(text: string, goal: string, revisionNote: string): string {
+  const m = /不少于\s*(\d{2,5})\s*字/.exec(goal) || /约\s*(\d{2,5})\s*字/.exec(goal);
+  if (!m) return text;
+  const need = Number(m[1]);
+  if (!Number.isFinite(need) || need <= 0) return text;
+  let out = text;
+  const filler = revisionNote
+    ? `补充段落：已按修改要求围绕「${goal.slice(0, 40)}」扩展说明。`
+    : `补充段落：围绕「${goal.slice(0, 40)}」继续说明产品定位、能力与价值。`;
+  while (out.replace(/\s+/g, '').length < Math.floor(need * 0.92)) {
+    out += `\n\n${filler}`;
+    if (out.length > need * 4) break;
+  }
+  return out;
+}
+
+async function collectMaterialSnippets(
+  input: CapabilityInput,
+  readExtractedText?: (ref: string) => Promise<string>,
+): Promise<string[]> {
+  if (!readExtractedText || !input.snapshot?.items?.length) return [];
+  const out: string[] = [];
+  for (const item of input.snapshot.items) {
+    if (item.status !== 'ok' || !item.extractedTextRef) continue;
+    try {
+      const body = (await readExtractedText(item.extractedTextRef)).trim();
+      if (body) out.push(body);
+    } catch {
+      /* 单条读取失败不阻断 Fake 生成 */
+    }
+  }
+  return out;
 }
 
 function sleep(ms: number, signal: AbortSignal, ignoreAbort: boolean): Promise<void> {

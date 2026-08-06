@@ -751,6 +751,11 @@ select {
   min-height: 420px;
 }
 
+/* display:flex/grid 会压过浏览器默认 [hidden]{display:none}，必须显式覆盖，否则主栏纵向堆叠 */
+.shell-panel[hidden] {
+  display: none !important;
+}
+
 .page-title {
   font-size: 22px;
   margin: 0 0 8px;

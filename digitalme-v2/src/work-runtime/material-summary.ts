@@ -52,6 +52,16 @@ export function buildMaterialSummary(items: readonly SnapshotItem[]): MaterialSu
       included.push({ path: item.sourcePath, displayName });
       continue;
     }
+    // status=ok 但无正文引用：不得标「已读取」（与进入模型上下文不一致）
+    if (item.status === 'ok' && !item.extractedTextRef) {
+      skipped.push({
+        path: item.sourcePath,
+        displayName,
+        reasonCode: 'unreadable',
+        reason: REASON_LABEL.unreadable,
+      });
+      continue;
+    }
     // 空文件夹占位：整夹无可读文件时给一条汇总，不拆成假文件
     if (
       item.kind === 'folder-entry' &&

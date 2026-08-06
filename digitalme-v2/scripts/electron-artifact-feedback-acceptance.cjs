@@ -99,6 +99,11 @@ function registerIpc() {
     },
   }));
   ipcMain.handle('shell:conversationClear', async () => ({ cleared: true }));
+  ipcMain.handle('shell:conversationReply', async (_e, input) => ({
+    text: `（验收助手）收到：${String((input && input.text) || '').slice(0, 80)}`,
+    status: 'complete',
+    finishReason: 'stop',
+  }));
 }
 
 async function openWindow() {
