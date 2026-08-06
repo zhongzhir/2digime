@@ -16,8 +16,60 @@
         <header class="hero">
           <p class="brand">Digital Me</p>
           <h1>建立你的数字之我</h1>
+          <p class="page-lead">在本机保存你的资料与成果，按你的方式做事与对话。</p>
         </header>
-        <div class="welcome-actions">
+
+        <div id="welcome-step-intro" class="welcome-actions welcome-step">
+          <p class="muted">接下来需要连接模型，才能对话和做事。也可以先浏览界面。</p>
+          <div class="row">
+            <button type="button" id="btn-welcome-to-model" class="primary">连接模型</button>
+            <button type="button" id="btn-welcome-skip-model" class="ghost">先跳过</button>
+          </div>
+          <p id="welcome-skip-hint" class="muted tiny" hidden>
+            可以先浏览，但对话和做事需要连接模型。
+          </p>
+          <p id="welcome-status" class="status" hidden></p>
+        </div>
+
+        <div id="welcome-step-model" class="welcome-actions welcome-step settings-panel" hidden>
+          <h2>连接模型</h2>
+          <p class="muted">密钥只保存在本机。连接成功后即可开始使用。</p>
+          <label class="field">
+            <span>服务提供方</span>
+            <select id="welcome-model-provider">
+              <option value="deepseek">DeepSeek</option>
+              <option value="openai-compatible">自定义服务</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>API Key</span>
+            <input
+              id="welcome-model-api-key"
+              type="password"
+              placeholder="粘贴你的密钥"
+              autocomplete="new-password"
+            />
+          </label>
+          <details class="advanced-connection">
+            <summary>高级连接</summary>
+            <label class="field">
+              <span>服务地址</span>
+              <input id="welcome-model-base-url" type="text" placeholder="例如 https://api.example.com/v1" autocomplete="off" />
+            </label>
+            <label class="field">
+              <span>模型名称</span>
+              <input id="welcome-model-id" type="text" placeholder="例如 deepseek-v4-flash" autocomplete="off" />
+            </label>
+          </details>
+          <p id="welcome-model-state" class="connection-state" aria-live="polite">连接状态：尚未连接</p>
+          <div class="row">
+            <button type="button" id="btn-welcome-save-model" class="primary">保存并验证</button>
+            <button type="button" id="btn-welcome-skip-model-2" class="ghost">先跳过</button>
+          </div>
+          <p id="welcome-model-status" class="status" aria-live="polite"></p>
+        </div>
+
+        <div id="welcome-step-start" class="welcome-actions welcome-step" hidden>
           <label class="field">
             <span>用一句话介绍你自己，或者告诉我你最近在做什么</span>
             <textarea
@@ -26,11 +78,12 @@
               placeholder="例如：我在做 Digital Me，重视真实用户价值和快速验证。"
             ></textarea>
           </label>
+          <p id="welcome-model-ready-note" class="muted tiny" hidden></p>
           <div class="row">
             <button type="button" id="btn-create-pkg" class="primary">开始使用</button>
-            <button type="button" id="btn-create-skip" class="ghost">先跳过</button>
+            <button type="button" id="btn-create-skip" class="ghost">先跳过介绍</button>
           </div>
-          <p id="welcome-status" class="status" hidden></p>
+          <p id="welcome-start-status" class="status" hidden></p>
         </div>
       </section>
 
@@ -104,6 +157,27 @@
             <summary>技术摘要</summary>
             <pre id="settings-tech-body" class="settings-tech-body"></pre>
           </details>
+
+          <hr class="settings-divider" />
+          <h2>专业能力</h2>
+          <p class="muted">可选。不是另一个数字之我，而是本机可连接的研究分析服务。</p>
+          <p id="settings-remote-cap-status" class="meta" aria-live="polite">状态：未配置</p>
+          <label class="field">
+            <span>服务地址</span>
+            <input
+              id="remote-cap-base-url"
+              type="text"
+              placeholder="例如 http://127.0.0.1:43111"
+              autocomplete="off"
+            />
+          </label>
+          <div class="row settings-actions">
+            <button type="button" id="btn-remote-cap-save" class="primary">保存并验证</button>
+            <button type="button" id="btn-remote-cap-test">检查连接</button>
+            <button type="button" id="btn-remote-cap-disable" class="ghost">停用</button>
+          </div>
+          <p id="remote-cap-settings-status" class="status" aria-live="polite"></p>
+          <p id="remote-cap-status-label" class="meta" hidden>状态：未配置</p>
         </div>
       </section>
 
@@ -114,7 +188,7 @@
             <button type="button" class="nav-item active" data-nav="work" id="nav-work">做事</button>
             <button type="button" class="nav-item" data-nav="chat" id="nav-chat">对话</button>
             <button type="button" class="nav-item" data-nav="subject" id="nav-subject">数字之我</button>
-            <button type="button" class="nav-item nav-item-secondary" data-nav="collab" id="nav-collab">协作</button>
+            <button type="button" class="nav-item nav-item-secondary" data-nav="collab" id="nav-collab" title="实验能力">协作</button>
           </nav>
           <div class="topbar-actions" aria-label="次级入口">
             <button type="button" id="btn-open-help" class="ghost topbar-secondary">帮助</button>
@@ -342,55 +416,18 @@
               <h1 class="page-title">协作</h1>
               <button type="button" id="btn-collab-page-new" class="primary">新建协作</button>
             </div>
-            <p class="page-lead">找人帮忙或使用专业能力，并处理返回结果。</p>
+            <p class="page-lead">实验能力：当前仅支持已添加到本设备的另一个 Digital Me。</p>
+            <p class="muted tiny">不支持跨设备或公开网络协作。研究分析等专业能力请到「设置」中配置。</p>
 
             <section class="collab-home-section" aria-labelledby="collab-who-title">
               <h2 class="section-title" id="collab-who-title">
                 可找谁帮忙
-                <span class="section-hint">对象与能力</span>
+                <span class="section-hint">本机已添加的数字之我</span>
               </h2>
               <div class="collab-connected-peers">
                 <div class="collab-peer-manage-card" id="collab-peer-digitalme-card">
                   <p class="collab-peer-name">其他数字之我</p>
-                  <p class="muted tiny">可在「新建协作」中选择或导入。</p>
-                </div>
-                <div class="collab-peer-manage-card" id="collab-external-cap-manage">
-                  <p class="collab-peer-name">专业能力</p>
-                  <p id="collab-ext-cap-name" class="meta">研究分析能力</p>
-                  <p id="collab-ext-cap-desc" class="muted tiny">
-                    基于授权材料形成项目风险摘要。不是另一个数字之我。
-                  </p>
-                  <p id="collab-ext-cap-suitable" class="muted tiny">适合：约 500–800 字结构化摘要。</p>
-                  <p id="collab-ext-cap-status" class="meta" aria-live="polite">状态：未连接</p>
-                  <div class="row">
-                    <button type="button" id="btn-collab-ext-connect" class="primary">连接</button>
-                    <button type="button" id="btn-remote-cap-test">检查连接</button>
-                    <button type="button" id="btn-remote-cap-disable" class="ghost">停用</button>
-                    <button type="button" id="btn-collab-ext-auth" class="ghost">查看授权边界</button>
-                  </div>
-                  <div id="collab-ext-cap-connect-panel" class="collab-ext-connect-panel" hidden>
-                    <details id="collab-ext-cap-advanced">
-                      <summary>连接外部专业能力（高级）</summary>
-                      <label class="field">
-                        <span>服务地址</span>
-                        <input
-                          id="remote-cap-base-url"
-                          type="text"
-                          placeholder="例如 http://127.0.0.1:43111"
-                          autocomplete="off"
-                        />
-                      </label>
-                      <div class="row">
-                        <button type="button" id="btn-remote-cap-save" class="primary">保存并连接</button>
-                      </div>
-                    </details>
-                  </div>
-                  <div id="collab-ext-cap-auth-panel" class="collab-confirm" hidden>
-                    <h3 class="section-title">授权边界</h3>
-                    <ul id="collab-ext-cap-auth-points" class="collab-confirm-points"></ul>
-                  </div>
-                  <p id="remote-cap-status-label" class="meta" hidden>状态：未连接</p>
-                  <p id="remote-cap-settings-status" class="status" aria-live="polite"></p>
+                  <p class="muted tiny">在「新建协作」中选择本机已有的另一个数字之我文件夹。</p>
                 </div>
               </div>
             </section>
@@ -427,11 +464,11 @@
             <button type="button" id="btn-collab-new-back" class="ghost">返回列表</button>
             <h1 class="page-title">新建协作</h1>
             <p id="collab-page-context-note" class="muted tiny" hidden></p>
-            <label class="field">
+            <p class="muted tiny">实验能力：仅可选择已添加到本设备的另一个 Digital Me。</p>
+            <label class="field" hidden>
               <span>协作方式</span>
               <select id="collab-page-target-mode">
-                <option value="local-peer">请人帮忙（另一个数字之我）</option>
-                <option value="external-research">用专业能力</option>
+                <option value="local-peer" selected>请人帮忙（另一个数字之我）</option>
               </select>
             </label>
 
@@ -518,9 +555,9 @@
               </div>
               <div id="external-cap-result" class="external-cap-result" hidden>
                 <h4 class="section-title">返回的成果</h4>
-                <p id="external-cap-source" class="meta">来源：已连接的研究分析能力</p>
+                <p id="external-cap-source" class="meta">来源：研究分析能力</p>
                 <p id="external-cap-returned-at" class="muted tiny"></p>
-                <p id="external-cap-check-status" class="meta">检查状态：已通过</p>
+                <p id="external-cap-check-status" class="meta" hidden></p>
                 <pre id="external-cap-body" class="collab-return"></pre>
                 <div class="row">
                   <button type="button" id="btn-external-accept" class="primary">采用</button>
@@ -546,6 +583,7 @@
             <p id="collab-detail-return-empty" class="muted tiny">尚未返回成果。</p>
             <div class="row" id="collab-detail-actions">
               <button type="button" id="btn-collab-detail-execute">开始协作执行</button>
+              <button type="button" id="btn-collab-detail-retry" class="primary" hidden>重试履行</button>
               <button type="button" id="btn-collab-detail-accept" class="primary">采用</button>
               <button type="button" id="btn-collab-detail-reject">不采用</button>
               <button type="button" id="btn-collab-detail-revoke" class="ghost">撤销授权</button>
@@ -568,8 +606,8 @@
             <li><strong>做事</strong>：写下目标、添加材料、开始处理；成果可修改、采用与导出。</li>
             <li><strong>对话</strong>：澄清想法；需要时点「转为任务」继续。</li>
             <li><strong>数字之我</strong>：查看已确认内容，确认新内容，管理资料。</li>
-            <li><strong>协作</strong>：请人帮忙或使用专业能力，并处理返回结果。</li>
-            <li><strong>设置</strong>：连接模型。外部专业能力在「协作」中连接。</li>
+            <li><strong>协作</strong>（实验）：请本机另一个数字之我帮忙，并处理返回结果。</li>
+            <li><strong>设置</strong>：连接模型；可选配置专业能力。</li>
           </ul>
         </div>
       </section>

@@ -108,6 +108,36 @@ export function latestDelivery(record: CollaborationRecord): CollaborationEvent 
   return undefined;
 }
 
+/** 最近一次履行失败事实（无成功 delivery，且之后未再启动新的履行）。 */
+export function latestFulfillmentFailure(record: CollaborationRecord): CollaborationEvent | undefined {
+  if (latestDelivery(record)) return undefined;
+  for (let i = record.events.length - 1; i >= 0; i -= 1) {
+    const ev = record.events[i];
+    if (!ev) continue;
+    if (ev.kind === 'fulfillment_started' && !isFailureNote(ev.note)) {
+      // 之后又启动了新的履行尝试 → 当前不是失败终态
+      return undefined;
+    }
+    if (ev.kind === 'delivered' && !ev.delivery && isFailureNote(ev.note)) return ev;
+    if (ev.kind === 'fulfillment_started' && isFailureNote(ev.note)) return ev;
+  }
+  return undefined;
+}
+
+function isFailureNote(note: string | undefined): boolean {
+  if (!note) return false;
+  return /^(fail:|interrupted:|recoverable_fail:)/i.test(note) || /失败|中断|error/i.test(note);
+}
+
+/** 最近一次带 Job/Task 引用的履行启动。 */
+export function latestLinkedFulfillment(record: CollaborationRecord): CollaborationEvent | undefined {
+  for (let i = record.events.length - 1; i >= 0; i -= 1) {
+    const ev = record.events[i];
+    if (ev?.kind === 'fulfillment_started' && (ev.jobId || ev.taskId)) return ev;
+  }
+  return undefined;
+}
+
 export function latestOwnerDecision(
   record: CollaborationRecord,
 ): 'accept' | 'reject' | 'revise' | undefined {
@@ -137,14 +167,9 @@ export function deriveCollabStatus(record: CollaborationRecord): CollabUserStatu
   const delivery = latestDelivery(record);
   if (delivery) return 'delivered';
 
-  if (events.some((e) => e.kind === 'fulfillment_started') && !delivery) {
-    const failed = [...events].reverse().find((e) => e.kind === 'delivered' === false && e.note?.includes('fail'));
-    void failed;
-    // 若有 fulfillment_started 但随后无 delivered，且最后事件带失败 note
-    if (last?.kind === 'fulfillment_started') return 'running';
-    if (last && last.kind !== 'delivered' && last.note && /fail|失败|error/i.test(last.note)) {
-      return 'failed';
-    }
+  if (latestFulfillmentFailure(record)) return 'failed';
+
+  if (events.some((e) => e.kind === 'fulfillment_started')) {
     return 'running';
   }
 

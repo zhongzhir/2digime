@@ -24,6 +24,8 @@ let deleteCredential = null;
 let testConnection = null;
 /** @type {{ modelReady: boolean, modelMeta: any, needsCredentialSetup: boolean, status: any, isPackaged: boolean, buildMeta: any } | null} */
 let lastBootInfo = null;
+/** 外部专业能力是否已经过真实可达性验证（本进程内）。 */
+let remoteReachabilityVerified = false;
 
 const COMMAND_NAMES = new Set([
   "subject.createPackage",
@@ -81,7 +83,7 @@ async function bootstrapRuntime() {
     safeStorage,
     userDataPath: app.getPath("userData"),
     isPackaged: app.isPackaged,
-    allowDevRuntimeFile: !app.isPackaged,
+    allowDevRuntimeFile: process.env.DIGITALME_V2_ALLOW_DEV_CREDENTIAL === "1",
   });
 
   saveCredential = typeof model.saveCredential === "function" ? model.saveCredential : null;
@@ -114,9 +116,9 @@ async function bootstrapRuntime() {
   const resolvedRemote = resolveResearchBaseUrl(userDataPath);
   let a2aRemoteCapability = undefined;
   let remoteRegistered = false;
-  let remoteConnectionState = savedRemote.enabled || resolvedRemote.source === "env_override"
-    ? "unreachable"
-    : "disconnected";
+  // 每次重建运行时：未做本轮探测前不得冒充可用
+  remoteReachabilityVerified = false;
+  let remoteConnectionState = "disconnected";
   if (resolvedRemote.enabled && resolvedRemote.baseUrl) {
     try {
       const {
@@ -130,13 +132,15 @@ async function bootstrapRuntime() {
         pollIntervalMs: 200,
       };
       remoteRegistered = true;
-      remoteConnectionState = "connected";
+      remoteConnectionState = "configured_unverified";
     } catch (err) {
       console.warn("[digitalme] external capability not registered:", err && err.message);
       remoteRegistered = false;
       remoteConnectionState = "unreachable";
       a2aRemoteCapability = undefined;
     }
+  } else if (savedRemote.enabled && savedRemote.baseUrl) {
+    remoteConnectionState = "configured_unverified";
   }
 
   const options = uxAcceptanceFake
@@ -175,6 +179,7 @@ async function bootstrapRuntime() {
     resolved: resolvedRemote,
     registered: remoteRegistered,
     connectionState: remoteConnectionState,
+    reachabilityVerified: remoteReachabilityVerified,
   });
   lastBootInfo = buildBootInfo(model, appRoot, remoteStatus);
   return lastBootInfo;
@@ -389,14 +394,16 @@ function registerIpc() {
     const saved = readRemoteCapabilityConfig(userDataPath);
     const resolved = resolveResearchBaseUrl(userDataPath);
     const registered = !!(lastBootInfo && lastBootInfo.remoteCapability && lastBootInfo.remoteCapability.registered);
-    const connectionState =
+    let connectionState =
       (lastBootInfo && lastBootInfo.remoteCapability && lastBootInfo.remoteCapability.connectionState) ||
-      (saved.enabled ? "unreachable" : "disconnected");
+      (saved.enabled ? "configured_unverified" : "disconnected");
+    if (remoteReachabilityVerified) connectionState = "connected";
     return publicRemoteCapabilityStatus({
       saved,
       resolved,
       registered,
       connectionState,
+      reachabilityVerified: remoteReachabilityVerified,
     });
   });
 
@@ -405,13 +412,27 @@ function registerIpc() {
       validateResearchEndpoint,
       normalizeBaseUrl,
       userFacingConnectError,
+      publicRemoteCapabilityStatus,
+      readRemoteCapabilityConfig,
+      resolveResearchBaseUrl,
     } = require(path.join(__dirname, "bootstrap-remote-capability.cjs"));
     const baseUrl = normalizeBaseUrl((input && input.baseUrl) || "");
     try {
       const result = await validateResearchEndpoint(baseUrl, resolveAppRoot());
+      remoteReachabilityVerified = true;
+      const userDataPath = app.getPath("userData");
+      const status = publicRemoteCapabilityStatus({
+        saved: readRemoteCapabilityConfig(userDataPath),
+        resolved: resolveResearchBaseUrl(userDataPath),
+        registered: !!(lastBootInfo && lastBootInfo.remoteCapability && lastBootInfo.remoteCapability.registered),
+        connectionState: "connected",
+        reachabilityVerified: true,
+      });
+      if (lastBootInfo) lastBootInfo.remoteCapability = status;
       return {
         ok: true,
         message: "连接正常，可以使用研究分析能力。",
+        remoteCapability: status,
         diagnostic: result.probe
           ? {
               stage: "ok",
@@ -424,6 +445,7 @@ function registerIpc() {
           : undefined,
       };
     } catch (err) {
+      remoteReachabilityVerified = false;
       console.warn("[digitalme] testRemoteCapability failed:", {
         action: "shell:testRemoteCapability",
         diagnostic: err && err.diagnostic,
@@ -442,11 +464,15 @@ function registerIpc() {
       writeRemoteCapabilityConfig,
       normalizeBaseUrl,
       userFacingConnectError,
+      publicRemoteCapabilityStatus,
+      readRemoteCapabilityConfig,
+      resolveResearchBaseUrl,
     } = require(path.join(__dirname, "bootstrap-remote-capability.cjs"));
     const baseUrl = normalizeBaseUrl((input && input.baseUrl) || "");
     try {
       await validateResearchEndpoint(baseUrl, resolveAppRoot());
     } catch (err) {
+      remoteReachabilityVerified = false;
       const message =
         (err && err.userMessage) ||
         userFacingConnectError(err) ||
@@ -463,11 +489,27 @@ function registerIpc() {
       enabled: true,
       baseUrl,
     });
+    remoteReachabilityVerified = true;
     const boot = await rebootstrapAndNotify();
+    // rebootstrap 会清验证标记；保存前已探测成功，恢复为可用
+    remoteReachabilityVerified = true;
+    const userDataPath = app.getPath("userData");
+    const status = publicRemoteCapabilityStatus({
+      saved: readRemoteCapabilityConfig(userDataPath),
+      resolved: resolveResearchBaseUrl(userDataPath),
+      registered: !!(boot.remoteCapability && boot.remoteCapability.registered),
+      connectionState: "connected",
+      reachabilityVerified: true,
+    });
+    boot.remoteCapability = status;
+    lastBootInfo = boot;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("shell:boot-info", boot);
+    }
     return {
       ok: true,
-      remoteCapability: boot.remoteCapability,
-      message: "已连接研究分析能力。",
+      remoteCapability: status,
+      message: "研究分析能力已可用。",
     };
   });
 
@@ -476,6 +518,7 @@ function registerIpc() {
       disableRemoteCapabilityConfig,
     } = require(path.join(__dirname, "bootstrap-remote-capability.cjs"));
     disableRemoteCapabilityConfig(app.getPath("userData"));
+    remoteReachabilityVerified = false;
     const boot = await rebootstrapAndNotify();
     return {
       ok: true,
@@ -484,7 +527,6 @@ function registerIpc() {
     };
   });
 
-  /** 在资源管理器中显示路径（壳层辅助，非领域命令）。 */
   ipcMain.handle("shell:revealPath", async (_evt, targetPath) => {
     const p = String(targetPath || "").trim();
     if (!p) return { opened: false };
@@ -640,7 +682,7 @@ function registerIpc() {
       safeStorage,
       userDataPath: app.getPath("userData"),
       isPackaged: app.isPackaged,
-      allowDevRuntimeFile: !app.isPackaged,
+      allowDevRuntimeFile: process.env.DIGITALME_V2_ALLOW_DEV_CREDENTIAL === "1",
     });
     if (!model.ok || !model.openaiCompatible || !model.secrets) {
       throw Object.assign(new Error("请先连接模型"), {

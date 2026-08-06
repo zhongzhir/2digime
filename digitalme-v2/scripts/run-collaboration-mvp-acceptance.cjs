@@ -35,8 +35,8 @@ for (const re of [
   /id="btn-collab-open"/,
   /id="btn-collab-page-issue"|id="btn-collab-issue"/,
   /id="btn-collab-revoke"|id="btn-collab-detail-revoke"/,
-  /action:\s*["']issue["']/,
-  /action:\s*["']execute["']/,
+  /action:\s*["']propose["']/,
+  /action:\s*["']fulfill["']/,
   /action:\s*["']revoke["']/,
 ]) {
   const hay = html + '\n' + appJs;

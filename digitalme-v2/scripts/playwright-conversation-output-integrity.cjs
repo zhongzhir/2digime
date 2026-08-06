@@ -71,6 +71,23 @@ async function setReplyMode(app, mode) {
 async function enterShell(page) {
   const welcomeHidden = await page.locator('#view-welcome').evaluate((el) => el.hidden).catch(() => true);
   if (!welcomeHidden) {
+    // 首启三步：若停在介绍/模型步，先进入「开始使用」再创建
+    const startHidden = await page
+      .locator('#welcome-step-start')
+      .evaluate((el) => el.hidden)
+      .catch(() => true);
+    if (startHidden) {
+      const introVisible = await page
+        .locator('#welcome-step-intro')
+        .evaluate((el) => !el.hidden)
+        .catch(() => false);
+      if (introVisible) {
+        await page.click('#btn-welcome-skip-model');
+      } else {
+        await page.click('#btn-welcome-skip-model-2').catch(() => page.click('#btn-welcome-skip-model'));
+      }
+      await page.waitForTimeout(200);
+    }
     await page.fill('#self-intro', '对话输出完整性验收主体。');
     await page.click('#btn-create-pkg');
   }
@@ -312,12 +329,22 @@ async function run() {
   );
   const shellHidden = await page.locator('#view-shell').evaluate((el) => el.hidden).catch(() => true);
   if (shellHidden) {
-    // 若未自动进入，点创建（已存在则 open）
+    // 若未自动进入，走欢迎首启（兼容三步引导）
     const welcomeHidden2 = await page.locator('#view-welcome').evaluate((el) => el.hidden).catch(() => true);
     if (!welcomeHidden2) {
-      await page.click('#btn-create-skip').catch(async () => {
-        await page.fill('#self-intro', '重载恢复');
-        await page.click('#btn-create-pkg');
+      const startHidden = await page
+        .locator('#welcome-step-start')
+        .evaluate((el) => el.hidden)
+        .catch(() => true);
+      if (startHidden) {
+        await page.click('#btn-welcome-skip-model').catch(async () => {
+          await page.click('#btn-welcome-skip-model-2');
+        });
+        await page.waitForTimeout(200);
+      }
+      await page.fill('#self-intro', '重载恢复').catch(() => {});
+      await page.click('#btn-create-pkg').catch(async () => {
+        await page.click('#btn-create-skip');
       });
     }
   }

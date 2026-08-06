@@ -194,13 +194,27 @@ async function validateResearchEndpoint(baseUrl, appRoot) {
 function publicRemoteCapabilityStatus(input) {
   const saved = input.saved || { enabled: false, baseUrl: '' };
   const resolved = input.resolved || { enabled: false, baseUrl: '', source: 'none' };
-  const connectionState = input.connectionState || 'disconnected';
-  // connectionState: disconnected | checking | connected | unreachable
+  // connectionState:
+  //   disconnected — 未配置
+  //   configured_unverified — 已配置，尚未验证可达性
+  //   connected — 已验证可用
+  //   unreachable — 暂时无法连接
+  //   checking — 正在检查
+  let connectionState = input.connectionState || 'disconnected';
+  if (
+    connectionState === 'connected' &&
+    input.reachabilityVerified !== true
+  ) {
+    // 无真实可达性验证时，不得显示「已连接/可用」
+    connectionState =
+      saved.enabled || resolved.enabled ? 'configured_unverified' : 'disconnected';
+  }
   const labelMap = {
-    disconnected: '未连接',
+    disconnected: '未配置',
+    configured_unverified: '已配置，尚未验证',
     checking: '正在检查',
-    connected: '已连接',
-    unreachable: '无法连接',
+    connected: '可用',
+    unreachable: '暂时无法连接',
   };
   return {
     displayName: DISPLAY_NAME,
@@ -210,7 +224,8 @@ function publicRemoteCapabilityStatus(input) {
     source: resolved.source || 'none',
     registered: !!input.registered,
     connectionState,
-    statusLabel: labelMap[connectionState] || '未连接',
+    reachabilityVerified: input.reachabilityVerified === true,
+    statusLabel: labelMap[connectionState] || '未配置',
     requiresCredential: false,
     updatedAt: saved.updatedAt || null,
   };

@@ -123,15 +123,22 @@ function registerIpc() {
   ipcMain.handle('shell:conversationReply', async (_e, input) => {
     const text = String((input && input.text) || '').trim();
     const mode = replyMode;
+    // 模拟生产主进程在回复后调度成长捕获（不依赖 renderer 再 invoke capture）
+    const bumpCapture = () => {
+      captureCount += 1;
+    };
     if (mode === 'network') {
+      bumpCapture();
       const err = new Error('网络中断。回复未完成，可重试');
       err.code = 'CHAT_INCOMPLETE';
       throw err;
     }
     if (mode === 'fail') {
+      bumpCapture();
       throw new Error('模型暂时不可用。请稍后重试');
     }
     if (mode === 'incomplete') {
+      bumpCapture();
       return {
         text: '这是被截断的半句，尚无结束标记',
         status: 'incomplete',
@@ -139,19 +146,22 @@ function registerIpc() {
       };
     }
     if (/CHAT_SHORT_OK|只回复/.test(text)) {
+      bumpCapture();
       return { text: 'CHAT_SHORT_OK', status: 'complete', finishReason: 'stop' };
     }
-    if (/1200|小节|END_OF_REPLY|长文|长回复/.test(text)) {
+    if (/1200|文章|END_OF_REPLY|长文|长回复/.test(text)) {
       // 故意不把 REASONING_LEAK 放进 text；模拟 adapter 已丢弃 reasoning
       void REASONING_LEAK;
+      bumpCapture();
       return {
         text: buildLongArticle(),
         status: 'complete',
         finishReason: 'stop',
       };
     }
+    bumpCapture();
     return {
-      text: `（验收助手）收到：${text.slice(0, 120)}`,
+      text: '（验收助手）收到：' + text.slice(0, 120),
       status: 'complete',
       finishReason: 'stop',
     };

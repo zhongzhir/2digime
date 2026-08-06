@@ -1,0 +1,15 @@
+✔ Case1+2+3+4: propose fulfill isolate revoke via collab.interact (10947.9893ms)
+✔ fulfillment interrupt without job ref recovers to failed; retry succeeds (3041.1629ms)
+✔ termsDigest stable for same terms regardless of material order (14.2053ms)
+✔ agreement requires same termsDigest from both sides (0.736ms)
+✔ deriveCollabStatus: delivered-without-delivery fail note is failed not running (0.3748ms)
+✔ deriveCollabStatus: new fulfillment after failure returns running (0.4017ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 14723.7215
+

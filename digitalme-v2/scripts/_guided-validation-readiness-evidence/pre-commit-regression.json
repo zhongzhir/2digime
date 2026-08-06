@@ -1,0 +1,69 @@
+{
+  "task": "DIGITALME-V2-GUIDED-VALIDATION-READINESS-01",
+  "phase": "pre_commit_regression",
+  "checkedAt": "2026-08-06T09:20:00.000Z",
+  "parentHead": "f6bb56dd0f24a529cf4e6a43c366997287ca1d38",
+  "ok": true,
+  "items": [
+    {
+      "id": 1,
+      "name": "conversation_send_reply_failure",
+      "result": "pass",
+      "how": "npm run accept:conversation-output-integrity (fake harness + model-http unit)"
+    },
+    {
+      "id": 2,
+      "name": "write_task_artifact_revise_accept",
+      "result": "pass",
+      "how": "npm run accept:artifact-feedback; npm run accept:task-instruction-revision-integrity"
+    },
+    {
+      "id": 3,
+      "name": "code_analysis_select_and_bundle",
+      "result": "pass",
+      "how": "dist work-runtime-generalization + code-repo-analysis + p21-repository-snapshot unit tests (fake/deterministic)"
+    },
+    {
+      "id": 4,
+      "name": "growth_capture_outcomes",
+      "result": "pass",
+      "how": "dist/subject-core/tests/growth-capture-trust.test.js (nothing_to_learn / learned / distill_failed)"
+    },
+    {
+      "id": 5,
+      "name": "experience_reuse_isolation",
+      "result": "pass",
+      "how": "task-instruction-revision-integrity unit (related inject / unrelated empty); artifact-feedback related reuse"
+    },
+    {
+      "id": 6,
+      "name": "collab_happy_path_and_recovery",
+      "result": "pass",
+      "how": "npm run accept:collaboration-mvp (propose/fulfill + interrupt recover + retry)"
+    },
+    {
+      "id": 7,
+      "name": "COMMAND_COUNT_unchanged",
+      "result": "pass",
+      "how": "npm run smoke: COMMAND_NAMES.length=20 <= COMMAND_COUNT_LIMIT=20; command-bus.test.js"
+    }
+  ],
+  "realModelEvidenceNotRerun": [
+    {
+      "file": "scripts/_subject-collaboration-foundation-real-evidence/summary.json",
+      "reason": "本轮禁止再次调用真实模型；协作正常完成路径已由 fake domain 单测与 accept:collaboration-mvp 覆盖"
+    },
+    {
+      "file": "scripts/_subject-growth-loop-evidence/acceptance-summary.json",
+      "reason": "成长三类结果由 growth-capture-trust 单测覆盖；真实模型成长环证据未重跑"
+    }
+  ],
+  "packagedArtifact": {
+    "committed": false,
+    "buildId": "v2-20260806T085853Z-f6bb56dd",
+    "zipName": "DigitalMeV2-0.1.0-win-x64.zip",
+    "zipSha256": "09be8aac6b5b0e312831e7c5adea785e6fb7ab208f3d89ea06702f402a90c55c",
+    "zipBytes": 114517051,
+    "note": "win-unpacked 与完整 ZIP 均不入库；仅摘要"
+  }
+}

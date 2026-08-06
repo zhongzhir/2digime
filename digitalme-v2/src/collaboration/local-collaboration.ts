@@ -20,7 +20,9 @@ import {
   deriveCollabStatus,
   findAgreement,
   latestDelivery,
+  latestFulfillmentFailure,
   latestGrantId,
+  latestLinkedFulfillment,
   latestOwnerDecision,
   latestTerms,
   mergeIncomingEvents,
@@ -161,25 +163,286 @@ export class LocalCollaborationHost {
     });
   }
 
-  /** 打开包/进入协作页时的对账：拉取对方事件并入本地副本。 */
+  /** 打开包/进入协作页时的对账：拉取对方事件并入本地副本，并对未完成履行做 Job 对账。 */
   async reconcile(recordId: string): Promise<CollaborationRecord> {
     const local = await this.loadRecord(recordId);
     const selfId = this.issuer.subject.requireActive().id;
     const peer =
       local.initiator.subjectId === selfId ? local.responder : local.initiator;
+    let merged = local;
     try {
       const remote = await this.transport.pullRecord(peer.endpointRef, recordId);
-      if (!remote) return local;
-      const merged = mergeIncomingEvents(local, remote.events);
-      if (merged.events.length !== local.events.length) {
-        await this.saveLocal(merged);
+      if (remote) {
+        merged = mergeIncomingEvents(local, remote.events);
+        if (merged.events.length !== local.events.length) {
+          await this.saveLocal(merged);
+        }
       }
-      return merged;
     } catch (err) {
       // 对端不可达时保留本地状态
       void err;
-      return local;
+      merged = local;
     }
+    return this.recoverInFlightFulfillment(merged);
+  }
+
+  /**
+   * 履行中断恢复（无持续轮询）：
+   * - 已有成功交付但未物化 → 补齐物化；
+   * - Job 失败/取消/启动恢复中断 → 可恢复失败态；
+   * - Job 已成功 → 补齐交付；
+   * - 仅有 fulfillment_started 无 Job 引用 → 可恢复失败态。
+   */
+  private async recoverInFlightFulfillment(
+    record: CollaborationRecord,
+  ): Promise<CollaborationRecord> {
+    const delivery = latestDelivery(record);
+    const localMaterialized = [...record.events]
+      .reverse()
+      .find((e) => e.localArtifactId)?.localArtifactId;
+
+    if (delivery?.delivery && !localMaterialized) {
+      return this.finishMaterializeFromDelivery(record, delivery);
+    }
+    if (delivery?.delivery && localMaterialized) return record;
+
+    if (!record.events.some((e) => e.kind === 'fulfillment_started')) return record;
+    if (latestFulfillmentFailure(record) && !latestLinkedFulfillment(record)?.jobId) {
+      return record;
+    }
+
+    const linked = latestLinkedFulfillment(record);
+    const grantId = latestGrantId(record);
+
+    if (!linked?.jobId) {
+      if (latestFulfillmentFailure(record)) return record;
+      const failEv: CollaborationEvent = {
+        eventId: newId('collaborationEvent'),
+        kind: 'fulfillment_started',
+        authorSubjectId: record.responder.subjectId,
+        at: nowIso(),
+        ...(grantId ? { grantId } : {}),
+        note: 'recoverable_fail:履行中断，尚未建立执行引用',
+      };
+      record = await this.appendLocalOnly(record, [failEv]);
+      try {
+        await this.syncFullRecordToPeer(record);
+      } catch {
+        /* 对端不可达时仍保留本方可恢复失败态 */
+      }
+      return record;
+    }
+
+    let opened: Awaited<ReturnType<CollaborationTransport['openByEndpointRef']>> | null =
+      null;
+    try {
+      opened = await this.transport.openByEndpointRef(record.responder.endpointRef);
+      const job = await opened.runtime.workRuntime.getJob(linked.jobId);
+      if (!job) {
+        if (latestFulfillmentFailure(record)) return record;
+        const failEv: CollaborationEvent = {
+          eventId: newId('collaborationEvent'),
+          kind: 'fulfillment_started',
+          authorSubjectId: record.responder.subjectId,
+          at: nowIso(),
+          ...(grantId ? { grantId } : {}),
+          jobId: linked.jobId,
+          ...(linked.taskId ? { taskId: linked.taskId } : {}),
+          note: 'recoverable_fail:找不到对应执行，可重试',
+        };
+        record = await this.appendLocalOnly(record, [failEv]);
+        await this.syncFullRecordToPeer(record).catch(() => undefined);
+        return record;
+      }
+
+      if (job.status === 'failed' || job.status === 'cancelled') {
+        if (latestFulfillmentFailure(record)) return record;
+        const failMessage =
+          job.progress?.note?.trim() ||
+          job.failure?.message ||
+          (job.failure?.stage === 'interrupted' ? '执行中断' : String(job.status));
+        const failEv: CollaborationEvent = {
+          eventId: newId('collaborationEvent'),
+          kind: 'delivered',
+          authorSubjectId: record.responder.subjectId,
+          at: nowIso(),
+          ...(grantId ? { grantId } : {}),
+          jobId: job.id,
+          ...(linked.taskId ? { taskId: linked.taskId } : {}),
+          note: `recoverable_fail:${failMessage}`,
+          selfCheck: { passed: false, notes: [failMessage] },
+        };
+        record = await this.appendLocalOnly(record, [failEv]);
+        await this.syncFullRecordToPeer(record).catch(() => undefined);
+        return record;
+      }
+
+      if (job.status === 'succeeded' && job.artifactId) {
+        const next = await this.completeDeliveryFromJob({
+          record,
+          opened,
+          jobId: job.id,
+          artifactId: job.artifactId,
+          ...(linked.taskId ? { taskId: linked.taskId } : {}),
+          ...(grantId ? { grantId } : {}),
+        });
+        opened = null;
+        return next;
+      }
+
+      // queued/running：不做轮询；打开包时 WorkRuntime 会把崩溃中的 running 标为中断失败
+      return record;
+    } catch (err) {
+      void err;
+      return record;
+    } finally {
+      if (opened) {
+        try {
+          await opened.stop();
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
+
+  private async finishMaterializeFromDelivery(
+    record: CollaborationRecord,
+    deliveryEv: CollaborationEvent,
+  ): Promise<CollaborationRecord> {
+    const delivery = deliveryEv.delivery;
+    if (!delivery) return record;
+    if ([...record.events].some((e) => e.localArtifactId && e.delivery?.contentDigest === delivery.contentDigest)) {
+      return record;
+    }
+    let opened: Awaited<ReturnType<CollaborationTransport['openByEndpointRef']>> | null =
+      null;
+    try {
+      opened = await this.transport.openByEndpointRef(record.responder.endpointRef);
+      const content = await opened.runtime.getContent({
+        artifactId: delivery.sourceArtifactId,
+      });
+      const artifactText = content.text ?? '';
+      await opened.stop();
+      opened = null;
+      const terms = latestTerms(record);
+      const agreement = findAgreement(record);
+      const materialized = await this.issuer.materializePeerArtifact({
+        title: terms.intent.slice(0, 80),
+        text: artifactText,
+        recordId: record.recordId,
+        provenance: {
+          kind: 'collaboration_delivery',
+          recordId: record.recordId,
+          sourceSubjectId: delivery.sourceSubjectId,
+          sourceArtifactId: delivery.sourceArtifactId,
+          sourceHeadVersionId: delivery.sourceHeadVersionId,
+          sourceContentDigest: delivery.contentDigest,
+          agreementTermsDigest: agreement?.termsDigest || delivery.termsDigest,
+        },
+      });
+      const materializeEv: CollaborationEvent = {
+        eventId: newId('collaborationEvent'),
+        kind: 'delivered',
+        authorSubjectId: record.initiator.subjectId,
+        at: nowIso(),
+        termsDigest: delivery.termsDigest,
+        delivery,
+        localArtifactId: materialized.artifactId,
+        localHeadVersionId: materialized.headVersionId,
+        note: 'initiator_materialized',
+      };
+      record = await this.appendLocalOnly(record, [materializeEv]);
+      await this.syncFullRecordToPeer(record).catch(() => undefined);
+      return record;
+    } catch (err) {
+      void err;
+      return record;
+    } finally {
+      if (opened) {
+        try {
+          await opened.stop();
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
+
+  private async completeDeliveryFromJob(input: {
+    record: CollaborationRecord;
+    opened: Awaited<ReturnType<CollaborationTransport['openByEndpointRef']>>;
+    jobId: string;
+    taskId?: string;
+    artifactId: string;
+    grantId?: string;
+  }): Promise<CollaborationRecord> {
+    let { record, opened } = input;
+    if (latestDelivery(record)) {
+      const localId = [...record.events].reverse().find((e) => e.localArtifactId)?.localArtifactId;
+      if (localId) return record;
+      return this.finishMaterializeFromDelivery(record, latestDelivery(record)!);
+    }
+    const terms = latestTerms(record);
+    const agreement = findAgreement(record);
+    if (!agreement?.termsDigest) return record;
+
+    const content = await opened.runtime.getContent({ artifactId: input.artifactId });
+    const artifactText = content.text ?? '';
+    const digest = contentDigest(artifactText);
+    const check = selfCheckDelivery({ text: artifactText, terms });
+    const deliveryRef = {
+      sourceSubjectId: opened.runtime.subject.requireActive().id,
+      sourceArtifactId: input.artifactId,
+      sourceHeadVersionId: content.artifact.headVersionId,
+      contentDigest: digest,
+      agreementEventId: agreement.eventId,
+      termsDigest: agreement.termsDigest,
+    };
+    const delivered: CollaborationEvent = {
+      eventId: newId('collaborationEvent'),
+      kind: 'delivered',
+      authorSubjectId: record.responder.subjectId,
+      at: nowIso(),
+      ...(input.grantId ? { grantId: input.grantId } : {}),
+      ...(input.taskId ? { taskId: input.taskId } : {}),
+      jobId: input.jobId,
+      termsDigest: agreement.termsDigest,
+      delivery: deliveryRef,
+      selfCheck: check,
+      note: check.passed ? '对方已提交成果（含自检）' : '对方已提交成果（自检未完全通过）',
+    };
+    record = await this.appendLocalOnly(record, [delivered]);
+    await opened.stop();
+
+    const materialized = await this.issuer.materializePeerArtifact({
+      title: terms.intent.slice(0, 80),
+      text: artifactText,
+      recordId: record.recordId,
+      provenance: {
+        kind: 'collaboration_delivery',
+        recordId: record.recordId,
+        sourceSubjectId: deliveryRef.sourceSubjectId,
+        sourceArtifactId: deliveryRef.sourceArtifactId,
+        sourceHeadVersionId: deliveryRef.sourceHeadVersionId,
+        sourceContentDigest: digest,
+        agreementTermsDigest: agreement.termsDigest,
+      },
+    });
+    const materializeEv: CollaborationEvent = {
+      eventId: newId('collaborationEvent'),
+      kind: 'delivered',
+      authorSubjectId: record.initiator.subjectId,
+      at: nowIso(),
+      termsDigest: agreement.termsDigest,
+      delivery: deliveryRef,
+      localArtifactId: materialized.artifactId,
+      localHeadVersionId: materialized.headVersionId,
+      note: 'initiator_materialized',
+    };
+    record = await this.appendLocalOnly(record, [materializeEv]);
+    await this.syncFullRecordToPeer(record).catch(() => undefined);
+    return record;
   }
 
   async resolvePeer(granteePackageDir: string): Promise<CollabPeerPreview> {
@@ -590,6 +853,45 @@ export class LocalCollaborationHost {
         ...(existingGrantId ? { grantId: existingGrantId } : {}),
       };
     }
+
+    // 幂等：已交付则直接返回（必要时 reconcile 已补齐物化）
+    const existingDelivery = latestDelivery(record);
+    if (existingDelivery?.delivery) {
+      const localId = [...record.events].reverse().find((e) => e.localArtifactId)?.localArtifactId;
+      let artifactText: string | undefined;
+      if (localId) {
+        try {
+          const got = await this.issuer.getContent({ artifactId: localId });
+          artifactText = got.text ?? '';
+        } catch {
+          artifactText = undefined;
+        }
+      }
+      return {
+        recordId,
+        status: deriveCollabStatus(record),
+        ...(latestGrantId(record) ? { grantId: latestGrantId(record)! } : {}),
+        ...(localId ? { localArtifactId: localId } : {}),
+        ...(artifactText !== undefined ? { artifactText } : {}),
+        ...(existingDelivery.jobId ? { jobId: existingDelivery.jobId } : {}),
+        ...(existingDelivery.delivery.sourceArtifactId
+          ? { artifactId: existingDelivery.delivery.sourceArtifactId }
+          : {}),
+      };
+    }
+
+    const currentStatus = deriveCollabStatus(record);
+    if (currentStatus === 'running') {
+      const runningGrantId = latestGrantId(record);
+      return {
+        recordId,
+        status: 'running',
+        denied: true,
+        reason: '对方仍在处理，请稍后再打开查看',
+        ...(runningGrantId ? { grantId: runningGrantId } : {}),
+      };
+    }
+
     const agreement = findAgreement(record);
     if (!agreement?.termsDigest) {
       return { recordId, status: deriveCollabStatus(record), denied: true, reason: '尚未形成协作约定' };
@@ -797,7 +1099,27 @@ export class LocalCollaborationHost {
       } catch {
         /* ignore */
       }
-      throw err;
+      const failMessage = err instanceof Error ? err.message : String(err);
+      try {
+        const failEv: CollaborationEvent = {
+          eventId: newId('collaborationEvent'),
+          kind: 'fulfillment_started',
+          authorSubjectId: record.responder.subjectId,
+          at: nowIso(),
+          grantId,
+          note: `recoverable_fail:${failMessage}`,
+        };
+        record = await this.appendLocalOnly(record, [failEv]);
+        await this.syncFullRecordToPeer(record).catch(() => undefined);
+      } catch {
+        /* 尽量落失败态；若写盘失败仍向上抛出 */
+      }
+      return {
+        recordId,
+        grantId,
+        status: 'failed',
+        reason: failMessage,
+      };
     }
   }
 

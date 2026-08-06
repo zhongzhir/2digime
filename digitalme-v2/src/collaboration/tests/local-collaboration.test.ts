@@ -109,3 +109,73 @@ test('Case1+2+3+4: propose fulfill isolate revoke via collab.interact', async ()
   assert.equal(restored.status, 'revoked');
   await runtimeA2.stop();
 });
+
+test('fulfillment interrupt without job ref recovers to failed; retry succeeds', async () => {
+  const root = await tempDir('recover');
+  const dirA = path.join(root, 'subject-a');
+  const dirB = path.join(root, 'subject-b');
+  const matX = await writeFile(path.join(root, 'materials', 'x.md'), '材料X：可共享要点。');
+
+  const runtimeA = createDigitalMeRuntime({ documentCapability: 'fake' });
+  const busA = createCommandBus(runtimeA);
+  await runtimeA.createPackage({
+    displayName: '主体甲',
+    targetDir: dirA,
+    initialSelfDescription: '主方。',
+  });
+  const runtimeB = createDigitalMeRuntime({ documentCapability: 'fake' });
+  await runtimeB.createPackage({
+    displayName: '主体乙',
+    targetDir: dirB,
+    initialSelfDescription: '协助方。',
+  });
+  await runtimeB.stop();
+
+  const issued = await busA.invoke('collab.interact', {
+    action: 'propose',
+    granteePackageDir: dirB,
+    intent: '根据材料写简短摘要。',
+    allowedMaterialPaths: [matX],
+    acceptanceCriteria: ['提供可核对的完整成果，并说明依据'],
+    deadline: new Date(Date.now() + 86400000).toISOString(),
+  });
+  assert.ok(issued.recordId);
+
+  // 模拟履行中断：已写入 fulfillment_started，但尚未建立 Job 引用
+  const { CollaborationRecordStore } = await import('../record-store');
+  const store = await CollaborationRecordStore.open(dirA);
+  const record = await store.get(issued.recordId!);
+  assert.ok(record);
+  record!.events.push({
+    eventId: `cev_interrupt_${Date.now()}`,
+    kind: 'fulfillment_started',
+    authorSubjectId: record!.responder.subjectId,
+    at: new Date().toISOString(),
+    ...(issued.grantId ? { grantId: issued.grantId } : {}),
+  });
+  record!.updatedAt = new Date().toISOString();
+  await store.put(record!);
+
+  const stuck = await busA.invoke('collab.interact', {
+    action: 'status',
+    recordId: issued.recordId,
+  });
+  assert.equal(stuck.status, 'failed', 'interrupt without job must not stay running');
+
+  const retried = await busA.invoke('collab.interact', {
+    action: 'fulfill',
+    recordId: issued.recordId,
+  });
+  assert.equal(retried.status, 'delivered');
+  assert.ok(retried.localArtifactId);
+
+  // 幂等：再次 fulfill 不重复开工
+  const again = await busA.invoke('collab.interact', {
+    action: 'fulfill',
+    recordId: issued.recordId,
+  });
+  assert.equal(again.status, 'delivered');
+  assert.equal(again.localArtifactId, retried.localArtifactId);
+
+  await runtimeA.stop();
+});

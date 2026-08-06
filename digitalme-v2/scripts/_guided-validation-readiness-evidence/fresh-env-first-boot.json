@@ -1,0 +1,23 @@
+{
+  "checkedAt": "2026-08-06T09:01:26.906Z",
+  "ownerDevCredentialFileExists": true,
+  "cases": {
+    "allowDevRuntimeFile_false": {
+      "ok": false,
+      "needsCredentialSetup": true,
+      "reason": "no_model_credential"
+    },
+    "allowDevRuntimeFile_true_dev_only": {
+      "ok": true,
+      "needsCredentialSetup": false,
+      "reason": null,
+      "note": "仅证明门控有效；产品默认不得开启"
+    },
+    "packaged_like": {
+      "ok": false,
+      "needsCredentialSetup": true,
+      "reason": "no_model_credential"
+    }
+  },
+  "pass": true
+}

@@ -13,6 +13,22 @@
     selfIntro: document.getElementById("self-intro"),
     createPkg: document.getElementById("btn-create-pkg"),
     createSkip: document.getElementById("btn-create-skip"),
+    welcomeStepIntro: document.getElementById("welcome-step-intro"),
+    welcomeStepModel: document.getElementById("welcome-step-model"),
+    welcomeStepStart: document.getElementById("welcome-step-start"),
+    btnWelcomeToModel: document.getElementById("btn-welcome-to-model"),
+    btnWelcomeSkipModel: document.getElementById("btn-welcome-skip-model"),
+    btnWelcomeSkipModel2: document.getElementById("btn-welcome-skip-model-2"),
+    welcomeSkipHint: document.getElementById("welcome-skip-hint"),
+    welcomeModelProvider: document.getElementById("welcome-model-provider"),
+    welcomeModelApiKey: document.getElementById("welcome-model-api-key"),
+    welcomeModelBaseUrl: document.getElementById("welcome-model-base-url"),
+    welcomeModelId: document.getElementById("welcome-model-id"),
+    welcomeModelState: document.getElementById("welcome-model-state"),
+    btnWelcomeSaveModel: document.getElementById("btn-welcome-save-model"),
+    welcomeModelStatus: document.getElementById("welcome-model-status"),
+    welcomeModelReadyNote: document.getElementById("welcome-model-ready-note"),
+    welcomeStartStatus: document.getElementById("welcome-start-status"),
     welcomeStatus: document.getElementById("welcome-status"),
     openSettings: document.getElementById("btn-open-settings"),
     openHelp: document.getElementById("btn-open-help"),
@@ -41,6 +57,7 @@
     btnRemoteCapSave: document.getElementById("btn-remote-cap-save"),
     btnRemoteCapDisable: document.getElementById("btn-remote-cap-disable"),
     remoteCapSettingsStatus: document.getElementById("remote-cap-settings-status"),
+    settingsRemoteCapStatus: document.getElementById("settings-remote-cap-status"),
     collabExtCapStatus: document.getElementById("collab-ext-cap-status"),
     collabExtCapConnectPanel: document.getElementById("collab-ext-cap-connect-panel"),
     collabExtCapAdvanced: document.getElementById("collab-ext-cap-advanced"),
@@ -93,6 +110,7 @@
     collabDetailReturnEmpty: document.getElementById("collab-detail-return-empty"),
     collabDetailActions: document.getElementById("collab-detail-actions"),
     btnCollabDetailExecute: document.getElementById("btn-collab-detail-execute"),
+    btnCollabDetailRetry: document.getElementById("btn-collab-detail-retry"),
     btnCollabDetailAccept: document.getElementById("btn-collab-detail-accept"),
     btnCollabDetailReject: document.getElementById("btn-collab-detail-reject"),
     btnCollabDetailRevoke: document.getElementById("btn-collab-detail-revoke"),
@@ -303,6 +321,11 @@
   /** 用户本会话是否改过高级连接字段（避免误覆盖已保存自定义值） */
   let advancedFieldsDirty = false;
   let settingsConnectionLabel = "尚未连接";
+  let welcomeModelSkipped = false;
+  let welcomeModelVerified = false;
+  /** @type {'intro'|'model'|'start'} */
+  let welcomeStep = "intro";
+  let collabWizardExternal = false;
 
   function showStatus(el, text, isError) {
     if (!el) return;
@@ -390,6 +413,137 @@
   function setRemoteCapStatusLabel(text) {
     if (els.collabExtCapStatus) els.collabExtCapStatus.textContent = text;
     if (els.remoteCapStatusLabel) els.remoteCapStatusLabel.textContent = text;
+    if (els.settingsRemoteCapStatus) els.settingsRemoteCapStatus.textContent = text;
+  }
+
+  function remoteCapStatusLine(remote) {
+    const label = (remote && remote.statusLabel) || "未配置";
+    return `状态：${label}`;
+  }
+
+  function refreshRemoteCapabilityUi(remote) {
+    const st = remote || lastBootRemoteCapability();
+    setRemoteCapStatusLabel(remoteCapStatusLine(st || {}));
+  }
+
+  function externalCapUnavailableMessage(card) {
+    if (card && card.availabilityLabel) return card.availabilityLabel;
+    const remote = lastBootRemoteCapability();
+    if (remote && remote.statusLabel === "可用") return "当前可用";
+    return "专业能力当前不可用，请到设置中配置并验证。";
+  }
+
+  function renderExternalCapCheckStatus(selfCheck) {
+    if (!els.externalCapCheckStatus) return;
+    if (!selfCheck || typeof selfCheck.passed !== "boolean") {
+      els.externalCapCheckStatus.hidden = true;
+      els.externalCapCheckStatus.textContent = "";
+      return;
+    }
+    els.externalCapCheckStatus.hidden = false;
+    if (selfCheck.passed === true) {
+      els.externalCapCheckStatus.textContent = "检查状态：已通过";
+      return;
+    }
+    const notes = Array.isArray(selfCheck.notes) ? selfCheck.notes.filter(Boolean) : [];
+    els.externalCapCheckStatus.textContent = notes.length
+      ? `检查状态：未通过（${notes.join("；")}）`
+      : "检查状态：未通过";
+  }
+
+  function welcomeModelReady() {
+    return (
+      welcomeModelVerified ||
+      !!(shellBootInfo && shellBootInfo.modelReady) ||
+      !!(lastConnectionState && lastConnectionState.available)
+    );
+  }
+
+  function showWelcomeStep(step) {
+    welcomeStep = step;
+    if (els.welcomeStepIntro) els.welcomeStepIntro.hidden = step !== "intro";
+    if (els.welcomeStepModel) els.welcomeStepModel.hidden = step !== "model";
+    if (els.welcomeStepStart) els.welcomeStepStart.hidden = step !== "start";
+  }
+
+  function showWelcomeStatus(text, isError, onStartStep) {
+    const startEl = els.welcomeStartStatus || els.welcomeStatus;
+    const introEl = els.welcomeStatus || els.welcomeStartStatus;
+    if (onStartStep) {
+      showStatus(startEl, text, isError);
+      if (introEl && introEl !== startEl) showStatus(introEl, "");
+    } else {
+      showStatus(introEl, text, isError);
+      if (startEl && startEl !== introEl) showStatus(startEl, "");
+    }
+  }
+
+  function setWelcomeModelStateLabel(label, tone) {
+    if (!els.welcomeModelState) return;
+    els.welcomeModelState.textContent = `连接状态：${label || "尚未连接"}`;
+    els.welcomeModelState.classList.toggle("is-error", tone === "error");
+    els.welcomeModelState.classList.toggle("is-ok", tone === "ok");
+  }
+
+  function fillWelcomeModelForm() {
+    const status = shellStatus || {};
+    const preset =
+      status.providerPreset ||
+      (status.baseUrl && String(status.baseUrl).includes("deepseek")
+        ? "deepseek"
+        : status.baseUrl
+          ? "openai-compatible"
+          : "deepseek");
+    const provider = preset === "deepseek" ? "deepseek" : "openai-compatible";
+    if (els.welcomeModelProvider) els.welcomeModelProvider.value = provider;
+    const savedBase = status.baseUrl || "";
+    const savedModel = status.model || "";
+    if (els.welcomeModelBaseUrl) {
+      els.welcomeModelBaseUrl.value =
+        provider === "deepseek" ? savedBase || presets.deepseek.baseUrl : savedBase;
+    }
+    if (els.welcomeModelId) {
+      els.welcomeModelId.value =
+        provider === "deepseek" ? savedModel || presets.deepseek.model : savedModel;
+    }
+    if (els.welcomeModelApiKey) {
+      els.welcomeModelApiKey.value = "";
+      els.welcomeModelApiKey.type = "password";
+      els.welcomeModelApiKey.placeholder = isCredentialConfigured()
+        ? "若要更换密钥，请输入新密钥"
+        : "粘贴你的密钥";
+    }
+    const available = !!(lastConnectionState && lastConnectionState.available);
+    if (available) setWelcomeModelStateLabel("已连接", "ok");
+    else if (isCredentialConfigured()) setWelcomeModelStateLabel("尚未确认（可测试连接）", null);
+    else setWelcomeModelStateLabel("尚未连接", null);
+    showStatus(els.welcomeModelStatus, "");
+  }
+
+  function initWelcomeFlow() {
+    welcomeModelSkipped = false;
+    if (els.welcomeSkipHint) els.welcomeSkipHint.hidden = true;
+    showWelcomeStatus("", false, false);
+    showWelcomeStatus("", false, true);
+    if (welcomeModelReady()) {
+      welcomeModelVerified = true;
+      showWelcomeStep("start");
+      if (els.welcomeModelReadyNote) {
+        els.welcomeModelReadyNote.hidden = false;
+        els.welcomeModelReadyNote.textContent = "模型已连接，可以直接开始使用。";
+      }
+    } else {
+      welcomeModelVerified = false;
+      if (els.welcomeModelReadyNote) els.welcomeModelReadyNote.hidden = true;
+      showWelcomeStep("intro");
+    }
+  }
+
+  function proceedWelcomeAfterModelSkip() {
+    welcomeModelSkipped = true;
+    if (els.welcomeSkipHint) els.welcomeSkipHint.hidden = false;
+    showWelcomeStep("start");
+    showWelcomeStatus("", false, true);
   }
 
   function openHelp() {
@@ -512,6 +666,9 @@
       presets.deepseek.baseUrl =
         shellStatus.presets.deepseek.baseUrl || presets.deepseek.baseUrl;
       presets.deepseek.model = shellStatus.presets.deepseek.model || presets.deepseek.model;
+    }
+    if (info && info.remoteCapability) {
+      refreshRemoteCapabilityUi(info.remoteCapability);
     }
   }
 
@@ -650,10 +807,10 @@
         const next = st.baseUrl || st.resolvedBaseUrl || "";
         if (next) els.remoteCapBaseUrl.value = next;
       }
-      setRemoteCapStatusLabel(`状态：${st.statusLabel || "未连接"}`);
+      refreshRemoteCapabilityUi(st);
       showStatus(els.remoteCapSettingsStatus, "");
     } catch {
-      setRemoteCapStatusLabel("状态：未连接");
+      refreshRemoteCapabilityUi({ statusLabel: "未配置" });
     }
   }
 
@@ -774,10 +931,16 @@
   }
 
   function syncCollabPageMode() {
-    const mode =
-      els.collabPageTargetMode && String(els.collabPageTargetMode.value || "local-peer") === "external-research"
-        ? "external-research"
-        : "local-peer";
+    let mode = "local-peer";
+    if (collabWizardExternal) {
+      mode = "external-research";
+    } else if (els.collabPageTargetMode) {
+      const val = String(els.collabPageTargetMode.value || "local-peer");
+      const hasExternalOption = !!els.collabPageTargetMode.querySelector(
+        'option[value="external-research"]',
+      );
+      mode = val === "external-research" && hasExternalOption ? "external-research" : "local-peer";
+    }
     if (els.collabPagePeerFlow) els.collabPagePeerFlow.hidden = mode !== "local-peer";
     if (els.externalCapPanel) els.externalCapPanel.hidden = mode !== "external-research";
     return mode;
@@ -785,9 +948,18 @@
 
   function applyCollabDraftToWizard() {
     const draft = collabDraftFromWork;
-    const mode = draft && draft.mode === "external-research" ? "external-research" : "local-peer";
-    if (els.collabPageTargetMode) els.collabPageTargetMode.value = mode;
-    syncCollabPageMode();
+    collabWizardExternal = !!(draft && draft.mode === "external-research");
+    const hasExternalOption =
+      els.collabPageTargetMode &&
+      !!els.collabPageTargetMode.querySelector('option[value="external-research"]');
+    if (els.collabPageTargetMode) {
+      if (collabWizardExternal && hasExternalOption) {
+        els.collabPageTargetMode.value = "external-research";
+      } else {
+        els.collabPageTargetMode.value = "local-peer";
+      }
+    }
+    const mode = syncCollabPageMode();
     if (els.collabPageContextNote) {
       if (draft && draft.issuerTaskId) {
         els.collabPageContextNote.hidden = false;
@@ -1805,7 +1977,23 @@
       await api.invoke("subject.createPackage", input);
     }
     showStatus(els.welcomeStatus, "");
+    showStatus(els.welcomeStartStatus, "");
     await enterShell();
+  }
+
+  async function tryStartFromWelcome(opts) {
+    const skipIntro = !!(opts && opts.skipIntro);
+    if (!welcomeModelReady() && !welcomeModelSkipped) {
+      showWelcomeStep("model");
+      fillWelcomeModelForm();
+      showWelcomeStatus("请先连接模型，或选择跳过（跳过后对话和做事仍需要模型）。", true, false);
+      return;
+    }
+    try {
+      await createOrOpenDefaultPackage({ skipIntro });
+    } catch (err) {
+      showWelcomeStatus(err.message || String(err), true, true);
+    }
   }
 
   async function tryAutoOpenDefault() {
@@ -1821,21 +2009,93 @@
     }
   }
 
-  els.createPkg.addEventListener("click", async () => {
-    try {
-      await createOrOpenDefaultPackage({ skipIntro: false });
-    } catch (err) {
-      showStatus(els.welcomeStatus, err.message || String(err), true);
-    }
-  });
+  if (els.btnWelcomeToModel) {
+    els.btnWelcomeToModel.addEventListener("click", () => {
+      showWelcomeStep("model");
+      fillWelcomeModelForm();
+      showWelcomeStatus("", false, false);
+    });
+  }
+  if (els.btnWelcomeSkipModel) {
+    els.btnWelcomeSkipModel.addEventListener("click", () => {
+      proceedWelcomeAfterModelSkip();
+    });
+  }
+  if (els.btnWelcomeSkipModel2) {
+    els.btnWelcomeSkipModel2.addEventListener("click", () => {
+      proceedWelcomeAfterModelSkip();
+    });
+  }
+  if (els.btnWelcomeSaveModel) {
+    els.btnWelcomeSaveModel.addEventListener("click", async () => {
+      try {
+        const apiKey = els.welcomeModelApiKey ? (els.welcomeModelApiKey.value || "").trim() : "";
+        const baseUrl = els.welcomeModelBaseUrl ? (els.welcomeModelBaseUrl.value || "").trim() : "";
+        const model = els.welcomeModelId ? (els.welcomeModelId.value || "").trim() : "";
+        const provider = els.welcomeModelProvider ? els.welcomeModelProvider.value : "deepseek";
+        const configured = isCredentialConfigured();
+        if (!apiKey && !configured) {
+          showStatus(els.welcomeModelStatus, "请输入 API Key 后再保存", true);
+          setWelcomeModelStateLabel("尚未连接", "error");
+          return;
+        }
+        if (!baseUrl || !model) {
+          showStatus(els.welcomeModelStatus, "请在高级连接中填写服务地址与模型名称", true);
+          setWelcomeModelStateLabel("尚未连接", "error");
+          return;
+        }
+        els.btnWelcomeSaveModel.disabled = true;
+        setWelcomeModelStateLabel("正在检查", null);
+        showStatus(els.welcomeModelStatus, "正在保存并验证…");
+        const result = await api.saveModelCredential({
+          apiKey,
+          baseUrl,
+          model,
+          providerPreset: provider,
+          allowExistingKey: !apiKey && configured,
+        });
+        rememberShellMeta(result || {});
+        if (els.welcomeModelApiKey) {
+          els.welcomeModelApiKey.value = "";
+          els.welcomeModelApiKey.type = "password";
+        }
+        await refreshConnectionFromCapabilities();
+        if (lastConnectionState && lastConnectionState.available) {
+          welcomeModelVerified = true;
+          welcomeModelSkipped = false;
+          setWelcomeModelStateLabel("已连接", "ok");
+          showStatus(els.welcomeModelStatus, "已保存并连接。");
+          showWelcomeStep("start");
+          if (els.welcomeModelReadyNote) {
+            els.welcomeModelReadyNote.hidden = false;
+            els.welcomeModelReadyNote.textContent = "模型已连接，可以直接开始使用。";
+          }
+          if (els.welcomeSkipHint) els.welcomeSkipHint.hidden = true;
+        } else {
+          setWelcomeModelStateLabel("尚未确认（可测试连接）", null);
+          showStatus(els.welcomeModelStatus, "已保存密钥，但尚未确认连接。请检查高级连接设置。");
+        }
+      } catch (err) {
+        const facing = userFacingModelError(err, "保存失败，请检查密钥或高级连接设置");
+        showStatus(els.welcomeModelStatus, facing, true);
+        setWelcomeModelStateLabel("无法连接，请检查密钥或高级连接设置", "error");
+      } finally {
+        if (els.btnWelcomeSaveModel) els.btnWelcomeSaveModel.disabled = false;
+      }
+    });
+  }
 
-  els.createSkip.addEventListener("click", async () => {
-    try {
-      await createOrOpenDefaultPackage({ skipIntro: true });
-    } catch (err) {
-      showStatus(els.welcomeStatus, err.message || String(err), true);
-    }
-  });
+  if (els.createPkg) {
+    els.createPkg.addEventListener("click", () => {
+      void tryStartFromWelcome({ skipIntro: false });
+    });
+  }
+
+  if (els.createSkip) {
+    els.createSkip.addEventListener("click", () => {
+      void tryStartFromWelcome({ skipIntro: true });
+    });
+  }
 
   if (els.navChat) els.navChat.addEventListener("click", () => setNav("chat"));
   els.navSubject.addEventListener("click", () => setNav("subject"));
@@ -2215,10 +2475,12 @@
       try {
         const result = await api.testRemoteCapability({ baseUrl });
         if (result && result.ok) {
-          setRemoteCapStatusLabel("状态：已连接");
+          const label =
+            (result.remoteCapability && result.remoteCapability.statusLabel) || "可用";
+          setRemoteCapStatusLabel(`状态：${label}`);
           showStatus(els.remoteCapSettingsStatus, result.message || "连接正常");
         } else {
-          setRemoteCapStatusLabel("状态：无法连接");
+          setRemoteCapStatusLabel("状态：暂时无法连接");
           showStatus(
             els.remoteCapSettingsStatus,
             (result && result.message) || REMOTE_CONNECT_FAIL,
@@ -2226,7 +2488,7 @@
           );
         }
       } catch (err) {
-        setRemoteCapStatusLabel("状态：无法连接");
+        setRemoteCapStatusLabel("状态：暂时无法连接");
         showStatus(els.remoteCapSettingsStatus, userFacingRemoteError(err, REMOTE_CONNECT_FAIL), true);
       }
     });
@@ -2245,7 +2507,7 @@
       try {
         const result = await api.saveRemoteCapability({ baseUrl });
         if (!result || result.ok === false) {
-          setRemoteCapStatusLabel("状态：无法连接");
+          setRemoteCapStatusLabel("状态：暂时无法连接");
           showStatus(
             els.remoteCapSettingsStatus,
             (result && result.message) || REMOTE_CONNECT_FAIL,
@@ -2256,15 +2518,15 @@
         rememberShellMeta(result || {});
         setRemoteCapStatusLabel(
           `状态：${
-            (result.remoteCapability && result.remoteCapability.statusLabel) || "已连接"
+            (result.remoteCapability && result.remoteCapability.statusLabel) || "可用"
           }`,
         );
-        showStatus(els.remoteCapSettingsStatus, result.message || "已连接研究分析能力。");
+        showStatus(els.remoteCapSettingsStatus, result.message || "研究分析能力已可用。");
         if (els.collabExtCapConnectPanel) els.collabExtCapConnectPanel.hidden = true;
         await refreshConnectionFromCapabilities();
         await refreshExternalCapabilityCard();
       } catch (err) {
-        setRemoteCapStatusLabel("状态：无法连接");
+        setRemoteCapStatusLabel("状态：暂时无法连接");
         showStatus(els.remoteCapSettingsStatus, userFacingRemoteError(err, REMOTE_CONNECT_FAIL), true);
       } finally {
         els.btnRemoteCapSave.disabled = false;
@@ -2278,7 +2540,7 @@
       try {
         const result = await api.disableRemoteCapability();
         rememberShellMeta(result || {});
-        setRemoteCapStatusLabel("状态：未连接");
+        refreshRemoteCapabilityUi(result && result.remoteCapability);
         showStatus(els.remoteCapSettingsStatus, result.message || "已停用外部专业能力。");
         await refreshConnectionFromCapabilities();
         await refreshExternalCapabilityCard();
@@ -2746,6 +3008,7 @@
 
   function collabBucket(item) {
     if (item.status === "revoked" || item.status === "withdrawn") return "revoked";
+    if (item.status === "failed") return "active";
     if (
       item.ownerDecision === "accept" ||
       item.ownerDecision === "reject" ||
@@ -2979,11 +3242,20 @@
       if (els.collabDetailReturnEmpty) els.collabDetailReturnEmpty.hidden = !!text;
       const revoked = item.status === "revoked" || item.status === "withdrawn";
       const hasReturn = !!text || item.status === "delivered";
+      const isFailed = item.status === "failed";
       const canFulfill =
         !revoked &&
         !hasReturn &&
+        !isFailed &&
         (item.status === "authorized" || item.status === "agreed");
-      if (els.btnCollabDetailExecute) els.btnCollabDetailExecute.disabled = !canFulfill;
+      const canRetry = !revoked && isFailed;
+      if (els.btnCollabDetailExecute) {
+        els.btnCollabDetailExecute.hidden = canRetry;
+        els.btnCollabDetailExecute.disabled = !canFulfill;
+      }
+      if (els.btnCollabDetailRetry) {
+        els.btnCollabDetailRetry.hidden = !canRetry;
+      }
       if (els.btnCollabDetailAccept) els.btnCollabDetailAccept.disabled = revoked || !hasReturn;
       if (els.btnCollabDetailReject) els.btnCollabDetailReject.disabled = revoked || !hasReturn;
       if (els.btnCollabDetailRevoke) els.btnCollabDetailRevoke.disabled = revoked;
@@ -3218,6 +3490,7 @@
 
   if (els.collabPageTargetMode) {
     els.collabPageTargetMode.addEventListener("change", () => {
+      collabWizardExternal = false;
       const mode = syncCollabPageMode();
       if (collabDraftFromWork) collabDraftFromWork.mode = mode;
       showStatus(els.collabPageNewError, "");
@@ -3243,6 +3516,7 @@
     if (els.externalCapResult) els.externalCapResult.hidden = true;
     if (els.externalCapBody) els.externalCapBody.textContent = "";
     if (els.externalCapFailureActions) els.externalCapFailureActions.hidden = true;
+    renderExternalCapCheckStatus(null);
   }
 
   function stopExternalCapWatch() {
@@ -3291,24 +3565,24 @@
       else if (!research) {
         applyExternalCard({
           displayName: "研究分析能力",
-          shortDescription: "已连接的专业能力，可根据授权材料形成结构化项目风险摘要。",
+          shortDescription: "可根据授权材料形成结构化项目风险摘要。",
           suitableFor: "适合完成：基于明确授权材料的结构化项目风险摘要（约 500–800 字）。",
           shareSummary: "将共享：仅你勾选的材料与任务要求文字。",
           estimatedDuration: "预计可能耗时：数秒到两分钟。",
           available: false,
-          availabilityLabel: "尚未连接可用的外部专业能力",
+          availabilityLabel: externalCapUnavailableMessage(),
         });
       }
       return res;
     } catch {
       applyExternalCard({
         displayName: "研究分析能力",
-        shortDescription: "已连接的专业能力，可根据授权材料形成结构化项目风险摘要。",
+        shortDescription: "可根据授权材料形成结构化项目风险摘要。",
         suitableFor: "适合完成：基于明确授权材料的结构化项目风险摘要（约 500–800 字）。",
         shareSummary: "将共享：仅你勾选的材料与任务要求文字。",
         estimatedDuration: "预计可能耗时：数秒到两分钟。",
         available: false,
-        availabilityLabel: "尚未连接可用的外部专业能力",
+        availabilityLabel: externalCapUnavailableMessage(),
       });
       return null;
     }
@@ -3357,22 +3631,20 @@
     if (els.btnExternalBackTask) els.btnExternalBackTask.hidden = false;
   }
 
-  async function showExternalCandidate(artifactId, returnedAt) {
+  async function showExternalCandidate(artifactId, returnedAt, selfCheck) {
     if (!artifactId) return;
     externalCapArtifactId = artifactId;
     const content = await api.invoke("artifact.getContent", { artifactId });
     const text = content && content.text ? String(content.text) : "";
     if (els.externalCapSource) {
-      els.externalCapSource.textContent = "来源：已连接的研究分析能力";
+      els.externalCapSource.textContent = "来源：研究分析能力";
     }
     if (els.externalCapReturnedAt) {
       els.externalCapReturnedAt.textContent = returnedAt
         ? `返回时间：${returnedAt}`
         : "返回时间：刚刚";
     }
-    if (els.externalCapCheckStatus) {
-      els.externalCapCheckStatus.textContent = "检查状态：已通过";
-    }
+    renderExternalCapCheckStatus(selfCheck);
     if (els.externalCapBody) els.externalCapBody.textContent = text;
     if (els.externalCapResult) els.externalCapResult.hidden = false;
   }
@@ -3488,23 +3760,19 @@
               String(c.displayName || "").includes("研究分析")),
         );
         if (!research) {
-          showStatus(els.externalCapError, "尚未连接可用的外部专业能力。", true);
+          showStatus(els.externalCapError, externalCapUnavailableMessage(), true);
           showExternalFailureActions("goto_collab");
           return;
         }
         if (listed && listed.externalCapabilityCard && !listed.externalCapabilityCard.available) {
-          const label = listed.externalCapabilityCard.availabilityLabel || "";
-          if (/尚未连接/.test(label)) {
-            showStatus(els.externalCapError, "尚未连接可用的外部专业能力。", true);
+          const card = listed.externalCapabilityCard;
+          const label = card.availabilityLabel || "";
+          showStatus(els.externalCapError, externalCapUnavailableMessage(card), true);
+          if (/设置|配置|未配置|尚未验证|不可用|尚未连接/.test(label)) {
             showExternalFailureActions("goto_collab");
-            return;
+          } else {
+            showExternalFailureActions("retry_or_local");
           }
-          showStatus(
-            els.externalCapError,
-            "研究分析能力目前无法使用，请稍后重试或改用本地能力。",
-            true,
-          );
-          showExternalFailureActions("retry_or_local");
           return;
         }
         const fullGoal = extra ? `${goal}\n补充说明：${extra}` : goal;
@@ -3530,7 +3798,7 @@
       } catch (err) {
         const msg = err && err.message ? String(err.message) : "";
         if (/credential|secret|尚未连接|api[_-]?key/i.test(msg)) {
-          showStatus(els.externalCapError, "尚未连接可用的外部专业能力。", true);
+          showStatus(els.externalCapError, externalCapUnavailableMessage(), true);
           showExternalFailureActions("goto_collab");
         } else if (/material|授权|projection/i.test(msg)) {
           showStatus(els.externalCapError, "所选材料无法按当前授权发送，请重新选择。", true);
@@ -3616,7 +3884,7 @@
       await api.invoke("subject.captureInput", {
         text:
           decision === "accept"
-            ? "采用已连接的研究分析能力返回的成果"
+            ? "采用研究分析能力返回的成果"
             : "不采用外部专业能力返回的成果",
         sourceKind: decision === "accept" ? "artifact_acceptance" : "artifact_rejection",
         taskId: externalCapTaskId,
@@ -3778,7 +4046,7 @@
                 String(c.displayName || "").includes("研究分析")),
           );
           if (!research) {
-            showStatus(els.collabError, "尚未连接可用的外部专业能力。", true);
+            showStatus(els.collabError, externalCapUnavailableMessage(), true);
             return;
           }
           const goal = extra ? `${subtask}\n补充说明：${extra}` : subtask;
@@ -3801,7 +4069,7 @@
         } catch (err) {
           const msg = err && err.message ? String(err.message) : "";
           if (/credential|尚未连接|secret/i.test(msg)) {
-            showStatus(els.collabError, "尚未连接可用的外部专业能力。", true);
+            showStatus(els.collabError, externalCapUnavailableMessage(), true);
           } else {
             showStatus(
               els.collabError,
@@ -3874,6 +4142,7 @@
   if (els.btnCollabPageNew) {
     els.btnCollabPageNew.addEventListener("click", () => {
       collabDraftFromWork = null;
+      collabWizardExternal = false;
       showCollabPage("new");
       clearPeerCard(pagePeerCardEls());
       if (els.collabPagePeerEmpty) els.collabPagePeerEmpty.hidden = true;
@@ -3885,6 +4154,7 @@
   if (els.btnCollabPageCancel) {
     els.btnCollabPageCancel.addEventListener("click", async () => {
       collabDraftFromWork = null;
+      collabWizardExternal = false;
       showCollabPage("home");
       await refreshCollabHome();
     });
@@ -3996,6 +4266,16 @@
       if (activeGrantId) await openCollabDetail(activeGrantId);
     });
   }
+  if (els.btnCollabDetailRetry) {
+    els.btnCollabDetailRetry.addEventListener("click", async () => {
+      await executeActiveGrant(
+        els.collabDetailStatus,
+        els.collabDetailReturn,
+        els.collabDetailError,
+      );
+      if (activeGrantId) await openCollabDetail(activeGrantId);
+    });
+  }
   if (els.btnCollabDetailAccept) {
     els.btnCollabDetailAccept.addEventListener("click", async () => {
       await decideCollabReturn("accept", els.collabDetailStatus, els.collabDetailError);
@@ -4053,6 +4333,9 @@
     }
     await refreshConnectionFromCapabilities();
     const opened = await tryAutoOpenDefault();
-    if (!opened) setView("welcome");
+    if (!opened) {
+      setView("welcome");
+      initWelcomeFlow();
+    }
   })();
 })();

@@ -1,0 +1,29 @@
+{
+  "buildId": "v2-20260806T085853Z-f6bb56dd",
+  "gitHead": "f6bb56dd0f24a529cf4e6a43c366997287ca1d38",
+  "staging": "release-staging/v2-20260806T085853Z-f6bb56dd",
+  "deliveryFormat": "zip",
+  "zip": {
+    "path": "release-staging\\v2-20260806T085853Z-f6bb56dd\\DigitalMeV2-0.1.0-win-x64.zip",
+    "sha256": "09be8aac6b5b0e312831e7c5adea785e6fb7ab208f3d89ea06702f402a90c55c",
+    "bytes": 114517051
+  },
+  "exe": {
+    "path": "release-staging\\v2-20260806T085853Z-f6bb56dd\\win-unpacked\\DigitalMeV2.exe",
+    "sha256": "1d9837b0efe0e0eee437909682c818a82920c442f00883ee27fc7073d76fe028",
+    "bytes": 186328576
+  },
+  "asar": {
+    "path": "release-staging\\v2-20260806T085853Z-f6bb56dd\\win-unpacked\\resources\\app.asar",
+    "sha256": "ac7df5000a5a08cfbc4ca66bacb30a4e9f296a5b5f42d6d5104ef4294bbc9ac7",
+    "bytes": 21214022
+  },
+  "sensitiveFindings": [],
+  "entryCompare": {
+    "packaged": "electron/main.cjs",
+    "dev": "electron/main.cjs",
+    "domain": "dist/runtime/digitalme-runtime.js",
+    "jobRunner": "dist/work-runtime/job-runner.js",
+    "adapter": "dist/capability/adapters/openai-compatible.js"
+  }
+}

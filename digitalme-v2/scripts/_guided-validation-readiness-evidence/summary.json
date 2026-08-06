@@ -1,0 +1,94 @@
+{
+  "task": "DIGITALME-V2-GUIDED-VALIDATION-READINESS-01",
+  "goalState": "ready_for_2_to_5_user_guided_validation",
+  "ok": true,
+  "checkedAt": "2026-08-06T09:16:16.994Z",
+  "claims": {
+    "mvp_ready": false,
+    "closed_alpha_ready": false,
+    "production_ready": false
+  },
+  "checks": [
+    {
+      "name": "collab_experimental_label",
+      "ok": true,
+      "detail": "nav marks 实验 without breaking button text"
+    },
+    {
+      "name": "collab_same_device_only_copy",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "external_cap_not_on_collab_home",
+      "ok": true,
+      "detail": "external cap manage card removed from collab home"
+    },
+    {
+      "name": "external_cap_in_settings",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "no_hardcoded_check_passed_default",
+      "ok": true,
+      "detail": "HTML default must not claim 已通过"
+    },
+    {
+      "name": "check_status_gated_in_js",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "remote_status_labels_honest",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "welcome_model_gate_steps",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "welcome_flow_in_app",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "no_auto_dev_credential_by_default",
+      "ok": true,
+      "detail": "dev credential import only when env allow flag set"
+    },
+    {
+      "name": "fulfillment_job_ref_persisted",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "recover_in_flight_on_reconcile",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "derive_failed_not_stuck_running",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "guided_script_exists",
+      "ok": true,
+      "detail": "D:\\Projects\\Digital Me\\digitalme-v2\\docs\\guided-validation\\DIGITALME-V2-GUIDED-VALIDATION-SCRIPT-01.md"
+    },
+    {
+      "name": "typescript_build",
+      "ok": true,
+      "detail": "npm warn Unknown env config \"devdir\". This will stop working in the next major version of npm.\n"
+    },
+    {
+      "name": "collab_unit_including_recovery",
+      "ok": true,
+      "detail": "✔ Case1+2+3+4: propose fulfill isolate revoke via collab.interact (10947.9893ms)\n✔ fulfillment interrupt without job ref recovers to failed; retry succeeds (3041.1629ms)\n✔ termsDigest stable for same terms regardless of material order (14.2053ms)\n✔ agreement requires same termsDigest from both sides (0.736ms)\n✔ deriveCollabStatus: delivered-without-delivery fail note is failed not running (0.3748ms)\n✔ deriveCollabStatus: new fulfillment after failure returns running (0.4017ms)\nℹ tests 6\nℹ suites 0\nℹ pass 6\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 14723.7215\n"
+    }
+  ],
+  "failed": []
+}

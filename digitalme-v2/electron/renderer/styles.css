@@ -734,6 +734,22 @@ select {
   border-radius: 999px;
 }
 
+#nav-collab::after {
+  content: "实验";
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #6b7280;
+  vertical-align: middle;
+}
+
+.settings-divider {
+  border: none;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  margin: 28px 0 20px;
+}
+
 .nav-item.active {
   color: var(--accent);
   border-color: rgba(15, 106, 90, 0.35);
