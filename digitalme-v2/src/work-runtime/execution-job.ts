@@ -47,6 +47,8 @@ export interface ExecutionJob {
   targetArtifactId?: string;
   /** 用户本次修改要求(与 targetArtifactId 成对出现)。 */
   revisionRequest?: string;
+  /** 用户不采用理由（可选；进入修订 prompt）。 */
+  rejectionReason?: string;
   costActual?: { tokens?: number; durationMs?: number };
   /**
    * 远端执行映射(可选) — 不是第二状态机。

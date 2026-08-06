@@ -198,9 +198,11 @@ export class WorkRuntime {
     taskId: string;
     artifactId: string;
     revisionRequest: string;
+    rejectionReason?: string;
   }): Promise<{ jobId: string }> {
     const request = String(input.revisionRequest || '').trim();
     if (!request) throw new Error('请填写修改要求');
+    const rejectionReason = String(input.rejectionReason || '').trim();
 
     return this.withTaskLock(input.taskId, async () => {
       const task = await this.opts.taskService.get(input.taskId);
@@ -227,6 +229,7 @@ export class WorkRuntime {
       const job = await this.createQueuedJob(task.id, capabilityId, {
         targetArtifactId: artifact.id,
         revisionRequest: request,
+        ...(rejectionReason ? { rejectionReason } : {}),
       });
       this.enqueue(job.id);
       return { jobId: job.id };
@@ -461,7 +464,11 @@ export class WorkRuntime {
   private async createQueuedJob(
     taskId: string,
     capabilityId: string,
-    meta?: { targetArtifactId?: string; revisionRequest?: string },
+    meta?: {
+      targetArtifactId?: string;
+      revisionRequest?: string;
+      rejectionReason?: string;
+    },
   ): Promise<ExecutionJob> {
     const active = await this.opts.jobStore.findActiveForTask(taskId);
     if (active) {
@@ -475,6 +482,7 @@ export class WorkRuntime {
       status: 'queued',
       ...(meta?.targetArtifactId ? { targetArtifactId: meta.targetArtifactId } : {}),
       ...(meta?.revisionRequest ? { revisionRequest: meta.revisionRequest } : {}),
+      ...(meta?.rejectionReason ? { rejectionReason: meta.rejectionReason } : {}),
     };
     await this.opts.jobStore.put(job);
     this.publishJob(job);
@@ -639,6 +647,7 @@ export class WorkRuntime {
         capabilityId: job.capabilityId,
         createdAt: job.createdAt,
         revisionRequest: job.revisionRequest,
+        rejectionReason: job.rejectionReason,
         targetArtifactId: job.targetArtifactId,
       };
 
@@ -646,6 +655,7 @@ export class WorkRuntime {
         request: string;
         previousText: string;
         artifactId: string;
+        rejectionReason?: string;
       } | undefined;
       if (jobMeta.targetArtifactId && jobMeta.revisionRequest) {
         const target = await this.opts.artifactCommitter.get(jobMeta.targetArtifactId);
@@ -667,6 +677,7 @@ export class WorkRuntime {
           request: jobMeta.revisionRequest,
           previousText,
           artifactId: target.id,
+          ...(jobMeta.rejectionReason ? { rejectionReason: jobMeta.rejectionReason } : {}),
         };
         job = await this.withProgress(job, 'capability', '正在修改');
         await this.persistJob(job);
@@ -980,8 +991,8 @@ export class WorkRuntime {
         return;
       }
 
-      // AI-first Outcome Check：主生成后最多一次针对性修订（用户主动修改不重复）
-      if (!revisionInput && !isRemote && output) {
+      // AI-first Outcome Check：主题/字数/修订落实；主生成与用户修订各最多一次针对性补修
+      if (!isRemote && output) {
         const text = capabilityOutputText(output);
         if (text !== null) {
           const profile = chooseExecutionProfile({
@@ -991,12 +1002,22 @@ export class WorkRuntime {
           const hardBoundaryTexts = subjectContext.entries
             .filter((e) => (e.kind || '') === 'boundary')
             .map((e) => `${e.title}\n${e.detail}\n${e.tags.join(' ')}`);
-          const outcome = checkOutcome({
-            goal: task.goal,
-            text,
-            hardBoundaryTexts,
-            profile,
-          });
+
+          const runCheck = (currentText: string) =>
+            checkOutcome({
+              goal: task.goal,
+              text: currentText,
+              hardBoundaryTexts,
+              profile,
+              ...(revisionInput
+                ? {
+                    previousText: revisionInput.previousText,
+                    revisionRequest: revisionInput.request,
+                  }
+                : {}),
+            });
+
+          let outcome = runCheck(text);
           if (outcome.verdict === 'targeted_revision_required') {
             job = await this.withProgress(job, 'capability', '正在修改');
             await this.persistJob(job);
@@ -1018,7 +1039,10 @@ export class WorkRuntime {
                 revision: {
                   request: buildTargetedRevisionRequest(outcome.defects),
                   previousText: text,
-                  artifactId: 'pending',
+                  artifactId: revisionInput?.artifactId || 'pending',
+                  ...(revisionInput?.rejectionReason
+                    ? { rejectionReason: revisionInput.rejectionReason }
+                    : {}),
                 },
               };
               const auth = buildJobAuthorizationProjection({
@@ -1045,16 +1069,35 @@ export class WorkRuntime {
                 subjectId: task.subjectId,
               });
               output = revised.output;
-              // 第二次仍不完美：保留当前结果继续交付，不无限循环
+              const revisedText = capabilityOutputText(output);
+              if (revisedText !== null) {
+                outcome = runCheck(revisedText);
+              }
             } catch {
-              // 修订失败不推翻首次成果
+              // 自动补修失败：保留当前结果，再按下方 verdict 决定是否可交付
             }
-          } else if (outcome.verdict === 'blocked' && !text.trim()) {
+          }
+
+          if (outcome.verdict === 'blocked' && !(capabilityOutputText(output) || '').trim()) {
             await this.failJob(
               job,
               'capability',
               sanitizeMessage(outcome.defects[0] || '成果不完整'),
               '请补充任务说明后重试',
+            );
+            return;
+          }
+
+          // 主题偏离 / 修订无实质变化 / 「不少于」字数未达标：不得标成功
+          const hardDefect = outcome.defects.some((d) =>
+            /主题未紧扣|几乎相同|修改说明未落实|不少于约/.test(d),
+          );
+          if (outcome.verdict !== 'pass' && hardDefect) {
+            await this.failJob(
+              job,
+              'capability',
+              sanitizeMessage(outcome.defects[0] || '成果未满足任务要求'),
+              '请调整目标、材料或修改说明后重试',
             );
             return;
           }

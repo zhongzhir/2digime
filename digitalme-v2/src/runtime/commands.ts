@@ -183,7 +183,13 @@ export interface CommandMap {
    * 失败不破坏当前 head。
    */
   'work.reviseArtifact': {
-    input: { taskId: string; artifactId: string; revisionRequest: string };
+    input: {
+      taskId: string;
+      artifactId: string;
+      revisionRequest: string;
+      /** 不采用理由；进入修订模型输入，可与 revisionRequest 并存。 */
+      rejectionReason?: string;
+    };
     output: { jobId: string };
   };
   'work.cancelJob': {

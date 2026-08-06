@@ -44,6 +44,29 @@ test('checkOutcome: pass / targeted_revision / blocked', () => {
   assert.equal(revise.verdict, 'targeted_revision_required');
   assert.ok(revise.defects.length >= 1);
 
+  const theme = checkOutcome({
+    goal: '写一篇关于 Aivestor 项目的介绍文章，不少于1500字。',
+    text: '# WAIC 券商 Skill 介绍\n\n'.padEnd(1600, '无关内容'),
+  });
+  assert.equal(theme.verdict, 'targeted_revision_required');
+  assert.ok(theme.defects.some((d) => /主题|Aivestor/.test(d)));
+
+  const tooShort = checkOutcome({
+    goal: '写一篇关于 Aivestor 的介绍，不少于1500字。',
+    text: '# Aivestor\n\n很短。',
+  });
+  assert.equal(tooShort.verdict, 'targeted_revision_required');
+  assert.ok(tooShort.defects.some((d) => /字数|不少于/.test(d)));
+
+  const noChange = checkOutcome({
+    goal: '写一篇关于 Aivestor 的介绍',
+    text: '# Aivestor\n\n正文保持不变。'.padEnd(200, '同'),
+    previousText: '# Aivestor\n\n正文保持不变。'.padEnd(200, '同'),
+    revisionRequest: '请重写并综合产品定位',
+  });
+  assert.equal(noChange.verdict, 'targeted_revision_required');
+  assert.ok(noChange.defects.some((d) => /几乎相同/.test(d)));
+
   const blocked = checkOutcome({
     goal: '写文档',
     text: '',

@@ -151,14 +151,55 @@ test('修改要求进入 prompt,不发起第二次模型调用', async () => {
         request: '开篇改成获奖事实',
         previousText: '# 旧稿\n内容',
         artifactId: 'art_1',
+        rejectionReason: '主题错误，未围绕目标',
       },
     }),
     async () => '',
   );
+  assert.match(assembled.messages[0]?.content as string, /材料不得自动成为最终答案/);
+  assert.match(assembled.messages[1]?.content as string, /# 优先级/);
+  assert.match(assembled.messages[1]?.content as string, /# 不采用理由/);
+  assert.match(assembled.messages[1]?.content as string, /主题错误/);
   assert.match(assembled.messages[1]?.content as string, /# 修改要求/);
   assert.match(assembled.messages[1]?.content as string, /开篇改成获奖事实/);
-  assert.match(assembled.messages[1]?.content as string, /# 当前成果\(待改\)/);
+  assert.match(assembled.messages[1]?.content as string, /# 当前成果\(待改对象/);
   assert.match(assembled.messages[1]?.content as string, /旧稿/);
+});
+
+test('多材料按目标相关度排序，且不得整篇当答案', async () => {
+  const snapshot = {
+    id: 'snap_1',
+    taskId: 'task_1',
+    createdAt: 't',
+    items: [
+      {
+        sourcePath: 'C:/mats/waic-long.md',
+        status: 'ok' as const,
+        extractedTextRef: 'text/waic',
+      },
+      {
+        sourcePath: 'C:/mats/aivestor-notes.md',
+        status: 'ok' as const,
+        extractedTextRef: 'text/aiv',
+      },
+    ],
+  };
+  const assembled = await assembleDocumentPrompt(
+    baseInput({
+      goal: '写一篇关于 Aivestor 项目的介绍文章，不少于1500字。',
+      snapshot: snapshot as never,
+    }),
+    async (ref) =>
+      ref === 'text/aiv'
+        ? 'Aivestor 是面向投资者的智能助手，定位清晰。'
+        : `${'WAIC 券商 Skill 无关长文。'.repeat(200)}`,
+  );
+  const user = assembled.messages[1]?.content as string;
+  assert.match(user, /材料（事实与素材；不得整篇当作答案）/);
+  const aivPos = user.indexOf('aivestor-notes.md');
+  const waicPos = user.indexOf('waic-long.md');
+  assert.ok(aivPos >= 0 && waicPos >= 0);
+  assert.ok(aivPos < waicPos, 'Aivestor 相关材料应排在无关长文之前');
 });
 
 async function withMockServer(
@@ -248,7 +289,7 @@ test('401 / 429 / timeout / abort / 空内容 / 非法响应 分类', async () =
 
     const e = await run('/empty');
     assert.equal(e?.stage, 'model');
-    assert.match(e?.message ?? '', /empty/);
+    assert.match(e?.message ?? '', /empty|missing usable|reasoning discarded/i);
 
     const b = await run('/bad');
     assert.equal(b?.stage, 'model');

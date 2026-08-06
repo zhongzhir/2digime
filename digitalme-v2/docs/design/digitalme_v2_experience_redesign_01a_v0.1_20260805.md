@@ -1,14 +1,15 @@
-# Digital Me V2 — EXPERIENCE-REDESIGN-01A
+# Digital Me V2 — EXPERIENCE-REDESIGN-01A / 01B
 
-- **任务**：`DIGITALME-V2-EXPERIENCE-REDESIGN-01A`
-- **版本**：v0.1 · 2026-08-05
-- **状态**：`owner_frozen` / `implementation_authorized_for_01B`（B1→B6 逐片；不得并行大改）
+- **任务**：`DIGITALME-V2-EXPERIENCE-REDESIGN-01A`（冻结）→ `DIGITALME-V2-EXPERIENCE-REDESIGN-01B`（实施）
+- **版本**：v0.1 · 2026-08-05；**收口日**：2026-08-06
+- **01A 状态**：`owner_frozen` / `implemented_via_01B`
+- **01B 状态**：`implemented` / `owner_runtime_accepted` / `conversation_integrity_validated` / `material_grounding_validated` / `revision_integrity_validated` / `experience_redesign_closed` / `not_pushed`
 - **冻结日**：2026-08-05
-- **基线**：`v2/foundation` @ `bbf8218`（含 GROWTH-PERCEPTION-BRIDGE）
+- **实施基线**：`v2/foundation`（B1–B6 已合入；收口提交相对 `a7bbedc`）
 - **上位**：架构巩固文（IA 冻结）、主体架构原则、用户意图与确认负担规则、最弱环节审计结论
 - **FigJam**：[Digital Me Experience Redesign 01A](https://www.figma.com/board/MzhFrPO0Wctlk3qSCcEAEx)
 
-> Owner 已冻结四主栏与次级设置/帮助等决策。本文件为 01B 实施合同；当前切片为 **B1**。
+> Owner 已冻结四主栏与次级设置/帮助等决策；**01B 已完成真机验收并关闭**。不得夸大为 `closed_alpha` / `mvp_ready` / `production_ready`。
 
 ---
 
@@ -240,20 +241,29 @@ flowchart LR
 
 **不做进 01B**：能力商店、广播、紫深色主题、React 迁移、P2C1、第二主体 Store。
 
+### 7.1 01B 收口记录（2026-08-06）
+
+| 项 | 结论 |
+|----|------|
+| B1–B6 | 已实现并自动化验收通过 |
+| Owner 真机 | 四栏互斥、真实对话、分析过程隔离、截断与重试、PDF grounding、多材料综合、不采用反馈、版本 2 实质修订 — **已接受** |
+| 后续修复块 | OWNER-ACCEPTANCE-BLOCKERS / CONVERSATION-OUTPUT-INTEGRITY / TASK-INSTRUCTION-AND-REVISION-INTEGRITY — 已合入并随收口提交 |
+| 边界 | 无第二 Store；无协议泄漏进默认产品面；**未 push**；**未**宣称 closed alpha / mvp ready |
+
 ---
 
 ## 8. 需要 Owner 冻结的决策（≤3）
 
-1. **导航**：是否批准「主栏 4 + 设置齿轮次级」（相对现行 5 平权）？
-2. **协作入口**：做事页是否只保留二字轻入口，完整流程仅在协作页？
-3. **设置**：是否默认隐藏 Base URL / Model ID（高级折叠）？
+1. **导航**：是否批准「主栏 4 + 设置齿轮次级」（相对现行 5 平权）？ → **已冻结并落地**
+2. **协作入口**：做事页是否只保留二字轻入口，完整流程仅在协作页？ → **已冻结并落地**
+3. **设置**：是否默认隐藏 Base URL / Model ID（高级折叠）？ → **已冻结并落地**
 
-冻结前：**禁止大面积生产代码改造**。01A 仅文档 + FigJam + 审查画布。
+历史注：冻结前曾禁止大面积生产改造；01A 为文档 + FigJam；01B 已按切片实施并关闭。
 
 ---
 
 ## 9. 声明
 
-- 未修改生产业务逻辑（本任务仅设计交付）。
-- 未 push。
+- 01A 原声明：设计冻结期未改生产逻辑。
+- 01B：已按 B1–B6 与后续完整性修复落地；Owner 真机已接受；**未 push**。
 - FigJam：https://www.figma.com/board/MzhFrPO0Wctlk3qSCcEAEx

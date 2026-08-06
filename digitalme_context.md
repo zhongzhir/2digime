@@ -2,7 +2,7 @@
 
 版本：v0.4
 状态：持续更新
-最后更新：2026-08-04（Collaboration Product Entry 已提交；跨模块轮动演进与广播假设写入规则；下一任务 Remote Capability Product Readiness；`v2/foundation` @ `c017e7b`；不得 push）
+最后更新：2026-08-06（EXPERIENCE-REDESIGN-01B Owner 真机接受并关闭；`v2/foundation` 收口提交 · **未 push**）
 
 > **当前行动准则（2026-08-04）**：
 > 1. Digital Me 后续采用跨模块轮动演进。
@@ -11,13 +11,14 @@
 > 4. 广播作为长期核心创新假设持续评估，但近期不替代产品基本闭环和 A2A 受控能力接入。
 >
 > **当前产品主线（2026-07-26）**：**第二纵向闭环** — 多模态成果包交付与渐进式主体构建。第一纵向闭环已 `accepted` / `completed`。
-> **V2 当前执行分支（2026-08-04）**：`v2/foundation` · HEAD **`c017e7b`** · **未 push** · Collaboration Product Entry = `owner_accepted` / `committed`。
-> **今日停止指针**：**DIGITALME-V2-P2C1-CODE-ANALYSIS-QUALITY-RECOVERY-01** =
-> `blocked` / `real_quality_gate_failed` / `degraded_scan_only` / `snapshot_noise_identified` /
-> `structured_output_brittleness_identified` / `production_changes_reverted` / `next_route_defined` /
-> `not_applied` / `not_pushed`。
-> **不得**：今日继续实现、重跑真实模型、凑 usable、构建 ZIP/portable、push。
-> **下一轮（仅记录，未启动）**：先形成最小方案（Snapshot 噪声围栏 + findings NDJSON/分批 + `json_object` 兼容探测），再开任务；禁止硬编码架构答案 / 文件名清单 / 目标复述冒充深度分析。证据：`digitalme-v2/scripts/_mvp-p2c1-quality-recovery-evidence/`。
+> **V2 当前执行分支（2026-08-06）**：`v2/foundation` · **未 push**。
+> **今日停止指针**：**DIGITALME-V2-EXPERIENCE-REDESIGN-01B** =
+> `implemented` / `owner_runtime_accepted` / `conversation_integrity_validated` /
+> `material_grounding_validated` / `revision_integrity_validated` / `experience_redesign_closed` /
+> `not_pushed`。
+> **不得**：夸大为 `closed_alpha` / `mvp_ready` / `production_ready`；不得 push（除非 Owner 另令）。
+> **历史阻断（保留）**：P2C1 代码分析质量恢复仍为 `blocked` / `real_quality_gate_failed`（非本收口主线）。
+> **规格入口**：[`digitalme-v2/docs/design/digitalme_v2_experience_redesign_01a_v0.1_20260805.md`](digitalme-v2/docs/design/digitalme_v2_experience_redesign_01a_v0.1_20260805.md)。
 > **最高架构与研发原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)（**v0.1.1 `active`**）。
 > **当前执行基线**：[`DigitalMe_product_baseline_reset_v0.2_2026-07-21.md`](DigitalMe_product_baseline_reset_v0.2_2026-07-21.md)（**v0.2 `active`**；Owner 审核通过关键裁决，包含能力覆盖完整性、唯一数字身份与对外协作等补强项）。
 > **产品基线重置裁决（历史）**：原「研究与表达」候选确认路径判废；工程机制（上下文装配、候选选择、确认快照）降为后台自动编排。**第一纵向闭环后续已于 2026-07-25 正式收口为 `accepted` / `completed`（决策 #103 + `928aa1a` + `e8b6572`），本条不再作为「未验收」有效指针。**

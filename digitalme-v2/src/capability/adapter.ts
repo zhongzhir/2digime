@@ -101,6 +101,8 @@ export interface CapabilityInput {
     request: string;
     previousText: string;
     artifactId: string;
+    /** 用户「不采用」时写下的理由（可选，进入修订 prompt）。 */
+    rejectionReason?: string;
   };
   /**
    * 授权投影附带字段(可选);prepareAuthorizedInput 可写入。

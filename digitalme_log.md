@@ -5,6 +5,34 @@
 
 ---
 
+## 2026-08-06 TODAY-CLOSE · EXPERIENCE-REDESIGN-01B 最终收口
+
+### 状态
+
+`implemented` / `owner_runtime_accepted` / `conversation_integrity_validated` / `material_grounding_validated` / `revision_integrity_validated` / `experience_redesign_closed` / `not_pushed`
+
+分支：`v2/foundation`。任务：`DIGITALME-V2-EXPERIENCE-REDESIGN-01A/01B`。规格：`digitalme-v2/docs/design/digitalme_v2_experience_redesign_01a_v0.1_20260805.md`。
+
+### Owner 真机已接受
+
+- 四栏互斥；真实对话；分析过程隔离；截断与重试
+- PDF grounding；多材料综合；不采用可见反馈；版本 2 实质修订
+- **关闭 EXPERIENCE-REDESIGN-01B**
+
+### 工程验证（收口前）
+
+- `npm test` 通过
+- `accept:owner-blockers` / `accept:conversation-output-integrity`（含 `:real`）/
+  `accept:task-instruction-revision-integrity`（含 `:real`）通过
+- `accept:experience-redesign` / `-ui` / `-a11y` 与 B1–B5 相关验收通过
+- 真实 DeepSeek 验收通过；无密钥入仓；无真实 userData 污染；无残留 Electron
+
+### 边界
+
+不得宣称 `closed_alpha` / `mvp_ready` / `production_ready`。隔离脏文件未混入。**未 push**。
+
+---
+
 ## 2026-08-03 TODAY-CLOSE · P2C1 代码分析质量恢复阻断收口
 
 ### 状态
