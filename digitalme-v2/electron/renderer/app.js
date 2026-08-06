@@ -2728,23 +2728,33 @@
 
   function collabUserLabel(item) {
     if (!item) return "";
-    if (item.status === "revoked") return "已撤销";
+    if (item.status === "revoked" || item.status === "withdrawn") return "已撤销";
     if (item.status === "failed") return "未完成";
     if (item.status === "running") return "正在处理";
-    if (item.status === "authorized" || item.status === "requested") return "等待开始";
-    if (item.ownerDecision === "accept") return "已完成";
+    if (item.status === "awaiting_owner") return "等待对方确认";
+    if (item.status === "awaiting_clarification") return "等待补充说明";
+    if (item.status === "counter_proposed") return "对方提出调整";
+    if (item.status === "proposed") return "等待对方回应";
+    if (item.status === "delivered") return "需要你确认";
+    if (item.status === "authorized" || item.status === "agreed" || item.status === "requested") {
+      return "等待开始";
+    }
+    if (item.ownerDecision === "accept" || item.status === "completed") return "已完成";
     if (item.ownerDecision === "reject" || item.status === "rejected") return "未完成";
-    if (item.status === "completed") return "需要你确认";
     return "等待开始";
   }
 
   function collabBucket(item) {
-    if (item.status === "revoked") return "revoked";
-    if (item.ownerDecision === "accept" || item.ownerDecision === "reject" || item.status === "rejected") {
+    if (item.status === "revoked" || item.status === "withdrawn") return "revoked";
+    if (
+      item.ownerDecision === "accept" ||
+      item.ownerDecision === "reject" ||
+      item.status === "rejected" ||
+      item.status === "completed"
+    ) {
       return "done";
     }
-    // 已返回、待确认：归入「待你处理 / 已完成」，不占进行中列表
-    if (item.status === "completed") return "done";
+    if (item.status === "delivered") return "done";
     return "active";
   }
 
@@ -2838,7 +2848,7 @@
   }
 
   async function listCollabItems() {
-    const listed = await api.invoke("collab.simulateInteraction", { action: "list" });
+    const listed = await api.invoke("collab.interact", { action: "list" });
     return Array.isArray(listed.items) ? listed.items : [];
   }
 
@@ -2862,11 +2872,11 @@
         meta.textContent = `${item.granteeDisplayName || "协作对象"} · ${collabUserLabel(item)}`;
         li.appendChild(title);
         li.appendChild(meta);
-        li.addEventListener("click", () => openCollabDetail(item.grantId));
+        li.addEventListener("click", () => openCollabDetail(item.recordId || item.grantId));
         li.addEventListener("keydown", (ev) => {
           if (ev.key === "Enter" || ev.key === " ") {
             ev.preventDefault();
-            openCollabDetail(item.grantId);
+            openCollabDetail(item.recordId || item.grantId);
           }
         });
         ul.appendChild(li);
@@ -2888,7 +2898,10 @@
     const items = await listCollabItems();
     const forTask = items.filter((i) => i.issuerTaskId === activeTaskId);
     const current =
-      (activeGrantId && forTask.find((i) => i.grantId === activeGrantId)) || forTask[0] || null;
+      (activeGrantId &&
+        forTask.find((i) => i.recordId === activeGrantId || i.grantId === activeGrantId)) ||
+      forTask[0] ||
+      null;
     if (!current) {
       activeGrantId = null;
       if (els.collabStatus) els.collabStatus.textContent = "";
@@ -2899,7 +2912,7 @@
       showCollabActions(false);
       return;
     }
-    activeGrantId = current.grantId;
+    activeGrantId = current.recordId || current.grantId;
     if (els.collabStatus) els.collabStatus.textContent = collabUserLabel(current);
     if (els.collabReturn) {
       const text = current.returnedExcerpt || "";
@@ -2915,12 +2928,14 @@
     showCollabPage("detail");
     showStatus(els.collabDetailError, "");
     try {
-      const st = await api.invoke("collab.simulateInteraction", {
+      const st = await api.invoke("collab.interact", {
         action: "status",
+        recordId: grantId,
         grantId,
       });
       const item = {
-        grantId,
+        recordId: st.recordId || grantId,
+        grantId: st.grantId,
         status: st.status,
         ownerDecision: st.ownerDecision || st.grant?.ownerDecision,
         subtaskGoal: st.grant?.subtaskGoal,
@@ -2929,7 +2944,9 @@
         returnedExcerpt: st.artifactText || st.grant?.returnedExcerpt || "",
         issuerTaskId: st.grant?.issuerTaskId,
         failureMessage: st.grant?.failureMessage,
+        localArtifactId: st.grant?.localArtifactId || st.artifactId,
       };
+      activeGrantId = item.recordId;
       if (els.collabDetailPeer) {
         els.collabDetailPeer.textContent = `协作对象：${item.granteeDisplayName || "本机数字之我"}`;
       }
@@ -2960,9 +2977,13 @@
         els.collabDetailReturn.textContent = text;
       }
       if (els.collabDetailReturnEmpty) els.collabDetailReturnEmpty.hidden = !!text;
-      const revoked = item.status === "revoked";
-      const hasReturn = !!text;
-      if (els.btnCollabDetailExecute) els.btnCollabDetailExecute.disabled = revoked || hasReturn;
+      const revoked = item.status === "revoked" || item.status === "withdrawn";
+      const hasReturn = !!text || item.status === "delivered";
+      const canFulfill =
+        !revoked &&
+        !hasReturn &&
+        (item.status === "authorized" || item.status === "agreed");
+      if (els.btnCollabDetailExecute) els.btnCollabDetailExecute.disabled = !canFulfill;
       if (els.btnCollabDetailAccept) els.btnCollabDetailAccept.disabled = revoked || !hasReturn;
       if (els.btnCollabDetailReject) els.btnCollabDetailReject.disabled = revoked || !hasReturn;
       if (els.btnCollabDetailRevoke) els.btnCollabDetailRevoke.disabled = revoked;
@@ -3022,7 +3043,7 @@
       return null;
     }
     try {
-      const peer = await api.invoke("collab.simulateInteraction", {
+      const peer = await api.invoke("collab.interact", {
         action: "resolvePeer",
         granteePackageDir: dir,
       });
@@ -3049,15 +3070,18 @@
     if (!subtask) throw new Error("请填写想让对方完成的内容");
     const goal = extra ? `${subtask}\n\n补充要求：${extra}` : subtask;
     const payload = {
-      action: "issue",
+      action: "propose",
       granteePackageDir: peer,
       subtaskGoal: goal,
+      intent: goal,
       allowedMaterialPaths: mats,
+      acceptanceCriteria: ["提供可核对的完整成果，并说明依据"],
+      deadline: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
     };
     // 仅做事页已有任务时写入关联；协作页新建不创建空 Task。
     if (opts.issuerTaskId) payload.issuerTaskId = opts.issuerTaskId;
-    const issued = await api.invoke("collab.simulateInteraction", payload);
-    activeGrantId = issued.grantId;
+    const issued = await api.invoke("collab.interact", payload);
+    activeGrantId = issued.recordId || issued.grantId;
     return issued;
   }
 
@@ -3066,8 +3090,9 @@
     if (!activeGrantId) return;
     if (statusEl) statusEl.textContent = "正在处理";
     try {
-      const result = await api.invoke("collab.simulateInteraction", {
-        action: "execute",
+      const result = await api.invoke("collab.interact", {
+        action: "fulfill",
+        recordId: activeGrantId,
         grantId: activeGrantId,
       });
       if (result.denied) {
@@ -3098,8 +3123,9 @@
     showStatus(errorEl, "");
     if (!activeGrantId) return;
     try {
-      await api.invoke("collab.simulateInteraction", {
-        action: "acceptReturn",
+      await api.invoke("collab.interact", {
+        action: "decideResult",
+        recordId: activeGrantId,
         grantId: activeGrantId,
         decision,
       });
@@ -3111,8 +3137,9 @@
       if (decision === "accept") {
         let targetTask = activeTaskId || null;
         try {
-          const st = await api.invoke("collab.simulateInteraction", {
+          const st = await api.invoke("collab.interact", {
             action: "status",
+            recordId: activeGrantId,
             grantId: activeGrantId,
           });
           if (st && st.grant && st.grant.issuerTaskId) targetTask = st.grant.issuerTaskId;
@@ -3144,8 +3171,9 @@
     showStatus(errorEl, "");
     if (!activeGrantId) return;
     try {
-      await api.invoke("collab.simulateInteraction", {
+      await api.invoke("collab.interact", {
         action: "revoke",
+        recordId: activeGrantId,
         grantId: activeGrantId,
       });
       if (statusEl) statusEl.textContent = "已撤销";

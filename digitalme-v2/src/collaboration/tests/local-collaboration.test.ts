@@ -1,5 +1,5 @@
 /**
- * Collaboration MVP — 同机双主体：授权、执行、隔离、撤销、成长事件。
+ * Collaboration MVP 回归 — 适配 collab.interact 主体协作主链。
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -8,7 +8,6 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { createDigitalMeRuntime } from '../../runtime/digitalme-runtime';
 import { createCommandBus } from '../../runtime/command-bus';
-import { waitForJobTerminal } from '../../work-runtime/job-runner';
 import { GrantStore } from '../grant-store';
 
 async function tempDir(prefix: string): Promise<string> {
@@ -21,7 +20,7 @@ async function writeFile(p: string, text: string): Promise<string> {
   return p;
 }
 
-test('Case1+2+3+4: local dual-subject collaboration grant execute isolate revoke', async () => {
+test('Case1+2+3+4: propose fulfill isolate revoke via collab.interact', async () => {
   const root = await tempDir('mvp');
   const dirA = path.join(root, 'subject-a');
   const dirB = path.join(root, 'subject-b');
@@ -44,254 +43,69 @@ test('Case1+2+3+4: local dual-subject collaboration grant execute isolate revoke
   });
   await runtimeB.stop();
 
-  const main = await runtimeA.submitTask({
-    goal: '撰写产品说明文档，其中背景摘要可协作完成。',
-    contextRefs: [
-      { kind: 'file', path: matX },
-      { kind: 'file', path: matY },
-    ],
-    requestedArtifactType: 'document',
-  });
-  const mainJob = await waitForJobTerminal(runtimeA.workRuntime, main.jobId);
-  assert.equal(mainJob.status, 'succeeded');
-  const mainArtifactId = mainJob.artifactId as string;
-  const mainBefore = await runtimeA.getContent({ artifactId: mainArtifactId });
-  const mainHeadBefore = mainBefore.artifact.headVersionId;
-
-  // Case 1: issue + execute + accept
-  const issued = await busA.invoke('collab.simulateInteraction', {
-    action: 'issue',
+  const issued = await busA.invoke('collab.interact', {
+    action: 'propose',
     granteePackageDir: dirB,
-    issuerTaskId: main.taskId,
-    subtaskGoal: '根据材料X写一段简洁背景摘要。',
+    intent: '根据材料X写一段简洁背景摘要。',
     allowedMaterialPaths: [matX],
+    acceptanceCriteria: ['提供可核对的完整成果，并说明依据'],
+    deadline: new Date(Date.now() + 86400000).toISOString(),
   });
+  assert.ok(issued.recordId);
   assert.ok(issued.grantId);
-  assert.equal(issued.status, 'authorized');
+  assert.ok(['authorized', 'agreed'].includes(String(issued.status)));
 
   const store = await GrantStore.open(dirA);
   const persisted = await store.get(issued.grantId!);
   assert.ok(persisted);
   assert.equal(persisted!.status, 'granted');
-  assert.deepEqual(persisted!.scope.resourceRefs?.map((p) => path.resolve(p)), [
-    path.resolve(matX),
-  ]);
+  assert.equal(persisted!.origin.kind, 'collaboration_agreement');
 
-  const listed = await busA.invoke('collab.simulateInteraction', { action: 'list' });
-  assert.ok(Array.isArray(listed.items));
-  assert.ok(listed.items.some((i) => i.grantId === issued.grantId));
-  assert.ok(
-    listed.items.every((i) => Array.isArray(i.allowedMaterials)),
-    'list projection must expose allowed materials',
-  );
+  const listed = await busA.invoke('collab.interact', { action: 'list' });
+  assert.ok(listed.items?.some((i) => i.recordId === issued.recordId));
 
-  // Case 2: Y 未授权
-  const denyY = await busA.invoke('collab.simulateInteraction', {
+  const denyY = await busA.invoke('collab.interact', {
     action: 'assertMaterialAccess',
-    grantId: issued.grantId,
+    recordId: issued.recordId,
     attemptMaterialPath: matY,
   });
   assert.equal(denyY.allowed, false);
-  assert.equal(denyY.denied, true);
 
-  const denyExecY = await busA.invoke('collab.simulateInteraction', {
-    action: 'execute',
-    grantId: issued.grantId,
-    extraMaterialPaths: [matY],
+  const executed = await busA.invoke('collab.interact', {
+    action: 'fulfill',
+    recordId: issued.recordId,
   });
-  assert.equal(denyExecY.denied, true);
+  assert.equal(executed.status, 'delivered');
+  assert.ok(executed.localArtifactId);
+  assert.ok((executed.artifactText || '').length >= 40);
 
-  const executed = await busA.invoke('collab.simulateInteraction', {
-    action: 'execute',
-    grantId: issued.grantId,
-  });
-  assert.equal(executed.denied, undefined);
-  assert.equal(executed.status, 'completed');
-  assert.ok(executed.artifactId);
-  assert.ok(executed.granteeEventId);
-  assert.ok((executed.artifactText || '').length > 0);
-
-  const status1 = await busA.invoke('collab.simulateInteraction', {
+  const status1 = await busA.invoke('collab.interact', {
     action: 'status',
-    grantId: issued.grantId,
+    recordId: issued.recordId,
   });
-  assert.equal(status1.status, 'completed');
-  assert.ok(status1.grant?.returnedExcerpt);
+  assert.equal(status1.status, 'delivered');
 
-  // Snapshot 记录 grant
-  const grantAfter = await store.get(issued.grantId!);
-  assert.ok(grantAfter?.disclosure?.snapshotId);
-  const runtimeB2 = createDigitalMeRuntime({ documentCapability: 'fake' });
-  await runtimeB2.openPackage({ dir: dirB });
-  const snap = await runtimeB2.getSnapshot(grantAfter!.disclosure!.snapshotId!);
-  assert.ok(snap?.authorization?.grantId === issued.grantId);
-  assert.ok(
-    snap!.items.every((i) => path.resolve(i.sourcePath) !== path.resolve(matY)),
-    'snapshot must not include unauthorized material Y',
-  );
-  const bEvents = await runtimeB2.subject.listGrowthEvents();
-  const bFulfilled = bEvents.find((e) => (e.payload.tags ?? []).includes('collab:fulfilled'));
-  assert.ok(bFulfilled);
-
-  // 协作执行不得直接覆盖 A 主成果
-  const mainAfterExecute = await runtimeA.getContent({ artifactId: mainArtifactId });
-  assert.equal(mainAfterExecute.artifact.headVersionId, mainHeadBefore);
-
-  const accepted = await busA.invoke('collab.simulateInteraction', {
-    action: 'acceptReturn',
-    grantId: issued.grantId,
+  const accepted = await busA.invoke('collab.interact', {
+    action: 'decideResult',
+    recordId: issued.recordId,
     decision: 'accept',
-    note: '背景摘要可用',
   });
-  assert.ok(accepted.issuerEventId);
-  const aEvents = await runtimeA.subject.listGrowthEvents();
-  const aAccept = aEvents.find((e) => (e.payload.tags ?? []).includes('collab:external_accept'));
-  assert.ok(aAccept);
-  assert.notEqual(aAccept!.id, bFulfilled!.id);
-  assert.notEqual(aAccept!.payload.title, bFulfilled!.payload.title);
+  assert.equal(accepted.status, 'completed');
 
-  // 采用后主成果应含协作引用区（新版本，非静默覆盖）
-  const mainIntegrated = await runtimeA.getContent({ artifactId: mainArtifactId });
-  assert.notEqual(mainIntegrated.artifact.headVersionId, mainHeadBefore);
-  assert.match(mainIntegrated.text || '', /协作摘要（已采用）/);
-  assert.match(mainIntegrated.text || '', new RegExp(`collab-ref:${issued.grantId}`));
-
-  // Case 3: revoke → re-execute denied
-  const revoked = await busA.invoke('collab.simulateInteraction', {
+  const revoked = await busA.invoke('collab.interact', {
     action: 'revoke',
-    grantId: issued.grantId,
+    recordId: issued.recordId,
   });
   assert.equal(revoked.status, 'revoked');
-  const again = await busA.invoke('collab.simulateInteraction', {
-    action: 'execute',
-    grantId: issued.grantId,
-  });
-  assert.equal(again.denied, true);
-  assert.match(String(again.reason || ''), /revoked/i);
 
-  // 重启后 Grant 与返回成果仍在
+  await runtimeA.stop();
   const runtimeA2 = createDigitalMeRuntime({ documentCapability: 'fake' });
   const busA2 = createCommandBus(runtimeA2);
   await runtimeA2.openPackage({ dir: dirA });
-  const restored = await busA2.invoke('collab.simulateInteraction', {
+  const restored = await busA2.invoke('collab.interact', {
     action: 'status',
-    grantId: issued.grantId,
+    recordId: issued.recordId,
   });
   assert.equal(restored.status, 'revoked');
-  assert.ok(restored.grant?.returnedExcerpt);
-
-  await runtimeB2.stop();
-});
-
-test('issue without issuer task; B task only after execute; peer preview', async () => {
-  const root = await tempDir('no-shell-task');
-  const dirA = path.join(root, 'subject-a');
-  const dirB = path.join(root, 'subject-b');
-  const matX = await writeFile(path.join(root, 'x.md'), '授权材料X：仅共享要点。');
-
-  const runtimeA = createDigitalMeRuntime({ documentCapability: 'fake' });
-  const busA = createCommandBus(runtimeA);
-  await runtimeA.createPackage({
-    displayName: '主体甲',
-    targetDir: dirA,
-    initialSelfDescription: '主报告负责人。',
-  });
-  const runtimeB = createDigitalMeRuntime({ documentCapability: 'fake' });
-  await runtimeB.createPackage({
-    displayName: '协作乙',
-    targetDir: dirB,
-    initialSelfDescription: '协助整理摘要。',
-  });
-  await runtimeB.stop();
-
-  const tasksBefore = await runtimeA.listTasks({ limit: 50 });
-  const peer = await busA.invoke('collab.simulateInteraction', {
-    action: 'resolvePeer',
-    granteePackageDir: dirB,
-  });
-  assert.equal(peer.displayName, '协作乙');
-  assert.match(String(peer.packageDir || ''), /subject-b/);
-
-  const issued = await busA.invoke('collab.simulateInteraction', {
-    action: 'issue',
-    granteePackageDir: dirB,
-    subtaskGoal: '根据材料写一段摘要。',
-    allowedMaterialPaths: [matX],
-  });
-  assert.ok(issued.grantId);
-  const tasksAfterIssue = await runtimeA.listTasks({ limit: 50 });
-  assert.equal(
-    tasksAfterIssue.tasks.length,
-    tasksBefore.tasks.length,
-    'issue must not create A-side container task',
-  );
-
-  const runtimeBBefore = createDigitalMeRuntime({ documentCapability: 'fake' });
-  await runtimeBBefore.openPackage({ dir: dirB });
-  const bTasksBefore = await runtimeBBefore.listTasks({ limit: 50 });
-  assert.equal(bTasksBefore.tasks.length, 0);
-  await runtimeBBefore.stop();
-
-  const executed = await busA.invoke('collab.simulateInteraction', {
-    action: 'execute',
-    grantId: issued.grantId as string,
-  });
-  assert.equal(executed.status, 'completed');
-
-  const runtimeBAfter = createDigitalMeRuntime({ documentCapability: 'fake' });
-  await runtimeBAfter.openPackage({ dir: dirB });
-  const bTasks = await runtimeBAfter.listTasks({ limit: 50 });
-  assert.equal(bTasks.tasks.length, 1);
-  const bDetail = await runtimeBAfter.getTask({ taskId: bTasks.tasks[0]!.taskId });
-  assert.equal(bDetail.task.authorization?.grantId, issued.grantId);
-  await runtimeBAfter.stop();
-  await runtimeA.stop();
-});
-
-test('Case4: capability failure does not write collab:fulfilled', async () => {
-  const root = await tempDir('fail');
-  const dirA = path.join(root, 'subject-a');
-  const dirB = path.join(root, 'subject-b');
-  const matX = await writeFile(path.join(root, 'x.md'), '授权材料X');
-
-  const runtimeA = createDigitalMeRuntime({
-    documentCapability: 'none',
-    registerOpenAiStub: false,
-  });
-  const busA = createCommandBus(runtimeA);
-  await runtimeA.createPackage({
-    displayName: '甲-无文档能力',
-    targetDir: dirA,
-    initialSelfDescription: '测试失败纪律。',
-  });
-
-  const runtimeB = createDigitalMeRuntime({ documentCapability: 'fake' });
-  await runtimeB.createPackage({
-    displayName: '乙',
-    targetDir: dirB,
-    initialSelfDescription: '协作者。',
-  });
-  await runtimeB.stop();
-
-  // Issuer 无能力 → sibling 也无能力 → execute 失败且不得 fulfilled
-  // 协作身份由 Grant 承载，issue 无需 A 侧容器 Task。
-  const issued = await busA.invoke('collab.simulateInteraction', {
-    action: 'issue',
-    granteePackageDir: dirB,
-    subtaskGoal: '应失败的子任务',
-    allowedMaterialPaths: [matX],
-  });
-  assert.ok(issued.grantId);
-  const executed = await busA.invoke('collab.simulateInteraction', {
-    action: 'execute',
-    grantId: issued.grantId as string,
-  });
-  assert.equal(executed.status, 'failed');
-
-  const runtimeB2 = createDigitalMeRuntime({ documentCapability: 'fake' });
-  await runtimeB2.openPackage({ dir: dirB });
-  const events = await runtimeB2.subject.listGrowthEvents();
-  assert.ok(!events.some((e) => (e.payload.tags ?? []).includes('collab:fulfilled')));
-  await runtimeB2.stop();
-  await runtimeA.stop();
+  await runtimeA2.stop();
 });

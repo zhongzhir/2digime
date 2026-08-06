@@ -1,6 +1,6 @@
 /**
- * COLLABORATION-REAL-CAPABILITY-VALIDATION-01
- * 真实模型同机双主体协作单样本；无凭证则失败（不得 Fake 冒充）。
+ * DIGITALME-V2-SUBJECT-COLLABORATION-FOUNDATION-01-REAL-VALIDATION
+ * 真实模型同机双主体协作纵向验收；无凭证则失败（不得 Fake 冒充）。
  *
  * 用法: npm run accept:collaboration-real
  */
@@ -22,36 +22,32 @@ function ok(msg) {
   console.log(`OK: ${msg}`);
 }
 
-const build = spawnSync('npm', ['run', 'build'], { stdio: 'inherit', shell: true });
-if (build.status !== 0) process.exit(build.status || 1);
-
-const domain = spawnSync(
-  process.execPath,
-  ['--test', '--test-concurrency=1', 'dist/collaboration/tests/local-collaboration-real.test.js'],
-  {
-    stdio: 'inherit',
-    cwd: appRoot,
-    env: { ...process.env },
-  },
-);
-if (domain.status !== 0) {
-  fail(`collaboration-real tests exited ${domain.status}`);
+const run = spawnSync(process.execPath, ['scripts/run-subject-collaboration-foundation-real.cjs'], {
+  stdio: 'inherit',
+  cwd: appRoot,
+  env: { ...process.env },
+});
+if (run.status !== 0) {
+  fail(`foundation real validation exited ${run.status}`);
 }
-ok('collaboration-real domain sample passed');
 
-const evidence = path.join(
+const summaryPath = path.join(
   appRoot,
   'scripts',
-  '_mvp-collaboration-real-evidence',
-  'real-collab-sample.json',
+  '_subject-collaboration-foundation-real-evidence',
+  'summary.json',
 );
-if (!fs.existsSync(evidence)) {
-  fail('missing real-collab-sample.json evidence');
+if (!fs.existsSync(summaryPath)) fail('missing summary.json evidence');
+const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
+if (summary.ok !== true) fail('summary.ok must be true');
+if (summary.evidenceKind !== 'real_model') fail('evidenceKind must be real_model');
+if (!summary.model || !summary.model.model) fail('summary.model missing');
+if (!summary.collaboration || !summary.collaboration.termsDigest) {
+  fail('summary.collaboration.termsDigest missing');
 }
-const payload = JSON.parse(fs.readFileSync(evidence, 'utf8'));
-if (payload.reachedModel !== true) fail('evidence.reachedModel must be true');
-if (!payload.mentionsAuthorizedToken) fail('evidence must mention authorized material token');
-if (payload.mentionsUnauthorizedToken) fail('evidence must not mention unauthorized token');
-ok('evidence checks passed');
+if (!summary.artifacts || !summary.artifacts.bArtifactId || !summary.artifacts.aLocalArtifactId) {
+  fail('summary.artifacts incomplete');
+}
+ok('summary.json checks passed');
 
 console.log('\naccept:collaboration-real PASSED');

@@ -3,7 +3,6 @@ import type { TaskState } from '../work-runtime/derive';
 import type { JobStatus } from '../work-runtime/execution-job';
 import type { ArtifactContent } from '../work-runtime/artifact';
 import type { CapabilityRegistration } from '../capability/registration';
-import type { AuthorizationScope } from '../collaboration/schema';
 import type { ExportFormat } from '../artifact-workspace/contracts';
 
 /**
@@ -362,41 +361,66 @@ export interface CommandMap {
     };
   };
   /**
-   * 本机协作（升级原 simulate 占位）：
-   * issue / revoke / execute / status / list / acceptReturn / assertMaterialAccess。
-   * 仍占 1 个命令位；Grant 持久在 issuer 包内；list/status 为派生投影。
+   * 主体协作（原 collab.simulateInteraction）：
+   * propose / evaluate / respond / fulfill / requestRevision / decideResult /
+   * revoke / status / list / resolvePeer / assertMaterialAccess / reconcile。
+   * 仍占 1 个命令位。兼容旧 action 名 issue/execute/acceptReturn。
    */
-  'collab.simulateInteraction': {
+  'collab.interact': {
     input: {
       action?:
-        | 'issue'
+        | 'propose'
+        | 'evaluate'
+        | 'respond'
+        | 'fulfill'
+        | 'requestRevision'
+        | 'decideResult'
         | 'revoke'
-        | 'execute'
         | 'status'
         | 'list'
         | 'resolvePeer'
-        | 'acceptReturn'
-        | 'assertMaterialAccess';
-      /** 兼容旧冒烟：无 action 时按本地占位模拟。 */
-      granteeName?: string;
-      scope?: AuthorizationScope;
-      goal?: string;
+        | 'assertMaterialAccess'
+        | 'reconcile'
+        /** @deprecated 映射到 propose */
+        | 'issue'
+        /** @deprecated 映射到 fulfill */
+        | 'execute'
+        /** @deprecated 映射到 decideResult */
+        | 'acceptReturn';
+      recordId?: string;
       grantId?: string;
       granteePackageDir?: string;
       issuerTaskId?: string;
+      intent?: string;
+      expectedOutcome?: string;
+      acceptanceCriteria?: string[];
+      deadline?: string;
+      costTerms?: string;
+      /** 兼容旧字段 */
       subtaskGoal?: string;
       allowedMaterialPaths?: string[];
       attemptMaterialPath?: string;
       extraMaterialPaths?: string[];
-      decision?: 'accept' | 'reject';
+      decision?: 'accept' | 'reject' | 'counter_propose' | 'request_clarification' | 'revise';
       note?: string;
+      skipAutoEvaluate?: boolean;
+      terms?: {
+        intent: string;
+        expectedOutcome: string;
+        offeredMaterials: Array<{ path: string; summary?: string }>;
+        deadline?: string;
+        costTerms?: string;
+        acceptanceCriteria: string[];
+      };
     };
     output: {
+      recordId?: string;
       requestId?: string;
       grantId?: string;
       status?: string;
       artifactId?: string;
       artifactText?: string;
+      localArtifactId?: string;
       denied?: boolean;
       reason?: string;
       allowed?: boolean;
@@ -405,15 +429,21 @@ export interface CommandMap {
       reachedModel?: boolean;
       capabilityId?: string;
       integratedIntoArtifactId?: string;
-      ownerDecision?: 'accept' | 'reject';
+      ownerDecision?: 'accept' | 'reject' | 'revise';
       displayName?: string;
       packageDir?: string;
       brief?: string;
       subjectId?: string;
+      endpointRef?: string;
+      evaluationBasis?: string[];
+      requiresOwnerConfirmation?: boolean;
+      verificationSatisfied?: boolean;
+      termsDigest?: string;
       items?: Array<{
-        grantId: string;
+        recordId: string;
+        grantId?: string;
         status: string;
-        ownerDecision?: 'accept' | 'reject';
+        ownerDecision?: 'accept' | 'reject' | 'revise';
         subtaskGoal?: string;
         granteeDisplayName?: string;
         allowedMaterials: string[];
@@ -421,6 +451,8 @@ export interface CommandMap {
         issuerTaskId?: string;
         failureMessage?: string;
         reachedModel?: boolean;
+        localArtifactId?: string;
+        evaluationBasis?: string[];
       }>;
       grant?: {
         id: string;
@@ -432,7 +464,10 @@ export interface CommandMap {
         allowedMaterials?: string[];
         issuerTaskId?: string;
         failureMessage?: string;
-        ownerDecision?: 'accept' | 'reject';
+        ownerDecision?: 'accept' | 'reject' | 'revise';
+        localArtifactId?: string;
+        termsDigest?: string;
+        evaluationBasis?: string[];
       };
     };
   };
@@ -460,7 +495,7 @@ export const COMMAND_NAMES = [
   'artifact.export',
   'artifact.revealInFolder',
   'capability.list',
-  'collab.simulateInteraction',
+  'collab.interact',
 ] as const satisfies readonly CommandName[];
 
 /** 命令面硬上限(architecture §4;超出即架构违规)。 */

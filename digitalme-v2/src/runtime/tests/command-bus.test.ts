@@ -73,13 +73,8 @@ test('CommandBus 覆盖全部命令且不超过上限', async () => {
   const caps = await bus.invoke('capability.list', {});
   assert.ok(caps.capabilities.length >= 1);
 
-  const collab = await bus.invoke('collab.simulateInteraction', {
-    granteeName: '协作方',
-    scope: { actions: ['network'] },
-    goal: '本地模拟',
-  });
-  assert.ok(collab.requestId);
-  assert.ok(collab.grantId);
+  const collab = await bus.invoke('collab.interact', { action: 'list' });
+  assert.ok(Array.isArray(collab.items));
 
   const list = await bus.invoke('work.listTasks', {});
   assert.ok(list.tasks.length >= 1);

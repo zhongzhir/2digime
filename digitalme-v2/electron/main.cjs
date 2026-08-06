@@ -45,7 +45,7 @@ const COMMAND_NAMES = new Set([
   "artifact.export",
   "artifact.revealInFolder",
   "capability.list",
-  "collab.simulateInteraction",
+  "collab.interact",
 ]);
 
 function resolveAppRoot() {

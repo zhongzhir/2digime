@@ -1,3 +1,7 @@
+/**
+ * TEST-ONLY 替身：内存模拟 InteractionRequest + AuthorizationGrant。
+ * 不得经 CommandBus / collab.interact 到达；仅供 smoke 与单元测试直接 import。
+ */
 import { newId, nowIso } from '../shared/ids';
 import type {
   AuthorizationGrant,
@@ -6,11 +10,6 @@ import type {
   SubjectIdentifier,
 } from './schema';
 
-/**
- * 本地模拟(首切片第 9 步):生成一个 InteractionRequest 与对应 AuthorizationGrant。
- * 不执行外网协作;仅验证协作对象与授权链路的接口边界。
- * Grant.origin 内嵌请求快照,请求本体不持久也不产生悬空引用。
- */
 export function simulateInteraction(input: {
   grantor: SubjectIdentifier;
   granteeName: string;
@@ -21,7 +20,6 @@ export function simulateInteraction(input: {
   const grantee: SubjectIdentifier = {
     subjectId: newId('subject'),
     displayName: input.granteeName,
-    scheme: 'local',
   };
   const request: InteractionRequest = {
     id: newId('interactionRequest'),

@@ -9,6 +9,17 @@ export type ArtifactContent =
   | { kind: 'file'; ref: string; mediaType: string }
   | { kind: 'bundle'; entries: Array<{ ref: string; mediaType: string; role?: string }> };
 
+/** 协作交付物化溯源：复制完整内容但保留对方 artifact/version/digest 与约定绑定。 */
+export interface ArtifactProvenance {
+  kind: 'collaboration_delivery';
+  recordId: string;
+  sourceSubjectId: string;
+  sourceArtifactId: string;
+  sourceHeadVersionId: string;
+  sourceContentDigest: string;
+  agreementTermsDigest: string;
+}
+
 export interface Artifact {
   id: string;
   taskId: string;
@@ -22,6 +33,7 @@ export interface Artifact {
   headVersionId: string;
   /** 磁盘目录,支持"打开所在目录";content ref 相对此目录解析。 */
   storageDir: string;
+  provenance?: ArtifactProvenance;
 }
 
 export interface ArtifactVersion {

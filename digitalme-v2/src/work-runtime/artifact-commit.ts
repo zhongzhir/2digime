@@ -111,6 +111,79 @@ export class ArtifactCommitter {
     return next;
   }
 
+  /**
+   * 将对方完整成果物化到本方 Artifact Store，保留 provenance，不丢失来源关联。
+   * 修订时传入 existingArtifactId，追加新版本。
+   */
+  async materializePeerText(input: {
+    subjectId: string;
+    recordId: string;
+    title: string;
+    text: string;
+    provenance: import('./artifact').ArtifactProvenance;
+    existingArtifactId?: string;
+  }): Promise<{ artifact: Artifact; contentDigest: string }> {
+    const { createHash } = await import('node:crypto');
+    const contentDigest = createHash('sha256').update(input.text).digest('hex');
+    const stored = await this.contentStore.putText(input.text, 'markdown');
+    const versionId = newId('artifactVersion');
+    const createdAt = nowIso();
+    const version: ArtifactVersion = {
+      versionId,
+      createdAt,
+      author: 'capability',
+      content: stored.content,
+      note: `collab_delivery:${input.recordId}`,
+    };
+
+    if (input.existingArtifactId) {
+      const existing = await this.artifactStore.get(input.existingArtifactId);
+      if (!existing) throw new Error(`artifact not found: ${input.existingArtifactId}`);
+      const next: Artifact = {
+        ...existing,
+        title: input.title || existing.title,
+        versions: [...existing.versions, version],
+        headVersionId: versionId,
+        provenance: input.provenance,
+      };
+      await this.artifactStore.put(next);
+      return { artifact: next, contentDigest };
+    }
+
+    const jobId = `job_collab_${input.recordId.replace(/^crec_/, '').slice(0, 24)}`;
+    const id = artifactIdForJob(jobId);
+    const existing = await this.artifactStore.get(id);
+    if (existing) {
+      const next: Artifact = {
+        ...existing,
+        title: input.title || existing.title,
+        versions: [...existing.versions, version],
+        headVersionId: versionId,
+        provenance: input.provenance,
+      };
+      await this.artifactStore.put(next);
+      return { artifact: next, contentDigest };
+    }
+
+    const storageDir = path.join(this.artifactsRoot, id);
+    await fs.mkdir(storageDir, { recursive: true });
+    const artifact: Artifact = {
+      id,
+      taskId: `task_collab_${input.recordId.replace(/^crec_/, '').slice(0, 24)}`,
+      jobId,
+      subjectId: input.subjectId,
+      createdAt,
+      type: 'document',
+      title: input.title,
+      versions: [version],
+      headVersionId: versionId,
+      storageDir,
+      provenance: input.provenance,
+    };
+    await this.artifactStore.put(artifact);
+    return { artifact, contentDigest };
+  }
+
   private async persistPayload(
     payload: CapabilityOutput['artifact']['payload'],
   ): Promise<ArtifactContent> {

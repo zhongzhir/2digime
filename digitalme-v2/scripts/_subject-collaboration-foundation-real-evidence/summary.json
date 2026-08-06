@@ -1,0 +1,281 @@
+{
+  "task": "DIGITALME-V2-SUBJECT-COLLABORATION-FOUNDATION-01-REAL-VALIDATION",
+  "ok": true,
+  "evidenceKind": "real_model",
+  "distinguishFromFake": "Fake 自动化证据见 dist/collaboration/tests/subject-collaboration-foundation.test.js；本文件仅为真实模型证据。",
+  "finishedAt": "2026-08-06T08:26:50.629Z",
+  "model": {
+    "model": "deepseek-v4-flash",
+    "providerId": "openai-compatible",
+    "baseUrlHost": "api.deepseek.com"
+  },
+  "packages": {
+    "a": {
+      "subjectId": "subj_msh93vtw1cabbe5b9964",
+      "displayName": "真实协作甲"
+    },
+    "b": {
+      "subjectId": "subj_msh93xx79fa01a5f4559",
+      "displayName": "真实协作乙"
+    }
+  },
+  "collaboration": {
+    "rejectRecordId": "crec_msh9444n3a915e5a03f7",
+    "recordId": "crec_msh944jn109a542fbc11",
+    "grantId": "grant_msh944yh6f908dffef8e",
+    "termsDigest": "9a6f3650b55c63b2f28d8960d8b7f49c",
+    "evaluationBasis": [
+      "capability_count:1",
+      "within_autonomy"
+    ],
+    "rejectEvaluationBasis": [
+      "boundary:gevt_msh943vi78da8e89bfe1:薪酬"
+    ]
+  },
+  "artifacts": {
+    "bArtifactId": "art_msh94569b79d51ca580a",
+    "bHeadVersionId": "ver_msh94u7s7570d51ec3c9",
+    "bDigestPrefix": "a908096924e7b8fc",
+    "aLocalArtifactId": "art_collab_msh944jn109a542fbc11",
+    "aVersionCount": 2,
+    "aHeadAfterRevision": "ver_msh95ev459deaaa02f8d",
+    "revisionDigestPrefix": "ff62026ec2a1abb1",
+    "fullTextCharsFirst": 599,
+    "fullTextCharsRevised": 426
+  },
+  "growth": {
+    "aAcceptTags": [
+      "collab:external_accept",
+      "decision:accept",
+      "document",
+      "collab:record:crec_msh944jn109a542fbc11",
+      "collab:peer:subj_msh93xx79fa01a5f4559"
+    ],
+    "bFulfilledCount": 1,
+    "bAcceptedByPeerCount": 1
+  },
+  "checks": {
+    "01_rule_reject": {
+      "ok": true,
+      "detail": {
+        "status": "rejected",
+        "evaluationBasis": [
+          "boundary:gevt_msh943vi78da8e89bfe1:薪酬"
+        ]
+      }
+    },
+    "03_reject_uses_b_boundary": {
+      "ok": true,
+      "detail": {
+        "evaluationBasis": [
+          "boundary:gevt_msh943vi78da8e89bfe1:薪酬"
+        ]
+      }
+    },
+    "05a_no_grant_on_reject": {
+      "ok": true,
+      "detail": {
+        "recordId": "crec_msh9444n3a915e5a03f7",
+        "grantId": null
+      }
+    },
+    "04_compliant_agreement": {
+      "ok": true,
+      "detail": {
+        "recordId": "crec_msh944jn109a542fbc11",
+        "grantId": "grant_msh944yh6f908dffef8e",
+        "status": "authorized"
+      }
+    },
+    "04_same_terms_digest": {
+      "ok": true,
+      "detail": {
+        "termsDigest": "9a6f3650b55c63b2f28d8960d8b7f49c",
+        "a": "9a6f3650b55c63b2f28d8960d8b7f49c",
+        "b": "9a6f3650b55c63b2f28d8960d8b7f49c"
+      }
+    },
+    "05_grant_after_agreement": {
+      "ok": true,
+      "detail": {
+        "idxAgree": 2,
+        "idxGrant": 3
+      }
+    },
+    "05_grant_origin_agreement": {
+      "ok": true,
+      "detail": {
+        "originKind": "collaboration_agreement",
+        "termsDigest": "9a6f3650b55c63b2f28d8960d8b7f49c"
+      }
+    },
+    "15_eval_not_from_a": {
+      "ok": true,
+      "detail": {
+        "evaluationBasis": [
+          "capability_count:1",
+          "within_autonomy"
+        ]
+      }
+    },
+    "06_real_model_fulfill": {
+      "ok": true,
+      "detail": {
+        "status": "delivered",
+        "reason": null,
+        "reachedModel": true,
+        "capabilityId": "cap_model_openai_compatible",
+        "chars": 599
+      }
+    },
+    "06_b_task_job_artifact": {
+      "ok": true,
+      "detail": {
+        "taskCount": 1
+      }
+    },
+    "06_b_authorization_grant": {
+      "ok": true,
+      "detail": {
+        "grantId": "grant_msh944yh6f908dffef8e"
+      }
+    },
+    "06_b_full_artifact": {
+      "ok": true,
+      "detail": {
+        "artifactId": "art_msh94569b79d51ca580a",
+        "headVersionId": "ver_msh94u7s7570d51ec3c9",
+        "chars": 599,
+        "digestPrefix": "a908096924e7b8fc"
+      }
+    },
+    "07_materialize_match": {
+      "ok": true,
+      "detail": {
+        "localArtifactId": "art_collab_msh944jn109a542fbc11",
+        "sourceArtifactId": "art_msh94569b79d51ca580a",
+        "sourceHeadVersionId": "ver_msh94u7s7570d51ec3c9",
+        "digestMatch": true,
+        "chars": 599
+      }
+    },
+    "14_no_excerpt_substitute": {
+      "ok": true,
+      "detail": {
+        "aChars": 599,
+        "bChars": 599,
+        "note": "完整正文往返，非 Grant 摘录字段"
+      }
+    },
+    "08_revision_requested": {
+      "ok": true,
+      "detail": {
+        "status": "delivered",
+        "localArtifactId": "art_collab_msh944jn109a542fbc11"
+      }
+    },
+    "09_revision_substantial": {
+      "ok": true,
+      "detail": {
+        "containsMarker": true,
+        "digestChanged": true,
+        "chars": 426
+      }
+    },
+    "10_version_provenance": {
+      "ok": true,
+      "detail": {
+        "versionCount": 2,
+        "headBefore": "ver_msh94ub2c2e194516992",
+        "headAfter": "ver_msh95ev459deaaa02f8d",
+        "provenanceDigestPrefix": "ff62026ec2a1abb1"
+      }
+    },
+    "11_accept": {
+      "ok": true,
+      "detail": {
+        "status": "completed"
+      }
+    },
+    "11_growth_a": {
+      "ok": true,
+      "detail": {
+        "count": 1,
+        "sampleTags": [
+          "collab:external_accept",
+          "decision:accept",
+          "document",
+          "collab:record:crec_msh944jn109a542fbc11",
+          "collab:peer:subj_msh93xx79fa01a5f4559"
+        ]
+      }
+    },
+    "11_growth_b": {
+      "ok": true,
+      "detail": {
+        "fulfilled": 1,
+        "acceptedByPeer": 1
+      }
+    },
+    "02_b_subject_rules_persist": {
+      "ok": true,
+      "detail": {
+        "bGrowthCount": 7
+      }
+    },
+    "13_idempotent_accept": {
+      "ok": true,
+      "detail": {
+        "acceptEventsBefore": 1,
+        "acceptEventsAfter": 1,
+        "status": "completed"
+      }
+    },
+    "13_idempotent_delivery_safe": {
+      "ok": true,
+      "detail": {
+        "againStatus": "completed",
+        "denied": true,
+        "reason": "协作结果已验收，不能重复履行"
+      }
+    },
+    "12_restart_a_status": {
+      "ok": true,
+      "detail": {
+        "status": "completed",
+        "termsDigest": "9a6f3650b55c63b2f28d8960d8b7f49c"
+      }
+    },
+    "12_restart_grant": {
+      "ok": true,
+      "detail": {
+        "grantStatus": "granted"
+      }
+    },
+    "12_restart_artifact_versions": {
+      "ok": true,
+      "detail": {
+        "versions": 2,
+        "head": "ver_msh95ev459deaaa02f8d"
+      }
+    },
+    "12_restart_growth_a": {
+      "ok": true,
+      "detail": {}
+    },
+    "12_restart_b": {
+      "ok": true,
+      "detail": {
+        "tasks": 2,
+        "growth": 7
+      }
+    },
+    "16_no_second_systems": {
+      "ok": true,
+      "detail": {
+        "note": "复用 Task/Job/Artifact/Growth；仅新增 CollaborationRecord 对象"
+      }
+    }
+  },
+  "failed": []
+}

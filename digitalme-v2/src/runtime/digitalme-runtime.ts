@@ -43,7 +43,6 @@ import { buildMaterialSummary } from '../work-runtime/material-summary';
 import { ArtifactWorkspace } from '../artifact-workspace/workspace';
 import type { CommandMap } from '../runtime/commands';
 import type { GrowthEvent } from '../subject-core/growth-event';
-import { simulateInteraction } from '../collaboration/local-simulation';
 import { LocalCollaborationHost } from '../collaboration/local-collaboration';
 import { GrantStore } from '../collaboration/grant-store';
 import { nowIso, newId } from '../shared/ids';
@@ -115,6 +114,7 @@ export class DigitalMeRuntime {
   private work: WorkRuntime | null = null;
   private workspace: ArtifactWorkspace | null = null;
   private contentStore: ContentStore | null = null;
+  private artifactCommitter: ArtifactCommitter | null = null;
   private readonly registry: CapabilityRegistry;
   private readonly options: DigitalMeRuntimeOptions;
   private unsubGrowthJobHook: (() => void) | null = null;
@@ -388,6 +388,35 @@ export class DigitalMeRuntime {
     return this.requireWorkspace().getContent(input.artifactId, input.versionId);
   }
 
+  /**
+   * 协作交付物化：完整成果进入本方 Artifact Store，并保留对方来源与约定 digest。
+   */
+  async materializePeerArtifact(input: {
+    title: string;
+    text: string;
+    recordId: string;
+    provenance: import('../work-runtime/artifact').ArtifactProvenance;
+    existingArtifactId?: string;
+  }): Promise<{ artifactId: string; headVersionId: string; contentDigest: string }> {
+    if (!this.artifactCommitter) {
+      throw new Error('artifact committer not attached; open or create a package first');
+    }
+    const pkg = this.subject.requireActive();
+    const { artifact, contentDigest } = await this.artifactCommitter.materializePeerText({
+      subjectId: pkg.id,
+      recordId: input.recordId,
+      title: input.title,
+      text: input.text,
+      provenance: input.provenance,
+      ...(input.existingArtifactId ? { existingArtifactId: input.existingArtifactId } : {}),
+    });
+    return {
+      artifactId: artifact.id,
+      headVersionId: artifact.headVersionId,
+      contentDigest,
+    };
+  }
+
   saveEdit(input: CommandMap['artifact.saveEdit']['input']) {
     return this.requireWorkspace().saveEdit(input.artifactId, input.text).then((r) => ({
       versionId: r.version.versionId,
@@ -509,39 +538,71 @@ export class DigitalMeRuntime {
     return out;
   }
 
-  async simulateCollab(
-    input: CommandMap['collab.simulateInteraction']['input'],
-  ): Promise<CommandMap['collab.simulateInteraction']['output']> {
-    const action = input.action;
+  async interactCollab(
+    input: CommandMap['collab.interact']['input'],
+  ): Promise<CommandMap['collab.interact']['output']> {
+    let action = input.action;
     if (!action) {
-      // 兼容旧冒烟：内存模拟（不落盘）
-      const pkg = this.subject.requireActive();
-      if (!input.granteeName || !input.scope || !input.goal) {
-        throw new Error('legacy collab.simulateInteraction requires granteeName, scope, goal');
-      }
-      const { request, grant } = simulateInteraction({
-        grantor: {
-          subjectId: pkg.id,
-          displayName: pkg.identity.displayName,
-          scheme: 'local',
-        },
-        granteeName: input.granteeName,
-        scope: input.scope,
-        goal: input.goal,
-      });
-      return { requestId: request.id, grantId: grant.id, status: 'authorized' };
+      throw new Error('collab.interact requires action（内存模拟已移出命令面，请直接使用测试替身）');
     }
+    if (action === 'issue') action = 'propose';
+    if (action === 'execute') action = 'fulfill';
+    if (action === 'acceptReturn') action = 'decideResult';
 
     const host = new LocalCollaborationHost(this);
-    if (action === 'issue') {
-      if (!input.granteePackageDir || !input.subtaskGoal) {
-        throw new Error('issue requires granteePackageDir, subtaskGoal');
+    const id = input.recordId || input.grantId;
+
+    if (action === 'propose') {
+      const intent = (input.intent || input.subtaskGoal || '').trim();
+      if (!input.granteePackageDir || !intent) {
+        throw new Error('propose requires granteePackageDir and intent/subtaskGoal');
       }
-      return host.issue({
-        granteePackageDir: input.granteePackageDir,
+      const materials = (input.allowedMaterialPaths ?? []).map((p) => ({ path: p }));
+      const criteria =
+        input.acceptanceCriteria && input.acceptanceCriteria.length > 0
+          ? input.acceptanceCriteria
+          : ['提供可核对的完整成果，并说明依据'];
+      const result = await host.propose({
+        responderPackageDir: input.granteePackageDir,
+        proposal: {
+          intent,
+          expectedOutcome: (input.expectedOutcome || intent).trim(),
+          offeredMaterials: materials,
+          acceptanceCriteria: criteria,
+          ...(input.deadline ? { deadline: input.deadline } : {}),
+          ...(input.costTerms ? { costTerms: input.costTerms } : {}),
+        },
         ...(input.issuerTaskId ? { issuerTaskId: input.issuerTaskId } : {}),
-        subtaskGoal: input.subtaskGoal,
-        allowedMaterialPaths: input.allowedMaterialPaths ?? [],
+        ...(input.skipAutoEvaluate ? { skipAutoEvaluate: true } : {}),
+      });
+      return {
+        recordId: result.recordId,
+        status: result.status,
+        ...(result.grantId ? { grantId: result.grantId } : {}),
+        ...(result.evaluationBasis ? { evaluationBasis: result.evaluationBasis } : {}),
+        ...(result.requiresOwnerConfirmation ? { requiresOwnerConfirmation: true } : {}),
+      };
+    }
+    if (action === 'evaluate') {
+      if (!id) throw new Error('evaluate requires recordId');
+      return host.autoEvaluateAndMaybeAgree(id);
+    }
+    if (action === 'respond') {
+      if (!id || !input.decision) throw new Error('respond requires recordId and decision');
+      const decision = input.decision;
+      if (
+        decision !== 'accept' &&
+        decision !== 'reject' &&
+        decision !== 'counter_propose' &&
+        decision !== 'request_clarification'
+      ) {
+        throw new Error('respond decision must be accept|reject|counter_propose|request_clarification');
+      }
+      return host.respond({
+        recordId: id,
+        decision,
+        ...(input.terms ? { terms: input.terms } : {}),
+        ...(input.note ? { note: input.note } : {}),
       });
     }
     if (action === 'resolvePeer') {
@@ -549,77 +610,61 @@ export class DigitalMeRuntime {
       return host.resolvePeer(input.granteePackageDir);
     }
     if (action === 'revoke') {
-      if (!input.grantId) throw new Error('revoke requires grantId');
-      return host.revoke(input.grantId);
+      if (!id) throw new Error('revoke requires recordId or grantId');
+      return host.revoke(id);
     }
-    if (action === 'execute') {
-      if (!input.grantId) throw new Error('execute requires grantId');
-      return host.execute(
-        input.grantId,
-        input.extraMaterialPaths ? { extraMaterialPaths: input.extraMaterialPaths } : {},
-      );
+    if (action === 'fulfill') {
+      if (!id) throw new Error('fulfill requires recordId');
+      return host.fulfill(id);
+    }
+    if (action === 'requestRevision') {
+      if (!id || !input.note) throw new Error('requestRevision requires recordId and note');
+      return host.requestRevision({ recordId: id, note: input.note });
     }
     if (action === 'list') {
       return host.list();
     }
+    if (action === 'reconcile') {
+      if (!id) throw new Error('reconcile requires recordId');
+      const record = await host.reconcile(id);
+      return { recordId: record.recordId, status: 'ok' };
+    }
     if (action === 'status') {
-      if (!input.grantId) throw new Error('status requires grantId');
-      const got = await host.getStatus(input.grantId);
+      if (!id) throw new Error('status requires recordId or grantId');
+      const got = await host.getStatus(id);
       return {
-        grantId: got.grantId,
+        recordId: got.recordId,
+        ...(got.grantId ? { grantId: got.grantId } : {}),
         status: got.status,
         ...(got.ownerDecision ? { ownerDecision: got.ownerDecision } : {}),
-        grant: {
-          id: got.grant.id,
-          status: got.grant.status,
-          ...(got.grant.subtaskGoal ? { subtaskGoal: got.grant.subtaskGoal } : {}),
-          ...(got.grant.granteeDisplayName
-            ? { granteeDisplayName: got.grant.granteeDisplayName }
-            : {}),
-          ...(got.grant.returnedArtifact?.textExcerpt
-            ? { returnedExcerpt: got.grant.returnedArtifact.textExcerpt }
-            : {}),
-          ...(got.grant.returnedArtifact?.reachedModel !== undefined
-            ? { reachedModel: got.grant.returnedArtifact.reachedModel }
-            : {}),
-          allowedMaterials: (got.grant.scope.resourceRefs ?? []).map((p) => path.resolve(p)),
-          ...(got.grant.issuerTaskId ? { issuerTaskId: got.grant.issuerTaskId } : {}),
-          ...(got.grant.lastFailure?.message
-            ? { failureMessage: got.grant.lastFailure.message }
-            : {}),
-          ...(got.ownerDecision ? { ownerDecision: got.ownerDecision } : {}),
-        },
-        ...(got.grant.disclosure?.reachedModel !== undefined
-          ? { reachedModel: got.grant.disclosure.reachedModel }
-          : {}),
-        ...(got.grant.disclosure?.capabilityId
-          ? { capabilityId: got.grant.disclosure.capabilityId }
-          : {}),
-        ...(got.grant.returnedArtifact
-          ? {
-              artifactId: got.grant.returnedArtifact.artifactId,
-              artifactText: got.grant.returnedArtifact.textExcerpt,
-            }
-          : {}),
+        ...(got.grant ? { grant: got.grant } : {}),
+        ...(got.artifactId ? { artifactId: got.artifactId } : {}),
+        ...(got.artifactText ? { artifactText: got.artifactText } : {}),
+        ...(got.grant?.termsDigest ? { termsDigest: got.grant.termsDigest } : {}),
+        ...(got.grant?.evaluationBasis ? { evaluationBasis: got.grant.evaluationBasis } : {}),
       };
     }
-    if (action === 'acceptReturn') {
-      if (!input.grantId || !input.decision) {
-        throw new Error('acceptReturn requires grantId and decision');
+    if (action === 'decideResult') {
+      if (!id || !input.decision) {
+        throw new Error('decideResult requires recordId and decision');
       }
-      return host.acceptReturn({
-        grantId: input.grantId,
+      if (input.decision !== 'accept' && input.decision !== 'reject') {
+        throw new Error('decideResult decision must be accept or reject');
+      }
+      return host.decideResult({
+        recordId: id,
         decision: input.decision,
         ...(input.note ? { note: input.note } : {}),
       });
     }
     if (action === 'assertMaterialAccess') {
-      if (!input.grantId || !input.attemptMaterialPath) {
-        throw new Error('assertMaterialAccess requires grantId and attemptMaterialPath');
+      if (!id || !input.attemptMaterialPath) {
+        throw new Error('assertMaterialAccess requires recordId/grantId and attemptMaterialPath');
       }
-      const access = await host.assertMaterialAccess(input.grantId, input.attemptMaterialPath);
+      const access = await host.assertMaterialAccess(id, input.attemptMaterialPath);
       return {
-        grantId: input.grantId,
+        recordId: id,
+        grantId: id,
         allowed: access.allowed,
         denied: !access.allowed,
         ...(access.reason ? { reason: access.reason } : {}),
@@ -684,16 +729,18 @@ export class DigitalMeRuntime {
 
     const subjectService = this.subject;
     const grantStorePromise = GrantStore.open(pkg.rootDir);
+    const artifactCommitter = new ArtifactCommitter(
+      artifactStore,
+      contentStore,
+      path.join(root, 'artifact-files'),
+    );
+    this.artifactCommitter = artifactCommitter;
     this.work = new WorkRuntime({
       subjectId: pkg.id,
       taskService: new TaskService(taskStore),
       jobStore: new JobStore(jobStoreRaw),
       snapshotBuilder: new ContextSnapshotBuilder(snapshotStore, contentStore),
-      artifactCommitter: new ArtifactCommitter(
-        artifactStore,
-        contentStore,
-        path.join(root, 'artifact-files'),
-      ),
+      artifactCommitter,
       registry,
       eventBus: this.eventBus,
       workRoot: path.join(root, 'work'),

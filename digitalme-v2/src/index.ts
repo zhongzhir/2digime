@@ -36,6 +36,11 @@ export * from './capability/adapters/prompt-assemble';
 export * from './collaboration/schema';
 export * from './collaboration/local-simulation';
 export * from './collaboration/local-collaboration';
+export * from './collaboration/record-store';
+export * from './collaboration/record-derive';
+export * from './collaboration/transport';
+export * from './collaboration/evaluate';
+export * from './collaboration/schema';
 export * from './collaboration/grant-store';
 
 export * from './artifact-workspace/contracts';

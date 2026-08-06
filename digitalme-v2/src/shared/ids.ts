@@ -12,6 +12,8 @@ export const ID_PREFIXES = {
   grant: 'grant',
   interactionRequest: 'ireq',
   collaborationJob: 'cjob',
+  collaborationRecord: 'crec',
+  collaborationEvent: 'cevt',
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

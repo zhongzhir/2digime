@@ -119,9 +119,9 @@ export function createCommandBus(runtime: DigitalMeRuntime): CommandBus {
           return (await runtime.listCapabilities(
             (input || {}) as CommandMap['capability.list']['input'],
           )) as CommandMap[K]['output'];
-        case 'collab.simulateInteraction':
-          return (await runtime.simulateCollab(
-            input as CommandMap['collab.simulateInteraction']['input'],
+        case 'collab.interact':
+          return (await runtime.interactCollab(
+            input as CommandMap['collab.interact']['input'],
           )) as CommandMap[K]['output'];
         default: {
           const _exhaustive: never = name;

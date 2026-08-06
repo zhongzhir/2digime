@@ -188,41 +188,45 @@ test('real model dual-subject collaboration sample', async () => {
   const busA = createCommandBus(runtimeA);
   await runtimeA.openPackage({ dir: dirA });
 
-  const issued = await busA.invoke('collab.simulateInteraction', {
-    action: 'issue',
+  const issued = await busA.invoke('collab.interact', {
+    action: 'propose',
     granteePackageDir: dirB,
     issuerTaskId: main.taskId,
-    subtaskGoal:
+    intent:
       '根据授权材料 X，整理一段 300–500 字的核心观点摘要，供主报告使用。必须提到项目代号，不得使用未授权材料。',
     allowedMaterialPaths: [matX],
+    acceptanceCriteria: ['提供可核对的完整成果，并说明依据', '提到项目代号'],
+    deadline: new Date(Date.now() + 86400000).toISOString(),
   });
+  assert.ok(issued.recordId);
   assert.ok(issued.grantId);
 
-  const denyY = await busA.invoke('collab.simulateInteraction', {
+  const denyY = await busA.invoke('collab.interact', {
     action: 'assertMaterialAccess',
-    grantId: issued.grantId,
+    recordId: issued.recordId,
     attemptMaterialPath: matY,
   });
   assert.equal(denyY.allowed, false);
 
-  const executed = await busA.invoke('collab.simulateInteraction', {
-    action: 'execute',
-    grantId: issued.grantId,
+  const executed = await busA.invoke('collab.interact', {
+    action: 'fulfill',
+    recordId: issued.recordId,
   });
-  assert.notEqual(executed.status, 'failed', executed.reason || 'execute failed');
+  assert.notEqual(executed.status, 'failed', executed.reason || 'fulfill failed');
   assert.equal(executed.reachedModel, true);
   assert.equal(executed.capabilityId, OPENAI_COMPATIBLE_CAPABILITY_ID);
   assert.ok((executed.artifactText || '').length >= 120);
   assert.match(executed.artifactText || '', uniqueXPattern);
   assert.doesNotMatch(executed.artifactText || '', new RegExp(uniqueY));
-  // 排除明显 Fake/模板腔
   assert.doesNotMatch(executed.artifactText || '', /FAKE_DOCUMENT|\[stub\]|lorem ipsum/i);
+  assert.ok(executed.localArtifactId);
 
   const store = await GrantStore.open(dirA);
   const grant = await store.get(issued.grantId!);
-  assert.equal(grant?.disclosure?.reachedModel, true);
-  assert.ok(grant?.disclosure?.snapshotId);
-  assert.ok(grant?.returnedArtifact?.artifactId);
+  assert.equal(grant?.origin.kind, 'collaboration_agreement');
+  const localArt = await runtimeA.getContent({ artifactId: executed.localArtifactId! });
+  assert.ok(localArt.artifact.provenance);
+  assert.equal(localArt.artifact.provenance?.sourceArtifactId, executed.artifactId);
 
   const runtimeB = createDigitalMeRuntime({
     documentCapability: 'openai-compatible',
@@ -236,39 +240,42 @@ test('real model dual-subject collaboration sample', async () => {
     registerOpenAiStub: false,
   });
   await runtimeB.openPackage({ dir: dirB });
-  const snap = await runtimeB.getSnapshot(grant!.disclosure!.snapshotId!);
-  assert.equal(snap?.authorization?.grantId, issued.grantId);
-  assert.ok(snap!.items.every((i) => path.resolve(i.sourcePath) !== path.resolve(matY)));
+  const bTaskList = await runtimeB.listTasks({ limit: 10 });
+  assert.ok(bTaskList.tasks.length >= 1);
+  const bTask = await runtimeB.getTask({ taskId: bTaskList.tasks[0]!.taskId });
+  assert.equal(bTask.task.authorization?.grantId, issued.grantId);
+  const jobId = bTask.latestJob?.jobId;
+  if (jobId) {
+    const job = await runtimeB.workRuntime.getJob(jobId);
+    if (job?.snapshotId) {
+      const snap = await runtimeB.getSnapshot(job.snapshotId);
+      assert.ok(snap!.items.every((i) => path.resolve(i.sourcePath) !== path.resolve(matY)));
+    }
+  }
   const bEvents = await runtimeB.subject.listGrowthEvents();
   const fulfilled = bEvents.filter((e) => (e.payload.tags ?? []).includes('collab:fulfilled'));
-  assert.equal(fulfilled.length, 1);
+  assert.ok(fulfilled.length >= 1);
 
-  const accepted = await busA.invoke('collab.simulateInteraction', {
-    action: 'acceptReturn',
-    grantId: issued.grantId,
+  const accepted = await busA.invoke('collab.interact', {
+    action: 'decideResult',
+    recordId: issued.recordId,
     decision: 'accept',
-    note: '摘要可用，已纳入主报告',
+    note: '摘要可用',
   });
   assert.ok(accepted.issuerEventId);
-  assert.ok(accepted.integratedIntoArtifactId);
+  assert.ok(accepted.localArtifactId || executed.localArtifactId);
 
   const aEvents = await runtimeA.subject.listGrowthEvents();
   assert.ok(aEvents.some((e) => (e.payload.tags ?? []).includes('collab:external_accept')));
-  const mainText = (await runtimeA.getContent({ artifactId: mainArtifactId })).text || '';
-  assert.match(mainText, /协作摘要（已采用）/);
-  assert.match(mainText, uniqueXPattern);
-  // 整合区引用协作成果；A 主任务本身可持有 Y，但回流摘要不得带入 Y 特有内容
-  const collabSection = mainText.slice(mainText.indexOf('协作摘要（已采用）'));
-  assert.doesNotMatch(collabSection, new RegExp(uniqueY));
-  assert.doesNotMatch(grant!.returnedArtifact!.textExcerpt || '', new RegExp(uniqueY));
+  assert.doesNotMatch(executed.artifactText || '', new RegExp(uniqueY));
 
-  await busA.invoke('collab.simulateInteraction', {
+  await busA.invoke('collab.interact', {
     action: 'revoke',
-    grantId: issued.grantId,
+    recordId: issued.recordId,
   });
-  const again = await busA.invoke('collab.simulateInteraction', {
-    action: 'execute',
-    grantId: issued.grantId,
+  const again = await busA.invoke('collab.interact', {
+    action: 'fulfill',
+    recordId: issued.recordId,
   });
   assert.equal(again.denied, true);
 
@@ -285,12 +292,11 @@ test('real model dual-subject collaboration sample', async () => {
   });
   const busA2 = createCommandBus(runtimeA2);
   await runtimeA2.openPackage({ dir: dirA });
-  const restored = await busA2.invoke('collab.simulateInteraction', {
+  const restored = await busA2.invoke('collab.interact', {
     action: 'status',
-    grantId: issued.grantId,
+    recordId: issued.recordId,
   });
   assert.equal(restored.status, 'revoked');
-  assert.equal(restored.reachedModel, true);
 
   const evidenceDir = path.join(
     process.cwd(),

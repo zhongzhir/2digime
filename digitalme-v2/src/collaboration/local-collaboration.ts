@@ -1,8 +1,9 @@
 /**
- * 同机双 SubjectPackage 协作编排。
- * - Grant 持久在 issuer 包内（对象 #8）
- * - B 执行复用既有 WorkRuntime / ExecutionJob
- * - 不新建 Collaboration Store / 第二套 Job 状态机
+ * 主体协作协调器（部署无关）。
+ * - CollaborationRecord：提议/协商/约定/交付事件（append-only）
+ * - AuthorizationGrant：约定后的纯授权
+ * - 执行复用 WorkRuntime；成果物化保留 provenance
+ * - 绝对路径仅经 LocalPackageTransport
  */
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
@@ -13,46 +14,48 @@ import { waitForJobTerminal } from '../work-runtime/job-runner';
 import type { ContextRef } from '../work-runtime/task';
 import { OPENAI_COMPATIBLE_CAPABILITY_ID } from '../capability/adapters/openai-compatible';
 import { GrantStore } from './grant-store';
+import { CollaborationRecordStore } from './record-store';
+import { LocalPackageTransport, type CollaborationTransport } from './transport';
+import {
+  deriveCollabStatus,
+  findAgreement,
+  latestDelivery,
+  latestGrantId,
+  latestOwnerDecision,
+  latestTerms,
+  mergeIncomingEvents,
+  termsDigestOf,
+  tryFormAgreementDigest,
+} from './record-derive';
+import {
+  evaluateProposalForSubject,
+  selfCheckDelivery,
+  verifyDeliveryByInitiator,
+} from './evaluate';
 import {
   LOCAL_COLLAB_ACTIONS,
   type AuthorizationGrant,
+  type CollaborationEvent,
+  type CollaborationProposalTerms,
+  type CollaborationRecord,
   type CollabUserStatus,
   type InteractionRequest,
+  type SubjectRef,
 } from './schema';
-
-export interface CollabIssueInput {
-  granteePackageDir: string;
-  /** 可选：做事页发起时关联的 A 侧任务；协作页新建可不传（身份由 Grant 承载）。 */
-  issuerTaskId?: string;
-  subtaskGoal: string;
-  allowedMaterialPaths: string[];
-}
 
 export interface CollabPeerPreview {
   displayName: string;
   packageDir: string;
   brief?: string;
   subjectId?: string;
+  endpointRef?: string;
 }
 
-export interface CollabExecuteResult {
-  grantId: string;
-  status: CollabUserStatus;
-  artifactId?: string;
-  artifactText?: string;
-  jobId?: string;
-  granteeEventId?: string;
-  denied?: boolean;
-  reason?: string;
-  reachedModel?: boolean;
-  capabilityId?: string;
-}
-
-/** 产品面投影（派生自 Grant + GrowthEvent，非第二权威 Store）。 */
 export interface CollabListItem {
-  grantId: string;
+  recordId: string;
+  grantId?: string;
   status: CollabUserStatus;
-  ownerDecision?: 'accept' | 'reject';
+  ownerDecision?: 'accept' | 'reject' | 'revise';
   subtaskGoal?: string;
   granteeDisplayName?: string;
   allowedMaterials: string[];
@@ -60,28 +63,21 @@ export interface CollabListItem {
   issuerTaskId?: string;
   failureMessage?: string;
   reachedModel?: boolean;
+  localArtifactId?: string;
+  evaluationBasis?: string[];
 }
 
 function normPath(p: string): string {
   return path.resolve(p);
 }
 
-function deriveUserStatus(grant: AuthorizationGrant): CollabUserStatus {
-  if (grant.status === 'revoked') return 'revoked';
-  if (grant.status === 'expired') return 'revoked';
-  if (grant.lastFailure && !grant.returnedArtifact) return 'failed';
-  if (grant.returnedArtifact) return 'completed';
-  if (grant.disclosure?.jobId) return 'running';
-  return 'authorized';
+function contentDigest(text: string): string {
+  return createHash('sha256').update(text).digest('hex');
 }
 
 function assertGrantUsable(grant: AuthorizationGrant): void {
-  if (grant.status === 'revoked') {
-    throw new Error('authorization grant has been revoked');
-  }
-  if (grant.status === 'expired') {
-    throw new Error('authorization grant has expired');
-  }
+  if (grant.status === 'revoked') throw new Error('authorization grant has been revoked');
+  if (grant.status === 'expired') throw new Error('authorization grant has expired');
   if (grant.expiresAt && Date.parse(grant.expiresAt) < Date.now()) {
     throw new Error('authorization grant has expired');
   }
@@ -93,300 +89,609 @@ function assertGrantUsable(grant: AuthorizationGrant): void {
   }
 }
 
-function isPathAllowed(grant: AuthorizationGrant, materialPath: string): boolean {
-  const target = normPath(materialPath);
-  const allowed = (grant.scope.resourceRefs ?? []).map(normPath);
-  return allowed.includes(target);
-}
-
 export class LocalCollaborationHost {
-  constructor(private readonly issuer: DigitalMeRuntime) {}
+  private readonly transport: CollaborationTransport;
+
+  constructor(
+    private readonly issuer: DigitalMeRuntime,
+    transport?: CollaborationTransport,
+  ) {
+    this.transport = transport ?? new LocalPackageTransport(issuer);
+  }
+
+  private async recordStore(): Promise<CollaborationRecordStore> {
+    return CollaborationRecordStore.open(this.issuer.subject.requireActive().rootDir);
+  }
 
   private async grantStore(): Promise<GrantStore> {
-    const pkg = this.issuer.subject.requireActive();
-    return GrantStore.open(pkg.rootDir);
+    return GrantStore.open(this.issuer.subject.requireActive().rootDir);
   }
 
-  async issue(input: CollabIssueInput): Promise<{
-    requestId: string;
-    grantId: string;
-    status: CollabUserStatus;
-  }> {
-    const issuerPkg = this.issuer.subject.requireActive();
-    const goal = input.subtaskGoal.trim();
-    if (!goal) throw new Error('subtask goal required');
-    const granteeDir = path.resolve(input.granteePackageDir);
-    const granteeRt = this.issuer.createSiblingRuntime();
+  private async loadRecord(recordId: string): Promise<CollaborationRecord> {
+    const store = await this.recordStore();
+    const record = await store.get(recordId);
+    if (!record) throw new Error(`collaboration record not found: ${recordId}`);
+    return record;
+  }
+
+  private async saveLocal(record: CollaborationRecord): Promise<void> {
+    const store = await this.recordStore();
+    await store.put(record);
+  }
+
+  /** 追加本方事件并推送到对方副本（幂等 eventId）。 */
+  private async appendAndSync(
+    record: CollaborationRecord,
+    events: CollaborationEvent[],
+    peerEndpointRef: string,
+  ): Promise<CollaborationRecord> {
+    const next = await this.appendLocalOnly(record, events);
+    await this.transport.pushEvents({
+      endpointRef: peerEndpointRef,
+      recordId: record.recordId,
+      events,
+      seedRecord: next,
+    });
+    return next;
+  }
+
+  /** 仅追加本方事件（对端 Runtime 打开期间禁止 push，以免 recover 打断 Job）。 */
+  private async appendLocalOnly(
+    record: CollaborationRecord,
+    events: CollaborationEvent[],
+  ): Promise<CollaborationRecord> {
+    const next: CollaborationRecord = {
+      ...record,
+      events: [...record.events, ...events],
+      updatedAt: events[events.length - 1]?.at || nowIso(),
+    };
+    await this.saveLocal(next);
+    return next;
+  }
+
+  private async syncFullRecordToPeer(record: CollaborationRecord): Promise<void> {
+    const selfId = this.issuer.subject.requireActive().id;
+    const peer =
+      record.initiator.subjectId === selfId ? record.responder : record.initiator;
+    await this.transport.pushEvents({
+      endpointRef: peer.endpointRef,
+      recordId: record.recordId,
+      events: record.events,
+      seedRecord: record,
+    });
+  }
+
+  /** 打开包/进入协作页时的对账：拉取对方事件并入本地副本。 */
+  async reconcile(recordId: string): Promise<CollaborationRecord> {
+    const local = await this.loadRecord(recordId);
+    const selfId = this.issuer.subject.requireActive().id;
+    const peer =
+      local.initiator.subjectId === selfId ? local.responder : local.initiator;
     try {
-      const opened = await granteeRt.openPackage({ dir: granteeDir });
-      const allowed = [...new Set(input.allowedMaterialPaths.map(normPath))];
-      for (const p of allowed) {
-        await fs.access(p);
+      const remote = await this.transport.pullRecord(peer.endpointRef, recordId);
+      if (!remote) return local;
+      const merged = mergeIncomingEvents(local, remote.events);
+      if (merged.events.length !== local.events.length) {
+        await this.saveLocal(merged);
       }
-      const at = nowIso();
-      const requestId = newId('interactionRequest');
-      const grant: AuthorizationGrant = {
-        id: newId('grant'),
-        grantorSubjectId: issuerPkg.id,
-        grantee: { kind: 'remote_subject', subjectId: opened.subjectId },
-        scope: {
-          actions: [...LOCAL_COLLAB_ACTIONS],
-          resourceRefs: allowed,
-        },
-        origin: {
-          kind: 'interaction_request',
-          requestId,
-          requestSummary: {
-            fromDisplayName: opened.displayName,
-            goal,
-          },
-        },
-        status: 'granted',
-        grantedAt: at,
-        ...(input.issuerTaskId ? { issuerTaskId: input.issuerTaskId } : {}),
-        subtaskGoal: goal,
-        granteePackageDir: granteeDir,
-        granteeDisplayName: opened.displayName,
-      };
-      const store = await this.grantStore();
-      await store.put(grant);
-      return { requestId, grantId: grant.id, status: 'authorized' };
-    } finally {
-      await granteeRt.stop();
+      return merged;
+    } catch (err) {
+      // 对端不可达时保留本地状态
+      void err;
+      return local;
     }
   }
 
-  /**
-   * 预览本机协作对象身份（不切换当前活动包、不落盘）。
-   */
   async resolvePeer(granteePackageDir: string): Promise<CollabPeerPreview> {
-    const granteeDir = path.resolve(granteePackageDir);
-    const granteeRt = this.issuer.createSiblingRuntime();
-    try {
-      const opened = await granteeRt.openPackage({ dir: granteeDir });
-      let brief: string | undefined;
-      try {
-        const overview = await granteeRt.getOverview({});
-        const line =
-          (overview.activeUnderstandings &&
-            overview.activeUnderstandings[0] &&
-            overview.activeUnderstandings[0].text) ||
-          overview.summaryLine ||
-          '';
-        if (line && String(line).trim()) brief = String(line).trim().slice(0, 120);
-      } catch {
-        /* overview 可选 */
-      }
-      return {
-        displayName: opened.displayName,
-        packageDir: granteeDir,
-        subjectId: opened.subjectId,
-        ...(brief ? { brief } : {}),
-      };
-    } finally {
-      await granteeRt.stop();
-    }
-  }
-
-  async revoke(grantId: string): Promise<{ grantId: string; status: CollabUserStatus }> {
-    const store = await this.grantStore();
-    const grant = await store.get(grantId);
-    if (!grant) throw new Error(`grant not found: ${grantId}`);
-    if (grant.status !== 'revoked') {
-      grant.status = 'revoked';
-      grant.revokedAt = nowIso();
-      await store.put(grant);
-    }
-    return { grantId, status: 'revoked' };
-  }
-
-  async getStatus(grantId: string): Promise<{
-    grantId: string;
-    status: CollabUserStatus;
-    grant: AuthorizationGrant;
-    ownerDecision?: 'accept' | 'reject';
-  }> {
-    const store = await this.grantStore();
-    const grant = await store.get(grantId);
-    if (!grant) throw new Error(`grant not found: ${grantId}`);
-    const ownerDecision = await this.resolveOwnerDecision(grantId);
+    const peer = await this.transport.resolvePeer(granteePackageDir);
+    const dir = path.resolve(granteePackageDir);
     return {
-      grantId,
-      status: deriveUserStatus(grant),
-      grant,
-      ...(ownerDecision ? { ownerDecision } : {}),
+      displayName: peer.displayName,
+      packageDir: dir,
+      subjectId: peer.subjectId,
+      endpointRef: peer.endpointRef,
+      ...(peer.brief ? { brief: peer.brief } : {}),
     };
   }
 
   /**
-   * 列出本主体发出的协作授权（读 GrantStore，不另建协作 Store）。
+   * 发起协作提议。同设备验证阶段随后自动触发 B 评估（规则内自动，越界 JIT）。
    */
-  async list(): Promise<{ items: CollabListItem[] }> {
-    const store = await this.grantStore();
-    const grants = await store.list();
-    const items: CollabListItem[] = [];
-    for (const grant of grants) {
-      if (!grant.subtaskGoal && !grant.granteePackageDir) continue;
-      const ownerDecision = await this.resolveOwnerDecision(grant.id);
-      const status = deriveUserStatus(grant);
-      items.push({
-        grantId: grant.id,
-        status,
-        ...(ownerDecision ? { ownerDecision } : {}),
-        ...(grant.subtaskGoal ? { subtaskGoal: grant.subtaskGoal } : {}),
-        ...(grant.granteeDisplayName
-          ? { granteeDisplayName: grant.granteeDisplayName }
-          : {}),
-        allowedMaterials: (grant.scope.resourceRefs ?? []).map(normPath),
-        ...(grant.returnedArtifact?.textExcerpt
-          ? { returnedExcerpt: grant.returnedArtifact.textExcerpt }
-          : {}),
-        ...(grant.issuerTaskId ? { issuerTaskId: grant.issuerTaskId } : {}),
-        ...(grant.lastFailure?.message
-          ? { failureMessage: grant.lastFailure.message }
-          : {}),
-        ...(grant.disclosure?.reachedModel !== undefined
-          ? { reachedModel: grant.disclosure.reachedModel }
-          : grant.returnedArtifact?.reachedModel !== undefined
-            ? { reachedModel: grant.returnedArtifact.reachedModel }
-            : {}),
-      });
+  async propose(input: {
+    responderPackageDir: string;
+    proposal: CollaborationProposalTerms;
+    issuerTaskId?: string;
+    /** 为 true 时不自动评估（测试用）。 */
+    skipAutoEvaluate?: boolean;
+  }): Promise<{
+    recordId: string;
+    status: CollabUserStatus;
+    grantId?: string;
+    evaluationBasis?: string[];
+    requiresOwnerConfirmation?: boolean;
+  }> {
+    const issuerPkg = this.issuer.subject.requireActive();
+    const intent = input.proposal.intent.trim();
+    if (!intent) throw new Error('collaboration intent required');
+
+    const responder = await this.transport.resolvePeer(input.responderPackageDir);
+    const materials = input.proposal.offeredMaterials.map((m) => ({
+      path: normPath(m.path),
+      ...(m.summary ? { summary: m.summary } : {}),
+    }));
+    for (const m of materials) await fs.access(m.path);
+
+    const terms: CollaborationProposalTerms = {
+      ...input.proposal,
+      intent,
+      expectedOutcome: input.proposal.expectedOutcome.trim() || intent,
+      offeredMaterials: materials,
+      acceptanceCriteria: [...input.proposal.acceptanceCriteria],
+    };
+    const digest = termsDigestOf(terms);
+    const at = nowIso();
+    const recordId = newId('collaborationRecord');
+    const proposed: CollaborationEvent = {
+      eventId: newId('collaborationEvent'),
+      kind: 'proposed',
+      authorSubjectId: issuerPkg.id,
+      at,
+      termsDigest: digest,
+      terms,
+    };
+    const initiator: SubjectRef = {
+      subjectId: issuerPkg.id,
+      displayName: issuerPkg.identity.displayName,
+      endpointRef: `subject:${issuerPkg.id}`,
+    };
+    // 注册自身 endpoint，便于对方回推（同设备）
+    await this.transport.registerEndpoint(initiator, issuerPkg.rootDir);
+
+    const record: CollaborationRecord = {
+      id: recordId,
+      recordId,
+      initiator,
+      responder: {
+        subjectId: responder.subjectId,
+        displayName: responder.displayName,
+        endpointRef: responder.endpointRef,
+      },
+      proposal: terms,
+      events: [proposed],
+      createdAt: at,
+      updatedAt: at,
+      ...(input.issuerTaskId ? { issuerTaskId: input.issuerTaskId } : {}),
+    };
+    await this.saveLocal(record);
+    await this.transport.pushEvents({
+      endpointRef: responder.endpointRef,
+      recordId,
+      events: [proposed],
+      seedRecord: record,
+    });
+
+    if (input.skipAutoEvaluate) {
+      return { recordId, status: deriveCollabStatus(record) };
     }
-    items.sort((a, b) => b.grantId.localeCompare(a.grantId));
-    return { items };
+    return this.autoEvaluateAndMaybeAgree(recordId);
   }
 
-  private async resolveOwnerDecision(
-    grantId: string,
-  ): Promise<'accept' | 'reject' | undefined> {
-    const events = await this.issuer.subject.listGrowthEvents();
-    const needle = `grant ${grantId}`;
-    for (let i = events.length - 1; i >= 0; i -= 1) {
-      const e = events[i];
-      if (!e) continue;
-      const detail = e.payload.detail || '';
-      if (!detail.includes(needle)) continue;
-      const tags = e.payload.tags ?? [];
-      if (tags.includes('collab:external_accept')) return 'accept';
-      if (tags.includes('collab:external_reject')) return 'reject';
-    }
-    return undefined;
-  }
-
-  async assertMaterialAccess(
-    grantId: string,
-    materialPath: string,
-  ): Promise<{ allowed: boolean; reason?: string }> {
-    const store = await this.grantStore();
-    const grant = await store.get(grantId);
-    if (!grant) return { allowed: false, reason: 'grant not found' };
+  /** B 规则内自动评估；越界返回 awaiting_owner。 */
+  async autoEvaluateAndMaybeAgree(recordId: string): Promise<{
+    recordId: string;
+    status: CollabUserStatus;
+    grantId?: string;
+    evaluationBasis?: string[];
+    requiresOwnerConfirmation?: boolean;
+  }> {
+    let record = await this.reconcile(recordId);
+    const opened = await this.transport.openByEndpointRef(record.responder.endpointRef);
     try {
-      assertGrantUsable(grant);
-    } catch (err) {
-      return { allowed: false, reason: err instanceof Error ? err.message : String(err) };
+      // 在 B 侧注册 A 的 endpoint，便于 B 回推
+      await new LocalPackageTransport(opened.runtime).registerEndpoint(
+        record.initiator,
+        this.issuer.subject.requireActive().rootDir,
+      );
+
+      const terms = latestTerms(record);
+      const evaluation = await evaluateProposalForSubject(opened.runtime, terms);
+      const at = nowIso();
+
+      if (evaluation.requiresOwnerConfirmation || evaluation.decision === 'require_owner_confirmation') {
+        const ev: CollaborationEvent = {
+          eventId: newId('collaborationEvent'),
+          kind: 'owner_confirmation_required',
+          authorSubjectId: record.responder.subjectId,
+          at,
+          note: evaluation.note,
+          evaluationBasis: evaluation.basis,
+          requiresOwnerConfirmation: true,
+        };
+        record = await this.appendAndSync(record, [ev], record.responder.endpointRef);
+        return {
+          recordId,
+          status: deriveCollabStatus(record),
+          evaluationBasis: evaluation.basis,
+          requiresOwnerConfirmation: true,
+        };
+      }
+
+      if (evaluation.decision === 'reject') {
+        const ev: CollaborationEvent = {
+          eventId: newId('collaborationEvent'),
+          kind: 'rejected',
+          authorSubjectId: record.responder.subjectId,
+          at,
+          note: evaluation.note,
+          evaluationBasis: evaluation.basis,
+        };
+        record = await this.appendAndSync(record, [ev], record.responder.endpointRef);
+        return { recordId, status: deriveCollabStatus(record), evaluationBasis: evaluation.basis };
+      }
+
+      if (evaluation.decision === 'request_clarification') {
+        const ev: CollaborationEvent = {
+          eventId: newId('collaborationEvent'),
+          kind: 'clarification_requested',
+          authorSubjectId: record.responder.subjectId,
+          at,
+          note: evaluation.note,
+          ...(evaluation.terms ? { terms: evaluation.terms, termsDigest: termsDigestOf(evaluation.terms) } : {}),
+          evaluationBasis: evaluation.basis,
+        };
+        record = await this.appendAndSync(record, [ev], record.responder.endpointRef);
+        return { recordId, status: deriveCollabStatus(record), evaluationBasis: evaluation.basis };
+      }
+
+      if (evaluation.decision === 'counter_propose' && evaluation.terms) {
+        const counterDigest = termsDigestOf(evaluation.terms);
+        const counterEv: CollaborationEvent = {
+          eventId: newId('collaborationEvent'),
+          kind: 'counter_proposed',
+          authorSubjectId: record.responder.subjectId,
+          at,
+          terms: evaluation.terms,
+          termsDigest: counterDigest,
+          note: evaluation.note,
+          evaluationBasis: evaluation.basis,
+        };
+        record = await this.appendAndSync(record, [counterEv], record.responder.endpointRef);
+        // 同设备验证：发起方自动接受非高风险还价（仍绑定 digest）
+        return this.acceptTerms(recordId, counterDigest, evaluation.terms, evaluation.basis);
+      }
+
+      // accept
+      const acceptDigest = termsDigestOf(evaluation.terms || terms);
+      const acceptEv: CollaborationEvent = {
+        eventId: newId('collaborationEvent'),
+        kind: 'accepted',
+        authorSubjectId: record.responder.subjectId,
+        at,
+        termsDigest: acceptDigest,
+        terms: evaluation.terms || terms,
+        note: evaluation.note,
+        evaluationBasis: evaluation.basis,
+      };
+      record = await this.appendAndSync(record, [acceptEv], record.responder.endpointRef);
+      return this.finalizeAgreementIfReady(recordId, evaluation.basis);
+    } finally {
+      await opened.stop();
     }
-    if (!isPathAllowed(grant, materialPath)) {
-      return { allowed: false, reason: 'material not in authorization scope' };
+  }
+
+  /** 发起方接受对方还价（绑定同一 termsDigest）。 */
+  async acceptTerms(
+    recordId: string,
+    termsDigest: string,
+    terms: CollaborationProposalTerms,
+    evaluationBasis?: string[],
+  ): Promise<{
+    recordId: string;
+    status: CollabUserStatus;
+    grantId?: string;
+    evaluationBasis?: string[];
+  }> {
+    let record = await this.reconcile(recordId);
+    const selfId = this.issuer.subject.requireActive().id;
+    const at = nowIso();
+    const acceptEv: CollaborationEvent = {
+      eventId: newId('collaborationEvent'),
+      kind: 'accepted',
+      authorSubjectId: selfId,
+      at,
+      termsDigest,
+      terms,
+      note: '接受对方调整后的协作条件',
+    };
+    const peer =
+      record.initiator.subjectId === selfId ? record.responder : record.initiator;
+    record = await this.appendAndSync(record, [acceptEv], peer.endpointRef);
+    return this.finalizeAgreementIfReady(recordId, evaluationBasis);
+  }
+
+  private async finalizeAgreementIfReady(
+    recordId: string,
+    evaluationBasis?: string[],
+  ): Promise<{
+    recordId: string;
+    status: CollabUserStatus;
+    grantId?: string;
+    evaluationBasis?: string[];
+  }> {
+    let record = await this.reconcile(recordId);
+    if (findAgreement(record)) {
+      const existingGrantId = latestGrantId(record);
+      return {
+        recordId,
+        status: deriveCollabStatus(record),
+        ...(existingGrantId ? { grantId: existingGrantId } : {}),
+        ...(evaluationBasis ? { evaluationBasis } : {}),
+      };
     }
-    return { allowed: true };
+    const digest = tryFormAgreementDigest(record);
+    if (!digest) {
+      return {
+        recordId,
+        status: deriveCollabStatus(record),
+        ...(evaluationBasis ? { evaluationBasis } : {}),
+      };
+    }
+    const terms = latestTerms(record);
+    if (termsDigestOf(terms) !== digest) {
+      // 找到对应 digest 的条款快照
+      for (let i = record.events.length - 1; i >= 0; i -= 1) {
+        const ev = record.events[i];
+        if (ev?.termsDigest === digest && ev.terms) {
+          Object.assign(terms, ev.terms);
+          break;
+        }
+      }
+    }
+    const at = nowIso();
+    const agreementEv: CollaborationEvent = {
+      eventId: newId('collaborationEvent'),
+      kind: 'agreement_formed',
+      authorSubjectId: record.initiator.subjectId,
+      at,
+      termsDigest: digest,
+      terms,
+      note: '双方已对同一条款摘要达成约定',
+    };
+    record = await this.appendAndSync(record, [agreementEv], record.responder.endpointRef);
+
+    // 签发纯授权 Grant
+    const grant: AuthorizationGrant = {
+      id: newId('grant'),
+      grantorSubjectId: record.initiator.subjectId,
+      grantee: { kind: 'remote_subject', subjectId: record.responder.subjectId },
+      scope: {
+        actions: [...LOCAL_COLLAB_ACTIONS],
+        resourceRefs: terms.offeredMaterials.map((m) => normPath(m.path)),
+      },
+      origin: {
+        kind: 'collaboration_agreement',
+        recordId: record.recordId,
+        agreementEventId: agreementEv.eventId,
+        termsDigest: digest,
+      },
+      status: 'granted',
+      grantedAt: at,
+    };
+    const gStore = await this.grantStore();
+    await gStore.put(grant);
+
+    const grantEv: CollaborationEvent = {
+      eventId: newId('collaborationEvent'),
+      kind: 'grant_issued',
+      authorSubjectId: record.initiator.subjectId,
+      at: nowIso(),
+      grantId: grant.id,
+      termsDigest: digest,
+    };
+    record = await this.appendAndSync(record, [grantEv], record.responder.endpointRef);
+
+    return {
+      recordId,
+      status: deriveCollabStatus(record),
+      grantId: grant.id,
+      ...(evaluationBasis ? { evaluationBasis } : {}),
+    };
+  }
+
+  async respond(input: {
+    recordId: string;
+    decision: 'accept' | 'reject' | 'counter_propose' | 'request_clarification';
+    terms?: CollaborationProposalTerms;
+    note?: string;
+  }): Promise<{ recordId: string; status: CollabUserStatus; grantId?: string }> {
+    let record = await this.reconcile(input.recordId);
+    const selfId = this.issuer.subject.requireActive().id;
+    const at = nowIso();
+    const peer =
+      record.initiator.subjectId === selfId ? record.responder : record.initiator;
+
+    if (input.decision === 'reject') {
+      const ev: CollaborationEvent = {
+        eventId: newId('collaborationEvent'),
+        kind: 'rejected',
+        authorSubjectId: selfId,
+        at,
+        ...(input.note ? { note: input.note } : {}),
+      };
+      record = await this.appendAndSync(record, [ev], peer.endpointRef);
+      return { recordId: record.recordId, status: deriveCollabStatus(record) };
+    }
+    if (input.decision === 'request_clarification') {
+      const ev: CollaborationEvent = {
+        eventId: newId('collaborationEvent'),
+        kind: 'clarification_requested',
+        authorSubjectId: selfId,
+        at,
+        ...(input.note ? { note: input.note } : {}),
+      };
+      record = await this.appendAndSync(record, [ev], peer.endpointRef);
+      return { recordId: record.recordId, status: deriveCollabStatus(record) };
+    }
+    if (input.decision === 'counter_propose') {
+      if (!input.terms) throw new Error('counter_propose requires terms');
+      const digest = termsDigestOf(input.terms);
+      const ev: CollaborationEvent = {
+        eventId: newId('collaborationEvent'),
+        kind: 'counter_proposed',
+        authorSubjectId: selfId,
+        at,
+        terms: input.terms,
+        termsDigest: digest,
+        ...(input.note ? { note: input.note } : {}),
+      };
+      record = await this.appendAndSync(record, [ev], peer.endpointRef);
+      return { recordId: record.recordId, status: deriveCollabStatus(record) };
+    }
+    const terms = input.terms || latestTerms(record);
+    const digest = termsDigestOf(terms);
+    const ev: CollaborationEvent = {
+      eventId: newId('collaborationEvent'),
+      kind: 'accepted',
+      authorSubjectId: selfId,
+      at,
+      terms,
+      termsDigest: digest,
+      ...(input.note ? { note: input.note } : {}),
+    };
+    record = await this.appendAndSync(record, [ev], peer.endpointRef);
+    return this.finalizeAgreementIfReady(record.recordId);
   }
 
   /**
-   * 以 B 身份执行子任务。材料越权或已撤销时在领域层拒绝。
+   * B 履行约定。立即落盘 fulfillment_started，修复「running 不可达」。
    */
-  async execute(
-    grantId: string,
-    opts?: { extraMaterialPaths?: string[] },
-  ): Promise<CollabExecuteResult> {
-    const store = await this.grantStore();
-    const grant = await store.get(grantId);
+  async fulfill(recordId: string): Promise<{
+    recordId: string;
+    grantId?: string;
+    status: CollabUserStatus;
+    artifactId?: string;
+    artifactText?: string;
+    localArtifactId?: string;
+    jobId?: string;
+    denied?: boolean;
+    reason?: string;
+    reachedModel?: boolean;
+    capabilityId?: string;
+  }> {
+    let record = await this.reconcile(recordId);
+    const alreadyDecided = latestOwnerDecision(record);
+    if (alreadyDecided === 'accept' || alreadyDecided === 'reject') {
+      const existingGrantId = latestGrantId(record);
+      return {
+        recordId,
+        status: deriveCollabStatus(record),
+        denied: true,
+        reason: '协作结果已验收，不能重复履行',
+        ...(existingGrantId ? { grantId: existingGrantId } : {}),
+      };
+    }
+    const agreement = findAgreement(record);
+    if (!agreement?.termsDigest) {
+      return { recordId, status: deriveCollabStatus(record), denied: true, reason: '尚未形成协作约定' };
+    }
+    const grantId = latestGrantId(record);
+    if (!grantId) {
+      return { recordId, status: deriveCollabStatus(record), denied: true, reason: '尚未签发授权' };
+    }
+    const gStore = await this.grantStore();
+    const grant = await gStore.get(grantId);
     if (!grant) {
-      return { grantId, status: 'failed', denied: true, reason: 'grant not found' };
+      return { recordId, status: 'failed', denied: true, reason: 'grant not found', grantId };
     }
     try {
       assertGrantUsable(grant);
     } catch (err) {
       return {
+        recordId,
         grantId,
         status: 'revoked',
         denied: true,
         reason: err instanceof Error ? err.message : String(err),
       };
     }
-    if (!grant.granteePackageDir || !grant.subtaskGoal) {
-      return {
-        grantId,
-        status: 'failed',
-        denied: true,
-        reason: 'grant is not a local collaboration grant',
-      };
-    }
 
-    const allowed = (grant.scope.resourceRefs ?? []).map(normPath);
-    const extras = (opts?.extraMaterialPaths ?? []).map(normPath);
-    for (const extra of extras) {
-      if (!allowed.includes(extra)) {
-        return {
-          grantId,
-          status: deriveUserStatus(grant),
-          denied: true,
-          reason: 'material not in authorization scope',
-        };
-      }
-    }
-
+    const terms = latestTerms(record);
+    const allowed = terms.offeredMaterials.map((m) => normPath(m.path));
     const contextRefs: ContextRef[] = allowed.map((p) => ({ kind: 'file', path: p }));
-    const granteeRt = this.issuer.createSiblingRuntime();
 
+    const started: CollaborationEvent = {
+      eventId: newId('collaborationEvent'),
+      kind: 'fulfillment_started',
+      authorSubjectId: record.responder.subjectId,
+      at: nowIso(),
+      grantId,
+      termsDigest: agreement.termsDigest,
+    };
+    // 履行前先落本方 running 事实；对端同步延后到 Runtime 关闭后，避免并发 open 打断 Job
+    record = await this.appendLocalOnly(record, [started]);
+
+    const opened = await this.transport.openByEndpointRef(record.responder.endpointRef);
     try {
-      await granteeRt.openPackage({ dir: grant.granteePackageDir });
-      const beforeEvents = await granteeRt.subject.listGrowthEvents();
-      const beforeFulfilled = beforeEvents.filter((e) =>
-        (e.payload.tags ?? []).includes('collab:fulfilled'),
-      ).length;
+      // 把 Grant 投影到 B 包，供 B 侧 loadAuthorizationGrant
+      const bGrantStore = await GrantStore.open(opened.runtime.subject.requireActive().rootDir);
+      await bGrantStore.put(grant);
 
       let submitted: { taskId: string; jobId: string };
       try {
-        submitted = await granteeRt.submitTask({
-          goal: grant.subtaskGoal,
+        submitted = await opened.runtime.submitTask({
+          goal: terms.intent,
           contextRefs,
           requestedArtifactType: 'document',
           authorization: {
             grantId: grant.id,
             issuerSubjectId: grant.grantorSubjectId,
-            granteeSubjectId: granteeRt.subject.requireActive().id,
+            granteeSubjectId: opened.runtime.subject.requireActive().id,
           },
         });
       } catch (err) {
         const failMessage = err instanceof Error ? err.message : String(err);
-        grant.lastFailure = { at: nowIso(), message: failMessage };
-        await store.put(grant);
-        const afterFail = await granteeRt.subject.listGrowthEvents();
-        const afterFulfilled = afterFail.filter((e) =>
-          (e.payload.tags ?? []).includes('collab:fulfilled'),
-        ).length;
-        if (afterFulfilled !== beforeFulfilled) {
-          throw new Error('invariant violated: collab:fulfilled written on failed job');
-        }
-        return { grantId, status: 'failed', reason: failMessage };
+        const failEv: CollaborationEvent = {
+          eventId: newId('collaborationEvent'),
+          kind: 'fulfillment_started',
+          authorSubjectId: record.responder.subjectId,
+          at: nowIso(),
+          grantId,
+          note: `fail:${failMessage}`,
+        };
+        record = await this.appendLocalOnly(record, [failEv]);
+        await this.syncFullRecordToPeer(record);
+        return { recordId, grantId, status: 'failed', reason: failMessage };
       }
 
-      const job = await waitForJobTerminal(granteeRt.workRuntime, submitted.jobId, 180_000);
+      const jobLink: CollaborationEvent = {
+        eventId: newId('collaborationEvent'),
+        kind: 'fulfillment_started',
+        authorSubjectId: record.responder.subjectId,
+        at: nowIso(),
+        grantId,
+        taskId: submitted.taskId,
+        jobId: submitted.jobId,
+        note: 'job_linked',
+      };
+      record = await this.appendLocalOnly(record, [jobLink]);
+
+      const job = await waitForJobTerminal(opened.runtime.workRuntime, submitted.jobId, 180_000);
       if (job.status !== 'succeeded' || !job.artifactId) {
         const failMessage = job.progress?.note?.trim() || String(job.status);
-        grant.lastFailure = {
+        const failEv: CollaborationEvent = {
+          eventId: newId('collaborationEvent'),
+          kind: 'delivered',
+          authorSubjectId: record.responder.subjectId,
           at: nowIso(),
-          message: failMessage,
+          grantId,
+          jobId: job.id,
+          note: `fail:${failMessage}`,
+          selfCheck: { passed: false, notes: [failMessage] },
         };
-        await store.put(grant);
-        const afterFail = await granteeRt.subject.listGrowthEvents();
-        const afterFulfilled = afterFail.filter((e) =>
-          (e.payload.tags ?? []).includes('collab:fulfilled'),
-        ).length;
-        if (afterFulfilled !== beforeFulfilled) {
-          throw new Error('invariant violated: collab:fulfilled written on failed job');
-        }
+        record = await this.appendLocalOnly(record, [failEv]);
+        await this.syncFullRecordToPeer(record);
         return {
+          recordId,
           grantId,
           status: 'failed',
           jobId: job.id,
@@ -396,68 +701,12 @@ export class LocalCollaborationHost {
         };
       }
 
-      const content = await granteeRt.getContent({ artifactId: job.artifactId });
-      const headVersionId = content.artifact.headVersionId;
+      const content = await opened.runtime.getContent({ artifactId: job.artifactId });
       const artifactText = content.text ?? '';
-      if (artifactText.trim().length < 40) {
-        const failMessage =
-          'artifact too short or empty; not treating as collaboration success';
-        grant.lastFailure = {
-          at: nowIso(),
-          message: failMessage,
-        };
-        await store.put(grant);
-        return {
-          grantId,
-          status: 'failed',
-          jobId: job.id,
-          reason: failMessage,
-        };
-      }
+      const digest = contentDigest(artifactText);
+      const check = selfCheckDelivery({ text: artifactText, terms });
 
-      const snapshot = job.snapshotId
-        ? await granteeRt.getSnapshot(job.snapshotId)
-        : null;
-      const materialSummaries =
-        snapshot?.items.map((item) => ({
-          path: item.sourcePath,
-          ...(item.contentDigest ? { contentDigest: item.contentDigest } : {}),
-        })) ??
-        allowed.map((p) => ({
-          path: p,
-          contentDigest: createHash('sha256').update(p).digest('hex').slice(0, 16),
-        }));
-
-      const reachedModel =
-        job.capabilityId === OPENAI_COMPATIBLE_CAPABILITY_ID &&
-        (this.issuer.documentCapabilityMode === 'openai-compatible' ||
-          this.issuer.documentCapabilityMode === 'both');
-
-      grant.disclosure = {
-        ...(job.snapshotId ? { snapshotId: job.snapshotId } : {}),
-        jobId: job.id,
-        materialSummaries,
-        sentAt: nowIso(),
-        reachedModel,
-        ...(job.capabilityId ? { capabilityId: job.capabilityId } : {}),
-        ...(job.costActual?.tokens !== undefined ? { modelTokens: job.costActual.tokens } : {}),
-        ...(job.costActual?.durationMs !== undefined
-          ? { capabilityDurationMs: job.costActual.durationMs }
-          : {}),
-      };
-      grant.returnedArtifact = {
-        artifactId: job.artifactId,
-        subjectId: granteeRt.subject.requireActive().id,
-        headVersionId,
-        title: grant.subtaskGoal.slice(0, 80),
-        textExcerpt: artifactText.slice(0, 800),
-        reachedModel,
-      };
-      delete grant.lastFailure;
-      // 先落盘 Artifact 溯源，再写成长事件（失败不得 fulfilled）
-      await store.put(grant);
-
-      const granteeEvent = await granteeRt.appendOwnerEvent({
+      await opened.runtime.appendOwnerEvent({
         type: 'experience_confirmed',
         confidence: 'confirmed',
         source: {
@@ -466,67 +715,297 @@ export class LocalCollaborationHost {
           artifactId: job.artifactId,
         },
         payload: {
-          title: '完成协作子任务',
-          detail: `已完成：${grant.subtaskGoal}`.slice(0, 400),
-          tags: ['collab:fulfilled', 'document'],
+          title: '完成协作履行',
+          detail: `已完成：${terms.intent}`.slice(0, 400),
+          tags: ['collab:fulfilled', 'document', `collab:record:${recordId}`],
           evidence: {
             artifactId: job.artifactId,
-            toVersionId: headVersionId,
+            toVersionId: content.artifact.headVersionId,
           },
         },
       });
 
-      return {
+      const deliveryRef = {
+        sourceSubjectId: opened.runtime.subject.requireActive().id,
+        sourceArtifactId: job.artifactId,
+        sourceHeadVersionId: content.artifact.headVersionId,
+        contentDigest: digest,
+        agreementEventId: agreement.eventId,
+        termsDigest: agreement.termsDigest,
+      };
+      const delivered: CollaborationEvent = {
+        eventId: newId('collaborationEvent'),
+        kind: 'delivered',
+        authorSubjectId: record.responder.subjectId,
+        at: nowIso(),
         grantId,
-        status: 'completed',
+        taskId: submitted.taskId,
+        jobId: job.id,
+        termsDigest: agreement.termsDigest,
+        delivery: deliveryRef,
+        selfCheck: check,
+        note: check.passed ? '对方已提交成果（含自检）' : '对方已提交成果（自检未完全通过）',
+      };
+      record = await this.appendLocalOnly(record, [delivered]);
+
+      // 先关闭 B，再同步事件并在 A 物化
+      await opened.stop();
+
+      const materialized = await this.issuer.materializePeerArtifact({
+        title: terms.intent.slice(0, 80),
+        text: artifactText,
+        recordId,
+        provenance: {
+          kind: 'collaboration_delivery',
+          recordId,
+          sourceSubjectId: deliveryRef.sourceSubjectId,
+          sourceArtifactId: deliveryRef.sourceArtifactId,
+          sourceHeadVersionId: deliveryRef.sourceHeadVersionId,
+          sourceContentDigest: digest,
+          agreementTermsDigest: agreement.termsDigest,
+        },
+      });
+
+      const materializeEv: CollaborationEvent = {
+        eventId: newId('collaborationEvent'),
+        kind: 'delivered',
+        authorSubjectId: record.initiator.subjectId,
+        at: nowIso(),
+        termsDigest: agreement.termsDigest,
+        delivery: deliveryRef,
+        localArtifactId: materialized.artifactId,
+        localHeadVersionId: materialized.headVersionId,
+        note: 'initiator_materialized',
+      };
+      record = await this.appendLocalOnly(record, [materializeEv]);
+      await this.syncFullRecordToPeer(record);
+
+      return {
+        recordId,
+        grantId,
+        status: deriveCollabStatus(record),
         artifactId: job.artifactId,
         artifactText,
+        localArtifactId: materialized.artifactId,
         jobId: job.id,
-        granteeEventId: granteeEvent.id,
-        reachedModel,
+        reachedModel: job.capabilityId === OPENAI_COMPATIBLE_CAPABILITY_ID,
         ...(job.capabilityId ? { capabilityId: job.capabilityId } : {}),
       };
-    } finally {
-      await granteeRt.stop();
+    } catch (err) {
+      try {
+        await opened.stop();
+      } catch {
+        /* ignore */
+      }
+      throw err;
     }
   }
 
-  async acceptReturn(input: {
-    grantId: string;
+  async requestRevision(input: {
+    recordId: string;
+    note: string;
+  }): Promise<{
+    recordId: string;
+    status: CollabUserStatus;
+    artifactText?: string;
+    localArtifactId?: string;
+  }> {
+    let record = await this.reconcile(input.recordId);
+    const selfId = this.issuer.subject.requireActive().id;
+    const revEv: CollaborationEvent = {
+      eventId: newId('collaborationEvent'),
+      kind: 'revision_requested',
+      authorSubjectId: selfId,
+      at: nowIso(),
+      note: input.note.trim(),
+    };
+    record = await this.appendAndSync(record, [revEv], record.responder.endpointRef);
+
+    const terms = latestTerms(record);
+    const revisedTerms: CollaborationProposalTerms = {
+      ...terms,
+      intent: `${terms.intent}\n\n修改要求：${input.note.trim()}`,
+    };
+    const opened = await this.transport.openByEndpointRef(record.responder.endpointRef);
+    try {
+      const grantId = latestGrantId(record);
+      if (!grantId) throw new Error('missing grant');
+      const gStore = await this.grantStore();
+      const grant = await gStore.get(grantId);
+      if (!grant) throw new Error('grant not found');
+      assertGrantUsable(grant);
+      const bGrantStore = await GrantStore.open(opened.runtime.subject.requireActive().rootDir);
+      await bGrantStore.put(grant);
+
+      const allowed = terms.offeredMaterials.map((m) => normPath(m.path));
+      const submitted = await opened.runtime.submitTask({
+        goal: revisedTerms.intent,
+        contextRefs: allowed.map((p) => ({ kind: 'file' as const, path: p })),
+        requestedArtifactType: 'document',
+        authorization: {
+          grantId: grant.id,
+          issuerSubjectId: grant.grantorSubjectId,
+          granteeSubjectId: opened.runtime.subject.requireActive().id,
+        },
+      });
+      const job = await waitForJobTerminal(opened.runtime.workRuntime, submitted.jobId, 180_000);
+      if (job.status !== 'succeeded' || !job.artifactId) {
+        await opened.stop();
+        return { recordId: record.recordId, status: 'failed' };
+      }
+      const content = await opened.runtime.getContent({ artifactId: job.artifactId });
+      const artifactText = content.text ?? '';
+      const digest = contentDigest(artifactText);
+      const agreement = findAgreement(record);
+      if (!agreement?.termsDigest) throw new Error('missing agreement');
+      const prevLocal = [...record.events]
+        .reverse()
+        .find((e) => e.localArtifactId)?.localArtifactId;
+
+      const deliveryRef = {
+        sourceSubjectId: opened.runtime.subject.requireActive().id,
+        sourceArtifactId: job.artifactId,
+        sourceHeadVersionId: content.artifact.headVersionId,
+        contentDigest: digest,
+        agreementEventId: agreement.eventId,
+        termsDigest: agreement.termsDigest,
+      };
+      const delivered: CollaborationEvent = {
+        eventId: newId('collaborationEvent'),
+        kind: 'delivered',
+        authorSubjectId: record.responder.subjectId,
+        at: nowIso(),
+        grantId,
+        taskId: submitted.taskId,
+        jobId: job.id,
+        termsDigest: agreement.termsDigest,
+        delivery: deliveryRef,
+        selfCheck: selfCheckDelivery({ text: artifactText, terms }),
+        note: 'revision_delivery',
+      };
+      record = await this.appendLocalOnly(record, [delivered]);
+      await opened.stop();
+
+      const materialized = await this.issuer.materializePeerArtifact({
+        title: terms.intent.slice(0, 80),
+        text: artifactText,
+        recordId: record.recordId,
+        provenance: {
+          kind: 'collaboration_delivery',
+          recordId: record.recordId,
+          sourceSubjectId: deliveryRef.sourceSubjectId,
+          sourceArtifactId: deliveryRef.sourceArtifactId,
+          sourceHeadVersionId: deliveryRef.sourceHeadVersionId,
+          sourceContentDigest: digest,
+          agreementTermsDigest: agreement.termsDigest,
+        },
+        ...(prevLocal ? { existingArtifactId: prevLocal } : {}),
+      });
+
+      const matEv: CollaborationEvent = {
+        eventId: newId('collaborationEvent'),
+        kind: 'delivered',
+        authorSubjectId: record.initiator.subjectId,
+        at: nowIso(),
+        delivery: deliveryRef,
+        localArtifactId: materialized.artifactId,
+        localHeadVersionId: materialized.headVersionId,
+        note: 'initiator_materialized_revision',
+      };
+      record = await this.appendLocalOnly(record, [matEv]);
+      await this.syncFullRecordToPeer(record);
+
+      return {
+        recordId: record.recordId,
+        status: deriveCollabStatus(record),
+        artifactText,
+        localArtifactId: materialized.artifactId,
+      };
+    } catch (err) {
+      try {
+        await opened.stop();
+      } catch {
+        /* ignore */
+      }
+      throw err;
+    }
+  }
+
+  async decideResult(input: {
+    recordId: string;
     decision: 'accept' | 'reject';
     note?: string;
   }): Promise<{
-    grantId: string;
+    recordId: string;
     status: CollabUserStatus;
     issuerEventId: string;
     granteeEventId?: string;
-    integratedIntoArtifactId?: string;
+    localArtifactId?: string;
+    verificationSatisfied?: boolean;
   }> {
-    const store = await this.grantStore();
-    const grant = await store.get(input.grantId);
-    if (!grant) throw new Error(`grant not found: ${input.grantId}`);
-    if (!grant.returnedArtifact) {
-      throw new Error('no returned artifact to accept or reject');
+    let record = await this.reconcile(input.recordId);
+    const delivery = latestDelivery(record);
+    if (!delivery?.delivery) throw new Error('尚无协作成果可验收');
+
+    // 幂等：已有最终决定则直接返回
+    const existing = latestOwnerDecision(record);
+    if (existing === 'accept' || existing === 'reject') {
+      return {
+        recordId: record.recordId,
+        status: deriveCollabStatus(record),
+        issuerEventId: 'idempotent',
+        ...(delivery.localArtifactId ? { localArtifactId: delivery.localArtifactId } : {}),
+      };
     }
+
+    const terms = latestTerms(record);
+    let text = '';
+    const localId =
+      [...record.events].reverse().find((e) => e.localArtifactId)?.localArtifactId;
+    if (localId) {
+      const got = await this.issuer.getContent({ artifactId: localId });
+      text = got.text ?? '';
+    }
+    const verification = verifyDeliveryByInitiator({
+      text,
+      terms,
+      contentDigestMatches: contentDigest(text) === delivery.delivery.contentDigest || !text,
+    });
+    // 最终由 A 定案：用户决策优先；验证信息随事件记录
+    const at = nowIso();
+    const decideEv: CollaborationEvent = {
+      eventId: newId('collaborationEvent'),
+      kind: 'result_decided',
+      authorSubjectId: record.initiator.subjectId,
+      at,
+      decision: input.decision,
+      verification: {
+        satisfied: input.decision === 'accept' ? verification.satisfied : false,
+        notes: verification.notes,
+      },
+      ...(localId ? { localArtifactId: localId, artifactDecisionRef: localId } : {}),
+      ...(input.note ? { note: input.note } : {}),
+    };
+    record = await this.appendAndSync(record, [decideEv], record.responder.endpointRef);
 
     const note = (input.note || '').trim();
     const detailBase =
       input.decision === 'accept'
-        ? `采用外部协作成果：${grant.subtaskGoal || ''}`
-        : `未采用外部协作成果：${grant.subtaskGoal || ''}`;
-    const peerId =
-      grant.grantee.kind === 'remote_subject' ? grant.grantee.subjectId : '';
-    const detail = `${detailBase}${note ? `\n${note}` : ''}\ngrant ${grant.id}; peer ${peerId}`.slice(
-      0,
-      400,
-    );
+        ? `采用协作成果：${terms.intent}`
+        : `未采用协作成果：${terms.intent}`;
+    const detail =
+      `${detailBase}${note ? `\n${note}` : ''}\nrecord ${record.recordId}; peer ${record.responder.subjectId}`.slice(
+        0,
+        400,
+      );
 
     const issuerEvent = await this.issuer.appendOwnerEvent({
       type: 'experience_confirmed',
       confidence: 'confirmed',
       source: {
         kind: 'task_feedback',
-        ...(grant.issuerTaskId ? { taskId: grant.issuerTaskId } : {}),
+        ...(record.issuerTaskId ? { taskId: record.issuerTaskId } : {}),
+        ...(localId ? { artifactId: localId } : {}),
       },
       payload: {
         title: input.decision === 'accept' ? '采用了协作成果' : '未采用协作成果',
@@ -535,54 +1014,300 @@ export class LocalCollaborationHost {
           input.decision === 'accept' ? 'collab:external_accept' : 'collab:external_reject',
           input.decision === 'accept' ? 'decision:accept' : 'decision:reject',
           'document',
+          `collab:record:${record.recordId}`,
+          `collab:peer:${record.responder.subjectId}`,
         ],
+        ...(localId
+          ? {
+              evidence: {
+                artifactId: localId,
+                toVersionId:
+                  [...record.events].reverse().find((e) => e.localHeadVersionId)
+                    ?.localHeadVersionId || localId,
+              },
+            }
+          : {}),
       },
     });
 
-    let integratedIntoArtifactId: string | undefined;
-    // 采用后：受控副本 + 引用进主成果（不整篇覆盖）。
-    if (input.decision === 'accept' && grant.returnedArtifact.textExcerpt) {
-      const body = grant.returnedArtifact.textExcerpt;
-      const tmp = path.join(
-        this.issuer.subject.requireActive().rootDir,
-        'materials',
-        `collab_${grant.id.slice(0, 12)}.md`,
-      );
-      await fs.mkdir(path.dirname(tmp), { recursive: true });
-      await fs.writeFile(tmp, `# 协作成果\n\n${body}\n`, 'utf8');
-      await this.issuer.importSubjectMaterial({
-        sourcePath: tmp,
-        distillCandidates: false,
-      });
+    // 通知 B：被采用/拒绝
+    let granteeEventId: string | undefined;
+    try {
+      const opened = await this.transport.openByEndpointRef(record.responder.endpointRef);
+      try {
+        const ge = await opened.runtime.appendOwnerEvent({
+          type: 'experience_confirmed',
+          confidence: 'confirmed',
+          source: { kind: 'owner_direct' },
+          payload: {
+            title:
+              input.decision === 'accept' ? '协作成果被对方采用' : '协作成果未被对方采用',
+            detail: `record ${record.recordId}; ${input.decision}`.slice(0, 400),
+            tags: [
+              input.decision === 'accept' ? 'collab:accepted_by_peer' : 'collab:rejected_by_peer',
+              `collab:record:${record.recordId}`,
+            ],
+          },
+        });
+        granteeEventId = ge.id;
+      } finally {
+        await opened.stop();
+      }
+    } catch {
+      /* 对端不可达时发起方记录仍成立 */
+    }
 
-      if (grant.issuerTaskId) {
-        const taskView = await this.issuer.getTask({ taskId: grant.issuerTaskId });
-        const mainArtifactId = taskView.artifactIds[0];
-        if (mainArtifactId) {
-          const main = await this.issuer.getContent({ artifactId: mainArtifactId });
-          const base = main.text ?? '';
-          const marker = `<!-- collab-ref:${grant.id} -->`;
-          if (!base.includes(marker)) {
-            const integrated = `${base.trim()}\n\n## 协作摘要（已采用）\n\n${marker}\n\n${body}\n`;
-            await this.issuer.saveEdit({ artifactId: mainArtifactId, text: integrated });
-            integratedIntoArtifactId = mainArtifactId;
-          } else {
-            integratedIntoArtifactId = mainArtifactId;
-          }
-        }
+    return {
+      recordId: record.recordId,
+      status: deriveCollabStatus(record),
+      issuerEventId: issuerEvent.id,
+      ...(granteeEventId ? { granteeEventId } : {}),
+      ...(localId ? { localArtifactId: localId } : {}),
+      ...(decideEv.verification?.satisfied !== undefined
+        ? { verificationSatisfied: decideEv.verification.satisfied }
+        : {}),
+    };
+  }
+
+  async revoke(recordIdOrGrantId: string): Promise<{
+    recordId?: string;
+    grantId?: string;
+    status: CollabUserStatus;
+  }> {
+    // 兼容：可能传入 recordId 或 grantId
+    const store = await this.recordStore();
+    let record = await store.get(recordIdOrGrantId);
+    if (!record) {
+      const all = await store.list();
+      record =
+        all.find((r) => latestGrantId(r) === recordIdOrGrantId) ||
+        null;
+    }
+    if (!record) {
+      // 旧 Grant 路径
+      const gStore = await this.grantStore();
+      const grant = await gStore.get(recordIdOrGrantId);
+      if (grant && grant.status !== 'revoked') {
+        grant.status = 'revoked';
+        grant.revokedAt = nowIso();
+        await gStore.put(grant);
+      }
+      return { grantId: recordIdOrGrantId, status: 'revoked' };
+    }
+
+    record = await this.reconcile(record.recordId);
+    const grantId = latestGrantId(record);
+    if (grantId) {
+      const gStore = await this.grantStore();
+      const grant = await gStore.get(grantId);
+      if (grant && grant.status !== 'revoked') {
+        grant.status = 'revoked';
+        grant.revokedAt = nowIso();
+        await gStore.put(grant);
+      }
+    }
+    const ev: CollaborationEvent = {
+      eventId: newId('collaborationEvent'),
+      kind: 'revoked',
+      authorSubjectId: this.issuer.subject.requireActive().id,
+      at: nowIso(),
+      ...(grantId ? { grantId } : {}),
+    };
+    record = await this.appendAndSync(record, [ev], record.responder.endpointRef);
+    return {
+      recordId: record.recordId,
+      ...(grantId ? { grantId } : {}),
+      status: 'revoked',
+    };
+  }
+
+  async getStatus(recordIdOrGrantId: string): Promise<{
+    recordId: string;
+    grantId?: string;
+    status: CollabUserStatus;
+    ownerDecision?: 'accept' | 'reject' | 'revise';
+    grant?: {
+      id: string;
+      status: string;
+      subtaskGoal?: string;
+      granteeDisplayName?: string;
+      returnedExcerpt?: string;
+      reachedModel?: boolean;
+      allowedMaterials?: string[];
+      issuerTaskId?: string;
+      failureMessage?: string;
+      ownerDecision?: 'accept' | 'reject' | 'revise';
+      localArtifactId?: string;
+      termsDigest?: string;
+      evaluationBasis?: string[];
+    };
+    artifactId?: string;
+    artifactText?: string;
+  }> {
+    const store = await this.recordStore();
+    let record = await store.get(recordIdOrGrantId);
+    if (!record) {
+      const all = await store.list();
+      record = all.find((r) => latestGrantId(r) === recordIdOrGrantId) || null;
+    }
+    if (!record) throw new Error(`collaboration record not found: ${recordIdOrGrantId}`);
+    record = await this.reconcile(record.recordId);
+
+    const terms = latestTerms(record);
+    const delivery = latestDelivery(record);
+    const grantId = latestGrantId(record);
+    const ownerDecision = latestOwnerDecision(record);
+    const agreement = findAgreement(record);
+    const evalBasis = [...record.events]
+      .reverse()
+      .find((e) => e.evaluationBasis)?.evaluationBasis;
+    const localId = [...record.events].reverse().find((e) => e.localArtifactId)?.localArtifactId;
+
+    let artifactText: string | undefined;
+    if (localId) {
+      try {
+        const got = await this.issuer.getContent({ artifactId: localId });
+        artifactText = got.text;
+      } catch {
+        artifactText = undefined;
       }
     }
 
     return {
-      grantId: grant.id,
-      status: input.decision === 'accept' ? 'completed' : 'rejected',
-      issuerEventId: issuerEvent.id,
-      ...(integratedIntoArtifactId ? { integratedIntoArtifactId } : {}),
+      recordId: record.recordId,
+      ...(grantId ? { grantId } : {}),
+      status: deriveCollabStatus(record),
+      ...(ownerDecision ? { ownerDecision } : {}),
+      grant: {
+        id: grantId || record.recordId,
+        status: deriveCollabStatus(record),
+        subtaskGoal: terms.intent,
+        granteeDisplayName: record.responder.displayName,
+        ...(artifactText ? { returnedExcerpt: artifactText.slice(0, 800) } : {}),
+        allowedMaterials: terms.offeredMaterials.map((m) => m.path),
+        ...(record.issuerTaskId ? { issuerTaskId: record.issuerTaskId } : {}),
+        ...(ownerDecision ? { ownerDecision } : {}),
+        ...(localId ? { localArtifactId: localId } : {}),
+        ...(agreement?.termsDigest ? { termsDigest: agreement.termsDigest } : {}),
+        ...(evalBasis ? { evaluationBasis: evalBasis } : {}),
+      },
+      ...(localId ? { artifactId: localId } : {}),
+      ...(artifactText ? { artifactText } : {}),
     };
+  }
+
+  async list(): Promise<{ items: CollabListItem[] }> {
+    const store = await this.recordStore();
+    const records = await store.list();
+    const items: CollabListItem[] = [];
+    for (const raw of records) {
+      const record = await this.reconcile(raw.recordId).catch(() => raw);
+      const terms = latestTerms(record);
+      const delivery = latestDelivery(record);
+      const grantId = latestGrantId(record);
+      const ownerDecision = latestOwnerDecision(record);
+      const localId = [...record.events].reverse().find((e) => e.localArtifactId)?.localArtifactId;
+      let excerpt: string | undefined;
+      if (localId) {
+        try {
+          const got = await this.issuer.getContent({ artifactId: localId });
+          excerpt = (got.text || '').slice(0, 800);
+        } catch {
+          excerpt = undefined;
+        }
+      }
+      const evalBasis = [...record.events]
+        .reverse()
+        .find((e) => e.evaluationBasis)?.evaluationBasis;
+      items.push({
+        recordId: record.recordId,
+        ...(grantId ? { grantId } : {}),
+        status: deriveCollabStatus(record),
+        ...(ownerDecision ? { ownerDecision } : {}),
+        subtaskGoal: terms.intent,
+        granteeDisplayName: record.responder.displayName,
+        allowedMaterials: terms.offeredMaterials.map((m) => m.path),
+        ...(excerpt ? { returnedExcerpt: excerpt } : {}),
+        ...(record.issuerTaskId ? { issuerTaskId: record.issuerTaskId } : {}),
+        ...(localId ? { localArtifactId: localId } : {}),
+        ...(evalBasis ? { evaluationBasis: evalBasis } : {}),
+      });
+    }
+    // 兼容：仍列出仅有旧 Grant 扩展字段的记录
+    const gStore = await this.grantStore();
+    for (const grant of await gStore.list()) {
+      if (!grant.subtaskGoal && !grant.granteePackageDir) continue;
+      if (items.some((i) => i.grantId === grant.id)) continue;
+      items.push({
+        recordId: grant.id,
+        grantId: grant.id,
+        status:
+          grant.status === 'revoked'
+            ? 'revoked'
+            : grant.returnedArtifact
+              ? 'delivered'
+              : 'authorized',
+        ...(grant.subtaskGoal ? { subtaskGoal: grant.subtaskGoal } : {}),
+        ...(grant.granteeDisplayName ? { granteeDisplayName: grant.granteeDisplayName } : {}),
+        allowedMaterials: (grant.scope.resourceRefs ?? []).map(normPath),
+        ...(grant.returnedArtifact?.textExcerpt
+          ? { returnedExcerpt: grant.returnedArtifact.textExcerpt }
+          : {}),
+        ...(grant.issuerTaskId ? { issuerTaskId: grant.issuerTaskId } : {}),
+      });
+    }
+    items.sort((a, b) => b.recordId.localeCompare(a.recordId));
+    return { items };
+  }
+
+  async assertMaterialAccess(
+    recordIdOrGrantId: string,
+    materialPath: string,
+  ): Promise<{ allowed: boolean; reason?: string }> {
+    const store = await this.recordStore();
+    let record = await store.get(recordIdOrGrantId);
+    if (!record) {
+      const all = await store.list();
+      record = all.find((r) => latestGrantId(r) === recordIdOrGrantId) || null;
+    }
+    const target = normPath(materialPath);
+    if (record) {
+      const allowed = latestTerms(record).offeredMaterials.map((m) => normPath(m.path));
+      if (!allowed.includes(target)) {
+        return { allowed: false, reason: 'material not in authorization scope' };
+      }
+      const grantId = latestGrantId(record);
+      if (grantId) {
+        const grant = await (await this.grantStore()).get(grantId);
+        if (grant) {
+          try {
+            assertGrantUsable(grant);
+          } catch (err) {
+            return {
+              allowed: false,
+              reason: err instanceof Error ? err.message : String(err),
+            };
+          }
+        }
+      }
+      return { allowed: true };
+    }
+    const grant = await (await this.grantStore()).get(recordIdOrGrantId);
+    if (!grant) return { allowed: false, reason: 'grant not found' };
+    try {
+      assertGrantUsable(grant);
+    } catch (err) {
+      return { allowed: false, reason: err instanceof Error ? err.message : String(err) };
+    }
+    const allowed = (grant.scope.resourceRefs ?? []).map(normPath);
+    if (!allowed.includes(target)) {
+      return { allowed: false, reason: 'material not in authorization scope' };
+    }
+    return { allowed: true };
   }
 }
 
-/** 兼容旧本地模拟工厂：仅内存，不落盘。 */
+/** @deprecated 仅测试替身。 */
 export function buildLegacySimulationRequest(input: {
   grantorSubjectId: string;
   grantorDisplayName: string;
@@ -596,12 +1321,10 @@ export function buildLegacySimulationRequest(input: {
     fromSubject: {
       subjectId: granteeSubjectId,
       displayName: input.granteeName,
-      scheme: 'local',
     },
     toSubject: {
       subjectId: input.grantorSubjectId,
       displayName: input.grantorDisplayName,
-      scheme: 'local',
     },
     requestedScope: { actions: [...LOCAL_COLLAB_ACTIONS] },
     goal: input.goal,

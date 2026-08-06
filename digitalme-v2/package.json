@@ -10,9 +10,10 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "smoke": "node dist/smoke.js",
-    "test": "node --test --test-concurrency=1 \"dist/infrastructure/tests/*.test.js\" \"dist/work-runtime/tests/*.test.js\" \"dist/subject-core/tests/*.test.js\" \"dist/capability/adapters/tests/*.test.js\" \"dist/capability/tests/*.test.js\" \"dist/runtime/tests/*.test.js\" \"dist/engineering/tests/*.test.js\" \"dist/collaboration/tests/local-collaboration.test.js\"",
+    "test": "node --test --test-concurrency=1 \"dist/infrastructure/tests/*.test.js\" \"dist/work-runtime/tests/*.test.js\" \"dist/subject-core/tests/*.test.js\" \"dist/capability/adapters/tests/*.test.js\" \"dist/capability/tests/*.test.js\" \"dist/runtime/tests/*.test.js\" \"dist/engineering/tests/*.test.js\" \"dist/collaboration/tests/*.test.js\"",
     "accept:collaboration-mvp": "node scripts/run-collaboration-mvp-acceptance.cjs",
     "accept:collaboration-real": "node scripts/run-collaboration-real-acceptance.cjs",
+    "accept:collaboration-real:foundation": "node scripts/run-subject-collaboration-foundation-real.cjs",
     "accept:collaboration-product-entry": "node scripts/run-collaboration-product-entry-acceptance.cjs",
     "accept:remote-capability-readiness": "node scripts/run-remote-capability-readiness-acceptance.cjs",
     "accept:a2a-remote-capability": "node scripts/run-a2a-remote-capability-acceptance.cjs",
