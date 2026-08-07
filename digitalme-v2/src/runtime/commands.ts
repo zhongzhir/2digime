@@ -719,11 +719,20 @@ export interface CommandMap {
         | 'listInbox'
         | 'acknowledge'
         | 'processInbox'
-        | 'health';
+        | 'health'
+        | 'configureRelay'
+        | 'createInvite'
+        | 'acceptInvite'
+        | 'listPeers'
+        | 'retryOutbox'
+        | 'pullRemote';
       peerPackageDir?: string;
+      peerEndpointRef?: string;
       opportunityId?: string;
       envelopeId?: string;
       intent?: string;
+      relayUrl?: string;
+      inviteJson?: string;
       signal?: {
         intent: string;
         seeking: string[];
@@ -740,11 +749,19 @@ export interface CommandMap {
       recordId?: string;
       status?: string;
       processed?: number;
+      collabSynced?: number;
       delivered?: boolean;
       duplicate?: boolean;
       mode?: string;
       reachable?: boolean;
       capabilities?: string[];
+      connectionLabel?: string;
+      inviteJson?: string;
+      peerDisplayName?: string;
+      submitted?: number;
+      failed?: number;
+      fetched?: number;
+      rejected?: number;
       items?: Array<{
         id: string;
         peerDisplayName: string;
@@ -769,6 +786,8 @@ export interface CommandMap {
         localBrief?: string;
         collaborationRecordId?: string;
       };
+      peers?: Array<{ displayName: string; endpointRef?: string; statusLabel: string }>;
+      relayUrl?: string;
       inbox?: Array<{
         envelopeId: string;
         kind: string;

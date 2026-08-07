@@ -26,6 +26,8 @@
     "accept:collaboration-real-loop-real": "node scripts/run-collaboration-real-loop-real-fulfillment.cjs",
     "accept:opportunity-discovery-demo": "node scripts/run-opportunity-discovery-demo-acceptance.cjs",
     "accept:opportunity-discovery-owner": "node scripts/run-opportunity-discovery-owner-acceptance.cjs",
+    "accept:remote-subject-communication": "node scripts/run-remote-subject-communication-01-acceptance.cjs",
+    "relay:start": "node scripts/start-relay-service.cjs",
     "accept:remote-capability-readiness": "node scripts/run-remote-capability-readiness-acceptance.cjs",
     "accept:a2a-remote-capability": "node scripts/run-a2a-remote-capability-acceptance.cjs",
     "accept:external-capability-owner-path": "node scripts/run-external-capability-owner-path-acceptance.cjs",

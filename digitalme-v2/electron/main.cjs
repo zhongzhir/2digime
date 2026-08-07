@@ -85,6 +85,23 @@ async function bootstrapRuntime() {
   } = require(path.join(appRoot, "dist", "runtime", "digitalme-runtime"));
   const { createCommandBus } = require(path.join(appRoot, "dist", "runtime", "command-bus"));
   const { resolveModelConfig } = require(path.join(__dirname, "bootstrap-secrets.cjs"));
+  try {
+    const {
+      createElectronSafeStorageCipherAdapter,
+      isElectronSafeStorageAvailable,
+    } = require(path.join(appRoot, "dist", "infrastructure", "electron-safe-storage-cipher"));
+    const { setCommCipher } = require(path.join(
+      appRoot,
+      "dist",
+      "subject-comm",
+      "transport-factory",
+    ));
+    if (isElectronSafeStorageAvailable(safeStorage)) {
+      setCommCipher(createElectronSafeStorageCipherAdapter(safeStorage));
+    }
+  } catch {
+    /* 通信密钥适配可选 */
+  }
 
   const model = await resolveModelConfig({
     safeStorage,

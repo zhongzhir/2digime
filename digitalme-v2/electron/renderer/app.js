@@ -66,6 +66,19 @@
     testModel: document.getElementById("btn-test-model"),
     deleteModel: document.getElementById("btn-delete-model"),
     settingsStatus: document.getElementById("settings-status"),
+    remoteRelayUrl: document.getElementById("remote-relay-url"),
+    remoteDmConnectionState: document.getElementById("remote-dm-connection-state"),
+    btnRemoteRelayConnect: document.getElementById("btn-remote-relay-connect"),
+    btnRemoteCreateInvite: document.getElementById("btn-remote-create-invite"),
+    remoteInviteInput: document.getElementById("remote-invite-input"),
+    remoteInviteOutput: document.getElementById("remote-invite-output"),
+    btnRemoteAcceptInvite: document.getElementById("btn-remote-accept-invite"),
+    remotePeerList: document.getElementById("remote-peer-list"),
+    remoteDmStatus: document.getElementById("remote-dm-status"),
+    collabSignalPeer: document.getElementById("collab-signal-peer"),
+    collabSignalIntent: document.getElementById("collab-signal-intent"),
+    btnCollabSendSignal: document.getElementById("btn-collab-send-signal"),
+    collabSignalStatus: document.getElementById("collab-signal-status"),
     remoteCapStatusLabel: document.getElementById("remote-cap-status-label"),
     remoteCapBaseUrl: document.getElementById("remote-cap-base-url"),
     btnRemoteCapTest: document.getElementById("btn-remote-cap-test"),
@@ -4540,6 +4553,186 @@
     }
   });
 
+  async function refreshRemotePeers() {
+    if (!els.remotePeerList && !els.collabSignalPeer) return;
+    try {
+      const listed = await api.invoke("subject.communicate", { action: "listPeers" });
+      if (els.remoteDmConnectionState) {
+        els.remoteDmConnectionState.textContent = `连接状态：${listed.connectionLabel || "尚未配置"}`;
+      }
+      if (els.remoteRelayUrl && listed.relayUrl && !(els.remoteRelayUrl.value || "").trim()) {
+        els.remoteRelayUrl.value = listed.relayUrl;
+      }
+      if (els.remotePeerList) {
+        els.remotePeerList.innerHTML = "";
+        for (const p of listed.peers || []) {
+          const li = document.createElement("li");
+          li.textContent = `${p.displayName} · ${p.statusLabel || ""}`;
+          els.remotePeerList.appendChild(li);
+        }
+      }
+      if (els.collabSignalPeer) {
+        const prev = els.collabSignalPeer.value;
+        els.collabSignalPeer.innerHTML = "";
+        const peers = listed.peers || [];
+        if (!peers.length) {
+          const opt = document.createElement("option");
+          opt.value = "";
+          opt.textContent = "请先在设置中连接另一个 Digital Me";
+          els.collabSignalPeer.appendChild(opt);
+        } else {
+          for (const p of peers) {
+            const opt = document.createElement("option");
+            opt.value = p.endpointRef || "";
+            opt.textContent = `${p.displayName}${p.statusLabel ? ` · ${p.statusLabel}` : ""}`;
+            els.collabSignalPeer.appendChild(opt);
+          }
+          if (prev && [...els.collabSignalPeer.options].some((o) => o.value === prev)) {
+            els.collabSignalPeer.value = prev;
+          }
+        }
+      }
+    } catch {
+      /* 包未打开时忽略 */
+    }
+  }
+
+  function deriveSignalFields(intent) {
+    const seeking = [];
+    const offering = [];
+    if (/金融|投资|应用|参赛|场景/i.test(intent)) {
+      seeking.push("成熟金融应用场景", "联合参赛");
+    }
+    if (/Agent|Digital Me|技术/i.test(intent)) {
+      if (/提供|可以/.test(intent)) offering.push("Agent / Digital Me 技术能力");
+      else seeking.push("Agent / Digital Me 技术能力");
+    }
+    if (!seeking.length) seeking.push(intent.slice(0, 120));
+    if (!offering.length) offering.push("相关能力与经验");
+    return { seeking, offering };
+  }
+
+  async function syncRemoteTransportQuietly() {
+    try {
+      await api.invoke("subject.communicate", { action: "retryOutbox" });
+    } catch {
+      /* ignore */
+    }
+    try {
+      await api.invoke("subject.communicate", { action: "pullRemote" });
+    } catch {
+      /* ignore */
+    }
+  }
+
+  let remoteCommWatchTimer = null;
+  function ensureRemoteCommWatch() {
+    if (remoteCommWatchTimer) return;
+    remoteCommWatchTimer = setInterval(async () => {
+      try {
+        await syncRemoteTransportQuietly();
+        if (document.getElementById("panel-collab") && !document.getElementById("panel-collab").hidden) {
+          await refreshOpportunityCards();
+        }
+      } catch {
+        /* ignore */
+      }
+    }, 8000);
+  }
+
+  if (els.btnRemoteRelayConnect) {
+    els.btnRemoteRelayConnect.addEventListener("click", async () => {
+      try {
+        const relayUrl = (els.remoteRelayUrl && els.remoteRelayUrl.value) || "";
+        const r = await api.invoke("subject.communicate", {
+          action: "configureRelay",
+          relayUrl: relayUrl.trim(),
+        });
+        if (els.remoteDmConnectionState) {
+          els.remoteDmConnectionState.textContent = `连接状态：${r.connectionLabel || "无法连接"}`;
+        }
+        showStatus(els.remoteDmStatus, r.reachable ? "中继已连接。" : "暂时无法连接中继。", !r.reachable);
+        await refreshRemotePeers();
+        ensureRemoteCommWatch();
+      } catch (err) {
+        showStatus(els.remoteDmStatus, String(err.message || err), true);
+      }
+    });
+  }
+  if (els.btnRemoteCreateInvite) {
+    els.btnRemoteCreateInvite.addEventListener("click", async () => {
+      try {
+        const r = await api.invoke("subject.communicate", { action: "createInvite" });
+        if (els.remoteInviteOutput) els.remoteInviteOutput.value = r.inviteJson || "";
+        showStatus(els.remoteDmStatus, "邀请已生成，可复制给对方。");
+      } catch (err) {
+        showStatus(els.remoteDmStatus, String(err.message || err), true);
+      }
+    });
+  }
+  if (els.btnRemoteAcceptInvite) {
+    els.btnRemoteAcceptInvite.addEventListener("click", async () => {
+      try {
+        const inviteJson = (els.remoteInviteInput && els.remoteInviteInput.value) || "";
+        const r = await api.invoke("subject.communicate", {
+          action: "acceptInvite",
+          inviteJson: inviteJson.trim(),
+        });
+        if (els.remoteInviteOutput && r.inviteJson) {
+          els.remoteInviteOutput.value = r.inviteJson;
+        }
+        showStatus(
+          els.remoteDmStatus,
+          r.peerDisplayName ? `已与「${r.peerDisplayName}」建立联系。请把回执邀请交给对方。` : "已接受邀请。",
+        );
+        await refreshRemotePeers();
+        ensureRemoteCommWatch();
+      } catch (err) {
+        showStatus(els.remoteDmStatus, String(err.message || err), true);
+      }
+    });
+  }
+  if (els.btnCollabSendSignal) {
+    els.btnCollabSendSignal.addEventListener("click", async () => {
+      const intent = ((els.collabSignalIntent && els.collabSignalIntent.value) || "").trim();
+      const peerEndpointRef = (els.collabSignalPeer && els.collabSignalPeer.value) || "";
+      if (!peerEndpointRef) {
+        showStatus(els.collabSignalStatus, "请先在设置中连接另一个 Digital Me。", true);
+        return;
+      }
+      if (!intent) {
+        showStatus(els.collabSignalStatus, "请先写明你的合作意向。", true);
+        return;
+      }
+      try {
+        showStatus(els.collabSignalStatus, "正在发出…");
+        const fields = deriveSignalFields(intent);
+        const r = await api.invoke("subject.communicate", {
+          action: "sendSignal",
+          peerEndpointRef,
+          signal: {
+            intent,
+            seeking: fields.seeking,
+            offering: fields.offering,
+            disclosureLevel: "minimal",
+          },
+        });
+        if (r.delivered === false) {
+          showStatus(
+            els.collabSignalStatus,
+            "暂时无法送达，恢复连接后会继续尝试。",
+            true,
+          );
+        } else {
+          showStatus(els.collabSignalStatus, "已发出。对方上线后会看到相关提示。");
+        }
+        ensureRemoteCommWatch();
+        await refreshCollabHome();
+      } catch (err) {
+        showStatus(els.collabSignalStatus, String(err.message || err), true);
+      }
+    });
+  }
   els.deleteModel.addEventListener("click", async () => {
     try {
       const result = await api.deleteModelCredential({});
@@ -5936,6 +6129,9 @@
     fill(els.collabListActive, els.collabEmptyActive, buckets.active);
     fill(els.collabListDone, els.collabEmptyDone, buckets.done);
     fill(els.collabListRevoked, els.collabEmptyRevoked, buckets.revoked);
+    await refreshRemotePeers();
+    ensureRemoteCommWatch();
+    await syncRemoteTransportQuietly();
     await refreshOpportunityCards();
     await fillRemoteCapabilitySettings();
   }

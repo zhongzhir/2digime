@@ -1,0 +1,7 @@
+# 示例：Caddy 反代 + 自动 TLS。将 example.com 换成真实域名。
+# Relay Node 只监听本机 8787；公网仅 HTTPS。
+
+example.com {
+	encode gzip
+	reverse_proxy 127.0.0.1:8787
+}

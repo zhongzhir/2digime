@@ -810,26 +810,147 @@ export class DigitalMeRuntime {
     input: CommandMap['subject.communicate']['input'],
   ): Promise<CommandMap['subject.communicate']['output']> {
     const { SignalOpportunityHost } = await import('../subject-comm/signal-host');
-    const host = new SignalOpportunityHost(this);
+    const { openRelayIfConfigured, getCollaborationTransport, resolveCommCipher } =
+      await import('../subject-comm/transport-factory');
+    const { processTransportInbox } = await import('../subject-comm/process-inbox');
+    const { isRemoteEndpointRef } = await import('../subject-comm/endpoint');
+    const cipher = resolveCommCipher();
+    const relay = await openRelayIfConfigured(this, cipher);
+    const collabTransport = await getCollaborationTransport(this, cipher);
+    const transport = collabTransport.asSubjectTransport();
+    const host = new SignalOpportunityHost(this, transport, relay);
     const action = input.action;
     if (!action) throw new Error('subject.communicate requires action');
 
+    const mapOpp = (c: {
+      id: string;
+      peerDisplayName: string;
+      stage: string;
+      seekingSummary: string;
+      offeringSummary: string;
+      whyWorthKnowing: string;
+      privacyNote: string;
+      peerBrief?: string;
+      localBrief?: string;
+      collaborationRecordId?: string;
+    }) => ({
+      id: c.id,
+      peerDisplayName: c.peerDisplayName,
+      stage: c.stage,
+      seekingSummary: c.seekingSummary,
+      offeringSummary: c.offeringSummary,
+      whyWorthKnowing: c.whyWorthKnowing,
+      privacyNote: c.privacyNote,
+      ...(c.peerBrief ? { peerBrief: c.peerBrief } : {}),
+      ...(c.localBrief ? { localBrief: c.localBrief } : {}),
+      ...(c.collaborationRecordId ? { collaborationRecordId: c.collaborationRecordId } : {}),
+    });
+
+    if (action === 'configureRelay') {
+      if (!input.relayUrl) throw new Error('configureRelay requires relayUrl');
+      const { CommIdentityStore } = await import('../subject-comm/identity-store');
+      const pkg = this.subject.requireActive();
+      const store = new CommIdentityStore(pkg.rootDir, cipher);
+      const { profile } = await store.ensureLocalEndpoint({
+        subjectId: pkg.id,
+        displayName: pkg.identity.displayName,
+        relayUrl: input.relayUrl,
+      });
+      const { RelayClient } = await import('../subject-comm/relay-client');
+      const health = await new RelayClient(profile.relayUrl).health();
+      return {
+        ok: true,
+        mode: 'remote',
+        reachable: health.reachable && health.ok,
+        connectionLabel: health.reachable && health.ok ? '已连接' : '无法连接',
+      };
+    }
+    if (action === 'createInvite') {
+      const { CommIdentityStore } = await import('../subject-comm/identity-store');
+      const { createInvite } = await import('../subject-comm/invite');
+      const pkg = this.subject.requireActive();
+      const store = new CommIdentityStore(pkg.rootDir, cipher);
+      const self = await store.getLocalProfile();
+      if (!self) throw new Error('请先连接 Relay');
+      const invite = createInvite(self, new Date().toISOString());
+      return { ok: true, inviteJson: JSON.stringify(invite) };
+    }
+    if (action === 'acceptInvite') {
+      if (!input.inviteJson) throw new Error('acceptInvite requires inviteJson');
+      const { CommIdentityStore } = await import('../subject-comm/identity-store');
+      const { acceptInvite } = await import('../subject-comm/invite');
+      const pkg = this.subject.requireActive();
+      const store = new CommIdentityStore(pkg.rootDir, cipher);
+      if (!(await store.getLocalProfile())) {
+        throw new Error('请先连接 Relay');
+      }
+      const parsed = JSON.parse(input.inviteJson) as unknown;
+      const { peer, replyInvite } = await acceptInvite(store, parsed);
+      return {
+        ok: true,
+        peerDisplayName: peer.displayName,
+        inviteJson: JSON.stringify(replyInvite),
+        connectionLabel: '已连接',
+      };
+    }
+    if (action === 'listPeers') {
+      const { CommIdentityStore } = await import('../subject-comm/identity-store');
+      const { remoteEndpointRef } = await import('../subject-comm/endpoint');
+      const pkg = this.subject.requireActive();
+      const store = new CommIdentityStore(pkg.rootDir, cipher);
+      const peers = await store.listPeers();
+      const self = await store.getLocalProfile();
+      const h = await transport.health();
+      const paired = peers.length > 0;
+      return {
+        peers: peers.map((p) => ({
+          displayName: p.displayName,
+          endpointRef: remoteEndpointRef(p.endpointId),
+          statusLabel: paired ? (h.reachable ? '已连接' : '已建立联系') : '',
+        })),
+        ...(self?.relayUrl ? { relayUrl: self.relayUrl } : {}),
+        connectionLabel: !self
+          ? '尚未配置'
+          : h.reachable
+            ? paired
+              ? '已连接'
+              : '中继已连接'
+            : paired
+              ? '已建立联系，暂时无法连接中继'
+              : '暂时无法连接中继',
+      };
+    }
+    if (action === 'retryOutbox') {
+      if (!relay) return { submitted: 0, failed: 0 };
+      const r = await relay.retryOutbox();
+      return { submitted: r.submitted, failed: r.failed, ok: true };
+    }
+    if (action === 'pullRemote') {
+      if (!relay) return { fetched: 0, rejected: 0 };
+      const r = await relay.pullFromRelay();
+      await processTransportInbox(this, transport);
+      return { fetched: r.fetched, rejected: r.rejected, ok: true };
+    }
+
     if (action === 'health') {
-      const { LocalPackageTransport } = await import('../collaboration/transport');
-      const h = await new LocalPackageTransport(this).asSubjectTransport().health();
+      const h = await transport.health();
       return {
         mode: h.mode,
         reachable: h.reachable,
         capabilities: h.capabilities,
+        connectionLabel: h.reachable
+          ? h.mode === 'remote'
+            ? '已连接'
+            : '已连接'
+          : '无法连接',
       };
     }
     if (action === 'processInbox') {
-      const r = await host.processInbox();
-      return { processed: r.processed };
+      const r = await processTransportInbox(this, transport);
+      return { processed: r.processed, collabSynced: r.collabSynced };
     }
     if (action === 'listInbox') {
-      const { LocalPackageTransport } = await import('../collaboration/transport');
-      const items = await new LocalPackageTransport(this).asSubjectTransport().listInbox({});
+      const items = await transport.listInbox({});
       return {
         inbox: items.map((e) => ({
           envelopeId: e.envelopeId,
@@ -842,18 +963,17 @@ export class DigitalMeRuntime {
     }
     if (action === 'acknowledge') {
       if (!input.envelopeId) throw new Error('acknowledge requires envelopeId');
-      const { LocalPackageTransport } = await import('../collaboration/transport');
-      const r = await new LocalPackageTransport(this)
-        .asSubjectTransport()
-        .acknowledge(input.envelopeId);
+      const r = await transport.acknowledge(input.envelopeId);
       return { ok: r.ok };
     }
     if (action === 'sendSignal') {
-      if (!input.peerPackageDir || !input.signal) {
-        throw new Error('sendSignal requires peerPackageDir and signal');
+      if (!input.signal) throw new Error('sendSignal requires signal');
+      if (!input.peerPackageDir && !input.peerEndpointRef) {
+        throw new Error('sendSignal requires peerPackageDir or peerEndpointRef');
       }
       const sent = await host.sendSignal({
-        peerPackageDir: input.peerPackageDir,
+        ...(input.peerPackageDir ? { peerPackageDir: input.peerPackageDir } : {}),
+        ...(input.peerEndpointRef ? { peerEndpointRef: input.peerEndpointRef } : {}),
         signal: {
           intent: input.signal.intent,
           seeking: input.signal.seeking || [],
@@ -863,83 +983,50 @@ export class DigitalMeRuntime {
           ...(input.signal.expiresAt ? { expiresAt: input.signal.expiresAt } : {}),
         },
       });
-      // 对端处理匹配
-      const peerRt = this.createSiblingRuntime();
-      try {
-        await peerRt.openPackage({ dir: input.peerPackageDir });
-        const peerHost = new SignalOpportunityHost(peerRt);
-        await peerHost.processInbox();
-      } finally {
-        await peerRt.stop();
-      }
-      // 取回 response
-      await host.processInbox();
-      return { envelopeId: sent.envelopeId, opportunityId: sent.opportunityId };
-    }
-    if (action === 'listOpportunities') {
-      const listed = await host.listOpportunities();
-      return {
-        items: listed.items.map((c) => ({
-          id: c.id,
-          peerDisplayName: c.peerDisplayName,
-          stage: c.stage,
-          seekingSummary: c.seekingSummary,
-          offeringSummary: c.offeringSummary,
-          whyWorthKnowing: c.whyWorthKnowing,
-          privacyNote: c.privacyNote,
-          ...(c.peerBrief ? { peerBrief: c.peerBrief } : {}),
-          ...(c.localBrief ? { localBrief: c.localBrief } : {}),
-          ...(c.collaborationRecordId ? { collaborationRecordId: c.collaborationRecordId } : {}),
-        })),
-      };
-    }
-    if (action === 'continueInterest') {
-      if (!input.opportunityId) throw new Error('continueInterest requires opportunityId');
-      const r = await host.continueInterest(input.opportunityId);
-      // 对端消化
-      const card = r.item;
-      const dir = await new (await import('../collaboration/transport')).LocalPackageTransport(this)
-        .asSubjectTransport()
-        .lookupPackageDir(card.peerEndpointRef);
-      if (dir) {
+      // 仅本地路径：打开对端处理。远程由对方 pullRemote / processInbox。
+      if (input.peerPackageDir && !input.peerEndpointRef) {
         const peerRt = this.createSiblingRuntime();
         try {
-          await peerRt.openPackage({ dir });
-          await new SignalOpportunityHost(peerRt).processInbox();
+          await peerRt.openPackage({ dir: input.peerPackageDir });
+          const peerHost = new SignalOpportunityHost(peerRt);
+          await peerHost.processInbox();
         } finally {
           await peerRt.stop();
         }
         await host.processInbox();
-        const listed = await host.listOpportunities();
-        const updated = listed.items.find((i) => i.id === input.opportunityId) || r.item;
-        return {
-          item: {
-            id: updated.id,
-            peerDisplayName: updated.peerDisplayName,
-            stage: updated.stage,
-            seekingSummary: updated.seekingSummary,
-            offeringSummary: updated.offeringSummary,
-            whyWorthKnowing: updated.whyWorthKnowing,
-            privacyNote: updated.privacyNote,
-            ...(updated.peerBrief ? { peerBrief: updated.peerBrief } : {}),
-            ...(updated.localBrief ? { localBrief: updated.localBrief } : {}),
-            ...(updated.collaborationRecordId
-              ? { collaborationRecordId: updated.collaborationRecordId }
-              : {}),
-          },
-        };
       }
       return {
-        item: {
-          id: r.item.id,
-          peerDisplayName: r.item.peerDisplayName,
-          stage: r.item.stage,
-          seekingSummary: r.item.seekingSummary,
-          offeringSummary: r.item.offeringSummary,
-          whyWorthKnowing: r.item.whyWorthKnowing,
-          privacyNote: r.item.privacyNote,
-        },
+        envelopeId: sent.envelopeId,
+        opportunityId: sent.opportunityId,
+        delivered: sent.delivered,
       };
+    }
+    if (action === 'listOpportunities') {
+      if (relay) await relay.pullFromRelay().catch(() => undefined);
+      await processTransportInbox(this, transport);
+      const listed = await host.listOpportunities();
+      return { items: listed.items.map(mapOpp) };
+    }
+    if (action === 'continueInterest') {
+      if (!input.opportunityId) throw new Error('continueInterest requires opportunityId');
+      const r = await host.continueInterest(input.opportunityId);
+      const card = r.item;
+      if (!isRemoteEndpointRef(card.peerEndpointRef)) {
+        const dir = await collabTransport.lookupPackageDir(card.peerEndpointRef);
+        if (dir) {
+          const peerRt = this.createSiblingRuntime();
+          try {
+            await peerRt.openPackage({ dir });
+            await new SignalOpportunityHost(peerRt).processInbox();
+          } finally {
+            await peerRt.stop();
+          }
+          await host.processInbox();
+        }
+      }
+      const listed = await host.listOpportunities();
+      const updated = listed.items.find((i) => i.id === input.opportunityId) || r.item;
+      return { item: mapOpp(updated) };
     }
     if (action === 'decline') {
       if (!input.opportunityId) throw new Error('decline requires opportunityId');
@@ -948,35 +1035,23 @@ export class DigitalMeRuntime {
     if (action === 'discloseBrief') {
       if (!input.opportunityId) throw new Error('discloseBrief requires opportunityId');
       const r = await host.discloseBrief(input.opportunityId);
-      const dir = await new (await import('../collaboration/transport')).LocalPackageTransport(this)
-        .asSubjectTransport()
-        .lookupPackageDir(r.item.peerEndpointRef);
-      if (dir) {
-        const peerRt = this.createSiblingRuntime();
-        try {
-          await peerRt.openPackage({ dir });
-          await new SignalOpportunityHost(peerRt).discloseBrief(input.opportunityId).catch(() => undefined);
-          await new SignalOpportunityHost(peerRt).processInbox();
-        } finally {
-          await peerRt.stop();
+      if (!isRemoteEndpointRef(r.item.peerEndpointRef)) {
+        const dir = await collabTransport.lookupPackageDir(r.item.peerEndpointRef);
+        if (dir) {
+          const peerRt = this.createSiblingRuntime();
+          try {
+            await peerRt.openPackage({ dir });
+            await new SignalOpportunityHost(peerRt).discloseBrief(input.opportunityId).catch(() => undefined);
+            await new SignalOpportunityHost(peerRt).processInbox();
+          } finally {
+            await peerRt.stop();
+          }
+          await host.processInbox();
         }
-        await host.processInbox();
       }
       const listed = await host.listOpportunities();
       const updated = listed.items.find((i) => i.id === input.opportunityId) || r.item;
-      return {
-        item: {
-          id: updated.id,
-          peerDisplayName: updated.peerDisplayName,
-          stage: updated.stage,
-          seekingSummary: updated.seekingSummary,
-          offeringSummary: updated.offeringSummary,
-          whyWorthKnowing: updated.whyWorthKnowing,
-          privacyNote: updated.privacyNote,
-          ...(updated.peerBrief ? { peerBrief: updated.peerBrief } : {}),
-          ...(updated.localBrief ? { localBrief: updated.localBrief } : {}),
-        },
-      };
+      return { item: mapOpp(updated) };
     }
     if (action === 'startCollaboration') {
       if (!input.opportunityId) throw new Error('startCollaboration requires opportunityId');

@@ -1,14 +1,17 @@
 /**
- * 协作传输边界：Record/合同不依赖部署位置；路径只存在于本机 Transport。
- * LocalPackageTransport 经 SubjectTransport 发送 collaboration_sync，再幂等合并 Record。
+ * CollaborationTransport：Local 直写路径假设仅限 LocalSubjectTransport；
+ * 远程端点经 RelayTransport 只投递 envelope，由接收方 apply collaboration_sync。
  */
 import type { DigitalMeRuntime } from '../runtime/digitalme-runtime';
 import type { CollaborationEvent, CollaborationRecord, SubjectRef } from './schema';
 import { CollaborationRecordStore } from './record-store';
-import { mergeIncomingEvents } from './record-derive';
 import { LocalSubjectTransport, buildEnvelope } from '../subject-comm/local-subject-transport';
 import type { CollaborationSyncPayload } from '../subject-comm/envelope';
 import { InboxStore } from '../subject-comm/inbox-store';
+import { applyCollaborationSyncLocally } from '../subject-comm/collaboration-sync-apply';
+import { isRemoteEndpointRef, parseRemoteEndpointRef } from '../subject-comm/endpoint';
+import type { SubjectTransport } from '../subject-comm/subject-transport';
+import type { RelayTransport } from '../subject-comm/relay-transport';
 import { nowIso } from '../shared/ids';
 
 export interface CollaborationTransport {
@@ -30,30 +33,51 @@ export interface CollaborationTransport {
 }
 
 export class LocalPackageTransport implements CollaborationTransport {
-  private readonly subjectTransport: LocalSubjectTransport;
+  private readonly localTransport: LocalSubjectTransport;
+  private readonly relayTransport: RelayTransport | null;
 
-  constructor(private readonly issuer: DigitalMeRuntime) {
-    this.subjectTransport = new LocalSubjectTransport(issuer);
+  constructor(
+    private readonly issuer: DigitalMeRuntime,
+    options?: { relay?: RelayTransport | null },
+  ) {
+    this.localTransport = new LocalSubjectTransport(issuer);
+    this.relayTransport = options?.relay ?? null;
   }
 
-  asSubjectTransport(): LocalSubjectTransport {
-    return this.subjectTransport;
+  asSubjectTransport(): SubjectTransport {
+    return this.relayTransport ?? this.localTransport;
+  }
+
+  asLocalSubjectTransport(): LocalSubjectTransport {
+    return this.localTransport;
+  }
+
+  private subjectFor(endpointRef: string): SubjectTransport {
+    if (isRemoteEndpointRef(endpointRef)) {
+      if (!this.relayTransport) throw new Error('远程端点需要 RelayTransport');
+      return this.relayTransport;
+    }
+    return this.localTransport;
   }
 
   resolvePeer(packageDir: string) {
-    return this.subjectTransport.resolvePeer(packageDir);
+    return this.localTransport.resolvePeer(packageDir);
   }
 
   registerEndpoint(ref: SubjectRef, packageDir: string) {
-    return this.subjectTransport.registerEndpoint(ref, packageDir);
+    return this.localTransport.registerEndpoint(ref, packageDir);
   }
 
   lookupPackageDir(endpointRef: string) {
-    return this.subjectTransport.lookupPackageDir(endpointRef);
+    if (isRemoteEndpointRef(endpointRef)) return Promise.resolve(null);
+    return this.localTransport.lookupPackageDir(endpointRef);
   }
 
   openByEndpointRef(endpointRef: string) {
-    return this.subjectTransport.openByEndpointRef(endpointRef);
+    if (isRemoteEndpointRef(endpointRef)) {
+      return Promise.reject(new Error('远程端点不能打开对方本地主体包'));
+    }
+    return this.localTransport.openByEndpointRef(endpointRef);
   }
 
   async pushEvents(input: {
@@ -63,16 +87,37 @@ export class LocalPackageTransport implements CollaborationTransport {
     seedRecord?: CollaborationRecord;
   }): Promise<void> {
     const host = this.issuer.subject.requireActive();
-    const from: SubjectRef = {
-      subjectId: host.id,
-      displayName: host.identity.displayName,
-      endpointRef: `subject:${host.id}`,
-    };
-    await this.subjectTransport.registerEndpoint(from, host.rootDir);
+    const remote = isRemoteEndpointRef(input.endpointRef);
+    const transport = this.subjectFor(input.endpointRef);
 
+    let from: SubjectRef;
     let to: SubjectRef;
-    {
-      const probe = await this.subjectTransport.openByEndpointRef(input.endpointRef);
+
+    if (remote) {
+      const relay = this.relayTransport!;
+      const self = await relay.identityStore().getLocalProfile();
+      if (!self) throw new Error('尚未配置远程端点');
+      const peerId = parseRemoteEndpointRef(input.endpointRef);
+      const peer = peerId ? await relay.identityStore().getPeer(peerId) : null;
+      if (!peer) throw new Error('尚未与对方建立连接');
+      from = {
+        subjectId: self.subjectId,
+        displayName: self.displayName,
+        endpointRef: `dmep:${self.endpointId}`,
+      };
+      to = {
+        subjectId: peer.subjectId,
+        displayName: peer.displayName,
+        endpointRef: input.endpointRef,
+      };
+    } else {
+      from = {
+        subjectId: host.id,
+        displayName: host.identity.displayName,
+        endpointRef: `subject:${host.id}`,
+      };
+      await this.localTransport.registerEndpoint(from, host.rootDir);
+      const probe = await this.localTransport.openByEndpointRef(input.endpointRef);
       try {
         to = probe.subjectRef;
       } finally {
@@ -92,49 +137,46 @@ export class LocalPackageTransport implements CollaborationTransport {
       payload,
       correlationId: input.recordId,
     });
-    const sendResult = await this.subjectTransport.send(envelope);
-
-    const opened = await this.subjectTransport.openByEndpointRef(input.endpointRef);
-    try {
-      const store = await CollaborationRecordStore.open(
-        opened.runtime.subject.requireActive().rootDir,
-      );
-      let existing = await store.get(input.recordId);
-      if (!existing) {
-        if (!input.seedRecord) {
-          throw new Error('对方尚无协作记录且未提供初始副本');
-        }
-        existing = {
-          ...input.seedRecord,
-          events: [],
-        };
-      }
-      const merged = mergeIncomingEvents(existing, input.events);
-      if (!(await store.get(input.recordId)) && input.seedRecord) {
-        await store.put({
-          ...input.seedRecord,
-          events: merged.events,
-          updatedAt: merged.updatedAt,
-        });
-      } else {
-        await store.put(merged);
-      }
-
-      if (!sendResult.duplicate) {
-        const peerInbox = await InboxStore.open(opened.runtime.subject.requireActive().rootDir);
-        const env = await peerInbox.get(envelope.envelopeId);
-        if (env && !env.ackedAt) {
-          env.ackedAt = nowIso();
-          await peerInbox.put(env);
-        }
-      }
-    } finally {
-      await opened.stop();
+    if (remote) {
+      envelope.transportMeta = { mode: 'remote', encrypted: true };
     }
+
+    const sendResult = await transport.send(envelope);
+
+    // Local 优化：同机仍可直接合并对方 Record（路径假设不出 Local）
+    if (!remote) {
+      const opened = await this.localTransport.openByEndpointRef(input.endpointRef);
+      try {
+        await applyCollaborationSyncLocally(
+          opened.runtime.subject.requireActive().rootDir,
+          payload,
+        );
+        if (!sendResult.duplicate) {
+          const peerInbox = await InboxStore.open(
+            opened.runtime.subject.requireActive().rootDir,
+          );
+          const env = await peerInbox.get(envelope.envelopeId);
+          if (env && !env.ackedAt) {
+            env.ackedAt = nowIso();
+            await peerInbox.put(env);
+          }
+        }
+      } finally {
+        await opened.stop();
+      }
+    }
+    // Remote：接收方 pull + processTransportInbox 应用；发送方已有本地真相
   }
 
   async pullRecord(endpointRef: string, recordId: string): Promise<CollaborationRecord | null> {
-    const opened = await this.subjectTransport.openByEndpointRef(endpointRef);
+    if (isRemoteEndpointRef(endpointRef)) {
+      // 远程：只读本机副本（对端事件经 collaboration_sync 汇入）
+      const store = await CollaborationRecordStore.open(
+        this.issuer.subject.requireActive().rootDir,
+      );
+      return store.get(recordId);
+    }
+    const opened = await this.localTransport.openByEndpointRef(endpointRef);
     try {
       const store = await CollaborationRecordStore.open(
         opened.runtime.subject.requireActive().rootDir,

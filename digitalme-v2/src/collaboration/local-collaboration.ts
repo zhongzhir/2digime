@@ -124,12 +124,16 @@ export class LocalCollaborationHost {
       await store.put(grant);
     };
     const writePeer = async (endpointRef: string) => {
-      const opened = await this.transport.openByEndpointRef(endpointRef);
       try {
-        const store = await GrantStore.open(opened.runtime.subject.requireActive().rootDir);
-        await store.put(grant);
-      } finally {
-        await opened.stop();
+        const opened = await this.transport.openByEndpointRef(endpointRef);
+        try {
+          const store = await GrantStore.open(opened.runtime.subject.requireActive().rootDir);
+          await store.put(grant);
+        } finally {
+          await opened.stop();
+        }
+      } catch {
+        // 远程端点无法直写对方包；Grant 留在本机，对端经协作事件本地重建
       }
     };
 
@@ -529,7 +533,9 @@ export class LocalCollaborationHost {
    * 发起协作提议。同设备验证阶段随后自动触发 B 评估（规则内自动，越界 JIT）。
    */
   async propose(input: {
-    responderPackageDir: string;
+    responderPackageDir?: string;
+    /** 远程配对端点（dmep:…）；与 responderPackageDir 二选一 */
+    responderEndpointRef?: string;
     proposal: CollaborationProposalTerms;
     issuerTaskId?: string;
     /** 为 true 时不自动评估（测试用）。 */
@@ -545,7 +551,45 @@ export class LocalCollaborationHost {
     const intent = input.proposal.intent.trim();
     if (!intent) throw new Error('collaboration intent required');
 
-    const responder = await this.transport.resolvePeer(input.responderPackageDir);
+    let responder: SubjectRef;
+    let initiatorEndpointRef = `subject:${issuerPkg.id}`;
+
+    if (input.responderEndpointRef) {
+      const { isRemoteEndpointRef, parseRemoteEndpointRef } = await import(
+        '../subject-comm/endpoint'
+      );
+      if (!isRemoteEndpointRef(input.responderEndpointRef)) {
+        throw new Error('responderEndpointRef 必须是远程端点');
+      }
+      const collabTransport = this.transport as LocalPackageTransport;
+      const relay = collabTransport.asSubjectTransport();
+      const { RelayTransport } = await import('../subject-comm/relay-transport');
+      if (!(relay instanceof RelayTransport)) {
+        throw new Error('远程协作需要 RelayTransport');
+      }
+      const epId = parseRemoteEndpointRef(input.responderEndpointRef);
+      const peer = epId ? await relay.identityStore().getPeer(epId) : null;
+      if (!peer) throw new Error('尚未与对方建立连接');
+      const self = await relay.identityStore().getLocalProfile();
+      if (!self) throw new Error('尚未配置远程端点');
+      responder = {
+        subjectId: peer.subjectId,
+        displayName: peer.displayName,
+        endpointRef: input.responderEndpointRef,
+      };
+      initiatorEndpointRef = `dmep:${self.endpointId}`;
+    } else {
+      if (!input.responderPackageDir) {
+        throw new Error('propose requires responderPackageDir or responderEndpointRef');
+      }
+      const resolved = await this.transport.resolvePeer(input.responderPackageDir);
+      responder = {
+        subjectId: resolved.subjectId,
+        displayName: resolved.displayName,
+        endpointRef: resolved.endpointRef,
+      };
+    }
+
     const materials = input.proposal.offeredMaterials.map((m) => ({
       path: normPath(m.path),
       ...(m.summary ? { summary: m.summary } : {}),
@@ -573,10 +617,12 @@ export class LocalCollaborationHost {
     const initiator: SubjectRef = {
       subjectId: issuerPkg.id,
       displayName: issuerPkg.identity.displayName,
-      endpointRef: `subject:${issuerPkg.id}`,
+      endpointRef: initiatorEndpointRef,
     };
-    // 注册自身 endpoint，便于对方回推（同设备）
-    await this.transport.registerEndpoint(initiator, issuerPkg.rootDir);
+    // 仅本地路径登记；远程不写 package path
+    if (!input.responderEndpointRef) {
+      await this.transport.registerEndpoint(initiator, issuerPkg.rootDir);
+    }
 
     const record: CollaborationRecord = {
       id: recordId,

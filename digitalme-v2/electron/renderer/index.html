@@ -153,6 +153,34 @@
           </details>
 
           <p id="settings-status" class="status" aria-live="polite"></p>
+
+          <section class="settings-block" aria-labelledby="remote-dm-title">
+            <h2 id="remote-dm-title">连接另一个 Digital Me</h2>
+            <p class="muted">实验能力：通过中继服务与另一台设备上的数字之我建立联系。不共享本机文件夹。</p>
+            <label class="field">
+              <span>中继服务地址</span>
+              <input id="remote-relay-url" type="text" placeholder="例如 https://relay.example.com" autocomplete="off" />
+            </label>
+            <p id="remote-dm-connection-state" class="connection-state" aria-live="polite">连接状态：尚未配置</p>
+            <div class="row settings-actions">
+              <button type="button" id="btn-remote-relay-connect" class="primary">连接中继</button>
+              <button type="button" id="btn-remote-create-invite">生成邀请</button>
+            </div>
+            <label class="field">
+              <span>对方邀请</span>
+              <textarea id="remote-invite-input" rows="3" placeholder="粘贴对方生成的邀请内容"></textarea>
+            </label>
+            <div class="row settings-actions">
+              <button type="button" id="btn-remote-accept-invite">接受邀请</button>
+            </div>
+            <label class="field">
+              <span>我的邀请（可复制给对方）</span>
+              <textarea id="remote-invite-output" rows="3" readonly placeholder="生成后显示在这里"></textarea>
+            </label>
+            <ul id="remote-peer-list" class="collab-entry-list"></ul>
+            <p id="remote-dm-status" class="status" aria-live="polite"></p>
+          </section>
+
           <details id="settings-tech-detail" class="settings-tech-detail" hidden>
             <summary>技术摘要</summary>
             <pre id="settings-tech-body" class="settings-tech-body"></pre>
@@ -589,20 +617,45 @@
               <h1 class="page-title">协作</h1>
               <button type="button" id="btn-collab-page-new" class="primary">新建协作</button>
             </div>
-            <p class="page-lead">实验能力：当前仅支持已添加到本设备的另一个 Digital Me。</p>
-            <p class="muted tiny">不支持跨设备或公开网络协作。研究分析等专业能力请到「设置」中配置。</p>
+            <p class="page-lead">实验能力：可与本机另一个数字之我协作，也可在设置中连接另一台设备上的数字之我。</p>
+            <p class="muted tiny">研究分析等专业能力请到「设置」中配置。</p>
 
             <section class="collab-home-section" aria-labelledby="collab-who-title">
               <h2 class="section-title" id="collab-who-title">
                 可找谁帮忙
-                <span class="section-hint">本机已添加的数字之我</span>
+                <span class="section-hint">本机或已连接的数字之我</span>
               </h2>
               <div class="collab-connected-peers">
                 <div class="collab-peer-manage-card" id="collab-peer-digitalme-card">
                   <p class="collab-peer-name">其他数字之我</p>
-                  <p class="muted tiny">在「新建协作」中选择本机已有的另一个数字之我文件夹。</p>
+                  <p class="muted tiny">本机对象在「新建协作」中选择；跨设备请先到「设置 → 连接另一个 Digital Me」。</p>
                 </div>
               </div>
+            </section>
+
+            <section class="collab-home-section" aria-labelledby="collab-signal-title" id="collab-signal-compose">
+              <h2 class="section-title" id="collab-signal-title">
+                发出合作意向
+                <span class="section-hint">尚未正式协作</span>
+              </h2>
+              <label class="field">
+                <span>发给谁</span>
+                <select id="collab-signal-peer" aria-label="选择已连接的数字之我">
+                  <option value="">请先在设置中连接另一个 Digital Me</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>你想说什么</span>
+                <textarea
+                  id="collab-signal-intent"
+                  rows="4"
+                  placeholder="例如：我正在寻找适合共同参赛的成熟金融 AI 应用，可以提供 Agent / Digital Me 技术能力。"
+                ></textarea>
+              </label>
+              <div class="row">
+                <button type="button" id="btn-collab-send-signal" class="primary">发出</button>
+              </div>
+              <p id="collab-signal-status" class="status" aria-live="polite"></p>
             </section>
 
             <section class="collab-home-section" aria-labelledby="collab-opp-title">

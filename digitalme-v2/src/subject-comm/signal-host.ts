@@ -5,6 +5,7 @@
 import type { DigitalMeRuntime } from '../runtime/digitalme-runtime';
 import { LocalPackageTransport } from '../collaboration/transport';
 import { LocalSubjectTransport, buildEnvelope } from './local-subject-transport';
+import type { SubjectTransport } from './subject-transport';
 import { InboxStore, OpportunityStore } from './inbox-store';
 import { matchSignalLocally } from './opportunity-match';
 import {
@@ -18,6 +19,8 @@ import type { SubjectEnvelope } from './envelope';
 import type { SubjectRef } from '../collaboration/schema';
 import { nowIso } from '../shared/ids';
 import { LocalCollaborationHost } from '../collaboration/local-collaboration';
+import { isRemoteEndpointRef, parseRemoteEndpointRef } from './endpoint';
+import type { RelayTransport } from './relay-transport';
 
 function makeCommId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
@@ -40,10 +43,18 @@ function isSignalResponsePayload(p: unknown): p is SignalResponsePayload {
 }
 
 export class SignalOpportunityHost {
-  private readonly transport: LocalSubjectTransport;
+  private readonly transport: SubjectTransport;
+  private readonly relay: RelayTransport | null;
 
-  constructor(private readonly runtime: DigitalMeRuntime) {
-    this.transport = new LocalPackageTransport(runtime).asSubjectTransport();
+  constructor(
+    private readonly runtime: DigitalMeRuntime,
+    transport?: SubjectTransport,
+    relay?: RelayTransport | null,
+  ) {
+    this.relay = relay ?? null;
+    this.transport =
+      transport ??
+      new LocalPackageTransport(runtime, { relay: this.relay }).asSubjectTransport();
   }
 
   private async opportunityStore(): Promise<OpportunityStore> {
@@ -71,35 +82,72 @@ export class SignalOpportunityHost {
   }
 
   async sendSignal(input: {
-    peerPackageDir: string;
+    peerPackageDir?: string;
+    peerEndpointRef?: string;
     signal: SignalPayload;
-  }): Promise<{ envelopeId: string; opportunityId: string }> {
-    const peer = await this.transport.resolvePeer(input.peerPackageDir);
+  }): Promise<{ envelopeId: string; opportunityId: string; delivered: boolean }> {
     const from = selfRef(this.runtime);
-    await this.transport.registerEndpoint(from, this.runtime.subject.requireActive().rootDir);
+    let to: SubjectRef;
+    let peerDisplayName: string;
+    let peerEndpointRef: string;
+    let peerSubjectId: string;
+
+    if (input.peerEndpointRef && isRemoteEndpointRef(input.peerEndpointRef)) {
+      if (!this.relay) throw new Error('远程信号需要 Relay');
+      const epId = parseRemoteEndpointRef(input.peerEndpointRef);
+      const peer = epId ? await this.relay.identityStore().getPeer(epId) : null;
+      if (!peer) throw new Error('尚未与对方建立连接');
+      const self = await this.relay.identityStore().getLocalProfile();
+      if (!self) throw new Error('尚未配置远程端点');
+      from.endpointRef = `dmep:${self.endpointId}`;
+      from.displayName = self.displayName;
+      to = {
+        subjectId: peer.subjectId,
+        displayName: peer.displayName,
+        endpointRef: input.peerEndpointRef,
+      };
+      peerDisplayName = peer.displayName;
+      peerEndpointRef = input.peerEndpointRef;
+      peerSubjectId = peer.subjectId;
+    } else {
+      if (!input.peerPackageDir) throw new Error('sendSignal requires peerPackageDir or peerEndpointRef');
+      const local =
+        this.transport instanceof LocalSubjectTransport
+          ? this.transport
+          : new LocalPackageTransport(this.runtime).asLocalSubjectTransport();
+      const peer = await local.resolvePeer(input.peerPackageDir);
+      await local.registerEndpoint(from, this.runtime.subject.requireActive().rootDir);
+      to = {
+        subjectId: peer.subjectId,
+        displayName: peer.displayName,
+        endpointRef: peer.endpointRef,
+      };
+      peerDisplayName = peer.displayName;
+      peerEndpointRef = peer.endpointRef;
+      peerSubjectId = peer.subjectId;
+    }
 
     const correlationId = makeCommId('opportunity');
     const envelope = buildEnvelope({
       from,
-      to: {
-        subjectId: peer.subjectId,
-        displayName: peer.displayName,
-        endpointRef: peer.endpointRef,
-      },
+      to,
       kind: 'signal',
       payload: input.signal,
       correlationId,
       ...(input.signal.expiresAt ? { expiresAt: input.signal.expiresAt } : {}),
     });
+    if (isRemoteEndpointRef(peerEndpointRef)) {
+      envelope.transportMeta = { mode: 'remote', encrypted: true };
+    }
 
-    await this.transport.send(envelope);
+    const sent = await this.transport.send(envelope);
 
     const card: OpportunityCard = {
       id: correlationId,
       derivedFrom: 'signal_envelope',
-      peerDisplayName: peer.displayName,
-      peerEndpointRef: peer.endpointRef,
-      peerSubjectId: peer.subjectId,
+      peerDisplayName,
+      peerEndpointRef,
+      peerSubjectId,
       stage: 'potential',
       seekingSummary: (input.signal.seeking || []).join('、') || input.signal.intent,
       offeringSummary: (input.signal.offering || []).join('、'),
@@ -111,7 +159,11 @@ export class SignalOpportunityHost {
       updatedAt: nowIso(),
     };
     await (await this.opportunityStore()).put(card);
-    return { envelopeId: envelope.envelopeId, opportunityId: card.id };
+    return {
+      envelopeId: envelope.envelopeId,
+      opportunityId: card.id,
+      delivered: sent.delivered !== false,
+    };
   }
 
   private async onInboundSignal(env: SubjectEnvelope): Promise<boolean> {
@@ -157,18 +209,19 @@ export class SignalOpportunityHost {
       peerMayNeed: match.response.peerMayNeed || env.payload.offering.slice(0, 2),
       youMayOffer: match.response.youMayOffer || env.payload.seeking.slice(0, 2),
     };
+    const replyFrom = await this.selfCommRef(env.from.endpointRef);
     const reply = buildEnvelope({
-      from: selfRef(this.runtime),
+      from: replyFrom,
       to: env.from,
       kind: 'signal_response',
       payload: responsePayload,
       correlationId,
       replyTo: env.envelopeId,
     });
-    await this.transport.registerEndpoint(
-      selfRef(this.runtime),
-      this.runtime.subject.requireActive().rootDir,
-    );
+    if (isRemoteEndpointRef(env.from.endpointRef)) {
+      reply.transportMeta = { mode: 'remote', encrypted: true };
+    }
+    await this.ensureLocalEndpointRegistered(replyFrom);
     await this.transport.send(reply);
     card.responseEnvelopeId = reply.envelopeId;
     card.stage = 'potential';
@@ -364,8 +417,9 @@ export class SignalOpportunityHost {
       '_',
     );
     const inbox = await this.inboxStore();
+    const continueFrom = await this.selfCommRef(card.peerEndpointRef);
     const continueEnv = buildEnvelope({
-      from: selfRef(this.runtime),
+      from: continueFrom,
       to: {
         subjectId: card.peerSubjectId,
         displayName: card.peerDisplayName,
@@ -385,11 +439,11 @@ export class SignalOpportunityHost {
     // 复用 envelopeId 稳定幂等键：用固定 id 前缀
     continueEnv.envelopeId = markerId.slice(0, 80);
     continueEnv.id = markerId.slice(0, 80);
+    if (isRemoteEndpointRef(card.peerEndpointRef)) {
+      continueEnv.transportMeta = { mode: 'remote', encrypted: true };
+    }
 
-    await this.transport.registerEndpoint(
-      selfRef(this.runtime),
-      this.runtime.subject.requireActive().rootDir,
-    );
+    await this.ensureLocalEndpointRegistered(continueFrom);
     await this.transport.send(continueEnv);
 
     // 检查对方是否已发过 continue（inbox 中同 correlation）
@@ -432,8 +486,9 @@ export class SignalOpportunityHost {
     card.localBrief = localBrief;
 
     // 向对方发送最小简介（仍走 signal_response，disclosure 层）
+    const briefFrom = await this.selfCommRef(card.peerEndpointRef);
     const briefEnv = buildEnvelope({
-      from: selfRef(this.runtime),
+      from: briefFrom,
       to: {
         subjectId: card.peerSubjectId,
         displayName: card.peerDisplayName,
@@ -447,6 +502,9 @@ export class SignalOpportunityHost {
       },
       correlationId: card.correlationId,
     });
+    if (isRemoteEndpointRef(card.peerEndpointRef)) {
+      briefEnv.transportMeta = { mode: 'remote', encrypted: true };
+    }
     await this.transport.send(briefEnv);
 
     // 收取对方已披露的简介
@@ -530,24 +588,35 @@ export class SignalOpportunityHost {
       }
     }
 
-    const peerDir = await this.transport.lookupPackageDir(card.peerEndpointRef);
-    if (!peerDir) throw new Error('无法定位对方主体包');
-
     const intent =
       input.intent ||
       `基于双方已确认的潜在合作机会，希望一起推进：${card.seekingSummary || card.whyWorthKnowing}`;
 
-    const collab = new LocalCollaborationHost(this.runtime);
-    const proposed = await collab.propose({
-      responderPackageDir: peerDir,
-      proposal: {
-        intent,
-        expectedOutcome: '形成可验收的合作成果',
-        offeredMaterials: [],
-        acceptanceCriteria: ['提供可核对的完整成果，并说明依据'],
-      },
-      skipAutoEvaluate: true,
-    });
+    const collab = new LocalCollaborationHost(
+      this.runtime,
+      new LocalPackageTransport(this.runtime, { relay: this.relay }),
+    );
+    const proposed = isRemoteEndpointRef(card.peerEndpointRef)
+      ? await collab.propose({
+          responderEndpointRef: card.peerEndpointRef,
+          proposal: {
+            intent,
+            expectedOutcome: '形成可验收的合作成果',
+            offeredMaterials: [],
+            acceptanceCriteria: ['提供可核对的完整成果，并说明依据'],
+          },
+          skipAutoEvaluate: true,
+        })
+      : await collab.propose({
+          responderPackageDir: (await this.localLookupDir(card.peerEndpointRef))!,
+          proposal: {
+            intent,
+            expectedOutcome: '形成可验收的合作成果',
+            offeredMaterials: [],
+            acceptanceCriteria: ['提供可核对的完整成果，并说明依据'],
+          },
+          skipAutoEvaluate: true,
+        });
 
     const latest = (await store.get(input.opportunityId))!;
     latest.stage = 'collaboration_started';
@@ -556,5 +625,44 @@ export class SignalOpportunityHost {
     await store.put(latest);
 
     return { recordId: proposed.recordId, status: proposed.status };
+  }
+
+  private async selfCommRef(peerEndpointRef: string): Promise<SubjectRef> {
+    if (isRemoteEndpointRef(peerEndpointRef) && this.relay) {
+      const self = await this.relay.identityStore().getLocalProfile();
+      if (self) {
+        return {
+          subjectId: self.subjectId,
+          displayName: self.displayName,
+          endpointRef: `dmep:${self.endpointId}`,
+        };
+      }
+    }
+    return selfRef(this.runtime);
+  }
+
+  private async ensureLocalEndpointRegistered(ref: SubjectRef): Promise<void> {
+    if (isRemoteEndpointRef(ref.endpointRef)) return;
+    if (typeof (this.transport as LocalSubjectTransport).registerEndpoint === 'function') {
+      try {
+        await (this.transport as LocalSubjectTransport).registerEndpoint(
+          ref,
+          this.runtime.subject.requireActive().rootDir,
+        );
+      } catch {
+        /* relay 无此方法 */
+      }
+    }
+  }
+
+  private async localLookupDir(endpointRef: string): Promise<string | null> {
+    try {
+      if (typeof (this.transport as LocalSubjectTransport).lookupPackageDir === 'function') {
+        return await (this.transport as LocalSubjectTransport).lookupPackageDir(endpointRef);
+      }
+    } catch {
+      /* ignore */
+    }
+    return new LocalPackageTransport(this.runtime).lookupPackageDir(endpointRef);
   }
 }

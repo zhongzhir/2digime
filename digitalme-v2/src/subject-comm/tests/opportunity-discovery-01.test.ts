@@ -272,7 +272,7 @@ test('SubjectTransport LocalPackageTransport is SubjectTransport-backed', async 
     initialSelfDescription: '测',
   });
   const t = new LocalPackageTransport(rt);
-  const st: LocalSubjectTransport = t.asSubjectTransport();
+  const st = t.asSubjectTransport();
   const h = await st.health();
   assert.equal(h.mode, 'local_trusted');
   await rt.stop();
