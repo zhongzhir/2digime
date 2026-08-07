@@ -266,7 +266,7 @@ describe('coding-capability-onboarding-01', () => {
       'utf8',
     );
     assert.match(html, /完成这项任务需要代码执行能力/);
-    assert.match(html, /使用已安装的能力/);
+    assert.match(html, /连接代码执行能力|使用已安装的能力/);
     assert.match(html, /安装推荐能力/);
     assert.match(html, /稍后连接/);
     assert.match(html, /代码执行能力/);

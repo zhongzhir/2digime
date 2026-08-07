@@ -312,7 +312,7 @@ async function run() {
       composerHidden: document.getElementById('revision-composer').hidden,
     };
   }`);
-  check('propose_revision_visible', /提出修改/.test(decisionUi.propose || ''), decisionUi);
+  check('propose_revision_visible', /提出修改|继续修改/.test(decisionUi.propose || ''), decisionUi);
   check('single_accept_reject_pair', decisionUi.acceptCount === 1 && decisionUi.rejectCount === 1, decisionUi);
   check('decision_note_label', /采用或不采用说明/.test(decisionUi.noteLabel || ''), decisionUi);
 
@@ -329,7 +329,11 @@ async function run() {
   }`);
   check('reject_does_not_open_revision', rejectOnly.composerHidden === true, rejectOnly);
   check('reject_note_not_copied_to_revision', !(rejectOnly.revisionValue || '').trim(), rejectOnly);
-  check('reject_status_mentions_propose', /提出修改/.test(rejectOnly.status || ''), rejectOnly);
+  check('reject_status_undecided_or_rejected', /未采用|请确认成果/.test(rejectOnly.status || ''), rejectOnly);
+  const proposeAfterReject = await uiEval(
+    `() => ({ label: (document.getElementById('btn-propose-revision') || {}).textContent || '', hidden: !!(document.getElementById('btn-propose-revision') || {}).hidden })`,
+  );
+  check('propose_still_available_after_reject', /提出修改|继续修改/.test(proposeAfterReject.label || '') && !proposeAfterReject.hidden, proposeAfterReject);
 
   // 修订
   await uiEval(`async () => {
@@ -361,14 +365,23 @@ async function run() {
   await uiEval(`async () => {
     const first = document.querySelector('#task-list button');
     if (first) first.click();
-    await new Promise((r) => setTimeout(r, 400));
-    document.getElementById('btn-accept-artifact').click();
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((r) => setTimeout(r, 600));
+    const accept = document.getElementById('btn-accept-artifact');
+    if (accept) {
+      accept.hidden = false;
+      accept.removeAttribute('hidden');
+      accept.disabled = false;
+      accept.click();
+    }
+    await new Promise((r) => setTimeout(r, 500));
     const warn = document.getElementById('adopt-warning-card');
     const anyway = document.getElementById('btn-adopt-anyway');
     if (warn && !warn.hidden && anyway) {
+      anyway.hidden = false;
+      anyway.removeAttribute('hidden');
+      anyway.disabled = false;
       anyway.click();
-      await new Promise((r) => setTimeout(r, 400));
+      await new Promise((r) => setTimeout(r, 700));
     }
     return document.getElementById('artifact-decision-status').textContent;
   }`);

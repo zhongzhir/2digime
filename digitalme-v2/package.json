@@ -16,6 +16,7 @@
     "accept:software-dev-fresh-ud": "electron scripts/electron-software-dev-fresh-ud-acceptance.cjs",
     "accept:software-dev-task-isolation": "electron scripts/electron-software-dev-task-isolation-acceptance.cjs",
     "accept:coding-capability-onboarding": "electron scripts/electron-coding-capability-onboarding-acceptance.cjs",
+    "accept:work-ux-simplification-blocker": "node --test --test-concurrency=1 dist/execution/tests/work-ux-simplification-01-blocker-01.test.js dist/execution/tests/work-ux-simplification-01-blocker-02.test.js dist/execution/tests/work-ux-simplification-01-blocker-03.test.js",
     "accept:collaboration-mvp": "node scripts/run-collaboration-mvp-acceptance.cjs",
     "accept:collaboration-real": "node scripts/run-collaboration-real-acceptance.cjs",
     "accept:collaboration-real:foundation": "node scripts/run-subject-collaboration-foundation-real.cjs",
