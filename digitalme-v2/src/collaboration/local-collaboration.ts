@@ -57,6 +57,10 @@ export interface CollabListItem {
   recordId: string;
   grantId?: string;
   status: CollabUserStatus;
+  /** 本方在协作中的角色（派生，不另存）。 */
+  role?: 'initiator' | 'responder';
+  /** 对方显示名（发起方看 B，接收方看 A）。 */
+  peerDisplayName?: string;
   ownerDecision?: 'accept' | 'reject' | 'revise';
   subtaskGoal?: string;
   granteeDisplayName?: string;
@@ -107,6 +111,70 @@ export class LocalCollaborationHost {
 
   private async grantStore(): Promise<GrantStore> {
     return GrantStore.open(this.issuer.subject.requireActive().rootDir);
+  }
+
+  /** 将 Grant 写入发起方（权威）并投影到接收方，不新建 Store。 */
+  private async persistGrantBothSides(
+    record: CollaborationRecord,
+    grant: AuthorizationGrant,
+  ): Promise<void> {
+    const selfId = this.issuer.subject.requireActive().id;
+    const writeLocal = async () => {
+      const store = await this.grantStore();
+      await store.put(grant);
+    };
+    const writePeer = async (endpointRef: string) => {
+      const opened = await this.transport.openByEndpointRef(endpointRef);
+      try {
+        const store = await GrantStore.open(opened.runtime.subject.requireActive().rootDir);
+        await store.put(grant);
+      } finally {
+        await opened.stop();
+      }
+    };
+
+    if (selfId === record.initiator.subjectId) {
+      await writeLocal();
+      await writePeer(record.responder.endpointRef);
+      return;
+    }
+    if (selfId === record.responder.subjectId) {
+      await writePeer(record.initiator.endpointRef);
+      await writeLocal();
+      return;
+    }
+    await writePeer(record.initiator.endpointRef);
+    await writePeer(record.responder.endpointRef);
+  }
+
+  /** 从本包或发起方包解析 Grant（成约后投影）。 */
+  private async resolveGrant(
+    record: CollaborationRecord,
+    grantId: string,
+  ): Promise<AuthorizationGrant | null> {
+    const local = await this.grantStore();
+    const hit = await local.get(grantId);
+    if (hit) return hit;
+    const selfId = this.issuer.subject.requireActive().id;
+    if (selfId === record.initiator.subjectId) return null;
+    try {
+      const opened = await this.transport.openByEndpointRef(record.initiator.endpointRef);
+      try {
+        const remote = await GrantStore.open(opened.runtime.subject.requireActive().rootDir);
+        const grant = await remote.get(grantId);
+        if (grant) await local.put(grant);
+        return grant;
+      } finally {
+        await opened.stop();
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  private selfRole(record: CollaborationRecord): 'initiator' | 'responder' {
+    const selfId = this.issuer.subject.requireActive().id;
+    return record.initiator.subjectId === selfId ? 'initiator' : 'responder';
   }
 
   private async loadRecord(recordId: string): Promise<CollaborationRecord> {
@@ -720,7 +788,11 @@ export class LocalCollaborationHost {
       terms,
       note: '双方已对同一条款摘要达成约定',
     };
-    record = await this.appendAndSync(record, [agreementEv], record.responder.endpointRef);
+    const peerEndpoint =
+      this.selfRole(record) === 'initiator'
+        ? record.responder.endpointRef
+        : record.initiator.endpointRef;
+    record = await this.appendAndSync(record, [agreementEv], peerEndpoint);
 
     // 签发纯授权 Grant
     const grant: AuthorizationGrant = {
@@ -740,8 +812,7 @@ export class LocalCollaborationHost {
       status: 'granted',
       grantedAt: at,
     };
-    const gStore = await this.grantStore();
-    await gStore.put(grant);
+    await this.persistGrantBothSides(record, grant);
 
     const grantEv: CollaborationEvent = {
       eventId: newId('collaborationEvent'),
@@ -751,7 +822,7 @@ export class LocalCollaborationHost {
       grantId: grant.id,
       termsDigest: digest,
     };
-    record = await this.appendAndSync(record, [grantEv], record.responder.endpointRef);
+    record = await this.appendAndSync(record, [grantEv], peerEndpoint);
 
     return {
       recordId,
@@ -900,8 +971,7 @@ export class LocalCollaborationHost {
     if (!grantId) {
       return { recordId, status: deriveCollabStatus(record), denied: true, reason: '尚未签发授权' };
     }
-    const gStore = await this.grantStore();
-    const grant = await gStore.get(grantId);
+    const grant = await this.resolveGrant(record, grantId);
     if (!grant) {
       return { recordId, status: 'failed', denied: true, reason: 'grant not found', grantId };
     }
@@ -920,6 +990,7 @@ export class LocalCollaborationHost {
     const terms = latestTerms(record);
     const allowed = terms.offeredMaterials.map((m) => normPath(m.path));
     const contextRefs: ContextRef[] = allowed.map((p) => ({ kind: 'file', path: p }));
+    const amResponder = this.selfRole(record) === 'responder';
 
     const started: CollaborationEvent = {
       eventId: newId('collaborationEvent'),
@@ -932,22 +1003,30 @@ export class LocalCollaborationHost {
     // 履行前先落本方 running 事实；对端同步延后到 Runtime 关闭后，避免并发 open 打断 Job
     record = await this.appendLocalOnly(record, [started]);
 
-    const opened = await this.transport.openByEndpointRef(record.responder.endpointRef);
-    try {
-      // 把 Grant 投影到 B 包，供 B 侧 loadAuthorizationGrant
-      const bGrantStore = await GrantStore.open(opened.runtime.subject.requireActive().rootDir);
+    /** B 本机履行：不 open 自己；A 代履约时 open B。 */
+    let responderOpened: Awaited<ReturnType<CollaborationTransport['openByEndpointRef']>> | null =
+      null;
+    let executionRuntime: DigitalMeRuntime = this.issuer;
+    if (!amResponder) {
+      responderOpened = await this.transport.openByEndpointRef(record.responder.endpointRef);
+      const bGrantStore = await GrantStore.open(
+        responderOpened.runtime.subject.requireActive().rootDir,
+      );
       await bGrantStore.put(grant);
+      executionRuntime = responderOpened.runtime;
+    }
 
+    try {
       let submitted: { taskId: string; jobId: string };
       try {
-        submitted = await opened.runtime.submitTask({
+        submitted = await executionRuntime.submitTask({
           goal: terms.intent,
           contextRefs,
           requestedArtifactType: 'document',
           authorization: {
             grantId: grant.id,
             issuerSubjectId: grant.grantorSubjectId,
-            granteeSubjectId: opened.runtime.subject.requireActive().id,
+            granteeSubjectId: executionRuntime.subject.requireActive().id,
           },
         });
       } catch (err) {
@@ -977,7 +1056,7 @@ export class LocalCollaborationHost {
       };
       record = await this.appendLocalOnly(record, [jobLink]);
 
-      const job = await waitForJobTerminal(opened.runtime.workRuntime, submitted.jobId, 180_000);
+      const job = await waitForJobTerminal(executionRuntime.workRuntime, submitted.jobId, 180_000);
       if (job.status !== 'succeeded' || !job.artifactId) {
         const failMessage = job.progress?.note?.trim() || String(job.status);
         const failEv: CollaborationEvent = {
@@ -1003,12 +1082,12 @@ export class LocalCollaborationHost {
         };
       }
 
-      const content = await opened.runtime.getContent({ artifactId: job.artifactId });
+      const content = await executionRuntime.getContent({ artifactId: job.artifactId });
       const artifactText = content.text ?? '';
       const digest = contentDigest(artifactText);
       const check = selfCheckDelivery({ text: artifactText, terms });
 
-      await opened.runtime.appendOwnerEvent({
+      await executionRuntime.appendOwnerEvent({
         type: 'experience_confirmed',
         confidence: 'confirmed',
         source: {
@@ -1028,7 +1107,7 @@ export class LocalCollaborationHost {
       });
 
       const deliveryRef = {
-        sourceSubjectId: opened.runtime.subject.requireActive().id,
+        sourceSubjectId: executionRuntime.subject.requireActive().id,
         sourceArtifactId: job.artifactId,
         sourceHeadVersionId: content.artifact.headVersionId,
         contentDigest: digest,
@@ -1050,54 +1129,82 @@ export class LocalCollaborationHost {
       };
       record = await this.appendLocalOnly(record, [delivered]);
 
-      // 先关闭 B，再同步事件并在 A 物化
-      await opened.stop();
+      if (responderOpened) {
+        await responderOpened.stop();
+        responderOpened = null;
+      }
 
-      const materialized = await this.issuer.materializePeerArtifact({
-        title: terms.intent.slice(0, 80),
-        text: artifactText,
-        recordId,
-        provenance: {
-          kind: 'collaboration_delivery',
-          recordId,
-          sourceSubjectId: deliveryRef.sourceSubjectId,
-          sourceArtifactId: deliveryRef.sourceArtifactId,
-          sourceHeadVersionId: deliveryRef.sourceHeadVersionId,
-          sourceContentDigest: digest,
-          agreementTermsDigest: agreement.termsDigest,
-        },
-      });
-
-      const materializeEv: CollaborationEvent = {
-        eventId: newId('collaborationEvent'),
-        kind: 'delivered',
-        authorSubjectId: record.initiator.subjectId,
-        at: nowIso(),
-        termsDigest: agreement.termsDigest,
-        delivery: deliveryRef,
-        localArtifactId: materialized.artifactId,
-        localHeadVersionId: materialized.headVersionId,
-        note: 'initiator_materialized',
-      };
-      record = await this.appendLocalOnly(record, [materializeEv]);
-      await this.syncFullRecordToPeer(record);
-
-      return {
-        recordId,
-        grantId,
-        status: deriveCollabStatus(record),
-        artifactId: job.artifactId,
-        artifactText,
-        localArtifactId: materialized.artifactId,
-        jobId: job.id,
-        reachedModel: job.capabilityId === OPENAI_COMPATIBLE_CAPABILITY_ID,
-        ...(job.capabilityId ? { capabilityId: job.capabilityId } : {}),
-      };
-    } catch (err) {
+      // 在发起方物化成果（本方是 A 则本地；本方是 B 则 open A）
+      let materializeRuntime: DigitalMeRuntime = this.issuer;
+      let initiatorOpened: Awaited<
+        ReturnType<CollaborationTransport['openByEndpointRef']>
+      > | null = null;
+      if (amResponder) {
+        initiatorOpened = await this.transport.openByEndpointRef(record.initiator.endpointRef);
+        materializeRuntime = initiatorOpened.runtime;
+      }
       try {
-        await opened.stop();
-      } catch {
-        /* ignore */
+        const materialized = await materializeRuntime.materializePeerArtifact({
+          title: terms.intent.slice(0, 80),
+          text: artifactText,
+          recordId,
+          provenance: {
+            kind: 'collaboration_delivery',
+            recordId,
+            sourceSubjectId: deliveryRef.sourceSubjectId,
+            sourceArtifactId: deliveryRef.sourceArtifactId,
+            sourceHeadVersionId: deliveryRef.sourceHeadVersionId,
+            sourceContentDigest: digest,
+            agreementTermsDigest: agreement.termsDigest,
+          },
+        });
+
+        if (initiatorOpened) {
+          await initiatorOpened.stop();
+          initiatorOpened = null;
+        }
+
+        const materializeEv: CollaborationEvent = {
+          eventId: newId('collaborationEvent'),
+          kind: 'delivered',
+          authorSubjectId: record.initiator.subjectId,
+          at: nowIso(),
+          termsDigest: agreement.termsDigest,
+          delivery: deliveryRef,
+          localArtifactId: materialized.artifactId,
+          localHeadVersionId: materialized.headVersionId,
+          note: 'initiator_materialized',
+        };
+        record = await this.appendLocalOnly(record, [materializeEv]);
+        await this.syncFullRecordToPeer(record);
+
+        return {
+          recordId,
+          grantId,
+          status: deriveCollabStatus(record),
+          artifactId: job.artifactId,
+          artifactText,
+          localArtifactId: materialized.artifactId,
+          jobId: job.id,
+          reachedModel: job.capabilityId === OPENAI_COMPATIBLE_CAPABILITY_ID,
+          ...(job.capabilityId ? { capabilityId: job.capabilityId } : {}),
+        };
+      } finally {
+        if (initiatorOpened) {
+          try {
+            await initiatorOpened.stop();
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    } catch (err) {
+      if (responderOpened) {
+        try {
+          await responderOpened.stop();
+        } catch {
+          /* ignore */
+        }
       }
       const failMessage = err instanceof Error ? err.message : String(err);
       try {
@@ -1146,14 +1253,13 @@ export class LocalCollaborationHost {
     const terms = latestTerms(record);
     const revisedTerms: CollaborationProposalTerms = {
       ...terms,
-      intent: `${terms.intent}\n\n修改要求：${input.note.trim()}`,
+      intent: `${terms.intent}\n\n修订说明：${input.note.trim()}`,
     };
     const opened = await this.transport.openByEndpointRef(record.responder.endpointRef);
     try {
       const grantId = latestGrantId(record);
       if (!grantId) throw new Error('missing grant');
-      const gStore = await this.grantStore();
-      const grant = await gStore.get(grantId);
+      const grant = await this.resolveGrant(record, grantId);
       if (!grant) throw new Error('grant not found');
       assertGrantUsable(grant);
       const bGrantStore = await GrantStore.open(opened.runtime.subject.requireActive().rootDir);
@@ -1164,12 +1270,20 @@ export class LocalCollaborationHost {
         goal: revisedTerms.intent,
         contextRefs: allowed.map((p) => ({ kind: 'file' as const, path: p })),
         requestedArtifactType: 'document',
+        intentKind: 'create_document',
         authorization: {
           grantId: grant.id,
           issuerSubjectId: grant.grantorSubjectId,
           granteeSubjectId: opened.runtime.subject.requireActive().id,
         },
       });
+      if (!submitted.jobId) {
+        await opened.stop();
+        return {
+          recordId: record.recordId,
+          status: 'failed',
+        };
+      }
       const job = await waitForJobTerminal(opened.runtime.workRuntime, submitted.jobId, 180_000);
       if (job.status !== 'succeeded' || !job.artifactId) {
         await opened.stop();
@@ -1420,12 +1534,11 @@ export class LocalCollaborationHost {
     record = await this.reconcile(record.recordId);
     const grantId = latestGrantId(record);
     if (grantId) {
-      const gStore = await this.grantStore();
-      const grant = await gStore.get(grantId);
+      const grant = await this.resolveGrant(record, grantId);
       if (grant && grant.status !== 'revoked') {
         grant.status = 'revoked';
         grant.revokedAt = nowIso();
-        await gStore.put(grant);
+        await this.persistGrantBothSides(record, grant);
       }
     }
     const ev: CollaborationEvent = {
@@ -1447,6 +1560,8 @@ export class LocalCollaborationHost {
     recordId: string;
     grantId?: string;
     status: CollabUserStatus;
+    role?: 'initiator' | 'responder';
+    peerDisplayName?: string;
     ownerDecision?: 'accept' | 'reject' | 'revise';
     grant?: {
       id: string;
@@ -1499,6 +1614,11 @@ export class LocalCollaborationHost {
       recordId: record.recordId,
       ...(grantId ? { grantId } : {}),
       status: deriveCollabStatus(record),
+      role: this.selfRole(record),
+      peerDisplayName:
+        this.selfRole(record) === 'initiator'
+          ? record.responder.displayName
+          : record.initiator.displayName,
       ...(ownerDecision ? { ownerDecision } : {}),
       grant: {
         id: grantId || record.recordId,
@@ -1545,6 +1665,11 @@ export class LocalCollaborationHost {
         recordId: record.recordId,
         ...(grantId ? { grantId } : {}),
         status: deriveCollabStatus(record),
+        role: this.selfRole(record),
+        peerDisplayName:
+          this.selfRole(record) === 'initiator'
+            ? record.responder.displayName
+            : record.initiator.displayName,
         ...(ownerDecision ? { ownerDecision } : {}),
         subtaskGoal: terms.intent,
         granteeDisplayName: record.responder.displayName,
@@ -1599,18 +1724,20 @@ export class LocalCollaborationHost {
         return { allowed: false, reason: 'material not in authorization scope' };
       }
       const grantId = latestGrantId(record);
-      if (grantId) {
-        const grant = await (await this.grantStore()).get(grantId);
-        if (grant) {
-          try {
-            assertGrantUsable(grant);
-          } catch (err) {
-            return {
-              allowed: false,
-              reason: err instanceof Error ? err.message : String(err),
-            };
-          }
-        }
+      if (!grantId) {
+        return { allowed: false, reason: 'collaboration not yet authorized' };
+      }
+      const grant = await this.resolveGrant(record, grantId);
+      if (!grant) {
+        return { allowed: false, reason: 'grant not found' };
+      }
+      try {
+        assertGrantUsable(grant);
+      } catch (err) {
+        return {
+          allowed: false,
+          reason: err instanceof Error ? err.message : String(err),
+        };
       }
       return { allowed: true };
     }

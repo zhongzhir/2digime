@@ -180,6 +180,13 @@ export class LocalPackageTransport implements CollaborationTransport {
       } else {
         await store.put(merged);
       }
+
+      // 反向端点：对方可回推到本方（同机双包闭环；不写入 CollaborationRecord）
+      const host = this.hostRuntime.subject.requireActive();
+      const peerRoot = opened.runtime.subject.requireActive().rootDir;
+      const peerMap = await loadEndpoints(peerRoot);
+      peerMap.byEndpointRef[`subject:${host.id}`] = path.resolve(this.hostRoot());
+      await saveEndpoints(peerRoot, peerMap);
     } finally {
       await opened.stop();
     }

@@ -647,6 +647,7 @@ export interface CommandMap {
       artifactId?: string;
       artifactText?: string;
       localArtifactId?: string;
+      jobId?: string;
       denied?: boolean;
       reason?: string;
       allowed?: boolean;
@@ -656,6 +657,8 @@ export interface CommandMap {
       capabilityId?: string;
       integratedIntoArtifactId?: string;
       ownerDecision?: 'accept' | 'reject' | 'revise';
+      role?: 'initiator' | 'responder';
+      peerDisplayName?: string;
       displayName?: string;
       packageDir?: string;
       brief?: string;
@@ -669,6 +672,8 @@ export interface CommandMap {
         recordId: string;
         grantId?: string;
         status: string;
+        role?: 'initiator' | 'responder';
+        peerDisplayName?: string;
         ownerDecision?: 'accept' | 'reject' | 'revise';
         subtaskGoal?: string;
         granteeDisplayName?: string;

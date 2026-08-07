@@ -126,7 +126,10 @@
     collabDetailActions: document.getElementById("collab-detail-actions"),
     btnCollabDetailExecute: document.getElementById("btn-collab-detail-execute"),
     btnCollabDetailRetry: document.getElementById("btn-collab-detail-retry"),
+    btnCollabDetailRespondAccept: document.getElementById("btn-collab-detail-respond-accept"),
+    btnCollabDetailRespondReject: document.getElementById("btn-collab-detail-respond-reject"),
     btnCollabDetailAccept: document.getElementById("btn-collab-detail-accept"),
+    btnCollabDetailRevise: document.getElementById("btn-collab-detail-revise"),
     btnCollabDetailReject: document.getElementById("btn-collab-detail-reject"),
     btnCollabDetailRevoke: document.getElementById("btn-collab-detail-revoke"),
     collabDetailError: document.getElementById("collab-detail-error"),
@@ -5602,20 +5605,27 @@
 
   function collabUserLabel(item) {
     if (!item) return "";
-    if (item.status === "revoked" || item.status === "withdrawn") return "已撤销";
+    const role = item.role || "initiator";
+    if (item.status === "revoked" || item.status === "withdrawn") return "已结束";
     if (item.status === "failed") return "未完成";
-    if (item.status === "running") return "正在处理";
+    if (item.status === "running") {
+      return role === "responder" ? "你正在完成" : "对方正在处理";
+    }
     if (item.status === "awaiting_owner") return "等待对方确认";
     if (item.status === "awaiting_clarification") return "等待补充说明";
     if (item.status === "counter_proposed") return "对方提出调整";
-    if (item.status === "proposed") return "等待对方回应";
-    if (item.status === "delivered") return "需要你确认";
+    if (item.status === "proposed") {
+      return role === "responder" ? "需要你回应" : "等待对方回应";
+    }
+    if (item.status === "delivered") {
+      return role === "initiator" ? "需要你确认" : "等待对方确认";
+    }
     if (item.status === "authorized" || item.status === "agreed" || item.status === "requested") {
-      return "等待开始";
+      return role === "responder" ? "可以开始完成" : "等待对方完成";
     }
     if (item.ownerDecision === "accept" || item.status === "completed") return "已完成";
     if (item.ownerDecision === "reject" || item.status === "rejected") return "未完成";
-    return "等待开始";
+    return role === "responder" ? "需要你回应" : "等待开始";
   }
 
   function collabBucket(item) {
@@ -5744,7 +5754,7 @@
         title.textContent = item.subtaskGoal || "协作请求";
         const meta = document.createElement("p");
         meta.className = "entry-meta";
-        meta.textContent = `${item.granteeDisplayName || "协作对象"} · ${collabUserLabel(item)}`;
+        meta.textContent = `${item.peerDisplayName || item.granteeDisplayName || "协作对象"} · ${collabUserLabel(item)}`;
         li.appendChild(title);
         li.appendChild(meta);
         li.addEventListener("click", () => openCollabDetail(item.recordId || item.grantId));
@@ -5812,6 +5822,8 @@
         recordId: st.recordId || grantId,
         grantId: st.grantId,
         status: st.status,
+        role: st.role,
+        peerDisplayName: st.peerDisplayName,
         ownerDecision: st.ownerDecision || st.grant?.ownerDecision,
         subtaskGoal: st.grant?.subtaskGoal,
         granteeDisplayName: st.grant?.granteeDisplayName,
@@ -5822,14 +5834,17 @@
         localArtifactId: st.grant?.localArtifactId || st.artifactId,
       };
       activeGrantId = item.recordId;
+      const role = item.role || "initiator";
       if (els.collabDetailPeer) {
-        els.collabDetailPeer.textContent = `协作对象：${item.granteeDisplayName || "本机数字之我"}`;
+        const peer = item.peerDisplayName || item.granteeDisplayName || "本机数字之我";
+        els.collabDetailPeer.textContent =
+          role === "responder" ? `来自：${peer}` : `协作对象：${peer}`;
       }
       if (els.collabDetailGoal) {
         els.collabDetailGoal.textContent = item.subtaskGoal || "";
       }
       if (els.collabDetailStatus) {
-        els.collabDetailStatus.textContent = `当前状态：${collabUserLabel(item)}`;
+        els.collabDetailStatus.textContent = `现在：${collabUserLabel(item)}`;
       }
       if (els.collabDetailMaterials) {
         els.collabDetailMaterials.innerHTML = "";
@@ -5853,24 +5868,67 @@
       }
       if (els.collabDetailReturnEmpty) els.collabDetailReturnEmpty.hidden = !!text;
       const revoked = item.status === "revoked" || item.status === "withdrawn";
+      const done =
+        item.ownerDecision === "accept" ||
+        item.ownerDecision === "reject" ||
+        item.status === "completed" ||
+        item.status === "rejected";
       const hasReturn = !!text || item.status === "delivered";
       const isFailed = item.status === "failed";
+      const awaitingRespond =
+        !revoked &&
+        !done &&
+        role === "responder" &&
+        (item.status === "proposed" || item.status === "awaiting_clarification");
       const canFulfill =
         !revoked &&
+        !done &&
         !hasReturn &&
         !isFailed &&
+        role === "responder" &&
         (item.status === "authorized" || item.status === "agreed");
-      const canRetry = !revoked && isFailed;
+      const canRetry = !revoked && !done && isFailed && role === "responder";
+      const canDecide =
+        !revoked && !done && hasReturn && role === "initiator" && item.status === "delivered";
+      const canRevoke =
+        !revoked &&
+        !done &&
+        role === "initiator" &&
+        (item.status === "authorized" ||
+          item.status === "agreed" ||
+          item.status === "running" ||
+          item.status === "delivered" ||
+          item.status === "failed");
+
+      if (els.btnCollabDetailRespondAccept) {
+        els.btnCollabDetailRespondAccept.hidden = !awaitingRespond;
+      }
+      if (els.btnCollabDetailRespondReject) {
+        els.btnCollabDetailRespondReject.hidden = !awaitingRespond;
+      }
       if (els.btnCollabDetailExecute) {
-        els.btnCollabDetailExecute.hidden = canRetry;
+        els.btnCollabDetailExecute.hidden = canRetry || awaitingRespond || !canFulfill;
         els.btnCollabDetailExecute.disabled = !canFulfill;
       }
       if (els.btnCollabDetailRetry) {
         els.btnCollabDetailRetry.hidden = !canRetry;
       }
-      if (els.btnCollabDetailAccept) els.btnCollabDetailAccept.disabled = revoked || !hasReturn;
-      if (els.btnCollabDetailReject) els.btnCollabDetailReject.disabled = revoked || !hasReturn;
-      if (els.btnCollabDetailRevoke) els.btnCollabDetailRevoke.disabled = revoked;
+      if (els.btnCollabDetailAccept) {
+        els.btnCollabDetailAccept.hidden = !canDecide;
+        els.btnCollabDetailAccept.disabled = !canDecide;
+      }
+      if (els.btnCollabDetailRevise) {
+        els.btnCollabDetailRevise.hidden = !canDecide;
+        els.btnCollabDetailRevise.disabled = !canDecide;
+      }
+      if (els.btnCollabDetailReject) {
+        els.btnCollabDetailReject.hidden = !canDecide;
+        els.btnCollabDetailReject.disabled = !canDecide;
+      }
+      if (els.btnCollabDetailRevoke) {
+        els.btnCollabDetailRevoke.hidden = !canRevoke;
+        els.btnCollabDetailRevoke.disabled = !canRevoke;
+      }
       await syncWorkCollabFromDomain();
     } catch (err) {
       showStatus(els.collabDetailError, collabErrorMessage(err, "status"), true);
@@ -5961,6 +6019,7 @@
       allowedMaterialPaths: mats,
       acceptanceCriteria: ["提供可核对的完整成果，并说明依据"],
       deadline: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+      skipAutoEvaluate: true,
     };
     // 仅做事页已有任务时写入关联；协作页新建不创建空 Task。
     if (opts.issuerTaskId) payload.issuerTaskId = opts.issuerTaskId;
@@ -6862,7 +6921,7 @@
             : null,
         });
         collabDraftFromWork = null;
-        await openCollabDetail(issued.grantId);
+        await openCollabDetail(issued.recordId || issued.grantId);
       } catch (err) {
         showStatus(els.collabPageNewError, collabErrorMessage(err, "issue"), true);
       }
@@ -6888,10 +6947,74 @@
       if (activeGrantId) await openCollabDetail(activeGrantId);
     });
   }
+  if (els.btnCollabDetailRespondAccept) {
+    els.btnCollabDetailRespondAccept.addEventListener("click", async () => {
+      showStatus(els.collabDetailError, "");
+      if (!activeGrantId) return;
+      try {
+        await api.invoke("collab.interact", {
+          action: "respond",
+          recordId: activeGrantId,
+          decision: "accept",
+        });
+        if (els.collabDetailStatus) els.collabDetailStatus.textContent = "现在：可以开始完成";
+        await openCollabDetail(activeGrantId);
+        await refreshCollabHome();
+      } catch (err) {
+        showStatus(els.collabDetailError, collabErrorMessage(err, "decide"), true);
+      }
+    });
+  }
+  if (els.btnCollabDetailRespondReject) {
+    els.btnCollabDetailRespondReject.addEventListener("click", async () => {
+      showStatus(els.collabDetailError, "");
+      if (!activeGrantId) return;
+      try {
+        await api.invoke("collab.interact", {
+          action: "respond",
+          recordId: activeGrantId,
+          decision: "reject",
+          note: "本次不适合承接",
+        });
+        if (els.collabDetailStatus) els.collabDetailStatus.textContent = "现在：未完成";
+        await openCollabDetail(activeGrantId);
+        await refreshCollabHome();
+      } catch (err) {
+        showStatus(els.collabDetailError, collabErrorMessage(err, "decide"), true);
+      }
+    });
+  }
   if (els.btnCollabDetailAccept) {
     els.btnCollabDetailAccept.addEventListener("click", async () => {
       await decideCollabReturn("accept", els.collabDetailStatus, els.collabDetailError);
       if (activeGrantId) await openCollabDetail(activeGrantId);
+    });
+  }
+  if (els.btnCollabDetailRevise) {
+    els.btnCollabDetailRevise.addEventListener("click", async () => {
+      showStatus(els.collabDetailError, "");
+      if (!activeGrantId) return;
+      const note = window.prompt(
+        "请说明希望对方如何修改",
+        "请更关注普通用户实际体验，减少偏技术的表述。",
+      );
+      if (!note || !String(note).trim()) return;
+      try {
+        if (els.collabDetailStatus) els.collabDetailStatus.textContent = "现在：对方正在处理";
+        const result = await api.invoke("collab.interact", {
+          action: "requestRevision",
+          recordId: activeGrantId,
+          grantId: activeGrantId,
+          note: String(note).trim(),
+        });
+        if (result.status === "failed") {
+          showStatus(els.collabDetailError, "对方未能完成修改", true);
+        }
+        await openCollabDetail(activeGrantId);
+        await refreshCollabHome();
+      } catch (err) {
+        showStatus(els.collabDetailError, collabErrorMessage(err, "execute"), true);
+      }
     });
   }
   if (els.btnCollabDetailReject) {

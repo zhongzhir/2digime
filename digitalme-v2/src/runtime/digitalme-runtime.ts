@@ -1075,8 +1075,10 @@ export class DigitalMeRuntime {
     if (this.work) {
       const listed = await this.work.listTasks({ limit: 50 });
       for (const row of listed.tasks) {
+        const work = this.work;
+        if (!work) break;
         const taskId = row.taskId;
-        const detail = await this.work.getTask({ taskId }).catch(() => null);
+        const detail = await work.getTask({ taskId }).catch(() => null);
         if (!detail?.task?.goal) continue;
         const events = await this.subject.listGrowthEvents();
         const key = `captureKey:task_requirement:${taskId}`;
