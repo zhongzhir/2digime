@@ -99,6 +99,7 @@ export function createCommandBus(runtime: DigitalMeRuntime): CommandBus {
             headVersionId,
             versionCount: got.artifact.versions.length,
             ownerDecision,
+            artifactTaskId: got.artifact.taskId,
             ...(got.bundle !== undefined ? { bundle: got.bundle } : {}),
             ...(got.evidenceStale ? { evidenceStale: true } : {}),
             ...((got as unknown as { codeChange?: unknown }).codeChange

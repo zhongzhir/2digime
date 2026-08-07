@@ -165,6 +165,8 @@ export function buildExecutionConfirmPreview(input: {
   writeScope?: string[];
   executorDisplayName: string;
   projectName?: string;
+  /** 空目录新建项目 */
+  isNewProject?: boolean;
 }): {
   title: string;
   notice: string;
@@ -180,6 +182,7 @@ export function buildExecutionConfirmPreview(input: {
     doNotDo: string[];
   };
   executorDisplayName: string;
+  isNewProject?: boolean;
 } {
   const scopes = deriveDefaultScopes(input.workingDirectory);
   const readScope = input.readScope?.length ? input.readScope : scopes.readScope;
@@ -190,19 +193,27 @@ export function buildExecutionConfirmPreview(input: {
   const projectName =
     String(input.projectName || '').trim() || path.basename(workingDirectory) || workingDirectory;
   const testLines = criteria.filter((c) => /测试|test/i.test(c));
+  const isNew = !!input.isNewProject;
   return {
-    title: '这项任务需要修改项目文件',
-    notice:
-      '开始前请确认项目、验收条件与修改权限。确认后才会实际修改项目文件。',
+    title: isNew ? '这项任务将在空文件夹中创建项目' : '这项任务需要修改项目文件',
+    notice: isNew
+      ? '开始前请确认项目位置与权限。确认后将在该目录内创建和修改文件，并可能运行本地测试或构建。'
+      : '开始前请确认项目、验收条件与修改权限。确认后才会实际修改项目文件。',
     projectName,
     workingDirectory,
     readScope,
     writeScope,
-    allowed: [
-      '读取当前项目文件',
-      '修改确认范围内的文件',
-      '运行本地测试',
-    ],
+    allowed: isNew
+      ? [
+          '在该目录内创建新的项目文件',
+          '修改确认范围内的文件',
+          '运行本地测试或构建命令',
+        ]
+      : [
+          '读取当前项目文件',
+          '修改确认范围内的文件',
+          '运行本地测试',
+        ],
     forbidden: [
       '不会自动 commit',
       '不会自动 push',
@@ -215,9 +226,10 @@ export function buildExecutionConfirmPreview(input: {
       goals: [String(input.goal || '').trim().slice(0, 400) || criteria[0] || ''],
       tests: testLines.length
         ? testLines
-        : ['将根据项目配置运行可用测试'],
+        : [isNew ? '将在创建项目后运行可用测试或构建命令' : '将根据项目配置运行可用测试'],
       doNotDo: doNotDo.slice(0, 6),
     },
     executorDisplayName: input.executorDisplayName,
+    ...(isNew ? { isNewProject: true } : {}),
   };
 }

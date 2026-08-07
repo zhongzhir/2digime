@@ -222,6 +222,9 @@ export interface CommandMap {
           doNotDo: string[];
         };
         executorDisplayName: string;
+        /** 实际选用的能力（高级设置可见；确认卡主文案仍用自然名称）。 */
+        selectedCapabilityId?: string;
+        selectedCapabilityDisplayName?: string;
       };
       /**
        * 软件开发意图已识别，但代码执行能力尚未连接。
@@ -230,6 +233,42 @@ export interface CommandMap {
       needsExecutorSetup?: {
         message: string;
         settingsHint?: string;
+        title?: string;
+        description?: string;
+        actions?: Array<'use_installed' | 'install_recommended' | 'connect_later' | 'use_cloud'>;
+        capabilities?: Array<{
+          capabilityId: string;
+          displayName: string;
+          providerKind: string;
+          invocationKind: string;
+          availability: string;
+          connectionStatus: string;
+          supportsAutomaticExecution: boolean;
+          supportsProgress: boolean;
+          supportsRevision: boolean;
+          supportsResultCollection: boolean;
+          actionableMessage: string;
+          canDo: string;
+          executionModeLabel: string;
+          installProvider?: string;
+        }>;
+        recommended?: {
+          displayName: string;
+          canDo: string;
+          whyNeeded: string;
+          permissions: string[];
+          installProvider: string;
+          noAutoCommitPushDeploy: true;
+          installGuideUrl?: string;
+        };
+      };
+      /**
+       * 软件开发意图已识别，但尚未选择项目目录。
+       * 不得回退为普通文档生成，也不得创建 Task。
+       */
+      needsProjectFolder?: {
+        message: string;
+        allowEmptyFolder?: boolean;
       };
     };
   };
@@ -330,13 +369,20 @@ export interface CommandMap {
     };
   };
   'artifact.getContent': {
-    input: { artifactId: string; versionId?: string };
+    input: {
+      artifactId: string;
+      versionId?: string;
+      /** 可选：要求 Artifact 必须属于该 Task，防止跨任务串线。 */
+      expectedTaskId?: string;
+    };
     output: {
       content: ArtifactContent;
       /** text 类内容直接内联返回,供页面直显与编辑。bundle 时为主报告 Markdown。 */
       text?: string;
       headVersionId: string;
       versionCount: number;
+      /** 成果所属任务；用于前端防串线校验。 */
+      artifactTaskId?: string;
       /**
        * 当前 head 版本的采用状态 — 由已落盘 GrowthEvent 派生，非 UI 本地布尔。
        * undecided | accepted | rejected
@@ -384,6 +430,16 @@ export interface CommandMap {
         unresolvedItems?: string[];
         afterScopeDigest?: string;
         directoryChangedSinceResult?: boolean;
+        digitalMeVerified?: boolean;
+        agentClaimedSuccess?: boolean;
+        acceptanceSummary?: {
+          title: string;
+          goalLabel: string;
+          goalVerdict?: string;
+          recommendation: string;
+          bullets: string[];
+          canAdoptSuggested: boolean;
+        };
       };
     };
   };
@@ -410,6 +466,19 @@ export interface CommandMap {
       };
       /** 可选：探测外部能力当前是否可用（不暴露协议细节）。 */
       includeAvailability?: boolean;
+      /**
+       * 代码执行能力动作（复用 capability.list，不新增命令位）。
+       */
+      codingAction?:
+        | { type: 'set_default'; capabilityId: string }
+        | {
+            type: 'save_pending';
+            goal: string;
+            contextRefs: Array<{ kind: 'file' | 'folder'; path: string }>;
+            acceptanceNotes?: string;
+          }
+        | { type: 'clear_pending' }
+        | { type: 'get_pending' };
     };
     output: {
       capabilities: CapabilityRegistration[];
@@ -444,7 +513,45 @@ export interface CommandMap {
         available: boolean;
         availabilityLabel: string;
         detail?: string;
+        executionModeLabel?: string;
+        connectionStatus?: string;
+        supportsAutomaticExecution?: boolean;
       };
+      /** 统一代码执行能力状态列表（派生自 Registry）。 */
+      codingCapabilities?: Array<{
+        capabilityId: string;
+        displayName: string;
+        providerKind: string;
+        invocationKind: string;
+        availability: string;
+        connectionStatus: string;
+        supportsAutomaticExecution: boolean;
+        supportsProgress: boolean;
+        supportsRevision: boolean;
+        supportsResultCollection: boolean;
+        actionableMessage: string;
+        canDo: string;
+        executionModeLabel: string;
+        installProvider?: string;
+      }>;
+      preferredCodingCapabilityId?: string;
+      codingRecommendation?: {
+        displayName: string;
+        canDo: string;
+        whyNeeded: string;
+        permissions: string[];
+        installProvider: string;
+        noAutoCommitPushDeploy: true;
+        installGuideUrl?: string;
+      };
+      pendingSoftwareTask?: {
+        goal: string;
+        contextRefs: Array<{ kind: 'file' | 'folder'; path: string }>;
+        acceptanceNotes?: string;
+        status: string;
+        userFacingNotice: string;
+        savedAt: string;
+      } | null;
     };
   };
   /**

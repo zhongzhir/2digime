@@ -5,6 +5,21 @@
     return;
   }
 
+  const USER_FACING_TASK_START_FAILED =
+    "Digital Me 暂时无法开始这项任务，请重新打开应用后重试。";
+
+  function userFacingWorkError(err) {
+    const msg = String((err && err.message) || err || "");
+    if (
+      /work runtime not attached|artifact workspace not attached|no active subject|open or create a package|runtime not ready|Error invoking remote method|command:invoke|PACKAGE_ATTACH_FAILED/i.test(
+        msg,
+      )
+    ) {
+      return USER_FACING_TASK_START_FAILED;
+    }
+    return msg || USER_FACING_TASK_START_FAILED;
+  }
+
   const els = {
     welcome: document.getElementById("view-welcome"),
     shell: document.getElementById("view-shell"),
@@ -179,12 +194,36 @@
     openProjectFolder: document.getElementById("btn-open-project-folder"),
     restartCompose: document.getElementById("btn-restart-compose"),
     executorSetupCard: document.getElementById("executor-setup-card"),
+    executorSetupTitle: document.getElementById("executor-setup-title"),
+    executorSetupDescription: document.getElementById("executor-setup-description"),
+    projectFolderCard: document.getElementById("project-folder-card"),
+    projectFolderMessage: document.getElementById("project-folder-message"),
+    pickExistingProject: document.getElementById("btn-pick-existing-project"),
+    pickEmptyProject: document.getElementById("btn-pick-empty-project"),
+    artifactEmpty: document.getElementById("artifact-empty"),
+    ccAcceptanceSection: document.getElementById("cc-acceptance-section"),
+    ccAcceptanceTitle: document.getElementById("cc-acceptance-title"),
+    ccAcceptanceGoal: document.getElementById("cc-acceptance-goal"),
+    ccAcceptanceBullets: document.getElementById("cc-acceptance-bullets"),
+    ccAcceptanceReco: document.getElementById("cc-acceptance-reco"),
     executorSetupMessage: document.getElementById("executor-setup-message"),
+    codingCapScanList: document.getElementById("coding-cap-scan-list"),
+    codingCapInstallPanel: document.getElementById("coding-cap-install-panel"),
+    codingCapInstallBody: document.getElementById("coding-cap-install-body"),
+    codingUseInstalled: document.getElementById("btn-coding-use-installed"),
+    codingInstallRecommended: document.getElementById("btn-coding-install-recommended"),
+    codingConnectLater: document.getElementById("btn-coding-connect-later"),
+    codingUseCloud: document.getElementById("btn-coding-use-cloud"),
+    codingOpenGuide: document.getElementById("btn-coding-open-guide"),
+    codingBackOnboarding: document.getElementById("btn-coding-back-onboarding"),
+    settingsCodingCapabilities: document.getElementById("settings-coding-capabilities"),
+    settingsCodingAdvancedName: document.getElementById("settings-coding-advanced-name"),
     executorGotoSettings: document.getElementById("btn-executor-goto-settings"),
     executorRecheck: document.getElementById("btn-executor-recheck"),
     executionConfirmCard: document.getElementById("execution-confirm-card"),
     executionConfirmTitle: document.getElementById("execution-confirm-title"),
     executionConfirmNotice: document.getElementById("execution-confirm-notice"),
+    executionConfirmExecutor: document.getElementById("execution-confirm-executor"),
     executionConfirmProject: document.getElementById("execution-confirm-project"),
     executionConfirmDir: document.getElementById("execution-confirm-dir"),
     executionConfirmAllowed: document.getElementById("execution-confirm-allowed"),
@@ -217,7 +256,11 @@
     ownerChoiceActions: document.getElementById("owner-choice-actions"),
     artifactPanel: document.getElementById("artifact-panel"),
     artifactEditor: document.getElementById("artifact-editor"),
-    reviseBox: document.getElementById("revise-box"),
+    reviseBox: document.getElementById("revision-composer"),
+    revisionComposer: document.getElementById("revision-composer"),
+    revisionComposerTitle: document.getElementById("revision-composer-title"),
+    proposeRevision: document.getElementById("btn-propose-revision"),
+    cancelRevision: document.getElementById("btn-cancel-revision"),
     bundleView: document.getElementById("bundle-view"),
     bundleQuality: document.getElementById("bundle-quality"),
     bundleReport: document.getElementById("bundle-report"),
@@ -295,6 +338,9 @@
   let materials = [];
   /** @type {null | { goal: string, contextRefs: {kind:string,path:string}[], preview: any }} */
   let pendingExecutionConfirm = null;
+  let pendingCodingOnboarding = null;
+  let lastCodingCapabilities = [];
+  let lastCodingRecommendation = null;
   /** @type {string | null} */
   let activeCodeChangeWorkingDirectory = null;
   let ccFilesExpanded = false;
@@ -314,6 +360,8 @@
   let externalCapCapabilityId = null;
   let activeJobId = null;
   let activeArtifactId = null;
+  let uiEpoch = 0;
+  let confirmSubmitInFlight = false;
   let lastArtifactRejectionReason = "";
   let activeHeadVersionId = null;
   /** @type {string} */
@@ -467,32 +515,96 @@
   }
 
   async function refreshExecutorCapabilityUi(includeAvailability) {
-    if (!els.settingsExecutorStatus) return;
+    if (!els.settingsExecutorStatus && !els.settingsCodingCapabilities) return;
     try {
       const listed = await api.invoke("capability.list", {
         includeAvailability: !!includeAvailability,
       });
+      lastCodingCapabilities = (listed && listed.codingCapabilities) || [];
+      lastCodingRecommendation = (listed && listed.codingRecommendation) || null;
+      renderSettingsCodingCapabilities(lastCodingCapabilities, listed && listed.preferredCodingCapabilityId);
       const card = listed && listed.executorCapabilityCard;
       if (!card) {
-        els.settingsExecutorStatus.textContent = "状态：未配置";
+        if (els.settingsExecutorStatus) els.settingsExecutorStatus.textContent = "状态：未配置";
         if (els.settingsExecutorDesc) els.settingsExecutorDesc.textContent = "";
         if (els.settingsExecutorScope) els.settingsExecutorScope.textContent = "";
-        return card;
+        return listed;
       }
-      els.settingsExecutorStatus.textContent = `状态：${card.availabilityLabel || (card.available ? "已连接" : "未连接")}`;
+      if (els.settingsExecutorStatus) {
+        els.settingsExecutorStatus.textContent = `状态：${card.availabilityLabel || (card.available ? "已连接" : "未连接")}`;
+      }
       if (els.settingsExecutorDesc) {
         els.settingsExecutorDesc.textContent = `${card.displayName} — ${card.canDo || card.shortDescription || ""}`;
       }
       if (els.settingsExecutorScope) {
-        els.settingsExecutorScope.textContent = card.allowedScope || "";
+        const mode = card.executionModeLabel ? ` · ${card.executionModeLabel}` : "";
+        els.settingsExecutorScope.textContent = `${card.allowedScope || ""}${mode}`;
       }
-      return card;
+      if (els.settingsCodingAdvancedName) {
+        els.settingsCodingAdvancedName.textContent = card.available
+          ? `当前默认：${card.displayName}`
+          : "";
+      }
+      return listed;
     } catch (err) {
-      els.settingsExecutorStatus.textContent = "状态：检查失败";
+      if (els.settingsExecutorStatus) els.settingsExecutorStatus.textContent = "状态：检查失败";
       if (els.executorSettingsStatus) {
         els.executorSettingsStatus.textContent = err.message || String(err);
       }
       return null;
+    }
+  }
+
+  function renderSettingsCodingCapabilities(caps, preferredId) {
+    if (!els.settingsCodingCapabilities) return;
+    els.settingsCodingCapabilities.innerHTML = "";
+    const list = Array.isArray(caps) ? caps : [];
+    if (!list.length) {
+      const p = document.createElement("p");
+      p.className = "muted tiny";
+      p.textContent = "尚未检测到可用的代码执行能力。";
+      els.settingsCodingCapabilities.appendChild(p);
+      return;
+    }
+    for (const cap of list) {
+      const item = document.createElement("div");
+      item.className = "coding-cap-item";
+      const title = document.createElement("div");
+      title.className = "coding-cap-title";
+      title.textContent = `${cap.displayName} · ${cap.connectionStatus || ""}`;
+      const desc = document.createElement("div");
+      desc.className = "muted tiny";
+      desc.textContent = `${cap.canDo || ""} · ${cap.executionModeLabel || ""}`;
+      const actions = document.createElement("div");
+      actions.className = "row";
+      const checkBtn = document.createElement("button");
+      checkBtn.type = "button";
+      checkBtn.className = "ghost";
+      checkBtn.textContent = "检查连接";
+      checkBtn.addEventListener("click", async () => {
+        await refreshExecutorCapabilityUi(true);
+      });
+      actions.appendChild(checkBtn);
+      if (cap.availability === "ready" && cap.supportsAutomaticExecution) {
+        const defBtn = document.createElement("button");
+        defBtn.type = "button";
+        defBtn.className = "ghost";
+        defBtn.textContent =
+          preferredId === cap.capabilityId ? "当前默认" : "设置为默认";
+        defBtn.disabled = preferredId === cap.capabilityId;
+        defBtn.addEventListener("click", async () => {
+          await api.invoke("capability.list", {
+            codingAction: { type: "set_default", capabilityId: cap.capabilityId },
+            includeAvailability: true,
+          });
+          await refreshExecutorCapabilityUi(true);
+        });
+        actions.appendChild(defBtn);
+      }
+      item.appendChild(title);
+      item.appendChild(desc);
+      item.appendChild(actions);
+      els.settingsCodingCapabilities.appendChild(item);
     }
   }
 
@@ -914,8 +1026,15 @@
       const li = document.createElement("li");
       const meta = document.createElement("div");
       meta.className = "material-meta";
+      const isNewProj = !!(item.softwareProject && item.softwareProject.isNewProjectCandidate);
       const isSoft = !!(item.softwareProject && item.softwareProject.isSoftwareProject);
-      const kind = isSoft ? "已添加软件项目" : item.kind === "folder" ? "文件夹" : "文件";
+      const kind = isNewProj
+        ? "准备创建的软件项目"
+        : isSoft
+          ? "已添加软件项目"
+          : item.kind === "folder"
+            ? "文件夹"
+            : "文件";
       const name = document.createElement("div");
       name.className = "material-name" + (isSoft ? " is-software-project" : "");
       const displayName =
@@ -961,17 +1080,265 @@
     if (!els.executorSetupCard) return;
     els.executorSetupCard.hidden = true;
     els.executorSetupCard.setAttribute("hidden", "");
+    pendingCodingOnboarding = null;
+    if (els.codingCapScanList) {
+      els.codingCapScanList.hidden = true;
+      els.codingCapScanList.innerHTML = "";
+    }
+    if (els.codingCapInstallPanel) {
+      els.codingCapInstallPanel.hidden = true;
+      els.codingCapInstallPanel.setAttribute("hidden", "");
+    }
+    if (els.codingOpenGuide) els.codingOpenGuide.hidden = true;
+    if (els.codingBackOnboarding) els.codingBackOnboarding.hidden = true;
   }
 
-  function showExecutorSetupCard(message) {
+  function showExecutorSetupCard(payloadOrMessage) {
     hideExecutionConfirmCard();
+    hideProjectFolderCard();
     if (!els.executorSetupCard) return;
+    const payload =
+      payloadOrMessage && typeof payloadOrMessage === "object"
+        ? payloadOrMessage
+        : {
+            message:
+              payloadOrMessage ||
+              "尚未检测到可用的代码执行能力。",
+            title: "完成这项任务需要代码执行能力",
+            description:
+              "Digital Me 会使用它在你确认的项目目录中创建或修改代码，并运行测试。",
+          };
+    pendingCodingOnboarding = payload;
     els.executorSetupCard.hidden = false;
     els.executorSetupCard.removeAttribute("hidden");
+    if (els.executorSetupTitle) {
+      els.executorSetupTitle.textContent = payload.title || "完成这项任务需要代码执行能力";
+    }
+    if (els.executorSetupDescription) {
+      els.executorSetupDescription.textContent =
+        payload.description ||
+        "Digital Me 会使用它在你确认的项目目录中创建或修改代码，并运行测试。";
+    }
     if (els.executorSetupMessage) {
       els.executorSetupMessage.textContent =
-        message ||
-        "代码执行能力尚未连接。连接后，Digital Me 可以在你确认范围内修改项目并运行测试。";
+        payload.message ||
+        "尚未检测到可用的代码执行能力。";
+    }
+    const actions = payload.actions || [
+      "use_installed",
+      "install_recommended",
+      "connect_later",
+    ];
+    if (els.codingUseCloud) {
+      const showCloud = actions.includes("use_cloud");
+      els.codingUseCloud.hidden = !showCloud;
+      if (showCloud) els.codingUseCloud.removeAttribute("hidden");
+      else els.codingUseCloud.setAttribute("hidden", "");
+    }
+    if (els.codingCapScanList) {
+      els.codingCapScanList.hidden = true;
+      els.codingCapScanList.innerHTML = "";
+    }
+    if (els.codingCapInstallPanel) {
+      els.codingCapInstallPanel.hidden = true;
+      els.codingCapInstallPanel.setAttribute("hidden", "");
+    }
+    if (els.codingOpenGuide) {
+      els.codingOpenGuide.hidden = true;
+      els.codingOpenGuide.setAttribute("hidden", "");
+    }
+    if (els.codingBackOnboarding) {
+      els.codingBackOnboarding.hidden = true;
+      els.codingBackOnboarding.setAttribute("hidden", "");
+    }
+    if (Array.isArray(payload.capabilities)) {
+      lastCodingCapabilities = payload.capabilities;
+    }
+    if (payload.recommended) lastCodingRecommendation = payload.recommended;
+  }
+
+  function renderCodingScanList(caps) {
+    if (!els.codingCapScanList) return;
+    els.codingCapScanList.innerHTML = "";
+    els.codingCapScanList.hidden = false;
+    els.codingCapScanList.removeAttribute("hidden");
+    const list = Array.isArray(caps) ? caps : [];
+    if (!list.length) {
+      const p = document.createElement("p");
+      p.className = "muted";
+      p.textContent = "尚未检测到可用的代码执行能力。";
+      els.codingCapScanList.appendChild(p);
+      return;
+    }
+    for (const cap of list) {
+      const item = document.createElement("div");
+      item.className = "coding-cap-item";
+      const title = document.createElement("div");
+      title.className = "coding-cap-title";
+      title.textContent = `${cap.displayName} · ${cap.connectionStatus || ""}`;
+      const msg = document.createElement("div");
+      msg.className = "muted tiny";
+      msg.textContent = cap.actionableMessage || cap.executionModeLabel || "";
+      item.appendChild(title);
+      item.appendChild(msg);
+      const row = document.createElement("div");
+      row.className = "row";
+      if (cap.availability === "ready" && cap.supportsAutomaticExecution) {
+        const useBtn = document.createElement("button");
+        useBtn.type = "button";
+        useBtn.className = "primary";
+        useBtn.textContent = "使用此能力";
+        useBtn.addEventListener("click", () => resumePendingSoftwareTask(cap.capabilityId));
+        row.appendChild(useBtn);
+      } else if (cap.availability === "needs_login") {
+        const checkBtn = document.createElement("button");
+        checkBtn.type = "button";
+        checkBtn.className = "ghost";
+        checkBtn.textContent = "检查连接";
+        checkBtn.addEventListener("click", async () => {
+          await refreshExecutorCapabilityUi(true);
+          await scanInstalledCodingCapabilities();
+        });
+        row.appendChild(checkBtn);
+        const guideBtn = document.createElement("button");
+        guideBtn.type = "button";
+        guideBtn.className = "ghost";
+        guideBtn.textContent = "打开连接说明";
+        guideBtn.addEventListener("click", () => openSettings());
+        row.appendChild(guideBtn);
+      } else if (cap.availability === "unsupported" || cap.invocationKind === "desktop_handoff") {
+        const note = document.createElement("p");
+        note.className = "muted tiny";
+        note.textContent = "检测到该工具，但当前还不能由 Digital Me 自动调用。";
+        item.appendChild(note);
+      }
+      if (row.childNodes.length) item.appendChild(row);
+      els.codingCapScanList.appendChild(item);
+    }
+  }
+
+  function showCodingInstallPanel() {
+    if (!els.codingCapInstallPanel || !els.codingCapInstallBody) return;
+    const rec = lastCodingRecommendation || (pendingCodingOnboarding && pendingCodingOnboarding.recommended);
+    els.codingCapInstallPanel.hidden = false;
+    els.codingCapInstallPanel.removeAttribute("hidden");
+    if (els.codingCapScanList) {
+      els.codingCapScanList.hidden = true;
+      els.codingCapScanList.setAttribute("hidden", "");
+    }
+    const perms = (rec && rec.permissions) || [];
+    els.codingCapInstallBody.innerHTML = "";
+    const lines = [
+      `能完成什么：${(rec && rec.canDo) || "在确认的项目目录中修改代码并运行测试。"}`,
+      `为什么需要：${(rec && rec.whyNeeded) || "软件开发任务需要可自动执行的代码能力。"}`,
+      `安装后 Digital Me 可以获得：${perms.join("；") || "在确认范围内读写项目文件并运行测试"}`,
+      `安装由谁提供：${(rec && rec.installProvider) || "由该能力的官方安装渠道提供"}`,
+      "不会自动 commit、push 或部署。",
+    ];
+    for (const line of lines) {
+      const p = document.createElement("p");
+      p.textContent = line;
+      els.codingCapInstallBody.appendChild(p);
+    }
+    if (els.codingOpenGuide) {
+      els.codingOpenGuide.hidden = false;
+      els.codingOpenGuide.removeAttribute("hidden");
+    }
+    if (els.codingBackOnboarding) {
+      els.codingBackOnboarding.hidden = false;
+      els.codingBackOnboarding.removeAttribute("hidden");
+    }
+  }
+
+  async function scanInstalledCodingCapabilities() {
+    const listed = await api.invoke("capability.list", { includeAvailability: true });
+    lastCodingCapabilities = (listed && listed.codingCapabilities) || [];
+    lastCodingRecommendation = (listed && listed.codingRecommendation) || lastCodingRecommendation;
+    renderCodingScanList(lastCodingCapabilities);
+    const ready = lastCodingCapabilities.find(
+      (c) => c.availability === "ready" && c.supportsAutomaticExecution,
+    );
+    if (ready) {
+      els.jobStatus.textContent = "已找到可用的代码执行能力";
+      els.jobStatus.classList.remove("error");
+      els.jobActionable.textContent = "可点击「使用此能力」继续。";
+    } else {
+      els.jobStatus.textContent = "尚未找到可自动使用的代码执行能力";
+      els.jobStatus.classList.remove("error");
+      els.jobActionable.textContent = "可安装推荐能力，或稍后连接。";
+    }
+    return listed;
+  }
+
+  async function resumePendingSoftwareTask(capabilityId) {
+    const goal = (els.goal && els.goal.value ? els.goal.value : "").trim();
+    if (!goal) {
+      els.jobStatus.textContent = "请先填写任务目标";
+      els.jobStatus.classList.add("error");
+      return;
+    }
+    const payload = {
+      goal,
+      contextRefs: materials.map((m) => ({ kind: m.kind, path: m.path })),
+    };
+    if (capabilityId) payload.capabilityId = capabilityId;
+    workMode = "compose";
+    const result = await api.invoke("work.submitTask", payload);
+    if (result.needsProjectFolder) {
+      showProjectFolderCard(result.needsProjectFolder.message || result.userFacingNotice);
+      return;
+    }
+    if (result.needsExecutorSetup) {
+      showExecutorSetupCard(result.needsExecutorSetup);
+      return;
+    }
+    if (result.needsExecutionConfirm) {
+      pendingExecutionConfirm = {
+        goal,
+        contextRefs: payload.contextRefs,
+        preview: result.needsExecutionConfirm,
+        capabilityId:
+          capabilityId ||
+          result.needsExecutionConfirm.selectedCapabilityId ||
+          null,
+      };
+      showExecutionConfirmCard(result.needsExecutionConfirm);
+      els.jobStatus.textContent = "开始前请确认项目与修改权限";
+      els.jobStatus.classList.remove("error");
+      els.jobActionable.textContent = result.needsExecutionConfirm.notice || "";
+      return;
+    }
+  }
+
+  async function restorePendingSoftwareDraftIfAny() {
+    try {
+      const listed = await api.invoke("capability.list", {
+        codingAction: { type: "get_pending" },
+      });
+      const pending = listed && listed.pendingSoftwareTask;
+      if (!pending || !pending.goal) return false;
+      workMode = "compose";
+      activeTaskId = null;
+      els.goal.value = pending.goal;
+      els.goal.readOnly = false;
+      materials = (pending.contextRefs || []).map((r) => ({
+        kind: r.kind,
+        path: r.path,
+      }));
+      renderMaterials();
+      if (els.workComposeTitle) els.workComposeTitle.textContent = "待继续的任务";
+      showExecutorSetupCard({
+        title: "完成这项任务需要代码执行能力",
+        description:
+          "Digital Me 会使用它在你确认的项目目录中创建或修改代码，并运行测试。",
+        message: pending.userFacingNotice || "连接代码执行能力后可继续",
+      });
+      els.jobStatus.textContent = "连接代码执行能力后可继续";
+      els.jobStatus.classList.remove("error");
+      els.jobActionable.textContent = "目标和项目材料已保留。";
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -980,6 +1347,36 @@
     els.codeChangeView.hidden = false;
     els.codeChangeView.removeAttribute("hidden");
     activeCodeChangeWorkingDirectory = codeChange.workingDirectory || null;
+    const acc = codeChange.acceptanceSummary;
+    if (els.ccAcceptanceSection) {
+      if (acc) {
+        els.ccAcceptanceSection.hidden = false;
+        els.ccAcceptanceSection.removeAttribute("hidden");
+        if (els.ccAcceptanceTitle) els.ccAcceptanceTitle.textContent = acc.title || "Digital Me 检查结果";
+        if (els.ccAcceptanceGoal) {
+          els.ccAcceptanceGoal.textContent = "目标：" + (acc.goalLabel || "无法验证");
+          els.ccAcceptanceGoal.className =
+            "cc-acceptance-goal" +
+            (acc.canAdoptSuggested ? " is-ok" : acc.goalLabel === "部分满足" ? " is-warn" : " is-bad");
+        }
+        if (els.ccAcceptanceBullets) {
+          els.ccAcceptanceBullets.innerHTML = "";
+          for (const b of acc.bullets || []) {
+            const li = document.createElement("li");
+            li.textContent = b;
+            els.ccAcceptanceBullets.appendChild(li);
+          }
+        }
+        if (els.ccAcceptanceReco) {
+          els.ccAcceptanceReco.textContent = "建议：" + (acc.recommendation || "暂不建议采用");
+          els.ccAcceptanceReco.className =
+            "cc-acceptance-reco" + (acc.canAdoptSuggested ? " is-ok" : " is-warn");
+        }
+      } else {
+        els.ccAcceptanceSection.hidden = true;
+        els.ccAcceptanceSection.setAttribute("hidden", "");
+      }
+    }
     if (els.ccSummary) {
       const summaryText = String(codeChange.summary || "").trim();
       const happened = summaryText.match(/##\s*发生了什么\s*([\s\S]*?)(?=\n##\s|$)/);
@@ -1088,6 +1485,34 @@
     if (els.codeChangeView) {
       els.codeChangeView.hidden = true;
       els.codeChangeView.setAttribute("hidden", "");
+    }
+    if (els.ccAcceptanceSection) {
+      els.ccAcceptanceSection.hidden = true;
+      els.ccAcceptanceSection.setAttribute("hidden", "");
+    }
+    if (els.ccAcceptanceTitle) els.ccAcceptanceTitle.textContent = "";
+    if (els.ccAcceptanceGoal) {
+      els.ccAcceptanceGoal.textContent = "";
+      els.ccAcceptanceGoal.className = "cc-acceptance-goal";
+    }
+    if (els.ccAcceptanceBullets) els.ccAcceptanceBullets.innerHTML = "";
+    if (els.ccAcceptanceReco) {
+      els.ccAcceptanceReco.textContent = "";
+      els.ccAcceptanceReco.className = "cc-acceptance-reco";
+    }
+    if (els.ccSummary) els.ccSummary.textContent = "";
+    if (els.ccVerification) els.ccVerification.textContent = "";
+    if (els.ccFileList) els.ccFileList.innerHTML = "";
+    if (els.ccDiff) els.ccDiff.textContent = "";
+    if (els.ccTestList) els.ccTestList.innerHTML = "";
+    if (els.ccUnresolvedList) els.ccUnresolvedList.innerHTML = "";
+    if (els.ccTestsSection) {
+      els.ccTestsSection.hidden = true;
+      els.ccTestsSection.setAttribute("hidden", "");
+    }
+    if (els.ccUnresolvedSection) {
+      els.ccUnresolvedSection.hidden = true;
+      els.ccUnresolvedSection.setAttribute("hidden", "");
     }
     if (els.openProjectFolder) {
       els.openProjectFolder.hidden = true;
@@ -1418,13 +1843,77 @@
     else els.copy.removeAttribute("hidden");
   }
 
+  function bumpUiEpoch() {
+    uiEpoch += 1;
+    return uiEpoch;
+  }
+
+  function hideProjectFolderCard() {
+    if (!els.projectFolderCard) return;
+    els.projectFolderCard.hidden = true;
+    els.projectFolderCard.setAttribute("hidden", "");
+  }
+
+  function showProjectFolderCard(message) {
+    hideExecutionConfirmCard();
+    hideExecutorSetupCard();
+    if (!els.projectFolderCard) return;
+    els.projectFolderCard.hidden = false;
+    els.projectFolderCard.removeAttribute("hidden");
+    if (els.projectFolderMessage) {
+      els.projectFolderMessage.textContent =
+        message || "这项任务需要一个项目位置";
+    }
+  }
+
+  function showEmptyArtifact(message) {
+    activeArtifactId = null;
+    activeHeadVersionId = null;
+    hideCodeChangeView();
+    hideRevisionComposer();
+    copyBlockedFailed = false;
+    setCopyEnabled(false);
+    if (els.decisionBox) {
+      els.decisionBox.hidden = true;
+      els.decisionBox.setAttribute("hidden", "");
+    }
+    if (els.artifactEditor) {
+      els.artifactEditor.hidden = true;
+      els.artifactEditor.setAttribute("hidden", "");
+    }
+    if (els.bundleView) {
+      els.bundleView.hidden = true;
+      els.bundleView.setAttribute("hidden", "");
+    }
+    els.artifactPanel.hidden = false;
+    els.artifactPanel.removeAttribute("hidden");
+    setWorkLayoutArtifact(true);
+    if (els.artifactEmpty) {
+      els.artifactEmpty.hidden = false;
+      els.artifactEmpty.removeAttribute("hidden");
+      els.artifactEmpty.textContent = message || "这项任务尚未产生成果。";
+    }
+    if (els.versionMeta) els.versionMeta.textContent = "";
+    if (els.saveStatus) els.saveStatus.textContent = "";
+    clearAppliedUnderstanding();
+  }
+
   function clearArtifactView() {
     activeArtifactId = null;
     activeHeadVersionId = null;
     hideCodeChangeView();
+    hideRevisionComposer();
     resetCollabUi();
     copyBlockedFailed = false;
     setCopyEnabled(false);
+    if (els.artifactEmpty) {
+      els.artifactEmpty.hidden = true;
+      els.artifactEmpty.setAttribute("hidden", "");
+    }
+    if (els.decisionBox) {
+      els.decisionBox.hidden = true;
+      els.decisionBox.setAttribute("hidden", "");
+    }
     els.artifactPanel.hidden = true;
     els.artifactPanel.setAttribute("hidden", "");
     setWorkLayoutArtifact(false);
@@ -1437,24 +1926,96 @@
     clearAppliedUnderstanding();
   }
 
+  function hideRevisionComposer() {
+    if (!els.revisionComposer && !els.reviseBox) return;
+    const box = els.revisionComposer || els.reviseBox;
+    box.hidden = true;
+    box.setAttribute("hidden", "");
+  }
+
+  function showRevisionComposer(opts) {
+    const box = els.revisionComposer || els.reviseBox;
+    if (!box) return;
+    const continueMode = !!(opts && opts.continueMode);
+    box.hidden = false;
+    box.removeAttribute("hidden");
+    if (els.revisionComposerTitle) {
+      els.revisionComposerTitle.textContent = continueMode
+        ? "继续修改"
+        : "继续修改这项成果";
+    }
+    if (els.revisionRequest && !(els.revisionRequest.value || "").trim()) {
+      els.revisionRequest.placeholder =
+        "说明还需要修改什么，例如：将返回值改为 done，并同步更新测试。";
+    }
+    if (els.revisionRequest) els.revisionRequest.focus();
+  }
+
   function renderArtifactDecision(decision) {
     if (!els.decisionStatus) return;
     const status = decision && decision.status ? decision.status : "undecided";
+    const noteField = els.decisionNote
+      ? els.decisionNote.closest(".decision-note") || els.decisionNote.closest("label")
+      : null;
     if (status === "accepted") {
       els.decisionStatus.textContent = "已采用";
-      if (els.decisionActions) els.decisionActions.hidden = true;
-      if (els.decisionNote) els.decisionNote.closest(".decision-note").hidden = true;
+      if (els.decisionActions) els.decisionActions.hidden = false;
+      if (noteField) noteField.hidden = true;
+      if (els.acceptArtifact) {
+        els.acceptArtifact.hidden = true;
+        els.acceptArtifact.setAttribute("hidden", "");
+      }
+      if (els.rejectArtifact) {
+        els.rejectArtifact.hidden = true;
+        els.rejectArtifact.setAttribute("hidden", "");
+      }
+      if (els.proposeRevision) {
+        els.proposeRevision.hidden = false;
+        els.proposeRevision.removeAttribute("hidden");
+        els.proposeRevision.textContent = "继续修改";
+        els.proposeRevision.disabled = false;
+      }
     } else if (status === "rejected") {
       els.decisionStatus.textContent = "未采用";
       if (els.decisionActions) els.decisionActions.hidden = false;
-      if (els.decisionNote) els.decisionNote.closest(".decision-note").hidden = false;
+      if (noteField) noteField.hidden = false;
+      if (els.acceptArtifact) {
+        els.acceptArtifact.hidden = false;
+        els.acceptArtifact.removeAttribute("hidden");
+        els.acceptArtifact.disabled = false;
+      }
+      if (els.rejectArtifact) {
+        els.rejectArtifact.hidden = false;
+        els.rejectArtifact.removeAttribute("hidden");
+        els.rejectArtifact.disabled = true;
+      }
+      if (els.proposeRevision) {
+        els.proposeRevision.hidden = false;
+        els.proposeRevision.removeAttribute("hidden");
+        els.proposeRevision.textContent = "提出修改";
+        els.proposeRevision.disabled = false;
+      }
     } else {
       els.decisionStatus.textContent = "尚未决定是否采用";
       if (els.decisionActions) els.decisionActions.hidden = false;
-      if (els.decisionNote) els.decisionNote.closest(".decision-note").hidden = false;
+      if (noteField) noteField.hidden = false;
+      if (els.acceptArtifact) {
+        els.acceptArtifact.hidden = false;
+        els.acceptArtifact.removeAttribute("hidden");
+        els.acceptArtifact.disabled = false;
+      }
+      if (els.rejectArtifact) {
+        els.rejectArtifact.hidden = false;
+        els.rejectArtifact.removeAttribute("hidden");
+        els.rejectArtifact.disabled = false;
+      }
+      if (els.proposeRevision) {
+        els.proposeRevision.hidden = false;
+        els.proposeRevision.removeAttribute("hidden");
+        els.proposeRevision.textContent = "提出修改";
+        els.proposeRevision.disabled = false;
+      }
     }
-    if (els.acceptArtifact) els.acceptArtifact.disabled = status === "accepted";
-    if (els.rejectArtifact) els.rejectArtifact.disabled = status === "rejected";
   }
 
   async function submitArtifactDecision(kind) {
@@ -1500,13 +2061,7 @@
         artifactVersionId: activeHeadVersionId,
         requestedArtifactType: activeTaskRequestedArtifactType || "document",
         sourceCapabilityKind: "local",
-        ...(note ? (kind === "reject" ? { rejectionReason: note } : {}) : {}),
-        ...(kind === "reject" && lastArtifactRejectionReason
-          ? { rejectionReason: lastArtifactRejectionReason }
-          : {}),
-        ...(els.revisionRequest && String(els.revisionRequest.value || "").trim()
-          ? { revisionRequest: String(els.revisionRequest.value || "").trim() }
-          : {}),
+        ...(kind === "reject" && note ? { rejectionReason: note } : {}),
       });
       if (result && result.captureOutcome === "distill_failed") {
         showStatus(els.decisionError, "决定已记下，但相关体会还没记全，请稍后再试。", true);
@@ -1518,22 +2073,12 @@
       if (kind === "reject" && status === "rejected") {
         if (els.decisionStatus) {
           els.decisionStatus.textContent = note
-            ? "已记录为未采用，并保存了你的说明。可继续填写修改要求并按说明修改。"
-            : "已记录为未采用。请说明如何修改后继续。";
+            ? "已记录为未采用，并保存了你的说明。如需继续改代码，请点「提出修改」。"
+            : "已记录为未采用。如需继续改代码，请点「提出修改」；如需改回文件，请使用「恢复执行前状态」。";
         }
         if (els.saveStatus) els.saveStatus.textContent = "已记录你的决定。";
-        // 不采用后自然进入修订：打开修订区；有说明则预填
-        if (els.reviseBox) {
-          els.reviseBox.hidden = false;
-          els.reviseBox.removeAttribute("hidden");
-          els.reviseBox.open = true;
-        }
-        if (note && els.revisionRequest) {
-          if (!(els.revisionRequest.value || "").trim()) {
-            els.revisionRequest.value = note;
-          }
-        }
-        lastArtifactRejectionReason = note || baseText;
+        hideRevisionComposer();
+        lastArtifactRejectionReason = note || "";
       }
     } catch (err) {
       renderArtifactDecision({
@@ -1588,6 +2133,7 @@
   }
 
   function startNewTaskComposer(seed) {
+    bumpUiEpoch();
     workMode = "compose";
     activeTaskId = null;
     activeJobId = null;
@@ -1606,13 +2152,24 @@
     els.goal.readOnly = false;
     if (els.workComposeTitle) els.workComposeTitle.textContent = "新建任务";
     clearJobChrome();
+    hideExecutionConfirmCard();
+    hideProjectFolderCard();
+    hideExecutorSetupCard();
     clearArtifactView();
     setWorkCollabVisible(false);
     if (els.restartCompose) els.restartCompose.hidden = true;
+    if (els.submit) {
+      els.submit.hidden = false;
+      els.submit.removeAttribute("hidden");
+      els.submit.disabled = false;
+    }
     setWorkStage("center");
     setWorkTasksOpen(false);
     syncGoalPresentation();
     refreshTasks();
+    if (!(seed && seed.preservePending)) {
+      void api.invoke("capability.list", { codingAction: { type: "clear_pending" } }).catch(() => {});
+    }
     requestAnimationFrame(() => {
       if (els.goal && workMode === "compose") els.goal.focus();
     });
@@ -1742,11 +2299,22 @@
     els.cancel.disabled = !(job && (status === "queued" || status === "running"));
     els.retry.disabled =
       !connected || !(job && (status === "failed" || status === "cancelled"));
-    if (els.restartCompose) {
-      const showRestart =
+    if (els.submit) {
+      const hideSubmit =
         workMode === "task" &&
-        (!!status && (status === "failed" || status === "cancelled" || status === "succeeded"));
+        !!status &&
+        (status === "succeeded" || status === "failed" || status === "cancelled" || status === "running" || status === "queued");
+      els.submit.hidden = hideSubmit;
+      if (hideSubmit) els.submit.setAttribute("hidden", "");
+      else els.submit.removeAttribute("hidden");
+    }
+    if (els.restartCompose) {
+      const showRestart = workMode === "task";
       els.restartCompose.hidden = !showRestart;
+      if (showRestart) {
+        els.restartCompose.removeAttribute("hidden");
+        els.restartCompose.textContent = "创建新任务";
+      }
     }
   }
 
@@ -1774,11 +2342,17 @@
         (!eventStatus || eventStatus === "succeeded")
       ) {
         copyBlockedFailed = false;
-        activeArtifactId = detail.artifactIds[0];
-        await loadArtifact(activeArtifactId);
-        renderAppliedUnderstanding(detail.appliedUnderstanding);
+        const epoch = uiEpoch;
+        const taskId = activeTaskId;
+        await loadArtifact(detail.artifactIds[0], { taskId, epoch });
+        if (epoch === uiEpoch && activeTaskId === taskId) {
+          renderAppliedUnderstanding(detail.appliedUnderstanding);
+        }
+      } else if (terminalStatus === "failed" || terminalStatus === "cancelled") {
+        /* keep failure chrome; do not resurrect unrelated artifacts */
+        if (!activeArtifactId) showEmptyArtifact("这项任务尚未产生可用成果。");
       } else {
-        clearArtifactView();
+        showEmptyArtifact("这项任务尚未产生成果。");
         clearAppliedUnderstanding();
       }
     }
@@ -1787,10 +2361,28 @@
   }
 
   async function selectTask(taskId) {
+    const epoch = bumpUiEpoch();
     workMode = "task";
     activeTaskId = taskId;
+    activeJobId = null;
+    hideExecutionConfirmCard();
+    hideProjectFolderCard();
+    clearArtifactView();
     if (els.workComposeTitle) els.workComposeTitle.textContent = "当前任务";
-    const detail = await api.invoke("work.getTask", { taskId });
+    let detail;
+    try {
+      detail = await api.invoke("work.getTask", { taskId });
+    } catch (err) {
+      if (epoch !== uiEpoch || activeTaskId !== taskId) return;
+      showEmptyArtifact("当前任务暂时无法加载，请从任务列表重新选择。");
+      els.jobStatus.textContent = userFacingWorkError(err);
+      els.jobStatus.classList.add("error");
+      activeTaskId = null;
+      workMode = "compose";
+      await refreshTasks();
+      return;
+    }
+    if (epoch !== uiEpoch || activeTaskId !== taskId) return;
     activeJobId = detail.latestJob ? detail.latestJob.jobId : null;
     els.goal.value = detail.task && detail.task.goal ? detail.task.goal : "";
     els.goal.readOnly = true;
@@ -1802,6 +2394,16 @@
     materials = refs
       .filter((r) => r && (r.kind === "file" || r.kind === "folder") && r.path)
       .map((r) => ({ kind: r.kind, path: r.path }));
+    for (const item of materials) {
+      if (item.kind !== "folder" || !item.path) continue;
+      try {
+        if (typeof api.inspectSoftwareProject === "function") {
+          item.softwareProject = await api.inspectSoftwareProject(item.path);
+        }
+      } catch {
+        /* ignore */
+      }
+    }
     renderMaterials();
     renderJobStatus(detail);
     renderOwnerChoicePrompt(detail);
@@ -1811,9 +2413,10 @@
     setWorkCollabVisible(true);
     syncGoalPresentation();
 
+    if (epoch !== uiEpoch || activeTaskId !== taskId) return;
     if (isJobActive(detail)) {
       startJobWatch(taskId);
-      clearArtifactView();
+      showEmptyArtifact("正在处理这项任务…");
       clearAppliedUnderstanding();
     } else {
       stopJobWatch();
@@ -1824,24 +2427,58 @@
         detail.artifactIds[0]
       ) {
         copyBlockedFailed = false;
-        activeArtifactId = detail.artifactIds[0];
-        await loadArtifact(activeArtifactId);
-        renderAppliedUnderstanding(detail.appliedUnderstanding);
+        await loadArtifact(detail.artifactIds[0], { taskId, epoch });
+        if (epoch === uiEpoch && activeTaskId === taskId) {
+          renderAppliedUnderstanding(detail.appliedUnderstanding);
+        }
       } else {
-        clearArtifactView();
+        showEmptyArtifact("这项任务尚未产生成果。");
         clearAppliedUnderstanding();
       }
     }
+    if (epoch !== uiEpoch || activeTaskId !== taskId) return;
     await refreshTasks();
     await syncWorkCollabFromDomain();
   }
 
-  async function loadArtifact(artifactId) {
-    const content = await api.invoke("artifact.getContent", { artifactId });
+  async function loadArtifact(artifactId, opts) {
+    const expectedTaskId =
+      (opts && opts.taskId) || activeTaskId || null;
+    const epoch = (opts && opts.epoch != null) ? opts.epoch : uiEpoch;
+    if (!artifactId) {
+      showEmptyArtifact("这项任务尚未产生成果。");
+      return null;
+    }
+    let content;
+    try {
+      content = await api.invoke("artifact.getContent", {
+        artifactId,
+        ...(expectedTaskId ? { expectedTaskId } : {}),
+      });
+    } catch (err) {
+      if (epoch !== uiEpoch) return null;
+      showEmptyArtifact(userFacingWorkError(err) || "当前任务暂时无法加载成果。");
+      return null;
+    }
+    if (epoch !== uiEpoch) return null;
+    if (workMode !== "task") return null;
+    if (expectedTaskId && activeTaskId && expectedTaskId !== activeTaskId) return null;
+    if (content.artifactTaskId && activeTaskId && content.artifactTaskId !== activeTaskId) {
+      showEmptyArtifact("这项成果不属于当前任务。");
+      return null;
+    }
+    if (content.artifact && content.artifact.taskId && activeTaskId && content.artifact.taskId !== activeTaskId) {
+      showEmptyArtifact("这项成果不属于当前任务。");
+      return null;
+    }
     const isBundle = !!(content.content && content.content.kind === "bundle");
     activeArtifactId = artifactId;
     activeHeadVersionId = content.headVersionId || null;
     copyBlockedFailed = false;
+    if (els.artifactEmpty) {
+      els.artifactEmpty.hidden = true;
+      els.artifactEmpty.setAttribute("hidden", "");
+    }
     els.artifactPanel.hidden = false;
     els.artifactPanel.removeAttribute("hidden");
     setWorkLayoutArtifact(true);
@@ -1886,20 +2523,18 @@
       }
       els.artifactEditor.hidden = true;
       els.artifactEditor.setAttribute("hidden", "");
-      if (els.reviseBox) {
-        els.reviseBox.hidden = false;
-        els.reviseBox.removeAttribute("hidden");
-        const summary = els.reviseBox.querySelector("summary");
-        if (summary) {
-          summary.textContent = isCodeChange
-            ? "提出修改（继续调整当前软件修改）"
-            : "用说明重新执行";
-        }
-        if (els.revise) {
-          els.revise.textContent = isCodeChange ? "按说明继续调整" : "按说明重新分析";
-        }
-      } else if (els.revise) {
-        els.revise.closest(".revise-box").hidden = false;
+      hideRevisionComposer();
+      if (els.proposeRevision) {
+        els.proposeRevision.hidden = false;
+        els.proposeRevision.removeAttribute("hidden");
+        const st =
+          content.ownerDecision && content.ownerDecision.status
+            ? content.ownerDecision.status
+            : "undecided";
+        els.proposeRevision.textContent = st === "accepted" ? "继续修改" : "提出修改";
+      }
+      if (els.revise) {
+        els.revise.textContent = "提交修改";
       }
       if (els.restoreBaseline) {
         const showRestore = !!(content.codeChange && content.codeChange.workingDirectory);
@@ -2019,16 +2654,13 @@
       els.bundleView.setAttribute("hidden", "");
       els.artifactEditor.hidden = false;
       els.artifactEditor.removeAttribute("hidden");
-      if (els.reviseBox) {
-        els.reviseBox.hidden = false;
-        els.reviseBox.removeAttribute("hidden");
-        els.reviseBox.removeAttribute("open");
-        const summary = els.reviseBox.querySelector("summary");
-        if (summary) summary.textContent = "用说明修改成果";
-        if (els.revise) els.revise.textContent = "按说明修改";
-      } else if (els.revise) {
-        els.revise.closest(".revise-box").hidden = false;
+      hideRevisionComposer();
+      if (els.proposeRevision) {
+        els.proposeRevision.hidden = false;
+        els.proposeRevision.removeAttribute("hidden");
+        els.proposeRevision.textContent = "提出修改";
       }
+      if (els.revise) els.revise.textContent = "提交修改";
       els.exportMd.hidden = false;
       els.exportDocx.hidden = false;
       suppressSave = true;
@@ -2231,10 +2863,11 @@
   async function enterShell() {
     setView("shell");
     setNav("work");
-    startNewTaskComposer();
+    startNewTaskComposer({ preservePending: true });
     await refreshConnectionFromCapabilities();
     await refreshTasks();
     await refreshSubjectPanel();
+    await restorePendingSoftwareDraftIfAny();
   }
 
   async function createOrOpenDefaultPackage(opts) {
@@ -2407,9 +3040,7 @@
   }
   if (els.restartCompose) {
     els.restartCompose.addEventListener("click", () => {
-      const goal = els.goal ? String(els.goal.value || "") : "";
-      const mats = materials.slice();
-      startNewTaskComposer({ goal, materials: mats });
+      startNewTaskComposer();
     });
   }
 
@@ -2750,12 +3381,13 @@
   if (els.checkExecutor) {
     els.checkExecutor.addEventListener("click", async () => {
       if (els.executorSettingsStatus) els.executorSettingsStatus.textContent = "正在检查…";
-      const card = await refreshExecutorCapabilityUi(true);
+      const listed = await refreshExecutorCapabilityUi(true);
+      const card = listed && listed.executorCapabilityCard;
       if (els.executorSettingsStatus) {
         els.executorSettingsStatus.textContent = card
           ? card.available
             ? "连接正常"
-            : card.detail || "未连接：请先安装并登录代码执行组件"
+            : card.detail || "未连接：请先安装并连接代码执行能力"
           : "未找到代码执行能力";
       }
     });
@@ -3084,6 +3716,46 @@
     }
   });
 
+
+  async function addProjectFolderFromPicker(preferEmpty) {
+    try {
+      const dir = await api.dialogs.pickOpenDirectory();
+      if (!dir) return;
+      let inspected = null;
+      if (typeof api.inspectSoftwareProject === "function") {
+        inspected = await api.inspectSoftwareProject(dir);
+      }
+      if (preferEmpty && inspected && !inspected.isEmptyDirectory && !inspected.isNewProjectCandidate) {
+        els.jobStatus.textContent = "请选择空文件夹以开始新项目，或改用「选择现有项目文件夹」。";
+        els.jobStatus.classList.add("error");
+        return;
+      }
+      materials = materials.filter((m) => !(m.kind === "folder"));
+      materials.push({
+        kind: "folder",
+        path: dir,
+        softwareProject: inspected || undefined,
+      });
+      renderMaterials();
+      hideProjectFolderCard();
+      els.jobStatus.textContent = inspected && inspected.isNewProjectCandidate
+        ? "已选择空文件夹，可作为新项目位置。"
+        : "已添加项目文件夹。";
+      els.jobStatus.classList.remove("error");
+      els.jobActionable.textContent = "确认材料后可点击「开始处理」。";
+    } catch (err) {
+      els.jobStatus.textContent = userFacingWorkError(err);
+      els.jobStatus.classList.add("error");
+    }
+  }
+
+  if (els.pickExistingProject) {
+    els.pickExistingProject.addEventListener("click", () => addProjectFolderFromPicker(false));
+  }
+  if (els.pickEmptyProject) {
+    els.pickEmptyProject.addEventListener("click", () => addProjectFolderFromPicker(true));
+  }
+
   els.submit.addEventListener("click", async () => {
     try {
       await refreshConnectionFromCapabilities();
@@ -3120,14 +3792,24 @@
       // 不强迫传成果类型；Runtime 按意图派生。显式仅在隐藏控件有非空值时透传。
       if (type) payload.requestedArtifactType = type;
       const result = await api.invoke("work.submitTask", payload);
-      if (result.needsExecutorSetup) {
-        showExecutorSetupCard(result.needsExecutorSetup.message || result.userFacingNotice);
+      if (result.needsProjectFolder) {
+        showProjectFolderCard(result.needsProjectFolder.message || result.userFacingNotice);
         els.submit.disabled = false;
-        els.jobStatus.textContent = "代码执行能力尚未连接";
-        els.jobStatus.classList.add("error");
+        els.jobStatus.textContent = "这项任务需要一个项目位置";
+        els.jobStatus.classList.remove("error");
+        els.jobActionable.textContent = "请选择现有项目文件夹，或选择空文件夹开始新项目。";
+        clearArtifactView();
+        return;
+      }
+      if (result.needsExecutorSetup) {
+        showExecutorSetupCard(result.needsExecutorSetup);
+        els.submit.disabled = false;
+        els.jobStatus.textContent = result.needsExecutorSetup.title || "这项任务需要代码执行能力";
+        els.jobStatus.classList.remove("error");
         els.jobActionable.textContent =
+          result.needsExecutorSetup.message ||
           result.needsExecutorSetup.settingsHint ||
-          "请先在设置中连接执行能力，再开始软件开发任务。";
+          "请先连接代码执行能力。";
         return;
       }
       if (result.needsExecutionConfirm) {
@@ -3135,6 +3817,7 @@
           goal,
           contextRefs: payload.contextRefs,
           preview: result.needsExecutionConfirm,
+          capabilityId: result.needsExecutionConfirm.selectedCapabilityId || null,
         };
         showExecutionConfirmCard(result.needsExecutionConfirm);
         els.submit.disabled = false;
@@ -3165,7 +3848,7 @@
       await syncActiveTaskStatus();
       startJobWatch(activeTaskId);
     } catch (err) {
-      els.jobStatus.textContent = err.message || String(err);
+      els.jobStatus.textContent = userFacingWorkError(err);
       els.jobStatus.classList.add("error");
     } finally {
       await refreshConnectionFromCapabilities();
@@ -3182,6 +3865,7 @@
 
   function showExecutionConfirmCard(preview) {
     hideExecutorSetupCard();
+    hideProjectFolderCard();
     if (!els.executionConfirmCard) return;
     els.executionConfirmCard.hidden = false;
     els.executionConfirmCard.removeAttribute("hidden");
@@ -3189,6 +3873,9 @@
       els.executionConfirmTitle.textContent = preview.title || "这项任务需要修改项目文件";
     }
     if (els.executionConfirmNotice) els.executionConfirmNotice.textContent = preview.notice || "";
+    if (els.executionConfirmExecutor) {
+      els.executionConfirmExecutor.textContent = "代码执行能力";
+    }
     if (els.executionConfirmProject) {
       els.executionConfirmProject.textContent =
         preview.projectName || basenamePath(preview.workingDirectory || "") || "（未命名项目）";
@@ -3222,7 +3909,7 @@
     hideExecutionConfirmCard();
     const result = await api.invoke("work.submitTask", payload);
     if (result.needsExecutorSetup) {
-      showExecutorSetupCard(result.needsExecutorSetup.message || result.userFacingNotice);
+      showExecutorSetupCard(result.needsExecutorSetup);
       els.submit.disabled = false;
       return;
     }
@@ -3231,6 +3918,10 @@
         goal: payload.goal,
         contextRefs: payload.contextRefs,
         preview: result.needsExecutionConfirm,
+        capabilityId:
+          payload.capabilityId ||
+          result.needsExecutionConfirm.selectedCapabilityId ||
+          null,
       };
       showExecutionConfirmCard(result.needsExecutionConfirm);
       els.submit.disabled = false;
@@ -3257,9 +3948,10 @@
   if (els.confirmExecution) {
     els.confirmExecution.addEventListener("click", async () => {
       try {
-        if (!pendingExecutionConfirm) return;
+        if (!pendingExecutionConfirm || confirmSubmitInFlight) return;
+        confirmSubmitInFlight = true;
         const preview = pendingExecutionConfirm.preview;
-        await startTaskAfterConfirm({
+        const confirmPayload = {
           goal: pendingExecutionConfirm.goal,
           contextRefs: pendingExecutionConfirm.contextRefs,
           executionAuthorization: {
@@ -3268,11 +3960,18 @@
             readScope: preview.readScope,
             writeScope: preview.writeScope,
           },
-        });
+        };
+        if (pendingExecutionConfirm.capabilityId) {
+          confirmPayload.capabilityId = pendingExecutionConfirm.capabilityId;
+        } else if (preview.selectedCapabilityId) {
+          confirmPayload.capabilityId = preview.selectedCapabilityId;
+        }
+        await startTaskAfterConfirm(confirmPayload);
       } catch (err) {
-        els.jobStatus.textContent = err.message || String(err);
+        els.jobStatus.textContent = userFacingWorkError(err);
         els.jobStatus.classList.add("error");
       } finally {
+        confirmSubmitInFlight = false;
         els.submit.disabled = false;
         await refreshConnectionFromCapabilities();
       }
@@ -3308,21 +4007,98 @@
   if (els.executorRecheck) {
     els.executorRecheck.addEventListener("click", async () => {
       try {
-        const card = await refreshExecutorCapabilityUi(true);
+        const listed = await refreshExecutorCapabilityUi(true);
+        const card = listed && listed.executorCapabilityCard;
         const available = !!(card && card.available);
         if (available) {
-          hideExecutorSetupCard();
-          els.jobStatus.textContent = "代码执行能力已连接，可以再次开始处理";
-          els.jobStatus.classList.remove("error");
-          els.jobActionable.textContent = "";
+          await resumePendingSoftwareTask(
+            (listed && listed.preferredCodingCapabilityId) || card.capabilityId,
+          );
         } else {
-          showExecutorSetupCard();
-          els.jobStatus.textContent = "代码执行能力尚未连接";
-          els.jobStatus.classList.add("error");
+          showExecutorSetupCard(
+            pendingCodingOnboarding || {
+              message: (card && card.detail) || "尚未检测到可用的代码执行能力。",
+            },
+          );
+          els.jobStatus.textContent = "代码执行能力尚未就绪";
+          els.jobStatus.classList.remove("error");
+          els.jobActionable.textContent = (card && card.detail) || "请安装或连接后再试。";
         }
       } catch {
         els.jobActionable.textContent = "重新检查未完成，请稍后再试。";
       }
+    });
+  }
+
+  if (els.codingUseInstalled) {
+    els.codingUseInstalled.addEventListener("click", async () => {
+      try {
+        await scanInstalledCodingCapabilities();
+      } catch (err) {
+        els.jobStatus.textContent = userFacingWorkError(err);
+        els.jobStatus.classList.add("error");
+      }
+    });
+  }
+  if (els.codingInstallRecommended) {
+    els.codingInstallRecommended.addEventListener("click", () => {
+      showCodingInstallPanel();
+    });
+  }
+  if (els.codingConnectLater) {
+    els.codingConnectLater.addEventListener("click", async () => {
+      try {
+        const goal = (els.goal && els.goal.value ? els.goal.value : "").trim();
+        await api.invoke("capability.list", {
+          codingAction: {
+            type: "save_pending",
+            goal,
+            contextRefs: materials.map((m) => ({ kind: m.kind, path: m.path })),
+          },
+        });
+        hideExecutorSetupCard();
+        els.jobStatus.textContent = "连接代码执行能力后可继续";
+        els.jobStatus.classList.remove("error");
+        els.jobActionable.textContent = "目标和项目材料已保留，不会创建失败任务。";
+        if (els.workComposeTitle) els.workComposeTitle.textContent = "待继续的任务";
+      } catch (err) {
+        els.jobStatus.textContent = userFacingWorkError(err);
+        els.jobStatus.classList.add("error");
+      }
+    });
+  }
+  if (els.codingOpenGuide) {
+    els.codingOpenGuide.addEventListener("click", () => {
+      const url =
+        (lastCodingRecommendation && lastCodingRecommendation.installGuideUrl) ||
+        (pendingCodingOnboarding &&
+          pendingCodingOnboarding.recommended &&
+          pendingCodingOnboarding.recommended.installGuideUrl) ||
+        "";
+      if (url && window.digitalMe && typeof window.digitalMe.openExternal === "function") {
+        window.digitalMe.openExternal(url);
+      } else if (url) {
+        els.jobActionable.textContent = `请在浏览器打开安装说明：${url}`;
+      } else {
+        openSettings();
+      }
+    });
+  }
+  if (els.codingBackOnboarding) {
+    els.codingBackOnboarding.addEventListener("click", () => {
+      if (els.codingCapInstallPanel) {
+        els.codingCapInstallPanel.hidden = true;
+        els.codingCapInstallPanel.setAttribute("hidden", "");
+      }
+      if (els.codingOpenGuide) {
+        els.codingOpenGuide.hidden = true;
+        els.codingOpenGuide.setAttribute("hidden", "");
+      }
+      if (els.codingBackOnboarding) {
+        els.codingBackOnboarding.hidden = true;
+        els.codingBackOnboarding.setAttribute("hidden", "");
+      }
+      showExecutorSetupCard(pendingCodingOnboarding || {});
     });
   }
 
@@ -3346,6 +4122,19 @@
     });
   }
 
+  if (els.proposeRevision) {
+    els.proposeRevision.addEventListener("click", () => {
+      const st = els.decisionStatus ? els.decisionStatus.textContent : "";
+      showRevisionComposer({ continueMode: /已采用/.test(st || "") });
+    });
+  }
+  if (els.cancelRevision) {
+    els.cancelRevision.addEventListener("click", () => {
+      hideRevisionComposer();
+      if (els.revisionRequest) els.revisionRequest.value = "";
+    });
+  }
+
   els.revise.addEventListener("click", async () => {
     try {
       if (!activeTaskId || !activeArtifactId || workMode !== "task") return;
@@ -3357,27 +4146,32 @@
       }
       const revisionRequest = (els.revisionRequest.value || "").trim();
       if (!revisionRequest) {
-        els.jobStatus.textContent = "请先说明如何修改";
+        els.jobStatus.textContent = "请先说明还需要修改什么";
         els.jobStatus.classList.add("error");
+        showRevisionComposer();
         return;
       }
-      const rejectionReason = String(
-        lastArtifactRejectionReason ||
-          (els.decisionNote && els.decisionNote.value) ||
-          "",
-      ).trim();
+      // 采用/不采用说明不得作为 revisionRequest
       const result = await api.invoke("work.reviseArtifact", {
         taskId: activeTaskId,
         artifactId: activeArtifactId,
         revisionRequest,
-        ...(rejectionReason ? { rejectionReason } : {}),
       });
+      hideRevisionComposer();
+      if (els.revisionRequest) els.revisionRequest.value = "";
       activeJobId = result.jobId;
+      els.jobStatus.textContent = "正在按你的修改要求继续处理";
+      els.jobStatus.classList.remove("error");
+      if (els.jobActionable) els.jobActionable.textContent = "";
       await syncActiveTaskStatus();
       startJobWatch(activeTaskId);
     } catch (err) {
-      els.jobStatus.textContent = err.message || String(err);
+      const msg = userFacingWorkError(err);
+      els.jobStatus.textContent = msg;
       els.jobStatus.classList.add("error");
+      if (/重新连接|设置中检查连接|登录|认证/i.test(msg)) {
+        showExecutorSetupCard(msg);
+      }
     } finally {
       await refreshConnectionFromCapabilities();
     }
@@ -3427,7 +4221,7 @@
           if (activeArtifactId) await loadArtifact(activeArtifactId);
         }
       } catch (err) {
-        els.jobStatus.textContent = err.message || String(err);
+        els.jobStatus.textContent = userFacingWorkError(err);
         els.jobStatus.classList.add("error");
       }
     });
@@ -4853,7 +5647,10 @@
     }
     if (event.kind === "artifact.updated" && event.artifactId === activeArtifactId) {
       els.saveStatus.textContent = "内容已更新";
-      if (activeArtifactId && workMode === "task") await loadArtifact(activeArtifactId);
+      if (activeArtifactId && workMode === "task" && activeTaskId) {
+        const epoch = uiEpoch;
+        await loadArtifact(activeArtifactId, { taskId: activeTaskId, epoch });
+      }
     }
     if (event.kind === "subject.updated" && activeNav === "subject") {
       await refreshSubjectPanel();
@@ -4864,6 +5661,22 @@
     rememberShellMeta(info || {});
     await refreshConnectionFromCapabilities();
     if (currentView === "settings") fillSettingsForm();
+    // 主进程 rebootstrap 后默认包已重新挂载；shell 内刷新任务，welcome 则尝试进入做事。
+    if (currentView === "shell") {
+      try {
+        await refreshTasks();
+        if (activeNav === "subject") await refreshSubjectPanel();
+      } catch {
+        /* ignore */
+      }
+    } else if (currentView === "welcome") {
+      try {
+        const opened = await tryAutoOpenDefault();
+        if (opened) return;
+      } catch {
+        /* ignore */
+      }
+    }
   });
 
   (async () => {

@@ -159,8 +159,9 @@
           </details>
 
           <hr class="settings-divider" />
-          <h2>执行能力</h2>
-          <p class="muted">用于在你确认的项目目录中修改代码。密钥与登录由该执行组件自行管理。</p>
+          <h2>代码执行能力</h2>
+          <p class="muted">用于在你确认的项目目录中创建或修改代码，并运行测试。密钥与登录由该能力自行管理。</p>
+          <div id="settings-coding-capabilities" class="coding-cap-list"></div>
           <p id="settings-executor-status" class="meta" aria-live="polite">状态：检查中…</p>
           <p id="settings-executor-desc" class="muted tiny"></p>
           <p id="settings-executor-scope" class="muted tiny"></p>
@@ -170,8 +171,9 @@
           <details class="advanced-connection">
             <summary>高级说明</summary>
             <p class="muted tiny">
-              首轮仅连接本机代码执行组件。它只会在你确认的文件夹内工作，不会自动提交、推送或发布。
+              Digital Me 只会在你确认的文件夹内工作，不会自动提交、推送或发布。不会静默安装软件，也不会修改系统安全设置。
             </p>
+            <p id="settings-coding-advanced-name" class="muted tiny"></p>
           </details>
           <p id="executor-settings-status" class="status" aria-live="polite"></p>
 
@@ -328,19 +330,44 @@
               </section>
 
               <section class="work-exec-block" aria-label="执行">
-                <div id="executor-setup-card" class="executor-setup-card" hidden>
-                  <p id="executor-setup-message" class="muted">
-                    代码执行能力尚未连接。连接后，Digital Me 可以在你确认范围内修改项目并运行测试。
+                                <div id="executor-setup-card" class="executor-setup-card coding-onboarding-card" hidden>
+                  <h3 id="executor-setup-title" class="execution-confirm-title">完成这项任务需要代码执行能力</h3>
+                  <p id="executor-setup-description" class="muted">
+                    Digital Me 会使用它在你确认的项目目录中创建或修改代码，并运行测试。
                   </p>
-                  <div class="row">
-                    <button type="button" id="btn-executor-goto-settings" class="primary">去设置</button>
+                  <p id="executor-setup-message" class="muted">
+                    尚未检测到可用的代码执行能力。
+                  </p>
+                  <div id="coding-cap-scan-list" class="coding-cap-list" hidden></div>
+                  <div id="coding-cap-install-panel" class="coding-install-panel" hidden>
+                    <h4>推荐安装代码执行能力</h4>
+                    <div id="coding-cap-install-body" class="muted tiny"></div>
+                  </div>
+                  <div class="row coding-onboarding-actions" id="coding-onboarding-actions">
+                    <button type="button" id="btn-coding-use-installed" class="primary">使用已安装的能力</button>
+                    <button type="button" id="btn-coding-install-recommended" class="ghost">安装推荐能力</button>
+                    <button type="button" id="btn-coding-connect-later" class="ghost">稍后连接</button>
+                    <button type="button" id="btn-coding-use-cloud" class="ghost" hidden>使用云端执行</button>
+                  </div>
+                  <div class="row" id="coding-onboarding-secondary">
+                    <button type="button" id="btn-executor-goto-settings" class="ghost">打开设置</button>
                     <button type="button" id="btn-executor-recheck" class="ghost">重新检查</button>
+                    <button type="button" id="btn-coding-open-guide" class="ghost" hidden>查看安装说明</button>
+                    <button type="button" id="btn-coding-back-onboarding" class="ghost" hidden>返回</button>
+                  </div>
+                </div>
+<div id="project-folder-card" class="executor-setup-card" hidden>
+                  <p id="project-folder-message" class="muted">这项任务需要一个项目位置</p>
+                  <div class="row">
+                    <button type="button" id="btn-pick-existing-project" class="primary">选择现有项目文件夹</button>
+                    <button type="button" id="btn-pick-empty-project" class="ghost">选择空文件夹开始新项目</button>
                   </div>
                 </div>
                 <div id="execution-confirm-card" class="execution-confirm-card" hidden>
                   <h3 id="execution-confirm-title" class="execution-confirm-title">这项任务需要修改项目文件</h3>
                   <p id="execution-confirm-notice" class="muted"></p>
                   <dl class="execution-confirm-dl">
+                    <div><dt>将使用</dt><dd id="execution-confirm-executor">代码执行能力</dd></div>
                     <div><dt>项目</dt><dd id="execution-confirm-project"></dd></div>
                     <div><dt>工作目录</dt><dd id="execution-confirm-dir"></dd></div>
                     <div><dt>准备完成</dt><dd id="execution-confirm-accept"></dd></div>
@@ -357,9 +384,8 @@
                   <button type="button" id="btn-submit" class="primary">开始处理</button>
                   <button type="button" id="btn-cancel" disabled>取消</button>
                   <button type="button" id="btn-retry" disabled>重试</button>
-                  <button type="button" id="btn-restore-baseline" class="ghost" hidden>恢复执行前状态</button>
                   <button type="button" id="btn-open-project-folder" class="ghost" hidden>打开项目文件夹</button>
-                  <button type="button" id="btn-restart-compose" class="ghost" hidden>重新开始</button>
+                  <button type="button" id="btn-restart-compose" class="ghost" hidden>创建新任务</button>
                 </div>
                 <div class="work-status-rail" id="work-status-rail">
                   <p id="job-status" class="status" aria-live="polite"></p>
@@ -381,9 +407,7 @@
                   <pre id="collab-return" class="collab-return" hidden></pre>
                   <div class="row" id="collab-actions" hidden>
                     <button type="button" id="btn-work-open-collab-detail">前往处理</button>
-                    <button type="button" id="btn-collab-accept">采用</button>
-                    <button type="button" id="btn-collab-reject">不采用</button>
-                    <button type="button" id="btn-collab-revoke" class="ghost">撤销</button>
+                    <button type="button" id="btn-collab-revoke" class="ghost">撤销授权</button>
                   </div>
                   <p id="collab-error" class="muted tiny error" hidden></p>
                 </div>
@@ -403,27 +427,49 @@
               <div class="decision-box" id="artifact-decision-box">
                 <p id="artifact-decision-status" class="meta" aria-live="polite">尚未决定是否采用</p>
                 <p id="artifact-decision-hint" class="muted tiny">
-                  采用表示保留当前项目变更；不采用不会自动改回文件。需要时请单独使用「恢复执行前状态」。
+                  采用表示保留当前项目变更。不采用只记录决定，不会改文件，也不会开始修改。需要改回文件时，请单独使用「恢复执行前状态」。
                 </p>
                 <div class="row decision-actions" id="artifact-decision-actions">
+                  <button type="button" id="btn-propose-revision">提出修改</button>
                   <button type="button" id="btn-accept-artifact" class="primary">采用</button>
                   <button type="button" id="btn-reject-artifact">不采用</button>
                 </div>
                 <label class="field decision-note" id="artifact-decision-note-field">
-                  <span>可选说明</span>
+                  <span>采用或不采用说明（可选）</span>
                   <input
                     type="text"
                     id="artifact-decision-note"
-                    placeholder="可选说明，可留空"
+                    placeholder="仅记录决定理由，不会开始修改"
                     maxlength="400"
                   />
                 </label>
+                <div id="revision-composer" class="revision-composer" hidden>
+                  <h3 id="revision-composer-title" class="revision-composer-title">继续修改这项成果</h3>
+                  <label class="field">
+                    <span class="visually-hidden">修改要求</span>
+                    <textarea
+                      id="revision-request"
+                      rows="3"
+                      placeholder="说明还需要修改什么，例如：将返回值改为 done，并同步更新测试。"
+                    ></textarea>
+                  </label>
+                  <div class="row">
+                    <button type="button" id="btn-revise" class="primary">提交修改</button>
+                    <button type="button" id="btn-cancel-revision" class="ghost">取消</button>
+                  </div>
+                </div>
                 <p id="artifact-decision-error" class="muted tiny error" hidden></p>
               </div>
               <details id="applied-understanding" class="applied-understanding" hidden></details>
               <p id="save-status" class="meta"></p>
               <p id="version-meta" class="meta"></p>
               <div id="code-change-view" class="code-change-view" hidden>
+                <section class="cc-section cc-acceptance" id="cc-acceptance-section">
+                  <h3 id="cc-acceptance-title">Digital Me 检查结果</h3>
+                  <p id="cc-acceptance-goal" class="cc-acceptance-goal"></p>
+                  <ul id="cc-acceptance-bullets" class="cc-acceptance-bullets"></ul>
+                  <p id="cc-acceptance-reco" class="cc-acceptance-reco"></p>
+                </section>
                 <section class="cc-section">
                   <h3>发生了什么</h3>
                   <p id="cc-summary" class="cc-summary"></p>
@@ -449,7 +495,11 @@
                 <p id="cc-restore-hint" class="muted tiny">
                   「恢复执行前状态」会改写当前项目文件，使其回到本次执行前的内容。
                 </p>
+                <div class="row" id="cc-restore-row">
+                  <button type="button" id="btn-restore-baseline" class="ghost" hidden>恢复执行前状态</button>
+                </div>
               </div>
+              <p id="artifact-empty" class="empty-hint" hidden>这项任务尚未产生成果。</p>
               <div id="bundle-view" class="bundle-view" hidden>
                 <p id="bundle-quality" class="bundle-quality" hidden></p>
                 <textarea
@@ -470,20 +520,6 @@
               </div>
               <div class="artifact-body">
                 <textarea id="artifact-editor" rows="18" spellcheck="true" aria-label="成果正文"></textarea>
-                <details class="revise-box" id="revise-box">
-                  <summary>用说明修改成果</summary>
-                  <label class="field">
-                    <span class="visually-hidden">修改说明</span>
-                    <textarea
-                      id="revision-request"
-                      rows="3"
-                      placeholder="说明希望如何继续调整当前软件修改。"
-                    ></textarea>
-                  </label>
-                  <div class="row">
-                    <button type="button" id="btn-revise" class="primary">按说明修改</button>
-                  </div>
-                </details>
               </div>
             </section>
           </div>

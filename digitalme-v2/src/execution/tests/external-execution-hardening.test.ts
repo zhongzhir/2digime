@@ -91,7 +91,18 @@ describe('external-execution-hardening', () => {
     const texts = extractCodexErrorTexts({ stdout });
     const mapped = mapCodexFailure({ texts, exitCode: 1, changedFilesCount: 0 });
     assert.equal(mapped.kind, 'auth_failed');
+    assert.match(mapped.actionable, /重新连接|设置/);
     assert.doesNotMatch(mapped.actionable, /未检测到项目文件变化/);
+  });
+
+  it('PowerShell UnauthorizedAccess 不得误判为 Codex 登录失败', () => {
+    const texts = [
+      'npm : File C:\\Program Files\\nodejs\\npm.ps1 cannot be loaded because running scripts is disabled on this system.',
+      'FullyQualifiedErrorId : UnauthorizedAccess',
+    ];
+    const mapped = mapCodexFailure({ texts, exitCode: 1, changedFilesCount: 0 });
+    assert.notEqual(mapped.kind, 'auth_failed');
+    assert.doesNotMatch(mapped.actionable, /登录校验|重新登录/);
   });
 
   it('启动失败与无变更不混淆', () => {
@@ -142,7 +153,7 @@ describe('external-execution-hardening', () => {
           const err = new Error('401 Unauthorized Invalid API-key');
           Object.assign(err, {
             failureKind: 'auth_failed',
-            actionable: '代码执行组件未能通过登录校验。请在该组件中重新登录后再试。',
+            actionable: '代码执行能力需要重新连接。请先打开设置检查连接，然后重试。',
           });
           throw err;
         },
@@ -164,19 +175,12 @@ describe('external-execution-hardening', () => {
         writeScope: ['.'],
       },
     });
-    const deadline = Date.now() + 10_000;
-    let detail = await rt.getTask({ taskId: started.taskId });
-    while (
-      Date.now() < deadline &&
-      detail.latestJob &&
-      (detail.latestJob.status === 'queued' || detail.latestJob.status === 'running')
-    ) {
-      await new Promise((r) => setTimeout(r, 40));
-      detail = await rt.getTask({ taskId: started.taskId });
-    }
+    const { waitForJobTerminal } = await import('../../work-runtime/job-runner');
+    await waitForJobTerminal(rt.workRuntime, started.jobId, 20000);
+    const detail = await rt.getTask({ taskId: started.taskId });
     assert.equal(detail.latestJob?.status, 'failed');
     assert.equal(detail.latestJob?.externalExecution?.lastExecutorStatus, 'failed');
-    assert.match(String(detail.latestJob?.actionable || ''), /登录|认证|校验/);
+    assert.match(String(detail.latestJob?.actionable || ''), /重新连接|设置|登录|认证/);
     assert.doesNotMatch(String(detail.latestJob?.actionable || ''), /未检测到项目文件变化/);
   });
 

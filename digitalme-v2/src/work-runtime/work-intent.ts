@@ -40,13 +40,17 @@ export interface SoftwareProjectInspection {
   markersHit: string[];
   /** 用户面说明；非软件项目时为空。 */
   userFacingHint: string;
+  /** 目录为空（或仅含可忽略项），可作为新项目工作目录。 */
+  isEmptyDirectory?: boolean;
+  /** 可作为「准备创建的软件项目」使用。 */
+  isNewProjectCandidate?: boolean;
 }
 
 const CODE_ANALYZE_GOAL_RE =
   /分析(一下|下)?(这个|该|此)?(代码|仓库|项目|代码库|codebase)|代码审查|审查代码|找出.*(问题|风险|缺陷)|问题清单|静态分析|repo\s*analysis|analyze\s+(the\s+)?(code|repo|project)|code\s*review/i;
 
 const CODE_MODIFY_GOAL_RE =
-  /修改|修复|实现|重构|改成|改为|更新代码|添加.+功能|删除.+代码|补上|修一下|fix\b|implement|refactor|change\s+the|update\s+the\s+code|add\s+a\s+|remove\s+the/i;
+  /修改|修复|实现|开发|重构|改成|改为|更新代码|添加.+功能|删除.+代码|补上|修一下|写一个|做一个|创建.+游戏|fix\b|implement|refactor|change\s+the|update\s+the\s+code|add\s+a\s+|remove\s+the|build\s+a\s+|create\s+a\s+/i;
 
 const WRITE_DOC_GOAL_RE =
   /写(一篇|一份|个)?|起草|改写|润色|总结|整理成文|方案|文章|报告(?!分析)|周报|纪要|文档|说明书|readme(?!\s*分析)/i;
@@ -127,17 +131,38 @@ export async function inspectSoftwareProject(
 
   try {
     const entries = await fs.readdir(root);
-    for (const name of entries) {
+    const meaningful = entries.filter(
+      (name) => name !== '.' && name !== '..' && name !== '.DS_Store' && name !== 'Thumbs.db',
+    );
+    const isEmptyDirectory = meaningful.length === 0;
+    const onlyGit = meaningful.length === 1 && meaningful[0] === '.git';
+    for (const name of meaningful) {
       const lower = name.toLowerCase();
       if (SOFTWARE_PROJECT_EXTENSIONS.some((ext) => lower.endsWith(ext))) {
         markersHit.push(name);
       }
     }
+
+    // 仅有 src/app/lib 而无其他工程文件时仍可能是项目；保留命中即可
+    const isSoftwareProject = markersHit.length > 0;
+    const isNewProjectCandidate = isEmptyDirectory || onlyGit;
+    return {
+      path: root,
+      projectName,
+      isSoftwareProject: isSoftwareProject || isNewProjectCandidate,
+      markersHit,
+      isEmptyDirectory: isEmptyDirectory || onlyGit,
+      isNewProjectCandidate,
+      userFacingHint: isNewProjectCandidate
+        ? '将在这个空文件夹中创建新的项目文件；开始前会请你确认范围。'
+        : isSoftwareProject
+          ? 'Digital Me 可以在你确认范围后读取项目、修改文件并运行本地测试。'
+          : '',
+    };
   } catch {
     /* ignore listing errors */
   }
 
-  // 仅有 src/app/lib 而无其他工程文件时仍可能是项目；保留命中即可
   const isSoftwareProject = markersHit.length > 0;
   return {
     path: root,

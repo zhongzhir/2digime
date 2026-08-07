@@ -296,10 +296,45 @@ async function run() {
   check('code_change_view', !!(cc && cc.visible), cc);
   check('code_change_files', /formatLabel/.test((cc && cc.files) || ''), cc);
 
+  const decisionUi = await uiEval(`() => {
+    const propose = document.getElementById('btn-propose-revision');
+    const accept = document.getElementById('btn-accept-artifact');
+    const reject = document.getElementById('btn-reject-artifact');
+    const noteLabel = (document.getElementById('artifact-decision-note-field') || {}).innerText || '';
+    const reviseBoxes = document.querySelectorAll('#btn-accept-artifact, #btn-reject-artifact');
+    return {
+      propose: propose ? propose.textContent : '',
+      accept: !!accept,
+      reject: !!reject,
+      noteLabel,
+      acceptCount: document.querySelectorAll('#btn-accept-artifact').length,
+      rejectCount: document.querySelectorAll('#btn-reject-artifact').length,
+      composerHidden: document.getElementById('revision-composer').hidden,
+    };
+  }`);
+  check('propose_revision_visible', /提出修改/.test(decisionUi.propose || ''), decisionUi);
+  check('single_accept_reject_pair', decisionUi.acceptCount === 1 && decisionUi.rejectCount === 1, decisionUi);
+  check('decision_note_label', /采用或不采用说明/.test(decisionUi.noteLabel || ''), decisionUi);
+
+  // 不采用不得打开修订或触发 reviseArtifact
+  const rejectOnly = await uiEval(`async () => {
+    document.getElementById('artifact-decision-note').value = '这次先不用';
+    document.getElementById('btn-reject-artifact').click();
+    await new Promise((r) => setTimeout(r, 400));
+    return {
+      status: document.getElementById('artifact-decision-status').textContent,
+      composerHidden: document.getElementById('revision-composer').hidden,
+      revisionValue: document.getElementById('revision-request').value,
+    };
+  }`);
+  check('reject_does_not_open_revision', rejectOnly.composerHidden === true, rejectOnly);
+  check('reject_note_not_copied_to_revision', !(rejectOnly.revisionValue || '').trim(), rejectOnly);
+  check('reject_status_mentions_propose', /提出修改/.test(rejectOnly.status || ''), rejectOnly);
+
   // 修订
   await uiEval(`async () => {
-    const box = document.getElementById('revise-box');
-    if (box) box.open = true;
+    document.getElementById('btn-propose-revision').click();
+    await new Promise((r) => setTimeout(r, 100));
     document.getElementById('revision-request').value = '将结果改为 done，并同步更新测试。';
     document.getElementById('btn-revise').click();
     await new Promise((r) => setTimeout(r, 400));

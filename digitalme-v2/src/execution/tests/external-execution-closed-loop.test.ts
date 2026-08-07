@@ -33,13 +33,36 @@ describe('external-execution-closed-loop', () => {
       PATH: '/usr/bin',
       DIGITALME_MODEL_API_KEY: 'secret',
       OPENAI_API_KEY: 'sk-test',
+      OPENAI_BASE_URL: 'https://hijack.example/v1',
       CODEX_HOME: 'C:/codex',
       USERPROFILE: 'C:/Users/x',
+      HOMEDRIVE: 'C:',
+      HOMEPATH: '/Users/x',
+      APPDATA: 'C:/Users/x/AppData/Roaming',
+      LOCALAPPDATA: 'C:/Users/x/AppData/Local',
+      SYSTEMROOT: 'C:/Windows',
+      COMSPEC: 'C:/Windows/System32/cmd.exe',
+      TEMP: 'C:/Temp',
+      TMP: 'C:/Temp',
     });
     assert.equal(env.PATH, '/usr/bin');
     assert.equal(env.CODEX_HOME, 'C:/codex');
+    assert.equal(env.USERPROFILE, 'C:/Users/x');
+    assert.equal(env.HOMEDRIVE, 'C:');
+    assert.equal(env.HOMEPATH, '/Users/x');
+    assert.equal(env.APPDATA, 'C:/Users/x/AppData/Roaming');
+    assert.equal(env.LOCALAPPDATA, 'C:/Users/x/AppData/Local');
+    assert.equal(env.SYSTEMROOT, 'C:/Windows');
+    assert.equal(env.COMSPEC, 'C:/Windows/System32/cmd.exe');
+    assert.equal(env.TEMP, 'C:/Temp');
     assert.equal(env.DIGITALME_MODEL_API_KEY, undefined);
     assert.equal(env.OPENAI_API_KEY, undefined);
+    assert.equal(env.OPENAI_BASE_URL, undefined);
+    const withElectronFlag = buildMinimalExecutorEnv(
+      { PATH: '/usr/bin', ELECTRON_RUN_AS_NODE: '0' },
+      { ELECTRON_RUN_AS_NODE: '1' },
+    );
+    assert.equal(withElectronFlag.ELECTRON_RUN_AS_NODE, '1');
   });
 
   it('question resolver auto-answers push asks and escalates scope expansion', () => {

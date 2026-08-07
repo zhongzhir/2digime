@@ -1242,12 +1242,20 @@ select {
   resize: vertical;
 }
 
-.revise-box {
+.revise-box,
+.revision-composer {
   flex-shrink: 0;
   border: 1px solid var(--line);
   border-radius: 10px;
-  padding: 8px 12px;
+  padding: 10px 12px;
+  margin-top: 10px;
   background: rgba(255, 255, 255, 0.7);
+}
+
+.revision-composer-title {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .revise-box > summary {
@@ -1580,11 +1588,82 @@ select {
   border: 1px solid rgba(40, 48, 56, 0.18);
   background: rgba(255, 248, 240, 0.9);
 }
+.coding-cap-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin: 0.5rem 0 0.75rem;
+}
+.coding-cap-item {
+  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(40, 48, 56, 0.12);
+  background: rgba(255, 255, 255, 0.72);
+}
+.coding-cap-title {
+  font-weight: 600;
+  margin-bottom: 0.2rem;
+}
+.coding-install-panel h4 {
+  margin: 0 0 0.4rem;
+  font-size: 0.98rem;
+}
+.coding-onboarding-actions {
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.55rem;
+}
 .execution-confirm-title {
   margin: 0 0 0.4rem;
   font-size: 1.05rem;
   font-weight: 600;
 }
+.cc-acceptance {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.cc-acceptance-goal {
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+
+.cc-acceptance-goal.is-ok {
+  color: #1f6b3a;
+}
+
+.cc-acceptance-goal.is-warn {
+  color: #8a5a00;
+}
+
+.cc-acceptance-goal.is-bad {
+  color: #8b2e2e;
+}
+
+.cc-acceptance-bullets {
+  margin: 0 0 10px;
+  padding-left: 1.2em;
+}
+
+.cc-acceptance-reco {
+  margin: 0;
+  font-weight: 600;
+}
+
+.cc-acceptance-reco.is-ok {
+  color: #1f6b3a;
+}
+
+.cc-acceptance-reco.is-warn {
+  color: #8a5a00;
+}
+
+#artifact-empty {
+  padding: 24px 8px;
+  text-align: center;
+}
+
 .code-change-view {
   display: flex;
   flex-direction: column;

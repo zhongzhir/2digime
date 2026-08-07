@@ -26,8 +26,23 @@ import {
   createExternalExecutorCodexAdapter,
 } from '../capability/adapters/external-executor-codex';
 import {
+  createUnsupportedDesktopCodingAdapter,
+  type UnsupportedDesktopCodingOptions,
+} from '../capability/adapters/unsupported-desktop-coding';
+import {
   EXTERNAL_EXECUTOR_CODEX_CAPABILITY_ID,
 } from '../execution/external-executor-contract';
+import {
+  recommendedCodingCapability,
+} from '../capability/coding-capability';
+import { listCodingCapabilityStatuses } from '../capability/coding-capability-probe';
+import {
+  clearPendingSoftwareTask,
+  loadCodingCapabilityPrefs,
+  loadPendingSoftwareTask,
+  saveCodingCapabilityPrefs,
+  savePendingSoftwareTask,
+} from '../capability/coding-capability-draft';
 import type { SecretAccessor } from '../capability/adapter';
 import type { Task } from '../work-runtime/task';
 import type { ExecutionJob } from '../work-runtime/execution-job';
@@ -118,6 +133,11 @@ export interface DigitalMeRuntimeOptions {
     | false
     | 'auto'
     | import('../capability/adapters/external-executor-codex').ExternalExecutorCodexOptions;
+  /**
+   * 测试注入：不支持自动调用的桌面 Coding Agent 描述。
+   * false/undefined：不注册。
+   */
+  unsupportedDesktopCodingCapability?: false | UnsupportedDesktopCodingOptions;
 }
 
 /**
@@ -301,11 +321,27 @@ export class DigitalMeRuntime {
           taskId: created.taskId,
         });
       }
-      // Task + 初始 Job 已持久化即可调度目标捕获（不依赖执行成功）
-      this.scheduleTaskRequirementCapture({
-        taskId: created.taskId,
-        goal: input.goal,
-      });
+      if (created.needsExecutorSetup) {
+        try {
+          await savePendingSoftwareTask(this.requireRuntimeDir(), {
+            goal: input.goal,
+            contextRefs: (input.contextRefs || []).filter(
+              (r): r is { kind: 'file' | 'folder'; path: string } =>
+                !!r && (r.kind === 'file' || r.kind === 'folder') && !!r.path,
+            ),
+            userFacingNotice: '连接代码执行能力后可继续',
+          });
+        } catch {
+          /* 草稿可选 */
+        }
+      }
+      if (created.taskId) {
+        await clearPendingSoftwareTask(this.requireRuntimeDir()).catch(() => undefined);
+        this.scheduleTaskRequirementCapture({
+          taskId: created.taskId,
+          goal: input.goal,
+        });
+      }
       return created;
     };
     return run();
@@ -401,7 +437,11 @@ export class DigitalMeRuntime {
   }
 
   getContent(input: CommandMap['artifact.getContent']['input']) {
-    return this.requireWorkspace().getContent(input.artifactId, input.versionId);
+    return this.requireWorkspace().getContent(
+      input.artifactId,
+      input.versionId,
+      input.expectedTaskId,
+    );
   }
 
   /**
@@ -551,33 +591,80 @@ export class DigitalMeRuntime {
       });
     }
 
-    const execCap = this.registry.get(EXTERNAL_EXECUTOR_CODEX_CAPABILITY_ID);
-    if (execCap) {
-      let available = execCap.registration.availability === 'available';
-      let detail: string | undefined;
-      if (input.includeAvailability) {
-        try {
-          const check = await execCap.checkAvailability({});
-          available = !!check.available;
-          detail = check.detail;
-          (execCap.registration as { availability: string }).availability = available
-            ? 'available'
-            : 'needs_setup';
-        } catch (err) {
-          available = false;
-          detail = err instanceof Error ? err.message : String(err);
-          (execCap.registration as { availability: string }).availability = 'needs_setup';
-        }
+    const prefsRaw = this.tryRuntimeDir();
+    const prefs = prefsRaw ? await loadCodingCapabilityPrefs(prefsRaw).catch(() => null) : null;
+    const codingPrefs = prefs?.defaultCapabilityId
+      ? { defaultCapabilityId: prefs.defaultCapabilityId }
+      : undefined;
+
+    if (input.codingAction) {
+      const runtimeDir = this.tryRuntimeDir();
+      if (input.codingAction.type === 'set_default' && runtimeDir) {
+        await saveCodingCapabilityPrefs(runtimeDir, {
+          defaultCapabilityId: input.codingAction.capabilityId,
+        });
+      } else if (input.codingAction.type === 'save_pending' && runtimeDir) {
+        await savePendingSoftwareTask(runtimeDir, {
+          goal: input.codingAction.goal,
+          contextRefs: input.codingAction.contextRefs,
+          ...(input.codingAction.acceptanceNotes
+            ? { acceptanceNotes: input.codingAction.acceptanceNotes }
+            : {}),
+        });
+      } else if (input.codingAction.type === 'clear_pending' && runtimeDir) {
+        await clearPendingSoftwareTask(runtimeDir);
       }
+    }
+
+    const { statuses, preferred } = await listCodingCapabilityStatuses(this.registry, {
+      probe: !!input.includeAvailability,
+      ...(codingPrefs
+        ? {
+            prefs: {
+              ...(input.codingAction && input.codingAction.type === 'set_default'
+                ? { defaultCapabilityId: input.codingAction.capabilityId }
+                : codingPrefs),
+            },
+          }
+        : input.codingAction && input.codingAction.type === 'set_default'
+          ? { prefs: { defaultCapabilityId: input.codingAction.capabilityId } }
+          : {}),
+    });
+    out.codingCapabilities = statuses;
+    out.codingRecommendation = recommendedCodingCapability();
+    if (preferred) out.preferredCodingCapabilityId = preferred.capabilityId;
+
+    const pending = this.tryRuntimeDir()
+      ? await loadPendingSoftwareTask(this.tryRuntimeDir()!)
+      : null;
+    out.pendingSoftwareTask = pending
+      ? {
+          goal: pending.goal,
+          contextRefs: pending.contextRefs,
+          ...(pending.acceptanceNotes ? { acceptanceNotes: pending.acceptanceNotes } : {}),
+          status: pending.status,
+          userFacingNotice: pending.userFacingNotice,
+          savedAt: pending.savedAt,
+        }
+      : null;
+
+    const primary =
+      preferred ||
+      statuses.find((s) => s.supportsAutomaticExecution) ||
+      statuses[0];
+    if (primary) {
       out.executorCapabilityCard = {
-        capabilityId: execCap.registration.id,
-        displayName: execCap.registration.displayName,
-        shortDescription: '在你确认的项目目录中修改文件并运行测试。',
-        canDo: '按你的目标修改代码、运行本地测试，并把变更与测试结果交回 Digital Me 验收。',
+        capabilityId: primary.capabilityId,
+        displayName: primary.displayName,
+        shortDescription: primary.canDo,
+        canDo: primary.canDo,
         allowedScope: '仅限你确认的项目文件夹；不会自动提交、推送或发布。',
-        available,
-        availabilityLabel: available ? '已连接' : '未连接',
-        ...(detail ? { detail } : {}),
+        available: primary.availability === 'ready' && primary.supportsAutomaticExecution,
+        availabilityLabel: primary.connectionStatus,
+        connectionStatus: primary.connectionStatus,
+        executionModeLabel: primary.executionModeLabel,
+        supportsAutomaticExecution: primary.supportsAutomaticExecution,
+        detail: primary.actionableMessage,
       };
     }
 
@@ -745,6 +832,8 @@ export class DigitalMeRuntime {
       this.unsubGrowthJobHook = null;
     }
     if (this.work) await this.work.stop();
+    this.work = null;
+    this.workspace = null;
   }
 
   get workRuntime(): WorkRuntime {
@@ -753,6 +842,11 @@ export class DigitalMeRuntime {
 
   get artifactWorkspace(): ArtifactWorkspace {
     return this.requireWorkspace();
+  }
+
+  /** 是否已挂载工作运行时（默认包已 open/create）。 */
+  isPackageAttached(): boolean {
+    return !!this.work;
   }
 
   private async attachWorkRuntime(): Promise<void> {
@@ -1112,21 +1206,53 @@ export class DigitalMeRuntime {
       const adapter = createExternalExecutorCodexAdapter(opt);
       // 同步探测：构造期尽量反映真实可用性（异步细节由 checkAvailability 再确认）
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const fsSync = require('node:fs') as typeof import('node:fs');
-        const { resolveCodexJs } = require('../capability/adapters/external-executor-codex') as typeof import('../capability/adapters/external-executor-codex');
-        const js = opt.codexJsPath || resolveCodexJs();
-        fsSync.accessSync(js);
-        (adapter.registration as { availability: string }).availability = 'available';
+        if (opt.forceAvailability === 'ready' || opt.executeHook) {
+          (adapter.registration as { availability: string }).availability = 'available';
+        } else if (
+          opt.forceAvailability === 'needs_setup' ||
+          opt.forceAvailability === 'needs_login' ||
+          opt.forceAvailability === 'unavailable' ||
+          opt.forceAvailability === 'unsupported'
+        ) {
+          (adapter.registration as { availability: string }).availability = 'needs_setup';
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const fsSync = require('node:fs') as typeof import('node:fs');
+          const { resolveCodexJs } = require('../capability/adapters/external-executor-codex') as typeof import('../capability/adapters/external-executor-codex');
+          const js = opt.codexJsPath || process.env.DIGITALME_CODEX_JS_PATH || resolveCodexJs();
+          fsSync.accessSync(js);
+          (adapter.registration as { availability: string }).availability = 'available';
+        }
       } catch {
         (adapter.registration as { availability: string }).availability = 'needs_setup';
       }
-      if (opt.executeHook) {
-        (adapter.registration as { availability: string }).availability = 'available';
-      }
       registry.register(adapter);
     }
+    if (this.options.unsupportedDesktopCodingCapability) {
+      registry.register(
+        createUnsupportedDesktopCodingAdapter(
+          typeof this.options.unsupportedDesktopCodingCapability === 'object'
+            ? this.options.unsupportedDesktopCodingCapability
+            : {},
+        ),
+      );
+    }
     return registry;
+  }
+
+  private tryRuntimeDir(): string | null {
+    try {
+      const pkg = this.subject.requireActive();
+      return path.join(pkg.rootDir, 'runtime');
+    } catch {
+      return null;
+    }
+  }
+
+  private requireRuntimeDir(): string {
+    const dir = this.tryRuntimeDir();
+    if (!dir) throw new Error('work runtime not attached; open or create a package first');
+    return dir;
   }
 
   private requireWork(): WorkRuntime {

@@ -139,6 +139,7 @@ export async function writeCodeChangeBundle(input: {
     verificationOverall: input.verification.overall,
     digitalMeVerified: input.verification.digitalMeVerified,
     agentClaimedSuccess: input.verification.agentClaimedSuccess,
+    checks: input.verification.checks,
     executor: {
       executorId: input.agentResult.executorId,
       executorRunId: input.agentResult.executorRunId,

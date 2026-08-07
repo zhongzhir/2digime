@@ -7,6 +7,11 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Menu } = require("electron");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
+const {
+  ensureDefaultPackageAttached: ensureDefaultPackageAttachedCore,
+  sanitizeCommandError,
+  USER_FACING_ATTACH_FAILED,
+} = require("./default-package.cjs");
 
 /** @type {import('../dist/runtime/digitalme-runtime').DigitalMeRuntime | null} */
 let runtime = null;
@@ -185,6 +190,37 @@ async function bootstrapRuntime() {
   return lastBootInfo;
 }
 
+async function ensureDefaultPackageAttached() {
+  if (!runtime) return { ok: false, reason: "no_runtime" };
+  const result = await ensureDefaultPackageAttachedCore({
+    runtime,
+    userDataPath: app.getPath("userData"),
+  });
+  if (!result.ok) {
+    console.error("[digitalme] ensureDefaultPackageAttached failed:", result.reason);
+  }
+  return result;
+}
+
+const PACKAGE_BOOTSTRAP_COMMANDS = new Set([
+  "subject.createPackage",
+  "subject.openPackage",
+  "capability.list",
+]);
+
+async function ensurePackageBeforeCommand(name) {
+  if (PACKAGE_BOOTSTRAP_COMMANDS.has(name)) return;
+  if (runtime && typeof runtime.isPackageAttached === "function" && runtime.isPackageAttached()) {
+    return;
+  }
+  const ensured = await ensureDefaultPackageAttached();
+  if (!ensured.ok) {
+    throw Object.assign(new Error(USER_FACING_ATTACH_FAILED), {
+      code: "PACKAGE_ATTACH_FAILED",
+    });
+  }
+}
+
 function loadBuildMeta(appRoot) {
   try {
     return JSON.parse(
@@ -232,6 +268,8 @@ async function rebootstrapAndNotify() {
   if (unsubscribe) unsubscribe();
   if (runtime) await runtime.stop();
   const boot = await bootstrapRuntime();
+  // 重建 Runtime 后必须幂等重新挂载默认包，否则做事页仍可操作但 submitTask 失败。
+  await ensureDefaultPackageAttached();
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send("shell:boot", boot);
   }
@@ -240,60 +278,68 @@ async function rebootstrapAndNotify() {
 
 function registerIpc() {
   ipcMain.handle("command:invoke", async (_evt, name, input) => {
-    if (!bus || !runtime) throw new Error("runtime not ready");
+    if (!bus || !runtime) {
+      throw Object.assign(new Error(USER_FACING_ATTACH_FAILED), { code: "RUNTIME_NOT_READY" });
+    }
     if (!COMMAND_NAMES.has(name)) throw new Error(`command not exposed: ${name}`);
 
-    if (
-      (name === "work.submitTask" ||
-        name === "work.retryTask" ||
-        name === "work.reviseArtifact") &&
-      !(lastBootInfo && lastBootInfo.modelReady)
-    ) {
-      throw Object.assign(new Error("请先连接模型"), {
-        code: "MODEL_NOT_CONFIGURED",
-        actionable: "请先在设置中连接真实模型后再开始处理",
-      });
-    }
+    try {
+      await ensurePackageBeforeCommand(name);
 
-    if (name === "artifact.revealInFolder") {
-      const artifactId = input && input.artifactId;
-      const result = await bus.invoke(name, input || {});
-      try {
-        const dir = await runtime.getArtifactStorageDir(artifactId);
-        const fs = require("node:fs");
-        const preferred = ["result.md", "report.md"]
-          .map((name) => path.join(dir, name))
-          .find((p) => fs.existsSync(p));
-        if (preferred) shell.showItemInFolder(preferred);
-        else shell.showItemInFolder(dir);
-      } catch {
-        /* ignore */
-      }
-      return result;
-    }
-
-    if (name === "artifact.export") {
-      const format = input && input.format;
-      let targetPath = input && input.targetPath;
-      if (!targetPath) {
-        const defaultName =
-          format === "docx" ? "成果.docx" : format === "md" ? "成果.md" : "成果";
-        const picked = await dialog.showSaveDialog(mainWindow, {
-          defaultPath: defaultName,
-          filters:
-            format === "docx"
-              ? [{ name: "Word", extensions: ["docx"] }]
-              : [{ name: "Markdown", extensions: ["md"] }],
+      if (
+        (name === "work.submitTask" ||
+          name === "work.retryTask" ||
+          name === "work.reviseArtifact") &&
+        !(lastBootInfo && lastBootInfo.modelReady)
+      ) {
+        throw Object.assign(new Error("请先连接模型"), {
+          code: "MODEL_NOT_CONFIGURED",
+          actionable: "请先在设置中连接真实模型后再开始处理",
         });
-        if (picked.canceled || !picked.filePath) {
-          throw new Error("已取消导出");
-        }
-        targetPath = picked.filePath;
       }
-      return bus.invoke(name, { ...input, targetPath });
-    }
 
-    return bus.invoke(name, input || {});
+      if (name === "artifact.revealInFolder") {
+        const artifactId = input && input.artifactId;
+        const result = await bus.invoke(name, input || {});
+        try {
+          const dir = await runtime.getArtifactStorageDir(artifactId);
+          const fs = require("node:fs");
+          const preferred = ["result.md", "report.md"]
+            .map((fileName) => path.join(dir, fileName))
+            .find((p) => fs.existsSync(p));
+          if (preferred) shell.showItemInFolder(preferred);
+          else shell.showItemInFolder(dir);
+        } catch {
+          /* ignore */
+        }
+        return result;
+      }
+
+      if (name === "artifact.export") {
+        const format = input && input.format;
+        let targetPath = input && input.targetPath;
+        if (!targetPath) {
+          const defaultName =
+            format === "docx" ? "成果.docx" : format === "md" ? "成果.md" : "成果";
+          const picked = await dialog.showSaveDialog(mainWindow, {
+            defaultPath: defaultName,
+            filters:
+              format === "docx"
+                ? [{ name: "Word", extensions: ["docx"] }]
+                : [{ name: "Markdown", extensions: ["md"] }],
+          });
+          if (picked.canceled || !picked.filePath) {
+            throw new Error("已取消导出");
+          }
+          targetPath = picked.filePath;
+        }
+        return bus.invoke(name, { ...input, targetPath });
+      }
+
+      return bus.invoke(name, input || {});
+    } catch (err) {
+      throw sanitizeCommandError(err);
+    }
   });
 
   ipcMain.handle("shell:pickOpenFiles", async () => {
@@ -347,18 +393,11 @@ function registerIpc() {
 
   /** 默认主体包目录(userData/subjects/default)，首次无需用户选择文件夹。 */
   ipcMain.handle("shell:getDefaultSubjectDir", async () => {
-    const fs = require("node:fs");
-    const dir = path.join(app.getPath("userData"), "subjects", "default");
-    fs.mkdirSync(path.dirname(dir), { recursive: true });
-    const manifest = path.join(dir, "manifest.json");
-    let exists = false;
-    try {
-      fs.accessSync(manifest);
-      exists = true;
-    } catch {
-      exists = false;
-    }
-    return { dir, exists };
+    const { resolveDefaultSubjectDir, defaultPackageExists } = require("./default-package.cjs");
+    const userDataPath = app.getPath("userData");
+    const dir = resolveDefaultSubjectDir(userDataPath);
+    require("node:fs").mkdirSync(path.dirname(dir), { recursive: true });
+    return { dir, exists: defaultPackageExists(userDataPath) };
   });
 
   ipcMain.handle("shell:getModelStatus", async () => {
@@ -1001,6 +1040,7 @@ app.whenReady().then(async () => {
   }
 
   const bootInfo = await bootstrapRuntime();
+  await ensureDefaultPackageAttached();
   createWindow(bootInfo);
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow(bootInfo);

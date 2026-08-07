@@ -32,7 +32,7 @@ import {
   capabilityOutputText,
   dispatchOutcomeCheck,
 } from './outcome-dispatch';
-import { deriveWorkIntent, isTaskIntentKind } from './work-intent';
+import { deriveWorkIntent, inspectSoftwareProject, isTaskIntentKind } from './work-intent';
 import { CODE_ANALYSIS_ARTIFACT_TYPE } from '../capability/adapters/code-repo-analysis-contract';
 import {
   CODE_CHANGE_ARTIFACT_TYPE,
@@ -44,6 +44,13 @@ import {
 import { buildExecutionConfirmPreview } from '../execution/task-package';
 import { restoreExecutionBaseline } from '../execution/restore';
 import { computeScopeDigest } from '../execution/baseline';
+import {
+  buildCodingOnboardingPayload,
+  isAutomaticReady,
+  userFacingNaturalExecutorName,
+} from '../capability/coding-capability';
+import { listCodingCapabilityStatuses } from '../capability/coding-capability-probe';
+import { loadCodingCapabilityPrefs } from '../capability/coding-capability-draft';
 
 export interface WorkRuntimeOptions {
   subjectId: string;
@@ -186,37 +193,80 @@ export class WorkRuntime {
     if (forceModify && !input.executionAuthorization?.confirmed) {
       const folder = input.contextRefs.find((r) => r.kind === 'folder');
       if (!folder) {
-        const msg = '修改代码需要你添加项目文件夹。';
-        throw Object.assign(new Error(msg), { actionable: msg });
-      }
-      const execAdapter = this.opts.registry.get(EXTERNAL_EXECUTOR_CODEX_CAPABILITY_ID);
-      const executorReady =
-        !!execAdapter && execAdapter.registration.availability === 'available';
-      if (!executorReady) {
-        const msg =
-          '代码执行能力尚未连接。连接后，Digital Me 可以在你确认范围内修改项目并运行测试。';
+        const msg = '这项任务需要一个项目位置。请先选择现有项目文件夹，或选择空文件夹开始新项目。';
         return {
           taskId: '',
           jobId: '',
           intentKind: 'modify_code',
           userFacingNotice: msg,
-          needsExecutorSetup: {
+          needsProjectFolder: {
             message: msg,
-            settingsHint: '请在设置中连接执行能力后重试。',
+            allowEmptyFolder: true,
           },
         };
       }
+      const inspected = await inspectSoftwareProject(folder.path);
+      const prefsFile = await loadCodingCapabilityPrefs(path.dirname(this.opts.workRoot));
+      const prefs = prefsFile?.defaultCapabilityId
+        ? { defaultCapabilityId: prefsFile.defaultCapabilityId }
+        : undefined;
+      const { statuses, preferred } = await listCodingCapabilityStatuses(this.opts.registry, {
+        probe: true,
+        ...(prefs ? { prefs } : {}),
+      });
+      if (!isAutomaticReady(preferred)) {
+        const onboarding = buildCodingOnboardingPayload(statuses);
+        return {
+          taskId: '',
+          jobId: '',
+          intentKind: 'modify_code',
+          userFacingNotice: onboarding.message,
+          needsExecutorSetup: {
+            message: onboarding.message,
+            title: onboarding.title,
+            description: onboarding.description,
+            actions: onboarding.actions,
+            capabilities: onboarding.capabilities,
+            recommended: onboarding.recommended,
+            ...(onboarding.settingsHint ? { settingsHint: onboarding.settingsHint } : {}),
+          },
+        };
+      }
+      const selectedCoding = preferred!;
+      if (
+        !this.opts.registry.get(selectedCoding.capabilityId) &&
+        !this.opts.registry.get(EXTERNAL_EXECUTOR_CODEX_CAPABILITY_ID)
+      ) {
+        const onboarding = buildCodingOnboardingPayload(statuses);
+        return {
+          taskId: '',
+          jobId: '',
+          intentKind: 'modify_code',
+          userFacingNotice: onboarding.message,
+          needsExecutorSetup: {
+            message: onboarding.message,
+            title: onboarding.title,
+            description: onboarding.description,
+            actions: onboarding.actions,
+            capabilities: onboarding.capabilities,
+            recommended: onboarding.recommended,
+            ...(onboarding.settingsHint ? { settingsHint: onboarding.settingsHint } : {}),
+          },
+        };
+      }
+      const isNewProject = !!inspected.isNewProjectCandidate;
       const preview = buildExecutionConfirmPreview({
         goal: input.goal,
         workingDirectory: folder.path,
-        projectName: path.basename(folder.path),
+        projectName: inspected.projectName || path.basename(folder.path),
         ...(input.executionAuthorization?.readScope
           ? { readScope: input.executionAuthorization.readScope }
           : {}),
         ...(input.executionAuthorization?.writeScope
           ? { writeScope: input.executionAuthorization.writeScope }
           : {}),
-        executorDisplayName: execAdapter?.registration.displayName || '代码执行能力',
+        executorDisplayName: userFacingNaturalExecutorName(),
+        ...(isNewProject ? { isNewProject: true } : {}),
       });
       return {
         taskId: '',
@@ -225,7 +275,9 @@ export class WorkRuntime {
         userFacingNotice: preview.notice,
         needsExecutionConfirm: {
           ...preview,
-          executorDisplayName: execAdapter?.registration.displayName || '代码执行能力',
+          executorDisplayName: userFacingNaturalExecutorName(),
+          selectedCapabilityId: selectedCoding.capabilityId,
+          selectedCapabilityDisplayName: selectedCoding.displayName,
         },
       };
     }

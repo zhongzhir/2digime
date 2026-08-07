@@ -117,14 +117,20 @@ export function mapCodexFailure(input: {
     };
   }
 
-  if (
-    /401|unauthorized|invalid api.?key|auth(entication|orization)? failed|not logged in|login required|please log in|invalid.*credential/i.test(
-      blob,
-    )
-  ) {
+  // 不得把 PowerShell UnauthorizedAccess / 执行策略误判为 Codex 登录失败
+  const looksLikeShellAcl =
+    /unauthorizedaccess|running scripts is disabled|execution_polic/i.test(blob);
+  const looksLikeCodexAuth =
+    !looksLikeShellAcl &&
+    (/\b401\b/.test(blob) ||
+      /invalid api.?key|authentication failed|authorization failed|not logged in|login required|please log in|invalid.*credential/i.test(
+        blob,
+      ) ||
+      (/\bunauthorized\b/i.test(blob) && !/unauthorizedaccess/i.test(blob)));
+  if (looksLikeCodexAuth) {
     return {
       kind: 'auth_failed',
-      actionable: '代码执行组件未能通过登录校验。请在该组件中重新登录后再试。',
+      actionable: '代码执行能力需要重新连接。请先打开设置检查连接，然后重试。',
       summary: '未登录或认证失败',
     };
   }

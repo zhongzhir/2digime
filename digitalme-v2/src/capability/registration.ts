@@ -5,6 +5,7 @@
  * 注册数据永不指定可加载代码位置,Adapter 实现由代码静态绑定。
  */
 import type { ContextIngestionPolicy } from '../work-runtime/context-policy';
+import type { CodingExecutionProfile } from './coding-capability';
 
 export type CapabilityKind = 'model' | 'agent' | 'skill' | 'tool' | 'service';
 
@@ -61,4 +62,8 @@ export interface CapabilityRegistration {
    * 策略为通用值对象,不得携带场景专用状态。
    */
   contextPolicy?: ContextIngestionPolicy;
+  /**
+   * 代码执行能力画像（可选）。仅声明通用执行属性，不得放入供应商专有字段。
+   */
+  codingExecution?: CodingExecutionProfile;
 }

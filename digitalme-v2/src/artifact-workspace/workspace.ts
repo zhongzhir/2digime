@@ -48,6 +48,7 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
   async getContent(
     artifactId: string,
     versionId?: string,
+    expectedTaskId?: string,
   ): Promise<{
     artifact: Artifact;
     content: ArtifactContent;
@@ -67,6 +68,9 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
     };
   }> {
     const artifact = await this.requireArtifact(artifactId);
+    if (expectedTaskId && artifact.taskId !== expectedTaskId) {
+      throw new Error('这项成果不属于当前任务');
+    }
     const version = versionId
       ? artifact.versions.find((v) => v.versionId === versionId)
       : headVersion(artifact);
@@ -156,6 +160,16 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
             unresolvedItems?: string[];
             afterScopeDigest?: string;
             directoryChangedSinceResult?: boolean;
+            digitalMeVerified?: boolean;
+            agentClaimedSuccess?: boolean;
+            acceptanceSummary?: {
+              title: string;
+              goalLabel: string;
+              goalVerdict?: string;
+              recommendation: string;
+              bullets: string[];
+              canAdoptSuggested: boolean;
+            };
           }
         | undefined;
       const manifestEntry = entries.find((e) => e.role === 'manifest');
@@ -176,10 +190,21 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
             afterScopeDigest?: string;
             artifactType?: string;
             writeScope?: string[];
+            digitalMeVerified?: boolean;
+            agentClaimedSuccess?: boolean;
+            checks?: Array<{
+              id: string;
+              title: string;
+              verdict: 'satisfied' | 'partially_satisfied' | 'unsatisfied' | 'unverifiable';
+              detail?: string;
+            }>;
           };
           if (parsed.artifactType === 'code-change' || parsed.workingDirectory) {
             const { userFacingVerification } = await import(
               '../execution/external-executor-contract'
+            );
+            const { buildOwnerAcceptanceSummary } = await import(
+              '../execution/acceptance-summary'
             );
             const { computeScopeDigest } = await import('../execution/baseline');
             let directoryChangedSinceResult = false;
@@ -206,7 +231,9 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
             const changedEntry = entries.find((e) => e.role === 'changed-files');
             const diffEntry = entries.find((e) => e.role === 'diff');
             const testsEntry = entries.find((e) => e.role === 'tests');
-            const unresolvedEntry = entries.find((e) => e.role === 'unresolved');
+            const unresolvedEntry = entries.find(
+              (e) => e.role === 'unresolved' || e.role === 'unresolved-items',
+            );
 
             let changes: Array<{
               path: string;
@@ -304,6 +331,12 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
                     ),
                   }
                 : {}),
+              ...(typeof parsed.digitalMeVerified === 'boolean'
+                ? { digitalMeVerified: parsed.digitalMeVerified }
+                : {}),
+              ...(typeof parsed.agentClaimedSuccess === 'boolean'
+                ? { agentClaimedSuccess: parsed.agentClaimedSuccess }
+                : {}),
               ...(summaryEntry?.text
                 ? {
                     summary: summaryEntry.text
@@ -322,6 +355,32 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
                 : {}),
               directoryChangedSinceResult,
             };
+            if (parsed.verificationOverall) {
+              const acceptanceSummary = buildOwnerAcceptanceSummary({
+                verification: {
+                  overall: parsed.verificationOverall as
+                    | 'satisfied'
+                    | 'partially_satisfied'
+                    | 'unsatisfied'
+                    | 'unverifiable',
+                  checks: Array.isArray(parsed.checks)
+                    ? parsed.checks.map((c) => ({
+                        id: c.id,
+                        title: c.title,
+                        verdict: c.verdict,
+                        detail: c.detail ?? '',
+                      }))
+                    : [],
+                  digitalMeVerified: !!parsed.digitalMeVerified,
+                  agentClaimedSuccess: !!parsed.agentClaimedSuccess,
+                },
+                changedFileCount: changes.length || (parsed.changedFiles || []).length,
+                directoryChangedSinceResult,
+                unresolvedItems,
+                ...(summaryEntry?.text ? { summaryExcerpt: summaryEntry.text } : {}),
+              });
+              codeChange.acceptanceSummary = acceptanceSummary;
+            }
           } else {
             manifestSummary = {
               fileCountScanned: parsed.repo?.fileCountScanned ?? 0,

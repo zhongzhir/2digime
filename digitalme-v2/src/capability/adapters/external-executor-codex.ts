@@ -14,7 +14,7 @@ import type {
 } from '../adapter';
 import type { CapabilityRegistration } from '../registration';
 import { newId, nowIso } from '../../shared/ids';
-import { buildMinimalExecutorEnv } from '../../execution/minimal-env';
+import { buildMinimalExecutorEnv, resolveNodeExecutable } from '../../execution/minimal-env';
 import {
   buildExecutorTaskPackage,
   renderTaskPackagePrompt,
@@ -50,7 +50,7 @@ export {
 } from '../../execution/external-executor-contract';
 
 export interface ExternalExecutorCodexOptions {
-  /** 覆盖 codex.js 路径（测试用）。 */
+  /** 覆盖执行组件入口路径（测试用）。 */
   codexJsPath?: string;
   defaultTimeoutMs?: number;
   /** 测试注入：跳过真实 spawn。 */
@@ -59,6 +59,16 @@ export interface ExternalExecutorCodexOptions {
     prompt: string;
     workDir: string;
   }) => Promise<Partial<ExecutorRunResult> & { exitCode: number | null; summary: string }>;
+  /**
+   * 测试/验收注入统一可用性（不写入通用合同字段名）。
+   * ready | needs_login | needs_setup | unavailable | unsupported
+   */
+  forceAvailability?:
+    | 'ready'
+    | 'needs_login'
+    | 'needs_setup'
+    | 'unavailable'
+    | 'unsupported';
 }
 
 export function createExternalExecutorCodexAdapter(
@@ -67,7 +77,7 @@ export function createExternalExecutorCodexAdapter(
   const registration: CapabilityRegistration = {
     id: EXTERNAL_EXECUTOR_CODEX_CAPABILITY_ID,
     kind: 'agent',
-    displayName: '代码执行（Codex）',
+    displayName: '代码执行能力',
     description: '在你确认的项目目录中修改文件并运行测试，由 Digital Me 独立验收。',
     inputContract: {
       acceptsGoal: true,
@@ -83,6 +93,14 @@ export function createExternalExecutorCodexAdapter(
     adapter: {
       type: 'external-executor-cli',
       adapterId: EXTERNAL_EXECUTOR_CODEX_ADAPTER_ID,
+    },
+    codingExecution: {
+      providerKind: 'local_coding_agent',
+      invocationKind: 'cli',
+      supportsAutomaticExecution: true,
+      supportsProgress: true,
+      supportsRevision: true,
+      supportsResultCollection: true,
     },
     contextPolicy: {
       folderTraversal: 'recursive',
@@ -111,17 +129,7 @@ export function createExternalExecutorCodexAdapter(
       version: 'external-executor-codex/1',
     }),
     checkAvailability: async (): Promise<AvailabilityCheckResult> => {
-      try {
-        const js = options.codexJsPath || resolveCodexJs();
-        await fs.access(js);
-        return { available: true, detail: `codex: ${js}` };
-      } catch (error) {
-        return {
-          available: false,
-          reason: 'needs_setup',
-          detail: (error as Error).message || '未找到 Codex CLI',
-        };
-      }
+      return probeCodexAvailability(options.codexJsPath, options);
     },
     execute: async (input: CapabilityInput, ctx: ExecutionContext): Promise<CapabilityOutput> => {
       return runExternalExecutorCodex(input, ctx, options);
@@ -132,17 +140,62 @@ export function createExternalExecutorCodexAdapter(
 /** 探测后写入可用性（供 Runtime 启动时刷新 registration.availability）。 */
 export async function probeCodexAvailability(
   codexJsPath?: string,
+  options: Pick<ExternalExecutorCodexOptions, 'forceAvailability' | 'executeHook'> = {},
 ): Promise<AvailabilityCheckResult> {
+  const forced =
+    options.forceAvailability ||
+    (process.env.DIGITALME_CODING_CAPABILITY_FORCE as
+      | ExternalExecutorCodexOptions['forceAvailability']
+      | undefined);
+  if (forced === 'ready' || options.executeHook) {
+    return { available: true, detail: 'ready' };
+  }
+  if (forced === 'needs_login') {
+    return {
+      available: false,
+      reason: 'needs_login',
+      detail: '代码执行能力需要连接后才能继续。',
+    };
+  }
+  if (forced === 'unavailable') {
+    return {
+      available: false,
+      reason: 'version_incompatible',
+      detail: '当前代码执行能力版本过旧，请更新后重新检查。',
+    };
+  }
+  if (forced === 'unsupported') {
+    return {
+      available: false,
+      reason: 'unsupported',
+      detail: '检测到该工具，但当前版本还不能自动调用它。',
+    };
+  }
+  if (forced === 'needs_setup') {
+    return {
+      available: false,
+      reason: 'needs_setup',
+      detail: '尚未检测到可用的代码执行能力。',
+    };
+  }
   try {
-    const js = codexJsPath || resolveCodexJs();
+    const envPath = process.env.DIGITALME_CODEX_JS_PATH;
+    const js = codexJsPath || envPath || resolveCodexJs();
     await fs.access(js);
     const version = await runCodexVersion(js);
+    if (/outdated|unsupported.*cli|incompatible/i.test(version || '')) {
+      return {
+        available: false,
+        reason: 'version_incompatible',
+        detail: '当前代码执行能力版本过旧，请更新后重新检查。',
+      };
+    }
     return { available: true, detail: version || js };
   } catch (error) {
     return {
       available: false,
       reason: 'needs_setup',
-      detail: (error as Error).message || '未找到 Codex CLI',
+      detail: '尚未检测到可用的代码执行能力。',
     };
   }
 }
@@ -188,9 +241,7 @@ export function resolveCodexJs(): string {
       /* continue */
     }
   }
-  throw new Error(
-    '未找到已安装的代码执行组件（Codex CLI）。请先安装后再在设置中检查连接。',
-  );
+  throw new Error('尚未检测到可用的代码执行能力。请先安装推荐能力后再在设置中检查连接。');
 }
 
 async function runExternalExecutorCodex(
@@ -660,11 +711,12 @@ async function spawnCodexExec(input: {
     lastMessagePath,
   });
 
+  const nodeExecutable = resolveNodeExecutable(process.env);
   await fs.writeFile(
     path.join(input.evidenceDir, 'codex-argv.json'),
     JSON.stringify(
       {
-        executable: process.execPath,
+        executable: nodeExecutable,
         args,
         shell: false,
         cwdNote: 'workingDirectory passed via --cd arg, not shell cwd string',
@@ -675,13 +727,17 @@ async function spawnCodexExec(input: {
     'utf8',
   );
 
-  const env = buildMinimalExecutorEnv(process.env);
+  const env = buildMinimalExecutorEnv(process.env, {
+    ...(process.versions.electron && nodeExecutable === process.execPath
+      ? { ELECTRON_RUN_AS_NODE: '1' }
+      : {}),
+  });
   input.reportProgress('正在修改项目文件');
 
   return new Promise((resolve, reject) => {
     let settled = false;
     let timedOut = false;
-    const child = spawn(process.execPath, args, {
+    const child = spawn(nodeExecutable, args, {
       env,
       shell: false,
       windowsHide: true,
@@ -843,8 +899,13 @@ function extractQuestions(summary: string): ExecutorRunResult['questions'] {
 
 async function runCodexVersion(codexJs: string): Promise<string> {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [codexJs, '--version'], {
-      env: buildMinimalExecutorEnv(process.env),
+    const nodeExecutable = resolveNodeExecutable(process.env);
+    const child = spawn(nodeExecutable, [codexJs, '--version'], {
+      env: buildMinimalExecutorEnv(process.env, {
+        ...(process.versions.electron && nodeExecutable === process.execPath
+          ? { ELECTRON_RUN_AS_NODE: '1' }
+          : {}),
+      }),
       shell: false,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],

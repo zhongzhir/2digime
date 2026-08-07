@@ -118,7 +118,7 @@ describe('software-development-task-ux', () => {
       contextRefs: [{ kind: 'folder', path: dir }],
     });
     assert.ok(result.needsExecutorSetup);
-    assert.match(result.needsExecutorSetup!.message, /尚未连接/);
+    assert.match(result.needsExecutorSetup!.message, /尚未检测|需要连接|代码执行能力/);
     assert.equal(result.taskId, '');
     assert.equal(result.needsExecutionConfirm, undefined);
   });
@@ -176,5 +176,144 @@ describe('software-development-task-ux', () => {
     });
     const blob = JSON.stringify(preview);
     assert.doesNotMatch(blob, /queued|executorRunId|adapter|artifactType|CapabilityId/i);
+  });
+
+  it('成果区提供提出修改且说明字段不承担修订', async () => {
+    const html = await fs.readFile(
+      path.join(__dirname, '../../../electron/renderer/index.html'),
+      'utf8',
+    );
+    const appJs = await fs.readFile(
+      path.join(__dirname, '../../../electron/renderer/app.js'),
+      'utf8',
+    );
+    assert.match(html, /id="btn-propose-revision"/);
+    assert.match(html, /提出修改/);
+    assert.match(html, /采用或不采用说明（可选）/);
+    assert.match(html, /id="revision-composer"/);
+    assert.match(html, /提交修改/);
+    assert.equal((html.match(/id="btn-accept-artifact"/g) || []).length, 1);
+    assert.equal((html.match(/id="btn-reject-artifact"/g) || []).length, 1);
+    assert.doesNotMatch(html, /填写修改要求后点击不采用/);
+    assert.match(appJs, /hideRevisionComposer/);
+    assert.match(appJs, /showRevisionComposer/);
+    assert.match(appJs, /采用\/不采用说明不得作为 revisionRequest/);
+    assert.doesNotMatch(appJs, /不采用后自然进入修订/);
+  });
+
+  it('修订复用同一 task/artifact 主链', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-rev-repo-'));
+    const pkg = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-rev-pkg-'));
+    await fs.writeFile(path.join(dir, 'package.json'), '{"name":"r"}', 'utf8');
+    await fs.writeFile(
+      path.join(dir, 'formatLabel.js'),
+      "module.exports={formatLabel:(i)=>i};\n",
+      'utf8',
+    );
+    const rt = createDigitalMeRuntime({
+      documentCapability: 'fake',
+      codeAnalysisCapability: 'none',
+      externalExecutorCapability: {
+        executeHook: async ({ pkg: taskPkg }) => {
+          const target = path.join(taskPkg.workingDirectory, 'formatLabel.js');
+          const done = !!(taskPkg.previousRun && taskPkg.previousRun.revisionRequest);
+          await fs.writeFile(
+            target,
+            done
+              ? "module.exports={formatLabel:(i)=>i==='start'?'done':i};\n"
+              : "module.exports={formatLabel:(i)=>i==='start'?'start-processing':i};\n",
+            'utf8',
+          );
+          return {
+            exitCode: 0,
+            summary: done ? 'done' : 'start-processing',
+            claimedChangedFiles: ['formatLabel.js'],
+          };
+        },
+      },
+    });
+    await rt.createPackage({ displayName: 'rev', targetDir: pkg });
+    const preview = await rt.submitTask({
+      goal: '修改这个项目中的 formatLabel，使 start 返回 start-processing，并运行测试',
+      contextRefs: [{ kind: 'folder', path: dir }],
+    });
+    assert.ok(preview.needsExecutionConfirm);
+    const started = await rt.submitTask({
+      goal: '修改这个项目中的 formatLabel，使 start 返回 start-processing，并运行测试',
+      contextRefs: [{ kind: 'folder', path: dir }],
+      executionAuthorization: {
+        confirmed: true,
+        workingDirectory: dir,
+        readScope: ['.'],
+        writeScope: ['.'],
+      },
+    });
+    const { waitForJobTerminal } = await import('../../work-runtime/job-runner');
+    await waitForJobTerminal(rt.workRuntime, started.jobId, 20000);
+    const after = await rt.getTask({ taskId: started.taskId });
+    assert.equal(after.latestJob?.status, 'succeeded');
+    const artifactId = after.artifactIds[0];
+    assert.ok(artifactId);
+    const rev = await rt.reviseArtifact({
+      taskId: started.taskId,
+      artifactId,
+      revisionRequest: '将 start-processing 改为 done，并同步更新测试。',
+    });
+    await waitForJobTerminal(rt.workRuntime, rev.jobId, 20000);
+    const afterRev = await rt.getTask({ taskId: started.taskId });
+    assert.equal(afterRev.latestJob?.status, 'succeeded');
+    assert.equal(afterRev.artifactIds.length, 1);
+    assert.equal(afterRev.artifactIds[0], artifactId);
+    const body = await fs.readFile(path.join(dir, 'formatLabel.js'), 'utf8');
+    assert.match(body, /done/);
+  });
+
+  it('rebootstrap 后默认包可再挂载且执行器仍注册', async () => {
+    const { createRequire } = await import('node:module');
+    const req = createRequire(__filename);
+    const {
+      ensureDefaultPackageAttached,
+      countSubjectPackages,
+    } = req(path.join(__dirname, '../../../electron/default-package.cjs')) as {
+      ensureDefaultPackageAttached: (opts: {
+        runtime: ReturnType<typeof createDigitalMeRuntime>;
+        userDataPath: string;
+      }) => Promise<{ ok: boolean; created?: boolean }>;
+      countSubjectPackages: (userDataPath: string) => number;
+    };
+    const userData = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-reboot-ud-'));
+    const makeRt = () =>
+      createDigitalMeRuntime({
+        documentCapability: 'fake',
+        codeAnalysisCapability: 'none',
+        externalExecutorCapability: {
+          executeHook: async () => ({
+            exitCode: 0,
+            summary: 'ok',
+            claimedChangedFiles: [],
+          }),
+        },
+      });
+    let rt = makeRt();
+    const first = await ensureDefaultPackageAttached({ runtime: rt, userDataPath: userData });
+    assert.equal(first.ok, true);
+    assert.equal(first.created, true);
+    assert.equal(rt.isPackageAttached(), true);
+    let caps = await rt.listCapabilities();
+    assert.ok(
+      caps.capabilities.some((c) => /external-executor|codex|代码执行/i.test(JSON.stringify(c))),
+    );
+    await rt.stop();
+    rt = makeRt();
+    assert.equal(rt.isPackageAttached(), false);
+    const second = await ensureDefaultPackageAttached({ runtime: rt, userDataPath: userData });
+    assert.equal(second.ok, true);
+    assert.equal(second.created, false);
+    assert.equal(rt.isPackageAttached(), true);
+    assert.equal(countSubjectPackages(userData), 1);
+    caps = await rt.listCapabilities();
+    assert.ok(
+      caps.capabilities.some((c) => /external-executor|codex|代码执行/i.test(JSON.stringify(c))),
+    );
   });
 });
