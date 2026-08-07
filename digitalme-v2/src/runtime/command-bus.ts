@@ -101,6 +101,9 @@ export function createCommandBus(runtime: DigitalMeRuntime): CommandBus {
             ownerDecision,
             ...(got.bundle !== undefined ? { bundle: got.bundle } : {}),
             ...(got.evidenceStale ? { evidenceStale: true } : {}),
+            ...((got as unknown as { codeChange?: unknown }).codeChange
+              ? { codeChange: (got as unknown as { codeChange: unknown }).codeChange }
+              : {}),
           } as CommandMap[K]['output'];
         }
         case 'artifact.saveEdit':

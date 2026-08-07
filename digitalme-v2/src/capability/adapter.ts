@@ -114,6 +114,16 @@ export interface CapabilityInput {
     materialDigests?: string[];
     grantId?: string;
   };
+  /**
+   * 外部代码执行授权（用户确认卡通过后由 Runner 注入）。
+   * 非持久核心对象；仅一次执行输入。
+   */
+  executionAuthorization?: {
+    confirmed: boolean;
+    workingDirectory: string;
+    readScope: string[];
+    writeScope: string[];
+  };
 }
 
 export interface ExecutionContext {
@@ -140,6 +150,20 @@ export interface ExecutionContext {
   updateRemoteExecution?(patch: {
     lastRemoteStatus?: RemoteLifecycleStatus;
     executionId?: string;
+  }): void;
+  /** 可选:更新外部执行器映射状态（非第二状态机）。 */
+  updateExternalExecution?(patch: {
+    lastExecutorStatus?:
+      | 'queued'
+      | 'running'
+      | 'waiting_for_input'
+      | 'succeeded'
+      | 'failed'
+      | 'cancelled'
+      | 'interrupted';
+    executorRunId?: string;
+    afterScopeDigest?: string;
+    needsUserQuestion?: boolean;
   }): void;
 }
 

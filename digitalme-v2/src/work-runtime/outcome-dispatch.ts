@@ -14,6 +14,7 @@ import {
   CODE_ANALYSIS_MANIFEST_SCHEMA_VERSION,
   CODE_BUNDLE_ROLES,
 } from '../capability/adapters/code-repo-analysis-contract';
+import { CODE_CHANGE_BUNDLE_ROLES } from '../execution/external-executor-contract';
 
 export type OutcomeCheckKind = 'text' | 'bundle' | 'external' | 'not_applicable';
 
@@ -66,6 +67,17 @@ export function dispatchOutcomeCheck(input: {
   }
 
   if (payload.kind === 'bundle') {
+    const roles = new Set(
+      payload.entries.map((e) => String(e.role || '').toLowerCase()).filter(Boolean),
+    );
+    const isCodeChange = CODE_CHANGE_BUNDLE_ROLES.every((r) => roles.has(r));
+    if (isCodeChange || input.requestedArtifactType === 'code-change') {
+      return {
+        ...checkCodeChangeBundleOutcome(payload.entries),
+        profile,
+        checkKind: 'bundle',
+      };
+    }
     return {
       ...checkBundleOutcome(payload.entries),
       profile,
@@ -118,6 +130,24 @@ export function checkBundleOutcome(
   void CODE_ANALYSIS_MANIFEST_SCHEMA_VERSION;
   void CODE_ANALYSIS_EVIDENCE_SCHEMA_VERSION;
 
+  if (defects.length > 0) {
+    return { verdict: 'blocked', defects };
+  }
+  return { verdict: 'pass', defects: [] };
+}
+
+export function checkCodeChangeBundleOutcome(
+  entries: Array<{ role?: string; mediaType?: string; sourcePath?: string }>,
+): { verdict: OutcomeVerdict; defects: string[] } {
+  const defects: string[] = [];
+  const roles = new Set(
+    entries.map((e) => String(e.role || '').toLowerCase()).filter(Boolean),
+  );
+  for (const required of CODE_CHANGE_BUNDLE_ROLES) {
+    if (!roles.has(required)) {
+      defects.push(`成果包缺少「${required}」部分，无法作为完整代码修改结果。`);
+    }
+  }
   if (defects.length > 0) {
     return { verdict: 'blocked', defects };
   }

@@ -1,0 +1,5 @@
+# Keep only committed acceptance summaries; ignore full local run evidence.
+*
+!.gitignore
+!ACCEPTANCE_SUMMARY.json
+!ACCEPTANCE_REPORT.md

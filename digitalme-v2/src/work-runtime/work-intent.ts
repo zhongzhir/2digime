@@ -9,6 +9,7 @@ import * as path from 'node:path';
 export const TASK_INTENT_KINDS = [
   'create_document',
   'analyze_code',
+  'modify_code',
   'external_research',
   'general',
 ] as const;
@@ -17,7 +18,7 @@ export type TaskIntentKind = (typeof TASK_INTENT_KINDS)[number];
 
 export type MaterialKind = 'file' | 'folder' | 'code_repo' | 'text_doc' | 'unknown';
 
-export type ExpectedOutputFamily = 'document' | 'code-analysis' | string;
+export type ExpectedOutputFamily = 'document' | 'code-analysis' | 'code-change' | string;
 
 export interface WorkIntent {
   intentKind: TaskIntentKind;
@@ -27,10 +28,15 @@ export interface WorkIntent {
   userFacingNotice?: string;
   /** 是否高置信（可用于自动选能力且只读分析无需确认）。 */
   highConfidence: boolean;
+  /** 代码修改意图时，提交前需用户确认写权限。 */
+  requiresExecutionConfirm?: boolean;
 }
 
 const CODE_ANALYZE_GOAL_RE =
   /分析(一下|下)?(这个|该|此)?(代码|仓库|项目|代码库|codebase)|代码审查|审查代码|找出.*(问题|风险|缺陷)|问题清单|静态分析|repo\s*analysis|analyze\s+(the\s+)?(code|repo|project)|code\s*review/i;
+
+const CODE_MODIFY_GOAL_RE =
+  /修改|修复|实现|重构|改成|改为|更新代码|添加.+功能|删除.+代码|补上|修一下|fix\b|implement|refactor|change\s+the|update\s+the\s+code|add\s+a\s+|remove\s+the/i;
 
 const WRITE_DOC_GOAL_RE =
   /写(一篇|一份|个)?|起草|改写|润色|总结|整理成文|方案|文章|报告(?!分析)|周报|纪要|文档|说明书|readme(?!\s*分析)/i;
@@ -129,8 +135,33 @@ export function deriveWorkIntentSync(input: {
   }
 
   const wantsCodeAnalysis = CODE_ANALYZE_GOAL_RE.test(goal);
+  const wantsCodeModify = CODE_MODIFY_GOAL_RE.test(goal) && !wantsCodeAnalysis;
   const wantsWrite = WRITE_DOC_GOAL_RE.test(goal);
   const codeRepoPresent = materialKinds.includes('code_repo');
+
+  // 高置信：明确修改目标 + 代码仓库材料 → 外部代码执行
+  if (wantsCodeModify && (codeRepoPresent || hasCodeMaterial)) {
+    return {
+      intentKind: 'modify_code',
+      expectedOutputFamily: 'code-change',
+      materialKinds,
+      highConfidence: codeRepoPresent || materialKinds.includes('folder'),
+      requiresExecutionConfirm: true,
+      userFacingNotice:
+        '这项任务需要修改项目文件，将交给已连接的代码执行能力完成。开始前你可以查看它能够访问和修改的范围。',
+    };
+  }
+
+  if (wantsCodeModify && !hasCodeMaterial) {
+    return {
+      intentKind: 'modify_code',
+      expectedOutputFamily: 'code-change',
+      materialKinds,
+      highConfidence: false,
+      requiresExecutionConfirm: true,
+      userFacingNotice: '修改代码需要你添加项目文件夹。',
+    };
+  }
 
   // 高置信：明确分析目标 + 代码材料（仓库或代码文件）
   if (wantsCodeAnalysis && (codeRepoPresent || hasCodeMaterial)) {

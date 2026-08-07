@@ -34,6 +34,16 @@ import {
 } from './outcome-dispatch';
 import { deriveWorkIntent, isTaskIntentKind } from './work-intent';
 import { CODE_ANALYSIS_ARTIFACT_TYPE } from '../capability/adapters/code-repo-analysis-contract';
+import {
+  CODE_CHANGE_ARTIFACT_TYPE,
+  EXTERNAL_EXECUTOR_CODEX_CAPABILITY_ID,
+  userFacingVerification,
+  type CollectedExecutionChanges,
+  type ExecutionBaseline,
+} from '../execution/external-executor-contract';
+import { buildExecutionConfirmPreview } from '../execution/task-package';
+import { restoreExecutionBaseline } from '../execution/restore';
+import { computeScopeDigest } from '../execution/baseline';
 
 export interface WorkRuntimeOptions {
   subjectId: string;
@@ -132,12 +142,7 @@ export class WorkRuntime {
    */
   async submitTask(
     input: SubmitInput,
-  ): Promise<{
-    taskId: string;
-    jobId: string;
-    intentKind?: import('./work-intent').TaskIntentKind;
-    userFacingNotice?: string;
-  }> {
+  ): Promise<CommandMap['work.submitTask']['output']> {
     const derived = await deriveWorkIntent({
       goal: input.goal,
       contextRefs: input.contextRefs,
@@ -152,10 +157,19 @@ export class WorkRuntime {
               input.requestedArtifactType ||
               (input.intentKind === 'analyze_code'
                 ? CODE_ANALYSIS_ARTIFACT_TYPE
-                : derived.expectedOutputFamily),
+                : input.intentKind === 'modify_code'
+                  ? CODE_CHANGE_ARTIFACT_TYPE
+                  : derived.expectedOutputFamily),
             highConfidence: true,
             ...(input.intentKind === 'analyze_code'
               ? { userFacingNotice: '将分析你添加的代码并整理问题清单与依据。' }
+              : {}),
+            ...(input.intentKind === 'modify_code'
+              ? {
+                  requiresExecutionConfirm: true,
+                  userFacingNotice:
+                    '这项任务需要修改项目文件，将交给已连接的代码执行能力完成。开始前你可以查看它能够访问和修改的范围。',
+                }
               : {}),
           }
         : derived;
@@ -163,9 +177,41 @@ export class WorkRuntime {
     const expectedOutputFamily =
       String(input.requestedArtifactType || '').trim() || intent.expectedOutputFamily;
 
-    // 显式要求代码分析时，禁止在能力不可用时回退写作
     const forceAnalyze =
       intent.intentKind === 'analyze_code' || expectedOutputFamily === CODE_ANALYSIS_ARTIFACT_TYPE;
+    const forceModify =
+      intent.intentKind === 'modify_code' || expectedOutputFamily === CODE_CHANGE_ARTIFACT_TYPE;
+
+    // 代码修改：未确认授权时只返回确认卡，不创建 Task/Job
+    if (forceModify && !input.executionAuthorization?.confirmed) {
+      const folder = input.contextRefs.find((r) => r.kind === 'folder');
+      if (!folder) {
+        const msg = '修改代码需要你添加项目文件夹。';
+        throw Object.assign(new Error(msg), { actionable: msg });
+      }
+      const execAdapter = this.opts.registry.get(EXTERNAL_EXECUTOR_CODEX_CAPABILITY_ID);
+      const preview = buildExecutionConfirmPreview({
+        goal: input.goal,
+        workingDirectory: folder.path,
+        ...(input.executionAuthorization?.readScope
+          ? { readScope: input.executionAuthorization.readScope }
+          : {}),
+        ...(input.executionAuthorization?.writeScope
+          ? { writeScope: input.executionAuthorization.writeScope }
+          : {}),
+        executorDisplayName: execAdapter?.registration.displayName || '代码执行能力',
+      });
+      return {
+        taskId: '',
+        jobId: '',
+        intentKind: 'modify_code',
+        userFacingNotice: preview.notice,
+        needsExecutionConfirm: {
+          ...preview,
+          executorDisplayName: execAdapter?.registration.displayName || '代码执行能力',
+        },
+      };
+    }
 
     const selected = this.opts.registry.selectForNeed({
       intentKind: intent.intentKind,
@@ -177,9 +223,11 @@ export class WorkRuntime {
     if (!selected.adapter) {
       const msg =
         selected.actionable ||
-        (forceAnalyze
-          ? '当前无法进行代码分析：请先连接模型并添加代码材料后再试。'
-          : 'no available capability for requested artifact type');
+        (forceModify
+          ? '当前无法修改项目文件：请先在设置中连接代码执行组件后再试。'
+          : forceAnalyze
+            ? '当前无法进行代码分析：请先连接模型并添加代码材料后再试。'
+            : 'no available capability for requested artifact type');
       throw Object.assign(new Error(msg), { actionable: msg });
     }
     if (selected.adapter.registration.availability !== 'available') {
@@ -188,7 +236,6 @@ export class WorkRuntime {
       throw Object.assign(new Error(msg), { actionable: msg });
     }
 
-    // 若意图为代码分析，确认选中的能力确实产出 code-analysis
     if (
       forceAnalyze &&
       !selected.adapter.registration.outputArtifactTypes.includes(CODE_ANALYSIS_ARTIFACT_TYPE)
@@ -197,10 +244,19 @@ export class WorkRuntime {
         '当前无法进行代码分析：没有可用的代码分析能力。不会改用普通写作冒充代码审查。';
       throw Object.assign(new Error(msg), { actionable: msg });
     }
+    if (
+      forceModify &&
+      !selected.adapter.registration.outputArtifactTypes.includes(CODE_CHANGE_ARTIFACT_TYPE)
+    ) {
+      const msg =
+        '当前无法修改项目文件：没有可用的代码执行能力。不会改用普通写作冒充代码修改。';
+      throw Object.assign(new Error(msg), { actionable: msg });
+    }
 
     const adapter = selected.adapter;
-    const resolvedFamily =
-      forceAnalyze
+    const resolvedFamily = forceModify
+      ? CODE_CHANGE_ARTIFACT_TYPE
+      : forceAnalyze
         ? CODE_ANALYSIS_ARTIFACT_TYPE
         : expectedOutputFamily ||
           adapter.registration.outputArtifactTypes[0] ||
@@ -230,7 +286,16 @@ export class WorkRuntime {
     }
     const task = await this.opts.taskService.create(taskInput);
 
-    const job = await this.createQueuedJob(task.id, adapter.registration.id);
+    const extAuth = input.executionAuthorization;
+    const job = await this.createQueuedJob(task.id, adapter.registration.id, undefined, extAuth
+      ? {
+          executorId: adapter.registration.adapter.adapterId,
+          workingDirectory: path.resolve(extAuth.workingDirectory),
+          readScope: extAuth.readScope?.length ? extAuth.readScope : ['.'],
+          writeScope: extAuth.writeScope?.length ? extAuth.writeScope : ['.'],
+          lastExecutorStatus: 'queued',
+        }
+      : undefined);
     this.enqueue(job.id);
     return {
       taskId: task.id,
@@ -243,8 +308,16 @@ export class WorkRuntime {
   /**
    * 仅当无非终态 Job 时允许;新建 Job + 默认新建 Snapshot;
    * 并发双击经 task 锁串行,只能成功创建一个。
+   * action=restore_baseline：恢复最近外部执行前状态，不新建 Job。
    */
-  async retryTask(input: { taskId: string }): Promise<{ jobId: string }> {
+  async retryTask(input: {
+    taskId: string;
+    action?: 'retry' | 'restore_baseline';
+    jobId?: string;
+  }): Promise<CommandMap['work.retryTask']['output']> {
+    if (input.action === 'restore_baseline') {
+      return this.restoreExternalExecutionBaseline(input.taskId, input.jobId);
+    }
     return this.withTaskLock(input.taskId, async () => {
       const task = await this.opts.taskService.get(input.taskId);
       if (!task) throw new Error(`task not found: ${input.taskId}`);
@@ -260,12 +333,32 @@ export class WorkRuntime {
         }).adapter?.registration.id;
       if (!capabilityId) {
         const msg =
-          task.intentKind === 'analyze_code'
-            ? '当前无法重试代码分析：请先连接模型后再试。'
-            : 'no available capability for retry';
+          task.intentKind === 'modify_code'
+            ? '当前无法重试代码修改：请先在设置中连接代码执行组件后再试。'
+            : task.intentKind === 'analyze_code'
+              ? '当前无法重试代码分析：请先连接模型后再试。'
+              : 'no available capability for retry';
         throw Object.assign(new Error(msg), { actionable: msg });
       }
-      const job = await this.createQueuedJob(task.id, capabilityId);
+      const prevJobs = await this.opts.jobStore.listByTask(input.taskId);
+      const prevExt = [...prevJobs]
+        .reverse()
+        .find((j) => j.externalExecution?.workingDirectory);
+      const job = await this.createQueuedJob(
+        task.id,
+        capabilityId,
+        undefined,
+        prevExt?.externalExecution
+          ? {
+              executorId: prevExt.externalExecution.executorId,
+              workingDirectory: prevExt.externalExecution.workingDirectory,
+              readScope: prevExt.externalExecution.readScope,
+              writeScope: prevExt.externalExecution.writeScope,
+              lastExecutorStatus: 'queued',
+              autoContinueCount: 0,
+            }
+          : undefined,
+      );
       this.enqueue(job.id);
       return { jobId: job.id };
     });
@@ -318,11 +411,29 @@ export class WorkRuntime {
             : 'selected capability is not available';
         throw Object.assign(new Error(msg), { actionable: msg });
       }
-      const job = await this.createQueuedJob(task.id, capabilityId, {
-        targetArtifactId: artifact.id,
-        revisionRequest: request,
-        ...(rejectionReason ? { rejectionReason } : {}),
-      });
+      const prevJobs = await this.opts.jobStore.listByTask(task.id);
+      const prevExt = [...prevJobs]
+        .reverse()
+        .find((j) => j.externalExecution?.workingDirectory);
+      const job = await this.createQueuedJob(
+        task.id,
+        capabilityId,
+        {
+          targetArtifactId: artifact.id,
+          revisionRequest: request,
+          ...(rejectionReason ? { rejectionReason } : {}),
+        },
+        prevExt?.externalExecution
+          ? {
+              executorId: prevExt.externalExecution.executorId,
+              workingDirectory: prevExt.externalExecution.workingDirectory,
+              readScope: prevExt.externalExecution.readScope,
+              writeScope: prevExt.externalExecution.writeScope,
+              lastExecutorStatus: 'queued',
+              autoContinueCount: 0,
+            }
+          : undefined,
+      );
       this.enqueue(job.id);
       return { jobId: job.id };
     });
@@ -434,6 +545,20 @@ export class WorkRuntime {
       if (last.status === 'cancelled' && externalCapability) {
         latestJobOut.actionable = mapExternalCapabilityFailure({ cancelled: true }).message;
       }
+      if (last.externalExecution) {
+        latestJobOut.externalExecution = {
+          workingDirectory: last.externalExecution.workingDirectory,
+          ...(last.externalExecution.lastExecutorStatus
+            ? { lastExecutorStatus: last.externalExecution.lastExecutorStatus }
+            : {}),
+          ...(last.externalExecution.needsUserQuestion
+            ? { needsUserQuestion: true }
+            : {}),
+          ...(last.externalExecution.afterScopeDigest
+            ? { afterScopeDigest: last.externalExecution.afterScopeDigest }
+            : {}),
+        };
+      }
       output.latestJob = latestJobOut;
     }
     return output;
@@ -477,7 +602,14 @@ export class WorkRuntime {
     const actions: Array<{ jobId: string; action: string }> = [];
     const jobs = await this.opts.jobStore.list();
     for (const job of jobs) {
-      const artifactExists = await this.opts.artifactCommitter.existsForJob(job.id);
+      let artifactExists = await this.opts.artifactCommitter.existsForJob(job.id);
+      // 修订 Job 向既有 Artifact 追加版本：权威在 job.artifactId / targetArtifactId
+      if (!artifactExists && job.artifactId) {
+        artifactExists = !!(await this.opts.artifactCommitter.get(job.artifactId));
+      }
+      if (!artifactExists && job.targetArtifactId && job.status === 'succeeded') {
+        artifactExists = !!(await this.opts.artifactCommitter.get(job.targetArtifactId));
+      }
 
       // 远端映射恢复:running + remoteExecution → 重新入队以 re-associate,不另建状态机。
       if (
@@ -561,6 +693,7 @@ export class WorkRuntime {
       revisionRequest?: string;
       rejectionReason?: string;
     },
+    externalExecution?: ExecutionJob['externalExecution'],
   ): Promise<ExecutionJob> {
     const active = await this.opts.jobStore.findActiveForTask(taskId);
     if (active) {
@@ -575,10 +708,60 @@ export class WorkRuntime {
       ...(meta?.targetArtifactId ? { targetArtifactId: meta.targetArtifactId } : {}),
       ...(meta?.revisionRequest ? { revisionRequest: meta.revisionRequest } : {}),
       ...(meta?.rejectionReason ? { rejectionReason: meta.rejectionReason } : {}),
+      ...(externalExecution ? { externalExecution } : {}),
     };
     await this.opts.jobStore.put(job);
     this.publishJob(job);
     return job;
+  }
+
+  private async restoreExternalExecutionBaseline(
+    taskId: string,
+    jobId?: string,
+  ): Promise<CommandMap['work.retryTask']['output']> {
+    const jobs = await this.opts.jobStore.listByTask(taskId);
+    const target =
+      (jobId ? jobs.find((j) => j.id === jobId) : undefined) ||
+      [...jobs]
+        .reverse()
+        .find((j) => j.externalExecution?.workingDirectory && (j.status === 'succeeded' || j.status === 'failed'));
+    if (!target?.externalExecution) {
+      throw Object.assign(new Error('没有可恢复的执行记录'), {
+        actionable: '仅在外部代码执行完成后才能恢复本次执行前状态',
+      });
+    }
+    const evidenceDir = path.join(this.opts.workRoot, 'jobs', target.id, 'external-execution');
+    let baseline: ExecutionBaseline;
+    let collected: CollectedExecutionChanges;
+    try {
+      baseline = JSON.parse(await fs.readFile(path.join(evidenceDir, 'baseline.json'), 'utf8')) as ExecutionBaseline;
+      collected = JSON.parse(
+        await fs.readFile(path.join(evidenceDir, 'collected-changes.json'), 'utf8'),
+      ) as CollectedExecutionChanges;
+      // patch 不在 json 内时补空
+      if (!collected.unifiedDiff) {
+        try {
+          collected.unifiedDiff = await fs.readFile(path.join(evidenceDir, 'patch.diff'), 'utf8');
+        } catch {
+          collected.unifiedDiff = '';
+        }
+      }
+    } catch {
+      throw Object.assign(new Error('找不到执行前快照'), {
+        actionable: '无法恢复：执行证据不完整',
+      });
+    }
+    const result = await restoreExecutionBaseline({
+      baseline,
+      collected,
+      jobEvidenceDir: evidenceDir,
+    });
+    return {
+      jobId: '',
+      restored: result.ok,
+      message: result.message,
+      ...(result.conflicts.length ? { conflicts: result.conflicts } : {}),
+    };
   }
 
   private enqueue(jobId: string): void {
@@ -898,7 +1081,49 @@ export class WorkRuntime {
         }) => {
           void updateRemote(patch);
         },
+        updateExternalExecution: (patch: {
+          lastExecutorStatus?: NonNullable<ExecutionJob['externalExecution']>['lastExecutorStatus'];
+          executorRunId?: string;
+          afterScopeDigest?: string;
+          needsUserQuestion?: boolean;
+        }) => {
+          void (async () => {
+            const current = await this.opts.jobStore.get(jobId);
+            if (!current?.externalExecution || isTerminal(current.status)) return;
+            const next: ExecutionJob = {
+              ...current,
+              externalExecution: {
+                ...current.externalExecution,
+                ...(patch.lastExecutorStatus
+                  ? { lastExecutorStatus: patch.lastExecutorStatus }
+                  : {}),
+                ...(patch.executorRunId ? { executorRunId: patch.executorRunId } : {}),
+                ...(patch.afterScopeDigest
+                  ? { afterScopeDigest: patch.afterScopeDigest }
+                  : {}),
+                ...(patch.needsUserQuestion !== undefined
+                  ? { needsUserQuestion: patch.needsUserQuestion }
+                  : {}),
+              },
+            };
+            job = next;
+            await this.persistJob(next);
+          })();
+        },
       };
+
+      // 外部执行：进入能力阶段即标记 running（避免失败后仍停留 queued）
+      if (job.externalExecution) {
+        const marked: ExecutionJob = {
+          ...job,
+          externalExecution: {
+            ...job.externalExecution,
+            lastExecutorStatus: 'running',
+          },
+        };
+        job = marked;
+        await this.persistJob(marked);
+      }
 
       let output;
       try {
@@ -978,6 +1203,16 @@ export class WorkRuntime {
             subjectContext,
             artifactType: task.requestedArtifactType,
             ...(revisionInput ? { revision: revisionInput } : {}),
+            ...(job.externalExecution?.workingDirectory
+              ? {
+                  executionAuthorization: {
+                    confirmed: true as const,
+                    workingDirectory: job.externalExecution.workingDirectory,
+                    readScope: job.externalExecution.readScope,
+                    writeScope: job.externalExecution.writeScope,
+                  },
+                }
+              : {}),
           };
           const auth = buildJobAuthorizationProjection({
             task,
@@ -1274,6 +1509,14 @@ export class WorkRuntime {
         ...succeeded,
         artifactId: artifact.id,
         snapshotId: snapshot.id,
+        ...(succeeded.externalExecution
+          ? {
+              externalExecution: {
+                ...succeeded.externalExecution,
+                lastExecutorStatus: 'succeeded' as const,
+              },
+            }
+          : {}),
       };
       // 终态清除进行中进度,避免 UI 拼接「已完成 · 正在整理成果」
       delete succeeded.progress;
@@ -1303,9 +1546,18 @@ export class WorkRuntime {
     const current = await this.opts.jobStore.get(job.id);
     if (!current || isTerminal(current.status)) return;
     if (current.status !== 'running') return;
-    const next = transitionJob(current, 'cancelled', nowIso());
+    let next = transitionJob(current, 'cancelled', nowIso());
     // cancelled 不产生 Artifact
     delete next.artifactId;
+    if (next.externalExecution) {
+      next = {
+        ...next,
+        externalExecution: {
+          ...next.externalExecution,
+          lastExecutorStatus: 'cancelled',
+        },
+      };
+    }
     await this.persistJob(next, '已取消');
   }
 
@@ -1325,6 +1577,14 @@ export class WorkRuntime {
     next = {
       ...next,
       failure: { stage, message, actionable },
+      ...(next.externalExecution
+        ? {
+            externalExecution: {
+              ...next.externalExecution,
+              lastExecutorStatus: 'failed' as const,
+            },
+          }
+        : {}),
     };
     await this.persistJob(next, actionable);
   }

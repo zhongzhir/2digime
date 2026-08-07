@@ -139,6 +139,9 @@ export function applyAuthorizationProjectionToInput(
   if (input.revision && auth.allowedFields.includes('revision')) {
     next.revision = input.revision;
   }
+  if (input.executionAuthorization) {
+    next.executionAuthorization = input.executionAuthorization;
+  }
   return next;
 }
 

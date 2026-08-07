@@ -22,6 +22,12 @@ import {
   type ControlledRemoteOptions,
 } from '../capability/adapters/controlled-remote';
 import type { A2ARemoteAdapterOptions } from '../capability/adapters/a2a-remote';
+import {
+  createExternalExecutorCodexAdapter,
+} from '../capability/adapters/external-executor-codex';
+import {
+  EXTERNAL_EXECUTOR_CODEX_CAPABILITY_ID,
+} from '../execution/external-executor-contract';
 import type { SecretAccessor } from '../capability/adapter';
 import type { Task } from '../work-runtime/task';
 import type { ExecutionJob } from '../work-runtime/execution-job';
@@ -102,6 +108,16 @@ export interface DigitalMeRuntimeOptions {
    * - A2ARemoteAdapterOptions:注册 A2ARemoteCapabilityAdapter
    */
   a2aRemoteCapability?: false | A2ARemoteAdapterOptions;
+  /**
+   * 外部代码执行能力（Codex CLI）:
+   * - auto/undefined:探测本机 Codex，可用则注册 available，否则 needs_setup
+   * - false:不注册
+   * - options 对象:强制注册（测试可注入 executeHook）
+   */
+  externalExecutorCapability?:
+    | false
+    | 'auto'
+    | import('../capability/adapters/external-executor-codex').ExternalExecutorCodexOptions;
 }
 
 /**
@@ -533,6 +549,36 @@ export class DigitalMeRuntime {
         ...(availabilityReason ? { availabilityReason } : {}),
         selectedMaterialNames: materialDisplayNames(mats),
       });
+    }
+
+    const execCap = this.registry.get(EXTERNAL_EXECUTOR_CODEX_CAPABILITY_ID);
+    if (execCap) {
+      let available = execCap.registration.availability === 'available';
+      let detail: string | undefined;
+      if (input.includeAvailability) {
+        try {
+          const check = await execCap.checkAvailability({});
+          available = !!check.available;
+          detail = check.detail;
+          (execCap.registration as { availability: string }).availability = available
+            ? 'available'
+            : 'needs_setup';
+        } catch (err) {
+          available = false;
+          detail = err instanceof Error ? err.message : String(err);
+          (execCap.registration as { availability: string }).availability = 'needs_setup';
+        }
+      }
+      out.executorCapabilityCard = {
+        capabilityId: execCap.registration.id,
+        displayName: execCap.registration.displayName,
+        shortDescription: '在你确认的项目目录中修改文件并运行测试。',
+        canDo: '按你的目标修改代码、运行本地测试，并把变更与测试结果交回 Digital Me 验收。',
+        allowedScope: '仅限你确认的项目文件夹；不会自动提交、推送或发布。',
+        available,
+        availabilityLabel: available ? '已连接' : '未连接',
+        ...(detail ? { detail } : {}),
+      };
     }
 
     return out;
@@ -1056,6 +1102,29 @@ export class DigitalMeRuntime {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { createA2ARemoteCapabilityAdapter } = require('../capability/adapters/a2a-remote') as typeof import('../capability/adapters/a2a-remote');
       registry.register(createA2ARemoteCapabilityAdapter(this.options.a2aRemoteCapability));
+    }
+
+    if (this.options.externalExecutorCapability !== false) {
+      const opt =
+        typeof this.options.externalExecutorCapability === 'object'
+          ? this.options.externalExecutorCapability
+          : {};
+      const adapter = createExternalExecutorCodexAdapter(opt);
+      // 同步探测：构造期尽量反映真实可用性（异步细节由 checkAvailability 再确认）
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const fsSync = require('node:fs') as typeof import('node:fs');
+        const { resolveCodexJs } = require('../capability/adapters/external-executor-codex') as typeof import('../capability/adapters/external-executor-codex');
+        const js = opt.codexJsPath || resolveCodexJs();
+        fsSync.accessSync(js);
+        (adapter.registration as { availability: string }).availability = 'available';
+      } catch {
+        (adapter.registration as { availability: string }).availability = 'needs_setup';
+      }
+      if (opt.executeHook) {
+        (adapter.registration as { availability: string }).availability = 'available';
+      }
+      registry.register(adapter);
     }
     return registry;
   }

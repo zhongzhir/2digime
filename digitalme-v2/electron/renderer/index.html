@@ -159,6 +159,23 @@
           </details>
 
           <hr class="settings-divider" />
+          <h2>执行能力</h2>
+          <p class="muted">用于在你确认的项目目录中修改代码。密钥与登录由该执行组件自行管理。</p>
+          <p id="settings-executor-status" class="meta" aria-live="polite">状态：检查中…</p>
+          <p id="settings-executor-desc" class="muted tiny"></p>
+          <p id="settings-executor-scope" class="muted tiny"></p>
+          <div class="row settings-actions">
+            <button type="button" id="btn-check-executor">检查连接</button>
+          </div>
+          <details class="advanced-connection">
+            <summary>高级说明</summary>
+            <p class="muted tiny">
+              首轮仅连接本机代码执行组件。它只会在你确认的文件夹内工作，不会自动提交、推送或发布。
+            </p>
+          </details>
+          <p id="executor-settings-status" class="status" aria-live="polite"></p>
+
+          <hr class="settings-divider" />
           <h2>专业能力</h2>
           <p class="muted">可选。不是另一个数字之我，而是本机可连接的研究分析服务。</p>
           <p id="settings-remote-cap-status" class="meta" aria-live="polite">状态：未配置</p>
@@ -306,10 +323,26 @@
               </section>
 
               <section class="work-exec-block" aria-label="执行">
+                <div id="execution-confirm-card" class="execution-confirm-card" hidden>
+                  <p id="execution-confirm-notice" class="muted"></p>
+                  <dl class="execution-confirm-dl">
+                    <div><dt>项目目录</dt><dd id="execution-confirm-dir"></dd></div>
+                    <div><dt>可访问</dt><dd id="execution-confirm-read"></dd></div>
+                    <div><dt>可修改</dt><dd id="execution-confirm-write"></dd></div>
+                    <div><dt>验收目标</dt><dd id="execution-confirm-accept"></dd></div>
+                    <div><dt>明确不做</dt><dd id="execution-confirm-donot"></dd></div>
+                  </dl>
+                  <ul id="execution-confirm-forbidden" class="muted tiny"></ul>
+                  <div class="row">
+                    <button type="button" id="btn-confirm-execution" class="primary">确认并开始</button>
+                    <button type="button" id="btn-cancel-execution" class="ghost">取消</button>
+                  </div>
+                </div>
                 <div class="row work-exec-actions">
                   <button type="button" id="btn-submit" class="primary">开始处理</button>
                   <button type="button" id="btn-cancel" disabled>取消</button>
                   <button type="button" id="btn-retry" disabled>重试</button>
+                  <button type="button" id="btn-restore-baseline" class="ghost" hidden>恢复执行前状态</button>
                   <button type="button" id="btn-restart-compose" class="ghost" hidden>重新开始</button>
                 </div>
                 <div class="work-status-rail" id="work-status-rail">

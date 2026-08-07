@@ -175,9 +175,25 @@
     submit: document.getElementById("btn-submit"),
     cancel: document.getElementById("btn-cancel"),
     retry: document.getElementById("btn-retry"),
+    restoreBaseline: document.getElementById("btn-restore-baseline"),
     restartCompose: document.getElementById("btn-restart-compose"),
+    executionConfirmCard: document.getElementById("execution-confirm-card"),
+    executionConfirmNotice: document.getElementById("execution-confirm-notice"),
+    executionConfirmDir: document.getElementById("execution-confirm-dir"),
+    executionConfirmRead: document.getElementById("execution-confirm-read"),
+    executionConfirmWrite: document.getElementById("execution-confirm-write"),
+    executionConfirmAccept: document.getElementById("execution-confirm-accept"),
+    executionConfirmDonot: document.getElementById("execution-confirm-donot"),
+    executionConfirmForbidden: document.getElementById("execution-confirm-forbidden"),
+    confirmExecution: document.getElementById("btn-confirm-execution"),
+    cancelExecution: document.getElementById("btn-cancel-execution"),
     jobStatus: document.getElementById("job-status"),
     jobActionable: document.getElementById("job-actionable"),
+    settingsExecutorStatus: document.getElementById("settings-executor-status"),
+    settingsExecutorDesc: document.getElementById("settings-executor-desc"),
+    settingsExecutorScope: document.getElementById("settings-executor-scope"),
+    checkExecutor: document.getElementById("btn-check-executor"),
+    executorSettingsStatus: document.getElementById("executor-settings-status"),
     ownerChoicePrompt: document.getElementById("owner-choice-prompt"),
     ownerChoiceQuestion: document.getElementById("owner-choice-question"),
     ownerChoiceActions: document.getElementById("owner-choice-actions"),
@@ -259,6 +275,8 @@
 
   /** @type {{ kind: 'file'|'folder', path: string }[]} */
   let materials = [];
+  /** @type {null | { goal: string, contextRefs: {kind:string,path:string}[], preview: any }} */
+  let pendingExecutionConfirm = null;
   /** @type {'compose'|'task'} */
   let workMode = "compose";
   let activeTaskId = null;
@@ -396,6 +414,7 @@
     }
     fillSettingsForm();
     setView("settings");
+    void refreshExecutorCapabilityUi(false);
   }
 
   const REMOTE_CONNECT_FAIL =
@@ -424,6 +443,36 @@
   function refreshRemoteCapabilityUi(remote) {
     const st = remote || lastBootRemoteCapability();
     setRemoteCapStatusLabel(remoteCapStatusLine(st || {}));
+  }
+
+  async function refreshExecutorCapabilityUi(includeAvailability) {
+    if (!els.settingsExecutorStatus) return;
+    try {
+      const listed = await api.invoke("capability.list", {
+        includeAvailability: !!includeAvailability,
+      });
+      const card = listed && listed.executorCapabilityCard;
+      if (!card) {
+        els.settingsExecutorStatus.textContent = "状态：未配置";
+        if (els.settingsExecutorDesc) els.settingsExecutorDesc.textContent = "";
+        if (els.settingsExecutorScope) els.settingsExecutorScope.textContent = "";
+        return card;
+      }
+      els.settingsExecutorStatus.textContent = `状态：${card.availabilityLabel || (card.available ? "已连接" : "未连接")}`;
+      if (els.settingsExecutorDesc) {
+        els.settingsExecutorDesc.textContent = `${card.displayName} — ${card.canDo || card.shortDescription || ""}`;
+      }
+      if (els.settingsExecutorScope) {
+        els.settingsExecutorScope.textContent = card.allowedScope || "";
+      }
+      return card;
+    } catch (err) {
+      els.settingsExecutorStatus.textContent = "状态：检查失败";
+      if (els.executorSettingsStatus) {
+        els.executorSettingsStatus.textContent = err.message || String(err);
+      }
+      return null;
+    }
   }
 
   function externalCapUnavailableMessage(card) {
@@ -1638,9 +1687,26 @@
         els.reviseBox.removeAttribute("hidden");
         const summary = els.reviseBox.querySelector("summary");
         if (summary) summary.textContent = "用说明重新执行";
-        if (els.revise) els.revise.textContent = "按说明重新分析";
+        if (els.revise) {
+          els.revise.textContent = content.codeChange ? "按说明重新执行" : "按说明重新分析";
+        }
       } else if (els.revise) {
         els.revise.closest(".revise-box").hidden = false;
+      }
+      if (els.restoreBaseline) {
+        const showRestore = !!(content.codeChange && content.codeChange.workingDirectory);
+        els.restoreBaseline.hidden = !showRestore;
+        if (showRestore) els.restoreBaseline.removeAttribute("hidden");
+        else els.restoreBaseline.setAttribute("hidden", "");
+      }
+      if (content.codeChange && content.codeChange.directoryChangedSinceResult) {
+        els.jobActionable.textContent =
+          "当前项目已与待验收结果不同。请重新核对后再采用，或先恢复执行前状态。";
+      }
+      if (content.codeChange && content.codeChange.verificationLabel && els.bundleQuality) {
+        els.bundleQuality.hidden = false;
+        els.bundleQuality.removeAttribute("hidden");
+        els.bundleQuality.textContent = content.codeChange.verificationLabel;
       }
       suppressSave = true;
       if (els.bundleReport) {
@@ -2461,6 +2527,20 @@
     }
   });
 
+  if (els.checkExecutor) {
+    els.checkExecutor.addEventListener("click", async () => {
+      if (els.executorSettingsStatus) els.executorSettingsStatus.textContent = "正在检查…";
+      const card = await refreshExecutorCapabilityUi(true);
+      if (els.executorSettingsStatus) {
+        els.executorSettingsStatus.textContent = card
+          ? card.available
+            ? "连接正常"
+            : card.detail || "未连接：请先安装并登录代码执行组件"
+          : "未找到代码执行能力";
+      }
+    });
+  }
+
   if (els.btnRemoteCapTest) {
     els.btnRemoteCapTest.addEventListener("click", async () => {
       const baseUrl = els.remoteCapBaseUrl ? String(els.remoteCapBaseUrl.value || "").trim() : "";
@@ -2807,12 +2887,29 @@
       // 不强迫传成果类型；Runtime 按意图派生。显式仅在隐藏控件有非空值时透传。
       if (type) payload.requestedArtifactType = type;
       const result = await api.invoke("work.submitTask", payload);
+      if (result.needsExecutionConfirm) {
+        pendingExecutionConfirm = {
+          goal,
+          contextRefs: payload.contextRefs,
+          preview: result.needsExecutionConfirm,
+        };
+        showExecutionConfirmCard(result.needsExecutionConfirm);
+        els.submit.disabled = false;
+        els.jobStatus.textContent = "开始前请确认可修改范围";
+        els.jobStatus.classList.remove("error");
+        els.jobActionable.textContent = result.needsExecutionConfirm.notice || "";
+        return;
+      }
       workMode = "task";
       activeTaskId = result.taskId;
       activeJobId = result.jobId;
       activeTaskIntentKind = result.intentKind || null;
       activeTaskRequestedArtifactType =
-        result.intentKind === "analyze_code" ? "code-analysis" : "document";
+        result.intentKind === "analyze_code"
+          ? "code-analysis"
+          : result.intentKind === "modify_code"
+            ? "code-change"
+            : "document";
       els.goal.readOnly = true;
       if (els.workComposeTitle) els.workComposeTitle.textContent = "当前任务";
       setWorkCollabVisible(true);
@@ -2831,6 +2928,109 @@
       await refreshConnectionFromCapabilities();
     }
   });
+
+  function hideExecutionConfirmCard() {
+    pendingExecutionConfirm = null;
+    if (els.executionConfirmCard) {
+      els.executionConfirmCard.hidden = true;
+      els.executionConfirmCard.setAttribute("hidden", "");
+    }
+  }
+
+  function showExecutionConfirmCard(preview) {
+    if (!els.executionConfirmCard) return;
+    els.executionConfirmCard.hidden = false;
+    els.executionConfirmCard.removeAttribute("hidden");
+    if (els.executionConfirmNotice) els.executionConfirmNotice.textContent = preview.notice || "";
+    if (els.executionConfirmDir) els.executionConfirmDir.textContent = preview.workingDirectory || "";
+    if (els.executionConfirmRead) {
+      els.executionConfirmRead.textContent = (preview.readScope || []).join("、") || "整个项目目录";
+    }
+    if (els.executionConfirmWrite) {
+      els.executionConfirmWrite.textContent = (preview.writeScope || []).join("、") || "整个项目目录";
+    }
+    const acc = preview.acceptancePreview || {};
+    if (els.executionConfirmAccept) {
+      els.executionConfirmAccept.textContent = (acc.goals || []).concat(acc.tests || []).join("；") || "按任务目标验收";
+    }
+    if (els.executionConfirmDonot) {
+      els.executionConfirmDonot.textContent = (acc.doNotDo || []).slice(0, 4).join("；");
+    }
+    if (els.executionConfirmForbidden) {
+      els.executionConfirmForbidden.innerHTML = "";
+      for (const line of preview.forbidden || []) {
+        const li = document.createElement("li");
+        li.textContent = line;
+        els.executionConfirmForbidden.appendChild(li);
+      }
+    }
+  }
+
+  async function startTaskAfterConfirm(payload) {
+    els.submit.disabled = true;
+    clearArtifactView();
+    hideExecutionConfirmCard();
+    const result = await api.invoke("work.submitTask", payload);
+    if (result.needsExecutionConfirm) {
+      pendingExecutionConfirm = {
+        goal: payload.goal,
+        contextRefs: payload.contextRefs,
+        preview: result.needsExecutionConfirm,
+      };
+      showExecutionConfirmCard(result.needsExecutionConfirm);
+      els.submit.disabled = false;
+      return;
+    }
+    workMode = "task";
+    activeTaskId = result.taskId;
+    activeJobId = result.jobId;
+    activeTaskIntentKind = result.intentKind || null;
+    activeTaskRequestedArtifactType =
+      result.intentKind === "modify_code" ? "code-change" : result.intentKind === "analyze_code" ? "code-analysis" : "document";
+    els.goal.readOnly = true;
+    if (els.workComposeTitle) els.workComposeTitle.textContent = "当前任务";
+    setWorkCollabVisible(true);
+    syncGoalPresentation();
+    if (result.userFacingNotice) {
+      els.jobStatus.textContent = result.userFacingNotice;
+      els.jobStatus.classList.remove("error");
+    }
+    await syncActiveTaskStatus();
+    startJobWatch(activeTaskId);
+  }
+
+  if (els.confirmExecution) {
+    els.confirmExecution.addEventListener("click", async () => {
+      try {
+        if (!pendingExecutionConfirm) return;
+        const preview = pendingExecutionConfirm.preview;
+        await startTaskAfterConfirm({
+          goal: pendingExecutionConfirm.goal,
+          contextRefs: pendingExecutionConfirm.contextRefs,
+          executionAuthorization: {
+            confirmed: true,
+            workingDirectory: preview.workingDirectory,
+            readScope: preview.readScope,
+            writeScope: preview.writeScope,
+          },
+        });
+      } catch (err) {
+        els.jobStatus.textContent = err.message || String(err);
+        els.jobStatus.classList.add("error");
+      } finally {
+        els.submit.disabled = false;
+        await refreshConnectionFromCapabilities();
+      }
+    });
+  }
+
+  if (els.cancelExecution) {
+    els.cancelExecution.addEventListener("click", () => {
+      hideExecutionConfirmCard();
+      els.jobStatus.textContent = "已取消开始";
+      els.jobActionable.textContent = "";
+    });
+  }
 
   els.revise.addEventListener("click", async () => {
     try {
@@ -2888,6 +3088,29 @@
     await syncActiveTaskStatus();
     startJobWatch(activeTaskId);
   });
+
+  if (els.restoreBaseline) {
+    els.restoreBaseline.addEventListener("click", async () => {
+      if (!activeTaskId) return;
+      try {
+        const result = await api.invoke("work.retryTask", {
+          taskId: activeTaskId,
+          action: "restore_baseline",
+        });
+        els.jobStatus.textContent = result.message || (result.restored ? "已恢复执行前状态" : "恢复未完成");
+        els.jobStatus.classList.toggle("error", !result.restored);
+        if (result.conflicts && result.conflicts.length) {
+          els.jobActionable.textContent = `冲突文件：${result.conflicts.slice(0, 5).join("、")}`;
+        } else {
+          els.jobActionable.textContent =
+            "不采用不会自动还原文件。如需还原，请使用「恢复执行前状态」。";
+        }
+      } catch (err) {
+        els.jobStatus.textContent = err.message || String(err);
+        els.jobStatus.classList.add("error");
+      }
+    });
+  }
 
   els.artifactEditor.addEventListener("input", () => {
     if (suppressSave || !activeArtifactId || workMode !== "task") return;

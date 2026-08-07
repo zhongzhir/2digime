@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "eecl-acceptance-summary/1",
+  "task": "DIGITALME-V2-EXTERNAL-EXECUTION-CLOSED-LOOP-01",
+  "ok": true,
+  "realCodex": true,
+  "runId": "run_msi9xvjz_ddmhrm",
+  "startedAt": "2026-08-07T01:36:43.777Z",
+  "completedAt": "2026-08-07T01:38:01.657Z",
+  "failureStage": null,
+  "failureMessage": null,
+  "codexProbe": {
+    "available": true,
+    "detail": "codex-cli 0.146.1"
+  },
+  "verified": {
+    "firstModify": true,
+    "revise": true,
+    "accept": true,
+    "restartPersists": true,
+    "restoreBaseline": true,
+    "noFullAutoFlag": true,
+    "shellFalse": true,
+    "noDep0190Observed": true,
+    "noCommitPushOrDeploy": true,
+    "independentEvidenceRunDir": true
+  },
+  "unitTests": {
+    "command": "node --test --test-concurrency=1 dist/execution/tests/*.test.js",
+    "passed": 15,
+    "failed": 0
+  },
+  "notes": [
+    "Full run evidence kept local under scripts/_external-execution-closed-loop-01-evidence/<runId>/; not committed.",
+    "Absolute machine paths and fixture contents omitted from this summary.",
+    "approval_policy=never used via -c to keep non-interactive exec without deprecated --full-auto."
+  ]
+}

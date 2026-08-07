@@ -189,6 +189,16 @@ export interface CommandMap {
         eventIdA: string;
         eventIdB: string;
       };
+      /**
+       * 代码修改授权（用户确认卡通过后传入）。
+       * 缺省且意图为 modify_code 时，不创建 Job，仅返回 needsExecutionConfirm。
+       */
+      executionAuthorization?: {
+        confirmed: true;
+        workingDirectory: string;
+        readScope?: string[];
+        writeScope?: string[];
+      };
     };
     output: {
       taskId: string;
@@ -196,11 +206,36 @@ export interface CommandMap {
       intentKind?: import('../work-runtime/work-intent').TaskIntentKind;
       /** 用户可理解的一句说明（如自动选择代码分析时）。 */
       userFacingNotice?: string;
+      /** 需要先确认写权限时返回；此时 taskId/jobId 为空字符串。 */
+      needsExecutionConfirm?: {
+        notice: string;
+        workingDirectory: string;
+        readScope: string[];
+        writeScope: string[];
+        forbidden: string[];
+        acceptancePreview: {
+          goals: string[];
+          tests: string[];
+          doNotDo: string[];
+        };
+        executorDisplayName: string;
+      };
     };
   };
   'work.retryTask': {
-    input: { taskId: string };
-    output: { jobId: string };
+    input: {
+      taskId: string;
+      /** restore_baseline：恢复最近一次外部执行前状态（不新建 Job）。 */
+      action?: 'retry' | 'restore_baseline';
+      /** 指定恢复所依据的 Job；缺省取最近 succeeded/failed 外部执行 Job。 */
+      jobId?: string;
+    };
+    output: {
+      jobId: string;
+      restored?: boolean;
+      message?: string;
+      conflicts?: string[];
+    };
   };
   /**
    * 对已有成果提出修改要求:同 Task 新 Job,成功后向同一 Artifact 追加 capability 版本。
@@ -234,6 +269,13 @@ export interface CommandMap {
         startedAt?: string;
         /** 失败时面向用户的可行动说明。 */
         actionable?: string;
+        /** 外部代码执行投影（白话由 UI 映射）。 */
+        externalExecution?: {
+          workingDirectory?: string;
+          lastExecutorStatus?: string;
+          needsUserQuestion?: boolean;
+          afterScopeDigest?: string;
+        };
       };
       artifactIds: string[];
       /** 轻量成长反馈;默认收起「使用了什么」,不含内部链路。 */
@@ -309,6 +351,15 @@ export interface CommandMap {
        * 报告为人工编辑，清单/依据仍为旧版；不得冒充已同步。
        */
       evidenceStale?: boolean;
+      /** code-change 成果：工作目录与验收摘要（非第二 Store）。 */
+      codeChange?: {
+        workingDirectory?: string;
+        verificationOverall?: string;
+        verificationLabel?: string;
+        changedFiles?: string[];
+        afterScopeDigest?: string;
+        directoryChangedSinceResult?: boolean;
+      };
     };
   };
   'artifact.saveEdit': {
@@ -357,6 +408,17 @@ export interface CommandMap {
         estimatedDuration: string;
         available: boolean;
         availabilityLabel: string;
+      };
+      /** 代码执行能力（设置页）；非能力市场。 */
+      executorCapabilityCard?: {
+        capabilityId: string;
+        displayName: string;
+        shortDescription: string;
+        canDo: string;
+        allowedScope: string;
+        available: boolean;
+        availabilityLabel: string;
+        detail?: string;
       };
     };
   };

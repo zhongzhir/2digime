@@ -9,7 +9,12 @@ import type { ContextIngestionPolicy } from '../work-runtime/context-policy';
 export type CapabilityKind = 'model' | 'agent' | 'skill' | 'tool' | 'service';
 
 /** Adapter 类型白名单 — 封闭枚举,新增类型必须改代码并过评审。 */
-export const ADAPTER_TYPES = ['openai-compatible-model', 'local-tool', 'remote-subject'] as const;
+export const ADAPTER_TYPES = [
+  'openai-compatible-model',
+  'local-tool',
+  'remote-subject',
+  'external-executor-cli',
+] as const;
 export type AdapterType = (typeof ADAPTER_TYPES)[number];
 
 export function isAdapterType(value: string): value is AdapterType {

@@ -5,6 +5,8 @@ import {
   CODE_ANALYSIS_ARTIFACT_TYPE,
   CODE_REPO_ANALYSIS_CAPABILITY_ID,
 } from './adapters/code-repo-analysis-contract';
+import { EXTERNAL_EXECUTOR_CODEX_CAPABILITY_ID } from '../execution/external-executor-contract';
+import { CODE_CHANGE_ARTIFACT_TYPE } from '../execution/external-executor-contract';
 
 export interface CapabilityNeed {
   intentKind?: TaskIntentKind;
@@ -135,6 +137,45 @@ export class CapabilityRegistry {
       return { adapter: byFamily, reason: 'intent_material' };
     }
 
+    if (intent === 'modify_code' || family === CODE_CHANGE_ARTIFACT_TYPE) {
+      const exec = this.adapters.get(EXTERNAL_EXECUTOR_CODEX_CAPABILITY_ID);
+      const byFamily = exec
+        ? exec
+        : [...this.adapters.values()].find((a) =>
+            a.registration.outputArtifactTypes.includes(CODE_CHANGE_ARTIFACT_TYPE),
+          );
+      if (!byFamily) {
+        return {
+          reason: 'none',
+          actionable:
+            '当前没有可用的代码执行能力。请先在设置中连接代码执行组件后再试。不会改用普通写作冒充代码修改。',
+        };
+      }
+      if (byFamily.registration.availability !== 'available') {
+        return {
+          reason: 'none',
+          actionable: actionableForUnavailable(byFamily.registration, 'modify_code'),
+        };
+      }
+      const hasCodeMaterial =
+        materials.includes('code_repo') ||
+        materials.includes('folder') ||
+        materials.includes('file');
+      if (intent === 'modify_code' && materials.length > 0 && !hasCodeMaterial) {
+        return {
+          reason: 'none',
+          actionable: '修改代码需要你添加项目文件夹。',
+        };
+      }
+      return {
+        adapter: byFamily,
+        reason:
+          intent === 'modify_code' && (materials.includes('code_repo') || materials.includes('folder'))
+            ? 'intent_material'
+            : 'output_family',
+      };
+    }
+
     if (family) {
       for (const adapter of this.adapters.values()) {
         const reg = adapter.registration;
@@ -166,6 +207,12 @@ function actionableForUnavailable(
   reg: CapabilityRegistration,
   intent?: TaskIntentKind,
 ): string {
+  if (intent === 'modify_code' || reg.outputArtifactTypes.includes(CODE_CHANGE_ARTIFACT_TYPE)) {
+    if (reg.availability === 'needs_setup') {
+      return '当前无法修改项目文件：请先在设置中连接代码执行组件后再试。不会改用普通写作冒充代码修改。';
+    }
+    return '代码执行能力暂时不可用，请稍后重试。不会改用普通写作冒充代码修改。';
+  }
   if (intent === 'analyze_code' || reg.outputArtifactTypes.includes(CODE_ANALYSIS_ARTIFACT_TYPE)) {
     if (reg.availability === 'needs_setup') {
       return '当前无法进行代码分析：请先连接模型后再试。不会改用普通写作冒充代码审查。';

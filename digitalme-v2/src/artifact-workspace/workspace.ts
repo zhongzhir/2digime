@@ -120,7 +120,9 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
         }
         entries.push(item);
       }
-      const report = entries.find((e) => e.role === 'report');
+      const report =
+        entries.find((e) => e.role === 'execution-summary') ||
+        entries.find((e) => e.role === 'report');
       if (report?.text) result.text = report.text;
       let manifestSummary:
         | {
@@ -130,6 +132,16 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
             skippedSensitiveCount: number;
             warnings: string[];
             quality?: { grade: string; reasons: string[] };
+          }
+        | undefined;
+      let codeChange:
+        | {
+            workingDirectory?: string;
+            verificationOverall?: string;
+            verificationLabel?: string;
+            changedFiles?: string[];
+            afterScopeDigest?: string;
+            directoryChangedSinceResult?: boolean;
           }
         | undefined;
       const manifestEntry = entries.find((e) => e.role === 'manifest');
@@ -144,15 +156,69 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
             languages?: Array<{ language: string; files: number; bytes: number }>;
             warnings?: string[];
             quality?: { grade: string; reasons: string[] };
+            workingDirectory?: string;
+            verificationOverall?: string;
+            changedFiles?: string[];
+            afterScopeDigest?: string;
+            artifactType?: string;
+            writeScope?: string[];
           };
-          manifestSummary = {
-            fileCountScanned: parsed.repo?.fileCountScanned ?? 0,
-            languages: parsed.languages ?? [],
-            truncated: parsed.repo?.truncated ?? false,
-            skippedSensitiveCount: parsed.repo?.skippedSensitiveCount ?? 0,
-            warnings: parsed.warnings ?? [],
-            ...(parsed.quality ? { quality: parsed.quality } : {}),
-          };
+          if (parsed.artifactType === 'code-change' || parsed.workingDirectory) {
+            const { userFacingVerification } = await import(
+              '../execution/external-executor-contract'
+            );
+            const { computeScopeDigest } = await import('../execution/baseline');
+            let directoryChangedSinceResult = false;
+            if (parsed.workingDirectory && parsed.afterScopeDigest && parsed.writeScope) {
+              try {
+                const nowDigest = await computeScopeDigest(
+                  parsed.workingDirectory,
+                  parsed.writeScope as string[],
+                );
+                directoryChangedSinceResult = nowDigest !== parsed.afterScopeDigest;
+              } catch {
+                directoryChangedSinceResult = false;
+              }
+            } else if (parsed.workingDirectory && parsed.afterScopeDigest) {
+              try {
+                const nowDigest = await computeScopeDigest(parsed.workingDirectory, ['.']);
+                directoryChangedSinceResult = nowDigest !== parsed.afterScopeDigest;
+              } catch {
+                directoryChangedSinceResult = false;
+              }
+            }
+            codeChange = {
+              ...(parsed.workingDirectory
+                ? { workingDirectory: parsed.workingDirectory }
+                : {}),
+              ...(parsed.verificationOverall
+                ? {
+                    verificationOverall: parsed.verificationOverall,
+                    verificationLabel: userFacingVerification(
+                      parsed.verificationOverall as
+                        | 'satisfied'
+                        | 'partially_satisfied'
+                        | 'unsatisfied'
+                        | 'unverifiable',
+                    ),
+                  }
+                : {}),
+              ...(parsed.changedFiles ? { changedFiles: parsed.changedFiles } : {}),
+              ...(parsed.afterScopeDigest
+                ? { afterScopeDigest: parsed.afterScopeDigest }
+                : {}),
+              directoryChangedSinceResult,
+            };
+          } else {
+            manifestSummary = {
+              fileCountScanned: parsed.repo?.fileCountScanned ?? 0,
+              languages: parsed.languages ?? [],
+              truncated: parsed.repo?.truncated ?? false,
+              skippedSensitiveCount: parsed.repo?.skippedSensitiveCount ?? 0,
+              warnings: parsed.warnings ?? [],
+              ...(parsed.quality ? { quality: parsed.quality } : {}),
+            };
+          }
         } catch {
           // ignore
         }
@@ -165,6 +231,9 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
         })),
         ...(manifestSummary ? { manifestSummary } : {}),
       };
+      if (codeChange) {
+        (result as { codeChange?: typeof codeChange }).codeChange = codeChange;
+      }
     }
     return result;
   }

@@ -64,6 +64,29 @@ export interface ExecutionJob {
     /** 幂等重试计数(最多一次)。 */
     retryCount?: number;
   };
+  /**
+   * 外部执行器映射(可选) — 不是第二状态机 / 第二任务系统。
+   * Job 五态仍是唯一权威；此处承载授权范围与执行器侧状态投影。
+   */
+  externalExecution?: {
+    executorId: string;
+    executorRunId?: string;
+    workingDirectory: string;
+    readScope: string[];
+    writeScope: string[];
+    lastExecutorStatus?:
+      | 'queued'
+      | 'running'
+      | 'waiting_for_input'
+      | 'succeeded'
+      | 'failed'
+      | 'cancelled'
+      | 'interrupted';
+    /** 每个原始 Job 最多自动续执行一次。 */
+    autoContinueCount?: number;
+    afterScopeDigest?: string;
+    needsUserQuestion?: boolean;
+  };
 }
 
 /** 合法状态迁移(contracts §3;终态不可再迁移)。 */

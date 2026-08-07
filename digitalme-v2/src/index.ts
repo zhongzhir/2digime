@@ -52,3 +52,6 @@ export * from './runtime/command-bus';
 export * from './runtime/digitalme-runtime';
 
 export * from './infrastructure';
+
+export * from './execution/external-executor-contract';
+export * from './capability/adapters/external-executor-codex';
