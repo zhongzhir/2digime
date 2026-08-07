@@ -90,7 +90,7 @@ const ACTIONABLE: Record<CodingCapabilityAvailability, string> = {
   needs_login: '代码执行能力需要连接后才能继续。',
   needs_setup: '尚未检测到可用的代码执行能力。',
   unavailable: '当前代码执行能力版本过旧，请更新后重新检查。',
-  unsupported: '检测到该工具，但当前版本还不能自动调用它。',
+  unsupported: '检测到该工具，但当前还不能由 Digital Me 自动调用。',
   degraded_handoff:
     '当前需要你在外部工具中完成修改。完成后回到这里，Digital Me 会检查变化和测试结果。',
 };
@@ -246,18 +246,24 @@ export function buildCodingOnboardingPayload(
   if (opts?.includeCloudAction || hasManagedRemoteReady) {
     actions.push('use_cloud');
   }
+  const unsupported = statuses.filter((s) => s.availability === 'unsupported');
+  let message: string;
+  if (statuses.some((s) => s.availability === 'needs_login')) {
+    message = actionableForCodingAvailability('needs_login');
+  } else if (unsupported.length > 0 && !statuses.some((s) => s.availability === 'ready')) {
+    // 已检测到但暂不能自动调用时，不得被同场的 needs_setup 盖成「尚未检测到」
+    const name = String(unsupported[0]?.displayName || '').trim();
+    message = name
+      ? `已检测到「${name}」，但当前还不能由 Digital Me 自动调用。`
+      : actionableForCodingAvailability('unsupported');
+  } else {
+    message = actionableForCodingAvailability('needs_setup');
+  }
   return {
     title: '完成这项任务需要代码执行能力',
     description:
       'Digital Me 会使用它在你确认的项目目录中创建或修改代码，并运行测试。',
-    message: actionableForCodingAvailability(
-      statuses.some((s) => s.availability === 'needs_login')
-        ? 'needs_login'
-        : statuses.some((s) => s.availability === 'unsupported') &&
-            !statuses.some((s) => s.availability === 'needs_setup' || s.availability === 'ready')
-          ? 'unsupported'
-          : 'needs_setup',
-    ),
+    message,
     settingsHint: '可在设置中查看代码执行能力状态与说明。',
     actions,
     capabilities: statuses.map(sanitizeCodingStatusForUi),

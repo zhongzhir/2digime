@@ -103,7 +103,7 @@ describe('coding-capability-onboarding-01', () => {
     const check = await adapter.checkAvailability();
     assert.equal(check.available, false);
     assert.equal(check.reason, 'unsupported');
-    assert.match(String(check.detail), /不能自动调用/);
+    assert.match(String(check.detail), /不能.*自动调用/);
     assert.equal(adapter.registration.codingExecution?.supportsAutomaticExecution, false);
     assert.equal(adapter.registration.codingExecution?.invocationKind, 'desktop_handoff');
   });

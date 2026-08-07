@@ -137,6 +137,11 @@ describe('coding-capability-owner-scenarios-close-01', () => {
     assert.equal(result.needsExecutionConfirm, undefined);
     assert.ok(result.needsExecutorSetup);
     assert.equal(result.taskId, '');
+    assert.match(
+      String(result.needsExecutorSetup!.message),
+      /已检测|不能由 Digital Me 自动调用/,
+    );
+    assert.equal(/尚未检测到可用的代码执行能力/.test(String(result.needsExecutorSetup!.message)), false);
   });
 
   it('默认场景 A 不受 B/C 开关影响；同包去掉开关后恢复真实探测派生', async () => {

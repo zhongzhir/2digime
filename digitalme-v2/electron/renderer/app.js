@@ -1242,10 +1242,15 @@
         guideBtn.addEventListener("click", () => openSettings());
         row.appendChild(guideBtn);
       } else if (cap.availability === "unsupported" || cap.invocationKind === "desktop_handoff") {
-        const note = document.createElement("p");
-        note.className = "muted tiny";
-        note.textContent = "检测到该工具，但当前还不能由 Digital Me 自动调用。";
-        item.appendChild(note);
+        const already =
+          /不能.*自动调用|无法自动使用/.test(String(cap.actionableMessage || "")) ||
+          /不能.*自动调用|无法自动使用/.test(String(cap.executionModeLabel || ""));
+        if (!already) {
+          const note = document.createElement("p");
+          note.className = "muted tiny";
+          note.textContent = "检测到该工具，但当前还不能由 Digital Me 自动调用。";
+          item.appendChild(note);
+        }
       }
       if (row.childNodes.length) item.appendChild(row);
       els.codingCapScanList.appendChild(item);
@@ -4432,12 +4437,10 @@
       if (result.needsExecutorSetup) {
         showExecutorSetupCard(result.needsExecutorSetup);
         els.submit.disabled = false;
-        els.jobStatus.textContent = result.needsExecutorSetup.title || "这项任务需要代码执行能力";
+        // 详情已在引导卡中；底部状态栏只给下一步提示，避免同一句话重复三处
+        els.jobStatus.textContent = "请先连接可用的代码执行能力";
         els.jobStatus.classList.remove("error");
-        els.jobActionable.textContent =
-          result.needsExecutorSetup.message ||
-          result.needsExecutorSetup.settingsHint ||
-          "请先连接代码执行能力。";
+        els.jobActionable.textContent = "可使用已安装的能力、安装推荐能力，或稍后连接后继续。";
         return;
       }
       if (result.needsExecutionConfirm) {

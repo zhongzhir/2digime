@@ -164,7 +164,7 @@ export async function probeCodexAvailability(
     return {
       available: false,
       reason: 'unsupported',
-      detail: '检测到该工具，但当前版本还不能自动调用它。',
+      detail: '检测到该工具，但当前还不能由 Digital Me 自动调用。',
     };
   }
   if (forced === 'needs_setup') {

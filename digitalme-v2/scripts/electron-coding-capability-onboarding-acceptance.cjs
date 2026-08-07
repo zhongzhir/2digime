@@ -302,18 +302,34 @@ async function run() {
     await new Promise((r) => setTimeout(r, 250));
     document.getElementById('btn-submit').click();
     await new Promise((r) => setTimeout(r, 500));
-    document.getElementById('btn-coding-use-installed').click();
-    await new Promise((r) => setTimeout(r, 500));
-    const scan = (document.getElementById('coding-cap-scan-list') || {}).innerText || '';
+    const card = document.getElementById('executor-setup-card');
+    const msg = (document.getElementById('executor-setup-message') || {}).textContent || '';
+    const status = (document.getElementById('job-status') || {}).textContent || '';
+    const actionable = (document.getElementById('job-actionable') || {}).textContent || '';
     const confirmHidden = document.getElementById('execution-confirm-card').hidden;
+    document.getElementById('btn-coding-use-installed').click();
+    await new Promise((r) => setTimeout(r, 400));
+    const scan = (document.getElementById('coding-cap-scan-list') || {}).innerText || '';
+    const deskHits = (scan.match(/某桌面代码工具|桌面工具/g) || []).length;
+    const autoCallHits = (scan.match(/不能由 Digital Me 自动调用|不能自动调用/g) || []).length;
     return {
+      cardVisible: card && !card.hidden,
+      msg,
+      status,
+      actionable,
       scan,
       confirmHidden,
-      notConnected: /不能自动调用|无法自动使用/.test(scan),
-      notReadyLabel: !/已连接/.test(scan) || /不能自动/.test(scan),
+      topMessageOk: /已检测|不能由 Digital Me 自动调用/.test(msg),
+      notSceneB: !/尚未检测到可用的代码执行能力/.test(msg),
+      statusNotDuplicate: !/已检测「|尚未检测到可用/.test(status + actionable),
+      notConnected: /不能.*自动调用|无法自动使用/.test(scan + msg),
+      scanNoTriple: deskHits <= 2 && autoCallHits <= 2,
     };
   }`);
-  check('c_unsupported_message', !!(sceneC && sceneC.notConnected), sceneC);
+  check('c_unsupported_message', !!(sceneC && sceneC.notConnected && sceneC.topMessageOk), sceneC);
+  check('c_not_scene_b_copy', !!(sceneC && sceneC.notSceneB), sceneC);
+  check('c_status_not_duplicate', !!(sceneC && sceneC.statusNotDuplicate), sceneC);
+  check('c_scan_not_triple', !!(sceneC && sceneC.scanNoTriple), sceneC);
   check('c_no_auto_confirm', !!(sceneC && sceneC.confirmHidden), sceneC);
 
   const listedC = await bus.invoke('capability.list', { includeAvailability: true });
