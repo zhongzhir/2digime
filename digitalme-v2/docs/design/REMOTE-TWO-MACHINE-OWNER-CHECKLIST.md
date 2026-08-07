@@ -1,12 +1,19 @@
 # REMOTE-TWO-MACHINE-OWNER-CHECKLIST
 
-任务：`DIGITALME-V2-REMOTE-TWO-MACHINE-OWNER-VALIDATION-01`
+任务：`DIGITALME-V2-REMOTE-TWO-MACHINE-OWNER-VALIDATION-01`  
+状态（2026-08-07）：**明日唯一继续点**；今日停止产品开发。Candidate：`494b755`。
 
 Owner 只走用户路径。工程细节由开发侧另行核对。
 
+## Owner 先决（开始前）
+
+- 公网 Relay **部署服务器**
+- Relay **域名 / 子域名**
+- 最终只提供：`https://<domain>`
+
 ## 前置
 
-- 同一 Candidate 构建（`REMOTE-COMMUNICATION-CANDIDATE`）
+- 同一 Candidate 构建（`REMOTE-COMMUNICATION-CANDIDATE` = `494b755`）
 - 公网中继地址形如：`https://<domain>`（仅此一项；无需端口/数据库）
 - 电脑 A / B：独立 userData、独立数字之我资料包；不共享磁盘、不复制密钥、不映射网络盘
 
@@ -63,6 +70,6 @@ Owner 只走用户路径。工程细节由开发侧另行核对。
 
 ## 已知本轮边界（记入下一任务）
 
-- 大成果跨公网完整履约：未正式 remote 化 → `REMOTE-COLLABORATION-DELIVERY-01`
+- 大成果跨公网完整履约：未正式 remote 化 → `REMOTE-COLLABORATION-DELIVERY-01`（**仅双机通过后**）
 - Grant 远程投影：未完整关闭
 - 不得用共享目录假装完成

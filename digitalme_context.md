@@ -2,7 +2,7 @@
 
 版本：v0.4
 状态：持续更新
-最后更新：2026-08-06（EXPERIENCE-REDESIGN-01B Owner 真机接受并关闭；`v2/foundation` 收口提交 · **未 push**）
+最后更新：2026-08-07（TODAY-CLOSE；`v2/foundation` · Candidate `494b755` · **未 push**）
 
 > **当前行动准则（2026-08-04）**：
 > 1. Digital Me 后续采用跨模块轮动演进。
@@ -11,14 +11,16 @@
 > 4. 广播作为长期核心创新假设持续评估，但近期不替代产品基本闭环和 A2A 受控能力接入。
 >
 > **当前产品主线（2026-07-26）**：**第二纵向闭环** — 多模态成果包交付与渐进式主体构建。第一纵向闭环已 `accepted` / `completed`。
-> **V2 当前执行分支（2026-08-06）**：`v2/foundation` · **未 push**。
-> **今日停止指针**：**DIGITALME-V2-EXPERIENCE-REDESIGN-01B** =
-> `implemented` / `owner_runtime_accepted` / `conversation_integrity_validated` /
-> `material_grounding_validated` / `revision_integrity_validated` / `experience_redesign_closed` /
-> `not_pushed`。
-> **不得**：夸大为 `closed_alpha` / `mvp_ready` / `production_ready`；不得 push（除非 Owner 另令）。
+> **V2 当前执行分支（2026-08-07）**：`v2/foundation` · HEAD **`494b755d297853523180cd407f4bb0a1ea097174`** · **未 push**。
+> **今日停止指针**：**DIGITALME-TODAY-CLOSE-20260807** =
+> `product_day_closed` / `remote_communication_candidate_frozen` / `not_pushed`。
+> **REMOTE-COMMUNICATION-CANDIDATE**：`494b755`（`feat(communication): add encrypted relay transport`）。
+> **明日唯一继续点（不编码）**：**DIGITALME-V2-REMOTE-TWO-MACHINE-OWNER-VALIDATION-01**。  
+> Owner 先决：公网 Relay 服务器 + 域名/子域名 → HTTPS Relay → 两台真机 Candidate `494b755` → pairing → Signal 往返 → 离线/retry → Signal→远程协作提案。  
+> 双机通过前 **不得**启动 `REMOTE-COLLABORATION-DELIVERY-01`；不得继续产品开发编码。
+> **不得**：夸大为 `closed_alpha` / `mvp_ready` / `production_ready` / `two_machine_validated` / `public_relay_validated`；不得 push（除非 Owner 另令）。
 > **历史阻断（保留）**：P2C1 代码分析质量恢复仍为 `blocked` / `real_quality_gate_failed`（非本收口主线）。
-> **规格入口**：[`digitalme-v2/docs/design/digitalme_v2_experience_redesign_01a_v0.1_20260805.md`](digitalme-v2/docs/design/digitalme_v2_experience_redesign_01a_v0.1_20260805.md)。
+> **通信路线图**：[`digitalme-v2/docs/design/SUBJECT-COMMUNICATION-REMOTE-ROADMAP.md`](digitalme-v2/docs/design/SUBJECT-COMMUNICATION-REMOTE-ROADMAP.md)；双机清单：[`digitalme-v2/docs/design/REMOTE-TWO-MACHINE-OWNER-CHECKLIST.md`](digitalme-v2/docs/design/REMOTE-TWO-MACHINE-OWNER-CHECKLIST.md)。
 > **最高架构与研发原则**：[`digitalme_subject_architecture_and_rd_principles_v0.1.md`](digitalme_subject_architecture_and_rd_principles_v0.1.md)（**v0.1.1 `active`**）。
 > **当前执行基线**：[`DigitalMe_product_baseline_reset_v0.2_2026-07-21.md`](DigitalMe_product_baseline_reset_v0.2_2026-07-21.md)（**v0.2 `active`**；Owner 审核通过关键裁决，包含能力覆盖完整性、唯一数字身份与对外协作等补强项）。
 > **产品基线重置裁决（历史）**：原「研究与表达」候选确认路径判废；工程机制（上下文装配、候选选择、确认快照）降为后台自动编排。**第一纵向闭环后续已于 2026-07-25 正式收口为 `accepted` / `completed`（决策 #103 + `928aa1a` + `e8b6572`），本条不再作为「未验收」有效指针。**
@@ -59,6 +61,36 @@
 > **长期结论（2026-07-31 · 学习质量）**：① 用户修改并采用成果后，质量经验可分类、落盘、重载并在下一匹配任务复用。② 通用质量经验经 `qualityScope` 支持 document/software/image/video/podcast 等，**不是**文章专用机制。③ 边界：document/article 已真实模型回归；其他成果类型仅静态 scope 隔离；跨模态真实质量验证未执行。④ 不得把一次采用成果中的全部特征自动学习为长期偏好。
 >
 > **V2 / 软件工程收口摘要（2026-08-03）**：P2B.1 隔离闭环与 P2B.2–P2B.4 真实小修已合入 `v2/foundation`（至 `ef1d394`）。P2C1 真实代码分析质量门失败并阻断；生产试改已撤回。Codex CLI 本机仍 `auth_failed`（DashScope 401，环境问题，不否定路线）。
+>
+> ### 当前产品状态（2026-08-07）
+>
+> Digital Me 三根主梁均已有真实闭环：
+> - **代表我 / 成长**（含 SMALL-LOOP-INTEGRATION-01：`e4f3f4d`）
+> - **做事**（含软件开发 Owner 真机闭环与 WORK-UX-SIMPLIFICATION-01：`b01a0ef` / `eedfd59` 等）
+> - **协作**（含 COLLABORATION-REAL-LOOP-01：`90c5e65`）
+>
+> 并新增：
+> - **Signal before Collaboration** / Opportunity Discovery（`eb0f22a`）
+> - **Relay-ready remote communication foundation**（Candidate `494b755`）
+>
+> ### 当前通信架构原则（冻结）
+>
+> `Subject semantics → SubjectTransport → Local / Relay / future P2P-Hybrid`
+>
+> - 不绑定纯 P2P；通讯机制采用多 Transport
+> - Relay 是加密邮局，**不是**主体事实源
+> - 主体数据仍属于各自 SubjectPackage
+> - Remote payload **E2EE**（Ed25519 + X25519 + AES-256-GCM）
+> - P2P 后续可作为 direct path；Relay 作为可靠 fallback
+> - Digital Me 之间通讯是未来重大商业价值来源之一；当前优先验证**主体网络真实成立**
+> - **暂不扩**：广播市场、支付、信誉、多方协作、P2P/NAT traversal
+>
+> ### 当前真实验证边界（2026-08-07）
+>
+> **已验证**：Local 双主体；真实模型协作；Signal/opportunity；本机完全隔离 A/B + Relay 三进程 remote semantics；E2EE / offline / retry / idempotency。
+>
+> **尚未验证（不得写成已完成）**：两台真实电脑；公网 HTTPS Relay；真实跨公网 Signal 往返；remote 大 Artifact；remote Grant 完整投影。
+>
 ## 1. 项目背景
 
 Digital Me 旨在解决 AI 时代“人的主体性”问题：个人如何在 AI 能力快速增强的环境中，持续保有并扩展自身的记忆、判断、表达、能力与关系，而不是被平台和模型吸收。
@@ -612,7 +644,11 @@ Owner 判断（2026-07-27）：
 
 ### 7.1 近期优先级（建议顺序）
 
-> **2026-08-02 当前执行指针（TODAY-CLOSE）**：**MVP-PORTABLE-REBUILD-AND-OWNER-ACCEPTANCE-01** 候选 `20260802-184853-144d0d7` 已建（完整性 + 烟测通过；`owner_install_acceptance_pending`）。基线 `144d0d7`。**等待 Owner 安装手测**。通过前不得写 `owner_install_accepted` / `closed_alpha_candidate_ready` / `closed_alpha_ready` / `mvp_ready`。不得 push；本阶段无新代码 commit。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+> **2026-08-07 当前执行指针（TODAY-CLOSE）**：产品开发停止。可信基线 = `v2/foundation` @ **`494b755`**（REMOTE-COMMUNICATION-CANDIDATE）。**明日唯一继续点**：**DIGITALME-V2-REMOTE-TWO-MACHINE-OWNER-VALIDATION-01**（先 Owner 定公网 Relay 服务器与域名；再真双机验收）。通过前不得启动 `REMOTE-COLLABORATION-DELIVERY-01`；不得宣称公网/双机已验证。不得 push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+
+> **2026-08-06 历史指针**：**DIGITALME-V2-EXPERIENCE-REDESIGN-01B** 已 `owner_runtime_accepted` / `experience_redesign_closed`。
+
+> **2026-08-02 历史指针**：**MVP-PORTABLE-REBUILD-AND-OWNER-ACCEPTANCE-01** 候选 `20260802-184853-144d0d7` 已建（完整性 + 烟测通过；`owner_install_acceptance_pending`）。基线 `144d0d7`。通过前不得写 `owner_install_accepted` / `closed_alpha_candidate_ready` / `closed_alpha_ready` / `mvp_ready`。
 
 > **2026-08-02 历史指针**：**MVP-RELEASE-REGRESSION-02** 已工程验收收口（`release_main_path_validated` / `accepted_as_engineered`；任务包 `digitalme_phase1_task_MVP-RELEASE-REGRESSION-02_v0.1.md`；报告 `MVP_RELEASE_REGRESSION_02_REPORT_20260802.md`）。基线 `bd6f031`→提交 `144d0d7`。创建/导入双路径真实模型通过。
 
@@ -1089,3 +1125,4 @@ flowchart TB
 106. **BUG1 #4 多模态产物方向（2026-07-26，历史方向记录）**：Owner 明确「做事」不只是文字，要覆盖**文字 / 图 / 视频 / 音频 / 代码 / 网页 / 数据**等 AI 可生成的产物类型。设计原则：①不自研能力（决策 #37 能力跟随——对接业界最好的）；②能力可装可卸（§7.8）；③校准不限制（决策 #28）；④能力为空时引导装；⑤密钥只在 main 层（§7.8）。曾给三候选方案：A「做事页加产物类型选择」/ B「新增创作入口」/ C「场景自动分流」。**已被决策 #107 正式选定（C+A，不采用 B）**。
 107. **第二纵向闭环启动 · Owner 四项正式裁决（2026-07-26）**：① BUG1 #4 = **C + A**；② BUG1 #6 = **七模块渐进式数字之我构建框架**；③ 首个正式验收场景 = **为一个项目生成完整的对外介绍成果包**；④ 第一轮真实产物 = 文档/PPT/HTML/封面图片。**DVL2-00 v0.1.1** 已冻结。**DVL2-01** 启动时为 `owner_accepted` / `frozen_for_implementation` / `not_started`（[`digitalme_phase1_task_DVL2-01_deliverable_planner_v0.1.md`](digitalme_phase1_task_DVL2-01_deliverable_planner_v0.1.md)）。**其后**已获实施授权、实现并于 Owner 真机验收收口为 `owner_runtime_accepted` / `accepted_as_implemented`（实施 `implemented` @ `6e7c384`）。**当前下一步** = 等待 DVL2-02 任务起草与独立实施授权（`not_started` / `not_authorized`）。R3 / R2.5 / PAN-02 仍 `paused` / `deferred` / `blocked`。
 108. **CRT-MVP-02 系列 Owner 真机验收收口（2026-07-27）**：Owner 最终冒烟 4/4 通过——①附件变化拦截；②正式成果无内部方括号标签；③开放探索保留创造力且未改写为 DID/区块链平台；④文本框右键菜单。裁定 **CRT-MVP-02 / 02.1 / 02.2 = `owner_runtime_accepted`**。任务包 [`digitalme_phase1_task_CRT-MVP-02_subject_context_engine_v0.1.md`](digitalme_phase1_task_CRT-MVP-02_subject_context_engine_v0.1.md)；规格 [`digitalme_crt_v0.2_subject_context_engine_spec.md`](docs/design/digitalme_crt_v0.2_subject_context_engine_spec.md) 保持 `frozen_for_implementation`。Judgment Candidate 由自动化 J1 与 `.codex-qa/crt-mvp-02.2/acceptance.json` 验证。**不等于**完整 Active Judgment 已实现；**不**将 CRT v0.2 以外后续阶段标完成。非阻断观察：探索成果偶发「已有用户体系 / 现有用户社群」未确认现状表述，后续生成质量优化应改为「未来用户体系 / 目标用户 / 后续种子用户」。**不 push**。
+109. **V2 主体网络基础日收口（2026-08-07）**：当日 Git 关键链（`v2/foundation`）含软件开发 Owner 闭环、WORK-UX-SIMPLIFICATION-01、SMALL-LOOP-INTEGRATION-01（`e4f3f4d`）、COLLABORATION-REAL-LOOP-01（`90c5e65`）、Opportunity Discovery（`eb0f22a`）、Remote Subject Communication Candidate（`494b755`）。冻结通信原则：Subject semantics → SubjectTransport → Local/Relay/future P2P-Hybrid；Relay=加密邮局非事实源；E2EE；多 Transport 非教条纯 P2P。**已验证**至本机三进程 remote semantics；**未验证**真双机与公网 HTTPS Relay。明日唯一继续点 = `DIGITALME-V2-REMOTE-TWO-MACHINE-OWNER-VALIDATION-01`（先 Owner 定服务器/域名）。**不 push**。

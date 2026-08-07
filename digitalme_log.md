@@ -5,6 +5,54 @@
 
 ---
 
+## 2026-08-07 TODAY-CLOSE · V2 主体网络基础日收口
+
+### 状态
+
+`product_day_closed` / `remote_communication_candidate_frozen` / `not_pushed`
+
+分支：`v2/foundation`。收口前 HEAD：**`494b755d297853523180cd407f4bb0a1ea097174`**（REMOTE-COMMUNICATION-CANDIDATE）。任务：`DIGITALME-TODAY-CLOSE-20260807`。
+
+### 当日关键 Git 结果（事实源）
+
+| 提交 | 摘要 |
+|------|------|
+| `b461168`…`b01a0ef` | 软件开发主框架及 Owner 真机闭环 |
+| `b9a2ff4` / `eedfd59` | 编码能力说明澄清；WORK-UX-SIMPLIFICATION-01 |
+| `e4f3f4d` | SMALL-LOOP-INTEGRATION-01：四类输入统一成长链、下一任务复用、项目作用域隔离 |
+| `90c5e65` | COLLABORATION-REAL-LOOP-01：双独立主体、授权、真实模型履约、修订/采用、双方成长 |
+| `eb0f22a` | Opportunity Discovery：SubjectTransport/Envelope、Signal 与 Collaboration 分离、最小披露 |
+| `494b755` | Remote Subject Communication：RelayTransport + Relay Service、E2EE、pairing、offline/retry/idempotency、本机三进程 remote semantics |
+
+### 当前产品状态
+
+三根主梁均有真实闭环（代表我/成长 · 做事 · 协作）；并新增 Signal before Collaboration、Opportunity Discovery、Relay-ready remote foundation。
+
+### 通信架构原则（冻结）
+
+Subject semantics → SubjectTransport → Local / Relay / future P2P-Hybrid。Relay=加密邮局非事实源；主体数据属各自 SubjectPackage；Remote E2EE；不绑定纯 P2P。
+
+### 真实验证边界
+
+- **已验证**：Local 双主体；真实模型协作；Signal/opportunity；本机隔离 A/B + Relay 三进程；E2EE / offline / retry / idempotency
+- **尚未验证**：两台真实电脑；公网 HTTPS Relay；跨公网 Signal 往返；remote 大 Artifact；remote Grant 完整投影
+
+### 长期路线判断
+
+Digital Me 间通讯是未来重大商业价值来源之一；多 Transport 而非教条纯 P2P；当前优先验证主体网络真实成立；暂不扩广播市场、支付、信誉、多方协作、P2P/NAT。
+
+### 明日唯一继续点（不编码）
+
+**DIGITALME-V2-REMOTE-TWO-MACHINE-OWNER-VALIDATION-01**  
+Owner 先决：公网 Relay 服务器 + 域名 → HTTPS 部署 → Candidate `494b755` 双机 pairing / Signal / 离线 / retry / 远程协作提案。  
+双机通过后再决定 `REMOTE-COLLABORATION-DELIVERY-01`。清单：`digitalme-v2/docs/design/REMOTE-TWO-MACHINE-OWNER-CHECKLIST.md`。
+
+### 今日停止
+
+停止产品开发编码；不启动新开发任务；隔离无关脏文件/evidence；**未 push**。
+
+---
+
 ## 2026-08-06 TODAY-CLOSE · EXPERIENCE-REDESIGN-01B 最终收口
 
 ### 状态
