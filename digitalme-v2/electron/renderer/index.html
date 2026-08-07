@@ -293,10 +293,15 @@
                     <textarea
                       id="goal"
                       class="goal-input"
-                      rows="12"
-                      placeholder="写清目标、范围与期望结果。可粘贴较长说明。"
+                      rows="10"
+                      placeholder="告诉我你要完成什么。可以写文章、分析资料、修改软件项目，或处理其他工作。"
                     ></textarea>
                   </label>
+                  <div id="goal-examples" class="goal-examples" aria-label="任务示例">
+                    <button type="button" class="goal-example ghost" data-goal-example="修改这个项目中的登录页，并运行相关测试">修改这个项目中的登录页，并运行相关测试</button>
+                    <button type="button" class="goal-example ghost" data-goal-example="分析这些材料，形成一份投资判断">分析这些材料，形成一份投资判断</button>
+                    <button type="button" class="goal-example ghost" data-goal-example="根据现有资料撰写一篇公众号文章">根据现有资料撰写一篇公众号文章</button>
+                  </div>
                 </details>
               </section>
 
@@ -323,19 +328,29 @@
               </section>
 
               <section class="work-exec-block" aria-label="执行">
+                <div id="executor-setup-card" class="executor-setup-card" hidden>
+                  <p id="executor-setup-message" class="muted">
+                    代码执行能力尚未连接。连接后，Digital Me 可以在你确认范围内修改项目并运行测试。
+                  </p>
+                  <div class="row">
+                    <button type="button" id="btn-executor-goto-settings" class="primary">去设置</button>
+                    <button type="button" id="btn-executor-recheck" class="ghost">重新检查</button>
+                  </div>
+                </div>
                 <div id="execution-confirm-card" class="execution-confirm-card" hidden>
+                  <h3 id="execution-confirm-title" class="execution-confirm-title">这项任务需要修改项目文件</h3>
                   <p id="execution-confirm-notice" class="muted"></p>
                   <dl class="execution-confirm-dl">
-                    <div><dt>项目目录</dt><dd id="execution-confirm-dir"></dd></div>
-                    <div><dt>可访问</dt><dd id="execution-confirm-read"></dd></div>
-                    <div><dt>可修改</dt><dd id="execution-confirm-write"></dd></div>
-                    <div><dt>验收目标</dt><dd id="execution-confirm-accept"></dd></div>
-                    <div><dt>明确不做</dt><dd id="execution-confirm-donot"></dd></div>
+                    <div><dt>项目</dt><dd id="execution-confirm-project"></dd></div>
+                    <div><dt>工作目录</dt><dd id="execution-confirm-dir"></dd></div>
+                    <div><dt>准备完成</dt><dd id="execution-confirm-accept"></dd></div>
+                    <div><dt>允许</dt><dd id="execution-confirm-allowed"></dd></div>
+                    <div><dt>不会执行</dt><dd id="execution-confirm-donot"></dd></div>
                   </dl>
-                  <ul id="execution-confirm-forbidden" class="muted tiny"></ul>
+                  <ul id="execution-confirm-forbidden" class="muted tiny" hidden></ul>
                   <div class="row">
                     <button type="button" id="btn-confirm-execution" class="primary">确认并开始</button>
-                    <button type="button" id="btn-cancel-execution" class="ghost">取消</button>
+                    <button type="button" id="btn-cancel-execution" class="ghost">返回修改</button>
                   </div>
                 </div>
                 <div class="row work-exec-actions">
@@ -343,6 +358,7 @@
                   <button type="button" id="btn-cancel" disabled>取消</button>
                   <button type="button" id="btn-retry" disabled>重试</button>
                   <button type="button" id="btn-restore-baseline" class="ghost" hidden>恢复执行前状态</button>
+                  <button type="button" id="btn-open-project-folder" class="ghost" hidden>打开项目文件夹</button>
                   <button type="button" id="btn-restart-compose" class="ghost" hidden>重新开始</button>
                 </div>
                 <div class="work-status-rail" id="work-status-rail">
@@ -386,6 +402,9 @@
               </div>
               <div class="decision-box" id="artifact-decision-box">
                 <p id="artifact-decision-status" class="meta" aria-live="polite">尚未决定是否采用</p>
+                <p id="artifact-decision-hint" class="muted tiny">
+                  采用表示保留当前项目变更；不采用不会自动改回文件。需要时请单独使用「恢复执行前状态」。
+                </p>
                 <div class="row decision-actions" id="artifact-decision-actions">
                   <button type="button" id="btn-accept-artifact" class="primary">采用</button>
                   <button type="button" id="btn-reject-artifact">不采用</button>
@@ -404,6 +423,33 @@
               <details id="applied-understanding" class="applied-understanding" hidden></details>
               <p id="save-status" class="meta"></p>
               <p id="version-meta" class="meta"></p>
+              <div id="code-change-view" class="code-change-view" hidden>
+                <section class="cc-section">
+                  <h3>发生了什么</h3>
+                  <p id="cc-summary" class="cc-summary"></p>
+                  <p id="cc-verification" class="meta"></p>
+                </section>
+                <section class="cc-section">
+                  <h3>修改文件</h3>
+                  <ul id="cc-file-list" class="cc-file-list"></ul>
+                  <button type="button" id="btn-cc-files-more" class="ghost tiny" hidden>显示全部文件</button>
+                </section>
+                <details class="cc-section cc-diff-panel" id="cc-diff-panel">
+                  <summary>代码变化</summary>
+                  <pre id="cc-diff" class="cc-diff"></pre>
+                </details>
+                <section class="cc-section" id="cc-tests-section">
+                  <h3>验证结果</h3>
+                  <ul id="cc-test-list" class="cc-test-list"></ul>
+                </section>
+                <section class="cc-section" id="cc-unresolved-section" hidden>
+                  <h3>未完成事项</h3>
+                  <ul id="cc-unresolved-list" class="cc-unresolved-list"></ul>
+                </section>
+                <p id="cc-restore-hint" class="muted tiny">
+                  「恢复执行前状态」会改写当前项目文件，使其回到本次执行前的内容。
+                </p>
+              </div>
               <div id="bundle-view" class="bundle-view" hidden>
                 <p id="bundle-quality" class="bundle-quality" hidden></p>
                 <textarea
@@ -431,7 +477,7 @@
                     <textarea
                       id="revision-request"
                       rows="3"
-                      placeholder="说明希望如何改这一版成果。"
+                      placeholder="说明希望如何继续调整当前软件修改。"
                     ></textarea>
                   </label>
                   <div class="row">

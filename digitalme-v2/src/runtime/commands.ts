@@ -208,10 +208,13 @@ export interface CommandMap {
       userFacingNotice?: string;
       /** 需要先确认写权限时返回；此时 taskId/jobId 为空字符串。 */
       needsExecutionConfirm?: {
+        title?: string;
         notice: string;
+        projectName?: string;
         workingDirectory: string;
         readScope: string[];
         writeScope: string[];
+        allowed?: string[];
         forbidden: string[];
         acceptancePreview: {
           goals: string[];
@@ -219,6 +222,14 @@ export interface CommandMap {
           doNotDo: string[];
         };
         executorDisplayName: string;
+      };
+      /**
+       * 软件开发意图已识别，但代码执行能力尚未连接。
+       * 不得回退为普通文档生成。
+       */
+      needsExecutorSetup?: {
+        message: string;
+        settingsHint?: string;
       };
     };
   };
@@ -354,9 +365,23 @@ export interface CommandMap {
       /** code-change 成果：工作目录与验收摘要（非第二 Store）。 */
       codeChange?: {
         workingDirectory?: string;
+        projectName?: string;
         verificationOverall?: string;
         verificationLabel?: string;
+        summary?: string;
         changedFiles?: string[];
+        changes?: Array<{
+          path: string;
+          status: 'added' | 'modified' | 'deleted' | 'unknown';
+        }>;
+        unifiedDiff?: string;
+        testResults?: Array<{
+          command: string;
+          passed: boolean;
+          summary?: string;
+          logExcerpt?: string;
+        }>;
+        unresolvedItems?: string[];
         afterScopeDigest?: string;
         directoryChangedSinceResult?: boolean;
       };

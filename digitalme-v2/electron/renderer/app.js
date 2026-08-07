@@ -176,17 +176,35 @@
     cancel: document.getElementById("btn-cancel"),
     retry: document.getElementById("btn-retry"),
     restoreBaseline: document.getElementById("btn-restore-baseline"),
+    openProjectFolder: document.getElementById("btn-open-project-folder"),
     restartCompose: document.getElementById("btn-restart-compose"),
+    executorSetupCard: document.getElementById("executor-setup-card"),
+    executorSetupMessage: document.getElementById("executor-setup-message"),
+    executorGotoSettings: document.getElementById("btn-executor-goto-settings"),
+    executorRecheck: document.getElementById("btn-executor-recheck"),
     executionConfirmCard: document.getElementById("execution-confirm-card"),
+    executionConfirmTitle: document.getElementById("execution-confirm-title"),
     executionConfirmNotice: document.getElementById("execution-confirm-notice"),
+    executionConfirmProject: document.getElementById("execution-confirm-project"),
     executionConfirmDir: document.getElementById("execution-confirm-dir"),
-    executionConfirmRead: document.getElementById("execution-confirm-read"),
-    executionConfirmWrite: document.getElementById("execution-confirm-write"),
+    executionConfirmAllowed: document.getElementById("execution-confirm-allowed"),
     executionConfirmAccept: document.getElementById("execution-confirm-accept"),
     executionConfirmDonot: document.getElementById("execution-confirm-donot"),
     executionConfirmForbidden: document.getElementById("execution-confirm-forbidden"),
     confirmExecution: document.getElementById("btn-confirm-execution"),
     cancelExecution: document.getElementById("btn-cancel-execution"),
+    goalExamples: document.getElementById("goal-examples"),
+    codeChangeView: document.getElementById("code-change-view"),
+    ccSummary: document.getElementById("cc-summary"),
+    ccVerification: document.getElementById("cc-verification"),
+    ccFileList: document.getElementById("cc-file-list"),
+    ccFilesMore: document.getElementById("btn-cc-files-more"),
+    ccDiff: document.getElementById("cc-diff"),
+    ccDiffPanel: document.getElementById("cc-diff-panel"),
+    ccTestList: document.getElementById("cc-test-list"),
+    ccTestsSection: document.getElementById("cc-tests-section"),
+    ccUnresolvedSection: document.getElementById("cc-unresolved-section"),
+    ccUnresolvedList: document.getElementById("cc-unresolved-list"),
     jobStatus: document.getElementById("job-status"),
     jobActionable: document.getElementById("job-actionable"),
     settingsExecutorStatus: document.getElementById("settings-executor-status"),
@@ -273,10 +291,13 @@
     collabError: document.getElementById("collab-error"),
   };
 
-  /** @type {{ kind: 'file'|'folder', path: string }[]} */
+  /** @type {{ kind: 'file'|'folder', path: string, softwareProject?: { isSoftwareProject: boolean, projectName: string, userFacingHint: string } }[]} */
   let materials = [];
   /** @type {null | { goal: string, contextRefs: {kind:string,path:string}[], preview: any }} */
   let pendingExecutionConfirm = null;
+  /** @type {string | null} */
+  let activeCodeChangeWorkingDirectory = null;
+  let ccFilesExpanded = false;
   /** @type {'compose'|'task'} */
   let workMode = "compose";
   let activeTaskId = null;
@@ -876,9 +897,12 @@
   function renderMaterials() {
     els.materialList.innerHTML = "";
     const count = materials.length;
+    const softwareCount = materials.filter((m) => m.softwareProject && m.softwareProject.isSoftwareProject).length;
     if (els.materialListSummary) {
-      els.materialListSummary.textContent =
-        count === 0 ? "尚未添加材料" : `已添加 ${count} 项`;
+      if (count === 0) els.materialListSummary.textContent = "尚未添加材料";
+      else if (softwareCount > 0)
+        els.materialListSummary.textContent = `已添加 ${count} 项（含 ${softwareCount} 个软件项目）`;
+      else els.materialListSummary.textContent = `已添加 ${count} 项`;
     }
     if (els.materialListWrap) {
       els.materialListWrap.open = count > 0 && count <= 5;
@@ -890,15 +914,24 @@
       const li = document.createElement("li");
       const meta = document.createElement("div");
       meta.className = "material-meta";
-      const kind = item.kind === "folder" ? "文件夹" : "文件";
+      const isSoft = !!(item.softwareProject && item.softwareProject.isSoftwareProject);
+      const kind = isSoft ? "已添加软件项目" : item.kind === "folder" ? "文件夹" : "文件";
       const name = document.createElement("div");
-      name.className = "material-name";
-      name.textContent = `${kind} · ${basenamePath(item.path)}`;
+      name.className = "material-name" + (isSoft ? " is-software-project" : "");
+      const displayName =
+        (item.softwareProject && item.softwareProject.projectName) || basenamePath(item.path);
+      name.textContent = `${kind} · ${displayName}`;
       const pathEl = document.createElement("div");
       pathEl.className = "material-path";
       pathEl.textContent = item.path;
       meta.appendChild(name);
       meta.appendChild(pathEl);
+      if (isSoft && item.softwareProject.userFacingHint) {
+        const hint = document.createElement("div");
+        hint.className = "material-hint";
+        hint.textContent = item.softwareProject.userFacingHint;
+        meta.appendChild(hint);
+      }
       li.appendChild(meta);
       if (canRemove) {
         const rm = document.createElement("button");
@@ -912,6 +945,153 @@
         li.appendChild(rm);
       }
       els.materialList.appendChild(li);
+    }
+  }
+
+  function mapProgressNoteForUi(note) {
+    const raw = String(note || "").trim();
+    if (!raw) return "";
+    if (/queued|running|artifact|collector|verifier|executorRunId|adapter/i.test(raw)) {
+      return "正在处理";
+    }
+    return raw;
+  }
+
+  function hideExecutorSetupCard() {
+    if (!els.executorSetupCard) return;
+    els.executorSetupCard.hidden = true;
+    els.executorSetupCard.setAttribute("hidden", "");
+  }
+
+  function showExecutorSetupCard(message) {
+    hideExecutionConfirmCard();
+    if (!els.executorSetupCard) return;
+    els.executorSetupCard.hidden = false;
+    els.executorSetupCard.removeAttribute("hidden");
+    if (els.executorSetupMessage) {
+      els.executorSetupMessage.textContent =
+        message ||
+        "代码执行能力尚未连接。连接后，Digital Me 可以在你确认范围内修改项目并运行测试。";
+    }
+  }
+
+  function renderCodeChangeView(codeChange) {
+    if (!els.codeChangeView || !codeChange) return;
+    els.codeChangeView.hidden = false;
+    els.codeChangeView.removeAttribute("hidden");
+    activeCodeChangeWorkingDirectory = codeChange.workingDirectory || null;
+    if (els.ccSummary) {
+      const summaryText = String(codeChange.summary || "").trim();
+      const happened = summaryText.match(/##\s*发生了什么\s*([\s\S]*?)(?=\n##\s|$)/);
+      let brief = happened ? happened[1].trim() : "";
+      if (!brief) {
+        brief =
+          summaryText
+            .split(/\n{2,}/)
+            .map((p) => p.trim())
+            .find((p) => p && !p.startsWith("#") && !p.startsWith("**验收") && !/^##\s*目标/.test(p)) ||
+          summaryText.slice(0, 800);
+      }
+      els.ccSummary.textContent = brief || "已完成本次项目修改。";
+    }
+    if (els.ccVerification) {
+      els.ccVerification.textContent = codeChange.verificationLabel || "";
+    }
+    const changes =
+      Array.isArray(codeChange.changes) && codeChange.changes.length
+        ? codeChange.changes
+        : (codeChange.changedFiles || []).map((p) => ({ path: p, status: "modified" }));
+    if (els.ccFileList) {
+      els.ccFileList.innerHTML = "";
+      const limit = ccFilesExpanded ? changes.length : 8;
+      const shown = changes.slice(0, limit);
+      const statusLabel = { added: "新增", modified: "修改", deleted: "删除", unknown: "变更" };
+      for (const ch of shown) {
+        const li = document.createElement("li");
+        const st = document.createElement("span");
+        st.className = "cc-file-status";
+        st.textContent = statusLabel[ch.status] || "变更";
+        li.appendChild(st);
+        li.appendChild(document.createTextNode(ch.path));
+        els.ccFileList.appendChild(li);
+      }
+      if (els.ccFilesMore) {
+        const needMore = changes.length > 8;
+        els.ccFilesMore.hidden = !needMore;
+        if (needMore) {
+          els.ccFilesMore.removeAttribute("hidden");
+          els.ccFilesMore.textContent = ccFilesExpanded
+            ? "收起文件列表"
+            : `显示全部 ${changes.length} 个文件`;
+        } else els.ccFilesMore.setAttribute("hidden", "");
+      }
+    }
+    if (els.ccDiff) {
+      const diff = String(codeChange.unifiedDiff || "").trim();
+      els.ccDiff.textContent = diff ? diff.slice(0, 120000) : "（无 diff）";
+      if (els.ccDiffPanel) els.ccDiffPanel.open = !!diff && diff.length < 4000;
+    }
+    if (els.ccTestList) {
+      els.ccTestList.innerHTML = "";
+      const tests = codeChange.testResults || [];
+      if (els.ccTestsSection) {
+        els.ccTestsSection.hidden = tests.length === 0;
+        if (tests.length === 0) els.ccTestsSection.setAttribute("hidden", "");
+        else els.ccTestsSection.removeAttribute("hidden");
+      }
+      for (const t of tests) {
+        const li = document.createElement("li");
+        const head = document.createElement("div");
+        head.textContent = `${t.passed ? "通过" : "失败"} · ${t.command || "测试"}`;
+        li.appendChild(head);
+        if (t.summary) {
+          const s = document.createElement("div");
+          s.className = "muted tiny";
+          s.textContent = t.summary;
+          li.appendChild(s);
+        }
+        if (t.logExcerpt) {
+          const details = document.createElement("details");
+          const sum = document.createElement("summary");
+          sum.textContent = "完整日志";
+          const pre = document.createElement("pre");
+          pre.className = "cc-test-log";
+          pre.textContent = t.logExcerpt;
+          details.appendChild(sum);
+          details.appendChild(pre);
+          li.appendChild(details);
+        }
+        els.ccTestList.appendChild(li);
+      }
+    }
+    const unresolved = (codeChange.unresolvedItems || []).filter(Boolean);
+    if (els.ccUnresolvedSection && els.ccUnresolvedList) {
+      if (unresolved.length) {
+        els.ccUnresolvedSection.hidden = false;
+        els.ccUnresolvedSection.removeAttribute("hidden");
+        els.ccUnresolvedList.innerHTML = "";
+        for (const item of unresolved.slice(0, 20)) {
+          const li = document.createElement("li");
+          li.textContent = item;
+          els.ccUnresolvedList.appendChild(li);
+        }
+      } else {
+        els.ccUnresolvedSection.hidden = true;
+        els.ccUnresolvedSection.setAttribute("hidden", "");
+      }
+    }
+  }
+
+  function hideCodeChangeView() {
+    activeCodeChangeWorkingDirectory = null;
+    ccFilesExpanded = false;
+    if (els.codeChangeView) {
+      els.codeChangeView.hidden = true;
+      els.codeChangeView.setAttribute("hidden", "");
+    }
+    if (els.openProjectFolder) {
+      els.openProjectFolder.hidden = true;
+      els.openProjectFolder.setAttribute("hidden", "");
     }
   }
 
@@ -1189,15 +1369,18 @@
     if (detail && detail.userFacingLabel) return detail.userFacingLabel;
     const job = detail && detail.latestJob;
     if (job) {
+      const progress = mapProgressNoteForUi(job.progressNote);
+      if (job.status === "running" && progress) return progress;
+      if (job.status === "failed" && progress) return "执行失败，可重试";
       switch (job.status) {
         case "queued":
           return "等待开始";
         case "running":
-          return job.revisionRequest ? "正在修改" : "正在处理";
+          return job.revisionRequest ? "正在修改项目文件" : "正在读取项目";
         case "succeeded":
           return detail.artifactIds && detail.artifactIds[0] ? "已完成" : "需要处理";
         case "failed":
-          return "失败";
+          return "执行失败，可重试";
         case "cancelled":
           return "已取消";
       }
@@ -1238,6 +1421,7 @@
   function clearArtifactView() {
     activeArtifactId = null;
     activeHeadVersionId = null;
+    hideCodeChangeView();
     resetCollabUi();
     copyBlockedFailed = false;
     setCopyEnabled(false);
@@ -1281,6 +1465,10 @@
     }
     const note = els.decisionNote ? String(els.decisionNote.value || "").trim() : "";
     const goal = els.goal && els.goal.value ? String(els.goal.value).trim() : "";
+    const isCodeChange =
+      !!activeCodeChangeWorkingDirectory ||
+      activeTaskRequestedArtifactType === "code-change" ||
+      activeTaskIntentKind === "modify_code";
     const isCodeAnalysis =
       activeArtifactKind === "bundle" ||
       activeTaskRequestedArtifactType === "code-analysis" ||
@@ -1288,13 +1476,18 @@
     const baseText =
       kind === "accept"
         ? note ||
-          (isCodeAnalysis
-            ? `采用代码分析：可沿用关注点、判断标准与工作方法。任务：${goal || "本次任务"}`.slice(
-                0,
-                400,
-              )
-            : `采用成果：${goal || "本次任务"}`.slice(0, 400))
-        : note || `未采用成果：${goal || "本次任务"}`.slice(0, 400);
+          (isCodeChange
+            ? `采用当前项目修改并保留文件变更。任务：${goal || "本次任务"}`.slice(0, 400)
+            : isCodeAnalysis
+              ? `采用代码分析：可沿用关注点、判断标准与工作方法。任务：${goal || "本次任务"}`.slice(
+                  0,
+                  400,
+                )
+              : `采用成果：${goal || "本次任务"}`.slice(0, 400))
+        : note ||
+          (isCodeChange
+            ? `不采用当前修改结果（不会自动还原项目文件）。任务：${goal || "本次任务"}`.slice(0, 400)
+            : `未采用成果：${goal || "本次任务"}`.slice(0, 400));
     const prevLabel = els.decisionStatus ? els.decisionStatus.textContent : "";
     if (els.acceptArtifact) els.acceptArtifact.disabled = true;
     if (els.rejectArtifact) els.rejectArtifact.disabled = true;
@@ -1663,6 +1856,7 @@
 
     if (isBundle) {
       activeArtifactKind = "bundle";
+      const isCodeChange = !!(content.codeChange);
       const qualitySource =
         content.bundle && content.bundle.manifestSummary
           ? content.bundle.manifestSummary.quality
@@ -1678,17 +1872,31 @@
       lastQualityGrade =
         qualitySource && qualitySource.grade ? qualitySource.grade : null;
       lastQualityBannerText = qualityUi.bannerText || "";
-      els.bundleView.hidden = false;
-      els.bundleView.removeAttribute("hidden");
+
+      if (isCodeChange) {
+        if (els.bundleView) {
+          els.bundleView.hidden = true;
+          els.bundleView.setAttribute("hidden", "");
+        }
+        renderCodeChangeView(content.codeChange);
+      } else {
+        hideCodeChangeView();
+        els.bundleView.hidden = false;
+        els.bundleView.removeAttribute("hidden");
+      }
       els.artifactEditor.hidden = true;
       els.artifactEditor.setAttribute("hidden", "");
       if (els.reviseBox) {
         els.reviseBox.hidden = false;
         els.reviseBox.removeAttribute("hidden");
         const summary = els.reviseBox.querySelector("summary");
-        if (summary) summary.textContent = "用说明重新执行";
+        if (summary) {
+          summary.textContent = isCodeChange
+            ? "提出修改（继续调整当前软件修改）"
+            : "用说明重新执行";
+        }
         if (els.revise) {
-          els.revise.textContent = content.codeChange ? "按说明重新执行" : "按说明重新分析";
+          els.revise.textContent = isCodeChange ? "按说明继续调整" : "按说明重新分析";
         }
       } else if (els.revise) {
         els.revise.closest(".revise-box").hidden = false;
@@ -1699,23 +1907,30 @@
         if (showRestore) els.restoreBaseline.removeAttribute("hidden");
         else els.restoreBaseline.setAttribute("hidden", "");
       }
+      if (els.openProjectFolder) {
+        const showOpen = !!(content.codeChange && content.codeChange.workingDirectory);
+        els.openProjectFolder.hidden = !showOpen;
+        if (showOpen) els.openProjectFolder.removeAttribute("hidden");
+        else els.openProjectFolder.setAttribute("hidden", "");
+      }
       if (content.codeChange && content.codeChange.directoryChangedSinceResult) {
         els.jobActionable.textContent =
           "当前项目已与待验收结果不同。请重新核对后再采用，或先恢复执行前状态。";
+        if (els.acceptArtifact) els.acceptArtifact.disabled = true;
       }
-      if (content.codeChange && content.codeChange.verificationLabel && els.bundleQuality) {
+      if (!isCodeChange && content.codeChange && content.codeChange.verificationLabel && els.bundleQuality) {
         els.bundleQuality.hidden = false;
         els.bundleQuality.removeAttribute("hidden");
         els.bundleQuality.textContent = content.codeChange.verificationLabel;
       }
       suppressSave = true;
-      if (els.bundleReport) {
+      if (els.bundleReport && !isCodeChange) {
         if ("value" in els.bundleReport) els.bundleReport.value = content.text || "";
         else els.bundleReport.textContent = content.text || "";
       }
       suppressSave = false;
       if (els.bundleStaleNotice) {
-        if (content.evidenceStale) {
+        if (content.evidenceStale && !isCodeChange) {
           els.bundleStaleNotice.hidden = false;
           els.bundleStaleNotice.removeAttribute("hidden");
         } else {
@@ -1723,74 +1938,79 @@
           els.bundleStaleNotice.setAttribute("hidden", "");
         }
       }
-      if (els.bundleQuality) {
+      if (els.bundleQuality && !isCodeChange) {
         if (qualityUi.showBanner && qualityUi.bannerText) {
           els.bundleQuality.hidden = false;
           els.bundleQuality.textContent = qualityUi.bannerText;
           els.bundleQuality.className = qualityUi.className || "bundle-quality";
-        } else {
+        } else if (!(content.codeChange && content.codeChange.verificationLabel)) {
           els.bundleQuality.hidden = true;
         }
       }
-      els.bundleManifest.textContent = "";
-      els.bundleEntries.innerHTML = "";
-      if (content.bundle && content.bundle.manifestSummary) {
-        const m = content.bundle.manifestSummary;
-        const langs = (m.languages || [])
-          .slice(0, 4)
-          .map((l) => `${l.language || "?"} ${l.files || 0}`)
-          .join("、");
-        els.bundleManifest.textContent = [
-          `扫描 ${m.fileCountScanned || 0} 个文件`,
-          langs ? `语言 ${langs}` : null,
-          m.truncated ? "已截断" : null,
-          m.skippedSensitiveCount ? `敏感跳过 ${m.skippedSensitiveCount}` : null,
+      if (!isCodeChange) {
+        els.bundleManifest.textContent = "";
+        els.bundleEntries.innerHTML = "";
+        if (content.bundle && content.bundle.manifestSummary) {
+          const m = content.bundle.manifestSummary;
+          const langs = (m.languages || [])
+            .slice(0, 4)
+            .map((l) => `${l.language || "?"} ${l.files || 0}`)
+            .join("、");
+          els.bundleManifest.textContent = [
+            `扫描 ${m.fileCountScanned || 0} 个文件`,
+            langs ? `语言 ${langs}` : null,
+            m.truncated ? "已截断" : null,
+            m.skippedSensitiveCount ? `敏感跳过 ${m.skippedSensitiveCount}` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ");
+        }
+        const evidenceEntry = ((content.bundle && content.bundle.entries) || []).find(
+          (e) => e.role === "evidence",
+        );
+        let evidenceSummary = "";
+        if (evidenceEntry && evidenceEntry.text) {
+          try {
+            const parsed = JSON.parse(evidenceEntry.text);
+            const items = parsed.items || [];
+            evidenceSummary = `证据 ${items.length} 条`;
+            const sample = items
+              .slice(0, 5)
+              .map((it) => `${it.claimId || "?"} → ${it.path || "?"}`)
+              .join("；");
+            if (sample) evidenceSummary += `：${sample}`;
+          } catch {
+            evidenceSummary = "证据摘要不可用";
+          }
+        }
+        const roles = ((content.bundle && content.bundle.entries) || [])
+          .map((e) => e.role)
+          .filter(Boolean);
+        const li = document.createElement("li");
+        li.textContent = [
+          roles.includes("manifest") ? "包含清单" : null,
+          evidenceSummary || (roles.includes("evidence") ? "包含证据" : null),
+          content.evidenceStale ? "依据未随人工改稿更新" : null,
         ]
           .filter(Boolean)
           .join(" · ");
+        if (li.textContent) els.bundleEntries.appendChild(li);
       }
-      const evidenceEntry = ((content.bundle && content.bundle.entries) || []).find(
-        (e) => e.role === "evidence",
-      );
-      let evidenceSummary = "";
-      if (evidenceEntry && evidenceEntry.text) {
-        try {
-          const parsed = JSON.parse(evidenceEntry.text);
-          const items = parsed.items || [];
-          evidenceSummary = `证据 ${items.length} 条`;
-          const sample = items
-            .slice(0, 5)
-            .map((it) => `${it.claimId || "?"} → ${it.path || "?"}`)
-            .join("；");
-          if (sample) evidenceSummary += `：${sample}`;
-        } catch {
-          evidenceSummary = "证据摘要不可用";
-        }
-      }
-      const roles = ((content.bundle && content.bundle.entries) || [])
-        .map((e) => e.role)
-        .filter(Boolean);
-      const li = document.createElement("li");
-      li.textContent = [
-        roles.includes("manifest") ? "包含清单" : null,
-        evidenceSummary || (roles.includes("evidence") ? "包含证据" : null),
-        content.evidenceStale ? "依据未随人工改稿更新" : null,
-      ]
-        .filter(Boolean)
-        .join(" · ");
-      if (li.textContent) els.bundleEntries.appendChild(li);
       els.exportMd.hidden = true;
       els.exportDocx.hidden = true;
       els.reveal.hidden = false;
-      els.saveStatus.textContent = content.evidenceStale
-        ? "报告为人工编辑；依据未同步更新"
-        : qualityUi.saveStatus;
+      els.saveStatus.textContent = isCodeChange
+        ? content.codeChange.verificationLabel || "已载入修改结果"
+        : content.evidenceStale
+          ? "报告为人工编辑；依据未同步更新"
+          : qualityUi.saveStatus;
       const connected = await refreshConnectionFromCapabilities();
       els.revise.disabled = !connected;
     } else {
       activeArtifactKind = "document";
       lastQualityGrade = null;
       lastQualityBannerText = "";
+      hideCodeChangeView();
       if (els.bundleStaleNotice) {
         els.bundleStaleNotice.hidden = true;
         els.bundleStaleNotice.setAttribute("hidden", "");
@@ -2756,7 +2976,20 @@
       return;
     }
     const folder = await api.dialogs.pickOpenDirectory();
-    if (folder) materials.push({ kind: "folder", path: folder });
+    if (!folder) return;
+    let softwareProject = null;
+    try {
+      if (typeof api.inspectSoftwareProject === "function") {
+        softwareProject = await api.inspectSoftwareProject(folder);
+      }
+    } catch {
+      softwareProject = null;
+    }
+    materials.push({
+      kind: "folder",
+      path: folder,
+      ...(softwareProject ? { softwareProject } : {}),
+    });
     renderMaterials();
   });
 
@@ -2887,6 +3120,16 @@
       // 不强迫传成果类型；Runtime 按意图派生。显式仅在隐藏控件有非空值时透传。
       if (type) payload.requestedArtifactType = type;
       const result = await api.invoke("work.submitTask", payload);
+      if (result.needsExecutorSetup) {
+        showExecutorSetupCard(result.needsExecutorSetup.message || result.userFacingNotice);
+        els.submit.disabled = false;
+        els.jobStatus.textContent = "代码执行能力尚未连接";
+        els.jobStatus.classList.add("error");
+        els.jobActionable.textContent =
+          result.needsExecutorSetup.settingsHint ||
+          "请先在设置中连接执行能力，再开始软件开发任务。";
+        return;
+      }
       if (result.needsExecutionConfirm) {
         pendingExecutionConfirm = {
           goal,
@@ -2895,7 +3138,7 @@
         };
         showExecutionConfirmCard(result.needsExecutionConfirm);
         els.submit.disabled = false;
-        els.jobStatus.textContent = "开始前请确认可修改范围";
+        els.jobStatus.textContent = "开始前请确认项目与修改权限";
         els.jobStatus.classList.remove("error");
         els.jobActionable.textContent = result.needsExecutionConfirm.notice || "";
         return;
@@ -2938,31 +3181,38 @@
   }
 
   function showExecutionConfirmCard(preview) {
+    hideExecutorSetupCard();
     if (!els.executionConfirmCard) return;
     els.executionConfirmCard.hidden = false;
     els.executionConfirmCard.removeAttribute("hidden");
+    if (els.executionConfirmTitle) {
+      els.executionConfirmTitle.textContent = preview.title || "这项任务需要修改项目文件";
+    }
     if (els.executionConfirmNotice) els.executionConfirmNotice.textContent = preview.notice || "";
+    if (els.executionConfirmProject) {
+      els.executionConfirmProject.textContent =
+        preview.projectName || basenamePath(preview.workingDirectory || "") || "（未命名项目）";
+    }
     if (els.executionConfirmDir) els.executionConfirmDir.textContent = preview.workingDirectory || "";
-    if (els.executionConfirmRead) {
-      els.executionConfirmRead.textContent = (preview.readScope || []).join("、") || "整个项目目录";
-    }
-    if (els.executionConfirmWrite) {
-      els.executionConfirmWrite.textContent = (preview.writeScope || []).join("、") || "整个项目目录";
-    }
     const acc = preview.acceptancePreview || {};
     if (els.executionConfirmAccept) {
-      els.executionConfirmAccept.textContent = (acc.goals || []).concat(acc.tests || []).join("；") || "按任务目标验收";
+      const parts = []
+        .concat(acc.goals || [])
+        .concat(acc.tests || []);
+      els.executionConfirmAccept.textContent = parts.filter(Boolean).join("；") || "按任务目标验收";
+    }
+    if (els.executionConfirmAllowed) {
+      els.executionConfirmAllowed.textContent = (preview.allowed || []).join("；") ||
+        "读取当前项目文件；修改确认范围内文件；运行本地测试";
     }
     if (els.executionConfirmDonot) {
-      els.executionConfirmDonot.textContent = (acc.doNotDo || []).slice(0, 4).join("；");
+      const lines = (preview.forbidden || []).concat(acc.doNotDo || []);
+      els.executionConfirmDonot.textContent = [...new Set(lines)].slice(0, 8).join("；");
     }
     if (els.executionConfirmForbidden) {
       els.executionConfirmForbidden.innerHTML = "";
-      for (const line of preview.forbidden || []) {
-        const li = document.createElement("li");
-        li.textContent = line;
-        els.executionConfirmForbidden.appendChild(li);
-      }
+      els.executionConfirmForbidden.hidden = true;
+      els.executionConfirmForbidden.setAttribute("hidden", "");
     }
   }
 
@@ -2971,6 +3221,11 @@
     clearArtifactView();
     hideExecutionConfirmCard();
     const result = await api.invoke("work.submitTask", payload);
+    if (result.needsExecutorSetup) {
+      showExecutorSetupCard(result.needsExecutorSetup.message || result.userFacingNotice);
+      els.submit.disabled = false;
+      return;
+    }
     if (result.needsExecutionConfirm) {
       pendingExecutionConfirm = {
         goal: payload.goal,
@@ -3027,8 +3282,67 @@
   if (els.cancelExecution) {
     els.cancelExecution.addEventListener("click", () => {
       hideExecutionConfirmCard();
-      els.jobStatus.textContent = "已取消开始";
-      els.jobActionable.textContent = "";
+      els.jobStatus.textContent = "已返回修改";
+      els.jobActionable.textContent = "可调整目标或材料后再次开始。";
+    });
+  }
+
+  if (els.goalExamples) {
+    els.goalExamples.addEventListener("click", (ev) => {
+      const btn = ev.target && ev.target.closest ? ev.target.closest("[data-goal-example]") : null;
+      if (!btn || workMode !== "compose") return;
+      const text = btn.getAttribute("data-goal-example") || "";
+      if (els.goal && text) {
+        els.goal.value = text;
+        els.goal.focus();
+      }
+    });
+  }
+
+  if (els.executorGotoSettings) {
+    els.executorGotoSettings.addEventListener("click", () => {
+      if (typeof openSettings === "function") openSettings();
+    });
+  }
+
+  if (els.executorRecheck) {
+    els.executorRecheck.addEventListener("click", async () => {
+      try {
+        const card = await refreshExecutorCapabilityUi(true);
+        const available = !!(card && card.available);
+        if (available) {
+          hideExecutorSetupCard();
+          els.jobStatus.textContent = "代码执行能力已连接，可以再次开始处理";
+          els.jobStatus.classList.remove("error");
+          els.jobActionable.textContent = "";
+        } else {
+          showExecutorSetupCard();
+          els.jobStatus.textContent = "代码执行能力尚未连接";
+          els.jobStatus.classList.add("error");
+        }
+      } catch {
+        els.jobActionable.textContent = "重新检查未完成，请稍后再试。";
+      }
+    });
+  }
+
+  if (els.ccFilesMore) {
+    els.ccFilesMore.addEventListener("click", () => {
+      ccFilesExpanded = !ccFilesExpanded;
+      if (activeArtifactId) loadArtifact(activeArtifactId);
+    });
+  }
+
+  if (els.openProjectFolder) {
+    els.openProjectFolder.addEventListener("click", async () => {
+      if (!activeCodeChangeWorkingDirectory) return;
+      try {
+        if (typeof api.revealPath === "function") {
+          await api.revealPath(activeCodeChangeWorkingDirectory);
+        }
+      } catch (err) {
+        els.jobActionable.textContent = err.message || "无法打开项目文件夹";
+      }
     });
   }
 
@@ -3093,6 +3407,10 @@
     els.restoreBaseline.addEventListener("click", async () => {
       if (!activeTaskId) return;
       try {
+        const ok = window.confirm(
+          "恢复执行前状态会改写当前项目文件，使其回到本次执行前的内容。确定继续？",
+        );
+        if (!ok) return;
         const result = await api.invoke("work.retryTask", {
           taskId: activeTaskId,
           action: "restore_baseline",
@@ -3100,10 +3418,13 @@
         els.jobStatus.textContent = result.message || (result.restored ? "已恢复执行前状态" : "恢复未完成");
         els.jobStatus.classList.toggle("error", !result.restored);
         if (result.conflicts && result.conflicts.length) {
-          els.jobActionable.textContent = `冲突文件：${result.conflicts.slice(0, 5).join("、")}`;
+          els.jobActionable.textContent = `无法安全恢复：${result.conflicts.slice(0, 5).join("、")}`;
+        } else if (!result.restored) {
+          els.jobActionable.textContent = "恢复已停止。请先处理冲突后再试。";
         } else {
           els.jobActionable.textContent =
             "不采用不会自动还原文件。如需还原，请使用「恢复执行前状态」。";
+          if (activeArtifactId) await loadArtifact(activeArtifactId);
         }
       } catch (err) {
         els.jobStatus.textContent = err.message || String(err);

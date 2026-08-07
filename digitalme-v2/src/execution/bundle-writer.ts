@@ -35,11 +35,11 @@ export async function writeCodeChangeBundle(input: {
     '',
     input.taskPackage.goal,
     '',
-    '## 执行器说明',
+    '## 发生了什么',
     '',
     input.agentResult.summary.slice(0, 4000) || '（无）',
     '',
-    '## Digital Me 独立验证',
+    '## 核对结果',
     '',
     ...input.verification.checks.map(
       (c) => `- ${c.title}：${userFacingVerification(c.verdict)} — ${c.detail}`,
@@ -48,9 +48,6 @@ export async function writeCodeChangeBundle(input: {
     '## 工作目录',
     '',
     input.taskPackage.workingDirectory,
-    '',
-    `执行器：${input.agentResult.executorId} / ${input.agentResult.executorRunId}`,
-    `退出码：${input.agentResult.exitCode ?? '未知'}`,
     '',
   ].join('\n');
   await fs.writeFile(path.join(bundleDir, 'execution-summary.md'), summaryMd, 'utf8');

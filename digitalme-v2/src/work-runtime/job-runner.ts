@@ -190,9 +190,26 @@ export class WorkRuntime {
         throw Object.assign(new Error(msg), { actionable: msg });
       }
       const execAdapter = this.opts.registry.get(EXTERNAL_EXECUTOR_CODEX_CAPABILITY_ID);
+      const executorReady =
+        !!execAdapter && execAdapter.registration.availability === 'available';
+      if (!executorReady) {
+        const msg =
+          '代码执行能力尚未连接。连接后，Digital Me 可以在你确认范围内修改项目并运行测试。';
+        return {
+          taskId: '',
+          jobId: '',
+          intentKind: 'modify_code',
+          userFacingNotice: msg,
+          needsExecutorSetup: {
+            message: msg,
+            settingsHint: '请在设置中连接执行能力后重试。',
+          },
+        };
+      }
       const preview = buildExecutionConfirmPreview({
         goal: input.goal,
         workingDirectory: folder.path,
+        projectName: path.basename(folder.path),
         ...(input.executionAuthorization?.readScope
           ? { readScope: input.executionAuthorization.readScope }
           : {}),

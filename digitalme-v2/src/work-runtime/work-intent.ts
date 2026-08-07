@@ -32,6 +32,16 @@ export interface WorkIntent {
   requiresExecutionConfirm?: boolean;
 }
 
+/** 软件项目文件夹派生视图 — 可计算，非永久事实源。 */
+export interface SoftwareProjectInspection {
+  path: string;
+  projectName: string;
+  isSoftwareProject: boolean;
+  markersHit: string[];
+  /** 用户面说明；非软件项目时为空。 */
+  userFacingHint: string;
+}
+
 const CODE_ANALYZE_GOAL_RE =
   /分析(一下|下)?(这个|该|此)?(代码|仓库|项目|代码库|codebase)|代码审查|审查代码|找出.*(问题|风险|缺陷)|问题清单|静态分析|repo\s*analysis|analyze\s+(the\s+)?(code|repo|project)|code\s*review/i;
 
@@ -41,19 +51,25 @@ const CODE_MODIFY_GOAL_RE =
 const WRITE_DOC_GOAL_RE =
   /写(一篇|一份|个)?|起草|改写|润色|总结|整理成文|方案|文章|报告(?!分析)|周报|纪要|文档|说明书|readme(?!\s*分析)/i;
 
-const CODE_REPO_MARKERS = [
+/** 根目录识别信号（有限、可解释）。 */
+export const SOFTWARE_PROJECT_MARKERS = [
+  '.git',
   'package.json',
-  'Cargo.toml',
-  'go.mod',
   'pyproject.toml',
   'requirements.txt',
+  'Cargo.toml',
+  'go.mod',
   'pom.xml',
   'build.gradle',
+  'build.gradle.kts',
   'CMakeLists.txt',
-  '.git',
   'src',
+  'app',
   'lib',
-];
+] as const;
+
+/** 扩展名识别（根目录扫描，非递归）。 */
+const SOFTWARE_PROJECT_EXTENSIONS = ['.sln', '.csproj'] as const;
 
 export function isTaskIntentKind(value: unknown): value is TaskIntentKind {
   return (
@@ -77,29 +93,72 @@ export function classifyMaterialRefs(refs: readonly ContextRef[]): MaterialKind[
   return kinds.length ? kinds : ['unknown'];
 }
 
-/** 探测文件夹是否像代码仓库（有限深度，失败则不当作仓库）。 */
+/**
+ * 检查单个文件夹是否像软件项目（派生视图，不落 Store）。
+ */
+export async function inspectSoftwareProject(
+  folderPath: string,
+): Promise<SoftwareProjectInspection> {
+  const root = path.resolve(folderPath);
+  const projectName = path.basename(root) || root;
+  const empty: SoftwareProjectInspection = {
+    path: root,
+    projectName,
+    isSoftwareProject: false,
+    markersHit: [],
+    userFacingHint: '',
+  };
+  try {
+    const st = await fs.stat(root);
+    if (!st.isDirectory()) return empty;
+  } catch {
+    return empty;
+  }
+
+  const markersHit: string[] = [];
+  for (const marker of SOFTWARE_PROJECT_MARKERS) {
+    try {
+      await fs.access(path.join(root, marker));
+      markersHit.push(marker);
+    } catch {
+      /* next */
+    }
+  }
+
+  try {
+    const entries = await fs.readdir(root);
+    for (const name of entries) {
+      const lower = name.toLowerCase();
+      if (SOFTWARE_PROJECT_EXTENSIONS.some((ext) => lower.endsWith(ext))) {
+        markersHit.push(name);
+      }
+    }
+  } catch {
+    /* ignore listing errors */
+  }
+
+  // 仅有 src/app/lib 而无其他工程文件时仍可能是项目；保留命中即可
+  const isSoftwareProject = markersHit.length > 0;
+  return {
+    path: root,
+    projectName,
+    isSoftwareProject,
+    markersHit,
+    userFacingHint: isSoftwareProject
+      ? 'Digital Me 可以在你确认范围后读取项目、修改文件并运行本地测试。'
+      : '',
+  };
+}
+
+/** 探测文件夹是否像代码仓库；返回命中的绝对路径（每项独立判断）。 */
 export async function detectCodeRepoFolders(
   refs: readonly ContextRef[],
 ): Promise<string[]> {
   const hits: string[] = [];
   for (const ref of refs) {
     if (ref.kind !== 'folder') continue;
-    const root = path.resolve(ref.path);
-    try {
-      const st = await fs.stat(root);
-      if (!st.isDirectory()) continue;
-      for (const marker of CODE_REPO_MARKERS) {
-        try {
-          await fs.access(path.join(root, marker));
-          hits.push(root);
-          break;
-        } catch {
-          /* next marker */
-        }
-      }
-    } catch {
-      /* skip */
-    }
+    const inspected = await inspectSoftwareProject(ref.path);
+    if (inspected.isSoftwareProject) hits.push(inspected.path);
   }
   return hits;
 }
@@ -218,21 +277,24 @@ export async function deriveWorkIntent(input: {
   explicitCapabilityId?: string;
   externalResearchCapabilityIds?: readonly string[];
 }): Promise<WorkIntent> {
-  const baseKinds = classifyMaterialRefs(input.contextRefs);
   const codeFolders = await detectCodeRepoFolders(input.contextRefs);
-  const materialKinds: MaterialKind[] = baseKinds.map((k) =>
-    k === 'folder' && codeFolders.length > 0 ? 'code_repo' : k,
-  );
-  // 若存在代码仓库文件夹，确保种类中有 code_repo
-  if (codeFolders.length > 0 && !materialKinds.includes('code_repo')) {
-    materialKinds.push('code_repo');
-  }
-  // 单文件代码也算
+  const codeSet = new Set(codeFolders.map((p) => path.resolve(p)));
+  const materialKinds: MaterialKind[] = [];
   for (const ref of input.contextRefs) {
-    if (ref.kind === 'file' && /\.(ts|tsx|js|jsx|py|go|rs|java)$/i.test(ref.path)) {
-      if (!materialKinds.includes('code_repo')) materialKinds.push('code_repo');
+    if (ref.kind === 'folder') {
+      materialKinds.push(codeSet.has(path.resolve(ref.path)) ? 'code_repo' : 'folder');
+    } else if (ref.kind === 'file') {
+      const lower = ref.path.toLowerCase();
+      if (/\.(md|txt|docx?|rtf)$/i.test(lower)) materialKinds.push('text_doc');
+      else if (/\.(ts|tsx|js|jsx|py|go|rs|java|kt|c|cpp|h|cs)$/i.test(lower)) {
+        materialKinds.push('code_repo');
+      } else materialKinds.push('file');
+    } else {
+      materialKinds.push('unknown');
     }
   }
+  if (!materialKinds.length) materialKinds.push('unknown');
+
   return deriveWorkIntentSync({
     goal: input.goal,
     contextRefs: input.contextRefs,

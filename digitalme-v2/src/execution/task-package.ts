@@ -164,39 +164,60 @@ export function buildExecutionConfirmPreview(input: {
   readScope?: string[];
   writeScope?: string[];
   executorDisplayName: string;
+  projectName?: string;
 }): {
+  title: string;
   notice: string;
+  projectName: string;
   workingDirectory: string;
   readScope: string[];
   writeScope: string[];
+  allowed: string[];
   forbidden: string[];
   acceptancePreview: {
     goals: string[];
     tests: string[];
     doNotDo: string[];
   };
+  executorDisplayName: string;
 } {
   const scopes = deriveDefaultScopes(input.workingDirectory);
   const readScope = input.readScope?.length ? input.readScope : scopes.readScope;
   const writeScope = input.writeScope?.length ? input.writeScope : scopes.writeScope;
   const criteria = deriveAcceptanceCriteria(input.goal);
   const doNotDo = deriveDoNotDo(input.goal);
+  const workingDirectory = path.resolve(input.workingDirectory);
+  const projectName =
+    String(input.projectName || '').trim() || path.basename(workingDirectory) || workingDirectory;
+  const testLines = criteria.filter((c) => /测试|test/i.test(c));
   return {
+    title: '这项任务需要修改项目文件',
     notice:
-      '这项任务需要修改项目文件，将交给已连接的代码执行能力完成。开始前你可以查看它能够访问和修改的范围。',
-    workingDirectory: path.resolve(input.workingDirectory),
+      '开始前请确认项目、验收条件与修改权限。确认后才会实际修改项目文件。',
+    projectName,
+    workingDirectory,
     readScope,
     writeScope,
+    allowed: [
+      '读取当前项目文件',
+      '修改确认范围内的文件',
+      '运行本地测试',
+    ],
     forbidden: [
-      '不会自动提交或推送代码',
-      '不会创建远程合并请求或部署',
-      '不会修改你未授权的目录',
-      `将使用：${input.executorDisplayName}`,
+      '不会自动 commit',
+      '不会自动 push',
+      '不会创建远程合并请求',
+      '不会部署或发布',
+      '不会修改项目目录外的文件',
+      '不会读取 Digital Me 模型密钥或完整个人主体资料',
     ],
     acceptancePreview: {
-      goals: [criteria[0] || input.goal],
-      tests: criteria.filter((c) => /测试|test/i.test(c)),
-      doNotDo: doNotDo.slice(0, 4),
+      goals: [String(input.goal || '').trim().slice(0, 400) || criteria[0] || ''],
+      tests: testLines.length
+        ? testLines
+        : ['将根据项目配置运行可用测试'],
+      doNotDo: doNotDo.slice(0, 6),
     },
+    executorDisplayName: input.executorDisplayName,
   };
 }

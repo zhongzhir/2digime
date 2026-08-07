@@ -312,6 +312,31 @@ function registerIpc() {
     return result.filePaths[0];
   });
 
+  ipcMain.handle("shell:inspectSoftwareProject", async (_e, input) => {
+    const folderPath = input && input.path ? String(input.path) : "";
+    if (!folderPath) {
+      return {
+        path: "",
+        projectName: "",
+        isSoftwareProject: false,
+        markersHit: [],
+        userFacingHint: "",
+      };
+    }
+    try {
+      const { inspectSoftwareProject } = require("../dist/work-runtime/work-intent");
+      return await inspectSoftwareProject(folderPath);
+    } catch (err) {
+      return {
+        path: folderPath,
+        projectName: path.basename(folderPath),
+        isSoftwareProject: false,
+        markersHit: [],
+        userFacingHint: "",
+      };
+    }
+  });
+
   ipcMain.handle("shell:pickSaveDirectory", async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ["openDirectory", "createDirectory"],

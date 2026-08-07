@@ -1546,3 +1546,102 @@ select {
   margin: 0;
   word-break: break-all;
 }
+
+.goal-examples {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.6rem;
+}
+.goal-example {
+  text-align: left;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  padding: 0.35rem 0.5rem;
+  opacity: 0.85;
+}
+.goal-example:hover {
+  opacity: 1;
+}
+.work-layout:not(.work-compose-focus) .goal-examples {
+  display: none;
+}
+.material-list .material-name.is-software-project {
+  font-weight: 600;
+}
+.material-list .material-hint {
+  color: #5b6570;
+  font-size: 0.85rem;
+  margin-top: 0.2rem;
+}
+.executor-setup-card {
+  margin: 0 0 0.85rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(40, 48, 56, 0.18);
+  background: rgba(255, 248, 240, 0.9);
+}
+.execution-confirm-title {
+  margin: 0 0 0.4rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.code-change-view {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-bottom: 0.75rem;
+}
+.cc-section h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.cc-summary {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.45;
+}
+.cc-file-list,
+.cc-test-list,
+.cc-unresolved-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cc-file-list li,
+.cc-test-list li,
+.cc-unresolved-list li {
+  padding: 0.25rem 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  font-size: 0.9rem;
+}
+.cc-file-status {
+  display: inline-block;
+  min-width: 2.5rem;
+  margin-right: 0.4rem;
+  color: #5b6570;
+  font-size: 0.8rem;
+}
+.cc-diff {
+  margin: 0.4rem 0 0;
+  padding: 0.6rem;
+  overflow: auto;
+  max-height: 22rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  white-space: pre;
+  background: rgba(0, 0, 0, 0.03);
+}
+.cc-test-log {
+  margin-top: 0.25rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+  max-height: 8rem;
+  overflow: auto;
+}
+#artifact-decision-hint {
+  margin: 0.25rem 0 0.5rem;
+}
+

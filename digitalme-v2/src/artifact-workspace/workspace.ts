@@ -137,9 +137,23 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
       let codeChange:
         | {
             workingDirectory?: string;
+            projectName?: string;
             verificationOverall?: string;
             verificationLabel?: string;
+            summary?: string;
             changedFiles?: string[];
+            changes?: Array<{
+              path: string;
+              status: 'added' | 'modified' | 'deleted' | 'unknown';
+            }>;
+            unifiedDiff?: string;
+            testResults?: Array<{
+              command: string;
+              passed: boolean;
+              summary?: string;
+              logExcerpt?: string;
+            }>;
+            unresolvedItems?: string[];
             afterScopeDigest?: string;
             directoryChangedSinceResult?: boolean;
           }
@@ -187,10 +201,97 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
                 directoryChangedSinceResult = false;
               }
             }
+
+            const summaryEntry = entries.find((e) => e.role === 'execution-summary');
+            const changedEntry = entries.find((e) => e.role === 'changed-files');
+            const diffEntry = entries.find((e) => e.role === 'diff');
+            const testsEntry = entries.find((e) => e.role === 'tests');
+            const unresolvedEntry = entries.find((e) => e.role === 'unresolved');
+
+            let changes: Array<{
+              path: string;
+              status: 'added' | 'modified' | 'deleted' | 'unknown';
+            }> = [];
+            if (changedEntry?.text) {
+              try {
+                const cf = JSON.parse(changedEntry.text) as {
+                  changes?: Array<{ relativePath?: string; path?: string; changeType?: string; status?: string }>;
+                  changedFiles?: string[];
+                };
+                if (Array.isArray(cf.changes) && cf.changes.length) {
+                  changes = cf.changes.map((c) => {
+                    const st = String(c.changeType || c.status || '').toLowerCase();
+                    const status: 'added' | 'modified' | 'deleted' | 'unknown' =
+                      st === 'added' || st === 'created'
+                        ? 'added'
+                        : st === 'deleted' || st === 'removed'
+                          ? 'deleted'
+                          : st === 'modified' || st === 'changed'
+                            ? 'modified'
+                            : 'unknown';
+                    return {
+                      path: String(c.relativePath || c.path || ''),
+                      status,
+                    };
+                  }).filter((c) => c.path);
+                } else if (Array.isArray(cf.changedFiles)) {
+                  changes = cf.changedFiles.map((p) => ({
+                    path: String(p),
+                    status: 'modified' as const,
+                  }));
+                }
+              } catch {
+                /* ignore */
+              }
+            }
+
+            let testResults: Array<{
+              command: string;
+              passed: boolean;
+              summary?: string;
+              logExcerpt?: string;
+            }> = [];
+            if (testsEntry?.text) {
+              try {
+                const tj = JSON.parse(testsEntry.text) as {
+                  results?: Array<{
+                    command?: string;
+                    passed?: boolean;
+                    summary?: string;
+                    logExcerpt?: string;
+                    logRel?: string;
+                  }>;
+                };
+                testResults = (tj.results || []).map((r) => ({
+                  command: String(r.command || ''),
+                  passed: !!r.passed,
+                  ...(r.summary ? { summary: String(r.summary).slice(0, 400) } : {}),
+                  ...(r.logExcerpt
+                    ? { logExcerpt: String(r.logExcerpt).slice(0, 4000) }
+                    : {}),
+                }));
+              } catch {
+                /* ignore */
+              }
+            }
+
+            let unresolvedItems: string[] = [];
+            if (unresolvedEntry?.text) {
+              unresolvedItems = unresolvedEntry.text
+                .split(/\r?\n/)
+                .map((l) => l.replace(/^\s*[-*]\s*/, '').trim())
+                .filter((l) => l && l !== '（无）' && !l.startsWith('#') && l !== '警告' && l !== '提问');
+            }
+
+            const projectName = parsed.workingDirectory
+              ? parsed.workingDirectory.replace(/[/\\]+$/, '').split(/[/\\]/).pop() || undefined
+              : undefined;
+
             codeChange = {
               ...(parsed.workingDirectory
                 ? { workingDirectory: parsed.workingDirectory }
                 : {}),
+              ...(projectName ? { projectName } : {}),
               ...(parsed.verificationOverall
                 ? {
                     verificationOverall: parsed.verificationOverall,
@@ -203,7 +304,19 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
                     ),
                   }
                 : {}),
+              ...(summaryEntry?.text
+                ? {
+                    summary: summaryEntry.text
+                      .replace(/^#\s*执行摘要\s*/m, '')
+                      .trim()
+                      .slice(0, 6000),
+                  }
+                : {}),
               ...(parsed.changedFiles ? { changedFiles: parsed.changedFiles } : {}),
+              ...(changes.length ? { changes } : {}),
+              ...(diffEntry?.text ? { unifiedDiff: diffEntry.text.slice(0, 200_000) } : {}),
+              ...(testResults.length ? { testResults } : {}),
+              ...(unresolvedItems.length ? { unresolvedItems } : {}),
               ...(parsed.afterScopeDigest
                 ? { afterScopeDigest: parsed.afterScopeDigest }
                 : {}),

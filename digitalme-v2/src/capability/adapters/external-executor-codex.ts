@@ -262,7 +262,7 @@ async function runExternalExecutorCodex(
     'utf8',
   );
 
-  ctx.reportProgress('正在记录执行前状态');
+  ctx.reportProgress('正在读取项目');
   ctx.updateExternalExecution?.({
     lastExecutorStatus: 'running',
     executorRunId: newId('job'),
@@ -275,7 +275,7 @@ async function runExternalExecutorCodex(
   });
   const preRunDigest = baseline.scopeDigest;
 
-  ctx.reportProgress('正在调用代码执行能力');
+  ctx.reportProgress('正在修改项目文件');
   const prompt = renderTaskPackagePrompt(pkg);
   await fs.writeFile(path.join(evidenceDir, 'prompt.txt'), prompt, 'utf8');
 
@@ -322,7 +322,7 @@ async function runExternalExecutorCodex(
     throw abortError();
   }
 
-  ctx.reportProgress('正在核对文件变更');
+  ctx.reportProgress('正在整理结果');
   const midDigest = await computeScopeDigest(pkg.workingDirectory, pkg.writeScope);
   let collected = await collectExecutionChanges({ baseline, jobEvidenceDir: evidenceDir });
   collected = markConcurrentIfNeeded(collected, preRunDigest, midDigest);
@@ -379,7 +379,7 @@ async function runExternalExecutorCodex(
       'utf8',
     );
     // 同一 Job 内最多自动续执行一次（不另建 Job、不循环）
-    ctx.reportProgress('根据已确认边界自动继续');
+    ctx.reportProgress('正在修改项目文件');
     const continuePkg: ExecutorTaskPackage = {
       ...pkg,
       previousRun: {
@@ -443,7 +443,7 @@ async function runExternalExecutorCodex(
     'utf8',
   );
 
-  ctx.reportProgress('正在按验收条件核对结果');
+  ctx.reportProgress('正在运行测试');
   const verification = await verifyExternalExecution({
     taskPackage: pkg,
     agentResult,
@@ -676,7 +676,7 @@ async function spawnCodexExec(input: {
   );
 
   const env = buildMinimalExecutorEnv(process.env);
-  input.reportProgress('代码执行能力运行中');
+  input.reportProgress('正在修改项目文件');
 
   return new Promise((resolve, reject) => {
     let settled = false;
