@@ -204,5 +204,8 @@ describe('coding-capability-owner-scenarios-close-01', () => {
     assert.match(src, /scrubOwnerScenarioEnv/);
     // Owner checklist 模板应使用 scene 开关，而非要求用户手敲测试注入变量名作为主路径
     assert.match(src, /--fresh-session --scene=b/);
+    assert.match(src, /--resume-session/);
+    assert.match(src, /--fixture-project/);
+    assert.match(src, /resumeCommand/);
   });
 });

@@ -108,6 +108,22 @@ function registerIpc() {
   ipcMain.handle('shell:inspectSoftwareProject', async (_e, input) =>
     inspectSoftwareProject(input && input.path ? input.path : repoA),
   );
+  ipcMain.handle('shell:prepareSoftwareProject', async (_e, input) => {
+    const goal = input && input.goal ? String(input.goal) : '新项目';
+    const parent =
+      input && input.parentDir ? path.resolve(String(input.parentDir)) : emptyB;
+    const folder = `dm-${String(goal).replace(/[^\u4e00-\u9fa5a-zA-Z0-9_-]+/g, '-').slice(0, 24) || 'project'}`;
+    const target = path.join(parent, folder);
+    fs.mkdirSync(target, { recursive: true });
+    return {
+      ok: true,
+      path: target,
+      folderName: folder,
+      displayPath: target,
+      created: true,
+      reused: false,
+    };
+  });
   ipcMain.handle('shell:getDefaultSubjectDir', async () => {
     const manifest = path.join(defaultDir, 'manifest.json');
     return { dir: defaultDir, exists: fs.existsSync(manifest) };
@@ -134,9 +150,7 @@ function registerIpc() {
   ipcMain.handle('shell:conversationClear', async () => ({ ok: true }));
   ipcMain.handle('shell:conversationReply', async () => ({ text: '' }));
   ipcMain.handle('shell:conversationGrowthHint', async () => ({ hint: null }));
-  ipcMain.handle('shell:pickSaveDirectory', async () => {
-    throw new Error('unused');
-  });
+  ipcMain.handle('shell:pickSaveDirectory', async () => emptyB);
 }
 
 async function createWindow() {
@@ -245,12 +259,18 @@ async function run() {
   const tasksMid = await bus.invoke('work.listTasks', { limit: 10 });
   check('still_one_task_before_b_confirm', tasksMid.tasks.length === 1, tasksMid);
 
-  // Pick empty folder for B and run
+  // 由 Digital Me 创建新项目并运行任务 B
   await uiEval(`async () => {
-    document.getElementById('btn-pick-empty-project').click();
-    await new Promise((r) => setTimeout(r, 300));
-    document.getElementById('btn-submit').click();
+    const createBtn = document.getElementById('btn-create-new-project');
+    if (!createBtn) throw new Error('missing btn-create-new-project');
+    createBtn.click();
+    await new Promise((r) => setTimeout(r, 500));
+    const confirmCreate = document.getElementById('btn-confirm-create-project');
+    if (!confirmCreate) throw new Error('missing btn-confirm-create-project');
+    confirmCreate.click();
     await new Promise((r) => setTimeout(r, 400));
+    document.getElementById('btn-submit').click();
+    await new Promise((r) => setTimeout(r, 500));
     if (!document.getElementById('execution-confirm-card').hidden) {
       document.getElementById('btn-confirm-execution').click();
       await new Promise((r) => setTimeout(r, 800));

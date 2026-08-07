@@ -91,30 +91,96 @@ export async function verifyExternalExecution(input: {
         : `命中关键词 ${hitTerms.length}/${goalTerms.length}：${hitTerms.join(', ') || '无'}`,
   });
 
-  // 5–6. 测试
-  const testResults = await runDeclaredTests(pkg, input.jobEvidenceDir, agent);
+  // 5–6. 自动测试（无 test script ≠ 测试失败）
+  const { inspectAutoTestConfig, runBuildCheck, runStartupCheck } = await import(
+    './startup-check'
+  );
+  const testCfg = await inspectAutoTestConfig(pkg.workingDirectory);
+  checks.push({
+    id: 'tests_configured',
+    title: '项目是否配置了自动测试',
+    verdict: testCfg.hasTestScript
+      ? 'satisfied'
+      : testCfg.hasPackageJson
+        ? 'unsatisfied'
+        : 'unverifiable',
+    detail: testCfg.hasTestScript
+      ? '已配置 test 脚本'
+      : testCfg.hasPackageJson
+        ? '这个项目没有配置自动测试'
+        : '未发现 package.json',
+  });
+
+  const testResults = await runDeclaredTests(pkg, input.jobEvidenceDir, agent, testCfg);
   const testsRan = testResults.length > 0;
   const testsPassed = testResults.every((t) => t.passed);
   checks.push({
     id: 'tests_executed',
-    title: '要求的测试是否执行',
-    verdict: testsRan ? 'satisfied' : /测试|test/i.test(pkg.goal) ? 'unsatisfied' : 'unverifiable',
-    detail: testsRan
-      ? `已执行 ${testResults.length} 项检查`
-      : '未执行测试（目标未强制或命令不可用）',
+    title: '自动测试是否执行',
+    verdict: !testCfg.hasTestScript
+      ? 'unverifiable'
+      : testsRan
+        ? 'satisfied'
+        : /测试|test/i.test(pkg.goal) || testCfg.hasTestScript
+          ? 'unsatisfied'
+          : 'unverifiable',
+    detail: !testCfg.hasTestScript
+      ? '这个项目没有配置自动测试'
+      : testsRan
+        ? `已执行 ${testResults.length} 项检查`
+        : '测试命令无法启动或未执行',
   });
   checks.push({
     id: 'tests_passed',
-    title: '测试是否通过',
-    verdict: !testsRan ? 'unverifiable' : testsPassed ? 'satisfied' : 'unsatisfied',
-    detail: !testsRan
-      ? '无测试结果'
-      : testsPassed
-        ? '全部测试通过'
-        : '存在失败的测试',
+    title: '自动测试结果',
+    verdict: !testCfg.hasTestScript
+      ? 'unverifiable'
+      : !testsRan
+        ? 'unverifiable'
+        : testsPassed
+          ? 'satisfied'
+          : 'unsatisfied',
+    detail: !testCfg.hasTestScript
+      ? '这个项目没有配置自动测试'
+      : !testsRan
+        ? '测试命令无法启动'
+        : testsPassed
+          ? '自动测试通过'
+          : '自动测试失败',
   });
   agent.testResults = testResults;
   agent.testCommands = testResults.map((t) => t.command);
+
+  // 6b. 构建（如有）
+  const build = await runBuildCheck(pkg.workingDirectory);
+  if (build) {
+    checks.push({
+      id: 'build_check',
+      title: '构建检查',
+      verdict: build.kind === 'build_passed' ? 'satisfied' : 'unsatisfied',
+      detail: build.detail || build.label,
+    });
+  }
+
+  // 6c. 启动检查（新项目 / 游戏类目标强制）
+  const needsRun =
+    !!pkg.projectOrigin ||
+    /游戏|tetris|方块|启动|运行|试玩/i.test(pkg.goal) ||
+    pkg.acceptanceCriteria.some((c) => /启动|运行/.test(c));
+  if (needsRun || !testCfg.hasTestScript) {
+    const startup = await runStartupCheck(pkg.workingDirectory);
+    checks.push({
+      id: 'run_startup_check',
+      title: '启动检查',
+      verdict:
+        startup.kind === 'startup_passed'
+          ? 'satisfied'
+          : startup.kind === 'run_not_verified'
+            ? 'unverifiable'
+            : 'unsatisfied',
+      detail: `${startup.label}${startup.detail ? `：${startup.detail}` : ''}`,
+    });
+  }
 
   // 7. 未说明脏文件 / 禁 commit
   checks.push({
@@ -251,25 +317,35 @@ async function runDeclaredTests(
   pkg: ExecutorTaskPackage,
   jobEvidenceDir: string,
   agent: ExecutorRunResult,
+  testCfg?: { hasPackageJson: boolean; hasTestScript: boolean },
 ): Promise<ExecutorRunResult['testResults']> {
   const logsDir = path.join(jobEvidenceDir, 'test-logs');
   await fs.mkdir(logsDir, { recursive: true });
   const results: ExecutorRunResult['testResults'] = [];
 
-  // 若执行器已报告测试，仍由 Digital Me 复跑常见本地检查（克制：有 package.json 才试）
-  let hasPackage = false;
-  try {
-    await fs.access(path.join(pkg.workingDirectory, 'package.json'));
-    hasPackage = true;
-  } catch {
-    hasPackage = false;
+  let hasPackage = testCfg?.hasPackageJson;
+  let hasTestScript = testCfg?.hasTestScript;
+  if (hasPackage == null || hasTestScript == null) {
+    try {
+      const raw = await fs.readFile(path.join(pkg.workingDirectory, 'package.json'), 'utf8');
+      hasPackage = true;
+      const parsed = JSON.parse(raw) as { scripts?: { test?: string } };
+      hasTestScript = !!(parsed.scripts && typeof parsed.scripts.test === 'string');
+    } catch {
+      hasPackage = false;
+      hasTestScript = false;
+    }
+  }
+
+  // 未配置 test 脚本时绝不跑 npm test，避免被误判为“测试失败”
+  if (!hasPackage || !hasTestScript) {
+    return results;
   }
 
   const commands: string[][] = [];
-  if (hasPackage && /测试|test|tsc/i.test(pkg.goal + pkg.acceptanceCriteria.join('\n'))) {
+  if (/测试|test|tsc/i.test(pkg.goal + pkg.acceptanceCriteria.join('\n')) || hasTestScript) {
     commands.push(buildNpmTestCommand(['--if-present']));
   }
-  // 不强制 tsc：避免无关大仓超时；目标明确提到时再跑
   if (hasPackage && /\btsc\b|类型检查|typecheck/i.test(pkg.goal)) {
     commands.push(buildNpxTscCommand());
   }

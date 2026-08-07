@@ -357,10 +357,19 @@
                   </div>
                 </div>
 <div id="project-folder-card" class="executor-setup-card" hidden>
+                  <h3 class="execution-confirm-title">选择项目位置</h3>
                   <p id="project-folder-message" class="muted">这项任务需要一个项目位置</p>
-                  <div class="row">
-                    <button type="button" id="btn-pick-existing-project" class="primary">选择现有项目文件夹</button>
-                    <button type="button" id="btn-pick-empty-project" class="ghost">选择空文件夹开始新项目</button>
+                  <div id="project-create-confirm" class="project-create-confirm" hidden>
+                    <p id="project-create-path" class="project-create-path"></p>
+                    <div class="row">
+                      <button type="button" id="btn-confirm-create-project" class="primary">确认并开始</button>
+                      <button type="button" id="btn-change-project-location" class="ghost">更改位置</button>
+                      <button type="button" id="btn-cancel-create-project" class="ghost">取消</button>
+                    </div>
+                  </div>
+                  <div id="project-folder-actions" class="row project-folder-actions">
+                    <button type="button" id="btn-create-new-project" class="primary">由 Digital Me 创建新项目</button>
+                    <button type="button" id="btn-pick-existing-project" class="ghost">使用已有项目</button>
                   </div>
                 </div>
                 <div id="execution-confirm-card" class="execution-confirm-card" hidden>
@@ -414,7 +423,7 @@
               </div>
             </main>
 
-            <section id="artifact-panel" class="panel artifact-side" hidden>
+            <section id="artifact-panel" class="panel artifact-side">
               <div class="artifact-head">
                 <h2>成果</h2>
                 <div class="row artifact-exports">
@@ -424,11 +433,28 @@
                   <button type="button" id="btn-reveal">打开所在目录</button>
                 </div>
               </div>
-              <div class="decision-box" id="artifact-decision-box">
+              <div id="artifact-loading" class="artifact-loading" hidden>
+                <p class="muted">正在打开任务…</p>
+              </div>
+              <div id="revision-active-banner" class="revision-active-banner" hidden>
+                <p id="revision-active-title" class="revision-active-title">正在按你的修改要求继续处理</p>
+                <p class="revision-active-label muted tiny">修改要求</p>
+                <p id="revision-active-text" class="revision-active-text"></p>
+              </div>
+              <div class="decision-box" id="artifact-decision-box" hidden>
                 <p id="artifact-decision-status" class="meta" aria-live="polite">尚未决定是否采用</p>
                 <p id="artifact-decision-hint" class="muted tiny">
                   采用表示保留当前项目变更。不采用只记录决定，不会改文件，也不会开始修改。需要改回文件时，请单独使用「恢复执行前状态」。
                 </p>
+                <div id="adopt-warning-card" class="adopt-warning-card" hidden>
+                  <p id="adopt-warning-title" class="adopt-warning-title">Digital Me 检查发现还有问题：</p>
+                  <ul id="adopt-warning-list" class="adopt-warning-list"></ul>
+                  <p class="muted tiny">你仍然可以保留当前结果。</p>
+                  <div class="row">
+                    <button type="button" id="btn-adopt-continue-revise" class="primary">继续修改</button>
+                    <button type="button" id="btn-adopt-anyway" class="ghost">仍然采用</button>
+                  </div>
+                </div>
                 <div class="row decision-actions" id="artifact-decision-actions">
                   <button type="button" id="btn-propose-revision">提出修改</button>
                   <button type="button" id="btn-accept-artifact" class="primary">采用</button>
@@ -450,25 +476,47 @@
                     <textarea
                       id="revision-request"
                       rows="3"
-                      placeholder="说明还需要修改什么，例如：将返回值改为 done，并同步更新测试。"
+                      placeholder="说明还需要修改什么。可粘贴截图，或点击「添加截图」。"
                     ></textarea>
                   </label>
+                  <div id="revision-shots" class="revision-shots" aria-label="截图附件"></div>
+                  <div class="row">
+                    <button type="button" id="btn-add-revision-shot" class="ghost">添加截图</button>
+                    <input type="file" id="revision-shot-file" accept="image/png,image/jpeg,image/webp" hidden multiple />
+                  </div>
+                  <p id="revision-shot-hint" class="muted tiny" hidden></p>
                   <div class="row">
                     <button type="button" id="btn-revise" class="primary">提交修改</button>
                     <button type="button" id="btn-cancel-revision" class="ghost">取消</button>
                   </div>
                 </div>
+                <div id="next-steps-card" class="next-steps-card" hidden>
+                  <h3 id="next-steps-title">接下来</h3>
+                  <p id="next-steps-lead" class="muted"></p>
+                  <div class="row next-steps-actions" id="next-steps-actions"></div>
+                  <p id="next-steps-status" class="muted tiny" aria-live="polite"></p>
+                </div>
                 <p id="artifact-decision-error" class="muted tiny error" hidden></p>
               </div>
               <details id="applied-understanding" class="applied-understanding" hidden></details>
+              <div class="artifact-scroll" id="artifact-scroll">
               <p id="save-status" class="meta"></p>
               <p id="version-meta" class="meta"></p>
               <div id="code-change-view" class="code-change-view" hidden>
+                <section class="cc-section cc-revision-req" id="cc-revision-section" hidden>
+                  <h3>本次修改要求</h3>
+                  <p id="cc-revision-request" class="cc-revision-request"></p>
+                </section>
                 <section class="cc-section cc-acceptance" id="cc-acceptance-section">
                   <h3 id="cc-acceptance-title">Digital Me 检查结果</h3>
+                  <p id="cc-acceptance-exec" class="cc-acceptance-exec muted tiny"></p>
                   <p id="cc-acceptance-goal" class="cc-acceptance-goal"></p>
                   <ul id="cc-acceptance-bullets" class="cc-acceptance-bullets"></ul>
                   <p id="cc-acceptance-reco" class="cc-acceptance-reco"></p>
+                  <details id="cc-tech-evidence" class="cc-tech-evidence" hidden>
+                    <summary>技术证据</summary>
+                    <ul id="cc-tech-bullets" class="cc-acceptance-bullets"></ul>
+                  </details>
                 </section>
                 <section class="cc-section">
                   <h3>发生了什么</h3>
@@ -520,6 +568,7 @@
               </div>
               <div class="artifact-body">
                 <textarea id="artifact-editor" rows="18" spellcheck="true" aria-label="成果正文"></textarea>
+              </div>
               </div>
             </section>
           </div>

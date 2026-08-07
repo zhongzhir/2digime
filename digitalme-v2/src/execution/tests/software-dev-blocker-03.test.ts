@@ -47,7 +47,7 @@ describe('software-dev-blocker-03', () => {
     });
     assert.equal(summary.goalLabel, '未满足');
     assert.equal(summary.canAdoptSuggested, false);
-    assert.match(summary.bullets.join('\n'), /范围外|越权/);
+    assert.match(summary.bullets.join('\n'), /范围之?外|越权/);
   });
 
   it('验收摘要：目录不一致时请重新验证', () => {
@@ -216,7 +216,8 @@ describe('software-dev-blocker-03', () => {
     assert.match(html, /id="cc-acceptance-section"/);
     assert.match(html, /Digital Me 检查结果/);
     assert.match(html, /id="project-folder-card"/);
-    assert.match(html, /选择空文件夹开始新项目/);
+    assert.match(html, /由 Digital Me 创建新项目/);
+    assert.match(html, /使用已有项目/);
     assert.match(html, /创建新任务/);
     assert.equal((html.match(/id="btn-accept-artifact"/g) || []).length, 1);
     assert.doesNotMatch(html, /id="btn-collab-accept"/);

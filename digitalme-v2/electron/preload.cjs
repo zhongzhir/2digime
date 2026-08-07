@@ -59,6 +59,11 @@ contextBridge.exposeInMainWorld("digitalMe", {
   },
   inspectSoftwareProject: (folderPath) =>
     ipcRenderer.invoke("shell:inspectSoftwareProject", { path: folderPath }),
+  prepareSoftwareProject: (input) =>
+    ipcRenderer.invoke("shell:prepareSoftwareProject", input || {}),
+  detectProjectRun: (input) => ipcRenderer.invoke("shell:detectProjectRun", input || {}),
+  tryRunProject: (input) => ipcRenderer.invoke("shell:tryRunProject", input || {}),
+  saveRevisionImage: (input) => ipcRenderer.invoke("shell:saveRevisionImage", input || {}),
   getDefaultSubjectDir: () => ipcRenderer.invoke("shell:getDefaultSubjectDir"),
   getModelStatus: () => ipcRenderer.invoke("shell:getModelStatus"),
   saveModelCredential: (input) => ipcRenderer.invoke("shell:saveModelCredential", input),

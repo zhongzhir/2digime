@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   /* EXPERIENCE-REDESIGN-01B-B5 — 暖色纸感 token（唯一主行动色） */
   --bg: #f3efe6;
   --ink: #1c2430;
@@ -45,6 +45,8 @@ body {
     radial-gradient(900px 420px at 100% 0%, #efe6d6 0%, transparent 50%),
     var(--bg);
   min-height: 100vh;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 #app {
@@ -897,14 +899,31 @@ select {
 
 .work-layout {
   display: grid;
-  grid-template-columns: minmax(200px, 240px) minmax(0, 1fr);
+  grid-template-columns: minmax(200px, 220px) minmax(0, 1.05fr) minmax(320px, 1.15fr);
   gap: 16px;
   align-items: stretch;
-  min-height: min(72vh, 820px);
+  height: calc(100vh - 120px);
+  min-height: 520px;
+  max-height: calc(100vh - 96px);
+  scrollbar-gutter: stable;
 }
 
 .work-layout.has-artifact {
-  grid-template-columns: minmax(180px, 220px) minmax(0, 1.05fr) minmax(320px, 1.15fr);
+  grid-template-columns: minmax(200px, 220px) minmax(0, 1.05fr) minmax(320px, 1.15fr);
+}
+
+.work-layout > .panel {
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.work-layout .work-main,
+.work-layout .work-tasks {
+  overflow: auto;
+  scrollbar-gutter: stable;
 }
 
 .work-main-head {
@@ -1134,19 +1153,145 @@ select {
 
 .artifact-side {
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  max-height: min(78vh, 900px);
-  overflow: hidden;
-}
-
-.artifact-side .artifact-body {
-  flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.artifact-side .artifact-head,
+.artifact-side .decision-box,
+.artifact-side .revision-active-banner,
+.artifact-side .artifact-loading {
+  flex-shrink: 0;
+}
+
+.artifact-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  padding-right: 2px;
+}
+
+.artifact-side .artifact-body,
+.artifact-side {
+  /* keep panel frame; content scrolls in .artifact-scroll */
+}
+
+.revision-shots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.revision-shot {
+  position: relative;
+  width: 88px;
+  height: 66px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.revision-shot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.revision-shot button {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  padding: 2px 6px;
+  font-size: 11px;
+}
+
+.artifact-loading {
+  padding: 24px 8px;
+  text-align: center;
+  min-height: 120px;
+}
+
+.revision-active-banner {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(15, 106, 90, 0.28);
+  border-radius: 10px;
+  background: rgba(15, 106, 90, 0.06);
+}
+
+.revision-active-title {
+  margin: 0 0 6px;
+  font-weight: 650;
+}
+
+.revision-active-text {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.45;
+}
+
+.project-create-path {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(28, 36, 48, 0.04);
+  white-space: pre-wrap;
+}
+
+.adopt-warning-card {
+  margin: 10px 0;
+  padding: 12px;
+  border: 1px solid rgba(138, 90, 0, 0.35);
+  border-radius: 10px;
+  background: rgba(255, 196, 80, 0.12);
+}
+
+.adopt-warning-title {
+  margin: 0 0 6px;
+  font-weight: 650;
+}
+
+.adopt-warning-list {
+  margin: 0 0 8px;
+  padding-left: 1.2em;
+}
+
+.next-steps-card {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.next-steps-card h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+
+.next-steps-actions {
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.cc-revision-request {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.45;
+}
+
+.cc-acceptance-exec {
+  margin: 0 0 6px;
+}
+
+.cc-tech-evidence {
+  margin-top: 8px;
 }
 
 .panel.grow {
@@ -1705,7 +1850,7 @@ select {
   margin: 0.4rem 0 0;
   padding: 0.6rem;
   overflow: auto;
-  max-height: 22rem;
+  max-height: none;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.8rem;
   line-height: 1.4;

@@ -162,12 +162,26 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
             directoryChangedSinceResult?: boolean;
             digitalMeVerified?: boolean;
             agentClaimedSuccess?: boolean;
+            revisionRequest?: string;
+            runInfo?: {
+              runnable: boolean;
+              kind?: string;
+              label?: string;
+              command?: string;
+              entryPath?: string;
+              reason?: string;
+              canSuggestTryRun?: boolean;
+            };
             acceptanceSummary?: {
               title: string;
+              headline?: string;
+              executionStatusLabel?: string;
               goalLabel: string;
               goalVerdict?: string;
               recommendation: string;
               bullets: string[];
+              technicalBullets?: string[];
+              adoptWarnings?: string[];
               canAdoptSuggested: boolean;
             };
           }
@@ -355,7 +369,37 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
                 : {}),
               directoryChangedSinceResult,
             };
+            if (
+              version.note &&
+              version.author === 'capability' &&
+              version.note !== 'manual_report_edit'
+            ) {
+              codeChange.revisionRequest = version.note;
+            } else {
+              // 回退：从同 Task 的 Job lineage 取（由上层 command-bus 可再补）
+            }
+            if (parsed.workingDirectory) {
+              try {
+                const { detectProjectRunInfo } = await import('../execution/run-detection');
+                const knownCommands = (testResults || [])
+                  .map((t) => t.command)
+                  .filter(Boolean);
+                codeChange.runInfo = await detectProjectRunInfo(parsed.workingDirectory, {
+                  knownCommands,
+                });
+              } catch {
+                codeChange.runInfo = { runnable: false, reason: '还不能可靠自动打开这个程序' };
+              }
+            }
             if (parsed.verificationOverall) {
+              const checks = Array.isArray(parsed.checks)
+                ? parsed.checks.map((c) => ({
+                    id: c.id,
+                    title: c.title,
+                    verdict: c.verdict,
+                    detail: c.detail ?? '',
+                  }))
+                : [];
               const acceptanceSummary = buildOwnerAcceptanceSummary({
                 verification: {
                   overall: parsed.verificationOverall as
@@ -363,14 +407,7 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
                     | 'partially_satisfied'
                     | 'unsatisfied'
                     | 'unverifiable',
-                  checks: Array.isArray(parsed.checks)
-                    ? parsed.checks.map((c) => ({
-                        id: c.id,
-                        title: c.title,
-                        verdict: c.verdict,
-                        detail: c.detail ?? '',
-                      }))
-                    : [],
+                  checks,
                   digitalMeVerified: !!parsed.digitalMeVerified,
                   agentClaimedSuccess: !!parsed.agentClaimedSuccess,
                 },
@@ -380,6 +417,21 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
                 ...(summaryEntry?.text ? { summaryExcerpt: summaryEntry.text } : {}),
               });
               codeChange.acceptanceSummary = acceptanceSummary;
+              const startup = checks.find((c) => c.id === 'run_startup_check');
+              if (codeChange.runInfo) {
+                // 只有 Digital Me 启动检查明确通过时才允许「可以试用」
+                codeChange.runInfo = {
+                  ...codeChange.runInfo,
+                  canSuggestTryRun: !!(
+                    codeChange.runInfo.runnable && startup && startup.verdict === 'satisfied'
+                  ),
+                };
+              }
+            } else if (codeChange.runInfo) {
+              codeChange.runInfo = {
+                ...codeChange.runInfo,
+                canSuggestTryRun: false,
+              };
             }
           } else {
             manifestSummary = {

@@ -22,10 +22,14 @@ export function deriveAcceptanceCriteria(goal: string): string[] {
     '仅修改授权范围内的文件',
     '不执行提交、推送、发布或删除仓库',
   ];
+  if (/游戏|应用|程序|网站|页面|tetris|方块/i.test(g) || /开发一个|做一个|创建/.test(g)) {
+    criteria.push('项目必须能够启动：主要入口存在，启动无明显错误');
+    criteria.push('若存在可执行的启动检查，则必须通过后方可视为可用');
+  }
   if (/测试|test|tsc|单测|单元/i.test(g)) {
     criteria.push('按目标要求运行相关测试并使其通过');
   } else {
-    criteria.push('若项目存在可运行的本地测试，在改动后执行并报告结果');
+    criteria.push('若项目配置了自动测试，在改动后执行并报告结果；未配置测试时不得谎称测试失败');
   }
   return criteria;
 }
@@ -74,6 +78,7 @@ export function buildExecutorTaskPackage(input: {
   executorSelectionReason: string;
   acceptanceCriteria?: string[];
   doNotDo?: string[];
+  projectOrigin?: 'digitalme_created' | 'user_selected' | 'unknown';
 }): ExecutorTaskPackage {
   const scopes = deriveDefaultScopes(input.workingDirectory);
   const readScope = input.readScope?.length ? input.readScope : scopes.readScope;
@@ -105,6 +110,7 @@ export function buildExecutorTaskPackage(input: {
     timeoutMs: input.timeoutMs ?? 600_000,
     executorSelectionReason: input.executorSelectionReason,
     executorId: input.executorId,
+    ...(input.projectOrigin ? { projectOrigin: input.projectOrigin } : {}),
   };
 }
 

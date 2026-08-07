@@ -6,6 +6,7 @@
  */
 const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Menu } = require("electron");
 const path = require("node:path");
+const fs = require("node:fs");
 const { pathToFileURL } = require("node:url");
 const {
   ensureDefaultPackageAttached: ensureDefaultPackageAttachedCore,
@@ -385,6 +386,146 @@ function registerIpc() {
         isSoftwareProject: false,
         markersHit: [],
         userFacingHint: "",
+      };
+    }
+  });
+
+  /** 在 Documents/Digital Me Projects 下创建唯一新项目目录（成果工作目录）。 */
+  ipcMain.handle("shell:prepareSoftwareProject", async (_e, input) => {
+    const goal = input && input.goal ? String(input.goal) : "新项目";
+    const parentOverride =
+      input && input.parentDir ? path.resolve(String(input.parentDir)) : "";
+    try {
+      const {
+        allocateUniqueProjectDir,
+        deriveProjectFolderName,
+        displayProjectsRelativePath,
+        resolveDigitalMeProjectsRoot,
+      } = require("../dist/execution/project-location");
+      const documentsPath = app.getPath("documents");
+      const projectsRoot = parentOverride
+        ? parentOverride
+        : resolveDigitalMeProjectsRoot(documentsPath);
+      const allocated = await allocateUniqueProjectDir(projectsRoot, goal, {
+        reuseEmptySameName: true,
+      });
+      const displayPath = parentOverride
+        ? allocated.absolutePath
+        : displayProjectsRelativePath(documentsPath, allocated.absolutePath);
+      return {
+        ok: true,
+        path: allocated.absolutePath,
+        folderName: allocated.folderName,
+        displayPath,
+        documentsPath,
+        projectsRoot,
+        derivedName: deriveProjectFolderName(goal),
+        created: !!allocated.created,
+        reused: !!allocated.reused,
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err && err.message ? String(err.message) : String(err),
+      };
+    }
+  });
+
+  /** 试运行探测（派生）。 */
+  ipcMain.handle("shell:detectProjectRun", async (_e, input) => {
+    const folderPath = input && input.path ? String(input.path) : "";
+    if (!folderPath) return { runnable: false, reason: "缺少项目目录" };
+    try {
+      const { detectProjectRunInfo } = require("../dist/execution/run-detection");
+      return await detectProjectRunInfo(folderPath, {
+        knownCommands: Array.isArray(input && input.knownCommands)
+          ? input.knownCommands.map(String)
+          : [],
+      });
+    } catch (err) {
+      return {
+        runnable: false,
+        reason: err && err.message ? String(err.message) : "探测失败",
+      };
+    }
+  });
+
+  /**
+   * 发起试运行：仅在可可靠打开时执行；HTML 用系统默认打开；脚本类打开项目目录并返回命令。
+   * 不得假报成功。
+   */
+  ipcMain.handle("shell:tryRunProject", async (_e, input) => {
+    const folderPath = input && input.path ? String(input.path) : "";
+    if (!folderPath) {
+      return { ok: false, message: "缺少项目目录" };
+    }
+    try {
+      const { detectProjectRunInfo } = require("../dist/execution/run-detection");
+      const info = await detectProjectRunInfo(folderPath, {
+        knownCommands: Array.isArray(input && input.knownCommands)
+          ? input.knownCommands.map(String)
+          : [],
+      });
+      if (!info.runnable) {
+        return {
+          ok: false,
+          runnable: false,
+          message:
+            "代码已经生成，但 Digital Me 还不能直接替你打开这个程序。你可以先运行检查，或者继续让 Digital Me 完善它。",
+          runInfo: info,
+        };
+      }
+      if (info.kind === "html" && info.entryPath) {
+        const openErr = await shell.openPath(info.entryPath);
+        if (openErr) {
+          return { ok: false, runnable: true, message: openErr, runInfo: info };
+        }
+        return {
+          ok: true,
+          runnable: true,
+          message: "已在本机打开页面，请查看效果。",
+          runInfo: info,
+        };
+      }
+      await shell.openPath(folderPath);
+      return {
+        ok: true,
+        runnable: true,
+        message: info.command
+          ? `已打开项目文件夹。请在本机终端运行：${info.command}`
+          : "已打开项目文件夹，请在本机试运行。",
+        runInfo: info,
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        message: err && err.message ? String(err.message) : String(err),
+      };
+    }
+  });
+
+  /** 将修订截图保存到当前主体包 materials（现有材料链，非第二 Store）。 */
+  ipcMain.handle("shell:saveRevisionImage", async (_e, input) => {
+    try {
+      const dataUrl = input && input.dataUrl ? String(input.dataUrl) : "";
+      const m = /^data:(image\/(png|jpeg|jpg|webp));base64,(.+)$/i.exec(dataUrl);
+      if (!m) return { ok: false, error: "不支持的图片格式" };
+      const ext = m[2].toLowerCase() === "jpeg" ? "jpg" : m[2].toLowerCase();
+      const buf = Buffer.from(m[3], "base64");
+      if (buf.length > 8 * 1024 * 1024) return { ok: false, error: "图片过大" };
+      const { resolveDefaultSubjectDir } = require("./default-package.cjs");
+      const userDataPath = app.getPath("userData");
+      const pkgDir = resolveDefaultSubjectDir(userDataPath);
+      const dir = path.join(pkgDir, "materials", "revision-shots");
+      fs.mkdirSync(dir, { recursive: true });
+      const name = `shot-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const filePath = path.join(dir, name);
+      fs.writeFileSync(filePath, buf);
+      return { ok: true, path: filePath };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err && err.message ? String(err.message) : String(err),
       };
     }
   });

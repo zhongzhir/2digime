@@ -41,4 +41,6 @@ export interface Task {
 export interface ContextRef {
   kind: 'file' | 'folder';
   path: string;
+  /** 文件夹来源：Digital Me 创建 / 用户自选（非第二 Store）。 */
+  projectOrigin?: 'digitalme_created' | 'user_selected' | 'unknown';
 }

@@ -200,12 +200,37 @@
     projectFolderMessage: document.getElementById("project-folder-message"),
     pickExistingProject: document.getElementById("btn-pick-existing-project"),
     pickEmptyProject: document.getElementById("btn-pick-empty-project"),
+    createNewProject: document.getElementById("btn-create-new-project"),
+    projectFolderActions: document.getElementById("project-folder-actions"),
+    projectCreateConfirm: document.getElementById("project-create-confirm"),
+    projectCreatePath: document.getElementById("project-create-path"),
+    confirmCreateProject: document.getElementById("btn-confirm-create-project"),
+    changeProjectLocation: document.getElementById("btn-change-project-location"),
+    cancelCreateProject: document.getElementById("btn-cancel-create-project"),
     artifactEmpty: document.getElementById("artifact-empty"),
+    artifactLoading: document.getElementById("artifact-loading"),
+    revisionActiveBanner: document.getElementById("revision-active-banner"),
+    revisionActiveTitle: document.getElementById("revision-active-title"),
+    revisionActiveText: document.getElementById("revision-active-text"),
+    adoptWarningCard: document.getElementById("adopt-warning-card"),
+    adoptWarningList: document.getElementById("adopt-warning-list"),
+    adoptContinueRevise: document.getElementById("btn-adopt-continue-revise"),
+    adoptAnyway: document.getElementById("btn-adopt-anyway"),
+    nextStepsCard: document.getElementById("next-steps-card"),
+    nextStepsTitle: document.getElementById("next-steps-title"),
+    nextStepsLead: document.getElementById("next-steps-lead"),
+    nextStepsActions: document.getElementById("next-steps-actions"),
+    nextStepsStatus: document.getElementById("next-steps-status"),
+    ccRevisionSection: document.getElementById("cc-revision-section"),
+    ccRevisionRequest: document.getElementById("cc-revision-request"),
     ccAcceptanceSection: document.getElementById("cc-acceptance-section"),
     ccAcceptanceTitle: document.getElementById("cc-acceptance-title"),
+    ccAcceptanceExec: document.getElementById("cc-acceptance-exec"),
     ccAcceptanceGoal: document.getElementById("cc-acceptance-goal"),
     ccAcceptanceBullets: document.getElementById("cc-acceptance-bullets"),
     ccAcceptanceReco: document.getElementById("cc-acceptance-reco"),
+    ccTechEvidence: document.getElementById("cc-tech-evidence"),
+    ccTechBullets: document.getElementById("cc-tech-bullets"),
     executorSetupMessage: document.getElementById("executor-setup-message"),
     codingCapScanList: document.getElementById("coding-cap-scan-list"),
     codingCapInstallPanel: document.getElementById("coding-cap-install-panel"),
@@ -279,6 +304,10 @@
     rejectArtifact: document.getElementById("btn-reject-artifact"),
     appliedUnderstanding: document.getElementById("applied-understanding"),
     revisionRequest: document.getElementById("revision-request"),
+    revisionShots: document.getElementById("revision-shots"),
+    addRevisionShot: document.getElementById("btn-add-revision-shot"),
+    revisionShotFile: document.getElementById("revision-shot-file"),
+    revisionShotHint: document.getElementById("revision-shot-hint"),
     revise: document.getElementById("btn-revise"),
     copy: document.getElementById("btn-copy"),
     exportMd: document.getElementById("btn-export-md"),
@@ -343,6 +372,12 @@
   let lastCodingRecommendation = null;
   /** @type {string | null} */
   let activeCodeChangeWorkingDirectory = null;
+  let activeCodeChangeRunInfo = null;
+  let activeAcceptanceSummary = null;
+  let pendingCreateProject = null;
+  /** @type {{ id: string, dataUrl: string, path?: string }[]} */
+  let revisionShotItems = [];
+  let revisionShotSeq = 0;
   let ccFilesExpanded = false;
   /** @type {'compose'|'task'} */
   let workMode = "compose";
@@ -1279,7 +1314,7 @@
     }
     const payload = {
       goal,
-      contextRefs: materials.map((m) => ({ kind: m.kind, path: m.path })),
+      contextRefs: materials.map((m) => ({ kind: m.kind, path: m.path, ...(m.projectOrigin ? { projectOrigin: m.projectOrigin } : {}) })),
     };
     if (capabilityId) payload.capabilityId = capabilityId;
     workMode = "compose";
@@ -1344,24 +1379,43 @@
 
   function renderCodeChangeView(codeChange) {
     if (!els.codeChangeView || !codeChange) return;
+    hideArtifactLoading();
     els.codeChangeView.hidden = false;
     els.codeChangeView.removeAttribute("hidden");
     activeCodeChangeWorkingDirectory = codeChange.workingDirectory || null;
+    activeCodeChangeRunInfo = codeChange.runInfo || null;
+    activeAcceptanceSummary = codeChange.acceptanceSummary || null;
+    const revisionText = String(codeChange.revisionRequest || "").trim();
+    if (els.ccRevisionSection) {
+      if (revisionText) {
+        els.ccRevisionSection.hidden = false;
+        els.ccRevisionSection.removeAttribute("hidden");
+        if (els.ccRevisionRequest) els.ccRevisionRequest.textContent = revisionText;
+      } else {
+        els.ccRevisionSection.hidden = true;
+        els.ccRevisionSection.setAttribute("hidden", "");
+      }
+    }
     const acc = codeChange.acceptanceSummary;
     if (els.ccAcceptanceSection) {
       if (acc) {
         els.ccAcceptanceSection.hidden = false;
         els.ccAcceptanceSection.removeAttribute("hidden");
         if (els.ccAcceptanceTitle) els.ccAcceptanceTitle.textContent = acc.title || "Digital Me 检查结果";
+        if (els.ccAcceptanceExec) {
+          els.ccAcceptanceExec.textContent =
+            acc.executionStatusLabel || "本次处理已结束";
+        }
         if (els.ccAcceptanceGoal) {
-          els.ccAcceptanceGoal.textContent = "目标：" + (acc.goalLabel || "无法验证");
+          els.ccAcceptanceGoal.textContent = acc.headline || acc.goalLabel || "无法验证";
           els.ccAcceptanceGoal.className =
             "cc-acceptance-goal" +
-            (acc.canAdoptSuggested ? " is-ok" : acc.goalLabel === "部分满足" ? " is-warn" : " is-bad");
+            (acc.canAdoptSuggested ? " is-ok" : acc.canAdoptSuggested === false ? " is-warn" : " is-bad");
         }
         if (els.ccAcceptanceBullets) {
           els.ccAcceptanceBullets.innerHTML = "";
           for (const b of acc.bullets || []) {
+            if (/命中关键词|keyword matching|goal_alignment/i.test(String(b))) continue;
             const li = document.createElement("li");
             li.textContent = b;
             els.ccAcceptanceBullets.appendChild(li);
@@ -1371,6 +1425,22 @@
           els.ccAcceptanceReco.textContent = "建议：" + (acc.recommendation || "暂不建议采用");
           els.ccAcceptanceReco.className =
             "cc-acceptance-reco" + (acc.canAdoptSuggested ? " is-ok" : " is-warn");
+        }
+        const tech = acc.technicalBullets || [];
+        if (els.ccTechEvidence && els.ccTechBullets) {
+          if (tech.length) {
+            els.ccTechEvidence.hidden = false;
+            els.ccTechEvidence.removeAttribute("hidden");
+            els.ccTechBullets.innerHTML = "";
+            for (const t of tech) {
+              const li = document.createElement("li");
+              li.textContent = t;
+              els.ccTechBullets.appendChild(li);
+            }
+          } else {
+            els.ccTechEvidence.hidden = true;
+            els.ccTechEvidence.setAttribute("hidden", "");
+          }
         }
       } else {
         els.ccAcceptanceSection.hidden = true;
@@ -1481,6 +1551,8 @@
 
   function hideCodeChangeView() {
     activeCodeChangeWorkingDirectory = null;
+    activeCodeChangeRunInfo = null;
+    activeAcceptanceSummary = null;
     ccFilesExpanded = false;
     if (els.codeChangeView) {
       els.codeChangeView.hidden = true;
@@ -1780,9 +1852,9 @@
       case "waiting":
         return "等待开始";
       case "processing":
-        return "正在处理";
+        return "处理中";
       case "completed":
-        return "已完成";
+        return "需要你确认";
       case "attention":
         return "需要处理";
       default:
@@ -1801,9 +1873,9 @@
         case "queued":
           return "等待开始";
         case "running":
-          return job.revisionRequest ? "正在修改项目文件" : "正在读取项目";
+          return job.revisionRequest ? "正在修改" : "处理中";
         case "succeeded":
-          return detail.artifactIds && detail.artifactIds[0] ? "已完成" : "需要处理";
+          return detail.artifactIds && detail.artifactIds[0] ? "需要你确认" : "需要处理";
         case "failed":
           return "执行失败，可重试";
         case "cancelled":
@@ -1829,7 +1901,9 @@
 
   function setWorkLayoutArtifact(hasArtifact) {
     if (!els.workLayout) return;
-    els.workLayout.classList.toggle("has-artifact", !!hasArtifact);
+    // 三栏宽度常驻，避免 2↔3 列切换抖动；has-artifact 仅作状态标记
+    els.workLayout.classList.add("has-artifact");
+    els.workLayout.classList.toggle("artifact-ready", !!hasArtifact);
     if (hasArtifact) setWorkStage(els.workLayout.dataset.stage === "artifact" ? "artifact" : "center");
     else setWorkStage("center");
     syncGoalPresentation();
@@ -1852,6 +1926,15 @@
     if (!els.projectFolderCard) return;
     els.projectFolderCard.hidden = true;
     els.projectFolderCard.setAttribute("hidden", "");
+    pendingCreateProject = null;
+    if (els.projectCreateConfirm) {
+      els.projectCreateConfirm.hidden = true;
+      els.projectCreateConfirm.setAttribute("hidden", "");
+    }
+    if (els.projectFolderActions) {
+      els.projectFolderActions.hidden = false;
+      els.projectFolderActions.removeAttribute("hidden");
+    }
   }
 
   function showProjectFolderCard(message) {
@@ -1862,15 +1945,111 @@
     els.projectFolderCard.removeAttribute("hidden");
     if (els.projectFolderMessage) {
       els.projectFolderMessage.textContent =
-        message || "这项任务需要一个项目位置";
+        message || "这项任务需要一个项目位置。可由 Digital Me 创建新项目，或使用你已有的项目。";
     }
+    if (els.projectCreateConfirm) {
+      els.projectCreateConfirm.hidden = true;
+      els.projectCreateConfirm.setAttribute("hidden", "");
+    }
+    if (els.projectFolderActions) {
+      els.projectFolderActions.hidden = false;
+      els.projectFolderActions.removeAttribute("hidden");
+    }
+  }
+
+  function hideRevisionActiveBanner() {
+    if (!els.revisionActiveBanner) return;
+    els.revisionActiveBanner.hidden = true;
+    els.revisionActiveBanner.setAttribute("hidden", "");
+  }
+
+  function showRevisionActiveBanner(revisionRequest) {
+    if (!els.revisionActiveBanner) return;
+    const text = String(revisionRequest || "").trim();
+    if (!text) {
+      hideRevisionActiveBanner();
+      return;
+    }
+    els.revisionActiveBanner.hidden = false;
+    els.revisionActiveBanner.removeAttribute("hidden");
+    if (els.revisionActiveTitle) {
+      els.revisionActiveTitle.textContent = "正在按你的修改要求继续处理";
+    }
+    if (els.revisionActiveText) els.revisionActiveText.textContent = text;
+  }
+
+  function hideNextStepsCard() {
+    if (!els.nextStepsCard) return;
+    els.nextStepsCard.hidden = true;
+    els.nextStepsCard.setAttribute("hidden", "");
+    if (els.nextStepsActions) els.nextStepsActions.innerHTML = "";
+    if (els.nextStepsStatus) els.nextStepsStatus.textContent = "";
+  }
+
+  function hideAdoptWarning() {
+    if (!els.adoptWarningCard) return;
+    els.adoptWarningCard.hidden = true;
+    els.adoptWarningCard.setAttribute("hidden", "");
+  }
+
+  function showArtifactLoading(message) {
+    activeArtifactId = null;
+    activeHeadVersionId = null;
+    activeCodeChangeWorkingDirectory = null;
+    activeCodeChangeRunInfo = null;
+    activeAcceptanceSummary = null;
+    hideCodeChangeView();
+    hideRevisionComposer();
+    hideNextStepsCard();
+    hideAdoptWarning();
+    copyBlockedFailed = false;
+    setCopyEnabled(false);
+    if (els.decisionBox) {
+      els.decisionBox.hidden = true;
+      els.decisionBox.setAttribute("hidden", "");
+    }
+    if (els.artifactEditor) {
+      els.artifactEditor.hidden = true;
+      els.artifactEditor.setAttribute("hidden", "");
+    }
+    if (els.bundleView) {
+      els.bundleView.hidden = true;
+      els.bundleView.setAttribute("hidden", "");
+    }
+    if (els.artifactEmpty) {
+      els.artifactEmpty.hidden = true;
+      els.artifactEmpty.setAttribute("hidden", "");
+    }
+    els.artifactPanel.hidden = false;
+    els.artifactPanel.removeAttribute("hidden");
+    setWorkLayoutArtifact(true);
+    if (els.artifactLoading) {
+      els.artifactLoading.hidden = false;
+      els.artifactLoading.removeAttribute("hidden");
+      const p = els.artifactLoading.querySelector("p");
+      if (p) p.textContent = message || "正在打开任务…";
+    }
+    if (els.versionMeta) els.versionMeta.textContent = "";
+    if (els.saveStatus) els.saveStatus.textContent = "";
+    clearAppliedUnderstanding();
+  }
+
+  function hideArtifactLoading() {
+    if (!els.artifactLoading) return;
+    els.artifactLoading.hidden = true;
+    els.artifactLoading.setAttribute("hidden", "");
   }
 
   function showEmptyArtifact(message) {
     activeArtifactId = null;
     activeHeadVersionId = null;
+    activeCodeChangeRunInfo = null;
+    activeAcceptanceSummary = null;
     hideCodeChangeView();
     hideRevisionComposer();
+    hideNextStepsCard();
+    hideAdoptWarning();
+    hideArtifactLoading();
     copyBlockedFailed = false;
     setCopyEnabled(false);
     if (els.decisionBox) {
@@ -1899,10 +2078,17 @@
   }
 
   function clearArtifactView() {
+    // 稳定三栏：清空内容但不坍缩成果栏外框
     activeArtifactId = null;
     activeHeadVersionId = null;
+    activeCodeChangeWorkingDirectory = null;
+    activeCodeChangeRunInfo = null;
+    activeAcceptanceSummary = null;
     hideCodeChangeView();
     hideRevisionComposer();
+    hideNextStepsCard();
+    hideAdoptWarning();
+    hideRevisionActiveBanner();
     resetCollabUi();
     copyBlockedFailed = false;
     setCopyEnabled(false);
@@ -1914,9 +2100,10 @@
       els.decisionBox.hidden = true;
       els.decisionBox.setAttribute("hidden", "");
     }
-    els.artifactPanel.hidden = true;
-    els.artifactPanel.setAttribute("hidden", "");
-    setWorkLayoutArtifact(false);
+    hideArtifactLoading();
+    els.artifactPanel.hidden = false;
+    els.artifactPanel.removeAttribute("hidden");
+    setWorkLayoutArtifact(true);
     if (els.revise) els.revise.disabled = true;
     if (els.acceptArtifact) els.acceptArtifact.disabled = true;
     if (els.rejectArtifact) els.rejectArtifact.disabled = true;
@@ -1924,6 +2111,92 @@
     if (els.decisionNote) els.decisionNote.value = "";
     showStatus(els.decisionError, "");
     clearAppliedUnderstanding();
+  }
+
+  function clearRevisionShots() {
+    revisionShotItems = [];
+    renderRevisionShots();
+    if (els.revisionShotHint) {
+      els.revisionShotHint.hidden = true;
+      els.revisionShotHint.textContent = "";
+    }
+  }
+
+  function renderRevisionShots() {
+    if (!els.revisionShots) return;
+    els.revisionShots.innerHTML = "";
+    for (const shot of revisionShotItems) {
+      const wrap = document.createElement("div");
+      wrap.className = "revision-shot";
+      const img = document.createElement("img");
+      img.src = shot.dataUrl;
+      img.alt = "问题截图";
+      const del = document.createElement("button");
+      del.type = "button";
+      del.textContent = "×";
+      del.setAttribute("aria-label", "删除截图");
+      del.addEventListener("click", () => {
+        revisionShotItems = revisionShotItems.filter((s) => s.id !== shot.id);
+        renderRevisionShots();
+      });
+      wrap.appendChild(img);
+      wrap.appendChild(del);
+      els.revisionShots.appendChild(wrap);
+    }
+  }
+
+  function updateRevisionShotHint() {
+    if (!els.revisionShotHint) return;
+    if (!revisionShotItems.length) {
+      els.revisionShotHint.hidden = true;
+      els.revisionShotHint.textContent = "";
+      return;
+    }
+    // 当前默认主模型不保证支持视觉：不假称已看懂图片
+    els.revisionShotHint.hidden = false;
+    els.revisionShotHint.removeAttribute("hidden");
+    els.revisionShotHint.textContent =
+      "已附上截图。Digital Me 会把截图保存为修改材料，并结合你的文字说明继续处理；请用文字写清问题要点。";
+  }
+
+  async function addRevisionShotFromDataUrl(dataUrl) {
+    const raw = String(dataUrl || "");
+    if (!/^data:image\/(png|jpeg|jpg|webp);base64,/i.test(raw)) return false;
+    if (revisionShotItems.length >= 6) {
+      if (els.revisionShotHint) {
+        els.revisionShotHint.hidden = false;
+        els.revisionShotHint.textContent = "一次最多附上 6 张截图。";
+      }
+      return false;
+    }
+    revisionShotSeq += 1;
+    revisionShotItems.push({
+      id: "shot_" + revisionShotSeq,
+      dataUrl: raw,
+    });
+    renderRevisionShots();
+    updateRevisionShotHint();
+    return true;
+  }
+
+  async function persistRevisionShots() {
+    const paths = [];
+    for (const shot of revisionShotItems) {
+      if (shot.path) {
+        paths.push(shot.path);
+        continue;
+      }
+      if (typeof api.saveRevisionImage !== "function") {
+        throw new Error("当前环境无法保存截图");
+      }
+      const saved = await api.saveRevisionImage({ dataUrl: shot.dataUrl });
+      if (!saved || !saved.ok || !saved.path) {
+        throw new Error((saved && saved.error) || "截图保存失败");
+      }
+      shot.path = saved.path;
+      paths.push(saved.path);
+    }
+    return paths;
   }
 
   function hideRevisionComposer() {
@@ -1946,9 +2219,95 @@
     }
     if (els.revisionRequest && !(els.revisionRequest.value || "").trim()) {
       els.revisionRequest.placeholder =
-        "说明还需要修改什么，例如：将返回值改为 done，并同步更新测试。";
+        "说明还需要修改什么。可粘贴截图，或点击「添加截图」。";
     }
+    updateRevisionShotHint();
     if (els.revisionRequest) els.revisionRequest.focus();
+  }
+
+  function renderNextStepsCard() {
+    if (!els.nextStepsCard || !els.nextStepsActions) return;
+    const runInfo = activeCodeChangeRunInfo;
+    const acc = activeAcceptanceSummary;
+    const startupFailed =
+      acc &&
+      ((acc.bullets || []).some((b) => /启动检查失败|尚不能确认/.test(b)) ||
+        (acc.adoptWarnings || []).some((w) => /启动检查/.test(w)) ||
+        (acc.canAdoptSuggested === false && runInfo && runInfo.runnable === false));
+    const canTry = !!(runInfo && runInfo.runnable && runInfo.canSuggestTryRun !== false && !startupFailed);
+    els.nextStepsCard.hidden = false;
+    els.nextStepsCard.removeAttribute("hidden");
+    if (els.nextStepsTitle) {
+      els.nextStepsTitle.textContent = canTry ? "可以试用了" : "还不能正常运行";
+    }
+    if (els.nextStepsLead) {
+      els.nextStepsLead.textContent = canTry
+        ? "Digital Me 已确认启动命令可用。你可以试运行，或继续完善。"
+        : "代码已经保留，但启动检查尚未通过。建议先继续修复。";
+    }
+    els.nextStepsActions.innerHTML = "";
+    const addBtn = (label, primary) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = label;
+      btn.className = primary ? "primary" : "ghost";
+      els.nextStepsActions.appendChild(btn);
+      return btn;
+    };
+    if (canTry) {
+      const tryBtn = addBtn("试运行", true);
+      tryBtn.addEventListener("click", async () => {
+        if (!activeCodeChangeWorkingDirectory) return;
+        if (els.nextStepsStatus) els.nextStepsStatus.textContent = "正在准备试运行…";
+        try {
+          if (typeof api.tryRunProject !== "function") {
+            if (els.nextStepsStatus) {
+              els.nextStepsStatus.textContent =
+                "Digital Me 已确认启动命令可用，但当前环境无法自动打开。";
+            }
+            return;
+          }
+          const result = await api.tryRunProject({ path: activeCodeChangeWorkingDirectory });
+          if (els.nextStepsStatus) {
+            els.nextStepsStatus.textContent =
+              (result && result.message) || "已发起试运行。";
+          }
+        } catch (err) {
+          if (els.nextStepsStatus) els.nextStepsStatus.textContent = userFacingWorkError(err);
+        }
+      });
+      addBtn("继续完善", false).addEventListener("click", () => {
+        showRevisionComposer({ continueMode: true });
+      });
+    } else {
+      addBtn("继续修复", true).addEventListener("click", () => {
+        showRevisionComposer({ continueMode: true });
+        if (els.revisionRequest) {
+          els.revisionRequest.placeholder =
+            "说明启动或运行时的问题，例如：窗口打不开、画面空白、一启动就退出…";
+          els.revisionRequest.focus();
+        }
+      });
+    }
+    addBtn("告诉 Digital Me 哪里不对", false).addEventListener("click", () => {
+      showRevisionComposer({ continueMode: true });
+      if (els.revisionRequest) {
+        els.revisionRequest.placeholder =
+          "描述你看到的问题，例如：方块无法旋转、窗口打不开、速度太快…也可粘贴截图。";
+        els.revisionRequest.focus();
+      }
+    });
+    addBtn("打开项目", false).addEventListener("click", async () => {
+      if (!activeCodeChangeWorkingDirectory) return;
+      try {
+        await api.revealPath(activeCodeChangeWorkingDirectory);
+      } catch (err) {
+        if (els.nextStepsStatus) els.nextStepsStatus.textContent = userFacingWorkError(err);
+      }
+    });
+    if (!canTry && els.nextStepsStatus) {
+      els.nextStepsStatus.textContent = "修改完成前，请先解决启动问题。";
+    }
   }
 
   function renderArtifactDecision(decision) {
@@ -1975,7 +2334,14 @@
         els.proposeRevision.textContent = "继续修改";
         els.proposeRevision.disabled = false;
       }
+      const isCodeChange =
+        !!activeCodeChangeWorkingDirectory ||
+        activeTaskRequestedArtifactType === "code-change" ||
+        activeTaskIntentKind === "modify_code";
+      if (isCodeChange) renderNextStepsCard();
+      else hideNextStepsCard();
     } else if (status === "rejected") {
+      hideNextStepsCard();
       els.decisionStatus.textContent = "未采用";
       if (els.decisionActions) els.decisionActions.hidden = false;
       if (noteField) noteField.hidden = false;
@@ -1996,6 +2362,7 @@
         els.proposeRevision.disabled = false;
       }
     } else {
+      hideNextStepsCard();
       els.decisionStatus.textContent = "尚未决定是否采用";
       if (els.decisionActions) els.decisionActions.hidden = false;
       if (noteField) noteField.hidden = false;
@@ -2018,18 +2385,43 @@
     }
   }
 
-  async function submitArtifactDecision(kind) {
+  async function submitArtifactDecision(kind, opts) {
     showStatus(els.decisionError, "");
+    hideAdoptWarning();
     if (!activeArtifactId || !activeHeadVersionId || !activeTaskId) {
       showStatus(els.decisionError, "当前没有可决定的成果", true);
       return;
     }
+    const forceAdopt = !!(opts && opts.forceAdopt);
     const note = els.decisionNote ? String(els.decisionNote.value || "").trim() : "";
     const goal = els.goal && els.goal.value ? String(els.goal.value).trim() : "";
     const isCodeChange =
       !!activeCodeChangeWorkingDirectory ||
       activeTaskRequestedArtifactType === "code-change" ||
       activeTaskIntentKind === "modify_code";
+    if (
+      kind === "accept" &&
+      isCodeChange &&
+      !forceAdopt &&
+      activeAcceptanceSummary &&
+      activeAcceptanceSummary.canAdoptSuggested === false
+    ) {
+      const warnings =
+        (activeAcceptanceSummary.adoptWarnings && activeAcceptanceSummary.adoptWarnings.length
+          ? activeAcceptanceSummary.adoptWarnings
+          : ["Digital Me 检查发现还有问题"]).slice(0, 6);
+      if (els.adoptWarningCard && els.adoptWarningList) {
+        els.adoptWarningCard.hidden = false;
+        els.adoptWarningCard.removeAttribute("hidden");
+        els.adoptWarningList.innerHTML = "";
+        for (const w of warnings) {
+          const li = document.createElement("li");
+          li.textContent = w;
+          els.adoptWarningList.appendChild(li);
+        }
+      }
+      return;
+    }
     const isCodeAnalysis =
       activeArtifactKind === "bundle" ||
       activeTaskRequestedArtifactType === "code-analysis" ||
@@ -2182,21 +2574,41 @@
   }
 
   async function refreshTasks() {
+    const requestEpoch = uiEpoch;
     const { tasks } = await api.invoke("work.listTasks", { limit: 50 });
+    if (requestEpoch !== uiEpoch && workMode === "task") {
+      // 允许 compose 时刷新；task 模式下若已切换则仍应用列表（顺序/标签来自权威 list），但不要用过期 epoch 挡列表
+    }
     els.taskList.innerHTML = "";
     els.taskEmpty.hidden = tasks.length > 0;
     for (const t of tasks) {
       const li = document.createElement("li");
+      li.dataset.taskId = t.taskId;
       if (workMode === "task" && t.taskId === activeTaskId) li.classList.add("active");
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "linkish";
+      btn.dataset.taskId = t.taskId;
       const stateLabel = t.userFacingLabel || labelForState(t.state);
       btn.innerHTML = `<div class="task-goal">${escapeHtml(t.goal.slice(0, 80))}</div>
-        <div class="task-state">${escapeHtml(stateLabel)}</div>`;
+        <div class="task-state" data-task-state="${escapeHtml(t.taskId)}">${escapeHtml(stateLabel)}</div>`;
       btn.addEventListener("click", () => selectTask(t.taskId));
       li.appendChild(btn);
       els.taskList.appendChild(li);
+    }
+  }
+
+  /** 仅更新指定 taskId 的列表标签，禁止用「当前任务」变量改任意项。 */
+  function updateTaskListItemLabel(taskId, label) {
+    if (!taskId || !label) return;
+    const node = els.taskList.querySelector(
+      '.task-state[data-task-state="' + CSS.escape(taskId) + '"]',
+    );
+    if (node) node.textContent = label;
+    const li = els.taskList.querySelector('li[data-task-id="' + CSS.escape(taskId) + '"]');
+    if (li) {
+      if (workMode === "task" && taskId === activeTaskId) li.classList.add("active");
+      else li.classList.remove("active");
     }
   }
 
@@ -2288,6 +2700,8 @@
           ? String(detail.latestJob.actionable)
           : "任务已取消。可以重试。";
       els.jobActionable.textContent = cancelledMsg;
+    } else if (job && (job.status === "queued" || job.status === "running") && job.revisionRequest) {
+      els.jobActionable.textContent = "修改要求：" + String(job.revisionRequest);
     } else if (detail.state === "attention") {
       els.jobActionable.textContent = "可以重试，或调整目标与材料后再试。";
     }
@@ -2330,10 +2744,16 @@
 
     if (isJobActive(detail)) {
       startJobWatch(activeTaskId);
-      clearArtifactView();
+      const rev =
+        detail.latestJob && detail.latestJob.revisionRequest
+          ? detail.latestJob.revisionRequest
+          : "";
+      showRevisionActiveBanner(rev);
+      showArtifactLoading(rev ? "正在按你的修改要求继续处理…" : "正在处理这项任务…");
       clearAppliedUnderstanding();
     } else {
       stopJobWatch();
+      hideRevisionActiveBanner();
       const terminalStatus = detail.latestJob && detail.latestJob.status;
       if (
         terminalStatus === "succeeded" &&
@@ -2365,10 +2785,20 @@
     workMode = "task";
     activeTaskId = taskId;
     activeJobId = null;
+    // 原子切换：立即清掉上一任务的中右栏与材料，避免串态
+    materials = [];
+    renderMaterials();
+    clearMaterialSummary();
     hideExecutionConfirmCard();
     hideProjectFolderCard();
-    clearArtifactView();
+    hideExecutorSetupCard();
+    hideRevisionActiveBanner();
+    clearJobChrome();
+    els.jobStatus.textContent = "正在打开任务…";
+    els.jobStatus.classList.remove("error");
+    showArtifactLoading("正在打开任务…");
     if (els.workComposeTitle) els.workComposeTitle.textContent = "当前任务";
+    updateTaskListItemLabel(taskId, "正在打开…");
     let detail;
     try {
       detail = await api.invoke("work.getTask", { taskId });
@@ -2389,26 +2819,47 @@
     activeTaskRequestedArtifactType =
       (detail.task && detail.task.requestedArtifactType) || "document";
     activeTaskIntentKind = (detail.task && detail.task.intentKind) || null;
+    if (detail.userFacingLabel) {
+      updateTaskListItemLabel(taskId, detail.userFacingLabel);
+    }
     const refs =
       detail.task && Array.isArray(detail.task.contextRefs) ? detail.task.contextRefs : [];
-    materials = refs
+    const nextMaterials = refs
       .filter((r) => r && (r.kind === "file" || r.kind === "folder") && r.path)
-      .map((r) => ({ kind: r.kind, path: r.path }));
-    for (const item of materials) {
+      .map((r) => ({ kind: r.kind, path: r.path, ...(r.projectOrigin ? { projectOrigin: r.projectOrigin } : {}) }));
+    // 项目目录也可来自 Job（磁盘事实），避免仅因 contextRefs 瞬时空而显示「需要项目位置」
+    if (
+      !nextMaterials.some((m) => m.kind === "folder") &&
+      detail.latestJob &&
+      detail.latestJob.externalExecution &&
+      detail.latestJob.externalExecution.workingDirectory
+    ) {
+      nextMaterials.unshift({
+        kind: "folder",
+        path: detail.latestJob.externalExecution.workingDirectory,
+      });
+    }
+    for (const item of nextMaterials) {
       if (item.kind !== "folder" || !item.path) continue;
       try {
         if (typeof api.inspectSoftwareProject === "function") {
-          item.softwareProject = await api.inspectSoftwareProject(item.path);
+          const inspected = await api.inspectSoftwareProject(item.path);
+          if (epoch !== uiEpoch || activeTaskId !== taskId) return;
+          item.softwareProject = inspected;
         }
       } catch {
         /* ignore */
       }
+      if (epoch !== uiEpoch || activeTaskId !== taskId) return;
     }
+    if (epoch !== uiEpoch || activeTaskId !== taskId) return;
+    materials = nextMaterials;
     renderMaterials();
     renderJobStatus(detail);
     renderOwnerChoicePrompt(detail);
     renderMaterialSummary(detail.materialSummary);
     const connected = await refreshConnectionFromCapabilities();
+    if (epoch !== uiEpoch || activeTaskId !== taskId) return;
     applyJobControls(detail, connected);
     setWorkCollabVisible(true);
     syncGoalPresentation();
@@ -2416,10 +2867,16 @@
     if (epoch !== uiEpoch || activeTaskId !== taskId) return;
     if (isJobActive(detail)) {
       startJobWatch(taskId);
-      showEmptyArtifact("正在处理这项任务…");
+      const rev =
+        detail.latestJob && detail.latestJob.revisionRequest
+          ? detail.latestJob.revisionRequest
+          : "";
+      showRevisionActiveBanner(rev);
+      showArtifactLoading(rev ? "正在按你的修改要求继续处理…" : "正在处理这项任务…");
       clearAppliedUnderstanding();
     } else {
       stopJobWatch();
+      hideRevisionActiveBanner();
       if (
         detail.latestJob &&
         detail.latestJob.status === "succeeded" &&
@@ -2432,12 +2889,18 @@
           renderAppliedUnderstanding(detail.appliedUnderstanding);
         }
       } else {
-        showEmptyArtifact("这项任务尚未产生成果。");
+        if (epoch !== uiEpoch || activeTaskId !== taskId) return;
+        showEmptyArtifact(
+          detail.latestJob && detail.latestJob.status === "failed"
+            ? "这项任务执行失败，尚未产生可确认的成果。"
+            : "这项任务尚未产生成果。",
+        );
         clearAppliedUnderstanding();
       }
     }
     if (epoch !== uiEpoch || activeTaskId !== taskId) return;
     await refreshTasks();
+    if (epoch !== uiEpoch || activeTaskId !== taskId) return;
     await syncWorkCollabFromDomain();
   }
 
@@ -2464,11 +2927,9 @@
     if (workMode !== "task") return null;
     if (expectedTaskId && activeTaskId && expectedTaskId !== activeTaskId) return null;
     if (content.artifactTaskId && activeTaskId && content.artifactTaskId !== activeTaskId) {
-      showEmptyArtifact("这项成果不属于当前任务。");
       return null;
     }
     if (content.artifact && content.artifact.taskId && activeTaskId && content.artifact.taskId !== activeTaskId) {
-      showEmptyArtifact("这项成果不属于当前任务。");
       return null;
     }
     const isBundle = !!(content.content && content.content.kind === "bundle");
@@ -3726,7 +4187,7 @@
         inspected = await api.inspectSoftwareProject(dir);
       }
       if (preferEmpty && inspected && !inspected.isEmptyDirectory && !inspected.isNewProjectCandidate) {
-        els.jobStatus.textContent = "请选择空文件夹以开始新项目，或改用「选择现有项目文件夹」。";
+        els.jobStatus.textContent = "请选择空文件夹以开始新项目，或改用「使用已有项目」。";
         els.jobStatus.classList.add("error");
         return;
       }
@@ -3734,12 +4195,13 @@
       materials.push({
         kind: "folder",
         path: dir,
+        projectOrigin: "user_selected",
         softwareProject: inspected || undefined,
       });
       renderMaterials();
       hideProjectFolderCard();
       els.jobStatus.textContent = inspected && inspected.isNewProjectCandidate
-        ? "已选择空文件夹，可作为新项目位置。"
+        ? "已准备好新项目位置。"
         : "已添加项目文件夹。";
       els.jobStatus.classList.remove("error");
       els.jobActionable.textContent = "确认材料后可点击「开始处理」。";
@@ -3749,11 +4211,177 @@
     }
   }
 
+  async function beginCreateNewProjectFlow() {
+    const goal = (els.goal && els.goal.value ? String(els.goal.value) : "").trim();
+    if (!goal) {
+      els.jobStatus.textContent = "请先填写任务目标";
+      els.jobStatus.classList.add("error");
+      return;
+    }
+    // 幂等：同一任务草稿已选定项目目录时复用，不创建 (2)
+    const existing = materials.find(
+      (m) => m.kind === "folder" && m.projectOrigin === "digitalme_created" && m.path,
+    );
+    if (existing) {
+      pendingCreateProject = {
+        ok: true,
+        path: existing.path,
+        displayPath: existing.path,
+        reused: true,
+      };
+      if (els.projectFolderActions) {
+        els.projectFolderActions.hidden = true;
+        els.projectFolderActions.setAttribute("hidden", "");
+      }
+      if (els.projectCreateConfirm) {
+        els.projectCreateConfirm.hidden = false;
+        els.projectCreateConfirm.removeAttribute("hidden");
+      }
+      if (els.projectCreatePath) {
+        els.projectCreatePath.textContent =
+          "将继续使用已为这项任务准备的项目文件夹：\n" + existing.path;
+      }
+      return;
+    }
+    if (pendingCreateProject && pendingCreateProject.path) {
+      if (els.projectFolderActions) {
+        els.projectFolderActions.hidden = true;
+        els.projectFolderActions.setAttribute("hidden", "");
+      }
+      if (els.projectCreateConfirm) {
+        els.projectCreateConfirm.hidden = false;
+        els.projectCreateConfirm.removeAttribute("hidden");
+      }
+      if (els.projectCreatePath) {
+        els.projectCreatePath.textContent =
+          "Digital Me 将为这项任务创建项目文件夹：\n" +
+          (pendingCreateProject.displayPath || pendingCreateProject.path);
+      }
+      return;
+    }
+    if (typeof api.prepareSoftwareProject !== "function") {
+      els.jobStatus.textContent = "当前环境无法自动创建项目文件夹";
+      els.jobStatus.classList.add("error");
+      return;
+    }
+    try {
+      const prepared = await api.prepareSoftwareProject({ goal });
+      if (!prepared || !prepared.ok || !prepared.path) {
+        els.jobStatus.textContent =
+          (prepared && prepared.error) || "无法创建项目文件夹";
+        els.jobStatus.classList.add("error");
+        return;
+      }
+      pendingCreateProject = prepared;
+      if (els.projectFolderActions) {
+        els.projectFolderActions.hidden = true;
+        els.projectFolderActions.setAttribute("hidden", "");
+      }
+      if (els.projectCreateConfirm) {
+        els.projectCreateConfirm.hidden = false;
+        els.projectCreateConfirm.removeAttribute("hidden");
+      }
+      if (els.projectCreatePath) {
+        els.projectCreatePath.textContent =
+          "Digital Me 将为这项任务创建项目文件夹：\n" +
+          (prepared.displayPath || prepared.path);
+      }
+      els.jobStatus.textContent = "请确认新项目位置";
+      els.jobStatus.classList.remove("error");
+      els.jobActionable.textContent = "";
+    } catch (err) {
+      els.jobStatus.textContent = userFacingWorkError(err);
+      els.jobStatus.classList.add("error");
+    }
+  }
+
+  async function confirmPendingCreateProject() {
+    if (!pendingCreateProject || !pendingCreateProject.path) return;
+    const dir = pendingCreateProject.path;
+    let inspected = null;
+    try {
+      if (typeof api.inspectSoftwareProject === "function") {
+        inspected = await api.inspectSoftwareProject(dir);
+      }
+    } catch {
+      /* ignore */
+    }
+    materials = materials.filter((m) => !(m.kind === "folder"));
+    materials.push({
+      kind: "folder",
+      path: dir,
+      projectOrigin: "digitalme_created",
+      softwareProject: inspected || { isNewProjectCandidate: true, isEmptyDirectory: true },
+    });
+    renderMaterials();
+    hideProjectFolderCard();
+    els.jobStatus.textContent = pendingCreateProject.reused
+      ? "已沿用本任务的项目文件夹。"
+      : "已创建新项目文件夹。";
+    els.jobStatus.classList.remove("error");
+    els.jobActionable.textContent = "确认材料后可点击「开始处理」。";
+  }
+
+  if (els.createNewProject) {
+    els.createNewProject.addEventListener("click", () => beginCreateNewProjectFlow());
+  }
+  if (els.confirmCreateProject) {
+    els.confirmCreateProject.addEventListener("click", () => confirmPendingCreateProject());
+  }
+  if (els.changeProjectLocation) {
+    els.changeProjectLocation.addEventListener("click", async () => {
+      const parent = await api.dialogs.pickSaveDirectory();
+      if (!parent) return;
+      const goal = (els.goal && els.goal.value ? String(els.goal.value) : "").trim() || "新项目";
+      try {
+        const prepared = await api.prepareSoftwareProject({ goal, parentDir: parent });
+        if (!prepared || !prepared.ok) {
+          els.jobStatus.textContent = (prepared && prepared.error) || "无法更改位置";
+          els.jobStatus.classList.add("error");
+          return;
+        }
+        pendingCreateProject = prepared;
+        if (els.projectCreatePath) {
+          els.projectCreatePath.textContent =
+            "Digital Me 将为这项任务创建项目文件夹：\n" +
+            (prepared.displayPath || prepared.path);
+        }
+      } catch (err) {
+        els.jobStatus.textContent = userFacingWorkError(err);
+        els.jobStatus.classList.add("error");
+      }
+    });
+  }
+  if (els.cancelCreateProject) {
+    els.cancelCreateProject.addEventListener("click", () => {
+      pendingCreateProject = null;
+      if (els.projectCreateConfirm) {
+        els.projectCreateConfirm.hidden = true;
+        els.projectCreateConfirm.setAttribute("hidden", "");
+      }
+      if (els.projectFolderActions) {
+        els.projectFolderActions.hidden = false;
+        els.projectFolderActions.removeAttribute("hidden");
+      }
+    });
+  }
   if (els.pickExistingProject) {
     els.pickExistingProject.addEventListener("click", () => addProjectFolderFromPicker(false));
   }
   if (els.pickEmptyProject) {
     els.pickEmptyProject.addEventListener("click", () => addProjectFolderFromPicker(true));
+  }
+  if (els.adoptContinueRevise) {
+    els.adoptContinueRevise.addEventListener("click", () => {
+      hideAdoptWarning();
+      showRevisionComposer({ continueMode: true });
+    });
+  }
+  if (els.adoptAnyway) {
+    els.adoptAnyway.addEventListener("click", () => {
+      hideAdoptWarning();
+      void submitArtifactDecision("accept", { forceAdopt: true });
+    });
   }
 
   els.submit.addEventListener("click", async () => {
@@ -3787,7 +4415,7 @@
       clearArtifactView();
       const payload = {
         goal,
-        contextRefs: materials.map((m) => ({ kind: m.kind, path: m.path })),
+        contextRefs: materials.map((m) => ({ kind: m.kind, path: m.path, ...(m.projectOrigin ? { projectOrigin: m.projectOrigin } : {}) })),
       };
       // 不强迫传成果类型；Runtime 按意图派生。显式仅在隐藏控件有非空值时透传。
       if (type) payload.requestedArtifactType = type;
@@ -3797,7 +4425,7 @@
         els.submit.disabled = false;
         els.jobStatus.textContent = "这项任务需要一个项目位置";
         els.jobStatus.classList.remove("error");
-        els.jobActionable.textContent = "请选择现有项目文件夹，或选择空文件夹开始新项目。";
+        els.jobActionable.textContent = "可由 Digital Me 创建新项目，或使用你已有的项目。";
         clearArtifactView();
         return;
       }
@@ -3953,12 +4581,29 @@
         const preview = pendingExecutionConfirm.preview;
         const confirmPayload = {
           goal: pendingExecutionConfirm.goal,
-          contextRefs: pendingExecutionConfirm.contextRefs,
+          contextRefs: pendingExecutionConfirm.contextRefs.map((r) => {
+            const mat = materials.find((m) => m.path === r.path);
+            return {
+              kind: r.kind,
+              path: r.path,
+              ...(mat && mat.projectOrigin ? { projectOrigin: mat.projectOrigin } : {}),
+              ...(preview.projectOrigin && r.kind === "folder"
+                ? { projectOrigin: preview.projectOrigin }
+                : {}),
+            };
+          }),
           executionAuthorization: {
             confirmed: true,
             workingDirectory: preview.workingDirectory,
             readScope: preview.readScope,
             writeScope: preview.writeScope,
+            ...(preview.projectOrigin ? { projectOrigin: preview.projectOrigin } : {}),
+            ...(materials.find((m) => m.kind === "folder" && m.projectOrigin)
+              ? {
+                  projectOrigin: materials.find((m) => m.kind === "folder" && m.projectOrigin)
+                    .projectOrigin,
+                }
+              : {}),
           },
         };
         if (pendingExecutionConfirm.capabilityId) {
@@ -4053,7 +4698,7 @@
           codingAction: {
             type: "save_pending",
             goal,
-            contextRefs: materials.map((m) => ({ kind: m.kind, path: m.path })),
+            contextRefs: materials.map((m) => ({ kind: m.kind, path: m.path, ...(m.projectOrigin ? { projectOrigin: m.projectOrigin } : {}) })),
           },
         });
         hideExecutorSetupCard();
@@ -4132,6 +4777,64 @@
     els.cancelRevision.addEventListener("click", () => {
       hideRevisionComposer();
       if (els.revisionRequest) els.revisionRequest.value = "";
+      clearRevisionShots();
+    });
+  }
+
+  if (els.revisionRequest) {
+    els.revisionRequest.addEventListener("paste", async (ev) => {
+      const items = ev.clipboardData && ev.clipboardData.items;
+      if (!items) return;
+      let handled = false;
+      for (const item of items) {
+        if (!item.type || !item.type.startsWith("image/")) continue;
+        handled = true;
+        const file = item.getAsFile();
+        if (!file) continue;
+        const reader = new FileReader();
+        reader.onload = async () => {
+          await addRevisionShotFromDataUrl(String(reader.result || ""));
+          showRevisionComposer({ continueMode: true });
+        };
+        reader.readAsDataURL(file);
+      }
+      if (handled) ev.preventDefault();
+    });
+    els.revisionRequest.addEventListener("dragover", (ev) => {
+      ev.preventDefault();
+    });
+    els.revisionRequest.addEventListener("drop", async (ev) => {
+      ev.preventDefault();
+      const files = ev.dataTransfer && ev.dataTransfer.files;
+      if (!files || !files.length) return;
+      for (const file of files) {
+        if (!/^image\/(png|jpeg|jpg|webp)$/i.test(file.type)) continue;
+        const reader = new FileReader();
+        reader.onload = async () => {
+          await addRevisionShotFromDataUrl(String(reader.result || ""));
+        };
+        reader.readAsDataURL(file);
+      }
+      showRevisionComposer({ continueMode: true });
+    });
+  }
+  if (els.addRevisionShot && els.revisionShotFile) {
+    els.addRevisionShot.addEventListener("click", () => {
+      els.revisionShotFile.click();
+    });
+    els.revisionShotFile.addEventListener("change", async () => {
+      const files = els.revisionShotFile.files;
+      if (!files) return;
+      for (const file of files) {
+        if (!/^image\/(png|jpeg|jpg|webp)$/i.test(file.type)) continue;
+        const reader = new FileReader();
+        reader.onload = async () => {
+          await addRevisionShotFromDataUrl(String(reader.result || ""));
+        };
+        reader.readAsDataURL(file);
+      }
+      els.revisionShotFile.value = "";
+      showRevisionComposer({ continueMode: true });
     });
   }
 
@@ -4145,24 +4848,40 @@
         return;
       }
       const revisionRequest = (els.revisionRequest.value || "").trim();
-      if (!revisionRequest) {
-        els.jobStatus.textContent = "请先说明还需要修改什么";
+      if (!revisionRequest && revisionShotItems.length === 0) {
+        els.jobStatus.textContent = "请先说明还需要修改什么，或附上截图";
         els.jobStatus.classList.add("error");
         showRevisionComposer();
         return;
       }
+      if (!revisionRequest && revisionShotItems.length > 0) {
+        els.jobStatus.textContent = "请用文字简要说明截图里的问题";
+        els.jobStatus.classList.add("error");
+        showRevisionComposer({ continueMode: true });
+        return;
+      }
+      const attachmentPaths = await persistRevisionShots();
       // 采用/不采用说明不得作为 revisionRequest
       const result = await api.invoke("work.reviseArtifact", {
         taskId: activeTaskId,
         artifactId: activeArtifactId,
         revisionRequest,
+        ...(attachmentPaths.length ? { attachmentPaths } : {}),
       });
       hideRevisionComposer();
+      showRevisionActiveBanner(revisionRequest);
       if (els.revisionRequest) els.revisionRequest.value = "";
+      clearRevisionShots();
       activeJobId = result.jobId;
       els.jobStatus.textContent = "正在按你的修改要求继续处理";
       els.jobStatus.classList.remove("error");
-      if (els.jobActionable) els.jobActionable.textContent = "";
+      if (els.jobActionable) {
+        els.jobActionable.textContent =
+          "修改要求：" +
+          revisionRequest +
+          (attachmentPaths.length ? `（附 ${attachmentPaths.length} 张截图）` : "");
+      }
+      showArtifactLoading("正在按你的修改要求继续处理…");
       await syncActiveTaskStatus();
       startJobWatch(activeTaskId);
     } catch (err) {

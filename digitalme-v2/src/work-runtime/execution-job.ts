@@ -74,6 +74,7 @@ export interface ExecutionJob {
     workingDirectory: string;
     readScope: string[];
     writeScope: string[];
+    projectOrigin?: 'digitalme_created' | 'user_selected' | 'unknown';
     lastExecutorStatus?:
       | 'queued'
       | 'running'

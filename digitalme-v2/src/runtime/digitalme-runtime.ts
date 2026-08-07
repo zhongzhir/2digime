@@ -884,6 +884,8 @@ export class DigitalMeRuntime {
       registry,
       eventBus: this.eventBus,
       workRoot: path.join(root, 'work'),
+      getArtifactOwnerDecision: (artifactId, artifactVersionId) =>
+        subjectService.getArtifactOwnerDecision(artifactId, artifactVersionId),
       ...(this.options.secrets ? { secrets: this.options.secrets } : {}),
       readExtractedText: async (ref: string) => {
         const bytes = await contentStore.readBytes(ref);

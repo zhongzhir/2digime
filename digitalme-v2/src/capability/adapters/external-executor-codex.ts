@@ -300,6 +300,7 @@ async function runExternalExecutorCodex(
     timeoutMs: options.defaultTimeoutMs ?? 600_000,
     executorId: EXTERNAL_EXECUTOR_CODEX_ADAPTER_ID,
     executorSelectionReason: '用户目标需要修改代码仓库文件；已连接 Codex CLI 代码执行能力',
+    ...(auth.projectOrigin ? { projectOrigin: auth.projectOrigin } : {}),
   });
 
   await fs.writeFile(
@@ -663,9 +664,11 @@ export function buildCodexExecArgs(input: {
   codexJsPath: string;
   workingDirectory: string;
   lastMessagePath: string;
+  /** 仅 Digital Me 自建且非 Git 仓库的新项目可 true */
+  skipGitRepoCheck?: boolean;
 }): string[] {
   // 非交互：-c approval_policy=never 替代已废弃 --full-auto；不拼接 shell 命令字符串
-  return [
+  const args = [
     input.codexJsPath,
     'exec',
     '--cd',
@@ -675,10 +678,12 @@ export function buildCodexExecArgs(input: {
     '--json',
     '-c',
     'approval_policy="never"',
-    '--output-last-message',
-    input.lastMessagePath,
-    '-',
   ];
+  if (input.skipGitRepoCheck) {
+    args.push('--skip-git-repo-check');
+  }
+  args.push('--output-last-message', input.lastMessagePath, '-');
+  return args;
 }
 
 async function spawnCodexExec(input: {
@@ -700,10 +705,17 @@ async function spawnCodexExec(input: {
   const codexJs = input.codexJsPath || resolveCodexJs();
   const lastMessagePath = path.join(input.evidenceDir, 'codex-last-message.txt');
   const stdoutPath = path.join(input.evidenceDir, 'codex-stdout.jsonl');
+  const { shouldSkipGitRepoCheck } = await import('../../execution/git-trust');
+  const skipGitRepoCheck = await shouldSkipGitRepoCheck({
+    workingDirectory: input.pkg.workingDirectory,
+    authorizedWorkingDirectory: input.pkg.workingDirectory,
+    ...(input.pkg.projectOrigin ? { projectOrigin: input.pkg.projectOrigin } : {}),
+  });
   const args = buildCodexExecArgs({
     codexJsPath: codexJs,
     workingDirectory: input.pkg.workingDirectory,
     lastMessagePath,
+    ...(skipGitRepoCheck ? { skipGitRepoCheck: true } : {}),
   });
 
   const nodeExecutable = resolveNodeExecutable(process.env);

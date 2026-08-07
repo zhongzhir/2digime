@@ -198,6 +198,7 @@ export interface CommandMap {
         workingDirectory: string;
         readScope?: string[];
         writeScope?: string[];
+        projectOrigin?: 'digitalme_created' | 'user_selected' | 'unknown';
       };
     };
     output: {
@@ -225,6 +226,7 @@ export interface CommandMap {
         /** 实际选用的能力（高级设置可见；确认卡主文案仍用自然名称）。 */
         selectedCapabilityId?: string;
         selectedCapabilityDisplayName?: string;
+        projectOrigin?: 'digitalme_created' | 'user_selected' | 'unknown';
       };
       /**
        * 软件开发意图已识别，但代码执行能力尚未连接。
@@ -269,6 +271,8 @@ export interface CommandMap {
       needsProjectFolder?: {
         message: string;
         allowEmptyFolder?: boolean;
+        /** 新软件任务优先「由 Digital Me 创建新项目」 */
+        preferCreateNew?: boolean;
       };
     };
   };
@@ -298,6 +302,8 @@ export interface CommandMap {
       revisionRequest: string;
       /** 不采用理由；进入修订模型输入，可与 revisionRequest 并存。 */
       rejectionReason?: string;
+      /** 截图等附件绝对路径。 */
+      attachmentPaths?: string[];
     };
     output: { jobId: string };
   };
@@ -311,6 +317,9 @@ export interface CommandMap {
       task: Task;
       state: TaskState;
       userFacingLabel: string;
+      displayState?: string;
+      activityTime?: string;
+      projectDir?: string;
       latestJob?: {
         jobId: string;
         status: JobStatus;
@@ -319,6 +328,8 @@ export interface CommandMap {
         startedAt?: string;
         /** 失败时面向用户的可行动说明。 */
         actionable?: string;
+        /** 本次 Job 的修改要求（来自 Job.revisionRequest）。 */
+        revisionRequest?: string;
         /** 外部代码执行投影（白话由 UI 映射）。 */
         externalExecution?: {
           workingDirectory?: string;
@@ -365,6 +376,9 @@ export interface CommandMap {
         goal: string;
         state: TaskState;
         userFacingLabel?: string;
+        displayState?: string;
+        activityTime?: string;
+        projectDir?: string;
       }>;
     };
   };
@@ -434,11 +448,27 @@ export interface CommandMap {
         agentClaimedSuccess?: boolean;
         acceptanceSummary?: {
           title: string;
+          headline?: string;
+          executionStatusLabel?: string;
           goalLabel: string;
           goalVerdict?: string;
           recommendation: string;
           bullets: string[];
+          technicalBullets?: string[];
+          adoptWarnings?: string[];
           canAdoptSuggested: boolean;
+        };
+        /** 本版本对应的修改要求（version.note / Job lineage）。 */
+        revisionRequest?: string;
+        /** 试运行探测（派生，不持久化）。 */
+        runInfo?: {
+          runnable: boolean;
+          kind?: string;
+          label?: string;
+          command?: string;
+          entryPath?: string;
+          reason?: string;
+          canSuggestTryRun?: boolean;
         };
       };
     };

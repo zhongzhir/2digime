@@ -82,6 +82,8 @@ export interface ExecutorTaskPackage {
   /** 为何选择此执行器（审计）。 */
   executorSelectionReason: string;
   executorId: string;
+  /** Digital Me 自建项目来源（用于受控 skip-git-repo-check）。 */
+  projectOrigin?: 'digitalme_created' | 'user_selected' | 'unknown';
 }
 
 /** 执行输出 — Adapter 自报部分；权威判定由 Digital Me 独立采集+验证。 */

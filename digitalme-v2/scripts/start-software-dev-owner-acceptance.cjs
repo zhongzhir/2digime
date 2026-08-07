@@ -2,6 +2,8 @@
  * Owner 真机验收启动器
  * - 默认复用隔离 userData（不删除旧证据）
  * - --fresh-session：新建时间戳 userData + 时间戳测试项目
+ * - --resume-session <userData路径>：同会话重启，不新建、不删除、不复制
+ * - --fixture-project <路径>：与 resume 配套指定原测试项目（可选；可从 launch.json 回填）
  * - --scene=a|b|c：仅向 Electron 子进程注入验收环境（剥离父进程残留）
  * - --preflight：自动核对隔离环境与能力状态后退出（不代替 Owner 点击）
  * - 不注入任务/材料/成果；不改系统 PATH / 登录 / 全局配置
@@ -32,20 +34,82 @@ const defaultFixture = 'D:\\Projects\\DigitalMe-Software-UX-Owner-Test';
 const PRESERVED_EVIDENCE_UD =
   'C:\\Users\\46554\\AppData\\Local\\DigitalMe-OwnerAcceptance\\software-dev-task-ux-01';
 
+function takeArgValue(argv, name) {
+  const eq = argv.find((a) => a.startsWith(`${name}=`));
+  if (eq) return eq.slice(name.length + 1).trim();
+  const idx = argv.indexOf(name);
+  if (idx >= 0 && argv[idx + 1] && !String(argv[idx + 1]).startsWith('--')) {
+    return String(argv[idx + 1]).trim();
+  }
+  return '';
+}
+
 function parseArgs(argv) {
   const fresh = argv.includes('--fresh-session');
   const preflight = argv.includes('--preflight');
+  const resumeSession = takeArgValue(argv, '--resume-session');
+  const fixtureProjectArg = takeArgValue(argv, '--fixture-project');
   const sessionArg = argv.find((a) => a.startsWith('--session='));
   const sceneArg = argv.find((a) => a.startsWith('--scene='));
   const stamp = Date.now();
-  const sessionId = sessionArg
+  let scene = (sceneArg ? sceneArg.slice('--scene='.length) : 'a').trim().toLowerCase();
+  if (!['a', 'b', 'c'].includes(scene)) scene = 'a';
+
+  if (resumeSession && fresh) {
+    throw new Error('--resume-session 与 --fresh-session 不能同时使用');
+  }
+
+  let sessionId = sessionArg
     ? sessionArg.slice('--session='.length).trim()
     : fresh
       ? `${defaultSessionId}-${stamp}`
       : defaultSessionId;
-  let scene = (sceneArg ? sceneArg.slice('--scene='.length) : 'a').trim().toLowerCase();
-  if (!['a', 'b', 'c'].includes(scene)) scene = 'a';
-  return { fresh, preflight, sessionId, stamp, scene };
+  let userDataOverride = '';
+
+  if (resumeSession) {
+    userDataOverride = path.resolve(resumeSession);
+    sessionId = path.basename(userDataOverride);
+  }
+
+  return {
+    fresh,
+    preflight,
+    sessionId,
+    stamp,
+    scene,
+    resumeSession: !!resumeSession,
+    userDataOverride,
+    fixtureProjectArg,
+  };
+}
+
+function resolveFixtureForResume(userData, fixtureProjectArg) {
+  if (fixtureProjectArg) {
+    const resolved = path.resolve(fixtureProjectArg);
+    if (!fs.existsSync(resolved)) {
+      throw new Error(`fixture-project 不存在: ${resolved}`);
+    }
+    return resolved;
+  }
+  try {
+    const launch = JSON.parse(
+      fs.readFileSync(path.join(evidenceDir, 'launch.json'), 'utf8'),
+    );
+    if (
+      launch &&
+      launch.userData &&
+      path.resolve(launch.userData) === path.resolve(userData) &&
+      launch.fixtureProject &&
+      fs.existsSync(launch.fixtureProject)
+    ) {
+      return path.resolve(launch.fixtureProject);
+    }
+  } catch {
+    /* ignore */
+  }
+  throw new Error(
+    '同会话重启需要 --fixture-project <原测试项目路径>，或 evidence/launch.json 中有匹配记录',
+  );
 }
 
 function createFreshFixture(stamp) {
@@ -137,29 +201,97 @@ function buildChildEnv(scene) {
   };
 }
 
+function inspectResumePackage(userData) {
+  const pkgDir = path.join(userData, 'subjects', 'default');
+  const manifestPath = path.join(pkgDir, 'manifest.json');
+  const tasksDir = path.join(pkgDir, 'runtime', 'tasks');
+  const jobsDir = path.join(pkgDir, 'runtime', 'jobs');
+  const artifactsDir = path.join(pkgDir, 'runtime', 'artifacts');
+  const modelConfig = path.join(userData, 'model-config.json');
+  const secrets = path.join(userData, 'secrets.v2.json');
+  const listJson = (dir) => {
+    if (!fs.existsSync(dir)) return [];
+    return fs
+      .readdirSync(dir)
+      .filter((n) => n.endsWith('.json'))
+      .sort();
+  };
+  const taskFiles = listJson(tasksDir);
+  const jobFiles = listJson(jobsDir);
+  const artifactFiles = listJson(artifactsDir);
+  let packageId = null;
+  try {
+    packageId = JSON.parse(fs.readFileSync(manifestPath, 'utf8')).id || null;
+  } catch {
+    /* ignore */
+  }
+  let modelConfigured = false;
+  try {
+    const cfg = JSON.parse(fs.readFileSync(modelConfig, 'utf8'));
+    modelConfigured = !!(cfg && cfg.baseUrl && cfg.model);
+  } catch {
+    /* ignore */
+  }
+  return {
+    packageDir: pkgDir,
+    packageExists: fs.existsSync(manifestPath),
+    packageId,
+    taskCount: taskFiles.length,
+    taskIds: taskFiles.map((f) => f.replace(/\.json$/, '')),
+    jobCount: jobFiles.length,
+    artifactCount: artifactFiles.length,
+    modelConfigPresent: fs.existsSync(modelConfig),
+    modelConfigured,
+    secretsPresent: fs.existsSync(secrets),
+    subjectsCount: fs.existsSync(path.join(userData, 'subjects'))
+      ? fs
+          .readdirSync(path.join(userData, 'subjects'), { withFileTypes: true })
+          .filter((d) => d.isDirectory()).length
+      : 0,
+  };
+}
+
+function resumeCommand(userData, fixtureProject) {
+  return [
+    'node scripts/start-software-dev-owner-acceptance.cjs',
+    `--resume-session "${userData}"`,
+    `--fixture-project "${fixtureProject}"`,
+    '--scene=a',
+  ].join(' ');
+}
+
 function writeLaunchNote(input) {
   const {
     electronPath,
     userData,
     sessionId,
     fresh,
+    resumeSession,
     fixtureProject,
     scene,
     preflight,
+    resumeDiagnostics,
   } = input;
+  const resumeCmd = resumeCommand(userData, fixtureProject);
+  const preferredWorking =
+    'C:\\Users\\46554\\AppData\\Local\\DigitalMe-OwnerAcceptance\\software-dev-task-ux-01-1786086712062';
+  const preferredFixture = 'D:\\Projects\\DigitalMe-Software-UX-Owner-Test-1786086712062';
   const note = {
-    schemaVersion: 'owner-acceptance-launch/2',
+    schemaVersion: 'owner-acceptance-launch/4',
     launchedAt: new Date().toISOString(),
     branchHint: 'v2/foundation',
-    headHint: '957481e547ee1aa1fc19833d054fa6e891d2fd50',
+    headHint: '375428702e6b778191eecd329b2cdca83c6b1d6d',
+    blocker: 'BLOCKER-05',
     electronMain: path.join(root, 'electron', 'main.cjs'),
     electronPath: electronPath || null,
     userData,
     sessionId,
     freshSession: !!fresh,
+    resumeSession: !!resumeSession,
     fixtureProject,
     scene,
     preflight: !!preflight,
+    resumeDiagnostics: resumeDiagnostics || null,
     preservedEvidenceUserData: PRESERVED_EVIDENCE_UD,
     ownerGoal:
       '修改这个项目中的 formatLabel，使输入 start 时返回 start-processing，并同步更新测试、运行测试。不要提交或推送代码。',
@@ -167,14 +299,18 @@ function writeLaunchNote(input) {
     reviseGoal: '将 start-processing 改为 done，并同步更新测试。',
     sceneCommands: {
       A: 'node scripts/start-software-dev-owner-acceptance.cjs --fresh-session --scene=a',
+      A_RESUME: resumeCmd,
+      A_RESUME_WORKING_SESSION: resumeCommand(preferredWorking, preferredFixture),
       B: 'node scripts/start-software-dev-owner-acceptance.cjs --fresh-session --scene=b',
       C: 'node scripts/start-software-dev-owner-acceptance.cjs --fresh-session --scene=c',
     },
     notes: [
       '本启动不注入任务/材料/成果；Owner 须从做事页亲自操作。',
       '默认命令复用旧 userData；--fresh-session 创建新时间戳会话与新测试项目，不删除旧证据。',
+      '--resume-session 同会话重启：不新建、不删除、不复制；须带原 fixture 或从 launch.json 回填。',
+      'resume 只恢复指定 userData；打开空会话不等于「任务丢失」。请核对 taskCount。',
       '场景环境仅注入 Electron 子进程；不改系统 PATH、登录状态或全局配置。',
-      '一次只开一个场景窗口；Owner 退出后再开下一场景。',
+      '一次只开一个场景窗口；Owner 退出后再开下一场景。场景 B/C 本轮暂停。',
       '不得 push。',
     ],
   };
@@ -182,57 +318,48 @@ function writeLaunchNote(input) {
   fs.writeFileSync(
     path.join(evidenceDir, 'OWNER_CHECKLIST.md'),
     [
-      '# Owner 真机验收清单（CODING-CAPABILITY-OWNER-SCENARIOS-CLOSE-01）',
+      '# Owner 真机验收清单（BLOCKER-05）',
       '',
       `当前场景：\`${String(scene).toUpperCase()}\``,
       `测试项目：\`${fixtureProject.replace(/\\/g, '\\\\')}\``,
       `userData：\`${userData.replace(/\\/g, '\\\\')}\``,
       `会话：\`${sessionId}\``,
+      `模式：\`${resumeSession ? 'resume-session' : fresh ? 'fresh-session' : 'default'}\``,
+      resumeDiagnostics
+        ? `恢复诊断：tasks=${resumeDiagnostics.taskCount} jobs=${resumeDiagnostics.jobCount} artifacts=${resumeDiagnostics.artifactCount} packageId=${resumeDiagnostics.packageId || 'n/a'} secrets=${resumeDiagnostics.secretsPresent} modelConfig=${resumeDiagnostics.modelConfigured}`
+        : '',
       '',
-      '每次只启动一个场景；完成后退出再开下一个。均使用 `--fresh-session`。',
+      '## 重要：同会话重启',
       '',
-      '## 场景 A：真实已连接能力',
+      '必须 resume **你实际做事** 的那个 userData。空会话（taskCount=0）不是「丢任务」。',
       '',
-      '```',
-      'node scripts/start-software-dev-owner-acceptance.cjs --fresh-session --scene=a',
-      '```',
-      '',
-      '1. 修改 formatLabel：start → start-processing',
-      '2. 查看 Digital Me 检查结果、diff 和测试',
-      '3. 提出修改：start-processing → done',
-      '4. 采用',
-      '5. 新建「开发一个俄罗斯方块游戏」',
-      '6. 未选目录时不得显示旧成果，必须提示选择项目位置',
-      '7. 选择空文件夹并完成真实创建',
-      '8. 切换两任务，目标/材料/成果分别正确',
-      '9. 重启后任务数量不增加、无幽灵任务',
-      '10. 采用状态与项目文件一致',
-      '',
-      '## 场景 B：未安装或未配置能力',
+      '若此前真实任务在 `…1786086712062`：',
       '',
       '```',
-      'node scripts/start-software-dev-owner-acceptance.cjs --fresh-session --scene=b',
+      resumeCommand(preferredWorking, preferredFixture),
       '```',
       '',
-      '1. 新建软件任务并选择项目目录',
-      '2. 显示「完成这项任务需要代码执行能力」',
-      '3. 不创建失败任务，不回退成普通写作',
-      '4. 目标、材料、目录保持',
-      '5. 退出后用场景 A 重新打开（或清除验收场景后重启），应能回到权限确认',
-      '6. 无需重新输入目标',
-      '',
-      '## 场景 C：检测到但不支持自动调用的桌面工具',
+      '当前窗口同会话重启：',
       '',
       '```',
-      'node scripts/start-software-dev-owner-acceptance.cjs --fresh-session --scene=c',
+      resumeCmd,
       '```',
       '',
-      '1. 显示已检测到工具',
-      '2. 明确不能自动调用',
-      '3. 不标记为已连接或自动执行',
-      '4. 不允许进入虚假执行闭环',
+      '## 场景 A 复验（BLOCKER-05）',
       '',
-    ].join('\n'),
+      'A1 formatLabel：修改 → 修订 → 采用 → 关闭 → 同 userData resume → AI 无需重配、任务/成果仍在。',
+      '',
+      'A2 俄罗斯方块：由 Digital Me 创建新项目 → 无 trusted directory 错误 → 真实执行 → Digital Me 启动检查；失败则继续修复，不得显示「可以试用」。',
+      '',
+      'A3 截图反馈：在「告诉 Digital Me 哪里不对」粘贴截图 + 文字 → 同一任务 revision。',
+      '',
+      'A4 resume：AI 配置仍在；任务数量与 ID 不变；不出现第二 default package。',
+      '',
+      '场景 B/C：暂停，不要启动。',
+      '',
+    ]
+      .filter((line) => line !== undefined)
+      .join('\n'),
     'utf8',
   );
 }
@@ -358,21 +485,98 @@ async function runPreflight(scene, userData, fixtureProject) {
 }
 
 async function main() {
-  const { fresh, preflight, sessionId, stamp, scene } = parseArgs(process.argv.slice(2));
+  let parsed;
+  try {
+    parsed = parseArgs(process.argv.slice(2));
+  } catch (err) {
+    console.error(err && err.message ? err.message : String(err));
+    process.exit(1);
+  }
+  const {
+    fresh,
+    preflight,
+    sessionId,
+    stamp,
+    scene,
+    resumeSession,
+    userDataOverride,
+    fixtureProjectArg,
+  } = parsed;
   if (!sessionId.startsWith('software-dev-task-ux-01')) {
     console.error('拒绝：仅允许 DigitalMe-OwnerAcceptance 下的 software-dev-task-ux-01* 会话');
     process.exit(1);
   }
-  if (fs.existsSync(PRESERVED_EVIDENCE_UD) && sessionId === 'software-dev-task-ux-01' && fresh) {
-    // fresh always uses timestamped id; keep guard for safety
+
+  let userData = userDataOverride || path.join(acceptanceRoot, sessionId);
+  if (resumeSession) {
+    if (!fs.existsSync(userData)) {
+      console.error(`拒绝：resume-session 的 userData 不存在: ${userData}`);
+      process.exit(1);
+    }
+    if (path.resolve(userData) === path.resolve(PRESERVED_EVIDENCE_UD)) {
+      console.error('拒绝：resume-session 不得指向已保留旧证据 userData');
+      process.exit(1);
+    }
+    const underAcceptance =
+      path.resolve(userData).toLowerCase().startsWith(path.resolve(acceptanceRoot).toLowerCase() + path.sep) ||
+      path.resolve(userData).toLowerCase() === path.resolve(acceptanceRoot).toLowerCase();
+    if (!underAcceptance) {
+      console.error('拒绝：resume-session 必须位于 DigitalMe-OwnerAcceptance 下');
+      process.exit(1);
+    }
+  } else {
+    if (userData === PRESERVED_EVIDENCE_UD && fresh) {
+      console.error('拒绝：fresh-session 不得覆盖旧证据 userData');
+      process.exit(1);
+    }
+    ensureDirs(userData);
   }
-  const userData = path.join(acceptanceRoot, sessionId);
-  if (userData === PRESERVED_EVIDENCE_UD && fresh) {
-    console.error('拒绝：fresh-session 不得覆盖旧证据 userData');
+
+  const resumeDiagnostics = resumeSession ? inspectResumePackage(userData) : null;
+  if (resumeSession && resumeDiagnostics) {
+    if (!resumeDiagnostics.packageExists) {
+      console.error(
+        '拒绝：resume-session 目标没有 subjects/default/manifest.json；这会变成「新用户」而不是恢复。请指定真实做事会话。',
+      );
+      process.exit(1);
+    }
+    if (resumeDiagnostics.taskCount === 0) {
+      console.warn(
+        JSON.stringify(
+          {
+            warn: 'resume_empty_package',
+            message:
+              '该 userData 的 default package 任务数为 0。若你期望看到旧任务，说明 resume 到了错误会话（常见：fresh 空窗 vs 实际做事窗）。',
+            userData,
+            diagnostics: resumeDiagnostics,
+          },
+          null,
+          2,
+        ),
+      );
+    }
+  }
+
+  let fixtureProject;
+  try {
+    if (resumeSession) {
+      fixtureProject = resolveFixtureForResume(userData, fixtureProjectArg);
+    } else if (fresh) {
+      fixtureProject = createFreshFixture(stamp);
+    } else if (fixtureProjectArg) {
+      fixtureProject = path.resolve(fixtureProjectArg);
+      if (!fs.existsSync(fixtureProject)) {
+        console.error(`fixture-project 不存在: ${fixtureProject}`);
+        process.exit(1);
+      }
+    } else {
+      fixtureProject = defaultFixture;
+    }
+  } catch (err) {
+    console.error(err && err.message ? err.message : String(err));
     process.exit(1);
   }
-  ensureDirs(userData);
-  const fixtureProject = fresh ? createFreshFixture(stamp) : defaultFixture;
+
   build();
 
   let electronPath = null;
@@ -394,9 +598,11 @@ async function main() {
     userData,
     sessionId,
     fresh,
+    resumeSession,
     fixtureProject,
     scene,
     preflight,
+    resumeDiagnostics,
   });
 
   if (preflight) {
@@ -429,9 +635,12 @@ async function main() {
         userData,
         sessionId,
         freshSession: !!fresh,
+        resumeSession: !!resumeSession,
         scene,
         evidenceDir,
         fixtureProject,
+        resumeCommand: resumeCommand(userData, fixtureProject),
+        resumeDiagnostics,
       },
       null,
       2,
@@ -455,7 +664,9 @@ async function main() {
   });
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

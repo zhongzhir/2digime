@@ -357,13 +357,19 @@ async function run() {
     artifactIds: revDone.artifactIds,
   });
 
-  // 采用
+  // 采用（若 Digital Me 检查仍有问题，需再点「仍然采用」）
   await uiEval(`async () => {
     const first = document.querySelector('#task-list button');
     if (first) first.click();
     await new Promise((r) => setTimeout(r, 400));
     document.getElementById('btn-accept-artifact').click();
-    await new Promise((r) => setTimeout(r, 400));
+    await new Promise((r) => setTimeout(r, 300));
+    const warn = document.getElementById('adopt-warning-card');
+    const anyway = document.getElementById('btn-adopt-anyway');
+    if (warn && !warn.hidden && anyway) {
+      anyway.click();
+      await new Promise((r) => setTimeout(r, 400));
+    }
     return document.getElementById('artifact-decision-status').textContent;
   }`);
   const decision = await uiEval(

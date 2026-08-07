@@ -21,7 +21,12 @@ import { JobStore } from './job-store';
 import { ContextSnapshotBuilder, sanitizeMessage } from './snapshot-builder';
 import { ArtifactCommitter } from './artifact-commit';
 import { InMemoryEventBus } from './event-bus';
-import { deriveTaskState, latestJob, userFacingLabelFromLatestJob } from './derive';
+import { latestJob, userFacingLabelFromLatestJob } from './derive';
+import {
+  deriveTaskDisplayState,
+  pickPrimaryArtifact,
+  sortTasksByActivityTime,
+} from './task-display-state';
 import {
   buildJobAuthorizationProjection,
   prepareAndExecuteCapability,
@@ -89,6 +94,11 @@ export interface WorkRuntimeOptions {
     taskId: string;
     allowedMaterialPaths: string[];
   }) => Promise<string[]> | string[];
+  /** 可选：读取成果采用状态（派生自 GrowthEvent，非第二 Store）。 */
+  getArtifactOwnerDecision?: (
+    artifactId: string,
+    artifactVersionId: string,
+  ) => Promise<{ status: 'undecided' | 'accepted' | 'rejected' }>;
 }
 
 export interface SubjectSelectionResult {
@@ -193,7 +203,8 @@ export class WorkRuntime {
     if (forceModify && !input.executionAuthorization?.confirmed) {
       const folder = input.contextRefs.find((r) => r.kind === 'folder');
       if (!folder) {
-        const msg = '这项任务需要一个项目位置。请先选择现有项目文件夹，或选择空文件夹开始新项目。';
+        const msg =
+          '这项任务需要一个项目位置。可由 Digital Me 创建新项目，或使用你已有的项目。';
         return {
           taskId: '',
           jobId: '',
@@ -202,6 +213,7 @@ export class WorkRuntime {
           needsProjectFolder: {
             message: msg,
             allowEmptyFolder: true,
+            preferCreateNew: true,
           },
         };
       }
@@ -254,7 +266,9 @@ export class WorkRuntime {
           },
         };
       }
-      const isNewProject = !!inspected.isNewProjectCandidate;
+      const isNewProject =
+        !!inspected.isNewProjectCandidate ||
+        (folder as { projectOrigin?: string }).projectOrigin === 'digitalme_created';
       const preview = buildExecutionConfirmPreview({
         goal: input.goal,
         workingDirectory: folder.path,
@@ -278,6 +292,16 @@ export class WorkRuntime {
           executorDisplayName: userFacingNaturalExecutorName(),
           selectedCapabilityId: selectedCoding.capabilityId,
           selectedCapabilityDisplayName: selectedCoding.displayName,
+          ...(isNewProject || (folder as { projectOrigin?: string }).projectOrigin
+            ? {
+                projectOrigin:
+                  (folder as { projectOrigin?: string }).projectOrigin === 'digitalme_created'
+                    ? 'digitalme_created'
+                    : isNewProject
+                      ? 'digitalme_created'
+                      : 'user_selected',
+              }
+            : {}),
         },
       };
     }
@@ -363,6 +387,7 @@ export class WorkRuntime {
           readScope: extAuth.readScope?.length ? extAuth.readScope : ['.'],
           writeScope: extAuth.writeScope?.length ? extAuth.writeScope : ['.'],
           lastExecutorStatus: 'queued',
+          ...(extAuth.projectOrigin ? { projectOrigin: extAuth.projectOrigin } : {}),
         }
       : undefined);
     this.enqueue(job.id);
@@ -425,6 +450,9 @@ export class WorkRuntime {
               writeScope: prevExt.externalExecution.writeScope,
               lastExecutorStatus: 'queued',
               autoContinueCount: 0,
+              ...(prevExt.externalExecution.projectOrigin
+                ? { projectOrigin: prevExt.externalExecution.projectOrigin }
+                : {}),
             }
           : undefined,
       );
@@ -442,14 +470,25 @@ export class WorkRuntime {
     artifactId: string;
     revisionRequest: string;
     rejectionReason?: string;
+    /** 截图等附件路径，并入 Task.contextRefs 后进入 Snapshot。 */
+    attachmentPaths?: string[];
   }): Promise<{ jobId: string }> {
     const request = String(input.revisionRequest || '').trim();
     if (!request) throw new Error('请填写修改要求');
     const rejectionReason = String(input.rejectionReason || '').trim();
+    const attachmentPaths = (input.attachmentPaths || [])
+      .map((p) => String(p || '').trim())
+      .filter(Boolean);
 
     return this.withTaskLock(input.taskId, async () => {
-      const task = await this.opts.taskService.get(input.taskId);
+      let task = await this.opts.taskService.get(input.taskId);
       if (!task) throw new Error(`task not found: ${input.taskId}`);
+      if (attachmentPaths.length) {
+        task = await this.opts.taskService.appendContextRefs(
+          input.taskId,
+          attachmentPaths.map((p) => ({ kind: 'file' as const, path: p })),
+        );
+      }
       const artifact = await this.opts.artifactCommitter.get(input.artifactId);
       if (!artifact) throw new Error(`artifact not found: ${input.artifactId}`);
       if (artifact.taskId !== input.taskId) {
@@ -484,12 +523,16 @@ export class WorkRuntime {
       const prevExt = [...prevJobs]
         .reverse()
         .find((j) => j.externalExecution?.workingDirectory);
+      const revisionText =
+        attachmentPaths.length > 0
+          ? `${request}\n\n（用户附了 ${attachmentPaths.length} 张截图作为问题说明材料；请结合文字理解问题。若无法直接查看图片，以文字说明为准。）`
+          : request;
       const job = await this.createQueuedJob(
         task.id,
         capabilityId,
         {
           targetArtifactId: artifact.id,
-          revisionRequest: request,
+          revisionRequest: revisionText,
           ...(rejectionReason ? { rejectionReason } : {}),
         },
         prevExt?.externalExecution
@@ -500,6 +543,9 @@ export class WorkRuntime {
               writeScope: prevExt.externalExecution.writeScope,
               lastExecutorStatus: 'queued',
               autoContinueCount: 0,
+              ...(prevExt.externalExecution.projectOrigin
+                ? { projectOrigin: prevExt.externalExecution.projectOrigin }
+                : {}),
             }
           : undefined,
       );
@@ -565,7 +611,6 @@ export class WorkRuntime {
     const task = await this.opts.taskService.get(input.taskId);
     if (!task) throw new Error(`task not found: ${input.taskId}`);
     const jobs = await this.opts.jobStore.listByTask(task.id);
-    const state = deriveTaskState(jobs);
     const last = latestJob(jobs);
     const artifacts = await this.opts.artifactCommitter.listByTask(task.id);
     const revising = !!(last && last.revisionRequest && (last.status === 'queued' || last.status === 'running'));
@@ -576,16 +621,34 @@ export class WorkRuntime {
       last?.capabilityId || task.capabilityId,
     );
     const hasArtifact = artifacts.length > 0;
-    let userFacingLabel = userFacingLabelFromLatestJob(jobs, {
-      revising,
-      externalCapability,
-      hasArtifact,
+    const primaryArtifact = pickPrimaryArtifact(artifacts, last);
+    const softwareOutcome = await this.resolveSoftwareOutcomeHint(primaryArtifact, last);
+    const display = deriveTaskDisplayState({
+      task,
+      jobsForTask: jobs,
+      artifacts,
+      ...(softwareOutcome ? { softwareOutcome } : {}),
+      treatMissingProjectAsNeedsProject:
+        task.intentKind === 'modify_code' ||
+        task.requestedArtifactType === 'code-change' ||
+        !!last?.externalExecution,
     });
+    let userFacingLabel = display.label;
+    if (!softwareOutcome && !last?.externalExecution) {
+      userFacingLabel = userFacingLabelFromLatestJob(jobs, {
+        revising,
+        externalCapability,
+        hasArtifact,
+      });
+    }
     const output: GetTaskOutput = {
       task,
-      state,
+      state: display.state,
       userFacingLabel,
       artifactIds: artifacts.map((a) => a.id),
+      ...(display.projectDir ? { projectDir: display.projectDir } : {}),
+      displayState: display.displayId,
+      activityTime: display.activityTime,
     };
     if (last) {
       const latestJobOut: NonNullable<GetTaskOutput['latestJob']> = {
@@ -594,6 +657,7 @@ export class WorkRuntime {
         createdAt: last.createdAt,
       };
       if (last.startedAt) latestJobOut.startedAt = last.startedAt;
+      if (last.revisionRequest) latestJobOut.revisionRequest = last.revisionRequest;
       // 仅非终态可附带说明性进度;终态禁止拼接内部 phase 文案。
       if (
         (last.status === 'queued' || last.status === 'running') &&
@@ -638,7 +702,7 @@ export class WorkRuntime {
       '../capability/external-capability-product'
     );
     const tasks = await this.opts.taskService.list(input.limit);
-    const result = [];
+    const result: CommandMap['work.listTasks']['output']['tasks'] = [];
     for (const task of tasks) {
       const jobs = await this.opts.jobStore.listByTask(task.id);
       const last = latestJob(jobs);
@@ -650,18 +714,114 @@ export class WorkRuntime {
       const externalCapability = isExternalResearchCapabilityId(
         last?.capabilityId || task.capabilityId,
       );
-      result.push({
-        taskId: task.id,
-        goal: task.goal,
-        state: deriveTaskState(jobs),
-        userFacingLabel: userFacingLabelFromLatestJob(jobs, {
+      const primaryArtifact = pickPrimaryArtifact(artifacts, last);
+      const softwareOutcome = await this.resolveSoftwareOutcomeHint(primaryArtifact, last);
+      const display = deriveTaskDisplayState({
+        task,
+        jobsForTask: jobs,
+        artifacts,
+        ...(softwareOutcome ? { softwareOutcome } : {}),
+        treatMissingProjectAsNeedsProject:
+          task.intentKind === 'modify_code' ||
+          task.requestedArtifactType === 'code-change' ||
+          !!last?.externalExecution,
+      });
+      let userFacingLabel = display.label;
+      if (externalCapability) {
+        userFacingLabel = userFacingLabelFromLatestJob(jobs, {
           revising,
           externalCapability,
           hasArtifact: artifacts.length > 0,
-        }),
+          ...(softwareOutcome ? { softwareOutcome } : {}),
+        });
+      }
+      result.push({
+        taskId: task.id,
+        goal: task.goal,
+        state: display.state,
+        userFacingLabel,
+        displayState: display.displayId,
+        activityTime: display.activityTime,
+        ...(display.projectDir ? { projectDir: display.projectDir } : {}),
       });
     }
-    return { tasks: result };
+    const sorted = sortTasksByActivityTime(
+      result.map((t) => ({
+        ...t,
+        activityTime: String(t.activityTime || ''),
+      })),
+    );
+    return { tasks: sorted };
+  }
+
+  private async resolveSoftwareOutcomeHint(
+    artifact: Awaited<ReturnType<ArtifactCommitter['get']>> | undefined,
+    last: ExecutionJob | undefined,
+  ): Promise<import('./derive').SoftwareOutcomeHint | undefined> {
+    if (!artifact) {
+      if (
+        last?.status === 'succeeded' &&
+        (last.capabilityId?.includes('codex') ||
+          last.capabilityId?.includes('external') ||
+          last.externalExecution)
+      ) {
+        return { isCodeChange: true };
+      }
+      return undefined;
+    }
+    const isCodeChange =
+      artifact.type === CODE_CHANGE_ARTIFACT_TYPE ||
+      artifact.type === 'code-change' ||
+      !!last?.externalExecution;
+    if (!isCodeChange) return undefined;
+    const hint: import('./derive').SoftwareOutcomeHint = { isCodeChange: true };
+    const head = artifact.versions.find((v) => v.versionId === artifact.headVersionId);
+    if (head && this.opts.getArtifactOwnerDecision) {
+      try {
+        const decision = await this.opts.getArtifactOwnerDecision(
+          artifact.id,
+          head.versionId,
+        );
+        hint.ownerDecision = decision.status;
+      } catch {
+        /* ignore */
+      }
+    }
+    if (head?.content.kind === 'bundle') {
+      const manifest = head.content.entries.find((e) => e.role === 'manifest');
+      if (manifest?.ref) {
+        try {
+          const text = await fs.readFile(
+            path.isAbsolute(manifest.ref)
+              ? manifest.ref
+              : path.join(artifact.storageDir, manifest.ref),
+            'utf8',
+          );
+          const parsed = JSON.parse(text) as {
+            verificationOverall?: string;
+            digitalMeVerified?: boolean;
+            checks?: Array<{ id?: string; verdict?: string }>;
+          };
+          if (parsed.verificationOverall) {
+            hint.verificationOverall = parsed.verificationOverall;
+            hint.canAdoptSuggested =
+              parsed.verificationOverall === 'satisfied' &&
+              parsed.digitalMeVerified !== false;
+          }
+          const startup = (parsed.checks || []).find((c) => c.id === 'run_startup_check');
+          if (startup?.verdict) {
+            hint.startupCheckVerdict = startup.verdict;
+            hint.canSuggestTryRun = startup.verdict === 'satisfied';
+            if (startup.verdict === 'unsatisfied') {
+              hint.canAdoptSuggested = false;
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    return hint;
   }
 
   /** 启动扫描:按封闭 RecoveryAction 落地,不临时扩展状态。 */
@@ -1279,6 +1439,9 @@ export class WorkRuntime {
                     workingDirectory: job.externalExecution.workingDirectory,
                     readScope: job.externalExecution.readScope,
                     writeScope: job.externalExecution.writeScope,
+                    ...(job.externalExecution.projectOrigin
+                      ? { projectOrigin: job.externalExecution.projectOrigin }
+                      : {}),
                   },
                 }
               : {}),

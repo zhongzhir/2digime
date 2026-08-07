@@ -123,6 +123,8 @@ export interface CapabilityInput {
     workingDirectory: string;
     readScope: string[];
     writeScope: string[];
+    /** Digital Me 自建项目等来源标记（非第二 Store）。 */
+    projectOrigin?: 'digitalme_created' | 'user_selected' | 'unknown';
   };
 }
 
