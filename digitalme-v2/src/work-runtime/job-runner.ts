@@ -1597,10 +1597,21 @@ export class WorkRuntime {
           job = await this.withProgress(job, 'capability', '正在修改');
           await this.persistJob(job);
           try {
+            // 定向修订仍须保留已匹配的偏好/纠正/经验；不得只留边界导致小循环断链
             const minimalContext: ConfirmedExperienceView = {
               subjectId: subjectContext.subjectId,
               derivedAt: subjectContext.derivedAt,
-              entries: subjectContext.entries.filter((e) => (e.kind || '') === 'boundary'),
+              entries: subjectContext.entries
+                .filter((e) => {
+                  const kind = e.kind || '';
+                  if (kind === 'boundary') return true;
+                  if (kind === 'preference') return true;
+                  if (kind === 'experience' && !(e.tags || []).includes('reuse:weak_structure')) {
+                    return true;
+                  }
+                  return false;
+                })
+                .slice(0, 4),
             };
             const grant =
               task.authorization?.grantId && this.opts.loadAuthorizationGrant

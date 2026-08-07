@@ -6,6 +6,12 @@
 import { newId, nowIso } from '../shared/ids';
 import type { GrowthEvent, GrowthEventSourceKind, GrowthEventType } from './growth-event';
 import { enrichGrowthTags, type GrowthAdoptDecision } from './growth-signal';
+import {
+  distillDecisionReusableSnippet,
+  extractDomainTags,
+  extractProjectScopeTag,
+  looksLikeProjectDecision,
+} from './small-loop';
 
 /** 产品侧候选来源(服务合同);不暴露给用户面内部词。 */
 export type SubjectCaptureSourceKind =
@@ -105,9 +111,15 @@ export function distillCandidatesFromText(input: {
       ...(input.authority ? { authority: input.authority } : {}),
     });
     if (enriched.adopt === 'discard') return enriched.adopt;
-    const tags = [...enriched.tags];
-    if (enriched.adopt === 'silent_adopt' && !tags.includes('silent_ok')) {
-      tags.push('silent_ok');
+    let tags = [...enriched.tags];
+    if (enriched.adopt === 'silent_adopt') {
+      if (!tags.includes('silent_ok')) tags.push('silent_ok');
+      tags = tags.filter((t) => t !== 'needs_confirmation');
+    } else {
+      tags = tags.filter((t) => t !== 'silent_ok');
+      if (enriched.adopt === 'must_confirm' && !tags.includes('needs_confirmation')) {
+        tags.push('needs_confirmation');
+      }
     }
     const payload: GrowthEvent['payload'] = { title, detail, tags };
     if (relation) payload.relation = relation;
@@ -148,6 +160,11 @@ export function distillCandidatesFromText(input: {
       text.slice(0, 400),
       tags,
     );
+    // 决策本身带 decision:*；另沉淀可复用偏好/纠正（无 decision 标签，可供下次注入）
+    const reusable = distillDecisionReusableSnippet(text, isReject ? 'reject' : 'accept');
+    if (reusable) {
+      push('preference_observed', reusable.title, reusable.detail, reusable.tags);
+    }
     return out;
   }
 
@@ -195,25 +212,78 @@ export function distillCandidatesFromText(input: {
     );
   }
 
+  // 明确项目决策（对话/资料）→ 短事实 + project: 范围，可静默
+  if (looksLikeProjectDecision(text)) {
+    const project = extractProjectScopeTag(text);
+    const domain = extractDomainTags(text);
+    const tags = [
+      'project_decision',
+      'category:working_method',
+      'silent_ok',
+      ...domain,
+      ...(project ? [project] : []),
+    ];
+    if (input.sourceKind === 'imported_material') {
+      tags.push('project_fact', 'from_material');
+    } else {
+      tags.push('from_conversation');
+    }
+    push('preference_observed', '项目决策', text.slice(0, 200), [...new Set(tags)]);
+  }
+
+  // 口语化偏好（与「正式」可冲突，由 enrichGrowthTags 标记）
+  if (
+    /以后|请记住|下次/.test(text) &&
+    /口语|口语化|更口语|别太正式|不要太正式/.test(text)
+  ) {
+    push(
+      'preference_observed',
+      '偏好：更口语化',
+      text.slice(0, 240),
+      [
+        'style',
+        'preference',
+        'category:working_method',
+        'document',
+        '口语',
+        '介绍',
+        ...extractDomainTags(text),
+      ],
+    );
+  }
+
   // 明确“以后这样”的低风险写作偏好 → preference（可静默），不升格为原则
   if (
     /以后这样|以后都|请记住|下次请|以后给|以后.*汇报|以后.*周报/.test(text) &&
-    /简洁|短句|少套话|结论先行|先讲结论|先给结论|正式|完整分析|保留完整|控制篇幅|决策事项|需要我决策|尽量简短/.test(
+    /简洁|短句|少套话|结论先行|先讲结论|先给结论|正式|完整分析|保留完整|控制篇幅|决策事项|需要我决策|尽量简短|口语/.test(
       text,
     )
   ) {
     const title = /完整分析|保留完整|详细展开|详细论证/.test(text)
       ? '偏好：保留完整分析'
-      : /结论先行|先讲结论|先给结论/.test(text)
-        ? '偏好：结论先行'
-        : /控制篇幅|尽量简短|简洁/.test(text)
-          ? '偏好：控制篇幅'
-          : '偏好：表达简洁';
+      : /口语|口语化/.test(text)
+        ? '偏好：更口语化'
+        : /结论先行|先讲结论|先给结论/.test(text)
+          ? '偏好：结论先行'
+          : /控制篇幅|尽量简短|简洁/.test(text)
+            ? '偏好：控制篇幅'
+            : '偏好：表达简洁';
+    const domain = extractDomainTags(text);
+    const project = extractProjectScopeTag(text);
     push(
       'preference_observed',
       title,
       text.slice(0, 240),
-      ['style', 'preference', 'category:working_method', 'document', '周报', '汇报'],
+      [
+        'style',
+        'preference',
+        'category:working_method',
+        'document',
+        '周报',
+        '汇报',
+        ...domain,
+        ...(project ? [project] : []),
+      ],
     );
   } else if (
     /先给结论|先讲结论|结论先行/.test(text) &&
@@ -321,12 +391,11 @@ export function distillCandidatesFromText(input: {
   }
 
   if (input.sourceKind === 'imported_material' && out.length === 0 && text.length >= 2) {
-    push(
-      'asset_added',
-      '资料中的项目事实',
-      text.slice(0, 400),
-      ['material', 'category:external_claim', 'project_fact'],
-    );
+    const project = extractProjectScopeTag(text);
+    const tags = ['material', 'category:external_claim', 'project_fact'];
+    if (project) tags.push(project);
+    // 无决策措辞：仅外部声明候选，不静默成偏好；截断保存，不落全文材料本体
+    push('asset_added', '资料中的项目事实', text.slice(0, 240), tags);
   }
 
   return out;

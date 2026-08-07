@@ -919,6 +919,19 @@ export class DigitalMeRuntime {
             };
           }
         }
+        const scopeHints = [goal];
+        try {
+          const detail =
+            taskId && this.work
+              ? await this.work.getTask({ taskId }).catch(() => null)
+              : null;
+          // 仅当前任务材料路径参与项目范围，不得用主体库全部资料污染无关任务
+          for (const ref of detail?.task?.contextRefs || []) {
+            if (ref.path) scopeHints.push(String(ref.path));
+          }
+        } catch {
+          // ignore
+        }
         const selected = selectSubjectInjection({
           goal,
           requestedArtifactType,
@@ -929,6 +942,7 @@ export class DigitalMeRuntime {
             policy === 'legacy' || profile === 'careful' || profile === 'high_risk',
           excludeEventIds,
           forceIncludeEventIds: includeEventIds,
+          scopeHints,
         });
         return {
           ...selected,

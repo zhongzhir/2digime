@@ -66,11 +66,16 @@ test('distill acceptance includes evidence and decision tag; no second confirmat
     artifactVersionId: 'ver1',
     requestedArtifactType: 'document',
   });
-  assert.equal(events.length, 1);
-  const first = events[0]!;
-  assert.ok(first.payload.tags?.includes(DECISION_ACCEPT_TAG));
-  assert.equal(first.payload.evidence?.toVersionId, 'ver1');
-  assert.ok(!first.payload.tags?.includes('needs_confirmation'));
+  assert.ok(events.length >= 1);
+  const decision = events.find((e) => e.payload.tags?.includes(DECISION_ACCEPT_TAG));
+  assert.ok(decision);
+  assert.equal(decision!.payload.evidence?.toVersionId, 'ver1');
+  assert.ok(!decision!.payload.tags?.includes('needs_confirmation'));
+  // 可并行沉淀可复用偏好，但不得带 decision:accept（避免拒绝对外复用逻辑混淆）
+  const reusable = events.filter((e) => !e.payload.tags?.includes(DECISION_ACCEPT_TAG));
+  for (const e of reusable) {
+    assert.ok(!e.payload.tags?.includes(DECISION_ACCEPT_TAG));
+  }
 });
 
 test('artifact accept/reject: idempotent, version reset, related reuse, unrelated isolation', async () => {

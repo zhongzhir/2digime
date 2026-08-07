@@ -68,6 +68,8 @@ export interface CommandMap {
         /** 自然语言来源说明，非内部路径 */
         sourceNote?: string;
       }>;
+      /** 最近已沉淀、可供下次做事的少量要点（自然语言，无内部机制词）。 */
+      recentConfirmedLearnings?: Array<{ eventId: string; text: string }>;
       /** 还不确定 — 对后续任务有帮助的缺口提问(可忽略)。 */
       helpfulQuestions?: Array<{ eventId: string; text: string }>;
       /** SubjectPackage/materials 中已添加资料的轻量列表。 */

@@ -163,6 +163,8 @@
     subjectActionStatus: document.getElementById("subject-action-status"),
     subjectActiveList: document.getElementById("subject-active-list"),
     subjectActiveEmpty: document.getElementById("subject-active-empty"),
+    subjectLearnedList: document.getElementById("subject-learned-list"),
+    subjectLearnedEmpty: document.getElementById("subject-learned-empty"),
     subjectRecentList: document.getElementById("subject-recent-list"),
     subjectRecentEmpty: document.getElementById("subject-recent-empty"),
     subjectMaterialList: document.getElementById("subject-material-list"),
@@ -3676,6 +3678,17 @@
       row.appendChild(stop);
       li.appendChild(row);
       els.subjectActiveList.appendChild(li);
+    }
+
+    if (els.subjectLearnedList && els.subjectLearnedEmpty) {
+      const learned = overview.recentConfirmedLearnings || [];
+      els.subjectLearnedList.innerHTML = "";
+      els.subjectLearnedEmpty.hidden = learned.length > 0;
+      for (const item of learned) {
+        const li = document.createElement("li");
+        li.innerHTML = `<div class="subject-item-text">${escapeHtml(item.text)}</div>`;
+        els.subjectLearnedList.appendChild(li);
+      }
     }
 
     if (els.subjectRecentList && els.subjectRecentEmpty) {

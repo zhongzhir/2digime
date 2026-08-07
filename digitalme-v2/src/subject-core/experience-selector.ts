@@ -6,6 +6,10 @@ import {
   type SubjectContextFreeze,
   type FrozenSubjectEntry,
 } from './subject-context-freeze';
+import {
+  projectScopeAllows,
+  scorePreferenceForTask,
+} from './small-loop';
 
 export interface ExperienceSelectInput {
   goal: string;
@@ -14,6 +18,8 @@ export interface ExperienceSelectInput {
   intentKind?: string;
   confirmed: ConfirmedExperienceView;
   boundaries: SubjectDerivedBundle['boundaries'];
+  /** 项目/材料短提示，用于 project: 范围门禁 */
+  scopeHints?: readonly string[];
 }
 
 export interface ExperienceSelectOptions {
@@ -40,6 +46,8 @@ export interface SubjectInjectionSelectInput {
   excludeEventIds?: readonly string[];
   /** JIT「本次使用 B」等：强制纳入候选条目（仅本 Snapshot） */
   forceIncludeEventIds?: readonly string[];
+  /** 项目/材料短提示，用于 project: 范围门禁（非全文） */
+  scopeHints?: readonly string[];
 }
 
 export interface SubjectInjectionSelection {
@@ -75,11 +83,21 @@ export function selectConfirmedExperiences(
   const tokens = tokenize(input.goal);
   const artifactType = input.requestedArtifactType.toLowerCase();
 
+  const scopeHints = input.scopeHints || [];
   const eligible = resolvePositiveExperiences(input.confirmed.entries).filter((entry) => {
     const tags = entry.tags.map((t) => t.toLowerCase());
     if (tags.includes('capture:noop')) return false;
     if (tags.some((t) => excluded.has(t))) return false;
     if (tags.includes('decision:reject')) return false;
+    if (
+      !projectScopeAllows({
+        entryTags: entry.tags,
+        goal: input.goal,
+        scopeHints,
+      })
+    ) {
+      return false;
+    }
     // 过期临时内容不注入
     if (tags.some((t) => t.startsWith('expiresat:'))) {
       const iso = tags.find((t) => t.startsWith('expiresat:'))!.slice('expiresat:'.length);
@@ -263,6 +281,7 @@ export function selectSubjectInjection(
       ...(input.intentKind ? { intentKind: input.intentKind } : {}),
       confirmed: derived.confirmed,
       boundaries: derived.boundaries,
+      ...(input.scopeHints ? { scopeHints: input.scopeHints } : {}),
     },
     { maxEntries, maxDetailChars, policy },
   );
@@ -278,22 +297,45 @@ export function selectSubjectInjection(
     push(entry, 'experience', reason);
   }
 
-  // 已确认偏好：高相关可注入（计入主体切片，易纠正）
-  // ai_first：至少两处目标词命中，且不计内部标签，避免「文档/汇报」类标签误伤无关任务
-  const prefSlots = Math.max(0, AI_FIRST_MAX_ENTRIES - experienceView.entries.filter((e) => !e.tags.includes('reuse:weak_structure')).length);
+  // 已确认偏好：relevance + 域亲和 + 项目范围；数量受控；不全量灌入
+  const prefSlots = Math.max(
+    0,
+    AI_FIRST_MAX_ENTRIES -
+      experienceView.entries.filter((e) => !e.tags.includes('reuse:weak_structure')).length,
+  );
   let prefAdded = 0;
-  for (const item of derived.preferences.entries) {
+  const prefScored = derived.preferences.entries
+    .map((item) => {
+      if (
+        !projectScopeAllows({
+          entryTags: item.tags,
+          goal: input.goal,
+          ...(input.scopeHints ? { scopeHints: input.scopeHints } : {}),
+        })
+      ) {
+        return { item, score: -1, minScore: 99 };
+      }
+      const matched = scorePreferenceForTask({
+        goal: input.goal,
+        requestedArtifactType: input.requestedArtifactType,
+        title: item.title,
+        detail: item.detail,
+        tags: item.tags,
+        tokenize,
+        scoreText,
+      });
+      const minScore = policy === 'ai_first' ? matched.minScore : 1;
+      return { item, score: matched.score, minScore };
+    })
+    .filter((row) => row.score >= row.minScore)
+    .sort((a, b) => b.score - a.score);
+
+  for (const row of prefScored) {
     if (prefAdded >= Math.max(prefSlots, 1)) {
-      excludedEventIds.push(item.eventId);
+      excludedEventIds.push(row.item.eventId);
       continue;
     }
-    const score = scoreText(tokens, `${item.title} ${item.detail}`);
-    const minScore = policy === 'ai_first' ? 2 : 1;
-    if (score < minScore) {
-      excludedEventIds.push(item.eventId);
-      continue;
-    }
-    const full = derived.activeItems.find((a) => a.eventId === item.eventId);
+    const full = derived.activeItems.find((a) => a.eventId === row.item.eventId);
     const payload: {
       eventId: string;
       title: string;
@@ -301,14 +343,19 @@ export function selectSubjectInjection(
       tags: string[];
       occurredAt?: string;
     } = {
-      eventId: item.eventId,
-      title: item.title,
-      detail: item.detail,
-      tags: item.tags,
+      eventId: row.item.eventId,
+      title: row.item.title,
+      detail: row.item.detail,
+      tags: row.item.tags,
     };
     if (full?.occurredAt) payload.occurredAt = full.occurredAt;
     push(payload, 'preference', 'keyword_match');
     prefAdded += 1;
+  }
+  for (const item of derived.preferences.entries) {
+    if (!prefScored.some((r) => r.item.eventId === item.eventId) && !frozenEntries.some((e) => e.eventId === item.eventId)) {
+      excludedEventIds.push(item.eventId);
+    }
   }
 
   // JIT 本次强制纳入（可为仍待确认的候选）

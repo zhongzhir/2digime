@@ -303,7 +303,7 @@ test('scenarios 1-12 distillation + JIT confirmation', async () => {
     sourceKind: 'conversation',
   });
   const riskTask = await riskRt.submitTask({
-    goal: '起草公开发布说明并准备支付流程说明',
+    goal: '写一份对外说明文稿，并说明支付流程注意事项',
     contextRefs: [],
     requestedArtifactType: 'document',
   });

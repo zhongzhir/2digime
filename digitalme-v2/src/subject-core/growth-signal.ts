@@ -23,6 +23,20 @@ export type GrowthAdoptDecision = 'silent_adopt' | 'must_confirm' | 'keep_candid
 const HIGH_RISK_RE =
   /融资|隐私|机密|敏感|身份证|银行卡|转账|支付|汇款|签署|公开发布|对外发布|法律意见|诉讼/;
 
+/** 高风险：排除「不做/禁止公开发布」等否定表述，避免项目边界决定被误挡。 */
+export function isHighRiskGrowthText(text: string): boolean {
+  const t = String(text || '');
+  if (!HIGH_RISK_RE.test(t)) return false;
+  const scrubbed = t
+    .replace(/不(?:做)?公开发布/g, '')
+    .replace(/禁止公开发布/g, '')
+    .replace(/不得公开发布/g, '')
+    .replace(/勿公开发布/g, '')
+    .replace(/不对外发布/g, '')
+    .replace(/禁止对外发布/g, '');
+  return HIGH_RISK_RE.test(scrubbed);
+}
+
 const EXPLICIT_REMEMBER_RE =
   /以后这样|以后都|请记住|下次请|从今以后|固定为|一律|以后给|以后.*汇报|以后.*周报|以后.*先给结论|以后.*结论先行|以后.*控制篇幅|以后.*决策事项/;
 
@@ -72,7 +86,10 @@ export function classifySignalStrength(input: {
     input.sourceKind === 'explicit_boundary' ||
     input.sourceKind === 'repeated_correction' ||
     EXPLICIT_REMEMBER_RE.test(text) ||
-    /纠正|不是|别再|不要再/.test(text)
+    /纠正|不是|别再|不要再/.test(text) ||
+    tags.includes('project_decision') ||
+    tags.includes('correction') ||
+    /(?:本项目|该项目).{0,24}(?:已确认|决定|冻结)/.test(text)
   ) {
     return 'strong';
   }
@@ -131,7 +148,7 @@ export function decideGrowthAdoption(input: {
     return 'must_confirm';
   }
 
-  if (HIGH_RISK_RE.test(text) || tags.some((t) => HIGH_RISK_RE.test(t))) {
+  if (isHighRiskGrowthText(text) || tags.some((t) => isHighRiskGrowthText(t))) {
     return 'must_confirm';
   }
 
@@ -139,10 +156,16 @@ export function decideGrowthAdoption(input: {
     return 'silent_adopt';
   }
 
-  // 低风险偏好 / 工作方法：仅强信号可静默（中等须保留来源，不得自动成永久事实）
+  // 低风险偏好 / 工作方法：强信号可静默；带 silent_ok / from_edit / 纠正 / 项目决策亦可（含弱信号但来源明确）
   if (
     (input.type === 'preference_observed' || tags.includes('category:working_method')) &&
-    input.signal === 'strong'
+    (input.signal === 'strong' ||
+      ((input.signal === 'medium' || input.signal === 'weak') &&
+        (tags.includes('silent_ok') ||
+          tags.includes('from_edit') ||
+          tags.includes('from_reject') ||
+          tags.includes('project_decision') ||
+          tags.includes('correction'))))
   ) {
     return 'silent_adopt';
   }
@@ -179,7 +202,12 @@ export function detectAuthorityConflict(input: {
     ) {
       return true;
     }
-    if (/不要正式|别正式|反对正式/.test(text) && /正式/.test(prior)) return true;
+  if (/不要正式|别正式|反对正式|更口语|口语化/.test(text) && /正式/.test(prior) && !/口语/.test(prior)) {
+      return true;
+    }
+    if (/正式/.test(text) && !/不要正式|别正式|口语/.test(text) && /口语|口语化/.test(prior)) {
+      return true;
+    }
     if (/不讨论.*融资|exclude:融资/.test(prior) && /可以讨论融资|公开融资细节/.test(text)) {
       return true;
     }
@@ -264,11 +292,16 @@ export function enrichGrowthTags(input: {
   }
 
   if (
-    /结论先行|先结论|结构偏好|格式偏好|工作方式/.test(input.text) &&
+    /结论先行|先结论|结构偏好|格式偏好|工作方式|口语化|发布节奏/.test(input.text) &&
     input.type === 'preference_observed'
   ) {
     category = 'working_method';
     if (!tags.includes(categoryTag('working_method'))) tags.push(categoryTag('working_method'));
+  }
+
+  if (tags.includes('project_decision') && !tags.includes(categoryTag('working_method'))) {
+    category = 'working_method';
+    tags.push(categoryTag('working_method'));
   }
 
   if (!tags.some((t) => t.startsWith('category:'))) {

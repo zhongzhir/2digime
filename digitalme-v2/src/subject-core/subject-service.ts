@@ -20,7 +20,7 @@ import {
 } from './candidate-distill';
 import { scheduleGrowthWork } from './growth-async';
 import { structuredDistillToEvents } from './structured-distill';
-import { authorityFromEvents } from './growth-signal';
+import { authorityFromEvents, detectAuthorityConflict } from './growth-signal';
 import {
   findJitConflict,
   injectionExclusionsForJit,
@@ -174,6 +174,7 @@ export class SubjectService {
       knowledgeGapCount: derived.knowledgeGaps.entries.length,
       activeUnderstandings: slices.activeUnderstandings,
       recentLearnings: slices.recentLearnings,
+      recentConfirmedLearnings: slices.recentConfirmedLearnings,
       helpfulQuestions: slices.helpfulQuestions,
       materials,
     };
@@ -436,9 +437,62 @@ export class SubjectService {
       if (candidate.payload.evidence && !confirmed.payload.evidence) {
         confirmed.payload = { ...confirmed.payload, evidence: candidate.payload.evidence };
       }
+      // 冲突偏好确认时 supersede 旧权威，不得并存两个竞争有效事实
+      if (
+        candidate.type === 'preference_observed' ||
+        candidate.type === 'principle_stated' ||
+        candidate.type === 'goal_updated'
+      ) {
+        const conflicting = events.filter(
+          (e) =>
+            e.confidence === 'confirmed' &&
+            (e.type === 'preference_observed' ||
+              e.type === 'principle_stated' ||
+              e.type === 'goal_updated') &&
+            detectAuthorityConflict({
+              title: candidate.payload.title,
+              detail: candidate.payload.detail,
+              type: candidate.type,
+              authority: [
+                {
+                  title: e.payload.title,
+                  detail: e.payload.detail,
+                  type: e.type,
+                  ...(e.payload.tags ? { tags: e.payload.tags } : {}),
+                },
+              ],
+            }),
+        );
+        if (conflicting[0]) {
+          confirmed.payload = {
+            ...confirmed.payload,
+            relation: {
+              ...(confirmed.payload.relation || {}),
+              supersedes: conflicting[0].id,
+            },
+          };
+          for (const old of conflicting.slice(1)) {
+            await log.append({
+              id: newId('growthEvent'),
+              subjectId: pkg.id,
+              occurredAt: nowIso(),
+              type: 'subject_corrected',
+              source: { kind: 'owner_direct' },
+              payload: {
+                title: '已按你的确认更新旧观点',
+                detail: old.payload.title,
+                tags: ['action:replace'],
+                relation: { targetEventId: old.id, supersedes: old.id },
+              },
+              confidence: 'confirmed',
+            });
+          }
+        }
+      }
       await log.append(confirmed);
       alreadyConfirmed.add(eventId);
       confirmedCount += 1;
+      events.push(confirmed);
     }
     this.cachedDerived = null;
     await this.rebuildDerivedViews();

@@ -27,6 +27,8 @@
     "accept:external-artifact-reuse-quality": "node scripts/run-external-artifact-reuse-quality-acceptance.cjs",
     "accept:ai-first-execution": "node scripts/run-ai-first-execution-acceptance.cjs",
     "accept:subject-growth-loop": "node scripts/run-subject-growth-loop-acceptance.cjs",
+    "accept:small-loop-integration": "node scripts/run-small-loop-integration-acceptance.cjs",
+    "accept:small-loop-owner": "node scripts/run-small-loop-owner-acceptance.cjs",
     "accept:subject-distillation-jit-confirmation": "node scripts/run-subject-distillation-jit-confirmation-acceptance.cjs",
     "accept:real-distillation-jit-integration": "node scripts/run-real-distillation-jit-integration-acceptance.cjs",
     "accept:growth-perception-bridge": "node scripts/run-growth-perception-bridge-acceptance.cjs",

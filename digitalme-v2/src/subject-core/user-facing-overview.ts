@@ -5,6 +5,7 @@
 import type { SubjectDerivedBundle } from './derive-all';
 import type { SubjectContextFreeze } from './subject-context-freeze';
 import { requiresOwnerConfirmation } from './candidate-distill';
+import { phraseRecentLearning } from './small-loop';
 
 export interface ActiveUnderstandingItem {
   eventId: string;
@@ -47,6 +48,7 @@ export function toUserFacingText(title: string, detail: string): string {
 export function buildUserFacingSubjectSlices(derived: SubjectDerivedBundle): {
   activeUnderstandings: ActiveUnderstandingItem[];
   recentLearnings: RecentLearningItem[];
+  recentConfirmedLearnings: ActiveUnderstandingItem[];
   helpfulQuestions: HelpfulQuestionItem[];
 } {
   const inactive = new Set(derived.inactiveEventIds);
@@ -70,6 +72,30 @@ export function buildUserFacingSubjectSlices(derived: SubjectDerivedBundle): {
     activeUnderstandings.push({
       eventId: item.eventId,
       text: toUserFacingText(item.title, item.detail),
+    });
+  }
+
+  // Owner 验收轻量：「最近学到的内容」——已确认的偏好/项目决策/纠正（自然语言）
+  const recentConfirmedLearnings: ActiveUnderstandingItem[] = [];
+  const recentConfirmed = [...derived.activeItems]
+    .filter((i) => !inactive.has(i.eventId))
+    .filter(
+      (i) =>
+        i.kind === 'preference' ||
+        i.tags.some((t) =>
+          ['project_decision', 'correction', 'from_edit', 'from_reject', 'style'].includes(t),
+        ),
+    )
+    .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
+  for (const item of recentConfirmed) {
+    if (recentConfirmedLearnings.length >= MAX_RECENT) break;
+    recentConfirmedLearnings.push({
+      eventId: item.eventId,
+      text: phraseRecentLearning({
+        title: item.title,
+        detail: item.detail,
+        tags: item.tags,
+      }),
     });
   }
 
@@ -102,7 +128,7 @@ export function buildUserFacingSubjectSlices(derived: SubjectDerivedBundle): {
     helpfulQuestions.push({ eventId: gap.eventId, text });
   }
 
-  return { activeUnderstandings, recentLearnings, helpfulQuestions };
+  return { activeUnderstandings, recentLearnings, recentConfirmedLearnings, helpfulQuestions };
 }
 
 function naturalSourceNote(tags: readonly string[]): string | undefined {
