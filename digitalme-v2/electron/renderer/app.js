@@ -94,9 +94,11 @@
     collabListActive: document.getElementById("collab-list-active"),
     collabListDone: document.getElementById("collab-list-done"),
     collabListRevoked: document.getElementById("collab-list-revoked"),
+    collabListOpportunities: document.getElementById("collab-list-opportunities"),
     collabEmptyActive: document.getElementById("collab-empty-active"),
     collabEmptyDone: document.getElementById("collab-empty-done"),
     collabEmptyRevoked: document.getElementById("collab-empty-revoked"),
+    collabEmptyOpportunities: document.getElementById("collab-empty-opportunities"),
     btnCollabPageNew: document.getElementById("btn-collab-page-new"),
     btnCollabNewBack: document.getElementById("btn-collab-new-back"),
     collabPageTargetMode: document.getElementById("collab-page-target-mode"),
@@ -5737,6 +5739,169 @@
     return Array.isArray(listed.items) ? listed.items : [];
   }
 
+  function opportunityStageLabel(stage) {
+    if (stage === "brief_shared") return "已交换简介";
+    if (stage === "mutual_interest") return "双方愿意进一步了解";
+    if (stage === "continued") return "已表示愿意了解";
+    if (stage === "collaboration_started") return "已发起协作";
+    if (stage === "inbound_pending") return "对方发来的提示";
+    return "可能值得了解";
+  }
+
+  async function refreshOpportunityCards() {
+    const ul = els.collabListOpportunities;
+    const emptyEl = els.collabEmptyOpportunities;
+    if (!ul) return;
+    ul.innerHTML = "";
+    let rows = [];
+    try {
+      await api.invoke("subject.communicate", { action: "processInbox" });
+      const listed = await api.invoke("subject.communicate", { action: "listOpportunities" });
+      rows = Array.isArray(listed.items) ? listed.items : [];
+    } catch {
+      rows = [];
+    }
+    if (emptyEl) emptyEl.hidden = rows.length > 0;
+    for (const card of rows) {
+      if (card.stage === "collaboration_started" && card.collaborationRecordId) {
+        // 已转正式协作：仍可一键打开，不占主决策
+      }
+      const li = document.createElement("li");
+      li.className = "collab-opp-card";
+      const title = document.createElement("p");
+      title.className = "entry-title";
+      title.textContent =
+        card.stage === "inbound_pending" || card.stage === "potential"
+          ? "发现一个可能值得了解的合作机会"
+          : card.stage === "continued" || card.stage === "mutual_interest"
+            ? card.whyWorthKnowing && /愿意进一步了解/.test(card.whyWorthKnowing)
+              ? "对方也愿意进一步了解"
+              : "可能值得进一步了解"
+            : card.peerDisplayName || "合作机会";
+      const peerLine = document.createElement("p");
+      peerLine.className = "entry-meta";
+      peerLine.textContent = card.peerDisplayName ? `对方：${card.peerDisplayName}` : "";
+      const why = document.createElement("p");
+      why.className = "entry-meta";
+      why.textContent = card.whyWorthKnowing || "双方需求可能互补。";
+      const privacy = document.createElement("p");
+      privacy.className = "muted tiny";
+      privacy.textContent =
+        card.privacyNote || "双方 Digital Me 只交换了判断这次机会所需的少量信息。";
+      const meta = document.createElement("p");
+      meta.className = "entry-meta muted tiny";
+      meta.textContent = [
+        opportunityStageLabel(card.stage),
+        card.seekingSummary ? `关注：${card.seekingSummary}` : "",
+        card.offeringSummary ? `可提供：${card.offeringSummary}` : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      li.appendChild(title);
+      if (peerLine.textContent) li.appendChild(peerLine);
+      li.appendChild(why);
+      li.appendChild(privacy);
+      li.appendChild(meta);
+      if (card.peerBrief) {
+        const brief = document.createElement("p");
+        brief.className = "muted tiny";
+        brief.textContent = `对方简介：${card.peerBrief}`;
+        li.appendChild(brief);
+      }
+      const actions = document.createElement("div");
+      actions.className = "collab-opp-actions";
+      const stage = String(card.stage || "");
+      const addBtn = (label, primary, onClick) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = primary ? "primary" : "ghost";
+        btn.textContent = label;
+        btn.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          onClick();
+        });
+        actions.appendChild(btn);
+      };
+      if (stage === "potential" || stage === "inbound_pending") {
+        addBtn("继续了解", true, async () => {
+          try {
+            await api.invoke("subject.communicate", {
+              action: "continueInterest",
+              opportunityId: card.id,
+            });
+            await refreshCollabHome();
+          } catch (err) {
+            showStatus(els.collabDetailError || els.collabError, String(err.message || err), true);
+          }
+        });
+        addBtn("暂不考虑", false, async () => {
+          try {
+            await api.invoke("subject.communicate", {
+              action: "decline",
+              opportunityId: card.id,
+            });
+            await refreshCollabHome();
+          } catch (err) {
+            showStatus(els.collabDetailError || els.collabError, String(err.message || err), true);
+          }
+        });
+      } else if (stage === "continued" || stage === "mutual_interest") {
+        addBtn("交换简介", true, async () => {
+          try {
+            await api.invoke("subject.communicate", {
+              action: "discloseBrief",
+              opportunityId: card.id,
+            });
+            await refreshCollabHome();
+          } catch (err) {
+            showStatus(els.collabDetailError || els.collabError, String(err.message || err), true);
+          }
+        });
+        addBtn("暂不考虑", false, async () => {
+          try {
+            await api.invoke("subject.communicate", {
+              action: "decline",
+              opportunityId: card.id,
+            });
+            await refreshCollabHome();
+          } catch (err) {
+            showStatus(els.collabDetailError || els.collabError, String(err.message || err), true);
+          }
+        });
+      } else if (stage === "brief_shared") {
+        addBtn("发起协作", true, async () => {
+          try {
+            const started = await api.invoke("subject.communicate", {
+              action: "startCollaboration",
+              opportunityId: card.id,
+            });
+            await refreshCollabHome();
+            if (started.recordId) await openCollabDetail(started.recordId);
+          } catch (err) {
+            showStatus(els.collabDetailError || els.collabError, String(err.message || err), true);
+          }
+        });
+        addBtn("暂不考虑", false, async () => {
+          try {
+            await api.invoke("subject.communicate", {
+              action: "decline",
+              opportunityId: card.id,
+            });
+            await refreshCollabHome();
+          } catch (err) {
+            showStatus(els.collabDetailError || els.collabError, String(err.message || err), true);
+          }
+        });
+      } else if (stage === "collaboration_started" && card.collaborationRecordId) {
+        addBtn("打开协作", true, async () => {
+          await openCollabDetail(card.collaborationRecordId);
+        });
+      }
+      if (actions.childNodes.length) li.appendChild(actions);
+      ul.appendChild(li);
+    }
+  }
+
   async function refreshCollabHome() {
     const items = await listCollabItems();
     const buckets = { active: [], done: [], revoked: [] };
@@ -5771,6 +5936,7 @@
     fill(els.collabListActive, els.collabEmptyActive, buckets.active);
     fill(els.collabListDone, els.collabEmptyDone, buckets.done);
     fill(els.collabListRevoked, els.collabEmptyRevoked, buckets.revoked);
+    await refreshOpportunityCards();
     await fillRemoteCapabilitySettings();
   }
 

@@ -806,6 +806,189 @@ export class DigitalMeRuntime {
     throw new Error(`unknown collab action: ${String(action)}`);
   }
 
+  async subjectCommunicate(
+    input: CommandMap['subject.communicate']['input'],
+  ): Promise<CommandMap['subject.communicate']['output']> {
+    const { SignalOpportunityHost } = await import('../subject-comm/signal-host');
+    const host = new SignalOpportunityHost(this);
+    const action = input.action;
+    if (!action) throw new Error('subject.communicate requires action');
+
+    if (action === 'health') {
+      const { LocalPackageTransport } = await import('../collaboration/transport');
+      const h = await new LocalPackageTransport(this).asSubjectTransport().health();
+      return {
+        mode: h.mode,
+        reachable: h.reachable,
+        capabilities: h.capabilities,
+      };
+    }
+    if (action === 'processInbox') {
+      const r = await host.processInbox();
+      return { processed: r.processed };
+    }
+    if (action === 'listInbox') {
+      const { LocalPackageTransport } = await import('../collaboration/transport');
+      const items = await new LocalPackageTransport(this).asSubjectTransport().listInbox({});
+      return {
+        inbox: items.map((e) => ({
+          envelopeId: e.envelopeId,
+          kind: e.kind,
+          fromDisplayName: e.from.displayName,
+          acked: !!e.ackedAt,
+          createdAt: e.createdAt,
+        })),
+      };
+    }
+    if (action === 'acknowledge') {
+      if (!input.envelopeId) throw new Error('acknowledge requires envelopeId');
+      const { LocalPackageTransport } = await import('../collaboration/transport');
+      const r = await new LocalPackageTransport(this)
+        .asSubjectTransport()
+        .acknowledge(input.envelopeId);
+      return { ok: r.ok };
+    }
+    if (action === 'sendSignal') {
+      if (!input.peerPackageDir || !input.signal) {
+        throw new Error('sendSignal requires peerPackageDir and signal');
+      }
+      const sent = await host.sendSignal({
+        peerPackageDir: input.peerPackageDir,
+        signal: {
+          intent: input.signal.intent,
+          seeking: input.signal.seeking || [],
+          offering: input.signal.offering || [],
+          disclosureLevel: input.signal.disclosureLevel || 'minimal',
+          ...(input.signal.constraints ? { constraints: input.signal.constraints } : {}),
+          ...(input.signal.expiresAt ? { expiresAt: input.signal.expiresAt } : {}),
+        },
+      });
+      // 对端处理匹配
+      const peerRt = this.createSiblingRuntime();
+      try {
+        await peerRt.openPackage({ dir: input.peerPackageDir });
+        const peerHost = new SignalOpportunityHost(peerRt);
+        await peerHost.processInbox();
+      } finally {
+        await peerRt.stop();
+      }
+      // 取回 response
+      await host.processInbox();
+      return { envelopeId: sent.envelopeId, opportunityId: sent.opportunityId };
+    }
+    if (action === 'listOpportunities') {
+      const listed = await host.listOpportunities();
+      return {
+        items: listed.items.map((c) => ({
+          id: c.id,
+          peerDisplayName: c.peerDisplayName,
+          stage: c.stage,
+          seekingSummary: c.seekingSummary,
+          offeringSummary: c.offeringSummary,
+          whyWorthKnowing: c.whyWorthKnowing,
+          privacyNote: c.privacyNote,
+          ...(c.peerBrief ? { peerBrief: c.peerBrief } : {}),
+          ...(c.localBrief ? { localBrief: c.localBrief } : {}),
+          ...(c.collaborationRecordId ? { collaborationRecordId: c.collaborationRecordId } : {}),
+        })),
+      };
+    }
+    if (action === 'continueInterest') {
+      if (!input.opportunityId) throw new Error('continueInterest requires opportunityId');
+      const r = await host.continueInterest(input.opportunityId);
+      // 对端消化
+      const card = r.item;
+      const dir = await new (await import('../collaboration/transport')).LocalPackageTransport(this)
+        .asSubjectTransport()
+        .lookupPackageDir(card.peerEndpointRef);
+      if (dir) {
+        const peerRt = this.createSiblingRuntime();
+        try {
+          await peerRt.openPackage({ dir });
+          await new SignalOpportunityHost(peerRt).processInbox();
+        } finally {
+          await peerRt.stop();
+        }
+        await host.processInbox();
+        const listed = await host.listOpportunities();
+        const updated = listed.items.find((i) => i.id === input.opportunityId) || r.item;
+        return {
+          item: {
+            id: updated.id,
+            peerDisplayName: updated.peerDisplayName,
+            stage: updated.stage,
+            seekingSummary: updated.seekingSummary,
+            offeringSummary: updated.offeringSummary,
+            whyWorthKnowing: updated.whyWorthKnowing,
+            privacyNote: updated.privacyNote,
+            ...(updated.peerBrief ? { peerBrief: updated.peerBrief } : {}),
+            ...(updated.localBrief ? { localBrief: updated.localBrief } : {}),
+            ...(updated.collaborationRecordId
+              ? { collaborationRecordId: updated.collaborationRecordId }
+              : {}),
+          },
+        };
+      }
+      return {
+        item: {
+          id: r.item.id,
+          peerDisplayName: r.item.peerDisplayName,
+          stage: r.item.stage,
+          seekingSummary: r.item.seekingSummary,
+          offeringSummary: r.item.offeringSummary,
+          whyWorthKnowing: r.item.whyWorthKnowing,
+          privacyNote: r.item.privacyNote,
+        },
+      };
+    }
+    if (action === 'decline') {
+      if (!input.opportunityId) throw new Error('decline requires opportunityId');
+      return host.decline(input.opportunityId);
+    }
+    if (action === 'discloseBrief') {
+      if (!input.opportunityId) throw new Error('discloseBrief requires opportunityId');
+      const r = await host.discloseBrief(input.opportunityId);
+      const dir = await new (await import('../collaboration/transport')).LocalPackageTransport(this)
+        .asSubjectTransport()
+        .lookupPackageDir(r.item.peerEndpointRef);
+      if (dir) {
+        const peerRt = this.createSiblingRuntime();
+        try {
+          await peerRt.openPackage({ dir });
+          await new SignalOpportunityHost(peerRt).discloseBrief(input.opportunityId).catch(() => undefined);
+          await new SignalOpportunityHost(peerRt).processInbox();
+        } finally {
+          await peerRt.stop();
+        }
+        await host.processInbox();
+      }
+      const listed = await host.listOpportunities();
+      const updated = listed.items.find((i) => i.id === input.opportunityId) || r.item;
+      return {
+        item: {
+          id: updated.id,
+          peerDisplayName: updated.peerDisplayName,
+          stage: updated.stage,
+          seekingSummary: updated.seekingSummary,
+          offeringSummary: updated.offeringSummary,
+          whyWorthKnowing: updated.whyWorthKnowing,
+          privacyNote: updated.privacyNote,
+          ...(updated.peerBrief ? { peerBrief: updated.peerBrief } : {}),
+          ...(updated.localBrief ? { localBrief: updated.localBrief } : {}),
+        },
+      };
+    }
+    if (action === 'startCollaboration') {
+      if (!input.opportunityId) throw new Error('startCollaboration requires opportunityId');
+      const r = await host.startCollaboration({
+        opportunityId: input.opportunityId,
+        ...(input.intent ? { intent: input.intent } : {}),
+      });
+      return { recordId: r.recordId, ...(r.status ? { status: r.status } : {}) };
+    }
+    throw new Error(`unknown subject.communicate action: ${String(action)}`);
+  }
+
   async appendOwnerEvent(
     partial: Omit<GrowthEvent, 'id' | 'subjectId' | 'occurredAt' | 'source'> & {
       source?: GrowthEvent['source'];

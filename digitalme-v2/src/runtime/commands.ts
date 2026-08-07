@@ -702,6 +702,82 @@ export interface CommandMap {
       };
     };
   };
+
+  /**
+   * 主体通讯：Signal / 机会发现（正式协作之前）。
+   * 传输经 SubjectTransport；不替代 collab.interact。
+   */
+  'subject.communicate': {
+    input: {
+      action?:
+        | 'sendSignal'
+        | 'listOpportunities'
+        | 'continueInterest'
+        | 'decline'
+        | 'discloseBrief'
+        | 'startCollaboration'
+        | 'listInbox'
+        | 'acknowledge'
+        | 'processInbox'
+        | 'health';
+      peerPackageDir?: string;
+      opportunityId?: string;
+      envelopeId?: string;
+      intent?: string;
+      signal?: {
+        intent: string;
+        seeking: string[];
+        offering: string[];
+        constraints?: string[];
+        disclosureLevel?: 'minimal' | 'brief';
+        expiresAt?: string;
+      };
+    };
+    output: {
+      ok?: boolean;
+      envelopeId?: string;
+      opportunityId?: string;
+      recordId?: string;
+      status?: string;
+      processed?: number;
+      delivered?: boolean;
+      duplicate?: boolean;
+      mode?: string;
+      reachable?: boolean;
+      capabilities?: string[];
+      items?: Array<{
+        id: string;
+        peerDisplayName: string;
+        stage: string;
+        seekingSummary: string;
+        offeringSummary: string;
+        whyWorthKnowing: string;
+        privacyNote: string;
+        peerBrief?: string;
+        localBrief?: string;
+        collaborationRecordId?: string;
+      }>;
+      item?: {
+        id: string;
+        peerDisplayName: string;
+        stage: string;
+        seekingSummary: string;
+        offeringSummary: string;
+        whyWorthKnowing: string;
+        privacyNote: string;
+        peerBrief?: string;
+        localBrief?: string;
+        collaborationRecordId?: string;
+      };
+      inbox?: Array<{
+        envelopeId: string;
+        kind: string;
+        fromDisplayName: string;
+        acked: boolean;
+        createdAt: string;
+      }>;
+    };
+  };
 }
 
 export type CommandName = keyof CommandMap;
@@ -727,6 +803,7 @@ export const COMMAND_NAMES = [
   'artifact.revealInFolder',
   'capability.list',
   'collab.interact',
+  'subject.communicate',
 ] as const satisfies readonly CommandName[];
 
 /** 命令面硬上限(architecture §4;超出即架构违规)。 */

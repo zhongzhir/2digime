@@ -127,6 +127,10 @@ export function createCommandBus(runtime: DigitalMeRuntime): CommandBus {
           return (await runtime.interactCollab(
             input as CommandMap['collab.interact']['input'],
           )) as CommandMap[K]['output'];
+        case 'subject.communicate':
+          return (await runtime.subjectCommunicate(
+            input as CommandMap['subject.communicate']['input'],
+          )) as CommandMap[K]['output'];
         default: {
           const _exhaustive: never = name;
           throw new Error(`unhandled command: ${String(_exhaustive)}`);

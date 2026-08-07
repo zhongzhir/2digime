@@ -54,6 +54,7 @@ const COMMAND_NAMES = new Set([
   "artifact.revealInFolder",
   "capability.list",
   "collab.interact",
+  "subject.communicate",
 ]);
 
 function resolveAppRoot() {

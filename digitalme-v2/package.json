@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "smoke": "node dist/smoke.js",
-    "test": "node --test --test-concurrency=1 \"dist/infrastructure/tests/*.test.js\" \"dist/work-runtime/tests/*.test.js\" \"dist/subject-core/tests/*.test.js\" \"dist/capability/adapters/tests/*.test.js\" \"dist/capability/tests/*.test.js\" \"dist/runtime/tests/*.test.js\" \"dist/engineering/tests/*.test.js\" \"dist/collaboration/tests/*.test.js\" \"dist/execution/tests/*.test.js\"",
+    "test": "node --test --test-concurrency=1 \"dist/infrastructure/tests/*.test.js\" \"dist/work-runtime/tests/*.test.js\" \"dist/subject-core/tests/*.test.js\" \"dist/capability/adapters/tests/*.test.js\" \"dist/capability/tests/*.test.js\" \"dist/runtime/tests/*.test.js\" \"dist/engineering/tests/*.test.js\" \"dist/collaboration/tests/*.test.js\" \"dist/subject-comm/tests/*.test.js\" \"dist/execution/tests/*.test.js\"",
     "accept:external-execution-closed-loop": "node scripts/run-external-execution-closed-loop-01.cjs",
     "accept:software-dev-task-ux": "electron scripts/electron-software-dev-task-ux-acceptance.cjs",
     "accept:software-dev-fresh-ud": "electron scripts/electron-software-dev-fresh-ud-acceptance.cjs",
@@ -24,6 +24,8 @@
     "accept:collaboration-real-loop": "node scripts/run-collaboration-real-loop-01-acceptance.cjs",
     "accept:collaboration-real-loop-owner": "node scripts/run-collaboration-real-loop-owner-acceptance.cjs",
     "accept:collaboration-real-loop-real": "node scripts/run-collaboration-real-loop-real-fulfillment.cjs",
+    "accept:opportunity-discovery-demo": "node scripts/run-opportunity-discovery-demo-acceptance.cjs",
+    "accept:opportunity-discovery-owner": "node scripts/run-opportunity-discovery-owner-acceptance.cjs",
     "accept:remote-capability-readiness": "node scripts/run-remote-capability-readiness-acceptance.cjs",
     "accept:a2a-remote-capability": "node scripts/run-a2a-remote-capability-acceptance.cjs",
     "accept:external-capability-owner-path": "node scripts/run-external-capability-owner-path-acceptance.cjs",

@@ -1,13 +1,15 @@
 /**
  * 协作传输边界：Record/合同不依赖部署位置；路径只存在于本机 Transport。
+ * LocalPackageTransport 经 SubjectTransport 发送 collaboration_sync，再幂等合并 Record。
  */
-import { promises as fs } from 'node:fs';
-import * as path from 'node:path';
-import { atomicWriteFile, readFileWithRecovery } from '../infrastructure/fs-atomic';
 import type { DigitalMeRuntime } from '../runtime/digitalme-runtime';
 import type { CollaborationEvent, CollaborationRecord, SubjectRef } from './schema';
 import { CollaborationRecordStore } from './record-store';
 import { mergeIncomingEvents } from './record-derive';
+import { LocalSubjectTransport, buildEnvelope } from '../subject-comm/local-subject-transport';
+import type { CollaborationSyncPayload } from '../subject-comm/envelope';
+import { InboxStore } from '../subject-comm/inbox-store';
+import { nowIso } from '../shared/ids';
 
 export interface CollaborationTransport {
   resolvePeer(packageDir: string): Promise<SubjectRef & { brief?: string }>;
@@ -18,7 +20,6 @@ export interface CollaborationTransport {
   }>;
   registerEndpoint(ref: SubjectRef, packageDir: string): Promise<void>;
   lookupPackageDir(endpointRef: string): Promise<string | null>;
-  /** 将本方新事件推送到对方已接收副本（幂等按 eventId）。 */
   pushEvents(input: {
     endpointRef: string;
     recordId: string;
@@ -28,126 +29,31 @@ export interface CollaborationTransport {
   pullRecord(endpointRef: string, recordId: string): Promise<CollaborationRecord | null>;
 }
 
-interface PeerEndpointMap {
-  byEndpointRef: Record<string, string>;
-}
-
-function endpointsPath(packageRoot: string): string {
-  return path.join(packageRoot, 'collaboration', 'peer-endpoints.json');
-}
-
-async function loadEndpoints(packageRoot: string): Promise<PeerEndpointMap> {
-  const file = endpointsPath(packageRoot);
-  const result = await readFileWithRecovery(file, (c) => {
-    try {
-      JSON.parse(c);
-      return true;
-    } catch {
-      return false;
-    }
-  });
-  if (!result.content) return { byEndpointRef: {} };
-  try {
-    const parsed = JSON.parse(result.content) as PeerEndpointMap;
-    return { byEndpointRef: parsed.byEndpointRef || {} };
-  } catch {
-    return { byEndpointRef: {} };
-  }
-}
-
-async function saveEndpoints(packageRoot: string, map: PeerEndpointMap): Promise<void> {
-  const file = endpointsPath(packageRoot);
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  await atomicWriteFile(file, `${JSON.stringify(map, null, 2)}\n`);
-}
-
-/**
- * 同设备双 Package 传输实现。绝对路径仅存于此映射，不进入 CollaborationRecord。
- */
 export class LocalPackageTransport implements CollaborationTransport {
-  constructor(private readonly hostRuntime: DigitalMeRuntime) {}
+  private readonly subjectTransport: LocalSubjectTransport;
 
-  private hostRoot(): string {
-    return this.hostRuntime.subject.requireActive().rootDir;
+  constructor(private readonly issuer: DigitalMeRuntime) {
+    this.subjectTransport = new LocalSubjectTransport(issuer);
   }
 
-  async resolvePeer(packageDir: string): Promise<SubjectRef & { brief?: string }> {
-    const dir = path.resolve(packageDir);
-    const peerRt = this.hostRuntime.createSiblingRuntime();
-    try {
-      const opened = await peerRt.openPackage({ dir });
-      const endpointRef = `subject:${opened.subjectId}`;
-      await this.registerEndpoint(
-        {
-          subjectId: opened.subjectId,
-          displayName: opened.displayName,
-          endpointRef,
-        },
-        dir,
-      );
-      let brief: string | undefined;
-      try {
-        const overview = await peerRt.getOverview({});
-        const line =
-          (overview.activeUnderstandings &&
-            overview.activeUnderstandings[0] &&
-            overview.activeUnderstandings[0].text) ||
-          overview.summaryLine ||
-          '';
-        if (line && String(line).trim()) brief = String(line).trim().slice(0, 120);
-      } catch {
-        /* optional */
-      }
-      return {
-        subjectId: opened.subjectId,
-        displayName: opened.displayName,
-        endpointRef,
-        ...(brief ? { brief } : {}),
-      };
-    } finally {
-      await peerRt.stop();
-    }
+  asSubjectTransport(): LocalSubjectTransport {
+    return this.subjectTransport;
   }
 
-  async registerEndpoint(ref: SubjectRef, packageDir: string): Promise<void> {
-    const map = await loadEndpoints(this.hostRoot());
-    map.byEndpointRef[ref.endpointRef] = path.resolve(packageDir);
-    await saveEndpoints(this.hostRoot(), map);
+  resolvePeer(packageDir: string) {
+    return this.subjectTransport.resolvePeer(packageDir);
   }
 
-  async lookupPackageDir(endpointRef: string): Promise<string | null> {
-    const map = await loadEndpoints(this.hostRoot());
-    const dir = map.byEndpointRef[endpointRef];
-    return dir ? path.resolve(dir) : null;
+  registerEndpoint(ref: SubjectRef, packageDir: string) {
+    return this.subjectTransport.registerEndpoint(ref, packageDir);
   }
 
-  async openByEndpointRef(endpointRef: string): Promise<{
-    runtime: DigitalMeRuntime;
-    subjectRef: SubjectRef;
-    stop: () => Promise<void>;
-  }> {
-    const dir = await this.lookupPackageDir(endpointRef);
-    if (!dir) {
-      throw new Error('协作对象暂不可达：未找到本地端点映射');
-    }
-    try {
-      await fs.access(dir);
-    } catch {
-      throw new Error('协作对象暂不可达：对方主体包不可访问');
-    }
-    const runtime = this.hostRuntime.createSiblingRuntime();
-    const opened = await runtime.openPackage({ dir });
-    return {
-      runtime,
-      subjectRef: {
-        subjectId: opened.subjectId,
-        displayName: opened.displayName,
-        endpointRef,
-      },
-      stop: async () => {
-        await runtime.stop();
-      },
-    };
+  lookupPackageDir(endpointRef: string) {
+    return this.subjectTransport.lookupPackageDir(endpointRef);
+  }
+
+  openByEndpointRef(endpointRef: string) {
+    return this.subjectTransport.openByEndpointRef(endpointRef);
   }
 
   async pushEvents(input: {
@@ -156,9 +62,43 @@ export class LocalPackageTransport implements CollaborationTransport {
     events: CollaborationEvent[];
     seedRecord?: CollaborationRecord;
   }): Promise<void> {
-    const opened = await this.openByEndpointRef(input.endpointRef);
+    const host = this.issuer.subject.requireActive();
+    const from: SubjectRef = {
+      subjectId: host.id,
+      displayName: host.identity.displayName,
+      endpointRef: `subject:${host.id}`,
+    };
+    await this.subjectTransport.registerEndpoint(from, host.rootDir);
+
+    let to: SubjectRef;
+    {
+      const probe = await this.subjectTransport.openByEndpointRef(input.endpointRef);
+      try {
+        to = probe.subjectRef;
+      } finally {
+        await probe.stop();
+      }
+    }
+
+    const payload: CollaborationSyncPayload = {
+      recordId: input.recordId,
+      events: input.events,
+      ...(input.seedRecord ? { seedRecord: input.seedRecord } : {}),
+    };
+    const envelope = buildEnvelope({
+      from,
+      to,
+      kind: 'collaboration_sync',
+      payload,
+      correlationId: input.recordId,
+    });
+    const sendResult = await this.subjectTransport.send(envelope);
+
+    const opened = await this.subjectTransport.openByEndpointRef(input.endpointRef);
     try {
-      const store = await CollaborationRecordStore.open(opened.runtime.subject.requireActive().rootDir);
+      const store = await CollaborationRecordStore.open(
+        opened.runtime.subject.requireActive().rootDir,
+      );
       let existing = await store.get(input.recordId);
       if (!existing) {
         if (!input.seedRecord) {
@@ -170,7 +110,6 @@ export class LocalPackageTransport implements CollaborationTransport {
         };
       }
       const merged = mergeIncomingEvents(existing, input.events);
-      // 若是新建，补齐身份字段
       if (!(await store.get(input.recordId)) && input.seedRecord) {
         await store.put({
           ...input.seedRecord,
@@ -181,21 +120,25 @@ export class LocalPackageTransport implements CollaborationTransport {
         await store.put(merged);
       }
 
-      // 反向端点：对方可回推到本方（同机双包闭环；不写入 CollaborationRecord）
-      const host = this.hostRuntime.subject.requireActive();
-      const peerRoot = opened.runtime.subject.requireActive().rootDir;
-      const peerMap = await loadEndpoints(peerRoot);
-      peerMap.byEndpointRef[`subject:${host.id}`] = path.resolve(this.hostRoot());
-      await saveEndpoints(peerRoot, peerMap);
+      if (!sendResult.duplicate) {
+        const peerInbox = await InboxStore.open(opened.runtime.subject.requireActive().rootDir);
+        const env = await peerInbox.get(envelope.envelopeId);
+        if (env && !env.ackedAt) {
+          env.ackedAt = nowIso();
+          await peerInbox.put(env);
+        }
+      }
     } finally {
       await opened.stop();
     }
   }
 
   async pullRecord(endpointRef: string, recordId: string): Promise<CollaborationRecord | null> {
-    const opened = await this.openByEndpointRef(endpointRef);
+    const opened = await this.subjectTransport.openByEndpointRef(endpointRef);
     try {
-      const store = await CollaborationRecordStore.open(opened.runtime.subject.requireActive().rootDir);
+      const store = await CollaborationRecordStore.open(
+        opened.runtime.subject.requireActive().rootDir,
+      );
       return store.get(recordId);
     } finally {
       await opened.stop();

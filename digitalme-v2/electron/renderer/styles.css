@@ -809,6 +809,21 @@ select {
   color: var(--muted);
 }
 
+.collab-opp-privacy {
+  margin: 8px 0 0;
+}
+
+.collab-opp-list .collab-opp-card {
+  cursor: default;
+}
+
+.collab-opp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
 .subject-brief {
   margin: 0 0 16px;
   line-height: var(--line-height);
