@@ -142,11 +142,7 @@ export async function probeCodexAvailability(
   codexJsPath?: string,
   options: Pick<ExternalExecutorCodexOptions, 'forceAvailability' | 'executeHook'> = {},
 ): Promise<AvailabilityCheckResult> {
-  const forced =
-    options.forceAvailability ||
-    (process.env.DIGITALME_CODING_CAPABILITY_FORCE as
-      | ExternalExecutorCodexOptions['forceAvailability']
-      | undefined);
+  const forced = options.forceAvailability;
   if (forced === 'ready' || options.executeHook) {
     return { available: true, detail: 'ready' };
   }
@@ -179,8 +175,7 @@ export async function probeCodexAvailability(
     };
   }
   try {
-    const envPath = process.env.DIGITALME_CODEX_JS_PATH;
-    const js = codexJsPath || envPath || resolveCodexJs();
+    const js = codexJsPath || resolveCodexJs();
     await fs.access(js);
     const version = await runCodexVersion(js);
     if (/outdated|unsupported.*cli|incompatible/i.test(version || '')) {
@@ -191,7 +186,7 @@ export async function probeCodexAvailability(
       };
     }
     return { available: true, detail: version || js };
-  } catch (error) {
+  } catch {
     return {
       available: false,
       reason: 'needs_setup',

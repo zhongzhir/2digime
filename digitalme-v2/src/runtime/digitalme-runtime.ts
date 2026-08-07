@@ -1219,7 +1219,7 @@ export class DigitalMeRuntime {
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           const fsSync = require('node:fs') as typeof import('node:fs');
           const { resolveCodexJs } = require('../capability/adapters/external-executor-codex') as typeof import('../capability/adapters/external-executor-codex');
-          const js = opt.codexJsPath || process.env.DIGITALME_CODEX_JS_PATH || resolveCodexJs();
+          const js = opt.codexJsPath || resolveCodexJs();
           fsSync.accessSync(js);
           (adapter.registration as { availability: string }).availability = 'available';
         }

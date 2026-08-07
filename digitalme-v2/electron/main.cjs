@@ -148,29 +148,35 @@ async function bootstrapRuntime() {
     remoteConnectionState = "configured_unverified";
   }
 
-  const options = uxAcceptanceFake
-    ? {
-        documentCapability: "fake",
-        registerOpenAiStub: false,
-        codeAnalysisCapability: "needs_setup",
-        ...(a2aRemoteCapability ? { a2aRemoteCapability } : {}),
-      }
-    : model.documentCapability === "openai-compatible"
+  const {
+    applyOwnerScenarioPatch,
+  } = require(path.join(__dirname, "owner-scenario-env.cjs"));
+
+  const options = applyOwnerScenarioPatch(
+    uxAcceptanceFake
       ? {
-          documentCapability: "openai-compatible",
-          openaiCompatible: model.openaiCompatible,
-          secrets: model.secrets,
+          documentCapability: "fake",
           registerOpenAiStub: false,
-          codeAnalysisCapability,
+          codeAnalysisCapability: "needs_setup",
           ...(a2aRemoteCapability ? { a2aRemoteCapability } : {}),
         }
-      : {
-          documentCapability: "none",
-          registerOpenAiStub: false,
-          ...(model.secrets ? { secrets: model.secrets } : {}),
-          codeAnalysisCapability,
-          ...(a2aRemoteCapability ? { a2aRemoteCapability } : {}),
-        };
+      : model.documentCapability === "openai-compatible"
+        ? {
+            documentCapability: "openai-compatible",
+            openaiCompatible: model.openaiCompatible,
+            secrets: model.secrets,
+            registerOpenAiStub: false,
+            codeAnalysisCapability,
+            ...(a2aRemoteCapability ? { a2aRemoteCapability } : {}),
+          }
+        : {
+            documentCapability: "none",
+            registerOpenAiStub: false,
+            ...(model.secrets ? { secrets: model.secrets } : {}),
+            codeAnalysisCapability,
+            ...(a2aRemoteCapability ? { a2aRemoteCapability } : {}),
+          },
+  );
 
   runtime = createDigitalMeRuntime(options);
   bus = createCommandBus(runtime);
