@@ -26,6 +26,7 @@ const COMMAND_NAMES = [
   "artifact.revealInFolder",
   "capability.list",
   "collab.interact",
+  "subject.communicate",
 ];
 
 contextBridge.exposeInMainWorld("digitalMe", {

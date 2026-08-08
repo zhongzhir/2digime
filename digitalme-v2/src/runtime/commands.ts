@@ -825,8 +825,8 @@ export const COMMAND_NAMES = [
   'subject.communicate',
 ] as const satisfies readonly CommandName[];
 
-/** 命令面硬上限(architecture §4;超出即架构违规)。 */
-export const COMMAND_COUNT_LIMIT = 20;
+/** 命令面硬上限(architecture §4;超出即架构违规)。含 subject.communicate。 */
+export const COMMAND_COUNT_LIMIT = 21;
 
 export interface CommandBus {
   invoke<K extends CommandName>(
