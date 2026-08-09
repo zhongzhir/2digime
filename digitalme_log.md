@@ -5,6 +5,44 @@
 
 ---
 
+## 2026-08-09 TODAY-CLOSE · 双真机公网通路与协作最小收口归档
+
+### 状态
+
+`remote_public_relay_deployed` / `real_windows_mac_pairing_validated` / `remote_signal_e2ee_validated` / `opportunity_discovery_real_loop_validated` / `offline_store_forward_validated` / `network_recovery_protocol_validated` / `remote_collaboration_proposal_validated` / `minimal_collaboration_close_engineered` / `minimal_collaboration_owner_revalidation_pending` / `collaboration_expansion_paused` / `ready_for_whole_system_stage_review` / `not_pushed`
+
+分支：`v2/foundation`。HEAD：**`a851b0c95d1d343538eb6599fa2699ba65518759`**。任务：`DIGITALME-TODAY-CLOSE-20260809`。  
+归档：`digitalme-v2/docs/audit/REMOTE-TWO-MACHINE-OWNER-VALIDATION-20260809.md`。
+
+### 公网 Relay
+
+- `https://relay.muhub.cn`（Alibaba Cloud ECS；Nginx HTTPS；Let's Encrypt；systemd；`127.0.0.1:8787`）
+- 外部 Windows `/health` 200；不持有 SubjectPackage / Growth / Collaboration 明文；E2EE 在两端
+
+### Owner 真实双机（Windows ↔ Intel Mac）
+
+pairing；Signal E2EE；inbox/ACK；Opportunity + continue；offline store-forward；network recovery（协议层，曾有 UI 粘滞与 no_match 观测偏差）；Remote Collaboration Proposal；双端打开同一协作详情。
+
+### 本阶段关键 Git（最终主链）
+
+| 提交 | 摘要 |
+|------|------|
+| `9e39dd4` | 暴露 `subject.communicate` |
+| `23b13aa` | 远程轮询页面不再周期性抖动 |
+| `502b4c4` / `97b69d1` | Opportunity 自然语言语义与真实 distill/runtime 修复 |
+| `c81b267` / `8af5130` / `b94cb0a` | 网络恢复诊断、retry 与 UI 状态收口 |
+| `a851b0c` | Remote Collaboration 最小 accept/reject 收口（**engineered**；Owner 复验 pending） |
+
+### 产品判断
+
+复杂性内收；Relay 默认零配置、自建为高级；协作扩展暂停；下一步 = 整系统阶段复盘后再定优先级。
+
+### 今日停止
+
+只做文档归档；不开发产品功能；隔离脏文件；**未 push**。
+
+---
+
 ## 2026-08-07 TODAY-CLOSE · V2 主体网络基础日收口
 
 ### 状态

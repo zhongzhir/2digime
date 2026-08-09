@@ -1,8 +1,8 @@
 # Subject Communication Remote Roadmap
 
-状态（2026-08-07）：阶段 1–2 **已工程固化**为 Candidate `494b755`；阶段 3 = **明日唯一继续点**（Owner 真机，不编码）；阶段 4 以后。
+状态（2026-08-09）：阶段 1–2 已固化；阶段 3 **Owner 真机公网双机验证已完成并归档**；协作扩展暂停；阶段 4 以后。
 
-权威指针见 `digitalme_context.md` 文首与决策 #109；双机清单：`REMOTE-TWO-MACHINE-OWNER-CHECKLIST.md`。
+权威指针见 `digitalme_context.md` 文首与决策 #110；归档：`../audit/REMOTE-TWO-MACHINE-OWNER-VALIDATION-20260809.md`；双机清单：`REMOTE-TWO-MACHINE-OWNER-CHECKLIST.md`。
 
 ## 阶段 1（已完成 · Local + Signal）
 
@@ -24,27 +24,20 @@ Relay service
 - 本机三进程远程语义验收（隔离 userData，无共享路径）
 - Git Candidate：`494b755`（REMOTE-COMMUNICATION-CANDIDATE）
 
-## 阶段 3（下一步 · Owner 真机 · 不编码）
+## 阶段 3（已完成 · Owner 真机公网双机 · 2026-08-09 归档）
 
-任务：`DIGITALME-V2-REMOTE-TWO-MACHINE-OWNER-VALIDATION-01`
+任务：`DIGITALME-V2-REMOTE-TWO-MACHINE-OWNER-VALIDATION-01` → **通路验证完成**。
 
-Owner 先决：公网 Relay **服务器** + **域名/子域名**。
+已完成：公网 HTTPS Relay（`https://relay.muhub.cn`）；Windows ↔ Mac pairing；Signal E2EE；Opportunity；offline store-forward；协议层 network recovery；Remote Collaboration Proposal。
 
-随后：
+后续工程（非本阶段 Owner accepted）：`a851b0c` 最小 accept/reject 收口。
 
-1. 部署真实 HTTPS Relay（Node 内网端口 + 反代 TLS；Owner 只见 `https://<domain>`）
-2. 两台真实电脑使用 Candidate `494b755`
-3. pairing
-4. A→B Signal
-5. B→A response
-6. B 离线 store-and-forward
-7. 断网恢复 retry
-8. Signal → remote collaboration proposal
+**协作扩展暂停**。`REMOTE-COLLABORATION-DELIVERY-01` **不得**自动启动；须整系统复盘后再定。
 
-已知缺口（**仅**双机通过后才启动下一任务 `REMOTE-COLLABORATION-DELIVERY-01`）：
+明确延后：
 
 - large Artifact 跨公网完整履约
-- Grant 远程投影完整关闭
+- Grant 远程投影完整关闭 / 材料·Task·支付·多方·P2P
 
 ## 阶段 4（以后）
 

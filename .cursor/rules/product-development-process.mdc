@@ -47,21 +47,22 @@ Owner / 用户提出的产品想法**可能不全、可错、可非最优**，�
 - 无规格升版就堆功能
 - 用文案按钮冒充能力却无可核对依据
 
-## 三、数字主体第二纵向闭环阶段规则（2026-07-26 更新；指针 2026-08-07）
+## 三、数字主体第二纵向闭环阶段规则（2026-07-26 更新；指针 2026-08-09）
 
 **权威入口**：
 
 - 架构与研发原则：`digitalme_subject_architecture_and_rd_principles_v0.1.md`
 - 上位合同：`digitalme_phase1_task_DVL2-00_product_and_data_contracts_v0.1.md`（**v0.1.1** / `owner_accepted` / `frozen_for_implementation`）
-- **当前实现分支**：`v2/foundation` · HEAD **`494b755`**（REMOTE-COMMUNICATION-CANDIDATE）· **未 push**
-- 全局上下文文首：`digitalme_context.md`（决策 #109）
+- **当前实现分支**：`v2/foundation` · HEAD **`a851b0c`** · **未 push**
+- 全局上下文文首：`digitalme_context.md`（决策 #110）
+- 双机归档：`digitalme-v2/docs/audit/REMOTE-TWO-MACHINE-OWNER-VALIDATION-20260809.md`
 - 通信路线图：`digitalme-v2/docs/design/SUBJECT-COMMUNICATION-REMOTE-ROADMAP.md`
 - 双机清单：`digitalme-v2/docs/design/REMOTE-TWO-MACHINE-OWNER-CHECKLIST.md`
 - 协作效率上位原则：`digitalme_owner_cto_ai_collaboration_principles_v0.1.md`
 
-**当前主线**：第二纵向闭环 — **多模态成果包交付与渐进式主体构建**；V2 上三根主梁（成长 / 做事 / 协作）已有真实闭环，并固化 Signal / Opportunity / Relay-ready remote foundation。
+**当前主线**：第二纵向闭环 — **多模态成果包交付与渐进式主体构建**；V2 上三根主梁已有真实闭环；公网双真机协作**通路**已验证并归档；**协作功能扩展暂停**。
 
-**当前指针（2026-08-07）**：今日产品开发停止。明日唯一继续点 **DIGITALME-V2-REMOTE-TWO-MACHINE-OWNER-VALIDATION-01**（**不编码**；Owner 先定公网 Relay 服务器与域名）。双机通过前不得启动 `REMOTE-COLLABORATION-DELIVERY-01`。**不得** push；**不得**宣称 `two_machine_validated` / `public_relay_validated` / `closed_alpha_ready` / `mvp_ready`。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。P2C1 **`blocked`**（历史）。
+**当前指针（2026-08-09）**：今日文档归档收口。下一步决策门 = Owner/CTO「代表我—做事—协作」整系统复盘后再定优先级。**不得**自行启动 `REMOTE-COLLABORATION-DELIVERY-01` 或扩材料/Task/Artifact/Grant/多方/P2P。`a851b0c` 最小收口 **非** Owner accepted。**不得** push；**不得**宣称 `closed_alpha_ready` / `mvp_ready`。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。P2C1 **`blocked`**（历史）。
 
 1. **每次只推进一个已批准任务块**；不得偷跑或并列铺开。
 2. **非阻断问题进入 backlog**；仅四类问题可阻断：主流程不可用、数据损坏丢失、隐私超披露、未授权对外行动。
@@ -76,5 +77,5 @@ Owner / 用户提出的产品想法**可能不全、可错、可非最优**，�
 11. **PAN-02～PAN-06** 相对新主线 **`paused`/`blocked`**；不得按旧解锁条件自行启动。
 12. **P1-PANORAMA 执行索引**仅为历史/基础设施状态表，**不是**当前执行计划。
 13. Digital Org、支付结算、DID/VC/链上存证、广播市场、信誉、多方协作、P2P/NAT traversal **不进入**当前继续点。
-14. **未经 Owner 主路径验收不得 `accepted`**；公网双机未验不得写成已完成。
-15. **下一项**：**DIGITALME-V2-REMOTE-TWO-MACHINE-OWNER-VALIDATION-01**（真双机 + 公网 HTTPS Relay）。不得 push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**。
+14. **未经 Owner 主路径验收不得 `accepted`**；工程完成 ≠ Owner accepted（例：`a851b0c`）。
+15. **下一项**：整系统阶段复盘决策门（不自行开协作扩展）。不得 push。R3 **`paused`**；R2.5 **`deferred`**；PAN-02 **`blocked`**；协作扩展 **`paused`**。

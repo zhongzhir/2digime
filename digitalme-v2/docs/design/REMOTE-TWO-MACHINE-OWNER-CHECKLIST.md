@@ -1,7 +1,7 @@
 # REMOTE-TWO-MACHINE-OWNER-CHECKLIST
 
 任务：`DIGITALME-V2-REMOTE-TWO-MACHINE-OWNER-VALIDATION-01`  
-状态（2026-08-07）：**明日唯一继续点**；今日停止产品开发。Candidate：`494b755`。
+状态（2026-08-09）：**Owner 真实双机通路验证已完成并归档**；协作扩展暂停。归档时 HEAD：`a851b0c`。正式归档：`../audit/REMOTE-TWO-MACHINE-OWNER-VALIDATION-20260809.md`。
 
 Owner 只走用户路径。工程细节由开发侧另行核对。
 
@@ -73,3 +73,11 @@ Owner 只走用户路径。工程细节由开发侧另行核对。
 - 大成果跨公网完整履约：未正式 remote 化 → `REMOTE-COLLABORATION-DELIVERY-01`（**仅双机通过后**）
 - Grant 远程投影：未完整关闭
 - 不得用共享目录假装完成
+
+
+## 归档结论（2026-08-09）
+
+清单主路径（公网 Relay、pairing、Signal、Opportunity、offline、协议层 network recovery、Proposal 同步）已在 Windows ↔ Mac 真机走通并归档。
+
+- `a851b0c` 接受/暂不接受最小收口 = **engineered**，**非** Owner 最终复验 accepted
+- **停止**继续扩展远程协作交付面；下一步由 Owner/CTO 整系统复盘决定
