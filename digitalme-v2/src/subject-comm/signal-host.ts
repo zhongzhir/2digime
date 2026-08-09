@@ -8,6 +8,7 @@ import { LocalSubjectTransport, buildEnvelope } from './local-subject-transport'
 import type { SubjectTransport } from './subject-transport';
 import { InboxStore, OpportunityStore } from './inbox-store';
 import { matchSignalLocally } from './opportunity-match';
+import { enrichSignalPayload } from './signal-derive';
 import {
   OPPORTUNITY_PRIVACY_NOTE,
   type OpportunityCard,
@@ -128,13 +129,14 @@ export class SignalOpportunityHost {
     }
 
     const correlationId = makeCommId('opportunity');
+    const signalPayload = enrichSignalPayload(input.signal);
     const envelope = buildEnvelope({
       from,
       to,
       kind: 'signal',
-      payload: input.signal,
+      payload: signalPayload,
       correlationId,
-      ...(input.signal.expiresAt ? { expiresAt: input.signal.expiresAt } : {}),
+      ...(signalPayload.expiresAt ? { expiresAt: signalPayload.expiresAt } : {}),
     });
     if (isRemoteEndpointRef(peerEndpointRef)) {
       envelope.transportMeta = { mode: 'remote', encrypted: true };
@@ -149,8 +151,8 @@ export class SignalOpportunityHost {
       peerEndpointRef,
       peerSubjectId,
       stage: 'potential',
-      seekingSummary: (input.signal.seeking || []).join('、') || input.signal.intent,
-      offeringSummary: (input.signal.offering || []).join('、'),
+      seekingSummary: (signalPayload.seeking || []).join('、') || signalPayload.intent,
+      offeringSummary: (signalPayload.offering || []).join('、'),
       whyWorthKnowing: '已向对方发出最小需求与供给说明，等待对方 Digital Me 判断。',
       privacyNote: OPPORTUNITY_PRIVACY_NOTE,
       signalEnvelopeId: envelope.envelopeId,

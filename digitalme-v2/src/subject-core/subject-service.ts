@@ -77,12 +77,42 @@ export class SubjectService {
     this.distillRuntime = runtime;
   }
 
+  /** 机会匹配等复用同一模型入口；未配置时返回 null。 */
+  getDistillModelRuntime(): SubjectDistillModelRuntime | null {
+    return this.distillRuntime;
+  }
+
   getLastDistillMode(): typeof this.lastDistillMode {
     return this.lastDistillMode;
   }
 
   getLastNormalizeTrace(): unknown[] {
     return [...this.lastNormalizeTrace];
+  }
+
+  /**
+   * 复用做事/成长链已经配置的本地模型做小型语义判断。
+   * 不暴露凭据，不落盘；模型不可用或失败时由调用方保守降级。
+   */
+  async completeSemanticJson(system: string, prompt: string): Promise<string | null> {
+    if (!this.distillRuntime?.enabled) return null;
+    try {
+      const result = await this.distillRuntime.chatComplete({
+        baseUrl: this.distillRuntime.model.baseUrl,
+        model: this.distillRuntime.model.model,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: prompt },
+        ],
+        temperature: 0,
+        maxTokens: 500,
+        timeoutMs: 30_000,
+        responseFormat: { type: 'json_object' },
+      });
+      return result.text;
+    } catch {
+      return null;
+    }
   }
 
   getActive(): SubjectPackage | null {
@@ -105,11 +135,15 @@ export class SubjectService {
       throw new Error(`target already contains a subject package: ${rootDir}`);
     }
 
+    const initial = input.initialSelfDescription?.trim();
     const pkg: SubjectPackage = {
       id: newId('subject'),
       schemaVersion: SUBJECT_SCHEMA_VERSION,
       createdAt: nowIso(),
-      identity: { displayName },
+      identity: {
+        displayName,
+        ...(initial ? { description: initial.slice(0, 2000) } : {}),
+      },
       rootDir,
     };
     await this.writeManifest(pkg);
@@ -121,7 +155,6 @@ export class SubjectService {
     this.mount(pkg);
     await this.rebuildDerivedViews();
 
-    const initial = input.initialSelfDescription?.trim();
     if (initial) {
       // 一句话即可开始:保存来源并生成少量候选;不要求填写完整档案,不阻断后续 Task
       await this.captureInput({
@@ -144,6 +177,14 @@ export class SubjectService {
     }
     pkg.rootDir = rootDir;
     this.mount(pkg);
+    if (!pkg.identity.description?.trim()) {
+      const fromMaterial = await this.readLatestSelfDescriptionMaterial(rootDir);
+      if (fromMaterial) {
+        pkg.identity = { ...pkg.identity, description: fromMaterial.slice(0, 2000) };
+        this.active = pkg;
+        await this.writeManifest(pkg);
+      }
+    }
     await this.rebuildDerivedViews();
     return { subjectId: pkg.id, displayName: pkg.identity.displayName };
   }
@@ -614,6 +655,16 @@ export class SubjectService {
         confirmationSuggestedEventIds: [],
         captureOutcome: 'nothing_to_learn',
       };
+    }
+
+    // 自我说明进入主体权威简介（manifest identity.description），供机会匹配等本地判断使用
+    if (input.sourceKind === 'initial_self_description') {
+      const nextDesc = text.slice(0, 2000);
+      if (pkg.identity.description !== nextDesc) {
+        pkg.identity = { ...pkg.identity, description: nextDesc };
+        this.active = pkg;
+        await this.writeManifest(pkg);
+      }
     }
 
     if (isDecision) {
@@ -1191,6 +1242,23 @@ export class SubjectService {
   private requireLog(): PackageGrowthLog<GrowthEvent> {
     if (!this.growthLog) throw new Error('no active subject package');
     return this.growthLog;
+  }
+
+  /** 从 materials/self_*.txt 读取最新自我说明（欢迎页/设置写入的权威原文）。 */
+  private async readLatestSelfDescriptionMaterial(rootDir: string): Promise<string | null> {
+    try {
+      const materialsDir = path.join(rootDir, 'materials');
+      const names = (await fs.readdir(materialsDir))
+        .filter((name) => name.startsWith('self_') && name.endsWith('.txt'))
+        .sort();
+      for (let i = names.length - 1; i >= 0; i -= 1) {
+        const text = (await fs.readFile(path.join(materialsDir, names[i]!), 'utf8')).trim();
+        if (text) return text;
+      }
+    } catch {
+      /* no materials */
+    }
+    return null;
   }
 
   private async tryReadManifest(rootDir: string): Promise<SubjectPackage | null> {

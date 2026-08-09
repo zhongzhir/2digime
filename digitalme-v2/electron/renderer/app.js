@@ -4615,19 +4615,10 @@
     }
   }
 
+  // 原始 intent 是语义判断的权威输入；此处只派生软标签，不要求「提供/可以」模板。
   function deriveSignalFields(intent) {
-    const seeking = [];
-    const offering = [];
-    if (/金融|投资|应用|参赛|场景/i.test(intent)) {
-      seeking.push("成熟金融应用场景", "联合参赛");
-    }
-    if (/Agent|Digital Me|技术/i.test(intent)) {
-      if (/提供|可以/.test(intent)) offering.push("Agent / Digital Me 技术能力");
-      else seeking.push("Agent / Digital Me 技术能力");
-    }
-    if (!seeking.length) seeking.push(intent.slice(0, 120));
-    if (!offering.length) offering.push("相关能力与经验");
-    return { seeking, offering };
+    const text = String(intent || "").replace(/\s+/g, " ").trim().slice(0, 240);
+    return { seeking: text ? [text] : [], offering: [] };
   }
 
   async function syncRemoteTransportQuietly() {
