@@ -164,7 +164,7 @@ export class RelayTransport implements SubjectTransport {
   }
 
   /** 重试 outbox 中未成功提交的消息。 */
-  async retryOutbox(): Promise<{ submitted: number; failed: number }> {
+  async retryOutbox(): Promise<{ submitted: number; failed: number; remaining: number }> {
     // 每次 retry 周期丢弃旧 client 绑定（http 本身已无连接池；避免 URL/配置半旧）
     this.client = null;
     this.boundRelayUrl = null;
@@ -192,7 +192,8 @@ export class RelayTransport implements SubjectTransport {
         failed += 1;
       }
     }
-    return { submitted, failed };
+    const remaining = (await outbox.listPending()).length;
+    return { submitted, failed, remaining };
   }
 
   /**

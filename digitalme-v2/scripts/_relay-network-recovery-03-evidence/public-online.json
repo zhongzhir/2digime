@@ -1,0 +1,7 @@
+{
+  "timestamp": "2026-08-09T09:05:59.989Z",
+  "implementation": "relay_http_adapter",
+  "ok": true,
+  "status": 200,
+  "bodyHead": "{\"ok\":true,\"role\":\"relay\",\"plaintext\":false}"
+}

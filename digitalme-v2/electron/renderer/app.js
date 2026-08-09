@@ -4621,9 +4621,29 @@
     return { seeking: text ? [text] : [], offering: [] };
   }
 
+  function refreshPendingSignalStatus(retryResult) {
+    if (!els.collabSignalStatus) return;
+    const text = String(els.collabSignalStatus.textContent || "");
+    if (!/暂时无法送达/.test(text)) return;
+    const remaining =
+      retryResult && typeof retryResult.remaining === "number"
+        ? retryResult.remaining
+        : null;
+    const submitted =
+      retryResult && typeof retryResult.submitted === "number"
+        ? retryResult.submitted
+        : 0;
+    // remaining===0：待投递已清空。submitted>0：本轮确有成功提交（兼容仍有其它历史失败项）
+    if (remaining === 0 || submitted > 0) {
+      showStatus(els.collabSignalStatus, "已发出。对方上线后会看到相关提示。");
+    }
+  }
+
   async function syncRemoteTransportQuietly() {
+    let retryResult = null;
     try {
-      await api.invoke("subject.communicate", { action: "retryOutbox" });
+      retryResult = await api.invoke("subject.communicate", { action: "retryOutbox" });
+      refreshPendingSignalStatus(retryResult);
     } catch {
       /* ignore */
     }

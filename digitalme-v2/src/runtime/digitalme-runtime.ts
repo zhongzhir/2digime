@@ -921,9 +921,14 @@ export class DigitalMeRuntime {
       };
     }
     if (action === 'retryOutbox') {
-      if (!relay) return { submitted: 0, failed: 0 };
+      if (!relay) return { submitted: 0, failed: 0, remaining: 0 };
       const r = await relay.retryOutbox();
-      return { submitted: r.submitted, failed: r.failed, ok: true };
+      return {
+        submitted: r.submitted,
+        failed: r.failed,
+        remaining: r.remaining,
+        ok: true,
+      };
     }
     if (action === 'pullRemote') {
       if (!relay) return { fetched: 0, rejected: 0 };

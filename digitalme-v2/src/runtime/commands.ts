@@ -760,6 +760,8 @@ export interface CommandMap {
       peerDisplayName?: string;
       submitted?: number;
       failed?: number;
+      /** outbox 中仍待投递（pending|failed）的条数；0 表示已全部提交到 Relay */
+      remaining?: number;
       fetched?: number;
       rejected?: number;
       items?: Array<{

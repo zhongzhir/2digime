@@ -1,0 +1,37 @@
+﻿{
+    "envelopeId":  "envelope_mslk8lyq_3gva1c58",
+    "fixChoice":  "C_user_status_and_remaining_not_http_stack",
+    "outboxBakLastFailure":  {
+                                 "causeCode":  "NONE",
+                                 "lastErrorDetail":  "relay_request|Error|ENOTFOUND|NONE|getaddrinfo ENOTFOUND relay.muhub.cn",
+                                 "phase":  "relay_request",
+                                 "lastErrorCategory":  "relay_dns",
+                                 "code":  "ENOTFOUND",
+                                 "state":  "failed",
+                                 "name":  "Error",
+                                 "updatedAt":  "2026-08-09T08:50:12.521Z",
+                                 "attempts":  15
+                             },
+    "outboxCurrent":  {
+                          "updatedAt":  "2026-08-09T08:50:20.335Z",
+                          "attempts":  15,
+                          "lastErrorCategory":  null,
+                          "lastErrorDetail":  null,
+                          "state":  "submitted"
+                      },
+    "failureLayerVerdict":  "During outage: DNS ENOTFOUND. After restore: node/Relay HTTP recovered and submitted; Relay stored envelope; recipient ACK present. Owner-visible failure dominated by sticky UI and possible silent no_match on B.",
+    "signalMarker":  "20260809-04",
+    "relayRePost":  {
+                        "ok":  true,
+                        "state":  "duplicate",
+                        "duplicate":  true
+                    },
+    "task":  "REMOTE-RELAY-NETWORK-RECOVERY-ROOT-CAUSE-03",
+    "bSilentNoMatch":  "inbound signal ACK happens even on no_match with no opportunity card",
+    "uiStickyBug":  "collabSignalStatus set on send failure never refreshed after retryOutbox success",
+    "candidate":  "8af51305c92ab3d0dbec20fe2c3cf711882fc32a",
+    "relayUnackedInboxForRecipient":  {
+                                          "count":  0,
+                                          "interpretation":  "envelope_acked_by_recipient_or_processed"
+                                      }
+}

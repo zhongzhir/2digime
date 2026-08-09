@@ -171,6 +171,7 @@ test('同一 Transport：真实断连→同端口恢复→retryOutbox 成功且�
   const retry = await transport.retryOutbox();
   assert.equal(retry.submitted, 1);
   assert.equal(retry.failed, 0);
+  assert.equal(retry.remaining, 0);
 
   const done = await (await OutboxStore.open(dirA)).get(offlineId);
   assert.equal(done?.state, 'submitted');
@@ -181,6 +182,7 @@ test('同一 Transport：真实断连→同端口恢复→retryOutbox 成功且�
 
   const again = await transport.retryOutbox();
   assert.equal(again.submitted, 0);
+  assert.equal(again.remaining, 0);
   assert.equal(
     (await relay.store.listForRecipient(profileB.endpointId, { includeAcked: true })).filter(
       (w) => w.envelopeId === offlineId,
@@ -193,7 +195,7 @@ test('同一 Transport：真实断连→同端口恢复→retryOutbox 成功且�
 
 test('defaultRelayHttp 未使用 global fetch（源码与运行时约束）', async () => {
   const src = await fs.readFile(
-    path.resolve(__dirname, '../relay-http.ts'),
+    path.resolve(__dirname, '../../../src/subject-comm/relay-http.ts'),
     'utf8',
   );
   assert.doesNotMatch(src, /\bfetch\s*\(/);
