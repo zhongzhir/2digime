@@ -149,7 +149,15 @@ export class RelayTransport implements SubjectTransport {
     } catch (err) {
       const category =
         (err as Error & { category?: string }).category || 'relay_unavailable';
-      await outbox.markFailed(envelope.envelopeId, category);
+      const diag = (err as Error & { diagnostics?: { phase?: string; name?: string; code?: string; causeCode?: string; message?: string } })
+        .diagnostics;
+      const detail = diag
+        ? `${diag.phase}|${diag.name}|${diag.code}|${diag.causeCode}|${diag.message}`
+        : (err as Error).message;
+      await outbox.markFailed(envelope.envelopeId, category, detail);
+      if (process.env.DIGITALME_DEBUG_RELAY === '1') {
+        console.info('[relay-outbox]', { envelopeId: envelope.envelopeId, category, detail });
+      }
       // 不破坏 SubjectPackage；保留 outbox 待重试
       return { delivered: false };
     }
@@ -157,6 +165,9 @@ export class RelayTransport implements SubjectTransport {
 
   /** 重试 outbox 中未成功提交的消息。 */
   async retryOutbox(): Promise<{ submitted: number; failed: number }> {
+    // 每次 retry 周期丢弃旧 client 绑定（http 本身已无连接池；避免 URL/配置半旧）
+    this.client = null;
+    this.boundRelayUrl = null;
     const { client } = await this.requireClient();
     const outbox = await OutboxStore.open(this.opts.packageRoot);
     let submitted = 0;
@@ -169,7 +180,15 @@ export class RelayTransport implements SubjectTransport {
       } catch (err) {
         const category =
           (err as Error & { category?: string }).category || 'relay_unavailable';
-        await outbox.markFailed(item.envelopeId, category);
+        const diag = (err as Error & { diagnostics?: { phase?: string; name?: string; code?: string; causeCode?: string; message?: string } })
+          .diagnostics;
+        const detail = diag
+          ? `${diag.phase}|${diag.name}|${diag.code}|${diag.causeCode}|${diag.message}`
+          : (err as Error).message;
+        await outbox.markFailed(item.envelopeId, category, detail);
+        if (process.env.DIGITALME_DEBUG_RELAY === '1') {
+          console.info('[relay-retry]', { envelopeId: item.envelopeId, category, detail });
+        }
         failed += 1;
       }
     }

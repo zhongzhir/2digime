@@ -48,7 +48,16 @@ export class RelayClient {
     }
     if (res.status < 200 || res.status >= 300) {
       const err = new Error(`relay_http_failed:${res.status}`);
-      (err as Error & { category?: string }).category = 'relay_unavailable';
+      (err as Error & { category?: string }).category =
+        res.status >= 500 || res.status === 429 ? 'relay_unavailable' : 'relay_http_status';
+      (err as Error & { diagnostics?: unknown }).diagnostics = {
+        category: (err as Error & { category?: string }).category,
+        phase: 'relay_http_status',
+        name: 'HttpStatusError',
+        code: `HTTP_${res.status}`,
+        causeCode: 'NONE',
+        message: (res.text || '').slice(0, 160),
+      };
       throw err;
     }
     try {

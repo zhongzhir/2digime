@@ -15,6 +15,8 @@ export interface OutboxItem {
   state: 'pending' | 'submitted' | 'failed';
   attempts: number;
   lastErrorCategory?: string;
+  /** 开发诊断：不进用户 UI */
+  lastErrorDetail?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -54,15 +56,23 @@ export class OutboxStore {
     item.state = 'submitted';
     item.updatedAt = nowIso();
     delete item.lastErrorCategory;
+    delete item.lastErrorDetail;
     await this.store.put(item);
   }
 
-  async markFailed(envelopeId: string, category: string): Promise<void> {
+  async markFailed(
+    envelopeId: string,
+    category: string,
+    detail?: string,
+  ): Promise<void> {
     const item = await this.store.get(envelopeId);
     if (!item) return;
     item.state = 'failed';
     item.attempts += 1;
     item.lastErrorCategory = category;
+    if (detail && detail.trim()) {
+      item.lastErrorDetail = detail.trim().slice(0, 400);
+    }
     item.updatedAt = nowIso();
     await this.store.put(item);
   }

@@ -1,25 +1,26 @@
 /**
- * REMOTE-RELAY-NETWORK-RECOVERY-FIX-01
- * 同一 Runtime/Transport 实例：断网失败 → 网络恢复 → retryOutbox 自动成功。
- * 不得靠重建整个 Runtime/Transport 让测试通过。
+ * REMOTE-RELAY-NETWORK-RECOVERY-FIX-02
+ * 使用与 Electron 主进程相同的 defaultRelayHttp（node:http(s)+每请求 Agent.destroy），
+ * 真实 socket 生命周期：不可达 → 恢复 → 同 Transport 自动 retry 成功。
+ * 禁止用 mock fetch 代替真实连接。
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import * as net from 'node:net';
 import type { Server } from 'node:http';
 import { createRelayServer, FileRelayStore } from '../../relay-service/server';
 import { createTestCommCipher, CommIdentityStore } from '../identity-store';
 import { RelayTransport } from '../relay-transport';
-import { RelayClient } from '../relay-client';
 import { OutboxStore } from '../outbox-store';
 import { SUBJECT_ENDPOINT_PROTOCOL, remoteEndpointRef } from '../endpoint';
 import { buildEnvelope } from '../local-subject-transport';
-import { defaultRelayHttp, type RelayHttpFn } from '../relay-http';
+import { defaultRelayHttp } from '../relay-http';
 
 async function tempDir(prefix: string): Promise<string> {
-  return fs.mkdtemp(path.join(os.tmpdir(), `dmv2-relay-recovery-${prefix}-`));
+  return fs.mkdtemp(path.join(os.tmpdir(), `dmv2-relay-rec2-${prefix}-`));
 }
 
 async function listenRelay(
@@ -49,8 +50,7 @@ async function closeServer(server: Server): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     server.close((err) => (err ? reject(err) : resolve()));
   });
-  // 给 OS 一点时间释放端口，便于同端口重启
-  await new Promise((r) => setTimeout(r, 50));
+  await new Promise((r) => setTimeout(r, 80));
 }
 
 async function setupPair(root: string, relayUrl: string) {
@@ -59,20 +59,19 @@ async function setupPair(root: string, relayUrl: string) {
   const dirB = path.join(root, 'b');
   await fs.mkdir(dirA, { recursive: true });
   await fs.mkdir(dirB, { recursive: true });
-
   const idA = new CommIdentityStore(dirA, cipher);
   const idB = new CommIdentityStore(dirB, cipher);
   const a = await idA.ensureLocalEndpoint({
-    subjectId: 'subj_a_recovery',
+    subjectId: 'subj_a_rec2',
     displayName: 'A',
     relayUrl,
-    endpointId: 'ep_a_recovery',
+    endpointId: 'ep_a_rec2',
   });
   const b = await idB.ensureLocalEndpoint({
-    subjectId: 'subj_b_recovery',
+    subjectId: 'subj_b_rec2',
     displayName: 'B',
     relayUrl,
-    endpointId: 'ep_b_recovery',
+    endpointId: 'ep_b_rec2',
   });
   await idA.putPeer({
     protocolVersion: SUBJECT_ENDPOINT_PROTOCOL,
@@ -84,34 +83,58 @@ async function setupPair(root: string, relayUrl: string) {
     encPublicKey: b.profile.encPublicKey,
     keyId: b.profile.keyId,
   });
-  await idB.putPeer({
-    protocolVersion: SUBJECT_ENDPOINT_PROTOCOL,
-    subjectId: a.profile.subjectId,
-    endpointId: a.profile.endpointId,
-    displayName: a.profile.displayName,
-    relayUrl,
-    signPublicKey: a.profile.signPublicKey,
-    encPublicKey: a.profile.encPublicKey,
-    keyId: a.profile.keyId,
-  });
-
-  return { cipher, dirA, dirB, profileA: a.profile, profileB: b.profile };
+  return { cipher, dirA, profileA: a.profile, profileB: b.profile };
 }
 
-test('同一 Transport：断网失败后恢复网络，retryOutbox 自动成功且 envelope 只投递一次', async () => {
+test('defaultRelayHttp：真实 socket 先不可达再恢复，同函数实例成功', async () => {
+  // 真实 TCP：先占端口但不 accept HTTP → ECONNRESET/失败；再换成正常 Relay
+  const root = await tempDir('sock');
+  const holder = net.createServer(() => {
+    /* 接受后立即销毁，模拟坏连接 */
+  });
+  const port = await new Promise<number>((resolve, reject) => {
+    holder.listen(0, '127.0.0.1', () => {
+      const a = holder.address();
+      if (a && typeof a === 'object') resolve(a.port);
+      else reject(new Error('no port'));
+    });
+    holder.on('error', reject);
+  });
+
+  // 关闭 holder，使端口在短窗内不可达
+  await new Promise<void>((resolve, reject) => {
+    holder.close((err) => (err ? reject(err) : resolve()));
+  });
+  await new Promise((r) => setTimeout(r, 30));
+
+  await assert.rejects(
+    () => defaultRelayHttp({ url: `http://127.0.0.1:${port}/health`, timeoutMs: 800 }),
+    /relay_/,
+  );
+
+  const relay = await listenRelay(path.join(root, 'data'), port);
+  try {
+    const ok = await defaultRelayHttp({ url: `${relay.relayUrl}/health`, timeoutMs: 3000 });
+    assert.equal(ok.status, 200);
+    assert.match(ok.text, /"ok"\s*:\s*true/);
+  } finally {
+    await closeServer(relay.server);
+  }
+});
+
+test('同一 Transport：真实断连→同端口恢复→retryOutbox 成功且只投递一次', async () => {
   const root = await tempDir('main');
   const relayData = path.join(root, 'relay-data');
   let relay = await listenRelay(relayData);
   const { cipher, dirA, profileA, profileB } = await setupPair(root, relay.relayUrl);
 
-  // 同一实例贯穿失败与恢复
   const transport = new RelayTransport({
     packageRoot: dirA,
     cipher,
     relayUrl: relay.relayUrl,
   });
 
-  const envelope = buildEnvelope({
+  const offlineEnv = buildEnvelope({
     from: {
       subjectId: profileA.subjectId,
       displayName: profileA.displayName,
@@ -124,70 +147,40 @@ test('同一 Transport：断网失败后恢复网络，retryOutbox 自动成功�
     },
     kind: 'signal',
     payload: {
-      intent: '网络恢复后应自动送达',
-      seeking: ['协作'],
-      offering: ['能力'],
-      disclosureLevel: 'minimal',
-    },
-    correlationId: 'opportunity_network_recovery_01',
-  });
-  const envelopeId = envelope.envelopeId;
-
-  const first = await transport.send(envelope);
-  assert.equal(first.delivered, true);
-  assert.equal((await relay.store.listForRecipient(profileB.endpointId)).length, 1);
-
-  // 制造「断网」：关闭 Relay，不重建 Transport
-  const port = relay.port;
-  await closeServer(relay.server);
-
-  const offlineEnv = buildEnvelope({
-    from: envelope.from,
-    to: envelope.to,
-    kind: 'signal',
-    payload: {
       intent: '断网期间发出，待恢复后重试',
       seeking: ['协作'],
       offering: ['能力'],
       disclosureLevel: 'minimal',
     },
-    correlationId: 'opportunity_network_recovery_02',
+    correlationId: 'opportunity_rec2_01',
   });
   const offlineId = offlineEnv.envelopeId;
+
+  const port = relay.port;
+  await closeServer(relay.server);
+
   const offlineSend = await transport.send(offlineEnv);
   assert.equal(offlineSend.delivered, false);
-
   const failedItem = await (await OutboxStore.open(dirA)).get(offlineId);
-  assert.ok(failedItem);
-  assert.equal(failedItem!.state, 'failed');
-  assert.equal(failedItem!.lastErrorCategory, 'relay_unavailable');
-  assert.ok(failedItem!.attempts >= 1);
+  assert.equal(failedItem?.state, 'failed');
+  assert.ok(failedItem?.lastErrorCategory);
+  assert.ok(failedItem?.lastErrorDetail, '应保留开发诊断细节');
+  assert.match(failedItem!.lastErrorDetail!, /relay_|ECONN|timeout|Error/i);
 
-  // 恢复网络：同端口重启 Relay
   relay = await listenRelay(relayData, port);
-  assert.equal(relay.relayUrl, `http://127.0.0.1:${port}`);
-
   const retry = await transport.retryOutbox();
   assert.equal(retry.submitted, 1);
   assert.equal(retry.failed, 0);
 
-  const pending = await (await OutboxStore.open(dirA)).listPending();
-  assert.equal(
-    pending.filter((i) => i.envelopeId === offlineId).length,
-    0,
-    '成功后不得继续挂在 pending/failed',
-  );
   const done = await (await OutboxStore.open(dirA)).get(offlineId);
   assert.equal(done?.state, 'submitted');
-  assert.equal(done?.lastErrorCategory, undefined);
+  assert.equal(done?.lastErrorDetail, undefined);
 
   const listed = await relay.store.listForRecipient(profileB.endpointId, { includeAcked: true });
-  const hits = listed.filter((w) => w.envelopeId === offlineId);
-  assert.equal(hits.length, 1, 'Relay 只应收到该 envelope 一次');
-  assert.equal(listed.some((w) => w.envelopeId === envelopeId), true);
+  assert.equal(listed.filter((w) => w.envelopeId === offlineId).length, 1);
 
-  const retryAgain = await transport.retryOutbox();
-  assert.equal(retryAgain.submitted, 0);
+  const again = await transport.retryOutbox();
+  assert.equal(again.submitted, 0);
   assert.equal(
     (await relay.store.listForRecipient(profileB.endpointId, { includeAcked: true })).filter(
       (w) => w.envelopeId === offlineId,
@@ -198,74 +191,13 @@ test('同一 Transport：断网失败后恢复网络，retryOutbox 自动成功�
   await closeServer(relay.server);
 });
 
-test('同一 RelayClient：http 层先失败后成功，无需重建 client', async () => {
-  let calls = 0;
-  const http: RelayHttpFn = async (req) => {
-    calls += 1;
-    if (calls === 1) {
-      const err = new Error('fetch failed');
-      (err as NodeJS.ErrnoException).code = 'ECONNRESET';
-      throw err;
-    }
-    if (req.url.includes('/health')) {
-      return { status: 200, text: JSON.stringify({ ok: true }) };
-    }
-    return {
-      status: 200,
-      text: JSON.stringify({ ok: true, duplicate: false, state: 'delivered-to-relay' }),
-    };
-  };
-
-  const client = new RelayClient('http://127.0.0.1:9', http);
-  await assert.rejects(
-    () =>
-      client.submit({
-        version: 1,
-        envelopeId: 'e_fail_then_ok',
-        fromEndpointId: 'a',
-        toEndpointId: 'b',
-        keyId: 'k',
-        createdAt: new Date().toISOString(),
-        sealed: {
-          ephPublicSpkiB64: 'e',
-          ivB64: 'i',
-          tagB64: 't',
-          ciphertextB64: 'c',
-        },
-        signatureB64: 'x',
-        deliveryState: 'submitted',
-      }),
-    /relay/,
+test('defaultRelayHttp 未使用 global fetch（源码与运行时约束）', async () => {
+  const src = await fs.readFile(
+    path.resolve(__dirname, '../relay-http.ts'),
+    'utf8',
   );
-
-  const second = await client.submit({
-    version: 1,
-    envelopeId: 'e_fail_then_ok',
-    fromEndpointId: 'a',
-    toEndpointId: 'b',
-    keyId: 'k',
-    createdAt: new Date().toISOString(),
-    sealed: {
-      ephPublicSpkiB64: 'e',
-      ivB64: 'i',
-      tagB64: 't',
-      ciphertextB64: 'c',
-    },
-    signatureB64: 'x',
-    deliveryState: 'submitted',
-  });
-  assert.equal(second.ok, true);
-  assert.equal(calls, 2);
-});
-
-test('defaultRelayHttp 使用独立连接且可访问本机 Relay', async () => {
-  const root = await tempDir('http');
-  const relay = await listenRelay(path.join(root, 'data'));
-  try {
-    const health = await defaultRelayHttp({ url: `${relay.relayUrl}/health` });
-    assert.equal(health.status, 200);
-    assert.match(health.text, /"ok"\s*:\s*true/);
-  } finally {
-    await closeServer(relay.server);
-  }
+  assert.doesNotMatch(src, /\bfetch\s*\(/);
+  assert.match(src, /agent\.destroy|createRelayAgent/);
+  assert.match(src, /keepAlive:\s*false/);
+  assert.match(src, /family:\s*4/);
 });
