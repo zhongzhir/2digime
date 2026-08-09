@@ -86,6 +86,14 @@ test('B: 语义相近但措辞完全不同 → potential_match', async () => {
     '我做投资科技产品，手里有可落地的财富管理场景；想找能一起打比赛的 Agent 协作伙伴。',
   );
   try {
+    // 措辞差异大：走真实 distill 入口（非 forceHeuristic / 非 match 层 chatComplete）
+    runtime.subject.setDistillModelRuntime({
+      enabled: true,
+      model: { baseUrl: 'http://127.0.0.1', model: 'test-model', providerId: 'openai-compatible' },
+      chatComplete: async () => ({
+        text: JSON.stringify({ verdict: 'potential_match', matchKind: 'shared_goal' }),
+      }),
+    });
     const signal: SignalPayload = {
       intent:
         '我们在打磨数字分身与智能体协作能力，想找有真实投研/理财产品场景的团队共同冲赛事。',
@@ -93,7 +101,7 @@ test('B: 语义相近但措辞完全不同 → potential_match', async () => {
       offering: ['相关能力与经验'],
       disclosureLevel: 'minimal',
     };
-    const match = await matchSignalLocally(runtime, signal, { forceHeuristic: true });
+    const match = await matchSignalLocally(runtime, signal);
     assert.equal(match.verdict, 'potential_match');
     assert.doesNotMatch(signal.intent, /提供|可以/);
   } finally {

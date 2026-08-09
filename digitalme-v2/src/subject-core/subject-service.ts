@@ -94,23 +94,52 @@ export class SubjectService {
    * 复用做事/成长链已经配置的本地模型做小型语义判断。
    * 不暴露凭据，不落盘；模型不可用或失败时由调用方保守降级。
    */
+  private lastSemanticJsonError: string | null = null;
+
+  getLastSemanticJsonError(): string | null {
+    return this.lastSemanticJsonError;
+  }
+
   async completeSemanticJson(system: string, prompt: string): Promise<string | null> {
-    if (!this.distillRuntime?.enabled) return null;
+    this.lastSemanticJsonError = null;
+    if (!this.distillRuntime?.enabled) {
+      this.lastSemanticJsonError = 'distill_runtime_disabled';
+      return null;
+    }
+    const base = {
+      baseUrl: this.distillRuntime.model.baseUrl,
+      model: this.distillRuntime.model.model,
+      messages: [
+        { role: 'system' as const, content: system },
+        { role: 'user' as const, content: prompt },
+      ],
+      temperature: 0,
+      maxTokens: 500,
+      timeoutMs: 30_000,
+    };
     try {
       const result = await this.distillRuntime.chatComplete({
-        baseUrl: this.distillRuntime.model.baseUrl,
-        model: this.distillRuntime.model.model,
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: prompt },
-        ],
-        temperature: 0,
-        maxTokens: 500,
-        timeoutMs: 30_000,
+        ...base,
         responseFormat: { type: 'json_object' },
       });
-      return result.text;
-    } catch {
+      if (result.text?.trim()) return result.text;
+      this.lastSemanticJsonError = 'empty_model_content';
+    } catch (error) {
+      this.lastSemanticJsonError =
+        error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240);
+    }
+    // 部分兼容端点不接受 response_format；失败后降级再试一次
+    try {
+      const result = await this.distillRuntime.chatComplete(base);
+      if (result.text?.trim()) {
+        this.lastSemanticJsonError = null;
+        return result.text;
+      }
+      this.lastSemanticJsonError = this.lastSemanticJsonError || 'empty_model_content_retry';
+      return null;
+    } catch (error) {
+      this.lastSemanticJsonError =
+        error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240);
       return null;
     }
   }
