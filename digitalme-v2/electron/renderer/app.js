@@ -4563,32 +4563,50 @@
       if (els.remoteRelayUrl && listed.relayUrl && !(els.remoteRelayUrl.value || "").trim()) {
         els.remoteRelayUrl.value = listed.relayUrl;
       }
-      if (els.remotePeerList) {
-        els.remotePeerList.innerHTML = "";
-        for (const p of listed.peers || []) {
-          const li = document.createElement("li");
-          li.textContent = `${p.displayName} · ${p.statusLabel || ""}`;
-          els.remotePeerList.appendChild(li);
-        }
-      }
-      if (els.collabSignalPeer) {
-        const prev = els.collabSignalPeer.value;
-        els.collabSignalPeer.innerHTML = "";
-        const peers = listed.peers || [];
-        if (!peers.length) {
-          const opt = document.createElement("option");
-          opt.value = "";
-          opt.textContent = "请先在设置中连接另一个 Digital Me";
-          els.collabSignalPeer.appendChild(opt);
-        } else {
+      const peers = listed.peers || [];
+      const peerSig = JSON.stringify(
+        peers.map((p) => ({
+          endpointRef: p.endpointRef || "",
+          displayName: p.displayName || "",
+          statusLabel: p.statusLabel || "",
+        })),
+      );
+      if (peerSig !== lastRemotePeersSignature) {
+        lastRemotePeersSignature = peerSig;
+        if (els.remotePeerList) {
+          els.remotePeerList.innerHTML = "";
           for (const p of peers) {
-            const opt = document.createElement("option");
-            opt.value = p.endpointRef || "";
-            opt.textContent = `${p.displayName}${p.statusLabel ? ` · ${p.statusLabel}` : ""}`;
-            els.collabSignalPeer.appendChild(opt);
+            const li = document.createElement("li");
+            li.textContent = `${p.displayName} · ${p.statusLabel || ""}`;
+            els.remotePeerList.appendChild(li);
           }
-          if (prev && [...els.collabSignalPeer.options].some((o) => o.value === prev)) {
-            els.collabSignalPeer.value = prev;
+        }
+        if (els.collabSignalPeer) {
+          const prev = els.collabSignalPeer.value;
+          const hadFocus = document.activeElement === els.collabSignalPeer;
+          els.collabSignalPeer.innerHTML = "";
+          if (!peers.length) {
+            const opt = document.createElement("option");
+            opt.value = "";
+            opt.textContent = "请先在设置中连接另一个 Digital Me";
+            els.collabSignalPeer.appendChild(opt);
+          } else {
+            for (const p of peers) {
+              const opt = document.createElement("option");
+              opt.value = p.endpointRef || "";
+              opt.textContent = `${p.displayName}${p.statusLabel ? ` · ${p.statusLabel}` : ""}`;
+              els.collabSignalPeer.appendChild(opt);
+            }
+            if (prev && [...els.collabSignalPeer.options].some((o) => o.value === prev)) {
+              els.collabSignalPeer.value = prev;
+            }
+          }
+          if (hadFocus) {
+            try {
+              els.collabSignalPeer.focus({ preventScroll: true });
+            } catch {
+              els.collabSignalPeer.focus();
+            }
           }
         }
       }
@@ -5941,11 +5959,59 @@
     return "可能值得了解";
   }
 
+  /** 机会卡内容签名：轮询无变化时跳过 DOM 重建，避免协作页周期性抖动。 */
+  let lastOpportunityCardsSignature = "";
+  let lastRemotePeersSignature = "";
+
+  function opportunityCardsSignature(rows) {
+    return JSON.stringify(
+      (rows || []).map((card) => ({
+        id: card.id || "",
+        stage: card.stage || "",
+        peerDisplayName: card.peerDisplayName || "",
+        whyWorthKnowing: card.whyWorthKnowing || "",
+        seekingSummary: card.seekingSummary || "",
+        offeringSummary: card.offeringSummary || "",
+        peerBrief: card.peerBrief || "",
+        privacyNote: card.privacyNote || "",
+        collaborationRecordId: card.collaborationRecordId || "",
+      })),
+    );
+  }
+
+  function collabPanelScrollTop() {
+    const panel = els.panelCollab;
+    if (!panel) return 0;
+    let node = panel;
+    while (node && node !== document.body) {
+      const style = window.getComputedStyle(node);
+      if ((style.overflowY === "auto" || style.overflowY === "scroll") && node.scrollHeight > node.clientHeight) {
+        return node.scrollTop;
+      }
+      node = node.parentElement;
+    }
+    return panel.scrollTop || 0;
+  }
+
+  function restoreCollabPanelScroll(scrollTop) {
+    const panel = els.panelCollab;
+    if (!panel || scrollTop == null) return;
+    let node = panel;
+    while (node && node !== document.body) {
+      const style = window.getComputedStyle(node);
+      if ((style.overflowY === "auto" || style.overflowY === "scroll") && node.scrollHeight > node.clientHeight) {
+        node.scrollTop = scrollTop;
+        return;
+      }
+      node = node.parentElement;
+    }
+    if (panel.scrollHeight > panel.clientHeight) panel.scrollTop = scrollTop;
+  }
+
   async function refreshOpportunityCards() {
     const ul = els.collabListOpportunities;
     const emptyEl = els.collabEmptyOpportunities;
     if (!ul) return;
-    ul.innerHTML = "";
     let rows = [];
     try {
       await api.invoke("subject.communicate", { action: "processInbox" });
@@ -5954,6 +6020,21 @@
     } catch {
       rows = [];
     }
+    const signature = opportunityCardsSignature(rows);
+    if (signature === lastOpportunityCardsSignature) {
+      if (emptyEl) emptyEl.hidden = rows.length > 0;
+      return;
+    }
+    lastOpportunityCardsSignature = signature;
+    const preservedScroll = collabPanelScrollTop();
+    const active = document.activeElement;
+    const preserveFocus =
+      active &&
+      (active.id === "collab-signal-intent" ||
+        active.id === "collab-signal-peer" ||
+        active === els.collabSignalIntent ||
+        active === els.collabSignalPeer);
+    ul.innerHTML = "";
     if (emptyEl) emptyEl.hidden = rows.length > 0;
     for (const card of rows) {
       if (card.stage === "collaboration_started" && card.collaborationRecordId) {
@@ -6092,6 +6173,14 @@
       }
       if (actions.childNodes.length) li.appendChild(actions);
       ul.appendChild(li);
+    }
+    restoreCollabPanelScroll(preservedScroll);
+    if (preserveFocus && active && typeof active.focus === "function") {
+      try {
+        active.focus({ preventScroll: true });
+      } catch {
+        active.focus();
+      }
     }
   }
 
