@@ -49,6 +49,7 @@ function plaintextFromEnvelope(env: SubjectEnvelope): string {
 export class RelayTransport implements SubjectTransport {
   private readonly identity: CommIdentityStore;
   private client: RelayClient | null = null;
+  private boundRelayUrl: string | null = null;
 
   constructor(private readonly opts: RelayTransportOptions) {
     this.identity = new CommIdentityStore(opts.packageRoot, opts.cipher);
@@ -64,8 +65,9 @@ export class RelayTransport implements SubjectTransport {
     const keys = await this.identity.loadKeyMaterial();
     if (!keys) throw new Error('通信密钥不可用');
     const url = (this.opts.relayUrl || profile.relayUrl).replace(/\/+$/, '');
-    if (!this.client || profile.relayUrl !== url) {
+    if (!this.client || this.boundRelayUrl !== url) {
       this.client = new RelayClient(url);
+      this.boundRelayUrl = url;
     }
     return { client: this.client, profile, keys };
   }
@@ -164,8 +166,10 @@ export class RelayTransport implements SubjectTransport {
         await client.submit(item.wire);
         await outbox.markSubmitted(item.envelopeId);
         submitted += 1;
-      } catch {
-        await outbox.markFailed(item.envelopeId, 'relay_unavailable');
+      } catch (err) {
+        const category =
+          (err as Error & { category?: string }).category || 'relay_unavailable';
+        await outbox.markFailed(item.envelopeId, category);
         failed += 1;
       }
     }

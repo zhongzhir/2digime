@@ -53,6 +53,7 @@ export class OutboxStore {
     if (!item) return;
     item.state = 'submitted';
     item.updatedAt = nowIso();
+    delete item.lastErrorCategory;
     await this.store.put(item);
   }
 
