@@ -5839,17 +5839,17 @@
     if (item.status === "awaiting_clarification") return "等待补充说明";
     if (item.status === "counter_proposed") return "对方提出调整";
     if (item.status === "proposed") {
-      return role === "responder" ? "需要你回应" : "等待对方回应";
+      return role === "responder" ? "待你确认协作" : "等待对方确认";
     }
     if (item.status === "delivered") {
       return role === "initiator" ? "需要你确认" : "等待对方确认";
     }
     if (item.status === "authorized" || item.status === "agreed" || item.status === "requested") {
-      return role === "responder" ? "可以开始完成" : "等待对方完成";
+      return "协作已建立";
     }
     if (item.ownerDecision === "accept" || item.status === "completed") return "已完成";
-    if (item.ownerDecision === "reject" || item.status === "rejected") return "未完成";
-    return role === "responder" ? "需要你回应" : "等待开始";
+    if (item.ownerDecision === "reject" || item.status === "rejected") return "暂未建立协作";
+    return role === "responder" ? "待你确认协作" : "等待开始";
   }
 
   function collabBucket(item) {
@@ -6342,25 +6342,11 @@
         !done &&
         role === "responder" &&
         (item.status === "proposed" || item.status === "awaiting_clarification");
-      const canFulfill =
-        !revoked &&
-        !done &&
-        !hasReturn &&
-        !isFailed &&
-        role === "responder" &&
-        (item.status === "authorized" || item.status === "agreed");
-      const canRetry = !revoked && !done && isFailed && role === "responder";
-      const canDecide =
-        !revoked && !done && hasReturn && role === "initiator" && item.status === "delivered";
-      const canRevoke =
-        !revoked &&
-        !done &&
-        role === "initiator" &&
-        (item.status === "authorized" ||
-          item.status === "agreed" ||
-          item.status === "running" ||
-          item.status === "delivered" ||
-          item.status === "failed");
+      // 本轮只收口「建立协作」；已建立后不展开履行/成果循环入口。
+      const canFulfill = false;
+      const canRetry = false;
+      const canDecide = false;
+      const canRevoke = false;
 
       if (els.btnCollabDetailRespondAccept) {
         els.btnCollabDetailRespondAccept.hidden = !awaitingRespond;
@@ -7419,7 +7405,7 @@
           recordId: activeGrantId,
           decision: "accept",
         });
-        if (els.collabDetailStatus) els.collabDetailStatus.textContent = "现在：可以开始完成";
+        if (els.collabDetailStatus) els.collabDetailStatus.textContent = "现在：协作已建立";
         await openCollabDetail(activeGrantId);
         await refreshCollabHome();
       } catch (err) {
@@ -7438,7 +7424,7 @@
           decision: "reject",
           note: "本次不适合承接",
         });
-        if (els.collabDetailStatus) els.collabDetailStatus.textContent = "现在：未完成";
+        if (els.collabDetailStatus) els.collabDetailStatus.textContent = "现在：暂未建立协作";
         await openCollabDetail(activeGrantId);
         await refreshCollabHome();
       } catch (err) {

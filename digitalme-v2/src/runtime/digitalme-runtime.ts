@@ -682,7 +682,11 @@ export class DigitalMeRuntime {
     if (action === 'execute') action = 'fulfill';
     if (action === 'acceptReturn') action = 'decideResult';
 
-    const host = new LocalCollaborationHost(this);
+    const { getCollaborationTransport, resolveCommCipher } = await import(
+      '../subject-comm/transport-factory'
+    );
+    const collabTransport = await getCollaborationTransport(this, resolveCommCipher());
+    const host = new LocalCollaborationHost(this, collabTransport);
     const id = input.recordId || input.grantId;
 
     if (action === 'propose') {
@@ -769,6 +773,8 @@ export class DigitalMeRuntime {
         recordId: got.recordId,
         ...(got.grantId ? { grantId: got.grantId } : {}),
         status: got.status,
+        ...(got.role ? { role: got.role } : {}),
+        ...(got.peerDisplayName ? { peerDisplayName: got.peerDisplayName } : {}),
         ...(got.ownerDecision ? { ownerDecision: got.ownerDecision } : {}),
         ...(got.grant ? { grant: got.grant } : {}),
         ...(got.artifactId ? { artifactId: got.artifactId } : {}),

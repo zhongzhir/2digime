@@ -814,20 +814,20 @@
             <p id="collab-detail-peer" class="meta"></p>
             <p id="collab-detail-goal" class="collab-detail-goal"></p>
             <p id="collab-detail-status" class="meta" aria-live="polite"></p>
-            <h2 class="section-title">已共享材料</h2>
-            <ul id="collab-detail-materials" class="collab-material-checks"></ul>
-            <h2 class="section-title">返回成果</h2>
+            <h2 class="section-title" hidden>已共享材料</h2>
+            <ul id="collab-detail-materials" class="collab-material-checks" hidden></ul>
+            <h2 class="section-title" hidden>返回成果</h2>
             <pre id="collab-detail-return" class="collab-return" hidden></pre>
-            <p id="collab-detail-return-empty" class="muted tiny">尚未返回成果。</p>
+            <p id="collab-detail-return-empty" class="muted tiny" hidden></p>
             <div class="row" id="collab-detail-actions">
               <button type="button" id="btn-collab-detail-respond-accept" class="primary" hidden>接受协作</button>
-              <button type="button" id="btn-collab-detail-respond-reject" hidden>婉拒</button>
-              <button type="button" id="btn-collab-detail-execute">开始完成</button>
+              <button type="button" id="btn-collab-detail-respond-reject" hidden>暂不接受</button>
+              <button type="button" id="btn-collab-detail-execute" hidden>开始完成</button>
               <button type="button" id="btn-collab-detail-retry" class="primary" hidden>重试完成</button>
-              <button type="button" id="btn-collab-detail-accept" class="primary">采用</button>
+              <button type="button" id="btn-collab-detail-accept" class="primary" hidden>采用</button>
               <button type="button" id="btn-collab-detail-revise" hidden>要求修改</button>
-              <button type="button" id="btn-collab-detail-reject">不采用</button>
-              <button type="button" id="btn-collab-detail-revoke" class="ghost">结束授权</button>
+              <button type="button" id="btn-collab-detail-reject" hidden>不采用</button>
+              <button type="button" id="btn-collab-detail-revoke" class="ghost" hidden>结束授权</button>
             </div>
             <p id="collab-detail-error" class="muted tiny error" hidden></p>
           </div>
