@@ -11,6 +11,7 @@ const ux = require('../../../electron/renderer/work-ux-stage.js') as {
   deriveWorkUxView: (facts: Record<string, unknown>) => {
     stage: string;
     actions: Array<{ id: string; label: string; slot: string; column: string }>;
+    statusLine: string;
   };
   assertActionBudget: (view: {
     stage: string;
@@ -61,7 +62,7 @@ describe('work-ux-simplification-01', () => {
     assert.ok(!r.actions.some((a) => a.id === 'accept'));
   });
 
-  it('needs_review / adopted 不显示开始处理；adopted 不重复采用', () => {
+  it('needs_review / adopted 不显示开始处理；采用入口可确认', () => {
     const review = ux.deriveWorkUxView({
       hasArtifact: true,
       decisionStatus: 'undecided',
@@ -70,7 +71,8 @@ describe('work-ux-simplification-01', () => {
     });
     assert.equal(review.stage, 'needs_review');
     assert.ok(!review.actions.some((a) => a.id === 'start_submit'));
-    assert.equal(review.actions.find((a) => a.slot === 'primary')?.id, 'accept');
+    assert.ok(review.actions.some((a) => a.id === 'accept'));
+    assert.match(review.statusLine, /对话区|采用/);
 
     const adopted = ux.deriveWorkUxView({
       decisionStatus: 'accepted',
@@ -104,10 +106,12 @@ describe('work-ux-simplification-01', () => {
     assert.equal(v.actions.find((a) => a.slot === 'primary')?.id, 'coding_connect');
   });
 
-  it('blocked 主动作与阻断匹配；验收失败主=继续修改；通过主=采用', () => {
+  it('blocked 重试为辅助；未达标引导对话；达标可确认采用', () => {
     const blocked = ux.deriveWorkUxView({ jobStatus: 'failed' });
     assert.equal(blocked.stage, 'blocked');
-    assert.equal(blocked.actions.find((a) => a.slot === 'primary')?.id, 'retry_job');
+    assert.match(blocked.statusLine, /对话区/);
+    assert.equal(blocked.actions.find((a) => a.id === 'retry_job')?.slot, 'more');
+    assert.notEqual(blocked.actions.find((a) => a.slot === 'primary')?.id, 'retry_job');
 
     const bad = ux.deriveWorkUxView({
       hasArtifact: true,
@@ -116,11 +120,8 @@ describe('work-ux-simplification-01', () => {
       jobStatus: 'succeeded',
     });
     assert.equal(bad.stage, 'needs_revision');
-    assert.ok(
-      ['continue_revise', 'propose_revision'].includes(
-        bad.actions.find((a) => a.slot === 'primary')?.id || '',
-      ),
-    );
+    assert.match(bad.statusLine, /对话区/);
+    assert.ok(!bad.actions.some((a) => a.slot === 'primary' && /继续修改|确认继续/.test(a.label)));
 
     const ok = ux.deriveWorkUxView({
       hasArtifact: true,
@@ -128,7 +129,7 @@ describe('work-ux-simplification-01', () => {
       canAdoptSuggested: true,
       jobStatus: 'succeeded',
     });
-    assert.equal(ok.actions.find((a) => a.slot === 'primary')?.id, 'accept');
+    assert.ok(ok.actions.some((a) => a.id === 'accept'));
   });
 
   it('普通非软件任务同样适用；用户面无内部词', () => {

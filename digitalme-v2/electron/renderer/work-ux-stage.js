@@ -155,42 +155,37 @@
     } else if (stage === 'needs_revision') {
       hideDecisionHint = true;
       if (f.taskPaused) {
-        statusLine = '任务已暂停';
-        push('confirm_continue', '确认继续', 'primary', 'right');
-        push('supplement_opinion', '补充意见', 'secondary', 'right');
+        statusLine = '任务已暂停 · 可在对话区继续说明';
       } else if (f.revisionComposerOpen) {
         statusLine = '说明还需要修改什么，或补充你的意见';
         push('submit_revision', '提交修改', 'primary', 'right');
         push('cancel_revision', '取消', 'secondary', 'right');
         push('add_revision_shot', '添加截图', 'more', 'right');
       } else if (f.decisionStatus === 'rejected') {
-        statusLine = '这份成果未采用';
-        push('confirm_continue', '确认继续', 'primary', 'right');
-        push('supplement_opinion', '补充意见', 'secondary', 'right');
+        statusLine = '这份成果未采用 · 可在对话区继续说明';
         push('restart_compose', '创建新任务', 'secondary', 'middle');
       } else if (f.adoptWarningOpen || f.canAdoptSuggested === false) {
         statusLine =
-          f.primaryAction === 'need_decision' ? '需要你做一项决定' : '建议继续修正';
-        push('confirm_continue', '确认继续', 'primary', 'right');
-        push('supplement_opinion', '补充意见', 'secondary', 'right');
+          f.primaryAction === 'need_decision'
+            ? '需要你做一项决定 · 请在对话区说明'
+            : '建议继续修正 · 请在对话区直接说明';
         if (f.primaryAction === 'need_decision') {
           push('adopt_anyway', '仍然采用', 'secondary', 'right');
         }
+        push('confirm_continue', '按建议继续', 'more', 'right');
         push('pause_task', '暂停任务', 'more', 'right');
       } else {
-        statusLine = '建议继续修正';
-        push('confirm_continue', '确认继续', 'primary', 'right');
-        push('supplement_opinion', '补充意见', 'secondary', 'right');
+        statusLine = '建议继续修正 · 请在对话区直接说明';
+        push('confirm_continue', '按建议继续', 'more', 'right');
         push('pause_task', '暂停任务', 'more', 'right');
       }
       if (f.hasWorkingDirectory) push('restore_baseline', '恢复执行前状态', 'more', 'right');
       if (f.hasWorkingDirectory) push('open_project', '打开项目', 'more', 'middle');
       if (f.decisionStatus !== 'rejected') push('restart_compose', '创建新任务', 'more', 'middle');
     } else if (stage === 'needs_review') {
-      statusLine = 'Digital Me 建议采用当前成果';
+      statusLine = 'Digital Me 建议采用 · 可在对话区确认或继续说明';
       hideDecisionHint = true;
-      push('accept', '确认采用', 'primary', 'right');
-      push('supplement_opinion', '补充意见', 'secondary', 'right');
+      push('accept', '确认采用', 'secondary', 'right');
       push('pause_task', '暂停任务', 'more', 'right');
       if (f.hasWorkingDirectory) push('restore_baseline', '恢复执行前状态', 'more', 'right');
       if (f.hasWorkingDirectory) push('open_project', '打开项目', 'more', 'middle');
@@ -231,9 +226,9 @@
       push('export_docx', '导出 Word', 'more', 'right');
       push('copy_artifact', '复制', 'more', 'right');
     } else if (stage === 'blocked') {
-      statusLine = jsLabelBlocked(f);
-      push('retry_job', '重试', 'primary', 'middle');
-      push('restart_compose', '返回修改', 'secondary', 'middle');
+      statusLine = jsLabelBlocked(f) + ' · 可在对话区说明下一步';
+      push('retry_job', '重试', 'more', 'middle');
+      push('restart_compose', '创建新任务', 'secondary', 'middle');
       if (f.hasWorkingDirectory) push('open_project', '打开项目', 'more', 'middle');
       if (f.hasWorkingDirectory) push('restore_baseline', '恢复执行前状态', 'more', 'right');
       push('collab_open', '请人帮忙', 'more', 'middle');

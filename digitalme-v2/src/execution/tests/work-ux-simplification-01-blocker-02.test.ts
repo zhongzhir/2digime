@@ -55,18 +55,15 @@ describe('work-ux-simplification-01-blocker-02', () => {
     assert.equal(stillNeed.stage, 'needs_input');
   });
 
-  it('6-10 reject 不自动修订；派生 needs_revision；主动作继续修改', () => {
+  it('6-10 reject 不自动修订；派生 needs_revision；对话区继续', () => {
     const rejected = ux.deriveWorkUxView({
       hasArtifact: true,
       decisionStatus: 'rejected',
       jobStatus: 'succeeded',
     });
     assert.equal(rejected.stage, 'needs_revision');
-    assert.match(rejected.statusLine, /未采用/);
-    const primary = rejected.actions.find((a) => a.slot === 'primary');
-    assert.ok(primary);
-    assert.ok(['continue_revise', 'propose_revision', 'confirm_continue'].includes(primary!.id));
-    assert.match(primary!.label, /确认继续|继续修改/);
+    assert.match(rejected.statusLine, /未采用|对话区/);
+    assert.ok(!rejected.actions.some((a) => a.id === 'continue_revise' && a.slot === 'primary'));
     assert.ok(!rejected.actions.some((a) => a.id === 'reject'));
     assert.ok(!rejected.actions.some((a) => a.id === 'adopt_anyway'));
     assert.equal(ux.assertActionBudget(rejected).ok, true);

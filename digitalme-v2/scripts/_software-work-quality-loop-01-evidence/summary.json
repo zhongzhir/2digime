@@ -274,5 +274,38 @@
       "pass": 30,
       "fail": 0
     }
+  },
+  "conversationalWorkspace10": "2DIGIME-BUILD-01-CONVERSATIONAL-WORKSPACE-10",
+  "conversationalWorkspace10Result": {
+    "pass": true,
+    "baseline": "a7274107a2f655258f5dbdcf868d90a7096e61b4",
+    "centerTimeline": true,
+    "fixedNaturalLanguageInput": true,
+    "rightColumnNoDuplicateCto": true,
+    "emptyArtifactCopy": true,
+    "nlDrivesRevision": true,
+    "retryNotOnlyPath": true,
+    "adoptConfirmExplainsVersion": true,
+    "reuseExistingObjects": true,
+    "noSecondStateMachine": true,
+    "muhubUntouched": true,
+    "unitTests": {
+      "suites": [
+        "CONVERSATIONAL-WORKSPACE-10",
+        "CTO-LOOP-08 digital me cto loop",
+        "software-dev-blocker-04",
+        "software-dev-blocker-05",
+        "work-ux-simplification-01",
+        "work-ux-simplification-01-blocker-01",
+        "work-ux-simplification-01-blocker-02"
+      ],
+      "pass": 52,
+      "fail": 0
+    },
+    "electronVisual": {
+      "script": "scripts/electron-conversational-workspace-10-acceptance.cjs",
+      "shots": 3,
+      "evidence": "scripts/_conversational-workspace-10-evidence"
+    }
   }
 }

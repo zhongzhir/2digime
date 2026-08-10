@@ -261,6 +261,14 @@
     ccAcceptanceReco: document.getElementById("cc-acceptance-reco"),
     ccTechEvidence: document.getElementById("cc-tech-evidence"),
     ccTechBullets: document.getElementById("cc-tech-bullets"),
+    workTimeline: document.getElementById("work-timeline"),
+    workNlInput: document.getElementById("work-nl-input"),
+    workNlSend: document.getElementById("btn-work-nl-send"),
+    workNlComposer: document.getElementById("work-nl-composer"),
+    workComposeSetup: document.getElementById("work-compose-setup"),
+    workConversationScroll: document.getElementById("work-conversation-scroll"),
+    artifactEmptyHint: document.getElementById("artifact-empty-hint"),
+    panelWork: document.getElementById("panel-work"),
     executorSetupMessage: document.getElementById("executor-setup-message"),
     codingCapScanList: document.getElementById("coding-cap-scan-list"),
     codingCapInstallPanel: document.getElementById("coding-cap-install-panel"),
@@ -415,6 +423,10 @@
   let activeAcceptanceSummary = null;
   /** CTO 闭环：用户暂停当前任务（不新增任务状态机，仅 UI 事实） */
   let taskPausedCto = false;
+  /** 本会话追加的对话轮次（派生时间线之外的用户补充） */
+  let workExtraTurns = [];
+  let lastCtoTimelineKey = "";
+  let activeArtifactVersionLabel = "";
   let pendingCreateProject = null;
   /** @type {{ id: string, dataUrl: string, path?: string }[]} */
   let revisionShotItems = [];
@@ -1453,47 +1465,32 @@
       if (acc) {
         els.ccAcceptanceSection.hidden = false;
         els.ccAcceptanceSection.removeAttribute("hidden");
-        if (els.ccAcceptanceTitle) els.ccAcceptanceTitle.textContent = acc.title || "Digital Me 验收结论";
+        if (els.ccAcceptanceTitle) els.ccAcceptanceTitle.textContent = "执行状态";
         if (els.ccAcceptanceExec) {
           els.ccAcceptanceExec.textContent =
-            acc.executionStatusLabel || "Digital Me 已完成独立验收";
+            acc.executionStatusLabel || acc.recommendation || "本轮执行已结束";
         }
+        // CTO 完整叙事只在中栏对话；右栏不重复长报告
         if (els.ccAcceptanceGoal) {
-          els.ccAcceptanceGoal.textContent = acc.headline || acc.goalLabel || "无法验证";
-          els.ccAcceptanceGoal.className =
-            "cc-acceptance-goal" +
-            (acc.canAdoptSuggested ? " is-ok" : acc.canAdoptSuggested === false ? " is-warn" : " is-bad");
+          els.ccAcceptanceGoal.hidden = true;
+          els.ccAcceptanceGoal.setAttribute("hidden", "");
         }
         if (els.ccCtoReport) {
-          const report = String(acc.ctoReport || "").trim();
-          if (report) {
-            els.ccCtoReport.hidden = false;
-            els.ccCtoReport.removeAttribute("hidden");
-            els.ccCtoReport.textContent = report;
-          } else {
-            els.ccCtoReport.textContent = "";
-            els.ccCtoReport.hidden = true;
-            els.ccCtoReport.setAttribute("hidden", "");
-          }
+          els.ccCtoReport.hidden = true;
+          els.ccCtoReport.setAttribute("hidden", "");
+          els.ccCtoReport.textContent = "";
         }
         if (els.ccAcceptanceBullets) {
+          els.ccAcceptanceBullets.hidden = true;
           els.ccAcceptanceBullets.innerHTML = "";
-          for (const b of acc.bullets || []) {
-            if (/命中关键词|keyword matching|goal_alignment|辅助词命中/i.test(String(b))) continue;
-            const li = document.createElement("li");
-            li.textContent = b;
-            els.ccAcceptanceBullets.appendChild(li);
-          }
         }
         if (els.ccAcceptanceNext) {
-          const next = String(acc.userFacingNextStep || "").trim();
-          els.ccAcceptanceNext.textContent = next || "";
-          els.ccAcceptanceNext.hidden = !next;
+          els.ccAcceptanceNext.hidden = true;
+          els.ccAcceptanceNext.textContent = "";
         }
         if (els.ccAcceptanceReco) {
-          els.ccAcceptanceReco.textContent = "建议：" + (acc.recommendation || "暂不建议采用");
-          els.ccAcceptanceReco.className =
-            "cc-acceptance-reco" + (acc.canAdoptSuggested ? " is-ok" : " is-warn");
+          els.ccAcceptanceReco.hidden = true;
+          els.ccAcceptanceReco.textContent = "";
         }
         const tech = acc.technicalBullets || [];
         if (els.ccTechEvidence && els.ccTechBullets) {
@@ -1510,6 +1507,15 @@
             els.ccTechEvidence.hidden = true;
             els.ccTechEvidence.setAttribute("hidden", "");
           }
+        }
+        const ctoKey = String(activeHeadVersionId || "") + "::" + String(acc.ctoReport || "").slice(0, 80);
+        if (acc.ctoReport && ctoKey !== lastCtoTimelineKey) {
+          lastCtoTimelineKey = ctoKey;
+        }
+        renderWorkTimeline();
+        if (els.artifactEmptyHint) {
+          els.artifactEmptyHint.hidden = true;
+          els.artifactEmptyHint.setAttribute("hidden", "");
         }
       } else {
         els.ccAcceptanceSection.hidden = true;
@@ -2403,6 +2409,7 @@
     // 稳定三栏：清空内容但不坍缩成果栏外框
     activeArtifactId = null;
     activeHeadVersionId = null;
+    activeArtifactVersionLabel = "";
     resetArtifactProjection();
     hideRevisionActiveBanner();
     resetCollabUi();
@@ -2412,10 +2419,19 @@
       els.artifactEmpty.hidden = true;
       els.artifactEmpty.setAttribute("hidden", "");
     }
+    if (els.artifactEmptyHint) {
+      els.artifactEmptyHint.hidden = false;
+      els.artifactEmptyHint.removeAttribute("hidden");
+    }
     if (els.decisionBox) {
       els.decisionBox.hidden = true;
       els.decisionBox.setAttribute("hidden", "");
     }
+    if (els.codeChangeView) {
+      els.codeChangeView.hidden = true;
+      els.codeChangeView.setAttribute("hidden", "");
+    }
+    if (els.versionMeta) els.versionMeta.textContent = "";
     hideArtifactLoading();
     els.artifactPanel.hidden = false;
     els.artifactPanel.removeAttribute("hidden");
@@ -2526,19 +2542,26 @@
     const box = els.revisionComposer || els.reviseBox;
     if (!box) return;
     const continueMode = !!(opts && opts.continueMode);
+    // 主路径：中栏自然语言；右侧补充区仅作截图等辅助，默认不抢焦点
+    if (continueMode && !(opts && opts.forceOpen)) {
+      hideRevisionComposer();
+      focusWorkNaturalLanguageInput();
+      refreshWorkUxView({});
+      return;
+    }
     box.hidden = false;
     box.removeAttribute("hidden");
     if (els.revisionComposerTitle) {
       els.revisionComposerTitle.textContent = continueMode
-        ? "继续修改"
-        : "继续修改这项成果";
+        ? "补充意见"
+        : "补充意见（可选）";
     }
     if (els.revisionRequest && !(els.revisionRequest.value || "").trim()) {
       els.revisionRequest.placeholder =
-        "说明还需要修改什么。可粘贴截图，或点击「添加截图」。";
+        "也可直接在中间对话区输入。可粘贴截图，或点击「添加截图」。";
     }
     updateRevisionShotHint();
-    if (els.revisionRequest) els.revisionRequest.focus();
+    focusWorkNaturalLanguageInput();
     refreshWorkUxView({});
   }
 
@@ -2705,11 +2728,26 @@
     els.retry.disabled = true;
   }
 
+  function focusWorkNaturalLanguageInput() {
+    if (!els.workNlInput || els.workNlInput.disabled) return;
+    requestAnimationFrame(() => {
+      try {
+        els.workNlInput.focus();
+      } catch {
+        /* ignore */
+      }
+    });
+  }
+
   function startNewTaskComposer(seed) {
     bumpUiEpoch();
     workMode = "compose";
     activeTaskId = null;
     activeJobId = null;
+    workExtraTurns = [];
+    taskPausedCto = false;
+    lastCtoTimelineKey = "";
+    activeArtifactVersionLabel = "";
     const seedGoal = seed && seed.goal != null ? String(seed.goal) : "";
     const seedMats =
       seed && Array.isArray(seed.materials)
@@ -2732,8 +2770,9 @@
     setWorkCollabVisible(false);
     if (els.restartCompose) els.restartCompose.hidden = true;
     if (els.submit) {
-      els.submit.hidden = false;
-      els.submit.removeAttribute("hidden");
+      // 首轮由中栏自然语言发送驱动；快捷「开始处理」仍可由 UX 阶段派生显示
+      els.submit.hidden = true;
+      els.submit.setAttribute("hidden", "");
       els.submit.disabled = false;
     }
     setWorkStage("center");
@@ -2743,9 +2782,7 @@
     if (!(seed && seed.preservePending)) {
       void api.invoke("capability.list", { codingAction: { type: "clear_pending" } }).catch(() => {});
     }
-    requestAnimationFrame(() => {
-      if (els.goal && workMode === "compose") els.goal.focus();
-    });
+    focusWorkNaturalLanguageInput();
     refreshWorkUxView({ workMode: "compose", hasArtifact: false, decisionStatus: null, jobStatus: null });
   }
 
@@ -3046,6 +3083,202 @@
     }
   }
 
+  function syncWorkComposeVisibility() {
+    if (els.panelWork) {
+      if (workMode === "task" && activeTaskId) els.panelWork.classList.add("work-task-focus");
+      else els.panelWork.classList.remove("work-task-focus");
+    }
+    if (els.workNlComposer) {
+      const adopted = lastDecisionStatus === "accepted";
+      els.workNlComposer.hidden = false;
+      if (els.workNlInput) {
+        els.workNlInput.disabled = !!adopted;
+        els.workNlInput.placeholder = adopted
+          ? "当前成果已采用。如需新工作，请新建任务。"
+          : "直接说明下一步：例如「继续完善……」「这里不符合我的要求……」「先暂停」。";
+      }
+      if (els.workNlSend) els.workNlSend.disabled = !!adopted;
+    }
+  }
+
+  function renderWorkTimeline() {
+    const conv = window.DigitalMeWorkConversation;
+    if (!conv || !els.workTimeline) return;
+    const detail = lastJobDetailForUx;
+    const job = detail && detail.latestJob;
+    const js = job && job.status ? String(job.status) : "";
+    const acc = activeAcceptanceSummary || {};
+    const understandingLines = [];
+    if (acc.ctoReport) {
+      /* CTO 报告单独呈现 */
+    }
+    const pending = pendingExecutionConfirm && pendingExecutionConfirm.preview;
+    if (pending && pending.understandingSummary) {
+      for (const line of pending.understandingSummary) understandingLines.push(String(line));
+    }
+    const turns = conv.buildWorkTimeline({
+      goal: (els.goal && els.goal.value) || (detail && detail.goal) || "",
+      taskCreatedAt: detail && detail.createdAt,
+      understandingLines,
+      jobRunning: js === "queued" || js === "running",
+      jobFailed: js === "failed" || js === "cancelled",
+      failureMessage: (els.jobActionable && els.jobActionable.textContent) || "",
+      revisionActive: !!(job && job.revisionRequest),
+      ctoReport: acc.ctoReport || "",
+      userFacingNextStep: acc.userFacingNextStep || "",
+      canAdoptSuggested: !!acc.canAdoptSuggested,
+      artifactVersionId: activeHeadVersionId || "",
+      hasArtifact: !!activeArtifactId,
+      decisionAccepted: lastDecisionStatus === "accepted",
+      extraTurns: workExtraTurns,
+    });
+    els.workTimeline.innerHTML = "";
+    for (const turn of turns) {
+      const li = document.createElement("li");
+      li.className = "work-turn work-turn-" + turn.role;
+      li.dataset.turnKind = turn.kind || "";
+      const role = document.createElement("div");
+      role.className = "work-turn-role";
+      role.textContent = conv.roleLabel(turn.role);
+      const body = document.createElement("div");
+      body.className = "work-turn-text";
+      body.textContent = turn.text || "";
+      li.appendChild(role);
+      li.appendChild(body);
+      if (turn.actions && turn.actions.length) {
+        const row = document.createElement("div");
+        row.className = "work-turn-actions";
+        for (const action of turn.actions) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = action.id === "confirm_adopt" ? "primary" : "ghost";
+          btn.textContent = action.label;
+          btn.addEventListener("click", () => handleWorkTimelineAction(action.id, turn));
+          row.appendChild(btn);
+        }
+        li.appendChild(row);
+      }
+      els.workTimeline.appendChild(li);
+    }
+    if (els.workConversationScroll && turns.length) {
+      els.workConversationScroll.scrollTop = els.workConversationScroll.scrollHeight;
+    }
+    syncWorkComposeVisibility();
+  }
+
+  async function handleWorkTimelineAction(actionId, turn) {
+    if (actionId === "confirm_adopt") {
+      const versionHint =
+        activeArtifactVersionLabel ||
+        (turn && turn.artifactVersionId) ||
+        activeHeadVersionId ||
+        "当前版本";
+      const ok = window.confirm(
+        "确认采用「" +
+          versionHint +
+          "」？\n\n采用意味着结束当前交付循环，并将该成果沉淀为已采用结果。采用后如需新工作，请新建任务。",
+      );
+      if (!ok) return;
+      await submitArtifactDecision("accept", { forceAdopt: false });
+      return;
+    }
+    if (actionId === "retry_job" && els.retry) {
+      els.retry.click();
+    }
+  }
+
+  async function submitWorkNaturalLanguage() {
+    const conv = window.DigitalMeWorkConversation;
+    if (!conv || !els.workNlInput) return;
+    const text = String(els.workNlInput.value || "").trim();
+    if (!text) return;
+    const detail = lastJobDetailForUx;
+    const job = detail && detail.latestJob;
+    const js = job && job.status ? String(job.status) : "";
+    const route = conv.routeWorkNaturalLanguage({
+      text,
+      workMode,
+      activeTaskId,
+      activeArtifactId,
+      jobRunning: js === "queued" || js === "running",
+      jobFailed: js === "failed" || js === "cancelled",
+      decisionAccepted: lastDecisionStatus === "accepted",
+    });
+    workExtraTurns = workExtraTurns.concat([
+      {
+        id: "user_nl_" + Date.now(),
+        role: "user",
+        kind: "message",
+        text,
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+    els.workNlInput.value = "";
+    renderWorkTimeline();
+
+    if (route.action === "pause") {
+      taskPausedCto = true;
+      workExtraTurns = workExtraTurns.concat([
+        {
+          id: "dm_pause_" + Date.now(),
+          role: "digital_me",
+          kind: "pause",
+          text: "已暂停。你可以随时继续说明下一步。",
+        },
+      ]);
+      renderWorkTimeline();
+      refreshWorkUxView({ taskPaused: true });
+      return;
+    }
+    if (route.action === "note_only") {
+      workExtraTurns = workExtraTurns.concat([
+        {
+          id: "dm_note_" + Date.now(),
+          role: "digital_me",
+          kind: "note",
+          text:
+            route.reason === "running"
+              ? "当前轮次仍在执行。完成后我会继续说明；你也可以稍后再补充意见。"
+              : "当前成果已采用。如需新的工作，请新建任务。",
+        },
+      ]);
+      renderWorkTimeline();
+      return;
+    }
+    if (route.action === "submit_new") {
+      if (els.goal && !(els.goal.value || "").trim()) els.goal.value = text;
+      else if (els.goal && (els.goal.value || "").trim() && (els.goal.value || "").trim() !== text) {
+        // 用户在已有目标上补充：作为新目标覆盖发送首轮
+        els.goal.value = text;
+      }
+      if (els.submit) {
+        els.submit.hidden = false;
+        els.submit.click();
+      }
+      return;
+    }
+    if (route.action === "revise" || route.action === "revise_or_retry") {
+      if (!activeTaskId || !activeArtifactId) {
+        if (els.retry && !els.retry.disabled) {
+          els.retry.click();
+          return;
+        }
+        workExtraTurns = workExtraTurns.concat([
+          {
+            id: "dm_wait_" + Date.now(),
+            role: "digital_me",
+            kind: "note",
+            text: "当前还没有可继续修改的成果。请先完成首轮执行，或使用快捷重试。",
+          },
+        ]);
+        renderWorkTimeline();
+        return;
+      }
+      await runCtoConfirmContinue(text);
+      return;
+    }
+  }
+
   function applyWorkUxChrome(extraFacts) {
     const ux = window.DigitalMeWorkUx;
     if (!ux || typeof ux.deriveWorkUxView !== "function") return null;
@@ -3104,20 +3337,20 @@
             hideRevisionComposer();
             hideAdoptWarning();
             if (els.jobStatus) els.jobStatus.textContent = "任务已暂停";
+            workExtraTurns = workExtraTurns.concat([
+              {
+                id: "dm_pause_btn_" + Date.now(),
+                role: "digital_me",
+                kind: "pause",
+                text: "已暂停。你可以随时在对话区继续说明下一步。",
+              },
+            ]);
             refreshWorkUxView({ taskPaused: true });
             return;
           }
           if (action.id === "supplement_opinion") {
             taskPausedCto = false;
-            showRevisionComposer({ continueMode: true });
-            if (els.revisionComposerTitle) {
-              els.revisionComposerTitle.textContent = "补充意见";
-            }
-            if (els.revisionRequest) {
-              els.revisionRequest.placeholder =
-                "补充你的意见或约束。确认后将连同 Digital Me 的修正指令一并交给执行者。";
-              els.revisionRequest.focus();
-            }
+            focusWorkNaturalLanguageInput();
             return;
           }
           // confirm_continue：直接按 CTO 修正指令进入同任务下一轮
@@ -3249,6 +3482,7 @@
     }
 
     document.body.dataset.workUxStage = view.stage;
+    renderWorkTimeline();
     return view;
   }
 
@@ -3464,6 +3698,10 @@
     workMode = "task";
     activeTaskId = taskId;
     activeJobId = null;
+    workExtraTurns = [];
+    taskPausedCto = false;
+    lastCtoTimelineKey = "";
+    activeArtifactVersionLabel = "";
     // 原子切换：立即清掉上一任务的中右栏与材料，避免串态
     materials = [];
     renderMaterials();
@@ -3660,10 +3898,16 @@
     let blockAcceptForStaleDir = false;
     activeArtifactId = artifactId;
     activeHeadVersionId = content.headVersionId || null;
+    activeArtifactVersionLabel =
+      content.versionCount != null ? `版本 ${content.versionCount}` : "当前版本";
     copyBlockedFailed = false;
     if (els.artifactEmpty) {
       els.artifactEmpty.hidden = true;
       els.artifactEmpty.setAttribute("hidden", "");
+    }
+    if (els.artifactEmptyHint) {
+      els.artifactEmptyHint.hidden = true;
+      els.artifactEmptyHint.setAttribute("hidden", "");
     }
     els.artifactPanel.hidden = false;
     els.artifactPanel.removeAttribute("hidden");
@@ -5434,13 +5678,28 @@
   if (els.adoptContinueRevise) {
     els.adoptContinueRevise.addEventListener("click", () => {
       hideAdoptWarning();
-      showRevisionComposer({ continueMode: true });
+      focusWorkNaturalLanguageInput();
+      refreshWorkUxView({});
     });
   }
   if (els.adoptAnyway) {
     els.adoptAnyway.addEventListener("click", () => {
       hideAdoptWarning();
       void submitArtifactDecision("accept", { forceAdopt: true });
+    });
+  }
+
+  if (els.workNlSend) {
+    els.workNlSend.addEventListener("click", () => {
+      void submitWorkNaturalLanguage();
+    });
+  }
+  if (els.workNlInput) {
+    els.workNlInput.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
+        ev.preventDefault();
+        void submitWorkNaturalLanguage();
+      }
     });
   }
 
@@ -6126,7 +6385,16 @@
   });
 
   if (els.acceptArtifact) {
-    els.acceptArtifact.addEventListener("click", () => submitArtifactDecision("accept"));
+    els.acceptArtifact.addEventListener("click", () => {
+      const versionHint = activeArtifactVersionLabel || activeHeadVersionId || "当前版本";
+      const ok = window.confirm(
+        "确认采用「" +
+          versionHint +
+          "」？\n\n采用意味着结束当前交付循环，并将该成果沉淀为已采用结果。采用后如需新工作，请新建任务。",
+      );
+      if (!ok) return;
+      void submitArtifactDecision("accept");
+    });
   }
   if (els.rejectArtifact) {
     els.rejectArtifact.addEventListener("click", () => submitArtifactDecision("reject"));

@@ -1,0 +1,128 @@
+{
+  "startedAt": "2026-08-10T12:29:14.557Z",
+  "userData": "C:\\Users\\46554\\AppData\\Local\\Temp\\dmv2-ws10-ud-1786364954546-21696",
+  "checks": [
+    {
+      "name": "structure_left_center_right",
+      "ok": true,
+      "detail": {
+        "hasTimeline": true,
+        "hasNl": true,
+        "hasSend": true,
+        "emptyVisible": true,
+        "emptyText": "尚未形成可交付成果",
+        "hasTaskList": true,
+        "convApi": true
+      }
+    },
+    {
+      "name": "empty_artifact_copy",
+      "ok": true,
+      "detail": {
+        "hasTimeline": true,
+        "hasNl": true,
+        "hasSend": true,
+        "emptyVisible": true,
+        "emptyText": "尚未形成可交付成果",
+        "hasTaskList": true,
+        "convApi": true
+      }
+    },
+    {
+      "name": "conversation_module_loaded",
+      "ok": true,
+      "detail": {
+        "hasTimeline": true,
+        "hasNl": true,
+        "hasSend": true,
+        "emptyVisible": true,
+        "emptyText": "尚未形成可交付成果",
+        "hasTaskList": true,
+        "convApi": true
+      }
+    },
+    {
+      "name": "shot_compose-empty-artifact",
+      "ok": true,
+      "detail": {
+        "file": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_conversational-workspace-10-evidence\\shots\\01-compose-empty-artifact.png",
+        "size": 96016
+      }
+    },
+    {
+      "name": "center_has_cto_nl",
+      "ok": true,
+      "detail": {
+        "turnCount": 5,
+        "hasCtoInCenter": true,
+        "ctoHiddenOnRight": true,
+        "nlEnabled": true,
+        "nlHasOpinion": true
+      }
+    },
+    {
+      "name": "right_hides_long_cto",
+      "ok": true,
+      "detail": {
+        "turnCount": 5,
+        "hasCtoInCenter": true,
+        "ctoHiddenOnRight": true,
+        "nlEnabled": true,
+        "nlHasOpinion": true
+      }
+    },
+    {
+      "name": "nl_available_after_result",
+      "ok": true,
+      "detail": {
+        "turnCount": 5,
+        "hasCtoInCenter": true,
+        "ctoHiddenOnRight": true,
+        "nlEnabled": true,
+        "nlHasOpinion": true
+      }
+    },
+    {
+      "name": "shot_revision-conversation",
+      "ok": true,
+      "detail": {
+        "file": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_conversational-workspace-10-evidence\\shots\\02-revision-conversation.png",
+        "size": 94085
+      }
+    },
+    {
+      "name": "adopt_near_center_message",
+      "ok": true,
+      "detail": {
+        "hasAdoptNearMessage": true
+      }
+    },
+    {
+      "name": "shot_adopt-suggested",
+      "ok": true,
+      "detail": {
+        "file": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_conversational-workspace-10-evidence\\shots\\03-adopt-suggested.png",
+        "size": 94121
+      }
+    }
+  ],
+  "shots": [
+    {
+      "name": "compose-empty-artifact",
+      "file": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_conversational-workspace-10-evidence\\shots\\01-compose-empty-artifact.png",
+      "size": 96016
+    },
+    {
+      "name": "revision-conversation",
+      "file": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_conversational-workspace-10-evidence\\shots\\02-revision-conversation.png",
+      "size": 94085
+    },
+    {
+      "name": "adopt-suggested",
+      "file": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_conversational-workspace-10-evidence\\shots\\03-adopt-suggested.png",
+      "size": 94121
+    }
+  ],
+  "verdict": "pass",
+  "completedAt": "2026-08-10T12:29:22.517Z"
+}

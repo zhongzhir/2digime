@@ -127,10 +127,11 @@ export function buildDigitalMeCtoReview(input: CtoReviewInput): DigitalMeCtoRevi
   if (isExecutionFailure(startup)) {
     blockingIssues.push('启动检查失败，尚不能确认可正常使用');
   }
-  if (isExecutionFailure(testsPassed)) {
+  const testsPassedCheck = testsPassed;
+  if (testsPassedCheck && isExecutionFailure(testsPassedCheck)) {
     const testMissing =
       testsConfigured?.verdict === 'unsatisfied' ||
-      /not_configured|未配置|skipped|没有配置/i.test(String(testsPassed.detail || ''));
+      /not_configured|未配置|skipped|没有配置/i.test(String(testsPassedCheck.detail || ''));
     if (!testMissing) {
       blockingIssues.push('自动测试失败');
     }

@@ -61,7 +61,7 @@ describe('work-ux-simplification-01-blocker-01', () => {
     assert.equal(nextConfirm.stage, 'needs_confirmation');
   });
 
-  it('8-9 needs_revision 主=继续修改，可进入 revision', () => {
+  it('8-9 needs_revision 引导对话区；「按建议继续」仅作辅助', () => {
     const v = ux.deriveWorkUxView({
       hasArtifact: true,
       decisionStatus: 'undecided',
@@ -69,11 +69,10 @@ describe('work-ux-simplification-01-blocker-01', () => {
       jobStatus: 'succeeded',
     });
     assert.equal(v.stage, 'needs_revision');
-    const p = v.actions.find((a) => a.slot === 'primary');
-    assert.ok(p);
-    assert.ok(['continue_revise', 'propose_revision'].includes(p!.id));
-    assert.match(p!.label, /继续修改/);
-    assert.ok(!v.actions.some((a) => a.id === 'continue_revise' && a.slot === 'more'));
+    assert.match(v.statusLine, /对话区/);
+    assert.ok(v.actions.some((a) => a.id === 'confirm_continue' && a.slot === 'more'));
+    assert.ok(!v.actions.some((a) => a.id === 'continue_revise' && a.slot === 'primary'));
+    assert.ok(!v.actions.some((a) => a.id === 'propose_revision' && a.slot === 'primary'));
   });
 
   it('10-14 running terminal 后离开 running；review/revision/blocked/adopted', () => {
@@ -126,7 +125,7 @@ describe('work-ux-simplification-01-blocker-01', () => {
       jobStatus: 'succeeded',
     });
     assert.equal(rebuilt.stage, 'needs_review');
-    assert.equal(rebuilt.actions.find((a) => a.slot === 'primary')?.id, 'accept');
+    assert.ok(rebuilt.actions.some((a) => a.id === 'accept'));
   });
 
   it('18-19 普通文档任务不进软件项目/不投影 code-change 动作', () => {

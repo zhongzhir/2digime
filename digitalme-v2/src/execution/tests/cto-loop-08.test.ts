@@ -10,6 +10,7 @@ import { buildExecutionConfirmPreview } from '../task-package';
 const ux = require('../../../electron/renderer/work-ux-stage.js') as {
   deriveWorkUxView: (facts: Record<string, unknown>) => {
     stage: string;
+    statusLine: string;
     actions: Array<{ id: string; label: string; slot: string }>;
   };
 };
@@ -128,7 +129,7 @@ describe('CTO-LOOP-08 digital me cto loop', () => {
     assert.ok((summary.technicalBullets || []).some((b) => /修改文件/.test(b)));
   });
 
-  it('多轮 UX：未达标主按钮为确认继续；达标为确认采用', () => {
+  it('多轮 UX：未达标不以「继续修改」为必经主按钮；达标可确认采用', () => {
     const reviseView = ux.deriveWorkUxView({
       workMode: 'task',
       hasArtifact: true,
@@ -139,8 +140,9 @@ describe('CTO-LOOP-08 digital me cto loop', () => {
       jobStatus: 'succeeded',
     });
     assert.equal(reviseView.stage, 'needs_revision');
-    assert.ok(reviseView.actions.some((a) => a.id === 'confirm_continue' && a.label === '确认继续'));
-    assert.ok(reviseView.actions.some((a) => a.id === 'supplement_opinion'));
+    assert.match(reviseView.statusLine, /对话区/);
+    assert.ok(reviseView.actions.some((a) => a.id === 'confirm_continue' && a.slot === 'more'));
+    assert.ok(!reviseView.actions.some((a) => a.id === 'continue_revise' && a.slot === 'primary'));
 
     const adoptView = ux.deriveWorkUxView({
       workMode: 'task',

@@ -309,7 +309,7 @@
                 <button type="button" id="btn-work-toggle-tasks" class="ghost work-toggle-tasks">任务列表</button>
                 <h2 id="work-compose-title">新建任务</h2>
                 <div class="work-stage-tabs" id="work-stage-tabs" hidden>
-                  <button type="button" class="work-stage-tab active" data-work-stage="center">任务</button>
+                  <button type="button" class="work-stage-tab active" data-work-stage="center">对话</button>
                   <button type="button" class="work-stage-tab" data-work-stage="artifact">成果</button>
                 </div>
               </div>
@@ -318,149 +318,173 @@
                 <button type="button" id="btn-goto-settings" class="primary">前往设置</button>
               </div>
 
-              <section class="work-goal-block" aria-label="任务目标">
-                <details id="goal-details" class="goal-details" open>
-                  <summary id="goal-summary-label">你要完成的工作</summary>
-                  <label class="field goal-field">
-                    <span class="visually-hidden">任务目标</span>
+              <div class="work-conversation" id="work-conversation">
+                <div class="work-conversation-scroll" id="work-conversation-scroll">
+                  <section class="work-compose-setup" id="work-compose-setup" aria-label="新任务起草">
+                    <section class="work-goal-block" aria-label="任务目标">
+                      <details id="goal-details" class="goal-details" open>
+                        <summary id="goal-summary-label">你要完成的工作</summary>
+                        <label class="field goal-field">
+                          <span class="visually-hidden">任务目标</span>
+                          <textarea
+                            id="goal"
+                            class="goal-input"
+                            rows="6"
+                            placeholder="告诉我你要完成什么。也可以直接在下方输入框发送。"
+                          ></textarea>
+                        </label>
+                        <div id="goal-examples" class="goal-examples" aria-label="任务示例">
+                          <button type="button" class="goal-example ghost" data-goal-example="修改这个项目中的登录页，并运行相关测试">修改这个项目中的登录页，并运行相关测试</button>
+                          <button type="button" class="goal-example ghost" data-goal-example="分析这些材料，形成一份投资判断">分析这些材料，形成一份投资判断</button>
+                          <button type="button" class="goal-example ghost" data-goal-example="根据现有资料撰写一篇公众号文章">根据现有资料撰写一篇公众号文章</button>
+                        </div>
+                      </details>
+                    </section>
+
+                    <input type="hidden" id="artifact-type" value="document" />
+
+                    <section class="work-materials-block materials" aria-label="材料">
+                      <div class="materials-head">
+                        <h3 class="materials-title">材料</h3>
+                        <div class="row materials-actions">
+                          <button type="button" id="btn-add-files">添加文件</button>
+                          <button type="button" id="btn-add-folder">添加文件夹</button>
+                          <button type="button" id="btn-clear-materials" class="ghost">清空</button>
+                        </div>
+                      </div>
+                      <details id="material-list-wrap" class="material-list-wrap" open>
+                        <summary id="material-list-summary">尚未添加材料</summary>
+                        <ul id="material-list" class="material-list"></ul>
+                      </details>
+                      <details id="material-summary" class="material-summary" hidden>
+                        <summary id="material-summary-line"></summary>
+                        <div id="material-summary-body" class="material-summary-body"></div>
+                      </details>
+                    </section>
+                  </section>
+
+                  <ol id="work-timeline" class="work-timeline" aria-live="polite" aria-label="当前任务对话"></ol>
+
+                  <section class="work-exec-block" aria-label="执行确认">
+                    <div id="executor-setup-card" class="executor-setup-card coding-onboarding-card" hidden>
+                      <h3 id="executor-setup-title" class="execution-confirm-title">完成这项任务需要代码执行能力</h3>
+                      <p id="executor-setup-description" class="muted">
+                        Digital Me 会使用它在你确认的项目目录中创建或修改代码，并运行测试。
+                      </p>
+                      <p id="executor-setup-message" class="muted">
+                        尚未检测到可用的代码执行能力。
+                      </p>
+                      <div id="coding-cap-scan-list" class="coding-cap-list" hidden></div>
+                      <div id="coding-cap-install-panel" class="coding-install-panel" hidden>
+                        <h4>推荐安装代码执行能力</h4>
+                        <div id="coding-cap-install-body" class="muted tiny"></div>
+                      </div>
+                      <div class="row coding-onboarding-actions" id="coding-onboarding-actions">
+                        <button type="button" id="btn-coding-use-installed" class="primary">连接代码执行能力</button>
+                        <button type="button" id="btn-coding-connect-later" class="ghost">稍后连接</button>
+                        <button type="button" id="btn-coding-use-cloud" class="ghost" hidden>使用云端执行</button>
+                      </div>
+                      <details class="work-more-menu" id="coding-onboarding-more">
+                        <summary>更多</summary>
+                        <div class="row work-more-actions" id="coding-onboarding-secondary">
+                          <button type="button" id="btn-coding-install-recommended" class="ghost">安装推荐能力</button>
+                          <button type="button" id="btn-executor-goto-settings" class="ghost">打开设置</button>
+                          <button type="button" id="btn-executor-recheck" class="ghost">重新检查</button>
+                          <button type="button" id="btn-coding-open-guide" class="ghost" hidden>查看安装说明</button>
+                          <button type="button" id="btn-coding-back-onboarding" class="ghost" hidden>返回</button>
+                        </div>
+                      </details>
+                    </div>
+                    <div id="project-folder-card" class="executor-setup-card" hidden>
+                      <h3 class="execution-confirm-title">选择项目位置</h3>
+                      <p id="project-folder-message" class="muted">这项任务需要一个项目位置</p>
+                      <div id="project-create-confirm" class="project-create-confirm" hidden>
+                        <p id="project-create-path" class="project-create-path"></p>
+                        <div class="row">
+                          <button type="button" id="btn-confirm-create-project" class="primary">确认并开始</button>
+                          <button type="button" id="btn-change-project-location" class="ghost">更改位置</button>
+                          <button type="button" id="btn-cancel-create-project" class="ghost">取消</button>
+                        </div>
+                      </div>
+                      <div id="project-folder-actions" class="row project-folder-actions">
+                        <button type="button" id="btn-create-new-project" class="primary">由 Digital Me 创建新项目</button>
+                        <button type="button" id="btn-pick-existing-project" class="ghost">使用已有项目</button>
+                      </div>
+                    </div>
+                    <div id="execution-confirm-card" class="execution-confirm-card" hidden>
+                      <h3 id="execution-confirm-title" class="execution-confirm-title">这项任务需要修改项目文件</h3>
+                      <p id="execution-confirm-notice" class="muted"></p>
+                      <dl class="execution-confirm-dl">
+                        <div><dt>将使用</dt><dd id="execution-confirm-executor">代码执行能力</dd></div>
+                        <div><dt>项目</dt><dd id="execution-confirm-project"></dd></div>
+                        <div><dt>工作目录</dt><dd id="execution-confirm-dir"></dd></div>
+                        <div><dt>准备完成</dt><dd id="execution-confirm-accept"></dd></div>
+                        <div><dt>允许</dt><dd id="execution-confirm-allowed"></dd></div>
+                        <div><dt>不会执行</dt><dd id="execution-confirm-donot"></dd></div>
+                      </dl>
+                      <section id="execution-confirm-understanding" class="execution-confirm-understanding" hidden>
+                        <h4 class="execution-confirm-understanding-title">目标、方案与预计交付</h4>
+                        <ul id="execution-confirm-understanding-list" class="execution-confirm-understanding-list"></ul>
+                      </section>
+                      <ul id="execution-confirm-forbidden" class="muted tiny" hidden></ul>
+                      <div class="row">
+                        <button type="button" id="btn-confirm-execution" class="primary">确认并开始</button>
+                        <button type="button" id="btn-cancel-execution" class="ghost">返回修改</button>
+                      </div>
+                    </div>
+                    <div class="row work-exec-actions" id="work-exec-actions">
+                      <button type="button" id="btn-submit" class="primary" hidden>开始处理</button>
+                      <button type="button" id="btn-cancel" disabled hidden>取消</button>
+                      <button type="button" id="btn-retry" disabled hidden>重试</button>
+                      <button type="button" id="btn-open-project-folder" class="ghost" hidden>打开项目文件夹</button>
+                      <button type="button" id="btn-restart-compose" class="ghost" hidden>创建新任务</button>
+                      <details class="work-more-menu" id="work-more-menu" hidden>
+                        <summary>更多</summary>
+                        <div class="row work-more-actions" id="work-more-actions"></div>
+                      </details>
+                    </div>
+                    <div class="work-status-rail" id="work-status-rail">
+                      <p id="job-status" class="status" aria-live="polite"></p>
+                      <p id="job-actionable" class="muted"></p>
+                    </div>
+                    <div id="owner-choice-prompt" class="owner-choice" hidden>
+                      <p id="owner-choice-question" class="owner-choice-q"></p>
+                      <div class="row owner-choice-actions" id="owner-choice-actions"></div>
+                    </div>
+                  </section>
+
+                  <div class="collab-box work-assist-lite" id="collab-box" hidden>
+                    <div class="row work-assist-entries" id="work-assist-entries" hidden>
+                      <button type="button" id="btn-collab-open" class="ghost">请人帮忙</button>
+                      <button type="button" id="btn-external-cap-open" class="ghost">用专业能力</button>
+                    </div>
+                    <div id="work-collab-related" class="work-collab-related">
+                      <p id="collab-status" class="meta" aria-live="polite"></p>
+                      <pre id="collab-return" class="collab-return" hidden></pre>
+                      <div class="row" id="collab-actions" hidden>
+                        <button type="button" id="btn-work-open-collab-detail">前往处理</button>
+                        <button type="button" id="btn-collab-revoke" class="ghost">撤销授权</button>
+                      </div>
+                      <p id="collab-error" class="muted tiny error" hidden></p>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="work-nl-composer" id="work-nl-composer">
+                  <label class="field work-nl-field">
+                    <span class="visually-hidden">继续对话</span>
                     <textarea
-                      id="goal"
-                      class="goal-input"
-                      rows="10"
-                      placeholder="告诉我你要完成什么。可以写文章、分析资料、修改软件项目，或处理其他工作。"
+                      id="work-nl-input"
+                      class="work-nl-input"
+                      rows="3"
+                      placeholder="直接说明下一步：例如「继续完善……」「这里不符合我的要求……」「先暂停」。"
                     ></textarea>
                   </label>
-                  <div id="goal-examples" class="goal-examples" aria-label="任务示例">
-                    <button type="button" class="goal-example ghost" data-goal-example="修改这个项目中的登录页，并运行相关测试">修改这个项目中的登录页，并运行相关测试</button>
-                    <button type="button" class="goal-example ghost" data-goal-example="分析这些材料，形成一份投资判断">分析这些材料，形成一份投资判断</button>
-                    <button type="button" class="goal-example ghost" data-goal-example="根据现有资料撰写一篇公众号文章">根据现有资料撰写一篇公众号文章</button>
+                  <div class="row work-nl-actions">
+                    <button type="button" id="btn-work-nl-send" class="primary">发送</button>
+                    <button type="button" id="btn-work-nl-attach" class="ghost" hidden>添加材料</button>
+                    <p id="work-nl-hint" class="muted tiny">采用前可随时继续交流；快捷按钮只是辅助。</p>
                   </div>
-                </details>
-              </section>
-
-              <!-- 首轮默认文档交付；不强迫用户选择内部能力类型 -->
-              <input type="hidden" id="artifact-type" value="document" />
-
-              <section class="work-materials-block materials" aria-label="材料">
-                <div class="materials-head">
-                  <h3 class="materials-title">材料</h3>
-                  <div class="row materials-actions">
-                    <button type="button" id="btn-add-files">添加文件</button>
-                    <button type="button" id="btn-add-folder">添加文件夹</button>
-                    <button type="button" id="btn-clear-materials" class="ghost">清空</button>
-                  </div>
-                </div>
-                <details id="material-list-wrap" class="material-list-wrap" open>
-                  <summary id="material-list-summary">尚未添加材料</summary>
-                  <ul id="material-list" class="material-list"></ul>
-                </details>
-                <details id="material-summary" class="material-summary" hidden>
-                  <summary id="material-summary-line"></summary>
-                  <div id="material-summary-body" class="material-summary-body"></div>
-                </details>
-              </section>
-
-              <section class="work-exec-block" aria-label="执行">
-                                <div id="executor-setup-card" class="executor-setup-card coding-onboarding-card" hidden>
-                  <h3 id="executor-setup-title" class="execution-confirm-title">完成这项任务需要代码执行能力</h3>
-                  <p id="executor-setup-description" class="muted">
-                    Digital Me 会使用它在你确认的项目目录中创建或修改代码，并运行测试。
-                  </p>
-                  <p id="executor-setup-message" class="muted">
-                    尚未检测到可用的代码执行能力。
-                  </p>
-                  <div id="coding-cap-scan-list" class="coding-cap-list" hidden></div>
-                  <div id="coding-cap-install-panel" class="coding-install-panel" hidden>
-                    <h4>推荐安装代码执行能力</h4>
-                    <div id="coding-cap-install-body" class="muted tiny"></div>
-                  </div>
-                  <div class="row coding-onboarding-actions" id="coding-onboarding-actions">
-                    <button type="button" id="btn-coding-use-installed" class="primary">连接代码执行能力</button>
-                    <button type="button" id="btn-coding-connect-later" class="ghost">稍后连接</button>
-                    <button type="button" id="btn-coding-use-cloud" class="ghost" hidden>使用云端执行</button>
-                  </div>
-                  <details class="work-more-menu" id="coding-onboarding-more">
-                    <summary>更多</summary>
-                    <div class="row work-more-actions" id="coding-onboarding-secondary">
-                      <button type="button" id="btn-coding-install-recommended" class="ghost">安装推荐能力</button>
-                      <button type="button" id="btn-executor-goto-settings" class="ghost">打开设置</button>
-                      <button type="button" id="btn-executor-recheck" class="ghost">重新检查</button>
-                      <button type="button" id="btn-coding-open-guide" class="ghost" hidden>查看安装说明</button>
-                      <button type="button" id="btn-coding-back-onboarding" class="ghost" hidden>返回</button>
-                    </div>
-                  </details>
-                </div>
-<div id="project-folder-card" class="executor-setup-card" hidden>
-                  <h3 class="execution-confirm-title">选择项目位置</h3>
-                  <p id="project-folder-message" class="muted">这项任务需要一个项目位置</p>
-                  <div id="project-create-confirm" class="project-create-confirm" hidden>
-                    <p id="project-create-path" class="project-create-path"></p>
-                    <div class="row">
-                      <button type="button" id="btn-confirm-create-project" class="primary">确认并开始</button>
-                      <button type="button" id="btn-change-project-location" class="ghost">更改位置</button>
-                      <button type="button" id="btn-cancel-create-project" class="ghost">取消</button>
-                    </div>
-                  </div>
-                  <div id="project-folder-actions" class="row project-folder-actions">
-                    <button type="button" id="btn-create-new-project" class="primary">由 Digital Me 创建新项目</button>
-                    <button type="button" id="btn-pick-existing-project" class="ghost">使用已有项目</button>
-                  </div>
-                </div>
-                <div id="execution-confirm-card" class="execution-confirm-card" hidden>
-                  <h3 id="execution-confirm-title" class="execution-confirm-title">这项任务需要修改项目文件</h3>
-                  <p id="execution-confirm-notice" class="muted"></p>
-                  <dl class="execution-confirm-dl">
-                    <div><dt>将使用</dt><dd id="execution-confirm-executor">代码执行能力</dd></div>
-                    <div><dt>项目</dt><dd id="execution-confirm-project"></dd></div>
-                    <div><dt>工作目录</dt><dd id="execution-confirm-dir"></dd></div>
-                    <div><dt>准备完成</dt><dd id="execution-confirm-accept"></dd></div>
-                    <div><dt>允许</dt><dd id="execution-confirm-allowed"></dd></div>
-                    <div><dt>不会执行</dt><dd id="execution-confirm-donot"></dd></div>
-                  </dl>
-                  <section id="execution-confirm-understanding" class="execution-confirm-understanding" hidden>
-                    <h4 class="execution-confirm-understanding-title">任务理解与方案</h4>
-                    <ul id="execution-confirm-understanding-list" class="execution-confirm-understanding-list"></ul>
-                  </section>
-                  <ul id="execution-confirm-forbidden" class="muted tiny" hidden></ul>
-                  <div class="row">
-                    <button type="button" id="btn-confirm-execution" class="primary">确认并开始</button>
-                    <button type="button" id="btn-cancel-execution" class="ghost">返回修改</button>
-                  </div>
-                </div>
-                <div class="row work-exec-actions" id="work-exec-actions">
-                  <button type="button" id="btn-submit" class="primary">开始处理</button>
-                  <button type="button" id="btn-cancel" disabled hidden>取消</button>
-                  <button type="button" id="btn-retry" disabled hidden>重试</button>
-                  <button type="button" id="btn-open-project-folder" class="ghost" hidden>打开项目文件夹</button>
-                  <button type="button" id="btn-restart-compose" class="ghost" hidden>创建新任务</button>
-                  <details class="work-more-menu" id="work-more-menu" hidden>
-                    <summary>更多</summary>
-                    <div class="row work-more-actions" id="work-more-actions"></div>
-                  </details>
-                </div>
-                <div class="work-status-rail" id="work-status-rail">
-                  <p id="job-status" class="status" aria-live="polite"></p>
-                  <p id="job-actionable" class="muted"></p>
-                </div>
-                <div id="owner-choice-prompt" class="owner-choice" hidden>
-                  <p id="owner-choice-question" class="owner-choice-q"></p>
-                  <div class="row owner-choice-actions" id="owner-choice-actions"></div>
-                </div>
-              </section>
-
-              <div class="collab-box work-assist-lite" id="collab-box" hidden>
-                <div class="row work-assist-entries" id="work-assist-entries" hidden>
-                  <button type="button" id="btn-collab-open" class="ghost">请人帮忙</button>
-                  <button type="button" id="btn-external-cap-open" class="ghost">用专业能力</button>
-                </div>
-                <div id="work-collab-related" class="work-collab-related">
-                  <p id="collab-status" class="meta" aria-live="polite"></p>
-                  <pre id="collab-return" class="collab-return" hidden></pre>
-                  <div class="row" id="collab-actions" hidden>
-                    <button type="button" id="btn-work-open-collab-detail">前往处理</button>
-                    <button type="button" id="btn-collab-revoke" class="ghost">撤销授权</button>
-                  </div>
-                  <p id="collab-error" class="muted tiny error" hidden></p>
                 </div>
               </div>
             </main>
@@ -492,19 +516,19 @@
                 <div id="adopt-warning-card" class="adopt-warning-card" hidden>
                   <p id="adopt-warning-title" class="adopt-warning-title">Digital Me 检查发现还有问题：</p>
                   <ul id="adopt-warning-list" class="adopt-warning-list"></ul>
-                  <p class="muted tiny">你仍然可以保留当前结果。</p>
+                  <p class="muted tiny">你仍然可以保留当前结果；日常交流请在中间对话区继续说明。</p>
                   <div class="row">
-                    <button type="button" id="btn-adopt-continue-revise" class="primary">继续修改</button>
+                    <button type="button" id="btn-adopt-continue-revise" class="ghost">在对话中继续说明</button>
                     <button type="button" id="btn-adopt-anyway" class="ghost">仍然采用</button>
                   </div>
                 </div>
                 <div class="row decision-actions" id="artifact-decision-actions">
-                  <button type="button" id="btn-propose-revision">提出修改</button>
-                  <button type="button" id="btn-accept-artifact" class="primary">采用</button>
-                  <button type="button" id="btn-reject-artifact">不采用</button>
+                  <button type="button" id="btn-propose-revision" class="ghost" hidden>提出修改</button>
+                  <button type="button" id="btn-accept-artifact" class="primary" hidden>确认采用</button>
+                  <button type="button" id="btn-reject-artifact" class="ghost" hidden>不采用</button>
                 </div>
-                <label class="field decision-note" id="artifact-decision-note-field">
-                  <span>采用或不采用说明（可选）</span>
+                <label class="field decision-note" id="artifact-decision-note-field" hidden>
+                  <span>采用说明（可选）</span>
                   <input
                     type="text"
                     id="artifact-decision-note"
@@ -513,13 +537,13 @@
                   />
                 </label>
                 <div id="revision-composer" class="revision-composer" hidden>
-                  <h3 id="revision-composer-title" class="revision-composer-title">继续修改这项成果</h3>
+                  <h3 id="revision-composer-title" class="revision-composer-title">补充意见</h3>
                   <label class="field">
                     <span class="visually-hidden">修改要求</span>
                     <textarea
                       id="revision-request"
                       rows="3"
-                      placeholder="说明还需要修改什么。可粘贴截图，或点击「添加截图」。"
+                      placeholder="也可直接在中间对话区输入。"
                     ></textarea>
                   </label>
                   <div id="revision-shots" class="revision-shots" aria-label="截图附件"></div>
@@ -529,7 +553,7 @@
                   </div>
                   <p id="revision-shot-hint" class="muted tiny" hidden></p>
                   <div class="row">
-                    <button type="button" id="btn-revise" class="primary">提交修改</button>
+                    <button type="button" id="btn-revise" class="primary">提交</button>
                     <button type="button" id="btn-cancel-revision" class="ghost">取消</button>
                   </div>
                 </div>
@@ -543,21 +567,23 @@
               </div>
               <details id="applied-understanding" class="applied-understanding" hidden></details>
               <div class="artifact-scroll" id="artifact-scroll">
+              <p id="artifact-empty-hint" class="empty-hint artifact-empty-hint">尚未形成可交付成果</p>
               <p id="save-status" class="meta"></p>
               <p id="version-meta" class="meta"></p>
               <div id="code-change-view" class="code-change-view" hidden>
                 <section class="cc-section cc-revision-req" id="cc-revision-section" hidden>
-                  <h3>本次修改要求</h3>
+                  <h3>本轮执行要求</h3>
                   <p id="cc-revision-request" class="cc-revision-request"></p>
                 </section>
-                <section class="cc-section cc-acceptance" id="cc-acceptance-section">
-                  <h3 id="cc-acceptance-title">Digital Me 验收结论</h3>
+                <section class="cc-section cc-acceptance" id="cc-acceptance-section" hidden>
+                  <h3 id="cc-acceptance-title">执行状态</h3>
                   <p id="cc-acceptance-exec" class="cc-acceptance-exec muted tiny"></p>
-                  <p id="cc-acceptance-goal" class="cc-acceptance-goal"></p>
-                  <p id="cc-cto-report" class="cc-cto-report"></p>
-                  <ul id="cc-acceptance-bullets" class="cc-acceptance-bullets"></ul>
-                  <p id="cc-acceptance-next" class="cc-acceptance-next muted"></p>
-                  <p id="cc-acceptance-reco" class="cc-acceptance-reco"></p>
+                  <p id="cc-acceptance-goal" class="cc-acceptance-goal" hidden></p>
+                  <p id="cc-cto-report" class="cc-cto-report" hidden></p>
+                  <ul id="cc-acceptance-bullets" class="cc-acceptance-bullets" hidden></ul>
+                  <p id="cc-acceptance-next" class="cc-acceptance-next muted" hidden></p>
+                  <p id="cc-acceptance-reco" class="cc-acceptance-reco" hidden></p>
+                  <p id="cc-acceptance-redirect" class="muted tiny">完整验收说明见中间对话区。</p>
                   <details id="cc-tech-evidence" class="cc-tech-evidence" hidden>
                     <summary>技术证据</summary>
                     <ul id="cc-tech-bullets" class="cc-acceptance-bullets"></ul>
@@ -877,6 +903,7 @@
     <script src="bundle-copy.js"></script>
     <script src="work-artifact-projection.js"></script>
     <script src="work-ux-stage.js"></script>
+    <script src="work-conversation.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

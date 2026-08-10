@@ -1,27 +1,32 @@
 # 2DIGIME-BUILD-01 SOFTWARE-WORK-QUALITY-LOOP
 
 - phase: 2DIGIME-BUILD-01-SOFTWARE-WORK-QUALITY-LOOP
-- fix: DIGITALME-CTO-LOOP-08
-- readonlyCodexLocateWired: true
-- realCodex: true
+- task: 2DIGIME-BUILD-01-CONVERSATIONAL-WORKSPACE-10
+- baseline: a7274107a2f655258f5dbdcf868d90a7096e61b4
 - conclusion: ready_for_owner_runtime_acceptance
 - ownerAccepted: false
 
-## DIGITALME-CTO-LOOP-08
+## CONVERSATIONAL-WORKSPACE-10
 
-### 原流程为何丢失 AI CTO
-成果面默认呈现规则检查表 + Coding Agent 摘要，把「修改还是接受」推给用户阅读技术证据；Digital Me 未形成独立验收叙事与修正指令。
+### 页面职责
+- 左栏：任务名称、简要状态、新建任务
+- 中栏：唯一主交互 — 时间线（目标 / 理解 / 进展 / Digital Me 验收 / 修正建议 / 多轮自然语言）+ 固定输入区
+- 右栏：成果版本 / 预览 / 文件 / 打开下载；简洁执行状态；技术证据折叠；无成果时「尚未形成可交付成果」
 
-### 新调用链
-用户自然语言 → Digital Me 理解/规划 → 用户确认 → Coding Agent 执行 → Digital Me CTO 独立验收 → 未达标则修正指令 + 用户「确认继续/补充意见」→ 同 Task 新 Job → 达标则「建议采用」→ 用户最终确认。
+### 多轮自然语言调用链
+用户输入 → Digital Me 理解并建议 → 用户自然语言确认 → Coding Agent 执行 → Digital Me 独立验收（中栏说明）→ 用户继续输入 → 同 Task 新 Job / Artifact 版本 → 循环至建议采用 → 用户确认采用（含版本与后果说明）
 
-### 责任边界
-- Digital Me：理解、委派、独立验收、修正指令、建议交付
-- Coding Agent：文件阅读、实现、命令、测试与工程证据
-- 不扩展为自研 Coding Agent；不新增第二套任务状态机
+### 失败 / 未达标 / 达标
+- 失败：中栏解释 + NL 仍可用；「重试」仅为辅助
+- 未达标：NL 直接驱动下一轮；无必经「继续修改」按钮
+- 达标：验收消息附近「确认采用」；点击前说明版本与结束循环后果
+
+### 复用对象
+复用既有 Task / Job / Artifact / revision / acceptance；不新增第二套会话或状态机；不改 AI CTO ↔ Coding Agent 边界；未改 MUHUB。
 
 ### 验证
-`cto-loop-08` + blocker-04/05 + work-ux blocker-02 → **30/30 pass**（隔离 fixture；未改 MUHUB）
+- 单元：`conversational-workspace-10` + `cto-loop-08` + work-ux / blocker-04/05 → **52/52 pass**
+- Electron：`electron-conversational-workspace-10-acceptance.cjs` → 3 张视觉截图（隔离 userData）
 
 ## 说明
 工程验证证据，不是 Owner 运行时验收。ownerAccepted 必须为 false。
