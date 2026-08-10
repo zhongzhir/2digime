@@ -125,7 +125,7 @@ describe('work-ux-simplification-01-blocker-01', () => {
       jobStatus: 'succeeded',
     });
     assert.equal(rebuilt.stage, 'needs_review');
-    assert.ok(rebuilt.actions.some((a) => a.id === 'accept'));
+    assert.ok(!rebuilt.actions.some((a) => a.id === 'accept'));
   });
 
   it('18-19 普通文档任务不进软件项目/不投影 code-change 动作', () => {
@@ -152,8 +152,9 @@ describe('work-ux-simplification-01-blocker-01', () => {
     // running 不再用「正在打开任务」作为处理中文案
     assert.ok(!/showArtifactLoading\(rev \?/.test(appJs));
     assert.match(appJs, /处理完成后将在这里显示成果/);
-    // 决策按钮跨 stage 可恢复
+    // 决策按钮跨 stage 可恢复；确认采用仅中栏，右栏强制隐藏
     assert.match(appJs, /el\.disabled = false/);
-    assert.match(appJs, /els\.acceptArtifact\.disabled = false/);
+    assert.match(appJs, /确认采用仅在中栏时间线/);
+    assert.match(appJs, /setElVisible\(els\.acceptArtifact, false\)/);
   });
 });

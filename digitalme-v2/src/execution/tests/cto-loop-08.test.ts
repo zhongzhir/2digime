@@ -154,7 +154,7 @@ describe('CTO-LOOP-08 digital me cto loop', () => {
       jobStatus: 'succeeded',
     });
     assert.equal(adoptView.stage, 'needs_review');
-    assert.ok(adoptView.actions.some((a) => a.id === 'accept' && a.label === '确认采用'));
+    assert.ok(!adoptView.actions.some((a) => a.id === 'accept'));
   });
 
   it('执行失败/越权/无法判断时如实请求决策', () => {

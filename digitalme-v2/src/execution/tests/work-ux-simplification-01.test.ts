@@ -62,7 +62,7 @@ describe('work-ux-simplification-01', () => {
     assert.ok(!r.actions.some((a) => a.id === 'accept'));
   });
 
-  it('needs_review / adopted 不显示开始处理；采用入口可确认', () => {
+  it('needs_review / adopted 不显示开始处理；右栏不承载确认采用', () => {
     const review = ux.deriveWorkUxView({
       hasArtifact: true,
       decisionStatus: 'undecided',
@@ -71,8 +71,8 @@ describe('work-ux-simplification-01', () => {
     });
     assert.equal(review.stage, 'needs_review');
     assert.ok(!review.actions.some((a) => a.id === 'start_submit'));
-    assert.ok(review.actions.some((a) => a.id === 'accept'));
-    assert.match(review.statusLine, /对话区|采用/);
+    assert.ok(!review.actions.some((a) => a.id === 'accept'));
+    assert.match(review.statusLine, /对话区/);
 
     const adopted = ux.deriveWorkUxView({
       decisionStatus: 'accepted',
@@ -106,7 +106,7 @@ describe('work-ux-simplification-01', () => {
     assert.equal(v.actions.find((a) => a.slot === 'primary')?.id, 'coding_connect');
   });
 
-  it('blocked 重试为辅助；未达标引导对话；达标可确认采用', () => {
+  it('blocked 重试为辅助；未达标引导对话；达标采用仅在对话区', () => {
     const blocked = ux.deriveWorkUxView({ jobStatus: 'failed' });
     assert.equal(blocked.stage, 'blocked');
     assert.match(blocked.statusLine, /对话区/);
@@ -129,7 +129,8 @@ describe('work-ux-simplification-01', () => {
       canAdoptSuggested: true,
       jobStatus: 'succeeded',
     });
-    assert.ok(ok.actions.some((a) => a.id === 'accept'));
+    assert.equal(ok.stage, 'needs_review');
+    assert.ok(!ok.actions.some((a) => a.id === 'accept'));
   });
 
   it('普通非软件任务同样适用；用户面无内部词', () => {

@@ -3431,12 +3431,10 @@
         setElVisible(els.rejectArtifact, false);
       }
     }
-    // 决策按钮：计划中则明确启用；running/blocked 等已在基线隐藏
+    // 确认采用仅在中栏时间线；右栏成果区永不露出采用按钮
     if (els.acceptArtifact) {
-      const showAccept =
-        planned.has("accept") ||
-        (planned.has("adopt_anyway") && !facts.adoptWarningOpen);
-      if (showAccept) els.acceptArtifact.disabled = false;
+      setElVisible(els.acceptArtifact, false);
+      els.acceptArtifact.disabled = true;
     }
     if (els.rejectArtifact && planned.has("reject")) {
       els.rejectArtifact.disabled = false;
@@ -4107,11 +4105,18 @@
       const connected = await refreshConnectionFromCapabilities();
       els.revise.disabled = !connected;
     }
-    if (els.acceptArtifact) els.acceptArtifact.disabled = !!blockAcceptForStaleDir;
+    // 右栏永不启用确认采用；采用仅经中栏时间线
+    if (els.acceptArtifact) {
+      setElVisible(els.acceptArtifact, false);
+      els.acceptArtifact.disabled = true;
+    }
     if (els.rejectArtifact) els.rejectArtifact.disabled = false;
     hideArtifactLoading();
     refreshWorkUxView({});
-    if (blockAcceptForStaleDir && els.acceptArtifact) els.acceptArtifact.disabled = true;
+    if (els.acceptArtifact) {
+      setElVisible(els.acceptArtifact, false);
+      els.acceptArtifact.disabled = true;
+    }
     await syncWorkCollabFromDomain();
   }
 

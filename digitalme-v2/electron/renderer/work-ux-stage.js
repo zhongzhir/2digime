@@ -183,9 +183,9 @@
       if (f.hasWorkingDirectory) push('open_project', '打开项目', 'more', 'middle');
       if (f.decisionStatus !== 'rejected') push('restart_compose', '创建新任务', 'more', 'middle');
     } else if (stage === 'needs_review') {
-      statusLine = 'Digital Me 建议采用 · 可在对话区确认或继续说明';
+      // 确认采用仅在中栏 Digital Me 验收消息附近；右栏不承载采用操作
+      statusLine = 'Digital Me 建议采用 · 请在对话区确认或继续说明';
       hideDecisionHint = true;
-      push('accept', '确认采用', 'secondary', 'right');
       push('pause_task', '暂停任务', 'more', 'right');
       if (f.hasWorkingDirectory) push('restore_baseline', '恢复执行前状态', 'more', 'right');
       if (f.hasWorkingDirectory) push('open_project', '打开项目', 'more', 'middle');
@@ -299,6 +299,9 @@
     }
     if (view.stage === 'adopted' && primary.some((a) => a.id === 'accept')) {
       errors.push('adopted_repeat_accept');
+    }
+    if (view.stage === 'needs_review' && ids.includes('accept')) {
+      errors.push('needs_review_right_accept');
     }
     if (view.stage === 'needs_capability' && ids.includes('confirm_execution')) {
       errors.push('capability_has_exec');
