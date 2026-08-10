@@ -270,19 +270,35 @@ export class WorkRuntime {
         !!inspected.isNewProjectCandidate ||
         (folder as { projectOrigin?: string }).projectOrigin === 'digitalme_created';
       let understandingSummary: string[] | undefined;
+      let understandingReliable: boolean | undefined;
       try {
         const {
           buildSoftwareTaskUnderstanding,
           formatUnderstandingSummaryLines,
+          isUnderstandingReliable,
         } = await import('../execution/software-task-understanding');
+        let decisionBriefs: string[] = [];
+        try {
+          const view = await this.opts.loadSubjectContext?.();
+          decisionBriefs = (view?.entries || [])
+            .slice(0, 8)
+            .map((it) => `${it.title}: ${it.detail}`.trim())
+            .filter(Boolean);
+        } catch {
+          decisionBriefs = [];
+        }
         const understanding = await buildSoftwareTaskUnderstanding({
           goal: input.goal,
           workingDirectory: folder.path,
+          ...(decisionBriefs.length ? { subjectDecisionBriefs: decisionBriefs } : {}),
         });
+        understandingReliable = isUnderstandingReliable(understanding);
         const lines = formatUnderstandingSummaryLines(understanding);
         if (lines.length) understandingSummary = lines;
       } catch {
         /* 确认卡摘要可选；执行前仍会完整生成 understanding */
+        understandingReliable = false;
+        understandingSummary = ['尚未定位到可靠改动位置'];
       }
       const preview = buildExecutionConfirmPreview({
         goal: input.goal,
@@ -297,6 +313,7 @@ export class WorkRuntime {
         executorDisplayName: userFacingNaturalExecutorName(),
         ...(isNewProject ? { isNewProject: true } : {}),
         ...(understandingSummary ? { understandingSummary } : {}),
+        ...(understandingReliable != null ? { understandingReliable } : {}),
       });
       return {
         taskId: '',

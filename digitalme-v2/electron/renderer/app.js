@@ -5364,6 +5364,10 @@
       els.executionConfirmTitle.textContent = preview.title || "这项任务需要修改项目文件";
     }
     if (els.executionConfirmNotice) els.executionConfirmNotice.textContent = preview.notice || "";
+    if (els.confirmExecution) {
+      const unreliable = preview.understandingReliable === false;
+      els.confirmExecution.textContent = unreliable ? "仍要继续" : "确认并开始";
+    }
     if (els.executionConfirmExecutor) {
       els.executionConfirmExecutor.textContent = "代码执行能力";
     }

@@ -215,6 +215,8 @@ export function buildExecutionConfirmPreview(input: {
   isNewProject?: boolean;
   /** 可选：任务理解摘要行（将检查的文件/测试等） */
   understandingSummary?: string[];
+  /** 理解是否可靠；不可靠时不得使用确定性「将修改某文件」措辞 */
+  understandingReliable?: boolean;
 }): {
   title: string;
   notice: string;
@@ -232,6 +234,7 @@ export function buildExecutionConfirmPreview(input: {
   executorDisplayName: string;
   isNewProject?: boolean;
   understandingSummary?: string[];
+  understandingReliable?: boolean;
 } {
   const scopes = deriveDefaultScopes(input.workingDirectory);
   const readScope = input.readScope?.length ? input.readScope : scopes.readScope;
@@ -243,15 +246,23 @@ export function buildExecutionConfirmPreview(input: {
     String(input.projectName || '').trim() || path.basename(workingDirectory) || workingDirectory;
   const testLines = criteria.filter((c) => /测试|test/i.test(c));
   const isNew = !!input.isNewProject;
+  const understandingReliable = input.understandingReliable !== false;
   const understandingSummary = (input.understandingSummary || [])
     .map((s) => String(s || '').trim())
     .filter(Boolean)
     .slice(0, 8);
+  const uncertain = !isNew && input.understandingReliable === false;
   return {
-    title: isNew ? '这项任务将在空文件夹中创建项目' : '这项任务需要修改项目文件',
+    title: isNew
+      ? '这项任务将在空文件夹中创建项目'
+      : uncertain
+        ? '开始前请确认权限（尚未定位到可靠改动位置）'
+        : '这项任务需要修改项目文件',
     notice: isNew
       ? '开始前请确认项目位置与权限。确认后将在该目录内创建和修改文件，并可能运行本地测试或构建。'
-      : '开始前请确认项目、验收条件与修改权限。确认后才会实际修改项目文件。',
+      : uncertain
+        ? '当前还不能确定应改哪些文件。若继续，将在你确认的权限范围内由代码执行能力自行探索；不会把 package.json、README 等通用文件当作已定位的改动依据。'
+        : '开始前请确认项目、验收条件与修改权限。确认后才会实际修改项目文件。',
     projectName,
     workingDirectory,
     readScope,
@@ -285,5 +296,8 @@ export function buildExecutionConfirmPreview(input: {
     executorDisplayName: input.executorDisplayName,
     ...(isNew ? { isNewProject: true } : {}),
     ...(understandingSummary.length ? { understandingSummary } : {}),
+    ...(input.understandingReliable != null
+      ? { understandingReliable }
+      : {}),
   };
 }
