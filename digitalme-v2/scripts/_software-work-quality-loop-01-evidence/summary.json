@@ -229,5 +229,11 @@
     ],
     "readonlyZeroDiff": true,
     "chain": "createDigitalMeRuntime.submitTask.needsExecutionConfirm"
+  },
+  "fixReturnEditAction04": "FIX-RETURN-EDIT-ACTION-04",
+  "returnEditRegression": {
+    "pass": true,
+    "muhubZeroDiff": true,
+    "startSubmitRestored": true
   }
 }

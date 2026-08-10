@@ -5358,6 +5358,37 @@
     }
   }
 
+  /**
+   * 确认卡「返回修改」：回到可编辑起草态并恢复「开始处理」。
+   * 必须刷新 Work UX；否则仍按 needs_confirmation 隐藏提交按钮。
+   * 不清除材料、不创建任务/Job、不进入改码。
+   */
+  function returnFromExecutionConfirmToEdit() {
+    hideExecutionConfirmCard();
+    workMode = "compose";
+    if (els.goal) els.goal.readOnly = false;
+    if (els.workComposeTitle) els.workComposeTitle.textContent = "新建任务";
+    if (els.submit) {
+      els.submit.hidden = false;
+      els.submit.removeAttribute("hidden");
+      els.submit.disabled = false;
+      els.submit.textContent = "开始处理";
+      els.submit.classList.add("primary");
+      els.submit.classList.remove("ghost");
+    }
+    setWorkCollabVisible(false);
+    syncGoalPresentation();
+    refreshWorkUxView({
+      workMode: "compose",
+      executionConfirmCard: false,
+      projectFolderCard: false,
+      executorSetupCard: false,
+      jobStatus: null,
+      hasArtifact: false,
+      decisionStatus: null,
+    });
+  }
+
   function showExecutionConfirmCard(preview) {
     hideExecutorSetupCard();
     hideProjectFolderCard();
@@ -5519,8 +5550,9 @@
 
   if (els.cancelExecution) {
     els.cancelExecution.addEventListener("click", () => {
-      hideExecutionConfirmCard();
+      returnFromExecutionConfirmToEdit();
       els.jobStatus.textContent = "已返回修改";
+      els.jobStatus.classList.remove("error");
       els.jobActionable.textContent = "可调整目标或材料后再次开始。";
     });
   }
