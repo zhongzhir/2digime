@@ -326,12 +326,14 @@ async function runExternalExecutorCodex(
   const { buildSoftwareTaskUnderstanding, formatUnderstandingForBrief } = await import(
     '../../execution/software-task-understanding'
   );
-  const { asReadOnlyLocateHook } = await import('../../execution/software-readonly-codex-locate');
+  const { asReadOnlyLocateHook, READONLY_CODEX_LOCATE_TIMEOUT_MS } = await import(
+    '../../execution/software-readonly-codex-locate'
+  );
   // 测试注入 executeHook 时不拉真实只读 Codex；生产路径与确认卡一致注入
   const readOnlyLocate = options.executeHook
     ? undefined
     : asReadOnlyLocateHook({
-        timeoutMs: 45_000,
+        timeoutMs: READONLY_CODEX_LOCATE_TIMEOUT_MS,
         ...(options.codexJsPath ? { codexJsPath: options.codexJsPath } : {}),
       });
   const understanding = await buildSoftwareTaskUnderstanding({

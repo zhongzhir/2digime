@@ -1,83 +1,34 @@
 # 2DIGIME-BUILD-01 SOFTWARE-WORK-QUALITY-LOOP
 
 - phase: 2DIGIME-BUILD-01-SOFTWARE-WORK-QUALITY-LOOP
+- fix: FIX-REAL-RUNTIME-LOCATE-03
 - readonlyCodexLocateWired: true
-- fix: FIX-READONLY-CODEX-LOCATE-02
 - realCodex: true
 - readonlyZeroDiff: true
 - conclusion: ready_for_owner_runtime_acceptance
 - ownerAccepted: false
 
-## FIX-READONLY-CODEX-LOCATE-02 真实只读定位回归
+## FIX-REAL-RUNTIME-LOCATE-03
 
-在 worktree 内对 digitalme-v2 调用真实 Codex（locateWithReadonlyCodex → buildSoftwareTaskUnderstanding）。目标文本不含路径/文件名/函数名。调用前后 git status --porcelain 对比：零新增 dirty。
+### 真机失败根因
+确认卡路径 `asReadOnlyLocateHook({ timeoutMs: 45_000 })` 过短。MUHUB 真实只读 Codex 约需 ~95–120s；超时后返回 null，本地有界扫描对无路径提示的 UX 目标亦为 unreliable → 用户面「尚未定位到可靠改动位置」。
+DIGITALME_READONLY_CODEX_LOCATE=1 仅影响是否跳过 spawn；父进程已传入，子进程最小环境故意剥离 DIGITALME_*（Codex 用用户级认证）。失败点在**超时**，非认证/未调用。
+交互偏差：`work-ux-stage` 在 `needs_confirmation` 硬编码「确认并开始」，覆盖 app.js 已写的「仍要继续」。
 
-### A — 做事页确认前任务理解噪音文件
+### 修复
+- 默认/确认卡/改码前超时统一为 `READONLY_CODEX_LOCATE_TIMEOUT_MS = 180_000`
+- unreliable 时 UX 主按钮「仍要继续」；refresh 传入 `understandingReliable`
+- 样式扩展允许 `.css` 等作为只读定位源码类型
 
-- result: **pass**
-- REAL_CODEX: true
-- reliability: reliable
-- hintFiles（相对路径）:
-  - src/work-runtime/job-runner.ts
-  - src/execution/software-task-understanding.ts
-  - src/execution/software-readonly-codex-locate.ts
-  - src/execution/task-package.ts
-  - electron/renderer/app.js
-  - src/execution/tests/software-task-understanding.test.ts
-  - src/execution/tests/software-readonly-codex-locate.test.ts
-  - scripts/electron-software-dev-fresh-ud-acceptance.cjs
-  - scripts/electron-coding-capability-onboarding-acceptance.cjs
-- understanding.keyFiles:
-  - src/execution/tests/software-task-understanding.test.ts
-  - src/execution/tests/software-readonly-codex-locate.test.ts
-  - scripts/electron-coding-capability-onboarding-acceptance.cjs
-  - scripts/electron-software-dev-fresh-ud-acceptance.cjs
-  - electron/renderer/app.js
-  - src/execution/software-readonly-codex-locate.ts
-  - src/execution/software-task-understanding.ts
-  - src/execution/task-package.ts
-  - src/work-runtime/job-runner.ts
-- containsNoiseConfig: false
-- readonlyZeroDiff: true
-
-### B — 质量等级映射为用户可见状态
-
-- result: **pass**
-- REAL_CODEX: true
-- reliability: reliable
-- hintFiles（相对路径）:
-  - src/capability/adapters/code-repo-analysis.ts
-  - src/capability/adapters/code-repo-analysis-contract.ts
-  - src/artifact-workspace/workspace.ts
-  - src/work-runtime/job-runner.ts
-  - src/work-runtime/derive.ts
-  - src/work-runtime/task-display-state.ts
-  - electron/renderer/bundle-quality-ui.js
-  - electron/renderer/app.js
-  - src/execution/tests/software-task-understanding.test.ts
-  - src/execution/tests/software-dev-blocker-07.test.ts
-  - src/capability/adapters/tests/p2a-owner-feedback-fix.test.ts
-  - src/capability/adapters/tests/code-repo-analysis.test.ts
-- understanding.keyFiles:
-  - src/capability/adapters/tests/code-repo-analysis.test.ts
-  - src/execution/tests/software-task-understanding.test.ts
-  - electron/renderer/bundle-quality-ui.js
-  - src/artifact-workspace/workspace.ts
-  - src/capability/adapters/code-repo-analysis-contract.ts
-  - src/capability/adapters/code-repo-analysis.ts
-  - electron/renderer/app.js
-  - src/capability/adapters/tests/p2a-owner-feedback-fix.test.ts
-  - src/execution/tests/software-dev-blocker-07.test.ts
-  - src/work-runtime/derive.ts
-  - src/work-runtime/job-runner.ts
-  - src/work-runtime/task-display-state.ts
-- containsNoiseConfig: false
-- readonlyZeroDiff: true
+### MUHUB 真实产品链回归
+`node scripts/run-fix-real-runtime-locate-03.cjs`（submitTask → needsExecutionConfirm）：
+- reliable: true
+- 重点文件含：app/page.tsx、app/projects/*、components/home/*、globals.css
+- 确认前 MUHUB 零新增 dirty
+- 标题为确定性「这项任务需要修改项目文件」（非「尚未定位」）
 
 ### 自动化
-
-node --test --test-concurrency=1 dist/execution/tests/software-readonly-codex-locate.test.js dist/execution/tests/software-task-understanding.test.js → **19/19 pass**。
+software-readonly-codex-locate + software-task-understanding + fix-real-runtime-locate-03 → **25/25 pass**
 
 ## 说明
-
-本摘要为工程验证证据，不是 Owner 运行时验收。ownerAccepted 必须为 false。
+工程验证证据，不是 Owner 运行时验收。ownerAccepted 必须为 false。

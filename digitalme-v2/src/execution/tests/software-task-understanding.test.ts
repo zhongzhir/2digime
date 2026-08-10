@@ -171,6 +171,26 @@ describe('software-task-understanding relevance', () => {
     assert.match(preview.title, /尚未定位到可靠改动位置/);
     assert.match(preview.notice, /不能确定|不会把 package\.json/i);
     assert.equal(/将重点查看/.test(preview.notice), false);
+
+    // UX 阶段文案：不可靠时必须「仍要继续」，不得「确认并开始」
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const ux = require('../../../electron/renderer/work-ux-stage.js') as {
+      deriveWorkUxView: (facts: Record<string, unknown>) => {
+        actions: Array<{ id: string; label: string }>;
+      };
+    };
+    const unreliableView = ux.deriveWorkUxView({
+      executionConfirmCard: true,
+      understandingReliable: false,
+    });
+    const unreliableConfirm = unreliableView.actions.find((a) => a.id === 'confirm_execution');
+    assert.equal(unreliableConfirm?.label, '仍要继续');
+    const reliableView = ux.deriveWorkUxView({
+      executionConfirmCard: true,
+      understandingReliable: true,
+    });
+    const reliableConfirm = reliableView.actions.find((a) => a.id === 'confirm_execution');
+    assert.equal(reliableConfirm?.label, '确认并开始');
   });
 
   it('extractGoalHints parses path and symbol from natural language', () => {

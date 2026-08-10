@@ -1,16 +1,8 @@
-/**
- * Codex 只读定位 — execHook 注入、路径校验、只读隔离与 understanding 接线。
- */
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
-import { promises as fs } from 'node:fs';
-import * as os from 'node:os';
-import * as path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import {
   asReadOnlyLocateHook,
   locateWithReadonlyCodex,
   validateLocatePath,
+  READONLY_CODEX_LOCATE_TIMEOUT_MS,
 } from '../software-readonly-codex-locate';
 import {
   buildSoftwareTaskUnderstanding,
@@ -18,6 +10,12 @@ import {
   isUnderstandingReliable,
 } from '../software-task-understanding';
 import { buildCodexExecArgs } from '../../capability/adapters/external-executor-codex';
+import { promises as fs } from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
 
 async function writeTree(root: string, files: Record<string, string>): Promise<void> {
   for (const [rel, body] of Object.entries(files)) {
@@ -64,6 +62,30 @@ describe('software-readonly-codex-locate', () => {
       sandbox: 'read-only',
     });
     assert.equal(ro[ro.indexOf('--sandbox') + 1], 'read-only');
+  });
+
+  it('product default locate timeout is at least 120s (45s caused MUHUB false unreliable)', () => {
+    assert.ok(READONLY_CODEX_LOCATE_TIMEOUT_MS >= 120_000);
+  });
+
+  it('short timeout returns null (simulates prior 45s product failure)', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-ro-to-'));
+    await writeTree(root, {
+      'package.json': '{}',
+      'app/page.tsx': 'export default function Page(){return null}\n',
+    });
+    const hint = await locateWithReadonlyCodex({
+      goal: '优化展示页面视觉层级',
+      workingDirectory: root,
+      timeoutMs: 40,
+      execHook: async () => {
+        await new Promise((r) => setTimeout(r, 200));
+        return JSON.stringify({
+          files: [{ path: 'app/page.tsx', reason: '首页' }],
+        });
+      },
+    });
+    assert.equal(hint, null);
   });
 
   it('execHook valid JSON → hint contains existing file', async () => {

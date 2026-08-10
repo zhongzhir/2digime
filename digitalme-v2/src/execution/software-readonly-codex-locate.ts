@@ -17,7 +17,11 @@ import {
   type ReadOnlyLocateHint,
 } from './software-task-understanding';
 
-const DEFAULT_TIMEOUT_MS = 45_000;
+/** 大仓语义定位默认超时（确认卡 / 改码前共用）。 */
+export const READONLY_CODEX_LOCATE_TIMEOUT_MS = 180_000;
+
+/** 大仓语义定位常需 1–3 分钟；过短会在确认卡阶段误报「尚未定位」。 */
+const DEFAULT_TIMEOUT_MS = READONLY_CODEX_LOCATE_TIMEOUT_MS;
 
 const SOURCE_EXT = new Set([
   '.ts',
@@ -26,6 +30,10 @@ const SOURCE_EXT = new Set([
   '.jsx',
   '.mjs',
   '.cjs',
+  '.css',
+  '.scss',
+  '.sass',
+  '.less',
   '.py',
   '.go',
   '.rs',

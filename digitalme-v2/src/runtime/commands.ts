@@ -229,6 +229,10 @@ export interface CommandMap {
         selectedCapabilityId?: string;
         selectedCapabilityDisplayName?: string;
         projectOrigin?: 'digitalme_created' | 'user_selected' | 'unknown';
+        /** 执行前理解摘要（用户面）；不可靠时含「尚未定位到可靠改动位置」。 */
+        understandingSummary?: string[];
+        /** false 时确认按钮应为「仍要继续」。 */
+        understandingReliable?: boolean;
       };
       /**
        * 软件开发意图已识别，但代码执行能力尚未连接。

@@ -5207,7 +5207,11 @@
       els.jobStatus.textContent = "开始前请确认项目与修改权限";
       els.jobStatus.classList.remove("error");
       els.jobActionable.textContent = result.needsExecutionConfirm.notice || "";
-      refreshWorkUxView({ executionConfirmCard: true, projectDirReady: true });
+      refreshWorkUxView({
+        executionConfirmCard: true,
+        projectDirReady: true,
+        understandingReliable: result.needsExecutionConfirm.understandingReliable !== false,
+      });
       return "needs_confirmation";
     }
     workMode = "task";
@@ -5415,7 +5419,10 @@
       els.executionConfirmForbidden.hidden = true;
       els.executionConfirmForbidden.setAttribute("hidden", "");
     }
-    refreshWorkUxView({ executionConfirmCard: true });
+    refreshWorkUxView({
+      executionConfirmCard: true,
+      understandingReliable: preview.understandingReliable !== false,
+    });
   }
 
   async function startTaskAfterConfirm(payload) {

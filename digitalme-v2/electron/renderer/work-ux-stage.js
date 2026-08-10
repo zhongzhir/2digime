@@ -15,8 +15,9 @@
  * @property {boolean} [projectCreateConfirm]
  * @property {boolean} [projectDirReady]
  * @property {boolean} [executorSetupCard]
-   * @property {boolean} [executionConfirmCard]
-   * @property {boolean} [ownerChoicePrompt]
+ * @property {boolean} [executionConfirmCard]
+ * @property {boolean} [understandingReliable]
+ * @property {boolean} [ownerChoicePrompt]
    * @property {boolean} [revisionComposerOpen]
    * @property {boolean} [adoptWarningOpen]
    * @property {string|null} [jobStatus]
@@ -139,7 +140,9 @@
       }
     } else if (stage === 'needs_confirmation') {
       statusLine = '开始前请确认项目与修改范围';
-      push('confirm_execution', '确认并开始', 'primary', 'middle');
+      const confirmLabel =
+        f.understandingReliable === false ? '仍要继续' : '确认并开始';
+      push('confirm_execution', confirmLabel, 'primary', 'middle');
       push('cancel_execution', '返回修改', 'secondary', 'middle');
     } else if (stage === 'running') {
       statusLine = '正在处理';

@@ -214,5 +214,20 @@
     ],
     "pass": 19,
     "fail": 0
+  },
+  "fixRealRuntimeLocate03": "FIX-REAL-RUNTIME-LOCATE-03",
+  "readonlyCodexLocateTimeoutMs": 180000,
+  "muhubRuntimeLocate03": {
+    "pass": true,
+    "reliable": true,
+    "ms": 94242,
+    "keyFilesHint": [
+      "app/page.tsx",
+      "app/projects/page.tsx",
+      "components/home/features.tsx",
+      "app/globals.css"
+    ],
+    "readonlyZeroDiff": true,
+    "chain": "createDigitalMeRuntime.submitTask.needsExecutionConfirm"
   }
 }
