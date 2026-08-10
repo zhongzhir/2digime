@@ -287,10 +287,13 @@ export class WorkRuntime {
         } catch {
           decisionBriefs = [];
         }
+        const { asReadOnlyLocateHook } = await import('../execution/software-readonly-codex-locate');
         const understanding = await buildSoftwareTaskUnderstanding({
           goal: input.goal,
           workingDirectory: folder.path,
           ...(decisionBriefs.length ? { subjectDecisionBriefs: decisionBriefs } : {}),
+          // coding capability 已 ready（上方 isAutomaticReady）；未就绪时不会走到此处
+          readOnlyLocate: asReadOnlyLocateHook({ timeoutMs: 45_000 }),
         });
         understandingReliable = isUnderstandingReliable(understanding);
         const lines = formatUnderstandingSummaryLines(understanding);

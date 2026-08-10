@@ -326,11 +326,20 @@ async function runExternalExecutorCodex(
   const { buildSoftwareTaskUnderstanding, formatUnderstandingForBrief } = await import(
     '../../execution/software-task-understanding'
   );
+  const { asReadOnlyLocateHook } = await import('../../execution/software-readonly-codex-locate');
+  // 测试注入 executeHook 时不拉真实只读 Codex；生产路径与确认卡一致注入
+  const readOnlyLocate = options.executeHook
+    ? undefined
+    : asReadOnlyLocateHook({
+        timeoutMs: 45_000,
+        ...(options.codexJsPath ? { codexJsPath: options.codexJsPath } : {}),
+      });
   const understanding = await buildSoftwareTaskUnderstanding({
     goal: input.goal,
     workingDirectory: pkg.workingDirectory,
     subjectDecisionBriefs: decisionBriefs,
     ...(input.revision?.request ? { revisionRequest: input.revision.request } : {}),
+    ...(readOnlyLocate ? { readOnlyLocate } : {}),
   });
   await fs.writeFile(
     path.join(evidenceDir, 'understanding.json'),
@@ -702,15 +711,18 @@ export function buildCodexExecArgs(input: {
   lastMessagePath: string;
   /** 仅 Digital Me 自建且非 Git 仓库的新项目可 true */
   skipGitRepoCheck?: boolean;
+  /** 默认 workspace-write（改码路径）；只读定位传 read-only */
+  sandbox?: 'read-only' | 'workspace-write' | 'danger-full-access';
 }): string[] {
   // 非交互：-c approval_policy=never 替代已废弃 --full-auto；不拼接 shell 命令字符串
+  const sandbox = input.sandbox ?? 'workspace-write';
   const args = [
     input.codexJsPath,
     'exec',
     '--cd',
     input.workingDirectory,
     '--sandbox',
-    'workspace-write',
+    sandbox,
     '--json',
     '-c',
     'approval_policy="never"',

@@ -518,7 +518,7 @@ function mergeLocateHints(
       .replace(/^\.\//, '');
     if (!p || path.isAbsolute(p) || p.includes('..')) continue;
     if (!allRels.has(p) && ![...allRels].some((r) => r.endsWith('/' + p) || r === p)) {
-      // 模型点名但磁盘无此相对路径：忽略，避免伪造
+      // 未登记到候选集（通常因有界 walk 截断）；调用方应先 ensureLocateHintPathsOnDisk
       continue;
     }
     const resolved =
@@ -526,13 +526,41 @@ function mergeLocateHints(
     const reason = String(f.reason || '只读分析提示').slice(0, 80);
     const prev = byPath.get(resolved);
     if (prev) {
-      prev.score += 600;
+      // 只读定位命中优先于本地弱相关噪声
+      prev.score = Math.max(prev.score + 600, 1200);
       prev.reason = `${reason}；${prev.reason}`.slice(0, 120);
     } else {
-      byPath.set(resolved, { path: resolved, reason, score: 900 });
+      byPath.set(resolved, { path: resolved, reason, score: 1200 });
     }
   }
   return [...byPath.values()];
+}
+
+/** 将只读定位返回的相对路径在磁盘上验证后并入候选（弥补有界 walk 截断）。 */
+async function ensureLocateHintPathsOnDisk(
+  root: string,
+  hint: ReadOnlyLocateHint | null | undefined,
+  relToAbs: Map<string, string>,
+): Promise<void> {
+  if (!hint?.files?.length) return;
+  const rootResolved = path.resolve(root);
+  const prefix = rootResolved.endsWith(path.sep) ? rootResolved : rootResolved + path.sep;
+  for (const f of hint.files) {
+    const rel = String(f.path || '')
+      .replace(/\\/g, '/')
+      .replace(/^\.\//, '')
+      .trim();
+    if (!rel || path.isAbsolute(rel) || rel.includes('..')) continue;
+    if (relToAbs.has(rel)) continue;
+    const abs = path.resolve(rootResolved, ...rel.split('/'));
+    if (abs !== rootResolved && !abs.startsWith(prefix)) continue;
+    try {
+      const st = await fs.stat(abs);
+      if (st.isFile()) relToAbs.set(rel, abs);
+    } catch {
+      /* missing / hallucinated */
+    }
+  }
 }
 
 export async function buildSoftwareTaskUnderstanding(
@@ -560,7 +588,7 @@ export async function buildSoftwareTaskUnderstanding(
     relToAbs.set(rel, abs);
   }
   await ensureHintedPathsOnDisk(root, hints, relToAbs);
-  const allRels = new Set(relToAbs.keys());
+  let allRels = new Set(relToAbs.keys());
 
   let packageJsonRaw = '';
   const pkgAbs = relToAbs.get('package.json');
@@ -627,6 +655,10 @@ export async function buildSoftwareTaskUnderstanding(
       locateHint = null;
     }
   }
+
+  // Codex 命中文件可能因有界 walk 未进入候选：磁盘验证后并入
+  await ensureLocateHintPathsOnDisk(root, locateHint, relToAbs);
+  allRels = new Set(relToAbs.keys());
 
   let merged = mergeLocateHints(
     scored.map((s) => ({ path: s.path, reason: s.reason, score: s.score })),

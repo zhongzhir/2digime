@@ -204,6 +204,66 @@ describe('software-task-understanding relevance', () => {
     assert.equal(u.keyFiles.some((f) => f.path.includes('does-not-exist')), false);
   });
 
+  it('fuzzy goal without path/symbol + readOnlyLocate nested impl → reliable', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-u-fuzzy-ro-'));
+    await writeTree(root, {
+      'package.json': JSON.stringify({ name: 'nested', scripts: { test: 'node --test' } }),
+      'README.md': '# Nested\n',
+      'src/domain/billing/taxRate.ts':
+        'export function computeTaxRate(amount: number) { return amount * 0.1; }\n',
+      'src/domain/billing/tests/taxRate.test.ts':
+        "import { describe, it } from 'node:test';\ndescribe('taxRate', () => {});\n",
+      'src/domain/billing/invoice.ts': 'export function invoiceTotal() { return 0; }\n',
+    });
+
+    // 无路径、无明确符号的模糊目标；本地扫描可能 unreliable，Codex 只读命中应抬到 reliable
+    const u = await buildSoftwareTaskUnderstanding({
+      goal: '修正负数金额时的计税行为并补测试',
+      workingDirectory: root,
+      readOnlyLocate: async () => ({
+        files: [
+          { path: 'src/domain/billing/taxRate.ts', reason: '只读分析命中计税实现' },
+          { path: 'src/domain/billing/tests/taxRate.test.ts', reason: '对应测试' },
+        ],
+        symbols: ['computeTaxRate'],
+        rationale: '嵌套计税模块',
+      }),
+    });
+
+    assert.equal(u.reliability, 'reliable');
+    assert.equal(isUnderstandingReliable(u), true);
+    assert.ok(u.keyFiles.some((f) => f.path === 'src/domain/billing/taxRate.ts'));
+    const summary = formatUnderstandingSummaryLines(u).join('\n');
+    assert.match(summary, /taxRate\.ts/);
+  });
+
+  it('readOnlyLocate file outside walk window still merges when on disk', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-u-trunc-ro-'));
+    const files: Record<string, string> = {
+      'package.json': '{}',
+      'README.md': '# pad\n',
+      'zzz/deep/hiddenImpl.ts': 'export function fixHiddenBug() { return 1; }\n',
+    };
+    // 填满有界 walk（220），使 zzz/... 落在窗口外
+    for (let i = 0; i < 230; i += 1) {
+      files[`aaa/pad_${String(i).padStart(3, '0')}.ts`] = `export const pad${i} = ${i};\n`;
+    }
+    await writeTree(root, files);
+
+    const u = await buildSoftwareTaskUnderstanding({
+      goal: '修复隐藏缺陷',
+      workingDirectory: root,
+      readOnlyLocate: async () => ({
+        files: [{ path: 'zzz/deep/hiddenImpl.ts', reason: '只读分析命中实现' }],
+        symbols: ['fixHiddenBug'],
+      }),
+    });
+
+    assert.equal(u.reliability, 'reliable');
+    assert.ok(u.keyFiles.some((f) => f.path === 'zzz/deep/hiddenImpl.ts'));
+    assert.equal(u.keyFiles.some((f) => f.path === 'package.json'), false);
+  });
+
   it('degraded quality grade must not show awaiting-confirm label', () => {
     const job: ExecutionJob = {
       id: 'job_1',
