@@ -31,6 +31,13 @@ export type OwnerAcceptanceSummary = {
   canAdoptSuggested: boolean;
 };
 
+export type AcceptanceEvidenceInput = {
+  changedFiles?: string[];
+  changes?: Array<{ path: string; status?: string }>;
+  unifiedDiff?: string;
+  outOfScopeChanges?: string[];
+};
+
 function goalLabel(v: VerificationVerdict): string {
   switch (v) {
     case 'satisfied':
@@ -52,6 +59,62 @@ function looksLikeMachineMetric(text: string): boolean {
   );
 }
 
+/** 从 unified diff 汇总每个文件的 +/- 行数。 */
+export function summarizeDiffStats(
+  unifiedDiff: string | undefined,
+  changedFiles: string[],
+): Array<{ path: string; added: number; deleted: number }> {
+  const files = changedFiles.map((p) => p.replace(/\\/g, '/'));
+  const byPath = new Map<string, { path: string; added: number; deleted: number }>();
+  for (const p of files) {
+    byPath.set(p, { path: p, added: 0, deleted: 0 });
+  }
+  const diff = String(unifiedDiff || '');
+  if (!diff.trim()) {
+    return files.map((p) => byPath.get(p)!);
+  }
+  let current: string | null = null;
+  for (const line of diff.split(/\r?\n/)) {
+    const header = line.match(/^\+\+\+\s+(?:b\/)?(.+)$/);
+    if (header) {
+      const raw = header[1]!.trim();
+      if (raw === '/dev/null') {
+        current = null;
+        continue;
+      }
+      current = raw.replace(/\\/g, '/').replace(/^\.\//, '');
+      if (!byPath.has(current)) {
+        byPath.set(current, { path: current, added: 0, deleted: 0 });
+      }
+      continue;
+    }
+    const gitA = line.match(/^diff --git a\/(.+) b\/(.+)$/);
+    if (gitA) {
+      current = gitA[2]!.replace(/\\/g, '/');
+      if (!byPath.has(current)) {
+        byPath.set(current, { path: current, added: 0, deleted: 0 });
+      }
+      continue;
+    }
+    if (!current) continue;
+    if (line.startsWith('+') && !line.startsWith('+++')) {
+      byPath.get(current)!.added += 1;
+    } else if (line.startsWith('-') && !line.startsWith('---')) {
+      byPath.get(current)!.deleted += 1;
+    }
+  }
+  const ordered = files.length
+    ? files.map((p) => byPath.get(p)!).filter(Boolean)
+    : [...byPath.values()];
+  return ordered;
+}
+
+function checkLooksNotConfigured(detail: string | undefined): boolean {
+  return /not_configured|未配置|无 build 脚本|无脚本|没有配置自动测试/i.test(
+    String(detail || ''),
+  );
+}
+
 export function buildOwnerAcceptanceSummary(input: {
   verification: Pick<
     ExecutionVerificationReport,
@@ -61,6 +124,7 @@ export function buildOwnerAcceptanceSummary(input: {
   directoryChangedSinceResult?: boolean;
   unresolvedItems?: string[];
   summaryExcerpt?: string;
+  evidence?: AcceptanceEvidenceInput;
 }): OwnerAcceptanceSummary {
   const { verification } = input;
   const checks = verification.checks || [];
@@ -73,6 +137,7 @@ export function buildOwnerAcceptanceSummary(input: {
   const testExecuted = byId('tests_executed');
   const scope = byId('scope_boundary');
   const goal = byId('goal_alignment');
+  const gitIntegrity = byId('git_integrity');
   const testCfgSatisfied = testConfigured?.verdict === 'satisfied';
 
   const userBullets: string[] = [];
@@ -119,8 +184,12 @@ export function buildOwnerAcceptanceSummary(input: {
     if (startup.verdict === 'satisfied') {
       userBullets.push('已通过启动检查');
     } else if (startup.verdict === 'unsatisfied') {
-      userBullets.push(`启动检查失败${startup.detail ? `：${String(startup.detail).slice(0, 120)}` : ''}`);
+      userBullets.push(
+        `启动检查失败${startup.detail ? `：${String(startup.detail).slice(0, 120)}` : ''}`,
+      );
       userBullets.push('尚不能确认可以正常使用');
+    } else if (checkLooksNotConfigured(startup.detail)) {
+      userBullets.push('未配置可用启动方式');
     } else {
       userBullets.push('尚未验证实际运行');
     }
@@ -129,6 +198,8 @@ export function buildOwnerAcceptanceSummary(input: {
   const build = byId('build_check');
   if (build?.verdict === 'unsatisfied') {
     userBullets.push('构建失败');
+  } else if (build?.verdict === 'satisfied') {
+    userBullets.push('构建已通过');
   }
 
   if (scope) {
@@ -139,13 +210,126 @@ export function buildOwnerAcceptanceSummary(input: {
     );
   }
 
-  if (goal?.detail) {
-    technicalBullets.push(`目标核对：${String(goal.detail).slice(0, 160)}`);
+  // —— 技术证据：完整文件列表、diff 摘要、命令与结果、越界/提交 ——
+  const changedFiles =
+    input.evidence?.changedFiles?.length
+      ? input.evidence.changedFiles
+      : (input.evidence?.changes || []).map((c) => c.path).filter(Boolean);
+  const fileList =
+    changedFiles.length > 0
+      ? changedFiles
+      : input.changedFileCount > 0
+        ? []
+        : [];
+
+  technicalBullets.push(
+    fileList.length
+      ? `修改文件（${fileList.length}）：${fileList.join('；')}`
+      : input.changedFileCount > 0
+        ? `修改文件数：${input.changedFileCount}（清单未随摘要传入）`
+        : '修改文件：无',
+  );
+
+  const stats = summarizeDiffStats(input.evidence?.unifiedDiff, fileList);
+  if (stats.length) {
+    for (const s of stats) {
+      technicalBullets.push(
+        `变更摘要 ${s.path}：+${s.added} / -${s.deleted}`,
+      );
+    }
+  } else if (input.evidence?.unifiedDiff && input.evidence.unifiedDiff.length > 20) {
+    technicalBullets.push(
+      `diff 长度：${input.evidence.unifiedDiff.length} 字符（未能按文件拆分统计）`,
+    );
   }
+
+  if (goal?.detail) {
+    technicalBullets.push(`目标核对：${String(goal.detail).slice(0, 320)}`);
+  }
+
+  const commandish = ['tests_executed', 'tests_passed', 'build_check', 'run_startup_check'];
+  for (const id of commandish) {
+    const c = byId(id);
+    if (!c) continue;
+    const notCfg = checkLooksNotConfigured(c.detail);
+    const resultLabel =
+      c.verdict === 'satisfied'
+        ? '通过'
+        : notCfg || c.verdict === 'unverifiable'
+          ? '未配置（not_configured）'
+          : c.verdict === 'unsatisfied'
+            ? '失败（execution_failed）'
+            : String(c.verdict);
+    technicalBullets.push(
+      `${c.title}：${resultLabel}${c.detail ? ` — ${String(c.detail).slice(0, 220)}` : ''}`,
+    );
+  }
+
+  if (testConfigured) {
+    technicalBullets.push(
+      `测试配置：${
+        testConfigured.verdict === 'satisfied'
+          ? '已配置'
+          : '未配置（not_configured）'
+      }${testConfigured.detail ? ` — ${String(testConfigured.detail).slice(0, 120)}` : ''}`,
+    );
+  }
+
+  technicalBullets.push(
+    `构建：${
+      !build
+        ? '未执行'
+        : build.verdict === 'satisfied'
+          ? '通过'
+          : checkLooksNotConfigured(build.detail) || build.verdict === 'unverifiable'
+            ? '未配置（not_configured）'
+            : '未通过'
+    }`,
+  );
+  technicalBullets.push(
+    `启动：${
+      !startup
+        ? '未执行'
+        : startup.verdict === 'satisfied'
+          ? '通过'
+          : checkLooksNotConfigured(startup.detail) || startup.verdict === 'unverifiable'
+            ? '未配置或未验证（not_configured）'
+            : '未通过'
+    }`,
+  );
+
+  const outOfScope =
+    input.evidence?.outOfScopeChanges ||
+    (scope?.verdict !== 'satisfied' && scope?.detail
+      ? [String(scope.detail)]
+      : []);
+  technicalBullets.push(
+    outOfScope.length
+      ? `越界修改：有 — ${outOfScope.slice(0, 12).join('；')}`
+      : '越界修改：无',
+  );
+
+  if (gitIntegrity) {
+    technicalBullets.push(
+      `自动 commit / HEAD：${
+        gitIntegrity.verdict === 'satisfied' ? '未移动' : `异常 — ${String(gitIntegrity.detail || '').slice(0, 160)}`
+      }`,
+    );
+  } else {
+    technicalBullets.push('自动 commit / HEAD：本摘要未含 git_integrity 检查项');
+  }
+
   for (const c of checks) {
-    if (c.id === 'goal_alignment') continue;
-    const line = `${c.title}：${c.verdict}${c.detail ? ` — ${String(c.detail).slice(0, 80)}` : ''}`;
-    technicalBullets.push(line.slice(0, 200));
+    if (
+      c.id === 'goal_alignment' ||
+      commandish.includes(c.id) ||
+      c.id === 'tests_configured' ||
+      c.id === 'git_integrity'
+    ) {
+      continue;
+    }
+    const line = `${c.title}：${c.verdict}${c.detail ? ` — ${String(c.detail).slice(0, 120)}` : ''}`;
+    technicalBullets.push(line.slice(0, 240));
   }
 
   for (const item of (input.unresolvedItems || []).slice(0, 3)) {
@@ -167,9 +351,15 @@ export function buildOwnerAcceptanceSummary(input: {
     (testPass.verdict === 'unverifiable' && (!testRun || testRun.verdict !== 'unsatisfied'));
   const scopeOk = !scope || scope.verdict === 'satisfied';
   const startupCheck = byId('run_startup_check');
-  const startupOk = !startupCheck || startupCheck.verdict === 'satisfied';
+  const startupOk =
+    !startupCheck ||
+    startupCheck.verdict === 'satisfied' ||
+    startupCheck.verdict === 'unverifiable';
   const buildCheck = byId('build_check');
-  const buildOk = !buildCheck || buildCheck.verdict === 'satisfied';
+  const buildOk =
+    !buildCheck ||
+    buildCheck.verdict === 'satisfied' ||
+    buildCheck.verdict === 'unverifiable';
   const hasChanges = input.changedFileCount > 0;
   const overallOk = verification.overall === 'satisfied';
 
@@ -192,7 +382,7 @@ export function buildOwnerAcceptanceSummary(input: {
   } else if (
     verification.overall === 'partially_satisfied' ||
     (hasChanges && !overallOk) ||
-    !startupOk
+    (startupCheck && startupCheck.verdict === 'unsatisfied')
   ) {
     recommendation = '建议继续修改';
   } else {
@@ -250,7 +440,7 @@ export function buildOwnerAcceptanceSummary(input: {
     goalVerdict: verification.overall,
     recommendation,
     bullets: userBullets.slice(0, 10),
-    technicalBullets: technicalBullets.slice(0, 12),
+    technicalBullets: technicalBullets.slice(0, 48),
     adoptWarnings,
     digitalMeVerified: verification.digitalMeVerified,
     agentClaimedSuccess: verification.agentClaimedSuccess,

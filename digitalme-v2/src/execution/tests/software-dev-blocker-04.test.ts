@@ -70,7 +70,11 @@ describe('software-dev-blocker-04', () => {
     assert.match(summary.executionStatusLabel, /本次处理已结束/);
     assert.ok(summary.bullets.some((b) => /自动测试失败|测试没有通过/.test(b)));
     assert.ok(summary.bullets.every((b) => !/命中关键词/.test(b)));
-    assert.ok(summary.technicalBullets.some((b) => /命中关键词/.test(b)));
+    assert.ok(summary.technicalBullets.some((b) => /目标核对/.test(b)));
+    assert.ok(
+      summary.technicalBullets.some((b) => /修改文件/.test(b)),
+      '技术证据应含修改文件',
+    );
     assert.equal(summary.canAdoptSuggested, false);
     assert.ok(summary.adoptWarnings.length >= 1);
   });

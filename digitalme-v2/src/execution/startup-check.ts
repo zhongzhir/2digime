@@ -4,13 +4,17 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { detectProjectRunInfo, type ProjectRunInfo } from './run-detection';
-import { runCommandShellFalse, resolveNpmExecutable } from './test-command';
+import {
+  buildNpmRunCommand,
+  runProjectCommand,
+} from './test-command';
 
 export type SoftwareCheckKind =
   | 'auto_test_passed'
   | 'auto_test_failed'
   | 'no_auto_test'
   | 'test_command_unstartable'
+  | 'not_configured'
   | 'build_failed'
   | 'build_passed'
   | 'startup_failed'
@@ -23,6 +27,8 @@ export type SoftwareCheckResult = {
   detail?: string;
   runInfo?: ProjectRunInfo;
   canSuggestTryRun: boolean;
+  commandLine?: string;
+  exitCode?: number | null;
 };
 
 async function readPackageScripts(
@@ -51,6 +57,21 @@ export async function inspectAutoTestConfig(workingDirectory: string): Promise<{
   return { hasPackageJson: true, hasTestScript: typeof scripts.test === 'string' };
 }
 
+function formatCmdEvidence(input: {
+  commandLine: string;
+  status: number | null;
+  error?: string;
+  tail?: string;
+}): string {
+  const parts = [
+    `命令：${input.commandLine}`,
+    `退出码：${input.status == null ? '无' : String(input.status)}`,
+  ];
+  if (input.error) parts.push(`错误：${input.error.slice(0, 160)}`);
+  if (input.tail) parts.push(input.tail.slice(0, 200));
+  return parts.join('；');
+}
+
 /**
  * 轻量启动检查：确认入口/脚本存在，并对短生命周期命令做失败探测。
  * 不假报「可以试用」。
@@ -61,8 +82,8 @@ export async function runStartupCheck(
   const runInfo = await detectProjectRunInfo(workingDirectory);
   if (!runInfo.runnable) {
     return {
-      kind: 'startup_failed',
-      label: '启动检查失败',
+      kind: 'not_configured',
+      label: '未配置可用启动方式',
       detail: runInfo.reason || '找不到可靠的启动入口',
       runInfo,
       canSuggestTryRun: false,
@@ -92,44 +113,83 @@ export async function runStartupCheck(
 
   if (runInfo.kind === 'npm_script' && runInfo.command) {
     const scriptName = runInfo.command.replace(/^npm run\s+/, '').trim();
-    // 对 start/dev：仅验证脚本可解析；短超时探测立即崩溃
-    const npm = resolveNpmExecutable();
-    const probe = runCommandShellFalse({
-      command: [npm, 'run', scriptName, '--if-present'],
+    const scripts = await readPackageScripts(workingDirectory);
+    if (!scripts || !scripts[scriptName]) {
+      return {
+        kind: 'not_configured',
+        label: '未配置启动脚本',
+        detail: `package.json 中无脚本 ${scriptName}`,
+        runInfo,
+        canSuggestTryRun: false,
+      };
+    }
+    const command = buildNpmRunCommand(scriptName, ['--if-present']);
+    const probe = runProjectCommand({
+      command,
       cwd: workingDirectory,
       timeoutMs: 8_000,
       env: { ...process.env, npm_config_yes: 'true' },
     });
-    // 超时通常表示进程仍在跑（开发服务器）→ 视为启动检查通过
-    const timedOut =
-      !!probe.error && /ETIMEDOUT|timed out|TIMEOUT/i.test(probe.error);
+    const timedOut = probe.failureKind === 'timeout';
     if (timedOut) {
       return {
         kind: 'startup_passed',
         label: '已通过启动检查',
-        detail: `启动命令可用：${runInfo.command}`,
+        detail: formatCmdEvidence({
+          commandLine: probe.commandLine,
+          status: probe.status,
+          tail: `启动命令可用：${runInfo.command}`,
+        }),
         runInfo,
         canSuggestTryRun: true,
+        commandLine: probe.commandLine,
+        exitCode: probe.status,
+      };
+    }
+    if (probe.failureKind === 'spawn_failed') {
+      return {
+        kind: 'startup_failed',
+        label: '启动检查失败',
+        detail: formatCmdEvidence({
+          commandLine: probe.commandLine,
+          status: probe.status,
+          error: probe.error,
+        }),
+        runInfo,
+        canSuggestTryRun: false,
+        commandLine: probe.commandLine,
+        exitCode: probe.status,
       };
     }
     if (probe.status === 0) {
       return {
         kind: 'startup_passed',
         label: '已通过启动检查',
-        detail: `启动命令已成功结束：${runInfo.command}`,
+        detail: formatCmdEvidence({
+          commandLine: probe.commandLine,
+          status: 0,
+          tail: `启动命令已成功结束：${runInfo.command}`,
+        }),
         runInfo,
         canSuggestTryRun: true,
+        commandLine: probe.commandLine,
+        exitCode: 0,
       };
     }
-    const detail = (probe.stderr || probe.stdout || probe.error || '启动命令失败')
-      .toString()
-      .slice(0, 400);
+    const tail = (probe.stderr || probe.stdout || '').toString().slice(0, 200);
     return {
       kind: 'startup_failed',
       label: '启动检查失败',
-      detail,
+      detail: formatCmdEvidence({
+        commandLine: probe.commandLine,
+        status: probe.status,
+        error: probe.error,
+        tail,
+      }),
       runInfo,
       canSuggestTryRun: false,
+      commandLine: probe.commandLine,
+      exitCode: probe.status,
     };
   }
 
@@ -167,10 +227,25 @@ export async function runBuildCheck(
   workingDirectory: string,
 ): Promise<SoftwareCheckResult | null> {
   const scripts = await readPackageScripts(workingDirectory);
-  if (!scripts || !scripts.build) return null;
-  const npm = resolveNpmExecutable();
-  const r = runCommandShellFalse({
-    command: [npm, 'run', 'build', '--if-present'],
+  if (scripts == null) {
+    return {
+      kind: 'not_configured',
+      label: '未配置构建',
+      detail: '未发现 package.json',
+      canSuggestTryRun: false,
+    };
+  }
+  if (!scripts.build) {
+    return {
+      kind: 'not_configured',
+      label: '未配置构建脚本',
+      detail: 'package.json 中无 build 脚本',
+      canSuggestTryRun: false,
+    };
+  }
+  const command = buildNpmRunCommand('build', ['--if-present']);
+  const r = runProjectCommand({
+    command,
     cwd: workingDirectory,
     timeoutMs: 180_000,
     env: { ...process.env, npm_config_yes: 'true' },
@@ -179,14 +254,37 @@ export async function runBuildCheck(
     return {
       kind: 'build_passed',
       label: '构建通过',
-      detail: 'npm run build 成功',
+      detail: formatCmdEvidence({ commandLine: r.commandLine, status: 0 }),
       canSuggestTryRun: false,
+      commandLine: r.commandLine,
+      exitCode: 0,
+    };
+  }
+  if (r.failureKind === 'spawn_failed') {
+    return {
+      kind: 'build_failed',
+      label: '构建失败',
+      detail: formatCmdEvidence({
+        commandLine: r.commandLine,
+        status: r.status,
+        error: r.error,
+      }),
+      canSuggestTryRun: false,
+      commandLine: r.commandLine,
+      exitCode: r.status,
     };
   }
   return {
     kind: 'build_failed',
     label: '构建失败',
-    detail: (r.stderr || r.stdout || r.error || '').toString().slice(0, 400),
+    detail: formatCmdEvidence({
+      commandLine: r.commandLine,
+      status: r.status,
+      error: r.error,
+      tail: (r.stderr || r.stdout || '').toString().slice(0, 200),
+    }),
     canSuggestTryRun: false,
+    commandLine: r.commandLine,
+    exitCode: r.status,
   };
 }

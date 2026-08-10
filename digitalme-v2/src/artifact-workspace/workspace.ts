@@ -215,6 +215,7 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
             writeScope?: string[];
             digitalMeVerified?: boolean;
             agentClaimedSuccess?: boolean;
+            outOfScopeChanges?: string[];
             risks?: string[];
             checks?: Array<{
               id: string;
@@ -264,12 +265,17 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
               path: string;
               status: 'added' | 'modified' | 'deleted' | 'unknown';
             }> = [];
+            let outOfScopeFromBundle: string[] = [];
             if (changedEntry?.text) {
               try {
                 const cf = JSON.parse(changedEntry.text) as {
                   changes?: Array<{ relativePath?: string; path?: string; changeType?: string; status?: string }>;
                   changedFiles?: string[];
+                  outOfScopeChanges?: string[];
                 };
+                if (Array.isArray(cf.outOfScopeChanges)) {
+                  outOfScopeFromBundle = cf.outOfScopeChanges.map(String).filter(Boolean);
+                }
                 if (Array.isArray(cf.changes) && cf.changes.length) {
                   changes = cf.changes.map((c) => {
                     const st = String(c.changeType || c.status || '').toLowerCase();
@@ -569,6 +575,16 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
                 directoryChangedSinceResult,
                 unresolvedItems,
                 ...(summaryEntry?.text ? { summaryExcerpt: summaryEntry.text } : {}),
+                evidence: {
+                  changedFiles: parsed.changedFiles || changes.map((c) => c.path),
+                  changes,
+                  ...(diffEntry?.text ? { unifiedDiff: diffEntry.text } : {}),
+                  ...(outOfScopeFromBundle.length
+                    ? { outOfScopeChanges: outOfScopeFromBundle }
+                    : Array.isArray(parsed.outOfScopeChanges)
+                      ? { outOfScopeChanges: parsed.outOfScopeChanges as string[] }
+                      : {}),
+                },
               });
               codeChange.acceptanceSummary = acceptanceSummary;
               const startup = checks.find((c) => c.id === 'run_startup_check');

@@ -70,26 +70,8 @@ export async function verifyExternalExecution(input: {
         : `范围外改动：${col.outOfScopeChanges.slice(0, 8).join(', ')}`,
   });
 
-  // 4. 目标关键词与变更对应（启发式，不足则部分满足/无法验证）
-  const goalTerms = extractGoalTerms(pkg.goal);
-  const changedText = col.changedFiles.join(' ') + '\n' + col.unifiedDiff.slice(0, 20000);
-  const hitTerms = goalTerms.filter((t) => changedText.toLowerCase().includes(t.toLowerCase()));
-  checks.push({
-    id: 'goal_alignment',
-    title: '用户目标中的关键要求是否有对应变更',
-    verdict:
-      goalTerms.length === 0
-        ? 'unverifiable'
-        : hitTerms.length === 0
-          ? 'partially_satisfied'
-          : hitTerms.length >= Math.min(2, goalTerms.length)
-            ? 'satisfied'
-            : 'partially_satisfied',
-    detail:
-      goalTerms.length === 0
-        ? '目标过短，无法自动抽取关键词'
-        : `命中关键词 ${hitTerms.length}/${goalTerms.length}：${hitTerms.join(', ') || '无'}`,
-  });
+  // 4. 目标与变更对照：以执行前理解 / 实施方案 / 实际 diff 为主，关键词仅辅助
+  checks.push(assessGoalAlignment(pkg, col));
 
   // 5–6. 自动测试（无 test script ≠ 测试失败）
   const { inspectAutoTestConfig, runBuildCheck, runStartupCheck } = await import(
@@ -125,9 +107,12 @@ export async function verifyExternalExecution(input: {
           ? 'unsatisfied'
           : 'unverifiable',
     detail: !testCfg.hasTestScript
-      ? '这个项目没有配置自动测试'
+      ? '未配置测试（not_configured），未执行'
       : testsRan
-        ? `已执行 ${testResults.length} 项检查`
+        ? `已执行 ${testResults.length} 项检查：${testResults
+            .map((t) => `${t.command} → exit ${t.exitCode}`)
+            .join('；')
+            .slice(0, 240)}`
         : '测试命令无法启动或未执行',
   });
   checks.push({
@@ -141,12 +126,12 @@ export async function verifyExternalExecution(input: {
           ? 'satisfied'
           : 'unsatisfied',
     detail: !testCfg.hasTestScript
-      ? '这个项目没有配置自动测试'
+      ? '未配置测试（not_configured）'
       : !testsRan
         ? '测试命令无法启动'
         : testsPassed
           ? '自动测试通过'
-          : '自动测试失败',
+          : '自动测试失败（execution_failed）',
   });
   agent.testResults = testResults;
   agent.testCommands = testResults.map((t) => t.command);
@@ -157,7 +142,12 @@ export async function verifyExternalExecution(input: {
     checks.push({
       id: 'build_check',
       title: '构建检查',
-      verdict: build.kind === 'build_passed' ? 'satisfied' : 'unsatisfied',
+      verdict:
+        build.kind === 'build_passed'
+          ? 'satisfied'
+          : build.kind === 'not_configured'
+            ? 'unverifiable'
+            : 'unsatisfied',
       detail: build.detail || build.label,
     });
   }
@@ -175,7 +165,7 @@ export async function verifyExternalExecution(input: {
       verdict:
         startup.kind === 'startup_passed'
           ? 'satisfied'
-          : startup.kind === 'run_not_verified'
+          : startup.kind === 'run_not_verified' || startup.kind === 'not_configured'
             ? 'unverifiable'
             : 'unsatisfied',
       detail: `${startup.label}${startup.detail ? `：${startup.detail}` : ''}`,
@@ -311,6 +301,79 @@ function extractGoalTerms(goal: string): string[] {
     }
   }
   return [...new Set(terms)].slice(0, 12);
+}
+
+/** 从执行前理解 / 方案摘要中抽取相对路径线索。 */
+function extractUnderstandingPaths(brief: string): string[] {
+  const text = String(brief || '');
+  const found: string[] = [];
+  for (const m of text.matchAll(
+    /(?:^|[\s、，,;；:：→\-])((?:[\w.-]+\/)+[\w.-]+\.[A-Za-z0-9]+)(?=$|[\s、，,;；:：）)\]])/g,
+  )) {
+    found.push(m[1]!.replace(/\\/g, '/'));
+  }
+  return [...new Set(found)].slice(0, 24);
+}
+
+function assessGoalAlignment(
+  pkg: ExecutorTaskPackage,
+  col: CollectedExecutionChanges,
+): VerificationCheckResult {
+  const changed = col.changedFiles.map(normalizeRel);
+  const hasDiff = changed.length > 0 && String(col.unifiedDiff || '').length > 20;
+  const brief = String(pkg.projectBrief || '');
+  const understandingPaths = extractUnderstandingPaths(brief);
+  const pathHits = understandingPaths.filter((p) =>
+    changed.some(
+      (c) =>
+        c === p ||
+        c.endsWith('/' + p) ||
+        c.includes(p) ||
+        p.endsWith(c) ||
+        path.posix.basename(c) === path.posix.basename(p),
+    ),
+  );
+  const auxTerms = extractGoalTerms(pkg.goal);
+  const blob = `${changed.join('\n')}\n${String(col.unifiedDiff || '').slice(0, 20000)}`;
+  const auxHits = auxTerms.filter((t) => blob.toLowerCase().includes(t.toLowerCase()));
+
+  let verdict: VerificationVerdict;
+  const parts: string[] = [];
+  if (!hasDiff) {
+    verdict = 'unsatisfied';
+    parts.push('无实际文件变更可供对照目标与方案');
+  } else if (pathHits.length > 0) {
+    verdict =
+      pathHits.length >= Math.min(2, Math.max(1, understandingPaths.length)) ||
+      pathHits.length >= 1
+        ? 'satisfied'
+        : 'partially_satisfied';
+    parts.push(
+      `变更覆盖执行前理解中的路径 ${pathHits.length}/${understandingPaths.length || pathHits.length}：${pathHits.slice(0, 8).join(', ')}`,
+    );
+    parts.push(`共 ${changed.length} 个文件有变更`);
+  } else if (understandingPaths.length > 0) {
+    verdict = 'partially_satisfied';
+    parts.push(
+      `已有 ${changed.length} 个文件变更，但与执行前理解点名路径未直接对齐，请对照方案与 diff`,
+    );
+  } else if (brief.trim().length > 40 && hasDiff) {
+    verdict = 'partially_satisfied';
+    parts.push(`已有 ${changed.length} 个文件变更；已结合执行前说明与 diff，需人工核对设计目标是否达成`);
+  } else {
+    verdict = 'partially_satisfied';
+    parts.push(`已有 ${changed.length} 个文件变更；缺少可对齐的执行前路径线索`);
+  }
+  if (auxTerms.length) {
+    parts.push(`辅助词命中 ${auxHits.length}/${auxTerms.length}（不作为主判定）`);
+  }
+
+  return {
+    id: 'goal_alignment',
+    title: '用户目标与实施方案是否有对应变更',
+    verdict,
+    detail: parts.join('；').slice(0, 400),
+  };
 }
 
 async function runDeclaredTests(

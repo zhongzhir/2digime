@@ -235,5 +235,24 @@
     "pass": true,
     "muhubZeroDiff": true,
     "startSubmitRestored": true
+  },
+  "fixWindowsValidationEvidence05": "FIX-WINDOWS-VALIDATION-EVIDENCE-05",
+  "fix05WindowsValidation": {
+    "pass": true,
+    "einvalRootCause": "spawnSync npm.cmd shell:false",
+    "runProjectCommand": true,
+    "notConfiguredDistinct": true,
+    "goalKeywordsAuxiliaryOnly": true,
+    "technicalEvidenceComplete": true,
+    "muhubNineFilesPreserved": true,
+    "unitTests": {
+      "suites": [
+        "FIX-05 windows validation evidence",
+        "software-dev-blocker-04",
+        "software-dev-blocker-05"
+      ],
+      "pass": 28,
+      "fail": 0
+    }
   }
 }
