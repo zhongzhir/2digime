@@ -11,6 +11,44 @@ import type {
   ExecutorTaskPackage,
 } from './external-executor-contract';
 import { CODE_CHANGE_ARTIFACT_TYPE, userFacingVerification } from './external-executor-contract';
+import type { SoftwareTaskUnderstanding } from './software-task-understanding';
+
+function deriveBundleRisks(input: {
+  verification: ExecutionVerificationReport;
+  agentResult: ExecutorRunResult;
+  understanding?: SoftwareTaskUnderstanding;
+}): string[] {
+  const risks: string[] = [];
+  const seen = new Set<string>();
+  const push = (raw: string) => {
+    const t = String(raw || '').trim().replace(/\s+/g, ' ').slice(0, 240);
+    if (!t || seen.has(t)) return;
+    seen.add(t);
+    risks.push(t);
+  };
+
+  for (const c of input.verification.checks || []) {
+    if (c.verdict === 'unsatisfied' || c.verdict === 'unverifiable') {
+      push(`${c.title}：${userFacingVerification(c.verdict)}${c.detail ? ` — ${c.detail}` : ''}`);
+    } else if (c.verdict === 'partially_satisfied') {
+      push(`${c.title}仅部分通过${c.detail ? ` — ${c.detail}` : ''}`);
+    }
+  }
+  if (input.verification.overall && input.verification.overall !== 'satisfied') {
+    push(`整体验收：${userFacingVerification(input.verification.overall)}`);
+  }
+  for (const w of input.agentResult.warnings || []) {
+    if (w === 'digitalme_auto_continue_available') continue;
+    push(w.startsWith('needs_') ? `执行提示：${w}` : w);
+  }
+  for (const u of input.agentResult.unresolvedItems || []) {
+    push(u);
+  }
+  for (const r of input.understanding?.risks || []) {
+    push(r);
+  }
+  return risks.slice(0, 12);
+}
 
 export async function writeCodeChangeBundle(input: {
   outDir: string;
@@ -18,6 +56,7 @@ export async function writeCodeChangeBundle(input: {
   agentResult: ExecutorRunResult;
   collected: CollectedExecutionChanges;
   verification: ExecutionVerificationReport;
+  understanding?: SoftwareTaskUnderstanding;
 }): Promise<{
   bundleDir: string;
   entries: Array<{ sourcePath: string; mediaType: string; role: string }>;
@@ -25,6 +64,12 @@ export async function writeCodeChangeBundle(input: {
 }> {
   const bundleDir = path.join(input.outDir, 'code-change-bundle');
   await fs.mkdir(bundleDir, { recursive: true });
+
+  const risks = deriveBundleRisks({
+    verification: input.verification,
+    agentResult: input.agentResult,
+    ...(input.understanding ? { understanding: input.understanding } : {}),
+  });
 
   const summaryMd = [
     '# 执行摘要',
@@ -35,6 +80,31 @@ export async function writeCodeChangeBundle(input: {
     '',
     input.taskPackage.goal,
     '',
+    ...(input.understanding
+      ? [
+          '## 任务理解',
+          '',
+          input.understanding.goal,
+          '',
+          ...(input.understanding.keyFiles.length
+            ? [
+                '关键文件：',
+                ...input.understanding.keyFiles
+                  .slice(0, 8)
+                  .map((f) => `- ${f.path}：${f.reason}`),
+                '',
+              ]
+            : []),
+          ...(input.understanding.planSteps.length
+            ? [
+                '## 方案',
+                '',
+                ...input.understanding.planSteps.map((s, i) => `${i + 1}. ${s}`),
+                '',
+              ]
+            : []),
+        ]
+      : []),
     '## 发生了什么',
     '',
     input.agentResult.summary.slice(0, 4000) || '（无）',
@@ -44,6 +114,10 @@ export async function writeCodeChangeBundle(input: {
     ...input.verification.checks.map(
       (c) => `- ${c.title}：${userFacingVerification(c.verdict)} — ${c.detail}`,
     ),
+    '',
+    '## 风险',
+    '',
+    ...(risks.length ? risks.map((r) => `- ${r}`) : ['- （无额外风险说明）']),
     '',
     '## 工作目录',
     '',
@@ -93,6 +167,20 @@ export async function writeCodeChangeBundle(input: {
         collectedRef: 'collected-changes.json',
         verificationRef: 'verification.json',
         agentStdoutRef: 'codex-stdout.jsonl',
+        ...(input.understanding
+          ? {
+              understandingRef: 'understanding.json',
+              understanding: {
+                schemaVersion: input.understanding.schemaVersion,
+                goal: input.understanding.goal,
+                keyFiles: input.understanding.keyFiles.slice(0, 12),
+                planSteps: input.understanding.planSteps.slice(0, 8),
+                proposedTests: input.understanding.proposedTests.slice(0, 6),
+                risks: input.understanding.risks.slice(0, 12),
+                subjectConstraints: input.understanding.subjectConstraints.slice(0, 8),
+              },
+            }
+          : {}),
         workingDirectory: input.taskPackage.workingDirectory,
         scopeDigestAfter: input.collected.afterScopeDigest,
       },
@@ -117,6 +205,10 @@ export async function writeCodeChangeBundle(input: {
         ? input.agentResult.warnings.map((x) => `- ${x}`)
         : ['- （无）']),
       '',
+      '## 风险',
+      '',
+      ...(risks.length ? risks.map((r) => `- ${r}`) : ['- （无）']),
+      '',
       '## 提问',
       '',
       ...(input.agentResult.questions.length
@@ -140,6 +232,7 @@ export async function writeCodeChangeBundle(input: {
     digitalMeVerified: input.verification.digitalMeVerified,
     agentClaimedSuccess: input.verification.agentClaimedSuccess,
     checks: input.verification.checks,
+    risks,
     executor: {
       executorId: input.agentResult.executorId,
       executorRunId: input.agentResult.executorRunId,

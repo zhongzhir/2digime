@@ -10,6 +10,7 @@ import {
   NEEDS_REVISION_LABEL,
   REVISING_LABEL,
   USER_FACING_LABELS,
+  isDegradedQualityGrade,
   latestJob,
   type SoftwareOutcomeHint,
   type TaskState,
@@ -238,6 +239,14 @@ export function deriveTaskDisplayState(input: {
       const adopted = soft?.ownerDecision === 'accepted';
       if (adopted) {
         return { ...base, ...combineAdopted(run) };
+      }
+      if (isDegradedQualityGrade(soft?.qualityGrade)) {
+        return {
+          ...base,
+          state: 'attention',
+          displayId: 'needs_revision',
+          label: USER_FACING_LABELS.attention,
+        };
       }
       if (
         soft?.isCodeChange ||

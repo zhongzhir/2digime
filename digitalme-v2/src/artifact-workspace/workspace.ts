@@ -158,6 +158,15 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
               logExcerpt?: string;
             }>;
             unresolvedItems?: string[];
+            risks?: string[];
+            understanding?: {
+              goal?: string;
+              keyFiles?: Array<{ path: string; reason: string }>;
+              planSteps?: string[];
+              proposedTests?: string[];
+              risks?: string[];
+              subjectConstraints?: string[];
+            };
             afterScopeDigest?: string;
             directoryChangedSinceResult?: boolean;
             digitalMeVerified?: boolean;
@@ -206,6 +215,7 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
             writeScope?: string[];
             digitalMeVerified?: boolean;
             agentClaimedSuccess?: boolean;
+            risks?: string[];
             checks?: Array<{
               id: string;
               title: string;
@@ -245,6 +255,7 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
             const changedEntry = entries.find((e) => e.role === 'changed-files');
             const diffEntry = entries.find((e) => e.role === 'diff');
             const testsEntry = entries.find((e) => e.role === 'tests');
+            const evidenceEntry = entries.find((e) => e.role === 'evidence');
             const unresolvedEntry = entries.find(
               (e) => e.role === 'unresolved' || e.role === 'unresolved-items',
             );
@@ -321,7 +332,148 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
               unresolvedItems = unresolvedEntry.text
                 .split(/\r?\n/)
                 .map((l) => l.replace(/^\s*[-*]\s*/, '').trim())
-                .filter((l) => l && l !== '（无）' && !l.startsWith('#') && l !== '警告' && l !== '提问');
+                .filter(
+                  (l) =>
+                    l &&
+                    l !== '（无）' &&
+                    !l.startsWith('#') &&
+                    l !== '警告' &&
+                    l !== '提问' &&
+                    l !== '风险',
+                );
+            }
+
+            let risks: string[] = Array.isArray(parsed.risks)
+              ? parsed.risks.map((r) => String(r || '').trim()).filter(Boolean).slice(0, 12)
+              : [];
+            if (!risks.length && unresolvedEntry?.text) {
+              const riskSection = unresolvedEntry.text.match(
+                /##\s*风险\s*([\s\S]*?)(?=\n##\s|$)/,
+              );
+              if (riskSection?.[1]) {
+                risks = riskSection[1]
+                  .split(/\r?\n/)
+                  .map((l) => l.replace(/^\s*[-*]\s*/, '').trim())
+                  .filter((l) => l && l !== '（无）' && l !== '（无额外风险说明）')
+                  .slice(0, 12);
+              }
+            }
+            if (!risks.length && summaryEntry?.text) {
+              const riskSection = summaryEntry.text.match(/##\s*风险\s*([\s\S]*?)(?=\n##\s|$)/);
+              if (riskSection?.[1]) {
+                risks = riskSection[1]
+                  .split(/\r?\n/)
+                  .map((l) => l.replace(/^\s*[-*]\s*/, '').trim())
+                  .filter((l) => l && l !== '（无）' && l !== '（无额外风险说明）')
+                  .slice(0, 12);
+              }
+            }
+
+            let understanding:
+              | {
+                  goal?: string;
+                  keyFiles?: Array<{ path: string; reason: string }>;
+                  planSteps?: string[];
+                  proposedTests?: string[];
+                  risks?: string[];
+                  subjectConstraints?: string[];
+                }
+              | undefined;
+            if (evidenceEntry?.text) {
+              try {
+                const ev = JSON.parse(evidenceEntry.text) as {
+                  understanding?: {
+                    goal?: string;
+                    keyFiles?: Array<{ path: string; reason: string }>;
+                    planSteps?: string[];
+                    proposedTests?: string[];
+                    risks?: string[];
+                    subjectConstraints?: string[];
+                  };
+                };
+                if (ev.understanding) {
+                  const uParsed = ev.understanding;
+                  understanding = {
+                    ...(uParsed.goal ? { goal: String(uParsed.goal).slice(0, 400) } : {}),
+                    ...(Array.isArray(uParsed.keyFiles)
+                      ? {
+                          keyFiles: uParsed.keyFiles
+                            .map((f) => ({
+                              path: String(f.path || ''),
+                              reason: String(f.reason || ''),
+                            }))
+                            .filter((f) => f.path)
+                            .slice(0, 12),
+                        }
+                      : {}),
+                    ...(Array.isArray(uParsed.planSteps)
+                      ? {
+                          planSteps: uParsed.planSteps
+                            .map((s) => String(s || '').trim())
+                            .filter(Boolean)
+                            .slice(0, 8),
+                        }
+                      : {}),
+                    ...(Array.isArray(uParsed.proposedTests)
+                      ? {
+                          proposedTests: uParsed.proposedTests
+                            .map((s) => String(s || '').trim())
+                            .filter(Boolean)
+                            .slice(0, 6),
+                        }
+                      : {}),
+                    ...(Array.isArray(uParsed.risks)
+                      ? {
+                          risks: uParsed.risks
+                            .map((s) => String(s || '').trim())
+                            .filter(Boolean)
+                            .slice(0, 12),
+                        }
+                      : {}),
+                    ...(Array.isArray(uParsed.subjectConstraints)
+                      ? {
+                          subjectConstraints: uParsed.subjectConstraints
+                            .map((s) => String(s || '').trim())
+                            .filter(Boolean)
+                            .slice(0, 8),
+                        }
+                      : {}),
+                  };
+                  if (!risks.length && understanding.risks?.length) {
+                    risks = understanding.risks;
+                  }
+                }
+              } catch {
+                /* ignore */
+              }
+            }
+            if (!understanding && summaryEntry?.text) {
+              const goalSec = summaryEntry.text.match(/##\s*任务理解\s*([\s\S]*?)(?=\n##\s|$)/);
+              const planSec = summaryEntry.text.match(/##\s*方案\s*([\s\S]*?)(?=\n##\s|$)/);
+              if (goalSec?.[1] || planSec?.[1]) {
+                const goalBody = (goalSec?.[1] || '').trim();
+                const goalLine = goalBody.split(/\r?\n/).map((l) => l.trim()).find(Boolean) || '';
+                const keyFiles = (goalBody.match(/^\s*[-*]\s*([^：:]+)[：:](.+)$/gm) || [])
+                  .map((line) => {
+                    const m = line.match(/^\s*[-*]\s*([^：:]+)[：:](.+)$/);
+                    return {
+                      path: String(m?.[1] || '').trim(),
+                      reason: String(m?.[2] || '').trim(),
+                    };
+                  })
+                  .filter((f) => f.path);
+                const planSteps = (planSec?.[1] || '')
+                  .split(/\r?\n/)
+                  .map((l) => l.replace(/^\s*\d+\.\s*/, '').trim())
+                  .filter(Boolean)
+                  .slice(0, 8);
+                understanding = {
+                  ...(goalLine ? { goal: goalLine.slice(0, 400) } : {}),
+                  ...(keyFiles.length ? { keyFiles } : {}),
+                  ...(planSteps.length ? { planSteps } : {}),
+                  ...(risks.length ? { risks } : {}),
+                };
+              }
             }
 
             const projectName = parsed.workingDirectory
@@ -364,6 +516,8 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
               ...(diffEntry?.text ? { unifiedDiff: diffEntry.text.slice(0, 200_000) } : {}),
               ...(testResults.length ? { testResults } : {}),
               ...(unresolvedItems.length ? { unresolvedItems } : {}),
+              ...(risks.length ? { risks } : {}),
+              ...(understanding ? { understanding } : {}),
               ...(parsed.afterScopeDigest
                 ? { afterScopeDigest: parsed.afterScopeDigest }
                 : {}),

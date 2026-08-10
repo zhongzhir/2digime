@@ -273,14 +273,14 @@ async function runExternalExecutorCodex(
     .map((it) => `${it.title}: ${it.detail}`.trim())
     .filter(Boolean);
 
-  const pkg = buildExecutorTaskPackage({
+  let pkg = buildExecutorTaskPackage({
     taskId: String(input.snapshot.taskId || 'task'),
     jobId: ctx.jobId,
     goal: input.goal,
     workingDirectory,
     readScope: auth.readScope,
     writeScope: auth.writeScope,
-    projectBrief: `本地项目：${workingDirectory}`,
+    projectBrief: `本地项目：${path.basename(workingDirectory) || '项目'}`,
     priorDecisions: decisionBriefs,
     snapshotId: input.snapshot.id,
     materialPaths: (input.snapshot.items || [])
@@ -322,8 +322,42 @@ async function runExternalExecutorCodex(
   });
   const preRunDigest = baseline.scopeDigest;
 
+  ctx.reportProgress('正在理解项目');
+  const { buildSoftwareTaskUnderstanding, formatUnderstandingForBrief } = await import(
+    '../../execution/software-task-understanding'
+  );
+  const understanding = await buildSoftwareTaskUnderstanding({
+    goal: input.goal,
+    workingDirectory: pkg.workingDirectory,
+    subjectDecisionBriefs: decisionBriefs,
+    ...(input.revision?.request ? { revisionRequest: input.revision.request } : {}),
+  });
+  await fs.writeFile(
+    path.join(evidenceDir, 'understanding.json'),
+    JSON.stringify(understanding, null, 2),
+    'utf8',
+  );
+  const briefParts = [
+    formatUnderstandingForBrief(understanding),
+    decisionBriefs.length
+      ? `已确认偏好与边界：\n${decisionBriefs.map((d, i) => `${i + 1}. ${d}`).join('\n')}`
+      : '',
+  ].filter(Boolean);
+  pkg = {
+    ...pkg,
+    projectBrief: briefParts.join('\n\n').slice(0, 3500),
+    priorDecisions: decisionBriefs.length
+      ? decisionBriefs
+      : understanding.subjectConstraints.slice(0, 12),
+  };
+  await fs.writeFile(
+    path.join(evidenceDir, 'task-package.json'),
+    JSON.stringify(pkg, null, 2),
+    'utf8',
+  );
+
   ctx.reportProgress('正在修改项目文件');
-  const prompt = renderTaskPackagePrompt(pkg);
+  const prompt = renderTaskPackagePrompt(pkg, { understanding });
   await fs.writeFile(path.join(evidenceDir, 'prompt.txt'), prompt, 'utf8');
 
   const startedAt = nowIso();
@@ -435,7 +469,7 @@ async function runExternalExecutorCodex(
         revisionRequest: continueText,
       },
     };
-    const continuePrompt = renderTaskPackagePrompt(continuePkg);
+    const continuePrompt = renderTaskPackagePrompt(continuePkg, { understanding });
     await fs.writeFile(path.join(evidenceDir, 'prompt-continue.txt'), continuePrompt, 'utf8');
     let continuePartial: Partial<ExecutorRunResult> & {
       exitCode: number | null;
@@ -504,6 +538,7 @@ async function runExternalExecutorCodex(
     agentResult,
     collected,
     verification,
+    understanding,
   });
 
   // 将任务包/基线等证据也拷到 bundle 旁供审计
@@ -514,6 +549,7 @@ async function runExternalExecutorCodex(
     'verification.json',
     'executor-run.json',
     'prompt.txt',
+    'understanding.json',
   ]) {
     try {
       await fs.copyFile(path.join(evidenceDir, name), path.join(bundle.bundleDir, name));

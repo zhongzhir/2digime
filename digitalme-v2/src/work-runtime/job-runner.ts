@@ -269,6 +269,21 @@ export class WorkRuntime {
       const isNewProject =
         !!inspected.isNewProjectCandidate ||
         (folder as { projectOrigin?: string }).projectOrigin === 'digitalme_created';
+      let understandingSummary: string[] | undefined;
+      try {
+        const {
+          buildSoftwareTaskUnderstanding,
+          formatUnderstandingSummaryLines,
+        } = await import('../execution/software-task-understanding');
+        const understanding = await buildSoftwareTaskUnderstanding({
+          goal: input.goal,
+          workingDirectory: folder.path,
+        });
+        const lines = formatUnderstandingSummaryLines(understanding);
+        if (lines.length) understandingSummary = lines;
+      } catch {
+        /* 确认卡摘要可选；执行前仍会完整生成 understanding */
+      }
       const preview = buildExecutionConfirmPreview({
         goal: input.goal,
         workingDirectory: folder.path,
@@ -281,6 +296,7 @@ export class WorkRuntime {
           : {}),
         executorDisplayName: userFacingNaturalExecutorName(),
         ...(isNewProject ? { isNewProject: true } : {}),
+        ...(understandingSummary ? { understandingSummary } : {}),
       });
       return {
         taskId: '',
@@ -773,8 +789,12 @@ export class WorkRuntime {
       artifact.type === CODE_CHANGE_ARTIFACT_TYPE ||
       artifact.type === 'code-change' ||
       !!last?.externalExecution;
-    if (!isCodeChange) return undefined;
-    const hint: import('./derive').SoftwareOutcomeHint = { isCodeChange: true };
+    const isCodeAnalysis =
+      artifact.type === CODE_ANALYSIS_ARTIFACT_TYPE || artifact.type === 'code-analysis';
+    if (!isCodeChange && !isCodeAnalysis) return undefined;
+    const hint: import('./derive').SoftwareOutcomeHint = {
+      ...(isCodeChange ? { isCodeChange: true } : {}),
+    };
     const head = artifact.versions.find((v) => v.versionId === artifact.headVersionId);
     if (head && this.opts.getArtifactOwnerDecision) {
       try {
@@ -801,19 +821,25 @@ export class WorkRuntime {
             verificationOverall?: string;
             digitalMeVerified?: boolean;
             checks?: Array<{ id?: string; verdict?: string }>;
+            quality?: { grade?: string; reasons?: string[] };
           };
-          if (parsed.verificationOverall) {
-            hint.verificationOverall = parsed.verificationOverall;
-            hint.canAdoptSuggested =
-              parsed.verificationOverall === 'satisfied' &&
-              parsed.digitalMeVerified !== false;
+          if (parsed.quality?.grade) {
+            hint.qualityGrade = String(parsed.quality.grade);
           }
-          const startup = (parsed.checks || []).find((c) => c.id === 'run_startup_check');
-          if (startup?.verdict) {
-            hint.startupCheckVerdict = startup.verdict;
-            hint.canSuggestTryRun = startup.verdict === 'satisfied';
-            if (startup.verdict === 'unsatisfied') {
-              hint.canAdoptSuggested = false;
+          if (isCodeChange) {
+            if (parsed.verificationOverall) {
+              hint.verificationOverall = parsed.verificationOverall;
+              hint.canAdoptSuggested =
+                parsed.verificationOverall === 'satisfied' &&
+                parsed.digitalMeVerified !== false;
+            }
+            const startup = (parsed.checks || []).find((c) => c.id === 'run_startup_check');
+            if (startup?.verdict) {
+              hint.startupCheckVerdict = startup.verdict;
+              hint.canSuggestTryRun = startup.verdict === 'satisfied';
+              if (startup.verdict === 'unsatisfied') {
+                hint.canAdoptSuggested = false;
+              }
             }
           }
         } catch {

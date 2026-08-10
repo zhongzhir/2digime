@@ -148,6 +148,8 @@ export function createCodeRepoAnalysisAdapter(
 
         const compactUser = buildCompactAnalysisUser(input, assembled);
         let rawCombined = '';
+        let usedSnapshotSynthesis = false;
+        let autoAugmentedCount = 0;
 
         // —— findings: 1 主调 + 最多 1 次结构失败自动重试 ——
         ctx.reportProgress('正在提取关键结论');
@@ -222,6 +224,7 @@ export function createCodeRepoAnalysisAdapter(
           // 仍不可用:不发起第 3 次模型调用,基于冻结 Snapshot 确定性合成 findings
           if (!findingsText.trim() || !canParseFindings(findingsText)) {
             budget.recordRetry('findings', 'deterministic_snapshot_synthesis');
+            usedSnapshotSynthesis = true;
             findingsText = JSON.stringify(
               synthesizeFindingsFromSnapshot(assembled.selectedFiles, input),
             );
@@ -302,7 +305,12 @@ export function createCodeRepoAnalysisAdapter(
         let augmentedRaw = mergedRaw;
         try {
           const parsedForPad = parseModelCodeAnalysisPayload(mergedRaw);
+          const beforeCount = parsedForPad.findings.length;
           const padded = augmentFindingsToMinimum(parsedForPad, assembled.selectedFiles);
+          autoAugmentedCount = Math.max(0, padded.findings.length - beforeCount);
+          // 仅统计 auto_ 补足条目（与 augmentFindingsToMinimum 的 claimId 约定一致）
+          const autoIds = padded.findings.filter((f) => String(f.claimId || '').startsWith('auto_'));
+          if (autoIds.length > autoAugmentedCount) autoAugmentedCount = autoIds.length;
           augmentedRaw = JSON.stringify(padded);
         } catch {
           augmentedRaw = mergedRaw;
@@ -383,6 +391,18 @@ export function createCodeRepoAnalysisAdapter(
           },
         ];
 
+        const quality: NonNullable<CodeAnalysisBundleManifest['quality']> = usedSnapshotSynthesis
+          ? {
+              grade: 'degraded_scan_only',
+              reasons: ['模型未能产出可用结构化分析，已回退为快照扫描'],
+            }
+          : autoAugmentedCount >= 3
+            ? {
+                grade: 'needs_attention',
+                reasons: ['模型结论不足，已用快照扫描补足部分条目，请谨慎采信'],
+              }
+            : { grade: 'usable', reasons: [] };
+
         const manifest: CodeAnalysisBundleManifest = {
           schemaVersion: CODE_ANALYSIS_MANIFEST_SCHEMA_VERSION,
           generatedAt: new Date().toISOString(),
@@ -415,6 +435,7 @@ export function createCodeRepoAnalysisAdapter(
               .slice(0, 5)
               .map((f) => `推测: ${f.title}`),
           ],
+          quality,
         };
         const sealedManifestBody = JSON.stringify(manifest, null, 2);
 

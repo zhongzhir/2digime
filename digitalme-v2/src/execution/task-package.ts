@@ -115,7 +115,19 @@ export function buildExecutorTaskPackage(input: {
 }
 
 /** 渲染给人可读、给执行器可解析的 prompt（不含密钥与完整主体包）。 */
-export function renderTaskPackagePrompt(pkg: ExecutorTaskPackage): string {
+export function renderTaskPackagePrompt(
+  pkg: ExecutorTaskPackage,
+  opts?: {
+    understanding?: {
+      keyFiles?: Array<{ path: string; reason: string }>;
+      symbols?: string[];
+      proposedTests?: string[];
+      planSteps?: string[];
+      risks?: string[];
+      subjectConstraints?: string[];
+    };
+  },
+): string {
   const lines = [
     '你是被 Digital Me 委派的外部代码执行器。Digital Me 是任务控制方；你只负责在授权范围内实施改动。',
     '',
@@ -152,6 +164,34 @@ export function renderTaskPackagePrompt(pkg: ExecutorTaskPackage): string {
     '完成后请给出：变更摘要、修改文件列表、你运行过的测试及结果、未完成事项。',
     '不要声称已 commit / push。不要修改授权范围外文件。',
   ];
+  const u = opts?.understanding;
+  if (u) {
+    lines.push('', '## 任务理解与方案（执行前）');
+    if (u.keyFiles?.length) {
+      lines.push(
+        '关键文件：',
+        ...u.keyFiles.slice(0, 10).map((f) => `- ${f.path}：${f.reason}`),
+      );
+    }
+    if (u.symbols?.length) {
+      lines.push(`相关符号：${u.symbols.slice(0, 16).join(', ')}`);
+    }
+    if (u.planSteps?.length) {
+      lines.push('建议步骤：', ...u.planSteps.map((s, i) => `${i + 1}. ${s}`));
+    }
+    if (u.proposedTests?.length) {
+      lines.push('建议检查：', ...u.proposedTests.map((t) => `- ${t}`));
+    }
+    if (u.risks?.length) {
+      lines.push('已知风险：', ...u.risks.map((r) => `- ${r}`));
+    }
+    if (u.subjectConstraints?.length) {
+      lines.push(
+        '必须遵守的主体约束：',
+        ...u.subjectConstraints.map((c) => `- ${c}`),
+      );
+    }
+  }
   if (pkg.previousRun) {
     lines.push(
       '',
@@ -173,6 +213,8 @@ export function buildExecutionConfirmPreview(input: {
   projectName?: string;
   /** 空目录新建项目 */
   isNewProject?: boolean;
+  /** 可选：任务理解摘要行（将检查的文件/测试等） */
+  understandingSummary?: string[];
 }): {
   title: string;
   notice: string;
@@ -189,6 +231,7 @@ export function buildExecutionConfirmPreview(input: {
   };
   executorDisplayName: string;
   isNewProject?: boolean;
+  understandingSummary?: string[];
 } {
   const scopes = deriveDefaultScopes(input.workingDirectory);
   const readScope = input.readScope?.length ? input.readScope : scopes.readScope;
@@ -200,6 +243,10 @@ export function buildExecutionConfirmPreview(input: {
     String(input.projectName || '').trim() || path.basename(workingDirectory) || workingDirectory;
   const testLines = criteria.filter((c) => /测试|test/i.test(c));
   const isNew = !!input.isNewProject;
+  const understandingSummary = (input.understandingSummary || [])
+    .map((s) => String(s || '').trim())
+    .filter(Boolean)
+    .slice(0, 8);
   return {
     title: isNew ? '这项任务将在空文件夹中创建项目' : '这项任务需要修改项目文件',
     notice: isNew
@@ -237,5 +284,6 @@ export function buildExecutionConfirmPreview(input: {
     },
     executorDisplayName: input.executorDisplayName,
     ...(isNew ? { isNewProject: true } : {}),
+    ...(understandingSummary.length ? { understandingSummary } : {}),
   };
 }

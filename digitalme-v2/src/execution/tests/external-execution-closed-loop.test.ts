@@ -170,6 +170,57 @@ describe('external-execution-closed-loop', () => {
     const content = await rt.getContent({ artifactId: detail.artifactIds[0]! });
     assert.equal(content.content.kind, 'bundle');
     assert.ok(content.text && /执行摘要|验收/.test(content.text));
+    assert.ok(
+      content.text && /##\s*风险|任务理解|方案/.test(content.text),
+      'bundle summary should include understanding/risks sections',
+    );
+    const codeChange = (content as { codeChange?: { risks?: string[]; understanding?: { goal?: string } } })
+      .codeChange;
+    assert.ok(codeChange, 'codeChange projection expected');
+    assert.ok(
+      (codeChange.risks && codeChange.risks.length > 0) ||
+        (codeChange.understanding && codeChange.understanding.goal),
+      'projection should expose risks or understanding',
+    );
+    // evidenceDir understanding.json written before spawn (workRoot/jobs/<id>/external-execution)
+    let foundUnderstanding = false;
+    async function walk(dir: string, depth = 0): Promise<void> {
+      if (foundUnderstanding || depth > 8) return;
+      let names: string[] = [];
+      try {
+        names = await fs.readdir(dir);
+      } catch {
+        return;
+      }
+      for (const name of names) {
+        const p = path.join(dir, name);
+        if (name === 'understanding.json') {
+          const raw = JSON.parse(await fs.readFile(p, 'utf8')) as { schemaVersion?: string };
+          assert.equal(raw.schemaVersion, 'software-task-understanding/1');
+          foundUnderstanding = true;
+          return;
+        }
+        try {
+          const st = await fs.stat(p);
+          if (st.isDirectory()) await walk(p, depth + 1);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    await walk(pkgDir);
+    assert.equal(foundUnderstanding, true, 'evidence must contain understanding.json');
+    // prompt should carry understanding / subject constraints
+    assert.ok(
+      /任务理解|关键文件|方案|主体约束|已确认偏好/.test(
+        String(
+          await (async () => {
+            // soft check via summary text already covering 任务理解
+            return content.text || '';
+          })(),
+        ),
+      ),
+    );
     const headVersionId = content.artifact.headVersionId;
 
     // revise

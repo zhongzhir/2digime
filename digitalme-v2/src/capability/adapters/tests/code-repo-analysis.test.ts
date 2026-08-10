@@ -320,6 +320,15 @@ test('P2.2 真实 Adapter:mock 模型产出 bundle;失败分类', async () => {
       .entries.find((e) => e.role === 'report')!.sourcePath;
     const report = await fs.readFile(reportPath, 'utf8');
     assert.ok(/快照|inferred|推测|结构化/i.test(report));
+    const manifestPath = (out.artifact.payload as { entries: Array<{ role: string; sourcePath: string }> })
+      .entries.find((e) => e.role === 'manifest')!.sourcePath;
+    const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8')) as {
+      quality?: { grade?: string; reasons?: string[] };
+    };
+    assert.equal(manifest.quality?.grade, 'degraded_scan_only');
+    assert.ok(
+      (manifest.quality?.reasons || []).some((r) => /快照扫描|结构化分析/.test(r)),
+    );
   } finally {
     await badJson.close();
   }

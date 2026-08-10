@@ -69,7 +69,17 @@ export type SoftwareOutcomeHint = {
   startupCheckVerdict?: string;
   /** 启动检查通过时可试用。 */
   canSuggestTryRun?: boolean;
+  /**
+   * 成果质量分级（如 code-analysis manifest.quality.grade）。
+   * degraded_scan_only / needs_attention 时不得显示「需要你确认」。
+   */
+  qualityGrade?: string;
 };
+
+/** 质量降级：不得标成「需要你确认」伪完成。 */
+export function isDegradedQualityGrade(grade: string | undefined | null): boolean {
+  return grade === 'degraded_scan_only' || grade === 'needs_attention';
+}
 
 /**
  * 按最新 Job 状态给出用户面文案（失败/取消与「需要处理」区分）。
@@ -128,8 +138,10 @@ export function userFacingLabelFromLatestJob(
         }
         if (run === 'can_try') return '可以试用';
         if (run === 'needs_fix') return NEEDS_REVISION_LABEL;
+        if (isDegradedQualityGrade(soft.qualityGrade)) return USER_FACING_LABELS.attention;
         return AWAITING_CONFIRM_LABEL;
       }
+      if (isDegradedQualityGrade(soft?.qualityGrade)) return USER_FACING_LABELS.attention;
       return USER_FACING_LABELS.completed;
     }
     case 'failed':

@@ -283,6 +283,8 @@
     executionConfirmAccept: document.getElementById("execution-confirm-accept"),
     executionConfirmDonot: document.getElementById("execution-confirm-donot"),
     executionConfirmForbidden: document.getElementById("execution-confirm-forbidden"),
+    executionConfirmUnderstanding: document.getElementById("execution-confirm-understanding"),
+    executionConfirmUnderstandingList: document.getElementById("execution-confirm-understanding-list"),
     confirmExecution: document.getElementById("btn-confirm-execution"),
     cancelExecution: document.getElementById("btn-cancel-execution"),
     goalExamples: document.getElementById("goal-examples"),
@@ -297,6 +299,13 @@
     ccTestsSection: document.getElementById("cc-tests-section"),
     ccUnresolvedSection: document.getElementById("cc-unresolved-section"),
     ccUnresolvedList: document.getElementById("cc-unresolved-list"),
+    ccUnderstandingSection: document.getElementById("cc-understanding-section"),
+    ccUnderstandingGoal: document.getElementById("cc-understanding-goal"),
+    ccUnderstandingFiles: document.getElementById("cc-understanding-files"),
+    ccPlanSection: document.getElementById("cc-plan-section"),
+    ccPlanList: document.getElementById("cc-plan-list"),
+    ccRisksSection: document.getElementById("cc-risks-section"),
+    ccRisksList: document.getElementById("cc-risks-list"),
     jobStatus: document.getElementById("job-status"),
     jobActionable: document.getElementById("job-actionable"),
     settingsExecutorStatus: document.getElementById("settings-executor-status"),
@@ -1574,6 +1583,63 @@
         els.ccTestList.appendChild(li);
       }
     }
+    const understanding = codeChange.understanding || null;
+    if (els.ccUnderstandingSection) {
+      const goalText = String((understanding && understanding.goal) || "").trim();
+      const keyFiles = (understanding && understanding.keyFiles) || [];
+      if (goalText || keyFiles.length) {
+        els.ccUnderstandingSection.hidden = false;
+        els.ccUnderstandingSection.removeAttribute("hidden");
+        if (els.ccUnderstandingGoal) {
+          els.ccUnderstandingGoal.textContent = goalText || "已根据项目材料形成任务理解。";
+        }
+        if (els.ccUnderstandingFiles) {
+          els.ccUnderstandingFiles.innerHTML = "";
+          for (const f of keyFiles.slice(0, 10)) {
+            const li = document.createElement("li");
+            li.textContent = f.reason ? `${f.path}：${f.reason}` : f.path;
+            els.ccUnderstandingFiles.appendChild(li);
+          }
+        }
+      } else {
+        els.ccUnderstandingSection.hidden = true;
+        els.ccUnderstandingSection.setAttribute("hidden", "");
+      }
+    }
+    if (els.ccPlanSection && els.ccPlanList) {
+      const steps = (understanding && understanding.planSteps) || [];
+      if (steps.length) {
+        els.ccPlanSection.hidden = false;
+        els.ccPlanSection.removeAttribute("hidden");
+        els.ccPlanList.innerHTML = "";
+        for (const step of steps.slice(0, 8)) {
+          const li = document.createElement("li");
+          li.textContent = step;
+          els.ccPlanList.appendChild(li);
+        }
+      } else {
+        els.ccPlanSection.hidden = true;
+        els.ccPlanSection.setAttribute("hidden", "");
+        els.ccPlanList.innerHTML = "";
+      }
+    }
+    const risks = (codeChange.risks || (understanding && understanding.risks) || []).filter(Boolean);
+    if (els.ccRisksSection && els.ccRisksList) {
+      if (risks.length) {
+        els.ccRisksSection.hidden = false;
+        els.ccRisksSection.removeAttribute("hidden");
+        els.ccRisksList.innerHTML = "";
+        for (const item of risks.slice(0, 12)) {
+          const li = document.createElement("li");
+          li.textContent = item;
+          els.ccRisksList.appendChild(li);
+        }
+      } else {
+        els.ccRisksSection.hidden = true;
+        els.ccRisksSection.setAttribute("hidden", "");
+        els.ccRisksList.innerHTML = "";
+      }
+    }
     const unresolved = (codeChange.unresolvedItems || []).filter(Boolean);
     if (els.ccUnresolvedSection && els.ccUnresolvedList) {
       if (unresolved.length) {
@@ -1641,6 +1707,22 @@
       els.ccUnresolvedSection.hidden = true;
       els.ccUnresolvedSection.setAttribute("hidden", "");
     }
+    if (els.ccUnderstandingSection) {
+      els.ccUnderstandingSection.hidden = true;
+      els.ccUnderstandingSection.setAttribute("hidden", "");
+    }
+    if (els.ccUnderstandingGoal) els.ccUnderstandingGoal.textContent = "";
+    if (els.ccUnderstandingFiles) els.ccUnderstandingFiles.innerHTML = "";
+    if (els.ccPlanSection) {
+      els.ccPlanSection.hidden = true;
+      els.ccPlanSection.setAttribute("hidden", "");
+    }
+    if (els.ccPlanList) els.ccPlanList.innerHTML = "";
+    if (els.ccRisksSection) {
+      els.ccRisksSection.hidden = true;
+      els.ccRisksSection.setAttribute("hidden", "");
+    }
+    if (els.ccRisksList) els.ccRisksList.innerHTML = "";
     if (els.ccFilesMore) {
       els.ccFilesMore.hidden = true;
       els.ccFilesMore.setAttribute("hidden", "");
@@ -5304,6 +5386,25 @@
     if (els.executionConfirmDonot) {
       const lines = (preview.forbidden || []).concat(acc.doNotDo || []);
       els.executionConfirmDonot.textContent = [...new Set(lines)].slice(0, 8).join("；");
+    }
+    if (els.executionConfirmUnderstanding && els.executionConfirmUnderstandingList) {
+      const summaryLines = (preview.understandingSummary || [])
+        .map((s) => String(s || "").trim())
+        .filter(Boolean);
+      if (summaryLines.length) {
+        els.executionConfirmUnderstanding.hidden = false;
+        els.executionConfirmUnderstanding.removeAttribute("hidden");
+        els.executionConfirmUnderstandingList.innerHTML = "";
+        for (const line of summaryLines.slice(0, 8)) {
+          const li = document.createElement("li");
+          li.textContent = line;
+          els.executionConfirmUnderstandingList.appendChild(li);
+        }
+      } else {
+        els.executionConfirmUnderstanding.hidden = true;
+        els.executionConfirmUnderstanding.setAttribute("hidden", "");
+        els.executionConfirmUnderstandingList.innerHTML = "";
+      }
     }
     if (els.executionConfirmForbidden) {
       els.executionConfirmForbidden.innerHTML = "";

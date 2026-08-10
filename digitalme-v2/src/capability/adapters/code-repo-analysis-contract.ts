@@ -45,6 +45,14 @@ export interface CodeAnalysisBundleManifest {
   entries: Array<{ role: CodeBundleRole; path: string; mediaType: string; bytes?: number }>;
   /** 用户面文案,不含内部字段名与密钥样本。 */
   warnings: string[];
+  /**
+   * 分析质量分级 — 用于用户面门禁（不得把合成/降级结果标成「需要你确认」）。
+   * usable: 模型结构化输出可用；needs_attention: 大量自动补足；degraded_scan_only: 快照合成回退。
+   */
+  quality?: {
+    grade: 'usable' | 'needs_attention' | 'degraded_scan_only';
+    reasons: string[];
+  };
 }
 
 /** evidence 摘录上限 — 禁止整文件内容进入 evidence。 */
