@@ -65,8 +65,8 @@ describe('work-ux-simplification-01-blocker-02', () => {
     assert.match(rejected.statusLine, /未采用/);
     const primary = rejected.actions.find((a) => a.slot === 'primary');
     assert.ok(primary);
-    assert.ok(['continue_revise', 'propose_revision'].includes(primary!.id));
-    assert.match(primary!.label, /继续修改/);
+    assert.ok(['continue_revise', 'propose_revision', 'confirm_continue'].includes(primary!.id));
+    assert.match(primary!.label, /确认继续|继续修改/);
     assert.ok(!rejected.actions.some((a) => a.id === 'reject'));
     assert.ok(!rejected.actions.some((a) => a.id === 'adopt_anyway'));
     assert.equal(ux.assertActionBudget(rejected).ok, true);

@@ -255,7 +255,9 @@
     ccAcceptanceTitle: document.getElementById("cc-acceptance-title"),
     ccAcceptanceExec: document.getElementById("cc-acceptance-exec"),
     ccAcceptanceGoal: document.getElementById("cc-acceptance-goal"),
+    ccCtoReport: document.getElementById("cc-cto-report"),
     ccAcceptanceBullets: document.getElementById("cc-acceptance-bullets"),
+    ccAcceptanceNext: document.getElementById("cc-acceptance-next"),
     ccAcceptanceReco: document.getElementById("cc-acceptance-reco"),
     ccTechEvidence: document.getElementById("cc-tech-evidence"),
     ccTechBullets: document.getElementById("cc-tech-bullets"),
@@ -411,6 +413,8 @@
   let activeCodeChangeWorkingDirectory = null;
   let activeCodeChangeRunInfo = null;
   let activeAcceptanceSummary = null;
+  /** CTO 闭环：用户暂停当前任务（不新增任务状态机，仅 UI 事实） */
+  let taskPausedCto = false;
   let pendingCreateProject = null;
   /** @type {{ id: string, dataUrl: string, path?: string }[]} */
   let revisionShotItems = [];
@@ -1449,10 +1453,10 @@
       if (acc) {
         els.ccAcceptanceSection.hidden = false;
         els.ccAcceptanceSection.removeAttribute("hidden");
-        if (els.ccAcceptanceTitle) els.ccAcceptanceTitle.textContent = acc.title || "Digital Me 检查结果";
+        if (els.ccAcceptanceTitle) els.ccAcceptanceTitle.textContent = acc.title || "Digital Me 验收结论";
         if (els.ccAcceptanceExec) {
           els.ccAcceptanceExec.textContent =
-            acc.executionStatusLabel || "本次处理已结束";
+            acc.executionStatusLabel || "Digital Me 已完成独立验收";
         }
         if (els.ccAcceptanceGoal) {
           els.ccAcceptanceGoal.textContent = acc.headline || acc.goalLabel || "无法验证";
@@ -1460,14 +1464,31 @@
             "cc-acceptance-goal" +
             (acc.canAdoptSuggested ? " is-ok" : acc.canAdoptSuggested === false ? " is-warn" : " is-bad");
         }
+        if (els.ccCtoReport) {
+          const report = String(acc.ctoReport || "").trim();
+          if (report) {
+            els.ccCtoReport.hidden = false;
+            els.ccCtoReport.removeAttribute("hidden");
+            els.ccCtoReport.textContent = report;
+          } else {
+            els.ccCtoReport.textContent = "";
+            els.ccCtoReport.hidden = true;
+            els.ccCtoReport.setAttribute("hidden", "");
+          }
+        }
         if (els.ccAcceptanceBullets) {
           els.ccAcceptanceBullets.innerHTML = "";
           for (const b of acc.bullets || []) {
-            if (/命中关键词|keyword matching|goal_alignment/i.test(String(b))) continue;
+            if (/命中关键词|keyword matching|goal_alignment|辅助词命中/i.test(String(b))) continue;
             const li = document.createElement("li");
             li.textContent = b;
             els.ccAcceptanceBullets.appendChild(li);
           }
+        }
+        if (els.ccAcceptanceNext) {
+          const next = String(acc.userFacingNextStep || "").trim();
+          els.ccAcceptanceNext.textContent = next || "";
+          els.ccAcceptanceNext.hidden = !next;
         }
         if (els.ccAcceptanceReco) {
           els.ccAcceptanceReco.textContent = "建议：" + (acc.recommendation || "暂不建议采用");
@@ -1496,18 +1517,28 @@
       }
     }
     if (els.ccSummary) {
-      const summaryText = String(codeChange.summary || "").trim();
-      const happened = summaryText.match(/##\s*发生了什么\s*([\s\S]*?)(?=\n##\s|$)/);
-      let brief = happened ? happened[1].trim() : "";
-      if (!brief) {
-        brief =
-          summaryText
-            .split(/\n{2,}/)
-            .map((p) => p.trim())
-            .find((p) => p && !p.startsWith("#") && !p.startsWith("**验收") && !/^##\s*目标/.test(p)) ||
-          summaryText.slice(0, 800);
+      // Coding Agent 原始摘要不再作为默认主文案；CTO 报告优先
+      const cto = String((codeChange.acceptanceSummary && codeChange.acceptanceSummary.ctoReport) || "").trim();
+      if (cto) {
+        els.ccSummary.textContent = "";
+        els.ccSummary.hidden = true;
+        els.ccSummary.setAttribute("hidden", "");
+      } else {
+        els.ccSummary.hidden = false;
+        els.ccSummary.removeAttribute("hidden");
+        const summaryText = String(codeChange.summary || "").trim();
+        const happened = summaryText.match(/##\s*发生了什么\s*([\s\S]*?)(?=\n##\s|$)/);
+        let brief = happened ? happened[1].trim() : "";
+        if (!brief) {
+          brief =
+            summaryText
+              .split(/\n{2,}/)
+              .map((p) => p.trim())
+              .find((p) => p && !p.startsWith("#") && !p.startsWith("**验收") && !/^##\s*目标/.test(p)) ||
+            summaryText.slice(0, 800);
+        }
+        els.ccSummary.textContent = brief || "已完成本次项目修改。";
       }
-      els.ccSummary.textContent = brief || "已完成本次项目修改。";
     }
     if (els.ccVerification) {
       els.ccVerification.textContent = codeChange.verificationLabel || "";
@@ -2898,6 +2929,8 @@
       decisionStatus: lastDecisionStatus,
       canAdoptSuggested:
         acc && typeof acc.canAdoptSuggested === "boolean" ? acc.canAdoptSuggested : null,
+      primaryAction: acc && acc.primaryAction ? String(acc.primaryAction) : null,
+      taskPaused: !!taskPausedCto,
       codeChange: isActiveSoftwareCodeChangeProjection(),
       canTryRun: canTry,
       startupFailed,
@@ -2952,15 +2985,65 @@
   }
 
   function resolveWorkUxActionEl(actionId, facts, byId) {
-    if (actionId === "continue_revise") {
+    if (actionId === "continue_revise" || actionId === "confirm_continue") {
       // 继续修改必须走既有 revision 入口，不能藏进警告卡
       return facts.adoptWarningOpen ? els.adoptContinueRevise || els.proposeRevision : els.proposeRevision;
+    }
+    if (actionId === "supplement_opinion") {
+      return els.proposeRevision;
     }
     if (actionId === "adopt_anyway") {
       return facts.adoptWarningOpen ? els.adoptAnyway || els.acceptArtifact : els.acceptArtifact;
     }
     if (actionId === "tell_what_wrong") return els.proposeRevision;
+    if (actionId === "pause_task") return null;
     return byId[actionId] || null;
+  }
+
+  async function runCtoConfirmContinue(userSupplement) {
+    if (!activeTaskId || !activeArtifactId || workMode !== "task") return;
+    const connected = await refreshConnectionFromCapabilities();
+    if (!connected) {
+      if (els.jobStatus) {
+        els.jobStatus.textContent = "请先连接模型";
+        els.jobStatus.classList.add("error");
+      }
+      return;
+    }
+    const acc = activeAcceptanceSummary || {};
+    const directive = String(acc.revisionDirective || "").trim();
+    const next = String(acc.userFacingNextStep || "").trim();
+    const userText = String(userSupplement || "").trim();
+    let revisionRequest = directive || next || "请按 Digital Me 验收结论继续修正，补齐未达标项并提供可核对证据。";
+    if (userText) {
+      revisionRequest = `${revisionRequest}\n\n【用户补充意见】\n${userText}`;
+    }
+    taskPausedCto = false;
+    hideRevisionComposer();
+    hideAdoptWarning();
+    if (els.jobStatus) {
+      els.jobStatus.textContent = "正在按 Digital Me 修正指令继续…";
+      els.jobStatus.classList.remove("error");
+    }
+    try {
+      const result = await api.invoke("work.reviseArtifact", {
+        taskId: activeTaskId,
+        artifactId: activeArtifactId,
+        revisionRequest,
+      });
+      if (result && result.jobId) {
+        activeJobId = result.jobId;
+        workMode = "task";
+        refreshWorkUxView({});
+        if (typeof pollActiveJob === "function") pollActiveJob();
+        else if (typeof refreshTaskDetail === "function") refreshTaskDetail();
+      }
+    } catch (err) {
+      if (els.jobStatus) {
+        els.jobStatus.textContent = userFacingWorkError(err);
+        els.jobStatus.classList.add("error");
+      }
+    }
   }
 
   function applyWorkUxChrome(extraFacts) {
@@ -2992,8 +3075,58 @@
     if (moreHost) moreHost.innerHTML = "";
     let hasMore = false;
 
+    // CTO 动作：独立代理按钮，避免与旧「继续修改」混用
+    const ctoHost = els.decisionActions;
+    if (ctoHost) {
+      Array.from(ctoHost.querySelectorAll("[data-cto-action]")).forEach((n) => n.remove());
+    }
+
     for (const action of view.actions || []) {
       if (action.id === "try_run") continue;
+
+      if (
+        action.id === "confirm_continue" ||
+        action.id === "supplement_opinion" ||
+        action.id === "pause_task"
+      ) {
+        const host =
+          action.slot === "more" ? moreHost : ctoHost || moreHost;
+        if (!host) continue;
+        if (action.slot === "more") hasMore = true;
+        const proxy = document.createElement("button");
+        proxy.type = "button";
+        proxy.className = action.slot === "primary" ? "primary" : "ghost";
+        proxy.textContent = action.label || action.id;
+        proxy.dataset.ctoAction = action.id;
+        proxy.addEventListener("click", async () => {
+          if (action.id === "pause_task") {
+            taskPausedCto = true;
+            hideRevisionComposer();
+            hideAdoptWarning();
+            if (els.jobStatus) els.jobStatus.textContent = "任务已暂停";
+            refreshWorkUxView({ taskPaused: true });
+            return;
+          }
+          if (action.id === "supplement_opinion") {
+            taskPausedCto = false;
+            showRevisionComposer({ continueMode: true });
+            if (els.revisionComposerTitle) {
+              els.revisionComposerTitle.textContent = "补充意见";
+            }
+            if (els.revisionRequest) {
+              els.revisionRequest.placeholder =
+                "补充你的意见或约束。确认后将连同 Digital Me 的修正指令一并交给执行者。";
+              els.revisionRequest.focus();
+            }
+            return;
+          }
+          // confirm_continue：直接按 CTO 修正指令进入同任务下一轮
+          await runCtoConfirmContinue("");
+        });
+        host.appendChild(proxy);
+        continue;
+      }
+
       const el = resolveWorkUxActionEl(action.id, facts, byId);
       if (!el) continue;
       if (action.label && el.tagName === "BUTTON") el.textContent = action.label;
@@ -3080,7 +3213,15 @@
         planned.has("propose_revision") ||
         (planned.has("continue_revise") && !facts.adoptWarningOpen) ||
         planned.has("tell_what_wrong");
-      if (showPropose) els.proposeRevision.disabled = false;
+      // CTO 主路径使用代理按钮时，隐藏旧「继续修改」以免双入口
+      if (
+        planned.has("confirm_continue") ||
+        planned.has("supplement_opinion")
+      ) {
+        setElVisible(els.proposeRevision, false);
+      } else if (showPropose) {
+        els.proposeRevision.disabled = false;
+      }
     }
 
     if (els.decisionHint) {
@@ -5416,7 +5557,8 @@
       const parts = []
         .concat(acc.goals || [])
         .concat(acc.tests || []);
-      els.executionConfirmAccept.textContent = parts.filter(Boolean).join("；") || "按任务目标验收";
+      els.executionConfirmAccept.textContent =
+        parts.filter(Boolean).join("；") || "按确认的目标与方案验收交付";
     }
     if (els.executionConfirmAllowed) {
       els.executionConfirmAllowed.textContent = (preview.allowed || []).join("；") ||
@@ -5426,10 +5568,15 @@
       const lines = (preview.forbidden || []).concat(acc.doNotDo || []);
       els.executionConfirmDonot.textContent = [...new Set(lines)].slice(0, 8).join("；");
     }
+    // 确认页强调目标/方案/边界，不要求用户理解发给执行者的技术指令
     if (els.executionConfirmUnderstanding && els.executionConfirmUnderstandingList) {
       const summaryLines = (preview.understandingSummary || [])
         .map((s) => String(s || "").trim())
         .filter(Boolean);
+      const titleEl = els.executionConfirmUnderstanding.querySelector(
+        ".execution-confirm-understanding-title",
+      );
+      if (titleEl) titleEl.textContent = "目标、方案与预计交付";
       if (summaryLines.length) {
         els.executionConfirmUnderstanding.hidden = false;
         els.executionConfirmUnderstanding.removeAttribute("hidden");
@@ -5439,6 +5586,10 @@
           li.textContent = line;
           els.executionConfirmUnderstandingList.appendChild(li);
         }
+        const riskLi = document.createElement("li");
+        riskLi.textContent =
+          "重要边界：不会自动提交、推送或部署；仅在你确认的目录与权限范围内修改。";
+        els.executionConfirmUnderstandingList.appendChild(riskLi);
       } else {
         els.executionConfirmUnderstanding.hidden = true;
         els.executionConfirmUnderstanding.setAttribute("hidden", "");
@@ -5788,10 +5939,20 @@
       }
       const attachmentPaths = await persistRevisionShots();
       // 采用/不采用说明不得作为 revisionRequest
+      // CTO：用户补充意见时，附带 Digital Me 修正指令再委派
+      let revisionPayload = revisionRequest;
+      const ctoDirective =
+        activeAcceptanceSummary && activeAcceptanceSummary.revisionDirective
+          ? String(activeAcceptanceSummary.revisionDirective).trim()
+          : "";
+      if (ctoDirective && !/^【Digital Me 修正指令】/.test(revisionRequest)) {
+        revisionPayload = `${ctoDirective}\n\n【用户补充意见】\n${revisionRequest}`;
+      }
+      taskPausedCto = false;
       const result = await api.invoke("work.reviseArtifact", {
         taskId: activeTaskId,
         artifactId: activeArtifactId,
-        revisionRequest,
+        revisionRequest: revisionPayload,
         ...(attachmentPaths.length ? { attachmentPaths } : {}),
       });
       hideRevisionComposer();
@@ -5799,12 +5960,12 @@
       if (els.revisionRequest) els.revisionRequest.value = "";
       clearRevisionShots();
       activeJobId = result.jobId;
-      els.jobStatus.textContent = "正在按你的修改要求继续处理";
+      els.jobStatus.textContent = "正在按修正指令继续处理";
       els.jobStatus.classList.remove("error");
       if (els.jobActionable) {
         els.jobActionable.textContent =
-          "修改要求：" +
-          revisionRequest +
+          "修正说明：" +
+          revisionRequest.slice(0, 200) +
           (attachmentPaths.length ? `（附 ${attachmentPaths.length} 张截图）` : "");
       }
       showArtifactLoading("正在按你的修改要求继续处理…");

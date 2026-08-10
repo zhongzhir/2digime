@@ -23,8 +23,10 @@
    * @property {string|null} [jobStatus]
    * @property {boolean} [hasArtifact]
    * @property {'undecided'|'accepted'|'rejected'|null} [decisionStatus]
-   * @property {boolean|null} [canAdoptSuggested]
-   * @property {boolean} [codeChange]
+ * @property {boolean|null} [canAdoptSuggested]
+ * @property {string|null} [primaryAction]
+ * @property {boolean} [taskPaused]
+ * @property {boolean} [codeChange]
    * @property {boolean} [canTryRun]
    * @property {boolean} [startupFailed]
    * @property {boolean} [hasWorkingDirectory]
@@ -83,6 +85,7 @@
     // 不采用 ≠ 自动修订，但必须进入可继续修改的阶段
     if (f.hasArtifact && f.decisionStatus === 'rejected') return 'needs_revision';
     if (f.revisionComposerOpen || f.adoptWarningOpen) return 'needs_revision';
+    if (f.taskPaused && f.hasArtifact) return 'needs_revision';
     if (f.hasArtifact && (f.decisionStatus === 'undecided' || !f.decisionStatus)) {
       if (f.canAdoptSuggested === false) return 'needs_revision';
       return 'needs_review';
@@ -151,36 +154,44 @@
       }
     } else if (stage === 'needs_revision') {
       hideDecisionHint = true;
-      if (f.revisionComposerOpen) {
-        statusLine = '说明还需要修改什么';
+      if (f.taskPaused) {
+        statusLine = '任务已暂停';
+        push('confirm_continue', '确认继续', 'primary', 'right');
+        push('supplement_opinion', '补充意见', 'secondary', 'right');
+      } else if (f.revisionComposerOpen) {
+        statusLine = '说明还需要修改什么，或补充你的意见';
         push('submit_revision', '提交修改', 'primary', 'right');
         push('cancel_revision', '取消', 'secondary', 'right');
         push('add_revision_shot', '添加截图', 'more', 'right');
       } else if (f.decisionStatus === 'rejected') {
         statusLine = '这份成果未采用';
-        push('continue_revise', '继续修改', 'primary', 'right');
+        push('confirm_continue', '确认继续', 'primary', 'right');
+        push('supplement_opinion', '补充意见', 'secondary', 'right');
         push('restart_compose', '创建新任务', 'secondary', 'middle');
-        // 已 reject：不再显示「不采用」；也不自动打开 revision
       } else if (f.adoptWarningOpen || f.canAdoptSuggested === false) {
-        statusLine = '建议先继续修改';
-        push('continue_revise', '继续修改', 'primary', 'right');
-        push('adopt_anyway', '仍然采用', 'secondary', 'right');
-        push('reject', '不采用', 'secondary', 'right');
+        statusLine =
+          f.primaryAction === 'need_decision' ? '需要你做一项决定' : '建议继续修正';
+        push('confirm_continue', '确认继续', 'primary', 'right');
+        push('supplement_opinion', '补充意见', 'secondary', 'right');
+        if (f.primaryAction === 'need_decision') {
+          push('adopt_anyway', '仍然采用', 'secondary', 'right');
+        }
+        push('pause_task', '暂停任务', 'more', 'right');
       } else {
-        statusLine = '建议先继续修改';
-        push('propose_revision', '继续修改', 'primary', 'right');
-        push('accept', '采用', 'secondary', 'right');
-        push('reject', '不采用', 'secondary', 'right');
+        statusLine = '建议继续修正';
+        push('confirm_continue', '确认继续', 'primary', 'right');
+        push('supplement_opinion', '补充意见', 'secondary', 'right');
+        push('pause_task', '暂停任务', 'more', 'right');
       }
       if (f.hasWorkingDirectory) push('restore_baseline', '恢复执行前状态', 'more', 'right');
       if (f.hasWorkingDirectory) push('open_project', '打开项目', 'more', 'middle');
       if (f.decisionStatus !== 'rejected') push('restart_compose', '创建新任务', 'more', 'middle');
     } else if (stage === 'needs_review') {
-      statusLine = '请确认是否采用当前成果';
+      statusLine = 'Digital Me 建议采用当前成果';
       hideDecisionHint = true;
-      push('accept', '采用', 'primary', 'right');
-      push('propose_revision', '提出修改', 'secondary', 'right');
-      push('reject', '不采用', 'secondary', 'right');
+      push('accept', '确认采用', 'primary', 'right');
+      push('supplement_opinion', '补充意见', 'secondary', 'right');
+      push('pause_task', '暂停任务', 'more', 'right');
       if (f.hasWorkingDirectory) push('restore_baseline', '恢复执行前状态', 'more', 'right');
       if (f.hasWorkingDirectory) push('open_project', '打开项目', 'more', 'middle');
       push('restart_compose', '创建新任务', 'more', 'middle');
@@ -308,7 +319,12 @@
     const right = (view.actions || []).filter(
       (a) =>
         a.column === 'right' &&
-        (a.id === 'accept' || a.id === 'reject' || a.id === 'propose_revision' || a.id === 'continue_revise'),
+        (a.id === 'accept' ||
+          a.id === 'reject' ||
+          a.id === 'propose_revision' ||
+          a.id === 'continue_revise' ||
+          a.id === 'confirm_continue' ||
+          a.id === 'supplement_opinion'),
     );
     if (mid.length && right.length) errors.push('mid_right_decision_dup');
     const restore = (view.actions || []).find((a) => a.id === 'restore_baseline');

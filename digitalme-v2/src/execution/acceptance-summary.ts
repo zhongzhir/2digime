@@ -1,8 +1,15 @@
 /**
- * 面向 Owner 的 Digital Me 验收摘要（来自 verifier，非 agent 自述）。
- * 默认层白话；技术细节折叠。
+ * 面向 Owner 的 Digital Me 验收摘要（CTO 判断为主；verifier 证据为辅）。
+ * 默认层自然语言报告；技术细节折叠。
  */
 import type { ExecutionVerificationReport, VerificationVerdict } from './external-executor-contract';
+import {
+  buildDigitalMeCtoReview,
+  ctoActionToRecommendation,
+  ctoVerdictLabel,
+  type CtoPrimaryAction,
+  type DigitalMeCtoReview,
+} from './cto-review';
 
 export type OwnerAcceptanceRecommendation =
   | '可以采用'
@@ -29,6 +36,13 @@ export type OwnerAcceptanceSummary = {
   agentClaimedSuccess: boolean;
   /** 不得仅因 agentClaimedSuccess 显示可采用 */
   canAdoptSuggested: boolean;
+  /** Digital Me CTO 自然语言主报告 */
+  ctoReport?: string;
+  primaryAction?: CtoPrimaryAction;
+  userFacingNextStep?: string;
+  /** 内部修正指令（发给 Coding Agent；默认不要求用户阅读） */
+  revisionDirective?: string;
+  ctoReview?: DigitalMeCtoReview;
 };
 
 export type AcceptanceEvidenceInput = {
@@ -125,6 +139,11 @@ export function buildOwnerAcceptanceSummary(input: {
   unresolvedItems?: string[];
   summaryExcerpt?: string;
   evidence?: AcceptanceEvidenceInput;
+  /** 用户确认过的目标与理解（CTO 判断输入） */
+  userGoal?: string;
+  understandingBrief?: string;
+  understandingKeyFiles?: string[];
+  planSteps?: string[];
 }): OwnerAcceptanceSummary {
   const { verification } = input;
   const checks = verification.checks || [];
@@ -132,83 +151,45 @@ export function buildOwnerAcceptanceSummary(input: {
 
   const fileCheck = byId('file_changes');
   const testPass = byId('tests_passed');
-  const testRun = byId('tests_executed');
   const testConfigured = byId('tests_configured');
-  const testExecuted = byId('tests_executed');
   const scope = byId('scope_boundary');
   const goal = byId('goal_alignment');
   const gitIntegrity = byId('git_integrity');
-  const testCfgSatisfied = testConfigured?.verdict === 'satisfied';
 
-  const userBullets: string[] = [];
   const technicalBullets: string[] = [];
 
-  if (input.summaryExcerpt) {
-    const first = input.summaryExcerpt
-      .split(/\n/)
-      .map((l) => l.replace(/^\s*[-*]\s*/, '').trim())
-      .find((l) => l && !l.startsWith('#') && !l.startsWith('**') && l.length > 4);
-    if (first && !looksLikeMachineMetric(first)) {
-      userBullets.push(first.slice(0, 160));
-    }
-  }
+  const ctoReview = buildDigitalMeCtoReview({
+    userGoal: input.userGoal || '',
+    ...(input.understandingBrief ? { understandingBrief: input.understandingBrief } : {}),
+    ...(input.understandingKeyFiles ? { understandingKeyFiles: input.understandingKeyFiles } : {}),
+    ...(input.planSteps ? { planSteps: input.planSteps } : {}),
+    verification,
+    changedFileCount: input.changedFileCount,
+    ...(input.evidence?.changedFiles ? { changedFiles: input.evidence.changedFiles } : {}),
+    ...(input.directoryChangedSinceResult != null
+      ? { directoryChangedSinceResult: input.directoryChangedSinceResult }
+      : {}),
+    ...(input.unresolvedItems ? { unresolvedItems: input.unresolvedItems } : {}),
+    ...(input.summaryExcerpt ? { agentSummaryExcerpt: input.summaryExcerpt } : {}),
+  });
 
-  if (input.changedFileCount > 0) {
+  const userBullets: string[] = [];
+  for (const f of ctoReview.findings) {
+    if (!looksLikeMachineMetric(f)) userBullets.push(f.slice(0, 160));
+  }
+  for (const r of ctoReview.nonBlockingRisks) {
+    userBullets.push(`非阻断风险：${r.slice(0, 140)}`);
+  }
+  if (userBullets.length === 0 && input.changedFileCount > 0) {
     userBullets.push(`${input.changedFileCount} 个文件发生了变化`);
-  } else if (fileCheck?.verdict === 'unsatisfied') {
+  }
+  if (fileCheck?.verdict === 'unsatisfied' && input.changedFileCount <= 0) {
     userBullets.push('没有检测到实质文件变化');
   }
-
-  if (testPass) {
-    if (!testCfgSatisfied && testConfigured?.verdict === 'unsatisfied') {
-      userBullets.push('这个项目没有配置自动测试');
-    } else if (testPass.verdict === 'satisfied') {
-      userBullets.push('自动测试已经通过');
-    } else if (testPass.verdict === 'unsatisfied') {
-      userBullets.push('自动测试失败');
-    } else if (testExecuted?.verdict === 'unsatisfied') {
-      userBullets.push('测试命令无法启动');
-    } else {
-      userBullets.push('还不能确认自动测试结果');
-    }
-  } else if (testConfigured?.verdict === 'unsatisfied') {
-    userBullets.push('这个项目没有配置自动测试');
-  } else if (testRun?.verdict === 'unsatisfied') {
-    userBullets.push('本次没有运行测试');
-  } else if (!testRun && !testPass) {
-    userBullets.push('还不能确认程序是否已经可以正常运行');
-  }
+  userBullets.push('未执行提交、推送或部署');
 
   const startup = byId('run_startup_check');
-  if (startup) {
-    if (startup.verdict === 'satisfied') {
-      userBullets.push('已通过启动检查');
-    } else if (startup.verdict === 'unsatisfied') {
-      userBullets.push(
-        `启动检查失败${startup.detail ? `：${String(startup.detail).slice(0, 120)}` : ''}`,
-      );
-      userBullets.push('尚不能确认可以正常使用');
-    } else if (checkLooksNotConfigured(startup.detail)) {
-      userBullets.push('未配置可用启动方式');
-    } else {
-      userBullets.push('尚未验证实际运行');
-    }
-  }
-
   const build = byId('build_check');
-  if (build?.verdict === 'unsatisfied') {
-    userBullets.push('构建失败');
-  } else if (build?.verdict === 'satisfied') {
-    userBullets.push('构建已通过');
-  }
-
-  if (scope) {
-    userBullets.push(
-      scope.verdict === 'satisfied'
-        ? '没有发现项目范围之外的修改'
-        : '发现了项目范围之外的修改',
-    );
-  }
 
   // —— 技术证据：完整文件列表、diff 摘要、命令与结果、越界/提交 ——
   const changedFiles =
@@ -332,91 +313,27 @@ export function buildOwnerAcceptanceSummary(input: {
     technicalBullets.push(line.slice(0, 240));
   }
 
-  for (const item of (input.unresolvedItems || []).slice(0, 3)) {
-    if (!looksLikeMachineMetric(item)) {
-      userBullets.push(`未完成：${item.slice(0, 120)}`);
-    }
+  if (input.summaryExcerpt) {
+    technicalBullets.push(
+      `Coding Agent 摘要摘录：${String(input.summaryExcerpt).replace(/\s+/g, ' ').slice(0, 200)}`,
+    );
   }
 
-  userBullets.push('未执行提交、推送或部署');
-
-  if (input.directoryChangedSinceResult) {
-    userBullets.push('当前项目目录已与成果生成时不同，请重新核对后再决定');
-  }
-
-  const testsOk =
-    testConfigured?.verdict === 'unsatisfied' ||
-    !testPass ||
-    testPass.verdict === 'satisfied' ||
-    (testPass.verdict === 'unverifiable' && (!testRun || testRun.verdict !== 'unsatisfied'));
-  const scopeOk = !scope || scope.verdict === 'satisfied';
-  const startupCheck = byId('run_startup_check');
-  const startupOk =
-    !startupCheck ||
-    startupCheck.verdict === 'satisfied' ||
-    startupCheck.verdict === 'unverifiable';
-  const buildCheck = byId('build_check');
-  const buildOk =
-    !buildCheck ||
-    buildCheck.verdict === 'satisfied' ||
-    buildCheck.verdict === 'unverifiable';
-  const hasChanges = input.changedFileCount > 0;
-  const overallOk = verification.overall === 'satisfied';
-
-  let recommendation: OwnerAcceptanceRecommendation = '暂不建议采用';
-  let canAdoptSuggested = false;
-
-  if (input.directoryChangedSinceResult) {
-    recommendation = '请重新验证';
-  } else if (
-    overallOk &&
-    hasChanges &&
-    scopeOk &&
-    testsOk &&
-    startupOk &&
-    buildOk &&
-    verification.digitalMeVerified
-  ) {
-    recommendation = '可以采用';
-    canAdoptSuggested = true;
-  } else if (
-    verification.overall === 'partially_satisfied' ||
-    (hasChanges && !overallOk) ||
-    (startupCheck && startupCheck.verdict === 'unsatisfied')
-  ) {
-    recommendation = '建议继续修改';
-  } else {
-    recommendation = '暂不建议采用';
-  }
-
-  if (!verification.digitalMeVerified) {
-    canAdoptSuggested = false;
-    if (recommendation === '可以采用') recommendation = '建议继续修改';
-  }
+  const recommendation = ctoActionToRecommendation(ctoReview.primaryAction);
+  const canAdoptSuggested = ctoReview.primaryAction === 'confirm_adopt';
 
   const adoptWarnings: string[] = [];
   if (!canAdoptSuggested) {
-    if (testConfigured?.verdict === 'unsatisfied') {
-      /* 无自动测试不是“测试未通过” */
-    } else if (testPass?.verdict === 'unsatisfied') {
-      adoptWarnings.push('自动测试未通过');
+    for (const f of ctoReview.findings.slice(0, 5)) {
+      adoptWarnings.push(f.replace(/^问题：|^待确认：/, '').slice(0, 120));
     }
-    if (byId('run_startup_check')?.verdict === 'unsatisfied') {
-      adoptWarnings.push('启动检查未通过');
-    }
-    if (byId('build_check')?.verdict === 'unsatisfied') {
-      adoptWarnings.push('构建未通过');
-    }
-    if (
-      verification.overall === 'partially_satisfied' ||
-      verification.overall === 'unsatisfied'
-    ) {
-      adoptWarnings.push('部分要求尚未确认');
-    }
-    if (verification.overall === 'unverifiable') adoptWarnings.push('无法完整验证');
     if (scope && scope.verdict !== 'satisfied') adoptWarnings.push('存在范围外修改');
     if (input.directoryChangedSinceResult) adoptWarnings.push('项目目录已变化，建议重新核对');
-    if (adoptWarnings.length === 0) adoptWarnings.push('Digital Me 检查发现还有问题');
+    if (adoptWarnings.length === 0) adoptWarnings.push('Digital Me 认为尚不宜直接采用');
+  } else {
+    for (const r of ctoReview.nonBlockingRisks.slice(0, 3)) {
+      adoptWarnings.push(r);
+    }
   }
 
   let headline: string;
@@ -424,20 +341,23 @@ export function buildOwnerAcceptanceSummary(input: {
   if (canAdoptSuggested) {
     headline = 'Digital Me 已检查，可以采用';
     executionStatusLabel = '本次处理已结束，验收通过';
+  } else if (ctoReview.primaryAction === 'need_decision') {
+    headline = '还有问题需要处理';
+    executionStatusLabel = '本次处理已结束，等待你的决定';
   } else if (recommendation === '请重新验证') {
     headline = '请重新核对后再决定';
     executionStatusLabel = '本次处理已结束，但需要重新验证';
   } else {
     headline = '还有问题需要处理';
-    executionStatusLabel = '本次处理已结束，但还有问题需要处理';
+    executionStatusLabel = '本次处理已结束，建议继续同一任务';
   }
 
   return {
-    title: 'Digital Me 检查结果',
+    title: 'Digital Me 验收结论',
     headline,
     executionStatusLabel,
-    goalLabel: goalLabel(verification.overall),
-    goalVerdict: verification.overall,
+    goalLabel: goalLabel(ctoVerdictLabel(ctoReview)),
+    goalVerdict: ctoVerdictLabel(ctoReview),
     recommendation,
     bullets: userBullets.slice(0, 10),
     technicalBullets: technicalBullets.slice(0, 48),
@@ -445,5 +365,13 @@ export function buildOwnerAcceptanceSummary(input: {
     digitalMeVerified: verification.digitalMeVerified,
     agentClaimedSuccess: verification.agentClaimedSuccess,
     canAdoptSuggested,
+    ctoReport: ctoReview.report,
+    primaryAction: ctoReview.primaryAction,
+    userFacingNextStep: ctoReview.userFacingNextStep,
+    ...(ctoReview.revisionDirective
+      ? { revisionDirective: ctoReview.revisionDirective }
+      : {}),
+    ctoReview,
   };
 }
+

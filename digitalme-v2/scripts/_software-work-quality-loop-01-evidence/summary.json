@@ -254,5 +254,25 @@
       "pass": 28,
       "fail": 0
     }
+  },
+  "digitalMeCtoLoop08": "DIGITALME-CTO-LOOP-08",
+  "ctoLoop08": {
+    "pass": true,
+    "independentReview": true,
+    "revisionSameTask": true,
+    "defaultNlReport": true,
+    "techEvidenceCollapsed": true,
+    "noKeywordTaskTypeRules": true,
+    "noSecondStateMachine": true,
+    "unitTests": {
+      "suites": [
+        "CTO-LOOP-08 digital me cto loop",
+        "software-dev-blocker-04",
+        "software-dev-blocker-05",
+        "work-ux-simplification-01-blocker-02"
+      ],
+      "pass": 30,
+      "fail": 0
+    }
   }
 }

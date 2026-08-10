@@ -192,6 +192,10 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
               technicalBullets?: string[];
               adoptWarnings?: string[];
               canAdoptSuggested: boolean;
+              ctoReport?: string;
+              primaryAction?: string;
+              userFacingNextStep?: string;
+              revisionDirective?: string;
             };
           }
         | undefined;
@@ -585,6 +589,18 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
                       ? { outOfScopeChanges: parsed.outOfScopeChanges as string[] }
                       : {}),
                 },
+                ...(understanding?.goal ? { userGoal: understanding.goal } : {}),
+                ...(understanding?.keyFiles?.length
+                  ? {
+                      understandingKeyFiles: understanding.keyFiles.map((k) => k.path),
+                      understandingBrief: understanding.keyFiles
+                        .map((k) => `${k.path}：${k.reason}`)
+                        .join('；'),
+                    }
+                  : {}),
+                ...(understanding?.planSteps?.length
+                  ? { planSteps: understanding.planSteps }
+                  : {}),
               });
               codeChange.acceptanceSummary = acceptanceSummary;
               const startup = checks.find((c) => c.id === 'run_startup_check');

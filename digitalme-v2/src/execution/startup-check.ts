@@ -153,7 +153,7 @@ export async function runStartupCheck(
         detail: formatCmdEvidence({
           commandLine: probe.commandLine,
           status: probe.status,
-          error: probe.error,
+          ...(probe.error ? { error: probe.error } : {}),
         }),
         runInfo,
         canSuggestTryRun: false,
@@ -183,7 +183,7 @@ export async function runStartupCheck(
       detail: formatCmdEvidence({
         commandLine: probe.commandLine,
         status: probe.status,
-        error: probe.error,
+        ...(probe.error ? { error: probe.error } : {}),
         tail,
       }),
       runInfo,
@@ -267,7 +267,7 @@ export async function runBuildCheck(
       detail: formatCmdEvidence({
         commandLine: r.commandLine,
         status: r.status,
-        error: r.error,
+        ...(r.error ? { error: r.error } : {}),
       }),
       canSuggestTryRun: false,
       commandLine: r.commandLine,
@@ -280,7 +280,7 @@ export async function runBuildCheck(
     detail: formatCmdEvidence({
       commandLine: r.commandLine,
       status: r.status,
-      error: r.error,
+      ...(r.error ? { error: r.error } : {}),
       tail: (r.stderr || r.stdout || '').toString().slice(0, 200),
     }),
     canSuggestTryRun: false,
