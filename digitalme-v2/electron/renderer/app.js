@@ -216,7 +216,6 @@
     workMoreMenu: document.getElementById("work-more-menu"),
     workMoreActions: document.getElementById("work-more-actions"),
     workAssistEntries: document.getElementById("work-assist-entries"),
-    codingOnboardingMore: document.getElementById("coding-onboarding-more"),
     artifactExportsMore: document.getElementById("artifact-exports-more"),
     taskWorkspaceTitle: document.getElementById("task-workspace-title"),
     taskWorkspacePlan: document.getElementById("task-workspace-plan"),
@@ -232,20 +231,6 @@
     ccRestoreRow: document.getElementById("cc-restore-row"),
     ccRestoreHint: document.getElementById("cc-restore-hint"),
     decisionHint: document.getElementById("artifact-decision-hint"),
-    executorSetupCard: document.getElementById("executor-setup-card"),
-    executorSetupTitle: document.getElementById("executor-setup-title"),
-    executorSetupDescription: document.getElementById("executor-setup-description"),
-    projectFolderCard: document.getElementById("project-folder-card"),
-    projectFolderMessage: document.getElementById("project-folder-message"),
-    pickExistingProject: document.getElementById("btn-pick-existing-project"),
-    pickEmptyProject: document.getElementById("btn-pick-empty-project"),
-    createNewProject: document.getElementById("btn-create-new-project"),
-    projectFolderActions: document.getElementById("project-folder-actions"),
-    projectCreateConfirm: document.getElementById("project-create-confirm"),
-    projectCreatePath: document.getElementById("project-create-path"),
-    confirmCreateProject: document.getElementById("btn-confirm-create-project"),
-    changeProjectLocation: document.getElementById("btn-change-project-location"),
-    cancelCreateProject: document.getElementById("btn-cancel-create-project"),
     artifactEmpty: document.getElementById("artifact-empty"),
     artifactLoading: document.getElementById("artifact-loading"),
     revisionActiveBanner: document.getElementById("revision-active-banner"),
@@ -280,34 +265,8 @@
     workConversationScroll: document.getElementById("work-conversation-scroll"),
     artifactEmptyHint: document.getElementById("artifact-empty-hint"),
     panelWork: document.getElementById("panel-work"),
-    executorSetupMessage: document.getElementById("executor-setup-message"),
-    codingCapScanList: document.getElementById("coding-cap-scan-list"),
-    codingCapInstallPanel: document.getElementById("coding-cap-install-panel"),
-    codingCapInstallBody: document.getElementById("coding-cap-install-body"),
-    codingUseInstalled: document.getElementById("btn-coding-use-installed"),
-    codingInstallRecommended: document.getElementById("btn-coding-install-recommended"),
-    codingConnectLater: document.getElementById("btn-coding-connect-later"),
-    codingUseCloud: document.getElementById("btn-coding-use-cloud"),
-    codingOpenGuide: document.getElementById("btn-coding-open-guide"),
-    codingBackOnboarding: document.getElementById("btn-coding-back-onboarding"),
     settingsCodingCapabilities: document.getElementById("settings-coding-capabilities"),
     settingsCodingAdvancedName: document.getElementById("settings-coding-advanced-name"),
-    executorGotoSettings: document.getElementById("btn-executor-goto-settings"),
-    executorRecheck: document.getElementById("btn-executor-recheck"),
-    executionConfirmCard: document.getElementById("execution-confirm-card"),
-    executionConfirmTitle: document.getElementById("execution-confirm-title"),
-    executionConfirmNotice: document.getElementById("execution-confirm-notice"),
-    executionConfirmExecutor: document.getElementById("execution-confirm-executor"),
-    executionConfirmProject: document.getElementById("execution-confirm-project"),
-    executionConfirmDir: document.getElementById("execution-confirm-dir"),
-    executionConfirmAllowed: document.getElementById("execution-confirm-allowed"),
-    executionConfirmAccept: document.getElementById("execution-confirm-accept"),
-    executionConfirmDonot: document.getElementById("execution-confirm-donot"),
-    executionConfirmForbidden: document.getElementById("execution-confirm-forbidden"),
-    executionConfirmUnderstanding: document.getElementById("execution-confirm-understanding"),
-    executionConfirmUnderstandingList: document.getElementById("execution-confirm-understanding-list"),
-    confirmExecution: document.getElementById("btn-confirm-execution"),
-    cancelExecution: document.getElementById("btn-cancel-execution"),
     goalExamples: document.getElementById("goal-examples"),
     codeChangeView: document.getElementById("code-change-view"),
     ccSummary: document.getElementById("cc-summary"),
@@ -471,7 +430,6 @@
   let activeJobId = null;
   let activeArtifactId = null;
   let uiEpoch = 0;
-  let confirmSubmitInFlight = false;
   let lastArtifactRejectionReason = "";
   let activeHeadVersionId = null;
   /** @type {string} */
@@ -1189,179 +1147,60 @@
     return raw;
   }
 
-  /** D11-B：中栏三确认卡永久退出可访问性树与交互（DOM 保留至 D11-E）。 */
-  function sealLegacyMidConfirmCards() {
-    for (const card of [els.executorSetupCard, els.projectFolderCard, els.executionConfirmCard]) {
-      if (!card) continue;
-      card.hidden = true;
-      card.setAttribute("hidden", "");
-      card.setAttribute("aria-hidden", "true");
-      card.setAttribute("inert", "");
-      card.setAttribute("tabindex", "-1");
-      try {
-        card.inert = true;
-      } catch {
-        /* older Electron may lack inert property */
-      }
-      const focusables = card.querySelectorAll(
-        "button, a, input, select, textarea, [tabindex]:not([tabindex='-1'])",
-      );
-      for (const el of focusables) {
-        el.setAttribute("tabindex", "-1");
-        el.setAttribute("aria-hidden", "true");
-        if ("disabled" in el) el.disabled = true;
-      }
-    }
-  }
-
-  function hideExecutorSetupCard() {
-    if (!els.executorSetupCard) return;
-    els.executorSetupCard.hidden = true;
-    els.executorSetupCard.setAttribute("hidden", "");
-    els.executorSetupCard.setAttribute("aria-hidden", "true");
-    els.executorSetupCard.setAttribute("inert", "");
-    pendingCodingOnboarding = null;
-    if (els.codingCapScanList) {
-      els.codingCapScanList.hidden = true;
-      els.codingCapScanList.innerHTML = "";
-    }
-    if (els.codingCapInstallPanel) {
-      els.codingCapInstallPanel.hidden = true;
-      els.codingCapInstallPanel.setAttribute("hidden", "");
-    }
-    if (els.codingOpenGuide) els.codingOpenGuide.hidden = true;
-    if (els.codingBackOnboarding) els.codingBackOnboarding.hidden = true;
-  }
-
-  function showExecutorSetupCard(payloadOrMessage) {
-    // D11-B：禁止再打开中栏执行器卡；改走右栏准备受阻
-    hideExecutionConfirmCard();
-    hideProjectFolderCard();
-    sealLegacyMidConfirmCards();
-    showPrepBlocked(
-      "executor",
-      payloadOrMessage && typeof payloadOrMessage === "object"
-        ? payloadOrMessage
-        : { message: payloadOrMessage || "尚未检测到可用的代码执行能力。" },
-    );
-  }
-
-  function renderCodingScanList(caps) {
-    if (!els.codingCapScanList) return;
-    els.codingCapScanList.innerHTML = "";
-    els.codingCapScanList.hidden = false;
-    els.codingCapScanList.removeAttribute("hidden");
-    const list = Array.isArray(caps) ? caps : [];
-    if (!list.length) {
-      const p = document.createElement("p");
-      p.className = "muted";
-      p.textContent = "尚未检测到可用的代码执行能力。";
-      els.codingCapScanList.appendChild(p);
-      return;
-    }
-    for (const cap of list) {
-      const item = document.createElement("div");
-      item.className = "coding-cap-item";
-      const title = document.createElement("div");
-      title.className = "coding-cap-title";
-      title.textContent = `${cap.displayName} · ${cap.connectionStatus || ""}`;
-      const msg = document.createElement("div");
-      msg.className = "muted tiny";
-      msg.textContent = cap.actionableMessage || cap.executionModeLabel || "";
-      item.appendChild(title);
-      item.appendChild(msg);
-      const row = document.createElement("div");
-      row.className = "row";
-      if (cap.availability === "ready" && cap.supportsAutomaticExecution) {
-        const useBtn = document.createElement("button");
-        useBtn.type = "button";
-        useBtn.className = "primary";
-        useBtn.textContent = "使用此能力";
-        useBtn.addEventListener("click", () => resumePendingSoftwareTask(cap.capabilityId));
-        row.appendChild(useBtn);
-      } else if (cap.availability === "needs_login") {
-        const checkBtn = document.createElement("button");
-        checkBtn.type = "button";
-        checkBtn.className = "ghost";
-        checkBtn.textContent = "检查连接";
-        checkBtn.addEventListener("click", async () => {
-          await refreshExecutorCapabilityUi(true);
-          await scanInstalledCodingCapabilities();
-        });
-        row.appendChild(checkBtn);
-        const guideBtn = document.createElement("button");
-        guideBtn.type = "button";
-        guideBtn.className = "ghost";
-        guideBtn.textContent = "打开连接说明";
-        guideBtn.addEventListener("click", () => openSettings());
-        row.appendChild(guideBtn);
-      } else if (cap.availability === "unsupported" || cap.invocationKind === "desktop_handoff") {
-        const already =
-          /不能.*自动调用|无法自动使用/.test(String(cap.actionableMessage || "")) ||
-          /不能.*自动调用|无法自动使用/.test(String(cap.executionModeLabel || ""));
-        if (!already) {
-          const note = document.createElement("p");
-          note.className = "muted tiny";
-          note.textContent = "检测到该工具，但当前还不能由 Digital Me 自动调用。";
-          item.appendChild(note);
-        }
-      }
-      if (row.childNodes.length) item.appendChild(row);
-      els.codingCapScanList.appendChild(item);
-    }
-  }
-
-  function showCodingInstallPanel() {
-    if (!els.codingCapInstallPanel || !els.codingCapInstallBody) return;
-    const rec = lastCodingRecommendation || (pendingCodingOnboarding && pendingCodingOnboarding.recommended);
-    els.codingCapInstallPanel.hidden = false;
-    els.codingCapInstallPanel.removeAttribute("hidden");
-    if (els.codingCapScanList) {
-      els.codingCapScanList.hidden = true;
-      els.codingCapScanList.setAttribute("hidden", "");
-    }
-    const perms = (rec && rec.permissions) || [];
-    els.codingCapInstallBody.innerHTML = "";
-    const lines = [
-      `能完成什么：${(rec && rec.canDo) || "在确认的项目目录中修改代码并运行测试。"}`,
-      `为什么需要：${(rec && rec.whyNeeded) || "软件开发任务需要可自动执行的代码能力。"}`,
-      `安装后 Digital Me 可以获得：${perms.join("；") || "在确认范围内读写项目文件并运行测试"}`,
-      `安装由谁提供：${(rec && rec.installProvider) || "由该能力的官方安装渠道提供"}`,
-      "不会自动 commit、push 或部署。",
-    ];
-    for (const line of lines) {
-      const p = document.createElement("p");
-      p.textContent = line;
-      els.codingCapInstallBody.appendChild(p);
-    }
-    if (els.codingOpenGuide) {
-      els.codingOpenGuide.hidden = false;
-      els.codingOpenGuide.removeAttribute("hidden");
-    }
-    if (els.codingBackOnboarding) {
-      els.codingBackOnboarding.hidden = false;
-      els.codingBackOnboarding.removeAttribute("hidden");
-    }
-  }
+  /** D11-E：中栏三确认卡已移除；开发前准备只走右栏 prepBlocked。 */
 
   async function scanInstalledCodingCapabilities() {
     const listed = await api.invoke("capability.list", { includeAvailability: true });
     lastCodingCapabilities = (listed && listed.codingCapabilities) || [];
     lastCodingRecommendation = (listed && listed.codingRecommendation) || lastCodingRecommendation;
-    renderCodingScanList(lastCodingCapabilities);
+    await refreshExecutorCapabilityUi(false);
     const ready = lastCodingCapabilities.find(
       (c) => c.availability === "ready" && c.supportsAutomaticExecution,
     );
     if (ready) {
       els.jobStatus.textContent = "已找到可用的代码执行能力";
       els.jobStatus.classList.remove("error");
-      els.jobActionable.textContent = "可点击「使用此能力」继续。";
+      els.jobActionable.textContent = "可点击右侧「继续准备」继续。";
     } else {
       els.jobStatus.textContent = "尚未找到可自动使用的代码执行能力";
       els.jobStatus.classList.remove("error");
-      els.jobActionable.textContent = "可安装推荐能力，或稍后连接。";
+      els.jobActionable.textContent = "请在设置中安装或连接后再继续。";
     }
     return listed;
+  }
+
+  async function connectCodingCapabilityFromPrep() {
+    try {
+      const listed = await scanInstalledCodingCapabilities();
+      const ready = lastCodingCapabilities.find(
+        (c) => c.availability === "ready" && c.supportsAutomaticExecution,
+      );
+      if (ready) {
+        clearPrepBlocked();
+        await resumePendingSoftwareTask(
+          (listed && listed.preferredCodingCapabilityId) || ready.capabilityId,
+        );
+        return;
+      }
+      const card = listed && listed.executorCapabilityCard;
+      if (card && card.available) {
+        clearPrepBlocked();
+        await resumePendingSoftwareTask(
+          (listed && listed.preferredCodingCapabilityId) || card.capabilityId,
+        );
+        return;
+      }
+      openSettings();
+      showPrepBlocked(
+        "executor",
+        pendingCodingOnboarding || {
+          message: (card && card.detail) || "尚未检测到可用的代码执行能力。",
+        },
+      );
+    } catch (err) {
+      els.jobStatus.textContent = userFacingWorkError(err);
+      els.jobStatus.classList.add("error");
+    }
   }
 
   async function resumePendingSoftwareTask(capabilityId) {
@@ -1402,7 +1241,7 @@
       }));
       renderMaterials();
       if (els.workComposeTitle) els.workComposeTitle.textContent = "待继续的任务";
-      showExecutorSetupCard({
+      showPrepBlocked("executor", {
         title: "完成这项任务需要代码执行能力",
         description:
           "Digital Me 会使用它在你确认的项目目录中创建或修改代码，并运行测试。",
@@ -2223,31 +2062,6 @@
     return uiEpoch;
   }
 
-  function hideProjectFolderCard() {
-    if (!els.projectFolderCard) return;
-    els.projectFolderCard.hidden = true;
-    els.projectFolderCard.setAttribute("hidden", "");
-    els.projectFolderCard.setAttribute("aria-hidden", "true");
-    els.projectFolderCard.setAttribute("inert", "");
-    pendingCreateProject = null;
-    if (els.projectCreateConfirm) {
-      els.projectCreateConfirm.hidden = true;
-      els.projectCreateConfirm.setAttribute("hidden", "");
-    }
-    if (els.projectFolderActions) {
-      els.projectFolderActions.hidden = false;
-      els.projectFolderActions.removeAttribute("hidden");
-    }
-  }
-
-  function showProjectFolderCard(message) {
-    // D11-B：禁止再打开中栏项目卡；改走右栏准备受阻
-    hideExecutionConfirmCard();
-    hideExecutorSetupCard();
-    sealLegacyMidConfirmCards();
-    showPrepBlocked("project", { message: message || "" });
-  }
-
   function hideRevisionActiveBanner() {
     if (!els.revisionActiveBanner) return;
     els.revisionActiveBanner.hidden = true;
@@ -2734,9 +2548,9 @@
     els.goal.readOnly = false;
     if (els.workComposeTitle) els.workComposeTitle.textContent = "新建任务";
     clearJobChrome();
-    hideExecutionConfirmCard();
-    hideProjectFolderCard();
-    hideExecutorSetupCard();
+    pendingExecutionConfirm = null;
+    pendingCreateProject = null;
+    pendingCodingOnboarding = null;
     clearArtifactView();
     setWorkCollabVisible(false);
     if (els.restartCompose) els.restartCompose.hidden = true;
@@ -2921,16 +2735,15 @@
     const revisionOpen = !!(els.revisionComposer && !els.revisionComposer.hidden);
     const adoptWarn = !!(els.adoptWarningCard && !els.adoptWarningCard.hidden);
     const projectDirReady = materials.some((m) => m && m.kind === "folder" && m.path);
+    const prepKind = prepBlockedState && prepBlockedState.kind ? String(prepBlockedState.kind) : null;
     return {
       workMode,
       modelReady: lastModelReady !== false,
-      // D11-B：中栏三确认卡已退出交互；业务阶段只看右栏 prepBlocked / 规划确认，不读卡可见性
-      projectFolderCard: false,
-      projectCreateConfirm: !!(els.projectCreateConfirm && !els.projectCreateConfirm.hidden),
+      // D11-E：阶段只看右栏 prepBlocked / 规划确认
+      projectCreateConfirm: prepKind === "project_confirm",
       projectDirReady,
-      executorSetupCard: false,
-      executionConfirmCard: false,
       prepBlocked: !!prepBlockedState,
+      prepBlockedKind: prepKind,
       hasPlanDraft: !!(activeTaskPlan && activeTaskPlan.content && !activeArtifactId && js !== "queued" && js !== "running"),
       ownerChoicePrompt: !!(els.ownerChoicePrompt && !els.ownerChoicePrompt.hidden),
       revisionComposerOpen: revisionOpen,
@@ -2955,18 +2768,6 @@
     start_submit: els.submit,
     cancel_job: els.cancel,
     retry_job: els.retry,
-    create_project: els.createNewProject,
-    pick_existing_project: els.pickExistingProject,
-    confirm_create_project: els.confirmCreateProject,
-    change_project_location: els.changeProjectLocation,
-    cancel_create_project: els.cancelCreateProject,
-    confirm_execution: els.confirmExecution,
-    cancel_execution: els.cancelExecution,
-    coding_connect: els.codingUseInstalled,
-    coding_later: els.codingConnectLater,
-    coding_install: els.codingInstallRecommended,
-    coding_settings: els.executorGotoSettings,
-    coding_recheck: els.executorRecheck,
     goto_settings: els.gotoSettings,
     accept: els.acceptArtifact,
     reject: els.rejectArtifact,
@@ -3192,9 +2993,6 @@
   }
 
   function showPrepBlocked(kind, payload) {
-    hideExecutionConfirmCard();
-    hideExecutorSetupCard();
-    hideProjectFolderCard();
     if (kind === "project") {
       prepBlockedState = {
         kind: "project",
@@ -3240,10 +3038,9 @@
     }
     refreshTaskWorkspace();
     refreshWorkUxView({
-      projectFolderCard: false,
-      executorSetupCard: false,
-      executionConfirmCard: false,
       prepBlocked: !!prepBlockedState,
+      prepBlockedKind: prepBlockedState && prepBlockedState.kind ? prepBlockedState.kind : null,
+      projectCreateConfirm: !!(prepBlockedState && prepBlockedState.kind === "project_confirm"),
     });
   }
 
@@ -3673,21 +3470,6 @@
 
     setElVisible(els.workMoreMenu, hasMore);
 
-    if (view.stage === "needs_capability" && facts.executorSetupCard) {
-      setElVisible(els.codingUseInstalled, true);
-      if (els.codingUseInstalled) {
-        els.codingUseInstalled.textContent = "连接代码执行能力";
-        els.codingUseInstalled.classList.add("primary");
-        els.codingUseInstalled.disabled = false;
-      }
-      setElVisible(els.codingConnectLater, true);
-      if (els.codingConnectLater) els.codingConnectLater.disabled = false;
-      setElVisible(els.codingOnboardingMore, true);
-      setElVisible(els.codingInstallRecommended, true);
-      setElVisible(els.executorGotoSettings, true);
-      setElVisible(els.executorRecheck, true);
-    }
-
     if (els.cancel) {
       const showCancel = planned.has("cancel_job");
       setElVisible(els.cancel, showCancel);
@@ -3725,13 +3507,7 @@
         planned.has("propose_revision") ||
         (planned.has("continue_revise") && !facts.adoptWarningOpen) ||
         planned.has("tell_what_wrong");
-      // CTO 主路径使用代理按钮时，隐藏旧「继续修改」以免双入口
-      if (
-        planned.has("confirm_continue") ||
-        planned.has("supplement_opinion")
-      ) {
-        setElVisible(els.proposeRevision, false);
-      } else if (showPropose) {
+      if (showPropose) {
         els.proposeRevision.disabled = false;
       }
     }
@@ -3745,14 +3521,12 @@
     }
     if (els.workAssistEntries) setElVisible(els.workAssistEntries, false);
 
-    if (view.statusLine && els.jobStatus && workMode === "compose" && !facts.executorSetupCard) {
-      // drafting: 不强制改状态
-    } else if (
+    if (
       view.statusLine &&
       els.jobStatus &&
-      (facts.executorSetupCard || facts.projectFolderCard || facts.projectCreateConfirm || facts.executionConfirmCard)
+      (facts.prepBlocked || facts.projectCreateConfirm)
     ) {
-      if (!els.jobStatus.textContent || /开始处理|需要代码执行|项目位置|确认/.test(els.jobStatus.textContent)) {
+      if (!els.jobStatus.textContent || /开始处理|需要代码执行|项目位置|确认|开发前/.test(els.jobStatus.textContent)) {
         els.jobStatus.textContent = view.statusLine;
       }
       if (els.jobActionable && /已检测|尚未检测|完成这项任务需要/.test(els.jobActionable.textContent || "")) {
@@ -3993,9 +3767,9 @@
     materials = [];
     renderMaterials();
     clearMaterialSummary();
-    hideExecutionConfirmCard();
-    hideProjectFolderCard();
-    hideExecutorSetupCard();
+    pendingExecutionConfirm = null;
+    pendingCreateProject = null;
+    pendingCodingOnboarding = null;
     hideRevisionActiveBanner();
     clearJobChrome();
     resetArtifactProjection();
@@ -5695,7 +5469,7 @@
         softwareProject: inspected || undefined,
       });
       renderMaterials();
-      hideProjectFolderCard();
+      pendingCreateProject = null;
       els.jobStatus.textContent = inspected && inspected.isNewProjectCandidate
         ? "已准备好新项目位置。"
         : "已添加项目文件夹。";
@@ -5710,16 +5484,7 @@
   }
 
   function showProjectCreateConfirmUi(pathText) {
-    if (els.projectFolderActions) {
-      els.projectFolderActions.hidden = true;
-      els.projectFolderActions.setAttribute("hidden", "");
-    }
-    if (els.projectCreateConfirm) {
-      els.projectCreateConfirm.hidden = false;
-      els.projectCreateConfirm.removeAttribute("hidden");
-    }
-    if (els.projectCreatePath) els.projectCreatePath.textContent = pathText;
-    // D11-B：确认 UI 投影到右栏准备区，不走中栏三步卡
+    // D11-E：确认 UI 只投影到右栏准备区
     prepBlockedState = {
       kind: "project_confirm",
       title: "请确认新项目位置",
@@ -5732,9 +5497,9 @@
     };
     refreshTaskWorkspace();
     refreshWorkUxView({
-      projectFolderCard: false,
       projectCreateConfirm: true,
       prepBlocked: true,
+      prepBlockedKind: "project_confirm",
     });
   }
 
@@ -5816,7 +5581,7 @@
       softwareProject: inspected || { isNewProjectCandidate: true, isEmptyDirectory: true },
     });
     renderMaterials();
-    hideProjectFolderCard();
+    pendingCreateProject = null;
     els.jobStatus.textContent = reused
       ? "已沿用本任务的项目文件夹。"
       : "已创建新项目文件夹。";
@@ -5888,7 +5653,7 @@
       els.jobStatus.classList.remove("error");
       els.jobActionable.textContent = "请在右侧任务工作区选择或创建项目位置。";
       clearArtifactView();
-      refreshWorkUxView({ projectFolderCard: false, projectDirReady: false, prepBlocked: true });
+      refreshWorkUxView({ projectDirReady: false, prepBlocked: true, prepBlockedKind: "project" });
       return "needs_project";
     }
     if (result.needsExecutorSetup) {
@@ -5896,7 +5661,7 @@
       els.jobStatus.textContent = "开发前还需完成准备：代码执行能力";
       els.jobStatus.classList.remove("error");
       els.jobActionable.textContent = "请在右侧任务工作区连接代码执行能力。";
-      refreshWorkUxView({ executorSetupCard: false, projectDirReady: true, prepBlocked: true });
+      refreshWorkUxView({ projectDirReady: true, prepBlocked: true, prepBlockedKind: "executor" });
       return "needs_capability";
     }
     if (result.needsExecutionConfirm) {
@@ -5937,7 +5702,7 @@
         els.jobStatus.textContent = "需要额外确认后再开始";
         els.jobStatus.classList.remove("error");
         els.jobActionable.textContent = preview.notice || "";
-        refreshWorkUxView({ executionConfirmCard: false, prepBlocked: true });
+        refreshWorkUxView({ prepBlocked: true, prepBlockedKind: "high_risk" });
         return "needs_confirmation";
       }
       // 非规划确认入口：不得自动附授权；引导用户在右栏确认最新规划
@@ -5946,7 +5711,7 @@
       els.jobActionable.textContent = "确认规划后才会开始开发；高风险操作仍会单独请你确认。";
       clearPrepBlocked();
       refreshTaskWorkspace();
-      refreshWorkUxView({ executionConfirmCard: false, prepBlocked: false });
+      refreshWorkUxView({ prepBlocked: false });
       return "needs_plan_confirm";
     }
     workMode = "task";
@@ -5977,57 +5742,28 @@
     return "started";
   }
 
-  if (els.createNewProject) {
-    els.createNewProject.addEventListener("click", () => beginCreateNewProjectFlow());
-  }
-  if (els.confirmCreateProject) {
-    els.confirmCreateProject.addEventListener("click", () => confirmPendingCreateProject());
-  }
-  if (els.changeProjectLocation) {
-    els.changeProjectLocation.addEventListener("click", async () => {
-      const parent = await api.dialogs.pickSaveDirectory();
-      if (!parent) return;
-      const goal = (els.goal && els.goal.value ? String(els.goal.value) : "").trim() || "新项目";
-      try {
-        const prepared = await api.prepareSoftwareProject({ goal, parentDir: parent });
-        if (!prepared || !prepared.ok) {
-          els.jobStatus.textContent = (prepared && prepared.error) || "无法更改位置";
-          els.jobStatus.classList.add("error");
-          return;
-        }
-        pendingCreateProject = prepared;
-        if (els.projectCreatePath) {
-          els.projectCreatePath.textContent =
-            "Digital Me 将为这项任务创建项目文件夹：\n" +
-            (prepared.displayPath || prepared.path);
-        }
-        refreshWorkUxView({ projectFolderCard: true, projectCreateConfirm: true });
-      } catch (err) {
-        els.jobStatus.textContent = userFacingWorkError(err);
+  async function changePendingCreateProjectLocation() {
+    const parent = await api.dialogs.pickSaveDirectory();
+    if (!parent) return;
+    const goal = (els.goal && els.goal.value ? String(els.goal.value) : "").trim() || "新项目";
+    try {
+      const prepared = await api.prepareSoftwareProject({ goal, parentDir: parent });
+      if (!prepared || !prepared.ok) {
+        els.jobStatus.textContent = (prepared && prepared.error) || "无法更改位置";
         els.jobStatus.classList.add("error");
+        return;
       }
-    });
+      pendingCreateProject = prepared;
+      showProjectCreateConfirmUi(
+        "Digital Me 将为这项任务创建项目文件夹：\n" +
+          (prepared.displayPath || prepared.path),
+      );
+    } catch (err) {
+      els.jobStatus.textContent = userFacingWorkError(err);
+      els.jobStatus.classList.add("error");
+    }
   }
-  if (els.cancelCreateProject) {
-    els.cancelCreateProject.addEventListener("click", () => {
-      pendingCreateProject = null;
-      if (els.projectCreateConfirm) {
-        els.projectCreateConfirm.hidden = true;
-        els.projectCreateConfirm.setAttribute("hidden", "");
-      }
-      if (els.projectFolderActions) {
-        els.projectFolderActions.hidden = false;
-        els.projectFolderActions.removeAttribute("hidden");
-      }
-      refreshWorkUxView({ projectFolderCard: true, projectCreateConfirm: false });
-    });
-  }
-  if (els.pickExistingProject) {
-    els.pickExistingProject.addEventListener("click", () => addProjectFolderFromPicker(false));
-  }
-  if (els.pickEmptyProject) {
-    els.pickEmptyProject.addEventListener("click", () => addProjectFolderFromPicker(true));
-  }
+
   if (els.adoptContinueRevise) {
     els.adoptContinueRevise.addEventListener("click", () => {
       hideAdoptWarning();
@@ -6057,8 +5793,8 @@
   }
   if (els.twPickProject) {
     els.twPickProject.addEventListener("click", () => {
-      if (prepBlockedState && prepBlockedState.kind === "project_confirm" && els.changeProjectLocation) {
-        els.changeProjectLocation.click();
+      if (prepBlockedState && prepBlockedState.kind === "project_confirm") {
+        void changePendingCreateProjectLocation();
         return;
       }
       addProjectFolderFromPicker(false);
@@ -6066,8 +5802,7 @@
   }
   if (els.twConnectCoding) {
     els.twConnectCoding.addEventListener("click", () => {
-      if (els.codingUseInstalled) els.codingUseInstalled.click();
-      else if (els.openSettings) els.openSettings.click();
+      void connectCodingCapabilityFromPrep();
     });
   }
   if (els.twOpenSettings) {
@@ -6193,163 +5928,6 @@
     }
   });
 
-  function hideExecutionConfirmCard() {
-    pendingExecutionConfirm = null;
-    if (els.executionConfirmCard) {
-      els.executionConfirmCard.hidden = true;
-      els.executionConfirmCard.setAttribute("hidden", "");
-      els.executionConfirmCard.setAttribute("aria-hidden", "true");
-      els.executionConfirmCard.setAttribute("inert", "");
-    }
-  }
-
-  /**
-   * 确认卡「返回修改」：回到可编辑起草态并恢复「开始处理」。
-   * 必须刷新 Work UX；否则仍按 needs_confirmation 隐藏提交按钮。
-   * 不清除材料、不创建任务/Job、不进入改码。
-   */
-  function returnFromExecutionConfirmToEdit() {
-    hideExecutionConfirmCard();
-    workMode = "compose";
-    if (els.goal) els.goal.readOnly = false;
-    if (els.workComposeTitle) els.workComposeTitle.textContent = "新建任务";
-    if (els.submit) {
-      els.submit.hidden = false;
-      els.submit.removeAttribute("hidden");
-      els.submit.disabled = false;
-      els.submit.textContent = "开始处理";
-      els.submit.classList.add("primary");
-      els.submit.classList.remove("ghost");
-    }
-    setWorkCollabVisible(false);
-    syncGoalPresentation();
-    refreshWorkUxView({
-      workMode: "compose",
-      executionConfirmCard: false,
-      projectFolderCard: false,
-      executorSetupCard: false,
-      jobStatus: null,
-      hasArtifact: false,
-      decisionStatus: null,
-    });
-  }
-
-  function showExecutionConfirmCard(preview) {
-    // D11-B：禁止再打开中栏执行确认卡；高风险走右栏，其它保持密封
-    hideExecutorSetupCard();
-    hideProjectFolderCard();
-    sealLegacyMidConfirmCards();
-    if (preview) {
-      showPrepBlocked("high_risk", preview);
-    }
-  }
-
-  async function startTaskAfterConfirm(payload) {
-    els.submit.disabled = true;
-    clearArtifactView();
-    hideExecutionConfirmCard();
-    const result = await api.invoke("work.submitTask", payload);
-    if (result.needsExecutorSetup) {
-      showExecutorSetupCard(result.needsExecutorSetup);
-      els.submit.disabled = false;
-      return;
-    }
-    if (result.needsExecutionConfirm) {
-      pendingExecutionConfirm = {
-        goal: payload.goal,
-        contextRefs: payload.contextRefs,
-        preview: result.needsExecutionConfirm,
-        existingTaskId: payload.existingTaskId || null,
-        capabilityId:
-          payload.capabilityId ||
-          result.needsExecutionConfirm.selectedCapabilityId ||
-          null,
-      };
-      showExecutionConfirmCard(result.needsExecutionConfirm);
-      els.submit.disabled = false;
-      return;
-    }
-    workMode = "task";
-    activeTaskId = result.taskId;
-    activeJobId = result.jobId;
-    converseDraftTaskId = null;
-    activeTaskIntentKind = result.intentKind || null;
-    activeTaskRequestedArtifactType =
-      result.intentKind === "modify_code" ? "code-change" : result.intentKind === "analyze_code" ? "code-analysis" : "document";
-    els.goal.readOnly = true;
-    if (els.workComposeTitle) els.workComposeTitle.textContent = "当前任务";
-    setWorkCollabVisible(true);
-    syncGoalPresentation();
-    if (result.userFacingNotice) {
-      els.jobStatus.textContent = result.userFacingNotice;
-      els.jobStatus.classList.remove("error");
-    }
-    await syncActiveTaskStatus();
-    startJobWatch(activeTaskId);
-  }
-
-  if (els.confirmExecution) {
-    els.confirmExecution.addEventListener("click", async () => {
-      try {
-        if (!pendingExecutionConfirm || confirmSubmitInFlight) return;
-        confirmSubmitInFlight = true;
-        const preview = pendingExecutionConfirm.preview;
-        const confirmPayload = {
-          goal: pendingExecutionConfirm.goal,
-          contextRefs: pendingExecutionConfirm.contextRefs.map((r) => {
-            const mat = materials.find((m) => m.path === r.path);
-            return {
-              kind: r.kind,
-              path: r.path,
-              ...(mat && mat.projectOrigin ? { projectOrigin: mat.projectOrigin } : {}),
-              ...(preview.projectOrigin && r.kind === "folder"
-                ? { projectOrigin: preview.projectOrigin }
-                : {}),
-            };
-          }),
-          executionAuthorization: {
-            confirmed: true,
-            workingDirectory: preview.workingDirectory,
-            readScope: preview.readScope,
-            writeScope: preview.writeScope,
-            ...(preview.projectOrigin ? { projectOrigin: preview.projectOrigin } : {}),
-            ...(materials.find((m) => m.kind === "folder" && m.projectOrigin)
-              ? {
-                  projectOrigin: materials.find((m) => m.kind === "folder" && m.projectOrigin)
-                    .projectOrigin,
-                }
-              : {}),
-          },
-        };
-        if (pendingExecutionConfirm.capabilityId) {
-          confirmPayload.capabilityId = pendingExecutionConfirm.capabilityId;
-        } else if (preview.selectedCapabilityId) {
-          confirmPayload.capabilityId = preview.selectedCapabilityId;
-        }
-        if (pendingExecutionConfirm.existingTaskId) {
-          confirmPayload.existingTaskId = pendingExecutionConfirm.existingTaskId;
-        }
-        await startTaskAfterConfirm(confirmPayload);
-      } catch (err) {
-        els.jobStatus.textContent = userFacingWorkError(err);
-        els.jobStatus.classList.add("error");
-      } finally {
-        confirmSubmitInFlight = false;
-        els.submit.disabled = false;
-        await refreshConnectionFromCapabilities();
-      }
-    });
-  }
-
-  if (els.cancelExecution) {
-    els.cancelExecution.addEventListener("click", () => {
-      returnFromExecutionConfirmToEdit();
-      els.jobStatus.textContent = "已返回修改";
-      els.jobStatus.classList.remove("error");
-      els.jobActionable.textContent = "可调整目标或材料后再次开始。";
-    });
-  }
-
   if (els.goalExamples) {
     els.goalExamples.addEventListener("click", (ev) => {
       const btn = ev.target && ev.target.closest ? ev.target.closest("[data-goal-example]") : null;
@@ -6359,110 +5937,6 @@
         els.goal.value = text;
         els.goal.focus();
       }
-    });
-  }
-
-  if (els.executorGotoSettings) {
-    els.executorGotoSettings.addEventListener("click", () => {
-      if (typeof openSettings === "function") openSettings();
-    });
-  }
-
-  if (els.executorRecheck) {
-    els.executorRecheck.addEventListener("click", async () => {
-      try {
-        const listed = await refreshExecutorCapabilityUi(true);
-        const card = listed && listed.executorCapabilityCard;
-        const available = !!(card && card.available);
-        if (available) {
-          await resumePendingSoftwareTask(
-            (listed && listed.preferredCodingCapabilityId) || card.capabilityId,
-          );
-        } else {
-          showExecutorSetupCard(
-            pendingCodingOnboarding || {
-              message: (card && card.detail) || "尚未检测到可用的代码执行能力。",
-            },
-          );
-          els.jobStatus.textContent = "代码执行能力尚未就绪";
-          els.jobStatus.classList.remove("error");
-          els.jobActionable.textContent = (card && card.detail) || "请安装或连接后再试。";
-        }
-      } catch {
-        els.jobActionable.textContent = "重新检查未完成，请稍后再试。";
-      }
-    });
-  }
-
-  if (els.codingUseInstalled) {
-    els.codingUseInstalled.addEventListener("click", async () => {
-      try {
-        await scanInstalledCodingCapabilities();
-      } catch (err) {
-        els.jobStatus.textContent = userFacingWorkError(err);
-        els.jobStatus.classList.add("error");
-      }
-    });
-  }
-  if (els.codingInstallRecommended) {
-    els.codingInstallRecommended.addEventListener("click", () => {
-      showCodingInstallPanel();
-    });
-  }
-  if (els.codingConnectLater) {
-    els.codingConnectLater.addEventListener("click", async () => {
-      try {
-        const goal = (els.goal && els.goal.value ? els.goal.value : "").trim();
-        await api.invoke("capability.list", {
-          codingAction: {
-            type: "save_pending",
-            goal,
-            contextRefs: materials.map((m) => ({ kind: m.kind, path: m.path, ...(m.projectOrigin ? { projectOrigin: m.projectOrigin } : {}) })),
-          },
-        });
-        hideExecutorSetupCard();
-        els.jobStatus.textContent = "连接代码执行能力后可继续";
-        els.jobStatus.classList.remove("error");
-        els.jobActionable.textContent = "目标和项目材料已保留，不会创建失败任务。";
-        if (els.workComposeTitle) els.workComposeTitle.textContent = "待继续的任务";
-      } catch (err) {
-        els.jobStatus.textContent = userFacingWorkError(err);
-        els.jobStatus.classList.add("error");
-      }
-    });
-  }
-  if (els.codingOpenGuide) {
-    els.codingOpenGuide.addEventListener("click", () => {
-      const url =
-        (lastCodingRecommendation && lastCodingRecommendation.installGuideUrl) ||
-        (pendingCodingOnboarding &&
-          pendingCodingOnboarding.recommended &&
-          pendingCodingOnboarding.recommended.installGuideUrl) ||
-        "";
-      if (url && window.digitalMe && typeof window.digitalMe.openExternal === "function") {
-        window.digitalMe.openExternal(url);
-      } else if (url) {
-        els.jobActionable.textContent = `请在浏览器打开安装说明：${url}`;
-      } else {
-        openSettings();
-      }
-    });
-  }
-  if (els.codingBackOnboarding) {
-    els.codingBackOnboarding.addEventListener("click", () => {
-      if (els.codingCapInstallPanel) {
-        els.codingCapInstallPanel.hidden = true;
-        els.codingCapInstallPanel.setAttribute("hidden", "");
-      }
-      if (els.codingOpenGuide) {
-        els.codingOpenGuide.hidden = true;
-        els.codingOpenGuide.setAttribute("hidden", "");
-      }
-      if (els.codingBackOnboarding) {
-        els.codingBackOnboarding.hidden = true;
-        els.codingBackOnboarding.setAttribute("hidden", "");
-      }
-      showExecutorSetupCard(pendingCodingOnboarding || {});
     });
   }
 
@@ -6618,7 +6092,7 @@
       els.jobStatus.textContent = msg;
       els.jobStatus.classList.add("error");
       if (/重新连接|设置中检查连接|登录|认证/i.test(msg)) {
-        showExecutorSetupCard(msg);
+        showPrepBlocked("executor", { message: msg });
       }
     } finally {
       await refreshConnectionFromCapabilities();
@@ -8481,7 +7955,6 @@
   });
 
   (async () => {
-    sealLegacyMidConfirmCards();
     if (typeof api.getModelStatus === "function") {
       try {
         const info = await api.getModelStatus();

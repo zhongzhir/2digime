@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"/><title>D11-E 主链状态</title>
+<style>
+body{margin:0;font:14px/1.5 "Segoe UI",sans-serif;color:#1a1f2c;background:#eef1f6}
+.layout{display:grid;grid-template-columns:200px 1fr 320px;min-height:100vh}
+.col{background:#fff;border-right:1px solid #d8dde6;padding:14px;overflow:auto}
+.col:last-child{border-right:0}
+.panel{border:1px solid #d8dde6;border-radius:10px;background:#f7f8fb;padding:12px;margin-bottom:12px}
+.turn{margin:0 0 12px;padding:10px 12px;border:1px solid #d8dde6;border-radius:8px}
+.role{font-size:12px;color:#5b6475;margin-bottom:4px}
+.compose{margin-top:16px;border-top:1px solid #d8dde6;padding-top:12px}
+.compose input{width:100%;box-sizing:border-box;padding:8px;border:1px solid #d8dde6;border-radius:8px}
+.muted{color:#5b6475}.ok{color:#1f6b3a;font-weight:600}.warn{color:#8a4b00}
+button{border:1px solid #d8dde6;border-radius:8px;padding:6px 12px;background:#fff;margin:6px 6px 0 0}
+.primary{background:#1f3a5f;color:#fff;border-color:#1f3a5f}
+</style></head><body>
+<div class="layout">
+<aside class="col"><h2>任务</h2><p id="left">规划待确认</p><p class="muted" id="status">等待你确认规划</p></aside>
+<main class="col"><h2>对话</h2><div id="tl"></div>
+<div class="compose"><p class="muted">输入区始终可用 · 中栏仅自然语言</p><input placeholder="继续说明你的想法…"></div></main>
+<aside class="col"><h2 id="rt">任务工作区</h2>
+<div id="rp" class="panel"></div>
+</aside></div>
+<script>
+const scenes={
+plan:{left:'规划待确认',status:'等待你确认规划',rt:'任务工作区 · 规划',
+rp:'<h3>任务规划</h3><p>目标：打飞机网页版</p><p class="muted">预期交付 / 路径 / 准备 / 边界</p><button class="primary">开始开发</button>',
+tl:'<div class="turn"><div class="role">Digital Me</div>我已整理当前规划，请在右侧确认后开始开发。</div>'},
+auth:{left:'等待执行授权',status:'开发前还需准备',rt:'任务工作区 · 准备受阻',
+rp:'<h3>准备受阻</h3><p>高风险操作需要额外确认。</p><button class="primary">确认并开始</button><button>返回修改</button>',
+tl:'<div class="turn"><div class="role">Digital Me</div>开始前还需要你确认执行范围。中栏不再出现旧三步技术确认卡。</div>'},
+running:{left:'开发中',status:'正在处理',rt:'任务工作区 · 开发中',
+rp:'<h3>开发中</h3><p>正在创建基础玩法与画面</p><p class="muted">当前不需要你操作</p><details><summary>技术证据（默认折叠）</summary><p class="muted">构建进行中</p></details>',
+tl:'<div class="turn"><div class="role">Digital Me</div>已按确认规划开始开发，我会持续汇报进展。</div>'},
+revise:{left:'自动修订中',status:'自动处理中',rt:'任务工作区 · 修订中',
+rp:'<h3>自动修订中</h3><p>第 2 轮 · 换方案中</p><p class="muted">当前不需要你操作</p>',
+tl:'<div class="turn"><div class="role">Digital Me</div>第一轮未达标。我已找到问题并开始修订，无需你逐轮点击继续。</div>'},
+try:{left:'可以试用',status:'工程达标',rt:'任务工作区 · 成果',
+rp:'<h3 class="ok">可以试用</h3><button class="primary">试运行</button><button>打开项目</button>',
+tl:'<div class="turn"><div class="role">Digital Me</div>成果已达到当前规划。<button class="primary">确认采用</button></div>'},
+pause:{left:'已暂停',status:'第三次同因失败',rt:'任务工作区 · 暂停',
+rp:'<h3 class="warn">需要你决定</h3><p>连续三次同一原因未解决，已暂停自动修改。</p><button class="primary">提出修改</button>',
+tl:'<div class="turn"><div class="role">Digital Me</div>同一问题已出现三次，我已暂停自动修改。请说明下一步，或更换方向。</div>'}
+};
+const q=new URLSearchParams(location.search).get('scene')||'plan';
+const s=scenes[q]||scenes.plan;
+document.getElementById('left').textContent=s.left;
+document.getElementById('status').textContent=s.status;
+document.getElementById('rt').textContent=s.rt;
+document.getElementById('rp').innerHTML=s.rp;
+document.getElementById('tl').innerHTML=s.tl;
+document.title='D11-E '+s.left;
+</script></body></html>

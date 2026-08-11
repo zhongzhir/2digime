@@ -260,16 +260,17 @@ describe('coding-capability-onboarding-01', () => {
     assert.equal(again.preferredCodingCapabilityId, id);
   });
 
-  it('UI 结构含引导卡与代码执行能力设置标题', async () => {
+  it('UI 结构含设置页代码执行能力与右栏连接入口', async () => {
     const html = await fs.readFile(
       path.join(__dirname, '../../../electron/renderer/index.html'),
       'utf8',
     );
-    assert.match(html, /完成这项任务需要代码执行能力/);
-    assert.match(html, /连接代码执行能力|使用已安装的能力/);
-    assert.match(html, /安装推荐能力/);
-    assert.match(html, /稍后连接/);
-    assert.match(html, /代码执行能力/);
+    assert.doesNotMatch(html, /id="executor-setup-card"/);
+    assert.match(html, /<h2>代码执行能力<\/h2>/);
+    assert.match(html, /id="settings-coding-capabilities"/);
+    assert.match(html, /id="btn-check-executor"/);
+    assert.match(html, /id="btn-tw-connect-coding"/);
+    assert.match(html, /连接代码执行能力/);
     assert.equal(/btn-collab-accept/.test(html), false);
   });
 });

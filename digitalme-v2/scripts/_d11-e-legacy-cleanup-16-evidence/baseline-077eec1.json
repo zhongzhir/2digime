@@ -1,0 +1,30 @@
+﻿{
+    "summary":  [
+                    "ℹ tests 509",
+                    "ℹ pass 488",
+                    "ℹ fail 20"
+                ],
+    "commit":  "077eec1",
+    "fails":  [
+                  "1-5 项目位置就绪后不得 needs_input；进入 capability/confirmation",
+                  "A: 相关偏好复用 → appliedUnderstanding 出现且 ≤3 条",
+                  "confirm → return-edit facts restore drafting start_submit",
+                  "does not register fake or available document capabilities",
+                  "modify_code + 软件项目触发执行确认",
+                  "renderer：中栏对话 + 固定 NL + 右栏空成果文案 + 不重复 CTO 长报告",
+                  "SUBJECT-MVP: one sentence start → task without archive gate → growth reuse",
+                  "submitTask 常规材料与大 contextRefs 均 \u003c1 秒",
+                  "UI 成果区无重复采用入口且含验收摘要结构",
+                  "unreliable confirm card also returns to drafting start_submit",
+                  "unreliable understanding does not fake success or deterministic confirm copy",
+                  "成果区提供提出修改且说明字段不承担修订",
+                  "事件丢失后查询结果一致;用户面无 Legacy 词汇",
+                  "同 Task 单活跃 Job;queued→running→succeeded",
+                  "完整成长闭环:Task A 编辑确认后 Task B 复用;未确认与不相似隔离",
+                  "修改成果:同 Artifact 追加 capability 版本;失败保留 head",
+                  "验收通过时建议可以采用",
+                  "验收摘要：目录不一致时请重新验证",
+                  "验收摘要：越界修改不得显示目标已满足可采用",
+                  "验收摘要默认层不暴露关键词命中等机器指标"
+              ]
+}

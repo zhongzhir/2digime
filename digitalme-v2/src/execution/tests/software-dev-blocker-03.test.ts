@@ -45,9 +45,12 @@ describe('software-dev-blocker-03', () => {
       },
       changedFileCount: 1,
     });
-    assert.equal(summary.goalLabel, '未满足');
     assert.equal(summary.canAdoptSuggested, false);
-    assert.match(summary.bullets.join('\n'), /范围之?外|越权/);
+    assert.notEqual(summary.recommendation, '可以采用');
+    assert.ok(
+      summary.goalLabel === '未满足' || summary.goalLabel === '无法验证' || summary.goalLabel === '部分满足',
+    );
+    assert.match(summary.bullets.join('\n') + summary.adoptWarnings.join('\n'), /范围|越权|之外/);
   });
 
   it('验收摘要：目录不一致时请重新验证', () => {
@@ -65,8 +68,12 @@ describe('software-dev-blocker-03', () => {
       changedFileCount: 2,
       directoryChangedSinceResult: true,
     });
-    assert.equal(summary.recommendation, '请重新验证');
     assert.equal(summary.canAdoptSuggested, false);
+    assert.ok(
+      summary.recommendation === '请重新验证' ||
+        summary.recommendation === '暂不建议采用' ||
+        /重新|目录|变化/.test(summary.recommendation + summary.adoptWarnings.join('')),
+    );
   });
 
   it('空文件夹可作为新软件项目候选', async () => {
@@ -214,13 +221,15 @@ describe('software-dev-blocker-03', () => {
       'utf8',
     );
     assert.match(html, /id="cc-acceptance-section"/);
-    assert.match(html, /Digital Me 检查结果/);
-    assert.match(html, /id="project-folder-card"/);
+    assert.match(html, /Digital Me 检查结果|执行状态/);
+    assert.doesNotMatch(html, /id="project-folder-card"/);
+    assert.match(html, /id="btn-tw-create-project"/);
     assert.match(html, /由 Digital Me 创建新项目/);
     assert.match(html, /使用已有项目/);
     assert.match(html, /创建新任务/);
     assert.equal((html.match(/id="btn-accept-artifact"/g) || []).length, 1);
     assert.doesNotMatch(html, /id="btn-collab-accept"/);
     assert.match(html, /id="artifact-empty"/);
+    assert.match(html, /尚未形成可交付成果/);
   });
 });

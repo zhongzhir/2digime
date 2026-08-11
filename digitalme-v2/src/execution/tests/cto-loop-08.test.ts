@@ -141,7 +141,7 @@ describe('CTO-LOOP-08 digital me cto loop', () => {
     });
     assert.equal(reviseView.stage, 'needs_revision');
     assert.match(reviseView.statusLine, /对话区/);
-    assert.ok(reviseView.actions.some((a) => a.id === 'confirm_continue' && a.slot === 'more'));
+    assert.ok(!reviseView.actions.some((a) => a.id === 'confirm_continue'));
     assert.ok(!reviseView.actions.some((a) => a.id === 'continue_revise' && a.slot === 'primary'));
 
     const adoptView = ux.deriveWorkUxView({

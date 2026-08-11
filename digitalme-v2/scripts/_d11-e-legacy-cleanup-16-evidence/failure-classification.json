@@ -1,0 +1,38 @@
+{
+  "baselineCommit": "077eec1",
+  "baseline": { "tests": 509, "pass": 488, "fail": 20 },
+  "d11eHead": { "tests": 510, "pass": 505, "fail": 4 },
+  "added": [],
+  "removedCount": 16,
+  "remaining": [
+    {
+      "name": "A: 相关偏好复用 → appliedUnderstanding 出现且 ≤3 条",
+      "class": "unrelated_existing",
+      "note": "主体成长/偏好复用路径，非 Build-01 做事主链"
+    },
+    {
+      "name": "完整成长闭环:Task A 编辑确认后 Task B 复用;未确认与不相似隔离",
+      "class": "unrelated_existing",
+      "note": "主体成长闭环，非 D11 工作区主链"
+    },
+    {
+      "name": "SUBJECT-MVP: one sentence start → task without archive gate → growth reuse",
+      "class": "unrelated_existing",
+      "note": "SUBJECT-MVP 历史路径"
+    },
+    {
+      "name": "does not register fake or available document capabilities",
+      "class": "unrelated_existing",
+      "note": "documentCapability=none 注册策略既有断言，与 D11-E 清理无关"
+    }
+  ],
+  "fixedBuild01Related": [
+    "旧三确认卡 DOM/CSS/密封与相关 UX 测试",
+    "空成果文案「尚未形成可交付成果」",
+    "return-edit / prepBlocked 派生",
+    "work-runtime 用户面标签「需要你确认」",
+    "验收摘要文案与安全门断言对齐 D11-C",
+    "submitTask 同步路径竞态",
+    "代码执行能力引导 UI 断言改到设置页/右栏"
+  ]
+}

@@ -11,28 +11,26 @@
    * @typedef {object} WorkUxFacts
    * @property {'compose'|'task'} [workMode]
    * @property {boolean} [modelReady]
- * @property {boolean} [projectFolderCard]
- * @property {boolean} [projectCreateConfirm]
- * @property {boolean} [projectDirReady]
- * @property {boolean} [executorSetupCard]
- * @property {boolean} [executionConfirmCard]
- * @property {boolean} [understandingReliable]
- * @property {boolean} [ownerChoicePrompt]
+   * @property {boolean} [projectCreateConfirm]
+   * @property {boolean} [projectDirReady]
+   * @property {boolean} [understandingReliable]
+   * @property {boolean} [ownerChoicePrompt]
    * @property {boolean} [revisionComposerOpen]
    * @property {boolean} [adoptWarningOpen]
    * @property {string|null} [jobStatus]
    * @property {boolean} [hasArtifact]
    * @property {'undecided'|'accepted'|'rejected'|null} [decisionStatus]
- * @property {boolean|null} [canAdoptSuggested]
- * @property {string|null} [primaryAction]
- * @property {boolean} [taskPaused]
- * @property {boolean} [codeChange]
+   * @property {boolean|null} [canAdoptSuggested]
+   * @property {string|null} [primaryAction]
+   * @property {boolean} [taskPaused]
+   * @property {boolean} [codeChange]
    * @property {boolean} [canTryRun]
    * @property {boolean} [startupFailed]
    * @property {boolean} [hasWorkingDirectory]
    * @property {boolean} [prepBlocked]
- * @property {boolean} [hasPlanDraft]
- * @property {boolean} [jobCancelSupported]
+   * @property {'project'|'project_confirm'|'executor'|'high_risk'|string|null} [prepBlockedKind]
+   * @property {boolean} [hasPlanDraft]
+   * @property {boolean} [jobCancelSupported]
    */
 
   /**
@@ -73,13 +71,14 @@
   function deriveWorkUxStage(facts) {
     const f = facts || {};
     if (f.modelReady === false) return 'needs_capability';
-    if (f.prepBlocked) return 'needs_input';
-    if (f.executorSetupCard) return 'needs_capability';
-    // 项目位置已就绪时不得继续 needs_input（卡片残留也不算）
-    const projectInputOpen = !!(f.projectFolderCard || f.projectCreateConfirm) && !f.projectDirReady;
-    if (projectInputOpen && f.projectCreateConfirm) return 'needs_input';
-    if (projectInputOpen && f.projectFolderCard) return 'needs_input';
-    if (f.executionConfirmCard) return 'needs_confirmation';
+    // D11-E：开发前准备只看右栏 prepBlocked，不再读中栏三确认卡可见性
+    if (f.prepBlocked) {
+      const kind = String(f.prepBlockedKind || '');
+      if (kind === 'executor') return 'needs_capability';
+      if (kind === 'high_risk') return 'needs_confirmation';
+      return 'needs_input';
+    }
+    if (f.projectCreateConfirm && !f.projectDirReady) return 'needs_input';
     if (f.ownerChoicePrompt) return 'needs_input';
     const js = f.jobStatus ? String(f.jobStatus) : '';
     if (js === 'queued' || js === 'running') return 'running';
@@ -122,32 +121,22 @@
         push('start_submit', '开始处理', 'primary', 'middle');
       }
     } else if (stage === 'needs_input') {
-      if (f.prepBlocked) {
+      if (f.prepBlocked || f.projectCreateConfirm) {
         statusLine = '开发前还需完成准备 · 见右侧任务工作区';
-      } else if (f.projectCreateConfirm) {
-        statusLine = '请确认新项目位置';
-        push('confirm_create_project', '确认并开始', 'primary', 'middle');
-        push('change_project_location', '更改位置', 'secondary', 'middle');
-        push('cancel_create_project', '取消', 'more', 'middle');
-      } else if (f.projectFolderCard) {
-        statusLine = '这项任务需要一个项目位置';
-        push('create_project', '由 Digital Me 创建新项目', 'primary', 'middle');
-        push('pick_existing_project', '使用已有项目', 'secondary', 'middle');
       } else if (f.ownerChoicePrompt) {
         statusLine = '请选择本次如何处理';
       } else {
         statusLine = '请补充任务所需信息';
       }
     } else if (stage === 'needs_capability') {
-      statusLine = f.modelReady === false ? '请先连接模型' : '完成这项任务需要代码执行能力';
+      statusLine =
+        f.modelReady === false
+          ? '请先连接模型'
+          : f.prepBlocked
+            ? '开发前还需完成准备 · 见右侧任务工作区'
+            : '完成这项任务需要代码执行能力';
       if (f.modelReady === false) {
         push('goto_settings', '连接模型', 'primary', 'middle');
-      } else if (!f.prepBlocked) {
-        push('coding_connect', '连接代码执行能力', 'primary', 'middle');
-        push('coding_later', '稍后连接', 'secondary', 'middle');
-        push('coding_install', '安装推荐能力', 'more', 'middle');
-        push('coding_settings', '打开设置', 'more', 'middle');
-        push('coding_recheck', '重新检查', 'more', 'middle');
       }
     } else if (stage === 'needs_confirmation') {
       statusLine = '需要额外确认后再开始 · 见右侧任务工作区';
@@ -176,11 +165,10 @@
         if (f.primaryAction === 'need_decision') {
           push('adopt_anyway', '仍然采用', 'secondary', 'right');
         }
-        push('confirm_continue', '按建议继续', 'more', 'right');
+        // D11-E：不再把「按建议继续」作为每轮必点门控；用户可主动提出修改
         push('pause_task', '暂停任务', 'more', 'right');
       } else {
         statusLine = '建议继续修正 · 请在对话区直接说明';
-        push('confirm_continue', '按建议继续', 'more', 'right');
         push('pause_task', '暂停任务', 'more', 'right');
       }
       if (f.hasWorkingDirectory) push('restore_baseline', '恢复执行前状态', 'more', 'right');

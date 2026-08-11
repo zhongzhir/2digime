@@ -365,73 +365,7 @@
 
                   <ol id="work-timeline" class="work-timeline" aria-live="polite" aria-label="当前任务对话"></ol>
 
-                  <section class="work-exec-block" aria-label="执行确认">
-                    <div id="executor-setup-card" class="executor-setup-card coding-onboarding-card" hidden>
-                      <h3 id="executor-setup-title" class="execution-confirm-title">完成这项任务需要代码执行能力</h3>
-                      <p id="executor-setup-description" class="muted">
-                        Digital Me 会使用它在你确认的项目目录中创建或修改代码，并运行测试。
-                      </p>
-                      <p id="executor-setup-message" class="muted">
-                        尚未检测到可用的代码执行能力。
-                      </p>
-                      <div id="coding-cap-scan-list" class="coding-cap-list" hidden></div>
-                      <div id="coding-cap-install-panel" class="coding-install-panel" hidden>
-                        <h4>推荐安装代码执行能力</h4>
-                        <div id="coding-cap-install-body" class="muted tiny"></div>
-                      </div>
-                      <div class="row coding-onboarding-actions" id="coding-onboarding-actions">
-                        <button type="button" id="btn-coding-use-installed" class="primary">连接代码执行能力</button>
-                        <button type="button" id="btn-coding-connect-later" class="ghost">稍后连接</button>
-                        <button type="button" id="btn-coding-use-cloud" class="ghost" hidden>使用云端执行</button>
-                      </div>
-                      <details class="work-more-menu" id="coding-onboarding-more">
-                        <summary>更多</summary>
-                        <div class="row work-more-actions" id="coding-onboarding-secondary">
-                          <button type="button" id="btn-coding-install-recommended" class="ghost">安装推荐能力</button>
-                          <button type="button" id="btn-executor-goto-settings" class="ghost">打开设置</button>
-                          <button type="button" id="btn-executor-recheck" class="ghost">重新检查</button>
-                          <button type="button" id="btn-coding-open-guide" class="ghost" hidden>查看安装说明</button>
-                          <button type="button" id="btn-coding-back-onboarding" class="ghost" hidden>返回</button>
-                        </div>
-                      </details>
-                    </div>
-                    <div id="project-folder-card" class="executor-setup-card" hidden>
-                      <h3 class="execution-confirm-title">选择项目位置</h3>
-                      <p id="project-folder-message" class="muted">这项任务需要一个项目位置</p>
-                      <div id="project-create-confirm" class="project-create-confirm" hidden>
-                        <p id="project-create-path" class="project-create-path"></p>
-                        <div class="row">
-                          <button type="button" id="btn-confirm-create-project" class="primary">确认并开始</button>
-                          <button type="button" id="btn-change-project-location" class="ghost">更改位置</button>
-                          <button type="button" id="btn-cancel-create-project" class="ghost">取消</button>
-                        </div>
-                      </div>
-                      <div id="project-folder-actions" class="row project-folder-actions">
-                        <button type="button" id="btn-create-new-project" class="primary">由 Digital Me 创建新项目</button>
-                        <button type="button" id="btn-pick-existing-project" class="ghost">使用已有项目</button>
-                      </div>
-                    </div>
-                    <div id="execution-confirm-card" class="execution-confirm-card" hidden>
-                      <h3 id="execution-confirm-title" class="execution-confirm-title">这项任务需要修改项目文件</h3>
-                      <p id="execution-confirm-notice" class="muted"></p>
-                      <dl class="execution-confirm-dl">
-                        <div><dt>将使用</dt><dd id="execution-confirm-executor">代码执行能力</dd></div>
-                        <div><dt>项目</dt><dd id="execution-confirm-project"></dd></div>
-                        <div><dt>工作目录</dt><dd id="execution-confirm-dir"></dd></div>
-                        <div><dt>准备完成</dt><dd id="execution-confirm-accept"></dd></div>
-                        <div><dt>允许</dt><dd id="execution-confirm-allowed"></dd></div>
-                        <div><dt>不会执行</dt><dd id="execution-confirm-donot"></dd></div>
-                      </dl>
-                      <section id="execution-confirm-understanding" class="execution-confirm-understanding" hidden>
-                        <h4 class="execution-confirm-understanding-title">目标、方案与预计交付</h4>
-                        <ul id="execution-confirm-understanding-list" class="execution-confirm-understanding-list"></ul>
-                      </section>
-                      <ul id="execution-confirm-forbidden" class="muted tiny" hidden></ul>
-                      <div class="row">
-                        <button type="button" id="btn-confirm-execution" class="primary">确认并开始</button>
-                        <button type="button" id="btn-cancel-execution" class="ghost">返回修改</button>
-                      </div>
-                    </div>
+                  <section class="work-exec-block" aria-label="任务操作">
                     <div class="row work-exec-actions" id="work-exec-actions">
                       <button type="button" id="btn-submit" class="primary" hidden>开始处理</button>
                       <button type="button" id="btn-cancel" disabled hidden>取消</button>
@@ -688,7 +622,7 @@
                   <button type="button" id="btn-restore-baseline" class="ghost" hidden>恢复执行前状态</button>
                 </div>
               </div>
-              <p id="artifact-empty" class="empty-hint" hidden>这项任务尚未产生成果。</p>
+              <p id="artifact-empty" class="empty-hint" hidden>尚未形成可交付成果。</p>
               <div id="bundle-view" class="bundle-view" hidden>
                 <p id="bundle-quality" class="bundle-quality" hidden></p>
                 <textarea

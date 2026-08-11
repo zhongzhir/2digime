@@ -1,0 +1,14 @@
+{
+  "task": "2DIGIME-BUILD-01-D11-E-LEGACY-CLEANUP-OWNER-RUNTIME-PREP-16",
+  "generatedAt": "2026-08-11T08:49:38.194Z",
+  "userData": "C:\\Users\\46554\\AppData\\Local\\Temp\\dm-d11e-ud-11HRTf",
+  "shots": {
+    "plan": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_d11-e-legacy-cleanup-16-evidence\\01-plan-confirm.png",
+    "auth": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_d11-e-legacy-cleanup-16-evidence\\02-execution-auth.png",
+    "running": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_d11-e-legacy-cleanup-16-evidence\\03-developing.png",
+    "revise": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_d11-e-legacy-cleanup-16-evidence\\04-auto-revision.png",
+    "try": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_d11-e-legacy-cleanup-16-evidence\\05-ready-to-try.png",
+    "pause": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_d11-e-legacy-cleanup-16-evidence\\06-paused-after-failures.png"
+  },
+  "note": "engineering visual check only; owner_runtime_not_started; no MUHUB"
+}

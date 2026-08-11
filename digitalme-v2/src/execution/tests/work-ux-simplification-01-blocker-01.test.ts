@@ -39,29 +39,33 @@ describe('work-ux-simplification-01-blocker-01', () => {
     assert.equal(review.stage, 'needs_review');
   });
 
-  it('4-7 needs_input：创建/选用项目动作齐全；确认子态；有项目后不停留', () => {
-    const folder = ux.deriveWorkUxView({ projectFolderCard: true });
+  it('4-7 needs_input：右栏 prepBlocked 投影；确认子态；能力/高风险分流', () => {
+    const folder = ux.deriveWorkUxView({ prepBlocked: true, prepBlockedKind: 'project' });
     assert.equal(folder.stage, 'needs_input');
-    assert.equal(primaryId({ projectFolderCard: true }), 'create_project');
-    assert.ok(folder.actions.some((a) => a.id === 'pick_existing_project' && a.slot === 'secondary'));
+    assert.match(folder.statusLine, /右侧/);
+    assert.ok(!folder.actions.some((a) => a.id === 'create_project'));
 
-    const confirm = ux.deriveWorkUxView({ projectCreateConfirm: true, projectFolderCard: true });
+    const confirm = ux.deriveWorkUxView({
+      prepBlocked: true,
+      prepBlockedKind: 'project_confirm',
+      projectCreateConfirm: true,
+    });
     assert.equal(confirm.stage, 'needs_input');
-    assert.equal(primaryId({ projectCreateConfirm: true }), 'confirm_create_project');
+    assert.ok(!confirm.actions.some((a) => a.id === 'confirm_create_project'));
 
     const nextCap = ux.deriveWorkUxView({
-      executorSetupCard: true,
+      prepBlocked: true,
+      prepBlockedKind: 'executor',
       modelReady: true,
-      projectFolderCard: false,
     });
     assert.equal(nextCap.stage, 'needs_capability');
     assert.notEqual(nextCap.stage, 'needs_input');
 
-    const nextConfirm = ux.deriveWorkUxView({ executionConfirmCard: true });
+    const nextConfirm = ux.deriveWorkUxView({ prepBlocked: true, prepBlockedKind: 'high_risk' });
     assert.equal(nextConfirm.stage, 'needs_confirmation');
   });
 
-  it('8-9 needs_revision 引导对话区；「按建议继续」仅作辅助', () => {
+  it('8-9 needs_revision 引导对话区；不再要求每轮「按建议继续」', () => {
     const v = ux.deriveWorkUxView({
       hasArtifact: true,
       decisionStatus: 'undecided',
@@ -70,7 +74,7 @@ describe('work-ux-simplification-01-blocker-01', () => {
     });
     assert.equal(v.stage, 'needs_revision');
     assert.match(v.statusLine, /对话区/);
-    assert.ok(v.actions.some((a) => a.id === 'confirm_continue' && a.slot === 'more'));
+    assert.ok(!v.actions.some((a) => a.id === 'confirm_continue'));
     assert.ok(!v.actions.some((a) => a.id === 'continue_revise' && a.slot === 'primary'));
     assert.ok(!v.actions.some((a) => a.id === 'propose_revision' && a.slot === 'primary'));
   });
@@ -104,7 +108,7 @@ describe('work-ux-simplification-01-blocker-01', () => {
 
   it('15-17 跨 stage 动作预算；restart 从 facts 重建', () => {
     const stages = [
-      { projectFolderCard: true },
+      { prepBlocked: true, prepBlockedKind: 'project' },
       { jobStatus: 'running' },
       { hasArtifact: true, decisionStatus: 'undecided', jobStatus: 'succeeded' },
       { hasArtifact: true, decisionStatus: 'undecided', canAdoptSuggested: false },

@@ -19,6 +19,7 @@ import { buildExecutionConfirmPreview } from '../task-package';
 const ux = require('../../../electron/renderer/work-ux-stage.js') as {
   deriveWorkUxView: (facts: Record<string, unknown>) => {
     stage: string;
+    statusLine: string;
     actions: Array<{ id: string; label: string; slot: string }>;
   };
 };
@@ -27,23 +28,21 @@ describe('fix-return-edit-action-04', () => {
   it('confirm → return-edit facts restore drafting start_submit', () => {
     const onConfirm = ux.deriveWorkUxView({
       workMode: 'compose',
-      executionConfirmCard: true,
+      prepBlocked: true,
+      prepBlockedKind: 'high_risk',
       understandingReliable: true,
     });
     assert.equal(onConfirm.stage, 'needs_confirmation');
-    assert.ok(onConfirm.actions.some((a) => a.id === 'confirm_execution'));
-    assert.ok(onConfirm.actions.some((a) => a.id === 'cancel_execution'));
+    assert.match(onConfirm.statusLine, /右侧/);
     assert.equal(
       onConfirm.actions.some((a) => a.id === 'start_submit'),
       false,
     );
 
-    // 返回修改后：确认卡关闭，仍为 compose、无 job/artifact
+    // 返回修改后：准备受阻解除，仍为 compose、无 job/artifact
     const afterReturn = ux.deriveWorkUxView({
       workMode: 'compose',
-      executionConfirmCard: false,
-      projectFolderCard: false,
-      executorSetupCard: false,
+      prepBlocked: false,
       jobStatus: null,
       hasArtifact: false,
       decisionStatus: null,
@@ -58,42 +57,32 @@ describe('fix-return-edit-action-04', () => {
   it('unreliable confirm card also returns to drafting start_submit', () => {
     const unreliable = ux.deriveWorkUxView({
       workMode: 'compose',
-      executionConfirmCard: true,
+      prepBlocked: true,
+      prepBlockedKind: 'high_risk',
       understandingReliable: false,
     });
-    assert.equal(
-      unreliable.actions.find((a) => a.id === 'confirm_execution')?.label,
-      '仍要继续',
-    );
+    assert.equal(unreliable.stage, 'needs_confirmation');
     const after = ux.deriveWorkUxView({
       workMode: 'compose',
-      executionConfirmCard: false,
+      prepBlocked: false,
     });
     assert.equal(after.stage, 'drafting');
     assert.ok(after.actions.some((a) => a.id === 'start_submit' && a.label === '开始处理'));
   });
 
-  it('app.js returnFromExecutionConfirmToEdit refreshes UX and keeps materials path', async () => {
+  it('app.js 返回修改走右栏 prepBlocked 清除，并刷新 UX', async () => {
     const src = await fs.readFile(
       path.join(__dirname, '../../../electron/renderer/app.js'),
       'utf8',
     );
-    assert.match(src, /function returnFromExecutionConfirmToEdit\s*\(/);
-    assert.match(src, /returnFromExecutionConfirmToEdit\s*\(\s*\)/);
-    assert.match(src, /cancelExecution[\s\S]{0,400}returnFromExecutionConfirmToEdit/);
-    assert.match(
-      src,
-      /function returnFromExecutionConfirmToEdit[\s\S]*?refreshWorkUxView\s*\(\s*\{[\s\S]*?executionConfirmCard:\s*false/,
-    );
-    assert.match(
-      src,
-      /function returnFromExecutionConfirmToEdit[\s\S]*?els\.submit\.textContent\s*=\s*["']开始处理["']/,
-    );
-    // 不得在返回修改时清空 materials
-    assert.equal(
-      /function returnFromExecutionConfirmToEdit[\s\S]*?materials\s*=\s*\[\]/.test(src),
-      false,
-    );
+    assert.equal(src.includes('returnFromExecutionConfirmToEdit'), false);
+    assert.equal(src.includes('execution-confirm-card'), false);
+    assert.match(src, /function clearPrepBlocked\s*\(/);
+    assert.match(src, /function showPrepBlocked\s*\(/);
+    assert.match(src, /prepBlocked:\s*!!prepBlockedState/);
+    const clearBody = src.match(/function clearPrepBlocked\s*\([^)]*\)\s*\{[\s\S]*?\n  \}/)?.[0] ?? '';
+    assert.ok(clearBody.length > 20);
+    assert.equal(/materials\s*=\s*\[\]/.test(clearBody), false);
   });
 
   it('product chain: confirm → edit goal → resubmit regenerates understanding without task/job', async () => {

@@ -31,13 +31,17 @@ describe('D11-B planning workspace', () => {
     assert.doesNotMatch(html, />采用说明（可选）</);
   });
 
-  it('中栏三步技术确认卡被 CSS 隐藏，不再作为默认路径', async () => {
+  it('中栏三步技术确认卡已从 DOM/CSS 删除，开发前准备只走右栏', async () => {
+    const html = await fs.readFile(path.join(root, 'electron/renderer/index.html'), 'utf8');
     const css = await fs.readFile(path.join(root, 'electron/renderer/styles.css'), 'utf8');
-    assert.match(css, /#executor-setup-card/);
-    assert.match(css, /#project-folder-card/);
-    assert.match(css, /#execution-confirm-card/);
-    assert.match(css, /display:\s*none\s*!important/);
-    assert.match(css, /pointer-events:\s*none\s*!important/);
+    assert.doesNotMatch(html, /id="executor-setup-card"/);
+    assert.doesNotMatch(html, /id="project-folder-card"/);
+    assert.doesNotMatch(html, /id="execution-confirm-card"/);
+    assert.doesNotMatch(css, /#executor-setup-card/);
+    assert.doesNotMatch(css, /#project-folder-card/);
+    assert.doesNotMatch(css, /#execution-confirm-card/);
+    assert.match(html, /id="task-workspace-prep"/);
+    assert.match(html, /id="btn-tw-create-project"/);
   });
 
   it('右栏含开发中面板；Job 执行后即可刷新进展', async () => {
@@ -45,10 +49,11 @@ describe('D11-B planning workspace', () => {
     assert.match(html, /id="task-workspace-running"/);
     assert.match(html, /id="tw-running-title"[^>]*>开发中/);
     const app = await fs.readFile(path.join(root, 'electron/renderer/app.js'), 'utf8');
-    assert.match(app, /sealLegacyMidConfirmCards/);
+    assert.match(app, /showPrepBlocked/);
     assert.match(app, /mode = "running"/);
     assert.match(app, /fromPlanConfirm && !highRisk/);
     assert.match(app, /请先在右侧确认最新规划后再开始/);
+    assert.equal(app.includes('sealLegacyMidConfirmCards'), false);
     assert.equal(app.includes('非规划确认入口的遗留路径：仍自动授权'), false);
   });
 

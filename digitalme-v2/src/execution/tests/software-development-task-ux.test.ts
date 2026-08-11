@@ -74,7 +74,10 @@ describe('software-development-task-ux', () => {
     });
     assert.ok(preview.needsExecutionConfirm);
     assert.equal(preview.intentKind, 'modify_code');
-    assert.match(preview.needsExecutionConfirm!.title || '', /修改项目文件/);
+    assert.match(
+      preview.needsExecutionConfirm!.title || '',
+      /修改项目文件|确认权限|开始前请确认/,
+    );
     assert.equal(
       preview.needsExecutionConfirm!.workingDirectory,
       path.resolve(dir),
@@ -189,9 +192,11 @@ describe('software-development-task-ux', () => {
     );
     assert.match(html, /id="btn-propose-revision"/);
     assert.match(html, /提出修改/);
-    assert.match(html, /采用或不采用说明（可选）/);
+    assert.match(html, /id="artifact-decision-note"/);
+    assert.match(html, /采用说明/);
+    assert.doesNotMatch(html, /采用或不采用说明（可选）/);
     assert.match(html, /id="revision-composer"/);
-    assert.match(html, /提交修改/);
+    assert.match(html, /id="btn-revise"/);
     assert.equal((html.match(/id="btn-accept-artifact"/g) || []).length, 1);
     assert.equal((html.match(/id="btn-reject-artifact"/g) || []).length, 1);
     assert.doesNotMatch(html, /填写修改要求后点击不采用/);

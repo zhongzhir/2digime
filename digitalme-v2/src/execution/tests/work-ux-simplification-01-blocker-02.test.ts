@@ -25,32 +25,34 @@ describe('work-ux-simplification-01-blocker-02', () => {
   it('1-5 项目位置就绪后不得 needs_input；进入 capability/confirmation', () => {
     const created = ux.deriveWorkUxView({
       projectDirReady: true,
-      projectFolderCard: false,
-      executorSetupCard: true,
+      prepBlocked: true,
+      prepBlockedKind: 'executor',
       modelReady: true,
     });
     assert.equal(created.stage, 'needs_capability');
-    assert.equal(created.actions.find((a) => a.slot === 'primary')?.id, 'coding_connect');
+    assert.ok(!created.actions.some((a) => a.id === 'coding_connect'));
 
     const selected = ux.deriveWorkUxView({
       projectDirReady: true,
-      projectFolderCard: false,
-      executionConfirmCard: true,
+      prepBlocked: true,
+      prepBlockedKind: 'high_risk',
     });
     assert.equal(selected.stage, 'needs_confirmation');
-    assert.equal(selected.actions.find((a) => a.slot === 'primary')?.id, 'confirm_execution');
+    assert.ok(!selected.actions.some((a) => a.id === 'confirm_execution'));
 
-    // 卡片残留但 projectDir 已就绪 → 不困在 needs_input
+    // 无 prepBlocked 时，即便历史卡事实残留也不应再驱动阶段
     const staleCard = ux.deriveWorkUxView({
       projectDirReady: true,
       projectFolderCard: true,
       executionConfirmCard: true,
     });
-    assert.equal(staleCard.stage, 'needs_confirmation');
+    assert.notEqual(staleCard.stage, 'needs_input');
+    assert.notEqual(staleCard.stage, 'needs_confirmation');
 
     const stillNeed = ux.deriveWorkUxView({
       projectDirReady: false,
-      projectFolderCard: true,
+      prepBlocked: true,
+      prepBlockedKind: 'project',
     });
     assert.equal(stillNeed.stage, 'needs_input');
   });

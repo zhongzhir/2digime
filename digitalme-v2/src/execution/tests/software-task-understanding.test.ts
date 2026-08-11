@@ -172,25 +172,30 @@ describe('software-task-understanding relevance', () => {
     assert.match(preview.notice, /不能确定|不会把 package\.json/i);
     assert.equal(/将重点查看/.test(preview.notice), false);
 
-    // UX 阶段文案：不可靠时必须「仍要继续」，不得「确认并开始」
+    // UX 阶段：高风险确认走右栏 prepBlocked，不再派生中栏 confirm_execution 文案
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const ux = require('../../../electron/renderer/work-ux-stage.js') as {
       deriveWorkUxView: (facts: Record<string, unknown>) => {
+        stage: string;
         actions: Array<{ id: string; label: string }>;
+        statusLine: string;
       };
     };
-    const unreliableView = ux.deriveWorkUxView({
-      executionConfirmCard: true,
+    const highRiskView = ux.deriveWorkUxView({
+      prepBlocked: true,
+      prepBlockedKind: 'high_risk',
       understandingReliable: false,
     });
-    const unreliableConfirm = unreliableView.actions.find((a) => a.id === 'confirm_execution');
-    assert.equal(unreliableConfirm?.label, '仍要继续');
+    assert.equal(highRiskView.stage, 'needs_confirmation');
+    assert.match(highRiskView.statusLine, /右侧/);
+    assert.ok(!highRiskView.actions.some((a) => a.id === 'confirm_execution'));
     const reliableView = ux.deriveWorkUxView({
-      executionConfirmCard: true,
+      prepBlocked: true,
+      prepBlockedKind: 'high_risk',
       understandingReliable: true,
     });
-    const reliableConfirm = reliableView.actions.find((a) => a.id === 'confirm_execution');
-    assert.equal(reliableConfirm?.label, '确认并开始');
+    assert.equal(reliableView.stage, 'needs_confirmation');
+    assert.ok(!reliableView.actions.some((a) => a.id === 'confirm_execution'));
   });
 
   it('extractGoalHints parses path and symbol from natural language', () => {

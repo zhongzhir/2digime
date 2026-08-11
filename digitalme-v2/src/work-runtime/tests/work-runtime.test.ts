@@ -42,7 +42,13 @@ async function boot(
 test('submitTask 常规材料与大 contextRefs 均 <1 秒', async () => {
   const root = await tempRoot();
   const materials = await writeSampleMaterials(root);
-  const runtime = await boot(root);
+  // 故意不 start：仅测同步 submit 路径，避免泵出 Job 抢先写 Artifact
+  const runtime = createWorkRuntime({
+    rootDir: root,
+    subjectId: 'subj_test',
+    fakeAdapter: { delayMs: 5 },
+  });
+  await runtime.recoverOnStartup();
 
   const manyRefs = Array.from({ length: 800 }, (_, i) => ({
     kind: 'folder' as const,
@@ -96,7 +102,7 @@ test('同 Task 单活跃 Job;queued→running→succeeded', async () => {
   assert.equal(job.artifactId, artifactIdForJob(jobId));
   const view = await runtime.getTask({ taskId });
   assert.equal(view.state, 'completed');
-  assert.equal(view.userFacingLabel, '已完成');
+  assert.equal(view.userFacingLabel, '需要你确认');
   assert.deepEqual(view.artifactIds, [artifactIdForJob(jobId)]);
   assert.equal('status' in view.task, false);
   assert.equal('jobIds' in view.task, false);
@@ -372,7 +378,7 @@ test('事件丢失后查询结果一致;用户面无 Legacy 词汇', async () =>
   events.length = 0; // 模拟事件丢失
   const view = await runtime.getTask({ taskId });
   assert.equal(view.state, 'completed');
-  assert.equal(view.userFacingLabel, '已完成');
+  assert.equal(view.userFacingLabel, '需要你确认');
   assert.equal(view.latestJob?.status, 'succeeded');
   assert.equal(view.latestJob?.progressNote, undefined);
   const dumped = JSON.stringify(view);
@@ -417,7 +423,7 @@ test('修改成果:同 Artifact 追加 capability 版本;失败保留 head', asy
   const afterView = await runtime.getTask({ taskId });
   assert.equal(afterView.artifactIds.length, 1);
   assert.equal(afterView.artifactIds[0], artifactId);
-  assert.equal(afterView.userFacingLabel, '已完成');
+  assert.equal(afterView.userFacingLabel, '需要你确认');
   const after = await runtime.getArtifact(artifactId);
   assert.ok(after);
   assert.equal(after.versions.length, 2);

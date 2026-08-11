@@ -26,11 +26,11 @@ describe('work-ux-simplification-01', () => {
   it('每阶段主动作≤1、次动作≤2', () => {
     const samples = [
       { workMode: 'compose' },
-      { projectFolderCard: true },
-      { projectCreateConfirm: true },
-      { executorSetupCard: true, modelReady: true },
+      { prepBlocked: true, prepBlockedKind: 'project' },
+      { prepBlocked: true, prepBlockedKind: 'project_confirm', projectCreateConfirm: true },
+      { prepBlocked: true, prepBlockedKind: 'executor', modelReady: true },
       { modelReady: false },
-      { executionConfirmCard: true },
+      { prepBlocked: true, prepBlockedKind: 'high_risk' },
       { jobStatus: 'running', jobCancelSupported: true },
       { hasArtifact: true, decisionStatus: 'undecided', canAdoptSuggested: true, jobStatus: 'succeeded' },
       { hasArtifact: true, decisionStatus: 'undecided', canAdoptSuggested: false, jobStatus: 'succeeded' },
@@ -99,11 +99,12 @@ describe('work-ux-simplification-01', () => {
     assert.equal(ux.assertActionBudget(review).ok, true);
   });
 
-  it('needs_capability 不显示执行确认/开始处理', () => {
-    const v = ux.deriveWorkUxView({ executorSetupCard: true, modelReady: true });
+  it('needs_capability 不显示执行确认/开始处理；准备受阻不推中栏连接按钮', () => {
+    const v = ux.deriveWorkUxView({ prepBlocked: true, prepBlockedKind: 'executor', modelReady: true });
     assert.equal(v.stage, 'needs_capability');
     assert.ok(!v.actions.some((a) => a.id === 'confirm_execution' || a.id === 'start_submit'));
-    assert.equal(v.actions.find((a) => a.slot === 'primary')?.id, 'coding_connect');
+    assert.ok(!v.actions.some((a) => a.id === 'coding_connect'));
+    assert.match(v.statusLine, /右侧/);
   });
 
   it('blocked 重试为辅助；未达标引导对话；达标采用仅在对话区', () => {
