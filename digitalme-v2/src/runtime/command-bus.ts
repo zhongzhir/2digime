@@ -72,6 +72,10 @@ export function createCommandBus(runtime: DigitalMeRuntime): CommandBus {
           return (await runtime.listTasks(
             (input as CommandMap['work.listTasks']['input']) || {},
           )) as CommandMap[K]['output'];
+        case 'work.converse':
+          return (await runtime.converse(
+            input as CommandMap['work.converse']['input'],
+          )) as CommandMap[K]['output'];
         case 'artifact.getContent': {
           const req = input as CommandMap['artifact.getContent']['input'];
           const got = await runtime.getContent(req);

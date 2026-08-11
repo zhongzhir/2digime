@@ -20,6 +20,7 @@ const COMMAND_NAMES = [
   "work.cancelJob",
   "work.getTask",
   "work.listTasks",
+  "work.converse",
   "artifact.getContent",
   "artifact.saveEdit",
   "artifact.export",

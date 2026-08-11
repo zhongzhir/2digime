@@ -192,6 +192,11 @@ export interface CommandMap {
         eventIdB: string;
       };
       /**
+       * D11-A：复用对话中枢已建立的理解任务（不新建 Task）。
+       * 提供时表示确定性开始 = 用户对该任务当前规划的确认。
+       */
+      existingTaskId?: string;
+      /**
        * 代码修改授权（用户确认卡通过后传入）。
        * 缺省且意图为 modify_code 时，不创建 Job，仅返回 needsExecutionConfirm。
        */
@@ -386,6 +391,44 @@ export interface CommandMap {
         activityTime?: string;
         projectDir?: string;
       }>;
+    };
+  };
+  /**
+   * D11-A AI 意图与对话中枢：自然语言输入先得到 Digital Me 的理解与回应。
+   * 本命令永不创建 Job；执行只能经 work.submitTask / work.reviseArtifact 确定性发生。
+   * 模型不可用时降级为明确提示，不做关键词路由。
+   */
+  'work.converse': {
+    input: {
+      /** 缺省时创建理解阶段的新任务（无 Job）。 */
+      taskId?: string;
+      text: string;
+      /** 首轮建任务时可携带材料/项目引用。 */
+      contextRefs?: ContextRef[];
+    };
+    output: {
+      taskId: string;
+      createdTask: boolean;
+      intent: string;
+      confidence: number;
+      /** Digital Me 的自然语言回复（已持久化到 Task.meta.conversation）。 */
+      reply: string;
+      needsClarification: boolean;
+      /** 模型不可用降级。 */
+      degraded: boolean;
+      newTurns: Array<{
+        turnId: string;
+        role: 'user' | 'digital_me';
+        content: string;
+        createdAt: string;
+        intentId?: string;
+      }>;
+      plan?: { version: number; status: 'draft' | 'confirmed'; content: string };
+      /** 渲染层据此走确定性执行入口；不表示已执行。 */
+      startAuthorized: boolean;
+      startMode?: 'new_execution' | 'revision';
+      adoptRequested: boolean;
+      pauseRequested: boolean;
     };
   };
   'artifact.getContent': {
@@ -822,6 +865,7 @@ export const COMMAND_NAMES = [
   'work.cancelJob',
   'work.getTask',
   'work.listTasks',
+  'work.converse',
   'artifact.getContent',
   'artifact.saveEdit',
   'artifact.export',
@@ -831,8 +875,11 @@ export const COMMAND_NAMES = [
   'subject.communicate',
 ] as const satisfies readonly CommandName[];
 
-/** 命令面硬上限(architecture §4;超出即架构违规)。含 subject.communicate。 */
-export const COMMAND_COUNT_LIMIT = 21;
+/**
+ * 命令面硬上限(architecture §4;超出即架构违规)。含 subject.communicate。
+ * 2026-08-11 D11-A:新增 work.converse(AI 意图与对话中枢,Owner 授权的新领域用例),上限 21→22。
+ */
+export const COMMAND_COUNT_LIMIT = 22;
 
 export interface CommandBus {
   invoke<K extends CommandName>(

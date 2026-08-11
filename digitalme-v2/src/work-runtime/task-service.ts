@@ -1,6 +1,12 @@
 import type { ObjectStore } from '../runtime/ports';
 import { newId, nowIso } from '../shared/ids';
-import type { ContextRef, Task } from './task';
+import type {
+  ContextRef,
+  Task,
+  TaskConversationTurn,
+  TaskIntentConclusion,
+  TaskPlan,
+} from './task';
 import type { TaskIntentKind } from './work-intent';
 
 /**
@@ -80,6 +86,81 @@ export class TaskService {
       });
     }
     const updated: Task = { ...task, contextRefs: next };
+    await this.store.put(updated);
+    return updated;
+  }
+
+  /**
+   * 追加对话轮与意图结论（D11-A）。
+   * 追加式写入:不改写历史轮;意图结论经 turnId 引用,不进对话正文。
+   */
+  async appendConversation(
+    taskId: string,
+    input: { turns: TaskConversationTurn[]; intents?: TaskIntentConclusion[] },
+  ): Promise<Task> {
+    const task = await this.store.get(taskId);
+    if (!task) throw new Error(`task not found: ${taskId}`);
+    const conversation = task.meta?.conversation ?? { turns: [], intents: [] };
+    const updated: Task = {
+      ...task,
+      meta: {
+        ...(task.meta ?? {}),
+        conversation: {
+          turns: [...conversation.turns, ...input.turns],
+          intents: [...conversation.intents, ...(input.intents ?? [])],
+        },
+      },
+    };
+    await this.store.put(updated);
+    return updated;
+  }
+
+  /** 写入/替换当前规划（唯一保存处;不复制到对话或 Job）。 */
+  async updatePlan(taskId: string, plan: TaskPlan): Promise<Task> {
+    const task = await this.store.get(taskId);
+    if (!task) throw new Error(`task not found: ${taskId}`);
+    const updated: Task = {
+      ...task,
+      meta: { ...(task.meta ?? {}), plan },
+    };
+    await this.store.put(updated);
+    return updated;
+  }
+
+  /**
+   * 确定性开始执行前同步任务事实（goal/意图/能力/产出族）。
+   * 仅用于「先对话建任务、确认后在同一 Task 上执行」;不新建 Task。
+   */
+  async updateForSubmit(
+    taskId: string,
+    input: {
+      goal?: string;
+      contextRefs?: ContextRef[];
+      requestedArtifactType?: string;
+      intentKind?: TaskIntentKind;
+      capabilityId?: string;
+    },
+  ): Promise<Task> {
+    const task = await this.store.get(taskId);
+    if (!task) throw new Error(`task not found: ${taskId}`);
+    const updated: Task = {
+      ...task,
+      ...(input.goal && input.goal.trim() ? { goal: input.goal.trim() } : {}),
+      ...(input.contextRefs
+        ? {
+            contextRefs: input.contextRefs.map((r) => ({
+              kind: r.kind,
+              path: r.path,
+              ...(r.projectOrigin ? { projectOrigin: r.projectOrigin } : {}),
+            })),
+          }
+        : {}),
+      ...(input.requestedArtifactType
+        ? { requestedArtifactType: input.requestedArtifactType }
+        : {}),
+      ...(input.intentKind !== undefined ? { intentKind: input.intentKind } : {}),
+      ...(input.capabilityId !== undefined ? { capabilityId: input.capabilityId } : {}),
+    };
     await this.store.put(updated);
     return updated;
   }

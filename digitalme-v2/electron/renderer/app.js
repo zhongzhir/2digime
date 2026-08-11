@@ -425,6 +425,10 @@
   let taskPausedCto = false;
   /** 本会话追加的对话轮次（派生时间线之外的用户补充） */
   let workExtraTurns = [];
+  /** Task.meta.conversation 的持久化对话轮（唯一权威记录的投影；重启可恢复） */
+  let persistedConversationTurns = [];
+  /** 对话中枢先建的理解任务（尚无 Job）；确定性开始时经 existingTaskId 复用同一 Task */
+  let converseDraftTaskId = null;
   let lastCtoTimelineKey = "";
   let activeArtifactVersionLabel = "";
   let pendingCreateProject = null;
@@ -1382,6 +1386,7 @@
       contextRefs: materials.map((m) => ({ kind: m.kind, path: m.path, ...(m.projectOrigin ? { projectOrigin: m.projectOrigin } : {}) })),
     };
     if (capabilityId) payload.capabilityId = capabilityId;
+    if (converseDraftTaskId) payload.existingTaskId = converseDraftTaskId;
     workMode = "compose";
     const result = await api.invoke("work.submitTask", payload);
     if (result.needsProjectFolder) {
@@ -1397,6 +1402,7 @@
         goal,
         contextRefs: payload.contextRefs,
         preview: result.needsExecutionConfirm,
+        existingTaskId: payload.existingTaskId || null,
         capabilityId:
           capabilityId ||
           result.needsExecutionConfirm.selectedCapabilityId ||
@@ -2745,6 +2751,8 @@
     activeTaskId = null;
     activeJobId = null;
     workExtraTurns = [];
+    persistedConversationTurns = [];
+    converseDraftTaskId = null;
     taskPausedCto = false;
     lastCtoTimelineKey = "";
     activeArtifactVersionLabel = "";
@@ -3101,6 +3109,27 @@
     }
   }
 
+  /**
+   * 从 Task.meta.conversation（唯一权威记录）水合中栏对话；重启/刷新后可恢复。
+   * 尚无 Job 的任务视为对话中枢的理解任务，确定性开始时复用同一 Task。
+   */
+  function hydrateConversationFromTask(detail) {
+    const meta = detail && detail.task && detail.task.meta;
+    const conv = meta && meta.conversation;
+    const turns = conv && Array.isArray(conv.turns) ? conv.turns : [];
+    persistedConversationTurns = turns
+      .filter((t) => t && t.content)
+      .map((t) => ({
+        id: t.turnId || "turn_" + Math.random().toString(36).slice(2),
+        role: t.role === "digital_me" ? "digital_me" : "user",
+        kind: "message",
+        text: String(t.content),
+        createdAt: t.createdAt,
+      }));
+    converseDraftTaskId =
+      detail && detail.task && !detail.latestJob ? detail.task.id : null;
+  }
+
   function renderWorkTimeline() {
     const conv = window.DigitalMeWorkConversation;
     if (!conv || !els.workTimeline) return;
@@ -3117,7 +3146,10 @@
       for (const line of pending.understandingSummary) understandingLines.push(String(line));
     }
     const turns = conv.buildWorkTimeline({
-      goal: (els.goal && els.goal.value) || (detail && detail.goal) || "",
+      // 有持久化对话时首条用户轮即目标本身，避免目标重复显示
+      goal: persistedConversationTurns.length
+        ? ""
+        : (els.goal && els.goal.value) || (detail && detail.goal) || "",
       taskCreatedAt: detail && detail.createdAt,
       understandingLines,
       jobRunning: js === "queued" || js === "running",
@@ -3130,7 +3162,7 @@
       artifactVersionId: activeHeadVersionId || "",
       hasArtifact: !!activeArtifactId,
       decisionAccepted: lastDecisionStatus === "accepted",
-      extraTurns: workExtraTurns,
+      extraTurns: persistedConversationTurns.concat(workExtraTurns),
     });
     els.workTimeline.innerHTML = "";
     for (const turn of turns) {
@@ -3187,95 +3219,128 @@
     }
   }
 
+  /**
+   * D11-A：自然语言输入一律先经 work.converse 得到 Digital Me 的理解与回应；
+   * 不做本地关键词路由，不默认触发修改。执行只在 startAuthorized 后经确定性命令发生。
+   */
   async function submitWorkNaturalLanguage() {
-    const conv = window.DigitalMeWorkConversation;
-    if (!conv || !els.workNlInput) return;
+    if (!els.workNlInput) return;
     const text = String(els.workNlInput.value || "").trim();
     if (!text) return;
-    const detail = lastJobDetailForUx;
-    const job = detail && detail.latestJob;
-    const js = job && job.status ? String(job.status) : "";
-    const route = conv.routeWorkNaturalLanguage({
-      text,
-      workMode,
-      activeTaskId,
-      activeArtifactId,
-      jobRunning: js === "queued" || js === "running",
-      jobFailed: js === "failed" || js === "cancelled",
-      decisionAccepted: lastDecisionStatus === "accepted",
-    });
+    const payload = { text };
+    const targetTaskId = activeTaskId || converseDraftTaskId;
+    if (targetTaskId) payload.taskId = targetTaskId;
+    else if (materials.length) {
+      payload.contextRefs = materials.map((m) => ({
+        kind: m.kind,
+        path: m.path,
+        ...(m.projectOrigin ? { projectOrigin: m.projectOrigin } : {}),
+      }));
+    }
+    els.workNlInput.value = "";
+    // 乐观显示用户输入；权威记录由 work.converse 持久化后回填
+    const pendingId = "user_pending_" + Date.now();
     workExtraTurns = workExtraTurns.concat([
       {
-        id: "user_nl_" + Date.now(),
+        id: pendingId,
         role: "user",
         kind: "message",
         text,
         createdAt: new Date().toISOString(),
       },
     ]);
-    els.workNlInput.value = "";
     renderWorkTimeline();
-
-    if (route.action === "pause") {
-      taskPausedCto = true;
+    if (els.workNlSend) els.workNlSend.disabled = true;
+    let res;
+    try {
+      res = await api.invoke("work.converse", payload);
+    } catch (err) {
       workExtraTurns = workExtraTurns.concat([
         {
-          id: "dm_pause_" + Date.now(),
+          id: "dm_err_" + Date.now(),
           role: "digital_me",
-          kind: "pause",
-          text: "已暂停。你可以随时继续说明下一步。",
+          kind: "note",
+          text: userFacingWorkError(err),
         },
       ]);
       renderWorkTimeline();
+      return;
+    } finally {
+      if (els.workNlSend) els.workNlSend.disabled = false;
+    }
+    // 用持久化轮替换乐观轮
+    workExtraTurns = workExtraTurns.filter((t) => t.id !== pendingId);
+    persistedConversationTurns = persistedConversationTurns.concat(
+      (res.newTurns || [])
+        .filter((t) => t && t.content)
+        .map((t) => ({
+          id: t.turnId,
+          role: t.role === "digital_me" ? "digital_me" : "user",
+          kind: "message",
+          text: String(t.content),
+          createdAt: t.createdAt,
+        })),
+    );
+    if (res.createdTask && !activeTaskId) {
+      // 首轮对话建立了理解任务（无 Job）；进入任务态，后续确认在同一 Task 上执行
+      converseDraftTaskId = res.taskId;
+      await selectTask(res.taskId);
+    }
+    renderWorkTimeline();
+    if (res.degraded || res.needsClarification) return;
+    // 确定性效果（AI 只给结论；执行/暂停/采用均走既有确定性路径）
+    if (res.pauseRequested) {
+      taskPausedCto = true;
       refreshWorkUxView({ taskPaused: true });
       return;
     }
-    if (route.action === "note_only") {
-      workExtraTurns = workExtraTurns.concat([
-        {
-          id: "dm_note_" + Date.now(),
-          role: "digital_me",
-          kind: "note",
-          text:
-            route.reason === "running"
-              ? "当前轮次仍在执行。完成后我会继续说明；你也可以稍后再补充意见。"
-              : "当前成果已采用。如需新的工作，请新建任务。",
-        },
-      ]);
-      renderWorkTimeline();
+    if (res.adoptRequested) {
+      await handleWorkTimelineAction("confirm_adopt", {});
       return;
     }
-    if (route.action === "submit_new") {
-      if (els.goal && !(els.goal.value || "").trim()) els.goal.value = text;
-      else if (els.goal && (els.goal.value || "").trim() && (els.goal.value || "").trim() !== text) {
-        // 用户在已有目标上补充：作为新目标覆盖发送首轮
-        els.goal.value = text;
-      }
-      if (els.submit) {
-        els.submit.hidden = false;
-        els.submit.click();
-      }
-      return;
-    }
-    if (route.action === "revise" || route.action === "revise_or_retry") {
-      if (!activeTaskId || !activeArtifactId) {
-        if (els.retry && !els.retry.disabled) {
-          els.retry.click();
-          return;
-        }
-        workExtraTurns = workExtraTurns.concat([
-          {
-            id: "dm_wait_" + Date.now(),
-            role: "digital_me",
-            kind: "note",
-            text: "当前还没有可继续修改的成果。请先完成首轮执行，或使用快捷重试。",
-          },
-        ]);
-        renderWorkTimeline();
+    if (res.startAuthorized) {
+      if (res.startMode === "revision" && activeTaskId && activeArtifactId) {
+        await runCtoConfirmContinue(res.plan && res.plan.content ? res.plan.content : text);
         return;
       }
-      await runCtoConfirmContinue(text);
-      return;
+      await startConversationTaskExecution(res.taskId);
+    }
+  }
+
+  /**
+   * 对话确认后的确定性执行入口：在同一理解任务上开始执行（不新建 Task）。
+   * 与「开始处理」按钮共用 work.submitTask 前置检查（项目位置/执行能力/权限确认卡）。
+   */
+  async function startConversationTaskExecution(taskId) {
+    try {
+      await refreshConnectionFromCapabilities();
+      if (!canSubmit(lastConnectionState)) {
+        els.jobStatus.textContent = "请先连接模型";
+        els.jobStatus.classList.add("error");
+        els.jobActionable.textContent = "前往设置连接真实模型后再开始处理。";
+        refreshWorkUxView({ modelReady: false });
+        return;
+      }
+      const goal =
+        (els.goal && String(els.goal.value || "").trim()) ||
+        (lastJobDetailForUx && lastJobDetailForUx.task && lastJobDetailForUx.task.goal) ||
+        "";
+      if (!goal) return;
+      const payload = {
+        goal,
+        contextRefs: materials.map((m) => ({
+          kind: m.kind,
+          path: m.path,
+          ...(m.projectOrigin ? { projectOrigin: m.projectOrigin } : {}),
+        })),
+        existingTaskId: taskId,
+      };
+      const result = await api.invoke("work.submitTask", payload);
+      await applySubmitTaskResult(result, payload, goal);
+    } catch (err) {
+      els.jobStatus.textContent = userFacingWorkError(err);
+      els.jobStatus.classList.add("error");
+      refreshWorkUxView({});
     }
   }
 
@@ -3629,6 +3694,7 @@
     const detail = await api.invoke("work.getTask", { taskId: activeTaskId });
     activeJobId = detail.latestJob ? detail.latestJob.jobId : activeJobId;
     lastJobDetailForUx = detail;
+    hydrateConversationFromTask(detail);
     renderJobStatus(detail, eventNote);
     renderOwnerChoicePrompt(detail);
     renderMaterialSummary(detail.materialSummary);
@@ -3697,6 +3763,8 @@
     activeTaskId = taskId;
     activeJobId = null;
     workExtraTurns = [];
+    persistedConversationTurns = [];
+    converseDraftTaskId = null;
     taskPausedCto = false;
     lastCtoTimelineKey = "";
     activeArtifactVersionLabel = "";
@@ -3730,6 +3798,7 @@
     }
     if (epoch !== uiEpoch || activeTaskId !== taskId) return;
     activeJobId = detail.latestJob ? detail.latestJob.jobId : null;
+    hydrateConversationFromTask(detail);
     els.goal.value = detail.task && detail.task.goal ? detail.task.goal : "";
     els.goal.readOnly = true;
     activeTaskRequestedArtifactType =
@@ -5535,7 +5604,7 @@
         refreshWorkUxView({ modelReady: false });
         return;
       }
-      if (workMode !== "compose") {
+      if (workMode !== "compose" && !converseDraftTaskId) {
         refreshWorkUxView({});
         return;
       }
@@ -5556,6 +5625,7 @@
         })),
       };
       if (type) payload.requestedArtifactType = type;
+      if (converseDraftTaskId) payload.existingTaskId = converseDraftTaskId;
       const result = await api.invoke("work.submitTask", payload);
       await applySubmitTaskResult(result, payload, goal);
     } catch (err) {
@@ -5591,6 +5661,7 @@
         goal,
         contextRefs: payload.contextRefs,
         preview: result.needsExecutionConfirm,
+        existingTaskId: payload.existingTaskId || null,
         capabilityId: result.needsExecutionConfirm.selectedCapabilityId || null,
       };
       showExecutionConfirmCard(result.needsExecutionConfirm);
@@ -5607,6 +5678,7 @@
     workMode = "task";
     activeTaskId = result.taskId;
     activeJobId = result.jobId;
+    converseDraftTaskId = null;
     activeTaskIntentKind = result.intentKind || null;
     activeTaskRequestedArtifactType =
       result.intentKind === "analyze_code"
@@ -5719,8 +5791,9 @@
         refreshWorkUxView({ modelReady: false });
         return;
       }
-      // 新建任务必须从 compose 发起，避免覆盖旧任务输入冒充新任务
-      if (workMode !== "compose") {
+      // 新建任务必须从 compose 发起，避免覆盖旧任务输入冒充新任务；
+      // 例外：对话中枢先建的理解任务（converseDraftTaskId）允许在任务态确定性开始。
+      if (workMode !== "compose" && !converseDraftTaskId) {
         els.jobStatus.textContent = "请先点击「新建任务」";
         els.jobStatus.classList.add("error");
         return;
@@ -5744,6 +5817,7 @@
       };
       // 不强迫传成果类型；Runtime 按意图派生。显式仅在隐藏控件有非空值时透传。
       if (type) payload.requestedArtifactType = type;
+      if (converseDraftTaskId) payload.existingTaskId = converseDraftTaskId;
       const result = await api.invoke("work.submitTask", payload);
       await applySubmitTaskResult(result, payload, goal);
     } catch (err) {
@@ -5886,6 +5960,7 @@
         goal: payload.goal,
         contextRefs: payload.contextRefs,
         preview: result.needsExecutionConfirm,
+        existingTaskId: payload.existingTaskId || null,
         capabilityId:
           payload.capabilityId ||
           result.needsExecutionConfirm.selectedCapabilityId ||
@@ -5898,6 +5973,7 @@
     workMode = "task";
     activeTaskId = result.taskId;
     activeJobId = result.jobId;
+    converseDraftTaskId = null;
     activeTaskIntentKind = result.intentKind || null;
     activeTaskRequestedArtifactType =
       result.intentKind === "modify_code" ? "code-change" : result.intentKind === "analyze_code" ? "code-analysis" : "document";
@@ -5950,6 +6026,9 @@
           confirmPayload.capabilityId = pendingExecutionConfirm.capabilityId;
         } else if (preview.selectedCapabilityId) {
           confirmPayload.capabilityId = preview.selectedCapabilityId;
+        }
+        if (pendingExecutionConfirm.existingTaskId) {
+          confirmPayload.existingTaskId = pendingExecutionConfirm.existingTaskId;
         }
         await startTaskAfterConfirm(confirmPayload);
       } catch (err) {

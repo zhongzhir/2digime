@@ -48,6 +48,7 @@ const COMMAND_NAMES = new Set([
   "work.cancelJob",
   "work.getTask",
   "work.listTasks",
+  "work.converse",
   "artifact.getContent",
   "artifact.saveEdit",
   "artifact.export",

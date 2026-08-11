@@ -17,6 +17,13 @@ export interface Task {
   goal: string;
   contextRefs: ContextRef[];
   /**
+   * Task 级附属事实（D11-A，Owner 批准 2026-08-11）：
+   * - conversation:当前任务对话的唯一权威记录（可恢复、可审计）;
+   * - plan:当前规划、版本与确认事实。
+   * 不构成第二状态机;不保存提示词或模型思维链。
+   */
+  meta?: TaskMeta;
+  /**
    * 期望产出族（如 document / code-analysis）。
    * 不再单独承担任务分类或能力选择键。
    */
@@ -43,4 +50,56 @@ export interface ContextRef {
   path: string;
   /** 文件夹来源：Digital Me 创建 / 用户自选（非第二 Store）。 */
   projectOrigin?: 'digitalme_created' | 'user_selected' | 'unknown';
+}
+
+export interface TaskMeta {
+  conversation?: TaskConversation;
+  plan?: TaskPlan;
+}
+
+/**
+ * Task 级对话（唯一权威记录）。
+ * 只落盘可见对话与意图结论引用；内部提示词、模型思维链一律不落盘。
+ */
+export interface TaskConversation {
+  turns: TaskConversationTurn[];
+  /** AI 意图结论（经 turnId 引用关联用户轮，不写入对话正文）。 */
+  intents: TaskIntentConclusion[];
+}
+
+export interface TaskConversationTurn {
+  turnId: string;
+  role: 'user' | 'digital_me';
+  content: string;
+  createdAt: string;
+  /** 用户轮可引用对应意图结论。 */
+  intentId?: string;
+}
+
+export interface TaskIntentConclusion {
+  intentId: string;
+  /** 关联的用户轮。 */
+  turnId: string;
+  /** work-converse 意图枚举之一。 */
+  intent: string;
+  /** 0..1。 */
+  confidence: number;
+  needsClarification?: boolean;
+  /** 模型不可用降级时为 true。 */
+  degraded?: boolean;
+  createdAt: string;
+}
+
+/**
+ * 任务规划（当前版本 + 确认事实）。
+ * 规划正文只保存在此处，不复制到对话、Job 或其他字段。
+ */
+export interface TaskPlan {
+  version: number;
+  status: 'draft' | 'confirmed';
+  content: string;
+  updatedAt: string;
+  confirmedAt?: string;
+  /** 已确认事实（用户明确认可的目标/边界要点）。 */
+  confirmedFacts?: string[];
 }

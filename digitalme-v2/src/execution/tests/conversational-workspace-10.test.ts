@@ -15,11 +15,7 @@ const conv = require('../../../electron/renderer/work-conversation.js') as {
     text: string;
     actions?: Array<{ id: string; label: string }>;
   }>;
-  routeWorkNaturalLanguage: (ctx: Record<string, unknown>) => {
-    action: string;
-    text?: string;
-    reason?: string;
-  };
+  routeWorkNaturalLanguage?: unknown;
 };
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -63,17 +59,9 @@ describe('CONVERSATIONAL-WORKSPACE-10', () => {
     assert.ok(acceptance?.actions?.some((a) => a.id === 'confirm_adopt' && a.label === '确认采用'));
   });
 
-  it('未达标后自然语言直接路由为同任务修订，而非必经按钮', () => {
-    const route = conv.routeWorkNaturalLanguage({
-      text: '标题字号再大一点，这里不符合我的要求',
-      workMode: 'task',
-      activeTaskId: 'task_1',
-      activeArtifactId: 'art_1',
-      jobRunning: false,
-      jobFailed: false,
-      decisionAccepted: false,
-    });
-    assert.equal(route.action, 'revise');
+  it('D11-A：关键词路由已移除；未达标阶段主动作不再是修订按钮', () => {
+    // 设计 v0.2 §9.1：意图由 AI 经 work.converse 判断；渲染层不做关键词路由
+    assert.equal(conv.routeWorkNaturalLanguage, undefined);
     const view = ux.deriveWorkUxView({
       hasArtifact: true,
       decisionStatus: 'undecided',
@@ -95,45 +83,12 @@ describe('CONVERSATIONAL-WORKSPACE-10', () => {
     assert.match(fail!.text, /未能完成|建议|说明/);
     assert.ok(fail!.actions?.some((a) => a.id === 'retry_job'));
 
-    const route = conv.routeWorkNaturalLanguage({
-      text: '换一种方式安装依赖后再试',
-      workMode: 'task',
-      activeTaskId: 'task_1',
-      activeArtifactId: null,
-      jobRunning: false,
-      jobFailed: true,
-      decisionAccepted: false,
-    });
-    assert.equal(route.action, 'revise_or_retry');
-
     const blocked = ux.deriveWorkUxView({ jobStatus: 'failed' });
     assert.equal(blocked.stage, 'blocked');
     assert.match(blocked.statusLine, /对话区/);
     const retry = blocked.actions.find((a) => a.id === 'retry_job');
     assert.ok(retry);
     assert.notEqual(retry!.slot, 'primary');
-  });
-
-  it('暂停用语可暂停；采用后输入仅记笔记提示新建任务', () => {
-    assert.equal(
-      conv.routeWorkNaturalLanguage({
-        text: '先暂停',
-        workMode: 'task',
-        activeTaskId: 't1',
-        activeArtifactId: 'a1',
-      }).action,
-      'pause',
-    );
-    assert.equal(
-      conv.routeWorkNaturalLanguage({
-        text: '再改一点',
-        workMode: 'task',
-        activeTaskId: 't1',
-        activeArtifactId: 'a1',
-        decisionAccepted: true,
-      }).action,
-      'note_only',
-    );
   });
 
   it('renderer：中栏对话 + 固定 NL + 右栏空成果文案 + 不重复 CTO 长报告', async () => {

@@ -418,7 +418,40 @@ export class WorkRuntime {
     if (input.authorization) {
       taskInput.authorization = input.authorization;
     }
-    const task = await this.opts.taskService.create(taskInput);
+    let task: import('./task').Task;
+    if (input.existingTaskId) {
+      // D11-A：对话中枢先建的理解任务，确认后在同一 Task 上开始执行（不新建 Task）。
+      const existing = await this.opts.taskService.get(input.existingTaskId);
+      if (!existing) throw new Error(`task not found: ${input.existingTaskId}`);
+      const active = await this.opts.jobStore.findActiveForTask(input.existingTaskId);
+      if (active) {
+        throw Object.assign(new Error(`task already has an active job: ${active.id}`), {
+          actionable: '当前任务已有正在进行的执行，请等它结束后再开始。',
+        });
+      }
+      task = await this.opts.taskService.updateForSubmit(input.existingTaskId, {
+        goal: taskInput.goal,
+        contextRefs: taskInput.contextRefs,
+        requestedArtifactType: taskInput.requestedArtifactType,
+        ...(taskInput.intentKind !== undefined ? { intentKind: taskInput.intentKind } : {}),
+        ...(taskInput.capabilityId !== undefined
+          ? { capabilityId: taskInput.capabilityId }
+          : {}),
+      });
+      // 确定性开始 = 用户对当前规划的确认（按钮语义与自然语言确认一致）
+      const plan = existing.meta?.plan;
+      if (plan && plan.status !== 'confirmed') {
+        const now = nowIso();
+        await this.opts.taskService.updatePlan(input.existingTaskId, {
+          ...plan,
+          status: 'confirmed',
+          updatedAt: now,
+          confirmedAt: now,
+        });
+      }
+    } else {
+      task = await this.opts.taskService.create(taskInput);
+    }
 
     const extAuth = input.executionAuthorization;
     const job = await this.createQueuedJob(task.id, adapter.registration.id, undefined, extAuth
@@ -945,6 +978,47 @@ export class WorkRuntime {
 
   async getJob(jobId: string): Promise<ExecutionJob | null> {
     return this.opts.jobStore.get(jobId);
+  }
+
+  // ── D11-A 对话中枢支撑：Task.meta.conversation / Task.meta.plan 最小读写 ──
+  // 只是 TaskService 的受锁转发，不新增第二 Store 或状态机；本组方法不创建 Job。
+
+  async getTaskRecord(taskId: string) {
+    return this.opts.taskService.get(taskId);
+  }
+
+  /** 首轮对话建任务（理解阶段，无 Job）；意图轻量派生与 submitTask 同源。 */
+  async createConversationTask(input: {
+    goal: string;
+    contextRefs: SubmitInput['contextRefs'];
+  }) {
+    const derived = await deriveWorkIntent({
+      goal: input.goal,
+      contextRefs: input.contextRefs,
+    });
+    return this.opts.taskService.create({
+      subjectId: this.opts.subjectId,
+      goal: input.goal,
+      contextRefs: input.contextRefs,
+      requestedArtifactType: derived.expectedOutputFamily || 'document',
+      ...(derived.intentKind ? { intentKind: derived.intentKind } : {}),
+    });
+  }
+
+  async appendTaskConversation(
+    taskId: string,
+    input: {
+      turns: import('./task').TaskConversationTurn[];
+      intents?: import('./task').TaskIntentConclusion[];
+    },
+  ) {
+    return this.withTaskLock(taskId, () =>
+      this.opts.taskService.appendConversation(taskId, input),
+    );
+  }
+
+  async updateTaskPlan(taskId: string, plan: import('./task').TaskPlan) {
+    return this.withTaskLock(taskId, () => this.opts.taskService.updatePlan(taskId, plan));
   }
 
   async listSnapshotsForTask(taskId: string) {

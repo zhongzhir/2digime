@@ -130,37 +130,9 @@
     return turns;
   }
 
-  /**
-   * 将中栏自然语言路由为提交首轮 / 修订 / 暂停（不靠关键词规则表；仅识别明确暂停用语）。
-   * @param {object} ctx
-   */
-  function routeWorkNaturalLanguage(ctx) {
-    const text = String(ctx.text || '').trim();
-    if (!text) return { action: 'noop', reason: 'empty' };
-
-    const paused =
-      /^(先)?暂停(任务)?[。.!！]?$/.test(text) ||
-      /^pause$/i.test(text) ||
-      /^先停一下[。.!！]?$/.test(text);
-    if (paused) return { action: 'pause', text };
-
-    if (ctx.workMode === 'compose' || !ctx.activeTaskId) {
-      return { action: 'submit_new', text };
-    }
-    if (ctx.jobRunning) {
-      return { action: 'note_only', text, reason: 'running' };
-    }
-    if (ctx.decisionAccepted) {
-      return { action: 'note_only', text, reason: 'adopted' };
-    }
-    if (ctx.activeArtifactId) {
-      return { action: 'revise', text };
-    }
-    if (ctx.jobFailed) {
-      return { action: 'revise_or_retry', text };
-    }
-    return { action: 'submit_new', text };
-  }
+  // D11-A（设计 v0.2 §9.1）：关键词路由 routeWorkNaturalLanguage 已移除。
+  // 自然语言意图一律由 AI 经 work.converse 结合完整 Task 上下文判断；
+  // 模型不可用时降级为明确提示，不做关键词路由，不得从自然语言创建 Job。
 
   function roleLabel(role) {
     if (role === 'user') return '你';
@@ -170,7 +142,6 @@
 
   const api = {
     buildWorkTimeline,
-    routeWorkNaturalLanguage,
     roleLabel,
   };
 

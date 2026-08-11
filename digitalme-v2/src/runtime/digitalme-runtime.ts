@@ -80,6 +80,9 @@ import {
 import { captureOutcomeUserHint, type CaptureOutcome } from '../subject-core/capture-outcome';
 import { extractEditEvidence } from '../subject-core/diff-evidence';
 import { headVersion } from '../work-runtime/artifact';
+import { runWorkConverse, type WorkConverseDeps } from '../work-runtime/work-converse';
+import { chatComplete, type ChatMessage } from '../infrastructure/model-http';
+import { providerCredentialKey } from '../infrastructure/secret-store';
 
 export interface DigitalMeRuntimeOptions {
   /**
@@ -138,6 +141,12 @@ export interface DigitalMeRuntimeOptions {
    * false/undefined：不注册。
    */
   unsupportedDesktopCodingCapability?: false | UnsupportedDesktopCodingOptions;
+  /**
+   * D11-A 对话中枢模型调用注入（测试/评测用）。
+   * 缺省时按 documentCapability + openaiCompatible + secrets 走真实模型;
+   * 均不可用则 converse 进入降级(不得从自然语言创建 Job)。
+   */
+  converseChat?: (input: { messages: ChatMessage[] }) => Promise<{ text: string }>;
 }
 
 /**
@@ -412,6 +421,64 @@ export class DigitalMeRuntime {
 
   listTasks(input: CommandMap['work.listTasks']['input'] = {}) {
     return this.requireWork().listTasks(input);
+  }
+
+  /**
+   * D11-A AI 意图与对话中枢（work.converse）。
+   * 永不创建 Job;模型不可用时降级为明确提示,不做关键词路由。
+   */
+  async converse(
+    input: CommandMap['work.converse']['input'],
+  ): Promise<CommandMap['work.converse']['output']> {
+    const work = this.requireWork();
+    const deps: WorkConverseDeps = {
+      chat: this.buildConverseChat(),
+      getTask: (taskId) => work.getTaskRecord(taskId),
+      createTask: (i) => work.createConversationTask(i),
+      appendConversation: (taskId, i) => work.appendTaskConversation(taskId, i),
+      updatePlan: (taskId, plan) => work.updateTaskPlan(taskId, plan),
+      getTaskFacts: async (taskId) => {
+        const detail = await work.getTask({ taskId });
+        const jobStatus = detail.latestJob?.status;
+        return {
+          stageLabel: detail.userFacingLabel,
+          hasArtifact: detail.artifactIds.length > 0,
+          jobRunning: jobStatus === 'queued' || jobStatus === 'running',
+          ...(jobStatus === 'failed' && detail.latestJob?.actionable
+            ? { lastFailure: detail.latestJob.actionable }
+            : {}),
+        };
+      },
+    };
+    return runWorkConverse(deps, input);
+  }
+
+  /** 对话中枢模型通道：注入 hook 优先;否则要求真实模型配置;都没有 = 降级。 */
+  private buildConverseChat(): WorkConverseDeps['chat'] {
+    if (this.options.converseChat) return this.options.converseChat;
+    const mode = this.options.documentCapability;
+    if (mode !== 'openai-compatible' && mode !== 'both') return null;
+    const config = this.options.openaiCompatible;
+    const secrets = this.options.secrets;
+    if (!config || !secrets) return null;
+    return async ({ messages }) => {
+      const apiKey = await secrets.get(
+        providerCredentialKey(config.providerId || 'openai-compatible'),
+      );
+      if (!apiKey) {
+        throw new Error('model credential is not configured');
+      }
+      const result = await chatComplete({
+        baseUrl: config.baseUrl,
+        apiKey,
+        model: config.model,
+        messages,
+        temperature: 0.2,
+        maxTokens: 1024,
+        timeoutMs: config.timeoutMs ?? 60_000,
+      });
+      return { text: result.text };
+    };
   }
 
   getJob(jobId: string) {
