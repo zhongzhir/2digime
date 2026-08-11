@@ -310,7 +310,7 @@
                 <h2 id="work-compose-title">新建任务</h2>
                 <div class="work-stage-tabs" id="work-stage-tabs" hidden>
                   <button type="button" class="work-stage-tab active" data-work-stage="center">对话</button>
-                  <button type="button" class="work-stage-tab" data-work-stage="artifact">成果</button>
+                  <button type="button" class="work-stage-tab" data-work-stage="artifact">工作区</button>
                 </div>
               </div>
               <div id="model-gate" class="model-gate" hidden>
@@ -491,9 +491,9 @@
 
             <section id="artifact-panel" class="panel artifact-side">
               <div class="artifact-head">
-                <h2>成果</h2>
-                <details class="work-more-menu artifact-exports-more" id="artifact-exports-more">
-                  <summary>更多</summary>
+                <h2 id="task-workspace-title">任务工作区</h2>
+                <details class="work-more-menu artifact-exports-more" id="artifact-exports-more" hidden>
+                  <summary>导出</summary>
                   <div class="row artifact-exports" id="artifact-exports">
                     <button type="button" id="btn-copy">复制</button>
                     <button type="button" id="btn-export-md">导出 Markdown</button>
@@ -505,13 +505,64 @@
               <div id="artifact-loading" class="artifact-loading" hidden>
                 <p class="muted">正在打开任务…</p>
               </div>
+
+              <div id="task-workspace-plan" class="task-workspace-plan" hidden>
+                <div class="tw-plan-head">
+                  <h3 id="tw-plan-heading">任务规划</h3>
+                  <p id="tw-plan-version" class="meta">规划版本</p>
+                  <p id="tw-plan-status" class="muted tiny">待确认</p>
+                </div>
+                <dl class="tw-plan-dl">
+                  <div>
+                    <dt>任务目标</dt>
+                    <dd id="tw-plan-goal"></dd>
+                  </div>
+                  <div>
+                    <dt>预期交付</dt>
+                    <dd id="tw-plan-delivery"></dd>
+                  </div>
+                  <div>
+                    <dt>建议实现路径</dt>
+                    <dd id="tw-plan-path"></dd>
+                  </div>
+                  <div>
+                    <dt>必要准备条件</dt>
+                    <dd id="tw-plan-prep"></dd>
+                  </div>
+                  <div>
+                    <dt>重要边界或风险</dt>
+                    <dd id="tw-plan-bounds"></dd>
+                  </div>
+                </dl>
+                <p id="tw-plan-confirm-hint" class="muted tiny"></p>
+                <button type="button" id="btn-start-development" class="primary">开始开发</button>
+              </div>
+
+              <div id="task-workspace-prep" class="task-workspace-prep" hidden>
+                <h3 id="tw-prep-title">开发前还需完成准备</h3>
+                <p id="tw-prep-missing"></p>
+                <p id="tw-prep-why" class="muted"></p>
+                <p id="tw-prep-checked" class="muted tiny"></p>
+                <p id="tw-prep-action"></p>
+                <div class="row tw-prep-actions" id="tw-prep-actions">
+                  <button type="button" id="btn-tw-create-project" class="primary" hidden>由 Digital Me 创建新项目</button>
+                  <button type="button" id="btn-tw-pick-project" class="ghost" hidden>使用已有项目</button>
+                  <button type="button" id="btn-tw-connect-coding" class="primary" hidden>连接代码执行能力</button>
+                  <button type="button" id="btn-tw-open-settings" class="ghost" hidden>打开设置</button>
+                  <button type="button" id="btn-tw-prep-continue" class="primary" hidden>继续准备</button>
+                  <button type="button" id="btn-tw-high-risk-confirm" class="primary" hidden>确认并开始</button>
+                  <button type="button" id="btn-tw-high-risk-cancel" class="ghost" hidden>返回修改</button>
+                </div>
+                <p id="tw-prep-continue" class="muted tiny"></p>
+              </div>
+
               <div id="revision-active-banner" class="revision-active-banner" hidden>
                 <p id="revision-active-title" class="revision-active-title">正在按你的修改要求继续处理</p>
                 <p class="revision-active-label muted tiny">修改要求</p>
                 <p id="revision-active-text" class="revision-active-text"></p>
               </div>
               <div class="decision-box" id="artifact-decision-box" hidden>
-                <p id="artifact-decision-status" class="meta" aria-live="polite">尚未决定是否采用</p>
+                <p id="artifact-decision-status" class="meta" aria-live="polite" hidden></p>
                 <p id="artifact-decision-hint" class="muted tiny" hidden></p>
                 <div id="adopt-warning-card" class="adopt-warning-card" hidden>
                   <p id="adopt-warning-title" class="adopt-warning-title">Digital Me 检查发现还有问题：</p>
@@ -528,12 +579,13 @@
                   <button type="button" id="btn-reject-artifact" class="ghost" hidden>不采用</button>
                 </div>
                 <label class="field decision-note" id="artifact-decision-note-field" hidden>
-                  <span>采用说明（可选）</span>
+                  <span class="visually-hidden">采用说明</span>
                   <input
                     type="text"
                     id="artifact-decision-note"
-                    placeholder="仅记录决定理由，不会开始修改"
+                    placeholder=""
                     maxlength="400"
+                    hidden
                   />
                 </label>
                 <div id="revision-composer" class="revision-composer" hidden>
@@ -567,7 +619,7 @@
               </div>
               <details id="applied-understanding" class="applied-understanding" hidden></details>
               <div class="artifact-scroll" id="artifact-scroll">
-              <p id="artifact-empty-hint" class="empty-hint artifact-empty-hint">尚未形成可交付成果</p>
+              <p id="artifact-empty-hint" class="empty-hint artifact-empty-hint" hidden>规划确认后，成果会出现在这里。</p>
               <p id="save-status" class="meta"></p>
               <p id="version-meta" class="meta"></p>
               <div id="code-change-view" class="code-change-view" hidden>
@@ -904,6 +956,7 @@
     <script src="work-artifact-projection.js"></script>
     <script src="work-ux-stage.js"></script>
     <script src="work-conversation.js"></script>
+    <script src="task-workspace.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

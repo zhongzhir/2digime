@@ -197,6 +197,10 @@ export interface CommandMap {
        */
       existingTaskId?: string;
       /**
+       * D11-B：用户确认的规划版本。若与 Task.meta.plan.version 不一致则拒绝执行。
+       */
+      confirmedPlanVersion?: number;
+      /**
        * 代码修改授权（用户确认卡通过后传入）。
        * 缺省且意图为 modify_code 时，不创建 Job，仅返回 needsExecutionConfirm。
        */

@@ -1,34 +1,20 @@
 {
   "task": "2DIGIME-BUILD-01-D11-A-AI-INTERACTION-KERNEL-12",
-  "generatedAt": "2026-08-11T03:40:06.342Z",
+  "generatedAt": "2026-08-11T04:20:50.700Z",
   "model": {
     "baseUrlHost": "api.deepseek.com",
     "model": "deepseek-v4-flash"
   },
   "total": 56,
-  "correctCount": 55,
-  "accuracy": 0.9821,
+  "correctCount": 56,
+  "accuracy": 1,
   "falseExecutionCount": 0,
   "lowConfidenceNotClarified": 0,
   "thresholds": {
     "minCases": 50,
     "minAccuracy": 0.95
   },
-  "mistakes": [
-    {
-      "id": "dq07",
-      "text": "会不会很占电脑内存啊",
-      "context": "executing",
-      "expected": [
-        "discuss_or_question"
-      ],
-      "predicted": "request_explanation",
-      "confidence": 0.9,
-      "needsClarification": false,
-      "correct": false,
-      "falseExecution": false
-    }
-  ],
+  "mistakes": [],
   "results": [
     {
       "id": "dq03",
@@ -38,7 +24,7 @@
         "discuss_or_question"
       ],
       "predicted": "discuss_or_question",
-      "confidence": 0.9,
+      "confidence": 0.95,
       "needsClarification": false,
       "correct": true,
       "falseExecution": false
@@ -51,7 +37,7 @@
         "discuss_or_question"
       ],
       "predicted": "discuss_or_question",
-      "confidence": 0.95,
+      "confidence": 0.9,
       "needsClarification": false,
       "correct": true,
       "falseExecution": false
@@ -64,8 +50,8 @@
         "discuss_or_question",
         "query_status"
       ],
-      "predicted": "discuss_or_question",
-      "confidence": 0.9,
+      "predicted": "query_status",
+      "confidence": 0.95,
       "needsClarification": false,
       "correct": true,
       "falseExecution": false
@@ -77,6 +63,20 @@
       "expected": [
         "discuss_or_question",
         "request_explanation"
+      ],
+      "predicted": "discuss_or_question",
+      "confidence": 0.95,
+      "needsClarification": false,
+      "correct": true,
+      "falseExecution": false
+    },
+    {
+      "id": "dq05",
+      "text": "我在想要不要把颜色换成蓝色系，你怎么看？",
+      "context": "has_artifact",
+      "expected": [
+        "discuss_or_question",
+        "artifact_feedback"
       ],
       "predicted": "discuss_or_question",
       "confidence": 0.9,
@@ -92,22 +92,8 @@
         "discuss_or_question",
         "request_explanation"
       ],
-      "predicted": "request_explanation",
-      "confidence": 0.9,
-      "needsClarification": false,
-      "correct": true,
-      "falseExecution": false
-    },
-    {
-      "id": "dq05",
-      "text": "我在想要不要把颜色换成蓝色系，你怎么看？",
-      "context": "has_artifact",
-      "expected": [
-        "discuss_or_question",
-        "artifact_feedback"
-      ],
       "predicted": "discuss_or_question",
-      "confidence": 0.8,
+      "confidence": 0.95,
       "needsClarification": false,
       "correct": true,
       "falseExecution": false
@@ -120,7 +106,7 @@
         "discuss_or_question"
       ],
       "predicted": "discuss_or_question",
-      "confidence": 0.9,
+      "confidence": 0.85,
       "needsClarification": false,
       "correct": true,
       "falseExecution": false
@@ -140,6 +126,19 @@
       "falseExecution": false
     },
     {
+      "id": "dq07",
+      "text": "会不会很占电脑内存啊",
+      "context": "executing",
+      "expected": [
+        "discuss_or_question"
+      ],
+      "predicted": "discuss_or_question",
+      "confidence": 0.9,
+      "needsClarification": false,
+      "correct": true,
+      "falseExecution": false
+    },
+    {
       "id": "ag02",
       "text": "忘了说，最好能记录最高分",
       "context": "pre_start",
@@ -154,21 +153,8 @@
       "falseExecution": false
     },
     {
-      "id": "dq07",
-      "text": "会不会很占电脑内存啊",
-      "context": "executing",
-      "expected": [
-        "discuss_or_question"
-      ],
-      "predicted": "request_explanation",
-      "confidence": 0.9,
-      "needsClarification": false,
-      "correct": false,
-      "falseExecution": false
-    },
-    {
-      "id": "ag05",
-      "text": "目标人群主要是小学生，操作要简单",
+      "id": "ag03",
+      "text": "补充一下：给我妈用的，字要大一点",
       "context": "pre_start",
       "expected": [
         "add_goal_info",
@@ -195,14 +181,15 @@
       "falseExecution": false
     },
     {
-      "id": "mp01",
-      "text": "方案里第二步不太对，先做计分再做敌机吧",
+      "id": "ag05",
+      "text": "目标人群主要是小学生，操作要简单",
       "context": "pre_start",
       "expected": [
+        "add_goal_info",
         "modify_plan"
       ],
-      "predicted": "modify_plan",
-      "confidence": 0.98,
+      "predicted": "add_goal_info",
+      "confidence": 0.95,
       "needsClarification": false,
       "correct": true,
       "falseExecution": false
@@ -222,6 +209,19 @@
       "falseExecution": false
     },
     {
+      "id": "mp01",
+      "text": "方案里第二步不太对，先做计分再做敌机吧",
+      "context": "pre_start",
+      "expected": [
+        "modify_plan"
+      ],
+      "predicted": "modify_plan",
+      "confidence": 0.95,
+      "needsClarification": false,
+      "correct": true,
+      "falseExecution": false
+    },
+    {
       "id": "mp02",
       "text": "规划里说用键盘操作，改成鼠标操作",
       "context": "pre_start",
@@ -230,7 +230,7 @@
         "add_goal_info"
       ],
       "predicted": "modify_plan",
-      "confidence": 0.95,
+      "confidence": 0.85,
       "needsClarification": false,
       "correct": true,
       "falseExecution": false
@@ -243,7 +243,7 @@
         "modify_plan"
       ],
       "predicted": "modify_plan",
-      "confidence": 0.95,
+      "confidence": 0.9,
       "needsClarification": false,
       "correct": true,
       "falseExecution": false
@@ -257,7 +257,7 @@
         "add_goal_info"
       ],
       "predicted": "modify_plan",
-      "confidence": 0.7,
+      "confidence": 0.9,
       "needsClarification": false,
       "correct": true,
       "falseExecution": false
@@ -270,7 +270,20 @@
         "confirm_start"
       ],
       "predicted": "confirm_start",
-      "confidence": 0.99,
+      "confidence": 1,
+      "needsClarification": false,
+      "correct": true,
+      "falseExecution": false
+    },
+    {
+      "id": "cs02",
+      "text": "可以，开工",
+      "context": "pre_start",
+      "expected": [
+        "confirm_start"
+      ],
+      "predicted": "confirm_start",
+      "confidence": 0.98,
       "needsClarification": false,
       "correct": true,
       "falseExecution": false
@@ -285,21 +298,7 @@
         "add_goal_info"
       ],
       "predicted": "modify_plan",
-      "confidence": 0.9,
-      "needsClarification": false,
-      "correct": true,
-      "falseExecution": false
-    },
-    {
-      "id": "ag03",
-      "text": "补充一下：给我妈用的，字要大一点",
-      "context": "pre_start",
-      "expected": [
-        "add_goal_info",
-        "modify_plan"
-      ],
-      "predicted": "add_goal_info",
-      "confidence": 0.95,
+      "confidence": 0.85,
       "needsClarification": false,
       "correct": true,
       "falseExecution": false
@@ -312,14 +311,14 @@
         "confirm_start"
       ],
       "predicted": "confirm_start",
-      "confidence": 0.98,
+      "confidence": 1,
       "needsClarification": false,
       "correct": true,
       "falseExecution": false
     },
     {
-      "id": "cs02",
-      "text": "可以，开工",
+      "id": "cs04",
+      "text": "OK 按你说的来，开始",
       "context": "pre_start",
       "expected": [
         "confirm_start"
@@ -344,73 +343,8 @@
       "falseExecution": false
     },
     {
-      "id": "cs04",
-      "text": "OK 按你说的来，开始",
-      "context": "pre_start",
-      "expected": [
-        "confirm_start"
-      ],
-      "predicted": "confirm_start",
-      "confidence": 1,
-      "needsClarification": false,
-      "correct": true,
-      "falseExecution": false
-    },
-    {
-      "id": "cs06",
-      "text": "按刚才说的改吧，开始干活",
-      "context": "has_artifact",
-      "expected": [
-        "confirm_start"
-      ],
-      "predicted": "confirm_start",
-      "confidence": 0.95,
-      "needsClarification": false,
-      "correct": true,
-      "falseExecution": false
-    },
-    {
       "id": "af01",
       "text": "玩了一下，子弹太慢了，快一点",
-      "context": "has_artifact",
-      "expected": [
-        "artifact_feedback"
-      ],
-      "predicted": "artifact_feedback",
-      "confidence": 0.95,
-      "needsClarification": false,
-      "correct": true,
-      "falseExecution": false
-    },
-    {
-      "id": "af04",
-      "text": "这里不符合我的要求：我要的是打飞机不是打方块",
-      "context": "has_artifact",
-      "expected": [
-        "artifact_feedback"
-      ],
-      "predicted": "artifact_feedback",
-      "confidence": 0.9,
-      "needsClarification": false,
-      "correct": true,
-      "falseExecution": false
-    },
-    {
-      "id": "af03",
-      "text": "敌机出现得太密了，改稀一点，另外背景太暗",
-      "context": "has_artifact",
-      "expected": [
-        "artifact_feedback"
-      ],
-      "predicted": "artifact_feedback",
-      "confidence": 0.92,
-      "needsClarification": false,
-      "correct": true,
-      "falseExecution": false
-    },
-    {
-      "id": "af05",
-      "text": "整体不错，但结束画面少了重新开始按钮",
       "context": "has_artifact",
       "expected": [
         "artifact_feedback"
@@ -435,13 +369,39 @@
       "falseExecution": false
     },
     {
-      "id": "re02",
-      "text": "「依赖安装失败」是什么意思？",
-      "context": "failed",
+      "id": "af03",
+      "text": "敌机出现得太密了，改稀一点，另外背景太暗",
+      "context": "has_artifact",
       "expected": [
-        "request_explanation"
+        "artifact_feedback"
       ],
-      "predicted": "request_explanation",
+      "predicted": "artifact_feedback",
+      "confidence": 0.95,
+      "needsClarification": false,
+      "correct": true,
+      "falseExecution": false
+    },
+    {
+      "id": "cs06",
+      "text": "按刚才说的改吧，开始干活",
+      "context": "has_artifact",
+      "expected": [
+        "confirm_start"
+      ],
+      "predicted": "confirm_start",
+      "confidence": 0.6,
+      "needsClarification": true,
+      "correct": true,
+      "falseExecution": false
+    },
+    {
+      "id": "af04",
+      "text": "这里不符合我的要求：我要的是打飞机不是打方块",
+      "context": "has_artifact",
+      "expected": [
+        "artifact_feedback"
+      ],
+      "predicted": "artifact_feedback",
       "confidence": 0.95,
       "needsClarification": false,
       "correct": true,
@@ -475,15 +435,40 @@
       "falseExecution": false
     },
     {
-      "id": "re04",
-      "text": "你上一轮到底改了哪些地方，给我讲讲",
+      "id": "af05",
+      "text": "整体不错，但结束画面少了重新开始按钮",
       "context": "has_artifact",
       "expected": [
-        "request_explanation",
-        "query_status"
+        "artifact_feedback"
+      ],
+      "predicted": "artifact_feedback",
+      "confidence": 0.95,
+      "needsClarification": false,
+      "correct": true,
+      "falseExecution": false
+    },
+    {
+      "id": "re02",
+      "text": "「依赖安装失败」是什么意思？",
+      "context": "failed",
+      "expected": [
+        "request_explanation"
       ],
       "predicted": "request_explanation",
-      "confidence": 0.7,
+      "confidence": 0.95,
+      "needsClarification": false,
+      "correct": true,
+      "falseExecution": false
+    },
+    {
+      "id": "re03",
+      "text": "解释一下你刚才说的启动检查是干嘛的",
+      "context": "has_artifact",
+      "expected": [
+        "request_explanation"
+      ],
+      "predicted": "request_explanation",
+      "confidence": 0.92,
       "needsClarification": false,
       "correct": true,
       "falseExecution": false
@@ -496,7 +481,21 @@
         "query_status"
       ],
       "predicted": "query_status",
-      "confidence": 0.98,
+      "confidence": 1,
+      "needsClarification": false,
+      "correct": true,
+      "falseExecution": false
+    },
+    {
+      "id": "re05",
+      "text": "为啥要先做基础版？直接做完整版不行吗",
+      "context": "pre_start",
+      "expected": [
+        "request_explanation",
+        "discuss_or_question"
+      ],
+      "predicted": "request_explanation",
+      "confidence": 0.95,
       "needsClarification": false,
       "correct": true,
       "falseExecution": false
@@ -516,41 +515,28 @@
       "falseExecution": false
     },
     {
-      "id": "re03",
-      "text": "解释一下你刚才说的启动检查是干嘛的",
-      "context": "has_artifact",
-      "expected": [
-        "request_explanation"
-      ],
-      "predicted": "request_explanation",
-      "confidence": 0.85,
-      "needsClarification": false,
-      "correct": true,
-      "falseExecution": false
-    },
-    {
-      "id": "re05",
-      "text": "为啥要先做基础版？直接做完整版不行吗",
-      "context": "pre_start",
-      "expected": [
-        "request_explanation",
-        "discuss_or_question"
-      ],
-      "predicted": "request_explanation",
-      "confidence": 0.85,
-      "needsClarification": false,
-      "correct": true,
-      "falseExecution": false
-    },
-    {
-      "id": "qs05",
-      "text": "你还在做吗？没卡住吧",
+      "id": "qs03",
+      "text": "进展如何",
       "context": "executing",
       "expected": [
         "query_status"
       ],
       "predicted": "query_status",
       "confidence": 0.95,
+      "needsClarification": false,
+      "correct": true,
+      "falseExecution": false
+    },
+    {
+      "id": "re04",
+      "text": "你上一轮到底改了哪些地方，给我讲讲",
+      "context": "has_artifact",
+      "expected": [
+        "request_explanation",
+        "query_status"
+      ],
+      "predicted": "request_explanation",
+      "confidence": 0.9,
       "needsClarification": false,
       "correct": true,
       "falseExecution": false
@@ -569,14 +555,27 @@
       "falseExecution": false
     },
     {
-      "id": "qs03",
-      "text": "进展如何",
+      "id": "pc01",
+      "text": "先暂停一下，我晚点再看",
+      "context": "executing",
+      "expected": [
+        "pause_or_cancel"
+      ],
+      "predicted": "pause_or_cancel",
+      "confidence": 0.95,
+      "needsClarification": false,
+      "correct": true,
+      "falseExecution": false
+    },
+    {
+      "id": "qs05",
+      "text": "你还在做吗？没卡住吧",
       "context": "executing",
       "expected": [
         "query_status"
       ],
       "predicted": "query_status",
-      "confidence": 0.98,
+      "confidence": 0.95,
       "needsClarification": false,
       "correct": true,
       "falseExecution": false
@@ -590,19 +589,6 @@
         "discuss_or_question"
       ],
       "predicted": "query_status",
-      "confidence": 0.9,
-      "needsClarification": false,
-      "correct": true,
-      "falseExecution": false
-    },
-    {
-      "id": "pc02",
-      "text": "先停，我有事",
-      "context": "executing",
-      "expected": [
-        "pause_or_cancel"
-      ],
-      "predicted": "pause_or_cancel",
       "confidence": 0.95,
       "needsClarification": false,
       "correct": true,
@@ -622,9 +608,9 @@
       "falseExecution": false
     },
     {
-      "id": "pc04",
-      "text": "别继续了，先放着",
-      "context": "failed",
+      "id": "pc02",
+      "text": "先停，我有事",
+      "context": "executing",
       "expected": [
         "pause_or_cancel"
       ],
@@ -635,9 +621,9 @@
       "falseExecution": false
     },
     {
-      "id": "pc05",
-      "text": "停停停，我想先想清楚再说",
-      "context": "executing",
+      "id": "pc04",
+      "text": "别继续了，先放着",
+      "context": "failed",
       "expected": [
         "pause_or_cancel"
       ],
@@ -661,6 +647,19 @@
       "falseExecution": false
     },
     {
+      "id": "pc05",
+      "text": "停停停，我想先想清楚再说",
+      "context": "executing",
+      "expected": [
+        "pause_or_cancel"
+      ],
+      "predicted": "pause_or_cancel",
+      "confidence": 0.95,
+      "needsClarification": false,
+      "correct": true,
+      "falseExecution": false
+    },
+    {
       "id": "fa03",
       "text": "可以了，就这样，采用",
       "context": "has_artifact",
@@ -668,20 +667,7 @@
         "final_adopt"
       ],
       "predicted": "final_adopt",
-      "confidence": 1,
-      "needsClarification": false,
-      "correct": true,
-      "falseExecution": false
-    },
-    {
-      "id": "fa02",
-      "text": "我很满意，定稿",
-      "context": "has_artifact",
-      "expected": [
-        "final_adopt"
-      ],
-      "predicted": "final_adopt",
-      "confidence": 1,
+      "confidence": 0.95,
       "needsClarification": false,
       "correct": true,
       "falseExecution": false
@@ -700,6 +686,19 @@
       "falseExecution": false
     },
     {
+      "id": "fa02",
+      "text": "我很满意，定稿",
+      "context": "has_artifact",
+      "expected": [
+        "final_adopt"
+      ],
+      "predicted": "final_adopt",
+      "confidence": 0.95,
+      "needsClarification": false,
+      "correct": true,
+      "falseExecution": false
+    },
+    {
       "id": "fa05",
       "text": "成，就它了，结束吧",
       "context": "has_artifact",
@@ -707,6 +706,20 @@
         "final_adopt"
       ],
       "predicted": "final_adopt",
+      "confidence": 0.95,
+      "needsClarification": false,
+      "correct": true,
+      "falseExecution": false
+    },
+    {
+      "id": "ot02",
+      "text": "今天天气不错",
+      "context": "pre_start",
+      "expected": [
+        "other",
+        "discuss_or_question"
+      ],
+      "predicted": "other",
       "confidence": 0.95,
       "needsClarification": false,
       "correct": true,
@@ -727,16 +740,18 @@
       "falseExecution": false
     },
     {
-      "id": "ot02",
-      "text": "今天天气不错",
-      "context": "pre_start",
+      "id": "ot04",
+      "text": "？？？",
+      "context": "failed",
       "expected": [
         "other",
-        "discuss_or_question"
+        "request_explanation",
+        "discuss_or_question",
+        "query_status"
       ],
       "predicted": "other",
-      "confidence": 0.9,
-      "needsClarification": false,
+      "confidence": 0.3,
+      "needsClarification": true,
       "correct": true,
       "falseExecution": false
     },
@@ -748,38 +763,9 @@
         "other",
         "discuss_or_question"
       ],
-      "predicted": "other",
-      "confidence": 0.3,
+      "predicted": null,
+      "confidence": null,
       "needsClarification": true,
-      "correct": true,
-      "falseExecution": false
-    },
-    {
-      "id": "ot04",
-      "text": "？？？",
-      "context": "failed",
-      "expected": [
-        "other",
-        "request_explanation",
-        "discuss_or_question",
-        "query_status"
-      ],
-      "predicted": "query_status",
-      "confidence": 0.85,
-      "needsClarification": false,
-      "correct": true,
-      "falseExecution": false
-    },
-    {
-      "id": "pc01",
-      "text": "先暂停一下，我晚点再看",
-      "context": "executing",
-      "expected": [
-        "pause_or_cancel"
-      ],
-      "predicted": "pause_or_cancel",
-      "confidence": 0.95,
-      "needsClarification": false,
       "correct": true,
       "falseExecution": false
     }

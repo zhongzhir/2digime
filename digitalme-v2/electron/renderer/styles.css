@@ -1265,8 +1265,72 @@ select {
 .artifact-side .artifact-head,
 .artifact-side .decision-box,
 .artifact-side .revision-active-banner,
-.artifact-side .artifact-loading {
+.artifact-side .artifact-loading,
+.artifact-side .task-workspace-plan,
+.artifact-side .task-workspace-prep {
   flex-shrink: 0;
+}
+
+/* D11-B：规划卡与准备受阻 */
+.task-workspace-plan,
+.task-workspace-prep {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border, #d8dde6);
+  border-radius: 10px;
+  background: var(--panel-soft, #f7f8fb);
+}
+
+.tw-plan-head {
+  margin-bottom: 8px;
+}
+
+.tw-plan-head h3 {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+}
+
+.tw-plan-dl {
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.tw-plan-dl > div {
+  min-width: 0;
+}
+
+.tw-plan-dl dt {
+  font-size: 0.78rem;
+  color: var(--muted, #667085);
+  margin-bottom: 2px;
+}
+
+.tw-plan-dl dd {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.45;
+}
+
+#tw-plan-confirm-hint {
+  margin: 12px 0 8px;
+}
+
+#btn-start-development {
+  width: 100%;
+}
+
+.task-workspace-prep .tw-prep-actions {
+  margin-top: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* D11-B：中栏三步技术确认卡不再作为默认用户路径（保留 DOM 供准备动作复用） */
+.work-exec-block > #executor-setup-card,
+.work-exec-block > #project-folder-card,
+.work-exec-block > #execution-confirm-card {
+  display: none !important;
 }
 
 .artifact-scroll {

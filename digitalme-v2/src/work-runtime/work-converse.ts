@@ -400,11 +400,22 @@ export async function runWorkConverse(
 
   // 规划效果（先于对话落盘，保证返回的 plan 与存储一致）
   let planOut: WorkConverseResult['plan'];
-  if (decision.planDraftContent) {
+  let draftContent = decision.planDraftContent;
+  // D11-B：首轮理解任务若模型未给出规划正文，用目标种子一份 draft，保证右栏可展示规划卡
+  if (!draftContent && createdTask && !existingPlan) {
+    draftContent = [
+      `目标：${task.goal}`,
+      '交付：按你的目标完成可查看、可试用的结果',
+      '路径：先理清需求与边界，再实现并做基本验证',
+      '准备：若需改代码，需要可用的项目位置与已连接的代码执行能力',
+      '边界：不会自动提交、推送或发布；仅在你确认的项目范围内工作',
+    ].join('\n');
+  }
+  if (draftContent) {
     const nextPlan: TaskPlan = {
       version: (existingPlan?.version ?? 0) + 1,
       status: 'draft',
-      content: decision.planDraftContent,
+      content: draftContent,
       updatedAt: nowIso(),
       ...(existingPlan?.confirmedFacts ? { confirmedFacts: existingPlan.confirmedFacts } : {}),
     };

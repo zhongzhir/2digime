@@ -30,7 +30,9 @@
    * @property {boolean} [canTryRun]
    * @property {boolean} [startupFailed]
    * @property {boolean} [hasWorkingDirectory]
-   * @property {boolean} [jobCancelSupported]
+   * @property {boolean} [prepBlocked]
+ * @property {boolean} [hasPlanDraft]
+ * @property {boolean} [jobCancelSupported]
    */
 
   /**
@@ -71,6 +73,7 @@
   function deriveWorkUxStage(facts) {
     const f = facts || {};
     if (f.modelReady === false) return 'needs_capability';
+    if (f.prepBlocked) return 'needs_input';
     if (f.executorSetupCard) return 'needs_capability';
     // 项目位置已就绪时不得继续 needs_input（卡片残留也不算）
     const projectInputOpen = !!(f.projectFolderCard || f.projectCreateConfirm) && !f.projectDirReady;
@@ -113,10 +116,15 @@
     let collapseExportsToMore = true;
 
     if (stage === 'drafting') {
-      statusLine = '';
-      push('start_submit', '开始处理', 'primary', 'middle');
+      statusLine = f.hasPlanDraft ? '右侧是当前规划，可继续在对话中修改，或确认后开始开发' : '';
+      // D11-B：有规划时主入口在右栏「开始开发」，中栏不再用「开始处理」作为主路径
+      if (!f.hasPlanDraft) {
+        push('start_submit', '开始处理', 'primary', 'middle');
+      }
     } else if (stage === 'needs_input') {
-      if (f.projectCreateConfirm) {
+      if (f.prepBlocked) {
+        statusLine = '开发前还需完成准备 · 见右侧任务工作区';
+      } else if (f.projectCreateConfirm) {
         statusLine = '请确认新项目位置';
         push('confirm_create_project', '确认并开始', 'primary', 'middle');
         push('change_project_location', '更改位置', 'secondary', 'middle');
@@ -134,7 +142,7 @@
       statusLine = f.modelReady === false ? '请先连接模型' : '完成这项任务需要代码执行能力';
       if (f.modelReady === false) {
         push('goto_settings', '连接模型', 'primary', 'middle');
-      } else {
+      } else if (!f.prepBlocked) {
         push('coding_connect', '连接代码执行能力', 'primary', 'middle');
         push('coding_later', '稍后连接', 'secondary', 'middle');
         push('coding_install', '安装推荐能力', 'more', 'middle');
@@ -142,11 +150,7 @@
         push('coding_recheck', '重新检查', 'more', 'middle');
       }
     } else if (stage === 'needs_confirmation') {
-      statusLine = '开始前请确认项目与修改范围';
-      const confirmLabel =
-        f.understandingReliable === false ? '仍要继续' : '确认并开始';
-      push('confirm_execution', confirmLabel, 'primary', 'middle');
-      push('cancel_execution', '返回修改', 'secondary', 'middle');
+      statusLine = '需要额外确认后再开始 · 见右侧任务工作区';
     } else if (stage === 'running') {
       statusLine = '正在处理';
       if (f.jobCancelSupported !== false) {

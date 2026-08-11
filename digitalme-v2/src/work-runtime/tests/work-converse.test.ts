@@ -94,6 +94,10 @@ describe('D11-A work.converse — AI 意图与对话中枢', () => {
     assert.equal(first.intent, 'discuss_or_question');
     assert.ok(first.reply.length > 0);
     assert.equal(first.startAuthorized, false);
+    // D11-B：首轮即使讨论类输入也种子 draft plan，供右栏展示
+    assert.ok(first.plan);
+    assert.equal(first.plan?.status, 'draft');
+    assert.ok((first.plan?.version ?? 0) >= 1);
 
     const second = await bus.invoke('work.converse', { taskId: first.taskId, text: '现在什么状态？' });
     assert.equal(second.intent, 'query_status');

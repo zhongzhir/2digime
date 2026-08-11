@@ -160,6 +160,18 @@ export class WorkRuntime {
   async submitTask(
     input: SubmitInput,
   ): Promise<CommandMap['work.submitTask']['output']> {
+    // D11-B：确认开始时校验规划版本；过期规划不得执行
+    if (input.existingTaskId && input.confirmedPlanVersion != null) {
+      const existingForPlan = await this.opts.taskService.get(input.existingTaskId);
+      if (!existingForPlan) throw new Error(`task not found: ${input.existingTaskId}`);
+      const currentPlan = existingForPlan.meta?.plan;
+      if (!currentPlan || currentPlan.version !== input.confirmedPlanVersion) {
+        throw Object.assign(new Error('plan version mismatch'), {
+          code: 'plan_version_mismatch',
+          actionable: '规划已更新，请查看右侧最新规划后再确认开始。',
+        });
+      }
+    }
     const derived = await deriveWorkIntent({
       goal: input.goal,
       contextRefs: input.contextRefs,
@@ -440,13 +452,19 @@ export class WorkRuntime {
       });
       // 确定性开始 = 用户对当前规划的确认（按钮语义与自然语言确认一致）
       const plan = existing.meta?.plan;
-      if (plan && plan.status !== 'confirmed') {
+      if (plan) {
         const now = nowIso();
+        const confirmedFacts = [
+          ...(plan.confirmedFacts ?? []),
+          `确认规划版本 v${plan.version}`,
+          `确认目标：${taskInput.goal.slice(0, 120)}`,
+        ].filter((v, i, arr) => arr.indexOf(v) === i);
         await this.opts.taskService.updatePlan(input.existingTaskId, {
           ...plan,
           status: 'confirmed',
           updatedAt: now,
           confirmedAt: now,
+          confirmedFacts,
         });
       }
     } else {

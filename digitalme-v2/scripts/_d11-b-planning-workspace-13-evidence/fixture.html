@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>D11-B Planning Workspace Visual Check</title>
+    <style>
+      :root { --border:#d8dde6; --muted:#667085; --panel-soft:#f7f8fb; }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: #1f2937; background: #eef1f6; }
+      .shot-frame { display: grid; grid-template-columns: 220px 1fr 380px; height: 100vh; background: #fff; }
+      .shot-left, .shot-center, .shot-right { padding: 16px 18px; border-right: 1px solid var(--border); overflow: auto; }
+      .shot-right { border-right: 0; }
+      h2 { margin: 0 0 12px; font-size: 1.1rem; }
+      .meta { color: var(--muted); font-size: 0.85rem; }
+      .muted { color: var(--muted); }
+      .tiny { font-size: 0.8rem; }
+      .work-turn { margin: 0 0 14px; }
+      .work-turn-role { font-size: 0.75rem; color: var(--muted); }
+      .work-turn-text { margin-top: 4px; line-height: 1.5; white-space: pre-wrap; }
+      .task-workspace-plan, .task-workspace-prep {
+        margin: 0 0 12px; padding: 12px 14px; border: 1px solid var(--border);
+        border-radius: 10px; background: var(--panel-soft);
+      }
+      .tw-plan-head h3 { margin: 0 0 4px; font-size: 1.05rem; }
+      .tw-plan-dl { margin: 8px 0 0; display: grid; gap: 10px; }
+      .tw-plan-dl dt { font-size: 0.78rem; color: var(--muted); margin-bottom: 2px; }
+      .tw-plan-dl dd { margin: 0; white-space: pre-wrap; line-height: 1.45; }
+      #tw-plan-confirm-hint { margin: 12px 0 8px; }
+      button.primary {
+        display: inline-block; width: 100%; border: 0; border-radius: 8px;
+        padding: 10px 12px; background: #1f4b99; color: #fff; font-size: 0.95rem; cursor: pointer;
+      }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+      .row button.primary { width: auto; min-width: 140px; }
+      .empty-hint { color: var(--muted); }
+      ul { padding-left: 18px; }
+    </style>
+  </head>
+  <body>
+    <div class="shot-frame">
+      <aside class="shot-left">
+        <h2>任务</h2>
+        <p id="left-stage" class="meta">规划待确认</p>
+        <ul><li>打飞机小游戏</li></ul>
+      </aside>
+      <main class="shot-center">
+        <h2>与 Digital Me 对话</h2>
+        <div id="work-timeline"></div>
+        <p id="job-status" class="meta"></p>
+      </main>
+      <section id="artifact-panel" class="shot-right">
+        <h2 id="task-workspace-title">任务工作区</h2>
+        <div id="task-workspace-plan" class="task-workspace-plan" hidden>
+          <div class="tw-plan-head">
+            <h3>任务规划</h3>
+            <p id="tw-plan-version" class="meta"></p>
+            <p id="tw-plan-status" class="muted tiny"></p>
+          </div>
+          <dl class="tw-plan-dl">
+            <div><dt>任务目标</dt><dd id="tw-plan-goal"></dd></div>
+            <div><dt>预期交付</dt><dd id="tw-plan-delivery"></dd></div>
+            <div><dt>建议实现路径</dt><dd id="tw-plan-path"></dd></div>
+            <div><dt>必要准备条件</dt><dd id="tw-plan-prep"></dd></div>
+            <div><dt>重要边界或风险</dt><dd id="tw-plan-bounds"></dd></div>
+          </dl>
+          <p id="tw-plan-confirm-hint" class="muted tiny"></p>
+          <button type="button" id="btn-start-development" class="primary">开始开发</button>
+        </div>
+        <div id="task-workspace-prep" class="task-workspace-prep" hidden>
+          <h3 id="tw-prep-title"></h3>
+          <p id="tw-prep-missing"></p>
+          <p id="tw-prep-why" class="muted"></p>
+          <p id="tw-prep-checked" class="muted tiny"></p>
+          <p id="tw-prep-action"></p>
+          <div class="row">
+            <button type="button" id="btn-tw-connect-coding" class="primary" hidden>连接代码执行能力</button>
+            <button type="button" id="btn-tw-prep-continue" class="primary" hidden>继续准备</button>
+          </div>
+          <p id="tw-prep-continue" class="muted tiny"></p>
+        </div>
+        <p id="artifact-empty-hint" class="empty-hint" hidden></p>
+      </section>
+    </div>
+    <script>
+      window.__setPlan = function (version, content) {
+        const plan = document.getElementById('task-workspace-plan');
+        const prep = document.getElementById('task-workspace-prep');
+        prep.hidden = true;
+        plan.hidden = false;
+        document.getElementById('task-workspace-title').textContent = '任务工作区 · 规划';
+        document.getElementById('tw-plan-version').textContent = '规划版本 v' + version;
+        document.getElementById('tw-plan-status').textContent = '待确认 · 可继续在对话中修改';
+        const map = { goal:'', delivery:'', path:'', prep:'', bounds:'' };
+        let cur = 'goal';
+        String(content).split(/\\n/).forEach((line) => {
+          const m = line.match(/^(目标|交付|路径|准备|边界)\\s*[:：]\\s*(.*)$/);
+          if (m) {
+            cur = ({目标:'goal',交付:'delivery',路径:'path',准备:'prep',边界:'bounds'})[m[1]];
+            map[cur] = m[2];
+          } else if (line.trim()) {
+            map[cur] = (map[cur] ? map[cur] + '\\n' : '') + line.trim();
+          }
+        });
+        document.getElementById('tw-plan-goal').textContent = map.goal || '（待补充）';
+        document.getElementById('tw-plan-delivery').textContent = map.delivery || '（待补充）';
+        document.getElementById('tw-plan-path').textContent = map.path || '（待补充）';
+        document.getElementById('tw-plan-prep').textContent = map.prep || '（待补充）';
+        document.getElementById('tw-plan-bounds').textContent = map.bounds || '（待补充）';
+        document.getElementById('tw-plan-confirm-hint').textContent =
+          '确认后将按规划版本 v' + version + ' 开始开发。确认对象是这份规划，不会再分别确认普通技术细节。';
+      };
+      window.__setPrep = function () {
+        document.getElementById('task-workspace-plan').hidden = true;
+        const prep = document.getElementById('task-workspace-prep');
+        prep.hidden = false;
+        document.getElementById('task-workspace-title').textContent = '任务工作区 · 准备';
+        document.getElementById('tw-prep-title').textContent = '开发前还需完成准备';
+        document.getElementById('tw-prep-missing').textContent = '还缺少可用的代码执行能力。';
+        document.getElementById('tw-prep-why').textContent = '没有它，Digital Me 无法在项目里实际创建或修改代码。';
+        document.getElementById('tw-prep-checked').textContent = 'Digital Me 已完成检测：尚未检测到可用的代码执行能力。';
+        document.getElementById('tw-prep-action').textContent = '请连接代码执行能力，或打开设置完成安装与登录。';
+        document.getElementById('tw-prep-continue').textContent = '连接成功后点「继续准备」，将按已确认的规划开始。';
+        document.getElementById('btn-tw-connect-coding').hidden = false;
+        document.getElementById('btn-tw-prep-continue').hidden = false;
+      };
+      window.__setRunning = function () {
+        document.getElementById('task-workspace-plan').hidden = true;
+        document.getElementById('task-workspace-prep').hidden = true;
+        document.getElementById('task-workspace-title').textContent = '任务工作区 · 进行中';
+        const empty = document.getElementById('artifact-empty-hint');
+        empty.hidden = false;
+        empty.textContent = '正在按规划版本 v2 开发…成果就绪后会出现在这里。';
+      };
+    </script>
+  </body>
+</html>

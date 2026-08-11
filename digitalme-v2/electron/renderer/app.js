@@ -218,6 +218,17 @@
     workAssistEntries: document.getElementById("work-assist-entries"),
     codingOnboardingMore: document.getElementById("coding-onboarding-more"),
     artifactExportsMore: document.getElementById("artifact-exports-more"),
+    taskWorkspaceTitle: document.getElementById("task-workspace-title"),
+    taskWorkspacePlan: document.getElementById("task-workspace-plan"),
+    taskWorkspacePrep: document.getElementById("task-workspace-prep"),
+    startDevelopment: document.getElementById("btn-start-development"),
+    twCreateProject: document.getElementById("btn-tw-create-project"),
+    twPickProject: document.getElementById("btn-tw-pick-project"),
+    twConnectCoding: document.getElementById("btn-tw-connect-coding"),
+    twOpenSettings: document.getElementById("btn-tw-open-settings"),
+    twPrepContinue: document.getElementById("btn-tw-prep-continue"),
+    twHighRiskConfirm: document.getElementById("btn-tw-high-risk-confirm"),
+    twHighRiskCancel: document.getElementById("btn-tw-high-risk-cancel"),
     ccRestoreRow: document.getElementById("cc-restore-row"),
     ccRestoreHint: document.getElementById("cc-restore-hint"),
     decisionHint: document.getElementById("artifact-decision-hint"),
@@ -429,6 +440,10 @@
   let persistedConversationTurns = [];
   /** 对话中枢先建的理解任务（尚无 Job）；确定性开始时经 existingTaskId 复用同一 Task */
   let converseDraftTaskId = null;
+  /** D11-B：当前任务权威规划（来自 Task.meta.plan）。 */
+  let activeTaskPlan = null;
+  /** D11-B：准备受阻 / 高风险确认态（派生投影，不落盘）。 */
+  let prepBlockedState = null;
   let lastCtoTimelineKey = "";
   let activeArtifactVersionLabel = "";
   let pendingCreateProject = null;
@@ -1387,33 +1402,12 @@
     };
     if (capabilityId) payload.capabilityId = capabilityId;
     if (converseDraftTaskId) payload.existingTaskId = converseDraftTaskId;
+    if (activeTaskPlan && activeTaskPlan.version != null) {
+      payload.confirmedPlanVersion = activeTaskPlan.version;
+    }
     workMode = "compose";
     const result = await api.invoke("work.submitTask", payload);
-    if (result.needsProjectFolder) {
-      showProjectFolderCard(result.needsProjectFolder.message || result.userFacingNotice);
-      return;
-    }
-    if (result.needsExecutorSetup) {
-      showExecutorSetupCard(result.needsExecutorSetup);
-      return;
-    }
-    if (result.needsExecutionConfirm) {
-      pendingExecutionConfirm = {
-        goal,
-        contextRefs: payload.contextRefs,
-        preview: result.needsExecutionConfirm,
-        existingTaskId: payload.existingTaskId || null,
-        capabilityId:
-          capabilityId ||
-          result.needsExecutionConfirm.selectedCapabilityId ||
-          null,
-      };
-      showExecutionConfirmCard(result.needsExecutionConfirm);
-      els.jobStatus.textContent = "开始前请确认项目与修改权限";
-      els.jobStatus.classList.remove("error");
-      els.jobActionable.textContent = result.needsExecutionConfirm.notice || "";
-      return;
-    }
+    await applySubmitTaskResult(result, payload, goal, { fromPlanConfirm: true });
   }
 
   async function restorePendingSoftwareDraftIfAny() {
@@ -2591,9 +2585,12 @@
     hideNextStepsCard();
     if (status === "rejected") {
       els.decisionStatus.textContent = "这份成果未采用";
+      els.decisionStatus.hidden = false;
       if (noteField) noteField.hidden = true;
     } else {
-      els.decisionStatus.textContent = "请确认成果";
+      // D11-B：右栏不再展示「请确认成果」空壳；采用入口仅在中栏验收消息旁
+      els.decisionStatus.textContent = "";
+      els.decisionStatus.hidden = true;
       if (noteField) noteField.hidden = true;
     }
     if (els.decisionActions) els.decisionActions.hidden = false;
@@ -2753,6 +2750,8 @@
     workExtraTurns = [];
     persistedConversationTurns = [];
     converseDraftTaskId = null;
+    activeTaskPlan = null;
+    prepBlockedState = null;
     taskPausedCto = false;
     lastCtoTimelineKey = "";
     activeArtifactVersionLabel = "";
@@ -2966,6 +2965,8 @@
       projectDirReady,
       executorSetupCard: !!(els.executorSetupCard && !els.executorSetupCard.hidden),
       executionConfirmCard: !!(els.executionConfirmCard && !els.executionConfirmCard.hidden),
+      prepBlocked: !!prepBlockedState,
+      hasPlanDraft: !!(activeTaskPlan && activeTaskPlan.content && !activeArtifactId && js !== "queued" && js !== "running"),
       ownerChoicePrompt: !!(els.ownerChoicePrompt && !els.ownerChoicePrompt.hidden),
       revisionComposerOpen: revisionOpen,
       adoptWarningOpen: adoptWarn,
@@ -3128,6 +3129,135 @@
       }));
     converseDraftTaskId =
       detail && detail.task && !detail.latestJob ? detail.task.id : null;
+    hydratePlanFromTask(detail);
+  }
+
+  function hydratePlanFromTask(detail) {
+    const plan = detail && detail.task && detail.task.meta && detail.task.meta.plan;
+    activeTaskPlan = plan
+      ? {
+          version: plan.version,
+          status: plan.status,
+          content: plan.content,
+          confirmedAt: plan.confirmedAt,
+          confirmedFacts: plan.confirmedFacts,
+        }
+      : null;
+    refreshTaskWorkspace();
+  }
+
+  function refreshTaskWorkspace() {
+    const tw = window.DigitalMeTaskWorkspace;
+    if (!tw || typeof tw.renderTaskWorkspace !== "function") return;
+    const panel = document.getElementById("artifact-panel");
+    const js =
+      lastJobDetailForUx && lastJobDetailForUx.latestJob
+        ? String(lastJobDetailForUx.latestJob.status || "")
+        : "";
+    const running = js === "queued" || js === "running";
+    const hasArtifact = !!activeArtifactId;
+    let mode = "idle";
+    if (prepBlockedState) mode = "prep_blocked";
+    else if (running) mode = "running";
+    else if (hasArtifact) mode = "complete";
+    else if (activeTaskPlan && activeTaskPlan.content) mode = "planning";
+    tw.renderTaskWorkspace({
+      root: panel,
+      mode,
+      plan: activeTaskPlan,
+      goal: (els.goal && els.goal.value) || "",
+      prep: prepBlockedState,
+      title: tw.titleForMode(mode),
+    });
+    // 导出入口仅在有成果时出现，避免空「更多」
+    if (els.artifactExportsMore) {
+      els.artifactExportsMore.hidden = !hasArtifact;
+    }
+    syncPrepActionButtons();
+  }
+
+  function syncPrepActionButtons() {
+    const kind = prepBlockedState && prepBlockedState.kind;
+    const set = (el, on) => {
+      if (!el) return;
+      el.hidden = !on;
+    };
+    set(els.twCreateProject, kind === "project");
+    set(els.twPickProject, kind === "project" || kind === "project_confirm");
+    set(els.twConnectCoding, kind === "executor");
+    set(els.twOpenSettings, kind === "executor" || kind === "model");
+    set(els.twPrepContinue, kind === "project" || kind === "executor" || kind === "project_confirm");
+    if (els.twPrepContinue) {
+      els.twPrepContinue.textContent =
+        kind === "project_confirm" ? "确认并开始" : "继续准备";
+    }
+    set(els.twHighRiskConfirm, kind === "high_risk");
+    set(els.twHighRiskCancel, kind === "high_risk" || kind === "project_confirm");
+    if (els.twHighRiskCancel && kind === "project_confirm") {
+      els.twHighRiskCancel.textContent = "取消";
+      els.twHighRiskCancel.hidden = false;
+    }
+  }
+
+  function showPrepBlocked(kind, payload) {
+    hideExecutionConfirmCard();
+    hideExecutorSetupCard();
+    hideProjectFolderCard();
+    if (kind === "project") {
+      prepBlockedState = {
+        kind: "project",
+        title: "开发前还需完成准备",
+        missing: "还缺少可用的项目位置。",
+        why: "没有项目位置，就无法在安全范围内创建或修改文件。",
+        checked: "Digital Me 已确认：当前任务需要可写入的项目目录。",
+        action: "可由 Digital Me 创建新项目，或选择你已有的项目。",
+        continueHint: "选好位置后点「继续准备」，将按已确认的规划开始。",
+        payload: payload || null,
+      };
+    } else if (kind === "executor") {
+      const msg =
+        (payload && (payload.message || payload.description)) ||
+        "尚未检测到可用的代码执行能力。";
+      prepBlockedState = {
+        kind: "executor",
+        title: "开发前还需完成准备",
+        missing: "还缺少可用的代码执行能力。",
+        why: "没有它，Digital Me 无法在项目里实际创建或修改代码。",
+        checked: "Digital Me 已完成检测：" + msg,
+        action: "请连接代码执行能力，或打开设置完成安装与登录。",
+        continueHint: "连接成功后点「继续准备」，将按已确认的规划开始。",
+        payload: payload || null,
+      };
+    } else if (kind === "high_risk") {
+      prepBlockedState = {
+        kind: "high_risk",
+        title: "需要额外确认",
+        missing: "这项操作涉及更高风险的取舍。",
+        why: (payload && payload.notice) || "确认后才会按扩大后的权限或破坏性意图执行。",
+        checked:
+          "确认对象：规划版本 v" +
+          String((activeTaskPlan && activeTaskPlan.version) || "?") +
+          "；工作目录：" +
+          ((payload && payload.workingDirectory) || "（未指定）"),
+        action: "请确认你了解后果后再继续。",
+        continueHint: "也可返回对话继续修改规划。",
+        payload: payload || null,
+      };
+    } else {
+      prepBlockedState = null;
+    }
+    refreshTaskWorkspace();
+    refreshWorkUxView({
+      projectFolderCard: false,
+      executorSetupCard: false,
+      executionConfirmCard: false,
+      prepBlocked: !!prepBlockedState,
+    });
+  }
+
+  function clearPrepBlocked() {
+    prepBlockedState = null;
+    refreshTaskWorkspace();
   }
 
   function renderWorkTimeline() {
@@ -3286,6 +3416,15 @@
       converseDraftTaskId = res.taskId;
       await selectTask(res.taskId);
     }
+    if (res.plan) {
+      activeTaskPlan = {
+        version: res.plan.version,
+        status: res.plan.status,
+        content: res.plan.content,
+      };
+      clearPrepBlocked();
+      refreshTaskWorkspace();
+    }
     renderWorkTimeline();
     if (res.degraded || res.needsClarification) return;
     // 确定性效果（AI 只给结论；执行/暂停/采用均走既有确定性路径）
@@ -3309,9 +3448,10 @@
 
   /**
    * 对话确认后的确定性执行入口：在同一理解任务上开始执行（不新建 Task）。
-   * 与「开始处理」按钮共用 work.submitTask 前置检查（项目位置/执行能力/权限确认卡）。
+   * D11-B：确认明确规划版本；低风险自动附带执行授权，不再弹出三步技术确认卡。
    */
-  async function startConversationTaskExecution(taskId) {
+  async function startConversationTaskExecution(taskId, opts) {
+    const options = opts || {};
     try {
       await refreshConnectionFromCapabilities();
       if (!canSubmit(lastConnectionState)) {
@@ -3335,12 +3475,62 @@
         })),
         existingTaskId: taskId,
       };
+      if (options.confirmedPlanVersion != null) {
+        payload.confirmedPlanVersion = options.confirmedPlanVersion;
+      } else if (activeTaskPlan && activeTaskPlan.version != null) {
+        payload.confirmedPlanVersion = activeTaskPlan.version;
+      }
+      if (options.executionAuthorization) {
+        payload.executionAuthorization = options.executionAuthorization;
+      }
+      if (options.capabilityId) payload.capabilityId = options.capabilityId;
       const result = await api.invoke("work.submitTask", payload);
-      await applySubmitTaskResult(result, payload, goal);
+      await applySubmitTaskResult(result, payload, goal, {
+        fromPlanConfirm: options.fromPlanConfirm !== false,
+      });
+    } catch (err) {
+      const msg = userFacingWorkError(err);
+      els.jobStatus.textContent = msg;
+      els.jobStatus.classList.add("error");
+      if (String(err && err.code) === "plan_version_mismatch" || /规划已更新/.test(msg)) {
+        try {
+          const detail = await api.invoke("work.getTask", { taskId });
+          hydratePlanFromTask(detail);
+        } catch {
+          /* ignore */
+        }
+      }
+      refreshWorkUxView({});
+    }
+  }
+
+  async function confirmPlanAndStartDevelopment() {
+    const taskId = activeTaskId || converseDraftTaskId;
+    if (!taskId) return;
+    const expectedVersion = activeTaskPlan && activeTaskPlan.version;
+    if (expectedVersion == null) {
+      els.jobStatus.textContent = "还没有可确认的规划，请先在对话中说明任务。";
+      els.jobStatus.classList.add("error");
+      return;
+    }
+    try {
+      const detail = await api.invoke("work.getTask", { taskId });
+      const plan = detail && detail.task && detail.task.meta && detail.task.meta.plan;
+      hydratePlanFromTask(detail);
+      if (!plan || plan.version !== expectedVersion) {
+        els.jobStatus.textContent = "规划已更新，请查看右侧最新规划后再确认开始。";
+        els.jobStatus.classList.add("error");
+        refreshTaskWorkspace();
+        return;
+      }
+      clearPrepBlocked();
+      await startConversationTaskExecution(taskId, {
+        confirmedPlanVersion: expectedVersion,
+        fromPlanConfirm: true,
+      });
     } catch (err) {
       els.jobStatus.textContent = userFacingWorkError(err);
       els.jobStatus.classList.add("error");
-      refreshWorkUxView({});
     }
   }
 
@@ -3765,6 +3955,8 @@
     workExtraTurns = [];
     persistedConversationTurns = [];
     converseDraftTaskId = null;
+    activeTaskPlan = null;
+    prepBlockedState = null;
     taskPausedCto = false;
     lastCtoTimelineKey = "";
     activeArtifactVersionLabel = "";
@@ -5498,8 +5690,23 @@
       els.projectCreateConfirm.removeAttribute("hidden");
     }
     if (els.projectCreatePath) els.projectCreatePath.textContent = pathText;
-    // 必须重新派生，否则「确认并开始」会保持上一轮 hidden
-    refreshWorkUxView({ projectFolderCard: true, projectCreateConfirm: true });
+    // D11-B：确认 UI 投影到右栏准备区，不走中栏三步卡
+    prepBlockedState = {
+      kind: "project_confirm",
+      title: "请确认新项目位置",
+      missing: "需要确认即将使用的项目文件夹。",
+      why: "确认后才会在该位置创建或使用项目，并按已确认的规划开始开发。",
+      checked: pathText,
+      action: "确认位置无误后继续；也可更改位置或取消。",
+      continueHint: "",
+      payload: null,
+    };
+    refreshTaskWorkspace();
+    refreshWorkUxView({
+      projectFolderCard: false,
+      projectCreateConfirm: true,
+      prepBlocked: true,
+    });
   }
 
   async function beginCreateNewProjectFlow() {
@@ -5626,8 +5833,13 @@
       };
       if (type) payload.requestedArtifactType = type;
       if (converseDraftTaskId) payload.existingTaskId = converseDraftTaskId;
+      if (activeTaskPlan && activeTaskPlan.version != null) {
+        payload.confirmedPlanVersion = activeTaskPlan.version;
+      }
       const result = await api.invoke("work.submitTask", payload);
-      await applySubmitTaskResult(result, payload, goal);
+      await applySubmitTaskResult(result, payload, goal, {
+        fromPlanConfirm: !!converseDraftTaskId || !!activeTaskPlan,
+      });
     } catch (err) {
       els.jobStatus.textContent = userFacingWorkError(err);
       els.jobStatus.classList.add("error");
@@ -5638,47 +5850,93 @@
     }
   }
 
-  async function applySubmitTaskResult(result, payload, goal) {
+  async function applySubmitTaskResult(result, payload, goal, opts) {
+    const options = opts || {};
+    const fromPlanConfirm = !!options.fromPlanConfirm;
     if (result.needsProjectFolder) {
-      showProjectFolderCard(result.needsProjectFolder.message || result.userFacingNotice);
-      els.jobStatus.textContent = "这项任务需要一个项目位置";
+      showPrepBlocked("project", result.needsProjectFolder);
+      els.jobStatus.textContent = "开发前还需完成准备：项目位置";
       els.jobStatus.classList.remove("error");
-      els.jobActionable.textContent = "可由 Digital Me 创建新项目，或使用你已有的项目。";
+      els.jobActionable.textContent = "请在右侧任务工作区选择或创建项目位置。";
       clearArtifactView();
-      refreshWorkUxView({ projectFolderCard: true, projectDirReady: false });
+      refreshWorkUxView({ projectFolderCard: false, projectDirReady: false, prepBlocked: true });
       return "needs_project";
     }
     if (result.needsExecutorSetup) {
-      showExecutorSetupCard(result.needsExecutorSetup);
-      els.jobStatus.textContent = "请先连接可用的代码执行能力";
+      showPrepBlocked("executor", result.needsExecutorSetup);
+      els.jobStatus.textContent = "开发前还需完成准备：代码执行能力";
       els.jobStatus.classList.remove("error");
-      els.jobActionable.textContent = "可连接代码执行能力，或稍后连接后继续。";
-      refreshWorkUxView({ executorSetupCard: true, projectDirReady: true });
+      els.jobActionable.textContent = "请在右侧任务工作区连接代码执行能力。";
+      refreshWorkUxView({ executorSetupCard: false, projectDirReady: true, prepBlocked: true });
       return "needs_capability";
     }
     if (result.needsExecutionConfirm) {
-      pendingExecutionConfirm = {
-        goal,
-        contextRefs: payload.contextRefs,
-        preview: result.needsExecutionConfirm,
-        existingTaskId: payload.existingTaskId || null,
-        capabilityId: result.needsExecutionConfirm.selectedCapabilityId || null,
-      };
-      showExecutionConfirmCard(result.needsExecutionConfirm);
-      els.jobStatus.textContent = "开始前请确认项目与修改权限";
-      els.jobStatus.classList.remove("error");
-      els.jobActionable.textContent = result.needsExecutionConfirm.notice || "";
-      refreshWorkUxView({
-        executionConfirmCard: true,
-        projectDirReady: true,
-        understandingReliable: result.needsExecutionConfirm.understandingReliable !== false,
-      });
+      const preview = result.needsExecutionConfirm;
+      const tw = window.DigitalMeTaskWorkspace;
+      const highRisk =
+        tw && typeof tw.isHighRiskExecution === "function"
+          ? tw.isHighRiskExecution(goal, preview)
+          : false;
+      // D11-B：规划已确认的低风险路径自动附带执行授权，不再弹出三步技术确认卡
+      if (fromPlanConfirm && !highRisk && !options._authDone) {
+        const authPayload = Object.assign({}, payload, {
+          capabilityId: preview.selectedCapabilityId || payload.capabilityId,
+          executionAuthorization: {
+            confirmed: true,
+            workingDirectory: preview.workingDirectory,
+            readScope: preview.readScope,
+            writeScope: preview.writeScope,
+            projectOrigin: preview.projectOrigin || "unknown",
+          },
+        });
+        const next = await api.invoke("work.submitTask", authPayload);
+        return applySubmitTaskResult(next, authPayload, goal, {
+          fromPlanConfirm: true,
+          _authDone: true,
+        });
+      }
+      if (highRisk) {
+        pendingExecutionConfirm = {
+          goal,
+          contextRefs: payload.contextRefs,
+          preview,
+          existingTaskId: payload.existingTaskId || null,
+          capabilityId: preview.selectedCapabilityId || null,
+          confirmedPlanVersion: payload.confirmedPlanVersion,
+        };
+        showPrepBlocked("high_risk", preview);
+        els.jobStatus.textContent = "需要额外确认后再开始";
+        els.jobStatus.classList.remove("error");
+        els.jobActionable.textContent = preview.notice || "";
+        refreshWorkUxView({ executionConfirmCard: false, prepBlocked: true });
+        return "needs_confirmation";
+      }
+      // 非规划确认入口的遗留路径：仍自动授权低风险（避免三步卡回流）
+      if (!options._authDone) {
+        const authPayload = Object.assign({}, payload, {
+          capabilityId: preview.selectedCapabilityId || payload.capabilityId,
+          executionAuthorization: {
+            confirmed: true,
+            workingDirectory: preview.workingDirectory,
+            readScope: preview.readScope,
+            writeScope: preview.writeScope,
+            projectOrigin: preview.projectOrigin || "unknown",
+          },
+        });
+        const next = await api.invoke("work.submitTask", authPayload);
+        return applySubmitTaskResult(next, authPayload, goal, {
+          fromPlanConfirm,
+          _authDone: true,
+        });
+      }
+      showPrepBlocked("high_risk", preview);
       return "needs_confirmation";
     }
     workMode = "task";
     activeTaskId = result.taskId;
     activeJobId = result.jobId;
     converseDraftTaskId = null;
+    clearPrepBlocked();
     activeTaskIntentKind = result.intentKind || null;
     activeTaskRequestedArtifactType =
       result.intentKind === "analyze_code"
@@ -5771,6 +6029,89 @@
       void submitWorkNaturalLanguage();
     });
   }
+  if (els.startDevelopment) {
+    els.startDevelopment.addEventListener("click", () => {
+      void confirmPlanAndStartDevelopment();
+    });
+  }
+  if (els.twCreateProject) {
+    els.twCreateProject.addEventListener("click", () => beginCreateNewProjectFlow());
+  }
+  if (els.twPickProject) {
+    els.twPickProject.addEventListener("click", () => {
+      if (prepBlockedState && prepBlockedState.kind === "project_confirm" && els.changeProjectLocation) {
+        els.changeProjectLocation.click();
+        return;
+      }
+      addProjectFolderFromPicker(false);
+    });
+  }
+  if (els.twConnectCoding) {
+    els.twConnectCoding.addEventListener("click", () => {
+      if (els.codingUseInstalled) els.codingUseInstalled.click();
+      else if (els.openSettings) els.openSettings.click();
+    });
+  }
+  if (els.twOpenSettings) {
+    els.twOpenSettings.addEventListener("click", () => {
+      if (els.openSettings) els.openSettings.click();
+    });
+  }
+  if (els.twPrepContinue) {
+    els.twPrepContinue.addEventListener("click", () => {
+      if (prepBlockedState && prepBlockedState.kind === "project_confirm") {
+        void confirmPendingCreateProject();
+        return;
+      }
+      const taskId = activeTaskId || converseDraftTaskId;
+      if (!taskId) return;
+      void startConversationTaskExecution(taskId, {
+        confirmedPlanVersion: activeTaskPlan && activeTaskPlan.version,
+        fromPlanConfirm: true,
+      });
+    });
+  }
+  if (els.twHighRiskConfirm) {
+    els.twHighRiskConfirm.addEventListener("click", async () => {
+      const pending = pendingExecutionConfirm;
+      if (!pending || !pending.preview) return;
+      const goal = pending.goal || "";
+      const payload = {
+        goal,
+        contextRefs: pending.contextRefs || [],
+        existingTaskId: pending.existingTaskId || undefined,
+        capabilityId: pending.capabilityId || undefined,
+        confirmedPlanVersion: pending.confirmedPlanVersion,
+        executionAuthorization: {
+          confirmed: true,
+          workingDirectory: pending.preview.workingDirectory,
+          readScope: pending.preview.readScope,
+          writeScope: pending.preview.writeScope,
+          projectOrigin: pending.preview.projectOrigin || "unknown",
+        },
+      };
+      clearPrepBlocked();
+      const result = await api.invoke("work.submitTask", payload);
+      await applySubmitTaskResult(result, payload, goal, {
+        fromPlanConfirm: true,
+        _authDone: true,
+      });
+    });
+  }
+  if (els.twHighRiskCancel) {
+    els.twHighRiskCancel.addEventListener("click", () => {
+      if (prepBlockedState && prepBlockedState.kind === "project_confirm") {
+        pendingCreateProject = null;
+        clearPrepBlocked();
+        showPrepBlocked("project", null);
+        return;
+      }
+      pendingExecutionConfirm = null;
+      clearPrepBlocked();
+      refreshTaskWorkspace();
+      focusWorkNaturalLanguageInput();
+    });
+  }
   if (els.workNlInput) {
     els.workNlInput.addEventListener("keydown", (ev) => {
       if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
@@ -5818,8 +6159,13 @@
       // 不强迫传成果类型；Runtime 按意图派生。显式仅在隐藏控件有非空值时透传。
       if (type) payload.requestedArtifactType = type;
       if (converseDraftTaskId) payload.existingTaskId = converseDraftTaskId;
+      if (activeTaskPlan && activeTaskPlan.version != null) {
+        payload.confirmedPlanVersion = activeTaskPlan.version;
+      }
       const result = await api.invoke("work.submitTask", payload);
-      await applySubmitTaskResult(result, payload, goal);
+      await applySubmitTaskResult(result, payload, goal, {
+        fromPlanConfirm: !!converseDraftTaskId || !!activeTaskPlan,
+      });
     } catch (err) {
       els.jobStatus.textContent = userFacingWorkError(err);
       els.jobStatus.classList.add("error");
