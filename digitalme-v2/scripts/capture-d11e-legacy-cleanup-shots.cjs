@@ -1,5 +1,7 @@
 /**
- * D11-E 工程视觉核对：隔离 userData，截取规划确认 / 执行授权 / 开发中 / 自动修订 / 可试用 / 失败暂停。
+ * D11-E 界面示意截图（visual_mock_only）。
+ * 仅加载 fixture.html — 不得当作真实主链运行证据。
+ * 真实 Electron smoke：electron-d11e-runtime-smoke.cjs → _d11-e-runtime-evidence-16a/
  */
 'use strict';
 
@@ -32,25 +34,27 @@ async function main() {
     webPreferences: { contextIsolation: true, nodeIntegration: false },
   });
   const scenes = [
-    ['plan', '01-plan-confirm'],
-    ['auth', '02-execution-auth'],
-    ['running', '03-developing'],
-    ['revise', '04-auto-revision'],
-    ['try', '05-ready-to-try'],
-    ['pause', '06-paused-after-failures'],
+    ['plan', 'visual_mock_only-01-plan-confirm'],
+    ['auth', 'visual_mock_only-02-execution-auth'],
+    ['running', 'visual_mock_only-03-developing'],
+    ['revise', 'visual_mock_only-04-auto-revision'],
+    ['try', 'visual_mock_only-05-ready-to-try'],
+    ['pause', 'visual_mock_only-06-paused-after-failures'],
   ];
   const shots = {};
   for (const [scene, name] of scenes) {
     await win.loadURL(`${pathToFileURL(fixturePath).href}?scene=${scene}`);
     await new Promise((r) => setTimeout(r, 200));
-    shots[scene] = await capture(win, name);
+    shots[scene] = path.basename(await capture(win, name));
   }
   const summary = {
     task: '2DIGIME-BUILD-01-D11-E-LEGACY-CLEANUP-OWNER-RUNTIME-PREP-16',
     generatedAt: new Date().toISOString(),
+    kind: 'visual_mock_only',
     userData,
     shots,
-    note: 'engineering visual check only; owner_runtime_not_started; no MUHUB',
+    note:
+      'Static fixture.html only (visual_mock_only). NOT runtime evidence. See scripts/_d11-e-runtime-evidence-16a/. owner_runtime_not_started; no MUHUB.',
   };
   fs.writeFileSync(path.join(EVIDENCE, 'summary.json'), JSON.stringify(summary, null, 2), 'utf8');
   console.log(JSON.stringify(summary, null, 2));

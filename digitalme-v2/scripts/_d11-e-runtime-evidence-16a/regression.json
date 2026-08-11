@@ -1,0 +1,21 @@
+{
+  "task": "2DIGIME-BUILD-01-D11-E-RUNTIME-EVIDENCE-FOLLOWUP-16A",
+  "baselineHead": "19d5f01",
+  "fullSuite": {
+    "tests": 510,
+    "pass": 505,
+    "fail": 4,
+    "skipped": 1,
+    "addedFailuresVsD11E": 0
+  },
+  "remainingFour": [
+    "does not register fake or available document capabilities",
+    "A: 相关偏好复用 → appliedUnderstanding 出现且 ≤3 条",
+    "完整成长闭环:Task A 编辑确认后 Task B 复用;未确认与不相似隔离",
+    "SUBJECT-MVP: one sentence start → task without archive gate → growth reuse"
+  ],
+  "d11eTargeted": "pass",
+  "runtimeSmoke": "runtime_smoke_passed",
+  "ownerAccepted": false,
+  "ownerRuntime": "not_started"
+}

@@ -1,14 +1,14 @@
 {
   "task": "2DIGIME-BUILD-01-D11-E-LEGACY-CLEANUP-OWNER-RUNTIME-PREP-16",
   "generatedAt": "2026-08-11T08:49:38.194Z",
-  "userData": "C:\\Users\\46554\\AppData\\Local\\Temp\\dm-d11e-ud-11HRTf",
+  "kind": "visual_mock_only",
+  "note": "Static fixture.html screenshots only. NOT runtime evidence. Real Electron main-chain evidence: scripts/_d11-e-runtime-evidence-16a/. owner_runtime_not_started; no MUHUB.",
   "shots": {
-    "plan": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_d11-e-legacy-cleanup-16-evidence\\01-plan-confirm.png",
-    "auth": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_d11-e-legacy-cleanup-16-evidence\\02-execution-auth.png",
-    "running": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_d11-e-legacy-cleanup-16-evidence\\03-developing.png",
-    "revise": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_d11-e-legacy-cleanup-16-evidence\\04-auto-revision.png",
-    "try": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_d11-e-legacy-cleanup-16-evidence\\05-ready-to-try.png",
-    "pause": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_d11-e-legacy-cleanup-16-evidence\\06-paused-after-failures.png"
-  },
-  "note": "engineering visual check only; owner_runtime_not_started; no MUHUB"
+    "plan": "visual_mock_only-01-plan-confirm.png",
+    "auth": "visual_mock_only-02-execution-auth.png",
+    "running": "visual_mock_only-03-developing.png",
+    "revise": "visual_mock_only-04-auto-revision.png",
+    "try": "visual_mock_only-05-ready-to-try.png",
+    "pause": "visual_mock_only-06-paused-after-failures.png"
+  }
 }
