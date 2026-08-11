@@ -1189,10 +1189,37 @@
     return raw;
   }
 
+  /** D11-B：中栏三确认卡永久退出可访问性树与交互（DOM 保留至 D11-E）。 */
+  function sealLegacyMidConfirmCards() {
+    for (const card of [els.executorSetupCard, els.projectFolderCard, els.executionConfirmCard]) {
+      if (!card) continue;
+      card.hidden = true;
+      card.setAttribute("hidden", "");
+      card.setAttribute("aria-hidden", "true");
+      card.setAttribute("inert", "");
+      card.setAttribute("tabindex", "-1");
+      try {
+        card.inert = true;
+      } catch {
+        /* older Electron may lack inert property */
+      }
+      const focusables = card.querySelectorAll(
+        "button, a, input, select, textarea, [tabindex]:not([tabindex='-1'])",
+      );
+      for (const el of focusables) {
+        el.setAttribute("tabindex", "-1");
+        el.setAttribute("aria-hidden", "true");
+        if ("disabled" in el) el.disabled = true;
+      }
+    }
+  }
+
   function hideExecutorSetupCard() {
     if (!els.executorSetupCard) return;
     els.executorSetupCard.hidden = true;
     els.executorSetupCard.setAttribute("hidden", "");
+    els.executorSetupCard.setAttribute("aria-hidden", "true");
+    els.executorSetupCard.setAttribute("inert", "");
     pendingCodingOnboarding = null;
     if (els.codingCapScanList) {
       els.codingCapScanList.hidden = true;
@@ -1207,68 +1234,16 @@
   }
 
   function showExecutorSetupCard(payloadOrMessage) {
+    // D11-B：禁止再打开中栏执行器卡；改走右栏准备受阻
     hideExecutionConfirmCard();
     hideProjectFolderCard();
-    if (!els.executorSetupCard) return;
-    const payload =
+    sealLegacyMidConfirmCards();
+    showPrepBlocked(
+      "executor",
       payloadOrMessage && typeof payloadOrMessage === "object"
         ? payloadOrMessage
-        : {
-            message:
-              payloadOrMessage ||
-              "尚未检测到可用的代码执行能力。",
-            title: "完成这项任务需要代码执行能力",
-            description:
-              "Digital Me 会使用它在你确认的项目目录中创建或修改代码，并运行测试。",
-          };
-    pendingCodingOnboarding = payload;
-    els.executorSetupCard.hidden = false;
-    els.executorSetupCard.removeAttribute("hidden");
-    if (els.executorSetupTitle) {
-      els.executorSetupTitle.textContent = payload.title || "完成这项任务需要代码执行能力";
-    }
-    if (els.executorSetupDescription) {
-      els.executorSetupDescription.textContent =
-        payload.description ||
-        "Digital Me 会使用它在你确认的项目目录中创建或修改代码，并运行测试。";
-    }
-    if (els.executorSetupMessage) {
-      els.executorSetupMessage.textContent =
-        payload.message ||
-        "尚未检测到可用的代码执行能力。";
-    }
-    const actions = payload.actions || [
-      "use_installed",
-      "install_recommended",
-      "connect_later",
-    ];
-    if (els.codingUseCloud) {
-      const showCloud = actions.includes("use_cloud");
-      els.codingUseCloud.hidden = !showCloud;
-      if (showCloud) els.codingUseCloud.removeAttribute("hidden");
-      else els.codingUseCloud.setAttribute("hidden", "");
-    }
-    if (els.codingCapScanList) {
-      els.codingCapScanList.hidden = true;
-      els.codingCapScanList.innerHTML = "";
-    }
-    if (els.codingCapInstallPanel) {
-      els.codingCapInstallPanel.hidden = true;
-      els.codingCapInstallPanel.setAttribute("hidden", "");
-    }
-    if (els.codingOpenGuide) {
-      els.codingOpenGuide.hidden = true;
-      els.codingOpenGuide.setAttribute("hidden", "");
-    }
-    if (els.codingBackOnboarding) {
-      els.codingBackOnboarding.hidden = true;
-      els.codingBackOnboarding.setAttribute("hidden", "");
-    }
-    if (Array.isArray(payload.capabilities)) {
-      lastCodingCapabilities = payload.capabilities;
-    }
-    if (payload.recommended) lastCodingRecommendation = payload.recommended;
-    refreshWorkUxView({ executorSetupCard: true });
+        : { message: payloadOrMessage || "尚未检测到可用的代码执行能力。" },
+    );
   }
 
   function renderCodingScanList(caps) {
@@ -2252,6 +2227,8 @@
     if (!els.projectFolderCard) return;
     els.projectFolderCard.hidden = true;
     els.projectFolderCard.setAttribute("hidden", "");
+    els.projectFolderCard.setAttribute("aria-hidden", "true");
+    els.projectFolderCard.setAttribute("inert", "");
     pendingCreateProject = null;
     if (els.projectCreateConfirm) {
       els.projectCreateConfirm.hidden = true;
@@ -2264,24 +2241,11 @@
   }
 
   function showProjectFolderCard(message) {
+    // D11-B：禁止再打开中栏项目卡；改走右栏准备受阻
     hideExecutionConfirmCard();
     hideExecutorSetupCard();
-    if (!els.projectFolderCard) return;
-    els.projectFolderCard.hidden = false;
-    els.projectFolderCard.removeAttribute("hidden");
-    if (els.projectFolderMessage) {
-      els.projectFolderMessage.textContent =
-        message || "这项任务需要一个项目位置。可由 Digital Me 创建新项目，或使用你已有的项目。";
-    }
-    if (els.projectCreateConfirm) {
-      els.projectCreateConfirm.hidden = true;
-      els.projectCreateConfirm.setAttribute("hidden", "");
-    }
-    if (els.projectFolderActions) {
-      els.projectFolderActions.hidden = false;
-      els.projectFolderActions.removeAttribute("hidden");
-    }
-    refreshWorkUxView({ projectFolderCard: true });
+    sealLegacyMidConfirmCards();
+    showPrepBlocked("project", { message: message || "" });
   }
 
   function hideRevisionActiveBanner() {
@@ -2960,11 +2924,12 @@
     return {
       workMode,
       modelReady: lastModelReady !== false,
-      projectFolderCard: !!(els.projectFolderCard && !els.projectFolderCard.hidden),
+      // D11-B：中栏三确认卡已退出交互；业务阶段只看右栏 prepBlocked / 规划确认，不读卡可见性
+      projectFolderCard: false,
       projectCreateConfirm: !!(els.projectCreateConfirm && !els.projectCreateConfirm.hidden),
       projectDirReady,
-      executorSetupCard: !!(els.executorSetupCard && !els.executorSetupCard.hidden),
-      executionConfirmCard: !!(els.executionConfirmCard && !els.executionConfirmCard.hidden),
+      executorSetupCard: false,
+      executionConfirmCard: false,
       prepBlocked: !!prepBlockedState,
       hasPlanDraft: !!(activeTaskPlan && activeTaskPlan.content && !activeArtifactId && js !== "queued" && js !== "running"),
       ownerChoicePrompt: !!(els.ownerChoicePrompt && !els.ownerChoicePrompt.hidden),
@@ -3150,10 +3115,9 @@
     const tw = window.DigitalMeTaskWorkspace;
     if (!tw || typeof tw.renderTaskWorkspace !== "function") return;
     const panel = document.getElementById("artifact-panel");
-    const js =
-      lastJobDetailForUx && lastJobDetailForUx.latestJob
-        ? String(lastJobDetailForUx.latestJob.status || "")
-        : "";
+    const detail = lastJobDetailForUx;
+    const job = detail && detail.latestJob;
+    const js = job ? String(job.status || "") : "";
     const running = js === "queued" || js === "running";
     const hasArtifact = !!activeArtifactId;
     let mode = "idle";
@@ -3161,12 +3125,22 @@
     else if (running) mode = "running";
     else if (hasArtifact) mode = "complete";
     else if (activeTaskPlan && activeTaskPlan.content) mode = "planning";
+    const progressNote =
+      (job && (job.progressNote || job.actionable || job.userFacingLabel)) ||
+      (detail && detail.userFacingLabel) ||
+      "";
     tw.renderTaskWorkspace({
       root: panel,
       mode,
       plan: activeTaskPlan,
       goal: (els.goal && els.goal.value) || "",
       prep: prepBlockedState,
+      running: running
+        ? {
+            progressNote: String(progressNote || "").trim() || "正在实现与验证，请稍候…",
+            planVersion: activeTaskPlan && activeTaskPlan.version,
+          }
+        : null,
       title: tw.titleForMode(mode),
     });
     // 导出入口仅在有成果时出现，避免空「更多」
@@ -3287,6 +3261,8 @@
       failureMessage: (els.jobActionable && els.jobActionable.textContent) || "",
       revisionActive: !!(job && job.revisionRequest),
       ctoReport: acc.ctoReport || "",
+      ctoDecision: (acc.ctoReview && acc.ctoReview.decision) || "",
+      primaryAction: acc.primaryAction || "",
       userFacingNextStep: acc.userFacingNextStep || "",
       canAdoptSuggested: !!acc.canAdoptSuggested,
       artifactVersionId: activeHeadVersionId || "",
@@ -3342,6 +3318,20 @@
       );
       if (!ok) return;
       await submitArtifactDecision("accept", { forceAdopt: false });
+      return;
+    }
+    if (actionId === "confirm_continue") {
+      await runCtoConfirmContinue("");
+      return;
+    }
+    if (actionId === "retry_acceptance") {
+      if (!activeArtifactId) return;
+      els.jobStatus.textContent = "请稍后再试：重新打开本成果或刷新任务以再次验收";
+      els.jobStatus.classList.remove("error");
+      if (els.jobActionable) {
+        els.jobActionable.textContent =
+          "现有成果已保留。模型可用后，打开同一任务即可重新形成验收结论。";
+      }
       return;
     }
     if (actionId === "retry_job" && els.retry) {
@@ -3486,7 +3476,7 @@
       if (options.capabilityId) payload.capabilityId = options.capabilityId;
       const result = await api.invoke("work.submitTask", payload);
       await applySubmitTaskResult(result, payload, goal, {
-        fromPlanConfirm: options.fromPlanConfirm !== false,
+        fromPlanConfirm: options.fromPlanConfirm === true,
       });
     } catch (err) {
       const msg = userFacingWorkError(err);
@@ -3914,6 +3904,9 @@
       els.jobStatus.classList.remove("error");
       clearAppliedUnderstanding();
       applyJobControls(detail, connected);
+      // D11-B：Job 进入执行后右栏立即显示「开发中」与当前进展（不等 Artifact）
+      refreshTaskWorkspace();
+      refreshWorkUxView({});
     } else {
       stopJobWatch();
       hideRevisionActiveBanner();
@@ -5838,7 +5831,7 @@
       }
       const result = await api.invoke("work.submitTask", payload);
       await applySubmitTaskResult(result, payload, goal, {
-        fromPlanConfirm: !!converseDraftTaskId || !!activeTaskPlan,
+        fromPlanConfirm: false,
       });
     } catch (err) {
       els.jobStatus.textContent = userFacingWorkError(err);
@@ -5877,7 +5870,7 @@
         tw && typeof tw.isHighRiskExecution === "function"
           ? tw.isHighRiskExecution(goal, preview)
           : false;
-      // D11-B：规划已确认的低风险路径自动附带执行授权，不再弹出三步技术确认卡
+      // D11-B：仅在用户明确确认最新规划后，低风险才自动附带执行授权
       if (fromPlanConfirm && !highRisk && !options._authDone) {
         const authPayload = Object.assign({}, payload, {
           capabilityId: preview.selectedCapabilityId || payload.capabilityId,
@@ -5911,26 +5904,14 @@
         refreshWorkUxView({ executionConfirmCard: false, prepBlocked: true });
         return "needs_confirmation";
       }
-      // 非规划确认入口的遗留路径：仍自动授权低风险（避免三步卡回流）
-      if (!options._authDone) {
-        const authPayload = Object.assign({}, payload, {
-          capabilityId: preview.selectedCapabilityId || payload.capabilityId,
-          executionAuthorization: {
-            confirmed: true,
-            workingDirectory: preview.workingDirectory,
-            readScope: preview.readScope,
-            writeScope: preview.writeScope,
-            projectOrigin: preview.projectOrigin || "unknown",
-          },
-        });
-        const next = await api.invoke("work.submitTask", authPayload);
-        return applySubmitTaskResult(next, authPayload, goal, {
-          fromPlanConfirm,
-          _authDone: true,
-        });
-      }
-      showPrepBlocked("high_risk", preview);
-      return "needs_confirmation";
+      // 非规划确认入口：不得自动附授权；引导用户在右栏确认最新规划
+      els.jobStatus.textContent = "请先在右侧确认最新规划后再开始";
+      els.jobStatus.classList.remove("error");
+      els.jobActionable.textContent = "确认规划后才会开始开发；高风险操作仍会单独请你确认。";
+      clearPrepBlocked();
+      refreshTaskWorkspace();
+      refreshWorkUxView({ executionConfirmCard: false, prepBlocked: false });
+      return "needs_plan_confirm";
     }
     workMode = "task";
     activeTaskId = result.taskId;
@@ -5955,6 +5936,7 @@
     }
     await syncActiveTaskStatus();
     startJobWatch(activeTaskId);
+    refreshTaskWorkspace();
     refreshWorkUxView({});
     return "started";
   }
@@ -6164,7 +6146,7 @@
       }
       const result = await api.invoke("work.submitTask", payload);
       await applySubmitTaskResult(result, payload, goal, {
-        fromPlanConfirm: !!converseDraftTaskId || !!activeTaskPlan,
+        fromPlanConfirm: false,
       });
     } catch (err) {
       els.jobStatus.textContent = userFacingWorkError(err);
@@ -6180,6 +6162,8 @@
     if (els.executionConfirmCard) {
       els.executionConfirmCard.hidden = true;
       els.executionConfirmCard.setAttribute("hidden", "");
+      els.executionConfirmCard.setAttribute("aria-hidden", "true");
+      els.executionConfirmCard.setAttribute("inert", "");
     }
   }
 
@@ -6215,80 +6199,13 @@
   }
 
   function showExecutionConfirmCard(preview) {
+    // D11-B：禁止再打开中栏执行确认卡；高风险走右栏，其它保持密封
     hideExecutorSetupCard();
     hideProjectFolderCard();
-    if (!els.executionConfirmCard) return;
-    els.executionConfirmCard.hidden = false;
-    els.executionConfirmCard.removeAttribute("hidden");
-    if (els.executionConfirmTitle) {
-      els.executionConfirmTitle.textContent = preview.title || "这项任务需要修改项目文件";
+    sealLegacyMidConfirmCards();
+    if (preview) {
+      showPrepBlocked("high_risk", preview);
     }
-    if (els.executionConfirmNotice) els.executionConfirmNotice.textContent = preview.notice || "";
-    if (els.confirmExecution) {
-      const unreliable = preview.understandingReliable === false;
-      els.confirmExecution.textContent = unreliable ? "仍要继续" : "确认并开始";
-    }
-    if (els.executionConfirmExecutor) {
-      els.executionConfirmExecutor.textContent = "代码执行能力";
-    }
-    if (els.executionConfirmProject) {
-      els.executionConfirmProject.textContent =
-        preview.projectName || basenamePath(preview.workingDirectory || "") || "（未命名项目）";
-    }
-    if (els.executionConfirmDir) els.executionConfirmDir.textContent = preview.workingDirectory || "";
-    const acc = preview.acceptancePreview || {};
-    if (els.executionConfirmAccept) {
-      const parts = []
-        .concat(acc.goals || [])
-        .concat(acc.tests || []);
-      els.executionConfirmAccept.textContent =
-        parts.filter(Boolean).join("；") || "按确认的目标与方案验收交付";
-    }
-    if (els.executionConfirmAllowed) {
-      els.executionConfirmAllowed.textContent = (preview.allowed || []).join("；") ||
-        "读取当前项目文件；修改确认范围内文件；运行本地测试";
-    }
-    if (els.executionConfirmDonot) {
-      const lines = (preview.forbidden || []).concat(acc.doNotDo || []);
-      els.executionConfirmDonot.textContent = [...new Set(lines)].slice(0, 8).join("；");
-    }
-    // 确认页强调目标/方案/边界，不要求用户理解发给执行者的技术指令
-    if (els.executionConfirmUnderstanding && els.executionConfirmUnderstandingList) {
-      const summaryLines = (preview.understandingSummary || [])
-        .map((s) => String(s || "").trim())
-        .filter(Boolean);
-      const titleEl = els.executionConfirmUnderstanding.querySelector(
-        ".execution-confirm-understanding-title",
-      );
-      if (titleEl) titleEl.textContent = "目标、方案与预计交付";
-      if (summaryLines.length) {
-        els.executionConfirmUnderstanding.hidden = false;
-        els.executionConfirmUnderstanding.removeAttribute("hidden");
-        els.executionConfirmUnderstandingList.innerHTML = "";
-        for (const line of summaryLines.slice(0, 8)) {
-          const li = document.createElement("li");
-          li.textContent = line;
-          els.executionConfirmUnderstandingList.appendChild(li);
-        }
-        const riskLi = document.createElement("li");
-        riskLi.textContent =
-          "重要边界：不会自动提交、推送或部署；仅在你确认的目录与权限范围内修改。";
-        els.executionConfirmUnderstandingList.appendChild(riskLi);
-      } else {
-        els.executionConfirmUnderstanding.hidden = true;
-        els.executionConfirmUnderstanding.setAttribute("hidden", "");
-        els.executionConfirmUnderstandingList.innerHTML = "";
-      }
-    }
-    if (els.executionConfirmForbidden) {
-      els.executionConfirmForbidden.innerHTML = "";
-      els.executionConfirmForbidden.hidden = true;
-      els.executionConfirmForbidden.setAttribute("hidden", "");
-    }
-    refreshWorkUxView({
-      executionConfirmCard: true,
-      understandingReliable: preview.understandingReliable !== false,
-    });
   }
 
   async function startTaskAfterConfirm(payload) {
@@ -8528,6 +8445,7 @@
   });
 
   (async () => {
+    sealLegacyMidConfirmCards();
     if (typeof api.getModelStatus === "function") {
       try {
         const info = await api.getModelStatus();

@@ -1273,7 +1273,8 @@ select {
 
 /* D11-B：规划卡与准备受阻 */
 .task-workspace-plan,
-.task-workspace-prep {
+.task-workspace-prep,
+.task-workspace-running {
   margin: 0 0 12px;
   padding: 12px 14px;
   border: 1px solid var(--border, #d8dde6);
@@ -1326,11 +1327,13 @@ select {
   gap: 8px;
 }
 
-/* D11-B：中栏三步技术确认卡不再作为默认用户路径（保留 DOM 供准备动作复用） */
+/* D11-B：中栏三步技术确认卡退出交互（保留 DOM 待 D11-E 清理；不可聚焦、不进业务判断） */
 .work-exec-block > #executor-setup-card,
 .work-exec-block > #project-folder-card,
 .work-exec-block > #execution-confirm-card {
   display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
 
 .artifact-scroll {

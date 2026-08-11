@@ -13,6 +13,8 @@ const tw = require('../../../electron/renderer/task-workspace.js') as {
     goal: string,
     preview: { workingDirectory?: string; writeScope?: string[] },
   ) => boolean;
+  renderTaskWorkspace: (input: object) => void;
+  titleForMode: (mode: string) => string;
 };
 
 const root = path.resolve(__dirname, '../../..');
@@ -35,6 +37,19 @@ describe('D11-B planning workspace', () => {
     assert.match(css, /#project-folder-card/);
     assert.match(css, /#execution-confirm-card/);
     assert.match(css, /display:\s*none\s*!important/);
+    assert.match(css, /pointer-events:\s*none\s*!important/);
+  });
+
+  it('右栏含开发中面板；Job 执行后即可刷新进展', async () => {
+    const html = await fs.readFile(path.join(root, 'electron/renderer/index.html'), 'utf8');
+    assert.match(html, /id="task-workspace-running"/);
+    assert.match(html, /id="tw-running-title"[^>]*>开发中/);
+    const app = await fs.readFile(path.join(root, 'electron/renderer/app.js'), 'utf8');
+    assert.match(app, /sealLegacyMidConfirmCards/);
+    assert.match(app, /mode = "running"/);
+    assert.match(app, /fromPlanConfirm && !highRisk/);
+    assert.match(app, /请先在右侧确认最新规划后再开始/);
+    assert.equal(app.includes('非规划确认入口的遗留路径：仍自动授权'), false);
   });
 
   it('app.js：规划水合、确认开始、低风险自动授权、准备受阻', async () => {
@@ -49,7 +64,7 @@ describe('D11-B planning workspace', () => {
     assert.match(app, /规划已更新，请查看右侧最新规划后再确认开始/);
   });
 
-  it('task-workspace：解析规划栏目与高风险判定', () => {
+  it('task-workspace：解析规划栏目、高风险判定与开发中渲染', () => {
     const sections = tw.parsePlanSections(
       '目标：打飞机\n交付：网页版\n路径：先做基础版\n准备：需要项目位置\n边界：不联网',
       'fallback',
@@ -68,6 +83,8 @@ describe('D11-B planning workspace', () => {
       }),
       true,
     );
+    assert.equal(typeof tw.renderTaskWorkspace, 'function');
+    assert.equal(tw.titleForMode('running'), '任务工作区 · 开发中');
   });
 
   it('work.converse 首轮会种子 draft plan；submitTask 校验规划版本', async () => {

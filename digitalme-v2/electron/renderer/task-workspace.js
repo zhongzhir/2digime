@@ -79,6 +79,7 @@
    * @param {string} [input.goal]
    * @param {'planning'|'prep_blocked'|'running'|'complete'|'idle'} input.mode
    * @param {object|null} [input.prep]
+   * @param {{ progressNote?: string, planVersion?: number }|null} [input.running]
    * @param {string} [input.title]
    */
   function renderTaskWorkspace(input) {
@@ -86,6 +87,7 @@
     if (!root) return;
     const planEl = root.querySelector('#task-workspace-plan');
     const prepEl = root.querySelector('#task-workspace-prep');
+    const runningEl = root.querySelector('#task-workspace-running');
     const titleEl = root.querySelector('#task-workspace-title');
     const mode = (input && input.mode) || 'idle';
 
@@ -103,12 +105,17 @@
       prepEl.hidden = !showPrep;
       if (showPrep) setPrepEl(prepEl, input.prep);
     }
+    if (runningEl) {
+      const showRunning = mode === 'running';
+      runningEl.hidden = !showRunning;
+      if (showRunning) setRunningEl(runningEl, input.running || {}, input.plan);
+    }
   }
 
   function titleForMode(mode) {
     if (mode === 'planning') return '任务工作区 · 规划';
     if (mode === 'prep_blocked') return '任务工作区 · 准备';
-    if (mode === 'running') return '任务工作区 · 进行中';
+    if (mode === 'running') return '任务工作区 · 开发中';
     if (mode === 'complete') return '任务工作区 · 成果';
     return '任务工作区';
   }
@@ -156,6 +163,23 @@
     setText('#tw-prep-checked', prep.checked || '');
     setText('#tw-prep-action', prep.action || '');
     setText('#tw-prep-continue', prep.continueHint || '完成后点「继续准备」或再次确认开始。');
+  }
+
+  function setRunningEl(runningEl, running, plan) {
+    const title = runningEl.querySelector('#tw-running-title');
+    const planEl = runningEl.querySelector('#tw-running-plan');
+    const progressEl = runningEl.querySelector('#tw-running-progress');
+    if (title) title.textContent = '开发中';
+    if (planEl) {
+      const ver = running.planVersion || (plan && plan.version);
+      planEl.textContent = ver
+        ? '按已确认的规划版本 v' + String(ver) + ' 执行'
+        : '按已确认的规划执行';
+    }
+    if (progressEl) {
+      progressEl.textContent =
+        String(running.progressNote || '').trim() || '正在实现与验证，请稍候…';
+    }
   }
 
   /**
