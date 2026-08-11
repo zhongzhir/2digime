@@ -103,4 +103,13 @@ describe('D11-D controlled revision', () => {
     assert.equal(result.action, 'await_user');
     assert.equal(result.requireUserDecision, true);
   });
+
+  it('累计时长超限暂停', () => {
+    const result = decide(failure, {
+      cumulativeDurationMs: 45 * 60 * 1000,
+      maxCumulativeDurationMs: 45 * 60 * 1000,
+    });
+    assert.equal(result.action, 'pause');
+    assert.match(result.userFacingNote, /累计/);
+  });
 });

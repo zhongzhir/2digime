@@ -40,10 +40,27 @@ export interface TaskRevisionLoopMeta {
   paused?: boolean;
   pauseReason?: string;
   lastHandledVersionId?: string;
+  /** 真实 jobId，或 `pending:…` 占位（本身即可阻止并发认领）。 */
   inFlightJobId?: string;
+  /** 与 inFlightJobId 对应的认领令牌；创建 Job 后替换为真实 id。 */
+  claimToken?: string;
+  /** 认领开始时间；用于重启后过期 pending 收敛。 */
+  claimStartedAt?: string;
   attempts: RevisionAttemptRecord[];
   autoRoundCount: number;
 }
+
+/** 单任务自动修订轮次上限（须足以完成 2/3 刹车）。 */
+export const DEFAULT_MAX_AUTO_REVISION_ROUNDS = 6;
+/** 累计自动修订时长上限（毫秒）。 */
+export const DEFAULT_MAX_AUTO_REVISION_CUMULATIVE_MS = 45 * 60 * 1000;
+/**
+ * 单轮执行超时由 Coding Agent / external-executor 硬门承担（默认 600_000ms）。
+ * 见 capability/adapters/external-executor-codex.ts defaultTimeoutMs。
+ */
+export const EXTERNAL_EXECUTOR_DEFAULT_TIMEOUT_MS = 600_000;
+/** pending 认领过期阈值：超时且无 active Job 时可安全收敛。 */
+export const DEFAULT_REVISION_CLAIM_STALE_MS = 2 * 60 * 1000;
 
 export interface ControlledRevisionEvidence {
   decision: 'meets_plan' | 'needs_revision' | 'blocked' | 'insufficient_evidence' | string;
@@ -85,6 +102,9 @@ export interface ControlledRevisionInput {
   hasActiveJob: boolean;
   loop?: TaskRevisionLoopMeta;
   maxAutoRounds?: number;
+  /** 累计已用时长（毫秒）；超出则暂停。 */
+  cumulativeDurationMs?: number;
+  maxCumulativeDurationMs?: number;
   modelAvailable: boolean;
   pausedByUser: boolean;
   cancelled: boolean;
@@ -248,8 +268,12 @@ export function decideControlledRevision(input: ControlledRevisionInput): Contro
   }
   if (input.evidence.decision !== 'needs_revision') return { ...base, action: 'noop', userFacingNote: '当前不需要创建修订任务。', stopReason: 'not_revision' };
   if (!plan) return pause('缺少可执行的修改方案，已暂停自动修改。');
-  if ((loop.autoRoundCount ?? 0) >= (input.maxAutoRounds ?? 6)) {
+  if ((loop.autoRoundCount ?? 0) >= (input.maxAutoRounds ?? DEFAULT_MAX_AUTO_REVISION_ROUNDS)) {
     return pause('已达到本轮自动修改上限，请确认下一步。');
+  }
+  const maxCum = input.maxCumulativeDurationMs ?? DEFAULT_MAX_AUTO_REVISION_CUMULATIVE_MS;
+  if ((input.cumulativeDurationMs ?? 0) >= maxCum) {
+    return pause('已达到累计处理时长上限，请确认下一步。');
   }
   if (hasHighRiskMarker(plan) || hasGoalChangeMarker(plan)) {
     return {

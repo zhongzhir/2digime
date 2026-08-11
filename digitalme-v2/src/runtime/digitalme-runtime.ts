@@ -1536,6 +1536,7 @@ export class DigitalMeRuntime {
     await maybeRunControlledRevisionAfterJob(
       {
         getTask: (id) => this.work!.getTaskRecord(id),
+        withTaskExclusive: (id, fn) => this.work!.runExclusiveForTask(id, fn),
         updateRevisionLoop: (id, patch) => this.work!.updateTaskRevisionLoop(id, patch),
         appendConversation: async (id, turn) => {
           await this.work!.appendTaskConversation(id, {
@@ -1577,6 +1578,12 @@ export class DigitalMeRuntime {
           };
         },
         reviseArtifact: (input) => this.work!.reviseArtifact(input),
+        sumSucceededJobDurationMs: async (id) => {
+          const jobs = await this.work!.listJobsForTask(id);
+          return jobs
+            .filter((j) => j.status === 'succeeded')
+            .reduce((sum, j) => sum + (j.costActual?.durationMs ?? 0), 0);
+        },
         modelAvailable: !!ctoChat,
         ...(ctoChat
           ? {

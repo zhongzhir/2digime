@@ -656,6 +656,8 @@ export class WorkRuntime {
       await this.opts.taskService.updateRevisionLoop(job.taskId, (prev) => {
         const next = { ...prev, paused: true, pauseReason: 'user_cancelled' };
         delete next.inFlightJobId;
+        delete next.claimStartedAt;
+        delete next.claimToken;
         return next;
       });
     } catch {
@@ -1009,6 +1011,10 @@ export class WorkRuntime {
     return this.opts.jobStore.get(jobId);
   }
 
+  async listJobsForTask(taskId: string): Promise<ExecutionJob[]> {
+    return this.opts.jobStore.listByTask(taskId);
+  }
+
   // ── D11-A 对话中枢支撑：Task.meta.conversation / Task.meta.plan 最小读写 ──
   // 只是 TaskService 的受锁转发，不新增第二 Store 或状态机；本组方法不创建 Job。
 
@@ -1055,6 +1061,11 @@ export class WorkRuntime {
     patch: Parameters<import('./task-service').TaskService['updateRevisionLoop']>[1],
   ) {
     return this.withTaskLock(taskId, () => this.opts.taskService.updateRevisionLoop(taskId, patch));
+  }
+
+  /** D11-D：对外暴露同一 Task 临界区，供受控修订认领整段编排使用。 */
+  runExclusiveForTask<T>(taskId: string, fn: () => Promise<T>): Promise<T> {
+    return this.withTaskLock(taskId, fn);
   }
 
   async listSnapshotsForTask(taskId: string) {
@@ -2053,7 +2064,22 @@ export class WorkRuntime {
     this.opts.eventBus.publish(event);
   }
 
+  /** 同一调用栈内可重入，避免临界区内再调 updateTaskRevisionLoop / reviseArtifact 死锁。 */
+  private taskLockDepth = new Map<string, number>();
+
   private async withTaskLock<T>(taskId: string, fn: () => Promise<T>): Promise<T> {
+    const depth = this.taskLockDepth.get(taskId) ?? 0;
+    if (depth > 0) {
+      this.taskLockDepth.set(taskId, depth + 1);
+      try {
+        return await fn();
+      } finally {
+        const nextDepth = (this.taskLockDepth.get(taskId) ?? 1) - 1;
+        if (nextDepth <= 0) this.taskLockDepth.delete(taskId);
+        else this.taskLockDepth.set(taskId, nextDepth);
+      }
+    }
+
     const prev = this.taskLocks.get(taskId) ?? Promise.resolve();
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
@@ -2062,9 +2088,13 @@ export class WorkRuntime {
     const next = prev.then(() => gate);
     this.taskLocks.set(taskId, next);
     await prev.catch(() => undefined);
+    this.taskLockDepth.set(taskId, 1);
     try {
       return await fn();
     } finally {
+      const nextDepth = (this.taskLockDepth.get(taskId) ?? 1) - 1;
+      if (nextDepth <= 0) this.taskLockDepth.delete(taskId);
+      else this.taskLockDepth.set(taskId, nextDepth);
       release();
       if (this.taskLocks.get(taskId) === next) this.taskLocks.delete(taskId);
     }
