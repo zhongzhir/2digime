@@ -16,6 +16,13 @@ export type CtoPrimaryAction =
   | 'need_decision'
   | 'pause';
 
+/** AI 验收的受限结论；旧同步判断未提供时保持可选以兼容既有存档。 */
+export type CtoReviewDecision =
+  | 'meets_plan'
+  | 'needs_revision'
+  | 'blocked'
+  | 'insufficient_evidence';
+
 export type DigitalMeCtoReview = {
   schemaVersion: 'digitalme-cto-review/1';
   /** 默认成果面自然语言报告（主文案） */
@@ -36,6 +43,10 @@ export type DigitalMeCtoReview = {
   confidence: 'high' | 'medium' | 'low';
   requiresUserDecision: boolean;
   decisionPrompt?: string;
+  /** AI 验收的结构化结论（不含模型原文或提示词）。 */
+  decision?: CtoReviewDecision;
+  /** 支撑该结论的已核对证据引用。 */
+  evidenceRefs?: string[];
 };
 
 export type CtoReviewInput = {

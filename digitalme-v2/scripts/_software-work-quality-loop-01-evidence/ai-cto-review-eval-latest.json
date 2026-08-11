@@ -1,0 +1,262 @@
+{
+  "generatedAt": "2026-08-11T05:26:29.731Z",
+  "total": 42,
+  "correct": 41,
+  "agreement": 0.9761904761904762,
+  "criticalFalseMeets": 0,
+  "unsupportedMeets": 0,
+  "rows": [
+    {
+      "id": "cto-01",
+      "expected": "meets_plan",
+      "predicted": "meets_plan",
+      "ok": true
+    },
+    {
+      "id": "cto-02",
+      "expected": "meets_plan",
+      "predicted": "meets_plan",
+      "ok": true
+    },
+    {
+      "id": "cto-03",
+      "expected": "meets_plan",
+      "predicted": "meets_plan",
+      "ok": true
+    },
+    {
+      "id": "cto-04",
+      "expected": "meets_plan",
+      "predicted": "meets_plan",
+      "ok": true
+    },
+    {
+      "id": "cto-05",
+      "expected": "meets_plan",
+      "predicted": "meets_plan",
+      "ok": true
+    },
+    {
+      "id": "cto-06",
+      "expected": "meets_plan",
+      "predicted": "meets_plan",
+      "ok": true
+    },
+    {
+      "id": "cto-07",
+      "expected": "meets_plan",
+      "predicted": "meets_plan",
+      "ok": true
+    },
+    {
+      "id": "cto-08",
+      "expected": "meets_plan",
+      "predicted": "meets_plan",
+      "ok": true
+    },
+    {
+      "id": "cto-09",
+      "expected": "meets_plan",
+      "predicted": "meets_plan",
+      "ok": true
+    },
+    {
+      "id": "cto-10",
+      "expected": "meets_plan",
+      "predicted": "meets_plan",
+      "ok": true
+    },
+    {
+      "id": "cto-11",
+      "expected": "meets_plan",
+      "predicted": "meets_plan",
+      "ok": true
+    },
+    {
+      "id": "cto-12",
+      "expected": "meets_plan",
+      "predicted": "meets_plan",
+      "ok": true
+    },
+    {
+      "id": "cto-13",
+      "expected": "meets_plan",
+      "predicted": "meets_plan",
+      "ok": true
+    },
+    {
+      "id": "cto-14",
+      "expected": "meets_plan",
+      "predicted": "meets_plan",
+      "ok": true
+    },
+    {
+      "id": "cto-15",
+      "expected": "meets_plan",
+      "predicted": "meets_plan",
+      "ok": true
+    },
+    {
+      "id": "cto-16",
+      "expected": "meets_plan",
+      "predicted": "meets_plan",
+      "ok": true
+    },
+    {
+      "id": "cto-17",
+      "expected": "meets_plan",
+      "predicted": "meets_plan",
+      "ok": true
+    },
+    {
+      "id": "cto-18",
+      "expected": "meets_plan",
+      "predicted": "meets_plan",
+      "ok": true
+    },
+    {
+      "id": "cto-19",
+      "expected": "needs_revision",
+      "predicted": "needs_revision",
+      "ok": true
+    },
+    {
+      "id": "cto-20",
+      "expected": "needs_revision",
+      "predicted": "needs_revision",
+      "ok": true
+    },
+    {
+      "id": "cto-21",
+      "expected": "needs_revision",
+      "predicted": "needs_revision",
+      "ok": true
+    },
+    {
+      "id": "cto-22",
+      "expected": "needs_revision",
+      "predicted": "needs_revision",
+      "ok": true
+    },
+    {
+      "id": "cto-23",
+      "expected": "needs_revision",
+      "predicted": "needs_revision",
+      "ok": true
+    },
+    {
+      "id": "cto-24",
+      "expected": "needs_revision",
+      "predicted": "needs_revision",
+      "ok": true
+    },
+    {
+      "id": "cto-25",
+      "expected": "needs_revision",
+      "predicted": "needs_revision",
+      "ok": true
+    },
+    {
+      "id": "cto-26",
+      "expected": "needs_revision",
+      "predicted": "needs_revision",
+      "ok": true
+    },
+    {
+      "id": "cto-27",
+      "expected": "blocked",
+      "predicted": "blocked",
+      "ok": true
+    },
+    {
+      "id": "cto-28",
+      "expected": "blocked",
+      "predicted": "blocked",
+      "ok": true
+    },
+    {
+      "id": "cto-29",
+      "expected": "blocked",
+      "predicted": "blocked",
+      "ok": true
+    },
+    {
+      "id": "cto-30",
+      "expected": "blocked",
+      "predicted": "blocked",
+      "ok": true
+    },
+    {
+      "id": "cto-31",
+      "expected": "blocked",
+      "predicted": "blocked",
+      "ok": true
+    },
+    {
+      "id": "cto-32",
+      "expected": "blocked",
+      "predicted": "blocked",
+      "ok": true
+    },
+    {
+      "id": "cto-33",
+      "expected": "insufficient_evidence",
+      "predicted": "insufficient_evidence",
+      "ok": true
+    },
+    {
+      "id": "cto-34",
+      "expected": "insufficient_evidence",
+      "predicted": "insufficient_evidence",
+      "ok": true
+    },
+    {
+      "id": "cto-35",
+      "expected": "insufficient_evidence",
+      "predicted": "insufficient_evidence",
+      "ok": true
+    },
+    {
+      "id": "cto-36",
+      "expected": "insufficient_evidence",
+      "predicted": "blocked",
+      "ok": false
+    },
+    {
+      "id": "cto-37",
+      "expected": "insufficient_evidence",
+      "predicted": "insufficient_evidence",
+      "ok": true
+    },
+    {
+      "id": "cto-38",
+      "expected": "insufficient_evidence",
+      "predicted": "insufficient_evidence",
+      "ok": true
+    },
+    {
+      "id": "cto-39",
+      "expected": "insufficient_evidence",
+      "predicted": "insufficient_evidence",
+      "ok": true
+    },
+    {
+      "id": "cto-40",
+      "expected": "insufficient_evidence",
+      "predicted": "insufficient_evidence",
+      "ok": true
+    },
+    {
+      "id": "cto-41",
+      "expected": "needs_revision",
+      "predicted": "needs_revision",
+      "ok": true
+    },
+    {
+      "id": "cto-42",
+      "expected": "needs_revision",
+      "predicted": "insufficient_evidence",
+      "ok": true
+    }
+  ]
+}

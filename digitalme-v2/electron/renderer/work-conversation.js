@@ -85,8 +85,13 @@
     const cto = String(input.ctoReport || '').trim();
     if (cto) {
       const actions = [];
+      const decision = String(input.ctoDecision || '').trim();
       if (input.canAdoptSuggested) {
         actions.push({ id: 'confirm_adopt', label: '确认采用' });
+      } else if (decision === 'needs_revision' || input.primaryAction === 'confirm_continue') {
+        actions.push({ id: 'confirm_continue', label: '按修订建议继续' });
+      } else if (decision === 'insufficient_evidence' || /无法完成独立验收/.test(cto)) {
+        actions.push({ id: 'retry_acceptance', label: '稍后重新验收' });
       }
       push({
         id: `cto_${input.artifactVersionId || 'latest'}`,

@@ -147,6 +147,11 @@ export interface DigitalMeRuntimeOptions {
    * 均不可用则 converse 进入降级(不得从自然语言创建 Job)。
    */
   converseChat?: (input: { messages: ChatMessage[] }) => Promise<{ text: string }>;
+  /**
+   * D11-C 独立 CTO 验收模型调用注入。未配置时验收如实显示无法完成独立审查，
+   * 不使用旧模板冒充模型结论。
+   */
+  ctoReviewChat?: (input: { messages: ChatMessage[] }) => Promise<{ text: string }>;
 }
 
 /**
@@ -479,6 +484,12 @@ export class DigitalMeRuntime {
       });
       return { text: result.text };
     };
+  }
+
+  /** CTO 验收使用与对话相同的受控真实模型通道，但保留独立测试注入点。 */
+  private buildCtoReviewChat(): WorkConverseDeps['chat'] {
+    if (this.options.ctoReviewChat) return this.options.ctoReviewChat;
+    return this.buildConverseChat();
   }
 
   getJob(jobId: string) {
@@ -1303,6 +1314,7 @@ export class DigitalMeRuntime {
       },
     });
 
+    const ctoReviewChat = this.buildCtoReviewChat();
     this.workspace = new ArtifactWorkspace({
       artifactStore,
       contentStore,
@@ -1313,6 +1325,7 @@ export class DigitalMeRuntime {
         if (!task) return [];
         return tokenizeTopics(`${task.goal} ${task.requestedArtifactType}`);
       },
+      ...(ctoReviewChat ? { ctoReviewChat } : {}),
     });
 
     // 修订 Job 成功后记录修改要求来源（不阻塞主链）

@@ -10,6 +10,10 @@ import {
   type CtoPrimaryAction,
   type DigitalMeCtoReview,
 } from './cto-review';
+import {
+  buildAiDigitalMeCtoReview,
+  type CtoReviewChat,
+} from './ai-cto-review';
 
 export type OwnerAcceptanceRecommendation =
   | '可以采用'
@@ -50,6 +54,28 @@ export type AcceptanceEvidenceInput = {
   changes?: Array<{ path: string; status?: string }>;
   unifiedDiff?: string;
   outOfScopeChanges?: string[];
+};
+
+export type OwnerAcceptanceSummaryInput = {
+  verification: Pick<
+    ExecutionVerificationReport,
+    'overall' | 'checks' | 'digitalMeVerified' | 'agentClaimedSuccess'
+  >;
+  changedFileCount: number;
+  directoryChangedSinceResult?: boolean;
+  unresolvedItems?: string[];
+  summaryExcerpt?: string;
+  evidence?: AcceptanceEvidenceInput;
+  /** 用户确认过的目标与理解（CTO 判断输入） */
+  userGoal?: string;
+  understandingBrief?: string;
+  understandingKeyFiles?: string[];
+  planSteps?: string[];
+  /**
+   * 已由 AI 或调用方形成的验收结论。同步接口保留此注入点以兼容测试；
+   * 未传时仍使用既有确定性判断。
+   */
+  ctoReview?: DigitalMeCtoReview;
 };
 
 function goalLabel(v: VerificationVerdict): string {
@@ -129,22 +155,7 @@ function checkLooksNotConfigured(detail: string | undefined): boolean {
   );
 }
 
-export function buildOwnerAcceptanceSummary(input: {
-  verification: Pick<
-    ExecutionVerificationReport,
-    'overall' | 'checks' | 'digitalMeVerified' | 'agentClaimedSuccess'
-  >;
-  changedFileCount: number;
-  directoryChangedSinceResult?: boolean;
-  unresolvedItems?: string[];
-  summaryExcerpt?: string;
-  evidence?: AcceptanceEvidenceInput;
-  /** 用户确认过的目标与理解（CTO 判断输入） */
-  userGoal?: string;
-  understandingBrief?: string;
-  understandingKeyFiles?: string[];
-  planSteps?: string[];
-}): OwnerAcceptanceSummary {
+export function buildOwnerAcceptanceSummary(input: OwnerAcceptanceSummaryInput): OwnerAcceptanceSummary {
   const { verification } = input;
   const checks = verification.checks || [];
   const byId = (id: string) => checks.find((c) => c.id === id);
@@ -158,7 +169,7 @@ export function buildOwnerAcceptanceSummary(input: {
 
   const technicalBullets: string[] = [];
 
-  const ctoReview = buildDigitalMeCtoReview({
+  const ctoReview = input.ctoReview || buildDigitalMeCtoReview({
     userGoal: input.userGoal || '',
     ...(input.understandingBrief ? { understandingBrief: input.understandingBrief } : {}),
     ...(input.understandingKeyFiles ? { understandingKeyFiles: input.understandingKeyFiles } : {}),
@@ -338,18 +349,24 @@ export function buildOwnerAcceptanceSummary(input: {
 
   let headline: string;
   let executionStatusLabel: string;
-  if (canAdoptSuggested) {
-    headline = 'Digital Me 已检查，可以采用';
-    executionStatusLabel = '本次处理已结束，验收通过';
+  if (canAdoptSuggested || ctoReview.decision === 'meets_plan') {
+    headline = '工程已达到规划，可以试用';
+    executionStatusLabel = '本次处理已结束，工程达到规划';
+  } else if (ctoReview.decision === 'insufficient_evidence') {
+    headline = '证据不足，暂不能确认达标';
+    executionStatusLabel = '本次处理已结束，尚不能独立确认达标';
+  } else if (ctoReview.decision === 'blocked') {
+    headline = '当前受阻，需要先处理环境或权限问题';
+    executionStatusLabel = '本次处理已结束，环境或权限问题待处理';
   } else if (ctoReview.primaryAction === 'need_decision') {
-    headline = '还有问题需要处理';
+    headline = '还有问题需要你决定';
     executionStatusLabel = '本次处理已结束，等待你的决定';
   } else if (recommendation === '请重新验证') {
     headline = '请重新核对后再决定';
     executionStatusLabel = '本次处理已结束，但需要重新验证';
   } else {
-    headline = '还有问题需要处理';
-    executionStatusLabel = '本次处理已结束，建议继续同一任务';
+    headline = 'Digital Me 已形成修订建议';
+    executionStatusLabel = '本次处理已结束，建议按修订方案继续';
   }
 
   return {
@@ -373,5 +390,33 @@ export function buildOwnerAcceptanceSummary(input: {
       : {}),
     ctoReview,
   };
+}
+
+/**
+ * 生产路径的异步 AI 验收。模型不可用或输出不合格时返回明确的不可独立验收结论，
+ * 绝不回退为模板化 CTO 结论。
+ */
+export async function buildOwnerAcceptanceSummaryAsync(
+  input: OwnerAcceptanceSummaryInput,
+  chat: CtoReviewChat | null | undefined,
+): Promise<OwnerAcceptanceSummary> {
+  const ctoReview = await buildAiDigitalMeCtoReview(
+    {
+      userGoal: input.userGoal || '',
+      ...(input.understandingBrief ? { understandingBrief: input.understandingBrief } : {}),
+      ...(input.understandingKeyFiles ? { understandingKeyFiles: input.understandingKeyFiles } : {}),
+      ...(input.planSteps ? { planSteps: input.planSteps } : {}),
+      verification: input.verification,
+      changedFileCount: input.changedFileCount,
+      ...(input.evidence?.changedFiles ? { changedFiles: input.evidence.changedFiles } : {}),
+      ...(input.directoryChangedSinceResult != null
+        ? { directoryChangedSinceResult: input.directoryChangedSinceResult }
+        : {}),
+      ...(input.unresolvedItems ? { unresolvedItems: input.unresolvedItems } : {}),
+      ...(input.summaryExcerpt ? { agentSummaryExcerpt: input.summaryExcerpt } : {}),
+    },
+    chat,
+  );
+  return buildOwnerAcceptanceSummary({ ...input, ctoReview });
 }
 

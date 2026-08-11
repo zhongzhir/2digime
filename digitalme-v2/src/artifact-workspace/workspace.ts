@@ -15,6 +15,7 @@ import { InMemoryEventBus } from '../work-runtime/event-bus';
 import { extractEditEvidence } from '../subject-core/diff-evidence';
 import type { GrowthEvent } from '../subject-core/growth-event';
 import type { SubjectService } from '../subject-core/subject-service';
+import type { ChatMessage } from '../infrastructure/model-http';
 
 export interface ArtifactWorkspaceOptions {
   artifactStore: ObjectStore<Artifact>;
@@ -23,6 +24,8 @@ export interface ArtifactWorkspaceOptions {
   eventBus: InMemoryEventBus;
   /** 从 Task 取主题词,写入 candidate tags 以便相似任务命中。 */
   resolveTaskTopics?: (taskId: string) => Promise<string[]>;
+  /** D11-C 独立 CTO 验收模型通道；缺省时明确返回无法独立验收。 */
+  ctoReviewChat?: (input: { messages: ChatMessage[] }) => Promise<{ text: string }>;
 }
 
 /**
@@ -36,6 +39,7 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
   private readonly subjectService: SubjectService;
   private readonly eventBus: InMemoryEventBus;
   private readonly resolveTaskTopics?: (taskId: string) => Promise<string[]>;
+  private readonly ctoReviewChat?: (input: { messages: ChatMessage[] }) => Promise<{ text: string }>;
 
   constructor(options: ArtifactWorkspaceOptions) {
     this.artifactStore = options.artifactStore;
@@ -43,6 +47,7 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
     this.subjectService = options.subjectService;
     this.eventBus = options.eventBus;
     if (options.resolveTaskTopics) this.resolveTaskTopics = options.resolveTaskTopics;
+    if (options.ctoReviewChat) this.ctoReviewChat = options.ctoReviewChat;
   }
 
   async getContent(
@@ -232,7 +237,7 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
             const { userFacingVerification } = await import(
               '../execution/external-executor-contract'
             );
-            const { buildOwnerAcceptanceSummary } = await import(
+            const { buildOwnerAcceptanceSummaryAsync } = await import(
               '../execution/acceptance-summary'
             );
             const { computeScopeDigest } = await import('../execution/baseline');
@@ -564,7 +569,7 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
                     detail: c.detail ?? '',
                   }))
                 : [];
-              const acceptanceSummary = buildOwnerAcceptanceSummary({
+              const acceptanceSummary = await buildOwnerAcceptanceSummaryAsync({
                 verification: {
                   overall: parsed.verificationOverall as
                     | 'satisfied'
@@ -601,7 +606,7 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
                 ...(understanding?.planSteps?.length
                   ? { planSteps: understanding.planSteps }
                   : {}),
-              });
+              }, this.ctoReviewChat);
               codeChange.acceptanceSummary = acceptanceSummary;
               const startup = checks.find((c) => c.id === 'run_startup_check');
               if (codeChange.runInfo) {

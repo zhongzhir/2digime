@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<title>D11-C AI CTO Review Visual</title>
+<style>
+:root { --border:#d8dde6; --panel:#f7f8fb; --text:#1a1f2c; --muted:#5b6475; --ok:#1f6b3a; --warn:#8a5a00; }
+body { margin:0; font:14px/1.5 "Segoe UI",sans-serif; color:var(--text); background:#eef1f6; }
+.layout { display:grid; grid-template-columns: 220px 1fr 320px; height:100vh; }
+.col { background:#fff; border-right:1px solid var(--border); padding:12px; overflow:auto; }
+.col:last-child { border-right:none; }
+h2,h3 { margin:0 0 8px; font-size:15px; }
+.muted { color:var(--muted); }
+.tiny { font-size:12px; }
+.panel { border:1px solid var(--border); border-radius:10px; background:var(--panel); padding:12px; margin-bottom:12px; }
+.work-turn { margin:0 0 12px; padding:10px 12px; border:1px solid var(--border); border-radius:8px; }
+.work-turn-role { font-size:12px; color:var(--muted); margin-bottom:4px; }
+.work-turn-actions { margin-top:8px; display:flex; gap:8px; }
+button { border:1px solid var(--border); border-radius:8px; padding:6px 12px; background:#fff; }
+button.primary { background:#1f3a5f; color:#fff; border-color:#1f3a5f; }
+.compose { margin-top:16px; border-top:1px solid var(--border); padding-top:12px; }
+.compose input { width:100%; box-sizing:border-box; padding:8px; border:1px solid var(--border); border-radius:8px; }
+.tech { margin-top:8px; }
+.badge-ok { color:var(--ok); font-weight:600; }
+.badge-warn { color:var(--warn); font-weight:600; }
+#task-workspace-running[hidden], #task-workspace-result[hidden], #tech-fold[hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="col">
+    <h2>任务</h2>
+    <p id="left-stage">开发中</p>
+    <p class="muted tiny" id="job-status">正在处理</p>
+  </aside>
+  <main class="col">
+    <h2>对话</h2>
+    <div id="work-timeline"></div>
+    <div class="compose">
+      <p class="muted tiny">输入区始终可用</p>
+      <input id="nl" value="" placeholder="继续说明你的想法…" />
+    </div>
+  </main>
+  <aside class="col" id="artifact-panel">
+    <h2 id="task-workspace-title">任务工作区 · 开发中</h2>
+    <div id="task-workspace-running" class="panel">
+      <h3>开发中</h3>
+      <p class="muted">按已确认的规划版本 v2 执行</p>
+      <p id="tw-running-progress">正在实现与验证，请稍候…</p>
+    </div>
+    <div id="task-workspace-result" class="panel" hidden>
+      <h3 id="result-title">成果</h3>
+      <p id="result-body"></p>
+      <p id="try-run" class="badge-ok" hidden>可以试用：打开项目预览</p>
+      <details class="tech" id="tech-fold">
+        <summary>技术证据（默认折叠）</summary>
+        <p class="tiny muted">构建通过 · 测试通过 · 修改 3 个文件</p>
+      </details>
+    </div>
+  </aside>
+</div>
+<script>
+function setTimeline(html){ document.getElementById('work-timeline').innerHTML = html; }
+function setRunning(){
+  document.getElementById('task-workspace-running').hidden = false;
+  document.getElementById('task-workspace-result').hidden = true;
+  document.getElementById('task-workspace-title').textContent = '任务工作区 · 开发中';
+}
+function setResult(title, body, opts){
+  opts = opts || {};
+  document.getElementById('task-workspace-running').hidden = true;
+  document.getElementById('task-workspace-result').hidden = false;
+  document.getElementById('task-workspace-title').textContent = '任务工作区 · 成果';
+  document.getElementById('result-title').textContent = title;
+  document.getElementById('result-body').textContent = body;
+  document.getElementById('try-run').hidden = !opts.tryRun;
+  document.getElementById('tech-fold').hidden = !!opts.hideTech;
+}
+</script>
+</body>
+</html>
