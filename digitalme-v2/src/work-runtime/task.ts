@@ -8,6 +8,7 @@
  * intentKind ≠ capabilityId ≠ requestedArtifactType(期望产出族)。
  */
 import type { TaskIntentKind } from './work-intent';
+import type { TaskRevisionLoopMeta } from './controlled-revision';
 
 export interface Task {
   id: string;
@@ -55,6 +56,11 @@ export interface ContextRef {
 export interface TaskMeta {
   conversation?: TaskConversation;
   plan?: TaskPlan;
+  /**
+   * D11-D：不是第二状态机；attempts 是自动修订的审计记录，
+   * 连续失败数由 attempts 与 Job 事实派生。
+   */
+  revisionLoop?: TaskRevisionLoopMeta;
 }
 
 /**

@@ -651,6 +651,17 @@ export class WorkRuntime {
     if (!job) return { cancelled: false };
     if (isTerminal(job.status)) return { cancelled: false };
 
+    // D11-D：用户取消后禁止延迟回调再自动修订
+    try {
+      await this.opts.taskService.updateRevisionLoop(job.taskId, (prev) => {
+        const next = { ...prev, paused: true, pauseReason: 'user_cancelled' };
+        delete next.inFlightJobId;
+        return next;
+      });
+    } catch {
+      /* 取消主路径优先 */
+    }
+
     if (job.status === 'queued') {
       const next = transitionJob(job, 'cancelled', nowIso());
       await this.persistJob(next, '取消排队中的任务');
@@ -1037,6 +1048,13 @@ export class WorkRuntime {
 
   async updateTaskPlan(taskId: string, plan: import('./task').TaskPlan) {
     return this.withTaskLock(taskId, () => this.opts.taskService.updatePlan(taskId, plan));
+  }
+
+  async updateTaskRevisionLoop(
+    taskId: string,
+    patch: Parameters<import('./task-service').TaskService['updateRevisionLoop']>[1],
+  ) {
+    return this.withTaskLock(taskId, () => this.opts.taskService.updateRevisionLoop(taskId, patch));
   }
 
   async listSnapshotsForTask(taskId: string) {

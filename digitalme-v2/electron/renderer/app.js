@@ -3120,15 +3120,32 @@
     const js = job ? String(job.status || "") : "";
     const running = js === "queued" || js === "running";
     const hasArtifact = !!activeArtifactId;
+    const revising =
+      running &&
+      !!(job && job.revisionRequest);
+    const loop =
+      detail && detail.task && detail.task.meta && detail.task.meta.revisionLoop
+        ? detail.task.meta.revisionLoop
+        : null;
     let mode = "idle";
     if (prepBlockedState) mode = "prep_blocked";
+    else if (revising) mode = "revising";
     else if (running) mode = "running";
     else if (hasArtifact) mode = "complete";
     else if (activeTaskPlan && activeTaskPlan.content) mode = "planning";
     const progressNote =
+      (loop && loop.paused && loop.pauseReason && !running
+        ? "已暂停自动修订。可在对话中说明下一步，或点继续。"
+        : null) ||
       (job && (job.progressNote || job.actionable || job.userFacingLabel)) ||
       (detail && detail.userFacingLabel) ||
       "";
+    const round =
+      loop && typeof loop.autoRoundCount === "number" && loop.autoRoundCount > 0
+        ? loop.autoRoundCount
+        : revising
+          ? 1
+          : null;
     tw.renderTaskWorkspace({
       root: panel,
       mode,
@@ -3139,6 +3156,7 @@
         ? {
             progressNote: String(progressNote || "").trim() || "正在实现与验证，请稍候…",
             planVersion: activeTaskPlan && activeTaskPlan.version,
+            ...(round ? { round } : {}),
           }
         : null,
       title: tw.titleForMode(mode),
@@ -3263,6 +3281,17 @@
       ctoReport: acc.ctoReport || "",
       ctoDecision: (acc.ctoReview && acc.ctoReview.decision) || "",
       primaryAction: acc.primaryAction || "",
+      revisionPaused: !!(
+        detail &&
+        detail.task &&
+        detail.task.meta &&
+        detail.task.meta.revisionLoop &&
+        detail.task.meta.revisionLoop.paused
+      ),
+      requireUserDecision: !!(
+        (acc.ctoReview && acc.ctoReview.requiresUserDecision) ||
+        acc.primaryAction === "need_decision"
+      ),
       userFacingNextStep: acc.userFacingNextStep || "",
       canAdoptSuggested: !!acc.canAdoptSuggested,
       artifactVersionId: activeHeadVersionId || "",
@@ -3582,6 +3611,13 @@
             hideRevisionComposer();
             hideAdoptWarning();
             if (els.jobStatus) els.jobStatus.textContent = "任务已暂停";
+            if (activeJobId) {
+              try {
+                await api.invoke("work.cancelJob", { jobId: activeJobId });
+              } catch {
+                /* ignore */
+              }
+            }
             workExtraTurns = workExtraTurns.concat([
               {
                 id: "dm_pause_btn_" + Date.now(),

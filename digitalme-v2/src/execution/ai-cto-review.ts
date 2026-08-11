@@ -53,7 +53,7 @@ const SYSTEM_PROMPT = [
   '所有数组均为简短中文字符串；evidenceRefs 必须逐项来自证据包 evidenceRefs。',
   '当证据包同时满足：changedFileCount>0、digitalMeVerified=true、file_changes/scope_boundary/git_integrity/build_check 均为 satisfied，且没有 unsatisfied 的硬门检查时，应判定 meets_plan。',
   '仅在关键核对项缺失、结果互相矛盾，或无法从现有证据支持目标时使用 insufficient_evidence。',
-  'needs_revision 的 revisionPlan 应是可交给专业执行者的明确修正要求，不创建任务、不承诺自动执行。',
+  'needs_revision 的 revisionPlan 应是可交给专业执行者的明确修正要求；系统可在授权范围内自动执行修订，不要向用户承诺具体轮次。',
   '面向用户的中文要中性、清楚，避免内部术语。',
 ].join('\n');
 

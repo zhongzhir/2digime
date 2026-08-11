@@ -7,6 +7,7 @@ import type {
   TaskIntentConclusion,
   TaskPlan,
 } from './task';
+import type { TaskRevisionLoopMeta } from './controlled-revision';
 import type { TaskIntentKind } from './work-intent';
 
 /**
@@ -122,6 +123,48 @@ export class TaskService {
     const updated: Task = {
       ...task,
       meta: { ...(task.meta ?? {}), plan },
+    };
+    await this.store.put(updated);
+    return updated;
+  }
+
+  /**
+   * D11-D：受控修订审计元数据。attempts 只追加，最多保留最近 30 条。
+   * 调用方可用函数式 patch 在同一读取快照上构造下一状态。
+   */
+  async updateRevisionLoop(
+    taskId: string,
+    patch:
+      | Partial<TaskRevisionLoopMeta>
+      | ((prev: TaskRevisionLoopMeta) => TaskRevisionLoopMeta),
+  ): Promise<Task> {
+    const task = await this.store.get(taskId);
+    if (!task) throw new Error(`task not found: ${taskId}`);
+    const prev: TaskRevisionLoopMeta = task.meta?.revisionLoop ?? {
+      attempts: [],
+      autoRoundCount: 0,
+    };
+    let revisionLoop: TaskRevisionLoopMeta;
+    if (typeof patch === 'function') {
+      // 函数式 patch：调用方负责完整下一状态；attempts 以返回值为准，仅截断长度
+      const next = patch(prev);
+      revisionLoop = {
+        ...next,
+        attempts: (next.attempts ?? []).slice(-30),
+        autoRoundCount: next.autoRoundCount ?? prev.autoRoundCount,
+      };
+    } else {
+      const added = Array.isArray(patch.attempts) ? patch.attempts : [];
+      revisionLoop = {
+        ...prev,
+        ...patch,
+        attempts: [...prev.attempts, ...added].slice(-30),
+        autoRoundCount: patch.autoRoundCount ?? prev.autoRoundCount,
+      };
+    }
+    const updated: Task = {
+      ...task,
+      meta: { ...(task.meta ?? {}), revisionLoop },
     };
     await this.store.put(updated);
     return updated;

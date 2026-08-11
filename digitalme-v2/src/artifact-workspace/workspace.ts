@@ -177,6 +177,12 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
             digitalMeVerified?: boolean;
             agentClaimedSuccess?: boolean;
             revisionRequest?: string;
+            checks?: Array<{
+              id: string;
+              title: string;
+              verdict: string;
+              detail?: string;
+            }>;
             runInfo?: {
               runnable: boolean;
               kind?: string;
@@ -608,6 +614,7 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
                   : {}),
               }, this.ctoReviewChat);
               codeChange.acceptanceSummary = acceptanceSummary;
+              codeChange.checks = checks;
               const startup = checks.find((c) => c.id === 'run_startup_check');
               if (codeChange.runInfo) {
                 // 只有 Digital Me 启动检查明确通过时才允许「可以试用」

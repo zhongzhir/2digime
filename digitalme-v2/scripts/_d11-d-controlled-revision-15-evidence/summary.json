@@ -1,0 +1,13 @@
+{
+  "task": "2DIGIME-BUILD-01-D11-D-CONTROLLED-REVISION-LOOP-15",
+  "generatedAt": "2026-08-11T06:33:18.551Z",
+  "userData": "C:\\Users\\46554\\AppData\\Local\\Temp\\dm-d11d-ud-UvDD2c",
+  "shots": {
+    "first": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_d11-d-controlled-revision-15-evidence\\01-first-auto-revision.png",
+    "second": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_d11-d-controlled-revision-15-evidence\\02-second-scheme-change.png",
+    "third": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_d11-d-controlled-revision-15-evidence\\03-third-forced-pause.png",
+    "expand": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_d11-d-controlled-revision-15-evidence\\04-expand-scope-user-decision.png",
+    "ready": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_d11-d-controlled-revision-15-evidence\\05-meets-plan-try.png"
+  },
+  "note": "engineering visual check only; owner_runtime_not_started; D11-E not implemented"
+}

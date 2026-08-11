@@ -106,9 +106,11 @@
       if (showPrep) setPrepEl(prepEl, input.prep);
     }
     if (runningEl) {
-      const showRunning = mode === 'running';
+      const showRunning = mode === 'running' || mode === 'revising';
       runningEl.hidden = !showRunning;
-      if (showRunning) setRunningEl(runningEl, input.running || {}, input.plan);
+      if (showRunning) {
+        setRunningEl(runningEl, input.running || {}, input.plan, mode === 'revising');
+      }
     }
   }
 
@@ -116,6 +118,7 @@
     if (mode === 'planning') return '任务工作区 · 规划';
     if (mode === 'prep_blocked') return '任务工作区 · 准备';
     if (mode === 'running') return '任务工作区 · 开发中';
+    if (mode === 'revising') return '任务工作区 · 修订中';
     if (mode === 'complete') return '任务工作区 · 成果';
     return '任务工作区';
   }
@@ -165,20 +168,23 @@
     setText('#tw-prep-continue', prep.continueHint || '完成后点「继续准备」或再次确认开始。');
   }
 
-  function setRunningEl(runningEl, running, plan) {
+  function setRunningEl(runningEl, running, plan, revising) {
     const title = runningEl.querySelector('#tw-running-title');
     const planEl = runningEl.querySelector('#tw-running-plan');
     const progressEl = runningEl.querySelector('#tw-running-progress');
-    if (title) title.textContent = '开发中';
+    if (title) title.textContent = revising ? '修订中' : '开发中';
     if (planEl) {
+      const round = running.round;
       const ver = running.planVersion || (plan && plan.version);
-      planEl.textContent = ver
-        ? '按已确认的规划版本 v' + String(ver) + ' 执行'
-        : '按已确认的规划执行';
+      const parts = [];
+      if (ver) parts.push('按已确认的规划版本 v' + String(ver));
+      if (round) parts.push('第 ' + String(round) + ' 轮');
+      planEl.textContent = parts.length ? parts.join(' · ') : '按已确认的规划执行';
     }
     if (progressEl) {
       progressEl.textContent =
-        String(running.progressNote || '').trim() || '正在实现与验证，请稍候…';
+        String(running.progressNote || '').trim() ||
+        (revising ? '正在按修订方案继续处理…' : '正在实现与验证，请稍候…');
     }
   }
 

@@ -316,6 +316,11 @@ export interface WorkConverseDeps {
     input: { turns: TaskConversationTurn[]; intents?: TaskIntentConclusion[] },
   ): Promise<Task>;
   updatePlan(taskId: string, plan: TaskPlan): Promise<Task>;
+  /** D11-D：暂停自动修订 / 目标变更后解除暂停。 */
+  updateRevisionLoop?(
+    taskId: string,
+    patch: import('./controlled-revision').TaskRevisionLoopMeta | ((prev: import('./controlled-revision').TaskRevisionLoopMeta) => import('./controlled-revision').TaskRevisionLoopMeta),
+  ): Promise<Task>;
   getTaskFacts(taskId: string): Promise<ConverseTaskFacts>;
 }
 
@@ -474,6 +479,27 @@ export async function runWorkConverse(
     turns: [userTurn, replyTurn],
     intents: [conclusion],
   });
+
+  // D11-D：暂停/目标变更与自动修订闸门联动（不新建命令）
+  if (deps.updateRevisionLoop) {
+    if (decision.pauseRequested) {
+      await deps.updateRevisionLoop(task.id, (prev) => {
+        const next = { ...prev, paused: true, pauseReason: 'user_pause' };
+        delete next.inFlightJobId;
+        return next;
+      });
+    } else if (
+      decision.intent === 'modify_plan' ||
+      decision.intent === 'add_goal_info' ||
+      decision.planDraftContent
+    ) {
+      await deps.updateRevisionLoop(task.id, (prev) => {
+        const next = { ...prev, paused: false };
+        delete next.pauseReason;
+        return next;
+      });
+    }
+  }
 
   return {
     taskId: task.id,

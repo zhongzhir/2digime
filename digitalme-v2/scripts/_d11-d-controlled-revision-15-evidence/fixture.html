@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"/><title>D11-D</title>
+<style>
+body{margin:0;font:14px/1.5 Segoe UI,sans-serif;color:#1a1f2c;background:#eef1f6}
+.layout{display:grid;grid-template-columns:200px 1fr 320px;height:100vh}
+.col{background:#fff;border-right:1px solid #d8dde6;padding:12px;overflow:auto}
+.col:last-child{border-right:0}
+.panel{border:1px solid #d8dde6;border-radius:10px;background:#f7f8fb;padding:12px;margin-bottom:12px}
+.turn{margin:0 0 12px;padding:10px 12px;border:1px solid #d8dde6;border-radius:8px}
+.role{font-size:12px;color:#5b6475;margin-bottom:4px}
+.compose{margin-top:16px;border-top:1px solid #d8dde6;padding-top:12px}
+.compose input{width:100%;box-sizing:border-box;padding:8px;border:1px solid #d8dde6;border-radius:8px}
+.muted{color:#5b6475}.ok{color:#1f6b3a;font-weight:600}
+button{border:1px solid #d8dde6;border-radius:8px;padding:6px 12px;background:#fff;margin-top:8px}
+</style></head><body>
+<div class="layout">
+<aside class="col"><h2>任务</h2><p id="left">修订中</p><p class="muted" id="status">自动处理中</p></aside>
+<main class="col"><h2>对话</h2><div id="tl"></div>
+<div class="compose"><p class="muted">输入区始终可用</p><input placeholder="继续说明你的想法…"></div></main>
+<aside class="col"><h2 id="rt">任务工作区 · 修订中</h2>
+<div id="rp" class="panel"><h3 id="rh">修订中</h3><p id="rr" class="muted">第 1 轮</p><p id="rb">正在解决启动失败问题</p><p id="ru" class="muted">当前不需要你操作</p>
+<details><summary>技术证据（默认折叠）</summary><p class="muted">构建通过 · 启动失败</p></details></div>
+</aside></div>
+<script>
+function set(left,status,title,h,round,body,needUser,tl){
+  document.getElementById('left').textContent=left;
+  document.getElementById('status').textContent=status;
+  document.getElementById('rt').textContent=title;
+  document.getElementById('rh').textContent=h;
+  document.getElementById('rr').textContent=round;
+  document.getElementById('rb').textContent=body;
+  document.getElementById('ru').textContent=needUser?'需要你决定下一步':'当前不需要你操作';
+  document.getElementById('tl').innerHTML=tl;
+}
+</script></body></html>

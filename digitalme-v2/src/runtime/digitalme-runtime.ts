@@ -81,6 +81,7 @@ import { captureOutcomeUserHint, type CaptureOutcome } from '../subject-core/cap
 import { extractEditEvidence } from '../subject-core/diff-evidence';
 import { headVersion } from '../work-runtime/artifact';
 import { runWorkConverse, type WorkConverseDeps } from '../work-runtime/work-converse';
+import { maybeRunControlledRevisionAfterJob } from '../work-runtime/controlled-revision-runner';
 import { chatComplete, type ChatMessage } from '../infrastructure/model-http';
 import { providerCredentialKey } from '../infrastructure/secret-store';
 
@@ -442,6 +443,7 @@ export class DigitalMeRuntime {
       createTask: (i) => work.createConversationTask(i),
       appendConversation: (taskId, i) => work.appendTaskConversation(taskId, i),
       updatePlan: (taskId, plan) => work.updateTaskPlan(taskId, plan),
+      updateRevisionLoop: (taskId, patch) => work.updateTaskRevisionLoop(taskId, patch),
       getTaskFacts: async (taskId) => {
         const detail = await work.getTask({ taskId });
         const jobStatus = detail.latestJob?.status;
@@ -1328,11 +1330,14 @@ export class DigitalMeRuntime {
       ...(ctoReviewChat ? { ctoReviewChat } : {}),
     });
 
-    // 修订 Job 成功后记录修改要求来源（不阻塞主链）
+    // 修订 Job 成功后记录修改要求来源（不阻塞主链）；D11-D 受控修订在此之后调度
     if (this.unsubGrowthJobHook) this.unsubGrowthJobHook();
     this.unsubGrowthJobHook = this.eventBus.subscribe((event) => {
-      if (event.kind !== 'job.updated' || event.status !== 'succeeded') return;
-      void this.onJobSucceededForGrowth(event.jobId);
+      if (event.kind !== 'job.updated') return;
+      if (event.status === 'succeeded') {
+        void this.onJobSucceededForGrowth(event.jobId);
+        void this.onJobSucceededForControlledRevision(event.jobId);
+      }
     });
   }
 
@@ -1514,6 +1519,77 @@ export class DigitalMeRuntime {
       ...(rejectionReason ? { rejectionReason } : {}),
       ...(editSummary ? { editSummary } : {}),
     });
+  }
+
+  /**
+   * D11-D：Job 成功并形成验收结论后，在边界内自动启动下一轮修订。
+   * 不阻塞主链；失败不影响已成功 Job。
+   */
+  private async onJobSucceededForControlledRevision(jobId: string): Promise<void> {
+    if (!this.work || !this.workspace) return;
+    const job = await this.work.getJob(jobId);
+    if (!job || job.status !== 'succeeded') return;
+    const artifactId = job.artifactId || job.targetArtifactId;
+    if (!artifactId) return;
+    const taskId = job.taskId;
+    const ctoChat = this.buildCtoReviewChat();
+    await maybeRunControlledRevisionAfterJob(
+      {
+        getTask: (id) => this.work!.getTaskRecord(id),
+        updateRevisionLoop: (id, patch) => this.work!.updateTaskRevisionLoop(id, patch),
+        appendConversation: async (id, turn) => {
+          await this.work!.appendTaskConversation(id, {
+            turns: [
+              {
+                turnId: `turn_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+                role: turn.role,
+                content: turn.content,
+                createdAt: nowIso(),
+              },
+            ],
+          });
+        },
+        findActiveJob: async (id) => {
+          const detail = await this.work!.getTask({ taskId: id });
+          const latest = detail.latestJob;
+          if (!latest) return null;
+          if (latest.status !== 'queued' && latest.status !== 'running') return null;
+          return { id: latest.jobId };
+        },
+        getArtifactContent: async (id) => {
+          const content = await this.workspace!.getContent(id);
+          const head = headVersion(content.artifact);
+          const codeChange = (content as { codeChange?: Record<string, unknown> }).codeChange;
+          const acceptanceSummary =
+            codeChange && typeof codeChange === 'object'
+              ? (codeChange as { acceptanceSummary?: unknown }).acceptanceSummary
+              : undefined;
+          const checks =
+            codeChange && Array.isArray((codeChange as { checks?: unknown }).checks)
+              ? ((codeChange as { checks: Array<{ id?: string; verdict?: string; detail?: string }> })
+                  .checks)
+              : undefined;
+          return {
+            versionId: head.versionId,
+            ...(acceptanceSummary ? { acceptanceSummary } : {}),
+            ...(codeChange ? { codeChange } : {}),
+            ...(checks ? { checks } : {}),
+          };
+        },
+        reviseArtifact: (input) => this.work!.reviseArtifact(input),
+        modelAvailable: !!ctoChat,
+        ...(ctoChat
+          ? {
+              chat: async ({ messages }) => {
+                const result = await ctoChat({ messages });
+                return { text: result.text };
+              },
+            }
+          : {}),
+        nowIso,
+      },
+      { taskId, jobId, artifactId },
+    );
   }
 
   private buildCapabilityRegistry(): CapabilityRegistry {
