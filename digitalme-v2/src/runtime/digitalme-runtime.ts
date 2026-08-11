@@ -1537,8 +1537,9 @@ export class DigitalMeRuntime {
       {
         getTask: (id) => this.work!.getTaskRecord(id),
         withTaskExclusive: (id, fn) => this.work!.runExclusiveForTask(id, fn),
-        updateRevisionLoop: (id, patch) => this.work!.updateTaskRevisionLoop(id, patch),
+        updateRevisionLoop: (id, patch) => this.work!.updateTaskRevisionLoopAlreadyLocked(id, patch),
         appendConversation: async (id, turn) => {
+          // 锁外调用：走公开互斥路径；临界区内不得再调本函数
           await this.work!.appendTaskConversation(id, {
             turns: [
               {
@@ -1577,7 +1578,7 @@ export class DigitalMeRuntime {
             ...(checks ? { checks } : {}),
           };
         },
-        reviseArtifact: (input) => this.work!.reviseArtifact(input),
+        reviseArtifact: (input) => this.work!.reviseArtifactAlreadyLocked(input),
         sumSucceededJobDurationMs: async (id) => {
           const jobs = await this.work!.listJobsForTask(id);
           return jobs

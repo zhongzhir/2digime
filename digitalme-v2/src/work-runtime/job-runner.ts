@@ -567,83 +567,96 @@ export class WorkRuntime {
   }): Promise<{ jobId: string }> {
     const request = String(input.revisionRequest || '').trim();
     if (!request) throw new Error('请填写修改要求');
+    return this.withTaskLock(input.taskId, () => this.reviseArtifactAlreadyLocked(input));
+  }
+
+  /**
+   * 已持有该 Task 锁时调用（如受控修订临界区）。不得从锁外调用。
+   */
+  async reviseArtifactAlreadyLocked(input: {
+    taskId: string;
+    artifactId: string;
+    revisionRequest: string;
+    rejectionReason?: string;
+    attachmentPaths?: string[];
+  }): Promise<{ jobId: string }> {
+    const request = String(input.revisionRequest || '').trim();
+    if (!request) throw new Error('请填写修改要求');
     const rejectionReason = String(input.rejectionReason || '').trim();
     const attachmentPaths = (input.attachmentPaths || [])
       .map((p) => String(p || '').trim())
       .filter(Boolean);
 
-    return this.withTaskLock(input.taskId, async () => {
-      let task = await this.opts.taskService.get(input.taskId);
-      if (!task) throw new Error(`task not found: ${input.taskId}`);
-      if (attachmentPaths.length) {
-        task = await this.opts.taskService.appendContextRefs(
-          input.taskId,
-          attachmentPaths.map((p) => ({ kind: 'file' as const, path: p })),
-        );
-      }
-      const artifact = await this.opts.artifactCommitter.get(input.artifactId);
-      if (!artifact) throw new Error(`artifact not found: ${input.artifactId}`);
-      if (artifact.taskId !== input.taskId) {
-        throw new Error('artifact does not belong to this task');
-      }
-      const active = await this.opts.jobStore.findActiveForTask(input.taskId);
-      if (active) {
-        throw new Error(`task already has an active job: ${active.id}`);
-      }
-      const capabilityId =
-        task.capabilityId ??
-        this.opts.registry.selectForNeed({
-          ...(task.intentKind ? { intentKind: task.intentKind } : {}),
-          expectedOutputFamily: task.requestedArtifactType,
-        }).adapter?.registration.id;
-      if (!capabilityId) {
-        const msg =
-          task.intentKind === 'analyze_code'
-            ? '当前无法按说明重新分析：请先连接模型后再试。'
-            : 'no available capability for revise';
-        throw Object.assign(new Error(msg), { actionable: msg });
-      }
-      const adapter = this.opts.registry.get(capabilityId);
-      if (!adapter || adapter.registration.availability !== 'available') {
-        const msg =
-          task.intentKind === 'analyze_code'
-            ? '当前无法进行代码分析：请先连接模型后再试。不会改用普通写作冒充代码审查。'
-            : 'selected capability is not available';
-        throw Object.assign(new Error(msg), { actionable: msg });
-      }
-      const prevJobs = await this.opts.jobStore.listByTask(task.id);
-      const prevExt = [...prevJobs]
-        .reverse()
-        .find((j) => j.externalExecution?.workingDirectory);
-      const revisionText =
-        attachmentPaths.length > 0
-          ? `${request}\n\n（用户附了 ${attachmentPaths.length} 张截图作为问题说明材料；请结合文字理解问题。若无法直接查看图片，以文字说明为准。）`
-          : request;
-      const job = await this.createQueuedJob(
-        task.id,
-        capabilityId,
-        {
-          targetArtifactId: artifact.id,
-          revisionRequest: revisionText,
-          ...(rejectionReason ? { rejectionReason } : {}),
-        },
-        prevExt?.externalExecution
-          ? {
-              executorId: prevExt.externalExecution.executorId,
-              workingDirectory: prevExt.externalExecution.workingDirectory,
-              readScope: prevExt.externalExecution.readScope,
-              writeScope: prevExt.externalExecution.writeScope,
-              lastExecutorStatus: 'queued',
-              autoContinueCount: 0,
-              ...(prevExt.externalExecution.projectOrigin
-                ? { projectOrigin: prevExt.externalExecution.projectOrigin }
-                : {}),
-            }
-          : undefined,
+    let task = await this.opts.taskService.get(input.taskId);
+    if (!task) throw new Error(`task not found: ${input.taskId}`);
+    if (attachmentPaths.length) {
+      task = await this.opts.taskService.appendContextRefs(
+        input.taskId,
+        attachmentPaths.map((p) => ({ kind: 'file' as const, path: p })),
       );
-      this.enqueue(job.id);
-      return { jobId: job.id };
-    });
+    }
+    const artifact = await this.opts.artifactCommitter.get(input.artifactId);
+    if (!artifact) throw new Error(`artifact not found: ${input.artifactId}`);
+    if (artifact.taskId !== input.taskId) {
+      throw new Error('artifact does not belong to this task');
+    }
+    const active = await this.opts.jobStore.findActiveForTask(input.taskId);
+    if (active) {
+      throw new Error(`task already has an active job: ${active.id}`);
+    }
+    const capabilityId =
+      task.capabilityId ??
+      this.opts.registry.selectForNeed({
+        ...(task.intentKind ? { intentKind: task.intentKind } : {}),
+        expectedOutputFamily: task.requestedArtifactType,
+      }).adapter?.registration.id;
+    if (!capabilityId) {
+      const msg =
+        task.intentKind === 'analyze_code'
+          ? '当前无法按说明重新分析：请先连接模型后再试。'
+          : 'no available capability for revise';
+      throw Object.assign(new Error(msg), { actionable: msg });
+    }
+    const adapter = this.opts.registry.get(capabilityId);
+    if (!adapter || adapter.registration.availability !== 'available') {
+      const msg =
+        task.intentKind === 'analyze_code'
+          ? '当前无法进行代码分析：请先连接模型后再试。不会改用普通写作冒充代码审查。'
+          : 'selected capability is not available';
+      throw Object.assign(new Error(msg), { actionable: msg });
+    }
+    const prevJobs = await this.opts.jobStore.listByTask(task.id);
+    const prevExt = [...prevJobs]
+      .reverse()
+      .find((j) => j.externalExecution?.workingDirectory);
+    const revisionText =
+      attachmentPaths.length > 0
+        ? `${request}\n\n（用户附了 ${attachmentPaths.length} 张截图作为问题说明材料；请结合文字理解问题。若无法直接查看图片，以文字说明为准。）`
+        : request;
+    const job = await this.createQueuedJob(
+      task.id,
+      capabilityId,
+      {
+        targetArtifactId: artifact.id,
+        revisionRequest: revisionText,
+        ...(rejectionReason ? { rejectionReason } : {}),
+      },
+      prevExt?.externalExecution
+        ? {
+            executorId: prevExt.externalExecution.executorId,
+            workingDirectory: prevExt.externalExecution.workingDirectory,
+            readScope: prevExt.externalExecution.readScope,
+            writeScope: prevExt.externalExecution.writeScope,
+            lastExecutorStatus: 'queued',
+            autoContinueCount: 0,
+            ...(prevExt.externalExecution.projectOrigin
+              ? { projectOrigin: prevExt.externalExecution.projectOrigin }
+              : {}),
+          }
+        : undefined,
+    );
+    this.enqueue(job.id);
+    return { jobId: job.id };
   }
 
   async cancelJob(input: { jobId: string }): Promise<{ cancelled: boolean }> {
@@ -1047,9 +1060,18 @@ export class WorkRuntime {
       intents?: import('./task').TaskIntentConclusion[];
     },
   ) {
-    return this.withTaskLock(taskId, () =>
-      this.opts.taskService.appendConversation(taskId, input),
-    );
+    return this.withTaskLock(taskId, () => this.appendTaskConversationAlreadyLocked(taskId, input));
+  }
+
+  /** 已持有该 Task 锁时调用。不得从锁外调用。 */
+  appendTaskConversationAlreadyLocked(
+    taskId: string,
+    input: {
+      turns: import('./task').TaskConversationTurn[];
+      intents?: import('./task').TaskIntentConclusion[];
+    },
+  ) {
+    return this.opts.taskService.appendConversation(taskId, input);
   }
 
   async updateTaskPlan(taskId: string, plan: import('./task').TaskPlan) {
@@ -1060,10 +1082,21 @@ export class WorkRuntime {
     taskId: string,
     patch: Parameters<import('./task-service').TaskService['updateRevisionLoop']>[1],
   ) {
-    return this.withTaskLock(taskId, () => this.opts.taskService.updateRevisionLoop(taskId, patch));
+    return this.withTaskLock(taskId, () => this.updateTaskRevisionLoopAlreadyLocked(taskId, patch));
   }
 
-  /** D11-D：对外暴露同一 Task 临界区，供受控修订认领整段编排使用。 */
+  /** 已持有该 Task 锁时调用。不得从锁外调用。 */
+  updateTaskRevisionLoopAlreadyLocked(
+    taskId: string,
+    patch: Parameters<import('./task-service').TaskService['updateRevisionLoop']>[1],
+  ) {
+    return this.opts.taskService.updateRevisionLoop(taskId, patch);
+  }
+
+  /**
+   * 同一 Task 严格互斥临界区（不可重入）。
+   * 临界区内须调用 *AlreadyLocked 变体，禁止再调会取锁的公开 API。
+   */
   runExclusiveForTask<T>(taskId: string, fn: () => Promise<T>): Promise<T> {
     return this.withTaskLock(taskId, fn);
   }
@@ -2064,22 +2097,11 @@ export class WorkRuntime {
     this.opts.eventBus.publish(event);
   }
 
-  /** 同一调用栈内可重入，避免临界区内再调 updateTaskRevisionLoop / reviseArtifact 死锁。 */
-  private taskLockDepth = new Map<string, number>();
-
+  /**
+   * 严格不可重入的 Task 互斥：独立异步回调必须排队。
+   * 嵌套取锁会死锁；临界区内请用 *AlreadyLocked 内部实现。
+   */
   private async withTaskLock<T>(taskId: string, fn: () => Promise<T>): Promise<T> {
-    const depth = this.taskLockDepth.get(taskId) ?? 0;
-    if (depth > 0) {
-      this.taskLockDepth.set(taskId, depth + 1);
-      try {
-        return await fn();
-      } finally {
-        const nextDepth = (this.taskLockDepth.get(taskId) ?? 1) - 1;
-        if (nextDepth <= 0) this.taskLockDepth.delete(taskId);
-        else this.taskLockDepth.set(taskId, nextDepth);
-      }
-    }
-
     const prev = this.taskLocks.get(taskId) ?? Promise.resolve();
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
@@ -2088,13 +2110,9 @@ export class WorkRuntime {
     const next = prev.then(() => gate);
     this.taskLocks.set(taskId, next);
     await prev.catch(() => undefined);
-    this.taskLockDepth.set(taskId, 1);
     try {
       return await fn();
     } finally {
-      const nextDepth = (this.taskLockDepth.get(taskId) ?? 1) - 1;
-      if (nextDepth <= 0) this.taskLockDepth.delete(taskId);
-      else this.taskLockDepth.set(taskId, nextDepth);
       release();
       if (this.taskLocks.get(taskId) === next) this.taskLocks.delete(taskId);
     }

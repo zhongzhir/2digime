@@ -214,12 +214,12 @@ export async function maybeRunControlledRevisionAfterJob(
     });
     decision = applyPauseCancelOverride(decision, freshLoop);
 
-    // ③ 临界区：落盘 attempt、最终门控、创建 Job、pending→真实 jobId
-    return await deps.withTaskExclusive(input.taskId, async () => {
+    // ③ 临界区：落盘 attempt、最终门控、创建 Job、pending→真实 jobId（对话写入在锁外）
+    const locked = await deps.withTaskExclusive(input.taskId, async () => {
       const before = await deps.getTask(input.taskId);
       const gate = before?.meta?.revisionLoop;
       if (!gate || gate.inFlightJobId !== claim.claimId) {
-        return { ok: true, action: 'noop', reason: 'claim_lost' };
+        return { result: { ok: true as const, action: 'noop', reason: 'claim_lost' } };
       }
       if (isPausedOrCancelled(gate)) {
         await deps.updateRevisionLoop(input.taskId, (prev) => {
@@ -230,9 +230,15 @@ export async function maybeRunControlledRevisionAfterJob(
           return next;
         });
         return {
-          ok: true,
-          action: 'noop',
-          reason: gate.pauseReason === 'user_cancelled' ? 'cancelled' : 'paused',
+          note:
+            gate.pauseReason === 'user_cancelled'
+              ? '任务已取消，不再自动修改。'
+              : '自动修改已暂停。',
+          result: {
+            ok: true as const,
+            action: 'noop',
+            reason: gate.pauseReason === 'user_cancelled' ? 'cancelled' : 'paused',
+          },
         };
       }
 
@@ -282,16 +288,14 @@ export async function maybeRunControlledRevisionAfterJob(
         return next;
       });
 
-      await deps.appendConversation(input.taskId, {
-        role: 'digital_me',
-        content: decision.userFacingNote,
-      });
-
       if (decision.action !== 'auto_revise' && decision.action !== 'auto_revise_new_scheme') {
         return {
-          ok: true,
-          action: decision.action,
-          ...(decision.stopReason ? { reason: decision.stopReason } : {}),
+          note: decision.userFacingNote,
+          result: {
+            ok: true as const,
+            action: decision.action,
+            ...(decision.stopReason ? { reason: decision.stopReason } : {}),
+          },
         };
       }
 
@@ -310,7 +314,7 @@ export async function maybeRunControlledRevisionAfterJob(
           delete next.claimToken;
           return next;
         });
-        return { ok: true, action: 'noop', reason: 'blocked_before_create' };
+        return { result: { ok: true as const, action: 'noop', reason: 'blocked_before_create' } };
       }
 
       try {
@@ -324,7 +328,14 @@ export async function maybeRunControlledRevisionAfterJob(
           inFlightJobId: revised.jobId,
           claimToken: revised.jobId,
         }));
-        return { ok: true, action: decision.action, revisionJobId: revised.jobId };
+        return {
+          note: decision.userFacingNote,
+          result: {
+            ok: true as const,
+            action: decision.action,
+            revisionJobId: revised.jobId,
+          },
+        };
       } catch (error) {
         // 创建失败：清占位并暂停；保留 lastHandledVersionId，禁止同一旧 version 无限重试
         await deps.updateRevisionLoop(input.taskId, (prev) => {
@@ -339,12 +350,23 @@ export async function maybeRunControlledRevisionAfterJob(
           return next;
         });
         return {
-          ok: false,
-          action: decision.action,
-          reason: error instanceof Error ? error.message : 'revise_failed',
+          note: decision.userFacingNote,
+          result: {
+            ok: false as const,
+            action: decision.action,
+            reason: error instanceof Error ? error.message : 'revise_failed',
+          },
         };
       }
     });
+
+    if (locked.note) {
+      await deps.appendConversation(input.taskId, {
+        role: 'digital_me',
+        content: locked.note,
+      });
+    }
+    return locked.result;
   } catch (error) {
     return { ok: false, reason: error instanceof Error ? error.message : 'controlled_revision_failed' };
   }
