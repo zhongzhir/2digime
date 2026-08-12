@@ -1,0 +1,5 @@
+{
+  "note": "Previous run cleared into fresh evidence dir; see git history / prior agent logs for EPERM+blocking-monitor diagnosis",
+  "clearedAt": "2026-08-12T06:00:47.725Z",
+  "rootCauseHypothesis": "Electron entry used spawnSync PowerShell every 600ms on main thread, stalling JobRunner (job stuck in context phase; atomic rename EPERM left only .bak)"
+}

@@ -1,0 +1,60 @@
+{
+  "task": "2DIGIME-BUILD-01-OWNER-REVISION-ROUTING-FIX-22",
+  "diagnosedAt": "2026-08-12T06:50:00.000Z",
+  "baselineHead": "2063958",
+  "fix21Evidence": "scripts/_nongit-project-trust-fix-21-evidence",
+  "symptom": "Owner NL「改成 done」后未创建新 Job/Artifact",
+  "path": [
+    {
+      "step": 1,
+      "where": "work.converse / model intent",
+      "finding": "成果后明确修改意见按提示归为 artifact_feedback（或偶发 confirm_start）。prompt 示例「背景改成夜晚」→ artifact_feedback。"
+    },
+    {
+      "step": 2,
+      "where": "decideConverseEffects switch artifact_feedback",
+      "finding": "case 仅 break，不设置 startAuthorized/startMode。仅 planUpdate 可写规划草稿。",
+      "code": "src/work-runtime/work-converse.ts decideConverseEffects case 'artifact_feedback'"
+    },
+    {
+      "step": 3,
+      "where": "electron/renderer/app.js submitWorkNaturalLanguage",
+      "finding": "仅当 res.startAuthorized 才调用 runCtoConfirmContinue / startConversationTaskExecution。无授权则只刷新对话。",
+      "code": "if (res.startAuthorized) { startMode===revision → runCtoConfirmContinue }"
+    },
+    {
+      "step": 4,
+      "where": "revisionLoop.paused / autoRevisionPaused",
+      "finding": "controlled-revision-runner 在 paused 时阻止 system_auto_revision（maybeRunControlledRevisionAfterJob）。work.reviseArtifact 本身不检查 paused。暂停态不是 reviseArtifact 硬拦，而是 converse 未发出修订授权导致从未调用。"
+    },
+    {
+      "step": 5,
+      "where": "mis-route into auto revision",
+      "finding": "用户修订未进入 reviseArtifact；被当成「只回应」的非执行分支。不是被误判进 system_auto_revision 后被 pause 拦住。"
+    },
+    {
+      "step": 6,
+      "where": "FIX-21 runtime snapshot",
+      "finding": "Job 仅 1 个 succeeded；fixture 仍为 start-processing；对话含「已暂停自动修改」；未见「改成 done」触发的新 Job。"
+    }
+  ],
+  "secondaryFindings": [
+    {
+      "at": "2026-08-12T07:10:00.000Z",
+      "finding": "第二次全链：修订 NL 的 user/digital_me 轮次未出现在 Task.conversation；jobs 仍为 1。说明 work.converse 在闸门超时前未完成落盘，或发送后未进入完成路径。",
+      "mitigation": "闸门先 wait 对话增长/修订 Job 状态；runCtoConfirmContinue 从 latestJob 回填 artifactId，禁止静默 return。"
+    }
+  ],
+  "rootCause": {
+    "primary": "Owner 明确成果修订意图（artifact_feedback）在 decideConverseEffects 中不产生 startAuthorized/startMode=revision，渲染层因此不调用 work.reviseArtifact。",
+    "secondary": "runCtoConfirmContinue 以 CTO revisionDirective 为主、用户原文仅作补充，不利于「改成 done」类明确指令成为 Job.revisionRequest 主文。",
+    "notRootCause": "revisionLoop.paused 并未直接拒绝 reviseArtifact；暂停只应挡住 system_auto_revision。"
+  },
+  "fixPlan": {
+    "distinguish": ["system_auto_revision", "user_directed_revision", "consultation", "clarify_revision"],
+    "decideConverseEffects": "artifact_feedback + hasArtifact + 明确修订 → startAuthorized + startMode=revision；含糊 → needsClarification 零 Job；咨询保持零 Job",
+    "unpause": "user_directed_revision 授权时清除 auto revision pause（不启动 system auto）",
+    "renderer": "Owner 原文作为 reviseArtifact.revisionRequest 主文",
+    "preserve": ["confirmedPlanVersion 不重置", "项目授权", "并发锁", "auto revision 刹车", "禁止自动采用", "高风险确认"]
+  }
+}

@@ -59,6 +59,9 @@ export type LocateWithReadonlyCodexInput = {
   signal?: AbortSignal;
   timeoutMs?: number;
   codexJsPath?: string;
+  /** 与改码路径一致的项目信任来源 */
+  projectOrigin?: string;
+  authorizedWorkingDirectory?: string;
   /** 测试注入 */
   execHook?: (args: {
     prompt: string;
@@ -356,6 +359,7 @@ async function spawnReadonlyCodex(input: {
   timeoutMs: number;
   signal?: AbortSignal;
   codexJsPath?: string;
+  skipGitRepoCheck?: boolean;
   reportProgress?: (msg: string) => void;
 }): Promise<{ exitCode: number | null; text: string; argv: string[] }> {
   let launch;
@@ -372,6 +376,7 @@ async function spawnReadonlyCodex(input: {
     workingDirectory: input.workingDirectory,
     lastMessagePath,
     sandbox: 'read-only',
+    ...(input.skipGitRepoCheck ? { skipGitRepoCheck: true } : {}),
   });
   const argv = [...launch.argsPrefix, ...cliArgs];
   const env = buildMinimalExecutorEnv(process.env, {
@@ -505,6 +510,13 @@ export async function locateWithReadonlyCodex(
       return null;
     } else {
       try {
+        const { shouldSkipGitRepoCheck } = await import('./git-trust');
+        const skipGitRepoCheck = await shouldSkipGitRepoCheck({
+          workingDirectory,
+          authorizedWorkingDirectory:
+            input.authorizedWorkingDirectory || workingDirectory,
+          ...(input.projectOrigin ? { projectOrigin: input.projectOrigin } : {}),
+        });
         const spawned = await spawnReadonlyCodex({
           prompt,
           workingDirectory,
@@ -513,6 +525,7 @@ export async function locateWithReadonlyCodex(
           ...(input.signal ? { signal: input.signal } : {}),
           ...(input.codexJsPath ? { codexJsPath: input.codexJsPath } : {}),
           ...(input.reportProgress ? { reportProgress: input.reportProgress } : {}),
+          ...(skipGitRepoCheck ? { skipGitRepoCheck: true } : {}),
         });
         rawText = spawned.text;
         exitCode = spawned.exitCode;
@@ -558,6 +571,8 @@ export async function locateWithReadonlyCodex(
 export type AsReadOnlyLocateHookOptions = {
   timeoutMs?: number;
   codexJsPath?: string;
+  projectOrigin?: string;
+  authorizedWorkingDirectory?: string;
   execHook?: LocateWithReadonlyCodexInput['execHook'];
   reportProgress?: (msg: string) => void;
 };
@@ -572,6 +587,10 @@ export function asReadOnlyLocateHook(
       root: input.root,
       timeoutMs: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       ...(opts.codexJsPath ? { codexJsPath: opts.codexJsPath } : {}),
+      ...(opts.projectOrigin ? { projectOrigin: opts.projectOrigin } : {}),
+      ...(opts.authorizedWorkingDirectory
+        ? { authorizedWorkingDirectory: opts.authorizedWorkingDirectory }
+        : {}),
       ...(opts.execHook ? { execHook: opts.execHook } : {}),
       ...(opts.reportProgress ? { reportProgress: opts.reportProgress } : {}),
     });

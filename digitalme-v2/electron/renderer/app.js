@@ -17,7 +17,20 @@
     ) {
       return USER_FACING_TASK_START_FAILED;
     }
+    if (/trusted directory|skip-git-repo-check|not inside a trusted/i.test(msg)) {
+      return "尚未明确授权项目文件夹。请通过文件夹选择器添加项目位置后再开始。";
+    }
     return msg || USER_FACING_TASK_START_FAILED;
+  }
+
+  function resolveMaterialsProjectOrigin() {
+    const folder = materials.find((m) => m && m.kind === "folder" && m.path);
+    if (!folder) return null;
+    if (folder.projectOrigin === "digitalme_created") return "digitalme_created";
+    if (folder.projectOrigin === "user_selected") return "user_selected";
+    if (folder.projectOrigin === "unknown") return "unknown";
+    // 选择器添加的文件夹缺字段时按用户明确选择处理，不得落成 unknown
+    return "user_selected";
   }
 
   const els = {
@@ -2842,7 +2855,25 @@
   }
 
   async function runCtoConfirmContinue(userSupplement) {
-    if (!activeTaskId || !activeArtifactId || workMode !== "task") return;
+    if (workMode !== "task" || !activeTaskId) return;
+    const artifactId =
+      activeArtifactId ||
+      (lastJobDetailForUx &&
+        lastJobDetailForUx.artifactIds &&
+        lastJobDetailForUx.artifactIds[0]) ||
+      (lastJobDetailForUx &&
+        lastJobDetailForUx.latestJob &&
+        (lastJobDetailForUx.latestJob.artifactId ||
+          lastJobDetailForUx.latestJob.latestArtifactId)) ||
+      null;
+    if (!artifactId) {
+      if (els.jobStatus) {
+        els.jobStatus.textContent = "当前没有可修改的成果，请先完成一轮开发后再说明修改要求。";
+        els.jobStatus.classList.add("error");
+      }
+      return;
+    }
+    activeArtifactId = artifactId;
     const connected = await refreshConnectionFromCapabilities();
     if (!connected) {
       if (els.jobStatus) {
@@ -2855,21 +2886,28 @@
     const directive = String(acc.revisionDirective || "").trim();
     const next = String(acc.userFacingNextStep || "").trim();
     const userText = String(userSupplement || "").trim();
-    let revisionRequest = directive || next || "请按 Digital Me 验收结论继续修正，补齐未达标项并提供可核对证据。";
+    let revisionRequest = "";
     if (userText) {
-      revisionRequest = `${revisionRequest}\n\n【用户补充意见】\n${userText}`;
+      // FIX-22：Owner 明确修订以用户原文为主；CTO 建议仅作附录，不得盖过用户要求
+      revisionRequest = userText;
+      if (directive && directive !== userText) {
+        revisionRequest = `${userText}\n\n【Digital Me 此前建议】\n${directive}`;
+      }
+    } else {
+      revisionRequest =
+        directive || next || "请按 Digital Me 验收结论继续修正，补齐未达标项并提供可核对证据。";
     }
     taskPausedCto = false;
     hideRevisionComposer();
     hideAdoptWarning();
     if (els.jobStatus) {
-      els.jobStatus.textContent = "正在按 Digital Me 修正指令继续…";
+      els.jobStatus.textContent = "正在按你的修改要求继续…";
       els.jobStatus.classList.remove("error");
     }
     try {
       const result = await api.invoke("work.reviseArtifact", {
         taskId: activeTaskId,
-        artifactId: activeArtifactId,
+        artifactId,
         revisionRequest,
       });
       if (result && result.jobId) {
@@ -3217,12 +3255,21 @@
     }
   }
 
+  let workConverseInFlight = false;
+
   /**
    * D11-A：自然语言输入一律先经 work.converse 得到 Digital Me 的理解与回应；
    * 不做本地关键词路由，不默认触发修改。执行只在 startAuthorized 后经确定性命令发生。
    */
   async function submitWorkNaturalLanguage() {
     if (!els.workNlInput) return;
+    if (workConverseInFlight) {
+      if (els.jobStatus) {
+        els.jobStatus.textContent = "上一条说明还在处理，请稍候再发送。";
+        els.jobStatus.classList.remove("error");
+      }
+      return;
+    }
     const text = String(els.workNlInput.value || "").trim();
     if (!text) return;
     const payload = { text };
@@ -3249,6 +3296,7 @@
     ]);
     renderWorkTimeline();
     if (els.workNlSend) els.workNlSend.disabled = true;
+    workConverseInFlight = true;
     let res;
     try {
       res = await api.invoke("work.converse", payload);
@@ -3264,6 +3312,7 @@
       renderWorkTimeline();
       return;
     } finally {
+      workConverseInFlight = false;
       if (els.workNlSend) els.workNlSend.disabled = false;
     }
     // 用持久化轮替换乐观轮
@@ -3300,7 +3349,8 @@
     renderWorkTimeline();
     if (res.degraded || res.needsClarification) return;
     // 确定性效果（AI 只给结论；执行/暂停/采用均走既有确定性路径）
-    if (res.pauseRequested) {
+    // FIX-22：Owner 明确修订授权优先于「暂停自动修改」展示；暂停只拦系统自动修订
+    if (res.pauseRequested && !(res.startAuthorized && res.startMode === "revision")) {
       taskPausedCto = true;
       refreshWorkUxView({ taskPaused: true });
       return;
@@ -3311,7 +3361,8 @@
     }
     if (res.startAuthorized) {
       if (res.startMode === "revision" && activeTaskId && activeArtifactId) {
-        await runCtoConfirmContinue(res.plan && res.plan.content ? res.plan.content : text);
+        // FIX-22：修订指令必须用 Owner 本轮原文，不得用规划正文顶替
+        await runCtoConfirmContinue(text);
         return;
       }
       await startConversationTaskExecution(res.taskId);
@@ -3869,9 +3920,11 @@
       detail.latestJob.externalExecution &&
       detail.latestJob.externalExecution.workingDirectory
     ) {
+      const ext = detail.latestJob.externalExecution;
       nextMaterials.unshift({
         kind: "folder",
-        path: detail.latestJob.externalExecution.workingDirectory,
+        path: ext.workingDirectory,
+        ...(ext.projectOrigin ? { projectOrigin: ext.projectOrigin } : {}),
       });
     }
     for (const item of nextMaterials) {
@@ -5415,22 +5468,8 @@
       els.jobActionable.textContent = "如需更换材料，请先点「重新开始」或「新建任务」。";
       return;
     }
-    const folder = await api.dialogs.pickOpenDirectory();
-    if (!folder) return;
-    let softwareProject = null;
-    try {
-      if (typeof api.inspectSoftwareProject === "function") {
-        softwareProject = await api.inspectSoftwareProject(folder);
-      }
-    } catch {
-      softwareProject = null;
-    }
-    materials.push({
-      kind: "folder",
-      path: folder,
-      ...(softwareProject ? { softwareProject } : {}),
-    });
-    renderMaterials();
+    // 与右栏「使用已有项目」同一入口语义：用户明确选择 → user_selected
+    await addProjectFolderFromPicker(false);
   });
 
   els.clearMaterials.addEventListener("click", () => {
@@ -5743,7 +5782,10 @@
             workingDirectory: preview.workingDirectory,
             readScope: preview.readScope,
             writeScope: preview.writeScope,
-            projectOrigin: preview.projectOrigin || "unknown",
+            projectOrigin:
+              preview.projectOrigin ||
+              resolveMaterialsProjectOrigin() ||
+              "user_selected",
           },
         });
         const next = await api.invoke("work.submitTask", authPayload);
@@ -5903,7 +5945,10 @@
           workingDirectory: pending.preview.workingDirectory,
           readScope: pending.preview.readScope,
           writeScope: pending.preview.writeScope,
-          projectOrigin: pending.preview.projectOrigin || "unknown",
+          projectOrigin:
+            pending.preview.projectOrigin ||
+            resolveMaterialsProjectOrigin() ||
+            "user_selected",
         },
       };
       clearPrepBlocked();

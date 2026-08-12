@@ -413,6 +413,12 @@ async function runExternalExecutorCodex(
     : asReadOnlyLocateHook({
         timeoutMs: READONLY_CODEX_LOCATE_TIMEOUT_MS,
         ...(options.codexJsPath ? { codexJsPath: options.codexJsPath } : {}),
+        ...(auth.projectOrigin
+          ? {
+              projectOrigin: auth.projectOrigin,
+              authorizedWorkingDirectory: workingDirectory,
+            }
+          : {}),
       });
   const understanding = await buildSoftwareTaskUnderstanding({
     goal: input.goal,
@@ -789,7 +795,7 @@ export function buildCodexExecArgs(input: {
   codexJsPath: string;
   workingDirectory: string;
   lastMessagePath: string;
-  /** 仅 Digital Me 自建且非 Git 仓库的新项目可 true */
+  /** 仅 Digital Me 自建或用户明确选择的非 Git 目录，在授权硬门通过后可 true */
   skipGitRepoCheck?: boolean;
   /** 默认 workspace-write（改码路径）；只读定位传 read-only */
   sandbox?: 'read-only' | 'workspace-write' | 'danger-full-access';
@@ -839,12 +845,31 @@ async function spawnCodexExec(input: {
   const launch = resolveCodexLaunch(input.codexJsPath);
   const lastMessagePath = path.join(input.evidenceDir, 'codex-last-message.txt');
   const stdoutPath = path.join(input.evidenceDir, 'codex-stdout.jsonl');
-  const { shouldSkipGitRepoCheck } = await import('../../execution/git-trust');
-  const skipGitRepoCheck = await shouldSkipGitRepoCheck({
-    workingDirectory: input.pkg.workingDirectory,
-    authorizedWorkingDirectory: input.pkg.workingDirectory,
-    ...(input.pkg.projectOrigin ? { projectOrigin: input.pkg.projectOrigin } : {}),
-  });
+  const { assertCodexProjectTrust } = await import('../../execution/git-trust');
+  let skipGitRepoCheck = false;
+  try {
+    const trust = await assertCodexProjectTrust({
+      workingDirectory: input.pkg.workingDirectory,
+      authorizedWorkingDirectory: input.pkg.workingDirectory,
+      ...(input.pkg.projectOrigin ? { projectOrigin: input.pkg.projectOrigin } : {}),
+      readScope: input.pkg.readScope,
+      writeScope: input.pkg.writeScope,
+    });
+    skipGitRepoCheck = trust.skipGitRepoCheck;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const actionable =
+      err && typeof err === 'object' && 'actionable' in err
+        ? String((err as { actionable?: string }).actionable || msg)
+        : msg;
+    return {
+      exitCode: 1,
+      summary: msg,
+      claimedChangedFiles: [],
+      failureKind: 'executor_error',
+      actionable,
+    };
+  }
   const cliArgs = buildCodexExecArgs({
     codexJsPath: launch.codexJsPath,
     workingDirectory: input.pkg.workingDirectory,

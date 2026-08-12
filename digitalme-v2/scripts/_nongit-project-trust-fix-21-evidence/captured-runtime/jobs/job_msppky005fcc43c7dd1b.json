@@ -1,0 +1,28 @@
+{
+  "id": "job_msppky005fcc43c7dd1b",
+  "taskId": "task_msppjl0rfdbd28eaa21b",
+  "capabilityId": "cap_external_executor_codex",
+  "createdAt": "2026-08-12T06:28:57.504Z",
+  "status": "succeeded",
+  "externalExecution": {
+    "executorId": "external-executor-codex-cli",
+    "workingDirectory": "C:\\Users\\46554\\AppData\\Local\\Temp\\dm-21-repo-ypDACc",
+    "readScope": [
+      "."
+    ],
+    "writeScope": [
+      "."
+    ],
+    "lastExecutorStatus": "succeeded",
+    "projectOrigin": "user_selected",
+    "executorRunId": "job_mspplvwge67e4f666002",
+    "afterScopeDigest": "11529a6a5221b1bd230f4b170e6f9b577da5b12656fde1864c46878ee9c82e3d"
+  },
+  "startedAt": "2026-08-12T06:28:57.525Z",
+  "snapshotId": "snap_msppky19de4d114cba57",
+  "finishedAt": "2026-08-12T06:30:37.770Z",
+  "artifactId": "art_msppky005fcc43c7dd1b",
+  "costActual": {
+    "durationMs": 100245
+  }
+}

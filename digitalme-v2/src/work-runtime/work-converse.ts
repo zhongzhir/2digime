@@ -6,6 +6,10 @@ import {
   isCurrentTaskConsult,
   type ConsultTaskContext,
 } from './work-cto-consult';
+import {
+  classifyOwnerRevisionRoute,
+  isClearOwnerDirectedRevision,
+} from './work-revision-routing';
 
 /** 对话轮/意图结论局部 id（不属于 shared/ids 的对象前缀集）。 */
 function converseId(prefix: 'turn' | 'intent'): string {
@@ -133,7 +137,8 @@ const CONVERSE_SYSTEM_PROMPT = [
   '意图判定规则：',
   '- 讨论、提问、请求解释、询问进度或状态，都不是执行请求，分别归入 discuss_or_question / request_explanation / query_status。',
   '- 用户补充目标或要求，且尚未开始执行 → add_goal_info；要求调整当前规划 → modify_plan；对已有成果提出修改意见 → artifact_feedback。',
-  '- 只有用户明确表示「开始 / 按这个做 / 继续执行」时才是 confirm_start。',
+  '- 已有成果时，明确「改成 X / 按你说的改 / 把 A 改成 B」仍用 artifact_feedback（不要改成 discuss）；是否开始修改由系统确定性效果层决定，你仍须给出简短确认回复。',
+  '- 只有用户明确表示「开始 / 按这个做 / 继续执行」且主要是确认规划时才是 confirm_start。',
   '- 只有用户明确表示满意并要求采用、定稿、结束时才是 final_adopt。',
   '- 已有成果时，用户表达对当前版本满意并要用这一版（如「就用这一版」「这版可以，收货」）→ final_adopt，不是 confirm_start；confirm_start 只用于要求开始或继续做开发工作。',
   '- 想暂停、停止、取消 → pause_or_cancel。',
@@ -409,9 +414,34 @@ export function decideConverseEffects(input: ConverseDecisionInput): ConverseDec
   switch (intent) {
     case 'add_goal_info':
     case 'modify_plan':
-    case 'artifact_feedback':
       // planUpdate 已在上方写入
       break;
+    case 'artifact_feedback': {
+      // FIX-22：成果后 Owner 明确修订 → user_directed_revision；不得因自动修订暂停而吞掉。
+      if (confidence < EXECUTION_EFFECT_CONFIDENCE_THRESHOLD) {
+        decision.needsClarification = true;
+        break;
+      }
+      if (input.jobRunning || input.firstTurn || !input.hasArtifact) break;
+      const route = classifyOwnerRevisionRoute({
+        userText: input.userText || '',
+        hasArtifact: true,
+        intent: 'artifact_feedback',
+      });
+      if (route === 'consultation') break;
+      if (route === 'clarify_revision') {
+        decision.needsClarification = true;
+        if (!/具体|哪|请说明|想改成什么|需要你确认/.test(decision.reply)) {
+          decision.reply = `${decision.reply}\n\n请再说具体一点要改成什么样，或指出要改的位置；确认后我再动手。`.trim();
+        }
+        break;
+      }
+      if (route === 'user_directed_revision' || isClearOwnerDirectedRevision(input.userText || '')) {
+        decision.startAuthorized = true;
+        decision.startMode = 'revision';
+      }
+      break;
+    }
     case 'confirm_start':
       if (confidence < EXECUTION_EFFECT_CONFIDENCE_THRESHOLD) {
         decision.needsClarification = true;
@@ -437,6 +467,21 @@ export function decideConverseEffects(input: ConverseDecisionInput): ConverseDec
       break;
     default:
       break;
+  }
+  // After switch + consult override: clear Owner text can still authorize even if model intent drifted
+  if (
+    !decision.startAuthorized &&
+    !decision.pauseRequested &&
+    input.hasArtifact &&
+    !input.jobRunning &&
+    !input.firstTurn &&
+    confidence >= EXECUTION_EFFECT_CONFIDENCE_THRESHOLD &&
+    isClearOwnerDirectedRevision(input.userText || '') &&
+    !isCurrentTaskConsult(input.userText || '')
+  ) {
+    decision.startAuthorized = true;
+    decision.startMode = 'revision';
+    decision.needsClarification = false;
   }
   if (consult && input.consultContext) {
     decision.startAuthorized = false;
@@ -717,7 +762,9 @@ export async function runWorkConverse(
     } else if (
       decision.intent === 'modify_plan' ||
       decision.intent === 'add_goal_info' ||
-      decision.planDraftContent
+      decision.planDraftContent ||
+      // Owner 明确修订：解除自动修订暂停，但不等于启动 system_auto_revision
+      (decision.startAuthorized && decision.startMode === 'revision')
     ) {
       await deps.updateRevisionLoop(task.id, (prev) => {
         const next = { ...prev, paused: false };

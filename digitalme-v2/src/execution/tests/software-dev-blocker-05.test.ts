@@ -167,7 +167,7 @@ describe('software-dev-blocker-05', () => {
     assert.equal(passed.canAdoptSuggested, true);
   });
 
-  it('仅 digitalme_created + 授权目录 + 非 git 才 skip repo check', async () => {
+  it('digitalme_created / user_selected + 授权目录 + 非 git 才 skip；unknown 与 Git 不 skip', async () => {
     const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-skip-git-'));
     const project = path.join(tmp, 'game');
     await fs.mkdir(project);
@@ -185,13 +185,21 @@ describe('software-dev-blocker-05', () => {
         authorizedWorkingDirectory: project,
         projectOrigin: 'user_selected',
       }),
-      false,
+      true,
     );
     assert.equal(
       await shouldSkipGitRepoCheck({
         workingDirectory: project,
         authorizedWorkingDirectory: path.join(tmp, 'other'),
         projectOrigin: 'digitalme_created',
+      }),
+      false,
+    );
+    assert.equal(
+      await shouldSkipGitRepoCheck({
+        workingDirectory: project,
+        authorizedWorkingDirectory: project,
+        projectOrigin: 'unknown',
       }),
       false,
     );
@@ -261,7 +269,7 @@ describe('software-dev-blocker-05', () => {
       'utf8',
     );
     assert.match(codex, /skipGitRepoCheck/);
-    assert.match(codex, /shouldSkipGitRepoCheck/);
+    assert.match(codex, /assertCodexProjectTrust/);
     assert.match(codex, /--skip-git-repo-check/);
   });
 

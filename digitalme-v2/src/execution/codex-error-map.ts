@@ -104,6 +104,14 @@ export function mapCodexFailure(input: {
 
   const blob = sanitizeExecutorMessage(input.texts.join('\n'), 2000).toLowerCase();
 
+  if (/trusted directory|skip-git-repo-check|not inside a trusted/i.test(blob)) {
+    return {
+      kind: 'executor_error',
+      actionable: '尚未明确授权项目文件夹。请通过文件夹选择器添加项目位置后再开始。',
+      summary: '项目文件夹尚未明确授权',
+    };
+  }
+
   if (
     /model[_\s-]?not[_\s-]?found|unsupported model|unknown model|cli .+ outdated|upgrade.*codex|requires? newer|version.*(incompatible|too old)|not supported by this version/i.test(
       blob,

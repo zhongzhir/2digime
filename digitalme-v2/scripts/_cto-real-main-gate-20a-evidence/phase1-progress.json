@@ -1,0 +1,148 @@
+{
+  "phase": "1",
+  "checks": [
+    {
+      "name": "no_start_submit_before_plan",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "visible": false,
+        "label": "开始处理"
+      }
+    },
+    {
+      "name": "first_plan_visible",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "ver": "规划版本 v1",
+        "lastReply": "Digital Me我理解你的需求是：修改项目里的 formatLabel 函数，让它接收 start 时返回 start-processing，然后运行测试确保通过。我会先定位相关代码，修改逻辑，再执行测试。在开始前，我会先制定一个简单的执行计划，待你确认后执行。",
+        "submitVisible": false
+      }
+    },
+    {
+      "name": "plan_v1_persisted",
+      "ok": true,
+      "detail": {
+        "version": 1,
+        "status": "draft",
+        "source": "model",
+        "content": "目标：修改 formatLabel，使输入 start 返回 start-processing，并运行测试。\n交付：更新后的 formatLabel 代码 + 测试通过的验证结果。\n路径：1. 在项目中定位 formatLabel 定义；2. 修改返回逻辑；3. 运行测试。\n准备：检查测试环境和命令。\n边界：只改动 formatLabel，不涉及其他功能。"
+      }
+    },
+    {
+      "name": "plan_revision_version_strictly_increased",
+      "ok": true,
+      "detail": {
+        "before": {
+          "version": 1,
+          "status": "draft",
+          "source": "model",
+          "content": "目标：修改 formatLabel，使输入 start 返回 start-processing，并运行测试。\n交付：更新后的 formatLabel 代码 + 测试通过的验证结果。\n路径：1. 在项目中定位 formatLabel 定义；2. 修改返回逻辑；3. 运行测试。\n准备：检查测试环境和命令。\n边界：只改动 formatLabel，不涉及其他功能。"
+        },
+        "after": {
+          "version": 2,
+          "status": "draft",
+          "source": "model",
+          "content": "目标：修改 formatLabel，使输入 start 返回 start-processing，并运行测试；同时满足「20A-本地验证标记-mspol3md」专属要求。\n交付：更新后的 formatLabel 代码、测试通过的验证结果，以及标有「20A-本地验证标记-mspol3md」的本地验证记录。\n路径：1. 定位 formatLabel 定义；2. 修改返回逻辑；3. 运行测试；4. 用本地测试确认，并验证「20A-本地验证标记-mspol3md」。\n准备：检查测试环境和命令，确保本地测试可运行。\n边界：只改动 formatLabel，不涉及其他功能；本地测试通过作为验收标准。"
+        },
+        "ui": {
+          "ok": true,
+          "version": 2,
+          "verText": "规划版本 v2",
+          "hasMarker": true,
+          "body": "修改 formatLabel，使输入 start 返回 start-processing，并运行测试；同时满足「20A-本地验证标记-mspol3md」专属要求。\n更新后的 formatLabel 代码、测试通过的验证结果，以及标有「20A-本地验证标记-mspol3md」的本地验证记录。\n1. 定位 formatLabel 定义；2. 修改返回逻辑；3. 运行测试；4. 用本地测试确认，并验证「20A-本地验证标记-mspol3md」。\n检查测试环境和命令，确保本地测试可运行。\n只改动 formatLabel，不涉及其他功能；本地测试通过作为验收标准。\n\n                \n                  开发规划\n                  规划版本 v2\n                  待你确认\n                \n                \n                  \n                    目标\n                    修改 formatLabel，使输入 start 返回 start-processing，并运行测试；同时满足「20A-本地验证标记-mspol3md」专属要求。\n                  \n                  \n                    准备怎么做\n                    1. 定位 formatLabel 定义；2. 修改返回逻辑；3. 运行测试；4. 用本地测试确认，并验证「20A-本地验证标记-mspol3md」。\n                  \n                  \n                    如何判断完成\n                    更新后的 formatLabel 代码、测试通过的验证结果，以及标有「20A-本地验证标记-mspol3md」的本地验证记录。\n                  \n                  \n                    重要边界\n                    只改动 formatLabel，不涉及其他功能；本地测试通过作为验收标准。\n                  \n                \n                检查测试环境和命令，确保本地测试可运行。\n                \n                确认规划并开始开发\n              "
+        },
+        "productDefectSuspected": true
+      }
+    },
+    {
+      "name": "plan_revision_contains_new_requirement",
+      "ok": true,
+      "detail": {
+        "marker": "20A-本地验证标记-mspol3md",
+        "beforeLen": 179,
+        "afterLen": 295,
+        "content": "目标：修改 formatLabel，使输入 start 返回 start-processing，并运行测试；同时满足「20A-本地验证标记-mspol3md」专属要求。\n交付：更新后的 formatLabel 代码、测试通过的验证结果，以及标有「20A-本地验证标记-mspol3md」的本地验证记录。\n路径：1. 定位 formatLabel 定义；2. 修改返回逻辑；3. 运行测试；4. 用本地测试确认，并验证「20A-本地验证标记-mspol3md」。\n准备：检查测试环境和命令，确保本地测试可运行。\n边界：只改动 formatLabel，不涉及其他功能；本地测试通过作为验收标准。",
+        "productDefectSuspected": true
+      }
+    },
+    {
+      "name": "plan_revision_zero_jobs",
+      "ok": true,
+      "detail": {
+        "jobsBeforePlanRev": 0,
+        "jobsAfterPlanRev": 0,
+        "productDefectSuspected": true
+      }
+    },
+    {
+      "name": "codex_first_exec_modified_file",
+      "ok": false,
+      "detail": {
+        "body": "function formatLabel(input){ return input; }\nmodule.exports={formatLabel};\n",
+        "ui": {
+          "status": "执行失败",
+          "failed": true
+        },
+        "productDefectSuspected": true
+      }
+    }
+  ],
+  "timeline": [
+    {
+      "at": "2026-08-12T06:00:57.068Z",
+      "name": "phase1_start",
+      "detail": {
+        "title": "Digital Me"
+      }
+    },
+    {
+      "at": "2026-08-12T06:01:03.101Z",
+      "name": "shot",
+      "detail": {
+        "name": "01-compose",
+        "file": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_cto-real-main-gate-20a-evidence\\shots\\01-compose.png"
+      }
+    },
+    {
+      "at": "2026-08-12T06:01:05.187Z",
+      "name": "nl_goal_sent",
+      "detail": {
+        "goal": "修改这个项目中的 formatLabel，使输入 start 时返回 start-processing，并运行测试。"
+      }
+    },
+    {
+      "at": "2026-08-12T06:01:09.287Z",
+      "name": "shot",
+      "detail": {
+        "name": "02-plan-v1",
+        "file": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_cto-real-main-gate-20a-evidence\\shots\\02-plan-v1.png"
+      }
+    },
+    {
+      "at": "2026-08-12T06:01:15.438Z",
+      "name": "shot",
+      "detail": {
+        "name": "03-plan-v2",
+        "file": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_cto-real-main-gate-20a-evidence\\shots\\03-plan-v2.png"
+      }
+    },
+    {
+      "at": "2026-08-12T06:01:15.445Z",
+      "name": "confirm_plan_click",
+      "detail": {
+        "version": 2
+      }
+    }
+  ],
+  "black": {
+    "delegatedToOuter": true,
+    "phases": [
+      {
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:15.439Z"
+      }
+    ]
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "id": "job_mspolbz31edb586bea5f",
+  "taskId": "task_mspol3mxb112f183c259",
+  "capabilityId": "cap_external_executor_codex",
+  "createdAt": "2026-08-12T06:01:15.999Z",
+  "status": "failed",
+  "externalExecution": {
+    "executorId": "external-executor-codex-cli",
+    "workingDirectory": "C:\\Users\\46554\\AppData\\Local\\Temp\\dm-20a-repo-1VEe8M",
+    "readScope": [
+      "."
+    ],
+    "writeScope": [
+      "."
+    ],
+    "lastExecutorStatus": "failed",
+    "projectOrigin": "unknown",
+    "executorRunId": "job_mspolcfcace3bb44fd1e"
+  },
+  "startedAt": "2026-08-12T06:01:16.023Z",
+  "phase": "capability",
+  "progress": {
+    "note": "正在运行测试",
+    "updatedAt": "2026-08-12T06:01:16.900Z"
+  },
+  "snapshotId": "snap_mspolc0bf08362f04dd1",
+  "finishedAt": "2026-08-12T06:01:16.893Z",
+  "failure": {
+    "stage": "capability",
+    "message": "Not inside a trusted directory and --skip-git-repo-check was not specified.",
+    "actionable": "Not inside a trusted directory and --skip-git-repo-check was not specified."
+  }
+}

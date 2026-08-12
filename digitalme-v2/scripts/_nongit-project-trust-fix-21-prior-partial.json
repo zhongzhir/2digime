@@ -1,0 +1,8 @@
+{
+  "at": "2026-08-12T06:27:00.000Z",
+  "note": "First FIX-21 CTO attempt: trust path succeeded (projectOrigin=user_selected, formatLabel rewritten to start-processing). Gate failed at first_exec_created_artifact because it returned as soon as the file changed while Job was still running (status=running, phase=capability). Harness wait hardened to require artifact/job success; re-running full chain.",
+  "userData": "C:\\Users\\46554\\AppData\\Local\\Temp\\dm-21-ud-I2gzHJ",
+  "fixture": "C:\\Users\\46554\\AppData\\Local\\Temp\\dm-21-repo-f6gkIs",
+  "jobId": "job_msppf5r13603ca1f843a",
+  "projectOrigin": "user_selected"
+}

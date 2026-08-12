@@ -340,10 +340,17 @@ export class DigitalMeRuntime {
         try {
           await savePendingSoftwareTask(this.requireRuntimeDir(), {
             goal: input.goal,
-            contextRefs: (input.contextRefs || []).filter(
-              (r): r is { kind: 'file' | 'folder'; path: string } =>
-                !!r && (r.kind === 'file' || r.kind === 'folder') && !!r.path,
-            ),
+            contextRefs: (input.contextRefs || [])
+              .filter((r) => !!r && (r.kind === 'file' || r.kind === 'folder') && !!r.path)
+              .map((r) => ({
+                kind: r.kind as 'file' | 'folder',
+                path: r.path,
+                ...(r.projectOrigin === 'digitalme_created' ||
+                r.projectOrigin === 'user_selected' ||
+                r.projectOrigin === 'unknown'
+                  ? { projectOrigin: r.projectOrigin }
+                  : {}),
+              })),
             userFacingNotice: '连接代码执行能力后可继续',
           });
         } catch {

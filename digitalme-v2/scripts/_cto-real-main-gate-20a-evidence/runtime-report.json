@@ -1,0 +1,700 @@
+{
+  "schemaVersion": "cto-real-main-gate-20a/1",
+  "task": "2DIGIME-BUILD-01-CTO-REAL-MAIN-GATE-20A",
+  "startedAt": "2026-08-12T06:00:47.730Z",
+  "headBaseline": "2063958",
+  "entry": "electron/main.cjs",
+  "userData": "C:\\Users\\46554\\AppData\\Local\\Temp\\dm-20a-ud-EBxE15",
+  "fixtureProject": "C:\\Users\\46554\\AppData\\Local\\Temp\\dm-20a-repo-1VEe8M",
+  "phases": {
+    "phase1_black": {
+      "violations": 0
+    }
+  },
+  "blackWindow": {
+    "samples": [
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "phase1_confirm_to_first_exec",
+        "at": "2026-08-12T06:00:56.185Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "phase1_confirm_to_first_exec",
+        "at": "2026-08-12T06:00:58.420Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "phase1_confirm_to_first_exec",
+        "at": "2026-08-12T06:00:59.932Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "phase1_confirm_to_first_exec",
+        "at": "2026-08-12T06:01:01.669Z",
+        "platform": "win32",
+        "conhost": 14,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "phase1_confirm_to_first_exec",
+        "at": "2026-08-12T06:01:03.214Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "phase1_confirm_to_first_exec",
+        "at": "2026-08-12T06:01:04.562Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "phase1_confirm_to_first_exec",
+        "at": "2026-08-12T06:01:05.856Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "phase1_confirm_to_first_exec",
+        "at": "2026-08-12T06:01:07.282Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "phase1_confirm_to_first_exec",
+        "at": "2026-08-12T06:01:08.643Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "phase1_confirm_to_first_exec",
+        "at": "2026-08-12T06:01:10.091Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "phase1_confirm_to_first_exec",
+        "at": "2026-08-12T06:01:11.433Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "phase1_confirm_to_first_exec",
+        "at": "2026-08-12T06:01:12.770Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "phase1_confirm_to_first_exec",
+        "at": "2026-08-12T06:01:14.099Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "phase1_confirm_to_first_exec",
+        "at": "2026-08-12T06:01:15.374Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "phase1_confirm_to_first_exec",
+        "at": "2026-08-12T06:01:16.919Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:18.299Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:19.631Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:20.943Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:22.258Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:23.625Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:24.903Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:26.183Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:27.586Z",
+        "platform": "win32",
+        "conhost": 11,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:28.955Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:30.313Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:31.659Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:32.972Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:34.283Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:35.582Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:36.972Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:38.366Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:39.707Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:41.014Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:42.368Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:43.717Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:45.124Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:46.490Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:47.879Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:49.186Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:50.558Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:52.051Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:53.404Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:54.781Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:56.202Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:57.612Z",
+        "platform": "win32",
+        "conhost": 11,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:01:58.970Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:02:00.385Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:02:01.723Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:02:03.132Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:02:04.489Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:02:05.890Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:02:07.303Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:02:08.661Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:02:10.017Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:02:11.359Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:02:12.783Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:02:14.215Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:02:15.602Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:02:16.960Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:02:18.332Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      },
+      {
+        "phase": "phase1_confirm_to_first_exec",
+        "label": "first_exec",
+        "at": "2026-08-12T06:02:19.777Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      }
+    ],
+    "violations": [],
+    "byPhase": {
+      "phase1_confirm_to_first_exec": {
+        "sampleCount": 61,
+        "violationCount": 0,
+        "violations": [],
+        "byLabel": {
+          "phase1_confirm_to_first_exec": {
+            "sampleCount": 15,
+            "violationCount": 0,
+            "violations": []
+          },
+          "first_exec": {
+            "sampleCount": 46,
+            "violationCount": 0,
+            "violations": []
+          }
+        }
+      }
+    }
+  },
+  "checks": [
+    {
+      "name": "clean_build",
+      "ok": true,
+      "detail": {
+        "status": 0,
+        "tail": "\n> digitalme-v2@0.1.0 build\n> tsc -p tsconfig.json\n\n"
+      }
+    }
+  ],
+  "regression": null,
+  "verdict": "cto_real_main_gate_failed_product_defect",
+  "productDefectSuspected": true,
+  "ownerAccepted": false,
+  "thirdOwnerRuntime": "not_started",
+  "timeline": [
+    {
+      "at": "2026-08-12T06:00:47.732Z",
+      "name": "prepared",
+      "detail": {
+        "USER_DATA": "C:\\Users\\46554\\AppData\\Local\\Temp\\dm-20a-ud-EBxE15",
+        "FIXTURE": "C:\\Users\\46554\\AppData\\Local\\Temp\\dm-20a-repo-1VEe8M"
+      }
+    },
+    {
+      "at": "2026-08-12T06:00:54.807Z",
+      "name": "phase1_baseline_windows",
+      "detail": {
+        "at": "2026-08-12T06:00:54.807Z",
+        "platform": "win32",
+        "conhost": 10,
+        "visible": [
+          "powershell:2656:Farewell Response to Exit"
+        ]
+      }
+    },
+    {
+      "at": "2026-08-12T06:00:56.296Z",
+      "name": "phase1_spawned",
+      "detail": {
+        "pid": 26576
+      }
+    }
+  ],
+  "error": "Error: phase1 electron exited early code=1 logs={\"stdout\":\"\\r\\n\",\"stderr\":\"Error: CHECK_FAILED: codex_first_exec_modified_file — {\\\"body\\\":\\\"function formatLabel(input){ return input; }\\\\nmodule.exports={formatLabel};\\\\n\\\",\\\"ui\\\":{\\\"status\\\":\\\"执行失败\\\",\\\"failed\\\":true},\\\"productDefectSuspected\\\":true}\\n    at check (D:\\\\Projects\\\\_2digime-build-software-work-quality-loop-01\\\\digitalme-v2\\\\scripts\\\\electron-cto-real-main-gate-20a-entry.cjs:53:17)\\n    at runPhase1 (D:\\\\Projects\\\\_2digime-build-software-work-quality-loop-01\\\\digitalme-v2\\\\scripts\\\\electron-cto-real-main-gate-20a-entry.cjs:427:3)\\n    at async runAutomation (D:\\\\Projects\\\\_2digime-build-software-work-quality-loop-01\\\\digitalme-v2\\\\scripts\\\\electron-cto-real-main-gate-20a-entry.cjs:655:10) {\\n  productDefectSuspected: true\\n}\\n\"}\n    at ChildProcess.<anonymous> (D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\run-cto-real-main-gate-20a.cjs:338:15)\n    at ChildProcess.emit (node:events:508:28)\n    at ChildProcess._handle.onexit (node:internal/child_process:294:12)",
+  "finishedAt": "2026-08-12T06:04:29.064Z",
+  "rootCause": {
+    "summary": "Codex refused Owner-selected non-git folder",
+    "message": "Not inside a trusted directory and --skip-git-repo-check was not specified.",
+    "projectOrigin": "unknown",
+    "policy": "shouldSkipGitRepoCheck only allows digitalme_created"
+  }
+}

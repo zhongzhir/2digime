@@ -1,0 +1,58 @@
+{
+  "id": "art_msppky005fcc43c7dd1b",
+  "taskId": "task_msppjl0rfdbd28eaa21b",
+  "jobId": "job_msppky005fcc43c7dd1b",
+  "subjectId": "subj_msppjflhdb5127eb389f",
+  "createdAt": "2026-08-12T06:30:37.761Z",
+  "type": "code-change",
+  "title": "代码修改：修改这个项目中的 formatLabel，使输入 start 时返回 start-processing，并运行测试。",
+  "versions": [
+    {
+      "versionId": "ver_msppn3cx9ca3c8d1bfb2",
+      "createdAt": "2026-08-12T06:30:37.761Z",
+      "author": "capability",
+      "content": {
+        "kind": "bundle",
+        "entries": [
+          {
+            "ref": "files/a3e31d3bcd7d561d/execution-summary.md",
+            "mediaType": "text/markdown",
+            "role": "execution-summary"
+          },
+          {
+            "ref": "files/03d9cfb768c8090d/changed-files.json",
+            "mediaType": "application/json",
+            "role": "changed-files"
+          },
+          {
+            "ref": "files/f24cffbb3f8ba1d8/patch.diff",
+            "mediaType": "text/x-diff",
+            "role": "diff"
+          },
+          {
+            "ref": "files/24847293d0da5297/tests.json",
+            "mediaType": "application/json",
+            "role": "tests"
+          },
+          {
+            "ref": "files/4eeaea27d31313eb/evidence.json",
+            "mediaType": "application/json",
+            "role": "evidence"
+          },
+          {
+            "ref": "files/206c6ac7be503d89/unresolved-items.md",
+            "mediaType": "text/markdown",
+            "role": "unresolved-items"
+          },
+          {
+            "ref": "files/17f72b62eea71a22/manifest.json",
+            "mediaType": "application/json",
+            "role": "manifest"
+          }
+        ]
+      }
+    }
+  ],
+  "headVersionId": "ver_msppn3cx9ca3c8d1bfb2",
+  "storageDir": "C:\\Users\\46554\\AppData\\Local\\Temp\\dm-21-ud-U9jUNQ\\subjects\\default\\runtime\\artifact-files\\art_msppky005fcc43c7dd1b"
+}

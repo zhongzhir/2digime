@@ -307,6 +307,10 @@ export class WorkRuntime {
       const isNewProject =
         !!inspected.isNewProjectCandidate ||
         (folder as { projectOrigin?: string }).projectOrigin === 'digitalme_created';
+      const projectOrigin = (await import('../execution/git-trust')).resolveProjectOrigin({
+        projectOrigin: (folder as { projectOrigin?: string }).projectOrigin,
+        isNewProject,
+      });
       let understandingSummary: string[] | undefined;
       let understandingReliable: boolean | undefined;
       try {
@@ -336,6 +340,8 @@ export class WorkRuntime {
           // coding capability 已 ready（上方 isAutomaticReady）；未就绪时不会走到此处
           readOnlyLocate: asReadOnlyLocateHook({
             timeoutMs: READONLY_CODEX_LOCATE_TIMEOUT_MS,
+            projectOrigin,
+            authorizedWorkingDirectory: path.resolve(folder.path),
           }),
         });
         understandingReliable = isUnderstandingReliable(understanding);
@@ -371,16 +377,7 @@ export class WorkRuntime {
           executorDisplayName: userFacingNaturalExecutorName(),
           selectedCapabilityId: selectedCoding.capabilityId,
           selectedCapabilityDisplayName: selectedCoding.displayName,
-          ...(isNewProject || (folder as { projectOrigin?: string }).projectOrigin
-            ? {
-                projectOrigin:
-                  (folder as { projectOrigin?: string }).projectOrigin === 'digitalme_created'
-                    ? 'digitalme_created'
-                    : isNewProject
-                      ? 'digitalme_created'
-                      : 'user_selected',
-              }
-            : {}),
+          projectOrigin,
         },
       };
     }
@@ -498,6 +495,15 @@ export class WorkRuntime {
     }
 
     const extAuth = input.executionAuthorization;
+    const folderForOrigin = input.contextRefs.find((r) => r.kind === 'folder');
+    const { resolveProjectOrigin } = await import('../execution/git-trust');
+    const resolvedOrigin = extAuth
+      ? resolveProjectOrigin({
+          projectOrigin:
+            extAuth.projectOrigin ||
+            (folderForOrigin as { projectOrigin?: string } | undefined)?.projectOrigin,
+        })
+      : null;
     const job = await this.createQueuedJob(task.id, adapter.registration.id, undefined, extAuth
       ? {
           executorId: adapter.registration.adapter.adapterId,
@@ -505,7 +511,7 @@ export class WorkRuntime {
           readScope: extAuth.readScope?.length ? extAuth.readScope : ['.'],
           writeScope: extAuth.writeScope?.length ? extAuth.writeScope : ['.'],
           lastExecutorStatus: 'queued',
-          ...(extAuth.projectOrigin ? { projectOrigin: extAuth.projectOrigin } : {}),
+          ...(resolvedOrigin ? { projectOrigin: resolvedOrigin } : {}),
         }
       : undefined);
     this.enqueue(job.id);
@@ -1066,14 +1072,24 @@ export class WorkRuntime {
     goal: string;
     contextRefs: SubmitInput['contextRefs'];
   }) {
+    const { resolveProjectOrigin } = await import('../execution/git-trust');
+    const contextRefs = input.contextRefs.map((r) => {
+      if (r.kind !== 'folder') return r;
+      return {
+        ...r,
+        projectOrigin: resolveProjectOrigin({
+          projectOrigin: (r as { projectOrigin?: string }).projectOrigin,
+        }),
+      };
+    });
     const derived = await deriveWorkIntent({
       goal: input.goal,
-      contextRefs: input.contextRefs,
+      contextRefs,
     });
     return this.opts.taskService.create({
       subjectId: this.opts.subjectId,
       goal: input.goal,
-      contextRefs: input.contextRefs,
+      contextRefs,
       requestedArtifactType: derived.expectedOutputFamily || 'document',
       ...(derived.intentKind ? { intentKind: derived.intentKind } : {}),
     });
