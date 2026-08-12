@@ -1,0 +1,30 @@
+{
+  "task": "2DIGIME-BUILD-01-OWNER-RUNTIME-REACCEPTANCE-19",
+  "status": "owner_runtime_completed_rejected",
+  "ownerAccepted": false,
+  "verdict": "continue_corrective_or_stop_build01",
+  "closedAt": "2026-08-12T04:25:00.000Z",
+  "head": "ce89f7a",
+  "branch": "build/software-work-quality-loop-01",
+  "pr": "https://github.com/zhongzhir/2digime/pull/1",
+  "userData": "C:\\Users\\46554\\AppData\\Local\\DigitalMe-OwnerAcceptance\\software-dev-task-ux-01-1786507494427",
+  "testProject": "D:\\Projects\\DigitalMe-Software-UX-Owner-Test-1786507494427",
+  "ownerStopPhrase": "停止本次 Owner 验收",
+  "finalStore": {
+    "taskCount": 1,
+    "jobCount": 0,
+    "artifactCount": 0
+  },
+  "notes": [
+    "No product code changes during acceptance or 19A close.",
+    "19A records evidence + ACCEPTANCE_SUMMARY + read-only path divergence diagnosis only.",
+    "ownerAccepted remains false."
+  ],
+  "close19A": {
+    "task": "2DIGIME-BUILD-01-OWNER-REJECTION-CLOSE-19A",
+    "diagnosis": [
+      "RUNTIME_PATH_DIVERGENCE_19A.json",
+      "RUNTIME_PATH_DIVERGENCE_19A.md"
+    ]
+  }
+}

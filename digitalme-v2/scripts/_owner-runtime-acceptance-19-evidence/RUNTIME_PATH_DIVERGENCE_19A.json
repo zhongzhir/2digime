@@ -1,0 +1,190 @@
+{
+  "schemaVersion": "owner-rejection-close-19a/1",
+  "task": "2DIGIME-BUILD-01-OWNER-REJECTION-CLOSE-19A",
+  "baseline": {
+    "branch": "build/software-work-quality-loop-01",
+    "head": "ce89f7a",
+    "pr": "https://github.com/zhongzhir/2digime/pull/1",
+    "prStateRequired": "draft_keep_open"
+  },
+  "verdict": {
+    "ownerAccepted": false,
+    "build_01_not_accepted": true,
+    "owner_runtime_completed_rejected": true,
+    "runtime_path_divergence_suspected": true,
+    "architectureClass": "dual_workflow_coexistence_and_wrong_primary_cta",
+    "productCodeChangedIn19A": false
+  },
+  "ownerSession": {
+    "userData": "C:\\Users\\46554\\AppData\\Local\\DigitalMe-OwnerAcceptance\\software-dev-task-ux-01-1786507494427",
+    "testProject": "D:\\Projects\\DigitalMe-Software-UX-Owner-Test-1786507494427",
+    "launch": "node scripts/start-software-dev-owner-acceptance.cjs --fresh-session --scene=a",
+    "entry": "electron/main.cjs",
+    "model": {
+      "providerPreset": "deepseek",
+      "model": "deepseek-v4-flash",
+      "baseUrl": "https://api.deepseek.com/v1",
+      "secretsPresent": true
+    },
+    "finalStoreOnDisk": {
+      "taskFiles": ["task_mspkyb9d2e3220453241.json"],
+      "taskCount": 1,
+      "jobCount": 0,
+      "artifactCount": 0,
+      "onlyGoalPersisted": "再试一轮规划",
+      "formatLabelGoalPersisted": false
+    }
+  },
+  "dualWorkflows": {
+    "build01_plan_first": {
+      "renderer": "submitWorkNaturalLanguage → api.invoke('work.converse')",
+      "mainIpc": "command:invoke work.converse",
+      "runtime": "DigitalMeRuntime.converse → runWorkConverse",
+      "effects": "createConversationTask; optional seed plan; never creates Job",
+      "start": "confirmPlanAndStartDevelopment / #btn-start-development → work.submitTask with confirmedPlanVersion + low-risk auto auth"
+    },
+    "legacy_start_submit": {
+      "renderer": "work-ux-stage drafting + !hasPlanDraft → action start_submit label「开始处理」→ els.submit click",
+      "ipc": "work.submitTask",
+      "runtime": "JobRunner.submitTask",
+      "effects": "modify_code without executionAuthorization → needsExecutionConfirm with taskId='' jobId=''; probe:true on coding capabilities; no Task/Job persisted until auth"
+    },
+    "competition": "When first-turn plan never appears, UX still shows legacy primary「开始处理」, which bypasses plan-confirm CTA and does not create Task/Job on that click."
+  },
+  "round1_no_plan": {
+    "ownerObserved": {
+      "leftTaskList": "还没有任务",
+      "digitalMeReply": "未见理解/建议回复",
+      "right": "无开发规划",
+      "primaryCta": "开始处理"
+    },
+    "diskFact": "No task JSON for formatLabel goal; only later task for「再试一轮规划」.",
+    "whyGenericStartNotSoftwarePlan": {
+      "hasPlanDraft": false,
+      "uxRule": "electron/renderer/work-ux-stage.js drafting:!hasPlanDraft → push('start_submit','开始处理')",
+      "buttonMap": "app.js ACTION_EL_MAP start_submit → els.submit → work.submitTask",
+      "conversePathNotPersisted": "work.converse createConversationTask never wrote a formatLabel task; therefore Build-01 plan card / #btn-start-development never became primary."
+    },
+    "whyTaskJobArtifactZero": {
+      "intentRecognition": "Not persisted for round1; no Task means no intentKind/conversation intents on disk.",
+      "projectContext": "Folder material was present in UI; round2 task later bound same folder path successfully.",
+      "softwareWorkCapability": "Registered in real main runtime; round1 click hit submitTask confirm/probe path, not authorized execute.",
+      "modelCall": "No round1 converse persistence; cannot claim successful plan advice from model.",
+      "submitTaskResultShape": "forceModify && !executionAuthorization.confirmed → return needsExecutionConfirm {taskId:'',jobId:''} (job-runner.ts); applySubmitTaskResult(fromPlanConfirm:false) → status「请先在右侧确认最新规划后再开始」without creating Task/Job.",
+      "rendererIpcMain": [
+        "renderer: #btn-submit / UX start_submit",
+        "preload/ipc: work.submitTask",
+        "main: CommandBus → JobRunner.submitTask",
+        "sideEffect: listCodingCapabilityStatuses({probe:true}) → probeCodexAvailability → runCodexVersion"
+      ]
+    }
+  },
+  "round2_seed_and_unparseable": {
+    "taskId": "task_mspkyb9d2e3220453241",
+    "goal": "再试一轮规划",
+    "createConversationTaskDerived": {
+      "intentKind": "general",
+      "requestedArtifactType": "document",
+      "note": "Phrase does not match CODE_MODIFY_GOAL_RE; folder present but goal text is acceptance jargon, not modify-code intent."
+    },
+    "modelCalled": true,
+    "timingEvidence": {
+      "taskCreatedAt": "2026-08-12T04:19:23.137Z",
+      "conversationPersistedAt": "2026-08-12T04:19:42.861Z",
+      "approxChatLatencySec": 19,
+      "interpretation": "createTask then chat then persist; latency indicates real converse chat ran."
+    },
+    "seedPlanTrigger": {
+      "code": "work-converse.ts runWorkConverse: if (!draftContent && createdTask && !existingPlan) draftContent = deterministic seed from goal",
+      "condition": "firstTurn createdTask AND model did not supply planUpdate",
+      "contentSource": "deterministic_template_not_model_cto_advice"
+    },
+    "unparseableReply": {
+      "storedIntent": "other",
+      "confidence": 0,
+      "needsClarification": true,
+      "replyConstant": "CONVERSE_UNPARSEABLE_NOTICE",
+      "decisionPath": "decideConverseEffects: modelAvailable but !parsed || empty reply → clarification template",
+      "notKeywordLegacyRouter": true,
+      "stopPhraseLaterParsedOk": {
+        "text": "停止本次 Owner 验收",
+        "intent": "pause_or_cancel",
+        "confidence": 0.85,
+        "note": "Same chat channel can parse later; round2 first reply was parse/empty-reply failure path, not model-unavailable degrade."
+      }
+    }
+  },
+  "smokeVsOwner": {
+    "smoke": {
+      "script": "scripts/electron-corrective-18a-smoke.cjs",
+      "entry": "custom Electron harness (NOT electron/main.cjs product shell)",
+      "pageDrive": "skip welcome → nav-work → new task → #work-nl-input send → wait plan → #btn-start-development",
+      "neverClicks": "开始处理 / #btn-submit when !hasPlanDraft",
+      "executor": "hooked_codex_like_isolation (no real file agent for main chain)",
+      "converseChat": "real_configured_model",
+      "userData": "os.tmpdir dm-c18a-ud-*",
+      "projectAdd": "shell:pickOpenDirectory returns fixtureRepo",
+      "codexSilentCheck": "scripts/codex-silent-window-probe.cjs outside product click path; observed no_visible_window in that probe run",
+      "featureFlags": "forces modelReady via shell:boot; no Owner welcome/credential friction"
+    },
+    "owner": {
+      "entry": "electron/main.cjs via owner-acceptance launcher",
+      "pageDrive": "human UI; after no plan, primary CTA was legacy「开始处理」",
+      "executor": "real external-executor-codex",
+      "userData": "DigitalMe-OwnerAcceptance isolated profile",
+      "projectAdd": "real folder picker / acceptance fixture project",
+      "divergence": [
+        "smoke never exercises drafting:!hasPlanDraft → start_submit",
+        "smoke never hits real Codex spawn from product Job/probe under Owner window stacking",
+        "smoke hooked executor masks real agent console behavior during development start",
+        "Owner round2 goal text poisoned to「再试一轮规划」→ general/document, not modify_code software path"
+      ]
+    }
+  },
+  "blackWindow": {
+    "ownerEvidence": {
+      "shot": "shots/02-black-window-during-start.png",
+      "titleContains": "codex-win32-x64\\vendor",
+      "during": "click「开始处理」after round1 no-plan",
+      "storeAfter": "task/job/artifact still 0; project files unchanged"
+    },
+    "mustNotInferFixedFromSpawnOptionsAlone": true,
+    "codeSpawnOptions": {
+      "module": "src/execution/hidden-spawn.ts",
+      "windowsHide": true,
+      "shell": false,
+      "ELECTRON_NO_ATTACH_CONSOLE": "1 when env merged",
+      "note": "Parent Node/Electron spawn options do not control Rust grandchild AllocConsole."
+    },
+    "processChainMostConsistentWithEvidence": [
+      "1. Owner Electron main: electron.exe …/electron/main.cjs --user-data-dir=…OwnerAcceptance…",
+      "2. Renderer click #btn-submit → IPC work.submitTask",
+      "3. JobRunner.submitTask modify_code unauth branch → listCodingCapabilityStatuses({probe:true})",
+      "4. external-executor-codex probeCodexAvailability → runCodexVersion",
+      "5. spawn(nodeExecutable, [codex.js, '--version'], hiddenSpawnOptions)",
+      "6. node runs @openai/codex/bin/codex.js",
+      "7. codex.js launches native grandchild under @openai/codex-win32-x64/vendor/… (window title observed)",
+      "8. Native binary may create visible console despite parent windowsHide"
+    ],
+    "alternateIfAuthorizedExec": [
+      "same 1–2 then authorized Job pump → spawnCodexExec(node, [codex.js,'exec',...]) → same rust grandchild",
+      "ruled less likely for round1 because no Job persisted and files unchanged"
+    ],
+    "smokeProbeLimitation": "18A probe verdict no_visible_window_observed is a separate process tree, not proof Owner Electron-parented probe/exec never flashes vendor console."
+  },
+  "rootCauses": {
+    "noPlanRound1": "Build-01 converse/plan path did not persist; UX fell back to legacy drafting primary CTA.",
+    "zeroTaskJobArtifactOnStartClick": "Legacy submitTask confirm gate returns empty ids; no Job authorized.",
+    "seedPlusUnparseableRound2": "Real chat called; parse failed → CONVERSE_UNPARSEABLE_NOTICE; firstTurn seed plan always written without model planUpdate.",
+    "blackWindow": "Real Codex native grandchild under Electron-parented probe (or exec) path; spawn options on Node parent insufficient.",
+    "smokePassOwnerFail": "Smoke drives NL→plan→confirm with hooked executor; Owner hits dual-CTA legacy route + real Codex + polluted retry goal."
+  },
+  "minimalCorrectiveBoundary_doNotImplement": [
+    "Remove or hide drafting start_submit「开始处理」whenever software/compose expects plan-first; single primary = NL send then plan confirm.",
+    "Do not allow work.submitTask from compose without confirmed plan for modify_code when Build-01 is the product path.",
+    "Treat seed plan as non-user-facing or label clearly until model planUpdate exists; do not present seed as CTO advice.",
+    "Harden converse JSON parse / model contract so empty/unparseable is rare; surface model failure distinctly from「没听懂」.",
+    "Black window: fix at Codex native console attachment or wrap with proven no-console host; re-verify under Electron-parented probe+exec, not only detached probe script.",
+    "Owner acceptance must not use hooked executor or smoke harness as proof of real main chain."
+  ]
+}
