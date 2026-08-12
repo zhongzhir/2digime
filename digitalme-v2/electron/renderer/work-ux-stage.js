@@ -115,10 +115,11 @@
     let collapseExportsToMore = true;
 
     if (stage === 'drafting') {
-      statusLine = f.hasPlanDraft ? '右侧是开发规划。可在对话中补充，或确认后开始开发。' : '';
-      if (!f.hasPlanDraft) {
-        push('start_submit', '开始处理', 'primary', 'middle');
-      }
+      // SINGLE-RUNTIME-PATH-20：无有效模型规划时不得出现「开始处理」；
+      // 唯一入口是对话发送目标 / 重试规划 / 继续对话。
+      statusLine = f.hasPlanDraft
+        ? '右侧是开发规划。可在对话中补充，或确认后开始开发。'
+        : '请在下方说明目标；确认规划前不会开始修改项目。';
     } else if (stage === 'needs_input') {
       if (f.prepBlocked || f.projectCreateConfirm) {
         statusLine = '开发前还需完成准备 · 见右侧任务工作区';
@@ -269,6 +270,10 @@
     }
     if (view.stage === 'needs_capability' && ids.includes('start_submit')) {
       errors.push('capability_has_submit');
+    }
+    // SINGLE-RUNTIME-PATH-20：drafting 不得再出现开始处理
+    if (view.stage === 'drafting' && ids.includes('start_submit')) {
+      errors.push('drafting_has_start_submit');
     }
     const mid = (view.actions || []).filter(
       (a) =>

@@ -427,7 +427,14 @@ export interface CommandMap {
         createdAt: string;
         intentId?: string;
       }>;
-      plan?: { version: number; status: 'draft' | 'confirmed'; content: string };
+      plan?: {
+        version: number;
+        status: 'draft' | 'confirmed';
+        content: string;
+        source?: 'model' | 'seed_internal';
+      };
+      /** 规划生成失败（模型合同失败）；Task 仍已持久化。 */
+      planGenerationFailed?: boolean;
       /** 渲染层据此走确定性执行入口；不表示已执行。 */
       startAuthorized: boolean;
       startMode?: 'new_execution' | 'revision';

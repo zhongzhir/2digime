@@ -148,6 +148,14 @@ describe('external-execution-hardening', () => {
     const rt = createDigitalMeRuntime({
       documentCapability: 'fake',
       codeAnalysisCapability: 'none',
+      converseChat: async () => ({
+        text: JSON.stringify({
+          intent: 'add_goal_info',
+          confidence: 0.95,
+          reply: '已整理规划，确认后开始。',
+          planUpdate: '目标：修改 a.txt\n交付：内容为 hello\n路径：直接改文件\n准备：项目文件夹\n边界：不推送',
+        }),
+      }),
       externalExecutorCapability: {
         executeHook: async () => {
           const err = new Error('401 Unauthorized Invalid API-key');
@@ -160,14 +168,23 @@ describe('external-execution-hardening', () => {
       },
     });
     await rt.createPackage({ displayName: 'fail-map', targetDir: pkgDir });
+    const planned = await rt.converse({
+      text: '修改 a.txt 内容为 hello',
+      contextRefs: [{ kind: 'folder', path: repo }],
+    });
+    assert.ok(planned.plan?.version);
     const preview = await rt.submitTask({
       goal: '修改 a.txt 内容为 hello',
       contextRefs: [{ kind: 'folder', path: repo }],
+      existingTaskId: planned.taskId,
+      confirmedPlanVersion: planned.plan!.version,
     });
     assert.ok(preview.needsExecutionConfirm);
     const started = await rt.submitTask({
       goal: '修改 a.txt 内容为 hello',
       contextRefs: [{ kind: 'folder', path: repo }],
+      existingTaskId: planned.taskId,
+      confirmedPlanVersion: planned.plan!.version,
       executionAuthorization: {
         confirmed: true,
         workingDirectory: preview.needsExecutionConfirm!.workingDirectory,

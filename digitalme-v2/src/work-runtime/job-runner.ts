@@ -211,6 +211,32 @@ export class WorkRuntime {
     const forceModify =
       intent.intentKind === 'modify_code' || expectedOutputFamily === CODE_CHANGE_ARTIFACT_TYPE;
 
+    // SINGLE-RUNTIME-PATH-20：modify_code 必须先有用户可见模型规划的 confirmedPlanVersion；
+    // 禁止旧「开始处理」无规划直提；未带版本时拒绝且不探测 Codex。
+    if (forceModify) {
+      if (!input.existingTaskId || input.confirmedPlanVersion == null) {
+        throw Object.assign(new Error('plan confirmation required before code modification'), {
+          code: 'plan_confirmation_required',
+          actionable: '请先在对话中确认开发规划后再开始。确认前不会修改项目文件。',
+        });
+      }
+      const planTask = await this.opts.taskService.get(input.existingTaskId);
+      if (!planTask) throw new Error(`task not found: ${input.existingTaskId}`);
+      const plan = planTask.meta?.plan;
+      if (!plan || plan.version !== input.confirmedPlanVersion) {
+        throw Object.assign(new Error('plan version mismatch'), {
+          code: 'plan_version_mismatch',
+          actionable: '规划已更新，请查看右侧最新规划后再确认开始。',
+        });
+      }
+      if (plan.source === 'seed_internal') {
+        throw Object.assign(new Error('internal seed plan cannot authorize execution'), {
+          code: 'plan_not_ready',
+          actionable: '当前还没有可用的开发规划。请在对话中重试生成规划后再确认开始。',
+        });
+      }
+    }
+
     // 代码修改：未确认授权时只返回确认卡，不创建 Task/Job
     if (forceModify && !input.executionAuthorization?.confirmed) {
       const folder = input.contextRefs.find((r) => r.kind === 'folder');

@@ -108,4 +108,10 @@ export interface TaskPlan {
   confirmedAt?: string;
   /** 已确认事实（用户明确认可的目标/边界要点）。 */
   confirmedFacts?: string[];
+  /**
+   * model：用户可见的 CTO 规划（可确认开始）。
+   * seed_internal：仅内部恢复材料，不得展示为「开发规划」、不得授权开始。
+   * 缺省按历史数据视为 model（兼容旧包）。
+   */
+  source?: 'model' | 'seed_internal';
 }

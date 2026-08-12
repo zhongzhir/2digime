@@ -176,9 +176,8 @@ export async function probeCodexAvailability(
     };
   }
   try {
-    const js = codexJsPath || resolveCodexJs();
-    await fs.access(js);
-    const version = await runCodexVersion(js);
+    const launch = resolveCodexLaunch(codexJsPath);
+    const version = await runCodexVersion(launch);
     if (/outdated|unsupported.*cli|incompatible/i.test(version || '')) {
       return {
         available: false,
@@ -186,7 +185,7 @@ export async function probeCodexAvailability(
         detail: '当前代码执行能力版本过旧，请更新后重新检查。',
       };
     }
-    return { available: true, detail: version || js };
+    return { available: true, detail: version || launch.executable };
   } catch {
     return {
       available: false,
@@ -238,6 +237,84 @@ export function resolveCodexJs(): string {
     }
   }
   throw new Error('尚未检测到可用的代码执行能力。请先安装推荐能力后再在设置中检查连接。');
+}
+
+export type CodexLaunchMode = 'native' | 'node_js';
+
+/** probe 与 exec 共用：Windows 优先直启 vendor 原生 exe，避免 node→codex.js→vendor 二次派生。 */
+export interface CodexLaunch {
+  mode: CodexLaunchMode;
+  executable: string;
+  /** 置于 CLI 子命令前的参数（node 模式为 [codex.js]）。 */
+  argsPrefix: string[];
+  codexJsPath: string;
+  nativeExePath?: string;
+}
+
+export function resolveCodexNativeExe(codexJsPath: string): string | null {
+  if (process.platform !== 'win32') return null;
+  const pkgRoot = path.resolve(path.dirname(codexJsPath), '..');
+  const candidates = [
+    path.join(
+      pkgRoot,
+      'node_modules',
+      '@openai',
+      'codex-win32-x64',
+      'vendor',
+      'x86_64-pc-windows-msvc',
+      'bin',
+      'codex.exe',
+    ),
+    path.join(
+      pkgRoot,
+      '..',
+      'codex-win32-x64',
+      'vendor',
+      'x86_64-pc-windows-msvc',
+      'bin',
+      'codex.exe',
+    ),
+  ];
+  for (const candidate of candidates) {
+    try {
+      require('node:fs').accessSync(candidate);
+      return candidate;
+    } catch {
+      /* continue */
+    }
+  }
+  return null;
+}
+
+export function resolveCodexLaunch(codexJsPath?: string): CodexLaunch {
+  const js = codexJsPath || resolveCodexJs();
+  const native = resolveCodexNativeExe(js);
+  if (native) {
+    return {
+      mode: 'native',
+      executable: native,
+      argsPrefix: [],
+      codexJsPath: js,
+      nativeExePath: native,
+    };
+  }
+  const nodeExecutable = resolveNodeExecutable(process.env);
+  return {
+    mode: 'node_js',
+    executable: nodeExecutable,
+    argsPrefix: [js],
+    codexJsPath: js,
+  };
+}
+
+function buildCodexSpawnEnv(launch: CodexLaunch): NodeJS.ProcessEnv {
+  return buildMinimalExecutorEnv(process.env, {
+    ...(process.versions.electron &&
+    launch.mode === 'node_js' &&
+    launch.executable === process.execPath
+      ? { ELECTRON_RUN_AS_NODE: '1' }
+      : {}),
+  });
 }
 
 async function runExternalExecutorCodex(
@@ -707,7 +784,7 @@ function inferWorkingDirectory(input: CapabilityInput): string | null {
   return null;
 }
 
-/** 供测试与证据审计：executable=node，args 不含 shell 字符串与 --full-auto。 */
+/** 供测试与证据审计：CLI 参数不含可执行文件路径；executable 由 resolveCodexLaunch 决定。 */
 export function buildCodexExecArgs(input: {
   codexJsPath: string;
   workingDirectory: string;
@@ -720,7 +797,6 @@ export function buildCodexExecArgs(input: {
   // 非交互：-c approval_policy=never 替代已废弃 --full-auto；不拼接 shell 命令字符串
   const sandbox = input.sandbox ?? 'workspace-write';
   const args = [
-    input.codexJsPath,
     'exec',
     '--cd',
     input.workingDirectory,
@@ -735,6 +811,13 @@ export function buildCodexExecArgs(input: {
   }
   args.push('--output-last-message', input.lastMessagePath, '-');
   return args;
+}
+
+/**
+ * @deprecated 保留给旧测试：返回 [codexJsPath, ...cliArgs]。新路径请用 resolveCodexLaunch + buildCodexExecArgs。
+ */
+export function buildCodexExecArgvWithJs(input: Parameters<typeof buildCodexExecArgs>[0]): string[] {
+  return [input.codexJsPath, ...buildCodexExecArgs(input)];
 }
 
 async function spawnCodexExec(input: {
@@ -753,7 +836,7 @@ async function spawnCodexExec(input: {
   stdoutLog?: string;
   stderrLog?: string;
 }> {
-  const codexJs = input.codexJsPath || resolveCodexJs();
+  const launch = resolveCodexLaunch(input.codexJsPath);
   const lastMessagePath = path.join(input.evidenceDir, 'codex-last-message.txt');
   const stdoutPath = path.join(input.evidenceDir, 'codex-stdout.jsonl');
   const { shouldSkipGitRepoCheck } = await import('../../execution/git-trust');
@@ -762,21 +845,24 @@ async function spawnCodexExec(input: {
     authorizedWorkingDirectory: input.pkg.workingDirectory,
     ...(input.pkg.projectOrigin ? { projectOrigin: input.pkg.projectOrigin } : {}),
   });
-  const args = buildCodexExecArgs({
-    codexJsPath: codexJs,
+  const cliArgs = buildCodexExecArgs({
+    codexJsPath: launch.codexJsPath,
     workingDirectory: input.pkg.workingDirectory,
     lastMessagePath,
     ...(skipGitRepoCheck ? { skipGitRepoCheck: true } : {}),
   });
+  const args = [...launch.argsPrefix, ...cliArgs];
 
-  const nodeExecutable = resolveNodeExecutable(process.env);
   await fs.writeFile(
     path.join(input.evidenceDir, 'codex-argv.json'),
     JSON.stringify(
       {
-        executable: nodeExecutable,
+        mode: launch.mode,
+        executable: launch.executable,
         args,
         shell: false,
+        windowsHide: true,
+        nativeExePath: launch.nativeExePath || null,
         cwdNote: 'workingDirectory passed via --cd arg, not shell cwd string',
       },
       null,
@@ -785,18 +871,14 @@ async function spawnCodexExec(input: {
     'utf8',
   );
 
-  const env = buildMinimalExecutorEnv(process.env, {
-    ...(process.versions.electron && nodeExecutable === process.execPath
-      ? { ELECTRON_RUN_AS_NODE: '1' }
-      : {}),
-  });
+  const env = buildCodexSpawnEnv(launch);
   input.reportProgress('正在修改项目文件');
 
   return new Promise((resolve, reject) => {
     let settled = false;
     let timedOut = false;
     const child = spawn(
-      nodeExecutable,
+      launch.executable,
       args,
       hiddenSpawnOptions({
         env,
@@ -956,18 +1038,13 @@ function extractQuestions(summary: string): ExecutorRunResult['questions'] {
   return questions.slice(0, 5);
 }
 
-async function runCodexVersion(codexJs: string): Promise<string> {
+async function runCodexVersion(launch: CodexLaunch): Promise<string> {
   return new Promise((resolve) => {
-    const nodeExecutable = resolveNodeExecutable(process.env);
     const child = spawn(
-      nodeExecutable,
-      [codexJs, '--version'],
+      launch.executable,
+      [...launch.argsPrefix, '--version'],
       hiddenSpawnOptions({
-        env: buildMinimalExecutorEnv(process.env, {
-          ...(process.versions.electron && nodeExecutable === process.execPath
-            ? { ELECTRON_RUN_AS_NODE: '1' }
-            : {}),
-        }),
+        env: buildCodexSpawnEnv(launch),
         stdio: ['ignore', 'pipe', 'pipe'],
       }),
     );

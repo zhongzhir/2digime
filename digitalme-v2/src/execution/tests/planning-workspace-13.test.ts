@@ -99,15 +99,16 @@ describe('D11-B planning workspace', () => {
     assert.equal(tw.titleForMode('running'), '任务工作区 · 开发中');
   });
 
-  it('work.converse 首轮会种子 draft plan；submitTask 校验规划版本', async () => {
+  it('work.converse 首轮仅模型规划可见；submitTask 校验规划版本与确认门', async () => {
     const converse = await fs.readFile(
       path.join(root, 'src/work-runtime/work-converse.ts'),
       'utf8',
     );
-    assert.match(converse, /首轮理解任务若模型未给出规划正文/);
+    assert.match(converse, /seed_internal/);
+    assert.match(converse, /CONVERSE_PLAN_FAILED_NOTICE/);
     const runner = await fs.readFile(path.join(root, 'src/work-runtime/job-runner.ts'), 'utf8');
     assert.match(runner, /confirmedPlanVersion/);
     assert.match(runner, /plan_version_mismatch/);
-    assert.match(runner, /确认规划版本/);
+    assert.match(runner, /plan_confirmation_required/);
   });
 });

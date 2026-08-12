@@ -19,6 +19,7 @@ import {
   parseConverseModelOutput,
   recentTurnsWindow,
   CONVERSE_DEGRADED_NOTICE,
+  CONVERSE_PLAN_FAILED_NOTICE,
   isWorkConverseIntent,
   type WorkConverseIntent,
 } from '../work-converse';
@@ -81,7 +82,13 @@ describe('D11-A work.converse — AI 意图与对话中枢', () => {
   it('1+2. 连续提问/查状态/要解释：只有回应，零 Job；对话持久化并可重启恢复', async () => {
     const root = await tempDir('persist');
     const { chat } = scriptedChat([
-      { intent: 'discuss_or_question', confidence: 0.92, reply: '这类小游戏通常一到两轮就能出可玩版本。' },
+      {
+        intent: 'discuss_or_question',
+        confidence: 0.92,
+        reply: '这类小游戏通常一到两轮就能出可玩版本。建议先做最小可玩版。',
+        planUpdate:
+          '目标：打飞机小游戏\n交付：可玩网页版\n路径：先最小可玩再增强\n准备：无需改现有仓\n边界：不自动发布',
+      },
       { intent: 'query_status', confidence: 0.9, reply: '任务还没开始执行，正等你确认规划。' },
       { intent: 'request_explanation', confidence: 0.88, reply: '「可玩版本」指能移动、射击并计分的最小版本。' },
     ]);
@@ -94,11 +101,10 @@ describe('D11-A work.converse — AI 意图与对话中枢', () => {
     assert.equal(first.intent, 'discuss_or_question');
     assert.ok(first.reply.length > 0);
     assert.equal(first.startAuthorized, false);
-    // D11-B：首轮即使讨论类输入也种子 draft plan，供右栏展示
     assert.ok(first.plan);
     assert.equal(first.plan?.status, 'draft');
+    assert.equal(first.plan?.source, 'model');
     assert.ok((first.plan?.version ?? 0) >= 1);
-
     const second = await bus.invoke('work.converse', { taskId: first.taskId, text: '现在什么状态？' });
     assert.equal(second.intent, 'query_status');
     const third = await bus.invoke('work.converse', { taskId: first.taskId, text: '解释下什么叫可玩版本' });
@@ -169,6 +175,7 @@ describe('D11-A work.converse — AI 意图与对话中枢', () => {
 
     const first = await bus.invoke('work.converse', { text: '帮我写一句话说明' });
     assert.equal(first.plan?.status, 'draft');
+    assert.equal(first.plan?.source, 'model');
 
     // 自然语言确认开始
     const confirm = await bus.invoke('work.converse', { taskId: first.taskId, text: '按这个方案开始吧' });
@@ -185,6 +192,7 @@ describe('D11-A work.converse — AI 意图与对话中枢', () => {
       contextRefs: [],
       requestedArtifactType: 'document',
       existingTaskId: first.taskId,
+      confirmedPlanVersion: first.plan!.version,
     });
     assert.equal(submitted.taskId, first.taskId);
     assert.ok(submitted.jobId);
@@ -201,7 +209,7 @@ describe('D11-A work.converse — AI 意图与对话中枢', () => {
     await runtime.stop();
   });
 
-  it('5b. 按钮路径：submitTask(existingTaskId) 对草稿规划的确定性确认', async () => {
+  it('5b. 规划确认路径：submitTask(existingTaskId+confirmedPlanVersion) 确定性确认', async () => {
     const root = await tempDir('button');
     const { chat } = scriptedChat([
       { intent: 'add_goal_info', confidence: 0.9, reply: '规划已建立，等你确认。', planUpdate: '目标：写一句话说明' },
@@ -210,12 +218,13 @@ describe('D11-A work.converse — AI 意图与对话中枢', () => {
     await bus.invoke('subject.createPackage', { displayName: '按钮主体', targetDir: path.join(root, 'pkg') });
     const first = await bus.invoke('work.converse', { text: '帮我写一句话说明' });
     assert.equal(first.plan?.status, 'draft');
-    // 用户直接点「开始处理」= 确定性确认，不再调模型
+    // 用户确认规划后走确定性 submit（非旧「开始处理」无版本直提）
     const submitted = await bus.invoke('work.submitTask', {
       goal: '帮我写一句话说明',
       contextRefs: [],
       requestedArtifactType: 'document',
       existingTaskId: first.taskId,
+      confirmedPlanVersion: first.plan!.version,
     });
     assert.equal(submitted.taskId, first.taskId);
     const detail = await runtime.getTask({ taskId: first.taskId });
@@ -252,32 +261,45 @@ describe('D11-A work.converse — AI 意图与对话中枢', () => {
     assert.equal(res.reply, CONVERSE_DEGRADED_NOTICE);
     assert.equal(res.startAuthorized, false);
     assert.equal(res.adoptRequested, false);
+    assert.equal(res.plan, undefined);
     assert.equal(await jobCountForTask(runtime, res.taskId), 0);
-    // 降级对话仍持久化（记录不丢失）
+    // 降级对话仍持久化（记录不丢失）；内部 seed 不得作为用户可见规划返回
     const detail = await runtime.getTask({ taskId: res.taskId });
     assert.equal(detail.task.meta?.conversation?.turns.length, 2);
     assert.equal(detail.task.meta?.conversation?.intents[0]?.degraded, true);
+    assert.equal(detail.task.meta?.plan?.source, 'seed_internal');
     await runtime.stop();
   });
 
-  it('8. 既有授权硬门不被绕过：改码任务确认后仍需项目位置与执行授权', async () => {
+  it('8. 既有授权硬门不被绕过：改码无 confirmedPlanVersion 必须拒绝', async () => {
     const root = await tempDir('gate');
     const { chat } = scriptedChat([
-      { intent: 'confirm_start', confidence: 0.95, reply: '好，我开始。' },
+      {
+        intent: 'add_goal_info',
+        confidence: 0.95,
+        reply: '明白，规划如下。',
+        planUpdate: '目标：修按钮\n交付：可运行修复\n路径：定位并修改\n准备：项目文件夹\n边界：不提交推送',
+      },
     ]);
     const { runtime, bus } = await makeRuntime(root, chat);
     await bus.invoke('subject.createPackage', { displayName: '硬门主体', targetDir: path.join(root, 'pkg') });
     const first = await bus.invoke('work.converse', { text: '修一下项目里的按钮 bug' });
-    // 即便对话中枢授权了开始，确定性提交仍要过 modify_code 硬门
-    const submitted = await bus.invoke('work.submitTask', {
-      goal: '修一下项目里的按钮 bug',
-      contextRefs: [],
-      intentKind: 'modify_code',
-      existingTaskId: first.taskId,
-    });
-    assert.equal(submitted.taskId, '');
-    assert.equal(submitted.jobId, '');
-    assert.ok(submitted.needsProjectFolder);
+    assert.ok(first.plan);
+    await assert.rejects(
+      () =>
+        bus.invoke('work.submitTask', {
+          goal: '修一下项目里的按钮 bug',
+          contextRefs: [],
+          intentKind: 'modify_code',
+          existingTaskId: first.taskId,
+        }),
+      (err: unknown) => {
+        const e = err as { code?: string; message?: string };
+        assert.equal(e.code, 'plan_confirmation_required');
+        assert.match(String(e.message || ''), /plan confirmation required/i);
+        return true;
+      },
+    );
     assert.equal(await jobCountForTask(runtime, first.taskId), 0);
     await runtime.stop();
   });
@@ -285,7 +307,14 @@ describe('D11-A work.converse — AI 意图与对话中枢', () => {
   it('9. 不落盘思维链：围栏与杂散推理文本不进入对话；只存可见回复与结论', async () => {
     const root = await tempDir('nochain');
     const { chat, seenMessages } = scriptedChat([
-      { intent: 'discuss_or_question', confidence: 0.9, reply: '可以的，网页版能在手机浏览器里玩。', wrap: true },
+      {
+        intent: 'discuss_or_question',
+        confidence: 0.9,
+        reply: '可以的，网页版能在手机浏览器里玩。',
+        planUpdate:
+          '目标：小游戏\n交付：手机可玩网页版\n路径：响应式布局\n准备：无\n边界：不自动发布',
+        wrap: true,
+      },
     ]);
     const { runtime, bus } = await makeRuntime(root, chat);
     await bus.invoke('subject.createPackage', { displayName: '审计主体', targetDir: path.join(root, 'pkg') });
@@ -308,10 +337,12 @@ describe('D11-A work.converse — AI 意图与对话中枢', () => {
     await runtime.stop();
   });
 
-  it('确定性策略层：解析失败→澄清零效果；执行中/首轮不授权开始与采用', () => {
-    // 解析失败
+  it('确定性策略层：解析失败→规划失败语义零效果；执行中/首轮不授权开始与采用', () => {
+    // 解析失败：技术合同失败，不是「没听懂」
     const bad = decideConverseEffects({ parsed: null, modelAvailable: true, hasArtifact: false, jobRunning: false });
-    assert.equal(bad.needsClarification, true);
+    assert.equal(bad.needsClarification, false);
+    assert.equal(bad.degraded, true);
+    assert.equal(bad.reply, CONVERSE_PLAN_FAILED_NOTICE);
     assert.equal(bad.startAuthorized, false);
     // 执行中不授权
     const running = decideConverseEffects({

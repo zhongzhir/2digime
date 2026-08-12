@@ -25,7 +25,7 @@ const ux = require('../../../electron/renderer/work-ux-stage.js') as {
 };
 
 describe('fix-return-edit-action-04', () => {
-  it('confirm → return-edit facts restore drafting start_submit', () => {
+  it('confirm → return-edit facts restore drafting without legacy start_submit', () => {
     const onConfirm = ux.deriveWorkUxView({
       workMode: 'compose',
       prepBlocked: true,
@@ -39,22 +39,24 @@ describe('fix-return-edit-action-04', () => {
       false,
     );
 
-    // 返回修改后：准备受阻解除，仍为 compose、无 job/artifact
+    // 返回修改后：准备受阻解除，仍为 compose；无规划时不得再出现「开始处理」
     const afterReturn = ux.deriveWorkUxView({
       workMode: 'compose',
       prepBlocked: false,
       jobStatus: null,
       hasArtifact: false,
       decisionStatus: null,
+      hasPlanDraft: false,
     });
     assert.equal(afterReturn.stage, 'drafting');
-    const start = afterReturn.actions.find((a) => a.id === 'start_submit');
-    assert.ok(start);
-    assert.equal(start!.label, '开始处理');
-    assert.equal(start!.slot, 'primary');
+    assert.equal(
+      afterReturn.actions.some((a) => a.id === 'start_submit'),
+      false,
+    );
+    assert.match(afterReturn.statusLine, /说明目标|确认规划/);
   });
 
-  it('unreliable confirm card also returns to drafting start_submit', () => {
+  it('unreliable confirm card also returns to drafting without start_submit', () => {
     const unreliable = ux.deriveWorkUxView({
       workMode: 'compose',
       prepBlocked: true,
@@ -65,9 +67,13 @@ describe('fix-return-edit-action-04', () => {
     const after = ux.deriveWorkUxView({
       workMode: 'compose',
       prepBlocked: false,
+      hasPlanDraft: false,
     });
     assert.equal(after.stage, 'drafting');
-    assert.ok(after.actions.some((a) => a.id === 'start_submit' && a.label === '开始处理'));
+    assert.equal(
+      after.actions.some((a) => a.id === 'start_submit'),
+      false,
+    );
   });
 
   it('app.js 返回修改走右栏 prepBlocked 清除，并刷新 UX', async () => {
@@ -98,6 +104,20 @@ describe('fix-return-edit-action-04', () => {
     const rt = createDigitalMeRuntime({
       documentCapability: 'fake',
       codeAnalysisCapability: 'none',
+      converseChat: async ({ messages }) => {
+        const last = String(messages[messages.length - 1]?.content || '');
+        const visual = /视觉品质/.test(last);
+        return {
+          text: JSON.stringify({
+            intent: 'add_goal_info',
+            confidence: 0.95,
+            reply: visual ? '已按视觉品质更新规划。' : '已整理信息层级规划。',
+            planUpdate: visual
+              ? '目标：展示页面视觉品质并保持核心功能\n交付：可查看改动\n路径：调整样式\n准备：项目文件夹\n边界：不推送'
+              : '目标：展示页面信息层级\n交付：可查看改动\n路径：调整结构\n准备：项目文件夹\n边界：不推送',
+          }),
+        };
+      },
       externalExecutorCapability: {
         forceAvailability: 'ready',
         executeHook: async () => ({ exitCode: 0, summary: 'ok' }),
@@ -106,9 +126,16 @@ describe('fix-return-edit-action-04', () => {
     await rt.createPackage({ displayName: 'ret', targetDir: pkg });
 
     const goal1 = '修改这个项目中的展示页面信息层级';
+    const planned1 = await rt.converse({
+      text: goal1,
+      contextRefs: [{ kind: 'folder', path: dir }],
+    });
+    assert.ok(planned1.plan?.version);
     const first = await rt.submitTask({
       goal: goal1,
       contextRefs: [{ kind: 'folder', path: dir }],
+      existingTaskId: planned1.taskId,
+      confirmedPlanVersion: planned1.plan!.version,
     });
     assert.ok(first.needsExecutionConfirm);
     assert.equal(first.taskId, '');
@@ -116,11 +143,18 @@ describe('fix-return-edit-action-04', () => {
     const folderKept = first.needsExecutionConfirm!.workingDirectory;
     assert.equal(path.resolve(folderKept), path.resolve(dir));
 
-    // 返回修改不经 Runtime 建任务；再次 submit 用新目标
+    // 返回修改：对话更新规划，不经无版本 submitTask
     const goal2 = '修改这个项目中的展示页面视觉品质并保持核心功能';
+    const planned2 = await rt.converse({
+      taskId: planned1.taskId,
+      text: goal2,
+    });
+    assert.ok(planned2.plan && planned2.plan.version > planned1.plan!.version);
     const second = await rt.submitTask({
       goal: goal2,
       contextRefs: [{ kind: 'folder', path: dir }],
+      existingTaskId: planned1.taskId,
+      confirmedPlanVersion: planned2.plan!.version,
     });
     assert.ok(second.needsExecutionConfirm);
     assert.equal(second.taskId, '');
@@ -133,9 +167,9 @@ describe('fix-return-edit-action-04', () => {
       (second.needsExecutionConfirm!.acceptancePreview.goals || []).join('\n'),
       /视觉品质|核心功能/,
     );
-    // 仍未真正执行
-    const tasks = await rt.listTasks({ limit: 20 });
-    assert.equal((tasks.tasks || []).length, 0);
+    // 仍未真正执行（确认门未授权）
+    const jobs = await rt.workRuntime.listJobsForTask(planned1.taskId);
+    assert.equal(jobs.length, 0);
 
     // 理解层：新目标不得复用旧摘要污染（独立构建）
     const u1 = await buildSoftwareTaskUnderstanding({
@@ -192,7 +226,11 @@ describe('fix-return-edit-action-04', () => {
     const after = ux.deriveWorkUxView({
       workMode: 'compose',
       executionConfirmCard: false,
+      hasPlanDraft: false,
     });
-    assert.ok(after.actions.some((a) => a.id === 'start_submit'));
+    assert.equal(
+      after.actions.some((a) => a.id === 'start_submit'),
+      false,
+    );
   });
 });

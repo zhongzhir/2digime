@@ -8,9 +8,11 @@ import * as path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import {
   buildCodexExecArgs,
-  resolveCodexJs,
+  buildCodexExecArgvWithJs,
+  resolveCodexLaunch,
 } from '../capability/adapters/external-executor-codex';
-import { buildMinimalExecutorEnv, resolveNodeExecutable } from './minimal-env';
+import { hiddenSpawnOptions } from './hidden-spawn';
+import { buildMinimalExecutorEnv } from './minimal-env';
 import {
   extractGoalHints,
   type BuildSoftwareTaskUnderstandingInput,
@@ -356,24 +358,26 @@ async function spawnReadonlyCodex(input: {
   codexJsPath?: string;
   reportProgress?: (msg: string) => void;
 }): Promise<{ exitCode: number | null; text: string; argv: string[] }> {
-  let codexJs: string;
+  let launch;
   try {
-    codexJs = input.codexJsPath || resolveCodexJs();
-    await fs.access(codexJs);
+    launch = resolveCodexLaunch(input.codexJsPath);
+    await fs.access(launch.mode === 'native' ? launch.executable : launch.codexJsPath);
   } catch {
     throw Object.assign(new Error('codex_unavailable'), { failureKind: 'spawn_failed' });
   }
 
   const lastMessagePath = path.join(input.evidenceDir, 'codex-last-message.txt');
-  const argv = buildCodexExecArgs({
-    codexJsPath: codexJs,
+  const cliArgs = buildCodexExecArgs({
+    codexJsPath: launch.codexJsPath,
     workingDirectory: input.workingDirectory,
     lastMessagePath,
     sandbox: 'read-only',
   });
-  const nodeExecutable = resolveNodeExecutable(process.env);
+  const argv = [...launch.argsPrefix, ...cliArgs];
   const env = buildMinimalExecutorEnv(process.env, {
-    ...(process.versions.electron && nodeExecutable === process.execPath
+    ...(process.versions.electron &&
+    launch.mode === 'node_js' &&
+    launch.executable === process.execPath
       ? { ELECTRON_RUN_AS_NODE: '1' }
       : {}),
   });
@@ -383,12 +387,13 @@ async function spawnReadonlyCodex(input: {
   return new Promise((resolve, reject) => {
     let settled = false;
     let timedOut = false;
-    const child = spawn(nodeExecutable, argv, {
-      env,
-      shell: false,
-      windowsHide: true,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+    const child = spawn(
+      launch.executable,
+      argv,
+      hiddenSpawnOptions({
+        env,
+      }),
+    );
     let stdout = '';
     let stderr = '';
     const timer = setTimeout(() => {
@@ -469,7 +474,7 @@ export async function locateWithReadonlyCodex(
   try {
     let rawText = '';
     let exitCode: number | null = 0;
-    const placeholderArgv = buildCodexExecArgs({
+    const placeholderArgv = buildCodexExecArgvWithJs({
       codexJsPath: input.codexJsPath || 'codex.js',
       workingDirectory,
       lastMessagePath: path.join(evidenceDir, 'codex-last-message.txt'),

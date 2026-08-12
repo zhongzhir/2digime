@@ -1210,15 +1210,28 @@
       els.jobStatus.classList.add("error");
       return;
     }
+    // SINGLE-RUNTIME-PATH-20：能力就绪后仍须已有可确认模型规划，不得无规划直提
+    if (
+      !activeTaskPlan ||
+      activeTaskPlan.source === "seed_internal" ||
+      activeTaskPlan.version == null ||
+      !(activeTaskId || converseDraftTaskId)
+    ) {
+      els.jobStatus.textContent = "代码执行能力已就绪。请先在对话中确认开发规划后再开始。";
+      els.jobStatus.classList.remove("error");
+      clearPrepBlocked();
+      refreshWorkUxView({});
+      focusWorkNaturalLanguageInput();
+      return;
+    }
     const payload = {
       goal,
       contextRefs: materials.map((m) => ({ kind: m.kind, path: m.path, ...(m.projectOrigin ? { projectOrigin: m.projectOrigin } : {}) })),
     };
     if (capabilityId) payload.capabilityId = capabilityId;
     if (converseDraftTaskId) payload.existingTaskId = converseDraftTaskId;
-    if (activeTaskPlan && activeTaskPlan.version != null) {
-      payload.confirmedPlanVersion = activeTaskPlan.version;
-    }
+    if (activeTaskId) payload.existingTaskId = activeTaskId;
+    payload.confirmedPlanVersion = activeTaskPlan.version;
     workMode = "compose";
     const result = await api.invoke("work.submitTask", payload);
     await applySubmitTaskResult(result, payload, goal, { fromPlanConfirm: true });
@@ -2753,7 +2766,14 @@
       projectDirReady,
       prepBlocked: !!prepBlockedState,
       prepBlockedKind: prepKind,
-      hasPlanDraft: !!(activeTaskPlan && activeTaskPlan.content && !activeArtifactId && js !== "queued" && js !== "running"),
+      hasPlanDraft: !!(
+        activeTaskPlan &&
+        activeTaskPlan.content &&
+        activeTaskPlan.source !== "seed_internal" &&
+        !activeArtifactId &&
+        js !== "queued" &&
+        js !== "running"
+      ),
       ownerChoicePrompt: !!(els.ownerChoicePrompt && !els.ownerChoicePrompt.hidden),
       revisionComposerOpen: revisionOpen,
       adoptWarningOpen: adoptWarn,
@@ -2909,15 +2929,19 @@
 
   function hydratePlanFromTask(detail) {
     const plan = detail && detail.task && detail.task.meta && detail.task.meta.plan;
-    activeTaskPlan = plan
-      ? {
-          version: plan.version,
-          status: plan.status,
-          content: plan.content,
-          confirmedAt: plan.confirmedAt,
-          confirmedFacts: plan.confirmedFacts,
-        }
-      : null;
+    // seed_internal 仅内部恢复，不得进入用户可见规划态
+    if (plan && plan.content && plan.source !== "seed_internal") {
+      activeTaskPlan = {
+        version: plan.version,
+        status: plan.status,
+        content: plan.content,
+        confirmedAt: plan.confirmedAt,
+        confirmedFacts: plan.confirmedFacts,
+        source: plan.source || "model",
+      };
+    } else {
+      activeTaskPlan = null;
+    }
     refreshTaskWorkspace();
   }
 
@@ -3265,8 +3289,12 @@
         version: res.plan.version,
         status: res.plan.status,
         content: res.plan.content,
+        source: res.plan.source || "model",
       };
       clearPrepBlocked();
+      refreshTaskWorkspace();
+    } else if (res.planGenerationFailed) {
+      activeTaskPlan = null;
       refreshTaskWorkspace();
     }
     renderWorkTimeline();
@@ -3352,8 +3380,8 @@
     const taskId = activeTaskId || converseDraftTaskId;
     if (!taskId) return;
     const expectedVersion = activeTaskPlan && activeTaskPlan.version;
-    if (expectedVersion == null) {
-      els.jobStatus.textContent = "还没有可确认的规划，请先在对话中说明任务。";
+    if (expectedVersion == null || (activeTaskPlan && activeTaskPlan.source === "seed_internal")) {
+      els.jobStatus.textContent = "还没有可确认的开发规划，请先在对话中说明任务并等待规划生成。";
       els.jobStatus.classList.add("error");
       return;
     }
@@ -3361,8 +3389,11 @@
       const detail = await api.invoke("work.getTask", { taskId });
       const plan = detail && detail.task && detail.task.meta && detail.task.meta.plan;
       hydratePlanFromTask(detail);
-      if (!plan || plan.version !== expectedVersion) {
-        els.jobStatus.textContent = "规划已更新，请查看右侧最新规划后再确认开始。";
+      if (!plan || plan.version !== expectedVersion || plan.source === "seed_internal") {
+        els.jobStatus.textContent =
+          plan && plan.source === "seed_internal"
+            ? "当前还没有可用的开发规划，请在对话中重试生成后再确认开始。"
+            : "规划已更新，请查看右侧最新规划后再确认开始。";
         els.jobStatus.classList.add("error");
         refreshTaskWorkspace();
         return;
@@ -5638,7 +5669,7 @@
   }
 
   /**
-   * 项目位置只是输入门槛：选定后立即继续提交门控，进入 capability / confirmation。
+   * 项目位置只是输入门槛：选定后刷新门控，不得绕过规划确认直接 submitTask。
    */
   async function advanceAfterProjectLocationReady() {
     refreshWorkUxView({});
@@ -5651,42 +5682,28 @@
         refreshWorkUxView({ modelReady: false });
         return;
       }
-      if (workMode !== "compose" && !converseDraftTaskId) {
-        refreshWorkUxView({});
+      if (
+        activeTaskPlan &&
+        activeTaskPlan.content &&
+        activeTaskPlan.source !== "seed_internal" &&
+        (activeTaskId || converseDraftTaskId)
+      ) {
+        els.jobStatus.textContent = "项目位置已就绪。请在右侧确认规划后再开始开发。";
+        els.jobStatus.classList.remove("error");
+        els.jobActionable.textContent = "";
+        refreshTaskWorkspace();
+        refreshWorkUxView({ projectDirReady: true, prepBlocked: false });
         return;
       }
-      const goal = (els.goal && els.goal.value ? String(els.goal.value) : "").trim();
-      if (!goal) {
-        els.jobStatus.textContent = "请先填写任务目标";
-        els.jobStatus.classList.add("error");
-        refreshWorkUxView({});
-        return;
-      }
-      const type = selectedArtifactType();
-      const payload = {
-        goal,
-        contextRefs: materials.map((m) => ({
-          kind: m.kind,
-          path: m.path,
-          ...(m.projectOrigin ? { projectOrigin: m.projectOrigin } : {}),
-        })),
-      };
-      if (type) payload.requestedArtifactType = type;
-      if (converseDraftTaskId) payload.existingTaskId = converseDraftTaskId;
-      if (activeTaskPlan && activeTaskPlan.version != null) {
-        payload.confirmedPlanVersion = activeTaskPlan.version;
-      }
-      const result = await api.invoke("work.submitTask", payload);
-      await applySubmitTaskResult(result, payload, goal, {
-        fromPlanConfirm: false,
-      });
+      els.jobStatus.textContent = "项目已添加。请在下方说明目标，等待开发规划后再确认开始。";
+      els.jobStatus.classList.remove("error");
+      els.jobActionable.textContent = "";
+      refreshWorkUxView({ projectDirReady: true });
+      focusWorkNaturalLanguageInput();
     } catch (err) {
       els.jobStatus.textContent = userFacingWorkError(err);
       els.jobStatus.classList.add("error");
       refreshWorkUxView({});
-    } finally {
-      await refreshConnectionFromCapabilities();
-      if (els.submit) els.submit.disabled = false;
     }
   }
 
@@ -5921,56 +5938,30 @@
   }
 
   els.submit.addEventListener("click", async () => {
+    // SINGLE-RUNTIME-PATH-20：封死旧「开始处理」直提 submitTask。
+    // 有可确认模型规划时，转唯一主链确认入口；否则只引导对话。
     try {
-      await refreshConnectionFromCapabilities();
-      const type = selectedArtifactType();
-      if (!canSubmit(lastConnectionState)) {
-        els.jobStatus.textContent = "请先连接模型";
-        els.jobStatus.classList.add("error");
-        els.jobActionable.textContent = "前往设置连接真实模型后再开始处理。";
-        refreshWorkUxView({ modelReady: false });
+      if (
+        activeTaskPlan &&
+        activeTaskPlan.content &&
+        activeTaskPlan.source !== "seed_internal" &&
+        (activeTaskId || converseDraftTaskId)
+      ) {
+        await confirmPlanAndStartDevelopment();
         return;
       }
-      // 新建任务必须从 compose 发起，避免覆盖旧任务输入冒充新任务；
-      // 例外：对话中枢先建的理解任务（converseDraftTaskId）允许在任务态确定性开始。
-      if (workMode !== "compose" && !converseDraftTaskId) {
-        els.jobStatus.textContent = "请先点击「新建任务」";
-        els.jobStatus.classList.add("error");
-        return;
+      els.jobStatus.textContent = "请先在对话中说明目标并确认开发规划；确认前不会开始修改项目。";
+      els.jobStatus.classList.remove("error");
+      els.jobActionable.textContent = "";
+      if (els.submit) {
+        els.submit.hidden = true;
+        els.submit.setAttribute("hidden", "");
       }
-      const normalize =
-        (window.DigitalMeText && window.DigitalMeText.normalizeNewlines) ||
-        ((t) => String(t ?? "").replace(/\r\n/g, "\n").replace(/\r/g, "\n"));
-      const goalNormalized = normalize(els.goal.value || "");
-      if (els.goal.value !== goalNormalized) els.goal.value = goalNormalized;
-      const goal = goalNormalized.trim();
-      if (!goal) {
-        els.jobStatus.textContent = "请先填写任务目标";
-        els.jobStatus.classList.add("error");
-        return;
-      }
-      els.submit.disabled = true;
-      clearArtifactView();
-      const payload = {
-        goal,
-        contextRefs: materials.map((m) => ({ kind: m.kind, path: m.path, ...(m.projectOrigin ? { projectOrigin: m.projectOrigin } : {}) })),
-      };
-      // 不强迫传成果类型；Runtime 按意图派生。显式仅在隐藏控件有非空值时透传。
-      if (type) payload.requestedArtifactType = type;
-      if (converseDraftTaskId) payload.existingTaskId = converseDraftTaskId;
-      if (activeTaskPlan && activeTaskPlan.version != null) {
-        payload.confirmedPlanVersion = activeTaskPlan.version;
-      }
-      const result = await api.invoke("work.submitTask", payload);
-      await applySubmitTaskResult(result, payload, goal, {
-        fromPlanConfirm: false,
-      });
+      refreshWorkUxView({});
+      focusWorkNaturalLanguageInput();
     } catch (err) {
       els.jobStatus.textContent = userFacingWorkError(err);
       els.jobStatus.classList.add("error");
-    } finally {
-      await refreshConnectionFromCapabilities();
-      if (els.submit) els.submit.disabled = false;
     }
   });
 

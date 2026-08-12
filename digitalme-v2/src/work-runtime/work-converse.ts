@@ -63,10 +63,18 @@ export const CONVERSE_DEGRADED_NOTICE =
   '你仍然可以查看和打开已有成果，或使用明确的暂停、取消按钮；' +
   '等模型恢复连接后，我会继续按你的话推进。这段话我已记录，不会丢失。';
 
-/** 模型返回无法解析时的澄清提示（同为结构性降级文案）。 */
+/**
+ * 语义歧义时的澄清提示（仅当模型已给出合法回复且判定需要补充时使用）。
+ * 技术解析失败不得使用本句。
+ */
 export const CONVERSE_UNPARSEABLE_NOTICE =
   '我刚才没有把你的意思理解清楚。可以换一种说法再讲一次吗？' +
   '比如告诉我你是想了解情况、补充要求，还是希望我开始或继续做事。';
+
+/** 模型输出合同失败 / 规划生成失败（保留 Task 与目标；可重试）。 */
+export const CONVERSE_PLAN_FAILED_NOTICE =
+  '规划生成失败，可重试。你的目标和任务已保留，不会丢失。' +
+  '请再发送一次，或把目标说得更具体一些。';
 
 /** 非执行类意图：只回应，不产生任何执行性效果。 */
 export const NON_EXECUTION_INTENTS: readonly WorkConverseIntent[] = [
@@ -116,11 +124,12 @@ const CONVERSE_SYSTEM_PROMPT = [
   '你是用户的 Digital Me，以技术负责人的身份与用户讨论一项正在进行的任务。',
   '用户不懂技术，你要用平实的中文与其对话；不要输出任何内部术语、分析提纲或推理过程。',
   '根据下面提供的任务上下文与用户最新输入，判断用户意图并生成回复。',
-  '只输出一个 JSON 对象（不要 Markdown 代码块围栏、不要其他文字），字段如下：',
+  '输出合同：必须给出一个合法 JSON 对象。可以在前后有简短说明，或使用 Markdown 代码围栏，但其中必须含有完整 JSON。',
+  'JSON 字段如下（schema）：',
   '{"intent":"<必须是以下之一: discuss_or_question | add_goal_info | modify_plan | confirm_start | artifact_feedback | request_explanation | query_status | pause_or_cancel | final_adopt | other>",',
   ' "confidence": <0 到 1 的数字，表示你对意图判断的把握>,',
-  ' "reply": "<给用户的自然语言回复>",',
-  ' "planUpdate": "<可选：当用户补充了目标信息、要求修改规划或对成果提出修改反馈时，给出更新后的完整规划要点（分行列出目标、交付、路径、边界）；其他情况省略该字段>"}',
+  ' "reply": "<给用户的自然语言回复：说明你对目标的理解，并给出简短 CTO 建议>",',
+  ' "planUpdate": "<可选但强烈建议：完整开发规划要点，分行列出目标、交付、路径、准备、边界；首轮目标输入必须提供；其他情况可省略>"}',
   '意图判定规则：',
   '- 讨论、提问、请求解释、询问进度或状态，都不是执行请求，分别归入 discuss_or_question / request_explanation / query_status。',
   '- 用户补充目标或要求，且尚未开始执行 → add_goal_info；要求调整当前规划 → modify_plan；对已有成果提出修改意见 → artifact_feedback。',
@@ -139,6 +148,12 @@ const CONVERSE_SYSTEM_PROMPT = [
   '- 若用户在问当前结果：必须明确回答能不能用、是否达到目标、还需不需要改、真正需要用户知道的风险、建议下一步；',
   '- 不要假装已经完成了任何修改或执行；执行需要用户确认后才会开始。',
 ].join('\n');
+
+const CONVERSE_REPAIR_USER =
+  '上一次输出不符合合同。请只输出一个合法 JSON 对象（可无围栏），字段为 intent、confidence、reply，必要时加 planUpdate；不要 Markdown 说明。';
+
+const CONVERSE_FIRST_TURN_PLAN_REPAIR =
+  '上一次输出缺少可用的 planUpdate。请再输出一个合法 JSON 对象：intent、confidence、reply，以及完整 planUpdate（分行列出目标、交付、路径、准备、边界）。reply 需包含对目标的理解与简短建议。';
 
 export function buildConverseMessages(ctx: ConverseModelContext): ChatMessage[] {
   const lines: string[] = [];
@@ -201,7 +216,7 @@ export interface ParsedConverseOutput {
   planUpdate?: string;
 }
 
-/** 解析模型输出；无法解析返回 null（由策略层走澄清降级，不猜测）。 */
+/** 解析模型输出；无法解析返回 null（由策略层走规划失败语义，不猜测、不说「没听懂」）。 */
 export function parseConverseModelOutput(text: string): ParsedConverseOutput | null {
   const raw = String(text || '').trim();
   if (!raw) return null;
@@ -236,11 +251,56 @@ export function parseConverseModelOutput(text: string): ParsedConverseOutput | n
   };
 }
 
-function extractJsonObject(text: string): string | null {
+/**
+ * 从模型原文提取 JSON 对象：支持代码围栏与前后解释文字。
+ * 优先 ```json 围栏，其次首尾花括号平衡切片。
+ */
+export function extractJsonObject(text: string): string | null {
+  const raw = String(text || '');
+  const fence = raw.match(/```(?:json|JSON)?\s*([\s\S]*?)```/);
+  if (fence && fence[1]) {
+    const inner = fence[1].trim();
+    const fromFence = sliceBalancedJson(inner);
+    if (fromFence) return fromFence;
+  }
+  return sliceBalancedJson(raw);
+}
+
+function sliceBalancedJson(text: string): string | null {
   const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start < 0 || end <= start) return null;
-  return text.slice(start, end + 1);
+  if (start < 0) return null;
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i]!;
+    if (inString) {
+      if (escape) {
+        escape = false;
+      } else if (ch === '\\') {
+        escape = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === '{') depth += 1;
+    else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+/** 用户可见规划：仅 model 来源（缺省 source 兼容历史）。 */
+export function isUserVisiblePlan(plan: { source?: string } | null | undefined): boolean {
+  if (!plan) return false;
+  return plan.source !== 'seed_internal';
 }
 
 export interface ConverseDecision {
@@ -322,7 +382,13 @@ export function decideConverseEffects(input: ConverseDecisionInput): ConverseDec
         degraded: true,
       };
     }
-    return { ...base, reply: CONVERSE_UNPARSEABLE_NOTICE, needsClarification: true };
+    // 技术合同失败 ≠ 语义「没听懂」
+    return {
+      ...base,
+      reply: CONVERSE_PLAN_FAILED_NOTICE,
+      needsClarification: false,
+      degraded: true,
+    };
   }
   const { intent, confidence, reply, planUpdate } = input.parsed;
   if (confidence < LOW_CONFIDENCE_THRESHOLD) {
@@ -335,14 +401,16 @@ export function decideConverseEffects(input: ConverseDecisionInput): ConverseDec
       confidence,
       reply: safeReply,
       needsClarification: true,
+      // 低置信度不写入规划草稿，避免误更新
     };
   }
   const decision: ConverseDecision = { ...base, intent, confidence, reply };
+  if (planUpdate) decision.planDraftContent = planUpdate;
   switch (intent) {
     case 'add_goal_info':
     case 'modify_plan':
     case 'artifact_feedback':
-      if (planUpdate) decision.planDraftContent = planUpdate;
+      // planUpdate 已在上方写入
       break;
     case 'confirm_start':
       if (confidence < EXECUTION_EFFECT_CONFIDENCE_THRESHOLD) {
@@ -414,7 +482,14 @@ export interface WorkConverseResult {
   needsClarification: boolean;
   degraded: boolean;
   newTurns: TaskConversationTurn[];
-  plan?: { version: number; status: 'draft' | 'confirmed'; content: string };
+  plan?: {
+    version: number;
+    status: 'draft' | 'confirmed';
+    content: string;
+    source?: 'model' | 'seed_internal';
+  };
+  /** 规划生成失败（模型合同失败）；Task 仍已持久化。 */
+  planGenerationFailed?: boolean;
   startAuthorized: boolean;
   startMode?: 'new_execution' | 'revision';
   adoptRequested: boolean;
@@ -457,7 +532,7 @@ export async function runWorkConverse(
     const messages = buildConverseMessages({
       goal: task.goal,
       facts,
-      ...(existingPlan ? { plan: existingPlan } : {}),
+      ...(existingPlan && isUserVisiblePlan(existingPlan) ? { plan: existingPlan } : {}),
       recentTurns: recentTurnsWindow(existingTurns),
       userText: text,
     });
@@ -469,14 +544,29 @@ export async function runWorkConverse(
           messages: [
             ...messages,
             { role: 'assistant' as const, content: String(result.text || '').slice(0, 2000) },
-            {
-              role: 'user' as const,
-              content:
-                '上一次输出无法使用。请只输出一个合法 JSON 对象，字段为 intent、confidence、reply，必要时加 planUpdate；不要 Markdown。',
-            },
+            { role: 'user' as const, content: CONVERSE_REPAIR_USER },
           ],
         });
         parsed = parseConverseModelOutput(retry.text);
+      }
+      // 首轮必须拿到模型规划正文；缺 planUpdate 时再 repair 一次
+      if (parsed && createdTask && !existingPlan && !parsed.planUpdate) {
+        const planRetry = await deps.chat({
+          messages: [
+            ...messages,
+            {
+              role: 'assistant' as const,
+              content: JSON.stringify({
+                intent: parsed.intent,
+                confidence: parsed.confidence,
+                reply: parsed.reply,
+              }).slice(0, 2000),
+            },
+            { role: 'user' as const, content: CONVERSE_FIRST_TURN_PLAN_REPAIR },
+          ],
+        });
+        const repaired = parseConverseModelOutput(planRetry.text);
+        if (repaired) parsed = repaired;
       }
     } catch {
       chatFailed = true;
@@ -506,49 +596,84 @@ export async function runWorkConverse(
 
   // 规划效果（先于对话落盘，保证返回的 plan 与存储一致）
   let planOut: WorkConverseResult['plan'];
+  let planGenerationFailed = false;
   let draftContent = decision.planDraftContent;
-  // D11-B：首轮理解任务若模型未给出规划正文，用目标种子一份 draft，保证右栏可展示规划卡
-  if (!draftContent && createdTask && !existingPlan) {
-    draftContent = [
-      `目标：${task.goal}`,
-      '交付：按你的目标完成可查看、可试用的结果',
-      '路径：先理清需求与边界，再实现并做基本验证',
-      '准备：若需改代码，需要可用的项目位置与已连接的代码执行能力',
-      '边界：不会自动提交、推送或发布；仅在你确认的项目范围内工作',
-    ].join('\n');
+  let planSource: 'model' | 'seed_internal' = 'model';
+
+  // 首轮：仅模型 planUpdate 可成为用户可见开发规划；失败则内部 seed + 明确失败语义
+  if (createdTask && !existingPlan) {
+    if (draftContent && parsed) {
+      planSource = 'model';
+    } else if (!draftContent) {
+      planGenerationFailed = true;
+      planSource = 'seed_internal';
+      draftContent = [
+        `目标：${task.goal}`,
+        '交付：（内部恢复材料，未完成模型规划）',
+        '路径：（待重试生成）',
+        '准备：若需改代码，需要可用的项目位置与已连接的代码执行能力',
+        '边界：不会自动提交、推送或发布；仅在你确认的项目范围内工作',
+      ].join('\n');
+      if (!decision.degraded && modelAvailable && !chatFailed) {
+        decision.reply = CONVERSE_PLAN_FAILED_NOTICE;
+        decision.degraded = true;
+      } else if (!String(decision.reply || '').trim()) {
+        decision.reply = CONVERSE_PLAN_FAILED_NOTICE;
+        decision.degraded = true;
+      }
+    }
+  } else if (draftContent) {
+    planSource = 'model';
   }
+
   if (draftContent) {
     const nextPlan: TaskPlan = {
       version: (existingPlan?.version ?? 0) + 1,
       status: 'draft',
       content: draftContent,
       updatedAt: nowIso(),
+      source: planSource,
       ...(existingPlan?.confirmedFacts ? { confirmedFacts: existingPlan.confirmedFacts } : {}),
     };
     await deps.updatePlan(task.id, nextPlan);
-    planOut = { version: nextPlan.version, status: nextPlan.status, content: nextPlan.content };
+    // 仅用户可见规划回传给渲染层
+    if (isUserVisiblePlan(nextPlan)) {
+      planOut = {
+        version: nextPlan.version,
+        status: nextPlan.status,
+        content: nextPlan.content,
+        ...(nextPlan.source ? { source: nextPlan.source } : { source: 'model' as const }),
+      };
+    }
   } else if (decision.confirmPlan) {
-    const confirmed: TaskPlan = existingPlan
-      ? {
-          ...existingPlan,
-          status: 'confirmed',
-          updatedAt: nowIso(),
-          confirmedAt: nowIso(),
-        }
-      : {
-          version: 1,
-          status: 'confirmed',
-          content: '按当前任务目标执行（未单独建立规划正文）',
-          updatedAt: nowIso(),
-          confirmedAt: nowIso(),
-        };
-    await deps.updatePlan(task.id, confirmed);
-    planOut = { version: confirmed.version, status: confirmed.status, content: confirmed.content };
-  } else if (existingPlan) {
+    if (!existingPlan || !isUserVisiblePlan(existingPlan)) {
+      // 不得用空规划或内部 seed 确认开始
+      decision.startAuthorized = false;
+      decision.confirmPlan = false;
+    } else {
+      const confirmedSource =
+        existingPlan.source === 'seed_internal' ? 'model' : existingPlan.source || 'model';
+      const confirmed: TaskPlan = {
+        ...existingPlan,
+        status: 'confirmed',
+        updatedAt: nowIso(),
+        confirmedAt: nowIso(),
+        source: confirmedSource,
+      };
+      await deps.updatePlan(task.id, confirmed);
+      planOut = {
+        version: confirmed.version,
+        status: confirmed.status,
+        content: confirmed.content,
+        source: confirmedSource,
+      };
+    }
+  } else if (existingPlan && isUserVisiblePlan(existingPlan)) {
     planOut = {
       version: existingPlan.version,
       status: existingPlan.status,
       content: existingPlan.content,
+      ...(existingPlan.source ? { source: existingPlan.source } : {}),
     };
   }
 
@@ -612,6 +737,7 @@ export async function runWorkConverse(
     degraded: decision.degraded,
     newTurns: [userTurn, replyTurn],
     ...(planOut ? { plan: planOut } : {}),
+    ...(planGenerationFailed ? { planGenerationFailed: true } : {}),
     startAuthorized: decision.startAuthorized,
     ...(decision.startMode ? { startMode: decision.startMode } : {}),
     adoptRequested: decision.adoptRequested,
