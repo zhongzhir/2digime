@@ -1,0 +1,750 @@
+{
+  "schemaVersion": "corrective-18-smoke/1",
+  "task": "2DIGIME-BUILD-01-CORRECTIVE-PRODUCT-REDESIGN-18",
+  "startedAt": "2026-08-12T02:23:23.991Z",
+  "userData": "C:\\Users\\46554\\AppData\\Local\\Temp\\dm-c18-ud-ne32N5",
+  "adapter": {
+    "documentCapability": "fake",
+    "externalExecutor": "hooked_codex_like_isolation",
+    "note": "工程隔离；真实 renderer 主链；非 Owner 真机、非真实 Codex CLI"
+  },
+  "checks": [
+    {
+      "name": "entered_work_shell",
+      "ok": true,
+      "detail": {
+        "welcomeHidden": true,
+        "shellHidden": false,
+        "hasNl": true
+      }
+    },
+    {
+      "name": "shot_01-compose_nonempty",
+      "ok": true,
+      "detail": {
+        "file": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_corrective-18-smoke-evidence\\shots\\01-01-compose.png",
+        "size": 97078
+      }
+    },
+    {
+      "name": "plan_labeled_开发规划",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "heading": "开发规划",
+        "start": "确认规划并开始开发"
+      }
+    },
+    {
+      "name": "primary_start_label",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "heading": "开发规划",
+        "start": "确认规划并开始开发"
+      }
+    },
+    {
+      "name": "shot_02-plan_nonempty",
+      "ok": true,
+      "detail": {
+        "file": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_corrective-18-smoke-evidence\\shots\\02-02-plan.png",
+        "size": 112191
+      }
+    },
+    {
+      "name": "one_task_after_start",
+      "ok": true,
+      "detail": {
+        "taskCount": 1,
+        "jobCount": 1,
+        "artifactCount": 1,
+        "details": [
+          {
+            "taskId": "task_mspgt8ot4025a24267ad",
+            "statusLabel": "尚未决定",
+            "jobCount": 1,
+            "jobStatuses": [
+              "succeeded"
+            ],
+            "artifactIds": [
+              "art_mspgt9w1e36cf6263797"
+            ],
+            "decision": "undecided",
+            "ctoReport": "现在能不能用：现在还不建议当作可用版本。\n是否达到目标：还不能认定已达到目标。\n还需不需要修改：需要。先看已有改动，再决定是否继续修改。\n需要你知道的风险：暂时无法完成独立验收：本次独立验收结论未能按要求形成。不会自动提交、推送或发布。\n建议下一步：可以先查看已有成果；连上模型后我会重新给出完整结论。"
+          }
+        ]
+      }
+    },
+    {
+      "name": "job_created_after_start",
+      "ok": true,
+      "detail": {
+        "afterStart": {
+          "taskCount": 1,
+          "jobCount": 1,
+          "artifactCount": 1,
+          "details": [
+            {
+              "taskId": "task_mspgt8ot4025a24267ad",
+              "statusLabel": "尚未决定",
+              "jobCount": 1,
+              "jobStatuses": [
+                "succeeded"
+              ],
+              "artifactIds": [
+                "art_mspgt9w1e36cf6263797"
+              ],
+              "decision": "undecided",
+              "ctoReport": "现在能不能用：现在还不建议当作可用版本。\n是否达到目标：还不能认定已达到目标。\n还需不需要修改：需要。先看已有改动，再决定是否继续修改。\n需要你知道的风险：暂时无法完成独立验收：本次独立验收结论未能按要求形成。不会自动提交、推送或发布。\n建议下一步：可以先查看已有成果；连上模型后我会重新给出完整结论。"
+            }
+          ]
+        },
+        "startClick": {
+          "clicked": true,
+          "planHidden": true,
+          "status": "这项操作风险较高，请看右侧说明后再决定是否开始。",
+          "prepHidden": false,
+          "runningHidden": true
+        },
+        "prepVisible": {
+          "prepHidden": false,
+          "pickHidden": true,
+          "contHidden": true,
+          "createHidden": true
+        }
+      }
+    },
+    {
+      "name": "shot_03-after-start_nonempty",
+      "ok": true,
+      "detail": {
+        "file": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_corrective-18-smoke-evidence\\shots\\03-03-after-start.png",
+        "size": 199094
+      }
+    },
+    {
+      "name": "has_artifact",
+      "ok": true,
+      "detail": {
+        "taskCount": 1,
+        "jobCount": 1,
+        "artifactCount": 1,
+        "details": [
+          {
+            "taskId": "task_mspgt8ot4025a24267ad",
+            "statusLabel": "尚未决定",
+            "jobCount": 1,
+            "jobStatuses": [
+              "succeeded"
+            ],
+            "artifactIds": [
+              "art_mspgt9w1e36cf6263797"
+            ],
+            "decision": "undecided",
+            "ctoReport": "现在能不能用：现在还不建议当作可用版本。\n是否达到目标：还不能认定已达到目标。\n还需不需要修改：需要。先看已有改动，再决定是否继续修改。\n需要你知道的风险：暂时无法完成独立验收：本次独立验收结论未能按要求形成。不会自动提交、推送或发布。\n建议下一步：可以先查看已有成果；连上模型后我会重新给出完整结论。"
+          }
+        ]
+      }
+    },
+    {
+      "name": "not_auto_adopted",
+      "ok": true,
+      "detail": {
+        "taskCount": 1,
+        "jobCount": 1,
+        "artifactCount": 1,
+        "details": [
+          {
+            "taskId": "task_mspgt8ot4025a24267ad",
+            "statusLabel": "尚未决定",
+            "jobCount": 1,
+            "jobStatuses": [
+              "succeeded"
+            ],
+            "artifactIds": [
+              "art_mspgt9w1e36cf6263797"
+            ],
+            "decision": "undecided",
+            "ctoReport": "现在能不能用：现在还不建议当作可用版本。\n是否达到目标：还不能认定已达到目标。\n还需不需要修改：需要。先看已有改动，再决定是否继续修改。\n需要你知道的风险：暂时无法完成独立验收：本次独立验收结论未能按要求形成。不会自动提交、推送或发布。\n建议下一步：可以先查看已有成果；连上模型后我会重新给出完整结论。"
+          }
+        ]
+      }
+    },
+    {
+      "name": "cto_conclusion_fields",
+      "ok": true,
+      "detail": {
+        "taskId": "task_mspgt8ot4025a24267ad",
+        "statusLabel": "尚未决定",
+        "jobCount": 1,
+        "jobStatuses": [
+          "succeeded"
+        ],
+        "artifactIds": [
+          "art_mspgt9w1e36cf6263797"
+        ],
+        "decision": "undecided",
+        "ctoReport": "现在能不能用：现在还不建议当作可用版本。\n是否达到目标：还不能认定已达到目标。\n还需不需要修改：需要。先看已有改动，再决定是否继续修改。\n需要你知道的风险：暂时无法完成独立验收：本次独立验收结论未能按要求形成。不会自动提交、推送或发布。\n建议下一步：可以先查看已有成果；连上模型后我会重新给出完整结论。"
+      }
+    },
+    {
+      "name": "result_leads_with_cto",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "cto": "现在能不能用：现在还不建议当作可用版本。\n是否达到目标：还不能认定已达到目标。\n还需不需要修改：需要。先看已有改动，再决定是否继续修改。\n需要你知道的风险：暂时无法完成独立验收：本次独立验收结论未能按要求形成。不会自动提交、推送或发布。\n建议下一步：可以先查看已有成果；连上模型后我会重新给出完整结论。",
+        "title": "Digital Me 的结论",
+        "planHidden": true,
+        "startHidden": true,
+        "decision": "尚未决定",
+        "decisionHidden": false
+      }
+    },
+    {
+      "name": "no_start_dev_after_result",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "cto": "现在能不能用：现在还不建议当作可用版本。\n是否达到目标：还不能认定已达到目标。\n还需不需要修改：需要。先看已有改动，再决定是否继续修改。\n需要你知道的风险：暂时无法完成独立验收：本次独立验收结论未能按要求形成。不会自动提交、推送或发布。\n建议下一步：可以先查看已有成果；连上模型后我会重新给出完整结论。",
+        "title": "Digital Me 的结论",
+        "planHidden": true,
+        "startHidden": true,
+        "decision": "尚未决定",
+        "decisionHidden": false
+      }
+    },
+    {
+      "name": "undecided_visible",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "cto": "现在能不能用：现在还不建议当作可用版本。\n是否达到目标：还不能认定已达到目标。\n还需不需要修改：需要。先看已有改动，再决定是否继续修改。\n需要你知道的风险：暂时无法完成独立验收：本次独立验收结论未能按要求形成。不会自动提交、推送或发布。\n建议下一步：可以先查看已有成果；连上模型后我会重新给出完整结论。",
+        "title": "Digital Me 的结论",
+        "planHidden": true,
+        "startHidden": true,
+        "decision": "尚未决定",
+        "decisionHidden": false
+      }
+    },
+    {
+      "name": "shot_04-result_nonempty",
+      "ok": true,
+      "detail": {
+        "file": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_corrective-18-smoke-evidence\\shots\\04-04-result.png",
+        "size": 197186
+      }
+    },
+    {
+      "name": "no_ambiguous_buttons",
+      "ok": true,
+      "detail": {
+        "heading": {
+          "present": true,
+          "hidden": false,
+          "text": "开发规划",
+          "label": ""
+        },
+        "planHidden": true,
+        "startHidden": true,
+        "startLabel": "确认规划并开始开发",
+        "title": {
+          "present": true,
+          "hidden": false,
+          "text": "任务工作区 · 成果",
+          "label": ""
+        },
+        "decision": {
+          "present": true,
+          "hidden": false,
+          "text": "尚未决定",
+          "label": ""
+        },
+        "cto": {
+          "present": true,
+          "hidden": false,
+          "text": "现在能不能用：现在还不建议当作可用版本。\n是否达到目标：还不能认定已达到目标。\n还需不需要修改：需要。先看已有改动，再决定是否继续修改。\n需要你知道的风险：暂时无法完成独立验收：本次独立验收结论未能按要求形成。不会自动提交、推送或发布。\n建议下一步：可以先查看已有成果；连上模型后我会重新给出完整结论。",
+          "label": ""
+        },
+        "ctoTitle": {
+          "present": true,
+          "hidden": false,
+          "text": "Digital Me 的结论",
+          "label": ""
+        },
+        "moreHidden": true,
+        "acceptHidden": true,
+        "visibleAdopt": [],
+        "badVisible": [],
+        "timeline": "Digital Me将重点查看：formatLabel.jsDigital Me可能运行：若存在测试命令则运行并报告结果Digital Me方案：明确目标：修改这个项目中的 formatLabel，使输入 start 时返回 start-processing，并运行测试。 → 阅读相关实现：formatLabel.js → 在授权范围内实施最小必要改动Digital Me现在能不能用：现在还不建议当作可用版本。\n是否达到目标：还不能认定已达到目标。\n还需不需要修改：需要。先看已有改动，再决定是否继续修改。\n需要你知道的风险：暂时无法完成独立验收：本次独立验收结论未能按要求形成。不会自动提交、推送或发布。\n建议下一步：可以先查看已有成果；连上模型后我会重新给出完整结论。Digital Me请检查模型连接后重新验收，或先查看已有成果再决定。你修改这个项目中的 formatLabel，使输入 start 时返回 start-processing，并运行测试。Digital Me建议先改 formatLabel，再跑现有测试确认。右侧是开发规划，确认后我开始调度开发。Digital Me当前结果需要你决定下一步，已暂停自动修改。",
+        "nlDisabled": false
+      }
+    },
+    {
+      "name": "more_menu_hidden",
+      "ok": true,
+      "detail": {
+        "heading": {
+          "present": true,
+          "hidden": false,
+          "text": "开发规划",
+          "label": ""
+        },
+        "planHidden": true,
+        "startHidden": true,
+        "startLabel": "确认规划并开始开发",
+        "title": {
+          "present": true,
+          "hidden": false,
+          "text": "任务工作区 · 成果",
+          "label": ""
+        },
+        "decision": {
+          "present": true,
+          "hidden": false,
+          "text": "尚未决定",
+          "label": ""
+        },
+        "cto": {
+          "present": true,
+          "hidden": false,
+          "text": "现在能不能用：现在还不建议当作可用版本。\n是否达到目标：还不能认定已达到目标。\n还需不需要修改：需要。先看已有改动，再决定是否继续修改。\n需要你知道的风险：暂时无法完成独立验收：本次独立验收结论未能按要求形成。不会自动提交、推送或发布。\n建议下一步：可以先查看已有成果；连上模型后我会重新给出完整结论。",
+          "label": ""
+        },
+        "ctoTitle": {
+          "present": true,
+          "hidden": false,
+          "text": "Digital Me 的结论",
+          "label": ""
+        },
+        "moreHidden": true,
+        "acceptHidden": true,
+        "visibleAdopt": [],
+        "badVisible": [],
+        "timeline": "Digital Me将重点查看：formatLabel.jsDigital Me可能运行：若存在测试命令则运行并报告结果Digital Me方案：明确目标：修改这个项目中的 formatLabel，使输入 start 时返回 start-processing，并运行测试。 → 阅读相关实现：formatLabel.js → 在授权范围内实施最小必要改动Digital Me现在能不能用：现在还不建议当作可用版本。\n是否达到目标：还不能认定已达到目标。\n还需不需要修改：需要。先看已有改动，再决定是否继续修改。\n需要你知道的风险：暂时无法完成独立验收：本次独立验收结论未能按要求形成。不会自动提交、推送或发布。\n建议下一步：可以先查看已有成果；连上模型后我会重新给出完整结论。Digital Me请检查模型连接后重新验收，或先查看已有成果再决定。你修改这个项目中的 formatLabel，使输入 start 时返回 start-processing，并运行测试。Digital Me建议先改 formatLabel，再跑现有测试确认。右侧是开发规划，确认后我开始调度开发。Digital Me当前结果需要你决定下一步，已暂停自动修改。",
+        "nlDisabled": false
+      }
+    },
+    {
+      "name": "right_adopt_hidden",
+      "ok": true,
+      "detail": {
+        "heading": {
+          "present": true,
+          "hidden": false,
+          "text": "开发规划",
+          "label": ""
+        },
+        "planHidden": true,
+        "startHidden": true,
+        "startLabel": "确认规划并开始开发",
+        "title": {
+          "present": true,
+          "hidden": false,
+          "text": "任务工作区 · 成果",
+          "label": ""
+        },
+        "decision": {
+          "present": true,
+          "hidden": false,
+          "text": "尚未决定",
+          "label": ""
+        },
+        "cto": {
+          "present": true,
+          "hidden": false,
+          "text": "现在能不能用：现在还不建议当作可用版本。\n是否达到目标：还不能认定已达到目标。\n还需不需要修改：需要。先看已有改动，再决定是否继续修改。\n需要你知道的风险：暂时无法完成独立验收：本次独立验收结论未能按要求形成。不会自动提交、推送或发布。\n建议下一步：可以先查看已有成果；连上模型后我会重新给出完整结论。",
+          "label": ""
+        },
+        "ctoTitle": {
+          "present": true,
+          "hidden": false,
+          "text": "Digital Me 的结论",
+          "label": ""
+        },
+        "moreHidden": true,
+        "acceptHidden": true,
+        "visibleAdopt": [],
+        "badVisible": [],
+        "timeline": "Digital Me将重点查看：formatLabel.jsDigital Me可能运行：若存在测试命令则运行并报告结果Digital Me方案：明确目标：修改这个项目中的 formatLabel，使输入 start 时返回 start-processing，并运行测试。 → 阅读相关实现：formatLabel.js → 在授权范围内实施最小必要改动Digital Me现在能不能用：现在还不建议当作可用版本。\n是否达到目标：还不能认定已达到目标。\n还需不需要修改：需要。先看已有改动，再决定是否继续修改。\n需要你知道的风险：暂时无法完成独立验收：本次独立验收结论未能按要求形成。不会自动提交、推送或发布。\n建议下一步：可以先查看已有成果；连上模型后我会重新给出完整结论。Digital Me请检查模型连接后重新验收，或先查看已有成果再决定。你修改这个项目中的 formatLabel，使输入 start 时返回 start-processing，并运行测试。Digital Me建议先改 formatLabel，再跑现有测试确认。右侧是开发规划，确认后我开始调度开发。Digital Me当前结果需要你决定下一步，已暂停自动修改。",
+        "nlDisabled": false
+      }
+    },
+    {
+      "name": "nl_still_enabled",
+      "ok": true,
+      "detail": {
+        "heading": {
+          "present": true,
+          "hidden": false,
+          "text": "开发规划",
+          "label": ""
+        },
+        "planHidden": true,
+        "startHidden": true,
+        "startLabel": "确认规划并开始开发",
+        "title": {
+          "present": true,
+          "hidden": false,
+          "text": "任务工作区 · 成果",
+          "label": ""
+        },
+        "decision": {
+          "present": true,
+          "hidden": false,
+          "text": "尚未决定",
+          "label": ""
+        },
+        "cto": {
+          "present": true,
+          "hidden": false,
+          "text": "现在能不能用：现在还不建议当作可用版本。\n是否达到目标：还不能认定已达到目标。\n还需不需要修改：需要。先看已有改动，再决定是否继续修改。\n需要你知道的风险：暂时无法完成独立验收：本次独立验收结论未能按要求形成。不会自动提交、推送或发布。\n建议下一步：可以先查看已有成果；连上模型后我会重新给出完整结论。",
+          "label": ""
+        },
+        "ctoTitle": {
+          "present": true,
+          "hidden": false,
+          "text": "Digital Me 的结论",
+          "label": ""
+        },
+        "moreHidden": true,
+        "acceptHidden": true,
+        "visibleAdopt": [],
+        "badVisible": [],
+        "timeline": "Digital Me将重点查看：formatLabel.jsDigital Me可能运行：若存在测试命令则运行并报告结果Digital Me方案：明确目标：修改这个项目中的 formatLabel，使输入 start 时返回 start-processing，并运行测试。 → 阅读相关实现：formatLabel.js → 在授权范围内实施最小必要改动Digital Me现在能不能用：现在还不建议当作可用版本。\n是否达到目标：还不能认定已达到目标。\n还需不需要修改：需要。先看已有改动，再决定是否继续修改。\n需要你知道的风险：暂时无法完成独立验收：本次独立验收结论未能按要求形成。不会自动提交、推送或发布。\n建议下一步：可以先查看已有成果；连上模型后我会重新给出完整结论。Digital Me请检查模型连接后重新验收，或先查看已有成果再决定。你修改这个项目中的 formatLabel，使输入 start 时返回 start-processing，并运行测试。Digital Me建议先改 formatLabel，再跑现有测试确认。右侧是开发规划，确认后我开始调度开发。Digital Me当前结果需要你决定下一步，已暂停自动修改。",
+        "nlDisabled": false
+      }
+    },
+    {
+      "name": "consult_not_unparseable",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "bad": false,
+        "slice": "：若存在测试命令则运行并报告结果Digital Me方案：明确目标：修改这个项目中的 formatLabel，使输入 start 时返回 start-processing，并运行测试。 → 阅读相关实现：formatLabel.js → 在授权范围内实施最小必要改动Digital Me现在能不能用：现在还不建议当作可用版本。\n是否达到目标：还不能认定已达到目标。\n还需不需要修改：需要。先看已有改动，再决定是否继续修改。\n需要你知道的风险：暂时无法完成独立验收：本次独立验收结论未能按要求形成。不会自动提交、推送或发布。\n建议下一步：可以先查看已有成果；连上模型后我会重新给出完整结论。Digital Me请检查模型连接后重新验收，或先查看已有成果再决定。你修改这个项目中的 formatLabel，使输入 start 时返回 start-processing，并运行测试。Digital Me建议先改 formatLabel，再跑现有测试确认。右侧是开发规划，确认后我开始调度开发。Digital Me当前结果需要你决定下一步，已暂停自动修改。你我看不懂这份结果。能不能用、要不要改、有什么风险？"
+      }
+    },
+    {
+      "name": "consult_does_not_create_job",
+      "ok": true,
+      "detail": {
+        "before": 1,
+        "after": 1
+      }
+    },
+    {
+      "name": "shot_05-consult_nonempty",
+      "ok": true,
+      "detail": {
+        "file": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_corrective-18-smoke-evidence\\shots\\05-05-consult.png",
+        "size": 199560
+      }
+    },
+    {
+      "name": "restart_same_task",
+      "ok": true,
+      "detail": {
+        "before": {
+          "taskCount": 1,
+          "jobCount": 1,
+          "artifactCount": 1,
+          "details": [
+            {
+              "taskId": "task_mspgt8ot4025a24267ad",
+              "statusLabel": "尚未决定",
+              "jobCount": 1,
+              "jobStatuses": [
+                "succeeded"
+              ],
+              "artifactIds": [
+                "art_mspgt9w1e36cf6263797"
+              ],
+              "decision": "undecided",
+              "ctoReport": "现在能不能用：现在还不建议当作可用版本。\n是否达到目标：还不能认定已达到目标。\n还需不需要修改：需要。先看已有改动，再决定是否继续修改。\n需要你知道的风险：暂时无法完成独立验收：本次独立验收结论未能按要求形成。不会自动提交、推送或发布。\n建议下一步：可以先查看已有成果；连上模型后我会重新给出完整结论。"
+            }
+          ]
+        },
+        "after": {
+          "taskCount": 1,
+          "jobCount": 1,
+          "artifactCount": 1,
+          "details": [
+            {
+              "taskId": "task_mspgt8ot4025a24267ad",
+              "statusLabel": "尚未决定",
+              "jobCount": 1,
+              "jobStatuses": [
+                "succeeded"
+              ],
+              "artifactIds": [
+                "art_mspgt9w1e36cf6263797"
+              ],
+              "decision": "undecided",
+              "ctoReport": "现在能不能用：现在还不建议当作可用版本。\n是否达到目标：还不能认定已达到目标。\n还需不需要修改：需要。先看已有改动，再决定是否继续修改。\n需要你知道的风险：暂时无法完成独立验收：本次独立验收结论未能按要求形成。不会自动提交、推送或发布。\n建议下一步：可以先查看已有成果；连上模型后我会重新给出完整结论。"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "restart_same_jobs",
+      "ok": true,
+      "detail": {
+        "before": 1,
+        "after": 1
+      }
+    },
+    {
+      "name": "restart_still_undecided",
+      "ok": true,
+      "detail": {
+        "taskCount": 1,
+        "jobCount": 1,
+        "artifactCount": 1,
+        "details": [
+          {
+            "taskId": "task_mspgt8ot4025a24267ad",
+            "statusLabel": "尚未决定",
+            "jobCount": 1,
+            "jobStatuses": [
+              "succeeded"
+            ],
+            "artifactIds": [
+              "art_mspgt9w1e36cf6263797"
+            ],
+            "decision": "undecided",
+            "ctoReport": "现在能不能用：现在还不建议当作可用版本。\n是否达到目标：还不能认定已达到目标。\n还需不需要修改：需要。先看已有改动，再决定是否继续修改。\n需要你知道的风险：暂时无法完成独立验收：本次独立验收结论未能按要求形成。不会自动提交、推送或发布。\n建议下一步：可以先查看已有成果；连上模型后我会重新给出完整结论。"
+          }
+        ]
+      }
+    },
+    {
+      "name": "restart_no_start_development",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "title": "任务工作区",
+        "planHidden": true,
+        "startShown": false,
+        "decision": "尚未决定",
+        "cto": ""
+      }
+    },
+    {
+      "name": "restart_decision_visible",
+      "ok": true,
+      "detail": {
+        "ok": true,
+        "title": "任务工作区",
+        "planHidden": true,
+        "startShown": false,
+        "decision": "尚未决定",
+        "cto": ""
+      }
+    },
+    {
+      "name": "shot_06-restart_nonempty",
+      "ok": true,
+      "detail": {
+        "file": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_corrective-18-smoke-evidence\\shots\\06-06-restart.png",
+        "size": 102953
+      }
+    }
+  ],
+  "shots": [
+    {
+      "name": "01-compose",
+      "file": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_corrective-18-smoke-evidence\\shots\\01-01-compose.png",
+      "size": 97078,
+      "realState": "compose_ready",
+      "kind": "ui_main_chain"
+    },
+    {
+      "name": "02-plan",
+      "file": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_corrective-18-smoke-evidence\\shots\\02-02-plan.png",
+      "size": 112191,
+      "realState": "plan_visible_after_nl",
+      "kind": "ui_main_chain"
+    },
+    {
+      "name": "03-after-start",
+      "file": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_corrective-18-smoke-evidence\\shots\\03-03-after-start.png",
+      "size": 199094,
+      "realState": "after_confirm_plan",
+      "kind": "ui_main_chain"
+    },
+    {
+      "name": "04-result",
+      "file": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_corrective-18-smoke-evidence\\shots\\04-04-result.png",
+      "size": 197186,
+      "realState": "cto_conclusion_visible",
+      "kind": "ui_main_chain"
+    },
+    {
+      "name": "05-consult",
+      "file": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_corrective-18-smoke-evidence\\shots\\05-05-consult.png",
+      "size": 199560,
+      "realState": "grounded_consult_reply",
+      "kind": "ui_main_chain"
+    },
+    {
+      "name": "06-restart",
+      "file": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_corrective-18-smoke-evidence\\shots\\06-06-restart.png",
+      "size": 102953,
+      "realState": "same_task_no_replay_start",
+      "kind": "ui_main_chain"
+    }
+  ],
+  "timeline": [
+    {
+      "at": "2026-08-12T02:23:27.332Z",
+      "event": "screenshot",
+      "detail": {
+        "name": "01-compose",
+        "stateLabel": "compose_ready",
+        "file": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_corrective-18-smoke-evidence\\shots\\01-01-compose.png"
+      }
+    },
+    {
+      "at": "2026-08-12T02:23:28.057Z",
+      "event": "ui_nl_goal_sent"
+    },
+    {
+      "at": "2026-08-12T02:23:28.376Z",
+      "event": "screenshot",
+      "detail": {
+        "name": "02-plan",
+        "stateLabel": "plan_visible_after_nl",
+        "file": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_corrective-18-smoke-evidence\\shots\\02-02-plan.png"
+      }
+    },
+    {
+      "at": "2026-08-12T02:23:29.579Z",
+      "event": "ui_confirm_plan_clicked",
+      "detail": {
+        "clicked": true,
+        "planHidden": true,
+        "status": "这项操作风险较高，请看右侧说明后再决定是否开始。",
+        "prepHidden": false,
+        "runningHidden": true
+      }
+    },
+    {
+      "at": "2026-08-12T02:23:29.580Z",
+      "event": "prep_clicked",
+      "detail": {
+        "prepHidden": false,
+        "pickHidden": true,
+        "contHidden": true,
+        "createHidden": true,
+        "clicked": true,
+        "id": "btn-tw-high-risk-confirm",
+        "riskHidden": true
+      }
+    },
+    {
+      "at": "2026-08-12T02:23:31.180Z",
+      "event": "screenshot",
+      "detail": {
+        "name": "03-after-start",
+        "stateLabel": "after_confirm_plan",
+        "file": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_corrective-18-smoke-evidence\\shots\\03-03-after-start.png"
+      }
+    },
+    {
+      "at": "2026-08-12T02:23:32.512Z",
+      "event": "screenshot",
+      "detail": {
+        "name": "04-result",
+        "stateLabel": "cto_conclusion_visible",
+        "file": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_corrective-18-smoke-evidence\\shots\\04-04-result.png"
+      }
+    },
+    {
+      "at": "2026-08-12T02:23:32.652Z",
+      "event": "screenshot",
+      "detail": {
+        "name": "05-consult",
+        "stateLabel": "grounded_consult_reply",
+        "file": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_corrective-18-smoke-evidence\\shots\\05-05-consult.png"
+      }
+    },
+    {
+      "at": "2026-08-12T02:23:35.658Z",
+      "event": "screenshot",
+      "detail": {
+        "name": "06-restart",
+        "stateLabel": "same_task_no_replay_start",
+        "file": "D:\\Projects\\_2digime-build-software-work-quality-loop-01\\digitalme-v2\\scripts\\_corrective-18-smoke-evidence\\shots\\06-06-restart.png"
+      }
+    }
+  ],
+  "counts": {
+    "afterFirstSuccess": {
+      "taskCount": 1,
+      "jobCount": 1,
+      "artifactCount": 1,
+      "details": [
+        {
+          "taskId": "task_mspgt8ot4025a24267ad",
+          "statusLabel": "尚未决定",
+          "jobCount": 1,
+          "jobStatuses": [
+            "succeeded"
+          ],
+          "artifactIds": [
+            "art_mspgt9w1e36cf6263797"
+          ],
+          "decision": "undecided",
+          "ctoReport": "现在能不能用：现在还不建议当作可用版本。\n是否达到目标：还不能认定已达到目标。\n还需不需要修改：需要。先看已有改动，再决定是否继续修改。\n需要你知道的风险：暂时无法完成独立验收：本次独立验收结论未能按要求形成。不会自动提交、推送或发布。\n建议下一步：可以先查看已有成果；连上模型后我会重新给出完整结论。"
+        }
+      ]
+    }
+  },
+  "restart": {
+    "before": {
+      "taskCount": 1,
+      "jobCount": 1,
+      "artifactCount": 1,
+      "details": [
+        {
+          "taskId": "task_mspgt8ot4025a24267ad",
+          "statusLabel": "尚未决定",
+          "jobCount": 1,
+          "jobStatuses": [
+            "succeeded"
+          ],
+          "artifactIds": [
+            "art_mspgt9w1e36cf6263797"
+          ],
+          "decision": "undecided",
+          "ctoReport": "现在能不能用：现在还不建议当作可用版本。\n是否达到目标：还不能认定已达到目标。\n还需不需要修改：需要。先看已有改动，再决定是否继续修改。\n需要你知道的风险：暂时无法完成独立验收：本次独立验收结论未能按要求形成。不会自动提交、推送或发布。\n建议下一步：可以先查看已有成果；连上模型后我会重新给出完整结论。"
+        }
+      ]
+    },
+    "after": {
+      "taskCount": 1,
+      "jobCount": 1,
+      "artifactCount": 1,
+      "details": [
+        {
+          "taskId": "task_mspgt8ot4025a24267ad",
+          "statusLabel": "尚未决定",
+          "jobCount": 1,
+          "jobStatuses": [
+            "succeeded"
+          ],
+          "artifactIds": [
+            "art_mspgt9w1e36cf6263797"
+          ],
+          "decision": "undecided",
+          "ctoReport": "现在能不能用：现在还不建议当作可用版本。\n是否达到目标：还不能认定已达到目标。\n还需不需要修改：需要。先看已有改动，再决定是否继续修改。\n需要你知道的风险：暂时无法完成独立验收：本次独立验收结论未能按要求形成。不会自动提交、推送或发布。\n建议下一步：可以先查看已有成果；连上模型后我会重新给出完整结论。"
+        }
+      ]
+    }
+  },
+  "verdict": "runtime_smoke_passed",
+  "ownerAccepted": false,
+  "finishedAt": "2026-08-12T02:23:35.658Z",
+  "ownerRuntime": "not_started"
+}

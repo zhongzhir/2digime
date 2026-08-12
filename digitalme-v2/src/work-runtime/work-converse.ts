@@ -1,5 +1,10 @@
 import { nowIso } from '../shared/ids';
 import { randomUUID } from 'node:crypto';
+import {
+  buildGroundedConsultReply,
+  isCurrentTaskConsult,
+  type ConsultTaskContext,
+} from './work-cto-consult';
 
 /** 对话轮/意图结论局部 id（不属于 shared/ids 的对象前缀集）。 */
 function converseId(prefix: 'turn' | 'intent'): string {
@@ -77,12 +82,16 @@ export function isWorkConverseIntent(value: unknown): value is WorkConverseInten
 }
 
 export interface ConverseTaskFacts {
-  /** 用户可读阶段标签（如 等待开始 / 处理中 / 需要你确认）。 */
+  /** 用户可读阶段标签（如 等待开始 / 开发中 / 尚未决定）。 */
   stageLabel: string;
   hasArtifact: boolean;
   jobRunning: boolean;
   /** 最近一次失败的用户面说明（如有）。 */
   lastFailure?: string;
+  latestJobStatus?: string;
+  ownerDecision?: 'undecided' | 'accepted' | 'rejected';
+  canAdoptSuggested?: boolean;
+  ctoReport?: string;
 }
 
 export interface ConverseModelContext {
@@ -123,9 +132,10 @@ const CONVERSE_SYSTEM_PROMPT = [
   '- 「以后想加个排行榜，难不难？」→ 只是询问难度，不是让你现在做 → discuss_or_question 或 request_explanation。',
   '- 「背景改成夜晚的，其他不动」→ 已有成果时是 artifact_feedback；尚未开始时是 modify_plan。',
   '- 「行，就这么干」→ confirm_start；「这版挺好，不用再改了」→ final_adopt。',
+  '- 用户问「能不能用 / 要不要改 / 有什么风险 / 现在怎么样 / 看不懂这份结果」→ query_status 或 request_explanation，必须结合当前任务、最新执行与验收结论用几句人话回答；禁止说「没听懂请再说一次」。',
   'reply 要求：',
   '- 说明你对这句话的理解和判断；',
-  '- 说明接下来会发生什么或需要用户做什么；',
+  '- 若用户在问当前结果：必须明确回答能不能用、是否达到目标、还需不需要改、真正需要用户知道的风险、建议下一步；',
   '- 不要假装已经完成了任何修改或执行；执行需要用户确认后才会开始。',
 ].join('\n');
 
@@ -140,6 +150,26 @@ export function buildConverseMessages(ctx: ConverseModelContext): ChatMessage[] 
   lines.push(`成果：${ctx.facts.hasArtifact ? '已有可查看的成果' : '尚未形成成果'}`);
   if (ctx.facts.lastFailure) {
     lines.push(`最近一次失败说明：${ctx.facts.lastFailure}`);
+  }
+  if (ctx.facts.latestJobStatus) {
+    lines.push(`最近一次执行状态：${ctx.facts.latestJobStatus}`);
+  }
+  if (ctx.facts.ownerDecision) {
+    lines.push(
+      `采用决定：${
+        ctx.facts.ownerDecision === 'accepted'
+          ? '已采用'
+          : ctx.facts.ownerDecision === 'rejected'
+            ? '未采用'
+            : '尚未决定'
+      }`,
+    );
+  }
+  if (ctx.facts.canAdoptSuggested != null) {
+    lines.push(`是否建议采用：${ctx.facts.canAdoptSuggested ? '是' : '否，建议继续修改'}`);
+  }
+  if (ctx.facts.ctoReport) {
+    lines.push(`当前验收结论：${ctx.facts.ctoReport}`);
   }
   if (ctx.plan) {
     lines.push(
@@ -236,6 +266,8 @@ export interface ConverseDecisionInput {
    * 必须先有 Digital Me 的理解回应，再由用户确认（两步启动）。
    */
   firstTurn?: boolean;
+  userText?: string;
+  consultContext?: ConsultTaskContext;
 }
 
 /**
@@ -261,12 +293,44 @@ export function decideConverseEffects(input: ConverseDecisionInput): ConverseDec
     pauseRequested: false,
   };
   if (!input.modelAvailable) {
+    if (isCurrentTaskConsult(input.userText || '') && input.consultContext) {
+      return {
+        ...base,
+        intent: 'query_status',
+        confidence: 0.9,
+        reply: buildGroundedConsultReply(input.consultContext),
+      };
+    }
     return { ...base, reply: CONVERSE_DEGRADED_NOTICE, degraded: true };
   }
   if (!input.parsed) {
+    if (isCurrentTaskConsult(input.userText || '') && input.consultContext) {
+      return {
+        ...base,
+        intent: 'query_status',
+        confidence: 0.85,
+        reply: buildGroundedConsultReply(input.consultContext),
+      };
+    }
     return { ...base, reply: CONVERSE_UNPARSEABLE_NOTICE, needsClarification: true };
   }
   const { intent, confidence, reply, planUpdate } = input.parsed;
+  if (
+    isCurrentTaskConsult(input.userText || '') &&
+    input.consultContext &&
+    (intent === 'other' ||
+      intent === 'query_status' ||
+      intent === 'request_explanation' ||
+      intent === 'discuss_or_question' ||
+      confidence < LOW_CONFIDENCE_THRESHOLD)
+  ) {
+    return {
+      ...base,
+      intent: intent === 'other' ? 'query_status' : intent,
+      confidence: Math.max(confidence, 0.8),
+      reply: buildGroundedConsultReply(input.consultContext),
+    };
+  }
   if (confidence < LOW_CONFIDENCE_THRESHOLD) {
     return { ...base, intent, confidence, reply, needsClarification: true };
   }
@@ -395,12 +459,25 @@ export async function runWorkConverse(
     }
   }
 
+  const consultContext: ConsultTaskContext = {
+    goal: task.goal,
+    stageLabel: facts.stageLabel,
+    hasArtifact: facts.hasArtifact,
+    jobRunning: facts.jobRunning,
+    ...(facts.latestJobStatus ? { latestJobStatus: facts.latestJobStatus } : {}),
+    ...(facts.ownerDecision ? { ownerDecision: facts.ownerDecision } : {}),
+    ...(facts.canAdoptSuggested != null ? { canAdoptSuggested: facts.canAdoptSuggested } : {}),
+    ...(facts.ctoReport ? { ctoReport: facts.ctoReport } : {}),
+    ...(facts.lastFailure ? { lastFailure: facts.lastFailure } : {}),
+  };
   const decision = decideConverseEffects({
     parsed,
     modelAvailable: modelAvailable && !chatFailed,
     hasArtifact: facts.hasArtifact,
     jobRunning: facts.jobRunning,
     firstTurn: createdTask,
+    userText: text,
+    consultContext,
   });
 
   // 规划效果（先于对话落盘，保证返回的 plan 与存储一致）

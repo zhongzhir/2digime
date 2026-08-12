@@ -510,6 +510,7 @@ export interface CommandMap {
           technicalBullets?: string[];
           adoptWarnings?: string[];
           canAdoptSuggested: boolean;
+          ctoReport?: string;
         };
         /** 本版本对应的修改要求（version.note / Job lineage）。 */
         revisionRequest?: string;

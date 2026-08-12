@@ -221,7 +221,7 @@ describe('software-dev-blocker-03', () => {
       'utf8',
     );
     assert.match(html, /id="cc-acceptance-section"/);
-    assert.match(html, /Digital Me 检查结果|执行状态/);
+    assert.match(html, /Digital Me 的结论/);
     assert.doesNotMatch(html, /id="project-folder-card"/);
     assert.match(html, /id="btn-tw-create-project"/);
     assert.match(html, /由 Digital Me 创建新项目/);

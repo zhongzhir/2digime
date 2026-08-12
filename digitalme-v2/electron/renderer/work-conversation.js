@@ -87,15 +87,12 @@
       const actions = [];
       const decision = String(input.ctoDecision || '').trim();
       if (input.canAdoptSuggested) {
-        actions.push({ id: 'confirm_adopt', label: '确认采用' });
+        actions.push({ id: 'confirm_adopt', label: '采用这份成果' });
       } else if (
         (decision === 'needs_revision' || input.primaryAction === 'confirm_continue') &&
         (input.revisionPaused || input.requireUserDecision)
       ) {
-        // D11-D：普通修订自动进行；仅暂停/需用户决策时保留手动继续
-        actions.push({ id: 'confirm_continue', label: '按修订建议继续' });
-      } else if (decision === 'insufficient_evidence' || /无法完成独立验收/.test(cto)) {
-        actions.push({ id: 'retry_acceptance', label: '稍后重新验收' });
+        actions.push({ id: 'confirm_continue', label: '按建议继续修改' });
       }
       push({
         id: `cto_${input.artifactVersionId || 'latest'}`,

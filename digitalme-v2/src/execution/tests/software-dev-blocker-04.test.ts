@@ -99,7 +99,7 @@ describe('software-dev-blocker-04', () => {
     assert.match(summary.headline, /可以采用|可以试用|达到规划/);
   });
 
-  it('任务列表区分建议继续修改 / 需要你确认 / 已采用', () => {
+  it('任务列表区分建议继续修改 / 建议采用 / 已采用', () => {
     const succeeded = [job({ id: 'j1', status: 'succeeded', artifactId: 'a1' })];
     assert.equal(
       userFacingLabelFromLatestJob(succeeded, {
@@ -119,7 +119,7 @@ describe('software-dev-blocker-04', () => {
           canAdoptSuggested: true,
         },
       }),
-      AWAITING_CONFIRM_LABEL,
+      '建议采用',
     );
     assert.equal(
       userFacingLabelFromLatestJob(succeeded, {

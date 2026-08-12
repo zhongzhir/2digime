@@ -38,7 +38,7 @@ describe('CONVERSATIONAL-WORKSPACE-10A interaction ownership', () => {
       artifactVersionId: 'ver_2',
     });
     const acceptance = turns.find((t) => t.kind === 'acceptance');
-    assert.ok(acceptance?.actions?.some((a) => a.id === 'confirm_adopt' && a.label === '确认采用'));
+    assert.ok(acceptance?.actions?.some((a) => a.id === 'confirm_adopt' && a.label === '采用这份成果'));
   });
 
   it('needs_review 右栏 UX 不派生确认采用', () => {
@@ -59,7 +59,7 @@ describe('CONVERSATIONAL-WORKSPACE-10A interaction ownership', () => {
     const stageJs = await fs.readFile(path.join(root, 'electron/renderer/work-ux-stage.js'), 'utf8');
     assert.match(appJs, /确认采用仅在中栏时间线/);
     assert.match(appJs, /actionId === "confirm_adopt"/);
-    assert.match(stageJs, /确认采用仅在中栏/);
+    assert.match(stageJs, /采用入口只在中栏|确认采用仅在中栏/);
     assert.doesNotMatch(
       stageJs,
       /stage === 'needs_review'[\s\S]{0,400}push\('accept',\s*'确认采用'/,

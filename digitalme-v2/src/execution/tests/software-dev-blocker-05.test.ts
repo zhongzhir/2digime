@@ -246,7 +246,8 @@ describe('software-dev-blocker-05', () => {
     assert.match(appJs, /addRevisionShotFromDataUrl/);
     assert.match(appJs, /请用文字写清问题要点/);
     assert.match(appJs, /还不能正常运行/);
-    assert.match(appJs, /可以试用了/);
+    const stageJs = await fs.readFile(path.join(root, 'electron/renderer/work-ux-stage.js'), 'utf8');
+    assert.match(stageJs, /已采用 · 可以试用/);
     assert.match(main, /shell:saveRevisionImage/);
     assert.match(main, /reuseEmptySameName|prepareSoftwareProject/);
     assert.match(css, /\.artifact-scroll\s*\{/);

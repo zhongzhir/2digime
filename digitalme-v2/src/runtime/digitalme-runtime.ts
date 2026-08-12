@@ -447,14 +447,41 @@ export class DigitalMeRuntime {
       getTaskFacts: async (taskId) => {
         const detail = await work.getTask({ taskId });
         const jobStatus = detail.latestJob?.status;
-        return {
+        const facts: import('../work-runtime/work-converse').ConverseTaskFacts = {
           stageLabel: detail.userFacingLabel,
           hasArtifact: detail.artifactIds.length > 0,
           jobRunning: jobStatus === 'queued' || jobStatus === 'running',
+          ...(jobStatus ? { latestJobStatus: jobStatus } : {}),
           ...(jobStatus === 'failed' && detail.latestJob?.actionable
             ? { lastFailure: detail.latestJob.actionable }
             : {}),
         };
+        const artId = detail.artifactIds[0];
+        if (artId) {
+          try {
+            const content = (await this.getContent({ artifactId: artId })) as {
+              ownerDecision?: { status: 'undecided' | 'accepted' | 'rejected' };
+              codeChange?: {
+                acceptanceSummary?: {
+                  canAdoptSuggested?: boolean;
+                  ctoReport?: string;
+                  headline?: string;
+                };
+              };
+            };
+            const decision = content.ownerDecision?.status;
+            if (decision) facts.ownerDecision = decision;
+            const acc = content.codeChange?.acceptanceSummary;
+            if (acc && typeof acc.canAdoptSuggested === 'boolean') {
+              facts.canAdoptSuggested = acc.canAdoptSuggested;
+            }
+            const report = String(acc?.ctoReport || acc?.headline || '').trim();
+            if (report) facts.ctoReport = report;
+          } catch {
+            /* 咨询仍可用阶段标签 */
+          }
+        }
+        return facts;
       },
     };
     return runWorkConverse(deps, input);

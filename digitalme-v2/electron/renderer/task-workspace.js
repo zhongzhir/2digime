@@ -39,7 +39,7 @@
       const line = String(raw || '').trim();
       if (!line) continue;
       const labeled = line.match(
-        /^(任务目标|目标|预期交付|交付|建议实现路径|实现路径|路径|必要准备条件|准备条件|准备|重要边界或风险|重要边界|边界|风险)\s*[:：]\s*(.*)$/,
+        /^(任务目标|目标|预期交付|如何判断完成|交付|准备怎么做|建议实现路径|实现路径|路径|必要准备条件|准备条件|准备|重要边界或风险|重要边界|边界|风险)\s*[:：]\s*(.*)$/,
       );
       if (labeled) {
         const key = mapLabel(labeled[1]);
@@ -65,8 +65,8 @@
 
   function mapLabel(label) {
     if (/目标/.test(label)) return 'goal';
-    if (/交付/.test(label)) return 'delivery';
-    if (/路径/.test(label)) return 'path';
+    if (/如何判断完成|交付/.test(label)) return 'delivery';
+    if (/准备怎么做|路径/.test(label)) return 'path';
     if (/准备/.test(label)) return 'prep';
     if (/边界|风险/.test(label)) return 'bounds';
     return 'rest';
@@ -114,8 +114,30 @@
     }
   }
 
+  /**
+   * 从现有 Task/Job/Artifact 事实派生右栏模式。
+   * 已有 Job 或成果时不得回到初始「开发规划 + 开始开发」。
+   */
+  function deriveWorkspaceMode(facts) {
+    const f = facts || {};
+    const js = String(f.jobStatus || '');
+    const running = js === 'queued' || js === 'running';
+    const hasArtifact = !!(
+      f.hasArtifact ||
+      (Array.isArray(f.artifactIds) && f.artifactIds.length) ||
+      f.latestArtifactId
+    );
+    if (f.prepBlocked) return 'prep_blocked';
+    if (running && f.revising) return 'revising';
+    if (running) return 'running';
+    if (hasArtifact) return 'complete';
+    if (js === 'failed' || js === 'cancelled') return 'idle';
+    if (f.hasPlan && !js) return 'planning';
+    return 'idle';
+  }
+
   function titleForMode(mode) {
-    if (mode === 'planning') return '任务工作区 · 规划';
+    if (mode === 'planning') return '任务工作区 · 开发规划';
     if (mode === 'prep_blocked') return '任务工作区 · 准备';
     if (mode === 'running') return '任务工作区 · 开发中';
     if (mode === 'revising') return '任务工作区 · 修订中';
@@ -133,8 +155,7 @@
     };
     if (versionEl) versionEl.textContent = '规划版本 v' + String(plan.version || 1);
     if (statusEl) {
-      statusEl.textContent =
-        plan.status === 'confirmed' ? '已确认' : '待确认 · 可继续在对话中修改';
+      statusEl.textContent = plan.status === 'confirmed' ? '已确认' : '待你确认';
     }
     setText('#tw-plan-goal', sections.goal);
     setText('#tw-plan-delivery', sections.delivery || sections.rest);
@@ -148,10 +169,8 @@
     }
     const hint = planEl.querySelector('#tw-plan-confirm-hint');
     if (hint) {
-      hint.textContent =
-        '确认后将按规划版本 v' +
-        String(plan.version || 1) +
-        ' 开始开发。确认对象是这份规划，不会再分别确认普通技术细节。';
+      hint.hidden = true;
+      hint.textContent = '';
     }
   }
 
@@ -198,7 +217,16 @@
     }
     const writeScope = (preview && preview.writeScope) || [];
     const wd = preview && preview.workingDirectory ? String(preview.workingDirectory) : '';
-    if (wd && writeScope.some((s) => !String(s).startsWith(wd))) {
+    const norm = (p) =>
+      String(p || '')
+        .replace(/\\/g, '/')
+        .replace(/\/+$/, '')
+        .toLowerCase();
+    const root = norm(wd);
+    if (root && writeScope.some((s) => {
+      const child = norm(s);
+      return child !== root && !child.startsWith(root + '/');
+    })) {
       return true;
     }
     return false;
@@ -209,6 +237,7 @@
     renderTaskWorkspace,
     isHighRiskExecution,
     titleForMode,
+    deriveWorkspaceMode,
   };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;

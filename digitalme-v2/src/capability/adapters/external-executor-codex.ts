@@ -5,6 +5,7 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { spawn } from 'node:child_process';
+import { hiddenSpawnOptions } from '../../execution/hidden-spawn';
 import { asLocalCapabilityAdapter } from '../local-adapter-lifecycle';
 import type {
   AvailabilityCheckResult,
@@ -794,12 +795,13 @@ async function spawnCodexExec(input: {
   return new Promise((resolve, reject) => {
     let settled = false;
     let timedOut = false;
-    const child = spawn(nodeExecutable, args, {
-      env,
-      shell: false,
-      windowsHide: true,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+    const child = spawn(
+      nodeExecutable,
+      args,
+      hiddenSpawnOptions({
+        env,
+      }),
+    );
     let stdout = '';
     let stderr = '';
     const timer = setTimeout(() => {
@@ -957,16 +959,18 @@ function extractQuestions(summary: string): ExecutorRunResult['questions'] {
 async function runCodexVersion(codexJs: string): Promise<string> {
   return new Promise((resolve) => {
     const nodeExecutable = resolveNodeExecutable(process.env);
-    const child = spawn(nodeExecutable, [codexJs, '--version'], {
-      env: buildMinimalExecutorEnv(process.env, {
-        ...(process.versions.electron && nodeExecutable === process.execPath
-          ? { ELECTRON_RUN_AS_NODE: '1' }
-          : {}),
+    const child = spawn(
+      nodeExecutable,
+      [codexJs, '--version'],
+      hiddenSpawnOptions({
+        env: buildMinimalExecutorEnv(process.env, {
+          ...(process.versions.electron && nodeExecutable === process.execPath
+            ? { ELECTRON_RUN_AS_NODE: '1' }
+            : {}),
+        }),
+        stdio: ['ignore', 'pipe', 'pipe'],
       }),
-      shell: false,
-      windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    );
     let out = '';
     child.stdout?.on('data', (c: Buffer) => {
       out += c.toString('utf8');

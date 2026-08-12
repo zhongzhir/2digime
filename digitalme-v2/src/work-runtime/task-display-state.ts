@@ -8,7 +8,9 @@ import type { Task } from './task';
 import {
   AWAITING_CONFIRM_LABEL,
   NEEDS_REVISION_LABEL,
+  REJECTED_LABEL,
   REVISING_LABEL,
+  SUGGEST_ADOPT_LABEL,
   USER_FACING_LABELS,
   isDegradedQualityGrade,
   latestJob,
@@ -37,7 +39,9 @@ export type TaskDisplayStateId =
   | 'adopted_unverified'
   | 'failed'
   | 'cancelled'
-  | 'needs_project';
+  | 'needs_project'
+  | 'rejected'
+  | 'suggest_adopt';
 
 export type TaskDisplayState = {
   taskId: string;
@@ -166,7 +170,7 @@ function combineAdopted(run: RunAvailability): Pick<TaskDisplayState, 'displayId
  * 1. 排队/运行中 → 处理中 / 正在修改
  * 2. 失败 → 执行失败；取消 → 已取消
  * 3. 成功后：采用维度 × 运行维度组合（采用不覆盖运行事实）
- * 4. 未采用：可以试用 / 建议继续修改 / 需要你确认
+ * 4. 未采用：可试用 / 建议采用 / 建议继续修改 / 尚未决定 / 未采用
  * 5. 无有效 projectDir（且像软件任务）→ 需要选择项目位置
  */
 export function deriveTaskDisplayState(input: {
@@ -240,6 +244,9 @@ export function deriveTaskDisplayState(input: {
       if (adopted) {
         return { ...base, ...combineAdopted(run) };
       }
+      if (soft?.ownerDecision === 'rejected') {
+        return { ...base, displayId: 'rejected', label: REJECTED_LABEL };
+      }
       if (isDegradedQualityGrade(soft?.qualityGrade)) {
         return {
           ...base,
@@ -254,6 +261,9 @@ export function deriveTaskDisplayState(input: {
         soft?.canSuggestTryRun != null ||
         soft?.startupCheckVerdict
       ) {
+        if (soft?.canAdoptSuggested === true) {
+          return { ...base, displayId: 'suggest_adopt', label: SUGGEST_ADOPT_LABEL };
+        }
         if (run === 'can_try') {
           return { ...base, displayId: 'can_try_run', label: TRY_RUN_LABEL };
         }

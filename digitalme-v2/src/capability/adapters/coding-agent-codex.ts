@@ -6,6 +6,7 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { hiddenSpawnSyncOptions } from '../../execution/hidden-spawn';
 import {
   CODING_AGENT_DEFAULT_ACTIONS,
   codingAgentMayHold,
@@ -81,14 +82,19 @@ export async function runCodexCodingAgent(input: {
     '-',
   ];
 
-  const result = spawnSync(process.execPath, [resolveCodexJs(), ...args], {
-    encoding: 'utf8',
-    shell: false,
-    timeout: input.timeoutMs ?? 300_000,
-    input: prompt,
-    env: { ...process.env },
-    windowsHide: true,
-  });
+  const result = spawnSync(
+    process.execPath,
+    [resolveCodexJs(), ...args],
+    hiddenSpawnSyncOptions({
+      encoding: 'utf8',
+      timeout: input.timeoutMs ?? 300_000,
+      input: prompt,
+      env: {
+        ...process.env,
+        ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: '1' } : {}),
+      },
+    }),
+  );
 
   const stdout = String(result.stdout || '');
   const stderr = [

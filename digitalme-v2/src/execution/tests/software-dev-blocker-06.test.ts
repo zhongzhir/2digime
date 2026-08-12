@@ -9,7 +9,6 @@ import type { ExecutionJob } from '../../work-runtime/execution-job';
 import type { Artifact } from '../../work-runtime/artifact';
 import type { Task } from '../../work-runtime/task';
 import {
-  TRY_RUN_LABEL,
   EXEC_FAILED_LABEL,
   NEEDS_PROJECT_LABEL,
   computeTaskActivityTime,
@@ -17,7 +16,7 @@ import {
   resolveTaskProjectDir,
   sortTasksByActivityTime,
 } from '../../work-runtime/task-display-state';
-import { NEEDS_REVISION_LABEL } from '../../work-runtime/derive';
+import { NEEDS_REVISION_LABEL, SUGGEST_ADOPT_LABEL } from '../../work-runtime/derive';
 
 const root = path.resolve(__dirname, '../../..');
 
@@ -167,9 +166,9 @@ describe('software-dev-blocker-06', () => {
     assert.equal(failedA.label, EXEC_FAILED_LABEL);
     assert.equal(failedB.label, EXEC_FAILED_LABEL);
     assert.equal(needsFix.label, NEEDS_REVISION_LABEL);
-    assert.equal(canTry.label, TRY_RUN_LABEL);
+    assert.equal(canTry.label, SUGGEST_ADOPT_LABEL);
     assert.notEqual(failedA.label, canTry.label);
-    assert.equal(canTry.displayId, 'can_try_run');
+    assert.equal(canTry.displayId, 'suggest_adopt');
   });
 
   it('无 projectDir 才显示项目位置问题；有目录的失败任务不显示', () => {

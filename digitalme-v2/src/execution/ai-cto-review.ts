@@ -6,6 +6,7 @@
 import type { ChatMessage } from '../infrastructure/model-http';
 import type { VerificationCheckResult } from './external-executor-contract';
 import type { CtoReviewInput, DigitalMeCtoReview } from './cto-review';
+import { formatCtoUserConclusion } from '../work-runtime/work-cto-consult';
 
 export const AI_CTO_DECISIONS = [
   'meets_plan',
@@ -224,12 +225,19 @@ function unavailableReview(
       };
     }
   }
+  const why =
+    reason === 'unavailable'
+      ? '独立验收所需的模型连接不可用。'
+      : '本次独立验收结论未能按要求形成。';
   return {
     schemaVersion: 'digitalme-cto-review/1',
-    report:
-      reason === 'unavailable'
-        ? '暂时无法完成独立验收：验收所需的模型连接不可用。现有工程证据会保留，你可以先查看已有成果，稍后再重新验收。'
-        : '暂时无法完成独立验收：本次验收结论未能按要求形成。现有工程证据会保留，你可以先查看已有成果，稍后再重新验收。',
+    report: formatCtoUserConclusion({
+      canUse: '现在还不建议当作可用版本。',
+      goalAttained: '还不能认定已达到目标。',
+      needChange: '需要。先看已有改动，再决定是否继续修改。',
+      risks: `暂时无法完成独立验收：${why}不会自动提交、推送或发布。`,
+      nextStep: '可以先查看已有成果；连上模型后我会重新给出完整结论。',
+    }),
     findings: ['尚未形成可核对的独立验收结论'],
     nonBlockingRisks: [],
     primaryAction: 'need_decision',

@@ -102,7 +102,7 @@ test('同 Task 单活跃 Job;queued→running→succeeded', async () => {
   assert.equal(job.artifactId, artifactIdForJob(jobId));
   const view = await runtime.getTask({ taskId });
   assert.equal(view.state, 'completed');
-  assert.equal(view.userFacingLabel, '需要你确认');
+  assert.equal(view.userFacingLabel, '尚未决定');
   assert.deepEqual(view.artifactIds, [artifactIdForJob(jobId)]);
   assert.equal('status' in view.task, false);
   assert.equal('jobIds' in view.task, false);
@@ -378,7 +378,7 @@ test('事件丢失后查询结果一致;用户面无 Legacy 词汇', async () =>
   events.length = 0; // 模拟事件丢失
   const view = await runtime.getTask({ taskId });
   assert.equal(view.state, 'completed');
-  assert.equal(view.userFacingLabel, '需要你确认');
+  assert.equal(view.userFacingLabel, '尚未决定');
   assert.equal(view.latestJob?.status, 'succeeded');
   assert.equal(view.latestJob?.progressNote, undefined);
   const dumped = JSON.stringify(view);
@@ -423,7 +423,7 @@ test('修改成果:同 Artifact 追加 capability 版本;失败保留 head', asy
   const afterView = await runtime.getTask({ taskId });
   assert.equal(afterView.artifactIds.length, 1);
   assert.equal(afterView.artifactIds[0], artifactId);
-  assert.equal(afterView.userFacingLabel, '需要你确认');
+  assert.equal(afterView.userFacingLabel, '尚未决定');
   const after = await runtime.getArtifact(artifactId);
   assert.ok(after);
   assert.equal(after.versions.length, 2);

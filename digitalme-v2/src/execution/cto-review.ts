@@ -9,6 +9,7 @@ import type {
   VerificationCheckResult,
   VerificationVerdict,
 } from './external-executor-contract';
+import { formatCtoUserConclusion } from '../work-runtime/work-cto-consult';
 
 export type CtoPrimaryAction =
   | 'confirm_continue'
@@ -333,6 +334,25 @@ export function buildDigitalMeCtoReview(input: CtoReviewInput): DigitalMeCtoRevi
     ...blockingIssues.map((x) => `问题：${x}`),
     ...softIssues.map((x) => `待确认：${x}`),
   ].slice(0, 8);
+
+  const canUse =
+    goalAttained
+      ? '可以试用；采用前这还不是最终交付。'
+      : primaryAction === 'confirm_continue'
+        ? '现在还不建议当作可用版本。'
+        : '现在还不能当作可用版本。';
+  const attainedText = goalAttained ? '已达到本轮目标。' : '尚未达到目标。';
+  const needChange = goalAttained ? '不是必须再改；有意见直接说。' : '需要继续修改。';
+  const risks =
+    (nonBlockingRisks.length ? nonBlockingRisks.slice(0, 3).join('；') : '') ||
+    (blockingIssues.length ? blockingIssues.slice(0, 2).join('；') : '不会自动提交、推送或发布。');
+  report = formatCtoUserConclusion({
+    canUse,
+    goalAttained: attainedText,
+    needChange,
+    risks,
+    nextStep: userFacingNextStep,
+  });
 
   return {
     schemaVersion: 'digitalme-cto-review/1',

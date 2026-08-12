@@ -150,7 +150,7 @@ describe('software-dev-blocker-07', () => {
         canAdoptSuggested: true,
       },
     });
-    assert.equal(d.label, TRY_RUN_LABEL);
+    assert.equal(d.label, '建议采用');
   });
 
   it('未采用 + partial → 建议继续修改', () => {

@@ -24,7 +24,7 @@ describe('D11-B planning workspace', () => {
     const html = await fs.readFile(path.join(root, 'electron/renderer/index.html'), 'utf8');
     assert.match(html, /id="task-workspace-title"[^>]*>任务工作区/);
     assert.match(html, /id="task-workspace-plan"/);
-    assert.match(html, /id="btn-start-development"[^>]*>开始开发/);
+    assert.match(html, /id="btn-start-development"[^>]*>确认规划并开始开发/);
     assert.match(html, /id="task-workspace-prep"/);
     assert.match(html, /task-workspace\.js/);
     assert.doesNotMatch(html, /<h2>成果<\/h2>/);
@@ -50,7 +50,7 @@ describe('D11-B planning workspace', () => {
     assert.match(html, /id="tw-running-title"[^>]*>开发中/);
     const app = await fs.readFile(path.join(root, 'electron/renderer/app.js'), 'utf8');
     assert.match(app, /showPrepBlocked/);
-    assert.match(app, /mode = "running"/);
+    assert.match(app, /deriveWorkspaceMode/);
     assert.match(app, /fromPlanConfirm && !highRisk/);
     assert.match(app, /请先在右侧确认最新规划后再开始/);
     assert.equal(app.includes('sealLegacyMidConfirmCards'), false);
@@ -79,6 +79,13 @@ describe('D11-B planning workspace', () => {
     assert.equal(sections.path, '先做基础版');
     assert.equal(
       tw.isHighRiskExecution('做一个小游戏', { workingDirectory: 'D:/a', writeScope: ['D:/a'] }),
+      false,
+    );
+    assert.equal(
+      tw.isHighRiskExecution('做一个小游戏', {
+        workingDirectory: 'D:\\tmp\\proj',
+        writeScope: ['D:/tmp/proj'],
+      }),
       false,
     );
     assert.equal(

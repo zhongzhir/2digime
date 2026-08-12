@@ -11,15 +11,17 @@ export type TaskState = (typeof TASK_STATES)[number];
 /** 用户面文案 — 封闭表;「正在修改」由修订中的 processing 派生,非独立持久态。 */
 export const USER_FACING_LABELS: Record<TaskState, string> = {
   waiting: '等待开始',
-  processing: '处理中',
-  completed: '需要你确认',
-  attention: '需要处理',
+  processing: '开发中',
+  completed: '尚未决定',
+  attention: '受阻',
 };
 
-export const REVISING_LABEL = '正在修改';
+export const REVISING_LABEL = '修订中';
 export const ADOPTED_LABEL = '已采用';
+export const REJECTED_LABEL = '未采用';
 export const NEEDS_REVISION_LABEL = '建议继续修改';
-export const AWAITING_CONFIRM_LABEL = '需要你确认';
+export const AWAITING_CONFIRM_LABEL = '尚未决定';
+export const SUGGEST_ADOPT_LABEL = '建议采用';
 
 /** 同一 Task 下最新 Job:按 createdAt 排序,同刻以 id 决胜(全序,无并列)。 */
 export function latestJob(jobsForTask: readonly ExecutionJob[]): ExecutionJob | undefined {
@@ -136,6 +138,8 @@ export function userFacingLabelFromLatestJob(
           if (run === 'needs_fix') return '已采用 · 仍需修复';
           return '已采用 · 尚未验证';
         }
+        if (soft.ownerDecision === 'rejected') return REJECTED_LABEL;
+        if (soft.canAdoptSuggested === true) return SUGGEST_ADOPT_LABEL;
         if (run === 'can_try') return '可以试用';
         if (run === 'needs_fix') return NEEDS_REVISION_LABEL;
         if (isDegradedQualityGrade(soft.qualityGrade)) return USER_FACING_LABELS.attention;

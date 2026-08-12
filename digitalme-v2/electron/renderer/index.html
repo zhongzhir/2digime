@@ -373,7 +373,7 @@
                       <button type="button" id="btn-open-project-folder" class="ghost" hidden>打开项目文件夹</button>
                       <button type="button" id="btn-restart-compose" class="ghost" hidden>创建新任务</button>
                       <details class="work-more-menu" id="work-more-menu" hidden>
-                        <summary>更多</summary>
+                        <summary class="visually-hidden">其他操作</summary>
                         <div class="row work-more-actions" id="work-more-actions"></div>
                       </details>
                     </div>
@@ -396,8 +396,8 @@
                       <p id="collab-status" class="meta" aria-live="polite"></p>
                       <pre id="collab-return" class="collab-return" hidden></pre>
                       <div class="row" id="collab-actions" hidden>
-                        <button type="button" id="btn-work-open-collab-detail">前往处理</button>
-                        <button type="button" id="btn-collab-revoke" class="ghost">撤销授权</button>
+                        <button type="button" id="btn-work-open-collab-detail" hidden>打开协作详情</button>
+                        <button type="button" id="btn-collab-revoke" class="ghost" hidden>结束这次协作</button>
                       </div>
                       <p id="collab-error" class="muted tiny error" hidden></p>
                     </div>
@@ -427,7 +427,7 @@
               <div class="artifact-head">
                 <h2 id="task-workspace-title">任务工作区</h2>
                 <details class="work-more-menu artifact-exports-more" id="artifact-exports-more" hidden>
-                  <summary>导出</summary>
+                  <summary>保存副本</summary>
                   <div class="row artifact-exports" id="artifact-exports">
                     <button type="button" id="btn-copy">复制</button>
                     <button type="button" id="btn-export-md">导出 Markdown</button>
@@ -442,34 +442,31 @@
 
               <div id="task-workspace-plan" class="task-workspace-plan" hidden>
                 <div class="tw-plan-head">
-                  <h3 id="tw-plan-heading">任务规划</h3>
+                  <h3 id="tw-plan-heading">开发规划</h3>
                   <p id="tw-plan-version" class="meta">规划版本</p>
                   <p id="tw-plan-status" class="muted tiny">待确认</p>
                 </div>
                 <dl class="tw-plan-dl">
                   <div>
-                    <dt>任务目标</dt>
+                    <dt>目标</dt>
                     <dd id="tw-plan-goal"></dd>
                   </div>
                   <div>
-                    <dt>预期交付</dt>
-                    <dd id="tw-plan-delivery"></dd>
-                  </div>
-                  <div>
-                    <dt>建议实现路径</dt>
+                    <dt>准备怎么做</dt>
                     <dd id="tw-plan-path"></dd>
                   </div>
                   <div>
-                    <dt>必要准备条件</dt>
-                    <dd id="tw-plan-prep"></dd>
+                    <dt>如何判断完成</dt>
+                    <dd id="tw-plan-delivery"></dd>
                   </div>
                   <div>
-                    <dt>重要边界或风险</dt>
+                    <dt>重要边界</dt>
                     <dd id="tw-plan-bounds"></dd>
                   </div>
                 </dl>
-                <p id="tw-plan-confirm-hint" class="muted tiny"></p>
-                <button type="button" id="btn-start-development" class="primary">开始开发</button>
+                <p id="tw-plan-prep" class="muted tiny" hidden></p>
+                <p id="tw-plan-confirm-hint" class="muted tiny" hidden></p>
+                <button type="button" id="btn-start-development" class="primary">确认规划并开始开发</button>
               </div>
 
               <div id="task-workspace-prep" class="task-workspace-prep" hidden>
@@ -484,8 +481,8 @@
                   <button type="button" id="btn-tw-connect-coding" class="primary" hidden>连接代码执行能力</button>
                   <button type="button" id="btn-tw-open-settings" class="ghost" hidden>打开设置</button>
                   <button type="button" id="btn-tw-prep-continue" class="primary" hidden>继续准备</button>
-                  <button type="button" id="btn-tw-high-risk-confirm" class="primary" hidden>确认并开始</button>
-                  <button type="button" id="btn-tw-high-risk-cancel" class="ghost" hidden>返回修改</button>
+                  <button type="button" id="btn-tw-high-risk-confirm" class="primary" hidden>确认后开始开发</button>
+                  <button type="button" id="btn-tw-high-risk-cancel" class="ghost" hidden>先不开始</button>
                 </div>
                 <p id="tw-prep-continue" class="muted tiny"></p>
               </div>
@@ -569,14 +566,14 @@
                   <p id="cc-revision-request" class="cc-revision-request"></p>
                 </section>
                 <section class="cc-section cc-acceptance" id="cc-acceptance-section" hidden>
-                  <h3 id="cc-acceptance-title">执行状态</h3>
-                  <p id="cc-acceptance-exec" class="cc-acceptance-exec muted tiny"></p>
+                  <h3 id="cc-acceptance-title">Digital Me 的结论</h3>
+                  <p id="cc-acceptance-exec" class="cc-acceptance-exec"></p>
                   <p id="cc-acceptance-goal" class="cc-acceptance-goal" hidden></p>
-                  <p id="cc-cto-report" class="cc-cto-report" hidden></p>
+                  <p id="cc-cto-report" class="cc-cto-report"></p>
                   <ul id="cc-acceptance-bullets" class="cc-acceptance-bullets" hidden></ul>
                   <p id="cc-acceptance-next" class="cc-acceptance-next muted" hidden></p>
                   <p id="cc-acceptance-reco" class="cc-acceptance-reco" hidden></p>
-                  <p id="cc-acceptance-redirect" class="muted tiny">完整验收说明见中间对话区。</p>
+                  <p id="cc-acceptance-redirect" class="muted tiny" hidden></p>
                   <details id="cc-tech-evidence" class="cc-tech-evidence" hidden>
                     <summary>技术证据</summary>
                     <ul id="cc-tech-bullets" class="cc-acceptance-bullets"></ul>

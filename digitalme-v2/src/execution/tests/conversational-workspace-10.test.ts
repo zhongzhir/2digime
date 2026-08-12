@@ -56,7 +56,7 @@ describe('CONVERSATIONAL-WORKSPACE-10', () => {
       artifactVersionId: 'ver_2',
     });
     const acceptance = turns.find((t) => t.kind === 'acceptance');
-    assert.ok(acceptance?.actions?.some((a) => a.id === 'confirm_adopt' && a.label === '确认采用'));
+    assert.ok(acceptance?.actions?.some((a) => a.id === 'confirm_adopt' && a.label === '采用这份成果'));
   });
 
   it('D11-A：关键词路由已移除；未达标阶段主动作不再是修订按钮', () => {
@@ -88,7 +88,8 @@ describe('CONVERSATIONAL-WORKSPACE-10', () => {
     assert.match(blocked.statusLine, /对话区/);
     const retry = blocked.actions.find((a) => a.id === 'retry_job');
     assert.ok(retry);
-    assert.notEqual(retry!.slot, 'primary');
+    assert.equal(retry!.slot, 'primary');
+    assert.match(blocked.statusLine, /对话区/);
   });
 
   it('renderer：中栏对话 + 固定 NL + 右栏空成果文案 + 不重复 CTO 长报告', async () => {
@@ -99,11 +100,12 @@ describe('CONVERSATIONAL-WORKSPACE-10', () => {
     assert.match(html, /id="work-nl-input"/);
     assert.match(html, /id="btn-work-nl-send"/);
     assert.match(html, /尚未形成可交付成果/);
-    assert.match(html, /完整验收说明见中间对话区/);
+    assert.match(html, /Digital Me 的结论/);
+    assert.match(html, /id="cc-tech-evidence"/);
     assert.match(html, /work-conversation\.js/);
     assert.match(appJs, /function submitWorkNaturalLanguage/);
     assert.match(appJs, /function renderWorkTimeline/);
-    assert.match(appJs, /CTO 完整叙事只在中栏对话/);
+    assert.match(appJs, /ccCtoReport|ctoReport/);
     assert.match(appJs, /确认采用「/);
     assert.match(appJs, /结束当前交付循环/);
     assert.match(css, /\.work-nl-composer/);

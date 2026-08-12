@@ -1279,20 +1279,20 @@
       if (acc) {
         els.ccAcceptanceSection.hidden = false;
         els.ccAcceptanceSection.removeAttribute("hidden");
-        if (els.ccAcceptanceTitle) els.ccAcceptanceTitle.textContent = "执行状态";
+        if (els.ccAcceptanceTitle) els.ccAcceptanceTitle.textContent = "Digital Me 的结论";
         if (els.ccAcceptanceExec) {
-          els.ccAcceptanceExec.textContent =
-            acc.executionStatusLabel || acc.recommendation || "本轮执行已结束";
+          els.ccAcceptanceExec.hidden = true;
+          els.ccAcceptanceExec.textContent = "";
         }
-        // CTO 完整叙事只在中栏对话；右栏不重复长报告
         if (els.ccAcceptanceGoal) {
           els.ccAcceptanceGoal.hidden = true;
           els.ccAcceptanceGoal.setAttribute("hidden", "");
         }
         if (els.ccCtoReport) {
-          els.ccCtoReport.hidden = true;
-          els.ccCtoReport.setAttribute("hidden", "");
-          els.ccCtoReport.textContent = "";
+          const report = String(acc.ctoReport || acc.headline || acc.recommendation || "").trim();
+          els.ccCtoReport.hidden = !report;
+          if (report) els.ccCtoReport.removeAttribute("hidden");
+          els.ccCtoReport.textContent = report;
         }
         if (els.ccAcceptanceBullets) {
           els.ccAcceptanceBullets.hidden = true;
@@ -1339,10 +1339,15 @@
     if (els.ccSummary) {
       // Coding Agent 原始摘要不再作为默认主文案；CTO 报告优先
       const cto = String((codeChange.acceptanceSummary && codeChange.acceptanceSummary.ctoReport) || "").trim();
+      const happenedSection = els.ccSummary.closest ? els.ccSummary.closest(".cc-section") : null;
       if (cto) {
         els.ccSummary.textContent = "";
         els.ccSummary.hidden = true;
         els.ccSummary.setAttribute("hidden", "");
+        if (happenedSection) {
+          happenedSection.hidden = true;
+          happenedSection.setAttribute("hidden", "");
+        }
       } else {
         els.ccSummary.hidden = false;
         els.ccSummary.removeAttribute("hidden");
@@ -1994,7 +1999,7 @@
       case "processing":
         return "处理中";
       case "completed":
-        return "需要你确认";
+        return "尚未决定";
       case "attention":
         return "需要处理";
       default:
@@ -2015,7 +2020,7 @@
         case "running":
           return job.revisionRequest ? "正在修改" : "处理中";
         case "succeeded":
-          return detail.artifactIds && detail.artifactIds[0] ? "需要你确认" : "需要处理";
+          return detail.artifactIds && detail.artifactIds[0] ? "尚未决定" : "受阻";
         case "failed":
           return "执行失败，可重试";
         case "cancelled":
@@ -2352,6 +2357,8 @@
       : null;
     if (status === "accepted") {
       els.decisionStatus.textContent = "已采用";
+      els.decisionStatus.hidden = false;
+      els.decisionStatus.removeAttribute("hidden");
       if (els.decisionActions) els.decisionActions.hidden = false;
       if (noteField) noteField.hidden = true;
       const isCodeChange = isActiveSoftwareCodeChangeProjection();
@@ -2362,13 +2369,14 @@
     }
     hideNextStepsCard();
     if (status === "rejected") {
-      els.decisionStatus.textContent = "这份成果未采用";
+      els.decisionStatus.textContent = "未采用";
       els.decisionStatus.hidden = false;
+      els.decisionStatus.removeAttribute("hidden");
       if (noteField) noteField.hidden = true;
     } else {
-      // D11-B：右栏不再展示「请确认成果」空壳；采用入口仅在中栏验收消息旁
-      els.decisionStatus.textContent = "";
-      els.decisionStatus.hidden = true;
+      els.decisionStatus.textContent = "尚未决定";
+      els.decisionStatus.hidden = false;
+      els.decisionStatus.removeAttribute("hidden");
       if (noteField) noteField.hidden = true;
     }
     if (els.decisionActions) els.decisionActions.hidden = false;
@@ -2867,12 +2875,12 @@
       const adopted = lastDecisionStatus === "accepted";
       els.workNlComposer.hidden = false;
       if (els.workNlInput) {
-        els.workNlInput.disabled = !!adopted;
+        els.workNlInput.disabled = false;
         els.workNlInput.placeholder = adopted
-          ? "当前成果已采用。如需新工作，请新建任务。"
-          : "直接说明下一步：例如「继续完善……」「这里不符合我的要求……」「先暂停」。";
+          ? "成果已采用。可继续询问或说明新的修改要求。"
+          : "直接说明下一步：例如「继续完善……」「这里不符合我的要求……」「现在能不能用」。";
       }
-      if (els.workNlSend) els.workNlSend.disabled = !!adopted;
+      if (els.workNlSend) els.workNlSend.disabled = false;
     }
   }
 
@@ -2928,12 +2936,31 @@
       detail && detail.task && detail.task.meta && detail.task.meta.revisionLoop
         ? detail.task.meta.revisionLoop
         : null;
-    let mode = "idle";
-    if (prepBlockedState) mode = "prep_blocked";
-    else if (revising) mode = "revising";
-    else if (running) mode = "running";
-    else if (hasArtifact) mode = "complete";
-    else if (activeTaskPlan && activeTaskPlan.content) mode = "planning";
+    const artifactIds =
+      detail && Array.isArray(detail.artifactIds) ? detail.artifactIds : [];
+    const latestArtifactId =
+      (job && (job.artifactId || job.latestArtifactId)) || artifactIds[0] || null;
+    let mode = tw.deriveWorkspaceMode
+      ? tw.deriveWorkspaceMode({
+          prepBlocked: !!prepBlockedState,
+          jobStatus: js,
+          revising,
+          hasArtifact: hasArtifact || !!latestArtifactId,
+          artifactIds,
+          latestArtifactId,
+          hasPlan: !!(activeTaskPlan && activeTaskPlan.content),
+        })
+      : prepBlockedState
+        ? "prep_blocked"
+        : revising
+          ? "revising"
+          : running
+            ? "running"
+            : hasArtifact || latestArtifactId
+              ? "complete"
+              : activeTaskPlan && activeTaskPlan.content
+                ? "planning"
+                : "idle";
     const progressNote =
       (loop && loop.paused && loop.pauseReason && !running
         ? "已暂停自动修订。可在对话中说明下一步，或点继续。"
@@ -2982,7 +3009,7 @@
     set(els.twPrepContinue, kind === "project" || kind === "executor" || kind === "project_confirm");
     if (els.twPrepContinue) {
       els.twPrepContinue.textContent =
-        kind === "project_confirm" ? "确认并开始" : "继续准备";
+        kind === "project_confirm" ? "确认项目并开始开发" : "准备好了，继续";
     }
     set(els.twHighRiskConfirm, kind === "high_risk");
     set(els.twHighRiskCancel, kind === "high_risk" || kind === "project_confirm");
@@ -3030,7 +3057,7 @@
           "；工作目录：" +
           ((payload && payload.workingDirectory) || "（未指定）"),
         action: "请确认你了解后果后再继续。",
-        continueHint: "也可返回对话继续修改规划。",
+        continueHint: "",
         payload: payload || null,
       };
     } else {
@@ -3468,7 +3495,7 @@
       }
     }
 
-    setElVisible(els.workMoreMenu, hasMore);
+    setElVisible(els.workMoreMenu, false);
 
     if (els.cancel) {
       const showCancel = planned.has("cancel_job");
@@ -3625,29 +3652,6 @@
         }
       });
     }
-    // 更多：恢复等
-    const moreActs = planned.filter((a) => a.slot === "more" && a.column === "right");
-    if (moreActs.length && els.nextStepsActions) {
-      const details = document.createElement("details");
-      details.className = "work-more-menu";
-      const summary = document.createElement("summary");
-      summary.textContent = "更多";
-      details.appendChild(summary);
-      const row = document.createElement("div");
-      row.className = "row work-more-actions";
-      for (const a of moreActs) {
-        if (a.id === "restore_baseline" && els.restoreBaseline) {
-          setElVisible(els.restoreBaseline, true);
-          row.appendChild(els.restoreBaseline);
-        } else if (a.id === "tell_what_wrong") {
-          addBtn(a.label, false, () => {
-            showRevisionComposer({ continueMode: true });
-          });
-        }
-      }
-      details.appendChild(row);
-      els.nextStepsActions.appendChild(details);
-    }
     refreshWorkUxView({});
   }
 
@@ -3792,6 +3796,7 @@
       return;
     }
     if (epoch !== uiEpoch || activeTaskId !== taskId) return;
+    lastJobDetailForUx = detail;
     activeJobId = detail.latestJob ? detail.latestJob.jobId : null;
     hydrateConversationFromTask(detail);
     els.goal.value = detail.task && detail.task.goal ? detail.task.goal : "";
@@ -4176,6 +4181,7 @@
     }
     if (els.rejectArtifact) els.rejectArtifact.disabled = false;
     hideArtifactLoading();
+    refreshTaskWorkspace();
     refreshWorkUxView({});
     if (els.acceptArtifact) {
       setElVisible(els.acceptArtifact, false);

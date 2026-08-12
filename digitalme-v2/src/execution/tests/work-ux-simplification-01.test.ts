@@ -85,7 +85,7 @@ describe('work-ux-simplification-01', () => {
     assert.ok(!adopted.actions.some((a) => a.id === 'accept' && a.slot === 'primary'));
   });
 
-  it('restore 进入更多；中右栏不重复成果决策动作', () => {
+  it('验收阶段不堆低价值更多动作；中右栏不重复成果决策', () => {
     const review = ux.deriveWorkUxView({
       hasArtifact: true,
       decisionStatus: 'undecided',
@@ -93,9 +93,8 @@ describe('work-ux-simplification-01', () => {
       hasWorkingDirectory: true,
       jobStatus: 'succeeded',
     });
-    const restore = review.actions.find((a) => a.id === 'restore_baseline');
-    assert.ok(restore);
-    assert.equal(restore!.slot, 'more');
+    assert.ok(!review.actions.some((a) => a.id === 'restore_baseline'));
+    assert.ok(!review.actions.some((a) => a.id === 'collab_open'));
     assert.equal(ux.assertActionBudget(review).ok, true);
   });
 
@@ -111,8 +110,8 @@ describe('work-ux-simplification-01', () => {
     const blocked = ux.deriveWorkUxView({ jobStatus: 'failed' });
     assert.equal(blocked.stage, 'blocked');
     assert.match(blocked.statusLine, /对话区/);
-    assert.equal(blocked.actions.find((a) => a.id === 'retry_job')?.slot, 'more');
-    assert.notEqual(blocked.actions.find((a) => a.slot === 'primary')?.id, 'retry_job');
+    assert.equal(blocked.actions.find((a) => a.id === 'retry_job')?.slot, 'primary');
+    assert.equal(blocked.actions.filter((a) => a.slot === 'primary').length, 1);
 
     const bad = ux.deriveWorkUxView({
       hasArtifact: true,
