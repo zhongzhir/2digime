@@ -1,0 +1,14 @@
+{
+  "task": "2DIGIME-BUILD-01-OWNER-RUNTIME-ACCEPTANCE-17",
+  "head": "b69967c",
+  "ownerAccepted": false,
+  "verdict": "owner_runtime_completed_rejected",
+  "restart": {
+    "sameTask": true,
+    "artifactsPresent": true,
+    "adoptVisible": false,
+    "planAndStartDevReappeared": true,
+    "countsStable": { "tasks": 1, "jobs": 2, "artifacts": 1 }
+  },
+  "ownerQuote": "是同一件事，成果还在。这次反而出现了标准的规划文件，有开始开发按钮。看不出有没有被采用。"
+}

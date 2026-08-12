@@ -1,0 +1,12 @@
+{
+  "task": "2DIGIME-BUILD-01-OWNER-RUNTIME-ACCEPTANCE-17",
+  "at": "2026-08-12T01:38:00+08:00",
+  "step": "resume_same_session",
+  "beforeResume": {
+    "taskCount": 1,
+    "jobCount": 2,
+    "artifactCount": 1,
+    "taskId": "task_mspe7e1s76208a952741"
+  },
+  "userData": "C:\\Users\\46554\\AppData\\Local\\DigitalMe-OwnerAcceptance\\software-dev-task-ux-01-1786495930332"
+}

@@ -1,0 +1,24 @@
+{
+  "task": "2DIGIME-BUILD-01-OWNER-RUNTIME-ACCEPTANCE-17",
+  "at": "2026-08-12T01:00:00Z",
+  "step": "after_owner_goal_and_project",
+  "observed": {
+    "goalFilled": true,
+    "softwareProjectAttached": true,
+    "testProject": "D:\\\\Projects\\\\DigitalMe-Software-UX-Owner-Test-1786495930332",
+    "planVisible": true,
+    "planVersion": "v2",
+    "rightPanel": "prep_extra_confirm_high_risk",
+    "primaryAction": "确认并开始",
+    "legacyThreeConfirmCards": false,
+    "leftTaskListStillEmpty": true,
+    "notes": [
+      "Simple formatLabel change presented as 需要额外确认 / 较高风险取舍 — record only, do not expand-fix during acceptance.",
+      "确认并开始 may combine plan confirm + start; Owner has not yet separately reviewed commit/push/deploy forbidden list."
+    ]
+  },
+  "shots": [
+    "shots/01-compose-goal-and-project.png",
+    "shots/02-plan-and-extra-confirm.png"
+  ]
+}

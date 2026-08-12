@@ -1,0 +1,20 @@
+{
+  "task": "2DIGIME-BUILD-01-OWNER-RUNTIME-ACCEPTANCE-17",
+  "status": "owner_runtime_in_progress",
+  "ownerAccepted": false,
+  "head": "b69967c",
+  "branch": "build/software-work-quality-loop-01",
+  "pr": "https://github.com/zhongzhir/2digime/pull/1",
+  "launchedAt": "2026-08-12T00:52:18.989Z",
+  "entry": "electron/main.cjs",
+  "adapter": "real_app_no_fixture_no_fake_no_command_bus",
+  "scene": "a",
+  "userData": "C:\\Users\\46554\\AppData\\Local\\DigitalMe-OwnerAcceptance\\software-dev-task-ux-01-1786495930332",
+  "testProject": "D:\\Projects\\DigitalMe-Software-UX-Owner-Test-1786495930332",
+  "resumeCommand": "node scripts/start-software-dev-owner-acceptance.cjs --resume-session \"C:\\Users\\46554\\AppData\\Local\\DigitalMe-OwnerAcceptance\\software-dev-task-ux-01-1786495930332\" --fixture-project \"D:\\Projects\\DigitalMe-Software-UX-Owner-Test-1786495930332\" --scene=a",
+  "notes": [
+    "Isolated fresh userData; Owner must operate the real UI.",
+    "Test project is disposable formatLabel mini-repo; not Digital Me / MUHUB.",
+    "No commit until acceptance closes."
+  ]
+}
