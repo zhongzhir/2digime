@@ -74,13 +74,13 @@ describe('work-ux-simplification-01-blocker-03', () => {
     assert.equal(soft.kind, 'code-change');
     assert.equal(soft.contradiction, false);
 
-    // 仅有 codeChange 字段、无正式类型 → 不得打开 code UI
+    // 软件任务且成果带 codeChange 事实时，即使类型标签被洗成 document 也恢复成果视图
     const metaOnly = proj.resolveArtifactProjection({
       taskIntent: 'modify_code',
       artifactType: 'document',
       artifactContent: { codeChange: { summary: 'x' } },
     });
-    assert.notEqual(metaOnly.kind, 'code-change');
+    assert.equal(metaOnly.kind, 'code-change');
   });
 
   it('8-10 sanitize 与 DOM/CSS 门控：非软件不得沿用 code-change 类型；hidden 覆盖 display:flex', async () => {

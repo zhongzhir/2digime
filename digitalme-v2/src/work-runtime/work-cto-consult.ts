@@ -16,6 +16,9 @@ export interface ConsultTaskContext {
   lastFailure?: string;
 }
 
+export const DEGRADED_CONSULT_NOTICE =
+  '这是暂时根据已有记录作的判断，还不是完整的 AI CTO 分析。';
+
 const CONSULT_RE =
   /能不能用|能用吗|现在能用|要不要改|还需不需要改|还要改吗|有什么风险|有哪些风险|现在怎么样|现在什么状态|看到哪了|看不懂|这份结果|用几句人话|是否达到|达标了吗|建议采用|可不可以用来/;
 
@@ -97,6 +100,44 @@ export function buildGroundedConsultReply(ctx: ConsultTaskContext): string {
     lines.push(extra.length > 400 ? extra.slice(0, 400) + '…' : extra);
   }
   return lines.join('\n');
+}
+
+/** 模型不可用或输出无法解析时的确定性降级；必须标明暂时性，不得冒充完整分析。 */
+export function buildDegradedConsultReply(ctx: ConsultTaskContext): string {
+  return `${DEGRADED_CONSULT_NOTICE}\n${buildGroundedConsultReply(ctx)}`;
+}
+
+/**
+ * 本地只校验模型咨询回答是否与已有事实冲突，不改写专业判断。
+ * 咨询路径不得因此产生执行效果。
+ */
+export function assertConsultReplyConsistent(
+  reply: string,
+  ctx: ConsultTaskContext,
+): string {
+  const text = String(reply || '').trim();
+  if (!text) return text;
+  const notes: string[] = [];
+  if (
+    /你已经采用|已确认采用|已经采用了这份|当前成果已采用/.test(text) &&
+    ctx.ownerDecision !== 'accepted'
+  ) {
+    notes.push('更正：当前成果尚未采用。');
+  }
+  if (
+    /你未采用|你已经拒绝|未作为达标版本收下/.test(text) &&
+    ctx.ownerDecision === 'accepted'
+  ) {
+    notes.push('更正：这份成果你已经采用。');
+  }
+  if (
+    ctx.hasArtifact &&
+    /还没有开始执行|尚未开始执行|还没开始执行|目前还没有开始/.test(text)
+  ) {
+    notes.push('更正：当前已有成果，并已形成验收结论。');
+  }
+  if (notes.length === 0) return text;
+  return `${text}\n（${notes.join('')}）`;
 }
 
 export function formatCtoUserConclusion(input: {

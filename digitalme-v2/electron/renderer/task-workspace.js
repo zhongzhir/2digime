@@ -212,7 +212,11 @@
    */
   function isHighRiskExecution(goal, preview) {
     const g = String(goal || '');
-    if (/删除整个|清空(项目|仓库|目录)|格式化|覆盖全部|系统目录|管理员权限|\bsudo\b/i.test(g)) {
+    if (
+      /删除整个|清空(项目|仓库|目录)|格式化磁盘|覆盖全部|系统目录|管理员权限|\bsudo\b|git\s+push|\bpush\s+到|提交并推送|部署到|发布到生产|rm\s+-rf/i.test(
+        g,
+      )
+    ) {
       return true;
     }
     const writeScope = (preview && preview.writeScope) || [];
@@ -223,13 +227,19 @@
         .replace(/\/+$/, '')
         .toLowerCase();
     const root = norm(wd);
-    if (root && writeScope.some((s) => {
-      const child = norm(s);
-      return child !== root && !child.startsWith(root + '/');
-    })) {
-      return true;
-    }
-    return false;
+    if (!root) return false;
+    const isInsideProject = (raw) => {
+      const child = norm(raw);
+      if (!child || child === '.' || child === './') return true;
+      if (child === root || child.startsWith(root + '/')) return true;
+      const isAbs = /^[a-z]:/.test(child) || child.startsWith('/');
+      if (!isAbs) {
+        const resolved = norm(root + '/' + child.replace(/^\.\//, ''));
+        return resolved === root || resolved.startsWith(root + '/');
+      }
+      return false;
+    };
+    return writeScope.some((s) => !isInsideProject(s));
   }
 
   const api = {

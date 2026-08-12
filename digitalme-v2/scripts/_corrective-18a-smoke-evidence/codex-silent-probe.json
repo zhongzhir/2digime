@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "codex-silent-window-probe/1",
+  "at": "2026-08-12T03:42:05.584Z",
+  "platform": "win32",
+  "spawnOptions": {
+    "shell": false,
+    "windowsHide": true,
+    "detached": false,
+    "stdio": [
+      "pipe",
+      "pipe",
+      "pipe"
+    ],
+    "note": "CREATE_NO_WINDOW via windowsHide; not shell; not detached"
+  },
+  "codexJs": "C:\\Users\\46554\\AppData\\Roaming\\npm\\node_modules\\@openai\\codex\\bin\\codex.js",
+  "version": {
+    "status": 0,
+    "stdout": "codex-cli 0.146.1",
+    "stderr": "",
+    "error": null
+  },
+  "exec": {
+    "timedOut": false,
+    "status": 0,
+    "stdout": "ok\n",
+    "stderr": "warning: `--full-auto` is deprecated; use `--sandbox workspace-write` instead.\n2026-08-12T03:42:08.129050Z ERROR codex_models_manager::cache: failed to load models cache: missing field `base_instructions` at line 94 column 5\nOpenAI Codex v0.146.1\n--------\nworkdir: C:\\Users\\46554\\AppData\\Local\\Temp\\dm-c18a-codex-rPKCTC\nmodel: gpt-5.6-luna\nprovider: openai\napproval: never\nsandbox: workspace-write [w",
+    "error": null
+  },
+  "before": {
+    "platform": "win32",
+    "conhost": 10,
+    "visible": [
+      "atomcode v5.0.6"
+    ]
+  },
+  "after": {
+    "platform": "win32",
+    "conhost": 10,
+    "visible": [
+      "atomcode v5.0.6"
+    ]
+  },
+  "visibleWindowCreated": false,
+  "rustGrandchildConsole": "no_new_console_observed",
+  "verdict": "no_visible_window_observed"
+}

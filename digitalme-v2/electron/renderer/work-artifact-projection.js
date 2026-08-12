@@ -42,7 +42,7 @@
     const softwareTask = isSoftwareExecutionTask(intent);
     const codeChangeArtifact = isFormalCodeChangeArtifactType(artifactType, artifactKind);
 
-    if (softwareTask && codeChangeArtifact) {
+    if (softwareTask && (codeChangeArtifact || hasCodeMeta)) {
       return { kind: 'code-change', contradiction: false };
     }
 

@@ -4,11 +4,20 @@ import type { SpawnOptions, SpawnSyncOptions } from 'node:child_process';
  * Coding Agent / 本地命令必须静默后台：不弹可见控制台、不用 cmd 包装。
  * windowsHide 对应 CREATE_NO_WINDOW；stdio 全部 pipe，避免继承父控制台。
  */
+function withSilentEnv(extraEnv?: NodeJS.ProcessEnv): NodeJS.ProcessEnv | undefined {
+  if (!extraEnv) return extraEnv;
+  return {
+    ...extraEnv,
+    ELECTRON_NO_ATTACH_CONSOLE: '1',
+  };
+}
+
 export function hiddenSpawnOptions(
   extra: SpawnOptions = {},
 ): SpawnOptions {
   return {
     ...extra,
+    ...(extra.env ? { env: withSilentEnv(extra.env as NodeJS.ProcessEnv) } : {}),
     shell: false,
     windowsHide: true,
     detached: false,
@@ -21,6 +30,7 @@ export function hiddenSpawnSyncOptions(
 ): SpawnSyncOptions {
   return {
     ...extra,
+    ...(extra.env ? { env: withSilentEnv(extra.env as NodeJS.ProcessEnv) } : {}),
     shell: false,
     windowsHide: true,
     stdio: extra.stdio ?? ['pipe', 'pipe', 'pipe'],

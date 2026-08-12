@@ -1,7 +1,8 @@
 import { nowIso } from '../shared/ids';
 import { randomUUID } from 'node:crypto';
 import {
-  buildGroundedConsultReply,
+  assertConsultReplyConsistent,
+  buildDegradedConsultReply,
   isCurrentTaskConsult,
   type ConsultTaskContext,
 } from './work-cto-consult';
@@ -215,7 +216,12 @@ export function parseConverseModelOutput(text: string): ParsedConverseOutput | n
   if (!isWorkConverseIntent(obj.intent)) return null;
   const reply = typeof obj.reply === 'string' ? obj.reply.trim() : '';
   if (!reply) return null;
-  const confidenceRaw = typeof obj.confidence === 'number' ? obj.confidence : NaN;
+  const confidenceRaw =
+    typeof obj.confidence === 'number'
+      ? obj.confidence
+      : typeof obj.confidence === 'string'
+        ? Number(obj.confidence)
+        : NaN;
   if (!Number.isFinite(confidenceRaw)) return null;
   const confidence = Math.min(1, Math.max(0, confidenceRaw));
   const planUpdate =
@@ -292,47 +298,44 @@ export function decideConverseEffects(input: ConverseDecisionInput): ConverseDec
     adoptRequested: false,
     pauseRequested: false,
   };
+  const consult =
+    isCurrentTaskConsult(input.userText || '') && !!input.consultContext;
   if (!input.modelAvailable) {
-    if (isCurrentTaskConsult(input.userText || '') && input.consultContext) {
+    if (consult && input.consultContext) {
       return {
         ...base,
         intent: 'query_status',
         confidence: 0.9,
-        reply: buildGroundedConsultReply(input.consultContext),
+        reply: buildDegradedConsultReply(input.consultContext),
+        degraded: true,
       };
     }
     return { ...base, reply: CONVERSE_DEGRADED_NOTICE, degraded: true };
   }
-  if (!input.parsed) {
-    if (isCurrentTaskConsult(input.userText || '') && input.consultContext) {
+  if (!input.parsed || !String(input.parsed.reply || '').trim()) {
+    if (consult && input.consultContext) {
       return {
         ...base,
         intent: 'query_status',
         confidence: 0.85,
-        reply: buildGroundedConsultReply(input.consultContext),
+        reply: buildDegradedConsultReply(input.consultContext),
+        degraded: true,
       };
     }
     return { ...base, reply: CONVERSE_UNPARSEABLE_NOTICE, needsClarification: true };
   }
   const { intent, confidence, reply, planUpdate } = input.parsed;
-  if (
-    isCurrentTaskConsult(input.userText || '') &&
-    input.consultContext &&
-    (intent === 'other' ||
-      intent === 'query_status' ||
-      intent === 'request_explanation' ||
-      intent === 'discuss_or_question' ||
-      confidence < LOW_CONFIDENCE_THRESHOLD)
-  ) {
+  if (confidence < LOW_CONFIDENCE_THRESHOLD) {
+    const safeReply = consult && input.consultContext
+      ? assertConsultReplyConsistent(reply, input.consultContext)
+      : reply;
     return {
       ...base,
-      intent: intent === 'other' ? 'query_status' : intent,
-      confidence: Math.max(confidence, 0.8),
-      reply: buildGroundedConsultReply(input.consultContext),
+      intent: consult && intent === 'other' ? 'query_status' : intent,
+      confidence,
+      reply: safeReply,
+      needsClarification: true,
     };
-  }
-  if (confidence < LOW_CONFIDENCE_THRESHOLD) {
-    return { ...base, intent, confidence, reply, needsClarification: true };
   }
   const decision: ConverseDecision = { ...base, intent, confidence, reply };
   switch (intent) {
@@ -366,6 +369,13 @@ export function decideConverseEffects(input: ConverseDecisionInput): ConverseDec
       break;
     default:
       break;
+  }
+  if (consult && input.consultContext) {
+    decision.startAuthorized = false;
+    decision.adoptRequested = false;
+    decision.confirmPlan = false;
+    if (intent === 'other') decision.intent = 'query_status';
+    decision.reply = assertConsultReplyConsistent(decision.reply, input.consultContext);
   }
   return decision;
 }
@@ -454,6 +464,20 @@ export async function runWorkConverse(
     try {
       const result = await deps.chat({ messages });
       parsed = parseConverseModelOutput(result.text);
+      if (!parsed) {
+        const retry = await deps.chat({
+          messages: [
+            ...messages,
+            { role: 'assistant' as const, content: String(result.text || '').slice(0, 2000) },
+            {
+              role: 'user' as const,
+              content:
+                '上一次输出无法使用。请只输出一个合法 JSON 对象，字段为 intent、confidence、reply，必要时加 planUpdate；不要 Markdown。',
+            },
+          ],
+        });
+        parsed = parseConverseModelOutput(retry.text);
+      }
     } catch {
       chatFailed = true;
     }

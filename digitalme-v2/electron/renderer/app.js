@@ -1311,6 +1311,7 @@
           if (tech.length) {
             els.ccTechEvidence.hidden = false;
             els.ccTechEvidence.removeAttribute("hidden");
+            els.ccTechEvidence.open = false;
             els.ccTechBullets.innerHTML = "";
             for (const t of tech) {
               const li = document.createElement("li");
@@ -1639,7 +1640,7 @@
     const hasCodeMeta = !!(dispatch && dispatch.artifactContent && dispatch.artifactContent.codeChange);
     const softwareTask = isSoftwareExecutionTask(intent);
     const codeChangeArtifact = isFormalCodeChangeArtifactType(artifactType, artifactKind);
-    if (softwareTask && codeChangeArtifact) {
+    if (softwareTask && (codeChangeArtifact || hasCodeMeta)) {
       return { kind: "code-change", contradiction: false };
     }
     const contradiction = !!(hasCodeMeta && !(softwareTask && codeChangeArtifact));
@@ -3812,6 +3813,19 @@
     if (detail.userFacingLabel) {
       updateTaskListItemLabel(taskId, detail.userFacingLabel);
     }
+    const readyArtifactId =
+      (detail.artifactIds && detail.artifactIds[0]) ||
+      (detail.latestJob && (detail.latestJob.artifactId || detail.latestJob.latestArtifactId)) ||
+      null;
+    if (
+      readyArtifactId &&
+      detail.latestJob &&
+      String(detail.latestJob.status || "") === "succeeded"
+    ) {
+      copyBlockedFailed = false;
+      await loadArtifact(readyArtifactId, { taskId, epoch });
+      if (epoch !== uiEpoch || activeTaskId !== taskId) return;
+    }
     const refs =
       detail.task && Array.isArray(detail.task.contextRefs) ? detail.task.contextRefs : [];
     const nextMaterials = refs
@@ -3880,8 +3894,10 @@
         detail.artifactIds &&
         detail.artifactIds[0]
       ) {
-        copyBlockedFailed = false;
-        await loadArtifact(detail.artifactIds[0], { taskId, epoch });
+        if (activeArtifactId !== detail.artifactIds[0]) {
+          copyBlockedFailed = false;
+          await loadArtifact(detail.artifactIds[0], { taskId, epoch });
+        }
         if (epoch === uiEpoch && activeTaskId === taskId) {
           renderAppliedUnderstanding(detail.appliedUnderstanding);
         }
@@ -4388,14 +4404,38 @@
     }
   }
 
+  async function restoreLatestOpenTaskIfAny() {
+    try {
+      const listed = await api.invoke("work.listTasks", { limit: 50 });
+      const tasks = (listed && listed.tasks) || [];
+      if (!tasks.length) return false;
+      let chosen = tasks[0];
+      for (const t of tasks) {
+        const label = String(t.userFacingLabel || "");
+        if (/尚未决定|建议采用|已采用|未采用|可试用|开发中|修订/.test(label)) {
+          chosen = t;
+          break;
+        }
+      }
+      if (!chosen || !chosen.taskId) return false;
+      await selectTask(chosen.taskId);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async function enterShell() {
     setView("shell");
     setNav("work");
-    startNewTaskComposer({ preservePending: true });
     await refreshConnectionFromCapabilities();
     await refreshTasks();
     await refreshSubjectPanel();
-    await restorePendingSoftwareDraftIfAny();
+    const restored = await restoreLatestOpenTaskIfAny();
+    if (!restored) {
+      startNewTaskComposer({ preservePending: true });
+      await restorePendingSoftwareDraftIfAny();
+    }
   }
 
   async function createOrOpenDefaultPackage(opts) {

@@ -70,7 +70,7 @@ test('D11-C AI CTO 评测：关键证据缺失零误通过，一致率≥90%', a
         model: modelEnv.model,
         messages,
         temperature: 0,
-        maxTokens: 900,
+        maxTokens: 2048,
         timeoutMs: 90_000,
         responseFormat: { type: 'json_object' },
       });

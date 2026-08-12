@@ -37,6 +37,11 @@ export interface AiCtoEvidencePack {
 
 export interface AiCtoReviewOutput {
   decision: AiCtoDecision;
+  /** 面向用户的五项结论；由模型基于证据包生成，硬门只可收紧不可伪造。 */
+  canUse: string;
+  goalAttained: string;
+  needChange: string;
+  nextStep: string;
   userSummary: string;
   completed: string[];
   gaps: string[];
@@ -50,7 +55,8 @@ const SYSTEM_PROMPT = [
   '你是 Digital Me 的独立 AI CTO，审查一项软件成果是否可采用。',
   '只能依据提供的证据包判断；不得假设未提供的测试、文件或结果。',
   '不要输出思考过程、内部协议名、字段名或 Markdown。只输出一个 JSON 对象。',
-  'JSON 字段：decision（meets_plan | needs_revision | blocked | insufficient_evidence）、userSummary、completed、gaps、evidenceRefs、risks、nextAction、revisionPlan（仅 needs_revision 时可有）。',
+  'JSON 字段：decision（meets_plan | needs_revision | blocked | insufficient_evidence）、canUse、goalAttained、needChange、risks、nextStep、userSummary、completed、gaps、evidenceRefs、nextAction、revisionPlan（仅 needs_revision 时可有）。',
+  'canUse、goalAttained、needChange、risks、nextStep 必须是面向用户的自然语言判断，由你基于证据包独立作出；不要复述检查项英文 id 或内部枚举。',
   '所有数组均为简短中文字符串；evidenceRefs 必须逐项来自证据包 evidenceRefs。',
   '当证据包同时满足：changedFileCount>0、digitalMeVerified=true、file_changes/scope_boundary/git_integrity/build_check 均为 satisfied，且没有 unsatisfied 的硬门检查时，应判定 meets_plan。',
   '仅在关键核对项缺失、结果互相矛盾，或无法从现有证据支持目标时使用 insufficient_evidence。',
@@ -84,14 +90,26 @@ export function parseAiCtoReviewOutput(
   try {
     const raw = JSON.parse(candidate) as Record<string, unknown>;
     if (!(AI_CTO_DECISIONS as readonly string[]).includes(String(raw.decision))) return null;
-    const userSummary = typeof raw.userSummary === 'string' ? raw.userSummary.trim() : '';
-    const nextAction = typeof raw.nextAction === 'string' ? raw.nextAction.trim() : '';
+    const canUse = typeof raw.canUse === 'string' ? raw.canUse.trim() : '';
+    const goalAttainedText =
+      typeof raw.goalAttained === 'string' ? raw.goalAttained.trim() : '';
+    const needChange = typeof raw.needChange === 'string' ? raw.needChange.trim() : '';
+    const nextStepRaw = typeof raw.nextStep === 'string' ? raw.nextStep.trim() : '';
+    const userSummary = (
+      typeof raw.userSummary === 'string' ? raw.userSummary.trim() : ''
+    ) || canUse;
+    const nextAction = (
+      typeof raw.nextAction === 'string' ? raw.nextAction.trim() : ''
+    ) || nextStepRaw;
+    const nextStep = nextStepRaw || nextAction;
     if (!userSummary || !nextAction) return null;
     const completed = textList(raw.completed ?? []) ?? [];
     const gaps = textList(raw.gaps ?? []) ?? [];
-    const risks = textList(raw.risks ?? []) ?? [];
-    let evidenceRefs = textList(raw.evidenceRefs ?? [], 16);
-    if (!evidenceRefs) return null;
+    const risksFromList = textList(raw.risks ?? []);
+    const risks =
+      risksFromList ??
+      (typeof raw.risks === 'string' && raw.risks.trim() ? [raw.risks.trim().slice(0, 400)] : []);
+    let evidenceRefs = textList(raw.evidenceRefs ?? [], 16) ?? [];
     // 丢掉伪造引用；若模型未给引用则回退到可用证据中的前几项（仍不放宽决策本身）
     evidenceRefs = evidenceRefs.filter((ref) => allowedEvidenceRefs.includes(ref));
     if (evidenceRefs.length === 0 && allowedEvidenceRefs.length > 0) {
@@ -102,12 +120,19 @@ export function parseAiCtoReviewOutput(
       typeof raw.revisionPlan === 'string' && raw.revisionPlan.trim()
         ? raw.revisionPlan.trim()
         : undefined;
+    const five = {
+      canUse: (canUse || userSummary).slice(0, 400),
+      goalAttained: (goalAttainedText || userSummary).slice(0, 400),
+      needChange: (needChange || nextAction).slice(0, 400),
+      nextStep: nextStep.slice(0, 400),
+    };
     if (raw.decision === 'needs_revision' && !revisionPlan) {
       const synthesized = gaps.length
         ? `请针对以下缺口完成修正并补充可核对证据：${gaps.join('；')}。不得提交、推送或发布。`
         : '请对照已确认规划补齐缺口，完成必要验证并提供可核对证据。不得提交、推送或发布。';
       return {
         decision: 'needs_revision',
+        ...five,
         userSummary: userSummary.slice(0, 900),
         completed,
         gaps,
@@ -119,6 +144,7 @@ export function parseAiCtoReviewOutput(
     }
     return {
       decision: raw.decision as AiCtoDecision,
+      ...five,
       userSummary: userSummary.slice(0, 900),
       completed,
       gaps,
@@ -231,13 +257,16 @@ function unavailableReview(
       : '本次独立验收结论未能按要求形成。';
   return {
     schemaVersion: 'digitalme-cto-review/1',
-    report: formatCtoUserConclusion({
-      canUse: '现在还不建议当作可用版本。',
-      goalAttained: '还不能认定已达到目标。',
-      needChange: '需要。先看已有改动，再决定是否继续修改。',
-      risks: `暂时无法完成独立验收：${why}不会自动提交、推送或发布。`,
-      nextStep: '可以先查看已有成果；连上模型后我会重新给出完整结论。',
-    }),
+    report: [
+      '这是暂时性判断，还不是完整的 AI CTO 分析。',
+      formatCtoUserConclusion({
+        canUse: '现在还不建议当作可用版本。',
+        goalAttained: '还不能认定已达到目标。',
+        needChange: '需要。先看已有改动，再决定是否继续修改。',
+        risks: `暂时无法完成独立验收：${why}不会自动提交、推送或发布。`,
+        nextStep: '可以先查看已有成果；连上模型后我会重新给出完整结论。',
+      }),
+    ].join('\n'),
     findings: ['尚未形成可核对的独立验收结论'],
     nonBlockingRisks: [],
     primaryAction: 'need_decision',
@@ -275,9 +304,41 @@ export function mapAiCtoReview(
       ? ['缺少支持采用所需的关键工程证据']
       : []),
   ].slice(0, 8);
-  const report = gateNotes.length
-    ? `${output.userSummary}${/[。！？]$/.test(output.userSummary) ? '' : '。'}另外：${gateNotes.join('；')}。`
-    : output.userSummary;
+  let canUse = output.canUse;
+  let goalAttainedText = output.goalAttained;
+  let needChange = output.needChange;
+  let nextStep = output.nextStep || output.nextAction;
+  if (guardedDecision === 'blocked' || guardedDecision === 'insufficient_evidence') {
+    if (/可以完全使用|建议当作可用|已经可以交付/.test(canUse)) {
+      canUse = '现在还不能当作可用版本。';
+    }
+    if (/已达到|已经达标/.test(goalAttainedText)) {
+      goalAttainedText = '还不能认定已达到目标。';
+    }
+    if (/不是必须|不必再改|可以不改/.test(needChange)) {
+      needChange = '需要先处理必须面对的问题，再决定是否继续修改。';
+    }
+  } else if (guardedDecision === 'needs_revision' && output.decision === 'meets_plan') {
+    if (/可以完全使用|已经可以交付/.test(canUse)) {
+      canUse = '现在还不建议当作最终可用版本。';
+    }
+    if (/不是必须|不必再改/.test(needChange)) {
+      needChange = '还需要按核对结果继续修改。';
+    }
+  }
+  const riskText = [
+    ...(output.risks || []).slice(0, 4),
+    ...gateNotes,
+  ]
+    .filter(Boolean)
+    .join('；') || '不会自动提交、推送或发布。';
+  const report = formatCtoUserConclusion({
+    canUse,
+    goalAttained: goalAttainedText,
+    needChange,
+    risks: riskText,
+    nextStep,
+  });
   const revisionDirective =
     guardedDecision === 'needs_revision'
       ? output.revisionPlan ||

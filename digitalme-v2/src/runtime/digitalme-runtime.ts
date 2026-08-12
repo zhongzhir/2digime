@@ -510,6 +510,7 @@ export class DigitalMeRuntime {
         temperature: 0.2,
         maxTokens: 1024,
         timeoutMs: config.timeoutMs ?? 60_000,
+        responseFormat: { type: 'json_object' },
       });
       return { text: result.text };
     };
@@ -518,7 +519,30 @@ export class DigitalMeRuntime {
   /** CTO 验收使用与对话相同的受控真实模型通道，但保留独立测试注入点。 */
   private buildCtoReviewChat(): WorkConverseDeps['chat'] {
     if (this.options.ctoReviewChat) return this.options.ctoReviewChat;
-    return this.buildConverseChat();
+    const mode = this.options.documentCapability;
+    if (mode !== 'openai-compatible' && mode !== 'both') return null;
+    const config = this.options.openaiCompatible;
+    const secrets = this.options.secrets;
+    if (!config || !secrets) return null;
+    return async ({ messages }) => {
+      const apiKey = await secrets.get(
+        providerCredentialKey(config.providerId || 'openai-compatible'),
+      );
+      if (!apiKey) {
+        throw new Error('model credential is not configured');
+      }
+      const result = await chatComplete({
+        baseUrl: config.baseUrl,
+        apiKey,
+        model: config.model,
+        messages,
+        temperature: 0,
+        maxTokens: 2048,
+        timeoutMs: config.timeoutMs ?? 90_000,
+        responseFormat: { type: 'json_object' },
+      });
+      return { text: result.text };
+    };
   }
 
   getJob(jobId: string) {

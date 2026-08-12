@@ -1,5 +1,7 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
+import * as os from 'node:os';
+import { createHash } from 'node:crypto';
 import type { ObjectStore } from '../runtime/ports';
 import type { ContentStore } from '../infrastructure/content-store';
 import { exportDocx, exportMarkdown } from '../infrastructure/export';
@@ -40,6 +42,8 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
   private readonly eventBus: InMemoryEventBus;
   private readonly resolveTaskTopics?: (taskId: string) => Promise<string[]>;
   private readonly ctoReviewChat?: (input: { messages: ChatMessage[] }) => Promise<{ text: string }>;
+  /** 同一成果版本+核对摘要只跑一次 AI CTO，避免每次 getContent 重放。 */
+  private readonly ctoSummaryCache = new Map<string, unknown>();
 
   constructor(options: ArtifactWorkspaceOptions) {
     this.artifactStore = options.artifactStore;
@@ -575,7 +579,35 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
                     detail: c.detail ?? '',
                   }))
                 : [];
-              const acceptanceSummary = await buildOwnerAcceptanceSummaryAsync({
+              const changedFileCount = changes.length || (parsed.changedFiles || []).length;
+              const ctoCacheKey = [
+                artifactId,
+                version.versionId,
+                parsed.verificationOverall,
+                checks.map((c) => `${c.id}:${c.verdict}`).join(','),
+                String(directoryChangedSinceResult),
+                String(changedFileCount),
+              ].join('|');
+              const ctoCacheFile = path.join(
+                os.tmpdir(),
+                'digitalme-cto-summary',
+                `${createHash('sha256').update(ctoCacheKey).digest('hex').slice(0, 24)}.json`,
+              );
+              let acceptanceSummary = this.ctoSummaryCache.get(ctoCacheKey) as
+                | Awaited<ReturnType<typeof buildOwnerAcceptanceSummaryAsync>>
+                | undefined;
+              if (!acceptanceSummary) {
+                try {
+                  const raw = await fs.readFile(ctoCacheFile, 'utf8');
+                  acceptanceSummary = JSON.parse(raw) as Awaited<
+                    ReturnType<typeof buildOwnerAcceptanceSummaryAsync>
+                  >;
+                } catch {
+                  acceptanceSummary = undefined;
+                }
+              }
+              if (!acceptanceSummary) {
+                acceptanceSummary = await buildOwnerAcceptanceSummaryAsync({
                 verification: {
                   overall: parsed.verificationOverall as
                     | 'satisfied'
@@ -586,7 +618,7 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
                   digitalMeVerified: !!parsed.digitalMeVerified,
                   agentClaimedSuccess: !!parsed.agentClaimedSuccess,
                 },
-                changedFileCount: changes.length || (parsed.changedFiles || []).length,
+                changedFileCount,
                 directoryChangedSinceResult,
                 unresolvedItems,
                 ...(summaryEntry?.text ? { summaryExcerpt: summaryEntry.text } : {}),
@@ -612,7 +644,17 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
                 ...(understanding?.planSteps?.length
                   ? { planSteps: understanding.planSteps }
                   : {}),
-              }, this.ctoReviewChat);
+                }, this.ctoReviewChat);
+                this.ctoSummaryCache.set(ctoCacheKey, acceptanceSummary);
+                try {
+                  await fs.mkdir(path.dirname(ctoCacheFile), { recursive: true });
+                  await fs.writeFile(ctoCacheFile, JSON.stringify(acceptanceSummary), 'utf8');
+                } catch {
+                  /* 缓存失败不影响验收 */
+                }
+              } else {
+                this.ctoSummaryCache.set(ctoCacheKey, acceptanceSummary);
+              }
               codeChange.acceptanceSummary = acceptanceSummary;
               codeChange.checks = checks;
               const startup = checks.find((c) => c.id === 'run_startup_check');

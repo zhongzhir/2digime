@@ -65,6 +65,7 @@ describe('corrective product redesign 18', () => {
     assert.notEqual(d.reply, CONVERSE_UNPARSEABLE_NOTICE);
     assert.match(d.reply, /现在能不能用/);
     assert.match(d.reply, /建议下一步/);
+    assert.match(d.reply, /暂时根据已有记录|还不是完整的 AI CTO/);
   });
 
   it('2. CTO 结论含能否使用、是否建议修改/采用及风险', () => {
@@ -238,5 +239,6 @@ describe('corrective product redesign 18', () => {
       },
     });
     assert.equal(consult.startAuthorized, false);
+    assert.equal(consult.reply, '看一下');
   });
 });

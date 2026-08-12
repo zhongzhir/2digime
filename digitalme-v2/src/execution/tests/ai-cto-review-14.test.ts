@@ -28,11 +28,15 @@ test('D11-C：模型结论映射为可采用建议', async () => {
   const review = await buildAiDigitalMeCtoReview(input, async () => ({
     text: JSON.stringify({
       decision: 'meets_plan',
+      canUse: '可以试用当前版本。',
+      goalAttained: '已达到本轮目标。',
+      needChange: '不是必须再改。',
+      nextStep: '建议采用这一版成果。',
       userSummary: '手机导航已完成调整，并通过现有构建核对。',
       completed: ['完成导航布局调整'],
       gaps: [],
       evidenceRefs: ['check:file_changes', 'check:build_check', 'file:src/nav.ts'],
-      risks: [],
+      risks: ['不会自动提交或发布'],
       nextAction: '你可以确认采用这一版成果。',
     }),
   }));
@@ -40,6 +44,10 @@ test('D11-C：模型结论映射为可采用建议', async () => {
   assert.equal(review.goalAttained, true);
   assert.equal(review.decision, 'meets_plan');
   assert.deepEqual(review.evidenceRefs, ['check:file_changes', 'check:build_check', 'file:src/nav.ts']);
+  assert.match(review.report, /现在能不能用：可以试用当前版本/);
+  assert.match(review.report, /是否达到目标：已达到本轮目标/);
+  assert.match(review.report, /还需不需要修改：不是必须再改/);
+  assert.doesNotMatch(review.report, /file_changes|scope_boundary|meets_plan/);
 });
 
 test('D11-C：硬门覆盖模型的可采用结论', async () => {
@@ -56,6 +64,10 @@ test('D11-C：硬门覆盖模型的可采用结论', async () => {
     async () => ({
       text: JSON.stringify({
         decision: 'meets_plan',
+        canUse: '可以完全使用。',
+        goalAttained: '已达到目标。',
+        needChange: '不是必须再改。',
+        nextStep: '确认采用。',
         userSummary: '模型认为成果可采用。',
         completed: ['完成修改'],
         gaps: [],
@@ -68,6 +80,9 @@ test('D11-C：硬门覆盖模型的可采用结论', async () => {
   assert.equal(review.decision, 'blocked');
   assert.equal(review.primaryAction, 'need_decision');
   assert.equal(review.goalAttained, false);
+  assert.match(review.report, /现在能不能用/);
+  assert.doesNotMatch(review.report, /可以完全使用/);
+  assert.doesNotMatch(review.report, /\bmeets_plan\b|\bscope_boundary\b/);
 });
 
 test('D11-C：关键工程证据缺失时不得判为可采用', async () => {
@@ -83,6 +98,10 @@ test('D11-C：关键工程证据缺失时不得判为可采用', async () => {
     async () => ({
       text: JSON.stringify({
         decision: 'meets_plan',
+        canUse: '可以完全使用。',
+        goalAttained: '已达到目标。',
+        needChange: '不是必须再改。',
+        nextStep: '确认采用。',
         userSummary: '模型认为可以采用。',
         completed: ['完成修改'],
         gaps: [],
@@ -115,6 +134,10 @@ test('D11-C：needs_revision 生成专业修正计划，不创建任务', async 
   const summary = await buildOwnerAcceptanceSummaryAsync(input, async () => ({
     text: JSON.stringify({
       decision: 'needs_revision',
+      canUse: '现在还不建议当作可用版本。',
+      goalAttained: '尚未完全达到目标。',
+      needChange: '需要补充手机宽度验证。',
+      nextStep: '请确认是否继续补充验证。',
       userSummary: '导航改动已完成，但自动测试尚未覆盖手机宽度。',
       completed: ['完成导航布局调整'],
       gaps: ['缺少手机宽度的自动验证'],
@@ -134,6 +157,10 @@ test('D11-C：解析只接受证据包内的引用', () => {
   const parsed = parseAiCtoReviewOutput(
     JSON.stringify({
       decision: 'blocked',
+      canUse: '现在还不能当作可用版本。',
+      goalAttained: '不能认定已达标。',
+      needChange: '需要先核对范围。',
+      nextStep: '人工核对后再决定。',
       userSummary: '范围异常。',
       completed: [],
       gaps: ['范围异常'],
