@@ -1,0 +1,23 @@
+{
+  "at": "2026-08-13T07:02:00.000Z",
+  "stoppedBecause": "owner_rejected",
+  "noWorkaround": true,
+  "noLiveFix": true,
+  "headUnchanged": "0dd41e1",
+  "fixtureFormatLabelUnchanged": true,
+  "fixtureStillReturnsInputAsIs": true,
+  "requestedArtifactTypeObserved": "document",
+  "intentKindObserved": "general",
+  "capabilityObserved": "cap_model_openai_compatible",
+  "planStatusObserved": "draft",
+  "planVersionObserved": 3,
+  "documentVersionsObserved": 3,
+  "revisionLoopPaused": true,
+  "pauseReasonObserved": "plan_unconfirmed",
+  "userFacingNotesObserved": [
+    "现有证据不足或存在阻断，已暂停自动修改。",
+    "请先确认当前计划后再继续修改。"
+  ],
+  "consultRevisionRestart": "not_reached",
+  "techEvidenceExpandedByOwner": false
+}

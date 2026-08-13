@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "owner-runtime-21-timeline/1",
+  "events": [
+    {
+      "at": "2026-08-13T06:49:53.016Z",
+      "name": "launched",
+      "detail": {
+        "head": "0dd41e1",
+        "entry": "electron/main.cjs",
+        "pid": 28560,
+        "gitInitOnFixture": false
+      }
+    },
+    {
+      "at": "2026-08-13T06:50:30.000Z",
+      "name": "window_visible",
+      "detail": {
+        "title": "Digital Me",
+        "blackWindowAtLaunch": false
+      }
+    },
+    {
+      "at": "2026-08-13T06:52:32.000Z",
+      "name": "owner_first_goal",
+      "detail": { "note": "Owner stated formatLabel start → start-processing and run tests" }
+    },
+    {
+      "at": "2026-08-13T06:53:53.000Z",
+      "name": "owner_confirm_start_1",
+      "detail": { "text": "确认。开始。" }
+    },
+    {
+      "at": "2026-08-13T06:55:53.000Z",
+      "name": "owner_asked_if_stopped",
+      "detail": { "text": "是停下来了吗？" }
+    },
+    {
+      "at": "2026-08-13T06:56:29.000Z",
+      "name": "owner_confirm_start_2",
+      "detail": { "text": "确认。开始。" }
+    },
+    {
+      "at": "2026-08-13T07:02:00.000Z",
+      "name": "owner_rejected",
+      "detail": {
+        "verdict": "owner_runtime_completed_rejected",
+        "ownerAccepted": false
+      }
+    }
+  ]
+}

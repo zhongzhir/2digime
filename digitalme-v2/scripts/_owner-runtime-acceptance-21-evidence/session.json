@@ -1,0 +1,33 @@
+{
+  "task": "2DIGIME-BUILD-01-OWNER-RUNTIME-ACCEPTANCE-21",
+  "round": "third_owner_runtime",
+  "status": "owner_runtime_completed_rejected",
+  "ownerAccepted": false,
+  "verdict": "owner_runtime_completed_rejected",
+  "closedAt": "2026-08-13T07:02:00.000Z",
+  "head": "0dd41e1",
+  "headFull": "0dd41e101861678f674468f8e821c75c562ad9dc",
+  "branch": "build/software-work-quality-loop-01",
+  "pr": "https://github.com/zhongzhir/2digime/pull/1",
+  "prState": "draft",
+  "launchedAt": "2026-08-13T06:49:53.016Z",
+  "entry": "electron/main.cjs",
+  "userData": "C:\\Users\\46554\\AppData\\Local\\DigitalMe-OwnerAcceptance\\software-dev-task-ux-01-1786603793016",
+  "testProject": "D:\\Projects\\DigitalMe-Software-UX-Owner-Test-1786603793016",
+  "electronPid": 28560,
+  "storeAtStop": {
+    "taskCount": 1,
+    "jobCount": 1,
+    "artifactCount": 1
+  },
+  "ownerFinal": {
+    "trustworthy": false,
+    "resultCorrect": false,
+    "willingToAdopt": false
+  },
+  "notes": [
+    "Stopped on Owner rejection. No live fix, no workaround, no adopt click.",
+    "ownerAccepted remains false.",
+    "No merge, no main, no deploy, no MUHUB."
+  ]
+}

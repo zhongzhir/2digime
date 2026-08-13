@@ -1,0 +1,7 @@
+﻿{
+  "name": "digitalme-software-ux-owner-test",
+  "version": "1.0.0",
+  "private": true,
+  "main": "formatLabel.js",
+  "scripts": { "test": "node formatLabel.test.js" }
+}

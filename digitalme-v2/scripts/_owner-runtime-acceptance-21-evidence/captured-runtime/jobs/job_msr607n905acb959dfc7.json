@@ -1,0 +1,17 @@
+{
+  "id": "job_msr607n905acb959dfc7",
+  "taskId": "task_msr5v1zua9a18d12a404",
+  "capabilityId": "cap_model_openai_compatible",
+  "createdAt": "2026-08-13T06:56:29.877Z",
+  "status": "succeeded",
+  "targetArtifactId": "art_msr5vdbv02c3b69ab943",
+  "revisionRequest": "确认。开始。",
+  "startedAt": "2026-08-13T06:56:29.891Z",
+  "snapshotId": "snap_msr607nt59edcbdc66b8",
+  "finishedAt": "2026-08-13T06:56:39.693Z",
+  "artifactId": "art_msr5vdbv02c3b69ab943",
+  "costActual": {
+    "tokens": 2285,
+    "durationMs": 9802
+  }
+}

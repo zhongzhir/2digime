@@ -1,0 +1,21 @@
+{
+  "task": "2DIGIME-BUILD-01-OWNER-RUNTIME-ACCEPTANCE-21",
+  "head": "0dd41e1",
+  "ownerAccepted": false,
+  "verdict": "owner_runtime_completed_rejected",
+  "trustworthy": false,
+  "resultCorrect": false,
+  "willingToAdopt": false,
+  "ownerQuotes": [
+    "工作区出现确认规划后，占确认开始，digitalme回复如附图1，再次在对话框内输入确认，开始，系统开始运行。两次重复确认。",
+    "开始执行一段时间后，如附图2。要求对第2版进行确认，但不仔细看，看不到第2版的字样，也没有提示。继续输入确认，开始。显示第3版（附图3）",
+    "“尚未决定”是指用户还没决定？这个提示有够自然。为什么不在digitalme的回复里提示？“保存副本”有什么用？",
+    "最后没有完成，也没有提示。",
+    "任务过程累赘，信息不明，没有完成（或者不知道为什么没完成，原因在哪里，下一步能做什么）。不通过。"
+  ],
+  "shots": [
+    "shots/01-double-confirm-after-plan.png",
+    "shots/02-ask-confirm-v2-hard-to-see.png",
+    "shots/03-shows-v3-undecided-incomplete.png"
+  ]
+}

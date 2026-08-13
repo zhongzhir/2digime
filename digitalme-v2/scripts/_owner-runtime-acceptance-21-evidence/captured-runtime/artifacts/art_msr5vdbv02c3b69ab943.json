@@ -1,0 +1,45 @@
+{
+  "id": "art_msr5vdbv02c3b69ab943",
+  "taskId": "task_msr5v1zua9a18d12a404",
+  "jobId": "job_msr607n905acb959dfc7",
+  "subjectId": "subj_msr5ru0o7ffc80699dc2",
+  "createdAt": "2026-08-13T06:52:54.463Z",
+  "type": "document",
+  "title": "调整 formatLabel：输入 start 时返回 start-processing",
+  "versions": [
+    {
+      "versionId": "ver_msr5vlfj06679aecb5ff",
+      "createdAt": "2026-08-13T06:52:54.463Z",
+      "author": "capability",
+      "content": {
+        "kind": "text",
+        "format": "markdown",
+        "ref": "text/77/775ffffe814fd961d5c10932ecd277c69e86981747c1c2ce3ca7641dbcedf35a.md"
+      }
+    },
+    {
+      "versionId": "ver_msr5xbmt24a297619280",
+      "createdAt": "2026-08-13T06:54:15.077Z",
+      "author": "capability",
+      "content": {
+        "kind": "text",
+        "format": "markdown",
+        "ref": "text/70/70fa1cbb907ba6bdcd7edd7b4212dab5ef3e5122dc9570d017440f64f1a54c11.md"
+      },
+      "note": "确认。开始。"
+    },
+    {
+      "versionId": "ver_msr60f7rfa4106688429",
+      "createdAt": "2026-08-13T06:56:39.687Z",
+      "author": "capability",
+      "content": {
+        "kind": "text",
+        "format": "markdown",
+        "ref": "text/c8/c8ec7c9819cc09ffda813d8f06e90f74389644117eb56b3e048d1b5a6b64043c.md"
+      },
+      "note": "确认。开始。"
+    }
+  ],
+  "headVersionId": "ver_msr60f7rfa4106688429",
+  "storageDir": "C:\\Users\\46554\\AppData\\Local\\DigitalMe-OwnerAcceptance\\software-dev-task-ux-01-1786603793016\\subjects\\default\\runtime\\artifact-files\\art_msr5vdbv02c3b69ab943"
+}
