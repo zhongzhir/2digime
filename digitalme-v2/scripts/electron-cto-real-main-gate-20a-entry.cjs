@@ -155,6 +155,62 @@ function listJsonIds(dir) {
     .map((f) => f.replace(/\.json$/, ''));
 }
 
+function readRuntimeJson(kind, id) {
+  const rt = findRuntimeRoot();
+  if (!rt || !id) return null;
+  const p = path.join(rt, kind, `${id}.json`);
+  if (!fs.existsSync(p)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(p, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function snapArtifact(art) {
+  if (!art) return null;
+  const versions = Array.isArray(art.versions) ? art.versions : [];
+  const head = versions.find((v) => v.versionId === art.headVersionId);
+  return {
+    id: art.id,
+    jobId: art.jobId || null,
+    headVersionId: art.headVersionId || null,
+    versionCount: versions.length,
+    versionIds: versions.map((v) => v.versionId),
+    headCreatedAt: head && head.createdAt ? head.createdAt : null,
+    headNote: head && head.note ? head.note : null,
+  };
+}
+
+function revisionCompletion() {
+  const p = path.join(ROOT, 'dist', 'work-runtime', 'revision-completion.js');
+  return require(p);
+}
+
+function copyCapturedRuntime() {
+  const rt = findRuntimeRoot();
+  if (!rt) return { ok: false, reason: 'no_runtime' };
+  const dest = path.join(EVIDENCE, 'captured-runtime');
+  fs.mkdirSync(dest, { recursive: true });
+  for (const name of ['jobs', 'artifacts', 'tasks']) {
+    const src = path.join(rt, name);
+    const out = path.join(dest, name);
+    fs.mkdirSync(out, { recursive: true });
+    if (!fs.existsSync(src)) continue;
+    for (const f of fs.readdirSync(src)) {
+      if (!f.endsWith('.json')) continue;
+      fs.copyFileSync(path.join(src, f), path.join(out, f));
+    }
+  }
+  const fixtureDest = path.join(dest, 'fixture-project');
+  fs.mkdirSync(fixtureDest, { recursive: true });
+  for (const f of fs.readdirSync(FIXTURE)) {
+    const src = path.join(FIXTURE, f);
+    if (fs.statSync(src).isFile()) fs.copyFileSync(src, path.join(fixtureDest, f));
+  }
+  return { ok: true, dest, runtime: rt };
+}
+
 function readLatestTask() {
   const rt = findRuntimeRoot();
   if (!rt) return null;
@@ -533,7 +589,9 @@ async function runPhase1(win) {
   // NL revision → new job/artifact + file change to done
   const jobsBeforeRev = listJsonIds(path.join(rt || '', 'jobs'));
   const artsBeforeRev = listJsonIds(path.join(rt || '', 'artifacts'));
+  const artBeforeSnap = snapArtifact(readRuntimeJson('artifacts', artsBeforeRev[0]));
   const fileBeforeRev = fs.readFileSync(path.join(FIXTURE, 'formatLabel.js'), 'utf8');
+  const cto1Fields = cto1.fields;
   setBlackPhase('revision_exec');
   const turnsBeforeRev = await ui(win, `() => {
     const turns = Array.from(document.querySelectorAll('#work-timeline .work-turn-digital_me, #work-timeline li.work-turn-digital_me, #work-timeline .work-turn-user, #work-timeline li.work-turn-user'));
@@ -568,8 +626,10 @@ async function runPhase1(win) {
       }
       const status = String((document.getElementById('job-status') || {}).textContent || '');
       const running = /正在按你的修改|开发中|正在修改/.test(status);
+      const bad = /规划生成失败|没听懂|没有把你的意思理解清楚|暂时无法理解/.test(last);
       return {
-        ok: (sawUserRev && (sawReplyAfter || running)) || running,
+        ok: !bad && ((sawUserRev && (sawReplyAfter || running)) || running),
+        bad,
         sawUserRev,
         sawReplyAfter,
         turnCount: nodes.length,
@@ -587,90 +647,146 @@ async function runPhase1(win) {
     const start = Date.now();
     let body = fileBeforeRev;
     let lastUi = null;
+    let lastJob = null;
+    const { revisionArtifactAdvanced } = revisionCompletion();
     while (Date.now() - start < 480000) {
       try {
         body = fs.readFileSync(path.join(FIXTURE, 'formatLabel.js'), 'utf8');
-        if (/done/.test(body) && body !== fileBeforeRev) {
-          const rtNow = findRuntimeRoot();
-          const jobsNow = listJsonIds(path.join(rtNow || '', 'jobs'));
-          const grew = jobsNow.length > jobsBeforeRev.length;
-          if (grew) return { ok: true, body, jobsNow };
-        }
       } catch {
         /* ignore */
+      }
+      const rtNow = findRuntimeRoot();
+      const jobsNow = listJsonIds(path.join(rtNow || '', 'jobs'));
+      const newIds = jobsNow.filter((id) => !jobsBeforeRev.includes(id));
+      if (newIds.length > 1) {
+        return { ok: false, reason: 'duplicate_revision_jobs', body, newIds };
+      }
+      if (newIds.length === 1) {
+        lastJob = readRuntimeJson('jobs', newIds[0]);
+        if (lastJob && (lastJob.status === 'failed' || lastJob.status === 'cancelled')) {
+          return { ok: false, reason: 'revision_job_failed', body, job: lastJob, ui: lastUi };
+        }
+        if (
+          lastJob &&
+          lastJob.status === 'succeeded' &&
+          !lastJob.failure &&
+          /done/.test(body) &&
+          body !== fileBeforeRev
+        ) {
+          const artId = lastJob.artifactId || lastJob.targetArtifactId || artsBeforeRev[0];
+          const artSnap = snapArtifact(readRuntimeJson('artifacts', artId));
+          const advanced = revisionArtifactAdvanced(artBeforeSnap, artSnap);
+          if (advanced) {
+            return {
+              ok: true,
+              body,
+              job: lastJob,
+              artSnap,
+              newJobs: newIds,
+            };
+          }
+        }
       }
       try {
         lastUi = await ui(win, `() => {
           const status = String((document.getElementById('job-status') || {}).textContent || '');
-          const failed = /失败|无法完成|出错|中断|没有可修改的成果/.test(status);
+          const bodyText = String(document.body.innerText || '');
+          const failed = /执行失败，尚未产生可确认的成果|这项任务执行失败/.test(status + bodyText);
           return { status: status.slice(0, 200), failed };
         }`);
-        if (lastUi && lastUi.failed && Date.now() - start > 90000) {
-          return { ok: false, body, ui: lastUi };
+        if (lastUi && lastUi.failed && Date.now() - start > 120000) {
+          return { ok: false, reason: 'ui_failed', body, ui: lastUi, job: lastJob };
         }
       } catch {
         /* ignore */
       }
       await sleep(2000);
     }
-    return { ok: false, body };
+    return { ok: false, reason: 'timeout', body, job: lastJob, ui: lastUi };
   })();
-  await sleep(3000);
+  await sleep(2000);
   clearBlackPhase();
 
-  const jobsAfterRev = listJsonIds(path.join(rt || '', 'jobs'));
-  const artsAfterRev = listJsonIds(path.join(rt || '', 'artifacts'));
+  const jobsAfterRev = listJsonIds(path.join(findRuntimeRoot() || '', 'jobs'));
+  const artsAfterRev = listJsonIds(path.join(findRuntimeRoot() || '', 'artifacts'));
   const newJobs = jobsAfterRev.filter((id) => !jobsBeforeRev.includes(id));
   const newArts = artsAfterRev.filter((id) => !artsBeforeRev.includes(id));
-  check('revision_created_new_job', newJobs.length >= 1, {
+  const revJob = (fileRev && fileRev.job) || (newJobs[0] ? readRuntimeJson('jobs', newJobs[0]) : null);
+  const revArtId =
+    (revJob && (revJob.artifactId || revJob.targetArtifactId)) || artsAfterRev[0] || artsBeforeRev[0];
+  const artAfterSnap = snapArtifact(readRuntimeJson('artifacts', revArtId));
+  const { revisionArtifactAdvanced, headVersionBoundToJob, ctoFieldsDiffer } = revisionCompletion();
+  const artAdvanced = revisionArtifactAdvanced(artBeforeSnap, artAfterSnap);
+
+  check('revision_created_new_job', newJobs.length === 1, {
     jobsBeforeRev,
     jobsAfterRev,
     newJobs,
-    productDefectSuspected: true,
   });
-  // 修订向既有 Artifact 追加版本：同 id 亦可；以新 Job + headVersion/revisionRequest 追溯
-  let artTraceOk = newArts.length >= 1 || artsAfterRev.length > artsBeforeRev.length;
-  if (!artTraceOk && newJobs.length >= 1) {
-    try {
-      const j = JSON.parse(
-        fs.readFileSync(path.join(rt || '', 'jobs', `${newJobs[0]}.json`), 'utf8'),
-      );
-      const artId = j.artifactId || j.targetArtifactId;
-      if (artId && j.revisionRequest) {
-        const art = JSON.parse(
-          fs.readFileSync(path.join(rt || '', 'artifacts', `${artId}.json`), 'utf8'),
-        );
-        artTraceOk = !!(art && (art.headVersionId || (art.versions && art.versions.length > 1)));
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-  check('revision_created_new_artifact', artTraceOk, {
+  check(
+    'revision_job_succeeded',
+    !!(
+      revJob &&
+      revJob.status === 'succeeded' &&
+      !revJob.failure &&
+      !revJob.error
+    ),
+    {
+      jobId: revJob && revJob.id,
+      status: revJob && revJob.status,
+      failure: revJob && revJob.failure,
+      artifactId: revJob && revJob.artifactId,
+      targetArtifactId: revJob && revJob.targetArtifactId,
+    },
+  );
+  check('revision_created_new_artifact', artAdvanced, {
     artsBeforeRev,
     artsAfterRev,
     newArts,
-    newJobs,
-    productDefectSuspected: true,
+    before: artBeforeSnap,
+    after: artAfterSnap,
   });
+  const bound = headVersionBoundToJob(readRuntimeJson('artifacts', revArtId), newJobs[0] || '');
+  check('revision_artifact_bound_to_second_job', bound.ok, bound);
   check('revision_file_changed_to_done', fileRev.ok && /done/.test(fileRev.body), {
     before: fileBeforeRev.slice(0, 300),
     after: String(fileRev.body || '').slice(0, 300),
-    productDefectSuspected: true,
+    reason: fileRev.reason || null,
   });
   await shot(win, '07-revision');
 
-  const cto2Ui = await waitUi(
-    win,
-    'cto_five_after_rev',
-    `() => {
-      const text = String(document.body.innerText || '');
-      return { ok: /现在能不能用[：:]/.test(text) && /建议下一步[：:]/.test(text), text: text.slice(-2500) };
-    }`,
-    240000,
-  );
-  const cto2 = parseCtoFive(cto2Ui.text);
-  check('cto_five_after_revision_all_nonempty', cto2.ok, cto2);
+  const cto2Wait = await (async () => {
+    const start = Date.now();
+    let last = { ok: false, failed: false, fields: {}, text: '' };
+    while (Date.now() - start < 240000) {
+      const raw = await ui(win, `() => {
+        const text = String(document.body.innerText || '');
+        const failed = /执行失败，尚未产生可确认的成果|这项任务执行失败/.test(text);
+        return { text: text.slice(-3500), failed };
+      }`);
+      const parsed = parseCtoFive(raw && raw.text);
+      last = {
+        ok: parsed.ok,
+        failed: !!(raw && raw.failed),
+        fields: parsed.fields,
+        missing: parsed.missing,
+        text: (raw && raw.text) || '',
+      };
+      if (parsed.ok && !last.failed && ctoFieldsDiffer(cto1Fields, parsed.fields)) return last;
+      await sleep(2000);
+    }
+    return last;
+  })();
+  check('cto_five_after_revision_all_nonempty', cto2Wait.ok && !cto2Wait.failed, cto2Wait);
+  check('revision_cto_not_identical_to_first', ctoFieldsDiffer(cto1Fields, cto2Wait.fields), {
+    first: cto1Fields,
+    second: cto2Wait.fields,
+    headCreatedAtBefore: artBeforeSnap && artBeforeSnap.headCreatedAt,
+    headCreatedAtAfter: artAfterSnap && artAfterSnap.headCreatedAt,
+    headVersionIdBefore: artBeforeSnap && artBeforeSnap.headVersionId,
+    headVersionIdAfter: artAfterSnap && artAfterSnap.headVersionId,
+  });
+  const cto2 = { ok: cto2Wait.ok, fields: cto2Wait.fields, missing: cto2Wait.missing || [] };
 
   const taskFinal = readLatestTask();
   const handoff = {
@@ -680,6 +796,10 @@ async function runPhase1(win) {
     jobs: jobsAfterRev,
     artifacts: artsAfterRev,
     cto: cto2.fields,
+    ctoFirst: cto1Fields,
+    revisionJobId: newJobs[0] || null,
+    artifactBefore: artBeforeSnap,
+    artifactAfter: artAfterSnap,
     formatLabel: String(fileRev.body || '').slice(0, 500),
     uniqueRevisionMarker,
     ownerDecision: null,
@@ -694,6 +814,13 @@ async function runPhase1(win) {
     return { ownerDecision, hasStartSubmit: /开始处理/.test(text) && !!document.getElementById('btn-submit') && !document.getElementById('btn-submit').hidden };
   }`);
   handoff.ownerDecision = decisionProbe.ownerDecision;
+  check(
+    'revision_owner_decision_not_auto_adopted',
+    handoff.ownerDecision === 'undecided' || handoff.ownerDecision === 'rejected',
+    { ownerDecision: handoff.ownerDecision },
+  );
+  const captured = copyCapturedRuntime();
+  note('captured_runtime', captured);
   fs.writeFileSync(path.join(EVIDENCE, 'restart-handoff.json'), `${JSON.stringify(handoff, null, 2)}\n`);
   note('handoff_written', handoff);
 
@@ -737,7 +864,8 @@ async function runPhase2(win) {
         startDevVisible,
         planHeading,
         hasCto: /现在能不能用[：:]/.test(body) && /建议下一步[：:]/.test(body),
-        bodySlice: body.slice(0, 2000),
+        failedUi: /执行失败|尚未产生可确认的成果|尚未产生成果/.test(body),
+        bodySlice: body.slice(0, 2500),
       };
     }`,
     handoff.taskId,
@@ -745,15 +873,44 @@ async function runPhase2(win) {
 
   check('restart_no_start_submit', !selected.submitVisible, selected);
   check('restart_not_initial_planning_cta', !(selected.startDevVisible && /开发规划/.test(selected.planHeading)), selected);
+  check('restart_ui_not_failed', !selected.failedUi, {
+    failedUi: selected.failedUi,
+    bodySlice: selected.bodySlice,
+  });
 
   const cto = parseCtoFive(selected.bodySlice);
   check('restart_cto_five_restored', cto.ok, cto);
+  if (handoff.cto) {
+    const { ctoFieldsFingerprint } = revisionCompletion();
+    const latestFp = ctoFieldsFingerprint(cto.fields);
+    const expectedFp = ctoFieldsFingerprint(handoff.cto);
+    check('restart_cto_matches_latest_revision', latestFp === expectedFp && Boolean(latestFp), {
+      restored: cto.fields,
+      expected: handoff.cto,
+    });
+  }
 
   const task = readLatestTask();
   check('restart_same_task', !!(task && task.id === handoff.taskId), {
     expected: handoff.taskId,
     actual: task && task.id,
   });
+  const jobsNow = listJsonIds(path.join(findRuntimeRoot() || '', 'jobs'));
+  check('restart_two_jobs', jobsNow.length === 2, { jobsNow, expected: handoff.jobs });
+  const revJobId = handoff.revisionJobId || (handoff.jobs && handoff.jobs[1]);
+  const revJob = readRuntimeJson('jobs', revJobId);
+  check('restart_revision_job_succeeded', !!(revJob && revJob.status === 'succeeded' && !revJob.failure), {
+    jobId: revJobId,
+    status: revJob && revJob.status,
+    failure: revJob && revJob.failure,
+  });
+  const artNow = snapArtifact(readRuntimeJson('artifacts', (handoff.artifacts && handoff.artifacts[0]) || null));
+  const { revisionArtifactAdvanced } = revisionCompletion();
+  check(
+    'restart_artifact_version_chain',
+    revisionArtifactAdvanced(handoff.artifactBefore, artNow),
+    { before: handoff.artifactBefore, after: artNow },
+  );
   const fileNow = fs.readFileSync(path.join(FIXTURE, 'formatLabel.js'), 'utf8');
   check('restart_file_still_revised', /done/.test(fileNow), { fileNow: fileNow.slice(0, 300) });
 

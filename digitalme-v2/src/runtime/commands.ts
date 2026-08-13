@@ -341,6 +341,9 @@ export interface CommandMap {
         progressNote?: string;
         createdAt?: string;
         startedAt?: string;
+        /** succeeded 时绑定的成果（修订 Job 为 target Artifact）。 */
+        artifactId?: string;
+        targetArtifactId?: string;
         /** 失败时面向用户的可行动说明。 */
         actionable?: string;
         /** 本次 Job 的修改要求（来自 Job.revisionRequest）。 */

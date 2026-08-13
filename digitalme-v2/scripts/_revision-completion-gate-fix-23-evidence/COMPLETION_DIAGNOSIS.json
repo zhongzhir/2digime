@@ -1,0 +1,89 @@
+{
+  "task": "2DIGIME-BUILD-01-REVISION-COMPLETION-GATE-FIX-23",
+  "diagnosedAt": "2026-08-13T02:30:00.000Z",
+  "baselineHead": "20f9ed9",
+  "subjectJob": "job_msprrcpu90defe6c207e",
+  "fix22Evidence": "scripts/_owner-revision-routing-fix-22-evidence",
+  "symptom": "文件已改成 done，但 UI 投影为执行失败、无新 Artifact 版本、CTO 五项与首次相同；闸门仍给出 passed",
+  "observedFromFix22": {
+    "jobs": ["job_msprodpo0fb09780b80a", "job_msprrcpu90defe6c207e"],
+    "artifacts": ["art_msprodpo0fb09780b80a"],
+    "newArtifactIds": [],
+    "formatLabelAfter": "start → done",
+    "ownerDecision": "rejected",
+    "restartUi": "执行失败 / 这项任务执行失败，尚未产生可确认的成果。",
+    "ctoAfterRevisionEqualsFirst": true,
+    "revisionExecWindowSecApprox": 84,
+    "firstExecDurationMsExample": 100245
+  },
+  "path": [
+    {
+      "step": 1,
+      "where": "scripts/electron-cto-real-main-gate-20a-entry.cjs revision wait",
+      "finding": "等待循环在 formatLabel 含 done 且 jobs 数量增加时立即返回，不要求第二 Job status=succeeded，也不比较 headVersionId/versions。"
+    },
+    {
+      "step": 2,
+      "where": "revision_created_new_artifact",
+      "finding": "假通过：newArts=[] 时，只要既有 Artifact 已有 headVersionId 或 versions.length>1 即 ok。首次成果本来就有 headVersionId。"
+    },
+    {
+      "step": 3,
+      "where": "cto_five_after_revision_all_nonempty",
+      "finding": "只检查页面是否仍含五项标题。首次 CTO 仍在 DOM 上，故与首次五项整体相同也能通过。"
+    },
+    {
+      "step": 4,
+      "where": "phase1 electron exit",
+      "finding": "handoff 写入后 800ms 退出。修订 Codex 仍可能 running；文件已由执行器改写，但 Artifact 追加/Job succeeded/新 CTO 未完成。"
+    },
+    {
+      "step": 5,
+      "where": "JobRunner.recoverOnStartup + recoverJobOnStartup",
+      "finding": "running 且不存在 art_${revisionJobId} → mark_failed(interrupted)。修订成功路径本应追加到 targetArtifactId，existsForJob(revisionJobId) 恒为 false。"
+    },
+    {
+      "step": 6,
+      "where": "applyRecoveryWrite(commit_succeeded)",
+      "finding": "补交时无条件 artifactId=artifactIdForJob(job.id)，修订 Job 会指向不存在的 art_${revisionJobId}，而不是 targetArtifactId。"
+    },
+    {
+      "step": 7,
+      "where": "electron/renderer/app.js selectTask",
+      "finding": "仅当 latestJob.status===succeeded 才 loadArtifact；否则 failed →「这项任务执行失败，尚未产生可确认的成果。」即使 artifactIds 仍有首次成果。"
+    },
+    {
+      "step": 8,
+      "where": "job-runner previousText for bundle",
+      "finding": "只读 role=report。code-change 包使用 execution-summary，修订 previousText 为空（不单独导致本次失败，但修订上下文不完整）。"
+    }
+  ],
+  "rootCause": {
+    "primary": "闸门把「磁盘已改 + 新 Job 出现 + 旧 Artifact 已有 headVersionId + 旧 CTO 仍在页面」误判为修订收口完成，并在 Job 仍 running 时结束进程。",
+    "product": "修订 Job 被启动恢复标为 interrupted/failed；UI 按最新 failed Job 宣称无成果；Artifact 未追加版本；CTO 未基于新版本重算。",
+    "notRootCause": "FIX-22 路由（user_directed_revision 已创建第二 Job）；文件改写本身已发生。"
+  },
+  "firstGateRun": {
+    "at": "2026-08-13T02:51:45.118Z",
+    "result": "revision_created_new_job failed; newJobs=[]",
+    "converseReply": "规划生成失败，可重试。你的目标和任务已保留，不会丢失。请再发送一次，或把目标说得更具体一些。",
+    "cause": "decideConverseEffects 在 parsed=null 时提前返回 PLAN_FAILED，FIX-22 明确修订兜底未执行",
+    "followUp": "parsed 失败且 hasArtifact+明确修订句 → 仍 startAuthorized revision；闸门不再把规划生成失败当 converse 成功"
+  },
+  "fixPlan": {
+    "product": [
+      "bundle 修订 previousText 读取 execution-summary/report",
+      "恢复：targetArtifact.jobId===本 Job 视为成果已写，commit_succeeded 且 artifactId=targetArtifactId",
+      "applyRecoveryWrite 保留 targetArtifactId",
+      "selectTask：已有 artifactIds 时加载成果，不得因后续 Job 失败宣称尚未产生成果"
+    ],
+    "gate": [
+      "revision_created_new_artifact 必须 headVersionId 变化或 versions 严格增加或新 Artifact ID",
+      "第二 Job status=succeeded、无 failure、绑定最新版本",
+      "第二次 CTO 不得与首次整体相同，且绑定新版本",
+      "重启非失败 UI、两个 Job、版本链",
+      "任一失败立即停止，不写 passed",
+      "全量测试必须结束并记录 exitCode/pass/fail/skip"
+    ]
+  }
+}

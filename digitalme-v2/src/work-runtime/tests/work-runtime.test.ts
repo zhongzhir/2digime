@@ -306,6 +306,44 @@ test('崩溃恢复:Artifact 写后补交;succeeded 缺 Artifact;queued 重入队
     startedAt: '2026-08-02T12:03:01.000Z',
   });
 
+  // 5) 修订 Job running，但 target Artifact 已追加本 Job 版本 → 补交 succeeded
+  await jobStore.put({
+    id: 'job_recover_e',
+    taskId: 'task_recover_e',
+    capabilityId: 'cap_fake_document',
+    createdAt: '2026-08-02T12:04:00.000Z',
+    status: 'running',
+    startedAt: '2026-08-02T12:04:01.000Z',
+    targetArtifactId: 'art_first_e',
+    revisionRequest: '改成 done',
+  });
+  await artifactStore.put({
+    id: 'art_first_e',
+    taskId: 'task_recover_e',
+    jobId: 'job_recover_e',
+    subjectId: 'subj_test',
+    createdAt: '2026-08-02T12:04:02.000Z',
+    type: 'document',
+    title: '修订半成品',
+    versions: [
+      {
+        versionId: 'ver_e1',
+        createdAt: '2026-08-02T12:04:00.000Z',
+        author: 'capability',
+        content: { kind: 'text', format: 'markdown', ref: 'text/e1.md' },
+      },
+      {
+        versionId: 'ver_e2',
+        createdAt: '2026-08-02T12:04:02.000Z',
+        author: 'capability',
+        content: { kind: 'text', format: 'markdown', ref: 'text/e2.md' },
+        note: '改成 done',
+      },
+    ],
+    headVersionId: 'ver_e2',
+    storageDir: path.join(root, 'artifact-files', 'art_first_e'),
+  });
+
   const runtime = createWorkRuntime({ rootDir: root, subjectId: 'subj_test' });
   const { actions } = await runtime.recoverOnStartup();
   const byId = Object.fromEntries(actions.map((a) => [a.jobId, a.action]));
@@ -313,6 +351,7 @@ test('崩溃恢复:Artifact 写后补交;succeeded 缺 Artifact;queued 重入队
   assert.equal(byId.job_recover_b, 'mark_failed');
   assert.equal(byId.job_recover_c, 'requeue');
   assert.equal(byId.job_recover_d, 'mark_failed');
+  assert.equal(byId.job_recover_e, 'commit_succeeded');
 
   const a = await runtime.getJob('job_recover_a');
   assert.equal(a?.status, 'succeeded');
@@ -325,6 +364,10 @@ test('崩溃恢复:Artifact 写后补交;succeeded 缺 Artifact;queued 重入队
   const d = await runtime.getJob('job_recover_d');
   assert.equal(d?.status, 'failed');
   assert.equal(d?.failure?.stage, 'interrupted');
+
+  const e = await runtime.getJob('job_recover_e');
+  assert.equal(e?.status, 'succeeded');
+  assert.equal(e?.artifactId, 'art_first_e');
 
   runtime.start();
   const c = await waitForJobTerminal(runtime, 'job_recover_c');

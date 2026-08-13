@@ -3972,16 +3972,15 @@
     } else {
       stopJobWatch();
       hideRevisionActiveBanner();
-      if (
-        detail.latestJob &&
-        detail.latestJob.status === "succeeded" &&
-        detail.artifactIds &&
-        detail.artifactIds[0]
-      ) {
-        if (activeArtifactId !== detail.artifactIds[0]) {
-          copyBlockedFailed = false;
-          await loadArtifact(detail.artifactIds[0], { taskId, epoch });
-        }
+      const readyArtifactId =
+        (detail.artifactIds && detail.artifactIds[0]) ||
+        (detail.latestJob && (detail.latestJob.artifactId || detail.latestJob.targetArtifactId)) ||
+        null;
+      if (readyArtifactId) {
+        // 已有成果必须展示；后续修订 Job 失败不得宣称「尚未产生成果」
+        // succeeded 时即使 Artifact ID 相同也要重载，以拿到新 headVersion / CTO
+        copyBlockedFailed = false;
+        await loadArtifact(readyArtifactId, { taskId, epoch });
         if (epoch === uiEpoch && activeTaskId === taskId) {
           renderAppliedUnderstanding(detail.appliedUnderstanding);
         }

@@ -800,13 +800,15 @@ export class WorkRuntime {
       displayState: display.displayId,
       activityTime: display.activityTime,
     };
-    if (last) {
+      if (last) {
       const latestJobOut: NonNullable<GetTaskOutput['latestJob']> = {
         jobId: last.id,
         status: last.status,
         createdAt: last.createdAt,
       };
       if (last.startedAt) latestJobOut.startedAt = last.startedAt;
+      if (last.artifactId) latestJobOut.artifactId = last.artifactId;
+      if (last.targetArtifactId) latestJobOut.targetArtifactId = last.targetArtifactId;
       if (last.revisionRequest) latestJobOut.revisionRequest = last.revisionRequest;
       // 仅非终态可附带说明性进度;终态禁止拼接内部 phase 文案。
       if (
@@ -996,8 +998,11 @@ export class WorkRuntime {
       if (!artifactExists && job.artifactId) {
         artifactExists = !!(await this.opts.artifactCommitter.get(job.artifactId));
       }
-      if (!artifactExists && job.targetArtifactId && job.status === 'succeeded') {
-        artifactExists = !!(await this.opts.artifactCommitter.get(job.targetArtifactId));
+      if (!artifactExists && job.targetArtifactId) {
+        const target = await this.opts.artifactCommitter.get(job.targetArtifactId);
+        if (target && (job.status === 'succeeded' || target.jobId === job.id)) {
+          artifactExists = true;
+        }
       }
 
       // 远端映射恢复:running + remoteExecution → 重新入队以 re-associate,不另建状态机。
@@ -1437,10 +1442,11 @@ export class WorkRuntime {
           }
           previousText = await this.opts.readExtractedText(head.content.ref);
         } else if (head.content.kind === 'bundle') {
-          const report = head.content.entries.find((e) => e.role === 'report');
-          if (report && this.opts.readExtractedText) {
+          const { pickBundleTextEntry } = await import('./revision-completion');
+          const textEntry = pickBundleTextEntry(head.content.entries);
+          if (textEntry && this.opts.readExtractedText) {
             try {
-              previousText = await this.opts.readExtractedText(report.ref);
+              previousText = await this.opts.readExtractedText(textEntry.ref);
             } catch {
               previousText = '';
             }

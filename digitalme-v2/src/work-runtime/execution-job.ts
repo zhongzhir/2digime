@@ -152,7 +152,8 @@ export function applyRecoveryWrite(
       ...job,
       status: 'succeeded',
       finishedAt: at,
-      artifactId: artifactIdForJob(job.id),
+      // 修订 Job 成果写在 targetArtifactId 上，不得改写成 art_${revisionJobId}
+      artifactId: job.targetArtifactId || job.artifactId || artifactIdForJob(job.id),
     };
     delete next.failure;
     return next;

@@ -134,6 +134,19 @@ describe('owner-revision-routing-fix-22', () => {
     assert.match(converse, /startMode === 'revision'/);
   });
 
+  it('模型合同失败时，明确 Owner 修订仍授权 revision', () => {
+    const d = decideConverseEffects({
+      parsed: null,
+      modelAvailable: true,
+      hasArtifact: true,
+      jobRunning: false,
+      userText: '按你说的改吧：把 start 的返回值改成 done，并同步测试。',
+    });
+    assert.equal(d.startAuthorized, true);
+    assert.equal(d.startMode, 'revision');
+    assert.equal(d.degraded, false);
+  });
+
   it('无 Artifact 时明确修改句不授权 revision', () => {
     const d = decideConverseEffects({
       parsed: {

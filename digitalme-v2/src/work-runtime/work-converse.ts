@@ -345,7 +345,7 @@ export interface ConverseDecisionInput {
  * 确定性策略层：把 AI 意图结论翻译为受限效果集合。
  * 规则（不可被模型输出覆盖）：
  * - 模型不可用 → 降级提示，零效果；
- * - 输出不可解析 → 澄清提示，零效果；
+ * - 输出不可解析 → 规划失败语义，零效果；成果后明确 Owner 修订除外，仍授权受控修订；
  * - 低置信度 → 保留模型回复但强制澄清，零效果；
  * - 执行性意图（confirm_start / final_adopt）把握低于 EXECUTION_EFFECT_CONFIDENCE_THRESHOLD → 先澄清，不授权；
  * - 非执行意图 → 只回应；
@@ -385,6 +385,23 @@ export function decideConverseEffects(input: ConverseDecisionInput): ConverseDec
         confidence: 0.85,
         reply: buildDegradedConsultReply(input.consultContext),
         degraded: true,
+      };
+    }
+    // 技术合同失败不得吞掉成果后的明确 Owner 修订
+    if (
+      input.hasArtifact &&
+      !input.jobRunning &&
+      !input.firstTurn &&
+      isClearOwnerDirectedRevision(input.userText || '') &&
+      !isCurrentTaskConsult(input.userText || '')
+    ) {
+      return {
+        ...base,
+        intent: 'artifact_feedback',
+        confidence: 0.9,
+        reply: '好的，我按你刚才说的修改要求继续改这一版成果。',
+        startAuthorized: true,
+        startMode: 'revision',
       };
     }
     // 技术合同失败 ≠ 语义「没听懂」
