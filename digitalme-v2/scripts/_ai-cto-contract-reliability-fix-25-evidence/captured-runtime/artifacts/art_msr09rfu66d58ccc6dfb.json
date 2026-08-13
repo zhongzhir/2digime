@@ -1,0 +1,104 @@
+{
+  "id": "art_msr09rfu66d58ccc6dfb",
+  "taskId": "task_msr08amjcc3b3117c39a",
+  "jobId": "job_msr0d9hg579f7e7e591b",
+  "subjectId": "subj_msr07uxmb41996529480",
+  "createdAt": "2026-08-13T04:17:55.143Z",
+  "type": "code-change",
+  "title": "代码修改：修改这个项目中的 formatLabel，使输入 start 时返回 start-processing，并运行测试。",
+  "versions": [
+    {
+      "versionId": "ver_msr0ca13c6a51b45d940",
+      "createdAt": "2026-08-13T04:17:55.143Z",
+      "author": "capability",
+      "content": {
+        "kind": "bundle",
+        "entries": [
+          {
+            "ref": "files/5a2515459932cca1/execution-summary.md",
+            "mediaType": "text/markdown",
+            "role": "execution-summary"
+          },
+          {
+            "ref": "files/1aa6a222ac4950de/changed-files.json",
+            "mediaType": "application/json",
+            "role": "changed-files"
+          },
+          {
+            "ref": "files/286df731aca57996/patch.diff",
+            "mediaType": "text/x-diff",
+            "role": "diff"
+          },
+          {
+            "ref": "files/99191b2b3c0151b1/tests.json",
+            "mediaType": "application/json",
+            "role": "tests"
+          },
+          {
+            "ref": "files/98ee4b67b2d34725/evidence.json",
+            "mediaType": "application/json",
+            "role": "evidence"
+          },
+          {
+            "ref": "files/a3e96fc5a4353cf0/unresolved-items.md",
+            "mediaType": "text/markdown",
+            "role": "unresolved-items"
+          },
+          {
+            "ref": "files/31ea43d2ad564f68/manifest.json",
+            "mediaType": "application/json",
+            "role": "manifest"
+          }
+        ]
+      }
+    },
+    {
+      "versionId": "ver_msr0grdj32d98b4d0f23",
+      "createdAt": "2026-08-13T04:21:24.247Z",
+      "author": "capability",
+      "content": {
+        "kind": "bundle",
+        "entries": [
+          {
+            "ref": "files/e0eee3257393adf6/execution-summary.md",
+            "mediaType": "text/markdown",
+            "role": "execution-summary"
+          },
+          {
+            "ref": "files/cd65f1b74eb12ca4/changed-files.json",
+            "mediaType": "application/json",
+            "role": "changed-files"
+          },
+          {
+            "ref": "files/20aaf65b29472a9a/patch.diff",
+            "mediaType": "text/x-diff",
+            "role": "diff"
+          },
+          {
+            "ref": "files/14e5c7f72361974b/tests.json",
+            "mediaType": "application/json",
+            "role": "tests"
+          },
+          {
+            "ref": "files/30551da500680959/evidence.json",
+            "mediaType": "application/json",
+            "role": "evidence"
+          },
+          {
+            "ref": "files/4d835a9eeaa747ed/unresolved-items.md",
+            "mediaType": "text/markdown",
+            "role": "unresolved-items"
+          },
+          {
+            "ref": "files/4954433c11799d71/manifest.json",
+            "mediaType": "application/json",
+            "role": "manifest"
+          }
+        ]
+      },
+      "note": "按你说的改吧：把 start 的返回值改成 done，并同步测试。"
+    }
+  ],
+  "headVersionId": "ver_msr0grdj32d98b4d0f23",
+  "storageDir": "C:\\Users\\46554\\AppData\\Local\\Temp\\dm-23-ud-ZLSZz9\\subjects\\default\\runtime\\artifact-files\\art_msr09rfu66d58ccc6dfb"
+}

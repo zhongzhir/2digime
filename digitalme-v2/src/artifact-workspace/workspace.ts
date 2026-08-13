@@ -20,6 +20,30 @@ import type { SubjectService } from '../subject-core/subject-service';
 import type { ChatMessage } from '../infrastructure/model-http';
 import { deriveJobEffectiveGoal } from '../execution/effective-goal';
 
+function excerptsFromUnifiedDiff(
+  diff: string,
+  files: string[],
+): Array<{ path: string; excerpt: string }> {
+  const text = String(diff || '');
+  const out: Array<{ path: string; excerpt: string }> = [];
+  for (const file of files.slice(0, 8)) {
+    const norm = String(file || '').replace(/\\/g, '/');
+    if (!norm) continue;
+    const base = norm.split('/').pop() || norm;
+    const idx = text.indexOf(base);
+    if (idx < 0) continue;
+    out.push({
+      path: norm,
+      excerpt: text.slice(Math.max(0, idx - 40), idx + 560),
+    });
+  }
+  return out;
+}
+
+function dropStaleLocateItems(items: string[]): string[] {
+  return items.filter((item) => !/无需修改|当前代码已满足目标/.test(String(item || '')));
+}
+
 export interface ArtifactWorkspaceOptions {
   artifactStore: ObjectStore<Artifact>;
   contentStore: ContentStore;
@@ -631,7 +655,7 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
                 },
                 changedFileCount,
                 directoryChangedSinceResult,
-                unresolvedItems,
+                unresolvedItems: dropStaleLocateItems(unresolvedItems),
                 ...(summaryEntry?.text ? { summaryExcerpt: summaryEntry.text } : {}),
                 evidence: {
                   changedFiles: parsed.changedFiles || changes.map((c) => c.path),
@@ -667,7 +691,11 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
                         ...(understanding?.keyFiles?.length
                           ? [
                               understanding.keyFiles
-                                .map((k) => `${k.path}：${k.reason}`)
+                                .map((k) => {
+                                  const reason = String(k.reason || '');
+                                  if (/无需修改|当前代码已满足目标/.test(reason)) return k.path;
+                                  return reason ? `${k.path}：${reason}` : k.path;
+                                })
                                 .join('；'),
                             ]
                           : []),
@@ -679,6 +707,25 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
                 ...(understanding?.planSteps?.length
                   ? { planSteps: understanding.planSteps }
                   : {}),
+                artifactVersionId: version.versionId,
+                jobId: artifact.jobId,
+                ...(testResults.length
+                  ? {
+                      testResults: testResults.map((t) => ({
+                        command: t.command,
+                        passed: t.passed,
+                        ...(t.summary ? { summary: t.summary } : {}),
+                      })),
+                    }
+                  : {}),
+                ...(diffEntry?.text
+                  ? {
+                      changedFileExcerpts: excerptsFromUnifiedDiff(
+                        diffEntry.text,
+                        parsed.changedFiles || changes.map((c) => c.path),
+                      ),
+                    }
+                  : {}),
                 }, this.ctoReviewChat);
                 this.ctoSummaryCache.set(ctoCacheKey, acceptanceSummary);
                 try {
@@ -689,6 +736,23 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
                 }
               } else {
                 this.ctoSummaryCache.set(ctoCacheKey, acceptanceSummary);
+                const diagDir = String(process.env.DIGITALME_20A_EVIDENCE || '').trim();
+                if (diagDir) {
+                  try {
+                    await fs.appendFile(
+                      path.join(diagDir, 'AI_CTO_CACHE.jsonl'),
+                      `${JSON.stringify({
+                        at: new Date().toISOString(),
+                        cacheHit: true,
+                        versionId: version.versionId,
+                        jobId: artifact.jobId,
+                        reusedOldCtoConclusion: false,
+                      })}\n`,
+                    );
+                  } catch {
+                    /* ignore */
+                  }
+                }
               }
               codeChange.acceptanceSummary = acceptanceSummary;
               codeChange.checks = checks;

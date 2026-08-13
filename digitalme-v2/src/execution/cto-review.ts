@@ -48,6 +48,21 @@ export type DigitalMeCtoReview = {
   decision?: CtoReviewDecision;
   /** 支撑该结论的已核对证据引用。 */
   evidenceRefs?: string[];
+  /** 输出合同失败：不是完整专业判断，不得当作可采用结论。 */
+  ctoContractDegraded?: boolean;
+  /** 机器可读解析诊断；不含模型原文或思维链。 */
+  ctoParseDiagnosis?: Array<{
+    attempt: 1 | 2;
+    foundJson: boolean;
+    jsonParseOk: boolean;
+    illegalDecision: boolean;
+    invalidEvidenceRefs: boolean;
+    missingOrTypedWrong: string[];
+    textLength: number;
+    finishReason?: string;
+    truncated?: boolean;
+    failStep?: string;
+  }>;
 };
 
 export type CtoReviewInput = {
@@ -70,6 +85,10 @@ export type CtoReviewInput = {
   directoryChangedSinceResult?: boolean;
   unresolvedItems?: string[];
   agentSummaryExcerpt?: string;
+  artifactVersionId?: string;
+  jobId?: string;
+  testResults?: Array<{ command: string; passed: boolean; summary?: string }>;
+  changedFileExcerpts?: Array<{ path: string; excerpt: string }>;
 };
 
 function byId(

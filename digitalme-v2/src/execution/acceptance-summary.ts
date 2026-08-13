@@ -47,6 +47,7 @@ export type OwnerAcceptanceSummary = {
   /** 内部修正指令（发给 Coding Agent；默认不要求用户阅读） */
   revisionDirective?: string;
   ctoReview?: DigitalMeCtoReview;
+  ctoContractDegraded?: boolean;
 };
 
 export type AcceptanceEvidenceInput = {
@@ -71,6 +72,10 @@ export type OwnerAcceptanceSummaryInput = {
   originalTaskGoal?: string;
   revisionRequest?: string;
   currentRoundAuthority?: 'initial_task' | 'owner_revision';
+  artifactVersionId?: string;
+  jobId?: string;
+  testResults?: Array<{ command: string; passed: boolean; summary?: string }>;
+  changedFileExcerpts?: Array<{ path: string; excerpt: string }>;
   understandingBrief?: string;
   understandingKeyFiles?: string[];
   planSteps?: string[];
@@ -336,8 +341,11 @@ export function buildOwnerAcceptanceSummary(input: OwnerAcceptanceSummaryInput):
     );
   }
 
-  const recommendation = ctoActionToRecommendation(ctoReview.primaryAction);
-  const canAdoptSuggested = ctoReview.primaryAction === 'confirm_adopt';
+  const recommendation = ctoReview.ctoContractDegraded
+    ? '请重新验证'
+    : ctoActionToRecommendation(ctoReview.primaryAction);
+  const canAdoptSuggested =
+    !ctoReview.ctoContractDegraded && ctoReview.primaryAction === 'confirm_adopt';
 
   const adoptWarnings: string[] = [];
   if (!canAdoptSuggested) {
@@ -355,7 +363,10 @@ export function buildOwnerAcceptanceSummary(input: OwnerAcceptanceSummaryInput):
 
   let headline: string;
   let executionStatusLabel: string;
-  if (canAdoptSuggested || ctoReview.decision === 'meets_plan') {
+  if (ctoReview.ctoContractDegraded) {
+    headline = '验收结论未能形成，请重新验收';
+    executionStatusLabel = '本次处理已结束，现有成果会保留，现在不能建议采用';
+  } else if (canAdoptSuggested || ctoReview.decision === 'meets_plan') {
     headline = '工程已达到规划，可以试用';
     executionStatusLabel = '本次处理已结束，工程达到规划';
   } else if (ctoReview.decision === 'insufficient_evidence') {
@@ -395,6 +406,7 @@ export function buildOwnerAcceptanceSummary(input: OwnerAcceptanceSummaryInput):
       ? { revisionDirective: ctoReview.revisionDirective }
       : {}),
     ctoReview,
+    ...(ctoReview.ctoContractDegraded ? { ctoContractDegraded: true } : {}),
   };
 }
 
@@ -412,6 +424,12 @@ export async function buildOwnerAcceptanceSummaryAsync(
       ...(input.originalTaskGoal ? { originalTaskGoal: input.originalTaskGoal } : {}),
       ...(input.revisionRequest ? { revisionRequest: input.revisionRequest } : {}),
       ...(input.currentRoundAuthority ? { currentRoundAuthority: input.currentRoundAuthority } : {}),
+      ...(input.artifactVersionId ? { artifactVersionId: input.artifactVersionId } : {}),
+      ...(input.jobId ? { jobId: input.jobId } : {}),
+      ...(input.testResults?.length ? { testResults: input.testResults } : {}),
+      ...(input.changedFileExcerpts?.length
+        ? { changedFileExcerpts: input.changedFileExcerpts }
+        : {}),
       ...(input.understandingBrief ? { understandingBrief: input.understandingBrief } : {}),
       ...(input.understandingKeyFiles ? { understandingKeyFiles: input.understandingKeyFiles } : {}),
       ...(input.planSteps ? { planSteps: input.planSteps } : {}),

@@ -842,6 +842,60 @@ async function runPhase1(win) {
     !/改回.{0,24}start-processing|改成.{0,16}start-processing/.test(needChange2),
     { needChange: needChange2, nextStep: cto2Fields.nextStep, risks: cto2Fields.risks },
   );
+  const { ctoConclusionLooksDegraded, ownerGateRejectsDegradedCto } = revisionCompletion();
+  const cto2Full = String(cto2Wait.text || '');
+  const degradedGate = ownerGateRejectsDegradedCto({
+    ctoText: cto2Full,
+    ctoContractDegraded: /验收合同失败/.test(cto2Full),
+  });
+  check('revision_cto_not_degraded', degradedGate.pass && !ctoConclusionLooksDegraded(cto2Full), {
+    reason: degradedGate.reason,
+    canUse: canUse2,
+    goalAttained: goalAttained2,
+    textSlice: cto2Full.slice(-1200),
+  });
+  check(
+    'revision_cto_not_unparseable_template',
+    !/验收合同失败|暂时无法完成独立验收|尚未形成可核对的独立验收结论/.test(cto2Full),
+    { textSlice: cto2Full.slice(-800) },
+  );
+  const fileDone = /done/.test(String(fileRev.body || ''));
+  const usable = /可以|试用|建议采用|可以采用/.test(`${canUse2}\n${cto2Fields.nextStep || ''}`);
+  check(
+    'revision_cto_usable_when_done_evidence',
+    !fileDone || usable,
+    { fileDone, canUse: canUse2, nextStep: cto2Fields.nextStep, goalAttained: goalAttained2 },
+  );
+  let parseDiag = null;
+  try {
+    parseDiag = JSON.parse(fs.readFileSync(path.join(EVIDENCE, 'AI_CTO_PARSE_DIAGNOSIS.json'), 'utf8'));
+  } catch {
+    parseDiag = null;
+  }
+  const sessions = (parseDiag && parseDiag.sessions) || [];
+  const lastSession = sessions[sessions.length - 1] || null;
+  const lastAttempts = (lastSession && lastSession.attempts) || [];
+  const lastAttempt = lastAttempts[lastAttempts.length - 1] || null;
+  check(
+    'revision_cto_parse_diagnosis_recorded',
+    !!(lastSession && lastAttempts.length >= 1 && lastAttempt && typeof lastAttempt.foundJson === 'boolean'),
+    {
+      sessionCount: sessions.length,
+      lastParsed: lastSession && lastSession.parsed,
+      lastDegraded: lastSession && lastSession.degraded,
+      attempts: lastAttempts,
+    },
+  );
+  check(
+    'revision_cto_second_round_parsed',
+    !!(lastSession && lastSession.parsed === true && lastSession.degraded !== true),
+    { lastSession },
+  );
+  check(
+    'revision_cto_not_cache_misuse',
+    !(lastSession && lastSession.notes && lastSession.notes.reusedOldCtoConclusion),
+    { notes: lastSession && lastSession.notes, cacheHit: lastSession && lastSession.cacheHit },
+  );
   const taskGoalNow = readLatestTask();
   check(
     'task_goal_not_overwritten',
@@ -942,6 +996,14 @@ async function runPhase2(win) {
 
   const cto = parseCtoFive(selected.bodySlice);
   check('restart_cto_five_restored', cto.ok, cto);
+  {
+    const { ctoConclusionLooksDegraded } = revisionCompletion();
+    check(
+      'restart_cto_not_degraded',
+      !ctoConclusionLooksDegraded(String(selected.bodySlice || '')),
+      { bodySlice: String(selected.bodySlice || '').slice(0, 800) },
+    );
+  }
   if (handoff.cto) {
     const { ctoFieldsFingerprint } = revisionCompletion();
     const latestFp = ctoFieldsFingerprint(cto.fields);

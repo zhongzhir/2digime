@@ -1,0 +1,106 @@
+{
+  "schemaVersion": "ai-cto-parse-diagnosis/1",
+  "sessions": [
+    {
+      "at": "2026-08-13T04:17:55.622Z",
+      "parsed": false,
+      "degraded": true,
+      "cacheHit": false,
+      "jobId": "job_msr09rfu66d58ccc6dfb",
+      "artifactVersionId": "ver_msr0ca13c6a51b45d940",
+      "attempts": [],
+      "notes": {
+        "reusedOldCtoConclusion": false,
+        "keywordRouting": false,
+        "parsedNullExecution": false
+      }
+    },
+    {
+      "at": "2026-08-13T04:18:31.351Z",
+      "parsed": true,
+      "degraded": false,
+      "cacheHit": false,
+      "jobId": "job_msr09rfu66d58ccc6dfb",
+      "artifactVersionId": "ver_msr0ca13c6a51b45d940",
+      "attempts": [
+        {
+          "attempt": 1,
+          "foundJson": false,
+          "jsonParseOk": false,
+          "illegalDecision": false,
+          "invalidEvidenceRefs": false,
+          "missingOrTypedWrong": [],
+          "textLength": 764,
+          "finishReason": "length",
+          "truncated": true,
+          "failStep": "json_parse_error"
+        },
+        {
+          "attempt": 2,
+          "foundJson": true,
+          "jsonParseOk": true,
+          "illegalDecision": false,
+          "invalidEvidenceRefs": false,
+          "missingOrTypedWrong": [],
+          "textLength": 592,
+          "finishReason": "stop"
+        }
+      ],
+      "notes": {
+        "reusedOldCtoConclusion": false,
+        "keywordRouting": false,
+        "parsedNullExecution": false
+      }
+    },
+    {
+      "at": "2026-08-13T04:21:33.987Z",
+      "parsed": true,
+      "degraded": false,
+      "cacheHit": false,
+      "jobId": "job_msr0d9hg579f7e7e591b",
+      "artifactVersionId": "ver_msr0grdj32d98b4d0f23",
+      "attempts": [
+        {
+          "attempt": 1,
+          "foundJson": true,
+          "jsonParseOk": true,
+          "illegalDecision": false,
+          "invalidEvidenceRefs": false,
+          "missingOrTypedWrong": [],
+          "textLength": 1116,
+          "finishReason": "stop"
+        }
+      ],
+      "notes": {
+        "reusedOldCtoConclusion": false,
+        "keywordRouting": false,
+        "parsedNullExecution": false
+      }
+    },
+    {
+      "at": "2026-08-13T04:21:37.185Z",
+      "parsed": true,
+      "degraded": false,
+      "cacheHit": false,
+      "jobId": "job_msr0d9hg579f7e7e591b",
+      "artifactVersionId": "ver_msr0grdj32d98b4d0f23",
+      "attempts": [
+        {
+          "attempt": 1,
+          "foundJson": true,
+          "jsonParseOk": true,
+          "illegalDecision": false,
+          "invalidEvidenceRefs": false,
+          "missingOrTypedWrong": [],
+          "textLength": 997,
+          "finishReason": "stop"
+        }
+      ],
+      "notes": {
+        "reusedOldCtoConclusion": false,
+        "keywordRouting": false,
+        "parsedNullExecution": false
+      }
+    }
+  ]
+}

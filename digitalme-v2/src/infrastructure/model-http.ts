@@ -40,8 +40,17 @@ export interface ChatCompleteOptions {
   maxTokens?: number;
   timeoutMs?: number; // 默认 120s
   signal?: AbortSignal;
-  /** OpenAI-compatible response_format,如 { type: 'json_object' }。 */
-  responseFormat?: { type: string };
+  /** OpenAI-compatible response_format：json_object，或当前端点支持时的 json_schema。 */
+  responseFormat?:
+    | { type: 'json_object' }
+    | {
+        type: 'json_schema';
+        json_schema: {
+          name: string;
+          strict?: boolean;
+          schema: Record<string, unknown>;
+        };
+      };
 }
 
 export interface ChatCompleteResult {

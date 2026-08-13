@@ -76,6 +76,25 @@ export function ctoFieldsDiffer(
   return Boolean(a) && Boolean(b) && a !== b;
 }
 
+/** 降级模板 / 合同失败结论不得当作 Owner 闸门通过。 */
+export function ctoConclusionLooksDegraded(text: string): boolean {
+  return /验收合同失败|暂时性判断|还不是完整的 AI CTO|暂时无法完成独立验收|尚未形成可核对的独立验收结论|本次验收结论未能形成/.test(
+    String(text || ''),
+  );
+}
+
+export function ownerGateRejectsDegradedCto(input: {
+  ctoText?: string;
+  ctoContractDegraded?: boolean;
+  canAdoptSuggested?: boolean;
+}): { pass: boolean; reason?: string } {
+  if (input.ctoContractDegraded) return { pass: false, reason: 'cto_contract_degraded' };
+  if (ctoConclusionLooksDegraded(String(input.ctoText || ''))) {
+    return { pass: false, reason: 'degraded_template' };
+  }
+  return { pass: true };
+}
+
 /**
  * 修订 Job 的成果权威在 targetArtifactId / job.artifactId，而不是 art_${revisionJobId}。
  * 若目标 Artifact.jobId 已指向本 Job，说明版本已写入，启动恢复应补交 succeeded。

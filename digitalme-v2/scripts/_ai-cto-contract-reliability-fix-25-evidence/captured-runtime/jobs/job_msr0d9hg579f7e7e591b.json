@@ -1,0 +1,31 @@
+{
+  "id": "job_msr0d9hg579f7e7e591b",
+  "taskId": "task_msr08amjcc3b3117c39a",
+  "capabilityId": "cap_external_executor_codex",
+  "createdAt": "2026-08-13T04:18:41.092Z",
+  "status": "succeeded",
+  "targetArtifactId": "art_msr09rfu66d58ccc6dfb",
+  "revisionRequest": "按你说的改吧：把 start 的返回值改成 done，并同步测试。",
+  "externalExecution": {
+    "executorId": "external-executor-codex-cli",
+    "workingDirectory": "C:\\Users\\46554\\AppData\\Local\\Temp\\dm-23-repo-gHBLac",
+    "readScope": [
+      "."
+    ],
+    "writeScope": [
+      "."
+    ],
+    "lastExecutorStatus": "succeeded",
+    "autoContinueCount": 0,
+    "projectOrigin": "user_selected",
+    "executorRunId": "job_msr0e6uf3a0ccf83735b",
+    "afterScopeDigest": "2e50556109ca50124180a3301cdd4dea121b583c66e3e3407cf345a702d7c0e9"
+  },
+  "startedAt": "2026-08-13T04:18:41.109Z",
+  "snapshotId": "snap_msr0d9iccb302b296bc3",
+  "finishedAt": "2026-08-13T04:21:24.281Z",
+  "artifactId": "art_msr09rfu66d58ccc6dfb",
+  "costActual": {
+    "durationMs": 163172
+  }
+}

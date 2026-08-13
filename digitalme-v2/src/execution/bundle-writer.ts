@@ -17,6 +17,7 @@ function deriveBundleRisks(input: {
   verification: ExecutionVerificationReport;
   agentResult: ExecutorRunResult;
   understanding?: SoftwareTaskUnderstanding;
+  changedFileCount?: number;
 }): string[] {
   const risks: string[] = [];
   const seen = new Set<string>();
@@ -41,10 +42,14 @@ function deriveBundleRisks(input: {
     if (w === 'digitalme_auto_continue_available') continue;
     push(w.startsWith('needs_') ? `执行提示：${w}` : w);
   }
+  const staleLocate = /无需修改|当前代码已满足目标|已实现/;
+  const filesChanged = (input.changedFileCount || 0) > 0;
   for (const u of input.agentResult.unresolvedItems || []) {
+    if (filesChanged && staleLocate.test(u)) continue;
     push(u);
   }
   for (const r of input.understanding?.risks || []) {
+    if (filesChanged && staleLocate.test(r)) continue;
     push(r);
   }
   return risks.slice(0, 12);
@@ -69,6 +74,7 @@ export async function writeCodeChangeBundle(input: {
     verification: input.verification,
     agentResult: input.agentResult,
     ...(input.understanding ? { understanding: input.understanding } : {}),
+    changedFileCount: (input.collected.changedFiles || []).length,
   });
 
   const summaryMd = [

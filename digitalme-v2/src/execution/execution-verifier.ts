@@ -303,12 +303,12 @@ function extractGoalTerms(goal: string): string[] {
   return [...new Set(terms)].slice(0, 12);
 }
 
-/** 从执行前理解 / 方案摘要中抽取相对路径线索。 */
-function extractUnderstandingPaths(brief: string): string[] {
+/** 从执行前理解 / 方案摘要中抽取相对路径或裸文件名线索。 */
+export function extractUnderstandingPaths(brief: string): string[] {
   const text = String(brief || '');
   const found: string[] = [];
   for (const m of text.matchAll(
-    /(?:^|[\s、，,;；:：→\-])((?:[\w.-]+\/)+[\w.-]+\.[A-Za-z0-9]+)(?=$|[\s、，,;；:：）)\]])/g,
+    /(?:^|[\s、，,;；:：→\-`'"(（])((?:[\w.-]+\/)*[\w.-]+\.[A-Za-z][A-Za-z0-9]*)(?=$|[\s、，,;；:：）)`'"\]])/g,
   )) {
     found.push(m[1]!.replace(/\\/g, '/'));
   }

@@ -82,7 +82,8 @@ import { extractEditEvidence } from '../subject-core/diff-evidence';
 import { headVersion } from '../work-runtime/artifact';
 import { runWorkConverse, type WorkConverseDeps } from '../work-runtime/work-converse';
 import { maybeRunControlledRevisionAfterJob } from '../work-runtime/controlled-revision-runner';
-import { chatComplete, type ChatMessage } from '../infrastructure/model-http';
+import { chatComplete, ModelHttpError, type ChatMessage } from '../infrastructure/model-http';
+import { AI_CTO_JSON_SCHEMA } from '../execution/ai-cto-review';
 import { providerCredentialKey } from '../infrastructure/secret-store';
 
 export interface DigitalMeRuntimeOptions {
@@ -531,6 +532,7 @@ export class DigitalMeRuntime {
     const config = this.options.openaiCompatible;
     const secrets = this.options.secrets;
     if (!config || !secrets) return null;
+    let schemaMode: 'json_schema' | 'json_object' = 'json_schema';
     return async ({ messages }) => {
       const apiKey = await secrets.get(
         providerCredentialKey(config.providerId || 'openai-compatible'),
@@ -538,17 +540,42 @@ export class DigitalMeRuntime {
       if (!apiKey) {
         throw new Error('model credential is not configured');
       }
-      const result = await chatComplete({
-        baseUrl: config.baseUrl,
-        apiKey,
-        model: config.model,
-        messages,
-        temperature: 0,
-        maxTokens: 2048,
-        timeoutMs: config.timeoutMs ?? 90_000,
-        responseFormat: { type: 'json_object' },
-      });
-      return { text: result.text };
+      const run = (responseFormat: NonNullable<Parameters<typeof chatComplete>[0]['responseFormat']>) =>
+        chatComplete({
+          baseUrl: config.baseUrl,
+          apiKey,
+          model: config.model,
+          messages,
+          temperature: 0,
+          maxTokens: 4096,
+          timeoutMs: config.timeoutMs ?? 120_000,
+          responseFormat,
+        });
+      const schemaFormat = {
+        type: 'json_schema' as const,
+        json_schema: {
+          name: 'digitalme_ai_cto_review',
+          strict: true,
+          schema: AI_CTO_JSON_SCHEMA,
+        },
+      };
+      let result;
+      try {
+        result = await run(schemaMode === 'json_schema' ? schemaFormat : { type: 'json_object' });
+      } catch (err) {
+        const schemaRejected =
+          schemaMode === 'json_schema' &&
+          err instanceof ModelHttpError &&
+          (err.kind === 'bad_request' || /json_schema|response_format/i.test(err.message));
+        if (!schemaRejected) throw err;
+        schemaMode = 'json_object';
+        result = await run({ type: 'json_object' });
+      }
+      return {
+        text: result.text,
+        ...(result.finishReason ? { finishReason: result.finishReason } : {}),
+        ...(result.truncated ? { truncated: true } : {}),
+      };
     };
   }
 

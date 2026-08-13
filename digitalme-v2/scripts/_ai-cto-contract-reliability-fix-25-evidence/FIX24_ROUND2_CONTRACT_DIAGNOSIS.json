@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "ai-cto-parse-diagnosis/1",
+  "source": "fix-24-round-2-postmortem",
+  "head": "1f759af",
+  "savedModelText": false,
+  "savedChainOfThought": false,
+  "cacheMisuse": false,
+  "keywordRouting": false,
+  "parsedNullExecutionRestored": false,
+  "attempts": [
+    {
+      "attempt": 1,
+      "foundJson": null,
+      "jsonParseOk": false,
+      "illegalDecision": null,
+      "invalidEvidenceRefs": null,
+      "missingOrTypedWrong": [],
+      "textLength": null,
+      "finishReason": "not_recorded",
+      "truncated": "unknown_finish_reason_dropped_by_cto_chat",
+      "failStep": "no_machine_readable_diagnosis_at_fix24",
+      "structuralCauses": [
+        "cto_chat_returned_only_text_dropped_finish_reason",
+        "maxTokens_2048",
+        "response_format_json_object_only_no_json_schema",
+        "generic_repair_prompt",
+        "evidence_pack_paths_only_no_file_or_test_excerpts",
+        "extractUnderstandingPaths_required_slash_missed_formatLabel.js",
+        "pre_exec_locate_risks_无需修改_written_into_v2_bundle",
+        "summaryExcerpt_started_with_original_goal_section"
+      ]
+    },
+    {
+      "attempt": 2,
+      "foundJson": null,
+      "jsonParseOk": false,
+      "failStep": "generic_repair_same_contract_still_unparseable",
+      "structuralCauses": [
+        "repair_not_targeted_to_fail_step"
+      ]
+    }
+  ],
+  "gateDefect": "fix24_gate_passed_unavailableReview_five_point_template",
+  "notModelFluke": true
+}
