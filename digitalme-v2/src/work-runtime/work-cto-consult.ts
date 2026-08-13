@@ -140,6 +140,18 @@ export function assertConsultReplyConsistent(
   return `${text}\n（${notes.join('')}）`;
 }
 
+/** 五项结论只保留自然语言；内部枚举与对象名不得出现在用户回复里。 */
+export function sanitizeCtoUserFacingText(text: string): string {
+  return String(text || '')
+    .replace(/失败（execution_failed）/g, '测试未通过')
+    .replace(/（execution_failed）/g, '测试未通过')
+    .replace(/\bexecution_failed\b/gi, '测试未通过')
+    .replace(/\bJob\b/g, '这次处理')
+    .replace(/\bArtifact\b/g, '这份成果')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
 export function formatCtoUserConclusion(input: {
   canUse: string;
   goalAttained: string;
@@ -148,10 +160,10 @@ export function formatCtoUserConclusion(input: {
   nextStep: string;
 }): string {
   return [
-    `现在能不能用：${input.canUse}`,
-    `是否达到目标：${input.goalAttained}`,
-    `还需不需要修改：${input.needChange}`,
-    `需要你知道的风险：${input.risks}`,
-    `建议下一步：${input.nextStep}`,
+    `现在能不能用：${sanitizeCtoUserFacingText(input.canUse)}`,
+    `是否达到目标：${sanitizeCtoUserFacingText(input.goalAttained)}`,
+    `还需不需要修改：${sanitizeCtoUserFacingText(input.needChange)}`,
+    `需要你知道的风险：${sanitizeCtoUserFacingText(input.risks)}`,
+    `建议下一步：${sanitizeCtoUserFacingText(input.nextStep)}`,
   ].join('\n');
 }

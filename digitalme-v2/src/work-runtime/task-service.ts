@@ -5,6 +5,7 @@ import type {
   Task,
   TaskConversationTurn,
   TaskIntentConclusion,
+  TaskMeta,
   TaskPlan,
 } from './task';
 import type { TaskRevisionLoopMeta } from './controlled-revision';
@@ -26,6 +27,7 @@ export class TaskService {
     intentKind?: TaskIntentKind;
     capabilityId?: string;
     authorization?: Task['authorization'];
+    meta?: Pick<TaskMeta, 'runtimePath'>;
   }): Promise<Task> {
     const goal = input.goal.trim();
     if (goal.length === 0) {
@@ -63,6 +65,9 @@ export class TaskService {
     }
     if (input.authorization) {
       task.authorization = { ...input.authorization };
+    }
+    if (input.meta?.runtimePath) {
+      task.meta = { runtimePath: input.meta.runtimePath };
     }
     await this.store.put(task);
     return task;

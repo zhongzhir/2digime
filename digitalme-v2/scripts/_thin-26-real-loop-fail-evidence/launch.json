@@ -1,0 +1,6 @@
+{
+  "USER_DATA": "C:\\Users\\46554\\AppData\\Local\\Temp\\dm-thin26-fail-ud-ViCTAG",
+  "FIXTURE": "C:\\Users\\46554\\AppData\\Local\\Temp\\dm-thin26-fail-repo-vdY9c0",
+  "GOAL": "请看一下这个小项目，把 formatLabel 改成：输入 start 时给出 start-processing，然后把测试跑一遍。",
+  "entry": "electron/main.cjs"
+}

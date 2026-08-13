@@ -98,7 +98,7 @@
     if (planEl) {
       const showPlan = mode === 'planning' && input.plan && input.plan.content;
       planEl.hidden = !showPlan;
-      if (showPlan) setPlanEl(planEl, input.plan, input.goal);
+      if (showPlan) setPlanEl(planEl, input.plan, input.goal, !!input.thinRuntime);
     }
     if (prepEl) {
       const showPrep = mode === 'prep_blocked' && input.prep;
@@ -109,7 +109,7 @@
       const showRunning = mode === 'running' || mode === 'revising';
       runningEl.hidden = !showRunning;
       if (showRunning) {
-        setRunningEl(runningEl, input.running || {}, input.plan, mode === 'revising');
+        setRunningEl(runningEl, input.running || {}, input.plan, mode === 'revising', !!input.thinRuntime);
       }
     }
   }
@@ -145,15 +145,20 @@
     return '任务工作区';
   }
 
-  function setPlanEl(planEl, plan, goal) {
+  function setPlanEl(planEl, plan, goal, thinRuntime) {
     const sections = parsePlanSections(plan.content, goal);
     const versionEl = planEl.querySelector('#tw-plan-version');
     const statusEl = planEl.querySelector('#tw-plan-status');
+    const headingEl = planEl.querySelector('#tw-plan-heading');
     const setText = (sel, text) => {
       const el = planEl.querySelector(sel);
       if (el) el.textContent = text || '（待补充）';
     };
-    if (versionEl) versionEl.textContent = '规划版本 v' + String(plan.version || 1);
+    if (headingEl) headingEl.textContent = thinRuntime ? '当前方案' : '开发规划';
+    if (versionEl) {
+      versionEl.textContent = thinRuntime ? '确认后开始处理' : '规划版本 v' + String(plan.version || 1);
+      versionEl.hidden = false;
+    }
     if (statusEl) {
       statusEl.textContent = plan.status === 'confirmed' ? '已确认' : '待你确认';
     }
@@ -166,6 +171,7 @@
     if (startBtn) {
       startBtn.disabled = false;
       startBtn.dataset.planVersion = String(plan.version || 1);
+      startBtn.textContent = thinRuntime ? '确认并开始' : '确认规划并开始开发';
     }
     const hint = planEl.querySelector('#tw-plan-confirm-hint');
     if (hint) {
@@ -187,7 +193,7 @@
     setText('#tw-prep-continue', prep.continueHint || '完成后点「继续准备」或再次确认开始。');
   }
 
-  function setRunningEl(runningEl, running, plan, revising) {
+  function setRunningEl(runningEl, running, plan, revising, thinRuntime) {
     const title = runningEl.querySelector('#tw-running-title');
     const planEl = runningEl.querySelector('#tw-running-plan');
     const progressEl = runningEl.querySelector('#tw-running-progress');
@@ -196,7 +202,11 @@
       const round = running.round;
       const ver = running.planVersion || (plan && plan.version);
       const parts = [];
-      if (ver) parts.push('按已确认的规划版本 v' + String(ver));
+      if (thinRuntime) {
+        parts.push('按已确认的方案执行');
+      } else if (ver) {
+        parts.push('按已确认的规划版本 v' + String(ver));
+      }
       if (round) parts.push('第 ' + String(round) + ' 轮');
       planEl.textContent = parts.length ? parts.join(' · ') : '按已确认的规划执行';
     }

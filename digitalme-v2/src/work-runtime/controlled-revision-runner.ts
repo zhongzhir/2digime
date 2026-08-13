@@ -137,6 +137,10 @@ export async function maybeRunControlledRevisionAfterJob(
   input: { taskId: string; jobId: string; artifactId: string },
 ): Promise<{ ok: boolean; action?: string; reason?: string; revisionJobId?: string }> {
   try {
+    const thinTask = await deps.getTask(input.taskId);
+    if (thinTask?.meta?.runtimePath === 'thin_v1') {
+      return { ok: true, action: 'noop', reason: 'thin_v1_no_auto_revision' };
+    }
     const artifact = await deps.getArtifactContent(input.artifactId);
     const nowMs = deps.nowMs ? deps.nowMs() : Date.now();
     const now = deps.nowIso();

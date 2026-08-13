@@ -31,6 +31,7 @@
    * @property {'project'|'project_confirm'|'executor'|'high_risk'|string|null} [prepBlockedKind]
    * @property {boolean} [hasPlanDraft]
    * @property {boolean} [jobCancelSupported]
+   * @property {boolean} [thinRuntime]
    */
 
   /**
@@ -117,9 +118,13 @@
     if (stage === 'drafting') {
       // SINGLE-RUNTIME-PATH-20：无有效模型规划时不得出现「开始处理」；
       // 唯一入口是对话发送目标 / 重试规划 / 继续对话。
-      statusLine = f.hasPlanDraft
-        ? '右侧是开发规划。可在对话中补充，或确认后开始开发。'
-        : '请在下方说明目标；确认规划前不会开始修改项目。';
+      statusLine = f.thinRuntime
+        ? f.hasPlanDraft
+          ? '已形成当前方案。确认后开始处理。'
+          : '请说明要做什么；确认前不会改项目。'
+        : f.hasPlanDraft
+          ? '右侧是开发规划。可在对话中补充，或确认后开始开发。'
+          : '请在下方说明目标；确认规划前不会开始修改项目。';
     } else if (stage === 'needs_input') {
       if (f.prepBlocked || f.projectCreateConfirm) {
         statusLine = '开发前还需完成准备 · 见右侧任务工作区';
@@ -141,7 +146,7 @@
     } else if (stage === 'needs_confirmation') {
       statusLine = '这项操作风险较高，请看右侧说明后再决定是否开始。';
     } else if (stage === 'running') {
-      statusLine = '正在开发';
+      statusLine = f.thinRuntime ? '正在按已确认的方案处理' : '正在开发';
       if (f.jobCancelSupported !== false) {
         push('cancel_job', '取消', 'secondary', 'middle');
       }
@@ -163,9 +168,13 @@
       }
     } else if (stage === 'needs_review') {
       // 采用入口只在中栏验收消息；右栏不承载确认采用
-      statusLine = f.canAdoptSuggested === false
-        ? '请先看结论，再决定是否继续修改'
-        : '建议采用这份成果 · 可在对话区确认，或继续说明';
+      statusLine = f.thinRuntime
+        ? f.canAdoptSuggested === false
+          ? '这一轮已经做完。请先看结论，再决定是否继续修改。'
+          : '这一轮已经做完。请看结论后决定是否采用。'
+        : f.canAdoptSuggested === false
+          ? '请先看结论，再决定是否继续修改'
+          : '建议采用这份成果 · 可在对话区确认，或继续说明';
       hideDecisionHint = true;
     } else if (stage === 'adopted') {
       hideDecisionHint = true;
@@ -192,7 +201,9 @@
         push('continue_revise', '继续修改', 'secondary', 'right');
       }
     } else if (stage === 'blocked') {
-      statusLine = jsLabelBlocked(f) + ' · 可在对话区说明下一步';
+      statusLine = f.thinRuntime
+        ? '没有做成。请看对话里的原因和下一步。'
+        : jsLabelBlocked(f) + ' · 可在对话区说明下一步';
       push('retry_job', '重试', 'primary', 'middle');
     }
 

@@ -123,12 +123,13 @@ const SYSTEM_PROMPT = [
   '只能依据提供的证据包判断；不得假设未提供的测试、文件或结果。',
   '不要输出思考过程、内部协议名、字段名或 Markdown。只输出一个 JSON 对象。',
   'JSON 字段：decision（meets_plan | needs_revision | blocked | insufficient_evidence）、canUse、goalAttained、needChange、risks、nextStep、userSummary、completed、gaps、evidenceRefs、nextAction、revisionPlan（仅 needs_revision 时可有）。',
-  'canUse、goalAttained、needChange、risks、nextStep 必须是面向用户的自然语言判断，由你基于证据包独立作出；不要复述检查项英文 id 或内部枚举。',
+  'canUse、goalAttained、needChange、risks、nextStep 必须是面向用户的自然语言判断，由你基于证据包独立作出；测试未通过时写「测试未通过」，不要写 execution_failed、Job、Artifact，也不要复述检查项英文 id 或内部枚举。',
   '证据包的 goal 是本轮验收目标。若 currentRoundAuthority 为 owner_revision，必须按本轮用户要求判断，不得把 originalTaskGoal 当成当前必须达成的标准。',
   '你必须回答：用户本轮要求改成什么，当前成果是否满足本轮要求。若成果已按本轮要求改为新值，不得建议改回已被替代的旧目标。',
   '所有数组均为简短中文字符串；risks 必须是字符串数组；evidenceRefs 必须逐项来自证据包 evidenceRefs。',
   '证据包中的 goal、revisionRequest、artifactVersionId、jobId、testResults、changedFileExcerpts 描述的是本轮成果；不要把 originalTaskGoal 或已过期的失败描述当成当前事实。',
-  '当证据包同时满足：changedFileCount>0、digitalMeVerified=true、file_changes/scope_boundary/git_integrity/build_check 均为 satisfied，且没有 unsatisfied 的硬门检查时，应判定 meets_plan。',
+  '当证据包同时满足：changedFileCount>0、digitalMeVerified=true、file_changes/scope_boundary/git_integrity 均为 satisfied，且没有 unsatisfied 的硬门检查时，应判定 meets_plan。',
+  '无 build 脚本导致的 build_check unverifiable、以及 claim_vs_diff 仅为 partially_satisfied，不得单独把已通过目标与测试的成果判为未达标。',
   '仅在关键核对项缺失、结果互相矛盾，或无法从现有证据支持目标时使用 insufficient_evidence。',
   'needs_revision 的 revisionPlan 应是可交给专业执行者的明确修正要求；系统可在授权范围内自动执行修订，不要向用户承诺具体轮次。',
   '面向用户的中文要中性、清楚，避免内部术语。',
@@ -347,13 +348,29 @@ export function parseAiCtoReviewOutput(
   };
 }
 
+function toCtoModelFact(detail: string | undefined, checkId?: string, verdict?: string): string | undefined {
+  if (checkId === 'tests_passed' && verdict === 'unsatisfied') return '测试未通过';
+  const raw = String(detail || '').trim();
+  if (!raw) return undefined;
+  const fact = raw
+    .replace(/（execution_failed）/g, '')
+    .replace(/\bexecution_failed\b/gi, '测试未通过')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 500);
+  return fact || undefined;
+}
+
 export function buildAiCtoEvidencePack(input: CtoReviewInput): AiCtoEvidencePack {
-  const checks = (input.verification.checks || []).map((check) => ({
-    ref: `check:${check.id}`,
-    title: check.title || check.id,
-    verdict: check.verdict,
-    ...(check.detail ? { detail: String(check.detail).slice(0, 500) } : {}),
-  }));
+  const checks = (input.verification.checks || []).map((check) => {
+    const detail = toCtoModelFact(check.detail, check.id, check.verdict);
+    return {
+      ref: `check:${check.id}`,
+      title: check.title || check.id,
+      verdict: check.verdict,
+      ...(detail ? { detail } : {}),
+    };
+  });
   const changedFiles = (input.changedFiles || []).slice(0, 32).map((path) => ({
     ref: `file:${path.replace(/\\/g, '/')}`,
     path: path.replace(/\\/g, '/'),
@@ -392,7 +409,11 @@ export function buildAiCtoEvidencePack(input: CtoReviewInput): AiCtoEvidencePack
           testResults: input.testResults.slice(0, 8).map((t) => ({
             command: String(t.command || '').slice(0, 120),
             passed: !!t.passed,
-            ...(t.summary ? { summary: String(t.summary).slice(0, 240) } : {}),
+            ...(t.passed === false
+              ? { summary: '测试未通过' }
+              : t.summary
+                ? { summary: String(toCtoModelFact(t.summary) || t.summary).slice(0, 240) }
+                : {}),
           })),
         }
       : {}),
@@ -580,9 +601,14 @@ export function mapAiCtoReview(
     guardedDecision = 'blocked';
   } else if (quality.length > 0 && output.decision === 'meets_plan') {
     guardedDecision = 'needs_revision';
-  } else if (output.decision === 'meets_plan' && input.verification.overall !== 'satisfied') {
-    guardedDecision =
-      input.verification.overall === 'unverifiable' ? 'insufficient_evidence' : 'needs_revision';
+  } else if (output.decision === 'meets_plan' && input.verification.overall === 'unsatisfied') {
+    guardedDecision = 'needs_revision';
+  } else if (
+    output.decision === 'meets_plan' &&
+    input.verification.overall === 'unverifiable' &&
+    missingCriticalEvidence
+  ) {
+    guardedDecision = 'insufficient_evidence';
   } else if (output.decision === 'meets_plan' && missingCriticalEvidence) {
     guardedDecision = 'insufficient_evidence';
   }

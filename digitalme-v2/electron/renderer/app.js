@@ -414,6 +414,10 @@
   let converseDraftTaskId = null;
   /** D11-B：当前任务权威规划（来自 Task.meta.plan）。 */
   let activeTaskPlan = null;
+  /** 2DIGIME-AI-NATIVE-THIN-RUNTIME-26：当前任务是否走薄主链。 */
+  let activeRuntimePath = null;
+  /** 薄主链失败说明已触发的 Job，避免重复对话。 */
+  let thinFailureExplainedJobId = null;
   /** D11-B：准备受阻 / 高风险确认态（派生投影，不落盘）。 */
   let prepBlockedState = null;
   let lastCtoTimelineKey = "";
@@ -2018,6 +2022,12 @@
       .replace(/"/g, "&quot;");
   }
 
+  function isThinRuntimeActive(detail) {
+    if (activeRuntimePath === "thin_v1") return true;
+    const d = detail || lastJobDetailForUx;
+    return !!(d && d.task && d.task.meta && d.task.meta.runtimePath === "thin_v1");
+  }
+
   function labelForState(state, userFacingLabel) {
     if (userFacingLabel) return userFacingLabel;
     switch (state) {
@@ -2026,7 +2036,7 @@
       case "processing":
         return "处理中";
       case "completed":
-        return "尚未决定";
+        return isThinRuntimeActive() ? "请看结论后决定是否采用" : "尚未决定";
       case "attention":
         return "需要处理";
       default:
@@ -2047,7 +2057,11 @@
         case "running":
           return job.revisionRequest ? "正在修改" : "处理中";
         case "succeeded":
-          return detail.artifactIds && detail.artifactIds[0] ? "尚未决定" : "受阻";
+          return detail.artifactIds && detail.artifactIds[0]
+            ? isThinRuntimeActive(detail)
+              ? "这一轮已经做完，请看结论后决定是否采用"
+              : "尚未决定"
+            : "受阻";
         case "failed":
           return "执行失败，可重试";
         case "cancelled":
@@ -2401,7 +2415,9 @@
       els.decisionStatus.removeAttribute("hidden");
       if (noteField) noteField.hidden = true;
     } else {
-      els.decisionStatus.textContent = "尚未决定";
+      els.decisionStatus.textContent = isThinRuntimeActive()
+        ? "请决定是否采用这份成果"
+        : "尚未决定";
       els.decisionStatus.hidden = false;
       els.decisionStatus.removeAttribute("hidden");
       if (noteField) noteField.hidden = true;
@@ -2564,6 +2580,8 @@
     persistedConversationTurns = [];
     converseDraftTaskId = null;
     activeTaskPlan = null;
+    activeRuntimePath = null;
+    thinFailureExplainedJobId = null;
     prepBlockedState = null;
     taskPausedCto = false;
     lastCtoTimelineKey = "";
@@ -2673,6 +2691,40 @@
     return "处理未能完成。";
   }
 
+  async function explainThinJobFailure(detail) {
+    if (!isThinRuntimeActive(detail)) return;
+    const job = detail && detail.latestJob;
+    if (!job || job.status !== "failed") return;
+    const jobId = job.jobId || job.id;
+    if (!jobId || thinFailureExplainedJobId === jobId) return;
+    const taskId = activeTaskId;
+    if (!taskId || workConverseInFlight) return;
+    thinFailureExplainedJobId = jobId;
+    try {
+      const res = await api.invoke("work.converse", {
+        taskId,
+        text: "请根据刚才的执行结果，用平实的话说明为什么没做成，以及我现在可以怎么做。",
+        silentOutcomeExplain: true,
+      });
+      if (res && res.reply) {
+        persistedConversationTurns = persistedConversationTurns.concat(
+          (res.newTurns || [])
+            .filter((t) => t && t.content)
+            .map((t) => ({
+              id: t.turnId,
+              role: t.role === "digital_me" ? "digital_me" : "user",
+              kind: "message",
+              text: String(t.content),
+              createdAt: t.createdAt,
+            })),
+        );
+        renderWorkTimeline();
+      }
+    } catch {
+      /* 状态栏仍有失败说明；对话补充失败不得冒充成功 */
+    }
+  }
+
   function renderOwnerChoicePrompt(detail) {
     const box = els.ownerChoicePrompt;
     const q = els.ownerChoiceQuestion;
@@ -2735,6 +2787,7 @@
     els.jobActionable.textContent = "";
     if (failed) {
       els.jobActionable.textContent = userFacingFailureReason(detail, eventNote);
+      void explainThinJobFailure(detail);
     } else if (cancelled) {
       const cancelledMsg =
         detail && detail.latestJob && detail.latestJob.actionable
@@ -2802,6 +2855,7 @@
       startupFailed,
       hasWorkingDirectory: !!activeCodeChangeWorkingDirectory && isActiveSoftwareCodeChangeProjection(),
       jobCancelSupported: true,
+      thinRuntime: isThinRuntimeActive(detail),
       ...(extra || {}),
     };
   }
@@ -3037,24 +3091,27 @@
         : revising
           ? 1
           : null;
+    const thin = isThinRuntimeActive(detail);
     tw.renderTaskWorkspace({
       root: panel,
       mode,
       plan: activeTaskPlan,
       goal: (els.goal && els.goal.value) || "",
       prep: prepBlockedState,
+      thinRuntime: thin,
       running: running
         ? {
             progressNote: String(progressNote || "").trim() || "正在实现与验证，请稍候…",
-            planVersion: activeTaskPlan && activeTaskPlan.version,
+            planVersion: thin ? undefined : activeTaskPlan && activeTaskPlan.version,
             ...(round ? { round } : {}),
           }
         : null,
-      title: tw.titleForMode(mode),
+      title: thin && mode === "planning" ? "任务工作区 · 当前方案" : tw.titleForMode(mode),
     });
-    // 导出入口仅在有成果时出现，避免空「更多」
+    // 导出入口仅在有成果时出现，避免空「更多」；薄主链采用前不展示「保存副本」
     if (els.artifactExportsMore) {
-      els.artifactExportsMore.hidden = !hasArtifact;
+      els.artifactExportsMore.hidden =
+        !hasArtifact || (thin && lastDecisionStatus !== "accepted");
     }
     syncPrepActionButtons();
   }
@@ -3328,6 +3385,7 @@
           createdAt: t.createdAt,
         })),
     );
+    if (res.runtimePath) activeRuntimePath = String(res.runtimePath);
     if (res.createdTask && !activeTaskId) {
       // 首轮对话建立了理解任务（无 Job）；进入任务态，后续确认在同一 Task 上执行
       converseDraftTaskId = res.taskId;
@@ -3365,7 +3423,12 @@
         await runCtoConfirmContinue(text);
         return;
       }
-      await startConversationTaskExecution(res.taskId);
+      const thin = isThinRuntimeActive() || res.runtimePath === "thin_v1";
+      await startConversationTaskExecution(res.taskId, {
+        fromPlanConfirm: thin === true,
+        intentKind: thin ? "modify_code" : undefined,
+        requestedArtifactType: thin ? "code-change" : undefined,
+      });
     }
   }
 
@@ -3389,13 +3452,28 @@
         (lastJobDetailForUx && lastJobDetailForUx.task && lastJobDetailForUx.task.goal) ||
         "";
       if (!goal) return;
+      let contextRefs = materials.map((m) => ({
+        kind: m.kind,
+        path: m.path,
+        ...(m.projectOrigin ? { projectOrigin: m.projectOrigin } : {}),
+      }));
+      const thin = isThinRuntimeActive() || options.intentKind === "modify_code";
+      if (thin && !contextRefs.some((r) => r.kind === "folder")) {
+        const taskRefs =
+          lastJobDetailForUx && lastJobDetailForUx.task && lastJobDetailForUx.task.contextRefs;
+        if (Array.isArray(taskRefs)) {
+          contextRefs = taskRefs
+            .filter((r) => r && (r.kind === "file" || r.kind === "folder") && r.path)
+            .map((r) => ({
+              kind: r.kind,
+              path: r.path,
+              ...(r.projectOrigin ? { projectOrigin: r.projectOrigin } : {}),
+            }));
+        }
+      }
       const payload = {
         goal,
-        contextRefs: materials.map((m) => ({
-          kind: m.kind,
-          path: m.path,
-          ...(m.projectOrigin ? { projectOrigin: m.projectOrigin } : {}),
-        })),
+        contextRefs,
         existingTaskId: taskId,
       };
       if (options.confirmedPlanVersion != null) {
@@ -3407,6 +3485,12 @@
         payload.executionAuthorization = options.executionAuthorization;
       }
       if (options.capabilityId) payload.capabilityId = options.capabilityId;
+      if (options.intentKind) payload.intentKind = options.intentKind;
+      if (options.requestedArtifactType) payload.requestedArtifactType = options.requestedArtifactType;
+      if (thin && !payload.intentKind) {
+        payload.intentKind = "modify_code";
+        payload.requestedArtifactType = "code-change";
+      }
       const result = await api.invoke("work.submitTask", payload);
       await applySubmitTaskResult(result, payload, goal, {
         fromPlanConfirm: options.fromPlanConfirm === true,
@@ -3453,6 +3537,8 @@
       await startConversationTaskExecution(taskId, {
         confirmedPlanVersion: expectedVersion,
         fromPlanConfirm: true,
+        intentKind: isThinRuntimeActive(detail) ? "modify_code" : undefined,
+        requestedArtifactType: isThinRuntimeActive(detail) ? "code-change" : undefined,
       });
     } catch (err) {
       els.jobStatus.textContent = userFacingWorkError(err);
@@ -3645,8 +3731,69 @@
     }
 
     document.body.dataset.workUxStage = view.stage;
+    applyThinOwnerSurface(view, facts);
     renderWorkTimeline();
     return view;
+  }
+
+  function applyThinOwnerSurface(view, facts) {
+    if (!facts || !facts.thinRuntime || !els.jobStatus) return;
+    const js = facts.jobStatus;
+    let happening = "";
+    let result = "";
+    let needAct = "";
+    if (view.stage === "drafting") {
+      happening = facts.hasPlanDraft ? "已根据你的目标形成当前方案" : "正在理解你的目标";
+      result = "还没有开始改项目";
+      needAct = facts.hasPlanDraft ? "请确认方案后开始" : "请说明要做什么";
+    } else if (view.stage === "needs_input") {
+      happening = "开始前还缺准备";
+      result = "还没有开始";
+      needAct = view.statusLine || "请按右侧说明补齐";
+    } else if (view.stage === "needs_capability") {
+      happening = "还不能开始处理";
+      result = facts.modelReady === false ? "需要先连接模型" : "代码执行能力未就绪";
+      needAct = facts.modelReady === false ? "请先连接模型" : "请先连接代码执行能力";
+    } else if (view.stage === "needs_confirmation") {
+      happening = "这项操作需要额外确认";
+      result = "尚未开始";
+      needAct = "请看右侧说明后再决定是否开始";
+    } else if (view.stage === "running") {
+      happening = "正在按已确认的方案处理";
+      result = "尚未完成";
+      needAct = "现在不需要你操作";
+    } else if (view.stage === "needs_review") {
+      happening = "这一轮已经做完";
+      result = facts.canAdoptSuggested === false ? "建议先看结论再决定" : "可以查看结论";
+      needAct = "请决定是否采用，或说明还要改什么";
+    } else if (view.stage === "needs_revision") {
+      happening = "需要继续修改";
+      result = facts.decisionStatus === "rejected" ? "这份成果未采用" : "还不能采用";
+      needAct = "请在对话里说明下一步";
+    } else if (view.stage === "adopted") {
+      happening = "已采用这份成果";
+      result = facts.canTryRun
+        ? "可以试用"
+        : facts.startupFailed
+          ? "仍需修复才能正常使用"
+          : "已采用";
+      needAct = facts.canTryRun ? "可以试用，或继续修改" : "如需再改，直接说明即可";
+    } else if (view.stage === "blocked") {
+      happening = "没有做成";
+      const existingReason = String((els.jobActionable && els.jobActionable.textContent) || "").trim();
+      result =
+        js === "cancelled"
+          ? "已取消"
+          : existingReason && !/^需要你：/.test(existingReason)
+            ? existingReason
+            : "执行失败";
+      needAct = "请看对话里的原因和下一步，或重试";
+    }
+    if (!happening) return;
+    els.jobStatus.textContent = happening + (result ? "。" + result : "");
+    if (els.jobActionable) {
+      els.jobActionable.textContent = needAct ? "需要你：" + needAct : "";
+    }
   }
 
   function renderNextStepsCard() {
@@ -3846,6 +3993,8 @@
     persistedConversationTurns = [];
     converseDraftTaskId = null;
     activeTaskPlan = null;
+    activeRuntimePath = null;
+    thinFailureExplainedJobId = null;
     prepBlockedState = null;
     taskPausedCto = false;
     lastCtoTimelineKey = "";
@@ -3881,6 +4030,10 @@
     if (epoch !== uiEpoch || activeTaskId !== taskId) return;
     lastJobDetailForUx = detail;
     activeJobId = detail.latestJob ? detail.latestJob.jobId : null;
+    activeRuntimePath =
+      detail.task && detail.task.meta && detail.task.meta.runtimePath
+        ? String(detail.task.meta.runtimePath)
+        : null;
     hydrateConversationFromTask(detail);
     els.goal.value = detail.task && detail.task.goal ? detail.task.goal : "";
     els.goal.readOnly = true;

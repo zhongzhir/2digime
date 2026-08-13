@@ -38,6 +38,13 @@ import {
   dispatchOutcomeCheck,
 } from './outcome-dispatch';
 import { deriveWorkIntent, inspectSoftwareProject, isTaskIntentKind } from './work-intent';
+import {
+  isThinOwnerRuntime,
+  mergeThinContextRefs,
+  shouldUseThinOwnerRuntime,
+  THIN_RUNTIME_PATH,
+  thinCodeChangeOverride,
+} from './thin-owner-start';
 import { CODE_ANALYSIS_ARTIFACT_TYPE } from '../capability/adapters/code-repo-analysis-contract';
 import {
   CODE_CHANGE_ARTIFACT_TYPE,
@@ -161,15 +168,26 @@ export class WorkRuntime {
     input: SubmitInput,
   ): Promise<CommandMap['work.submitTask']['output']> {
     // D11-B：确认开始时校验规划版本；过期规划不得执行
-    if (input.existingTaskId && input.confirmedPlanVersion != null) {
+    // 薄主链：绕开关键词意图，复用 Task 上已附项目位置
+    if (input.existingTaskId) {
       const existingForPlan = await this.opts.taskService.get(input.existingTaskId);
       if (!existingForPlan) throw new Error(`task not found: ${input.existingTaskId}`);
-      const currentPlan = existingForPlan.meta?.plan;
-      if (!currentPlan || currentPlan.version !== input.confirmedPlanVersion) {
-        throw Object.assign(new Error('plan version mismatch'), {
-          code: 'plan_version_mismatch',
-          actionable: '规划已更新，请查看右侧最新规划后再确认开始。',
-        });
+      if (input.confirmedPlanVersion != null) {
+        const currentPlan = existingForPlan.meta?.plan;
+        if (!currentPlan || currentPlan.version !== input.confirmedPlanVersion) {
+          throw Object.assign(new Error('plan version mismatch'), {
+            code: 'plan_version_mismatch',
+            actionable: '规划已更新，请查看右侧最新规划后再确认开始。',
+          });
+        }
+      }
+      if (isThinOwnerRuntime(existingForPlan)) {
+        input.contextRefs = mergeThinContextRefs(
+          input.contextRefs,
+          existingForPlan.contextRefs,
+        );
+        input.intentKind = 'modify_code';
+        input.requestedArtifactType = CODE_CHANGE_ARTIFACT_TYPE;
       }
     }
     const derived = await deriveWorkIntent({
@@ -1091,12 +1109,23 @@ export class WorkRuntime {
       goal: input.goal,
       contextRefs,
     });
+    const thin = await shouldUseThinOwnerRuntime({
+      goal: input.goal,
+      contextRefs,
+    });
+    const override = thin ? thinCodeChangeOverride() : null;
     return this.opts.taskService.create({
       subjectId: this.opts.subjectId,
       goal: input.goal,
       contextRefs,
-      requestedArtifactType: derived.expectedOutputFamily || 'document',
-      ...(derived.intentKind ? { intentKind: derived.intentKind } : {}),
+      requestedArtifactType:
+        override?.expectedOutputFamily || derived.expectedOutputFamily || 'document',
+      ...(override
+        ? { intentKind: override.intentKind }
+        : derived.intentKind
+          ? { intentKind: derived.intentKind }
+          : {}),
+      ...(thin ? { meta: { runtimePath: THIN_RUNTIME_PATH } } : {}),
     });
   }
 

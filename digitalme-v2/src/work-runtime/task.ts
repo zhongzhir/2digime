@@ -61,6 +61,11 @@ export interface TaskMeta {
    * 连续失败数由 attempts 与 Job 事实派生。
    */
   revisionLoop?: TaskRevisionLoopMeta;
+  /**
+   * 2DIGIME-AI-NATIVE-THIN-RUNTIME-26：Owner 薄主链标记。
+   * 只影响确认与意图绕开策略；不构成第二状态机。
+   */
+  runtimePath?: 'legacy' | 'thin_v1';
 }
 
 /**

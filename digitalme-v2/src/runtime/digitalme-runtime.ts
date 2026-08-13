@@ -460,8 +460,19 @@ export class DigitalMeRuntime {
           hasArtifact: detail.artifactIds.length > 0,
           jobRunning: jobStatus === 'queued' || jobStatus === 'running',
           ...(jobStatus ? { latestJobStatus: jobStatus } : {}),
-          ...(jobStatus === 'failed' && detail.latestJob?.actionable
-            ? { lastFailure: detail.latestJob.actionable }
+          ...(jobStatus === 'failed'
+            ? (() => {
+                const lastFailure = [
+                  detail.latestJob?.actionable,
+                  detail.latestJob?.progressNote,
+                ]
+                  .map((s) => String(s || '').trim())
+                  .filter(Boolean)
+                  .filter((s, i, a) => a.indexOf(s) === i)
+                  .join(' ')
+                  .trim();
+                return lastFailure ? { lastFailure } : {};
+              })()
             : {}),
         };
         const artId = detail.artifactIds[0];

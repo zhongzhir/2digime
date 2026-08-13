@@ -1,0 +1,13 @@
+{
+  "commands": [
+    "npm test --if-present"
+  ],
+  "results": [
+    {
+      "command": "npm test --if-present",
+      "exitCode": 1,
+      "logRef": "test-logs/npm.cmd_test_--if-present.log",
+      "passed": false
+    }
+  ]
+}

@@ -22,6 +22,7 @@ import type {
   TaskIntentConclusion,
   TaskPlan,
 } from './task';
+import { isThinOwnerRuntime } from './thin-owner-start';
 
 /**
  * work-converse — D11-A AI 意图与对话中枢（设计 v0.2 §9）。
@@ -499,6 +500,11 @@ export interface WorkConverseInput {
   text: string;
   /** 首轮建任务时可携带材料/项目引用。 */
   contextRefs?: ContextRef[];
+  /**
+   * 薄主链：执行失败后由 Runtime 触发的结果说明。
+   * 不把这句话当作 Owner 新决策，不授权开始/采用。
+   */
+  silentOutcomeExplain?: boolean;
 }
 
 export interface WorkConverseResult {
@@ -518,6 +524,8 @@ export interface WorkConverseResult {
   };
   /** 规划生成失败（模型合同失败）；Task 仍已持久化。 */
   planGenerationFailed?: boolean;
+  /** 薄主链标记（若该 Task 走 thin_v1）。 */
+  runtimePath?: 'legacy' | 'thin_v1';
   startAuthorized: boolean;
   startMode?: 'new_execution' | 'revision';
   adoptRequested: boolean;
@@ -633,10 +641,32 @@ export async function runWorkConverse(
     consultContext,
   });
 
+  if (input.silentOutcomeExplain) {
+    decision.startAuthorized = false;
+    decision.adoptRequested = false;
+    decision.confirmPlan = false;
+    decision.pauseRequested = false;
+    delete decision.planDraftContent;
+    decision.intent = 'query_status';
+    if (!parsed || chatFailed || decision.degraded) {
+      const evidence = String(facts.lastFailure || '').trim();
+      decision.reply = evidence
+        ? `这次没有做成。${evidence} 你可以改一下要求后再试，或先检查项目位置和代码执行能力是否可用。`
+        : '这次没有做成。我还没有拿到足够的失败说明。你可以再试一次，或换一种说法说明目标。';
+      decision.degraded = false;
+      decision.needsClarification = false;
+    }
+  }
+
   // 规划效果（先于对话落盘，保证返回的 plan 与存储一致）
   let planOut: WorkConverseResult['plan'];
   let planGenerationFailed = false;
   let draftContent = decision.planDraftContent;
+  const thin = isThinOwnerRuntime(task);
+  // 薄主链：确认当前方案时忽略附带 planUpdate，避免升版导致 Owner 再确认
+  if (thin && decision.confirmPlan && existingPlan && isUserVisiblePlan(existingPlan)) {
+    draftContent = undefined;
+  }
   let planSource: 'model' | 'seed_internal' = 'model';
 
   // 首轮：仅模型 planUpdate 可成为用户可见开发规划；失败则内部 seed + 明确失败语义
@@ -733,15 +763,16 @@ export async function runWorkConverse(
   };
   const conclusion: TaskIntentConclusion = {
     intentId,
-    turnId: userTurn.turnId,
+    turnId: input.silentOutcomeExplain ? replyTurn.turnId : userTurn.turnId,
     intent: decision.intent,
     confidence: decision.confidence,
     ...(decision.needsClarification ? { needsClarification: true } : {}),
     ...(decision.degraded ? { degraded: true } : {}),
     createdAt: nowIso(),
   };
+  const persistedTurns = input.silentOutcomeExplain ? [replyTurn] : [userTurn, replyTurn];
   await deps.appendConversation(task.id, {
-    turns: [userTurn, replyTurn],
+    turns: persistedTurns,
     intents: [conclusion],
   });
 
@@ -776,9 +807,10 @@ export async function runWorkConverse(
     reply: decision.reply,
     needsClarification: decision.needsClarification,
     degraded: decision.degraded,
-    newTurns: [userTurn, replyTurn],
+    newTurns: persistedTurns,
     ...(planOut ? { plan: planOut } : {}),
     ...(planGenerationFailed ? { planGenerationFailed: true } : {}),
+    ...(thin ? { runtimePath: 'thin_v1' as const } : {}),
     startAuthorized: decision.startAuthorized,
     ...(decision.startMode ? { startMode: decision.startMode } : {}),
     adoptRequested: decision.adoptRequested,

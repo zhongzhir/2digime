@@ -412,6 +412,8 @@ export interface CommandMap {
       text: string;
       /** 首轮建任务时可携带材料/项目引用。 */
       contextRefs?: ContextRef[];
+      /** 薄主链：执行失败后由 Runtime 触发的结果说明，不作为 Owner 新决策。 */
+      silentOutcomeExplain?: boolean;
     };
     output: {
       taskId: string;
@@ -423,6 +425,8 @@ export interface CommandMap {
       needsClarification: boolean;
       /** 模型不可用降级。 */
       degraded: boolean;
+      /** 薄主链标记（若该 Task 走 thin_v1）。 */
+      runtimePath?: 'legacy' | 'thin_v1';
       newTurns: Array<{
         turnId: string;
         role: 'user' | 'digital_me';
