@@ -2678,13 +2678,8 @@
     const cancelled = !!(detail && detail.latestJob && detail.latestJob.status === "cancelled");
     let label = labelFromJobDetail(detail);
     const job = detail && detail.latestJob;
-    if (job && job.status === "running") {
-      const elapsed = formatElapsed(job.startedAt || job.createdAt);
-      if (elapsed) label += ` · ${elapsed}`;
-      const startMs = Date.parse(job.startedAt || job.createdAt || "");
-      if (!Number.isNaN(startMs) && Date.now() - startMs >= 30000) {
-        label += " · 仍在处理";
-      }
+    if (job && (job.status === "running" || job.status === "queued")) {
+      label = "正在处理…";
     }
     els.jobStatus.textContent = label;
     els.jobStatus.classList.toggle("error", failed);
@@ -2982,19 +2977,14 @@
               : activeTaskPlan && activeTaskPlan.content
                 ? "planning"
                 : "idle";
-    const progressNote =
-      (loop && loop.paused && loop.pauseReason && !running
+    const progressNote = running
+      ? "正在处理…"
+      : (loop && loop.paused && loop.pauseReason
         ? "已暂停自动修订。可在对话中说明下一步，或点继续。"
         : null) ||
-      (job && (job.progressNote || job.actionable || job.userFacingLabel)) ||
-      (detail && detail.userFacingLabel) ||
-      "";
-    const round =
-      loop && typeof loop.autoRoundCount === "number" && loop.autoRoundCount > 0
-        ? loop.autoRoundCount
-        : revising
-          ? 1
-          : null;
+        (job && (job.progressNote || job.actionable || job.userFacingLabel)) ||
+        (detail && detail.userFacingLabel) ||
+        "";
     const thin = isThinRuntimeActive(detail);
     tw.renderTaskWorkspace({
       root: panel,
@@ -3005,13 +2995,32 @@
       thinRuntime: thin,
       running: running
         ? {
-            progressNote: String(progressNote || "").trim() || "正在实现与验证，请稍候…",
-            planVersion: thin ? undefined : activeTaskPlan && activeTaskPlan.version,
-            ...(round ? { round } : {}),
+            progressNote: "正在处理…",
           }
         : null,
       title: thin && mode === "planning" ? "任务工作区 · 当前方案" : tw.titleForMode(mode),
     });
+    if (running) {
+      const runTitle = document.getElementById("tw-running-title");
+      if (runTitle) runTitle.textContent = "正在处理…";
+      const runProgress = document.getElementById("tw-running-progress");
+      if (runProgress) runProgress.textContent = "正在处理…";
+      const runPlan = document.getElementById("tw-running-plan");
+      if (runPlan) runPlan.textContent = "";
+      const runHint = document.getElementById("tw-running-hint");
+      if (runHint) {
+        runHint.hidden = true;
+        runHint.setAttribute("hidden", "");
+      }
+      if (els.artifactEmptyHint) {
+        els.artifactEmptyHint.hidden = true;
+        els.artifactEmptyHint.setAttribute("hidden", "");
+      }
+      if (!hasArtifact && els.artifactEmpty) {
+        els.artifactEmpty.hidden = true;
+        els.artifactEmpty.setAttribute("hidden", "");
+      }
+    }
     if (els.artifactExportsMore) {
       const summary = els.artifactExportsMore.querySelector("summary");
       if (summary) summary.textContent = "导出副本";
@@ -3181,6 +3190,49 @@
     syncWorkComposeVisibility();
   }
 
+  function hideAdoptConfirm() {
+    const box = document.getElementById("adopt-confirm");
+    if (box) box.hidden = true;
+  }
+
+  function showAdoptConfirm(versionHint) {
+    let box = document.getElementById("adopt-confirm");
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "adopt-confirm";
+      box.className = "work-turn work-turn-digital_me adopt-confirm";
+      box.innerHTML =
+        '<p class="work-turn-role">Digital Me</p>' +
+        '<p id="adopt-confirm-text" class="work-turn-text"></p>' +
+        '<div class="row adopt-confirm-actions">' +
+        '<button type="button" id="btn-adopt-confirm" class="primary">确认采用</button>' +
+        '<button type="button" id="btn-adopt-later" class="ghost">再看看</button>' +
+        "</div>";
+      const host = els.workTimeline && els.workTimeline.parentNode;
+      if (host) host.insertBefore(box, els.workTimeline.nextSibling);
+      else if (els.workConversationScroll) els.workConversationScroll.appendChild(box);
+      const yes = box.querySelector("#btn-adopt-confirm");
+      const later = box.querySelector("#btn-adopt-later");
+      if (yes) {
+        yes.addEventListener("click", () => {
+          hideAdoptConfirm();
+          void submitArtifactDecision("accept", { forceAdopt: false });
+        });
+      }
+      if (later) later.addEventListener("click", () => hideAdoptConfirm());
+    }
+    const textEl = box.querySelector("#adopt-confirm-text");
+    if (textEl) {
+      textEl.textContent =
+        "确认采用「" +
+        versionHint +
+        "」？采用意味着结束当前交付循环，并将该成果沉淀为已采用结果。采用后如需新工作，请新建任务。";
+    }
+    box.hidden = false;
+    box.removeAttribute("hidden");
+    if (typeof box.scrollIntoView === "function") box.scrollIntoView({ block: "nearest" });
+  }
+
   async function handleWorkTimelineAction(actionId, turn) {
     if (actionId === "confirm_adopt") {
       const versionHint =
@@ -3188,13 +3240,7 @@
         (turn && turn.artifactVersionId) ||
         activeHeadVersionId ||
         "当前版本";
-      const ok = window.confirm(
-        "确认采用「" +
-          versionHint +
-          "」？\n\n采用意味着结束当前交付循环，并将该成果沉淀为已采用结果。采用后如需新工作，请新建任务。",
-      );
-      if (!ok) return;
-      await submitArtifactDecision("accept", { forceAdopt: false });
+      showAdoptConfirm(versionHint);
       return;
     }
     if (actionId === "confirm_continue") {
@@ -3226,7 +3272,7 @@
     if (!els.workNlInput && presetText == null) return;
     if (workConverseInFlight) {
       if (els.jobStatus) {
-        els.jobStatus.textContent = "上一条说明还在处理，请稍候再发送。";
+        els.jobStatus.textContent = "正在思考…";
         els.jobStatus.classList.remove("error");
       }
       return;
@@ -3259,6 +3305,10 @@
     ]);
     renderWorkTimeline();
     if (els.workNlSend) els.workNlSend.disabled = true;
+    if (els.jobStatus) {
+      els.jobStatus.textContent = "正在思考…";
+      els.jobStatus.classList.remove("error");
+    }
     workConverseInFlight = true;
     let res;
     try {
@@ -3273,6 +3323,7 @@
         },
       ]);
       renderWorkTimeline();
+      if (els.jobStatus && els.jobStatus.textContent === "正在思考…") els.jobStatus.textContent = "";
       return;
     } finally {
       workConverseInFlight = false;
@@ -3311,15 +3362,20 @@
       refreshTaskWorkspace();
     }
     renderWorkTimeline();
-    if (res.degraded || res.needsClarification) return;
+    if (res.degraded || res.needsClarification) {
+      if (els.jobStatus && els.jobStatus.textContent === "正在思考…") els.jobStatus.textContent = "";
+      return;
+    }
     // 确定性效果（AI 只给结论；执行/暂停/采用均走既有确定性路径）
     // FIX-22：Owner 明确修订授权优先于「暂停自动修改」展示；暂停只拦系统自动修订
     if (res.pauseRequested && !(res.startAuthorized && res.startMode === "revision")) {
       taskPausedCto = true;
       refreshWorkUxView({ taskPaused: true });
+      if (els.jobStatus && els.jobStatus.textContent === "正在思考…") els.jobStatus.textContent = "";
       return;
     }
     if (res.adoptRequested) {
+      if (els.jobStatus && els.jobStatus.textContent === "正在思考…") els.jobStatus.textContent = "";
       await handleWorkTimelineAction("confirm_adopt", {});
       return;
     }
@@ -3336,6 +3392,7 @@
         requestedArtifactType: thin ? "code-change" : undefined,
       });
     }
+    if (els.jobStatus && els.jobStatus.textContent === "正在思考…") els.jobStatus.textContent = "";
   }
 
   /**
@@ -3670,9 +3727,9 @@
       result = "尚未开始";
       needAct = "请看右侧说明后再决定是否开始";
     } else if (view.stage === "running") {
-      happening = "正在按已确认的方案处理";
-      result = "尚未完成";
-      needAct = "现在不需要你操作";
+      happening = "正在处理…";
+      result = "";
+      needAct = "";
     } else if (view.stage === "needs_review") {
       happening = "这一轮已经做完";
       result = facts.canAdoptSuggested === false ? "建议先看结论再决定" : "可以查看结论";
@@ -3855,12 +3912,23 @@
           els.decisionBox.setAttribute("hidden", "");
         }
       }
-      els.jobStatus.textContent = rev ? "正在按你的修改要求继续处理…" : "正在处理这项任务…";
+      els.jobStatus.textContent = "正在处理…";
       els.jobStatus.classList.remove("error");
       clearAppliedUnderstanding();
       applyJobControls(detail, connected);
-      // D11-B：Job 进入执行后右栏立即显示「开发中」与当前进展（不等 Artifact）
       refreshTaskWorkspace();
+      const runTitle = document.getElementById("tw-running-title");
+      if (runTitle) runTitle.textContent = "正在处理…";
+      const runProgress = document.getElementById("tw-running-progress");
+      if (runProgress) runProgress.textContent = "正在处理…";
+      if (els.artifactEmptyHint) {
+        els.artifactEmptyHint.hidden = true;
+        els.artifactEmptyHint.setAttribute("hidden", "");
+      }
+      if (els.artifactEmpty) {
+        els.artifactEmpty.hidden = true;
+        els.artifactEmpty.setAttribute("hidden", "");
+      }
       refreshWorkUxView({});
     } else {
       stopJobWatch();
@@ -4026,12 +4094,20 @@
       showRevisionActiveBanner(rev);
       hideArtifactLoading();
       if (els.artifactEmpty) {
-        els.artifactEmpty.hidden = false;
-        els.artifactEmpty.removeAttribute("hidden");
-        els.artifactEmpty.textContent = "处理完成后将在这里显示成果。";
+        els.artifactEmpty.hidden = true;
+        els.artifactEmpty.setAttribute("hidden", "");
       }
-      els.jobStatus.textContent = rev ? "正在按你的修改要求继续处理…" : "正在处理这项任务…";
+      if (els.artifactEmptyHint) {
+        els.artifactEmptyHint.hidden = true;
+        els.artifactEmptyHint.setAttribute("hidden", "");
+      }
+      els.jobStatus.textContent = "正在处理…";
       clearAppliedUnderstanding();
+      refreshTaskWorkspace();
+      const runTitle = document.getElementById("tw-running-title");
+      if (runTitle) runTitle.textContent = "正在处理…";
+      const runProgress = document.getElementById("tw-running-progress");
+      if (runProgress) runProgress.textContent = "正在处理…";
       refreshWorkUxView({});
     } else {
       stopJobWatch();
@@ -6410,13 +6486,7 @@
   if (els.acceptArtifact) {
     els.acceptArtifact.addEventListener("click", () => {
       const versionHint = activeArtifactVersionLabel || activeHeadVersionId || "当前版本";
-      const ok = window.confirm(
-        "确认采用「" +
-          versionHint +
-          "」？\n\n采用意味着结束当前交付循环，并将该成果沉淀为已采用结果。采用后如需新工作，请新建任务。",
-      );
-      if (!ok) return;
-      void submitArtifactDecision("accept");
+      showAdoptConfirm(versionHint);
     });
   }
   if (els.rejectArtifact) {

@@ -289,6 +289,11 @@ describe('2DIGIME-AI-NATIVE-THIN-RUNTIME-26', () => {
     assert.match(app, /artifactExportsMore\.hidden = !hasArtifact/);
     assert.match(app, /submitWorkNaturalLanguage\("确认"\)/);
     assert.match(app, /ccAcceptanceSection\.hidden = true/);
+    assert.match(app, /正在思考…/);
+    assert.match(app, /function showAdoptConfirm/);
+    assert.match(app, /再看看/);
+    assert.doesNotMatch(app, /label \+= ` · \$\{elapsed\}`/);
+    assert.doesNotMatch(app, /window\.confirm\(\s*"确认采用/);
     assert.match(html, /发送给 Digital Me/);
     assert.match(html, />导出副本</);
     assert.doesNotMatch(html, /保存副本/);

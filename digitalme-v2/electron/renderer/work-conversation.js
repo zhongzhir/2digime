@@ -64,9 +64,7 @@
         id: 'progress_running',
         role: 'digital_me',
         kind: 'progress',
-        text: input.revisionActive
-          ? '正在按你的意见继续处理同一任务…'
-          : '正在处理这项任务…',
+        text: '正在处理…',
       });
     }
 

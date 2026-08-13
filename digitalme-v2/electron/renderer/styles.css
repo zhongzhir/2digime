@@ -37,6 +37,11 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  height: 100%;
+}
+
 body {
   margin: 0;
   color: var(--ink);
@@ -44,16 +49,21 @@ body {
     radial-gradient(1200px 500px at 10% -10%, #e7f2ee 0%, transparent 55%),
     radial-gradient(900px 420px at 100% 0%, #efe6d6 0%, transparent 50%),
     var(--bg);
-  min-height: 100vh;
-  overflow-y: auto;
+  min-height: 100%;
+  overflow: hidden;
   scrollbar-gutter: stable;
 }
 
 #app {
   max-width: min(1680px, 96vw);
   margin: 0 auto;
-  padding: 28px 24px 48px;
+  padding: 20px 24px 16px;
   width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
 }
 
 .decision-box {
@@ -169,6 +179,15 @@ body {
 .owner-choice-actions {
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.adopt-confirm {
+  margin-top: 10px;
+}
+
+.adopt-confirm-actions {
+  margin-top: 10px;
+  gap: 8px;
 }
 
 .collab-box {
@@ -720,6 +739,7 @@ select {
   align-items: center;
   gap: 16px;
   margin-bottom: 16px;
+  flex-shrink: 0;
 }
 
 .main-nav {
@@ -770,7 +790,35 @@ select {
 }
 
 .shell-panel {
-  min-height: 420px;
+  min-height: 0;
+}
+
+#view-welcome[hidden],
+#view-shell[hidden] {
+  display: none !important;
+}
+
+#view-shell:not([hidden]) {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#panel-work:not([hidden]) {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#panel-work .page-title {
+  flex-shrink: 0;
+}
+
+.artifact-side .task-workspace-running:not([hidden]) {
+  flex: 1 1 auto;
 }
 
 /* display:flex/grid 会压过浏览器默认 [hidden]{display:none}，必须显式覆盖，否则主栏纵向堆叠 */
@@ -917,9 +965,10 @@ select {
   grid-template-columns: minmax(200px, 220px) minmax(0, 1.05fr) minmax(320px, 1.15fr);
   gap: 16px;
   align-items: stretch;
-  height: calc(100vh - 120px);
-  min-height: 520px;
-  max-height: calc(100vh - 96px);
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  max-height: none;
   scrollbar-gutter: stable;
 }
 
