@@ -274,6 +274,7 @@ describe('2DIGIME-AI-NATIVE-THIN-RUNTIME-26', () => {
 
   it('源码接线：一次确认走 fromPlanConfirm；规划版本不对 Owner 展示', async () => {
     const app = await fs.readFile(path.join(repoRoot, 'electron/renderer/app.js'), 'utf8');
+    const html = await fs.readFile(path.join(repoRoot, 'electron/renderer/index.html'), 'utf8');
     const workspace = await fs.readFile(
       path.join(repoRoot, 'electron/renderer/task-workspace.js'),
       'utf8',
@@ -285,7 +286,12 @@ describe('2DIGIME-AI-NATIVE-THIN-RUNTIME-26', () => {
     assert.match(app, /fromPlanConfirm: thin === true/);
     assert.match(app, /silentOutcomeExplain: true/);
     assert.match(app, /请决定是否采用这份成果/);
-    assert.match(app, /artifactExportsMore\.hidden/);
+    assert.match(app, /artifactExportsMore\.hidden = !hasArtifact/);
+    assert.match(app, /submitWorkNaturalLanguage\("确认"\)/);
+    assert.match(app, /ccAcceptanceSection\.hidden = true/);
+    assert.match(html, /发送给 Digital Me/);
+    assert.match(html, />导出副本</);
+    assert.doesNotMatch(html, /保存副本/);
     assert.match(workspace, /thinRuntime \? '当前方案'/);
     assert.match(workspace, /确认并开始/);
     assert.match(converse, /thin && decision\.confirmPlan/);

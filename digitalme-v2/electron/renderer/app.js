@@ -210,6 +210,7 @@
     taskList: document.getElementById("task-list"),
     taskEmpty: document.getElementById("task-empty"),
     goal: document.getElementById("goal"),
+    goalSend: document.getElementById("btn-goal-send"),
     artifactType: document.getElementById("artifact-type"),
     materialList: document.getElementById("material-list"),
     materialListWrap: document.getElementById("material-list-wrap"),
@@ -1306,94 +1307,39 @@
     }
     const acc = codeChange.acceptanceSummary;
     if (els.ccAcceptanceSection) {
-      if (acc) {
-        els.ccAcceptanceSection.hidden = false;
-        els.ccAcceptanceSection.removeAttribute("hidden");
-        if (els.ccAcceptanceTitle) els.ccAcceptanceTitle.textContent = "Digital Me 的结论";
-        if (els.ccAcceptanceExec) {
-          els.ccAcceptanceExec.hidden = true;
-          els.ccAcceptanceExec.textContent = "";
-        }
-        if (els.ccAcceptanceGoal) {
-          els.ccAcceptanceGoal.hidden = true;
-          els.ccAcceptanceGoal.setAttribute("hidden", "");
-        }
-        if (els.ccCtoReport) {
-          const report = String(acc.ctoReport || acc.headline || acc.recommendation || "").trim();
-          els.ccCtoReport.hidden = !report;
-          if (report) els.ccCtoReport.removeAttribute("hidden");
-          els.ccCtoReport.textContent = report;
-        }
-        if (els.ccAcceptanceBullets) {
-          els.ccAcceptanceBullets.hidden = true;
-          els.ccAcceptanceBullets.innerHTML = "";
-        }
-        if (els.ccAcceptanceNext) {
-          els.ccAcceptanceNext.hidden = true;
-          els.ccAcceptanceNext.textContent = "";
-        }
-        if (els.ccAcceptanceReco) {
-          els.ccAcceptanceReco.hidden = true;
-          els.ccAcceptanceReco.textContent = "";
-        }
-        const tech = acc.technicalBullets || [];
-        if (els.ccTechEvidence && els.ccTechBullets) {
-          if (tech.length) {
-            els.ccTechEvidence.hidden = false;
-            els.ccTechEvidence.removeAttribute("hidden");
-            els.ccTechEvidence.open = false;
-            els.ccTechBullets.innerHTML = "";
-            for (const t of tech) {
-              const li = document.createElement("li");
-              li.textContent = t;
-              els.ccTechBullets.appendChild(li);
-            }
-          } else {
-            els.ccTechEvidence.hidden = true;
-            els.ccTechEvidence.setAttribute("hidden", "");
-          }
-        }
-        const ctoKey = String(activeHeadVersionId || "") + "::" + String(acc.ctoReport || "").slice(0, 80);
-        if (acc.ctoReport && ctoKey !== lastCtoTimelineKey) {
-          lastCtoTimelineKey = ctoKey;
-        }
-        renderWorkTimeline();
-        if (els.artifactEmptyHint) {
-          els.artifactEmptyHint.hidden = true;
-          els.artifactEmptyHint.setAttribute("hidden", "");
-        }
-      } else {
-        els.ccAcceptanceSection.hidden = true;
-        els.ccAcceptanceSection.setAttribute("hidden", "");
+      els.ccAcceptanceSection.hidden = true;
+      els.ccAcceptanceSection.setAttribute("hidden", "");
+    }
+    if (acc) {
+      const ctoKey = String(activeHeadVersionId || "") + "::" + String(acc.ctoReport || "").slice(0, 80);
+      if (acc.ctoReport && ctoKey !== lastCtoTimelineKey) {
+        lastCtoTimelineKey = ctoKey;
+      }
+      renderWorkTimeline();
+      if (els.artifactEmptyHint) {
+        els.artifactEmptyHint.hidden = true;
+        els.artifactEmptyHint.setAttribute("hidden", "");
       }
     }
     if (els.ccSummary) {
-      // Coding Agent 原始摘要不再作为默认主文案；CTO 报告优先
-      const cto = String((codeChange.acceptanceSummary && codeChange.acceptanceSummary.ctoReport) || "").trim();
       const happenedSection = els.ccSummary.closest ? els.ccSummary.closest(".cc-section") : null;
-      if (cto) {
-        els.ccSummary.textContent = "";
-        els.ccSummary.hidden = true;
-        els.ccSummary.setAttribute("hidden", "");
-        if (happenedSection) {
-          happenedSection.hidden = true;
-          happenedSection.setAttribute("hidden", "");
-        }
-      } else {
-        els.ccSummary.hidden = false;
-        els.ccSummary.removeAttribute("hidden");
-        const summaryText = String(codeChange.summary || "").trim();
-        const happened = summaryText.match(/##\s*发生了什么\s*([\s\S]*?)(?=\n##\s|$)/);
-        let brief = happened ? happened[1].trim() : "";
-        if (!brief) {
-          brief =
-            summaryText
-              .split(/\n{2,}/)
-              .map((p) => p.trim())
-              .find((p) => p && !p.startsWith("#") && !p.startsWith("**验收") && !/^##\s*目标/.test(p)) ||
-            summaryText.slice(0, 800);
-        }
-        els.ccSummary.textContent = brief || "已完成本次项目修改。";
+      const summaryText = String(codeChange.summary || "").trim();
+      const happened = summaryText.match(/##\s*发生了什么\s*([\s\S]*?)(?=\n##\s|$)/);
+      let brief = happened ? happened[1].trim() : "";
+      if (!brief) {
+        brief =
+          summaryText
+            .split(/\n{2,}/)
+            .map((p) => p.trim())
+            .find((p) => p && !p.startsWith("#") && !p.startsWith("**验收") && !/^##\s*目标/.test(p)) ||
+          summaryText.slice(0, 800);
+      }
+      els.ccSummary.hidden = false;
+      els.ccSummary.removeAttribute("hidden");
+      els.ccSummary.textContent = brief || "已完成本次处理。可在下方查看文件，或打开项目文件夹。";
+      if (happenedSection) {
+        happenedSection.hidden = false;
+        happenedSection.removeAttribute("hidden");
       }
     }
     if (els.ccVerification) {
@@ -1470,62 +1416,17 @@
         els.ccTestList.appendChild(li);
       }
     }
-    const understanding = codeChange.understanding || null;
     if (els.ccUnderstandingSection) {
-      const goalText = String((understanding && understanding.goal) || "").trim();
-      const keyFiles = (understanding && understanding.keyFiles) || [];
-      if (goalText || keyFiles.length) {
-        els.ccUnderstandingSection.hidden = false;
-        els.ccUnderstandingSection.removeAttribute("hidden");
-        if (els.ccUnderstandingGoal) {
-          els.ccUnderstandingGoal.textContent = goalText || "已根据项目材料形成任务理解。";
-        }
-        if (els.ccUnderstandingFiles) {
-          els.ccUnderstandingFiles.innerHTML = "";
-          for (const f of keyFiles.slice(0, 10)) {
-            const li = document.createElement("li");
-            li.textContent = f.reason ? `${f.path}：${f.reason}` : f.path;
-            els.ccUnderstandingFiles.appendChild(li);
-          }
-        }
-      } else {
-        els.ccUnderstandingSection.hidden = true;
-        els.ccUnderstandingSection.setAttribute("hidden", "");
-      }
+      els.ccUnderstandingSection.hidden = true;
+      els.ccUnderstandingSection.setAttribute("hidden", "");
     }
-    if (els.ccPlanSection && els.ccPlanList) {
-      const steps = (understanding && understanding.planSteps) || [];
-      if (steps.length) {
-        els.ccPlanSection.hidden = false;
-        els.ccPlanSection.removeAttribute("hidden");
-        els.ccPlanList.innerHTML = "";
-        for (const step of steps.slice(0, 8)) {
-          const li = document.createElement("li");
-          li.textContent = step;
-          els.ccPlanList.appendChild(li);
-        }
-      } else {
-        els.ccPlanSection.hidden = true;
-        els.ccPlanSection.setAttribute("hidden", "");
-        els.ccPlanList.innerHTML = "";
-      }
+    if (els.ccPlanSection) {
+      els.ccPlanSection.hidden = true;
+      els.ccPlanSection.setAttribute("hidden", "");
     }
-    const risks = (codeChange.risks || (understanding && understanding.risks) || []).filter(Boolean);
-    if (els.ccRisksSection && els.ccRisksList) {
-      if (risks.length) {
-        els.ccRisksSection.hidden = false;
-        els.ccRisksSection.removeAttribute("hidden");
-        els.ccRisksList.innerHTML = "";
-        for (const item of risks.slice(0, 12)) {
-          const li = document.createElement("li");
-          li.textContent = item;
-          els.ccRisksList.appendChild(li);
-        }
-      } else {
-        els.ccRisksSection.hidden = true;
-        els.ccRisksSection.setAttribute("hidden", "");
-        els.ccRisksList.innerHTML = "";
-      }
+    if (els.ccRisksSection) {
+      els.ccRisksSection.hidden = true;
+      els.ccRisksSection.setAttribute("hidden", "");
     }
     const unresolved = (codeChange.unresolvedItems || []).filter(Boolean);
     if (els.ccUnresolvedSection && els.ccUnresolvedList) {
@@ -1794,6 +1695,9 @@
     }
     if (els.workLayout && hasArtifact && els.workLayout.dataset.stage !== "artifact") {
       /* keep current stage when already on artifact */
+    }
+    if (els.goalSend) {
+      els.goalSend.hidden = workMode !== "compose" || !!(els.goal && els.goal.readOnly);
     }
   }
 
@@ -3108,10 +3012,10 @@
         : null,
       title: thin && mode === "planning" ? "任务工作区 · 当前方案" : tw.titleForMode(mode),
     });
-    // 导出入口仅在有成果时出现，避免空「更多」；薄主链采用前不展示「保存副本」
     if (els.artifactExportsMore) {
-      els.artifactExportsMore.hidden =
-        !hasArtifact || (thin && lastDecisionStatus !== "accepted");
+      const summary = els.artifactExportsMore.querySelector("summary");
+      if (summary) summary.textContent = "导出副本";
+      els.artifactExportsMore.hidden = !hasArtifact;
     }
     syncPrepActionButtons();
   }
@@ -3318,8 +3222,8 @@
    * D11-A：自然语言输入一律先经 work.converse 得到 Digital Me 的理解与回应；
    * 不做本地关键词路由，不默认触发修改。执行只在 startAuthorized 后经确定性命令发生。
    */
-  async function submitWorkNaturalLanguage() {
-    if (!els.workNlInput) return;
+  async function submitWorkNaturalLanguage(presetText) {
+    if (!els.workNlInput && presetText == null) return;
     if (workConverseInFlight) {
       if (els.jobStatus) {
         els.jobStatus.textContent = "上一条说明还在处理，请稍候再发送。";
@@ -3327,7 +3231,9 @@
       }
       return;
     }
-    const text = String(els.workNlInput.value || "").trim();
+    const text = String(
+      presetText != null ? presetText : (els.workNlInput && els.workNlInput.value) || "",
+    ).trim();
     if (!text) return;
     const payload = { text };
     const targetTaskId = activeTaskId || converseDraftTaskId;
@@ -3339,7 +3245,7 @@
         ...(m.projectOrigin ? { projectOrigin: m.projectOrigin } : {}),
       }));
     }
-    els.workNlInput.value = "";
+    if (els.workNlInput) els.workNlInput.value = "";
     // 乐观显示用户输入；权威记录由 work.converse 持久化后回填
     const pendingId = "user_pending_" + Date.now();
     workExtraTurns = workExtraTurns.concat([
@@ -3512,37 +3418,42 @@
   }
 
   async function confirmPlanAndStartDevelopment() {
+    const btn = els.startDevelopment;
+    const prevLabel = btn ? String(btn.textContent || "") : "";
+    if (els.jobStatus) {
+      els.jobStatus.textContent = "已确认，正在开始…";
+      els.jobStatus.classList.remove("error");
+    }
+    if (els.jobActionable) els.jobActionable.textContent = "";
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "正在开始…";
+    }
     const taskId = activeTaskId || converseDraftTaskId;
-    if (!taskId) return;
-    const expectedVersion = activeTaskPlan && activeTaskPlan.version;
-    if (expectedVersion == null || (activeTaskPlan && activeTaskPlan.source === "seed_internal")) {
-      els.jobStatus.textContent = "还没有可确认的开发规划，请先在对话中说明任务并等待规划生成。";
-      els.jobStatus.classList.add("error");
+    if (!taskId) {
+      if (els.jobStatus) {
+        els.jobStatus.textContent = "还没有可确认的方案。请先发送要做的事。";
+        els.jobStatus.classList.add("error");
+      }
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = prevLabel || "确认并开始";
+      }
       return;
     }
     try {
-      const detail = await api.invoke("work.getTask", { taskId });
-      const plan = detail && detail.task && detail.task.meta && detail.task.meta.plan;
-      hydratePlanFromTask(detail);
-      if (!plan || plan.version !== expectedVersion || plan.source === "seed_internal") {
-        els.jobStatus.textContent =
-          plan && plan.source === "seed_internal"
-            ? "当前还没有可用的开发规划，请在对话中重试生成后再确认开始。"
-            : "规划已更新，请查看右侧最新规划后再确认开始。";
-        els.jobStatus.classList.add("error");
-        refreshTaskWorkspace();
-        return;
-      }
-      clearPrepBlocked();
-      await startConversationTaskExecution(taskId, {
-        confirmedPlanVersion: expectedVersion,
-        fromPlanConfirm: true,
-        intentKind: isThinRuntimeActive(detail) ? "modify_code" : undefined,
-        requestedArtifactType: isThinRuntimeActive(detail) ? "code-change" : undefined,
-      });
+      await submitWorkNaturalLanguage("确认");
     } catch (err) {
-      els.jobStatus.textContent = userFacingWorkError(err);
-      els.jobStatus.classList.add("error");
+      if (els.jobStatus) {
+        els.jobStatus.textContent = userFacingWorkError(err);
+        els.jobStatus.classList.add("error");
+      }
+    } finally {
+      const started = !!(activeJobId || (lastJobDetailForUx && lastJobDetailForUx.latestJob));
+      if (btn && !started) {
+        btn.disabled = false;
+        btn.textContent = prevLabel || "确认并开始";
+      }
     }
   }
 
@@ -5886,7 +5797,7 @@
         refreshWorkUxView({ projectDirReady: true, prepBlocked: false });
         return;
       }
-      els.jobStatus.textContent = "项目已添加。请在下方说明目标，等待开发规划后再确认开始。";
+      els.jobStatus.textContent = "项目已添加。请写下要做的事，然后发送给 Digital Me。";
       els.jobStatus.classList.remove("error");
       els.jobActionable.textContent = "";
       refreshWorkUxView({ projectDirReady: true });
@@ -6038,6 +5949,27 @@
   if (els.workNlSend) {
     els.workNlSend.addEventListener("click", () => {
       void submitWorkNaturalLanguage();
+    });
+  }
+  if (els.goalSend) {
+    els.goalSend.addEventListener("click", () => {
+      const goal = String((els.goal && els.goal.value) || "").trim();
+      if (!goal) {
+        if (els.jobStatus) {
+          els.jobStatus.textContent = "请先写下要完成的工作。";
+          els.jobStatus.classList.remove("error");
+        }
+        return;
+      }
+      els.goalSend.disabled = true;
+      if (els.jobStatus) {
+        els.jobStatus.textContent = "正在发送给 Digital Me…";
+        els.jobStatus.classList.remove("error");
+      }
+      void submitWorkNaturalLanguage(goal).finally(() => {
+        if (els.goalSend) els.goalSend.disabled = workMode !== "compose";
+        syncGoalPresentation();
+      });
     });
   }
   if (els.startDevelopment) {

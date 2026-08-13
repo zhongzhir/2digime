@@ -330,9 +330,12 @@
                             id="goal"
                             class="goal-input"
                             rows="6"
-                            placeholder="告诉我你要完成什么。也可以直接在下方输入框发送。"
+                            placeholder="告诉我你要完成什么。"
                           ></textarea>
                         </label>
+                        <div class="row goal-send-row">
+                          <button type="button" id="btn-goal-send" class="primary">发送给 Digital Me</button>
+                        </div>
                         <div id="goal-examples" class="goal-examples" aria-label="任务示例">
                           <button type="button" class="goal-example ghost" data-goal-example="修改这个项目中的登录页，并运行相关测试">修改这个项目中的登录页，并运行相关测试</button>
                           <button type="button" class="goal-example ghost" data-goal-example="分析这些材料，形成一份投资判断">分析这些材料，形成一份投资判断</button>
@@ -427,7 +430,7 @@
               <div class="artifact-head">
                 <h2 id="task-workspace-title">任务工作区</h2>
                 <details class="work-more-menu artifact-exports-more" id="artifact-exports-more" hidden>
-                  <summary>保存副本</summary>
+                  <summary>导出副本</summary>
                   <div class="row artifact-exports" id="artifact-exports">
                     <button type="button" id="btn-copy">复制</button>
                     <button type="button" id="btn-export-md">导出 Markdown</button>
@@ -592,8 +595,8 @@
                   <h3>风险</h3>
                   <ul id="cc-risks-list" class="cc-risks-list"></ul>
                 </section>
-                <section class="cc-section">
-                  <h3>发生了什么</h3>
+                <section class="cc-section" id="cc-deliverable-section">
+                  <h3>本次成果</h3>
                   <p id="cc-summary" class="cc-summary"></p>
                   <p id="cc-verification" class="meta"></p>
                 </section>
