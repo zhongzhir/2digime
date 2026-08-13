@@ -134,7 +134,7 @@ describe('owner-revision-routing-fix-22', () => {
     assert.match(converse, /startMode === 'revision'/);
   });
 
-  it('模型合同失败时，明确 Owner 修订仍授权 revision', () => {
+  it('模型合同失败时明确修订句不得授权执行（零 Job）', () => {
     const d = decideConverseEffects({
       parsed: null,
       modelAvailable: true,
@@ -142,9 +142,9 @@ describe('owner-revision-routing-fix-22', () => {
       jobRunning: false,
       userText: '按你说的改吧：把 start 的返回值改成 done，并同步测试。',
     });
-    assert.equal(d.startAuthorized, true);
-    assert.equal(d.startMode, 'revision');
-    assert.equal(d.degraded, false);
+    assert.equal(d.startAuthorized, false);
+    assert.equal(d.startMode, undefined);
+    assert.equal(d.degraded, true);
   });
 
   it('无 Artifact 时明确修改句不授权 revision', () => {

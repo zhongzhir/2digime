@@ -8,7 +8,6 @@ import {
 } from './work-cto-consult';
 import {
   classifyOwnerRevisionRoute,
-  isClearOwnerDirectedRevision,
 } from './work-revision-routing';
 
 /** 对话轮/意图结论局部 id（不属于 shared/ids 的对象前缀集）。 */
@@ -75,10 +74,9 @@ export const CONVERSE_UNPARSEABLE_NOTICE =
   '我刚才没有把你的意思理解清楚。可以换一种说法再讲一次吗？' +
   '比如告诉我你是想了解情况、补充要求，还是希望我开始或继续做事。';
 
-/** 模型输出合同失败 / 规划生成失败（保留 Task 与目标；可重试）。 */
+/** 模型输出合同失败 / 理解或规划生成失败（保留 Owner 原文与 Task；可重试；零 Job）。 */
 export const CONVERSE_PLAN_FAILED_NOTICE =
-  '规划生成失败，可重试。你的目标和任务已保留，不会丢失。' +
-  '请再发送一次，或把目标说得更具体一些。';
+  '本次理解或规划生成失败，可重试。你的原文和任务已保留，不会丢失。请再发送一次。';
 
 /** 非执行类意图：只回应，不产生任何执行性效果。 */
 export const NON_EXECUTION_INTENTS: readonly WorkConverseIntent[] = [
@@ -345,7 +343,7 @@ export interface ConverseDecisionInput {
  * 确定性策略层：把 AI 意图结论翻译为受限效果集合。
  * 规则（不可被模型输出覆盖）：
  * - 模型不可用 → 降级提示，零效果；
- * - 输出不可解析 → 规划失败语义，零效果；成果后明确 Owner 修订除外，仍授权受控修订；
+ * - 输出不可解析 → 理解/规划失败语义，零效果；不得用关键词替代 AI 判断并授权执行；
  * - 低置信度 → 保留模型回复但强制澄清，零效果；
  * - 执行性意图（confirm_start / final_adopt）把握低于 EXECUTION_EFFECT_CONFIDENCE_THRESHOLD → 先澄清，不授权；
  * - 非执行意图 → 只回应；
@@ -387,24 +385,7 @@ export function decideConverseEffects(input: ConverseDecisionInput): ConverseDec
         degraded: true,
       };
     }
-    // 技术合同失败不得吞掉成果后的明确 Owner 修订
-    if (
-      input.hasArtifact &&
-      !input.jobRunning &&
-      !input.firstTurn &&
-      isClearOwnerDirectedRevision(input.userText || '') &&
-      !isCurrentTaskConsult(input.userText || '')
-    ) {
-      return {
-        ...base,
-        intent: 'artifact_feedback',
-        confidence: 0.9,
-        reply: '好的，我按你刚才说的修改要求继续改这一版成果。',
-        startAuthorized: true,
-        startMode: 'revision',
-      };
-    }
-    // 技术合同失败 ≠ 语义「没听懂」
+    // 技术合同失败 ≠ 语义「没听懂」；不得用关键词降级成执行
     return {
       ...base,
       reply: CONVERSE_PLAN_FAILED_NOTICE,
@@ -453,7 +434,7 @@ export function decideConverseEffects(input: ConverseDecisionInput): ConverseDec
         }
         break;
       }
-      if (route === 'user_directed_revision' || isClearOwnerDirectedRevision(input.userText || '')) {
+      if (route === 'user_directed_revision') {
         decision.startAuthorized = true;
         decision.startMode = 'revision';
       }
@@ -484,21 +465,6 @@ export function decideConverseEffects(input: ConverseDecisionInput): ConverseDec
       break;
     default:
       break;
-  }
-  // After switch + consult override: clear Owner text can still authorize even if model intent drifted
-  if (
-    !decision.startAuthorized &&
-    !decision.pauseRequested &&
-    input.hasArtifact &&
-    !input.jobRunning &&
-    !input.firstTurn &&
-    confidence >= EXECUTION_EFFECT_CONFIDENCE_THRESHOLD &&
-    isClearOwnerDirectedRevision(input.userText || '') &&
-    !isCurrentTaskConsult(input.userText || '')
-  ) {
-    decision.startAuthorized = true;
-    decision.startMode = 'revision';
-    decision.needsClarification = false;
   }
   if (consult && input.consultContext) {
     decision.startAuthorized = false;
@@ -590,7 +556,18 @@ export async function runWorkConverse(
   const modelAvailable = deps.chat !== null;
   let parsed: ParsedConverseOutput | null = null;
   let chatFailed = false;
-  if (deps.chat) {
+  let forceUnparseable = false;
+  const unparseableFlag = String(process.env.DIGITALME_20A_FORCE_UNPARSEABLE || '').trim();
+  if (unparseableFlag) {
+    try {
+      const { unlink } = await import('node:fs/promises');
+      await unlink(unparseableFlag);
+      forceUnparseable = true;
+    } catch {
+      forceUnparseable = false;
+    }
+  }
+  if (deps.chat && !forceUnparseable) {
     const messages = buildConverseMessages({
       goal: task.goal,
       facts,

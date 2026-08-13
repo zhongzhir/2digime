@@ -1,0 +1,7 @@
+{
+  "name": "dm-23-fixture",
+  "private": true,
+  "scripts": {
+    "test": "node formatLabel.test.js"
+  }
+}

@@ -52,6 +52,11 @@ export type DigitalMeCtoReview = {
 
 export type CtoReviewInput = {
   userGoal: string;
+  /** 历史 Task.goal；修订轮不得当作当前验收标准 */
+  originalTaskGoal?: string;
+  /** 本轮 Owner 修订原文（与 Job.revisionRequest 同一事实） */
+  revisionRequest?: string;
+  currentRoundAuthority?: 'initial_task' | 'owner_revision';
   /** 确认前理解 / 方案摘要 */
   understandingBrief?: string;
   understandingKeyFiles?: string[];

@@ -18,6 +18,7 @@ import { extractEditEvidence } from '../subject-core/diff-evidence';
 import type { GrowthEvent } from '../subject-core/growth-event';
 import type { SubjectService } from '../subject-core/subject-service';
 import type { ChatMessage } from '../infrastructure/model-http';
+import { deriveJobEffectiveGoal } from '../execution/effective-goal';
 
 export interface ArtifactWorkspaceOptions {
   artifactStore: ObjectStore<Artifact>;
@@ -580,6 +581,14 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
                   }))
                 : [];
               const changedFileCount = changes.length || (parsed.changedFiles || []).length;
+              const effectiveGoal = deriveJobEffectiveGoal({
+                taskGoal: String(understanding?.goal || '').trim(),
+                confirmedPlan: (understanding?.planSteps || []).join('\n'),
+                ...(codeChange.revisionRequest
+                  ? { revisionRequest: codeChange.revisionRequest }
+                  : {}),
+                currentPlan: (understanding?.planSteps || []).join('\n'),
+              });
               const ctoCacheKey = [
                 artifactId,
                 version.versionId,
@@ -587,6 +596,8 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
                 checks.map((c) => `${c.id}:${c.verdict}`).join(','),
                 String(directoryChangedSinceResult),
                 String(changedFileCount),
+                effectiveGoal.currentRoundAuthority,
+                effectiveGoal.acceptanceTarget.slice(0, 240),
               ].join('|');
               const ctoCacheFile = path.join(
                 os.tmpdir(),
@@ -632,13 +643,37 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
                       ? { outOfScopeChanges: parsed.outOfScopeChanges as string[] }
                       : {}),
                 },
-                ...(understanding?.goal ? { userGoal: understanding.goal } : {}),
-                ...(understanding?.keyFiles?.length
+                ...(effectiveGoal.acceptanceTarget
+                  ? { userGoal: effectiveGoal.acceptanceTarget }
+                  : understanding?.goal
+                    ? { userGoal: understanding.goal }
+                    : {}),
+                ...(effectiveGoal.originalTaskGoal
+                  ? { originalTaskGoal: effectiveGoal.originalTaskGoal }
+                  : {}),
+                ...(effectiveGoal.revisionRequest
+                  ? { revisionRequest: effectiveGoal.revisionRequest }
+                  : {}),
+                currentRoundAuthority: effectiveGoal.currentRoundAuthority,
+                ...(understanding?.keyFiles?.length || effectiveGoal.background
                   ? {
-                      understandingKeyFiles: understanding.keyFiles.map((k) => k.path),
-                      understandingBrief: understanding.keyFiles
-                        .map((k) => `${k.path}：${k.reason}`)
-                        .join('；'),
+                      ...(understanding?.keyFiles?.length
+                        ? {
+                            understandingKeyFiles: understanding.keyFiles.map((k) => k.path),
+                          }
+                        : {}),
+                      understandingBrief: [
+                        effectiveGoal.background,
+                        ...(understanding?.keyFiles?.length
+                          ? [
+                              understanding.keyFiles
+                                .map((k) => `${k.path}：${k.reason}`)
+                                .join('；'),
+                            ]
+                          : []),
+                      ]
+                        .filter(Boolean)
+                        .join('\n'),
                     }
                   : {}),
                 ...(understanding?.planSteps?.length

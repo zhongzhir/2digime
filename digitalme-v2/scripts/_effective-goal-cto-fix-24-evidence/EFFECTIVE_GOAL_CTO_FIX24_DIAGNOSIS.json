@@ -1,0 +1,24 @@
+{
+  "task": "2DIGIME-BUILD-01-EFFECTIVE-GOAL-CTO-FIX-24",
+  "diagnosedAt": "2026-08-13T03:30:00.000Z",
+  "baselineHead": "931a2c8",
+  "subjectJob": "job_msqxhbul5e59dd4202e7",
+  "subjectTask": "task_msqxbs7u427267c262d1",
+  "fix23Evidence": "scripts/_revision-completion-gate-fix-23-evidence",
+  "factsIntoSecondCto": {
+    "taskGoal": "修改这个项目中的 formatLabel，使输入 start 时返回 start-processing，并运行测试。",
+    "taskGoalMutated": false,
+    "confirmedPlan": "first Job confirmed plan targeting start-processing",
+    "jobRevisionRequest": "按你说的改吧：把 start 的返回值改成 done，并同步测试。",
+    "artifactHead": "version 2 note=Owner 改成 done",
+    "executionEvidence": "formatLabel.js already done; tests passed",
+    "ctoPromptAcceptanceTarget": "understanding.goal = Task.goal = start-processing"
+  },
+  "rootCauseLayer": "artifact-workspace/workspace.ts CTO input: userGoal=understanding.goal (frozen Task.goal). Job.revisionRequest was loaded as version.note but never passed into the evidence pack.",
+  "parsedNullRegression": "decideConverseEffects parsed=null + isClearOwnerDirectedRevision → startAuthorized revision (FIX-23 workaround). Revoked.",
+  "fixPlan": {
+    "effectiveGoal": "derive at use time; do not overwrite Task.goal",
+    "cto": "evidence pack goal = current-round acceptanceTarget",
+    "aiFirst": "parse failure: one repair, then retryable notice, zero Job"
+  }
+}

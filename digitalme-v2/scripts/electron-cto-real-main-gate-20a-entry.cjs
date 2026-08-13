@@ -586,6 +586,47 @@ async function runPhase1(win) {
     120000,
   );
 
+  // 模型合同失败场景：parsed 失败不得用「改成」关键词创建 Job
+  const unparseableFlag = String(process.env.DIGITALME_20A_FORCE_UNPARSEABLE || '').trim();
+  if (unparseableFlag) {
+    const jobsBeforeParseFail = listJsonIds(path.join(rt || '', 'jobs'));
+    fs.mkdirSync(path.dirname(unparseableFlag), { recursive: true });
+    fs.writeFileSync(unparseableFlag, '1\n');
+    await ui(win, `async () => {
+      const input = document.getElementById('work-nl-input');
+      const send = document.getElementById('btn-work-nl-send');
+      input.value = '先改成 done 并同步测试。';
+      send.click();
+      return true;
+    }`);
+    const parseFailUi = await waitUi(
+      win,
+      'model_contract_fail_notice',
+      `() => {
+        const text = String(document.body.innerText || '');
+        const hit = /理解或规划生成失败|规划生成失败，可重试/.test(text);
+        return { ok: hit, slice: text.slice(-1200) };
+      }`,
+      120000,
+    );
+    check('model_contract_fail_notice', !!(parseFailUi && parseFailUi.ok), parseFailUi);
+    const jobsAfterParseFail = listJsonIds(path.join(rt || '', 'jobs'));
+    check(
+      'model_contract_fail_zero_jobs',
+      jobsAfterParseFail.length === jobsBeforeParseFail.length,
+      { before: jobsBeforeParseFail, after: jobsAfterParseFail },
+    );
+    await waitUi(
+      win,
+      'nl_ready_after_parse_fail',
+      `() => {
+        const send = document.getElementById('btn-work-nl-send');
+        return { ok: !!(send && !send.disabled) };
+      }`,
+      120000,
+    );
+  }
+
   // NL revision → new job/artifact + file change to done
   const jobsBeforeRev = listJsonIds(path.join(rt || '', 'jobs'));
   const artsBeforeRev = listJsonIds(path.join(rt || '', 'artifacts'));
@@ -786,6 +827,27 @@ async function runPhase1(win) {
     headVersionIdBefore: artBeforeSnap && artBeforeSnap.headVersionId,
     headVersionIdAfter: artAfterSnap && artAfterSnap.headVersionId,
   });
+  const cto2Fields = cto2Wait.fields || {};
+  const goalAttained2 = String(cto2Fields.goalAttained || '');
+  const needChange2 = String(cto2Fields.needChange || '');
+  const canUse2 = String(cto2Fields.canUse || '');
+  check(
+    'revision_cto_goal_attained_not_against_done',
+    !/done.{0,24}(与要求相反|不符合|未达到)/.test(goalAttained2) &&
+      !/仍应.{0,12}start-processing|要求.{0,16}start-processing/.test(goalAttained2),
+    { goalAttained: goalAttained2, canUse: canUse2 },
+  );
+  check(
+    'revision_cto_need_change_not_revert_start_processing',
+    !/改回.{0,24}start-processing|改成.{0,16}start-processing/.test(needChange2),
+    { needChange: needChange2, nextStep: cto2Fields.nextStep, risks: cto2Fields.risks },
+  );
+  const taskGoalNow = readLatestTask();
+  check(
+    'task_goal_not_overwritten',
+    !!(taskGoalNow && /start-processing/.test(String(taskGoalNow.goal || ''))),
+    { goal: taskGoalNow && taskGoalNow.goal },
+  );
   const cto2 = { ok: cto2Wait.ok, fields: cto2Wait.fields, missing: cto2Wait.missing || [] };
 
   const taskFinal = readLatestTask();

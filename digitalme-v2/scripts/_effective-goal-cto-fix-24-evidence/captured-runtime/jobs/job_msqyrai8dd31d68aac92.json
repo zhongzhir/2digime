@@ -1,0 +1,28 @@
+{
+  "id": "job_msqyrai8dd31d68aac92",
+  "taskId": "task_msqyptht9c0dc7877e54",
+  "capabilityId": "cap_external_executor_codex",
+  "createdAt": "2026-08-13T03:33:36.368Z",
+  "status": "succeeded",
+  "externalExecution": {
+    "executorId": "external-executor-codex-cli",
+    "workingDirectory": "C:\\Users\\46554\\AppData\\Local\\Temp\\dm-23-repo-sB9mMA",
+    "readScope": [
+      "."
+    ],
+    "writeScope": [
+      "."
+    ],
+    "lastExecutorStatus": "succeeded",
+    "projectOrigin": "user_selected",
+    "executorRunId": "job_msqyt4ew91a8dbf03853",
+    "afterScopeDigest": "d9bcdf6c69ea7a2886beea06173e2f5dc8ae9007e7975ace2b5c45d1b8c274b1"
+  },
+  "startedAt": "2026-08-13T03:33:36.456Z",
+  "snapshotId": "snap_msqyramd90f69381b9a7",
+  "finishedAt": "2026-08-13T03:36:56.065Z",
+  "artifactId": "art_msqyrai8dd31d68aac92",
+  "costActual": {
+    "durationMs": 199609
+  }
+}

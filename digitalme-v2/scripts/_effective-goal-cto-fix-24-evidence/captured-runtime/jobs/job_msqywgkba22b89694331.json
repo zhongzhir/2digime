@@ -1,0 +1,31 @@
+{
+  "id": "job_msqywgkba22b89694331",
+  "taskId": "task_msqyptht9c0dc7877e54",
+  "capabilityId": "cap_external_executor_codex",
+  "createdAt": "2026-08-13T03:37:37.499Z",
+  "status": "succeeded",
+  "targetArtifactId": "art_msqyrai8dd31d68aac92",
+  "revisionRequest": "按你说的改吧：把 start 的返回值改成 done，并同步测试。",
+  "externalExecution": {
+    "executorId": "external-executor-codex-cli",
+    "workingDirectory": "C:\\Users\\46554\\AppData\\Local\\Temp\\dm-23-repo-sB9mMA",
+    "readScope": [
+      "."
+    ],
+    "writeScope": [
+      "."
+    ],
+    "lastExecutorStatus": "succeeded",
+    "autoContinueCount": 0,
+    "projectOrigin": "user_selected",
+    "executorRunId": "job_msqyxc6uc65d9b09f4b4",
+    "afterScopeDigest": "2e50556109ca50124180a3301cdd4dea121b583c66e3e3407cf345a702d7c0e9"
+  },
+  "startedAt": "2026-08-13T03:37:37.516Z",
+  "snapshotId": "snap_msqywgla7c20720bace5",
+  "finishedAt": "2026-08-13T03:39:37.689Z",
+  "artifactId": "art_msqyrai8dd31d68aac92",
+  "costActual": {
+    "durationMs": 120173
+  }
+}

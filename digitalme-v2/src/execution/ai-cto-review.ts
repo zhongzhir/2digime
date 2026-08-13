@@ -19,6 +19,9 @@ export type CtoReviewChat = (input: { messages: ChatMessage[] }) => Promise<{ te
 
 export interface AiCtoEvidencePack {
   goal: string;
+  originalTaskGoal?: string;
+  revisionRequest?: string;
+  currentRoundAuthority?: 'initial_task' | 'owner_revision';
   understanding?: string;
   planSteps: string[];
   verification: {
@@ -57,6 +60,8 @@ const SYSTEM_PROMPT = [
   '不要输出思考过程、内部协议名、字段名或 Markdown。只输出一个 JSON 对象。',
   'JSON 字段：decision（meets_plan | needs_revision | blocked | insufficient_evidence）、canUse、goalAttained、needChange、risks、nextStep、userSummary、completed、gaps、evidenceRefs、nextAction、revisionPlan（仅 needs_revision 时可有）。',
   'canUse、goalAttained、needChange、risks、nextStep 必须是面向用户的自然语言判断，由你基于证据包独立作出；不要复述检查项英文 id 或内部枚举。',
+  '证据包的 goal 是本轮验收目标。若 currentRoundAuthority 为 owner_revision，必须按本轮用户要求判断，不得把 originalTaskGoal 当成当前必须达成的标准。',
+  '你必须回答：用户本轮要求改成什么，当前成果是否满足本轮要求。若成果已按本轮要求改为新值，不得建议改回已被替代的旧目标。',
   '所有数组均为简短中文字符串；evidenceRefs 必须逐项来自证据包 evidenceRefs。',
   '当证据包同时满足：changedFileCount>0、digitalMeVerified=true、file_changes/scope_boundary/git_integrity/build_check 均为 satisfied，且没有 unsatisfied 的硬门检查时，应判定 meets_plan。',
   '仅在关键核对项缺失、结果互相矛盾，或无法从现有证据支持目标时使用 insufficient_evidence。',
@@ -169,8 +174,14 @@ export function buildAiCtoEvidencePack(input: CtoReviewInput): AiCtoEvidencePack
     ref: `file:${path.replace(/\\/g, '/')}`,
     path: path.replace(/\\/g, '/'),
   }));
+  const originalTaskGoal = String(input.originalTaskGoal || '').trim();
+  const revisionRequest = String(input.revisionRequest || '').trim();
+  const currentRoundAuthority = input.currentRoundAuthority;
   return {
     goal: String(input.userGoal || '').trim() || '未提供明确目标',
+    ...(originalTaskGoal ? { originalTaskGoal: originalTaskGoal.slice(0, 800) } : {}),
+    ...(revisionRequest ? { revisionRequest: revisionRequest.slice(0, 800) } : {}),
+    ...(currentRoundAuthority ? { currentRoundAuthority } : {}),
     ...(input.understandingBrief ? { understanding: input.understandingBrief.slice(0, 1800) } : {}),
     planSteps: (input.planSteps || []).slice(0, 12),
     verification: {

@@ -68,6 +68,9 @@ export type OwnerAcceptanceSummaryInput = {
   evidence?: AcceptanceEvidenceInput;
   /** 用户确认过的目标与理解（CTO 判断输入） */
   userGoal?: string;
+  originalTaskGoal?: string;
+  revisionRequest?: string;
+  currentRoundAuthority?: 'initial_task' | 'owner_revision';
   understandingBrief?: string;
   understandingKeyFiles?: string[];
   planSteps?: string[];
@@ -171,6 +174,9 @@ export function buildOwnerAcceptanceSummary(input: OwnerAcceptanceSummaryInput):
 
   const ctoReview = input.ctoReview || buildDigitalMeCtoReview({
     userGoal: input.userGoal || '',
+    ...(input.originalTaskGoal ? { originalTaskGoal: input.originalTaskGoal } : {}),
+    ...(input.revisionRequest ? { revisionRequest: input.revisionRequest } : {}),
+    ...(input.currentRoundAuthority ? { currentRoundAuthority: input.currentRoundAuthority } : {}),
     ...(input.understandingBrief ? { understandingBrief: input.understandingBrief } : {}),
     ...(input.understandingKeyFiles ? { understandingKeyFiles: input.understandingKeyFiles } : {}),
     ...(input.planSteps ? { planSteps: input.planSteps } : {}),
@@ -403,6 +409,9 @@ export async function buildOwnerAcceptanceSummaryAsync(
   const ctoReview = await buildAiDigitalMeCtoReview(
     {
       userGoal: input.userGoal || '',
+      ...(input.originalTaskGoal ? { originalTaskGoal: input.originalTaskGoal } : {}),
+      ...(input.revisionRequest ? { revisionRequest: input.revisionRequest } : {}),
+      ...(input.currentRoundAuthority ? { currentRoundAuthority: input.currentRoundAuthority } : {}),
       ...(input.understandingBrief ? { understandingBrief: input.understandingBrief } : {}),
       ...(input.understandingKeyFiles ? { understandingKeyFiles: input.understandingKeyFiles } : {}),
       ...(input.planSteps ? { planSteps: input.planSteps } : {}),
