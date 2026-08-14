@@ -547,8 +547,9 @@ export class DigitalMeRuntime {
         model: config.model,
         messages,
         temperature: 0.2,
-        maxTokens: 1024,
-        timeoutMs: config.timeoutMs ?? 60_000,
+        // 材料感知规划需要完整 planUpdate JSON；1024 易截断导致首轮规划失败。
+        maxTokens: 4096,
+        timeoutMs: config.timeoutMs ?? 120_000,
         responseFormat: { type: 'json_object' },
       });
       return { text: result.text };

@@ -40,6 +40,7 @@ export const RECURSIVE_TEXT_EXTENSIONS = new Set([
   '.xml',
   '.html',
   '.htm',
+  '.csv',
   '.css',
   '.scss',
   '.less',

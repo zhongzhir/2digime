@@ -283,7 +283,9 @@ describe('2DIGIME-AI-NATIVE-THIN-RUNTIME-26', () => {
       path.join(repoRoot, 'src/work-runtime/work-converse.ts'),
       'utf8',
     );
-    assert.match(app, /fromPlanConfirm: thin === true/);
+    assert.match(app, /fromPlanConfirm:\s*true/);
+    // 确认后按 executionIntent 选择能力；thin 仅作兜底，不再单独决定 fromPlanConfirm。
+    assert.match(app, /executionIntentKind|executionRequestedArtifactType/);
     assert.match(app, /silentOutcomeExplain: true/);
     assert.match(app, /请决定是否采用这份成果/);
     assert.match(app, /artifactExportsMore\.hidden = !hasArtifact/);

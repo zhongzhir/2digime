@@ -9,6 +9,11 @@ import {
 import {
   classifyOwnerRevisionRoute,
 } from './work-revision-routing';
+import {
+  buildConverseMaterialBrief,
+  resolveConfirmedPlanExecutionIntent,
+} from './converse-material-brief';
+import type { TaskIntentKind } from './work-intent';
 
 /** 对话轮/意图结论局部 id（不属于 shared/ids 的对象前缀集）。 */
 function converseId(prefix: 'turn' | 'intent'): string {
@@ -113,6 +118,8 @@ export interface ConverseModelContext {
   /** 近期对话窗口（已按 CONVERSE_CONTEXT_TURN_WINDOW 截取）。 */
   recentTurns: Array<{ role: 'user' | 'digital_me'; content: string }>;
   userText: string;
+  /** 已授权材料事实（确认前理解/规划用；可空）。 */
+  materialBrief?: string;
 }
 
 /** 由持久对话即时推导模型输入窗口；不产生第二事实源。 */
@@ -126,7 +133,12 @@ export function recentTurnsWindow(
 const CONVERSE_SYSTEM_PROMPT = [
   '你是用户的 Digital Me，以技术负责人的身份与用户讨论一项正在进行的任务。',
   '用户不懂技术，你要用平实的中文与其对话；不要输出任何内部术语、分析提纲或推理过程。',
-  '根据下面提供的任务上下文与用户最新输入，判断用户意图并生成回复。',
+  '根据下面提供的任务上下文、已授权材料事实与用户最新输入，判断用户意图并生成回复。',
+  '材料规则（必须遵守）：',
+  '- 若上下文含「已授权材料」且有清单或摘录：你已经获得这些本地材料事实；必须基于材料理解与规划；禁止声称“无法访问/无法读取本地文件夹”，禁止要求用户把全文粘贴进对话。',
+  '- 若某文件标注未读取：只说明该文件的具体阻断原因与可行动办法，不得把整次授权说成系统不能读文件夹。',
+  '- 读取已授权材料属于理解与规划，不需要用户再次确认执行。',
+  '- 对「先出方案、批准后再实施」：确认前只更新开发规划，不要假装已经改了项目文件。',
   '输出合同：必须给出一个合法 JSON 对象。可以在前后有简短说明，或使用 Markdown 代码围栏，但其中必须含有完整 JSON。',
   'JSON 字段如下（schema）：',
   '{"intent":"<必须是以下之一: discuss_or_question | add_goal_info | modify_plan | confirm_start | artifact_feedback | request_explanation | query_status | pause_or_cancel | final_adopt | other>",',
@@ -151,6 +163,7 @@ const CONVERSE_SYSTEM_PROMPT = [
   '- 说明你对这句话的理解和判断；',
   '- 若用户在问当前结果：必须明确回答能不能用、是否达到目标、还需不需要改、真正需要用户知道的风险、建议下一步；',
   '- 不要假装已经完成了任何修改或执行；执行需要用户确认后才会开始。',
+  '- 规划正文由你直接给出（planUpdate），不要声称要交给外部写代码工具来替你写规划。',
 ].join('\n');
 
 const CONVERSE_REPAIR_USER =
@@ -198,6 +211,9 @@ export function buildConverseMessages(ctx: ConverseModelContext): ChatMessage[] 
     lines.push(ctx.plan.content);
   } else {
     lines.push('当前规划：尚未建立');
+  }
+  if (ctx.materialBrief && ctx.materialBrief.trim()) {
+    lines.push(ctx.materialBrief.trim());
   }
   if (ctx.recentTurns.length) {
     lines.push('【近期对话】');
@@ -528,6 +544,9 @@ export interface WorkConverseResult {
   runtimePath?: 'legacy' | 'thin_v1';
   startAuthorized: boolean;
   startMode?: 'new_execution' | 'revision';
+  /** 确认开始后建议的执行意图（由确认方案判定；Renderer/submitTask 复用）。 */
+  executionIntentKind?: TaskIntentKind;
+  executionRequestedArtifactType?: string;
   adoptRequested: boolean;
   pauseRequested: boolean;
 }
@@ -576,12 +595,17 @@ export async function runWorkConverse(
     }
   }
   if (deps.chat && !forceUnparseable) {
+    const materialBrief = await buildConverseMaterialBrief({
+      contextRefs: task.contextRefs || [],
+      goal: task.goal,
+    });
     const messages = buildConverseMessages({
       goal: task.goal,
       facts,
       ...(existingPlan && isUserVisiblePlan(existingPlan) ? { plan: existingPlan } : {}),
       recentTurns: recentTurnsWindow(existingTurns),
       userText: text,
+      ...(materialBrief.promptBlock ? { materialBrief: materialBrief.promptBlock } : {}),
     });
     try {
       const result = await deps.chat({ messages });
@@ -800,6 +824,24 @@ export async function runWorkConverse(
     }
   }
 
+  let executionIntentKind: TaskIntentKind | undefined;
+  let executionRequestedArtifactType: string | undefined;
+  if (decision.startAuthorized && decision.startMode !== 'revision') {
+    const planText =
+      (decision.confirmPlan
+        ? existingPlan && isUserVisiblePlan(existingPlan)
+          ? existingPlan.content
+          : planOut?.content
+        : planOut?.content || existingPlan?.content) || '';
+    const resolved = resolveConfirmedPlanExecutionIntent({
+      goal: task.goal,
+      planContent: planText,
+      contextRefs: task.contextRefs || [],
+    });
+    executionIntentKind = resolved.intentKind;
+    executionRequestedArtifactType = resolved.expectedOutputFamily;
+  }
+
   return {
     taskId: task.id,
     createdTask,
@@ -814,6 +856,10 @@ export async function runWorkConverse(
     ...(thin ? { runtimePath: 'thin_v1' as const } : {}),
     startAuthorized: decision.startAuthorized,
     ...(decision.startMode ? { startMode: decision.startMode } : {}),
+    ...(executionIntentKind ? { executionIntentKind } : {}),
+    ...(executionRequestedArtifactType
+      ? { executionRequestedArtifactType }
+      : {}),
     adoptRequested: decision.adoptRequested,
     pauseRequested: decision.pauseRequested,
   };

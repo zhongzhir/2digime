@@ -13,7 +13,40 @@ import { readZipEntries } from './zip';
  */
 export const MAX_EXTRACT_CHARS = 200_000;
 
-export const SUPPORTED_EXTENSIONS = ['.txt', '.md', '.markdown', '.docx', '.pdf', '.pptx'] as const;
+export const SUPPORTED_EXTENSIONS = [
+  '.txt',
+  '.md',
+  '.markdown',
+  '.docx',
+  '.pdf',
+  '.pptx',
+  '.html',
+  '.htm',
+  '.csv',
+] as const;
+
+/** 目录遍历时跳过的依赖/构建/版本控制等目录（不进入材料清单）。 */
+export const SKIP_DIR_NAMES = new Set([
+  'node_modules',
+  '.git',
+  '.svn',
+  '.hg',
+  'dist',
+  'build',
+  'out',
+  '.next',
+  '.nuxt',
+  '.turbo',
+  '.cache',
+  'coverage',
+  'vendor',
+  '__pycache__',
+  '.venv',
+  'venv',
+  'target',
+  '.idea',
+  '.vscode',
+]);
 
 export interface ExtractionOutcome {
   sourcePath: string;
@@ -36,7 +69,12 @@ export async function extractFile(filePath: string): Promise<ExtractionOutcome> 
       case '.txt':
       case '.md':
       case '.markdown':
+      case '.csv':
         rawText = await fs.readFile(filePath, 'utf8');
+        break;
+      case '.html':
+      case '.htm':
+        rawText = htmlToReadableText(await fs.readFile(filePath, 'utf8'));
         break;
       case '.docx':
         rawText = extractDocxText(await fs.readFile(filePath));
@@ -84,6 +122,10 @@ async function walk(dir: string, outcomes: ExtractionOutcome[]): Promise<void> {
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
+      if (SKIP_DIR_NAMES.has(entry.name.toLowerCase()) || entry.name.startsWith('.')) {
+        // 隐藏目录与依赖/构建目录不展开；不写入逐文件噪音 warning
+        continue;
+      }
       await walk(fullPath, outcomes);
     } else if (entry.isFile()) {
       const ext = path.extname(entry.name).toLowerCase();
@@ -117,6 +159,25 @@ function finalizeText(sourcePath: string, rawText: string): ExtractionOutcome {
 
 function warningOutcome(sourcePath: string, warning: string): ExtractionOutcome {
   return { sourcePath, status: 'warning', warning };
+}
+
+/** 常见 HTML 安全可读化：去脚本/样式后保留可见文本，不做完整 DOM 解析。 */
+function htmlToReadableText(html: string): string {
+  return html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<\/(p|div|h[1-6]|li|tr|br|section|article)>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
 }
 
 function extractDocxText(fileBytes: Buffer): string {

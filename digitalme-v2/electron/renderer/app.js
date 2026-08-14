@@ -3402,10 +3402,14 @@
         return;
       }
       const thin = isThinRuntimeActive() || res.runtimePath === "thin_v1";
+      const execKind = String(res.executionIntentKind || "").trim();
+      const execFamily = String(res.executionRequestedArtifactType || "").trim();
       await startConversationTaskExecution(res.taskId, {
-        fromPlanConfirm: thin === true,
-        intentKind: thin ? "modify_code" : undefined,
-        requestedArtifactType: thin ? "code-change" : undefined,
+        fromPlanConfirm: true,
+        intentKind: execKind || (thin ? "modify_code" : undefined),
+        requestedArtifactType:
+          execFamily ||
+          (execKind === "modify_code" || thin ? "code-change" : undefined),
       });
     }
     if (els.jobStatus && els.jobStatus.textContent === "正在思考…") els.jobStatus.textContent = "";
@@ -3436,10 +3440,17 @@
         path: m.path,
         ...(m.projectOrigin ? { projectOrigin: m.projectOrigin } : {}),
       }));
-      const thin = isThinRuntimeActive() || options.intentKind === "modify_code";
-      if (thin && !contextRefs.some((r) => r.kind === "folder")) {
-        const taskRefs =
+      if (!contextRefs.some((r) => r.kind === "folder" || r.kind === "file")) {
+        let taskRefs =
           lastJobDetailForUx && lastJobDetailForUx.task && lastJobDetailForUx.task.contextRefs;
+        if (!Array.isArray(taskRefs) || !taskRefs.length) {
+          try {
+            const detail = await api.invoke("work.getTask", { taskId });
+            taskRefs = detail && detail.task && detail.task.contextRefs;
+          } catch {
+            taskRefs = null;
+          }
+        }
         if (Array.isArray(taskRefs)) {
           contextRefs = taskRefs
             .filter((r) => r && (r.kind === "file" || r.kind === "folder") && r.path)
@@ -3450,6 +3461,10 @@
             }));
         }
       }
+      const thin =
+        isThinRuntimeActive() ||
+        options.intentKind === "modify_code" ||
+        options.requestedArtifactType === "code-change";
       const payload = {
         goal,
         contextRefs,
