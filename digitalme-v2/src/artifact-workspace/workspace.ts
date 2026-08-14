@@ -19,6 +19,18 @@ import type { GrowthEvent } from '../subject-core/growth-event';
 import type { SubjectService } from '../subject-core/subject-service';
 import type { ChatMessage } from '../infrastructure/model-http';
 import { deriveJobEffectiveGoal } from '../execution/effective-goal';
+import {
+  ACCEPTANCE_REVIEW_FAILED_MESSAGE,
+  resolveCurrentAcceptance,
+} from '../work-runtime/artifact-acceptance';
+import type { ArtifactAcceptance } from '../work-runtime/artifact';
+import type { OwnerAcceptanceSummary } from '../execution/acceptance-summary';
+
+export type GetContentOptions = {
+  expectedTaskId?: string;
+  /** 跳过补跑评价，避免评价路径与 getContent 递归。 */
+  skipEnsure?: boolean;
+};
 
 function excerptsFromUnifiedDiff(
   diff: string,
@@ -53,6 +65,11 @@ export interface ArtifactWorkspaceOptions {
   resolveTaskTopics?: (taskId: string) => Promise<string[]>;
   /** D11-C 独立 CTO 验收模型通道；缺省时明确返回无法独立验收。 */
   ctoReviewChat?: (input: { messages: ChatMessage[] }) => Promise<{ text: string }>;
+  /**
+   * 当前 head 尚无通用 CTO 结论时补跑评价（Job 成功钩为主路径）。
+   * getContent 不得作为新评价的阻塞入口。
+   */
+  ensureAcceptance?: (artifactId: string) => Promise<void>;
 }
 
 /**
@@ -67,6 +84,7 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
   private readonly eventBus: InMemoryEventBus;
   private readonly resolveTaskTopics?: (taskId: string) => Promise<string[]>;
   private readonly ctoReviewChat?: (input: { messages: ChatMessage[] }) => Promise<{ text: string }>;
+  private readonly ensureAcceptance?: (artifactId: string) => Promise<void>;
   /** 同一成果版本+核对摘要只跑一次 AI CTO，避免每次 getContent 重放。 */
   private readonly ctoSummaryCache = new Map<string, unknown>();
 
@@ -77,12 +95,14 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
     this.eventBus = options.eventBus;
     if (options.resolveTaskTopics) this.resolveTaskTopics = options.resolveTaskTopics;
     if (options.ctoReviewChat) this.ctoReviewChat = options.ctoReviewChat;
+    if (options.ensureAcceptance) this.ensureAcceptance = options.ensureAcceptance;
   }
 
   async getContent(
     artifactId: string,
     versionId?: string,
     expectedTaskId?: string,
+    opts?: GetContentOptions,
   ): Promise<{
     artifact: Artifact;
     content: ArtifactContent;
@@ -100,9 +120,13 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
         quality?: { grade: string; reasons: string[] };
       };
     };
+    acceptanceSummary?: OwnerAcceptanceSummary;
+    acceptanceStatus?: 'ready' | 'failed' | 'pending';
+    acceptanceFailureMessage?: string;
   }> {
+    const expected = opts?.expectedTaskId ?? expectedTaskId;
     const artifact = await this.requireArtifact(artifactId);
-    if (expectedTaskId && artifact.taskId !== expectedTaskId) {
+    if (expected && artifact.taskId !== expected) {
       throw new Error('这项成果不属于当前任务');
     }
     const version = versionId
@@ -125,6 +149,9 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
           quality?: { grade: string; reasons: string[] };
         };
       };
+      acceptanceSummary?: OwnerAcceptanceSummary;
+      acceptanceStatus?: 'ready' | 'failed' | 'pending';
+      acceptanceFailureMessage?: string;
     } = {
       artifact,
       content: version.content,
@@ -271,9 +298,6 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
           if (parsed.artifactType === 'code-change' || parsed.workingDirectory) {
             const { userFacingVerification } = await import(
               '../execution/external-executor-contract'
-            );
-            const { buildOwnerAcceptanceSummaryAsync } = await import(
-              '../execution/acceptance-summary'
             );
             const { computeScopeDigest } = await import('../execution/baseline');
             let directoryChangedSinceResult = false;
@@ -629,112 +653,17 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
                 `${createHash('sha256').update(ctoCacheKey).digest('hex').slice(0, 24)}.json`,
               );
               let acceptanceSummary = this.ctoSummaryCache.get(ctoCacheKey) as
-                | Awaited<ReturnType<typeof buildOwnerAcceptanceSummaryAsync>>
+                | OwnerAcceptanceSummary
                 | undefined;
               if (!acceptanceSummary) {
                 try {
                   const raw = await fs.readFile(ctoCacheFile, 'utf8');
-                  acceptanceSummary = JSON.parse(raw) as Awaited<
-                    ReturnType<typeof buildOwnerAcceptanceSummaryAsync>
-                  >;
+                  acceptanceSummary = JSON.parse(raw) as OwnerAcceptanceSummary;
                 } catch {
                   acceptanceSummary = undefined;
                 }
               }
-              if (!acceptanceSummary) {
-                acceptanceSummary = await buildOwnerAcceptanceSummaryAsync({
-                verification: {
-                  overall: parsed.verificationOverall as
-                    | 'satisfied'
-                    | 'partially_satisfied'
-                    | 'unsatisfied'
-                    | 'unverifiable',
-                  checks,
-                  digitalMeVerified: !!parsed.digitalMeVerified,
-                  agentClaimedSuccess: !!parsed.agentClaimedSuccess,
-                },
-                changedFileCount,
-                directoryChangedSinceResult,
-                unresolvedItems: dropStaleLocateItems(unresolvedItems),
-                ...(summaryEntry?.text ? { summaryExcerpt: summaryEntry.text } : {}),
-                evidence: {
-                  changedFiles: parsed.changedFiles || changes.map((c) => c.path),
-                  changes,
-                  ...(diffEntry?.text ? { unifiedDiff: diffEntry.text } : {}),
-                  ...(outOfScopeFromBundle.length
-                    ? { outOfScopeChanges: outOfScopeFromBundle }
-                    : Array.isArray(parsed.outOfScopeChanges)
-                      ? { outOfScopeChanges: parsed.outOfScopeChanges as string[] }
-                      : {}),
-                },
-                ...(effectiveGoal.acceptanceTarget
-                  ? { userGoal: effectiveGoal.acceptanceTarget }
-                  : understanding?.goal
-                    ? { userGoal: understanding.goal }
-                    : {}),
-                ...(effectiveGoal.originalTaskGoal
-                  ? { originalTaskGoal: effectiveGoal.originalTaskGoal }
-                  : {}),
-                ...(effectiveGoal.revisionRequest
-                  ? { revisionRequest: effectiveGoal.revisionRequest }
-                  : {}),
-                currentRoundAuthority: effectiveGoal.currentRoundAuthority,
-                ...(understanding?.keyFiles?.length || effectiveGoal.background
-                  ? {
-                      ...(understanding?.keyFiles?.length
-                        ? {
-                            understandingKeyFiles: understanding.keyFiles.map((k) => k.path),
-                          }
-                        : {}),
-                      understandingBrief: [
-                        effectiveGoal.background,
-                        ...(understanding?.keyFiles?.length
-                          ? [
-                              understanding.keyFiles
-                                .map((k) => {
-                                  const reason = String(k.reason || '');
-                                  if (/无需修改|当前代码已满足目标/.test(reason)) return k.path;
-                                  return reason ? `${k.path}：${reason}` : k.path;
-                                })
-                                .join('；'),
-                            ]
-                          : []),
-                      ]
-                        .filter(Boolean)
-                        .join('\n'),
-                    }
-                  : {}),
-                ...(understanding?.planSteps?.length
-                  ? { planSteps: understanding.planSteps }
-                  : {}),
-                artifactVersionId: version.versionId,
-                jobId: artifact.jobId,
-                ...(testResults.length
-                  ? {
-                      testResults: testResults.map((t) => ({
-                        command: t.command,
-                        passed: t.passed,
-                        ...(t.summary ? { summary: t.summary } : {}),
-                      })),
-                    }
-                  : {}),
-                ...(diffEntry?.text
-                  ? {
-                      changedFileExcerpts: excerptsFromUnifiedDiff(
-                        diffEntry.text,
-                        parsed.changedFiles || changes.map((c) => c.path),
-                      ),
-                    }
-                  : {}),
-                }, this.ctoReviewChat);
-                this.ctoSummaryCache.set(ctoCacheKey, acceptanceSummary);
-                try {
-                  await fs.mkdir(path.dirname(ctoCacheFile), { recursive: true });
-                  await fs.writeFile(ctoCacheFile, JSON.stringify(acceptanceSummary), 'utf8');
-                } catch {
-                  /* 缓存失败不影响验收 */
-                }
-              } else {
+              if (acceptanceSummary) {
                 this.ctoSummaryCache.set(ctoCacheKey, acceptanceSummary);
                 const diagDir = String(process.env.DIGITALME_20A_EVIDENCE || '').trim();
                 if (diagDir) {
@@ -754,7 +683,10 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
                   }
                 }
               }
-              codeChange.acceptanceSummary = acceptanceSummary;
+              // 历史只读：通用位置缺失时才把旧缓存挂到 codeChange，新结论不双写。
+              if (acceptanceSummary && !artifact.acceptance) {
+                codeChange.acceptanceSummary = acceptanceSummary;
+              }
               codeChange.checks = checks;
               const startup = checks.find((c) => c.id === 'run_startup_check');
               if (codeChange.runInfo) {
@@ -798,7 +730,71 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
         (result as { codeChange?: typeof codeChange }).codeChange = codeChange;
       }
     }
+    this.applyResolvedAcceptance(
+      result,
+      artifact,
+      version.versionId,
+      (result as { codeChange?: { acceptanceSummary?: OwnerAcceptanceSummary } }).codeChange,
+    );
+    if (!opts?.skipEnsure) {
+      const resolved = resolveCurrentAcceptance(
+        artifact,
+        version.versionId,
+        (result as { codeChange?: { acceptanceSummary?: OwnerAcceptanceSummary } }).codeChange
+          ?.acceptanceSummary,
+      );
+      if (!resolved) {
+        void this.ensureAcceptance?.(artifactId);
+      }
+    }
     return result;
+  }
+
+  async persistAcceptance(artifactId: string, fact: ArtifactAcceptance | null): Promise<Artifact> {
+    const artifact = await this.requireArtifact(artifactId);
+    if (fact && fact.artifactVersionId !== artifact.headVersionId) {
+      return artifact;
+    }
+    const next: Artifact = { ...artifact };
+    if (fact) next.acceptance = fact;
+    else delete next.acceptance;
+    await this.artifactStore.put(next);
+    this.eventBus.publish({
+      kind: 'artifact.updated',
+      artifactId: artifact.id,
+      taskId: artifact.taskId,
+      headVersionId: artifact.headVersionId,
+    });
+    return next;
+  }
+
+  private applyResolvedAcceptance(
+    result: {
+      acceptanceSummary?: OwnerAcceptanceSummary;
+      acceptanceStatus?: 'ready' | 'failed' | 'pending';
+      acceptanceFailureMessage?: string;
+    },
+    artifact: Artifact,
+    headVersionId: string,
+    codeChange?: { acceptanceSummary?: OwnerAcceptanceSummary },
+  ): void {
+    const resolved = resolveCurrentAcceptance(
+      artifact,
+      headVersionId,
+      codeChange?.acceptanceSummary,
+    );
+    if (!resolved) return;
+    result.acceptanceStatus = resolved.status;
+    if (resolved.status === 'ready' && resolved.summary) {
+      result.acceptanceSummary = resolved.summary;
+      if (resolved.source === 'artifact' && codeChange) {
+        delete codeChange.acceptanceSummary;
+      }
+    } else if (resolved.status === 'failed') {
+      result.acceptanceFailureMessage =
+        resolved.failureMessage || ACCEPTANCE_REVIEW_FAILED_MESSAGE;
+      if (codeChange) delete codeChange.acceptanceSummary;
+    }
   }
 
   async saveEdit(artifactId: string, text: string): Promise<{ version: ArtifactVersion }> {

@@ -89,10 +89,19 @@ export interface AvailabilityCheckResult {
 }
 
 export interface CapabilityInput {
+  /** 原始任务目标（Task.goal）；不是本轮执行方案。 */
   goal: string;
   snapshot: ContextSnapshot;
   subjectContext: ConfirmedExperienceView;
   artifactType: string;
+  /**
+   * 本轮已确认规划（Task.meta.plan 在执行时的只读投影）。
+   * 非持久核心对象；不得写入 Job 作为第二份规划正文。
+   */
+  confirmedPlan?: {
+    version: number;
+    content: string;
+  };
   /**
    * 修改成果时由 Runner 注入:当前 head 文本与用户修改要求。
    * 非持久核心对象;仅一次执行输入。
@@ -126,6 +135,23 @@ export interface CapabilityInput {
     /** Digital Me 自建项目等来源标记（非第二 Store）。 */
     projectOrigin?: 'digitalme_created' | 'user_selected' | 'unknown';
   };
+}
+
+/**
+ * 能力/执行器实际消费的任务说明：原始目标 + 已确认规划（若有）。
+ * Task.goal 保持原样；本函数只用于组装执行载荷。
+ */
+export function formatCapabilityTaskAndPlan(input: CapabilityInput): string {
+  const goal = String(input.goal || '').trim();
+  const planContent = String(input.confirmedPlan?.content || '').trim();
+  if (!planContent) return goal;
+  const version = input.confirmedPlan?.version;
+  const versionLabel = version != null ? `第 ${version} 版` : '当前版';
+  return [
+    `原始目标：${goal}`,
+    `本轮执行方案（已确认规划${versionLabel}；必须按此方案执行，不得只按原始目标自行改写）：`,
+    planContent,
+  ].join('\n\n');
 }
 
 export interface ExecutionContext {
@@ -186,6 +212,23 @@ export interface CapabilityOutput {
     payload: CapabilityArtifactPayload;
   };
   costActual?: { tokens?: number };
+  /**
+   * 本轮实际读入执行/提示的材料（执行证据，非状态机）。
+   * 由 Adapter 填写；Job 原样保存供验收区分「获得」与「已使用」。
+   */
+  materialUse?: {
+    usedPaths: string[];
+    includedCount: number;
+    truncatedCount?: number;
+    fullReadCount?: number;
+    skippedWarningCount?: number;
+    items?: Array<{
+      path: string;
+      completeness: 'full' | 'truncated' | 'unread';
+      sourceChars: number;
+      usedChars: number;
+    }>;
+  };
   /** 候选成果元数据;验证前不得当作已提交 Artifact。 */
   candidateMeta?: {
     provenance?: string;

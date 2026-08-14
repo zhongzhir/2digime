@@ -5,11 +5,12 @@
  */
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
-import type {
-  CapabilityAdapter,
-  CapabilityInput,
-  CapabilityOutput,
-  ExecutionContext,
+import {
+  formatCapabilityTaskAndPlan,
+  type CapabilityAdapter,
+  type CapabilityInput,
+  type CapabilityOutput,
+  type ExecutionContext,
 } from '../adapter';
 import type { CapabilityRegistration } from '../registration';
 import { asLocalCapabilityAdapter } from '../local-adapter-lifecycle';
@@ -129,7 +130,7 @@ export function createDeterministicCodeAnalysisAdapter(): CapabilityAdapter {
 
       const evidence = buildEvidence({ fileViews, languages, configs, scripts });
       const report = buildReport({
-        goal: input.goal,
+        goal: formatCapabilityTaskAndPlan(input),
         fileViews,
         languages,
         configs,
@@ -403,7 +404,7 @@ function buildReport(input: {
     '> 本报告为基于冻结材料的确定性结构扫描，不是完整架构审查或代码质量结论。',
   );
   lines.push('');
-  lines.push(`任务目标：${scrubText(input.goal).slice(0, 200)}`);
+  lines.push(`任务目标：${scrubText(input.goal).slice(0, 2000)}`);
   lines.push('');
   lines.push('## 概览');
   lines.push('');

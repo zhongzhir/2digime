@@ -202,6 +202,76 @@ test('多材料按目标相关度排序，且不得整篇当答案', async () =>
   assert.ok(aivPos < waicPos, 'Aivestor 相关材料应排在无关长文之前');
 });
 
+test('材料完整性:合计未超总预算时续读剩余段，全部完整读取', async () => {
+  const architecture = '架构说明。'.repeat(900); // > 3500，旧单篇上限会截断
+  const execution = '执行步骤。'.repeat(250);
+  const readme = '项目说明。';
+  assert.ok(architecture.length > 3500);
+  assert.ok(architecture.length + execution.length + readme.length < PROMPT_MATERIAL_BUDGET_CHARS);
+  const snapshot = {
+    id: 'snap_full',
+    taskId: 'task_full',
+    createdAt: 't',
+    items: [
+      { sourcePath: '/proj/README.txt', status: 'ok' as const, extractedTextRef: 'text/readme' },
+      { sourcePath: '/proj/architecture.md', status: 'ok' as const, extractedTextRef: 'text/arch' },
+      { sourcePath: '/proj/execution.md', status: 'ok' as const, extractedTextRef: 'text/exec' },
+    ],
+  };
+  const assembled = await assembleDocumentPrompt(
+    baseInput({
+      goal: '形成一份架构评估报告，说明当前架构、主要问题和建议的下一步。',
+      snapshot: snapshot as never,
+    }),
+    async (ref) =>
+      ref === 'text/arch' ? architecture : ref === 'text/exec' ? execution : readme,
+  );
+  assert.equal(assembled.materialCount, 3);
+  assert.equal(assembled.fullReadCount, 3);
+  assert.equal(assembled.truncatedCount, 0);
+  const byPath = new Map(assembled.items.map((it) => [it.sourcePath.replace(/\\/g, '/'), it]));
+  assert.equal(byPath.get('/proj/architecture.md')?.completeness, 'full');
+  assert.equal(byPath.get('/proj/architecture.md')?.usedChars, architecture.length);
+  assert.equal(byPath.get('/proj/architecture.md')?.sourceChars, architecture.length);
+  assert.equal(byPath.get('/proj/execution.md')?.completeness, 'full');
+  assert.equal(byPath.get('/proj/README.txt')?.completeness, 'full');
+  const user = assembled.messages[1]?.content as string;
+  assert.match(user, /材料完整性/);
+  assert.match(user, /完整读取/);
+  assert.match(user, /续读第2段|architecture\.md：完整读取/);
+});
+
+test('材料完整性:超过总预算时标记部分读取，不得把纳入条数当成完整阅读', async () => {
+  const huge = '字'.repeat(PROMPT_MATERIAL_BUDGET_CHARS + 4000);
+  const snapshot = {
+    id: 'snap_trunc',
+    taskId: 'task_trunc',
+    createdAt: 't',
+    items: [
+      { sourcePath: '/proj/short.txt', status: 'ok' as const, extractedTextRef: 'text/short' },
+      { sourcePath: '/proj/huge.md', status: 'ok' as const, extractedTextRef: 'text/huge' },
+    ],
+  };
+  const assembled = await assembleDocumentPrompt(
+    baseInput({
+      goal: '写一份简报',
+      snapshot: snapshot as never,
+    }),
+    async (ref) => (ref === 'text/huge' ? huge : '短材料'),
+  );
+  assert.equal(assembled.materialCount, 2);
+  assert.ok(assembled.truncatedCount >= 1);
+  const hugeItem = assembled.items.find((it) => it.sourcePath.includes('huge.md'));
+  assert.ok(hugeItem);
+  assert.equal(hugeItem.completeness, 'truncated');
+  assert.ok(hugeItem.sourceChars > hugeItem.usedChars);
+  assert.ok(hugeItem.usedChars > 0);
+  assert.ok(assembled.fullReadCount < assembled.materialCount);
+  const user = assembled.messages[1]?.content as string;
+  assert.match(user, /部分读取/);
+  assert.match(user, /纳入提示的材料条数不是完整阅读数/);
+});
+
 async function withMockServer(
   handler: (req: http.IncomingMessage, res: http.ServerResponse) => void,
   run: (baseUrl: string) => Promise<void>,

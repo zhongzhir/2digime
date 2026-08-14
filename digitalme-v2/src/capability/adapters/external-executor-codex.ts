@@ -13,6 +13,7 @@ import type {
   CapabilityOutput,
   ExecutionContext,
 } from '../adapter';
+import { formatCapabilityTaskAndPlan } from '../adapter';
 import type { CapabilityRegistration } from '../registration';
 import { newId, nowIso } from '../../shared/ids';
 import { buildMinimalExecutorEnv, resolveNodeExecutable } from '../../execution/minimal-env';
@@ -354,7 +355,7 @@ async function runExternalExecutorCodex(
   let pkg = buildExecutorTaskPackage({
     taskId: String(input.snapshot.taskId || 'task'),
     jobId: ctx.jobId,
-    goal: input.goal,
+    goal: formatCapabilityTaskAndPlan(input),
     workingDirectory,
     readScope: auth.readScope,
     writeScope: auth.writeScope,
@@ -421,7 +422,7 @@ async function runExternalExecutorCodex(
           : {}),
       });
   const understanding = await buildSoftwareTaskUnderstanding({
-    goal: input.goal,
+    goal: formatCapabilityTaskAndPlan(input),
     workingDirectory: pkg.workingDirectory,
     subjectDecisionBriefs: decisionBriefs,
     ...(input.revision?.request ? { revisionRequest: input.revision.request } : {}),

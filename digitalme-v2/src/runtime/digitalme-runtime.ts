@@ -82,6 +82,16 @@ import { extractEditEvidence } from '../subject-core/diff-evidence';
 import { headVersion } from '../work-runtime/artifact';
 import { runWorkConverse, type WorkConverseDeps } from '../work-runtime/work-converse';
 import { maybeRunControlledRevisionAfterJob } from '../work-runtime/controlled-revision-runner';
+import {
+  collectGenericCtoEvidence,
+  runGenericArtifactCtoReview,
+} from '../execution/generic-cto-review';
+import {
+  ACCEPTANCE_REVIEW_FAILED_MESSAGE,
+  asArtifactAcceptance,
+  resolveCurrentAcceptance,
+} from '../work-runtime/artifact-acceptance';
+import type { OwnerAcceptanceSummary } from '../execution/acceptance-summary';
 import { chatComplete, ModelHttpError, type ChatMessage } from '../infrastructure/model-http';
 import { AI_CTO_JSON_SCHEMA } from '../execution/ai-cto-review';
 import { providerCredentialKey } from '../infrastructure/secret-store';
@@ -170,6 +180,10 @@ export class DigitalMeRuntime {
   private readonly registry: CapabilityRegistry;
   private readonly options: DigitalMeRuntimeOptions;
   private unsubGrowthJobHook: (() => void) | null = null;
+  private readonly acceptanceLocks = new Map<string, Promise<void>>();
+  /** 进程内生命周期，不落盘。关闭时取消尚未完成的通用 CTO 评价。 */
+  private ctoReviewAbort = new AbortController();
+  private readonly ctoReviewInflight = new Set<Promise<void>>();
 
   constructor(options: DigitalMeRuntimeOptions = {}) {
     this.options = options;
@@ -480,6 +494,12 @@ export class DigitalMeRuntime {
           try {
             const content = (await this.getContent({ artifactId: artId })) as {
               ownerDecision?: { status: 'undecided' | 'accepted' | 'rejected' };
+              acceptanceSummary?: {
+                canAdoptSuggested?: boolean;
+                ctoReport?: string;
+                headline?: string;
+              };
+              acceptanceStatus?: 'ready' | 'failed' | 'pending';
               codeChange?: {
                 acceptanceSummary?: {
                   canAdoptSuggested?: boolean;
@@ -490,7 +510,7 @@ export class DigitalMeRuntime {
             };
             const decision = content.ownerDecision?.status;
             if (decision) facts.ownerDecision = decision;
-            const acc = content.codeChange?.acceptanceSummary;
+            const acc = content.acceptanceSummary || content.codeChange?.acceptanceSummary;
             if (acc && typeof acc.canAdoptSuggested === 'boolean') {
               facts.canAdoptSuggested = acc.canAdoptSuggested;
             }
@@ -618,6 +638,10 @@ export class DigitalMeRuntime {
       input.versionId,
       input.expectedTaskId,
     );
+  }
+
+  async retryArtifactAcceptance(artifactId: string): Promise<void> {
+    await this.trackCtoReview(() => this.reviewArtifactAcceptance(artifactId, { forceRetry: true }));
   }
 
   /**
@@ -1272,13 +1296,7 @@ export class DigitalMeRuntime {
   }
 
   async stop(): Promise<void> {
-    if (this.unsubGrowthJobHook) {
-      this.unsubGrowthJobHook();
-      this.unsubGrowthJobHook = null;
-    }
-    if (this.work) await this.work.stop();
-    this.work = null;
-    this.workspace = null;
+    await this.detachWorkRuntime();
   }
 
   get workRuntime(): WorkRuntime {
@@ -1294,12 +1312,33 @@ export class DigitalMeRuntime {
     return !!this.work;
   }
 
+  /**
+   * 先停收 Job 成功评价，再取消/排空已启动的 CTO 评价，最后拆除 Work/Workspace。
+   * 可重复调用。取消时不写伪造的验收失败。
+   */
+  private async detachWorkRuntime(): Promise<void> {
+    if (this.unsubGrowthJobHook) {
+      this.unsubGrowthJobHook();
+      this.unsubGrowthJobHook = null;
+    }
+    if (!this.ctoReviewAbort.signal.aborted) {
+      this.ctoReviewAbort.abort();
+    }
+    while (this.ctoReviewInflight.size > 0) {
+      await Promise.allSettled([...this.ctoReviewInflight]);
+    }
+    if (this.work) await this.work.stop();
+    this.work = null;
+    this.workspace = null;
+  }
+
   private async attachWorkRuntime(): Promise<void> {
     const pkg = this.subject.requireActive();
     const root = path.join(pkg.rootDir, 'runtime');
     await fs.mkdir(root, { recursive: true });
 
-    if (this.work) await this.work.stop();
+    await this.detachWorkRuntime();
+    this.ctoReviewAbort = new AbortController();
 
     const taskStore = new JsonObjectStore<Task>({ dir: path.join(root, 'tasks') });
     const jobStoreRaw = new JsonObjectStore<ExecutionJob>({ dir: path.join(root, 'jobs') });
@@ -1424,14 +1463,18 @@ export class DigitalMeRuntime {
         return tokenizeTopics(`${task.goal} ${task.requestedArtifactType}`);
       },
       ...(ctoReviewChat ? { ctoReviewChat } : {}),
+      ensureAcceptance: (artifactId) =>
+        this.trackCtoReview(() => this.reviewArtifactAcceptance(artifactId)),
     });
 
     // 修订 Job 成功后记录修改要求来源（不阻塞主链）；D11-D 受控修订在此之后调度
     if (this.unsubGrowthJobHook) this.unsubGrowthJobHook();
     this.unsubGrowthJobHook = this.eventBus.subscribe((event) => {
       if (event.kind !== 'job.updated') return;
+      if (this.ctoReviewAbort.signal.aborted) return;
       if (event.status === 'succeeded') {
         void this.onJobSucceededForGrowth(event.jobId);
+        void this.trackCtoReview(() => this.onJobSucceededForCtoReview(event.jobId));
         void this.onJobSucceededForControlledRevision(event.jobId);
       }
     });
@@ -1617,9 +1660,154 @@ export class DigitalMeRuntime {
     });
   }
 
+  private trackCtoReview(run: () => Promise<void>): Promise<void> {
+    let tracked!: Promise<void>;
+    tracked = (async () => {
+      try {
+        if (this.ctoReviewAbort.signal.aborted) return;
+        await run();
+      } finally {
+        this.ctoReviewInflight.delete(tracked);
+      }
+    })();
+    this.ctoReviewInflight.add(tracked);
+    return tracked;
+  }
+
   /**
-   * D11-D：Job 成功并形成验收结论后，在边界内自动启动下一轮修订。
-   * 不阻塞主链；失败不影响已成功 Job。
+   * 成功 Job 且已有 Artifact 时，走同一套通用 AI CTO 评价。
+   * 不依赖 codeChange；代码证据只是可选增强。
+   */
+  private async onJobSucceededForCtoReview(jobId: string): Promise<void> {
+    if (this.ctoReviewAbort.signal.aborted) return;
+    const work = this.work;
+    const workspace = this.workspace;
+    if (!work || !workspace) return;
+    const job = await work.getJob(jobId);
+    if (this.ctoReviewAbort.signal.aborted) return;
+    if (!job || job.status !== 'succeeded') return;
+    const artifactId = job.artifactId || job.targetArtifactId;
+    if (!artifactId) return;
+    await this.reviewArtifactAcceptance(artifactId);
+  }
+
+  private async reviewArtifactAcceptance(
+    artifactId: string,
+    opts?: { forceRetry?: boolean },
+  ): Promise<void> {
+    const existing = this.acceptanceLocks.get(artifactId);
+    if (existing && !opts?.forceRetry) {
+      await existing;
+      return;
+    }
+    const run = this.reviewArtifactAcceptanceUnlocked(artifactId, opts);
+    this.acceptanceLocks.set(artifactId, run);
+    try {
+      await run;
+    } catch {
+      /* 评价过程异常不得变成未处理拒绝 */
+    } finally {
+      if (this.acceptanceLocks.get(artifactId) === run) {
+        this.acceptanceLocks.delete(artifactId);
+      }
+    }
+  }
+
+  private async reviewArtifactAcceptanceUnlocked(
+    artifactId: string,
+    opts?: { forceRetry?: boolean },
+  ): Promise<void> {
+    const signal = this.ctoReviewAbort.signal;
+    if (signal.aborted) return;
+    const work = this.work;
+    const workspace = this.workspace;
+    if (!work || !workspace) return;
+    if (opts?.forceRetry) {
+      await workspace.persistAcceptance(artifactId, null);
+      if (signal.aborted) return;
+    }
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      if (signal.aborted) return;
+      const got = await workspace.getContent(artifactId, undefined, undefined, {
+        skipEnsure: true,
+      });
+      if (signal.aborted) return;
+      const artifact = got.artifact;
+      const head = headVersion(artifact);
+      const boundVersionId = head.versionId;
+      const current = resolveCurrentAcceptance(
+        artifact,
+        boundVersionId,
+        (got as { codeChange?: { acceptanceSummary?: OwnerAcceptanceSummary } }).codeChange
+          ?.acceptanceSummary,
+      );
+      if (current && (current.status === 'ready' || current.status === 'failed')) {
+        return;
+      }
+      const job = await work.getJob(artifact.jobId);
+      if (signal.aborted) return;
+      const task = await work.getTaskRecord(artifact.taskId);
+      if (signal.aborted) return;
+      if (!job || !task) return;
+      const snapshot = job.snapshotId ? await work.getSnapshot(job.snapshotId) : null;
+      if (signal.aborted) return;
+      const codeChange = (got as {
+        codeChange?: Parameters<typeof collectGenericCtoEvidence>[0]['codeChange'];
+      }).codeChange;
+      const evidence = collectGenericCtoEvidence({
+        task,
+        job,
+        artifact,
+        artifactVersionId: boundVersionId,
+        ...(got.text ? { artifactBody: got.text } : {}),
+        ...(codeChange ? { codeChange } : {}),
+        ...(snapshot ? { snapshot } : {}),
+      });
+      const ctoChat = this.buildCtoReviewChat();
+      const reviewPromise = runGenericArtifactCtoReview(evidence, ctoChat);
+      void reviewPromise.catch(() => undefined);
+      const raced = await Promise.race([
+        reviewPromise.then((value) => ({ done: true as const, value })),
+        waitForAbort(signal).then(() => ({ done: false as const })),
+      ]);
+      if (!raced.done || signal.aborted) return;
+      const reviewed = raced.value;
+      const latest = await workspace.getContent(artifactId, undefined, undefined, {
+        skipEnsure: true,
+      });
+      if (signal.aborted) return;
+      if (latest.artifact.headVersionId !== boundVersionId) {
+        continue;
+      }
+      await workspace.persistAcceptance(
+        artifactId,
+        asArtifactAcceptance({
+          artifactVersionId: boundVersionId,
+          jobId: job.id,
+          status: reviewed.status,
+          updatedAt: nowIso(),
+          ...(reviewed.status === 'ready' && reviewed.summary
+            ? { summary: reviewed.summary }
+            : { failureMessage: reviewed.failureMessage || ACCEPTANCE_REVIEW_FAILED_MESSAGE }),
+        }),
+      );
+      if (signal.aborted) return;
+      const after = await workspace.getContent(artifactId, undefined, undefined, {
+        skipEnsure: true,
+      });
+      if (signal.aborted) return;
+      if (
+        after.artifact.headVersionId === boundVersionId &&
+        after.artifact.acceptance?.artifactVersionId === boundVersionId
+      ) {
+        return;
+      }
+    }
+  }
+
+  /**
+   * D11-D：Job 成功并形成验收结论后的受控修订入口。
+   * 产品主链已关闭系统自动修订；缺口由验收结论说明，等待用户明确继续。
    */
   private async onJobSucceededForControlledRevision(jobId: string): Promise<void> {
     if (!this.work || !this.workspace) return;
@@ -1655,13 +1843,16 @@ export class DigitalMeRuntime {
           return { id: latest.jobId };
         },
         getArtifactContent: async (id) => {
-          const content = await this.workspace!.getContent(id);
+          const content = await this.workspace!.getContent(id, undefined, undefined, {
+            skipEnsure: true,
+          });
           const head = headVersion(content.artifact);
           const codeChange = (content as { codeChange?: Record<string, unknown> }).codeChange;
           const acceptanceSummary =
-            codeChange && typeof codeChange === 'object'
+            content.acceptanceSummary ||
+            (codeChange && typeof codeChange === 'object'
               ? (codeChange as { acceptanceSummary?: unknown }).acceptanceSummary
-              : undefined;
+              : undefined);
           const checks =
             codeChange && Array.isArray((codeChange as { checks?: unknown }).checks)
               ? ((codeChange as { checks: Array<{ id?: string; verdict?: string; detail?: string }> })
@@ -1813,6 +2004,13 @@ export class DigitalMeRuntime {
     }
     return this.workspace;
   }
+}
+
+function waitForAbort(signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    signal.addEventListener('abort', () => resolve(), { once: true });
+  });
 }
 
 function tokenizeTopics(text: string): string[] {

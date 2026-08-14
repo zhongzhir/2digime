@@ -35,7 +35,7 @@ export function buildJobAuthorizationProjection(input: {
       goal: input.task.goal,
       allowedMaterialPaths: materialPaths,
       defaults: {
-        allowedFields: [...DEFAULT_ALLOWED_FIELDS, 'subjectContext', 'revision'],
+        allowedFields: [...DEFAULT_ALLOWED_FIELDS, 'subjectContext', 'revision', 'confirmedPlan'],
         maxCalls: 32,
         maxMaterialBytes: 2_000_000,
         maxRuntimeMs: 300_000,

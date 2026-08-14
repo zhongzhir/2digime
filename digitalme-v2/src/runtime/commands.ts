@@ -455,6 +455,8 @@ export interface CommandMap {
       versionId?: string;
       /** 可选：要求 Artifact 必须属于该 Task，防止跨任务串线。 */
       expectedTaskId?: string;
+      /** 评价失败后重试同一通用入口；不新增命令。 */
+      retryAcceptance?: boolean;
     };
     output: {
       content: ArtifactContent;
@@ -489,6 +491,30 @@ export interface CommandMap {
        * 报告为人工编辑，清单/依据仍为旧版；不得冒充已同步。
        */
       evidenceStale?: boolean;
+      /**
+       * 当前 CTO 结论（Artifact.acceptance 权威位置）。
+       * 历史成果可从 codeChange.acceptanceSummary 只读回退。
+       */
+      acceptanceSummary?: {
+        title: string;
+        headline?: string;
+        executionStatusLabel?: string;
+        goalLabel: string;
+        goalVerdict?: string;
+        recommendation: string;
+        bullets: string[];
+        technicalBullets?: string[];
+        adoptWarnings?: string[];
+        canAdoptSuggested: boolean;
+        ctoReport?: string;
+        primaryAction?: string;
+        userFacingNextStep?: string;
+        revisionDirective?: string;
+        ctoReview?: unknown;
+        ctoContractDegraded?: boolean;
+      };
+      acceptanceStatus?: 'ready' | 'failed' | 'pending';
+      acceptanceFailureMessage?: string;
       /** code-change 成果：工作目录与验收摘要（非第二 Store）。 */
       codeChange?: {
         workingDirectory?: string;

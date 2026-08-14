@@ -1,8 +1,9 @@
-import type {
-  CapabilityAdapter,
-  CapabilityInput,
-  CapabilityOutput,
-  ExecutionContext,
+import {
+  formatCapabilityTaskAndPlan,
+  type CapabilityAdapter,
+  type CapabilityInput,
+  type CapabilityOutput,
+  type ExecutionContext,
 } from '../adapter';
 import type { CapabilityRegistration } from '../registration';
 import { asLocalCapabilityAdapter } from '../local-adapter-lifecycle';
@@ -72,17 +73,29 @@ export function createFakeDocumentAdapter(
         err.actionable = options.failWith.actionable;
         throw err;
       }
-      const materialSnippets = await collectMaterialSnippets(input, ctx.readExtractedText);
+      const { snippets: materialSnippets, usedPaths, items } = await collectMaterialSnippets(
+        input,
+        ctx.readExtractedText,
+      );
       const text =
         typeof options.text === 'function'
           ? options.text(input, { materialSnippets })
           : defaultFakeDocumentText(input, options.text, materialSnippets);
       options.onExecute?.({ input, materialSnippets, text });
+      const fullReadCount = items.filter((i) => i.completeness === 'full').length;
+      const truncatedCount = items.filter((i) => i.completeness === 'truncated').length;
       return {
         artifact: {
           type: 'document',
           title: options.title ?? (input.goal.slice(0, 80) || '文档'),
           payload: { kind: 'text', format: 'markdown', text },
+        },
+        materialUse: {
+          usedPaths,
+          includedCount: usedPaths.length,
+          fullReadCount,
+          truncatedCount,
+          items,
         },
       };
     },
@@ -95,7 +108,7 @@ function defaultFakeDocumentText(
   materialSnippets: string[] = [],
 ): string {
   if (override !== undefined) return override;
-  const goal = input.goal.trim();
+  const goal = formatCapabilityTaskAndPlan(input).trim() || input.goal.trim();
   const revisionNote = input.revision?.request?.trim() || '';
   const rejection = input.revision?.rejectionReason?.trim() || '';
   // 标题紧扣目标；修订时必须产生可见正文变化，避免“版本号变、正文不变”
@@ -193,19 +206,46 @@ function padToGoalLength(text: string, goal: string, revisionNote: string): stri
 async function collectMaterialSnippets(
   input: CapabilityInput,
   readExtractedText?: (ref: string) => Promise<string>,
-): Promise<string[]> {
-  if (!readExtractedText || !input.snapshot?.items?.length) return [];
-  const out: string[] = [];
+): Promise<{
+  snippets: string[];
+  usedPaths: string[];
+  items: Array<{
+    path: string;
+    completeness: 'full' | 'truncated' | 'unread';
+    sourceChars: number;
+    usedChars: number;
+  }>;
+}> {
+  if (!readExtractedText || !input.snapshot?.items?.length) {
+    return { snippets: [], usedPaths: [], items: [] };
+  }
+  const snippets: string[] = [];
+  const usedPaths: string[] = [];
+  const items: Array<{
+    path: string;
+    completeness: 'full' | 'truncated' | 'unread';
+    sourceChars: number;
+    usedChars: number;
+  }> = [];
   for (const item of input.snapshot.items) {
     if (item.status !== 'ok' || !item.extractedTextRef) continue;
     try {
       const body = (await readExtractedText(item.extractedTextRef)).trim();
-      if (body) out.push(body);
+      if (body) {
+        snippets.push(body);
+        usedPaths.push(item.sourcePath);
+        items.push({
+          path: item.sourcePath,
+          completeness: item.truncated ? 'truncated' : 'full',
+          sourceChars: body.length,
+          usedChars: body.length,
+        });
+      }
     } catch {
       /* 单条读取失败不阻断 Fake 生成 */
     }
   }
-  return out;
+  return { snippets, usedPaths, items };
 }
 
 function sleep(ms: number, signal: AbortSignal, ignoreAbort: boolean): Promise<void> {

@@ -3,7 +3,7 @@
  * 只消费冻结 Snapshot 文本;按优先级选文件;总/单文件预算;全部 scrub。
  * 不访问 sourcePath,不读用户仓库。
  */
-import type { CapabilityInput } from '../adapter';
+import { formatCapabilityTaskAndPlan, type CapabilityInput } from '../adapter';
 import type { SnapshotItem } from '../../work-runtime/context-snapshot';
 import type { ChatMessage } from '../../infrastructure/model-http';
 
@@ -203,7 +203,7 @@ export async function assembleCodeAnalysisPrompt(
     .join('\n\n');
 
   const userParts = [
-    `# 用户目标\n${scrubText(input.goal).slice(0, 4_000)}`,
+    `# 用户目标\n${scrubText(formatCapabilityTaskAndPlan(input)).slice(0, 4_000)}`,
     `# 分析覆盖说明\n${coverageNote}`,
     `# 扫描警告\n${warningLines.length ? warningLines.map((w) => `- ${w}`).join('\n') : '- 无'}`,
     experience.text

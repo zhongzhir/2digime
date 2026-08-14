@@ -663,8 +663,9 @@ export async function runWorkConverse(
   let planGenerationFailed = false;
   let draftContent = decision.planDraftContent;
   const thin = isThinOwnerRuntime(task);
-  // 薄主链：确认当前方案时忽略附带 planUpdate，避免升版导致 Owner 再确认
-  if (thin && decision.confirmPlan && existingPlan && isUserVisiblePlan(existingPlan)) {
+  // 确认是唯一主动作：已有可见规划且本轮确认执行时，忽略同轮 planUpdate，不升版。
+  // 真正修改规划（confirmPlan=false 且带 planUpdate）仍生成新 draft。thin / 非 thin 同一规则。
+  if (decision.confirmPlan && existingPlan && isUserVisiblePlan(existingPlan)) {
     draftContent = undefined;
   }
   let planSource: 'model' | 'seed_internal' = 'model';

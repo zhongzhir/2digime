@@ -1,7 +1,8 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import type { CapabilityRegistry } from '../capability/registry';
-import type { SecretAccessor, RemoteLifecycleStatus, CapabilityOutput } from '../capability/adapter';
+import type { SecretAccessor, RemoteLifecycleStatus, CapabilityOutput, CapabilityInput } from '../capability/adapter';
+import type { ContextSnapshot } from './context-snapshot';
 import { newId, nowIso } from '../shared/ids';
 import type { ConfirmedExperienceView } from '../subject-core/derived-views';
 import type { SubjectContextFreeze } from '../subject-core/subject-context-freeze';
@@ -11,6 +12,7 @@ import type { AuthorizationGrant } from '../collaboration/schema';
 import {
   applyRecoveryWrite,
   isTerminal,
+  normalizeMaterialUse,
   recoverJobOnStartup,
   transitionJob,
   type ExecutionJob,
@@ -63,6 +65,8 @@ import {
 } from '../capability/coding-capability';
 import { listCodingCapabilityStatuses } from '../capability/coding-capability-probe';
 import { loadCodingCapabilityPrefs } from '../capability/coding-capability-draft';
+import { confirmedPlanFromJob, freezeConfirmedPlanSnapshot } from './confirmed-plan-execution';
+import type { Task } from './task';
 
 export interface WorkRuntimeOptions {
   subjectId: string;
@@ -1195,6 +1199,25 @@ export class WorkRuntime {
 
   // --- internals ---
 
+  /** 执行输入：Task.goal 为原始目标；确认规划只读 Job 快照，不读当前 Task.meta.plan。 */
+  private buildCapabilityRawInput(
+    task: Task,
+    job: ExecutionJob,
+    snapshot: ContextSnapshot,
+    subjectContext: ConfirmedExperienceView,
+    extra: Partial<CapabilityInput> = {},
+  ): CapabilityInput {
+    const confirmedPlan = confirmedPlanFromJob(job);
+    return {
+      goal: task.goal,
+      snapshot,
+      subjectContext,
+      artifactType: task.requestedArtifactType,
+      ...(confirmedPlan ? { confirmedPlan } : {}),
+      ...extra,
+    };
+  }
+
   private async createQueuedJob(
     taskId: string,
     capabilityId: string,
@@ -1209,6 +1232,8 @@ export class WorkRuntime {
     if (active) {
       throw new Error(`task already has an active job: ${active.id}`);
     }
+    const task = await this.opts.taskService.get(taskId);
+    const confirmedPlanSnapshot = freezeConfirmedPlanSnapshot(task);
     const job: ExecutionJob = {
       id: newId('job'),
       taskId,
@@ -1218,6 +1243,7 @@ export class WorkRuntime {
       ...(meta?.targetArtifactId ? { targetArtifactId: meta.targetArtifactId } : {}),
       ...(meta?.revisionRequest ? { revisionRequest: meta.revisionRequest } : {}),
       ...(meta?.rejectionReason ? { rejectionReason: meta.rejectionReason } : {}),
+      ...(confirmedPlanSnapshot ? { confirmedPlanSnapshot } : {}),
       ...(externalExecution ? { externalExecution } : {}),
     };
     await this.opts.jobStore.put(job);
@@ -1708,11 +1734,9 @@ export class WorkRuntime {
             task.authorization?.grantId && this.opts.loadAuthorizationGrant
               ? await this.opts.loadAuthorizationGrant(task.authorization.grantId)
               : null;
-          const rawInput = {
-            goal: task.goal,
-            snapshot,
-            subjectContext,
-            artifactType: task.requestedArtifactType,
+          const liveJob = (await this.opts.jobStore.get(jobId)) ?? job;
+          job = liveJob;
+          const rawInput = this.buildCapabilityRawInput(task, liveJob, snapshot, subjectContext, {
             ...(revisionInput ? { revision: revisionInput } : {}),
             ...(job.externalExecution?.workingDirectory
               ? {
@@ -1727,7 +1751,7 @@ export class WorkRuntime {
                   },
                 }
               : {}),
-          };
+          });
           const auth = buildJobAuthorizationProjection({
             task,
             capabilityInput: rawInput,
@@ -1758,12 +1782,12 @@ export class WorkRuntime {
             task.authorization?.grantId && this.opts.loadAuthorizationGrant
               ? await this.opts.loadAuthorizationGrant(task.authorization.grantId)
               : null;
-          const rawInput = {
-            goal: task.goal,
+          const rawInput = this.buildCapabilityRawInput(
+            task,
+            (await this.opts.jobStore.get(jobId)) ?? job,
             snapshot,
             subjectContext,
-            artifactType: task.requestedArtifactType,
-          };
+          );
           const auth = buildJobAuthorizationProjection({
             task,
             capabilityInput: rawInput,
@@ -1899,20 +1923,22 @@ export class WorkRuntime {
               task.authorization?.grantId && this.opts.loadAuthorizationGrant
                 ? await this.opts.loadAuthorizationGrant(task.authorization.grantId)
                 : null;
-            const reviseRaw = {
-              goal: task.goal,
+            const reviseRaw = this.buildCapabilityRawInput(
+              task,
+              (await this.opts.jobStore.get(jobId)) ?? job,
               snapshot,
-              subjectContext: minimalContext,
-              artifactType: task.requestedArtifactType,
-              revision: {
-                request: buildTargetedRevisionRequest(outcome.defects),
-                previousText: text,
-                artifactId: revisionInput?.artifactId || 'pending',
-                ...(revisionInput?.rejectionReason
-                  ? { rejectionReason: revisionInput.rejectionReason }
-                  : {}),
+              minimalContext,
+              {
+                revision: {
+                  request: buildTargetedRevisionRequest(outcome.defects),
+                  previousText: text,
+                  artifactId: revisionInput?.artifactId || 'pending',
+                  ...(revisionInput?.rejectionReason
+                    ? { rejectionReason: revisionInput.rejectionReason }
+                    : {}),
+                },
               },
-            };
+            );
             const auth = buildJobAuthorizationProjection({
               task,
               capabilityInput: reviseRaw,
@@ -2030,10 +2056,12 @@ export class WorkRuntime {
       // 幂等:重放同一 Job 不得生成第二个 Artifact(committer 已保证)
       const at = nowIso();
       let succeeded = transitionJob(job, 'succeeded', at);
+      const materialUse = normalizeMaterialUse(output.materialUse);
       succeeded = {
         ...succeeded,
         artifactId: artifact.id,
         snapshotId: snapshot.id,
+        ...(materialUse ? { materialUse } : {}),
         ...(succeeded.externalExecution
           ? {
               externalExecution: {

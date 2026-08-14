@@ -34,6 +34,40 @@ export interface Artifact {
   /** 磁盘目录,支持"打开所在目录";content ref 相对此目录解析。 */
   storageDir: string;
   provenance?: ArtifactProvenance;
+  /**
+   * 当前 CTO 验收结论的唯一权威位置（按 head 版本绑定）。
+   * 新写入只落这里；不得再把同一结论写入 codeChange.acceptanceSummary。
+   */
+  acceptance?: ArtifactAcceptance;
+}
+
+/** 与 OwnerAcceptanceSummary 同形，避免为文档任务复制评价类型。 */
+export interface ArtifactAcceptanceSummary {
+  title: string;
+  headline?: string;
+  executionStatusLabel?: string;
+  goalLabel: string;
+  goalVerdict?: string;
+  recommendation: string;
+  bullets: string[];
+  technicalBullets?: string[];
+  adoptWarnings?: string[];
+  canAdoptSuggested: boolean;
+  ctoReport?: string;
+  primaryAction?: string;
+  userFacingNextStep?: string;
+  revisionDirective?: string;
+  ctoReview?: unknown;
+  ctoContractDegraded?: boolean;
+}
+
+export interface ArtifactAcceptance {
+  artifactVersionId: string;
+  jobId: string;
+  status: 'ready' | 'failed';
+  updatedAt: string;
+  summary?: ArtifactAcceptanceSummary;
+  failureMessage?: string;
 }
 
 export interface ArtifactVersion {

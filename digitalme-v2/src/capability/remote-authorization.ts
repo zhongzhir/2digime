@@ -25,6 +25,7 @@ export interface RemoteAuthorizationProjection {
 
 export const DEFAULT_ALLOWED_FIELDS = [
   'goal',
+  'confirmedPlan',
   'artifactType',
   'authorizedMaterials',
   'purpose',
@@ -138,6 +139,9 @@ export function applyAuthorizationProjectionToInput(
   };
   if (input.revision && auth.allowedFields.includes('revision')) {
     next.revision = input.revision;
+  }
+  if (input.confirmedPlan && auth.allowedFields.includes('confirmedPlan')) {
+    next.confirmedPlan = input.confirmedPlan;
   }
   if (input.executionAuthorization) {
     next.executionAuthorization = input.executionAuthorization;

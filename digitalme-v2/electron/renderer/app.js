@@ -405,6 +405,8 @@
   let activeCodeChangeWorkingDirectory = null;
   let activeCodeChangeRunInfo = null;
   let activeAcceptanceSummary = null;
+  let activeAcceptanceFailed = false;
+  let activeAcceptanceFailureMessage = "";
   /** CTO 闭环：用户暂停当前任务（不新增任务状态机，仅 UI 事实） */
   let taskPausedCto = false;
   /** 本会话追加的对话轮次（派生时间线之外的用户补充） */
@@ -1293,7 +1295,7 @@
     setCodeChangeViewVisible(true);
     activeCodeChangeWorkingDirectory = codeChange.workingDirectory || null;
     activeCodeChangeRunInfo = codeChange.runInfo || null;
-    activeAcceptanceSummary = codeChange.acceptanceSummary || null;
+    activeAcceptanceSummary = codeChange.acceptanceSummary || activeAcceptanceSummary;
     const revisionText = String(codeChange.revisionRequest || "").trim();
     if (els.ccRevisionSection) {
       if (revisionText) {
@@ -1449,7 +1451,6 @@
   function hideCodeChangeView() {
     activeCodeChangeWorkingDirectory = null;
     activeCodeChangeRunInfo = null;
-    activeAcceptanceSummary = null;
     ccFilesExpanded = false;
     setCodeChangeViewVisible(false);
     if (els.ccRevisionSection) {
@@ -2053,6 +2054,8 @@
     activeCodeChangeWorkingDirectory = null;
     activeCodeChangeRunInfo = null;
     activeAcceptanceSummary = null;
+    activeAcceptanceFailed = false;
+    activeAcceptanceFailureMessage = "";
     hideCodeChangeView();
     hideRevisionComposer();
     hideNextStepsCard();
@@ -2100,6 +2103,8 @@
     activeHeadVersionId = null;
     activeCodeChangeRunInfo = null;
     activeAcceptanceSummary = null;
+    activeAcceptanceFailed = false;
+    activeAcceptanceFailureMessage = "";
     hideCodeChangeView();
     hideRevisionComposer();
     hideNextStepsCard();
@@ -3138,6 +3143,8 @@
       ctoReport: acc.ctoReport || "",
       ctoDecision: (acc.ctoReview && acc.ctoReview.decision) || "",
       primaryAction: acc.primaryAction || "",
+      acceptanceFailed: !!activeAcceptanceFailed,
+      acceptanceFailureMessage: activeAcceptanceFailureMessage || "",
       revisionPaused: !!(
         detail &&
         detail.task &&
@@ -3249,11 +3256,20 @@
     }
     if (actionId === "retry_acceptance") {
       if (!activeArtifactId) return;
-      els.jobStatus.textContent = "请稍后再试：重新打开本成果或刷新任务以再次验收";
+      els.jobStatus.textContent = "正在重新整理验收说明…";
       els.jobStatus.classList.remove("error");
-      if (els.jobActionable) {
-        els.jobActionable.textContent =
-          "现有成果已保留。模型可用后，打开同一任务即可重新形成验收结论。";
+      try {
+        await api.invoke("artifact.getContent", {
+          artifactId: activeArtifactId,
+          retryAcceptance: true,
+          ...(activeTaskId ? { expectedTaskId: activeTaskId } : {}),
+        });
+        await loadArtifact(activeArtifactId, { taskId: activeTaskId, epoch: uiEpoch });
+      } catch (err) {
+        els.jobStatus.textContent = "成果已生成，但验收说明暂未完成，可重试。";
+        if (els.jobActionable) {
+          els.jobActionable.textContent = userFacingWorkError(err) || "现有成果已保留。";
+        }
       }
       return;
     }
@@ -4413,6 +4429,12 @@
       const connected = await refreshConnectionFromCapabilities();
       els.revise.disabled = !connected;
     }
+    activeAcceptanceSummary =
+      content.acceptanceSummary ||
+      (content.codeChange && content.codeChange.acceptanceSummary) ||
+      null;
+    activeAcceptanceFailed = content.acceptanceStatus === "failed";
+    activeAcceptanceFailureMessage = String(content.acceptanceFailureMessage || "");
     // 右栏永不启用确认采用；采用仅经中栏时间线
     if (els.acceptArtifact) {
       setElVisible(els.acceptArtifact, false);

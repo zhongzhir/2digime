@@ -120,3 +120,166 @@ function displayNameOf(item: SnapshotItem): string {
   }
   return path.basename(item.sourcePath.replace(/\\/g, '/')) || item.sourcePath;
 }
+
+export interface MaterialEvidenceEntry {
+  path: string;
+  displayName: string;
+  status?: string;
+  reason?: string;
+  completeness?: 'full' | 'truncated' | 'unread';
+  sourceChars?: number;
+  usedChars?: number;
+}
+
+/**
+ * 验收用材料事实：区分获得、已抽取、实际使用、仅存在未读取。
+ * 使用侧再区分完整读取 / 部分读取 / 未读取。
+ * 不得把「项目路径存在」或 includedCount 写成已完整阅读。
+ */
+export interface MaterialEvidence {
+  obtained: MaterialEvidenceEntry[];
+  extracted: MaterialEvidenceEntry[];
+  used: MaterialEvidenceEntry[];
+  unread: MaterialEvidenceEntry[];
+  folderAttached: boolean;
+  includedCount?: number;
+  fullReadCount?: number;
+  truncatedCount?: number;
+  notes: string[];
+}
+
+function normPath(p: string): string {
+  return String(p || '').replace(/\\/g, '/').toLowerCase();
+}
+
+function displayFromPath(p: string): string {
+  const n = String(p || '').replace(/\\/g, '/');
+  return n.split('/').filter(Boolean).pop() || n;
+}
+
+export function buildMaterialEvidence(input: {
+  snapshotItems?: readonly SnapshotItem[];
+  contextRefs?: ReadonlyArray<{ kind: string; path: string }>;
+  materialUse?: {
+    usedPaths?: string[];
+    includedCount?: number;
+    truncatedCount?: number;
+    fullReadCount?: number;
+    items?: Array<{
+      path: string;
+      completeness: 'full' | 'truncated' | 'unread';
+      sourceChars: number;
+      usedChars: number;
+    }>;
+  };
+}): MaterialEvidence {
+  const items = input.snapshotItems || [];
+  const obtained: MaterialEvidenceEntry[] = items.slice(0, 80).map((item) => ({
+    path: item.sourcePath,
+    displayName: displayNameOf(item),
+    status: item.status,
+    ...(item.warning ? { reason: item.warning } : {}),
+  }));
+  const extracted: MaterialEvidenceEntry[] = [];
+  const unread: MaterialEvidenceEntry[] = [];
+  for (const item of items.slice(0, 80)) {
+    const entry: MaterialEvidenceEntry = {
+      path: item.sourcePath,
+      displayName: displayNameOf(item),
+      status: item.status,
+      ...(item.warning ? { reason: item.warning } : {}),
+    };
+    if (item.status === 'ok' && item.extractedTextRef) extracted.push(entry);
+    else unread.push(entry);
+  }
+  const useItems = input.materialUse?.items || [];
+  const usedPaths = (input.materialUse?.usedPaths || []).map((p) => String(p || '').trim()).filter(Boolean);
+  const usedByPath = new Map(extracted.map((e) => [normPath(e.path), e]));
+  const useByPath = new Map(useItems.map((u) => [normPath(u.path), u]));
+  const used: MaterialEvidenceEntry[] = [];
+  const seen = new Set<string>();
+  const recordUsed = (p: string) => {
+    const key = normPath(p);
+    if (seen.has(key)) return;
+    seen.add(key);
+    const base = usedByPath.get(key) || { path: p, displayName: displayFromPath(p) };
+    const fact = useByPath.get(key);
+    used.push({
+      ...base,
+      ...(fact
+        ? {
+            completeness: fact.completeness,
+            sourceChars: fact.sourceChars,
+            usedChars: fact.usedChars,
+          }
+        : {}),
+    });
+  };
+  for (const u of useItems) {
+    if (u.usedChars > 0 || u.completeness !== 'unread') recordUsed(u.path);
+  }
+  for (const p of usedPaths.slice(0, 80)) recordUsed(p);
+  for (const u of useItems) {
+    if (u.completeness === 'unread' && u.usedChars === 0) {
+      const key = normPath(u.path);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      unread.push({
+        path: u.path,
+        displayName: displayFromPath(u.path),
+        completeness: 'unread',
+        sourceChars: u.sourceChars,
+        usedChars: 0,
+      });
+    }
+  }
+  const folderAttached =
+    (input.contextRefs || []).some((r) => r.kind === 'folder' || r.kind === 'file') ||
+    items.some((i) => i.kind === 'folder-entry' || i.kind === 'file');
+  const truncatedCount = useItems.length
+    ? useItems.filter((u) => u.completeness === 'truncated').length
+    : typeof input.materialUse?.truncatedCount === 'number'
+      ? input.materialUse.truncatedCount
+      : 0;
+  const fullReadCount = useItems.length
+    ? useItems.filter((u) => u.completeness === 'full').length
+    : typeof input.materialUse?.fullReadCount === 'number'
+      ? input.materialUse.fullReadCount
+      : 0;
+  const includedCount =
+    typeof input.materialUse?.includedCount === 'number'
+      ? input.materialUse.includedCount
+      : used.length;
+  const notes: string[] = [];
+  if (folderAttached && extracted.length === 0) {
+    notes.push('已附加项目路径，但没有抽取到可读文件。不得把目录存在当作已通读项目。');
+  }
+  if (extracted.length > 0 && used.length === 0) {
+    notes.push(
+      input.materialUse
+        ? '已抽取材料未进入本轮执行使用清单。'
+        : '快照已抽取正文，但执行器未声明实际纳入提示的材料；不得把已抽取等同于已通读。',
+    );
+  }
+  if (usedPaths.length === 0 && includedCount === 0 && extracted.length === 0) {
+    notes.push('执行阶段没有可用的项目正文。');
+  }
+  if (truncatedCount > 0) {
+    notes.push(
+      `有 ${truncatedCount} 份材料仅部分读取。纳入提示 ${includedCount} 份不等于完整阅读 ${fullReadCount} 份。`,
+    );
+  } else if (includedCount > 0 && fullReadCount < includedCount && !useItems.length) {
+    notes.push('不得把纳入提示的材料条数当成完整阅读数。');
+  }
+  return {
+    obtained,
+    extracted,
+    used,
+    unread,
+    folderAttached,
+    includedCount,
+    fullReadCount,
+    truncatedCount,
+    notes,
+  };
+}

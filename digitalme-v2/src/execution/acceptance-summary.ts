@@ -14,6 +14,7 @@ import {
   buildAiDigitalMeCtoReview,
   type CtoReviewChat,
 } from './ai-cto-review';
+import type { MaterialEvidence } from '../work-runtime/material-summary';
 
 export type OwnerAcceptanceRecommendation =
   | '可以采用'
@@ -79,6 +80,10 @@ export type OwnerAcceptanceSummaryInput = {
   understandingBrief?: string;
   understandingKeyFiles?: string[];
   planSteps?: string[];
+  confirmedPlan?: { version: number; content: string };
+  artifactBody?: string;
+  jobExecutionReport?: string;
+  materials?: MaterialEvidence;
   /**
    * 已由 AI 或调用方形成的验收结论。同步接口保留此注入点以兼容测试；
    * 未传时仍使用既有确定性判断。
@@ -433,6 +438,10 @@ export async function buildOwnerAcceptanceSummaryAsync(
       ...(input.understandingBrief ? { understandingBrief: input.understandingBrief } : {}),
       ...(input.understandingKeyFiles ? { understandingKeyFiles: input.understandingKeyFiles } : {}),
       ...(input.planSteps ? { planSteps: input.planSteps } : {}),
+      ...(input.confirmedPlan ? { confirmedPlan: input.confirmedPlan } : {}),
+      ...(input.artifactBody ? { artifactBody: input.artifactBody } : {}),
+      ...(input.jobExecutionReport ? { jobExecutionReport: input.jobExecutionReport } : {}),
+      ...(input.materials ? { materials: input.materials } : {}),
       verification: input.verification,
       changedFileCount: input.changedFileCount,
       ...(input.evidence?.changedFiles ? { changedFiles: input.evidence.changedFiles } : {}),

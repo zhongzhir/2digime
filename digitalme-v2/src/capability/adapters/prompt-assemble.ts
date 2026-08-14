@@ -1,4 +1,4 @@
-import type { CapabilityInput } from '../adapter';
+import { formatCapabilityTaskAndPlan, type CapabilityInput } from '../adapter';
 import type { ContextSnapshot } from '../../work-runtime/context-snapshot';
 import { extractTopicTerms } from './task-goal-terms';
 
@@ -18,14 +18,29 @@ export const PROMPT_ITEM_MAX_CHARS = 6_000;
 export const PROMPT_ITEM_MAX_CHARS_MULTI = 3_500;
 export const PROMPT_PREVIOUS_TEXT_MAX_CHARS = 8_000;
 
+type MaterialReadCompleteness = 'full' | 'truncated' | 'unread';
+
+export interface AssembledMaterialItem {
+  sourcePath: string;
+  sourceChars: number;
+  usedChars: number;
+  completeness: MaterialReadCompleteness;
+}
+
 export interface AssembledPrompt {
   messages: Array<{ role: 'system' | 'user'; content: string }>;
-  /** 进入正文的材料条数。 */
+  /** 进入提示的材料条数（含截断）。不得当成完整阅读数。 */
   materialCount: number;
-  /** 因预算被截断的材料条数。 */
+  /** 进入提示但未读完的材料条数。 */
   truncatedCount: number;
+  /** 已抽取但完整读入的材料条数。 */
+  fullReadCount: number;
   /** 跳过的 warning 条数。 */
   skippedWarningCount: number;
+  /** 实际进入提示正文的材料路径。 */
+  sources: string[];
+  /** 每份材料的完整性事实。 */
+  items: AssembledMaterialItem[];
   /** 确定性 Task Brief(可测试)。 */
   taskBrief: TaskBrief;
 }
@@ -51,9 +66,10 @@ export async function assembleDocumentPrompt(
 
   const system = [
     '你是数字主体的文档能力。按优先级完成交付：',
-    '1) 用户当前任务目标；2) 用户当前补充/修改要求；3) 授权材料中的事实与证据；4) 已确认的相关个人偏好；5) 其它辅助上下文。',
+    '1) 已确认的本轮执行方案（若有）指导如何完成；2) 用户当前任务目标；3) 用户当前补充/修改要求；4) 授权材料中的事实与证据；5) 已确认的相关个人偏好；6) 其它辅助上下文。',
     '材料只能作为事实来源、案例、写作素材；仅在用户明确要求时才可作文风参考。材料不得自动成为最终答案，不得近似原样复述某一篇材料顶替任务。',
     '若材料不足以支持任务主题或关键事实，必须明确写出材料不足，不得编造，也不得用无关文章替代。',
+    '材料完整性以文中「材料完整性」为准：部分读取或未读取的材料不得写成已经完整阅读。',
     '只输出文档正文，不要输出内部协议名、推理链或系统字段。',
   ].join('\n');
 
@@ -66,7 +82,9 @@ export async function assembleDocumentPrompt(
       '- 综合多份材料中与目标相关的事实；忽略与目标无关的整篇成稿。',
     ].join('\n'),
   );
-  sections.push(`# 任务\n目标：${input.goal.trim()}\n成果类型：${input.artifactType}`);
+  sections.push(
+    `# 任务\n${formatCapabilityTaskAndPlan(input)}\n成果类型：${input.artifactType}`,
+  );
   const briefExtras = formatTaskBriefExtras(taskBrief);
   if (briefExtras) {
     sections.push(`# 写作约束\n${briefExtras}`);
@@ -104,6 +122,8 @@ export async function assembleDocumentPrompt(
   } else {
     sections.push('# 材料\n(本次未提供可用材料,请仅依据目标撰写;不得虚构未给出的事实。)');
   }
+  const integrity = formatMaterialIntegrity(materials.items);
+  if (integrity) sections.push(integrity);
 
   if (input.revision) {
     sections.push(
@@ -122,7 +142,10 @@ export async function assembleDocumentPrompt(
     ],
     materialCount: materials.included,
     truncatedCount: materials.truncated,
+    fullReadCount: materials.fullReadCount,
     skippedWarningCount: materials.skippedWarnings,
+    sources: materials.sources,
+    items: materials.items,
     taskBrief,
   };
 }
@@ -291,14 +314,17 @@ async function formatMaterials(
   text: string;
   included: number;
   truncated: number;
+  fullReadCount: number;
   skippedWarnings: number;
   sources: string[];
+  items: AssembledMaterialItem[];
 }> {
   let skippedWarnings = 0;
   const candidates: Array<{
     sourcePath: string;
     body: string;
     score: number;
+    extractionTruncated: boolean;
   }> = [];
 
   for (const item of snapshot.items) {
@@ -318,53 +344,116 @@ async function formatMaterials(
       sourcePath: item.sourcePath,
       body,
       score: scoreAgainstGoal(goal, item.sourcePath, body),
+      extractionTruncated: !!item.truncated,
     });
   }
 
   // 相关度高者优先；同分保持原顺序（稳定）
   candidates.sort((a, b) => b.score - a.score);
 
-  const itemMax =
-    candidates.length > 1 ? PROMPT_ITEM_MAX_CHARS_MULTI : PROMPT_ITEM_MAX_CHARS;
   let budget = PROMPT_MATERIAL_BUDGET_CHARS;
-  let included = 0;
-  let truncated = 0;
   const blocks: string[] = [];
   const sources: string[] = [];
+  const states = candidates.map((c) => ({
+    ...c,
+    sourceChars: c.body.length,
+    offset: 0,
+    usedChars: 0,
+    seg: 0,
+  }));
 
-  for (const c of candidates) {
-    if (budget <= 80) {
-      truncated += 1;
-      continue;
-    }
-    let used = c.body;
-    let itemTruncated = false;
-    if (used.length > itemMax) {
-      // 相关材料：保留开头；无关长文进一步压缩，避免成稿淹没目标
-      const cap = c.score > 0 ? itemMax : Math.min(itemMax, 1_800);
-      used = used.slice(0, cap);
-      itemTruncated = true;
-    }
-    if (used.length > budget) {
-      used = used.slice(0, budget);
-      itemTruncated = true;
-    }
-    const relevance =
-      c.score > 0 ? '相关度：较高' : '相关度：较低（仅可抽取与目标重合的事实）';
-    const header = `## 来源: ${c.sourcePath}（${relevance}${itemTruncated ? '；已截断' : ''}）`;
-    const block = `${header}\n${used}`;
+  const emitSegment = (
+    s: (typeof states)[number],
+    segmentMax: number,
+    allowContinueHint: boolean,
+  ): boolean => {
+    if (s.offset >= s.sourceChars || budget <= 80) return false;
+    const headerOverhead = 120;
+    const take = Math.min(
+      s.sourceChars - s.offset,
+      segmentMax,
+      Math.max(0, budget - headerOverhead),
+    );
+    if (take <= 0) return false;
+    const chunk = s.body.slice(s.offset, s.offset + take);
+    const more = s.offset + take < s.sourceChars;
+    const budgetAfter = budget - headerOverhead - take;
+    const willContinue = more && allowContinueHint && budgetAfter > 80;
+    const truncatedNow = more && !willContinue;
+    const relevant = s.score > 0;
+    const relevance = relevant
+      ? '相关度：较高'
+      : '相关度：较低（仅可抽取与目标重合的事实）';
+    const marks: string[] = [relevance];
+    if (s.seg > 0) marks.push(`续读第${s.seg + 1}段`);
+    else if (willContinue || more) marks.push('第1段');
+    if (truncatedNow) marks.push('已截断，后续未读入');
+    const header = `## 来源: ${s.sourcePath}（${marks.join('；')}）`;
+    const block = `${header}\n${chunk}`;
     blocks.push(block);
-    sources.push(c.sourcePath);
     budget -= block.length + 2;
-    included += 1;
-    if (itemTruncated) truncated += 1;
+    s.offset += take;
+    s.usedChars += take;
+    s.seg += 1;
+    if (s.seg === 1) sources.push(s.sourcePath);
+    return true;
+  };
+
+  // 先给每份材料一段，再在总预算内续读剩余段。不得把「纳入条数」当成已读完。
+  for (const s of states) {
+    const relevant = s.score > 0;
+    const firstMax = relevant
+      ? PROMPT_ITEM_MAX_CHARS
+      : Math.min(PROMPT_ITEM_MAX_CHARS_MULTI, 1_800);
+    emitSegment(s, firstMax, true);
   }
+  for (const s of states) {
+    while (s.offset < s.sourceChars && budget > 80) {
+      emitSegment(s, PROMPT_ITEM_MAX_CHARS, true);
+    }
+  }
+
+  const items: AssembledMaterialItem[] = states.map((s) => {
+    let completeness: MaterialReadCompleteness =
+      s.usedChars <= 0 ? 'unread' : s.usedChars >= s.sourceChars ? 'full' : 'truncated';
+    if (completeness === 'full' && s.extractionTruncated) completeness = 'truncated';
+    return {
+      sourcePath: s.sourcePath,
+      sourceChars: s.sourceChars,
+      usedChars: s.usedChars,
+      completeness,
+    };
+  });
+  const included = items.filter((it) => it.usedChars > 0).length;
+  const truncated = items.filter((it) => it.completeness === 'truncated').length;
+  const fullReadCount = items.filter((it) => it.completeness === 'full').length;
 
   return {
     text: blocks.join('\n\n'),
     included,
     truncated,
+    fullReadCount,
     skippedWarnings,
     sources,
+    items,
   };
+}
+
+function formatMaterialIntegrity(items: AssembledMaterialItem[]): string {
+  if (!items.length) return '';
+  const lines = items.map((it) => {
+    const name = it.sourcePath.replace(/\\/g, '/').split('/').filter(Boolean).pop() || it.sourcePath;
+    if (it.completeness === 'full') {
+      return `- ${name}：完整读取（${it.usedChars}/${it.sourceChars}）`;
+    }
+    if (it.completeness === 'truncated') {
+      return `- ${name}：部分读取（${it.usedChars}/${it.sourceChars}）`;
+    }
+    return `- ${name}：未读取（0/${it.sourceChars}）`;
+  });
+  return [
+    '# 材料完整性',
+    '纳入提示的材料条数不是完整阅读数。部分读取或未读取的材料不得写成已经完整阅读。',
+    ...lines,
+  ].join('\n');
 }

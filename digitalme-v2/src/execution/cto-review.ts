@@ -10,6 +10,7 @@ import type {
   VerificationVerdict,
 } from './external-executor-contract';
 import { formatCtoUserConclusion } from '../work-runtime/work-cto-consult';
+import type { MaterialEvidence } from '../work-runtime/material-summary';
 
 export type CtoPrimaryAction =
   | 'confirm_continue'
@@ -89,6 +90,17 @@ export type CtoReviewInput = {
   jobId?: string;
   testResults?: Array<{ command: string; passed: boolean; summary?: string }>;
   changedFileExcerpts?: Array<{ path: string; excerpt: string }>;
+  /** 确认规划全文（Job 冻结快照）；文档与代码共用。 */
+  confirmedPlan?: { version: number; content: string };
+  /** 成果正文或输出摘要；有正文时不得因缺少代码 diff 而判不足。 */
+  artifactBody?: string;
+  /** 本轮真实执行情况的用户可读摘要。 */
+  jobExecutionReport?: string;
+  /**
+   * 材料事实：获得 / 已抽取 / 实际使用 / 未读取。
+   * 项目路径存在不等于已通读。
+   */
+  materials?: MaterialEvidence;
 };
 
 function byId(

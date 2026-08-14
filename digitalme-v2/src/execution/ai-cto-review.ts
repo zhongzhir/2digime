@@ -37,6 +37,7 @@ export const AI_CTO_JSON_SCHEMA: Record<string, unknown> = {
     'evidenceRefs',
     'nextAction',
     'revisionPlan',
+    'requirementChecks',
   ],
   properties: {
     decision: { type: 'string', enum: [...AI_CTO_DECISIONS] },
@@ -51,6 +52,19 @@ export const AI_CTO_JSON_SCHEMA: Record<string, unknown> = {
     evidenceRefs: { type: 'array', items: { type: 'string' } },
     nextAction: { type: 'string' },
     revisionPlan: { type: 'string' },
+    requirementChecks: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['requirement', 'status'],
+        properties: {
+          requirement: { type: 'string' },
+          status: { type: 'string', enum: ['completed', 'incomplete', 'unverifiable'] },
+          evidence: { type: 'string' },
+        },
+      },
+    },
   },
 };
 
@@ -100,6 +114,41 @@ export interface AiCtoEvidencePack {
   jobId?: string;
   testResults?: Array<{ command: string; passed: boolean; summary?: string }>;
   changedFileExcerpts?: Array<{ path: string; excerpt: string }>;
+  confirmedPlan?: { version: number; content: string };
+  artifactBody?: string;
+  jobExecutionReport?: string;
+  materials?: {
+    obtained: Array<{ displayName: string; path: string }>;
+    extracted: Array<{ displayName: string; path: string }>;
+    used: Array<{
+      displayName: string;
+      path: string;
+      completeness?: 'full' | 'truncated' | 'unread';
+      sourceChars?: number;
+      usedChars?: number;
+    }>;
+    unread: Array<{
+      displayName: string;
+      path: string;
+      reason?: string;
+      completeness?: 'full' | 'truncated' | 'unread';
+      sourceChars?: number;
+      usedChars?: number;
+    }>;
+    folderAttached: boolean;
+    includedCount?: number;
+    fullReadCount?: number;
+    truncatedCount?: number;
+    notes: string[];
+  };
+}
+
+export type RequirementCheckStatus = 'completed' | 'incomplete' | 'unverifiable';
+
+export interface RequirementCheck {
+  requirement: string;
+  status: RequirementCheckStatus;
+  evidence?: string;
 }
 
 export interface AiCtoReviewOutput {
@@ -116,22 +165,29 @@ export interface AiCtoReviewOutput {
   risks: string[];
   nextAction: string;
   revisionPlan?: string;
+  requirementChecks?: RequirementCheck[];
 }
 
 const SYSTEM_PROMPT = [
-  '你是 Digital Me 的独立 AI CTO，审查一项软件成果是否可采用。',
+  '你是 Digital Me 的独立 AI CTO，审查一项成果是否可采用。成果可以是文档、研究报告、代码修改或其他交付物。',
   '只能依据提供的证据包判断；不得假设未提供的测试、文件或结果。',
   '不要输出思考过程、内部协议名、字段名或 Markdown。只输出一个 JSON 对象。',
-  'JSON 字段：decision（meets_plan | needs_revision | blocked | insufficient_evidence）、canUse、goalAttained、needChange、risks、nextStep、userSummary、completed、gaps、evidenceRefs、nextAction、revisionPlan（仅 needs_revision 时可有）。',
+  'JSON 字段：decision（meets_plan | needs_revision | blocked | insufficient_evidence）、canUse、goalAttained、needChange、risks、nextStep、userSummary、completed、gaps、evidenceRefs、nextAction、revisionPlan（仅 needs_revision 时可有）、requirementChecks。',
   'canUse、goalAttained、needChange、risks、nextStep 必须是面向用户的自然语言判断，由你基于证据包独立作出；测试未通过时写「测试未通过」，不要写 execution_failed、Job、Artifact，也不要复述检查项英文 id 或内部枚举。',
   '证据包的 goal 是本轮验收目标。若 currentRoundAuthority 为 owner_revision，必须按本轮用户要求判断，不得把 originalTaskGoal 当成当前必须达成的标准。',
   '你必须回答：用户本轮要求改成什么，当前成果是否满足本轮要求。若成果已按本轮要求改为新值，不得建议改回已被替代的旧目标。',
   '所有数组均为简短中文字符串；risks 必须是字符串数组；evidenceRefs 必须逐项来自证据包 evidenceRefs。',
-  '证据包中的 goal、revisionRequest、artifactVersionId、jobId、testResults、changedFileExcerpts 描述的是本轮成果；不要把 originalTaskGoal 或已过期的失败描述当成当前事实。',
+  '证据包中的 goal、confirmedPlan、artifactBody、jobExecutionReport、revisionRequest、artifactVersionId、jobId、testResults、changedFileExcerpts、materials 描述的是本轮成果；不要把 originalTaskGoal 或已过期的失败描述当成当前事实。',
+  'materials.obtained 是能力实际获得的文件清单；extracted 是已抽取正文；used 是实际读入执行或提示的文件；unread 是仅存在但未读取。used 各项的 completeness 为 full（完整读取）、truncated（部分读取）或 unread（未读取），并带 sourceChars/usedChars。includedCount 是纳入提示的条数，不是完整阅读数；fullReadCount 才是完整读取数。jobExecutionReport 只是执行器声明，不是独立核对。artifactBody 是实际成果。testResults、changedFiles、changedFileExcerpts 才是独立证据。项目目录存在不等于已阅读项目；已抽取不等于已完整阅读。',
+  '对用户目标中的明确要求逐项写入 requirementChecks：requirement、status（completed | incomplete | unverifiable）、evidence。completed 必须能指向证据包中的真实材料或成果依据。由你根据用户目标识别何为核心要求，不要只数材料条数。',
+  '若用户核心要求是完整阅读全部材料：used 中任一材料 completeness 不是 full，该要求不得标 completed；decision 不得为 meets_plan；canUse 与 nextStep 不得建议采用声称已完整阅读的成果。可以判定部分完成，并说明哪些材料只读了部分、哪些未读。',
+  '核心要求为 incomplete 或 unverifiable 时：decision 不得为 meets_plan；goalAttained 不得写成目标已达成；canUse 与 nextStep 不得建议采用。可以判定部分完成，并准确说明缺什么。',
+  '不得把本轮用户明确要求改写成后续新任务，从而把未执行事项说成不影响采用。',
+  '若证据包含成果正文且没有代码核对项，请根据原始目标、已确认规划和正文判断是否完成；不得因缺少测试、diff 或文件改动而判为不足。次要验证缺失（例如未配置构建脚本）不必单独否决已有依据的成果。',
   '当证据包同时满足：changedFileCount>0、digitalMeVerified=true、file_changes/scope_boundary/git_integrity 均为 satisfied，且没有 unsatisfied 的硬门检查时，应判定 meets_plan。',
   '无 build 脚本导致的 build_check unverifiable、以及 claim_vs_diff 仅为 partially_satisfied，不得单独把已通过目标与测试的成果判为未达标。',
   '仅在关键核对项缺失、结果互相矛盾，或无法从现有证据支持目标时使用 insufficient_evidence。',
-  'needs_revision 的 revisionPlan 应是可交给专业执行者的明确修正要求；系统可在授权范围内自动执行修订，不要向用户承诺具体轮次。',
+  'needs_revision 的 revisionPlan 应是可交给专业执行者的明确修正要求；不要假设系统会自动开始下一轮修改，只需说明缺口和建议，等待用户明确继续。不要向用户承诺具体轮次。',
   '面向用户的中文要中性、清楚，避免内部术语。',
 ].join('\n');
 
@@ -319,6 +375,7 @@ export function parseAiCtoReviewOutput(
     nextStep: nextStep.slice(0, 400),
   };
   if (!five.canUse || !five.goalAttained || !five.needChange || !five.nextStep) return null;
+  const requirementChecks = parseRequirementChecks(raw.requirementChecks);
   if (raw.decision === 'needs_revision' && !revisionPlan) {
     const synthesized = gaps.length
       ? `请针对以下缺口完成修正并补充可核对证据：${gaps.join('；')}。不得提交、推送或发布。`
@@ -333,6 +390,7 @@ export function parseAiCtoReviewOutput(
       risks,
       nextAction: nextAction.slice(0, 400),
       revisionPlan: synthesized,
+      ...(requirementChecks?.length ? { requirementChecks } : {}),
     };
   }
   return {
@@ -345,7 +403,29 @@ export function parseAiCtoReviewOutput(
     risks,
     nextAction: nextAction.slice(0, 400),
     ...(revisionPlan ? { revisionPlan: revisionPlan.slice(0, 1600) } : {}),
+    ...(requirementChecks?.length ? { requirementChecks } : {}),
   };
+}
+
+function parseRequirementChecks(raw: unknown): RequirementCheck[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: RequirementCheck[] = [];
+  for (const item of raw.slice(0, 16)) {
+    if (!item || typeof item !== 'object') continue;
+    const rec = item as Record<string, unknown>;
+    const requirement = String(rec.requirement || '').trim();
+    const status = String(rec.status || '').trim();
+    if (!requirement) continue;
+    if (status !== 'completed' && status !== 'incomplete' && status !== 'unverifiable') continue;
+    out.push({
+      requirement: requirement.slice(0, 240),
+      status,
+      ...(typeof rec.evidence === 'string' && rec.evidence.trim()
+        ? { evidence: rec.evidence.trim().slice(0, 400) }
+        : {}),
+    });
+  }
+  return out.length ? out : undefined;
 }
 
 function toCtoModelFact(detail: string | undefined, checkId?: string, verdict?: string): string | undefined {
@@ -401,7 +481,30 @@ export function buildAiCtoEvidencePack(input: CtoReviewInput): AiCtoEvidencePack
     ...(input.agentSummaryExcerpt
       ? { agentSummary: pickCurrentRoundSummary(input.agentSummaryExcerpt) }
       : {}),
-    evidenceRefs: [...checks.map((check) => check.ref), ...changedFiles.map((file) => file.ref)],
+    evidenceRefs: [
+      ...checks.map((check) => check.ref),
+      ...changedFiles.map((file) => file.ref),
+      ...(String(input.artifactBody || '').trim() ? ['artifact:body'] : []),
+      ...(input.confirmedPlan && String(input.confirmedPlan.content || '').trim()
+        ? [`plan:v${input.confirmedPlan.version}`]
+        : []),
+      ...(String(input.jobExecutionReport || '').trim() ? ['job:report'] : []),
+      ...materialEvidenceRefs(input.materials),
+    ],
+    ...(input.confirmedPlan && String(input.confirmedPlan.content || '').trim()
+      ? {
+          confirmedPlan: {
+            version: input.confirmedPlan.version,
+            content: String(input.confirmedPlan.content).slice(0, 4000),
+          },
+        }
+      : {}),
+    ...(String(input.artifactBody || '').trim()
+      ? { artifactBody: String(input.artifactBody).slice(0, 12000) }
+      : {}),
+    ...(String(input.jobExecutionReport || '').trim()
+      ? { jobExecutionReport: String(input.jobExecutionReport).slice(0, 2000) }
+      : {}),
     ...(input.artifactVersionId ? { artifactVersionId: input.artifactVersionId } : {}),
     ...(input.jobId ? { jobId: input.jobId } : {}),
     ...(input.testResults?.length
@@ -425,7 +528,72 @@ export function buildAiCtoEvidencePack(input: CtoReviewInput): AiCtoEvidencePack
           })),
         }
       : {}),
+    ...(input.materials ? { materials: packMaterials(input.materials) } : {}),
   };
+}
+
+function slimMaterialEntries(
+  entries: Array<{
+    displayName: string;
+    path: string;
+    reason?: string;
+    completeness?: 'full' | 'truncated' | 'unread';
+    sourceChars?: number;
+    usedChars?: number;
+  }>,
+): Array<{
+  displayName: string;
+  path: string;
+  reason?: string;
+  completeness?: 'full' | 'truncated' | 'unread';
+  sourceChars?: number;
+  usedChars?: number;
+}> {
+  return entries.slice(0, 40).map((e) => ({
+    displayName: String(e.displayName || '').slice(0, 120),
+    path: String(e.path || '').replace(/\\/g, '/').slice(-240),
+    ...(e.reason ? { reason: String(e.reason).slice(0, 120) } : {}),
+    ...(e.completeness === 'full' || e.completeness === 'truncated' || e.completeness === 'unread'
+      ? { completeness: e.completeness }
+      : {}),
+    ...(typeof e.sourceChars === 'number' && Number.isFinite(e.sourceChars)
+      ? { sourceChars: Math.max(0, Math.floor(e.sourceChars)) }
+      : {}),
+    ...(typeof e.usedChars === 'number' && Number.isFinite(e.usedChars)
+      ? { usedChars: Math.max(0, Math.floor(e.usedChars)) }
+      : {}),
+  }));
+}
+
+function packMaterials(materials: NonNullable<CtoReviewInput['materials']>): NonNullable<
+  AiCtoEvidencePack['materials']
+> {
+  return {
+    obtained: slimMaterialEntries(materials.obtained),
+    extracted: slimMaterialEntries(materials.extracted),
+    used: slimMaterialEntries(materials.used),
+    unread: slimMaterialEntries(materials.unread),
+    folderAttached: !!materials.folderAttached,
+    ...(typeof materials.includedCount === 'number' ? { includedCount: materials.includedCount } : {}),
+    ...(typeof materials.fullReadCount === 'number' ? { fullReadCount: materials.fullReadCount } : {}),
+    ...(typeof materials.truncatedCount === 'number' ? { truncatedCount: materials.truncatedCount } : {}),
+    notes: (materials.notes || []).slice(0, 6),
+  };
+}
+
+function materialEvidenceRefs(materials: CtoReviewInput['materials'] | undefined): string[] {
+  if (!materials) return [];
+  const refs: string[] = [];
+  if (materials.obtained.length || materials.folderAttached) refs.push('materials:inventory');
+  if (materials.extracted.length) refs.push('materials:extracted');
+  if (materials.used.length) refs.push('materials:used');
+  if (materials.unread.length) refs.push('materials:unread');
+  const truncated =
+    (materials.truncatedCount ?? 0) > 0 ||
+    materials.used.some((u) => u.completeness === 'truncated') ||
+    materials.unread.some((u) => u.completeness === 'truncated');
+  if (truncated) refs.push('materials:truncated');
+  return refs;
 }
 
 function pickCurrentRoundSummary(full: string): string {
@@ -444,6 +612,10 @@ function filterStaleUnresolved(items: string[], revisionRequest?: string): strin
   });
 }
 
+export function hasGenericArtifactBody(input: CtoReviewInput): boolean {
+  return !!String(input.artifactBody || '').trim();
+}
+
 function hardGateIssues(input: CtoReviewInput): { security: string[]; quality: string[] } {
   const checks = input.verification.checks || [];
   const failed = (id: string) => checks.find((check) => check.id === id)?.verdict === 'unsatisfied';
@@ -454,7 +626,7 @@ function hardGateIssues(input: CtoReviewInput): { security: string[]; quality: s
   if (failed('git_integrity')) security.push('检测到版本状态异常');
   if (failed('concurrent_edit')) security.push('执行期间可能发生并发修改');
   if (failed('adopt_consistency')) security.push('当前目录与待验收成果不一致');
-  if (input.changedFileCount <= 0 || failed('file_changes')) {
+  if (!hasGenericArtifactBody(input) && (input.changedFileCount <= 0 || failed('file_changes'))) {
     security.push('没有可核对的实质文件变化');
   }
   if (failed('build_check')) quality.push('构建未通过');
@@ -475,6 +647,10 @@ function criticalEvidenceMissing(input: CtoReviewInput): boolean {
   const checks = input.verification.checks || [];
   const hasSatisfied = (id: string) =>
     checks.some((check) => check.id === id && check.verdict === 'satisfied');
+  // 有成果正文的通用路径：正文即核对材料，不得因缺少代码文件变化而禁止达标
+  if (hasGenericArtifactBody(input) && input.changedFileCount <= 0) {
+    return false;
+  }
   // 构建未配置不算关键缺失；只有完全没有文件变化或未独立核对，才禁止达标
   return (
     input.changedFileCount <= 0 ||
@@ -612,9 +788,21 @@ export function mapAiCtoReview(
   } else if (output.decision === 'meets_plan' && missingCriticalEvidence) {
     guardedDecision = 'insufficient_evidence';
   }
+  const openRequirements = output.requirementChecks || [];
+  const hasIncomplete = openRequirements.some((c) => c.status === 'incomplete');
+  const hasUnverifiable = openRequirements.some((c) => c.status === 'unverifiable');
+  if (guardedDecision === 'meets_plan' && hasIncomplete) {
+    guardedDecision = 'needs_revision';
+  } else if (guardedDecision === 'meets_plan' && hasUnverifiable) {
+    guardedDecision = 'insufficient_evidence';
+  }
   const gateNotes = [...security, ...quality];
+  const requirementGaps = openRequirements
+    .filter((c) => c.status !== 'completed')
+    .map((c) => `${c.requirement}：${c.status === 'unverifiable' ? '无法验证' : '未完成'}`);
   const findings = [
     ...output.gaps,
+    ...requirementGaps,
     ...gateNotes,
     ...(missingCriticalEvidence && guardedDecision !== 'meets_plan'
       ? ['缺少支持采用所需的关键工程证据']
@@ -624,7 +812,18 @@ export function mapAiCtoReview(
   let goalAttainedText = output.goalAttained;
   let needChange = output.needChange;
   let nextStep = output.nextStep || output.nextAction;
-  if (guardedDecision === 'blocked' || guardedDecision === 'insufficient_evidence') {
+  const requirementBlockedAdopt =
+    output.decision === 'meets_plan' &&
+    guardedDecision !== 'meets_plan' &&
+    (hasIncomplete || hasUnverifiable);
+  if (requirementBlockedAdopt) {
+    canUse = '现在还不建议当作最终可用版本。';
+    goalAttainedText = '还不能认定已达到目标。';
+    needChange = '还需要按未完成或无法验证的要求继续处理。';
+    nextStep = hasIncomplete
+      ? '请先补齐未完成的要求后再继续。'
+      : '当前无法验证核心要求，不能建议采用。';
+  } else if (guardedDecision === 'blocked' || guardedDecision === 'insufficient_evidence') {
     if (/可以完全使用|建议当作可用|已经可以交付/.test(canUse)) {
       canUse = '现在还不能当作可用版本。';
     }
@@ -658,9 +857,11 @@ export function mapAiCtoReview(
   const revisionDirective =
     guardedDecision === 'needs_revision'
       ? output.revisionPlan ||
-        (quality.length
-          ? `请先处理以下问题并补充可核对证据：${quality.join('；')}。不得提交、推送或发布。`
-          : undefined)
+        (requirementGaps.length
+          ? `请针对以下未完成或无法验证的要求补充可核对证据：${requirementGaps.join('；')}。不得提交、推送或发布。`
+          : quality.length
+            ? `请先处理以下问题并补充可核对证据：${quality.join('；')}。不得提交、推送或发布。`
+            : undefined)
       : guardedDecision === 'blocked' && security.length
         ? `请先处理以下问题并补充可核对证据：${security.join('；')}。不得提交、推送或发布。`
         : undefined;
@@ -675,7 +876,10 @@ export function mapAiCtoReview(
         : guardedDecision === 'needs_revision'
           ? 'confirm_continue'
           : 'need_decision',
-    userFacingNextStep: output.nextAction,
+    userFacingNextStep:
+      guardedDecision === output.decision
+        ? output.nextAction
+        : nextStep,
     ...(revisionDirective ? { revisionDirective } : {}),
     goalAttained: guardedDecision === 'meets_plan',
     confidence:

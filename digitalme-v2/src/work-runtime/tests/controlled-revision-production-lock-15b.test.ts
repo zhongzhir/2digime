@@ -181,7 +181,7 @@ describe('D11-D production Task mutex (WorkRuntime)', () => {
     }
   });
 
-  it('10 个真实并发 succeeded 回调只创建 1 个修订 Job', async () => {
+  it('10 个真实并发 succeeded 回调零自动修订 Job', async () => {
     const { runtime } = await boot();
     try {
       const seeded = await seedSucceededTask(runtime);
@@ -197,9 +197,10 @@ describe('D11-D production Task mutex (WorkRuntime)', () => {
         ),
       );
       const created = results.filter((r) => r.revisionJobId);
-      assert.equal(created.length, 1);
+      assert.equal(created.length, 0);
+      assert.ok(results.every((r) => r.reason === 'product_main_chain_no_auto_revision'));
       const afterJobs = await runtime.listJobsForTask(seeded.taskId);
-      assert.equal(afterJobs.length, beforeJobs.length + 1);
+      assert.equal(afterJobs.length, beforeJobs.length);
     } finally {
       await runtime.stop();
     }

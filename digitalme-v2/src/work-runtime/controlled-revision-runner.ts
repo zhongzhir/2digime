@@ -61,6 +61,11 @@ export type ClaimRevisionResult =
   | { ok: true; claimId: string; loop: TaskRevisionLoopMeta; task: Task }
   | { ok: false; reason: string; loop?: TaskRevisionLoopMeta };
 
+/** 产品主链关闭 Job 成功后的系统自动修订；Owner 明确修订不走本入口。 */
+export function productMainChainBlocksAutoRevision(): boolean {
+  return true;
+}
+
 /**
  * 在调用方已持有 withTaskExclusive 时执行：重新读取最新状态并原子认领 version。
  * pending:* 存在（无论有无 active Job）即拒绝；过期 pending 可安全收敛清理。
@@ -137,9 +142,11 @@ export async function maybeRunControlledRevisionAfterJob(
   input: { taskId: string; jobId: string; artifactId: string },
 ): Promise<{ ok: boolean; action?: string; reason?: string; revisionJobId?: string }> {
   try {
-    const thinTask = await deps.getTask(input.taskId);
-    if (thinTask?.meta?.runtimePath === 'thin_v1') {
-      return { ok: true, action: 'noop', reason: 'thin_v1_no_auto_revision' };
+    // 产品主链：Job 成功后不再自动创建修订 Job、不自行改文件、不写「已暂停自动修改」。
+    // AI CTO 缺口解释已写在成果验收结论中，等待用户明确继续或补充意见。
+    // Owner 明确修订仍走 work.reviseArtifact。下方编排保留，不作为产品主链入口。
+    if (productMainChainBlocksAutoRevision()) {
+      return { ok: true, action: 'noop', reason: 'product_main_chain_no_auto_revision' };
     }
     const artifact = await deps.getArtifactContent(input.artifactId);
     const nowMs = deps.nowMs ? deps.nowMs() : Date.now();

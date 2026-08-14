@@ -109,6 +109,16 @@
           text: next,
         });
       }
+    } else if (input.hasArtifact && !input.jobRunning && input.acceptanceFailed) {
+      push({
+        id: 'acceptance_failed',
+        role: 'digital_me',
+        kind: 'acceptance',
+        text:
+          String(input.acceptanceFailureMessage || '').trim() ||
+          '成果已生成，但验收说明暂未完成，可重试。',
+        actions: [{ id: 'retry_acceptance', label: '重新整理验收说明' }],
+      });
     } else if (input.hasArtifact && !input.jobRunning) {
       push({
         id: 'artifact_ready_no_cto',

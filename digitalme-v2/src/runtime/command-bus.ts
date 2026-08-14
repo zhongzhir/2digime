@@ -78,6 +78,9 @@ export function createCommandBus(runtime: DigitalMeRuntime): CommandBus {
           )) as CommandMap[K]['output'];
         case 'artifact.getContent': {
           const req = input as CommandMap['artifact.getContent']['input'];
+          if (req.retryAcceptance) {
+            await runtime.retryArtifactAcceptance(req.artifactId);
+          }
           const got = await runtime.getContent(req);
           const headVersionId = got.artifact.headVersionId;
           let ownerDecision: CommandMap['artifact.getContent']['output']['ownerDecision'];
@@ -108,6 +111,18 @@ export function createCommandBus(runtime: DigitalMeRuntime): CommandBus {
             ...(got.evidenceStale ? { evidenceStale: true } : {}),
             ...((got as unknown as { codeChange?: unknown }).codeChange
               ? { codeChange: (got as unknown as { codeChange: unknown }).codeChange }
+              : {}),
+            ...((got as { acceptanceSummary?: unknown }).acceptanceSummary
+              ? { acceptanceSummary: (got as { acceptanceSummary: unknown }).acceptanceSummary }
+              : {}),
+            ...((got as { acceptanceStatus?: unknown }).acceptanceStatus
+              ? { acceptanceStatus: (got as { acceptanceStatus: unknown }).acceptanceStatus }
+              : {}),
+            ...((got as { acceptanceFailureMessage?: string }).acceptanceFailureMessage
+              ? {
+                  acceptanceFailureMessage: (got as { acceptanceFailureMessage: string })
+                    .acceptanceFailureMessage,
+                }
               : {}),
           } as CommandMap[K]['output'];
         }

@@ -6,6 +6,109 @@ import { artifactIdForJob } from './artifact';
  * P0.1:Job 1:1 Snapshot;snapshotId 在 context 阶段完成后写入(submitTask 同步路径
  * 只建 queued Job,材料抽取属于 Job 的第一个异步阶段)。
  */
+/** Job 创建时冻结的确认规划；执行只读此结构。 */
+export interface ConfirmedPlanSnapshot {
+  version: number;
+  content: string;
+}
+
+/** 能力实际纳入提示或读取的材料；与 Snapshot 获得清单区分。 */
+export type MaterialReadCompleteness = 'full' | 'truncated' | 'unread';
+
+export interface JobMaterialUseItem {
+  path: string;
+  completeness: MaterialReadCompleteness;
+  sourceChars: number;
+  usedChars: number;
+}
+
+export interface JobMaterialUse {
+  usedPaths: string[];
+  /** 进入提示的条数（含截断）。不得当成完整阅读数。 */
+  includedCount: number;
+  /** 进入提示但未读完的条数。 */
+  truncatedCount?: number;
+  /** 完整读入的条数。 */
+  fullReadCount?: number;
+  skippedWarningCount?: number;
+  items?: JobMaterialUseItem[];
+}
+
+function parseMaterialUseItems(raw: unknown): JobMaterialUseItem[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: JobMaterialUseItem[] = [];
+  for (const it of raw.slice(0, 80)) {
+    if (!it || typeof it !== 'object') continue;
+    const rec = it as Record<string, unknown>;
+    const itemPath = String(rec.path || '').trim();
+    const completeness = rec.completeness;
+    if (!itemPath) continue;
+    if (completeness !== 'full' && completeness !== 'truncated' && completeness !== 'unread') {
+      continue;
+    }
+    const sourceChars = Number(rec.sourceChars);
+    const usedChars = Number(rec.usedChars);
+    out.push({
+      path: itemPath,
+      completeness,
+      sourceChars: Number.isFinite(sourceChars) ? Math.max(0, Math.floor(sourceChars)) : 0,
+      usedChars: Number.isFinite(usedChars) ? Math.max(0, Math.floor(usedChars)) : 0,
+    });
+  }
+  return out.length ? out : undefined;
+}
+
+export function normalizeMaterialUse(raw: unknown): JobMaterialUse | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const o = raw as Record<string, unknown>;
+  const items = parseMaterialUseItems(o.items);
+  const usedPaths = Array.isArray(o.usedPaths)
+    ? o.usedPaths.map((p) => String(p || '').trim()).filter(Boolean).slice(0, 80)
+    : items
+      ? items.filter((i) => i.usedChars > 0).map((i) => i.path)
+      : [];
+  const includedCount =
+    typeof o.includedCount === 'number' && Number.isFinite(o.includedCount)
+      ? Math.max(0, Math.floor(o.includedCount))
+      : usedPaths.length;
+  const truncatedFromItems = items?.filter((i) => i.completeness === 'truncated').length;
+  const fullFromItems = items?.filter((i) => i.completeness === 'full').length;
+  const truncatedCount =
+    truncatedFromItems != null
+      ? truncatedFromItems
+      : typeof o.truncatedCount === 'number' && Number.isFinite(o.truncatedCount)
+        ? Math.max(0, Math.floor(o.truncatedCount))
+        : undefined;
+  const fullReadCount =
+    fullFromItems != null
+      ? fullFromItems
+      : typeof o.fullReadCount === 'number' && Number.isFinite(o.fullReadCount)
+        ? Math.max(0, Math.floor(o.fullReadCount))
+        : undefined;
+  const skippedWarningCount =
+    typeof o.skippedWarningCount === 'number' && Number.isFinite(o.skippedWarningCount)
+      ? Math.max(0, Math.floor(o.skippedWarningCount))
+      : undefined;
+  if (
+    usedPaths.length === 0 &&
+    includedCount === 0 &&
+    truncatedCount == null &&
+    fullReadCount == null &&
+    skippedWarningCount == null &&
+    !items
+  ) {
+    return { usedPaths: [], includedCount: 0 };
+  }
+  return {
+    usedPaths,
+    includedCount,
+    ...(truncatedCount != null ? { truncatedCount } : {}),
+    ...(fullReadCount != null ? { fullReadCount } : {}),
+    ...(skippedWarningCount != null ? { skippedWarningCount } : {}),
+    ...(items ? { items } : {}),
+  };
+}
+
 export const JOB_STATUSES = ['queued', 'running', 'succeeded', 'failed', 'cancelled'] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
 
@@ -49,6 +152,16 @@ export interface ExecutionJob {
   revisionRequest?: string;
   /** 用户不采用理由（可选；进入修订 prompt）。 */
   rejectionReason?: string;
+  /**
+   * 本 Job 创建时冻结的已确认规划（版本 + 正文）。
+   * 仅证明并承载本次执行依据的方案；不回写 Task，不替代 Plan 权威链。
+   */
+  confirmedPlanSnapshot?: ConfirmedPlanSnapshot;
+  /**
+   * 能力实际读入执行/提示的材料路径（执行证据，非状态机）。
+   * 与 Snapshot 中「获得/已抽取/未读取」区分；缺省不得把已抽取当成已通读。
+   */
+  materialUse?: JobMaterialUse;
   costActual?: { tokens?: number; durationMs?: number };
   /**
    * 远端执行映射(可选) — 不是第二状态机。

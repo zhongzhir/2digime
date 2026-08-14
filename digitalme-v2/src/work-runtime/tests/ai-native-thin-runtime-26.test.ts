@@ -299,7 +299,7 @@ describe('2DIGIME-AI-NATIVE-THIN-RUNTIME-26', () => {
     assert.doesNotMatch(html, /保存副本/);
     assert.match(workspace, /thinRuntime \? '当前方案'/);
     assert.match(workspace, /确认并开始/);
-    assert.match(converse, /thin && decision\.confirmPlan/);
+    assert.match(converse, /decision\.confirmPlan && existingPlan && isUserVisiblePlan/);
     assert.match(converse, /silentOutcomeExplain/);
   });
 
@@ -437,7 +437,7 @@ describe('2DIGIME-AI-NATIVE-THIN-RUNTIME-26', () => {
       { taskId: task.id, jobId: 'job_1', artifactId: 'art_1' },
     );
     assert.equal(result.action, 'noop');
-    assert.equal(result.reason, 'thin_v1_no_auto_revision');
+    assert.equal(result.reason, 'product_main_chain_no_auto_revision');
   });
 });
 

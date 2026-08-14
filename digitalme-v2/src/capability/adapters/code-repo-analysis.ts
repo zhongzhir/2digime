@@ -8,11 +8,12 @@
  */
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
-import type {
-  CapabilityAdapter,
-  CapabilityInput,
-  CapabilityOutput,
-  ExecutionContext,
+import {
+  formatCapabilityTaskAndPlan,
+  type CapabilityAdapter,
+  type CapabilityInput,
+  type CapabilityOutput,
+  type ExecutionContext,
 } from '../adapter';
 import { asLocalCapabilityAdapter } from '../local-adapter-lifecycle';
 import { chatComplete, ModelHttpError } from '../../infrastructure/model-http';
@@ -190,7 +191,7 @@ export function createCodeRepoAnalysisAdapter(
                 {
                   role: 'user',
                   content: [
-                    `# GOAL\n${scrubText(input.goal).slice(0, 800)}`,
+                    `# GOAL\n${scrubText(formatCapabilityTaskAndPlan(input)).slice(0, 800)}`,
                     `# INDEX (path digest)\n${assembled.selectedFiles
                       .slice(0, 20)
                       .map((f) => `${f.relativePath}\t${f.contentDigest}`)
@@ -250,7 +251,7 @@ export function createCodeRepoAnalysisAdapter(
             '若 findings 含 APPLIED_EXPERIENCE:<eventId>,必须在 recommendations 中保留该标记。',
           ].join('');
           const sectionsUser = [
-            `# 用户目标\n${scrubText(input.goal).slice(0, 1500)}`,
+            `# 用户目标\n${scrubText(formatCapabilityTaskAndPlan(input)).slice(0, 1500)}`,
             `# findings\n${findingsText.slice(0, 10_000)}`,
             `# 覆盖说明\n${assembled.coverageNote}`,
             `# 文件索引(摘录)\n${compactUser.slice(0, 6_000)}`,
@@ -652,7 +653,7 @@ function buildCompactAnalysisUser(
     .map((e) => `- eventId=${e.eventId} | ${e.title}: ${e.detail}`)
     .join('\n');
   return [
-    `# 用户目标\n${scrubText(input.goal).slice(0, 1500)}`,
+    `# 用户目标\n${scrubText(formatCapabilityTaskAndPlan(input)).slice(0, 1500)}`,
     `# 覆盖说明\n${assembled.coverageNote}`,
     experiences ? `# 已确认经验(必须尊重;适用时输出 APPLIED_EXPERIENCE:<eventId>)\n${experiences}` : '',
     `# 文件索引\n${index}`,

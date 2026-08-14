@@ -7,13 +7,11 @@ import { describe, it } from 'node:test';
 import {
   DEFAULT_MAX_AUTO_REVISION_CUMULATIVE_MS,
   DEFAULT_MAX_AUTO_REVISION_ROUNDS,
-  DEFAULT_REVISION_CLAIM_STALE_MS,
   EXTERNAL_EXECUTOR_DEFAULT_TIMEOUT_MS,
   decideControlledRevision,
 } from '../controlled-revision';
 import {
   claimRevisionVersionExclusive,
-  isPendingClaim,
   maybeRunControlledRevisionAfterJob,
   type ControlledRevisionRunnerDeps,
 } from '../controlled-revision-runner';
@@ -147,46 +145,34 @@ function createHarness(opts: {
 }
 
 describe('D11-D concurrency follow-up (runner)', () => {
-  it('同一 succeeded event 并发 10 次只创建 1 个修订 Job', async () => {
+  it('产品主链：同一 succeeded event 并发 10 次零自动修订 Job', async () => {
     const h = createHarness();
     const input = { taskId: h.taskId, jobId: 'job_src', artifactId: 'art_1' };
     const results = await Promise.all(
       Array.from({ length: 10 }, () => maybeRunControlledRevisionAfterJob(h.deps, input)),
     );
-    assert.equal(h.reviseCalls, 1);
-    assert.equal(results.filter((r) => r.revisionJobId).length, 1);
-    assert.ok(!isPendingClaim(h.task.meta?.revisionLoop?.inFlightJobId));
-    assert.equal(h.task.meta?.revisionLoop?.inFlightJobId, 'job_rev_1');
+    assert.equal(h.reviseCalls, 0);
+    assert.equal(results.filter((r) => r.revisionJobId).length, 0);
+    assert.ok(results.every((r) => r.action === 'noop'));
+    assert.ok(results.every((r) => r.reason === 'product_main_chain_no_auto_revision'));
   });
 
-  it('两个回调同时读到无 active Job，仍只有一个认领成功', async () => {
+  it('产品主链：两个回调同时到达仍为零修订 Job', async () => {
     const h = createHarness();
-    let bothSawEmpty = false;
-    const saw: boolean[] = [];
-    const orig = h.deps.findActiveJob;
-    h.deps.findActiveJob = async () => {
-      const active = await orig('x');
-      saw.push(!active);
-      if (saw.length >= 2 && saw.every(Boolean)) bothSawEmpty = true;
-      return active;
-    };
     const input = { taskId: h.taskId, jobId: 'job_src', artifactId: 'art_1' };
     const [a, b] = await Promise.all([
       maybeRunControlledRevisionAfterJob(h.deps, input),
       maybeRunControlledRevisionAfterJob(h.deps, input),
     ]);
-    assert.equal(bothSawEmpty, true);
-    assert.equal(h.reviseCalls, 1);
-    const actions = [a.action, b.action];
-    assert.ok(actions.includes('auto_revise') || actions.includes('auto_revise_new_scheme'));
-    assert.ok(actions.includes('noop') || actions.filter((x) => x === 'auto_revise').length === 1);
+    assert.equal(h.reviseCalls, 0);
+    assert.equal(a.action, 'noop');
+    assert.equal(b.action, 'noop');
   });
 
-  it('pending 占位存在但 Job 尚未落盘时，重复事件不得继续', async () => {
+  it('产品主链：pending 占位存在时仍不创建修订 Job', async () => {
     const h = createHarness();
     await h.deps.updateRevisionLoop(h.taskId, (prev) => ({
       ...prev,
-      // 故意不写 lastHandled：仅靠 pending 阻断
       inFlightJobId: 'pending:job_src:ver_1',
       claimToken: 'pending:job_src:ver_1',
       claimStartedAt: '2026-08-11T00:00:00.000Z',
@@ -197,11 +183,11 @@ describe('D11-D concurrency follow-up (runner)', () => {
       artifactId: 'art_1',
     });
     assert.equal(result.action, 'noop');
-    assert.equal(result.reason, 'revision_in_flight');
+    assert.equal(result.reason, 'product_main_chain_no_auto_revision');
     assert.equal(h.reviseCalls, 0);
   });
 
-  it('认领后、reviseArtifact 前用户暂停 → 零新 Job', async () => {
+  it('产品主链：用户暂停后零新 Job', async () => {
     const h = createHarness({
       afterClaimForTest: async () => {
         await h.deps.updateRevisionLoop(h.taskId, (prev) => ({
@@ -218,12 +204,9 @@ describe('D11-D concurrency follow-up (runner)', () => {
     });
     assert.equal(h.reviseCalls, 0);
     assert.equal(result.action, 'noop');
-    assert.ok(result.reason === 'paused' || result.reason === 'blocked_before_create');
-    assert.equal(h.task.meta?.revisionLoop?.inFlightJobId, undefined);
-    assert.equal(h.task.meta?.revisionLoop?.lastHandledVersionId, 'ver_1');
   });
 
-  it('认领后用户取消 → 零新 Job', async () => {
+  it('产品主链：用户取消后零新 Job', async () => {
     const h = createHarness({
       afterClaimForTest: async () => {
         await h.deps.updateRevisionLoop(h.taskId, (prev) => ({
@@ -240,77 +223,31 @@ describe('D11-D concurrency follow-up (runner)', () => {
     });
     assert.equal(h.reviseCalls, 0);
     assert.equal(result.action, 'noop');
-    assert.ok(result.reason === 'cancelled' || result.reason === 'blocked_before_create');
   });
 
-  it('创建 Job 失败后不残留假运行状态，也不重复执行旧版本', async () => {
-    const h = createHarness({
-      reviseImpl: async () => {
-        throw new Error('create_failed');
-      },
-    });
+  it('产品主链：重复成功事件不产生自动修订', async () => {
+    const h = createHarness();
     const first = await maybeRunControlledRevisionAfterJob(h.deps, {
       taskId: h.taskId,
       jobId: 'job_src',
       artifactId: 'art_1',
     });
-    assert.equal(first.ok, false);
-    assert.equal(h.task.meta?.revisionLoop?.inFlightJobId, undefined);
-    assert.equal(h.task.meta?.revisionLoop?.paused, true);
-    assert.equal(h.task.meta?.revisionLoop?.lastHandledVersionId, 'ver_1');
-
     const second = await maybeRunControlledRevisionAfterJob(h.deps, {
       taskId: h.taskId,
       jobId: 'job_src',
       artifactId: 'art_1',
     });
+    assert.equal(first.action, 'noop');
     assert.equal(second.action, 'noop');
-    assert.ok(
-      second.reason === 'paused_or_cancelled' ||
-        second.reason === 'version_already_handled' ||
-        second.reason === 'paused',
-    );
-  });
-
-  it('重启后过期 pending 可安全收敛，不重复建 Job（同 version）', async () => {
-    const started = Date.parse('2026-08-11T00:00:00.000Z');
-    const h = createHarness({
-      nowMs: () => started + DEFAULT_REVISION_CLAIM_STALE_MS + 1,
-    });
-    await h.deps.updateRevisionLoop(h.taskId, (prev) => ({
-      ...prev,
-      lastHandledVersionId: 'ver_1',
-      inFlightJobId: 'pending:job_old:ver_1',
-      claimToken: 'pending:job_old:ver_1',
-      claimStartedAt: '2026-08-11T00:00:00.000Z',
-    }));
-    const result = await maybeRunControlledRevisionAfterJob(h.deps, {
-      taskId: h.taskId,
-      jobId: 'job_src',
-      artifactId: 'art_1',
-    });
     assert.equal(h.reviseCalls, 0);
-    assert.equal(result.action, 'noop');
-    assert.equal(result.reason, 'version_already_handled');
-    assert.equal(h.task.meta?.revisionLoop?.inFlightJobId, undefined);
   });
 
-  it('不同 Artifact version 可按顺序处理', async () => {
+  it('产品主链：不同 Artifact version 也不自动建修订 Job', async () => {
     const h = createHarness({ versionId: 'ver_1' });
     const first = await maybeRunControlledRevisionAfterJob(h.deps, {
       taskId: h.taskId,
       jobId: 'job_1',
       artifactId: 'art_1',
-    });
-    assert.ok(first.revisionJobId);
-
-    // 上一轮 Job 已结束：清 inFlight，推进到 ver_2
-    await h.deps.updateRevisionLoop(h.taskId, (prev) => {
-      const next = { ...prev };
-      delete next.inFlightJobId;
-      delete next.claimStartedAt;
-      delete next.claimToken;
-      return next;
     });
     h.deps.getArtifactContent = async () => ({
       versionId: 'ver_2',
@@ -323,15 +260,14 @@ describe('D11-D concurrency follow-up (runner)', () => {
       },
       checks: [{ id: 'integration', verdict: 'unsatisfied', detail: '空指针' }],
     });
-
     const second = await maybeRunControlledRevisionAfterJob(h.deps, {
       taskId: h.taskId,
       jobId: 'job_2',
       artifactId: 'art_1',
     });
-    assert.ok(second.revisionJobId);
-    assert.equal(h.reviseCalls, 2);
-    assert.equal(h.task.meta?.revisionLoop?.lastHandledVersionId, 'ver_2');
+    assert.equal(first.revisionJobId, undefined);
+    assert.equal(second.revisionJobId, undefined);
+    assert.equal(h.reviseCalls, 0);
   });
 
   it('硬门常量：单轮超时 / 累计时长 / 自动轮次上限可引用且决策生效', () => {
@@ -369,26 +305,6 @@ describe('D11-D concurrency follow-up (runner)', () => {
       loop: { attempts: [], autoRoundCount: 0 },
     });
     assert.equal(pausedByCum.action, 'pause');
-  });
-
-  it('不得把 pausedByUser:false / cancelled:false 当作真实运行事实（以 loop 为准）', async () => {
-    const h = createHarness({
-      afterClaimForTest: async () => {
-        await h.deps.updateRevisionLoop(h.taskId, (prev) => ({
-          ...prev,
-          paused: true,
-          pauseReason: 'user_pause',
-        }));
-      },
-    });
-    // 即便决策输入侧曾写死 false，runner 必须以最新 loop 阻断
-    const result = await maybeRunControlledRevisionAfterJob(h.deps, {
-      taskId: h.taskId,
-      jobId: 'job_src',
-      artifactId: 'art_1',
-    });
-    assert.equal(h.reviseCalls, 0);
-    assert.equal(result.action, 'noop');
   });
 
   it('claimRevisionVersionExclusive：pending 本身阻止，不要求 active Job', async () => {

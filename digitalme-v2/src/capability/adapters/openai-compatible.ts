@@ -133,6 +133,19 @@ export function createOpenAiCompatibleAdapter(
           title,
           payload: { kind: 'text', format: 'markdown', text },
         },
+        materialUse: {
+          usedPaths: assembled.sources,
+          includedCount: assembled.materialCount,
+          truncatedCount: assembled.truncatedCount,
+          fullReadCount: assembled.fullReadCount,
+          skippedWarningCount: assembled.skippedWarningCount,
+          items: assembled.items.map((it) => ({
+            path: it.sourcePath,
+            completeness: it.completeness,
+            sourceChars: it.sourceChars,
+            usedChars: it.usedChars,
+          })),
+        },
       };
       if (result.usage?.totalTokens !== undefined) {
         output.costActual = { tokens: result.usage.totalTokens };
