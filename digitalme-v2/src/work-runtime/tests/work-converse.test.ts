@@ -37,6 +37,8 @@ interface ScriptedReply {
   confidence: number;
   reply: string;
   planUpdate?: string;
+  executionIntentKind?: string;
+  expectedOutputFamily?: string;
   /** 模型输出前后混入的杂散文本（模拟思维链/围栏）。 */
   wrap?: boolean;
 }
@@ -54,6 +56,8 @@ function scriptedChat(replies: ScriptedReply[]) {
       confidence: r.confidence,
       reply: r.reply,
       ...(r.planUpdate ? { planUpdate: r.planUpdate } : {}),
+        ...(r.executionIntentKind ? { executionIntentKind: r.executionIntentKind } : {}),
+        ...(r.expectedOutputFamily ? { expectedOutputFamily: r.expectedOutputFamily } : {}),
     });
     const text = r.wrap
       ? '好的，我先想一想。\n```json\n' + body + '\n```\n以上是我的判断。'
@@ -168,7 +172,9 @@ describe('D11-A work.converse — AI 意图与对话中枢', () => {
     const root = await tempDir('start');
     const { chat } = scriptedChat([
       { intent: 'add_goal_info', confidence: 0.9, reply: '收到，规划整理好了，确认后开始。', planUpdate: '目标：写一句话说明\n交付：一段文字' },
-      { intent: 'confirm_start', confidence: 0.95, reply: '好，我按第 1 版规划开始，完成后告诉你。' },
+      { intent: 'confirm_start', confidence: 0.95, reply: '好，我按第 1 版规划开始，完成后告诉你。',
+        executionIntentKind: 'create_document',
+        expectedOutputFamily: 'document' },
     ]);
     const { runtime, bus } = await makeRuntime(root, chat);
     await bus.invoke('subject.createPackage', { displayName: '启动主体', targetDir: path.join(root, 'pkg') });
@@ -236,7 +242,9 @@ describe('D11-A work.converse — AI 意图与对话中枢', () => {
     const root = await tempDir('lowconf');
     const { chat } = scriptedChat([
       { intent: 'add_goal_info', confidence: 0.9, reply: '规划已建立。', planUpdate: '目标：小游戏' },
-      { intent: 'confirm_start', confidence: 0.35, reply: '我不太确定你是想现在开始，还是先再聊聊？', planUpdate: '不应生效的规划' },
+      { intent: 'confirm_start', confidence: 0.35, reply: '我不太确定你是想现在开始，还是先再聊聊？', planUpdate: '不应生效的规划',
+        executionIntentKind: 'create_document',
+        expectedOutputFamily: 'document' },
     ]);
     const { runtime, bus } = await makeRuntime(root, chat);
     await bus.invoke('subject.createPackage', { displayName: '澄清主体', targetDir: path.join(root, 'pkg') });
@@ -346,7 +354,9 @@ describe('D11-A work.converse — AI 意图与对话中枢', () => {
     assert.equal(bad.startAuthorized, false);
     // 执行中不授权
     const running = decideConverseEffects({
-      parsed: { intent: 'confirm_start', confidence: 0.99, reply: '开始' },
+      parsed: { intent: 'confirm_start', confidence: 0.99, reply: '开始',
+        executionIntentKind: 'create_document',
+        expectedOutputFamily: 'document' },
       modelAvailable: true,
       hasArtifact: false,
       jobRunning: true,
@@ -354,7 +364,9 @@ describe('D11-A work.converse — AI 意图与对话中枢', () => {
     assert.equal(running.startAuthorized, false);
     // 首轮不授权（同一句话不得建任务又当场执行）
     const firstTurn = decideConverseEffects({
-      parsed: { intent: 'confirm_start', confidence: 0.99, reply: '开始' },
+      parsed: { intent: 'confirm_start', confidence: 0.99, reply: '开始',
+        executionIntentKind: 'create_document',
+        expectedOutputFamily: 'document' },
       modelAvailable: true,
       hasArtifact: false,
       jobRunning: false,
@@ -363,7 +375,9 @@ describe('D11-A work.converse — AI 意图与对话中枢', () => {
     assert.equal(firstTurn.startAuthorized, false);
     // 有成果时确认开始 = 修订轮
     const revision = decideConverseEffects({
-      parsed: { intent: 'confirm_start', confidence: 0.9, reply: '继续' },
+      parsed: { intent: 'confirm_start', confidence: 0.9, reply: '继续',
+        executionIntentKind: 'create_document',
+        expectedOutputFamily: 'document' },
       modelAvailable: true,
       hasArtifact: true,
       jobRunning: false,
@@ -379,7 +393,9 @@ describe('D11-A work.converse — AI 意图与对话中枢', () => {
     assert.equal(adoptNoArtifact.adoptRequested, false);
     // 执行性意图把握不足（<0.8）→ 先澄清，不授权开始/采用
     const midConfStart = decideConverseEffects({
-      parsed: { intent: 'confirm_start', confidence: 0.7, reply: '你是想现在开始吗？' },
+      parsed: { intent: 'confirm_start', confidence: 0.7, reply: '你是想现在开始吗？',
+        executionIntentKind: 'create_document',
+        expectedOutputFamily: 'document' },
       modelAvailable: true,
       hasArtifact: false,
       jobRunning: false,

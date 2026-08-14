@@ -40,6 +40,8 @@ interface ScriptedReply {
   confidence: number;
   reply: string;
   planUpdate?: string;
+  executionIntentKind?: string;
+  expectedOutputFamily?: string;
 }
 
 function scriptedChat(replies: ScriptedReply[]) {
@@ -54,6 +56,8 @@ function scriptedChat(replies: ScriptedReply[]) {
         confidence: r.confidence,
         reply: r.reply,
         ...(r.planUpdate ? { planUpdate: r.planUpdate } : {}),
+        ...(r.executionIntentKind ? { executionIntentKind: r.executionIntentKind } : {}),
+        ...(r.expectedOutputFamily ? { expectedOutputFamily: r.expectedOutputFamily } : {}),
       }),
     };
   };
@@ -107,6 +111,8 @@ describe('AI-NATIVE-CORE-RUNTIME-31', () => {
         confidence: 0.95,
         reply: '好，按当前方案开始。',
         planUpdate: '目标：写一句话说明（同轮不应生效的升版）\n交付：被忽略',
+        executionIntentKind: 'create_document',
+        expectedOutputFamily: 'document',
       },
     ]);
     const { runtime, bus } = await makeDigitalRuntime(root, chat);
@@ -144,6 +150,8 @@ describe('AI-NATIVE-CORE-RUNTIME-31', () => {
         confidence: 0.95,
         reply: '好，开始。',
         planUpdate: '目标：修 formatLabel（补充说明）\n交付：同上',
+        executionIntentKind: 'modify_code',
+        expectedOutputFamily: 'code-change',
       },
     ]);
     const { runtime, bus } = await makeDigitalRuntime(root, chat);
@@ -163,6 +171,7 @@ describe('AI-NATIVE-CORE-RUNTIME-31', () => {
     });
     assert.equal(confirm.plan?.status, 'confirmed');
     assert.equal(confirm.plan?.version, 1);
+    assert.equal(confirm.executionIntentKind, 'modify_code');
     await runtime.stop();
   });
 
@@ -214,6 +223,8 @@ describe('AI-NATIVE-CORE-RUNTIME-31', () => {
         confidence: 0.95,
         reply: '好，按当前方案开始。',
         planUpdate: '不应升版的附带规划',
+        executionIntentKind: 'create_document',
+        expectedOutputFamily: 'document',
       },
     ]);
     const { runtime, bus } = await makeDigitalRuntime(root, chat);
@@ -255,6 +266,8 @@ describe('AI-NATIVE-CORE-RUNTIME-31', () => {
         intent: 'confirm_start',
         confidence: 0.95,
         reply: '好，按当前方案开始。',
+        executionIntentKind: 'create_document',
+        expectedOutputFamily: 'document',
       },
     ]);
     const runtime = createDigitalMeRuntime({

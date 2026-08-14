@@ -34,7 +34,7 @@ async function tempDir(prefix: string): Promise<string> {
 }
 
 function scriptedConverse(
-  replies: Array<{ intent: string; confidence: number; reply: string; planUpdate?: string }>,
+  replies: Array<{ intent: string; confidence: number; reply: string; planUpdate?: string; executionIntentKind?: string; expectedOutputFamily?: string }>,
 ) {
   let i = 0;
   return async ({ messages }: { messages: ChatMessage[] }) => {
@@ -47,6 +47,8 @@ function scriptedConverse(
         confidence: r.confidence,
         reply: r.reply,
         ...(r.planUpdate ? { planUpdate: r.planUpdate } : {}),
+        ...(r.executionIntentKind ? { executionIntentKind: r.executionIntentKind } : {}),
+        ...(r.expectedOutputFamily ? { expectedOutputFamily: r.expectedOutputFamily } : {}),
       }),
     };
   };
@@ -169,7 +171,9 @@ describe('AI-NATIVE-CORE-RUNTIME-31B generic CTO review', () => {
         reply: '规划已整理，确认后开始。',
         planUpdate: UNIQUE_PLAN,
       },
-      { intent: 'confirm_start', confidence: 0.95, reply: '好，按当前方案开始。' },
+      { intent: 'confirm_start', confidence: 0.95, reply: '好，按当前方案开始。',
+        executionIntentKind: 'create_document',
+        expectedOutputFamily: 'document' },
     ]) };
     const { chat: cto, captured } = scriptedCto(meetsPlanOutput);
     const { runtime, bus } = await makeRuntime({ converse, cto });
@@ -262,7 +266,9 @@ describe('AI-NATIVE-CORE-RUNTIME-31B generic CTO review', () => {
         reply: '规划已整理。',
         planUpdate: UNIQUE_PLAN,
       },
-      { intent: 'confirm_start', confidence: 0.95, reply: '开始。' },
+      { intent: 'confirm_start', confidence: 0.95, reply: '开始。',
+        executionIntentKind: 'create_document',
+        expectedOutputFamily: 'document' },
     ]);
     const { chat: cto } = scriptedCto(() => new Error('model down'));
     const { runtime, bus } = await makeRuntime({ converse, cto });
@@ -305,7 +311,9 @@ describe('AI-NATIVE-CORE-RUNTIME-31B generic CTO review', () => {
         reply: '规划已整理。',
         planUpdate: UNIQUE_PLAN,
       },
-      { intent: 'confirm_start', confidence: 0.95, reply: '开始。' },
+      { intent: 'confirm_start', confidence: 0.95, reply: '开始。',
+        executionIntentKind: 'create_document',
+        expectedOutputFamily: 'document' },
     ]);
     const { chat: cto } = scriptedCto(meetsPlanOutput);
     const first = await makeRuntime({ converse, cto });
@@ -342,7 +350,9 @@ describe('AI-NATIVE-CORE-RUNTIME-31B generic CTO review', () => {
         reply: '规划已整理。',
         planUpdate: UNIQUE_PLAN,
       },
-      { intent: 'confirm_start', confidence: 0.95, reply: '开始。' },
+      { intent: 'confirm_start', confidence: 0.95, reply: '开始。',
+        executionIntentKind: 'create_document',
+        expectedOutputFamily: 'document' },
     ]);
     const { chat: cto } = scriptedCto(needsRevisionOutput);
     const { runtime, bus } = await makeRuntime({ converse, cto });
@@ -421,7 +431,9 @@ describe('AI-NATIVE-CORE-RUNTIME-31B generic CTO review', () => {
         reply: '规划已整理。',
         planUpdate: UNIQUE_PLAN,
       },
-      { intent: 'confirm_start', confidence: 0.95, reply: '开始。' },
+      { intent: 'confirm_start', confidence: 0.95, reply: '开始。',
+        executionIntentKind: 'create_document',
+        expectedOutputFamily: 'document' },
     ]);
     const cto = async ({ messages }: { messages: ChatMessage[] }) => {
       ctoCalls += 1;
@@ -486,7 +498,9 @@ describe('AI-NATIVE-CORE-RUNTIME-31B generic CTO review', () => {
         reply: '规划已整理。',
         planUpdate: UNIQUE_PLAN,
       },
-      { intent: 'confirm_start', confidence: 0.95, reply: '开始。' },
+      { intent: 'confirm_start', confidence: 0.95, reply: '开始。',
+        executionIntentKind: 'create_document',
+        expectedOutputFamily: 'document' },
     ]);
     let entered = 0;
     const firstCto = async () => {

@@ -63,6 +63,8 @@ interface ScriptedReply {
   confidence: number;
   reply: string;
   planUpdate?: string;
+  executionIntentKind?: string;
+  expectedOutputFamily?: string;
 }
 
 function scriptedChat(replies: ScriptedReply[]) {
@@ -77,6 +79,8 @@ function scriptedChat(replies: ScriptedReply[]) {
         confidence: r.confidence,
         reply: r.reply,
         ...(r.planUpdate ? { planUpdate: r.planUpdate } : {}),
+        ...(r.executionIntentKind ? { executionIntentKind: r.executionIntentKind } : {}),
+        ...(r.expectedOutputFamily ? { expectedOutputFamily: r.expectedOutputFamily } : {}),
       }),
     };
   };
@@ -156,6 +160,8 @@ describe('2DIGIME-AI-NATIVE-THIN-RUNTIME-26', () => {
         confidence: 0.96,
         reply: '好，按当前方案开始。',
         planUpdate: '目标：修 formatLabel（补充说明）\n交付：同上',
+        executionIntentKind: 'modify_code',
+        expectedOutputFamily: 'code-change',
       },
     ]);
     const { runtime, bus } = await makeRuntime(root, chat);
@@ -284,8 +290,10 @@ describe('2DIGIME-AI-NATIVE-THIN-RUNTIME-26', () => {
       'utf8',
     );
     assert.match(app, /fromPlanConfirm:\s*true/);
-    // 确认后按 executionIntent 选择能力；thin 仅作兜底，不再单独决定 fromPlanConfirm。
+    // 确认后必须使用模型瞬时 executionIntent；不得再用 thin 猜测 modify_code。
     assert.match(app, /executionIntentKind|executionRequestedArtifactType/);
+    assert.match(app, /!options\.fromPlanConfirm && thin/);
+    assert.doesNotMatch(app, /execKind \|\| \(thin \? "modify_code"/);
     assert.match(app, /silentOutcomeExplain: true/);
     assert.match(app, /请决定是否采用这份成果/);
     assert.match(app, /artifactExportsMore\.hidden = !hasArtifact/);

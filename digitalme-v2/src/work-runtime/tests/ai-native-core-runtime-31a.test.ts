@@ -46,7 +46,7 @@ async function makeSoftwareFolder(root: string): Promise<string> {
 }
 
 function scriptedChat(
-  replies: Array<{ intent: string; confidence: number; reply: string; planUpdate?: string }>,
+  replies: Array<{ intent: string; confidence: number; reply: string; planUpdate?: string; executionIntentKind?: string; expectedOutputFamily?: string }>,
 ) {
   let i = 0;
   const chat = async ({ messages }: { messages: ChatMessage[] }) => {
@@ -59,6 +59,8 @@ function scriptedChat(
         confidence: r.confidence,
         reply: r.reply,
         ...(r.planUpdate ? { planUpdate: r.planUpdate } : {}),
+        ...(r.executionIntentKind ? { executionIntentKind: r.executionIntentKind } : {}),
+        ...(r.expectedOutputFamily ? { expectedOutputFamily: r.expectedOutputFamily } : {}),
       }),
     };
   };
@@ -183,6 +185,8 @@ describe('AI-NATIVE-CORE-RUNTIME-31A', () => {
         intent: 'confirm_start',
         confidence: 0.95,
         reply: '好，按当前方案开始。',
+        executionIntentKind: 'create_document',
+        expectedOutputFamily: 'document',
       },
     ]);
     const { runtime, bus } = await makeDigitalRuntime(chat, {
@@ -250,6 +254,8 @@ describe('AI-NATIVE-CORE-RUNTIME-31A', () => {
         intent: 'confirm_start',
         confidence: 0.95,
         reply: '好，按当前方案开始。',
+        executionIntentKind: 'create_document',
+        expectedOutputFamily: 'document',
       },
     ]);
     const firstRt = await makeDigitalRuntime(chat);
@@ -313,6 +319,8 @@ describe('AI-NATIVE-CORE-RUNTIME-31A', () => {
         intent: 'confirm_start',
         confidence: 0.95,
         reply: '好，按当前方案开始。',
+        executionIntentKind: 'create_document',
+        expectedOutputFamily: 'document',
       },
     ]);
     const { runtime, bus } = await makeDigitalRuntime(chat);
@@ -361,6 +369,8 @@ describe('AI-NATIVE-CORE-RUNTIME-31A', () => {
         intent: 'confirm_start',
         confidence: 0.95,
         reply: '好，开始。',
+        executionIntentKind: 'create_document',
+        expectedOutputFamily: 'document',
       },
     ]);
     const { runtime, bus } = await makeDigitalRuntime(chat);

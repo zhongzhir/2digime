@@ -31,7 +31,7 @@ async function tempDir(prefix: string): Promise<string> {
 }
 
 function scriptedConverse(
-  replies: Array<{ intent: string; confidence: number; reply: string; planUpdate?: string }>,
+  replies: Array<{ intent: string; confidence: number; reply: string; planUpdate?: string; executionIntentKind?: string; expectedOutputFamily?: string }>,
 ) {
   let i = 0;
   return async ({ messages }: { messages: ChatMessage[] }) => {
@@ -44,6 +44,8 @@ function scriptedConverse(
         confidence: r.confidence,
         reply: r.reply,
         ...(r.planUpdate ? { planUpdate: r.planUpdate } : {}),
+        ...(r.executionIntentKind ? { executionIntentKind: r.executionIntentKind } : {}),
+        ...(r.expectedOutputFamily ? { expectedOutputFamily: r.expectedOutputFamily } : {}),
       }),
     };
   };
@@ -187,7 +189,9 @@ function planConverse() {
       reply: '规划已整理，确认后开始。',
       planUpdate: UNIQUE_PLAN,
     },
-    { intent: 'confirm_start', confidence: 0.95, reply: '好，按当前方案开始。' },
+    { intent: 'confirm_start', confidence: 0.95, reply: '好，按当前方案开始。',
+        executionIntentKind: 'create_document',
+        expectedOutputFamily: 'document' },
   ]);
 }
 

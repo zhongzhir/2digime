@@ -11,7 +11,7 @@ import {
 } from './work-revision-routing';
 import {
   buildConverseMaterialBrief,
-  resolveConfirmedPlanExecutionIntent,
+  validateConfirmedPlanExecutionIntent,
 } from './converse-material-brief';
 import type { TaskIntentKind } from './work-intent';
 
@@ -144,12 +144,15 @@ const CONVERSE_SYSTEM_PROMPT = [
   '{"intent":"<必须是以下之一: discuss_or_question | add_goal_info | modify_plan | confirm_start | artifact_feedback | request_explanation | query_status | pause_or_cancel | final_adopt | other>",',
   ' "confidence": <0 到 1 的数字，表示你对意图判断的把握>,',
   ' "reply": "<给用户的自然语言回复：说明你对目标的理解，并给出简短 CTO 建议>",',
-  ' "planUpdate": "<可选但强烈建议：完整开发规划要点，分行列出目标、交付、路径、准备、边界；首轮目标输入必须提供；其他情况可省略>"}',
+  ' "planUpdate": "<可选但强烈建议：完整开发规划要点，分行列出目标、交付、路径、准备、边界；首轮目标输入必须提供；其他情况可省略>",',
+  ' "executionIntentKind": "<仅 confirm_start：modify_code | create_document | analyze_code>",',
+  ' "expectedOutputFamily": "<仅 confirm_start：code-change | document | code-analysis>"}',
   '意图判定规则：',
   '- 讨论、提问、请求解释、询问进度或状态，都不是执行请求，分别归入 discuss_or_question / request_explanation / query_status。',
   '- 用户补充目标或要求，且尚未开始执行 → add_goal_info；要求调整当前规划 → modify_plan；对已有成果提出修改意见 → artifact_feedback。',
   '- 已有成果时，明确「改成 X / 按你说的改 / 把 A 改成 B」仍用 artifact_feedback（不要改成 discuss）；是否开始修改由系统确定性效果层决定，你仍须给出简短确认回复。',
   '- 只有用户明确表示「开始 / 按这个做 / 继续执行」且主要是确认规划时才是 confirm_start。',
+  '- confirm_start 时必须同时给出本轮瞬时 executionIntentKind 与 expectedOutputFamily（不写入规划、不持久化）：要改项目文件 → modify_code 配 code-change；只出报告/说明且明确不改文件 → create_document 配 document；只读代码分析 → analyze_code 配 code-analysis。以已确认方案的实际动作为准，不得因为出现「优化」「实施」等词就改文件。',
   '- 只有用户明确表示满意并要求采用、定稿、结束时才是 final_adopt。',
   '- 已有成果时，用户表达对当前版本满意并要用这一版（如「就用这一版」「这版可以，收货」）→ final_adopt，不是 confirm_start；confirm_start 只用于要求开始或继续做开发工作。',
   '- 想暂停、停止、取消 → pause_or_cancel。',
@@ -167,7 +170,11 @@ const CONVERSE_SYSTEM_PROMPT = [
 ].join('\n');
 
 const CONVERSE_REPAIR_USER =
-  '上一次输出不符合合同。请只输出一个合法 JSON 对象（可无围栏），字段为 intent、confidence、reply，必要时加 planUpdate；不要 Markdown 说明。';
+  '上一次输出不符合合同。请只输出一个合法 JSON 对象（可无围栏），字段为 intent、confidence、reply；intent 为 confirm_start 时必须同时给出配对的 executionIntentKind 与 expectedOutputFamily（modify_code↔code-change，create_document↔document，analyze_code↔code-analysis）；必要时加 planUpdate；不要 Markdown 说明。';
+
+/** 确认开始但本轮执行族无效：零 Job，可重试。 */
+export const CONVERSE_EXECUTION_ROUTE_FAILED_NOTICE =
+  '这次还不能开始处理：还没有形成可用的执行判断。请再确认一次，或把目标说得更明确一些。你的原文和任务都还在。';
 
 const CONVERSE_FIRST_TURN_PLAN_REPAIR =
   '上一次输出缺少可用的 planUpdate。请再输出一个合法 JSON 对象：intent、confidence、reply，以及完整 planUpdate（分行列出目标、交付、路径、准备、边界）。reply 需包含对目标的理解与简短建议。';
@@ -234,6 +241,9 @@ export interface ParsedConverseOutput {
   confidence: number;
   reply: string;
   planUpdate?: string;
+  /** 仅 confirm_start 使用；瞬时决策，不落盘。 */
+  executionIntentKind?: string;
+  expectedOutputFamily?: string;
 }
 
 /** 解析模型输出；无法解析返回 null（由策略层走规划失败语义，不猜测、不说「没听懂」）。 */
@@ -263,11 +273,21 @@ export function parseConverseModelOutput(text: string): ParsedConverseOutput | n
     typeof obj.planUpdate === 'string' && obj.planUpdate.trim().length > 0
       ? obj.planUpdate.trim()
       : undefined;
+  const executionIntentKind =
+    typeof obj.executionIntentKind === 'string' && obj.executionIntentKind.trim()
+      ? obj.executionIntentKind.trim()
+      : undefined;
+  const expectedOutputFamily =
+    typeof obj.expectedOutputFamily === 'string' && obj.expectedOutputFamily.trim()
+      ? obj.expectedOutputFamily.trim()
+      : undefined;
   return {
     intent: obj.intent,
     confidence,
     reply,
     ...(planUpdate ? { planUpdate } : {}),
+    ...(executionIntentKind ? { executionIntentKind } : {}),
+    ...(expectedOutputFamily ? { expectedOutputFamily } : {}),
   };
 }
 
@@ -610,11 +630,34 @@ export async function runWorkConverse(
     try {
       const result = await deps.chat({ messages });
       parsed = parseConverseModelOutput(result.text);
+      let usedContractRepair = false;
       if (!parsed) {
+        usedContractRepair = true;
         const retry = await deps.chat({
           messages: [
             ...messages,
             { role: 'assistant' as const, content: String(result.text || '').slice(0, 2000) },
+            { role: 'user' as const, content: CONVERSE_REPAIR_USER },
+          ],
+        });
+        parsed = parseConverseModelOutput(retry.text);
+      }
+      const needsExecRoute =
+        !!parsed &&
+        parsed.intent === 'confirm_start' &&
+        !createdTask &&
+        !facts.hasArtifact &&
+        parsed.confidence >= EXECUTION_EFFECT_CONFIDENCE_THRESHOLD &&
+        !validateConfirmedPlanExecutionIntent(parsed);
+      if (needsExecRoute && !usedContractRepair) {
+        const retry = await deps.chat({
+          messages: [
+            ...messages,
+            { role: 'assistant' as const, content: JSON.stringify({
+              intent: parsed!.intent,
+              confidence: parsed!.confidence,
+              reply: parsed!.reply,
+            }).slice(0, 2000) },
             { role: 'user' as const, content: CONVERSE_REPAIR_USER },
           ],
         });
@@ -664,6 +707,16 @@ export async function runWorkConverse(
     userText: text,
     consultContext,
   });
+  if (
+    decision.startAuthorized &&
+    decision.startMode !== 'revision' &&
+    !validateConfirmedPlanExecutionIntent(parsed || {})
+  ) {
+    decision.startAuthorized = false;
+    decision.confirmPlan = false;
+    decision.degraded = true;
+    decision.reply = CONVERSE_EXECUTION_ROUTE_FAILED_NOTICE;
+  }
 
   if (input.silentOutcomeExplain) {
     decision.startAuthorized = false;
@@ -827,19 +880,11 @@ export async function runWorkConverse(
   let executionIntentKind: TaskIntentKind | undefined;
   let executionRequestedArtifactType: string | undefined;
   if (decision.startAuthorized && decision.startMode !== 'revision') {
-    const planText =
-      (decision.confirmPlan
-        ? existingPlan && isUserVisiblePlan(existingPlan)
-          ? existingPlan.content
-          : planOut?.content
-        : planOut?.content || existingPlan?.content) || '';
-    const resolved = resolveConfirmedPlanExecutionIntent({
-      goal: task.goal,
-      planContent: planText,
-      contextRefs: task.contextRefs || [],
-    });
-    executionIntentKind = resolved.intentKind;
-    executionRequestedArtifactType = resolved.expectedOutputFamily;
+    const resolved = validateConfirmedPlanExecutionIntent(parsed || {});
+    if (resolved) {
+      executionIntentKind = resolved.intentKind;
+      executionRequestedArtifactType = resolved.expectedOutputFamily;
+    }
   }
 
   return {

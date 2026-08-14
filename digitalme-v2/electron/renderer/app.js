@@ -3401,15 +3401,19 @@
         await runCtoConfirmContinue(text);
         return;
       }
-      const thin = isThinRuntimeActive() || res.runtimePath === "thin_v1";
       const execKind = String(res.executionIntentKind || "").trim();
       const execFamily = String(res.executionRequestedArtifactType || "").trim();
+      if (!execKind || !execFamily) {
+        if (els.jobStatus) {
+          els.jobStatus.textContent = "这次还不能开始处理：还没有形成可用的执行判断。请再确认一次。";
+          els.jobStatus.classList.remove("error");
+        }
+        return;
+      }
       await startConversationTaskExecution(res.taskId, {
         fromPlanConfirm: true,
-        intentKind: execKind || (thin ? "modify_code" : undefined),
-        requestedArtifactType:
-          execFamily ||
-          (execKind === "modify_code" || thin ? "code-change" : undefined),
+        intentKind: execKind,
+        requestedArtifactType: execFamily,
       });
     }
     if (els.jobStatus && els.jobStatus.textContent === "正在思考…") els.jobStatus.textContent = "";
@@ -3481,7 +3485,7 @@
       if (options.capabilityId) payload.capabilityId = options.capabilityId;
       if (options.intentKind) payload.intentKind = options.intentKind;
       if (options.requestedArtifactType) payload.requestedArtifactType = options.requestedArtifactType;
-      if (thin && !payload.intentKind) {
+      if (!options.fromPlanConfirm && thin && !payload.intentKind) {
         payload.intentKind = "modify_code";
         payload.requestedArtifactType = "code-change";
       }

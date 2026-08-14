@@ -218,49 +218,46 @@ function formatBriefPrompt(
   return lines.join('\n');
 }
 
+/** confirm_start 时模型给出的本轮执行族；仅校验配对，不根据关键词猜测。 */
+export const CONFIRMED_PLAN_EXECUTION_KINDS = [
+  'modify_code',
+  'create_document',
+  'analyze_code',
+] as const;
+export type ConfirmedPlanExecutionKind = (typeof CONFIRMED_PLAN_EXECUTION_KINDS)[number];
+
+export const CONFIRMED_PLAN_OUTPUT_FAMILIES = [
+  'code-change',
+  'document',
+  'code-analysis',
+] as const;
+export type ConfirmedPlanOutputFamily = (typeof CONFIRMED_PLAN_OUTPUT_FAMILIES)[number];
+
+const EXECUTION_KIND_FAMILY: Record<ConfirmedPlanExecutionKind, ConfirmedPlanOutputFamily> = {
+  modify_code: 'code-change',
+  create_document: 'document',
+  analyze_code: 'code-analysis',
+};
+
 /**
- * 确认后按已确认方案判断本轮执行族：改项目 → Coding；仅报告 → 文档。
- * 不依据 Git / package.json / 目录关键词。
+ * 校验模型瞬时执行族：只做枚举与配对，不读目标/规划正文、不按关键词路由。
  */
-export function resolveConfirmedPlanExecutionIntent(input: {
-  goal: string;
-  planContent: string;
-  contextRefs: readonly ContextRef[];
+export function validateConfirmedPlanExecutionIntent(input: {
+  executionIntentKind?: unknown;
+  expectedOutputFamily?: unknown;
 }): {
-  intentKind: 'modify_code' | 'create_document' | 'general';
-  expectedOutputFamily: 'code-change' | 'document';
-} {
-  const goal = String(input.goal || '');
-  const plan = String(input.planContent || '');
-  const blob = `${goal}\n${plan}`;
-  const hasProjectPath = (input.contextRefs || []).some(
-    (r) => r && (r.kind === 'folder' || r.kind === 'file') && String(r.path || '').trim(),
-  );
-
-  const reportOnly =
-    /(只|仅).{0,6}(输出|交付|撰写|整理).{0,8}(方案|报告|文档)/.test(blob) &&
-    !/(批准后|确认后|通过后).{0,16}(实施|修改|改动|落地|改代码|写入)/.test(blob) &&
-    !/(开始|进行|执行).{0,10}(实施|修改|改代码|落地)/.test(blob);
-
-  if (reportOnly || !hasProjectPath) {
-    return { intentKind: 'create_document', expectedOutputFamily: 'document' };
-  }
-
-  const wantsModify =
-    /(修改|改动|写入|编辑|落地|实施).{0,20}(项目|代码|文件|源码|仓库|网页|应用)/.test(blob) ||
-    /(批准后|确认后|通过后).{0,16}(实施|修改|改动|落地)/.test(blob) ||
-    /待批准后实施|批准后实施|确认后开始/.test(blob) ||
-    /(效率优化|升级方案).{0,40}(实施|落地|修改)/.test(blob) ||
-    /按(?:确认|批准)?(?:的)?方案.{0,12}(执行|实施|修改)/.test(blob);
-
-  if (wantsModify) {
-    return { intentKind: 'modify_code', expectedOutputFamily: 'code-change' };
-  }
-
-  // 有项目路径且方案未明确“只出报告”时，默认按改项目执行（避免再落成空转文档 Job）
-  if (hasProjectPath && /(实施|优化|升级|修复|改进)/.test(blob)) {
-    return { intentKind: 'modify_code', expectedOutputFamily: 'code-change' };
-  }
-
-  return { intentKind: 'create_document', expectedOutputFamily: 'document' };
+  intentKind: ConfirmedPlanExecutionKind;
+  expectedOutputFamily: ConfirmedPlanOutputFamily;
+} | null {
+  const kind = typeof input.executionIntentKind === 'string' ? input.executionIntentKind.trim() : '';
+  const family =
+    typeof input.expectedOutputFamily === 'string' ? input.expectedOutputFamily.trim() : '';
+  if (!(CONFIRMED_PLAN_EXECUTION_KINDS as readonly string[]).includes(kind)) return null;
+  if (!(CONFIRMED_PLAN_OUTPUT_FAMILIES as readonly string[]).includes(family)) return null;
+  const expected = EXECUTION_KIND_FAMILY[kind as ConfirmedPlanExecutionKind];
+  if (expected !== family) return null;
+  return {
+    intentKind: kind as ConfirmedPlanExecutionKind,
+    expectedOutputFamily: family as ConfirmedPlanOutputFamily,
+  };
 }

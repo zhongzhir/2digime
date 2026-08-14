@@ -445,7 +445,7 @@ export interface CommandMap {
       /** 渲染层据此走确定性执行入口；不表示已执行。 */
       startAuthorized: boolean;
       startMode?: 'new_execution' | 'revision';
-      /** 确认开始后建议的执行意图（由确认方案判定）。 */
+      /** 确认开始后由模型瞬时给出的执行族（不持久化）。 */
       executionIntentKind?: string;
       executionRequestedArtifactType?: string;
       adoptRequested: boolean;

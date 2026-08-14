@@ -1,6 +1,6 @@
 /**
- * AI-NATIVE-MATERIAL-AWARE-WORKFLOW-32
- * 确认前材料事实进入 converse；确认后按方案选 Coding Agent。
+ * AI-NATIVE-MATERIAL-AWARE-WORKFLOW-32 / ROUTING-CLOSE
+ * 确认前材料事实进入 converse；确认后由模型瞬时执行族决定能力，确定性代码只校验。
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -10,9 +10,13 @@ import * as path from 'node:path';
 import { extractFile, extractFolder, SUPPORTED_EXTENSIONS } from '../../infrastructure/extract';
 import {
   buildConverseMaterialBrief,
-  resolveConfirmedPlanExecutionIntent,
+  validateConfirmedPlanExecutionIntent,
 } from '../converse-material-brief';
-import { buildConverseMessages, decideConverseEffects } from '../work-converse';
+import {
+  buildConverseMessages,
+  decideConverseEffects,
+  CONVERSE_EXECUTION_ROUTE_FAILED_NOTICE,
+} from '../work-converse';
 import { createDigitalMeRuntime } from '../../runtime/digitalme-runtime';
 import { createCommandBus } from '../../runtime/command-bus';
 import type { ChatMessage } from '../../infrastructure/model-http';
@@ -90,25 +94,55 @@ describe('AI-NATIVE-MATERIAL-AWARE-WORKFLOW-32', () => {
     assert.match(blob, /已授权材料/);
     assert.match(blob, /imprint\.html/);
     assert.match(messages[0]!.content, /禁止声称.*无法访问|无法读取本地文件夹/);
+    assert.match(messages[0]!.content, /executionIntentKind|expectedOutputFamily/);
   });
 
-  it('确认后：实施类方案 → modify_code；纯报告 → document', () => {
-    const impl = resolveConfirmedPlanExecutionIntent({
-      goal: '提出项目优化升级方案，待批准后实施。',
-      planContent:
-        '目标：优化 IMPRINT\n交付：按方案修改项目文件\n路径：批准后实施效率优化\n边界：不推送',
-      contextRefs: [{ kind: 'folder', path: 'D:\\Projects\\IMPRINT' }],
-    });
-    assert.equal(impl.intentKind, 'modify_code');
-    assert.equal(impl.expectedOutputFamily, 'code-change');
+  it('校验配对：枚举与配对通过；错配/缺字段失败；不读目标正文', () => {
+    assert.deepEqual(
+      validateConfirmedPlanExecutionIntent({
+        executionIntentKind: 'modify_code',
+        expectedOutputFamily: 'code-change',
+      }),
+      { intentKind: 'modify_code', expectedOutputFamily: 'code-change' },
+    );
+    assert.deepEqual(
+      validateConfirmedPlanExecutionIntent({
+        executionIntentKind: 'create_document',
+        expectedOutputFamily: 'document',
+      }),
+      { intentKind: 'create_document', expectedOutputFamily: 'document' },
+    );
+    assert.equal(
+      validateConfirmedPlanExecutionIntent({
+        executionIntentKind: 'modify_code',
+        expectedOutputFamily: 'document',
+      }),
+      null,
+    );
+    assert.equal(validateConfirmedPlanExecutionIntent({}), null);
+    assert.equal(
+      validateConfirmedPlanExecutionIntent({
+        executionIntentKind: 'general',
+        expectedOutputFamily: 'document',
+      }),
+      null,
+    );
+  });
 
-    const report = resolveConfirmedPlanExecutionIntent({
-      goal: '写一份行业综述报告',
-      planContent: '目标：只输出一份综述报告文档\n交付：Markdown 报告\n边界：不修改任何项目文件',
-      contextRefs: [{ kind: 'folder', path: 'D:\\Projects\\docs' }],
-    });
-    assert.equal(report.intentKind, 'create_document');
-    assert.equal(report.expectedOutputFamily, 'document');
+  it('无关键词路由：生产代码不得再按目标/规划正则决定最终能力', async () => {
+    const repoRoot = path.resolve(__dirname, '../../..');
+    const briefSrc = await fs.readFile(
+      path.join(repoRoot, 'src/work-runtime/converse-material-brief.ts'),
+      'utf8',
+    );
+    assert.doesNotMatch(briefSrc, /resolveConfirmedPlanExecutionIntent/);
+    assert.doesNotMatch(briefSrc, /待批准后实施|只输出一份综述|wantsModify|reportOnly/);
+    const converseSrc = await fs.readFile(
+      path.join(repoRoot, 'src/work-runtime/work-converse.ts'),
+      'utf8',
+    );
+    assert.match(converseSrc, /validateConfirmedPlanExecutionIntent/);
+    assert.doesNotMatch(converseSrc, /resolveConfirmedPlanExecutionIntent/);
   });
 
   it('首轮 firstTurn 不得 startAuthorized（确认前零 Job）', () => {
@@ -132,7 +166,230 @@ describe('AI-NATIVE-MATERIAL-AWARE-WORKFLOW-32', () => {
     assert.equal(productMainChainBlocksAutoRevision(), true);
   });
 
-  it('UI 文件夹落盘后后续 converse 仍能获得材料；确认前零 Job；确认后按方案走 Coding', async () => {
+  it('多种实施表达 → Coding；只分析不改文件 → 文档；含优化实施但明确不改 → 文档', async () => {
+    const cases: Array<{
+      id: string;
+      goal: string;
+      modelKind: 'modify_code' | 'create_document';
+      modelFamily: 'code-change' | 'document';
+      expectCap: 'coding' | 'document';
+    }> = [
+      {
+        id: 'zh-impl',
+        goal: '提出项目优化升级方案，待批准后实施。',
+        modelKind: 'modify_code',
+        modelFamily: 'code-change',
+        expectCap: 'coding',
+      },
+      {
+        id: 'en-impl',
+        goal: 'Please implement the approved upgrade plan in the project files.',
+        modelKind: 'modify_code',
+        modelFamily: 'code-change',
+        expectCap: 'coding',
+      },
+      {
+        id: 'ship-it',
+        goal: 'Apply the changes to the codebase and run tests.',
+        modelKind: 'modify_code',
+        modelFamily: 'code-change',
+        expectCap: 'coding',
+      },
+      {
+        id: 'report-only',
+        goal: '只分析这个项目并写一份评估报告，暂不修改任何文件。',
+        modelKind: 'create_document',
+        modelFamily: 'document',
+        expectCap: 'document',
+      },
+      {
+        id: 'opt-no-edit',
+        goal: '请给出优化与实施建议，但本轮只写报告，明确不修改项目文件。',
+        modelKind: 'create_document',
+        modelFamily: 'document',
+        expectCap: 'document',
+      },
+    ];
+
+    for (const c of cases) {
+      const root = await tempDir(`route-${c.id}`);
+      const pkgDir = path.join(root, 'pkg');
+      const project = path.join(root, 'project');
+      await writeImprintLikeFixture(project);
+      let codingHits = 0;
+      let docHits = 0;
+      const converse = async ({ messages }: { messages: ChatMessage[] }) => {
+        const userBlob = String(messages.find((m) => m.role === 'user')?.content || '');
+        const latest = String(userBlob.split('【用户最新输入】').pop() || '').trim();
+        if (latest === c.goal) {
+          return {
+            text: JSON.stringify({
+              intent: 'add_goal_info',
+              confidence: 0.95,
+              reply: '规划已整理，确认后开始。',
+              planUpdate: `目标：${c.goal}\n交付：按确认方案执行\n边界：按用户意图`,
+            }),
+          };
+        }
+        return {
+          text: JSON.stringify({
+            intent: 'confirm_start',
+            confidence: 0.95,
+            reply: '好，按确认方案开始。',
+            executionIntentKind: c.modelKind,
+            expectedOutputFamily: c.modelFamily,
+          }),
+        };
+      };
+      const runtime = createDigitalMeRuntime({
+        documentCapability: 'fake',
+        registerOpenAiStub: false,
+        converseChat: converse,
+        fakeAdapter: {
+          text: `DOC-${c.id}`,
+          title: 'report',
+          onExecute: () => {
+            docHits += 1;
+          },
+        },
+        externalExecutorCapability: {
+          forceAvailability: 'ready',
+          executeHook: async () => {
+            codingHits += 1;
+            await fs.writeFile(path.join(project, `hit-${c.id}.txt`), 'ok\n', 'utf8');
+            return {
+              exitCode: 0,
+              summary: `coded ${c.id}`,
+              changedFiles: [`hit-${c.id}.txt`],
+              unifiedDiff:
+                `diff --git a/hit-${c.id}.txt b/hit-${c.id}.txt\n` +
+                `new file mode 100644\n` +
+                `--- /dev/null\n` +
+                `+++ b/hit-${c.id}.txt\n` +
+                `@@ -0,0 +1 @@\n` +
+                `+ok\n`,
+            };
+          },
+        },
+      });
+      const bus = createCommandBus(runtime);
+      await bus.invoke('subject.createPackage', {
+        displayName: `32 ${c.id}`,
+        targetDir: pkgDir,
+      });
+      const first = await bus.invoke('work.converse', {
+        text: c.goal,
+        contextRefs: [{ kind: 'folder', path: project, projectOrigin: 'user_selected' }],
+      });
+      assert.equal(first.startAuthorized, false, c.id);
+      assert.equal((await runtime.workRuntime.listJobsForTask(first.taskId)).length, 0, c.id);
+      const confirm = await bus.invoke('work.converse', {
+        taskId: first.taskId,
+        text: '按这个方案开始。',
+      });
+      assert.equal(confirm.startAuthorized, true, c.id);
+      assert.equal(confirm.executionIntentKind, c.modelKind, c.id);
+      assert.equal(confirm.executionRequestedArtifactType, c.modelFamily, c.id);
+      const submitted = await bus.invoke('work.submitTask', {
+        goal: c.goal,
+        contextRefs: [{ kind: 'folder', path: project, projectOrigin: 'user_selected' }],
+        existingTaskId: first.taskId,
+        confirmedPlanVersion: confirm.plan?.version || first.plan?.version || 1,
+        intentKind: c.modelKind,
+        requestedArtifactType: c.modelFamily,
+        ...(c.expectCap === 'coding'
+          ? {
+              executionAuthorization: {
+                confirmed: true,
+                workingDirectory: project,
+                readScope: ['.'],
+                writeScope: ['.'],
+              },
+            }
+          : {}),
+      });
+      assert.ok(submitted.jobId, c.id);
+      await waitForJobTerminal(runtime.workRuntime, submitted.jobId, 20_000);
+      const jobs = await runtime.workRuntime.listJobsForTask(first.taskId);
+      assert.equal(jobs.length, 1, c.id);
+      const capId = String(jobs[0]!.capabilityId || '');
+      if (c.expectCap === 'coding') {
+        assert.match(capId, /external_executor|codex/i, c.id);
+        assert.equal(codingHits, 1, c.id);
+        assert.equal(docHits, 0, c.id);
+      } else {
+        assert.doesNotMatch(capId, /external_executor|codex/i, c.id);
+        assert.ok(docHits >= 1, c.id);
+        assert.equal(codingHits, 0, c.id);
+        assert.equal(jobs[0]!.status, 'succeeded', c.id);
+      }
+      await runtime.stop();
+    }
+  });
+
+  it('确认缺执行族：repair 一次仍失败 → 零 Job + 可重试说明；不得静默猜成 Coding', async () => {
+    const root = await tempDir('route-fail');
+    const pkgDir = path.join(root, 'pkg');
+    const project = path.join(root, 'project');
+    await writeImprintLikeFixture(project);
+    let chatCalls = 0;
+    const converse = async ({ messages }: { messages: ChatMessage[] }) => {
+      chatCalls += 1;
+      const userBlob = String(messages.find((m) => m.role === 'user')?.content || '');
+      const latest = String(userBlob.split('【用户最新输入】').pop() || '').trim();
+      if (/提出项目优化/.test(latest)) {
+        return {
+          text: JSON.stringify({
+            intent: 'add_goal_info',
+            confidence: 0.95,
+            reply: '规划已整理。',
+            planUpdate: '目标：优化并实施\n交付：改项目\n边界：不推送',
+          }),
+        };
+      }
+      return {
+        text: JSON.stringify({
+          intent: 'confirm_start',
+          confidence: 0.95,
+          reply: '开始。',
+        }),
+      };
+    };
+    const runtime = createDigitalMeRuntime({
+      documentCapability: 'fake',
+      registerOpenAiStub: false,
+      converseChat: converse,
+      fakeAdapter: { text: '不应创建', title: 'doc' },
+      externalExecutorCapability: {
+        forceAvailability: 'ready',
+        executeHook: async () => {
+          throw new Error('must not start coding job');
+        },
+      },
+    });
+    const bus = createCommandBus(runtime);
+    await bus.invoke('subject.createPackage', {
+      displayName: '32 fail',
+      targetDir: pkgDir,
+    });
+    const first = await bus.invoke('work.converse', {
+      text: '提出项目优化升级方案，待批准后实施。',
+      contextRefs: [{ kind: 'folder', path: project, projectOrigin: 'user_selected' }],
+    });
+    const confirm = await bus.invoke('work.converse', {
+      taskId: first.taskId,
+      text: '按这个方案开始。',
+    });
+    assert.equal(confirm.startAuthorized, false);
+    assert.equal(confirm.degraded, true);
+    assert.match(String(confirm.reply || ''), new RegExp(CONVERSE_EXECUTION_ROUTE_FAILED_NOTICE.slice(0, 12)));
+    assert.equal((await runtime.workRuntime.listJobsForTask(first.taskId)).length, 0);
+    assert.ok(chatCalls >= 3, '首轮 + confirm + 一次 repair');
+    assert.equal(confirm.executionIntentKind, undefined);
+    await runtime.stop();
+  });
+
+  it('UI 文件夹落盘后后续 converse 仍能获得材料；确认前零 Job；确认后按模型执行族走 Coding', async () => {
     const root = await tempDir('loop');
     const pkgDir = path.join(root, 'pkg');
     const project = path.join(root, 'project');
@@ -173,6 +430,8 @@ describe('AI-NATIVE-MATERIAL-AWARE-WORKFLOW-32', () => {
           intent: 'confirm_start',
           confidence: 0.95,
           reply: '好，按确认方案开始实施。',
+          executionIntentKind: 'modify_code',
+          expectedOutputFamily: 'code-change',
         }),
       };
     };
@@ -216,7 +475,6 @@ describe('AI-NATIVE-MATERIAL-AWARE-WORKFLOW-32', () => {
     const jobsAfterPlan = await runtime.workRuntime.listJobsForTask(first.taskId);
     assert.equal(jobsAfterPlan.length, 0, '确认前必须零 Job');
 
-    // 模拟后续 converse：不再传 contextRefs，但仍应注入 Task 落盘材料
     const ask = await bus.invoke('work.converse', {
       taskId: first.taskId,
       text: '你先了解项目。',
@@ -232,7 +490,6 @@ describe('AI-NATIVE-MATERIAL-AWARE-WORKFLOW-32', () => {
     assert.equal(confirm.executionIntentKind, 'modify_code');
     assert.equal(confirm.executionRequestedArtifactType, 'code-change');
 
-    // 确定性提交（与 Renderer 一致）
     const folderRef = { kind: 'folder' as const, path: project, projectOrigin: 'user_selected' as const };
     const submitted = await bus.invoke('work.submitTask', {
       goal: '提出项目优化升级方案，待批准后实施。',
