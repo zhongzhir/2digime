@@ -1129,6 +1129,85 @@ function registerIpc() {
       }
     };
 
+    // DIGITALME-CONVERSATION-SEARCH-RESEARCH-01：
+    // 对话信息能力 — 自然对话 → 判断是否需要外部信息 → 不搜索/快速搜索/深度研究
+    // → 综合本人上下文 + 外部来源 → 自然答案 + 可核验来源。
+    // 仅在真实模型已配置时启用；可用 DIGITALME_V2_SEARCH_ENABLED=0 关闭。
+    let searchFailureHonest = false;
+    const searchEnabled =
+      process.env.DIGITALME_V2_SEARCH_ENABLED !== "0" &&
+      !!model.openaiCompatible &&
+      !isFactQuery &&
+      !isInferenceQuery;
+    if (searchEnabled) {
+      try {
+        const { runConversationSearch } = require(path.join(
+          appRoot,
+          "dist",
+          "capability",
+          "conversation-search",
+        ));
+        const { createBingHtmlSearchConnector } = require(path.join(
+          appRoot,
+          "dist",
+          "capability",
+          "adapters",
+          "bing-html-search",
+        ));
+        const searchChat = async (chatMessages, chatOpts) => {
+          const result = await chatComplete({
+            baseUrl: model.openaiCompatible.baseUrl,
+            apiKey,
+            model: model.openaiCompatible.model,
+            messages: chatMessages,
+            temperature:
+              chatOpts && typeof chatOpts.temperature === "number"
+                ? chatOpts.temperature
+                : 0.4,
+            maxTokens:
+              chatOpts && Number.isFinite(chatOpts.maxTokens) && chatOpts.maxTokens > 0
+                ? chatOpts.maxTokens
+                : maxTokens,
+            timeoutMs: model.openaiCompatible.timeoutMs || 180_000,
+            ...(chatOpts && chatOpts.responseFormat
+              ? { responseFormat: { type: chatOpts.responseFormat } }
+              : {}),
+          });
+          return result;
+        };
+        const connector = createBingHtmlSearchConnector();
+        const reply = await runConversationSearch({
+          userText,
+          turns: recent
+            .slice(0, -1)
+            .map((t) => ({ role: t.role === "assistant" ? "assistant" : "user", content: t.text })),
+          subjectFacts,
+          currentDate: new Date().toISOString().slice(0, 10),
+          chat: searchChat,
+          connector,
+        });
+        if (reply.mode !== "no_search") {
+          scheduleGrowth(reply.text);
+          return {
+            text: reply.text,
+            status: "complete",
+            finishReason: reply.mode === "deep_research" ? "deep_research" : "web_search",
+            ...(userTurn ? { userTurnId: userTurn.id } : {}),
+          };
+        }
+      } catch (err) {
+        // 诚实失败：不阻断对话，回落到普通对话并要求模型如实说明无法核实。
+        searchFailureHonest = true;
+      }
+    }
+    if (searchFailureHonest) {
+      messages.push({
+        role: "system",
+        content:
+          "（本次未能获取到最新网络信息。回答时请如实说明无法核实最新信息，仅基于已有知识作答，不要假装实时。）",
+      });
+    }
+
     try {
       const result = await chatComplete({
         baseUrl: model.openaiCompatible.baseUrl,

@@ -1,0 +1,34 @@
+{
+  "id": "DIGITALME-CONVERSATION-SEARCH-RESEARCH-BENCHMARK-01",
+  "frozenAt": "2026-08-20",
+  "purpose": "冻结 benchmark 协议与样本集，用于 2digime vs ChatGPT/Claude/Gemini/Perplexity 对比评测。仅冻结协议与样本；不声称 market_p95_met / mvp_ready。",
+  "dimensions": [
+    { "key": "correctness", "label": "事实正确性" },
+    { "key": "freshness", "label": "时效性（当前日期/来源发布时间）" },
+    { "key": "source_quality", "label": "来源质量（官方/权威>二手>UGC）" },
+    { "key": "citation_correctness", "label": "引用正确性（可打开、不编造）" },
+    { "key": "coverage", "label": "覆盖度（回答是否全面）" },
+    { "key": "contradiction_handling", "label": "矛盾处理（如实说明差异）" },
+    { "key": "research_depth", "label": "研究深度（deep_research 轮次/交叉验证）" },
+    { "key": "latency", "label": "延迟" },
+    { "key": "cost", "label": "成本" },
+    { "key": "owner_context_usefulness", "label": "本人上下文有用性（相关时参与）" },
+    { "key": "irrelevant_personalization_penalty", "label": "无关个性化惩罚（不强行带入本人信息）" }
+  ],
+  "protocol": {
+    "sameQuestions": true,
+    "tools": ["ChatGPT", "Claude", "Gemini", "Perplexity", "2digime"],
+    "scoring": "每维 0-5，取 3 名独立评审平均值；记录每题模型/工具实际是否联网及引用数。",
+    "note": "本任务只冻结协议与样本。真实跑分与 P95 结论需在后续独立任务中执行并附证据。"
+  },
+  "sampleQuestions": [
+    { "id": "bm-01", "text": "水在0摄氏度会结冰吗？", "expected": "no_search" },
+    { "id": "bm-02", "text": "最近 OpenAI 发布了什么重要新闻？", "expected": "web_search" },
+    { "id": "bm-03", "text": "某某手机最新官方售价是多少？", "expected": "web_search, 官方来源优先" },
+    { "id": "bm-04", "text": "A 公司称销量第一，B 媒体称第二，哪个准确？", "expected": "web_search, 冲突表达" },
+    { "id": "bm-05", "text": "2026 年中国 AI Agent 创业与融资趋势", "expected": "deep_research" },
+    { "id": "bm-06", "text": "结合我的项目，最近有什么 AI 创新比赛可以参加？", "expected": "web_search + owner context" },
+    { "id": "bm-07", "text": "（搜索后）你刚才搜索的内容会变成对我的长期了解吗？", "expected": "不会自动成为本人事实" },
+    { "id": "bm-08", "text": "（网络不可用场景）最新人工智能大会时间", "expected": "诚实失败" }
+  ]
+}
