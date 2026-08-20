@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:;"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Digital Me</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <section id="view-welcome" class="view">
+        <header class="hero">
+          <p class="brand">Digital Me</p>
+          <h1>建立你的数字之我</h1>
+          <p class="page-lead">在本机保存你的资料与成果，按你的方式做事与对话。</p>
+        </header>
+
+        <div id="welcome-step-intro" class="welcome-actions welcome-step">
+          <p class="muted">接下来需要连接模型，才能对话和做事。也可以先浏览界面。</p>
+          <div class="row">
+            <button type="button" id="btn-welcome-to-model" class="primary">连接模型</button>
+            <button type="button" id="btn-welcome-skip-model" class="ghost">先跳过</button>
+          </div>
+          <p id="welcome-skip-hint" class="muted tiny" hidden>
+            可以先浏览，但对话和做事需要连接模型。
+          </p>
+          <p id="welcome-status" class="status" hidden></p>
+        </div>
+
+        <div id="welcome-step-model" class="welcome-actions welcome-step settings-panel" hidden>
+          <h2>连接模型</h2>
+          <p class="muted">密钥只保存在本机。连接成功后即可开始使用。</p>
+          <label class="field">
+            <span>服务提供方</span>
+            <select id="welcome-model-provider">
+              <option value="deepseek">DeepSeek</option>
+              <option value="openai-compatible">自定义服务</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>API Key</span>
+            <input
+              id="welcome-model-api-key"
+              type="password"
+              placeholder="粘贴你的密钥"
+              autocomplete="new-password"
+            />
+          </label>
+          <details class="advanced-connection">
+            <summary>高级连接</summary>
+            <label class="field">
+              <span>服务地址</span>
+              <input id="welcome-model-base-url" type="text" placeholder="例如 https://api.example.com/v1" autocomplete="off" />
+            </label>
+            <label class="field">
+              <span>模型名称</span>
+              <input id="welcome-model-id" type="text" placeholder="例如 deepseek-v4-flash" autocomplete="off" />
+            </label>
+          </details>
+          <p id="welcome-model-state" class="connection-state" aria-live="polite">连接状态：尚未连接</p>
+          <div class="row">
+            <button type="button" id="btn-welcome-save-model" class="primary">保存并验证</button>
+            <button type="button" id="btn-welcome-skip-model-2" class="ghost">先跳过</button>
+          </div>
+          <p id="welcome-model-status" class="status" aria-live="polite"></p>
+        </div>
+
+        <div id="welcome-step-start" class="welcome-actions welcome-step" hidden>
+          <label class="field">
+            <span>用一句话介绍你自己，或者告诉我你最近在做什么</span>
+            <textarea
+              id="self-intro"
+              rows="3"
+              placeholder="例如：我在做 Digital Me，重视真实用户价值和快速验证。"
+            ></textarea>
+          </label>
+          <p id="welcome-model-ready-note" class="muted tiny" hidden></p>
+          <div class="row">
+            <button type="button" id="btn-create-pkg" class="primary">开始使用</button>
+            <button type="button" id="btn-create-skip" class="ghost">先跳过介绍</button>
+          </div>
+          <p id="welcome-start-status" class="status" hidden></p>
+        </div>
+      </section>
+
+      <section id="view-settings" class="view" hidden>
+        <header class="topbar">
+          <div>
+            <p class="brand-sm">Digital Me</p>
+            <h1>设置</h1>
+          </div>
+          <button type="button" id="btn-settings-back">返回</button>
+        </header>
+        <div class="welcome-actions settings-panel">
+          <h2>模型连接</h2>
+          <p class="muted">连接模型后即可做事与对话。密钥保存在本机。</p>
+
+          <label class="field">
+            <span>服务提供方</span>
+            <select id="model-provider">
+              <option value="deepseek">DeepSeek</option>
+              <option value="openai-compatible">自定义服务</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>API Key</span>
+            <div class="key-input-row">
+              <input
+                id="model-api-key"
+                type="password"
+                placeholder="粘贴你的密钥"
+                autocomplete="new-password"
+              />
+              <button type="button" id="btn-toggle-api-key" class="ghost key-toggle" aria-pressed="false">
+                显示
+              </button>
+            </div>
+            <span id="model-key-state" class="meta">密钥：尚未保存</span>
+          </label>
+
+          <p id="model-connection-state" class="connection-state" aria-live="polite">连接状态：尚未连接</p>
+
+          <div class="row settings-actions">
+            <button type="button" id="btn-save-model" class="primary">保存</button>
+            <button type="button" id="btn-test-model">测试连接</button>
+            <button type="button" id="btn-delete-model" class="ghost">清除密钥</button>
+          </div>
+
+          <details id="advanced-connection" class="advanced-connection">
+            <summary>高级连接</summary>
+            <p class="muted tiny">仅在自定义服务时需要。普通使用可保持收起。</p>
+            <label class="field">
+              <span>服务地址</span>
+              <input
+                id="model-base-url"
+                type="text"
+                placeholder="例如 https://api.example.com/v1"
+                autocomplete="off"
+              />
+            </label>
+            <label class="field">
+              <span>模型名称</span>
+              <input id="model-id" type="text" placeholder="例如 deepseek-v4-flash" autocomplete="off" />
+            </label>
+            <div class="row">
+              <button type="button" id="btn-restore-model-preset" class="ghost">恢复推荐设置</button>
+            </div>
+          </details>
+
+          <p id="settings-status" class="status" aria-live="polite"></p>
+
+          <section class="settings-block" aria-labelledby="remote-dm-title">
+            <h2 id="remote-dm-title">连接另一台电脑上的数字之我</h2>
+            <p class="muted">实验能力：与另一台电脑上的数字之我建立联系。不共享这台电脑上的文件夹。</p>
+            <label class="field">
+              <span>中继服务地址</span>
+              <input id="remote-relay-url" type="text" placeholder="例如 https://relay.example.com" autocomplete="off" />
+            </label>
+            <p id="remote-dm-connection-state" class="connection-state" aria-live="polite">连接状态：尚未配置</p>
+            <div class="row settings-actions">
+              <button type="button" id="btn-remote-relay-connect" class="primary">连接中继</button>
+              <button type="button" id="btn-remote-create-invite">生成邀请</button>
+            </div>
+            <label class="field">
+              <span>对方邀请</span>
+              <textarea id="remote-invite-input" rows="3" placeholder="粘贴对方生成的邀请内容"></textarea>
+            </label>
+            <div class="row settings-actions">
+              <button type="button" id="btn-remote-accept-invite">接受邀请</button>
+            </div>
+            <label class="field">
+              <span>我的邀请（可复制给对方）</span>
+              <textarea id="remote-invite-output" rows="3" readonly placeholder="生成后显示在这里"></textarea>
+            </label>
+            <ul id="remote-peer-list" class="collab-entry-list"></ul>
+            <p id="remote-dm-status" class="status" aria-live="polite"></p>
+          </section>
+
+          <details id="settings-tech-detail" class="settings-tech-detail" hidden>
+            <summary>技术摘要</summary>
+            <pre id="settings-tech-body" class="settings-tech-body"></pre>
+          </details>
+
+          <hr class="settings-divider" />
+          <h2>代码执行能力</h2>
+          <p class="muted">用于在你确认的项目目录中创建或修改代码，并运行测试。密钥与登录由该能力自行管理。</p>
+          <div id="settings-coding-capabilities" class="coding-cap-list"></div>
+          <p id="settings-executor-status" class="meta" aria-live="polite">状态：检查中…</p>
+          <p id="settings-executor-desc" class="muted tiny"></p>
+          <p id="settings-executor-scope" class="muted tiny"></p>
+          <div class="row settings-actions">
+            <button type="button" id="btn-check-executor">检查连接</button>
+          </div>
+          <details class="advanced-connection">
+            <summary>高级说明</summary>
+            <p class="muted tiny">
+              Digital Me 只会在你确认的文件夹内工作，不会自动提交、推送或发布。不会静默安装软件，也不会修改系统安全设置。
+            </p>
+            <p id="settings-coding-advanced-name" class="muted tiny"></p>
+          </details>
+          <p id="executor-settings-status" class="status" aria-live="polite"></p>
+
+          <hr class="settings-divider" />
+          <h2>专业能力</h2>
+          <p class="muted">可选。不是另一个数字之我，而是本机可连接的研究分析服务。</p>
+          <p id="settings-remote-cap-status" class="meta" aria-live="polite">状态：未配置</p>
+          <label class="field">
+            <span>服务地址</span>
+            <input
+              id="remote-cap-base-url"
+              type="text"
+              placeholder="例如 http://127.0.0.1:43111"
+              autocomplete="off"
+            />
+          </label>
+          <div class="row settings-actions">
+            <button type="button" id="btn-remote-cap-save" class="primary">保存并验证</button>
+            <button type="button" id="btn-remote-cap-test">检查连接</button>
+            <button type="button" id="btn-remote-cap-disable" class="ghost">停用</button>
+          </div>
+          <p id="remote-cap-settings-status" class="status" aria-live="polite"></p>
+          <p id="remote-cap-status-label" class="meta" hidden>状态：未配置</p>
+        </div>
+      </section>
+
+      <section id="view-shell" class="view" hidden>
+        <header class="topbar shell-topbar">
+          <p class="brand-sm">Digital Me</p>
+          <nav class="main-nav" aria-label="主导航">
+            <button type="button" class="nav-item active" data-nav="chat" id="nav-chat">对话</button>
+            <button type="button" class="nav-item" data-nav="work" id="nav-work">做事</button>
+            <button type="button" class="nav-item" data-nav="collab" id="nav-collab" title="实验能力">协作（实验）</button>
+            <button type="button" class="nav-item" data-nav="subject" id="nav-subject">数字之我</button>
+          </nav>
+          <div class="topbar-actions" aria-label="次级入口">
+            <button type="button" id="btn-open-help" class="ghost topbar-secondary">帮助</button>
+            <button type="button" id="btn-open-settings" class="ghost topbar-secondary">设置</button>
+          </div>
+        </header>
+
+        <section id="panel-chat" class="shell-panel chat-panel" data-panel="chat">
+          <h1 class="page-title">对话</h1>
+          <p class="page-lead">交流想法；需要时可转为任务。</p>
+          <div class="chat-stream">
+            <div id="chat-context" class="chat-context muted tiny" hidden></div>
+            <ul id="chat-turns" class="chat-turns" aria-live="polite"></ul>
+            <p id="chat-empty" class="empty-hint">写一句话开始。</p>
+          </div>
+          <div id="growth-guide-actions" class="growth-guide-actions" hidden>
+            <button type="button" id="btn-guide-switch" class="ghost">换一个问题</button>
+            <button type="button" id="btn-guide-later" class="ghost">稍后再聊这个</button>
+          </div>
+          <div class="chat-composer">
+            <div class="field">
+              <label for="chat-input">你想说的话</label>
+              <textarea id="chat-input" rows="3" placeholder="例如：我最近在做产品验收，希望你记得这一点。"></textarea>
+            </div>
+            <div class="row">
+              <button type="button" id="btn-chat-send" class="primary">发送</button>
+              <button type="button" id="btn-chat-retry" class="ghost" hidden>重试回复</button>
+              <button type="button" id="btn-chat-to-task">转为任务</button>
+              <button type="button" id="btn-chat-clear" class="ghost">清空对话</button>
+            </div>
+            <div id="chat-clear-confirm" class="chat-clear-confirm" hidden>
+              <span class="chat-clear-confirm-text">清空当前对话？</span>
+              <button type="button" id="btn-chat-clear-confirm" class="primary">确认清空</button>
+              <button type="button" id="btn-chat-clear-cancel" class="ghost">取消</button>
+            </div>
+            <p id="chat-status" class="meta" aria-live="polite"></p>
+          </div>
+        </section>
+
+        <section id="panel-subject" class="shell-panel" data-panel="subject" hidden>
+          <h1 class="page-title">数字之我</h1>
+          <section id="growth-block" class="growth-block" hidden>
+            <div id="growth-home" class="growth-home">
+            <h2 id="growth-stage-name" class="growth-stage-name"></h2>
+            <p id="growth-calibration" class="growth-calibration" hidden>需要校准</p>
+            <p id="growth-stage-explain" class="growth-stage-explain"></p>
+            <div id="growth-next-gap" class="growth-next-gap">
+              <p id="growth-next-title" class="growth-task-title"></p>
+              <p id="growth-next-purpose" class="growth-task-purpose muted tiny"></p>
+            </div>
+            <div class="row">
+              <button type="button" id="btn-growth-continue-learn" class="primary">继续了解我</button>
+            </div>
+            <section id="growth-cockpit" class="growth-cockpit">
+              <div class="growth-cockpit-block">
+                <h3>已经了解 <span id="growth-cockpit-known-count" class="growth-cockpit-count"></span></h3>
+                <ul id="growth-cockpit-known" class="growth-plain-list"></ul>
+                <p id="growth-cockpit-known-empty" class="empty-hint">还没有可展示的了解。</p>
+              </div>
+              <div class="growth-cockpit-block">
+                <h3>还可以了解</h3>
+                <ul id="growth-cockpit-gaps" class="growth-plain-list"></ul>
+                <p id="growth-cockpit-gaps-empty" class="empty-hint">当前没有特别建议补充的方面。</p>
+              </div>
+              <div class="growth-cockpit-block">
+                <h3>已有资料 <span id="growth-cockpit-material-count" class="growth-cockpit-count"></span></h3>
+                <p id="growth-cockpit-material-kinds" class="muted tiny"></p>
+                <ul id="growth-cockpit-materials" class="growth-plain-list"></ul>
+                <p id="growth-cockpit-materials-empty" class="empty-hint">还没有资料。</p>
+              </div>
+            </section>
+            <div class="growth-card-links">
+              <button type="button" id="btn-growth-situation" class="ghost">查看完整情况</button>
+              <button type="button" id="btn-growth-other-ways" class="ghost">其他完善方式</button>
+            </div>
+            </div>
+            <div id="growth-other-ways" class="growth-subpage" hidden>
+              <div class="growth-subpage-bar">
+                <button type="button" id="btn-growth-back-other" class="ghost">返回数字之我</button>
+              </div>
+              <h2 class="page-title">其他完善方式</h2>
+              <ol class="growth-other-ways-list">
+                <li>
+                  <p class="growth-task-title">提供资料</p>
+                  <p class="muted tiny">用你自己的材料补充背景，这是自愿的。</p>
+                  <button type="button" id="btn-import-subject-material">添加资料</button>
+                </li>
+                <li>
+                  <p class="growth-task-title">回答简短问题或表单</p>
+                  <p class="muted tiny">用一两句话写下你愿意补充的内容。</p>
+                  <label class="field">
+                    <span>补充一句话</span>
+                    <textarea id="subject-more" rows="2" placeholder="补充你希望被了解的一点。"></textarea>
+                  </label>
+                  <div class="row">
+                    <button type="button" id="btn-subject-capture" class="primary">保存</button>
+                  </div>
+                </li>
+                <li>
+                  <p class="growth-task-title">通过实际经历或任务让我了解你</p>
+                  <p class="muted tiny">这不是必经步骤，只是让我从真实工作中了解你的一种方式。</p>
+                  <button type="button" id="btn-growth-optional-work" class="ghost">去做事</button>
+                </li>
+              </ol>
+              <p id="subject-action-status" class="meta" aria-live="polite"></p>
+              <h2 class="section-title">已添加的资料</h2>
+              <ul id="subject-material-list" class="subject-list"></ul>
+              <p id="subject-material-empty" class="empty-hint">还没有资料。</p>
+            </div>
+            <div id="growth-situation" class="growth-subpage" hidden>
+              <div class="growth-subpage-bar">
+                <button type="button" id="btn-growth-back-situation" class="ghost">返回数字之我</button>
+              </div>
+              <h2 class="page-title">完整情况</h2>
+              <section>
+                <h3 class="section-title">已有所了解</h3>
+                <ul id="growth-known-list" class="growth-plain-list"></ul>
+                <p id="growth-known-empty" class="empty-hint">还没有可展示的了解。</p>
+              </section>
+              <section>
+                <h3 class="section-title">可以继续补充</h3>
+                <ul id="growth-partial-list" class="growth-plain-list"></ul>
+                <p id="growth-partial-empty" class="empty-hint">当前没有需要补充的半成品信息。</p>
+              </section>
+              <section>
+                <h3 class="section-title">暂未了解</h3>
+                <ul id="growth-unknown-list" class="growth-plain-list"></ul>
+              </section>
+            </div>
+            <p id="growth-later-note" class="muted tiny" hidden></p>
+          </section>
+          <div id="subject-hidden-lists" hidden>
+            <p id="subject-brief" class="subject-brief"></p>
+            <ul id="subject-active-list" class="subject-list"></ul>
+            <p id="subject-active-empty" class="empty-hint">暂无已确认内容。</p>
+            <ul id="subject-learned-list" class="subject-list"></ul>
+            <p id="subject-learned-empty" class="empty-hint">暂无新近沉淀的内容。</p>
+            <ul id="subject-recent-list" class="subject-list subject-list-pending"></ul>
+            <p id="subject-recent-empty" class="empty-hint">暂无待确认内容。</p>
+          </div>
+        </section>
+
+        <section id="panel-work" class="shell-panel work-compose-focus" data-panel="work" hidden>
+          <h1 class="page-title">做事</h1>
+          <div class="work-layout" data-stage="center" data-tasks="closed">
+            <aside class="panel work-tasks" id="work-tasks">
+              <div class="aside-head">
+                <h2>任务</h2>
+                <button type="button" id="btn-new-task" class="primary">新建任务</button>
+              </div>
+              <ul id="task-list" class="task-list"></ul>
+              <p id="task-empty" class="empty-hint">还没有任务。写下目标后开始。</p>
+            </aside>
+
+            <main class="panel grow work-main" id="work-main">
+              <div class="work-main-head">
+                <button type="button" id="btn-work-toggle-tasks" class="ghost work-toggle-tasks">任务列表</button>
+                <h2 id="work-compose-title">新建任务</h2>
+                <div class="work-stage-tabs" id="work-stage-tabs" hidden>
+                  <button type="button" class="work-stage-tab active" data-work-stage="center">对话</button>
+                  <button type="button" class="work-stage-tab" data-work-stage="artifact">工作区</button>
+                </div>
+              </div>
+              <div id="model-gate" class="model-gate" hidden>
+                <p>请先连接模型，才能开始处理任务。</p>
+                <button type="button" id="btn-goto-settings" class="primary">前往设置</button>
+              </div>
+
+              <div class="work-conversation" id="work-conversation">
+                <div class="work-conversation-scroll" id="work-conversation-scroll">
+                  <section class="work-compose-setup" id="work-compose-setup" aria-label="新任务起草">
+                    <section class="work-goal-block" aria-label="任务目标">
+                      <details id="goal-details" class="goal-details" open>
+                        <summary id="goal-summary-label">你要完成的工作</summary>
+                        <label class="field goal-field">
+                          <span class="visually-hidden">任务目标</span>
+                          <textarea
+                            id="goal"
+                            class="goal-input"
+                            rows="6"
+                            placeholder="告诉我你要完成什么。"
+                          ></textarea>
+                        </label>
+                        <div class="row goal-send-row">
+                          <button type="button" id="btn-goal-send" class="primary">发送给 Digital Me</button>
+                        </div>
+                        <div id="goal-examples" class="goal-examples" aria-label="任务示例">
+                          <button type="button" class="goal-example ghost" data-goal-example="修改这个项目中的登录页，并运行相关测试">修改这个项目中的登录页，并运行相关测试</button>
+                          <button type="button" class="goal-example ghost" data-goal-example="分析这些材料，形成一份投资判断">分析这些材料，形成一份投资判断</button>
+                          <button type="button" class="goal-example ghost" data-goal-example="根据现有资料撰写一篇公众号文章">根据现有资料撰写一篇公众号文章</button>
+                        </div>
+                      </details>
+                    </section>
+
+                    <input type="hidden" id="artifact-type" value="document" />
+
+                    <section class="work-materials-block materials" aria-label="材料">
+                      <div class="materials-head">
+                        <h3 class="materials-title">材料</h3>
+                        <div class="row materials-actions">
+                          <button type="button" id="btn-add-files">添加文件</button>
+                          <button type="button" id="btn-add-folder">添加文件夹</button>
+                          <button type="button" id="btn-clear-materials" class="ghost">清空</button>
+                        </div>
+                      </div>
+                      <details id="material-list-wrap" class="material-list-wrap" open>
+                        <summary id="material-list-summary">尚未添加材料</summary>
+                        <ul id="material-list" class="material-list"></ul>
+                      </details>
+                      <details id="material-summary" class="material-summary" hidden>
+                        <summary id="material-summary-line"></summary>
+                        <div id="material-summary-body" class="material-summary-body"></div>
+                      </details>
+                    </section>
+                  </section>
+
+                  <ol id="work-timeline" class="work-timeline" aria-live="polite" aria-label="当前任务对话"></ol>
+
+                  <section class="work-exec-block" aria-label="任务操作">
+                    <div class="row work-exec-actions" id="work-exec-actions">
+                      <button type="button" id="btn-submit" class="primary" hidden>开始处理</button>
+                      <button type="button" id="btn-cancel" disabled hidden>取消</button>
+                      <button type="button" id="btn-retry" disabled hidden>重试</button>
+                      <button type="button" id="btn-open-project-folder" class="ghost" hidden>打开项目文件夹</button>
+                      <button type="button" id="btn-restart-compose" class="ghost" hidden>创建新任务</button>
+                      <details class="work-more-menu" id="work-more-menu" hidden>
+                        <summary class="visually-hidden">其他操作</summary>
+                        <div class="row work-more-actions" id="work-more-actions"></div>
+                      </details>
+                    </div>
+                    <div class="work-status-rail" id="work-status-rail">
+                      <p id="job-status" class="status" aria-live="polite"></p>
+                      <p id="job-actionable" class="muted"></p>
+                    </div>
+                    <div id="owner-choice-prompt" class="owner-choice" hidden>
+                      <p id="owner-choice-question" class="owner-choice-q"></p>
+                      <div class="row owner-choice-actions" id="owner-choice-actions"></div>
+                    </div>
+                  </section>
+
+                  <div class="collab-box work-assist-lite" id="collab-box" hidden>
+                    <div class="row work-assist-entries" id="work-assist-entries" hidden>
+                      <button type="button" id="btn-collab-open" class="ghost">请人帮忙</button>
+                      <button type="button" id="btn-external-cap-open" class="ghost">用专业能力</button>
+                    </div>
+                    <div id="work-collab-related" class="work-collab-related">
+                      <p id="collab-status" class="meta" aria-live="polite"></p>
+                      <pre id="collab-return" class="collab-return" hidden></pre>
+                      <div class="row" id="collab-actions" hidden>
+                        <button type="button" id="btn-work-open-collab-detail" hidden>打开协作详情</button>
+                        <button type="button" id="btn-collab-revoke" class="ghost" hidden>结束这次协作</button>
+                      </div>
+                      <p id="collab-error" class="muted tiny error" hidden></p>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="work-nl-composer" id="work-nl-composer">
+                  <label class="field work-nl-field">
+                    <span class="visually-hidden">继续对话</span>
+                    <textarea
+                      id="work-nl-input"
+                      class="work-nl-input"
+                      rows="3"
+                      placeholder="直接说明下一步：例如「继续完善……」「这里不符合我的要求……」「先暂停」。"
+                    ></textarea>
+                  </label>
+                  <div class="row work-nl-actions">
+                    <button type="button" id="btn-work-nl-send" class="primary">发送</button>
+                    <button type="button" id="btn-work-nl-attach" class="ghost" hidden>添加材料</button>
+                    <p id="work-nl-hint" class="muted tiny">采用前可随时继续交流；快捷按钮只是辅助。</p>
+                  </div>
+                </div>
+              </div>
+            </main>
+
+            <section id="artifact-panel" class="panel artifact-side">
+              <div class="artifact-head">
+                <h2 id="task-workspace-title">任务工作区</h2>
+                <details class="work-more-menu artifact-exports-more" id="artifact-exports-more" hidden>
+                  <summary>导出副本</summary>
+                  <div class="row artifact-exports" id="artifact-exports">
+                    <button type="button" id="btn-copy">复制</button>
+                    <button type="button" id="btn-export-md">导出 Markdown</button>
+                    <button type="button" id="btn-export-docx">导出 Word</button>
+                    <button type="button" id="btn-reveal">打开所在目录</button>
+                  </div>
+                </details>
+              </div>
+              <div id="artifact-loading" class="artifact-loading" hidden>
+                <p class="muted">正在打开任务…</p>
+              </div>
+
+              <div id="task-workspace-plan" class="task-workspace-plan" hidden>
+                <div class="tw-plan-head">
+                  <h3 id="tw-plan-heading">开发规划</h3>
+                  <p id="tw-plan-version" class="meta">规划版本</p>
+                  <p id="tw-plan-status" class="muted tiny">待确认</p>
+                </div>
+                <dl class="tw-plan-dl">
+                  <div>
+                    <dt>目标</dt>
+                    <dd id="tw-plan-goal"></dd>
+                  </div>
+                  <div>
+                    <dt>准备怎么做</dt>
+                    <dd id="tw-plan-path"></dd>
+                  </div>
+                  <div>
+                    <dt>如何判断完成</dt>
+                    <dd id="tw-plan-delivery"></dd>
+                  </div>
+                  <div>
+                    <dt>重要边界</dt>
+                    <dd id="tw-plan-bounds"></dd>
+                  </div>
+                </dl>
+                <p id="tw-plan-prep" class="muted tiny" hidden></p>
+                <p id="tw-plan-confirm-hint" class="muted tiny" hidden></p>
+                <button type="button" id="btn-start-development" class="primary">确认规划并开始开发</button>
+              </div>
+
+              <div id="task-workspace-prep" class="task-workspace-prep" hidden>
+                <h3 id="tw-prep-title">开发前还需完成准备</h3>
+                <p id="tw-prep-missing"></p>
+                <p id="tw-prep-why" class="muted"></p>
+                <p id="tw-prep-checked" class="muted tiny"></p>
+                <p id="tw-prep-action"></p>
+                <div class="row tw-prep-actions" id="tw-prep-actions">
+                  <button type="button" id="btn-tw-create-project" class="primary" hidden>由 Digital Me 创建新项目</button>
+                  <button type="button" id="btn-tw-pick-project" class="ghost" hidden>使用已有项目</button>
+                  <button type="button" id="btn-tw-connect-coding" class="primary" hidden>连接代码执行能力</button>
+                  <button type="button" id="btn-tw-open-settings" class="ghost" hidden>打开设置</button>
+                  <button type="button" id="btn-tw-prep-continue" class="primary" hidden>继续准备</button>
+                  <button type="button" id="btn-tw-high-risk-confirm" class="primary" hidden>确认后开始开发</button>
+                  <button type="button" id="btn-tw-high-risk-cancel" class="ghost" hidden>先不开始</button>
+                </div>
+                <p id="tw-prep-continue" class="muted tiny"></p>
+              </div>
+
+              <div id="task-workspace-running" class="task-workspace-running" hidden>
+                <h3 id="tw-running-title">开发中</h3>
+                <p id="tw-running-plan" class="meta"></p>
+                <p id="tw-running-progress"></p>
+                <p id="tw-running-hint" class="muted tiny">完成后，成果与试用说明会出现在这里。</p>
+              </div>
+
+              <div id="revision-active-banner" class="revision-active-banner" hidden>
+                <p id="revision-active-title" class="revision-active-title">正在按你的修改要求继续处理</p>
+                <p class="revision-active-label muted tiny">修改要求</p>
+                <p id="revision-active-text" class="revision-active-text"></p>
+              </div>
+              <div class="decision-box" id="artifact-decision-box" hidden>
+                <p id="artifact-decision-status" class="meta" aria-live="polite" hidden></p>
+                <p id="artifact-decision-hint" class="muted tiny" hidden></p>
+                <div id="adopt-warning-card" class="adopt-warning-card" hidden>
+                  <p id="adopt-warning-title" class="adopt-warning-title">Digital Me 检查发现还有问题：</p>
+                  <ul id="adopt-warning-list" class="adopt-warning-list"></ul>
+                  <p class="muted tiny">你仍然可以保留当前结果；日常交流请在中间对话区继续说明。</p>
+                  <div class="row">
+                    <button type="button" id="btn-adopt-continue-revise" class="ghost">在对话中继续说明</button>
+                    <button type="button" id="btn-adopt-anyway" class="ghost">仍然采用</button>
+                  </div>
+                </div>
+                <div class="row decision-actions" id="artifact-decision-actions">
+                  <button type="button" id="btn-propose-revision" class="ghost" hidden>提出修改</button>
+                  <button type="button" id="btn-accept-artifact" class="primary" hidden>确认采用</button>
+                  <button type="button" id="btn-reject-artifact" class="ghost" hidden>不采用</button>
+                </div>
+                <label class="field decision-note" id="artifact-decision-note-field" hidden>
+                  <span class="visually-hidden">采用说明</span>
+                  <input
+                    type="text"
+                    id="artifact-decision-note"
+                    placeholder=""
+                    maxlength="400"
+                    hidden
+                  />
+                </label>
+                <div id="revision-composer" class="revision-composer" hidden>
+                  <h3 id="revision-composer-title" class="revision-composer-title">补充意见</h3>
+                  <label class="field">
+                    <span class="visually-hidden">修改要求</span>
+                    <textarea
+                      id="revision-request"
+                      rows="3"
+                      placeholder="也可直接在中间对话区输入。"
+                    ></textarea>
+                  </label>
+                  <div id="revision-shots" class="revision-shots" aria-label="截图附件"></div>
+                  <div class="row">
+                    <button type="button" id="btn-add-revision-shot" class="ghost">添加截图</button>
+                    <input type="file" id="revision-shot-file" accept="image/png,image/jpeg,image/webp" hidden multiple />
+                  </div>
+                  <p id="revision-shot-hint" class="muted tiny" hidden></p>
+                  <div class="row">
+                    <button type="button" id="btn-revise" class="primary">提交</button>
+                    <button type="button" id="btn-cancel-revision" class="ghost">取消</button>
+                  </div>
+                </div>
+                <div id="next-steps-card" class="next-steps-card" hidden>
+                  <h3 id="next-steps-title">接下来</h3>
+                  <p id="next-steps-lead" class="muted"></p>
+                  <div class="row next-steps-actions" id="next-steps-actions"></div>
+                  <p id="next-steps-status" class="muted tiny" aria-live="polite"></p>
+                </div>
+                <p id="artifact-decision-error" class="muted tiny error" hidden></p>
+              </div>
+              <details id="applied-understanding" class="applied-understanding" hidden></details>
+              <div class="artifact-scroll" id="artifact-scroll">
+              <p id="artifact-empty-hint" class="empty-hint artifact-empty-hint" hidden>规划确认后，成果会出现在这里。</p>
+              <p id="save-status" class="meta"></p>
+              <p id="version-meta" class="meta"></p>
+              <div id="code-change-view" class="code-change-view" hidden>
+                <section class="cc-section cc-revision-req" id="cc-revision-section" hidden>
+                  <h3>本轮执行要求</h3>
+                  <p id="cc-revision-request" class="cc-revision-request"></p>
+                </section>
+                <section class="cc-section cc-acceptance" id="cc-acceptance-section" hidden>
+                  <h3 id="cc-acceptance-title">Digital Me 的结论</h3>
+                  <p id="cc-acceptance-exec" class="cc-acceptance-exec"></p>
+                  <p id="cc-acceptance-goal" class="cc-acceptance-goal" hidden></p>
+                  <p id="cc-cto-report" class="cc-cto-report"></p>
+                  <ul id="cc-acceptance-bullets" class="cc-acceptance-bullets" hidden></ul>
+                  <p id="cc-acceptance-next" class="cc-acceptance-next muted" hidden></p>
+                  <p id="cc-acceptance-reco" class="cc-acceptance-reco" hidden></p>
+                  <p id="cc-acceptance-redirect" class="muted tiny" hidden></p>
+                  <details id="cc-tech-evidence" class="cc-tech-evidence" hidden>
+                    <summary>技术证据</summary>
+                    <ul id="cc-tech-bullets" class="cc-acceptance-bullets"></ul>
+                  </details>
+                </section>
+                <section class="cc-section" id="cc-understanding-section" hidden>
+                  <h3>任务理解</h3>
+                  <p id="cc-understanding-goal" class="cc-understanding-goal"></p>
+                  <ul id="cc-understanding-files" class="cc-understanding-files"></ul>
+                </section>
+                <section class="cc-section" id="cc-plan-section" hidden>
+                  <h3>方案</h3>
+                  <ol id="cc-plan-list" class="cc-plan-list"></ol>
+                </section>
+                <section class="cc-section" id="cc-risks-section" hidden>
+                  <h3>风险</h3>
+                  <ul id="cc-risks-list" class="cc-risks-list"></ul>
+                </section>
+                <section class="cc-section" id="cc-deliverable-section">
+                  <h3>本次成果</h3>
+                  <p id="cc-summary" class="cc-summary"></p>
+                  <p id="cc-verification" class="meta"></p>
+                </section>
+                <section class="cc-section">
+                  <h3>修改文件</h3>
+                  <ul id="cc-file-list" class="cc-file-list"></ul>
+                  <button type="button" id="btn-cc-files-more" class="ghost tiny" hidden>显示全部文件</button>
+                </section>
+                <details class="cc-section cc-diff-panel" id="cc-diff-panel">
+                  <summary>代码变化</summary>
+                  <pre id="cc-diff" class="cc-diff"></pre>
+                </details>
+                <section class="cc-section" id="cc-tests-section">
+                  <h3>验证结果</h3>
+                  <ul id="cc-test-list" class="cc-test-list"></ul>
+                </section>
+                <section class="cc-section" id="cc-unresolved-section" hidden>
+                  <h3>未完成事项</h3>
+                  <ul id="cc-unresolved-list" class="cc-unresolved-list"></ul>
+                </section>
+                <p id="cc-restore-hint" class="muted tiny" hidden></p>
+                <div class="row" id="cc-restore-row" hidden>
+                  <button type="button" id="btn-restore-baseline" class="ghost" hidden>恢复执行前状态</button>
+                </div>
+              </div>
+              <p id="artifact-empty" class="empty-hint" hidden>尚未形成可交付成果。</p>
+              <div id="bundle-view" class="bundle-view" hidden>
+                <p id="bundle-quality" class="bundle-quality" hidden></p>
+                <textarea
+                  id="bundle-report"
+                  class="bundle-report"
+                  rows="16"
+                  spellcheck="true"
+                  aria-label="分析报告（可人工编辑；依据不会自动同步）"
+                ></textarea>
+                <p id="bundle-stale-notice" class="muted tiny" hidden>
+                  报告已人工修改；下方依据与清单仍为生成时的版本，未自动同步。
+                </p>
+                <details id="bundle-evidence-panel" class="bundle-evidence-panel">
+                  <summary>分析依据</summary>
+                  <div id="bundle-manifest" class="bundle-manifest muted"></div>
+                  <ul id="bundle-entries" class="bundle-entries"></ul>
+                </details>
+              </div>
+              <div class="artifact-body">
+                <textarea id="artifact-editor" rows="18" spellcheck="true" aria-label="成果正文"></textarea>
+              </div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section id="panel-collab" class="shell-panel" data-panel="collab" hidden>
+          <div id="collab-page-home">
+            <div class="aside-head">
+              <h1 class="page-title">协作</h1>
+              <button type="button" id="btn-collab-page-new" class="primary">新建协作</button>
+            </div>
+            <p class="page-lead">实验能力：协作还处于试用阶段，但入口与做事、对话同等可发现。当前你可以：与另一台已配对的数字之我建立联系、收发加密信件、发现协作机会、提出协作并打开同一条协作详情。</p>
+            <p class="muted tiny">协作目前还<strong>不能</strong>当成完整的远程交活：不传输大文件、不走完整远程任务履约；暂不支持多人同时协作；不提供支付或对外自动承诺。研究分析等专业能力请到「设置」中配置。</p>
+
+            <section class="collab-home-section" aria-labelledby="collab-who-title">
+              <h2 class="section-title" id="collab-who-title">
+                可找谁帮忙
+                <span class="section-hint">另一台电脑上的数字之我</span>
+              </h2>
+              <div class="collab-connected-peers">
+                <div class="collab-peer-manage-card" id="collab-peer-digitalme-card">
+                  <p class="collab-peer-name">另一台电脑上的数字之我</p>
+                  <p class="muted tiny">这台电脑上只有你的数字之我。要协作，请先到「设置」连接另一台电脑上的数字之我。</p>
+                  <p class="muted tiny">数字之我正在逐步做到：按你确认过的内容代表你说话和做事，并在你授权下与另一台电脑上的数字之我协作。当前协作仍是实验，可以建立联系、发现机会、提出意向；还不能当成完整的远程交活。</p>
+                </div>
+              </div>
+            </section>
+
+            <section class="collab-home-section" aria-labelledby="collab-signal-title" id="collab-signal-compose">
+              <h2 class="section-title" id="collab-signal-title">
+                发出合作意向
+                <span class="section-hint">尚未正式协作</span>
+              </h2>
+              <label class="field">
+                <span>发给谁</span>
+                <select id="collab-signal-peer" aria-label="选择已连接的数字之我">
+                  <option value="">请先在设置中连接另一台电脑上的数字之我</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>你想说什么</span>
+                <textarea
+                  id="collab-signal-intent"
+                  rows="4"
+                  placeholder="例如：我正在找适合一起做项目的人，希望能把方案一起做完。"
+                ></textarea>
+              </label>
+              <div class="row">
+                <button type="button" id="btn-collab-send-signal" class="primary">发出</button>
+              </div>
+              <p id="collab-signal-status" class="status" aria-live="polite"></p>
+            </section>
+
+            <section class="collab-home-section" aria-labelledby="collab-opp-title">
+              <h2 class="section-title" id="collab-opp-title">
+                可能值得了解
+                <span class="section-hint">尚未正式协作</span>
+              </h2>
+              <ul id="collab-list-opportunities" class="collab-entry-list collab-opp-list"></ul>
+              <p id="collab-empty-opportunities" class="empty-hint">暂无新的合作机会提示。</p>
+              <p class="muted tiny collab-opp-privacy">
+                双方 Digital Me 只交换了判断这次机会所需的少量信息。
+              </p>
+            </section>
+
+            <section class="collab-home-section" aria-labelledby="collab-active-title">
+              <h2 class="section-title" id="collab-active-title">
+                进行中
+                <span class="section-hint">尚未结束</span>
+              </h2>
+              <ul id="collab-list-active" class="collab-entry-list"></ul>
+              <p id="collab-empty-active" class="empty-hint">暂无进行中的协作。可点「新建协作」。</p>
+            </section>
+
+            <section class="collab-home-section" aria-labelledby="collab-done-title">
+              <h2 class="section-title" id="collab-done-title">
+                待你处理 / 已完成
+                <span class="section-hint">需确认或已结束</span>
+              </h2>
+              <ul id="collab-list-done" class="collab-entry-list"></ul>
+              <p id="collab-empty-done" class="empty-hint">暂无待处理或已完成的协作。</p>
+            </section>
+
+            <section class="collab-home-section" aria-labelledby="collab-revoked-title">
+              <h2 class="section-title" id="collab-revoked-title">
+                已撤销
+                <span class="section-hint">授权已结束</span>
+              </h2>
+              <ul id="collab-list-revoked" class="collab-entry-list"></ul>
+              <p id="collab-empty-revoked" class="empty-hint">暂无已撤销记录。</p>
+            </section>
+          </div>
+
+          <div id="collab-page-new" hidden>
+            <button type="button" id="btn-collab-new-back" class="ghost">返回列表</button>
+            <h1 class="page-title">新建协作</h1>
+            <p id="collab-page-context-note" class="muted tiny" hidden></p>
+            <p class="muted tiny">实验能力：协作对象是另一台电脑上的数字之我。请先在「设置」中连接。</p>
+            <label class="field" hidden>
+              <span>协作方式</span>
+              <select id="collab-page-target-mode">
+                <option value="local-peer" selected>请人帮忙（另一台电脑上的数字之我）</option>
+              </select>
+            </label>
+
+            <div id="collab-page-peer-flow">
+              <label class="field">
+                <span>协作对象</span>
+                <div class="row">
+                  <button type="button" id="btn-collab-page-pick-peer">选择</button>
+                  <button type="button" id="btn-collab-page-import-peer" class="ghost">导入数字之我</button>
+                </div>
+                <input type="hidden" id="collab-page-peer-dir" />
+                <div id="collab-page-peer-card" class="collab-peer-card" hidden>
+                  <p id="collab-page-peer-name" class="collab-peer-name"></p>
+                  <p id="collab-page-peer-brief" class="muted tiny" hidden></p>
+                  <p id="collab-page-peer-path" class="muted tiny collab-peer-path"></p>
+                </div>
+              </label>
+              <p id="collab-page-peer-empty" class="muted tiny" hidden>还没有可协作的数字之我。</p>
+              <label class="field">
+                <span>想让对方完成什么</span>
+                <textarea id="collab-page-subtask" rows="5" placeholder="说明希望对方完成的具体内容"></textarea>
+              </label>
+              <label class="field">
+                <span>可选补充要求</span>
+                <textarea id="collab-page-extra" rows="2" placeholder="可留空"></textarea>
+              </label>
+              <fieldset class="field collab-materials-field">
+                <legend>允许共享的材料（须明确勾选）</legend>
+                <div class="row">
+                  <button type="button" id="btn-collab-page-add-files">添加材料文件</button>
+                </div>
+                <ul id="collab-page-material-checks" class="collab-material-checks"></ul>
+                <p class="muted tiny">默认不勾选。发送前请核对。</p>
+              </fieldset>
+              <div id="collab-page-confirm" class="collab-confirm" hidden>
+                <h2 class="section-title">授权说明</h2>
+                <ul id="collab-page-confirm-points" class="collab-confirm-points"></ul>
+              </div>
+              <div class="row">
+                <button type="button" id="btn-collab-page-preview" class="ghost">查看授权范围</button>
+                <button type="button" id="btn-collab-page-issue" class="primary">发出协作</button>
+                <button type="button" id="btn-collab-page-cancel" class="ghost">取消</button>
+              </div>
+            </div>
+
+            <div id="external-cap-panel" class="collab-form" hidden>
+              <div id="external-cap-card" class="external-cap-card">
+                <p id="external-cap-name" class="collab-peer-name">研究分析能力</p>
+                <p id="external-cap-desc" class="muted tiny">已连接的专业能力，可基于授权材料形成项目风险摘要。</p>
+                <p id="external-cap-suitable" class="muted tiny">适合完成：结构化项目风险摘要（约 500–800 字）。</p>
+                <p id="external-cap-share" class="muted tiny">将共享：仅勾选的材料与任务要求文字。</p>
+                <p id="external-cap-eta" class="muted tiny">预计耗时：数秒到两分钟。</p>
+                <p id="external-cap-avail" class="meta" aria-live="polite">当前是否可用：检查中…</p>
+              </div>
+              <label class="field">
+                <span>任务要求</span>
+                <textarea id="external-cap-goal" rows="4" placeholder="请根据已授权材料，形成 500–800 字结构化项目风险摘要。"></textarea>
+              </label>
+              <label class="field">
+                <span>可选补充说明</span>
+                <textarea id="external-cap-extra" rows="2" placeholder="可留空"></textarea>
+              </label>
+              <fieldset class="field collab-materials-field">
+                <legend>允许共享的材料（须明确勾选）</legend>
+                <ul id="external-cap-material-checks" class="collab-material-checks"></ul>
+                <p class="muted tiny">未勾选时只发送任务要求文字，不发送其它资料。</p>
+              </fieldset>
+              <div id="external-cap-confirm" class="collab-confirm" hidden>
+                <h4 class="section-title">授权说明</h4>
+                <ul id="external-cap-confirm-points" class="collab-confirm-points"></ul>
+              </div>
+              <div class="row">
+                <button type="button" id="btn-external-cap-preview" class="ghost">查看授权说明</button>
+                <button type="button" id="btn-external-cap-issue" class="primary">开始使用</button>
+                <button type="button" id="btn-external-cap-cancel" class="ghost" disabled>取消</button>
+              </div>
+              <p id="external-cap-status" class="meta" aria-live="polite"></p>
+              <p id="external-cap-error" class="muted tiny error" hidden></p>
+              <div class="row" id="external-cap-failure-actions" hidden>
+                <button type="button" id="btn-external-goto-collab">返回协作首页</button>
+                <button type="button" id="btn-external-retry">重试</button>
+                <button type="button" id="btn-external-use-local">改用本地能力</button>
+                <button type="button" id="btn-external-back-task" class="ghost">返回任务</button>
+              </div>
+              <div id="external-cap-result" class="external-cap-result" hidden>
+                <h4 class="section-title">返回的成果</h4>
+                <p id="external-cap-source" class="meta">来源：研究分析能力</p>
+                <p id="external-cap-returned-at" class="muted tiny"></p>
+                <p id="external-cap-check-status" class="meta" hidden></p>
+                <pre id="external-cap-body" class="collab-return"></pre>
+                <div class="row">
+                  <button type="button" id="btn-external-accept" class="primary">采用</button>
+                  <button type="button" id="btn-external-reject">不采用</button>
+                  <button type="button" id="btn-external-regenerate" class="ghost">重新生成</button>
+                </div>
+              </div>
+            </div>
+
+            <p id="collab-page-new-error" class="muted tiny error" hidden></p>
+          </div>
+
+          <div id="collab-page-detail" hidden>
+            <button type="button" id="btn-collab-detail-back" class="ghost">返回列表</button>
+            <h1 class="page-title">协作详情</h1>
+            <p id="collab-detail-peer" class="meta"></p>
+            <p id="collab-detail-goal" class="collab-detail-goal"></p>
+            <p id="collab-detail-status" class="meta" aria-live="polite"></p>
+            <h2 class="section-title" hidden>已共享材料</h2>
+            <ul id="collab-detail-materials" class="collab-material-checks" hidden></ul>
+            <h2 class="section-title" hidden>返回成果</h2>
+            <pre id="collab-detail-return" class="collab-return" hidden></pre>
+            <p id="collab-detail-return-empty" class="muted tiny" hidden></p>
+            <div class="row" id="collab-detail-actions">
+              <button type="button" id="btn-collab-detail-respond-accept" class="primary" hidden>接受协作</button>
+              <button type="button" id="btn-collab-detail-respond-reject" hidden>暂不接受</button>
+              <button type="button" id="btn-collab-detail-execute" hidden>开始完成</button>
+              <button type="button" id="btn-collab-detail-retry" class="primary" hidden>重试完成</button>
+              <button type="button" id="btn-collab-detail-accept" class="primary" hidden>采用</button>
+              <button type="button" id="btn-collab-detail-revise" hidden>要求修改</button>
+              <button type="button" id="btn-collab-detail-reject" hidden>不采用</button>
+              <button type="button" id="btn-collab-detail-revoke" class="ghost" hidden>结束授权</button>
+            </div>
+            <p id="collab-detail-error" class="muted tiny error" hidden></p>
+          </div>
+        </section>
+
+      </section>
+
+            <section id="view-help" class="view" hidden>
+        <header class="topbar">
+          <p class="brand-sm">Digital Me</p>
+          <button type="button" id="btn-help-back" class="ghost">返回</button>
+        </header>
+        <div class="panel help-panel">
+          <h1>帮助</h1>
+          <p id="help-topic-title" class="page-lead">对话</p>
+
+          <div class="help-topic" data-help-topic="chat">
+            <p>在这里交流想法。需要做成具体工作时，点「转为任务」。</p>
+            <ul class="help-list">
+              <li>还没连接模型时无法回复，请到「设置」连接后再试。</li>
+              <li>对话是完善数字之我的主要方式；你确认过的内容会被记住。</li>
+              <li>清空对话不会清掉已确认的重要内容。</li>
+            </ul>
+          </div>
+
+          <div class="help-topic" data-help-topic="work" hidden>
+            <p>写下要做的事，添加文件或文件夹，开始处理后可以查看、修改和采用成果。</p>
+            <ul class="help-list">
+              <li>还没连接模型时不能开始处理，请到「设置」连接。</li>
+              <li>采用成果后，对话可以提起刚完成的事。</li>
+              <li>需要另一台电脑上的数字之我帮忙时，可转到「协作（实验）」。</li>
+            </ul>
+          </div>
+
+          <div class="help-topic" data-help-topic="collab" hidden>
+            <p>这是实验能力。协作对象是另一台电脑上的数字之我，不是这台电脑上的第二个数字之我。</p>
+            <ul class="help-list">
+              <li>现在可以：连接、发现机会、提出意向、查看同一条协作。</li>
+              <li>现在还不能：当成完整的远程交活、传送大文件、多人同时协作、支付或对外自动承诺。</li>
+              <li>请先到「设置」连接另一台电脑上的数字之我。</li>
+            </ul>
+          </div>
+
+          <div class="help-topic" data-help-topic="subject" hidden>
+            <p class="page-lead">查看当前了解程度，并选择继续了解或补充资料。</p>
+            <h2 id="help-growth" class="section-title">数字之我如何成长</h2>
+            <p>对话是主要完善方式。资料、简短问答、成果反馈和实际经历都是自愿的补充。所有内容都可以跳过、暂不回答、不记录、修改、删除或限制使用范围。阶段只评价数字之我当前了解到什么，不评价你本人。</p>
+            <h3 class="section-title">四个成长阶段</h3>
+            <ol class="help-list help-growth-stages">
+              <li><strong>未开始</strong>：还缺少来源明确的本人信息。</li>
+              <li><strong>基础建立</strong>：已有若干来源明确的本人信息，可以开始按你的情况工作。</li>
+              <li><strong>基本成形</strong>：已覆盖多个核心方面，相关事情不必反复从头介绍。</li>
+              <li><strong>持续完善</strong>：已有较完整的了解，之后主要是按你的使用继续校准。</li>
+            </ol>
+            <h3 class="section-title">会逐步了解的方面</h3>
+            <ul class="help-list">
+              <li>基本身份</li>
+              <li>经历与背景</li>
+              <li>当前状态</li>
+              <li>目标与意图</li>
+              <li>兴趣与偏好</li>
+              <li>价值观与判断原则</li>
+              <li>表达与沟通方式</li>
+              <li>能力与做事方法</li>
+              <li>重要关系与组织</li>
+              <li>授权、隐私和使用边界</li>
+            </ul>
+            <p class="muted tiny">健康、财务、家庭等信息只有在你主动提起或明确同意后才会被处理。做事只是可选成长来源，不是启动条件。</p>
+          </div>
+
+          <div class="help-topic" data-help-topic="settings" hidden>
+            <p>在这里连接模型。连接之后，对话和做事才能开始处理。</p>
+            <ul class="help-list">
+              <li>密钥只保存在这台电脑上。</li>
+              <li>要使用协作，请在这里连接另一台电脑上的数字之我。</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+    </div>
+    <script src="text-normalize.js"></script>
+    <script src="bundle-quality-ui.js"></script>
+    <script src="bundle-copy.js"></script>
+    <script src="work-artifact-projection.js"></script>
+    <script src="work-ux-stage.js"></script>
+    <script src="work-conversation.js"></script>
+    <script src="task-workspace.js"></script>
+    <script src="growth-panel.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

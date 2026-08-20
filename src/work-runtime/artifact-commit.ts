@@ -1,0 +1,199 @@
+import { promises as fs } from 'node:fs';
+import * as path from 'node:path';
+import type { ObjectStore } from '../runtime/ports';
+import type { ContentStore } from '../infrastructure/content-store';
+import { newId, nowIso } from '../shared/ids';
+import type { CapabilityOutput } from '../capability/adapter';
+import {
+  artifactIdForJob,
+  type Artifact,
+  type ArtifactContent,
+  type ArtifactVersion,
+} from './artifact';
+
+/**
+ * Artifact 幂等提交协议:
+ * 1. artifactId = artifactIdForJob(jobId)
+ * 2. 若已存在则直接返回(重放不得生成第二个)
+ * 3. 先写 ContentStore,再写 Artifact 对象
+ * Job succeeded 由 Runner 在 Artifact 写入成功后单独落盘。
+ */
+export class ArtifactCommitter {
+  constructor(
+    private readonly artifactStore: ObjectStore<Artifact>,
+    private readonly contentStore: ContentStore,
+    private readonly artifactsRoot: string,
+  ) {}
+
+  async get(id: string): Promise<Artifact | null> {
+    return this.artifactStore.get(id);
+  }
+
+  async listByTask(taskId: string): Promise<Artifact[]> {
+    return this.artifactStore.list((a) => a.taskId === taskId);
+  }
+
+  async existsForJob(jobId: string): Promise<boolean> {
+    const existing = await this.artifactStore.get(artifactIdForJob(jobId));
+    return existing !== null;
+  }
+
+  async commit(input: {
+    jobId: string;
+    taskId: string;
+    subjectId: string;
+    output: CapabilityOutput;
+  }): Promise<Artifact> {
+    const id = artifactIdForJob(input.jobId);
+    const existing = await this.artifactStore.get(id);
+    if (existing) return existing;
+
+    const storageDir = path.join(this.artifactsRoot, id);
+    await fs.mkdir(storageDir, { recursive: true });
+
+    const content = await this.persistPayload(input.output.artifact.payload);
+    const versionId = newId('artifactVersion');
+    const createdAt = nowIso();
+    const version: ArtifactVersion = {
+      versionId,
+      createdAt,
+      author: 'capability',
+      content,
+    };
+    const artifact: Artifact = {
+      id,
+      taskId: input.taskId,
+      jobId: input.jobId,
+      subjectId: input.subjectId,
+      createdAt,
+      type: input.output.artifact.type,
+      title: input.output.artifact.title,
+      versions: [version],
+      headVersionId: versionId,
+      storageDir,
+    };
+    await this.artifactStore.put(artifact);
+    return artifact;
+  }
+
+  /**
+   * 向既有 Artifact 追加 capability 版本并移动 head。
+   * 失败抛错时不写 Artifact 对象 → 当前 head 保留。
+   */
+  async appendCapabilityVersion(input: {
+    artifactId: string;
+    jobId: string;
+    output: CapabilityOutput;
+    note?: string;
+  }): Promise<Artifact> {
+    const existing = await this.artifactStore.get(input.artifactId);
+    if (!existing) {
+      throw new Error(`artifact not found: ${input.artifactId}`);
+    }
+
+    const content = await this.persistPayload(input.output.artifact.payload);
+    const versionId = newId('artifactVersion');
+    const version: ArtifactVersion = {
+      versionId,
+      createdAt: nowIso(),
+      author: 'capability',
+      content,
+      ...(input.note ? { note: input.note } : {}),
+    };
+    const next: Artifact = {
+      ...existing,
+      jobId: input.jobId,
+      title: input.output.artifact.title || existing.title,
+      versions: [...existing.versions, version],
+      headVersionId: versionId,
+    };
+    await this.artifactStore.put(next);
+    return next;
+  }
+
+  /**
+   * 将对方完整成果物化到本方 Artifact Store，保留 provenance，不丢失来源关联。
+   * 修订时传入 existingArtifactId，追加新版本。
+   */
+  async materializePeerText(input: {
+    subjectId: string;
+    recordId: string;
+    title: string;
+    text: string;
+    provenance: import('./artifact').ArtifactProvenance;
+    existingArtifactId?: string;
+  }): Promise<{ artifact: Artifact; contentDigest: string }> {
+    const { createHash } = await import('node:crypto');
+    const contentDigest = createHash('sha256').update(input.text).digest('hex');
+    const stored = await this.contentStore.putText(input.text, 'markdown');
+    const versionId = newId('artifactVersion');
+    const createdAt = nowIso();
+    const version: ArtifactVersion = {
+      versionId,
+      createdAt,
+      author: 'capability',
+      content: stored.content,
+      note: `collab_delivery:${input.recordId}`,
+    };
+
+    if (input.existingArtifactId) {
+      const existing = await this.artifactStore.get(input.existingArtifactId);
+      if (!existing) throw new Error(`artifact not found: ${input.existingArtifactId}`);
+      const next: Artifact = {
+        ...existing,
+        title: input.title || existing.title,
+        versions: [...existing.versions, version],
+        headVersionId: versionId,
+        provenance: input.provenance,
+      };
+      await this.artifactStore.put(next);
+      return { artifact: next, contentDigest };
+    }
+
+    const jobId = `job_collab_${input.recordId.replace(/^crec_/, '').slice(0, 24)}`;
+    const id = artifactIdForJob(jobId);
+    const existing = await this.artifactStore.get(id);
+    if (existing) {
+      const next: Artifact = {
+        ...existing,
+        title: input.title || existing.title,
+        versions: [...existing.versions, version],
+        headVersionId: versionId,
+        provenance: input.provenance,
+      };
+      await this.artifactStore.put(next);
+      return { artifact: next, contentDigest };
+    }
+
+    const storageDir = path.join(this.artifactsRoot, id);
+    await fs.mkdir(storageDir, { recursive: true });
+    const artifact: Artifact = {
+      id,
+      taskId: `task_collab_${input.recordId.replace(/^crec_/, '').slice(0, 24)}`,
+      jobId,
+      subjectId: input.subjectId,
+      createdAt,
+      type: 'document',
+      title: input.title,
+      versions: [version],
+      headVersionId: versionId,
+      storageDir,
+      provenance: input.provenance,
+    };
+    await this.artifactStore.put(artifact);
+    return { artifact, contentDigest };
+  }
+
+  private async persistPayload(
+    payload: CapabilityOutput['artifact']['payload'],
+  ): Promise<ArtifactContent> {
+    if (payload.kind === 'text') {
+      const stored = await this.contentStore.putText(payload.text, payload.format);
+      return stored.content;
+    }
+    if (payload.kind === 'file') {
+      return this.contentStore.putFile(payload.sourcePath, payload.mediaType);
+    }
+    return this.contentStore.putBundle(payload.entries);
+  }
+}

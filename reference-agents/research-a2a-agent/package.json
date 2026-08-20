@@ -1,0 +1,17 @@
+{
+  "name": "digitalme-research-a2a-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Independent A2A 1.0 research analysis reference agent for Digital Me interoperability baseline",
+  "type": "commonjs",
+  "main": "server.cjs",
+  "scripts": {
+    "start": "node server.cjs",
+    "stop": "node stop.cjs"
+  },
+  "dependencies": {
+    "@a2a-js/sdk": "1.0.1",
+    "express": "^5.1.0",
+    "uuid": "^11.1.0"
+  }
+}

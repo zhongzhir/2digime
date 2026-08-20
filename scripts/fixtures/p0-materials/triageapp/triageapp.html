@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>TRIAGEAPP — 单文件内容分拣工作台</title>
+</head>
+<body data-triageapp-root="true">
+  <header>
+    <h1>TRIAGEAPP</h1>
+    <p class="tagline" data-description="内容分拣工作台">单文件内容分拣工作台：粘贴待处理内容，快速标记与归档。</p>
+  </header>
+  <main>
+    <section>
+      <h2>待处理</h2>
+      <textarea id="triage_input" placeholder="粘贴待分拣内容…"></textarea>
+      <button id="triage_add">加入分拣</button>
+    </section>
+    <section>
+      <h2>分拣列表</h2>
+      <ul id="triage_items"></ul>
+    </section>
+  </main>
+  <footer>
+    <p class="hint">数据仅保存在本机浏览器（localStorage）。</p>
+  </footer>
+  <script>
+    (function () {
+      var KEY = 'triageapp.triage_items';
+      var list = document.getElementById('triage_items');
+      function load() {
+        try {
+          return JSON.parse(localStorage.getItem(KEY) || '[]');
+        } catch (e) {
+          return [];
+        }
+      }
+      function save(items) {
+        localStorage.setItem(KEY, JSON.stringify(items));
+      }
+      function render() {
+        var items = load();
+        list.textContent = '';
+        items.forEach(function (item) {
+          var li = document.createElement('li');
+          li.textContent = item;
+          list.appendChild(li);
+        });
+      }
+      document.getElementById('triage_add').addEventListener('click', function () {
+        var input = document.getElementById('triage_input');
+        var value = input.value.trim();
+        if (!value) return;
+        var items = load();
+        items.push(value);
+        save(items);
+        input.value = '';
+        render();
+      });
+      render();
+    })();
+  </script>
+</body>
+</html>

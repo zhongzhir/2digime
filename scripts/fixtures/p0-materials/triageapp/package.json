@@ -1,0 +1,9 @@
+{
+  "name": "triageapp-fixture",
+  "private": true,
+  "version": "0.1.0",
+  "description": "TRIAGEAPP 单文件内容分拣工作台 fixture（隔离副本）",
+  "scripts": {
+    "test": "node test/verify-fixture.mjs"
+  }
+}

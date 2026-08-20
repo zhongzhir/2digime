@@ -1,0 +1,34 @@
+{
+  "name": "digitalme-v2",
+  "version": "0.1.0",
+  "description": "Digital Me — an Owner-controlled, AI-native personal digital subject system.",
+  "type": "commonjs",
+  "author": "Digital Me",
+  "license": "Apache-2.0",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "smoke": "node dist/smoke.js",
+    "test": "node --test --test-concurrency=1 \"dist/infrastructure/tests/*.test.js\" \"dist/work-runtime/tests/*.test.js\" \"dist/subject-core/tests/*.test.js\" \"dist/capability/adapters/tests/*.test.js\" \"dist/capability/tests/*.test.js\" \"dist/runtime/tests/*.test.js\" \"dist/engineering/tests/*.test.js\" \"dist/collaboration/tests/*.test.js\" \"dist/subject-comm/tests/*.test.js\" \"dist/execution/tests/*.test.js\"",
+    "electron:version": "node scripts/check-electron-version.cjs",
+    "preflight:electron": "node scripts/electron-preflight.cjs",
+    "dev": "node scripts/start-dev.cjs",
+    "build:packaged": "node scripts/build-packaged.cjs",
+    "smoke:packaged": "node scripts/run-packaged-trial-smoke.cjs",
+    "test:model-gate": "node scripts/test-model-gate-visibility.cjs",
+    "verify": "npm run build && npm run smoke && npm run test && npm run test:model-gate && npm run preflight:electron"
+  },
+  "dependencies": {
+    "@a2a-js/sdk": "^1.0.1",
+    "express": "^5.2.1",
+    "pdf-parse": "^1.1.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^24.0.0",
+    "electron": "^32.0.0",
+    "electron-builder": "^25.1.8",
+    "playwright": "^1.49.1",
+    "typescript": "^5.9.3"
+  }
+}

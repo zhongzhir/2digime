@@ -1,0 +1,8 @@
+{
+  "name": "digitalme-second-real-agent-01-target",
+  "private": true,
+  "version": "0.0.1",
+  "scripts": {
+    "test": "node --test test/inventory.test.js"
+  }
+}
