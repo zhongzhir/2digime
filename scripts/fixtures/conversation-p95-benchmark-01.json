@@ -1,0 +1,163 @@
+{
+  "id": "DIGITALME-CONVERSATION-P95-BENCHMARK-01",
+  "branch": "build/conversation-p95-benchmark-01",
+  "baseHead": "9188696",
+  "frozenAt": "2026-08-20",
+  "generatedAt": null,
+  "runWindowUtc": null,
+  "armProbe": {
+    "probed": true,
+    "conclusion": "本机无 ChatGPT/Claude/Gemini/Perplexity 的 CLI/API key/已保存登录（仅有 Qwen 登录但浏览器运行锁定 profile；DashScope key 401 不可用）。因此对照产品 arm 一律 unavailable。真实可运行：2digime（真实产品管线）+ DeepSeek-v4-flash 裸 API（无搜索，作为 API capability arm 与产品 arm 分开统计）。",
+    "arms": [
+      {
+        "id": "arm-A-2digime",
+        "label": "2digime (DeepSeek + Bing HTML)",
+        "type": "product",
+        "status": "runnable",
+        "description": "真实 2digime 对话搜索管线：决策(no_search/web_search/deep_research) + Bing HTML 搜索 + 综合(引用/来源/owner context)。"
+      },
+      {
+        "id": "arm-B-deepseek-raw",
+        "label": "DeepSeek-v4-flash 裸 API（无搜索）",
+        "type": "api-capability",
+        "status": "runnable",
+        "description": "同一模型通道，无搜索、无编排，仅单轮 chat completion。用于衡量搜索+编排增益。与产品 arm 分开统计。"
+      },
+      {
+        "id": "arm-C-chatgpt-search",
+        "label": "ChatGPT Search / Deep Research",
+        "type": "product",
+        "status": "unavailable",
+        "reason": "无账号/API key/CLI"
+      },
+      {
+        "id": "arm-D-claude-search",
+        "label": "Claude Search / Research",
+        "type": "product",
+        "status": "unavailable",
+        "reason": "无 CLI/API key"
+      },
+      {
+        "id": "arm-E-gemini-research",
+        "label": "Gemini / Deep Research",
+        "type": "product",
+        "status": "unavailable",
+        "reason": "无 API key/已保存登录"
+      },
+      {
+        "id": "arm-F-perplexity",
+        "label": "Perplexity / Research",
+        "type": "product",
+        "status": "unavailable",
+        "reason": "无账号/API key"
+      }
+    ]
+  },
+  "dimensions": [
+    { "key": "correctness", "label": "事实正确性", "scale": 5, "type": "ai-judge" },
+    { "key": "freshness", "label": "时效性（当前日期/来源发布时间）", "scale": 5, "type": "ai-judge" },
+    { "key": "source_quality", "label": "来源质量（官方/权威>二手>UGC）", "scale": 5, "type": "deterministic+ai" },
+    { "key": "citation_entailment", "label": "引用支持度（答案主张是否被引用支撑）", "scale": 5, "type": "ai-judge" },
+    { "key": "citation_completeness", "label": "引用完整性（覆盖主要主张/有可用链接）", "scale": 5, "type": "deterministic+ai" },
+    { "key": "coverage", "label": "覆盖度（回答是否全面）", "scale": 5, "type": "ai-judge" },
+    { "key": "contradiction_handling", "label": "矛盾处理（冲突来源是否如实呈现）", "scale": 5, "type": "ai-judge" },
+    { "key": "reasoning", "label": "推理/综合质量", "scale": 5, "type": "ai-judge" },
+    { "key": "research_depth", "label": "研究深度（轮次/交叉验证）", "scale": 5, "type": "deterministic+ai" },
+    { "key": "latency", "label": "延迟", "scale": 5, "type": "deterministic", "metric": "ms" },
+    { "key": "cost", "label": "成本", "scale": 5, "type": "deterministic", "metric": "usd" },
+    { "key": "personalization_usefulness", "label": "个性化有用性（相关时参与）", "scale": 5, "type": "ai-judge" },
+    { "key": "irrelevant_personalization_penalty", "label": "无关个性化惩罚（不强行带入本人信息）", "scale": 5, "type": "ai-judge" }
+  ],
+  "fairness": {
+    "sameTimeWindow": true,
+    "sameUserGoal": true,
+    "noAnswerInjection": true,
+    "noEarlyTruncation": true,
+    "deepResearchFullRun": true,
+    "saveRawOutputsAndSources": true,
+    "blindScoring": true,
+    "note": "同一时间窗口内顺序执行；用户提示完全一致；不预先向任何 arm 注入参考答案；不因慢而截断；Deep Research 允许完成全流程；原始输出与来源全部落盘；盲评阶段剥离产品名。"
+  },
+  "blindReview": {
+    "anonymizedLabels": ["Arm A", "Arm B"],
+    "judgeModel": "deepseek-v4-pro（独立于参赛 arm 使用的 deepseek-v4-flash）",
+    "fixedRubric": "每维 0-5 整数；0=完全失败,1=严重问题,2=明显不足,3=及格,4=良好,5=优秀。",
+    "hardFail": "重大事实错误/引用编造/不实时效声明 → 该题 hard fail，correctness 记 0。",
+    "crossCheck": "同一题目至少 2 名独立 judge 评（judge 与参赛 arm 不同实例），取平均。"
+  },
+  "scoringRubric": {
+    "correctness": "答案中的事实主张是否真实、无重大错误；硬事实错误计 0 并 hard fail。",
+    "freshness": "答案是否反映当前日期（2026-08-20）可及的最新状态；是否明示来源发布时间。",
+    "source_quality": "主要引用是否来自官方/权威来源（政府、公司官网、主流新闻社），而非论坛/UGC。",
+    "citation_entailment": "答案中每个事实主张是否被列出的引用 URL 实际支撑；'答案正确但引用不支持'不算高分。",
+    "citation_completeness": "是否为主要主张都提供了可打开、可核验的引用。",
+    "coverage": "回答是否覆盖问题的主要方面。",
+    "contradiction_handling": "存在冲突来源时是否如实说明差异而非隐藏或武断选边。",
+    "reasoning": "综合/推理是否清晰、有逻辑、有区分度（事实 vs 推断）。",
+    "research_depth": "搜索轮次、是否二次/三次搜索、交叉验证。",
+    "latency": "相对基准：2digime 快搜 <60s 为 4-5，60-120s 为 3，>120s 为 1-2；Deep Research 允许 <10min 为 4-5。",
+    "cost": "相对基准：快搜单题 <$0.01 为 5，<$0.05 为 4；Deep Research <$0.20 为 4-5。",
+    "personalization_usefulness": "G 类任务：是否因知道 owner 项目/目标/偏好而给出更有用结果。",
+    "irrelevant_personalization_penalty": "负例任务：owner 上下文与问题无关时，是否仍给出正常质量答案而非强行带入。"
+  },
+  "taskDistribution": {
+    "A_knowledge_reasoning": 5,
+    "B_recent_facts": 7,
+    "C_official_facts_prices_rules": 4,
+    "D_conflicting_sources": 3,
+    "E_comparison": 3,
+    "F_deep_research": 5,
+    "G_personalization": 5,
+    "total": 32
+  },
+  "coverageChecklist": [
+    "今天/最近发生的事件",
+    "发布日期 ≠ 事件日期（如公告日 vs 生效日）",
+    "官方源与媒体源并存",
+    "来源冲突",
+    "找不到可靠答案（诚实说不知道）",
+    "需要二次/三次搜索",
+    "Owner context 相关与无关负例",
+    "中文为主 + 少量英文"
+  ],
+  "tasks": [
+    { "id": "A-01", "cat": "A", "mode": "no_search", "text": "水在0摄氏度会结冰吗？", "note": "常识，无需搜索。" },
+    { "id": "A-02", "cat": "A", "mode": "no_search", "text": "12支球队单循环赛一共要打多少场比赛？", "note": "推理，C(12,2)=66。" },
+    { "id": "A-03", "cat": "A", "mode": "no_search", "text": "光在真空中的传播速度是多少？", "note": "常识。" },
+    { "id": "A-04", "cat": "A", "mode": "no_search", "text": "一个数字时钟显示 13:37，3小时后它显示几点？", "note": "推理，16:37。" },
+    { "id": "A-05", "cat": "A", "mode": "no_search", "text": "为什么海水是咸的？", "note": "解释性知识。" },
+
+    { "id": "B-01", "cat": "B", "mode": "web_search", "text": "最近 OpenAI 发布了什么重要新闻？", "note": "事件日 vs 发布日：需引最新报道。" },
+    { "id": "B-02", "cat": "B", "mode": "web_search", "text": "2026 年美加墨世界杯已经结束，冠军是哪支球队？", "note": "日期应反映 2026 结果，非 2022 旧知识。" },
+    { "id": "B-03", "cat": "B", "mode": "web_search", "text": "今天人民币兑美元汇率是多少？", "note": "当日汇率，需实时来源。" },
+    { "id": "B-04", "cat": "B", "mode": "web_search", "text": "苹果最新发布的 iPhone 是哪一款？官方起售价是多少？", "note": "官方 Apple 源优先，媒体源并存。" },
+    { "id": "B-05", "cat": "B", "mode": "web_search", "text": "中国最近一次人口普查的人口总数是多少？", "note": "官方统计源（国家统计局）。" },
+    { "id": "B-06", "cat": "B", "mode": "web_search", "text": "最近一个月中国 AI 行业有什么重大政策或监管动态？", "note": "需近期政策新闻。" },
+    { "id": "B-07", "cat": "B", "mode": "web_search", "text": "What is the latest GPT-5 model from OpenAI? When was it released?", "note": "英文题；发布日期需准确。" },
+
+    { "id": "C-01", "cat": "C", "mode": "web_search", "text": "中国个人所得税起征点和税率表现在是多少？", "note": "官方来源（国家税务总局）。" },
+    { "id": "C-02", "cat": "C", "mode": "web_search", "text": "DeepSeek API 当前的定价是多少？", "note": "官方定价页。" },
+    { "id": "C-03", "cat": "C", "mode": "web_search", "text": "北京最新汽车限购（摇号）政策是怎样的？", "note": "官方规则。" },
+    { "id": "C-04", "cat": "C", "mode": "web_search", "text": "2026 年春节是哪一天？", "note": "官方日历/权威来源。" },
+
+    { "id": "D-01", "cat": "D", "mode": "web_search", "text": "2026 年全球智能手机出货量第一是哪个品牌？三星和苹果都说自己第一吗？", "note": "IDC/Counterpoint 等机构数据冲突，需如实呈现。" },
+    { "id": "D-02", "cat": "D", "mode": "web_search", "text": "2026 年中国新能源汽车销量，比亚迪和特斯拉谁排第一？", "note": "统计口径不同导致的冲突。" },
+    { "id": "D-03", "cat": "D", "mode": "web_search", "text": "关于\"每天喝 8 杯水\"的说法，医学来源的说法是否一致？", "note": "健康建议冲突。" },
+
+    { "id": "E-01", "cat": "E", "mode": "web_search", "text": "对比一下 ChatGPT 和 Claude 在编程能力上的表现，谁更强？", "note": "综合比较，需引用评测。" },
+    { "id": "E-02", "cat": "E", "mode": "web_search", "text": "对比中国和美国的人工智能监管政策，主要差异是什么？", "note": "综合比较，需多来源。" },
+    { "id": "E-03", "cat": "E", "mode": "web_search", "text": "电动车和燃油车，从全生命周期成本看哪个更划算？", "note": "综合比较，多维度。" },
+
+    { "id": "F-01", "cat": "F", "mode": "deep_research", "text": "深入研究：2026 年中国 AI Agent 创业与融资趋势", "note": "需多轮搜索+交叉验证。" },
+    { "id": "F-02", "cat": "F", "mode": "deep_research", "text": "深入研究：生成式 AI 在医疗行业的应用现状、主要障碍与监管", "note": "需多轮搜索+交叉验证。" },
+    { "id": "F-03", "cat": "F", "mode": "deep_research", "text": "深入研究：固态电池量产进展与主要厂商路线对比", "note": "需多轮搜索+交叉验证。" },
+    { "id": "F-04", "cat": "F", "mode": "deep_research", "text": "深入研究：全球半导体供应链现状与地缘政治影响", "note": "需多轮搜索+交叉验证。" },
+    { "id": "F-05", "cat": "F", "mode": "deep_research", "text": "深入研究：数字分身/数字主体（Digital Twin of a Person）的技术现状与伦理问题", "note": "与 2digime 主题相关。" },
+
+    { "id": "G-01", "cat": "G", "mode": "web_search", "text": "最近有什么适合我的项目参加的 AI 创新比赛？", "note": "owner context: 2digime 数字主体项目参赛。", "ownerContext": ["你正在准备 2digime（数字主体与 AI Native 定位）参加 AI 创新大赛", "你的项目定位是数字主体、个人 AI 分身"] },
+    { "id": "G-02", "cat": "G", "mode": "web_search", "text": "为我的 AI 创新大赛项目推荐一个参赛技术栈和演示方案", "note": "owner context 相关：项目即 2digime。", "ownerContext": ["你的项目 2digime 定位数字主体、AI Native", "你希望以最小成本快速做出可演示的 MVP"] },
+    { "id": "G-03", "cat": "G", "mode": "no_search", "text": "帮我把我的项目写成一段 200 字的中文参赛简介", "note": "纯个性化写作，无需搜索。", "ownerContext": ["你的项目 2digime 定位数字主体、AI Native", "技术栈：TypeScript + Electron + 本地优先", "你已实现对话记忆、成长闭环、联网检索"] },
+    { "id": "G-04", "cat": "G", "mode": "no_search", "text": "帮我推荐一本学习 Python 的入门书", "note": "负例：owner 上下文无关，不应强行带入项目信息。", "ownerContext": ["你正在准备 2digime 参加 AI 创新大赛", "你的项目定位数字主体与 AI Native"] },
+    { "id": "G-05", "cat": "G", "mode": "no_search", "text": "周末想放松，有什么轻松的电影推荐？", "note": "负例：owner 上下文无关，个性化不得降低答案质量。", "ownerContext": ["你正在准备 2digime 参加 AI 创新大赛", "你的项目定位数字主体与 AI Native"] }
+  ]
+}
