@@ -21,6 +21,7 @@ import {
 import { scheduleGrowthWork } from './growth-async';
 import { structuredDistillToEvents } from './structured-distill';
 import { authorityFromEvents, detectAuthorityConflict } from './growth-signal';
+import { applyCorrectionSupersede } from './correction-supersede';
 import {
   findJitConflict,
   injectionExclusionsForJit,
@@ -878,6 +879,10 @@ export class SubjectService {
     const candidateEventIds: string[] = [];
     const confirmationSuggestedEventIds: string[] = [];
     const silentAdoptIds: string[] = [];
+    // 纠正闭环：新值 supersede 旧值，而非并存
+    if (!isDecision && (input.sourceKind === 'conversation' || input.sourceKind === 'repeated_correction' || input.sourceKind === 'artifact_edit')) {
+      applyCorrectionSupersede({ text: input.text, events: distilled, existingEvents: existing });
+    }
     for (const event of distilled) {
       if (captureKeyTag) {
         const tags = event.payload.tags ?? [];

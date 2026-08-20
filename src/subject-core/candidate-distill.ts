@@ -12,6 +12,10 @@ import {
   extractProjectScopeTag,
   looksLikeProjectDecision,
 } from './small-loop';
+import {
+  extractReplacementPreference,
+  isCorrectionStatement,
+} from './correction-supersede';
 
 /** 产品侧候选来源(服务合同);不暴露给用户面内部词。 */
 export type SubjectCaptureSourceKind =
@@ -331,7 +335,8 @@ export function distillCandidatesFromText(input: {
   } else if (
     /先给结论|先讲结论|结论先行/.test(text) &&
     /尽量简短|控制篇幅|简洁|短句/.test(text) &&
-    !/完整分析|保留完整|详细论证/.test(text)
+    !/完整分析|保留完整|详细论证/.test(text) &&
+    !isCorrectionStatement(text)
   ) {
     push(
       'preference_observed',
@@ -339,7 +344,7 @@ export function distillCandidatesFromText(input: {
       text.slice(0, 240),
       ['style', 'preference', 'category:working_method', 'document', '周报', '汇报'],
     );
-  } else if (/正式|结论先行/.test(text) && !/完整分析|保留完整|以后这样|请记住|以后给|尽量简短|先给结论/.test(text)) {
+  } else if (/正式|结论先行/.test(text) && !/完整分析|保留完整|以后这样|请记住|以后给|尽量简短|先给结论/.test(text) && !isCorrectionStatement(text)) {
     push(
       'principle_stated',
       '原则：表达正式、结论先行',
@@ -350,7 +355,8 @@ export function distillCandidatesFromText(input: {
 
   if (
     /完整分析|保留完整|详细展开|详细论证|写长一点/.test(text) &&
-    !/以后这样|请记住|仅本次|只这一次/.test(text)
+    !/以后这样|请记住|仅本次|只这一次/.test(text) &&
+    !isCorrectionStatement(text)
   ) {
     push(
       'preference_observed',
@@ -362,7 +368,8 @@ export function distillCandidatesFromText(input: {
 
   if (
     /简洁|短句|少套话|不要空话|尽量简短/.test(text) &&
-    !/正式|结论先行|先给结论|以后这样|请记住|完整分析|保留完整|详细论证/.test(text)
+    !/正式|结论先行|先给结论|以后这样|请记住|完整分析|保留完整|详细论证/.test(text) &&
+    !isCorrectionStatement(text)
   ) {
     push(
       'preference_observed',
@@ -370,6 +377,35 @@ export function distillCandidatesFromText(input: {
       text.slice(0, 240),
       ['style', '简洁', 'preference', '汇报'],
     );
+  }
+
+  // 纠正性陈述：提炼替换后的偏好（低风险可静默），供 supersede 闭环复用
+  if (
+    (input.sourceKind === 'conversation' ||
+      input.sourceKind === 'repeated_correction' ||
+      input.sourceKind === 'artifact_edit') &&
+    isCorrectionStatement(text)
+  ) {
+    const replacement = extractReplacementPreference(text);
+    if (replacement) {
+      const domain = extractDomainTags(text);
+      const project = extractProjectScopeTag(text);
+      push(
+        'preference_observed',
+        replacement.title,
+        replacement.detail,
+        [
+          'style',
+          'preference',
+          'category:working_method',
+          'correction',
+          'supersede',
+          'silent_ok',
+          ...domain,
+          ...(project ? [project] : []),
+        ],
+      );
+    }
   }
 
   // 成果修改后采用 → 工作偏好（可静默，易纠正）
