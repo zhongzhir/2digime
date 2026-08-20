@@ -14,11 +14,13 @@ import {
   runWebSearch,
   runDeepResearch,
   hasExternalSources,
+  synthesizeSearchAnswer,
+  verifyCitations,
   type ConversationChat,
 } from '../conversation-search';
 import type { SearchConnector } from '../search-connector';
-import type { SearchSource, SearchNeed } from '../search-contract';
-import { createBingHtmlSearchConnector, parseBingSearchResults, decodeBingRedirectUrl } from '../adapters/bing-html-search';
+import type { SearchSource, SearchNeed, SearchEvidence } from '../search-contract';
+import { createBingHtmlSearchConnector, parseBingSearchResults, decodeBingRedirectUrl, deriveSourceType, htmlToText } from '../adapters/bing-html-search';
 import {
   EXTERNAL_SOURCE_CLASS,
   isExternalSource,
@@ -35,7 +37,7 @@ const SOURCE_POOL = [
   { title: '政策支持 AI 产业', url: 'https://gov.example.com/ai-policy', host: 'gov.example.com' },
 ];
 
-function fakeConnector(options?: { fail?: boolean }): SearchConnector {
+function fakeConnector(options?: { fail?: boolean; withRead?: boolean }): SearchConnector {
   let cursor = 0;
   const seen = new Set<string>();
   return {
@@ -52,21 +54,25 @@ function fakeConnector(options?: { fail?: boolean }): SearchConnector {
       }
       return sources;
     },
+    async read(url) {
+      if (!options?.withRead) return null;
+      return { content: `来自 ${url} 的正文证据：OpenAI 于 2026 年发布了新一代模型。`, retrievedAt: '2026-08-20T00:00:00.000Z' };
+    },
   };
 }
 
 function fakeChat(behavior: 'web' | 'research' | 'no-search' | 'unparseable' | 'throw'): ConversationChat {
   const log: string[] = [];
-  const chat = async (messages: Array<{ role: string; content: string }>): Promise<{ text: string }> => {
+  const chat = async (messages: Array<{ role: string; content: string }>): Promise<{ text: string; finishReason?: string }> => {
     log.push(messages.map((m) => m.role).join(','));
     const last = messages[messages.length - 1]?.content || '';
     if (behavior === 'throw') throw new Error('model down');
     if (behavior === 'no-search') return { text: '{"mode":"no_search","queries":[]}' };
     if (behavior === 'unparseable') return { text: 'sorry, no json' };
     if (behavior === 'research') {
-      if (/follow_up_queries/.test(last)) {
+      if (/评估证据覆盖/.test(last)) {
         return {
-          text: '{"follow_up_queries":["补充：行业融资数据 2026","补充：政策支持 AI Agent"],"unresolved_questions":["具体融资规模尚不明确"]}',
+          text: '{"coverage":{"covered":["融资规模"],"missing":["政策支持细节"]},"gaps":[{"missingQuestion":"具体融资规模","whyNeeded":"首轮仅覆盖方向","preferredSourceType":"news","followupQuery":"2026 中国 AI Agent 融资规模 亿元"}]}',
         };
       }
       if (/用户消息：/.test(last)) {
@@ -76,7 +82,7 @@ function fakeChat(behavior: 'web' | 'research' | 'no-search' | 'unparseable' | '
     }
     // web 决策：system 提示含「搜索决策器」，用户句形如「用户消息：…」
     if (/用户消息：/.test(last)) {
-      return { text: '{"mode":"web_search","queries":["OpenAI 最新新闻 2026"]}' };
+      return { text: '{"mode":"web_search","queries":["OpenAI 最新新闻 2026"],"reason":"需要最新信息","freshnessRequired":true,"externalVerificationRequired":true,"researchComplexity":2}' };
     }
     return { text: '综合答案（web）[1][2]\n\n来源：[1] OpenAI 官方 https://openai.com/news' };
   };
@@ -117,13 +123,19 @@ describe('conversation-search-01', () => {
     assert.ok(Array.isArray(d.queries) && d.queries.length > 0);
   });
 
-  it('D: 决策 — 模型返回不可解析 JSON → 诚实回退 no_search', async () => {
-    const d = await decideSearchNeed(baseOptions(fakeChat('unparseable'), fakeConnector()));
+  it('D: 决策 — 模型返回不可解析 JSON → 无当前事实信号时诚实回退 no_search', async () => {
+    const d = await decideSearchNeed({
+      ...baseOptions(fakeChat('unparseable'), fakeConnector()),
+      userText: '什么是二次方程式？请用我的方式讲一下',
+    });
     assert.equal(d.mode, 'no_search');
   });
 
-  it('E: 决策 — 模型调用失败 → 回退 no_search，不阻断对话', async () => {
-    const d = await decideSearchNeed(baseOptions(fakeChat('throw'), fakeConnector()));
+  it('E: 决策 — 模型调用失败且无当前事实信号 → 回退 no_search，不阻断对话', async () => {
+    const d = await decideSearchNeed({
+      ...baseOptions(fakeChat('throw'), fakeConnector()),
+      userText: '帮我写一首关于秋天的诗',
+    });
     assert.equal(d.mode, 'no_search');
   });
 
@@ -205,7 +217,7 @@ describe('conversation-search-01', () => {
       const last = messages[messages.length - 1]?.content || '';
       if (/用户消息：/.test(last)) return { text: '{"mode":"web_search","queries":["OpenAI 最新新闻"]}' };
       // 断言：综合提示中搜索结果以 [n] 来源形式出现，且系统提示要求不混淆
-      assert.ok(/网络搜索结果/.test(last));
+      assert.ok(/网络来源与证据/.test(last));
       return { text: '综合答案（web）[1][2]' };
     };
     const reply = await runConversationSearch(baseOptions(chat, fakeConnector()));
@@ -213,6 +225,82 @@ describe('conversation-search-01', () => {
     assert.ok(reply.text.length > 0);
     // 产物全部 external，不写入 owner 事实存储（本模块无 Store 写入入口）
     assert.ok(reply.evidence.rounds.every((r) => r.sources.every((s) => s.sourceClass === EXTERNAL_SOURCE_CLASS)));
+  });
+
+  it('M: evidence retrieval — connector.read 提供 evidence chunk 进入综合输入', async () => {
+    const chat: ConversationChat = async (messages) => {
+      const last = messages[messages.length - 1]?.content || '';
+      if (/用户消息：/.test(last)) return { text: '{"mode":"web_search","queries":["OpenAI 最新新闻"]}' };
+      // 综合输入应包含证据片段与来源编号
+      assert.ok(/证据片段/.test(last), '综合输入应含证据片段');
+      assert.ok(/\[1\]/.test(last));
+      return { text: '综合答案 [1]' };
+    };
+    const reply = await runConversationSearch(baseOptions(chat, fakeConnector({ withRead: true })));
+    const flat = reply.evidence.rounds.flatMap((r) => r.sources);
+    assert.ok(flat.some((s) => s.evidenceChunk && s.evidenceChunk.length > 0), '来源应带 evidenceChunk');
+    assert.ok(flat.some((s) => s.retrievedAt), '来源应带检索时间');
+  });
+
+  it('N: 引用绑定验证 — 越界与无证据引用被标记', () => {
+    const rounds = [
+      { query: 'q', sources: [
+        { title: 'A', url: 'https://a.com', sourceClass: EXTERNAL_SOURCE_CLASS, evidenceChunk: 'x' },
+        { title: 'B', url: 'https://b.com', sourceClass: EXTERNAL_SOURCE_CLASS }, // 无证据
+      ] },
+    ];
+    const report = verifyCitations('正文 [1] [2] [5]', rounds);
+    assert.deepEqual(report.cited, [1, 2, 5]);
+    assert.deepEqual(report.outOfRange, [5]);
+    assert.deepEqual(report.ungrounded, [2]);
+    assert.equal(report.validCount, 1);
+  });
+
+  it('O: synthesis truncation — 截断后一次 bounded continuation 补全答案', async () => {
+    let synthesisCalls = 0;
+    const chat: ConversationChat = async (messages) => {
+      const last = messages[messages.length - 1]?.content || '';
+      if (/用户消息：/.test(last)) return { text: '{"mode":"web_search","queries":["OpenAI 最新新闻"]}' };
+      synthesisCalls += 1;
+      if (synthesisCalls === 1) return { text: '答案前半部分', finishReason: 'length', truncated: true };
+      // continuation：消息应含「截断处继续」
+      assert.ok(/截断处继续/.test(last), 'continuation 提示应出现');
+      return { text: '答案后半部分' };
+    };
+    const reply = await runConversationSearch(baseOptions(chat, fakeConnector()));
+    assert.equal(reply.mode, 'web_search');
+    assert.ok(reply.text.includes('答案前半部分') && reply.text.includes('答案后半部分'));
+  });
+
+  it('P: 决策降级 — 模型失败但问题含当前事实信号 → degraded web_search', async () => {
+    const d = await decideSearchNeed(baseOptions(fakeChat('unparseable'), fakeConnector()));
+    assert.equal(d.mode, 'web_search');
+    assert.equal(d.degraded, true);
+    assert.ok((d.queries || []).length > 0);
+  });
+
+  it('Q: deep_research gap 轮 — 第二轮查询来自真实 gap（followupQuery），且记录结构化 gaps', async () => {
+    const reply = await runDeepResearch(
+      baseOptions(fakeChat('research'), fakeConnector()),
+      { mode: 'deep_research', queries: ['2026 中国 AI Agent 趋势'] } as SearchNeed,
+    );
+    assert.ok(reply.evidence.research?.researchGaps?.length, '应记录结构化 researchGaps');
+    const followups = reply.evidence.research!.researchGaps!.map((g) => g.followupQuery);
+    assert.ok(followups.some((q) => q.includes('融资规模')), 'followup 应来自 gap');
+    assert.ok(reply.evidence.iterations && reply.evidence.iterations >= 2);
+  });
+
+  it('R: 综合提示含一手来源偏好与时效性要求', async () => {
+    let payload = '';
+    const chat: ConversationChat = async (messages) => {
+      const last = messages[messages.length - 1]?.content || '';
+      if (/用户消息：/.test(last)) return { text: '{"mode":"web_search","queries":["OpenAI 最新新闻"]}' };
+      payload = JSON.stringify(messages);
+      return { text: '综合答案 [1]' };
+    };
+    await runConversationSearch(baseOptions(chat, fakeConnector({ withRead: true })));
+    assert.ok(/一手\/官方来源优先/.test(payload));
+    assert.ok(/今天是2026-08-20/.test(payload));
   });
 });
 
@@ -260,5 +348,41 @@ describe('bing-html-search-connector-01', () => {
       const e = err as { kind?: string };
       return e.kind === 'blocked';
     });
+  });
+
+  it('Q: htmlToText 提取正文并清理标签/实体', () => {
+    const html = `<html><body><script>var x=1;</script><style>p{color:red}</style>
+      <p>OpenAI 发布 <b>新模型</b></p><p>价格 &amp; 政策</p></body></html>`;
+    const text = htmlToText(html);
+    assert.ok(text.includes('OpenAI 发布 新模型'));
+    assert.ok(text.includes('价格 & 政策'));
+    assert.ok(!text.includes('script'));
+    assert.ok(!text.includes('<b>'));
+  });
+
+  it('R: deriveSourceType 结构推导一手/官方/参考/新闻/二手', () => {
+    assert.equal(deriveSourceType('https://www.gov.cn/policy'), 'official');
+    assert.equal(deriveSourceType('https://openai.com/news'), 'official');
+    assert.equal(deriveSourceType('https://en.wikipedia.org/wiki/OpenAI'), 'reference');
+    assert.equal(deriveSourceType('https://www.reuters.com/tech'), 'news');
+    assert.equal(deriveSourceType('https://zhuanlan.zhihu.com/p/123'), 'secondary');
+    assert.equal(deriveSourceType('not a url'), 'unknown');
+  });
+
+  it('S: connector.read 抓取页面返回 evidence chunk（时间戳）', async () => {
+    const connector = createBingHtmlSearchConnector({
+      fetchImpl: (async (input: string | URL) => {
+        const u = String(input);
+        if (u.includes('search')) {
+          return new Response('<li class="b_algo"><h2><a href="https://www.bing.com/ck/a?&u=a1aHR0cHM6Ly9vcGVuYWkuY29tLw&ntb=1">OpenAI</a></h2></li>', { status: 200 });
+        }
+        return new Response('<html><body><p>OpenAI 官方正文内容示例。这里包含足够长度的正文文本，用于验证 evidence chunk 的抓取与提取逻辑是否正确工作，并且长度需要超过最小阈值才会被保留。</p></body></html>', { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+    const sources = await connector.search('openai');
+    assert.ok(sources.length >= 1);
+    const read = await connector.read!(sources[0]!.url);
+    assert.ok(read && read.content.includes('OpenAI 官方正文内容示例'));
+    assert.ok(read.retrievedAt);
   });
 });

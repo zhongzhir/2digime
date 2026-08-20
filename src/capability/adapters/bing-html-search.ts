@@ -7,8 +7,8 @@
  * 解析说明：Bing 结果 URL 走 /ck/a 跳转，真实目标藏在 u=a1a<base64> 参数，
  * 其中 base64 字符串以 'a' 补足后解码即为最终 URL。
  */
-import type { SearchConnector } from '../search-connector';
-import type { SearchSource } from '../search-contract';
+import type { SearchConnector, ReadResult } from '../search-connector';
+import type { SearchSource, SourceType } from '../search-contract';
 
 export interface BingHtmlSearchConnectorOptions {
   /** 每查询最多保留的来源数。 */
@@ -66,11 +66,111 @@ export function parseBingSearchResults(html: string): Array<{ title: string; url
   return out;
 }
 
+/**
+ * 推导来源类型（可推导时）：不建巨型 domain 白名单，用结构特征。
+ * 优先级：政府/机构官方 > 一手（厂商官网） > 新闻 > 参考（wiki/百科）> 二手 > 未知。
+ */
+export function deriveSourceType(url: string, title?: string): SourceType {
+  let host = '';
+  try {
+    host = new URL(url).hostname.replace(/^www\./, '').toLowerCase();
+  } catch {
+    return 'unknown';
+  }
+  // 政府/国际机构
+  if (
+    host.endsWith('.gov') || host === 'gov.cn' || host.endsWith('.gov.cn') || host.endsWith('.go.jp') ||
+    host.endsWith('.gouv.fr') || host.endsWith('.gov.uk') || host === 'who.int' ||
+    host.endsWith('.who.int') || host.endsWith('.un.org') || host.endsWith('.europa.eu') ||
+    host.endsWith('.edu') || host.endsWith('.edu.cn') || host.endsWith('.ac.cn') ||
+    host === 'nber.org' || host === 'imf.org' || host === 'worldbank.org' || host === 'oecd.org' ||
+    host === 'iea.org'
+  ) {
+    return 'official';
+  }
+  // 参考/百科
+  if (host.endsWith('wikipedia.org') || host.endsWith('wikimedia.org') || host.endsWith('baike.baidu.com')) {
+    return 'reference';
+  }
+  // 一手/厂商官网（产品/价格/政策/公告优先）
+  if (host === 'openai.com' || host === 'deepseek.com' || host === 'anthropic.com' || host === 'google.com' ||
+    host === 'microsoft.com' || host === 'apple.com' || host === 'alibaba.com' || host === 'tencent.com' ||
+    host === 'baidu.com' || host === 'nvidia.com' || host === 'meta.com' || host === 'amazon.com') {
+    return 'official';
+  }
+  // 新闻媒体
+  const newsHosts = ['reuters.com', 'apnews.com', 'bloomberg.com', 'ft.com', 'wsj.com', 'cnn.com',
+    'bbc.com', 'economist.com', 'nikkei.com', 'theguardian.com', 'nytimes.com', 'scmp.com',
+    'zaobao.com', '36kr.com', 'ithome.com', 'ifeng.com', 'sina.com.cn', 'sohu.com', 'qq.com',
+    '163.com', 'thepaper.cn', 'caixin.com', 'yicai.com', 'jiemian.com', 'huxiu.com', 'pingwest.com'];
+  if (newsHosts.some((h) => host === h || host.endsWith('.' + h))) {
+    return 'news';
+  }
+  // 二手聚合/博客/论坛
+  if (host.endsWith('medium.com') || host.endsWith('zhihu.com') || host.endsWith('reddit.com') ||
+    host.endsWith('github.com') || host.endsWith('csdn.net') || host.endsWith('juejin.cn')) {
+    return 'secondary';
+  }
+  void title;
+  return 'unknown';
+}
+
+/** HTML → 纯文本（evidence chunk）。 */
+export function htmlToText(html: string, maxChars = 8000): string {
+  let text = html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|h1|h2|h3|h4|tr|section|article)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&hellip;/gi, '…')
+    .replace(/&mdash;/gi, '—')
+    .replace(/&ndash;/gi, '–');
+  text = text
+    .split('\n')
+    .map((l) => l.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+  if (text.length > maxChars) text = text.slice(0, maxChars);
+  return text;
+}
+
 export function createBingHtmlSearchConnector(options?: BingHtmlSearchConnectorOptions): SearchConnector {
   const maxResults = options?.maxResults ?? 8;
   const timeoutMs = options?.timeoutMs ?? 15_000;
   const fetchImpl = options?.fetchImpl ?? globalThis.fetch;
   const userAgent = options?.userAgent ?? DEFAULT_UA;
+
+  async function read(url: string, opts?: { signal?: AbortSignal; maxChars?: number }): Promise<ReadResult | null> {
+    if (!/^https?:\/\//i.test(url)) return null;
+    const init: RequestInit = {
+      headers: {
+        'user-agent': userAgent,
+        'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+      },
+    };
+    if (opts?.signal) init.signal = opts.signal;
+    try {
+      const response = await fetchImpl(url, init);
+      if (!response.ok) return null;
+      const html = await response.text();
+      const content = htmlToText(html, opts?.maxChars ?? 8000);
+      if (content.length < 40) return null;
+      return { content, retrievedAt: new Date().toISOString() };
+    } catch {
+      return null; // 页面抓取失败不阻断搜索（evidence 缺失时综合如实降级）
+    }
+  }
 
   async function search(query: string, opts?: { signal?: AbortSignal }): Promise<SearchSource[]> {
     if (!query.trim()) return [];
@@ -105,7 +205,12 @@ export function createBingHtmlSearchConnector(options?: BingHtmlSearchConnectorO
       const host = /^https?:\/\/([^/]+)/.exec(p.url)?.[1] || '';
       if (!host || seen.has(host)) continue;
       seen.add(host);
-      sources.push({ title: p.title, url: p.url, sourceClass: 'external' });
+      sources.push({
+        title: p.title,
+        url: p.url,
+        sourceClass: 'external',
+        sourceType: deriveSourceType(p.url, p.title),
+      });
       if (sources.length >= maxResults) break;
     }
     if (sources.length === 0) {
@@ -114,5 +219,5 @@ export function createBingHtmlSearchConnector(options?: BingHtmlSearchConnectorO
     return sources;
   }
 
-  return { id: 'bing-html', search };
+  return { id: 'bing-html', search, read };
 }

@@ -9,7 +9,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
-const OUT_DIR = path.join(__dirname, '_conversation-p95-benchmark-01-evidence');
+const OUT_DIR = process.env.P95_DIR
+  ? path.resolve(process.env.P95_DIR)
+  : path.join(__dirname, '_conversation-p95-benchmark-01-evidence');
 const RUNS_FILE = path.join(OUT_DIR, 'benchmark-runs.jsonl');
 const ANON_FILE = path.join(OUT_DIR, 'blind-input.json');
 const KEY_FILE = path.join(OUT_DIR, 'blind-key.json');

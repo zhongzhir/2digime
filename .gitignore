@@ -38,3 +38,6 @@ scripts/_subject-distillation-jit-evidence/
 scripts/_subject-growth-loop-evidence/
 scripts/_conversation-search-real-evidence-evidence/
 scripts/_conversation-p95-benchmark-01-evidence/
+
+scripts/_conversation-quality-gate-evidence/
+scripts/_conversation-quality-recovery-evidence/

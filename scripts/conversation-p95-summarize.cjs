@@ -6,7 +6,9 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const OUT_DIR = path.join(__dirname, '_conversation-p95-benchmark-01-evidence');
+const OUT_DIR = process.env.P95_DIR
+  ? path.resolve(process.env.P95_DIR)
+  : path.join(__dirname, '_conversation-p95-benchmark-01-evidence');
 const RUNS = fs.readFileSync(path.join(OUT_DIR, 'benchmark-runs.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
 const SCORES = require(path.join(OUT_DIR, 'blind-scores.json'));
 const KEY = require(path.join(OUT_DIR, 'blind-key.json'));

@@ -10,18 +10,40 @@
  */
 export type SearchMode = 'no_search' | 'web_search' | 'deep_research';
 
-/** 外部来源条目：一律标记 external，默认不写入本人事实。 */
+/** 来源类型（可推导时）：一手/官方 > 新闻 > 参考/二手 > 未知。不建白名单，靠结构推导。 */
+export type SourceType = 'official' | 'primary' | 'news' | 'reference' | 'secondary' | 'unknown';
+
+/**
+ * 外部来源条目：一律标记 external，默认不写入本人事实。
+ * 支持 evidence grounding：search → read → evidence chunk → claim-grounded synthesis。
+ */
 export interface SearchSource {
   title: string;
   url: string;
   snippet?: string;
   sourceClass: 'external';
+  /** 检索到的正文证据片段（evidence chunk），供 claim-grounded synthesis 使用。 */
+  evidenceChunk?: string;
+  /** 检索时间（ISO，UTC）。 */
+  retrievedAt?: string;
+  /** 可推导的来源类型（一手/官方/新闻/参考/二手）。 */
+  sourceType?: SourceType;
 }
 
-/** 决策产物：搜索模式 + 待执行查询。 */
+/** 决策产物：搜索模式 + 待执行查询 + 结构化搜索需要。 */
 export interface SearchNeed {
   mode: SearchMode;
   queries: string[];
+  /** 模型给出决策理由。 */
+  reason?: string;
+  /** 是否要求最新时效（答案随时间变化）。 */
+  freshnessRequired?: boolean;
+  /** 是否需要外部权威事实核验（模型知识可能过时）。 */
+  externalVerificationRequired?: boolean;
+  /** 研究复杂度 1-5（交叉验证需求）。 */
+  researchComplexity?: number;
+  /** true 表示决策器降级（classifier 失败但问题明显涉及当前外部事实），须暴露 degraded 状态。 */
+  degraded?: boolean;
 }
 
 /** 一轮搜索的结果（一条 query 一组来源）。 */
@@ -30,11 +52,35 @@ export interface SearchRound {
   sources: SearchSource[];
 }
 
+/** Deep Research gap：第二轮/后续轮只针对真实缺口查询。 */
+export interface ResearchGap {
+  missingQuestion: string;
+  whyNeeded: string;
+  preferredSourceType?: string;
+  followupQuery: string;
+}
+
 /** deep_research 内部工作区（默认不展示给用户）。 */
 export interface ResearchPlan {
   plan?: string[];
   unresolvedQuestions?: string[];
   gaps?: string[];
+  /** 结构化 gap（coverage evaluation 产物，驱动后续轮查询）。 */
+  researchGaps?: ResearchGap[];
+  /** 首轮 coverage 评估：已覆盖 / 缺失主题。 */
+  coverage?: { covered: string[]; missing: string[] };
+}
+
+/** 引用绑定验证报告：claim → citation → evidence chunk 的最小可验证性。 */
+export interface CitationReport {
+  /** 正文出现的引用编号。 */
+  cited: number[];
+  /** 超出真实来源范围的引用（无效）。 */
+  outOfRange: number[];
+  /** 引用了但无 evidence chunk 支撑的编号（不可核验）。 */
+  ungrounded: number[];
+  /** 有效且被证据支撑的引用数。 */
+  validCount: number;
 }
 
 /** 搜索证据：供综合成文与测试断言使用。 */
@@ -44,6 +90,10 @@ export interface SearchEvidence {
   /** deep_research 实际执行的搜索轮数（>=2 时满足最小闭环）。 */
   iterations?: number;
   research?: ResearchPlan;
+  /** 引用绑定验证报告（claim→citation→evidence chunk）。 */
+  citationReport?: CitationReport;
+  /** 决策 degraded 状态：true 时综合须如实暴露。 */
+  degraded?: boolean;
 }
 
 export const EXTERNAL_SOURCE_CLASS = 'external' as const;
