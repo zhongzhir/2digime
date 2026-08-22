@@ -77,6 +77,10 @@ export function deriveSourceType(url: string, title?: string): SourceType {
   } catch {
     return 'unknown';
   }
+  // 国家/地区二级域（.com.cn/.co.jp/.com.hk 等）：归一到基础域再判断，
+  // 使 apple.com.cn → apple.com、gov.cn 等地区官方镜像统一进入同一套结构推导（不建大名单）。
+  const countryTldMatch = /^(.+)\.(com|co|net|org|gov|ac|edu)\.(cn|jp|kr|hk|tw|sg|my|au|uk|de|fr|ca|in|it|es|br|mx|ru|za|id|th|vn|ph|nz)$/.exec(host);
+  const baseHost = countryTldMatch ? `${countryTldMatch[1]}.${countryTldMatch[2]}` : host;
   // 政府/国际机构
   if (
     host.endsWith('.gov') || host === 'gov.cn' || host.endsWith('.gov.cn') || host.endsWith('.go.jp') ||
@@ -92,10 +96,13 @@ export function deriveSourceType(url: string, title?: string): SourceType {
   if (host.endsWith('wikipedia.org') || host.endsWith('wikimedia.org') || host.endsWith('baike.baidu.com')) {
     return 'reference';
   }
-  // 一手/厂商官网（产品/价格/政策/公告优先）
+  // 一手/厂商官网（产品/价格/政策/公告优先）；baseHost 覆盖 apple.com.cn→apple.com 等地区镜像
   if (host === 'openai.com' || host === 'deepseek.com' || host === 'anthropic.com' || host === 'google.com' ||
     host === 'microsoft.com' || host === 'apple.com' || host === 'alibaba.com' || host === 'tencent.com' ||
-    host === 'baidu.com' || host === 'nvidia.com' || host === 'meta.com' || host === 'amazon.com') {
+    host === 'baidu.com' || host === 'nvidia.com' || host === 'meta.com' || host === 'amazon.com' ||
+    baseHost === 'openai.com' || baseHost === 'deepseek.com' || baseHost === 'anthropic.com' || baseHost === 'google.com' ||
+    baseHost === 'microsoft.com' || baseHost === 'apple.com' || baseHost === 'alibaba.com' || baseHost === 'tencent.com' ||
+    baseHost === 'baidu.com' || baseHost === 'nvidia.com' || baseHost === 'meta.com' || baseHost === 'amazon.com') {
     return 'official';
   }
   // 新闻媒体
@@ -103,7 +110,8 @@ export function deriveSourceType(url: string, title?: string): SourceType {
     'bbc.com', 'economist.com', 'nikkei.com', 'theguardian.com', 'nytimes.com', 'scmp.com',
     'zaobao.com', '36kr.com', 'ithome.com', 'ifeng.com', 'sina.com.cn', 'sohu.com', 'qq.com',
     '163.com', 'thepaper.cn', 'caixin.com', 'yicai.com', 'jiemian.com', 'huxiu.com', 'pingwest.com'];
-  if (newsHosts.some((h) => host === h || host.endsWith('.' + h))) {
+  if (newsHosts.some((h) => host === h || host.endsWith('.' + h)) ||
+    newsHosts.some((h) => baseHost === h || baseHost.endsWith('.' + h))) {
     return 'news';
   }
   // 二手聚合/博客/论坛

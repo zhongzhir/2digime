@@ -123,6 +123,40 @@ describe('conversation-search-01', () => {
     assert.ok(Array.isArray(d.queries) && d.queries.length > 0);
   });
 
+  it('C04: 决策 — 特定年份日历/日期问题由语义层触发 web_search（非关键词规则）', async () => {
+    const chat: ConversationChat = async (messages) => {
+      const last = messages[messages.length - 1]?.content || '';
+      // 语义验证：决策提示须要求「特定年份/特定日期现实世界日历→外部核验」，而非春节/日期关键词。
+      assert.ok(/特定年份|特定日期|日历|节假日/.test(last), '决策提示应包含日期/日历语义规则');
+      return {
+        text: '{"mode":"web_search","queries":["2026年春节","2026 春节 农历"],"reason":"具体年份日历需外部确认","freshnessRequired":true,"externalVerificationRequired":true,"researchComplexity":1}',
+      };
+    };
+    const d = await decideSearchNeed({
+      ...baseOptions(chat, fakeConnector()),
+      userText: '2026 年春节是哪一天？',
+    });
+    assert.equal(d.mode, 'web_search');
+    assert.equal(d.externalVerificationRequired, true);
+    assert.ok((d.queries || []).length > 0);
+  });
+
+  it('C04-no-search: 决策 — 稳定常识问题保持 no_search（语义稳定）', async () => {
+    const d = await decideSearchNeed({
+      ...baseOptions(fakeChat('no-search'), fakeConnector()),
+      userText: '一年有哪四个季节？',
+    });
+    assert.equal(d.mode, 'no_search');
+  });
+
+  it('C04-hint: 决策 — 显式「不要搜索」保持 no_search（不被日期规则破坏）', async () => {
+    const d = await decideSearchNeed({
+      ...baseOptions(fakeChat('web'), fakeConnector()),
+      userText: '不要搜索，直接说 2026 年春节是哪一天',
+    });
+    assert.equal(d.mode, 'no_search');
+  });
+
   it('D: 决策 — 模型返回不可解析 JSON → 无当前事实信号时诚实回退 no_search', async () => {
     const d = await decideSearchNeed({
       ...baseOptions(fakeChat('unparseable'), fakeConnector()),

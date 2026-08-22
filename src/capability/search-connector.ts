@@ -13,6 +13,8 @@ export interface ReadResult {
   content: string;
   /** 检索时间（ISO，UTC）。 */
   retrievedAt: string;
+  /** 最终解析后的真实 URL（如经 provider redirect 后）。 */
+  resolvedUrl?: string;
 }
 
 export interface SearchConnector {

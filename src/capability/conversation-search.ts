@@ -14,6 +14,7 @@
  * 两者在测试中都可替换为 fake，保证离线可测；生产由壳层注入真实实现。
  */
 import type { SearchConnector } from './search-connector';
+import { deriveSourceType } from './adapters/bing-html-search';
 import {
   type SearchMode,
   type SearchNeed,
@@ -47,6 +48,11 @@ export interface ConversationSearchOptions {
   currentDate?: string;
   chat: ConversationChat;
   connector: SearchConnector;
+  /** 显式 degraded fallback connector（如 Bing）。主 connector（如 Gemini）provider 失败时，
+   *  由编排显式使用 fallback 并标记 providerDegraded；不得把 fallback 结果标成正式 grounded search。 */
+  fallbackConnector?: SearchConnector;
+  /** 主 provider 标识（供诊断/日志，不含 secret）。 */
+  providerId?: string;
   /** 显式任务特征硬覆盖（优先级最高）：用户明确说不搜索 → no_search。 */
   noSearchOverride?: boolean;
   /** 显式任务特征：用户明确要快速搜索。 */
@@ -110,9 +116,11 @@ function decisionSystemPrompt(currentDate?: string): string {
     '"queries":[...]}。' +
     '规则：常识/推理/写作/本人已有上下文足够→no_search（queries空）；' +
     '最新信息/实时事实核验/价格政策新闻/公司产品现状/统计数据/汇率/人口等具体现实数字，本地模型知识可能过时→web_search（1-3条精炼查询）；' +
+    '需要准确确认特定年份/特定日期的现实世界日历、节假日、官方时间安排（如某年春节、某年某节、选举/考试/赛事日期）→web_search（这类答案随年份/日历规则变化，本地记忆可能过时或记错，必须外部核验）→externalVerificationRequired=true；' +
     '需要权威来源核验的主张（医学健康、科学事实、法规政策、有争议的说法）→web_search（即使你自以为知道，也核实来源一致性）；' +
     '涉及「当前/最新」的个性化推荐（如参赛技术栈、可报名赛事、市场在售方案）→web_search（获取最新可用性与趋势）；' +
     '多主体比较/复杂调研/行业趋势/投资研究，需大量来源交叉验证→deep_research（2-4条覆盖多个角度的查询）。' +
+    '稳定不变的常识（如"水在标准大气压下 100°C 沸腾""一年有十二个月"）无需搜索→no_search。' +
     '不要输出JSON以外内容。'
   );
 }
@@ -239,12 +247,14 @@ async function runSearchRound(
   connector: SearchConnector,
   queries: string[],
   signal?: AbortSignal,
+  opts?: ConversationSearchOptions,
+  degradedState?: { used: boolean },
 ): Promise<SearchRound[]> {
   const rounds: SearchRound[] = [];
   const seenHosts = new Set<string>();
   for (const query of queries) {
     if (!query || !query.trim()) continue;
-    const sources = await connector.search(query, signal ? { signal } : undefined);
+    const sources = await searchWithFallback(opts, connector, query, signal, degradedState);
     const filtered = sources.filter((s) => {
       const host = /^https?:\/\/([^/]+)/.exec(s.url)?.[1] || '';
       if (!host || seenHosts.has(host)) return false;
@@ -254,6 +264,29 @@ async function runSearchRound(
     rounds.push({ query, sources: filtered });
   }
   return rounds.filter((r) => r.sources.length > 0);
+}
+
+/**
+ * 单条查询执行（含 §三 的 degraded 语义）：
+ * 主 connector 抛 provider 失败 → 仅该调用进入显式 degraded fallback（保留 providerDegraded 标记），
+ * 不把整场 research 重跑成 Bing 路径；fallback 也失败则诚实失败兜底。
+ */
+async function searchWithFallback(
+  opts: ConversationSearchOptions | undefined,
+  connector: SearchConnector,
+  query: string,
+  signal?: AbortSignal,
+  degradedState?: { used: boolean },
+): Promise<SearchSource[]> {
+  try {
+    return await connector.search(query, signal ? { signal } : undefined);
+  } catch (err) {
+    if (opts?.fallbackConnector && isProviderFailure(err)) {
+      if (degradedState) degradedState.used = true;
+      return await opts.fallbackConnector.search(query, signal ? { signal } : undefined);
+    }
+    throw err;
+  }
 }
 
 /**
@@ -279,6 +312,12 @@ async function retrieveEvidence(
         if (result && result.content && result.content.trim().length >= 40) {
           source.evidenceChunk = result.content.trim();
           source.retrievedAt = result.retrievedAt;
+          // 若 provider redirect 解析出真实 URL，更新来源 URL 供 citation 指向真实页面。
+          if (result.resolvedUrl && /^https?:\/\//i.test(result.resolvedUrl)) {
+            source.url = result.resolvedUrl;
+            const realType = deriveSourceType(result.resolvedUrl, source.title);
+            source.sourceType = realType;
+          }
           reads += 1;
         }
       } catch {
@@ -296,7 +335,8 @@ export async function runWebSearch(
 ): Promise<ConversationSearchReply> {
   const queries = queriesForNeed(need, opts.maxQueries ?? 2);
   const effectiveQueries = queries.length > 0 ? queries : [opts.userText.slice(0, 100)];
-  const rounds = await runSearchRound(opts.connector, effectiveQueries, opts.signal);
+  const degradedState = { used: false };
+  const rounds = await runSearchRound(opts.connector, effectiveQueries, opts.signal, opts, degradedState);
   const maxReads = opts.maxEvidenceReads ?? 4;
   const readRounds = await retrieveEvidence(opts.connector, rounds, maxReads, opts.signal);
   const evidence: SearchEvidence = {
@@ -304,6 +344,7 @@ export async function runWebSearch(
     rounds: readRounds,
     iterations: 1,
     ...(need.degraded ? { degraded: true } : {}),
+    ...(degradedState.used ? { providerDegraded: true } : {}),
   };
   const text = await synthesizeSearchAnswer(opts, evidence);
   evidence.citationReport = verifyCitations(text, readRounds);
@@ -431,12 +472,13 @@ export async function runDeepResearch(
   const firstQueries = planned.length > 0 ? planned : [opts.userText.replace(/^(深入研究|深度调研|调研一下)[：:\s]*/, '').slice(0, 100)].filter(Boolean);
   const allRounds: SearchRound[] = [];
   const seenHosts = new Set<string>();
+  const degradedState = { used: false };
 
   async function execRound(queries: string[]): Promise<SearchRound[]> {
     const rounds: SearchRound[] = [];
     for (const query of queries) {
       if (!query || !query.trim()) continue;
-      const sources = await opts.connector.search(query, opts.signal ? { signal: opts.signal } : undefined);
+      const sources = await searchWithFallback(opts, opts.connector, query, opts.signal, degradedState);
       const filtered = sources.filter((s) => {
         const host = /^https?:\/\/([^/]+)/.exec(s.url)?.[1] || '';
         if (!host || seenHosts.has(host)) return false;
@@ -483,6 +525,7 @@ export async function runDeepResearch(
     rounds: allRounds,
     iterations,
     ...(need.degraded ? { degraded: true } : {}),
+    ...(degradedState.used ? { providerDegraded: true } : {}),
     research: {
       plan: firstQueries,
       unresolvedQuestions: researchGaps.map((g) => g.missingQuestion),
@@ -664,7 +707,42 @@ export async function buildHonestFailureReply(opts: ConversationSearchOptions): 
   return String(result.text || '').trim();
 }
 
-/** 主入口：决策 + 执行 + 综合。失败时按语义回退。 */
+/** 判断是否 provider（搜索/证据读取）失败（区别于综合/决策失败）。 */
+function isProviderFailure(err: unknown): boolean {
+  const e = err as { kind?: string };
+  const kind = e && e.kind;
+  if (!kind) return false;
+  return [
+    'network', 'auth', 'quota', 'invalid', 'empty', 'blocked', 'model', 'response',
+    'search', // 由 connector 抛出的搜索失败
+  ].includes(kind);
+}
+
+async function runModeWithConnector(
+  opts: ConversationSearchOptions,
+  need: SearchNeed,
+  connector: SearchConnector,
+  providerId: string | undefined,
+  providerDegraded: boolean,
+): Promise<ConversationSearchReply> {
+  const runOpts: ConversationSearchOptions = { ...opts, connector };
+  if (providerId) runOpts.providerId = providerId;
+  let reply: ConversationSearchReply;
+  if (need.mode === 'deep_research') {
+    reply = await runDeepResearch(runOpts, need);
+  } else {
+    reply = await runWebSearch(runOpts, need);
+  }
+  if (providerDegraded) {
+    reply.evidence.providerDegraded = true;
+    reply.evidence.providerId = providerId || 'bing-html(degraded)';
+  } else if (providerId) {
+    reply.evidence.providerId = providerId;
+  }
+  return reply;
+}
+
+/** 主入口：决策 + 执行 + 综合。主 provider 失败时显式回退 degraded fallback；否则诚实失败。 */
 export async function runConversationSearch(opts: ConversationSearchOptions): Promise<ConversationSearchReply> {
   const need = await decideSearchNeed(opts);
   if (need.mode === 'no_search') {
@@ -676,12 +754,31 @@ export async function runConversationSearch(opts: ConversationSearchOptions): Pr
     };
   }
   try {
-    if (need.mode === 'deep_research') {
-      return await runDeepResearch(opts, need);
-    }
-    return await runWebSearch(opts, need);
+    return await runModeWithConnector(opts, need, opts.connector, opts.providerId, false);
   } catch (err) {
-    // 搜索/综合失败：诚实失败回退，不把协议错误抛到用户面。
+    // 主 provider（connector.search/read）失败 → 显式回退 degraded fallback（不得 silent / 不得标成正式 grounded）。
+    if (opts.fallbackConnector && isProviderFailure(err)) {
+      try {
+        return await runModeWithConnector(opts, need, opts.fallbackConnector, 'bing-html(degraded)', true);
+      } catch (fallbackErr) {
+        // fallback 也失败 → 诚实失败兜底。
+        try {
+          const honestText = await buildHonestFailureReply(opts);
+          return {
+            mode: need.mode,
+            text: honestText,
+            evidence: { mode: need.mode, rounds: [], providerDegraded: true, providerId: 'bing-html(degraded)' },
+            usedExternal: false,
+          };
+        } catch {
+          throw new ConversationSearchError(
+            'search',
+            `搜索失败：${fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)}`,
+          );
+        }
+      }
+    }
+    // 非 provider 失败（如综合失败）或无可回退：诚实失败回退，不把协议错误抛到用户面。
     try {
       const honestText = await buildHonestFailureReply(opts);
       return {

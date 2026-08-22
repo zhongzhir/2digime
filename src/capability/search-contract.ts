@@ -28,6 +28,11 @@ export interface SearchSource {
   retrievedAt?: string;
   /** 可推导的来源类型（一手/官方/新闻/参考/二手）。 */
   sourceType?: SourceType;
+  /** Google Grounding support 信号（§七）：answer segment ↔ 该来源 chunk 的映射。
+   *  仅作额外 signal；Digital Me 最终 citation 仍须绑定 evidenceChunk，不因 Gemini 说 grounded 就自动信任。 */
+  groundingSupport?: { segment: string; confidence?: number }[];
+  /** 该来源是否经 provider grounding 标记（google search grounding 命中）。 */
+  grounded?: boolean;
 }
 
 /** 决策产物：搜索模式 + 待执行查询 + 结构化搜索需要。 */
@@ -94,6 +99,10 @@ export interface SearchEvidence {
   citationReport?: CitationReport;
   /** 决策 degraded 状态：true 时综合须如实暴露。 */
   degraded?: boolean;
+  /** 主 provider 不可用、实际使用 degraded fallback（如 Bing）时 true；不得标成正式 grounded search。 */
+  providerDegraded?: boolean;
+  /** 实际使用的 provider id（diagnostic，不含 secret）。 */
+  providerId?: string;
 }
 
 export const EXTERNAL_SOURCE_CLASS = 'external' as const;
