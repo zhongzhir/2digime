@@ -1,0 +1,42 @@
+{
+  "id": "REAL-CAPABILITY-RESULT-SCHEMA-V1",
+  "description": "DIGITALME-REAL-CAPABILITY-BENCHMARK-01 真实结果统一导入格式。JSONL，一行一条记录；评分前由 anonymize 步骤把 product 替换为 Arm A/B/C/D/E。",
+  "fileFormat": {
+    "type": "jsonl",
+    "encoding": "utf-8",
+    "oneRecordPerLine": true,
+    "naming": "<product>__<task_id>__<mode>.jsonl"
+  },
+  "requiredFields": ["product", "mode", "task_id", "started_at", "finished_at", "raw_answer", "sources", "citations", "latency", "manual_intervention", "notes"],
+  "optionalFields": ["research_activity_if_visible", "attachments"],
+  "fields": [
+    { "key": "product", "type": "string", "required": true, "desc": "产品/arm 标识，评分前匿名化" },
+    { "key": "mode", "type": "string", "required": true, "enum": ["no_search", "web_search", "deep_research"] },
+    { "key": "task_id", "type": "string", "required": true, "enum": ["B-02", "B-04", "C-02", "D-01", "F-01", "F-02", "F-03", "F-04", "F-05", "G-01", "G-02", "G-05"] },
+    { "key": "started_at", "type": "string", "required": true, "format": "ISO 8601 UTC" },
+    { "key": "finished_at", "type": "string", "required": true, "format": "ISO 8601 UTC" },
+    { "key": "raw_answer", "type": "string", "required": true, "desc": "原始产品输出全文，不做清洗" },
+    { "key": "sources", "type": "array", "required": true, "items": { "title": "string", "url": "string", "type": "SourceType" } },
+    { "key": "citations", "type": "array", "required": true, "items": { "segment": "string", "sourceIndex": "number" } },
+    { "key": "research_activity_if_visible", "type": "array", "required": false, "items": { "round": "number", "query": "string", "sourceCount": "number", "planOrGap": "string" }, "desc": "可见研究过程，无则 []" },
+    { "key": "attachments", "type": "array", "required": false, "desc": "本次 12 题统一为空数组" },
+    { "key": "latency", "type": "number", "required": true, "unit": "ms" },
+    { "key": "manual_intervention", "type": "array", "required": true, "items": { "when": "string", "what": "string" }, "desc": "人工介入（补打字/重试/澄清），无则 []" },
+    { "key": "notes", "type": "string", "required": true, "desc": "观察备注；API arm 参与时须注明 arm 类型披露" }
+  ],
+  "example": {
+    "product": "arm-X-example",
+    "mode": "web_search",
+    "task_id": "B-02",
+    "started_at": "2026-08-23T00:00:00.000Z",
+    "finished_at": "2026-08-23T00:00:05.000Z",
+    "raw_answer": "…原始输出全文…",
+    "sources": [{ "title": "…", "url": "https://…", "type": "news" }],
+    "citations": [{ "segment": "…", "sourceIndex": 0 }],
+    "research_activity_if_visible": [],
+    "attachments": [],
+    "latency": 5000,
+    "manual_intervention": [],
+    "notes": ""
+  }
+}

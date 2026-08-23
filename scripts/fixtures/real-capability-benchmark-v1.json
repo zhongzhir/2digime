@@ -1,0 +1,256 @@
+{
+  "id": "DIGITALME-REAL-CAPABILITY-BENCHMARK-01",
+  "branch": "build/real-capability-benchmark-01",
+  "baseHead": "0ebfca8",
+  "frozenAt": "2026-08-23",
+  "generatedAt": null,
+  "runWindowUtc": null,
+  "purpose": "建立真实市场头部能力基准（TRACK A 专业能力 + TRACK B 2digime 端到端价值）。本轮 01A 只冻结测试集/协议/审计/导入与盲评格式，不运行。",
+  "notInScope": [
+    "不开发 Search",
+    "不修 0ebfca8",
+    "不用普通 API completion 冒充产品能力",
+    "0 product feature change",
+    "0 prompt optimization",
+    "0 search tuning",
+    "0 benchmark-driven fix"
+  ],
+  "armProbe": {
+    "probed": true,
+    "probeDate": "2026-08-23",
+    "probeMethod": "env var 存在性（不打印值）+ 最小 API 鉴权调用（仅回传状态码）+ 已安装 CLI/浏览器/自动化探测 + 代码内 provider/credential 路径审计。未读取浏览器密码/未导出 cookie/未绕过登录/未注册账户。",
+    "conclusion": "2digime arm 真实可运行（干净 worktree 从 0ebfca8 构建通过；GEMINI_API_KEY 有效；模型 credential 已存在）。四个真实产品 arm（ChatGPT Search/Deep Research、Claude Web Search/Research、Gemini Search/Deep Research app、Perplexity Search/Research）当前均不可自动直接调用：无对应有效登录/订阅凭据、无对应 CLI；唯一有效凭据为 Gemini API（属 API 能力，按规则不得冒充 Gemini 产品 arm）。浏览器自动化路径可行（Chrome/Edge 已安装、Playwright 已装、浏览器可下载），但需 Owner 一次性登录，故四个产品 arm 标注 manual_owner_action_required。",
+    "arms": [
+      {
+        "id": "arm-2digime",
+        "label": "2digime（端到端产品管线：决策 + 搜索/研究 + 综合）",
+        "type": "product",
+        "status": "available",
+        "reason": "干净 worktree 从 0ebfca8 `npm ci --ignore-scripts && npm run build` 通过；搜索 provider = Gemini googleSearch Grounding（GEMINI_API_KEY 有效，generativelanguage v1beta/models 返回 200，connector 默认模型 gemini-3.5-flash 存在）；Bing HTML 为显式 degraded fallback；决策/综合模型 credential 存在于 `digitalme-v2/scripts/_mvp-p14-real-capability-evidence/.runtime-model-credential.json`（01B 需拷入干净 worktree 或设置 DIGITALME_CONVERSATION_SEARCH_* 环境变量）。",
+        "notes": "该 arm 使用 Gemini API grounding 作为自身 provider，属 2digime 产品能力；不得把其 provider 等同于『Gemini 产品 arm』。"
+      },
+      {
+        "id": "arm-chatgpt-search",
+        "label": "ChatGPT Search / Deep Research",
+        "type": "product",
+        "status": "manual_owner_action_required",
+        "reason": "OPENAI_API_KEY 已设置但鉴权返回 401（invalid_api_key，无效）；无 openai CLI；ChatGPT 为 web/app 产品，程序化访问仅 API（非产品，且 key 无效）。需 Owner 手工运行或一次性登录到 Playwright 持久 profile 后由 01B 自动采集。Deep Research 依赖付费订阅。",
+        "autoCollectable": "after_owner_login"
+      },
+      {
+        "id": "arm-claude-search",
+        "label": "Claude Web Search / Research",
+        "type": "product",
+        "status": "manual_owner_action_required",
+        "reason": "ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN 均未设置；无 claude CLI；无已保存 claude.ai 可自动复用的登录（未读取 cookie）。需 Owner 手工运行或一次性登录。",
+        "autoCollectable": "after_owner_login"
+      },
+      {
+        "id": "arm-gemini-search",
+        "label": "Gemini Search / Deep Research（产品 app）",
+        "type": "product",
+        "status": "manual_owner_action_required",
+        "reason": "GEMINI_API_KEY 有效，但这是 API 能力，按公平规则不得冒充 Gemini 产品 arm。Gemini app（Search / Deep Research UI）需 Owner 登录（建议 Gemini Advanced 以启用 Deep Research）。",
+        "apiEquivalentAvailable": "deep-research-*-preview 模型族经官方 API 存在（见 arm-gemini-api-deepresearch），是否作为 product-grade arm 参与由 CTO 决定，默认仅作 API arm 与 API arm 比。",
+        "autoCollectable": "after_owner_login"
+      },
+      {
+        "id": "arm-gemini-api-deepresearch",
+        "label": "Gemini API Deep Research（官方 API 模型族）",
+        "type": "api-capability",
+        "status": "available",
+        "reason": "GEMINI_API_KEY 有效；v1beta/models 列表含 models/deep-research-preview-04-2026、deep-research-pro-preview-12-2025、deep-research-max-preview-04-2026（均支持 generateContent）。按规则不作『Gemini 产品 arm』冒充；只能作为 API arm 或与 2digime deep_research 同档对比，且须在结果中显式标注 arm 类型。",
+        "notes": "01B 需对 deep-research 模型做最小真实调用验证后启用。"
+      },
+      {
+        "id": "arm-perplexity-search",
+        "label": "Perplexity Search / Research",
+        "type": "product",
+        "status": "manual_owner_action_required",
+        "reason": "PERPLEXITY_API_KEY 未设置；无 CLI；无已保存登录。需 Owner 手工运行或一次性登录。",
+        "autoCollectable": "after_owner_login"
+      },
+      {
+        "id": "arm-openai-api",
+        "label": "OpenAI API（web search / responses）",
+        "type": "api-capability",
+        "status": "unavailable",
+        "reason": "OPENAI_API_KEY 无效（401）。且按规则不得以 API 冒充 ChatGPT 产品 arm。"
+      },
+      {
+        "id": "arm-dashscope-api",
+        "label": "DashScope/Qwen API",
+        "type": "api-capability",
+        "status": "unavailable",
+        "reason": "DASHSCOPE_API_KEY 鉴权返回 401（与既有审计一致）。"
+      }
+    ]
+  },
+  "trackDefinition": {
+    "trackA": {
+      "name": "TRACK A — 专业能力基准",
+      "question": "如果用户只需要搜索/研究，当前最强现成能力做到什么水平？",
+      "quickSearchArms": ["ChatGPT Search", "Claude Web Search", "Gemini Search", "Perplexity Search", "2digime web_search"],
+      "deepResearchArms": ["ChatGPT Deep Research", "Claude Research", "Gemini Deep Research", "Perplexity Research", "2digime deep_research"],
+      "fairnessRule": "Quick Search 只与 Quick Search 比；Deep Research 只与 Deep Research 比。同一问题、尽量同一时间窗口、同样附件、同样明确约束。不得用普通 API completion 冒充上述产品能力。"
+    },
+    "trackB": {
+      "name": "TRACK B — 2digime 端到端价值",
+      "question": "用户通过 2digime 做事，最终结果是否优于直接使用专业 AI？",
+      "testedDimensions": ["任务理解", "relevant personal context", "project context", "能力选择", "专业执行结果", "验收/纠偏", "最终结果", "用户需要额外提供多少上下文"],
+      "fairnessRule": "不允许故意让竞品『不知道上下文』：对直接产品 arm 允许把同一冻结 context package 作为显式输入；单独记录 context_setup_burden。"
+    }
+  },
+  "taskDistribution": {
+    "quick_current_search": 4,
+    "deep_research": 5,
+    "digitalme_context": 3,
+    "total": 12
+  },
+  "coverageChecklist": [
+    "当前事实",
+    "官方事实",
+    "来源冲突",
+    "复杂行业研究",
+    "搜索纠偏",
+    "个性化正例",
+    "个性化负例"
+  ],
+  "coverageMapping": {
+    "当前事实": ["B-02", "B-04"],
+    "官方事实": ["B-04", "C-02"],
+    "来源冲突": ["D-01"],
+    "复杂行业研究": ["F-01", "F-02", "F-03", "F-04", "F-05"],
+    "搜索纠偏": ["B-02"],
+    "个性化正例": ["G-01", "G-02"],
+    "个性化负例": ["G-05"]
+  },
+  "tasks": [
+    { "id": "B-02", "cat": "quick_current_search", "mode": "web_search", "text": "2026 年美加墨世界杯已经结束，冠军是哪支球队？", "note": "当前事实 + 搜索纠偏：日期应反映 2026 结果，不得使用 2022 旧知识；事件日 vs 发布日期。", "originalId": "B-02" },
+    { "id": "B-04", "cat": "quick_current_search", "mode": "web_search", "text": "苹果最新发布的 iPhone 是哪一款？官方起售价是多少？", "note": "当前事实 + 官方事实：官方 Apple 源优先，媒体源并存。", "originalId": "B-04" },
+    { "id": "C-02", "cat": "quick_current_search", "mode": "web_search", "text": "DeepSeek API 当前的定价是多少？", "note": "官方事实/精确数字：官方定价页，数字可核验。", "originalId": "C-02" },
+    { "id": "D-01", "cat": "quick_current_search", "mode": "web_search", "text": "2026 年全球智能手机出货量第一是哪个品牌？三星和苹果都说自己第一吗？", "note": "来源冲突：IDC/Counterpoint 等机构口径不同，需如实呈现差异。", "originalId": "D-01" },
+    { "id": "F-01", "cat": "deep_research", "mode": "deep_research", "text": "深入研究：2026 年中国 AI Agent 创业与融资趋势", "note": "复杂行业研究：需多轮搜索 + 交叉验证 + 纠偏。", "originalId": "F-01" },
+    { "id": "F-02", "cat": "deep_research", "mode": "deep_research", "text": "深入研究：生成式 AI 在医疗行业的应用现状、主要障碍与监管", "note": "复杂行业研究：需多轮搜索 + 交叉验证。", "originalId": "F-02" },
+    { "id": "F-03", "cat": "deep_research", "mode": "deep_research", "text": "深入研究：固态电池量产进展与主要厂商路线对比", "note": "复杂行业研究：需多轮搜索 + 交叉验证。", "originalId": "F-03" },
+    { "id": "F-04", "cat": "deep_research", "mode": "deep_research", "text": "深入研究：全球半导体供应链现状与地缘政治影响", "note": "复杂行业研究：需多轮搜索 + 交叉验证。", "originalId": "F-04" },
+    { "id": "F-05", "cat": "deep_research", "mode": "deep_research", "text": "深入研究：数字分身/数字主体（Digital Twin of a Person）的技术现状与伦理问题", "note": "复杂行业研究：与 2digime 主题相关。", "originalId": "F-05" },
+    { "id": "G-01", "cat": "digitalme_context", "mode": "web_search", "text": "最近有什么适合我的项目参加的 AI 创新比赛？", "note": "个性化正例：需结合 owner 项目上下文 + 搜索。", "originalId": "G-01" },
+    { "id": "G-02", "cat": "digitalme_context", "mode": "web_search", "text": "为我的 AI 创新大赛项目推荐一个参赛技术栈和演示方案", "note": "个性化正例：需结合 owner 项目/已有技术栈 + 搜索。", "originalId": "G-02" },
+    { "id": "G-05", "cat": "digitalme_context", "mode": "no_search", "text": "周末想放松，有什么轻松的电影推荐？", "note": "个性化负例：owner 上下文与问题无关，不得强行带入，不得降低答案质量。", "originalId": "G-05" }
+  ],
+  "contextPackage": {
+    "description": "冻结的 benchmark-context-package：只包含该题真正相关、且 2digime 已经拥有的用户信息。TRACK B 对直接产品 arm 允许把同一 package 作为显式输入；同时记录 context_setup_burden。",
+    "G-01": {
+      "identity": { "name": "2digime", "positioning": "数字主体 / Digital Twin of a Person", "orientation": "AI Native" },
+      "currentActivity": "正在准备 2digime 参加 AI 创新大赛",
+      "constraint": "希望以最小成本快速做出可演示的 MVP"
+    },
+    "G-02": {
+      "identity": { "name": "2digime", "positioning": "数字主体 / Digital Twin of a Person", "orientation": "AI Native" },
+      "currentActivity": "正在准备 2digime 参加 AI 创新大赛",
+      "constraint": "希望以最小成本快速做出可演示的 MVP",
+      "existingStack": "TypeScript + Electron + 本地优先",
+      "existingCapabilities": "已实现对话记忆、成长闭环、联网检索"
+    },
+    "G-05": {
+      "stored": "正在准备 2digime（数字主体项目）参加 AI 创新大赛"
+    }
+  },
+  "fairness": {
+    "sameQuestion": true,
+    "sameTimeWindow": true,
+    "sameAttachments": true,
+    "sameConstraints": true,
+    "noAnswerInjection": true,
+    "noEarlyTruncation": true,
+    "deepResearchFullRun": true,
+    "saveRawOutputsAndSources": true,
+    "blindScoring": true,
+    "trackASegregation": "Quick Search 只与 Quick Search 比；Deep Research 只与 Deep Research 比。",
+    "trackBContextFairness": "产品 arm 允许显式获得同一 context package；2digime 自动注入。"
+  },
+  "collectionProtocol": {
+    "summary": "为所有产品统一定义保存格式；保存原始产品输出；评分前匿名化为 Arm A/B/C/D/E。",
+    "perArmExecution": "每个 arm 依序执行同一任务（同一时间窗口）；不因慢而截断；Deep Research 允许完整流程。",
+    "manualInterventionLogging": "任何人工补打字/重试/澄清均须记录 manual_intervention 字段（内容 + 轮次）。",
+    "sameContext": "TRACK B：产品 arm 输入 = 任务 text + 冻结 contextPackage；2digime 输入 = 任务 text（上下文自动注入），二者结果可比较且 context_setup_burden 分别计量。",
+    "apiArmDisclosure": "凡 API arm（如 Gemini API Deep Research）参与时，必须在结果 product 字段与 notes 中显式标注 arm 类型，不得伪装成产品 arm。"
+  },
+  "resultSchema": {
+    "description": "真实结果采集统一格式（JSONL 一行一条；所有字段按此契约落盘，评分前匿名化）。",
+    "fields": [
+      { "key": "product", "required": true, "type": "string", "desc": "产品/arm 标识（评分前替换为 Arm A/B/C/D/E）" },
+      { "key": "mode", "required": true, "type": "string", "enum": ["no_search", "web_search", "deep_research"] },
+      { "key": "task_id", "required": true, "type": "string", "desc": "B-02/C-02/D-01/F-01…G-05" },
+      { "key": "started_at", "required": true, "type": "string", "format": "ISO UTC" },
+      { "key": "finished_at", "required": true, "type": "string", "format": "ISO UTC" },
+      { "key": "raw_answer", "required": true, "type": "string", "desc": "原始产品输出全文（不做任何清洗）" },
+      { "key": "sources", "required": true, "type": "array", "desc": "来源列表（title/url/type）" },
+      { "key": "citations", "required": true, "type": "array", "desc": "引用标注（正文位置 ↔ 来源映射）" },
+      { "key": "research_activity_if_visible", "required": false, "type": "array", "desc": "可见的研究过程（轮次/查询/计划/交叉验证），无则空数组" },
+      { "key": "attachments", "required": false, "type": "array", "desc": "附件（本次 12 题无附件，统一空）" },
+      { "key": "latency", "required": true, "type": "number", "unit": "ms", "desc": "started_at → finished_at 真实耗时" },
+      { "key": "manual_intervention", "required": true, "type": "array", "desc": "人工介入记录（[{when, what}]），无则 []" },
+      { "key": "notes", "required": true, "type": "string", "desc": "观察备注（如 providerDegraded、arm 类型披露）" }
+    ]
+  },
+  "blindReview": {
+    "anonymizedLabels": ["Arm A", "Arm B", "Arm C", "Arm D", "Arm E"],
+    "method": "每 arm × 任务结果打乱后匿名化为 Arm A–E；映射存 blind-key（不进入盲评输入）。每个匿名结果独立评分。",
+    "judgeModel": "deepseek-v4-pro（独立于 2digime 决策/综合所用模型的实例；参赛方不参与评分）",
+    "fixedRubric": "每维 0-5 整数；0=完全失败,1=严重问题,2=明显不足,3=及格,4=良好,5=优秀。",
+    "hardFail": "重大事实错误/引用编造/不实时效声明 → 该题 hard fail，correctness 记 0。",
+    "crossCheck": "同一题目至少 2 名独立 judge 评，取平均。",
+    "trackASegregation": "TRACK A 只比较同一档位（Quick Search 组 vs Quick Search 组；Deep Research 组 vs Deep Research 组），跨档不比。"
+  },
+  "scoring": {
+    "trackA_dimensions": [
+      { "key": "correctness", "label": "事实正确性" },
+      { "key": "freshness", "label": "时效性（当前日期/来源发布时间）" },
+      { "key": "source_quality", "label": "来源质量（官方/权威>二手>UGC）" },
+      { "key": "citation_support", "label": "引用支持度（主张是否被引用实际支撑）" },
+      { "key": "citation_completeness", "label": "引用完整性（主要主张可核验）" },
+      { "key": "coverage", "label": "覆盖度" },
+      { "key": "contradiction_handling", "label": "矛盾处理（冲突来源如实呈现）" },
+      { "key": "research_depth", "label": "研究深度（轮次/交叉验证）" },
+      { "key": "synthesis", "label": "综合/推理质量" },
+      { "key": "latency", "label": "延迟" }
+    ],
+    "trackB_e2e_dimensions": [
+      { "key": "task_understanding", "label": "任务理解" },
+      { "key": "capability_selection", "label": "能力选择（是否选对 search/research/no_search）" },
+      { "key": "context_usefulness", "label": "context 有用性（相关时是否真正提升结果）" },
+      { "key": "context_setup_burden", "label": "context 设置负担（用户需额外提供多少上下文）" },
+      { "key": "result_usability", "label": "最终结果可用性" },
+      { "key": "owner_alignment", "label": "owner 对齐（与本人目标/约束一致）" },
+      { "key": "irrelevant_personalization", "label": "无关个性化惩罚（负例不得强行带入）" }
+    ],
+    "note": "不要把『2digime 自己搜索得怎么样』作为最终产品唯一指标。TRACK B 综合 TRACK A 专业执行结果 + 端到端维度。"
+  },
+  "p95": {
+    "definition": "market_p95 不表示『2digime 自研组件超过所有竞品组件』，而表示：对于目标真实任务，用户通过 2digime 获得的端到端结果进入当前市场头部水平。",
+    "implication": "专业执行层若存在明显更强成熟能力：优先 integrate / invoke / handoff，而不是默认 rebuild。",
+    "evaluationBasis": "由 TRACK A 专业对照 + TRACK B 端到端对照共同支撑；无真实产品对照可运行时不宣称 p95。"
+  },
+  "missingProductArms": [
+    { "arm": "ChatGPT Search / Deep Research", "needs": "Owner 登录 + 付费订阅（Deep Research），或 Owner 手工运行" },
+    { "arm": "Claude Web Search / Research", "needs": "Owner 登录 + 付费订阅，或 Owner 手工运行" },
+    { "arm": "Gemini Search / Deep Research（app）", "needs": "Owner 登录 + Gemini Advanced，或 Owner 手工运行；API 侧有 deep-research 模型族可选（需 CTO 定档）" },
+    { "arm": "Perplexity Search / Research", "needs": "Owner 登录 + Pro 订阅，或 Owner 手工运行" }
+  ],
+  "minimumOwnerActions": [
+    { "seq": 1, "action": "为四个产品 arm 选路径：A) 一次性登录到 Playwright 持久 profile（01B 自动采集，推荐，Owner 操作 4 次登录）；B) Owner 手工逐个运行并回填结果（约 48 次运行，不推荐）" },
+    { "seq": 2, "action": "把 2digime 决策/综合模型 credential（.runtime-model-credential.json）拷入 01B 工作目录，或设置 DIGITALME_CONVERSATION_SEARCH_* 环境变量（GEMINI_API_KEY 已有效，无需操作）" },
+    { "seq": 3, "action": "确认各产品付费订阅覆盖 Deep Research（ChatGPT Pro/Plus、Claude Pro、Gemini Advanced、Perplexity Pro）" },
+    { "seq": 4, "action": "01B 启动前关闭 Chrome/Edge 实例（自动化需解锁持久 profile）" }
+  ],
+  "selfAudit": {
+    "notReadSecrets": true,
+    "notExportedCookies": true,
+    "notBypassedLogin": true,
+    "notRegisteredAccounts": true,
+    "apiArmNotImpersonatingProduct": true,
+    "evidence": "cap-probe 仅输出状态码；profile 目录仅列名未读取内容；未改动主 worktree 的 evidence-efficiency-01 失败现场。"
+  }
+}
