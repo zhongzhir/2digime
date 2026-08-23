@@ -25,6 +25,10 @@ import {
   type CitationReport,
   EXTERNAL_SOURCE_CLASS,
 } from './search-contract';
+import {
+  classifySearchClosure,
+  type CapabilityResolution,
+} from './capability-closure';
 
 export interface ConversationChatResult {
   text: string;
@@ -798,4 +802,51 @@ export async function runConversationSearch(opts: ConversationSearchOptions): Pr
 
 export function hasExternalSources(evidence: SearchEvidence): boolean {
   return evidence.rounds.some((r) => r.sources.some((s) => s.sourceClass === EXTERNAL_SOURCE_CLASS));
+}
+
+/**
+ * CAPABILITY-FALLBACK-CLOSURE-01 — Search/Research 闭包执行入口。
+ * 执行前先按能力合同做闭包分类（OPTIMAL / BASELINE / LIMITED / UNAVAILABLE）；
+ * 需要外部信息但没有任何可用联网能力时，不发起注定失败的搜索，直接给出诚实的 LIMITED 回复。
+ * professionalSearchUsable / baselineSearchUsable / modelUsable 由调用方按
+ * 既有 SearchConnector 与模型配置的可用性传入（不做供应商判断）。
+ */
+export interface ClosureSearchState {
+  professionalSearchUsable?: boolean;
+  baselineSearchUsable?: boolean;
+  modelUsable?: boolean;
+}
+
+export interface ClosureSearchResult {
+  resolution: CapabilityResolution;
+  reply: ConversationSearchReply;
+}
+
+export async function runClosureSearch(
+  opts: ConversationSearchOptions & ClosureSearchState,
+): Promise<ClosureSearchResult> {
+  const need = await decideSearchNeed(opts);
+  const resolution = classifySearchClosure({
+    need,
+    professionalSearchUsable: opts.professionalSearchUsable ?? false,
+    baselineSearchUsable: opts.baselineSearchUsable ?? false,
+    modelUsable: opts.modelUsable ?? false,
+  });
+  const webNeeded = need.mode === 'web_search' || need.mode === 'deep_research';
+  const noWebCapability =
+    !opts.baselineSearchUsable && !opts.professionalSearchUsable;
+  if (webNeeded && noWebCapability) {
+    const honestText = await buildHonestFailureReply(opts);
+    return {
+      resolution,
+      reply: {
+        mode: need.mode,
+        text: honestText,
+        evidence: { mode: need.mode, rounds: [] },
+        usedExternal: false,
+      },
+    };
+  }
+  const reply = await runConversationSearch(opts);
+  return { resolution, reply };
 }

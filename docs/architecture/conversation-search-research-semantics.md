@@ -132,6 +132,17 @@ Internal research structure is **not shown** by default; only the natural answer
 
 Growth Closed Loop 03 · Growth Context Consistency · Product Semantics Recovery · normal conversation model capability · Talk/Do/Adopt · real Agent · second Agent · MCP readonly · smoke · model-gate · Electron preflight.
 
+## 7.5 Search closure classification (CAPABILITY-FALLBACK-CLOSURE-01)
+
+The conversation search/research path is classified into the shared capability levels, decided **before** execution from *contract availability*, never from provider names:
+
+- `deep_research` with a professional research/search capability usable → `OPTIMAL` (silent).
+- `deep_research` with no specialist but a usable baseline web connector + connected model → `BASELINE` (execute; only note the coverage gap when it visibly affects the result). This is the DeepSeek-only closure path: no new account required.
+- `web_search` (current-news / freshness) with any usable web connector → `BASELINE` and answer directly with real sources.
+- `web_search` with **no** usable web capability → `LIMITED`/`UNAVAILABLE`; never answer "today" from training knowledge. Honest text, e.g. "当前无法可靠确认最新信息。我可以先基于已有资料分析，或者联网能力恢复后继续查询。" No "please configure Gemini first".
+- `no_search` / stable-knowledge → direct model answer; do **not** force a search capability.
+- Provider failure mid-run (quota / 5xx / network) → automatic baseline fallback (`fallbackConnector`, e.g. no-key Bing); if fallback succeeds the task continues; protocol/HTTP detail is never surfaced to ordinary users.
+
 ## 7. Success criteria (only mark true when the evidence is real)
 
 `conversation_search_engineered` · `real_web_search_validated` · `automatic_search_decision_validated` · `current_fact_citations_validated` · `source_conflict_handling_validated` · `deep_research_min_loop_validated` · `owner_context_relevant_reuse_validated` · `external_search_not_owner_fact`.

@@ -85,6 +85,49 @@ electron/           thin app shell (main / preload / renderer)
 5. **Verified, then adopted.** Results are independently verified and only adopted with your confirmation.
 6. **Growth is event-based.** New knowledge enters only as growth events derived from your confirmed actions.
 
+## Capability closure (frozen product principles) — CAPABILITY-FALLBACK-CLOSURE-01
+
+These principles govern **how 2digime picks and downgrades capabilities** so that a user who only installs 2digime and connects one ordinary general-purpose model can still close real task loops. Stronger professional agents/search/research/coding are **optional enhancements**, never the default precondition for basic tasks. Capability selection is based on capability contracts, **never on provider name / brand routing** (no `if DeepSeek` / `if Gemini` product logic).
+
+1. **Professional capability may be absent; task closure must not easily be absent.** Absence of a specialist agent is a routing input, not a stop condition.
+2. **Best executable plan among what is available.** 2digime answers "how can the goal be best completed *with current capabilities*?", not "is this specific product installed?".
+3. **Stronger external capabilities are optional.** Connecting Gemini/Claude/Perplexity/… is an enhancement path, not the default precondition for ordinary users.
+4. **Acceptable fallback ⇒ default to executing.** If a fallback exists, 2digime proceeds by default instead of asking the user to configure a new service.
+5. **Fallback that visibly affects quality/speed/coverage ⇒ tell the user naturally and briefly.**
+6. **No reliable capability ⇒ state the capability boundary honestly.** Never use stale training knowledge or model hallucination to fake a real-time / professional result.
+7. **User keeps the choice.** Continue with current capabilities / use-or-connect a stronger capability / defer. "Connect a stronger capability" must never be the *only* path.
+8. **When a mature professional Agent exists, prefer integrate / invoke / handoff over re-implementing its core.**
+
+Forbidden flow: *need Deep Research → no Gemini → ask user to configure Gemini → task suspended.* Correct flow: *need Deep Research → no specialist research agent → find baseline capabilities (search / read / connected model / verification) → generate a fallback execution plan → state the honest quality gap → execute.*
+
+### Capability levels (runtime semantics, no numeric scoring)
+
+| Level | Meaning | User experience |
+|---|---|---|
+| `OPTIMAL` | The most suitable professional capability is available. | Silent by default; do not tell the user which adapter was picked internally. |
+| `BASELINE` | No best specialist, but the connected general model + basic tools are enough. | Usually executes directly; only mention the gap briefly when it actually affects the result. |
+| `LIMITED` | Part of the goal is achievable, but there are important quality / coverage / freshness limits. | Non-blocking. Something like: "可以继续完成，但当前只能使用基础研究能力，覆盖度可能低于专业深度研究。" Default offers **continue**, optional **use stronger capability**. |
+| `UNAVAILABLE` | No reliable capability for the core goal. | Honest, never fake completion. E.g. "当前无法可靠确认最新信息。我可以先基于已有资料分析，或者联网能力恢复后继续查询。" |
+
+User-facing messages never expose: provider id, HTTP status, quota, adapter name, MCP, or the internal capability graph — unless the user explicitly asks for a technical diagnosis.
+
+### Selection flow (task enters the "doing" stage)
+
+```
+User Goal
+  → Task Capability Needs
+  → Available Capabilities
+  → Best Execution Plan
+  → Fallback Plan (if needed)
+  → Execute
+  → 2digime Review / Acceptance
+  → Result
+```
+
+The core abstractions are **runtime-only** (`src/capability/capability-closure.ts`): `TaskCapabilityNeed`, `AvailableCapability`, `ExecutionPlan`, `FallbackOption`, plus the `OPTIMAL / BASELINE / LIMITED / UNAVAILABLE` levels. No permanent schema / store / state machine is added. Capability discovery reuses the existing `CapabilityRegistry`, `CapabilityRegistration` contract, `SearchConnector` + `SearchNeed`/`SearchEvidence` contract, coding routing (`routeCodingAgent`), the model gateway, document capability, and MCP/Agent adapters. The same resolution runs on each invocation, so when a stronger capability (e.g. a professional research agent) becomes available later, the resolver naturally upgrades — no task re-creation, no manual provider switch, task semantics unchanged.
+
+Baseline fallbacks today (already wired): no-key basic web search (`bing-html-search`), URL read/fetch evidence retrieval, the connected general model, and the existing research orchestration (`conversation-search.ts`). The research orchestration is a **baseline fallback**, not the strategic goal of "beating Gemini Deep Research". Future **2digime Managed Capabilities** (managed search / URL extraction / browser / basic research tools) plug into the same `SearchConnector` / capability contract so ordinary users need no third-party accounts; BYOK, MCP, local tools and third-party agents remain supported.
+
 ## Honest status
 
 This is an **experimental preview**, not an MVP and not production-ready. The architecture is the durable asset: an AI-native control layer that keeps the human in charge of what "you" are and what the system is allowed to do.
