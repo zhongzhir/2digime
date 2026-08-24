@@ -80,6 +80,11 @@ import {
 } from '../capability/adapters/mcp-stdio-readonly';
 import { confirmedPlanFromJob, freezeConfirmedPlanSnapshot } from './confirmed-plan-execution';
 import type { Task } from './task';
+import {
+  closureViewFromSelection,
+  taskNeedFromWorkIntent,
+  type CapabilityClosureView,
+} from '../capability/capability-closure';
 
 export interface WorkRuntimeOptions {
   subjectId: string;
@@ -260,6 +265,9 @@ export class WorkRuntime {
     const expectedOutputFamily =
       String(input.requestedArtifactType || '').trim() || intent.expectedOutputFamily;
 
+    const closureNeed = taskNeedFromWorkIntent(intent);
+    const closureRegistrations = this.opts.registry.list();
+
     const forceAnalyze =
       intent.intentKind === 'analyze_code' || expectedOutputFamily === CODE_ANALYSIS_ARTIFACT_TYPE;
     const forceModify =
@@ -325,6 +333,10 @@ export class WorkRuntime {
           jobId: '',
           intentKind: 'modify_code',
           userFacingNotice: onboarding.message,
+          capabilityClosure: closureViewFromSelection({
+            need: closureNeed,
+            availableRegistrations: closureRegistrations,
+          }),
           needsExecutorSetup: {
             message: onboarding.message,
             title: onboarding.title,
@@ -347,6 +359,10 @@ export class WorkRuntime {
           jobId: '',
           intentKind: 'modify_code',
           userFacingNotice: onboarding.message,
+          capabilityClosure: closureViewFromSelection({
+            need: closureNeed,
+            availableRegistrations: closureRegistrations,
+          }),
           needsExecutorSetup: {
             message: onboarding.message,
             title: onboarding.title,
@@ -430,6 +446,16 @@ export class WorkRuntime {
         userFacingNotice: isModelApi
           ? '将使用已连接的模型修改这个项目（实验）。'
           : preview.notice,
+        capabilityClosure: (() => {
+          const confirmType = selectedCoding.capabilityId
+            ? this.opts.registry.get(selectedCoding.capabilityId)?.registration.adapter.type
+            : undefined;
+          return closureViewFromSelection({
+            need: closureNeed,
+            ...(confirmType ? { selectedAdapterType: confirmType } : {}),
+            availableRegistrations: closureRegistrations,
+          });
+        })(),
         needsExecutionConfirm: {
           ...preview,
           executorDisplayName,
@@ -455,7 +481,11 @@ export class WorkRuntime {
           : forceAnalyze
             ? '当前无法进行代码分析：请先连接模型并添加代码材料后再试。'
             : 'no available capability for requested artifact type');
-      throw Object.assign(new Error(msg), { actionable: msg });
+      const closureView: CapabilityClosureView = closureViewFromSelection({
+        need: closureNeed,
+        availableRegistrations: closureRegistrations,
+      });
+      throw Object.assign(new Error(msg), { actionable: msg, capabilityClosure: closureView });
     }
     if (selected.adapter.registration.availability !== 'available') {
       const msg =
@@ -578,6 +608,11 @@ export class WorkRuntime {
       jobId: job.id,
       intentKind: intent.intentKind,
       ...(intent.userFacingNotice ? { userFacingNotice: intent.userFacingNotice } : {}),
+      capabilityClosure: closureViewFromSelection({
+        need: closureNeed,
+        selectedAdapterType: adapter.registration.adapter.type,
+        availableRegistrations: closureRegistrations,
+      }),
     };
   }
 
@@ -639,7 +674,20 @@ export class WorkRuntime {
           : undefined,
       );
       this.enqueue(job.id);
-      return { jobId: job.id };
+      const retryType = this.opts.registry.get(capabilityId)?.registration.adapter.type;
+      return {
+        jobId: job.id,
+        capabilityClosure: closureViewFromSelection({
+          need: taskNeedFromWorkIntent({
+            intentKind: task.intentKind ?? 'general',
+            expectedOutputFamily: task.requestedArtifactType,
+            materialKinds: [],
+            highConfidence: true,
+          }),
+          ...(retryType ? { selectedAdapterType: retryType } : {}),
+          availableRegistrations: this.opts.registry.list(),
+        }),
+      };
     });
   }
 

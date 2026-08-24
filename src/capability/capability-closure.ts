@@ -95,6 +95,18 @@ export interface CapabilityResolution {
   userNotice?: string;
 }
 
+/**
+ * Do 主链向用户面暴露的闭包视图（最小投影）。
+ * 只含 level / notice / choices；不含 provider、adapter、quota、HTTP、内部能力图。
+ */
+export interface CapabilityClosureView {
+  level: CapabilityLevel;
+  /** 用户面自然语言（仅 LIMITED / UNAVAILABLE 时出现）。 */
+  notice?: string;
+  /** 用户可选动作（LIMITED / UNAVAILABLE 时给出）。 */
+  choices: CapabilityUserChoice[];
+}
+
 const KIND_LABELS: Record<CapabilityTier, string> = {
   professional: '专业能力',
   baseline: '基础能力',
@@ -408,4 +420,54 @@ export function resolveFromRegistry(
   registrations: readonly CapabilityRegistration[],
 ): CapabilityResolution {
   return resolveCapability(need, availableFromRegistrations(registrations));
+}
+
+/**
+ * CAPABILITY-CLOSURE-RUNTIME-02 — 真实 Do 主链的闭包视图。
+ * 由已有 WorkIntent 派生 TaskCapabilityNeed，不建第二套意图系统。
+ */
+export function taskNeedFromWorkIntent(intent: WorkIntent): TaskCapabilityNeed {
+  return {
+    domain: domainFromWorkIntent(intent),
+    ...(intent.intentKind === 'modify_code' ? { requiresWrite: true } : {}),
+    hasMaterials: intent.materialKinds.length > 0,
+  };
+}
+
+/** 按能力合同（adapter 类型）给出已选中执行路径的闭包等级；无品牌判断。 */
+export function closureLevelForAdapterType(adapterType: string): CapabilityLevel {
+  if (
+    adapterType === 'external-executor-cli' ||
+    adapterType === 'external-executor-http' ||
+    adapterType === 'remote-subject'
+  ) {
+    return 'optimal';
+  }
+  return 'baseline';
+}
+
+/**
+ * 用户面闭包视图（Do 主链输出）：
+ * - selectedAdapter 存在：等级按已实际选中的能力合同判定（OPTIMAL/BASELINE，静默）。
+ * - 无选中能力：按可用注册表解析为 LIMITED / UNAVAILABLE，给出自然说明与用户选择。
+ * 只暴露 level / notice / choices，不含 provider / adapter / 内部能力 id。
+ */
+export function closureViewFromSelection(input: {
+  need: TaskCapabilityNeed;
+  selectedAdapterType?: string;
+  availableRegistrations?: readonly CapabilityRegistration[];
+}): CapabilityClosureView {
+  if (input.selectedAdapterType) {
+    const level = closureLevelForAdapterType(input.selectedAdapterType);
+    return { level, choices: [] };
+  }
+  const resolution = resolveCapability(
+    input.need,
+    availableFromRegistrations(input.availableRegistrations ?? []),
+  );
+  return {
+    level: resolution.level,
+    choices: resolution.userChoices,
+    ...(resolution.userNotice ? { notice: resolution.userNotice } : {}),
+  };
 }

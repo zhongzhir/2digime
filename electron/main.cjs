@@ -1141,7 +1141,7 @@ function registerIpc() {
       !isInferenceQuery;
     if (searchEnabled) {
       try {
-        const { runConversationSearch } = require(path.join(
+        const { runClosureSearch } = require(path.join(
           appRoot,
           "dist",
           "capability",
@@ -1176,7 +1176,9 @@ function registerIpc() {
           return result;
         };
         const connector = createBingHtmlSearchConnector();
-        const reply = await runConversationSearch({
+        // CAPABILITY-CLOSURE-RUNTIME-02：真实主链经 runClosureSearch 执行闭包分类
+        // （专业搜索不可用 → baseline web + 通用模型 → BASELINE；无联网 → LIMITED 诚实回复）。
+        const result = await runClosureSearch({
           userText,
           turns: recent
             .slice(0, -1)
@@ -1185,13 +1187,26 @@ function registerIpc() {
           currentDate: new Date().toISOString().slice(0, 10),
           chat: searchChat,
           connector,
+          professionalSearchUsable: false,
+          baselineSearchUsable: true,
+          modelUsable: !!model.openaiCompatible,
         });
+        const reply = result.reply;
         if (reply.mode !== "no_search") {
           scheduleGrowth(reply.text);
           return {
             text: reply.text,
             status: "complete",
             finishReason: reply.mode === "deep_research" ? "deep_research" : "web_search",
+            capabilityClosure: result.resolution
+              ? {
+                  level: result.resolution.level,
+                  ...(result.resolution.userNotice
+                    ? { notice: result.resolution.userNotice }
+                    : {}),
+                  choices: result.resolution.userChoices,
+                }
+              : undefined,
             ...(userTurn ? { userTurnId: userTurn.id } : {}),
           };
         }

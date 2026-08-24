@@ -369,6 +369,12 @@ export interface CommandMap {
         /** 新软件任务优先「由 Digital Me 创建新项目」 */
         preferCreateNew?: boolean;
       };
+      /**
+       * CAPABILITY-CLOSURE-RUNTIME-02：本次 Do 选择的闭包视图。
+       * OPTIMAL/BASELINE 默认静默；LIMITED/UNAVAILABLE 提供自然说明与用户选择。
+       * 不含 provider / adapter / quota / HTTP / 内部能力图。
+       */
+      capabilityClosure?: import('../capability/capability-closure').CapabilityClosureView;
     };
   };
   'work.retryTask': {
@@ -384,6 +390,8 @@ export interface CommandMap {
       restored?: boolean;
       message?: string;
       conflicts?: string[];
+      /** CAPABILITY-CLOSURE-RUNTIME-02：重试选择的闭包视图（同 submitTask）。 */
+      capabilityClosure?: import('../capability/capability-closure').CapabilityClosureView;
     };
   };
   /**
