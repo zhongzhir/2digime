@@ -1,0 +1,78 @@
+{
+  "generatedAt": "2026-08-24T00:00:00.000Z",
+  "branch": "build/subject-collaboration-01",
+  "base": "7a7a163",
+  "mode": "deterministic_engineering_test",
+  "runtimes": {
+    "A": { "type": "market_validation", "goal": "快速验证市场", "capability": "cap_fake_document" },
+    "B": { "type": "reliable_delivery", "goal": "可靠产品交付", "boundary": "不得直接公开发布测试结果", "capability": "cap_fake_document" }
+  },
+  "isolation": {
+    "shared_subject_store": false,
+    "shared_code_and_protocol": true,
+    "subject_a_private_pref_not_in_b": true,
+    "subject_b_goal_not_in_a": true,
+    "subject_b_experience_not_in_a": true,
+    "subject_b_boundary_not_in_a": true
+  },
+  "successCriteria": {
+    "subject_to_subject_collaboration": true,
+    "independent_accept_decline": true,
+    "minimum_context_disclosure": true,
+    "subject_truth_isolation": true,
+    "independent_learning_after_collaboration": true,
+    "delegated_execution_with_local_review": true,
+    "counterparty_failure_fallback": true,
+    "responsibility_traceable": true,
+    "agent_vs_subject_semantics_distinct": true,
+    "cross_subject_contamination": 0,
+    "whole_subject_disclosure": 0
+  },
+  "cases": {
+    "case1_capability_complement": {
+      "a_discovers_b": true,
+      "minimal_authorization_request": true,
+      "b_accepts": true,
+      "b_organizes_own_capability": true,
+      "result_with_provenance": true,
+      "a_verifies_and_owner_gets_result": true,
+      "subjects_not_merged": true
+    },
+    "case2_boundary_conflict": {
+      "a_request_touches_b_boundary": true,
+      "b_does_not_obey_a": true,
+      "b_declines_with_boundary_basis": true,
+      "a_accepts_and_finds_alternative": true,
+      "task_not_dead": true
+    },
+    "case3_independent_experience": {
+      "a_experience": "collab:external_accept",
+      "b_experience_fulfilled": "collab:fulfilled",
+      "b_experience_accepted": "collab:accepted_by_peer",
+      "cross_contamination": 0
+    },
+    "negotiation_section11": {
+      "proposal": "24h",
+      "counterproposal": "48h + deliver critical part first",
+      "accept": true,
+      "agreement_formed": true,
+      "grant_issued": true
+    },
+    "contrast_section13": {
+      "ordinary_capability_constrained_by_contract_only": true,
+      "ordinary_agent_no_accept_decline": true,
+      "digital_me_b_has_subject_boundary": true,
+      "capability_vs_subject_distinct": true
+    }
+  },
+  "level3": {
+    "capability_swap_subject_continuity": "not_yet_fully_validated",
+    "reason": "A/B 双方内部使用同一 fake document capability；单能力环境不自然成立，未购买额外模型"
+  },
+  "store_schema_changes": {
+    "new_collaboration_store": 0,
+    "second_truth_source": 0,
+    "new_permanent_schema": 0,
+    "product_code_changed": false
+  }
+}
