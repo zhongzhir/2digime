@@ -11,6 +11,11 @@ async function sleep(ms) {
 }
 
 async function run(ctx) {
+  // DIGITALME-FIRST-VALUE-01：委托给首次价值走查模块（真实 main + preload + renderer + IPC + 窗口）。
+  if (process.env.DIGITALME_V2_FIRST_VALUE_EVIDENCE === "1") {
+    const firstValue = require(path.join(__dirname, "..", "scripts", "first-value-evidence.cjs"));
+    return firstValue.runInSmoke(ctx);
+  }
   const evidenceDir =
     process.env.DIGITALME_V2_SMOKE_EVIDENCE || path.join(os.tmpdir(), "dmv2-p16-smoke-evidence");
   fs.mkdirSync(evidenceDir, { recursive: true });

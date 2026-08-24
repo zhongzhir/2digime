@@ -235,6 +235,12 @@
     chatClearCancel: document.getElementById("btn-chat-clear-cancel"),
     chatToTask: document.getElementById("btn-chat-to-task"),
     chatStatus: document.getElementById("chat-status"),
+    firstValue: document.getElementById("first-value"),
+    firstValueConnect: document.getElementById("first-value-connect"),
+    btnFirstChat: document.getElementById("btn-first-chat"),
+    btnFirstMaterial: document.getElementById("btn-first-material"),
+    btnFirstDo: document.getElementById("btn-first-do"),
+    btnFirstConnect: document.getElementById("btn-first-connect"),
     subjectBrief: document.getElementById("subject-brief"),
     subjectMore: document.getElementById("subject-more"),
     subjectCapture: document.getElementById("btn-subject-capture"),
@@ -962,6 +968,8 @@
   }
 
   let lastConnectionState = { available: false, codeChangeAvailable: false, showGate: true };
+  // 「我能帮你做什么」首次价值面：用户尚未真正参与前保持可见（轻量、非强制）。
+  let firstValueDismissed = false;
 
   function applyConnectionUi(state) {
     lastConnectionState = state || lastConnectionState;
@@ -3388,6 +3396,7 @@
    * 不做本地关键词路由，不默认触发修改。执行只在 startAuthorized 后经确定性命令发生。
    */
   async function submitWorkNaturalLanguage(presetText) {
+    firstValueDismissed = true;
     if (!els.workNlInput && presetText == null) return;
     if (workConverseInFlight) {
       if (els.jobStatus) {
@@ -5194,6 +5203,19 @@
     }
     els.chatTurns.innerHTML = "";
     if (els.chatEmpty) els.chatEmpty.hidden = turns.length > 0;
+    // 「我能帮你做什么」：在用户尚未真正参与前一直可见（轻量、非强制）。
+    const showFirstValue = !firstValueDismissed && chatGuideMode !== "growth_guided";
+    if (els.firstValue) {
+      els.firstValue.hidden = !showFirstValue;
+      if (showFirstValue) els.firstValue.removeAttribute("hidden");
+      else els.firstValue.setAttribute("hidden", "");
+    }
+    if (els.firstValueConnect) {
+      const needConnect = showFirstValue && !lastConnectionState.available;
+      els.firstValueConnect.hidden = !needConnect;
+      if (needConnect) els.firstValueConnect.removeAttribute("hidden");
+      else els.firstValueConnect.setAttribute("hidden", "");
+    }
     for (const turn of turns) {
       const li = document.createElement("li");
       const roleLabel =
@@ -5434,6 +5456,7 @@
           if (els.chatStatus) els.chatStatus.textContent = "请先写一句话。";
           return;
         }
+        firstValueDismissed = true;
         if (!api.conversation || typeof api.conversation.append !== "function") {
           throw new Error("对话功能不可用");
         }
@@ -5693,6 +5716,36 @@
       startNewTaskComposer();
       els.goal.value = text;
       if (els.chatStatus) els.chatStatus.textContent = "已带到做事页，可直接开始处理。";
+    });
+  }
+
+  // 「我能帮你做什么」首次价值入口。
+  if (els.btnFirstChat) {
+    els.btnFirstChat.addEventListener("click", () => {
+      if (els.chatInput) {
+        els.chatInput.focus();
+        els.chatInput.placeholder = "例如：我最近在做产品验收，希望你记得这一点。";
+      }
+    });
+  }
+  if (els.btnFirstMaterial) {
+    els.btnFirstMaterial.addEventListener("click", async () => {
+      await setNav("work");
+      startNewTaskComposer();
+      const addFiles = document.getElementById("btn-add-files");
+      if (addFiles && typeof addFiles.click === "function") addFiles.click();
+    });
+  }
+  if (els.btnFirstDo) {
+    els.btnFirstDo.addEventListener("click", async () => {
+      await setNav("work");
+      startNewTaskComposer();
+      if (els.goal) els.goal.focus();
+    });
+  }
+  if (els.btnFirstConnect) {
+    els.btnFirstConnect.addEventListener("click", () => {
+      openSettings();
     });
   }
 

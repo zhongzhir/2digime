@@ -250,6 +250,19 @@
             <div id="chat-context" class="chat-context muted tiny" hidden></div>
             <ul id="chat-turns" class="chat-turns" aria-live="polite"></ul>
             <p id="chat-empty" class="empty-hint">写一句话开始。</p>
+            <section id="first-value" class="first-value" hidden aria-label="我能帮你做什么">
+              <h2 class="first-value-title">我能帮你做什么？</h2>
+              <p class="first-value-lead muted">你可以直接说出来，也可以从下面几件事开始。</p>
+              <div class="first-value-actions">
+                <button type="button" id="btn-first-chat" class="ghost">跟我聊聊，让我开始了解你</button>
+                <button type="button" id="btn-first-material" class="ghost">把一份资料交给我整理</button>
+                <button type="button" id="btn-first-do" class="ghost">让我帮你完成一件事</button>
+              </div>
+              <div id="first-value-connect" class="first-value-connect" hidden>
+                <p class="muted tiny">对话和做事需要连接一个 AI 能力。</p>
+                <button type="button" id="btn-first-connect" class="primary">连接 AI 能力</button>
+              </div>
+            </section>
           </div>
           <div id="growth-guide-actions" class="growth-guide-actions" hidden>
             <button type="button" id="btn-guide-switch" class="ghost">换一个问题</button>

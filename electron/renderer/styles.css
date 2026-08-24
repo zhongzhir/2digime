@@ -2194,6 +2194,32 @@ select {
 .work-layout:not(.work-compose-focus) .goal-examples {
   display: none;
 }
+.first-value {
+  margin: 0.5rem 0 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface, rgba(0, 0, 0, 0.02));
+}
+.first-value-title {
+  margin: 0 0 0.3rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.first-value-lead {
+  margin: 0 0 0.6rem;
+}
+.first-value-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+.first-value-connect {
+  margin-top: 0.6rem;
+}
+.first-value-connect p {
+  margin: 0 0 0.35rem;
+}
 .material-list .material-name.is-software-project {
   font-weight: 600;
 }
