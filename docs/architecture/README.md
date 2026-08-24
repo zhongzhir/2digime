@@ -130,6 +130,19 @@ The core abstractions are **runtime-only** (`src/capability/capability-closure.t
 
 Baseline fallbacks today (already wired): no-key basic web search (`bing-html-search`), URL read/fetch evidence retrieval, the connected general model, and the existing research orchestration (`conversation-search.ts`). The research orchestration is a **baseline fallback**, not the strategic goal of "beating Gemini Deep Research". Future **2digime Managed Capabilities** (managed search / URL extraction / browser / basic research tools) plug into the same `SearchConnector` / capability contract so ordinary users need no third-party accounts; BYOK, MCP, local tools and third-party agents remain supported.
 
+## Subject-grounded work (DIGITALME-SUBJECT-GROUNDED-WORK-01)
+
+The person's Digital Me participates in the real Do chain through a **narrow, runtime-only Subject Context Package** (`src/subject-core/subject-context-package.ts`) built from the existing derived views (subject events / confirmed facts / growth experience / supersede semantics — **no new Store, no second subject truth**). The package is selected **per task** and layered:
+
+| Tier | Meaning | Examples |
+|---|---|---|
+| `mandatory` (A) | Must follow; always injected, highest priority | explicit boundaries / authorization limits / explicit user constraints |
+| `applied` (B) | Apply to the result | relevant confirmed goals / product positioning / principles / preferences / project context |
+| `reference` (C) | Reference experience | confirmed experience from similar adopted/corrected tasks |
+| excluded (D) | Never enter execution | irrelevant prefs, candidates, superseded/inactive, external claims, knowledge gaps |
+
+Selection is relevance-first, not a keyword-rule library: deterministic keyword/domain affinity scoring is reused, and an optional **semantic-relevance** pass (2digime's own model over a small pre-filtered candidate pool) lifts recall for genuinely-relevant context (e.g. a confirmed "conclusion-first, concise" writing preference applying to an unrelated-sounding intro task). Irrelevant personal info (e.g. favourite colour) never enters a project-intro task. Boundaries stay mandatory and outrank preferences/experience; external search facts never become owner facts; external agents receive only minimum necessary context (coding agents get brief decision lines, remote agents get an empty subject slice unless explicitly authorized). Experience really re-enters the next similar task via the existing growth loop (`experience_confirmed` + `decision:accept`), and `supersedes` / inactive semantics keep corrected or replaced context out. User-facing results naturally reflect the person/project; internal `provenance` (why each entry was or wasn't injected) stays hidden from ordinary users.
+
 ## Honest status
 
 This is an **experimental preview**, not an MVP and not production-ready. The architecture is the durable asset: an AI-native control layer that keeps the human in charge of what "you" are and what the system is allowed to do.

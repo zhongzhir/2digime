@@ -18,6 +18,13 @@ const STYLE_DOMAIN_TAGS = new Set([
 
 const DOC_LIKE = /document|article|周报|汇报|介绍|文案|文章|纪要|摘要/;
 
+/**
+ * SUBJECT-GROUNDED-WORK-01：项目名之后/之前的通用文档或工作名词不是项目名。
+ * 「项目汇报 / 项目周报 / 项目介绍 / 项目计划 …」应识别为体裁，而不是 project:<name>。
+ */
+const GENERIC_AFTER_PROJECT =
+  /^(汇报|周报|月报|日报|季报|介绍|说明|文档|方案|计划|规划|进度|复盘|总结|纪要|概述|分析|大纲|白皮书|发布|上线|立项|资料|材料|文件|工作|任务|事项|清单|情况|报告|详情|概述|摘要)/;
+
 /** 从文本提炼短项目范围标签（project:slug），无则 null。 */
 export function extractProjectScopeTag(text: string): string | null {
   const t = text.trim();
@@ -28,7 +35,9 @@ export function extractProjectScopeTag(text: string): string | null {
     t.match(/(?:项目|代号)\s*[「『"]?\s*([A-Za-z][\w-]{1,32}|[\u4e00-\u9fff]{2,12})\s*[」』"]?/) ||
     t.match(/\b([A-Z][a-zA-Z0-9_-]{2,24})\b/);
   if (named?.[1] && !/^(API|HTTP|JSON|MVP|PDF)$/i.test(named[1])) {
-    return `project:${slugifyProject(named[1])}`;
+    const captured = String(named[1]);
+    if (GENERIC_AFTER_PROJECT.test(captured)) return null;
+    return `project:${slugifyProject(captured)}`;
   }
   return null;
 }

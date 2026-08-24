@@ -148,8 +148,10 @@ test('SUBJECT-MVP: one sentence start → task without archive gate → growth r
     text: `${text1}\n\n发布节奏要明确，删掉空话套话。\n`,
   });
   const overviewMid = await runtime.getOverview();
+  // 修正：取「内容增补/纠正」类真实反馈候选（含 节奏/空话/删除），
+  // 不能因 `type === 'feedback_recorded'` 误取同场 task_requirement 产生的 capture:noop 占位候选。
   const feedbackCand = overviewMid.candidateExperiences.find(
-    (c) => c.type === 'feedback_recorded' || /节奏|空话|删除/.test(c.title + c.detail),
+    (c) => c.type === 'feedback_recorded' && /节奏|空话|删除/.test(c.title + c.detail),
   );
   assert.ok(feedbackCand, 'expected feedback from artifact edit');
 

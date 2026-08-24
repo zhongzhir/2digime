@@ -206,6 +206,8 @@ export function deriveAllViews(
     if (!(CANDIDATE_QUEUE_TYPES as readonly string[]).includes(event.type)) continue;
     if (confirmedIds.has(event.id)) continue;
     if (inactive.has(event.id)) continue;
+    // SUBJECT-GROUNDED-WORK-01：capture:noop 是幂等回执，不是可确认的学习候选，不进用户确认队列。
+    if ((event.payload.tags ?? []).includes('capture:noop')) continue;
     const entry: CandidateExperienceView['entries'][number] = {
       eventId: event.id,
       type: event.type,

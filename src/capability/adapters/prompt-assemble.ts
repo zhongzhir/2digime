@@ -1,6 +1,7 @@
 import { formatCapabilityTaskAndPlan, type CapabilityInput } from '../adapter';
 import type { ContextSnapshot } from '../../work-runtime/context-snapshot';
 import { extractTopicTerms } from './task-goal-terms';
+import { tierForEntryKind, type SubjectContextTier } from '../../subject-core/subject-context-package';
 
 export { extractTopicTerms } from './task-goal-terms';
 /**
@@ -272,20 +273,46 @@ function truncateText(text: string, max: number): string {
   return `${t.slice(0, max)}…`;
 }
 
+/**
+ * 主体上下文按层级渲染（SUBJECT-GROUNDED-WORK-01）：
+ * - 必须遵守（边界/明确约束）最高优先级；
+ * - 已确认的目标与偏好（应用于成果）次之；
+ * - 可参考经验（reference）最后。
+ * 保持父标题「# 已确认经验」，子级用「##」区分，避免无关主体信息混入同一块。
+ */
+const TIER_HEADERS: Record<SubjectContextTier, string> = {
+  mandatory: '必须遵守（边界与明确约束）',
+  applied: '已确认的目标与偏好（应用于成果）',
+  reference: '可参考经验',
+};
+
 function formatExperiences(
   entries: CapabilityInput['subjectContext']['entries'],
 ): { text: string } {
   if (entries.length === 0) return { text: '' };
-  let budget = PROMPT_EXPERIENCE_BUDGET_CHARS;
-  const lines: string[] = [];
+  const grouped: Record<SubjectContextTier, CapabilityInput['subjectContext']['entries']> = {
+    mandatory: [],
+    applied: [],
+    reference: [],
+  };
   for (const entry of entries) {
-    const line = `- [${entry.eventId}] ${entry.title}: ${entry.detail}`;
-    if (line.length > budget) {
-      lines.push(`${line.slice(0, Math.max(0, budget - 1))}…`);
-      break;
+    grouped[tierForEntryKind(entry.kind)].push(entry);
+  }
+  let budget = PROMPT_EXPERIENCE_BUDGET_CHARS;
+  const lines: string[] = ['# 已确认经验'];
+  for (const tier of ['mandatory', 'applied', 'reference'] as const) {
+    const items = grouped[tier];
+    if (items.length === 0) continue;
+    lines.push(`## ${TIER_HEADERS[tier]}`);
+    for (const entry of items) {
+      const line = `- [${entry.eventId}] ${entry.title}: ${entry.detail}`;
+      if (line.length > budget) {
+        lines.push(`${line.slice(0, Math.max(0, budget - 1))}…`);
+        break;
+      }
+      lines.push(line);
+      budget -= line.length + 1;
     }
-    lines.push(line);
-    budget -= line.length + 1;
   }
   return { text: lines.join('\n') };
 }

@@ -132,7 +132,12 @@ test('完整成长闭环:Task A 编辑确认后 Task B 复用;未确认与不相
 
   const overview = await runtime.getOverview();
   assert.ok(overview.candidateExperiences.length >= 1);
-  const candidateId = overview.candidateExperiences[0]?.eventId as string;
+  // 修正：取「内容增补/纠正」类真实编辑反馈（带 evidence.toVersionId），
+  // 不能取 [0]——任务要求捕获会先生成 capture:noop 占位候选。
+  const candidateId = overview.candidateExperiences.find(
+    (c) => c.type === 'feedback_recorded' && /内容增补|节奏|空话|避免/.test(`${c.title}${c.detail}`),
+  )?.eventId as string;
+  assert.ok(candidateId);
   const cand = (await runtime.subject.listGrowthEvents()).find((e) => e.id === candidateId);
   assert.equal(cand?.confidence, 'candidate');
   assert.ok(cand?.payload.evidence?.toVersionId);

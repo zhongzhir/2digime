@@ -48,6 +48,12 @@ export interface SubjectInjectionSelectInput {
   forceIncludeEventIds?: readonly string[];
   /** 项目/材料短提示，用于 project: 范围门禁（非全文） */
   scopeHints?: readonly string[];
+  /**
+   * SUBJECT-GROUNDED-WORK-01：语义相关分（可选）。由 2digime 自身模型对
+   * 「已过滤的小候选池」打分（不暴露全部主体资料给外部 Agent）。
+   * 仅用于提升确定性关键词/域匹配的召回；不降低既有排除门。
+   */
+  semanticScores?: Readonly<Record<string, number>>;
 }
 
 export interface SubjectInjectionSelection {
@@ -59,6 +65,8 @@ const DEFAULT_MAX_ENTRIES = 5;
 const AI_FIRST_MAX_ENTRIES = 3;
 const DEFAULT_MAX_DETAIL_CHARS = 200;
 const MAX_CORE_PER_KIND = 3;
+/** SUBJECT-GROUNDED-WORK-01：standard 档位仍注入「与目标相关」的核/方向/原则，但数量更窄。 */
+const RELEVANT_CORE_PER_KIND = 2;
 const WEAK_STRUCTURE_DETAIL =
   '仅沿用通用结构或表达偏好，不注入该成果中的具体事实。';
 
@@ -207,27 +215,42 @@ export function selectSubjectInjection(
     reasons.push({ eventId: item.eventId, reason });
   };
 
-  // AI-first standard：不默认注入身份/方向/原则（避免「可能有用」膨胀上下文）
-  if (includeCore) {
-    for (const item of derived.identity.entries.slice(0, MAX_CORE_PER_KIND)) {
-      const full = derived.activeItems.find((a) => a.eventId === item.eventId);
-      const payload: {
-        eventId: string;
-        title: string;
-        detail: string;
-        tags: string[];
-        occurredAt?: string;
-      } = {
-        eventId: item.eventId,
-        title: item.title,
-        detail: item.detail,
-        tags: item.tags,
-      };
-      if (full?.occurredAt) payload.occurredAt = full.occurredAt;
-      push(payload, 'identity', 'identity_core');
+  // SUBJECT-GROUNDED-WORK-01：
+  // standard（includeCore=false）不再整类排除身份/方向/原则，而是注入「与当前目标相关」者（数量更窄）；
+  // legacy/careful/high_risk（includeCore=true）保持原样（按序注入全部核心，最多 MAX_CORE_PER_KIND）。
+  const coreCap = includeCore ? MAX_CORE_PER_KIND : RELEVANT_CORE_PER_KIND;
+  let identityAdded = 0;
+  for (const item of derived.identity.entries) {
+    if (identityAdded >= coreCap) {
+      excludedEventIds.push(item.eventId);
+      continue;
     }
-  } else {
-    for (const item of derived.identity.entries) excludedEventIds.push(item.eventId);
+    // standard：只注入与目标相关的身份（避免「可能有用」膨胀上下文）；careful/high_risk 保持原样全量。
+    if (!includeCore) {
+      const keyword = scoreText(tokens, `${item.title} ${item.detail} ${item.tags.join(' ')}`);
+      const semantic = input.semanticScores?.[item.eventId] ?? 0;
+      const score = Math.max(keyword, semantic);
+      if (score <= 0) {
+        excludedEventIds.push(item.eventId);
+        continue;
+      }
+    }
+    const full = derived.activeItems.find((a) => a.eventId === item.eventId);
+    const payload: {
+      eventId: string;
+      title: string;
+      detail: string;
+      tags: string[];
+      occurredAt?: string;
+    } = {
+      eventId: item.eventId,
+      title: item.title,
+      detail: item.detail,
+      tags: item.tags,
+    };
+    if (full?.occurredAt) payload.occurredAt = full.occurredAt;
+    push(payload, 'identity', 'identity_core');
+    identityAdded += 1;
   }
 
   const pickMatching = (
@@ -235,14 +258,15 @@ export function selectSubjectInjection(
     kind: SubjectEntryKind,
     reason: SelectionReason,
   ): number => {
-    if (!includeCore) {
-      for (const item of items) excludedEventIds.push(item.eventId);
-      return 0;
-    }
     let added = 0;
     for (const item of items) {
-      if (added >= MAX_CORE_PER_KIND) break;
-      const score = scoreText(tokens, `${item.title} ${item.detail} ${item.tags.join(' ')}`);
+      if (added >= coreCap) {
+        excludedEventIds.push(item.eventId);
+        continue;
+      }
+      const keyword = scoreText(tokens, `${item.title} ${item.detail} ${item.tags.join(' ')}`);
+      const semantic = input.semanticScores?.[item.eventId] ?? 0;
+      const score = Math.max(keyword, semantic);
       if (score <= 0) {
         excludedEventIds.push(item.eventId);
         continue;
@@ -324,8 +348,10 @@ export function selectSubjectInjection(
         tokenize,
         scoreText,
       });
-      const minScore = policy === 'ai_first' ? matched.minScore : 1;
-      return { item, score: matched.score, minScore };
+      const semantic = input.semanticScores?.[item.eventId] ?? 0;
+      const score = Math.max(matched.score, semantic);
+      const minScore = policy === 'ai_first' ? Math.min(matched.minScore, semantic > 0 ? 1 : matched.minScore) : 1;
+      return { item, score, minScore };
     })
     .filter((row) => row.score >= row.minScore)
     .sort((a, b) => b.score - a.score);
