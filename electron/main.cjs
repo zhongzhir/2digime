@@ -44,6 +44,7 @@ const COMMAND_NAMES = new Set([
   "subject.importMaterial",
   "subject.removeMaterial",
   "work.submitTask",
+  "work.delegateTask",
   "work.retryTask",
   "work.reviseArtifact",
   "work.cancelJob",

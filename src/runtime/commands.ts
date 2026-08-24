@@ -395,6 +395,20 @@ export interface CommandMap {
     };
   };
   /**
+   * DIGITALME-COLLAB-DELEGATED-01：AI-native 委托执行。
+   * 输入与 work.submitTask 相同；2digime 依据 capability closure 判断
+   * 「本地不足 / 外部更合适」，自动把任务委托给专业外部能力（remote research /
+   * 专业 Coding Agent），外部失败时自动回退本地 baseline，再交回本地独立验收。
+   * 用户不直接管理协作者；委托出去的是执行，不是主体控制权。
+   */
+  'work.delegateTask': {
+    input: CommandMap['work.submitTask']['input'];
+    output: CommandMap['work.submitTask']['output'] & {
+      /** 委托执行审计（内部；不含协议/HTTP/Agent 细节）。 */
+      delegation?: import('../collaboration/delegated-execution').DelegationAudit;
+    };
+  };
+  /**
    * 对已有成果提出修改要求:同 Task 新 Job,成功后向同一 Artifact 追加 capability 版本。
    * 失败不破坏当前 head。
    */
@@ -996,6 +1010,7 @@ export const COMMAND_NAMES = [
   'subject.importMaterial',
   'subject.removeMaterial',
   'work.submitTask',
+  'work.delegateTask',
   'work.retryTask',
   'work.reviseArtifact',
   'work.cancelJob',
@@ -1013,9 +1028,10 @@ export const COMMAND_NAMES = [
 
 /**
  * 命令面硬上限(architecture §4;超出即架构违规)。含 subject.communicate。
- * 2026-08-11 D11-A:新增 work.converse(AI 意图与对话中枢,Owner 授权的新领域用例),上限 21→22。
+ * 2026-08-11 D11-A:新增 work.converse,上限 21→22。
+ * DIGITALME-COLLAB-DELEGATED-01:新增 work.delegateTask(AI-native 委托执行),上限 22→23。
  */
-export const COMMAND_COUNT_LIMIT = 22;
+export const COMMAND_COUNT_LIMIT = 23;
 
 export interface CommandBus {
   invoke<K extends CommandName>(

@@ -93,6 +93,14 @@ import { LocalCollaborationHost } from '../collaboration/local-collaboration';
 import { GrantStore } from '../collaboration/grant-store';
 import { CollaborationRecordStore } from '../collaboration/record-store';
 import {
+  decideDelegation,
+  delegationCandidates,
+  type DelegationAudit,
+} from '../collaboration/delegated-execution';
+import { deriveWorkIntent } from '../work-runtime/work-intent';
+import { taskNeedFromWorkIntent } from '../capability/capability-closure';
+import { waitForJobTerminal } from '../work-runtime/job-runner';
+import {
   deriveGrowthProfile,
   dimensionByKey,
   guideChoiceCaptureKey,
@@ -601,6 +609,134 @@ export class DigitalMeRuntime {
 
   retryTask(input: CommandMap['work.retryTask']['input']) {
     return this.requireWork().retryTask(input);
+  }
+
+  /**
+   * DIGITALME-COLLAB-DELEGATED-01 — AI-native 委托执行。
+   *
+   * 闭环：Owner goal → 2digime 理解目标 → 判断本地不足/外部更合适 →
+   * 委托专业外部能力（remote research / 专业 Coding Agent，经 capability contract 选择，无品牌判断）
+   * → 最小必要上下文与授权 → 外部执行 → 返回结果 + provenance →
+   * 本方 2digime 独立验收（CTO review，事件驱动）→ 接受/修正/fallback →
+   * 结果归还 Owner → 经验按正确主体归属沉淀（外部结果不自动成为 owner fact）。
+   *
+   * 外部失败（capability/model stage）时自动回退本地 baseline，不把协议/HTTP/Agent
+   * 内部错误暴露给用户。0 新增 Store / 第二协作真值 / 工作流状态机。
+   */
+  async delegateTask(
+    input: CommandMap['work.delegateTask']['input'],
+  ): Promise<CommandMap['work.delegateTask']['output']> {
+    const work = this.requireWork();
+    const derived = await deriveWorkIntent({
+      goal: input.goal,
+      contextRefs: input.contextRefs,
+      ...(input.capabilityId ? { explicitCapabilityId: input.capabilityId } : {}),
+    });
+    const need = taskNeedFromWorkIntent(derived);
+    const decision = decideDelegation({
+      need,
+      goal: input.goal,
+      registrations: this.registry.list(),
+    });
+    const candidates = delegationCandidates(decision);
+
+    let taskId = '';
+    let finalJobId = '';
+    let lastSubmitted: CommandMap['work.submitTask']['output'] | null = null;
+    let fallbackUsed = false;
+    let lastCapabilityId: string | undefined;
+
+    const audit = (patch?: Partial<DelegationAudit>): DelegationAudit => ({
+      mode: decision.mode,
+      level: decision.level,
+      ...(decision.primaryCapabilityId ? { primaryCapabilityId: decision.primaryCapabilityId } : {}),
+      fallbackUsed,
+      ...(lastCapabilityId ? { finalCapabilityId: lastCapabilityId } : {}),
+      ...patch,
+    });
+
+    for (let i = 0; i < candidates.length; i += 1) {
+      const capabilityId = candidates[i]!;
+      lastCapabilityId = capabilityId;
+      const submitInput: CommandMap['work.submitTask']['input'] = {
+        goal: input.goal,
+        contextRefs: input.contextRefs,
+        ...(input.requestedArtifactType
+          ? { requestedArtifactType: input.requestedArtifactType }
+          : {}),
+        ...(input.intentKind ? { intentKind: input.intentKind } : {}),
+        ...(capabilityId ? { capabilityId } : {}),
+        ...(input.existingTaskId || taskId
+          ? { existingTaskId: input.existingTaskId || taskId }
+          : {}),
+        ...(input.confirmedPlanVersion != null
+          ? { confirmedPlanVersion: input.confirmedPlanVersion }
+          : {}),
+        ...(input.executionAuthorization
+          ? { executionAuthorization: input.executionAuthorization }
+          : {}),
+      };
+      let submitted: CommandMap['work.submitTask']['output'];
+      try {
+        submitted = await this.submitTask(submitInput);
+      } catch (err) {
+        if (i < candidates.length - 1) {
+          fallbackUsed = i > 0 || taskId !== '';
+          continue;
+        }
+        throw Object.assign(err as Error, { delegation: audit({ failed: true }) });
+      }
+      lastSubmitted = submitted;
+      taskId = taskId || submitted.taskId;
+
+      if (
+        submitted.needsExecutionConfirm ||
+        submitted.needsExecutorSetup ||
+        submitted.needsProjectFolder
+      ) {
+        // 需要用户确认（如代码写权限 / 项目目录）：把确认卡返回，交由用户决定后继续。
+        return {
+          ...submitted,
+          delegation: audit(),
+        };
+      }
+      if (!submitted.jobId) {
+        if (i < candidates.length - 1) continue;
+        return { ...submitted, delegation: audit({ failed: true }) };
+      }
+
+      const job = await waitForJobTerminal(work, submitted.jobId, 180_000);
+      finalJobId = job.id;
+      if (job.status === 'succeeded') {
+        const out: CommandMap['work.delegateTask']['output'] = {
+          taskId,
+          jobId: job.id,
+          delegation: audit(),
+        };
+        if (submitted.intentKind) out.intentKind = submitted.intentKind;
+        if (submitted.userFacingNotice) out.userFacingNotice = submitted.userFacingNotice;
+        if (submitted.capabilityClosure) out.capabilityClosure = submitted.capabilityClosure;
+        return out;
+      }
+      const stage = job.failure?.stage;
+      const retryable = stage === 'capability' || stage === 'model' || stage === undefined;
+      if (retryable && i < candidates.length - 1) {
+        fallbackUsed = true;
+        continue;
+      }
+      break;
+    }
+
+    // 全部候选失败：诚实返回（不暴露协议/HTTP/Agent 内部错误）。
+    const failedOut: CommandMap['work.delegateTask']['output'] = {
+      taskId,
+      jobId: finalJobId,
+      userFacingNotice: '当前可用的执行路径均未完成，请稍后重试，或改用其它目标。',
+      delegation: audit({ failed: true }),
+    };
+    if (lastSubmitted?.intentKind) failedOut.intentKind = lastSubmitted.intentKind;
+    if (lastSubmitted?.capabilityClosure) failedOut.capabilityClosure = lastSubmitted.capabilityClosure;
+    return failedOut;
   }
 
   reviseArtifact(input: CommandMap['work.reviseArtifact']['input']) {

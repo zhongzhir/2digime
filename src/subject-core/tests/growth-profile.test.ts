@@ -331,7 +331,7 @@ test('帮助目录为四个阶段且不评价真人', () => {
 });
 
 test('CommandBus 上限仍为 22', () => {
-  assert.equal(COMMAND_NAMES.length, 22);
+  assert.equal(COMMAND_NAMES.length, 23);
   assert.ok(COMMAND_NAMES.length <= COMMAND_COUNT_LIMIT);
 });
 

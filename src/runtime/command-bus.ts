@@ -52,6 +52,10 @@ export function createCommandBus(runtime: DigitalMeRuntime): CommandBus {
           return (await runtime.submitTask(
             input as CommandMap['work.submitTask']['input'],
           )) as CommandMap[K]['output'];
+        case 'work.delegateTask':
+          return (await runtime.delegateTask(
+            input as CommandMap['work.delegateTask']['input'],
+          )) as CommandMap[K]['output'];
         case 'work.retryTask':
           return (await runtime.retryTask(
             input as CommandMap['work.retryTask']['input'],

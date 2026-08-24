@@ -15,6 +15,7 @@ const COMMAND_NAMES = [
   "subject.importMaterial",
   "subject.removeMaterial",
   "work.submitTask",
+  "work.delegateTask",
   "work.retryTask",
   "work.reviseArtifact",
   "work.cancelJob",
