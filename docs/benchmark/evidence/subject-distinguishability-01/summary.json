@@ -1,0 +1,210 @@
+{
+  "generatedAt": "2026-08-24T08:33:36.399Z",
+  "model": {
+    "baseUrl": "https://api.deepseek.com/v1",
+    "model": "deepseek-v4-flash"
+  },
+  "taskCount": 16,
+  "perTask": {
+    "identifiable": 14,
+    "correct": 14,
+    "rate": 1
+  },
+  "overallCorrectRate": 0.875,
+  "nonNeutralDistinguishability": {
+    "tasks": 12,
+    "correct": 12,
+    "cannotTell": 0,
+    "rate": 1
+  },
+  "neutralFactIndependence": {
+    "tasks": 4,
+    "cannotTell": 2,
+    "cannotTellRate": 0.5
+  },
+  "crossTask": {
+    "rounds": 2,
+    "correct": 2,
+    "rate": 1
+  },
+  "factDistortion": {
+    "checks": 2,
+    "distorted": 0
+  },
+  "isolation": {
+    "aBefore": "推进方式建议：**先做可逆的小范围试点，验证再放大；不可逆发布前停下来确认。**\n\n- **主体依据**  \n  你允许小范围可逆试错，无需逐项确认；不可逆公开发布必须先确认。同时，你的经验是“过度开发错过窗口”，所以这次不要一开始就做完整版，应该沿用以往项目中通用的结构或表达偏好，而不是把那个项目的具体事实和成果硬塞进来。\n\n- **外部事实依据**  \n  类似项目的窗口期通常有限，快速验证核心假设比做出完整功能更现实。可逆变更成本低，可以随时调整方向；不可逆发布一旦出去，影响和撤回成本都高，所以必须单独确认。\n\n- **我的推理**  \n  所以推进方式应该是“最小启动、快速验证、逐步扩大”。拆出一个最核心的实验版本，在小范围跑通，拿到真实反馈后再决定是否增加功能或扩大范围。这样既守住了你的边界，也避免重蹈过度开发的覆辙。\n\n具体可执行：\n\n1. 列出上一个项目中可复用的框架、工作流、表达偏好，但剔除其中的具体事实和数据。  \n2. 定义这次项目的核心假设和最小验证目标。  \n3. 先用原型或草案在内部、私密环境、小群内测试。  \n4. 设定时间盒——比如两周内必须有初步结果，否则主动砍范围。  \n5. 任何公开发布前，单独走一次确认流程。",
+    "aAfter": "推进方式应该是：**先做一个 2 周内可以验证的最小实验，验证通过后再铺开。** 不要一上来做完整版本，也不要急着公开发布。\n\n**主体依据：**  \n- 你明确排除了“不可逆公开发布”，所以这一轮不能直接公开全量推送。  \n- 你允许小范围可逆实验，并且不需要逐项确认，这意味着 2 周内的小规模试错可以直接做，不用卡流程。  \n- 你本周刚确认的经验是：类似项目必须先做最小实验，验证通过后才能规模化。  \n- 你也有“过度开发错过窗口”的教训，所以果断砍掉非核心功能，别给自己加戏。\n\n**外部事实依据：**  \n- 需求不确定时，小范围试错能最快区分“方向对不对”和“执行够不够好”。  \n- 两周是一个能压低沉没成本的窗口：够拿到真实反馈，又不至于陷进去。  \n- 小范围、可逆的测试，即使在公开环境中不是最优解，在你当前条件下是最合适的收敛方式。\n\n**我的推理：**  \n所以这轮的具体推进方式可以是：\n\n1. **写下一个核心假设。**  \n   比如：“目标用户会为了这个价值完成某个关键动作。” 不要写一堆目标，只写最关键的。\n\n2. **选一个最小切片。**  \n   只做一个用户群、一个渠道、一条核心功能线。目的是验证假设，不是交付完整方案。\n\n3. **设定 2 周内的成功标准。**  \n   例如“有 N 个真实用户完成核心动作”“某个指标达到 X%”“用户反馈中有明确的主动使用意愿”。标准要提前写死，不要事后解释。\n\n4. **用最少资源跑起来。**  \n   能用手动流程就手动，能用现成工具就不新开发。凡是“以后需要但本次验证不需要”的东西，全部不做。\n\n5. **第 14 天做决定：**\n   - 验证通过 → 正式开始规模化推进；\n   - 验证不通过 → 停下来调整方向或终止，不硬撑；\n   - 验证模糊 → 再给一次 1 周的延续实验，但必须换一个更尖锐的验证角度。\n\n6. **守住边界。**  \n   2 周内的小实验可以自行决定；任何不可逆动作，比如正式公开、对外承诺、覆盖老数据，都要先停下来确认。\n\n一句话：**用最小实验代替完整方案，用可逆动作代替公开发布，用两周窗口避免过度开发。**",
+    "bBefore": "可以复用以往类似项目已验证过的流程，但不要直接照搬结论。更合适的方式是：**“小步里程碑 + 门禁评审 + 灰度验证 + 人工发布确认”**。\n\n---\n\n## 主体依据\n\n- 你的目标是“可靠产品交付”，所以推进方式不是求快，而是保证质量、信任和可回退性。\n- 高影响变更是明确不允许未经验证就推进的，因此涉及架构、数据、权限、对外接口等变更，必须设置专门验证环节。\n- 你不允许自动提交/推送/发布，意味着发布动作必须有人工确认节点，不能静默上线。\n\n## 外部事实依据\n\n- 发布风险与影响范围成正比；灰度发布、分批放量能把故障影响限制在可控范围。\n- 有回滚预案的发布，恢复速度更快，用户损失更小。\n- 人工发布确认能明确责任归属，避免“自动发布后无人负责”的问题。\n\n## 我的推理\n\n- 类似项目已经有相对成熟的路径，不需要重新探索，但要把之前的经验变成可执行的检查清单。\n- 每个里程碑都应该可验证、可演示、可回退，避免一路走到黑再返工。\n- 高影响变更必须单独走评审和验证流程，不能混在常规变更里顺手发布。\n\n---\n\n具体推进方式建议如下：\n\n1. **启动阶段：先定验收标准与风险清单**  \n   明确项目范围、成功标准、非目标；列出哪些是高影响变更，并为每一项提前设计验证方案和回滚方案。\n\n2. **实施阶段：按里程碑拆分，每个里程碑设门禁**  \n   每个里程碑结束后都要有可验证的成果；高影响变更在合并前必须完成评审、测试、staging 验证；提交和推送由人工确认，不自动执行。\n\n3. **发布阶段：灰度或分批发布，发布前确认回滚点**  \n   生产环境先小范围验证，再逐步放量；每次发布前确认回滚命令、回滚负责人、监控指标；最终发布动作由人工触发。\n\n4. **收尾阶段：沉淀检查清单**  \n   记录本次偏差、回滚情况、验证盲点，更新成项目模板，供后续类似项目使用。",
+    "bAfterSameTask": "要推进这个项目，我会遵循你明确的边界与目标，给出以下直接建议。\n\n**主体依据：**\n- 你的核心目标是“可靠产品交付”，要求重要里程碑必须“可验证、可回退”。\n- 你明确排除了“自动/静默发布”，要求发布必须人工确认。\n- 高影响变更必须充分验证，不容许未经评审就进入生产。\n\n**外部事实依据：**\n- 工程实践中，分阶段发布（小步快跑）比一次性大发布能显著降低整体风险。\n- 可回退的关键是提前准备“快速回滚预案”，而不是事后补救。\n\n**我的推理与执行建议：**\n\n1. **将项目拆解为多个可独立验证的里程碑**，而不是一个整体大发布。每个里程碑都有明确的验收条件，作为后续推进的“安全台阶”。\n2. **每个里程碑必须单独走通“验证 → 评审 → 人工发布 → 观察”的闭环**，只有确认稳定后才能推进下一个。\n3. **对高影响变更采取分批次放量策略**：优先在内部或小范围环境验证通过，再逐步扩大用户面，避免大面积暴露风险。\n4. **必须保留一个可操作的回退方案**（例如功能开关或版本回滚），确保在上线异常时可以立即回到上一个稳定状态，而不是在事故现场修补。\n5. **发布操作全部由人工触发**，自动化只能负责构建和验证，绝不自动推送或发布。每次发布前需要你或负责人明确确认。",
+    "aChanged": true,
+    "aContainsLearning": true,
+    "bContainsLearning": false
+  },
+  "supersede": {
+    "oldExcluded": true,
+    "oldSelected": false,
+    "newSelected": true,
+    "bUnaffected": true
+  },
+  "boundary": {
+    "t10": {
+      "aMandatory": [
+        "a_bnd1",
+        "a_bnd2"
+      ],
+      "bMandatory": [
+        "b_bnd1",
+        "b_bnd2"
+      ]
+    },
+    "t11": {
+      "aMandatory": [
+        "a_bnd1",
+        "a_bnd2"
+      ],
+      "bMandatory": [
+        "b_bnd1",
+        "b_bnd2"
+      ]
+    },
+    "t12": {
+      "aMandatory": [
+        "a_bnd1",
+        "a_bnd2"
+      ],
+      "bMandatory": [
+        "b_bnd1",
+        "b_bnd2"
+      ]
+    }
+  },
+  "minContext": {
+    "runs": [
+      {
+        "taskId": "t01",
+        "aSelectedCount": 0,
+        "bSelectedCount": 0,
+        "aExcludedCount": 7,
+        "bExcludedCount": 7
+      },
+      {
+        "taskId": "t02",
+        "aSelectedCount": 4,
+        "bSelectedCount": 6,
+        "aExcludedCount": 3,
+        "bExcludedCount": 1
+      },
+      {
+        "taskId": "t03",
+        "aSelectedCount": 3,
+        "bSelectedCount": 3,
+        "aExcludedCount": 4,
+        "bExcludedCount": 4
+      },
+      {
+        "taskId": "t04",
+        "aSelectedCount": 0,
+        "bSelectedCount": 0,
+        "aExcludedCount": 7,
+        "bExcludedCount": 7
+      },
+      {
+        "taskId": "t05",
+        "aSelectedCount": 5,
+        "bSelectedCount": 5,
+        "aExcludedCount": 2,
+        "bExcludedCount": 2
+      },
+      {
+        "taskId": "t06",
+        "aSelectedCount": 6,
+        "bSelectedCount": 4,
+        "aExcludedCount": 1,
+        "bExcludedCount": 3
+      },
+      {
+        "taskId": "t07",
+        "aSelectedCount": 5,
+        "bSelectedCount": 5,
+        "aExcludedCount": 2,
+        "bExcludedCount": 2
+      },
+      {
+        "taskId": "t08",
+        "aSelectedCount": 0,
+        "bSelectedCount": 1,
+        "aExcludedCount": 7,
+        "bExcludedCount": 6
+      },
+      {
+        "taskId": "t09",
+        "aSelectedCount": 5,
+        "bSelectedCount": 6,
+        "aExcludedCount": 2,
+        "bExcludedCount": 1
+      },
+      {
+        "taskId": "t10",
+        "aSelectedCount": 1,
+        "bSelectedCount": 4,
+        "aExcludedCount": 6,
+        "bExcludedCount": 3
+      },
+      {
+        "taskId": "t11",
+        "aSelectedCount": 3,
+        "bSelectedCount": 3,
+        "aExcludedCount": 4,
+        "bExcludedCount": 4
+      },
+      {
+        "taskId": "t12",
+        "aSelectedCount": 5,
+        "bSelectedCount": 5,
+        "aExcludedCount": 2,
+        "bExcludedCount": 2
+      },
+      {
+        "taskId": "t13",
+        "aSelectedCount": 3,
+        "bSelectedCount": 2,
+        "aExcludedCount": 4,
+        "bExcludedCount": 5
+      },
+      {
+        "taskId": "t14",
+        "aSelectedCount": 1,
+        "bSelectedCount": 2,
+        "aExcludedCount": 6,
+        "bExcludedCount": 5
+      },
+      {
+        "taskId": "t15",
+        "aSelectedCount": 6,
+        "bSelectedCount": 5,
+        "aExcludedCount": 1,
+        "bExcludedCount": 2
+      },
+      {
+        "taskId": "t16",
+        "aSelectedCount": 1,
+        "bSelectedCount": 1,
+        "aExcludedCount": 6,
+        "bExcludedCount": 6
+      }
+    ],
+    "maxSelected": 6,
+    "irrelevantLeaked": false
+  },
+  "capabilitySwap": {
+    "modelsAvailable": [
+      "deepseek-v4-flash"
+    ],
+    "crossModelSwap": "not_yet_fully_validated",
+    "note": "当前环境仅一个可靠 generic model；A/B 两臂使用同一底层模型，差异完全由 subject state 驱动（same model, same code, different subject）。跨模型主体不变性留待多模型环境验证。",
+    "sameModelSubjectDriven": true
+  },
+  "styleShortcut": {
+    "rowsWithStyleOnly": 1
+  }
+}

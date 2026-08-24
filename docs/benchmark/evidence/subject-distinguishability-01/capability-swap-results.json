@@ -1,0 +1,8 @@
+{
+  "modelsAvailable": [
+    "deepseek-v4-flash"
+  ],
+  "crossModelSwap": "not_yet_fully_validated",
+  "note": "当前环境仅一个可靠 generic model；A/B 两臂使用同一底层模型，差异完全由 subject state 驱动（same model, same code, different subject）。跨模型主体不变性留待多模型环境验证。",
+  "sameModelSubjectDriven": true
+}

@@ -1,0 +1,107 @@
+{
+  "id": "Subject-B",
+  "events": [
+    {
+      "id": "b_ident",
+      "type": "identity_clarified",
+      "title": "可靠交付型产品人",
+      "detail": "以稳定可靠的产品交付为核心；在关键路径上宁可慢，不可错",
+      "tags": [
+        "identity"
+      ],
+      "confidence": "confirmed"
+    },
+    {
+      "id": "b_goal",
+      "type": "goal_updated",
+      "title": "当前目标：可靠产品交付",
+      "detail": "保证交付质量与用户信任；重要里程碑以可验证、可回退的方式推进",
+      "tags": [
+        "goal",
+        "可靠交付"
+      ],
+      "confidence": "confirmed"
+    },
+    {
+      "id": "b_prio",
+      "type": "principle_stated",
+      "title": "可靠性优先于速度",
+      "detail": "当可靠性、质量与速度存在取舍时，优先保证关键路径的可靠与可验证",
+      "tags": [
+        "principle",
+        "可靠性"
+      ],
+      "confidence": "confirmed"
+    },
+    {
+      "id": "b_risk",
+      "type": "preference_observed",
+      "title": "偏好：关键路径谨慎",
+      "detail": "对高影响、难以回退的变更采取谨慎与充分验证",
+      "tags": [
+        "preference",
+        "风险",
+        "谨慎"
+      ],
+      "confidence": "confirmed"
+    },
+    {
+      "id": "b_exp1",
+      "type": "experience_confirmed",
+      "title": "经验：缺陷损害信任",
+      "detail": "过去曾因未充分验证的缺陷损害用户信任；后续关键变更必须完整验证后再发布",
+      "tags": [
+        "document",
+        "可靠交付",
+        "项目",
+        "decision:accept",
+        "artifact:art_b1"
+      ],
+      "confidence": "confirmed"
+    },
+    {
+      "id": "b_exp2",
+      "type": "experience_confirmed",
+      "title": "经验：验证门禁有效",
+      "detail": "在发布前设置验证门禁，显著降低了回归与线上事故",
+      "tags": [
+        "document",
+        "可靠交付",
+        "决策:accept"
+      ],
+      "confidence": "confirmed"
+    },
+    {
+      "id": "b_bnd1",
+      "type": "boundary_updated",
+      "title": "高影响变更必须充分验证",
+      "detail": "exclude:高影响变更",
+      "tags": [
+        "边界",
+        "exclude:高影响变更"
+      ],
+      "confidence": "confirmed"
+    },
+    {
+      "id": "b_bnd2",
+      "type": "boundary_updated",
+      "title": "不允许未经评审的静默发布",
+      "detail": "不允许自动提交/推送/发布；发布需人工确认",
+      "tags": [
+        "边界"
+      ],
+      "confidence": "confirmed"
+    },
+    {
+      "id": "b_irrel",
+      "type": "preference_observed",
+      "title": "偏好：喜欢咖啡",
+      "detail": "个人偏好咖啡，与工作决策无关",
+      "tags": [
+        "preference",
+        "咖啡"
+      ],
+      "confidence": "confirmed"
+    }
+  ]
+}

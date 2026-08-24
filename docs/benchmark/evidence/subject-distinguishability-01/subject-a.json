@@ -1,0 +1,107 @@
+{
+  "id": "Subject-A",
+  "events": [
+    {
+      "id": "a_ident",
+      "type": "identity_clarified",
+      "title": "市场验证型产品人",
+      "detail": "在资源有限时优先用最小可行实验验证市场需求，再决定投入方向",
+      "tags": [
+        "identity"
+      ],
+      "confidence": "confirmed"
+    },
+    {
+      "id": "a_goal",
+      "type": "goal_updated",
+      "title": "当前目标：快速验证市场",
+      "detail": "以最短可验证路径确认目标市场与核心价值假设；优先把关键不确定性降下来",
+      "tags": [
+        "goal",
+        "市场验证"
+      ],
+      "confidence": "confirmed"
+    },
+    {
+      "id": "a_prio",
+      "type": "principle_stated",
+      "title": "速度优先于完整性",
+      "detail": "当速度与完整存在取舍时，优先推出可验证的最小版本；完整性要求可后置",
+      "tags": [
+        "principle",
+        "速度"
+      ],
+      "confidence": "confirmed"
+    },
+    {
+      "id": "a_risk",
+      "type": "preference_observed",
+      "title": "偏好：可逆小步试错",
+      "detail": "决策偏好可逆的小步试错，避免把资源一次性押在大而全的方案上",
+      "tags": [
+        "preference",
+        "风险",
+        "试错"
+      ],
+      "confidence": "confirmed"
+    },
+    {
+      "id": "a_exp1",
+      "type": "experience_confirmed",
+      "title": "经验：过度开发错过窗口",
+      "detail": "过去曾因过度打磨而错过市场窗口；后续同类项目应尽早交付可验证版本",
+      "tags": [
+        "document",
+        "市场验证",
+        "项目",
+        "decision:accept",
+        "artifact:art_a1"
+      ],
+      "confidence": "confirmed"
+    },
+    {
+      "id": "a_exp2",
+      "type": "experience_confirmed",
+      "title": "经验：小实验快速迭代有效",
+      "detail": "用两周内可验证的最小实验确认需求，比长期规划更有效",
+      "tags": [
+        "document",
+        "市场验证",
+        "决策:accept"
+      ],
+      "confidence": "confirmed"
+    },
+    {
+      "id": "a_bnd1",
+      "type": "boundary_updated",
+      "title": "不可逆公开发布需确认",
+      "detail": "exclude:不可逆公开发布",
+      "tags": [
+        "边界",
+        "exclude:不可逆公开发布"
+      ],
+      "confidence": "confirmed"
+    },
+    {
+      "id": "a_bnd2",
+      "type": "boundary_updated",
+      "title": "允许可逆试错",
+      "detail": "允许小范围可逆的实验性变更，无需逐项确认",
+      "tags": [
+        "边界"
+      ],
+      "confidence": "confirmed"
+    },
+    {
+      "id": "a_irrel",
+      "type": "preference_observed",
+      "title": "偏好：喜欢蓝色",
+      "detail": "个人偏好蓝色，与工作决策无关",
+      "tags": [
+        "preference",
+        "颜色"
+      ],
+      "confidence": "confirmed"
+    }
+  ]
+}
