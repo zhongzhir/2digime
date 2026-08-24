@@ -248,6 +248,12 @@
     subjectRecentEmpty: document.getElementById("subject-recent-empty"),
     subjectMaterialList: document.getElementById("subject-material-list"),
     subjectMaterialEmpty: document.getElementById("subject-material-empty"),
+    btnGrowthUnderstanding: document.getElementById("btn-growth-understanding"),
+    growthUnderstanding: document.getElementById("growth-understanding"),
+    growthUnderstandingList: document.getElementById("growth-understanding-list"),
+    growthUnderstandingEmpty: document.getElementById("growth-understanding-empty"),
+    growthUnderstandingStatus: document.getElementById("growth-understanding-status"),
+    btnGrowthBackUnderstanding: document.getElementById("btn-growth-back-understanding"),
     newTask: document.getElementById("btn-new-task"),
     workLayout: document.querySelector("#panel-work .work-layout"),
     workComposeTitle: document.getElementById("work-compose-title"),
@@ -4700,10 +4706,11 @@
   }
 
   function showGrowthSubjectView(view, options) {
-    const next = view === "situation" || view === "other" ? view : "home";
+    const next = view === "situation" || view === "other" || view === "understanding" ? view : "home";
     const home = document.getElementById("growth-home");
     const situation = document.getElementById("growth-situation");
     const other = document.getElementById("growth-other-ways");
+    const understanding = document.getElementById("growth-understanding");
     const panel = els.panelSubject;
     if (growthSubjectView === "home" && next !== "home" && panel) {
       growthHomeScroll = panel.scrollTop || 0;
@@ -4723,6 +4730,11 @@
       other.hidden = next !== "other";
       if (next === "other") other.removeAttribute("hidden");
       else other.setAttribute("hidden", "");
+    }
+    if (understanding) {
+      understanding.hidden = next !== "understanding";
+      if (next === "understanding") understanding.removeAttribute("hidden");
+      else understanding.setAttribute("hidden", "");
     }
     if (!panel) return;
     if (next === "home") {
@@ -4857,6 +4869,108 @@
     await continueUnderstandingMe();
   }
 
+  function renderUnderstandingList(items) {
+    const list = els.growthUnderstandingList;
+    if (!list) return;
+    list.innerHTML = "";
+    const itemsArr = items || [];
+    if (els.growthUnderstandingEmpty) {
+      els.growthUnderstandingEmpty.hidden = itemsArr.length > 0;
+    }
+    for (const item of itemsArr) {
+      const li = document.createElement("li");
+      const textNode = document.createElement("div");
+      textNode.className = "subject-item-text";
+      textNode.textContent = String(item.text || "");
+      const actions = document.createElement("div");
+      actions.className = "subject-actions";
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "ghost";
+      editBtn.textContent = "修改";
+      editBtn.addEventListener("click", () => {
+        openInlineEdit(li, textNode, actions, item);
+      });
+      const stopBtn = document.createElement("button");
+      stopBtn.type = "button";
+      stopBtn.className = "ghost";
+      stopBtn.textContent = "停止使用";
+      stopBtn.addEventListener("click", async () => {
+        try {
+          await api.invoke("subject.respondToLearning", {
+            eventId: item.eventId,
+            action: "retire",
+          });
+          setUnderstandingStatus("已停止使用这条。");
+          await refreshSubjectPanel();
+        } catch (err) {
+          setUnderstandingStatus((err && err.message) || "操作失败，请重试。");
+        }
+      });
+      actions.appendChild(editBtn);
+      actions.appendChild(stopBtn);
+      li.appendChild(textNode);
+      li.appendChild(actions);
+      list.appendChild(li);
+    }
+  }
+
+  function openInlineEdit(li, textNode, actions, item) {
+    textNode.style.display = "none";
+    actions.style.display = "none";
+    const box = document.createElement("div");
+    box.className = "subject-edit-box";
+    const input = document.createElement("textarea");
+    input.className = "subject-edit-input";
+    input.value = String(item.text || "");
+    input.rows = 2;
+    const btnRow = document.createElement("div");
+    btnRow.className = "subject-actions";
+    const save = document.createElement("button");
+    save.type = "button";
+    save.className = "primary";
+    save.textContent = "保存";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "ghost";
+    cancel.textContent = "取消";
+    btnRow.appendChild(save);
+    btnRow.appendChild(cancel);
+    box.appendChild(input);
+    box.appendChild(btnRow);
+    li.appendChild(box);
+    input.focus();
+    save.addEventListener("click", async () => {
+      const next = String(input.value || "").trim();
+      if (!next) {
+        setUnderstandingStatus("请写出更准确的说法。");
+        return;
+      }
+      try {
+        await api.invoke("subject.respondToLearning", {
+          eventId: item.eventId,
+          action: "revise",
+          revisionText: next,
+        });
+        setUnderstandingStatus("已更新。");
+        await refreshSubjectPanel();
+      } catch (err) {
+        setUnderstandingStatus((err && err.message) || "更新失败，请重试。");
+      }
+    });
+    cancel.addEventListener("click", () => {
+      box.remove();
+      textNode.style.display = "";
+      actions.style.display = "";
+    });
+  }
+
+  function setUnderstandingStatus(text) {
+    if (els.growthUnderstandingStatus) {
+      els.growthUnderstandingStatus.textContent = String(text || "");
+    }
+  }
+
   async function refreshSubjectPanel() {
     const overview = await api.invoke("subject.getOverview", {});
     lastGrowthSnapshot = overview.growth || null;
@@ -4896,6 +5010,10 @@
       overview.displayName ||
       "";
     els.subjectBrief.textContent = brief;
+
+    // 「它目前了解的我」：只展示当前有效、用户可理解的少量高价值条目（userVisibleFacts 已裁剪）。
+    const understandItems = overview.userVisibleFacts || [];
+    renderUnderstandingList(understandItems);
 
     // 01B：「已经了解」必须与对话模型上下文共用 userVisibleFacts（具体事实及其具体值）。
     const items = overview.userVisibleFacts || overview.activeUnderstandings || [];
@@ -6269,6 +6387,18 @@
   const growthBackOther = document.getElementById("btn-growth-back-other");
   if (growthBackOther) {
     growthBackOther.addEventListener("click", () => {
+      showGrowthSubjectView("home");
+    });
+  }
+  const growthUnderstandingBtn = document.getElementById("btn-growth-understanding");
+  if (growthUnderstandingBtn) {
+    growthUnderstandingBtn.addEventListener("click", () => {
+      showGrowthSubjectView("understanding");
+    });
+  }
+  const growthBackUnderstanding = document.getElementById("btn-growth-back-understanding");
+  if (growthBackUnderstanding) {
+    growthBackUnderstanding.addEventListener("click", () => {
       showGrowthSubjectView("home");
     });
   }

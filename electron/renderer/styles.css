@@ -2035,6 +2035,23 @@ select {
   color: var(--accent);
 }
 
+.subject-edit-box {
+  margin: 6px 0;
+}
+
+.subject-edit-input {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 13px;
+  line-height: 1.45;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  resize: vertical;
+  background: var(--surface, transparent);
+  color: inherit;
+}
+
 .tiny {
   font-size: 12px;
   margin: 0;

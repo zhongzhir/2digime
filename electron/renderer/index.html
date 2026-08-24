@@ -308,6 +308,7 @@
               </div>
             </section>
             <div class="growth-card-links">
+              <button type="button" id="btn-growth-understanding" class="ghost">它目前了解的我</button>
               <button type="button" id="btn-growth-situation" class="ghost">查看完整情况</button>
               <button type="button" id="btn-growth-other-ways" class="ghost">其他完善方式</button>
             </div>
@@ -364,6 +365,16 @@
                 <h3 class="section-title">暂未了解</h3>
                 <ul id="growth-unknown-list" class="growth-plain-list"></ul>
               </section>
+            </div>
+            <div id="growth-understanding" class="growth-subpage" hidden>
+              <div class="growth-subpage-bar">
+                <button type="button" id="btn-growth-back-understanding" class="ghost">返回数字之我</button>
+              </div>
+              <h2 class="page-title">它目前了解的我</h2>
+              <p class="muted tiny">下面是我目前对你的了解。可以直接修改某一条，或让某一条不再被使用。</p>
+              <ul id="growth-understanding-list" class="subject-list"></ul>
+              <p id="growth-understanding-empty" class="empty-hint">还没有已经确认的了解。</p>
+              <p id="growth-understanding-status" class="meta" aria-live="polite"></p>
             </div>
             <p id="growth-later-note" class="muted tiny" hidden></p>
           </section>
