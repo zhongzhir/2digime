@@ -1,0 +1,86 @@
+{
+  "generatedAt": "2026-08-24T00:00:00.000Z",
+  "branch": "build/real-subject-collaboration-02",
+  "base": "ba1e2ed",
+  "mode": "deterministic_engineering_test_real_relay",
+  "transport": "real_http_relay_e2ee",
+  "isolation": {
+    "independent_runtimes": true,
+    "independent_subject_stores": true,
+    "independent_capability_registry": true,
+    "independent_goals_boundaries_experience": true,
+    "shared_object_references": false,
+    "shared_subject_store": false
+  },
+  "integration_defect_fixed": {
+    "artifact_content_cross_relay": true,
+    "grant_cross_relay": true,
+    "remote_self_aware_evaluation": true,
+    "files": [
+      "src/collaboration/schema.ts",
+      "src/collaboration/local-collaboration.ts",
+      "src/subject-comm/collaboration-sync-apply.ts"
+    ]
+  },
+  "successCriteria": {
+    "real_independent_subject_runtimes": true,
+    "real_remote_subject_request": true,
+    "remote_independent_accept_decline": true,
+    "minimum_network_disclosure": true,
+    "remote_subject_truth_isolation": true,
+    "independent_growth_after_remote_collaboration": true,
+    "local_final_review": true,
+    "remote_failure_fallback": true,
+    "cross_subject_contamination": 0,
+    "whole_subject_disclosure": 0,
+    "fake_remote_execution": false
+  },
+  "cases": {
+    "caseA_capability_complement": {
+      "a_proposes_over_relay": true,
+      "b_self_subject_evaluate_accept": true,
+      "b_selects_own_capability_and_executes": true,
+      "result_delivered_with_provenance": true,
+      "a_materializes_locally": true,
+      "a_local_review_accept": true,
+      "owner_gets_result": true,
+      "a_does_not_specify_b_model": true
+    },
+    "caseB_boundary_conflict": {
+      "a_request_touches_b_boundary": true,
+      "real_remote_b_declines": true,
+      "boundary_basis_present": true,
+      "no_grant_issued": true,
+      "a_local_fallback": true,
+      "task_not_dead": true
+    },
+    "minimum_disclosure": {
+      "captured_network_payload": true,
+      "sent_goal": true,
+      "sent_required_materials": true,
+      "sent_constraints": true,
+      "not_sent_subject_package": true,
+      "not_sent_irrelevant_preference": true,
+      "not_sent_complete_memory": true,
+      "whole_subject_disclosure": 0
+    },
+    "independent_growth": {
+      "a_experience": "collab:external_accept",
+      "b_experience": "collab:fulfilled",
+      "cross_contamination": 0
+    },
+    "failure_path": {
+      "relay_closed": true,
+      "remote_unreachable": true,
+      "a_local_fallback": true,
+      "user_facing_clean": true
+    }
+  },
+  "store_schema_state_changes": {
+    "new_collaboration_store": 0,
+    "second_truth_source": 0,
+    "new_permanent_schema": 0,
+    "new_state_machine": 0,
+    "transient_event_fields_added": ["CollaborationEvent.artifactText", "CollaborationEvent.grant"]
+  }
+}

@@ -187,6 +187,17 @@ export interface CollaborationEvent {
   localHeadVersionId?: string;
   requiresOwnerConfirmation?: boolean;
   evaluationBasis?: string[];
+  /**
+   * 跨主体交付内容（仅 `delivered` 事件、远端路径承载）。
+   * 供发起方在不打开对端本地包的情况下物化成果；不发完整 SubjectPackage。
+   * 属于运行态传输字段，不构成新的持久业务 schema。
+   */
+  artifactText?: string;
+  /**
+   * 签发授权的完整副本（仅 `grant_issued` 事件、远端路径承载）。
+   * 供发起方在不打开对端本地包的情况下重建授权；非持久业务 schema。
+   */
+  grant?: AuthorizationGrant;
 }
 
 export interface CollaborationDeliveryRef {

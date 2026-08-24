@@ -13,6 +13,7 @@ import type { DigitalMeRuntime } from '../runtime/digitalme-runtime';
 import { waitForJobTerminal } from '../work-runtime/job-runner';
 import type { ContextRef } from '../work-runtime/task';
 import { OPENAI_COMPATIBLE_CAPABILITY_ID } from '../capability/adapters/openai-compatible';
+import { isRemoteEndpointRef } from '../subject-comm/endpoint';
 import { GrantStore } from './grant-store';
 import { CollaborationRecordStore } from './record-store';
 import { LocalPackageTransport, type CollaborationTransport } from './transport';
@@ -390,13 +391,17 @@ export class LocalCollaborationHost {
     let opened: Awaited<ReturnType<CollaborationTransport['openByEndpointRef']>> | null =
       null;
     try {
-      opened = await this.transport.openByEndpointRef(record.responder.endpointRef);
-      const content = await opened.runtime.getContent({
-        artifactId: delivery.sourceArtifactId,
-      });
-      const artifactText = content.text ?? '';
-      await opened.stop();
-      opened = null;
+      // 远端交付：内容已随事件承载，无需打开对方包；本地路径再回退到打开对方读取。
+      let artifactText = deliveryEv.artifactText ?? '';
+      if (!artifactText && !isRemoteEndpointRef(record.responder.endpointRef)) {
+        opened = await this.transport.openByEndpointRef(record.responder.endpointRef);
+        const content = await opened.runtime.getContent({
+          artifactId: delivery.sourceArtifactId,
+        });
+        artifactText = content.text ?? '';
+        await opened.stop();
+        opened = null;
+      }
       const terms = latestTerms(record);
       const agreement = findAgreement(record);
       const materialized = await this.issuer.materializePeerArtifact({
@@ -653,7 +658,7 @@ export class LocalCollaborationHost {
     return this.autoEvaluateAndMaybeAgree(recordId);
   }
 
-  /** B 规则内自动评估；越界返回 awaiting_owner。 */
+  /** B 规则内自动评估；越界返回 awaiting_owner。可运行于发起方（本地开 B）或接收方自身 runtime。 */
   async autoEvaluateAndMaybeAgree(recordId: string): Promise<{
     recordId: string;
     status: CollabUserStatus;
@@ -662,16 +667,26 @@ export class LocalCollaborationHost {
     requiresOwnerConfirmation?: boolean;
   }> {
     let record = await this.reconcile(recordId);
-    const opened = await this.transport.openByEndpointRef(record.responder.endpointRef);
-    try {
+    const selfId = this.issuer.subject.requireActive().id;
+    const amResponder = selfId === record.responder.subjectId;
+    // 发起方视角 peer=B；接收方视角 peer=A。
+    const peerRef = amResponder ? record.initiator.endpointRef : record.responder.endpointRef;
+
+    let opened: Awaited<ReturnType<CollaborationTransport['openByEndpointRef']>> | null = null;
+    let evalRuntime = this.issuer;
+    if (!amResponder) {
+      // 发起方本地代 B 评估（仅本地路径）
+      opened = await this.transport.openByEndpointRef(record.responder.endpointRef);
+      evalRuntime = opened.runtime;
       // 在 B 侧注册 A 的 endpoint，便于 B 回推
       await new LocalPackageTransport(opened.runtime).registerEndpoint(
         record.initiator,
         this.issuer.subject.requireActive().rootDir,
       );
-
+    }
+    try {
       const terms = latestTerms(record);
-      const evaluation = await evaluateProposalForSubject(opened.runtime, terms);
+      const evaluation = await evaluateProposalForSubject(evalRuntime, terms);
       const at = nowIso();
 
       if (evaluation.requiresOwnerConfirmation || evaluation.decision === 'require_owner_confirmation') {
@@ -684,7 +699,7 @@ export class LocalCollaborationHost {
           evaluationBasis: evaluation.basis,
           requiresOwnerConfirmation: true,
         };
-        record = await this.appendAndSync(record, [ev], record.responder.endpointRef);
+        record = await this.appendAndSync(record, [ev], peerRef);
         return {
           recordId,
           status: deriveCollabStatus(record),
@@ -702,7 +717,7 @@ export class LocalCollaborationHost {
           note: evaluation.note,
           evaluationBasis: evaluation.basis,
         };
-        record = await this.appendAndSync(record, [ev], record.responder.endpointRef);
+        record = await this.appendAndSync(record, [ev], peerRef);
         return { recordId, status: deriveCollabStatus(record), evaluationBasis: evaluation.basis };
       }
 
@@ -716,7 +731,7 @@ export class LocalCollaborationHost {
           ...(evaluation.terms ? { terms: evaluation.terms, termsDigest: termsDigestOf(evaluation.terms) } : {}),
           evaluationBasis: evaluation.basis,
         };
-        record = await this.appendAndSync(record, [ev], record.responder.endpointRef);
+        record = await this.appendAndSync(record, [ev], peerRef);
         return { recordId, status: deriveCollabStatus(record), evaluationBasis: evaluation.basis };
       }
 
@@ -732,8 +747,11 @@ export class LocalCollaborationHost {
           note: evaluation.note,
           evaluationBasis: evaluation.basis,
         };
-        record = await this.appendAndSync(record, [counterEv], record.responder.endpointRef);
-        // 同设备验证：发起方自动接受非高风险还价（仍绑定 digest）
+        record = await this.appendAndSync(record, [counterEv], peerRef);
+        // 发起方代 B 评估时自动接受还价；接收方自身运行时交由发起方决定（不自我代答）。
+        if (amResponder) {
+          return { recordId, status: deriveCollabStatus(record), evaluationBasis: evaluation.basis };
+        }
         return this.acceptTerms(recordId, counterDigest, evaluation.terms, evaluation.basis);
       }
 
@@ -749,10 +767,12 @@ export class LocalCollaborationHost {
         note: evaluation.note,
         evaluationBasis: evaluation.basis,
       };
-      record = await this.appendAndSync(record, [acceptEv], record.responder.endpointRef);
+      record = await this.appendAndSync(record, [acceptEv], peerRef);
       return this.finalizeAgreementIfReady(recordId, evaluation.basis);
     } finally {
-      await opened.stop();
+      if (opened) {
+        await opened.stop();
+      }
     }
   }
 
@@ -867,6 +887,8 @@ export class LocalCollaborationHost {
       at: nowIso(),
       grantId: grant.id,
       termsDigest: digest,
+      // 远端对端无法直写对方 GrantStore：随事件承载完整授权，供其本地重建。
+      grant,
     };
     record = await this.appendAndSync(record, [grantEv], peerEndpoint);
 
@@ -1171,6 +1193,10 @@ export class LocalCollaborationHost {
         termsDigest: agreement.termsDigest,
         delivery: deliveryRef,
         selfCheck: check,
+        // 远端发起方无法打开本方包：把成果内容随事件承载，供其物化（不发完整 SubjectPackage）。
+        ...(isRemoteEndpointRef(record.initiator.endpointRef)
+          ? { artifactText }
+          : {}),
         note: check.passed ? '对方已提交成果（含自检）' : '对方已提交成果（自检未完全通过）',
       };
       record = await this.appendLocalOnly(record, [delivered]);
@@ -1178,6 +1204,22 @@ export class LocalCollaborationHost {
       if (responderOpened) {
         await responderOpened.stop();
         responderOpened = null;
+      }
+
+      // 远端发起方由对方自行物化；仅本地发起方由本方直接物化。
+      const remoteInitiator = isRemoteEndpointRef(record.initiator.endpointRef);
+      if (amResponder && remoteInitiator) {
+        await this.syncFullRecordToPeer(record);
+        return {
+          recordId,
+          grantId,
+          status: deriveCollabStatus(record),
+          artifactId: job.artifactId,
+          artifactText,
+          jobId: job.id,
+          reachedModel: job.capabilityId === OPENAI_COMPATIBLE_CAPABILITY_ID,
+          ...(job.capabilityId ? { capabilityId: job.capabilityId } : {}),
+        };
       }
 
       // 在发起方物化成果（本方是 A 则本地；本方是 B 则 open A）
