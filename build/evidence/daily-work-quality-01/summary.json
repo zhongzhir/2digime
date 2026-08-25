@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "case1_document": {
+    "user_decision_count": 0,
+    "system_confirmation_count": 0,
+    "auto_progressed": true,
+    "result_reachable": true
+  },
+  "case2_high_consequence": {
+    "goal": "写一份测试结果报告。",
+    "high_risk_detected": true,
+    "auto_progress_blocked": true
+  },
+  "case3_capability_failure": {
+    "user_facing_error": "我现在暂时无法理解你的这句话：理解能力需要的模型连接不可用。你仍然可以查看和打开已有成果，或使用明确的暂停、取消按钮；等模型恢复连接后，我会继续按你的话推进。这段话我已记录，不会丢失。",
+    "technical_fields_exposed": false
+  },
+  "renderer_auto_progress_wired": true
+}

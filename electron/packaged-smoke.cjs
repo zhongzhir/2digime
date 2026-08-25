@@ -16,6 +16,11 @@ async function run(ctx) {
     const firstValue = require(path.join(__dirname, "..", "scripts", "first-value-evidence.cjs"));
     return firstValue.runInSmoke(ctx);
   }
+  // DIGITALME-DAILY-WORK-QUALITY-01：委托给日常做事摩擦走查模块。
+  if (process.env.DIGITALME_V2_DAILY_WORK_EVIDENCE === "1") {
+    const dailyWork = require(path.join(__dirname, "..", "scripts", "daily-work-evidence.cjs"));
+    return dailyWork.runInSmoke(ctx);
+  }
   const evidenceDir =
     process.env.DIGITALME_V2_SMOKE_EVIDENCE || path.join(os.tmpdir(), "dmv2-p16-smoke-evidence");
   fs.mkdirSync(evidenceDir, { recursive: true });

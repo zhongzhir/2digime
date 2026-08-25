@@ -970,6 +970,8 @@
   let lastConnectionState = { available: false, codeChangeAvailable: false, showGate: true };
   // 「我能帮你做什么」首次价值面：用户尚未真正参与前保持可见（轻量、非强制）。
   let firstValueDismissed = false;
+  // 普通低风险文档/分析目标：首个规划出现后自动推进一次（不重复）。
+  let firstPlanAutoProgressed = false;
 
   function applyConnectionUi(state) {
     lastConnectionState = state || lastConnectionState;
@@ -2595,6 +2597,7 @@
     lastCtoTimelineKey = "";
     activeArtifactVersionLabel = "";
     lastJobDetailForUx = null;
+    firstPlanAutoProgressed = false;
     activeAcceptanceSummary = null;
     activeAcceptanceFailed = false;
     activeAcceptanceFailureMessage = "";
@@ -3395,6 +3398,50 @@
    * D11-A：自然语言输入一律先经 work.converse 得到 Digital Me 的理解与回应；
    * 不做本地关键词路由，不默认触发修改。执行只在 startAuthorized 后经确定性命令发生。
    */
+  async function maybeAutoProgressLowRiskDocument() {
+    // 仅一次：新任务拿到可执行规划后，普通低风险文档/分析目标自行推进。
+    if (firstPlanAutoProgressed) return;
+    const taskId = activeTaskId || converseDraftTaskId;
+    if (!taskId) return;
+    if (!activeTaskPlan || !activeTaskPlan.content || activeTaskPlan.source === "seed_internal") return;
+    if (workConverseInFlight || lastConnectionState.available === false) return;
+    if (els.jobStatus && els.jobStatus.textContent === "正在思考…") return;
+    const refs = materials || [];
+    if (refs.some((m) => m && m.kind === "folder")) return;
+    try {
+      const detail = await api.invoke("work.getTask", { taskId });
+      const task = detail && detail.task;
+      // 已有执行或成果 → 不自动推进（避免覆盖已开始/已完成的任务）。
+      if (detail && detail.latestJob) return;
+      if (detail && Array.isArray(detail.artifactIds) && detail.artifactIds.length > 0) return;
+      if (task) {
+        const taskRefs = Array.isArray(task.contextRefs) ? task.contextRefs : [];
+        if (taskRefs.some((r) => r && r.kind === "folder")) return;
+        const taskGoal = String(task.goal || "").trim();
+        if (taskGoal && looksHighRiskGoal(taskGoal)) return;
+      }
+    } catch {
+      return;
+    }
+    const goalText =
+      (els.goal && String(els.goal.value || "").trim()) ||
+      String(activeTaskPlan.content || "");
+    if (looksHighRiskGoal(goalText)) return;
+    firstPlanAutoProgressed = true;
+    if (els.jobStatus) {
+      els.jobStatus.textContent = "已按目标开始，稍后给你结果。";
+      els.jobStatus.classList.remove("error");
+    }
+    await confirmPlanAndStartDevelopment();
+  }
+
+  function looksHighRiskGoal(text) {
+    const t = String(text || "");
+    return /删除整个|清空(项目|仓库|目录)|格式化|系统目录|管理员权限|\bsudo\b|git\s+push|提交并推送|部署到生产|发布到生产|rm\s+-rf|公开发布|对外发布|删除全部|不可逆|覆盖全部|泄露|密钥|支付|转账/i.test(
+      t,
+    );
+  }
+
   async function submitWorkNaturalLanguage(presetText) {
     firstValueDismissed = true;
     if (!els.workNlInput && presetText == null) return;
@@ -3485,6 +3532,8 @@
       };
       clearPrepBlocked();
       refreshTaskWorkspace();
+      // 普通低风险文档/分析目标：规划生成后自行推进，不要求用户再点「确认规划并开始开发」。
+      await maybeAutoProgressLowRiskDocument();
     } else if (res.planGenerationFailed) {
       activeTaskPlan = null;
       refreshTaskWorkspace();
@@ -4517,11 +4566,12 @@
             const parsed = JSON.parse(evidenceEntry.text);
             const items = parsed.items || [];
             evidenceSummary = `证据 ${items.length} 条`;
-            const sample = items
+            const paths = items
               .slice(0, 5)
-              .map((it) => `${it.claimId || "?"} → ${it.path || "?"}`)
-              .join("；");
-            if (sample) evidenceSummary += `：${sample}`;
+              .map((it) => String(it.path || "").trim())
+              .filter(Boolean);
+            // 不暴露内部 claimId 等半内部标识符；只展示证据覆盖的文件。
+            if (paths.length) evidenceSummary += `：覆盖 ${[...new Set(paths)].join("；")}`;
           } catch {
             evidenceSummary = "证据摘要不可用";
           }
