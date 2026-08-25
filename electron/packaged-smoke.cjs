@@ -21,6 +21,11 @@ async function run(ctx) {
     const dailyWork = require(path.join(__dirname, "..", "scripts", "daily-work-evidence.cjs"));
     return dailyWork.runInSmoke(ctx);
   }
+  // DIGITALME-PROFESSIONAL-CAPABILITY-ACCESS-01：委托给专业能力可达性走查模块。
+  if (process.env.DIGITALME_V2_PROF_CAP_EVIDENCE === "1") {
+    const profCap = require(path.join(__dirname, "..", "scripts", "professional-capability-evidence.cjs"));
+    return profCap.runInSmoke(ctx);
+  }
   const evidenceDir =
     process.env.DIGITALME_V2_SMOKE_EVIDENCE || path.join(os.tmpdir(), "dmv2-p16-smoke-evidence");
   fs.mkdirSync(evidenceDir, { recursive: true });

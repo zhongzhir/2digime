@@ -611,6 +611,7 @@ export class WorkRuntime {
       capabilityClosure: closureViewFromSelection({
         need: closureNeed,
         selectedAdapterType: adapter.registration.adapter.type,
+        selectedCapabilityId: adapter.registration.id,
         availableRegistrations: closureRegistrations,
       }),
     };

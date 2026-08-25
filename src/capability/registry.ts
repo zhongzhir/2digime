@@ -144,6 +144,26 @@ export class CapabilityRegistry {
       return { adapter: byFamily, reason: 'intent_material' };
     }
 
+    // PROFESSIONAL-CAPABILITY-ACCESS-01：研究/当前信息意图优先使用 search 型能力。
+    // professional（有凭据的联网搜索）优先；否则 baseline（keyless）；都无则回落 document。
+    if (intent === 'external_research') {
+      const searchAdapters = [...this.adapters.values()].filter(
+        (a) =>
+          a.registration.availability === 'available' &&
+          /(?:-search|search)$/i.test(String(a.registration.adapter.adapterId || '')),
+      );
+      const professional = searchAdapters.find((a) =>
+        /gemini|google|professional/i.test(String(a.registration.adapter.adapterId || '')),
+      );
+      const chosen = professional || searchAdapters[0];
+      if (chosen) {
+        return {
+          adapter: chosen,
+          reason: 'output_family',
+        };
+      }
+    }
+
     if (intent === 'modify_code' || family === CODE_CHANGE_ARTIFACT_TYPE) {
       const hasCodeMaterial =
         materials.includes('code_repo') ||

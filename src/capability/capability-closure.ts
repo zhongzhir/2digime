@@ -184,6 +184,18 @@ export function capabilityViewFromRegistration(
       automatic: true,
     };
   }
+  // PROFESSIONAL-CAPABILITY-ACCESS-01：search 型 local-tool 能力归入研究/当前信息域。
+  // 品牌/API 判断只在 adapter/probe 层；此处仅按 adapterId 合同约定识别 search 能力。
+  if (type === 'local-tool' && /(?:-search|search)$/i.test(String(reg.adapter.adapterId || ''))) {
+    const professional = /gemini|google|professional/i.test(String(reg.adapter.adapterId || ''));
+    return {
+      ...base,
+      kindLabel: professional ? KIND_LABELS.professional : KIND_LABELS.baseline,
+      tier: professional ? 'professional' : 'baseline',
+      domains: ['deep_research', 'current_web'],
+      automatic: true,
+    };
+  }
   // mcp-stdio / local-tool / 其它：不作为本组域的通用执行能力（只读工具走专用路径）。
   return null;
 }
@@ -455,9 +467,16 @@ export function closureLevelForAdapterType(adapterType: string): CapabilityLevel
 export function closureViewFromSelection(input: {
   need: TaskCapabilityNeed;
   selectedAdapterType?: string;
+  selectedCapabilityId?: string;
   availableRegistrations?: readonly CapabilityRegistration[];
 }): CapabilityClosureView {
   if (input.selectedAdapterType) {
+    // PROFESSIONAL-CAPABILITY-ACCESS-01：按实际选中的能力合同判定等级。
+    // search 专业能力（有凭据）报 OPTIMAL；否则按 adapter 类型。
+    if (input.selectedCapabilityId && /search/i.test(String(input.selectedCapabilityId || ''))) {
+      const isProfessional = /gemini|google|professional/i.test(String(input.selectedCapabilityId || ''));
+      return { level: isProfessional ? 'optimal' : 'baseline', choices: [] };
+    }
     const level = closureLevelForAdapterType(input.selectedAdapterType);
     return { level, choices: [] };
   }

@@ -1,0 +1,49 @@
+{
+  "environment": {
+    "real_model": true
+  },
+  "capabilities": [
+    {
+      "id": "cap_model_openai_compatible",
+      "displayName": "对话模型",
+      "availability": "available"
+    },
+    {
+      "id": "cap_baseline_web_search",
+      "displayName": "基础搜索",
+      "availability": "available"
+    },
+    {
+      "id": "cap_gemini_web_search",
+      "displayName": "联网搜索",
+      "availability": "available"
+    },
+    {
+      "id": "cap_code_repo_analysis",
+      "displayName": "对话模型",
+      "availability": "available"
+    },
+    {
+      "id": "cap_external_executor_codex",
+      "displayName": "代码执行能力",
+      "availability": "available"
+    },
+    {
+      "id": "cap_external_executor_model_api",
+      "displayName": "已连接的模型",
+      "availability": "available"
+    }
+  ],
+  "overview_rendered": true,
+  "research": {
+    "status": "succeeded",
+    "capabilityId": "cap_gemini_web_search",
+    "closure": {
+      "level": "optimal",
+      "choices": []
+    },
+    "sources": true,
+    "excerpt": "# 搜索要点：调研企业引入 AI Agent 辅助开发时最常踩的三个坑\n\n- cnblogs.com\n  来源：https://www.cnblogs.com/itech/p/21388422\n- juejin.cn\n  来源：https://juejin.cn/post/7540652656911138852\n- c"
+  },
+  "ok": true
+}

@@ -195,6 +195,12 @@ export interface DigitalMeRuntimeOptions {
     | 'auto'
     | import('../capability/adapters/external-executor-codex').ExternalExecutorCodexOptions;
   /**
+   * PROFESSIONAL-CAPABILITY-ACCESS-01：是否注册可发现的 Search capability。
+   * - undefined/true：注册（baseline 始终；professional 当探测到合法凭据）。
+   * - false：不注册（测试可关闭）。
+   */
+  searchCapability?: boolean;
+  /**
    * TRIAL-SURFACE-01B：无专用代码执行器时的模型兜底运输（agent 连接器的 model-api 运输）。
    * - undefined：默认——当真实模型已配置（documentCapability 为 openai-compatible/both 且有 openaiCompatible）时注册；
    *   否则不注册（fake/none 测试运行时禁止假模型冒充改代码）。
@@ -2448,6 +2454,15 @@ export class DigitalMeRuntime {
       registry.register(createFakeDocumentAdapter(this.options.fakeAdapter));
       if (this.options.registerOpenAiStub !== false) {
         registry.register(createOpenAiCompatibleAdapterStub());
+      }
+    }
+
+    // PROFESSIONAL-CAPABILITY-ACCESS-01：注册可发现的 Search capability（复用现有 connector）。
+    if (this.options.searchCapability !== false) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { discoverSearchCapabilities } = require('../capability/search-capability-discovery') as typeof import('../capability/search-capability-discovery');
+      for (const adapter of discoverSearchCapabilities()) {
+        registry.register(adapter);
       }
     }
 

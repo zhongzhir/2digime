@@ -341,6 +341,9 @@
     panelWork: document.getElementById("panel-work"),
     settingsCodingCapabilities: document.getElementById("settings-coding-capabilities"),
     settingsCodingAdvancedName: document.getElementById("settings-coding-advanced-name"),
+    capabilityOverview: document.getElementById("settings-capability-overview"),
+    capabilityOverviewStatus: document.getElementById("settings-capability-overview-status"),
+    capabilityAdvanced: document.getElementById("settings-capability-advanced"),
     goalExamples: document.getElementById("goal-examples"),
     codeChangeView: document.getElementById("code-change-view"),
     ccSummary: document.getElementById("cc-summary"),
@@ -1012,6 +1015,44 @@
       /* keep latest settings probe label unless freshly unavailable */
     } else if (!configured) {
       setConnectionStateLabel("尚未连接", null);
+    }
+    renderCapabilityOverview(state ? state.capabilities : null);
+  }
+
+  function renderCapabilityOverview(capabilities) {
+    if (!els.capabilityOverview) return;
+    const list = Array.isArray(capabilities) ? capabilities : [];
+    const byType = (t) => list.some((c) => c && c.availability === "available" && (c.outputArtifactTypes || []).includes(t));
+    const byId = (id) => list.some((c) => c && c.id === id && c.availability === "available");
+    const items = [
+      { label: "对话与思考", ok: byType("document") },
+      { label: "文档", ok: byType("document") },
+      { label: "搜索", ok: byId("cap_baseline_web_search") || byId("cap_gemini_web_search") },
+      { label: "深度研究", ok: byId("cap_gemini_web_search") },
+      { label: "编程", ok: byType("code-change") },
+    ];
+    const advanced = list
+      .map((c) => (c.displayName || c.id || "") + (c.availability === "available" ? " · 可用" : " · 需增强"))
+      .join("；");
+    if (els.capabilityAdvanced) els.capabilityAdvanced.textContent = advanced;
+    els.capabilityOverview.innerHTML = "";
+    for (const it of items) {
+      const li = document.createElement("li");
+      li.className = "coding-cap-row";
+      const name = document.createElement("strong");
+      name.textContent = it.label;
+      const stateEl = document.createElement("span");
+      stateEl.className = it.ok ? "meta" : "meta";
+      stateEl.textContent = it.ok ? "已可用" : "需增强";
+      li.appendChild(name);
+      li.appendChild(document.createTextNode(" "));
+      li.appendChild(stateEl);
+      els.capabilityOverview.appendChild(li);
+    }
+    if (els.capabilityOverviewStatus) {
+      const needEnhance = items.filter((i) => !i.ok).length;
+      els.capabilityOverviewStatus.textContent =
+        needEnhance > 0 ? `${items.length - needEnhance} 项可用，${needEnhance} 项可增强。` : "当前能力均已可用。";
     }
   }
 
