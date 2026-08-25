@@ -1024,12 +1024,26 @@
     const list = Array.isArray(capabilities) ? capabilities : [];
     const byType = (t) => list.some((c) => c && c.availability === "available" && (c.outputArtifactTypes || []).includes(t));
     const byId = (id) => list.some((c) => c && c.id === id && c.availability === "available");
+    const hasAnySearch = byId("cap_baseline_web_search") || byId("cap_gemini_web_search");
+    // 深度研究：仅真正 professional research（remote-subject 研究型）才标「已可用」；
+    // 只有 web search 时是「基础研究可用」，不虚报为专业能力。
+    const professionalResearch = list.some(
+      (c) => c && c.availability === "available" && c.adapter && c.adapter.type === "remote-subject",
+    );
     const items = [
-      { label: "对话与思考", ok: byType("document") },
-      { label: "文档", ok: byType("document") },
-      { label: "搜索", ok: byId("cap_baseline_web_search") || byId("cap_gemini_web_search") },
-      { label: "深度研究", ok: byId("cap_gemini_web_search") },
-      { label: "编程", ok: byType("code-change") },
+      { label: "对话与思考", ok: byType("document"), note: "" },
+      { label: "文档", ok: byType("document"), note: "" },
+      { label: "搜索", ok: hasAnySearch, note: hasAnySearch ? "" : "连接后可用" },
+      {
+        label: "深度研究",
+        ok: professionalResearch,
+        note: professionalResearch
+          ? "已可用"
+          : hasAnySearch
+            ? "可完成基础研究，覆盖有限"
+            : "需连接研究能力",
+      },
+      { label: "编程", ok: byType("code-change"), note: byType("code-change") ? "" : "连接代码能力后可用" },
     ];
     const advanced = list
       .map((c) => (c.displayName || c.id || "") + (c.availability === "available" ? " · 可用" : " · 需增强"))
@@ -1042,8 +1056,8 @@
       const name = document.createElement("strong");
       name.textContent = it.label;
       const stateEl = document.createElement("span");
-      stateEl.className = it.ok ? "meta" : "meta";
-      stateEl.textContent = it.ok ? "已可用" : "需增强";
+      stateEl.className = "meta";
+      stateEl.textContent = it.ok ? (it.note || "已可用") : (it.note || "需增强");
       li.appendChild(name);
       li.appendChild(document.createTextNode(" "));
       li.appendChild(stateEl);

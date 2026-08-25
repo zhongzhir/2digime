@@ -184,15 +184,16 @@ export function capabilityViewFromRegistration(
       automatic: true,
     };
   }
-  // PROFESSIONAL-CAPABILITY-ACCESS-01：search 型 local-tool 能力归入研究/当前信息域。
-  // 品牌/API 判断只在 adapter/probe 层；此处仅按 adapterId 合同约定识别 search 能力。
+  // PROFESSIONAL-CAPABILITY-ACCESS-01 → SEMANTICS-02：search 型 local-tool 能力只服务 current_web。
+  // Web search（即使 grounded）≠ deep research；品牌/API 判断只在 adapter/probe 层。
   if (type === 'local-tool' && /(?:-search|search)$/i.test(String(reg.adapter.adapterId || ''))) {
     const professional = /gemini|google|professional/i.test(String(reg.adapter.adapterId || ''));
     return {
       ...base,
       kindLabel: professional ? KIND_LABELS.professional : KIND_LABELS.baseline,
       tier: professional ? 'professional' : 'baseline',
-      domains: ['deep_research', 'current_web'],
+      // 仅 current_web：grounded web search 是专业搜索，但不是 deep research。
+      domains: ['current_web'],
       automatic: true,
     };
   }
@@ -256,17 +257,30 @@ export function resolveCapability(
 
   switch (domain) {
     case 'deep_research': {
+      // SEMANTICS-02：只有真正声明为 deep research 的 professional adapter 才满足 OPTIMAL。
+      // Web search（即使 grounded）只能作为 BASELINE research 的组成（search + model 组合）。
+      const webSearch =
+        usableServing(available, 'current_web', 'professional') ||
+        usableServing(available, 'current_web', 'baseline');
       if (professional) {
         return resolution(need, 'optimal', plan('optimal', professional, domain), [], []);
       }
-      if (baseline && model) {
-        return resolution(need, 'baseline', plan('baseline', baseline, domain), [], []);
+      if (webSearch && model) {
+        // SEMANTICS-02：baseline research = web search + model 组合。
+        // 复用 webSearch 自身标签（如「基础搜索能力」），不标为「专业能力」。
+        return resolution(
+          need,
+          'baseline',
+          plan('baseline', webSearch, domain),
+          [],
+          [],
+        );
       }
-      if (baseline || model) {
+      if (webSearch || model) {
         return resolution(
           need,
           'limited',
-          plan('limited', (baseline || model)!, domain),
+          plan('limited', (webSearch || model)!, domain),
           [],
           ['continue_current', 'use_stronger', 'defer'],
           buildCapabilityNotice('limited', need),
@@ -471,8 +485,20 @@ export function closureViewFromSelection(input: {
   availableRegistrations?: readonly CapabilityRegistration[];
 }): CapabilityClosureView {
   if (input.selectedAdapterType) {
-    // PROFESSIONAL-CAPABILITY-ACCESS-01：按实际选中的能力合同判定等级。
-    // search 专业能力（有凭据）报 OPTIMAL；否则按 adapter 类型。
+    // SEMANTICS-02：deep_research 的等级必须由组合判断（web search + model = BASELINE），
+    // 不得因选中了 search 能力就报 OPTIMAL。
+    if (input.need.domain === 'deep_research') {
+      const resolution = resolveCapability(
+        input.need,
+        availableFromRegistrations(input.availableRegistrations ?? []),
+      );
+      return {
+        level: resolution.level,
+        choices: resolution.userChoices,
+        ...(resolution.userNotice ? { notice: resolution.userNotice } : {}),
+      };
+    }
+    // 非 deep_research：按实际选中能力合同判定（current_web + 专业搜索 = OPTIMAL）。
     if (input.selectedCapabilityId && /search/i.test(String(input.selectedCapabilityId || ''))) {
       const isProfessional = /gemini|google|professional/i.test(String(input.selectedCapabilityId || ''));
       return { level: isProfessional ? 'optimal' : 'baseline', choices: [] };

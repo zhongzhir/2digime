@@ -98,6 +98,11 @@ async function runInSmoke(ctx) {
     capabilities,
     overview_rendered: overviewRendered,
     research,
+    // SEMANTICS-02：t2 研究任务必须如实报告为 BASELINE（web search + model 组合），
+    // 不得把 Grounded Search 标成 Professional Deep Research。
+    semantics_accurate: research.closure
+      ? research.closure.level === "baseline"
+      : false,
     ok: hasSearch && overviewRendered && research.status === "succeeded" && research.sources,
   };
   fs.writeFileSync(path.join(OUT_DIR, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);

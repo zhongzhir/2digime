@@ -20,9 +20,27 @@ import { discoverSearchCapabilities, probeSearchAvailability, BASELINE_SEARCH_CA
 import { resolveCapability, availableFromRegistrations, closureLevelForAdapterType, closureViewFromSelection } from '../capability-closure';
 import { CapabilityRegistry } from '../registry';
 import { createExternalExecutorCodexAdapter } from '../adapters/external-executor-codex';
+import type { CapabilityRegistration } from '../registration';
 
 async function tempDir(prefix: string): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), `dmv2-pca-${prefix}-`));
+}
+
+function fullRegistration(id: string, type: CapabilityRegistration['adapter']['type'], adapterId: string): CapabilityRegistration {
+  return {
+    id,
+    kind: 'tool',
+    displayName: id,
+    description: id,
+    inputContract: { acceptsGoal: true, acceptsSnapshot: true, acceptsSubjectContext: true },
+    outputArtifactTypes: ['document'],
+    permissions: [],
+    cost: { estimate: '' },
+    latencyEstimate: '',
+    location: 'remote',
+    availability: 'available',
+    adapter: { type, adapterId },
+  };
 }
 
 test('CASE 1/2: Coding 能力自动发现 — 已安装 → available；未安装 → needs_setup（不假执行）', async () => {
@@ -83,33 +101,40 @@ test('CASE 3b: 探测分级 available / needs_simple_setup / unavailable', async
   assert.equal(await probeSearchAvailability(prof, { GEMINI_API_KEY: 'sk-x' }), 'available');
 });
 
-test('CASE 4: 专业 Research capability 存在 → deep_research 自动升级 OPTIMAL', () => {
+test('CASE 4: Web Search 存在 → current_web OPTIMAL；deep_research 需 search+model → BASELINE（不虚报）', () => {
   const withKey = discoverSearchCapabilities({ GEMINI_API_KEY: 'sk-test' }).map((a) => a.registration);
-  const avail = availableFromRegistrations(withKey);
+  const model = fullRegistration('cap_model', 'openai-compatible-model', 'openai-compatible-chat');
+  const avail = availableFromRegistrations([...withKey, model]);
   const prof = avail.find((v) => v.capabilityId === PROFESSIONAL_SEARCH_CAPABILITY_ID);
   assert.ok(prof && prof.tier === 'professional', 'search 专业能力归类为 professional');
-  const r = resolveCapability({ domain: 'deep_research' }, avail);
-  assert.equal(r.level, 'optimal');
-  assert.equal(r.plan.capabilityId, PROFESSIONAL_SEARCH_CAPABILITY_ID);
+  // current_web：专业搜索 → OPTIMAL（正确）。
+  const cw = resolveCapability({ domain: 'current_web' }, avail);
+  assert.equal(cw.level, 'optimal');
+  assert.equal(cw.plan.capabilityId, PROFESSIONAL_SEARCH_CAPABILITY_ID);
+  // deep_research：仅 search+model → BASELINE（不是 OPTIMAL-professional）。
+  const dr = resolveCapability({ domain: 'deep_research' }, avail);
+  assert.equal(dr.level, 'baseline', 'web search 不能满足 deep_research OPTIMAL');
+  assert.ok(!/professional/i.test(String(dr.plan.kindLabel || '')), 'baseline research 不标为专业');
 
-  // 无凭据：deep_research 为 limited（baseline search），不伪装专业。
-  const noKey = discoverSearchCapabilities({ GEMINI_API_KEY: '' }).map((a) => a.registration);
-  const availNoKey = availableFromRegistrations(noKey);
-  const rNoKey = resolveCapability({ domain: 'deep_research' }, availNoKey);
-  assert.equal(rNoKey.level, 'limited');
-  assert.ok((rNoKey.userChoices || []).includes('use_stronger'), '给出增强选择');
+  // 无 model 只有 search：deep_research → limited（缺组合）。
+  const availNoModel = availableFromRegistrations(withKey);
+  const rNoModel = resolveCapability({ domain: 'deep_research' }, availNoModel);
+  assert.equal(rNoModel.level, 'limited');
+  assert.ok((rNoModel.userChoices || []).includes('use_stronger'), '给出增强选择');
 });
 
-test('CASE 5: 能力后来出现 → 同一 need 自动升级（不重建任务语义）', () => {
-  // 纯函数：同一 need，注册表变化后重新评估 → 从 limited 升到 optimal。
-  const noKey = discoverSearchCapabilities({ GEMINI_API_KEY: '' }).map((a) => a.registration);
+test('CASE 5: 真正 professional research 出现 → 同一 deep_research need 自动升级 OPTIMAL', () => {
+  // baseline：web search + model → BASELINE。
   const withKey = discoverSearchCapabilities({ GEMINI_API_KEY: 'sk-test' }).map((a) => a.registration);
-  const before = resolveCapability({ domain: 'deep_research' }, availableFromRegistrations(noKey));
-  const after = resolveCapability({ domain: 'deep_research' }, availableFromRegistrations(withKey));
-  assert.equal(before.level, 'limited');
-  assert.equal(after.level, 'optimal');
+  const model = fullRegistration('cap_model', 'openai-compatible-model', 'openai-compatible-chat');
+  const before = resolveCapability({ domain: 'deep_research' }, availableFromRegistrations([...withKey, model]));
+  assert.equal(before.level, 'baseline');
+  // 注入真正声明为 deep research 的 professional adapter（remote-subject 研究型）→ OPTIMAL。
+  const profResearch = fullRegistration('cap_a2a_research', 'remote-subject', 'a2a-remote');
+  const after = resolveCapability({ domain: 'deep_research' }, availableFromRegistrations([...withKey, model, profResearch]));
+  assert.equal(after.level, 'optimal', '真正 professional deep research 出现后自动升级');
   // 任务本身不重建：同 need（goal/上下文不变），仅能力执行路径变化。
-  assert.equal(after.plan.capabilityId, PROFESSIONAL_SEARCH_CAPABILITY_ID);
+  assert.equal(after.plan.capabilityId, 'cap_a2a_research');
 });
 
 test('CASE 6: 探测失败 → 不暴露技术错误，fallback 仍可运行', async () => {
@@ -128,22 +153,24 @@ test('CASE 6: 探测失败 → 不暴露技术错误，fallback 仍可运行', a
   }
 });
 
-test('closureLevelForAdapterType: search 专业能力经 selectedCapabilityId 报 optimal', () => {
+test('closureViewFromSelection: current_web 选中专业搜索 → optimal；deep_research 需组合', () => {
   assert.equal(closureLevelForAdapterType('local-tool'), 'baseline');
-  const view = closureViewFromSelection({
+  // current_web：选中专业搜索 → OPTIMAL。
+  const cwView = closureViewFromSelection({
+    need: { domain: 'current_web' },
+    selectedAdapterType: 'local-tool',
+    selectedCapabilityId: PROFESSIONAL_SEARCH_CAPABILITY_ID,
+    availableRegistrations: [],
+  });
+  assert.equal(cwView.level, 'optimal');
+  // deep_research：仅选中 search（无 model 组合）→ 组合缺失，不虚报为 optimal。
+  const drView = closureViewFromSelection({
     need: { domain: 'deep_research' },
     selectedAdapterType: 'local-tool',
     selectedCapabilityId: PROFESSIONAL_SEARCH_CAPABILITY_ID,
     availableRegistrations: [],
   });
-  assert.equal(view.level, 'optimal');
-  const baselineView = closureViewFromSelection({
-    need: { domain: 'deep_research' },
-    selectedAdapterType: 'local-tool',
-    selectedCapabilityId: BASELINE_SEARCH_CAPABILITY_ID,
-    availableRegistrations: [],
-  });
-  assert.equal(baselineView.level, 'baseline');
+  assert.notEqual(drView.level, 'optimal', 'deep_research 不能因选中 search 就报 optimal');
 });
 
 test('registry: research 意图优先选 search 能力', async () => {

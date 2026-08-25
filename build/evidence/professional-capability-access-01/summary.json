@@ -39,11 +39,12 @@
     "status": "succeeded",
     "capabilityId": "cap_gemini_web_search",
     "closure": {
-      "level": "optimal",
+      "level": "baseline",
       "choices": []
     },
     "sources": true,
-    "excerpt": "# 搜索要点：调研企业引入 AI Agent 辅助开发时最常踩的三个坑\n\n- cnblogs.com\n  来源：https://www.cnblogs.com/itech/p/21388422\n- juejin.cn\n  来源：https://juejin.cn/post/7540652656911138852\n- c"
+    "excerpt": "# 搜索要点：调研企业引入 AI Agent 辅助开发时最常踩的三个坑\n\n- github.com\n  来源：https://github.com/datawhalechina/hello-agents/blob/main/Extra-Chapter/Extra09-Agent%E5%BA%94%E7%94%A8%E5"
   },
+  "semantics_accurate": true,
   "ok": true
 }
