@@ -5,11 +5,11 @@
  * 不引入第二 Store：关系复用 GrowthEvent.payload.relation.supersedes。
  */
 import type { GrowthEvent } from './growth-event';
-import { isExpiredByTags } from './growth-signal';
+import { isExpiredByTags, detectAuthorityConflict } from './growth-signal';
 
 /** 明确的纠正意图信号（保守集合，避免把闲聊/背景误判为纠正）。 */
 const CORRECTION_INTENT_RE =
-  /上次|之前|原来|其实|更正|纠正|不对|改成|换成|改为|换掉|不要|别再|不再|以后不要|以后别|只要|统一|固定为/;
+  /上次|之前|原来|其实|更正|纠正|不对|不是，|不是,|^不是[。！!]|改成|换成|改为|换掉|不要|别再|不再|以后不要|以后别|只要|统一|固定为/;
 
 const ONE_OFF_RE = /仅本次|只这一次|临时|这次先/;
 
@@ -58,7 +58,7 @@ export function isCorrectionStatement(text: string): boolean {
 export function hasReplacementValue(text: string): boolean {
   const t = String(text || '').trim();
   if (!t) return false;
-  if (/(改成|换成|改为|换掉|只要|统一|固定为|以后用|以后要)/.test(t)) return true;
+  if (/(改成|换成|改为|换掉|只要|统一|固定为|以后用|以后要|以后尽量|以后请)/.test(t)) return true;
   // 「不要 X，要 Y」结构
   if (/不要[^。\n]{0,40}，?要/.test(t)) return true;
   return false;
@@ -81,7 +81,7 @@ export function extractReplacementPreference(text: string): {
 
   const value =
     after(/(?:改成|换成|改为|换掉|统一为|固定为|以后统一为)/) ||
-    after(/(?:以后只要|以后用|以后要|只保留|只留|只要)/) ||
+    after(/(?:以后只要|以后用|以后要|以后尽量|以后请|只保留|只留|只要)/) ||
     after(/不要[^。\n]{0,40}，?要/) ||
     after(/(?:改为|换成|改成)/);
   if (!value || value.length < 2) return null;
@@ -141,7 +141,25 @@ export function matchCorrectionTarget(input: {
   }
 
   const pool = exactTagHits.length > 0 ? exactTagHits : topicHits;
-  if (pool.length === 0) return null;
+  if (pool.length === 0) {
+    const conflictHits = candidates.filter((e) =>
+      detectAuthorityConflict({
+        title: '',
+        detail: input.text,
+        type: input.type,
+        authority: [
+          {
+            title: e.payload.title,
+            detail: e.payload.detail,
+            type: e.type,
+            ...(e.payload.tags ? { tags: e.payload.tags } : {}),
+          },
+        ],
+      }),
+    );
+    if (conflictHits.length === 0) return null;
+    return [...conflictHits].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))[0] ?? null;
+  }
   return [...pool].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))[0] ?? null;
 }
 

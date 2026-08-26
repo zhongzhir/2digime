@@ -71,7 +71,10 @@ import { WorkRuntime } from '../work-runtime/job-runner';
 import type { SubjectSelectionResult } from '../work-runtime/job-runner';
 import { SubjectService } from '../subject-core/subject-service';
 import { selectSubjectInjection } from '../subject-core/experience-selector';
-import { createSubjectDistillModelRuntime } from '../subject-core/distill-model-runtime';
+import {
+  resolveSubjectUnderstandingRuntime,
+  type SubjectDistillModelRuntime,
+} from '../subject-core/distill-model-runtime';
 import type { SubjectContextFreeze } from '../subject-core/subject-context-freeze';
 import { buildAppliedUnderstanding } from '../subject-core/user-facing-overview';
 import {
@@ -236,6 +239,11 @@ export interface DigitalMeRuntimeOptions {
    */
   unsupportedDesktopCodingCapability?: false | UnsupportedDesktopCodingOptions;
   /**
+   * 主体理解专门能力（可选升级）。未提供时复用已有 generic model access。
+   * 不是第二套 registry，也不要求用户配置 distill/memory/embedding。
+   */
+  subjectUnderstanding?: SubjectDistillModelRuntime | null;
+  /**
    * D11-A 对话中枢模型调用注入（测试/评测用）。
    * 缺省时按 documentCapability + openaiCompatible + secrets 走真实模型;
    * 均不可用则 converse 进入降级(不得从自然语言创建 Job)。
@@ -272,14 +280,15 @@ export class DigitalMeRuntime {
   constructor(options: DigitalMeRuntimeOptions = {}) {
     this.options = options;
     this.registry = this.buildCapabilityRegistry();
-    const distillRt = createSubjectDistillModelRuntime({
+    const understanding = resolveSubjectUnderstandingRuntime({
+      ...(options.subjectUnderstanding ? { specialist: options.subjectUnderstanding } : {}),
       ...(options.documentCapability !== undefined
         ? { documentCapability: options.documentCapability }
         : {}),
       ...(options.openaiCompatible ? { openaiCompatible: options.openaiCompatible } : {}),
       ...(options.secrets ? { secrets: options.secrets } : {}),
     });
-    this.subject.setDistillModelRuntime(distillRt);
+    this.subject.setDistillModelRuntime(understanding.runtime);
   }
 
   /**

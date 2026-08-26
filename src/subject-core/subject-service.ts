@@ -73,7 +73,7 @@ export class SubjectService {
 
   constructor(private readonly eventBus?: InMemoryEventBus) {}
 
-  /** 由 Runtime 注入：与做事模型同一 SecretAccessor / openaiCompatible。 */
+  /** 由 Runtime 注入：专门 distill 优先，否则复用做事模型同一 SecretAccessor / openaiCompatible。 */
   setDistillModelRuntime(runtime: SubjectDistillModelRuntime | null): void {
     this.distillRuntime = runtime;
   }
@@ -81,6 +81,11 @@ export class SubjectService {
   /** 机会匹配等复用同一模型入口；未配置时返回 null。 */
   getDistillModelRuntime(): SubjectDistillModelRuntime | null {
     return this.distillRuntime;
+  }
+
+  getLastUnderstandingSource(): 'specialist' | 'generic' | 'none' {
+    if (!this.distillRuntime?.enabled) return 'none';
+    return this.distillRuntime.source === 'specialist' ? 'specialist' : 'generic';
   }
 
   getLastDistillMode(): typeof this.lastDistillMode {
@@ -92,7 +97,7 @@ export class SubjectService {
   }
 
   /**
-   * 复用做事/成长链已经配置的本地模型做小型语义判断。
+   * 复用当前可用的主体理解模型（专门 distill 或 generic model）做小型语义判断。
    * 不暴露凭据，不落盘；模型不可用或失败时由调用方保守降级。
    */
   private lastSemanticJsonError: string | null = null;

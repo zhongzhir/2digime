@@ -212,6 +212,46 @@ function proposalToEvent(
   };
 }
 
+/** 复用主模型时必须窄上下文：当前输入 + 少量已有事实，禁止整包/整段历史。 */
+const DISTILL_TEXT_LIMIT = 800;
+const DISTILL_FACT_LIMIT = 5;
+const DISTILL_MAX_TOKENS = 500;
+const DISTILL_TIMEOUT_MS = 12_000;
+
+function compactExistingFacts(
+  events: GrowthEvent[] | undefined,
+): Array<{ type: string; title: string; detail: string }> {
+  const allowed = new Set([
+    'preference_observed',
+    'identity_clarified',
+    'goal_updated',
+    'boundary_updated',
+    'principle_stated',
+  ]);
+  return (events || [])
+    .filter((e) => e.confidence === 'confirmed' && allowed.has(e.type))
+    .slice(-DISTILL_FACT_LIMIT)
+    .map((e) => ({
+      type: e.type,
+      title: e.payload.title.slice(0, 40),
+      detail: e.payload.detail.slice(0, 80),
+    }));
+}
+
+async function withDistillDeadline<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('distill_timeout')), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 async function modelDistillProposals(input: StructuredDistillInput): Promise<{
   proposals: DistilledCandidateProposal[];
   trace: NonNullable<StructuredDistillResult['normalizeTrace']>;
@@ -219,31 +259,37 @@ async function modelDistillProposals(input: StructuredDistillInput): Promise<{
 } | null> {
   if (!input.chatComplete || !input.model) return null;
   const system = [
-    '你从用户输入中提炼 1 到 3 条成长候选。只输出 JSON。',
+    '你从用户输入中提炼 0 到 3 条成长候选。只输出 JSON。',
     '可用字段: title, text, category, scope, temporary, risk, maybeConflict, modelConfidenceSummary, eventType。',
     'category 建议: preference, working_method, principle, boundary, goal, identity_fact, temporary_context, external_claim。',
     'text 尽量保留用户原词（如结论、篇幅、决策），不要改写成第三人称长句。',
     '不得把外部资料写成用户观点；不得推断性格/立场/敏感属性；不得把一次性要求写成长期偏好。',
+    '天气、新闻、闲聊或与用户本人无关的外部事实不是长期偏好或身份；此时输出 {"candidates":[]}。',
+    'existingFacts 仅用于冲突判断，不要把旧事实再写一遍，也不要读取未提供的历史。',
     '你不能决定确认或覆盖旧内容；needs_confirmation 只是建议。',
   ].join('\n');
   const userContent = JSON.stringify({
     sourceKind: input.sourceKind,
-    text: input.text.slice(0, 4000),
+    text: input.text.slice(0, DISTILL_TEXT_LIMIT),
+    existingFacts: compactExistingFacts(input.existingEvents),
   });
   const attempt = async (useJsonFormat: boolean): Promise<ChatCompleteResult> =>
-    input.chatComplete!({
-      baseUrl: input.model!.baseUrl,
-      ...(input.model!.apiKey ? { apiKey: input.model!.apiKey } : {}),
-      model: input.model!.model,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: userContent },
-      ],
-      temperature: 0,
-      maxTokens: 800,
-      ...(useJsonFormat ? { responseFormat: { type: 'json_object' as const } } : {}),
-      timeoutMs: 60_000,
-    });
+    withDistillDeadline(
+      input.chatComplete!({
+        baseUrl: input.model!.baseUrl,
+        ...(input.model!.apiKey ? { apiKey: input.model!.apiKey } : {}),
+        model: input.model!.model,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: userContent },
+        ],
+        temperature: 0,
+        maxTokens: DISTILL_MAX_TOKENS,
+        ...(useJsonFormat ? { responseFormat: { type: 'json_object' as const } } : {}),
+        timeoutMs: DISTILL_TIMEOUT_MS,
+      }),
+      DISTILL_TIMEOUT_MS,
+    );
 
   try {
     let result: ChatCompleteResult;

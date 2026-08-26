@@ -196,8 +196,8 @@ export function detectAuthorityConflict(input: {
     if (/结论先行/.test(prior) && /先铺垫|不要结论|禁止结论先行/.test(text)) return true;
     if (
       (/简洁|短句|少套话|尽量简短|控制篇幅|先给结论|结论先行/.test(prior) &&
-        /完整分析|保留完整|详细展开|详细论证|细节写全|写长一点/.test(text)) ||
-      (/完整分析|保留完整|详细展开|详细论证|细节写全/.test(prior) &&
+        /完整分析|保留完整|详细展开|详细论证|细节写全|写长一点|详细说明|喜欢详细|尽量详细/.test(text)) ||
+      (/完整分析|保留完整|详细展开|详细论证|细节写全|详细说明|喜欢详细|尽量详细/.test(prior) &&
         /简洁|短句|少套话|尽量简短|控制篇幅|先给结论|结论先行/.test(text))
     ) {
       return true;
