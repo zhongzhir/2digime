@@ -201,6 +201,11 @@ export interface DigitalMeRuntimeOptions {
    */
   searchCapability?: boolean;
   /**
+   * SEARCH-FAILURE-CLOSURE-01：测试/工程注入完整 registry（不走 buildCapabilityRegistry）。
+   * 默认不提供；提供时完全替代自动构建（用于受控 fallback 验证）。
+   */
+  capabilityRegistryOverride?: CapabilityRegistry;
+  /**
    * TRIAL-SURFACE-01B：无专用代码执行器时的模型兜底运输（agent 连接器的 model-api 运输）。
    * - undefined：默认——当真实模型已配置（documentCapability 为 openai-compatible/both 且有 openaiCompatible）时注册；
    *   否则不注册（fake/none 测试运行时禁止假模型冒充改代码）。
@@ -2436,6 +2441,9 @@ export class DigitalMeRuntime {
   }
 
   private buildCapabilityRegistry(): CapabilityRegistry {
+    if (this.options.capabilityRegistryOverride) {
+      return this.options.capabilityRegistryOverride;
+    }
     const registry = new CapabilityRegistry();
     const mode = this.options.documentCapability ?? 'fake';
     if (mode === 'none') {

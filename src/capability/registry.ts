@@ -16,6 +16,11 @@ export interface CapabilityNeed {
   expectedOutputFamily?: string;
   materialKinds?: readonly MaterialKind[];
   explicitCapabilityId?: string;
+  /**
+   * SEARCH-FAILURE-CLOSURE-01：本次选择需排除的能力（如刚失败/处于 cooldown 的 professional search）。
+   * 供「失败→排除→重选」复用，不建第二套 router。
+   */
+  excludeCapabilityIds?: readonly string[];
 }
 
 export interface CapabilitySelectResult {
@@ -81,6 +86,8 @@ export class CapabilityRegistry {
    */
   selectForNeed(need: CapabilityNeed): CapabilitySelectResult {
     const explicitId = String(need.explicitCapabilityId || '').trim();
+    const excluded = new Set(need.excludeCapabilityIds ?? []);
+    const notExcluded = (a: CapabilityAdapter): boolean => !excluded.has(a.registration.id);
     if (explicitId) {
       const adapter = this.adapters.get(explicitId);
       if (!adapter) {
@@ -146,9 +153,11 @@ export class CapabilityRegistry {
 
     // PROFESSIONAL-CAPABILITY-ACCESS-01：研究/当前信息意图优先使用 search 型能力。
     // professional（有凭据的联网搜索）优先；否则 baseline（keyless）；都无则回落 document。
+    // SEARCH-FAILURE-CLOSURE-01：被排除（刚失败/cooldown）的能力不再被选中 → 自然落到下一可用。
     if (intent === 'external_research') {
       const searchAdapters = [...this.adapters.values()].filter(
         (a) =>
+          notExcluded(a) &&
           a.registration.availability === 'available' &&
           /(?:-search|search)$/i.test(String(a.registration.adapter.adapterId || '')),
       );
@@ -161,6 +170,12 @@ export class CapabilityRegistry {
           adapter: chosen,
           reason: 'output_family',
         };
+      }
+      // 研究意图无可用的 search 能力时：若存在其他可执行能力（如 model），落到 family 分支；
+      // 若全部被排除，明确 none（不得回选被排除的 search 能力充当 document）。
+      const hasAnyUsable = [...this.adapters.values()].some((a) => notExcluded(a) && a.registration.availability === 'available');
+      if (!hasAnyUsable) {
+        return { reason: 'none', actionable: '暂无可用能力完成该任务' };
       }
     }
 
@@ -208,6 +223,7 @@ export class CapabilityRegistry {
       for (const adapter of this.adapters.values()) {
         const reg = adapter.registration;
         if (
+          notExcluded(adapter) &&
           reg.availability === 'available' &&
           reg.outputArtifactTypes.includes(family)
         ) {

@@ -1,0 +1,62 @@
+{
+  "note": "capabilityRegistryOverride 可控注入：professional search 首次 transient 失败、baseline search 可用、model 可用。普通用户入口 converse。",
+  "tasks": [
+    {
+      "id": "T2",
+      "label": "当前研究",
+      "initial_user_input": "调研企业引入 AI Agent 辅助开发时最常踩的三个坑，形成调研摘要。",
+      "user_confirmation_count": 0,
+      "technical_decisions_requested": [],
+      "recovery_user_intervention": [],
+      "time_to_result_ms": 12508,
+      "actual_capability_path": [
+        "closure:baseline",
+        "cap_baseline_web_search"
+      ],
+      "final_result": {
+        "status": "succeeded",
+        "textLength": 94,
+        "excerpt": "# 研究要点\n\n- AI Agent 在企业辅助开发的主要模式\n- 企业引入 AI Agent 的常见风险与收益\n- 来源A：真实来源 / 来源B：真实来源\n覆盖有限但可用，供进一步阅读。"
+      },
+      "major_manual_rework": false
+    },
+    {
+      "id": "T6",
+      "label": "深度研究",
+      "initial_user_input": "做一份关于 AI Agent 辅助开发对企业软件工程影响的深入行业研究报告。",
+      "user_confirmation_count": 0,
+      "technical_decisions_requested": [],
+      "recovery_user_intervention": [],
+      "time_to_result_ms": 20364,
+      "actual_capability_path": [
+        "closure:baseline",
+        "cap_baseline_web_search"
+      ],
+      "final_result": {
+        "status": "succeeded",
+        "textLength": 94,
+        "excerpt": "# 研究要点\n\n- AI Agent 在企业辅助开发的主要模式\n- 企业引入 AI Agent 的常见风险与收益\n- 来源A：真实来源 / 来源B：真实来源\n覆盖有限但可用，供进一步阅读。"
+      },
+      "major_manual_rework": false
+    },
+    {
+      "id": "T7",
+      "label": "连续失败",
+      "initial_user_input": "再调研一次 AI Agent 在企业落地的收益与风险。",
+      "user_confirmation_count": 0,
+      "technical_decisions_requested": [],
+      "recovery_user_intervention": [],
+      "time_to_result_ms": 23083,
+      "actual_capability_path": [
+        "closure:baseline",
+        "cap_baseline_web_search"
+      ],
+      "final_result": {
+        "status": "succeeded",
+        "textLength": 94,
+        "excerpt": "# 研究要点\n\n- AI Agent 在企业辅助开发的主要模式\n- 企业引入 AI Agent 的常见风险与收益\n- 来源A：真实来源 / 来源B：真实来源\n覆盖有限但可用，供进一步阅读。"
+      },
+      "major_manual_rework": false
+    }
+  ]
+}

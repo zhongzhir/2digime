@@ -161,6 +161,13 @@ export class WorkRuntime {
   private readonly liveProgress = new Map<string, string>();
   private pumping = false;
   private started = false;
+  /**
+   * SEARCH-FAILURE-CLOSURE-01：运行态内存健康/cooldown（capabilityId → until epoch ms）。
+   * 0 Store / 0 持久化 / 0 状态机；进程内短生命周期，重启即消失。
+   */
+  private readonly capabilityCooldown = new Map<string, number>();
+  /** 某 job 是否已做过 capability fallback（避免无限递归）。 */
+  private readonly jobFallbackAttempted = new Set<string>();
 
   constructor(private readonly opts: WorkRuntimeOptions) {}
 
@@ -180,6 +187,70 @@ export class WorkRuntime {
     while (this.pumping && Date.now() - startedAt < 15_000) {
       await new Promise((r) => setTimeout(r, 15));
     }
+  }
+
+  /**
+   * SEARCH-FAILURE-CLOSURE-01：判断是否为可回退的瞬时能力失败。
+   * 复用现有 error 分类：transient（429/5xx/timeout/network reset）与 retryable stage（capability/model）。
+   * auth/config（401/403）不在此列——但可回退到 baseline（见 pickFallbackCapability）。
+   */
+  private isRetryableCapabilityFailure(error: unknown): boolean {
+    const e = error as { transient?: boolean; kind?: string; stage?: string; status?: number };
+    if (e.transient === true) return true;
+    if (e.stage === 'capability' || e.stage === 'model') return true;
+    const kind = e.kind || '';
+    if (['network', 'quota', 'response', 'search', 'timeout'].includes(kind)) return true;
+    const status = Number(e.status);
+    if (status >= 429 || (status >= 500 && status < 600)) return true;
+    return false;
+  }
+
+  /** 运行态 cooldown：transient 耗尽后标记一段时间，避免连续任务反复撞同一坏能力。 */
+  private markCapabilityTransient(capabilityId: string): void {
+    this.capabilityCooldown.set(capabilityId, Date.now() + 60_000);
+  }
+
+  private capabilityInCooldown(capabilityId: string): boolean {
+    const until = this.capabilityCooldown.get(capabilityId);
+    if (until === undefined) return false;
+    if (Date.now() < until) return true;
+    this.capabilityCooldown.delete(capabilityId);
+    return false;
+  }
+
+  /** 当前处于 cooldown 的能力 id 列表（内存、短生命周期）。 */
+  private cooldownCapabilityIds(): string[] {
+    const now = Date.now();
+    const out: string[] = [];
+    for (const [id, until] of this.capabilityCooldown) {
+      if (now < until) out.push(id);
+      else this.capabilityCooldown.delete(id);
+    }
+    return out;
+  }
+
+  /**
+   * 失败后重新基于当前 Available Capabilities 选择下一可执行能力（复用 selectForNeed，
+   * 排除失败能力 + cooldown 能力）。无可用则返回 null。
+   */
+  private pickFallbackCapability(task: Task, failedCapabilityId: string): string | null {
+    const materialKinds: Array<'folder' | 'file'> = [];
+    for (const ref of task.contextRefs || []) {
+      if (ref.kind === 'folder') materialKinds.push('folder');
+      else if (ref.kind === 'file') materialKinds.push('file');
+    }
+    const excluded = new Set<string>([failedCapabilityId]);
+    for (const [id, until] of this.capabilityCooldown) {
+      if (Date.now() < until) excluded.add(id);
+    }
+    const sel = this.opts.registry.selectForNeed({
+      ...(task.intentKind ? { intentKind: task.intentKind } : {}),
+      expectedOutputFamily: task.requestedArtifactType,
+      materialKinds,
+      excludeCapabilityIds: [...excluded],
+    });
+    if (!sel.adapter || sel.adapter.registration.id === failedCapabilityId) return null;
+    return sel.adapter.registration.id;
   }
 
   /**
@@ -471,6 +542,11 @@ export class WorkRuntime {
       expectedOutputFamily,
       materialKinds: intent.materialKinds,
       ...(explicitCapabilityId ? { explicitCapabilityId } : {}),
+      // SEARCH-FAILURE-CLOSURE-01：cooldown 中的能力（刚 transient 耗尽）不再被首选，
+      // 避免连续任务反复撞同一坏能力。
+      ...(this.cooldownCapabilityIds().length
+        ? { excludeCapabilityIds: this.cooldownCapabilityIds() }
+        : {}),
     });
 
     if (!selected.adapter) {
@@ -1963,10 +2039,35 @@ export class WorkRuntime {
           await this.cancelRunning(job);
           return;
         }
+        // SEARCH-FAILURE-CLOSURE-01：瞬时能力失败 → bounded fallback（排除失败能力 → 重选下一可用）。
+        if (!this.jobFallbackAttempted.has(job.id) && this.isRetryableCapabilityFailure(error)) {
+          const fallbackCapId = this.pickFallbackCapability(task, job.capabilityId);
+          if (fallbackCapId) {
+            this.markCapabilityTransient(job.capabilityId);
+            this.jobFallbackAttempted.add(job.id);
+            this.liveProgress.delete(job.id); // 清 stale progress（避免把「正在检索」当失败文案）
+            const current = await this.opts.jobStore.get(job.id);
+            if (current && !isTerminal(current.status)) {
+              // 重置为 queued，让 pump 用新 capabilityId 重新调度执行。
+              const updated: ExecutionJob = {
+                ...current,
+                capabilityId: fallbackCapId,
+                status: 'queued',
+                progress: { note: '切换可用能力继续', updatedAt: nowIso() },
+              };
+              delete (updated as { failure?: unknown }).failure;
+              await this.opts.jobStore.put(updated);
+              this.publishJob(updated);
+              this.enqueue(job.id);
+              return;
+            }
+          }
+        }
         const stage = inferFailureStage(error);
         const actionable =
           (error as { actionable?: string }).actionable ??
           '请重试;若持续失败请更换能力或简化材料';
+        this.liveProgress.delete(job.id); // 失败时清 stale progress，避免误导性文案
         await this.failJob(
           job,
           stage,

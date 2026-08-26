@@ -26,6 +26,11 @@ async function run(ctx) {
     const profCap = require(path.join(__dirname, "..", "scripts", "professional-capability-evidence.cjs"));
     return profCap.runInSmoke(ctx);
   }
+  // DIGITALME-SEARCH-FAILURE-CLOSURE-01：委托给 search 失败闭环定向复测。
+  if (process.env.DIGITALME_V2_SFC_EVIDENCE === "1") {
+    const sfc = require(path.join(__dirname, "..", "scripts", "search-failure-closure-evidence.cjs"));
+    return sfc.runInSmoke(ctx);
+  }
   const evidenceDir =
     process.env.DIGITALME_V2_SMOKE_EVIDENCE || path.join(os.tmpdir(), "dmv2-p16-smoke-evidence");
   fs.mkdirSync(evidenceDir, { recursive: true });
