@@ -67,6 +67,7 @@ export function asLocalCapabilityAdapter(core: LocalCapabilityAdapterCore): Capa
     async execute(input: CapabilityInput, ctx: ExecutionContext): Promise<CapabilityOutput> {
       if (ctx.signal.aborted) throw abortError();
       const output = await core.execute(input, ctx);
+      if (ctx.signal.aborted) throw abortError();
       lastByJob.set(ctx.jobId, output);
       return output;
     },
@@ -92,9 +93,9 @@ export function asLocalCapabilityAdapter(core: LocalCapabilityAdapterCore): Capa
     recover:
       core.recover ??
       (async (ref: RemoteExecutionRef, ctx: ExecutionContext): Promise<RemoteRecoverResult> => {
+        if (ctx.signal.aborted) return { status: 'cancelled', message: '本地执行已取消' };
         const cached = lastByJob.get(ctx.jobId) ?? lastByJob.get(ref.executionId);
         if (cached) return { status: 'completed', output: cached };
-        if (ctx.signal.aborted) return { status: 'cancelled', message: '本地执行已取消' };
         return { status: 'failed', message: '本地同步能力无远端可恢复句柄' };
       }),
     collectArtifact:

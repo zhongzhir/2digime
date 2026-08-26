@@ -98,7 +98,7 @@ import {
   type DelegationAudit,
 } from '../collaboration/delegated-execution';
 import { deriveWorkIntent } from '../work-runtime/work-intent';
-import { taskNeedFromWorkIntent } from '../capability/capability-closure';
+import { taskNeedFromWorkIntent, closureViewFromSelection } from '../capability/capability-closure';
 import { waitForJobTerminal } from '../work-runtime/job-runner';
 import {
   deriveGrowthProfile,
@@ -200,6 +200,10 @@ export interface DigitalMeRuntimeOptions {
    * - false：不注册（测试可关闭）。
    */
   searchCapability?: boolean;
+  /**
+   * 搜索能力单次 attempt 的 job 级 deadline（毫秒）。测试可缩短。
+   */
+  searchAttemptDeadlineMs?: number;
   /**
    * SEARCH-FAILURE-CLOSURE-01：测试/工程注入完整 registry（不走 buildCapabilityRegistry）。
    * 默认不提供；提供时完全替代自动构建（用于受控 fallback 验证）。
@@ -726,7 +730,25 @@ export class DigitalMeRuntime {
         };
         if (submitted.intentKind) out.intentKind = submitted.intentKind;
         if (submitted.userFacingNotice) out.userFacingNotice = submitted.userFacingNotice;
-        if (submitted.capabilityClosure) out.capabilityClosure = submitted.capabilityClosure;
+        const actualAdapter = this.registry.get(job.capabilityId);
+        if (actualAdapter) {
+          const domain =
+            submitted.intentKind === 'external_research'
+              ? 'deep_research'
+              : submitted.intentKind === 'modify_code' || submitted.intentKind === 'analyze_code'
+                ? 'coding'
+                : submitted.intentKind === 'create_document'
+                  ? 'document'
+                  : 'current_web';
+          out.capabilityClosure = closureViewFromSelection({
+            need: { domain },
+            selectedAdapterType: actualAdapter.registration.adapter.type,
+            selectedCapabilityId: actualAdapter.registration.id,
+            availableRegistrations: this.registry.list(),
+          });
+        } else if (submitted.capabilityClosure) {
+          out.capabilityClosure = submitted.capabilityClosure;
+        }
         return out;
       }
       const stage = job.failure?.stage;
@@ -1859,6 +1881,9 @@ export class DigitalMeRuntime {
       registry,
       eventBus: this.eventBus,
       workRoot: path.join(root, 'work'),
+      ...(typeof this.options.searchAttemptDeadlineMs === 'number'
+        ? { searchAttemptDeadlineMs: this.options.searchAttemptDeadlineMs }
+        : {}),
       getArtifactOwnerDecision: (artifactId, artifactVersionId) =>
         subjectService.getArtifactOwnerDecision(artifactId, artifactVersionId),
       ...(this.options.secrets ? { secrets: this.options.secrets } : {}),

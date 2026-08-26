@@ -8,6 +8,12 @@
  * 其中 base64 字符串以 'a' 补足后解码即为最终 URL。
  */
 import type { SearchConnector, ReadResult } from '../search-connector';
+import {
+  bindTimeoutSignal,
+  fetchWithDeadline,
+  isTimeoutAbortReason,
+  throwIfAborted,
+} from '../search-connector';
 import type { SearchSource, SourceType } from '../search-contract';
 
 export interface BingHtmlSearchConnectorOptions {
@@ -21,13 +27,15 @@ export interface BingHtmlSearchConnectorOptions {
 }
 
 export class BingSearchConnectorError extends Error {
-  readonly kind: 'network' | 'blocked' | 'empty' | 'parse';
+  readonly kind: 'network' | 'blocked' | 'empty' | 'parse' | 'timeout';
   readonly status: number | undefined;
-  constructor(kind: BingSearchConnectorError['kind'], message: string, status?: number) {
+  readonly transient?: boolean;
+  constructor(kind: BingSearchConnectorError['kind'], message: string, status?: number, transient?: boolean) {
     super(message);
     this.name = 'BingSearchConnectorError';
     this.kind = kind;
     this.status = status;
+    if (transient !== undefined) this.transient = transient;
   }
 }
 
@@ -160,16 +168,17 @@ export function createBingHtmlSearchConnector(options?: BingHtmlSearchConnectorO
 
   async function read(url: string, opts?: { signal?: AbortSignal; maxChars?: number }): Promise<ReadResult | null> {
     if (!/^https?:\/\//i.test(url)) return null;
-    const init: RequestInit = {
-      headers: {
-        'user-agent': userAgent,
-        'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
-      },
-    };
-    if (opts?.signal) init.signal = opts.signal;
+    const bound = bindTimeoutSignal({ timeoutMs, parent: opts?.signal });
     try {
-      const response = await fetchImpl(url, init);
+      const init: RequestInit = {
+        headers: {
+          'user-agent': userAgent,
+          'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
+          accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+        },
+        signal: bound.signal,
+      };
+      const response = await fetchWithDeadline(fetchImpl, url, init, bound.signal);
       if (!response.ok) return null;
       const html = await response.text();
       const content = htmlToText(html, opts?.maxChars ?? 8000);
@@ -177,54 +186,70 @@ export function createBingHtmlSearchConnector(options?: BingHtmlSearchConnectorO
       return { content, retrievedAt: new Date().toISOString() };
     } catch {
       return null; // 页面抓取失败不阻断搜索（evidence 缺失时综合如实降级）
+    } finally {
+      bound.dispose();
     }
   }
 
   async function search(query: string, opts?: { signal?: AbortSignal }): Promise<SearchSource[]> {
     if (!query.trim()) return [];
-    const url = `https://www.bing.com/search?q=${encodeURIComponent(query)}&setlang=zh-cn&count=${maxResults + 2}`;
-    let response: Response;
-    const init: RequestInit = {
-      headers: {
-        'user-agent': userAgent,
-        'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
-      },
-    };
-    if (opts?.signal) init.signal = opts.signal;
+    const bound = bindTimeoutSignal({ timeoutMs, parent: opts?.signal });
     try {
-      response = await fetchImpl(url, init);
+      const url = `https://www.bing.com/search?q=${encodeURIComponent(query)}&setlang=zh-cn&count=${maxResults + 2}`;
+      let response: Response;
+      const init: RequestInit = {
+        headers: {
+          'user-agent': userAgent,
+          'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        },
+        signal: bound.signal,
+      };
+      try {
+        throwIfAborted(bound.signal);
+        response = await fetchWithDeadline(fetchImpl, url, init, bound.signal);
+      } catch (err) {
+        if (bound.timedOut() || isTimeoutAbortReason(err) || isTimeoutAbortReason(bound.signal.reason)) {
+          throw new BingSearchConnectorError('timeout', `Bing search timed out after ${timeoutMs}ms`, undefined, true);
+        }
+        throw new BingSearchConnectorError('network', `Bing 搜索网络失败: ${(err as Error).message}`, undefined, true);
+      }
+      if (response.status === 202 || response.status === 403 || response.status === 429) {
+        throw new BingSearchConnectorError('blocked', `Bing 拒绝搜索请求 (${response.status})`, response.status);
+      }
+      if (!response.ok) {
+        throw new BingSearchConnectorError('network', `Bing 搜索返回 ${response.status}`, response.status);
+      }
+      const html = await response.text();
+      const parsed = parseBingSearchResults(html);
+      if (parsed.length === 0) {
+        throw new BingSearchConnectorError('empty', 'Bing 未返回可解析结果');
+      }
+      const seen = new Set<string>();
+      const sources: SearchSource[] = [];
+      for (const p of parsed) {
+        const host = /^https?:\/\/([^/]+)/.exec(p.url)?.[1] || '';
+        if (!host || seen.has(host)) continue;
+        seen.add(host);
+        sources.push({
+          title: p.title,
+          url: p.url,
+          sourceClass: 'external',
+          sourceType: deriveSourceType(p.url, p.title),
+        });
+        if (sources.length >= maxResults) break;
+      }
+      if (sources.length === 0) {
+        throw new BingSearchConnectorError('empty', 'Bing 未返回可用来源');
+      }
+      return sources;
     } catch (err) {
-      throw new BingSearchConnectorError('network', `Bing 搜索网络失败: ${(err as Error).message}`);
+      if (bound.timedOut() && !(err instanceof BingSearchConnectorError && err.kind === 'timeout')) {
+        throw new BingSearchConnectorError('timeout', `Bing search timed out after ${timeoutMs}ms`, undefined, true);
+      }
+      throw err;
+    } finally {
+      bound.dispose();
     }
-    if (response.status === 202 || response.status === 403 || response.status === 429) {
-      throw new BingSearchConnectorError('blocked', `Bing 拒绝搜索请求 (${response.status})`, response.status);
-    }
-    if (!response.ok) {
-      throw new BingSearchConnectorError('network', `Bing 搜索返回 ${response.status}`, response.status);
-    }
-    const html = await response.text();
-    const parsed = parseBingSearchResults(html);
-    if (parsed.length === 0) {
-      throw new BingSearchConnectorError('empty', 'Bing 未返回可解析结果');
-    }
-    const seen = new Set<string>();
-    const sources: SearchSource[] = [];
-    for (const p of parsed) {
-      const host = /^https?:\/\/([^/]+)/.exec(p.url)?.[1] || '';
-      if (!host || seen.has(host)) continue;
-      seen.add(host);
-      sources.push({
-        title: p.title,
-        url: p.url,
-        sourceClass: 'external',
-        sourceType: deriveSourceType(p.url, p.title),
-      });
-      if (sources.length >= maxResults) break;
-    }
-    if (sources.length === 0) {
-      throw new BingSearchConnectorError('empty', 'Bing 未返回可用来源');
-    }
-    return sources;
   }
 
   return { id: 'bing-html', search, read };

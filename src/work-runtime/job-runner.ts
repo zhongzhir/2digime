@@ -85,6 +85,10 @@ import {
   taskNeedFromWorkIntent,
   type CapabilityClosureView,
 } from '../capability/capability-closure';
+import {
+  BASELINE_SEARCH_CAPABILITY_ID,
+  PROFESSIONAL_SEARCH_CAPABILITY_ID,
+} from '../capability/search-capability-discovery';
 
 export interface WorkRuntimeOptions {
   subjectId: string;
@@ -128,6 +132,11 @@ export interface WorkRuntimeOptions {
     artifactId: string,
     artifactVersionId: string,
   ) => Promise<{ status: 'undecided' | 'accepted' | 'rejected' }>;
+  /**
+   * 搜索能力单次 attempt 的 job 级 deadline（毫秒）。
+   * 不是通用调度器：仅防止 adapter 不响应时占死串行泵。默认 90s。
+   */
+  searchAttemptDeadlineMs?: number;
 }
 
 export interface SubjectSelectionResult {
@@ -148,6 +157,36 @@ export interface SubjectSelectionResult {
 
 type SubmitInput = CommandMap['work.submitTask']['input'];
 type GetTaskOutput = CommandMap['work.getTask']['output'];
+
+export const SEARCH_JOB_ATTEMPT_DEADLINE_MS = 90_000;
+export const SEARCH_UNAVAILABLE_USER_MESSAGE = '暂时无法可靠获取最新外部信息。';
+export const BASELINE_SEARCH_FALLBACK_NOTICE = '已使用当前可用的基础搜索完成，覆盖可能有限。';
+const SEARCH_ATTEMPT_DEADLINE_CODE = 'search_attempt_deadline';
+
+function isSearchCapabilityId(id: string | undefined): boolean {
+  if (!id) return false;
+  return (
+    id === PROFESSIONAL_SEARCH_CAPABILITY_ID ||
+    id === BASELINE_SEARCH_CAPABILITY_ID ||
+    /web_search/i.test(id) ||
+    /(?:^|_|-)search$/i.test(id)
+  );
+}
+
+function isSearchAttemptDeadline(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  return (value as { code?: string }).code === SEARCH_ATTEMPT_DEADLINE_CODE;
+}
+
+function searchAttemptDeadlineError(): Error {
+  return Object.assign(new Error('search attempt timed out'), {
+    name: 'TimeoutError',
+    kind: 'timeout',
+    transient: true,
+    code: SEARCH_ATTEMPT_DEADLINE_CODE,
+    stage: 'capability' as const,
+  });
+}
 
 /**
  * JobRunner / WorkRuntime — Work 主链唯一执行入口。
@@ -199,7 +238,7 @@ export class WorkRuntime {
     if (e.transient === true) return true;
     if (e.stage === 'capability' || e.stage === 'model') return true;
     const kind = e.kind || '';
-    if (['network', 'quota', 'response', 'search', 'timeout'].includes(kind)) return true;
+    if (['network', 'quota', 'response', 'search', 'timeout', 'empty'].includes(kind)) return true;
     const status = Number(e.status);
     if (status >= 429 || (status >= 500 && status < 600)) return true;
     return false;
@@ -251,6 +290,55 @@ export class WorkRuntime {
     });
     if (!sel.adapter || sel.adapter.registration.id === failedCapabilityId) return null;
     return sel.adapter.registration.id;
+  }
+
+  private isLiveAttempt(jobId: string, controller: AbortController): boolean {
+    if (controller.signal.aborted) return false;
+    return this.abortByJob.get(jobId) === controller;
+  }
+
+  private async awaitSearchAttempt<T>(pending: Promise<T>, controller: AbortController): Promise<T> {
+    const deadlineMs = this.opts.searchAttemptDeadlineMs ?? SEARCH_JOB_ATTEMPT_DEADLINE_MS;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        const reason = searchAttemptDeadlineError();
+        if (!controller.signal.aborted) controller.abort(reason);
+        reject(reason);
+      }, deadlineMs);
+    });
+    try {
+      return await Promise.race([pending, timeout]);
+    } catch (err) {
+      if (isSearchAttemptDeadline(err) || isSearchAttemptDeadline(controller.signal.reason)) {
+        void pending.then(
+          () => undefined,
+          () => undefined,
+        );
+      }
+      throw err;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
+  private userFacingCapabilityFailure(
+    job: ExecutionJob,
+    error: unknown,
+  ): { message: string; actionable: string } {
+    if (isSearchCapabilityId(job.capabilityId)) {
+      return {
+        message: SEARCH_UNAVAILABLE_USER_MESSAGE,
+        actionable: SEARCH_UNAVAILABLE_USER_MESSAGE,
+      };
+    }
+    const actionable =
+      (error as { actionable?: string }).actionable ??
+      '请重试;若持续失败请更换能力或简化材料';
+    return {
+      message: sanitizeMessage((error as Error).message || '能力执行失败'),
+      actionable: sanitizeMessage(actionable),
+    };
   }
 
   /**
@@ -1758,6 +1846,7 @@ export class WorkRuntime {
       const execCtx = {
         jobId: job.id,
         reportProgress: (note: string) => {
+          if (!this.isLiveAttempt(jobId, controller)) return;
           this.liveProgress.set(jobId, note);
           this.publishJob(
             {
@@ -1789,12 +1878,14 @@ export class WorkRuntime {
           endpoint?: string;
           lastRemoteStatus?: RemoteLifecycleStatus;
         }) => {
+          if (!this.isLiveAttempt(jobId, controller)) return;
           void bindRemote(ref);
         },
         updateRemoteExecution: (patch: {
           lastRemoteStatus?: RemoteLifecycleStatus;
           executionId?: string;
         }) => {
+          if (!this.isLiveAttempt(jobId, controller)) return;
           void updateRemote(patch);
         },
         updateExternalExecution: (patch: {
@@ -1804,6 +1895,7 @@ export class WorkRuntime {
           needsUserQuestion?: boolean;
         }) => {
           void (async () => {
+            if (!this.isLiveAttempt(jobId, controller)) return;
             const current = await this.opts.jobStore.get(jobId);
             if (!current?.externalExecution || isTerminal(current.status)) return;
             const next: ExecutionJob = {
@@ -1943,7 +2035,7 @@ export class WorkRuntime {
                 allowedMaterialPaths: [...auth.allowedMaterials],
               })
             : [];
-          const preparedResult = await prepareAndExecuteCapability({
+          const prepared = prepareAndExecuteCapability({
             adapter,
             rawInput,
             auth,
@@ -1954,6 +2046,9 @@ export class WorkRuntime {
             task,
             subjectId: task.subjectId,
           });
+          const preparedResult = isSearchCapabilityId(adapter.registration.id)
+            ? await this.awaitSearchAttempt(prepared, controller)
+            : await prepared;
           output = preparedResult.output;
         } else if (isRemote) {
           // 恢复得到的 output 仍须验证并附收据
@@ -2030,7 +2125,12 @@ export class WorkRuntime {
           output = await attachReceiptToOutput(output, workDir, receipt);
         }
       } catch (error) {
-        if (controller.signal.aborted || isAbortError(error) || job.remoteExecution?.cancelRequested) {
+        const deadlineHit =
+          isSearchAttemptDeadline(error) || isSearchAttemptDeadline(controller.signal.reason);
+        if (
+          !deadlineHit &&
+          (controller.signal.aborted || isAbortError(error) || job.remoteExecution?.cancelRequested)
+        ) {
           await this.cancelRunning(job);
           return;
         }
@@ -2039,8 +2139,13 @@ export class WorkRuntime {
           await this.cancelRunning(job);
           return;
         }
+        const retryError = deadlineHit ? searchAttemptDeadlineError() : error;
         // SEARCH-FAILURE-CLOSURE-01：瞬时能力失败 → bounded fallback（排除失败能力 → 重选下一可用）。
-        if (!this.jobFallbackAttempted.has(job.id) && this.isRetryableCapabilityFailure(error)) {
+        if (
+          !this.jobFallbackAttempted.has(job.id) &&
+          isSearchCapabilityId(job.capabilityId) &&
+          this.isRetryableCapabilityFailure(retryError)
+        ) {
           const fallbackCapId = this.pickFallbackCapability(task, job.capabilityId);
           if (fallbackCapId) {
             this.markCapabilityTransient(job.capabilityId);
@@ -2063,17 +2168,10 @@ export class WorkRuntime {
             }
           }
         }
-        const stage = inferFailureStage(error);
-        const actionable =
-          (error as { actionable?: string }).actionable ??
-          '请重试;若持续失败请更换能力或简化材料';
+        const stage = inferFailureStage(retryError);
+        const userFacing = this.userFacingCapabilityFailure(job, retryError);
         this.liveProgress.delete(job.id); // 失败时清 stale progress，避免误导性文案
-        await this.failJob(
-          job,
-          stage,
-          sanitizeMessage((error as Error).message || '能力执行失败'),
-          sanitizeMessage(actionable),
-        );
+        await this.failJob(job, stage, userFacing.message, userFacing.actionable);
         return;
       }
 
@@ -2224,6 +2322,14 @@ export class WorkRuntime {
             return;
           }
         }
+      }
+
+      if (
+        output &&
+        this.jobFallbackAttempted.has(job.id) &&
+        job.capabilityId === BASELINE_SEARCH_CAPABILITY_ID
+      ) {
+        output = applyBaselineSearchNotice(output);
       }
 
       // --- artifact commit / append (先写 Artifact,再 succeeded) ---
@@ -2473,6 +2579,23 @@ function isAbortError(error: unknown): boolean {
     (error instanceof Error && error.name === 'AbortError') ||
     (error instanceof Error && /abort/i.test(error.message))
   );
+}
+
+function applyBaselineSearchNotice(output: CapabilityOutput): CapabilityOutput {
+  const artifact = output.artifact;
+  if (!artifact || artifact.payload.kind !== 'text') return output;
+  const text = artifact.payload.text || '';
+  if (text.includes(BASELINE_SEARCH_FALLBACK_NOTICE)) return output;
+  return {
+    ...output,
+    artifact: {
+      ...artifact,
+      payload: {
+        ...artifact.payload,
+        text: `${BASELINE_SEARCH_FALLBACK_NOTICE}\n\n${text}`,
+      },
+    },
+  };
 }
 
 /** 是否 Coding Job（专用或模型兜底代码执行 Agent）。CODEX-DOING-CLOSED-LOOP-01 单 Job 硬门 + TRIAL-SURFACE-01B 模型兜底识别。 */

@@ -176,5 +176,56 @@ describe('gemini-search-01', () => {
       assert.equal(sources.length, 1);
       assert.equal(retries, 1);
     });
+
+    it('J: timeoutMs 约束 fetch；到期后 search 结束且不返回迟到结果', async () => {
+      let lateWrites = 0;
+      const connector = createGeminiSearchConnector({
+        apiKey: 'test-key',
+        timeoutMs: 60,
+        maxRetries: 0,
+        fetchImpl: (async (_input: string | URL | Request, init?: RequestInit) => {
+          await new Promise<void>((resolve, reject) => {
+            const timer = setTimeout(() => {
+              lateWrites += 1;
+              resolve();
+            }, 2_000);
+            init?.signal?.addEventListener(
+              'abort',
+              () => {
+                clearTimeout(timer);
+                const err = new Error('aborted');
+                err.name = 'AbortError';
+                reject(err);
+              },
+              { once: true },
+            );
+          });
+          return new Response(JSON.stringify(groundingResponse([{ uri: 'https://late.example', title: 'LATE' }])), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }) as unknown as typeof fetch,
+      });
+      const started = Date.now();
+      await assert.rejects(() => connector.search('q'), (err: unknown) => {
+        const e = err as GeminiSearchConnectorError;
+        return e.name === 'GeminiSearchConnectorError' && (e.kind === 'timeout' || e.transient === true);
+      });
+      const elapsed = Date.now() - started;
+      assert.ok(elapsed < 800, `timeout 应在数百毫秒内结束，实际 ${elapsed}ms`);
+      await new Promise((r) => setTimeout(r, 80));
+      assert.equal(lateWrites, 0, 'abort 后不得把迟到响应写回');
+    });
+
+    it('K: empty grounding chunks 视为能力失败（非成功）', async () => {
+      const connector = createGeminiSearchConnector({
+        apiKey: 'test-key',
+        fetchImpl: fakeFetch([{ body: groundingResponse([]) }]),
+      });
+      await assert.rejects(() => connector.search('q'), (err: unknown) => {
+        const e = err as GeminiSearchConnectorError;
+        return e.kind === 'empty';
+      });
+    });
   });
 });

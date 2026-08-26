@@ -146,10 +146,11 @@ const fakeSources: SearchSource[] = [
   { title: '融资快讯', url: 'https://funding.example.com/news', sourceClass: EXTERNAL_SOURCE_CLASS },
 ];
 
-function fakeSearchConnector(opts?: { fail?: boolean; failKind?: string }): SearchConnector {
+function fakeSearchConnector(opts?: { fail?: boolean; failKind?: string; empty?: boolean }): SearchConnector {
   return {
     id: 'fake',
     async search(_q) {
+      if (opts?.empty) return [];
       if (opts?.fail) {
         throw Object.assign(new Error('primary provider down'), { kind: opts.failKind ?? 'network' });
       }
@@ -323,6 +324,21 @@ describe('capability-closure-01', () => {
       assert.equal(reply.evidence.providerDegraded, true);
       assertNoTechLeak(reply.text, 'CASE9 text');
       assert.ok(!/503|429|quota/i.test(reply.text), '用户面不出现 HTTP/quota 细节');
+    });
+    it('主 provider 返回 empty → 视为本次能力不可用，fallback 完成', async () => {
+      const empty = fakeSearchConnector({ empty: true });
+      const fallback = fakeSearchConnector();
+      const reply = await runConversationSearch({
+        userText: '深入研究 2026 年中国 AI Agent 创业与融资趋势',
+        currentDate: '2026-08-26',
+        chat: fakeChat(),
+        connector: empty,
+        fallbackConnector: fallback,
+        providerId: 'primary',
+      });
+      assert.equal(reply.usedExternal, true);
+      assert.equal(reply.evidence.providerDegraded, true);
+      assertNoTechLeak(reply.text, 'CASE9 empty');
     });
   });
 

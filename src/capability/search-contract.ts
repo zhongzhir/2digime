@@ -110,3 +110,21 @@ export const EXTERNAL_SOURCE_CLASS = 'external' as const;
 export function isExternalSource(source: SearchSource): boolean {
   return source.sourceClass === 'external';
 }
+
+/**
+ * 当前 web search 的可用结果合同（复用 SearchSource，不用字数阈值）。
+ * HTTP 200 / 空结构成功 ≠ 能力成功：必须至少有一条可检索的外部来源条目。
+ */
+export function isUsableWebEvidenceItem(source: SearchSource | null | undefined): boolean {
+  if (!source || source.sourceClass !== EXTERNAL_SOURCE_CLASS) return false;
+  const url = String(source.url || '').trim();
+  if (!/^https?:\/\//i.test(url)) return false;
+  const title = String(source.title || '').trim();
+  return title.length > 0 || url.length > 0;
+}
+
+/** 一轮/一次 search 是否具备足以支撑当前事实检索的 evidence/source item。 */
+export function hasUsableWebEvidence(sources: readonly SearchSource[] | null | undefined): boolean {
+  if (!sources || sources.length === 0) return false;
+  return sources.some((s) => isUsableWebEvidenceItem(s));
+}

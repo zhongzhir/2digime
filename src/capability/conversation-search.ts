@@ -24,6 +24,7 @@ import {
   type ResearchGap,
   type CitationReport,
   EXTERNAL_SOURCE_CLASS,
+  hasUsableWebEvidence,
 } from './search-contract';
 import {
   classifySearchClosure,
@@ -283,7 +284,11 @@ async function searchWithFallback(
   degradedState?: { used: boolean },
 ): Promise<SearchSource[]> {
   try {
-    return await connector.search(query, signal ? { signal } : undefined);
+    const sources = await connector.search(query, signal ? { signal } : undefined);
+    if (!hasUsableWebEvidence(sources)) {
+      throw Object.assign(new Error('search returned no usable evidence'), { kind: 'empty' });
+    }
+    return sources;
   } catch (err) {
     if (opts?.fallbackConnector && isProviderFailure(err)) {
       if (degradedState) degradedState.used = true;
@@ -343,6 +348,9 @@ export async function runWebSearch(
   const rounds = await runSearchRound(opts.connector, effectiveQueries, opts.signal, opts, degradedState);
   const maxReads = opts.maxEvidenceReads ?? 4;
   const readRounds = await retrieveEvidence(opts.connector, rounds, maxReads, opts.signal);
+  if (!hasUsableWebEvidence(readRounds.flatMap((r) => r.sources))) {
+    throw Object.assign(new Error('search returned no usable evidence'), { kind: 'empty' });
+  }
   const evidence: SearchEvidence = {
     mode: 'web_search',
     rounds: readRounds,
@@ -498,6 +506,9 @@ export async function runDeepResearch(
   const round1 = await execRound(firstQueries);
   allRounds.push(...(await retrieveEvidence(opts.connector, round1, maxReads, opts.signal)));
   let iterations = round1.length > 0 ? 1 : 0;
+  if (!hasUsableWebEvidence(allRounds.flatMap((r) => r.sources))) {
+    throw Object.assign(new Error('search returned no usable evidence'), { kind: 'empty' });
+  }
 
   // Round 2+：coverage evaluation → 只针对真实 gap 查询（非「+最新进展 2026」拼接）。
   const researchGaps: ResearchGap[] = [];
@@ -719,6 +730,7 @@ function isProviderFailure(err: unknown): boolean {
   return [
     'network', 'auth', 'quota', 'invalid', 'empty', 'blocked', 'model', 'response',
     'search', // 由 connector 抛出的搜索失败
+    'timeout',
   ].includes(kind);
 }
 
@@ -848,5 +860,29 @@ export async function runClosureSearch(
     };
   }
   const reply = await runConversationSearch(opts);
+  if (webNeeded) {
+    if (!reply.usedExternal) {
+      return {
+        resolution: classifySearchClosure({
+          need,
+          professionalSearchUsable: false,
+          baselineSearchUsable: false,
+          modelUsable: opts.modelUsable ?? false,
+        }),
+        reply,
+      };
+    }
+    if (reply.evidence.providerDegraded) {
+      return {
+        resolution: classifySearchClosure({
+          need,
+          professionalSearchUsable: false,
+          baselineSearchUsable: opts.baselineSearchUsable ?? true,
+          modelUsable: opts.modelUsable ?? false,
+        }),
+        reply,
+      };
+    }
+  }
   return { resolution, reply };
 }

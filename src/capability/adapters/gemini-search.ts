@@ -13,6 +13,12 @@
  * 失败：抛 GeminiSearchConnectorError，由 pipeline 按现有失败语义处理（诚实失败 / degraded）。
  */
 import type { SearchConnector, ReadResult } from '../search-connector';
+import {
+  bindTimeoutSignal,
+  fetchWithDeadline,
+  isTimeoutAbortReason,
+  throwIfAborted,
+} from '../search-connector';
 import type { SearchSource, SourceType } from '../search-contract';
 import { deriveSourceType, htmlToText } from './bing-html-search';
 
@@ -41,7 +47,7 @@ export interface GeminiSearchConnectorOptions {
 }
 
 export class GeminiSearchConnectorError extends Error {
-  readonly kind: 'network' | 'auth' | 'quota' | 'invalid' | 'empty' | 'model' | 'response';
+  readonly kind: 'network' | 'auth' | 'quota' | 'invalid' | 'empty' | 'model' | 'response' | 'timeout';
   readonly status: number | undefined;
   readonly transient?: boolean;
   constructor(kind: GeminiSearchConnectorError['kind'], message: string, status?: number, transient?: boolean) {
@@ -87,15 +93,51 @@ function classifyError(status: number, msg: string): GeminiSearchConnectorError 
 }
 
 function isRetriable(err: unknown): boolean {
-  const e = err as { transient?: boolean; kind?: string };
+  const e = err as { transient?: boolean; kind?: string; name?: string };
+  // 总 deadline 用尽或已取消：不再重试同一 attempt。
+  if (e && (e.kind === 'timeout' || e.name === 'TimeoutError' || e.name === 'AbortError')) return false;
   if (e && e.transient === true) return true;
-  // 网络 reset/timeout（fetch 抛错、无 status）也算 transient。
+  // 网络 reset（fetch 抛错、无 status）也算 transient。
   if (e && e.kind === 'network' && !e.transient) return true;
   return false;
 }
 
-async function sleepMs(ms: number): Promise<void> {
-  await new Promise((r) => setTimeout(r, ms));
+async function sleepMs(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) throwIfAborted(signal);
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      try {
+        throwIfAborted(signal);
+      } catch (err) {
+        reject(err);
+      }
+    };
+    if (!signal) return;
+    if (signal.aborted) {
+      clearTimeout(timer);
+      onAbort();
+      return;
+    }
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+function classifyAbortOrTimeout(err: unknown, timeoutMs: number, signal?: AbortSignal): GeminiSearchConnectorError {
+  const reason = signal?.reason ?? err;
+  if (isTimeoutAbortReason(reason) || isTimeoutAbortReason(err)) {
+    return new GeminiSearchConnectorError('timeout', `Gemini request timed out after ${timeoutMs}ms`, undefined, true);
+  }
+  if ((err instanceof Error && err.name === 'AbortError') || signal?.aborted) {
+    return new GeminiSearchConnectorError('network', 'Gemini request aborted', undefined, true);
+  }
+  return new GeminiSearchConnectorError(
+    'network',
+    `Gemini network failure: ${(err as Error).message}`,
+    undefined,
+    true,
+  );
 }
 
 /** bounded exponential backoff + jitter。 */
@@ -137,7 +179,7 @@ export function createGeminiSearchConnector(options: GeminiSearchConnectorOption
             ...(typeof le.status === 'number' ? { status: le.status } : {}),
           });
         }
-        await sleepMs(delay);
+        await sleepMs(delay, opts?.signal);
       }
       try {
         return await geminiGenerateOnce(query, opts);
@@ -169,10 +211,9 @@ export function createGeminiSearchConnector(options: GeminiSearchConnectorOption
     };
     if (opts?.signal) init.signal = opts.signal;
     try {
-      response = await fetchImpl(url, init);
+      response = await fetchWithDeadline(fetchImpl, url, init, opts?.signal ?? new AbortController().signal);
     } catch (err) {
-      // 网络 reset / timeout：transient。
-      throw new GeminiSearchConnectorError('network', `Gemini network failure: ${(err as Error).message}`, undefined, true);
+      throw classifyAbortOrTimeout(err, timeoutMs, opts?.signal);
     }
     if (!response.ok) {
       let msg = '';
@@ -219,48 +260,59 @@ export function createGeminiSearchConnector(options: GeminiSearchConnectorOption
 
   async function search(query: string, opts?: { signal?: AbortSignal }): Promise<SearchSource[]> {
     if (!query.trim()) return [];
-    const { chunks, supports } = await geminiGenerate(query, opts);
-    const seenTitles = new Set<string>();
-    const sources: SearchSource[] = [];
-    for (const chunk of chunks) {
-      const uri = chunk.web && chunk.web.uri;
-      if (!uri) continue;
-      // Google grounding chunk URLs 均为 vertexaisearch redirect（同一 host），不能按 host 去重；
-      // 改按 title 去重保留多个不同来源。
-      const title = (chunk.web && chunk.web.title) || uri;
-      const titleKey = title.toLowerCase().trim();
-      if (seenTitles.has(titleKey)) continue;
-      seenTitles.add(titleKey);
-      // 基于 redirect 解析后的真实 URL 判断来源类型，并让上层 host 去重作用于真实 host。
-      const realUrl = await resolveGroundingUrl(uri, opts?.signal);
-      const source: SearchSource = {
-        title,
-        url: realUrl || uri,
-        sourceClass: 'external',
-        sourceType: deriveSourceType(realUrl || uri, title),
-        grounded: true,
-      };
-      // §七：把 grounding support signal 附到来源（segment 文本 + confidence）。
-      const supportsForThisChunk = supports
-        .map((s, idx) => ({ s, idx }))
-        .filter(({ s }) => Array.isArray(s.groundingChunkIndices) && s.groundingChunkIndices.includes(chunks.indexOf(chunk)))
-        .map(({ s }) => {
-          const entry: { segment: string; confidence?: number } = {
-            segment: (s.segment && s.segment.text) || '',
-          };
-          const conf = s.confidenceScores && s.confidenceScores[0];
-          if (typeof conf === 'number') entry.confidence = conf;
-          return entry;
-        })
-        .filter((x) => x.segment.length > 0);
-      if (supportsForThisChunk.length > 0) source.groundingSupport = supportsForThisChunk;
-      sources.push(source);
-      if (sources.length >= maxResults) break;
+    const bound = bindTimeoutSignal({ timeoutMs, parent: opts?.signal });
+    try {
+      const { chunks, supports } = await geminiGenerate(query, { signal: bound.signal });
+      const seenTitles = new Set<string>();
+      const sources: SearchSource[] = [];
+      for (const chunk of chunks) {
+        throwIfAborted(bound.signal);
+        const uri = chunk.web && chunk.web.uri;
+        if (!uri) continue;
+        // Google grounding chunk URLs 均为 vertexaisearch redirect（同一 host），不能按 host 去重；
+        // 改按 title 去重保留多个不同来源。
+        const title = (chunk.web && chunk.web.title) || uri;
+        const titleKey = title.toLowerCase().trim();
+        if (seenTitles.has(titleKey)) continue;
+        seenTitles.add(titleKey);
+        // 基于 redirect 解析后的真实 URL 判断来源类型，并让上层 host 去重作用于真实 host。
+        const realUrl = await resolveGroundingUrl(uri, bound.signal);
+        const source: SearchSource = {
+          title,
+          url: realUrl || uri,
+          sourceClass: 'external',
+          sourceType: deriveSourceType(realUrl || uri, title),
+          grounded: true,
+        };
+        // §七：把 grounding support signal 附到来源（segment 文本 + confidence）。
+        const supportsForThisChunk = supports
+          .map((s, idx) => ({ s, idx }))
+          .filter(({ s }) => Array.isArray(s.groundingChunkIndices) && s.groundingChunkIndices.includes(chunks.indexOf(chunk)))
+          .map(({ s }) => {
+            const entry: { segment: string; confidence?: number } = {
+              segment: (s.segment && s.segment.text) || '',
+            };
+            const conf = s.confidenceScores && s.confidenceScores[0];
+            if (typeof conf === 'number') entry.confidence = conf;
+            return entry;
+          })
+          .filter((x) => x.segment.length > 0);
+        if (supportsForThisChunk.length > 0) source.groundingSupport = supportsForThisChunk;
+        sources.push(source);
+        if (sources.length >= maxResults) break;
+      }
+      if (sources.length === 0) {
+        throw new GeminiSearchConnectorError('empty', 'Gemini grounding returned no usable sources');
+      }
+      return sources;
+    } catch (err) {
+      if (bound.timedOut() || isTimeoutAbortReason(err) || isTimeoutAbortReason(bound.signal.reason)) {
+        throw classifyAbortOrTimeout(err, timeoutMs, bound.signal);
+      }
+      throw err;
+    } finally {
+      bound.dispose();
     }
-    if (sources.length === 0) {
-      throw new GeminiSearchConnectorError('empty', 'Gemini grounding returned no usable sources');
-    }
-    return sources;
   }
 
   /** 仅对 Google grounding redirect host 做真实 URL 解析（bounded）；非 redirect 直接返回。 */
@@ -292,22 +344,26 @@ export function createGeminiSearchConnector(options: GeminiSearchConnectorOption
     const headers = { 'user-agent': userAgent, 'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8' };
     // HEAD 优先（轻量）
     try {
+      throwIfAborted(signal);
       const init: RequestInit = { method: 'HEAD', redirect: 'follow', headers };
       if (signal) init.signal = signal;
-      const res = await fetchImpl(url, init);
+      const res = await fetchWithDeadline(fetchImpl, url, init, signal ?? new AbortController().signal);
       const finalUrl = res.url || url;
       if (res.ok && finalUrl && !isGoogleRedirect(finalUrl)) return finalUrl;
-    } catch {
+    } catch (err) {
+      if (signal?.aborted || isTimeoutAbortReason(err)) throw err;
       /* fallthrough to GET */
     }
     // GET 回退：跟随重定向拿到最终 URL
     try {
+      throwIfAborted(signal);
       const init: RequestInit = { method: 'GET', redirect: 'follow', headers };
       if (signal) init.signal = signal;
-      const res = await fetchImpl(url, init);
+      const res = await fetchWithDeadline(fetchImpl, url, init, signal ?? new AbortController().signal);
       const finalUrl = res.url || url;
       if (res.ok && finalUrl && !isGoogleRedirect(finalUrl)) return finalUrl;
-    } catch {
+    } catch (err) {
+      if (signal?.aborted || isTimeoutAbortReason(err)) throw err;
       return null;
     }
     return null;
@@ -317,14 +373,20 @@ export function createGeminiSearchConnector(options: GeminiSearchConnectorOption
    *  先解析 redirect 到真实 URL 再抓取（更稳）；transient 网络/5xx 做 bounded retry（复用同一退避策略）。 */
   async function read(url: string, opts?: { signal?: AbortSignal; maxChars?: number }): Promise<ReadResult | null> {
     if (!/^https?:\/\//i.test(url)) return null;
-    // 先解析 grounding redirect 到真实 URL，再用真实 URL 抓正文。
-    const resolved = await resolveRealUrl(url, opts?.signal);
-    const targets = [resolved && /^https?:\/\//i.test(resolved) ? resolved : url, resolved && /^https?:\/\//i.test(resolved) ? url : null].filter((u): u is string => !!u);
-    for (const target of targets) {
-      const result = await readOnce(target, opts);
-      if (result) return result;
+    const bound = bindTimeoutSignal({ timeoutMs, parent: opts?.signal });
+    try {
+      const resolved = await resolveRealUrl(url, bound.signal);
+      const targets = [resolved && /^https?:\/\//i.test(resolved) ? resolved : url, resolved && /^https?:\/\//i.test(resolved) ? url : null].filter((u): u is string => !!u);
+      for (const target of targets) {
+        const result = await readOnce(target, { ...opts, signal: bound.signal });
+        if (result) return result;
+      }
+      return null;
+    } catch {
+      return null;
+    } finally {
+      bound.dispose();
     }
-    return null;
   }
 
   async function readOnce(url: string, opts?: { signal?: AbortSignal; maxChars?: number }): Promise<ReadResult | null> {
@@ -337,10 +399,15 @@ export function createGeminiSearchConnector(options: GeminiSearchConnectorOption
     };
     if (opts?.signal) init.signal = opts.signal;
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
-      if (attempt > 0 && opts?.signal?.aborted) return null;
-      if (attempt > 0) await sleepMs(backoffMs(attempt, retryBaseMs, retryMaxMs));
+      if (opts?.signal?.aborted) return null;
+      if (attempt > 0) await sleepMs(backoffMs(attempt, retryBaseMs, retryMaxMs), opts?.signal);
       try {
-        const response = await fetchImpl(url, init);
+        const response = await fetchWithDeadline(
+          fetchImpl,
+          url,
+          init,
+          opts?.signal ?? new AbortController().signal,
+        );
         if (response.status === 429 || (response.status >= 500 && response.status <= 599)) {
           if (attempt < maxRetries) continue;
           return null;
@@ -351,8 +418,8 @@ export function createGeminiSearchConnector(options: GeminiSearchConnectorOption
         const content = htmlToText(html, opts?.maxChars ?? 6000);
         if (content.length < 40) return null;
         return { content, retrievedAt: new Date().toISOString(), resolvedUrl: finalUrl };
-      } catch {
-        // 网络 reset/timeout：transient，bounded retry；最终仍拿不到则返回 null（不阻断）。
+      } catch (err) {
+        if (opts?.signal?.aborted || isTimeoutAbortReason(err)) return null;
         if (attempt >= maxRetries) return null;
       }
     }
