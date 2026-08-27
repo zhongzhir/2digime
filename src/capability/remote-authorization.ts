@@ -143,6 +143,9 @@ export function applyAuthorizationProjectionToInput(
   if (input.confirmedPlan && auth.allowedFields.includes('confirmedPlan')) {
     next.confirmedPlan = input.confirmedPlan;
   }
+  if (input.searchQuery && auth.allowedFields.includes('searchQuery')) {
+    next.searchQuery = input.searchQuery;
+  }
   if (input.executionAuthorization) {
     next.executionAuthorization = input.executionAuthorization;
   }

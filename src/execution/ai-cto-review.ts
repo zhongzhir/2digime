@@ -183,6 +183,7 @@ const SYSTEM_PROMPT = [
   'materials.obtained 是能力实际获得的文件清单；extracted 是已抽取正文；used 是实际读入执行或提示的文件；unread 是仅存在但未读取。used 各项的 completeness 为 full（完整读取）、truncated（部分读取）或 unread（未读取），并带 sourceChars/usedChars。includedCount 是纳入提示的条数，不是完整阅读数；fullReadCount 才是完整读取数。jobExecutionReport 只是执行器声明，不是独立核对。artifactBody 是实际成果。testResults、changedFiles、changedFileExcerpts 才是独立证据。项目目录存在不等于已阅读项目；已抽取不等于已完整阅读。',
   '对规划要求（planRequirements）逐项写入 requirementChecks：requirement、status（completed | incomplete | unverifiable）、evidence。有 planRequirements 时必须用这些任务级要求验收，不得用关键词自行发明新要求。无 planRequirements 时才从用户目标识别核心要求。completed 必须能指向证据包中的真实材料或成果依据。',
   '若证据包含 selectedContext 或 materials.used 中的已有工作成果：必须结合 AI 规划、这些已选上下文与用户目标，判断产物是否已经达到可直接使用的完成状态。已有相关事实时，不得把仍需用户自行填空的通用稿当成完成。',
+  '若任务需要现实世界信息（规划含外部信息、或 materials 含 search-evidence）：必须判断正文是否真正回答了用户问题；关键现实判断是否能回到证据；是否只是链接或标题清单；核心问题是否被遗漏；证据明显不足时是否仍给出过强结论。仅有来源列表而无综合判断，不得 meets_plan。不得把内部知识假装成已检索到的最新事实。',
   '若用户核心要求是完整阅读全部材料：used 中任一材料 completeness 不是 full，该要求不得标 completed；decision 不得为 meets_plan；canUse 与 nextStep 不得建议采用声称已完整阅读的成果。可以判定部分完成，并说明哪些材料只读了部分、哪些未读。',
   '核心要求为 incomplete 或 unverifiable 时：decision 不得为 meets_plan；goalAttained 不得写成目标已达成；canUse 与 nextStep 不得建议采用。可以判定部分完成，并准确说明缺什么。',
   '不得把本轮用户明确要求改写成后续新任务，从而把未执行事项说成不影响采用。',

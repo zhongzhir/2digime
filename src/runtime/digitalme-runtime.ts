@@ -68,7 +68,7 @@ import { ContextSnapshotBuilder } from '../work-runtime/snapshot-builder';
 import { ArtifactCommitter } from '../work-runtime/artifact-commit';
 import { InMemoryEventBus } from '../work-runtime/event-bus';
 import { WorkRuntime } from '../work-runtime/job-runner';
-import type { SubjectSelectionResult } from '../work-runtime/job-runner';
+import type { SubjectSelectionResult, WorkRuntimeOptions } from '../work-runtime/job-runner';
 import { SubjectService } from '../subject-core/subject-service';
 import { selectSubjectInjection } from '../subject-core/experience-selector';
 import {
@@ -131,6 +131,10 @@ import { extractEditEvidence } from '../subject-core/diff-evidence';
 import { headVersion } from '../work-runtime/artifact';
 import { runWorkConverse, type WorkConverseDeps } from '../work-runtime/work-converse';
 import { resolveContextRelevanceWithChat } from '../work-runtime/context-relevance';
+import {
+  judgeResearchEvidenceWithChat,
+  planResearchQueriesWithChat,
+} from '../work-runtime/research-evidence';
 import { maybeRunControlledRevisionAfterJob } from '../work-runtime/controlled-revision-runner';
 import {
   collectGenericCtoEvidence,
@@ -250,6 +254,8 @@ export interface DigitalMeRuntimeOptions {
    * 均不可用则 converse 进入降级(不得从自然语言创建 Job)。
    */
   converseChat?: (input: { messages: ChatMessage[] }) => Promise<{ text: string }>;
+  /** 测试可注入研究查询/证据判断；缺省走 converse 同一模型。 */
+  resolveResearchEvidence?: WorkRuntimeOptions['resolveResearchEvidence'];
   /**
    * D11-C 独立 CTO 验收模型调用注入。未配置时验收如实显示无法完成独立审查，
    * 不使用旧模板冒充模型结论。
@@ -1919,6 +1925,31 @@ export class DigitalMeRuntime {
         if (!chat) return { selectedIds: [], decided: false };
         return resolveContextRelevanceWithChat(chat, input);
       },
+      resolveResearchEvidence:
+        this.options.resolveResearchEvidence ||
+        (async (input) => {
+        const chat = this.buildConverseChat();
+        if (!chat) return { decided: false };
+        if (input.phase === 'queries') {
+          const planned = await planResearchQueriesWithChat(chat, {
+            goal: input.goal,
+            ...(input.plan ? { plan: input.plan } : {}),
+          });
+          return { decided: planned.decided, queries: planned.queries };
+        }
+        const judged = await judgeResearchEvidenceWithChat(chat, {
+          goal: input.goal,
+          queries: input.queries || [],
+          candidates: input.candidates || [],
+        });
+        return {
+          decided: judged.decided,
+          selectedIndexes: judged.selectedIndexes,
+          sufficient: judged.sufficient,
+          followupQueries: judged.followupQueries,
+          missingQuestions: judged.missingQuestions,
+        };
+      }),
       selectSubjectContext: async ({
         goal,
         requestedArtifactType,

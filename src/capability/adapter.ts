@@ -135,6 +135,11 @@ export interface CapabilityInput {
     /** Digital Me 自建项目等来源标记（非第二 Store）。 */
     projectOrigin?: 'digitalme_created' | 'user_selected' | 'unknown';
   };
+  /**
+   * 本轮检索查询（由研究编排注入）。缺省时搜索能力仍可用 goal。
+   * 不得覆盖 Task.goal。
+   */
+  searchQuery?: string;
 }
 
 /**
@@ -229,6 +234,19 @@ export interface CapabilityOutput {
       usedChars: number;
     }>;
   };
+  /**
+   * 检索能力返回的结构化来源（研究编排用）。
+   * 有 URL 不等于有效研究证据；由后续模型筛选。
+   */
+  externalSources?: Array<{
+    title: string;
+    url: string;
+    snippet?: string;
+    evidenceChunk?: string;
+    sourceType?: string;
+  }>;
+  /** 本轮实际执行的检索查询。 */
+  searchQuery?: string;
   /** 候选成果元数据;验证前不得当作已提交 Artifact。 */
   candidateMeta?: {
     provenance?: string;

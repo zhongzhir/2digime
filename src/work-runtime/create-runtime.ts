@@ -28,6 +28,7 @@ export interface CreateWorkRuntimeOptions {
   selectSubjectContext?: WorkRuntimeOptions['selectSubjectContext'];
   loadSubjectPreferenceCandidates?: WorkRuntimeOptions['loadSubjectPreferenceCandidates'];
   resolveContextRelevance?: WorkRuntimeOptions['resolveContextRelevance'];
+  resolveResearchEvidence?: WorkRuntimeOptions['resolveResearchEvidence'];
   secrets?: WorkRuntimeOptions['secrets'];
 }
 
@@ -78,6 +79,9 @@ export function createWorkRuntime(options: CreateWorkRuntimeOptions): WorkRuntim
       : {}),
     ...(options.resolveContextRelevance
       ? { resolveContextRelevance: options.resolveContextRelevance }
+      : {}),
+    ...(options.resolveResearchEvidence
+      ? { resolveResearchEvidence: options.resolveResearchEvidence }
       : {}),
     ...(options.secrets ? { secrets: options.secrets } : {}),
   });

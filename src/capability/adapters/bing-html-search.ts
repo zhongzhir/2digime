@@ -59,17 +59,40 @@ export function decodeBingRedirectUrl(hrefOrEncoded: string): string {
   return '';
 }
 
-/** 解析 Bing HTML 搜索结果页，返回 {title,url}[]。 */
-export function parseBingSearchResults(html: string): Array<{ title: string; url: string }> {
-  const out: Array<{ title: string; url: string }> = [];
+/** 解析 Bing HTML 搜索结果页，返回 {title,url,snippet?}[]。优先有机结果块，避免视频模块 h2。 */
+export function parseBingSearchResults(html: string): Array<{ title: string; url: string; snippet?: string }> {
+  const organic = parseBingAlgoResults(html);
+  if (organic.length) return organic;
+  const out: Array<{ title: string; url: string; snippet?: string }> = [];
   const h2Blocks = html.match(/<h2[^>]*><a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a><\/h2>/g) || [];
   for (const block of h2Blocks) {
     const href = /href="([^"]+)"/.exec(block)?.[1] || '';
     const rawTitle = block.replace(/<[^>]+>/g, '').trim().replace(/&amp;/g, '&').replace(/&#39;/g, "'");
     if (!href || !rawTitle) continue;
-    const url = decodeBingRedirectUrl(href);
+    const url = decodeBingRedirectUrl(href) || (/^https?:\/\//i.test(href) ? href : '');
     if (!url) continue;
     out.push({ title: rawTitle.slice(0, 300), url });
+  }
+  return out;
+}
+
+function parseBingAlgoResults(html: string): Array<{ title: string; url: string; snippet?: string }> {
+  const out: Array<{ title: string; url: string; snippet?: string }> = [];
+  const blocks = html.match(/<li[^>]*class="[^"]*\bb_algo\b[^"]*"[\s\S]*?<\/li>/gi) || [];
+  for (const block of blocks) {
+    const href = /<h2[^>]*>[\s\S]*?<a[^>]*href="([^"]+)"/i.exec(block)?.[1] || '';
+    const titleHtml = /<h2[^>]*>([\s\S]*?)<\/h2>/i.exec(block)?.[1] || '';
+    const rawTitle = titleHtml.replace(/<[^>]+>/g, '').trim().replace(/&amp;/g, '&').replace(/&#39;/g, "'");
+    if (!href || !rawTitle) continue;
+    const url = decodeBingRedirectUrl(href) || (/^https?:\/\//i.test(href) ? href : '');
+    if (!url) continue;
+    const caption = /<p[^>]*>([\s\S]*?)<\/p>/i.exec(block)?.[1] || '';
+    const snippet = caption.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 280);
+    out.push({
+      title: rawTitle.slice(0, 300),
+      url,
+      ...(snippet.length >= 12 ? { snippet } : {}),
+    });
   }
   return out;
 }
@@ -235,6 +258,7 @@ export function createBingHtmlSearchConnector(options?: BingHtmlSearchConnectorO
           url: p.url,
           sourceClass: 'external',
           sourceType: deriveSourceType(p.url, p.title),
+          ...('snippet' in p && p.snippet ? { snippet: p.snippet } : {}),
         });
         if (sources.length >= maxResults) break;
       }

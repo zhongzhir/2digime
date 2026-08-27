@@ -1,4 +1,7 @@
 import { artifactIdForJob } from './artifact';
+import type { JobResearchEvidence } from './research-evidence';
+
+export type { JobResearchEvidence };
 
 /**
  * ExecutionJob — 一次执行的唯一权威状态载体(domain model §2.5)。
@@ -173,6 +176,11 @@ export interface ExecutionJob {
    * 仅 validation / 排障使用，不向普通用户展示。
    */
   contextContinuity?: JobContextContinuity;
+  /**
+   * 研究证据审计（查询 → 候选 → 筛选 → 是否充足）。
+   * 仅 validation / 排障使用，不向普通用户展示。
+   */
+  researchEvidence?: JobResearchEvidence;
   /**
    * 能力实际读入执行/提示的材料路径（执行证据，非状态机）。
    * 与 Snapshot 中「获得/已抽取/未读取」区分；缺省不得把已抽取当成已通读。

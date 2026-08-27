@@ -172,9 +172,12 @@ export function collectGenericCtoEvidence(input: {
             ...job.contextContinuity.attachedRefs,
             ...job.contextContinuity.selectedIds,
             ...job.contextContinuity.freezeEventIds.map((id) => `preference-or-subject:${id}`),
+            ...(job.researchEvidence?.selectedUrls || []),
           ].filter(Boolean),
         }
-      : {}),
+      : job.researchEvidence?.selectedUrls?.length
+        ? { selectedContext: job.researchEvidence.selectedUrls }
+        : {}),
   };
 }
 

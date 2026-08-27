@@ -12,7 +12,63 @@ import type {
 import type { CapabilityRegistration } from '../registration';
 import { asLocalCapabilityAdapter } from '../local-adapter-lifecycle';
 import type { SearchConnector } from '../search-connector';
-import { hasUsableWebEvidence } from '../search-contract';
+import { hasUsableWebEvidence, type SearchSource } from '../search-contract';
+
+const MAX_EVIDENCE_READS = 4;
+
+function snippetFromSource(source: SearchSource): string | undefined {
+  const direct = String(source.snippet || '').trim();
+  if (direct) return direct.slice(0, 280);
+  const grounded = (source.groundingSupport || [])
+    .map((g) => String(g.segment || '').trim())
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  return grounded ? grounded.slice(0, 280) : undefined;
+}
+
+function evidenceChunkFromSource(source: SearchSource): string | undefined {
+  const direct = String(source.evidenceChunk || '').trim();
+  if (direct) return direct.slice(0, 4000);
+  const grounded = (source.groundingSupport || [])
+    .map((g) => String(g.segment || '').trim())
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+  return grounded ? grounded.slice(0, 4000) : undefined;
+}
+
+async function enrichSourcesWithReads(
+  connector: SearchConnector,
+  sources: SearchSource[],
+  signal: AbortSignal,
+): Promise<SearchSource[]> {
+  if (!connector.read) return sources;
+  const out: SearchSource[] = [];
+  let reads = 0;
+  for (const source of sources) {
+    if (reads >= MAX_EVIDENCE_READS || !connector.read) {
+      out.push(source);
+      continue;
+    }
+    try {
+      const page = await connector.read(source.url, { signal, maxChars: 4000 });
+      reads += 1;
+      if (page?.content && page.content.trim().length >= 40) {
+        out.push({
+          ...source,
+          evidenceChunk: page.content.slice(0, 4000),
+          retrievedAt: page.retrievedAt,
+        });
+        continue;
+      }
+    } catch {
+      /* 单页失败不阻断检索 */
+    }
+    out.push(source);
+  }
+  return out;
+}
 
 function unusableSearchError(): Error {
   return Object.assign(new Error('search returned no usable evidence'), {
@@ -84,7 +140,7 @@ export function createSearchCapabilityAdapter(input: {
         throw err;
       }
       ctx.reportProgress('正在检索外部来源');
-      const query = (capInput.goal || '').trim() || '最新信息';
+      const query = String(capInput.searchQuery || capInput.goal || '').trim() || '最新信息';
       const sources = await connector.search(query, { signal: ctx.signal });
       if (ctx.signal.aborted) {
         const err = new Error('aborted');
@@ -92,13 +148,26 @@ export function createSearchCapabilityAdapter(input: {
         throw err;
       }
       if (!hasUsableWebEvidence(sources)) throw unusableSearchError();
-      const text = formatSearchDocument(query, sources);
+      const enriched = await enrichSourcesWithReads(connector, sources, ctx.signal);
+      const text = formatSearchDocument(query, enriched);
       return {
         artifact: {
           type: 'document',
           title: `搜索要点：${query.slice(0, 60)}`,
           payload: { kind: 'text', format: 'markdown', text },
         },
+        searchQuery: query,
+        externalSources: enriched.map((s) => {
+          const snippet = snippetFromSource(s);
+          const evidenceChunk = evidenceChunkFromSource(s);
+          return {
+            title: s.title,
+            url: s.url,
+            ...(snippet ? { snippet } : {}),
+            ...(evidenceChunk ? { evidenceChunk } : {}),
+            ...(s.sourceType ? { sourceType: s.sourceType } : {}),
+          };
+        }),
         materialUse: {
           usedPaths: [],
           includedCount: 0,

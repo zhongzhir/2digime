@@ -18,6 +18,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { createDigitalMeRuntime } from '../../runtime/digitalme-runtime';
 import { CapabilityRegistry } from '../../capability/registry';
+import { createFakeDocumentAdapter } from '../../capability/adapters/fake-document';
 import { PROFESSIONAL_SEARCH_CAPABILITY_ID, BASELINE_SEARCH_CAPABILITY_ID } from '../../capability/search-capability-discovery';
 import { asLocalCapabilityAdapter } from '../../capability/local-adapter-lifecycle';
 import type { CapabilityAdapter } from '../../capability/adapter';
@@ -60,6 +61,10 @@ function failingSearchAdapter(id: string, adapterId: string, failTimes = 1, tran
       ctx.reportProgress('正在检索');
       return {
         artifact: { type: 'document', title: '搜索', payload: { kind: 'text', format: 'markdown', text: 'baseline 结果：来源A 来源B' } },
+        externalSources: [
+          { title: '来源A', url: 'https://example.org/source-a' },
+          { title: '来源B', url: 'https://example.org/source-b' },
+        ],
         materialUse: { usedPaths: [], includedCount: 0, fullReadCount: 0, truncatedCount: 0 },
       };
     },
@@ -152,6 +157,11 @@ test('failureNote: 失败时不再显示 stale「正在检索外部来源」', a
 
 function buildRegistryWithFailover(opts?: { bothFail?: boolean }): CapabilityRegistry {
   const registry = new CapabilityRegistry();
+  registry.register(
+    createFakeDocumentAdapter({
+      text: (_i, extras) => `# 要点\n${(extras?.materialSnippets || []).join('\n')}`,
+    }),
+  );
   const profFailTimes = opts?.bothFail ? 999 : 1;
   registry.register(failingSearchAdapter(PROFESSIONAL_SEARCH_CAPABILITY_ID, 'gemini-search', profFailTimes));
   registry.register(
@@ -165,6 +175,11 @@ function buildRegistryWithFailover(opts?: { bothFail?: boolean }): CapabilityReg
 test('double failure: professional + baseline 都失败 → 诚实失败，不假完成', async () => {
   const root = await tempDir('double');
   const registry = new CapabilityRegistry();
+  registry.register(
+    createFakeDocumentAdapter({
+      text: (_i, extras) => `# 要点\n${(extras?.materialSnippets || []).join('\n')}`,
+    }),
+  );
   registry.register(failingSearchAdapter(PROFESSIONAL_SEARCH_CAPABILITY_ID, 'gemini-search', 999));
   registry.register(failingSearchAdapter(BASELINE_SEARCH_CAPABILITY_ID, 'baseline-bing-search', 999));
   const runtime = createDigitalMeRuntime({ documentCapability: 'none', registerOpenAiStub: false, capabilityRegistryOverride: registry });

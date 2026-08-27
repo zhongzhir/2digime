@@ -89,6 +89,12 @@ function searchAdapter(id: string, adapterId: string, connector: SearchConnector
   });
 }
 
+function synthDoc() {
+  return createFakeDocumentAdapter({
+    text: (_i, extras) => `# 要点\n${(extras?.materialSnippets || []).join('\n')}`,
+  });
+}
+
 function hangingAdapter(id: string, adapterId: string, delayMs: number, title: string): CapabilityAdapter {
   const reg = searchReg({ id, adapterId });
   return asLocalCapabilityAdapter({
@@ -124,6 +130,7 @@ test('usable-result contract: 空数组 / 无 URL 不可用；有外部 http 来
 test('CASE A: professional empty → baseline → result；closure 为 BASELINE', async () => {
   const root = await tempDir('a');
   const registry = new CapabilityRegistry();
+  registry.register(synthDoc());
   registry.register(
     searchAdapter(
       PROFESSIONAL_SEARCH_CAPABILITY_ID,
@@ -173,6 +180,7 @@ test('CASE A: professional empty → baseline → result；closure 为 BASELINE'
 test('CASE B: professional timeout 真正结束 → baseline → result', async () => {
   const root = await tempDir('b');
   const registry = new CapabilityRegistry();
+  registry.register(synthDoc());
   registry.register(
     createSearchCapabilityAdapter({
       connector: createGeminiSearchConnector({
@@ -289,6 +297,7 @@ test('CASE D: timeout/fallback 后迟到 professional 结果不得覆盖 baselin
   const root = await tempDir('d');
   let lateReturned = false;
   const registry = new CapabilityRegistry();
+  registry.register(synthDoc());
   registry.register(
     hangingAdapter(PROFESSIONAL_SEARCH_CAPABILITY_ID, 'gemini-search', 600, 'late-prof'),
   );
@@ -336,6 +345,7 @@ test('CASE E: empty 后 cooldown，紧接着同类任务直接 baseline', async 
   const root = await tempDir('e');
   let profCalls = 0;
   const registry = new CapabilityRegistry();
+  registry.register(synthDoc());
   registry.register(
     searchAdapter(
       PROFESSIONAL_SEARCH_CAPABILITY_ID,
@@ -390,6 +400,7 @@ test('CASE E: empty 后 cooldown，紧接着同类任务直接 baseline', async 
 test('CASE F: professional + baseline 都 unusable → 诚实失败，无假完成', async () => {
   const root = await tempDir('f');
   const registry = new CapabilityRegistry();
+  registry.register(synthDoc());
   registry.register(
     searchAdapter(
       PROFESSIONAL_SEARCH_CAPABILITY_ID,

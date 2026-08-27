@@ -47,6 +47,17 @@ import {
   type PlannerSemanticDecision,
 } from './planner-semantic';
 import {
+  RESEARCH_MAX_QUERIES_PER_ROUND,
+  RESEARCH_MAX_ROUNDS,
+  RESEARCH_MAX_EVIDENCE,
+  dedupeSearchSources,
+  formatSelectedEvidenceDocument,
+  isSearchDumpText,
+  toResearchCandidates,
+  type JobResearchEvidence,
+} from './research-evidence';
+import type { SearchSource, SourceType } from '../capability/search-contract';
+import {
   buildWorkContextCandidates,
   mergeSelectedContextIds,
   resolveSelectedContextRefs,
@@ -148,6 +159,29 @@ export interface WorkRuntimeOptions {
     candidates: WorkContextCandidate[];
     recentTurns?: Array<{ role: string; content: string }>;
   }) => Promise<{ selectedIds: string[]; decided: boolean }>;
+  /**
+   * 研究证据：规划查询或判断相关性/充足性。模型判断；失败则 decided=false。
+   */
+  resolveResearchEvidence?: (input: {
+    phase: 'queries' | 'judge';
+    goal: string;
+    plan?: string;
+    queries?: string[];
+    candidates?: Array<{
+      index: number;
+      title: string;
+      url: string;
+      snippet?: string;
+      evidenceExcerpt?: string;
+    }>;
+  }) => Promise<{
+    decided: boolean;
+    queries?: string[];
+    selectedIndexes?: number[];
+    sufficient?: boolean;
+    followupQueries?: string[];
+    missingQuestions?: string[];
+  }>;
   secrets?: SecretAccessor;
   /** 只读解析 Snapshot extractedTextRef;供模型 Adapter 组装材料。 */
   readExtractedText?: (ref: string) => Promise<string>;
@@ -195,6 +229,7 @@ export const BASELINE_SEARCH_FALLBACK_NOTICE = '已使用当前可用的基础�
 export const SEARCH_CAPABILITY_COOLDOWN_MS = 180_000;
 const SEARCH_ATTEMPT_DEADLINE_CODE = 'search_attempt_deadline';
 const DOCUMENT_SYNTHESIS_FAILED_CODE = 'document_synthesis_failed';
+const RESEARCH_EVIDENCE_INSUFFICIENT_CODE = 'research_evidence_insufficient';
 const DOCUMENT_SYNTHESIS_ATTEMPTS = 3;
 const DOCUMENT_SYNTHESIS_RETRY_BASE_MS = 400;
 
@@ -412,6 +447,12 @@ export class WorkRuntime {
       return {
         message: '暂时无法完成基于检索结果的整理。',
         actionable: '外部检索已完成，但后续整理暂时不可用。请稍后重试。',
+      };
+    }
+    if ((error as { code?: string }).code === RESEARCH_EVIDENCE_INSUFFICIENT_CODE) {
+      return {
+        message: '没有与当前问题相关的可用外部证据，无法形成研究结果。',
+        actionable: '请换一种问法或补充材料后重试',
       };
     }
     if (isSearchCapabilityId(job.capabilityId)) {
@@ -1743,6 +1784,309 @@ export class WorkRuntime {
     return '';
   }
 
+  private researchNeedsSynthesis(
+    task: import('./task').Task,
+    job: ExecutionJob,
+  ): boolean {
+    const caps =
+      job.confirmedPlanSnapshot?.requiredCapabilities || planSemanticOf(task)?.requiredCapabilities;
+    if (caps?.includes('document_synthesis') || caps?.includes('external_information')) return true;
+    return needsDocumentSynthesis(planSemanticOf(task));
+  }
+
+  private pickDocumentSynthesisAdapter(excludeCapabilityId?: string) {
+    const excluded = [PROFESSIONAL_SEARCH_CAPABILITY_ID, BASELINE_SEARCH_CAPABILITY_ID];
+    if (excludeCapabilityId) excluded.push(excludeCapabilityId);
+    const docSel = this.opts.registry.selectForNeed({
+      intentKind: 'create_document',
+      expectedOutputFamily: 'document',
+      excludeCapabilityIds: excluded,
+    });
+    const adapter = docSel.adapter;
+    if (!adapter || isSearchCapabilityId(adapter.registration.id)) return null;
+    return adapter;
+  }
+
+  private sourcesFromSearchOutput(output: CapabilityOutput): SearchSource[] {
+    const raw = output.externalSources || [];
+    const mapped: SearchSource[] = [];
+    for (const s of raw) {
+      const item: SearchSource = {
+        title: String(s.title || ''),
+        url: String(s.url || ''),
+        sourceClass: 'external',
+      };
+      if (s.snippet) item.snippet = String(s.snippet);
+      if (s.evidenceChunk) item.evidenceChunk = String(s.evidenceChunk);
+      const sourceType = s.sourceType;
+      if (sourceType) item.sourceType = sourceType as SourceType;
+      mapped.push(item);
+    }
+    return dedupeSearchSources(mapped);
+  }
+
+  private async executeOneSearchQuery(input: {
+    adapter: import('../capability/adapter').CapabilityAdapter;
+    task: import('./task').Task;
+    job: ExecutionJob;
+    snapshot: ContextSnapshot;
+    subjectContext: ConfirmedExperienceView;
+    execCtx: ExecutionContext;
+    controller: AbortController;
+    isRemote: boolean;
+    query: string;
+    grant: import('../collaboration/schema').AuthorizationGrant | null;
+  }): Promise<CapabilityOutput> {
+    const child = new AbortController();
+    const onParentAbort = () => {
+      if (!child.signal.aborted) child.abort(input.controller.signal.reason);
+    };
+    if (input.controller.signal.aborted) {
+      child.abort(input.controller.signal.reason);
+    } else {
+      input.controller.signal.addEventListener('abort', onParentAbort, { once: true });
+    }
+    const execCtx: ExecutionContext = {
+      ...input.execCtx,
+      signal: child.signal,
+    };
+    try {
+      const rawInput = this.buildCapabilityRawInput(
+        input.task,
+        input.job,
+        input.snapshot,
+        input.subjectContext,
+        { searchQuery: input.query },
+      );
+      const auth = buildJobAuthorizationProjection({
+        task: input.task,
+        capabilityInput: rawInput,
+        grant: input.grant,
+        isRemote: input.isRemote,
+      });
+      const markers = this.opts.resolveUnauthorizedMarkers
+        ? await this.opts.resolveUnauthorizedMarkers({
+            taskId: input.task.id,
+            allowedMaterialPaths: [...auth.allowedMaterials],
+          })
+        : [];
+      const prepared = prepareAndExecuteCapability({
+        adapter: input.adapter,
+        rawInput,
+        auth,
+        ctx: execCtx,
+        isRemote: input.isRemote,
+        unauthorizedMarkers: markers,
+        job: input.job,
+        task: input.task,
+        subjectId: input.task.subjectId,
+      });
+      const preparedResult = await this.awaitSearchAttempt(prepared, child);
+      return preparedResult.output;
+    } finally {
+      input.controller.signal.removeEventListener('abort', onParentAbort);
+    }
+  }
+
+  private async runBoundedResearch(input: {
+    adapter: import('../capability/adapter').CapabilityAdapter;
+    task: import('./task').Task;
+    job: ExecutionJob;
+    snapshot: ContextSnapshot;
+    subjectContext: ConfirmedExperienceView;
+    execCtx: ExecutionContext;
+    controller: AbortController;
+    isRemote: boolean;
+    grant: import('../collaboration/schema').AuthorizationGrant | null;
+  }): Promise<{
+    output: CapabilityOutput;
+    snapshot: ContextSnapshot;
+    audit: JobResearchEvidence;
+  }> {
+    const goal = String(input.task.goal || '').trim();
+    const plan = String(input.job.confirmedPlanSnapshot?.content || '').trim();
+    let queries: string[] = [];
+    if (this.opts.resolveResearchEvidence) {
+      const planned = await this.opts.resolveResearchEvidence({
+        phase: 'queries',
+        goal,
+        ...(plan ? { plan } : {}),
+      });
+      if (planned.decided && planned.queries?.length) {
+        queries = planned.queries
+          .map((q) => String(q || '').trim())
+          .filter((q) => q.length >= 4)
+          .slice(0, RESEARCH_MAX_QUERIES_PER_ROUND);
+      }
+    }
+    if (!queries.length) queries = [goal];
+
+    const allSources: SearchSource[] = [];
+    const allQueries: string[] = [];
+    let lastError: unknown;
+    let rounds = 0;
+    let sufficient = false;
+    let decided = false;
+    let selected: SearchSource[] = [];
+    let rejected: SearchSource[] = [];
+    let missingQuestions: string[] = [];
+
+    for (let round = 0; round < RESEARCH_MAX_ROUNDS; round += 1) {
+      const roundQueries = queries.filter((q) => q && !allQueries.includes(q)).slice(
+        0,
+        RESEARCH_MAX_QUERIES_PER_ROUND,
+      );
+      if (!roundQueries.length) break;
+      rounds += 1;
+      input.execCtx.reportProgress(
+        round === 0 ? '正在检索外部来源' : '正在按证据缺口补充检索',
+      );
+      for (const query of roundQueries) {
+        allQueries.push(query);
+        try {
+          const hit = await this.executeOneSearchQuery({ ...input, query });
+          allSources.push(...this.sourcesFromSearchOutput(hit));
+        } catch (err) {
+          lastError = err;
+          if (isSearchAttemptDeadline(err) || isSearchAttemptDeadline(input.execCtx.signal.reason)) {
+            throw err;
+          }
+          if (isAbortError(err) || input.execCtx.signal.aborted) throw err;
+        }
+      }
+      const candidates = dedupeSearchSources(allSources);
+      if (!candidates.length) {
+        if (lastError) throw lastError;
+        continue;
+      }
+      let judgment = {
+        selectedIndexes: candidates.map((_, i) => i + 1),
+        sufficient: false,
+        followupQueries: [] as string[],
+        missingQuestions: [] as string[],
+        decided: false,
+      };
+      if (this.opts.resolveResearchEvidence) {
+        const judged = await this.opts.resolveResearchEvidence({
+          phase: 'judge',
+          goal,
+          queries: allQueries,
+          candidates: toResearchCandidates(candidates),
+        });
+        if (judged.decided) {
+          judgment = {
+            selectedIndexes: (judged.selectedIndexes || []).filter(
+              (n) => Number.isInteger(n) && n >= 1 && n <= candidates.length,
+            ),
+            sufficient: judged.sufficient === true,
+            followupQueries: (judged.followupQueries || [])
+              .map((q) => String(q || '').trim())
+              .filter((q) => q.length >= 4)
+              .slice(0, RESEARCH_MAX_QUERIES_PER_ROUND),
+            missingQuestions: (judged.missingQuestions || [])
+              .map((q) => String(q || '').trim())
+              .filter(Boolean)
+              .slice(0, 6),
+            decided: true,
+          };
+        }
+      }
+      decided = judgment.decided;
+      sufficient = judgment.sufficient;
+      missingQuestions = judgment.missingQuestions;
+      if (judgment.decided) {
+        selected = judgment.selectedIndexes
+          .map((n) => candidates[n - 1])
+          .filter((s): s is SearchSource => Boolean(s));
+        const selectedUrls = new Set(selected.map((s) => s.url));
+        rejected = candidates.filter((s) => !selectedUrls.has(s.url));
+      } else {
+        selected = candidates;
+        rejected = [];
+      }
+      if (sufficient || round + 1 >= RESEARCH_MAX_ROUNDS) break;
+      if (judgment.followupQueries.length) {
+        queries = judgment.followupQueries;
+        continue;
+      }
+      break;
+    }
+
+    if (!allSources.length && lastError) throw lastError;
+    if (!selected.length && allSources.length && !decided) selected = dedupeSearchSources(allSources);
+
+    const audit: JobResearchEvidence = {
+      queries: allQueries,
+      rounds,
+      candidateUrls: dedupeSearchSources(allSources).map((s) => s.url).slice(0, 24),
+      selectedUrls: selected.map((s) => s.url).slice(0, RESEARCH_MAX_EVIDENCE),
+      rejectedUrls: rejected.map((s) => s.url).slice(0, 24),
+      sufficient,
+      decided,
+    };
+    if (!selected.length) {
+      try {
+        await this.opts.jobStore.put({ ...input.job, researchEvidence: audit });
+      } catch {
+        /* 审计写入失败不得改成假成功 */
+      }
+      throw Object.assign(new Error('没有与当前问题相关的可用外部证据，无法形成研究结果。'), {
+        code: RESEARCH_EVIDENCE_INSUFFICIENT_CODE,
+        stage: 'capability' as const,
+        kind: 'evidence',
+        transient: false,
+        actionable: '请换一种问法或补充材料后重试',
+      });
+    }
+
+    const evidenceText = formatSelectedEvidenceDocument({
+      goal,
+      queries: allQueries,
+      selected,
+      rejectedCount: rejected.length,
+      sufficient,
+      missingQuestions,
+    });
+    const evidenceOutput: CapabilityOutput = {
+      artifact: {
+        type: 'document',
+        title: '研究证据',
+        payload: { kind: 'text', format: 'markdown', text: evidenceText },
+      },
+      ...(allQueries[0] ? { searchQuery: allQueries[0] } : {}),
+      externalSources: selected.map((s) => {
+        const item: NonNullable<CapabilityOutput['externalSources']>[number] = {
+          title: s.title,
+          url: s.url,
+        };
+        if (s.snippet) item.snippet = s.snippet;
+        if (s.evidenceChunk) item.evidenceChunk = s.evidenceChunk;
+        const sourceType = s.sourceType;
+        if (sourceType) item.sourceType = sourceType;
+        return item;
+      }),
+      materialUse: {
+        usedPaths: [],
+        includedCount: 0,
+        fullReadCount: 0,
+        truncatedCount: 0,
+      },
+    };
+    const synthesized = await this.synthesizeAfterExternalInformation({
+      task: input.task,
+      job: input.job,
+      snapshot: input.snapshot,
+      subjectContext: input.subjectContext,
+      searchOutput: evidenceOutput,
+      execCtx: input.execCtx,
+      requireSuccess: true,
+    });
+    if (!synthesized) {
+      throw asDocumentSynthesisFailure(new Error('research synthesis unavailable'));
+    }
+    return { output: synthesized.output, snapshot: synthesized.snapshot, audit };
+  }
+
   private async synthesizeAfterExternalInformation(input: {
     task: import('./task').Task;
     job: ExecutionJob;
@@ -1750,16 +2094,20 @@ export class WorkRuntime {
     subjectContext: ConfirmedExperienceView;
     searchOutput: CapabilityOutput;
     execCtx: ExecutionContext;
+    requireSuccess?: boolean;
   }): Promise<{ output: CapabilityOutput; snapshot: ContextSnapshot } | null> {
-    if (!needsDocumentSynthesis(planSemanticOf(input.task))) return null;
+    const required = input.requireSuccess === true || this.researchNeedsSynthesis(input.task, input.job);
+    if (!required) return null;
     const searchText = capabilityOutputText(input.searchOutput) || '';
-    if (!searchText.trim()) return null;
-    const docSel = this.opts.registry.selectForNeed({
-      intentKind: 'create_document',
-      expectedOutputFamily: 'document',
-    });
-    const docAdapter = docSel.adapter;
-    if (!docAdapter || isSearchCapabilityId(docAdapter.registration.id)) return null;
+    if (!searchText.trim()) {
+      if (input.requireSuccess) throw asDocumentSynthesisFailure(new Error('no search evidence to synthesize'));
+      return null;
+    }
+    const docAdapter = this.pickDocumentSynthesisAdapter(input.job.capabilityId);
+    if (!docAdapter) {
+      if (input.requireSuccess) throw asDocumentSynthesisFailure(new Error('document synthesis unavailable'));
+      return null;
+    }
     let snapshot = await this.opts.snapshotBuilder.attachTextItem(input.snapshot.id, {
       sourcePath: 'external-information://search-evidence',
       text: searchText.slice(0, 12_000),
@@ -2348,6 +2696,23 @@ export class WorkRuntime {
               : null;
           const liveJob = (await this.opts.jobStore.get(jobId)) ?? job;
           job = liveJob;
+          if (isSearchCapabilityId(adapter.registration.id)) {
+            const research = await this.runBoundedResearch({
+              adapter,
+              task,
+              job,
+              snapshot,
+              subjectContext,
+              execCtx,
+              controller,
+              isRemote,
+              grant,
+            });
+            output = research.output;
+            snapshot = research.snapshot;
+            job = { ...job, researchEvidence: research.audit };
+            await this.persistJob(job);
+          } else {
           const rawInput = this.buildCapabilityRawInput(task, liveJob, snapshot, subjectContext, {
             ...(revisionInput ? { revision: revisionInput } : {}),
             ...(job.externalExecution?.workingDirectory
@@ -2387,23 +2752,8 @@ export class WorkRuntime {
             task,
             subjectId: task.subjectId,
           });
-          const preparedResult = isSearchCapabilityId(adapter.registration.id)
-            ? await this.awaitSearchAttempt(prepared, controller)
-            : await prepared;
+          const preparedResult = await prepared;
           output = preparedResult.output;
-          if (isSearchCapabilityId(adapter.registration.id) && output) {
-            const synthesized = await this.synthesizeAfterExternalInformation({
-              task,
-              job,
-              snapshot,
-              subjectContext,
-              searchOutput: output,
-              execCtx,
-            });
-            if (synthesized) {
-              output = synthesized.output;
-              snapshot = synthesized.snapshot;
-            }
           }
         } else if (isRemote) {
           // 恢复得到的 output 仍须验证并附收据
@@ -2498,9 +2848,12 @@ export class WorkRuntime {
         // 检索已成功、仅文档综合失败：重试综合（见 synthesizeAfterExternalInformation），
         // 不得再当成 search 失败去切换 provider / 丢弃已检索证据。
         const synthesisFailed = isDocumentSynthesisFailure(retryError);
+        const evidenceInsufficient =
+          (retryError as { code?: string }).code === RESEARCH_EVIDENCE_INSUFFICIENT_CODE;
         // SEARCH-FAILURE-CLOSURE-01：瞬时能力失败 → bounded fallback（排除失败能力 → 重选下一可用）。
         if (
           !synthesisFailed &&
+          !evidenceInsufficient &&
           !this.jobFallbackAttempted.has(job.id) &&
           isSearchCapabilityId(job.capabilityId) &&
           this.isRetryableCapabilityFailure(retryError)
@@ -2612,8 +2965,14 @@ export class WorkRuntime {
                   allowedMaterialPaths: [...auth.allowedMaterials],
                 })
               : [];
+            const reviseAdapter = isSearchCapabilityId(adapter.registration.id)
+              ? this.pickDocumentSynthesisAdapter(job.capabilityId)
+              : adapter;
+            if (!reviseAdapter) {
+              throw new Error('document synthesis unavailable');
+            }
             const revised = await prepareAndExecuteCapability({
-              adapter,
+              adapter: reviseAdapter,
               rawInput: reviseRaw,
               auth,
               ctx: execCtx,
@@ -2681,6 +3040,16 @@ export class WorkRuntime {
             return;
           }
         }
+      }
+
+      if (output && isSearchDumpText(capabilityOutputText(output) || '')) {
+        await this.failJob(
+          job,
+          'capability',
+          '检索来源清单还不是可用的研究结果，需要基于相关证据综合成文。',
+          '请重试该任务',
+        );
+        return;
       }
 
       if (
