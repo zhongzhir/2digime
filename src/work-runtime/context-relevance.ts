@@ -5,7 +5,7 @@
  */
 import type { ChatMessage } from '../infrastructure/model-http';
 import type { WorkContextCandidate } from './context-candidates';
-import { formatContextCandidateBrief } from './context-candidates';
+import { canonicalizeContextSelectionIds, formatContextCandidateBrief } from './context-candidates';
 
 export interface ContextRelevanceResult {
   selectedIds: string[];
@@ -57,16 +57,20 @@ export function buildContextRelevanceMessages(input: ContextRelevanceInput): Cha
 export function parseContextRelevanceOutput(
   text: string,
   allowedIds: readonly string[],
+  candidates?: readonly WorkContextCandidate[],
 ): string[] {
   const allowed = new Set(allowedIds);
   const obj = extractJsonObject(text);
   if (!obj) return [];
   const raw = obj.relevantContextIds ?? obj.selectedContextIds;
   if (!Array.isArray(raw)) return [];
+  const extracted = raw.map((item) => String(item || '').trim()).filter(Boolean);
+  const canonical = candidates
+    ? canonicalizeContextSelectionIds(candidates, extracted)
+    : extracted;
   const out: string[] = [];
   const seen = new Set<string>();
-  for (const item of raw) {
-    const id = String(item || '').trim();
+  for (const id of canonical) {
     if (!id || !allowed.has(id) || seen.has(id)) continue;
     seen.add(id);
     out.push(id);
@@ -84,8 +88,8 @@ export async function resolveContextRelevanceWithChat(
   const messages = buildContextRelevanceMessages(input);
   try {
     const first = await chat({ messages });
-    if (looksLikeEmptySelection(first.text) || parseContextRelevanceOutput(first.text, allowed).length) {
-      return { selectedIds: parseContextRelevanceOutput(first.text, allowed), decided: true };
+    if (looksLikeEmptySelection(first.text) || parseContextRelevanceOutput(first.text, allowed, input.candidates).length) {
+      return { selectedIds: parseContextRelevanceOutput(first.text, allowed, input.candidates), decided: true };
     }
     const retry = await chat({
       messages: [
@@ -98,8 +102,8 @@ export async function resolveContextRelevanceWithChat(
         },
       ],
     });
-    if (looksLikeEmptySelection(retry.text) || parseContextRelevanceOutput(retry.text, allowed).length) {
-      return { selectedIds: parseContextRelevanceOutput(retry.text, allowed), decided: true };
+    if (looksLikeEmptySelection(retry.text) || parseContextRelevanceOutput(retry.text, allowed, input.candidates).length) {
+      return { selectedIds: parseContextRelevanceOutput(retry.text, allowed, input.candidates), decided: true };
     }
     return { selectedIds: [], decided: false };
   } catch {

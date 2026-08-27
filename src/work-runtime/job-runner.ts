@@ -59,6 +59,7 @@ import {
 import type { SearchSource, SourceType } from '../capability/search-contract';
 import {
   buildWorkContextCandidates,
+  canonicalizeContextSelectionIds,
   mergeSelectedContextIds,
   resolveSelectedContextRefs,
   type WorkContextCandidate,
@@ -1723,7 +1724,10 @@ export class WorkRuntime {
         relevanceDecided = false;
       }
     }
-    const selectedIds = mergeSelectedContextIds(planned, resolved);
+    const selectedIds = canonicalizeContextSelectionIds(
+      candidates,
+      mergeSelectedContextIds(planned, resolved),
+    );
     return { candidates, selectedIds, attachedRefs: [], relevanceDecided };
   }
 
@@ -1732,9 +1736,11 @@ export class WorkRuntime {
     snapshot: ContextSnapshot,
     selectedIds?: readonly string[],
   ): Promise<{ snapshot: ContextSnapshot; attachedRefs: string[] }> {
-    const ids = selectedIds?.length ? selectedIds : planSemanticOf(task)?.relevantContextIds || [];
-    if (!ids.length) return { snapshot, attachedRefs: [] };
     const candidates = await this.listContextCandidates(task.id);
+    const raw = selectedIds?.length ? selectedIds : planSemanticOf(task)?.relevantContextIds || [];
+    if (!raw.length) return { snapshot, attachedRefs: [] };
+    const ids = canonicalizeContextSelectionIds(candidates, raw);
+    if (!ids.length) return { snapshot, attachedRefs: [] };
     const resolved = resolveSelectedContextRefs(candidates, ids);
     const attachedRefs: string[] = [];
     let current = snapshot;
