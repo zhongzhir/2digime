@@ -92,6 +92,8 @@ export type CtoReviewInput = {
   changedFileExcerpts?: Array<{ path: string; excerpt: string }>;
   /** 确认规划全文（Job 冻结快照）；文档与代码共用。 */
   confirmedPlan?: { version: number; content: string };
+  /** Planner-owned requirements frozen with the job; review must check these. */
+  planRequirements?: string[];
   /** 成果正文或输出摘要；有正文时不得因缺少代码 diff 而判不足。 */
   artifactBody?: string;
   /** 本轮真实执行情况的用户可读摘要。 */

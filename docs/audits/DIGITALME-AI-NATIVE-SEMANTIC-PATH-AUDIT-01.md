@@ -231,11 +231,32 @@
 2. 对话页重放 T4 原句（含「先写结论」近义，不要求特定词）→ 事件类型为可注入的偏好/工作方法，下一轮「和上次一样写周报」freeze 含该条且成文结论先行。
 3. 做事页重放 T5 原句（不手动贴材料）→ 成文能指认本会话已有项目/材料，或明确询问「你指哪个项目」，不得交通用软件项目模板还标 succeeded。
 
-本轮 **不实施**。
+---
+
+## Implemented Resolution / Validation
+
+分支：`build/ai-native-semantic-control-01`（自 `f12cde19` 拉出）。
+
+**Ownership 反转：**
+
+| 层 | 现在负责 | 不得再做 |
+|----|----------|----------|
+| AI / planner / distiller | 任务语义、所需能力、相关上下文、是否为长期偏好、计划与验收要求 | — |
+| deterministic control | 能力是否真实存在、安全/授权/数据主权/主体真值、不可逆确认、文件合同、结构校验、失败恢复 | 用关键词或窄 enum 改写用户语义 |
+
+**T2：** `executionIntentKind` 仍表示交付形态（三值），不再拥有能力终裁。planner `requiredCapabilities`（含 `external_information`）经既有 `selectForNeed({ needsExternalInformation })` 进入做事链。search 成功后若仍需 `document_synthesis`，把检索证据挂进同一 snapshot 再综合。search 不可用时语义不变，只声明能力缺口。未给 execution family 增加 research 第四值，未复制 `decideSearchNeed`。
+
+**T4：** 有模型时蒸馏空结果/失败 → repair 一次 → 仍无可靠 proposal 则不记事实。删除「模型失败 → contract fallback → knowledge_gap」改写。模型已判定的本人低风险 `preference_observed` 按既有 Subject 权威机制补齐 `silent_ok`（不改类型、不加「以后/喜欢/偏好」关键词）。`category:preference` 进入既有风格亲和，使下一匹配文档任务能召回。无模型时合同蒸馏仍可用（测试夹具），不作为模型在场时的语义终裁。
+
+**T5：** 确定性层按授权列出历史成果/已授权目录候选；模型选 `relevantContextIds`；执行时装配所选上下文。无第二套 RAG/index。
+
+**Review：** Job 冻结 `plan.semantic.requirements`；证据包 `planRequirements` 来自 AI plan，审查不得用关键词发明要求。
+
+**验证：** `src/work-runtime/tests/ai-native-semantic-control-01.test.ts`（A/B/C/D）+ 既有 regression。真实 Electron 证据：`docs/validation/DIGITALME-AI-NATIVE-SEMANTIC-CONTROL-01.md` 与 `build/evidence/ai-native-semantic-control-01/`。
 
 ---
 
-## 证据索引（只读，未修改）
+## 证据索引（只读审计原稿，未改 Trial-04 文件）
 
 - Trial 报告：`docs/trials/DIGITALME-REAL-USER-VALUE-TRIAL-04.md`
 - 走查：`build/evidence/real-user-value-trial-04/`

@@ -10,6 +10,9 @@ import { artifactIdForJob } from './artifact';
 export interface ConfirmedPlanSnapshot {
   version: number;
   content: string;
+  /** Planner requirements frozen with this job; review must check these. */
+  requirements?: string[];
+  requiredCapabilities?: string[];
 }
 
 /** 能力实际纳入提示或读取的材料；与 Snapshot 获得清单区分。 */

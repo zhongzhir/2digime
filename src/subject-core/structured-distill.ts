@@ -166,6 +166,17 @@ function proposalToEvent(
   if (enriched.adopt === 'silent_adopt') {
     tags = tags.filter((t) => t !== 'needs_confirmation');
     if (!tags.includes('silent_ok')) tags.push('silent_ok');
+  } else if (
+    distillMode === 'model' &&
+    p.eventType === 'preference_observed' &&
+    p.risk === 'low' &&
+    !localConflict &&
+    (input.sourceKind === 'conversation' || input.sourceKind === 'task_requirement')
+  ) {
+    // 模型已判定为本人低风险 durable preference：按现有 Subject 权威机制静默采用。
+    // 不得用关键词改写类型；只补齐采用闸门，避免停在 candidate 无法注入。
+    tags = tags.filter((t) => t !== 'needs_confirmation');
+    if (!tags.includes('silent_ok')) tags.push('silent_ok');
   } else if (enriched.adopt === 'must_confirm' || tags.includes('conflict')) {
     if (!tags.includes('needs_confirmation')) tags.push('needs_confirmation');
     tags = tags.filter((t) => t !== 'silent_ok');
@@ -264,6 +275,8 @@ async function modelDistillProposals(input: StructuredDistillInput): Promise<{
     'category 建议: preference, working_method, principle, boundary, goal, identity_fact, temporary_context, external_claim。',
     'text 尽量保留用户原词（如结论、篇幅、决策），不要改写成第三人称长句。',
     '不得把外部资料写成用户观点；不得推断性格/立场/敏感属性；不得把一次性要求写成长期偏好。',
+    '若用户在说明今后同类工作应如何完成（即使未使用特定口号），这是可沉淀的工作方法，category=working_method 或 preference，eventType=preference_observed。',
+    '没有可沉淀的本人长期信息时输出 {"candidates":[]}。不要把未解析的句子写成 knowledge_gap 或 temporary_context。',
     '天气、新闻、闲聊或与用户本人无关的外部事实不是长期偏好或身份；此时输出 {"candidates":[]}。',
     'existingFacts 仅用于冲突判断，不要把旧事实再写一遍，也不要读取未提供的历史。',
     '你不能决定确认或覆盖旧内容；needs_confirmation 只是建议。',
@@ -332,6 +345,51 @@ async function modelDistillProposals(input: StructuredDistillInput): Promise<{
   }
 }
 
+async function modelDistillRepair(
+  input: StructuredDistillInput,
+): Promise<{
+  proposals: DistilledCandidateProposal[];
+  trace: NonNullable<StructuredDistillResult['normalizeTrace']>;
+  error?: string;
+} | null> {
+  if (!input.chatComplete || !input.model) return null;
+  try {
+    const result = await withDistillDeadline(
+      input.chatComplete({
+        baseUrl: input.model.baseUrl,
+        ...(input.model.apiKey ? { apiKey: input.model.apiKey } : {}),
+        model: input.model.model,
+        messages: [
+          {
+            role: 'system',
+            content:
+              '只输出 JSON。若用户在说明今后同类工作怎么做，产出 1 条 preference/working_method 候选；否则 {"candidates":[]}。不要输出 knowledge_gap。',
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              sourceKind: input.sourceKind,
+              text: input.text.slice(0, DISTILL_TEXT_LIMIT),
+            }),
+          },
+        ],
+        temperature: 0,
+        maxTokens: DISTILL_MAX_TOKENS,
+        responseFormat: { type: 'json_object' },
+        timeoutMs: DISTILL_TIMEOUT_MS,
+      }),
+      DISTILL_TIMEOUT_MS,
+    );
+    return parseAndNormalizeModelJson(result.text, input.sourceKind);
+  } catch (err) {
+    return {
+      proposals: [],
+      trace: [],
+      error: String(err instanceof Error ? err.message : err).slice(0, 200),
+    };
+  }
+}
+
 function parseAndNormalizeModelJson(
   text: string,
   sourceKind: string,
@@ -381,20 +439,27 @@ export async function structuredDistillToEvents(
   let normalizeTrace: StructuredDistillResult['normalizeTrace'];
 
   if (input.chatComplete && input.model) {
-    const fromModel = await modelDistillProposals(input);
+    let fromModel = await modelDistillProposals(input);
+    if (!fromModel || fromModel.proposals.length === 0) {
+      const repaired = await modelDistillRepair(input);
+      if (repaired && repaired.proposals.length > 0) fromModel = repaired;
+    }
     if (fromModel && fromModel.proposals.length > 0) {
       proposals = fromModel.proposals;
       normalizeTrace = fromModel.trace;
       mode = 'model';
     } else {
-      mode = 'model_fallback_contract';
-      normalizeTrace = fromModel?.trace || [];
-      if (fromModel?.error) {
-        normalizeTrace = [
-          ...(normalizeTrace || []),
-          { raw: { error: fromModel.error }, ok: false, reason: 'model_call_failed' },
-        ];
-      }
+      return {
+        events: [],
+        discarded: [
+          {
+            reason: fromModel?.error || 'model_empty',
+            title: 'no_reliable_subject_proposal',
+          },
+        ],
+        mode: 'model',
+        ...(fromModel?.trace ? { normalizeTrace: fromModel.trace } : {}),
+      };
     }
   }
 
@@ -411,19 +476,11 @@ export async function structuredDistillToEvents(
     mode: mode === 'model' ? 'model' : 'contract',
   });
 
-  // 真模型产出全部被质量门丢弃时，合同降级保证主路径仍有可审候选（低置信不得静默）
   if (mode === 'model' && gated.accepted.length === 0) {
-    const contractProposals = contractDistillProposals(input);
-    const fallback = gateDistilledBatch({
-      proposals: contractProposals,
-      sourceText: input.text,
-      existingDetails,
-      mode: 'contract',
-    });
     return {
-      events: fallback.accepted.map((p) => proposalToEvent(p, input, 'model_fallback_contract')),
-      discarded: [...gated.discarded, ...fallback.discarded],
-      mode: 'model_fallback_contract',
+      events: [],
+      discarded: gated.discarded,
+      mode: 'model',
       ...(normalizeTrace ? { normalizeTrace } : {}),
     };
   }

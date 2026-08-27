@@ -60,6 +60,34 @@ export class ContextSnapshotBuilder {
     return next;
   }
 
+  /**
+   * Attach planner-selected text (search evidence or historical deliverable)
+   * into an existing snapshot. Not a second store — same ContentStore + items[].
+   */
+  async attachTextItem(
+    snapshotId: string,
+    input: { sourcePath: string; text: string },
+  ): Promise<ContextSnapshot> {
+    const snapshot = await this.snapshotStore.get(snapshotId);
+    if (!snapshot) throw new Error(`snapshot not found: ${snapshotId}`);
+    const text = String(input.text || '');
+    if (!text.trim()) return snapshot;
+    const item = await this.mapOutcome(
+      {
+        sourcePath: String(input.sourcePath || 'attached-context').slice(0, 240),
+        status: 'ok',
+        text,
+      },
+      'file',
+    );
+    const next: ContextSnapshot = {
+      ...snapshot,
+      items: [...snapshot.items, item],
+    };
+    await this.snapshotStore.put(next);
+    return next;
+  }
+
   /** P1 文档路径 — 不得改动抽取语义。 */
   private async buildDocumentDefault(task: Task): Promise<ContextSnapshot> {
     const items: SnapshotItem[] = [];

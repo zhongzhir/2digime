@@ -16,6 +16,13 @@ import {
   validateConfirmedPlanExecutionIntent,
 } from './converse-material-brief';
 import type { TaskIntentKind } from './work-intent';
+import {
+  mergePlannerSemantic,
+  parsePlannerSemantic,
+  type PlannerSemanticDecision,
+} from './planner-semantic';
+import type { WorkContextCandidate } from './context-candidates';
+import { formatContextCandidateBrief } from './context-candidates';
 
 /** 对话轮/意图结论局部 id（不属于 shared/ids 的对象前缀集）。 */
 function converseId(prefix: 'turn' | 'intent'): string {
@@ -122,6 +129,8 @@ export interface ConverseModelContext {
   userText: string;
   /** 已授权材料事实（确认前理解/规划用；可空）。 */
   materialBrief?: string;
+  /** 跨任务候选（发现层）；相关性由模型选择。 */
+  contextCandidateBrief?: string;
 }
 
 /** 由持久对话即时推导模型输入窗口；不产生第二事实源。 */
@@ -147,14 +156,19 @@ const CONVERSE_SYSTEM_PROMPT = [
   ' "confidence": <0 到 1 的数字，表示你对意图判断的把握>,',
   ' "reply": "<给用户的自然语言回复：说明你对目标的理解，并给出简短 CTO 建议>",',
   ' "planUpdate": "<可选但强烈建议：完整开发规划要点，分行列出目标、交付、路径、准备、边界；首轮目标输入必须提供；其他情况可省略>",',
-  ' "executionIntentKind": "<仅 confirm_start：modify_code | create_document | analyze_code>",',
-  ' "expectedOutputFamily": "<仅 confirm_start：code-change | document | code-analysis>"}',
+  ' "executionIntentKind": "<仅 confirm_start：modify_code | create_document | analyze_code —— 只表示最终交付动作，不表示需要哪些能力>",',
+  ' "expectedOutputFamily": "<仅 confirm_start：code-change | document | code-analysis>",',
+  ' "requiredCapabilities": ["<从这些能力中多选：external_information | code_execution | code_analysis | document_synthesis>"],',
+  ' "planRequirements": ["<本轮验收必须核对的任务要求，短句>"],',
+  ' "relevantContextIds": ["<仅选用真正相关的候选 id，可空>"]}',
   '意图判定规则：',
   '- 讨论、提问、请求解释、询问进度或状态，都不是执行请求，分别归入 discuss_or_question / request_explanation / query_status。',
   '- 用户补充目标或要求，且尚未开始执行 → add_goal_info；要求调整当前规划 → modify_plan；对已有成果提出修改意见 → artifact_feedback。',
   '- 已有成果时，明确「改成 X / 按你说的改 / 把 A 改成 B」仍用 artifact_feedback（不要改成 discuss）；是否开始修改由系统确定性效果层决定，你仍须给出简短确认回复。',
   '- 只有用户明确表示「开始 / 按这个做 / 继续执行」且主要是确认规划时才是 confirm_start。',
-  '- confirm_start 时必须同时给出本轮瞬时 executionIntentKind 与 expectedOutputFamily（不写入规划、不持久化）：要改项目文件 → modify_code 配 code-change；只出报告/说明且明确不改文件 → create_document 配 document；只读代码分析 → analyze_code 配 code-analysis。以已确认方案的实际动作为准，不得因为出现「优化」「实施」等词就改文件。',
+  '- 有规划时必须给出 requiredCapabilities：完成目标真正需要的能力，可多项。最终成果可以是文档，但仍可需要 external_information（现实世界证据/来源）。不要因为要写报告就把所需能力改成「只是写文档」。',
+  '- 授权材料已足够、且不需要当前世界证据时，不要加入 external_information。',
+  '- confirm_start 时必须同时给出本轮瞬时 executionIntentKind 与 expectedOutputFamily（表示交付形态，不写入能力终裁）：要改项目文件 → modify_code 配 code-change；只出报告/说明且明确不改文件 → create_document 配 document；只读代码分析 → analyze_code 配 code-analysis。以已确认方案的实际动作为准，不得因为出现「优化」「实施」等词就改文件。',
   '- 只有用户明确表示满意并要求采用、定稿、结束时才是 final_adopt。',
   '- 已有成果时，用户表达对当前版本满意并要用这一版（如「就用这一版」「这版可以，收货」）→ final_adopt，不是 confirm_start；confirm_start 只用于要求开始或继续做开发工作。',
   '- 想暂停、停止、取消 → pause_or_cancel。',
@@ -172,7 +186,7 @@ const CONVERSE_SYSTEM_PROMPT = [
 ].join('\n');
 
 const CONVERSE_REPAIR_USER =
-  '上一次输出不符合合同。请只输出一个合法 JSON 对象（可无围栏），字段为 intent、confidence、reply；intent 为 confirm_start 时必须同时给出配对的 executionIntentKind 与 expectedOutputFamily（modify_code↔code-change，create_document↔document，analyze_code↔code-analysis）；必要时加 planUpdate；不要 Markdown 说明。';
+  '上一次输出不符合合同。请只输出一个合法 JSON 对象（可无围栏），字段为 intent、confidence、reply；intent 为 confirm_start 时必须同时给出配对的 executionIntentKind 与 expectedOutputFamily（modify_code↔code-change，create_document↔document，analyze_code↔code-analysis）；有规划时必须给出 requiredCapabilities（可含 external_information）；必要时加 planUpdate、planRequirements、relevantContextIds；不要 Markdown 说明。';
 
 /** 确认开始但本轮执行族无效：零 Job，可重试。 */
 export const CONVERSE_EXECUTION_ROUTE_FAILED_NOTICE =
@@ -224,6 +238,9 @@ export function buildConverseMessages(ctx: ConverseModelContext): ChatMessage[] 
   if (ctx.materialBrief && ctx.materialBrief.trim()) {
     lines.push(ctx.materialBrief.trim());
   }
+  if (ctx.contextCandidateBrief && ctx.contextCandidateBrief.trim()) {
+    lines.push(ctx.contextCandidateBrief.trim());
+  }
   if (ctx.recentTurns.length) {
     lines.push('【近期对话】');
     for (const t of ctx.recentTurns) {
@@ -243,9 +260,10 @@ export interface ParsedConverseOutput {
   confidence: number;
   reply: string;
   planUpdate?: string;
-  /** 仅 confirm_start 使用；瞬时决策，不落盘。 */
+  /** 仅 confirm_start 使用；表示交付形态，不表示能力终裁。 */
   executionIntentKind?: string;
   expectedOutputFamily?: string;
+  semantic?: PlannerSemanticDecision;
 }
 
 /** 解析模型输出；无法解析返回 null（由策略层走规划失败语义，不猜测、不说「没听懂」）。 */
@@ -283,6 +301,7 @@ export function parseConverseModelOutput(text: string): ParsedConverseOutput | n
     typeof obj.expectedOutputFamily === 'string' && obj.expectedOutputFamily.trim()
       ? obj.expectedOutputFamily.trim()
       : undefined;
+  const semantic = parsePlannerSemantic(obj);
   return {
     intent: obj.intent,
     confidence,
@@ -290,6 +309,7 @@ export function parseConverseModelOutput(text: string): ParsedConverseOutput | n
     ...(planUpdate ? { planUpdate } : {}),
     ...(executionIntentKind ? { executionIntentKind } : {}),
     ...(expectedOutputFamily ? { expectedOutputFamily } : {}),
+    ...(semantic ? { semantic } : {}),
   };
 }
 
@@ -560,6 +580,8 @@ export interface WorkConverseDeps {
     patch: import('./controlled-revision').TaskRevisionLoopMeta | ((prev: import('./controlled-revision').TaskRevisionLoopMeta) => import('./controlled-revision').TaskRevisionLoopMeta),
   ): Promise<Task>;
   getTaskFacts(taskId: string): Promise<ConverseTaskFacts>;
+  /** 授权范围内的历史上下文候选；相关性由模型判断。 */
+  listContextCandidates?(taskId: string): Promise<WorkContextCandidate[]>;
 }
 
 export interface WorkConverseInput {
@@ -650,6 +672,15 @@ export async function runWorkConverse(
       contextRefs: task.contextRefs || [],
       goal: task.goal,
     });
+    let contextCandidateBrief = '';
+    if (deps.listContextCandidates) {
+      try {
+        const candidates = await deps.listContextCandidates(task.id);
+        contextCandidateBrief = formatContextCandidateBrief(candidates);
+      } catch {
+        contextCandidateBrief = '';
+      }
+    }
     const messages = buildConverseMessages({
       goal: task.goal,
       facts,
@@ -657,6 +688,7 @@ export async function runWorkConverse(
       recentTurns: recentTurnsWindow(existingTurns),
       userText: text,
       ...(materialBrief.promptBlock ? { materialBrief: materialBrief.promptBlock } : {}),
+      ...(contextCandidateBrief ? { contextCandidateBrief } : {}),
     });
     try {
       const result = await deps.chat({ messages });
@@ -805,6 +837,7 @@ export async function runWorkConverse(
   }
 
   if (draftContent) {
+    const nextSemantic = mergePlannerSemantic(existingPlan?.semantic, parsed?.semantic);
     const nextPlan: TaskPlan = {
       version: (existingPlan?.version ?? 0) + 1,
       status: 'draft',
@@ -812,6 +845,7 @@ export async function runWorkConverse(
       updatedAt: nowIso(),
       source: planSource,
       ...(existingPlan?.confirmedFacts ? { confirmedFacts: existingPlan.confirmedFacts } : {}),
+      ...(nextSemantic ? { semantic: nextSemantic } : {}),
     };
     await deps.updatePlan(task.id, nextPlan);
     // 仅用户可见规划回传给渲染层
@@ -831,12 +865,14 @@ export async function runWorkConverse(
     } else {
       const confirmedSource =
         existingPlan.source === 'seed_internal' ? 'model' : existingPlan.source || 'model';
+      const nextSemantic = mergePlannerSemantic(existingPlan.semantic, parsed?.semantic);
       const confirmed: TaskPlan = {
         ...existingPlan,
         status: 'confirmed',
         updatedAt: nowIso(),
         confirmedAt: nowIso(),
         source: confirmedSource,
+        ...(nextSemantic ? { semantic: nextSemantic } : {}),
       };
       await deps.updatePlan(task.id, confirmed);
       planOut = {

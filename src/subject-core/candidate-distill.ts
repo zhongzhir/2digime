@@ -446,28 +446,7 @@ export function distillCandidatesFromText(input: {
     );
   }
 
-  if (input.sourceKind === 'task_requirement' && out.length === 0 && text.length >= 4) {
-    push(
-      'knowledge_gap_noted',
-      '还不确定：任务中提到的偏好',
-      text.slice(0, 400),
-      ['gap', 'task_requirement', 'category:temporary_context'],
-    );
-  }
-
-  if (
-    (input.sourceKind === 'initial_self_description' ||
-      input.sourceKind === 'conversation') &&
-    out.length === 0 &&
-    text.length >= 2
-  ) {
-    push(
-      'knowledge_gap_noted',
-      '还不确定：需要更多了解',
-      text.slice(0, 400),
-      ['gap'],
-    );
-  }
+  // 无命中时不发明 knowledge_gap：宁可不记，不能把未解析句改写成主体缺口。
 
   if (input.sourceKind === 'imported_material' && out.length === 0 && text.length >= 2) {
     const project = extractProjectScopeTag(text);

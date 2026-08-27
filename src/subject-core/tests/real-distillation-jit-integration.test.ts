@@ -111,10 +111,11 @@ test('captureInput wires product distill runtime (no env parallel client)', asyn
   });
   assert.ok(
     cap.distillMode === 'model' ||
-      cap.distillMode === 'model_fallback_contract' ||
       cap.distillMode === 'contract',
   );
-  assert.ok((cap.confirmedEventIds || []).length >= 1, 'low-risk explicit preference silent-adopts');
+  if (cap.distillMode === 'contract') {
+    assert.ok((cap.confirmedEventIds || []).length >= 1, 'no-model contract path still silent-adopts low-risk preference');
+  }
 });
 
 test('model distill hard failure does not block document job', async () => {
@@ -132,7 +133,8 @@ test('model distill hard failure does not block document job', async () => {
     text: '以后项目汇报先给结论，控制篇幅。',
     sourceKind: 'conversation',
   });
-  assert.equal(cap.distillMode, 'model_fallback_contract');
+  assert.equal(cap.distillMode, 'model');
+  assert.equal((cap.confirmedEventIds || []).length, 0, 'model failure must not invent a subject fact');
   const task = await runtime.submitTask({
     goal: '写一份简短说明文档',
     contextRefs: [],

@@ -15,7 +15,17 @@ export function freezeConfirmedPlanSnapshot(
   if (typeof plan.version !== 'number') return undefined;
   const content = String(plan.content || '');
   if (!content.trim()) return undefined;
-  return { version: plan.version, content };
+  const requirements = (plan.semantic?.requirements || [])
+    .map((r) => String(r || '').trim())
+    .filter(Boolean)
+    .slice(0, 8);
+  const requiredCapabilities = (plan.semantic?.requiredCapabilities || []).slice(0, 8);
+  return {
+    version: plan.version,
+    content,
+    ...(requirements.length ? { requirements } : {}),
+    ...(requiredCapabilities.length ? { requiredCapabilities } : {}),
+  };
 }
 
 /**

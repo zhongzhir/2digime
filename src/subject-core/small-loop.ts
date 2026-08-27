@@ -14,6 +14,7 @@ const STYLE_DOMAIN_TAGS = new Set([
   'from_edit',
   'correction',
   'category:working_method',
+  'category:preference',
 ]);
 
 const DOC_LIKE = /document|article|周报|汇报|介绍|文案|文章|纪要|摘要/;

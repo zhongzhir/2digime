@@ -28,6 +28,7 @@ import { excerptsFromGenericDiff } from './generic-cto-excerpts';
 export interface GenericCtoEvidence {
   taskGoal: string;
   confirmedPlan?: { version: number; content: string };
+  planRequirements?: string[];
   artifactId: string;
   artifactVersionId: string;
   jobId: string;
@@ -136,6 +137,9 @@ export function collectGenericCtoEvidence(input: {
             version: job.confirmedPlanSnapshot.version,
             content: String(job.confirmedPlanSnapshot.content || ''),
           },
+          ...(job.confirmedPlanSnapshot.requirements?.length
+            ? { planRequirements: job.confirmedPlanSnapshot.requirements }
+            : {}),
         }
       : {}),
     artifactId: artifact.id,
@@ -178,6 +182,7 @@ export function toCtoReviewInput(evidence: GenericCtoEvidence): CtoReviewInput {
     currentRoundAuthority: evidence.revisionRequest ? 'owner_revision' : 'initial_task',
     ...(planSteps.length ? { planSteps } : {}),
     ...(evidence.confirmedPlan ? { confirmedPlan: evidence.confirmedPlan } : {}),
+    ...(evidence.planRequirements?.length ? { planRequirements: evidence.planRequirements } : {}),
     ...(evidence.artifactBody ? { artifactBody: evidence.artifactBody } : {}),
     ...(evidence.jobExecutionReport ? { jobExecutionReport: evidence.jobExecutionReport } : {}),
     verification: evidence.verification || EMPTY_VERIFICATION,

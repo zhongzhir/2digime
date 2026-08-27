@@ -859,6 +859,7 @@ export class DigitalMeRuntime {
       appendConversation: (taskId, i) => work.appendTaskConversation(taskId, i),
       updatePlan: (taskId, plan) => work.updateTaskPlan(taskId, plan),
       updateRevisionLoop: (taskId, patch) => work.updateTaskRevisionLoop(taskId, patch),
+      listContextCandidates: (taskId) => work.listContextCandidates(taskId),
       getTaskFacts: async (taskId) => {
         const detail = await work.getTask({ taskId });
         const jobStatus = detail.latestJob?.status;

@@ -21,6 +21,11 @@ export interface CapabilityNeed {
    * 供「失败→排除→重选」复用，不建第二套 router。
    */
   excludeCapabilityIds?: readonly string[];
+  /**
+   * Planner-owned: task needs live/world evidence.
+   * Independent of execution family (a document can still require search).
+   */
+  needsExternalInformation?: boolean;
 }
 
 export interface CapabilitySelectResult {
@@ -154,7 +159,17 @@ export class CapabilityRegistry {
     // PROFESSIONAL-CAPABILITY-ACCESS-01：研究/当前信息意图优先使用 search 型能力。
     // professional（有凭据的联网搜索）优先；否则 baseline（keyless）；都无则回落 document。
     // SEARCH-FAILURE-CLOSURE-01：被排除（刚失败/cooldown）的能力不再被选中 → 自然落到下一可用。
-    if (intent === 'external_research') {
+    // Planner semantic needsExternalInformation 与旧 intentKind 同等进入本选择支路，
+    // 不得把「需要外部信息的文档」改写成普通 document。
+    // 不得用外部信息需求覆盖代码修改/分析终裁（那些由 delivery family 决定）。
+    const codingDelivery =
+      intent === 'modify_code' ||
+      family === CODE_CHANGE_ARTIFACT_TYPE ||
+      family === CODE_ANALYSIS_ARTIFACT_TYPE;
+    if (
+      !codingDelivery &&
+      (intent === 'external_research' || need.needsExternalInformation)
+    ) {
       const searchAdapters = [...this.adapters.values()].filter(
         (a) =>
           notExcluded(a) &&

@@ -9,6 +9,7 @@
  */
 import type { TaskIntentKind } from './work-intent';
 import type { TaskRevisionLoopMeta } from './controlled-revision';
+import type { PlannerSemanticDecision } from './planner-semantic';
 
 export interface Task {
   id: string;
@@ -119,4 +120,9 @@ export interface TaskPlan {
    * 缺省按历史数据视为 model（兼容旧包）。
    */
   source?: 'model' | 'seed_internal';
+  /**
+   * Planner-owned semantic decision (delivery vs capability needs).
+   * Control may validate shape and enforce safety; it must not reinterpret.
+   */
+  semantic?: PlannerSemanticDecision;
 }

@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import type { CapabilityRegistry } from '../capability/registry';
-import type { SecretAccessor, RemoteLifecycleStatus, CapabilityOutput, CapabilityInput } from '../capability/adapter';
+import type { SecretAccessor, RemoteLifecycleStatus, CapabilityOutput, CapabilityInput, ExecutionContext } from '../capability/adapter';
 import type { ContextSnapshot } from './context-snapshot';
 import { newId, nowIso } from '../shared/ids';
 import type { ConfirmedExperienceView } from '../subject-core/derived-views';
@@ -40,6 +40,18 @@ import {
   dispatchOutcomeCheck,
 } from './outcome-dispatch';
 import { deriveWorkIntent, inspectSoftwareProject, isTaskIntentKind } from './work-intent';
+import {
+  capabilityNeedFromPlan,
+  needsDocumentSynthesis,
+  needsExternalInformation,
+  type PlannerSemanticDecision,
+} from './planner-semantic';
+import {
+  buildWorkContextCandidates,
+  resolveSelectedContextRefs,
+  type WorkContextCandidate,
+} from './context-candidates';
+import type { Artifact } from './artifact';
 import {
   isThinOwnerRuntime,
   mergeThinContextRefs,
@@ -173,6 +185,14 @@ function isSearchCapabilityId(id: string | undefined): boolean {
   );
 }
 
+const EXTERNAL_INFO_UNAVAILABLE_NOTICE =
+  '【能力可用性】本任务需要现实世界/外部信息能力，但当前没有可用的搜索能力。语义需求不变：无法核实的外部事实不得编造；请如实说明缺口，并仅基于已有材料完成能完成的部分。';
+
+function planSemanticOf(task: { meta?: { plan?: { semantic?: PlannerSemanticDecision } } } | null | undefined):
+  PlannerSemanticDecision | undefined {
+  return task?.meta?.plan?.semantic;
+}
+
 function isSearchAttemptDeadline(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
   return (value as { code?: string }).code === SEARCH_ATTEMPT_DEADLINE_CODE;
@@ -287,6 +307,7 @@ export class WorkRuntime {
       expectedOutputFamily: task.requestedArtifactType,
       materialKinds,
       excludeCapabilityIds: [...excluded],
+      ...capabilityNeedFromPlan(planSemanticOf(task)),
     });
     if (!sel.adapter || sel.adapter.registration.id === failedCapabilityId) return null;
     return sel.adapter.registration.id;
@@ -350,9 +371,11 @@ export class WorkRuntime {
   ): Promise<CommandMap['work.submitTask']['output']> {
     // D11-B：确认开始时校验规划版本；过期规划不得执行
     // 薄主链：绕开关键词意图，复用 Task 上已附项目位置
+    let plannerSemantic: PlannerSemanticDecision | undefined;
     if (input.existingTaskId) {
       const existingForPlan = await this.opts.taskService.get(input.existingTaskId);
       if (!existingForPlan) throw new Error(`task not found: ${input.existingTaskId}`);
+      plannerSemantic = planSemanticOf(existingForPlan);
       if (input.confirmedPlanVersion != null) {
         const currentPlan = existingForPlan.meta?.plan;
         if (!currentPlan || currentPlan.version !== input.confirmedPlanVersion) {
@@ -368,6 +391,13 @@ export class WorkRuntime {
       });
       input.goal = identity.goal;
       input.contextRefs = identity.contextRefs;
+      const selectedFolders = await this.resolvePlannerSelectedFolders(
+        existingForPlan.id,
+        planSemanticOf(existingForPlan),
+      );
+      if (selectedFolders.length) {
+        input.contextRefs = [...(input.contextRefs || []), ...selectedFolders];
+      }
       if (isThinOwnerRuntime(existingForPlan)) {
         input.contextRefs = mergeThinContextRefs(
           input.contextRefs,
@@ -630,6 +660,7 @@ export class WorkRuntime {
       expectedOutputFamily,
       materialKinds: intent.materialKinds,
       ...(explicitCapabilityId ? { explicitCapabilityId } : {}),
+      ...(!forceModify && !forceAnalyze ? capabilityNeedFromPlan(plannerSemantic) : {}),
       // SEARCH-FAILURE-CLOSURE-01：cooldown 中的能力（刚 transient 耗尽）不再被首选，
       // 避免连续任务反复撞同一坏能力。
       ...(this.cooldownCapabilityIds().length
@@ -806,6 +837,7 @@ export class WorkRuntime {
         this.opts.registry.selectForNeed({
           ...(task.intentKind ? { intentKind: task.intentKind } : {}),
           expectedOutputFamily: task.requestedArtifactType,
+          ...capabilityNeedFromPlan(planSemanticOf(task)),
         }).adapter?.registration.id;
       if (!capabilityId) {
         const msg =
@@ -912,6 +944,7 @@ export class WorkRuntime {
       this.opts.registry.selectForNeed({
         ...(task.intentKind ? { intentKind: task.intentKind } : {}),
         expectedOutputFamily: task.requestedArtifactType,
+        ...capabilityNeedFromPlan(planSemanticOf(task)),
       }).adapter?.registration.id;
     if (!capabilityId) {
       const msg =
@@ -1358,10 +1391,6 @@ export class WorkRuntime {
         }),
       };
     });
-    const derived = await deriveWorkIntent({
-      goal: input.goal,
-      contextRefs,
-    });
     const thin = await shouldUseThinOwnerRuntime({
       goal: input.goal,
       contextRefs,
@@ -1372,13 +1401,24 @@ export class WorkRuntime {
       goal: input.goal,
       contextRefs,
       requestedArtifactType:
-        override?.expectedOutputFamily || derived.expectedOutputFamily || 'document',
-      ...(override
-        ? { intentKind: override.intentKind }
-        : derived.intentKind
-          ? { intentKind: derived.intentKind }
-          : {}),
+        override?.expectedOutputFamily || 'document',
+      ...(override ? { intentKind: override.intentKind } : {}),
       ...(thin ? { meta: { runtimePath: THIN_RUNTIME_PATH } } : {}),
+    });
+  }
+
+  async listContextCandidates(currentTaskId: string): Promise<WorkContextCandidate[]> {
+    const tasks = await this.opts.taskService.list(24);
+    const artifacts: Artifact[] = [];
+    for (const t of tasks) {
+      if (t.id === currentTaskId) continue;
+      const listed = await this.opts.artifactCommitter.listByTask(t.id);
+      artifacts.push(...listed);
+    }
+    return buildWorkContextCandidates({
+      currentTaskId,
+      tasks,
+      artifacts,
     });
   }
 
@@ -1516,6 +1556,109 @@ export class WorkRuntime {
     await this.opts.jobStore.put(job);
     this.publishJob(job);
     return job;
+  }
+
+  private async resolvePlannerSelectedFolders(
+    taskId: string,
+    semantic: PlannerSemanticDecision | undefined,
+  ): Promise<Array<{ kind: 'folder'; path: string; projectOrigin: 'user_selected' }>> {
+    const ids = semantic?.relevantContextIds || [];
+    if (!ids.length) return [];
+    const candidates = await this.listContextCandidates(taskId);
+    const resolved = resolveSelectedContextRefs(candidates, ids);
+    return resolved.folderPaths.map((p) => ({
+      kind: 'folder' as const,
+      path: p,
+      projectOrigin: 'user_selected' as const,
+    }));
+  }
+
+  private async attachPlannerSelectedContext(
+    task: import('./task').Task,
+    snapshot: ContextSnapshot,
+  ): Promise<ContextSnapshot> {
+    const ids = planSemanticOf(task)?.relevantContextIds || [];
+    if (!ids.length) return snapshot;
+    let current = snapshot;
+    for (const raw of ids) {
+      const id = String(raw || '').trim();
+      if (!id.startsWith('artifact:')) continue;
+      const artId = id.slice('artifact:'.length);
+      const artifact = await this.opts.artifactCommitter.get(artId);
+      if (!artifact) continue;
+      const text = await this.readArtifactBody(artifact);
+      if (!text.trim()) continue;
+      current = await this.opts.snapshotBuilder.attachTextItem(current.id, {
+        sourcePath: `historical-artifact:${artifact.title || artifact.id}`,
+        text: text.slice(0, 8000),
+      });
+    }
+    return current;
+  }
+
+  private async readArtifactBody(artifact: Artifact): Promise<string> {
+    const head = artifact.versions.find((v) => v.versionId === artifact.headVersionId);
+    if (!head) return '';
+    if (head.content.kind === 'text' && this.opts.readExtractedText) {
+      try {
+        return await this.opts.readExtractedText(head.content.ref);
+      } catch {
+        return '';
+      }
+    }
+    return '';
+  }
+
+  private async synthesizeAfterExternalInformation(input: {
+    task: import('./task').Task;
+    job: ExecutionJob;
+    snapshot: ContextSnapshot;
+    subjectContext: ConfirmedExperienceView;
+    searchOutput: CapabilityOutput;
+    execCtx: ExecutionContext;
+  }): Promise<{ output: CapabilityOutput; snapshot: ContextSnapshot } | null> {
+    if (!needsDocumentSynthesis(planSemanticOf(input.task))) return null;
+    const searchText = capabilityOutputText(input.searchOutput) || '';
+    if (!searchText.trim()) return null;
+    const docSel = this.opts.registry.selectForNeed({
+      intentKind: 'create_document',
+      expectedOutputFamily: 'document',
+    });
+    const docAdapter = docSel.adapter;
+    if (!docAdapter || isSearchCapabilityId(docAdapter.registration.id)) return null;
+    let snapshot = await this.opts.snapshotBuilder.attachTextItem(input.snapshot.id, {
+      sourcePath: 'external-information://search-evidence',
+      text: searchText.slice(0, 12_000),
+    });
+    const rawInput = this.buildCapabilityRawInput(
+      input.task,
+      input.job,
+      snapshot,
+      input.subjectContext,
+    );
+    const grant =
+      input.task.authorization?.grantId && this.opts.loadAuthorizationGrant
+        ? await this.opts.loadAuthorizationGrant(input.task.authorization.grantId)
+        : null;
+    const auth = buildJobAuthorizationProjection({
+      task: input.task,
+      capabilityInput: rawInput,
+      grant,
+      isRemote: false,
+    });
+    const prepared = prepareAndExecuteCapability({
+      adapter: docAdapter,
+      rawInput,
+      auth,
+      ctx: input.execCtx,
+      isRemote: false,
+      unauthorizedMarkers: [],
+      job: input.job,
+      task: input.task,
+      subjectId: input.task.subjectId,
+    });
+    const result = await prepared;
+    return { output: result.output, snapshot };
   }
 
   private async restoreExternalExecutionBaseline(
@@ -1668,6 +1811,21 @@ export class WorkRuntime {
       if (controller.signal.aborted || job.remoteExecution?.cancelRequested) {
         await this.cancelRunning(job);
         return;
+      }
+
+      try {
+        snapshot = await this.attachPlannerSelectedContext(task, snapshot);
+        if (
+          needsExternalInformation(planSemanticOf(task)) &&
+          !isSearchCapabilityId(job.capabilityId)
+        ) {
+          snapshot = await this.opts.snapshotBuilder.attachTextItem(snapshot.id, {
+            sourcePath: 'capability-availability://external-information',
+            text: EXTERNAL_INFO_UNAVAILABLE_NOTICE,
+          });
+        }
+      } catch {
+        /* 历史上下文装配失败不得阻断主成果 */
       }
 
       // --- capability ---
@@ -2050,6 +2208,20 @@ export class WorkRuntime {
             ? await this.awaitSearchAttempt(prepared, controller)
             : await prepared;
           output = preparedResult.output;
+          if (isSearchCapabilityId(adapter.registration.id) && output) {
+            const synthesized = await this.synthesizeAfterExternalInformation({
+              task,
+              job,
+              snapshot,
+              subjectContext,
+              searchOutput: output,
+              execCtx,
+            });
+            if (synthesized) {
+              output = synthesized.output;
+              snapshot = synthesized.snapshot;
+            }
+          }
         } else if (isRemote) {
           // 恢复得到的 output 仍须验证并附收据
           const grant =
