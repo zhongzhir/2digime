@@ -25,6 +25,9 @@ export interface CreateWorkRuntimeOptions {
   /** 默认注册 P2.1 确定性代码分析 Adapter(工程验证)。 */
   registerDeterministicCodeAnalysis?: boolean;
   loadSubjectContext?: WorkRuntimeOptions['loadSubjectContext'];
+  selectSubjectContext?: WorkRuntimeOptions['selectSubjectContext'];
+  loadSubjectPreferenceCandidates?: WorkRuntimeOptions['loadSubjectPreferenceCandidates'];
+  resolveContextRelevance?: WorkRuntimeOptions['resolveContextRelevance'];
   secrets?: WorkRuntimeOptions['secrets'];
 }
 
@@ -69,6 +72,13 @@ export function createWorkRuntime(options: CreateWorkRuntimeOptions): WorkRuntim
       return bytes.toString('utf8');
     },
     ...(options.loadSubjectContext ? { loadSubjectContext: options.loadSubjectContext } : {}),
+    ...(options.selectSubjectContext ? { selectSubjectContext: options.selectSubjectContext } : {}),
+    ...(options.loadSubjectPreferenceCandidates
+      ? { loadSubjectPreferenceCandidates: options.loadSubjectPreferenceCandidates }
+      : {}),
+    ...(options.resolveContextRelevance
+      ? { resolveContextRelevance: options.resolveContextRelevance }
+      : {}),
     ...(options.secrets ? { secrets: options.secrets } : {}),
   });
   return runtime;

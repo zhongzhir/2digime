@@ -46,6 +46,7 @@ export interface GenericCtoEvidence {
   unresolvedItems?: string[];
   agentSummaryExcerpt?: string;
   materials?: MaterialEvidence;
+  selectedContext?: string[];
 }
 
 export interface GenericCtoReviewResult {
@@ -165,6 +166,15 @@ export function collectGenericCtoEvidence(input: {
       ...(task.contextRefs?.length ? { contextRefs: task.contextRefs } : {}),
       ...(job.materialUse ? { materialUse: job.materialUse } : {}),
     }),
+    ...(job.contextContinuity
+      ? {
+          selectedContext: [
+            ...job.contextContinuity.attachedRefs,
+            ...job.contextContinuity.selectedIds,
+            ...job.contextContinuity.freezeEventIds.map((id) => `preference-or-subject:${id}`),
+          ].filter(Boolean),
+        }
+      : {}),
   };
 }
 
@@ -194,6 +204,7 @@ export function toCtoReviewInput(evidence: GenericCtoEvidence): CtoReviewInput {
     ...(evidence.unresolvedItems?.length ? { unresolvedItems: evidence.unresolvedItems } : {}),
     ...(evidence.agentSummaryExcerpt ? { agentSummaryExcerpt: evidence.agentSummaryExcerpt } : {}),
     ...(evidence.materials ? { materials: evidence.materials } : {}),
+    ...(evidence.selectedContext?.length ? { selectedContext: evidence.selectedContext } : {}),
     artifactVersionId: evidence.artifactVersionId,
     jobId: evidence.jobId,
     ...(evidence.testResults?.length ? { testResults: evidence.testResults } : {}),

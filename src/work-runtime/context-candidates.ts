@@ -1,21 +1,43 @@
 /**
  * Cross-task context candidates — deterministic discovery only.
- * Relevance is decided by the planner, not keywords.
+ * Relevance / referent resolution is decided by the model, not keywords.
+ *
+ * Sources are existing authorities: conversation/thread, completed
+ * job/result/deliverable, project/workspace folders, subject preferences,
+ * current attachments (the last is already in the converse material brief).
  */
 import type { Artifact } from './artifact';
 import type { Task } from './task';
 
+export type WorkContextCandidateKind =
+  | 'artifact'
+  | 'task_folder'
+  | 'conversation'
+  | 'preference';
+
 export interface WorkContextCandidate {
   id: string;
-  kind: 'artifact' | 'task_folder';
+  kind: WorkContextCandidateKind;
   title: string;
   summary: string;
   taskId: string;
   /** Absolute path when the candidate is an authorized folder. */
   path?: string;
+  /** Subject preference event id when kind is preference. */
+  eventId?: string;
 }
 
-const MAX_CANDIDATES = 12;
+export interface ResolvedContextSelection {
+  artifactIds: string[];
+  folderPaths: string[];
+  preferenceEventIds: string[];
+  conversationTaskIds: string[];
+}
+
+const MAX_CANDIDATES = 16;
+const MAX_ARTIFACTS_PER_TASK = 2;
+const MAX_CONVERSATION_CANDIDATES = 6;
+const MAX_PREFERENCE_CANDIDATES = 6;
 const SUMMARY_CHARS = 280;
 
 export function buildWorkContextCandidates(input: {
@@ -23,6 +45,7 @@ export function buildWorkContextCandidates(input: {
   tasks: readonly Task[];
   artifacts: readonly Artifact[];
   readArtifactText?: (artifact: Artifact) => string | undefined;
+  preferences?: readonly { eventId: string; title: string; detail: string }[];
 }): WorkContextCandidate[] {
   const out: WorkContextCandidate[] = [];
   const seen = new Set<string>();
@@ -34,38 +57,70 @@ export function buildWorkContextCandidates(input: {
     artifactsByTask.set(art.taskId, list);
   }
 
+  const push = (c: WorkContextCandidate) => {
+    if (seen.has(c.id) || out.length >= MAX_CANDIDATES) return false;
+    seen.add(c.id);
+    out.push(c);
+    return out.length < MAX_CANDIDATES;
+  };
+
   for (const task of tasks) {
     const arts = artifactsByTask.get(task.id) || [];
-    for (const art of arts.slice(0, 2)) {
-      const id = `artifact:${art.id}`;
-      if (seen.has(id)) continue;
-      seen.add(id);
-      const body = input.readArtifactText?.(art) || '';
-      out.push({
-        id,
+    for (const art of arts.slice(0, MAX_ARTIFACTS_PER_TASK)) {
+      const body = String(input.readArtifactText?.(art) || '').replace(/\s+/g, ' ').trim();
+      const ok = push({
+        id: `artifact:${art.id}`,
         kind: 'artifact',
         title: String(art.title || task.goal).slice(0, 80),
-        summary: (body || task.goal).replace(/\s+/g, ' ').trim().slice(0, SUMMARY_CHARS),
+        summary: (body || task.goal).slice(0, SUMMARY_CHARS),
         taskId: task.id,
       });
-      if (out.length >= MAX_CANDIDATES) return out;
+      if (!ok) return out;
     }
     for (const ref of task.contextRefs || []) {
       if (ref.kind !== 'folder' || !ref.path) continue;
-      const id = `task_folder:${ref.path}`;
-      if (seen.has(id)) continue;
-      seen.add(id);
-      out.push({
-        id,
+      const ok = push({
+        id: `task_folder:${ref.path}`,
         kind: 'task_folder',
         title: task.goal.slice(0, 80),
         summary: `已授权项目目录：${ref.path}`,
         taskId: task.id,
         path: ref.path,
       });
-      if (out.length >= MAX_CANDIDATES) return out;
+      if (!ok) return out;
     }
   }
+
+  let conversationAdded = 0;
+  for (const task of tasks) {
+    if (conversationAdded >= MAX_CONVERSATION_CANDIDATES) break;
+    const summary = conversationCandidateSummary(task);
+    if (!summary) continue;
+    const ok = push({
+      id: `conversation:${task.id}`,
+      kind: 'conversation',
+      title: task.goal.slice(0, 80) || '近期对话',
+      summary,
+      taskId: task.id,
+    });
+    if (!ok) return out;
+    conversationAdded += 1;
+  }
+
+  for (const pref of (input.preferences || []).slice(0, MAX_PREFERENCE_CANDIDATES)) {
+    const eventId = String(pref.eventId || '').trim();
+    if (!eventId) continue;
+    const ok = push({
+      id: `preference:${eventId}`,
+      kind: 'preference',
+      title: String(pref.title || '已确认偏好').slice(0, 80),
+      summary: String(pref.detail || pref.title || '').replace(/\s+/g, ' ').trim().slice(0, SUMMARY_CHARS),
+      taskId: input.currentTaskId,
+      eventId,
+    });
+    if (!ok) return out;
+  }
+
   return out;
 }
 
@@ -73,9 +128,15 @@ export function formatContextCandidateBrief(
   candidates: readonly WorkContextCandidate[],
 ): string {
   if (!candidates.length) return '';
-  const lines = ['【可选用的已有上下文候选】', '仅在与当前目标真正相关时选用；不要把无关项目硬塞进方案。'];
+  const lines = [
+    '【可选用的已有上下文候选】',
+    '这些是已经存在的对话、已完成成果、项目目录与已确认工作偏好。',
+    '你必须对当前用户目标做指代解析：用户可能不重复项目名或材料，但仍在继续刚完成的工作。',
+    '选择依据是语义相关、对话连续性与新近程度的综合判断，不是“最新一条全选”，也不是名称关键词命中。',
+    '只填真正相关的 id；无关项目与不适用的偏好不要选。',
+  ];
   for (const c of candidates) {
-    lines.push(`- ${c.id}｜${c.title}｜${c.summary}`);
+    lines.push(`- ${c.id}｜${c.kind}｜${c.title}｜${c.summary}`);
   }
   return lines.join('\n');
 }
@@ -83,19 +144,75 @@ export function formatContextCandidateBrief(
 export function resolveSelectedContextRefs(
   candidates: readonly WorkContextCandidate[],
   selectedIds: readonly string[],
-): { artifactIds: string[]; folderPaths: string[] } {
+): ResolvedContextSelection {
   const byId = new Map(candidates.map((c) => [c.id, c]));
   const artifactIds: string[] = [];
   const folderPaths: string[] = [];
+  const preferenceEventIds: string[] = [];
+  const conversationTaskIds: string[] = [];
+  const seenArt = new Set<string>();
+  const seenFolder = new Set<string>();
+  const seenPref = new Set<string>();
+  const seenConv = new Set<string>();
+
   for (const raw of selectedIds) {
     const hit = byId.get(String(raw || '').trim());
     if (!hit) continue;
     if (hit.kind === 'artifact') {
       const artId = hit.id.replace(/^artifact:/, '');
-      if (artId) artifactIds.push(artId);
-    } else if (hit.path) {
+      if (artId && !seenArt.has(artId)) {
+        seenArt.add(artId);
+        artifactIds.push(artId);
+      }
+    } else if (hit.kind === 'task_folder' && hit.path && !seenFolder.has(hit.path)) {
+      seenFolder.add(hit.path);
       folderPaths.push(hit.path);
+    } else if (hit.kind === 'preference') {
+      const eventId = hit.eventId || hit.id.replace(/^preference:/, '');
+      if (eventId && !seenPref.has(eventId)) {
+        seenPref.add(eventId);
+        preferenceEventIds.push(eventId);
+      }
+    } else if (hit.kind === 'conversation' && hit.taskId && !seenConv.has(hit.taskId)) {
+      seenConv.add(hit.taskId);
+      conversationTaskIds.push(hit.taskId);
     }
   }
-  return { artifactIds, folderPaths };
+  return { artifactIds, folderPaths, preferenceEventIds, conversationTaskIds };
+}
+
+export function mergeSelectedContextIds(
+  planned: readonly string[] | undefined,
+  resolved: readonly string[] | undefined,
+): string[] {
+  const extra = (resolved || []).map((id) => String(id || '').trim()).filter(Boolean);
+  if (extra.length) return uniqueIds(extra);
+  return uniqueIds((planned || []).map((id) => String(id || '').trim()).filter(Boolean));
+}
+
+function uniqueIds(ids: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of ids) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out.slice(0, 12);
+}
+
+function conversationCandidateSummary(task: Task): string {
+  const turns = task.meta?.conversation?.turns || [];
+  const lastUser = [...turns].reverse().find((t) => t.role === 'user');
+  const lastMe = [...turns].reverse().find((t) => t.role === 'digital_me');
+  const parts: string[] = [];
+  if (task.goal.trim()) parts.push(task.goal.trim());
+  if (lastUser?.content?.trim() && lastUser.content.trim() !== task.goal.trim()) {
+    parts.push(`用户：${lastUser.content.trim()}`);
+  }
+  if (lastMe?.content?.trim()) {
+    parts.push(`此前回复：${lastMe.content.trim()}`);
+  }
+  const text = parts.join(' / ').replace(/\s+/g, ' ').trim();
+  return text.slice(0, SUMMARY_CHARS);
 }

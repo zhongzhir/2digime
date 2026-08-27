@@ -12,6 +12,7 @@ export type SelectionReason =
   | 'goal_tag'
   | 'weak_structure_only'
   | 'boundary_statement'
+  | 'planner_selected'
   | 'manual_none';
 
 export interface FrozenSubjectEntry {

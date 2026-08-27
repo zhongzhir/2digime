@@ -238,13 +238,14 @@ function judgeHistoricalContextFromJob(job, cues, extra) {
   const selected = (extra && extra.selectedArtifacts) || [];
   const pathBlob = usedPaths.join("\n");
   const selectedBlob = JSON.stringify(selected);
-  const assembled =
-    usedPaths.some((p) => HISTORICAL_CTX_RE.test(p)) && hint.some((re) => re.test(pathBlob));
-  const planned = selected.length > 0 && hint.some((re) => re.test(selectedBlob));
+  const assembled = usedPaths.some((p) => HISTORICAL_CTX_RE.test(p));
+  const planned = selected.length > 0;
+  const cueHit = hint.some((re) => re.test(pathBlob) || re.test(selectedBlob));
   return {
     historical_context_used: assembled || planned,
     assembled,
     planned,
+    cueHit,
     usedPaths,
     selectedArtifacts: selected,
     capabilityId: (job && job.capabilityId) || null,

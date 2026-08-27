@@ -54,6 +54,11 @@ export interface SubjectInjectionSelectInput {
    * 仅用于提升确定性关键词/域匹配的召回；不降低既有排除门。
    */
   semanticScores?: Readonly<Record<string, number>>;
+  /**
+   * 规划/相关性模型选出的偏好 eventId。
+   * 一旦提供（含空数组），偏好是否适用改由该列表决定，不再用关键词门槛机械注入。
+   */
+  plannerPreferenceIds?: readonly string[];
 }
 
 export interface SubjectInjectionSelection {
@@ -321,40 +326,65 @@ export function selectSubjectInjection(
     push(entry, 'experience', reason);
   }
 
-  // 已确认偏好：relevance + 域亲和 + 项目范围；数量受控；不全量灌入
+  // 已确认偏好：数量受控；不全量灌入。
+  // 若规划/相关性模型已给出 plannerPreferenceIds，则以模型判断为准；
+  // 未给出时保留既有关键词/语义分门槛（离线包与旧路径）。
   const prefSlots = Math.max(
     0,
     AI_FIRST_MAX_ENTRIES -
       experienceView.entries.filter((e) => !e.tags.includes('reuse:weak_structure')).length,
   );
   let prefAdded = 0;
-  const prefScored = derived.preferences.entries
-    .map((item) => {
-      if (
-        !projectScopeAllows({
-          entryTags: item.tags,
-          goal: input.goal,
-          ...(input.scopeHints ? { scopeHints: input.scopeHints } : {}),
-        })
-      ) {
-        return { item, score: -1, minScore: 99 };
-      }
-      const matched = scorePreferenceForTask({
-        goal: input.goal,
-        requestedArtifactType: input.requestedArtifactType,
-        title: item.title,
-        detail: item.detail,
-        tags: item.tags,
-        tokenize,
-        scoreText,
-      });
-      const semantic = input.semanticScores?.[item.eventId] ?? 0;
-      const score = Math.max(matched.score, semantic);
-      const minScore = policy === 'ai_first' ? Math.min(matched.minScore, semantic > 0 ? 1 : matched.minScore) : 1;
-      return { item, score, minScore };
-    })
-    .filter((row) => row.score >= row.minScore)
-    .sort((a, b) => b.score - a.score);
+  const plannerPrefIds = input.plannerPreferenceIds;
+  const plannerPrefSet = plannerPrefIds ? new Set(plannerPrefIds) : null;
+
+  const prefScored =
+    plannerPrefSet == null
+      ? derived.preferences.entries
+          .map((item) => {
+            if (
+              !projectScopeAllows({
+                entryTags: item.tags,
+                goal: input.goal,
+                ...(input.scopeHints ? { scopeHints: input.scopeHints } : {}),
+              })
+            ) {
+              return { item, score: -1, minScore: 99, reason: 'keyword_match' as const };
+            }
+            const matched = scorePreferenceForTask({
+              goal: input.goal,
+              requestedArtifactType: input.requestedArtifactType,
+              title: item.title,
+              detail: item.detail,
+              tags: item.tags,
+              tokenize,
+              scoreText,
+            });
+            const semantic = input.semanticScores?.[item.eventId] ?? 0;
+            const score = Math.max(matched.score, semantic);
+            const minScore =
+              policy === 'ai_first' ? Math.min(matched.minScore, semantic > 0 ? 1 : matched.minScore) : 1;
+            return { item, score, minScore, reason: 'keyword_match' as const };
+          })
+          .filter((row) => row.score >= row.minScore)
+          .sort((a, b) => b.score - a.score)
+      : derived.preferences.entries
+          .filter((item) => plannerPrefSet.has(item.eventId) || forceInclude.has(item.eventId))
+          .filter((item) =>
+            forceInclude.has(item.eventId)
+              ? true
+              : projectScopeAllows({
+                  entryTags: item.tags,
+                  goal: input.goal,
+                  ...(input.scopeHints ? { scopeHints: input.scopeHints } : {}),
+                }),
+          )
+          .map((item) => ({
+            item,
+            score: 3,
+            minScore: 1,
+            reason: 'planner_selected' as const,
+          }));
 
   for (const row of prefScored) {
     if (prefAdded >= Math.max(prefSlots, 1)) {
@@ -375,7 +405,7 @@ export function selectSubjectInjection(
       tags: row.item.tags,
     };
     if (full?.occurredAt) payload.occurredAt = full.occurredAt;
-    push(payload, 'preference', 'keyword_match');
+    push(payload, 'preference', row.reason);
     prefAdded += 1;
   }
   for (const item of derived.preferences.entries) {
@@ -400,7 +430,7 @@ export function selectSubjectInjection(
         active.kind === 'preference' || active.kind === 'principle' || active.kind === 'goal'
           ? active.kind
           : 'preference',
-        'keyword_match',
+        plannerPrefSet?.has(eventId) ? 'planner_selected' : 'keyword_match',
       );
       continue;
     }
@@ -415,7 +445,7 @@ export function selectSubjectInjection(
           occurredAt: cand.occurredAt,
         },
         'preference',
-        'keyword_match',
+        plannerPrefSet?.has(eventId) ? 'planner_selected' : 'keyword_match',
       );
     }
   }

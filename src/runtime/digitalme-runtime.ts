@@ -130,6 +130,7 @@ import { captureOutcomeUserHint, type CaptureOutcome } from '../subject-core/cap
 import { extractEditEvidence } from '../subject-core/diff-evidence';
 import { headVersion } from '../work-runtime/artifact';
 import { runWorkConverse, type WorkConverseDeps } from '../work-runtime/work-converse';
+import { resolveContextRelevanceWithChat } from '../work-runtime/context-relevance';
 import { maybeRunControlledRevisionAfterJob } from '../work-runtime/controlled-revision-runner';
 import {
   collectGenericCtoEvidence,
@@ -1905,7 +1906,27 @@ export class DigitalMeRuntime {
         const derived = await subjectService.getDerived();
         return derived.confirmed;
       },
-      selectSubjectContext: async ({ goal, requestedArtifactType, intentKind, taskId }) => {
+      loadSubjectPreferenceCandidates: async () => {
+        const derived = await subjectService.getDerived();
+        return derived.preferences.entries.map((e) => ({
+          eventId: e.eventId,
+          title: e.title,
+          detail: e.detail,
+        }));
+      },
+      resolveContextRelevance: async (input) => {
+        const chat = this.buildConverseChat();
+        if (!chat) return { selectedIds: [], decided: false };
+        return resolveContextRelevanceWithChat(chat, input);
+      },
+      selectSubjectContext: async ({
+        goal,
+        requestedArtifactType,
+        intentKind,
+        taskId,
+        relevantContextIds,
+        preferenceSelectionAuthoritative,
+      }) => {
         const derived = await subjectService.getDerived();
         const policy = this.options.executionPolicy ?? 'ai_first';
         const profile = chooseExecutionProfile({ goal, requestedArtifactType });
@@ -1942,6 +1963,11 @@ export class DigitalMeRuntime {
         } catch {
           // ignore
         }
+        const plannerPreferenceIds = (relevantContextIds || [])
+          .filter((id) => String(id).startsWith('preference:'))
+          .map((id) => String(id).slice('preference:'.length))
+          .filter(Boolean);
+        const semanticScores = Object.fromEntries(plannerPreferenceIds.map((id) => [id, 3]));
         const selected = selectSubjectInjection({
           goal,
           requestedArtifactType,
@@ -1951,8 +1977,12 @@ export class DigitalMeRuntime {
           includeCoreMatching:
             policy === 'legacy' || profile === 'careful' || profile === 'high_risk',
           excludeEventIds,
-          forceIncludeEventIds: includeEventIds,
+          forceIncludeEventIds: [...includeEventIds, ...plannerPreferenceIds],
           scopeHints,
+          ...(preferenceSelectionAuthoritative || plannerPreferenceIds.length
+            ? { plannerPreferenceIds }
+            : {}),
+          ...(plannerPreferenceIds.length ? { semanticScores } : {}),
         });
         return {
           ...selected,

@@ -48,6 +48,7 @@ import {
 } from './planner-semantic';
 import {
   buildWorkContextCandidates,
+  mergeSelectedContextIds,
   resolveSelectedContextRefs,
   type WorkContextCandidate,
 } from './context-candidates';
@@ -124,11 +125,29 @@ export interface WorkRuntimeOptions {
     intentKind?: import('./work-intent').TaskIntentKind;
     confirmed: ConfirmedExperienceView;
     taskId?: string;
+    relevantContextIds?: string[];
+    /** 相关性模型已作出选择（含空选择）时，偏好不再走关键词门槛。 */
+    preferenceSelectionAuthoritative?: boolean;
   }) =>
     | Promise<SubjectSelectionResult>
     | SubjectSelectionResult
     | Promise<ConfirmedExperienceView>
     | ConfirmedExperienceView;
+  /**
+   * 已确认偏好候选（来自既有 Subject 派生视图，非第二 Store）。
+   */
+  loadSubjectPreferenceCandidates?: () => Promise<
+    Array<{ eventId: string; title: string; detail: string }>
+  >;
+  /**
+   * 执行前的有界相关性/指代解析。模型决定选哪些候选；失败则回退规划已选 id。
+   */
+  resolveContextRelevance?: (input: {
+    goal: string;
+    userText?: string;
+    candidates: WorkContextCandidate[];
+    recentTurns?: Array<{ role: string; content: string }>;
+  }) => Promise<{ selectedIds: string[]; decided: boolean }>;
   secrets?: SecretAccessor;
   /** 只读解析 Snapshot extractedTextRef;供模型 Adapter 组装材料。 */
   readExtractedText?: (ref: string) => Promise<string>;
@@ -1463,10 +1482,23 @@ export class WorkRuntime {
       const listed = await this.opts.artifactCommitter.listByTask(t.id);
       artifacts.push(...listed);
     }
+    const textByArtifact = new Map<string, string>();
+    for (const art of artifacts) {
+      const body = await this.readArtifactBody(art);
+      if (body.trim()) textByArtifact.set(art.id, body);
+    }
+    let preferences: Array<{ eventId: string; title: string; detail: string }> = [];
+    try {
+      preferences = (await this.opts.loadSubjectPreferenceCandidates?.()) ?? [];
+    } catch {
+      preferences = [];
+    }
     return buildWorkContextCandidates({
       currentTaskId,
       tasks,
       artifacts,
+      readArtifactText: (art) => textByArtifact.get(art.id),
+      preferences,
     });
   }
 
@@ -1621,27 +1653,81 @@ export class WorkRuntime {
     }));
   }
 
+  private async resolveExecutionContextSelection(task: Task): Promise<{
+    candidates: WorkContextCandidate[];
+    selectedIds: string[];
+    attachedRefs: string[];
+    relevanceDecided: boolean;
+  }> {
+    const candidates = await this.listContextCandidates(task.id);
+    const planned = planSemanticOf(task)?.relevantContextIds || [];
+    let resolved: string[] = [];
+    let relevanceDecided = false;
+    if (this.opts.resolveContextRelevance && candidates.length) {
+      try {
+        const turns = (task.meta?.conversation?.turns || []).map((t) => ({
+          role: t.role,
+          content: t.content,
+        }));
+        const result = await this.opts.resolveContextRelevance({
+          goal: task.goal,
+          userText: task.goal,
+          candidates,
+          recentTurns: turns,
+        });
+        resolved = result.selectedIds || [];
+        relevanceDecided = result.decided === true;
+      } catch {
+        resolved = [];
+        relevanceDecided = false;
+      }
+    }
+    const selectedIds = mergeSelectedContextIds(planned, resolved);
+    return { candidates, selectedIds, attachedRefs: [], relevanceDecided };
+  }
+
   private async attachPlannerSelectedContext(
     task: import('./task').Task,
     snapshot: ContextSnapshot,
-  ): Promise<ContextSnapshot> {
-    const ids = planSemanticOf(task)?.relevantContextIds || [];
-    if (!ids.length) return snapshot;
+    selectedIds?: readonly string[],
+  ): Promise<{ snapshot: ContextSnapshot; attachedRefs: string[] }> {
+    const ids = selectedIds?.length ? selectedIds : planSemanticOf(task)?.relevantContextIds || [];
+    if (!ids.length) return { snapshot, attachedRefs: [] };
+    const candidates = await this.listContextCandidates(task.id);
+    const resolved = resolveSelectedContextRefs(candidates, ids);
+    const attachedRefs: string[] = [];
     let current = snapshot;
-    for (const raw of ids) {
-      const id = String(raw || '').trim();
-      if (!id.startsWith('artifact:')) continue;
-      const artId = id.slice('artifact:'.length);
+
+    const artifactIds = [...resolved.artifactIds];
+    for (const convTaskId of resolved.conversationTaskIds) {
+      const listed = await this.opts.artifactCommitter.listByTask(convTaskId);
+      for (const art of listed.slice(0, 1)) {
+        if (!artifactIds.includes(art.id)) artifactIds.push(art.id);
+      }
+      const convTask = candidates.find((c) => c.kind === 'conversation' && c.taskId === convTaskId);
+      if (convTask?.summary) {
+        const ref = `historical-conversation:${convTask.title || convTaskId}`;
+        current = await this.opts.snapshotBuilder.attachTextItem(current.id, {
+          sourcePath: ref,
+          text: convTask.summary.slice(0, 4000),
+        });
+        attachedRefs.push(ref);
+      }
+    }
+
+    for (const artId of artifactIds) {
       const artifact = await this.opts.artifactCommitter.get(artId);
       if (!artifact) continue;
       const text = await this.readArtifactBody(artifact);
       if (!text.trim()) continue;
+      const ref = `historical-artifact:${artifact.title || artifact.id}`;
       current = await this.opts.snapshotBuilder.attachTextItem(current.id, {
-        sourcePath: `historical-artifact:${artifact.title || artifact.id}`,
+        sourcePath: ref,
         text: text.slice(0, 8000),
       });
+      attachedRefs.push(ref);
     }
-    return current;
+    return { snapshot: current, attachedRefs };
   }
 
   private async readArtifactBody(artifact: Artifact): Promise<string> {
@@ -1885,8 +1971,21 @@ export class WorkRuntime {
         return;
       }
 
+      let contextSelection: {
+        candidates: WorkContextCandidate[];
+        selectedIds: string[];
+        attachedRefs: string[];
+        relevanceDecided: boolean;
+      } = { candidates: [], selectedIds: [], attachedRefs: [], relevanceDecided: false };
       try {
-        snapshot = await this.attachPlannerSelectedContext(task, snapshot);
+        contextSelection = await this.resolveExecutionContextSelection(task);
+        const attached = await this.attachPlannerSelectedContext(
+          task,
+          snapshot,
+          contextSelection.selectedIds,
+        );
+        snapshot = attached.snapshot;
+        contextSelection.attachedRefs = attached.attachedRefs;
         if (
           needsExternalInformation(planSemanticOf(task)) &&
           !isSearchCapabilityId(job.capabilityId)
@@ -1921,6 +2020,8 @@ export class WorkRuntime {
               ...(task.intentKind ? { intentKind: task.intentKind } : {}),
               confirmed: fullContext,
               taskId: task.id,
+              relevantContextIds: contextSelection.selectedIds,
+              preferenceSelectionAuthoritative: contextSelection.relevanceDecided,
             })
           : fullContext;
         selection = normalizeSelection(this.opts.subjectId, selectedRaw, fullContext);
@@ -1950,6 +2051,16 @@ export class WorkRuntime {
           `${JSON.stringify(selection.freeze, null, 2)}\n`,
         );
       }
+      job = {
+        ...job,
+        contextContinuity: {
+          candidateIds: contextSelection.candidates.map((c) => c.id),
+          selectedIds: contextSelection.selectedIds,
+          attachedRefs: contextSelection.attachedRefs,
+          freezeEventIds: selection.freeze.selectedEventIds,
+        },
+      };
+      await this.persistJob(job);
       const secrets = this.opts.secrets ?? { get: async () => null };
       const jobMeta = {
         taskId: job.taskId,

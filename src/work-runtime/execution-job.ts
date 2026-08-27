@@ -15,6 +15,14 @@ export interface ConfirmedPlanSnapshot {
   requiredCapabilities?: string[];
 }
 
+/** Validation/audit only: how current-task context was discovered, selected, and frozen. */
+export interface JobContextContinuity {
+  candidateIds: string[];
+  selectedIds: string[];
+  attachedRefs: string[];
+  freezeEventIds: string[];
+}
+
 /** 能力实际纳入提示或读取的材料；与 Snapshot 获得清单区分。 */
 export type MaterialReadCompleteness = 'full' | 'truncated' | 'unread';
 
@@ -160,6 +168,11 @@ export interface ExecutionJob {
    * 仅证明并承载本次执行依据的方案；不回写 Task，不替代 Plan 权威链。
    */
   confirmedPlanSnapshot?: ConfirmedPlanSnapshot;
+  /**
+   * 任务上下文连续性审计（候选 → 选择 → 装配 → freeze）。
+   * 仅 validation / 排障使用，不向普通用户展示。
+   */
+  contextContinuity?: JobContextContinuity;
   /**
    * 能力实际读入执行/提示的材料路径（执行证据，非状态机）。
    * 与 Snapshot 中「获得/已抽取/未读取」区分；缺省不得把已抽取当成已通读。

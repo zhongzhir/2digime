@@ -278,6 +278,35 @@ describe('subject-grounded-work-01', () => {
       );
       assert.ok(!pkg.applied.some((e) => e.eventId === 'pref_irrel'), '无关偏好仍排除');
     });
+
+    it('plannerPreferenceIds 使词面不重合的偏好进入 freeze，未选中的不机械注入', () => {
+      const selected = selectSubjectInjection({
+        goal: '写一份给管理层看的季度进展说明',
+        requestedArtifactType: 'document',
+        derived: bundle(baseEvents),
+        policy: 'ai_first',
+        plannerPreferenceIds: ['pref_rel'],
+      });
+      assert.ok(
+        selected.freeze.selectedEventIds.includes('pref_rel'),
+        '模型选中的偏好必须进入 freeze',
+      );
+      assert.ok(
+        selected.freeze.selectionReasons.some(
+          (r) => r.eventId === 'pref_rel' && r.reason === 'planner_selected',
+        ),
+      );
+      assert.ok(!selected.freeze.selectedEventIds.includes('pref_irrel'));
+
+      const none = selectSubjectInjection({
+        goal: '写一份给管理层看的季度进展说明',
+        requestedArtifactType: 'document',
+        derived: bundle(baseEvents),
+        policy: 'ai_first',
+        plannerPreferenceIds: [],
+      });
+      assert.ok(!none.freeze.selectedEventIds.includes('pref_rel'), '未选中不得机械注入');
+    });
   });
 
   describe('CASE 10：用户纠正旧偏好 → supersede 后旧值不再注入', () => {

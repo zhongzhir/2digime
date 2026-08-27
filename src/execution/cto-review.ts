@@ -103,6 +103,11 @@ export type CtoReviewInput = {
    * 项目路径存在不等于已通读。
    */
   materials?: MaterialEvidence;
+  /**
+   * 本轮实际选入执行的上下文（审计字段投影给验收，不向用户展示内部 id）。
+   * 用于判断已有相关事实是否被用进可直接使用的产物。
+   */
+  selectedContext?: string[];
 };
 
 function byId(

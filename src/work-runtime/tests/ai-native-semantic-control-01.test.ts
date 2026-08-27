@@ -447,6 +447,7 @@ test('D: no trial-case keyword patch in new semantic modules', async () => {
   const files = [
     'src/work-runtime/planner-semantic.ts',
     'src/work-runtime/context-candidates.ts',
+    'src/work-runtime/context-relevance.ts',
     'src/work-runtime/work-converse.ts',
     'src/subject-core/structured-distill.ts',
   ];
@@ -455,5 +456,8 @@ test('D: no trial-case keyword patch in new semantic modules', async () => {
     assert.doesNotMatch(src, /和上次一样/);
     assert.doesNotMatch(src, /先写结论，再展开依据/);
     assert.doesNotMatch(src, /AI Agent 辅助软件开发/);
+    assert.doesNotMatch(src, /下一步最该先啃/);
+    assert.doesNotMatch(src, /这件事情/);
+    assert.doesNotMatch(src, /\[填写/);
   }
 });

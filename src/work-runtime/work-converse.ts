@@ -160,7 +160,7 @@ const CONVERSE_SYSTEM_PROMPT = [
   ' "expectedOutputFamily": "<仅 confirm_start：code-change | document | code-analysis>",',
   ' "requiredCapabilities": ["<从这些能力中多选：external_information | code_execution | code_analysis | document_synthesis>"],',
   ' "planRequirements": ["<本轮验收必须核对的任务要求，短句>"],',
-  ' "relevantContextIds": ["<仅选用真正相关的候选 id，可空>"]}',
+  ' "relevantContextIds": ["<对候选做指代解析后填入真正相关的 id；无关则不要填>"]}',
   '意图判定规则：',
   '- 讨论、提问、请求解释、询问进度或状态，都不是执行请求，分别归入 discuss_or_question / request_explanation / query_status。',
   '- 用户补充目标或要求，且尚未开始执行 → add_goal_info；要求调整当前规划 → modify_plan；对已有成果提出修改意见 → artifact_feedback。',
@@ -168,6 +168,8 @@ const CONVERSE_SYSTEM_PROMPT = [
   '- 只有用户明确表示「开始 / 按这个做 / 继续执行」且主要是确认规划时才是 confirm_start。',
   '- 有规划时必须给出 requiredCapabilities：完成目标真正需要的能力，可多项。最终成果可以是文档，但仍可需要 external_information（现实世界证据/来源）。不要因为要写报告就把所需能力改成「只是写文档」。',
   '- 授权材料已足够、且不需要当前世界证据时，不要加入 external_information。',
+  '- 若提供了已有上下文候选：必须根据当前目标、近期对话与候选语义解析用户实际指向什么。用户可能不重复项目名或材料，但仍在继续刚完成的工作。相关成果、对话或工作偏好必须写入 relevantContextIds；无关的不要选。不要只因为某条最新就全选。只有真正无法可靠判断且选错代价明显时，才在 reply 里向用户询问。',
+  '- 一旦选用了已有成果或项目上下文，规划必须要求用这些具体事实完成可直接使用的产物，而不是让用户再填空白模板。',
   '- confirm_start 时必须同时给出本轮瞬时 executionIntentKind 与 expectedOutputFamily（表示交付形态，不写入能力终裁）：要改项目文件 → modify_code 配 code-change；只出报告/说明且明确不改文件 → create_document 配 document；只读代码分析 → analyze_code 配 code-analysis。以已确认方案的实际动作为准，不得因为出现「优化」「实施」等词就改文件。',
   '- 只有用户明确表示满意并要求采用、定稿、结束时才是 final_adopt。',
   '- 已有成果时，用户表达对当前版本满意并要用这一版（如「就用这一版」「这版可以，收货」）→ final_adopt，不是 confirm_start；confirm_start 只用于要求开始或继续做开发工作。',
@@ -186,7 +188,7 @@ const CONVERSE_SYSTEM_PROMPT = [
 ].join('\n');
 
 const CONVERSE_REPAIR_USER =
-  '上一次输出不符合合同。请只输出一个合法 JSON 对象（可无围栏），字段为 intent、confidence、reply；intent 为 confirm_start 时必须同时给出配对的 executionIntentKind 与 expectedOutputFamily（modify_code↔code-change，create_document↔document，analyze_code↔code-analysis）；有规划时必须给出 requiredCapabilities（可含 external_information）；必要时加 planUpdate、planRequirements、relevantContextIds；不要 Markdown 说明。';
+  '上一次输出不符合合同。请只输出一个合法 JSON 对象（可无围栏），字段为 intent、confidence、reply；intent 为 confirm_start 时必须同时给出配对的 executionIntentKind 与 expectedOutputFamily（modify_code↔code-change，create_document↔document，analyze_code↔code-analysis）；有规划时必须给出 requiredCapabilities（可含 external_information）、planUpdate、planRequirements，并给出 relevantContextIds（对已有候选做指代解析；无关则空数组）；不要 Markdown 说明。';
 
 /** 确认开始但本轮执行族无效：零 Job，可重试。 */
 export const CONVERSE_EXECUTION_ROUTE_FAILED_NOTICE =
