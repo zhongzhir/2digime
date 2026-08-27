@@ -45,6 +45,12 @@ export interface StructuredDistillResult {
   events: GrowthEvent[];
   discarded: Array<{ reason: string; title: string }>;
   mode: 'contract' | 'model' | 'model_fallback_contract';
+  /**
+   * 模型调用/结构化输出不可靠：不得写成「无可学」幂等回执。
+   * 与模型明确判定 not_durable 区分。
+   */
+  unreliable?: boolean;
+  emptyKind?: 'explicit' | 'unnormalized' | 'technical' | 'verified_not_durable' | 'verified_uncertain';
   /** 验收追溯：原始候选与归一结果（不上用户面） */
   normalizeTrace?: Array<{
     raw: Record<string, unknown>;
@@ -52,6 +58,15 @@ export interface StructuredDistillResult {
     ok: boolean;
     reason?: string;
   }>;
+}
+
+type DistillEmptyKind = 'explicit' | 'unnormalized' | 'technical';
+
+interface ModelDistillAttempt {
+  proposals: DistilledCandidateProposal[];
+  trace: NonNullable<StructuredDistillResult['normalizeTrace']>;
+  error?: string;
+  emptyKind?: DistillEmptyKind;
 }
 
 /**
@@ -263,11 +278,15 @@ async function withDistillDeadline<T>(promise: Promise<T>, timeoutMs: number): P
   }
 }
 
-async function modelDistillProposals(input: StructuredDistillInput): Promise<{
-  proposals: DistilledCandidateProposal[];
-  trace: NonNullable<StructuredDistillResult['normalizeTrace']>;
-  error?: string;
-} | null> {
+function attachSource(input: StructuredDistillInput, row: DistilledCandidateProposal): DistilledCandidateProposal {
+  return {
+    ...row,
+    sourceKind: input.sourceKind,
+    ...(input.materialRef ? { sourceRef: input.materialRef } : {}),
+  };
+}
+
+async function modelDistillProposals(input: StructuredDistillInput): Promise<ModelDistillAttempt | null> {
   if (!input.chatComplete || !input.model) return null;
   const system = [
     '你从用户输入中提炼 0 到 3 条成长候选。只输出 JSON。',
@@ -309,7 +328,6 @@ async function modelDistillProposals(input: StructuredDistillInput): Promise<{
     try {
       result = await attempt(true);
     } catch (firstErr) {
-      // 部分兼容端点不支持 json_object；再试一次无强制格式
       try {
         result = await attempt(false);
       } catch {
@@ -317,41 +335,22 @@ async function modelDistillProposals(input: StructuredDistillInput): Promise<{
           proposals: [],
           trace: [],
           error: String(firstErr instanceof Error ? firstErr.message : firstErr).slice(0, 200),
+          emptyKind: 'technical',
         };
       }
     }
-    const { proposals, trace } = parseAndNormalizeModelJson(result.text, input.sourceKind);
-    if (!proposals.length) {
-      return {
-        proposals: [],
-        trace,
-        error: 'empty_or_unnormalized_model_json',
-      };
-    }
-    return {
-      proposals: proposals.slice(0, 3).map((row) => ({
-        ...row,
-        sourceKind: input.sourceKind,
-        ...(input.materialRef ? { sourceRef: input.materialRef } : {}),
-      })),
-      trace,
-    };
+    return attemptFromParsed(parseAndNormalizeModelJson(result.text, input.sourceKind), input);
   } catch (err) {
     return {
       proposals: [],
       trace: [],
       error: String(err instanceof Error ? err.message : err).slice(0, 200),
+      emptyKind: 'technical',
     };
   }
 }
 
-async function modelDistillRepair(
-  input: StructuredDistillInput,
-): Promise<{
-  proposals: DistilledCandidateProposal[];
-  trace: NonNullable<StructuredDistillResult['normalizeTrace']>;
-  error?: string;
-} | null> {
+async function modelDistillRepair(input: StructuredDistillInput): Promise<ModelDistillAttempt | null> {
   if (!input.chatComplete || !input.model) return null;
   try {
     const result = await withDistillDeadline(
@@ -363,7 +362,7 @@ async function modelDistillRepair(
           {
             role: 'system',
             content:
-              '只输出 JSON。若用户在说明今后同类工作怎么做，产出 1 条 preference/working_method 候选；否则 {"candidates":[]}。不要输出 knowledge_gap。',
+              '只输出 JSON。这是结构化输出修复，不是改写用户意图。若用户在说明今后同类工作怎么做，产出 1 条 preference/working_method 候选并尽量保留用户原词；否则 {"candidates":[]}。不要输出 knowledge_gap。',
           },
           {
             role: 'user',
@@ -380,13 +379,149 @@ async function modelDistillRepair(
       }),
       DISTILL_TIMEOUT_MS,
     );
-    return parseAndNormalizeModelJson(result.text, input.sourceKind);
+    return attemptFromParsed(parseAndNormalizeModelJson(result.text, input.sourceKind), input);
   } catch (err) {
     return {
       proposals: [],
       trace: [],
       error: String(err instanceof Error ? err.message : err).slice(0, 200),
+      emptyKind: 'technical',
     };
+  }
+}
+
+async function modelDistillVerify(input: StructuredDistillInput): Promise<{
+  decision: 'durable_preference' | 'not_durable' | 'uncertain';
+  proposals: DistilledCandidateProposal[];
+  trace: NonNullable<StructuredDistillResult['normalizeTrace']>;
+  error?: string;
+} | null> {
+  if (!input.chatComplete || !input.model) return null;
+  try {
+    const result = await withDistillDeadline(
+      input.chatComplete({
+        baseUrl: input.model.baseUrl,
+        ...(input.model.apiKey ? { apiKey: input.model.apiKey } : {}),
+        model: input.model.model,
+        messages: [
+          {
+            role: 'system',
+            content: [
+              '只输出 JSON。判断用户这句话是否表达本人今后同类工作应如何完成。',
+              '{"decision":"durable_preference"|"not_durable"|"uncertain","candidate":null|{title,text,category,eventType,temporary,risk,scope}}',
+              'durable_preference：本人对今后同类材料/判断/协作方式的稳定做法。candidate 尽量用用户原词。',
+              'not_durable：仅本次安排、天气闲聊、外部事实、或在描述别人怎么做。',
+              'uncertain：无法可靠判断。不要输出 knowledge_gap，不要猜测成其他主体类型。',
+            ].join('\n'),
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              sourceKind: input.sourceKind,
+              text: input.text.slice(0, DISTILL_TEXT_LIMIT),
+            }),
+          },
+        ],
+        temperature: 0,
+        maxTokens: DISTILL_MAX_TOKENS,
+        responseFormat: { type: 'json_object' },
+        timeoutMs: DISTILL_TIMEOUT_MS,
+      }),
+      DISTILL_TIMEOUT_MS,
+    );
+    return parseVerifyDecision(result.text, input);
+  } catch (err) {
+    return {
+      decision: 'uncertain',
+      proposals: [],
+      trace: [],
+      error: String(err instanceof Error ? err.message : err).slice(0, 200),
+    };
+  }
+}
+
+function parseVerifyDecision(
+  text: string,
+  input: StructuredDistillInput,
+): {
+  decision: 'durable_preference' | 'not_durable' | 'uncertain';
+  proposals: DistilledCandidateProposal[];
+  trace: NonNullable<StructuredDistillResult['normalizeTrace']>;
+  error?: string;
+} {
+  const empty = {
+    decision: 'uncertain' as const,
+    proposals: [] as DistilledCandidateProposal[],
+    trace: [] as NonNullable<StructuredDistillResult['normalizeTrace']>,
+  };
+  try {
+    let rawText = String(text || '').trim();
+    const fenced = rawText.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fenced?.[1]) rawText = fenced[1].trim();
+    const data = JSON.parse(rawText) as Record<string, unknown>;
+    if (!data || typeof data !== 'object') return { ...empty, error: 'verify_unparsed' };
+    const explicitEmpty =
+      Array.isArray(data.candidates) && (data.candidates as unknown[]).length === 0 && data.decision == null && data.verdict == null;
+    if (explicitEmpty) {
+      return { decision: 'not_durable', proposals: [], trace: [] };
+    }
+    const decisionRaw = String(data.decision ?? data.verdict ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+    let decision: 'durable_preference' | 'not_durable' | 'uncertain' = 'uncertain';
+    if (
+      decisionRaw === 'durable_preference' ||
+      decisionRaw === 'durable' ||
+      decisionRaw === 'true' ||
+      decisionRaw === 'preference'
+    ) {
+      decision = 'durable_preference';
+    } else if (
+      decisionRaw === 'not_durable' ||
+      decisionRaw === 'notdurable' ||
+      decisionRaw === 'false' ||
+      decisionRaw === 'temporary' ||
+      decisionRaw === 'other_person'
+    ) {
+      decision = 'not_durable';
+    }
+    if (decision !== 'durable_preference') {
+      return { decision, proposals: [], trace: [] };
+    }
+    const candidateRaw =
+      data.candidate && typeof data.candidate === 'object'
+        ? (data.candidate as RawModelCandidate)
+        : data.title || data.text
+          ? (data as RawModelCandidate)
+          : {
+              title: input.text.slice(0, 40),
+              text: input.text.slice(0, 400),
+              category: 'preference',
+              eventType: 'preference_observed',
+              temporary: false,
+              risk: 'low',
+              scope: 'general',
+            };
+    const parsed = parseAndNormalizeModelJson(JSON.stringify(candidateRaw), input.sourceKind);
+    let proposals = parsed.proposals.map((row) => attachSource(input, { ...row, tags: [...(row.tags || []), 'distill:verify'] }));
+    if (!proposals.length) {
+      const fallback = normalizeModelCandidate(
+        {
+          title: input.text.slice(0, 40),
+          text: input.text.slice(0, 400),
+          category: 'preference',
+          eventType: 'preference_observed',
+          temporary: false,
+          risk: 'low',
+          scope: 'general',
+        },
+        input.sourceKind,
+      );
+      if (fallback.ok && fallback.proposal) {
+        proposals = [attachSource(input, { ...fallback.proposal, tags: [...(fallback.proposal.tags || []), 'distill:verify'] })];
+      }
+    }
+    return { decision, proposals, trace: parsed.trace };
+  } catch {
+    return { ...empty, error: 'verify_unparsed' };
   }
 }
 
@@ -396,6 +531,8 @@ function parseAndNormalizeModelJson(
 ): {
   proposals: DistilledCandidateProposal[];
   trace: NonNullable<StructuredDistillResult['normalizeTrace']>;
+  parsed: boolean;
+  explicitEmpty: boolean;
 } {
   const trace: NonNullable<StructuredDistillResult['normalizeTrace']> = [];
   const proposals: DistilledCandidateProposal[] = [];
@@ -404,14 +541,27 @@ function parseAndNormalizeModelJson(
     const fenced = rawText.match(/```(?:json)?\s*([\s\S]*?)```/i);
     if (fenced?.[1]) rawText = fenced[1].trim();
     const data = JSON.parse(rawText) as unknown;
+    const explicitEmpty =
+      !!data &&
+      typeof data === 'object' &&
+      !Array.isArray(data) &&
+      Array.isArray((data as { candidates?: unknown }).candidates) &&
+      ((data as { candidates: unknown[] }).candidates.length === 0);
+    const nestedCandidate =
+      data && typeof data === 'object' && !Array.isArray(data)
+        ? ((data as { candidate?: unknown; preference?: unknown }).candidate ??
+          (data as { preference?: unknown }).preference)
+        : undefined;
     const arr = Array.isArray(data)
       ? data
       : data && typeof data === 'object' && Array.isArray((data as { candidates?: unknown }).candidates)
         ? (data as { candidates: unknown[] }).candidates
         : data && typeof data === 'object' && Array.isArray((data as { items?: unknown }).items)
           ? (data as { items: unknown[] }).items
-          : data && typeof data === 'object' && !Array.isArray(data)
-            ? [data]
+          : nestedCandidate && typeof nestedCandidate === 'object'
+            ? [nestedCandidate]
+            : data && typeof data === 'object' && !Array.isArray(data) && ((data as { title?: unknown }).title || (data as { text?: unknown }).text)
+              ? [data]
             : [];
     for (const row of arr) {
       if (!row || typeof row !== 'object') continue;
@@ -424,10 +574,60 @@ function parseAndNormalizeModelJson(
       });
       if (norm.ok && norm.proposal) proposals.push(norm.proposal);
     }
+    return { proposals, trace, parsed: true, explicitEmpty };
   } catch {
-    return { proposals: [], trace };
+    return { proposals: [], trace, parsed: false, explicitEmpty: false };
   }
-  return { proposals, trace };
+}
+
+function attemptFromParsed(
+  parsed: ReturnType<typeof parseAndNormalizeModelJson>,
+  input: StructuredDistillInput,
+): ModelDistillAttempt {
+  if (parsed.proposals.length) {
+    return {
+      proposals: parsed.proposals.slice(0, 3).map((row) => attachSource(input, row)),
+      trace: parsed.trace,
+    };
+  }
+  const emptyKind: DistillEmptyKind = !parsed.parsed ? 'technical' : parsed.explicitEmpty ? 'explicit' : 'unnormalized';
+  return {
+    proposals: [],
+    trace: parsed.trace,
+    error: parsed.parsed ? 'empty_or_unnormalized_model_json' : 'unparsed_model_json',
+    emptyKind,
+  };
+}
+
+function shouldVerifyPreference(sourceKind: string): boolean {
+  return sourceKind === 'conversation' || sourceKind === 'task_requirement';
+}
+
+function gateExistingDetails(input: StructuredDistillInput): string[] {
+  return (input.existingEvents || [])
+    .filter((e) => e.confidence === 'confirmed' || e.confidence === 'candidate')
+    .filter((e) => e.type !== 'asset_added')
+    .flatMap((e) => [e.payload.title, e.payload.detail]);
+}
+
+function toGatedEvents(
+  input: StructuredDistillInput,
+  proposals: DistilledCandidateProposal[],
+  mode: StructuredDistillResult['mode'],
+  normalizeTrace?: StructuredDistillResult['normalizeTrace'],
+): StructuredDistillResult {
+  const gated = gateDistilledBatch({
+    proposals,
+    sourceText: input.text,
+    existingDetails: gateExistingDetails(input),
+    mode: mode === 'model' ? 'model' : 'contract',
+  });
+  return {
+    events: gated.accepted.map((p) => proposalToEvent(p, input, mode)),
+    discarded: gated.discarded,
+    mode,
+    ...(normalizeTrace ? { normalizeTrace } : {}),
+  };
 }
 
 /** 主入口：蒸馏 → 归一 → 质量门 → GrowthEvent 候选（未 confirm）。 */
@@ -440,15 +640,56 @@ export async function structuredDistillToEvents(
 
   if (input.chatComplete && input.model) {
     let fromModel = await modelDistillProposals(input);
-    if (!fromModel || fromModel.proposals.length === 0) {
-      const repaired = await modelDistillRepair(input);
-      if (repaired && repaired.proposals.length > 0) fromModel = repaired;
+    if (!fromModel?.proposals.length) {
+      const kind = fromModel?.emptyKind;
+      if (kind === 'technical' || kind === 'unnormalized' || !fromModel) {
+        const repaired = await modelDistillRepair(input);
+        if (repaired?.proposals.length) fromModel = repaired;
+        else if (repaired && (kind === 'technical' || repaired.emptyKind === 'technical')) {
+          fromModel = repaired;
+        }
+      }
+    }
+    if (!fromModel?.proposals.length && shouldVerifyPreference(input.sourceKind)) {
+      const verified = await modelDistillVerify(input);
+      if (verified?.decision === 'durable_preference' && verified.proposals.length > 0) {
+        fromModel = {
+          proposals: verified.proposals,
+          trace: verified.trace,
+        };
+      } else if (verified?.decision === 'not_durable') {
+        return {
+          events: [],
+          discarded: [{ reason: 'verified_not_durable', title: 'no_durable_subject_proposal' }],
+          mode: 'model',
+          emptyKind: 'verified_not_durable',
+          ...(verified.trace.length ? { normalizeTrace: verified.trace } : {}),
+        };
+      } else {
+        return {
+          events: [],
+          discarded: [
+            {
+              reason: verified?.error || fromModel?.error || 'model_unreliable',
+              title: 'no_reliable_subject_proposal',
+            },
+          ],
+          mode: 'model',
+          unreliable: true,
+          emptyKind: verified?.decision === 'uncertain' ? 'verified_uncertain' : fromModel?.emptyKind || 'technical',
+          ...(verified?.trace.length ? { normalizeTrace: verified.trace } : fromModel?.trace ? { normalizeTrace: fromModel.trace } : {}),
+        };
+      }
     }
     if (fromModel && fromModel.proposals.length > 0) {
       proposals = fromModel.proposals;
       normalizeTrace = fromModel.trace;
       mode = 'model';
     } else {
+      const emptyKind = fromModel?.emptyKind === 'technical' || fromModel?.emptyKind === 'unnormalized' || fromModel?.emptyKind === 'explicit'
+        ? fromModel.emptyKind
+        : 'explicit';
+      const technical = emptyKind === 'technical' || emptyKind === 'unnormalized';
       return {
         events: [],
         discarded: [
@@ -458,37 +699,37 @@ export async function structuredDistillToEvents(
           },
         ],
         mode: 'model',
+        emptyKind,
+        ...(technical ? { unreliable: true } : {}),
         ...(fromModel?.trace ? { normalizeTrace: fromModel.trace } : {}),
       };
     }
   }
 
-  const existingDetails = (input.existingEvents || [])
-    .filter((e) => e.confidence === 'confirmed' || e.confidence === 'candidate')
-    // 资料副本正文可能含整段原文，不得据此把合法提炼判为重复
-    .filter((e) => e.type !== 'asset_added')
-    .flatMap((e) => [e.payload.title, e.payload.detail]);
-
-  const gated = gateDistilledBatch({
-    proposals,
-    sourceText: input.text,
-    existingDetails,
-    mode: mode === 'model' ? 'model' : 'contract',
-  });
-
-  if (mode === 'model' && gated.accepted.length === 0) {
+  let gated = toGatedEvents(input, proposals, mode, normalizeTrace);
+  if (mode === 'model' && gated.events.length === 0 && shouldVerifyPreference(input.sourceKind)) {
+    const verified = await modelDistillVerify(input);
+    if (verified?.decision === 'durable_preference' && verified.proposals.length > 0) {
+      gated = toGatedEvents(input, verified.proposals, mode, verified.trace);
+      if (gated.events.length > 0) return gated;
+    }
+    if (verified?.decision === 'not_durable') {
+      return {
+        events: [],
+        discarded: [{ reason: 'verified_not_durable', title: 'no_durable_subject_proposal' }],
+        mode: 'model',
+        emptyKind: 'verified_not_durable',
+      };
+    }
+    const gateFailed = gated.discarded.some((d) => d.reason === 'not_grounded' || d.reason === 'unknown_category');
     return {
       events: [],
       discarded: gated.discarded,
       mode: 'model',
+      ...(gateFailed || verified?.decision === 'uncertain' ? { unreliable: true } : {}),
       ...(normalizeTrace ? { normalizeTrace } : {}),
     };
   }
 
-  return {
-    events: gated.accepted.map((p) => proposalToEvent(p, input, mode)),
-    discarded: gated.discarded,
-    mode,
-    ...(normalizeTrace ? { normalizeTrace } : {}),
-  };
+  return gated;
 }

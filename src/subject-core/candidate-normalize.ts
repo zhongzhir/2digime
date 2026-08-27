@@ -62,12 +62,30 @@ const CATEGORY_ALIASES: Record<string, GrowthProductCategory> = {
   projectfact: 'external_claim',
   capability_experience: 'capability_experience',
   experience: 'capability_experience',
+  // 结构化字段中文标签（schema repair，不是用户自然语言分类器）
+  偏好: 'preference',
+  个人偏好: 'preference',
+  工作方法: 'working_method',
+  工作习惯: 'working_method',
+  做事方式: 'working_method',
+  原则: 'principle',
+  个人原则: 'principle',
+  边界: 'boundary',
+  目标: 'goal',
+  身份: 'identity_fact',
+  身份事实: 'identity_fact',
+  临时: 'temporary_context',
+  临时上下文: 'temporary_context',
+  外部主张: 'external_claim',
+  外部事实: 'external_claim',
 };
 
 const EVENT_ALIASES: Record<string, DistilledCandidateProposal['eventType']> = {
   preference_observed: 'preference_observed',
   user_preference: 'preference_observed',
   preference: 'preference_observed',
+  working_method: 'preference_observed',
+  workingmethod: 'preference_observed',
   principle_stated: 'principle_stated',
   personal_rule: 'principle_stated',
   principle: 'principle_stated',
@@ -83,6 +101,12 @@ const EVENT_ALIASES: Record<string, DistilledCandidateProposal['eventType']> = {
   external_claim: 'asset_added',
   knowledge_gap_noted: 'knowledge_gap_noted',
   temporary_context: 'knowledge_gap_noted',
+  偏好: 'preference_observed',
+  工作方法: 'preference_observed',
+  原则: 'principle_stated',
+  边界: 'boundary_updated',
+  目标: 'goal_updated',
+  身份: 'identity_clarified',
 };
 
 function canon(raw: unknown): string {

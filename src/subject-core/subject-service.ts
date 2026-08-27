@@ -824,13 +824,11 @@ export class SubjectService {
           }
         }
       } else {
-        const distillText =
-          input.sourceKind === 'conversation' && input.assistantContext
-            ? `${text}\n\n（对话上下文，非用户观点）\n${input.assistantContext.slice(0, 400)}`
-            : text;
+        // 只蒸馏用户原文。助手回复不得混进 source text：
+        // 否则模型可能把「本轮已答应怎么做」当成无需沉淀，或把助手措辞当作用户事实。
         const distillOpts: Parameters<typeof structuredDistillToEvents>[0] = {
           subjectId: pkg.id,
-          text: distillText,
+          text,
           sourceKind: input.sourceKind,
           ...(materialRef ? { materialRef } : {}),
           ...(input.taskId ? { taskId: input.taskId } : {}),
@@ -858,6 +856,9 @@ export class SubjectService {
         this.lastDistillDiscarded = result.discarded;
         this.lastDistillMode = result.mode;
         this.lastNormalizeTrace = result.normalizeTrace || [];
+        if (result.unreliable && distilled.length === 0) {
+          distillFailed = true;
+        }
       }
     } catch {
       // 硬失败：不得伪装为空成功
