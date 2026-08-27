@@ -162,7 +162,7 @@ export function htmlToText(html: string, maxChars = 8000): string {
 
 export function createBingHtmlSearchConnector(options?: BingHtmlSearchConnectorOptions): SearchConnector {
   const maxResults = options?.maxResults ?? 8;
-  const timeoutMs = options?.timeoutMs ?? 15_000;
+  const timeoutMs = options?.timeoutMs ?? 30_000;
   const fetchImpl = options?.fetchImpl ?? globalThis.fetch;
   const userAgent = options?.userAgent ?? DEFAULT_UA;
 

@@ -15,7 +15,13 @@ export interface FakeDocumentAdapterOptions {
   /** 模拟耗时。 */
   delayMs?: number;
   /** 强制失败(capability 阶段)。 */
-  failWith?: { message: string; actionable: string };
+  failWith?: {
+    message: string;
+    actionable: string;
+    stage?: 'capability' | 'model';
+    transient?: boolean;
+    kind?: string;
+  };
   /** failWith 仅生效的前 N 次调用;默认每次都失败。 */
   failTimes?: number;
   /** 忽略 AbortSignal(用于测 Runner 最终落 cancelled)。 */
@@ -69,8 +75,16 @@ export function createFakeDocumentAdapter(
       }
       const failLimit = options.failTimes ?? Number.POSITIVE_INFINITY;
       if (options.failWith && executeCount <= failLimit) {
-        const err = new Error(options.failWith.message) as Error & { actionable?: string };
+        const err = new Error(options.failWith.message) as Error & {
+          actionable?: string;
+          stage?: string;
+          transient?: boolean;
+          kind?: string;
+        };
         err.actionable = options.failWith.actionable;
+        if (options.failWith.stage) err.stage = options.failWith.stage;
+        if (options.failWith.transient != null) err.transient = options.failWith.transient;
+        if (options.failWith.kind) err.kind = options.failWith.kind;
         throw err;
       }
       const { snippets: materialSnippets, usedPaths, items } = await collectMaterialSnippets(

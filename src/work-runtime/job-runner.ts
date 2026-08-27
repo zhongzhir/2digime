@@ -173,7 +173,11 @@ type GetTaskOutput = CommandMap['work.getTask']['output'];
 export const SEARCH_JOB_ATTEMPT_DEADLINE_MS = 90_000;
 export const SEARCH_UNAVAILABLE_USER_MESSAGE = '暂时无法可靠获取最新外部信息。';
 export const BASELINE_SEARCH_FALLBACK_NOTICE = '已使用当前可用的基础搜索完成，覆盖可能有限。';
+export const SEARCH_CAPABILITY_COOLDOWN_MS = 180_000;
 const SEARCH_ATTEMPT_DEADLINE_CODE = 'search_attempt_deadline';
+const DOCUMENT_SYNTHESIS_FAILED_CODE = 'document_synthesis_failed';
+const DOCUMENT_SYNTHESIS_ATTEMPTS = 3;
+const DOCUMENT_SYNTHESIS_RETRY_BASE_MS = 400;
 
 function isSearchCapabilityId(id: string | undefined): boolean {
   if (!id) return false;
@@ -206,6 +210,18 @@ function searchAttemptDeadlineError(): Error {
     code: SEARCH_ATTEMPT_DEADLINE_CODE,
     stage: 'capability' as const,
   });
+}
+
+function isDocumentSynthesisFailure(error: unknown): boolean {
+  return !!(error && typeof error === 'object' && (error as { code?: string }).code === DOCUMENT_SYNTHESIS_FAILED_CODE);
+}
+
+function asDocumentSynthesisFailure(error: unknown): Error {
+  const err = error instanceof Error ? error : new Error(String(error));
+  const tagged = err as Error & { code?: string; stage?: FailureStage };
+  tagged.code = DOCUMENT_SYNTHESIS_FAILED_CODE;
+  if (!tagged.stage) tagged.stage = 'model';
+  return err;
 }
 
 /**
@@ -258,7 +274,9 @@ export class WorkRuntime {
     if (e.transient === true) return true;
     if (e.stage === 'capability' || e.stage === 'model') return true;
     const kind = e.kind || '';
-    if (['network', 'quota', 'response', 'search', 'timeout', 'empty'].includes(kind)) return true;
+    if (['network', 'quota', 'response', 'search', 'timeout', 'empty', 'blocked', 'parse'].includes(kind)) {
+      return true;
+    }
     const status = Number(e.status);
     if (status >= 429 || (status >= 500 && status < 600)) return true;
     return false;
@@ -266,7 +284,7 @@ export class WorkRuntime {
 
   /** 运行态 cooldown：transient 耗尽后标记一段时间，避免连续任务反复撞同一坏能力。 */
   private markCapabilityTransient(capabilityId: string): void {
-    this.capabilityCooldown.set(capabilityId, Date.now() + 60_000);
+    this.capabilityCooldown.set(capabilityId, Date.now() + SEARCH_CAPABILITY_COOLDOWN_MS);
   }
 
   private capabilityInCooldown(capabilityId: string): boolean {
@@ -310,7 +328,10 @@ export class WorkRuntime {
       ...capabilityNeedFromPlan(planSemanticOf(task)),
     });
     if (!sel.adapter || sel.adapter.registration.id === failedCapabilityId) return null;
-    return sel.adapter.registration.id;
+    const fallbackId = sel.adapter.registration.id;
+    // 搜索 Job 只能回退到另一搜索能力；用普通文档能力顶替等于假完成。
+    if (!isSearchCapabilityId(fallbackId)) return null;
+    return fallbackId;
   }
 
   private isLiveAttempt(jobId: string, controller: AbortController): boolean {
@@ -343,10 +364,37 @@ export class WorkRuntime {
     }
   }
 
+  private async sleepWithAbort(ms: number, signal: AbortSignal): Promise<void> {
+    if (signal.aborted) {
+      const err = new Error('aborted');
+      err.name = 'AbortError';
+      throw err;
+    }
+    await new Promise<void>((resolve, reject) => {
+      const onAbort = () => {
+        clearTimeout(timer);
+        const err = new Error('aborted');
+        err.name = 'AbortError';
+        reject(err);
+      };
+      const timer = setTimeout(() => {
+        signal.removeEventListener('abort', onAbort);
+        resolve();
+      }, Math.max(0, ms));
+      signal.addEventListener('abort', onAbort, { once: true });
+    });
+  }
+
   private userFacingCapabilityFailure(
     job: ExecutionJob,
     error: unknown,
   ): { message: string; actionable: string } {
+    if (isDocumentSynthesisFailure(error)) {
+      return {
+        message: '暂时无法完成基于检索结果的整理。',
+        actionable: '外部检索已完成，但后续整理暂时不可用。请稍后重试。',
+      };
+    }
     if (isSearchCapabilityId(job.capabilityId)) {
       return {
         message: SEARCH_UNAVAILABLE_USER_MESSAGE,
@@ -1646,19 +1694,43 @@ export class WorkRuntime {
       grant,
       isRemote: false,
     });
-    const prepared = prepareAndExecuteCapability({
-      adapter: docAdapter,
+    const preparedBase = {
       rawInput,
       auth,
       ctx: input.execCtx,
       isRemote: false,
-      unauthorizedMarkers: [],
+      unauthorizedMarkers: [] as string[],
       job: input.job,
       task: input.task,
       subjectId: input.task.subjectId,
-    });
-    const result = await prepared;
-    return { output: result.output, snapshot };
+    };
+    let lastErr: unknown;
+    for (let attempt = 1; attempt <= DOCUMENT_SYNTHESIS_ATTEMPTS; attempt += 1) {
+      if (attempt > 1) {
+        const delay = Math.min(DOCUMENT_SYNTHESIS_RETRY_BASE_MS * 2 ** (attempt - 2), 2_000);
+        await this.sleepWithAbort(delay, input.execCtx.signal);
+        input.execCtx.reportProgress('正在重试整理成果');
+      }
+      try {
+        const prepared = prepareAndExecuteCapability({
+          adapter: docAdapter,
+          ...preparedBase,
+        });
+        const result = await prepared;
+        return { output: result.output, snapshot };
+      } catch (err) {
+        lastErr = err;
+        if (
+          isAbortError(err) ||
+          input.execCtx.signal.aborted ||
+          !this.isRetryableCapabilityFailure(err) ||
+          attempt >= DOCUMENT_SYNTHESIS_ATTEMPTS
+        ) {
+          throw asDocumentSynthesisFailure(err);
+        }
+      }
+    }
+    throw asDocumentSynthesisFailure(lastErr);
   }
 
   private async restoreExternalExecutionBaseline(
@@ -2312,8 +2384,12 @@ export class WorkRuntime {
           return;
         }
         const retryError = deadlineHit ? searchAttemptDeadlineError() : error;
+        // 检索已成功、仅文档综合失败：重试综合（见 synthesizeAfterExternalInformation），
+        // 不得再当成 search 失败去切换 provider / 丢弃已检索证据。
+        const synthesisFailed = isDocumentSynthesisFailure(retryError);
         // SEARCH-FAILURE-CLOSURE-01：瞬时能力失败 → bounded fallback（排除失败能力 → 重选下一可用）。
         if (
+          !synthesisFailed &&
           !this.jobFallbackAttempted.has(job.id) &&
           isSearchCapabilityId(job.capabilityId) &&
           this.isRetryableCapabilityFailure(retryError)
@@ -2747,10 +2823,7 @@ function normalizeSelection(
 }
 
 function isAbortError(error: unknown): boolean {
-  return (
-    (error instanceof Error && error.name === 'AbortError') ||
-    (error instanceof Error && /abort/i.test(error.message))
-  );
+  return error instanceof Error && error.name === 'AbortError';
 }
 
 function applyBaselineSearchNotice(output: CapabilityOutput): CapabilityOutput {
