@@ -254,3 +254,100 @@ T8 是诚实失败，不是假成功。C1 对外部证据不足有书面承认�
 2. research：查询规划失败不得静默整句回退而不记审计；T8 类噪声命中应继续诚实失败，不要为了过线放宽假完成。  
 3. 暂缓 EARLY USER READY。BROADER REAL TRIAL 的门槛是 8 类稳定 **且** C1/C2 组合成立——本轮差在偏好组合。  
 4. 可以继续内部观察，不建议对外宣称 broader ready。
+
+---
+
+## FINAL GATE
+
+> HEAD `65a7253db2b50a39d1bbc35421a474e355ad341a`。0 product code changes。同一最终 build 上新跑真实 Electron，不读旧 evidence 作终裁。  
+> 入口：`electron/main.cjs` + `--user-data-dir` `dmv2-trial05fg-ud-VoBO3H`。模型 `gemini-3.6-flash`。  
+> 证据：`build/evidence/real-user-value-trial-05-final-gate/`（未跟踪）。措辞相对 revalidation 再次轻微变化。
+
+### 1. Final Verdict
+
+```
+知识工作者产品评级：LIMITED REAL TRIAL
+未正式进入 BROADER REAL TRIAL
+本轮最高仍不为 EARLY USER READY
+```
+
+T1–T8 在同一会话里全部成立。C1 历史项目与外部检索同时进入分析。C2 有项目事实、无空模板、无炒蛋污染，但 **已确认 durable preference 未进入候选/freeze**，成文回到先报进展。组合门槛 2/2 未满足，不得升级。
+
+### 2. T1–T8
+
+| # | 结果 | 权威依据 |
+|---|------|----------|
+| T1 | **pass** | `cap_gemini_web_search`；`search_used=true`；`decided=true`；8 条相关 `selectedUrls`；3741 字监管综合（EU AI Act / EEOC），非链接清单 |
+| T2 | **pass** | 「眼下这块先动一件」绑到刚完成的招聘合规研究；`historical_context_used=true`；无番茄炒蛋污染 |
+| T3 | **pass** | T3A `preference_observed` + `silent_ok`（`gevt_mtbfj9ey`）；T3B freeze 含该 event；成文风险先行 |
+| T4 | **pass** | `cap_external_executor_codex`；`formatRef` 真实实现；`node --test` exit 0。验收文案仍写「部分满足」，不否定文件闭环 |
+| T5 | **pass** | 周一开口讲稿使用 T1/T2 成果；`empty_template=false`；计划写明风险前置 |
+| T6 | **pass** | 对话回复；未建 Job |
+| T7 | **pass** | 读纪要；184 万 / 11 天 / 苏州园区 / 不做移动端；`search_used=false`；风险先行（偏好已在） |
+| T8 | **pass** | `cap_gemini_web_search` 成功综合（诉讼/授权，3225 字）；无假完成。`researchEvidence.decided=false` 记 observability backlog，不单独判 fail |
+
+### 3. C1 / C2
+
+| # | 结果 | 说明 |
+|---|------|------|
+| C1 | **pass** | 苇舟事实 + baseline search。正文承认公开渠道未拿到厂商最新采购细则，用行业通用审查框架补外部段，未编造最新竞品事实。候选含 preference 并 freeze。`decided=false` 为审计杂质。 |
+| C2 | **fail** | 历史项目 + C1 调研进入 `materialUse`。Store 仍有 `gevt_mtbfj9ey` confirmed。C2 `candidateIds` **不含** `preference:`，`freezeEventIds=[]`，`selectedEventIds=[]`。成文第一节「进展顺利」，风险后置。三者未同时成立。 |
+
+### 4. Hard Fail
+
+**1。**
+
+C2：durable preference 已存在，且 T3B/C1 刚成功注入，后续匹配的「对上进展稿」因候选发现未再放入 preference 而丢失。符合「durable preference 已存在但匹配任务仍因内部链路丢失」。
+
+未出现：假完成、错误主体事实、越权、空模板逼用户重填、把无 evidence 的检索假装成最新厂商事实、已成功阶段被瞬时错误丢弃。
+
+### 5. 用户负担
+
+| 指标 | 观察 |
+|------|------|
+| 内部机制 | 用户未选手动 capability / provider / freeze |
+| 重复上下文 | T2/T5/C1/C2 未要求重贴材料 |
+| 确认 | 文档类无技术决策；T4 委派后磁盘测试过 |
+| 失败沟通 | 本轮 T8 直接成功，无用户补救 |
+| 相对 BROADER 门槛 | 单任务负担已接近；长会话后开放目标不能默认带着偏好，用户仍可能要再强调结构 |
+
+未达到「日常 AI 超级助手、完全不必理解内部结构」——C2 证明偏好不会在后续同类任务里自动稳住。
+
+### 6. authoritative evidence 一致性
+
+Driver `ok: false` 仅因 C2。T1–T8 / C1 的 driver usable 与 Job / freeze / growth / 磁盘测试一致。C2 driver fail 与 `freezeEventIds=[]`、成文先报喜一致，不是 UI 误判。
+
+### 7. 是否仍有系统性架构缺口
+
+有，已收窄：
+
+1. **长会话下 preference 候选丢失（C2）**  
+   Acquisition 与短间隔 reuse（T3B、C1）成立。任务变多后候选列表被 artifact/conversation/`task_folder` 占满，preference 未再进入 discovery。这是组合能力缺口，不是「没学会」。
+
+2. **research 审计 `decided` 不稳定**  
+   T1 本轮 `decided=true`；C1/T8 为 false。用户结果仍可成立，属 observability backlog，本轮不改产品。
+
+3. **Coding 验收文案与磁盘测试不一致**  
+   再次「部分满足」+ test exit 0。
+
+未发现新的安全越权。本轮未改产品代码。
+
+### 8. 从 Trial-04 → Trial-05 的阶段变化
+
+| | Trial-04 | 原 Trial-05 | Revalidation | Final Gate |
+|--|----------|-------------|--------------|------------|
+| 基础任务 | 窄场景 | 4/8 | 7/8 | **8/8** |
+| 偏好 | `knowledge_gap` | 学到未注入 | 未学成 | 学会且 T3B 注入；**C2 再丢失** |
+| 研究 | — | YouTube 清单 | 可用综合 | T1 可用综合（gemini search） |
+| 指代/开放目标 | — | 空模板 Hard Fail | 绑近期成果 | T2/T5 成立 |
+| C1/C2 | 无 | 无 | C1 pass / C2 fail | C1 pass / **C2 fail** |
+| Hard Fail | — | 1 | 0 | **1**（C2 偏好链路） |
+| 评级 | — | LIMITED | LIMITED | **LIMITED** |
+
+### 9. 下一阶段建议
+
+1. 优先：候选发现在长会话中必须继续包含已采用 preference；不得被近期 artifact 配额挤出。用新的开放目标验证，不要复用本轮 C2 原句。  
+2. 在那之前不要宣布 BROADER REAL TRIAL。  
+3. `researchEvidence.decided` 继续作 backlog。  
+4. 不要给 EARLY USER READY。
+
