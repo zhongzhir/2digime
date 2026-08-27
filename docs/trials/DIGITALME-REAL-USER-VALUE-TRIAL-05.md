@@ -157,3 +157,100 @@ T1 不记 fake completion：检索真实发生，来源是真实 YouTube URL；�
 4. 暂缓 EARLY USER READY；也不要把本轮 4/8 pass 说成 Broader Real Trial 已过关。
 
 是否继续做更宽的真实试用：**可以继续作为观察手段**，但当前产品评级仍是 LIMITED REAL TRIAL，不建议据此对外部知识工作者宣称「已经 broader ready」。
+
+---
+
+## Consolidated Revalidation
+
+> HEAD `e68e635f18489ba034846a815e56aaff21662c88`。0 product code changes。同一最终 build 上新跑真实 Electron，不读旧 evidence 作终裁。  
+> 入口：`electron/main.cjs` + `--user-data-dir` `dmv2-trial05rv-ud-01HnTU`。模型 `gemini-3.6-flash`。  
+> 证据：`build/evidence/real-user-value-trial-05-revalidation/`（未跟踪）。  
+> 措辞相对原 Trial-05 做了轻微变化，避免旧输入成为隐含 fixture。
+
+### 1. 最终 verdict
+
+```
+知识工作者产品评级：LIMITED REAL TRIAL
+（相对原 Trial-05 的 4/8 有实质进展，仍未达到 BROADER REAL TRIAL）
+```
+
+本轮在同一会话里同时看到：search 能形成可用综合（T1）；近期工作指代能绑到刚完成成果而不是空模板（T2/T5）；附件不乱搜（T7）；纯对话不建 Job（T6）；Coding Agent 真改文件且测试通过（T4）；瞬时失败有 fallback 且无假完成（T8）；项目事实与外部检索能进入同一分析（C1）。
+
+本轮仍不能证明：自然表达的长期偏好会稳定写入 Subject 并进入 freeze（T3/C2）。C2 有项目上下文、无空模板、无番茄炒蛋污染，但偏好未进入执行。因此不给 BROADER REAL TRIAL，更不给 EARLY USER READY。
+
+### 2. T1–T8 新运行结果
+
+| # | 原 Trial-05 | 本轮 | 说明 |
+|---|-------------|------|------|
+| T1 外部研究 | fail（YouTube 清单） | **pass** | Job succeeded；search 真实执行；8 条相关 URL；4754 字综合（EU AI Act / EEOC / NYC LL144 / IL HB 3773）。不是链接清单。driver 因 `researchEvidence.decided=false`（查询回退为整句 goal）记 usable=false；按用户目标与落盘成果判 pass。 |
+| T2 项目连续 | fail（忽略已有项目） | **pass** | 「眼下这块先推进一件」绑到刚完成的招聘合规研究（T1），freeze 有 historical-artifact；未污染番茄炒蛋。未绑回苇舟纪要——在 T1 已成功的会话里，这是更近的工作指代，不是空模板。 |
+| T3 偏好复用 | fail（学到未注入） | **fail** | 对话承诺「风险优先」，但 90s 内 `preference_adopted=false`，T3B freeze `selectedEventIds=[]`。成文风险前置有一点影子，Subject 权威链未成立。 |
+| T4 Coding Agent | pass | **pass** | `cap_external_executor_codex`；`lot.js` 真实实现；独立 `node --test` exit 0。验收文案仍写「部分满足」，属已知杂质，不否定文件闭环。 |
+| T5 开放目标 | fail（`[填写…]` 空模板） | **pass** | 周五口述讲稿，使用 T1/T2 已有合规成果；`empty_template=false`；未要求用户重贴材料。 |
+| T6 纯对话 | pass | **pass** | 49s 回复；未建 Job；无 provider 泄漏。 |
+| T7 附件驱动 | pass | **pass** | 读纪要；184 万 / 审批流 / 苏州园区；`search_used=false`。 |
+| T8 可恢复失败 | pass | **pass*** | professional →「切换可用能力继续」→ baseline；两轮检索后诚实失败：「没有与当前问题相关的可用外部证据」。用户面无 HTTP/adapter。无假完成。用户没有拿到研究报告，但恢复语义成立。 |
+
+\*T8 按「可恢复失败 / 无假完成」计 pass，与原 Trial-05 口径一致。
+
+### 3. C1 / C2
+
+| # | 结果 | 说明 |
+|---|------|------|
+| C1 项目+外部研究 | **pass** | 终稿同时出现苇舟试点事实（184 万、审批流、不做移动端、11 天）与外部检索。search 执行。正文诚实写明竞品采购口径证据不足，未编造「最新竞品资质」。 |
+| C2 偏好+上下文+开放目标 | **fail** | 苇舟事实进入成文，无空模板、无家常菜污染；`preference_adopted=false` 且 freeze 无 preference。三种上下文没有同时成立。 |
+
+### 4. Hard Fail
+
+**0。**
+
+未出现：假完成、错误主体事实写入、高风险越权、deterministic 改写用户意图、已有上下文却用 `[填写…]` 把事实推回用户、research 假装已检索到最新事实、已成功阶段因后续瞬时错误被丢弃。
+
+T8 是诚实失败，不是假成功。C1 对外部证据不足有书面承认。
+
+### 5. 用户负担
+
+| 指标 | 观察 |
+|------|------|
+| 技术选型 | 均未要求用户理解 capability / model / agent |
+| 重复上下文 | T2/T5/C1/C2 未要求重贴材料；T2/T5 用了近期成果，C1/C2 用了苇舟 |
+| 确认 | 文档类无额外技术决策；T4 委派 Codex 后磁盘测试过 |
+| 失败沟通 | T8「请换一种问法或补充材料后重试」，无 cooldown/HTTP |
+| 对比原 4/8 | T1/T2/T5 从「用户得自己收拾」变成「能直接用」；T3 仍要用户自己盯汇报结构 |
+
+### 6. 是否仍有系统性 semantic / context / research 问题
+
+1. **偏好写入 Subject 仍不稳定（T3/C2）**  
+   对话层会答应「风险优先」，权威 store 本轮未 `preference_adopted`。与原 Trial-05「学到了不进 freeze」不同，本轮是学习落盘本身没成立。同一会话里 context  continuity 能工作，偏好链不能——组合能力未闭合。
+
+2. **查询规划 `decided=false` 时回退整句 goal（T1）**  
+   仍产出相关来源与可用综合，所以本轮 T1 用户价值成立；但 evidence judgment 合同未标 decided，说明「模型筛选」这条审计链偶发不闭合。
+
+3. **T8 检索命中质量**  
+   fallback 后候选含 openai.com / chatgpt.com 首页，模型判不足后诚实失败。恢复路径对；研究结果不稳定。
+
+4. **Coding 验收文案与磁盘测试不一致**  
+   再次出现「部分满足」+ 测试 exit 0。非新问题。
+
+未发现新的安全越权。本轮未改产品代码。
+
+### 7. 与原 Trial-05 4/8 的变化
+
+| | 原 Trial-05 | 本轮 |
+|--|-------------|------|
+| 基础任务 | 4/8 pass（T4/T6/T7/T8） | **7/8 pass**（T3 仍 fail） |
+| T1 | YouTube 清单 | 可用监管综合 |
+| T2/T5 | 忽略上下文 / 空模板 | 绑近期成果，无 `[填写…]` |
+| T3 | 学到未注入 | 本轮未学成 |
+| C1/C2 | 无 | C1 pass，C2 fail（缺偏好） |
+| Hard Fail | 1（T5 空模板） | 0 |
+| 评级 | LIMITED REAL TRIAL | 仍是 LIMITED REAL TRIAL |
+
+修复项在同一 build、同一会话里大部分能同时成立，不是只能在孤立测试里成立。缺口集中在 Subject 偏好权威链，以及 research 在噪声检索上的稳定性。
+
+### 8. 下一阶段建议
+
+1. 优先复验偏好：自然表达 → store 采用 → freeze → 执行形状，用新措辞，不要复用本轮原句。  
+2. research：查询规划失败不得静默整句回退而不记审计；T8 类噪声命中应继续诚实失败，不要为了过线放宽假完成。  
+3. 暂缓 EARLY USER READY。BROADER REAL TRIAL 的门槛是 8 类稳定 **且** C1/C2 组合成立——本轮差在偏好组合。  
+4. 可以继续内部观察，不建议对外宣称 broader ready。
