@@ -62,12 +62,22 @@ function loadJobs(pkgDir) {
 }
 
 function jobsForTask(pkgDir, taskId) {
-  return loadJobs(pkgDir).filter((j) => j.taskId === taskId);
+  const id = String(taskId || "").trim();
+  if (!id) return [];
+  return loadJobs(pkgDir).filter((j) => j && String(j.taskId || "") === id);
 }
 
+/** 该 Task 自己的 Job 按 createdAt 最新一条。无 taskId 时不得回退到全局 latest。 */
 function latestJobForTask(pkgDir, taskId) {
   const jobs = jobsForTask(pkgDir, taskId);
   return jobs.length ? jobs[jobs.length - 1] : null;
+}
+
+function taskMatchingGoal(listed, goal) {
+  const want = String(goal || "").trim();
+  const tasks = (listed && listed.tasks) || [];
+  if (!want) return null;
+  return tasks.find((t) => t && String(t.goal || "").trim() === want) || null;
 }
 
 function materialUsedPaths(job) {
@@ -295,6 +305,7 @@ module.exports = {
   loadJobs,
   jobsForTask,
   latestJobForTask,
+  taskMatchingGoal,
   materialUsedPaths,
   judgeSearchFromJob,
   loadPreferences,

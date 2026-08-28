@@ -866,6 +866,7 @@ export class DigitalMeRuntime {
       appendConversation: (taskId, i) => work.appendTaskConversation(taskId, i),
       updatePlan: (taskId, plan) => work.updateTaskPlan(taskId, plan),
       updateRevisionLoop: (taskId, patch) => work.updateTaskRevisionLoop(taskId, patch),
+      updateWorkUnit: (taskId, workUnit) => work.updateTaskWorkUnit(taskId, workUnit),
       listContextCandidates: (taskId) => work.listContextCandidates(taskId),
       getTaskFacts: async (taskId) => {
         const detail = await work.getTask({ taskId });
@@ -924,7 +925,25 @@ export class DigitalMeRuntime {
         return facts;
       },
     };
-    return runWorkConverse(deps, input);
+    const first = await runWorkConverse(deps, input);
+    if (
+      first.degraded &&
+      first.createdTask &&
+      first.originTurnId &&
+      deps.chat &&
+      !input.silentOutcomeExplain &&
+      input.workUnit !== 'confirm' &&
+      input.workUnit !== 'recover'
+    ) {
+      const recovered = await runWorkConverse(deps, {
+        taskId: first.taskId,
+        text: input.text,
+        workUnit: 'recover',
+        originatingTurnId: first.originTurnId,
+      });
+      return { ...recovered, createdTask: true };
+    }
+    return first;
   }
 
   /** 对话中枢模型通道：注入 hook 优先;否则要求真实模型配置;都没有 = 降级。 */

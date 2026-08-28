@@ -139,6 +139,11 @@ export type FailureStage =
 export interface ExecutionJob {
   id: string;
   taskId: string;
+  /**
+   * 建立本执行的用户轮（通常为该 Task 的 originTurnId）。
+   * 证明 Job ← Turn；不得用 Job 列表顺序反推。
+   */
+  originTurnId?: string;
   capabilityId: string;
   /** context 阶段完成后写入;成功的 Job 恰好关联一个 Snapshot。 */
   snapshotId?: string;

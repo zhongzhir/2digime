@@ -18,6 +18,7 @@ import {
   type TaskState,
   deriveTaskState,
 } from './derive';
+import { workUnitRecoveryExhausted } from './work-unit-ownership';
 
 export const TRY_RUN_LABEL = '可以试用';
 export const EXEC_FAILED_LABEL = '执行失败';
@@ -185,7 +186,10 @@ export function deriveTaskDisplayState(input: {
   const { task, jobsForTask, artifacts } = input;
   const soft = input.softwareOutcome;
   const last = latestJob(jobsForTask);
-  const state = deriveTaskState(jobsForTask);
+  const recoveryExhausted = workUnitRecoveryExhausted(task);
+  const state = deriveTaskState(jobsForTask, {
+    workUnitRecoveryExhausted: recoveryExhausted,
+  });
   const projectDir = resolveTaskProjectDir(task, jobsForTask);
   const primary = pickPrimaryArtifact(artifacts, last);
   const activityTime = computeTaskActivityTime({
@@ -212,6 +216,13 @@ export function deriveTaskDisplayState(input: {
   );
 
   if (!last) {
+    if (recoveryExhausted) {
+      return {
+        ...base,
+        displayId: 'failed',
+        label: USER_FACING_LABELS.attention,
+      };
+    }
     if (input.treatMissingProjectAsNeedsProject && !projectDir) {
       return { ...base, displayId: 'needs_project', label: NEEDS_PROJECT_LABEL };
     }

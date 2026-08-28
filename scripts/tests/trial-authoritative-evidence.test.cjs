@@ -16,6 +16,8 @@ const {
   judgePreferenceInJobContext,
   judgeHistoricalContextFromJob,
   waitForTaskJob,
+  taskMatchingGoal,
+  latestJobForTask,
 } = require("../lib/trial-authoritative-evidence.cjs");
 
 const SEARCH_JOB = {
@@ -205,6 +207,44 @@ test("T5: plan relevantContextIds resolve to NORTHSTAR artifact even without art
   assert.equal(judged.planned, true);
   assert.equal(judged.assembled, false);
   assert.equal(judged.historical_context_used, true);
+});
+
+test("taskMatchingGoal is exact goal match and never falls back to list[0]", () => {
+  const listed = {
+    tasks: [
+      { taskId: "task_cook", goal: "写一份番茄炒蛋家常做法，别掺项目的事。" },
+      { taskId: "task_hire", goal: "欧美招人用生成式模型筛简历，监管最近有没有实质变化？" },
+    ],
+  };
+  const hire = taskMatchingGoal(listed, "欧美招人用生成式模型筛简历，监管最近有没有实质变化？");
+  assert.equal(hire.taskId, "task_hire");
+  const missing = taskMatchingGoal(listed, "一份完全不存在的新目标");
+  assert.equal(missing, null);
+  assert.notEqual((listed.tasks[0] && listed.tasks[0].taskId) || null, missing && missing.taskId);
+});
+
+test("latestJobForTask stays on the given task; empty taskId is not global latest", () => {
+  const { pkgDir } = makePkg();
+  writeJson(path.join(pkgDir, "runtime", "jobs", "job_old.json"), {
+    id: "job_old",
+    taskId: "task_cook",
+    capabilityId: "cap_model_openai_compatible",
+    status: "succeeded",
+    createdAt: "2026-08-27T00:00:00.000Z",
+  });
+  writeJson(path.join(pkgDir, "runtime", "jobs", "job_new.json"), {
+    id: "job_new",
+    taskId: "task_hire",
+    capabilityId: "cap_baseline_web_search",
+    status: "succeeded",
+    createdAt: "2026-08-27T01:00:00.000Z",
+  });
+  const hireJob = latestJobForTask(pkgDir, "task_hire");
+  assert.equal(hireJob.id, "job_new");
+  const cookJob = latestJobForTask(pkgDir, "task_cook");
+  assert.equal(cookJob.id, "job_old");
+  assert.equal(latestJobForTask(pkgDir, ""), null);
+  assert.equal(latestJobForTask(pkgDir, null), null);
 });
 
 test("waitForTaskJob waits until persisted succeeded job exists", async () => {

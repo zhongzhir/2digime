@@ -37,6 +37,17 @@ import type {
   TaskPlan,
 } from './task';
 import { isThinOwnerRuntime } from './thin-owner-start';
+import {
+  CONVERSE_TRANSIENT_MAX_ATTEMPTS,
+  isClosedForNewExecution,
+  isWorkUnitKind,
+  originatingTurnIdFromTask,
+  resolveConverseBinding,
+  staleConfirmationError,
+  type ConverseRecoveryStatus,
+  type TaskWorkUnitMeta,
+  type WorkUnitKind,
+} from './work-unit-ownership';
 
 /**
  * work-converse — D11-A AI 意图与对话中枢（设计 v0.2 §9）。
@@ -584,6 +595,7 @@ export interface WorkConverseDeps {
   getTaskFacts(taskId: string): Promise<ConverseTaskFacts>;
   /** 授权范围内的历史上下文候选；相关性由模型判断。 */
   listContextCandidates?(taskId: string): Promise<WorkContextCandidate[]>;
+  updateWorkUnit?(taskId: string, workUnit: TaskWorkUnitMeta): Promise<Task>;
 }
 
 export interface WorkConverseInput {
@@ -596,6 +608,8 @@ export interface WorkConverseInput {
    * 不把这句话当作 Owner 新决策，不授权开始/采用。
    */
   silentOutcomeExplain?: boolean;
+  workUnit?: WorkUnitKind;
+  originatingTurnId?: string;
 }
 
 export interface WorkConverseResult {
@@ -624,28 +638,87 @@ export interface WorkConverseResult {
   executionRequestedArtifactType?: string;
   adoptRequested: boolean;
   pauseRequested: boolean;
+  originTurnId?: string;
+  recoveryStatus?: ConverseRecoveryStatus;
 }
 
 /**
  * 对话中枢编排：追加用户轮 → AI 判断 → 确定性策略 → 持久化回复与意图结论。
  * 全程不创建 Job、不调用任何执行命令。
  */
+async function chatWithTransientAttempts(
+  chat: NonNullable<WorkConverseDeps['chat']>,
+  messages: ChatMessage[],
+): Promise<{ text: string }> {
+  let lastErr: unknown;
+  for (let i = 0; i < CONVERSE_TRANSIENT_MAX_ATTEMPTS; i++) {
+    try {
+      return await chat({ messages });
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr || 'chat failed'));
+}
+
 export async function runWorkConverse(
   deps: WorkConverseDeps,
   input: WorkConverseInput,
 ): Promise<WorkConverseResult> {
-  const text = String(input.text || '').trim();
-  if (!text) {
+  const workUnit = isWorkUnitKind(input.workUnit) ? input.workUnit : undefined;
+  let text = String(input.text || '').trim();
+  let recoverOriginTurnId = String(input.originatingTurnId || '').trim();
+
+  if (workUnit === 'recover') {
+    const taskId = String(input.taskId || '').trim();
+    if (!taskId) {
+      throw Object.assign(new Error('recover requires taskId'), {
+        actionable: '无法恢复：缺少任务身份',
+      });
+    }
+    const existing = await deps.getTask(taskId);
+    if (!existing) throw new Error(`task not found: ${taskId}`);
+    if (!recoverOriginTurnId) {
+      recoverOriginTurnId = originatingTurnIdFromTask(existing) || '';
+    }
+    const originTurn = (existing.meta?.conversation?.turns ?? []).find(
+      (t) => t && t.role === 'user' && t.turnId === recoverOriginTurnId,
+    );
+    if (!originTurn || !String(originTurn.content || '').trim()) {
+      throw Object.assign(new Error('recover requires originating user turn'), {
+        actionable: '无法恢复：找不到原来的用户输入',
+      });
+    }
+    text = String(originTurn.content).trim();
+  } else if (!text) {
     throw Object.assign(new Error('converse text must not be empty'), {
       actionable: '请先输入内容再发送',
     });
   }
 
+  let bindFacts: ConverseTaskFacts | undefined;
+  const requestedTaskId = String(input.taskId || '').trim();
+  if (requestedTaskId && workUnit !== 'new') {
+    try {
+      bindFacts = await deps.getTaskFacts(requestedTaskId);
+    } catch {
+      bindFacts = undefined;
+    }
+  }
+  const binding = resolveConverseBinding({
+    ...(requestedTaskId ? { requestedTaskId } : {}),
+    ...(workUnit ? { workUnit } : {}),
+    closedForNewExecution: bindFacts ? isClosedForNewExecution(bindFacts) : false,
+  });
+  if (binding.action === 'reject_stale_confirm') {
+    throw staleConfirmationError();
+  }
+
   let task: Task | null = null;
   let createdTask = false;
-  if (input.taskId) {
-    task = await deps.getTask(input.taskId);
-    if (!task) throw new Error(`task not found: ${input.taskId}`);
+  if (binding.action === 'use_requested') {
+    task = await deps.getTask(binding.taskId);
+    if (!task) throw new Error(`task not found: ${binding.taskId}`);
   } else {
     task = await deps.createTask({ goal: text, contextRefs: input.contextRefs ?? [] });
     createdTask = true;
@@ -654,6 +727,8 @@ export async function runWorkConverse(
   const existingTurns = task.meta?.conversation?.turns ?? [];
   const existingPlan = task.meta?.plan;
   const facts = await deps.getTaskFacts(task.id);
+  const treatAsFirstTurn =
+    createdTask || (workUnit === 'recover' && !isUserVisiblePlan(existingPlan));
 
   const modelAvailable = deps.chat !== null;
   let parsed: ParsedConverseOutput | null = null;
@@ -693,7 +768,7 @@ export async function runWorkConverse(
       ...(contextCandidateBrief ? { contextCandidateBrief } : {}),
     });
     try {
-      const result = await deps.chat({ messages });
+      const result = await chatWithTransientAttempts(deps.chat, messages);
       parsed = parseConverseModelOutput(result.text);
       let usedContractRepair = false;
       if (!parsed) {
@@ -768,7 +843,7 @@ export async function runWorkConverse(
     modelAvailable: modelAvailable && !chatFailed,
     hasArtifact: facts.hasArtifact,
     jobRunning: facts.jobRunning,
-    firstTurn: createdTask,
+    firstTurn: treatAsFirstTurn,
     userText: text,
     consultContext,
   });
@@ -908,20 +983,61 @@ export async function runWorkConverse(
     content: decision.reply,
     createdAt: nowIso(),
   };
+  const originTurnId =
+    workUnit === 'recover'
+      ? recoverOriginTurnId || originatingTurnIdFromTask(task)
+      : createdTask
+        ? userTurn.turnId
+        : originatingTurnIdFromTask(task) || userTurn.turnId;
   const conclusion: TaskIntentConclusion = {
     intentId,
-    turnId: input.silentOutcomeExplain ? replyTurn.turnId : userTurn.turnId,
+    turnId: input.silentOutcomeExplain
+      ? replyTurn.turnId
+      : workUnit === 'recover'
+        ? originTurnId || replyTurn.turnId
+        : userTurn.turnId,
     intent: decision.intent,
     confidence: decision.confidence,
     ...(decision.needsClarification ? { needsClarification: true } : {}),
     ...(decision.degraded ? { degraded: true } : {}),
     createdAt: nowIso(),
   };
-  const persistedTurns = input.silentOutcomeExplain ? [replyTurn] : [userTurn, replyTurn];
+  const persistedTurns = input.silentOutcomeExplain
+    ? [replyTurn]
+    : workUnit === 'recover'
+      ? [replyTurn]
+      : [userTurn, replyTurn];
   await deps.appendConversation(task.id, {
     turns: persistedTurns,
     intents: [conclusion],
   });
+
+  let recoveryStatus: ConverseRecoveryStatus | undefined;
+  if (deps.updateWorkUnit && originTurnId) {
+    const prev = task.meta?.workUnit;
+    const attempts = (prev?.converseRecovery?.attempts || 0) + (workUnit === 'recover' || createdTask ? 1 : 0);
+    if (createdTask || workUnit === 'recover' || !prev) {
+      if (decision.degraded && (createdTask || workUnit === 'recover' || treatAsFirstTurn)) {
+        recoveryStatus = 'exhausted';
+      } else if (workUnit === 'recover' && !decision.degraded) {
+        recoveryStatus = 'recovered';
+      }
+      await deps.updateWorkUnit(task.id, {
+        originTurnId,
+        ...(recoveryStatus
+          ? {
+              converseRecovery: {
+                status: recoveryStatus,
+                attempts: Math.max(attempts, 1),
+                updatedAt: nowIso(),
+              },
+            }
+          : prev?.converseRecovery
+            ? { converseRecovery: prev.converseRecovery }
+            : {}),
+      });
+    }
+  }
 
   // D11-D：暂停/目标变更与自动修订闸门联动（不新建命令）
   if (deps.updateRevisionLoop) {
@@ -976,5 +1092,7 @@ export async function runWorkConverse(
       : {}),
     adoptRequested: decision.adoptRequested,
     pauseRequested: decision.pauseRequested,
+    ...(originTurnId ? { originTurnId } : {}),
+    ...(recoveryStatus ? { recoveryStatus } : {}),
   };
 }

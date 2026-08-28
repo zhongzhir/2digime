@@ -176,6 +176,21 @@ export class TaskService {
     return updated;
   }
 
+  /** 写入/更新工作单元身份（originTurn + converse recovery）。 */
+  async updateWorkUnit(
+    taskId: string,
+    workUnit: import('./work-unit-ownership').TaskWorkUnitMeta,
+  ): Promise<Task> {
+    const task = await this.store.get(taskId);
+    if (!task) throw new Error(`task not found: ${taskId}`);
+    const updated: Task = {
+      ...task,
+      meta: { ...(task.meta ?? {}), workUnit },
+    };
+    await this.store.put(updated);
+    return updated;
+  }
+
   /**
    * 确定性开始执行前同步任务事实（goal/意图/能力/产出族）。
    * 仅用于「先对话建任务、确认后在同一 Task 上执行」;不新建 Task。

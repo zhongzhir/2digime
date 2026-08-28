@@ -280,6 +280,8 @@ export interface CommandMap {
        * D11-B：用户确认的规划版本。若与 Task.meta.plan.version 不一致则拒绝执行。
        */
       confirmedPlanVersion?: number;
+      /** 建立本工作单元的用户轮；省略时用 Task.meta.workUnit.originTurnId。 */
+      originatingTurnId?: string;
       /**
        * 代码修改授权（用户确认卡通过后传入）。
        * 缺省且意图为 modify_code 时，不创建 Job，仅返回 needsExecutionConfirm。
@@ -509,13 +511,20 @@ export interface CommandMap {
    */
   'work.converse': {
     input: {
-      /** 缺省时创建理解阶段的新任务（无 Job）。 */
+      /** 缺省时创建理解阶段的新任务（无 Job）。workUnit=new 时忽略泄漏的 taskId。 */
       taskId?: string;
       text: string;
       /** 首轮建任务时可携带材料/项目引用。 */
       contextRefs?: ContextRef[];
       /** 薄主链：执行失败后由 Runtime 触发的结果说明，不作为 Owner 新决策。 */
       silentOutcomeExplain?: boolean;
+      /**
+       * 工作单元语义：new=新建 Task；continue=在指定 Task 上追加；
+       * confirm=确认该 Task；recover=对同一 originTurn 重试理解。
+       */
+      workUnit?: 'new' | 'continue' | 'confirm' | 'recover';
+      /** confirm/recover 绑定的用户轮。 */
+      originatingTurnId?: string;
     };
     output: {
       taskId: string;
@@ -529,6 +538,9 @@ export interface CommandMap {
       degraded: boolean;
       /** 薄主链标记（若该 Task 走 thin_v1）。 */
       runtimePath?: 'legacy' | 'thin_v1';
+      /** 建立本工作单元的用户轮。 */
+      originTurnId?: string;
+      recoveryStatus?: 'pending' | 'recovered' | 'exhausted';
       newTurns: Array<{
         turnId: string;
         role: 'user' | 'digital_me';

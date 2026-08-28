@@ -2693,6 +2693,9 @@
     }
     setWorkStage("center");
     setWorkTasksOpen(false);
+    if (els.goalSend) {
+      els.goalSend.disabled = false;
+    }
     syncGoalPresentation();
     refreshTasks();
     if (!(seed && seed.preservePending)) {
@@ -2700,6 +2703,31 @@
     }
     focusWorkNaturalLanguageInput();
     refreshWorkUxView({ workMode: "compose", hasArtifact: false, decisionStatus: null, jobStatus: null });
+    bindStartButton(null, null);
+    if (els.startDevelopment) {
+      els.startDevelopment.hidden = true;
+      els.startDevelopment.setAttribute("hidden", "");
+      els.startDevelopment.disabled = true;
+    }
+  }
+
+  function bindStartButton(taskId, originTurnId) {
+    const btn = els.startDevelopment;
+    if (!btn) return;
+    if (taskId) btn.dataset.taskId = String(taskId);
+    else delete btn.dataset.taskId;
+    if (originTurnId) btn.dataset.originTurnId = String(originTurnId);
+    else delete btn.dataset.originTurnId;
+  }
+
+  function originTurnIdFromDetail(detail) {
+    const meta = detail && detail.task && detail.task.meta;
+    const fromUnit = meta && meta.workUnit && meta.workUnit.originTurnId;
+    if (fromUnit) return String(fromUnit);
+    const turns = meta && meta.conversation && meta.conversation.turns;
+    if (!Array.isArray(turns)) return "";
+    const first = turns.find((t) => t && t.role === "user" && t.turnId);
+    return first && first.turnId ? String(first.turnId) : "";
   }
 
   function setWorkCollabVisible(visible) {
@@ -3160,6 +3188,20 @@
         (detail && detail.userFacingLabel) ||
         "";
     const thin = isThinRuntimeActive(detail);
+    const boundTask = activeTaskId || converseDraftTaskId;
+    const detailTaskId =
+      lastJobDetailForUx && lastJobDetailForUx.task && lastJobDetailForUx.task.id
+        ? String(lastJobDetailForUx.task.id)
+        : "";
+    const origin =
+      boundTask && detailTaskId === boundTask
+        ? originTurnIdFromDetail(lastJobDetailForUx)
+        : "";
+    const bindable =
+      workMode !== "compose" &&
+      boundTask &&
+      activeTaskPlan &&
+      activeTaskPlan.source !== "seed_internal";
     tw.renderTaskWorkspace({
       root: panel,
       mode,
@@ -3173,7 +3215,11 @@
           }
         : null,
       title: thin && mode === "planning" ? "任务工作区 · 当前方案" : tw.titleForMode(mode),
+      taskId: bindable ? boundTask : undefined,
+      originTurnId: bindable ? origin : undefined,
     });
+    if (bindable) bindStartButton(boundTask, origin);
+    else bindStartButton(null, null);
     if (running) {
       const runTitle = document.getElementById("tw-running-title");
       if (runTitle) runTitle.textContent = "正在处理…";
@@ -3487,7 +3533,7 @@
       els.jobStatus.textContent = "已按目标开始，稍后给你结果。";
       els.jobStatus.classList.remove("error");
     }
-    await confirmPlanAndStartDevelopment();
+    await confirmPlanAndStartDevelopment(taskId);
   }
 
   function looksHighRiskGoal(text) {
@@ -3497,7 +3543,7 @@
     );
   }
 
-  async function submitWorkNaturalLanguage(presetText) {
+  async function submitWorkNaturalLanguage(presetText, sendOpts) {
     firstValueDismissed = true;
     if (!els.workNlInput && presetText == null) return;
     if (workConverseInFlight) {
@@ -3512,14 +3558,41 @@
     ).trim();
     if (!text) return;
     const payload = { text };
-    const targetTaskId = activeTaskId || converseDraftTaskId;
-    if (targetTaskId) payload.taskId = targetTaskId;
-    else if (materials.length) {
-      payload.contextRefs = materials.map((m) => ({
-        kind: m.kind,
-        path: m.path,
-        ...(m.projectOrigin ? { projectOrigin: m.projectOrigin } : {}),
-      }));
+    const opts = sendOpts || {};
+    const confirmTaskId = opts.workUnit === "confirm" ? String(opts.taskId || "").trim() : "";
+    if (opts.workUnit === "confirm") {
+      if (!confirmTaskId) return;
+      payload.workUnit = "confirm";
+      payload.taskId = confirmTaskId;
+      if (opts.originatingTurnId) payload.originatingTurnId = opts.originatingTurnId;
+    } else if (opts.workUnit === "recover") {
+      payload.workUnit = "recover";
+      payload.taskId = String(opts.taskId || "").trim();
+      if (opts.originatingTurnId) payload.originatingTurnId = opts.originatingTurnId;
+    } else if (workMode === "compose") {
+      payload.workUnit = "new";
+      if (materials.length) {
+        payload.contextRefs = materials.map((m) => ({
+          kind: m.kind,
+          path: m.path,
+          ...(m.projectOrigin ? { projectOrigin: m.projectOrigin } : {}),
+        }));
+      }
+    } else {
+      const targetTaskId = activeTaskId || converseDraftTaskId;
+      if (targetTaskId) {
+        payload.workUnit = "continue";
+        payload.taskId = targetTaskId;
+      } else if (materials.length) {
+        payload.workUnit = "new";
+        payload.contextRefs = materials.map((m) => ({
+          kind: m.kind,
+          path: m.path,
+          ...(m.projectOrigin ? { projectOrigin: m.projectOrigin } : {}),
+        }));
+      } else {
+        payload.workUnit = "new";
+      }
     }
     if (els.workNlInput) els.workNlInput.value = "";
     // 乐观显示用户输入；权威记录由 work.converse 持久化后回填
@@ -3540,6 +3613,7 @@
       els.jobStatus.classList.remove("error");
     }
     workConverseInFlight = true;
+    const epochAtSend = uiEpoch;
     let res;
     try {
       res = await api.invoke("work.converse", payload);
@@ -3558,6 +3632,15 @@
     } finally {
       workConverseInFlight = false;
       if (els.workNlSend) els.workNlSend.disabled = false;
+    }
+    if (payload.taskId && res && res.taskId && res.taskId !== payload.taskId) {
+      return;
+    }
+    if (epochAtSend !== uiEpoch) {
+      return;
+    }
+    if (workMode === "task" && activeTaskId && res && res.taskId && res.taskId !== activeTaskId) {
+      return;
     }
     // 用持久化轮替换乐观轮
     workExtraTurns = workExtraTurns.filter((t) => t.id !== pendingId);
@@ -3630,6 +3713,7 @@
         fromPlanConfirm: true,
         intentKind: execKind,
         requestedArtifactType: execFamily,
+        originatingTurnId: res.originTurnId,
       });
     }
     if (els.jobStatus && els.jobStatus.textContent === "正在思考…") els.jobStatus.textContent = "";
@@ -3709,6 +3793,11 @@
         contextRefs,
         existingTaskId: taskId,
       };
+      const originTurn =
+        (options.originatingTurnId && String(options.originatingTurnId)) ||
+        (els.startDevelopment && els.startDevelopment.dataset && els.startDevelopment.dataset.originTurnId) ||
+        originTurnIdFromDetail(lastJobDetailForUx);
+      if (originTurn) payload.originatingTurnId = originTurn;
       if (options.confirmedPlanVersion != null) {
         payload.confirmedPlanVersion = options.confirmedPlanVersion;
       } else if (activeTaskPlan && activeTaskPlan.version != null) {
@@ -3744,9 +3833,13 @@
     }
   }
 
-  async function confirmPlanAndStartDevelopment() {
+  async function confirmPlanAndStartDevelopment(explicitTaskId) {
     const btn = els.startDevelopment;
     const prevLabel = btn ? String(btn.textContent || "") : "";
+    const boundTaskId = String(
+      explicitTaskId || (btn && btn.dataset && btn.dataset.taskId) || "",
+    ).trim();
+    const boundOrigin = String((btn && btn.dataset && btn.dataset.originTurnId) || "").trim();
     if (els.jobStatus) {
       els.jobStatus.textContent = "已确认，正在开始…";
       els.jobStatus.classList.remove("error");
@@ -3756,8 +3849,7 @@
       btn.disabled = true;
       btn.textContent = "正在开始…";
     }
-    const taskId = activeTaskId || converseDraftTaskId;
-    if (!taskId) {
+    if (!boundTaskId) {
       if (els.jobStatus) {
         els.jobStatus.textContent = "还没有可确认的方案。请先发送要做的事。";
         els.jobStatus.classList.add("error");
@@ -3769,7 +3861,11 @@
       return;
     }
     try {
-      await submitWorkNaturalLanguage("确认");
+      await submitWorkNaturalLanguage("确认", {
+        workUnit: "confirm",
+        taskId: boundTaskId,
+        originatingTurnId: boundOrigin,
+      });
     } catch (err) {
       if (els.jobStatus) {
         els.jobStatus.textContent = userFacingWorkError(err);
@@ -6921,7 +7017,8 @@
   }
   if (els.startDevelopment) {
     els.startDevelopment.addEventListener("click", () => {
-      void confirmPlanAndStartDevelopment();
+      const bound = els.startDevelopment.dataset && els.startDevelopment.dataset.taskId;
+      void confirmPlanAndStartDevelopment(bound);
     });
   }
   if (els.twCreateProject) {

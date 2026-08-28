@@ -856,6 +856,19 @@ export class WorkRuntime {
           actionable: '当前任务已有正在进行的执行，请等它结束后再开始。',
         });
       }
+      const existingJobs = await this.opts.jobStore.listByTask(input.existingTaskId);
+      const existingLatest = latestJob(existingJobs);
+      if (existingLatest?.status === 'succeeded' && existingLatest.artifactId) {
+        const { staleConfirmationError } = await import('./work-unit-ownership');
+        throw staleConfirmationError();
+      }
+      if (input.originatingTurnId) {
+        const { turnBelongsToTask } = await import('./work-unit-ownership');
+        if (!turnBelongsToTask(existing, input.originatingTurnId)) {
+          const { staleConfirmationError } = await import('./work-unit-ownership');
+          throw staleConfirmationError();
+        }
+      }
       task = await this.opts.taskService.updateForSubmit(input.existingTaskId, {
         goal: taskInput.goal,
         contextRefs: taskInput.contextRefs,
@@ -1198,11 +1211,13 @@ export class WorkRuntime {
     });
     let userFacingLabel = display.label;
     if (!softwareOutcome && !last?.externalExecution) {
-      userFacingLabel = userFacingLabelFromLatestJob(jobs, {
-        revising,
-        externalCapability,
-        hasArtifact,
-      });
+      if (!(display.state === 'attention' && !last)) {
+        userFacingLabel = userFacingLabelFromLatestJob(jobs, {
+          revising,
+          externalCapability,
+          hasArtifact,
+        });
+      }
     }
     const output: GetTaskOutput = {
       task,
@@ -1299,6 +1314,8 @@ export class WorkRuntime {
           hasArtifact: artifacts.length > 0,
           ...(softwareOutcome ? { softwareOutcome } : {}),
         });
+      } else if (display.state === 'attention' && !last) {
+        userFacingLabel = display.label;
       }
       result.push({
         taskId: task.id,
@@ -1569,6 +1586,13 @@ export class WorkRuntime {
     return this.withTaskLock(taskId, () => this.opts.taskService.updatePlan(taskId, plan));
   }
 
+  async updateTaskWorkUnit(
+    taskId: string,
+    workUnit: import('./work-unit-ownership').TaskWorkUnitMeta,
+  ) {
+    return this.withTaskLock(taskId, () => this.opts.taskService.updateWorkUnit(taskId, workUnit));
+  }
+
   async updateTaskRevisionLoop(
     taskId: string,
     patch: Parameters<import('./task-service').TaskService['updateRevisionLoop']>[1],
@@ -1663,12 +1687,15 @@ export class WorkRuntime {
     }
     const task = await this.opts.taskService.get(taskId);
     const confirmedPlanSnapshot = freezeConfirmedPlanSnapshot(task);
+    const { originatingTurnIdFromTask } = await import('./work-unit-ownership');
+    const originTurnId = task ? originatingTurnIdFromTask(task) : undefined;
     const job: ExecutionJob = {
       id: newId('job'),
       taskId,
       capabilityId,
       createdAt: nowIso(),
       status: 'queued',
+      ...(originTurnId ? { originTurnId } : {}),
       ...(meta?.targetArtifactId ? { targetArtifactId: meta.targetArtifactId } : {}),
       ...(meta?.revisionRequest ? { revisionRequest: meta.revisionRequest } : {}),
       ...(meta?.rejectionReason ? { rejectionReason: meta.rejectionReason } : {}),

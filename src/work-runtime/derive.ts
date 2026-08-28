@@ -38,9 +38,15 @@ export function latestJob(jobsForTask: readonly ExecutionJob[]): ExecutionJob | 
   return latest;
 }
 
-export function deriveTaskState(jobsForTask: readonly ExecutionJob[]): TaskState {
+export function deriveTaskState(
+  jobsForTask: readonly ExecutionJob[],
+  extras?: { workUnitRecoveryExhausted?: boolean },
+): TaskState {
   const last = latestJob(jobsForTask);
-  if (!last) return 'waiting';
+  if (!last) {
+    if (extras?.workUnitRecoveryExhausted) return 'attention';
+    return 'waiting';
+  }
   switch (last.status) {
     case 'queued':
       return 'waiting';

@@ -10,6 +10,7 @@
 import type { TaskIntentKind } from './work-intent';
 import type { TaskRevisionLoopMeta } from './controlled-revision';
 import type { PlannerSemanticDecision } from './planner-semantic';
+import type { TaskWorkUnitMeta } from './work-unit-ownership';
 
 export interface Task {
   id: string;
@@ -67,6 +68,11 @@ export interface TaskMeta {
    * 只影响确认与意图绕开策略；不构成第二状态机。
    */
   runtimePath?: 'legacy' | 'thin_v1';
+  /**
+   * 本工作单元身份：originTurnId 指向建立该 Task 的用户轮。
+   * 不是第二状态机；不替代 Job 派生状态。
+   */
+  workUnit?: TaskWorkUnitMeta;
 }
 
 /**

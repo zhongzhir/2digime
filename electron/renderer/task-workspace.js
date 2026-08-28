@@ -98,7 +98,7 @@
     if (planEl) {
       const showPlan = mode === 'planning' && input.plan && input.plan.content;
       planEl.hidden = !showPlan;
-      if (showPlan) setPlanEl(planEl, input.plan, input.goal, !!input.thinRuntime);
+      if (showPlan) setPlanEl(planEl, input.plan, input.goal, !!input.thinRuntime, input.taskId, input.originTurnId);
     }
     if (prepEl) {
       const showPrep = mode === 'prep_blocked' && input.prep;
@@ -145,7 +145,7 @@
     return '任务工作区';
   }
 
-  function setPlanEl(planEl, plan, goal, thinRuntime) {
+  function setPlanEl(planEl, plan, goal, thinRuntime, taskId, originTurnId) {
     const sections = parsePlanSections(plan.content, goal);
     const versionEl = planEl.querySelector('#tw-plan-version');
     const statusEl = planEl.querySelector('#tw-plan-status');
@@ -172,6 +172,8 @@
       startBtn.disabled = false;
       startBtn.dataset.planVersion = String(plan.version || 1);
       startBtn.textContent = thinRuntime ? '确认并开始' : '确认规划并开始开发';
+      if (taskId) startBtn.dataset.taskId = String(taskId);
+      if (originTurnId) startBtn.dataset.originTurnId = String(originTurnId);
     }
     const hint = planEl.querySelector('#tw-plan-confirm-hint');
     if (hint) {
