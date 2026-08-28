@@ -2704,11 +2704,28 @@
     focusWorkNaturalLanguageInput();
     refreshWorkUxView({ workMode: "compose", hasArtifact: false, decisionStatus: null, jobStatus: null });
     bindStartButton(null, null);
-    if (els.startDevelopment) {
-      els.startDevelopment.hidden = true;
-      els.startDevelopment.setAttribute("hidden", "");
-      els.startDevelopment.disabled = true;
-    }
+    setStartDevelopmentVisible(false);
+  }
+
+  function setStartDevelopmentVisible(visible) {
+    const btn = els.startDevelopment;
+    if (!btn) return;
+    setElVisible(btn, !!visible);
+    btn.disabled = !visible;
+  }
+
+  function taskNeedsUserPlanConfirmation(detail) {
+    const refs = Array.isArray(materials) ? materials : [];
+    if (refs.some((m) => m && m.kind === "folder")) return true;
+    const task = detail && detail.task;
+    const taskRefs = task && Array.isArray(task.contextRefs) ? task.contextRefs : [];
+    if (taskRefs.some((r) => r && r.kind === "folder")) return true;
+    const intent = task && task.intentKind;
+    const art = task && task.requestedArtifactType;
+    if (intent === "modify_code" || art === "code-change") return true;
+    const goal = String((task && task.goal) || (els.goal && els.goal.value) || "");
+    if (goal && looksHighRiskGoal(goal)) return true;
+    return false;
   }
 
   function bindStartButton(taskId, originTurnId) {
@@ -3202,6 +3219,23 @@
       boundTask &&
       activeTaskPlan &&
       activeTaskPlan.source !== "seed_internal";
+    const startPres =
+      tw.startDevelopmentPresentation &&
+      tw.startDevelopmentPresentation({
+        workMode,
+        workspaceMode: mode,
+        bindable: !!bindable,
+        displayedTaskId: boundTask || "",
+        detailTaskId: detailTaskId,
+        taskId: boundTask || "",
+        originTurnId: origin,
+        hasPlan: !!(activeTaskPlan && activeTaskPlan.content),
+        planSource: activeTaskPlan && activeTaskPlan.source,
+        hasJob: !!js,
+        hasArtifact: !!(hasArtifact || latestArtifactId),
+        confirmationRequired: taskNeedsUserPlanConfirmation(detail),
+      });
+    const showStart = !!(startPres && startPres.visible);
     tw.renderTaskWorkspace({
       root: panel,
       mode,
@@ -3215,11 +3249,13 @@
           }
         : null,
       title: thin && mode === "planning" ? "任务工作区 · 当前方案" : tw.titleForMode(mode),
-      taskId: bindable ? boundTask : undefined,
-      originTurnId: bindable ? origin : undefined,
+      taskId: showStart ? startPres.taskId : undefined,
+      originTurnId: showStart ? startPres.originTurnId : undefined,
+      showStartButton: showStart,
     });
-    if (bindable) bindStartButton(boundTask, origin);
+    if (showStart) bindStartButton(startPres.taskId, startPres.originTurnId);
     else bindStartButton(null, null);
+    setStartDevelopmentVisible(showStart);
     if (running) {
       const runTitle = document.getElementById("tw-running-title");
       if (runTitle) runTitle.textContent = "正在处理…";

@@ -98,7 +98,9 @@
     if (planEl) {
       const showPlan = mode === 'planning' && input.plan && input.plan.content;
       planEl.hidden = !showPlan;
-      if (showPlan) setPlanEl(planEl, input.plan, input.goal, !!input.thinRuntime, input.taskId, input.originTurnId);
+      if (showPlan) {
+        setPlanEl(planEl, input.plan, input.goal, !!input.thinRuntime, input.taskId, input.originTurnId, !!input.showStartButton);
+      }
     }
     if (prepEl) {
       const showPrep = mode === 'prep_blocked' && input.prep;
@@ -136,6 +138,33 @@
     return 'idle';
   }
 
+  /**
+   * enterCompose 会藏起确认按钮。规划就绪且必须由用户确认开工时，对称恢复。
+   * 文档/研究自动推进路径不得显示该按钮。
+   */
+  function startDevelopmentPresentation(facts) {
+    const f = facts || {};
+    const taskId = String(f.taskId || '').trim();
+    const originTurnId = String(f.originTurnId || '').trim();
+    const displayed = String(f.displayedTaskId || '').trim();
+    const detailId = String(f.detailTaskId || '').trim();
+    const hidden = {
+      visible: false,
+      taskId: null,
+      originTurnId: null,
+    };
+    if (f.workMode === 'compose') return hidden;
+    if (String(f.workspaceMode || '') !== 'planning') return hidden;
+    if (!f.bindable) return hidden;
+    if (!f.hasPlan || f.planSource === 'seed_internal') return hidden;
+    if (f.hasJob || f.hasArtifact) return hidden;
+    if (!f.confirmationRequired) return hidden;
+    if (!taskId || !originTurnId) return hidden;
+    if (!displayed || displayed !== taskId) return hidden;
+    if (detailId && detailId !== displayed) return hidden;
+    return { visible: true, taskId, originTurnId };
+  }
+
   function titleForMode(mode) {
     if (mode === 'planning') return '任务工作区 · 开发规划';
     if (mode === 'prep_blocked') return '任务工作区 · 准备';
@@ -145,7 +174,7 @@
     return '任务工作区';
   }
 
-  function setPlanEl(planEl, plan, goal, thinRuntime, taskId, originTurnId) {
+  function setPlanEl(planEl, plan, goal, thinRuntime, taskId, originTurnId, showStartButton) {
     const sections = parsePlanSections(plan.content, goal);
     const versionEl = planEl.querySelector('#tw-plan-version');
     const statusEl = planEl.querySelector('#tw-plan-status');
@@ -169,11 +198,21 @@
     setText('#tw-plan-bounds', sections.bounds);
     const startBtn = planEl.querySelector('#btn-start-development');
     if (startBtn) {
-      startBtn.disabled = false;
       startBtn.dataset.planVersion = String(plan.version || 1);
       startBtn.textContent = thinRuntime ? '确认并开始' : '确认规划并开始开发';
-      if (taskId) startBtn.dataset.taskId = String(taskId);
-      if (originTurnId) startBtn.dataset.originTurnId = String(originTurnId);
+      if (showStartButton && taskId && originTurnId) {
+        startBtn.hidden = false;
+        startBtn.removeAttribute('hidden');
+        startBtn.disabled = false;
+        startBtn.dataset.taskId = String(taskId);
+        startBtn.dataset.originTurnId = String(originTurnId);
+      } else {
+        startBtn.hidden = true;
+        startBtn.setAttribute('hidden', '');
+        startBtn.disabled = true;
+        delete startBtn.dataset.taskId;
+        delete startBtn.dataset.originTurnId;
+      }
     }
     const hint = planEl.querySelector('#tw-plan-confirm-hint');
     if (hint) {
@@ -260,6 +299,7 @@
     isHighRiskExecution,
     titleForMode,
     deriveWorkspaceMode,
+    startDevelopmentPresentation,
   };
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
