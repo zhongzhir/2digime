@@ -1,5 +1,7 @@
 # 2digime — Digital Me
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 **Digital Me** is an **Owner-controlled personal digital subject** that represents *you*, does things *for you*, and collaborates *with you* — built on an **AI-native architecture** that orchestrates real external coding agents and read-only tools under your explicit control.
 
 > **Current stage: experimental preview.** This is not an MVP, not production-ready, and not a market 95th-percentile product. It is a working research-grade baseline we are opening for early evaluation and review.
