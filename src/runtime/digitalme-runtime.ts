@@ -298,6 +298,7 @@ export class DigitalMeRuntime {
   /** 进程内生命周期，不落盘。关闭时取消尚未完成的通用 CTO 评价。 */
   private ctoReviewAbort = new AbortController();
   private readonly ctoReviewInflight = new Set<Promise<void>>();
+  private converseAbortSignal: AbortSignal | null = null;
 
   constructor(options: DigitalMeRuntimeOptions = {}) {
     this.options = options;
@@ -318,6 +319,11 @@ export class DigitalMeRuntime {
    */
   createSiblingRuntime(): DigitalMeRuntime {
     return createDigitalMeRuntime({ ...this.options });
+  }
+
+  /** 主进程在 work.converse 期间注入 AbortSignal，取消时中止模型请求。 */
+  setConverseAbortSignal(signal: AbortSignal | null): void {
+    this.converseAbortSignal = signal;
   }
 
   /** 当前文档能力模式（供协作验收区分 Fake / 真实模型）。 */
@@ -1021,6 +1027,7 @@ export class DigitalMeRuntime {
         maxTokens: 4096,
         timeoutMs: config.timeoutMs ?? 120_000,
         responseFormat: { type: 'json_object' },
+        ...(this.converseAbortSignal ? { signal: this.converseAbortSignal } : {}),
       });
       return { text: result.text };
     };

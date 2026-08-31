@@ -86,7 +86,10 @@ contextBridge.exposeInMainWorld("digitalMe", {
     listSessions: () => ipcRenderer.invoke("shell:conversationListSessions"),
     createSession: () => ipcRenderer.invoke("shell:conversationCreateSession"),
     openSession: (id) => ipcRenderer.invoke("shell:conversationOpenSession", { id }),
+    cancel: () => ipcRenderer.invoke("shell:conversationCancel"),
   },
+  cancelWorkRequest: (requestId) =>
+    ipcRenderer.invoke("shell:cancelWorkRequest", { requestId: requestId || "" }),
   onOpenHelp(listener) {
     const handler = (_evt, info) => listener(info);
     ipcRenderer.on("shell:open-help", handler);

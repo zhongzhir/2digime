@@ -28,6 +28,25 @@
     }
   }
 
+  function classifyUserFacingModelFailure(raw) {
+    const s = String(raw || "");
+    if (/aborted|用户取消|已取消本次|request aborted/i.test(s)) return "cancelled";
+    if (/timeout|超时/i.test(s)) return "timeout";
+    if (/503|high demand|server_error|繁忙|rate.?limit|429/i.test(s)) return "busy";
+    if (/ENOTFOUND|ECONNREFUSED|network failure|网络连接失败|fetch failed/i.test(s)) return "network";
+    if (/bad_response|invalid SSE|格式异常/i.test(s)) return "bad_response";
+    return "";
+  }
+
+  function noticeForModelFailure(kind, fallback) {
+    if (kind === "cancelled") return "已取消本次请求。";
+    if (kind === "timeout") return "请求超时，模型在限定时间内没有返回。可重试。";
+    if (kind === "busy") return "模型服务当前繁忙，请稍后重试。";
+    if (kind === "network") return "网络连接失败，暂时无法联系模型。可重试。";
+    if (kind === "bad_response") return "模型返回格式异常。可重试。";
+    return fallback;
+  }
+
   function userFacingChatError(err) {
     const raw = String((err && err.message) || err || "");
     if (/请先连接模型|MODEL_NOT_CONFIGURED/i.test(raw)) {
@@ -36,7 +55,9 @@
     if (/本次未能读取数字之我信息/.test(raw)) {
       return "本次未能读取数字之我信息，请重试。";
     }
-    if (/回复未完成|CHAT_INCOMPLETE|timeout|网络|中断/i.test(raw)) {
+    const classified = noticeForModelFailure(classifyUserFacingModelFailure(raw));
+    if (classified) return classified;
+    if (/回复未完成|CHAT_INCOMPLETE/i.test(raw)) {
       return "回复未完成，可重试";
     }
     if (
@@ -64,6 +85,11 @@
     }
     if (/trusted directory|skip-git-repo-check|not inside a trusted/i.test(msg)) {
       return "尚未明确授权项目文件夹。请通过文件夹选择器添加项目位置后再开始。";
+    }
+    const classified = noticeForModelFailure(classifyUserFacingModelFailure(msg));
+    if (classified) return classified;
+    if (/无法理解你的这句话/.test(msg)) {
+      return "当前无法连接模型服务。原文已保留，恢复后可以直接重试。";
     }
     return msg || USER_FACING_TASK_START_FAILED;
   }
@@ -234,6 +260,7 @@
     chatNew: document.getElementById("btn-chat-new"),
     chatSessionList: document.getElementById("chat-session-list"),
     chatSend: document.getElementById("btn-chat-send"),
+    chatCancel: document.getElementById("btn-chat-cancel"),
     chatRetry: document.getElementById("btn-chat-retry"),
     chatClear: document.getElementById("btn-chat-clear"),
     chatClearConfirm: document.getElementById("chat-clear-confirm"),
@@ -274,9 +301,11 @@
     goalDetails: document.getElementById("goal-details"),
     goalSummaryLabel: document.getElementById("goal-summary-label"),
     taskList: document.getElementById("task-list"),
+    taskListMore: document.getElementById("btn-task-list-more"),
     taskEmpty: document.getElementById("task-empty"),
     goal: document.getElementById("goal"),
     goalSend: document.getElementById("btn-goal-send"),
+    goalCancel: document.getElementById("btn-goal-cancel"),
     artifactType: document.getElementById("artifact-type"),
     materialList: document.getElementById("material-list"),
     materialListWrap: document.getElementById("material-list-wrap"),
@@ -340,6 +369,8 @@
     workTimeline: document.getElementById("work-timeline"),
     workNlInput: document.getElementById("work-nl-input"),
     workNlSend: document.getElementById("btn-work-nl-send"),
+    workNlCancel: document.getElementById("btn-work-nl-cancel"),
+    workNlHint: document.getElementById("work-nl-hint"),
     workNlComposer: document.getElementById("work-nl-composer"),
     workComposeSetup: document.getElementById("work-compose-setup"),
     workConversationScroll: document.getElementById("work-conversation-scroll"),
@@ -526,6 +557,13 @@
   let activeJobId = null;
   let activeArtifactId = null;
   let uiEpoch = 0;
+  let workRequestSeq = 0;
+  let activeWorkRequest = null;
+  let taskListShown = 50;
+  let waitStatusTimer = null;
+  let lastWorkUserText = "";
+  let lastWorkUserTurnId = "";
+  let lastWorkRetryTaskId = null;
   let lastArtifactRejectionReason = "";
   let activeHeadVersionId = null;
   /** @type {string} */
@@ -2250,6 +2288,90 @@
     return uiEpoch;
   }
 
+  function isWorkPanelActive() {
+    const panel = document.getElementById("panel-work");
+    return !!(panel && !panel.hidden);
+  }
+
+  function isLiveWorkView(captured) {
+    if (!captured) return false;
+    if (captured.epoch !== uiEpoch) return false;
+    if (!isWorkPanelActive()) return false;
+    if (captured.mode === "task") {
+      return workMode === "task" && activeTaskId === captured.taskId;
+    }
+    if (captured.mode === "compose") {
+      return workMode === "compose";
+    }
+    return workMode === captured.mode;
+  }
+
+  function nextWorkRequestId() {
+    workRequestSeq += 1;
+    return "wreq_" + workRequestSeq;
+  }
+
+  function stopWaitStatus() {
+    if (waitStatusTimer) {
+      clearInterval(waitStatusTimer);
+      waitStatusTimer = null;
+    }
+  }
+
+  function startWaitStatus(targetEls, isLive) {
+    stopWaitStatus();
+    const started = Date.now();
+    const targets = (Array.isArray(targetEls) ? targetEls : [targetEls]).filter(Boolean);
+    const tick = () => {
+      if (typeof isLive === "function" && !isLive()) {
+        stopWaitStatus();
+        return;
+      }
+      const sec = Math.max(0, Math.floor((Date.now() - started) / 1000));
+      let text = "正在连接模型…已等待 " + sec + " 秒";
+      if (sec >= 8) text += "。仍在处理，可继续等待或取消";
+      for (const el of targets) {
+        const cur = String(el.textContent || "");
+        if (cur && !/正在连接模型|已等待|正在发送/.test(cur)) continue;
+        el.textContent = text;
+      }
+    };
+    tick();
+    waitStatusTimer = setInterval(tick, 1000);
+  }
+
+  function setHiddenEl(el, hidden) {
+    if (!el) return;
+    el.hidden = !!hidden;
+    if (hidden) el.setAttribute("hidden", "");
+    else el.removeAttribute("hidden");
+  }
+
+  function setWorkSendingUi(on) {
+    if (els.workNlSend) {
+      els.workNlSend.disabled = false;
+      els.workNlSend.setAttribute("aria-busy", on ? "true" : "false");
+      els.workNlSend.textContent = on ? "正在发送…" : "发送";
+    }
+    if (els.goalSend) {
+      const compose = workMode === "compose";
+      els.goalSend.disabled = !compose;
+      els.goalSend.setAttribute("aria-busy", on && compose ? "true" : "false");
+      els.goalSend.textContent = on && compose ? "正在发送…" : "发送给 Digital Me";
+      if (!compose) els.goalSend.hidden = true;
+    }
+    setHiddenEl(els.workNlCancel, !on);
+    setHiddenEl(els.goalCancel, !on || workMode !== "compose");
+  }
+
+  function setChatSendingUi(on) {
+    if (els.chatSend) {
+      els.chatSend.disabled = !!on;
+      els.chatSend.textContent = on ? "正在发送…" : "发送";
+    }
+    setHiddenEl(els.chatCancel, !on);
+  }
+
   function hideRevisionActiveBanner() {
     if (!els.revisionActiveBanner) return;
     els.revisionActiveBanner.hidden = true;
@@ -2685,17 +2807,21 @@
     if (jobWatchTaskId === taskId && jobWatchTimer) return;
     stopJobWatch();
     jobWatchTaskId = taskId;
+    const watchEpoch = uiEpoch;
     jobWatchTimer = setInterval(async () => {
-      if (workMode !== "task" || activeTaskId !== taskId) {
+      if (workMode !== "task" || activeTaskId !== taskId || jobWatchTaskId !== taskId) {
         stopJobWatch();
         return;
       }
       try {
         const detail = await api.invoke("work.getTask", { taskId });
+        if (workMode !== "task" || activeTaskId !== taskId || jobWatchTaskId !== taskId) return;
+        if (watchEpoch !== uiEpoch) return;
         if (!isJobActive(detail)) {
           await syncActiveTaskStatus();
           return;
         }
+        if (workMode !== "task" || activeTaskId !== taskId || watchEpoch !== uiEpoch) return;
         renderJobStatus(detail);
       } catch {
         /* ignore transient */
@@ -2798,11 +2924,11 @@
   }
 
   async function refreshTasks() {
-    const requestEpoch = uiEpoch;
-    const { tasks } = await api.invoke("work.listTasks", { limit: 50 });
-    if (requestEpoch !== uiEpoch && workMode === "task") {
-      // 允许 compose 时刷新；task 模式下若已切换则仍应用列表（顺序/标签来自权威 list），但不要用过期 epoch 挡列表
-    }
+    const prevScroll = els.taskList ? els.taskList.scrollTop : 0;
+    const selectedId = workMode === "task" ? activeTaskId : null;
+    const listed = await api.invoke("work.listTasks", { limit: taskListShown, offset: 0 });
+    const tasks = (listed && listed.tasks) || [];
+    const hasMore = !!(listed && listed.hasMore);
     els.taskList.innerHTML = "";
     els.taskEmpty.hidden = tasks.length > 0;
     for (const t of tasks) {
@@ -2819,6 +2945,27 @@
       btn.addEventListener("click", () => selectTask(t.taskId));
       li.appendChild(btn);
       els.taskList.appendChild(li);
+    }
+    if (els.taskListMore) {
+      els.taskListMore.hidden = !hasMore;
+      if (hasMore) els.taskListMore.removeAttribute("hidden");
+      else els.taskListMore.setAttribute("hidden", "");
+      els.taskListMore.disabled = false;
+    }
+    if (els.taskList) {
+      els.taskList.scrollTop = prevScroll;
+      if (selectedId) {
+        const activeLi = els.taskList.querySelector(
+          'li[data-task-id="' + CSS.escape(selectedId) + '"]',
+        );
+        if (activeLi && typeof activeLi.scrollIntoView === "function") {
+          const listRect = els.taskList.getBoundingClientRect();
+          const liRect = activeLi.getBoundingClientRect();
+          if (liRect.bottom > listRect.bottom + 2 || liRect.top < listRect.top - 2) {
+            activeLi.scrollIntoView({ block: "nearest" });
+          }
+        }
+      }
     }
   }
 
@@ -2863,6 +3010,7 @@
     const jobId = job.jobId || job.id;
     if (!jobId || thinFailureExplainedJobId === jobId) return;
     const taskId = activeTaskId;
+    const epoch = uiEpoch;
     if (!taskId || workConverseInFlight) return;
     thinFailureExplainedJobId = jobId;
     try {
@@ -2871,6 +3019,7 @@
         text: "请根据刚才的执行结果，用平实的话说明为什么没做成，以及我现在可以怎么做。",
         silentOutcomeExplain: true,
       });
+      if (epoch !== uiEpoch || activeTaskId !== taskId || workMode !== "task") return;
       if (res && res.reply) {
         persistedConversationTurns = persistedConversationTurns.concat(
           (res.newTurns || [])
@@ -3637,22 +3786,34 @@
     );
   }
 
-  async function submitWorkNaturalLanguage(presetText) {
+  async function submitWorkNaturalLanguage(presetText, opts) {
     firstValueDismissed = true;
-    if (!els.workNlInput && presetText == null) return;
+    const retry = !!(opts && opts.retry);
+    if (!els.workNlInput && presetText == null && !retry) return;
     if (workConverseInFlight) {
       if (els.jobStatus) {
-        els.jobStatus.textContent = "正在思考…";
+        els.jobStatus.textContent = "上一句还在发送中。请等待完成，或点取消后再发送。";
         els.jobStatus.classList.remove("error");
       }
       return;
     }
     const text = String(
-      presetText != null ? presetText : (els.workNlInput && els.workNlInput.value) || "",
+      retry
+        ? lastWorkUserText || presetText || ""
+        : presetText != null
+          ? presetText
+          : (els.workNlInput && els.workNlInput.value) || "",
     ).trim();
     if (!text) return;
     const payload = { text };
-    const targetTaskId = activeTaskId || converseDraftTaskId;
+    const targetTaskId = (opts && opts.taskId) || activeTaskId || converseDraftTaskId || lastWorkRetryTaskId;
+    if (retry && !targetTaskId) {
+      if (els.jobStatus) {
+        els.jobStatus.textContent = "没有可重试的原任务，请再发送一次。";
+        els.jobStatus.classList.add("error");
+      }
+      return;
+    }
     if (targetTaskId) payload.taskId = targetTaskId;
     else if (materials.length) {
       payload.contextRefs = materials.map((m) => ({
@@ -3661,46 +3822,85 @@
         ...(m.projectOrigin ? { projectOrigin: m.projectOrigin } : {}),
       }));
     }
-    if (els.workNlInput) els.workNlInput.value = "";
-    // 乐观显示用户输入；权威记录由 work.converse 持久化后回填
-    const pendingId = "user_pending_" + Date.now();
-    workExtraTurns = workExtraTurns.concat([
-      {
-        id: pendingId,
-        role: "user",
-        kind: "message",
-        text,
-        createdAt: new Date().toISOString(),
-      },
-    ]);
-    renderWorkTimeline();
-    if (els.workNlSend) els.workNlSend.disabled = true;
-    if (els.jobStatus) {
-      els.jobStatus.textContent = "正在思考…";
-      els.jobStatus.classList.remove("error");
+    const requestId = nextWorkRequestId();
+    payload.requestId = requestId;
+    if (retry && lastWorkUserTurnId) payload.retryOfUserTurnId = lastWorkUserTurnId;
+    const captured = {
+      id: requestId,
+      taskId: targetTaskId || null,
+      epoch: uiEpoch,
+      mode: workMode,
+      text,
+    };
+    activeWorkRequest = captured;
+    lastWorkUserText = text;
+    if (!retry && els.workNlInput && presetText == null) els.workNlInput.value = "";
+    const pendingId = retry ? null : "user_pending_" + Date.now();
+    if (pendingId) {
+      workExtraTurns = workExtraTurns.concat([
+        {
+          id: pendingId,
+          role: "user",
+          kind: "message",
+          text,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+      renderWorkTimeline();
     }
+    setWorkSendingUi(true);
+    if (els.jobStatus) els.jobStatus.classList.remove("error");
     workConverseInFlight = true;
+    startWaitStatus(
+      [els.jobStatus, els.workNlHint].filter(Boolean),
+      () => workConverseInFlight && activeWorkRequest && activeWorkRequest.id === requestId,
+    );
     let res;
     try {
       res = await api.invoke("work.converse", payload);
     } catch (err) {
-      workExtraTurns = workExtraTurns.concat([
-        {
-          id: "dm_err_" + Date.now(),
-          role: "digital_me",
-          kind: "note",
-          text: userFacingWorkError(err),
-        },
-      ]);
-      renderWorkTimeline();
-      if (els.jobStatus && els.jobStatus.textContent === "正在思考…") els.jobStatus.textContent = "";
+      if (activeWorkRequest && activeWorkRequest.id === requestId) activeWorkRequest = null;
+      if (!isLiveWorkView(captured) && !(captured.mode === "compose" && workMode === "task" && captured.epoch === uiEpoch - 1)) {
+        return;
+      }
+      if (!isLiveWorkView(captured) && workMode === "task" && activeTaskId && captured.taskId && activeTaskId !== captured.taskId) {
+        return;
+      }
+      if (isLiveWorkView(captured) || (workMode === captured.mode && captured.epoch === uiEpoch)) {
+        workExtraTurns = workExtraTurns.concat([
+          {
+            id: "dm_err_" + Date.now(),
+            role: "digital_me",
+            kind: "note",
+            text: userFacingWorkError(err),
+          },
+        ]);
+        renderWorkTimeline();
+        if (els.jobStatus) els.jobStatus.textContent = userFacingWorkError(err);
+        if (els.retry) {
+          els.retry.hidden = false;
+          els.retry.disabled = false;
+          els.retry.removeAttribute("hidden");
+        }
+      }
       return;
     } finally {
       workConverseInFlight = false;
-      if (els.workNlSend) els.workNlSend.disabled = false;
+      stopWaitStatus();
+      setWorkSendingUi(false);
+      if (activeWorkRequest && activeWorkRequest.id === requestId) activeWorkRequest = null;
     }
-    // 用持久化轮替换乐观轮
-    workExtraTurns = workExtraTurns.filter((t) => t.id !== pendingId);
+    lastWorkRetryTaskId = res && res.taskId ? res.taskId : targetTaskId;
+    if (res && res.userTurnId) lastWorkUserTurnId = String(res.userTurnId);
+    const live = isLiveWorkView(captured);
+    const becameThisTask =
+      res &&
+      res.createdTask &&
+      captured.mode === "compose" &&
+      workMode === "compose" &&
+      captured.epoch === uiEpoch;
+    if (!live && !becameThisTask) return;
+    if (pendingId) workExtraTurns = workExtraTurns.filter((t) => t.id !== pendingId);
     persistedConversationTurns = persistedConversationTurns.concat(
       (res.newTurns || [])
         .filter((t) => t && t.content)
@@ -3714,9 +3914,11 @@
     );
     if (res.runtimePath) activeRuntimePath = String(res.runtimePath);
     if (res.createdTask && !activeTaskId) {
-      // 首轮对话建立了理解任务（无 Job）；进入任务态，后续确认在同一 Task 上执行
       converseDraftTaskId = res.taskId;
       await selectTask(res.taskId);
+      if (activeTaskId !== res.taskId) return;
+    } else if (!isLiveWorkView({ ...captured, taskId: res.taskId || captured.taskId, mode: workMode === "task" ? "task" : captured.mode })) {
+      if (workMode !== "task" || activeTaskId !== (res.taskId || captured.taskId)) return;
     }
     if (res.plan) {
       activeTaskPlan = {
@@ -3727,7 +3929,6 @@
       };
       clearPrepBlocked();
       refreshTaskWorkspace();
-      // 普通低风险文档/分析目标：规划生成后自行推进，不要求用户再点「确认规划并开始开发」。
       await maybeAutoProgressLowRiskDocument();
     } else if (res.planGenerationFailed) {
       activeTaskPlan = null;
@@ -3735,19 +3936,30 @@
     }
     renderWorkTimeline();
     if (res.degraded || res.needsClarification) {
-      if (els.jobStatus && els.jobStatus.textContent === "正在思考…") els.jobStatus.textContent = "";
+      if (res.modelFailureKind || res.degraded) {
+        if (els.jobStatus) {
+          els.jobStatus.textContent =
+            res.reply || noticeForModelFailure(res.modelFailureKind, "当前无法连接模型服务。可重试。");
+          els.jobStatus.classList.remove("error");
+        }
+        if (els.retry) {
+          els.retry.hidden = false;
+          els.retry.disabled = false;
+          els.retry.removeAttribute("hidden");
+        }
+      } else if (els.jobStatus) {
+        els.jobStatus.textContent = "";
+      }
       return;
     }
-    // 确定性效果（AI 只给结论；执行/暂停/采用均走既有确定性路径）
-    // FIX-22：Owner 明确修订授权优先于「暂停自动修改」展示；暂停只拦系统自动修订
     if (res.pauseRequested && !(res.startAuthorized && res.startMode === "revision")) {
       taskPausedCto = true;
       refreshWorkUxView({ taskPaused: true });
-      if (els.jobStatus && els.jobStatus.textContent === "正在思考…") els.jobStatus.textContent = "";
+      if (els.jobStatus) els.jobStatus.textContent = "";
       return;
     }
     if (res.adoptRequested) {
-      if (els.jobStatus && els.jobStatus.textContent === "正在思考…") els.jobStatus.textContent = "";
+      if (els.jobStatus) els.jobStatus.textContent = "";
       await submitArtifactDecision("accept", { forceAdopt: true });
       return;
     }
@@ -3778,7 +3990,7 @@
         requestedArtifactType: execFamily,
       });
     }
-    if (els.jobStatus && els.jobStatus.textContent === "正在思考…") els.jobStatus.textContent = "";
+    if (els.jobStatus) els.jobStatus.textContent = "";
   }
 
   /**
@@ -4309,7 +4521,10 @@
 
   async function syncActiveTaskStatus(eventNote, eventStatus) {
     if (!activeTaskId || workMode !== "task") return null;
-    const detail = await api.invoke("work.getTask", { taskId: activeTaskId });
+    const taskId = activeTaskId;
+    const epoch = uiEpoch;
+    const detail = await api.invoke("work.getTask", { taskId });
+    if (epoch !== uiEpoch || activeTaskId !== taskId || workMode !== "task") return detail;
     activeJobId = detail.latestJob ? detail.latestJob.jobId : activeJobId;
     lastJobDetailForUx = detail;
     hydrateConversationFromTask(detail);
@@ -4317,6 +4532,7 @@
     renderOwnerChoicePrompt(detail);
     renderMaterialSummary(detail.materialSummary);
     const connected = await refreshConnectionFromCapabilities();
+    if (epoch !== uiEpoch || activeTaskId !== taskId || workMode !== "task") return detail;
 
     if (isJobActive(detail)) {
       startJobWatch(activeTaskId);
@@ -4367,8 +4583,6 @@
         (!eventStatus || eventStatus === "succeeded")
       ) {
         copyBlockedFailed = false;
-        const epoch = uiEpoch;
-        const taskId = activeTaskId;
         await loadArtifact(detail.artifactIds[0], { taskId, epoch });
         if (epoch === uiEpoch && activeTaskId === taskId) {
           renderAppliedUnderstanding(detail.appliedUnderstanding);
@@ -4585,6 +4799,7 @@
       });
     } catch (err) {
       if (epoch !== uiEpoch) return null;
+      if (expectedTaskId && activeTaskId && expectedTaskId !== activeTaskId) return null;
       showEmptyArtifact(userFacingWorkError(err) || "当前任务暂时无法加载成果。");
       return null;
     }
@@ -5746,8 +5961,9 @@
         if (typeof api.conversation.reply !== "function") {
           throw new Error("对话回复功能不可用");
         }
-        generation = chatGeneration;
-        els.chatSend.disabled = true;
+        generation = ++chatGeneration;
+        const requestId = "chat_" + generation;
+        setChatSendingUi(true);
         if (els.chatRetry) {
           els.chatRetry.hidden = true;
           els.chatRetry.setAttribute("hidden", "");
@@ -5764,7 +5980,7 @@
           setChatGuideMode("normal");
         }
         lastChatReplyFailed = false;
-        if (els.chatStatus) els.chatStatus.textContent = "正在发送…";
+        startWaitStatus([els.chatStatus], () => isLiveChatGeneration(generation));
         const guided = lastGrowthSnapshot && lastGrowthSnapshot.guidedQuestion;
         const guideMode = chatGuideMode;
         await api.conversation.append({
@@ -5781,12 +5997,12 @@
         await refreshChatPanel();
         if (!isLiveChatGeneration(generation)) return;
 
-        if (els.chatStatus) els.chatStatus.textContent = "正在回复…";
+        startWaitStatus([els.chatStatus], () => isLiveChatGeneration(generation));
         let replyText = "";
         let replyStatus = "complete";
         let userTurnId = null;
         try {
-          const replied = await api.conversation.reply({ text, skipGrowthCapture, guideMode });
+          const replied = await api.conversation.reply({ text, skipGrowthCapture, guideMode, requestId });
           if (!isLiveChatGeneration(generation)) return;
           replyText = String((replied && replied.text) || "").trim();
           replyStatus = String((replied && replied.status) || "complete");
@@ -5867,9 +6083,34 @@
           els.chatRetry.removeAttribute("hidden");
         }
       } finally {
+        stopWaitStatus();
         if (!isLiveChatGeneration(generation)) return;
-        if (els.chatSend) els.chatSend.disabled = false;
+        setChatSendingUi(false);
       }
+    });
+  }
+
+  async function cancelInFlightChat() {
+    chatGeneration += 1;
+    stopWaitStatus();
+    setChatSendingUi(false);
+    if (api.conversation && typeof api.conversation.cancel === "function") {
+      try {
+        await api.conversation.cancel();
+      } catch {
+        /* ignore */
+      }
+    }
+    if (els.chatStatus) els.chatStatus.textContent = "已取消本次回复。原文仍保留，可重试。";
+    if (els.chatRetry && lastChatUserText) {
+      els.chatRetry.hidden = false;
+      els.chatRetry.removeAttribute("hidden");
+    }
+  }
+
+  if (els.chatCancel) {
+    els.chatCancel.addEventListener("click", () => {
+      void cancelInFlightChat();
     });
   }
 
@@ -5884,13 +6125,14 @@
         if (els.chatStatus) els.chatStatus.textContent = "对话回复功能不可用";
         return;
       }
-      const generation = chatGeneration;
+      const generation = ++chatGeneration;
+      const requestId = "chat_" + generation;
+      setChatSendingUi(true);
       els.chatRetry.disabled = true;
-      if (els.chatSend) els.chatSend.disabled = true;
-      if (els.chatStatus) els.chatStatus.textContent = "正在回复…";
+      startWaitStatus([els.chatStatus], () => isLiveChatGeneration(generation));
       try {
         // 重试：不重复写入用户消息，不重复成长采集
-        const replied = await api.conversation.reply({ text, guideMode: chatGuideMode });
+        const replied = await api.conversation.reply({ text, guideMode: chatGuideMode, requestId });
         if (!isLiveChatGeneration(generation) || String((replied && replied.status) || "") === "cancelled") {
           return;
         }
@@ -5933,9 +6175,10 @@
         els.chatRetry.hidden = false;
         els.chatRetry.removeAttribute("hidden");
       } finally {
+        stopWaitStatus();
         if (!isLiveChatGeneration(generation)) return;
         els.chatRetry.disabled = false;
-        if (els.chatSend) els.chatSend.disabled = false;
+        setChatSendingUi(false);
       }
     });
   }
@@ -5984,6 +6227,9 @@
 
   async function openChatSession(id) {
     const generation = ++chatGeneration;
+    if (api.conversation && typeof api.conversation.cancel === "function") {
+      void api.conversation.cancel();
+    }
     if (!api.conversation || typeof api.conversation.openSession !== "function") return;
     try {
       await api.conversation.openSession(id);
@@ -7149,6 +7395,42 @@
       void submitWorkNaturalLanguage();
     });
   }
+  async function cancelInFlightWork() {
+    const req = activeWorkRequest;
+    if (req) req.epoch = -1;
+    workConverseInFlight = false;
+    stopWaitStatus();
+    setWorkSendingUi(false);
+    if (req && req.id && typeof api.cancelWorkRequest === "function") {
+      try {
+        await api.cancelWorkRequest(req.id);
+      } catch {
+        /* ignore */
+      }
+    }
+    if (els.jobStatus) els.jobStatus.textContent = "已取消本次请求。原文仍保留，可重试。";
+    if (els.retry) {
+      els.retry.hidden = false;
+      els.retry.disabled = false;
+      els.retry.removeAttribute("hidden");
+    }
+  }
+  if (els.workNlCancel) {
+    els.workNlCancel.addEventListener("click", () => {
+      void cancelInFlightWork();
+    });
+  }
+  if (els.goalCancel) {
+    els.goalCancel.addEventListener("click", () => {
+      void cancelInFlightWork();
+    });
+  }
+  if (els.taskListMore) {
+    els.taskListMore.addEventListener("click", () => {
+      taskListShown += 50;
+      void refreshTasks();
+    });
+  }
   if (els.goalSend) {
     els.goalSend.addEventListener("click", () => {
       const goal = String((els.goal && els.goal.value) || "").trim();
@@ -7159,15 +7441,7 @@
         }
         return;
       }
-      els.goalSend.disabled = true;
-      if (els.jobStatus) {
-        els.jobStatus.textContent = "正在发送给 Digital Me…";
-        els.jobStatus.classList.remove("error");
-      }
-      void submitWorkNaturalLanguage(goal).finally(() => {
-        if (els.goalSend) els.goalSend.disabled = workMode !== "compose";
-        syncGoalPresentation();
-      });
+      void submitWorkNaturalLanguage(goal);
     });
   }
   if (els.startDevelopment) {
@@ -7469,6 +7743,13 @@
   });
 
   els.retry.addEventListener("click", async () => {
+    if (lastWorkUserText && !(lastJobDetailForUx && lastJobDetailForUx.latestJob && lastJobDetailForUx.latestJob.status === "failed")) {
+      void submitWorkNaturalLanguage(lastWorkUserText, {
+        retry: true,
+        taskId: lastWorkRetryTaskId || activeTaskId || converseDraftTaskId,
+      });
+      return;
+    }
     if (!activeTaskId) return;
     const connected = await refreshConnectionFromCapabilities();
     if (!connected) {

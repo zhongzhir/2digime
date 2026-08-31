@@ -1242,11 +1242,15 @@ export class WorkRuntime {
     return output;
   }
 
-  async listTasks(input: { limit?: number } = {}): Promise<CommandMap['work.listTasks']['output']> {
+  async listTasks(input: { limit?: number; offset?: number } = {}): Promise<CommandMap['work.listTasks']['output']> {
     const { isExternalResearchCapabilityId } = await import(
       '../capability/external-capability-product'
     );
-    const tasks = await this.opts.taskService.list(input.limit);
+    const all = await this.opts.taskService.list();
+    const total = all.length;
+    const offset = Math.max(0, Number(input.offset) || 0);
+    const limit = input.limit == null ? undefined : Math.max(0, Number(input.limit));
+    const tasks = limit == null ? all.slice(offset) : all.slice(offset, offset + limit);
     const result: CommandMap['work.listTasks']['output']['tasks'] = [];
     for (const task of tasks) {
       const jobs = await this.opts.jobStore.listByTask(task.id);
@@ -1296,7 +1300,8 @@ export class WorkRuntime {
         activityTime: String(t.activityTime || ''),
       })),
     );
-    return { tasks: sorted };
+    const hasMore = offset + sorted.length < total;
+    return { tasks: sorted, total, hasMore };
   }
 
   private async resolveSoftwareOutcomeHint(
@@ -2574,16 +2579,39 @@ export class WorkRuntime {
         }
 
         // 文本硬缺陷：主题偏离 / 修订无实质变化 / 「不少于」字数
+        // 质量门失败须保留模型原始产出供诊断，且不得冒充模型不可用。
         if (outcome.checkKind === 'text') {
           const hardDefect = outcome.defects.some((d) =>
             /主题未紧扣|几乎相同|修改说明未落实|不少于约/.test(d),
           );
           if (hardDefect) {
+            const qualityMessage = `成果未通过质量检查：${outcome.defects[0] || '未达到任务要求'}。这不是模型不可用。`;
+            try {
+              if (output) {
+                if (job.targetArtifactId) {
+                  await this.opts.artifactCommitter.appendCapabilityVersion({
+                    artifactId: job.targetArtifactId,
+                    jobId: job.id,
+                    output,
+                    note: 'quality_gate_kept_original',
+                  });
+                } else {
+                  await this.opts.artifactCommitter.commit({
+                    jobId: job.id,
+                    taskId: task.id,
+                    subjectId: task.subjectId,
+                    output,
+                  });
+                }
+              }
+            } catch {
+              /* 诊断保留失败仍标记质量门 */
+            }
             await this.failJob(
               job,
               'capability',
-              sanitizeMessage(outcome.defects[0] || '成果未达到任务要求'),
-              '请调整任务说明或修改要求后重试',
+              sanitizeMessage(qualityMessage),
+              '可查看已生成内容，调整要求后重试',
             );
             return;
           }

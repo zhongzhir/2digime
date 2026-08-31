@@ -5,6 +5,38 @@
 
 ---
 
+## 2026-08-31 · 稳定性收口（Owner 已验收安装包 · 提交）
+
+### 状态
+
+`stability_ui_accepted` / `not_mvp_ready` / `not_production_ready` / `not_pushed`
+
+分支：`build/subject-learning-availability-01`。收口前 HEAD：`54daf72`。工作区：`D:\Projects\Digital Me`。
+
+### 本轮已完成（Owner 已接受）
+
+1. **任务串台**：Job 监视、做事对话、成果加载、失败说明、材料摘要在 `await` 后核对 taskId / uiEpoch / 做事页模式；迟到结果可写所属 Task，不得画到另一任务界面。
+2. **等待与取消**：发送中显示已等待秒数；约 8 秒后可取消；`shell:conversationCancel` / `shell:cancelWorkRequest` 中止 AbortSignal；失败分类为繁忙/网络/超时/取消/格式异常；原请求可一键重试，不重复写用户轮、不新建 Task。
+3. **新建任务双入口**：上下入口都走 `work.converse`；处理中提示「上一句还在发送中」，不悄悄丢掉。
+4. **任务列表**：侧栏可滚动；`work.listTasks` 支持 offset / total / hasMore；提供「加载更早的任务」。
+5. **GitHub 地址**：`github.com\zhongzhir\2digime` 后紧挨汉字仍解析为 owner `zhongzhir`、repo `2digime`；解析失败为 `parse_error`，不说没有互联网。
+6. **503 与 PPT 质量门**：交付格式词不进主题提取；503 →「模型服务当前繁忙」；质量门失败保留原始产出并标明不是模型不可用。
+
+### 验证
+
+1. `git diff --check`、`npm run build`（tsc）通过。
+2. 完整 `npm test`：**1017** / **982** pass / **29** fail / **6** skip。失败集合与修改前相同。
+3. Owner 对安装包手动测试结论：**可以通过。**
+
+### 边界
+
+1. **未推送**远程。
+2. **`digitalme-v2/` 未纳入、未改动。**
+3. 验收包：`D:\Projects\Digital Me\release-staging\v2-20260831T120305Z-54daf726\DigitalMeV2-0.1.0-win-x64.zip`；ZIP SHA-256：`75363beafbca2553b6f3cdc41b7414861865fa8d1f902ee152f4e3c02d816fb6`。该包在提交前由工作区打出，含本轮改动；元数据 gitHead 仍为 `54daf72`。本轮收口不重打安装包。
+4. GENERAL-TASK-CLOSURE-01 仍为规划、未实施。本轮不自行启动 P0。
+
+---
+
 ## 2026-08-31 · 使用反馈闭环收口（Owner 已验收 · 提交 · 打包）
 
 ### 状态

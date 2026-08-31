@@ -289,8 +289,9 @@
               <label for="chat-input">你想说的话</label>
               <textarea id="chat-input" rows="3" placeholder="例如：我最近在做产品验收，希望你记得这一点。"></textarea>
             </div>
-            <div class="row">
+              <div class="row">
               <button type="button" id="btn-chat-send" class="primary">发送</button>
+              <button type="button" id="btn-chat-cancel" class="ghost" hidden>取消</button>
               <button type="button" id="btn-chat-retry" class="ghost" hidden>重试回复</button>
               <button type="button" id="btn-chat-to-task">转为任务</button>
             </div>
@@ -422,6 +423,7 @@
                 <button type="button" id="btn-new-task" class="primary">新建任务</button>
               </div>
               <ul id="task-list" class="task-list"></ul>
+              <button type="button" id="btn-task-list-more" class="ghost task-list-more" hidden>加载更早的任务</button>
               <p id="task-empty" class="empty-hint">还没有任务。写下目标后开始。</p>
             </aside>
 
@@ -456,7 +458,9 @@
                         </label>
                         <div class="row goal-send-row">
                           <button type="button" id="btn-goal-send" class="primary">发送给 Digital Me</button>
+                          <button type="button" id="btn-goal-cancel" class="ghost" hidden>取消</button>
                         </div>
+                        <p class="muted tiny" id="goal-compose-hint">新建任务时，上方目标框与下方输入框都会进入同一条对话链路。</p>
                         <div id="goal-examples" class="goal-examples" aria-label="任务示例">
                           <button type="button" class="goal-example ghost" data-goal-example="修改这个项目中的登录页，并运行相关测试">修改这个项目中的登录页，并运行相关测试</button>
                           <button type="button" class="goal-example ghost" data-goal-example="分析这些材料，形成一份投资判断">分析这些材料，形成一份投资判断</button>
@@ -545,6 +549,7 @@
                   </label>
                   <div class="row work-nl-actions">
                     <button type="button" id="btn-work-nl-send" class="primary">发送</button>
+                    <button type="button" id="btn-work-nl-cancel" class="ghost" hidden>取消</button>
                     <button type="button" id="btn-work-nl-attach" class="ghost" hidden>添加材料</button>
                     <p id="work-nl-hint" class="muted tiny">采用前可随时继续交流；快捷按钮只是辅助。</p>
                   </div>

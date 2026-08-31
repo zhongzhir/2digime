@@ -62,6 +62,9 @@ export function dispatchOutcomeCheck(input: {
       ...(input.hardBoundaryTexts ? { hardBoundaryTexts: input.hardBoundaryTexts } : {}),
       ...(input.previousText ? { previousText: input.previousText } : {}),
       ...(input.revisionRequest ? { revisionRequest: input.revisionRequest } : {}),
+      ...(input.requestedArtifactType
+        ? { requestedArtifactType: input.requestedArtifactType }
+        : {}),
     });
     return { ...base, checkKind: 'text' };
   }

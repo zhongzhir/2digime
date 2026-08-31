@@ -2,17 +2,18 @@
 
 版本：v0.4
 状态：持续更新
-最后更新：2026-08-31（使用反馈闭环已 Owner 现场验收；本提交收口。**不是** `mvp_ready` / `production_ready`；**未推送**）
+最后更新：2026-08-31（稳定性收口已 Owner 现场验收安装包；本提交收口。**不是** `mvp_ready` / `production_ready`；**未推送**）
 
-> **当前工作树状态（2026-08-31 · 使用反馈闭环收口）**：
+> **当前工作树状态（2026-08-31 · 稳定性收口）**：
 > - 当前分支：`build/subject-learning-availability-01`
-> - 收口前提交基线 HEAD：`eef1eb4`
+> - 收口前提交基线 HEAD：`54daf72`（使用反馈闭环：滚动、资料跨模块、公开网页/GitHub、SSRF、PPT）
 > - 工作区：`D:\Projects\Digital Me`
-> - Owner **已现场验收**本轮修复，并授权收口、提交、按现有方式打包。本条覆盖本轮已验收范围，**不是** `mvp_ready` / `production_ready`。
-> - `digitalme-v2/` 仍是未跟踪目录；未删除、移动、覆盖或纳入本次提交。
-> - 本轮已完成并已验收：对话纵向滚动与发送钮可见；主体资料跨对话/做事检索；公开网页只读查询与 GitHub Releases/审计；公开 HTTP DNS/重定向 SSRF（含生产 `pageRead` 钉死 IP）；PPT 语义版式（流程/时间线/对照/KPI/结论）。
-> - 已自动验证：专项测试（滚动、资料、公开网页/GitHub、SSRF、PPT）通过。最近一次完整 `npm test`：**1005** 项、**970** 通过、**29** 失败、**6** skipped；失败名单与修改前 29 项相同，无新增失败。
-> - 下一阶段计划：[`docs/plans/GENERAL-TASK-CLOSURE-01.md`](docs/plans/GENERAL-TASK-CLOSURE-01.md)（仍为 `planned / not_implemented`）。本提交满足其「独立提交」启动条件后，才可实施 P0。不得把 GitHub 审计专项兜底描述成已经覆盖所有未知任务。
+> - Owner **已现场验收**本轮稳定性修复（安装包手动测试「可以通过」），并授权收口、提交。本条覆盖本轮已验收范围，**不是** `mvp_ready` / `production_ready`。
+> - `digitalme-v2/` 仍是未跟踪目录；未删除、移动、覆盖或纳入本次提交。`release-staging/` 被 gitignore，不纳入提交。
+> - 本轮已完成并已验收：任务串台隔离（异步结果按 taskId/epoch 核对）；对话等待秒数与取消；新建任务双入口不丢句；任务列表可滚动并加载更早记录；GitHub 地址后紧挨汉字仍解析 owner/repo；503 与 PPT 质量门分文案。
+> - 已自动验证：本轮专项（串台/取消/分页/GitHub 解析/503 文案）通过。完整 `npm test`：**1017** 项、**982** 通过、**29** 失败、**6** skipped；失败数与修改前相同，无本轮新增失败。
+> - 验收安装包：`release-staging/v2-20260831T120305Z-54daf726/DigitalMeV2-0.1.0-win-x64.zip`（提交前工作区打包，含本轮改动；元数据 gitHead 仍为 `54daf72`）。
+> - 下一阶段计划：[`docs/plans/GENERAL-TASK-CLOSURE-01.md`](docs/plans/GENERAL-TASK-CLOSURE-01.md)（仍为 `planned / not_implemented`）。不得把 GitHub 审计专项兜底描述成已经覆盖所有未知任务。本轮不自行启动 P0。
 > - **仍未扩展**：通用任务外部交接闭环（P0）、受控能力发现（P1）、可信工具目录（P2）；未知任务仍可能落入 `general → document`。
 >
 > **当前行动准则（2026-08-04）**：

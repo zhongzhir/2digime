@@ -93,6 +93,7 @@ export type GitHubFailureClass =
   | 'network'
   | 'empty'
   | 'invalid'
+  | 'parse_error'
   | 'ssrf'
   | 'content_type'
   | 'too_large'
@@ -145,8 +146,9 @@ export interface GitHubFetchBlocked {
 
 export type GitHubFetchResult = GitHubFetchOk | GitHubFetchBlocked;
 
+/** owner/repo 只消费 GitHub 合法字符；中文/标点视为结束，不得进入仓库名。 */
 const GITHUB_HOST_RE =
-  /(?:https?:\/\/)?(?:www\.)?github\.com\/([A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?)(?:\/([A-Za-z0-9._-]+))?(?:\.git)?(?=$|[\s?#，。,；;\\])/i;
+  /(?:https?:\/\/)?(?:www\.)?github\.com\/([A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?)(?:\/([A-Za-z0-9._-]{1,100}))?(?:\.git)?(?![A-Za-z0-9._-])/i;
 
 /** 仅当确定是 GitHub 主机时把 `\` 写成 `/` 并补全 https，不改写普通路径。 */
 export function normalizeUserFacingUrls(text: string): string {

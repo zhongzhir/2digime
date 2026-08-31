@@ -49,6 +49,8 @@ export interface PublicWebQuery {
   normalizedGoal: string;
   target?: GitHubAuditTarget;
   pageUrl?: string;
+  /** GitHub 主机出现但无法抽出合法 owner/repo；不得当网络故障。 */
+  parseError?: 'github_unparsed';
 }
 
 export interface PublicWebQueryOk {
@@ -107,10 +109,19 @@ export function classifyPublicWebQuery(text: string): PublicWebQuery | null {
     }
     return { kind: 'github_overview', originalGoal: original, normalizedGoal, target };
   }
-  const pageMatch = /https?:\/\/[^\s\\]+/i.exec(normalizedGoal);
+  if (/github\.com/i.test(normalizedGoal)) {
+    return {
+      kind: 'github_overview',
+      originalGoal: original,
+      normalizedGoal,
+      parseError: 'github_unparsed',
+    };
+  }
+  const pageMatch = /https?:\/\/[^\s?#]+/i.exec(normalizedGoal);
   if (pageMatch && VISIT_SIGNAL_RE.test(normalizedGoal)) {
     try {
-      const pageUrl = assertSafePublicHttpUrl(pageMatch[0]).toString();
+      const rawUrl = String(pageMatch[0]).replace(/[^\x21-\x7E]+.*$/, '');
+      const pageUrl = assertSafePublicHttpUrl(rawUrl).toString();
       return { kind: 'public_page', originalGoal: original, normalizedGoal, pageUrl };
     } catch {
       return null;
@@ -146,6 +157,9 @@ function failureClassLabel(cls: PublicWebQueryBlocked['diagnostics']['failureCla
       return '内容类型不受支持';
     case 'too_large':
       return '响应过大';
+    case 'parse_error':
+    case 'invalid':
+      return '地址无法解析';
     default:
       return '网络失败';
   }
@@ -292,6 +306,16 @@ export async function executePublicWebQuery(
       defaultSafePublicHttpGet(url, headers, MAX_REDIRECTS, {
         ...(options.lookupAddresses ? { lookupAddresses: options.lookupAddresses } : {}),
       }));
+  if (query.parseError) {
+    return blocked(
+      query.kind,
+      query,
+      '无法从这句话里解析出有效的 GitHub 仓库地址。这不是网络故障。',
+      traces,
+      0,
+      'parse_error',
+    );
+  }
   if (query.kind === 'github_audit') {
     return blocked('github_audit', query, '这项请求应按代码审计处理。', traces, 0, 'invalid');
   }
@@ -598,7 +622,10 @@ function blocked(
     ok: false,
     ...(kind ? { kind } : {}),
     blocker,
-    nextStep: '请检查网络或连接其他只读能力后，对同一任务点「重试」。',
+    nextStep:
+      failureClass === 'parse_error' || failureClass === 'invalid'
+        ? '请给出 github.com/所有者/仓库 这样的地址后再试。这不是网络故障。'
+        : '请检查网络或连接其他只读能力后，对同一任务点「重试」。',
     copyablePrompt: copyableLookupPrompt(query),
     diagnostics: {
       stage: extra?.stage || 'lookup',

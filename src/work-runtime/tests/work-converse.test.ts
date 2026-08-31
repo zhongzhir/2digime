@@ -13,12 +13,14 @@ import * as path from 'node:path';
 import { createDigitalMeRuntime, type DigitalMeRuntime } from '../../runtime/digitalme-runtime';
 import { createCommandBus } from '../../runtime/command-bus';
 import type { ChatMessage } from '../../infrastructure/model-http';
+import { ModelHttpError } from '../../infrastructure/model-http';
 import {
   WORK_CONVERSE_INTENTS,
   decideConverseEffects,
   parseConverseModelOutput,
   recentTurnsWindow,
   CONVERSE_DEGRADED_NOTICE,
+  CONVERSE_BUSY_NOTICE,
   CONVERSE_PLAN_FAILED_NOTICE,
   isWorkConverseIntent,
   type WorkConverseIntent,
@@ -473,5 +475,51 @@ describe('D11-A work.converse — AI 意图与对话中枢', () => {
     for (const intent of WORK_CONVERSE_INTENTS) {
       assert.ok(covered.has(intent), `intent not covered by dataset: ${intent}`);
     }
+  });
+
+  it('503 繁忙与模型不可用分开；重试不得重复写入用户轮', async () => {
+    const root = await tempDir('busy-retry');
+    let calls = 0;
+    const chat = async () => {
+      calls += 1;
+      if (calls === 1) {
+        throw new ModelHttpError('server_error', 'high demand (503)', 503);
+      }
+      return {
+        text: JSON.stringify({
+          intent: 'add_goal_info',
+          confidence: 0.92,
+          reply: '规划已经写好，请看下面。',
+          planUpdate:
+            '目标：周报\n交付：可读文档\n路径：先出提纲\n准备：无\n边界：不提交',
+        }),
+      };
+    };
+    const { runtime, bus } = await makeRuntime(root, chat);
+    await bus.invoke('subject.createPackage', { displayName: '繁忙主体', targetDir: path.join(root, 'pkg') });
+    const first = await bus.invoke('work.converse', { text: '写一份本周工作周报' });
+    assert.equal(first.degraded, true);
+    assert.equal(first.reply, CONVERSE_BUSY_NOTICE);
+    assert.match(first.reply, /繁忙/);
+    assert.doesNotMatch(first.reply, /无法理解/);
+    assert.equal(first.modelFailureKind, 'busy');
+    const afterFail = await runtime.getTask({ taskId: first.taskId });
+    const userTurns1 = (afterFail.task.meta?.conversation?.turns || []).filter((t) => t.role === 'user');
+    assert.equal(userTurns1.length, 1);
+    assert.ok(first.userTurnId);
+    const retryTurnId = String(first.userTurnId);
+    const retry = await bus.invoke('work.converse', {
+      taskId: first.taskId,
+      text: '写一份本周工作周报',
+      retryOfUserTurnId: retryTurnId,
+    });
+    assert.equal(retry.createdTask, false);
+    assert.equal(retry.degraded, false);
+    assert.match(retry.reply, /规划已经写好/);
+    const afterOk = await runtime.getTask({ taskId: first.taskId });
+    const userTurns2 = (afterOk.task.meta?.conversation?.turns || []).filter((t) => t.role === 'user');
+    assert.equal(userTurns2.length, 1, '同一请求重试不得再写用户轮');
+    assert.equal(await jobCountForTask(runtime, first.taskId), 0);
+    await runtime.stop();
   });
 });

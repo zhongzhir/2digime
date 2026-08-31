@@ -87,6 +87,27 @@ test('checkOutcome: pass / targeted_revision / blocked', () => {
   assert.equal(boundary.verdict, 'blocked');
 });
 
+test('PPT 是交付格式：正文不出现字面量 PPT 不得误杀完整成果', () => {
+  const body = [
+    '# 航天产品进展汇报',
+    '',
+    '## 本月重点',
+    '',
+    '发射窗口评估已经完成，风险项已关闭。补充足够长度以保证可读完整。',
+    '',
+    '## 结论',
+    '',
+    '按既定计划推进下阶段地面试验。',
+  ].join('\n');
+  const pass = checkOutcome({
+    goal: '做一份航天产品汇报 PPT',
+    text: body,
+    requestedArtifactType: 'document',
+  });
+  assert.equal(pass.verdict, 'pass');
+  assert.ok(!pass.defects.some((d) => /PPT|pptx/i.test(d)), '不得因缺少字面量 PPT 记缺陷');
+});
+
 test('buildTargetedRevisionRequest only lists defects', () => {
   const req = buildTargetedRevisionRequest(['缺标题', '触碰边界']);
   assert.match(req, /缺标题/);

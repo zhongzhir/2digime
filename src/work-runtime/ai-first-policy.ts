@@ -46,6 +46,7 @@ export function checkOutcome(input: {
   previousText?: string;
   /** 用户修改说明。 */
   revisionRequest?: string;
+  requestedArtifactType?: string;
 }): OutcomeCheckResult {
   const profile = input.profile || chooseExecutionProfile({ goal: input.goal });
   const text = String(input.text || '').trim();
@@ -59,11 +60,16 @@ export function checkOutcome(input: {
     defects.push('成果缺少清晰标题或结构，请整理为可直接使用的文档。');
   }
 
-  // 主题：任务目标中的专名/「关于X」必须出现在正文
-  const topics = extractTopicTerms(goal);
+  // 主题：任务目标中的专名/「关于X」必须出现在正文。交付格式词（PPT/Word）不是主题。
+  const topics = extractTopicTerms(goal).filter((t) => !isDeliveryFormatTerm(t));
   const missingTopics = topics.filter((t) => !includesIgnoreCase(text, t));
   if (missingTopics.length > 0) {
     defects.push(`成果主题未紧扣任务要求：缺少「${missingTopics.slice(0, 3).join('、')}」。`);
+  }
+
+  if (isPresentationDelivery(goal, input.requestedArtifactType)) {
+    const presentationDefects = checkPresentationStructure(text, goal);
+    defects.push(...presentationDefects);
   }
 
   // 明确字数：不少于 N 为硬约束；约 N 仅在严重偏短时记缺陷
@@ -148,6 +154,28 @@ function countContentChars(text: string): number {
 
 function includesIgnoreCase(hay: string, needle: string): boolean {
   return hay.toLowerCase().includes(String(needle || '').toLowerCase());
+}
+
+const DELIVERY_FORMAT_RE =
+  /^(ppt|pptx|pdf|doc|docx|xls|xlsx|csv|html|md|txt|zip|word|excel|powerpoint|keynote|markdown)$/i;
+
+function isDeliveryFormatTerm(term: string): boolean {
+  return DELIVERY_FORMAT_RE.test(String(term || '').trim());
+}
+
+export function isPresentationDelivery(goal: string, requestedArtifactType?: string): boolean {
+  const t = String(goal || '');
+  if (/(?:ppt|pptx|powerpoint|演示文稿|幻灯片)/i.test(t)) return true;
+  return String(requestedArtifactType || '') === 'presentation';
+}
+
+function checkPresentationStructure(text: string, _goal: string): string[] {
+  const defects: string[] = [];
+  const headings = [...text.matchAll(/^#+\s+\S+/gm)];
+  if (headings.length === 0 && text.replace(/\s+/g, '').length >= 80) {
+    defects.push('演示文稿缺少页面结构：需要封面、核心内容和结论等独立标题。');
+  }
+  return defects;
 }
 
 function extractMustHints(goal: string): string[] {

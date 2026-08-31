@@ -48,6 +48,64 @@ test('反斜杠与斜杠 GitHub URL 都能解析，release 查询不是代码审
   assert.match(String(intent.userFacingNotice), /Release/);
 });
 
+const USER_GITHUB_SENTENCE =
+  '帮我看一下 github.com\\zhongzhir\\2digime项目发布的release版本正常可安装使用吗？';
+
+test('现场原句：中文紧挨仓库名时仍解析 owner/repo，且不把问题正文拼进 URL', async () => {
+  const parsed = parseGitHubTarget(USER_GITHUB_SENTENCE);
+  assert.ok(parsed, '必须解析出 GitHub 目标');
+  assert.equal(parsed.kind, 'repo');
+  assert.equal(parsed.owner, 'zhongzhir');
+  assert.equal(parsed.repo, '2digime');
+  const classified = classifyPublicWebQuery(USER_GITHUB_SENTENCE);
+  assert.ok(classified);
+  assert.equal(classified.kind, 'github_releases');
+  assert.equal(classified.target?.owner, 'zhongzhir');
+  assert.equal(classified.target?.repo, '2digime');
+  assert.equal(classified.parseError, undefined);
+  const seen: string[] = [];
+  const result = await executePublicWebQuery(classified, {
+    httpGet: async (url) => {
+      seen.push(url);
+      if (url === 'https://api.github.com/repos/zhongzhir/2digime') {
+        return {
+          status: 200,
+          body: JSON.stringify({
+            full_name: 'zhongzhir/2digime',
+            default_branch: 'main',
+            html_url: 'https://github.com/zhongzhir/2digime',
+          }),
+        };
+      }
+      if (url === 'https://api.github.com/repos/zhongzhir/2digime/releases') {
+        return { status: 200, body: '[]' };
+      }
+      return { status: 404, body: 'unexpected ' + url };
+    },
+  });
+  assert.ok(seen.includes('https://api.github.com/repos/zhongzhir/2digime/releases'));
+  assert.ok(seen.every((u) => !/项目|发布|版本|安装/.test(u)), '不得请求含中文问题正文的 GitHub URL');
+  assert.equal(result.ok, true);
+});
+
+test('GitHub 地址解析失败不得说成没有互联网', async () => {
+  const q = classifyPublicWebQuery('帮我看一下 github.com 这个网站');
+  assert.ok(q);
+  const blocked = await executePublicWebQuery(q!, {
+    httpGet: async () => {
+      throw new Error('should not fetch');
+    },
+  });
+  assert.equal(blocked.ok, false);
+  if (!blocked.ok) {
+    assert.equal(blocked.diagnostics.failureClass, 'parse_error');
+    const text = formatPublicWebFailureActionable(blocked);
+    assert.match(text, /地址/);
+    assert.doesNotMatch(text, /没有互联网/);
+    assert.match(text, /不是网络故障/);
+  }
+});
+
 test('Releases mock：有 release / 无 release / 404 / 限流 / DNS / TLS / 超时 / 恶意重定向', async () => {
   const targetGoal = RELEASE_GOAL_SLASH;
   const query = classifyPublicWebQuery(targetGoal)!;

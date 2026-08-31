@@ -29,6 +29,7 @@ function converseId(prefix: 'turn' | 'intent'): string {
   return `${prefix}_${randomUUID()}`;
 }
 import type { ChatMessage } from '../infrastructure/model-http';
+import { ModelHttpError } from '../infrastructure/model-http';
 import type {
   ContextRef,
   Task,
@@ -78,9 +79,72 @@ export const CONVERSE_CONTEXT_TURN_WINDOW = 12;
 
 /** 降级提示（结构性文案，允许确定性生成；不冒充 AI 情境回复）。 */
 export const CONVERSE_DEGRADED_NOTICE =
-  '我现在暂时无法理解你的这句话：理解能力需要的模型连接不可用。' +
-  '你仍然可以查看和打开已有成果，或使用明确的暂停、取消按钮；' +
-  '等模型恢复连接后，我会继续按你的话推进。这段话我已记录，不会丢失。';
+  '当前无法连接模型服务。这段话我已保留，不会丢失。模型恢复后可以直接重试，不必重新输入。' +
+  '你仍然可以查看和打开已有成果，或使用明确的暂停、取消。';
+
+export const CONVERSE_BUSY_NOTICE =
+  '模型服务当前繁忙，暂时无法处理。这段话我已保留，恢复后可以直接重试，不必重新输入。';
+
+export const CONVERSE_NETWORK_NOTICE =
+  '网络连接失败，暂时无法联系模型。这段话我已保留，网络恢复后可以直接重试。';
+
+export const CONVERSE_TIMEOUT_NOTICE =
+  '请求超时，模型在限定时间内没有返回。这段话我已保留，可以直接重试。';
+
+export const CONVERSE_CANCELLED_NOTICE =
+  '已取消本次请求。原文仍保留，需要时可以重试。';
+
+export const CONVERSE_BAD_RESPONSE_NOTICE =
+  '模型返回格式异常，我无法按合同解析这次回复。原文仍保留，可以直接重试。';
+
+export type ConverseModelFailureKind =
+  | 'unavailable'
+  | 'busy'
+  | 'network'
+  | 'timeout'
+  | 'cancelled'
+  | 'bad_response';
+
+export function classifyConverseModelFailure(err: unknown): ConverseModelFailureKind {
+  const kind = err instanceof ModelHttpError ? err.kind : (err as { kind?: string } | null)?.kind;
+  const status = err instanceof ModelHttpError ? err.status : (err as { status?: number } | null)?.status;
+  const msg = String((err as Error)?.message || err || '');
+  if (kind === 'aborted' || /request aborted|用户取消|已取消本次/i.test(msg)) return 'cancelled';
+  if (kind === 'timeout' || /timeout after|请求超时/i.test(msg)) return 'timeout';
+  if (kind === 'network' || /ENOTFOUND|ECONNREFUSED|network failure|fetch failed/i.test(msg)) {
+    return 'network';
+  }
+  if (
+    kind === 'server_error' ||
+    kind === 'rate_limited' ||
+    status === 503 ||
+    status === 429 ||
+    /high demand|503|temporarily unavailable|rate limited/i.test(msg)
+  ) {
+    return 'busy';
+  }
+  if (kind === 'bad_response' || /invalid SSE|stream produced no content/i.test(msg)) {
+    return 'bad_response';
+  }
+  return 'unavailable';
+}
+
+export function converseFailureNotice(kind: ConverseModelFailureKind): string {
+  switch (kind) {
+    case 'busy':
+      return CONVERSE_BUSY_NOTICE;
+    case 'network':
+      return CONVERSE_NETWORK_NOTICE;
+    case 'timeout':
+      return CONVERSE_TIMEOUT_NOTICE;
+    case 'cancelled':
+      return CONVERSE_CANCELLED_NOTICE;
+    case 'bad_response':
+      return CONVERSE_BAD_RESPONSE_NOTICE;
+    default:
+      return CONVERSE_DEGRADED_NOTICE;
+  }
+}
 
 /**
  * 语义歧义时的澄清提示（仅当模型已给出合法回复且判定需要补充时使用）。
@@ -414,6 +478,7 @@ export interface ConverseDecisionInput {
   userText?: string;
   consultContext?: ConsultTaskContext;
   pendingRevision?: TaskPendingRevisionRequest | null;
+  modelFailureKind?: ConverseModelFailureKind;
 }
 
 function applyQueuedRevision(decision: ConverseDecision, userText: string): void {
@@ -462,7 +527,7 @@ export function decideConverseEffects(input: ConverseDecisionInput): ConverseDec
         degraded: true,
       };
     }
-    return { ...base, reply: CONVERSE_DEGRADED_NOTICE, degraded: true };
+    return { ...base, reply: converseFailureNotice(input.modelFailureKind || 'unavailable'), degraded: true };
   }
   if (!input.parsed || !String(input.parsed.reply || '').trim()) {
     if (consult && input.consultContext) {
@@ -658,6 +723,10 @@ export interface WorkConverseInput {
    * 不把这句话当作 Owner 新决策，不授权开始/采用。
    */
   silentOutcomeExplain?: boolean;
+  /** 渲染层请求身份；取消时主进程按此中止。 */
+  requestId?: string;
+  /** 对已有用户轮重试：不得再写一条用户原文，也不得新建 Task。 */
+  retryOfUserTurnId?: string;
 }
 
 /** 任务对话身份捕获键：绑定本轮用户 turnId，同一任务多轮互不阻断，同 turn 可重放。 */
@@ -684,6 +753,8 @@ export interface WorkConverseResult {
   };
   /** 规划生成失败（模型合同失败）；Task 仍已持久化。 */
   planGenerationFailed?: boolean;
+  /** 模型失败分类（503/网络/超时/取消/格式），与质量门分开。 */
+  modelFailureKind?: ConverseModelFailureKind;
   /** 薄主链标记（若该 Task 走 thin_v1）。 */
   runtimePath?: 'legacy' | 'thin_v1';
   startAuthorized: boolean;
@@ -714,6 +785,12 @@ export async function runWorkConverse(
 
   let task: Task | null = null;
   let createdTask = false;
+  const retryOfUserTurnId = String(input.retryOfUserTurnId || '').trim();
+  if (retryOfUserTurnId && !input.taskId) {
+    throw Object.assign(new Error('retry requires existing taskId'), {
+      actionable: '请在原任务上重试，不要重新提交',
+    });
+  }
   if (input.taskId) {
     task = await deps.getTask(input.taskId);
     if (!task) throw new Error(`task not found: ${input.taskId}`);
@@ -729,6 +806,7 @@ export async function runWorkConverse(
   const modelAvailable = deps.chat !== null;
   let parsed: ParsedConverseOutput | null = null;
   let chatFailed = false;
+  let modelFailureKind: ConverseModelFailureKind | undefined;
   let forceUnparseable = false;
   const unparseableFlag = String(process.env.DIGITALME_20A_FORCE_UNPARSEABLE || '').trim();
   if (unparseableFlag) {
@@ -808,8 +886,9 @@ export async function runWorkConverse(
         const repaired = parseConverseModelOutput(planRetry.text);
         if (repaired) parsed = repaired;
       }
-    } catch {
+    } catch (err) {
       chatFailed = true;
+      modelFailureKind = classifyConverseModelFailure(err);
     }
   }
 
@@ -833,6 +912,7 @@ export async function runWorkConverse(
     userText: text,
     consultContext,
     pendingRevision: task.meta?.pendingRevisionRequest ?? null,
+    ...(modelFailureKind ? { modelFailureKind } : {}),
   });
   if (
     /已经加入计划|已经记下|已记下/.test(decision.reply) &&
@@ -990,16 +1070,17 @@ export async function runWorkConverse(
     content: decision.reply,
     createdAt: nowIso(),
   };
+  const omitUserTurn = !!input.silentOutcomeExplain || !!retryOfUserTurnId;
   const conclusion: TaskIntentConclusion = {
     intentId,
-    turnId: input.silentOutcomeExplain ? replyTurn.turnId : userTurn.turnId,
+    turnId: omitUserTurn ? replyTurn.turnId : userTurn.turnId,
     intent: decision.intent,
     confidence: decision.confidence,
     ...(decision.needsClarification ? { needsClarification: true } : {}),
     ...(decision.degraded ? { degraded: true } : {}),
     createdAt: nowIso(),
   };
-  const persistedTurns = input.silentOutcomeExplain ? [replyTurn] : [userTurn, replyTurn];
+  const persistedTurns = omitUserTurn ? [replyTurn] : [userTurn, replyTurn];
   await deps.appendConversation(task.id, {
     turns: persistedTurns,
     intents: [conclusion],
@@ -1047,9 +1128,14 @@ export async function runWorkConverse(
     needsClarification: decision.needsClarification,
     degraded: decision.degraded,
     newTurns: persistedTurns,
-    ...(!input.silentOutcomeExplain ? { userTurnId: userTurn.turnId } : {}),
+    ...(!omitUserTurn
+      ? { userTurnId: userTurn.turnId }
+      : retryOfUserTurnId
+        ? { userTurnId: retryOfUserTurnId }
+        : {}),
     ...(planOut ? { plan: planOut } : {}),
     ...(planGenerationFailed ? { planGenerationFailed: true } : {}),
+    ...(modelFailureKind ? { modelFailureKind } : {}),
     ...(thin ? { runtimePath: 'thin_v1' as const } : {}),
     startAuthorized: decision.startAuthorized,
     ...(decision.startMode ? { startMode: decision.startMode } : {}),

@@ -415,6 +415,37 @@ function registerIpc() {
         return bus.invoke(name, { ...input, targetPath });
       }
 
+      if (name === "work.converse") {
+        const requestId = input && input.requestId ? String(input.requestId) : "";
+        const ac = new AbortController();
+        if (requestId) workConverseAborts.set(requestId, ac);
+        if (runtime && typeof runtime.setConverseAbortSignal === "function") {
+          runtime.setConverseAbortSignal(ac.signal);
+        }
+        const delayMs = Number(process.env.DIGITALME_V2_CONVERSE_DELAY_MS || "");
+        try {
+          if (Number.isFinite(delayMs) && delayMs > 0) {
+            await new Promise((resolve, reject) => {
+              const timer = setTimeout(resolve, delayMs);
+              ac.signal.addEventListener(
+                "abort",
+                () => {
+                  clearTimeout(timer);
+                  reject(Object.assign(new Error("request aborted by caller"), { kind: "aborted" }));
+                },
+                { once: true },
+              );
+            });
+          }
+          return await bus.invoke(name, input || {});
+        } finally {
+          if (runtime && typeof runtime.setConverseAbortSignal === "function") {
+            runtime.setConverseAbortSignal(null);
+          }
+          if (requestId) workConverseAborts.delete(requestId);
+        }
+      }
+
       return bus.invoke(name, input || {});
     } catch (err) {
       throw sanitizeCommandError(err);
@@ -844,6 +875,8 @@ function registerIpc() {
 
   /** 清空对话时递增；仅内存，用于丢弃迟到回复。不落盘、不新增对话库。 */
   let conversationGeneration = 0;
+  let conversationAbort = null;
+  const workConverseAborts = new Map();
 
   function isGrowthCaptureStatusRow(row) {
     return !!(row && row.kind === "growth_capture_status" && typeof row.turnId === "string");
@@ -998,6 +1031,18 @@ function registerIpc() {
    * 回复完成后由主进程调度成长捕获（不阻塞回复；renderer 不再旁路提交）。
    */
   ipcMain.handle("shell:conversationReply", async (_evt, input) => {
+    conversationGeneration += 1;
+    const replyGeneration = conversationGeneration;
+    if (conversationAbort) {
+      try {
+        conversationAbort.abort();
+      } catch {
+        /* ignore */
+      }
+    }
+    conversationAbort = new AbortController();
+    const thisAbort = conversationAbort;
+    const requestId = input && input.requestId ? String(input.requestId) : "";
     const userText = String((input && input.text) || "").trim();
     if (!userText) {
       throw Object.assign(new Error("请先写一句话"), {
@@ -1166,7 +1211,6 @@ function registerIpc() {
 
     const skipGrowthCapture = !!(input && input.skipGrowthCapture);
     const userTurn = findLatestUserTurnId(file);
-    const replyGeneration = conversationGeneration;
 
     // 01C/01D：主体事实查询 + 本人推断查询 → 受控回复（直接由 userVisibleFacts 生成），
     // 不调用模型、不做推断、不添加动机/性格/职业/价值/使用场景解释。
@@ -1261,6 +1305,26 @@ function registerIpc() {
     };
 
     if (isElectronTestHarness() && !apiKey) {
+      const delayMs = Number(process.env.DIGITALME_V2_CHAT_DELAY_MS || "");
+      if (Number.isFinite(delayMs) && delayMs > 0) {
+        await new Promise((resolve, reject) => {
+          const timer = setTimeout(resolve, delayMs);
+          thisAbort.signal.addEventListener(
+            "abort",
+            () => {
+              clearTimeout(timer);
+              reject(Object.assign(new Error("request aborted by caller"), { kind: "aborted" }));
+            },
+            { once: true },
+          );
+        }).catch((err) => {
+          if (replyGeneration !== conversationGeneration) return;
+          throw err;
+        });
+      }
+      if (replyGeneration !== conversationGeneration || thisAbort.signal.aborted) {
+        return { text: "", status: "cancelled", finishReason: "cleared" };
+      }
       const text = "已收到。";
       scheduleGrowth(text);
       return {
@@ -1366,6 +1430,20 @@ function registerIpc() {
     }
 
     try {
+      const delayMs = Number(process.env.DIGITALME_V2_CHAT_DELAY_MS || "");
+      if (Number.isFinite(delayMs) && delayMs > 0) {
+        await new Promise((resolve, reject) => {
+          const timer = setTimeout(resolve, delayMs);
+          thisAbort.signal.addEventListener(
+            "abort",
+            () => {
+              clearTimeout(timer);
+              reject(Object.assign(new Error("request aborted by caller"), { kind: "aborted" }));
+            },
+            { once: true },
+          );
+        });
+      }
       const result = await chatComplete({
         baseUrl: model.openaiCompatible.baseUrl,
         apiKey,
@@ -1374,6 +1452,7 @@ function registerIpc() {
         temperature: 0.4,
         maxTokens,
         timeoutMs: model.openaiCompatible.timeoutMs || 180_000,
+        signal: thisAbort.signal,
       });
       if (replyGeneration !== conversationGeneration) {
         return { text: "", status: "cancelled", finishReason: "cleared" };
@@ -1413,17 +1492,24 @@ function registerIpc() {
       scheduleGrowth("");
       if (err instanceof ModelHttpError || (err && err.name === "ModelHttpError")) {
         const kind = err.kind || "";
-        if (kind === "timeout" || kind === "aborted" || kind === "network") {
+        if (kind === "aborted") {
+          return { text: "", status: "cancelled", finishReason: "cleared" };
+        }
+        if (kind === "timeout" || kind === "network") {
           const errObj = new Error(
-            `${String(err.message || "模型调用中断").slice(0, 300)}。回复未完成，可重试`,
+            kind === "timeout"
+              ? "请求超时，模型在限定时间内没有返回。可重试"
+              : "网络连接失败，暂时无法联系模型。可重试",
           );
           errObj.code = "CHAT_INCOMPLETE";
+          errObj.kind = kind;
           throw errObj;
         }
         let actionable = "请稍后重试";
         if (kind === "unauthorized") actionable = "请检查模型凭证是否有效";
-        else if (kind === "rate_limited") actionable = "请求过于频繁，请稍后再试";
-        else if (kind === "server_error") actionable = "模型服务暂时不可用，请稍后重试";
+        else if (kind === "rate_limited" || kind === "server_error") {
+          actionable = "模型服务当前繁忙，请稍后重试";
+        }
         throw new Error(`${String(err.message || "模型调用失败").slice(0, 300)}。${actionable}`);
       }
       if (err && typeof err.message === "string" && /请重试|请检查|请稍后|请先|可重试/.test(err.message)) {
@@ -1433,6 +1519,42 @@ function registerIpc() {
         `${String((err && err.message) || err || "模型调用失败").slice(0, 300)}。请稍后重试，或到设置中测试模型连接`,
       );
     }
+  });
+
+  ipcMain.handle("shell:conversationCancel", async () => {
+    conversationGeneration += 1;
+    if (conversationAbort) {
+      try {
+        conversationAbort.abort();
+      } catch {
+        /* ignore */
+      }
+      conversationAbort = null;
+    }
+    return { ok: true };
+  });
+
+  ipcMain.handle("shell:cancelWorkRequest", async (_evt, input) => {
+    const requestId = input && input.requestId ? String(input.requestId) : "";
+    if (requestId && workConverseAborts.has(requestId)) {
+      const ac = workConverseAborts.get(requestId);
+      try {
+        ac.abort();
+      } catch {
+        /* ignore */
+      }
+      workConverseAborts.delete(requestId);
+    } else {
+      for (const ac of workConverseAborts.values()) {
+        try {
+          ac.abort();
+        } catch {
+          /* ignore */
+        }
+      }
+      workConverseAborts.clear();
+    }
+    return { ok: true };
   });
 }
 

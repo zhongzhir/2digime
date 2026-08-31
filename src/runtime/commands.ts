@@ -507,7 +507,7 @@ export interface CommandMap {
     };
   };
   'work.listTasks': {
-    input: { limit?: number };
+    input: { limit?: number; offset?: number };
     output: {
       tasks: Array<{
         taskId: string;
@@ -518,6 +518,8 @@ export interface CommandMap {
         activityTime?: string;
         projectDir?: string;
       }>;
+      total?: number;
+      hasMore?: boolean;
     };
   };
   /**
@@ -534,6 +536,8 @@ export interface CommandMap {
       contextRefs?: ContextRef[];
       /** 薄主链：执行失败后由 Runtime 触发的结果说明，不作为 Owner 新决策。 */
       silentOutcomeExplain?: boolean;
+      requestId?: string;
+      retryOfUserTurnId?: string;
     };
     output: {
       taskId: string;
@@ -564,6 +568,13 @@ export interface CommandMap {
       };
       /** 规划生成失败（模型合同失败）；Task 仍已持久化。 */
       planGenerationFailed?: boolean;
+      modelFailureKind?:
+        | 'unavailable'
+        | 'busy'
+        | 'network'
+        | 'timeout'
+        | 'cancelled'
+        | 'bad_response';
       /** 渲染层据此走确定性执行入口；不表示已执行。 */
       startAuthorized: boolean;
       startMode?: 'new_execution' | 'revision';
