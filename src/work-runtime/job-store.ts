@@ -34,4 +34,11 @@ export class JobStore {
     const jobs = await this.listByTask(taskId);
     return jobs.find((job) => !isTerminal(job.status));
   }
+
+  async findByOwnerTurnId(taskId: string, ownerTurnId: string): Promise<ExecutionJob | undefined> {
+    const turnId = String(ownerTurnId || '').trim();
+    if (!turnId) return undefined;
+    const jobs = await this.listByTask(taskId);
+    return jobs.find((job) => String(job.ownerTurnId || '').trim() === turnId);
+  }
 }

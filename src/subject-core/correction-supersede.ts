@@ -165,8 +165,8 @@ export function matchCorrectionTarget(input: {
 
 /**
  * 为纠正后的候选事件写入 supersede 关系。
- * 仅处理 preference_observed（低风险、易纠正、可静默）；
- * 身份/目标/原则/边界仍走既有 must_confirm + conflict 检测。
+ * 处理 preference_observed，以及带 self_name 的身份纠正（新姓名 supersede 旧姓名）。
+ * 目标/原则/边界仍走既有 must_confirm + conflict 检测。
  * existingEvents 提供已被确认的旧值作为 supersede 目标。
  */
 export function applyCorrectionSupersede(input: {
@@ -181,13 +181,28 @@ export function applyCorrectionSupersede(input: {
       : input.events.filter((e) => e.confidence === 'confirmed');
   for (const event of input.events) {
     if (event.confidence !== 'candidate') continue;
-    if (event.type !== 'preference_observed') continue;
-    if (!isCorrectionStatement(input.text) || !hasReplacementValue(input.text)) continue;
-    const target = matchCorrectionTarget({
-      text: input.text,
-      type: 'preference_observed',
-      events: confirmedList,
-    });
+    let target: GrowthEvent | null = null;
+    if (event.type === 'identity_clarified' && (event.payload.tags ?? []).includes('self_name')) {
+      if (!isCorrectionStatement(input.text)) continue;
+      const names = confirmedList
+        .filter(
+          (e) =>
+            e.type === 'identity_clarified' &&
+            (e.payload.tags ?? []).includes('self_name') &&
+            e.id !== event.id,
+        )
+        .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
+      target = names[0] ?? null;
+    } else if (event.type === 'preference_observed') {
+      if (!isCorrectionStatement(input.text) || !hasReplacementValue(input.text)) continue;
+      target = matchCorrectionTarget({
+        text: input.text,
+        type: 'preference_observed',
+        events: confirmedList,
+      });
+    } else {
+      continue;
+    }
     if (!target) continue;
     if (target.id === event.id) continue;
     event.payload = {

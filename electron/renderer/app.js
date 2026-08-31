@@ -163,10 +163,12 @@
     collabPageNew: document.getElementById("collab-page-new"),
     collabPageDetail: document.getElementById("collab-page-detail"),
     collabListActive: document.getElementById("collab-list-active"),
+    collabListPending: document.getElementById("collab-list-pending"),
     collabListDone: document.getElementById("collab-list-done"),
     collabListRevoked: document.getElementById("collab-list-revoked"),
     collabListOpportunities: document.getElementById("collab-list-opportunities"),
     collabEmptyActive: document.getElementById("collab-empty-active"),
+    collabEmptyPending: document.getElementById("collab-empty-pending"),
     collabEmptyDone: document.getElementById("collab-empty-done"),
     collabEmptyRevoked: document.getElementById("collab-empty-revoked"),
     collabEmptyOpportunities: document.getElementById("collab-empty-opportunities"),
@@ -181,6 +183,8 @@
     btnCollabPageImportPeer: document.getElementById("btn-collab-page-import-peer"),
     collabPagePeerEmpty: document.getElementById("collab-page-peer-empty"),
     collabPageSubtask: document.getElementById("collab-page-subtask"),
+    collabPageLocalMaterialHint: document.getElementById("collab-page-local-material-hint"),
+    collabLocalMaterialHint: document.getElementById("collab-local-material-hint"),
     collabPageExtra: document.getElementById("collab-page-extra"),
     btnCollabPageAddFiles: document.getElementById("btn-collab-page-add-files"),
     collabPageMaterialChecks: document.getElementById("collab-page-material-checks"),
@@ -227,6 +231,8 @@
     chatTurns: document.getElementById("chat-turns"),
     chatEmpty: document.getElementById("chat-empty"),
     chatInput: document.getElementById("chat-input"),
+    chatNew: document.getElementById("btn-chat-new"),
+    chatSessionList: document.getElementById("chat-session-list"),
     chatSend: document.getElementById("btn-chat-send"),
     chatRetry: document.getElementById("btn-chat-retry"),
     chatClear: document.getElementById("btn-chat-clear"),
@@ -406,6 +412,13 @@
     copy: document.getElementById("btn-copy"),
     exportMd: document.getElementById("btn-export-md"),
     exportDocx: document.getElementById("btn-export-docx"),
+    exportPptx: document.getElementById("btn-export-pptx"),
+    exportPrimary: document.getElementById("artifact-export-primary"),
+    exportStatus: document.getElementById("export-status"),
+    exportRetry: document.getElementById("btn-export-retry"),
+    jobHandoff: document.getElementById("job-handoff"),
+    jobHandoffPrompt: document.getElementById("job-handoff-prompt"),
+    copyHandoff: document.getElementById("btn-copy-handoff"),
     reveal: document.getElementById("btn-reveal"),
     collabOpen: document.getElementById("btn-collab-open"),
     externalCapOpen: document.getElementById("btn-external-cap-open"),
@@ -529,6 +542,7 @@
   /** @type {'welcome'|'shell'|'settings'|'help'} */
   let currentView = "welcome";
   let lastGrowthSnapshot = null;
+  let lastMaterialKinds = [];
   let growthSubjectView = "home";
   let growthHomeScroll = 0;
   let growthFlowGoal = "";
@@ -556,6 +570,10 @@
   let activeArtifactProjectionKind = null;
   let lastArtifactProjectionDiagnostic = null;
   let lastQualityGrade = null;
+  /** @type {'docx'|'pptx'|'md'|null} */
+  let lastExportFormat = null;
+  /** @type {Map<string, { format: ('docx'|'pptx'|'md'|null), status: string, failed: boolean }>} */
+  const exportStateByKey = new Map();
   let lastQualityBannerText = "";
   let copyBlockedFailed = false;
 
@@ -803,6 +821,7 @@
 
   function welcomeModelReady() {
     return (
+      !!(shellBootInfo && shellBootInfo.electronTest) ||
       welcomeModelVerified ||
       !!(shellBootInfo && shellBootInfo.modelReady) ||
       !!(lastConnectionState && lastConnectionState.available)
@@ -1813,11 +1832,79 @@
       els.exportDocx.hidden = true;
       els.exportDocx.setAttribute("hidden", "");
     }
+    if (els.exportPptx) {
+      els.exportPptx.hidden = true;
+      els.exportPptx.setAttribute("hidden", "");
+    }
+    if (els.exportPrimary) {
+      els.exportPrimary.hidden = true;
+      els.exportPrimary.setAttribute("hidden", "");
+    }
     if (els.reveal) {
       els.reveal.hidden = true;
       els.reveal.setAttribute("hidden", "");
     }
     if (els.copy) setCopyEnabled(false);
+    lastExportFormat = null;
+    setExportStatus("", false);
+  }
+
+  function exportStateKey(taskId, artifactId) {
+    return String(taskId || "") + "::" + String(artifactId || "");
+  }
+
+  function rememberExportState() {
+    const key = exportStateKey(activeTaskId, activeArtifactId);
+    if (!activeTaskId || !activeArtifactId) return;
+    exportStateByKey.set(key, {
+      format: lastExportFormat,
+      status: els.exportStatus ? String(els.exportStatus.textContent || "") : "",
+      failed: !!(els.exportStatus && els.exportStatus.classList.contains("error")),
+    });
+  }
+
+  function restoreExportState(taskId, artifactId) {
+    const saved = exportStateByKey.get(exportStateKey(taskId, artifactId));
+    lastExportFormat = saved && saved.format ? saved.format : null;
+    setExportStatus(saved && saved.status ? saved.status : "", !!(saved && saved.failed));
+  }
+
+  function inferDocumentDelivery(goal, revisionText) {
+    const t = [goal, revisionText].filter(Boolean).join("\n");
+    const ppt = /ppt|pptx|powerpoint|幻灯|演示文稿/i.test(t);
+    const word = /word|\.docx|一份 Word|Word 版本/i.test(t);
+    const report = /报告|公文/.test(t);
+    if (ppt && word) return { showPpt: true, showWord: true, showMd: false };
+    if (ppt) return { showPpt: true, showWord: false, showMd: false };
+    if (word || report) return { showPpt: false, showWord: true, showMd: false };
+    return { showPpt: false, showWord: false, showMd: true };
+  }
+
+  function applyDocumentExportButtons(delivery) {
+    const showWord = !!(delivery && delivery.showWord);
+    const showPpt = !!(delivery && delivery.showPpt);
+    const showMd = !!(delivery && delivery.showMd);
+    if (els.exportDocx) {
+      els.exportDocx.hidden = !showWord;
+      if (showWord) els.exportDocx.removeAttribute("hidden");
+      else els.exportDocx.setAttribute("hidden", "");
+    }
+    if (els.exportPptx) {
+      els.exportPptx.hidden = !showPpt;
+      if (showPpt) els.exportPptx.removeAttribute("hidden");
+      else els.exportPptx.setAttribute("hidden", "");
+    }
+    if (els.exportMd) {
+      els.exportMd.hidden = !showMd;
+      if (showMd) els.exportMd.removeAttribute("hidden");
+      else els.exportMd.setAttribute("hidden", "");
+    }
+    const showPrimary = showWord || showPpt;
+    if (els.exportPrimary) {
+      els.exportPrimary.hidden = !showPrimary;
+      if (showPrimary) els.exportPrimary.removeAttribute("hidden");
+      else els.exportPrimary.setAttribute("hidden", "");
+    }
   }
 
   function syncGoalPresentation() {
@@ -2847,6 +2934,32 @@
     }
   }
 
+  function showJobHandoff(reason) {
+    const marker = "【可复制的提示词】";
+    const text = String(reason || "");
+    const idx = text.indexOf(marker);
+    if (idx < 0 || !els.jobHandoff || !els.jobHandoffPrompt) {
+      hideJobHandoff();
+      return;
+    }
+    const prompt = text.slice(idx + marker.length).trim();
+    if (!prompt) {
+      hideJobHandoff();
+      return;
+    }
+    els.jobHandoffPrompt.value = prompt;
+    els.jobHandoff.hidden = false;
+    els.jobHandoff.removeAttribute("hidden");
+  }
+
+  function hideJobHandoff() {
+    if (els.jobHandoff) {
+      els.jobHandoff.hidden = true;
+      els.jobHandoff.setAttribute("hidden", "");
+    }
+    if (els.jobHandoffPrompt) els.jobHandoffPrompt.value = "";
+  }
+
   function renderJobStatus(detail, eventNote) {
     const failed = isLatestJobFailed(detail);
     const cancelled = !!(detail && detail.latestJob && detail.latestJob.status === "cancelled");
@@ -2859,18 +2972,23 @@
     els.jobStatus.classList.toggle("error", failed);
     els.jobActionable.textContent = "";
     if (failed) {
-      els.jobActionable.textContent = userFacingFailureReason(detail, eventNote);
+      const reason = userFacingFailureReason(detail, eventNote);
+      els.jobActionable.textContent = reason.replace(/【可复制的提示词】[\s\S]*$/, "").trim();
+      showJobHandoff(reason);
       void explainThinJobFailure(detail);
-    } else if (cancelled) {
-      const cancelledMsg =
-        detail && detail.latestJob && detail.latestJob.actionable
-          ? String(detail.latestJob.actionable)
-          : "任务已取消。可以重试。";
-      els.jobActionable.textContent = cancelledMsg;
-    } else if (job && (job.status === "queued" || job.status === "running") && job.revisionRequest) {
-      els.jobActionable.textContent = "修改要求：" + String(job.revisionRequest);
-    } else if (detail.state === "attention") {
-      els.jobActionable.textContent = "可以重试，或调整目标与材料后再试。";
+    } else {
+      hideJobHandoff();
+      if (cancelled) {
+        const cancelledMsg =
+          detail && detail.latestJob && detail.latestJob.actionable
+            ? String(detail.latestJob.actionable)
+            : "任务已取消。可以重试。";
+        els.jobActionable.textContent = cancelledMsg;
+      } else if (job && (job.status === "queued" || job.status === "running") && job.revisionRequest) {
+        els.jobActionable.textContent = "修改要求：" + String(job.revisionRequest);
+      } else if (detail.state === "attention") {
+        els.jobActionable.textContent = "可以重试，或调整目标与材料后再试。";
+      }
     }
   }
 
@@ -2981,7 +3099,7 @@
     return byId[actionId] || null;
   }
 
-  async function runCtoConfirmContinue(userSupplement) {
+  async function runCtoConfirmContinue(userSupplement, ownerTurnId) {
     if (workMode !== "task" || !activeTaskId) return;
     const artifactId =
       activeArtifactId ||
@@ -3036,6 +3154,7 @@
         taskId: activeTaskId,
         artifactId,
         revisionRequest,
+        ...(ownerTurnId ? { ownerTurnId: String(ownerTurnId) } : {}),
       });
       if (result && result.jobId) {
         activeJobId = result.jobId;
@@ -3474,6 +3593,19 @@
         if (taskRefs.some((r) => r && r.kind === "folder")) return;
         const taskGoal = String(task.goal || "").trim();
         if (taskGoal && looksHighRiskGoal(taskGoal)) return;
+        if (looksLikeRemoteCodeAudit(taskGoal)) {
+          firstPlanAutoProgressed = true;
+          if (els.jobStatus) {
+            els.jobStatus.textContent = "已按目标开始读取公开仓库。";
+            els.jobStatus.classList.remove("error");
+          }
+          await startConversationTaskExecution(taskId, {
+            fromPlanConfirm: true,
+            intentKind: "analyze_code",
+            requestedArtifactType: "code-analysis",
+          });
+          return;
+        }
       }
     } catch {
       return;
@@ -3488,6 +3620,14 @@
       els.jobStatus.classList.remove("error");
     }
     await confirmPlanAndStartDevelopment();
+  }
+
+  function looksLikeRemoteCodeAudit(text) {
+    const t = String(text || "");
+    if (/(?:https?:\/\/)?(?:www\.)?github\.com\/[A-Za-z0-9]/.test(t) && /审计|审查|分析|问题|风险|audit|review/i.test(t)) {
+      return true;
+    }
+    return /审计/.test(t) && /github/i.test(t);
   }
 
   function looksHighRiskGoal(text) {
@@ -3612,9 +3752,15 @@
       return;
     }
     if (res.startAuthorized) {
-      if (res.startMode === "revision" && activeTaskId && activeArtifactId) {
-        // FIX-22：修订指令必须用 Owner 本轮原文，不得用规划正文顶替
-        await runCtoConfirmContinue(text);
+      if (res.startMode === "revision") {
+        if (!activeTaskId || !activeArtifactId) {
+          if (els.jobStatus) {
+            els.jobStatus.textContent = "当前没有可修改的成果，还不能开始改。";
+            els.jobStatus.classList.add("error");
+          }
+          return;
+        }
+        await runCtoConfirmContinue(res.revisionRequest || text, res.userTurnId);
         return;
       }
       const execKind = String(res.executionIntentKind || "").trim();
@@ -3733,6 +3879,7 @@
       els.jobStatus.textContent = msg;
       els.jobStatus.classList.add("error");
       if (String(err && err.code) === "plan_version_mismatch" || /规划已更新/.test(msg)) {
+        els.jobStatus.textContent = "规划已更新，请查看右侧最新规划后再确认开始";
         try {
           const detail = await api.invoke("work.getTask", { taskId });
           hydratePlanFromTask(detail);
@@ -4243,6 +4390,7 @@
   }
 
   async function selectTask(taskId) {
+    rememberExportState();
     const epoch = bumpUiEpoch();
     workMode = "task";
     activeTaskId = taskId;
@@ -4317,6 +4465,7 @@
     ) {
       copyBlockedFailed = false;
       await loadArtifact(readyArtifactId, { taskId, epoch });
+      restoreExportState(taskId, readyArtifactId);
       if (epoch !== uiEpoch || activeTaskId !== taskId) return;
     }
     const refs =
@@ -4486,6 +4635,9 @@
     activeArtifactVersionLabel =
       content.versionCount != null ? `版本 ${content.versionCount}` : "当前版本";
     copyBlockedFailed = false;
+    if (expectedTaskId || activeTaskId) {
+      restoreExportState(expectedTaskId || activeTaskId, artifactId);
+    }
     if (els.artifactEmpty) {
       els.artifactEmpty.hidden = true;
       els.artifactEmpty.setAttribute("hidden", "");
@@ -4646,6 +4798,11 @@
       }
       els.exportMd.hidden = true;
       els.exportDocx.hidden = true;
+      if (els.exportPptx) els.exportPptx.hidden = true;
+      if (els.exportPrimary) {
+        els.exportPrimary.hidden = true;
+        els.exportPrimary.setAttribute("hidden", "");
+      }
       els.reveal.hidden = false;
       els.saveStatus.textContent = isCodeChange
         ? content.codeChange.verificationLabel || "已载入修改结果"
@@ -4680,16 +4837,24 @@
           st === "accepted" || st === "rejected" ? "继续修改" : "提出修改";
       }
       if (els.revise) els.revise.textContent = "提交修改";
-      els.exportMd.hidden = false;
-      els.exportMd.removeAttribute("hidden");
-      els.exportDocx.hidden = false;
-      els.exportDocx.removeAttribute("hidden");
-      els.reveal.hidden = false;
-      els.reveal.removeAttribute("hidden");
       suppressSave = true;
       els.artifactEditor.value = content.text || "";
       suppressSave = false;
       els.saveStatus.textContent = "已载入最新内容";
+      const delivery = inferDocumentDelivery(
+        (els.goal && els.goal.value) ||
+          (lastJobDetailForUx && lastJobDetailForUx.task && lastJobDetailForUx.task.goal) ||
+          "",
+        (lastJobDetailForUx &&
+          lastJobDetailForUx.latestJob &&
+          lastJobDetailForUx.latestJob.revisionRequest) ||
+          "",
+      );
+      applyDocumentExportButtons(delivery);
+      if (els.reveal) {
+        els.reveal.hidden = false;
+        els.reveal.removeAttribute("hidden");
+      }
       const connected = await refreshConnectionFromCapabilities();
       els.revise.disabled = !connected;
     }
@@ -5088,6 +5253,7 @@
   async function refreshSubjectPanel() {
     const overview = await api.invoke("subject.getOverview", {});
     lastGrowthSnapshot = overview.growth || null;
+    updateCollabMaterialHints(overview);
     try {
       if (window.DigitalMeGrowthPanel) {
         window.DigitalMeGrowthPanel.render(document, lastGrowthSnapshot, {
@@ -5233,8 +5399,19 @@
       for (const mat of matItems) {
         const li = document.createElement("li");
         const addedAt = mat.addedAt ? new Date(mat.addedAt).toLocaleString() : "";
+        let readLine = "";
+        if (mat.userFacingReadResult) {
+          readLine = mat.userFacingReadResult;
+        } else if (mat.readStatus === "read" && mat.enteredUnderstanding) {
+          readLine = "已读取，已可用于对话和做事";
+        } else if (mat.readStatus === "partial") {
+          readLine = "只能读取部分内容" + (mat.readWarning ? "：" + mat.readWarning : "");
+        } else if (mat.readStatus === "failed") {
+          readLine = "读取失败" + (mat.readWarning ? "：" + mat.readWarning : "");
+        }
         li.innerHTML = `<div><strong>${escapeHtml(mat.fileName)}</strong></div>
-          <div class="muted tiny">${escapeHtml(addedAt)}</div>`;
+          <div class="muted tiny">${escapeHtml(addedAt)}</div>
+          ${readLine ? `<div class="muted tiny">${escapeHtml(readLine)}</div>` : ""}`;
         const row = document.createElement("div");
         row.className = "subject-actions";
         const revealBtn = document.createElement("button");
@@ -5275,6 +5452,7 @@
 
   async function refreshChatPanel() {
     if (!els.chatTurns) return;
+    void refreshChatSessions();
     try {
       const overview = await api.invoke("subject.getOverview", {});
       // 01B：可参考已确认内容 = 与「已经了解」/模型上下文同一 userVisibleFacts 投影源。
@@ -5759,6 +5937,67 @@
         els.chatRetry.disabled = false;
         if (els.chatSend) els.chatSend.disabled = false;
       }
+    });
+  }
+
+  async function refreshChatSessions() {
+    if (!els.chatSessionList || !api.conversation || typeof api.conversation.listSessions !== "function") return;
+    try {
+      const listed = await api.conversation.listSessions();
+      const sessions = (listed && listed.sessions) || [];
+      const currentId = listed && listed.currentId;
+      els.chatSessionList.innerHTML = "";
+      for (const session of sessions) {
+        const li = document.createElement("li");
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "ghost";
+        if (session.id === currentId) btn.classList.add("active");
+        btn.textContent = session.title || "新对话";
+        btn.addEventListener("click", () => {
+          void openChatSession(session.id);
+        });
+        li.appendChild(btn);
+        els.chatSessionList.appendChild(li);
+      }
+    } catch {
+      /* 会话列表失败不阻断当前对话 */
+    }
+  }
+
+  async function createChatSession() {
+    const generation = ++chatGeneration;
+    if (!api.conversation || typeof api.conversation.createSession !== "function") {
+      if (els.chatStatus) els.chatStatus.textContent = "暂时无法新建对话。";
+      return;
+    }
+    try {
+      await api.conversation.createSession();
+      if (!isLiveChatGeneration(generation)) return;
+      resetChatComposer();
+      await refreshChatPanel();
+      if (els.chatStatus) els.chatStatus.textContent = "已开始新对话。原来的对话还在左侧。";
+    } catch (err) {
+      if (els.chatStatus) els.chatStatus.textContent = (err && err.message) || String(err);
+    }
+  }
+
+  async function openChatSession(id) {
+    const generation = ++chatGeneration;
+    if (!api.conversation || typeof api.conversation.openSession !== "function") return;
+    try {
+      await api.conversation.openSession(id);
+      if (!isLiveChatGeneration(generation)) return;
+      resetChatComposer();
+      await refreshChatPanel();
+    } catch (err) {
+      if (els.chatStatus) els.chatStatus.textContent = (err && err.message) || String(err);
+    }
+  }
+
+  if (els.chatNew) {
+    els.chatNew.addEventListener("click", () => {
+      void createChatSession();
     });
   }
 
@@ -6505,14 +6744,26 @@
       const files = await api.dialogs.pickOpenFiles();
       if (!files || !files.length) return;
       els.subjectActionStatus.textContent = "正在添加…";
+      const notes = [];
       for (const filePath of files.slice(0, 3)) {
-        await api.invoke("subject.importMaterial", {
+        const imported = await api.invoke("subject.importMaterial", {
           sourcePath: filePath,
           distillCandidates: true,
         });
+        if (imported && imported.userFacingReadResult) {
+          notes.push(imported.userFacingReadResult);
+        } else if (imported && imported.readStatus === "read" && imported.enteredUnderstanding) {
+          notes.push("已读取，已可用于对话和做事");
+        } else if (imported && imported.readStatus === "partial") {
+          notes.push("只能读取部分内容" + (imported.readWarning ? "：" + imported.readWarning : ""));
+        } else if (imported && imported.readStatus === "failed") {
+          notes.push("读取失败" + (imported.readWarning ? "：" + imported.readWarning : ""));
+        } else {
+          notes.push("资料已保存，但还没有读到正文");
+        }
       }
       await refreshSubjectPanel();
-      els.subjectActionStatus.textContent = "资料已添加。";
+      els.subjectActionStatus.textContent = notes[0] || "资料已添加。";
     } catch (err) {
       els.subjectActionStatus.textContent = err.message || String(err);
     }
@@ -7341,14 +7592,99 @@
     }
   });
 
+  function formatExportLabel(format) {
+    if (format === "docx") return "Word";
+    if (format === "pptx") return "PowerPoint";
+    if (format === "md") return "Markdown";
+    return "文件";
+  }
+
+  function setExportStatus(text, failed) {
+    if (els.exportStatus) {
+      els.exportStatus.textContent = text || "";
+      els.exportStatus.hidden = !text;
+      if (text) els.exportStatus.removeAttribute("hidden");
+      else els.exportStatus.setAttribute("hidden", "");
+      els.exportStatus.classList.toggle("error", !!failed);
+    }
+    if (els.exportRetry) {
+      const showRetry = !!failed;
+      els.exportRetry.hidden = !showRetry;
+      if (showRetry) els.exportRetry.removeAttribute("hidden");
+      else els.exportRetry.setAttribute("hidden", "");
+    }
+  }
+
+  async function runArtifactExport(format) {
+    if (!activeArtifactId) return;
+    const capturedTaskId = activeTaskId;
+    const capturedArtifactId = activeArtifactId;
+    const key = exportStateKey(capturedTaskId, capturedArtifactId);
+    const label = formatExportLabel(format);
+    const stillActive = () =>
+      activeTaskId === capturedTaskId && activeArtifactId === capturedArtifactId;
+    lastExportFormat = format;
+    setExportStatus("正在导出" + label + "…", false);
+    exportStateByKey.set(key, { format, status: "正在导出" + label + "…", failed: false });
+    try {
+      await api.invoke("artifact.export", { artifactId: capturedArtifactId, format });
+      const doneStatus = "已导出" + label + "文件。";
+      exportStateByKey.set(key, { format, status: doneStatus, failed: false });
+      if (stillActive()) {
+        lastExportFormat = format;
+        setExportStatus(doneStatus, false);
+      }
+    } catch (err) {
+      const msg = (err && err.message) || String(err);
+      if (/已取消/.test(msg)) {
+        exportStateByKey.set(key, { format: null, status: "", failed: false });
+        if (stillActive()) setExportStatus("", false);
+        return;
+      }
+      const failStatus = "未能导出" + label + "：" + msg;
+      exportStateByKey.set(key, { format, status: failStatus, failed: true });
+      if (stillActive()) {
+        lastExportFormat = format;
+        setExportStatus(failStatus, true);
+      }
+    }
+  }
+
+  if (els.copyHandoff) {
+    els.copyHandoff.addEventListener("click", async () => {
+      const text = els.jobHandoffPrompt ? String(els.jobHandoffPrompt.value || "").trim() : "";
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        if (els.jobActionable && !els.jobActionable.textContent.includes("已复制提示词")) {
+          els.jobActionable.textContent = (els.jobActionable.textContent || "") + " 已复制提示词。";
+        }
+      } catch {
+        /* ignore */
+      }
+    });
+  }
+
   els.exportMd.addEventListener("click", async () => {
     if (!activeArtifactId) return;
-    await api.invoke("artifact.export", { artifactId: activeArtifactId, format: "md" });
+    await runArtifactExport("md");
   });
   els.exportDocx.addEventListener("click", async () => {
     if (!activeArtifactId) return;
-    await api.invoke("artifact.export", { artifactId: activeArtifactId, format: "docx" });
+    await runArtifactExport("docx");
   });
+  if (els.exportPptx) {
+    els.exportPptx.addEventListener("click", async () => {
+      if (!activeArtifactId) return;
+      await runArtifactExport("pptx");
+    });
+  }
+  if (els.exportRetry) {
+    els.exportRetry.addEventListener("click", async () => {
+      if (!lastExportFormat) return;
+      await runArtifactExport(lastExportFormat);
+    });
+  }
   els.reveal.addEventListener("click", async () => {
     if (!activeArtifactId) return;
     await api.invoke("artifact.revealInFolder", { artifactId: activeArtifactId });
@@ -7400,7 +7736,7 @@
     ) {
       return "done";
     }
-    if (item.status === "delivered") return "done";
+    if (item.status === "delivered") return "pending";
     return "active";
   }
 
@@ -7413,17 +7749,41 @@
     return msg || "操作未能完成";
   }
 
+  function updateCollabMaterialHints(overview) {
+    const kinds = [];
+    for (const mat of overview && overview.materials ? overview.materials : []) {
+      for (const k of mat.detectedKinds || []) {
+        if (k && !kinds.includes(k)) kinds.push(k);
+      }
+    }
+    lastMaterialKinds = kinds;
+    const text = kinds.length
+      ? `本机可根据已上传资料使用${kinds.join("、")}形成建议；未勾选授权材料前，不会发送任何简历字段。`
+      : "";
+    for (const el of [els.collabLocalMaterialHint, els.collabPageLocalMaterialHint]) {
+      if (!el) continue;
+      el.textContent = text;
+      el.hidden = !text;
+    }
+  }
+
   function buildConfirmPoints(peerLabel, goal, materialPaths, extra) {
     const mats = materialPaths.length
       ? materialPaths.map((m) => `「${basenamePath(m)}」`).join("、")
       : "无文件材料（仅协作要求文字）";
     const peer = peerLabel || "所选数字之我";
-    return [
+    const points = [
       `对方（${peer}）将看到：你的协作要求${extra ? "与补充说明" : ""}，以及你勾选的材料：${mats}。`,
       "对方可以做：根据上述授权内容完成本次子任务，并返回一份成果供你查看。",
       "对方不能做：查看未勾选的材料、你的完整数字之我资料、对话历史或其他任务。",
       "你可以随时撤销这次授权；撤销后对方不能再继续执行或读取这些材料。",
     ];
+    if (lastMaterialKinds.length && materialPaths.length === 0) {
+      points.push(
+        `本机可用资料（仅用于形成建议，未授权前不会发送）：${lastMaterialKinds.join("、")}。`,
+      );
+    }
+    return points;
   }
 
   function renderConfirmPoints(ul, points) {
@@ -7734,7 +8094,7 @@
 
   async function refreshCollabHome() {
     const items = await listCollabItems();
-    const buckets = { active: [], done: [], revoked: [] };
+    const buckets = { active: [], pending: [], done: [], revoked: [] };
     for (const item of items) buckets[collabBucket(item)].push(item);
 
     function fill(ul, emptyEl, rows) {
@@ -7764,6 +8124,7 @@
     }
 
     fill(els.collabListActive, els.collabEmptyActive, buckets.active);
+    fill(els.collabListPending, els.collabEmptyPending, buckets.pending);
     fill(els.collabListDone, els.collabEmptyDone, buckets.done);
     fill(els.collabListRevoked, els.collabEmptyRevoked, buckets.revoked);
     await refreshRemotePeers();
@@ -7771,6 +8132,12 @@
     await syncRemoteTransportQuietly();
     await refreshOpportunityCards();
     await fillRemoteCapabilitySettings();
+    try {
+      const overview = await api.invoke("subject.getOverview", {});
+      updateCollabMaterialHints(overview);
+    } catch {
+      /* 资料提示失败不得阻断协作列表 */
+    }
   }
 
   async function syncWorkCollabFromDomain() {

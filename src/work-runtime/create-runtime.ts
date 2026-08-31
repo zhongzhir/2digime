@@ -26,6 +26,11 @@ export interface CreateWorkRuntimeOptions {
   registerDeterministicCodeAnalysis?: boolean;
   loadSubjectContext?: WorkRuntimeOptions['loadSubjectContext'];
   secrets?: WorkRuntimeOptions['secrets'];
+  githubAuditFetch?: WorkRuntimeOptions['githubAuditFetch'];
+  publicWebHttpGet?: WorkRuntimeOptions['publicWebHttpGet'];
+  publicPageRead?: WorkRuntimeOptions['publicPageRead'];
+  retrieveSubjectMaterials?: WorkRuntimeOptions['retrieveSubjectMaterials'];
+  afterRevisionJobQueuedForTest?: WorkRuntimeOptions['afterRevisionJobQueuedForTest'];
 }
 
 /**
@@ -70,6 +75,15 @@ export function createWorkRuntime(options: CreateWorkRuntimeOptions): WorkRuntim
     },
     ...(options.loadSubjectContext ? { loadSubjectContext: options.loadSubjectContext } : {}),
     ...(options.secrets ? { secrets: options.secrets } : {}),
+    ...(options.githubAuditFetch ? { githubAuditFetch: options.githubAuditFetch } : {}),
+    ...(options.publicWebHttpGet ? { publicWebHttpGet: options.publicWebHttpGet } : {}),
+    ...(options.publicPageRead ? { publicPageRead: options.publicPageRead } : {}),
+    ...(options.retrieveSubjectMaterials
+      ? { retrieveSubjectMaterials: options.retrieveSubjectMaterials }
+      : {}),
+    ...(options.afterRevisionJobQueuedForTest
+      ? { afterRevisionJobQueuedForTest: options.afterRevisionJobQueuedForTest }
+      : {}),
   });
   return runtime;
 }

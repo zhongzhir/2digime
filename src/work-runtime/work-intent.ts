@@ -5,6 +5,8 @@
 import type { ContextRef } from './task';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
+import { isRemoteCodeAuditGoal, looksLikeFileGenerationGoal } from './remote-github-audit';
+import { classifyPublicWebQuery } from './public-web-query';
 
 export const TASK_INTENT_KINDS = [
   'create_document',
@@ -47,7 +49,7 @@ export interface SoftwareProjectInspection {
 }
 
 const CODE_ANALYZE_GOAL_RE =
-  /分析(一下|下)?(这个|该|此)?(代码|仓库|项目|代码库|codebase)|代码审查|审查代码|找出.*(问题|风险|缺陷)|问题清单|静态分析|repo\s*analysis|analyze\s+(the\s+)?(code|repo|project)|code\s*review/i;
+  /审计|安全审计|代码审计|仓库审计|分析(一下|下)?(这个|该|此)?(代码|仓库|项目|代码库|codebase)|代码审查|审查代码|找出.*(问题|风险|缺陷)|问题清单|静态分析|repo\s*analysis|analyze\s+(the\s+)?(code|repo|project)|code\s*review|\baudit\b/i;
 
 const CODE_MODIFY_GOAL_RE =
   /修改|修复|实现|开发|重构|改成|改为|更新代码|添加.+功能|删除.+代码|补上|修一下|写一个|做一个|创建.+游戏|fix\b|implement|refactor|change\s+the|update\s+the\s+code|add\s+a\s+|remove\s+the|build\s+a\s+|create\s+a\s+/i;
@@ -218,9 +220,27 @@ export function deriveWorkIntentSync(input: {
     };
   }
 
-  const wantsCodeAnalysis = CODE_ANALYZE_GOAL_RE.test(goal);
+  const wantsRemoteAudit = isRemoteCodeAuditGoal(goal);
+  const publicLookup = classifyPublicWebQuery(goal);
+  if (publicLookup && publicLookup.kind !== 'github_audit') {
+    const notice =
+      publicLookup.kind === 'github_releases'
+        ? '将查询该公开仓库的 Releases 与可下载资产。'
+        : publicLookup.kind === 'public_page'
+          ? '将只读访问你指定的公开网页。'
+          : '将读取该公开仓库的概览信息。';
+    return {
+      intentKind: 'general',
+      expectedOutputFamily: 'document',
+      materialKinds,
+      highConfidence: true,
+      userFacingNotice: notice,
+    };
+  }
+  const wantsCodeAnalysis = CODE_ANALYZE_GOAL_RE.test(goal) || wantsRemoteAudit;
   const wantsCodeModify = CODE_MODIFY_GOAL_RE.test(goal) && !wantsCodeAnalysis;
-  const wantsWrite = WRITE_DOC_GOAL_RE.test(goal);
+  const wantsWrite =
+    (WRITE_DOC_GOAL_RE.test(goal) || looksLikeFileGenerationGoal(goal)) && !wantsRemoteAudit;
   const codeRepoPresent = materialKinds.includes('code_repo');
 
   // 高置信：明确修改目标 + 代码仓库材料 → 外部代码执行
@@ -258,14 +278,16 @@ export function deriveWorkIntentSync(input: {
     };
   }
 
-  // 明确要求代码分析但材料不足：仍标 analyze_code，由选择层报不可用/缺材料
+  // 明确要求代码分析但材料不足：仍标 analyze_code，由选择层/远程读取层处理
   if (wantsCodeAnalysis && !hasCodeMaterial) {
     return {
       intentKind: 'analyze_code',
       expectedOutputFamily: 'code-analysis',
       materialKinds,
       highConfidence: false,
-      userFacingNotice: '代码分析需要你添加代码文件夹或项目文件。',
+      userFacingNotice: wantsRemoteAudit
+        ? '将尝试读取公开的 GitHub 仓库并整理问题清单。若无法访问，会说明原因并给你一份可复制的提示词。'
+        : '代码分析需要你添加代码文件夹或项目文件。',
     };
   }
 

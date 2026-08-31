@@ -79,6 +79,8 @@ export interface ConversationSystemInput {
   subjectContext?: string;
   /** 成长引导指令（仅 growth_guided 时携带；normal 为空）。 */
   growthGuide?: string;
+  /** 本机资料检索片段（非永久确认事实，不得含敏感字段）。 */
+  materialSnippets?: string[];
 }
 
 function resolveFacts(input: ConversationSystemInput): string[] {
@@ -98,7 +100,7 @@ function resolveFacts(input: ConversationSystemInput): string[] {
  */
 export function buildConversationSystemContent(input: ConversationSystemInput = {}): string {
   const base =
-    '你是用户的数字之我助手。根据对话上下文直接、具体地回答最终答复正文。' +
+    '你是用户的 Digital Me / 全能助手。根据对话上下文直接、具体地回答最终答复正文。' +
     '不要用「已记下」代替回答；不要假装已完成任务；不要输出分析过程、推理提纲或内部标签。';
   const facts = resolveFacts(input);
   let subjectRule = '';
@@ -114,7 +116,15 @@ export function buildConversationSystemContent(input: ConversationSystemInput = 
       `对关于用户本人的问题应如实说明了解不足，明确说「不确定」，不得编造或推断用户信息。`;
   }
   const guide = String(input.growthGuide || '').trim();
-  return base + subjectRule + (guide ? `\n\n${guide}` : '');
+  const snippets = (input.materialSnippets || [])
+    .map((s) => String(s || '').trim())
+    .filter(Boolean)
+    .slice(0, 4);
+  const materialRule = snippets.length
+    ? `\n\n本机已读取的相关资料片段（不是永久确认事实，来源可纠正；不要把身份证、电话、住址、财务或健康字段写入普通答复或对外内容）：\n` +
+      snippets.map((line) => `- ${line}`).join('\n')
+    : '';
+  return base + subjectRule + materialRule + (guide ? `\n\n${guide}` : '');
 }
 
 /**

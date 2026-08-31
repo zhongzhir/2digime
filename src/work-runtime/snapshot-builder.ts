@@ -163,6 +163,41 @@ export class ContextSnapshotBuilder {
     return snapshot;
   }
 
+  async appendRetrievedMaterials(
+    snapshotId: string,
+    extras: Array<{
+      sourcePath: string;
+      text: string;
+      materialRef: string;
+      chunkId: string;
+      sourceLabel: string;
+    }>,
+  ): Promise<ContextSnapshot> {
+    const snapshot = await this.snapshotStore.get(snapshotId);
+    if (!snapshot) throw new Error(`snapshot not found: ${snapshotId}`);
+    const items = snapshot.items.slice();
+    const existing = new Set(items.map((i) => i.sourcePath));
+    for (const extra of extras) {
+      if (existing.has(extra.sourcePath) || existing.has(extra.materialRef)) continue;
+      const stored = await this.contentStore.putText(extra.text, 'plain');
+      const item: SnapshotItem = {
+        sourcePath: extra.sourcePath,
+        kind: 'file',
+        status: 'ok',
+        materialRef: extra.materialRef,
+        chunkId: extra.chunkId,
+        sourceLabel: extra.sourceLabel,
+      };
+      if (stored.content.kind === 'text') item.extractedTextRef = stored.content.ref;
+      item.contentDigest = stored.digest;
+      items.push(item);
+      existing.add(extra.sourcePath);
+    }
+    const next: ContextSnapshot = { ...snapshot, items };
+    await this.snapshotStore.put(next);
+    return next;
+  }
+
   private async freezeIngested(file: {
     item: Omit<SnapshotItem, 'extractedTextRef'> & { text?: string };
   }): Promise<SnapshotItem> {

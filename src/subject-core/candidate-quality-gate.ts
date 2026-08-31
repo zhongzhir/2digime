@@ -59,7 +59,9 @@ export function runCandidateQualityGate(input: {
   if (!src.trim()) {
     return { verdict: 'discard', reason: 'missing_source' };
   }
-  if (!p.text.trim() || p.text.trim().length < 4) {
+  const minContent =
+    p.eventType === 'identity_clarified' || p.title === '姓名' ? 2 : 4;
+  if (!p.text.trim() || p.text.trim().length < minContent) {
     return { verdict: 'discard', reason: 'empty_content' };
   }
   // 产品归因硬规则优先于接地检查
@@ -100,9 +102,12 @@ export function runCandidateQualityGate(input: {
   if (mode === 'model' && !sourceGrounded(p.text, src) && !sourceGrounded(p.title, src)) {
     return { verdict: 'discard', reason: 'not_grounded' };
   }
-  // 去重：与已有内容近义
+  // 去重：与已有内容近义。身份标题常同为「姓名」，不得因此挡住纠正后的新名字。
   for (const prev of input.existingDetails) {
-    if (nearDuplicate(p.text, prev) || nearDuplicate(p.title, prev)) {
+    if (nearDuplicate(p.text, prev)) {
+      return { verdict: 'discard', reason: 'duplicate' };
+    }
+    if (p.eventType !== 'identity_clarified' && nearDuplicate(p.title, prev)) {
       return { verdict: 'discard', reason: 'duplicate' };
     }
   }

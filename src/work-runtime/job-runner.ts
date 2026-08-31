@@ -35,11 +35,12 @@ import {
   resumeRemoteIfPossible,
 } from './remote-job-bridge';
 import { buildTargetedRevisionRequest } from './ai-first-policy';
+import { isOwnerStartNowPhrase } from './work-revision-routing';
 import {
   capabilityOutputText,
   dispatchOutcomeCheck,
 } from './outcome-dispatch';
-import { deriveWorkIntent, inspectSoftwareProject, isTaskIntentKind } from './work-intent';
+import { deriveWorkIntent, detectCodeRepoFolders, inspectSoftwareProject, isTaskIntentKind } from './work-intent';
 import {
   isThinOwnerRuntime,
   mergeThinContextRefs,
@@ -48,7 +49,21 @@ import {
   THIN_RUNTIME_PATH,
   thinCodeChangeOverride,
 } from './thin-owner-start';
-import { CODE_ANALYSIS_ARTIFACT_TYPE } from '../capability/adapters/code-repo-analysis-contract';
+import {
+  attachRemoteAuditCoverage,
+  buildExternalAuditHandoffPrompt,
+  classifyGitHubFailure,
+  fetchGitHubPublicIntoDir,
+  formatRemoteAuditFailureActionable,
+  isRemoteCodeAuditGoal,
+  parseGitHubTarget,
+} from './remote-github-audit';
+import {
+  classifyPublicWebQuery,
+  executePublicWebQuery,
+  formatPublicWebFailureActionable,
+} from './public-web-query';
+import { CODE_ANALYSIS_ARTIFACT_TYPE, CODE_REPO_ANALYSIS_CAPABILITY_ID } from '../capability/adapters/code-repo-analysis-contract';
 import {
   CODE_CHANGE_ARTIFACT_TYPE,
   EXTERNAL_EXECUTOR_CODEX_CAPABILITY_ID,
@@ -132,11 +147,36 @@ export interface WorkRuntimeOptions {
     artifactId: string,
     artifactVersionId: string,
   ) => Promise<{ status: 'undecided' | 'accepted' | 'rejected' }>;
+  /** 可选：按任务目标检索主体资料分块，供 Snapshot 注入。 */
+  retrieveSubjectMaterials?: (input: {
+    goal: string;
+    existingPaths?: string[];
+  }) => Promise<
+    Array<{
+      sourcePath: string;
+      text: string;
+      materialRef: string;
+      chunkId: string;
+      sourceLabel: string;
+    }>
+  >;
+  /** 公开网页 / GitHub 只读查询的 HTTP 注入（测试 mock）。 */
+  publicWebHttpGet?: import('./remote-github-audit').HttpGetFn;
+  publicPageRead?: (url: string) => Promise<{ content: string; resolvedUrl?: string } | null>;
+  githubAuditFetch?: (
+    target: import('./remote-github-audit').GitHubAuditTarget,
+    destDir: string,
+  ) => Promise<import('./remote-github-audit').GitHubFetchResult>;
   /**
    * 搜索能力单次 attempt 的 job 级 deadline（毫秒）。
    * 不是通用调度器：仅防止 adapter 不响应时占死串行泵。默认 90s。
    */
   searchAttemptDeadlineMs?: number;
+  /**
+   * 测试钩子：revision Job 已入队且已写入 ownerTurnId 之后、pending 消费记录写入之前。
+   * 抛错用于覆盖「Job 已创建但消费记录未写上」的中断点。不得用于产品路径。
+   */
+  afterRevisionJobQueuedForTest?: (job: ExecutionJob) => Promise<void> | void;
 }
 
 export interface SubjectSelectionResult {
@@ -207,6 +247,8 @@ export class WorkRuntime {
   private readonly capabilityCooldown = new Map<string, number>();
   /** 某 job 是否已做过 capability fallback（避免无限递归）。 */
   private readonly jobFallbackAttempted = new Set<string>();
+  /** 远程 GitHub 审计本轮读取范围，提交成果时并入报告。 */
+  private readonly githubAuditCoverageByJob = new Map<string, string>();
 
   constructor(private readonly opts: WorkRuntimeOptions) {}
 
@@ -395,7 +437,7 @@ export class WorkRuntime {
       contextRefs: input.contextRefs,
       ...(explicitCapabilityId ? { explicitCapabilityId } : {}),
     });
-    const intent =
+    let intent =
       input.intentKind && isTaskIntentKind(input.intentKind)
         ? {
             ...derived,
@@ -421,8 +463,22 @@ export class WorkRuntime {
           }
         : derived;
 
+    const publicLookup = classifyPublicWebQuery(input.goal);
+    if (isRemoteCodeAuditGoal(input.goal) && publicLookup?.kind === 'github_audit') {
+      intent = {
+        ...intent,
+        intentKind: 'analyze_code',
+        expectedOutputFamily: CODE_ANALYSIS_ARTIFACT_TYPE,
+        highConfidence: false,
+        userFacingNotice:
+          '将尝试读取公开的 GitHub 仓库并整理问题清单。若无法访问，会说明原因并给你一份可复制的提示词。',
+      };
+    }
+
     const expectedOutputFamily =
-      String(input.requestedArtifactType || '').trim() || intent.expectedOutputFamily;
+      isRemoteCodeAuditGoal(input.goal) && classifyPublicWebQuery(input.goal)?.kind === 'github_audit'
+        ? CODE_ANALYSIS_ARTIFACT_TYPE
+        : String(input.requestedArtifactType || '').trim() || intent.expectedOutputFamily;
 
     const closureNeed = taskNeedFromWorkIntent(intent);
     const closureRegistrations = this.opts.registry.list();
@@ -638,6 +694,13 @@ export class WorkRuntime {
     });
 
     if (!selected.adapter) {
+      if (isRemoteCodeAuditGoal(input.goal)) {
+        return this.submitBlockedRemoteAudit(input, intent, {
+          blocker: selected.actionable || '当前无法进行代码分析。',
+          nextStep:
+            '请先在设置中连接模型后再点「重试」。也可以先用下面的提示词请其他 AI 工具审计，再把结果发回来。',
+        });
+      }
       const msg =
         selected.actionable ||
         (forceModify
@@ -661,6 +724,13 @@ export class WorkRuntime {
       forceAnalyze &&
       !selected.adapter.registration.outputArtifactTypes.includes(CODE_ANALYSIS_ARTIFACT_TYPE)
     ) {
+      if (isRemoteCodeAuditGoal(input.goal)) {
+        return this.submitBlockedRemoteAudit(input, intent, {
+          blocker: '当前无法进行代码分析。不会改用普通写作冒充代码审查。',
+          nextStep:
+            '请先在设置中连接模型后再点「重试」。也可以先用下面的提示词请其他 AI 工具审计，再把结果发回来。',
+        });
+      }
       const msg =
         '当前无法进行代码分析：没有可用的代码分析能力。不会改用普通写作冒充代码审查。';
       throw Object.assign(new Error(msg), { actionable: msg });
@@ -867,6 +937,7 @@ export class WorkRuntime {
     rejectionReason?: string;
     /** 截图等附件路径，并入 Task.contextRefs 后进入 Snapshot。 */
     attachmentPaths?: string[];
+    ownerTurnId?: string;
   }): Promise<{ jobId: string }> {
     const request = String(input.revisionRequest || '').trim();
     if (!request) throw new Error('请填写修改要求');
@@ -882,6 +953,7 @@ export class WorkRuntime {
     revisionRequest: string;
     rejectionReason?: string;
     attachmentPaths?: string[];
+    ownerTurnId?: string;
   }): Promise<{ jobId: string }> {
     const request = String(input.revisionRequest || '').trim();
     if (!request) throw new Error('请填写修改要求');
@@ -889,9 +961,33 @@ export class WorkRuntime {
     const attachmentPaths = (input.attachmentPaths || [])
       .map((p) => String(p || '').trim())
       .filter(Boolean);
+    const ownerTurnId = String(input.ownerTurnId || '').trim();
 
     let task = await this.opts.taskService.get(input.taskId);
     if (!task) throw new Error(`task not found: ${input.taskId}`);
+    const pending = task.meta?.pendingRevisionRequest;
+    if (ownerTurnId) {
+      const existingByTurn = await this.opts.jobStore.findByOwnerTurnId(input.taskId, ownerTurnId);
+      if (existingByTurn) {
+        if (pending && !pending.consumedJobId) {
+          try {
+            await this.opts.taskService.updatePendingRevision(task.id, {
+              text: pending.text,
+              createdAt: pending.createdAt,
+              sourceTurnId: pending.sourceTurnId,
+              consumedByTurnId: ownerTurnId,
+              consumedJobId: existingByTurn.id,
+            });
+          } catch {
+            /* Job 已是幂等事实；消费记录补写失败不得再创建 Job */
+          }
+        }
+        return { jobId: existingByTurn.id };
+      }
+    }
+    if (ownerTurnId && pending?.consumedByTurnId === ownerTurnId && pending.consumedJobId) {
+      return { jobId: pending.consumedJobId };
+    }
     if (attachmentPaths.length) {
       task = await this.opts.taskService.appendContextRefs(
         input.taskId,
@@ -932,10 +1028,15 @@ export class WorkRuntime {
     const prevExt = [...prevJobs]
       .reverse()
       .find((j) => j.externalExecution?.workingDirectory);
+    const pendingText = String(pending?.text || '').trim();
+    const resolvedRequest =
+      isOwnerStartNowPhrase(request) && pendingText && !pending?.consumedJobId
+        ? pendingText
+        : request;
     const revisionText =
       attachmentPaths.length > 0
-        ? `${request}\n\n（用户附了 ${attachmentPaths.length} 张截图作为问题说明材料；请结合文字理解问题。若无法直接查看图片，以文字说明为准。）`
-        : request;
+        ? `${resolvedRequest}\n\n（用户附了 ${attachmentPaths.length} 张截图作为问题说明材料；请结合文字理解问题。若无法直接查看图片，以文字说明为准。）`
+        : resolvedRequest;
     const job = await this.createQueuedJob(
       task.id,
       capabilityId,
@@ -943,6 +1044,7 @@ export class WorkRuntime {
         targetArtifactId: artifact.id,
         revisionRequest: revisionText,
         ...(rejectionReason ? { rejectionReason } : {}),
+        ...(ownerTurnId ? { ownerTurnId } : {}),
       },
       prevExt?.externalExecution
         ? {
@@ -959,6 +1061,26 @@ export class WorkRuntime {
         : undefined,
     );
     this.enqueue(job.id);
+    try {
+      if (this.opts.afterRevisionJobQueuedForTest) {
+        await this.opts.afterRevisionJobQueuedForTest(job);
+      }
+      await this.opts.taskService.updatePendingRevision(task.id, {
+        text: pendingText || resolvedRequest,
+        createdAt: pending?.createdAt || nowIso(),
+        sourceTurnId: pending?.sourceTurnId || ownerTurnId || job.id,
+        ...(ownerTurnId ? { consumedByTurnId: ownerTurnId } : {}),
+        consumedJobId: job.id,
+      });
+    } catch (error) {
+      if (ownerTurnId) {
+        throw Object.assign(
+          error instanceof Error ? error : new Error(String(error)),
+          { jobId: job.id, ownerTurnId },
+        );
+      }
+      throw error;
+    }
     return { jobId: job.id };
   }
 
@@ -1407,6 +1529,13 @@ export class WorkRuntime {
     return this.withTaskLock(taskId, () => this.opts.taskService.updatePlan(taskId, plan));
   }
 
+  async updatePendingRevision(
+    taskId: string,
+    pending: import('./task').TaskPendingRevisionRequest | null,
+  ) {
+    return this.withTaskLock(taskId, () => this.opts.taskService.updatePendingRevision(taskId, pending));
+  }
+
   async updateTaskRevisionLoop(
     taskId: string,
     patch: Parameters<import('./task-service').TaskService['updateRevisionLoop']>[1],
@@ -1474,6 +1603,7 @@ export class WorkRuntime {
       targetArtifactId?: string;
       revisionRequest?: string;
       rejectionReason?: string;
+      ownerTurnId?: string;
     },
     externalExecution?: ExecutionJob['externalExecution'],
   ): Promise<ExecutionJob> {
@@ -1510,6 +1640,7 @@ export class WorkRuntime {
       ...(meta?.targetArtifactId ? { targetArtifactId: meta.targetArtifactId } : {}),
       ...(meta?.revisionRequest ? { revisionRequest: meta.revisionRequest } : {}),
       ...(meta?.rejectionReason ? { rejectionReason: meta.rejectionReason } : {}),
+      ...(meta?.ownerTurnId ? { ownerTurnId: meta.ownerTurnId } : {}),
       ...(confirmedPlanSnapshot ? { confirmedPlanSnapshot } : {}),
       ...(externalExecution ? { externalExecution } : {}),
     };
@@ -1599,11 +1730,12 @@ export class WorkRuntime {
 
     if (job.status !== 'queued' && !resumingRemote) return;
 
-    const task = await this.opts.taskService.get(job.taskId);
-    if (!task) {
+    const loadedTask = await this.opts.taskService.get(job.taskId);
+    if (!loadedTask) {
       await this.failJob(job, 'capability', '任务不存在', '请重新提交任务');
       return;
     }
+    let task = loadedTask;
 
     const controller = new AbortController();
     this.abortByJob.set(jobId, controller);
@@ -1630,6 +1762,113 @@ export class WorkRuntime {
         await this.persistJob(job);
       }
       const active: ExecutionJob = job;
+
+      let publicLookupOutput: CapabilityOutput | undefined;
+      const publicLookup = !resumingRemote ? classifyPublicWebQuery(task.goal) : null;
+      if (publicLookup && publicLookup.kind !== 'github_audit') {
+        job = await this.withProgress(
+          job,
+          'capability',
+          publicLookup.kind === 'github_releases'
+            ? '正在查询公开仓库的 Releases'
+            : publicLookup.kind === 'public_page'
+              ? `正在只读访问 ${publicLookup.pageUrl || ''}`
+              : '正在读取公开仓库概览',
+        );
+        await this.persistJob(job);
+        const looked = await executePublicWebQuery(publicLookup, {
+          ...(this.opts.publicWebHttpGet ? { httpGet: this.opts.publicWebHttpGet } : {}),
+          ...(this.opts.publicPageRead ? { pageRead: this.opts.publicPageRead } : {}),
+        });
+        if (!looked.ok) {
+          await this.failJob(
+            job,
+            'capability',
+            looked.blocker,
+            formatPublicWebFailureActionable(looked),
+          );
+          return;
+        }
+        publicLookupOutput = looked.output;
+      }
+
+      if (!resumingRemote && isRemoteCodeAuditGoal(task.goal) && publicLookup?.kind === 'github_audit') {
+        const target = parseGitHubTarget(task.goal);
+        if (target) {
+          const localCode = await detectCodeRepoFolders(task.contextRefs || []);
+          if (localCode.length === 0) {
+            job = await this.withProgress(job, 'context', '正在读取公开仓库');
+            const dest = path.join(this.opts.workRoot, 'github-snapshots', job.id);
+            let fetched: import('./remote-github-audit').GitHubFetchResult;
+            try {
+              fetched = this.opts.githubAuditFetch
+                ? await this.opts.githubAuditFetch(target, dest)
+                : await fetchGitHubPublicIntoDir({ target, destDir: dest });
+            } catch (err) {
+              const msg = String((err as Error)?.message || err);
+              const cls = classifyGitHubFailure({ error: msg });
+              fetched = {
+                ok: false,
+                code: 'network',
+                blocker:
+                  cls === 'dns'
+                    ? '现在无法解析 GitHub 的域名。'
+                    : cls === 'tls'
+                      ? '现在无法安全连接到 GitHub。'
+                      : cls === 'timeout'
+                        ? '读取 GitHub 超时。'
+                        : '现在连不上 GitHub，所以还不能直接读取这些公开仓库。',
+                nextStep:
+                  '请检查网络后点「重试」。也可以先用下面的提示词请其他 AI 工具审计，再把结果发回来。',
+                copyablePrompt: buildExternalAuditHandoffPrompt(target, task.goal),
+                diagnostics: {
+                  stage: 'fetch',
+                  host: 'api.github.com',
+                  url: 'https://api.github.com/',
+                  failureClass: cls,
+                  traces: [
+                    {
+                      stage: 'fetch',
+                      host: 'api.github.com',
+                      url: 'https://api.github.com/',
+                      failureClass: cls,
+                      error: msg,
+                    },
+                  ],
+                },
+              };
+            }
+            if (!fetched.ok) {
+              await this.failJob(
+                job,
+                'context',
+                fetched.blocker,
+                formatRemoteAuditFailureActionable(fetched),
+              );
+              return;
+            }
+            if (fetched.coverageMarkdown) {
+              this.githubAuditCoverageByJob.set(job.id, fetched.coverageMarkdown);
+            }
+            const coverageNote = fetched.overviewOnly
+              ? '仅完成仓库概览，主要源码尚未覆盖'
+              : fetched.partial
+                ? '公开仓库已部分读取'
+                : '公开仓库主要源码已读取';
+            job = await this.withProgress(
+              job,
+              'context',
+              `已找到 ${fetched.foundRepoCount} 个公开仓库，实际审计 ${fetched.auditedRepos.join('、') || '无'}。${coverageNote}`,
+            );
+            await this.persistJob(job);
+            task = await this.opts.taskService.updateForSubmit(task.id, {
+              contextRefs: [...(task.contextRefs || []), { kind: 'folder', path: fetched.dir }],
+              intentKind: 'analyze_code',
+              requestedArtifactType: CODE_ANALYSIS_ARTIFACT_TYPE,
+            });
+          }
+        }
+      }
 
       // --- context ---
       // 先取已选能力的通用 contextPolicy,由 SnapshotBuilder 执行;Runner 不解释场景。
@@ -1660,8 +1899,25 @@ export class WorkRuntime {
           );
           return;
         }
-        job = { ...active, snapshotId: snapshot.id };
-        job = await this.withProgress(job, 'capability', '正在调用能力');
+        job = { ...job, snapshotId: snapshot.id };
+        if (!publicLookupOutput && this.opts.retrieveSubjectMaterials) {
+          try {
+            const extras = await this.opts.retrieveSubjectMaterials({
+              goal: task.goal,
+              existingPaths: snapshot.items.map((item) => item.sourcePath),
+            });
+            if (extras.length) {
+              snapshot = await this.opts.snapshotBuilder.appendRetrievedMaterials(snapshot.id, extras);
+            }
+          } catch {
+            /* 主体资料检索失败不得阻断任务 */
+          }
+        }
+        job = await this.withProgress(
+          job,
+          'capability',
+          publicLookupOutput ? '正在整理公开查询结果' : '正在调用能力',
+        );
         await this.persistJob(job);
       }
 
@@ -1672,7 +1928,7 @@ export class WorkRuntime {
 
       // --- capability ---
       const adapter = selectedAdapter;
-      if (!adapter) {
+      if (!publicLookupOutput && !adapter) {
         await this.failJob(job, 'capability', '能力不可用', '请选择其他能力或稍后重试');
         return;
       }
@@ -1785,6 +2041,7 @@ export class WorkRuntime {
       }
 
       const isRemote =
+        !!adapter &&
         adapter.registration.location === 'remote' &&
         adapter.registration.adapter.type === 'remote-subject';
 
@@ -1935,9 +2192,12 @@ export class WorkRuntime {
 
       let output;
       try {
-        if (resumingRemote && job.remoteExecution) {
+        if (publicLookupOutput) {
+          output = publicLookupOutput;
+        } else if (resumingRemote && job.remoteExecution && adapter) {
+          const remoteAdapter = adapter;
           const resumed = await resumeRemoteIfPossible({
-            adapter,
+            adapter: remoteAdapter,
             job,
             ctx: execCtx,
           });
@@ -1964,7 +2224,7 @@ export class WorkRuntime {
                 return;
               }
               await new Promise((r) => setTimeout(r, 50));
-              const again = await resumeRemoteIfPossible({ adapter, job, ctx: execCtx });
+              const again = await resumeRemoteIfPossible({ adapter: remoteAdapter, job, ctx: execCtx });
               if (again.kind === 'output') {
                 output = again.output;
                 stillRunning = false;
@@ -2001,6 +2261,11 @@ export class WorkRuntime {
         }
 
         if (!output) {
+          if (!adapter) {
+            await this.failJob(job, 'capability', '能力不可用', '请选择其他能力或稍后重试');
+            return;
+          }
+          const execAdapter = adapter;
           const grant =
             task.authorization?.grantId && this.opts.loadAuthorizationGrant
               ? await this.opts.loadAuthorizationGrant(task.authorization.grantId)
@@ -2036,7 +2301,7 @@ export class WorkRuntime {
               })
             : [];
           const prepared = prepareAndExecuteCapability({
-            adapter,
+            adapter: execAdapter,
             rawInput,
             auth,
             ctx: execCtx,
@@ -2046,7 +2311,7 @@ export class WorkRuntime {
             task,
             subjectId: task.subjectId,
           });
-          const preparedResult = isSearchCapabilityId(adapter.registration.id)
+          const preparedResult = isSearchCapabilityId(execAdapter.registration.id)
             ? await this.awaitSearchAttempt(prepared, controller)
             : await prepared;
           output = preparedResult.output;
@@ -2101,13 +2366,13 @@ export class WorkRuntime {
               },
             );
           }
-          const describe = adapter.describe();
+          const describe = adapter!.describe();
           const receipt = buildActionReceipt({
             receiptId: newId('capability'),
             subjectId: task.subjectId,
             taskId: task.id,
             jobId: job.id,
-            capabilityId: adapter.registration.id,
+            capabilityId: adapter!.registration.id,
             adapterId: describe.adapterId,
             adapterType: describe.adapterType,
             adapterVersion: describe.version,
@@ -2181,7 +2446,8 @@ export class WorkRuntime {
       }
 
       // Outcome Check：按成果合同分派；无适用检查器显式不适用
-      if (!isRemote && output) {
+      // 公开只读查询已由连接器/API 给出诚实结果，不得用写作质检改写或判失败。
+      if (!isRemote && output && !publicLookupOutput) {
         const hardBoundaryTexts = subjectContext.entries
           .filter((e) => (e.kind || '') === 'boundary')
           .map((e) => `${e.title}\n${e.detail}\n${e.tags.join(' ')}`);
@@ -2254,7 +2520,7 @@ export class WorkRuntime {
                 })
               : [];
             const revised = await prepareAndExecuteCapability({
-              adapter,
+              adapter: adapter!,
               rawInput: reviseRaw,
               auth,
               ctx: execCtx,
@@ -2330,6 +2596,12 @@ export class WorkRuntime {
         job.capabilityId === BASELINE_SEARCH_CAPABILITY_ID
       ) {
         output = applyBaselineSearchNotice(output);
+      }
+
+      const auditCoverage = this.githubAuditCoverageByJob.get(job.id);
+      if (output && auditCoverage) {
+        output = await attachRemoteAuditCoverage(output, auditCoverage);
+        this.githubAuditCoverageByJob.delete(job.id);
       }
 
       // --- artifact commit / append (先写 Artifact,再 succeeded) ---
@@ -2422,6 +2694,61 @@ export class WorkRuntime {
       };
     }
     await this.persistJob(next, '已取消');
+  }
+
+  private async submitBlockedRemoteAudit(
+    input: SubmitInput,
+    intent: import('./work-intent').WorkIntent,
+    reason: { blocker: string; nextStep: string },
+  ): Promise<CommandMap['work.submitTask']['output']> {
+    const target = parseGitHubTarget(input.goal);
+    const copyablePrompt = buildExternalAuditHandoffPrompt(
+      target || {
+        kind: 'user',
+        owner: 'unknown',
+        displayUrl: input.goal.slice(0, 80),
+      },
+      input.goal,
+    );
+    const actionable = formatRemoteAuditFailureActionable({
+      ok: false,
+      code: 'invalid',
+      blocker: reason.blocker,
+      nextStep: reason.nextStep,
+      copyablePrompt,
+    });
+    const capId =
+      this.opts.registry.get(CODE_REPO_ANALYSIS_CAPABILITY_ID)?.registration.id ||
+      CODE_REPO_ANALYSIS_CAPABILITY_ID;
+    let task: Task;
+    if (input.existingTaskId) {
+      const existing = await this.opts.taskService.get(input.existingTaskId);
+      if (!existing) throw new Error(`task not found: ${input.existingTaskId}`);
+      task = await this.opts.taskService.updateForSubmit(input.existingTaskId, {
+        goal: input.goal,
+        contextRefs: input.contextRefs,
+        requestedArtifactType: CODE_ANALYSIS_ARTIFACT_TYPE,
+        intentKind: 'analyze_code',
+        capabilityId: capId,
+      });
+    } else {
+      task = await this.opts.taskService.create({
+        subjectId: this.opts.subjectId,
+        goal: input.goal,
+        contextRefs: input.contextRefs,
+        requestedArtifactType: CODE_ANALYSIS_ARTIFACT_TYPE,
+        intentKind: 'analyze_code',
+        capabilityId: capId,
+      });
+    }
+    const job = await this.createQueuedJob(task.id, capId);
+    await this.failJob(job, 'context', reason.blocker, actionable);
+    return {
+      taskId: task.id,
+      jobId: job.id,
+      intentKind: 'analyze_code',
+      ...(intent.userFacingNotice ? { userFacingNotice: intent.userFacingNotice } : {}),
+    };
   }
 
   private async failJob(

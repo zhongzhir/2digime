@@ -15,6 +15,18 @@ const {
   USER_FACING_ATTACH_FAILED,
 } = require("./default-package.cjs");
 
+function isElectronTestHarness() {
+  return !app.isPackaged && process.env.DIGITALME_V2_ELECTRON_TEST === "1";
+}
+
+if (process.env.DIGITALME_V2_USER_DATA) {
+  app.setPath("userData", process.env.DIGITALME_V2_USER_DATA);
+}
+if (isElectronTestHarness()) {
+  app.commandLine.appendSwitch("disable-gpu");
+  app.commandLine.appendSwitch("disable-dev-shm-usage");
+}
+
 /** @type {import('../dist/runtime/digitalme-runtime').DigitalMeRuntime | null} */
 let runtime = null;
 /** @type {import('../dist/runtime/commands').CommandBus | null} */
@@ -75,6 +87,7 @@ function buildBootInfo(model, appRoot, remoteCapabilityStatus) {
     modelMeta: model.modelMeta || null,
     needsCredentialSetup: !!model.needsCredentialSetup || model.ok !== true,
     isPackaged: app.isPackaged,
+    electronTest: isElectronTestHarness(),
     buildMeta: loadBuildMeta(appRoot),
     status,
     remoteCapability: remoteCapabilityStatus || null,
@@ -130,7 +143,8 @@ async function bootstrapRuntime() {
 
   // 仅 UX 专项验收(未打包)可启用 Fake 文档能力;产品路径仍禁止 Fake。
   const uxAcceptanceFake =
-    !app.isPackaged && process.env.DIGITALME_V2_UX_ACCEPTANCE === "1";
+    !app.isPackaged &&
+    (process.env.DIGITALME_V2_UX_ACCEPTANCE === "1" || isElectronTestHarness());
 
   // 外部专业能力：优先已保存配置；环境变量仅开发覆盖；停用则不注册。
   const {
@@ -259,11 +273,28 @@ function loadBuildMeta(appRoot) {
   }
 }
 
+/** 测试窗口允许 Playwright 在页面里 evaluate；产品路径仍用严格 CSP。 */
+function rendererIndexUrl() {
+  const rendererDir = path.join(__dirname, "renderer");
+  const indexPath = path.join(rendererDir, "index.html");
+  if (!isElectronTestHarness()) {
+    return pathToFileURL(indexPath).href;
+  }
+  let html = fs.readFileSync(indexPath, "utf8");
+  html = html.replace("script-src 'self'", "script-src 'self' 'unsafe-eval'");
+  html = html.replace(/(href|src)="([^"]+\.(?:css|js))"/g, (_m, attr, file) => {
+    return `${attr}="${pathToFileURL(path.join(rendererDir, file)).href}"`;
+  });
+  const patched = path.join(app.getPath("userData"), "index.electron-test.html");
+  fs.writeFileSync(patched, html, "utf8");
+  return pathToFileURL(patched).href;
+}
+
 function createWindow(bootInfo) {
   mainWindow = new BrowserWindow({
-    width: 1180,
-    height: 820,
-    minWidth: 880,
+    width: isElectronTestHarness() ? 720 : 1180,
+    height: isElectronTestHarness() ? 820 : 820,
+    minWidth: isElectronTestHarness() ? 640 : 880,
     minHeight: 640,
     title: "Digital Me",
     webPreferences: {
@@ -273,8 +304,8 @@ function createWindow(bootInfo) {
       sandbox: true,
     },
   });
-  const indexHtml = path.join(__dirname, "renderer", "index.html");
-  mainWindow.loadURL(pathToFileURL(indexHtml).href);
+  const indexHtml = rendererIndexUrl();
+  mainWindow.loadURL(indexHtml);
   mainWindow.webContents.on("did-finish-load", () => {
     mainWindow.webContents.send("shell:boot", bootInfo || lastBootInfo);
   });
@@ -318,7 +349,8 @@ function registerIpc() {
         (name === "work.submitTask" ||
           name === "work.retryTask" ||
           name === "work.reviseArtifact") &&
-        !(lastBootInfo && lastBootInfo.modelReady)
+        !(lastBootInfo && lastBootInfo.modelReady) &&
+        !isElectronTestHarness()
       ) {
         throw Object.assign(new Error("请先连接模型"), {
           code: "MODEL_NOT_CONFIGURED",
@@ -346,20 +378,39 @@ function registerIpc() {
       if (name === "artifact.export") {
         const format = input && input.format;
         let targetPath = input && input.targetPath;
+        if (!targetPath && isElectronTestHarness()) {
+          const ext = format === "docx" ? "docx" : format === "pptx" ? "pptx" : "md";
+          targetPath = path.join(
+            app.getPath("temp"),
+            `digitalme-export-${Date.now()}.${ext}`,
+          );
+        }
         if (!targetPath) {
           const defaultName =
-            format === "docx" ? "成果.docx" : format === "md" ? "成果.md" : "成果";
+            format === "docx"
+              ? "成果.docx"
+              : format === "pptx"
+                ? "成果.pptx"
+                : format === "md"
+                  ? "成果.md"
+                  : "成果";
           const picked = await dialog.showSaveDialog(mainWindow, {
             defaultPath: defaultName,
             filters:
               format === "docx"
                 ? [{ name: "Word", extensions: ["docx"] }]
-                : [{ name: "Markdown", extensions: ["md"] }],
+                : format === "pptx"
+                  ? [{ name: "PowerPoint", extensions: ["pptx"] }]
+                  : [{ name: "Markdown", extensions: ["md"] }],
           });
           if (picked.canceled || !picked.filePath) {
             throw new Error("已取消导出");
           }
           targetPath = picked.filePath;
+        }
+        const delayMs = Number(process.env.DIGITALME_V2_EXPORT_DELAY_MS || "");
+        if (Number.isFinite(delayMs) && delayMs > 0) {
+          await new Promise((r) => setTimeout(r, delayMs));
         }
         return bus.invoke(name, { ...input, targetPath });
       }
@@ -371,6 +422,12 @@ function registerIpc() {
   });
 
   ipcMain.handle("shell:pickOpenFiles", async () => {
+    if (isElectronTestHarness() && process.env.DIGITALME_V2_TEST_IMPORT_FILES) {
+      return String(process.env.DIGITALME_V2_TEST_IMPORT_FILES)
+        .split(path.delimiter)
+        .map((p) => p.trim())
+        .filter(Boolean);
+    }
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ["openFile", "multiSelections"],
     });
@@ -776,6 +833,9 @@ function registerIpc() {
    * 成长捕获由主进程在回复完成后调度；状态以追加行记录，不改写历史消息。
    */
   function conversationFilePath() {
+    if (runtime && typeof runtime.getConversationTranscriptPath === "function") {
+      return runtime.getConversationTranscriptPath();
+    }
     if (!runtime || !runtime.subject) throw new Error("runtime not ready");
     const pkg = runtime.subject.getActive();
     if (!pkg) throw new Error("请先建立数字之我");
@@ -835,6 +895,31 @@ function registerIpc() {
     return { turns };
   });
 
+  ipcMain.handle("shell:conversationListSessions", async () => {
+    if (runtime && typeof runtime.listConversationSessions === "function") {
+      return runtime.listConversationSessions();
+    }
+    return { currentId: "", sessions: [] };
+  });
+
+  ipcMain.handle("shell:conversationCreateSession", async () => {
+    if (!runtime || typeof runtime.createConversationSession !== "function") {
+      throw new Error("请先建立数字之我");
+    }
+    conversationGeneration += 1;
+    return runtime.createConversationSession();
+  });
+
+  ipcMain.handle("shell:conversationOpenSession", async (_evt, input) => {
+    const id = String((input && input.id) || "").trim();
+    if (!id) throw new Error("找不到这场对话");
+    if (!runtime || typeof runtime.openConversationSession !== "function") {
+      throw new Error("请先建立数字之我");
+    }
+    conversationGeneration += 1;
+    return runtime.openConversationSession(id);
+  });
+
   ipcMain.handle("shell:conversationAppend", async (_evt, input) => {
     const fs = require("node:fs");
     const role = String((input && input.role) || "").trim();
@@ -854,6 +939,13 @@ function registerIpc() {
       at: new Date().toISOString(),
     };
     fs.appendFileSync(file, `${JSON.stringify(turn)}\n`, "utf8");
+    if (runtime && typeof runtime.touchConversationSession === "function" && role === "user") {
+      try {
+        runtime.touchConversationSession({ titleFromUserText: text });
+      } catch {
+        /* 会话索引失败不得影响对话落盘 */
+      }
+    }
     if (
       role === "user" &&
       skipGrowthCapture &&
@@ -913,9 +1005,11 @@ function registerIpc() {
       });
     }
     if (!lastBootInfo || !lastBootInfo.modelReady) {
-      throw Object.assign(new Error("请先连接模型"), {
-        actionable: "打开设置，配置并测试模型连接后再对话",
-      });
+      if (!isElectronTestHarness()) {
+        throw Object.assign(new Error("请先连接模型"), {
+          actionable: "打开设置，配置并测试模型连接后再对话",
+        });
+      }
     }
 
     const appRoot = resolveAppRoot();
@@ -939,15 +1033,20 @@ function registerIpc() {
       isPackaged: app.isPackaged,
       allowDevRuntimeFile: process.env.DIGITALME_V2_ALLOW_DEV_CREDENTIAL === "1",
     });
-    if (!model.ok || !model.openaiCompatible || !model.secrets) {
+    const harnessWithoutModel = isElectronTestHarness() && !(model.ok && model.openaiCompatible && model.secrets);
+    if (!harnessWithoutModel && (!model.ok || !model.openaiCompatible || !model.secrets)) {
       throw Object.assign(new Error("请先连接模型"), {
         actionable: "打开设置，配置并测试模型连接后再对话",
       });
     }
 
-    const providerId = model.openaiCompatible.providerId || "openai-compatible";
-    const apiKey = await model.secrets.get(providerCredentialKey(providerId));
-    if (!apiKey) {
+    const providerId =
+      (model.openaiCompatible && model.openaiCompatible.providerId) || "openai-compatible";
+    const apiKey =
+      model.secrets && typeof model.secrets.get === "function"
+        ? await model.secrets.get(providerCredentialKey(providerId))
+        : null;
+    if (!apiKey && !isElectronTestHarness()) {
       throw Object.assign(new Error("请先连接模型"), {
         actionable: "打开设置，配置并测试模型连接后再对话",
       });
@@ -1029,10 +1128,25 @@ function registerIpc() {
       }
     }
 
+    /** @type {string[]} */
+    let materialSnippets = [];
+    try {
+      if (runtime && typeof runtime.retrieveConversationMaterialSnippets === "function") {
+        const retrieved = await runtime.retrieveConversationMaterialSnippets(userText);
+        if (Array.isArray(retrieved)) materialSnippets = retrieved.filter(Boolean);
+      }
+    } catch {
+      materialSnippets = [];
+    }
+
     const systemContent =
       runtime && typeof runtime.buildConversationSystemContent === "function"
-        ? runtime.buildConversationSystemContent({ subjectFacts, growthGuide })
-        : "你是用户的数字之我助手。根据对话上下文直接、具体地回答最终答复正文。不要用「已记下」代替回答；不要假装已完成任务；不要输出分析过程、推理提纲或内部标签。" +
+        ? runtime.buildConversationSystemContent({
+            subjectFacts,
+            growthGuide,
+            ...(materialSnippets && materialSnippets.length ? { materialSnippets } : {}),
+          })
+        : "你是用户的 Digital Me / 全能助手。根据对话上下文直接、具体地回答最终答复正文。不要用「已记下」代替回答；不要假装已完成任务；不要输出分析过程、推理提纲或内部标签。" +
           (growthGuide ? ` ${growthGuide}` : "");
 
     const messages = [
@@ -1098,6 +1212,22 @@ function registerIpc() {
       };
     }
 
+    if (runtime && typeof runtime.tryMaterialGroundedReply === "function") {
+      try {
+        const grounded = await runtime.tryMaterialGroundedReply(userText);
+        if (grounded && typeof grounded.text === "string" && grounded.text.trim()) {
+          return {
+            text: String(grounded.text).trim(),
+            status: "complete",
+            finishReason: "material_grounded_reply",
+            ...(userTurn ? { userTurnId: userTurn.id } : {}),
+          };
+        }
+      } catch {
+        /* 资料检索失败时回落到普通对话 */
+      }
+    }
+
     if (runtime && typeof runtime.tryProvidedMaterialsLookup === "function") {
       try {
         const looked = await runtime.tryProvidedMaterialsLookup(userText);
@@ -1129,6 +1259,17 @@ function registerIpc() {
         /* 成长不得阻断回复 */
       }
     };
+
+    if (isElectronTestHarness() && !apiKey) {
+      const text = "已收到。";
+      scheduleGrowth(text);
+      return {
+        text,
+        status: "complete",
+        finishReason: "electron_test",
+        ...(userTurn ? { userTurnId: userTurn.id } : {}),
+      };
+    }
 
     // DIGITALME-CONVERSATION-SEARCH-RESEARCH-01：
     // 对话信息能力 — 自然对话 → 判断是否需要外部信息 → 不搜索/快速搜索/深度研究

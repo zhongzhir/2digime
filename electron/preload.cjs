@@ -83,6 +83,9 @@ contextBridge.exposeInMainWorld("digitalMe", {
     clear: () => ipcRenderer.invoke("shell:conversationClear"),
     reply: (input) => ipcRenderer.invoke("shell:conversationReply", input),
     growthHint: (input) => ipcRenderer.invoke("shell:conversationGrowthHint", input),
+    listSessions: () => ipcRenderer.invoke("shell:conversationListSessions"),
+    createSession: () => ipcRenderer.invoke("shell:conversationCreateSession"),
+    openSession: (id) => ipcRenderer.invoke("shell:conversationOpenSession", { id }),
   },
   onOpenHelp(listener) {
     const handler = (_evt, info) => listener(info);

@@ -41,6 +41,16 @@ import {
   deriveCaptureOutcome,
   type CaptureOutcome,
 } from './capture-outcome';
+import { extractFile } from '../infrastructure/extract';
+import {
+  buildMaterialIndexRecord,
+  dropMaterialIndex,
+  formatMaterialReadResult,
+  listMaterialIndex,
+  retrieveFromRecords,
+  upsertMaterialIndex,
+  type MaterialRetrievalHit,
+} from './material-index';
 
 export const SUBJECT_SCHEMA_VERSION = 1 as const;
 
@@ -1059,7 +1069,16 @@ export class SubjectService {
   async importSubjectMaterial(input: {
     sourcePath: string;
     distillCandidates?: boolean;
-  }): Promise<{ materialRef: string; candidateEventIds: string[] }> {
+  }): Promise<{
+    materialRef: string;
+    candidateEventIds: string[];
+    readStatus: 'read' | 'partial' | 'failed';
+    extractedLength: number;
+    enteredUnderstanding: boolean;
+    readWarning?: string;
+    userFacingReadResult?: string;
+    detectedKinds?: string[];
+  }> {
     const pkg = this.requireActive();
     const sourcePath = path.resolve(input.sourcePath);
     const stat = await fs.stat(sourcePath);
@@ -1077,9 +1096,34 @@ export class SubjectService {
     await fs.mkdir(path.dirname(dest), { recursive: true });
     await fs.copyFile(sourcePath, dest);
 
+    const extracted = await extractFile(dest);
+    const extractedText = String(extracted.text || '').trim();
+    let readStatus: 'read' | 'partial' | 'failed' = 'failed';
+    let readWarning: string | undefined;
+    if (extracted.status === 'ok' && extractedText && !extracted.truncated) {
+      readStatus = 'read';
+    } else if (extractedText) {
+      readStatus = 'partial';
+      readWarning = extracted.truncated
+        ? '内容过长，只读取了前面部分'
+        : extracted.warning || '只能读取部分内容';
+    } else {
+      readWarning = extracted.warning || '无法读取正文';
+    }
+    const extractedLength = extractedText.length;
+    const enteredUnderstanding =
+      input.distillCandidates !== false && (readStatus === 'read' || readStatus === 'partial');
+
     const candidateEventIds: string[] = [];
+    let userFacingReadResult: string | undefined;
+    let detectedKinds: string[] | undefined;
     if (input.distillCandidates !== false) {
-      const text = await readTextPreview(dest);
+      const detail =
+        readStatus === 'read'
+          ? `已读取正文 ${extractedLength} 字并进入了解流程`
+          : readStatus === 'partial'
+            ? `只能读取部分内容：${readWarning}`
+            : `读取失败：${readWarning}`;
       const asset: GrowthEvent = {
         id: newId('growthEvent'),
         subjectId: pkg.id,
@@ -1088,8 +1132,13 @@ export class SubjectService {
         source: { kind: 'import' },
         payload: {
           title: `已导入资料：${safeBase}`,
-          detail: text.slice(0, 400) || `材料已保存为 ${materialRef}`,
-          tags: ['material', 'import'],
+          detail,
+          tags: [
+            'material',
+            'import',
+            `read:${readStatus}`,
+            ...(enteredUnderstanding ? ['entered_understanding'] : []),
+          ],
           relation: { materialRef },
         },
         confidence: 'candidate',
@@ -1097,15 +1146,42 @@ export class SubjectService {
       await this.appendGrowthEvent(asset);
       candidateEventIds.push(asset.id);
 
-      const captured = await this.captureInput({
-        text: text || safeBase,
-        sourceKind: 'imported_material',
-        materialRef,
-      });
-      candidateEventIds.push(...captured.candidateEventIds);
+      if (extractedText) {
+        const captured = await this.captureInput({
+          text: extractedText.slice(0, 8000),
+          sourceKind: 'imported_material',
+          materialRef,
+        });
+        candidateEventIds.push(...captured.candidateEventIds);
+      }
     }
 
-    return { materialRef, candidateEventIds };
+    if (extractedText) {
+      const record = buildMaterialIndexRecord({
+        materialRef,
+        sourceFileName: base,
+        text: extractedText,
+        readStatus,
+      });
+      await upsertMaterialIndex(pkg.rootDir, record);
+      userFacingReadResult = formatMaterialReadResult(record);
+      detectedKinds = [
+        ...(record.detected.name ? ['姓名'] : []),
+        ...(record.detected.education.length ? ['教育'] : []),
+        ...(record.detected.experience.length ? ['经历'] : []),
+      ];
+    }
+
+    return {
+      materialRef,
+      candidateEventIds,
+      readStatus,
+      extractedLength,
+      enteredUnderstanding,
+      ...(readWarning ? { readWarning } : {}),
+      ...(userFacingReadResult ? { userFacingReadResult } : {}),
+      ...(detectedKinds && detectedKinds.length ? { detectedKinds } : {}),
+    };
   }
 
   /**
@@ -1136,15 +1212,88 @@ export class SubjectService {
       }
       if (!st.isFile()) continue;
       const materialRef = `materials/${name}`;
+      const readMeta = await this.materialReadMeta(pkg.id, materialRef);
+      const indexed = (await listMaterialIndex(pkg.rootDir)).find((r) => r.materialRef === materialRef);
       items.push({
         materialRef,
         fileName: displayMaterialFileName(name),
         addedAt: st.mtime.toISOString(),
         absolutePath,
+        ...(readMeta.readStatus ? { readStatus: readMeta.readStatus } : {}),
+        ...(readMeta.readWarning ? { readWarning: readMeta.readWarning } : {}),
+        ...(typeof readMeta.extractedLength === 'number'
+          ? { extractedLength: readMeta.extractedLength }
+          : {}),
+        ...(typeof readMeta.enteredUnderstanding === 'boolean'
+          ? { enteredUnderstanding: readMeta.enteredUnderstanding }
+          : {}),
+        ...(indexed ? { userFacingReadResult: formatMaterialReadResult(indexed) } : {}),
+        ...(indexed
+          ? {
+              detectedKinds: [
+                ...(indexed.detected.name ? ['姓名'] : []),
+                ...(indexed.detected.education.length ? ['教育'] : []),
+                ...(indexed.detected.experience.length ? ['经历'] : []),
+              ].filter(Boolean),
+            }
+          : {}),
       });
     }
     items.sort((a, b) => (a.addedAt < b.addedAt ? 1 : a.addedAt > b.addedAt ? -1 : 0));
     return items;
+  }
+
+  async retrieveMaterials(input: {
+    query: string;
+    maxChunks?: number;
+    includeSensitive?: boolean;
+  }): Promise<MaterialRetrievalHit[]> {
+    const pkg = this.requireActive();
+    const records = await listMaterialIndex(pkg.rootDir);
+    return retrieveFromRecords(records, input.query, {
+      maxChunks: input.maxChunks ?? 4,
+      includeSensitive: input.includeSensitive === true,
+    });
+  }
+
+  private async materialReadMeta(
+    subjectId: string,
+    materialRef: string,
+  ): Promise<{
+    readStatus?: 'read' | 'partial' | 'failed';
+    readWarning?: string;
+    extractedLength?: number;
+    enteredUnderstanding?: boolean;
+  }> {
+    try {
+      const events = await this.requireLog().list(subjectId);
+      const asset = [...events]
+        .reverse()
+        .find(
+          (e) =>
+            e.type === 'asset_added' &&
+            e.payload.relation?.materialRef === materialRef,
+        );
+      if (!asset) return {};
+      const tags = asset.payload.tags || [];
+      const readTag = tags.find((t) => t.startsWith('read:'));
+      const readStatus = readTag?.slice(5) as 'read' | 'partial' | 'failed' | undefined;
+      const enteredUnderstanding = tags.includes('entered_understanding');
+      const detail = String(asset.payload.detail || '');
+      const lengthMatch = detail.match(/已读取正文 (\d+) 字/);
+      return {
+        ...(readStatus === 'read' || readStatus === 'partial' || readStatus === 'failed'
+          ? { readStatus }
+          : {}),
+        ...(readStatus === 'partial' || readStatus === 'failed'
+          ? { readWarning: detail.replace(/^[^：:]*[：:]/, '').trim() || detail }
+          : {}),
+        ...(lengthMatch ? { extractedLength: Number(lengthMatch[1]) } : {}),
+        enteredUnderstanding,
+      };
+    } catch {
+      return {};
+    }
   }
 
   /**
@@ -1225,6 +1374,8 @@ export class SubjectService {
       await this.appendGrowthEvent(correction);
       corrections += 1;
     }
+
+    await dropMaterialIndex(pkg.rootDir, ref);
 
     if (removedFile || corrections > 0) {
       this.cachedDerived = null;
@@ -1401,14 +1552,4 @@ function buildExperienceDistillText(input: {
   const edit = String(input.editSummary || '').trim();
   if (edit) parts.push(`版本差异：${edit.slice(0, 400)}`);
   return parts.filter(Boolean).join('\n').slice(0, 1200);
-}
-
-async function readTextPreview(filePath: string): Promise<string> {
-  try {
-    const buf = await fs.readFile(filePath);
-    if (buf.includes(0)) return '';
-    return buf.toString('utf8').slice(0, 4000);
-  } catch {
-    return '';
-  }
 }

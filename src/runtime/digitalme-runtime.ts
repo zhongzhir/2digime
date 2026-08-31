@@ -88,6 +88,12 @@ import {
   type UnsupportedInferenceHit,
 } from '../subject-core/conversation-context';
 import { buildUserVisibleFacts } from '../subject-core/user-facing-overview';
+import {
+  buildMaterialGroundedReply,
+  isMaterialBackedIdentityQuery,
+  outboundSafeDetectedKinds,
+  listMaterialIndex,
+} from '../subject-core/material-index';
 import { buildMaterialSummary } from '../work-runtime/material-summary';
 import { ArtifactWorkspace } from '../artifact-workspace/workspace';
 import type { CommandMap } from '../runtime/commands';
@@ -101,6 +107,7 @@ import {
   type DelegationAudit,
 } from '../collaboration/delegated-execution';
 import { deriveWorkIntent } from '../work-runtime/work-intent';
+import { createBingHtmlSearchConnector } from '../capability/adapters/bing-html-search';
 import { taskNeedFromWorkIntent, closureViewFromSelection } from '../capability/capability-closure';
 import { waitForJobTerminal } from '../work-runtime/job-runner';
 import {
@@ -118,7 +125,6 @@ import { nowIso, newId } from '../shared/ids';
 import { chooseExecutionProfile } from '../work-runtime/ai-first-policy';
 import {
   appendConversationRow,
-  conversationFilePath,
   filterTurnsForUi,
   latestCaptureStatusByTurnId,
   listReplayableUserTurns,
@@ -126,10 +132,22 @@ import {
   readConversationRows,
   type GrowthCaptureStatusRecord,
 } from '../subject-core/conversation-transcript';
+import {
+  createConversationSessionSync,
+  currentConversationFilePathSync,
+  listConversationSessionsSync,
+  openConversationSessionSync,
+  touchConversationSessionSync,
+} from '../subject-core/conversation-sessions';
+import { extractExplicitSelfName, looksLikeIdentityClaim } from '../subject-core/candidate-distill';
 import { captureOutcomeUserHint, type CaptureOutcome } from '../subject-core/capture-outcome';
 import { extractEditEvidence } from '../subject-core/diff-evidence';
 import { headVersion } from '../work-runtime/artifact';
-import { runWorkConverse, type WorkConverseDeps } from '../work-runtime/work-converse';
+import {
+  runWorkConverse,
+  workConverseIdentityCaptureKey,
+  type WorkConverseDeps,
+} from '../work-runtime/work-converse';
 import { maybeRunControlledRevisionAfterJob } from '../work-runtime/controlled-revision-runner';
 import {
   collectGenericCtoEvidence,
@@ -243,6 +261,10 @@ export interface DigitalMeRuntimeOptions {
    * 不是第二套 registry，也不要求用户配置 distill/memory/embedding。
    */
   subjectUnderstanding?: SubjectDistillModelRuntime | null;
+  /** 公开网页 / GitHub 只读查询 mock（测试）。 */
+  publicWebHttpGet?: import('../work-runtime/remote-github-audit').HttpGetFn;
+  /** 公开网页读取（默认接入 SearchConnector.read；测试可替换）。 */
+  publicPageRead?: (url: string) => Promise<{ content: string; resolvedUrl?: string } | null>;
   /**
    * D11-A 对话中枢模型调用注入（测试/评测用）。
    * 缺省时按 documentCapability + openaiCompatible + secrets 走真实模型;
@@ -353,8 +375,44 @@ export class DigitalMeRuntime {
     subjectFacts?: string[];
     subjectContext?: string;
     growthGuide?: string;
+    materialSnippets?: string[];
   }): string {
     return assembleConversationSystemContent(input);
+  }
+
+  async retrieveConversationMaterialSnippets(query: string): Promise<string[]> {
+    if (!this.subject.getActive()) return [];
+    const hits = await this.subject.retrieveMaterials({ query, maxChunks: 4 });
+    return hits.map((h) => {
+      const src = h.chunk.sourceFileName || '资料';
+      const kind =
+        h.chunk.kind === 'name' ? '姓名' : h.chunk.kind === 'education' ? '教育' : h.chunk.kind === 'experience' ? '经历' : '资料';
+      return `来自${src}（${kind}，可纠正）：${h.chunk.text.slice(0, 400)}`;
+    });
+  }
+
+  async tryMaterialGroundedReply(userText: string): Promise<{ text: string } | null> {
+    if (!isMaterialBackedIdentityQuery(userText)) return null;
+    if (!this.subject.getActive()) return null;
+    const hits = await this.subject.retrieveMaterials({ query: userText, maxChunks: 4 });
+    const reply = buildMaterialGroundedReply(hits);
+    return reply ? { text: reply } : null;
+  }
+
+  async localMaterialUsePreview(query: string): Promise<{
+    kinds: string[];
+    userFacing: string;
+    sendable: false;
+  }> {
+    if (!this.subject.getActive()) {
+      return { kinds: [], userFacing: '', sendable: false };
+    }
+    const records = await listMaterialIndex(this.subject.requireActive().rootDir);
+    const kinds = outboundSafeDetectedKinds(records);
+    const userFacing = kinds.length
+      ? `本机可根据已上传资料使用${kinds.join('、')}形成建议；未授权前不会发送任何简历字段。`
+      : '';
+    return { kinds, userFacing, sendable: false };
   }
 
   /**
@@ -858,6 +916,7 @@ export class DigitalMeRuntime {
       createTask: (i) => work.createConversationTask(i),
       appendConversation: (taskId, i) => work.appendTaskConversation(taskId, i),
       updatePlan: (taskId, plan) => work.updateTaskPlan(taskId, plan),
+      updatePendingRevision: (taskId, pending) => work.updatePendingRevision(taskId, pending),
       updateRevisionLoop: (taskId, patch) => work.updateTaskRevisionLoop(taskId, patch),
       getTaskFacts: async (taskId) => {
         const detail = await work.getTask({ taskId });
@@ -916,7 +975,25 @@ export class DigitalMeRuntime {
         return facts;
       },
     };
-    return runWorkConverse(deps, input);
+    return runWorkConverse(deps, input).then((result) => {
+      const userText = String(input.text || '').trim();
+      const userTurnId = String(result.userTurnId || '').trim();
+      if (
+        userTurnId &&
+        (extractExplicitSelfName(userText) || looksLikeIdentityClaim(userText))
+      ) {
+        this.subject.captureInputAsync(
+          {
+            text: userText,
+            sourceKind: 'conversation',
+            ...(result.taskId ? { taskId: result.taskId } : {}),
+            captureKey: workConverseIdentityCaptureKey(userTurnId),
+          },
+          () => undefined,
+        );
+      }
+      return result;
+    });
   }
 
   /** 对话中枢模型通道：注入 hook 优先;否则要求真实模型配置;都没有 = 降级。 */
@@ -1896,9 +1973,37 @@ export class DigitalMeRuntime {
       getArtifactOwnerDecision: (artifactId, artifactVersionId) =>
         subjectService.getArtifactOwnerDecision(artifactId, artifactVersionId),
       ...(this.options.secrets ? { secrets: this.options.secrets } : {}),
+      ...(this.options.publicWebHttpGet ? { publicWebHttpGet: this.options.publicWebHttpGet } : {}),
+      publicPageRead:
+        this.options.publicPageRead ??
+        (async (url) => {
+          try {
+            const connector = createBingHtmlSearchConnector();
+            const read = await connector.read?.(url, { maxChars: 8000 });
+            if (read?.content) {
+              return { content: read.content, resolvedUrl: read.resolvedUrl || url };
+            }
+          } catch {
+            /* connector 失败时由 Job 走安全 HTTP 回退 */
+          }
+          return null;
+        }),
       readExtractedText: async (ref: string) => {
         const bytes = await contentStore.readBytes(ref);
         return bytes.toString('utf8');
+      },
+      retrieveSubjectMaterials: async ({ goal, existingPaths }) => {
+        const hits = await subjectService.retrieveMaterials({ query: goal, maxChunks: 6 });
+        const existing = new Set((existingPaths || []).map((p) => p.replace(/\\/g, '/')));
+        return hits
+          .filter((h) => !existing.has(h.chunk.materialRef) && !existing.has(h.chunk.chunkId))
+          .map((h) => ({
+            sourcePath: h.chunk.materialRef,
+            text: h.chunk.text,
+            materialRef: h.chunk.materialRef,
+            chunkId: h.chunk.chunkId,
+            sourceLabel: `简历片段：${h.chunk.sourceFileName}`,
+          }));
       },
       loadSubjectContext: async () => {
         const derived = await subjectService.getDerived();
@@ -2032,7 +2137,7 @@ export class DigitalMeRuntime {
     } catch {
       return;
     }
-    const file = conversationFilePath(pkg.rootDir);
+    const file = currentConversationFilePathSync(pkg.rootDir);
     try {
       const existing = latestCaptureStatusByTurnId(await readConversationRows(file)).get(input.turnId);
       if (existing?.status === 'skipped') return;
@@ -2099,7 +2204,7 @@ export class DigitalMeRuntime {
     } catch {
       return;
     }
-    const file = conversationFilePath(pkg.rootDir);
+    const file = currentConversationFilePathSync(pkg.rootDir);
     const skipped: GrowthCaptureStatusRecord = {
       kind: 'growth_capture_status',
       turnId: input.turnId,
@@ -2124,8 +2229,33 @@ export class DigitalMeRuntime {
   /** 列出对话轮次（忽略内部成长状态行）。供 App Shell 使用。 */
   async listConversationTurns(): Promise<{ turns: Array<{ id: string; role: string; text: string; at: string }> }> {
     const pkg = this.subject.requireActive();
-    const rows = await readConversationRows(conversationFilePath(pkg.rootDir));
+    const rows = await readConversationRows(currentConversationFilePathSync(pkg.rootDir));
     return { turns: filterTurnsForUi(rows) };
+  }
+
+  getConversationTranscriptPath(): string {
+    const pkg = this.subject.requireActive();
+    return currentConversationFilePathSync(pkg.rootDir);
+  }
+
+  listConversationSessions(): { currentId: string; sessions: Array<{ id: string; title: string; createdAt: string; updatedAt: string }> } {
+    const pkg = this.subject.requireActive();
+    return listConversationSessionsSync(pkg.rootDir);
+  }
+
+  createConversationSession(): { session: { id: string; title: string; createdAt: string; updatedAt: string } } {
+    const pkg = this.subject.requireActive();
+    return { session: createConversationSessionSync(pkg.rootDir) };
+  }
+
+  openConversationSession(sessionId: string): { session: { id: string; title: string; createdAt: string; updatedAt: string } } {
+    const pkg = this.subject.requireActive();
+    return { session: openConversationSessionSync(pkg.rootDir, sessionId) };
+  }
+
+  touchConversationSession(opts: { titleFromUserText?: string } = {}): void {
+    const pkg = this.subject.requireActive();
+    touchConversationSessionSync(pkg.rootDir, opts);
   }
 
   /**
@@ -2141,7 +2271,7 @@ export class DigitalMeRuntime {
       return { replayed: 0 };
     }
 
-    const file = conversationFilePath(pkg.rootDir);
+    const file = currentConversationFilePathSync(pkg.rootDir);
     const rows = await readConversationRows(file);
     for (const item of listReplayableUserTurns(rows)) {
       this.scheduleConversationGrowthCapture({
@@ -2176,7 +2306,7 @@ export class DigitalMeRuntime {
   /** 最近一次对话捕获是否需在聊天气泡旁提示（派生，非 Store）。 */
   async conversationGrowthHint(turnId: string): Promise<{ message: string } | null> {
     const pkg = this.subject.requireActive();
-    const rows = await readConversationRows(conversationFilePath(pkg.rootDir));
+    const rows = await readConversationRows(currentConversationFilePathSync(pkg.rootDir));
     const statuses = new Map<string, GrowthCaptureStatusRecord>();
     for (const row of rows) {
       if (row && typeof row === 'object' && (row as GrowthCaptureStatusRecord).kind === 'growth_capture_status') {

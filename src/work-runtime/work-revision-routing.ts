@@ -9,6 +9,7 @@ import { isCurrentTaskConsult } from './work-cto-consult';
 export type OwnerRevisionRoute =
   | 'system_auto_revision'
   | 'user_directed_revision'
+  | 'queue_revision'
   | 'consultation'
   | 'clarify_revision'
   | 'none';
@@ -18,6 +19,7 @@ export function isVagueOwnerRevision(text: string): boolean {
   const t = String(text || '').trim();
   if (!t) return true;
   if (isClearOwnerDirectedRevision(t)) return false;
+  if (isConcreteQueuedRevision(t)) return false;
   if (isCurrentTaskConsult(t)) return false;
   if (
     /我在想|要不要把|或许|可能吧|你觉得|怎么样|好不好|再看看|随便改改|弄弄|整体再优化一下|有空再改/.test(
@@ -60,6 +62,35 @@ export function isClearOwnerDirectedRevision(text: string): boolean {
 }
 
 /**
+ * 已有成果上的具体修改要求：足够形成修订，但尚未说「开始做」。
+ * 例如设计/排版优化，或额外要一份 Word。不把含糊「整体再优化一下」算进来。
+ */
+export function isConcreteQueuedRevision(text: string): boolean {
+  const t = String(text || '').trim();
+  if (!t) return false;
+  if (isCurrentTaskConsult(t)) return false;
+  if (isOwnerStartNowPhrase(t)) return false;
+  if (isClearOwnerDirectedRevision(t)) return false;
+  if (
+    /(界面|版式|排版|设计).{0,24}(太简单|单调|不好看|简陋|太素)/.test(t) ||
+    /优化.{0,16}(设计|排版|版式|布局)/.test(t) ||
+    /再提供一份\s*(Word|PPT|文档|报告)/i.test(t) ||
+    /另外再.{0,12}(Word|PPT|文档)/i.test(t)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/** 用户授权动手执行最近记下的修订。 */
+export function isOwnerStartNowPhrase(text: string): boolean {
+  const t = String(text || '').trim();
+  if (!t) return false;
+  if (isCurrentTaskConsult(t)) return false;
+  return /^(好的?[，, ]*)?(开始做吧|开始吧|动手吧|现在开始|开始做)[。.!！]*$/.test(t);
+}
+
+/**
  * 当前已有待接受成果时的显式结束确认。
  * 只在该上下文使用，不是全局关键词路由。
  */
@@ -89,6 +120,7 @@ export function classifyOwnerRevisionRoute(input: {
   if (isVagueOwnerRevision(text)) return 'clarify_revision';
   if (isExplicitCurrentResultAcceptance(text)) return 'none';
   if (isClearOwnerDirectedRevision(text)) return 'user_directed_revision';
+  if (isConcreteQueuedRevision(text)) return 'queue_revision';
   if (input.intent === 'artifact_feedback') {
     // 模型已判为成果反馈但启发式未标明确：保守澄清，避免静默执行
     return 'clarify_revision';

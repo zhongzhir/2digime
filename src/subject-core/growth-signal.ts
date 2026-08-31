@@ -135,6 +135,15 @@ export function decideGrowthAdoption(input: {
   if (input.signal === 'weak' && input.type === 'knowledge_gap_noted') return 'keep_candidate';
   if (tags.includes('category:external_claim')) return 'keep_candidate';
   if (tags.includes('category:temporary_context')) return 'keep_candidate';
+  if (
+    input.type === 'identity_clarified' &&
+    tags.includes('self_name') &&
+    !tags.includes('conflict') &&
+    !isHighRiskGrowthText(text)
+  ) {
+    return 'silent_adopt';
+  }
+
   if (tags.includes('conflict') || tags.includes('needs_confirmation') || tags.includes('low_confidence')) {
     return 'must_confirm';
   }

@@ -132,7 +132,9 @@ export class CapabilityRegistry {
         materials.includes('code_repo') ||
         materials.includes('folder') ||
         materials.some((m) => m === 'file');
-      if (intent === 'analyze_code' && materials.length > 0 && !hasCodeMaterial) {
+      const onlyUnknown =
+        materials.length > 0 && materials.every((m) => m === 'unknown');
+      if (intent === 'analyze_code' && materials.length > 0 && !hasCodeMaterial && !onlyUnknown) {
         return {
           reason: 'none',
           actionable: '代码分析需要你添加代码文件夹或项目文件。',

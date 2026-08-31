@@ -89,6 +89,13 @@ export interface CommandMap {
         fileName: string;
         addedAt: string;
         absolutePath: string;
+        /** 正文读取状态；复制成功不等于已读取。 */
+        readStatus?: 'read' | 'partial' | 'failed';
+        readWarning?: string;
+        extractedLength?: number;
+        enteredUnderstanding?: boolean;
+        userFacingReadResult?: string;
+        detectedKinds?: string[];
       }>;
       /**
        * 数字之我成长派生视图（用户面）。由现有证据计算，失败时省略，不得阻断本命令。
@@ -238,7 +245,16 @@ export interface CommandMap {
   /** 导入单文件到主体 materials/,可选产生候选。 */
   'subject.importMaterial': {
     input: { sourcePath: string; distillCandidates?: boolean };
-    output: { materialRef: string; candidateEventIds: string[] };
+    output: {
+      materialRef: string;
+      candidateEventIds: string[];
+      readStatus: 'read' | 'partial' | 'failed';
+      extractedLength: number;
+      enteredUnderstanding: boolean;
+      readWarning?: string;
+      userFacingReadResult?: string;
+      detectedKinds?: string[];
+    };
   };
   /**
    * 移除包内资料副本与对应引用；不得删除包外原始文件。
@@ -421,6 +437,8 @@ export interface CommandMap {
       rejectionReason?: string;
       /** 截图等附件绝对路径。 */
       attachmentPaths?: string[];
+      /** 对话轮幂等键：同一 turnId 重放不得重复创建 Job。 */
+      ownerTurnId?: string;
     };
     output: { jobId: string };
   };
@@ -524,6 +542,8 @@ export interface CommandMap {
       confidence: number;
       /** Digital Me 的自然语言回复（已持久化到 Task.meta.conversation）。 */
       reply: string;
+      /** 本轮已持久化的用户 turnId；用于身份捕获幂等，逐轮唯一。 */
+      userTurnId?: string;
       needsClarification: boolean;
       /** 模型不可用降级。 */
       degraded: boolean;
@@ -552,6 +572,16 @@ export interface CommandMap {
       executionRequestedArtifactType?: string;
       adoptRequested: boolean;
       pauseRequested: boolean;
+      /** 已持久化的待执行修订（查询用）；模型回复不是事实来源。 */
+      pendingRevisionRequest?: {
+        text: string;
+        createdAt: string;
+        sourceTurnId: string;
+        consumedByTurnId?: string;
+        consumedJobId?: string;
+      };
+      /** 授权修订时，渲染层必须用此原文创建 Job，不得用「开始做吧」顶替。 */
+      revisionRequest?: string;
     };
   };
   'artifact.getContent': {

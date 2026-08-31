@@ -36,6 +36,9 @@ export interface SnapshotItem {
   relativePath?: string;
   bytes?: number;
   truncated?: boolean;
+  materialRef?: string;
+  chunkId?: string;
+  sourceLabel?: string;
 }
 
 /** 构建期摄取摘要 — 非独立对象,挂在 Snapshot 上。 */

@@ -72,6 +72,7 @@ export async function assembleDocumentPrompt(
     '若材料不足以支持任务主题或关键事实，必须明确写出材料不足，不得编造，也不得用无关文章替代。',
     '材料完整性以文中「材料完整性」为准：部分读取或未读取的材料不得写成已经完整阅读。',
     '只输出文档正文，不要输出内部协议名、推理链或系统字段。',
+    '禁止让用户运行脚本、执行命令或自行生成文件。若任务需要 Word / PowerPoint，只写文稿正文；用户随后可点「导出 Word」「导出 PowerPoint」得到真实文件。',
   ].join('\n');
 
   const sections: string[] = [];

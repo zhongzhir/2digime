@@ -147,6 +147,15 @@ Selection is relevance-first, not a keyword-rule library: deterministic keyword/
 
 The first real AI-native collaboration loop composes the subject layer, the capability-control layer and remote-subject/A2A: `work.delegateTask` (`src/runtime/digitalme-runtime.ts`) decides via `decideDelegation` (`src/collaboration/delegated-execution.ts`) whether a goal is best executed locally or delegated to a professional external capability — a remote Research Agent (`remote-subject` / A2A / controlled-remote peer) or a professional Coding Agent (`external-executor-cli/http`). It delegates with **minimum necessary context** (goal + authorized materials; subject context is never sent to a remote peer; coding agents get only `priorDecisions` = "title: detail" briefs), runs the existing Do chain, verifies the remote result (`verifyCandidateArtifact` + action receipt with protocol provenance), and the event-driven CTO review performs the **local independent acceptance**. On external failure (`capability`/`model` stage) it automatically falls back to the next candidate (local baseline), never surfacing protocol/HTTP/agent internals to the user. Ownership semantics: the owner's own experience is attributed to the owner's Digital Me via existing growth; external execution facts carry external provenance and never auto-become owner facts; another Digital Me's subject information never enters the owner's subject truth. The owner does not manage collaborators — delegation, acceptance and fallback are 2digime's responsibility. No new Store, no second collaboration truth, no workflow state machine.
 
+## Planned next: general task closure (not implemented)
+
+See **[通用任务闭环与受控外部能力发现开发计划](../plans/GENERAL-TASK-CLOSURE-01.md)**（GENERAL-TASK-CLOSURE-01）。
+
+- **状态：** `planned / not_implemented`（已规划，尚未实施）。
+- **启动条件：** 使用反馈修复已 Owner 验收，并由本收口提交形成独立提交后，立即启动 P0。
+- **第一阶段：** P0 通用外部交接闭环。P0 验收后才做 P1 受控能力发现；P1 稳定后才做 P2 可信工具目录与安装引导。不得因建设工具市场而延误 P0。
+- **不得把现有 GitHub 专项兜底描述成已经覆盖所有未知任务。** GitHub 公开仓审计只覆盖远程代码审计一类目标；未知任务仍可能落入 `general → document`，被错误处理成说明文章。能力降级框架（`OPTIMAL / BASELINE / LIMITED / UNAVAILABLE`）解决的是如何在现有能力中执行或诚实停住，并不等于已经具备「无法完成时生成完整外部提示词、带回结果后继续检查与修订」的通用交接闭环。
+
 ## Honest status
 
 This is an **experimental preview**, not an MVP and not production-ready. The architecture is the durable asset: an AI-native control layer that keeps the human in charge of what "you" are and what the system is allowed to do.

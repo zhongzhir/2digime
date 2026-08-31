@@ -66,6 +66,19 @@ export interface TaskMeta {
    * 只影响确认与意图绕开策略；不构成第二状态机。
    */
   runtimePath?: 'legacy' | 'thin_v1';
+  /**
+   * 已有成果后的待执行修订要求。不是第二状态机：
+   * 只保存用户原文与消费记录，Job 仍是执行事实来源。
+   */
+  pendingRevisionRequest?: TaskPendingRevisionRequest;
+}
+
+export interface TaskPendingRevisionRequest {
+  text: string;
+  createdAt: string;
+  sourceTurnId: string;
+  consumedByTurnId?: string;
+  consumedJobId?: string;
 }
 
 /**

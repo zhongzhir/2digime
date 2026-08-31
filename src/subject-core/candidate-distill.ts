@@ -86,12 +86,136 @@ export function doingExperienceDetailFromAcceptText(text: string): string {
   return detail.slice(0, 400);
 }
 
+const SELF_IS_CLAUSE_RE = /我是(?!在|否|不是)([^，。,；;！!？?\n]{0,24})/g;
+
+/** 国籍、职业、来意、关系等，不得当姓名。 */
+export function isNonNameSelfPredicate(fragment: string): boolean {
+  const t = String(fragment || '')
+    .replace(/[。！？!?的了啊呀哦呢吧]+$/g, '')
+    .trim();
+  if (!t) return true;
+  if (isNonIdentitySelfPredicate(t)) return true;
+  if (/^(中国人|美国人|日本人|英国人|法国人|德国人|韩国人|外国人|本地人)$/.test(t)) return true;
+  if (
+    /(产品经理|工程师|设计师|程序员|开发|顾问|老师|学生|老板|员工|经理|创始人|负责人)$/.test(t)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/** 来意、纯关系称呼：不但不是姓名，也不应记成身份声明。职业/国籍仍可记为身份。 */
+export function isNonIdentitySelfPredicate(fragment: string): boolean {
+  const t = String(fragment || '')
+    .replace(/[。！？!?的了啊呀哦呢吧]+$/g, '')
+    .trim();
+  if (!t) return true;
+  if (/^(你的)?主人$/.test(t)) return true;
+  if (/^来/.test(t)) return true;
+  if (/(咨询|问题)$/.test(t)) return true;
+  return false;
+}
+
+function looksLikePersonName(raw: string): boolean {
+  const name = String(raw || '')
+    .replace(/[。！？!?的了啊呀哦呢吧]+$/g, '')
+    .trim();
+  if (!name || name.length < 2 || name.length > 8) return false;
+  if (isNonNameSelfPredicate(name)) return false;
+  if (/在|项目|修改|不是|一个|问题|咨询|函数|变量|文件/.test(name)) return false;
+  if (/^[\u4e00-\u9fff]{2,4}$/.test(name)) return true;
+  if (/^[A-Za-z][A-Za-z .·-]{1,19}$/.test(name)) return true;
+  return false;
+}
+
+function collectSelfIsClauses(text: string): string[] {
+  const clauses: string[] = [];
+  const re = new RegExp(SELF_IS_CLAUSE_RE.source, 'g');
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(text)) !== null) {
+    clauses.push(String(match[1] || '').trim());
+  }
+  return clauses;
+}
+
 /** 「我是在修改项目」是近况，不是身份声明。 */
 export function looksLikeIdentityClaim(text: string): boolean {
   const t = String(text || '').trim();
   if (!t) return false;
+  if (extractExplicitSelfName(t)) return true;
   if (/身份/.test(t)) return true;
-  return /我是(?!在|否|不是)/.test(t);
+  const clauses = collectSelfIsClauses(t);
+  if (clauses.length === 0) return false;
+  if (clauses.every((c) => isNonIdentitySelfPredicate(c))) return false;
+  return true;
+}
+
+/** 用户亲口说出的姓名（低风险、可静默记下）。 */
+export function extractExplicitSelfName(text: string): string | null {
+  const t = String(text || '').trim();
+  const match = t.match(
+    /(?:我(?:的)?名字是|我名叫|我叫|不是[，,。]?(?:其实|应该)?叫|(?:其实|改)叫)\s*([^\s，。,；;：:：]{1,20})/,
+  );
+  if (match && match[1]) {
+    const name = match[1].replace(/[。！？!?的了啊呀哦]+$/g, '').trim();
+    if (name && !/在|项目|修改|不是|一个/.test(name) && !isNonNameSelfPredicate(name)) {
+      return name.slice(0, 20);
+    }
+  }
+  for (const clause of collectSelfIsClauses(t)) {
+    if (looksLikePersonName(clause)) {
+      return clause.replace(/[。！？!?的了啊呀哦呢吧]+$/g, '').trim().slice(0, 20);
+    }
+  }
+  return null;
+}
+
+export function looksLikePersonalResume(text: string): boolean {
+  const t = String(text || '');
+  const labeled = /简历|个人简历|curriculum vitae|\bCV\b/.test(t);
+  const structured = /姓名[：:]/.test(t) && /(?:教育|工作经历|项目经历|技能|本科|硕士|任职|就职)/.test(t);
+  return labeled || structured;
+}
+
+export function extractResumePersonalFacts(text: string): Array<{
+  type: 'identity_clarified' | 'feedback_recorded';
+  title: string;
+  detail: string;
+}> {
+  const t = String(text || '');
+  const out: Array<{
+    type: 'identity_clarified' | 'feedback_recorded';
+    title: string;
+    detail: string;
+  }> = [];
+  const name = t.match(/姓名[：:]\s*([^\s，。,\n]{1,20})/);
+  if (name && name[1]) {
+    out.push({ type: 'identity_clarified', title: '姓名', detail: name[1].trim() });
+  }
+  const role = t.match(/(?:职位|岗位|求职意向)[：:]\s*([^\n]{2,40})/);
+  if (role && role[1]) {
+    out.push({
+      type: 'identity_clarified',
+      title: '职业方向',
+      detail: role[1].trim().slice(0, 80),
+    });
+  }
+  const expBlock = t.match(/工作经历[：:]?\s*([\s\S]{8,600})/);
+  if (expBlock && expBlock[1]) {
+    const line =
+      expBlock[1]
+        .split(/\n/)
+        .map((l) => l.replace(/^[-*•]\s*/, '').trim())
+        .find((l) => l.length >= 6) || expBlock[1].trim();
+    if (line) {
+      out.push({
+        type: 'feedback_recorded',
+        title: '工作经历',
+        detail: line.slice(0, 240),
+      });
+    }
+  }
+  return out.slice(0, 4);
 }
 
 export function distillCandidatesFromText(input: {
@@ -130,7 +254,7 @@ export function distillCandidatesFromText(input: {
     const enriched = enrichGrowthTags({
       type,
       sourceKind: input.sourceKind,
-      text: `${title} ${detail}`,
+      text: type === 'identity_clarified' ? input.text : `${title} ${detail}`,
       tags: rawTags,
       ...(input.authority ? { authority: input.authority } : {}),
     });
@@ -419,14 +543,22 @@ export function distillCandidatesFromText(input: {
   }
 
   if (looksLikeIdentityClaim(text) || input.sourceKind === 'initial_self_description') {
-    const line =
-      text
-        .split(/\n/)
-        .map((l) => l.trim())
-        .find((l) => l.length > 0) || text;
-    if (looksLikeIdentityClaim(text) || input.sourceKind === 'initial_self_description') {
-      const already = out.some((e) => e.type === 'identity_clarified');
-      if (!already) {
+    const selfName = extractExplicitSelfName(text);
+    const already = out.some((e) => e.type === 'identity_clarified');
+    if (!already) {
+      if (selfName) {
+        push(
+          'identity_clarified',
+          '姓名',
+          selfName,
+          ['身份', 'self_name', 'silent_ok', 'from_conversation', 'category:identity_fact'],
+        );
+      } else {
+        const line =
+          text
+            .split(/\n/)
+            .map((l) => l.trim())
+            .find((l) => l.length > 0) || text;
         push(
           'identity_clarified',
           '现在的我',
@@ -467,6 +599,27 @@ export function distillCandidatesFromText(input: {
       text.slice(0, 400),
       ['gap'],
     );
+  }
+
+  if (input.sourceKind === 'imported_material' && looksLikePersonalResume(text)) {
+    const facts = extractResumePersonalFacts(text);
+    for (const fact of facts) {
+      if (fact.type === 'identity_clarified') {
+        push(
+          'identity_clarified',
+          fact.title,
+          fact.detail,
+          ['身份', 'from_resume', 'needs_confirmation', 'category:identity_fact'],
+        );
+      } else {
+        push(
+          'feedback_recorded',
+          fact.title,
+          fact.detail,
+          ['from_resume', 'needs_confirmation', 'category:work_experience'],
+        );
+      }
+    }
   }
 
   if (input.sourceKind === 'imported_material' && out.length === 0 && text.length >= 2) {

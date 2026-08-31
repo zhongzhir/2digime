@@ -155,7 +155,7 @@ function proposalToEvent(
   const enriched = enrichGrowthTags({
     type: p.eventType,
     sourceKind: input.sourceKind,
-    text: `${p.title} ${p.text}`,
+    text: p.eventType === 'identity_clarified' ? input.text : `${p.title} ${p.text}`,
     tags,
     authority,
   });

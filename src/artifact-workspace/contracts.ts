@@ -4,7 +4,7 @@ import type { Artifact, ArtifactContent, ArtifactVersion } from '../work-runtime
  * Artifact Workspace 契约 — Artifact 是一等对象,不是模型回复附件。
  * 页面直接查看/编辑/复制/导出/打开目录/版本记录/任务关联。
  */
-export type ExportFormat = 'docx' | 'md';
+export type ExportFormat = 'docx' | 'pptx' | 'md';
 
 export interface ArtifactWorkspacePort {
   getContent(

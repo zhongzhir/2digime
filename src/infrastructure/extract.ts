@@ -84,12 +84,18 @@ export async function extractFile(filePath: string): Promise<ExtractionOutcome> 
         break;
       case '.pdf': {
         // 必须传纯 Uint8Array:pdf.js 的 fake-worker 克隆执行 new value.constructor(value),
-        // Buffer 构造器会复制进 Node 内存池(<4KB 时 byteOffset≠0),而 Stream.makeSubStream
+        // Buffer 构造器会复制进 Node 内存池(<4KB 时 byteOffset≠0)，而 Stream.makeSubStream
         // 按整个 ArrayBuffer 取流,视图偏移会使全部 xref 偏移错位(bad XRef entry)。
         const pooled = await fs.readFile(filePath);
         const plain = new Uint8Array(pooled.length);
         plain.set(pooled);
         rawText = (await pdfParse(plain)).text;
+        if (!String(rawText || '').trim()) {
+          return warningOutcome(
+            filePath,
+            'PDF 未能提取到可读正文，可能是字体未嵌入或编码无法识别',
+          );
+        }
         break;
       }
       default:
@@ -186,7 +192,11 @@ function extractDocxText(fileBytes: Buffer): string {
   if (!documentXml) {
     throw new Error('not a docx: word/document.xml missing');
   }
-  return xmlToText(documentXml.toString('utf8'), /<w:t[^>]*>([^<]*)<\/w:t>/g, /<\/w:p>/g);
+  const xml = documentXml
+    .toString('utf8')
+    .replace(/<\/w:tr>/g, '</w:p>')
+    .replace(/<\/w:tc>/g, ' ');
+  return xmlToText(xml, /<w:t[^>]*>([^<]*)<\/w:t>/g, /<\/w:p>/g);
 }
 
 function extractPptxText(fileBytes: Buffer): string {

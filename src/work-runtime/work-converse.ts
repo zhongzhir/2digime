@@ -9,13 +9,20 @@ import {
 import {
   classifyOwnerRevisionRoute,
   isClearOwnerDirectedRevision,
+  isConcreteQueuedRevision,
   isExplicitCurrentResultAcceptance,
+  isOwnerStartNowPhrase,
 } from './work-revision-routing';
 import {
   buildConverseMaterialBrief,
   validateConfirmedPlanExecutionIntent,
 } from './converse-material-brief';
 import type { TaskIntentKind } from './work-intent';
+import {
+  isRemoteCodeAuditGoal,
+  isTechnicalLeadTask,
+  looksLikeFileGenerationGoal,
+} from './remote-github-audit';
 
 /** 对话轮/意图结论局部 id（不属于 shared/ids 的对象前缀集）。 */
 function converseId(prefix: 'turn' | 'intent'): string {
@@ -27,6 +34,7 @@ import type {
   Task,
   TaskConversationTurn,
   TaskIntentConclusion,
+  TaskPendingRevisionRequest,
   TaskPlan,
 } from './task';
 import { isThinOwnerRuntime } from './thin-owner-start';
@@ -132,44 +140,56 @@ export function recentTurnsWindow(
   return turns.slice(-limit).map((t) => ({ role: t.role, content: t.content }));
 }
 
-const CONVERSE_SYSTEM_PROMPT = [
-  '你是用户的 Digital Me，以技术负责人的身份与用户讨论一项正在进行的任务。',
-  '用户不懂技术，你要用平实的中文与其对话；不要输出任何内部术语、分析提纲或推理过程。',
-  '根据下面提供的任务上下文、已授权材料事实与用户最新输入，判断用户意图并生成回复。',
-  '材料规则（必须遵守）：',
-  '- 若上下文含「已授权材料」且有清单或摘录：你已经获得这些本地材料事实；必须基于材料理解与规划；禁止声称“无法访问/无法读取本地文件夹”，禁止要求用户把全文粘贴进对话。',
-  '- 若某文件标注未读取：只说明该文件的具体阻断原因与可行动办法，不得把整次授权说成系统不能读文件夹。',
-  '- 读取已授权材料属于理解与规划，不需要用户再次确认执行。',
-  '- 对「先出方案、批准后再实施」：确认前只更新开发规划，不要假装已经改了项目文件。',
-  '输出合同：必须给出一个合法 JSON 对象。可以在前后有简短说明，或使用 Markdown 代码围栏，但其中必须含有完整 JSON。',
-  'JSON 字段如下（schema）：',
-  '{"intent":"<必须是以下之一: discuss_or_question | add_goal_info | modify_plan | confirm_start | artifact_feedback | request_explanation | query_status | pause_or_cancel | final_adopt | other>",',
-  ' "confidence": <0 到 1 的数字，表示你对意图判断的把握>,',
-  ' "reply": "<给用户的自然语言回复：说明你对目标的理解，并给出简短 CTO 建议>",',
-  ' "planUpdate": "<可选但强烈建议：完整开发规划要点，分行列出目标、交付、路径、准备、边界；首轮目标输入必须提供；其他情况可省略>",',
-  ' "executionIntentKind": "<仅 confirm_start：modify_code | create_document | analyze_code>",',
-  ' "expectedOutputFamily": "<仅 confirm_start：code-change | document | code-analysis>"}',
-  '意图判定规则：',
-  '- 讨论、提问、请求解释、询问进度或状态，都不是执行请求，分别归入 discuss_or_question / request_explanation / query_status。',
-  '- 用户补充目标或要求，且尚未开始执行 → add_goal_info；要求调整当前规划 → modify_plan；对已有成果提出修改意见 → artifact_feedback。',
-  '- 已有成果时，明确「改成 X / 按你说的改 / 把 A 改成 B」仍用 artifact_feedback（不要改成 discuss）；是否开始修改由系统确定性效果层决定，你仍须给出简短确认回复。',
-  '- 只有用户明确表示「开始 / 按这个做 / 继续执行」且主要是确认规划时才是 confirm_start。',
-  '- confirm_start 时必须同时给出本轮瞬时 executionIntentKind 与 expectedOutputFamily（不写入规划、不持久化）：要改项目文件 → modify_code 配 code-change；只出报告/说明且明确不改文件 → create_document 配 document；只读代码分析 → analyze_code 配 code-analysis。以已确认方案的实际动作为准，不得因为出现「优化」「实施」等词就改文件。',
-  '- 只有用户明确表示满意并要求采用、定稿、结束时才是 final_adopt。',
-  '- 已有成果时，用户表达对当前版本满意并要用这一版（如「就用这一版」「这版可以，收货」）→ final_adopt，不是 confirm_start；confirm_start 只用于要求开始或继续做开发工作。',
-  '- 想暂停、停止、取消 → pause_or_cancel。',
-  '- 拿不准时给出较低的 confidence，并在 reply 中向用户澄清你不确定的点。',
-  '示例（帮助你区分边界）：',
-  '- 「以后想加个排行榜，难不难？」→ 只是询问难度，不是让你现在做 → discuss_or_question 或 request_explanation。',
-  '- 「背景改成夜晚的，其他不动」→ 已有成果时是 artifact_feedback；尚未开始时是 modify_plan。',
-  '- 「行，就这么干」→ confirm_start；「这版挺好，不用再改了」→ final_adopt。',
-  '- 用户问「能不能用 / 要不要改 / 有什么风险 / 现在怎么样 / 看不懂这份结果」→ query_status 或 request_explanation，必须结合当前任务、最新执行与验收结论用几句人话回答；禁止说「没听懂请再说一次」。',
-  'reply 要求：',
-  '- 说明你对这句话的理解和判断；',
-  '- 若用户在问当前结果：必须明确回答能不能用、是否达到目标、还需不需要改、真正需要用户知道的风险、建议下一步；',
-  '- 不要假装已经完成了任何修改或执行；执行需要用户确认后才会开始。',
-  '- 规划正文由你直接给出（planUpdate），不要声称要交给外部写代码工具来替你写规划。',
-].join('\n');
+export function buildConverseSystemPrompt(goal: string): string {
+  const technical = isTechnicalLeadTask(goal);
+  const identity = technical
+    ? '你是用户的 Digital Me。当前这项任务属于软件开发或系统运维，请以技术负责人的身份与用户讨论。'
+    : '你是用户的 Digital Me / 全能助手，帮助用户完成正在进行的任务。';
+  return [
+    identity,
+    '用户不懂技术，你要用平实的中文与其对话；不要输出任何内部术语、分析提纲或推理过程。',
+    '不要自称技术负责人，除非当前任务确实是软件开发、系统运维或代码审计。',
+    '根据下面提供的任务上下文、已授权材料事实与用户最新输入，判断用户意图并生成回复。',
+    '材料规则（必须遵守）：',
+    '- 若上下文含「已授权材料」且有清单或摘录：你已经获得这些本地材料事实；必须基于材料理解与规划；禁止声称“无法访问/无法读取本地文件夹”，禁止要求用户把全文粘贴进对话。',
+    '- 若某文件标注未读取：只说明该文件的具体阻断原因与可行动办法，不得把整次授权说成系统不能读文件夹。',
+    '- 读取已授权材料属于理解与规划，不需要用户再次确认执行。',
+    '- 对「先出方案、批准后再实施」：确认前只更新开发规划，不要假装已经改了项目文件。',
+    '- 禁止让用户运行脚本、执行命令或自行补齐技术步骤。需要生成 Word / PowerPoint 时，只产出文稿正文；用户可在成果区点「导出 Word」「导出 PowerPoint」得到真实文件。',
+    '- 若任务是审计 GitHub 账号或仓库：executionIntentKind 必须是 analyze_code，不得改成 create_document，不得用普通文章冒充代码审计。若当前读不到公开仓库，要说清具体原因和下一步，并给出一份可复制到其他 AI 工具的完整提示词；用户把结果带回来后继续检查并给出下一轮要求。',
+    '输出合同：必须给出一个合法 JSON 对象。可以在前后有简短说明，或使用 Markdown 代码围栏，但其中必须含有完整 JSON。',
+    'JSON 字段如下（schema）：',
+    '{"intent":"<必须是以下之一: discuss_or_question | add_goal_info | modify_plan | confirm_start | artifact_feedback | request_explanation | query_status | pause_or_cancel | final_adopt | other>",',
+    ' "confidence": <0 到 1 的数字，表示你对意图判断的把握>,',
+    ' "reply": "<给用户的自然语言回复：说明你对目标的理解，并给出简短建议>",',
+    ' "planUpdate": "<可选但强烈建议：完整规划要点，分行列出目标、交付、路径、准备、边界；首轮目标输入必须提供；其他情况可省略>",',
+    ' "executionIntentKind": "<仅 confirm_start：modify_code | create_document | analyze_code>",',
+    ' "expectedOutputFamily": "<仅 confirm_start：code-change | document | code-analysis>"}',
+    '意图判定规则：',
+    '- 讨论、提问、请求解释、询问进度或状态，都不是执行请求，分别归入 discuss_or_question / request_explanation / query_status。',
+    '- 用户补充目标或要求，且尚未开始执行 → add_goal_info；要求调整当前规划 → modify_plan；对已有成果提出修改意见 → artifact_feedback。',
+    '- 已有成果时，明确「改成 X / 按你说的改 / 把 A 改成 B」仍用 artifact_feedback（不要改成 discuss）；是否开始修改由系统确定性效果层决定，你仍须给出简短确认回复。',
+    '- 只有用户明确表示「开始 / 按这个做 / 继续执行」且主要是确认规划时才是 confirm_start。',
+    `- confirm_start 时必须同时给出本轮瞬时 executionIntentKind 与 expectedOutputFamily：要改项目文件 → modify_code 配 code-change；生成 Word/PPT/文稿 → create_document 配 document；GitHub 或代码审计 → analyze_code 配 code-analysis。${looksLikeFileGenerationGoal(goal) ? '当前任务需要可下载文件，请按 create_document 规划正文内容，不要让用户运行脚本。' : ''}${isRemoteCodeAuditGoal(goal) ? '当前任务是远程代码审计，必须 analyze_code。' : ''}`,
+    '- 只有用户明确表示满意并要求采用、定稿、结束时才是 final_adopt。',
+    '- 已有成果时，用户表达对当前版本满意并要用这一版（如「就用这一版」「这版可以，收货」）→ final_adopt，不是 confirm_start；confirm_start 只用于要求开始或继续做开发工作。',
+    '- 想暂停、停止、取消 → pause_or_cancel。',
+    '- 拿不准时给出较低的 confidence，并在 reply 中向用户澄清你不确定的点。',
+    '示例（帮助你区分边界）：',
+    '- 「以后想加个排行榜，难不难？」→ 只是询问难度，不是让你现在做 → discuss_or_question 或 request_explanation。',
+    '- 「背景改成夜晚的，其他不动」→ 已有成果时是 artifact_feedback；尚未开始时是 modify_plan。',
+    '- 「行，就这么干」→ confirm_start；「这版挺好，不用再改了」→ final_adopt。',
+    '- 用户问「能不能用 / 要不要改 / 有什么风险 / 现在怎么样 / 看不懂这份结果」→ query_status 或 request_explanation，必须结合当前任务、最新执行与验收结论用几句人话回答；禁止说「没听懂请再说一次」。',
+    'reply 要求：',
+    '- 说明你对这句话的理解和判断；',
+    '- 若用户在问当前结果：必须明确回答能不能用、是否达到目标、还需不需要改、真正需要用户知道的风险、建议下一步；',
+    '- 不要假装已经完成了任何修改或执行；执行需要用户确认后才会开始。',
+    '- 规划正文由你直接给出（planUpdate），不要声称要交给外部写代码工具来替你写规划。',
+    '- 不要使用 Job、Artifact、Adapter、脚本等内部词。',
+  ].join('\n');
+}
+
+const CONVERSE_SYSTEM_PROMPT = buildConverseSystemPrompt('');
 
 const CONVERSE_REPAIR_USER =
   '上一次输出不符合合同。请只输出一个合法 JSON 对象（可无围栏），字段为 intent、confidence、reply；intent 为 confirm_start 时必须同时给出配对的 executionIntentKind 与 expectedOutputFamily（modify_code↔code-change，create_document↔document，analyze_code↔code-analysis）；必要时加 planUpdate；不要 Markdown 说明。';
@@ -233,7 +253,7 @@ export function buildConverseMessages(ctx: ConverseModelContext): ChatMessage[] 
   lines.push('【用户最新输入】');
   lines.push(ctx.userText);
   return [
-    { role: 'system', content: CONVERSE_SYSTEM_PROMPT },
+    { role: 'system', content: buildConverseSystemPrompt(ctx.goal || '') },
     { role: 'user', content: lines.join('\n') },
   ];
 }
@@ -349,6 +369,15 @@ export function isUserVisiblePlan(plan: { source?: string } | null | undefined):
 export const CURRENT_RESULT_ACCEPTED_REPLY =
   '好的，本次任务结束。如有其它需要，请随时告诉我。';
 
+const PENDING_REVISION_RECORDED_REPLY =
+  '已经记下你的修改要求。你说开始之后，我会按这个要求改这一版成果。';
+
+const START_WITHOUT_PENDING_REPLY =
+  '这一版已经做完。我还没有记下具体要改什么，所以现在不能开始改。请直接说要改的地方或交付格式。';
+
+const START_ALREADY_CONSUMED_REPLY =
+  '上一轮修改要求已经在执行或已经做过了。如果还要改，请再说具体要求。';
+
 export interface ConverseDecision {
   intent: WorkConverseIntent;
   confidence: number;
@@ -366,6 +395,10 @@ export interface ConverseDecision {
   adoptRequested: boolean;
   /** 请求渲染层走确定性暂停/取消路径。 */
   pauseRequested: boolean;
+  /** 把用户原文记为待执行修订（先落盘，再允许回复「已经加入计划」）。 */
+  recordPendingRevision?: boolean;
+  /** 授权修订时使用的用户原文。 */
+  revisionRequestText?: string;
 }
 
 export interface ConverseDecisionInput {
@@ -380,6 +413,19 @@ export interface ConverseDecisionInput {
   firstTurn?: boolean;
   userText?: string;
   consultContext?: ConsultTaskContext;
+  pendingRevision?: TaskPendingRevisionRequest | null;
+}
+
+function applyQueuedRevision(decision: ConverseDecision, userText: string): void {
+  const text = String(userText || '').trim();
+  decision.recordPendingRevision = true;
+  decision.revisionRequestText = text;
+  decision.startAuthorized = false;
+  delete decision.startMode;
+  decision.needsClarification = false;
+  if (!/已经加入计划|已经记下|已记下|加入计划/.test(decision.reply)) {
+    decision.reply = PENDING_REVISION_RECORDED_REPLY;
+  }
 }
 
 /**
@@ -455,7 +501,14 @@ export function decideConverseEffects(input: ConverseDecisionInput): ConverseDec
   switch (intent) {
     case 'add_goal_info':
     case 'modify_plan':
-      // planUpdate 已在上方写入
+      if (
+        input.hasArtifact &&
+        !input.jobRunning &&
+        !input.firstTurn &&
+        isConcreteQueuedRevision(input.userText || '')
+      ) {
+        applyQueuedRevision(decision, input.userText || '');
+      }
       break;
     case 'artifact_feedback': {
       // FIX-22：成果后 Owner 明确修订 → user_directed_revision；不得因自动修订暂停而吞掉。
@@ -476,6 +529,10 @@ export function decideConverseEffects(input: ConverseDecisionInput): ConverseDec
         intent: 'artifact_feedback',
       });
       if (route === 'consultation') break;
+      if (route === 'queue_revision') {
+        applyQueuedRevision(decision, input.userText || '');
+        break;
+      }
       if (route === 'clarify_revision') {
         decision.needsClarification = true;
         if (!/具体|哪|请说明|想改成什么|需要你确认/.test(decision.reply)) {
@@ -486,6 +543,7 @@ export function decideConverseEffects(input: ConverseDecisionInput): ConverseDec
       if (route === 'user_directed_revision') {
         decision.startAuthorized = true;
         decision.startMode = 'revision';
+        decision.revisionRequestText = String(input.userText || '').trim();
       }
       break;
     }
@@ -506,6 +564,30 @@ export function decideConverseEffects(input: ConverseDecisionInput): ConverseDec
           if (isClearOwnerDirectedRevision(userText)) {
             decision.startAuthorized = true;
             decision.startMode = 'revision';
+            decision.revisionRequestText = userText;
+            break;
+          }
+          const pending = input.pendingRevision;
+          const pendingOpen = !!(pending && pending.text && !pending.consumedJobId);
+          if (isOwnerStartNowPhrase(userText) && pendingOpen) {
+            decision.startAuthorized = true;
+            decision.startMode = 'revision';
+            decision.revisionRequestText = pending!.text;
+            decision.reply = `开始按上一轮修改要求做：${pending!.text}`;
+            break;
+          }
+          if (isOwnerStartNowPhrase(userText) && pending?.consumedJobId) {
+            decision.needsClarification = true;
+            decision.reply = START_ALREADY_CONSUMED_REPLY;
+            break;
+          }
+          if (isOwnerStartNowPhrase(userText)) {
+            decision.needsClarification = true;
+            decision.reply = START_WITHOUT_PENDING_REPLY;
+            break;
+          }
+          if (isConcreteQueuedRevision(userText)) {
+            applyQueuedRevision(decision, userText);
             break;
           }
           decision.needsClarification = true;
@@ -554,6 +636,10 @@ export interface WorkConverseDeps {
     input: { turns: TaskConversationTurn[]; intents?: TaskIntentConclusion[] },
   ): Promise<Task>;
   updatePlan(taskId: string, plan: TaskPlan): Promise<Task>;
+  updatePendingRevision?(
+    taskId: string,
+    pending: TaskPendingRevisionRequest | null,
+  ): Promise<Task>;
   /** D11-D：暂停自动修订 / 目标变更后解除暂停。 */
   updateRevisionLoop?(
     taskId: string,
@@ -574,6 +660,11 @@ export interface WorkConverseInput {
   silentOutcomeExplain?: boolean;
 }
 
+/** 任务对话身份捕获键：绑定本轮用户 turnId，同一任务多轮互不阻断，同 turn 可重放。 */
+export function workConverseIdentityCaptureKey(userTurnId: string): string {
+  return `work-converse-identity:${String(userTurnId || '').trim()}`;
+}
+
 export interface WorkConverseResult {
   taskId: string;
   createdTask: boolean;
@@ -583,6 +674,8 @@ export interface WorkConverseResult {
   needsClarification: boolean;
   degraded: boolean;
   newTurns: TaskConversationTurn[];
+  /** 本轮已持久化的用户 turnId；silentOutcomeExplain 未写用户轮时缺省。 */
+  userTurnId?: string;
   plan?: {
     version: number;
     status: 'draft' | 'confirmed';
@@ -600,6 +693,8 @@ export interface WorkConverseResult {
   executionRequestedArtifactType?: string;
   adoptRequested: boolean;
   pauseRequested: boolean;
+  pendingRevisionRequest?: TaskPendingRevisionRequest;
+  revisionRequest?: string;
 }
 
 /**
@@ -737,7 +832,16 @@ export async function runWorkConverse(
     firstTurn: createdTask,
     userText: text,
     consultContext,
+    pendingRevision: task.meta?.pendingRevisionRequest ?? null,
   });
+  if (
+    /已经加入计划|已经记下|已记下/.test(decision.reply) &&
+    !decision.recordPendingRevision &&
+    !(decision.startAuthorized && decision.startMode === 'revision')
+  ) {
+    decision.reply = START_WITHOUT_PENDING_REPLY;
+    decision.needsClarification = true;
+  }
   if (
     decision.startAuthorized &&
     decision.startMode !== 'revision' &&
@@ -855,10 +959,26 @@ export async function runWorkConverse(
     };
   }
 
+  // 先落盘待执行修订，再生成与实际状态一致的回复。模型回复不是事实来源。
+  const userTurnId = converseId('turn');
+  let pendingOut = task.meta?.pendingRevisionRequest;
+  if (decision.recordPendingRevision && decision.revisionRequestText && deps.updatePendingRevision) {
+    pendingOut = {
+      text: decision.revisionRequestText,
+      createdAt: nowIso(),
+      sourceTurnId: userTurnId,
+    };
+    task = await deps.updatePendingRevision(task.id, pendingOut);
+  } else if (decision.recordPendingRevision && !deps.updatePendingRevision) {
+    decision.recordPendingRevision = false;
+    decision.reply = START_WITHOUT_PENDING_REPLY;
+    decision.needsClarification = true;
+  }
+
   // 对话与意图结论落盘（只存可见内容与结论；不存提示词/思维链）
   const intentId = converseId('intent');
   const userTurn: TaskConversationTurn = {
-    turnId: converseId('turn'),
+    turnId: userTurnId,
     role: 'user',
     content: text,
     createdAt: nowIso(),
@@ -927,6 +1047,7 @@ export async function runWorkConverse(
     needsClarification: decision.needsClarification,
     degraded: decision.degraded,
     newTurns: persistedTurns,
+    ...(!input.silentOutcomeExplain ? { userTurnId: userTurn.turnId } : {}),
     ...(planOut ? { plan: planOut } : {}),
     ...(planGenerationFailed ? { planGenerationFailed: true } : {}),
     ...(thin ? { runtimePath: 'thin_v1' as const } : {}),
@@ -938,5 +1059,7 @@ export async function runWorkConverse(
       : {}),
     adoptRequested: decision.adoptRequested,
     pauseRequested: decision.pauseRequested,
+    ...(pendingOut ? { pendingRevisionRequest: pendingOut } : {}),
+    ...(decision.revisionRequestText ? { revisionRequest: decision.revisionRequestText } : {}),
   };
 }

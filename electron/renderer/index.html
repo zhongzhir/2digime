@@ -167,7 +167,7 @@
 
           <section class="settings-block" aria-labelledby="remote-dm-title">
             <h2 id="remote-dm-title">连接另一台电脑上的数字之我</h2>
-            <p class="muted">实验能力：与另一台电脑上的数字之我建立联系。不共享这台电脑上的文件夹。</p>
+            <p class="muted">与另一台电脑上的数字之我建立联系。不共享这台电脑上的文件夹。</p>
             <label class="field">
               <span>中继服务地址</span>
               <input id="remote-relay-url" type="text" placeholder="例如 https://relay.example.com" autocomplete="off" />
@@ -245,7 +245,7 @@
           <nav class="main-nav" aria-label="主导航">
             <button type="button" class="nav-item active" data-nav="chat" id="nav-chat">对话</button>
             <button type="button" class="nav-item" data-nav="work" id="nav-work">做事</button>
-            <button type="button" class="nav-item" data-nav="collab" id="nav-collab" title="实验能力">协作（实验）</button>
+            <button type="button" class="nav-item" data-nav="collab" id="nav-collab">协作</button>
             <button type="button" class="nav-item" data-nav="subject" id="nav-subject">数字之我</button>
           </nav>
           <div class="topbar-actions" aria-label="次级入口">
@@ -254,7 +254,12 @@
           </div>
         </header>
 
-        <section id="panel-chat" class="shell-panel chat-panel" data-panel="chat">
+        <section id="panel-chat" class="shell-panel chat-panel chat-with-sessions" data-panel="chat">
+          <aside id="chat-session-aside" class="chat-session-aside" aria-label="历史对话">
+            <button type="button" id="btn-chat-new" class="primary">新对话</button>
+            <ul id="chat-session-list" class="chat-session-list"></ul>
+          </aside>
+          <div class="chat-main">
           <h1 class="page-title">对话</h1>
           <p class="page-lead">交流想法；需要时可转为任务。</p>
           <div class="chat-stream">
@@ -288,14 +293,9 @@
               <button type="button" id="btn-chat-send" class="primary">发送</button>
               <button type="button" id="btn-chat-retry" class="ghost" hidden>重试回复</button>
               <button type="button" id="btn-chat-to-task">转为任务</button>
-              <button type="button" id="btn-chat-clear" class="ghost">清空对话</button>
-            </div>
-            <div id="chat-clear-confirm" class="chat-clear-confirm" hidden>
-              <span class="chat-clear-confirm-text">清空当前对话？</span>
-              <button type="button" id="btn-chat-clear-confirm" class="primary">确认清空</button>
-              <button type="button" id="btn-chat-clear-cancel" class="ghost">取消</button>
             </div>
             <p id="chat-status" class="meta" aria-live="polite"></p>
+          </div>
           </div>
         </section>
 
@@ -504,6 +504,11 @@
                     <div class="work-status-rail" id="work-status-rail">
                       <p id="job-status" class="status" aria-live="polite"></p>
                       <p id="job-actionable" class="muted"></p>
+                      <div id="job-handoff" class="job-handoff" hidden>
+                        <p class="muted tiny">可以把下面这段提示词复制到其他 AI 工具。完成后把结果发回来，我会继续检查。</p>
+                        <textarea id="job-handoff-prompt" rows="8" readonly></textarea>
+                        <button type="button" id="btn-copy-handoff">复制提示词</button>
+                      </div>
                     </div>
                     <div id="owner-choice-prompt" class="owner-choice" hidden>
                       <p id="owner-choice-question" class="owner-choice-q"></p>
@@ -555,11 +560,16 @@
                   <div class="row artifact-exports" id="artifact-exports">
                     <button type="button" id="btn-copy">复制</button>
                     <button type="button" id="btn-export-md">导出 Markdown</button>
-                    <button type="button" id="btn-export-docx">导出 Word</button>
                     <button type="button" id="btn-reveal">打开所在目录</button>
                   </div>
                 </details>
               </div>
+              <div class="row artifact-export-primary" id="artifact-export-primary" hidden>
+                <button type="button" id="btn-export-docx" class="primary">导出 Word</button>
+                <button type="button" id="btn-export-pptx" class="primary">导出 PowerPoint</button>
+              </div>
+              <p id="export-status" class="meta" hidden></p>
+              <button type="button" id="btn-export-retry" class="ghost" hidden>重试导出</button>
               <div id="artifact-loading" class="artifact-loading" hidden>
                 <p class="muted">正在打开任务…</p>
               </div>
@@ -774,10 +784,14 @@
           <div id="collab-page-home">
             <div class="aside-head">
               <h1 class="page-title">协作</h1>
-              <button type="button" id="btn-collab-page-new" class="primary">新建协作</button>
             </div>
-            <p class="page-lead">实验能力：协作还处于试用阶段，但入口与做事、对话同等可发现。当前你可以：与另一台已配对的数字之我建立联系、收发加密信件、发现协作机会、提出协作并打开同一条协作详情。</p>
-            <p class="muted tiny">协作目前还<strong>不能</strong>当成完整的远程交活：不传输大文件、不走完整远程任务履约；暂不支持多人同时协作；不提供支付或对外自动承诺。研究分析等专业能力请到「设置」中配置。</p>
+            <p class="page-lead">可以联系另一个用户的数字之我、收发信息、传递你明确授权的内容，并处理合作机会。</p>
+            <details class="collab-scope" id="collab-current-scope">
+              <summary>当前支持范围</summary>
+              <p>目前可以：连接另一台电脑上的数字之我、收发加密信件、发现合作机会、提出协作。还不支持：传送大文件、完整远程交活、多人同时协作、支付或对外自动承诺。</p>
+            </details>
+            <div class="collab-home-split">
+            <div class="collab-home-actions" aria-label="协作动作">
 
             <section class="collab-home-section" aria-labelledby="collab-who-title">
               <h2 class="section-title" id="collab-who-title">
@@ -788,7 +802,6 @@
                 <div class="collab-peer-manage-card" id="collab-peer-digitalme-card">
                   <p class="collab-peer-name">另一台电脑上的数字之我</p>
                   <p class="muted tiny">这台电脑上只有你的数字之我。要协作，请先到「设置」连接另一台电脑上的数字之我。</p>
-                  <p class="muted tiny">数字之我正在逐步做到：按你确认过的内容代表你说话和做事，并在你授权下与另一台电脑上的数字之我协作。当前协作仍是实验，可以建立联系、发现机会、提出意向；还不能当成完整的远程交活。</p>
                 </div>
               </div>
             </section>
@@ -812,11 +825,22 @@
                   placeholder="例如：我正在找适合一起做项目的人，希望能把方案一起做完。"
                 ></textarea>
               </label>
+              <p id="collab-local-material-hint" class="muted tiny" hidden></p>
               <div class="row">
                 <button type="button" id="btn-collab-send-signal" class="primary">发出</button>
               </div>
               <p id="collab-signal-status" class="status" aria-live="polite"></p>
             </section>
+
+            <section class="collab-home-section" aria-labelledby="collab-new-title">
+              <h2 class="section-title" id="collab-new-title">新建协作</h2>
+              <p class="muted tiny">说明想让对方完成的事，并发出协作请求。</p>
+              <div class="row">
+                <button type="button" id="btn-collab-page-new" class="primary">新建协作</button>
+              </div>
+            </section>
+            </div>
+            <div class="collab-home-status" aria-label="协作状态">
 
             <section class="collab-home-section" aria-labelledby="collab-opp-title">
               <h2 class="section-title" id="collab-opp-title">
@@ -839,13 +863,22 @@
               <p id="collab-empty-active" class="empty-hint">暂无进行中的协作。可点「新建协作」。</p>
             </section>
 
+            <section class="collab-home-section" aria-labelledby="collab-pending-title">
+              <h2 class="section-title" id="collab-pending-title">
+                待处理
+                <span class="section-hint">需要你确认</span>
+              </h2>
+              <ul id="collab-list-pending" class="collab-entry-list"></ul>
+              <p id="collab-empty-pending" class="empty-hint">暂无待处理的协作。</p>
+            </section>
+
             <section class="collab-home-section" aria-labelledby="collab-done-title">
               <h2 class="section-title" id="collab-done-title">
-                待你处理 / 已完成
-                <span class="section-hint">需确认或已结束</span>
+                已完成
+                <span class="section-hint">已经结束</span>
               </h2>
               <ul id="collab-list-done" class="collab-entry-list"></ul>
-              <p id="collab-empty-done" class="empty-hint">暂无待处理或已完成的协作。</p>
+              <p id="collab-empty-done" class="empty-hint">暂无已完成的协作。</p>
             </section>
 
             <section class="collab-home-section" aria-labelledby="collab-revoked-title">
@@ -856,13 +889,15 @@
               <ul id="collab-list-revoked" class="collab-entry-list"></ul>
               <p id="collab-empty-revoked" class="empty-hint">暂无已撤销记录。</p>
             </section>
+            </div>
+            </div>
           </div>
 
           <div id="collab-page-new" hidden>
             <button type="button" id="btn-collab-new-back" class="ghost">返回列表</button>
             <h1 class="page-title">新建协作</h1>
             <p id="collab-page-context-note" class="muted tiny" hidden></p>
-            <p class="muted tiny">实验能力：协作对象是另一台电脑上的数字之我。请先在「设置」中连接。</p>
+            <p class="muted tiny">协作对象是另一台电脑上的数字之我。请先在「设置」中连接。</p>
             <label class="field" hidden>
               <span>协作方式</span>
               <select id="collab-page-target-mode">
@@ -889,6 +924,7 @@
                 <span>想让对方完成什么</span>
                 <textarea id="collab-page-subtask" rows="5" placeholder="说明希望对方完成的具体内容"></textarea>
               </label>
+              <p id="collab-page-local-material-hint" class="muted tiny" hidden></p>
               <label class="field">
                 <span>可选补充要求</span>
                 <textarea id="collab-page-extra" rows="2" placeholder="可留空"></textarea>
@@ -1009,7 +1045,7 @@
             <ul class="help-list">
               <li>还没连接模型时无法回复，请到「设置」连接后再试。</li>
               <li>对话是完善数字之我的主要方式；你确认过的内容会被记住。</li>
-              <li>清空对话不会清掉已确认的重要内容。</li>
+              <li>新对话会保留原来的对话，可在左侧重新打开。</li>
             </ul>
           </div>
 
@@ -1018,15 +1054,15 @@
             <ul class="help-list">
               <li>还没连接模型时不能开始处理，请到「设置」连接。</li>
               <li>采用成果后，对话可以提起刚完成的事。</li>
-              <li>需要另一台电脑上的数字之我帮忙时，可转到「协作（实验）」。</li>
+              <li>需要另一台电脑上的数字之我帮忙时，可转到「协作」。</li>
             </ul>
           </div>
 
           <div class="help-topic" data-help-topic="collab" hidden>
-            <p>这是实验能力。协作对象是另一台电脑上的数字之我，不是这台电脑上的第二个数字之我。</p>
+            <p>协作对象是另一台电脑上的数字之我，不是这台电脑上的第二个数字之我。</p>
             <ul class="help-list">
-              <li>现在可以：连接、发现机会、提出意向、查看同一条协作。</li>
-              <li>现在还不能：当成完整的远程交活、传送大文件、多人同时协作、支付或对外自动承诺。</li>
+              <li>可以：连接、收发信息、发现机会、提出意向、查看同一条协作。</li>
+              <li>详细说明见协作页「当前支持范围」。</li>
               <li>请先到「设置」连接另一台电脑上的数字之我。</li>
             </ul>
           </div>

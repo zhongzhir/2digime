@@ -3,6 +3,7 @@
  * 成长捕获状态以独立行追加，不改写历史消息行；读层忽略内部状态。
  */
 import { promises as fs } from 'node:fs';
+import * as fssync from 'node:fs';
 import * as path from 'node:path';
 
 export type ConversationTurnRole = 'user' | 'assistant' | 'system';
@@ -52,8 +53,31 @@ export function isConversationTurn(row: unknown): row is ConversationTurn {
   );
 }
 
-export function conversationFilePath(packageRoot: string): string {
+/** 会话功能上线前的单一 transcript 路径；迁移仍读这里。 */
+export function legacyConversationFilePath(packageRoot: string): string {
   return path.join(packageRoot, 'ui', 'conversation.ndjson');
+}
+
+/**
+ * 当前对话 transcript。若已有会话索引，指向当前会话文件，
+ * 这样成长捕获状态与「本次回答不用于长期了解」与当前对话一致。
+ */
+export function conversationFilePath(packageRoot: string): string {
+  const indexFile = path.join(packageRoot, 'ui', 'conversations', 'index.json');
+  try {
+    if (fssync.existsSync(indexFile)) {
+      const parsed = JSON.parse(fssync.readFileSync(indexFile, 'utf8')) as {
+        schemaVersion?: number;
+        currentId?: string;
+      };
+      if (parsed?.schemaVersion === 1 && parsed.currentId) {
+        return path.join(packageRoot, 'ui', 'conversations', `${parsed.currentId}.ndjson`);
+      }
+    }
+  } catch {
+    /* 回退到旧路径 */
+  }
+  return legacyConversationFilePath(packageRoot);
 }
 
 export async function readConversationRows(filePath: string): Promise<ConversationNdjsonRow[]> {

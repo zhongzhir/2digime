@@ -21,6 +21,17 @@ test('txt 与 md 抽取', async () => {
   assert.equal(md.digest, contentDigest(md.text as string));
 });
 
+test('docx 抽取包含表格单元格文字', async () => {
+  const dir = await makeTempDir('extract-docx-table');
+  const { buildFixtureResumeDocx } = await import('./feedback-loop-02-fixtures');
+  const docxPath = path.join(dir, 'table.docx');
+  await fs.writeFile(docxPath, buildFixtureResumeDocx());
+  const outcome = await extractFile(docxPath);
+  assert.equal(outcome.status, 'ok');
+  assert.match(outcome.text as string, /张元林/);
+  assert.match(outcome.text as string, /示例大学/);
+});
+
 test('docx 抽取(经导出器往返)', async () => {
   const dir = await makeTempDir('extract-docx');
   const docxPath = path.join(dir, 'doc.docx');
@@ -57,6 +68,25 @@ test('pdf 抽取', async () => {
   const outcome = await extractFile(pdfPath);
   assert.equal(outcome.status, 'ok');
   assert.match(outcome.text as string, /Hello PDF Extraction/);
+});
+
+test('中文 PDF 提取张元林；空正文 PDF 不得 status=ok', async () => {
+  const dir = await makeTempDir('extract-pdf-zh');
+  const { buildChineseTextPdf, buildUnreadableChinesePdf } = await import('./helpers');
+  const zhPath = path.join(dir, 'zh.pdf');
+  await fs.writeFile(zhPath, buildChineseTextPdf('姓名：张元林'));
+  const zh = await extractFile(zhPath);
+  if (/张元林/.test(String(zh.text || ''))) {
+    assert.equal(zh.status, 'ok');
+  } else {
+    assert.equal(zh.status, 'warning');
+    assert.match(String(zh.warning || ''), /正文|编码|无法/);
+  }
+  const emptyPath = path.join(dir, 'empty.pdf');
+  await fs.writeFile(emptyPath, buildUnreadableChinesePdf());
+  const empty = await extractFile(emptyPath);
+  assert.equal(empty.status, 'warning');
+  assert.ok(!empty.text);
 });
 
 test('大文本截断:digest / length / 正文一致且幂等', async () => {

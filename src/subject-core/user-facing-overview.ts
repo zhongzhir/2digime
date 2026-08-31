@@ -62,9 +62,10 @@ export const MIN_CONCRETE_DETAIL_CHARS = 4;
 
 /**
  * 「当前有效本人认识」排除判定 — 唯一的来源筛选规则，页面「已经了解」与对话上下文共同遵守。
- * 排除：候选待确认（needs_confirmation）、任务临时材料（temporary / category:temporary_context /
+ * 排除：任务临时材料（temporary / category:temporary_context /
  * expiresAt:）、外部项目主张（category:external_claim）、内部过程行（capture:noop /
  * growth:stage:* / growth:guide_choice:*）。
+ * 已确认事件可能仍带 needs_confirmation 历史标签，不得因此从「已经了解」消失。
  */
 export function isExcludedFromPersonalUnderstanding(tags: readonly string[]): boolean {
   return tags.some((t) => {
@@ -72,7 +73,6 @@ export function isExcludedFromPersonalUnderstanding(tags: readonly string[]): bo
       t === 'category:temporary_context' ||
       t === 'category:external_claim' ||
       t === 'temporary' ||
-      t === 'needs_confirmation' ||
       t === 'capture:noop'
     ) {
       return true;
@@ -141,11 +141,12 @@ export function isConcreteFact(item: ActiveSubjectItem): boolean {
   const detail = (item.detail || '').trim();
   if (!title) return false;
   if (item.kind === 'asset') return false;
-  if (!detail || detail.length < MIN_CONCRETE_DETAIL_CHARS) return false;
+  const minDetail = item.kind === 'identity' ? 2 : MIN_CONCRETE_DETAIL_CHARS;
+  if (!detail || detail.length < minDetail) return false;
   if (GENERIC_DETAIL_RE.test(detail)) return false;
   const text = factText(title, detail);
   if (isInternalGrowthPhrase(text)) return false;
-  if (text.length < 6) return false;
+  if (item.kind === 'identity' ? text.length < 4 : text.length < 6) return false;
   for (const pat of DIMENSION_ONLY_PATTERNS) {
     if (pat.test(text)) return false;
   }

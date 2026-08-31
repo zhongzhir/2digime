@@ -15,15 +15,23 @@ import {
   throwIfAborted,
 } from '../search-connector';
 import type { SearchSource, SourceType } from '../search-contract';
+import {
+  assertSafePublicDestination,
+  resolvePublicRedirect,
+  safePublicHttpGet,
+  type SafePublicHttpDeps,
+} from '../../work-runtime/public-http-safety';
 
 export interface BingHtmlSearchConnectorOptions {
   /** 每查询最多保留的来源数。 */
   maxResults?: number;
   timeoutMs?: number;
-  /** 测试可注入的 fetch（默认全局 fetch）。 */
+  /** 测试可注入的 fetch（默认全局 fetch）。仅用于 search；read 不走未保护 fetch。 */
   fetchImpl?: typeof fetch;
   /** 测试可注入 user-agent。 */
   userAgent?: string;
+  /** read 的公开 HTTP 边界（DNS 钉死 / 测试 transport）。 */
+  http?: SafePublicHttpDeps;
 }
 
 export class BingSearchConnectorError extends Error {
@@ -160,6 +168,38 @@ export function htmlToText(html: string, maxChars = 8000): string {
   return text;
 }
 
+async function readViaInjectedFetch(
+  url: string,
+  fetchImpl: typeof fetch,
+  headers: Record<string, string>,
+  signal: AbortSignal,
+  http?: SafePublicHttpDeps,
+): Promise<{ status: number; body: string; finalUrl: string }> {
+  let current = url;
+  let left = 3;
+  while (left >= 0) {
+    const dest = await assertSafePublicDestination(current, http?.lookupAddresses);
+    const response = await fetchWithDeadline(
+      fetchImpl,
+      dest.url.toString(),
+      { headers, signal, redirect: 'manual' },
+      signal,
+    );
+    if (response.status >= 300 && response.status < 400) {
+      const loc = response.headers.get('location') || '';
+      if (!loc || left === 0) {
+        throw Object.assign(new Error('重定向次数过多'), { code: 'redirect' });
+      }
+      current = resolvePublicRedirect(dest.url.toString(), loc);
+      left -= 1;
+      continue;
+    }
+    const body = await response.text();
+    return { status: response.status, body, finalUrl: dest.url.toString() };
+  }
+  throw Object.assign(new Error('重定向次数过多'), { code: 'redirect' });
+}
+
 export function createBingHtmlSearchConnector(options?: BingHtmlSearchConnectorOptions): SearchConnector {
   const maxResults = options?.maxResults ?? 8;
   const timeoutMs = options?.timeoutMs ?? 15_000;
@@ -169,21 +209,28 @@ export function createBingHtmlSearchConnector(options?: BingHtmlSearchConnectorO
   async function read(url: string, opts?: { signal?: AbortSignal; maxChars?: number }): Promise<ReadResult | null> {
     if (!/^https?:\/\//i.test(url)) return null;
     const bound = bindTimeoutSignal({ timeoutMs, parent: opts?.signal });
+    const headers = {
+      'user-agent': userAgent,
+      'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
+    };
     try {
-      const init: RequestInit = {
-        headers: {
-          'user-agent': userAgent,
-          'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
-          accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.8',
-        },
-        signal: bound.signal,
-      };
-      const response = await fetchWithDeadline(fetchImpl, url, init, bound.signal);
-      if (!response.ok) return null;
-      const html = await response.text();
-      const content = htmlToText(html, opts?.maxChars ?? 8000);
+      throwIfAborted(bound.signal);
+      const customFetch = fetchImpl !== globalThis.fetch ? fetchImpl : undefined;
+      const got = customFetch
+        ? await readViaInjectedFetch(url, customFetch, headers, bound.signal, options?.http)
+        : await safePublicHttpGet(url, headers, 3, {
+            ...(options?.http || {}),
+            timeoutMs: options?.http?.timeoutMs ?? timeoutMs,
+          });
+      if (got.status < 200 || got.status >= 300) return null;
+      const content = htmlToText(got.body, opts?.maxChars ?? 8000);
       if (content.length < 40) return null;
-      return { content, retrievedAt: new Date().toISOString() };
+      return {
+        content,
+        retrievedAt: new Date().toISOString(),
+        resolvedUrl: 'finalUrl' in got ? got.finalUrl : url,
+      };
     } catch {
       return null; // 页面抓取失败不阻断搜索（evidence 缺失时综合如实降级）
     } finally {

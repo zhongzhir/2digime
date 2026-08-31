@@ -6,6 +6,7 @@ import type {
   TaskConversationTurn,
   TaskIntentConclusion,
   TaskMeta,
+  TaskPendingRevisionRequest,
   TaskPlan,
 } from './task';
 import type { TaskRevisionLoopMeta } from './controlled-revision';
@@ -130,6 +131,24 @@ export class TaskService {
       ...task,
       meta: { ...(task.meta ?? {}), plan },
     };
+    await this.store.put(updated);
+    return updated;
+  }
+
+  /** 写入或清除待执行修订要求（用户原文为权威，不是模型回复）。 */
+  async updatePendingRevision(
+    taskId: string,
+    pending: TaskPendingRevisionRequest | null,
+  ): Promise<Task> {
+    const task = await this.store.get(taskId);
+    if (!task) throw new Error(`task not found: ${taskId}`);
+    const meta: TaskMeta = { ...(task.meta ?? {}) };
+    if (pending) {
+      meta.pendingRevisionRequest = { ...pending };
+    } else {
+      delete meta.pendingRevisionRequest;
+    }
+    const updated: Task = { ...task, meta };
     await this.store.put(updated);
     return updated;
   }

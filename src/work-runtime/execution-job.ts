@@ -150,6 +150,11 @@ export interface ExecutionJob {
   targetArtifactId?: string;
   /** 用户本次修改要求(与 targetArtifactId 成对出现)。 */
   revisionRequest?: string;
+  /**
+   * Owner 对话 turn 幂等键。同一 taskId + ownerTurnId 只对应一个 Job。
+   * 可查询；不依赖 pending 消费记录是否写成功。
+   */
+  ownerTurnId?: string;
   /** 用户不采用理由（可选；进入修订 prompt）。 */
   rejectionReason?: string;
   /**

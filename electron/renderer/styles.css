@@ -239,6 +239,7 @@ body {
 }
 
 #collab-list-active + .empty-hint,
+#collab-list-pending + .empty-hint,
 #collab-list-done + .empty-hint,
 #collab-list-revoked + .empty-hint {
   margin-top: 0;
@@ -830,6 +831,13 @@ select {
   max-height: none;
 }
 
+#panel-chat.chat-with-sessions:not([hidden]) {
+  display: grid;
+  min-height: 0;
+  height: 100%;
+  grid-template-rows: minmax(0, 1fr);
+}
+
 #panel-work:not([hidden]) {
   flex: 1 1 auto;
   display: flex;
@@ -879,6 +887,46 @@ select {
   font-size: var(--font-sm);
   font-weight: 400;
   color: var(--muted);
+}
+
+.collab-home-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.collab-scope {
+  margin: 0 0 16px;
+  max-width: 42em;
+}
+
+.collab-scope summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: var(--font-sm);
+}
+
+.collab-scope p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: var(--font-sm);
+  line-height: var(--line-height);
+}
+
+.artifact-export-primary {
+  margin: 8px 0 4px;
+  gap: 8px;
+}
+
+.job-handoff {
+  margin: 8px 0 0;
+}
+
+.job-handoff textarea {
+  width: 100%;
+  min-height: 8em;
+  font-size: var(--font-sm);
 }
 
 .collab-opp-privacy {
@@ -1117,9 +1165,67 @@ select {
   min-height: 0;
 }
 
+.chat-panel.chat-with-sessions {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 16px;
+  align-items: stretch;
+  min-height: 0;
+}
+
+.chat-session-aside {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding-right: 8px;
+  border-right: 1px solid var(--line);
+}
+
+.chat-session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.chat-session-list li {
+  margin: 0 0 6px;
+}
+
+.chat-session-list button {
+  width: 100%;
+  text-align: left;
+  font-size: var(--font-sm);
+}
+
+.chat-session-list button.active {
+  border-color: rgba(15, 106, 90, 0.35);
+  background: var(--accent-soft);
+}
+
+.chat-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.chat-main > .page-title,
+.chat-main > .page-lead,
+.chat-main > .growth-guide-actions {
+  flex-shrink: 0;
+}
+
 .chat-stream {
   flex: 1;
   min-height: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1140,8 +1246,10 @@ select {
   padding: 0;
   flex: 1;
   min-height: 0;
+  min-width: 0;
   max-height: none;
   overflow: auto;
+  overscroll-behavior: contain;
 }
 
 #chat-empty {
@@ -1189,6 +1297,10 @@ select {
   padding: 10px 12px;
   margin-bottom: 8px;
   background: #fff;
+  min-width: 0;
+  max-width: 100%;
+  overflow: visible;
+  overflow-wrap: anywhere;
 }
 
 .chat-turn-user {
@@ -1204,6 +1316,10 @@ select {
 .chat-text {
   white-space: pre-wrap;
   line-height: var(--line-height);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .help-panel {
@@ -1234,6 +1350,8 @@ select {
   height: auto;
   max-height: none;
   scrollbar-gutter: stable;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .work-layout.has-artifact {
@@ -1241,6 +1359,7 @@ select {
 }
 
 .work-layout > .panel {
+  min-width: 0;
   min-height: 0;
   max-height: 100%;
   overflow: hidden;
@@ -1252,6 +1371,7 @@ select {
 .work-layout .work-tasks {
   overflow: hidden;
   scrollbar-gutter: stable;
+  min-width: 0;
 }
 
 .work-conversation {
@@ -1301,6 +1421,19 @@ select {
 .work-turn-text {
   white-space: pre-wrap;
   line-height: 1.55;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.work-turn-text pre,
+.work-turn-text code {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre;
+  overflow-wrap: normal;
 }
 
 .work-turn-actions {
@@ -1624,6 +1757,9 @@ select {
   margin: 0;
   white-space: pre-wrap;
   line-height: 1.45;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
 }
 
 #tw-plan-confirm-hint {
@@ -1828,6 +1964,16 @@ select {
 .task-goal {
   font-weight: 600;
   margin-bottom: 4px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.task-list li,
+.material-list li {
+  min-width: 0;
+  overflow: hidden;
 }
 
 .task-state {
@@ -1840,6 +1986,10 @@ select {
 }
 
 .status.error {
+  color: var(--danger);
+}
+
+#export-status.error {
   color: var(--danger);
 }
 
@@ -1861,6 +2011,13 @@ select {
 
 .artifact-exports {
   flex-wrap: wrap;
+  min-width: 0;
+}
+
+.artifact-export-primary {
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
 }
 
 #artifact-editor {
@@ -2145,8 +2302,23 @@ select {
     max-height: none;
     min-height: 0;
   }
-  .chat-turns {
-    max-height: min(42vh, 360px);
+  .chat-panel.chat-with-sessions {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  #panel-chat.chat-with-sessions:not([hidden]) {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .chat-session-aside {
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    padding-right: 0;
+    padding-bottom: 8px;
+    max-height: min(18vh, 140px);
+  }
+  .collab-home-split {
+    grid-template-columns: 1fr;
   }
   #collab-page-new,
   #collab-page-detail {
@@ -2163,6 +2335,64 @@ select {
 @media (max-width: 900px) {
   .layout {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-height: 760px) {
+  #app {
+    padding-top: 8px;
+    padding-bottom: 6px;
+  }
+  .shell-topbar {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    margin-bottom: 6px;
+    gap: 8px;
+  }
+  .main-nav {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    justify-content: flex-start;
+  }
+  .nav-item,
+  .topbar-secondary {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+  .chat-main > .page-title {
+    font-size: 16px;
+    margin-bottom: 4px;
+  }
+  .chat-main > .page-lead {
+    display: none;
+  }
+  .chat-composer {
+    margin-top: 4px;
+    padding-top: 8px;
+  }
+  .chat-composer .field label {
+    display: none;
+  }
+  .chat-composer textarea {
+    max-height: 2.6rem;
+    min-height: 2.4rem;
+  }
+  .chat-turns {
+    min-height: 8rem;
+  }
+  #panel-chat.chat-with-sessions:not([hidden]) {
+    grid-template-rows: auto minmax(8rem, 1fr);
+  }
+}
+
+@media (max-height: 560px) {
+  .chat-main > .page-title {
+    display: none;
+  }
+  .chat-session-aside {
+    max-height: 56px;
+  }
+  .brand-sm {
+    display: none;
   }
 }
 

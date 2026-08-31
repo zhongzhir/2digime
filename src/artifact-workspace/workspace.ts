@@ -4,7 +4,7 @@ import * as os from 'node:os';
 import { createHash } from 'node:crypto';
 import type { ObjectStore } from '../runtime/ports';
 import type { ContentStore } from '../infrastructure/content-store';
-import { exportDocx, exportMarkdown } from '../infrastructure/export';
+import { exportDocx, exportMarkdown, exportPptx } from '../infrastructure/export';
 import { newId, nowIso } from '../shared/ids';
 import type { ArtifactWorkspacePort, ExportFormat } from './contracts';
 import {
@@ -887,10 +887,11 @@ export class ArtifactWorkspace implements ArtifactWorkspacePort {
     if (text === undefined) throw new Error('export requires text content');
     const dir = targetPath ? path.dirname(targetPath) : artifact.storageDir;
     const base = targetPath
-      ? path.basename(targetPath).replace(/\.(md|docx)$/i, '')
+      ? path.basename(targetPath).replace(/\.(md|docx|pptx)$/i, '')
       : artifact.title || artifact.id;
     const outBase = path.join(dir, base);
     if (format === 'md') return exportMarkdown(text, outBase);
+    if (format === 'pptx') return exportPptx(text, outBase);
     return exportDocx(text, outBase);
   }
 
