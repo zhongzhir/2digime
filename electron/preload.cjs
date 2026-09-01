@@ -29,6 +29,7 @@ const COMMAND_NAMES = [
   "capability.list",
   "collab.interact",
   "subject.communicate",
+  "digitalSelf",
 ];
 
 contextBridge.exposeInMainWorld("digitalMe", {
@@ -90,6 +91,17 @@ contextBridge.exposeInMainWorld("digitalMe", {
   },
   cancelWorkRequest: (requestId) =>
     ipcRenderer.invoke("shell:cancelWorkRequest", { requestId: requestId || "" }),
+  pathForFile(file) {
+    try {
+      const { webUtils } = require("electron");
+      if (webUtils && typeof webUtils.getPathForFile === "function") {
+        return webUtils.getPathForFile(file);
+      }
+    } catch {
+      /* older Electron */
+    }
+    return (file && file.path) || "";
+  },
   onOpenHelp(listener) {
     const handler = (_evt, info) => listener(info);
     ipcRenderer.on("shell:open-help", handler);

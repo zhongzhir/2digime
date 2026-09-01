@@ -682,8 +682,12 @@
     }
     if (nav === "chat") await refreshChatPanel();
     if (nav === "subject") {
-      showGrowthSubjectView("home", { resetScroll: true });
-      await refreshSubjectPanel();
+      if (window.DigitalSelfPage && typeof window.DigitalSelfPage.refresh === "function") {
+        await window.DigitalSelfPage.refresh();
+      } else {
+        showGrowthSubjectView("home", { resetScroll: true });
+        await refreshSubjectPanel();
+      }
     }
     if (nav === "work") await refreshTasks();
     if (nav === "collab") {
@@ -5466,6 +5470,9 @@
   }
 
   async function refreshSubjectPanel() {
+    if (window.DigitalSelfPage && typeof window.DigitalSelfPage.refresh === "function") {
+      return;
+    }
     const overview = await api.invoke("subject.getOverview", {});
     lastGrowthSnapshot = overview.growth || null;
     updateCollabMaterialHints(overview);

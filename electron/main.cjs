@@ -70,6 +70,7 @@ const COMMAND_NAMES = new Set([
   "capability.list",
   "collab.interact",
   "subject.communicate",
+  "digitalSelf",
 ]);
 
 function resolveAppRoot() {
@@ -213,6 +214,10 @@ async function bootstrapRuntime() {
             ...(a2aRemoteCapability ? { a2aRemoteCapability } : {}),
           },
   );
+  if (process.env.DIGITALME_V2_DIGITAL_SELF_STUB === "1") {
+    const stub = require(path.join(__dirname, "digital-self-test-stub.cjs"));
+    options.digitalSelfChat = stub.chat;
+  }
 
   runtime = createDigitalMeRuntime(options);
   bus = createCommandBus(runtime);

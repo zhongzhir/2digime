@@ -944,6 +944,89 @@ select {
   margin-top: 10px;
 }
 
+.digital-self-page {
+  max-width: 42em;
+}
+
+#growth-block {
+  display: none !important;
+}
+
+.ds-headline {
+  margin: 0 0 12px;
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.ds-actions {
+  margin: 0 0 16px;
+}
+
+.ds-form {
+  margin: 0 0 18px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.ds-group {
+  margin: 0 0 18px;
+}
+
+.ds-group h2 {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.ds-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.ds-item {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.ds-text {
+  margin: 0 0 8px;
+  color: var(--ink);
+}
+
+.ds-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ds-source {
+  margin-top: 8px;
+}
+
+.ds-source summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: var(--font-sm);
+}
+
+.ds-source p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: var(--font-sm);
+}
+
+.ds-correct-form {
+  margin-top: 8px;
+}
+
 .growth-block {
   margin: 0 0 22px;
   padding: 16px 16px 14px;

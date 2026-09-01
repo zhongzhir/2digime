@@ -162,6 +162,8 @@ import type { OwnerAcceptanceSummary } from '../execution/acceptance-summary';
 import { chatComplete, ModelHttpError, type ChatMessage } from '../infrastructure/model-http';
 import { AI_CTO_JSON_SCHEMA } from '../execution/ai-cto-review';
 import { providerCredentialKey } from '../infrastructure/secret-store';
+import { DigitalSelfService } from '../subject-core/digital-self';
+import type { DigitalSelfChatFn } from '../subject-core/digital-self/interpret';
 
 export interface DigitalMeRuntimeOptions {
   /**
@@ -276,6 +278,11 @@ export interface DigitalMeRuntimeOptions {
    * 不使用旧模板冒充模型结论。
    */
   ctoReviewChat?: (input: { messages: ChatMessage[] }) => Promise<{ text: string }>;
+  /**
+   * Phase 1 Digital Self 理解模型注入（测试双）。
+   * 未提供时复用已有 generic model；均不可用则诚实提示需要连接 AI。
+   */
+  digitalSelfChat?: (input: { messages: ChatMessage[] }) => Promise<{ text: string }>;
 }
 
 /**
@@ -299,6 +306,7 @@ export class DigitalMeRuntime {
   private ctoReviewAbort = new AbortController();
   private readonly ctoReviewInflight = new Set<Promise<void>>();
   private converseAbortSignal: AbortSignal | null = null;
+  private digitalSelfService: DigitalSelfService | null = null;
 
   constructor(options: DigitalMeRuntimeOptions = {}) {
     this.options = options;
@@ -329,6 +337,54 @@ export class DigitalMeRuntime {
   /** 当前文档能力模式（供协作验收区分 Fake / 真实模型）。 */
   get documentCapabilityMode(): DigitalMeRuntimeOptions['documentCapability'] {
     return this.options.documentCapability ?? 'fake';
+  }
+
+  async digitalSelf(
+    input: CommandMap['digitalSelf']['input'],
+  ): Promise<CommandMap['digitalSelf']['output']> {
+    return this.getDigitalSelfService().invoke(input);
+  }
+
+  private getDigitalSelfService(): DigitalSelfService {
+    if (!this.digitalSelfService) {
+      this.digitalSelfService = new DigitalSelfService(
+        () => {
+          const pkg = this.subject.getActive();
+          if (!pkg) return null;
+          return { rootDir: pkg.rootDir, subjectId: pkg.id };
+        },
+        this.resolveDigitalSelfChat(),
+      );
+    }
+    return this.digitalSelfService;
+  }
+
+  private resolveDigitalSelfChat(): DigitalSelfChatFn | null {
+    if (this.options.digitalSelfChat) return this.options.digitalSelfChat;
+    const understanding = resolveSubjectUnderstandingRuntime({
+      ...(this.options.subjectUnderstanding
+        ? { specialist: this.options.subjectUnderstanding }
+        : {}),
+      ...(this.options.documentCapability !== undefined
+        ? { documentCapability: this.options.documentCapability }
+        : {}),
+      ...(this.options.openaiCompatible
+        ? { openaiCompatible: this.options.openaiCompatible }
+        : {}),
+      ...(this.options.secrets ? { secrets: this.options.secrets } : {}),
+    });
+    const runtime = understanding.runtime;
+    if (!runtime?.enabled) return null;
+    return async ({ messages }) => {
+      const result = await runtime.chatComplete({
+        messages,
+        baseUrl: runtime.model.baseUrl,
+        model: runtime.model.model,
+        temperature: 0.2,
+        responseFormat: { type: 'json_object' },
+      });
+      return { text: result.text };
+    };
   }
 
   async createPackage(input: CommandMap['subject.createPackage']['input']) {

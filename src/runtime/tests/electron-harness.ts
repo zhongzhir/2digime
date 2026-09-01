@@ -18,8 +18,10 @@ export interface ElectronHarness {
 export async function launchDigitalMeElectron(opts?: {
   exportDelayMs?: number;
   extraEnv?: Record<string, string>;
+  /** 复用已有 userData（重启验收）。未提供则新建临时目录。 */
+  userData?: string;
 }): Promise<ElectronHarness> {
-  const userData = await fs.mkdtemp(path.join(os.tmpdir(), 'dmv2-electron-ud-'));
+  const userData = opts?.userData || (await fs.mkdtemp(path.join(os.tmpdir(), 'dmv2-electron-ud-')));
   let electronPath: string;
   try {
     electronPath = require('electron') as string;

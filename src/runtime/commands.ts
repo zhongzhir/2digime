@@ -1037,6 +1037,24 @@ export interface CommandMap {
       }>;
     };
   };
+  'digitalSelf': {
+    input: {
+      action:
+        | 'read'
+        | 'tell'
+        | 'import'
+        | 'confirm'
+        | 'correct'
+        | 'delete'
+        | 'ignore';
+      text?: string;
+      understandingId?: string;
+      filePath?: string;
+    };
+    output: {
+      view: import('../subject-core/digital-self').DigitalSelfView;
+    };
+  };
 }
 
 export type CommandName = keyof CommandMap;
@@ -1065,14 +1083,16 @@ export const COMMAND_NAMES = [
   'capability.list',
   'collab.interact',
   'subject.communicate',
+  'digitalSelf',
 ] as const satisfies readonly CommandName[];
 
 /**
  * 命令面硬上限(architecture §4;超出即架构违规)。含 subject.communicate。
  * 2026-08-11 D11-A:新增 work.converse,上限 21→22。
  * DIGITALME-COLLAB-DELEGATED-01:新增 work.delegateTask(AI-native 委托执行),上限 22→23。
+ * 2DIGIME-REFOUNDATION-02:新增 digitalSelf（数字之我页唯一命令）,上限 23→24。
  */
-export const COMMAND_COUNT_LIMIT = 23;
+export const COMMAND_COUNT_LIMIT = 24;
 
 export interface CommandBus {
   invoke<K extends CommandName>(

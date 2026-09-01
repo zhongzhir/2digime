@@ -301,7 +301,28 @@
         </section>
 
         <section id="panel-subject" class="shell-panel" data-panel="subject" hidden>
-          <h1 class="page-title">数字之我</h1>
+          <section id="digital-self-page" class="digital-self-page">
+            <h1 class="page-title">数字之我</h1>
+            <p id="ds-headline" class="ds-headline">2digime 现在怎样理解我</p>
+            <p id="ds-notice" class="meta" aria-live="polite"></p>
+            <div class="ds-actions row">
+              <button type="button" id="btn-ds-tell" class="primary">告诉 2digime</button>
+              <button type="button" id="btn-ds-import">添加资料</button>
+              <input type="file" id="ds-import-file" hidden accept=".txt,.md,.markdown,.pdf,.docx,.html,.htm,.csv" />
+            </div>
+            <form id="ds-tell-form" class="ds-form" hidden>
+              <label class="field">
+                <span>关于你的一件事</span>
+                <textarea id="ds-tell-input" rows="3" placeholder="例如：我叫张三。"></textarea>
+              </label>
+              <div class="row">
+                <button type="submit" id="btn-ds-tell-submit" class="primary">记下这件事</button>
+                <button type="button" id="btn-ds-tell-cancel" class="ghost">取消</button>
+              </div>
+            </form>
+            <div id="ds-groups" class="ds-groups"></div>
+            <p id="ds-empty" class="empty-hint">还没有任何了解。告诉 2digime 一件关于你的事，或添加一份资料。</p>
+          </section>
           <section id="growth-block" class="growth-block" hidden>
             <div id="growth-home" class="growth-home">
             <h2 id="growth-stage-name" class="growth-stage-name"></h2>
@@ -1117,6 +1138,7 @@
     <script src="work-conversation.js"></script>
     <script src="task-workspace.js"></script>
     <script src="growth-panel.js"></script>
+    <script src="digital-self.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
