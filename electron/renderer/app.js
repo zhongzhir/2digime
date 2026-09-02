@@ -179,6 +179,7 @@
     collabExtCapAuthPoints: document.getElementById("collab-ext-cap-auth-points"),
     navChat: document.getElementById("nav-chat"),
     navSubject: document.getElementById("nav-subject"),
+    navSettings: document.getElementById("nav-settings"),
     navWork: document.getElementById("nav-work"),
     navCollab: document.getElementById("nav-collab"),
     panelChat: document.getElementById("panel-chat"),
@@ -662,7 +663,7 @@
     }
     activeNav = nav;
     if (nav !== "chat") setChatGuideMode("normal");
-    for (const btn of [els.navWork, els.navChat, els.navSubject, els.navCollab]) {
+    for (const btn of [els.navWork, els.navChat, els.navSubject, els.navCollab, els.navSettings]) {
       if (!btn) continue;
       btn.classList.toggle("active", btn.dataset.nav === nav);
     }
@@ -680,8 +681,19 @@
       else panel.setAttribute("hidden", "");
       panel.setAttribute("aria-hidden", show ? "false" : "true");
     }
-    if (nav === "chat") await refreshChatPanel();
+    if (nav === "chat") {
+      if (window.TalkPage && typeof window.TalkPage.refresh === "function") {
+        await window.TalkPage.refresh();
+      } else {
+        await refreshChatPanel();
+      }
+    }
     if (nav === "subject") {
+      const dsPage = document.getElementById("digital-self-page");
+      if (dsPage) {
+        dsPage.hidden = false;
+        dsPage.removeAttribute("hidden");
+      }
       if (window.DigitalSelfPage && typeof window.DigitalSelfPage.refresh === "function") {
         await window.DigitalSelfPage.refresh();
       } else {
@@ -699,13 +711,10 @@
   function openSettings() {
     returnView = currentView === "settings" ? returnView : currentView;
     if (activeNav !== "settings") {
-      returnNav =
-        activeNav === "chat" || activeNav === "subject" || activeNav === "work" || activeNav === "collab"
-          ? activeNav
-          : "chat";
+      returnNav = activeNav === "subject" ? "subject" : "chat";
     }
     activeNav = "settings";
-    for (const btn of [els.navWork, els.navChat, els.navSubject, els.navCollab]) {
+    for (const btn of [els.navWork, els.navChat, els.navSubject, els.navCollab, els.navSettings]) {
       if (!btn) continue;
       btn.classList.remove("active");
     }
@@ -5763,15 +5772,6 @@
   async function enterShell() {
     setView("shell");
     await refreshConnectionFromCapabilities();
-    await refreshTasks();
-    await refreshSubjectPanel();
-    const restored = await restoreLatestOpenTaskIfAny();
-    if (restored) {
-      await setNav("work");
-      return;
-    }
-    startNewTaskComposer({ preservePending: true });
-    await restorePendingSoftwareDraftIfAny();
     await setNav("chat");
   }
 
@@ -5926,6 +5926,7 @@
     setNav("chat");
   });
   els.navSubject.addEventListener("click", () => setNav("subject"));
+  if (els.navSettings) els.navSettings.addEventListener("click", () => setNav("settings"));
   els.navWork.addEventListener("click", () => setNav("work"));
   if (els.navCollab) els.navCollab.addEventListener("click", () => setNav("collab"));
   // 设置/帮助为次级入口，不在主导航平权
@@ -6358,13 +6359,7 @@
     setView(target);
     if (target === "shell") {
       void (async () => {
-        await setNav(returnNav || "chat");
-        if ((returnNav || "chat") === "work" && workMode === "task" && activeTaskId) {
-          await selectTask(activeTaskId);
-        }
-        if ((returnNav || "chat") === "chat") {
-          await refreshChatPanel();
-        }
+        await setNav(returnNav === "subject" ? "subject" : "chat");
       })();
     }
   });
@@ -9702,11 +9697,17 @@
     rememberShellMeta(info || {});
     await refreshConnectionFromCapabilities();
     if (currentView === "settings") fillSettingsForm();
-    // 主进程 rebootstrap 后默认包已重新挂载；shell 内刷新任务，welcome 则尝试进入做事。
     if (currentView === "shell") {
       try {
-        await refreshTasks();
-        if (activeNav === "subject") await refreshSubjectPanel();
+        if (activeNav === "subject") {
+          if (window.DigitalSelfPage && typeof window.DigitalSelfPage.refresh === "function") {
+            await window.DigitalSelfPage.refresh();
+          } else {
+            await refreshSubjectPanel();
+          }
+        } else if (activeNav === "chat" && window.TalkPage && typeof window.TalkPage.refresh === "function") {
+          await window.TalkPage.refresh();
+        }
       } catch {
         /* ignore */
       }

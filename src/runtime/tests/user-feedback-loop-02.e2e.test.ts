@@ -137,7 +137,6 @@ test('使用反馈（2）主链：PPT 修订 Job 与任务隔离（运行时）'
   ].filter(Boolean);
   if (toConfirm.length) await runtime.confirmExperience({ eventIds: [...new Set(toConfirm)] });
 
-  runtime.workRuntime.start();
   const ppt = await runtime.submitTask({
     goal: '做一份产品汇报 PPT',
     contextRefs: [],

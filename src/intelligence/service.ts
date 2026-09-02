@@ -21,7 +21,7 @@ export class TalkService {
     private readonly now: () => string = nowIso,
   ) {}
 
-  async invoke(input: { text?: string }): Promise<{ view: TalkView }> {
+  async invoke(input: { text?: string; contextPaths?: string[] }): Promise<{ view: TalkView }> {
     const run = this.writeChain.then(() => this.invokeNow(input));
     this.writeChain = run.then(
       () => undefined,
@@ -30,14 +30,14 @@ export class TalkService {
     return run;
   }
 
-  private async invokeNow(input: { text?: string }): Promise<{ view: TalkView }> {
+  private async invokeNow(input: { text?: string; contextPaths?: string[] }): Promise<{ view: TalkView }> {
     const pkg = this.resolvePackage();
     if (!pkg) {
       return { view: projectView(emptyThread(this.now()), '还没有可用的数字之我。') };
     }
     const now = this.now();
     const thread = await readThread(pkg.rootDir, now);
-    const text = String(input.text || '').trim();
+    const text = composeTalkUserText(String(input.text || '').trim(), input.contextPaths);
     if (!text) {
       return { view: projectView(thread) };
     }
@@ -63,6 +63,15 @@ export class TalkService {
     await writeThread(pkg.rootDir, next);
     return { view: projectView(next) };
   }
+}
+
+export function composeTalkUserText(text: string, contextPaths?: string[]): string {
+  const body = String(text || '').trim();
+  const paths = (contextPaths || []).map((item) => String(item || '').trim()).filter(Boolean);
+  if (!paths.length) return body;
+  const list = paths.map((item) => `- ${item}`).join('\n');
+  const suffix = `用户附上的文件或文件夹（这次交流的上下文，不是新任务）：\n${list}`;
+  return body ? `${body}\n\n${suffix}` : suffix;
 }
 
 function projectView(thread: ReturnType<typeof emptyThread>, notice?: string): TalkView {

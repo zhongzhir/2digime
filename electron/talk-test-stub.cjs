@@ -47,7 +47,9 @@ async function chat({ messages, tools }) {
 
   if (/了解我|你知道我|我是谁/.test(text)) {
     const start = sys.indexOf('当前对用户的必要理解');
-    const end = sys.indexOf('当前已连接的专业能力');
+    const endExternal = sys.indexOf('当前已连接的外部能力');
+    const endLegacy = sys.indexOf('当前已连接的专业能力');
+    const end = endExternal >= 0 ? endExternal : endLegacy;
     const slice = start >= 0 ? sys.slice(start, end >= 0 ? end : undefined) : '';
     const facts = slice
       .split('\n')
@@ -58,6 +60,12 @@ async function chat({ messages, tools }) {
       ? `我现在这样理解你：\n${facts.map((f) => `· ${f}`).join('\n')}`
       : '我还没有记下关于你的认识。';
     return { text: body };
+  }
+
+  if (/改得更简洁|更简洁/.test(text)) {
+    return {
+      text: '开会讨论了很多，下周再确认方案细节。',
+    };
   }
 
   if (/邮箱|发给|寄给|邮件/.test(text) && !/@/.test(text)) {

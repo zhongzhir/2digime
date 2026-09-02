@@ -13,21 +13,20 @@
 ```text
 Phase 1  Digital Self                         ACCEPTED
 Phase 2  Core Interaction Loop                ACCEPTED
-Phase 2  Product Surface                      NEXT
-Phase 3  Collaboration                        之后
+Phase 2  Product Surface                      ACCEPTED
+Phase 3  Collaboration                        NEXT
 ```
 
 不得并行把三阶段都当施工面。不得用旧「模块轮动」代替此顺序（`digitalme_rules.md` §14 为历史策略）。
 
-协作传输层（Relay / E2EE）已验证，**产品面继续暂停扩建**（决策 #110）。Phase 3 开始前须 Phase 1 与 Phase 2 对真人成立。
+协作传输层（Relay / E2EE）已验证。Phase 1 与 Phase 2 已对真人成立。**下一刀才是 Phase 3 Collaboration**，现在尚未开工。
 
 ---
 
 ## 2. 下一开发任务
 
-**任务名：** `2DIGIME-REFOUNDATION-03-PRODUCT-SURFACE`
-**阶段：** Phase 2 Product Surface
-**本轮状态（2026-09-02）：** Phase 1 与 Phase 2 核心交互闭环均已 ACCEPTED。**下一刀是产品表面**，不是再开第二运行时，也不是迁旧 work runtime。
+**阶段：** Phase 3 Collaboration
+**本轮状态（2026-09-02）：** Phase 1 Digital Self、Phase 2 Core Interaction Loop、Phase 2 Product Surface 均已 ACCEPTED。正式默认产品路径不再初始化旧 Work Runtime。旧 `work-runtime` 代码保留为 reference / 历史命令入口，不得再当新产品骨架。
 
 ### Phase 1 Digital Self（已接受）
 
@@ -47,11 +46,13 @@ Phase 3  Collaboration                        之后
 
 不迁旧 work / conversation runtime，不把 Job 当用户任务。
 
-### Phase 2 Product Surface（下一步）
+### Phase 2 Product Surface（已接受）
 
-**状态：** `NEXT`
+**状态：** `ACCEPTED`
 
-要做：同一 talk 主链上的产品表面——呈现、导引、交付、失败说明的真人可用性。不加第二入口，不加 intent 分流。
+已成立：一级导航为「与 2digime / 数字之我 / 设置」；默认进入「与 2digime」；旧对话/做事/协作标签退出普通用户主路径。结果卡是文件名 + 打开/在文件夹中显示。附件路径只进入该次 talk 上下文。
+
+正式默认启动不再 attach 旧 Work Runtime / Job runner，也不再创建旧 Task/Job/work state。历史 `work.*` / `artifact.*` 仍可按需挂载，供开发与旧测试使用；这不是新产品 compatibility layer，talk / Digital Self / capability 不得经过该路径。
 
 ### Phase 2 / 3 仍不做
 
@@ -61,11 +62,12 @@ Phase 3  Collaboration                        之后
 - 不把旧 `job-runner` 当新骨架
 - 不继续 capabilityLoop / GENERAL-TASK-CLOSURE
 - 不沿 DIGITAL-SELF-CORE-01 的 P1–P5 迁旧主链
+- 不为绕开旧依赖增加 compatibility layer
 - 不 push、不打包，除非 Owner 另令
 
-### Phase 3 预告（现在不开工）
+### Phase 3 Collaboration（下一步，尚未开工）
 
-协作产品面。传输层 KEEP 资产可复用。不扩建材料/支付/信誉/多方/P2P。
+协作产品面。传输层 KEEP 资产可复用。不扩建材料/支付/信誉/多方/P2P。不开工，除非 Owner 下达 Phase 3 任务。
 
 ---
 
@@ -127,14 +129,14 @@ AGENTS.md
 
 ---
 
-## 6. PRODUCT-SURFACE 启动门
+## 6. PHASE 3 启动门
 
 可以启动，当且仅当：
 
 1. 实现者已读 00/01/02/03（经 AGENTS.md）；
-2. 只做 talk 主链上的产品表面，不迁旧 work / conversation runtime，不修旧做事页；
-3. 遵守上文「仍不做」；
-4. 不得增加 intent 分流或第二入口；
+2. Owner 已下达 Phase 3 Collaboration 任务；
+3. 不迁旧 work / conversation runtime，不把旧 Job 当协作骨架；
+4. 遵守上文「仍不做」；
 5. 出现 Yellow/Red 立即停。
 
-Phase 1 与 Phase 2 核心闭环已 ACCEPTED。未完成 checkpoint 验证前不得把旧冻结做事代码并入本基线。
+Phase 1 与 Phase 2（核心闭环 + 产品表面）已 ACCEPTED。未完成 checkpoint 验证前不得把旧冻结做事代码并入本基线。

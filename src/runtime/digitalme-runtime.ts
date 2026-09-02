@@ -461,18 +461,12 @@ export class DigitalMeRuntime {
   }
 
   async createPackage(input: CommandMap['subject.createPackage']['input']) {
-    const result = await this.subject.createPackage(input);
-    await this.attachWorkRuntime();
-    this.work?.start();
-    return result;
+    return this.subject.createPackage(input);
   }
 
   async openPackage(input: CommandMap['subject.openPackage']['input']) {
     const result = await this.subject.openPackage(input);
-    await this.attachWorkRuntime();
-    await this.work?.recoverOnStartup();
-    this.work?.start();
-    // 打开包时恢复未完成的成长捕获（非定时轮询）
+    // 打开包时恢复未完成的成长捕获（非定时轮询）。无旧 Work Runtime 时内部直接返回。
     void this.recoverPendingGrowthCaptures();
     await this.maybeRecordGrowthStage();
     return result;
@@ -775,6 +769,7 @@ export class DigitalMeRuntime {
 
   submitTask(input: CommandMap['work.submitTask']['input']) {
     const run = async () => {
+      await this.ensureLegacyWorkRuntime();
       if (input.jitChoice) {
         await this.subject.resolveJitChoice({
           action: input.jitChoice.action,
@@ -825,7 +820,7 @@ export class DigitalMeRuntime {
   }
 
   retryTask(input: CommandMap['work.retryTask']['input']) {
-    return this.requireWork().retryTask(input);
+    return this.ensureLegacyWorkRuntime().then(() => this.requireWork().retryTask(input));
   }
 
   /**
@@ -843,6 +838,7 @@ export class DigitalMeRuntime {
   async delegateTask(
     input: CommandMap['work.delegateTask']['input'],
   ): Promise<CommandMap['work.delegateTask']['output']> {
+    await this.ensureLegacyWorkRuntime();
     const work = this.requireWork();
     const derived = await deriveWorkIntent({
       goal: input.goal,
@@ -975,14 +971,15 @@ export class DigitalMeRuntime {
   }
 
   reviseArtifact(input: CommandMap['work.reviseArtifact']['input']) {
-    return this.requireWork().reviseArtifact(input);
+    return this.ensureLegacyWorkRuntime().then(() => this.requireWork().reviseArtifact(input));
   }
 
   cancelJob(input: CommandMap['work.cancelJob']['input']) {
-    return this.requireWork().cancelJob(input);
+    return this.ensureLegacyWorkRuntime().then(() => this.requireWork().cancelJob(input));
   }
 
   async getTask(input: CommandMap['work.getTask']['input']) {
+    await this.ensureLegacyWorkRuntime();
     const result = await this.requireWork().getTask(input);
     const jobId = result.latestJob?.jobId;
     if (jobId) {
@@ -1034,7 +1031,7 @@ export class DigitalMeRuntime {
   }
 
   listTasks(input: CommandMap['work.listTasks']['input'] = {}) {
-    return this.requireWork().listTasks(input);
+    return this.ensureLegacyWorkRuntime().then(() => this.requireWork().listTasks(input));
   }
 
   /**
@@ -1044,6 +1041,7 @@ export class DigitalMeRuntime {
   async converse(
     input: CommandMap['work.converse']['input'],
   ): Promise<CommandMap['work.converse']['output']> {
+    await this.ensureLegacyWorkRuntime();
     const work = this.requireWork();
     const deps: WorkConverseDeps = {
       chat: this.buildConverseChat(),
@@ -1218,11 +1216,11 @@ export class DigitalMeRuntime {
   }
 
   getJob(jobId: string) {
-    return this.requireWork().getJob(jobId);
+    return this.ensureLegacyWorkRuntime().then(() => this.requireWork().getJob(jobId));
   }
 
   getSnapshot(snapshotId: string) {
-    return this.requireWork().getSnapshot(snapshotId);
+    return this.ensureLegacyWorkRuntime().then(() => this.requireWork().getSnapshot(snapshotId));
   }
 
   async readSubjectContextFreeze(
@@ -1236,14 +1234,16 @@ export class DigitalMeRuntime {
   }
 
   getArtifact(artifactId: string) {
-    return this.requireWork().getArtifact(artifactId);
+    return this.ensureLegacyWorkRuntime().then(() => this.requireWork().getArtifact(artifactId));
   }
 
   getContent(input: CommandMap['artifact.getContent']['input']) {
-    return this.requireWorkspace().getContent(
-      input.artifactId,
-      input.versionId,
-      input.expectedTaskId,
+    return this.ensureLegacyWorkRuntime().then(() =>
+      this.requireWorkspace().getContent(
+        input.artifactId,
+        input.versionId,
+        input.expectedTaskId,
+      ),
     );
   }
 
@@ -1281,24 +1281,30 @@ export class DigitalMeRuntime {
   }
 
   saveEdit(input: CommandMap['artifact.saveEdit']['input']) {
-    return this.requireWorkspace().saveEdit(input.artifactId, input.text).then((r) => ({
-      versionId: r.version.versionId,
-    }));
+    return this.ensureLegacyWorkRuntime().then(() =>
+      this.requireWorkspace().saveEdit(input.artifactId, input.text).then((r) => ({
+        versionId: r.version.versionId,
+      })),
+    );
   }
 
   exportArtifact(input: CommandMap['artifact.export']['input']) {
-    return this.requireWorkspace().export(input.artifactId, input.format, input.targetPath);
+    return this.ensureLegacyWorkRuntime().then(() =>
+      this.requireWorkspace().export(input.artifactId, input.format, input.targetPath),
+    );
   }
 
   async revealInFolder(
     input: CommandMap['artifact.revealInFolder']['input'],
   ): Promise<CommandMap['artifact.revealInFolder']['output']> {
+    await this.ensureLegacyWorkRuntime();
     await this.requireWorkspace().revealInFolder(input.artifactId);
     return { opened: true };
   }
 
   /** 供 App Shell 打开系统文件夹(不进入命令返回面)。 */
   async getArtifactStorageDir(artifactId: string): Promise<string> {
+    await this.ensureLegacyWorkRuntime();
     const artifact = await this.requireWork().getArtifact(artifactId);
     if (!artifact) throw new Error(`artifact not found: ${artifactId}`);
     return artifact.storageDir;
@@ -2042,9 +2048,26 @@ export class DigitalMeRuntime {
     return this.requireWorkspace();
   }
 
-  /** 是否已挂载工作运行时（默认包已 open/create）。 */
+  /** 是否已挂载 Subject 包。正式产品路径只要求包，不要求旧 Work Runtime。 */
   isPackageAttached(): boolean {
+    return !!this.subject.getActive();
+  }
+
+  /** 旧 Work Runtime / Job runner 是否已初始化。正式默认启动应为 false。 */
+  isWorkRuntimeAttached(): boolean {
     return !!this.work;
+  }
+
+  /**
+   * 历史入口：仅 work.* / artifact.* 显式调用时才挂载旧 Work Runtime。
+   * talk / Digital Self / capability 不得调用。不是新产品兼容层。
+   */
+  private async ensureLegacyWorkRuntime(): Promise<void> {
+    if (this.isWorkRuntimeAttached()) return;
+    await this.attachWorkRuntime();
+    const work = this.requireWork();
+    await work.recoverOnStartup();
+    work.start();
   }
 
   /**

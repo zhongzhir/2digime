@@ -334,7 +334,11 @@ export async function runTalkTurn(input: {
   }
 
   const assistantText = (judged.askUser || judged.userReply).trim();
-  const result = lastOk && lastPath ? { title: '结果', path: lastPath } : undefined;
+  const resultPath = lastOk ? lastPath || lastOutputs[0] : undefined;
+  const result =
+    resultPath
+      ? { title: path.basename(resultPath), path: resultPath }
+      : undefined;
   thread.turns.push({
     id: `turn_${randomUUID()}`,
     at: input.now,

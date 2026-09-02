@@ -106,6 +106,11 @@ export async function skipWelcomeAndEnterShell(page: Page): Promise<void> {
     await skipIntro.click({ force: true });
   }
   await page.locator('#view-shell').waitFor({ state: 'visible', timeout: 20_000 });
+  const chatNav = page.locator('#nav-chat');
+  if (await chatNav.isVisible().catch(() => false)) {
+    await chatNav.dispatchEvent('click');
+  }
+  await page.locator('#panel-chat').waitFor({ state: 'visible', timeout: 15_000 });
   await page.locator('#chat-input').waitFor({ state: 'visible', timeout: 15_000 });
 }
 

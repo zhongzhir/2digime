@@ -79,6 +79,7 @@ contextBridge.exposeInMainWorld("digitalMe", {
   saveRemoteCapability: (input) => ipcRenderer.invoke("shell:saveRemoteCapability", input),
   disableRemoteCapability: () => ipcRenderer.invoke("shell:disableRemoteCapability"),
   revealPath: (targetPath) => ipcRenderer.invoke("shell:revealPath", targetPath),
+  openPath: (targetPath) => ipcRenderer.invoke("shell:openPath", targetPath),
   conversation: {
     list: () => ipcRenderer.invoke("shell:conversationList"),
     append: (input) => ipcRenderer.invoke("shell:conversationAppend", input),

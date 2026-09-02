@@ -1058,6 +1058,7 @@ export interface CommandMap {
   'talk': {
     input: {
       text?: string;
+      contextPaths?: string[];
     };
     output: {
       view: import('../intelligence').TalkView;

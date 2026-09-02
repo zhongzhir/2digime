@@ -945,7 +945,9 @@ select {
 }
 
 .digital-self-page {
+  display: block;
   max-width: 42em;
+  min-height: 12rem;
 }
 
 #growth-block {
@@ -1027,12 +1029,115 @@ select {
   margin-top: 8px;
 }
 
+.legacy-nav,
+#nav-work,
+#nav-collab,
+#btn-open-settings[hidden] {
+  display: none !important;
+}
+
+.talk-composer-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.talk-composer-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.talk-attach-menu {
+  flex: 0 0 auto;
+  margin-top: 22px;
+  position: relative;
+}
+
+.talk-attach-menu > summary {
+  list-style: none;
+  cursor: pointer;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.talk-attach-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.talk-attach-menu-body {
+  position: absolute;
+  left: 0;
+  bottom: 42px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  z-index: 3;
+  min-width: 96px;
+}
+
+.talk-attach-chips {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 0;
+}
+
+.talk-attach-chips[hidden] {
+  display: none !important;
+}
+
+.talk-attach-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  font-size: var(--font-sm);
+}
+
+.talk-role {
+  margin: 0 0 4px;
+  font-size: var(--font-sm);
+  color: var(--muted);
+}
+
+.talk-processing .chat-text {
+  color: var(--muted);
+}
+
 .talk-result-card {
   margin-top: 8px;
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--panel);
+}
+
+.talk-result-name {
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+
+.talk-result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 #chat-session-aside[hidden] {
@@ -1262,7 +1367,7 @@ select {
 
 .chat-panel.chat-with-sessions {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   align-items: stretch;
   min-height: 0;
@@ -2439,12 +2544,12 @@ select {
     min-height: 0;
   }
   .chat-panel.chat-with-sessions {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
   }
   #panel-chat.chat-with-sessions:not([hidden]) {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
   }
   .chat-session-aside {
     border-right: none;

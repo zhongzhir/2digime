@@ -464,7 +464,7 @@ async function rebootstrapAndNotify() {
   if (unsubscribe) unsubscribe();
   if (runtime) await runtime.stop();
   const boot = await bootstrapRuntime();
-  // 重建 Runtime 后必须幂等重新挂载默认包，否则做事页仍可操作但 submitTask 失败。
+  // 重建 Runtime 后必须幂等重新挂载默认 Subject 包。旧 Work Runtime 不再随包启动。
   await ensureDefaultPackageAttached();
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send("shell:boot", boot);
@@ -604,6 +604,9 @@ function registerIpc() {
   });
 
   ipcMain.handle("shell:pickOpenDirectory", async () => {
+    if (isElectronTestHarness() && process.env.DIGITALME_V2_TEST_IMPORT_DIR) {
+      return String(process.env.DIGITALME_V2_TEST_IMPORT_DIR);
+    }
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ["openDirectory"],
     });
@@ -794,7 +797,15 @@ function registerIpc() {
   });
 
   ipcMain.handle("shell:getModelStatus", async () => {
-    return lastBootInfo || { modelReady: false, needsCredentialSetup: true, status: null };
+    const base = lastBootInfo || { modelReady: false, needsCredentialSetup: true, status: null };
+    return {
+      ...base,
+      legacyWorkRuntimeAttached: !!(
+        runtime &&
+        typeof runtime.isWorkRuntimeAttached === "function" &&
+        runtime.isWorkRuntimeAttached()
+      ),
+    };
   });
 
   ipcMain.handle("shell:saveModelCredential", async (_evt, input) => {
@@ -990,6 +1001,17 @@ function registerIpc() {
     try {
       shell.showItemInFolder(p);
       return { opened: true };
+    } catch {
+      return { opened: false };
+    }
+  });
+
+  ipcMain.handle("shell:openPath", async (_evt, targetPath) => {
+    const p = String(targetPath || "").trim();
+    if (!p) return { opened: false };
+    try {
+      const openErr = await shell.openPath(p);
+      return { opened: !openErr, error: openErr || undefined };
     } catch {
       return { opened: false };
     }

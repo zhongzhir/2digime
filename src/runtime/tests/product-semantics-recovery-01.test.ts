@@ -96,7 +96,7 @@ describe('product-semantics-recovery-01', () => {
     const after = await rt.listTasks({ limit: 50 });
     assert.ok(looked && /Project Alpha/.test(looked.text) && /high/i.test(looked.text));
     assert.equal(after.tasks.length, before.tasks.length);
-    rt.workRuntime.stop();
+    await rt.stop();
     await fs.rm(dir, { recursive: true, force: true });
   });
 
@@ -123,6 +123,7 @@ describe('product-semantics-recovery-01', () => {
       externalExecutorCapability: false,
     });
     await rt.createPackage({ displayName: 'sem-ident', targetDir: pkg });
+    await rt.listTasks({});
     const t1 = await rt.workRuntime.createConversationTask({
       goal: NAME_GOAL,
       contextRefs: [{ kind: 'file', path: nameFile }],
@@ -146,7 +147,7 @@ describe('product-semantics-recovery-01', () => {
     const got2 = await rt.getTask({ taskId: t2.id });
     assert.equal(got1.task.goal, NAME_GOAL);
     assert.equal(got2.task.goal, INV_GOAL);
-    rt.workRuntime.stop();
+    await rt.stop();
     await fs.rm(pkg, { recursive: true, force: true });
   });
 
@@ -238,7 +239,7 @@ describe('product-semantics-recovery-01', () => {
     const overview = await rt.getOverview({});
     const facts = (overview.userVisibleFacts || []).map((f) => String(f.text || ''));
     assert.equal(facts.some((t) => /Project Alpha/i.test(t)), false);
-    rt.workRuntime.stop();
+    await rt.stop();
     await fs.rm(dir, { recursive: true, force: true });
   });
 
@@ -273,7 +274,7 @@ describe('product-semantics-recovery-01', () => {
     const system = buildConversationSystemContent({ subjectFacts: facts });
     assert.match(system, /空格|近期完成的工作/);
     assert.doesNotMatch(system, /Project Alpha/i);
-    rt.workRuntime.stop();
+    await rt.stop();
     await fs.rm(pkg, { recursive: true, force: true }).catch(() => undefined);
   });
 

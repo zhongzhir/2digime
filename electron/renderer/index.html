@@ -241,21 +241,22 @@
 
       <section id="view-shell" class="view" hidden>
         <header class="topbar shell-topbar">
-          <p class="brand-sm">Digital Me</p>
+          <p class="brand-sm">2digime</p>
           <nav class="main-nav" aria-label="主导航">
-            <button type="button" class="nav-item active" data-nav="chat" id="nav-chat">对话</button>
-            <button type="button" class="nav-item" data-nav="work" id="nav-work">做事</button>
-            <button type="button" class="nav-item" data-nav="collab" id="nav-collab">协作</button>
+            <button type="button" class="nav-item active" data-nav="chat" id="nav-chat">与 2digime</button>
             <button type="button" class="nav-item" data-nav="subject" id="nav-subject">数字之我</button>
+            <button type="button" class="nav-item" data-nav="settings" id="nav-settings">设置</button>
+            <button type="button" class="nav-item legacy-nav" data-nav="work" id="nav-work" hidden>做事</button>
+            <button type="button" class="nav-item legacy-nav" data-nav="collab" id="nav-collab" hidden>协作</button>
           </nav>
           <div class="topbar-actions" aria-label="次级入口">
             <button type="button" id="btn-open-help" class="ghost topbar-secondary">帮助</button>
-            <button type="button" id="btn-open-settings" class="ghost topbar-secondary">设置</button>
+            <button type="button" id="btn-open-settings" class="ghost topbar-secondary" hidden>设置</button>
           </div>
         </header>
 
         <section id="panel-chat" class="shell-panel chat-panel chat-with-sessions" data-panel="chat">
-          <aside id="chat-session-aside" class="chat-session-aside" aria-label="历史对话">
+          <aside id="chat-session-aside" class="chat-session-aside" aria-label="历史对话" hidden>
             <button type="button" id="btn-chat-new" class="primary">新对话</button>
             <ul id="chat-session-list" class="chat-session-list"></ul>
           </aside>
@@ -265,7 +266,7 @@
           <div class="chat-stream">
             <div id="chat-context" class="chat-context muted tiny" hidden></div>
             <ul id="chat-turns" class="chat-turns" aria-live="polite"></ul>
-            <p id="chat-empty" class="empty-hint">写一句话开始。</p>
+            <p id="chat-empty" class="empty-hint">告诉 2digime 一件事，或问我现在怎样理解你。</p>
             <section id="first-value" class="first-value" hidden aria-label="我能帮你做什么">
               <h2 class="first-value-title">我能帮你做什么？</h2>
               <p class="first-value-lead muted">你可以直接说出来，也可以从下面几件事开始。</p>
@@ -285,15 +286,25 @@
             <button type="button" id="btn-guide-later" class="ghost">稍后再聊这个</button>
           </div>
           <div class="chat-composer">
-            <div class="field">
-              <label for="chat-input">你想说的话</label>
-              <textarea id="chat-input" rows="3" placeholder="告诉 2digime…"></textarea>
+            <ul id="talk-attach-chips" class="talk-attach-chips" hidden></ul>
+            <div class="talk-composer-row">
+              <details id="talk-attach-menu" class="talk-attach-menu">
+                <summary id="btn-talk-attach" title="添加文件或文件夹">＋</summary>
+                <div class="talk-attach-menu-body">
+                  <button type="button" id="btn-talk-attach-file">文件</button>
+                  <button type="button" id="btn-talk-attach-folder">文件夹</button>
+                </div>
+              </details>
+              <div class="field talk-composer-field">
+                <label for="chat-input">告诉 2digime</label>
+                <textarea id="chat-input" rows="3" placeholder="告诉 2digime…"></textarea>
+              </div>
             </div>
-              <div class="row">
+            <div class="row">
               <button type="button" id="btn-chat-send" class="primary">发送</button>
               <button type="button" id="btn-chat-cancel" class="ghost" hidden>取消</button>
               <button type="button" id="btn-chat-retry" class="ghost" hidden>重试回复</button>
-              <button type="button" id="btn-chat-to-task">转为任务</button>
+              <button type="button" id="btn-chat-to-task" hidden>转为任务</button>
             </div>
             <p id="chat-status" class="meta" aria-live="polite"></p>
           </div>
