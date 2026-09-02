@@ -155,20 +155,13 @@ export function usesAtomCodeCli(
 }
 
 /**
- * 默认执行选择：未显式指定执行器时，若本机存在已验收的 AtomCode 则走它，
- * 否则回退 Codex CLI。仅在未显式 cliKind / codexJsPath / atomcodeExePath 时生效。
+ * AtomCode 仅在显式指定时使用。
+ * 本机同时装了 Codex 与 AtomCode 时，默认走 Codex：探测到 AtomCode exe 不等于能执行。
  */
 export function usesAtomCodeDefault(
   options: Pick<ExternalExecutorCodexOptions, 'cliKind' | 'codexJsPath' | 'atomcodeExePath'> = {},
 ): boolean {
-  if (usesAtomCodeCli(options)) return true;
-  if (options.codexJsPath) return false;
-  try {
-    resolveAtomCodeExe(options.atomcodeExePath);
-    return true;
-  } catch {
-    return false;
-  }
+  return usesAtomCodeCli(options);
 }
 
 export function resolveAtomCodeExe(explicit?: string): string {
@@ -250,9 +243,7 @@ export async function probeCodexAvailability(
   if (codexJsPath) {
     return probeDefaultCodex(codexJsPath);
   }
-  // 默认：按执行时实际使用的本机代码执行能力探测（与 usesAtomCodeDefault 同源：
-  // AtomCode 若在则用之，否则 Codex），保证「探测到的与执行用的那一种」一致，
-  // 不在能力间写死厂商优先名单。
+  // 默认：显式 AtomCode 才走 AtomCode；否则探测 Codex（含本机原生安装）。
   if (usesAtomCodeDefault(options)) {
     return probeAtomCodeAvailability(options.atomcodeExePath);
   }
@@ -327,6 +318,39 @@ export function probeAtomCodeAvailability(atomcodeExePath?: string): Availabilit
   }
 }
 
+function accessOk(p: string): boolean {
+  try {
+    require('node:fs').accessSync(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 本机 OpenAI Codex 桌面安装 / PATH 上的原生 exe。 */
+export function resolveInstalledCodexExe(): string | null {
+  const exeName = process.platform === 'win32' ? 'codex.exe' : 'codex';
+  const localApp = process.env.LOCALAPPDATA || '';
+  const hashedBin = path.join(localApp, 'OpenAI', 'Codex', 'bin');
+  try {
+    const versions = require('node:fs').readdirSync(hashedBin) as string[];
+    for (const version of versions) {
+      const candidate = path.join(hashedBin, version, exeName);
+      if (accessOk(candidate)) return candidate;
+    }
+  } catch {
+    /* no hashed install */
+  }
+  const direct = path.join(localApp, 'OpenAI', 'Codex', exeName);
+  if (accessOk(direct)) return direct;
+  for (const dir of String(process.env.PATH || '').split(path.delimiter)) {
+    if (!dir) continue;
+    const candidate = path.join(dir, exeName);
+    if (accessOk(candidate)) return candidate;
+  }
+  return null;
+}
+
 export function resolveCodexJs(): string {
   const candidates = [
     path.join(
@@ -361,12 +385,7 @@ export function resolveCodexJs(): string {
     ),
   ];
   for (const candidate of candidates) {
-    try {
-      require('node:fs').accessSync(candidate);
-      return candidate;
-    } catch {
-      /* continue */
-    }
+    if (accessOk(candidate)) return candidate;
   }
   throw new Error('尚未检测到可用的代码执行能力。请先安装推荐能力后再在设置中检查连接。');
 }
@@ -419,7 +438,28 @@ export function resolveCodexNativeExe(codexJsPath: string): string | null {
 }
 
 export function resolveCodexLaunch(codexJsPath?: string): CodexLaunch {
+  if (!codexJsPath) {
+    const installed = resolveInstalledCodexExe();
+    if (installed) {
+      return {
+        mode: 'native',
+        executable: installed,
+        argsPrefix: [],
+        codexJsPath: installed,
+        nativeExePath: installed,
+      };
+    }
+  }
   const js = codexJsPath || resolveCodexJs();
+  if (/\.exe$/i.test(js) || /(^|[/\\])codex$/i.test(js)) {
+    return {
+      mode: 'native',
+      executable: js,
+      argsPrefix: [],
+      codexJsPath: js,
+      nativeExePath: js,
+    };
+  }
   const native = resolveCodexNativeExe(js);
   if (native) {
     return {

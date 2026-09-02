@@ -20,8 +20,14 @@ export async function launchDigitalMeElectron(opts?: {
   extraEnv?: Record<string, string>;
   /** 复用已有 userData（重启验收）。未提供则新建临时目录。 */
   userData?: string;
+  /** 正式产品闸门：不启用 UX Fake / Electron test harness stub。 */
+  realProduct?: boolean;
+  /** 使用本机应用 userData。默认仍隔离临时目录。 */
+  useAppUserData?: boolean;
 }): Promise<ElectronHarness> {
-  const userData = opts?.userData || (await fs.mkdtemp(path.join(os.tmpdir(), 'dmv2-electron-ud-')));
+  const userData = opts?.useAppUserData
+    ? ''
+    : opts?.userData || (await fs.mkdtemp(path.join(os.tmpdir(), 'dmv2-electron-ud-')));
   let electronPath: string;
   try {
     electronPath = require('electron') as string;
@@ -31,6 +37,7 @@ export async function launchDigitalMeElectron(opts?: {
   if (typeof electronPath !== 'string') {
     throw new Error('require(electron) 未返回可执行路径');
   }
+  const realProduct = opts?.realProduct === true;
   const playwright = await import('playwright');
   const app = await playwright._electron.launch({
     executablePath: electronPath,
@@ -40,29 +47,47 @@ export async function launchDigitalMeElectron(opts?: {
     env: {
       ...process.env,
       DIGITALME_V2_ROOT: REPO_ROOT,
-      DIGITALME_V2_ELECTRON_TEST: '1',
-      DIGITALME_V2_UX_ACCEPTANCE: '1',
-      DIGITALME_V2_SEARCH_ENABLED: '0',
-      DIGITALME_V2_USER_DATA: userData,
-      DIGITALME_V2_EXPORT_DELAY_MS: String(opts?.exportDelayMs ?? 0),
+      ...(realProduct
+        ? {
+            DIGITALME_V2_ELECTRON_TEST: '0',
+            DIGITALME_V2_UX_ACCEPTANCE: '0',
+            DIGITALME_V2_DIGITAL_SELF_STUB: '0',
+            DIGITALME_V2_TALK_STUB: '0',
+          }
+        : {
+            DIGITALME_V2_ELECTRON_TEST: '1',
+            DIGITALME_V2_UX_ACCEPTANCE: '1',
+            DIGITALME_V2_SEARCH_ENABLED: '0',
+            DIGITALME_V2_EXPORT_DELAY_MS: String(opts?.exportDelayMs ?? 0),
+          }),
+      ...(userData ? { DIGITALME_V2_USER_DATA: userData } : {}),
       ELECTRON_ENABLE_LOGGING: '1',
       ...(opts?.extraEnv || {}),
     },
   });
-  const page = await app.firstWindow();
-  await page.waitForLoadState('domcontentloaded');
-  return {
-    app,
-    page,
-    userData,
-    close: async () => {
-      try {
-        await app.close();
-      } catch {
-        /* ignore */
-      }
-    },
-  };
+  try {
+    const page = await app.firstWindow({ timeout: 90_000 });
+    await page.waitForLoadState('domcontentloaded');
+    return {
+      app,
+      page,
+      userData: userData || 'app-default',
+      close: async () => {
+        try {
+          await app.close();
+        } catch {
+          /* ignore */
+        }
+      },
+    };
+  } catch (err) {
+    try {
+      await app.close();
+    } catch {
+      /* ignore */
+    }
+    throw err;
+  }
 }
 
 export async function skipWelcomeAndEnterShell(page: Page): Promise<void> {

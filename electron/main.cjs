@@ -71,6 +71,7 @@ const COMMAND_NAMES = new Set([
   "collab.interact",
   "subject.communicate",
   "digitalSelf",
+  "talk",
 ]);
 
 function resolveAppRoot() {
@@ -217,6 +218,137 @@ async function bootstrapRuntime() {
   if (process.env.DIGITALME_V2_DIGITAL_SELF_STUB === "1") {
     const stub = require(path.join(__dirname, "digital-self-test-stub.cjs"));
     options.digitalSelfChat = stub.chat;
+  } else if (process.env.DIGITALME_V2_DIGITAL_SELF_TRACE_DIR && model.ok && model.openaiCompatible && model.secrets) {
+    const traceDir = process.env.DIGITALME_V2_DIGITAL_SELF_TRACE_DIR;
+    fs.mkdirSync(traceDir, { recursive: true });
+    const { chatComplete } = require(path.join(appRoot, "dist", "infrastructure", "model-http"));
+    const { providerCredentialKey } = require(path.join(
+      appRoot,
+      "dist",
+      "infrastructure",
+      "secret-store",
+    ));
+    const cfg = model.openaiCompatible;
+    let dsTraceSeq = 0;
+    options.digitalSelfChat = async ({ messages }) => {
+      const apiKey = await model.secrets.get(
+        providerCredentialKey(cfg.providerId || "openai-compatible"),
+      );
+      const result = await chatComplete({
+        messages,
+        baseUrl: cfg.baseUrl,
+        apiKey,
+        model: cfg.model,
+        temperature: 0.2,
+        responseFormat: { type: "json_object" },
+        timeoutMs: cfg.timeoutMs || 120000,
+      });
+      dsTraceSeq += 1;
+      let host = "unknown";
+      try {
+        host = new URL(cfg.baseUrl).host;
+      } catch {
+        /* ignore */
+      }
+      fs.writeFileSync(
+        path.join(traceDir, `raw-${String(dsTraceSeq).padStart(2, "0")}.json`),
+        `${JSON.stringify(
+          {
+            stub: false,
+            kind: "digital-self",
+            model: cfg.model,
+            providerHost: host,
+            at: new Date().toISOString(),
+            messages: messages.map((m) => ({
+              role: m.role,
+              content: m.content,
+            })),
+            text: result.text,
+          },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      );
+      return { text: result.text };
+    };
+  }
+  if (process.env.DIGITALME_V2_TALK_STUB === "1") {
+    const talkStub = require(path.join(__dirname, "talk-test-stub.cjs"));
+    options.talkChat = talkStub.chat;
+  } else if (process.env.DIGITALME_V2_TALK_TRACE_DIR && model.ok && model.openaiCompatible && model.secrets) {
+    const talkTraceDir = process.env.DIGITALME_V2_TALK_TRACE_DIR;
+    fs.mkdirSync(talkTraceDir, { recursive: true });
+    const { chatComplete } = require(path.join(appRoot, "dist", "infrastructure", "model-http"));
+    const { providerCredentialKey } = require(path.join(
+      appRoot,
+      "dist",
+      "infrastructure",
+      "secret-store",
+    ));
+    const cfg = model.openaiCompatible;
+    let talkTraceSeq = 0;
+    options.talkChat = async ({ messages, tools }) => {
+      const apiKey = await model.secrets.get(
+        providerCredentialKey(cfg.providerId || "openai-compatible"),
+      );
+      const result = await chatComplete({
+        messages,
+        baseUrl: cfg.baseUrl,
+        apiKey,
+        model: cfg.model,
+        temperature: 0.2,
+        timeoutMs: cfg.timeoutMs || 120000,
+        ...(tools && tools.length ? { tools, toolChoice: "auto" } : {}),
+      });
+      talkTraceSeq += 1;
+      let host = "unknown";
+      try {
+        host = new URL(cfg.baseUrl).host;
+      } catch {
+        /* ignore */
+      }
+      const last = messages[messages.length - 1] || {};
+      const sys = String((messages[0] && messages[0].content) || "");
+      fs.writeFileSync(
+        path.join(talkTraceDir, `raw-${String(talkTraceSeq).padStart(2, "0")}.json`),
+        `${JSON.stringify(
+          {
+            stub: false,
+            kind: tools && tools.length ? "talk-decide" : /验收/.test(sys) ? "talk-review" : "talk-other",
+            lastRole: last.role || null,
+            model: cfg.model,
+            providerHost: host,
+            at: new Date().toISOString(),
+            tools: (tools || []).map((t) => t.function && t.function.name).filter(Boolean),
+            messages: messages.map((m) => ({
+              role: m.role,
+              content: m.content,
+              ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
+              ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
+            })),
+            text: result.text,
+            toolCalls: result.toolCalls || [],
+            finishReason: result.finishReason || null,
+          },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      );
+      return {
+        text: result.text,
+        ...(result.toolCalls && result.toolCalls.length
+          ? {
+              toolCalls: result.toolCalls.map((call) => ({
+                id: call.id,
+                name: call.function.name,
+                arguments: call.function.arguments,
+              })),
+            }
+          : {}),
+      };
+    };
   }
 
   runtime = createDigitalMeRuntime(options);

@@ -164,6 +164,8 @@ import { AI_CTO_JSON_SCHEMA } from '../execution/ai-cto-review';
 import { providerCredentialKey } from '../infrastructure/secret-store';
 import { DigitalSelfService } from '../subject-core/digital-self';
 import type { DigitalSelfChatFn } from '../subject-core/digital-self/interpret';
+import { TalkService, agentsFromRegistry } from '../intelligence';
+import type { ProfessionalAgent, TalkChatFn } from '../intelligence';
 
 export interface DigitalMeRuntimeOptions {
   /**
@@ -283,6 +285,10 @@ export interface DigitalMeRuntimeOptions {
    * 未提供时复用已有 generic model；均不可用则诚实提示需要连接 AI。
    */
   digitalSelfChat?: (input: { messages: ChatMessage[] }) => Promise<{ text: string }>;
+  /** Phase 2 交流模型注入（测试可双）。未提供时复用已有 generic model。 */
+  talkChat?: TalkChatFn;
+  /** 测试注入专业能力；未提供时从当前已连接 registry 生成自然语言可调用表。 */
+  talkProfessionals?: ProfessionalAgent[];
 }
 
 /**
@@ -307,6 +313,7 @@ export class DigitalMeRuntime {
   private readonly ctoReviewInflight = new Set<Promise<void>>();
   private converseAbortSignal: AbortSignal | null = null;
   private digitalSelfService: DigitalSelfService | null = null;
+  private talkService: TalkService | null = null;
 
   constructor(options: DigitalMeRuntimeOptions = {}) {
     this.options = options;
@@ -345,6 +352,12 @@ export class DigitalMeRuntime {
     return this.getDigitalSelfService().invoke(input);
   }
 
+  async talk(
+    input: CommandMap['talk']['input'],
+  ): Promise<CommandMap['talk']['output']> {
+    return this.getTalkService().invoke(input);
+  }
+
   private getDigitalSelfService(): DigitalSelfService {
     if (!this.digitalSelfService) {
       this.digitalSelfService = new DigitalSelfService(
@@ -357,6 +370,66 @@ export class DigitalMeRuntime {
       );
     }
     return this.digitalSelfService;
+  }
+
+  private getTalkService(): TalkService {
+    if (!this.talkService) {
+      this.talkService = new TalkService(
+        () => {
+          const pkg = this.subject.getActive();
+          if (!pkg) return null;
+          return { rootDir: pkg.rootDir, subjectId: pkg.id };
+        },
+        this.resolveTalkChat(),
+        (pkg) => {
+          if (this.options.talkProfessionals) return this.options.talkProfessionals;
+          return agentsFromRegistry(this.registry, {
+            subjectId: pkg.subjectId,
+            ...(this.options.secrets ? { secrets: this.options.secrets } : {}),
+          });
+        },
+      );
+    }
+    return this.talkService;
+  }
+
+  private resolveTalkChat(): TalkChatFn | null {
+    if (this.options.talkChat) return this.options.talkChat;
+    const understanding = resolveSubjectUnderstandingRuntime({
+      ...(this.options.subjectUnderstanding
+        ? { specialist: this.options.subjectUnderstanding }
+        : {}),
+      ...(this.options.documentCapability !== undefined
+        ? { documentCapability: this.options.documentCapability }
+        : {}),
+      ...(this.options.openaiCompatible
+        ? { openaiCompatible: this.options.openaiCompatible }
+        : {}),
+      ...(this.options.secrets ? { secrets: this.options.secrets } : {}),
+    });
+    const runtime = understanding.runtime;
+    if (!runtime?.enabled) return null;
+    return async ({ messages, tools }) => {
+      const result = await runtime.chatComplete({
+        messages,
+        baseUrl: runtime.model.baseUrl,
+        model: runtime.model.model,
+        temperature: 0.2,
+        ...(tools && tools.length ? { tools, toolChoice: 'auto' as const } : {}),
+      });
+      return {
+        text: result.text,
+        ...(result.toolCalls?.length
+          ? {
+              toolCalls: result.toolCalls.map((call) => ({
+                id: call.id,
+                name: call.function.name,
+                arguments: call.function.arguments,
+              })),
+            }
+          : {}),
+      };
+    };
   }
 
   private resolveDigitalSelfChat(): DigitalSelfChatFn | null {
@@ -2749,15 +2822,12 @@ export class DigitalMeRuntime {
           // eslint-disable-next-line @typescript-eslint/no-require-imports
           const fsSync = require('node:fs') as typeof import('node:fs');
           const adapterMod = require('../capability/adapters/external-executor-codex') as typeof import('../capability/adapters/external-executor-codex');
-          // 与执行一致的默认探测：显式 cliKind / atomcodeExePath 用之；
-          // 否则 usesAtomCodeDefault 决定实际使用的那一种（AtomCode 若在则用之，否则 Codex），
-          // 保证「探测到的与执行用的那一种」一致，不在能力间写死厂商优先名单。
-          if (adapterMod.usesAtomCodeCli(opt) || (adapterMod.usesAtomCodeDefault(opt) && !opt.codexJsPath)) {
+          if (adapterMod.usesAtomCodeCli(opt) || adapterMod.usesAtomCodeDefault(opt)) {
             const exe = adapterMod.resolveAtomCodeExe(opt.atomcodeExePath);
             fsSync.accessSync(exe);
           } else {
-            const js = opt.codexJsPath || adapterMod.resolveCodexJs();
-            fsSync.accessSync(js);
+            const launch = adapterMod.resolveCodexLaunch(opt.codexJsPath);
+            fsSync.accessSync(launch.executable);
           }
           (adapter.registration as { availability: string }).availability = 'available';
         }

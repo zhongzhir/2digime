@@ -34,6 +34,18 @@ function findByText(current, re) {
 
 function tell(text, current) {
   const t = String(text || '').trim();
+  if (t.includes('我喜欢早起')) {
+    return {
+      understandings: [
+        {
+          text: '用户喜欢早起处理事情',
+          facet: 'preferences',
+          aboutUser: true,
+          origin: 'user_statement',
+        },
+      ],
+    };
+  }
   if (t.includes('我叫张三')) {
     const existing = findByText(current, /张三/);
     if (existing) {

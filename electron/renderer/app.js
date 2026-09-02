@@ -5961,6 +5961,10 @@
           if (els.chatStatus) els.chatStatus.textContent = "请先写一句话。";
           return;
         }
+        if (window.TalkPage && typeof window.TalkPage.handleSend === "function") {
+          await window.TalkPage.handleSend(text);
+          return;
+        }
         firstValueDismissed = true;
         if (!api.conversation || typeof api.conversation.append !== "function") {
           throw new Error("对话功能不可用");

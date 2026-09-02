@@ -30,6 +30,7 @@ const COMMAND_NAMES = [
   "collab.interact",
   "subject.communicate",
   "digitalSelf",
+  "talk",
 ];
 
 contextBridge.exposeInMainWorld("digitalMe", {

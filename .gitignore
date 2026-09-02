@@ -1,5 +1,8 @@
 node_modules/
 dist/
+scripts/_dialogue-doing-03-real-ai-gate/
+scripts/_dialogue-doing-03a-professional-boundary/
+scripts/_dialogue-doing-03b-execution-truth/
 reference-agents/**/.agent.pid
 scripts/_mvp-p14-real-capability-evidence/
 scripts/_mvp-p15-dev-acceptance-evidence/

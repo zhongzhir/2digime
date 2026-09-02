@@ -26,9 +26,26 @@ export class ModelHttpError extends Error {
   }
 }
 
+export interface ChatToolCall {
+  id: string;
+  type: 'function';
+  function: { name: string; arguments: string };
+}
+
+export interface ChatToolDefinition {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
+}
+
 export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
+  role: 'system' | 'user' | 'assistant' | 'tool';
   content: string;
+  tool_call_id?: string;
+  tool_calls?: ChatToolCall[];
 }
 
 export interface ChatCompleteOptions {
@@ -51,10 +68,14 @@ export interface ChatCompleteOptions {
           schema: Record<string, unknown>;
         };
       };
+  /** OpenAI-compatible tool calling. 工具是能力合同，不是任务类型枚举。 */
+  tools?: ChatToolDefinition[];
+  toolChoice?: 'auto' | 'none';
 }
 
 export interface ChatCompleteResult {
   text: string;
+  toolCalls?: ChatToolCall[];
   usage?: { totalTokens?: number };
   /** OpenAI-compatible finish_reason: stop | length | content_filter | ... */
   finishReason?: string;
@@ -69,7 +90,11 @@ export const DEFAULT_CHAT_MAX_TOKENS = 4096;
 export async function chatComplete(options: ChatCompleteOptions): Promise<ChatCompleteResult> {
   const body = JSON.parse(await requestCompletion(options, false)) as {
     choices?: Array<{
-      message?: { content?: string | null; reasoning_content?: string | null };
+      message?: {
+        content?: string | null;
+        reasoning_content?: string | null;
+        tool_calls?: ChatToolCall[];
+      };
       finish_reason?: string | null;
     }>;
     usage?: { total_tokens?: number };
@@ -80,8 +105,9 @@ export async function chatComplete(options: ChatCompleteOptions): Promise<ChatCo
   // 用户面只取 final content；reasoning_content 一律不进入返回正文（即使 content 为空）。
   const content = message?.content;
   const contentText = typeof content === 'string' ? content : '';
+  const toolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : undefined;
   const truncated = finishReason === 'length';
-  if (contentText.trim().length === 0) {
+  if (contentText.trim().length === 0 && !(toolCalls && toolCalls.length > 0)) {
     // token 上限耗尽且无 final 正文：仍标 truncated，供上层显示「回复未完成」
     if (truncated) {
       return {
@@ -97,6 +123,7 @@ export async function chatComplete(options: ChatCompleteOptions): Promise<ChatCo
   }
   const result: ChatCompleteResult = {
     text: contentText,
+    ...(toolCalls && toolCalls.length ? { toolCalls } : {}),
     ...(finishReason ? { finishReason } : {}),
     ...(truncated ? { truncated: true } : {}),
   };
@@ -176,6 +203,8 @@ async function requestCompletion(options: ChatCompleteOptions, stream: boolean):
     if (options.temperature !== undefined) payload.temperature = options.temperature;
     if (options.maxTokens !== undefined) payload.max_tokens = options.maxTokens;
     if (options.responseFormat) payload.response_format = options.responseFormat;
+    if (options.tools && options.tools.length > 0) payload.tools = options.tools;
+    if (options.toolChoice) payload.tool_choice = options.toolChoice;
 
     let response: Response;
     try {

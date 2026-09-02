@@ -1055,6 +1055,14 @@ export interface CommandMap {
       view: import('../subject-core/digital-self').DigitalSelfView;
     };
   };
+  'talk': {
+    input: {
+      text?: string;
+    };
+    output: {
+      view: import('../intelligence').TalkView;
+    };
+  };
 }
 
 export type CommandName = keyof CommandMap;
@@ -1084,6 +1092,7 @@ export const COMMAND_NAMES = [
   'collab.interact',
   'subject.communicate',
   'digitalSelf',
+  'talk',
 ] as const satisfies readonly CommandName[];
 
 /**
@@ -1091,8 +1100,9 @@ export const COMMAND_NAMES = [
  * 2026-08-11 D11-A:新增 work.converse,上限 21→22。
  * DIGITALME-COLLAB-DELEGATED-01:新增 work.delegateTask(AI-native 委托执行),上限 22→23。
  * 2DIGIME-REFOUNDATION-02:新增 digitalSelf（数字之我页唯一命令）,上限 23→24。
+ * 2DIGIME-REFOUNDATION-03:新增 talk（与 2digime 交流/做事同一入口）,上限 24→25。
  */
-export const COMMAND_COUNT_LIMIT = 24;
+export const COMMAND_COUNT_LIMIT = 25;
 
 export interface CommandBus {
   invoke<K extends CommandName>(

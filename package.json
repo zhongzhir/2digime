@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "smoke": "node dist/smoke.js",
-    "test": "node --test --test-concurrency=1 \"dist/infrastructure/tests/*.test.js\" \"dist/work-runtime/tests/*.test.js\" \"dist/subject-core/tests/*.test.js\" \"dist/capability/adapters/tests/*.test.js\" \"dist/capability/tests/*.test.js\" \"dist/runtime/tests/*.test.js\" \"dist/engineering/tests/*.test.js\" \"dist/collaboration/tests/*.test.js\" \"dist/subject-comm/tests/*.test.js\" \"dist/execution/tests/*.test.js\"",
+    "test": "node --test --test-concurrency=1 \"dist/infrastructure/tests/*.test.js\" \"dist/work-runtime/tests/*.test.js\" \"dist/subject-core/tests/*.test.js\" \"dist/intelligence/tests/*.test.js\" \"dist/capability/adapters/tests/*.test.js\" \"dist/capability/tests/*.test.js\" \"dist/runtime/tests/*.test.js\" \"dist/engineering/tests/*.test.js\" \"dist/collaboration/tests/*.test.js\" \"dist/subject-comm/tests/*.test.js\" \"dist/execution/tests/*.test.js\"",
     "electron:version": "node scripts/check-electron-version.cjs",
     "preflight:electron": "node scripts/electron-preflight.cjs",
     "dev": "node scripts/start-dev.cjs",
