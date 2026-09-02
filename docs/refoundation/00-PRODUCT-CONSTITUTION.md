@@ -88,6 +88,20 @@ Codex 是 Agent；Search 更像 Tool。调用接口可以统一，产品本体�
 - 授权最小必要、默认可撤销、不可暗中扩大。写文件、网络、账号、外发、付费分开展示。
 - 关键行为可追溯。普通用户默认不看审计，需要时能打开。
 
+长期 Digital Subject Network 分六层，彼此不得串层：
+
+| 层 | 回答 | 不是 |
+|---|---|---|
+| **Identity** | 这是谁的哪个数字主体 | 不是设备、不是 Agent Card 全文 |
+| **Reachability** | 这次怎样安全送到对方 endpoint | 不是「值不值得合作」 |
+| **Discovery** | 当前可发现谁、其公开协作面是什么 | 不是 Digital Self；不是广域市场 |
+| **Collaboration** | 两边 2digime 如何谈、披露、做事、验收 | 不是传输状态机；不是用户协作中心 |
+| **Transaction** | 以后钱/承诺是否真实发生 | 不是当前协作本体；无 receipt 就未付 |
+| **Physical Interaction** | 以后与物理世界的交接 | 不是本阶段产品 |
+
+**public-card** 是可发布的协作表面（身份引用、可达、公开技能/合作范围）。它不是 Digital Self authority，不得镜像 `self.json`。
+**exchange** 是 append-only 交换事实（实际发了/收了什么）。它不是 workflow state，不表示「协作走到第几步」。
+
 来源：`digitalme_context.md` 主权与本地优先、决策 #110 Relay 判断、`digitalme_rules.md` §5–§6、01A §1.7。归宿：本文。
 
 ## 8. 五个表面只是同一主体的投影

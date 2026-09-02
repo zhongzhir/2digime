@@ -3,7 +3,7 @@ import { nowIso } from '../shared/ids';
 import { readDigitalSelf } from '../subject-core/digital-self/store';
 import { formatSelfContext, selectSelfContext } from './self-context';
 import { emptyThread, readThread, writeThread } from './store';
-import { NO_MODEL_NOTICE, runTalkTurn } from './loop';
+import { NO_MODEL_NOTICE, runTalkTurn, type SubjectCollabPort } from './loop';
 import type { ProfessionalAgent, TalkChatFn, TalkView } from './types';
 
 export interface TalkPackageRef {
@@ -19,6 +19,7 @@ export class TalkService {
     private readonly chat: TalkChatFn | null,
     private readonly resolveAgents: (pkg: TalkPackageRef) => ProfessionalAgent[],
     private readonly now: () => string = nowIso,
+    private readonly resolveCollab?: (pkg: TalkPackageRef) => Promise<SubjectCollabPort | null>,
   ) {}
 
   async invoke(input: { text?: string; contextPaths?: string[] }): Promise<{ view: TalkView }> {
@@ -51,6 +52,7 @@ export class TalkService {
     } catch {
       selfContext = '读取数字之我失败。不得解释为不了解用户，也不要编造本人事实。';
     }
+    const collab = this.resolveCollab ? await this.resolveCollab(pkg) : null;
     const next = await runTalkTurn({
       thread,
       userText: text,
@@ -59,6 +61,7 @@ export class TalkService {
       chat: this.chat,
       workRoot: pkg.rootDir,
       now,
+      ...(collab ? { subjectCollab: collab } : {}),
     });
     await writeThread(pkg.rootDir, next);
     return { view: projectView(next) };

@@ -1,5 +1,5 @@
 /**
- * 统一处理收件箱：signal / signal_response / collaboration_sync。
+ * 统一处理收件箱：signal / signal_response / collaboration_sync / subject_collab。
  * ACK = 通信层；不等于业务接受。
  */
 import type { DigitalMeRuntime } from '../runtime/digitalme-runtime';
@@ -14,10 +14,11 @@ export async function processTransportInbox(
   runtime: DigitalMeRuntime,
   transport: SubjectTransport,
 ): Promise<{ processed: number; collabSynced: number }> {
-  // 先处理协作同步（幂等 merge）
+  const collabInbox = await runtime.drainSubjectCollabInbox();
   const items = await transport.listInbox({ unreadOnly: true });
   let collabSynced = 0;
   for (const env of items) {
+    if (env.kind === 'subject_collab') continue;
     if (env.kind !== 'collaboration_sync') continue;
     if (!isCollaborationSyncPayload(env.payload)) {
       await transport.acknowledge(env.envelopeId);
@@ -30,7 +31,6 @@ export async function processTransportInbox(
       );
       collabSynced += 1;
     } catch {
-      // 保留未 ACK 以便重试；不破坏包
       continue;
     }
     await transport.acknowledge(env.envelopeId);
@@ -38,5 +38,5 @@ export async function processTransportInbox(
 
   const host = new SignalOpportunityHost(runtime, transport);
   const signalPart = await host.processInbox();
-  return { processed: signalPart.processed + collabSynced, collabSynced };
+  return { processed: signalPart.processed + collabSynced + collabInbox.processed, collabSynced };
 }

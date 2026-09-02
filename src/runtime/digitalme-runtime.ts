@@ -166,6 +166,21 @@ import { DigitalSelfService } from '../subject-core/digital-self';
 import type { DigitalSelfChatFn } from '../subject-core/digital-self/interpret';
 import { TalkService, agentsFromRegistry } from '../intelligence';
 import type { ProfessionalAgent, TalkChatFn } from '../intelligence';
+import { formatSelfContext, selectSelfContext } from '../intelligence/self-context';
+import { readDigitalSelf } from '../subject-core/digital-self/store';
+import {
+  appendExchange,
+  bodyDigest,
+  consultSubject,
+  createRelaySubjectNetwork,
+  decideIncomingRequest,
+  readPublicCard,
+  runOwnContribution,
+  type CollaborationRequest,
+  type CollaborationResponse,
+  type RelaySubjectNetwork,
+  type SubjectCollabNetwork,
+} from '../subject-collab';
 
 export interface DigitalMeRuntimeOptions {
   /**
@@ -289,6 +304,11 @@ export interface DigitalMeRuntimeOptions {
   talkChat?: TalkChatFn;
   /** 测试注入专业能力；未提供时从当前已连接 registry 生成自然语言可调用表。 */
   talkProfessionals?: ProfessionalAgent[];
+  /**
+   * Subject ↔ Subject 发现与投递。未提供时本进程不可发现其他主体。
+   * 产品代码不得写死某个实验 peer。
+   */
+  subjectNetwork?: SubjectCollabNetwork;
 }
 
 /**
@@ -314,6 +334,8 @@ export class DigitalMeRuntime {
   private converseAbortSignal: AbortSignal | null = null;
   private digitalSelfService: DigitalSelfService | null = null;
   private talkService: TalkService | null = null;
+  private detachSubjectNetwork: (() => void) | null = null;
+  private relayCollab: RelaySubjectNetwork | null = null;
 
   constructor(options: DigitalMeRuntimeOptions = {}) {
     this.options = options;
@@ -388,9 +410,186 @@ export class DigitalMeRuntime {
             ...(this.options.secrets ? { secrets: this.options.secrets } : {}),
           });
         },
+        nowIso,
+        async (pkg) => {
+          const injected = this.options.subjectNetwork;
+          if (!injected) await this.ensureRelaySubjectCollab();
+          const net = injected || this.relayCollab;
+          if (!net) return null;
+          if (this.relayCollab) await this.relayCollab.publishPublicCard();
+          const cards = await net.listCards(pkg.subjectId);
+          if (!cards.length) return null;
+          return {
+            cards,
+            consult: (args) =>
+              consultSubject({
+                network: net,
+                packageRoot: pkg.rootDir,
+                selfSubjectId: pkg.subjectId,
+                ...args,
+              }),
+          };
+        },
       );
     }
     return this.talkService;
+  }
+
+  async drainSubjectCollabInbox(): Promise<{ processed: number }> {
+    await this.ensureRelaySubjectCollab();
+    if (!this.relayCollab) return { processed: 0 };
+    const processed = await this.relayCollab.drainInbox();
+    return { processed };
+  }
+
+  private async ensureRelaySubjectCollab(): Promise<void> {
+    if (this.options.subjectNetwork) return;
+    const pkg = this.subject.getActive();
+    if (!pkg) return;
+    const { resolveCommCipher } = await import('../subject-comm/transport-factory');
+    const { CommIdentityStore } = await import('../subject-comm/identity-store');
+    const cipher = resolveCommCipher();
+    const self = await new CommIdentityStore(pkg.rootDir, cipher).getLocalProfile();
+    if (!self) return;
+    if (!this.relayCollab) {
+      this.relayCollab = createRelaySubjectNetwork({ packageRoot: pkg.rootDir, cipher });
+      this.detachSubjectNetwork = this.relayCollab.attach({
+        subjectId: pkg.id,
+        getCard: () => readPublicCard(pkg.rootDir, pkg.id, pkg.identity.displayName),
+        handle: (request) => this.handleIncomingCollaboration(request),
+      });
+    }
+    await this.relayCollab.publishPublicCard();
+  }
+
+  private async attachToSubjectNetwork(): Promise<void> {
+    this.relayCollab?.stopPoll();
+    this.relayCollab = null;
+    this.detachSubjectNetwork?.();
+    this.detachSubjectNetwork = null;
+    const net = this.options.subjectNetwork;
+    const pkg = this.subject.getActive();
+    if (net && pkg) {
+      this.detachSubjectNetwork = net.attach({
+        subjectId: pkg.id,
+        getCard: () => readPublicCard(pkg.rootDir, pkg.id, pkg.identity.displayName),
+        handle: (request) => this.handleIncomingCollaboration(request),
+      });
+      return;
+    }
+    await this.ensureRelaySubjectCollab();
+  }
+
+  private resolveOwnProfessionals(): ProfessionalAgent[] {
+    const pkg = this.subject.getActive();
+    if (this.options.talkProfessionals) return this.options.talkProfessionals;
+    if (!pkg) return [];
+    return agentsFromRegistry(this.registry, {
+      subjectId: pkg.id,
+      ...(this.options.secrets ? { secrets: this.options.secrets } : {}),
+    });
+  }
+
+  private async handleIncomingCollaboration(
+    request: CollaborationRequest,
+  ): Promise<CollaborationResponse> {
+    const pkg = this.subject.getActive();
+    const now = nowIso();
+    if (!pkg || pkg.id !== request.toSubjectId) {
+      return {
+        exchangeId: request.exchangeId,
+        fromSubjectId: request.toSubjectId,
+        toSubjectId: request.fromSubjectId,
+        at: now,
+        decision: 'decline',
+        reply: '对方当前不可达。',
+      };
+    }
+    await appendExchange(pkg.rootDir, {
+      exchangeId: request.exchangeId,
+      kind: 'request_received',
+      at: now,
+      fromSubjectId: request.fromSubjectId,
+      toSubjectId: pkg.id,
+      threadId: request.threadId,
+      summary: '收到另一主体的合作请求',
+      body: JSON.stringify({
+        goal: request.goal,
+        hopedContribution: request.hopedContribution,
+        disclosure: request.disclosure,
+      }),
+    });
+    let selfContext = '当前还没有已写入的数字之我认识。读取失败不得假装了解用户。';
+    try {
+      const self = await readDigitalSelf(pkg.rootDir, pkg.id, now);
+      selfContext = formatSelfContext(selectSelfContext(self, request.goal));
+    } catch {
+      selfContext = '读取数字之我失败。不得解释为不了解用户，也不要编造本人事实。';
+    }
+    const chat = this.resolveTalkChat();
+    if (!chat) {
+      const declined: CollaborationResponse = {
+        exchangeId: request.exchangeId,
+        fromSubjectId: pkg.id,
+        toSubjectId: request.fromSubjectId,
+        at: now,
+        decision: 'decline',
+        reply: '需要先连接 AI 能力，才能判断这次合作。',
+      };
+      await appendExchange(pkg.rootDir, {
+        exchangeId: request.exchangeId,
+        kind: 'response_sent',
+        at: now,
+        fromSubjectId: pkg.id,
+        toSubjectId: request.fromSubjectId,
+        threadId: request.threadId,
+        summary: '对方决定：decline',
+        body: JSON.stringify(declined),
+        peerDecision: 'decline',
+      });
+      return declined;
+    }
+    const response = await decideIncomingRequest({
+      chat,
+      selfContext,
+      request,
+      now,
+    });
+    if (response.decision === 'accept') {
+      const own = await runOwnContribution({
+        agents: this.resolveOwnProfessionals(),
+        instruction: [request.hopedContribution, request.disclosure].filter(Boolean).join('\n'),
+        workRoot: pkg.rootDir,
+        now,
+      });
+      if (own.used) {
+        response.usedOwnCapability = true;
+        const parts = [response.contribution, own.summary].filter(Boolean);
+        if (parts.length) response.contribution = parts.join('\n');
+        if (own.evidencePath) {
+          const evidence = await fs.readFile(own.evidencePath, 'utf8');
+          response.evidenceDigest = bodyDigest(evidence);
+        }
+      }
+    }
+    await appendExchange(pkg.rootDir, {
+      exchangeId: request.exchangeId,
+      kind: 'response_sent',
+      at: now,
+      fromSubjectId: pkg.id,
+      toSubjectId: request.fromSubjectId,
+      threadId: request.threadId,
+      summary: `对方决定：${response.decision}`,
+      body: JSON.stringify({
+        decision: response.decision,
+        reply: response.reply,
+        contribution: response.contribution || '',
+      }),
+      peerDecision: response.decision,
+      ...(response.usedOwnCapability ? { usedOwnCapability: true } : {}),
+      ...(response.evidenceDigest ? { protocolRef: response.evidenceDigest } : {}),
+    });
+    return response;
   }
 
   private resolveTalkChat(): TalkChatFn | null {
@@ -461,11 +660,14 @@ export class DigitalMeRuntime {
   }
 
   async createPackage(input: CommandMap['subject.createPackage']['input']) {
-    return this.subject.createPackage(input);
+    const result = await this.subject.createPackage(input);
+    await this.attachToSubjectNetwork();
+    return result;
   }
 
   async openPackage(input: CommandMap['subject.openPackage']['input']) {
     const result = await this.subject.openPackage(input);
+    await this.attachToSubjectNetwork();
     // 打开包时恢复未完成的成长捕获（非定时轮询）。无旧 Work Runtime 时内部直接返回。
     void this.recoverPendingGrowthCaptures();
     await this.maybeRecordGrowthStage();
@@ -1677,6 +1879,7 @@ export class DigitalMeRuntime {
       });
       const { RelayClient } = await import('../subject-comm/relay-client');
       const health = await new RelayClient(profile.relayUrl).health();
+      await this.ensureRelaySubjectCollab();
       return {
         ok: true,
         mode: 'remote',
@@ -1705,6 +1908,7 @@ export class DigitalMeRuntime {
       }
       const parsed = JSON.parse(input.inviteJson) as unknown;
       const { peer, replyInvite } = await acceptInvite(store, parsed);
+      await this.ensureRelaySubjectCollab();
       return {
         ok: true,
         peerDisplayName: peer.displayName,
@@ -2037,6 +2241,10 @@ export class DigitalMeRuntime {
   }
 
   async stop(): Promise<void> {
+    this.relayCollab?.stopPoll();
+    this.relayCollab = null;
+    this.detachSubjectNetwork?.();
+    this.detachSubjectNetwork = null;
     await this.detachWorkRuntime();
   }
 

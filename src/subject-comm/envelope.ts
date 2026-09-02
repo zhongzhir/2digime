@@ -8,7 +8,22 @@ import type { SignalPayload, SignalResponsePayload } from './signal';
 
 export const SUBJECT_ENVELOPE_VERSION = 1 as const;
 
-export type SubjectEnvelopeKind = 'signal' | 'signal_response' | 'collaboration_sync';
+export type SubjectEnvelopeKind =
+  | 'signal'
+  | 'signal_response'
+  | 'collaboration_sync'
+  | 'subject_collab';
+
+/** 传输层协作载荷种类。不是产品协作阶段。 */
+export type SubjectCollabWire = 'public_card' | 'collab_request' | 'collab_response';
+
+export interface SubjectCollabPayload {
+  wire: SubjectCollabWire;
+  exchangeId?: string;
+  card?: Record<string, unknown>;
+  request?: Record<string, unknown>;
+  response?: Record<string, unknown>;
+}
 
 /** Local 明确 trusted；远程预留字段本轮不填、不伪造。 */
 export type TransportTrustMode = 'local_trusted' | 'remote';
@@ -30,7 +45,8 @@ export interface CollaborationSyncPayload {
 export type SubjectEnvelopePayload =
   | SignalPayload
   | SignalResponsePayload
-  | CollaborationSyncPayload;
+  | CollaborationSyncPayload
+  | SubjectCollabPayload;
 
 export interface SubjectEnvelope {
   /** JsonObjectStore 主键；与 envelopeId 相同 */
@@ -53,4 +69,10 @@ export interface SubjectEnvelope {
 
 export function envelopeStoreId(envelopeId: string): string {
   return envelopeId.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 120);
+}
+
+export function isSubjectCollabPayload(payload: unknown): payload is SubjectCollabPayload {
+  if (!payload || typeof payload !== 'object') return false;
+  const wire = (payload as SubjectCollabPayload).wire;
+  return wire === 'public_card' || wire === 'collab_request' || wire === 'collab_response';
 }

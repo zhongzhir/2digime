@@ -14,6 +14,8 @@ export interface TalkTurn {
   role: 'user' | 'assistant';
   text: string;
   executionIds?: string[];
+  /** 本回合实际发生的 Subject ↔ Subject 交换，不是协作阶段。 */
+  exchangeIds?: string[];
   result?: { title: string; path?: string };
 }
 

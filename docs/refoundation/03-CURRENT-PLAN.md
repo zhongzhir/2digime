@@ -14,19 +14,22 @@
 Phase 1  Digital Self                         ACCEPTED
 Phase 2  Core Interaction Loop                ACCEPTED
 Phase 2  Product Surface                      ACCEPTED
-Phase 3  Collaboration                        NEXT
+Phase 3  Collaboration Foundation             ACCEPTED
+Phase 3  Dual-Subject Loop                    ACCEPTED (architecture/engineering pass)
+Phase 3  Real Peer Relay Gate                 IN PROGRESS
 ```
 
 不得并行把三阶段都当施工面。不得用旧「模块轮动」代替此顺序（`digitalme_rules.md` §14 为历史策略）。
 
-协作传输层（Relay / E2EE）已验证。Phase 1 与 Phase 2 已对真人成立。**下一刀才是 Phase 3 Collaboration**，现在尚未开工。
+协作传输层（Relay / E2EE）已作为通信底座验证。Phase 1 与 Phase 2 已对真人成立。Phase 3 架构（04）与 Dual-Subject Loop（architecture/engineering pass）已接受；当前把 discovery/transport 接到真实配对 + Relay。不先做协作页面、不迁旧 work、不恢复 13 态。
 
 ---
 
 ## 2. 下一开发任务
 
-**阶段：** Phase 3 Collaboration
-**本轮状态（2026-09-02）：** Phase 1 Digital Self、Phase 2 Core Interaction Loop、Phase 2 Product Surface 均已 ACCEPTED。正式默认产品路径不再初始化旧 Work Runtime。旧 `work-runtime` 代码保留为 reference / 历史命令入口，不得再当新产品骨架。
+**任务名：** `2DIGIME-COLLABORATION-02-REAL-PEER-RELAY-GATE`
+**阶段：** Phase 3 Real Peer Relay Gate
+**本轮状态（2026-09-02）：** `IN PROGRESS`。01 Dual-Subject Loop 已接受为 architecture/engineering pass。本轮把 SubjectCollabNetwork 切到 invite/peers + Relay/E2EE。不 commit、不 push、不 package。
 
 ### Phase 1 Digital Self（已接受）
 
@@ -63,11 +66,29 @@ Phase 3  Collaboration                        NEXT
 - 不继续 capabilityLoop / GENERAL-TASK-CLOSURE
 - 不沿 DIGITAL-SELF-CORE-01 的 P1–P5 迁旧主链
 - 不为绕开旧依赖增加 compatibility layer
+- 不先做协作中心 UI，不恢复 `#nav-collab` 普通入口
+- 不把另一 Subject 当 Tool / worker，不打开对方 Package 去 `submitTask`
 - 不 push、不打包，除非 Owner 另令
 
-### Phase 3 Collaboration（下一步，尚未开工）
+### Phase 3 Collaboration Foundation（已接受）
 
-协作产品面。传输层 KEEP 资产可复用。不扩建材料/支付/信誉/多方/P2P。不开工，除非 Owner 下达 Phase 3 任务。
+**状态：** `ACCEPTED`
+
+协作不是第三入口。用户仍只与自己的 2digime 交流；对端是独立 Subject，不是 Tool / Sub-Agent / 本方 worker。
+
+外部标准判断与最小对象、第一版双 Subject 实验、禁止事项见 04。传输 KEEP Relay / E2EE。旧 `local-collaboration` 13 态与打开对方包 `submitTask`：**不接线**。
+
+### Phase 3 Dual-Subject Loop（已接受 architecture/engineering pass）
+
+**状态：** `ACCEPTED`（architecture/engineering pass）
+
+正式入口「与 2digime」上，两个独立 Subject Package 完成一次合作闭环（内存 discovery 证明对象模型）。不做协作 UI、广域发现、真钱、信誉市场、多方。
+
+### Phase 3 Real Peer Relay Gate（进行中）
+
+**状态：** `IN PROGRESS`
+
+把 discovery / transport 从本机内存切到已有配对身份 + Relay/E2EE。不重写 AI collaboration logic。不新协作 UI、状态机、session、Task。
 
 ---
 
@@ -89,7 +110,8 @@ AGENTS.md
   → 00-PRODUCT-CONSTITUTION.md
   → 01-DEVELOPMENT-CONSTITUTION.md
   → 02-FAILURE-LESSONS.md
-  → 03-CURRENT-PLAN.md   ← 本文
+  → 03-CURRENT-PLAN.md   ← 本文（排期）
+  → 04-COLLABORATION-FOUNDATION.md   Phase 3 架构；不与 00/01/02 并列产品宪法
 ```
 
 **降级（不删除）**
@@ -116,7 +138,7 @@ AGENTS.md
 |---|---|
 | 01A「下一步 = 最短 Goal 闭环」vs 01C「Phase 1 = Digital Self」 | **01C**：先 Digital Self |
 | rules §14 模块轮动 vs 本文 Phase 1→2→3 | **本文顺序** |
-| 广播作为核心创新假设 vs 协作扩建暂停 | **当前不实现广播/协作产品面**；假设留在 00 |
+| 广播作为核心创新假设 vs 协作扩建暂停 | **不实现广播市场与协作中心 UI**；假设留在 00。Phase 3 只做 Subject↔Subject 基础，不恢复 `#nav-collab` |
 | 「后台可保留复杂状态机」vs 禁止用状态机替代 AI | **禁止替代 AI**；运行态 ≠ 永久状态机 |
 | DIGITAL-SELF P1–P5 迁旧主链 vs 新核重建 | **不沿旧链 P1–P5** |
 | 单一说话入口 vs 对话/做事双标签 | **对话是统一入口**；做事是行为/结果。产品表面仍可 refinement，不得双运行时 |
@@ -129,14 +151,14 @@ AGENTS.md
 
 ---
 
-## 6. PHASE 3 启动门
+## 6. PHASE 3 实现启动门
 
-可以启动，当且仅当：
+Foundation（04）与 Dual-Subject Loop architecture/engineering pass 已接受。**Relay 接线**进行中，约束仍是：
 
-1. 实现者已读 00/01/02/03（经 AGENTS.md）；
-2. Owner 已下达 Phase 3 Collaboration 任务；
-3. 不迁旧 work / conversation runtime，不把旧 Job 当协作骨架；
-4. 遵守上文「仍不做」；
-5. 出现 Yellow/Red 立即停。
+1. 实现者已读 00/01/02/03 与 04；
+2. Owner 已接受 04，并已下达 Dual-Subject 与 `2DIGIME-COLLABORATION-02-REAL-PEER-RELAY-GATE`；
+3. 不迁旧 work / conversation runtime，不把旧 Job 当协作骨架，不打开对方 Package 当 worker；
+4. 不先做协作页面，不恢复 13 态，不自研替代 A2A/VC/payment；
+5. 出现 Yellow/Red 立即停（04 §11）。
 
 Phase 1 与 Phase 2（核心闭环 + 产品表面）已 ACCEPTED。未完成 checkpoint 验证前不得把旧冻结做事代码并入本基线。
