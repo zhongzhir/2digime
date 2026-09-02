@@ -257,7 +257,9 @@ export function createRelaySubjectNetwork(input: {
         request.exchangeId,
       );
       if (!sent.delivered) return unreachableResponse(request);
-      const deadline = Date.now() + 8000;
+      const waitMs = Number(process.env.DIGITALME_COLLAB_RESPONSE_WAIT_MS);
+      const budget = Number.isFinite(waitMs) && waitMs > 0 ? waitMs : 45_000;
+      const deadline = Date.now() + budget;
       while (Date.now() < deadline) {
         await drainInbox().catch(() => 0);
         const hit = pending.get(request.exchangeId);
@@ -294,8 +296,9 @@ export function createRelaySubjectNetwork(input: {
       }
     },
     drainInbox,
-    start(pollMs = 200) {
+    start(pollMs = 800) {
       if (pollTimer) return;
+      void drainInbox();
       pollTimer = setInterval(() => {
         void drainInbox();
       }, pollMs);

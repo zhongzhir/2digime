@@ -351,6 +351,7 @@ async function bootstrapRuntime() {
     };
   }
 
+  options.autonomousCollabReceive = true;
   runtime = createDigitalMeRuntime(options);
   bus = createCommandBus(runtime);
   unsubscribe = runtime.eventBus.subscribe((event) => {

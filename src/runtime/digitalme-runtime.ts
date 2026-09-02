@@ -309,6 +309,12 @@ export interface DigitalMeRuntimeOptions {
    * 产品代码不得写死某个实验 peer。
    */
   subjectNetwork?: SubjectCollabNetwork;
+  /**
+   * 本进程自己 pull / 解密 / 处理 subject_collab。
+   * 正式 Electron 开启；单元测试默认关闭，以免抢 Relay 信封。
+   * 不得靠对方 runtime.drain() 或打开对方 Package。
+   */
+  autonomousCollabReceive?: boolean;
 }
 
 /**
@@ -355,7 +361,7 @@ export class DigitalMeRuntime {
    * 为同机协作方创建能力配置一致的独立 Runtime（不共享 SubjectPackage / Store）。
    */
   createSiblingRuntime(): DigitalMeRuntime {
-    return createDigitalMeRuntime({ ...this.options });
+    return createDigitalMeRuntime({ ...this.options, autonomousCollabReceive: false });
   }
 
   /** 主进程在 work.converse 期间注入 AbortSignal，取消时中止模型请求。 */
@@ -460,6 +466,7 @@ export class DigitalMeRuntime {
       });
     }
     await this.relayCollab.publishPublicCard();
+    if (this.options.autonomousCollabReceive) this.relayCollab.start(800);
   }
 
   private async attachToSubjectNetwork(): Promise<void> {

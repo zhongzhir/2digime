@@ -16,20 +16,25 @@ Phase 2  Core Interaction Loop                ACCEPTED
 Phase 2  Product Surface                      ACCEPTED
 Phase 3  Collaboration Foundation             ACCEPTED
 Phase 3  Dual-Subject Loop                    ACCEPTED (architecture/engineering pass)
-Phase 3  Real Peer Relay Gate                 IN PROGRESS
+Phase 3  Real Peer Relay Gate                 ACCEPTED (engineering)
+Phase 3  Two-Owner Real Trial                 IN PROGRESS
 ```
 
 不得并行把三阶段都当施工面。不得用旧「模块轮动」代替此顺序（`digitalme_rules.md` §14 为历史策略）。
 
-协作传输层（Relay / E2EE）已作为通信底座验证。Phase 1 与 Phase 2 已对真人成立。Phase 3 架构（04）与 Dual-Subject Loop（architecture/engineering pass）已接受；当前把 discovery/transport 接到真实配对 + Relay。不先做协作页面、不迁旧 work、不恢复 13 态。
+协作传输层（Relay / E2EE）已作为通信底座验证。Phase 1 与 Phase 2 已对真人成立。Phase 3 架构（04）、Dual-Subject Loop 与 Real Peer Relay Gate 的工程接线已接受。当前任务是两个真人 Owner、两个独立正式 Electron 的真实 Subject↔Subject 试验。不先做协作页面、不迁旧 work、不恢复 13 态。
 
 ---
 
 ## 2. 下一开发任务
 
-**任务名：** `2DIGIME-COLLABORATION-02-REAL-PEER-RELAY-GATE`
-**阶段：** Phase 3 Real Peer Relay Gate
-**本轮状态（2026-09-02）：** `IN PROGRESS`。01 Dual-Subject Loop 已接受为 architecture/engineering pass。本轮把 SubjectCollabNetwork 切到 invite/peers + Relay/E2EE。不 commit、不 push、不 package。
+**任务名：** `2DIGIME-COLLABORATION-03-TWO-OWNER-REAL-TRIAL`
+**阶段：** Phase 3 Two-Owner Real Trial
+**本轮状态（2026-09-02）：** `IN PROGRESS`（产品）。02 Real Peer Relay Gate 已接受为 engineering pass。B 自主 inbox 的工程切片可入库；两个真人 Owner 的产品 PASS 仍未完成。不新协作 UI / 状态机 / session / Task，不改 AI 协作逻辑，不 push、不 package。
+
+一台机器时必须两套完全独立的 Electron `userData`（`DIGITALME_V2_USER_DATA`），不得共享 Package、Thread、SecretStore。B 必须在自己的进程里 pull inbox；A 不得调用 B.drain / B.runtime / B.package。
+
+产品 PASS 仅当 15 条验收全部满足，包括两个真人 Owner。双 Electron 工程闸门不能代替真人试验。
 
 ### Phase 1 Digital Self（已接受）
 
@@ -84,11 +89,17 @@ Phase 3  Real Peer Relay Gate                 IN PROGRESS
 
 正式入口「与 2digime」上，两个独立 Subject Package 完成一次合作闭环（内存 discovery 证明对象模型）。不做协作 UI、广域发现、真钱、信誉市场、多方。
 
-### Phase 3 Real Peer Relay Gate（进行中）
+### Phase 3 Real Peer Relay Gate（工程已接受）
+
+**状态：** `ACCEPTED`（engineering）
+
+discovery / transport 已接到 invite/peers + Relay/E2EE。不重写 AI collaboration logic。不新协作 UI、状态机、session、Task。
+
+### Phase 3 Two-Owner Real Trial（进行中）
 
 **状态：** `IN PROGRESS`
 
-把 discovery / transport 从本机内存切到已有配对身份 + Relay/E2EE。不重写 AI collaboration logic。不新协作 UI、状态机、session、Task。
+两个正式 Electron 实例之间的真实 Subject↔Subject。B 作为在线主体自主收件、判断、组织能力、回复。Owner A 只在原 Thread 看结果。必须另验一条 B 自主拒绝、A 自然恢复。本轮仍不扩功能。
 
 ---
 
@@ -153,12 +164,12 @@ AGENTS.md
 
 ## 6. PHASE 3 实现启动门
 
-Foundation（04）与 Dual-Subject Loop architecture/engineering pass 已接受。**Relay 接线**进行中，约束仍是：
+Foundation（04）与 Dual-Subject Loop architecture/engineering pass 已接受。Relay 工程接线已接受。**当前是 Two-Owner Real Trial**，约束仍是：
 
 1. 实现者已读 00/01/02/03 与 04；
-2. Owner 已接受 04，并已下达 Dual-Subject 与 `2DIGIME-COLLABORATION-02-REAL-PEER-RELAY-GATE`；
+2. Owner 已接受 04，并已下达 Dual-Subject、Relay Gate 与 `2DIGIME-COLLABORATION-03-TWO-OWNER-REAL-TRIAL`；
 3. 不迁旧 work / conversation runtime，不把旧 Job 当协作骨架，不打开对方 Package 当 worker；
-4. 不先做协作页面，不恢复 13 态，不自研替代 A2A/VC/payment；
+4. 不先做协作页面，不恢复 13 态，不自研替代 A2A/VC/payment；A 不得驱动 B runtime / drain；
 5. 出现 Yellow/Red 立即停（04 §11）。
 
 Phase 1 与 Phase 2（核心闭环 + 产品表面）已 ACCEPTED。未完成 checkpoint 验证前不得把旧冻结做事代码并入本基线。

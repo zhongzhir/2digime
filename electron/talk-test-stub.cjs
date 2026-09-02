@@ -20,7 +20,68 @@ function lastRole(messages) {
   return last ? last.role : '';
 }
 
+function pickSubjectFromCards(sys, skillHint) {
+  const blocks = String(sys || '').split('- subjectId: ').slice(1);
+  for (const block of blocks) {
+    const id = (block.split('\n')[0] || '').trim();
+    if (id && block.includes(skillHint)) return id;
+  }
+  const first = blocks[0] ? (blocks[0].split('\n')[0] || '').trim() : '';
+  return first;
+}
+
 async function chat({ messages, tools }) {
+  const sys = systemText(messages);
+  if (/另一主体发来合作请求/.test(sys)) {
+    const requestBlob = messages
+      .filter((m) => m.role === 'user')
+      .map((m) => String(m.content || ''))
+      .join('\n');
+    const refuse =
+      /不处理工程|不承担工程|只写现代诗|超出我目前愿意/.test(sys) &&
+      /工艺安全|化工厂|改造/.test(sys + requestBlob);
+    if (refuse) {
+      return {
+        text: JSON.stringify({
+          decision: 'decline',
+          reply: '这件事超出我目前愿意承担的范围。',
+          contribution: '',
+        }),
+      };
+    }
+    return {
+      text: JSON.stringify({
+        decision: 'accept',
+        reply: '可以提供工艺安全方面的补充判断。',
+        contribution: '工艺安全初步判断：当前设想在低风险范围内可继续评估，需补齐物料平衡。',
+      }),
+    };
+  }
+
+  if (/正在独立验收另一次主体合作/.test(sys)) {
+    const failed = /actualSuccess=false/.test(sys);
+    if (failed) {
+      return {
+        text: JSON.stringify({
+          deliver: true,
+          userReply: '这次合作没有成立。我先按现有材料自己看，不把没谈成的事说成已经完成。',
+          askUser: '',
+          openGoal: '',
+          revision: '',
+        }),
+      };
+    }
+    return {
+      text: JSON.stringify({
+        deliver: true,
+        userReply: '我综合了补充判断：当前设想在低风险范围内可继续评估，但需补齐物料平衡。',
+        askUser: '',
+        openGoal: '',
+        revision: '',
+      }),
+    };
+  }
+
   if (lastRole(messages) === 'tool') {
     const toolMsg = messages[messages.length - 1];
     let parsed = {};
@@ -42,7 +103,29 @@ async function chat({ messages, tools }) {
   }
 
   const text = lastUserText(messages);
-  const sys = systemText(messages);
+  const hasConsult =
+    Array.isArray(tools) && tools.some((t) => t.function && t.function.name === 'consult_subject');
+  if (hasConsult && /找|更懂|补充判断|工艺安全/.test(text)) {
+    const subjectId = pickSubjectFromCards(sys, '工艺安全');
+    if (subjectId) {
+      return {
+        text: '',
+        toolCalls: [
+          {
+            id: 'call_consult_1',
+            name: 'consult_subject',
+            arguments: JSON.stringify({
+              subjectId,
+              goal: text,
+              hopedContribution: '工艺安全方面的补充判断',
+              disclosure: '一份脱敏后的改造设想摘要，不含私人住址或完整数字之我。',
+            }),
+          },
+        ],
+      };
+    }
+  }
+
   const hasTools = Array.isArray(tools) && tools.some((t) => t.function && t.function.name === 'delegate');
 
   if (/了解我|你知道我|我是谁/.test(text)) {
