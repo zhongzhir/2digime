@@ -34,6 +34,65 @@ function findByText(current, re) {
 
 function tell(text, current) {
   const t = String(text || '').trim();
+  if (t.includes('我以后更喜欢上午处理复杂工作') || (t.includes('上午') && t.includes('复杂工作'))) {
+    return {
+      understandings: [
+        {
+          text: '用户更喜欢上午处理复杂工作',
+          facet: 'preferences',
+          aboutUser: true,
+          origin: 'user_statement',
+        },
+      ],
+    };
+  }
+  if (/今天下午三点开会/.test(t) && !/喜欢|偏好|以后/.test(t)) {
+    return { understandings: [] };
+  }
+  if (/工程安全类外部合作我不参与/.test(t)) {
+    return {
+      understandings: [
+        {
+          text: '用户不参与工程安全类外部合作',
+          facet: 'boundaries',
+          aboutUser: true,
+          origin: 'user_statement',
+        },
+      ],
+    };
+  }
+  if (
+    /低风险非最终责任意见可以提供/.test(t) ||
+    /愿意参与低风险工艺安全分析/.test(t) ||
+    (/低风险/.test(t) && /可以提供/.test(t))
+  ) {
+    const old = findByText(current, /不参与工程安全|工程安全类外部合作/);
+    return {
+      understandings: [
+        {
+          text: '用户可以提供低风险、非最终责任的工艺安全意见，高风险工程决策仍需先问本人',
+          facet: 'boundaries',
+          aboutUser: true,
+          origin: 'user_statement',
+          replacesId: old ? old.id : undefined,
+        },
+      ],
+    };
+  }
+  if (/以后涉及高风险工程决策都先问我/.test(t) || /高风险工程决策仍要问我/.test(t)) {
+    const old = findByText(current, /不参与工程安全|工程安全|工艺安全/);
+    return {
+      understandings: [
+        {
+          text: '高风险工程决策需要先问用户',
+          facet: 'boundaries',
+          aboutUser: true,
+          origin: 'user_statement',
+          replacesId: old ? old.id : undefined,
+        },
+      ],
+    };
+  }
   if (t.includes('我喜欢早起')) {
     return {
       understandings: [

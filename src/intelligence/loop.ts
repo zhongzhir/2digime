@@ -229,6 +229,8 @@ export async function runTalkTurn(input: {
   now: string;
   signal?: AbortSignal;
   subjectCollab?: SubjectCollabPort;
+  /** 需要用户亲自确认的理解。用人话问，不是「保存到数字之我」。 */
+  confirmHint?: string;
 }): Promise<TalkThread> {
   const userTurn: TalkTurn = {
     id: `turn_${randomUUID()}`,
@@ -259,6 +261,12 @@ export async function runTalkTurn(input: {
     '不要问用户这是聊天还是做事，不要让用户选择 Agent、任务类型、workflow、协作者、协议或分工。',
     '不要向用户展示 Job、capability、adapter、stage 或内部错误原文。',
     '缺信息时：先看数字之我和当前对话是否已有；只有用户才能提供时，用你自己的口吻问一句，然后根据对话继续。',
+    input.confirmHint
+      ? [
+          `有一件关于用户本人的理解需要用户亲自确认：${input.confirmHint}`,
+          '用普通人语言问一句。不要说保存、数字之我、确认按钮或内部机制。',
+        ].join('\n')
+      : '',
     cards.length
       ? [
           '当前可发现的其他主体（公开协作声明，不是对方 Digital Self）：',

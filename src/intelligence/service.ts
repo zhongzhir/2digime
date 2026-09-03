@@ -11,6 +11,11 @@ export interface TalkPackageRef {
   subjectId: string;
 }
 
+export type TalkLearnResult = {
+  asked: boolean;
+  askHint?: string;
+};
+
 export class TalkService {
   private writeChain: Promise<void> = Promise.resolve();
 
@@ -20,6 +25,7 @@ export class TalkService {
     private readonly resolveAgents: (pkg: TalkPackageRef) => ProfessionalAgent[],
     private readonly now: () => string = nowIso,
     private readonly resolveCollab?: (pkg: TalkPackageRef) => Promise<SubjectCollabPort | null>,
+    private readonly learnFromUtterance?: (text: string) => Promise<TalkLearnResult>,
   ) {}
 
   async invoke(input: { text?: string; contextPaths?: string[] }): Promise<{ view: TalkView }> {
@@ -38,12 +44,22 @@ export class TalkService {
     }
     const now = this.now();
     const thread = await readThread(pkg.rootDir, now);
-    const text = composeTalkUserText(String(input.text || '').trim(), input.contextPaths);
+    const spoken = String(input.text || '').trim();
+    const text = composeTalkUserText(spoken, input.contextPaths);
     if (!text) {
       return { view: projectView(thread) };
     }
     if (!this.chat) {
       return { view: projectView(thread, NO_MODEL_NOTICE) };
+    }
+    let confirmHint: string | undefined;
+    if (spoken && this.learnFromUtterance) {
+      try {
+        const learned = await this.learnFromUtterance(spoken);
+        if (learned.asked && learned.askHint) confirmHint = learned.askHint;
+      } catch {
+        /* 学习失败不得阻断交流 */
+      }
     }
     let selfContext = '当前还没有已写入的数字之我认识。读取失败不得假装了解用户。';
     try {
@@ -62,6 +78,7 @@ export class TalkService {
       workRoot: pkg.rootDir,
       now,
       ...(collab ? { subjectCollab: collab } : {}),
+      ...(confirmHint ? { confirmHint } : {}),
     });
     await writeThread(pkg.rootDir, next);
     return { view: projectView(next) };

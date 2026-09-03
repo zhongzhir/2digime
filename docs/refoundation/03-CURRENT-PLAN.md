@@ -14,6 +14,7 @@
 Phase 1  Digital Self                         ACCEPTED
 Phase 2  Core Interaction Loop                ACCEPTED
 Phase 2  Product Surface                      ACCEPTED
+Phase 2  Talk ↔ Digital Self Learning         ACCEPTED
 Phase 3  Collaboration Foundation             ACCEPTED
 Phase 3  Dual-Subject Loop                    ACCEPTED (architecture/engineering pass)
 Phase 3  Real Peer Relay Gate                 ACCEPTED (engineering)
@@ -22,15 +23,21 @@ Phase 3  Two-Owner Real Trial                 IN PROGRESS
 
 不得并行把三阶段都当施工面。不得用旧「模块轮动」代替此顺序（`digitalme_rules.md` §14 为历史策略）。
 
-协作传输层（Relay / E2EE）已作为通信底座验证。Phase 1 与 Phase 2 已对真人成立。Phase 3 架构（04）、Dual-Subject Loop 与 Real Peer Relay Gate 的工程接线已接受。当前任务是两个真人 Owner、两个独立正式 Electron 的真实 Subject↔Subject 试验。不先做协作页面、不迁旧 work、不恢复 13 态。
+协作传输层（Relay / E2EE）已作为通信底座验证。Phase 1 与 Phase 2 主链已对真人成立。Talk ↔ Digital Self 双向闭环已用正式 Electron + 真实 DeepSeek 验收。Phase 3 架构（04）、Dual-Subject Loop 与 Real Peer Relay Gate 的工程接线已接受。两个真人 Owner 的产品试验仍进行中。不先做协作页面、不迁旧 work、不恢复 13 态。不扩更大的广播/市场网络。
 
 ---
 
 ## 2. 下一开发任务
 
-**任务名：** `2DIGIME-COLLABORATION-03-TWO-OWNER-REAL-TRIAL`
-**阶段：** Phase 3 Two-Owner Real Trial
-**本轮状态（2026-09-02）：** `IN PROGRESS`（产品）。02 Real Peer Relay Gate 已接受为 engineering pass。B 自主 inbox 的工程切片可入库；两个真人 Owner 的产品 PASS 仍未完成。不新协作 UI / 状态机 / session / Task，不改 AI 协作逻辑，不 push、不 package。
+**任务名：** `2DIGIME-REFOUNDATION-05-TALK-TO-DIGITAL-SELF-LEARNING`
+**阶段：** Phase 2 Talk ↔ Digital Self Learning
+**本轮状态（2026-09-03）：** `ACCEPTED`。统一入口「与 2digime」经既有 Phase 1 interpret / apply 写入唯一 `digital-self/self.json`。Talk 只是 provenance source。默认静默。正式 Electron + DeepSeek 真人原句闸门已过：边界写入、纠正替换、一次性日程不沉淀、重启保持。未把原句写入 stub。不 push、不 package。
+
+**Talk ↔ Digital Self 双向闭环：** `ACCEPTED`
+
+Digital Self → Talk 与 Talk → Digital Self 均已成立。不扩广播/市场网络。
+
+两个真人 Owner 的协作产品试验仍为 `IN PROGRESS`，不阻塞本回流。
 
 一台机器时必须两套完全独立的 Electron `userData`（`DIGITALME_V2_USER_DATA`），不得共享 Package、Thread、SecretStore。B 必须在自己的进程里 pull inbox；A 不得调用 B.drain / B.runtime / B.package。
 
@@ -50,9 +57,15 @@ Phase 3  Two-Owner Real Trial                 IN PROGRESS
 
 **状态：** `ACCEPTED`
 
-已成立：对话是统一入口，做事是同一入口里的行为与结果。自然语言 → 当前 Digital Self → 模型 native `delegate` → External Capability 真实执行 → execution truth → 2digime semantic review → 同一 Thread。无 intent classifier、无关键词路由、无任务类型枚举。确定性 runtime 已知失败时，review 不得改写成成功。
+已成立：对话是统一入口，做事是同一入口里的行为与结果。自然语言 → 当前 Digital Self → 模型 native `delegate` → External Capability 真实执行 → execution truth → 2digime semantic review → 同一 Thread。无 intent classifier、无关键词路由、无任务类型枚举。确定性 runtime 已知失败时，review 不得改写成成功。Talk 中具有持续意义的本人表达回流到同一 `self.json`，一次性事务不沉淀。
 
 不迁旧 work / conversation runtime，不把 Job 当用户任务。
+
+### Phase 2 Talk ↔ Digital Self Learning（已接受）
+
+**状态：** `ACCEPTED`
+
+已成立：用户只在「与 2digime」说话即可更新唯一 Digital Self。沿用 Phase 1 tell 的确认 / candidate / conflict 规则。纠正覆盖旧 current。默认不弹「是否保存到数字之我」。打开「数字之我」可见刚通过 Talk 形成的当前理解。正式 Electron + DeepSeek 已验证真人原句写入、纠正替换、一次性日程不沉淀。stub 不是产品路径。
 
 ### Phase 2 Product Surface（已接受）
 

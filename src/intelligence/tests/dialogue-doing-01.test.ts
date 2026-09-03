@@ -50,18 +50,27 @@ test('A 普通交流不调用专业能力，并使用 Digital Self', async () =>
   const runtime = createDigitalMeRuntime({
     documentCapability: 'fake',
     registerOpenAiStub: false,
-    digitalSelfChat: async () => ({
-      text: JSON.stringify({
-        understandings: [
-          {
-            text: '用户喜欢早起处理事情',
-            facet: 'preferences',
-            aboutUser: true,
-            origin: 'user_statement',
-          },
-        ],
-      }),
-    }),
+    digitalSelfChat: async ({ messages }) => {
+      const user = messages.filter((m) => m.role === 'user').pop();
+      const prompt = String(user?.content || '');
+      const start = prompt.indexOf('===DIGITAL_SELF_INPUT===');
+      const input = start >= 0 ? prompt.slice(start + '===DIGITAL_SELF_INPUT==='.length).trim() : '';
+      if (!input.includes('早起')) {
+        return { text: JSON.stringify({ understandings: [] }) };
+      }
+      return {
+        text: JSON.stringify({
+          understandings: [
+            {
+              text: '用户喜欢早起处理事情',
+              facet: 'preferences',
+              aboutUser: true,
+              origin: 'user_statement',
+            },
+          ],
+        }),
+      };
+    },
     talkChat: scriptedChat([
       async ({ messages }) => {
         const sys = String(messages[0]?.content || '');

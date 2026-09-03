@@ -436,6 +436,17 @@ export class DigitalMeRuntime {
               }),
           };
         },
+        async (text) => {
+          const learned = await this.getDigitalSelfService().invoke({ action: 'tell', text });
+          if (!learned.view.asked) return { asked: false };
+          const pending = learned.view.groups.learning
+            .filter((item) => item.confirmationLabel === '需要你确认')
+            .map((item) => item.text)
+            .filter(Boolean);
+          return pending.length
+            ? { asked: true, askHint: pending.join('；') }
+            : { asked: true };
+        },
       );
     }
     return this.talkService;

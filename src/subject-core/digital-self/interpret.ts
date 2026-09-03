@@ -17,15 +17,17 @@ const SYSTEM = `你在帮助 2digime 理解「用户本人」。只判断与用�
 {"understandings":[{"text":"用第一人称以外的客观短句描述这条理解","facet":"about_me|goals|preferences|boundaries|context","aboutUser":true,"origin":"user_statement|material|inference","excerpt":"原文摘录","isCoreIdentity":false,"isSensitive":false,"isMajorGoal":false,"isBoundary":false,"mustAsk":false,"mergeWithId":null,"conflictsWithId":null,"replacesId":null}],"notice":""}
 
 规则：
-- 只输出与用户本人有关的理解。资料里的无关内容、百科、他人、一次性事务不要写成用户事实。
-- text 写当前理解，不要复述整份资料。
+- 只输出与用户本人有关、具有持续意义、未来判断或行动用得上的理解。
+- 资料里的无关内容、百科、他人不要写成用户事实。
+- 一次性日程、临时安排、纯当前对话事务不要写入。
+- 用户亲口明确说自己 → origin=user_statement；来自资料 → material；其余推断 → inference。
+- text 写当前理解，不要复述整份资料或整段对话。
 - facet 只是展示分组：about_me=我是谁；goals=关心/想要；preferences=偏好与判断；boundaries=边界；context=长期经历/项目/关系/上下文。
-- origin：用户亲口明确说自己 → user_statement；来自资料 → material；其余推断 → inference。
 - 若与 CURRENT 中某条说的是同一事实，填 mergeWithId。
-- 若明确纠正某条，填 replacesId。
+- 若明确纠正或收窄某条，填 replacesId，不要让互相冲突的旧条继续作为 current。
 - 若与某条矛盾且不能静默覆盖，填 conflictsWithId，mustAsk=true。
 - 资料或推断中的核心身份、敏感内容、重大长期目标、重要边界、低置信，mustAsk=true。
-- 不要编造。没有关于用户的信息时 understandings 为空数组。`;
+- 不要编造。没有值得长期记住的本人信息时 understandings 为空数组。`;
 
 function originOf(raw: unknown): DigitalSelfOrigin {
   if (raw === 'material' || raw === 'inference' || raw === 'user_statement') return raw;
