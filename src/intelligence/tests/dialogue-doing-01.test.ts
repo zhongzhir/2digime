@@ -74,6 +74,15 @@ test('A 普通交流不调用专业能力，并使用 Digital Self', async () =>
     talkChat: scriptedChat([
       async ({ messages }) => {
         const sys = String(messages[0]?.content || '');
+        if (/独立验收/.test(sys)) {
+          return {
+            text: JSON.stringify({
+              deliver: true,
+              userReply: '你喜欢早起处理事情。这是我现在对你的理解。',
+              freshnessRequired: false,
+            }),
+          };
+        }
         assert.match(sys, /喜欢早起处理事情/);
         assert.match(sys, /你是用户的兔机米，负责理解、编排与验收/);
         assert.equal(sys.includes('GrowthEvent'), false);
@@ -203,11 +212,33 @@ test('D 缺信息时问用户，回答后继续同一件事', async () => {
     documentCapability: 'fake',
     registerOpenAiStub: false,
     talkChat: scriptedChat([
-      async () => ({
-        text: '可以发，但我没有对方邮箱。请告诉我邮箱，我继续原来这件事。',
-      }),
       async ({ messages }) => {
         const sys = String(messages[0]?.content || '');
+        if (/独立验收/.test(sys)) {
+          return {
+            text: JSON.stringify({
+              deliver: false,
+              userReply: '',
+              askUser: '可以发，但我没有对方邮箱。请告诉我邮箱，我继续原来这件事。',
+              openGoal: '把说明发给李明',
+              revision: '',
+              freshnessRequired: false,
+            }),
+          };
+        }
+        return { text: '可以发，但我没有对方邮箱。请告诉我邮箱，我继续原来这件事。' };
+      },
+      async ({ messages }) => {
+        const sys = String(messages[0]?.content || '');
+        if (/独立验收/.test(sys)) {
+          return {
+            text: JSON.stringify({
+              deliver: true,
+              userReply: '好，我用这个邮箱继续原来要把说明发给李明这件事。',
+              freshnessRequired: false,
+            }),
+          };
+        }
         const blob = messages.map((m) => m.content).join('\n');
         assert.match(blob, /发给李明|邮箱/);
         assert.match(blob, /ming@example.com/);

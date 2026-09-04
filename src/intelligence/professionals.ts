@@ -89,7 +89,7 @@ function naturalContract(reg: CapabilityRegistration): {
       '用已连接的同一套对话模型，在本次授权目录里做一次小改文件。有落盘效果，但不是独立专业代码 Agent。';
   } else if (searchLike) {
     description =
-      '检索当前公开网页并返回来源与摘录，供核验训练记忆可能过时的公开事实。来源清单不是给用户的最终答案，也不会在磁盘上创建用户文件。';
+      '检索当前公开网页并返回来源与摘录，供核验训练记忆可能过时的公开现状（任职、排名、统计、价格、政策、公司或产品现状等）。稳定知识不必用它。来源清单不是给用户的最终答案，也不会在磁盘上创建用户文件。';
   } else if (!description) {
     description = '可按完整文字目标执行一次已连接能力。';
   }
@@ -123,6 +123,7 @@ function wrapAdapter(
     description: contract.description,
     cannotDo: contract.cannotDo,
     effects: contract.effects,
+    ...(searchLike ? { maxCallMs: 25_000, returnsEvidence: true } : {}),
     async run(runInput): Promise<ProfessionalResult> {
       await fs.mkdir(runInput.workDir, { recursive: true });
       const ctx: ExecutionContext = {

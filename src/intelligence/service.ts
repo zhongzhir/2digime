@@ -129,6 +129,7 @@ export class TalkService {
         workRoot: pkg.rootDir,
         now,
         signal: ac.signal,
+        deadlineAt: Date.now() + talkTurnDeadlineMs(),
         ...(collab ? { subjectCollab: collab } : {}),
         ...(confirmHint ? { confirmHint } : {}),
       });

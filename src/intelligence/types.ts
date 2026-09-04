@@ -90,6 +90,10 @@ export interface ProfessionalAgent {
   cannotDo?: string;
   /** 自然语言合同：是否产生文件 / 改代码 / 访问网络等真实效果。 */
   effects?: string;
+  /** 运行态：单次调用上限，检索应远短于整轮 deadline。 */
+  maxCallMs?: number;
+  /** 运行态：该能力返回证据而非用户交付物。 */
+  returnsEvidence?: boolean;
   run(input: {
     instruction: string;
     workDir: string;

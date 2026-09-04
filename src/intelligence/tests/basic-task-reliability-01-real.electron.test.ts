@@ -18,11 +18,15 @@ import {
 
 const ENABLED =
   process.env.DIGITALME_V2_BASIC_TASK_RELIABILITY === '1' ||
-  process.env.DIGITALME_V2_BASIC_TASK_RELIABILITY === 'targeted';
+  process.env.DIGITALME_V2_BASIC_TASK_RELIABILITY === 'targeted' ||
+  process.env.DIGITALME_V2_BASIC_TASK_RELIABILITY === 'fresh';
 const TARGETED = process.env.DIGITALME_V2_BASIC_TASK_RELIABILITY === 'targeted';
-const COUNTS = TARGETED
-  ? { A: 3, B: 10, C: 10, D: 3, E: 10, F: 3 }
-  : { A: 10, B: 10, C: 10, D: 10, E: 10, F: 10 };
+const FRESH = process.env.DIGITALME_V2_BASIC_TASK_RELIABILITY === 'fresh';
+const COUNTS = FRESH
+  ? { A: 5, B: 20, C: 5, D: 3, E: 3, F: 3 }
+  : TARGETED
+    ? { A: 3, B: 10, C: 10, D: 3, E: 10, F: 3 }
+    : { A: 10, B: 10, C: 10, D: 10, E: 10, F: 10 };
 const EVIDENCE = path.join(REPO_ROOT, 'scripts', '_basic-task-reliability-01');
 const CREDENTIAL = path.join(
   REPO_ROOT,
@@ -283,16 +287,26 @@ const PROMPTS = {
     '人一般用什么呼吸？',
   ],
   B: [
-    '最近有什么比较重要的科技新闻？',
-    '这周国际新闻里比较受关注的事是什么？',
-    '现在谁是联合国秘书长？',
-    '最近苹果公司有什么新发布吗？',
-    '今天人民币对美元大概什么汇率？',
-    '最近有没有比较大的自然灾害报道？',
-    '最近公开讨论得比较多的人工智能进展是什么？',
-    '现在世界上人口最多的国家是哪个？',
-    '最近有什么重要的体育赛事结果？',
-    '当前全球油价大概什么水平？',
+    '谁担任联合国秘书长？',
+    '哪个国家人口最多？',
+    '苹果公司有什么新的消费电子产品在卖？',
+    '人民币兑美元汇率大概多少？',
+    '美国总统是谁？',
+    '布伦特原油价格大概在什么区间？',
+    '英格兰银行的基准利率是多少？',
+    '特斯拉的首席执行官是谁？',
+    '英伟达最近一次公开财报大概怎么说？',
+    '下一届世界杯足球赛定在哪里举办？',
+    '欧元区通胀大概什么水平？',
+    '中国一线城市还在不在普遍限购住房？不确定就说不确定。',
+    'SpaceX 最近一次轨道发射成功了没有？',
+    '全球市值最高的上市公司是哪家？',
+    '水在标准大气压下大约多少度沸腾？',
+    '地球绕太阳一圈大约多长时间？',
+    '《哈姆雷特》的作者是谁？',
+    '第一次世界大战大约哪年结束？',
+    '真空中的光速是不是一个物理常数？',
+    '三角形内角和是多少度？',
   ],
   C: [
     '请在工作区写一个叫 shopping-1.txt 的小清单，里面写牛奶、鸡蛋、面包，并告诉我文件在哪。',
@@ -371,7 +385,7 @@ const PROMPTS = {
 test(
   '基础任务可靠性：6 类 × 连续 10 次真实主链',
   {
-    skip: ENABLED ? false : 'set DIGITALME_V2_BASIC_TASK_RELIABILITY=1 or targeted',
+    skip: ENABLED ? false : 'set DIGITALME_V2_BASIC_TASK_RELIABILITY=1, targeted, or fresh',
     timeout: 18_000_000,
   },
   async () => {
@@ -482,6 +496,11 @@ test(
           }
           const searched = row.execs.some((e) => isSearchCap(String(e.capabilityId || '')));
           const searchOk = row.execs.some((e) => isSearchCap(String(e.capabilityId || '')) && e.ok);
+          const searchCalls = row.capabilityIds.filter((id) => isSearchCap(id)).length;
+          if (searchCalls >= 3) {
+            markFail(row, '连续换检索器', { timeout: true });
+            return;
+          }
           if (snap.resultTitle === 'result.md') {
             markFail(row, '搜索不应落成用户结果卡', { pseudoSuccess: true });
             return;
@@ -491,7 +510,16 @@ test(
             else markFail(row, '最新信息未形成可用答案');
             return;
           }
-          if (!searched && !/无法确认|没法核对|没有检索到|不确定|无法在线|可能已变|以.{0,20}为准|公开.*估计/.test(snap.reply)) {
+          const stableFact = i >= 14;
+          if (stableFact) {
+            if (searched) {
+              markFail(row, '稳定知识不应检索', { wrongTool: true });
+              return;
+            }
+            finishSuccess(row);
+            return;
+          }
+          if (!searched && !/无法确认|没法核对|没有检索到|不确定|无法在线|可能已变|以.{0,20}为准|公开.*估计|无法可靠核验/.test(snap.reply)) {
             markFail(row, '需要最新信息却未调用检索也未诚实说明无法确认', { wrongTool: true });
             return;
           }
@@ -706,7 +734,8 @@ test(
       const dOk = sessionOk('D').filter(Boolean).length === COUNTS.D;
       const eOk = sessionOk('E').filter(Boolean).length === COUNTS.E;
       const fOk = byCat('F').filter((r) => r.success).length === COUNTS.F;
-      const accepted = aOk && bOk && cOk && dOk && eOk && fOk && !stuck && !pseudo && !leak && !inconsistent;
+      const timed = rows.some((r) => r.timeout);
+      const accepted = aOk && bOk && cOk && dOk && eOk && fOk && !stuck && !pseudo && !leak && !inconsistent && !timed;
       verdict.BASIC_TASK_RELIABILITY_VERDICT = accepted ? 'ACCEPTED' : 'NOT_RELIABLE';
       await fs.writeFile(
         path.join(EVIDENCE, 'results.json'),

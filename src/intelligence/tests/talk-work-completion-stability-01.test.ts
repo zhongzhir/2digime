@@ -97,7 +97,17 @@ test('A 简单常识问答：不搜索、不产生无意义 artifact', async () 
     documentCapability: 'fake',
     registerOpenAiStub: false,
     talkChat: scriptedChat([
-      async ({ tools }) => {
+      async ({ tools, messages }) => {
+        const sys = String(messages[0]?.content || '');
+        if (/独立验收/.test(sys)) {
+          return {
+            text: JSON.stringify({
+              deliver: true,
+              userReply: '在标准大气压下，纯水大约在 100°C 沸腾。',
+              freshnessRequired: false,
+            }),
+          };
+        }
         assert.ok(tools?.some((t) => t.function.name === 'delegate'));
         return { text: '在标准大气压下，纯水大约在 100°C 沸腾。' };
       },
@@ -359,6 +369,16 @@ test('E 连续多轮：上下文保留，上一轮工具不污染下一轮', asy
         }),
       }),
       async ({ messages, tools }) => {
+        const sys = String(messages[0]?.content || '');
+        if (/独立验收/.test(sys)) {
+          return {
+            text: JSON.stringify({
+              deliver: true,
+              userReply: '刚才说的 GPT-5.4 是检索后的结论。和上一代相比，公开报道强调更长上下文。',
+              freshnessRequired: false,
+            }),
+          };
+        }
         const blob = messages.map((m) => `${m.role}:${m.content}`).join('\n');
         assert.match(blob, /GPT-5\.4/);
         assert.match(blob, /和刚才那个有什么区别/);

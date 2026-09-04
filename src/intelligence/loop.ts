@@ -19,7 +19,7 @@ const DELEGATE_TOOL: ChatToolDefinition = {
   function: {
     name: 'delegate',
     description:
-      '当已连接专业能力能够实际执行用户目标，而你仅靠对话无法完成该执行时调用。必须填写已连接能力的 id。工具返回的是证据或执行事实，调用后必须综合成给用户的最终答案。不要把工具原文交给用户就算完成。若这次执行失败或未产生该能力声明的真实效果，应根据执行事实另选已连接能力、改方案、用已有证据作答，或仅在只有用户才能补的信息时提问；不要默认再调刚失败的同一个能力。不要用它来闲聊或回答关于用户自己的问题。不要假装执行不存在的能力。',
+      '当已连接专业能力能够实际执行用户目标，或需要核验可能过时的公开现状，而你仅靠对话无法完成时调用。必须填写已连接能力的 id。工具返回的是证据或执行事实，调用后必须综合成给用户的最终答案。不要把工具原文交给用户就算完成。若这次执行失败或未产生该能力声明的真实效果，应根据执行事实另选已连接能力、改方案、用已有证据作答，或仅在只有用户才能补的信息时提问；不要默认再调刚失败的同一个能力，也不要连续换多个同类检索器直到超时。不要用它来闲聊、回答关于用户自己的问题，或给稳定知识投保式检索。不要假装执行不存在的能力。',
     parameters: {
       type: 'object',
       properties: {
@@ -158,6 +158,7 @@ function parseReview(text: string): {
   askUser?: string;
   openGoal?: string;
   revision?: string;
+  freshnessRequired?: boolean;
 } {
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) {
@@ -170,6 +171,7 @@ function parseReview(text: string): {
       askUser?: string;
       openGoal?: string;
       revision?: string;
+      freshnessRequired?: boolean;
     };
     const userReply = String(parsed.userReply || '').trim();
     const askUser = String(parsed.askUser || '').trim();
@@ -181,6 +183,7 @@ function parseReview(text: string): {
       ...(askUser ? { askUser } : {}),
       ...(openGoal ? { openGoal } : {}),
       ...(revision ? { revision } : {}),
+      ...(parsed.freshnessRequired === true ? { freshnessRequired: true } : {}),
     };
   } catch {
     return { deliver: true, userReply: text.trim() };
@@ -236,21 +239,9 @@ function isOwnEvidenceLeak(text: string): boolean {
 }
 
 function applyExecutionTruth(
-  judged: {
-    deliver: boolean;
-    userReply: string;
-    askUser?: string;
-    openGoal?: string;
-    revision?: string;
-  },
+  judged: ReturnType<typeof parseReview>,
   facts: { ok: boolean; summary: string; failureReason?: string },
-): {
-  deliver: boolean;
-  userReply: string;
-  askUser?: string;
-  openGoal?: string;
-  revision?: string;
-} {
+): ReturnType<typeof parseReview> {
   if (facts.ok) return judged;
   const failureLine = facts.failureReason || facts.summary;
   const next = {
@@ -279,6 +270,43 @@ function usableFinalText(text: string): boolean {
 }
 
 const MAX_TOOL_ROUNDS = 4;
+/** 单次检索远短于整轮 deadline，避免一个 connector 吃光 180s。 */
+export const SEARCH_CALL_TIMEOUT_MS = 25_000;
+const DEFAULT_TOOL_CALL_TIMEOUT_MS = 75_000;
+const TOOL_SYNTHESIS_RESERVE_MS = 20_000;
+const MIN_TOOL_START_MS = 8_000;
+const UNVERIFIED_FRESH_NOTICE = '本轮没有获得实时核验，当前无法可靠确认这一点。';
+
+function remainingMs(deadlineAt?: number): number {
+  if (!deadlineAt || !Number.isFinite(deadlineAt)) return Number.POSITIVE_INFINITY;
+  return deadlineAt - Date.now();
+}
+
+function callTimeoutMs(agent: ProfessionalAgent, remaining: number): number {
+  const cap = agent.maxCallMs && agent.maxCallMs > 0 ? agent.maxCallMs : DEFAULT_TOOL_CALL_TIMEOUT_MS;
+  if (!Number.isFinite(remaining)) return cap;
+  return Math.max(1, Math.min(cap, remaining));
+}
+
+function bindCallSignal(parent: AbortSignal | undefined, timeoutMs: number): {
+  signal: AbortSignal;
+  dispose: () => void;
+} {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), Math.max(1, timeoutMs));
+  const onParent = () => ac.abort();
+  if (parent) {
+    if (parent.aborted) ac.abort();
+    else parent.addEventListener('abort', onParent, { once: true });
+  }
+  return {
+    signal: ac.signal,
+    dispose: () => {
+      clearTimeout(timer);
+      if (parent) parent.removeEventListener('abort', onParent);
+    },
+  };
+}
 
 const INCOMPLETE_SYNTHESIS_NOTICE =
   '这一轮没能形成可用的最终结论。外部能力有返回，但还不足以可靠回答你的问题。请再问一次，或把问题说得更具体。';
@@ -299,6 +327,8 @@ export async function runTalkTurn(input: {
   workRoot: string;
   now: string;
   signal?: AbortSignal;
+  /** 本轮硬截止。检索单次超时由此计算剩余预算，不得延长整轮。 */
+  deadlineAt?: number;
   subjectCollab?: SubjectCollabPort;
   /** 需要用户亲自确认的理解。用人话问，不是「保存到数字之我」。 */
   confirmHint?: string;
@@ -327,7 +357,11 @@ export async function runTalkTurn(input: {
   const system = [
     '你是用户的兔机米，负责理解、编排与验收。',
     '当已连接专业能力能够实际执行用户目标，而你仅靠对话无法完成该执行时，应调用该能力；不要假装执行不存在的能力。',
-    '当答案依赖可能在训练截止后变化的公开事实、且需要可靠核验时，可以使用已连接的实时检索能力。检索失败时换已连接的检索能力、基于已有可信证据明确限定，或说明无法确认。不要把未经核验的训练记忆说成刚查过的现状。',
+    '先判断：这是稳定知识，还是可能随时间变化的公开现实事实。算术、语言含义、已确定的科学关系、明确的历史事实，直接回答，不要为了保险去检索。',
+    '若正确答案取决于训练截止之后仍可能变化的公开现状（任职、排名、统计、价格、政策、公司或产品现状等），且已连接实时检索能力，应先核验再回答。这是认识判断，不是按某个词触发。',
+    '不要把未经核验的训练记忆说成已经确认的当前事实。检索失败或时间不够时：换一次已连接检索、用已有证据做有限说明，或明确无法确认。不要连续换多个同类检索器直到超时。',
+    '每一轮只针对当前这句用户原话判断。上一轮检索不能自动当作对本问的核验。',
+    '已公布的任职、主办、赛程、政策仍可能调整，不能因为训练记忆里「已经定了」就不核验。',
     '你根据当前数字之我理解用户；不要编造未写入的本人事实。',
     '交流、判断、解释用普通人语言直接回复，不要调用工具。',
     '工具返回的是证据或执行事实，不是给用户的最终答案。若调用了工具，必须在同一轮综合成用户能直接使用的结论。',
@@ -377,7 +411,7 @@ export async function runTalkTurn(input: {
     ...(tools.length ? { tools } : {}),
   });
 
-  if (!first.toolCalls?.length) {
+  if (!first.toolCalls?.length && !input.agents.length) {
     let text = first.text.trim();
     if (!text) {
       text = '我在。请再说一次你想让我做什么。';
@@ -403,6 +437,8 @@ export async function runTalkTurn(input: {
   let lastFailureReason = '';
   let lastOutputs: string[] = [];
   let lastEvidenceOnly = false;
+  let freshEvidenceSeen = false;
+  let evidenceCalls = 0;
   let didDelegate = false;
   let collabResult: ConsultResult | null = null;
 
@@ -439,28 +475,60 @@ export async function runTalkTurn(input: {
     lastCapability = agent.id;
     const execId = `run_${randomUUID()}`;
     const workDir = path.join(input.workRoot, 'intelligence', 'runs', execId);
-    let result;
-    try {
-      throwIfAborted(input.signal);
-      const run = agent.run({
-        instruction: lastInstruction,
-        workDir,
-        signal: input.signal || new AbortController().signal,
-      });
-      result = input.signal ? await Promise.race([run, waitForAbort(input.signal)]) : await run;
-    } catch (err) {
-      if (isAbortLike(err) || input.signal?.aborted) throw err;
+    const remaining = remainingMs(input.deadlineAt);
+    const returnsEvidence = agent.returnsEvidence === true;
+    let result: Awaited<ReturnType<ProfessionalAgent['run']>>;
+    if (remaining < MIN_TOOL_START_MS) {
       result = {
         ok: false,
-        failureReason: String(err instanceof Error ? err.message : err),
-        summary: '外部能力这次没能完成。',
-        producedOutputs: [] as string[],
-        rawText: String(err instanceof Error ? err.message : err),
+        failureReason: '时间预算不足，不能再启动一次外部调用。请基于已有证据综合，或说明无法确认。',
+        summary: '时间预算不足，不能再启动一次外部调用。',
+        producedOutputs: [],
+        ...(returnsEvidence ? { evidenceOnly: true } : {}),
       };
+    } else {
+      const callMs = callTimeoutMs(agent, remaining - TOOL_SYNTHESIS_RESERVE_MS);
+      const bound = bindCallSignal(input.signal, callMs);
+      try {
+        throwIfAborted(input.signal);
+        result = await Promise.race([
+          agent.run({
+            instruction: lastInstruction,
+            workDir,
+            signal: bound.signal,
+          }),
+          waitForAbort(bound.signal),
+        ]);
+      } catch (err) {
+        if (input.signal?.aborted) throw err;
+        if (isAbortLike(err) || bound.signal.aborted) {
+          result = {
+            ok: false,
+            failureReason: `这次调用在 ${callMs}ms 内没有返回。不是整轮结束，可换已连接能力、用已有证据，或说明无法确认。`,
+            summary: '外部能力这次没有在预算内返回。',
+            producedOutputs: [],
+            rawText: `timeout after ${callMs}ms`,
+            ...(returnsEvidence ? { evidenceOnly: true } : {}),
+          };
+        } else {
+          result = {
+            ok: false,
+            failureReason: String(err instanceof Error ? err.message : err),
+            summary: '外部能力这次没能完成。',
+            producedOutputs: [],
+            rawText: String(err instanceof Error ? err.message : err),
+            ...(returnsEvidence ? { evidenceOnly: true } : {}),
+          };
+        }
+      } finally {
+        bound.dispose();
+      }
     }
     lastOk = result.ok;
     lastFailureReason = result.failureReason || (result.ok ? '' : result.summary);
-    lastEvidenceOnly = result.evidenceOnly === true;
+    lastEvidenceOnly = result.evidenceOnly === true || returnsEvidence;
+    if (lastEvidenceOnly) evidenceCalls += 1;
+    if (lastOk && lastEvidenceOnly) freshEvidenceSeen = true;
     lastOutputs = lastEvidenceOnly
       ? []
       : result.producedOutputs || (result.outputPath ? [result.outputPath] : []);
@@ -620,40 +688,47 @@ export async function runTalkTurn(input: {
   }
 
   const continueWithTools = tools.length ? { tools } : {};
-  let current = await chat({
-    messages,
-    ...continueWithTools,
-  });
-  let toolRounds = 1;
-  while (current.toolCalls?.length && toolRounds < MAX_TOOL_ROUNDS) {
-    throwIfAborted(input.signal);
-    await appendToolRound(current);
-    toolRounds += 1;
+  let current = first;
+  let toolRounds = first.toolCalls?.length ? 1 : 0;
+  if (first.toolCalls?.length) {
     current = await chat({
       messages,
       ...continueWithTools,
     });
-  }
-  if (current.toolCalls?.length) {
-    throwIfAborted(input.signal);
-    await appendToolRound(current);
-    current = await chat({ messages, ...continueWithTools });
+    while (current.toolCalls?.length && toolRounds < MAX_TOOL_ROUNDS) {
+      throwIfAborted(input.signal);
+      await appendToolRound(current);
+      toolRounds += 1;
+      current = await chat({
+        messages,
+        ...continueWithTools,
+      });
+    }
+    if (current.toolCalls?.length) {
+      throwIfAborted(input.signal);
+      await appendToolRound(current);
+      current = await chat({ messages, ...continueWithTools });
+    }
   }
 
+  const remainingNow = () => remainingMs(input.deadlineAt);
   const recoveryFacts = (extra: string) =>
     [
       extra,
-      `执行事实（runtime 权威，不得改写）：actualSuccess=${lastOk} capabilityId=${lastCapability || '（未指定）'} evidenceOnly=${lastEvidenceOnly}`,
+      `执行事实（runtime 权威，不得改写）：actualSuccess=${lastOk} capabilityId=${lastCapability || '（未指定）'} evidenceOnly=${lastEvidenceOnly} freshEvidenceSeen=${freshEvidenceSeen}`,
       lastFailureReason ? `failureReason=${lastFailureReason}` : '',
       lastOutputs.length ? `outputs=${lastOutputs.join('；')}` : 'outputs=（无）',
       thread.executions.length
         ? `已尝试：${thread.executions.map((item) => `${item.capabilityId} actualSuccess=${item.ok}`).join('；')}`
-        : '',
+        : '已尝试：无外部调用',
+      `检索类调用次数=${evidenceCalls} 剩余时间约 ${Number.isFinite(remainingNow()) ? `${Math.max(0, Math.round(remainingNow() / 1000))}s` : '未知'}`,
       `当前已连接：${input.agents.map((item) => item.id).join('、') || '无'}`,
-      '由你选择下一步：换已连接能力、改方案、用已有证据作答，或仅在只有用户知道时提问。不要默认再调刚失败的同一个能力。已授权工作目录不需要向用户再要路径。',
+      '由你选择下一步：换已连接能力、改方案、用已有证据作答，或仅在只有用户知道时提问。不要默认再调刚失败的同一个能力。已有检索证据时综合交付；同类检索已失败两次或时间不够时，不要再换检索器，应诚实说明无法确认。已授权工作目录不需要向用户再要路径。',
     ].filter(Boolean).join('\n');
 
-  if (!lastOk && input.agents.length > 1 && !current.toolCalls?.length && toolRounds < MAX_TOOL_ROUNDS) {
+  const canStartAnotherTool =
+    toolRounds < MAX_TOOL_ROUNDS && remainingNow() >= MIN_TOOL_START_MS && evidenceCalls < 2;
+  if (!lastOk && didDelegate && input.agents.length > 1 && !current.toolCalls?.length && canStartAnotherTool) {
     throwIfAborted(input.signal);
     messages.push({ role: 'system', content: recoveryFacts('上一轮未产生要求的真实效果，同一轮继续。') });
     current = await chat({
@@ -689,12 +764,18 @@ export async function runTalkTurn(input: {
         ? lastEvidenceOnly
           ? '外部检索只提供了证据。必须综合成对用户问题的最终答案；来源清单不是答案。'
           : '执行已成功。判断：是否满足用户目标、内容是否合格、是否需要继续、如何向用户交付。若产生了文件，必须说明做了什么、结果在哪里、是否完成。'
-        : '执行已失败或未产生声明的真实效果。判断：是否已用人话说明、是否还缺只有用户知道的信息。不得宣称任务已完成，不得生成看起来完成的空结果。',
-      '只输出 JSON：{"deliver":true,"userReply":"...","askUser":"","openGoal":"","revision":""}',
+        : didDelegate
+          ? '执行已失败或未产生声明的真实效果。判断：是否已用人话说明、是否还缺只有用户知道的信息。不得宣称任务已完成，不得生成看起来完成的空结果。'
+          : '本轮没有外部执行。判断答案是否可直接交付。',
+      '再判断：这是稳定知识，还是可能随训练截止后变化的公开现实事实？freshnessRequired=true 仅当正确答案取决于可能变化的公开现状。算术、语言、已确定科学关系、明确历史事实必须 freshnessRequired=false，不要为了保险要求检索。已公布的任职、主办、赛程、政策仍可能变化。只针对当前用户原话；上一轮证据不能代替本轮核验。',
+      freshEvidenceSeen
+        ? '本轮已有实时检索证据。综合证据作答；不得把来源清单当答案。'
+        : '本轮 freshEvidenceSeen=false。若 freshnessRequired=true，不得把训练记忆包装成已确认的当前事实；应 revision 去核验，或明确说当前无法可靠核验。禁止「据我所知目前是 X」当成已核验。',
+      '只输出 JSON：{"deliver":true,"userReply":"...","askUser":"","openGoal":"","revision":"","freshnessRequired":false}',
       'userReply 必须是用户现在就能用的最终说明。禁止稍后再回答、重新整理后再说、后续分析为准。',
       'askUser 仅在数字之我与对话都无法补上、且只有用户知道时填写。',
-      'revision 只描述还缺什么，不是指定再调哪一个能力。',
-      `执行事实（runtime 权威，不得改写）：actualSuccess=${lastOk} capabilityId=${lastCapability || ''} evidenceOnly=${lastEvidenceOnly}`,
+      'revision 只描述还缺什么，不是指定再调哪一个能力。同类检索已失败或时间不够时不要 revision 再搜，应诚实交付。',
+      `执行事实（runtime 权威，不得改写）：actualSuccess=${lastOk} capabilityId=${lastCapability || ''} evidenceOnly=${lastEvidenceOnly} freshEvidenceSeen=${freshEvidenceSeen} evidenceCalls=${evidenceCalls}`,
       lastFailureReason ? `失败原因：${lastFailureReason}` : '',
       lastOutputs.length ? `已产生文件：${lastOutputs.join('；')}` : '未产生用户文件',
       `用户原话：${input.userText}`,
@@ -715,27 +796,51 @@ export async function runTalkTurn(input: {
       summary: lastSummary,
       ...(lastFailureReason ? { failureReason: lastFailureReason } : {}),
     });
+    if (judged.freshnessRequired) next = { ...next, freshnessRequired: true };
+    if (next.freshnessRequired && !freshEvidenceSeen) {
+      next.deliver = false;
+      if (!next.revision && !next.askUser) {
+        const reply = (next.userReply || '').trim();
+        next.userReply = reply && !claimsCompletion(reply) ? reply : UNVERIFIED_FRESH_NOTICE;
+        if (!next.revision && canStartAnotherTool && input.agents.length) {
+          next.revision = '还缺一次对当前公开事实的实时核验';
+        } else if (!usableFinalText(next.userReply) || claimsCompletion(next.userReply)) {
+          next.userReply = UNVERIFIED_FRESH_NOTICE;
+          next.deliver = true;
+          delete next.revision;
+        }
+      }
+    }
     const reply = (next.askUser || next.userReply).trim();
     if (next.deliver && isDeferredDelivery(reply)) {
-      if (usableFinalText(draft)) {
+      if (usableFinalText(draft) && !(next.freshnessRequired && !freshEvidenceSeen)) {
         next = { deliver: true, userReply: draft };
       } else {
         next = {
           deliver: true,
-          userReply: lastOk ? INCOMPLETE_SYNTHESIS_NOTICE : `这件事还没有做成。${lastFailureReason || lastSummary}`,
+          userReply: lastOk
+            ? INCOMPLETE_SYNTHESIS_NOTICE
+            : didDelegate
+              ? `这件事还没有做成。${lastFailureReason || lastSummary}`
+              : INCOMPLETE_REPLY_NOTICE,
         };
       }
     }
-    if (!next.askUser && !usableFinalText(next.userReply) && usableFinalText(draft)) {
+    if (!next.askUser && !usableFinalText(next.userReply) && usableFinalText(draft) && !(next.freshnessRequired && !freshEvidenceSeen)) {
       next = { ...next, userReply: draft };
     }
-    if (!next.askUser && !usableFinalText(next.userReply)) {
+    if (!next.askUser && !usableFinalText(next.userReply) && !next.revision) {
       next = {
         ...next,
         deliver: true,
-        userReply: lastOk
-          ? INCOMPLETE_SYNTHESIS_NOTICE
-          : `这件事还没有做成。${lastFailureReason || lastSummary}`,
+        userReply:
+          next.freshnessRequired && !freshEvidenceSeen
+            ? UNVERIFIED_FRESH_NOTICE
+            : lastOk
+              ? INCOMPLETE_SYNTHESIS_NOTICE
+              : didDelegate
+                ? `这件事还没有做成。${lastFailureReason || lastSummary}`
+                : INCOMPLETE_REPLY_NOTICE,
       };
     }
     return next;
@@ -746,7 +851,7 @@ export async function runTalkTurn(input: {
   });
   let judged = settleJudgement(parseReview(review.text), synthesized);
 
-  if (judged.revision && input.agents.length && toolRounds < MAX_TOOL_ROUNDS) {
+  if (judged.revision && input.agents.length && toolRounds < MAX_TOOL_ROUNDS && remainingNow() >= MIN_TOOL_START_MS && evidenceCalls < 2) {
     messages.push({
       role: 'system',
       content: recoveryFacts(`还缺什么：${judged.revision}`),
@@ -776,6 +881,14 @@ export async function runTalkTurn(input: {
       messages: [{ role: 'system', content: reviewPrompt(['这是继续之后的再次验收。执行仍失败时不得宣称任务已完成。']).join('\n') }],
     });
     judged = settleJudgement(parseReview(second.text), synthesized);
+  }
+
+  if (judged.freshnessRequired && !freshEvidenceSeen && !judged.askUser) {
+    const text = (judged.userReply || '').trim();
+    judged = {
+      deliver: true,
+      userReply: text && !claimsCompletion(text) ? text : UNVERIFIED_FRESH_NOTICE,
+    };
   }
 
   if (judged.deliver && isDeferredDelivery(judged.userReply)) {
