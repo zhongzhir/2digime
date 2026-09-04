@@ -35,6 +35,7 @@ const COMMAND_NAMES = [
 
 contextBridge.exposeInMainWorld("digitalMe", {
   commands: COMMAND_NAMES.slice(),
+  talkUiDeadlineMs: Number(process.env.DIGITALME_V2_TALK_UI_DEADLINE_MS) || 190000,
   invoke(name, input) {
     if (!COMMAND_NAMES.includes(name)) {
       return Promise.reject(new Error(`command not exposed: ${name}`));

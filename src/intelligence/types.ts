@@ -63,6 +63,7 @@ export interface TalkChatResult {
 export type TalkChatFn = (input: {
   messages: import('../infrastructure/model-http').ChatMessage[];
   tools?: import('../infrastructure/model-http').ChatToolDefinition[];
+  signal?: AbortSignal;
 }) => Promise<TalkChatResult>;
 
 export interface ProfessionalResult {

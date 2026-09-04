@@ -100,7 +100,7 @@ test('Electron：数字之我最小闭环 10 项真实验收', { timeout: 240_00
     await skipWelcomeAndEnterShell(first.page);
     await openDigitalSelf(first.page);
     const headline = await first.page.locator('#ds-headline').innerText();
-    assert.equal(headline.includes('2digime 现在怎样理解我'), true);
+    assert.equal(headline.includes('兔机米现在怎样理解我'), true);
     assert.equal(await first.page.locator('#growth-block').isVisible(), false);
 
     await tell(first.page, '我叫张三');

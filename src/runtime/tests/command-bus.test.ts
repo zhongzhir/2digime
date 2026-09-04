@@ -84,10 +84,10 @@ test('CommandBus 覆盖全部命令且不超过上限', async () => {
   assert.ok(list.tasks.length >= 1);
 
   const digitalSelf = await bus.invoke('digitalSelf', { action: 'read' });
-  assert.equal(digitalSelf.view.headline, '2digime 现在怎样理解我');
+  assert.equal(digitalSelf.view.headline, '兔机米现在怎样理解我');
 
   const talk = await bus.invoke('talk', {});
-  assert.equal(talk.view.headline, '与 2digime');
+  assert.equal(talk.view.headline, '与兔机米');
 
   await runtime.stop();
 });

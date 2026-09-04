@@ -19,7 +19,7 @@ const DELEGATE_TOOL: ChatToolDefinition = {
   function: {
     name: 'delegate',
     description:
-      '当已连接专业能力能够实际执行用户目标，而你仅靠对话无法完成该执行时调用。工具返回的是证据或执行事实，调用后必须综合成给用户的最终答案。不要把工具原文交给用户就算完成。不要用它来闲聊或回答关于用户自己的问题。不要假装执行不存在的能力。',
+      '当已连接专业能力能够实际执行用户目标，而你仅靠对话无法完成该执行时调用。必须填写已连接能力的 id。工具返回的是证据或执行事实，调用后必须综合成给用户的最终答案。不要把工具原文交给用户就算完成。若这次执行失败或未产生该能力声明的真实效果，应根据执行事实另选已连接能力、改方案、用已有证据作答，或仅在只有用户才能补的信息时提问；不要默认再调刚失败的同一个能力。不要用它来闲聊或回答关于用户自己的问题。不要假装执行不存在的能力。',
     parameters: {
       type: 'object',
       properties: {
@@ -29,7 +29,7 @@ const DELEGATE_TOOL: ChatToolDefinition = {
         },
         capabilityId: {
           type: 'string',
-          description: '可选。已连接能力的 id。若只有一个可用能力可省略。',
+          description: '已连接能力的 id。多个已连接能力时必须填写。',
         },
       },
       required: ['instruction'],
@@ -191,6 +191,50 @@ function claimsCompletion(text: string): boolean {
   return /已经完成|已完成|已创建|已经创建|已在工作区创建|成功写入|已经写好|已写好/.test(text);
 }
 
+function isAbortLike(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const name = (err as { name?: string }).name;
+  return name === 'AbortError' || name === 'TalkTimeoutError';
+}
+
+function abortError(): Error {
+  const err = new Error('aborted');
+  err.name = 'AbortError';
+  return err;
+}
+
+function waitForAbort(signal: AbortSignal): Promise<never> {
+  return new Promise((_resolve, reject) => {
+    if (signal.aborted) {
+      reject(abortError());
+      return;
+    }
+    signal.addEventListener('abort', () => reject(abortError()), { once: true });
+  });
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw abortError();
+}
+
+/** 工具 JSON 整段冒充最终答案。检索横幅只作最低限度防御。 */
+function isOwnEvidenceLeak(text: string): boolean {
+  const trimmed = String(text || '').trim();
+  if (trimmed.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(trimmed) as { actualSuccess?: unknown; role?: unknown };
+      if (parsed && typeof parsed === 'object') {
+        if ('actualSuccess' in parsed || parsed.role === 'evidence' || parsed.role === 'execution') {
+          return true;
+        }
+      }
+    } catch {
+      /* 不是 JSON，走横幅兜底 */
+    }
+  }
+  return /只供 2digime 综合，不是给用户的最终答案/.test(trimmed);
+}
+
 function applyExecutionTruth(
   judged: {
     deliver: boolean;
@@ -229,15 +273,18 @@ function isDeferredDelivery(text: string): boolean {
 
 function usableFinalText(text: string): boolean {
   const t = String(text || '').trim();
-  if (!t || isDeferredDelivery(t)) return false;
+  if (!t || isDeferredDelivery(t) || isOwnEvidenceLeak(t)) return false;
   if (t === '已经看过结果。' || t === '已经看过结果') return false;
   return true;
 }
 
-const MAX_TOOL_ROUNDS = 3;
+const MAX_TOOL_ROUNDS = 4;
 
 const INCOMPLETE_SYNTHESIS_NOTICE =
   '这一轮没能形成可用的最终结论。外部能力有返回，但还不足以可靠回答你的问题。请再问一次，或把问题说得更具体。';
+
+const INCOMPLETE_REPLY_NOTICE =
+  '这一轮没能形成可用的最终结论。请再问一次，或把问题说得更具体。';
 
 function asCollabResult(value: ConsultResult | null): ConsultResult | null {
   return value;
@@ -278,11 +325,13 @@ export async function runTalkTurn(input: {
 
   const cards = input.subjectCollab?.cards || [];
   const system = [
-    '你是用户的 2digime，负责理解、编排与验收。',
+    '你是用户的兔机米，负责理解、编排与验收。',
     '当已连接专业能力能够实际执行用户目标，而你仅靠对话无法完成该执行时，应调用该能力；不要假装执行不存在的能力。',
+    '当答案依赖可能在训练截止后变化的公开事实、且需要可靠核验时，可以使用已连接的实时检索能力。检索失败时换已连接的检索能力、基于已有可信证据明确限定，或说明无法确认。不要把未经核验的训练记忆说成刚查过的现状。',
     '你根据当前数字之我理解用户；不要编造未写入的本人事实。',
     '交流、判断、解释用普通人语言直接回复，不要调用工具。',
     '工具返回的是证据或执行事实，不是给用户的最终答案。若调用了工具，必须在同一轮综合成用户能直接使用的结论。',
+    '若执行失败或未产生该能力声明的真实效果，根据返回的执行事实继续：可换已连接能力、改方案、用已有证据作答；不要把刚失败的能力当成唯一选项。已授权工作目录不需要向用户再要路径。',
     '禁止把来源清单、redirect 或未完成草稿当成最终回复；禁止说稍后回答、重新整理后再说或后续分析为准并结束本轮。',
     '不要问用户这是聊天还是做事，不要让用户选择 Agent、任务类型、workflow、协作者、协议或分工。',
     '不要向用户展示 Job、capability、adapter、stage 或内部错误原文。',
@@ -316,14 +365,25 @@ export async function runTalkTurn(input: {
   if (input.agents.length) tools.push(DELEGATE_TOOL);
   if (cards.length) tools.push(CONSULT_TOOL);
 
+  const chat: TalkChatFn = (req) =>
+    input.chat({
+      ...req,
+      ...(input.signal ? { signal: input.signal } : {}),
+    });
+
   const messages: ChatMessage[] = [{ role: 'system', content: system }, ...history];
-  const first = await input.chat({
+  const first = await chat({
     messages,
     ...(tools.length ? { tools } : {}),
   });
 
   if (!first.toolCalls?.length) {
-    const text = first.text.trim() || '我在。请再说一次你想让我做什么。';
+    let text = first.text.trim();
+    if (!text) {
+      text = '我在。请再说一次你想让我做什么。';
+    } else if (!usableFinalText(text)) {
+      text = INCOMPLETE_REPLY_NOTICE;
+    }
     thread.turns.push({
       id: `turn_${randomUUID()}`,
       at: input.now,
@@ -343,26 +403,33 @@ export async function runTalkTurn(input: {
   let lastFailureReason = '';
   let lastOutputs: string[] = [];
   let lastEvidenceOnly = false;
-  let calls = 0;
   let didDelegate = false;
   let collabResult: ConsultResult | null = null;
 
   const runDelegate = async (rawArgs: string): Promise<string> => {
     const parsed = parseArgs(rawArgs);
-    const agent =
-      (parsed.capabilityId && input.agents.find((item) => item.id === parsed.capabilityId)) ||
-      input.agents[0];
+    const requested = parsed.capabilityId;
+    const agent = requested
+      ? input.agents.find((item) => item.id === requested)
+      : input.agents.length === 1
+        ? input.agents[0]
+        : undefined;
     if (!agent) {
       lastOk = false;
-      lastFailureReason = '当前没有可调用的外部能力。';
+      lastFailureReason = requested
+        ? `没有名为 ${requested} 的已连接能力。`
+        : `未指定 capabilityId。当前已连接：${input.agents.map((item) => item.id).join('、') || '无'}。请选择其中一个。`;
       lastOutputs = [];
       lastSummary = lastFailureReason;
       lastPath = undefined;
       lastEvidenceOnly = false;
+      lastCapability = requested || '';
       return JSON.stringify({
         actualSuccess: false,
         ok: false,
         role: 'execution',
+        capabilityId: requested || '',
+        evidenceOnly: false,
         failureReason: lastFailureReason,
         producedOutputs: [],
         summary: lastFailureReason,
@@ -374,12 +441,15 @@ export async function runTalkTurn(input: {
     const workDir = path.join(input.workRoot, 'intelligence', 'runs', execId);
     let result;
     try {
-      result = await agent.run({
+      throwIfAborted(input.signal);
+      const run = agent.run({
         instruction: lastInstruction,
         workDir,
         signal: input.signal || new AbortController().signal,
       });
+      result = input.signal ? await Promise.race([run, waitForAbort(input.signal)]) : await run;
     } catch (err) {
+      if (isAbortLike(err) || input.signal?.aborted) throw err;
       result = {
         ok: false,
         failureReason: String(err instanceof Error ? err.message : err),
@@ -414,6 +484,8 @@ export async function runTalkTurn(input: {
       actualSuccess: result.ok,
       ok: result.ok,
       role: lastEvidenceOnly ? 'evidence' : 'execution',
+      capabilityId: agent.id,
+      evidenceOnly: lastEvidenceOnly,
       summary: result.summary.slice(0, 4000),
       ...(lastFailureReason ? { failureReason: lastFailureReason } : {}),
       producedOutputs: lastOutputs,
@@ -424,6 +496,7 @@ export async function runTalkTurn(input: {
   type ModelToolCall = { id: string; name: string; arguments: string };
 
   const runOneTool = async (call: ModelToolCall): Promise<string> => {
+    throwIfAborted(input.signal);
     if (call.name === 'consult_subject') {
       const parsed = parseConsultArgs(call.arguments);
       if (!input.subjectCollab) {
@@ -437,7 +510,7 @@ export async function runTalkTurn(input: {
         };
         return JSON.stringify(collabResult);
       }
-      collabResult = await input.subjectCollab.consult({
+      const consult = input.subjectCollab.consult({
         threadId: thread.threadId,
         threadTurns: thread.turns.map((turn) => ({ role: turn.role, text: turn.text })),
         selfContext: input.selfContext,
@@ -447,6 +520,9 @@ export async function runTalkTurn(input: {
         hopedContribution: parsed.hopedContribution,
         disclosure: parsed.disclosure,
       });
+      collabResult = input.signal
+        ? await Promise.race([consult, waitForAbort(input.signal)])
+        : await consult;
       if (collabResult.exchangeId) exchangeIds.push(collabResult.exchangeId);
       return JSON.stringify({
         actualSuccess: collabResult.ok,
@@ -460,7 +536,6 @@ export async function runTalkTurn(input: {
     }
     if (call.name === 'delegate') {
       didDelegate = true;
-      calls += 1;
       return runDelegate(call.arguments);
     }
     return JSON.stringify({
@@ -503,12 +578,12 @@ export async function runTalkTurn(input: {
 
   const collabNow = asCollabResult(collabResult);
   if (collabNow && !didDelegate) {
-    const review = await input.chat({
+    const review = await chat({
       messages: [
         {
           role: 'system',
           content: [
-            '你是 2digime，正在独立验收另一次主体合作的返回。用人话向用户交付，不要展示协议词。',
+            '你是兔机米，正在独立验收另一次主体合作的返回。用人话向用户交付，不要展示协议词。',
             collabNow.ok
               ? '对方已真实回应并接受。判断：是否回答了原合作需求、是否可信、是否还缺内容、是否足够用于用户最终目标。'
               : '这次合作没有成立（对方拒绝、不可达或未收到）。判断：自己继续、换主体，或用人话告诉用户。不得把拒绝或未收到说成已经合作成功。',
@@ -545,39 +620,81 @@ export async function runTalkTurn(input: {
   }
 
   const continueWithTools = tools.length ? { tools } : {};
-  let current = await input.chat({
+  let current = await chat({
     messages,
     ...continueWithTools,
   });
   let toolRounds = 1;
   while (current.toolCalls?.length && toolRounds < MAX_TOOL_ROUNDS) {
+    throwIfAborted(input.signal);
     await appendToolRound(current);
     toolRounds += 1;
-    current = await input.chat({
+    current = await chat({
       messages,
       ...continueWithTools,
     });
   }
   if (current.toolCalls?.length) {
+    throwIfAborted(input.signal);
     await appendToolRound(current);
-    current = await input.chat({ messages });
+    current = await chat({ messages, ...continueWithTools });
+  }
+
+  const recoveryFacts = (extra: string) =>
+    [
+      extra,
+      `执行事实（runtime 权威，不得改写）：actualSuccess=${lastOk} capabilityId=${lastCapability || '（未指定）'} evidenceOnly=${lastEvidenceOnly}`,
+      lastFailureReason ? `failureReason=${lastFailureReason}` : '',
+      lastOutputs.length ? `outputs=${lastOutputs.join('；')}` : 'outputs=（无）',
+      thread.executions.length
+        ? `已尝试：${thread.executions.map((item) => `${item.capabilityId} actualSuccess=${item.ok}`).join('；')}`
+        : '',
+      `当前已连接：${input.agents.map((item) => item.id).join('、') || '无'}`,
+      '由你选择下一步：换已连接能力、改方案、用已有证据作答，或仅在只有用户知道时提问。不要默认再调刚失败的同一个能力。已授权工作目录不需要向用户再要路径。',
+    ].filter(Boolean).join('\n');
+
+  if (!lastOk && input.agents.length > 1 && !current.toolCalls?.length && toolRounds < MAX_TOOL_ROUNDS) {
+    throwIfAborted(input.signal);
+    messages.push({ role: 'system', content: recoveryFacts('上一轮未产生要求的真实效果，同一轮继续。') });
+    current = await chat({
+      messages,
+      ...continueWithTools,
+    });
+    if (current.toolCalls?.length) {
+      await appendToolRound(current);
+      toolRounds += 1;
+      while (current.toolCalls?.length && toolRounds < MAX_TOOL_ROUNDS) {
+        throwIfAborted(input.signal);
+        current = await chat({
+          messages,
+          ...continueWithTools,
+        });
+        if (!current.toolCalls?.length) break;
+        await appendToolRound(current);
+        toolRounds += 1;
+      }
+      if (current.toolCalls?.length) {
+        await appendToolRound(current);
+        current = await chat({ messages, ...continueWithTools });
+      }
+    }
   }
 
   let synthesized = String(current.text || '').trim();
 
   const reviewPrompt = (extra: string[]) =>
     [
-      '你是 2digime，正在独立验收本轮结果。不要把工具原文、来源清单或 stdout 原样丢给用户。',
+      '你是兔机米，正在独立验收本轮结果。不要把工具原文、来源清单或 stdout 原样丢给用户。',
       lastOk
         ? lastEvidenceOnly
           ? '外部检索只提供了证据。必须综合成对用户问题的最终答案；来源清单不是答案。'
-          : '执行已成功。判断：是否满足用户目标、内容是否合格、是否需要修订、如何向用户交付。若产生了文件，必须说明做了什么、结果在哪里、是否完成。'
-        : '执行已失败。判断：是否可换能力或重试、是否需要用户处理、如何用人话说明。不得宣称任务已完成，不得生成看起来完成的空结果。',
+          : '执行已成功。判断：是否满足用户目标、内容是否合格、是否需要继续、如何向用户交付。若产生了文件，必须说明做了什么、结果在哪里、是否完成。'
+        : '执行已失败或未产生声明的真实效果。判断：是否已用人话说明、是否还缺只有用户知道的信息。不得宣称任务已完成，不得生成看起来完成的空结果。',
       '只输出 JSON：{"deliver":true,"userReply":"...","askUser":"","openGoal":"","revision":""}',
       'userReply 必须是用户现在就能用的最终说明。禁止稍后再回答、重新整理后再说、后续分析为准。',
       'askUser 仅在数字之我与对话都无法补上、且只有用户知道时填写。',
-      'revision 仅在需要外部能力再做一次时填写完整新委托。',
-      `执行事实（runtime 权威，不得改写）：actualSuccess=${lastOk} evidenceOnly=${lastEvidenceOnly}`,
+      'revision 只描述还缺什么，不是指定再调哪一个能力。',
+      `执行事实（runtime 权威，不得改写）：actualSuccess=${lastOk} capabilityId=${lastCapability || ''} evidenceOnly=${lastEvidenceOnly}`,
       lastFailureReason ? `失败原因：${lastFailureReason}` : '',
       lastOutputs.length ? `已产生文件：${lastOutputs.join('；')}` : '未产生用户文件',
       `用户原话：${input.userText}`,
@@ -592,7 +709,6 @@ export async function runTalkTurn(input: {
   const settleJudgement = (
     judged: ReturnType<typeof parseReview>,
     draft: string,
-    allowRevision: boolean,
   ): ReturnType<typeof parseReview> => {
     let next = applyExecutionTruth(judged, {
       ok: lastOk,
@@ -603,8 +719,6 @@ export async function runTalkTurn(input: {
     if (next.deliver && isDeferredDelivery(reply)) {
       if (usableFinalText(draft)) {
         next = { deliver: true, userReply: draft };
-      } else if (allowRevision && !next.revision && lastInstruction) {
-        next = { ...next, deliver: false, revision: lastInstruction, userReply: '' };
       } else {
         next = {
           deliver: true,
@@ -627,45 +741,41 @@ export async function runTalkTurn(input: {
     return next;
   };
 
-  const review = await input.chat({
+  const review = await chat({
     messages: [{ role: 'system', content: reviewPrompt([]).join('\n') }],
   });
-  let judged = settleJudgement(parseReview(review.text), synthesized, true);
+  let judged = settleJudgement(parseReview(review.text), synthesized);
 
-  if (judged.revision && calls < 2 && input.agents.length) {
-    const toolContent = await runDelegate(
-      JSON.stringify({ instruction: judged.revision, capabilityId: lastCapability }),
-    );
+  if (judged.revision && input.agents.length && toolRounds < MAX_TOOL_ROUNDS) {
     messages.push({
-      role: 'assistant',
-      content: '',
-      tool_calls: [
-        {
-          id: 'revision_delegate',
-          type: 'function',
-          function: {
-            name: 'delegate',
-            arguments: JSON.stringify({ instruction: judged.revision, capabilityId: lastCapability }),
-          },
-        },
-      ],
+      role: 'system',
+      content: recoveryFacts(`还缺什么：${judged.revision}`),
     });
-    messages.push({ role: 'tool', tool_call_id: 'revision_delegate', content: toolContent });
-    const revised = await input.chat({
+    const recovered = await chat({
       messages,
       ...continueWithTools,
     });
-    if (revised.toolCalls?.length) {
-      await appendToolRound(revised);
-      const forced = await input.chat({ messages });
-      synthesized = String(forced.text || revised.text || '').trim();
+    if (recovered.toolCalls?.length) {
+      await appendToolRound(recovered);
+      toolRounds += 1;
+      const after = await chat({
+        messages,
+        ...continueWithTools,
+      });
+      if (after.toolCalls?.length) {
+        await appendToolRound(after);
+        const forced = await chat({ messages });
+        synthesized = String(forced.text || after.text || '').trim();
+      } else {
+        synthesized = String(after.text || recovered.text || '').trim();
+      }
     } else {
-      synthesized = String(revised.text || '').trim();
+      synthesized = String(recovered.text || '').trim();
     }
-    const second = await input.chat({
-      messages: [{ role: 'system', content: reviewPrompt(['这是修订后的再次验收。执行仍失败时不得宣称任务已完成。']).join('\n') }],
+    const second = await chat({
+      messages: [{ role: 'system', content: reviewPrompt(['这是继续之后的再次验收。执行仍失败时不得宣称任务已完成。']).join('\n') }],
     });
-    judged = settleJudgement(parseReview(second.text), synthesized, false);
+    judged = settleJudgement(parseReview(second.text), synthesized);
   }
 
   if (judged.deliver && isDeferredDelivery(judged.userReply)) {

@@ -8,20 +8,12 @@
   const USER_FACING_TASK_START_FAILED =
     "Digital Me 暂时无法开始这项任务，请重新打开应用后重试。";
 
-  const HELP_TOPIC_TITLES = {
-    chat: "对话",
-    work: "做事",
-    collab: "协作",
-    subject: "数字之我",
-    settings: "设置",
-  };
-
-  function applyHelpTopic(topic) {
-    const resolved = HELP_TOPIC_TITLES[topic] ? topic : "chat";
+  function applyHelpTopic(_topic) {
     const titleEl = document.getElementById("help-topic-title");
-    if (titleEl) titleEl.textContent = HELP_TOPIC_TITLES[resolved];
+    if (titleEl) titleEl.textContent = "日常使用这三个页面：与兔机米、数字之我、设置。";
     for (const node of document.querySelectorAll(".help-topic")) {
-      const show = node.getAttribute("data-help-topic") === resolved;
+      const topic = node.getAttribute("data-help-topic");
+      const show = topic === "chat" || topic === "subject" || topic === "settings";
       node.hidden = !show;
       if (show) node.removeAttribute("hidden");
       else node.setAttribute("hidden", "");
@@ -1196,7 +1188,7 @@
     }
     els.settingsTechBody.textContent = text.slice(0, 800);
     els.settingsTechDetail.hidden = false;
-    els.settingsTechDetail.removeAttribute("open");
+    els.settingsTechDetail.open = true;
   }
 
   function setConnectionStateLabel(label, tone) {
@@ -6638,18 +6630,19 @@
     const keptKey = els.modelApiKey ? els.modelApiKey.value : "";
     try {
       setConnectionStateLabel("正在检查", null);
-      showStatus(els.settingsStatus, "正在检查连接…");
+      showStatus(els.settingsStatus, "正在用已保存的连接探测（与对话相同）…");
       setSettingsTechDetail("");
-      const result = await api.testModelConnection({
-        baseUrl: (els.modelBaseUrl.value || "").trim(),
-        model: (els.modelId.value || "").trim(),
-        apiKey: (els.modelApiKey.value || "").trim() || undefined,
-        providerPreset: els.modelProvider.value,
-      });
+      const result = await api.testModelConnection({});
       if (els.modelApiKey) els.modelApiKey.value = keptKey;
-      if (result && result.ok) {
+      await refreshConnectionFromCapabilities();
+      const status = await api.getModelStatus();
+      const talkReady = !!(status && status.modelReady);
+      if (result && result.ok && talkReady) {
         setConnectionStateLabel("已连接", "ok");
-        showStatus(els.settingsStatus, "连接成功。");
+        showStatus(els.settingsStatus, "连接成功。对话使用同一配置。");
+      } else if (result && result.ok) {
+        setConnectionStateLabel("尚未确认（可测试连接）", null);
+        showStatus(els.settingsStatus, "探测有返回，但对话尚未使用该连接。请先保存。");
       } else {
         const reason = redactSecrets((result && result.reason) || "连接失败");
         setConnectionStateLabel("无法连接，请检查密钥或高级连接设置", "error");

@@ -183,17 +183,15 @@ function createCredentialOps(store, userDataPath) {
       await store.delete(providerCredentialKey(providerId));
       return { ok: true };
     },
-    testConnection: async (input = {}) => {
+    testConnection: async () => {
+      // 探测必须读已保存配置，与 Talk 同一事实源。未保存的表单值不能冒充已连接。
       const cfg = readModelConfig(userDataPath) || {};
-      const providerId =
-        String(input.providerId || cfg.providerId || "openai-compatible").trim() ||
-        "openai-compatible";
-      const baseUrl = String(input.baseUrl || cfg.baseUrl || "")
+      const providerId = String(cfg.providerId || "openai-compatible").trim() || "openai-compatible";
+      const baseUrl = String(cfg.baseUrl || "")
         .trim()
         .replace(/\/+$/, "");
-      const model = String(input.model || cfg.model || "").trim();
-      const apiKeyFromInput = String(input.apiKey || "").trim();
-      const apiKey = apiKeyFromInput || (await store.get(providerCredentialKey(providerId)));
+      const model = String(cfg.model || "").trim();
+      const apiKey = await store.get(providerCredentialKey(providerId));
       if (!apiKey || !baseUrl || !model) {
         throw new Error("请先填写并保存完整的模型连接信息");
       }

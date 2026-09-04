@@ -38,7 +38,7 @@ A normal AI agent is a generic, stateless model that answers whoever asks. Digit
 Download the **Windows x64 Preview ZIP** from the [Releases](https://github.com/zhongzhir/2digime/releases) page:
 
 1. Unzip anywhere.
-2. Double-click `DigitalMeV2.exe`. No installation needed.
+2. Double-click `兔机米.exe`. No installation needed.
 3. First open: go to **设置 (Settings)** and connect a model (bring your own API key). Until connected, talk and do will not pretend to work.
 4. Uninstall = delete the folder. Your key stays on your machine.
 

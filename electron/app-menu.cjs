@@ -14,13 +14,13 @@ function buildApplicationMenuTemplate(handlers) {
   const template = [];
   if (isMac()) {
     template.push({
-      label: app.name,
+      label: '兔机米',
       submenu: [
-        { role: 'about', label: `关于 ${app.name}` },
+        { role: 'about', label: '关于兔机米' },
         { type: 'separator' },
         { role: 'services', label: '服务' },
         { type: 'separator' },
-        { role: 'hide', label: `隐藏 ${app.name}` },
+        { role: 'hide', label: '隐藏兔机米' },
         { role: 'hideOthers', label: '隐藏其他' },
         { role: 'unhide', label: '显示全部' },
         { type: 'separator' },

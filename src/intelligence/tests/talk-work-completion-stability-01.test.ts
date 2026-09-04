@@ -379,3 +379,46 @@ test('E 连续多轮：上下文保留，上一轮工具不污染下一轮', asy
   assert.equal(second.view.turns.filter((t) => t.role === 'user').length, 2);
   await runtime.stop();
 });
+
+test('无工具路径：把答案推到稍后不得算完成', async () => {
+  const root = await tempDir('deferred');
+  const runtime = createDigitalMeRuntime({
+    documentCapability: 'fake',
+    registerOpenAiStub: false,
+    talkChat: async () => ({ text: '我稍后再回答这个问题。' }),
+    talkProfessionals: [searchAgent()],
+  });
+  const bus = createCommandBus(runtime);
+  const pkgDir = path.join(root, 'pkg');
+  await bus.invoke('subject.createPackage', { displayName: '完成语义', targetDir: pkgDir });
+  const talked = await bus.invoke('talk', { text: '水大约多少度沸腾？' });
+  const assistant = talked.view.turns.find((t) => t.role === 'assistant');
+  assert.match(String(assistant?.text || ''), /没能形成可用的最终结论/);
+  assert.equal(/稍后再回答/.test(String(assistant?.text || '')), false);
+  await runtime.stop();
+});
+
+test('无工具路径：工具证据原文不得冒充最终答案', async () => {
+  const root = await tempDir('leak');
+  const runtime = createDigitalMeRuntime({
+    documentCapability: 'fake',
+    registerOpenAiStub: false,
+    talkChat: async () => ({
+      text: [
+        '# 检索证据：openai',
+        '以下为公开来源摘录，只供 2digime 综合，不是给用户的最终答案。',
+        '- Example',
+        '  来源：https://example.com/openai',
+      ].join('\n'),
+    }),
+    talkProfessionals: [searchAgent()],
+  });
+  const bus = createCommandBus(runtime);
+  const pkgDir = path.join(root, 'pkg');
+  await bus.invoke('subject.createPackage', { displayName: '完成语义', targetDir: pkgDir });
+  const talked = await bus.invoke('talk', { text: '最近有什么新闻？' });
+  const assistant = talked.view.turns.find((t) => t.role === 'assistant');
+  assert.match(String(assistant?.text || ''), /没能形成可用的最终结论/);
+  assert.equal(/只供 2digime 综合/.test(String(assistant?.text || '')), false);
+  await runtime.stop();
+});

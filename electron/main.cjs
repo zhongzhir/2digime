@@ -9,6 +9,10 @@ const path = require("node:path");
 const fs = require("node:fs");
 const { pathToFileURL } = require("node:url");
 const { installApplicationMenu } = require("./app-menu.cjs");
+const DISPLAY_NAME = "兔机米";
+/** 本机配置目录名保持稳定，不随窗口显示名变化，避免保存的连接与 Talk 分裂。 */
+const USER_DATA_DIR_NAME = "digitalme-v2";
+app.setName(DISPLAY_NAME);
 const {
   ensureDefaultPackageAttached: ensureDefaultPackageAttachedCore,
   sanitizeCommandError,
@@ -21,6 +25,8 @@ function isElectronTestHarness() {
 
 if (process.env.DIGITALME_V2_USER_DATA) {
   app.setPath("userData", process.env.DIGITALME_V2_USER_DATA);
+} else {
+  app.setPath("userData", path.join(app.getPath("appData"), USER_DATA_DIR_NAME));
 }
 if (isElectronTestHarness()) {
   app.commandLine.appendSwitch("disable-gpu");
@@ -288,7 +294,7 @@ async function bootstrapRuntime() {
     ));
     const cfg = model.openaiCompatible;
     let talkTraceSeq = 0;
-    options.talkChat = async ({ messages, tools }) => {
+    options.talkChat = async ({ messages, tools, signal }) => {
       const apiKey = await model.secrets.get(
         providerCredentialKey(cfg.providerId || "openai-compatible"),
       );
@@ -299,6 +305,7 @@ async function bootstrapRuntime() {
         model: cfg.model,
         temperature: 0.2,
         timeoutMs: cfg.timeoutMs || 120000,
+        ...(signal ? { signal } : {}),
         ...(tools && tools.length ? { tools, toolChoice: "auto" } : {}),
       });
       talkTraceSeq += 1;
@@ -434,7 +441,7 @@ function createWindow(bootInfo) {
     height: isElectronTestHarness() ? 820 : 820,
     minWidth: isElectronTestHarness() ? 640 : 880,
     minHeight: 640,
-    title: "Digital Me",
+    title: DISPLAY_NAME,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,

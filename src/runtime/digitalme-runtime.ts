@@ -626,13 +626,14 @@ export class DigitalMeRuntime {
     });
     const runtime = understanding.runtime;
     if (!runtime?.enabled) return null;
-    return async ({ messages, tools }) => {
+    return async ({ messages, tools, signal }) => {
       const result = await runtime.chatComplete({
         messages,
         baseUrl: runtime.model.baseUrl,
         model: runtime.model.model,
         temperature: 0.2,
         ...(tools && tools.length ? { tools, toolChoice: 'auto' as const } : {}),
+        ...(signal ? { signal } : {}),
       });
       return {
         text: result.text,

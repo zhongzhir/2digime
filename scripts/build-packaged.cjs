@@ -107,7 +107,7 @@ function main() {
     buildId,
     gitHead: gitHead(),
     builtAt: new Date().toISOString(),
-    productName: "DigitalMeV2",
+    productName: "兔机米",
     entry: {
       packaged: "electron/main.cjs",
       dev: "electron/main.cjs",
@@ -146,10 +146,11 @@ function main() {
   fs.writeFileSync(path.join(staging, "build-meta.json"), `${JSON.stringify(meta, null, 2)}\n`, "utf8");
 
   const allFiles = walkFiles(staging);
-  const zip = allFiles.find((f) => /DigitalMeV2-.*-win-x64\.zip$/i.test(f));
+  const zip = allFiles.find((f) => /.*-win-x64\.zip$/i.test(f));
   const exe =
-    allFiles.find((f) => /DigitalMeV2\.exe$/i.test(path.basename(f)) && /win-unpacked/i.test(f)) ||
-    allFiles.find((f) => /DigitalMeV2\.exe$/i.test(path.basename(f)));
+    allFiles.find((f) => /兔机米\.exe$/i.test(path.basename(f)) && /win-unpacked/i.test(f)) ||
+    allFiles.find((f) => /兔机米\.exe$/i.test(path.basename(f))) ||
+    allFiles.find((f) => /\.exe$/i.test(path.basename(f)) && /win-unpacked/i.test(f));
   const asar = allFiles.find((f) => f.toLowerCase().endsWith(".asar"));
   const integrity = {
     buildId,

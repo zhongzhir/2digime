@@ -630,6 +630,24 @@ button.is-loading {
   margin-bottom: 10px;
 }
 
+.settings-optional {
+  margin: 14px 0 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.settings-optional > summary {
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 14px;
+}
+
+.settings-optional[open] > summary {
+  margin-bottom: 10px;
+}
+
 .settings-tech-detail {
   margin-top: 8px;
 }

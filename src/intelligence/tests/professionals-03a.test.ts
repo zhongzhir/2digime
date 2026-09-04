@@ -159,4 +159,41 @@ test('agentsFromRegistry 不再按 document 预筛选，也不把通用模型当
   const searchFiles = await fs.readdir(searchDir);
   assert.equal(searchFiles.includes('result.md'), false);
   assert.equal(/后续分析为准/.test(evidence.summary), false);
+  assert.match(blob, /当前公开网页|训练记忆可能过时/);
+});
+
+test('声明会写工作目录的能力：stdout 完成但无真实文件变化必须 ok=false', async () => {
+  const registry = new CapabilityRegistry();
+  registry.register(
+    stubAdapter(
+      baseReg({
+        id: 'cap_external_executor_codex',
+        kind: 'agent',
+        displayName: '代码执行能力',
+        outputArtifactTypes: ['code-change'],
+        permissions: ['filesystem_read', 'filesystem_write', 'network'],
+        adapter: { type: 'external-executor-cli', adapterId: 'adapter_external_executor_codex' },
+      }),
+      async () => ({
+        artifact: {
+          type: 'code-change',
+          title: '已完成',
+          payload: { kind: 'text', format: 'plain', text: 'Done. Files written.' },
+        },
+      }),
+    ),
+  );
+  const agents = agentsFromRegistry(registry, { subjectId: 'sub_1' });
+  const coding = agents.find((a) => a.id === 'cap_external_executor_codex');
+  assert.ok(coding);
+  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-prof-empty-'));
+  const result = await coding.run({
+    instruction: '写一个 hello.txt',
+    workDir,
+    signal: new AbortController().signal,
+  });
+  assert.equal(result.ok, false);
+  assert.match(String(result.failureReason || result.summary), /真实的用户文件|没有在授权目录/);
+  const names = await fs.readdir(workDir);
+  assert.equal(names.includes('result.md'), false);
 });

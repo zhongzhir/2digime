@@ -161,7 +161,7 @@ test('04 真实入口：导航 + A–E 同一交流', { timeout: 2_400_000 }, as
     })()`)) as { dir: string };
     const workBefore = await workStateFingerprint(locStart.dir);
 
-    assert.equal((await harness.page.locator('#nav-chat').innerText()).trim(), '与 2digime');
+    assert.equal((await harness.page.locator('#nav-chat').innerText()).trim(), '与兔机米');
     assert.equal(await harness.page.locator('#nav-subject').isVisible(), true);
     assert.equal(await harness.page.locator('#nav-settings').isVisible(), true);
     assert.equal(await harness.page.locator('#nav-work').isVisible().catch(() => false), false);

@@ -63,7 +63,7 @@ test('Electron：同一入口四场景（交流 / 做事 / 换说法 / 缺信息
 
     await openTalk(harness.page);
     const title = await harness.page.locator('#panel-chat .page-title').innerText();
-    assert.equal(title.includes('与 2digime'), true);
+    assert.equal(title.includes('与兔机米'), true);
 
     await sendTalk(harness.page, '你现在了解我什么？');
     let copy = await talkText(harness.page);

@@ -6,7 +6,7 @@ import type {
   Understanding,
 } from './types';
 
-const HEADLINE = '2digime 现在怎样理解我';
+const HEADLINE = '兔机米现在怎样理解我';
 
 function sourceLabel(item: Understanding): string {
   if (item.provenance.origin === 'user_statement') return '你亲口说的';
@@ -15,7 +15,7 @@ function sourceLabel(item: Understanding): string {
       ? `来自资料「${item.provenance.materialName}」`
       : '来自资料';
   }
-  return '2digime 的推断';
+  return '兔机米的推断';
 }
 
 function confirmationLabel(item: Understanding): string {

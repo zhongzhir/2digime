@@ -1,12 +1,19 @@
 'use strict';
 /**
- * 与 2digime：统一产品表面。只投影 talk 命令。
+ * 与兔机米：统一产品表面。只投影 talk 命令。
  */
 (function () {
   const pendingPaths = [];
+  const TALK_TIMEOUT_NOTICE = '请求超时，模型在限定时间内没有返回。可重试。';
 
   function api() {
     return window.digitalMe;
+  }
+
+  function talkUiDeadlineMs() {
+    const client = api();
+    const n = Number(client && client.talkUiDeadlineMs);
+    return Number.isFinite(n) && n > 0 ? n : 190_000;
   }
 
   function $(id) {
@@ -22,10 +29,16 @@
   function facingError(err) {
     const raw = String((err && err.message) || err || '').trim();
     if (!raw) return '这次没能完成。';
-    if (/codex/i.test(raw) && /HTTP|ECONN|ENOTFOUND|unavailable|不可用|403|404|timeout|超时/i.test(raw)) {
-      return '这次没有做成。Codex 当前不可用。';
+    if (/timeout after|请求超时|AbortError|ETIMEDOUT|TalkTimeout|超时/i.test(raw)) {
+      return TALK_TIMEOUT_NOTICE;
     }
-    if (/HTTP|status code|ECONN|ENOTFOUND|ETIMEDOUT|adapter|cap_|stack|ENOENT|Error invoking/i.test(raw)) {
+    if (/codex/i.test(raw) && /HTTP|ECONN|ENOTFOUND|unavailable|不可用|403|404/i.test(raw)) {
+      return '这次没有做成。代码执行能力当前不可用。';
+    }
+    if (/ECONN|ENOTFOUND|fetch failed|network/i.test(raw)) {
+      return '这次没能连上模型。请检查网络后重试。';
+    }
+    if (/HTTP|status code|adapter|cap_|stack|ENOENT|Error invoking/i.test(raw)) {
       return '这次没有做成。请稍后再试。';
     }
     return raw;
@@ -53,14 +66,14 @@
       el.setAttribute('hidden', '');
     }
     const title = document.querySelector('#panel-chat .page-title');
-    if (title) title.textContent = '与 2digime';
+    if (title) title.textContent = '与兔机米';
     const lead = document.querySelector('#panel-chat .page-lead');
     if (lead) lead.hidden = true;
     const label = document.querySelector('label[for="chat-input"]');
-    if (label) label.textContent = '告诉 2digime';
+    if (label) label.textContent = '告诉兔机米';
     const empty = $('chat-empty');
     if (empty && !empty.dataset.talkHint) {
-      empty.textContent = '告诉 2digime 一件事，或问我现在怎样理解你。';
+      empty.textContent = '告诉兔机米一件事，或问我现在怎样理解你。';
       empty.dataset.talkHint = '1';
     }
   }
@@ -170,7 +183,7 @@
       li.className = turn.role === 'user' ? 'chat-turn-user' : 'chat-turn-assistant';
       const role = document.createElement('p');
       role.className = 'talk-role';
-      role.textContent = turn.role === 'user' ? '用户' : '2digime';
+      role.textContent = turn.role === 'user' ? '用户' : '兔机米';
       li.appendChild(role);
       const p = document.createElement('p');
       p.className = 'chat-text';
@@ -197,7 +210,7 @@
         wait.setAttribute('data-talk-processing', '1');
         const waitRole = document.createElement('p');
         waitRole.className = 'talk-role';
-        waitRole.textContent = '2digime';
+        waitRole.textContent = '兔机米';
         wait.appendChild(waitRole);
         const waitText = document.createElement('p');
         waitText.className = 'chat-text';
@@ -255,15 +268,22 @@
         ? `${trimmed}\n\n（已附上 ${paths.map(basename).join('、')}）`
         : trimmed;
     renderView(lastView, { userText: pendingText });
+    let watchdog = 0;
     try {
       const payload = { text: trimmed };
       if (paths.length) payload.contextPaths = paths;
-      const result = await invokeTalk(payload);
+      const result = await Promise.race([
+        invokeTalk(payload),
+        new Promise((_, reject) => {
+          watchdog = setTimeout(() => reject(new Error(TALK_TIMEOUT_NOTICE)), talkUiDeadlineMs());
+        }),
+      ]);
       renderView(result && result.view);
     } catch (err) {
       renderView(lastView, { userText: pendingText, failed: true });
       setNotice(facingError(err));
     } finally {
+      if (watchdog) clearTimeout(watchdog);
       if (send) send.disabled = false;
     }
   }

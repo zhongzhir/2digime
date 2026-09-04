@@ -31,6 +31,9 @@ function pickSubjectFromCards(sys, skillHint) {
 }
 
 async function chat({ messages, tools }) {
+  if (process.env.DIGITALME_V2_TALK_STUB_HANG === '1') {
+    await new Promise(() => {});
+  }
   const sys = systemText(messages);
   if (/另一主体发来合作请求/.test(sys)) {
     const requestBlob = messages
@@ -54,6 +57,32 @@ async function chat({ messages, tools }) {
         decision: 'accept',
         reply: '可以提供工艺安全方面的补充判断。',
         contribution: '工艺安全初步判断：当前设想在低风险范围内可继续评估，需补齐物料平衡。',
+      }),
+    };
+  }
+
+  if (/正在独立验收本轮结果/.test(sys)) {
+    const failed = /actualSuccess=false/.test(sys);
+    const files = /已产生文件：([^\n]+)/.exec(sys);
+    if (failed) {
+      return {
+        text: JSON.stringify({
+          deliver: true,
+          userReply: '这件事还没有做成。外部能力这次没能完成。',
+          askUser: '',
+          openGoal: '',
+          revision: '',
+        }),
+      };
+    }
+    const where = files ? files[1] : '工作区';
+    return {
+      text: JSON.stringify({
+        deliver: true,
+        userReply: `已经完成。结果在 ${where}。`,
+        askUser: '',
+        openGoal: '',
+        revision: '',
       }),
     };
   }

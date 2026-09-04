@@ -7,8 +7,8 @@
 # paused as the Owner delivery format. Prefer win-unpacked ZIP.
 
 appId: local.digitalme.v2
-productName: DigitalMeV2
-copyright: Digital Me
+productName: 兔机米
+copyright: 兔机米
 directories:
   output: release-staging/_default
   buildResources: electron/build-resources
@@ -37,3 +37,20 @@ win:
         - x64
   artifactName: ${productName}-${version}-win-x64.zip
 # portable target intentionally omitted (paused for Owner delivery).
+mac:
+  artifactName: ${productName}-${version}-mac-${arch}.zip
+  target:
+    - target: zip
+      arch:
+        - x64
+  category: public.app-category.productivity
+  identity: null
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: electron/build-resources/entitlements.mac.plist
+  entitlementsInherit: electron/build-resources/entitlements.mac.plist
+  extendInfo:
+    CFBundleName: 兔机米
+    CFBundleDisplayName: 兔机米
+# Do not add NSRemindersUsageDescription / calendar entitlements.
+# Reminders TCC is triggered by EventKit usage or those Info.plist keys.

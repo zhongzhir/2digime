@@ -51,7 +51,11 @@ function isCallableProfessional(reg: CapabilityRegistration): boolean {
   if (reg.availability && reg.availability !== 'available') return false;
   if (reg.kind === 'model') return false;
   if (reg.adapter.type === 'openai-compatible-model') return false;
-  if (reg.id === 'cap_fake_document' || reg.adapter.adapterId === 'fake-document') return false;
+  if (reg.id === 'cap_fake_document' || reg.adapter.adapterId === 'fake-document') {
+    return (
+      process.env.DIGITALME_V2_UX_ACCEPTANCE === '1' || process.env.DIGITALME_V2_ELECTRON_TEST === '1'
+    );
+  }
   if (reg.codingExecution && reg.codingExecution.supportsAutomaticExecution === false) return false;
   return true;
 }
@@ -70,7 +74,7 @@ function naturalContract(reg: CapabilityRegistration): {
   const searchLike = net && !writes && reg.kind === 'tool';
 
   const effects: string[] = [];
-  if (writes) effects.push('会在本次授权目录里真实创建或修改文件');
+  if (writes) effects.push('会在本次已授权的工作目录里真实创建或修改文件，不要向用户再要路径');
   if (reads && !writes) effects.push('会读取授权范围内的文件');
   if (net && writes) effects.push('执行过程中可能访问网络');
   if (net && !writes) effects.push('会访问公开网络检索来源');
@@ -85,7 +89,7 @@ function naturalContract(reg: CapabilityRegistration): {
       '用已连接的同一套对话模型，在本次授权目录里做一次小改文件。有落盘效果，但不是独立专业代码 Agent。';
   } else if (searchLike) {
     description =
-      '检索公开网页并返回来源与摘录，供 2digime 综合成答。来源清单不是给用户的最终答案，也不会在磁盘上创建用户文件。';
+      '检索当前公开网页并返回来源与摘录，供核验训练记忆可能过时的公开事实。来源清单不是给用户的最终答案，也不会在磁盘上创建用户文件。';
   } else if (!description) {
     description = '可按完整文字目标执行一次已连接能力。';
   }
@@ -157,13 +161,19 @@ function wrapAdapter(
           : {}),
       };
       try {
+        if (runInput.signal.aborted) {
+          const err = new Error('aborted');
+          err.name = 'AbortError';
+          throw err;
+        }
+        const before = writes ? await snapshotWorkFiles(runInput.workDir) : new Map<string, WorkFileSnap>();
         const output = await adapter.execute(capInput, ctx);
         const payload = output.artifact.payload;
         let rawText = output.artifact.title || '';
         let outputPath: string | undefined;
         if (payload.kind === 'text') {
           rawText = payload.text;
-          if (!searchLike) {
+          if (!searchLike && !writes) {
             outputPath = path.join(runInput.workDir, 'result.md');
             await fs.writeFile(outputPath, rawText, 'utf8');
           }
@@ -171,7 +181,7 @@ function wrapAdapter(
           outputPath = payload.sourcePath;
           rawText = `已生成文件：${payload.sourcePath}`;
         } else if (payload.kind === 'bundle') {
-          const created = await listCreatedFiles(runInput.workDir);
+          const created = await listUserFacingFiles(runInput.workDir);
           outputPath = created[0];
           rawText = [
             output.artifact.title || '外部执行返回',
@@ -182,17 +192,31 @@ function wrapAdapter(
         } else {
           rawText = output.artifact.title || '外部执行返回';
         }
-        const userFiles = searchLike ? [] : await listCreatedFiles(runInput.workDir);
-        if (!searchLike) {
+        const after = await snapshotWorkFiles(runInput.workDir);
+        const changed = writes ? userFacingChanges(runInput.workDir, before, after) : [];
+        const userFiles = searchLike ? [] : writes ? changed : await listUserFacingFiles(runInput.workDir);
+        if (!searchLike && !writes) {
           if (!outputPath) outputPath = userFiles[0];
           if (userFiles.length && !/已产生文件/.test(rawText)) {
             rawText = `${rawText}\n已产生文件：${userFiles.join('；')}`;
           }
         }
+        if (writes && userFiles.length) {
+          outputPath = userFiles[0];
+          if (!/已产生文件/.test(rawText)) {
+            rawText = `${rawText}\n已产生文件：${userFiles.join('；')}`;
+          }
+        }
         const ok = searchLike
           ? Boolean(String(rawText || '').trim())
-          : payload.kind === 'text' || payload.kind === 'file' || userFiles.length > 0;
-        const failureReason = ok ? undefined : '外部执行没有在授权目录留下用户要的文件。';
+          : writes
+            ? userFiles.length > 0
+            : payload.kind === 'text' || payload.kind === 'file' || userFiles.length > 0;
+        const failureReason = ok
+          ? undefined
+          : writes
+            ? '外部执行没有在授权目录留下真实的用户文件或修改。'
+            : '外部执行没有在授权目录留下用户要的文件。';
         return {
           ok,
           summary: (ok ? rawText : `${failureReason}${rawText ? `\n${rawText}` : ''}`).slice(0, 4000),
@@ -203,8 +227,16 @@ function wrapAdapter(
           rawText,
         };
       } catch (err) {
+        if (
+          (err instanceof Error && err.name === 'AbortError') ||
+          runInput.signal.aborted
+        ) {
+          const abort = err instanceof Error && err.name === 'AbortError' ? err : new Error('aborted');
+          abort.name = 'AbortError';
+          throw abort;
+        }
         if (!searchLike) {
-          const userFiles = await listCreatedFiles(runInput.workDir);
+          const userFiles = await listUserFacingFiles(runInput.workDir);
           const firstFile = userFiles[0];
           if (firstFile) {
             return {
@@ -233,10 +265,15 @@ function wrapAdapter(
   };
 }
 
-async function listCreatedFiles(dir: string): Promise<string[]> {
-  const out: string[] = [];
-  const walk = async (cur: string, depth: number): Promise<void> => {
-    if (depth > 4) return;
+type WorkFileSnap = { size: number; mtimeMs: number };
+
+function isSkippedWorkName(name: string): boolean {
+  return name === 'node_modules' || name === 'external-execution';
+}
+
+async function snapshotWorkFiles(dir: string): Promise<Map<string, WorkFileSnap>> {
+  const out = new Map<string, WorkFileSnap>();
+  const walk = async (cur: string): Promise<void> => {
     let ents;
     try {
       ents = await fs.readdir(cur, { withFileTypes: true });
@@ -244,13 +281,41 @@ async function listCreatedFiles(dir: string): Promise<string[]> {
       return;
     }
     for (const ent of ents) {
-      if (ent.name === 'external-execution' || ent.name === 'node_modules') continue;
+      if (isSkippedWorkName(ent.name)) continue;
       const p = path.join(cur, ent.name);
-      if (ent.isDirectory()) await walk(p, depth + 1);
-      else out.push(p);
+      if (ent.isDirectory()) await walk(p);
+      else {
+        try {
+          const st = await fs.stat(p);
+          out.set(p, { size: st.size, mtimeMs: st.mtimeMs });
+        } catch {
+          /* ignore */
+        }
+      }
     }
   };
-  await walk(dir, 0);
+  await walk(dir);
+  return out;
+}
+
+function userFacingChanges(
+  workDir: string,
+  before: Map<string, WorkFileSnap>,
+  after: Map<string, WorkFileSnap>,
+): string[] {
+  const changed: string[] = [];
+  for (const [file, snap] of after) {
+    const prev = before.get(file);
+    if (!prev || prev.size !== snap.size || prev.mtimeMs !== snap.mtimeMs) changed.push(file);
+  }
+  const preferred = changed.filter((p) => /\.(md|txt)$/i.test(p));
+  const rest = changed.filter((p) => !preferred.includes(p));
+  return preferred.concat(rest).filter((p) => p.startsWith(workDir));
+}
+
+async function listUserFacingFiles(dir: string): Promise<string[]> {
+  const snap = await snapshotWorkFiles(dir);
+  const out = [...snap.keys()];
   const preferred = out.filter((p) => /\.(md|txt)$/i.test(p));
   return preferred.length ? preferred.concat(out.filter((p) => !preferred.includes(p))) : out;
 }

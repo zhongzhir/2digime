@@ -47,7 +47,7 @@ async function assertProductNav(page: Page): Promise<void> {
   await page.locator('#panel-chat').waitFor({ state: 'visible', timeout: 20_000 });
   await page.locator('#nav-subject').waitFor({ state: 'visible', timeout: 10_000 });
   await page.locator('#nav-settings').waitFor({ state: 'visible', timeout: 10_000 });
-  assert.equal((await navChat.innerText()).trim(), '与 2digime');
+  assert.equal((await navChat.innerText()).trim(), '与兔机米');
   assert.equal(await page.locator('#nav-work').isVisible().catch(() => false), false);
   assert.equal(await page.locator('#nav-collab').isVisible().catch(() => false), false);
   assert.equal(await page.locator('#panel-work').isVisible().catch(() => false), false);
@@ -90,12 +90,26 @@ test('Electron：统一产品表面导航与同一入口 A/B/C/D/E', { timeout: 
       timeout: 20_000,
     });
 
+    await harness.page.locator('#nav-chat').click();
+    await assertProductNav(harness.page);
+
     await harness.page.locator('#nav-settings').click();
     await harness.page.locator('#view-settings').waitFor({ state: 'visible', timeout: 15_000 });
     await harness.page.locator('#btn-settings-back').click();
     await harness.page.locator('#view-shell').waitFor({ state: 'visible', timeout: 15_000 });
-    await harness.page.locator('#panel-subject').waitFor({ state: 'visible', timeout: 15_000 });
     await harness.page.locator('#nav-chat').click();
+    await assertProductNav(harness.page);
+
+    await harness.page.locator('#btn-open-help').click();
+    await harness.page.locator('#view-help').waitFor({ state: 'visible', timeout: 10_000 });
+    const help = await harness.page.locator('#view-help').innerText();
+    assert.match(help, /与兔机米/);
+    assert.match(help, /数字之我/);
+    assert.match(help, /设置/);
+    assert.equal(help.includes('转为任务'), false);
+    assert.equal(help.includes('点「转为任务」'), false);
+    await harness.page.locator('#btn-help-back').click();
+    await harness.page.locator('#view-shell').waitFor({ state: 'visible', timeout: 10_000 });
     await assertProductNav(harness.page);
 
     await sendTalk(harness.page, '你现在了解我什么？');

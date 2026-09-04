@@ -75,7 +75,7 @@ test('A 普通交流不调用专业能力，并使用 Digital Self', async () =>
       async ({ messages }) => {
         const sys = String(messages[0]?.content || '');
         assert.match(sys, /喜欢早起处理事情/);
-        assert.match(sys, /你是用户的 2digime，负责理解、编排与验收/);
+        assert.match(sys, /你是用户的兔机米，负责理解、编排与验收/);
         assert.equal(sys.includes('GrowthEvent'), false);
         assert.equal(/WorkIntent|outputFamily/.test(sys), false);
         return { text: '你喜欢早起处理事情。这是我现在对你的理解。' };

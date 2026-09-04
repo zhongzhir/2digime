@@ -34,7 +34,7 @@ function findZip(staging) {
     for (const name of fs.readdirSync(dir)) {
       const full = path.join(dir, name);
       if (fs.statSync(full).isDirectory()) stack.push(full);
-      else if (/DigitalMeV2-.*-win-x64\.zip$/i.test(name)) return full;
+      else if (/兔机米-.*-win-x64\.zip$/i.test(name) || /.*-win-x64\.zip$/i.test(name)) return full;
     }
   }
   return null;
@@ -48,7 +48,7 @@ function findExe(dir) {
       const full = path.join(cur, name);
       const st = fs.statSync(full);
       if (st.isDirectory()) stack.push(full);
-      else if (/DigitalMeV2\.exe$/i.test(name)) return full;
+      else if (/兔机米\.exe$/i.test(name) || /\.exe$/i.test(name) && /win-unpacked/i.test(full)) return full;
     }
   }
   return null;

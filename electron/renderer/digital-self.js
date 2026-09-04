@@ -102,7 +102,7 @@
 
   function renderView(view) {
     const headline = $('ds-headline');
-    if (headline) headline.textContent = (view && view.headline) || '2digime 现在怎样理解我';
+    if (headline) headline.textContent = (view && view.headline) || '兔机米现在怎样理解我';
     setNotice(view && view.notice ? view.notice : '');
     const groupsEl = $('ds-groups');
     const emptyEl = $('ds-empty');
