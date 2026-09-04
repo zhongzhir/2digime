@@ -84,7 +84,8 @@ function naturalContract(reg: CapabilityRegistration): {
     description =
       '用已连接的同一套对话模型，在本次授权目录里做一次小改文件。有落盘效果，但不是独立专业代码 Agent。';
   } else if (searchLike) {
-    description = '检索公开网页并整理来源。不会在磁盘上创建或修改项目文件。';
+    description =
+      '检索公开网页并返回来源与摘录，供 2digime 综合成答。来源清单不是给用户的最终答案，也不会在磁盘上创建用户文件。';
   } else if (!description) {
     description = '可按完整文字目标执行一次已连接能力。';
   }
@@ -109,6 +110,8 @@ function wrapAdapter(
   const reg = adapter.registration;
   const contract = naturalContract(reg);
   const writes = (reg.permissions || []).includes('filesystem_write');
+  const searchLike =
+    (reg.permissions || []).includes('network') && !writes && reg.kind === 'tool';
   const artifactType = reg.outputArtifactTypes[0] || 'document';
   return {
     id: reg.id,
@@ -160,8 +163,10 @@ function wrapAdapter(
         let outputPath: string | undefined;
         if (payload.kind === 'text') {
           rawText = payload.text;
-          outputPath = path.join(runInput.workDir, 'result.md');
-          await fs.writeFile(outputPath, rawText, 'utf8');
+          if (!searchLike) {
+            outputPath = path.join(runInput.workDir, 'result.md');
+            await fs.writeFile(outputPath, rawText, 'utf8');
+          }
         } else if (payload.kind === 'file') {
           outputPath = payload.sourcePath;
           rawText = `已生成文件：${payload.sourcePath}`;
@@ -177,35 +182,39 @@ function wrapAdapter(
         } else {
           rawText = output.artifact.title || '外部执行返回';
         }
-        const userFiles = await listCreatedFiles(runInput.workDir);
-        if (!outputPath) outputPath = userFiles[0];
-        if (userFiles.length && !/已产生文件/.test(rawText)) {
-          rawText = `${rawText}\n已产生文件：${userFiles.join('；')}`;
+        const userFiles = searchLike ? [] : await listCreatedFiles(runInput.workDir);
+        if (!searchLike) {
+          if (!outputPath) outputPath = userFiles[0];
+          if (userFiles.length && !/已产生文件/.test(rawText)) {
+            rawText = `${rawText}\n已产生文件：${userFiles.join('；')}`;
+          }
         }
-        const ok =
-          payload.kind === 'text' ||
-          payload.kind === 'file' ||
-          userFiles.length > 0;
+        const ok = searchLike
+          ? Boolean(String(rawText || '').trim())
+          : payload.kind === 'text' || payload.kind === 'file' || userFiles.length > 0;
         const failureReason = ok ? undefined : '外部执行没有在授权目录留下用户要的文件。';
         return {
           ok,
           summary: (ok ? rawText : `${failureReason}${rawText ? `\n${rawText}` : ''}`).slice(0, 4000),
           ...(failureReason ? { failureReason } : {}),
           producedOutputs: userFiles,
-          ...(outputPath ? { outputPath } : {}),
+          ...(outputPath && !searchLike ? { outputPath } : {}),
+          ...(searchLike ? { evidenceOnly: true } : {}),
           rawText,
         };
       } catch (err) {
-        const userFiles = await listCreatedFiles(runInput.workDir);
-        const firstFile = userFiles[0];
-        if (firstFile) {
-          return {
-            ok: true,
-            summary: `已产生文件：${userFiles.join('；')}`.slice(0, 4000),
-            producedOutputs: userFiles,
-            outputPath: firstFile,
-            rawText: userFiles.join('\n'),
-          };
+        if (!searchLike) {
+          const userFiles = await listCreatedFiles(runInput.workDir);
+          const firstFile = userFiles[0];
+          if (firstFile) {
+            return {
+              ok: true,
+              summary: `已产生文件：${userFiles.join('；')}`.slice(0, 4000),
+              producedOutputs: userFiles,
+              outputPath: firstFile,
+              rawText: userFiles.join('\n'),
+            };
+          }
         }
         const failureReason = err instanceof Error ? err.message : String(err);
         const actionable =

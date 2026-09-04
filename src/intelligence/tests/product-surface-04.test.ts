@@ -54,6 +54,10 @@ test('产生文件时结果卡标题是文件名', async () => {
         text: '',
         toolCalls: [{ id: 'c1', name: 'delegate', arguments: '{"instruction":"写 README"}' }],
       }),
+      async ({ messages }) => {
+        assert.equal(messages.some((m) => m.role === 'tool'), true);
+        return { text: 'README 已经写好。' };
+      },
       async () => ({
         text: JSON.stringify({
           deliver: true,

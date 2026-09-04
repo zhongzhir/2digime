@@ -112,6 +112,12 @@ test('B 需要行动时模型调用专业能力，2digime 验收后再交付', a
         ],
       }),
       async ({ messages }) => {
+        assert.equal(messages.some((m) => m.role === 'tool'), true);
+        const tool = messages.filter((m) => m.role === 'tool').pop();
+        assert.match(String(tool?.content || ''), /actualSuccess|已写下说明/);
+        return { text: '备忘已经写好，三件待办都在里面。' };
+      },
+      async ({ messages }) => {
         const sys = String(messages[0]?.content || '');
         assert.match(sys, /独立验收|验收/);
         assert.match(sys, /写一份明天上午/);
@@ -163,6 +169,10 @@ test('C 换一种说法仍由模型决定调用，不增加路由', async () => 
           },
         ],
       }),
+      async ({ messages }) => {
+        assert.equal(messages.some((m) => m.role === 'tool'), true);
+        return { text: '备忘录已经写好。' };
+      },
       async () => ({
         text: JSON.stringify({
           deliver: true,
@@ -240,6 +250,10 @@ test('执行失败时 review 不能把结果改写成成功', async () => {
           },
         ],
       }),
+      async ({ messages }) => {
+        assert.equal(messages.some((m) => m.role === 'tool'), true);
+        return { text: '已在工作区创建 README.md，并写入了项目简短说明。' };
+      },
       async () => ({
         text: JSON.stringify({
           deliver: true,

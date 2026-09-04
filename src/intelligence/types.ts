@@ -73,6 +73,11 @@ export interface ProfessionalResult {
   producedOutputs?: string[];
   outputPath?: string;
   rawText?: string;
+  /**
+   * 运行态：这次返回只是给 2digime 综合用的证据，不是用户交付物。
+   * 不落盘、不作为 Thread 完成条件。
+   */
+  evidenceOnly?: boolean;
 }
 
 /** 统一调用接口；产品上这是外部能力/资源，不必都是 Agent。 */

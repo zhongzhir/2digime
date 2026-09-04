@@ -51,11 +51,16 @@ function searchRegistration(input: {
   };
 }
 
-function formatSearchDocument(
+function formatSearchEvidence(
   query: string,
   sources: Array<{ title?: string; url?: string; snippet?: string }>,
 ): string {
-  const lines: string[] = [`# 搜索要点：${query.slice(0, 80)}`, ''];
+  const lines: string[] = [
+    `# 检索证据：${query.slice(0, 80)}`,
+    '',
+    '以下为公开来源摘录，只供 2digime 综合，不是给用户的最终答案。',
+    '',
+  ];
   if (sources.length === 0) {
     lines.push('（本次未检索到可核对的外部来源。）');
     return lines.join('\n');
@@ -65,8 +70,6 @@ function formatSearchDocument(
     if (s.url) lines.push(`  来源：${s.url}`);
     if (s.snippet) lines.push(`  摘要：${s.snippet.slice(0, 200)}`);
   }
-  lines.push('');
-  lines.push('> 提示：以上为检索来源清单，供进一步阅读；综合结论以 2digime 后续分析为准。');
   return lines.join('\n');
 }
 
@@ -92,7 +95,7 @@ export function createSearchCapabilityAdapter(input: {
         throw err;
       }
       if (!hasUsableWebEvidence(sources)) throw unusableSearchError();
-      const text = formatSearchDocument(query, sources);
+      const text = formatSearchEvidence(query, sources);
       return {
         artifact: {
           type: 'document',

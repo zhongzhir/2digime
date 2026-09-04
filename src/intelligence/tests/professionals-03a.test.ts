@@ -143,4 +143,20 @@ test('agentsFromRegistry 不再按 document 预筛选，也不把通用模型当
   const readme = path.join(workDir, 'README.md');
   assert.equal(await fs.readFile(readme, 'utf8'), 'gate');
   assert.equal(result.outputPath, readme);
+
+  const search = agents.find((a) => a.id === 'cap_baseline_web_search');
+  assert.ok(search);
+  const searchDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-prof-search-'));
+  const evidence = await search.run({
+    instruction: 'OpenAI 今天发布的新模型叫什么名字？',
+    workDir: searchDir,
+    signal: new AbortController().signal,
+  });
+  assert.equal(evidence.evidenceOnly, true);
+  assert.equal(evidence.ok, true);
+  assert.equal(evidence.producedOutputs?.length || 0, 0);
+  assert.equal(evidence.outputPath, undefined);
+  const searchFiles = await fs.readdir(searchDir);
+  assert.equal(searchFiles.includes('result.md'), false);
+  assert.equal(/后续分析为准/.test(evidence.summary), false);
 });

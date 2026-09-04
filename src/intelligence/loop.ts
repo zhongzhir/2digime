@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import * as path from 'node:path';
-import type { ChatMessage, ChatToolDefinition } from '../infrastructure/model-http';
+import type { ChatMessage, ChatToolCall, ChatToolDefinition } from '../infrastructure/model-http';
 import { describeProfessionals } from './professionals';
 import type {
   ProfessionalAgent,
@@ -19,7 +19,7 @@ const DELEGATE_TOOL: ChatToolDefinition = {
   function: {
     name: 'delegate',
     description:
-      '当已连接专业能力能够实际执行用户目标，而你仅靠对话无法完成该执行时调用。不要用它来闲聊或回答关于用户自己的问题。不要假装执行不存在的能力。',
+      '当已连接专业能力能够实际执行用户目标，而你仅靠对话无法完成该执行时调用。工具返回的是证据或执行事实，调用后必须综合成给用户的最终答案。不要把工具原文交给用户就算完成。不要用它来闲聊或回答关于用户自己的问题。不要假装执行不存在的能力。',
     parameters: {
       type: 'object',
       properties: {
@@ -177,7 +177,7 @@ function parseReview(text: string): {
     const openGoal = String(parsed.openGoal || '').trim();
     return {
       deliver: parsed.deliver !== false && !askUser,
-      userReply: userReply || (askUser ? askUser : '已经看过结果。'),
+      userReply: userReply || askUser || '',
       ...(askUser ? { askUser } : {}),
       ...(openGoal ? { openGoal } : {}),
       ...(revision ? { revision } : {}),
@@ -219,6 +219,30 @@ function applyExecutionTruth(
   return next;
 }
 
+/** 结束本轮却把答案推到「稍后」——这不是完成。 */
+function isDeferredDelivery(text: string): boolean {
+  const t = String(text || '');
+  return /稍后再(回答|答复|说明)|稍后.*再(回答|整理)|重新整理后再|会重新整理后再|后续分析为准|等(我|稍后).*再(回答|整理)|先不回答/.test(
+    t,
+  );
+}
+
+function usableFinalText(text: string): boolean {
+  const t = String(text || '').trim();
+  if (!t || isDeferredDelivery(t)) return false;
+  if (t === '已经看过结果。' || t === '已经看过结果') return false;
+  return true;
+}
+
+const MAX_TOOL_ROUNDS = 3;
+
+const INCOMPLETE_SYNTHESIS_NOTICE =
+  '这一轮没能形成可用的最终结论。外部能力有返回，但还不足以可靠回答你的问题。请再问一次，或把问题说得更具体。';
+
+function asCollabResult(value: ConsultResult | null): ConsultResult | null {
+  return value;
+}
+
 export async function runTalkTurn(input: {
   thread: TalkThread;
   userText: string;
@@ -258,6 +282,8 @@ export async function runTalkTurn(input: {
     '当已连接专业能力能够实际执行用户目标，而你仅靠对话无法完成该执行时，应调用该能力；不要假装执行不存在的能力。',
     '你根据当前数字之我理解用户；不要编造未写入的本人事实。',
     '交流、判断、解释用普通人语言直接回复，不要调用工具。',
+    '工具返回的是证据或执行事实，不是给用户的最终答案。若调用了工具，必须在同一轮综合成用户能直接使用的结论。',
+    '禁止把来源清单、redirect 或未完成草稿当成最终回复；禁止说稍后回答、重新整理后再说或后续分析为准并结束本轮。',
     '不要问用户这是聊天还是做事，不要让用户选择 Agent、任务类型、workflow、协作者、协议或分工。',
     '不要向用户展示 Job、capability、adapter、stage 或内部错误原文。',
     '缺信息时：先看数字之我和当前对话是否已有；只有用户才能提供时，用你自己的口吻问一句，然后根据对话继续。',
@@ -316,6 +342,7 @@ export async function runTalkTurn(input: {
   let lastOk = false;
   let lastFailureReason = '';
   let lastOutputs: string[] = [];
+  let lastEvidenceOnly = false;
   let calls = 0;
   let didDelegate = false;
   let collabResult: ConsultResult | null = null;
@@ -331,9 +358,11 @@ export async function runTalkTurn(input: {
       lastOutputs = [];
       lastSummary = lastFailureReason;
       lastPath = undefined;
+      lastEvidenceOnly = false;
       return JSON.stringify({
         actualSuccess: false,
         ok: false,
+        role: 'execution',
         failureReason: lastFailureReason,
         producedOutputs: [],
         summary: lastFailureReason,
@@ -361,9 +390,12 @@ export async function runTalkTurn(input: {
     }
     lastOk = result.ok;
     lastFailureReason = result.failureReason || (result.ok ? '' : result.summary);
-    lastOutputs = result.producedOutputs || (result.outputPath ? [result.outputPath] : []);
+    lastEvidenceOnly = result.evidenceOnly === true;
+    lastOutputs = lastEvidenceOnly
+      ? []
+      : result.producedOutputs || (result.outputPath ? [result.outputPath] : []);
     lastSummary = result.summary;
-    lastPath = result.ok ? result.outputPath : undefined;
+    lastPath = result.ok && !lastEvidenceOnly ? result.outputPath : undefined;
     const rec: TalkExecution = {
       id: execId,
       at: input.now,
@@ -374,36 +406,24 @@ export async function runTalkTurn(input: {
       summary: result.summary,
       ...(lastFailureReason ? { failureReason: lastFailureReason } : {}),
       ...(lastOutputs.length ? { producedOutputs: lastOutputs } : {}),
-      ...(result.outputPath && result.ok ? { outputPath: result.outputPath } : {}),
+      ...(lastPath ? { outputPath: lastPath } : {}),
     };
     thread.executions.push(rec);
     executionIds.push(execId);
     return JSON.stringify({
       actualSuccess: result.ok,
       ok: result.ok,
+      role: lastEvidenceOnly ? 'evidence' : 'execution',
       summary: result.summary.slice(0, 4000),
       ...(lastFailureReason ? { failureReason: lastFailureReason } : {}),
       producedOutputs: lastOutputs,
-      ...(result.outputPath && result.ok ? { outputPath: result.outputPath } : {}),
+      ...(lastPath ? { outputPath: lastPath } : {}),
     });
   };
 
-  const pushToolCall = (call: { id: string; name: string; arguments: string }, toolContent: string) => {
-    messages.push({
-      role: 'assistant',
-      content: first.text || '',
-      tool_calls: [
-        {
-          id: call.id,
-          type: 'function',
-          function: { name: call.name, arguments: call.arguments },
-        },
-      ],
-    });
-    messages.push({ role: 'tool', tool_call_id: call.id, content: toolContent });
-  };
+  type ModelToolCall = { id: string; name: string; arguments: string };
 
-  for (const call of first.toolCalls) {
+  const runOneTool = async (call: ModelToolCall): Promise<string> => {
     if (call.name === 'consult_subject') {
       const parsed = parseConsultArgs(call.arguments);
       if (!input.subjectCollab) {
@@ -415,8 +435,7 @@ export async function runTalkTurn(input: {
           reply: '当前没有可联系的其他主体。',
           failureReason: '当前没有可联系的其他主体。',
         };
-        pushToolCall(call, JSON.stringify(collabResult));
-        continue;
+        return JSON.stringify(collabResult);
       }
       collabResult = await input.subjectCollab.consult({
         threadId: thread.threadId,
@@ -429,43 +448,77 @@ export async function runTalkTurn(input: {
         disclosure: parsed.disclosure,
       });
       if (collabResult.exchangeId) exchangeIds.push(collabResult.exchangeId);
-      pushToolCall(
-        call,
-        JSON.stringify({
-          actualSuccess: collabResult.ok,
-          received: collabResult.received,
-          decision: collabResult.decision || '',
-          reply: collabResult.reply,
-          contribution: collabResult.contribution || '',
-          disclosed: collabResult.disclosed,
-          ...(collabResult.failureReason ? { failureReason: collabResult.failureReason } : {}),
-        }),
-      );
-      continue;
+      return JSON.stringify({
+        actualSuccess: collabResult.ok,
+        received: collabResult.received,
+        decision: collabResult.decision || '',
+        reply: collabResult.reply,
+        contribution: collabResult.contribution || '',
+        disclosed: collabResult.disclosed,
+        ...(collabResult.failureReason ? { failureReason: collabResult.failureReason } : {}),
+      });
     }
-    if (call.name !== 'delegate') continue;
-    didDelegate = true;
-    calls += 1;
-    const toolContent = await runDelegate(call.arguments);
-    pushToolCall(call, toolContent);
-  }
+    if (call.name === 'delegate') {
+      didDelegate = true;
+      calls += 1;
+      return runDelegate(call.arguments);
+    }
+    return JSON.stringify({
+      actualSuccess: false,
+      ok: false,
+      failureReason: '当前没有这个外部能力。',
+      summary: '当前没有这个外部能力。',
+    });
+  };
 
-  if (collabResult && !didDelegate) {
+  const appendToolRound = async (
+    response: { text?: string; toolCalls?: ModelToolCall[] },
+  ): Promise<void> => {
+    const roundCalls = response.toolCalls || [];
+    if (!roundCalls.length) return;
+    const contents: string[] = [];
+    for (const call of roundCalls) {
+      contents.push(await runOneTool(call));
+    }
+    const toolCalls: ChatToolCall[] = roundCalls.map((call) => ({
+      id: call.id,
+      type: 'function',
+      function: { name: call.name, arguments: call.arguments },
+    }));
+    messages.push({
+      role: 'assistant',
+      content: response.text || '',
+      tool_calls: toolCalls,
+    });
+    roundCalls.forEach((call, index) => {
+      messages.push({
+        role: 'tool',
+        tool_call_id: call.id,
+        content: contents[index] || '',
+      });
+    });
+  };
+
+  await appendToolRound(first);
+
+  const collabNow = asCollabResult(collabResult);
+  if (collabNow && !didDelegate) {
     const review = await input.chat({
       messages: [
         {
           role: 'system',
           content: [
             '你是 2digime，正在独立验收另一次主体合作的返回。用人话向用户交付，不要展示协议词。',
-            collabResult.ok
+            collabNow.ok
               ? '对方已真实回应并接受。判断：是否回答了原合作需求、是否可信、是否还缺内容、是否足够用于用户最终目标。'
               : '这次合作没有成立（对方拒绝、不可达或未收到）。判断：自己继续、换主体，或用人话告诉用户。不得把拒绝或未收到说成已经合作成功。',
             '只输出 JSON：{"deliver":true,"userReply":"...","askUser":"","openGoal":"","revision":""}',
-            `合作事实（runtime 权威，不得改写）：actualSuccess=${collabResult.ok} received=${collabResult.received} decision=${collabResult.decision || ''}`,
-            collabResult.failureReason ? `失败原因：${collabResult.failureReason}` : '',
-            `实际披露：${collabResult.disclosed.slice(0, 2000)}`,
-            `对方回复：${collabResult.reply}`,
-            collabResult.contribution ? `对方贡献：${collabResult.contribution}` : '',
+            '必须在本轮给出可用结论或明确失败。禁止稍后再回答、重新整理后再说、后续分析为准。',
+            `合作事实（runtime 权威，不得改写）：actualSuccess=${collabNow.ok} received=${collabNow.received} decision=${collabNow.decision || ''}`,
+            collabNow.failureReason ? `失败原因：${collabNow.failureReason}` : '',
+            `实际披露：${collabNow.disclosed.slice(0, 2000)}`,
+            `对方回复：${collabNow.reply}`,
+            collabNow.contribution ? `对方贡献：${collabNow.contribution}` : '',
             `用户原话：${input.userText}`,
             `数字之我：\n${input.selfContext}`,
           ]
@@ -474,7 +527,7 @@ export async function runTalkTurn(input: {
         },
       ],
     });
-    const judged = applyCollabTruth(parseReview(review.text), collabResult);
+    const judged = applyCollabTruth(parseReview(review.text), collabNow);
     const assistantText = (judged.askUser || judged.userReply).trim();
     thread.turns.push({
       id: `turn_${randomUUID()}`,
@@ -491,68 +544,146 @@ export async function runTalkTurn(input: {
     return thread;
   }
 
+  const continueWithTools = tools.length ? { tools } : {};
+  let current = await input.chat({
+    messages,
+    ...continueWithTools,
+  });
+  let toolRounds = 1;
+  while (current.toolCalls?.length && toolRounds < MAX_TOOL_ROUNDS) {
+    await appendToolRound(current);
+    toolRounds += 1;
+    current = await input.chat({
+      messages,
+      ...continueWithTools,
+    });
+  }
+  if (current.toolCalls?.length) {
+    await appendToolRound(current);
+    current = await input.chat({ messages });
+  }
+
+  let synthesized = String(current.text || '').trim();
+
+  const reviewPrompt = (extra: string[]) =>
+    [
+      '你是 2digime，正在独立验收本轮结果。不要把工具原文、来源清单或 stdout 原样丢给用户。',
+      lastOk
+        ? lastEvidenceOnly
+          ? '外部检索只提供了证据。必须综合成对用户问题的最终答案；来源清单不是答案。'
+          : '执行已成功。判断：是否满足用户目标、内容是否合格、是否需要修订、如何向用户交付。若产生了文件，必须说明做了什么、结果在哪里、是否完成。'
+        : '执行已失败。判断：是否可换能力或重试、是否需要用户处理、如何用人话说明。不得宣称任务已完成，不得生成看起来完成的空结果。',
+      '只输出 JSON：{"deliver":true,"userReply":"...","askUser":"","openGoal":"","revision":""}',
+      'userReply 必须是用户现在就能用的最终说明。禁止稍后再回答、重新整理后再说、后续分析为准。',
+      'askUser 仅在数字之我与对话都无法补上、且只有用户知道时填写。',
+      'revision 仅在需要外部能力再做一次时填写完整新委托。',
+      `执行事实（runtime 权威，不得改写）：actualSuccess=${lastOk} evidenceOnly=${lastEvidenceOnly}`,
+      lastFailureReason ? `失败原因：${lastFailureReason}` : '',
+      lastOutputs.length ? `已产生文件：${lastOutputs.join('；')}` : '未产生用户文件',
+      `用户原话：${input.userText}`,
+      input.thread.openGoal ? `同一件事：${input.thread.openGoal}` : '',
+      `数字之我：\n${input.selfContext}`,
+      lastInstruction ? `委托：${lastInstruction}` : '',
+      `能力返回：${lastSummary}`,
+      synthesized ? `本轮综合草稿：${synthesized.slice(0, 4000)}` : '本轮尚未形成综合草稿。',
+      ...extra,
+    ].filter(Boolean);
+
+  const settleJudgement = (
+    judged: ReturnType<typeof parseReview>,
+    draft: string,
+    allowRevision: boolean,
+  ): ReturnType<typeof parseReview> => {
+    let next = applyExecutionTruth(judged, {
+      ok: lastOk,
+      summary: lastSummary,
+      ...(lastFailureReason ? { failureReason: lastFailureReason } : {}),
+    });
+    const reply = (next.askUser || next.userReply).trim();
+    if (next.deliver && isDeferredDelivery(reply)) {
+      if (usableFinalText(draft)) {
+        next = { deliver: true, userReply: draft };
+      } else if (allowRevision && !next.revision && lastInstruction) {
+        next = { ...next, deliver: false, revision: lastInstruction, userReply: '' };
+      } else {
+        next = {
+          deliver: true,
+          userReply: lastOk ? INCOMPLETE_SYNTHESIS_NOTICE : `这件事还没有做成。${lastFailureReason || lastSummary}`,
+        };
+      }
+    }
+    if (!next.askUser && !usableFinalText(next.userReply) && usableFinalText(draft)) {
+      next = { ...next, userReply: draft };
+    }
+    if (!next.askUser && !usableFinalText(next.userReply)) {
+      next = {
+        ...next,
+        deliver: true,
+        userReply: lastOk
+          ? INCOMPLETE_SYNTHESIS_NOTICE
+          : `这件事还没有做成。${lastFailureReason || lastSummary}`,
+      };
+    }
+    return next;
+  };
+
   const review = await input.chat({
-    messages: [
-      {
-        role: 'system',
-        content: [
-          '你是 2digime，正在独立验收外部能力的返回。不要把 stdout 原样丢给用户。',
-          lastOk
-            ? '执行已成功。判断：是否满足用户目标、内容是否合格、是否需要修订、如何向用户交付。'
-            : '执行已失败。判断：是否可换能力或重试、是否需要用户处理、如何用人话说明。不得宣称任务已完成。',
-          '只输出 JSON：{"deliver":true,"userReply":"...","askUser":"","openGoal":"","revision":""}',
-          'askUser 仅在数字之我与对话都无法补上、且只有用户知道时填写。',
-          'revision 仅在需要外部能力再做一次时填写完整新委托。',
-          `执行事实（runtime 权威，不得改写）：actualSuccess=${lastOk}`,
-          lastFailureReason ? `失败原因：${lastFailureReason}` : '',
-          lastOutputs.length ? `已产生文件：${lastOutputs.join('；')}` : '未产生用户文件',
-          `用户原话：${input.userText}`,
-          input.thread.openGoal ? `同一件事：${input.thread.openGoal}` : '',
-          `数字之我：\n${input.selfContext}`,
-          `委托：${lastInstruction}`,
-          `能力返回：${lastSummary}`,
-        ]
-          .filter(Boolean)
-          .join('\n'),
-      },
-    ],
+    messages: [{ role: 'system', content: reviewPrompt([]).join('\n') }],
   });
-  let judged = applyExecutionTruth(parseReview(review.text), {
-    ok: lastOk,
-    summary: lastSummary,
-    ...(lastFailureReason ? { failureReason: lastFailureReason } : {}),
-  });
+  let judged = settleJudgement(parseReview(review.text), synthesized, true);
 
   if (judged.revision && calls < 2 && input.agents.length) {
     const toolContent = await runDelegate(
       JSON.stringify({ instruction: judged.revision, capabilityId: lastCapability }),
     );
-    const second = await input.chat({
-      messages: [
+    messages.push({
+      role: 'assistant',
+      content: '',
+      tool_calls: [
         {
-          role: 'system',
-          content: [
-            '你是 2digime，正在再次验收。只输出 JSON：{"deliver":true,"userReply":"...","askUser":"","openGoal":"","revision":""}',
-            lastOk ? '' : '执行仍失败时不得宣称任务已完成。',
-            `执行事实：actualSuccess=${lastOk}`,
-            lastFailureReason ? `失败原因：${lastFailureReason}` : '',
-            `用户原话：${input.userText}`,
-            `第二次返回：${toolContent}`,
-          ]
-            .filter(Boolean)
-            .join('\n'),
+          id: 'revision_delegate',
+          type: 'function',
+          function: {
+            name: 'delegate',
+            arguments: JSON.stringify({ instruction: judged.revision, capabilityId: lastCapability }),
+          },
         },
       ],
     });
-    judged = applyExecutionTruth(parseReview(second.text), {
-      ok: lastOk,
-      summary: lastSummary,
-      ...(lastFailureReason ? { failureReason: lastFailureReason } : {}),
+    messages.push({ role: 'tool', tool_call_id: 'revision_delegate', content: toolContent });
+    const revised = await input.chat({
+      messages,
+      ...continueWithTools,
     });
+    if (revised.toolCalls?.length) {
+      await appendToolRound(revised);
+      const forced = await input.chat({ messages });
+      synthesized = String(forced.text || revised.text || '').trim();
+    } else {
+      synthesized = String(revised.text || '').trim();
+    }
+    const second = await input.chat({
+      messages: [{ role: 'system', content: reviewPrompt(['这是修订后的再次验收。执行仍失败时不得宣称任务已完成。']).join('\n') }],
+    });
+    judged = settleJudgement(parseReview(second.text), synthesized, false);
+  }
+
+  if (judged.deliver && isDeferredDelivery(judged.userReply)) {
+    judged = {
+      deliver: true,
+      userReply: lastOk ? INCOMPLETE_SYNTHESIS_NOTICE : `这件事还没有做成。${lastFailureReason || lastSummary}`,
+    };
   }
 
   const assistantText = (judged.askUser || judged.userReply).trim();
-  const resultPath = lastOk ? lastPath || lastOutputs[0] : undefined;
+  const resultPath =
+    !judged.askUser &&
+    lastOk &&
+    !lastEvidenceOnly &&
+    usableFinalText(assistantText) &&
+    assistantText !== INCOMPLETE_SYNTHESIS_NOTICE
+      ? lastPath || lastOutputs[0]
+      : undefined;
   const result =
     resultPath
       ? { title: path.basename(resultPath), path: resultPath }
