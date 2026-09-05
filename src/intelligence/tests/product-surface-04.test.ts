@@ -58,15 +58,6 @@ test('产生文件时结果卡标题是文件名', async () => {
         assert.equal(messages.some((m) => m.role === 'tool'), true);
         return { text: 'README 已经写好。' };
       },
-      async () => ({
-        text: JSON.stringify({
-          deliver: true,
-          userReply: 'README 已经写好。',
-          askUser: '',
-          openGoal: '',
-          revision: '',
-        }),
-      }),
     ]),
     talkProfessionals: [fileAgent()],
   });
@@ -92,15 +83,7 @@ test('正式路径 createPackage / talk 不初始化旧 Work Runtime', async () 
     documentCapability: 'fake',
     registerOpenAiStub: false,
     talkChat: scriptedChat([
-      async () => ({
-        text: JSON.stringify({
-          deliver: true,
-          userReply: '你好。',
-          askUser: '',
-          openGoal: '',
-          revision: '',
-        }),
-      }),
+      async () => ({ text: '你好。' }),
     ]),
   });
   const bus = createCommandBus(runtime);

@@ -83,24 +83,18 @@ function naturalContract(reg: CapabilityRegistration): {
   let description = String(reg.description || '').trim();
   if (cliAgent) {
     description =
-      '在本次授权的工作目录里真实创建、修改文件，并可运行测试。这是已连接的专业代码执行能力，不是聊天里生成的一段文字。';
+      '在授权工作目录里修改已有项目、处理多个工程文件、运行测试。适合复杂代码改动。';
   } else if (modelApiExec) {
-    description =
-      '用已连接的同一套对话模型，在本次授权目录里做一次小改文件。有落盘效果，但不是独立专业代码 Agent。';
+    description = '在授权目录做一次小范围文件修改。';
   } else if (searchLike) {
-    description =
-      '检索当前公开网页并返回来源与摘录，供核验训练记忆可能过时的公开现状（任职、排名、统计、价格、政策、公司或产品现状等）。稳定知识不必用它。来源清单不是给用户的最终答案，也不会在磁盘上创建用户文件。';
+    description = '检索公开网页并返回来源与摘录。返回的是证据，不是给用户的最终答案，也不会创建用户文件。';
   } else if (!description) {
     description = '可按完整文字目标执行一次已连接能力。';
   }
 
   let cannotDo =
     '不能发送邮件，不能扩大授权，不能改授权目录之外的路径，不能代替用户确认高风险操作。';
-  if (cliAgent) {
-    cannotDo = `不能仅靠对话假装已经改了文件。${cannotDo}`;
-  } else if (modelApiExec) {
-    cannotDo = `不是独立专业代码 Agent。${cannotDo}`;
-  } else if (searchLike) {
+  if (searchLike) {
     cannotDo = '不能改文件、不能发邮件、不能登录需要账号的站点；只检索公开网页。';
   }
 
@@ -309,14 +303,10 @@ function userFacingChanges(
     const prev = before.get(file);
     if (!prev || prev.size !== snap.size || prev.mtimeMs !== snap.mtimeMs) changed.push(file);
   }
-  const preferred = changed.filter((p) => /\.(md|txt)$/i.test(p));
-  const rest = changed.filter((p) => !preferred.includes(p));
-  return preferred.concat(rest).filter((p) => p.startsWith(workDir));
+  return changed.filter((p) => p.startsWith(workDir));
 }
 
 async function listUserFacingFiles(dir: string): Promise<string[]> {
   const snap = await snapshotWorkFiles(dir);
-  const out = [...snap.keys()];
-  const preferred = out.filter((p) => /\.(md|txt)$/i.test(p));
-  return preferred.length ? preferred.concat(out.filter((p) => !preferred.includes(p))) : out;
+  return [...snap.keys()];
 }

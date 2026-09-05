@@ -2,7 +2,7 @@
 
 **状态：** `current_authority`  
 **层级：** 00 之下；与 02 并列约束实现  
-**日期：** 2026-09-01  
+**日期：** 2026-09-05
 **性质：** AI Native 架构原则 + 开发纪律 + Owner / CTO / Agent 分工。
 
 ---
@@ -35,6 +35,36 @@ Human
 
 来源：01A §2、`digitalme_rules.md` §4–§6、conversation-search 架构「不再扩 regex」。归宿：本文。  
 推翻：`TASK_INTENT_KINDS`、关键词路由、capabilityLoop 作为永久对象。
+
+### 1.1 克制原则 / Capability Sufficiency First
+
+写代码前先证明现有能力不够。仓库入口见 `AGENTS.md`；详细约束以本节为准。不另建 `personal-context.md` 或第五份原则文件。
+
+顺序：
+
+1. 大模型本身是否已经能完成？
+2. 现有 Agent / Tool / Skill 是否已经能完成真实动作？
+3. 当前 runtime 是否已经足够承载？
+4. 如果已经能完成，禁止新增代码、规则、router、score、状态机、review、adapter 包装。
+5. 优先删除已有重复逻辑，而不是继续叠加。
+
+原则：能删不加；能复用不造；能让模型判断就不要用代码替模型判断；宁愿少写，不要多写。
+
+runtime 只保留模型无法自己知道、且系统必须保证的机械事实：权限 / 隐私 / 安全；工具真实成功失败；文件是否真的产生；配置是否真实可用；timeout / cancellation；必要真实性边界。
+
+禁止：为单个失败 case 加关键词规则；用 regex / score / topic classifier 模拟模型语义判断；为「更可控」增加第二套 planner/reviewer/state machine；用 harness 词命中反向约束模型表达；因为 Coding Agent 自己更容易实现而重写模型本来已有能力。
+
+新增代码前必须回答 **CAPABILITY SUFFICIENCY GATE**：
+
+1. Can the base model already do this?
+2. Can an existing Agent/Tool already do the external action?
+3. Can the current runtime already carry it?
+4. Is this code adding a missing capability, or replacing model intelligence?
+5. Can existing code be deleted instead?
+
+如果无法证明「现有能力不足」，不得写代码。
+
+Talk 主链默认收敛为：User → model → 模型决定是否调用工具 → 工具执行真实动作 → runtime 返回真实结果 → 同一模型继续推理 → 模型交付最终答案。runtime 不替模型做语义理解、换题判断、freshness 分类、能力排序、重试策略、失败策略、是否继续旧任务、内容是否「像完成」。
 
 ---
 

@@ -316,13 +316,12 @@ async function bootstrapRuntime() {
         /* ignore */
       }
       const last = messages[messages.length - 1] || {};
-      const sys = String((messages[0] && messages[0].content) || "");
       fs.writeFileSync(
         path.join(talkTraceDir, `raw-${String(talkTraceSeq).padStart(2, "0")}.json`),
         `${JSON.stringify(
           {
             stub: false,
-            kind: tools && tools.length ? "talk-decide" : /验收/.test(sys) ? "talk-review" : "talk-other",
+            kind: "talk",
             lastRole: last.role || null,
             model: cfg.model,
             providerHost: host,

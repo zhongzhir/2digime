@@ -163,27 +163,11 @@ function aChat(): TalkChatFn {
       };
     },
     async ({ messages }) => {
-      const sys = String(messages[0]?.content || '');
-      if (/actualSuccess=false/.test(sys)) {
-        return {
-          text: JSON.stringify({
-            deliver: true,
-            userReply: '这次合作没有成立。我先自己继续看现有材料。',
-            askUser: '',
-            openGoal: '',
-            revision: '',
-          }),
-        };
+      const tool = String(messages.filter((m) => m.role === 'tool').pop()?.content || '');
+      if (/actualSuccess":false/.test(tool)) {
+        return { text: '这次合作没有成立。我先自己继续看现有材料。' };
       }
-      return {
-        text: JSON.stringify({
-          deliver: true,
-          userReply: '我综合了补充判断：当前设想在低风险范围内可继续评估，但需补齐物料平衡。',
-          askUser: '',
-          openGoal: '',
-          revision: '',
-        }),
-      };
+      return { text: '我综合了补充判断：当前设想在低风险范围内可继续评估，但需补齐物料平衡。' };
     },
   ]);
 }

@@ -1,7 +1,6 @@
 /**
  * 2DIGIME-TALK-WORK-COMPLETION-STABILITY-01
- * 完成语义：只有用户已获得可用最终结果，本轮才算完成。
- * 不测关键词路由；测 tool → 同一 Thread 综合 → 验收门禁。
+ * 工具返回后由同一模型综合。不测关键词路由，不测 JSON reviewer。
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -99,16 +98,8 @@ test('A 简单常识问答：不搜索、不产生无意义 artifact', async () 
     talkChat: scriptedChat([
       async ({ tools, messages }) => {
         const sys = String(messages[0]?.content || '');
-        if (/独立验收/.test(sys)) {
-          return {
-            text: JSON.stringify({
-              deliver: true,
-              userReply: '在标准大气压下，纯水大约在 100°C 沸腾。',
-              freshnessRequired: false,
-            }),
-          };
-        }
         assert.ok(tools?.some((t) => t.function.name === 'delegate'));
+        assert.match(sys, /你是用户的兔机米/);
         return { text: '在标准大气压下，纯水大约在 100°C 沸腾。' };
       },
     ]),
@@ -160,19 +151,6 @@ test('B 最新信息：搜索只作证据，同一对话给出最终结论，不
         assert.equal(/后续分析为准/.test(body), false);
         return { text: '根据刚检索到的公开信息，新模型叫 GPT-5.4。' };
       },
-      async ({ messages }) => {
-        const sys = String(messages[0]?.content || '');
-        assert.match(sys, /验收/);
-        return {
-          text: JSON.stringify({
-            deliver: true,
-            userReply: '上次给出的结论不完整，会重新整理后再回答。',
-            askUser: '',
-            openGoal: '',
-            revision: '',
-          }),
-        };
-      },
     ]),
     talkProfessionals: [searchAgent()],
   });
@@ -215,15 +193,6 @@ test('C 做事任务：可以生成文件，同一对话必须说明做了什么
         assert.equal(messages.some((m) => m.role === 'tool'), true);
         return { text: '备忘已经写好，三件待办都在 memo.md 里。' };
       },
-      async () => ({
-        text: JSON.stringify({
-          deliver: true,
-          userReply: '已经写好明天三件待办，文件在 memo.md，这一轮完成。',
-          askUser: '',
-          openGoal: '',
-          revision: '',
-        }),
-      }),
     ]),
     talkProfessionals: [fileAgent()],
   });
@@ -259,17 +228,8 @@ test('D 工具失败：明确失败，不伪装成功，不生成看起来完成
       async ({ messages }) => {
         const body = String(messages.filter((m) => m.role === 'tool').pop()?.content || '');
         assert.match(body, /actualSuccess":false|"ok":false/);
-        return { text: '已经完成报告。' };
+        return { text: '检索没有可用证据，这件事还没有做成。' };
       },
-      async () => ({
-        text: JSON.stringify({
-          deliver: true,
-          userReply: '已经完成报告，result.md 已写好。',
-          askUser: '',
-          openGoal: '',
-          revision: '',
-        }),
-      }),
     ]),
     talkProfessionals: [
       {
@@ -317,15 +277,6 @@ test('验收占位句不得盖过已有综合草稿', async () => {
         ],
       }),
       async () => ({ text: '根据检索，目前公开信息里没有确认今天发布了新模型。' }),
-      async () => ({
-        text: JSON.stringify({
-          deliver: true,
-          userReply: '已经看过结果。',
-          askUser: '',
-          openGoal: '',
-          revision: '',
-        }),
-      }),
     ]),
     talkProfessionals: [searchAgent()],
   });
@@ -359,26 +310,7 @@ test('E 连续多轮：上下文保留，上一轮工具不污染下一轮', asy
         ],
       }),
       async () => ({ text: '新模型叫 GPT-5.4。' }),
-      async () => ({
-        text: JSON.stringify({
-          deliver: true,
-          userReply: '新模型叫 GPT-5.4。来源已核过。',
-          askUser: '',
-          openGoal: '',
-          revision: '',
-        }),
-      }),
       async ({ messages, tools }) => {
-        const sys = String(messages[0]?.content || '');
-        if (/独立验收/.test(sys)) {
-          return {
-            text: JSON.stringify({
-              deliver: true,
-              userReply: '刚才说的 GPT-5.4 是检索后的结论。和上一代相比，公开报道强调更长上下文。',
-              freshnessRequired: false,
-            }),
-          };
-        }
         const blob = messages.map((m) => `${m.role}:${m.content}`).join('\n');
         assert.match(blob, /GPT-5\.4/);
         assert.match(blob, /和刚才那个有什么区别/);
@@ -397,48 +329,5 @@ test('E 连续多轮：上下文保留，上一轮工具不污染下一轮', asy
   assert.match(String(last?.text || ''), /GPT-5\.4|刚才/);
   assert.equal(last?.result, undefined);
   assert.equal(second.view.turns.filter((t) => t.role === 'user').length, 2);
-  await runtime.stop();
-});
-
-test('无工具路径：把答案推到稍后不得算完成', async () => {
-  const root = await tempDir('deferred');
-  const runtime = createDigitalMeRuntime({
-    documentCapability: 'fake',
-    registerOpenAiStub: false,
-    talkChat: async () => ({ text: '我稍后再回答这个问题。' }),
-    talkProfessionals: [searchAgent()],
-  });
-  const bus = createCommandBus(runtime);
-  const pkgDir = path.join(root, 'pkg');
-  await bus.invoke('subject.createPackage', { displayName: '完成语义', targetDir: pkgDir });
-  const talked = await bus.invoke('talk', { text: '水大约多少度沸腾？' });
-  const assistant = talked.view.turns.find((t) => t.role === 'assistant');
-  assert.match(String(assistant?.text || ''), /没能形成可用的最终结论/);
-  assert.equal(/稍后再回答/.test(String(assistant?.text || '')), false);
-  await runtime.stop();
-});
-
-test('无工具路径：工具证据原文不得冒充最终答案', async () => {
-  const root = await tempDir('leak');
-  const runtime = createDigitalMeRuntime({
-    documentCapability: 'fake',
-    registerOpenAiStub: false,
-    talkChat: async () => ({
-      text: [
-        '# 检索证据：openai',
-        '以下为公开来源摘录，只供 2digime 综合，不是给用户的最终答案。',
-        '- Example',
-        '  来源：https://example.com/openai',
-      ].join('\n'),
-    }),
-    talkProfessionals: [searchAgent()],
-  });
-  const bus = createCommandBus(runtime);
-  const pkgDir = path.join(root, 'pkg');
-  await bus.invoke('subject.createPackage', { displayName: '完成语义', targetDir: pkgDir });
-  const talked = await bus.invoke('talk', { text: '最近有什么新闻？' });
-  const assistant = talked.view.turns.find((t) => t.role === 'assistant');
-  assert.match(String(assistant?.text || ''), /没能形成可用的最终结论/);
-  assert.equal(/只供 2digime 综合/.test(String(assistant?.text || '')), false);
   await runtime.stop();
 });

@@ -159,7 +159,7 @@ test('agentsFromRegistry 不再按 document 预筛选，也不把通用模型当
   const searchFiles = await fs.readdir(searchDir);
   assert.equal(searchFiles.includes('result.md'), false);
   assert.equal(/后续分析为准/.test(evidence.summary), false);
-  assert.match(blob, /当前公开网页|训练记忆可能过时/);
+  assert.match(blob, /检索公开网页/);
 });
 
 test('声明会写工作目录的能力：stdout 完成但无真实文件变化必须 ok=false', async () => {

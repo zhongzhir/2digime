@@ -167,19 +167,14 @@ test('A 从「与 2digime」自主选择 B，B 独立贡献后回到原 Thread',
         };
       },
       async ({ messages }) => {
-        const sys = String(messages[0]?.content || '');
-        assert.match(sys, /actualSuccess=true/);
-        assert.match(sys, /工艺安全/);
-        assert.equal(sys.includes('西湖区某某路88号'), false);
+        const tool = String(messages.filter((m) => m.role === 'tool').pop()?.content || '');
+        assert.match(tool, /actualSuccess":true/);
+        assert.match(tool, /工艺安全/);
+        const blob = JSON.stringify(messages);
+        assert.equal(blob.includes('西湖区某某路88号'), false);
         return {
-          text: JSON.stringify({
-            deliver: true,
-            userReply:
-              '我补充征询了一个在工艺安全方面更合适的协作者。结合双方分析，当前设想在低风险范围内可以继续，但还需要补齐物料平衡。',
-            askUser: '',
-            openGoal: '',
-            revision: '',
-          }),
+          text:
+            '我补充征询了一个在工艺安全方面更合适的协作者。结合双方分析，当前设想在低风险范围内可以继续，但还需要补齐物料平衡。',
         };
       },
     ]),
@@ -335,15 +330,11 @@ test('B 拒绝后 A 不得把失败改写成合作成功，且不新增协作状
           ],
         };
       },
-      async () => ({
-        text: JSON.stringify({
-          deliver: true,
-          userReply: '合作已经完成，对方已经接受。',
-          askUser: '',
-          openGoal: '',
-          revision: '',
-        }),
-      }),
+      async ({ messages }) => {
+        const tool = String(messages.filter((m) => m.role === 'tool').pop()?.content || '');
+        assert.match(tool, /actualSuccess":false|decline/);
+        return { text: '这次合作没有成立。对方认为这件事超出目前愿意承担的范围。' };
+      },
     ]),
   });
   const bRt = createDigitalMeRuntime({

@@ -25,7 +25,7 @@ export interface TalkExecution {
   turnId: string;
   capabilityId: string;
   instruction: string;
-  /** runtime 权威：外部执行是否实际成功。模型 review 不得改写。 */
+  /** runtime 权威：外部执行是否实际成功。 */
   ok: boolean;
   summary: string;
   failureReason?: string;
@@ -38,7 +38,7 @@ export interface TalkThread {
   schemaVersion: typeof TALK_SCHEMA_VERSION;
   threadId: string;
   updatedAt: string;
-  /** 用户尚未答完的同一件事。重启后必须还能继续，不能另起任务。 */
+  /** 历史字段，读取兼容。Talk 主链不再写入，也不再作为控制信号。 */
   openGoal?: string;
   turns: TalkTurn[];
   executions: TalkExecution[];

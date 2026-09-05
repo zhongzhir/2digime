@@ -115,15 +115,6 @@ test('第一次能力失败后，同一轮模型可另选已连接能力', async
         assert.match(tool, /actualSuccess":true/);
         return { text: '已经写好 hello.txt。' };
       },
-      async () => ({
-        text: JSON.stringify({
-          deliver: true,
-          userReply: '已经写好 hello.txt，这一轮完成。',
-          askUser: '',
-          openGoal: '',
-          revision: '',
-        }),
-      }),
     ]),
     talkProfessionals: [fail, ok],
   });
@@ -178,22 +169,12 @@ test('revision 不得锁死 lastCapability；由模型再选', async () => {
           },
         ],
       }),
-      async () => ({ text: '还没有写成文件。' }),
-      async () => ({ text: '仍未写成。' }),
-      async () => ({
-        text: JSON.stringify({
-          deliver: false,
-          userReply: '',
-          askUser: '',
-          openGoal: '',
-          revision: '还缺一份 hello.txt',
-        }),
-      }),
       async ({ tools, messages }) => {
         assert.equal(tools?.some((t) => t.function.name === 'delegate'), true);
+        const tool = String(messages.filter((m) => m.role === 'tool').pop()?.content || '');
+        assert.match(tool, /actualSuccess":false/);
         const blob = JSON.stringify(messages);
         assert.equal(blob.includes('revision_delegate'), false);
-        assert.equal(blob.includes('"capabilityId":"cap_fail_write"') && /revision_delegate/.test(blob), false);
         return {
           text: '',
           toolCalls: [
@@ -206,15 +187,6 @@ test('revision 不得锁死 lastCapability；由模型再选', async () => {
         };
       },
       async () => ({ text: '已经写好 hello.txt。' }),
-      async () => ({
-        text: JSON.stringify({
-          deliver: true,
-          userReply: '已经写好 hello.txt。',
-          askUser: '',
-          openGoal: '',
-          revision: '',
-        }),
-      }),
     ]),
     talkProfessionals: [fail, ok],
   });
@@ -257,16 +229,6 @@ test('多个已连接能力时未指定 capabilityId 不得默默落到 agents[0
         assert.equal(failRuns, 0);
         return { text: '需要先选定一个已连接能力。' };
       },
-      async () => ({ text: '仍未选定能力。' }),
-      async () => ({
-        text: JSON.stringify({
-          deliver: true,
-          userReply: '这件事还没有做成。未指定能力。',
-          askUser: '',
-          openGoal: '',
-          revision: '',
-        }),
-      }),
     ]),
     talkProfessionals: [fail, succeedingWrite()],
   });

@@ -209,17 +209,11 @@ test('A 经配对目录 + Relay/E2EE 自主选择 B，网络层无完整 Digital
         };
       },
       async ({ messages }) => {
-        const sys = String(messages[0]?.content || '');
-        assert.match(sys, /actualSuccess=true/);
+        const tool = String(messages.filter((m) => m.role === 'tool').pop()?.content || '');
+        assert.match(tool, /actualSuccess":true/);
         return {
-          text: JSON.stringify({
-            deliver: true,
-            userReply:
-              '我补充征询了一个在工艺安全方面更合适的协作者。结合双方分析，当前设想在低风险范围内可以继续，但还需要补齐物料平衡。',
-            askUser: '',
-            openGoal: '',
-            revision: '',
-          }),
+          text:
+            '我补充征询了一个在工艺安全方面更合适的协作者。结合双方分析，当前设想在低风险范围内可以继续，但还需要补齐物料平衡。',
         };
       },
     ]),
@@ -378,15 +372,11 @@ test('B 经 Relay 拒绝后，A 不得把失败改写成成功', { timeout: 2000
           ],
         };
       },
-      async () => ({
-        text: JSON.stringify({
-          deliver: true,
-          userReply: '合作已经完成，对方已经接受。',
-          askUser: '',
-          openGoal: '',
-          revision: '',
-        }),
-      }),
+      async ({ messages }) => {
+        const tool = String(messages.filter((m) => m.role === 'tool').pop()?.content || '');
+        assert.match(tool, /actualSuccess":false|decline/);
+        return { text: '这次合作没有成立。对方认为这件事超出目前愿意承担的范围。' };
+      },
     ]),
   });
   const bRt = createDigitalMeRuntime({

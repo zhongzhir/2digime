@@ -10,6 +10,18 @@ import { createDigitalMeRuntime } from '../../runtime/digitalme-runtime';
 import { createCommandBus } from '../../runtime/command-bus';
 import { TALK_TIMEOUT_NOTICE } from '../service';
 
+import type { TalkChatFn } from '../types';
+
+function scriptedChat(replies: TalkChatFn[]): TalkChatFn {
+  let i = 0;
+  return async (input) => {
+    const fn = replies[Math.min(i, replies.length - 1)];
+    i += 1;
+    if (!fn) throw new Error('talk chat script exhausted');
+    return fn(input);
+  };
+}
+
 test('Talk 整轮超时：挂起的模型调用必须在期限内变成可理解失败', { timeout: 15_000 }, async () => {
   const prev = process.env.DIGITALME_V2_TALK_TURN_DEADLINE_MS;
   process.env.DIGITALME_V2_TALK_TURN_DEADLINE_MS = '80';
@@ -49,16 +61,23 @@ test('Talk 整轮超时：挂起的工具执行必须在期限内变成可理解
   const runtime = createDigitalMeRuntime({
     documentCapability: 'fake',
     registerOpenAiStub: false,
-    talkChat: async () => ({
-      text: '',
-      toolCalls: [
-        {
-          id: 'call_hang',
-          name: 'delegate',
-          arguments: JSON.stringify({ instruction: 'hang forever' }),
-        },
-      ],
-    }),
+    talkChat: scriptedChat([
+      async () => ({
+        text: '',
+        toolCalls: [
+          {
+            id: 'call_hang',
+            name: 'delegate',
+            arguments: JSON.stringify({ instruction: 'hang forever' }),
+          },
+        ],
+      }),
+      async ({ messages }) => {
+        const tool = String(messages.filter((m) => m.role === 'tool').pop()?.content || '');
+        assert.match(tool, /actualSuccess":false/);
+        return { text: '外部能力没有在预算内返回，这件事还没有做成。' };
+      },
+    ]),
     talkProfessionals: [
       {
         id: 'cap_hang',
