@@ -651,6 +651,13 @@
     els.shell.hidden = view !== "shell";
     els.settings.hidden = view !== "settings";
     if (els.help) els.help.hidden = view !== "help";
+    const header = document.getElementById("product-header");
+    if (header) {
+      const show = view === "shell" || view === "settings";
+      header.hidden = !show;
+      if (show) header.removeAttribute("hidden");
+      else header.setAttribute("hidden", "");
+    }
   }
 
   async function setNav(nav) {
@@ -658,6 +665,7 @@
       openSettings();
       return;
     }
+    if (currentView !== "shell") setView("shell");
     activeNav = nav;
     if (nav !== "chat") setChatGuideMode("normal");
     for (const btn of [els.navWork, els.navChat, els.navSubject, els.navCollab, els.navSettings]) {
@@ -713,7 +721,7 @@
     activeNav = "settings";
     for (const btn of [els.navWork, els.navChat, els.navSubject, els.navCollab, els.navSettings]) {
       if (!btn) continue;
-      btn.classList.remove("active");
+      btn.classList.toggle("active", btn.dataset.nav === "settings");
     }
     fillSettingsForm();
     setView("settings");

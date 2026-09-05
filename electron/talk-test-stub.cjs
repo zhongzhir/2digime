@@ -119,15 +119,9 @@ async function chat({ messages, tools }) {
     } catch {
       parsed = {};
     }
-    const summary = String(parsed.summary || '');
+    const summary = String(parsed.summary || parsed.error || '');
     return {
-      text: JSON.stringify({
-        deliver: true,
-        userReply: summary ? `已经完成。\n\n${summary.slice(0, 800)}` : '已经完成你要的这件事。',
-        askUser: '',
-        openGoal: '',
-        revision: '',
-      }),
+      text: summary ? `已经完成。\n\n${summary.slice(0, 800)}` : '已经完成你要的这件事。',
     };
   }
 
@@ -154,8 +148,6 @@ async function chat({ messages, tools }) {
       };
     }
   }
-
-  const hasTools = Array.isArray(tools) && tools.some((t) => t.function && t.function.name === 'delegate');
 
   if (/了解我|你知道我|我是谁/.test(text)) {
     const start = sys.indexOf('当前对用户的必要理解');
@@ -187,6 +179,26 @@ async function chat({ messages, tools }) {
   if (/@/.test(text) && /继续|邮箱|发给|寄/.test(sys + text)) {
     return { text: '好，我记下这个地址，继续原来要把说明发出去这件事。这一步还缺真正的发信能力，所以先停在这里，不会假装已经发出。' };
   }
+
+  const hasWrite =
+    Array.isArray(tools) && tools.some((t) => t.function && t.function.name === 'write_file');
+  if (hasWrite && /README\.md/.test(text)) {
+    return {
+      text: '',
+      toolCalls: [
+        {
+          id: 'call_write_1',
+          name: 'write_file',
+          arguments: JSON.stringify({
+            relativePath: 'README.md',
+            content: '# 项目说明\n\n简短说明。\n',
+          }),
+        },
+      ],
+    };
+  }
+
+  const hasTools = Array.isArray(tools) && tools.some((t) => t.function && t.function.name === 'delegate');
 
   if (hasTools && /(写|备忘|文档|说明|待办|三件)/.test(text)) {
     return {

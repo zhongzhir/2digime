@@ -9,9 +9,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>兔机米</title>
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="public-trial.css" />
   </head>
   <body>
     <div id="app">
+      <header id="product-header" class="topbar shell-topbar" hidden>
+        <p class="brand-sm">兔机米</p>
+        <nav class="main-nav" aria-label="主导航">
+          <button type="button" class="nav-item active" data-nav="chat" id="nav-chat">与兔机米</button>
+          <button type="button" class="nav-item" data-nav="subject" id="nav-subject">数字之我</button>
+          <button type="button" class="nav-item" data-nav="settings" id="nav-settings">设置</button>
+          <button type="button" class="nav-item legacy-nav" data-nav="work" id="nav-work" hidden>做事</button>
+          <button type="button" class="nav-item legacy-nav" data-nav="collab" id="nav-collab" hidden>协作</button>
+        </nav>
+        <div class="topbar-actions" aria-label="次级入口">
+          <button type="button" id="btn-open-help" class="ghost topbar-secondary">帮助</button>
+          <button type="button" id="btn-open-settings" class="ghost topbar-secondary" hidden>设置</button>
+        </div>
+      </header>
       <section id="view-welcome" class="view">
         <header class="hero">
           <p class="brand">兔机米</p>
@@ -88,14 +103,13 @@
       </section>
 
       <section id="view-settings" class="view" hidden>
-        <header class="topbar">
-          <div>
-            <p class="brand-sm">兔机米</p>
-            <h1>设置</h1>
-          </div>
+        <header class="page-heading">
+          <h1>设置</h1>
+          <p class="page-lead">连接模型，也可选配置联网搜索。密钥保存在本机。</p>
           <button type="button" id="btn-settings-back">返回</button>
         </header>
         <div class="welcome-actions settings-panel">
+          <section class="settings-card settings-model">
           <h2>模型连接</h2>
           <p class="muted">连接后即可在「与兔机米」对话。密钥保存在本机。</p>
 
@@ -158,7 +172,9 @@
             <summary>详细原因</summary>
             <pre id="settings-tech-body" class="settings-tech-body"></pre>
           </details>
+          </section>
 
+          <section class="settings-card settings-search">
           <h2>联网搜索</h2>
           <p class="muted">配置后，兔机米可以查询实时公开信息。不配置也能正常对话。</p>
           <label class="field">
@@ -178,8 +194,9 @@
             <button type="button" id="btn-delete-gemini-search" class="ghost">清除</button>
           </div>
           <p id="gemini-search-status" class="status" aria-live="polite"></p>
+          </section>
 
-          <details class="settings-optional" id="settings-optional-remote">
+          <details class="settings-card settings-optional" id="settings-optional-remote">
           <summary>设备与数字之我连接</summary>
           <section class="settings-block" aria-labelledby="remote-dm-title">
             <h2 id="remote-dm-title">连接另一台电脑上的数字之我</h2>
@@ -209,7 +226,7 @@
           </section>
           </details>
 
-          <details class="settings-optional" id="settings-optional-coding">
+          <details class="settings-card settings-optional" id="settings-optional-coding">
           <summary>代码执行能力</summary>
           <h2>代码执行能力</h2>
           <p class="muted">用于在你确认的项目目录中创建或修改代码，并运行测试。密钥与登录由该能力自行管理。</p>
@@ -230,7 +247,7 @@
           <p id="executor-settings-status" class="status" aria-live="polite"></p>
           </details>
 
-          <details class="settings-optional" id="settings-optional-professional">
+          <details class="settings-card settings-optional" id="settings-optional-professional">
           <summary>专业能力连接</summary>
           <h2>专业能力</h2>
           <p class="muted">可选。不是另一个数字之我，而是本机可连接的研究分析服务。</p>
@@ -256,21 +273,6 @@
       </section>
 
       <section id="view-shell" class="view" hidden>
-        <header class="topbar shell-topbar">
-          <p class="brand-sm">兔机米</p>
-          <nav class="main-nav" aria-label="主导航">
-            <button type="button" class="nav-item active" data-nav="chat" id="nav-chat">与兔机米</button>
-            <button type="button" class="nav-item" data-nav="subject" id="nav-subject">数字之我</button>
-            <button type="button" class="nav-item" data-nav="settings" id="nav-settings">设置</button>
-            <button type="button" class="nav-item legacy-nav" data-nav="work" id="nav-work" hidden>做事</button>
-            <button type="button" class="nav-item legacy-nav" data-nav="collab" id="nav-collab" hidden>协作</button>
-          </nav>
-          <div class="topbar-actions" aria-label="次级入口">
-            <button type="button" id="btn-open-help" class="ghost topbar-secondary">帮助</button>
-            <button type="button" id="btn-open-settings" class="ghost topbar-secondary" hidden>设置</button>
-          </div>
-        </header>
-
         <section id="panel-chat" class="shell-panel chat-panel chat-with-sessions" data-panel="chat">
           <aside id="chat-session-aside" class="chat-session-aside" aria-label="历史对话" hidden>
             <button type="button" id="btn-chat-new" class="primary">新对话</button>
@@ -282,7 +284,11 @@
           <div class="chat-stream">
             <div id="chat-context" class="chat-context muted tiny" hidden></div>
             <ul id="chat-turns" class="chat-turns" aria-live="polite"></ul>
-            <p id="chat-empty" class="empty-hint" data-talk-hint="1">告诉兔机米一件事，或问我现在怎样理解你。</p>
+            <div id="chat-empty" class="empty-hint" data-talk-hint="1">
+              <span class="empty-emblem" aria-hidden="true">兔</span>
+              <h2>从你此刻的想法开始</h2>
+              <p>聊聊近况，理清思路，或把一件事交给兔机米。</p>
+            </div>
             <section id="first-value" class="first-value" hidden aria-label="我能帮你做什么">
               <h2 class="first-value-title">我能帮你做什么？</h2>
               <p class="first-value-lead muted">你可以直接说出来，也可以从下面几件事开始。</p>
@@ -316,7 +322,7 @@
                 <textarea id="chat-input" rows="3" placeholder="告诉兔机米…"></textarea>
               </div>
             </div>
-            <div class="row">
+            <div class="row composer-actions">
               <button type="button" id="btn-chat-send" class="primary">发送</button>
               <button type="button" id="btn-chat-cancel" class="ghost" hidden>取消</button>
               <button type="button" id="btn-chat-retry" class="ghost" hidden>重试回复</button>
