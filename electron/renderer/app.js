@@ -142,6 +142,11 @@
     testModel: document.getElementById("btn-test-model"),
     deleteModel: document.getElementById("btn-delete-model"),
     settingsStatus: document.getElementById("settings-status"),
+    geminiSearchApiKey: document.getElementById("gemini-search-api-key"),
+    geminiSearchKeyState: document.getElementById("gemini-search-key-state"),
+    saveGeminiSearch: document.getElementById("btn-save-gemini-search"),
+    deleteGeminiSearch: document.getElementById("btn-delete-gemini-search"),
+    geminiSearchStatus: document.getElementById("gemini-search-status"),
     remoteRelayUrl: document.getElementById("remote-relay-url"),
     remoteDmConnectionState: document.getElementById("remote-dm-connection-state"),
     btnRemoteRelayConnect: document.getElementById("btn-remote-relay-connect"),
@@ -1203,6 +1208,21 @@
     return !!(shellStatus && shellStatus.credentialConfigured);
   }
 
+  function isGeminiSearchConfigured() {
+    return !!(shellStatus && shellStatus.geminiSearchConfigured);
+  }
+
+  function updateGeminiSearchKeyStateUi() {
+    const configured = isGeminiSearchConfigured();
+    if (els.geminiSearchKeyState) {
+      els.geminiSearchKeyState.textContent = configured ? "已配置" : "未配置";
+    }
+    if (els.deleteGeminiSearch) els.deleteGeminiSearch.disabled = !configured;
+    if (els.geminiSearchApiKey) {
+      els.geminiSearchApiKey.placeholder = configured ? "若要更换密钥，请输入新密钥" : "粘贴你的密钥";
+    }
+  }
+
   function updateKeyStateUi() {
     const configured = isCredentialConfigured();
     if (els.modelKeyState) {
@@ -1212,6 +1232,7 @@
     if (els.modelApiKey) {
       els.modelApiKey.placeholder = configured ? "若要更换密钥，请输入新密钥" : "粘贴你的密钥";
     }
+    updateGeminiSearchKeyStateUi();
   }
 
   function syncAdvancedOpenForProvider() {
@@ -1266,6 +1287,11 @@
     advancedFieldsDirty = false;
     els.modelApiKey.value = "";
     if (els.modelApiKey) els.modelApiKey.type = "password";
+    if (els.geminiSearchApiKey) {
+      els.geminiSearchApiKey.value = "";
+      els.geminiSearchApiKey.type = "password";
+    }
+    if (els.geminiSearchStatus) els.geminiSearchStatus.textContent = "";
     if (els.toggleApiKey) {
       els.toggleApiKey.textContent = "显示";
       els.toggleApiKey.setAttribute("aria-pressed", "false");
@@ -6892,6 +6918,57 @@
     }
   });
 
+  if (els.saveGeminiSearch) {
+    els.saveGeminiSearch.addEventListener("click", async () => {
+      try {
+        const geminiApiKey = els.geminiSearchApiKey ? (els.geminiSearchApiKey.value || "").trim() : "";
+        if (!geminiApiKey) {
+          showStatus(els.geminiSearchStatus, "请输入联网搜索密钥后再保存", true);
+          return;
+        }
+        els.saveGeminiSearch.disabled = true;
+        showStatus(els.geminiSearchStatus, "正在保存…");
+        const result = await api.saveGeminiSearchCredential({ geminiApiKey });
+        rememberShellMeta(result || {});
+        if (els.geminiSearchApiKey) {
+          els.geminiSearchApiKey.value = "";
+          els.geminiSearchApiKey.type = "password";
+        }
+        updateGeminiSearchKeyStateUi();
+        showStatus(els.geminiSearchStatus, "已保存。");
+      } catch (err) {
+        showStatus(
+          els.geminiSearchStatus,
+          userFacingModelError(err, "保存失败，请稍后重试"),
+          true,
+        );
+      } finally {
+        els.saveGeminiSearch.disabled = false;
+      }
+    });
+  }
+
+  if (els.deleteGeminiSearch) {
+    els.deleteGeminiSearch.addEventListener("click", async () => {
+      try {
+        const result = await api.deleteGeminiSearchCredential();
+        rememberShellMeta(result || {});
+        if (els.geminiSearchApiKey) {
+          els.geminiSearchApiKey.value = "";
+          els.geminiSearchApiKey.type = "password";
+        }
+        updateGeminiSearchKeyStateUi();
+        showStatus(els.geminiSearchStatus, "已清除。");
+      } catch (err) {
+        showStatus(
+          els.geminiSearchStatus,
+          userFacingModelError(err, "清除失败，请稍后重试"),
+          true,
+        );
+      }
+    });
+  }
+
   els.addFiles.addEventListener("click", async () => {
     if (workMode !== "compose") {
       els.jobActionable.textContent = "如需更换材料，请先点「重新开始」或「新建任务」。";
@@ -6952,6 +7029,7 @@
     els.modelBaseUrl,
     els.modelId,
     els.modelApiKey,
+    els.geminiSearchApiKey,
   ]) {
     if (el) el.addEventListener("paste", normalizeEditablePaste);
   }

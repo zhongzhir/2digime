@@ -159,6 +159,26 @@
             <pre id="settings-tech-body" class="settings-tech-body"></pre>
           </details>
 
+          <h2>联网搜索</h2>
+          <p class="muted">配置后，兔机米可以查询实时公开信息。不配置也能正常对话。</p>
+          <label class="field">
+            <span>Gemini API Key</span>
+            <div class="key-input-row">
+              <input
+                id="gemini-search-api-key"
+                type="password"
+                placeholder="粘贴你的密钥"
+                autocomplete="new-password"
+              />
+            </div>
+            <span id="gemini-search-key-state" class="meta">未配置</span>
+          </label>
+          <div class="row settings-actions">
+            <button type="button" id="btn-save-gemini-search" class="primary">保存</button>
+            <button type="button" id="btn-delete-gemini-search" class="ghost">清除</button>
+          </div>
+          <p id="gemini-search-status" class="status" aria-live="polite"></p>
+
           <details class="settings-optional" id="settings-optional-remote">
           <summary>设备与数字之我连接</summary>
           <section class="settings-block" aria-labelledby="remote-dm-title">

@@ -45,6 +45,10 @@ let unsubscribe = null;
 let saveCredential = null;
 /** @type {null | ((input?: any) => Promise<any>)} */
 let deleteCredential = null;
+/** @type {null | ((input: any) => Promise<any>)} */
+let saveGeminiSearchCredential = null;
+/** @type {null | (() => Promise<any>)} */
+let deleteGeminiSearchCredential = null;
 /** @type {null | ((input?: any) => Promise<any>)} */
 let testConnection = null;
 /** @type {{ modelReady: boolean, modelMeta: any, needsCredentialSetup: boolean, status: any, isPackaged: boolean, buildMeta: any } | null} */
@@ -136,6 +140,12 @@ async function bootstrapRuntime() {
 
   saveCredential = typeof model.saveCredential === "function" ? model.saveCredential : null;
   deleteCredential = typeof model.deleteCredential === "function" ? model.deleteCredential : null;
+  saveGeminiSearchCredential =
+    typeof model.saveGeminiSearchCredential === "function" ? model.saveGeminiSearchCredential : null;
+  deleteGeminiSearchCredential =
+    typeof model.deleteGeminiSearchCredential === "function"
+      ? model.deleteGeminiSearchCredential
+      : null;
   testConnection = typeof model.testConnection === "function" ? model.testConnection : null;
 
   // App Shell:仅真实模型或无能力。禁止注册 Fake / both。
@@ -854,6 +864,32 @@ function registerIpc() {
   ipcMain.handle("shell:deleteModelCredential", async (_evt, input) => {
     if (!deleteCredential) throw new Error("凭证存储不可用，请确认系统安全存储已启用");
     await deleteCredential(input || {});
+    const boot = await rebootstrapAndNotify();
+    return {
+      ok: true,
+      modelReady: boot.modelReady,
+      modelMeta: boot.modelMeta,
+      status: boot.status,
+    };
+  });
+
+  ipcMain.handle("shell:saveGeminiSearchCredential", async (_evt, input) => {
+    if (!saveGeminiSearchCredential) throw new Error("本机安全存储不可用，暂时无法保存密钥");
+    const geminiApiKey = String((input && (input.geminiApiKey || input.apiKey)) || "").trim();
+    if (!geminiApiKey) throw new Error("请输入联网搜索密钥后再保存");
+    await saveGeminiSearchCredential({ geminiApiKey });
+    const boot = await rebootstrapAndNotify();
+    return {
+      ok: true,
+      modelReady: boot.modelReady,
+      modelMeta: boot.modelMeta,
+      status: boot.status,
+    };
+  });
+
+  ipcMain.handle("shell:deleteGeminiSearchCredential", async () => {
+    if (!deleteGeminiSearchCredential) throw new Error("凭证存储不可用，请确认系统安全存储已启用");
+    await deleteGeminiSearchCredential();
     const boot = await rebootstrapAndNotify();
     return {
       ok: true,

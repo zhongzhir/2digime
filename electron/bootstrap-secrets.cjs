@@ -86,10 +86,11 @@ function hostOf(baseUrl) {
   }
 }
 
-function publicStatus(cfg, credentialConfigured, isPackaged, reason) {
+function publicStatus(cfg, credentialConfigured, isPackaged, reason, geminiSearchConfigured) {
   return {
     credentialConfigured: !!credentialConfigured,
     needsCredentialSetup: !credentialConfigured,
+    geminiSearchConfigured: !!geminiSearchConfigured,
     providerPreset: (cfg && cfg.providerPreset) || "deepseek",
     providerId: (cfg && cfg.providerId) || "openai-compatible",
     baseUrl: (cfg && cfg.baseUrl) || DEFAULT_PROVIDER_PRESETS.deepseek.baseUrl,
@@ -184,6 +185,18 @@ function createCredentialOps(store, userDataPath) {
       });
       return { ok: true };
     },
+    saveGeminiSearchCredential: async (input) => {
+      const geminiApiKey = String((input && (input.geminiApiKey || input.apiKey)) || "").trim();
+      if (!geminiApiKey) {
+        throw new Error("请输入联网搜索密钥后再保存");
+      }
+      await store.put(providerCredentialKey("gemini-search"), geminiApiKey);
+      return { ok: true };
+    },
+    deleteGeminiSearchCredential: async () => {
+      await store.delete(providerCredentialKey("gemini-search"));
+      return { ok: true };
+    },
     deleteCredential: async (input = {}) => {
       const cfg = readModelConfig(userDataPath);
       const providerId =
@@ -253,7 +266,7 @@ async function resolveModelConfig(opts) {
       reason: "safeStorage_unavailable",
       documentCapability: "none",
       needsCredentialSetup: true,
-      status: publicStatus(cfg, false, isPackaged, "safeStorage_unavailable"),
+      status: publicStatus(cfg, false, isPackaged, "safeStorage_unavailable", false),
     };
   }
 
@@ -312,7 +325,7 @@ async function resolveModelConfig(opts) {
       reason: "no_model_credential",
       documentCapability: "none",
       needsCredentialSetup: true,
-      status: publicStatus(cfg, false, isPackaged, "no_model_credential"),
+      status: publicStatus(cfg, false, isPackaged, "no_model_credential", !!geminiSearchApiKey),
       secrets: store.accessor(),
       geminiSearchApiKey,
       geminiSearchModel,
@@ -338,7 +351,7 @@ async function resolveModelConfig(opts) {
       baseUrlHost: hostOf(cfg.baseUrl),
       source: isPackaged ? "v2_secret_store_packaged" : "v2_secret_store_dev",
     },
-    status: publicStatus(cfg, true, isPackaged, null),
+    status: publicStatus(cfg, true, isPackaged, null, !!geminiSearchApiKey),
     needsCredentialSetup: false,
     ...ops,
   };
