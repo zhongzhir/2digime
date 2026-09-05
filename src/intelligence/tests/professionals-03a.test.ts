@@ -7,7 +7,7 @@ import { asLocalCapabilityAdapter } from '../../capability/local-adapter-lifecyc
 import { CapabilityRegistry } from '../../capability/registry';
 import type { CapabilityInput, CapabilityOutput } from '../../capability/adapter';
 import type { CapabilityRegistration } from '../../capability/registration';
-import { agentsFromRegistry, describeProfessionals } from '../professionals';
+import { agentsFromRegistry, describeProfessionals, resolveAuthorizedWorkingDirectory } from '../professionals';
 
 function stubAdapter(reg: CapabilityRegistration, execute?: (input: CapabilityInput) => Promise<CapabilityOutput>) {
   return asLocalCapabilityAdapter({
@@ -82,9 +82,9 @@ test('agentsFromRegistry 不再按 document 预筛选，也不把通用模型当
   registry.register(
     stubAdapter(
       baseReg({
-        id: 'cap_baseline_web_search',
+        id: 'cap_gemini_web_search',
         kind: 'tool',
-        displayName: '基础搜索',
+        displayName: '联网搜索',
         outputArtifactTypes: ['document'],
         permissions: ['network'],
         adapter: { type: 'local-tool', adapterId: 'baseline-bing-search' },
@@ -117,9 +117,13 @@ test('agentsFromRegistry 不再按 document 预筛选，也不把通用模型当
     ),
   );
 
-  const agents = agentsFromRegistry(registry, { subjectId: 'sub_1' });
+  const withoutProject = agentsFromRegistry(registry, { subjectId: 'sub_1' });
+  assert.deepEqual(withoutProject.map((a) => a.id).sort(), ['cap_gemini_web_search']);
+
+  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-prof-'));
+  const agents = agentsFromRegistry(registry, { subjectId: 'sub_1', authorizedWorkingDirectory: workDir });
   const ids = agents.map((a) => a.id).sort();
-  assert.deepEqual(ids, ['cap_baseline_web_search', 'cap_external_executor_codex']);
+  assert.deepEqual(ids, ['cap_external_executor_codex', 'cap_gemini_web_search']);
   const blob = describeProfessionals(agents);
   assert.match(blob, /代码执行能力/);
   assert.match(blob, /不能做什么/);
@@ -128,12 +132,11 @@ test('agentsFromRegistry 不再按 document 预筛选，也不把通用模型当
   assert.equal(/WorkIntent|outputFamily/.test(blob), false);
   assert.equal(blob.includes('对话模型'), false);
 
-  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-prof-'));
   const coding = agents.find((a) => a.id === 'cap_external_executor_codex');
   assert.ok(coding);
   const result = await coding.run({
     instruction: '创建一个 README.md',
-    workDir,
+    workDir: path.join(workDir, 'run-evidence'),
     signal: new AbortController().signal,
   });
   assert.equal(captured.input?.artifactType, 'code-change');
@@ -144,7 +147,7 @@ test('agentsFromRegistry 不再按 document 预筛选，也不把通用模型当
   assert.equal(await fs.readFile(readme, 'utf8'), 'gate');
   assert.equal(result.outputPath, readme);
 
-  const search = agents.find((a) => a.id === 'cap_baseline_web_search');
+  const search = agents.find((a) => a.id === 'cap_gemini_web_search');
   assert.ok(search);
   const searchDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-prof-search-'));
   const evidence = await search.run({
@@ -183,10 +186,10 @@ test('声明会写工作目录的能力：stdout 完成但无真实文件变化�
       }),
     ),
   );
-  const agents = agentsFromRegistry(registry, { subjectId: 'sub_1' });
+  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-prof-empty-'));
+  const agents = agentsFromRegistry(registry, { subjectId: 'sub_1', authorizedWorkingDirectory: workDir });
   const coding = agents.find((a) => a.id === 'cap_external_executor_codex');
   assert.ok(coding);
-  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-prof-empty-'));
   const result = await coding.run({
     instruction: '写一个 hello.txt',
     workDir,
@@ -196,4 +199,12 @@ test('声明会写工作目录的能力：stdout 完成但无真实文件变化�
   assert.match(String(result.failureReason || result.summary), /真实的用户文件|没有在授权目录/);
   const names = await fs.readdir(workDir);
   assert.equal(names.includes('result.md'), false);
+});
+
+test('附上文件不得猜父目录为授权项目', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-auth-'));
+  const file = path.join(dir, 'note.txt');
+  await fs.writeFile(file, 'x');
+  assert.equal(resolveAuthorizedWorkingDirectory([file]), undefined);
+  assert.equal(resolveAuthorizedWorkingDirectory([dir]), path.resolve(dir));
 });

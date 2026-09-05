@@ -61,32 +61,39 @@ export async function launchDigitalMeElectron(opts?: {
     throw new Error('require(electron) 未返回可执行路径');
   }
   const realProduct = opts?.realProduct === true;
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries({
+    ...process.env,
+    DIGITALME_V2_ROOT: REPO_ROOT,
+    ...(realProduct
+      ? {
+          DIGITALME_V2_ELECTRON_TEST: '0',
+          DIGITALME_V2_UX_ACCEPTANCE: '0',
+          DIGITALME_V2_DIGITAL_SELF_STUB: '0',
+          DIGITALME_V2_TALK_STUB: '0',
+        }
+      : {
+          DIGITALME_V2_ELECTRON_TEST: '1',
+          DIGITALME_V2_UX_ACCEPTANCE: '1',
+          DIGITALME_V2_SEARCH_ENABLED: '0',
+          DIGITALME_V2_EXPORT_DELAY_MS: String(opts?.exportDelayMs ?? 0),
+        }),
+    DIGITALME_V2_USER_DATA: userData,
+    ELECTRON_ENABLE_LOGGING: '1',
+    ...(opts?.extraEnv || {}),
+  })) {
+    if (typeof value === 'string' && value !== '') env[key] = value;
+  }
+  for (const [key, value] of Object.entries(opts?.extraEnv || {})) {
+    if (value === '') delete env[key];
+  }
   const playwright = await import('playwright');
   const app = await playwright._electron.launch({
     executablePath: electronPath,
     args: [path.join(REPO_ROOT, 'electron', 'main.cjs')],
     cwd: REPO_ROOT,
     timeout: 60_000,
-    env: {
-      ...process.env,
-      DIGITALME_V2_ROOT: REPO_ROOT,
-      ...(realProduct
-        ? {
-            DIGITALME_V2_ELECTRON_TEST: '0',
-            DIGITALME_V2_UX_ACCEPTANCE: '0',
-            DIGITALME_V2_DIGITAL_SELF_STUB: '0',
-            DIGITALME_V2_TALK_STUB: '0',
-          }
-        : {
-            DIGITALME_V2_ELECTRON_TEST: '1',
-            DIGITALME_V2_UX_ACCEPTANCE: '1',
-            DIGITALME_V2_SEARCH_ENABLED: '0',
-            DIGITALME_V2_EXPORT_DELAY_MS: String(opts?.exportDelayMs ?? 0),
-          }),
-      DIGITALME_V2_USER_DATA: userData,
-      ELECTRON_ENABLE_LOGGING: '1',
-      ...(opts?.extraEnv || {}),
-    },
+    env,
   });
   try {
     const page = await app.firstWindow({ timeout: 90_000 });

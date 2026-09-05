@@ -142,6 +142,10 @@ async function importCredentialOnce(store, userDataPath, importFile) {
   if (!apiKey || !baseUrl || !model) return null;
 
   await store.put(providerCredentialKey(providerId), apiKey);
+  const geminiApiKey = String(parsed.geminiApiKey || parsed.GEMINI_API_KEY || "").trim();
+  if (geminiApiKey) {
+    await store.put(providerCredentialKey("gemini-search"), geminiApiKey);
+  }
   writeModelConfig(userDataPath, {
     providerPreset: inferPreset(baseUrl),
     providerId,
@@ -168,6 +172,10 @@ function createCredentialOps(store, userDataPath) {
         throw new Error("请填写服务地址与模型名称");
       }
       await store.put(providerCredentialKey(providerId), apiKey);
+      const geminiApiKey = String(input.geminiApiKey || "").trim();
+      if (geminiApiKey) {
+        await store.put(providerCredentialKey("gemini-search"), geminiApiKey);
+      }
       writeModelConfig(userDataPath, {
         providerPreset: input.providerPreset || inferPreset(baseUrl),
         providerId,
@@ -287,6 +295,17 @@ async function resolveModelConfig(opts) {
   }
 
   const apiKey = await store.get(providerCredentialKey(cfg.providerId));
+  const geminiStored = String((await store.get(providerCredentialKey("gemini-search"))) || "").trim();
+  const geminiEnv = String(process.env.GEMINI_API_KEY || "").trim();
+  let geminiSearchApiKey = geminiStored || null;
+  if (!geminiSearchApiKey && geminiEnv) {
+    geminiSearchApiKey = geminiEnv;
+    if (!isPackaged) {
+      await store.put(providerCredentialKey("gemini-search"), geminiEnv);
+    }
+  }
+  const geminiSearchModel =
+    String(process.env.GEMINI_SEARCH_MODEL || process.env.GEMINI_MODEL || "").trim() || null;
   if (!apiKey) {
     return {
       ok: false,
@@ -295,6 +314,8 @@ async function resolveModelConfig(opts) {
       needsCredentialSetup: true,
       status: publicStatus(cfg, false, isPackaged, "no_model_credential"),
       secrets: store.accessor(),
+      geminiSearchApiKey,
+      geminiSearchModel,
       ...ops,
     };
   }
@@ -310,6 +331,8 @@ async function resolveModelConfig(opts) {
       timeoutMs: 120_000,
     },
     secrets: store.accessor(),
+    geminiSearchApiKey,
+    geminiSearchModel,
     modelMeta: {
       model: cfg.model,
       baseUrlHost: hostOf(cfg.baseUrl),

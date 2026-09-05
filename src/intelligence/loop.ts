@@ -14,8 +14,6 @@ import type { ConsultResult, PublicSubjectCard } from '../subject-collab/types';
 import { formatPublicCardsForModel } from '../subject-collab/public-card';
 
 export const NO_MODEL_NOTICE = '需要先连接 AI 能力，才能继续交流。';
-/** 单次检索远短于整轮 deadline，避免一个 connector 吃光 180s。 */
-export const SEARCH_CALL_TIMEOUT_MS = 25_000;
 
 const MAX_TOOL_ROUNDS = 4;
 const DEFAULT_TOOL_CALL_TIMEOUT_MS = 75_000;
@@ -203,7 +201,8 @@ function remainingMs(deadlineAt?: number): number {
 }
 
 function callTimeoutMs(agent: ProfessionalAgent, remaining: number): number {
-  const cap = agent.maxCallMs && agent.maxCallMs > 0 ? agent.maxCallMs : DEFAULT_TOOL_CALL_TIMEOUT_MS;
+  const fallback = Number.isFinite(remaining) ? remaining : DEFAULT_TOOL_CALL_TIMEOUT_MS;
+  const cap = agent.maxCallMs && agent.maxCallMs > 0 ? agent.maxCallMs : fallback;
   if (!Number.isFinite(remaining)) return cap;
   return Math.max(1, Math.min(cap, remaining));
 }

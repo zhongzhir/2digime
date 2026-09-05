@@ -211,12 +211,16 @@ async function bootstrapRuntime() {
             secrets: model.secrets,
             registerOpenAiStub: false,
             codeAnalysisCapability,
+            ...(model.geminiSearchApiKey ? { geminiSearchApiKey: model.geminiSearchApiKey } : {}),
+            ...(model.geminiSearchModel ? { geminiSearchModel: model.geminiSearchModel } : {}),
             ...(a2aRemoteCapability ? { a2aRemoteCapability } : {}),
           }
         : {
             documentCapability: "none",
             registerOpenAiStub: false,
             ...(model.secrets ? { secrets: model.secrets } : {}),
+            ...(model.geminiSearchApiKey ? { geminiSearchApiKey: model.geminiSearchApiKey } : {}),
+            ...(model.geminiSearchModel ? { geminiSearchModel: model.geminiSearchModel } : {}),
             codeAnalysisCapability,
             ...(a2aRemoteCapability ? { a2aRemoteCapability } : {}),
           },
@@ -1501,13 +1505,11 @@ function registerIpc() {
       };
     }
 
-    // DIGITALME-CONVERSATION-SEARCH-RESEARCH-01：
-    // 对话信息能力 — 自然对话 → 判断是否需要外部信息 → 不搜索/快速搜索/深度研究
-    // → 综合本人上下文 + 外部来源 → 自然答案 + 可核验来源。
-    // 仅在真实模型已配置时启用；可用 DIGITALME_V2_SEARCH_ENABLED=0 关闭。
+    // 旧 conversation-search / Bing closure 退出默认产品路径。
+    // 仅显式 DIGITALME_V2_SEARCH_ENABLED=1 供诊断。
     let searchFailureHonest = false;
     const searchEnabled =
-      process.env.DIGITALME_V2_SEARCH_ENABLED !== "0" &&
+      process.env.DIGITALME_V2_SEARCH_ENABLED === "1" &&
       !!model.openaiCompatible &&
       !isFactQuery &&
       !isInferenceQuery;

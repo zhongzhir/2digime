@@ -1,9 +1,23 @@
-import { promises as fs } from 'node:fs';
+import { existsSync, promises as fs, statSync } from 'node:fs';
 import * as path from 'node:path';
 import type { CapabilityAdapter, CapabilityInput, ExecutionContext, SecretAccessor } from '../capability/adapter';
 import type { CapabilityRegistry } from '../capability/registry';
 import type { CapabilityRegistration } from '../capability/registration';
 import type { ProfessionalAgent, ProfessionalResult } from './types';
+
+/** 本次 Talk 附带的已存在目录才算授权 workspace；不猜父目录、不用 runs/{execId}。 */
+export function resolveAuthorizedWorkingDirectory(paths?: string[]): string | undefined {
+  for (const raw of paths || []) {
+    const candidate = path.resolve(String(raw || '').trim());
+    if (!candidate) continue;
+    try {
+      if (existsSync(candidate) && statSync(candidate).isDirectory()) return candidate;
+    } catch {
+      /* skip */
+    }
+  }
+  return undefined;
+}
 
 /**
  * 把已注册、当前可真实调用的外部能力/资源描述成自然语言合同。
@@ -48,11 +62,11 @@ export function describeProfessionals(agents: ProfessionalAgent[]): string {
  */
 export function agentsFromRegistry(
   registry: CapabilityRegistry,
-  input: { subjectId: string; secrets?: SecretAccessor },
+  input: { subjectId: string; secrets?: SecretAccessor; authorizedWorkingDirectory?: string },
 ): ProfessionalAgent[] {
   const out: ProfessionalAgent[] = [];
   for (const reg of registry.list()) {
-    if (!isCallableProfessional(reg)) continue;
+    if (!isCallableProfessional(reg, input.authorizedWorkingDirectory)) continue;
     const adapter = registry.get(reg.id);
     if (!adapter) continue;
     out.push(wrapAdapter(adapter, input));
@@ -60,7 +74,11 @@ export function agentsFromRegistry(
   return out;
 }
 
-function isCallableProfessional(reg: CapabilityRegistration): boolean {
+function writesFilesystem(reg: CapabilityRegistration): boolean {
+  return (reg.permissions || []).includes('filesystem_write');
+}
+
+function isCallableProfessional(reg: CapabilityRegistration, authorizedWorkingDirectory?: string): boolean {
   if (reg.availability && reg.availability !== 'available') return false;
   if (reg.kind === 'model') return false;
   if (reg.adapter.type === 'openai-compatible-model') return false;
@@ -70,6 +88,7 @@ function isCallableProfessional(reg: CapabilityRegistration): boolean {
     );
   }
   if (reg.codingExecution && reg.codingExecution.supportsAutomaticExecution === false) return false;
+  if (writesFilesystem(reg) && !authorizedWorkingDirectory) return false;
   return true;
 }
 
@@ -116,7 +135,7 @@ function naturalContract(reg: CapabilityRegistration): {
 
 function wrapAdapter(
   adapter: CapabilityAdapter,
-  input: { subjectId: string; secrets?: SecretAccessor },
+  input: { subjectId: string; secrets?: SecretAccessor; authorizedWorkingDirectory?: string },
 ): ProfessionalAgent {
   const reg = adapter.registration;
   const contract = naturalContract(reg);
@@ -124,13 +143,14 @@ function wrapAdapter(
   const searchLike =
     (reg.permissions || []).includes('network') && !writes && reg.kind === 'tool';
   const artifactType = reg.outputArtifactTypes[0] || 'document';
+  const projectDir = writes ? input.authorizedWorkingDirectory : undefined;
   return {
     id: reg.id,
     label: reg.displayName,
     description: contract.description,
     cannotDo: contract.cannotDo,
     effects: contract.effects,
-    ...(searchLike ? { maxCallMs: 25_000, returnsEvidence: true } : {}),
+    ...(searchLike ? { returnsEvidence: true } : {}),
     async run(runInput): Promise<ProfessionalResult> {
       await fs.mkdir(runInput.workDir, { recursive: true });
       const ctx: ExecutionContext = {
@@ -147,8 +167,8 @@ function wrapAdapter(
           id: ctx.jobId,
           taskId: 'talk',
           createdAt: new Date().toISOString(),
-          items: writes
-            ? [{ sourcePath: runInput.workDir, kind: 'folder-entry', status: 'ok' }]
+          items: writes && projectDir
+            ? [{ sourcePath: projectDir, kind: 'folder-entry', status: 'ok' }]
             : [],
         },
         subjectContext: {
@@ -156,11 +176,11 @@ function wrapAdapter(
           derivedAt: new Date().toISOString(),
           entries: [],
         },
-        ...(writes
+        ...(writes && projectDir
           ? {
               executionAuthorization: {
                 confirmed: true,
-                workingDirectory: runInput.workDir,
+                workingDirectory: projectDir,
                 readScope: ['.'],
                 writeScope: ['.'],
                 projectOrigin: 'digitalme_created' as const,
@@ -174,7 +194,8 @@ function wrapAdapter(
           err.name = 'AbortError';
           throw err;
         }
-        const before = writes ? await snapshotWorkFiles(runInput.workDir) : new Map<string, WorkFileSnap>();
+        const changeRoot = writes && projectDir ? projectDir : runInput.workDir;
+        const before = writes ? await snapshotWorkFiles(changeRoot) : new Map<string, WorkFileSnap>();
         const output = await adapter.execute(capInput, ctx);
         const payload = output.artifact.payload;
         let rawText = output.artifact.title || '';
@@ -189,7 +210,7 @@ function wrapAdapter(
           outputPath = payload.sourcePath;
           rawText = `已生成文件：${payload.sourcePath}`;
         } else if (payload.kind === 'bundle') {
-          const created = await listUserFacingFiles(runInput.workDir);
+          const created = await listUserFacingFiles(changeRoot);
           outputPath = created[0];
           rawText = [
             output.artifact.title || '外部执行返回',
@@ -200,8 +221,8 @@ function wrapAdapter(
         } else {
           rawText = output.artifact.title || '外部执行返回';
         }
-        const after = await snapshotWorkFiles(runInput.workDir);
-        const changed = writes ? userFacingChanges(runInput.workDir, before, after) : [];
+        const after = await snapshotWorkFiles(changeRoot);
+        const changed = writes ? userFacingChanges(changeRoot, before, after) : [];
         const userFiles = searchLike ? [] : writes ? changed : await listUserFacingFiles(runInput.workDir);
         if (!searchLike && !writes) {
           if (!outputPath) outputPath = userFiles[0];
@@ -244,7 +265,7 @@ function wrapAdapter(
           throw abort;
         }
         if (!searchLike) {
-          const userFiles = await listUserFacingFiles(runInput.workDir);
+          const userFiles = await listUserFacingFiles(writes && projectDir ? projectDir : runInput.workDir);
           const firstFile = userFiles[0];
           if (firstFile) {
             return {

@@ -67,7 +67,10 @@ export class TalkService {
   constructor(
     private readonly resolvePackage: () => TalkPackageRef | null,
     private readonly chat: TalkChatFn | null,
-    private readonly resolveAgents: (pkg: TalkPackageRef) => ProfessionalAgent[],
+    private readonly resolveAgents: (
+      pkg: TalkPackageRef,
+      turn?: { contextPaths?: string[] },
+    ) => ProfessionalAgent[],
     private readonly now: () => string = nowIso,
     private readonly resolveCollab?: (pkg: TalkPackageRef) => Promise<SubjectCollabPort | null>,
     private readonly learnFromUtterance?: (text: string) => Promise<TalkLearnResult>,
@@ -124,7 +127,7 @@ export class TalkService {
         thread,
         userText: text,
         selfContext,
-        agents: this.resolveAgents(pkg),
+        agents: this.resolveAgents(pkg, input.contextPaths ? { contextPaths: input.contextPaths } : {}),
         chat: boundedChat,
         workRoot: pkg.rootDir,
         now,

@@ -78,13 +78,16 @@ test('CASE B: 真正 professional deep-research contract 出现 → deep_researc
   assert.equal(after.plan.capabilityId, 'cap_professional_deep_research');
 });
 
-test('CASE C: 无 Search specialist 但 baseline web + model → deep_research BASELINE，不阻塞', () => {
-  const baseline = discoverSearchCapabilities({ GEMINI_API_KEY: '' }).map((a) => a.registration);
+test('CASE C: 无 Search specialist 时 leftover baseline 仅显式开启', () => {
+  const none = discoverSearchCapabilities({ GEMINI_API_KEY: '' }).map((a) => a.registration);
+  assert.equal(none.some((r) => r.id === BASELINE_SEARCH_CAPABILITY_ID), false);
+  assert.ok(!none.some((r) => r.id === PROFESSIONAL_SEARCH_CAPABILITY_ID), '无凭据时无专业搜索');
+
+  const baseline = discoverSearchCapabilities({ GEMINI_API_KEY: '' }, { includeBaseline: true }).map((a) => a.registration);
   assert.ok(baseline.some((r) => r.id === BASELINE_SEARCH_CAPABILITY_ID));
-  assert.ok(!baseline.some((r) => r.id === PROFESSIONAL_SEARCH_CAPABILITY_ID), '无凭据时无专业搜索');
 
   const dr = resolveCapability({ domain: 'deep_research' }, availableFromRegistrations([...baseline, modelReg()]));
-  assert.equal(dr.level, 'baseline', 'baseline web + model → BASELINE research，仍完成');
+  assert.equal(dr.level, 'baseline', '显式 baseline web + model → BASELINE research，仍完成');
 });
 
 test('CASE D: 所有外部研究能力不可用 → LIMITED / UNAVAILABLE，不虚报', () => {

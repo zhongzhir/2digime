@@ -164,7 +164,7 @@ import { AI_CTO_JSON_SCHEMA } from '../execution/ai-cto-review';
 import { providerCredentialKey } from '../infrastructure/secret-store';
 import { DigitalSelfService } from '../subject-core/digital-self';
 import type { DigitalSelfChatFn } from '../subject-core/digital-self/interpret';
-import { TalkService, agentsFromRegistry } from '../intelligence';
+import { TalkService, agentsFromRegistry, resolveAuthorizedWorkingDirectory } from '../intelligence';
 import type { ProfessionalAgent, TalkChatFn } from '../intelligence';
 import { formatSelfContext, selectSelfContext } from '../intelligence/self-context';
 import { readDigitalSelf } from '../subject-core/digital-self/store';
@@ -241,6 +241,12 @@ export interface DigitalMeRuntimeOptions {
    */
   searchCapability?: boolean;
   /**
+   * Gemini 搜索凭据（SecretStore 解析结果）。无值则只回退环境变量。
+   * 无凭据时不注册 Gemini search。
+   */
+  geminiSearchApiKey?: string | null;
+  geminiSearchModel?: string | null;
+  /**
    * 搜索能力单次 attempt 的 job 级 deadline（毫秒）。测试可缩短。
    */
   searchAttemptDeadlineMs?: number;
@@ -250,11 +256,9 @@ export interface DigitalMeRuntimeOptions {
    */
   capabilityRegistryOverride?: CapabilityRegistry;
   /**
-   * TRIAL-SURFACE-01B：无专用代码执行器时的模型兜底运输（agent 连接器的 model-api 运输）。
-   * - undefined：默认——当真实模型已配置（documentCapability 为 openai-compatible/both 且有 openaiCompatible）时注册；
-   *   否则不注册（fake/none 测试运行时禁止假模型冒充改代码）。
-   * - true：强制注册（测试可注入 chatCompleteHook）。
-   * - false：不注册。
+   * TRIAL-SURFACE-01B：模型 JSON edits 运输。默认**不**向 Talk 暴露、不因有主模型自动注册。
+   * - undefined/false：不注册（主模型 + write_file + Codex 已覆盖）。
+   * - true：强制注册。
    * - options：显式注册（测试注入）。
    */
   modelApiCapability?: boolean | ExternalExecutorModelApiOptions;
@@ -409,11 +413,13 @@ export class DigitalMeRuntime {
           return { rootDir: pkg.rootDir, subjectId: pkg.id };
         },
         this.resolveTalkChat(),
-        (pkg) => {
+        (pkg, turn) => {
           if (this.options.talkProfessionals) return this.options.talkProfessionals;
+          const authorizedWorkingDirectory = resolveAuthorizedWorkingDirectory(turn?.contextPaths);
           return agentsFromRegistry(this.registry, {
             subjectId: pkg.subjectId,
             ...(this.options.secrets ? { secrets: this.options.secrets } : {}),
+            ...(authorizedWorkingDirectory ? { authorizedWorkingDirectory } : {}),
           });
         },
         nowIso,
@@ -3019,7 +3025,14 @@ export class DigitalMeRuntime {
     if (this.options.searchCapability !== false) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { discoverSearchCapabilities } = require('../capability/search-capability-discovery') as typeof import('../capability/search-capability-discovery');
-      for (const adapter of discoverSearchCapabilities()) {
+      for (const adapter of discoverSearchCapabilities(process.env, {
+        ...(this.options.geminiSearchApiKey
+          ? { apiKey: this.options.geminiSearchApiKey }
+          : {}),
+        ...(this.options.geminiSearchModel
+          ? { model: this.options.geminiSearchModel }
+          : {}),
+      })) {
         registry.register(adapter);
       }
     }
@@ -3103,15 +3116,9 @@ export class DigitalMeRuntime {
     if (this.options.secondaryExecutorCapability) {
       registry.register(createExternalExecutorSecondaryAdapter(this.options.secondaryExecutorCapability));
     }
-    // TRIAL-SURFACE-01B：无专用代码执行器时用已连接模型兜底运输。
-    // 默认注册条件与文档模型同一配置源：真实模型（openai-compatible/both）+ openaiCompatible 配置。
-    // documentCapability: 'fake' / 'none' 的测试运行时**不**注册，以免假模型冒充改代码。
+    // model_api 退出默认暴露；仅显式 modelApiCapability 注册。源码保留作过渡。
     const modelApiConfig = this.options.modelApiCapability;
-    const realModelConfigured =
-      (this.options.documentCapability === 'openai-compatible' ||
-        this.options.documentCapability === 'both') &&
-      !!this.options.openaiCompatible;
-    if (modelApiConfig === true || (modelApiConfig === undefined && realModelConfigured)) {
+    if (modelApiConfig === true) {
       const cfg: ExternalExecutorModelApiOptions = {
         ...this.options.openaiCompatible,
         providerId:

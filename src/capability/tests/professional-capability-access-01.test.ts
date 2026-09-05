@@ -78,25 +78,24 @@ test('CASE 1/2: Coding 能力自动发现 — 已安装 → available；未安�
 });
 
 test('CASE 3: 已有支持 Search 的合法凭据 → 自动发现 search capability', () => {
-  // 有 GEMINI key：professional search 注册。
   const withKey = discoverSearchCapabilities({ GEMINI_API_KEY: 'sk-test', GEMINI_SEARCH_MODEL: 'gemini-3.6-flash' });
   const ids = withKey.map((a) => a.registration.id);
-  assert.ok(ids.includes(BASELINE_SEARCH_CAPABILITY_ID), 'baseline search 始终注册');
+  assert.equal(ids.includes(BASELINE_SEARCH_CAPABILITY_ID), false, 'Bing baseline 默认不注册');
   assert.ok(ids.includes(PROFESSIONAL_SEARCH_CAPABILITY_ID), '有凭据时 professional search 注册');
   assert.equal(withKey.find((a) => a.registration.id === PROFESSIONAL_SEARCH_CAPABILITY_ID)!.registration.availability, 'available');
 
-  // 无 key：只有 baseline。
   const noKey = discoverSearchCapabilities({ GEMINI_API_KEY: '' });
   const noKeyIds = noKey.map((a) => a.registration.id);
-  assert.ok(noKeyIds.includes(BASELINE_SEARCH_CAPABILITY_ID));
+  assert.equal(noKeyIds.includes(BASELINE_SEARCH_CAPABILITY_ID), false);
   assert.ok(!noKeyIds.includes(PROFESSIONAL_SEARCH_CAPABILITY_ID), '无凭据时不注册 professional search');
 });
 
 test('CASE 3b: 探测分级 available / needs_simple_setup / unavailable', async () => {
-  const regs = discoverSearchCapabilities({ GEMINI_API_KEY: 'sk-test' }).map((a) => a.registration);
+  const regs = discoverSearchCapabilities({ GEMINI_API_KEY: 'sk-test' }, { includeBaseline: true }).map((a) => a.registration);
   const baseline = regs.find((r) => r.id === BASELINE_SEARCH_CAPABILITY_ID)!;
   const prof = regs.find((r) => r.id === PROFESSIONAL_SEARCH_CAPABILITY_ID)!;
-  assert.equal(await probeSearchAvailability(baseline, { GEMINI_API_KEY: '' }), 'available');
+  assert.equal(await probeSearchAvailability(baseline, { GEMINI_API_KEY: '' }), 'unavailable');
+  assert.equal(await probeSearchAvailability(baseline, { DIGITALME_V2_BASELINE_SEARCH: '1' }), 'available');
   assert.equal(await probeSearchAvailability(prof, { GEMINI_API_KEY: '' }), 'needs_simple_setup');
   assert.equal(await probeSearchAvailability(prof, { GEMINI_API_KEY: 'sk-x' }), 'available');
 });
