@@ -133,7 +133,6 @@ test('04 真实入口：导航 + A–E 同一交流', { timeout: 2_400_000 }, as
   await fs.mkdir(talkTrace, { recursive: true });
   const harness = await launchDigitalMeElectron({
     realProduct: true,
-    useAppUserData: true,
     extraEnv: {
       DIGITALME_V2_DIGITAL_SELF_STUB: '0',
       DIGITALME_V2_TALK_STUB: '0',

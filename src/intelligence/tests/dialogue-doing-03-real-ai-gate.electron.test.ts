@@ -192,7 +192,6 @@ test('Electron 真实模型闸门：交流 / 做事 / 换说法 / 缺信息 / �
 
   const harness = await launchDigitalMeElectron({
     realProduct: true,
-    useAppUserData: true,
     extraEnv: {
       DIGITALME_V2_DIGITAL_SELF_STUB: '0',
       DIGITALME_V2_TALK_STUB: '0',
@@ -205,7 +204,7 @@ test('Electron 真实模型闸门：交流 / 做事 / 换说法 / 缺信息 / �
 
   const results: Record<string, unknown> = {
     stubForcedOff: true,
-    usedAppUserData: true,
+    usedAppUserData: false,
   };
 
   try {

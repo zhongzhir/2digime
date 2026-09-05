@@ -14,17 +14,30 @@ export function describeProfessionals(agents: ProfessionalAgent[]): string {
   if (!agents.length) {
     return '当前没有已连接的外部能力。只能交流或询问用户，不得假装已经做完外部行动。';
   }
-  return agents
-    .map((agent) => {
-      const lines = [
-        `- 名字：${agent.label}`,
-        `  id: ${agent.id}`,
-        `  能做什么：${agent.description}`,
-      ];
+  const contractKey = (agent: ProfessionalAgent) =>
+    `${agent.description}\n${agent.cannotDo || ''}\n${agent.effects || ''}`;
+  const groups: ProfessionalAgent[][] = [];
+  for (const agent of agents) {
+    const key = contractKey(agent);
+    const existing = groups.find((row) => row[0] && contractKey(row[0]) === key);
+    if (existing) {
+      existing.push(agent);
+      continue;
+    }
+    groups.push([agent]);
+  }
+  return groups
+    .map((group) => {
+      const agent = group[0];
+      if (!agent) return '';
+      const labels = group.map((item) => item.label).join(' / ');
+      const ids = group.map((item) => item.id).join('、');
+      const lines = [`- 名字：${labels}`, `  id: ${ids}`, `  能做什么：${agent.description}`];
       if (agent.cannotDo) lines.push(`  不能做什么：${agent.cannotDo}`);
       if (agent.effects) lines.push(`  真实效果：${agent.effects}`);
       return lines.join('\n');
     })
+    .filter(Boolean)
     .join('\n');
 }
 
@@ -77,7 +90,7 @@ function naturalContract(reg: CapabilityRegistration): {
   if (writes) effects.push('会在本次已授权的工作目录里真实创建或修改文件，不要向用户再要路径');
   if (reads && !writes) effects.push('会读取授权范围内的文件');
   if (net && writes) effects.push('执行过程中可能访问网络');
-  if (net && !writes) effects.push('会访问公开网络检索来源');
+  if (net && !writes) effects.push('会访问公开网络');
   if (!effects.length) effects.push('不产生磁盘或网络上的外部效果，只返回文字');
 
   let description = String(reg.description || '').trim();
@@ -87,7 +100,7 @@ function naturalContract(reg: CapabilityRegistration): {
   } else if (modelApiExec) {
     description = '在授权目录做一次小范围文件修改。';
   } else if (searchLike) {
-    description = '检索公开网页并返回来源与摘录。返回的是证据，不是给用户的最终答案，也不会创建用户文件。';
+    description = '检索公开网页并返回来源与摘录。返回证据，不写用户文件。';
   } else if (!description) {
     description = '可按完整文字目标执行一次已连接能力。';
   }
@@ -95,7 +108,7 @@ function naturalContract(reg: CapabilityRegistration): {
   let cannotDo =
     '不能发送邮件，不能扩大授权，不能改授权目录之外的路径，不能代替用户确认高风险操作。';
   if (searchLike) {
-    cannotDo = '不能改文件、不能发邮件、不能登录需要账号的站点；只检索公开网页。';
+    cannotDo = '';
   }
 
   return { description, cannotDo, effects: effects.join('；') };

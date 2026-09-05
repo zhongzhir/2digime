@@ -207,7 +207,6 @@ test('Electron 03A：真实专业能力可见后自主 delegate 并产生外部�
 
   const harness = await launchDigitalMeElectron({
     realProduct: true,
-    useAppUserData: true,
     extraEnv: {
       DIGITALME_V2_DIGITAL_SELF_STUB: '0',
       DIGITALME_V2_TALK_STUB: '0',
@@ -220,11 +219,11 @@ test('Electron 03A：真实专业能力可见后自主 delegate 并产生外部�
 
   const results: Record<string, unknown> = {
     stubForcedOff: true,
-    usedAppUserData: true,
-    isolatedUserDataFailedFirstWindow: true,
+    usedAppUserData: false,
+    isolatedUserDataFailedFirstWindow: false,
     yellow: false,
     openGoalWritten: false,
-    note: '本轮不为测试写入 openGoal。Thread history 已能支持连续交流。隔离 userData 无法在时限内出现窗口，改用本机应用 userData。',
+    note: '测试使用隔离 userData，不得写入正式 AppData default Thread。',
   };
 
   try {

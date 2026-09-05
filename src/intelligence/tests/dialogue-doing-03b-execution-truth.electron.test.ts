@@ -188,7 +188,6 @@ async function runScene(input: {
   await fs.mkdir(talkTrace, { recursive: true });
   const harness = await launchDigitalMeElectron({
     realProduct: true,
-    useAppUserData: true,
     extraEnv: {
       DIGITALME_V2_DIGITAL_SELF_STUB: '0',
       DIGITALME_V2_TALK_STUB: '0',

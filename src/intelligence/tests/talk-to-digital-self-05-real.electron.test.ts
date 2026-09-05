@@ -293,9 +293,10 @@ test('真实模型：Talk 真人原句回流到唯一 Digital Self', { timeout: 
   };
 
   let originalDir = '';
+  const isolatedUserData = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-talk-self-real-ud-'));
   const first = await launchDigitalMeElectron({
     realProduct: true,
-    useAppUserData: true,
+    userData: isolatedUserData,
     extraEnv,
   });
 
@@ -490,7 +491,7 @@ test('真实模型：Talk 真人原句回流到唯一 Digital Self', { timeout: 
 
   const second = await launchDigitalMeElectron({
     realProduct: true,
-    useAppUserData: true,
+    userData: isolatedUserData,
     extraEnv,
   });
   try {

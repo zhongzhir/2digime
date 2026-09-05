@@ -157,7 +157,6 @@ test('完成语义真实回归：常识 / 最新信息 / 做事 / 失败 / 多�
   await fs.mkdir(TALK_TRACE, { recursive: true });
   const harness = await launchDigitalMeElectron({
     realProduct: true,
-    useAppUserData: true,
     extraEnv: {
       DIGITALME_V2_DIGITAL_SELF_STUB: '0',
       DIGITALME_V2_TALK_STUB: '0',

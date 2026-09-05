@@ -114,6 +114,7 @@ function applyOneTell(
   now: string,
 ): { asked: boolean; conflict: boolean } {
   if (!proposal.aboutUser) return { asked: false, conflict: false };
+  if (proposal.lasting === false) return { asked: false, conflict: false };
   const text = normalizeUnderstandingText(proposal.text);
   if (!text) return { asked: false, conflict: false };
 
@@ -241,6 +242,7 @@ export function applyImportProposals(
   let asked = false;
   for (const proposal of proposals) {
     if (!proposal.aboutUser) continue;
+    if (proposal.lasting === false) continue;
     const text = normalizeUnderstandingText(proposal.text);
     if (!text) continue;
     if (live(self).some((item) => sameText(item.text, text))) continue;

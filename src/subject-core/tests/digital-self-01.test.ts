@@ -4,8 +4,9 @@ import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { DigitalSelfService } from '../digital-self/service';
-import { digitalSelfFilePath, readDigitalSelf } from '../digital-self/store';
+import { digitalSelfFilePath, emptyDigitalSelf, readDigitalSelf } from '../digital-self/store';
 import { liveUnderstandings } from '../digital-self/view';
+import { applyTellProposals } from '../digital-self/apply';
 import type { DigitalSelfChatFn } from '../digital-self/interpret';
 import { createDigitalMeRuntime } from '../../runtime/digitalme-runtime';
 import { createCommandBus } from '../../runtime/command-bus';
@@ -250,4 +251,22 @@ test('Digital Self 命令面走同一 authority，不经过 GrowthEvent', async 
   const raw = await fs.readFile(selfFile, 'utf8');
   assert.match(raw, /张三/);
   await runtime.stop();
+});
+
+test('lasting=false 的一次性任务不得写入 current', () => {
+  const self = emptyDigitalSelf('subj_test', '2026-09-05T00:00:00.000Z');
+  const result = applyTellProposals(
+    self,
+    [
+      {
+        text: '用户当前想要一个数学网页小游戏',
+        facet: 'goals',
+        aboutUser: true,
+        origin: 'user_statement',
+        lasting: false,
+      },
+    ],
+    '2026-09-05T00:00:00.000Z',
+  );
+  assert.equal(result.self.understandings.length, 0);
 });

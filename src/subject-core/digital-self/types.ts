@@ -58,6 +58,8 @@ export interface ModelUnderstandingProposal {
   aboutUser: boolean;
   origin: DigitalSelfOrigin;
   excerpt?: string;
+  /** 模型判断：是否值得进入长期数字之我。false 时 runtime 不写入 current。 */
+  lasting?: boolean;
   isCoreIdentity?: boolean;
   isSensitive?: boolean;
   isMajorGoal?: boolean;

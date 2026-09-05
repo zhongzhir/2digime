@@ -69,6 +69,22 @@ const learnChat: DigitalSelfChatFn = async ({ messages }) => {
             facet: 'preferences',
             aboutUser: true,
             origin: 'user_statement',
+            lasting: true,
+          },
+        ],
+      }),
+    };
+  }
+  if (/做一个双击就能玩的数学小游戏/.test(input) || /morning_todo/.test(input)) {
+    return {
+      text: JSON.stringify({
+        understandings: [
+          {
+            text: '用户当前想要一个数学网页小游戏',
+            facet: 'goals',
+            aboutUser: true,
+            origin: 'user_statement',
+            lasting: false,
           },
         ],
       }),
@@ -83,6 +99,7 @@ const learnChat: DigitalSelfChatFn = async ({ messages }) => {
             facet: 'boundaries',
             aboutUser: true,
             origin: 'user_statement',
+            lasting: true,
           },
         ],
       }),
@@ -98,7 +115,23 @@ const learnChat: DigitalSelfChatFn = async ({ messages }) => {
             facet: 'boundaries',
             aboutUser: true,
             origin: 'user_statement',
+            lasting: true,
             ...(old ? { replacesId: old.id } : {}),
+          },
+        ],
+      }),
+    };
+  }
+  if (/以后不要让我理解 IT/.test(input) || /用大白话和我沟通技术问题/.test(input)) {
+    return {
+      text: JSON.stringify({
+        understandings: [
+          {
+            text: '用户希望以后用大白话沟通技术问题，不要假定其理解 IT',
+            facet: 'preferences',
+            aboutUser: true,
+            origin: 'user_statement',
+            lasting: true,
           },
         ],
       }),
@@ -270,5 +303,48 @@ test('E：Talk 写入后重启仍保持', async () => {
     assert.equal(subjectId.length > 0, true);
   } finally {
     await second.stop();
+  }
+});
+
+test('F：一次性任务即使模型误输出也不进入 current', async () => {
+  const root = await tempDir('f');
+  const pkg = path.join(root, 'pkg');
+  const runtime = createDigitalMeRuntime({
+    documentCapability: 'fake',
+    registerOpenAiStub: false,
+    digitalSelfChat: learnChat,
+    talkChat: echoTalk,
+    talkProfessionals: [],
+  });
+  const bus = createCommandBus(runtime);
+  try {
+    await bus.invoke('subject.createPackage', { displayName: '学习主体', targetDir: pkg });
+    await bus.invoke('talk', { text: '给我做一个双击就能玩的数学小游戏。' });
+    const view = (await bus.invoke('digitalSelf', { action: 'read' })).view;
+    const blob = JSON.stringify(view);
+    assert.equal(/数学网页小游戏|数学小游戏/.test(blob), false);
+  } finally {
+    await runtime.stop();
+  }
+});
+
+test('G：明确长期偏好可以沉淀', async () => {
+  const root = await tempDir('g');
+  const pkg = path.join(root, 'pkg');
+  const runtime = createDigitalMeRuntime({
+    documentCapability: 'fake',
+    registerOpenAiStub: false,
+    digitalSelfChat: learnChat,
+    talkChat: echoTalk,
+    talkProfessionals: [],
+  });
+  const bus = createCommandBus(runtime);
+  try {
+    await bus.invoke('subject.createPackage', { displayName: '学习主体', targetDir: pkg });
+    await bus.invoke('talk', { text: '我不会写代码。以后不要让我理解 IT 技术问题，用大白话和我沟通技术问题。' });
+    const view = (await bus.invoke('digitalSelf', { action: 'read' })).view;
+    assert.ok(view.groups.preferences.some((item) => /大白话/.test(item.text) && /IT/.test(item.text)));
+  } finally {
+    await runtime.stop();
   }
 });

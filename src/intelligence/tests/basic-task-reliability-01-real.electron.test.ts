@@ -385,24 +385,26 @@ const PROMPTS = {
 test(
   '基础任务可靠性：6 类 × 连续 10 次真实主链',
   {
-    skip: ENABLED ? false : 'set DIGITALME_V2_BASIC_TASK_RELIABILITY=1, targeted, or fresh',
+    skip: !ENABLED
+      ? 'set DIGITALME_V2_BASIC_TASK_RELIABILITY=1, targeted, or fresh'
+      : existsSync(CREDENTIAL)
+        ? false
+        : 'no test model credential; will not use official AppData',
     timeout: 18_000_000,
   },
   async () => {
     await fs.mkdir(EVIDENCE, { recursive: true });
-    const hasDevCred = existsSync(CREDENTIAL);
+    const isolatedUserData = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-basic-reliab-'));
     const harness = await launchDigitalMeElectron({
       realProduct: true,
+      userData: isolatedUserData,
       extraEnv: {
         DIGITALME_V2_DIGITAL_SELF_STUB: '0',
         DIGITALME_V2_TALK_STUB: '0',
         DIGITALME_V2_UX_ACCEPTANCE: '0',
-        DIGITALME_V2_ALLOW_DEV_CREDENTIAL: hasDevCred ? '1' : '0',
+        DIGITALME_V2_ALLOW_DEV_CREDENTIAL: '1',
         DIGITALME_V2_TALK_TRACE_DIR: path.join(EVIDENCE, 'raw-talk'),
       },
-      ...(hasDevCred
-        ? { userData: await fs.mkdtemp(path.join(os.tmpdir(), 'dm-basic-reliab-')) }
-        : { useAppUserData: true }),
     });
     const rows: Row[] = [];
     const verdict = {

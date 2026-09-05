@@ -1,12 +1,34 @@
 /**
  * Playwright Electron 启动：真实窗口 + preload IPC，隔离 userData。
  */
+import { existsSync } from 'node:fs';
 import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { ElectronApplication, Page } from 'playwright';
 
 export const REPO_ROOT = path.resolve(__dirname, '../../..');
+
+export const DEV_MODEL_CREDENTIAL_FILE = path.join(
+  REPO_ROOT,
+  'scripts',
+  '_mvp-p14-real-capability-evidence',
+  '.runtime-model-credential.json',
+);
+
+/** 正式安装的 AppData，测试不得写入其 default Thread。 */
+export function officialAppUserDataPath(): string {
+  const appData = process.env.APPDATA || process.env.HOME || os.homedir();
+  return path.join(appData, 'digitalme-v2');
+}
+
+export function hasTestModelCredential(): boolean {
+  return existsSync(DEV_MODEL_CREDENTIAL_FILE);
+}
+
+export async function isolatedUserDataDir(prefix = 'dmv2-electron-ud-'): Promise<string> {
+  return fs.mkdtemp(path.join(os.tmpdir(), prefix));
+}
 
 export interface ElectronHarness {
   app: ElectronApplication;
@@ -18,16 +40,17 @@ export interface ElectronHarness {
 export async function launchDigitalMeElectron(opts?: {
   exportDelayMs?: number;
   extraEnv?: Record<string, string>;
-  /** 复用已有 userData（重启验收）。未提供则新建临时目录。 */
+  /** 复用已有隔离 userData（重启验收）。未提供则新建临时目录。不得指向正式 AppData。 */
   userData?: string;
   /** 正式产品闸门：不启用 UX Fake / Electron test harness stub。 */
   realProduct?: boolean;
-  /** 使用本机应用 userData。默认仍隔离临时目录。 */
-  useAppUserData?: boolean;
 }): Promise<ElectronHarness> {
-  const userData = opts?.useAppUserData
-    ? ''
-    : opts?.userData || (await fs.mkdtemp(path.join(os.tmpdir(), 'dmv2-electron-ud-')));
+  const userData = opts?.userData || (await isolatedUserDataDir());
+  const official = path.resolve(officialAppUserDataPath());
+  const resolvedUserData = path.resolve(userData);
+  if (resolvedUserData === official || resolvedUserData.startsWith(official + path.sep)) {
+    throw new Error('tests must not use the official AppData userData / default Thread');
+  }
   let electronPath: string;
   try {
     electronPath = require('electron') as string;
@@ -60,7 +83,7 @@ export async function launchDigitalMeElectron(opts?: {
             DIGITALME_V2_SEARCH_ENABLED: '0',
             DIGITALME_V2_EXPORT_DELAY_MS: String(opts?.exportDelayMs ?? 0),
           }),
-      ...(userData ? { DIGITALME_V2_USER_DATA: userData } : {}),
+      DIGITALME_V2_USER_DATA: userData,
       ELECTRON_ENABLE_LOGGING: '1',
       ...(opts?.extraEnv || {}),
     },
@@ -71,7 +94,7 @@ export async function launchDigitalMeElectron(opts?: {
     return {
       app,
       page,
-      userData: userData || 'app-default',
+      userData,
       close: async () => {
         try {
           await app.close();
