@@ -1,8 +1,7 @@
 # 02 — FAILURE LESSONS
 
 **状态：** `current_authority`  
-**日期：** 2026-09-01  
-**性质：** 旧版本失败史、根因、禁止事项、Yellow / Red 报警。出现报警必须重读本文及 00、01。
+**日期：** 2026-09-06**性质：** 旧版本失败史、根因、禁止事项、Yellow / Red 报警。出现报警必须重读本文及 00、01。
 
 来源吸收：`digitalme_rules.md`、`digitalme_log.md`、`digitalme_context.md`、`docs/reviews/DIGITALME-CORE-STAGE-REVIEW-01.md`、DIGITAL-SELF 依赖图与 ADR、01A baseline §3、专项 benchmark。本文是失败教训的唯一现行文件；旧处保留历史叙述，不再当现行清单。
 
@@ -112,8 +111,8 @@
 - **现象：** Bing HTML 当主搜索，P95 引用门槛达不到；本地启发式当协作判断；无专业能力时用写文章冒充执行。
 - **根因：** 「我们也能做一点」替代「去调用会做的人」。
 - **当时错误处理：** 在弱提供方上继续打质量补丁。
-- **最终经验：** 没有可靠能力就诚实停住或交接，不许假完成。
-- **今后禁止：** 重复开发成熟 AI 产品核心；`general → document` 冒充已完成。
+- **最终经验：** 没有可靠能力就诚实停住或交接，不许假完成。2026-09-06 Owner / CTO 进一步确认：做事 95 分位靠接入成熟能力；停止自造通用 AI 能力。
+- **今后禁止：** 重复开发成熟 AI 产品核心；`general → document` 冒充已完成；自研搜索 / Coding Agent / Computer Use / Office 智能 / 基础生成去和大模型厂商比。
 - **报警：** 为一种新任务先写本地弱实现而不是找成熟 Agent → YELLOW。
 
 ## L11. Owner 被拖进工程调试

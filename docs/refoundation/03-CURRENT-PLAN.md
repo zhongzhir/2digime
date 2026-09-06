@@ -1,47 +1,69 @@
 # 03 — CURRENT PLAN
 
 **状态：** `current_authority / only_execution_plan`
-**日期：** 2026-09-02
+**日期：** 2026-09-06
 **性质：** 当前唯一执行计划。旧 roadmap、execution index、context 文首指针、01A baseline 附录中的「下一步」均不得再当 current plan。
 
 开始任何实现前读 AGENTS.md 所列四份文件。本文件只回答：现在做什么、按什么顺序、什么不准做、还有哪些未决冲突。
 
 ---
 
-## 1. 唯一顺序
+## 1. 后续唯一战略顺序（2026-09-06）
+
+Refoundation Phase 1–3 已作为地基接受（见 §3）。**后续产品建设**按下列顺序，不得把四段同时当施工面，也不得在 Phase A 无限停留。
 
 ```text
-Phase 1  Digital Self                         ACCEPTED
-Phase 2  Core Interaction Loop                ACCEPTED
-Phase 2  Product Surface                      ACCEPTED
-Phase 2  Talk ↔ Digital Self Learning         ACCEPTED
-Phase 3  Collaboration Foundation             ACCEPTED
-Phase 3  Dual-Subject Loop                    ACCEPTED (architecture/engineering pass)
-Phase 3  Real Peer Relay Gate                 ACCEPTED (engineering)
-Phase 3  Two-Owner Real Trial                 IN PROGRESS
+Phase A  基础能力达到约 95 分位     CURRENT（Integrate-first）
+Phase B  做实数字之我                 NEXT（增强，不限制模型）
+Phase C  连接与自主选择               LATER
+Phase D  Digital Subject Network      LATER（新模式）
 ```
 
-不得并行把三阶段都当施工面。不得用旧「模块轮动」代替此顺序（`digitalme_rules.md` §14 为历史策略）。
+### Phase A — 基础能力达到 95 分位
 
-协作传输层（Relay / E2EE）已作为通信底座验证。Phase 1 与 Phase 2 主链已对真人成立。Talk ↔ Digital Self 双向闭环已用正式 Electron + 真实 DeepSeek 验收。Phase 3 架构（04）、Dual-Subject Loop 与 Real Peer Relay Gate 的工程接线已接受。两个真人 Owner 的产品试验仍进行中。不先做协作页面、不迁旧 work、不恢复 13 态。不扩更大的广播/市场网络。
+**原则：** Integrate-first。能接不造。
+
+重点接入（不自研替代成熟能力）：Coding Agent、Web、Computer Use、Office、Excel、图片、音频、视频、MCP / Skills。
+
+当某项成熟外部能力已经能满足约 95 分位：停止继续自研该基础能力。研发转向数字之我、安全、授权与真实执行事实。
+
+当前 Immediate：Execution Truth 最小修复（工具事实不得被 timeout 抹掉；授权范围内真实读写；导入原子提交）。不新造 Agent / 搜索 / Computer Use / Office 智能。
+
+### Phase B — 做实数字之我
+
+重点：输入资料、对话、成果、纠正、工作经验、协作经验 → 模型理解 → Digital Self 持续成长 → 应用于下一次真实任务。
+
+Digital Self 不限制模型，只增加主体上下文。禁止用 Digital Self 削弱、隐藏或锁死。
+
+### Phase C — 连接与自主选择
+
+兔机米根据目标、数字之我、真实能力与授权，由大模型自主选择：模型、Agent、Tool、本地软件、网络能力、其他 Digital Self。系统不写 router / score / workflow 代替这些判断。
+
+### Phase D — Digital Subject Network / 新模式
+
+前三项成立后再进入：自动机会发现、数字主体协作、新组织、交易/结算、信誉、人与 AI 共生网络。不把 Phase 3 协作试验扩成广播市场。
+
+### 与已接受 Refoundation 的关系
+
+Phase 1 Digital Self、Phase 2 Talk 主链、Phase 3 协作地基仍然有效，不推倒重来。两 Owner 真人试验（见 §3）可继续，但不扩建协作产品面，也不阻塞 Phase A。
 
 ---
 
 ## 2. 下一开发任务
 
-**任务名：** `2DIGIME-REFOUNDATION-05-TALK-TO-DIGITAL-SELF-LEARNING`
-**阶段：** Phase 2 Talk ↔ Digital Self Learning
-**本轮状态（2026-09-03）：** `ACCEPTED`。统一入口「与 2digime」经既有 Phase 1 interpret / apply 写入唯一 `digital-self/self.json`。Talk 只是 provenance source。默认静默。正式 Electron + DeepSeek 真人原句闸门已过：边界写入、纠正替换、一次性日程不沉淀、重启保持。未把原句写入 stub。不 push、不 package。
+**任务名：** `TUJIMI-STRATEGIC-ALIGNMENT-AND-EXECUTION-TRUTH-01`
+**阶段：** Strategic Phase A（Integrate-first）+ 上位权威对齐
+**本轮：** 先写入 2026-09-06 战略；再做已审计的 Execution Truth 最小修复。不自研新能力框架。
 
-**Talk ↔ Digital Self 双向闭环：** `ACCEPTED`
+历史已接受任务（Talk ↔ Digital Self Learning 等）见 §3，不再当作「下一步」。
 
-Digital Self → Talk 与 Talk → Digital Self 均已成立。不扩广播/市场网络。
+一台机器时必须两套完全独立的 Electron `userData`（`DIGITALME_V2_USER_DATA`），不得共享 Package、Thread、SecretStore。
 
-两个真人 Owner 的协作产品试验仍为 `IN PROGRESS`，不阻塞本回流。
+---
 
-一台机器时必须两套完全独立的 Electron `userData`（`DIGITALME_V2_USER_DATA`），不得共享 Package、Thread、SecretStore。B 必须在自己的进程里 pull inbox；A 不得调用 B.drain / B.runtime / B.package。
+## 3. 已接受的 Refoundation 地基
 
-产品 PASS 仅当 15 条验收全部满足，包括两个真人 Owner。双 Electron 工程闸门不能代替真人试验。
+下列 Phase 1–3 条目仍是已接受地基，不是当前「下一步」。不得用旧模块轮动代替 §1 的 A–D。
 
 ### Phase 1 Digital Self（已接受）
 
@@ -116,7 +138,7 @@ discovery / transport 已接到 invite/peers + Relay/E2EE。不重写 AI collabo
 
 ---
 
-## 3. 现场保护（仍有效）
+## 4. 现场保护（仍有效）
 
 - **干净 Phase 1 基线：** 分支 `checkpoint/2digime-refoundation-02`（worktree `dm-2digime-refoundation-02-checkpoint`）。只含已接受的 authority 文档 + 新 Digital Self。
 - **Phase 2 核心闭环基线：** 分支 `build/2digime-refoundation-03-dialogue-doing`（本工作区）。含 talk 主链、External Capabilities 暴露、execution truth、semantic review。
@@ -125,7 +147,7 @@ discovery / transport 已接到 invite/peers + Relay/E2EE。不重写 AI collabo
 
 ---
 
-## 4. 权威文件与降级清单
+## 5. 权威文件与降级清单
 
 **现行唯一层级**
 
@@ -154,15 +176,16 @@ AGENTS.md
 
 ---
 
-## 5. 原则冲突（不自行猜）
+## 6. 原则冲突（不自行猜）
 
 已裁定（后续 Owner 指令优先）：
 
 | 冲突 | 裁定 |
 |---|---|
 | 01A「下一步 = 最短 Goal 闭环」vs 01C「Phase 1 = Digital Self」 | **01C**：先 Digital Self |
-| rules §14 模块轮动 vs 本文 Phase 1→2→3 | **本文顺序** |
-| 广播作为核心创新假设 vs 协作扩建暂停 | **不实现广播市场与协作中心 UI**；假设留在 00。Phase 3 只做 Subject↔Subject 基础，不恢复 `#nav-collab` |
+| rules §14 模块轮动 vs 本文旧 Phase 1→2→3 | **已被 §1 战略 Phase A–D 覆盖**；1–3 为已接受地基 |
+| 广播作为核心创新假设 vs 协作扩建暂停 | **不实现广播市场与协作中心 UI**；假设留在 00。Phase D 才考虑主体网络，不恢复 `#nav-collab` |
+| 自研基础能力 vs Integrate-first | **2026-09-06：能接不造**；95 分位靠接入，不自研替代 Codex / 搜索 / Computer Use |
 | 「后台可保留复杂状态机」vs 禁止用状态机替代 AI | **禁止替代 AI**；运行态 ≠ 永久状态机 |
 | DIGITAL-SELF P1–P5 迁旧主链 vs 新核重建 | **不沿旧链 P1–P5** |
 | 单一说话入口 vs 对话/做事双标签 | **对话是统一入口**；做事是行为/结果。产品表面仍可 refinement，不得双运行时 |
@@ -175,9 +198,11 @@ AGENTS.md
 
 ---
 
-## 6. PHASE 3 实现启动门
+## 7. PHASE 3 协作试验约束
 
-Foundation（04）与 Dual-Subject Loop architecture/engineering pass 已接受。Relay 工程接线已接受。**当前是 Two-Owner Real Trial**，约束仍是：
+Foundation（04）与 Dual-Subject Loop architecture/engineering pass 已接受。Relay 工程接线已接受。Two-Owner Real Trial 仍可继续，**但不扩建协作产品面，也不替代 §1 Phase A。**
+
+约束仍是：
 
 1. 实现者已读 00/01/02/03 与 04；
 2. Owner 已接受 04，并已下达 Dual-Subject、Relay Gate 与 `2DIGIME-COLLABORATION-03-TWO-OWNER-REAL-TRIAL`；
@@ -185,4 +210,4 @@ Foundation（04）与 Dual-Subject Loop architecture/engineering pass 已接受�
 4. 不先做协作页面，不恢复 13 态，不自研替代 A2A/VC/payment；A 不得驱动 B runtime / drain；
 5. 出现 Yellow/Red 立即停（04 §11）。
 
-Phase 1 与 Phase 2（核心闭环 + 产品表面）已 ACCEPTED。未完成 checkpoint 验证前不得把旧冻结做事代码并入本基线。
+Phase 1 与 Phase 2（核心闭环 + 产品表面）已 ACCEPTED。未完成 checkpoint 验证前不得把旧冻结做事代码并入本基线。当前产品建设焦点是 §1 Phase A。

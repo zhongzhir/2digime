@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-09-06 · 2digime 战略定位进一步收敛
+
+### 状态
+
+`strategy_aligned` / Owner / CTO 已确认 / `not_pushed`
+
+主题：2digime 战略定位进一步收敛。写入现行权威（AGENTS.md、00、01、02、03），不另建第五份原则文件。`digitalme_context.md` 仍为 historical，不承担 current plan。
+
+### Owner / CTO 已确认
+
+1. 做事能力达到市场同类约 95 分位是基础门槛，不是护城河；默认 Integrate-first。
+2. 基础能力接入 / 调用 / 编排当前最强的大模型、Agent、Skill、MCP / Tool、Computer Use、本地软件与外部服务。
+3. 停止自造通用 AI 能力（不自研搜索、Coding Agent、Computer Use、Office 智能、基础生成去和厂商比）。
+4. 核心差异化转向：Digital Self + Connection + Autonomous Selection。
+5. 长期目标是人与 AI 共生的数字主体体系；模式创新（主体网络、协作、交易、信誉）在前三项成立之后。
+6. 系统只加数字之我 / 安全 / 授权；系统不替模型做语义或技术判断。
+7. 兔机米不是受 Digital Self 约束的大模型，而是大模型完整能力的主体化、持续化、增强层。
+
+### 路线总括
+
+Phase A 95 分位（Integrate-first）→ Phase B 做实数字之我 → Phase C 连接与自主选择 → Phase D Digital Subject Network。不要在 Phase A 无限停留。
+
+---
+
 ## 2026-08-31 · 稳定性收口（Owner 已验收安装包 · 提交）
 
 ### 状态

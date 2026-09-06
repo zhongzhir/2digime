@@ -1,9 +1,9 @@
 # AGENTS.md
 
 **状态：** `current_entry / not_a_product_constitution`  
-**日期：** 2026-09-05
+**日期：** 2026-09-06
 
-任何 2digime 的规划、架构、开发、测试、验收任务开始前，必须读取下列文件，不得用聊天记忆代替，不得等待 Owner 提醒：
+任何 2digime 的规划、架构、开发、测试、验收、运营、推广任务开始前，必须读取下列文件，不得用聊天记忆代替，不得等待 Owner 提醒：
 
 1. [`docs/refoundation/00-PRODUCT-CONSTITUTION.md`](docs/refoundation/00-PRODUCT-CONSTITUTION.md)
 2. [`docs/refoundation/01-DEVELOPMENT-CONSTITUTION.md`](docs/refoundation/01-DEVELOPMENT-CONSTITUTION.md)
@@ -12,7 +12,22 @@
 
 若当前工作已出现 Yellow 或 Red 信号（见 02），必须重新读取 02，并同时重读 00 与 01。
 
-本文只做入口。产品原则在 00，开发纪律在 01，失败史在 02，当前执行顺序只在 03。做事架构的克制原则以下文为准，并写入 01；仓库内没有 `docs/design/personal-context.md`，不得另建第五份原则文件。
+本文只做入口。产品原则在 00，开发纪律在 01，失败史在 02，当前执行顺序只在 03。下列开发行为不可违反，每项任务必须先读完本段再写代码。仓库内没有 `docs/design/personal-context.md`，不得另建第五份原则文件。
+
+---
+
+## 不可违反的开发行为
+
+1. **能接不造。** 能用成熟大模型 / Agent / Skill / MCP / Tool / Computer Use / 本地软件 / 外部服务，不自研替代。
+2. **少写优于多写。** 能删不加；能复用不造。
+3. **Capability Sufficiency First。** 写代码前先证明现有能力不够。
+4. **Build-vs-Integrate Gate。** 1–5 任一能解决，默认不自研（问题清单见下）。
+5. **系统只允许在大模型之上增加三类东西：** 数字之我、安全、授权。
+6. **系统绝不替大模型做语义或技术判断。** 尤其禁止：选文件、摘要、判断格式、决定能不能干、判断任务类型、规划步骤、选择工具、决定重试或换方案、keyword router、score、classifier、semantic reviewer。
+
+兔机米不是通用大模型厂商的竞争对手。禁止自研搜索、Coding Agent、Computer Use、Office 智能、音视频图片基础生成，去和 Codex / Cursor / Claude Code / 大模型厂商比。
+
+做事能力达到市场同类约 95 分位是门槛，不是护城河；默认用接入与编排实现。长期核心是数字之我 + 连接 + 自主选择 + 模式创新。数字之我增强模型，不削弱、不隐藏、不锁死用户。
 
 ---
 
@@ -52,7 +67,24 @@ runtime 只保留模型无法自己知道、且系统必须保证的机械事实
 - 用 harness 词命中反向约束模型表达；
 - 因为 Coding Agent 自己更容易实现而重写模型本来已有能力。
 
-新增代码前必须回答：
+---
+
+## Build-vs-Integrate Gate
+
+新增能力、在写代码之前必须回答：
+
+1. 大模型本身是不是已经会？
+2. 成熟 Agent / Skill / Tool 是否已经做到高水平？
+3. 当前系统是不是已经存在，只是没有暴露？
+4. 当前用户电脑 / OS / 软件是否已经拥有？
+5. 是否只是缺授权或连接？
+6. 是否真的必须由 2digime 新写代码？
+
+如果 1–5 中任何一种能够解决：默认不自研。
+
+只有明确证明现有成熟能力无法满足 **数字之我 / 安全 / 授权 / 或兔机米核心差异化**，才允许新增产品代码。
+
+同时仍须回答：
 
 **CAPABILITY SUFFICIENCY GATE**
 

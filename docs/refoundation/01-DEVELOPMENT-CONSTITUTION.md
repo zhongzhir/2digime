@@ -2,7 +2,7 @@
 
 **状态：** `current_authority`  
 **层级：** 00 之下；与 02 并列约束实现  
-**日期：** 2026-09-05
+**日期：** 2026-09-06
 **性质：** AI Native 架构原则 + 开发纪律 + Owner / CTO / Agent 分工。
 
 ---
@@ -23,7 +23,7 @@ Human
 
 **Digital Self** 是唯一「我是谁」。确定性内核执行确认、纠正、替代、失效、同意、撤销、冲突检测、损坏语义。模型可以参与开放理解，不得直接写主体状态。
 
-**Intelligence** 理解自然语言、保持同一个 Goal、选择能力、只问人必须决定的问题、用普通人语言回报。
+**Intelligence** 理解自然语言、保持同一个 Goal、把真实能力状态交给模型、只问人必须决定的问题、用普通人语言回报。需要什么能力、用哪个模型/Agent/Tool、失败后怎么办，由大模型自主判断。系统不得用 router / score / workflow 代替这些判断。
 
 **Models / Agents / Skills / Tools** 可替换，只获得本次授权的最小上下文。输出是候选结果或外部证据，不是主体事实。换掉 Codex / Gemini / DeepSeek，架构不得改。
 
@@ -40,6 +40,10 @@ Human
 
 写代码前先证明现有能力不够。仓库入口见 `AGENTS.md`；详细约束以本节为准。不另建 `personal-context.md` 或第五份原则文件。
 
+**兔机米不是一个受 Digital Self 约束的大模型，而是大模型完整能力的主体化、持续化、增强层。**
+
+做事能力达到市场同类约 95 分位是门槛，默认 Integrate-first。长期核心是数字之我 + 连接 + 自主选择 + 模式创新，不是自研通用 AI 能力。
+
 顺序：
 
 1. 大模型本身是否已经能完成？
@@ -48,13 +52,26 @@ Human
 4. 如果已经能完成，禁止新增代码、规则、router、score、状态机、review、adapter 包装。
 5. 优先删除已有重复逻辑，而不是继续叠加。
 
-原则：能删不加；能复用不造；能让模型判断就不要用代码替模型判断；宁愿少写，不要多写。
+原则：能删不加；能复用不造；能让模型判断就不要用代码替模型判断；宁愿少写，不要多写。**能接不造。少写优于多写。**
 
 runtime 只保留模型无法自己知道、且系统必须保证的机械事实：权限 / 隐私 / 安全；工具真实成功失败；文件是否真的产生；配置是否真实可用；timeout / cancellation；必要真实性边界。
 
-禁止：为单个失败 case 加关键词规则；用 regex / score / topic classifier 模拟模型语义判断；为「更可控」增加第二套 planner/reviewer/state machine；用 harness 词命中反向约束模型表达；因为 Coding Agent 自己更容易实现而重写模型本来已有能力。
+系统只允许在大模型之上增加：**数字之我、安全、授权。** 系统绝不替模型选文件、摘要、判断格式、决定能不能干、判断任务类型、规划步骤、选择工具、决定重试或换方案。
 
-新增代码前必须回答 **CAPABILITY SUFFICIENCY GATE**：
+禁止：为单个失败 case 加关键词规则；用 regex / score / topic classifier 模拟模型语义判断；为「更可控」增加第二套 planner/reviewer/state machine；用 harness 词命中反向约束模型表达；因为 Coding Agent 自己更容易实现而重写模型本来已有能力。禁止自研搜索 / Coding Agent / Computer Use / Office 智能 / 基础生成能力去和大模型厂商或 Codex / Cursor / Claude Code 比。
+
+新增代码前必须先过 **Build-vs-Integrate Gate**：
+
+1. 大模型本身是不是已经会？
+2. 成熟 Agent / Skill / Tool 是否已经做到高水平？
+3. 当前系统是不是已经存在，只是没有暴露？
+4. 当前用户电脑 / OS / 软件是否已经拥有？
+5. 是否只是缺授权或连接？
+6. 是否真的必须由 2digime 新写代码？
+
+如果 1–5 中任何一种能够解决：默认不自研。只有明确证明现有成熟能力无法满足数字之我、安全、授权、或兔机米核心差异化，才允许新增产品代码。
+
+同时回答 **CAPABILITY SUFFICIENCY GATE**：
 
 1. Can the base model already do this?
 2. Can an existing Agent/Tool already do the external action?
@@ -139,9 +156,9 @@ Talk 主链默认收敛为：User → model → 模型决定是否调用工具 �
 
 ### 3.5 Buy / integrate before build
 
-先找成熟模型、Agent、MCP、官方工具。2digime 做选择、授权、验收、回流。不得把能力内化误解为重写 Cursor / Codex / Git / 测试框架。
+先找成熟模型、Agent、MCP、Skill、Computer Use、官方工具与本地已有软件。2digime 做数字之我、授权、真实执行事实与回流。不得把能力内化误解为重写 Cursor / Codex / Claude Code / Git / 测试框架 / 搜索引擎 / Office 套件。当外部能力已达约 95 分位，停止自研该基础能力。
 
-来源：决策 #37、rules §4、01A §4.5。
+来源：决策 #37、rules §4、01A §4.5、2026-09-06 Owner/CTO。
 
 ### 3.6 最小闭环优先
 
@@ -159,11 +176,28 @@ Talk 主链默认收敛为：User → model → 模型决定是否调用工具 �
 
 来源：rules §1/§9、01A §4.8、成果打开 FIX 链。
 
-### 3.9 验证节奏
+### 3.9 验证节奏 / 测试战略
 
-日常：自动测试 + 必要的真实样本。不用大量重复真实模型调用证明同一事实。不因测试全绿宣布 Owner 验收通过。真实用户体验优先于内部验收结论。
+测试目标不是证明「规则都被执行」。测试目标是证明：
 
-来源：rules §9。Yellow / Red 细则在 02。
+1. 用户目标真实完成；
+2. 大模型原生能力没有被系统削弱；
+3. 外部动作真实发生；
+4. 数字之我真正提升了结果；
+5. 安全 / 授权边界真实有效。
+
+分层：
+
+| 层 | 用途 | 节奏 |
+|---|---|---|
+| Level 1 | targeted mechanical tests | 分钟级，日常默认 |
+| Level 2 | 少量真实模型 smoke | 改到模型/执行主链时 |
+| Level 3 | milestone 真实任务验收 | 阶段门 |
+| Level 4 | Release Candidate 真人验收 | 仅 Release 前 |
+
+禁止每个小修复都跑几十轮模型矩阵 / 全规则回归。禁止使用模型措辞关键词作为主要产品正确性判定。日常：自动测试 + 必要的真实样本。不因测试全绿宣布 Owner 验收通过。真实用户体验优先于内部验收结论。
+
+来源：rules §9、2026-09-06 Owner/CTO。Yellow / Red 细则在 02。
 
 ### 3.10 汇报
 
