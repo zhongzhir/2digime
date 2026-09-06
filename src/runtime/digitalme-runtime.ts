@@ -164,7 +164,12 @@ import { AI_CTO_JSON_SCHEMA } from '../execution/ai-cto-review';
 import { providerCredentialKey } from '../infrastructure/secret-store';
 import { DigitalSelfService } from '../subject-core/digital-self';
 import type { DigitalSelfChatFn } from '../subject-core/digital-self/interpret';
-import { TalkService, agentsFromRegistry, resolveAuthorizedWorkingDirectory } from '../intelligence';
+import {
+  TalkService,
+  agentsFromRegistry,
+  compileCapabilityReality,
+  resolveAuthorizedWorkingDirectory,
+} from '../intelligence';
 import type { ProfessionalAgent, TalkChatFn } from '../intelligence';
 import { formatSelfContext, selectSelfContext } from '../intelligence/self-context';
 import { readDigitalSelf } from '../subject-core/digital-self/store';
@@ -453,6 +458,11 @@ export class DigitalMeRuntime {
             ? { asked: true, askHint: pending.join('；') }
             : { asked: true };
         },
+        (_pkg, turn) =>
+          compileCapabilityReality({
+            registry: this.registry,
+            ...(turn?.contextPaths?.length ? { contextPaths: turn.contextPaths } : {}),
+          }),
       );
     }
     return this.talkService;

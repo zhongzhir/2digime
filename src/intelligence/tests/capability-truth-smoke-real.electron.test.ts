@@ -149,7 +149,7 @@ test(
       const sys = systemBlobFromTraces(TALK_TRACE_A);
       assert.equal(/cap_baseline_web_search/.test(sys), false);
       assert.equal(/cap_gemini_web_search/.test(sys), false);
-      assert.match(sys, /当前没有已连接的外部能力|只能交流/);
+      assert.match(sys, /联网搜索：当前尚未连接或配置/);
       const reply = lastAssistant((await talkView(harness.page)).turns);
       assert.equal(/cap_baseline_web_search|基础搜索/.test(reply), false);
 

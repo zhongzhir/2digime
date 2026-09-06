@@ -2,6 +2,7 @@ import * as path from 'node:path';
 import { nowIso } from '../shared/ids';
 import { readDigitalSelf } from '../subject-core/digital-self/store';
 import { formatSelfContext, selectSelfContext } from './self-context';
+import { compileCapabilityReality } from './capability-reality';
 import { emptyThread, readThread, writeThread } from './store';
 import { randomUUID } from 'node:crypto';
 import { NO_MODEL_NOTICE, runTalkTurn, type SubjectCollabPort } from './loop';
@@ -74,6 +75,10 @@ export class TalkService {
     private readonly now: () => string = nowIso,
     private readonly resolveCollab?: (pkg: TalkPackageRef) => Promise<SubjectCollabPort | null>,
     private readonly learnFromUtterance?: (text: string) => Promise<TalkLearnResult>,
+    private readonly resolveCapabilityReality?: (
+      pkg: TalkPackageRef,
+      turn?: { contextPaths?: string[] },
+    ) => Promise<string> | string,
   ) {}
 
   async invoke(input: { text?: string; contextPaths?: string[] }): Promise<{ view: TalkView }> {
@@ -117,6 +122,12 @@ export class TalkService {
       selfContext = '读取数字之我失败。不得解释为不了解用户，也不要编造本人事实。';
     }
     const collab = this.resolveCollab ? await this.resolveCollab(pkg) : null;
+    const turnCtx = input.contextPaths?.length ? { contextPaths: input.contextPaths } : {};
+    const capabilityReality = this.resolveCapabilityReality
+      ? await this.resolveCapabilityReality(pkg, turnCtx)
+      : await compileCapabilityReality(
+          turnCtx.contextPaths?.length ? { contextPaths: turnCtx.contextPaths } : {},
+        );
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), talkTurnDeadlineMs());
     const boundedChat = wrapChatWithDeadline(this.chat, ac.signal);
@@ -127,7 +138,8 @@ export class TalkService {
         thread,
         userText: text,
         selfContext,
-        agents: this.resolveAgents(pkg, input.contextPaths ? { contextPaths: input.contextPaths } : {}),
+        agents: this.resolveAgents(pkg, turnCtx),
+        capabilityReality,
         chat: boundedChat,
         workRoot: pkg.rootDir,
         now,

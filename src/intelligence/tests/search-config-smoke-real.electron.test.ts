@@ -174,7 +174,7 @@ test(
       await sendTalk(harness.page, '今天天气怎么样？');
       const sysA = systemBlob(TRACE);
       assert.equal(/cap_gemini_web_search|cap_baseline_web_search/.test(sysA), false);
-      assert.match(sysA, /当前没有已连接的外部能力|只能交流/);
+      assert.match(sysA, /联网搜索：当前尚未连接或配置/);
 
       await openSettings(harness.page);
       await harness.page.locator('#gemini-search-api-key').fill(GEMINI_KEY);

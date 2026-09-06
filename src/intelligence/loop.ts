@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import type { ChatMessage, ChatToolCall, ChatToolDefinition } from '../infrastructure/model-http';
 import { describeProfessionals } from './professionals';
+import { compileCapabilityReality } from './capability-reality';
 import {
   EXPORT_FILE_TOOL,
   LIST_DIRECTORY_TOOL,
@@ -252,6 +253,7 @@ export async function runTalkTurn(input: {
   subjectCollab?: SubjectCollabPort;
   confirmHint?: string;
   contextPaths?: string[];
+  capabilityReality?: string;
 }): Promise<TalkThread> {
   const userTurn: TalkTurn = {
     id: `turn_${randomUUID()}`,
@@ -277,6 +279,11 @@ export async function runTalkTurn(input: {
 
   const cards = input.subjectCollab?.cards || [];
   const auth = classifyAuthorizedPaths(input.contextPaths);
+  const capabilityReality =
+    input.capabilityReality ||
+    (await compileCapabilityReality(
+      input.contextPaths?.length ? { contextPaths: input.contextPaths } : {},
+    ));
   const system = [
     '你是用户的兔机米。',
     '根据当前数字之我理解用户；不要编造未写入的本人事实。',
@@ -296,8 +303,8 @@ export async function runTalkTurn(input: {
     '当前对用户的必要理解：',
     input.selfContext,
     describeAuthorizedFs(auth),
-    '当前已连接的外部能力：',
-    describeProfessionals(input.agents),
+    capabilityReality,
+    input.agents.length ? `当前可立即调用的外部能力：\n${describeProfessionals(input.agents)}` : '',
   ]
     .filter(Boolean)
     .join('\n');
