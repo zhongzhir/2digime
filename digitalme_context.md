@@ -1,8 +1,16 @@
 # Digital Me 项目上下文（参照 Aivestor）
 
 版本：v0.4
-状态：持续更新
-最后更新：2026-08-31（稳定性收口已 Owner 现场验收安装包；本提交收口。**不是** `mvp_ready` / `production_ready`；**未推送**）
+状态：historical strategic context（不承担 current plan）
+最后更新：2026-09-06（日终指针；下文 2026-08-31 及更早条目仍为历史）
+
+> **2026-09-06 当前状态指针**：本文件不恢复为第二权威源。现行权威：`AGENTS.md` → `docs/refoundation/00` / `01` / `02` / `03`。当前执行只在 [`docs/refoundation/03-CURRENT-PLAN.md`](docs/refoundation/03-CURRENT-PLAN.md)。
+>
+> 已接受：`STRATEGIC_ALIGNMENT_ACCEPTED` / `EXECUTION_TRUTH_RESTORED` / `CODING_CAPABILITY_REAL_AND_INTEGRATED` / `DAY_CLOSED_20260906`。未 push、未 Release。
+>
+> 今日核心：Phase A 做事能力约 95 分位是门槛（Integrate-first，禁止自造成熟通用 AI）；差异化是 Digital Self + Connection + Autonomous Selection。Digital Self 去掉 durable facts 摘要过滤、长资料可理解、source+self 原子提交。Capability reality：未授权/未配置不再消失。Execution Truth：tool 事实不被 timeout 抹掉。Coding：Codex 官方 `windows.sandbox=unelevated`，真改文件、真跑测试、真通过；未重写 Codex 项目级 intelligence。
+>
+> 关键提交：`346ee68` Digital Self；`38fc915` capability reality；`7121a7e` 战略对齐；`3b4cb4a` execution truth；`70aad37` Coding Windows sandbox。细节见同日 `digitalme_log.md`。
 
 > **当前工作树状态（2026-08-31 · 稳定性收口）**：
 > - 当前分支：`build/subject-learning-availability-01`

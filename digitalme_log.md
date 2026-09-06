@@ -5,27 +5,49 @@
 
 ---
 
-## 2026-09-06 · 2digime 战略定位进一步收敛
+## 2026-09-06 — 做事能力恢复、战略重新收敛
 
 ### 状态
 
-`strategy_aligned` / Owner / CTO 已确认 / `not_pushed`
+`STRATEGIC_ALIGNMENT_ACCEPTED` / `EXECUTION_TRUTH_RESTORED` / `CODING_CAPABILITY_REAL_AND_INTEGRATED` / `DAY_CLOSED_20260906` / `not_pushed` / `not_released`
 
-主题：2digime 战略定位进一步收敛。写入现行权威（AGENTS.md、00、01、02、03），不另建第五份原则文件。`digitalme_context.md` 仍为 historical，不承担 current plan。
+主题：先发现成熟能力没被完整暴露、授权、接线和真实执行；再完成最小修复与战略收敛。不另建第五份原则文件。`digitalme_context.md` 仍为 historical。
 
-### Owner / CTO 已确认
+### A. 真人验收发现
 
-1. 做事能力达到市场同类约 95 分位是基础门槛，不是护城河；默认 Integrate-first。
-2. 基础能力接入 / 调用 / 编排当前最强的大模型、Agent、Skill、MCP / Tool、Computer Use、本地软件与外部服务。
-3. 停止自造通用 AI 能力（不自研搜索、Coding Agent、Computer Use、Office 智能、基础生成去和厂商比）。
-4. 核心差异化转向：Digital Self + Connection + Autonomous Selection。
-5. 长期目标是人与 AI 共生的数字主体体系；模式创新（主体网络、协作、交易、信誉）在前三项成立之后。
-6. 系统只加数字之我 / 安全 / 授权；系统不替模型做语义或技术判断。
-7. 兔机米不是受 Digital Self 约束的大模型，而是大模型完整能力的主体化、持续化、增强层。
+- PPT 有格式能力但质量不足
+- 代码执行失败
+- Computer Use 缺失
+- Digital Self 姓名理解异常
+- 文本能力基本正常
 
-### 路线总括
+### B. 随后确认
 
-Phase A 95 分位（Integrate-first）→ Phase B 做实数字之我 → Phase C 连接与自主选择 → Phase D Digital Subject Network。不要在 Phase A 无限停留。
+问题不是需要新 Agent framework，而是成熟能力没有被完整暴露、授权、接线和真实执行。
+
+### C. 今日完成
+
+- Capability reality 暴露（已安装但未授权/未配置不再消失）
+- Digital Self 信息损耗修复（去掉 durable subject facts 摘要过滤；长资料可理解；source + self 原子提交）
+- Execution Truth 修复（已发生 tool execution 不被 Talk timeout 抹掉；Codex usage limit 不再误判 CLI 过旧；授权范围内源码可读）
+- Gemini 搜索闭环；本地文件读写闭环；真 Word/PPT 文件输出
+- Codex 成熟 Coding Agent 真执行闭环（官方 `windows.sandbox=unelevated`；真改 `math.js`、真跑 `npm test`、真通过；无自研 sandbox / planner / patch engine / router）
+
+### D. 战略决定
+
+基础做事能力约 95 分位 = 市场门槛。默认通过成熟能力集成获得，停止无限自研基础执行能力。长期核心：Digital Self + Connection + Autonomous Selection → 人与 AI 共生 → Digital Subject Network / 新协作与新模式。
+
+### 关键提交
+
+- `346ee68e51d49f678a3f58579c4624f2138aeceb` fix(digital-self): stop filtering durable subject facts
+- `38fc9153ef3b1de9d8d776a7355b1e1a8993d6fe` fix(capability): expose authorization and setup reality
+- `7121a7eb997fed78d25e6ffdb0cac2b1ffd3cd62` docs(strategy): align 2digime around digital self and AI integration
+- `3b4cb4a94de96cffe56471486d237201c5bb39dd` fix(runtime): preserve truthful execution outcomes
+- `70aad37ce46377af5370da7da9ea250bb9b5f4d6` fix(coding): use working Codex Windows sandbox mode
+
+### 下一工作日起点
+
+Phase A 继续。下一优先事项为成熟 Computer Use 的 Build-vs-Integrate Gate。**今天不启动。**
 
 ---
 

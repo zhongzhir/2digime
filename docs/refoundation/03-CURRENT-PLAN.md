@@ -27,7 +27,11 @@ Phase D  Digital Subject Network      LATER（新模式）
 
 当某项成熟外部能力已经能满足约 95 分位：停止继续自研该基础能力。研发转向数字之我、安全、授权与真实执行事实。
 
-当前 Immediate：Execution Truth 最小修复（工具事实不得被 timeout 抹掉；授权范围内真实读写；导入原子提交）。不新造 Agent / 搜索 / Computer Use / Office 智能。
+**2026-09-06 已部分闭环（Integrate-first，未自研替代）：** Talk / reasoning；Web search；authorized local files；Word/PPT 基础文件输出；Coding Agent（Codex + Windows 官方 `windows.sandbox=unelevated`）。
+
+**尚未达到完整 95 分位：** Computer Use；专业 Office / PPT；Excel；图像；音频；视频；更丰富成熟 Agent / Tool 接入。
+
+**下一优先事项：** 成熟 Computer Use 的 Build-vs-Integrate Gate。**今天 NOT STARTED。** 不要因为下一阶段列表存在，就再次自建这些能力。每项仍必须先过 Build-vs-Integrate Gate。
 
 ### Phase B — 做实数字之我
 
@@ -51,9 +55,13 @@ Phase 1 Digital Self、Phase 2 Talk 主链、Phase 3 协作地基仍然有效，
 
 ## 2. 下一开发任务
 
-**任务名：** `TUJIMI-STRATEGIC-ALIGNMENT-AND-EXECUTION-TRUTH-01`
-**阶段：** Strategic Phase A（Integrate-first）+ 上位权威对齐
-**本轮：** 先写入 2026-09-06 战略；再做已审计的 Execution Truth 最小修复。不自研新能力框架。
+**任务名：** 成熟 Computer Use 的 Build-vs-Integrate Gate
+**阶段：** Strategic Phase A（Integrate-first）
+**本轮：** `DAY_CLOSED_20260906`。Computer Use **今天 NOT STARTED**。不要因为本列表存在就自建 Computer Use / Office / 生成能力。
+
+已接受同日收口：`STRATEGIC_ALIGNMENT_ACCEPTED` / `EXECUTION_TRUTH_RESTORED` / `CODING_CAPABILITY_REAL_AND_INTEGRATED`。
+
+关键提交：`346ee68` Digital Self facts；`38fc915` capability reality；`7121a7e` 战略对齐；`3b4cb4a` execution truth；`70aad37` Codex Windows unelevated sandbox。
 
 历史已接受任务（Talk ↔ Digital Self Learning 等）见 §3，不再当作「下一步」。
 
