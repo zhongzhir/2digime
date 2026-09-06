@@ -1007,6 +1007,11 @@ export function buildCodexExecArgs(input: {
     '-c',
     'approval_policy="never"',
   ];
+  // Windows elevated sandbox 依赖本机 CodexSandboxOffline 账户。缺失时 LookupAccountNameW 1332。
+  // Codex 官方覆盖：windows.sandbox=unelevated。不是自研 sandbox。
+  if (process.platform === 'win32') {
+    args.push('-c', 'windows.sandbox="unelevated"');
+  }
   if (input.skipGitRepoCheck) {
     args.push('--skip-git-repo-check');
   }

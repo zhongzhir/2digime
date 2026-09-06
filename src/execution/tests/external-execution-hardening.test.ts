@@ -53,6 +53,9 @@ describe('external-execution-hardening', () => {
     assert.ok(args.includes('approval_policy="never"'));
     assert.ok(args.includes('--sandbox'));
     assert.ok(args.includes('--json'));
+    if (process.platform === 'win32') {
+      assert.equal(args.includes('windows.sandbox="unelevated"'), true);
+    }
     assert.equal(args[args.length - 1], '-');
 
     const probeCwd = await fs.mkdtemp(path.join(os.tmpdir(), 'dm space dir '));

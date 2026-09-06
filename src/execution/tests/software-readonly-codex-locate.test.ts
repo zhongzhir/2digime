@@ -54,6 +54,9 @@ describe('software-readonly-codex-locate', () => {
       lastMessagePath: 'C:\\tmp\\last.txt',
     });
     assert.equal(def[def.indexOf('--sandbox') + 1], 'workspace-write');
+    if (process.platform === 'win32') {
+      assert.equal(def.includes('windows.sandbox="unelevated"'), true);
+    }
 
     const ro = buildCodexExecArgs({
       codexJsPath: 'codex.js',
