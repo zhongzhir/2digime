@@ -8,7 +8,7 @@ import type {
 
 const HEADLINE = '兔机米现在怎样理解我';
 
-function sourceLabel(item: Understanding): string {
+export function sourceLabel(item: Understanding): string {
   if (item.provenance.origin === 'user_statement') return '你亲口说的';
   if (item.provenance.origin === 'material') {
     return item.provenance.materialName
@@ -18,7 +18,7 @@ function sourceLabel(item: Understanding): string {
   return '兔机米的推断';
 }
 
-function confirmationLabel(item: Understanding): string {
+export function confirmationLabel(item: Understanding): string {
   if (item.status === 'needs_ask') return '需要你确认';
   if (item.confirmed && item.status === 'current') return '已确认';
   return '尚未确认';
