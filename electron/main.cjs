@@ -261,7 +261,7 @@ async function bootstrapRuntime() {
         model: cfg.model,
         temperature: 0.2,
         responseFormat: { type: "json_object" },
-        timeoutMs: cfg.timeoutMs || 120000,
+        timeoutMs: 180000,
       });
       dsTraceSeq += 1;
       let host = "unknown";

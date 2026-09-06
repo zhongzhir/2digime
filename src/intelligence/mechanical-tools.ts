@@ -5,11 +5,12 @@
 import { existsSync, promises as fs, statSync } from 'node:fs';
 import * as path from 'node:path';
 import type { ChatToolDefinition } from '../infrastructure/model-http';
-import { extractFile } from '../infrastructure/extract';
+import { extractFile, MAX_EXTRACT_CHARS } from '../infrastructure/extract';
 import { exportDocx, exportPptx } from '../infrastructure/export';
 
 export const MAX_LIST_ENTRIES = 500;
 export const MAX_WRITE_BYTES = 2_000_000;
+export const MAX_READ_BYTES = 1_000_000;
 
 export type AuthorizedFs = {
   folders: string[];
@@ -35,7 +36,8 @@ export const READ_FILE_TOOL: ChatToolDefinition = {
   type: 'function',
   function: {
     name: 'read_file',
-    description: '读取本次已授权文件的真实抽取正文。支持 txt/md/csv/html/docx/pptx/pdf。不总结、不筛选。',
+    description:
+      '读取本次已授权文件的真实正文。Office/PDF 走抽取；其余文件在大小限制内按文本读取。不总结、不筛选、不按扩展名决定能不能读。',
     parameters: {
       type: 'object',
       properties: {
@@ -295,24 +297,73 @@ export async function runReadFile(auth: AuthorizedFs, rawArgs: string): Promise<
     });
   }
   const outcome = await extractFile(resolved.abs);
-  if (outcome.status !== 'ok' || !outcome.text) {
+  if (outcome.status === 'ok' && outcome.text) {
     return JSON.stringify({
-      actualSuccess: false,
-      ok: false,
+      actualSuccess: true,
+      ok: true,
       capabilityId: 'read_file',
       path: resolved.abs,
-      failureReason: outcome.warning || '没能抽出可读正文。',
+      length: outcome.length,
+      truncated: outcome.truncated === true,
+      content: outcome.text,
+    });
+  }
+  const asText = await tryReadAuthorizedText(resolved.abs);
+  if (asText.ok) {
+    return JSON.stringify({
+      actualSuccess: true,
+      ok: true,
+      capabilityId: 'read_file',
+      path: resolved.abs,
+      length: asText.text.length,
+      truncated: asText.truncated === true,
+      content: asText.text,
     });
   }
   return JSON.stringify({
-    actualSuccess: true,
-    ok: true,
+    actualSuccess: false,
+    ok: false,
     capabilityId: 'read_file',
     path: resolved.abs,
-    length: outcome.length,
-    truncated: outcome.truncated === true,
-    content: outcome.text,
+    failureReason: asText.reason || outcome.warning || '没能抽出可读正文。',
   });
+}
+
+async function tryReadAuthorizedText(
+  absPath: string,
+): Promise<{ ok: true; text: string; truncated?: boolean } | { ok: false; reason: string }> {
+  let st;
+  try {
+    st = await fs.stat(absPath);
+  } catch (err) {
+    return { ok: false, reason: `无法读取: ${err instanceof Error ? err.message : String(err)}` };
+  }
+  if (!st.isFile()) {
+    return { ok: false, reason: '不是文件。' };
+  }
+  if (st.size > MAX_READ_BYTES) {
+    return { ok: false, reason: `文件超过 ${MAX_READ_BYTES} 字节，无法作为文本整份读取。` };
+  }
+  let buf: Buffer;
+  try {
+    buf = await fs.readFile(absPath);
+  } catch (err) {
+    return { ok: false, reason: `无法读取: ${err instanceof Error ? err.message : String(err)}` };
+  }
+  if (buf.includes(0)) {
+    return { ok: false, reason: '文件是二进制，无法作为文本安全读取。' };
+  }
+  const text = buf.toString('utf8');
+  const replacement = (text.match(/\uFFFD/g) || []).length;
+  if (text.length > 0 && replacement / text.length > 0.1) {
+    return { ok: false, reason: '文件无法按文本解码。' };
+  }
+  if (!text.trim()) {
+    return { ok: false, reason: '没能抽出可读正文。' };
+  }
+  const truncated = text.length > MAX_EXTRACT_CHARS;
+  const stored = truncated ? text.slice(0, MAX_EXTRACT_CHARS) : text;
+  return truncated ? { ok: true, text: stored, truncated: true } : { ok: true, text: stored };
 }
 
 export function parseExportArgs(raw: string): {

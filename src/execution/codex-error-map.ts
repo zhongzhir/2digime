@@ -113,7 +113,7 @@ export function mapCodexFailure(input: {
   }
 
   if (
-    /model[_\s-]?not[_\s-]?found|unsupported model|unknown model|cli .+ outdated|upgrade.*codex|requires? newer|version.*(incompatible|too old)|not supported by this version/i.test(
+    /model[_\s-]?not[_\s-]?found|unsupported model|unknown model|cli .+ outdated|upgrade Codex CLI|requires? newer|version.*(incompatible|too old)|not supported by this version/i.test(
       blob,
     )
   ) {

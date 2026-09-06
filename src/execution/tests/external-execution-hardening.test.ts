@@ -66,6 +66,34 @@ describe('external-execution-hardening', () => {
     assert.equal(r.status, 0);
   });
 
+  it('Codex usage limit 的 Upgrade to Pro 不得误判为 CLI 过旧', () => {
+    const stdout = [
+      JSON.stringify({ type: 'thread.started', thread_id: 't1' }),
+      JSON.stringify({ type: 'turn.started' }),
+      JSON.stringify({
+        type: 'error',
+        message:
+          "You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 5:44 PM.",
+      }),
+      JSON.stringify({
+        type: 'turn.failed',
+        error: {
+          message:
+            "You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 5:44 PM.",
+        },
+      }),
+    ].join('\n');
+    const texts = extractCodexErrorTexts({ stdout });
+    assert.match(texts.join('\n'), /usage limit/i);
+    const mapped = mapCodexFailure({ texts, exitCode: 1, changedFilesCount: 0 });
+    assert.notEqual(mapped.kind, 'cli_outdated_or_model_incompatible');
+    assert.notEqual(mapped.kind, 'model_unavailable');
+    assert.equal(mapped.kind, 'executor_error');
+    assert.match(mapped.actionable, /usage limit/i);
+    assert.doesNotMatch(mapped.actionable, /CLI 版本过旧|模型不兼容/);
+    assert.doesNotMatch(mapped.summary, /CLI 版本过旧|模型不兼容/);
+  });
+
   it('解析 CLI/模型不兼容 JSONL', () => {
     const stdout = [
       JSON.stringify({

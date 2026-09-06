@@ -139,14 +139,21 @@ export class DigitalSelfService {
       }
       const materialName = path.basename(filePath);
       const digest = extracted.digest || contentDigest(extracted.text);
-      await writeSourceCopy(pkg.rootDir, digest, extracted.text);
-      const interpreted = await interpretWithModel({
-        chat: this.chat,
-        mode: 'import',
-        self,
-        text: extracted.text,
-        materialName,
-      });
+      let interpreted;
+      try {
+        interpreted = await interpretWithModel({
+          chat: this.chat,
+          mode: 'import',
+          self,
+          text: extracted.text,
+          materialName,
+        });
+      } catch (err) {
+        const reason = String(err instanceof Error ? err.message : err).trim() || '理解这份资料时失败。';
+        return {
+          view: projectDigitalSelfView(self, { notice: reason }),
+        };
+      }
       const result = applyImportProposals(
         self,
         interpreted.understandings,
@@ -154,6 +161,7 @@ export class DigitalSelfService {
         materialName,
       );
       await writeDigitalSelf(pkg.rootDir, result.self);
+      await writeSourceCopy(pkg.rootDir, digest, extracted.text);
       const notice =
         interpreted.notice ||
         result.notice ||

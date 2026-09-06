@@ -12,6 +12,7 @@ import { createCommandBus } from '../../runtime/command-bus';
 import { talkThreadFilePath } from '../store';
 import { buildDocxFromMarkdown } from '../../infrastructure/export';
 import { extractFile } from '../../infrastructure/extract';
+import { classifyAuthorizedPaths, runReadFile } from '../mechanical-tools';
 import type { TalkChatFn } from '../types';
 
 async function tempDir(prefix: string): Promise<string> {
@@ -284,4 +285,36 @@ test('export_file 复用 export.ts 写出真实 docx 与 pptx', async () => {
   assert.match(String(pptText.text || ''), /数字资产变现大纲|先交付真实文件/);
   await runtime.stop();
   await pptRuntime.stop();
+});
+
+test('授权仓库内 .js/.json/README 按真实文本读取，不按扩展名拒绝', async () => {
+  const root = await tempDir('src-text');
+  const folder = path.join(root, 'repo');
+  await fs.mkdir(folder, { recursive: true });
+  await fs.writeFile(path.join(folder, 'math.js'), 'function add(a, b) { return a + b; }\n', 'utf8');
+  await fs.writeFile(path.join(folder, 'package.json'), '{"name":"tiny-add","version":"1.0.0"}\n', 'utf8');
+  await fs.writeFile(path.join(folder, 'README.md'), '# tiny-add\n\nFix add and run tests.\n', 'utf8');
+  const auth = classifyAuthorizedPaths([folder]);
+  const js = JSON.parse(await runReadFile(auth, JSON.stringify({ path: 'math.js' }))) as {
+    actualSuccess?: boolean;
+    content?: string;
+    failureReason?: string;
+  };
+  const json = JSON.parse(await runReadFile(auth, JSON.stringify({ path: 'package.json' }))) as {
+    actualSuccess?: boolean;
+    content?: string;
+    failureReason?: string;
+  };
+  const readme = JSON.parse(await runReadFile(auth, JSON.stringify({ path: 'README.md' }))) as {
+    actualSuccess?: boolean;
+    content?: string;
+  };
+  assert.equal(js.actualSuccess, true, js.failureReason);
+  assert.match(String(js.content || ''), /function add/);
+  assert.equal(json.actualSuccess, true, json.failureReason);
+  assert.match(String(json.content || ''), /tiny-add/);
+  assert.equal(readme.actualSuccess, true);
+  assert.match(String(readme.content || ''), /Fix add/);
+  assert.equal(String(js.failureReason || '').includes('格式暂不支持'), false);
+  assert.equal(String(json.failureReason || '').includes('格式暂不支持'), false);
 });

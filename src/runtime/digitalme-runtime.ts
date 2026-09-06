@@ -689,6 +689,8 @@ export class DigitalMeRuntime {
         model: runtime.model.model,
         temperature: 0.2,
         responseFormat: { type: 'json_object' },
+        // 单次 interpret 与 Talk 整轮同级：完整资料 JSON 比闲聊更长，不得比 Talk 更短。
+        timeoutMs: 180_000,
       });
       return { text: result.text };
     };

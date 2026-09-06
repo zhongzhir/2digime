@@ -272,6 +272,27 @@ test('interpret 系统提示不做摘要式挑选，也无姓名特判', async (
   assert.equal(/姓名特判|姓名字段|第一行规则/.test(sys), false);
 });
 
+test('import interpret 失败时不得把 source 写成已导入', async () => {
+  const root = await tempDir();
+  const service = new DigitalSelfService(
+    () => ({ rootDir: root, subjectId: 'subj_test' }),
+    async () => {
+      throw new Error('timeout after 180000ms');
+    },
+    () => '2026-09-01T12:00:00.000Z',
+  );
+  const material = path.join(root, 'resume.md');
+  await fs.writeFile(material, '张元林。拥有25年投资与产业经验。', 'utf8');
+  const imported = await service.invoke({ action: 'import', filePath: material });
+  assert.match(String(imported.view.notice || ''), /timeout after 180000ms/);
+  assert.equal(imported.view.empty, true);
+  const sources = path.join(root, 'digital-self', 'sources');
+  const names = await fs.readdir(sources).catch(() => [] as string[]);
+  assert.equal(names.length, 0);
+  const stored = await readDigitalSelf(root, 'subj_test', '2026-09-01T12:00:00.000Z');
+  assert.equal(stored.understandings.length, 0);
+});
+
 test('lasting=false 的一次性任务不得写入 current', () => {
   const self = emptyDigitalSelf('subj_test', '2026-09-05T00:00:00.000Z');
   const result = applyTellProposals(

@@ -8,7 +8,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { createDigitalMeRuntime } from '../../runtime/digitalme-runtime';
 import { createCommandBus } from '../../runtime/command-bus';
-import { TALK_TIMEOUT_NOTICE } from '../service';
+import { TALK_SYNTHESIS_TIMEOUT_NOTICE, TALK_TIMEOUT_NOTICE } from '../service';
+import { talkThreadFilePath } from '../store';
 
 import type { TalkChatFn } from '../types';
 
@@ -105,6 +106,104 @@ test('Talk 整轮超时：挂起的工具执行必须在期限内变成可理解
     const last = talked.view.turns[talked.view.turns.length - 1];
     assert.equal(last?.role, 'assistant');
     assert.equal(String(last?.text || '').length > 0, true);
+  } finally {
+    if (prev === undefined) delete process.env.DIGITALME_V2_TALK_TURN_DEADLINE_MS;
+    else process.env.DIGITALME_V2_TALK_TURN_DEADLINE_MS = prev;
+    await runtime.stop();
+  }
+});
+
+test('Talk 整轮超时：已有工具失败必须保留，不得只剩泛化请求超时', { timeout: 15_000 }, async () => {
+  const prev = process.env.DIGITALME_V2_TALK_TURN_DEADLINE_MS;
+  process.env.DIGITALME_V2_TALK_TURN_DEADLINE_MS = '400';
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-talk-keep-fail-'));
+  const pkgDir = path.join(root, 'pkg');
+  const runtime = createDigitalMeRuntime({
+    documentCapability: 'fake',
+    registerOpenAiStub: false,
+    talkChat: scriptedChat([
+      async () => ({
+        text: '',
+        toolCalls: [
+          {
+            id: 'call_write',
+            name: 'write_file',
+            arguments: JSON.stringify({ relativePath: '../escape.txt', content: 'nope' }),
+          },
+        ],
+      }),
+      async () => new Promise(() => {}),
+    ]),
+  });
+  const bus = createCommandBus(runtime);
+  try {
+    await bus.invoke('subject.createPackage', {
+      displayName: '保留失败',
+      targetDir: pkgDir,
+    });
+    const talked = await bus.invoke('talk', { text: '写一个文件' });
+    const copy = talked.view.turns.map((t) => t.text).join('\n');
+    assert.equal(copy.includes(TALK_TIMEOUT_NOTICE), false);
+    assert.match(copy, /超出授权|路径/);
+    assert.match(String(talked.view.notice || ''), /超出授权|路径/);
+    const rec = JSON.parse(await fs.readFile(talkThreadFilePath(pkgDir), 'utf8')) as {
+      executions?: Array<{ ok: boolean; capabilityId: string }>;
+    };
+    const execs = rec.executions || [];
+    assert.equal(execs.length > 0, true);
+    assert.equal(
+      execs.some((item) => item.ok === false && item.capabilityId === 'write_file'),
+      true,
+    );
+  } finally {
+    if (prev === undefined) delete process.env.DIGITALME_V2_TALK_TURN_DEADLINE_MS;
+    else process.env.DIGITALME_V2_TALK_TURN_DEADLINE_MS = prev;
+    await runtime.stop();
+  }
+});
+
+test('Talk 整轮超时：已有工具成功必须保留，并说明最终回复生成超时', { timeout: 15_000 }, async () => {
+  const prev = process.env.DIGITALME_V2_TALK_TURN_DEADLINE_MS;
+  process.env.DIGITALME_V2_TALK_TURN_DEADLINE_MS = '400';
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-talk-keep-ok-'));
+  const pkgDir = path.join(root, 'pkg');
+  const runtime = createDigitalMeRuntime({
+    documentCapability: 'fake',
+    registerOpenAiStub: false,
+    talkChat: scriptedChat([
+      async () => ({
+        text: '',
+        toolCalls: [
+          {
+            id: 'call_write',
+            name: 'write_file',
+            arguments: JSON.stringify({ relativePath: 'done.txt', content: 'ok' }),
+          },
+        ],
+      }),
+      async () => new Promise(() => {}),
+    ]),
+  });
+  const bus = createCommandBus(runtime);
+  try {
+    await bus.invoke('subject.createPackage', {
+      displayName: '保留成功',
+      targetDir: pkgDir,
+    });
+    const talked = await bus.invoke('talk', { text: '写一个文件' });
+    const last = talked.view.turns[talked.view.turns.length - 1];
+    assert.equal(last?.text, TALK_SYNTHESIS_TIMEOUT_NOTICE);
+    assert.equal(talked.view.notice, TALK_SYNTHESIS_TIMEOUT_NOTICE);
+    const abs = path.join(pkgDir, 'intelligence', 'outputs', 'done.txt');
+    assert.equal(await fs.readFile(abs, 'utf8'), 'ok');
+    const rec = JSON.parse(await fs.readFile(talkThreadFilePath(pkgDir), 'utf8')) as {
+      executions?: Array<{ ok: boolean; capabilityId: string }>;
+    };
+    const execs = rec.executions || [];
+    assert.equal(
+      execs.some((item) => item.ok === true && item.capabilityId === 'write_file'),
+      true,
+    );
   } finally {
     if (prev === undefined) delete process.env.DIGITALME_V2_TALK_TURN_DEADLINE_MS;
     else process.env.DIGITALME_V2_TALK_TURN_DEADLINE_MS = prev;

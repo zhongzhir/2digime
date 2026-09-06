@@ -6,10 +6,11 @@ import { compileCapabilityReality } from './capability-reality';
 import { emptyThread, readThread, writeThread } from './store';
 import { randomUUID } from 'node:crypto';
 import { NO_MODEL_NOTICE, runTalkTurn, type SubjectCollabPort } from './loop';
-import type { ProfessionalAgent, TalkChatFn, TalkView } from './types';
+import type { ProfessionalAgent, TalkChatFn, TalkExecution, TalkView } from './types';
 
 export const TALK_TURN_DEADLINE_MS = 180_000;
 export const TALK_TIMEOUT_NOTICE = '请求超时，模型在限定时间内没有返回。可重试。';
+export const TALK_SYNTHESIS_TIMEOUT_NOTICE = '操作已经完成，但最终回复生成超时';
 
 export class TalkTimeoutError extends Error {
   readonly kind = 'timeout';
@@ -131,6 +132,7 @@ export class TalkService {
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), talkTurnDeadlineMs());
     const boundedChat = wrapChatWithDeadline(this.chat, ac.signal);
+    const turnExecutions: TalkExecution[] = [];
     let next = thread;
     let timeoutNotice: string | undefined;
     try {
@@ -145,13 +147,15 @@ export class TalkService {
         now,
         signal: ac.signal,
         deadlineAt: Date.now() + talkTurnDeadlineMs(),
+        onExecution: (rec) => {
+          turnExecutions.push(rec);
+        },
         ...(input.contextPaths?.length ? { contextPaths: input.contextPaths } : {}),
         ...(collab ? { subjectCollab: collab } : {}),
         ...(confirmHint ? { confirmHint } : {}),
       });
     } catch (err) {
       if (!isTalkTimeout(err)) throw err;
-      timeoutNotice = TALK_TIMEOUT_NOTICE;
       const last = thread.turns[thread.turns.length - 1];
       if (!last || last.role !== 'user' || last.text !== text) {
         thread.turns.push({
@@ -161,12 +165,21 @@ export class TalkService {
           text,
         });
       }
+      const userTurn = thread.turns[thread.turns.length - 1];
+      const fromExec = assistantFromTurnExecutions(turnExecutions);
+      timeoutNotice = fromExec.notice;
       thread.turns.push({
         id: `turn_${randomUUID()}`,
         at: now,
         role: 'assistant',
-        text: TALK_TIMEOUT_NOTICE,
+        text: fromExec.text,
+        ...(fromExec.executionIds.length ? { executionIds: fromExec.executionIds } : {}),
+        ...(fromExec.result ? { result: fromExec.result } : {}),
       });
+      if (userTurn && userTurn.role === 'user' && fromExec.executionIds.length) {
+        userTurn.executionIds = fromExec.executionIds;
+      }
+      thread.executions = [...(thread.executions || []), ...turnExecutions];
       next = thread;
     } finally {
       clearTimeout(timer);
@@ -183,6 +196,35 @@ export function composeTalkUserText(text: string, contextPaths?: string[]): stri
   const list = paths.map((item) => `- ${item}`).join('\n');
   const suffix = `用户附上的文件或文件夹（这次交流的上下文，不是新任务）：\n${list}`;
   return body ? `${body}\n\n${suffix}` : suffix;
+}
+
+function assistantFromTurnExecutions(execs: TalkExecution[]): {
+  text: string;
+  notice: string;
+  executionIds: string[];
+  result?: { title: string; path?: string };
+} {
+  const executionIds = execs.map((item) => item.id);
+  if (!execs.length) {
+    return { text: TALK_TIMEOUT_NOTICE, notice: TALK_TIMEOUT_NOTICE, executionIds };
+  }
+  const failed = [...execs].reverse().find((item) => !item.ok);
+  if (failed) {
+    const fact = String(failed.summary || failed.failureReason || TALK_TIMEOUT_NOTICE).trim();
+    return {
+      text: fact.slice(0, 4000),
+      notice: fact.slice(0, 400),
+      executionIds,
+    };
+  }
+  const lastOk = [...execs].reverse().find((item) => item.ok);
+  const outputPath = lastOk?.outputPath;
+  return {
+    text: TALK_SYNTHESIS_TIMEOUT_NOTICE,
+    notice: TALK_SYNTHESIS_TIMEOUT_NOTICE,
+    executionIds,
+    ...(outputPath ? { result: { title: path.basename(outputPath), path: outputPath } } : {}),
+  };
 }
 
 function projectView(thread: ReturnType<typeof emptyThread>, notice?: string): TalkView {

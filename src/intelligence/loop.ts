@@ -254,6 +254,8 @@ export async function runTalkTurn(input: {
   confirmHint?: string;
   contextPaths?: string[];
   capabilityReality?: string;
+  /** 工具一旦完成就把执行事实交给本轮 service；不是 workflow / retry 状态。 */
+  onExecution?: (rec: TalkExecution) => void;
 }): Promise<TalkThread> {
   const userTurn: TalkTurn = {
     id: `turn_${randomUUID()}`,
@@ -333,6 +335,7 @@ export async function runTalkTurn(input: {
   const recordExec = (rec: TalkExecution) => {
     thread.executions.push(rec);
     executionIds.push(rec.id);
+    input.onExecution?.(rec);
   };
 
   const runWriteFile = async (rawArgs: string): Promise<string> => {
