@@ -7,7 +7,7 @@ import { DigitalSelfService } from '../digital-self/service';
 import { digitalSelfFilePath, emptyDigitalSelf, readDigitalSelf } from '../digital-self/store';
 import { liveUnderstandings } from '../digital-self/view';
 import { applyTellProposals } from '../digital-self/apply';
-import type { DigitalSelfChatFn } from '../digital-self/interpret';
+import { interpretWithModel, type DigitalSelfChatFn } from '../digital-self/interpret';
 import { createDigitalMeRuntime } from '../../runtime/digitalme-runtime';
 import { createCommandBus } from '../../runtime/command-bus';
 
@@ -251,6 +251,25 @@ test('Digital Self 命令面走同一 authority，不经过 GrowthEvent', async 
   const raw = await fs.readFile(selfFile, 'utf8');
   assert.match(raw, /张三/);
   await runtime.stop();
+});
+
+test('interpret 系统提示不做摘要式挑选，也无姓名特判', async () => {
+  let sys = '';
+  await interpretWithModel({
+    chat: async ({ messages }) => {
+      sys = String(messages[0]?.content || '');
+      return { text: JSON.stringify({ understandings: [] }) };
+    },
+    mode: 'import',
+    self: emptyDigitalSelf('subj_test', '2026-09-06T00:00:00.000Z'),
+    text: '一份资料',
+    materialName: 'resume.pdf',
+  });
+  assert.match(sys, /不要做摘要式挑选/);
+  assert.match(sys, /已经写明的本人事实/);
+  assert.equal(/只输出与用户本人有关、具有稳定主体意义、未来判断或行动用得上/.test(sys), false);
+  assert.equal(/可以 lasting=true 的：用户明确的长期偏好/.test(sys), false);
+  assert.equal(/姓名特判|姓名字段|第一行规则/.test(sys), false);
 });
 
 test('lasting=false 的一次性任务不得写入 current', () => {

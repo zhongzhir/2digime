@@ -14,22 +14,20 @@ export type DigitalSelfChatFn = (input: {
 
 const SYSTEM = `你在帮助 2digime 理解「用户本人」。只判断与用户本人有关的信息。
 返回一个 JSON 对象，不要markdown。形状：
-{"understandings":[{"text":"用第一人称以外的客观短句描述这条理解","facet":"about_me|goals|preferences|boundaries|context","aboutUser":true,"origin":"user_statement|material|inference","excerpt":"原文摘录","lasting":false,"isCoreIdentity":false,"isSensitive":false,"isMajorGoal":false,"isBoundary":false,"mustAsk":false,"mergeWithId":null,"conflictsWithId":null,"replacesId":null}],"notice":""}
+{"understandings":[{"text":"用第一人称以外的客观短句描述这条理解","facet":"about_me|goals|preferences|boundaries|context","aboutUser":true,"origin":"user_statement|material|inference","excerpt":"原文摘录","lasting":true,"isCoreIdentity":false,"isSensitive":false,"isMajorGoal":false,"isBoundary":false,"mustAsk":false,"mergeWithId":null,"conflictsWithId":null,"replacesId":null}],"notice":""}
 
 规则：
-- lasting 必须给出。lasting=true 才值得进入长期数字之我；false 表示不要沉淀。
-- 只输出与用户本人有关、具有稳定主体意义、未来判断或行动用得上的理解。
-- 本轮具体要做的事、一次性任务目标、这次想要的成品、临时安排、纯当前对话事务：lasting=false，且不要写入 understandings。
-- 可以 lasting=true 的：用户明确的长期偏好、稳定能力事实、稳定边界、用户明确表示今后都如此的偏好。
+- lasting 必须给出。资料里属于用户本人、会持续存在的主体事实 lasting=true；本轮具体要做的事、一次性任务、这次想要的成品、临时安排 lasting=false，且不要写入 understandings。
+- 你看到的是完整资料或原话。资料中属于用户本人、可持续使用的主体信息，都应写成各自独立的理解。不要做摘要式挑选，不要只保留若干重点，不要概括成用户画像而漏掉资料里已经写明的本人事实。
 - 资料里的无关内容、百科、他人不要写成用户事实。
 - 用户亲口明确说自己 → origin=user_statement；来自资料 → material；其余推断 → inference。
-- text 写当前理解，不要复述整份资料或整段对话。
+- 每条 text 写一条当前理解，不要把整份资料糊成一条。
 - facet 只是展示分组：about_me=我是谁；goals=关心/想要；preferences=偏好与判断；boundaries=边界；context=长期经历/项目/关系/上下文。
 - 若与 CURRENT 中某条说的是同一事实，填 mergeWithId。
 - 若明确纠正或收窄某条，填 replacesId，不要让互相冲突的旧条继续作为 current。
 - 若与某条矛盾且不能静默覆盖，填 conflictsWithId，mustAsk=true。
 - 资料或推断中的核心身份、敏感内容、重大长期目标、重要边界、低置信，mustAsk=true。
-- 不要编造。没有长期价值、没有稳定主体意义的内容，understandings 为空数组。`;
+- 不要编造。没有任何用户本人事实时，understandings 为空数组。`;
 
 function originOf(raw: unknown): DigitalSelfOrigin {
   if (raw === 'material' || raw === 'inference' || raw === 'user_statement') return raw;
