@@ -1,22 +1,14 @@
-import { existsSync, promises as fs, statSync } from 'node:fs';
+import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import type { CapabilityAdapter, CapabilityInput, ExecutionContext, SecretAccessor } from '../capability/adapter';
 import type { CapabilityRegistry } from '../capability/registry';
 import type { CapabilityRegistration } from '../capability/registration';
 import type { ProfessionalAgent, ProfessionalResult } from './types';
+import { classifyAuthorizedPaths } from './mechanical-tools';
 
 /** 本次 Talk 附带的已存在目录才算授权 workspace；不猜父目录、不用 runs/{execId}。 */
 export function resolveAuthorizedWorkingDirectory(paths?: string[]): string | undefined {
-  for (const raw of paths || []) {
-    const candidate = path.resolve(String(raw || '').trim());
-    if (!candidate) continue;
-    try {
-      if (existsSync(candidate) && statSync(candidate).isDirectory()) return candidate;
-    } catch {
-      /* skip */
-    }
-  }
-  return undefined;
+  return classifyAuthorizedPaths(paths).folders[0];
 }
 
 /**

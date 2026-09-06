@@ -133,6 +133,7 @@ export class TalkService {
         now,
         signal: ac.signal,
         deadlineAt: Date.now() + talkTurnDeadlineMs(),
+        ...(input.contextPaths?.length ? { contextPaths: input.contextPaths } : {}),
         ...(collab ? { subjectCollab: collab } : {}),
         ...(confirmHint ? { confirmHint } : {}),
       });

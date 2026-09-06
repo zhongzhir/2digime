@@ -3,6 +3,19 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import type { ChatMessage, ChatToolCall, ChatToolDefinition } from '../infrastructure/model-http';
 import { describeProfessionals } from './professionals';
+import {
+  EXPORT_FILE_TOOL,
+  LIST_DIRECTORY_TOOL,
+  MAX_WRITE_BYTES,
+  READ_FILE_TOOL,
+  classifyAuthorizedPaths,
+  describeAuthorizedFs,
+  parseExportArgs,
+  resolveWritePath,
+  runListDirectory,
+  runReadFile,
+  writeExportedOffice,
+} from './mechanical-tools';
 import type {
   ProfessionalAgent,
   TalkChatFn,
@@ -15,11 +28,10 @@ import { formatPublicCardsForModel } from '../subject-collab/public-card';
 
 export const NO_MODEL_NOTICE = '需要先连接 AI 能力，才能继续交流。';
 
-const MAX_TOOL_ROUNDS = 4;
+const MAX_TOOL_ROUNDS = 8;
 const DEFAULT_TOOL_CALL_TIMEOUT_MS = 75_000;
 const TOOL_SYNTHESIS_RESERVE_MS = 20_000;
 const MIN_TOOL_START_MS = 8_000;
-const MAX_WRITE_BYTES = 2_000_000;
 const EMPTY_REPLY = '我在。请再说一次你想让我做什么。';
 
 const DELEGATE_TOOL: ChatToolDefinition = {
@@ -227,21 +239,6 @@ function bindCallSignal(parent: AbortSignal | undefined, timeoutMs: number): {
   };
 }
 
-function resolveWritePath(writeRoot: string, relativePath: string): { ok: true; abs: string } | { ok: false; reason: string } {
-  const rel = relativePath.replace(/\\/g, '/').replace(/^\/+/, '').trim();
-  if (!rel) return { ok: false, reason: '未提供相对路径。' };
-  if (path.isAbsolute(relativePath) || rel.includes('..')) {
-    return { ok: false, reason: '路径超出授权目录。' };
-  }
-  const rootResolved = path.resolve(writeRoot);
-  const abs = path.resolve(writeRoot, rel);
-  const inside = path.relative(rootResolved, abs);
-  if (!inside || inside.startsWith('..') || path.isAbsolute(inside)) {
-    return { ok: false, reason: '路径超出授权目录。' };
-  }
-  return { ok: true, abs };
-}
-
 export async function runTalkTurn(input: {
   thread: TalkThread;
   userText: string;
@@ -254,6 +251,7 @@ export async function runTalkTurn(input: {
   deadlineAt?: number;
   subjectCollab?: SubjectCollabPort;
   confirmHint?: string;
+  contextPaths?: string[];
 }): Promise<TalkThread> {
   const userTurn: TalkTurn = {
     id: `turn_${randomUUID()}`,
@@ -278,6 +276,7 @@ export async function runTalkTurn(input: {
   }
 
   const cards = input.subjectCollab?.cards || [];
+  const auth = classifyAuthorizedPaths(input.contextPaths);
   const system = [
     '你是用户的兔机米。',
     '根据当前数字之我理解用户；不要编造未写入的本人事实。',
@@ -296,13 +295,16 @@ export async function runTalkTurn(input: {
       : '',
     '当前对用户的必要理解：',
     input.selfContext,
+    describeAuthorizedFs(auth),
     '当前已连接的外部能力：',
     describeProfessionals(input.agents),
   ]
     .filter(Boolean)
     .join('\n');
 
-  const tools: ChatToolDefinition[] = [WRITE_FILE_TOOL];
+  const tools: ChatToolDefinition[] = [WRITE_FILE_TOOL, EXPORT_FILE_TOOL];
+  if (auth.folders.length) tools.push(LIST_DIRECTORY_TOOL);
+  if (auth.folders.length || auth.files.length) tools.push(READ_FILE_TOOL);
   if (input.agents.length) tools.push(DELEGATE_TOOL);
   if (cards.length) tools.push(CONSULT_TOOL);
 
@@ -389,6 +391,67 @@ export async function runTalkTurn(input: {
     } catch (err) {
       return fail(String(err instanceof Error ? err.message : err));
     }
+  };
+
+  const runExportFile = async (rawArgs: string): Promise<string> => {
+    const parsed = parseExportArgs(rawArgs);
+    const execId = `run_${randomUUID()}`;
+    const writeRoot = path.join(input.workRoot, 'intelligence', 'outputs');
+    const fail = (reason: string) => {
+      lastOk = false;
+      lastEvidenceOnly = false;
+      lastPath = undefined;
+      recordExec({
+        id: execId,
+        at: input.now,
+        turnId: userTurn.id,
+        capabilityId: 'export_file',
+        instruction: `${parsed.format}:${parsed.relativePath}`,
+        ok: false,
+        summary: reason,
+        failureReason: reason,
+      });
+      return JSON.stringify({
+        actualSuccess: false,
+        ok: false,
+        capabilityId: 'export_file',
+        evidenceOnly: false,
+        failureReason: reason,
+        producedOutputs: [],
+        summary: reason,
+      });
+    };
+    const written = await writeExportedOffice({
+      writeRoot,
+      relativePath: parsed.relativePath,
+      format: parsed.format,
+      content: parsed.content,
+    });
+    if (!written.ok) return fail(written.reason);
+    lastOk = true;
+    lastEvidenceOnly = false;
+    lastPath = written.abs;
+    recordExec({
+      id: execId,
+      at: input.now,
+      turnId: userTurn.id,
+      capabilityId: 'export_file',
+      instruction: `${parsed.format}:${parsed.relativePath}`,
+      ok: true,
+      summary: `已导出 ${written.abs}`,
+      producedOutputs: [written.abs],
+      outputPath: written.abs,
+    });
+    return JSON.stringify({
+      actualSuccess: true,
+      ok: true,
+      capabilityId: 'export_file',
+      evidenceOnly: false,
+      format: parsed.format,
+      producedOutputs: [written.abs],
+      outputPath: written.abs,
+      summary: `已导出 ${written.abs}`,
+    });
   };
 
   const runDelegate = async (rawArgs: string): Promise<string> => {
@@ -501,6 +564,50 @@ export async function runTalkTurn(input: {
   const runOneTool = async (call: ModelToolCall): Promise<string> => {
     throwIfAborted(input.signal);
     if (call.name === 'write_file') return runWriteFile(call.arguments);
+    if (call.name === 'export_file') return runExportFile(call.arguments);
+    if (call.name === 'list_directory') {
+      const payload = await runListDirectory(auth, call.arguments);
+      let parsed: { actualSuccess?: boolean; failureReason?: string; entries?: unknown[] } = {};
+      try {
+        parsed = JSON.parse(payload) as typeof parsed;
+      } catch {
+        parsed = {};
+      }
+      recordExec({
+        id: `run_${randomUUID()}`,
+        at: input.now,
+        turnId: userTurn.id,
+        capabilityId: 'list_directory',
+        instruction: call.arguments,
+        ok: parsed.actualSuccess === true,
+        summary:
+          parsed.actualSuccess === true
+            ? `列出 ${Array.isArray(parsed.entries) ? parsed.entries.length : 0} 项`
+            : parsed.failureReason || '列出失败',
+        ...(parsed.failureReason ? { failureReason: parsed.failureReason } : {}),
+      });
+      return payload;
+    }
+    if (call.name === 'read_file') {
+      const payload = await runReadFile(auth, call.arguments);
+      let parsed: { actualSuccess?: boolean; failureReason?: string; path?: string } = {};
+      try {
+        parsed = JSON.parse(payload) as typeof parsed;
+      } catch {
+        parsed = {};
+      }
+      recordExec({
+        id: `run_${randomUUID()}`,
+        at: input.now,
+        turnId: userTurn.id,
+        capabilityId: 'read_file',
+        instruction: parsed.path || call.arguments,
+        ok: parsed.actualSuccess === true,
+        summary: parsed.actualSuccess === true ? `已读取 ${parsed.path || ''}` : parsed.failureReason || '读取失败',
+        ...(parsed.failureReason ? { failureReason: parsed.failureReason } : {}),
+      });
+      return payload;
+    }
     if (call.name === 'consult_subject') {
       const parsed = parseConsultArgs(call.arguments);
       if (!input.subjectCollab) {
