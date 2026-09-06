@@ -20,16 +20,19 @@ assert.match(app, /applyConnectionUi\(state\)/);
 assert.doesNotMatch(app, /els\.modelGate\.hidden\s*=\s*connected/);
 
 /** 与 Renderer 同语义的派生,四种状态断言 */
+function isMainChatModelCapability(c) {
+  if (!c) return false;
+  if (c.id === "cap_model_openai_compatible") return true;
+  if (c.kind === "model") return true;
+  const adapter = c.adapter || {};
+  return adapter.type === "openai-compatible-model" || adapter.adapterId === "openai-compatible-chat";
+}
+
 function deriveModelAvailability(capabilities) {
   const list = Array.isArray(capabilities) ? capabilities : [];
-  const documentCaps = list.filter(
-    (c) =>
-      c &&
-      Array.isArray(c.outputArtifactTypes) &&
-      c.outputArtifactTypes.includes("document"),
-  );
-  const available = documentCaps.some((c) => c.availability === "available");
-  const needsSetup = documentCaps.some((c) => c.availability === "needs_setup");
+  const modelCaps = list.filter(isMainChatModelCapability);
+  const available = modelCaps.some((c) => c.availability === "available");
+  const needsSetup = modelCaps.some((c) => c.availability === "needs_setup");
   return {
     available,
     needsSetup: !available && needsSetup,
@@ -43,6 +46,8 @@ assert.equal(none.showGate, true);
 
 const needsSetup = deriveModelAvailability([
   {
+    id: "cap_model_openai_compatible",
+    kind: "model",
     availability: "needs_setup",
     outputArtifactTypes: ["document"],
   },
@@ -51,8 +56,21 @@ assert.equal(needsSetup.available, false);
 assert.equal(needsSetup.showGate, true);
 assert.equal(needsSetup.needsSetup, true);
 
+const searchOnly = deriveModelAvailability([
+  {
+    id: "cap_gemini_web_search",
+    kind: "tool",
+    availability: "available",
+    outputArtifactTypes: ["document"],
+  },
+]);
+assert.equal(searchOnly.available, false);
+assert.equal(searchOnly.showGate, true);
+
 const available = deriveModelAvailability([
   {
+    id: "cap_model_openai_compatible",
+    kind: "model",
     availability: "available",
     outputArtifactTypes: ["document"],
   },
@@ -62,6 +80,8 @@ assert.equal(available.showGate, false);
 
 const unavailable = deriveModelAvailability([
   {
+    id: "cap_model_openai_compatible",
+    kind: "model",
     availability: "unavailable",
     outputArtifactTypes: ["document"],
   },

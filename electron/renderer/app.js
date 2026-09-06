@@ -993,23 +993,26 @@
     }
   }
 
+  function isMainChatModelCapability(c) {
+    if (!c) return false;
+    if (c.id === "cap_model_openai_compatible") return true;
+    if (c.kind === "model") return true;
+    const adapter = c.adapter || {};
+    return adapter.type === "openai-compatible-model" || adapter.adapterId === "openai-compatible-chat";
+  }
+
   function deriveModelAvailability(capabilities) {
     const list = Array.isArray(capabilities) ? capabilities : [];
-    const documentCaps = list.filter(
-      (c) =>
-        c &&
-        Array.isArray(c.outputArtifactTypes) &&
-        c.outputArtifactTypes.includes("document"),
-    );
+    const modelCaps = list.filter(isMainChatModelCapability);
     const codeChangeCaps = list.filter(
       (c) =>
         c &&
         Array.isArray(c.outputArtifactTypes) &&
         c.outputArtifactTypes.includes("code-change"),
     );
-    const available = documentCaps.some((c) => c.availability === "available");
+    const available = modelCaps.some((c) => c.availability === "available");
     const codeChangeAvailable = codeChangeCaps.some((c) => c.availability === "available");
-    const needsSetup = documentCaps.some((c) => c.availability === "needs_setup");
+    const needsSetup = modelCaps.some((c) => c.availability === "needs_setup");
     return {
       available,
       codeChangeAvailable,
@@ -1082,15 +1085,10 @@
       els.submit.title = "";
       els.revise.disabled = !activeArtifactId;
     }
-    const configured = isCredentialConfigured() || available;
+    const configured = isMainModelConnected();
     updateKeyStateUi();
     if (els.deleteModel) els.deleteModel.disabled = !configured;
-    if (available) setConnectionStateLabel("已连接", "ok");
-    else if (currentView === "settings") {
-      /* keep latest settings probe label unless freshly unavailable */
-    } else if (!configured) {
-      setConnectionStateLabel("尚未连接", null);
-    }
+    syncMainModelConnectionLabel();
     renderCapabilityOverview(state ? state.capabilities : null);
   }
 
@@ -1216,6 +1214,22 @@
     return !!(shellStatus && shellStatus.credentialConfigured);
   }
 
+  function isMainModelConnected() {
+    return !!(shellBootInfo && shellBootInfo.modelReady === true);
+  }
+
+  function syncMainModelConnectionLabel() {
+    if (isMainModelConnected()) {
+      setConnectionStateLabel("已连接", "ok");
+      return;
+    }
+    if (isCredentialConfigured()) {
+      setConnectionStateLabel("尚未确认（可测试连接）", null);
+      return;
+    }
+    setConnectionStateLabel("尚未连接", null);
+  }
+
   function isGeminiSearchConfigured() {
     return !!(shellStatus && shellStatus.geminiSearchConfigured);
   }
@@ -1308,10 +1322,7 @@
       els.advancedConnection.open = provider === "openai-compatible";
     }
     updateKeyStateUi();
-    const available = !!(lastConnectionState && lastConnectionState.available);
-    if (available) setConnectionStateLabel("已连接", "ok");
-    else if (isCredentialConfigured()) setConnectionStateLabel("尚未确认（可测试连接）", null);
-    else setConnectionStateLabel("尚未连接", null);
+    syncMainModelConnectionLabel();
     showStatus(els.settingsStatus, "");
     setSettingsTechDetail("");
   }
@@ -6485,7 +6496,7 @@
       advancedFieldsDirty = false;
       updateKeyStateUi();
       await refreshConnectionFromCapabilities();
-      if (lastConnectionState && lastConnectionState.available) {
+      if (isMainModelConnected()) {
         setConnectionStateLabel("已连接", "ok");
         showStatus(els.settingsStatus, "已保存并连接。");
       } else {
