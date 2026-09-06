@@ -47,11 +47,15 @@ async function liveAvailable(
 }
 
 function searchLine(available: boolean): string {
-  return available ? '联网搜索：已连接，可使用' : '联网搜索：当前尚未连接或配置';
+  return available
+    ? '联网搜索：已连接，可使用'
+    : '联网搜索：当前尚未连接或配置。用户可以在「设置 → 联网搜索」中连接。';
 }
 
 function codeLine(available: boolean, authorizedFolder?: string): string {
-  if (available && !authorizedFolder) return '代码执行：已安装，但本轮尚未授权工作目录';
+  if (available && !authorizedFolder) {
+    return '代码执行：已安装，但本轮尚未授权工作目录。要实际使用，需要用户通过当前对话的“+”附加项目文件夹作为本次工作目录。';
+  }
   if (available) return '代码执行：已连接，可在授权工作目录中使用';
   return '代码执行：当前尚未连接或配置';
 }

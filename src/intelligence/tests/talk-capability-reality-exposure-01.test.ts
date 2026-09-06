@@ -96,11 +96,14 @@ test('compiler：Codex 已装未授权目录时可见但语义化；授权后变
   const folder = await tempDir('ws');
   const hidden = await compileCapabilityReality({ registry });
   assert.match(hidden, /代码执行：已安装，但本轮尚未授权工作目录/);
+  assert.match(hidden, /“\+”附加项目文件夹作为本次工作目录/);
   assert.match(hidden, /桌面应用操作：当前没有已连接的可执行能力/);
   assert.match(hidden, /联网搜索：当前尚未连接或配置/);
+  assert.match(hidden, /设置 → 联网搜索/);
   assert.match(hidden, /本地文件读取：本轮尚未通过/);
   assert.equal(/不能操作电脑|不允许|此类任务不支持/.test(hidden), false);
   assert.equal(/请安装/.test(hidden), false);
+  assert.equal(/应该选哪个|应该先做|fallback/.test(hidden), false);
   assertSemanticOnly(hidden);
 
   const ready = await compileCapabilityReality({ registry, contextPaths: [folder] });
@@ -161,6 +164,7 @@ test('A Codex 已装未授权：模型看见缺口；delegate 不可调用', asy
       async ({ messages, tools }) => {
         const sys = String(messages[0]?.content || '');
         assert.match(sys, /代码执行：已安装，但本轮尚未授权工作目录/);
+        assert.match(sys, /“\+”附加项目文件夹作为本次工作目录/);
         assert.equal(/cap_external_executor_codex/.test(sys), false);
         assert.equal(/不能操作电脑|我没有代码能力/.test(sys), false);
         sawDelegate = Boolean(tools?.some((t) => t.function.name === 'delegate'));
@@ -280,6 +284,7 @@ test('D Gemini 未配置：只陈述尚未连接；不规定固定回复', async
       async ({ messages, tools }) => {
         const sys = String(messages[0]?.content || '');
         assert.match(sys, /联网搜索：当前尚未连接或配置/);
+        assert.match(sys, /设置 → 联网搜索/);
         assert.equal(/cap_gemini_web_search|cap_baseline_web_search/.test(sys), false);
         assert.equal(tools?.some((t) => t.function.name === 'delegate'), false);
         return { text: '我这边还没连接实时检索。按已有公开知识，大致是这样；要核验今天的消息需要先在设置里接上联网能力。' };
