@@ -8,6 +8,84 @@
 
 ---
 
+## Repository Authority
+
+### CURRENT AUTHORITY
+
+```text
+CURRENT AUTHORITY BRANCH:
+build/tujimi-ui-minimal-integration-01
+```
+
+当前 Authority 为本文件所在的最新已提交 HEAD；每次 accepted 产品开发或治理提交后，该 HEAD 线性前进。不把某个 SHA 永久硬编码为本文件的 Authority HEAD。
+
+### ACTIVE DEVELOPMENT RULE
+
+默认：
+
+```text
+所有当前产品开发在唯一 Authority 线上线性推进。
+```
+
+不得再默认：
+
+```text
+one task = one branch = one permanent worktree
+```
+
+只有确实需要高风险隔离、长时间并行、明确实验，或 Owner / CTO 要求时，才创建临时 task branch/worktree。
+
+### NEW TASK GATE
+
+所有后续开发任务在开始前必须确认：
+
+```text
+1. AUTHORITY_HEAD
+2. CURRENT_ACTIVE_BRANCH
+3. ACTIVE_WORKTREE_STATUS
+4. Build-vs-Integrate Gate
+```
+
+若任务指令中的旧 SHA 与当前 Authority 不一致：以当前已提交 Authority 为准，不得机械从旧 SHA 新开开发线。
+
+### DIRTY WORKTREE RULE
+
+历史 DIRTY worktree：
+
+```text
+FROZEN / NOT AUTHORITY
+```
+
+不得：作为新任务基线；从其中未提交 CURRENT-PLAN 判断当前权威状态；stash / reset / clean / checkout 覆盖；未经单独审计直接合入 Authority。
+
+### TASK BRANCH LIFECYCLE
+
+临时 task branch：
+
+```text
+建立
+→ 开发
+→ 验证
+→ Owner / CTO ACCEPTED
+→ integration 回唯一 Authority
+→ 移除 task worktree
+→ branch 归档或安全删除
+```
+
+禁止 accepted 后长期漂浮形成第二主线。
+
+### MAIN RULE
+
+当前：
+
+```text
+origin/main ≠ development authority
+```
+
+它仍是公开历史线。后续是否 reconcile / 升格，必须单独决策。
+
+---
+
 ## 1. 后续唯一战略顺序（2026-09-06）
 
 Refoundation Phase 1–3 已作为地基接受（见 §3）。**后续产品建设**按下列顺序，不得把四段同时当施工面，也不得在 Phase A 无限停留。
