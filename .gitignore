@@ -50,3 +50,4 @@ scripts/_conversation-quality-gate-evidence/
 scripts/_conversation-quality-recovery-evidence/
 scripts/_conversation-gemini-benchmark-evidence/
 scripts/_collab-03-two-owner-trial-evidence/
+build/evidence/

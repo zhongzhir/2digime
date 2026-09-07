@@ -36,6 +36,10 @@ import {
   type SecondaryExecutorOptions,
 } from '../capability/adapters/external-executor-secondary';
 import {
+  createAcquiredCodingExecutorAdapter,
+  type AcquiredCodingExecutorOptions,
+} from '../capability/adapters/acquired-coding-executor';
+import {
   createExternalExecutorModelApiAdapter,
   type ExternalExecutorModelApiOptions,
 } from '../capability/adapters/external-executor-model-api';
@@ -279,6 +283,11 @@ export interface DigitalMeRuntimeOptions {
    * - SecondaryExecutorOptions：显式启用（测试 / gate / 验收）。kind='agent'。
    */
   secondaryExecutorCapability?: false | SecondaryExecutorOptions;
+  /**
+   * 无现成 Coding runtime 时获取成熟能力。默认不注册；产品入口显式打开。
+   * 不把单一厂商写成架构。
+   */
+  acquiredCodingCapability?: false | AcquiredCodingExecutorOptions;
   /**
    * 测试注入：不支持自动调用的桌面 Coding Agent 描述。
    * false/undefined：不注册。
@@ -3127,6 +3136,9 @@ export class DigitalMeRuntime {
     // MULTI-AGENT-ROUTE-01：第二 Agent 默认不注册（无空壳）；仅测试/gate/显式 options 注册。
     if (this.options.secondaryExecutorCapability) {
       registry.register(createExternalExecutorSecondaryAdapter(this.options.secondaryExecutorCapability));
+    }
+    if (this.options.acquiredCodingCapability) {
+      registry.register(createAcquiredCodingExecutorAdapter(this.options.acquiredCodingCapability));
     }
     // model_api 退出默认暴露；仅显式 modelApiCapability 注册。源码保留作过渡。
     const modelApiConfig = this.options.modelApiCapability;

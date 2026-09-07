@@ -224,6 +224,10 @@ async function bootstrapRuntime() {
             ...(model.geminiSearchApiKey ? { geminiSearchApiKey: model.geminiSearchApiKey } : {}),
             ...(model.geminiSearchModel ? { geminiSearchModel: model.geminiSearchModel } : {}),
             ...(a2aRemoteCapability ? { a2aRemoteCapability } : {}),
+            acquiredCodingCapability: {
+              runtimeRoot: path.join(userDataPath, "runtimes"),
+              connection: model.openaiCompatible,
+            },
           }
         : {
             documentCapability: "none",

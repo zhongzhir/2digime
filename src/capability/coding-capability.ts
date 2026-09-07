@@ -107,9 +107,8 @@ export function recommendedCodingCapability(): CodingCapabilityRecommendation {
       '在确认范围内创建或修改文件',
       '运行本地测试或构建命令',
     ],
-    installProvider: '由该能力的官方安装渠道提供；Digital Me 不会替你静默安装。',
+    installProvider: '需要时由 2digime 获取成熟代码执行能力，不要求用户安装开发工具。',
     noAutoCommitPushDeploy: true,
-    installGuideUrl: 'https://github.com/openai/codex',
   };
 }
 

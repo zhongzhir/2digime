@@ -52,6 +52,14 @@ function resolveOwnerScenarioRuntimePatch(env = process.env) {
     }
     if (atomcodeExe) exec.atomcodeExePath = atomcodeExe;
     patch.externalExecutorCapability = exec;
+    if (
+      forceAvailability === 'needs_setup' ||
+      forceAvailability === 'unavailable' ||
+      forceAvailability === 'unsupported' ||
+      forceAvailability === 'needs_login'
+    ) {
+      patch.acquiredCodingCapability = false;
+    }
   }
   if (injectUnsupported) {
     patch.unsupportedDesktopCodingCapability = {
