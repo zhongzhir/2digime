@@ -139,12 +139,22 @@ Phase 1 Digital Self、Phase 2 Talk 主链、Phase 3 协作地基仍然有效，
 
 ## 2. 下一开发任务
 
-**任务名：** Public Alpha P1（见 05 §9）
-**状态：** `NOT STARTED`
-**阶段：** Public Alpha 产品面 P0 已 ACCEPTED
-**本轮指针：** [`05-UI-RECOVERY-AUDIT.md`](./05-UI-RECOVERY-AUDIT.md) 的 **P1**：会话列表评估、Talk 内网络结果/主动告知（仍无 Feed Tab）、成果轻预览、两套 CSS 收成一层。不重画 Figma，不造 Feed，不恢复 `#nav-work` / `#nav-collab`。成熟 Computer Use 仍在 Phase A 未完成清单中，**今天 NOT STARTED**。
+**任务名：** Public Alpha P0 收口 → Windows 包 → 干净机 → 公开 main 换代（见 06）
+**状态：** `NOT STARTED`（审计已完成，发布未开始）
+**阶段：** Public Alpha **尚未发布**。产品面 P0 已 ACCEPTED；发布 Gate 见 [`06-PUBLIC-ALPHA-READINESS.md`](./06-PUBLIC-ALPHA-READINESS.md)。
+**裁决：** `PUBLIC_ALPHA_READY_AFTER_P0_FIXES`。禁止把 05 的 P1 升成发布前大完善。
 
-已接受：`PUBLIC_ALPHA_SURFACE_ACCEPTED`（05 P0，7 项）；`DIGITAL_SELF_NETWORK_EVOLUTION_ACCEPTED`（04 §15）；UI Recovery Audit（05）；`DISTRIBUTED_PERSONAL_SELECTION_ACCEPTED`；substrate 审计（04 §13）；`ZERO_START_CODING_TALK_ACCEPTED`（`24e1ce9`）；`STRATEGIC_ALIGNMENT_ACCEPTED` / `EXECUTION_TRUTH_RESTORED` / `CODING_CAPABILITY_REAL_AND_INTEGRATED`。
+**本轮指针（只按此序，本文件不执行）：**
+
+1. 重写公开 README / 试用说明（Windows-only；对齐 00「属于我 · 能做事 · 连接世界」）。  
+2. `npm run build:packaged` 从当前 Authority 打 Windows x64 ZIP。  
+3. 陌生 Windows 机验证：解压 → 连接 AI → Talk → 数字之我 → **无 USER_EXISTING Coding Agent** 的做事。  
+4. `NEW_PUBLIC_BASELINE`：tag 归档 `origin/main`（`a723037`）→ 在 Authority `merge -s ours origin/main` → fast-forward 公开 main。禁止直接 merge origin/main、禁止 force push。  
+5. 然后才是 push / tag `v0.1.0-public-alpha` / GitHub Release。  
+
+已接受：Public Alpha Readiness 审计（06）；`PUBLIC_ALPHA_SURFACE_ACCEPTED`（05 P0，7 项）；`DIGITAL_SELF_NETWORK_EVOLUTION_ACCEPTED`（04 §15）；UI Recovery Audit（05）；`DISTRIBUTED_PERSONAL_SELECTION_ACCEPTED`；substrate 审计（04 §13）；`ZERO_START_CODING_TALK_ACCEPTED`（`24e1ce9`）；`STRATEGIC_ALIGNMENT_ACCEPTED` / `EXECUTION_TRUTH_RESTORED` / `CODING_CAPABILITY_REAL_AND_INTEGRATED`。
+
+05 §9 的 P1（会话列表、Talk 内网络结果、成果轻预览、CSS 合层）、Computer Use、Feed、协作中心：**发布之后**，不是现在。
 
 不要做完整 Feed 产品、不要做订阅/关注、不要恢复协作中心。历史已接受任务（Talk ↔ Digital Self Learning、Zero-start Coding 等）见 §3，不再当作「下一步」。
 
@@ -252,6 +262,7 @@ AGENTS.md
   → 03-CURRENT-PLAN.md   ← 本文（排期）
   → 04-COLLABORATION-FOUNDATION.md   Phase 3 架构；不与 00/01/02 并列产品宪法
   → 05-UI-RECOVERY-AUDIT.md          Public Alpha UI 审计；不是宪法、不是 Current Plan
+  → 06-PUBLIC-ALPHA-READINESS.md     发布前只读审计；不是宪法、不是 Current Plan
 ```
 
 **降级（不删除）**

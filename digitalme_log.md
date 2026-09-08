@@ -5,6 +5,20 @@
 
 ---
 
+## 2026-09-08 — Public Alpha Readiness 审计
+
+### 状态
+
+`PUBLIC_ALPHA_READY_AFTER_P0_FIXES` / `not_pushed` / `not_released` / `product_code_unmodified`
+
+主题：以 `bac5de0198f567224aa1aeaf62a15872e9c9a4cb` 为唯一 Candidate，做发布前只读审计。Development Authority ≠ `origin/main`（`a723037`）≠ 尚未存在的 Release 包。推荐公开 main 升级：`NEW_PUBLIC_BASELINE`（`merge -s ours`，禁止直接 merge origin/main / force push）。
+
+Windows zero-start：PARTIAL。macOS：NOT_READY。SECRET_GATE：PASS。根 README 过时，属 P0 文档。四条真实 Trial：Talk 通过；「没有长期记忆」本轮未复现且实际使用 `self.json`；做事未假成功但本机仍打到 Codex；Subject Network 同池不同 Self 无回归。
+
+未改产品代码。未打包。未 push。未 release。下一刀见 06 与 03 §2，不要做 P1 大完善。
+
+---
+
 ## 2026-09-08 — Public Alpha 产品面 P0
 
 ### 状态
