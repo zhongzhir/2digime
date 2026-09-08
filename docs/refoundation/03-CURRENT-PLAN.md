@@ -1,7 +1,7 @@
 # 03 — CURRENT PLAN
 
 **状态：** `current_authority / only_execution_plan`
-**日期：** 2026-09-06
+**日期：** 2026-09-08
 **性质：** 当前唯一执行计划。旧 roadmap、execution index、context 文首指针、01A baseline 附录中的「下一步」均不得再当 current plan。
 
 开始任何实现前读 AGENTS.md 所列四份文件。本文件只回答：现在做什么、按什么顺序、什么不准做、还有哪些未决冲突。
@@ -86,16 +86,18 @@ origin/main ≠ development authority
 
 ---
 
-## 1. 后续唯一战略顺序（2026-09-06）
+## 1. 后续唯一战略顺序（2026-09-08）
 
 Refoundation Phase 1–3 已作为地基接受（见 §3）。**后续产品建设**按下列顺序，不得把四段同时当施工面，也不得在 Phase A 无限停留。
 
 ```text
-Phase A  基础能力达到约 95 分位     CURRENT（Integrate-first）
+Phase A  基础能力达到约 95 分位     CURRENT（Integrate-first；Coding 路线已证明）
 Phase B  做实数字之我                 NEXT（增强，不限制模型）
 Phase C  连接与自主选择               LATER
-Phase D  Digital Subject Network      LATER（新模式）
+Phase D  Digital Subject Network      NEXT THIN SLICE（先审计现有 substrate，不写新网络代码）
 ```
+
+核心定位（00）：**Digital Self / AI Capability / Digital Subject Network**。对外：**属于我 · 能做事 · 连接世界**。协作是 Subject Network 的一种应用，不是第三核心总称。
 
 ### Phase A — 基础能力达到 95 分位
 
@@ -107,15 +109,15 @@ Phase D  Digital Subject Network      LATER（新模式）
 
 **2026-09-06 已部分闭环（Integrate-first，未自研替代）：** Talk / reasoning；Web search；authorized local files；Word/PPT 基础文件输出；Coding Agent（Codex + Windows 官方 `windows.sandbox=unelevated`）。
 
-**尚未达到完整 95 分位：** Computer Use；专业 Office / PPT；Excel；图像；音频；视频；更丰富成熟 Agent / Tool 接入。
+**2026-09-08 已证明 AI Capability 路线：** Zero-start Coding Talk Gate `ZERO_START_CODING_TALK_ACCEPTED`（Authority `24e1ce9`）。用户无现成 Coding Agent 时，2digime 可 acquire 成熟 runtime、复用聊天凭证、真实改项目、真实跑测试、把本次 delta 如实交给模型与用户。不自研 Coding Agent。
 
-**下一优先事项：** 成熟 Computer Use 的 Build-vs-Integrate Gate。**今天 NOT STARTED。** 不要因为下一阶段列表存在，就再次自建这些能力。每项仍必须先过 Build-vs-Integrate Gate。
+**尚未达到完整 95 分位：** Computer Use；专业 Office / PPT；Excel；图像；音频；视频；更丰富成熟 Agent / Tool 接入。这些仍须先过 Build-vs-Integrate Gate，**不要因为列表存在就自建**。Computer Use **今天仍 NOT STARTED**。
 
 ### Phase B — 做实数字之我
 
-重点：输入资料、对话、成果、纠正、工作经验、协作经验 → 模型理解 → Digital Self 持续成长 → 应用于下一次真实任务。
+重点：输入资料、对话、成果、纠正、工作经验、协作经验、网络选择 → 模型理解 → Digital Self 持续成长 → 应用于下一次真实任务与网络选择。
 
-Digital Self 不限制模型，只增加主体上下文。禁止用 Digital Self 削弱、隐藏或锁死。
+Digital Self 不限制模型，只增加主体上下文。禁止用 Digital Self 削弱、隐藏或锁死。Digital Self 是这个人的个人选择算法，不得另建统一中心推荐代替它。
 
 ### Phase C — 连接与自主选择
 
@@ -123,25 +125,41 @@ Digital Self 不限制模型，只增加主体上下文。禁止用 Digital Self
 
 ### Phase D — Digital Subject Network / 新模式
 
-前三项成立后再进入：自动机会发现、数字主体协作、新组织、交易/结算、信誉、人与 AI 共生网络。不把 Phase 3 协作试验扩成广播市场。
+**2026-09-08：** 下一核心薄片转向 Digital Subject Network。**先审计、不实现。**
+
+原 collaboration 代码视为 Subject Network **substrate 的历史实现**，不是另一套产品。在写任何新网络代码前必须先审计现有：
+
+- relay
+- advertisement
+- discovery
+- consult
+- delegate
+- opportunity
+- owner controls
+
+**禁止另起一套 network runtime。** 本轮不开始网络实现，不开始 Computer Use。
+
+前三项能力仍须对真人成立；不把 Phase 3 协作试验扩成广播市场；不恢复 `#nav-collab`。中间服务（Relay / Index / Search 等）是服务商，不是网络主人。
 
 ### 与已接受 Refoundation 的关系
 
-Phase 1 Digital Self、Phase 2 Talk 主链、Phase 3 协作地基仍然有效，不推倒重来。两 Owner 真人试验（见 §3）可继续，但不扩建协作产品面，也不阻塞 Phase A。
+Phase 1 Digital Self、Phase 2 Talk 主链、Phase 3 协作地基仍然有效，不推倒重来。Phase 3 对象视为 Subject Network 的已有 substrate。两 Owner 真人试验（见 §3）可继续，但不扩建协作产品面，也不用新 runtime 替换已有 relay / discovery。
 
 ---
 
 ## 2. 下一开发任务
 
-**任务名：** 成熟 Computer Use 的 Build-vs-Integrate Gate
-**阶段：** Strategic Phase A（Integrate-first）
-**本轮：** `DAY_CLOSED_20260906`。Computer Use **今天 NOT STARTED**。不要因为本列表存在就自建 Computer Use / Office / 生成能力。
+**任务名：** Digital Subject Network substrate 审计（只读）
+**阶段：** Strategic Phase D 薄片（先审计现有；不写新网络代码）
+**本轮：** 不开始实现。不开始 Computer Use。
 
-已接受同日收口：`STRATEGIC_ALIGNMENT_ACCEPTED` / `EXECUTION_TRUTH_RESTORED` / `CODING_CAPABILITY_REAL_AND_INTEGRATED`。
+审计范围（现有代码视为 substrate，禁止另起 network runtime）：relay、advertisement、discovery、consult、delegate、opportunity、owner controls。
 
-关键提交：`346ee68` Digital Self facts；`38fc915` capability reality；`7121a7e` 战略对齐；`3b4cb4a` execution truth；`70aad37` Codex Windows unelevated sandbox。
+已接受：`ZERO_START_CODING_TALK_ACCEPTED`（`24e1ce9`）证明 AI Capability 零起步路线；`STRATEGIC_ALIGNMENT_ACCEPTED` / `EXECUTION_TRUTH_RESTORED` / `CODING_CAPABILITY_REAL_AND_INTEGRATED`。
 
-历史已接受任务（Talk ↔ Digital Self Learning 等）见 §3，不再当作「下一步」。
+成熟 Computer Use 仍在 Phase A 未完成清单中，**今天 NOT STARTED**，不得因旧列表自建。
+
+历史已接受任务（Talk ↔ Digital Self Learning、Zero-start Coding 等）见 §3，不再当作「下一步」。
 
 一台机器时必须两套完全独立的 Electron `userData`（`DIGITALME_V2_USER_DATA`），不得共享 Package、Thread、SecretStore。
 
@@ -270,7 +288,7 @@ AGENTS.md
 |---|---|
 | 01A「下一步 = 最短 Goal 闭环」vs 01C「Phase 1 = Digital Self」 | **01C**：先 Digital Self |
 | rules §14 模块轮动 vs 本文旧 Phase 1→2→3 | **已被 §1 战略 Phase A–D 覆盖**；1–3 为已接受地基 |
-| 广播作为核心创新假设 vs 协作扩建暂停 | **不实现广播市场与协作中心 UI**；假设留在 00。Phase D 才考虑主体网络，不恢复 `#nav-collab` |
+| 广播作为核心创新假设 vs 协作扩建暂停 | **不实现广播市场与协作中心 UI**；假设留在 00。下一薄片是审计现有 Subject Network substrate，不恢复 `#nav-collab`，不另起 network runtime |
 | 自研基础能力 vs Integrate-first | **2026-09-06：能接不造**；95 分位靠接入，不自研替代 Codex / 搜索 / Computer Use |
 | 「后台可保留复杂状态机」vs 禁止用状态机替代 AI | **禁止替代 AI**；运行态 ≠ 永久状态机 |
 | DIGITAL-SELF P1–P5 迁旧主链 vs 新核重建 | **不沿旧链 P1–P5** |
@@ -286,7 +304,7 @@ AGENTS.md
 
 ## 7. PHASE 3 协作试验约束
 
-Foundation（04）与 Dual-Subject Loop architecture/engineering pass 已接受。Relay 工程接线已接受。Two-Owner Real Trial 仍可继续，**但不扩建协作产品面，也不替代 §1 Phase A。**
+Foundation（04）与 Dual-Subject Loop architecture/engineering pass 已接受。Relay 工程接线已接受。Two-Owner Real Trial 仍可继续，**但不扩建协作产品面，也不用新 runtime 替代已有 substrate。协作是 Digital Subject Network 的一种应用（00 §4）。**
 
 约束仍是：
 
@@ -296,4 +314,4 @@ Foundation（04）与 Dual-Subject Loop architecture/engineering pass 已接受�
 4. 不先做协作页面，不恢复 13 态，不自研替代 A2A/VC/payment；A 不得驱动 B runtime / drain；
 5. 出现 Yellow/Red 立即停（04 §11）。
 
-Phase 1 与 Phase 2（核心闭环 + 产品表面）已 ACCEPTED。未完成 checkpoint 验证前不得把旧冻结做事代码并入本基线。当前产品建设焦点是 §1 Phase A。
+Phase 1 与 Phase 2（核心闭环 + 产品表面）已 ACCEPTED。Zero-start Coding Talk 已 ACCEPTED。未完成 checkpoint 验证前不得把旧冻结做事代码并入本基线。当前下一薄片是 §1 / §2 的 Subject Network substrate 审计，不是自建 Computer Use，也不是新写 network runtime。

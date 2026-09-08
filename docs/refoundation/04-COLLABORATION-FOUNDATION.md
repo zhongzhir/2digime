@@ -1,9 +1,11 @@
 # 04 — COLLABORATION FOUNDATION
 
 **状态：** `phase3_foundation / architecture_for_collaboration`
-**日期：** 2026-09-02
+**日期：** 2026-09-08
 **基线：** Dual-Subject Loop architecture/engineering pass 已接受
 **性质：** Phase 3 协作架构。不替代 00/01/02；不承担排期（排期只在 03）。本文回答：协作是什么、对端是谁、外部标准怎么用、代码守什么、第一版最少验什么。
+
+**2026-09-08：** 00 已将第三核心从「协作」更名为 **Digital Subject Network**。协作是该网络的一种应用（COLLABORATION IS AN APPLICATION），不是第三核心总称。本文仍是 Phase 3 对象与传输地基；现有 relay / discovery / opportunity 等实现视为 Subject Network substrate。禁止另起一套 network runtime。不在本文开始新实现。
 
 开始任何协作实现前：读 AGENTS.md 所列四份文件，再读本文。出现 Yellow / Red 必须重读 00 / 01 / 02 与本文。
 
@@ -13,7 +15,7 @@
 
 ## 1. 协作产品定义
 
-协作不是另一个主入口，也不是第三个产品。
+协作不是另一个主入口，也不是第三个产品，更不是第三核心的总称。它是 Digital Subject Network 上的一种应用。
 
 用户仍然只与自己的 2digime 交流。对话是统一入口；做事是同一入口里的外部执行；协作是同一入口里、对端换成另一个独立 Subject 时发生的行为。删除协作页面之后，主体、Goal、授权、传输与验收逻辑必须仍独立成立。
 

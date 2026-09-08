@@ -2,7 +2,7 @@
 
 **状态：** `current_authority`  
 **层级：** 00 之下；与 02 并列约束实现  
-**日期：** 2026-09-06
+**日期：** 2026-09-08
 **性质：** AI Native 架构原则 + 开发纪律 + Owner / CTO / Agent 分工。
 
 ---
@@ -42,7 +42,7 @@ Human
 
 **兔机米不是一个受 Digital Self 约束的大模型，而是大模型完整能力的主体化、持续化、增强层。**
 
-做事能力达到市场同类约 95 分位是门槛，默认 Integrate-first。长期核心是数字之我 + 连接 + 自主选择 + 模式创新，不是自研通用 AI 能力。
+做事能力达到市场同类约 95 分位是门槛，默认 Integrate-first。长期核心是 Digital Self / AI Capability / Digital Subject Network（属于我 · 能做事 · 连接世界），不是自研通用 AI 能力。协作是 Subject Network 的一种应用。
 
 顺序：
 

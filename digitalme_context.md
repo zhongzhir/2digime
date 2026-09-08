@@ -4,6 +4,10 @@
 状态：historical strategic context（不承担 current plan）
 最后更新：2026-09-06（日终指针；下文 2026-08-31 及更早条目仍为历史）
 
+> **2026-09-08 当前状态指针**：本文件不恢复为第二权威源。现行权威：`AGENTS.md` → `docs/refoundation/00` / `01` / `02` / `03`。当前执行只在 [`docs/refoundation/03-CURRENT-PLAN.md`](docs/refoundation/03-CURRENT-PLAN.md)。
+>
+> 已接受：`DIGITAL_SUBJECT_NETWORK_STRATEGY_ACCEPTED` / `ZERO_START_CODING_TALK_ACCEPTED`。核心定位见 00：Digital Self / AI Capability / Digital Subject Network。未 push、未 Release。
+>
 > **2026-09-06 当前状态指针**：本文件不恢复为第二权威源。现行权威：`AGENTS.md` → `docs/refoundation/00` / `01` / `02` / `03`。当前执行只在 [`docs/refoundation/03-CURRENT-PLAN.md`](docs/refoundation/03-CURRENT-PLAN.md)。
 >
 > 已接受：`STRATEGIC_ALIGNMENT_ACCEPTED` / `EXECUTION_TRUTH_RESTORED` / `CODING_CAPABILITY_REAL_AND_INTEGRATED` / `DAY_CLOSED_20260906`。未 push、未 Release。

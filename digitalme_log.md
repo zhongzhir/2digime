@@ -5,6 +5,34 @@
 
 ---
 
+## 2026-09-08 — DIGITAL SUBJECT NETWORK 战略升级
+
+### 状态
+
+`DIGITAL_SUBJECT_NETWORK_STRATEGY_ACCEPTED` / `OWNER_ACCEPTED` / `not_pushed` / `not_released`
+
+主题：核心定位从易被误解的「代表我 — 做事 — 协作」升级为 **Digital Self / AI Capability / Digital Subject Network**（属于我 · 能做事 · 连接世界）。只改上位文档，不改产品代码，不开始网络实现。
+
+关键词：
+
+- **DIGITAL SUBJECT NETWORK**
+- **DISTRIBUTED PERSONAL SELECTION**
+- **INTERMEDIARY SERVICE LAYER**
+- **COLLABORATION IS AN APPLICATION**
+
+### Owner 已接受
+
+1. 每一个 2digime 都是属于真人的智能网络节点；最关键创新是把选择算法从中心平台迁到用户自己的数字主体。
+2. 信息分发：Relay / Index / Search 提供候选；每个 2digime 按 Digital Self + 目标 + 边界 + 信任 + AI 推理自主选择。禁止另建统一中心推荐代替 2digime。
+3. 自动化交互是网络主战场（2digime ↔ 2digime / Agent / Service / Content）。真人之间通过 2digime 协作 IMPORTANT，但不是网络的主要定义。
+4. Relay 等中间服务不会消失，从「网络主人」退回「网络服务商」；不得天然获得最终选择权、唯一身份控制权、数字主体所有权、唯一关系图谱、最终分发权。
+5. 可借鉴 Web3 的主体自主与可迁移；去中心化 ≠ 全部 P2P / 无服务器 / 全部上链 / 区块链优先。
+6. Zero-start Coding 已证明 AI Capability 路线。下一核心薄片转向 Digital Subject Network：**先审计现有** relay / advertisement / discovery / consult / delegate / opportunity / owner controls，**禁止另起 network runtime**，本轮不实现。
+
+权威：产品原则在 `docs/refoundation/00-PRODUCT-CONSTITUTION.md`；执行顺序只在 `03-CURRENT-PLAN.md`。未另建第五份总纲。
+
+---
+
 ## 2026-09-06 — 做事能力恢复、战略重新收敛
 
 ### 状态
