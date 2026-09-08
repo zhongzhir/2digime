@@ -13,7 +13,7 @@
   function talkUiDeadlineMs() {
     const client = api();
     const n = Number(client && client.talkUiDeadlineMs);
-    return Number.isFinite(n) && n > 0 ? n : 190_000;
+    return Number.isFinite(n) && n > 0 ? n : 620_000;
   }
 
   function $(id) {

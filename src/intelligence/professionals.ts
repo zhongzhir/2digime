@@ -5,6 +5,13 @@ import type { CapabilityRegistry } from '../capability/registry';
 import type { CapabilityRegistration } from '../capability/registration';
 import type { ProfessionalAgent, ProfessionalResult } from './types';
 import { classifyAuthorizedPaths } from './mechanical-tools';
+import {
+  diffWorkTree,
+  snapshotWorkTree,
+  workTreeDeltaPaths,
+  type WorkTreeDelta,
+  type WorkTreeFileState,
+} from '../execution/baseline';
 
 /** 本次 Talk 附带的已存在目录才算授权 workspace；不猜父目录、不用 runs/{execId}。 */
 export function resolveAuthorizedWorkingDirectory(paths?: string[]): string | undefined {
@@ -132,6 +139,7 @@ function wrapAdapter(
   const reg = adapter.registration;
   const contract = naturalContract(reg);
   const writes = (reg.permissions || []).includes('filesystem_write');
+  const cliAgent = reg.adapter.type === 'external-executor-cli' && reg.kind === 'agent';
   const searchLike =
     (reg.permissions || []).includes('network') && !writes && reg.kind === 'tool';
   const artifactType = reg.outputArtifactTypes[0] || 'document';
@@ -142,6 +150,7 @@ function wrapAdapter(
     description: contract.description,
     cannotDo: contract.cannotDo,
     effects: contract.effects,
+    ...(cliAgent ? { maxCallMs: 600_000 } : {}),
     ...(searchLike ? { returnsEvidence: true } : {}),
     async run(runInput): Promise<ProfessionalResult> {
       await fs.mkdir(runInput.workDir, { recursive: true });
@@ -187,7 +196,7 @@ function wrapAdapter(
           throw err;
         }
         const changeRoot = writes && projectDir ? projectDir : runInput.workDir;
-        const before = writes ? await snapshotWorkFiles(changeRoot) : new Map<string, WorkFileSnap>();
+        const before = writes ? await snapshotWorkTree(changeRoot) : new Map<string, WorkTreeFileState>();
         const output = await adapter.execute(capInput, ctx);
         const payload = output.artifact.payload;
         let rawText = output.artifact.title || '';
@@ -202,31 +211,28 @@ function wrapAdapter(
           outputPath = payload.sourcePath;
           rawText = `已生成文件：${payload.sourcePath}`;
         } else if (payload.kind === 'bundle') {
-          const created = await listUserFacingFiles(changeRoot);
-          outputPath = created[0];
-          rawText = [
-            output.artifact.title || '外部执行返回',
-            created.length ? `已产生文件：${created.join('；')}` : '',
-          ]
-            .filter(Boolean)
-            .join('\n');
+          rawText = await bundleObservationText(output.artifact.title, payload.entries);
         } else {
           rawText = output.artifact.title || '外部执行返回';
         }
-        const after = await snapshotWorkFiles(changeRoot);
-        const changed = writes ? userFacingChanges(changeRoot, before, after) : [];
-        const userFiles = searchLike ? [] : writes ? changed : await listUserFacingFiles(runInput.workDir);
+        const after = writes ? await snapshotWorkTree(changeRoot) : new Map<string, WorkTreeFileState>();
+        const delta = writes
+          ? diffWorkTree(before, after)
+          : emptyDelta();
+        const userFiles = searchLike
+          ? []
+          : writes
+            ? workTreeDeltaPaths(delta).map((rel) => path.resolve(changeRoot, rel))
+            : await listUserFacingFiles(runInput.workDir);
         if (!searchLike && !writes) {
           if (!outputPath) outputPath = userFiles[0];
           if (userFiles.length && !/已产生文件/.test(rawText)) {
             rawText = `${rawText}\n已产生文件：${userFiles.join('；')}`;
           }
         }
-        if (writes && userFiles.length) {
-          outputPath = userFiles[0];
-          if (!/已产生文件/.test(rawText)) {
-            rawText = `${rawText}\n已产生文件：${userFiles.join('；')}`;
-          }
+        if (writes) {
+          rawText = appendWriteDeltaObservation(rawText, delta);
+          if (userFiles.length) outputPath = userFiles[0];
         }
         const ok = searchLike
           ? Boolean(String(rawText || '').trim())
@@ -256,19 +262,6 @@ function wrapAdapter(
           abort.name = 'AbortError';
           throw abort;
         }
-        if (!searchLike) {
-          const userFiles = await listUserFacingFiles(writes && projectDir ? projectDir : runInput.workDir);
-          const firstFile = userFiles[0];
-          if (firstFile) {
-            return {
-              ok: true,
-              summary: `已产生文件：${userFiles.join('；')}`.slice(0, 4000),
-              producedOutputs: userFiles,
-              outputPath: firstFile,
-              rawText: userFiles.join('\n'),
-            };
-          }
-        }
         const failureReason = err instanceof Error ? err.message : String(err);
         const actionable =
           err && typeof err === 'object' && 'actionable' in err
@@ -286,53 +279,37 @@ function wrapAdapter(
   };
 }
 
-type WorkFileSnap = { size: number; mtimeMs: number };
-
-function isSkippedWorkName(name: string): boolean {
-  return name === 'node_modules' || name === 'external-execution';
-}
-
-async function snapshotWorkFiles(dir: string): Promise<Map<string, WorkFileSnap>> {
-  const out = new Map<string, WorkFileSnap>();
-  const walk = async (cur: string): Promise<void> => {
-    let ents;
+async function bundleObservationText(
+  title: string | undefined,
+  entries: Array<{ sourcePath: string; mediaType: string; role?: string }>,
+): Promise<string> {
+  const parts = [title || '外部执行返回'];
+  for (const entry of entries || []) {
+    if (entry.role !== 'execution-summary' || !entry.sourcePath) continue;
     try {
-      ents = await fs.readdir(cur, { withFileTypes: true });
+      const text = (await fs.readFile(entry.sourcePath, 'utf8')).trim();
+      if (text) parts.push(text.slice(0, 2500));
     } catch {
-      return;
+      /* 摘要文件读不到时仍返回 title，不把目录里的旧文件当成成果 */
     }
-    for (const ent of ents) {
-      if (isSkippedWorkName(ent.name)) continue;
-      const p = path.join(cur, ent.name);
-      if (ent.isDirectory()) await walk(p);
-      else {
-        try {
-          const st = await fs.stat(p);
-          out.set(p, { size: st.size, mtimeMs: st.mtimeMs });
-        } catch {
-          /* ignore */
-        }
-      }
-    }
-  };
-  await walk(dir);
-  return out;
+  }
+  return parts.filter(Boolean).join('\n');
 }
 
-function userFacingChanges(
-  workDir: string,
-  before: Map<string, WorkFileSnap>,
-  after: Map<string, WorkFileSnap>,
-): string[] {
-  const changed: string[] = [];
-  for (const [file, snap] of after) {
-    const prev = before.get(file);
-    if (!prev || prev.size !== snap.size || prev.mtimeMs !== snap.mtimeMs) changed.push(file);
-  }
-  return changed.filter((p) => p.startsWith(workDir));
+function emptyDelta(): WorkTreeDelta {
+  return { created: [], modified: [], deleted: [], unchanged: [] };
+}
+
+function appendWriteDeltaObservation(rawText: string, delta: WorkTreeDelta): string {
+  const lines: string[] = [];
+  for (const rel of delta.created) lines.push(`- created: ${rel}`);
+  for (const rel of delta.modified) lines.push(`- modified: ${rel}`);
+  for (const rel of delta.deleted) lines.push(`- deleted: ${rel}`);
+  const deltaBlock = lines.length ? `本次实际修改：\n${lines.join('\n')}` : '本次没有改动授权目录中的文件。';
+  return `${rawText}\n${deltaBlock}`.trim();
 }
 
 async function listUserFacingFiles(dir: string): Promise<string[]> {
-  const snap = await snapshotWorkFiles(dir);
-  return [...snap.keys()];
+  const snap = await snapshotWorkTree(dir);
+  return [...snap.keys()].map((rel) => path.resolve(dir, rel));
 }

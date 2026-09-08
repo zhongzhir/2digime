@@ -136,7 +136,11 @@ function runAcquiredCli(input: {
     const child = spawn(
       input.exe,
       ['run', '--auto', '--dir', input.workingDirectory, '--model', input.modelRef, input.prompt],
-      hiddenSpawnOptions({ cwd: input.workingDirectory, env }),
+      hiddenSpawnOptions({
+        cwd: input.workingDirectory,
+        env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }),
     );
     let stdout = '';
     let stderr = '';

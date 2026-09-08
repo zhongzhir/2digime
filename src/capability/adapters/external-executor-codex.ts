@@ -253,7 +253,28 @@ export async function probeCodexAvailability(
 async function probeDefaultCodex(codexJsPath?: string): Promise<AvailabilityCheckResult> {
   try {
     const launch = resolveCodexLaunch(codexJsPath);
+    if (launch.mode === 'node_js' && !accessOk(launch.codexJsPath)) {
+      return {
+        available: false,
+        reason: 'needs_setup',
+        detail: '尚未检测到可用的代码执行能力。',
+      };
+    }
+    if (launch.mode === 'native' && !accessOk(launch.executable)) {
+      return {
+        available: false,
+        reason: 'needs_setup',
+        detail: '尚未检测到可用的代码执行能力。',
+      };
+    }
     const version = await runCodexVersion(launch);
+    if (!version) {
+      return {
+        available: false,
+        reason: 'needs_setup',
+        detail: '尚未检测到可用的代码执行能力。',
+      };
+    }
     if (/outdated|unsupported.*cli|incompatible/i.test(version || '')) {
       return {
         available: false,

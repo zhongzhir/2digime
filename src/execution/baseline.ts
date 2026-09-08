@@ -19,7 +19,74 @@ const IGNORE_NAMES = new Set([
   'out',
   '_evidence',
   'baseline-backups',
+  'external-execution',
+  '.opencode',
 ]);
+
+export type WorkTreeFileState = {
+  relativePath: string;
+  size: number;
+  mtimeMs: number;
+  hash: string | null;
+};
+
+export type WorkTreeDelta = {
+  created: string[];
+  modified: string[];
+  deleted: string[];
+  unchanged: string[];
+};
+
+/** 执行前后文件状态。用相对路径 + 内容哈希，不靠绝对路径 startsWith，也不把“目录里存在”当成本次成果。 */
+export async function snapshotWorkTree(workingDirectory: string): Promise<Map<string, WorkTreeFileState>> {
+  const root = path.resolve(workingDirectory);
+  const out = new Map<string, WorkTreeFileState>();
+  const allFiles = await listFiles(root);
+  for (const rel of allFiles) {
+    const abs = path.join(root, rel);
+    try {
+      const st = await fs.stat(abs);
+      const buf = await fs.readFile(abs);
+      out.set(rel, {
+        relativePath: rel,
+        size: buf.byteLength,
+        mtimeMs: st.mtimeMs,
+        hash: sha256(buf),
+      });
+    } catch {
+      out.set(rel, { relativePath: rel, size: 0, mtimeMs: 0, hash: null });
+    }
+  }
+  return out;
+}
+
+export function diffWorkTree(
+  before: Map<string, WorkTreeFileState>,
+  after: Map<string, WorkTreeFileState>,
+): WorkTreeDelta {
+  const created: string[] = [];
+  const modified: string[] = [];
+  const deleted: string[] = [];
+  const unchanged: string[] = [];
+  for (const [rel, snap] of after) {
+    const prev = before.get(rel);
+    if (!prev) created.push(rel);
+    else if ((prev.hash || '') !== (snap.hash || '') || prev.size !== snap.size) modified.push(rel);
+    else unchanged.push(rel);
+  }
+  for (const rel of before.keys()) {
+    if (!after.has(rel)) deleted.push(rel);
+  }
+  created.sort();
+  modified.sort();
+  deleted.sort();
+  unchanged.sort();
+  return { created, modified, deleted, unchanged };
+}
+
+export function workTreeDeltaPaths(delta: WorkTreeDelta): string[] {
+  return [...delta.created, ...delta.modified, ...delta.deleted];
+}
 
 export function isPathWithinScope(
   workingDirectory: string,

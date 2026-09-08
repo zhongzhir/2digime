@@ -8,7 +8,8 @@ import { randomUUID } from 'node:crypto';
 import { NO_MODEL_NOTICE, runTalkTurn, type SubjectCollabPort } from './loop';
 import type { ProfessionalAgent, TalkChatFn, TalkExecution, TalkView } from './types';
 
-export const TALK_TURN_DEADLINE_MS = 180_000;
+/** 做事（含首次获取代码执行能力）需要数分钟；180s 会在 runtime 仍工作时掐断。 */
+export const TALK_TURN_DEADLINE_MS = 600_000;
 export const TALK_TIMEOUT_NOTICE = '请求超时，模型在限定时间内没有返回。可重试。';
 export const TALK_SYNTHESIS_TIMEOUT_NOTICE = '操作已经完成，但最终回复生成超时';
 

@@ -3112,6 +3112,9 @@ export class DigitalMeRuntime {
           } else {
             const launch = adapterMod.resolveCodexLaunch(opt.codexJsPath);
             fsSync.accessSync(launch.executable);
+            if (launch.mode === 'node_js') {
+              fsSync.accessSync(launch.codexJsPath);
+            }
           }
           (adapter.registration as { availability: string }).availability = 'available';
         }
