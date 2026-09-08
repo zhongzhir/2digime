@@ -5,7 +5,7 @@
 **基线：** Dual-Subject Loop architecture/engineering pass 已接受
 **性质：** Phase 3 协作架构。不替代 00/01/02；不承担排期（排期只在 03）。本文回答：协作是什么、对端是谁、外部标准怎么用、代码守什么、第一版最少验什么。
 
-**2026-09-08：** 00 已将第三核心从「协作」更名为 **Digital Subject Network**。协作是该网络的一种应用（COLLABORATION IS AN APPLICATION），不是第三核心总称。本文仍是 Phase 3 对象与传输地基；现有 relay / discovery / opportunity 等实现视为 Subject Network substrate。禁止另起一套 network runtime。不在本文开始新实现。
+**2026-09-08：** 00 已将第三核心从「协作」更名为 **Digital Subject Network**。协作是该网络的一种应用（COLLABORATION IS AN APPLICATION），不是第三核心总称。本文仍是 Phase 3 对象与传输地基；现有 relay / discovery / opportunity 等实现视为 Subject Network substrate。禁止另起一套 network runtime。不在本文开始新实现。**同日只读审计见 §13。**
 
 开始任何协作实现前：读 AGENTS.md 所列四份文件，再读本文。出现 Yellow / Red 必须重读 00 / 01 / 02 与本文。
 
@@ -516,3 +516,243 @@ Settlement 层 + A2A Extension + 与 Grant 同级的 Mandate/receipt 事实。Ta
 **做：** 复用 invite / peers / Relay / E2EE / Grant 合同；A 从配对目录发现 public-card；真实信封往返；检查网络层 payload 的最小披露。
 
 **不做：** 协作 UI、广域发现、支付、信誉市场、多方、迁旧 work、恢复 13 态、硬编码 peer、打开对方 Package 当 worker、为接线增加 collaboration stage。
+
+代码路径上该接线已存在（`createRelaySubjectNetwork` + Talk `consult_subject`）。后续网络薄片以 §13 审计为准，不另起 network runtime。
+
+---
+
+## 13. Subject Network Substrate Audit — 2026-09-08
+
+**任务：** `DIGITALME-SUBJECT-NETWORK-SUBSTRATE-AUDIT-01`
+
+**性质：** READ-ONLY ARCHITECTURE AUDIT。本文仍是 Phase 3 foundation，不升格为总纲。不开始 Feed 实现。不改 schema。不改产品代码。
+
+**Build-vs-Integrate：** 现有 Relay / envelope / invite / peers / public-card / consult / 本地匹配 **足以作为第一版网络基础设施的传输与本地选择底座**。不得另建 `subject-network-v2` / `network-runtime-v2` / `feed-runtime` / `new-relay`。它们还 **不足以直接当 Feed**：Relay 是已配对端点的加密邮局，不是公开候选池；advertisement 是协作公开面，不是通用发布。
+
+### 13.1 现有 substrate 清单（真实调用链）
+
+#### Transport / Relay
+
+| 职责 | 代码 | 调用链 |
+|---|---|---|
+| Relay HTTP 邮局 | `src/relay-service/server.ts` | `POST /v1/envelopes` 存密文；`GET /v1/envelopes?to=` 按 `toEndpointId` 列出未 ACK；`POST .../ack`；`purgeExpired` |
+| 客户端 | `src/subject-comm/relay-client.ts` | `submit` / `fetchFor` / `ack` / `health` |
+| E2EE + 验签 | `relay-transport.ts` + `crypto-identity.ts` | `sealForRecipient` → 签名 → Relay；拉取后验签、解密、入本机 inbox |
+| Envelope | `envelope.ts` | `SubjectEnvelope`：from/to、kind、TTL、correlation、payload、ACK 字段 |
+| Wire | `relay-wire.ts` | 仅 `fromEndpointId` / `toEndpointId` / `sealed` / `signatureB64` |
+| 离线 / 重试 | `outbox-store.ts` + `retryOutbox` | 提交失败留 outbox；`subject.communicate` `retryOutbox` |
+| Inbox | `inbox-store.ts` | 本机明文副本；ACK ≠ 业务接受 |
+| 寻址 | `endpoint.ts` + `identity-store.ts` | `dmep:` endpoint；`peers.json` |
+
+Relay **没有** list-all、search、rank、profile、relevance API。`listForRecipient` 仅按 `createdAt` 排序。
+
+#### Subject identity / publication
+
+仓库 **没有** 名为 `SubjectAdvertisement` 的类型。对应物是 **`PublicSubjectCard`**（`src/subject-collab/types.ts` + `public-card.ts`）。
+
+字段：`subjectId`、`displayName`、`endpointRef`、`publicSkills`、`cooperationScope`、`protocol: 2digime-subject-collab/1`、`reachable`。
+
+发布：`RelaySubjectNetwork.publishPublicCard()` **单播** 给 `listPeers()` 中每一个已配对端，wire=`public_card`。不是广播目录。
+
+配对：`invite.ts` 注释写明 **无公开目录**；Owner 显式 `createInvite` / `acceptInvite`。
+
+#### Discovery
+
+v1 发现 = 已配对 `peers.json` + 缓存的 peer `public-card`。`listCards()` 返回全部已配对卡，**无 score / rank**。Talk 把卡列表交给模型（`formatPublicCardsForModel`），模型自行决定是否 `consult_subject`。
+
+不存在：公开主体列表、discovery broadcast、广域 search。
+
+#### Interaction
+
+| 应用 | 代码 | 谁判断 |
+|---|---|---|
+| Consult | `consult.ts` → `network.deliver` → Relay `collab_request` | A 侧模型选 `consult_subject` |
+| 自动接收 | Electron `autonomousCollabReceive=true` → `relayCollab.start(800)` drain | B 侧 `decideIncomingRequest`（模型 JSON：accept/decline/clarify/alternative） |
+| Delegate（Talk `delegate`） | `loop.ts` `DELEGATE_TOOL` | **外部 Agent/Tool**，不是 Subject↔Subject |
+| 旧 LocalCollaborationHost | `local-collaboration.ts` | **REFERENCE_ONLY / 禁止接线**（打开对方 Package） |
+
+#### Opportunity
+
+权威消息是 inbox 里的 `kind: signal` envelope。`OpportunityCard` 是派生视图。`SignalPayload`：`intent` / `seeking` / `offering` / `constraints` / `disclosureLevel` / `expiresAt`。匹配在 **接收方本机** `matchSignalLocally`（优先模型；失败才本地 token 重合 fallback）。产品面：04 已标 **REFERENCE_ONLY**（决策 #110）。UI：`#nav-collab` hidden；设置页仍有 Relay URL / invite / 机会卡按钮。
+
+#### Owner control / audit
+
+- 默认无 Relay profile、无 peers → 默认不可被网络找到。
+- 显式 opt-in：配置 Relay + 交换 invite。
+- Grant 合同：`AuthorizationGrant` 含 `granted` / `revoked` / `expired`（`collaboration/schema.ts`）。
+- Exchange 日志：sender/receiver/timestamp/bodyDigest（`exchange-store`）。
+- 机械披露闸：`disclosure.ts`（完整 Digital Self / 线程 / 证件密钥 / 支付账号）。
+- 无单一「停止全部自动网络活动」开关；停自动接收需关进程或关掉 `autonomousCollabReceive`。没有独立「可发现状态」Owner 开关（只有 card.`reachable` + 是否配对）。
+
+### 13.2 当前真实网络链路
+
+**路径 A — 已配对主体咨询（KEEP，可继承为 Personal Selection）**
+
+```text
+Owner 配置 Relay                         [Owner 控制]
+Owner A/B 交换 invite → peers.json       [Owner 控制 / 固定规则：无公开目录]
+Talk 打开前 publishPublicCard            [网络 transport：单播密文 public_card]
+listCards ← 配对目录 + peer-card 缓存    [候选发现：无排序]
+模型读公开声明，决定是否 consult_subject  [模型判断 = Distributed Personal Selection]
+consultSubject + checkDisclosure         [固定规则：最小披露 / 敏感词闸]
+RelayTransport.send collab_request       [网络 transport / E2EE]
+B drainInbox（Electron 800ms 轮询）      [自动接收]
+B decideIncomingRequest                  [模型判断；无 Owner 确认]
+B 回 collab_response                     [网络 transport]
+A 等待 drain 得到 decision               [应用：Collaboration]
+```
+
+与 collaboration **语义强绑定**的步骤：public-card 字段、consult 工具文案、decision 枚举、合作请求 JSON。Transport 本身不绑定。
+
+**路径 B — Signal / Opportunity（REFERENCE_ONLY）**
+
+```text
+已知 peer 的 sendSignal                  [必须已配对；非开放发现]
+Relay 或本地 inbox                       [transport]
+processInbox → matchSignalLocally        [本地模型；fallback 为 token 重合]
+potential_match 才建 OpportunityCard     [本地选择]
+自动回 signal_response                   [自动响应]
+Owner 点继续/拒绝/交换简介/发起协作       [旧 UX；#nav-collab 隐藏]
+```
+
+**Relay 不做：** 推荐、选人、判断是否值得看。
+
+### 13.3 Relay 是否哑基础设施
+
+| 应该做 | 证据 | 现状 |
+|---|---|---|
+| 传输 / 寻址 | `toEndpointId` 路由 | 有 |
+| 暂存 / TTL / ACK / 幂等 | `FileRelayStore` + default TTL 7 天 | 有 |
+| 重试 | 客户端 outbox，不在 Relay 内 | 有（客户端） |
+| 基本索引 | 按收件人列出 | 有；无主题索引 |
+| 安全 | 拒疑似明文；只存 sealed | 有 |
+| 授权 | Relay 不验业务授权；客户端拒绝未知 from peer | 有（端侧） |
+
+| 不应该拥有 | 证据 |
+|---|---|
+| 最终个性化推荐 | 无 |
+| 统一 relevance score | `src/relay-service` 与 `src/subject-comm` **无** score/rank/relevance |
+| 中心用户画像 / preference model | 无；Relay 不读 payload |
+| 决定用户最终看到什么 | 拉取是收件箱，不是 Feed |
+
+明文拒绝正则（`intent`/`seeking`/`offering`）是安全过滤器，不是推荐。
+
+```text
+RELAY_AS_SERVICE_LAYER = YES
+```
+
+### 13.4 Discovery：候选 vs 最终选择
+
+当前 discovery **不是**开放候选池，而是 **已配对名录**。
+
+- 无中央 relevance score。
+- 无 Relay 侧关键词评分。
+- `listCards` 无统一 ranking。
+- 最终 consult 由 Talk 模型决定。
+
+**可直接继承为 Distributed Personal Selection：** `loop.ts` 把候选交给模型 + `consult_subject`；对端 `decideIncomingRequest`。不要继承 `opportunity-match.ts` 的 token fallback 作为网络排序。
+
+本地 `fallbackMatch`（token 重合）与 `disclosure.ts` / `evaluate.ts` HIGH_RISK 正则是 **本机确定性闸/降级**，不在 Relay。Feed 不得把它们做成中心推荐。
+
+### 13.5 Advertisement → 网络发布？
+
+`PublicSubjectCard` **语义绑在「找人协作」**：`publicSkills`、`cooperationScope`、`2digime-subject-collab/1`。
+
+Envelope **形状**相对通用（from/to/kind/TTL/payload），但 `kind` 枚举现为 `signal | signal_response | collaboration_sync | subject_collab`。
+
+```text
+现有 advertisement 不够通用当 Content Publication
+现有 envelope 外壳可复用，缺 generic network item kind
+```
+
+**最小抽象方向（不改 schema，本轮只记）：** 将来若扩展，只增加一种通用 `network_item`（或同等）载荷类型 + 查询，不新造第二套 Relay。不要把 public-card 字段硬扩成内容/兴趣/offer 大杂烩。
+
+### 13.6 OpportunitySignal 是什么
+
+代码名是 `SignalPayload` / `OpportunityCard`，不是 `OpportunitySignal`。
+
+1. **数据结构：** 偏合作供需（seeking/offering/intent），不是通用 network item。
+2. **Filtering：** 在接收方本机，优先模型。
+3. **固定关键词/score：** 无中心 score；有本地 BOUNDARY_MARKERS 与 token overlap fallback。
+4. **Owner opt-in：** 发送须已知 peer；入站匹配可自动发生。opt-in 配对可继承。
+5. **内容候选：** 不能自然冒充内容分发（判定 **B. 合作机会**）。不要用它假装 Feed。
+
+```text
+Opportunity = Collaboration-specific signal（可作「已知 peer 上的本地过滤」参考）
+≠ generic network item
+```
+
+### 13.7 自动化
+
+| 动作 | 现状 |
+|---|---|
+| 自动接收 | Electron 有（collab drain 800ms）；Signal 需 `processInbox` / `pullRemote`（设置页会拉） |
+| 自动判断 | 有：入站 consult 由模型；Signal 由本地模型 |
+| 自动响应 | 有：collab_response；signal_response（match 时） |
+| 自动过滤 | 有：no_match 静默不建卡 |
+| 自动建立持续关系 | **无** subscription；持续关系 = `peers.json` 配对 |
+| 必须 Owner 手动 | 配 Relay、换 invite、发 Signal、机会卡「继续/拒绝/简介/开工」（旧 UX） |
+| 因安全需要确认 | 披露闸；Grant 合同存在；入站 consult **不**弹 Owner |
+| 旧 UX 遗留 | hidden `#nav-collab` 机会卡 |
+
+不要为自动化新增状态机。Feed 应复用「本机模型决定 show/ignore」，不要复用机会卡 stage。
+
+### 13.8 Owner / 主权
+
+满足：默认不公开（无 invite 则无目录项）；显式配对 opt-in；Grant 可撤销/过期；披露可限制；Relay 非事实源。
+
+缺口：无「停止自动网络活动」产品开关；入站合作由模型自动答，低风险筛选已自动化（符合 00）；高风险支付/承诺仍未做网络交易层。
+
+### 13.9 按新战略重分类
+
+| 当前组件 | 新网络角色 | 命名旧？ | 语义也旧？ |
+|---|---|---|---|
+| Relay | Transport / Service Layer | 否 | 否（已是哑邮局） |
+| PublicSubjectCard（无 Advertisement 类型） | Presence / collab publication | 是（常被叫 advertisement） | **是**（绑合作技能） |
+| peers.json + listCards | Candidate Discovery（仅已配对） | 「发现」偏大 | **是**（不是开放候选池） |
+| Talk consult_subject | Personal Selection | 「合作」文案旧 | 选择机制可继承 |
+| Consult | Communication / Collaboration application | 是 | 是（合作请求） |
+| Talk `delegate` | AI Capability 调用，不是主体委托 | 易混 | 与 Subject Network 无关 |
+| Signal / OpportunityCard | Collaboration-specific | 是 | **是** |
+| Owner invite / Relay 设置 | Network autonomy control candidate | 部分 | 配对模型可继承 |
+| Opportunity stage UI | 旧产品面 | — | REFERENCE_ONLY |
+
+### 13.10 Feed 第一刀 verdict
+
+目标形态：
+
+```text
+Content Publisher
+→ Existing Relay
+→ Same candidate pool
+→ 2digime A → Digital Self A selection
+→ 2digime B → Digital Self B selection
+```
+
+现有 Relay **能**当传输，且 **不做**个性化推荐。但 **没有**「同一候选池」：只有点对点收件箱；public-card 只发已配对 peer；无内容 envelope。
+
+```text
+FEED_SUBSTRATE_PARTIAL
+```
+
+**唯一最小缺口（只许这几项，禁止顺手设计完整网络）：**
+
+1. 现有 advertisement 只能发布「我是谁/能协作什么」，缺 generic network item envelope（可复用 `SubjectEnvelope` 外壳）。
+2. Relay 已能传输，但只能 peer-to-peer 投递到已知 `toEndpointId`，缺非个性化的广播/候选查询（时间/类型/来源/公开范围/TTL/分页即可）。
+3. Opportunity signal **不足以**承载内容候选，不要复用成 Feed 模型。
+
+**不需要新 runtime。**
+
+### 13.11 Feed 第一刀必须坚持的 Gate
+
+```text
+NO CENTRAL PERSONALIZED RANKING
+NO CENTRAL USER PROFILE
+NO CENTRAL RELEVANCE SCORE
+NO KEYWORD RECOMMENDER
+NO FEED ALGORITHM IN RELAY
+```
+
+Relay / Index 可以：时间、类型、来源、公开范围、基础 topic、分页、查询、TTL。
+
+最终 `show / ignore / connect / subscribe` 只能由每个 2digime 在本地按 Digital Self 判断。继承路径 A 的模型选择，不继承路径 B 的合作 schema，不把 `fallbackMatch` 做成推荐器。

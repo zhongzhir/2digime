@@ -94,7 +94,7 @@ Refoundation Phase 1–3 已作为地基接受（见 §3）。**后续产品建�
 Phase A  基础能力达到约 95 分位     CURRENT（Integrate-first；Coding 路线已证明）
 Phase B  做实数字之我                 NEXT（增强，不限制模型）
 Phase C  连接与自主选择               LATER
-Phase D  Digital Subject Network      NEXT THIN SLICE（先审计现有 substrate，不写新网络代码）
+Phase D  Digital Subject Network      NEXT THIN SLICE（substrate 审计已完成；Feed 第一刀仅补最小缺口，不另起 runtime）
 ```
 
 核心定位（00）：**Digital Self / AI Capability / Digital Subject Network**。对外：**属于我 · 能做事 · 连接世界**。协作是 Subject Network 的一种应用，不是第三核心总称。
@@ -125,19 +125,9 @@ Digital Self 不限制模型，只增加主体上下文。禁止用 Digital Self
 
 ### Phase D — Digital Subject Network / 新模式
 
-**2026-09-08：** 下一核心薄片转向 Digital Subject Network。**先审计、不实现。**
+**2026-09-08：** Digital Subject Network substrate **只读审计已完成**（见 04 §13）。原 collaboration 代码视为 Subject Network **substrate 的历史实现**，不是另一套产品。
 
-原 collaboration 代码视为 Subject Network **substrate 的历史实现**，不是另一套产品。在写任何新网络代码前必须先审计现有：
-
-- relay
-- advertisement
-- discovery
-- consult
-- delegate
-- opportunity
-- owner controls
-
-**禁止另起一套 network runtime。** 本轮不开始网络实现，不开始 Computer Use。
+已裁定：`RELAY_AS_SERVICE_LAYER = YES`；`FEED_SUBSTRATE_PARTIAL`。禁止另起 `subject-network-v2` / `feed-runtime` / `new-relay`。下一薄片若做 Feed，只补最小缺口（generic network item envelope + 非个性化候选查询），不把 Opportunity 冒充内容分发，不在 Relay 做推荐。不开始 Computer Use。
 
 前三项能力仍须对真人成立；不把 Phase 3 协作试验扩成广播市场；不恢复 `#nav-collab`。中间服务（Relay / Index / Search 等）是服务商，不是网络主人。
 
@@ -149,13 +139,11 @@ Phase 1 Digital Self、Phase 2 Talk 主链、Phase 3 协作地基仍然有效，
 
 ## 2. 下一开发任务
 
-**任务名：** Digital Subject Network substrate 审计（只读）
-**阶段：** Strategic Phase D 薄片（先审计现有；不写新网络代码）
-**本轮：** 不开始实现。不开始 Computer Use。
+**任务名：** `DIGITALME-SUBJECT-NETWORK-FEED-01`（仅最小缺口；尚未开工）
+**阶段：** Strategic Phase D 薄片
+**本轮指针：** substrate 审计已写入 04 §13。下一实现若启动，只允许：复用现有 Relay 信封外壳；增加 generic network item；Relay/Index 只做时间/类型/来源/公开范围/TTL/分页查询。禁止中心个性化排序、用户画像、relevance score、关键词推荐器、Feed 算法进 Relay。禁止新 network runtime。不开始 Computer Use。不恢复 `#nav-collab`。
 
-审计范围（现有代码视为 substrate，禁止另起 network runtime）：relay、advertisement、discovery、consult、delegate、opportunity、owner controls。
-
-已接受：`ZERO_START_CODING_TALK_ACCEPTED`（`24e1ce9`）证明 AI Capability 零起步路线；`STRATEGIC_ALIGNMENT_ACCEPTED` / `EXECUTION_TRUTH_RESTORED` / `CODING_CAPABILITY_REAL_AND_INTEGRATED`。
+已接受：substrate 审计结论（04 §13）；`ZERO_START_CODING_TALK_ACCEPTED`（`24e1ce9`）；`STRATEGIC_ALIGNMENT_ACCEPTED` / `EXECUTION_TRUTH_RESTORED` / `CODING_CAPABILITY_REAL_AND_INTEGRATED`。
 
 成熟 Computer Use 仍在 Phase A 未完成清单中，**今天 NOT STARTED**，不得因旧列表自建。
 
@@ -288,7 +276,7 @@ AGENTS.md
 |---|---|
 | 01A「下一步 = 最短 Goal 闭环」vs 01C「Phase 1 = Digital Self」 | **01C**：先 Digital Self |
 | rules §14 模块轮动 vs 本文旧 Phase 1→2→3 | **已被 §1 战略 Phase A–D 覆盖**；1–3 为已接受地基 |
-| 广播作为核心创新假设 vs 协作扩建暂停 | **不实现广播市场与协作中心 UI**；假设留在 00。下一薄片是审计现有 Subject Network substrate，不恢复 `#nav-collab`，不另起 network runtime |
+| 广播作为核心创新假设 vs 协作扩建暂停 | **不实现广播市场与协作中心 UI**；假设留在 00。substrate 审计已完成（04 §13）。Feed 第一刀若做，只补非个性化候选查询，不恢复 `#nav-collab`，不另起 network runtime |
 | 自研基础能力 vs Integrate-first | **2026-09-06：能接不造**；95 分位靠接入，不自研替代 Codex / 搜索 / Computer Use |
 | 「后台可保留复杂状态机」vs 禁止用状态机替代 AI | **禁止替代 AI**；运行态 ≠ 永久状态机 |
 | DIGITAL-SELF P1–P5 迁旧主链 vs 新核重建 | **不沿旧链 P1–P5** |
@@ -314,4 +302,4 @@ Foundation（04）与 Dual-Subject Loop architecture/engineering pass 已接受�
 4. 不先做协作页面，不恢复 13 态，不自研替代 A2A/VC/payment；A 不得驱动 B runtime / drain；
 5. 出现 Yellow/Red 立即停（04 §11）。
 
-Phase 1 与 Phase 2（核心闭环 + 产品表面）已 ACCEPTED。Zero-start Coding Talk 已 ACCEPTED。未完成 checkpoint 验证前不得把旧冻结做事代码并入本基线。当前下一薄片是 §1 / §2 的 Subject Network substrate 审计，不是自建 Computer Use，也不是新写 network runtime。
+Phase 1 与 Phase 2（核心闭环 + 产品表面）已 ACCEPTED。Zero-start Coding Talk 已 ACCEPTED。未完成 checkpoint 验证前不得把旧冻结做事代码并入本基线。Subject Network substrate 审计已完成（04 §13）。当前下一薄片指针见 §2：Feed 最小缺口，不是自建 Computer Use，也不是新写 network runtime。
