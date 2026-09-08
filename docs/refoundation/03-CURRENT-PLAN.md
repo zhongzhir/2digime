@@ -119,13 +119,15 @@ Phase D  Digital Subject Network      THIN SLICE ACCEPTED（Distributed Personal
 
 Digital Self 不限制模型，只增加主体上下文。禁止用 Digital Self 削弱、隐藏或锁死。Digital Self 是这个人的个人选择算法，不得另建统一中心推荐代替它。
 
+**2026-09-08：** `DIGITAL_SELF_NETWORK_EVOLUTION_ACCEPTED`（04 §15）。真人经 Talk 明确表达后，现有 Digital Self Core 写入唯一 `self.json`（V1→V2）；同一 Relay 候选池上的本地 Personal Selection 发生可解释变化。2digime 自己的 SHOW/IGNORE 与模型理由不得反写为用户事实。未建第二套 profile / 推荐记忆。
+
 ### Phase C — 连接与自主选择
 
 兔机米根据目标、数字之我、真实能力与授权，由大模型自主选择：模型、Agent、Tool、本地软件、网络能力、其他 Digital Self。系统不写 router / score / workflow 代替这些判断。
 
 ### Phase D — Digital Subject Network / 新模式
 
-**2026-09-08：** Digital Subject Network substrate 审计已完成（04 §13）。`DIGITALME-SUBJECT-NETWORK-FEED-01` 已证明：**同一 Relay 返回完全相同候选池，不同 Digital Self 的 2digime 自主选出不同内容；Relay 不参与个性化。** 裁定 `DISTRIBUTED_PERSONAL_SELECTION_ACCEPTED`（04 §14）。禁止另起 `subject-network-v2` / `feed-runtime` / `new-relay`。不把 Opportunity 冒充内容分发。不开始 Computer Use。不恢复 `#nav-collab`。
+**2026-09-08：** Digital Subject Network substrate 审计已完成（04 §13）。`DIGITALME-SUBJECT-NETWORK-FEED-01` 已证明：**同一 Relay 返回完全相同候选池，不同 Digital Self 的 2digime 自主选出不同内容；Relay 不参与个性化。** 裁定 `DISTRIBUTED_PERSONAL_SELECTION_ACCEPTED`（04 §14）。同日 `DIGITALME-DIGITAL-SELF-NETWORK-EVOLUTION-01` 证明：**同一主体 Digital Self 经 Talk 演化后，面对未变候选池，选择发生合理变化**（04 §15）。禁止另起 `subject-network-v2` / `feed-runtime` / `new-relay`。不把 Opportunity 冒充内容分发。不开始 Computer Use。不恢复 `#nav-collab`。不因本薄片做 Feed UI。
 
 前三项能力仍须对真人成立；不把 Phase 3 协作试验扩成广播市场；不恢复 `#nav-collab`。中间服务（Relay / Index / Search 等）是服务商，不是网络主人。
 
@@ -142,7 +144,7 @@ Phase 1 Digital Self、Phase 2 Talk 主链、Phase 3 协作地基仍然有效，
 **阶段：** Public Alpha 产品面（UI Recovery Audit 已完成）
 **本轮指针：** 实现 [`05-UI-RECOVERY-AUDIT.md`](./05-UI-RECOVERY-AUDIT.md) 的 **P0（7 项）**。视觉 **RECOVER_AND_ADAPT**：沿用 01B-B5 / 09-04 暖色纸感，按今天三入口重映射 IA。不重画 Figma，不造 Feed，不恢复 `#nav-work` / `#nav-collab`。成熟 Computer Use 仍在 Phase A 未完成清单中，**今天 NOT STARTED**。
 
-已接受：UI Recovery Audit（本文指针所依 05）；`DISTRIBUTED_PERSONAL_SELECTION_ACCEPTED`；substrate 审计（04 §13）；`ZERO_START_CODING_TALK_ACCEPTED`（`24e1ce9`）；`STRATEGIC_ALIGNMENT_ACCEPTED` / `EXECUTION_TRUTH_RESTORED` / `CODING_CAPABILITY_REAL_AND_INTEGRATED`。
+已接受：`DIGITAL_SELF_NETWORK_EVOLUTION_ACCEPTED`（04 §15）；UI Recovery Audit（05）；`DISTRIBUTED_PERSONAL_SELECTION_ACCEPTED`；substrate 审计（04 §13）；`ZERO_START_CODING_TALK_ACCEPTED`（`24e1ce9`）；`STRATEGIC_ALIGNMENT_ACCEPTED` / `EXECUTION_TRUTH_RESTORED` / `CODING_CAPABILITY_REAL_AND_INTEGRATED`。
 
 不要做完整 Feed 产品、不要做订阅/关注、不要恢复协作中心。历史已接受任务（Talk ↔ Digital Self Learning、Zero-start Coding 等）见 §3，不再当作「下一步」。
 

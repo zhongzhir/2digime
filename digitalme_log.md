@@ -5,6 +5,20 @@
 
 ---
 
+## 2026-09-08 — Digital Self Network Evolution
+
+### 状态
+
+`DIGITAL_SELF_NETWORK_EVOLUTION_ACCEPTED` / `not_pushed` / `not_released` / `product_runtime_unmodified`
+
+主题：真人经 Talk 更新唯一 Digital Self 后，同一 Relay 候选池上的本地 Personal Selection 发生可解释变化。2digime 自己的选择不得反写为用户事实。
+
+复用：Talk → `digitalSelf.tell`；`applyTellProposals`；`selectNetworkItems`。无第二套 profile。防自我强化 Case A/B/C 单测通过。真模型 `deepseek-v4-flash` trial 通过。证据 gitignored：`build/evidence/digital-self-network-evolution-01/`。
+
+权威：04 §15；排期仍只在 03。下一刀仍是 UI Public Alpha P0，不扩 Feed。
+
+---
+
 ## 2026-09-08 — UI Recovery Audit（Public Alpha 产品面）
 
 ### 状态

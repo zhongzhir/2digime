@@ -776,3 +776,25 @@ Relay / Index 可以：时间、类型、来源、公开范围、基础 topic、
 **Trial：** 同一 Relay、32 条公开候选、同一 `deepseek-v4-flash`、两个隔离 `self.json`。A/B 候选 ID 完全相同。选择差由 Digital Self 解释。反事实 `ni_01`：A=SHOW，B=IGNORE。证据在 gitignored `build/evidence/subject-network-feed-01/`。
 
 **仍不做：** Feed 产品面、`#nav-collab`、FOLLOW/SUBSCRIBE、中心排序、Computer Use。
+
+---
+
+## 15. Digital Self Network Evolution — 2026-09-08
+
+**任务：** `DIGITALME-DIGITAL-SELF-NETWORK-EVOLUTION-01`
+
+**状态：** `DIGITAL_SELF_NETWORK_EVOLUTION_ACCEPTED`
+
+**产品代码：** 无新增 runtime。复用 Talk → `DigitalSelfService.tell` → `interpretWithModel` / `applyTellProposals` → 唯一 `self.json`；本地 `selectNetworkItems` 读最新 Digital Self。禁止 `network-profile.json` / `feed-preferences.json` / interest-score / 第二套 learning store。
+
+**红线（已测）：**
+
+- Case A：仅有 2digime SHOW/IGNORE，没有用户反馈 → `self.json` 不得变。
+- Case B：模型选择理由（如「用户应该喜欢 AI 游戏」）不得成为 current 用户事实。
+- Case C：用户亲口说「最近我确实开始关注 AI 游戏」→ 经现有 learning，`origin=user_statement`。
+
+**Trial：** 同一 Relay、36 条公开候选（复用 FEED-01 的 32 条 + 4 条产业相关公开项）、`deepseek-v4-flash`、一个真实 Subject。V1 完成选择后，真人经 Talk 表达关注变化；V2 来自现有 Digital Self Core，provenance 为亲口陈述。候选 ID / 顺序 / pool hash 前后相同。Relay 查询不含 Digital Self。V2 选择相对 V1 有可解释的 SHOW→IGNORE（`ni_26`、`ni_30`）；与新表达无关的体育/消费项未大规模翻转。`ni_36` 纯融资项保持 IGNORE，V2 理由引用新边界。单条反事实重放存在模型上下文方差，不以伪 overlap 指标为门。证据 gitignored：`build/evidence/digital-self-network-evolution-01/`。
+
+**未来 Public Alpha UI 只需表达这一条事实，不要提前设计 Feed：**
+
+> 数字之我的成长会真实改变 2digime 对外部世界的选择。
