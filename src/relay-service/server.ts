@@ -9,6 +9,19 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
+import {
+  forbiddenPersonalizationKeys,
+  validateNetworkItem,
+  type NetworkItemQuery,
+} from '../subject-comm/network-item';
+import {
+  FileNetworkItemStore,
+  MemoryNetworkItemStore,
+  type NetworkItemStore,
+} from './network-item-store';
+
+export { FileNetworkItemStore, MemoryNetworkItemStore } from './network-item-store';
+export type { NetworkItemStore } from './network-item-store';
 
 export interface RelayStoredEnvelope {
   version: 1;
@@ -162,6 +175,7 @@ function logSafe(event: string, fields: Record<string, string | number | boolean
 
 export function createRelayServer(options: {
   store: RelayStore;
+  networkItems?: NetworkItemStore;
   host?: string;
   port?: number;
   defaultTtlMs?: number;
@@ -169,12 +183,60 @@ export function createRelayServer(options: {
   const host = options.host || process.env.RELAY_HOST || '127.0.0.1';
   const port = options.port ?? Number(process.env.RELAY_PORT || 8787);
   const defaultTtlMs = options.defaultTtlMs ?? 7 * 24 * 3600 * 1000;
+  const networkItems = options.networkItems || new MemoryNetworkItemStore();
 
   const server = createServer(async (req, res) => {
     try {
       const url = new URL(req.url || '/', `http://${host}:${port}`);
       if (req.method === 'GET' && url.pathname === '/health') {
-        sendJson(res, 200, { ok: true, role: 'relay', plaintext: false });
+        sendJson(res, 200, { ok: true, role: 'relay', plaintext: false, publicCandidates: true });
+        return;
+      }
+      if (req.method === 'POST' && url.pathname === '/v1/network-items') {
+        const body = JSON.parse(await readBody(req) || '{}') as unknown;
+        const checked = validateNetworkItem(body);
+        if (!checked.ok) {
+          sendJson(res, 400, { ok: false, error: 'invalid_item', reason: checked.reason });
+          return;
+        }
+        const stored = await networkItems.put(checked.item);
+        logSafe('network_item_publish', { itemId: stored.itemId, publisher: checked.item.publisherSubjectId });
+        sendJson(res, 200, { ok: true, itemId: stored.itemId });
+        return;
+      }
+      if (req.method === 'GET' && url.pathname === '/v1/network-items') {
+        const queryKeys: Record<string, unknown> = {};
+        url.searchParams.forEach((value, key) => {
+          queryKeys[key] = value;
+        });
+        const forbidden = forbiddenPersonalizationKeys(queryKeys);
+        if (forbidden.length) {
+          logSafe('network_item_query_rejected', { reason: forbidden[0] });
+          sendJson(res, 400, { ok: false, error: 'query_keys_rejected', keys: forbidden });
+          return;
+        }
+        const limitRaw = url.searchParams.get('limit');
+        const kind = url.searchParams.get('kind');
+        const publisher = url.searchParams.get('publisher');
+        const createdAfter = url.searchParams.get('createdAfter');
+        const createdBefore = url.searchParams.get('createdBefore');
+        const visibility = url.searchParams.get('visibility');
+        const cursor = url.searchParams.get('cursor');
+        const query: NetworkItemQuery = {
+          ...(kind ? { kind } : {}),
+          ...(publisher ? { publisher } : {}),
+          ...(createdAfter ? { createdAfter } : {}),
+          ...(createdBefore ? { createdBefore } : {}),
+          ...(visibility ? { visibility } : {}),
+          ...(cursor ? { cursor } : {}),
+          ...(limitRaw != null && limitRaw !== '' ? { limit: Number(limitRaw) } : {}),
+        };
+        const listed = await networkItems.list(query, new Date().toISOString());
+        logSafe('network_item_list', { count: listed.items.length });
+        sendJson(res, 200, {
+          items: listed.items,
+          ...(listed.nextCursor ? { nextCursor: listed.nextCursor } : {}),
+        });
         return;
       }
       if (req.method === 'POST' && url.pathname === '/v1/envelopes') {
@@ -271,7 +333,8 @@ async function main(): Promise<void> {
     process.env.RELAY_DATA_DIR || path.join(process.cwd(), '.relay-data');
   await fs.mkdir(dataDir, { recursive: true });
   const store = new FileRelayStore(dataDir);
-  const { start } = createRelayServer({ store });
+  const networkItems = new FileNetworkItemStore(dataDir);
+  const { start } = createRelayServer({ store, networkItems });
   const addr = await start();
   logSafe('relay_listen', { host: addr.host, port: addr.port, dataDir });
 }

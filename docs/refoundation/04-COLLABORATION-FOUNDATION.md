@@ -756,3 +756,23 @@ NO FEED ALGORITHM IN RELAY
 Relay / Index 可以：时间、类型、来源、公开范围、基础 topic、分页、查询、TTL。
 
 最终 `show / ignore / connect / subscribe` 只能由每个 2digime 在本地按 Digital Self 判断。继承路径 A 的模型选择，不继承路径 B 的合作 schema，不把 `fallbackMatch` 做成推荐器。
+
+---
+
+## 14. Distributed Personal Selection — 2026-09-08 第一真实薄片
+
+**任务：** `DIGITALME-SUBJECT-NETWORK-FEED-01`
+
+**状态：** `DISTRIBUTED_PERSONAL_SELECTION_ACCEPTED`
+
+补上 §13.10 的两个最小缺口，**没有**新 runtime / 新推荐引擎 / 新 UI。
+
+| 缺口 | 落地 |
+|---|---|
+| Generic Network Item | `src/subject-comm/network-item.ts`：`NetworkItem`（kind=content，visibility=public；不锁成 FeedArticle） |
+| 非个性化候选查询 | 同一 Relay 增加 `POST/GET /v1/network-items`；按 kind / publisher / createdAfter / createdBefore / visibility / cursor / limit；拒绝 Digital Self / preference / score 等查询键 |
+| Personal Selection | `src/subject-comm/personal-selection.ts`：本地 `selectNetworkItems`；模型失败 → `PERSONAL_SELECTION_UNAVAILABLE`；不复用 Opportunity token fallback |
+
+**Trial：** 同一 Relay、32 条公开候选、同一 `deepseek-v4-flash`、两个隔离 `self.json`。A/B 候选 ID 完全相同。选择差由 Digital Self 解释。反事实 `ni_01`：A=SHOW，B=IGNORE。证据在 gitignored `build/evidence/subject-network-feed-01/`。
+
+**仍不做：** Feed 产品面、`#nav-collab`、FOLLOW/SUBSCRIBE、中心排序、Computer Use。

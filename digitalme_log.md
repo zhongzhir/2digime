@@ -5,6 +5,18 @@
 
 ---
 
+## 2026-09-08 — Distributed Personal Selection 第一真实薄片
+
+### 状态
+
+`DISTRIBUTED_PERSONAL_SELECTION_ACCEPTED` / `not_pushed` / `not_released`
+
+主题：同一 Relay 提供完全相同的公开候选内容；两个隔离 Digital Self 的 2digime 用同一模型自主选出不同信息。Relay 不读 self.json、不调用模型、不做 relevance score。
+
+落地：`NetworkItem` + 现有 Relay 的 `/v1/network-items`；本地 `selectNetworkItems`。无 Feed UI，无新 runtime。证据 gitignored：`build/evidence/subject-network-feed-01/`。
+
+---
+
 ## 2026-09-08 — DIGITAL SUBJECT NETWORK 战略升级
 
 ### 状态

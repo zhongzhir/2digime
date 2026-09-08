@@ -4,6 +4,7 @@
  */
 import type { RelayAckResponse, RelayFetchResponse, RelaySubmitResponse, RelayWireEnvelope } from './relay-wire';
 import { defaultRelayHttp, relayNetworkError, type RelayHttpFn } from './relay-http';
+import type { NetworkItem, NetworkItemQuery } from './network-item';
 
 export class RelayClient {
   private readonly http: RelayHttpFn;
@@ -94,5 +95,27 @@ export class RelayClient {
       method: 'POST',
       body: { endpointId },
     });
+  }
+
+  async publishNetworkItem(item: NetworkItem): Promise<{ ok: boolean; itemId: string }> {
+    return this.json<{ ok: boolean; itemId: string }>('/v1/network-items', {
+      method: 'POST',
+      body: item,
+    });
+  }
+
+  async listNetworkItems(query: NetworkItemQuery = {}): Promise<{ items: NetworkItem[]; nextCursor?: string }> {
+    const params = new URLSearchParams();
+    if (query.kind) params.set('kind', query.kind);
+    if (query.publisher) params.set('publisher', query.publisher);
+    if (query.createdAfter) params.set('createdAfter', query.createdAfter);
+    if (query.createdBefore) params.set('createdBefore', query.createdBefore);
+    if (query.visibility) params.set('visibility', query.visibility);
+    if (query.cursor) params.set('cursor', query.cursor);
+    if (query.limit != null) params.set('limit', String(query.limit));
+    const qs = params.toString();
+    return this.json<{ items: NetworkItem[]; nextCursor?: string }>(
+      `/v1/network-items${qs ? `?${qs}` : ''}`,
+    );
   }
 }
