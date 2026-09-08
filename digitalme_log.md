@@ -5,6 +5,18 @@
 
 ---
 
+## 2026-09-08 — Public Alpha 产品面 P0
+
+### 状态
+
+`PUBLIC_ALPHA_SURFACE_ACCEPTED` / `not_pushed` / `not_released`
+
+主题：只实现 05 已接受的 7 项 P0。三入口锁定；Talk 输入可增高、附件=这次上下文；doing 轻量可取消；结果卡「打开」为主动作；数字之我去驾驶舱；设置默认不暴露基础设施；暖色纸感恢复、「兔」装饰清除；连接 AI 后进 Talk。
+
+真实 UI Trial A/B/C 通过（Electron + 真模型）。未新增 Feed / 协作 UI。未改 Constitution / Digital Self schema。两套 CSS 完整合并仍属 P1。
+
+---
+
 ## 2026-09-08 — Digital Self Network Evolution
 
 ### 状态

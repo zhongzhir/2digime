@@ -139,12 +139,12 @@ Phase 1 Digital Self、Phase 2 Talk 主链、Phase 3 协作地基仍然有效，
 
 ## 2. 下一开发任务
 
-**任务名：** `DIGITALME-UI-PUBLIC-ALPHA-SURFACE-01`
+**任务名：** Public Alpha P1（见 05 §9）
 **状态：** `NOT STARTED`
-**阶段：** Public Alpha 产品面（UI Recovery Audit 已完成）
-**本轮指针：** 实现 [`05-UI-RECOVERY-AUDIT.md`](./05-UI-RECOVERY-AUDIT.md) 的 **P0（7 项）**。视觉 **RECOVER_AND_ADAPT**：沿用 01B-B5 / 09-04 暖色纸感，按今天三入口重映射 IA。不重画 Figma，不造 Feed，不恢复 `#nav-work` / `#nav-collab`。成熟 Computer Use 仍在 Phase A 未完成清单中，**今天 NOT STARTED**。
+**阶段：** Public Alpha 产品面 P0 已 ACCEPTED
+**本轮指针：** [`05-UI-RECOVERY-AUDIT.md`](./05-UI-RECOVERY-AUDIT.md) 的 **P1**：会话列表评估、Talk 内网络结果/主动告知（仍无 Feed Tab）、成果轻预览、两套 CSS 收成一层。不重画 Figma，不造 Feed，不恢复 `#nav-work` / `#nav-collab`。成熟 Computer Use 仍在 Phase A 未完成清单中，**今天 NOT STARTED**。
 
-已接受：`DIGITAL_SELF_NETWORK_EVOLUTION_ACCEPTED`（04 §15）；UI Recovery Audit（05）；`DISTRIBUTED_PERSONAL_SELECTION_ACCEPTED`；substrate 审计（04 §13）；`ZERO_START_CODING_TALK_ACCEPTED`（`24e1ce9`）；`STRATEGIC_ALIGNMENT_ACCEPTED` / `EXECUTION_TRUTH_RESTORED` / `CODING_CAPABILITY_REAL_AND_INTEGRATED`。
+已接受：`PUBLIC_ALPHA_SURFACE_ACCEPTED`（05 P0，7 项）；`DIGITAL_SELF_NETWORK_EVOLUTION_ACCEPTED`（04 §15）；UI Recovery Audit（05）；`DISTRIBUTED_PERSONAL_SELECTION_ACCEPTED`；substrate 审计（04 §13）；`ZERO_START_CODING_TALK_ACCEPTED`（`24e1ce9`）；`STRATEGIC_ALIGNMENT_ACCEPTED` / `EXECUTION_TRUTH_RESTORED` / `CODING_CAPABILITY_REAL_AND_INTEGRATED`。
 
 不要做完整 Feed 产品、不要做订阅/关注、不要恢复协作中心。历史已接受任务（Talk ↔ Digital Self Learning、Zero-start Coding 等）见 §3，不再当作「下一步」。
 
@@ -184,9 +184,9 @@ Phase 1 Digital Self、Phase 2 Talk 主链、Phase 3 协作地基仍然有效，
 
 **状态：** `ACCEPTED`
 
-已成立：一级导航为「与 2digime / 数字之我 / 设置」；默认进入「与 2digime」；旧对话/做事/协作标签退出普通用户主路径。结果卡是文件名 + 打开/在文件夹中显示。附件路径只进入该次 talk 上下文。
+已成立：一级导航为「与 2digime / 数字之我 / 设置」；默认进入「与 2digime」；旧对话/做事/协作标签退出普通用户主路径。结果卡是文件名 + **打开**为主动作。附件路径只进入该次 talk 上下文。
 
-Public Alpha 表面的 KEEP / ADAPT / RETIRE / MISSING、Figma 裁决与 P0 清单见 [`05-UI-RECOVERY-AUDIT.md`](./05-UI-RECOVERY-AUDIT.md)。实现前读 05；不得用旧四主栏 Figma 反写产品结构。
+Public Alpha P0 已落地：`PUBLIC_ALPHA_SURFACE_ACCEPTED`。KEEP / ADAPT / RETIRE / MISSING、Figma 裁决与 P1 清单见 [`05-UI-RECOVERY-AUDIT.md`](./05-UI-RECOVERY-AUDIT.md)。不得用旧四主栏 Figma 反写产品结构。
 
 正式默认启动不再 attach 旧 Work Runtime / Job runner，也不再创建旧 Task/Job/work state。历史 `work.*` / `artifact.*` 仍可按需挂载，供开发与旧测试使用；这不是新产品 compatibility layer，talk / Digital Self / capability 不得经过该路径。
 

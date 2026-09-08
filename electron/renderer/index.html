@@ -30,25 +30,25 @@
       <section id="view-welcome" class="view">
         <header class="hero">
           <p class="brand">兔机米</p>
-          <h1>建立你的数字之我</h1>
-          <p class="page-lead">在本机保存你的资料，按你的方式对话与使用。</p>
+          <h1>连接 AI</h1>
+          <p class="page-lead">连接后即可开始聊天。密钥只保存在本机。</p>
         </header>
 
         <div id="welcome-step-intro" class="welcome-actions welcome-step">
-          <p class="muted">接下来需要连接模型，才能开始对话。也可以先浏览界面。</p>
+          <p class="muted">先连接 AI，然后开始聊天。</p>
           <div class="row">
-            <button type="button" id="btn-welcome-to-model" class="primary">连接模型</button>
-            <button type="button" id="btn-welcome-skip-model" class="ghost">先跳过</button>
+            <button type="button" id="btn-welcome-to-model" class="primary">连接 AI</button>
+            <button type="button" id="btn-welcome-skip-model" class="ghost">先看看</button>
           </div>
           <p id="welcome-skip-hint" class="muted tiny" hidden>
-            可以先浏览，但对话需要连接模型。
+            可以先看看，但聊天需要先连接 AI。
           </p>
           <p id="welcome-status" class="status" hidden></p>
         </div>
 
         <div id="welcome-step-model" class="welcome-actions welcome-step settings-panel" hidden>
-          <h2>连接模型</h2>
-          <p class="muted">密钥只保存在本机。连接成功后即可开始使用。</p>
+          <h2>连接 AI</h2>
+          <p class="muted">密钥只保存在本机。连上后即可开始聊天。</p>
           <label class="field">
             <span>服务提供方</span>
             <select id="welcome-model-provider">
@@ -105,13 +105,13 @@
       <section id="view-settings" class="view" hidden>
         <header class="page-heading">
           <h1>设置</h1>
-          <p class="page-lead">连接模型，也可选配置联网搜索。密钥保存在本机。</p>
+          <p class="page-lead">连接 AI，密钥保存在本机。也可选允许联网搜索。</p>
           <button type="button" id="btn-settings-back">返回</button>
         </header>
         <div class="welcome-actions settings-panel">
           <section class="settings-card settings-model">
-          <h2>模型连接</h2>
-          <p class="muted">连接后即可在「与兔机米」对话。密钥保存在本机。</p>
+          <h2>AI 连接</h2>
+          <p class="muted">连接后即可开始聊天。密钥保存在本机。</p>
 
           <label class="field">
             <span>服务提供方</span>
@@ -176,7 +176,7 @@
 
           <section class="settings-card settings-search">
           <h2>联网搜索</h2>
-          <p class="muted">配置后，兔机米可以查询实时公开信息。不配置也能正常对话。</p>
+          <p class="muted">可选。不配置也能正常聊天。</p>
           <label class="field">
             <span>Gemini API Key</span>
             <div class="key-input-row">
@@ -196,6 +196,9 @@
           <p id="gemini-search-status" class="status" aria-live="polite"></p>
           </section>
 
+          <details class="settings-card settings-advanced" id="settings-advanced">
+          <summary>高级</summary>
+          <p class="muted tiny">日常使用不必打开。</p>
           <details class="settings-card settings-optional" id="settings-optional-remote">
           <summary>设备与数字之我连接</summary>
           <section class="settings-block" aria-labelledby="remote-dm-title">
@@ -269,6 +272,7 @@
           <p id="remote-cap-settings-status" class="status" aria-live="polite"></p>
           <p id="remote-cap-status-label" class="meta" hidden>状态：未配置</p>
           </details>
+          </details>
         </div>
       </section>
 
@@ -285,9 +289,8 @@
             <div id="chat-context" class="chat-context muted tiny" hidden></div>
             <ul id="chat-turns" class="chat-turns" aria-live="polite"></ul>
             <div id="chat-empty" class="empty-hint" data-talk-hint="1">
-              <span class="empty-emblem" aria-hidden="true">兔</span>
               <h2>从你此刻的想法开始</h2>
-              <p>聊聊近况，理清思路，或把一件事交给兔机米。</p>
+              <p>聊聊近况，或把一件事交给兔机米。</p>
             </div>
             <section id="first-value" class="first-value" hidden aria-label="我能帮你做什么">
               <h2 class="first-value-title">我能帮你做什么？</h2>
@@ -311,18 +314,19 @@
             <ul id="talk-attach-chips" class="talk-attach-chips" hidden></ul>
             <div class="talk-composer-row">
               <details id="talk-attach-menu" class="talk-attach-menu">
-                <summary id="btn-talk-attach" title="添加文件或文件夹">＋</summary>
+                <summary id="btn-talk-attach" title="添加这次对话的上下文">＋</summary>
                 <div class="talk-attach-menu-body">
-                  <button type="button" id="btn-talk-attach-file">文件</button>
-                  <button type="button" id="btn-talk-attach-folder">文件夹</button>
+                  <button type="button" id="btn-talk-attach-file">这次一起看的文件</button>
+                  <button type="button" id="btn-talk-attach-folder">这次一起看的文件夹</button>
                 </div>
               </details>
               <div class="field talk-composer-field">
                 <label for="chat-input">告诉兔机米</label>
-                <textarea id="chat-input" rows="3" placeholder="告诉兔机米…"></textarea>
+                <textarea id="chat-input" rows="2" placeholder="想做什么，直接说。"></textarea>
               </div>
             </div>
             <div class="row composer-actions">
+              <p class="composer-hint">文件和文件夹都是这次对话的上下文。</p>
               <button type="button" id="btn-chat-send" class="primary">发送</button>
               <button type="button" id="btn-chat-cancel" class="ghost" hidden>取消</button>
               <button type="button" id="btn-chat-retry" class="ghost" hidden>重试回复</button>
@@ -337,10 +341,11 @@
           <section id="digital-self-page" class="digital-self-page">
             <h1 class="page-title">数字之我</h1>
             <p id="ds-headline" class="ds-headline">兔机米现在怎样理解我</p>
+            <p class="page-lead ds-lead">这些认识属于你，可以纠正。</p>
             <p id="ds-notice" class="meta" aria-live="polite"></p>
             <div class="ds-actions row">
-              <button type="button" id="btn-ds-tell" class="primary">告诉兔机米</button>
-              <button type="button" id="btn-ds-import">添加资料</button>
+              <button type="button" id="btn-ds-tell" class="primary">纠正或补充</button>
+              <button type="button" id="btn-ds-import">添加一份资料</button>
               <input type="file" id="ds-import-file" hidden accept=".txt,.md,.markdown,.pdf,.docx,.html,.htm,.csv" />
             </div>
             <form id="ds-tell-form" class="ds-form" hidden>
@@ -354,7 +359,7 @@
               </div>
             </form>
             <div id="ds-groups" class="ds-groups"></div>
-            <p id="ds-empty" class="empty-hint">还没有任何了解。告诉兔机米一件关于你的事，或添加一份资料。</p>
+            <p id="ds-empty" class="empty-hint">还没有任何了解。在「与兔机米」里说话，或在这里补充一件事。</p>
           </section>
           <section id="growth-block" class="growth-block" hidden>
             <div id="growth-home" class="growth-home">
@@ -1103,7 +1108,7 @@
             <h2>与兔机米</h2>
             <p>在这里直接说话。聊天、把一件事做完、纠正对你的理解，都在这一页完成。</p>
             <ul class="help-list">
-              <li>还没连接模型时无法回复，请到「设置」连接后再试。</li>
+              <li>还没连接 AI 时无法回复，请到「设置」连接后再试。</li>
               <li>对话是完善数字之我的主要方式；你确认过的内容会被记住。</li>
               <li>需要做成具体工作时，直接说出来即可。做成的文件会出现在对话里。</li>
             </ul>
@@ -1111,39 +1116,17 @@
 
           <div class="help-topic" data-help-topic="subject" id="help-subject">
             <h2>数字之我</h2>
-            <p>查看当前了解程度，并选择继续了解或补充资料。</p>
-            <h3 id="help-growth" class="section-title">数字之我如何成长</h3>
-            <p>对话是主要完善方式。资料、简短问答和实际经历都是自愿的补充。所有内容都可以跳过、暂不回答、不记录、修改、删除或限制使用范围。阶段只评价数字之我当前了解到什么，不评价你本人。</p>
-            <h3 class="section-title">四个成长阶段</h3>
-            <ol class="help-list help-growth-stages">
-              <li><strong>未开始</strong>：还缺少来源明确的本人信息。</li>
-              <li><strong>基础建立</strong>：已有若干来源明确的本人信息，可以开始按你的情况工作。</li>
-              <li><strong>基本成形</strong>：已覆盖多个核心方面，相关事情不必反复从头介绍。</li>
-              <li><strong>持续完善</strong>：已有较完整的了解，之后主要是按你的使用继续校准。</li>
-            </ol>
-            <h3 class="section-title">会逐步了解的方面</h3>
-            <ul class="help-list">
-              <li>基本身份</li>
-              <li>经历与背景</li>
-              <li>当前状态</li>
-              <li>目标与意图</li>
-              <li>兴趣与偏好</li>
-              <li>价值观与判断原则</li>
-              <li>表达与沟通方式</li>
-              <li>能力与做事方法</li>
-              <li>重要关系与组织</li>
-              <li>授权、隐私和使用边界</li>
-            </ul>
-            <p class="muted tiny">健康、财务、家庭等信息只有在你主动提起或明确同意后才会被处理。对话里完成的事只是可选成长来源，不是启动条件。</p>
+            <p>查看它现在怎样理解你。来源可见，也可以纠正或删除。</p>
+            <h3 id="help-growth" class="section-title">它如何了解你</h3>
+            <p>主要来自你在「与兔机米」里说的话，以及你在这里做的纠正。</p>
           </div>
 
           <div class="help-topic" data-help-topic="settings" id="help-settings">
             <h2>设置</h2>
-            <p>在这里连接模型。连接之后，「与兔机米」才能回复。</p>
+            <p>在这里连接 AI。连上之后即可聊天。</p>
             <ul class="help-list">
               <li>密钥只保存在这台电脑上。</li>
-              <li>一般选择 DeepSeek 即可。只有要用其它兼容服务时，才打开「高级连接」填写地址和模型名称。</li>
-              <li>折叠项是可选的：连接另一台电脑上的数字之我、代码执行、专业研究服务。日常使用不必打开。</li>
+              <li>日常不必打开「高级」。</li>
             </ul>
           </div>
         </div>

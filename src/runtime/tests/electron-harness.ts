@@ -156,13 +156,10 @@ export async function sendChat(page: Page, text: string): Promise<void> {
 
 export async function waitForOverviewName(page: Page, name: string, timeoutMs = 45_000): Promise<void> {
   await page.locator('#nav-subject').click();
-  const known = page.locator('#growth-cockpit-known');
-  try {
-    await known.getByText(name).waitFor({ state: 'visible', timeout: timeoutMs });
-  } catch {
-    await page.locator('#btn-growth-understanding').click();
-    await page.locator('#growth-understanding-list').getByText(name).waitFor({ state: 'visible', timeout: 15_000 });
-  }
+  await page.locator('#digital-self-page .ds-text', { hasText: name }).waitFor({
+    state: 'visible',
+    timeout: timeoutMs,
+  });
   await page.locator('#nav-chat').click();
   await page.locator('#chat-input').waitFor({ state: 'visible', timeout: 10_000 });
 }

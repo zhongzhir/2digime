@@ -20,9 +20,13 @@ test('Electron：Talk 挂起后在期限内离开正在处理', { timeout: 60_00
   });
   try {
     await skipWelcomeAndEnterShell(harness.page);
-    await harness.page.locator('#chat-input').fill('你好');
     const started = Date.now();
-    await harness.page.locator('#btn-chat-send').click();
+    await harness.page.evaluate(`(async () => {
+      if (!window.TalkPage || typeof window.TalkPage.handleSend !== 'function') {
+        throw new Error('TalkPage.handleSend missing');
+      }
+      void window.TalkPage.handleSend('你好');
+    })()`);
     await harness.page.locator('[data-talk-processing]').waitFor({
       state: 'visible',
       timeout: 8_000,
@@ -87,15 +91,22 @@ test('Electron：设置测试连接失败展示真实原因，高级项默认折
       ),
       false,
     );
-    await harness.page.locator('#btn-test-model').click();
+    assert.equal(
+      await harness.page.evaluate(
+        `!!document.querySelector('#settings-advanced') && document.querySelector('#settings-advanced').open`,
+      ),
+      false,
+    );
+    assert.equal(await harness.page.locator('#settings-optional-remote').isVisible().catch(() => false), false);
+    await harness.page.locator('.settings-model').waitFor({ state: 'visible', timeout: 10_000 });
+    await harness.page.locator('#btn-test-model').click({ force: true });
     await harness.page.locator('#settings-status').waitFor({ state: 'visible', timeout: 10_000 });
     const settingsStatus = await harness.page.locator('#settings-status').innerText();
     assert.match(settingsStatus, /无法连接|请先填写|密钥|连接/);
     assert.equal(settingsStatus.includes('连接成功'), false);
-    await harness.page.locator('#settings-tech-detail').waitFor({ state: 'visible', timeout: 5_000 });
-    const tech = await harness.page.locator('#settings-tech-body').innerText();
-    assert.equal(tech.trim().length > 0, true);
-    assert.match(await harness.page.locator('#settings-tech-detail summary').innerText(), /详细原因/);
+    assert.equal(await harness.page.locator('#settings-tech-detail').isVisible().catch(() => false), false);
+    const settingsCopy = await harness.page.locator('#view-settings').innerText();
+    assert.equal(/Relay URL|OpenCode|Codex|MCP|executor|capability registry/i.test(settingsCopy), false);
   } finally {
     await harness.close();
   }

@@ -52,6 +52,9 @@ async function assertProductNav(page: Page): Promise<void> {
   assert.equal(await page.locator('#nav-collab').isVisible().catch(() => false), false);
   assert.equal(await page.locator('#panel-work').isVisible().catch(() => false), false);
   assert.equal(await page.locator('#btn-chat-to-task').isVisible().catch(() => false), false);
+  assert.equal(await page.locator('.empty-emblem').count(), 0);
+  const navText = await page.locator('.main-nav').innerText();
+  assert.equal(/做事|协作|Feed|Growth/i.test(navText), false);
 }
 
 function leak(copy: string): boolean {
@@ -95,6 +98,13 @@ test('Electron：统一产品表面导航与同一入口 A/B/C/D/E', { timeout: 
 
     await harness.page.locator('#nav-settings').click();
     await harness.page.locator('#view-settings').waitFor({ state: 'visible', timeout: 15_000 });
+    const settingsCopy = await harness.page.locator('#view-settings').innerText();
+    assert.match(settingsCopy, /AI 连接|联网搜索|高级/);
+    assert.equal(/Relay URL|OpenCode|Codex|MCP|capability registry/i.test(settingsCopy), false);
+    assert.equal(
+      await harness.page.evaluate(`!!document.querySelector('#settings-advanced') && document.querySelector('#settings-advanced').open`),
+      false,
+    );
     await harness.page.locator('#btn-settings-back').click();
     await harness.page.locator('#view-shell').waitFor({ state: 'visible', timeout: 15_000 });
     await harness.page.locator('#nav-chat').click();
@@ -131,6 +141,8 @@ test('Electron：统一产品表面导航与同一入口 A/B/C/D/E', { timeout: 
     assert.match(copy, /完成|README|说明/);
     await harness.page.locator('.talk-result-card').waitFor({ state: 'visible', timeout: 10_000 });
     assert.match(await harness.page.locator('.talk-result-card .talk-result-name').innerText(), /README\.md|result\.md/);
+    assert.match(await harness.page.locator('.talk-result-card').innerText(), /这次完成的结果/);
+    assert.equal((await harness.page.locator('.talk-result-open').innerText()).trim(), '打开');
     assert.equal(await harness.page.locator('#panel-work').isVisible().catch(() => false), false);
     assert.equal(leak(copy), false);
 

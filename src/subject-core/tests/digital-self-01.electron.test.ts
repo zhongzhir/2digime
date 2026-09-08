@@ -125,7 +125,7 @@ test('Electron：数字之我最小闭环 10 项真实验收', { timeout: 240_00
     assert.equal(copy.includes('波函数'), false);
     assert.equal(copy.includes('氢原子'), false);
     const morning = first.page.locator('#digital-self-page .ds-item', { hasText: '早起' });
-    const morningSource = await morning.locator('.ds-source p').textContent();
+    const morningSource = await morning.locator('.ds-source-line').textContent();
     assert.match(String(morningSource || ''), /尚未确认|需要你确认/);
     await saveEvidence('03-import-mixed', first.page);
 
@@ -151,7 +151,7 @@ test('Electron：数字之我最小闭环 10 项真实验收', { timeout: 240_00
       const h2 = group && group.querySelector('h2');
       return (h2 && h2.textContent) || '';
     })()`);
-    assert.equal(lisiGroup, '正在了解');
+    assert.equal(lisiGroup, '最近它又了解了你这些');
     const zhangGroup = await first.page.evaluate(`(() => {
       const items = Array.from(document.querySelectorAll('.ds-item'));
       const zhang = items.find((el) => (el.textContent || '').includes('张三'));
@@ -159,7 +159,7 @@ test('Electron：数字之我最小闭环 10 项真实验收', { timeout: 240_00
       const h2 = group && group.querySelector('h2');
       return (h2 && h2.textContent) || '';
     })()`);
-    assert.equal(zhangGroup, '关于我');
+    assert.equal(zhangGroup, '当前理解');
     await saveEvidence('08-conflict-lisi', first.page);
 
     await first.page.locator('#digital-self-page .ds-item', { hasText: '早起' }).locator('button[data-act="delete"]').click();

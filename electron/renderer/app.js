@@ -725,7 +725,14 @@
     }
     fillSettingsForm();
     setView("settings");
-    void refreshExecutorCapabilityUi(false);
+    const advanced = document.getElementById("settings-advanced");
+    if (advanced && !advanced.dataset.bound) {
+      advanced.dataset.bound = "1";
+      advanced.addEventListener("toggle", () => {
+        if (advanced.open) void refreshExecutorCapabilityUi(false);
+      });
+    }
+    if (advanced && advanced.open) void refreshExecutorCapabilityUi(false);
   }
 
   const REMOTE_CONNECT_FAIL =
@@ -952,23 +959,19 @@
     showWelcomeStatus("", false, true);
     if (welcomeModelReady()) {
       welcomeModelVerified = true;
-      showWelcomeStep("start");
-      if (els.welcomeModelReadyNote) {
-        els.welcomeModelReadyNote.hidden = false;
-        els.welcomeModelReadyNote.textContent = "模型已连接，可以直接开始使用。";
-      }
-    } else {
-      welcomeModelVerified = false;
-      if (els.welcomeModelReadyNote) els.welcomeModelReadyNote.hidden = true;
-      showWelcomeStep("intro");
+      if (els.welcomeStepIntro) els.welcomeStepIntro.hidden = true;
+      void tryStartFromWelcome({ skipIntro: true });
+      return;
     }
+    welcomeModelVerified = false;
+    if (els.welcomeModelReadyNote) els.welcomeModelReadyNote.hidden = true;
+    showWelcomeStep("intro");
   }
 
   function proceedWelcomeAfterModelSkip() {
     welcomeModelSkipped = true;
-    if (els.welcomeSkipHint) els.welcomeSkipHint.hidden = false;
-    showWelcomeStep("start");
-    showWelcomeStatus("", false, true);
+    if (els.welcomeSkipHint) els.welcomeSkipHint.hidden = true;
+    void tryStartFromWelcome({ skipIntro: true });
   }
 
   function openHelp(sectionId) {
@@ -1189,17 +1192,12 @@
     return msg;
   }
 
-  function setSettingsTechDetail(raw) {
+  function setSettingsTechDetail(_raw) {
     if (!els.settingsTechDetail || !els.settingsTechBody) return;
-    const text = redactSecrets(raw || "").trim();
-    if (!text) {
-      els.settingsTechDetail.hidden = true;
-      els.settingsTechBody.textContent = "";
-      return;
-    }
-    els.settingsTechBody.textContent = text.slice(0, 800);
-    els.settingsTechDetail.hidden = false;
-    els.settingsTechDetail.open = true;
+    els.settingsTechDetail.hidden = true;
+    els.settingsTechDetail.setAttribute("hidden", "");
+    els.settingsTechDetail.open = false;
+    els.settingsTechBody.textContent = "";
   }
 
   function setConnectionStateLabel(label, tone) {
@@ -5925,13 +5923,9 @@
           welcomeModelVerified = true;
           welcomeModelSkipped = false;
           setWelcomeModelStateLabel("已连接", "ok");
-          showStatus(els.welcomeModelStatus, "已保存并连接。");
-          showWelcomeStep("start");
-          if (els.welcomeModelReadyNote) {
-            els.welcomeModelReadyNote.hidden = false;
-            els.welcomeModelReadyNote.textContent = "模型已连接，可以直接开始使用。";
-          }
+          showStatus(els.welcomeModelStatus, "已连接。");
           if (els.welcomeSkipHint) els.welcomeSkipHint.hidden = true;
+          void tryStartFromWelcome({ skipIntro: true });
         } else {
           setWelcomeModelStateLabel("尚未确认（可测试连接）", null);
           showStatus(els.welcomeModelStatus, "已保存密钥，但尚未确认连接。请检查高级连接设置。");
@@ -6159,6 +6153,10 @@
 
   if (els.chatCancel) {
     els.chatCancel.addEventListener("click", () => {
+      if (window.TalkPage && typeof window.TalkPage.cancel === "function") {
+        window.TalkPage.cancel();
+        return;
+      }
       void cancelInFlightChat();
     });
   }

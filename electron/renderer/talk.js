@@ -5,6 +5,10 @@
 (function () {
   const pendingPaths = [];
   const TALK_TIMEOUT_NOTICE = '请求超时，模型在限定时间内没有返回。可重试。';
+  const DOING_TEXT = '正在替你做';
+  const CHECKING_TEXT = '正在查看结果';
+  let sendGeneration = 0;
+  let sending = false;
 
   function api() {
     return window.digitalMe;
@@ -29,16 +33,19 @@
   function facingError(err) {
     const raw = String((err && err.message) || err || '').trim();
     if (!raw) return '这次没能完成。';
+    if (/aborted|用户取消|已取消|request aborted/i.test(raw)) {
+      return '已取消。';
+    }
     if (/timeout after|请求超时|AbortError|ETIMEDOUT|TalkTimeout|超时/i.test(raw)) {
       return TALK_TIMEOUT_NOTICE;
     }
     if (/codex/i.test(raw) && /HTTP|ECONN|ENOTFOUND|unavailable|不可用|403|404/i.test(raw)) {
-      return '这次没有做成。代码执行能力当前不可用。';
+      return '这次没有做成。请稍后再试。';
     }
     if (/ECONN|ENOTFOUND|fetch failed|network/i.test(raw)) {
-      return '这次没能连上模型。请检查网络后重试。';
+      return '这次没能连上。请检查网络后重试。';
     }
-    if (/HTTP|status code|adapter|cap_|stack|ENOENT|Error invoking/i.test(raw)) {
+    if (/HTTP|status code|adapter|cap_|stack|ENOENT|Error invoking|runtime|provider|executor|IPC/i.test(raw)) {
       return '这次没有做成。请稍后再试。';
     }
     return raw;
@@ -49,13 +56,20 @@
     if (el) el.textContent = text || '';
   }
 
+  function setCancelVisible(show) {
+    const el = $('btn-chat-cancel');
+    if (!el) return;
+    el.hidden = !show;
+    if (show) el.removeAttribute('hidden');
+    else el.setAttribute('hidden', '');
+  }
+
   function hideLegacyChrome() {
     const hideIds = [
       'chat-session-aside',
       'first-value',
       'growth-guide-actions',
       'btn-chat-to-task',
-      'btn-chat-cancel',
       'btn-chat-retry',
       'chat-context',
     ];
@@ -71,11 +85,25 @@
     if (lead) lead.hidden = true;
     const label = document.querySelector('label[for="chat-input"]');
     if (label) label.textContent = '告诉兔机米';
-    const empty = $('chat-empty');
-    if (empty && !empty.dataset.talkHint) {
-      empty.textContent = '告诉兔机米一件事，或问我现在怎样理解你。';
-      empty.dataset.talkHint = '1';
-    }
+    if (!sending) setCancelVisible(false);
+  }
+
+  function autosizeInput() {
+    const input = $('chat-input');
+    if (!input) return;
+    input.style.height = 'auto';
+    const maxPx = Math.min(Math.round(window.innerHeight * 0.42), 360);
+    const next = Math.min(Math.max(input.scrollHeight, 52), maxPx);
+    input.style.height = next + 'px';
+  }
+
+  function bindAutosize() {
+    const input = $('chat-input');
+    if (!input || input.dataset.autosizeBound) return;
+    input.dataset.autosizeBound = '1';
+    input.addEventListener('input', autosizeInput);
+    window.addEventListener('resize', autosizeInput);
+    autosizeInput();
   }
 
   function renderChips() {
@@ -99,7 +127,7 @@
       remove.type = 'button';
       remove.className = 'ghost';
       remove.textContent = '×';
-      remove.setAttribute('aria-label', '移除 ' + basename(filePath));
+      remove.setAttribute('aria-label', '移除这次上下文 ' + basename(filePath));
       remove.addEventListener('click', () => {
         pendingPaths.splice(index, 1);
         renderChips();
@@ -132,6 +160,10 @@
   function appendResultCard(li, file) {
     const card = document.createElement('div');
     card.className = 'talk-result-card';
+    const note = document.createElement('p');
+    note.className = 'talk-result-note';
+    note.textContent = '这次完成的结果';
+    card.appendChild(note);
     const title = document.createElement('p');
     title.className = 'talk-result-name';
     title.textContent = file.title || basename(file.path);
@@ -140,6 +172,7 @@
     actions.className = 'talk-result-actions';
     const open = document.createElement('button');
     open.type = 'button';
+    open.className = 'primary talk-result-open';
     open.textContent = '打开';
     open.addEventListener('click', () => {
       const client = api();
@@ -155,7 +188,7 @@
     });
     const reveal = document.createElement('button');
     reveal.type = 'button';
-    reveal.className = 'ghost';
+    reveal.className = 'ghost talk-result-reveal';
     reveal.textContent = '在文件夹中显示';
     reveal.addEventListener('click', () => {
       const client = api();
@@ -183,7 +216,7 @@
       li.className = turn.role === 'user' ? 'chat-turn-user' : 'chat-turn-assistant';
       const role = document.createElement('p');
       role.className = 'talk-role';
-      role.textContent = turn.role === 'user' ? '用户' : '兔机米';
+      role.textContent = turn.role === 'user' ? '你' : '兔机米';
       li.appendChild(role);
       const p = document.createElement('p');
       p.className = 'chat-text';
@@ -197,7 +230,7 @@
       userLi.className = 'chat-turn-user';
       const role = document.createElement('p');
       role.className = 'talk-role';
-      role.textContent = '用户';
+      role.textContent = '你';
       userLi.appendChild(role);
       const p = document.createElement('p');
       p.className = 'chat-text';
@@ -214,7 +247,8 @@
         wait.appendChild(waitRole);
         const waitText = document.createElement('p');
         waitText.className = 'chat-text';
-        waitText.textContent = '正在处理…';
+        waitText.setAttribute('data-talk-doing', '1');
+        waitText.textContent = pending.doingText || DOING_TEXT;
         wait.appendChild(waitText);
         list.appendChild(wait);
       }
@@ -229,6 +263,11 @@
     list.scrollTop = list.scrollHeight;
   }
 
+  function setDoingText(text) {
+    const el = document.querySelector('[data-talk-doing]');
+    if (el) el.textContent = text;
+  }
+
   async function invokeTalk(payload) {
     const client = api();
     if (!client || typeof client.invoke !== 'function') {
@@ -239,6 +278,7 @@
 
   async function refresh() {
     hideLegacyChrome();
+    bindAutosize();
     renderChips();
     try {
       const result = await invokeTalk({});
@@ -246,6 +286,17 @@
     } catch (err) {
       setNotice(facingError(err));
     }
+  }
+
+  function cancelSend() {
+    if (!sending) return;
+    sendGeneration += 1;
+    sending = false;
+    setCancelVisible(false);
+    const send = $('btn-chat-send');
+    if (send) send.disabled = false;
+    renderView(lastView);
+    setNotice('已取消。');
   }
 
   async function handleSend(text, extra) {
@@ -258,33 +309,52 @@
       setNotice('请先写一句话。');
       return;
     }
-    if (input) input.value = '';
+    if (input) {
+      input.value = '';
+      autosizeInput();
+    }
     pendingPaths.length = 0;
     renderChips();
-    setNotice('正在处理…');
+    const generation = ++sendGeneration;
+    sending = true;
+    setNotice(DOING_TEXT);
+    setCancelVisible(true);
     if (send) send.disabled = true;
     const pendingText =
       paths.length && trimmed
-        ? `${trimmed}\n\n（已附上 ${paths.map(basename).join('、')}）`
+        ? `${trimmed}\n\n（这次一起看：${paths.map(basename).join('、')}）`
         : trimmed;
-    renderView(lastView, { userText: pendingText });
+    renderView(lastView, { userText: pendingText, doingText: DOING_TEXT });
     let watchdog = 0;
+    let checkTimer = 0;
     try {
       const payload = { text: trimmed };
       if (paths.length) payload.contextPaths = paths;
+      checkTimer = setTimeout(() => {
+        if (generation !== sendGeneration) return;
+        setDoingText(CHECKING_TEXT);
+        setNotice(CHECKING_TEXT);
+      }, 8000);
       const result = await Promise.race([
         invokeTalk(payload),
         new Promise((_, reject) => {
           watchdog = setTimeout(() => reject(new Error(TALK_TIMEOUT_NOTICE)), talkUiDeadlineMs());
         }),
       ]);
+      if (generation !== sendGeneration) return;
       renderView(result && result.view);
     } catch (err) {
+      if (generation !== sendGeneration) return;
       renderView(lastView, { userText: pendingText, failed: true });
       setNotice(facingError(err));
     } finally {
       if (watchdog) clearTimeout(watchdog);
-      if (send) send.disabled = false;
+      if (checkTimer) clearTimeout(checkTimer);
+      if (generation === sendGeneration) {
+        sending = false;
+        setCancelVisible(false);
+        if (send) send.disabled = false;
+      }
     }
   }
 
@@ -324,13 +394,16 @@
   window.TalkPage = {
     refresh: refresh,
     handleSend: handleSend,
+    cancel: cancelSend,
     pendingPaths: pendingPaths,
+    addContextPaths: addPaths,
     attachFiles: pickFiles,
     attachFolder: pickFolder,
   };
 
   function start() {
     hideLegacyChrome();
+    bindAutosize();
     bindAttach();
     void refresh();
   }

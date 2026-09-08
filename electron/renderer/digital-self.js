@@ -1,17 +1,11 @@
 'use strict';
 /**
  * 数字之我页：只投影 Digital Self 唯一权威。
+ * 围绕：现在怎样理解我 / 为什么（来源）/ 我可以纠正。
  * 不展示 Event / Store / Candidate ID / confidence / provenance 结构。
  */
 (function () {
-  const GROUP_TITLES = {
-    about_me: '关于我',
-    goals: '目标与关注',
-    preferences: '偏好与判断',
-    boundaries: '边界',
-    learning: '正在了解',
-  };
-  const GROUP_ORDER = ['about_me', 'goals', 'preferences', 'boundaries', 'learning'];
+  const CURRENT_ORDER = ['about_me', 'goals', 'preferences', 'boundaries'];
 
   function api() {
     return window.digitalMe;
@@ -49,6 +43,14 @@
     }
   }
 
+  function flattenCurrent(groups) {
+    const out = [];
+    for (const key of CURRENT_ORDER) {
+      for (const item of groups[key] || []) out.push(item);
+    }
+    return out;
+  }
+
   function renderItem(item) {
     const li = document.createElement('li');
     li.className = 'ds-item';
@@ -57,6 +59,12 @@
     text.className = 'ds-text';
     text.textContent = item.text;
     li.appendChild(text);
+
+    const source = document.createElement('p');
+    source.className = 'ds-source-line';
+    const parts = [item.sourceLabel, item.confirmationLabel].filter(Boolean);
+    source.textContent = parts.join(' · ');
+    li.appendChild(source);
 
     const actions = document.createElement('div');
     actions.className = 'ds-item-actions';
@@ -87,17 +95,21 @@
     del.textContent = '删除';
     actions.appendChild(del);
     li.appendChild(actions);
-
-    const details = document.createElement('details');
-    details.className = 'ds-source';
-    const summary = document.createElement('summary');
-    summary.textContent = '来源与确认';
-    const src = document.createElement('p');
-    src.textContent = `${item.sourceLabel} · ${item.confirmationLabel}`;
-    details.appendChild(summary);
-    details.appendChild(src);
-    li.appendChild(details);
     return li;
+  }
+
+  function appendSection(parent, title, items, extraClass) {
+    if (!items.length) return;
+    const section = document.createElement('section');
+    section.className = extraClass ? 'ds-group ' + extraClass : 'ds-group';
+    const h2 = document.createElement('h2');
+    h2.textContent = title;
+    section.appendChild(h2);
+    const ul = document.createElement('ul');
+    ul.className = 'ds-list';
+    for (const item of items) ul.appendChild(renderItem(item));
+    section.appendChild(ul);
+    parent.appendChild(section);
   }
 
   function renderView(view) {
@@ -109,23 +121,11 @@
     if (!groupsEl) return;
     groupsEl.textContent = '';
     const groups = (view && view.groups) || {};
-    let any = false;
-    for (const key of GROUP_ORDER) {
-      const items = groups[key] || [];
-      if (!items.length) continue;
-      any = true;
-      const section = document.createElement('section');
-      section.className = 'ds-group';
-      section.dataset.group = key;
-      const h2 = document.createElement('h2');
-      h2.textContent = GROUP_TITLES[key] || key;
-      section.appendChild(h2);
-      const ul = document.createElement('ul');
-      ul.className = 'ds-list';
-      for (const item of items) ul.appendChild(renderItem(item));
-      section.appendChild(ul);
-      groupsEl.appendChild(section);
-    }
+    const recent = groups.learning || [];
+    const current = flattenCurrent(groups);
+    appendSection(groupsEl, '最近它又了解了你这些', recent, 'ds-group-recent');
+    appendSection(groupsEl, '当前理解', current, 'ds-group-current');
+    const any = recent.length + current.length > 0;
     if (emptyEl) {
       emptyEl.hidden = any || (view && view.empty === false);
       if (!emptyEl.hidden) emptyEl.removeAttribute('hidden');
@@ -146,7 +146,7 @@
       const result = await invoke('read');
       renderView(result && result.view);
     } catch (err) {
-      setNotice((err && err.message) || '没能读取数字之我。');
+      setNotice('没能读取数字之我。');
     }
   }
 
@@ -180,7 +180,7 @@
           showTellForm(false);
           renderView(result && result.view);
         } catch (err) {
-          setNotice((err && err.message) || '没能记下这件事。');
+          setNotice('没能记下这件事。');
         } finally {
           setBusy(false);
         }
@@ -206,7 +206,7 @@
           const result = await invoke('import', { filePath: filePath });
           renderView(result && result.view);
         } catch (err) {
-          setNotice((err && err.message) || '没能从资料里了解你。');
+          setNotice('没能从资料里了解你。');
         } finally {
           setBusy(false);
         }
@@ -255,7 +255,7 @@
               const result = await invoke('correct', { understandingId: id, text: text });
               renderView(result && result.view);
             } catch (err) {
-              setNotice((err && err.message) || '没能保存纠正。');
+              setNotice('没能保存纠正。');
             } finally {
               setBusy(false);
             }
@@ -270,7 +270,7 @@
             const result = await invoke(act, { understandingId: id });
             renderView(result && result.view);
           } catch (err) {
-            setNotice((err && err.message) || '没能完成这项操作。');
+            setNotice('没能完成这项操作。');
           } finally {
             setBusy(false);
           }

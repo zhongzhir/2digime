@@ -1,10 +1,10 @@
 # 05 — UI Recovery Audit（Public Alpha 产品面）
 
-**状态：** `audit_complete / not_a_constitution / not_current_plan`  
-**日期：** 2026-09-08  
-**任务：** `DIGITALME-UI-RECOVERY-AUDIT-01`  
-**Authority：** `build/tujimi-ui-minimal-integration-01` @ `e6c93cec3b694d02090a0b4443eeb847f32e44e5`  
-**性质：** 只审计。不改产品代码，不改 Figma，不开始 UI 实现。  
+**状态：** `P0_IMPLEMENTED / PUBLIC_ALPHA_SURFACE_ACCEPTED / not_a_constitution / not_current_plan`
+**日期：** 2026-09-08
+**任务：** `DIGITALME-UI-RECOVERY-AUDIT-01`（审计）→ `DIGITALME-UI-PUBLIC-ALPHA-SURFACE-01`（P0 已落地）
+**Authority：** `build/tujimi-ui-minimal-integration-01`（实现提交后的最新 HEAD）
+**性质：** 审计 + P0 实施记录。不是宪法，不是 Current Plan。
 **产品结构权威：** 今天的 00 / 03，不是旧 Figma。
 
 本文回答：此前 Figma UI/UX 升级里，哪些设计资产仍适合今天的 2digime；哪些因架构重构失效；Public Alpha 最小产品面是什么。不是重新设计一版 UI。
@@ -260,15 +260,17 @@ NO 现在选型 Today / For me / 通知中心
 
 下一实现任务应只做下列项。禁止展开成几十条 UI backlog。
 
-### P0（Public Alpha 前，7 项）
+### P0（Public Alpha 前，7 项）— 2026-09-08 已完成
 
-1. **锁三入口。** 默认「与 2digime」。`#nav-work` / `#nav-collab` 对普通用户保持不可见，不恢复做事/协作中心。  
-2. **Talk 输入可用。** 复杂目标写得下；附件是「这次一起看的文件/文件夹」，不是参考资料。  
-3. **结果在对话里。** 主动作是打开成果；「在文件夹中显示」降为次要。不要只靠系统文件菜单。  
-4. **doing 有主体感。** 轻量「正在替你做」，可取消；不暴露 Agent / 工具 / 协议。  
-5. **数字之我去驾驶舱。** 主页只留理解 / 来源 / 纠正；growth cockpit 与重复入口退出普通路径。  
-6. **设置变设置。** 默认模型连接（+可选搜索）。中继、执行器、专业能力不进新用户主路径。  
-7. **首次即聊 + 已接受视觉。** 连接 AI 后进入 Talk；沿用暖色纸感；去掉已接受删除却回归的「兔」装饰；不重做皮肤、不写产品介绍长页。
+1. **锁三入口。** DONE。默认「与兔机米」。`#nav-work` / `#nav-collab` 对普通用户不可见。
+2. **Talk 输入可用。** DONE。默认轻量，随内容增高至 `min(42vh, 360px)`；附件为「这次一起看的文件/文件夹」。
+3. **结果在对话里。** DONE。结果卡含「这次完成的结果」+ 文件名；「打开」为主动作。
+4. **doing 有主体感。** DONE。「正在替你做」/「正在查看结果」，可取消；不暴露 Agent / 工具 / 协议。
+5. **数字之我去驾驶舱。** DONE。主页为当前理解 / 最近了解 / 来源 / 纠正；growth cockpit 退出普通路径。
+6. **设置变设置。** DONE。默认 AI 连接 + 可选联网搜索；中继、执行器、专业能力收入默认收起的「高级」。
+7. **首次即聊 + 已接受视觉。** DONE。AI 已连接则进入 Talk；`public-trial.css` 暖色纸感与 01B-B5 对齐；「兔」装饰已删。
+
+**裁决：** `PUBLIC_ALPHA_SURFACE_ACCEPTED`（三条真实 UI Trial A/B/C 通过。未做 Feed / 协作 UI。两套 CSS 完整合并仍属 P1。）
 
 ### P1（开放试用后）
 
