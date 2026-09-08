@@ -5,6 +5,26 @@
 
 ---
 
+## 2026-09-08 — UI Recovery Audit（Public Alpha 产品面）
+
+### 状态
+
+`UI_RECOVERY_AUDIT_COMPLETE` / `not_pushed` / `not_released` / `product_code_unmodified`
+
+主题：此前 Figma / EXPERIENCE-REDESIGN 资产哪些仍适合今天；哪些因三核心重构失效；Public Alpha 最小表面是什么。只审计，不改 Electron / Figma / network。
+
+### 资产
+
+- Figma 源文件：**当前树 NOT FOUND**；git 历史 FOUND：`https://www.figma.com/design/uvAnPLjmU62XIy7GhlK7jP`（09-04 审计板，非组件原型）、FigJam `https://www.figma.com/board/MzhFrPO0Wctlk3qSCcEAEx`（01A 四主栏）。无 node id。
+- 视觉语言 FOUND：`styles.css` EXPERIENCE-REDESIGN-01B-B5 + `public-trial.css`。
+- 裁决：**RECOVER_AND_ADAPT**。
+
+### 文档
+
+[`docs/refoundation/05-UI-RECOVERY-AUDIT.md`](docs/refoundation/05-UI-RECOVERY-AUDIT.md)。03 下一任务改为 `DIGITALME-UI-PUBLIC-ALPHA-SURFACE-01`（NOT STARTED）。
+
+---
+
 ## 2026-09-08 — Distributed Personal Selection 第一真实薄片
 
 ### 状态
