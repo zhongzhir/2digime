@@ -139,18 +139,25 @@ Phase 1 Digital Self、Phase 2 Talk 主链、Phase 3 协作地基仍然有效，
 
 ## 2. 下一开发任务
 
-**任务名：** `DIGITALME-PUBLIC-ALPHA-WINDOWS-CANDIDATE-01`
+**任务名：** 干净 Windows 机复验已固化 ZIP（同一 SHA256）
 **状态：** `NOT STARTED`
-**阶段：** `PUBLIC ALPHA P0 DOCS READY`。Public Alpha **尚未发布**。发布 Gate 仍见 [`06-PUBLIC-ALPHA-READINESS.md`](./06-PUBLIC-ALPHA-READINESS.md)。
-**裁决：** 对外 README / 试用说明已换代。禁止把 05 的 P1 升成发布前大完善。
+**阶段：** `PUBLIC_ALPHA_WINDOWS_CANDIDATE_LIMITED`。包已打出，**尚未**干净机 zero-start。Public Alpha **尚未发布**。
+**禁止：** 重打包装却沿用旧 hash；把本机构建机预验收当成 ACCEPTED；做 P1 / Computer Use / Feed。
+
+**已固化 Candidate（不得当新包混用）：**
+
+```text
+SOURCE_SHA  e3307519f4de4bcbee87e4278e86c697ee1806f5
+FILE        兔机米-0.1.0-win-x64.zip
+SHA256      5dedd6bc3882ec664ec8b78a2fecb123e9e6b93fa60bac653661191a3eef858d
+```
 
 **本轮指针：**
 
-1. ~~重写公开 README / 试用说明~~ **DONE**（`PUBLIC_ALPHA_DOCS_ACCEPTED`）。  
-2. `npm run build:packaged` 从当前 Authority 打 Windows x64 ZIP。  
-3. 陌生 Windows 机验证：解压 → 连接 AI → Talk → 数字之我 → **无 USER_EXISTING Coding Agent** 的做事。  
-4. `NEW_PUBLIC_BASELINE`：tag 归档 `origin/main`（`a723037`）→ 在 Authority `merge -s ours origin/main` → fast-forward 公开 main。禁止直接 merge origin/main、禁止 force push。  
-5. 然后才是 push / tag `v0.1.0-public-alpha` / GitHub Release。  
+1. ~~公开 README / 试用说明~~ DONE。  
+2. ~~`npm run build:packaged`~~ DONE（上述 ZIP）。  
+3. **NEXT：** 全新 Windows VM / 另一台无 Coding Agent 的机器：只传 ZIP + SHA256 → 解压双击 → 连接 AI → Talk → 数字之我 → 无 USER_EXISTING 的 HTML 主题任务。  
+4. 通过后才 `NEW_PUBLIC_BASELINE` 与 `DIGITALME-PUBLIC-ALPHA-PUBLISH-01`。  
 
 已接受：Public Alpha Readiness 审计（06）；`PUBLIC_ALPHA_SURFACE_ACCEPTED`（05 P0，7 项）；`DIGITAL_SELF_NETWORK_EVOLUTION_ACCEPTED`（04 §15）；UI Recovery Audit（05）；`DISTRIBUTED_PERSONAL_SELECTION_ACCEPTED`；substrate 审计（04 §13）；`ZERO_START_CODING_TALK_ACCEPTED`（`24e1ce9`）；`STRATEGIC_ALIGNMENT_ACCEPTED` / `EXECUTION_TRUTH_RESTORED` / `CODING_CAPABILITY_REAL_AND_INTEGRATED`。
 

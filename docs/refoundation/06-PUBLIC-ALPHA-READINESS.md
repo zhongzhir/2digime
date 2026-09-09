@@ -306,16 +306,42 @@ PUBLIC_SECRET_GATE = PASS
 
 ---
 
-## 12. 总裁决
+## 12. 总裁决（Readiness 审计当时）
 
 ```text
 PUBLIC_ALPHA_READY_AFTER_P0_FIXES
 ```
 
-产品主链（Talk / Digital Self / 诚实做事 / 分布式选择）在 Candidate 上成立。挡住「现在就公开 Release」的是：README 换代、公开 main 换代方法、Windows 包 + 干净机、以及宣称 zero-start 所需的无 Codex 验证。
+产品主链在 Authority 上成立。挡住公开 Release 的是：README（已由后续 P0 docs 任务换代）、公开 main 换代、Windows 包 + **干净机** zero-start。
 
 ---
 
-## 13. 本轮未做
+## 13. Windows Candidate 01（2026-09-09）
 
-未改产品代码。未 push。未 release。未实际执行 main 替换。未打包装。
+**SOURCE_SHA：** `e3307519f4de4bcbee87e4278e86c697ee1806f5`  
+**命令：** `npm run build:packaged`  
+**产物：** `release-staging/v2-20260909T012005Z-e3307519/兔机米-0.1.0-win-x64.zip`  
+**内部别名：** `2digime-public-alpha-win-x64-e3307519.zip`（未改 builder 文件名）  
+**大小：** 115296555 bytes  
+**SHA256：** `5dedd6bc3882ec664ec8b78a2fecb123e9e6b93fa60bac653661191a3eef858d`  
+**CANDIDATE_CONTENT_GATE：** PASS（`兔机米.exe`、Electron assets、`试用说明.txt`、`app.asar`；无 .env / 凭证 / evidence / `scripts/_` / `.git` / 捆绑 OpenCode）
+
+构建机 packaged 预验收（**不是干净机**）：启动欢迎「连接 AI」；UI 粘贴 DeepSeek 密钥后「已连接」；三入口正确；Talk 无厂商词泄漏；Digital Self 写入 `self.json` 且「没有长期记忆」未复现；HTML 项目出现真实明暗主题与结果卡。本机有 Node/Git/Cursor/OpenCode/AtomCode/Python，`userData/runtimes` 未出现 acquire 目录。`npm run smoke:packaged` 因脚本使用 `--user-data-dir` 而主进程只认 `DIGITALME_V2_USER_DATA` 而误报未启动——双击默认走 `%APPDATA%\digitalme-v2`，不是用户 P0。
+
+本环境无 Windows Sandbox；Hyper-V 查询需提升权限。**未做干净 Windows 机 Trial。** 因此不能给 `PUBLIC_ALPHA_WINDOWS_CANDIDATE_ACCEPTED`。
+
+```text
+WINDOWS_PACKAGE = ACCEPTED
+CLEAN_MACHINE_STARTUP = LIMITED（未执行）
+CLEAN_MACHINE_DIGITAL_SELF = LIMITED（未执行）
+CLEAN_MACHINE_ZERO_START_CODING = LIMITED（未执行）
+PUBLIC_ALPHA_WINDOWS_CANDIDATE_LIMITED
+```
+
+ZIP 不入库。证据：`build/evidence/public-alpha-windows-candidate-01/`（gitignore）。后续干净机必须用 **同一 SHA256**，不得重打包装后沿用旧 hash。
+
+---
+
+## 14. 本轮未做
+
+未 push。未 release。未执行公开 main 替换。未在干净机上验收。

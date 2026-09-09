@@ -5,6 +5,18 @@
 
 ---
 
+## 2026-09-09 — Windows Public Alpha Candidate
+
+### 状态
+
+`PUBLIC_ALPHA_WINDOWS_CANDIDATE_LIMITED` / `not_pushed` / `not_released` / `product_code_unmodified`
+
+从 `e3307519` 执行 `npm run build:packaged`。ZIP `兔机米-0.1.0-win-x64.zip`，SHA256 `5dedd6bc3882ec664ec8b78a2fecb123e9e6b93fa60bac653661191a3eef858d`。内容门 PASS。构建机 packaged 预验收：启动、连接 AI、Talk、Digital Self、HTML 主题修改与结果卡。本机有开发工具与 Coding Agent，不能证明 zero-start。无 Windows Sandbox，未做干净机。ZIP 不入库。
+
+下一任务：用**同一 hash** 在干净 Windows 机复验，不要发布。
+
+---
+
 ## 2026-09-09 — Public Alpha P0 对外文档
 
 ### 状态
