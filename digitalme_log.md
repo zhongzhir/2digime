@@ -5,6 +5,18 @@
 
 ---
 
+## 2026-09-09 — Public Alpha P0 对外文档
+
+### 状态
+
+`PUBLIC ALPHA P0 DOCS READY` / `PUBLIC_ALPHA_DOCS_ACCEPTED` / `not_pushed` / `not_released` / `product_code_unmodified`
+
+主题：按今天的三核心重写根 README（中/英）与 Windows 试用说明。退出「转为任务 / 独立做事中心 / 协作第三核心 / Work Runtime 主路径」。Windows-only；macOS 不宣称。未写死不存在的安装包。未发布。
+
+下一任务：`DIGITALME-PUBLIC-ALPHA-WINDOWS-CANDIDATE-01`。
+
+---
+
 ## 2026-09-08 — Public Alpha Readiness 审计
 
 ### 状态

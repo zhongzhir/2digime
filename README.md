@@ -1,115 +1,119 @@
-# 2digime — Digital Me
+# 2digime（兔机米）
 
-**Digital Me** is an **Owner-controlled personal digital subject** that represents *you*, does things *for you*, and collaborates *with you* — built on an **AI-native architecture** that orchestrates real external coding agents and read-only tools under your explicit control.
+[English](README.md) · [中文](README.zh-CN.md)
 
-> **Current stage: experimental preview.** This is not an MVP, not production-ready, and not a market 95th-percentile product. It is a working research-grade baseline we are opening for early evaluation and review.
+**Your digital self.**
+
+Tell 兔机米 what you want to do. It understands your goal, and when needed finds and organizes the right AI capabilities to complete the work. Through ongoing conversation, real doing, choices, and connecting with the world, it keeps getting to know you, accepts your corrections, and grows into a digital self that is closer to you.
+
+> **Public Alpha** · early-stage · open source · **Windows x64 first**  
+> Not production-ready. Not a claim of market completeness.
 
 ---
 
-## What is 2digime?
+## Belonging to you · Getting things done · Connecting with the world
 
-2digime is the public project name for **Digital Me** — a desktop application where you build a personal "digital you": a growing record of what you have confirmed about yourself, a place to talk and do real work, and an experimental way to collaborate with another Digital Me on another machine.
+These are one subject, not three products.
 
-It is not another chatbot, and it is not a thin wrapper over one AI model. Digital Me is an **Owner-controlled agent layer** that:
+### Belonging to you
 
-- represents **you** (the Owner), not a generic assistant;
-- **does** real tasks (including editing code in an authorized project folder) using real external coding agents or your connected model;
-- **learns and grows** from what you confirm, without silently rewriting who you are;
-- collaborates, experimentally, with another Digital Me under authorization.
+There is one Digital Self: a living record of how 2digime currently understands you. It learns from talk and from real work. Each understanding has a source. You can open **数字之我**, see it, correct it, or delete it. What you state explicitly has the highest authority.
 
-## Why is this not a normal AI Agent?
+The long-term aim is to keep approaching the real you — not to freeze a static profile, and not to claim a perfect copy or that it already knows everything.
 
-A normal AI agent is a generic, stateless model that answers whoever asks. Digital Me is different in four ways:
+### Getting things done
 
-1. **Owner-controlled identity.** There is exactly one authoritative record of *your* subject — facts you confirmed, preferences, boundaries, and growth events. Nothing external writes to "who you are" without your confirmation.
-2. **You are the actor; the model is a capability.** Digital Me chooses, authorizes, calls, verifies, and feeds results back. It does not re-implement coding agents or research tools; it orchestrates real ones inside a scope you authorize.
-3. **Honest failure.** When a capability is not connected (model, code executor, or collaboration peer), Digital Me stops and tells you — it never pretends it succeeded.
-4. **A growth loop.** Completed work, verified facts, and adopted artifacts feed back into your subject so the system gets more useful over time.
+You do not need to assemble an AI toolchain first.
 
-## What can it do today?
+1. Tell 兔机米 the goal, in the same conversation.  
+2. It judges what capability is needed.  
+3. It calls — or obtains — a mature AI, agent, or tool.  
+4. It executes in the scope you authorized.  
+5. It checks the result.  
+6. The outcome returns to the same conversation.
 
-- **对话 (Talk):** natural conversation; can be turned into a task. Confirmed personal facts are honored; when facts are missing it does not fabricate.
-- **做事 (Do):** describe a task, add a project folder, confirm the scope, and Digital Me edits code / produces artifacts using a real external coding agent or your connected model, then verifies the result independently and lets you adopt it.
-- **数字之我 (Digital You):** review and build your confirmed personal subject.
-- **协作 (Collaborate, experimental):** connect to another Digital Me on another computer, exchange encrypted messages, discover opportunities, and propose collaboration. **This is not yet full remote delivery** — no large-file transfer, no full remote task fulfillment, no multi-party, no payments.
+Talk is the only everyday entry. Doing is not a second app or a “turn this into a task” workflow.
 
-## How to try it (Windows Preview)
+Verified example: on programming work, 2digime can obtain professional coding ability without a pre-installed coding agent, then make real edits and run checks.
 
-Download the **Windows x64 Preview ZIP** from the [Releases](https://github.com/zhongzhir/2digime/releases) page:
+### Connecting with the world
 
-1. Unzip anywhere.
-2. Double-click `兔机米.exe`. No installation needed.
-3. First open: go to **设置 (Settings)** and connect a model (bring your own API key). Until connected, talk and do will not pretend to work.
-4. Uninstall = delete the folder. Your key stays on your machine.
+Every 2digime can be an intelligent network node that belongs to a real person.
 
-> The Windows ZIP is **unsigned** and **experimental** (not an MVP). Your operating system may warn about an unsigned app; choose "run anyway" only if you trust the source.
+What has been verified: a Relay can offer the **same** candidate pool and transport; it does **not** own your profile and does **not** make the final personalized ranking. Each Digital Self judges locally. Different selves can make different, explainable choices. You can change your Digital Self and thereby change how selection works.
 
-## Why is the architecture "AI-native"?
+**The final say over “what I should see” moves from a central platform algorithm back to your own digital subject.**
 
-The design is not a chat app bolted onto a model. It is a **control layer** with a single authoritative domain model:
+Relays, search, storage, and models still matter — as **network service providers**, not as the default owners of your selection and distribution.
 
-```
-Subject Core   — who you are (facts + growth events, authoritative)
-Work Runtime   — task → context snapshot → capability → job → artifact → feedback
-Capability     — models / coding agents / read-only tools via one adapter contract
-Collaboration  — subject-to-subject authorization (experimental)
-App Shell      — thin Electron shell; domain is Electron-free and testable
-```
+This Alpha does **not** ship a full content feed, follow/subscribe graph, open social network, marketplace, or payments. Those are not current UI. Computer Use is not part of this Alpha.
 
-Principles that make it AI-native:
+---
 
-- **One execution path.** A task flows through one official pipeline; no ad-hoc multi-entry legacy paths.
-- **Capabilities are pluggable.** Adding a capability = adding an adapter, not rewriting the runtime.
-- **UI is a projection.** The renderer shows derived views; it never holds separate facts.
-- **Fail-closed security.** Paths are validated before any write; keys stay in a local encrypted store; evidence of sensitive operations is kept out of public output.
+## Public Alpha status
 
-See [docs/architecture](docs/architecture/) for the details.
-
-## What real stage is it in?
-
-| Aspect | Status |
+| | |
 |---|---|
-| Product status | **Experimental preview / research baseline** |
-| MVP / production ready | **No** |
-| Market 95th-percentile claim | **No** (an internal candidate gate exists; not claimed met) |
-| Full autonomous agent | **No** (Owner confirms and authorizes before actions) |
-| Mature collaboration network | **No** (collaboration is experimental) |
-| Owner runtime acceptance | Main path (talk / do / adopt / growth) accepted by the Owner on the integrated baseline |
-| Pre-existing known test failures | A few unit tests fail on this baseline (documented in the repo) |
+| Current Public Alpha target | **Windows x64** |
+| macOS | Not yet verified for Public Alpha. Do not treat this project as macOS-ready. |
+| Linux | Not claimed |
+| Stage | Early trial |
 
-This repository is opened early — for competition review, for early trial, and for honest evaluation of where an Owner-controlled digital subject can go.
+When a Public Alpha package is published, download the latest **Windows x64** build from [GitHub Releases](https://github.com/zhongzhir/2digime/releases). This repository page does not currently point at a specific installer file.
 
-## Repository layout
+Everyday use: unzip, double-click `兔机米.exe`, connect an AI in **设置**, then talk in **与兔机米**. No Node, Git, or developer tools required for that path.
+
+The Windows package is **not code-signed**. Windows may show an unknown-publisher warning. Only continue if you obtained the file from this project’s official Releases and you trust that source.
+
+Full trial notes (for ordinary users, in Chinese): [docs/windows-preview/README.md](docs/windows-preview/README.md).
+
+---
+
+## Why 2digime
+
+Most AI products are a generic model plus a platform that ranks what you see. 2digime is different in three durable ways:
+
+- **Digital Self** — identity, memory, and corrections stay yours, on your machine.  
+- **AI Capability** — the product integrates mature models and agents instead of competing with them by reinventing coding, search, or computer use.  
+- **Digital Subject Network** — candidates can come from the network; **personal selection stays with your Digital Self**.
+
+---
+
+## Architecture principles
+
+- **AI First** — language understanding and tool choice belong to the model, not a keyword router.  
+- **Build-vs-Integrate** — prefer mature agents, tools, and services; do not rebuild them here.  
+- **Local-first / user-owned** — keys and Digital Self stay on the user’s computer.  
+- **Platform-neutral** — capability providers are replaceable.  
+- **Relay is a service, not a recommendation authority.**  
+- **Open source** — [Apache-2.0](LICENSE).
+
+---
+
+## Feedback
+
+The most useful Public Alpha reports are real failures, misunderstandings, and moments that feel unnatural. Please use [GitHub Issues](https://github.com/zhongzhir/2digime/issues).
+
+---
+
+## Repository (developers)
 
 ```
-src/             domain layer (TypeScript, Electron-free)
-electron/        app shell (main / preload / renderer)
-scripts/         build, preflight, and trial smoke tooling
-fixtures/        small fixtures used by unit tests
-relay-service/   experimental encrypted mailbox (self-hostable)
-reference-agents/  reference A2A counterpart for collaboration testing
-trial/           Windows trial note bundled into the ZIP
-docs/architecture/  architecture explanation
-docs/competition/   competition-ready generic materials
-docs/windows-preview/  Windows preview usage
+src/           domain
+electron/      desktop shell
+relay-service/ optional relay (service, not a ranking authority)
+trial/         short note bundled into the Windows ZIP
+docs/refoundation/  product constitution and current plan
 ```
 
-## Building from source
+Build from source (developers only — not required to try a release ZIP):
 
 ```bash
 npm install
-npm run build        # tsc -> dist/
-npm run smoke        # domain smoke
-npm run test         # unit tests
-npm run preflight:electron
-npm run dev          # build + preflight + launch UI
-npm run build:packaged   # build the Windows x64 ZIP
+npm run build
+npm run build:packaged   # Windows x64 ZIP
 ```
-
-## License
-
-[Apache-2.0](LICENSE). See the license file for full terms.
 
 ---
 
-*Digital Me — represents you, does things for you, collaborates with you. Experimental; built under Owner control.*
+*2digime / 兔机米 — belonging to you · getting things done · connecting with the world. Public Alpha; not production-ready.*

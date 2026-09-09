@@ -1,5 +1,7 @@
 # Architecture
 
+> **Historical.** This page describes an earlier Work Runtime / collaboration framing. Current Public Alpha positioning is the root [README](../../README.md) / [README.zh-CN.md](../../README.zh-CN.md): belonging to you · getting things done · connecting with the world. Talk is the everyday entry. Do not use this file as the newcomer guide.
+
 Digital Me is an **Owner-controlled, AI-native control layer**. The most important idea is the separation between the **Owner** (you), the **orchestrator** (Digital Me, playing an internal "CTO" role over your work), and the **capabilities** it calls (models, coding agents, and read-only tools).
 
 ```

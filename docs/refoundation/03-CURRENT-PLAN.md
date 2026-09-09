@@ -139,14 +139,14 @@ Phase 1 Digital Self、Phase 2 Talk 主链、Phase 3 协作地基仍然有效，
 
 ## 2. 下一开发任务
 
-**任务名：** Public Alpha P0 收口 → Windows 包 → 干净机 → 公开 main 换代（见 06）
-**状态：** `NOT STARTED`（审计已完成，发布未开始）
-**阶段：** Public Alpha **尚未发布**。产品面 P0 已 ACCEPTED；发布 Gate 见 [`06-PUBLIC-ALPHA-READINESS.md`](./06-PUBLIC-ALPHA-READINESS.md)。
-**裁决：** `PUBLIC_ALPHA_READY_AFTER_P0_FIXES`。禁止把 05 的 P1 升成发布前大完善。
+**任务名：** `DIGITALME-PUBLIC-ALPHA-WINDOWS-CANDIDATE-01`
+**状态：** `NOT STARTED`
+**阶段：** `PUBLIC ALPHA P0 DOCS READY`。Public Alpha **尚未发布**。发布 Gate 仍见 [`06-PUBLIC-ALPHA-READINESS.md`](./06-PUBLIC-ALPHA-READINESS.md)。
+**裁决：** 对外 README / 试用说明已换代。禁止把 05 的 P1 升成发布前大完善。
 
-**本轮指针（只按此序，本文件不执行）：**
+**本轮指针：**
 
-1. 重写公开 README / 试用说明（Windows-only；对齐 00「属于我 · 能做事 · 连接世界」）。  
+1. ~~重写公开 README / 试用说明~~ **DONE**（`PUBLIC_ALPHA_DOCS_ACCEPTED`）。  
 2. `npm run build:packaged` 从当前 Authority 打 Windows x64 ZIP。  
 3. 陌生 Windows 机验证：解压 → 连接 AI → Talk → 数字之我 → **无 USER_EXISTING Coding Agent** 的做事。  
 4. `NEW_PUBLIC_BASELINE`：tag 归档 `origin/main`（`a723037`）→ 在 Authority `merge -s ours origin/main` → fast-forward 公开 main。禁止直接 merge origin/main、禁止 force push。  
