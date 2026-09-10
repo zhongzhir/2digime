@@ -32,14 +32,16 @@
 
 ## 最简单开始方式
 
-1. 从 [GitHub Releases](https://github.com/zhongzhir/2digime/releases/tag/v0.1.0-public-alpha) 下载 ZIP  
-   - GitHub 资源名：`tujimi-0.1.0-public-alpha-win-x64.zip`  
-   - 已验证包身份：`兔机米-0.1.0-public-alpha-win-x64.zip`（同一文件字节）
-2. 解压到任意文件夹
-3. 运行 `兔机米.exe`
-4. 在设置中连接支持的 AI
-5. 回到「与兔机米」，直接告诉它你想做什么
-6. 需要处理本地资料时，通过「添加文件 / 添加文件夹」交给它
+**Windows 用户优先下载 Installer（setup.exe）。** ZIP 便携版仍可作为补充下载。
+
+1. 从 [GitHub Releases](https://github.com/zhongzhir/2digime/releases/tag/v0.1.0-public-alpha) 下载  
+   - **优先：** Windows Installer（`兔机米-0.1.0-public-alpha-win-x64-setup.exe` / GitHub 资源名可能为 `tujimi-…-setup.exe`）  
+   - **补充：** ZIP 便携版（GitHub 资源名：`tujimi-0.1.0-public-alpha-win-x64.zip`；已验证包身份：`兔机米-0.1.0-public-alpha-win-x64.zip`）
+2. Installer：双击安装 → 桌面或开始菜单打开「兔机米」  
+   ZIP：解压到任意文件夹 → 运行 `兔机米.exe`
+3. 进入「与兔机米」后可先浏览；若尚未连接 AI，发送消息时会出现提示，并可用「连接 AI」进入设置
+4. 在设置中连接支持的 AI 后，回到「与兔机米」，直接告诉它你想做什么
+5. 需要处理本地资料时，通过「添加文件 / 添加文件夹」交给它
 
 不需要安装 Node、Git 或其它开发工具。
 

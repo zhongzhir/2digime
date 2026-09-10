@@ -75,6 +75,38 @@
   function setNotice(text) {
     const el = $('chat-status');
     if (el) el.textContent = text || '';
+    syncConnectAiAction(text);
+  }
+
+  function needsConnectAiNotice(text) {
+    return /需要先连接 AI 能力/.test(String(text || ''));
+  }
+
+  function syncConnectAiAction(text) {
+    const btn = $('btn-talk-connect-ai');
+    if (!btn) return;
+    const show = needsConnectAiNotice(text);
+    btn.hidden = !show;
+    if (show) btn.removeAttribute('hidden');
+    else btn.setAttribute('hidden', '');
+  }
+
+  function openAiSettings() {
+    if (typeof window.openDigitalMeAiSettings === 'function') {
+      window.openDigitalMeAiSettings();
+      return;
+    }
+    const openBtn = document.getElementById('btn-open-settings');
+    if (openBtn) openBtn.click();
+  }
+
+  function bindConnectAi() {
+    const btn = $('btn-talk-connect-ai');
+    if (!btn || btn.dataset.bound) return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', () => {
+      openAiSettings();
+    });
   }
 
   function setCancelVisible(show) {
@@ -485,6 +517,7 @@
     bindAutosize();
     bindComposerKeys();
     bindAttach();
+    bindConnectAi();
     void refresh();
   }
 

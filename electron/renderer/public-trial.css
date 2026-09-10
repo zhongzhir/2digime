@@ -120,8 +120,10 @@ input[type=checkbox], input[type=radio] { width: auto; flex: none; }
 .talk-attach-menu-body button { width: 100%; text-align: left; border: 0; }
 .composer-actions { justify-content: flex-end; align-items: center; gap: 8px; margin-top: 4px; }
 .composer-hint { margin-right: auto; color: var(--muted); font-size: 12px; }
-#chat-status { margin: 8px 0 0; }
+.talk-connect-ai-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 8px; min-height: 0; }
+.talk-connect-ai-row #chat-status { margin: 0; flex: 1 1 auto; }
 #chat-status:empty { display: none; }
+#btn-talk-connect-ai { flex: 0 0 auto; }
 .talk-attach-chips { margin: 0 0 12px; flex-wrap: wrap; }
 .talk-attach-chip { max-width: 100%; min-width: 0; background: var(--accent-soft); border-radius: 8px; }
 .talk-attach-chip span { overflow-wrap: anywhere; }

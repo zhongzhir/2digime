@@ -1,10 +1,10 @@
 # Digital Me V2 packaged build (electron-builder)
 # Output directory is overridden by scripts/build-packaged.cjs per buildId.
 #
-# SECURITY/FP NOTE (2026-08-03):
-# electron-builder "portable" is an unsigned NSIS self-extract wrapper and is a
-# known heuristic AV false-positive surface (e.g. 360 HEUR/QVM*). Portable is
-# paused as the Owner delivery format. Prefer win-unpacked ZIP.
+# Windows delivery:
+# - Primary: NSIS per-user installer (setup.exe)
+# - Secondary: ZIP portable (win-unpacked zip)
+# electron-builder "portable" target remains paused (unsigned self-extract AV surface).
 
 appId: local.digitalme.v2
 productName: 兔机米
@@ -30,13 +30,35 @@ extraFiles:
 extraMetadata:
   main: electron/main.cjs
 win:
+  # Avoid winCodeSign (symlink privilege failures on typical Windows).
+  # Icon / ProductName are applied in scripts/after-pack-win-icon.cjs via rcedit.
   signAndEditExecutable: false
+  icon: electron/build-resources/icon.ico
   target:
+    - target: nsis
+      arch:
+        - x64
     - target: zip
       arch:
         - x64
-  artifactName: ${productName}-${version}-win-x64.zip
-# portable target intentionally omitted (paused for Owner delivery).
+  # ZIP / generic win artifact (no -setup). NSIS overrides below.
+  artifactName: ${productName}-${version}-public-alpha-win-x64.${ext}
+afterPack: scripts/after-pack-win-icon.cjs
+nsis:
+  oneClick: true
+  perMachine: false
+  allowElevation: false
+  allowToChangeInstallationDirectory: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: 兔机米
+  uninstallDisplayName: 兔机米
+  deleteAppDataOnUninstall: false
+  installerIcon: electron/build-resources/icon.ico
+  uninstallerIcon: electron/build-resources/icon.ico
+  installerHeaderIcon: electron/build-resources/icon.ico
+  include: installer.nsh
+  artifactName: ${productName}-${version}-public-alpha-win-x64-setup.${ext}
 mac:
   artifactName: ${productName}-${version}-mac-${arch}.zip
   target:

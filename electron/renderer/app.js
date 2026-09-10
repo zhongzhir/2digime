@@ -713,7 +713,7 @@
     }
   }
 
-  function openSettings() {
+  function openSettings(opts) {
     returnView = currentView === "settings" ? returnView : currentView;
     if (activeNav !== "settings") {
       returnNav = activeNav === "subject" ? "subject" : "chat";
@@ -733,7 +733,26 @@
       });
     }
     if (advanced && advanced.open) void refreshExecutorCapabilityUi(false);
+    if (opts && opts.focusAi) {
+      const target =
+        document.querySelector(".settings-model") ||
+        document.getElementById("model-api-key") ||
+        document.getElementById("model-provider");
+      if (target && typeof target.scrollIntoView === "function") {
+        requestAnimationFrame(() => {
+          target.scrollIntoView({ block: "start", behavior: "smooth" });
+        });
+      }
+      const keyInput = document.getElementById("model-api-key");
+      if (keyInput && typeof keyInput.focus === "function") {
+        setTimeout(() => keyInput.focus(), 50);
+      }
+    }
   }
+
+  window.openDigitalMeAiSettings = function openDigitalMeAiSettings() {
+    openSettings({ focusAi: true });
+  };
 
   const REMOTE_CONNECT_FAIL =
     "无法连接研究分析能力，请确认服务正在运行并检查地址。";

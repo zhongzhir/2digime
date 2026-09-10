@@ -29,6 +29,7 @@
     "electron": "^32.0.0",
     "electron-builder": "^25.1.8",
     "playwright": "^1.49.1",
+    "rcedit": "^5.0.1",
     "typescript": "^5.9.3"
   }
 }

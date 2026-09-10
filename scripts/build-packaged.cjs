@@ -125,7 +125,8 @@ function main() {
     console.error("electron-builder 未安装");
     process.exit(1);
   }
-  run(process.execPath, [ebCli, "--win", "zip", "--x64", "--config", "electron-builder.yml"], {
+  // Prefer config targets (nsis + zip). Do not pass a single target override.
+  run(process.execPath, [ebCli, "--win", "--x64", "--config", "electron-builder.yml"], {
     env: {
       ...process.env,
       CSC_IDENTITY_AUTO_DISCOVERY: "false",
@@ -146,7 +147,10 @@ function main() {
   fs.writeFileSync(path.join(staging, "build-meta.json"), `${JSON.stringify(meta, null, 2)}\n`, "utf8");
 
   const allFiles = walkFiles(staging);
-  const zip = allFiles.find((f) => /.*-win-x64\.zip$/i.test(f));
+  const setup = allFiles.find((f) => /.*-win-x64-setup\.exe$/i.test(path.basename(f)));
+  const zip = allFiles.find(
+    (f) => /.*-win-x64\.zip$/i.test(f) && !/-setup\.zip$/i.test(path.basename(f)),
+  );
   const exe =
     allFiles.find((f) => /兔机米\.exe$/i.test(path.basename(f)) && /win-unpacked/i.test(f)) ||
     allFiles.find((f) => /兔机米\.exe$/i.test(path.basename(f))) ||
@@ -156,7 +160,11 @@ function main() {
     buildId,
     gitHead: meta.gitHead,
     staging,
-    deliveryFormat: "zip",
+    deliveryFormat: "nsis+zip",
+    primaryDelivery: "nsis",
+    setup: setup
+      ? { path: path.relative(root, setup), sha256: sha256File(setup), bytes: fs.statSync(setup).size }
+      : null,
     zip: zip
       ? { path: path.relative(root, zip), sha256: sha256File(zip), bytes: fs.statSync(zip).size }
       : null,

@@ -13,17 +13,20 @@
 
 ### Download and start (Windows x64)
 
-1. Download [`tujimi-0.1.0-public-alpha-win-x64.zip`](https://github.com/zhongzhir/2digime/releases/download/v0.1.0-public-alpha/tujimi-0.1.0-public-alpha-win-x64.zip) from [GitHub Releases](https://github.com/zhongzhir/2digime/releases/tag/v0.1.0-public-alpha)  
-   (validated package identity: `兔机米-0.1.0-public-alpha-win-x64.zip`; same bytes).  
-2. Unzip.  
-3. Run `兔机米.exe`.  
-4. Connect a supported AI in **设置**.  
-5. Return to **与兔机米** and tell it what you want done.  
-6. For local files, use **添加文件 / 添加文件夹**.
+**Prefer the Windows Installer; ZIP portable is secondary.**
+
+1. From [GitHub Releases](https://github.com/zhongzhir/2digime/releases/tag/v0.1.0-public-alpha) download:  
+   - **Preferred:** `兔机米-0.1.0-public-alpha-win-x64-setup.exe` (Installer)  
+   - **Secondary:** [`tujimi-0.1.0-public-alpha-win-x64.zip`](https://github.com/zhongzhir/2digime/releases/download/v0.1.0-public-alpha/tujimi-0.1.0-public-alpha-win-x64.zip) (validated identity: `兔机米-0.1.0-public-alpha-win-x64.zip`)  
+2. Installer: double-click to install, then open **兔机米** from Desktop or Start Menu. ZIP: unzip and run `兔机米.exe`.  
+3. You can browse **与兔机米** first; if AI is not connected, sending a message shows a notice with **连接 AI** to open Settings.  
+4. Connect a supported AI in **设置**, then tell it what you want done.  
+5. For local files, use **添加文件 / 添加文件夹**.
 
 Trial notes for ordinary users: [PUBLIC-ALPHA.md](PUBLIC-ALPHA.md)
 
-**SHA256:** `adf131a773d67c3717159bff57ff8034060cca4827b2fd87b99016f3f0b46e82`
+**Published ZIP SHA256:** `adf131a773d67c3717159bff57ff8034060cca4827b2fd87b99016f3f0b46e82`  
+(Installer candidate publishes only after Owner decision; do not rewrite the existing `v0.1.0-public-alpha` assets yet.)
 
 The Windows package is **not code-signed**. Windows may show an unknown-publisher warning. Continue only if you obtained the file from this project’s official Releases and you trust that source.
 
