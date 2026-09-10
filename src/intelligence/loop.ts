@@ -554,6 +554,7 @@ export async function runTalkTurn(input: {
       ok: result.ok,
       summary: result.summary,
       ...(failureReason ? { failureReason } : {}),
+      ...(result.safeDetail ? { safeDetail: result.safeDetail } : {}),
       ...(outputs.length ? { producedOutputs: outputs } : {}),
       ...(lastPath ? { outputPath: lastPath } : {}),
     });

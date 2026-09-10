@@ -280,11 +280,18 @@ export function createAcquiredCodingExecutorAdapter(
               runtimeRoot: options.runtimeRoot,
               signal: ctx.signal,
             });
-        if (acquired.status !== 'ready' || !acquired.runtimePath) {
-          throw Object.assign(new Error('当前还不能自动完成代码修改。'), {
-            stage: 'capability' as const,
-            actionable: '当前还不能自动完成代码修改。请先确认已连接聊天模型后再试。',
-          });
+        if (acquired.status !== 'ready' || !acquired.runtimePath || acquired.ok === false) {
+          throw Object.assign(
+            new Error('这次没能准备好完成任务需要的专业能力。兔机米没有改动你的项目。'),
+            {
+              stage: 'capability' as const,
+              actionable: '这次没能准备好完成任务需要的专业能力。兔机米没有改动你的项目。',
+              failureKind: acquired.failureKind,
+              safeDetail: acquired.safeDetail || acquired.detail,
+              acquireSource: acquired.source,
+              sourceFailures: acquired.sourceFailures,
+            },
+          );
         }
         const bridged = await mapChatModelToProviderEnv({
           ...(ctx.secrets ? { secrets: ctx.secrets } : {}),
@@ -294,6 +301,8 @@ export function createAcquiredCodingExecutorAdapter(
           throw Object.assign(new Error('当前还不能自动完成代码修改。'), {
             stage: 'capability' as const,
             actionable: '请先在设置中连接模型后再试。',
+            failureKind: 'MODEL FAILURE',
+            safeDetail: 'credential_bridge_unavailable',
           });
         }
         ctx.reportProgress('正在修改项目文件');

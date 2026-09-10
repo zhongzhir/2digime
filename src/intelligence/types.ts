@@ -32,6 +32,8 @@ export interface TalkExecution {
   producedOutputs?: string[];
   outputPath?: string;
   reviewNotes?: string;
+  /** 内部审计，不含密钥，不作为对用户的诊断文案。 */
+  safeDetail?: string;
 }
 
 export interface TalkThread {
@@ -74,6 +76,7 @@ export interface ProfessionalResult {
   producedOutputs?: string[];
   outputPath?: string;
   rawText?: string;
+  safeDetail?: string;
   /**
    * 运行态：这次返回只是给 2digime 综合用的证据，不是用户交付物。
    * 不落盘、不作为 Thread 完成条件。

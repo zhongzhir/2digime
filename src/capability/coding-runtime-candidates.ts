@@ -1,21 +1,42 @@
 /**
  * 成熟 Coding runtime 候选。OpenCode 是当前第一候选，不是产品架构。
  */
-import { createWriteStream, readdirSync, promises as fs } from 'node:fs';
-import * as http from 'node:https';
+import { readdirSync, promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import type { AcquireCandidate, AcquireContext, AcquireResult } from './acquire-capability';
+import {
+  failedAcquire,
+  readyAcquire,
+  type AcquireCandidate,
+  type AcquireContext,
+  type AcquireResult,
+  type AcquireSourceFailure,
+} from './acquire-capability';
+import { DownloadError, downloadVerifiedFile } from './http-download';
 import { hiddenSpawnSyncOptions } from '../execution/hidden-spawn';
+import {
+  OPENCODE_ASSET_NAME,
+  OPENCODE_ASSET_SHA256,
+  OPENCODE_CANDIDATE_ID,
+  OPENCODE_PINNED_VERSION,
+  defaultOpencodeSources,
+  type RuntimeAcquireSource,
+} from './coding-runtime-manifest';
 
-export const OPENCODE_CANDIDATE_ID = 'opencode-windows-cli';
-const OPENCODE_RELEASE_API = 'https://api.github.com/repos/anomalyco/opencode/releases/latest';
-const OPENCODE_ASSET = 'opencode-windows-x64.zip';
+export {
+  OPENCODE_CANDIDATE_ID,
+  OPENCODE_PINNED_VERSION,
+  OPENCODE_ASSET_NAME,
+  OPENCODE_ASSET_SHA256,
+} from './coding-runtime-manifest';
 
 export interface OpenCodeAcquireDeps {
-  downloadTo?: (url: string, dest: string, signal?: AbortSignal) => Promise<void>;
+  sources?: RuntimeAcquireSource[];
+  downloadTo?: typeof downloadVerifiedFile;
   extractZip?: (zipPath: string, destDir: string) => Promise<void>;
-  resolveAsset?: () => Promise<{ version: string; url: string }>;
+  probeVersion?: (exe: string) => string | null;
+  expectedSha256?: string;
+  expectedVersion?: string;
 }
 
 function findExe(dir: string): string | null {
@@ -36,69 +57,54 @@ function findExe(dir: string): string | null {
   return null;
 }
 
-function probeVersion(exe: string): string | null {
+export function probeOpencodeVersion(exe: string): string | null {
   const result = spawnSync(exe, ['--version'], hiddenSpawnSyncOptions({ encoding: 'utf8', timeout: 20_000 }));
   const text = `${result.stdout || ''}${result.stderr || ''}`.trim();
   return result.status === 0 && text ? text.split(/\r?\n/)[0]!.trim() : null;
 }
 
-async function defaultDownload(url: string, dest: string, signal?: AbortSignal): Promise<void> {
-  await fs.mkdir(path.dirname(dest), { recursive: true });
-  await new Promise<void>((resolve, reject) => {
-    const req = http.get(
-      url,
-      { headers: { 'User-Agent': '2digime', Accept: 'application/octet-stream' } },
-      (res) => {
-        if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          res.resume();
-          defaultDownload(res.headers.location, dest, signal).then(resolve, reject);
-          return;
-        }
-        if (res.statusCode !== 200) {
-          reject(new Error(`download_http_${res.statusCode || 0}`));
-          return;
-        }
-        const out = createWriteStream(dest);
-        res.pipe(out);
-        out.on('finish', () => out.close(() => resolve()));
-        out.on('error', reject);
-      },
-    );
-    req.on('error', reject);
-    if (signal) {
-      if (signal.aborted) req.destroy();
-      signal.addEventListener('abort', () => req.destroy(), { once: true });
-    }
-  });
+async function unlinkQuiet(file: string): Promise<void> {
+  try {
+    await fs.unlink(file);
+  } catch {
+    /* ignore */
+  }
 }
 
-async function defaultExtract(zipPath: string, destDir: string): Promise<void> {
+async function rmQuiet(dir: string): Promise<void> {
+  try {
+    await fs.rm(dir, { recursive: true, force: true });
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function defaultExtractZip(zipPath: string, destDir: string): Promise<void> {
   await fs.mkdir(destDir, { recursive: true });
   const { execFileSync } = require('node:child_process') as typeof import('node:child_process');
   execFileSync(
     'powershell.exe',
-    ['-NoProfile', '-Command', `Expand-Archive -LiteralPath '${zipPath.replace(/'/g, "''")}' -DestinationPath '${destDir.replace(/'/g, "''")}' -Force`],
+    [
+      '-NoProfile',
+      '-Command',
+      `Expand-Archive -LiteralPath '${zipPath.replace(/'/g, "''")}' -DestinationPath '${destDir.replace(/'/g, "''")}' -Force`,
+    ],
     { windowsHide: true, timeout: 120_000 },
   );
 }
 
-async function defaultResolveAsset(): Promise<{ version: string; url: string }> {
-  const raw = await new Promise<string>((resolve, reject) => {
-    http
-      .get(OPENCODE_RELEASE_API, { headers: { 'User-Agent': '2digime', Accept: 'application/vnd.github+json' } }, (res) => {
-        const chunks: Buffer[] = [];
-        res.on('data', (c) => chunks.push(c));
-        res.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-      })
-      .on('error', reject);
-  });
-  const parsed = JSON.parse(raw) as { tag_name?: string; assets?: Array<{ name?: string; browser_download_url?: string }> };
-  const asset = (parsed.assets || []).find((item) => item.name === OPENCODE_ASSET);
-  if (!asset?.browser_download_url) throw new Error('asset_missing');
-  return { version: String(parsed.tag_name || '').replace(/^v/, ''), url: asset.browser_download_url };
+function versionMatches(probed: string, expected: string): boolean {
+  return probed === expected || probed.includes(expected);
 }
 
 export function createOpenCodeWindowsCandidate(deps: OpenCodeAcquireDeps = {}): AcquireCandidate {
+  const expectedSha = (deps.expectedSha256 || OPENCODE_ASSET_SHA256).toLowerCase();
+  const expectedVersion = deps.expectedVersion || OPENCODE_PINNED_VERSION;
+  const sources = deps.sources || defaultOpencodeSources();
+  const downloadTo = deps.downloadTo || downloadVerifiedFile;
+  const extractZip = deps.extractZip || defaultExtractZip;
+  const probeVersion = deps.probeVersion || probeOpencodeVersion;
+
   return {
     id: OPENCODE_CANDIDATE_ID,
     async acquire(ctx: AcquireContext): Promise<AcquireResult> {
@@ -106,32 +112,90 @@ export function createOpenCodeWindowsCandidate(deps: OpenCodeAcquireDeps = {}): 
       const existing = findExe(destDir);
       if (existing) {
         const version = probeVersion(existing);
-        if (version) {
-          return { status: 'ready', candidateId: OPENCODE_CANDIDATE_ID, runtimePath: existing, version };
+        if (version && versionMatches(version, expectedVersion)) {
+          return readyAcquire({
+            candidateId: OPENCODE_CANDIDATE_ID,
+            runtimePath: existing,
+            version: expectedVersion,
+            source: 'cached',
+          });
+        }
+        await rmQuiet(destDir);
+      }
+
+      const sourceFailures: AcquireSourceFailure[] = [];
+      for (const source of sources) {
+        if (ctx.signal?.aborted) {
+          return failedAcquire({
+            candidateId: OPENCODE_CANDIDATE_ID,
+            failureKind: 'timeout',
+            safeDetail: 'aborted',
+            sourceFailures,
+          });
+        }
+        const zipPath = path.join(ctx.runtimeRoot, 'download', `${source.id}-${OPENCODE_ASSET_NAME}`);
+        try {
+          await downloadTo({
+            url: source.url,
+            dest: zipPath,
+            expectedSha256: expectedSha,
+            ...(ctx.signal ? { signal: ctx.signal } : {}),
+          });
+          await extractZip(zipPath, destDir);
+          const exe = findExe(destDir);
+          if (!exe) {
+            await unlinkQuiet(zipPath);
+            await rmQuiet(destDir);
+            sourceFailures.push({
+              source: source.id,
+              failureKind: 'extract',
+              safeDetail: 'exe_missing',
+            });
+            continue;
+          }
+          const version = probeVersion(exe);
+          if (!version || !versionMatches(version, expectedVersion)) {
+            await unlinkQuiet(zipPath);
+            await rmQuiet(destDir);
+            sourceFailures.push({
+              source: source.id,
+              failureKind: 'version',
+              safeDetail: 'version_mismatch',
+            });
+            continue;
+          }
+          return readyAcquire({
+            candidateId: OPENCODE_CANDIDATE_ID,
+            runtimePath: exe,
+            version: expectedVersion,
+            source: source.id,
+            ...(sourceFailures.length ? { sourceFailures } : {}),
+          });
+        } catch (err) {
+          await unlinkQuiet(zipPath);
+          await rmQuiet(destDir);
+          if (err instanceof DownloadError) {
+            sourceFailures.push({
+              source: source.id,
+              failureKind: err.failureKind,
+              safeDetail: err.safeDetail,
+            });
+          } else {
+            sourceFailures.push({
+              source: source.id,
+              failureKind: 'extract',
+              safeDetail: err instanceof Error ? err.message.slice(0, 240) : 'source_failed',
+            });
+          }
         }
       }
-      try {
-        const asset = await (deps.resolveAsset || defaultResolveAsset)();
-        const zipPath = path.join(ctx.runtimeRoot, 'download', OPENCODE_ASSET);
-        await fs.mkdir(path.dirname(zipPath), { recursive: true });
-        await (deps.downloadTo || defaultDownload)(asset.url, zipPath, ctx.signal);
-        await (deps.extractZip || defaultExtract)(zipPath, destDir);
-        const exe = findExe(destDir);
-        if (!exe) {
-          return { status: 'failed', failureKind: 'RUNTIME FAILURE', detail: 'exe_missing' };
-        }
-        const version = probeVersion(exe);
-        if (!version) {
-          return { status: 'failed', failureKind: 'RUNTIME FAILURE', detail: 'version_probe_failed' };
-        }
-        return { status: 'ready', candidateId: OPENCODE_CANDIDATE_ID, runtimePath: exe, version };
-      } catch (err) {
-        return {
-          status: 'failed',
-          failureKind: 'ACQUISITION FAILURE',
-          detail: err instanceof Error ? err.message : String(err),
-        };
-      }
+      const last = sourceFailures[sourceFailures.length - 1];
+      return failedAcquire({
+        candidateId: OPENCODE_CANDIDATE_ID,
+        failureKind: last?.failureKind || 'ACQUISITION FAILURE',
+        safeDetail: last?.safeDetail || 'all_sources_failed',
+        sourceFailures,
+      });
     },
   };
 }

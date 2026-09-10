@@ -25,19 +25,20 @@ describe('zero-start-coding-acquire-01', () => {
       id: 'first',
       acquire: async () => {
         seen.push('first');
-        return { status: 'failed', failureKind: 'ACQUISITION FAILURE' };
+        return { status: 'failed', ok: false, failureKind: 'ACQUISITION FAILURE' };
       },
     };
     const ready: AcquireCandidate = {
       id: 'second',
       acquire: async (ctx) => {
         seen.push(`second:${path.basename(ctx.runtimeRoot)}`);
-        return { status: 'ready', runtimePath: '/tmp/runtime', version: '1.0' };
+        return { status: 'ready', ok: true, runtimePath: '/tmp/runtime', version: '1.0' };
       },
     };
     const result = await acquireCapability([failing, ready], { runtimeRoot: '/tmp/runtimes' });
     assert.deepEqual(seen, ['first', 'second:runtimes']);
     assert.equal(result.status, 'ready');
+    assert.equal(result.ok, true);
     assert.equal(result.candidateId, 'second');
   });
 

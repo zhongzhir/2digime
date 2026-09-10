@@ -267,12 +267,17 @@ function wrapAdapter(
           err && typeof err === 'object' && 'actionable' in err
             ? String((err as { actionable?: string }).actionable || '')
             : '';
+        const safeDetail =
+          err && typeof err === 'object' && 'safeDetail' in err
+            ? String((err as { safeDetail?: string }).safeDetail || '')
+            : '';
         return {
           ok: false,
           failureReason,
           producedOutputs: [],
           summary: [failureReason, actionable].filter(Boolean).join(' ').slice(0, 4000),
           rawText: failureReason,
+          ...(safeDetail ? { safeDetail } : {}),
         };
       }
     },
