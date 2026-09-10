@@ -82,14 +82,19 @@ async function talkSnapshot(page: Page, pkgDir: string): Promise<{
   return { view, thread };
 }
 
-async function sendTalk(page: Page, text: string, waitMs = 400_000): Promise<void> {
+async function sendTalk(
+  page: Page,
+  text: string,
+  waitMs = 400_000,
+  extra?: { contextPaths?: string[] },
+): Promise<void> {
   const before = (await talkView(page)).turns.length;
   await page.evaluate(`(async (payload) => {
     if (!window.TalkPage || typeof window.TalkPage.handleSend !== 'function') {
       throw new Error('TalkPage.handleSend missing');
     }
-    await window.TalkPage.handleSend(payload);
-  })(${JSON.stringify(text)})`);
+    await window.TalkPage.handleSend(payload.text, payload.extra);
+  })(${JSON.stringify({ text, extra: extra || {} })})`);
   const deadline = Date.now() + waitMs;
   while (Date.now() < deadline) {
     if ((await talkView(page)).turns.length > before) return;
@@ -194,15 +199,18 @@ test(
       );
       assert.equal(/freshnessRequired/.test(JSON.stringify(bTraces)), false);
 
+      const gameDir = path.join(pkgDir, 'trial-game');
+      await fs.mkdir(gameDir, { recursive: true });
       const execBeforeC = b.thread.executions.length;
       await sendTalk(
         harness.page,
         '我不会写代码。帮我做一个双击就能玩的、带一点数学知识的简单网页小游戏。不要让我配置开发环境。',
+        400_000,
+        { contextPaths: [gameDir] },
       );
       const c = await talkSnapshot(harness.page, pkgDir);
       const cText = lastAssistant(c.view.turns);
       const cExec = (c.thread.executions || []).slice(execBeforeC);
-      const outputsDir = path.join(pkgDir, 'intelligence', 'outputs');
       const htmlFiles: string[] = [];
       const walk = async (dir: string): Promise<void> => {
         const ents = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
@@ -212,7 +220,7 @@ test(
           else if (/\.html?$/i.test(ent.name)) htmlFiles.push(p);
         }
       };
-      await walk(outputsDir);
+      await walk(gameDir);
       let htmlOk = false;
       for (const file of htmlFiles) {
         const body = await fs.readFile(file, 'utf8');

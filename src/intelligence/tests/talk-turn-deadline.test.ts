@@ -27,10 +27,14 @@ test('Talk 整轮超时：挂起的模型调用必须在期限内变成可理解
   const prev = process.env.DIGITALME_V2_TALK_TURN_DEADLINE_MS;
   process.env.DIGITALME_V2_TALK_TURN_DEADLINE_MS = '80';
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-talk-deadline-'));
+  let seenTimeout: number | undefined;
   const runtime = createDigitalMeRuntime({
     documentCapability: 'fake',
     registerOpenAiStub: false,
-    talkChat: async () => new Promise(() => {}),
+    talkChat: async ({ timeoutMs }) => {
+      seenTimeout = timeoutMs;
+      return new Promise(() => {});
+    },
   });
   const bus = createCommandBus(runtime);
   try {
@@ -48,6 +52,9 @@ test('Talk 整轮超时：挂起的模型调用必须在期限内变成可理解
     const last = talked.view.turns[talked.view.turns.length - 1];
     assert.equal(last?.role, 'assistant');
     assert.match(String(last?.text || ''), /超时/);
+    assert.equal(typeof seenTimeout, 'number');
+    assert.equal(Number(seenTimeout) > 0 && Number(seenTimeout) <= 80, true);
+    assert.equal(seenTimeout === 120_000, false);
   } finally {
     if (prev === undefined) delete process.env.DIGITALME_V2_TALK_TURN_DEADLINE_MS;
     else process.env.DIGITALME_V2_TALK_TURN_DEADLINE_MS = prev;
@@ -144,8 +151,8 @@ test('Talk 整轮超时：已有工具失败必须保留，不得只剩泛化请
     const talked = await bus.invoke('talk', { text: '写一个文件' });
     const copy = talked.view.turns.map((t) => t.text).join('\n');
     assert.equal(copy.includes(TALK_TIMEOUT_NOTICE), false);
-    assert.match(copy, /超出授权|路径/);
-    assert.match(String(talked.view.notice || ''), /超出授权|路径/);
+    assert.match(copy, /超出授权|路径|授权/);
+    assert.match(String(talked.view.notice || ''), /超出授权|路径|授权/);
     const rec = JSON.parse(await fs.readFile(talkThreadFilePath(pkgDir), 'utf8')) as {
       executions?: Array<{ ok: boolean; capabilityId: string }>;
     };
@@ -190,11 +197,13 @@ test('Talk 整轮超时：已有工具成功必须保留，并说明最终回复
       displayName: '保留成功',
       targetDir: pkgDir,
     });
-    const talked = await bus.invoke('talk', { text: '写一个文件' });
+    const project = path.join(root, 'project');
+    await fs.mkdir(project, { recursive: true });
+    const talked = await bus.invoke('talk', { text: '写一个文件', contextPaths: [project] });
     const last = talked.view.turns[talked.view.turns.length - 1];
     assert.equal(last?.text, TALK_SYNTHESIS_TIMEOUT_NOTICE);
     assert.equal(talked.view.notice, TALK_SYNTHESIS_TIMEOUT_NOTICE);
-    const abs = path.join(pkgDir, 'intelligence', 'outputs', 'done.txt');
+    const abs = path.join(project, 'done.txt');
     assert.equal(await fs.readFile(abs, 'utf8'), 'ok');
     const rec = JSON.parse(await fs.readFile(talkThreadFilePath(pkgDir), 'utf8')) as {
       executions?: Array<{ ok: boolean; capabilityId: string }>;

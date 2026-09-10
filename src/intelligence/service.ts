@@ -2,7 +2,6 @@ import * as path from 'node:path';
 import { nowIso } from '../shared/ids';
 import { readDigitalSelf } from '../subject-core/digital-self/store';
 import { formatSelfContext, selectSelfContext } from './self-context';
-import { compileCapabilityReality } from './capability-reality';
 import { emptyThread, readThread, writeThread } from './store';
 import { randomUUID } from 'node:crypto';
 import { NO_MODEL_NOTICE, runTalkTurn, type SubjectCollabPort } from './loop';
@@ -77,10 +76,6 @@ export class TalkService {
     private readonly now: () => string = nowIso,
     private readonly resolveCollab?: (pkg: TalkPackageRef) => Promise<SubjectCollabPort | null>,
     private readonly learnFromUtterance?: (text: string) => Promise<TalkLearnResult>,
-    private readonly resolveCapabilityReality?: (
-      pkg: TalkPackageRef,
-      turn?: { contextPaths?: string[] },
-    ) => Promise<string> | string,
   ) {}
 
   async invoke(input: { text?: string; contextPaths?: string[] }): Promise<{ view: TalkView }> {
@@ -108,6 +103,8 @@ export class TalkService {
       return { view: projectView(thread, NO_MODEL_NOTICE) };
     }
     let confirmHint: string | undefined;
+    // DIGITAL_SELF_LEARNING_BLOCKS_TALK = YES
+    // 每个 Talk turn 在真正 Talk 前同步调用 Digital Self interpret。本轮不改成异步。
     if (spoken && this.learnFromUtterance) {
       try {
         const learned = await this.learnFromUtterance(spoken);
@@ -125,11 +122,6 @@ export class TalkService {
     }
     const collab = this.resolveCollab ? await this.resolveCollab(pkg) : null;
     const turnCtx = input.contextPaths?.length ? { contextPaths: input.contextPaths } : {};
-    const capabilityReality = this.resolveCapabilityReality
-      ? await this.resolveCapabilityReality(pkg, turnCtx)
-      : await compileCapabilityReality(
-          turnCtx.contextPaths?.length ? { contextPaths: turnCtx.contextPaths } : {},
-        );
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), talkTurnDeadlineMs());
     const boundedChat = wrapChatWithDeadline(this.chat, ac.signal);
@@ -142,7 +134,6 @@ export class TalkService {
         userText: text,
         selfContext,
         agents: this.resolveAgents(pkg, turnCtx),
-        capabilityReality,
         chat: boundedChat,
         workRoot: pkg.rootDir,
         now,

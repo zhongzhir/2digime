@@ -19,38 +19,25 @@ export function resolveAuthorizedWorkingDirectory(paths?: string[]): string | un
 }
 
 /**
- * 把已注册、当前可真实调用的外部能力/资源描述成自然语言合同。
- * 不做 intent / WorkIntent / outputFamily / artifactType 路由。
- * 由 2digime 模型选择是否调用。接口可统一；产品上 Agent / Tool / Skill 不要混称。
+ * 把当前可调用的外部能力写成机械事实：id、能做什么、授权、runtime 是否已准备好。
+ * 不推荐何时使用、不写「适合复杂代码」、不把未获取的 runtime 说成已连接。
  */
 export function describeProfessionals(agents: ProfessionalAgent[]): string {
   if (!agents.length) {
-    return '当前没有已连接的外部能力。只能交流或询问用户，不得假装已经做完外部行动。';
+    return '当前没有可调用的外部能力。';
   }
-  const contractKey = (agent: ProfessionalAgent) =>
-    `${agent.description}\n${agent.cannotDo || ''}\n${agent.effects || ''}`;
-  const groups: ProfessionalAgent[][] = [];
-  for (const agent of agents) {
-    const key = contractKey(agent);
-    const existing = groups.find((row) => row[0] && contractKey(row[0]) === key);
-    if (existing) {
-      existing.push(agent);
-      continue;
-    }
-    groups.push([agent]);
-  }
-  return groups
-    .map((group) => {
-      const agent = group[0];
-      if (!agent) return '';
-      const labels = group.map((item) => item.label).join(' / ');
-      const ids = group.map((item) => item.id).join('、');
-      const lines = [`- 名字：${labels}`, `  id: ${ids}`, `  能做什么：${agent.description}`];
-      if (agent.cannotDo) lines.push(`  不能做什么：${agent.cannotDo}`);
-      if (agent.effects) lines.push(`  真实效果：${agent.effects}`);
+  return agents
+    .map((agent) => {
+      const lines = [
+        `- id: ${agent.id}`,
+        `  能做什么：${agent.description}`,
+        '  可调用：是',
+      ];
+      if (agent.authNeeded) lines.push(`  需要授权：${agent.authNeeded}`);
+      if (agent.runtimeStatus === 'ready') lines.push('  专业 runtime：已准备好');
+      if (agent.runtimeStatus === 'acquirable') lines.push('  专业 runtime：可获得（尚未准备好）');
       return lines.join('\n');
     })
-    .filter(Boolean)
     .join('\n');
 }
 
@@ -91,45 +78,21 @@ function isCallableProfessional(reg: CapabilityRegistration, authorizedWorkingDi
   return true;
 }
 
-function naturalContract(reg: CapabilityRegistration): {
-  description: string;
-  cannotDo: string;
-  effects: string;
-} {
-  const perms = new Set(reg.permissions || []);
-  const writes = perms.has('filesystem_write');
-  const reads = perms.has('filesystem_read');
-  const net = perms.has('network');
-  const cliAgent = reg.adapter.type === 'external-executor-cli' && reg.kind === 'agent';
-  const modelApiExec = reg.adapter.type === 'external-executor-model-api';
-  const searchLike = net && !writes && reg.kind === 'tool';
+function factualDescription(reg: CapabilityRegistration): string {
+  return String(reg.description || '').trim() || '可按完整文字目标执行一次已连接能力。';
+}
 
-  const effects: string[] = [];
-  if (writes) effects.push('会在本次已授权的工作目录里真实创建或修改文件，不要向用户再要路径');
-  if (reads && !writes) effects.push('会读取授权范围内的文件');
-  if (net && writes) effects.push('执行过程中可能访问网络');
-  if (net && !writes) effects.push('会访问公开网络');
-  if (!effects.length) effects.push('不产生磁盘或网络上的外部效果，只返回文字');
+function authNeededFor(reg: CapabilityRegistration): string {
+  return (reg.permissions || []).includes('filesystem_write')
+    ? '需要本次已授权工作目录'
+    : '不需要工作目录授权';
+}
 
-  let description = String(reg.description || '').trim();
-  if (cliAgent) {
-    description =
-      '在授权工作目录里修改已有项目、处理多个工程文件、运行测试。适合复杂代码改动。';
-  } else if (modelApiExec) {
-    description = '在授权目录做一次小范围文件修改。';
-  } else if (searchLike) {
-    description = '检索公开网页并返回来源与摘录。返回证据，不写用户文件。';
-  } else if (!description) {
-    description = '可按完整文字目标执行一次已连接能力。';
-  }
-
-  let cannotDo =
-    '不能发送邮件，不能扩大授权，不能改授权目录之外的路径，不能代替用户确认高风险操作。';
-  if (searchLike) {
-    cannotDo = '';
-  }
-
-  return { description, cannotDo, effects: effects.join('；') };
+function readRuntimeStatus(adapter: CapabilityAdapter): 'ready' | 'acquirable' | undefined {
+  const probe = (
+    adapter as CapabilityAdapter & { mechanicalRuntimeStatus?: () => 'ready' | 'acquirable' }
+  ).mechanicalRuntimeStatus;
+  return typeof probe === 'function' ? probe() : undefined;
 }
 
 function wrapAdapter(
@@ -137,20 +100,18 @@ function wrapAdapter(
   input: { subjectId: string; secrets?: SecretAccessor; authorizedWorkingDirectory?: string },
 ): ProfessionalAgent {
   const reg = adapter.registration;
-  const contract = naturalContract(reg);
   const writes = (reg.permissions || []).includes('filesystem_write');
-  const cliAgent = reg.adapter.type === 'external-executor-cli' && reg.kind === 'agent';
   const searchLike =
     (reg.permissions || []).includes('network') && !writes && reg.kind === 'tool';
   const artifactType = reg.outputArtifactTypes[0] || 'document';
   const projectDir = writes ? input.authorizedWorkingDirectory : undefined;
+  const runtimeStatus = readRuntimeStatus(adapter);
   return {
     id: reg.id,
     label: reg.displayName,
-    description: contract.description,
-    cannotDo: contract.cannotDo,
-    effects: contract.effects,
-    ...(cliAgent ? { maxCallMs: 600_000 } : {}),
+    description: factualDescription(reg),
+    authNeeded: authNeededFor(reg),
+    ...(runtimeStatus ? { runtimeStatus } : {}),
     ...(searchLike ? { returnsEvidence: true } : {}),
     async run(runInput): Promise<ProfessionalResult> {
       await fs.mkdir(runInput.workDir, { recursive: true });

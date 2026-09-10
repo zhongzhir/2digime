@@ -126,9 +126,11 @@ function systemOf(trace: Trace): string {
       const aSys = systemOf(aTrace);
       const aReply = [...(await talkView(harness.page)).turns].reverse().find((t) => t.role === 'assistant')?.text || '';
       report.A = { sysHasCode: /代码执行：/.test(aSys), tools: aTrace.tools, replyPreview: aReply.slice(0, 400) };
-      assert.match(aSys, /代码执行：已安装，但本轮尚未授权工作目录|代码执行：当前尚未连接或配置/);
-      assert.equal((aTrace.tools || []).includes('delegate'), false);
-      assert.equal(/cap_external_executor_codex/.test(aSys), false);
+      assert.equal(/适合复杂代码改动/.test(aSys), false);
+      assert.equal(/代码执行：/.test(aSys), false);
+      assert.equal(/桌面应用操作：/.test(aSys), false);
+      assert.equal(/联网搜索：/.test(aSys), false);
+      assert.equal((aTrace.tools || []).includes('write_file'), false);
       assert.equal(/我没有代码能力/.test(aReply), false);
 
       const beforeB = (await fs.readdir(TALK_TRACE)).filter((n) => n.endsWith('.json')).length;
@@ -148,17 +150,17 @@ function systemOf(trace: Trace): string {
       } catch {
         /* 模型可能还没写文件 */
       }
-      report.B = { tools: bTrace.tools, delegated: bExec.length, noteExists };
-      if (/代码执行：已连接/.test(bSys)) {
-        assert.equal((bTrace.tools || []).includes('delegate'), true);
-      }
+      report.B = { tools: bTrace.tools, delegated: bExec.length, noteExists, sysHasCap: /cap_/.test(bSys) };
+      assert.equal(/适合复杂代码改动/.test(bSys), false);
+      assert.equal(/代码执行：已连接/.test(bSys), false);
+      assert.equal((bTrace.tools || []).includes('write_file'), true);
 
       await sendTalk(harness.page, '帮我操作正在打开的 PowerPoint 调一下这几页。', 420_000);
       const cTrace = await latestTrace();
       const cSys = systemOf(cTrace);
       const cReply = [...(await talkView(harness.page)).turns].reverse().find((t) => t.role === 'assistant')?.text || '';
       report.C = { desktopLine: /桌面应用操作：/.test(cSys), replyPreview: cReply.slice(0, 400) };
-      assert.match(cSys, /桌面应用操作：当前没有已连接的可执行能力/);
+      assert.equal(/桌面应用操作：/.test(cSys), false);
       assert.equal(/不能操作电脑|桌面控制不允许|此类任务不支持/.test(cSys), false);
 
       await sendTalk(harness.page, '今天有什么重要新闻？', 420_000);
@@ -166,8 +168,8 @@ function systemOf(trace: Trace): string {
       const dSys = systemOf(dTrace);
       const dReply = [...(await talkView(harness.page)).turns].reverse().find((t) => t.role === 'assistant')?.text || '';
       report.D = { searchLine: /联网搜索：/.test(dSys), replyPreview: dReply.slice(0, 500) };
-      assert.match(dSys, /联网搜索：当前尚未连接或配置/);
-      assert.equal(/cap_gemini_web_search|cap_baseline_web_search/.test(dSys), false);
+      assert.equal(/联网搜索：当前尚未连接或配置/.test(dSys), false);
+      assert.equal(/适合复杂代码改动/.test(dSys), false);
     } finally {
       await fs.writeFile(path.join(EVIDENCE, 'results.json'), JSON.stringify(report, null, 2), 'utf8');
       await harness.close();

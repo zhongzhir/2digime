@@ -125,10 +125,11 @@ test('agentsFromRegistry 不再按 document 预筛选，也不把通用模型当
   const ids = agents.map((a) => a.id).sort();
   assert.deepEqual(ids, ['cap_external_executor_codex', 'cap_gemini_web_search']);
   const blob = describeProfessionals(agents);
-  assert.match(blob, /代码执行能力/);
-  assert.match(blob, /不能做什么/);
-  assert.match(blob, /真实效果/);
-  assert.match(blob, /真实创建或修改文件/);
+  assert.match(blob, /id: cap_external_executor_codex/);
+  assert.match(blob, /需要本次已授权工作目录/);
+  assert.equal(/适合复杂代码改动/.test(blob), false);
+  assert.equal(/不能做什么/.test(blob), false);
+  assert.equal(/真实效果/.test(blob), false);
   assert.equal(/WorkIntent|outputFamily/.test(blob), false);
   assert.equal(blob.includes('对话模型'), false);
 
@@ -162,7 +163,7 @@ test('agentsFromRegistry 不再按 document 预筛选，也不把通用模型当
   const searchFiles = await fs.readdir(searchDir);
   assert.equal(searchFiles.includes('result.md'), false);
   assert.equal(/后续分析为准/.test(evidence.summary), false);
-  assert.match(blob, /检索公开网页/);
+  assert.match(blob, /id: cap_gemini_web_search/);
 });
 
 test('声明会写工作目录的能力：stdout 完成但无真实文件变化必须 ok=false', async () => {

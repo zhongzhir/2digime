@@ -86,11 +86,20 @@ export function classifyAuthorizedPaths(contextPaths?: string[]): AuthorizedFs {
 
 export function describeAuthorizedFs(auth: AuthorizedFs): string {
   if (!auth.folders.length && !auth.files.length) {
-    return '当前没有通过“+”附加的文件或文件夹。不能读取用户电脑上仅出现在文字里的路径；需要时请用户用“+”选择该文件或文件夹。';
+    return '当前没有通过“+”附加的文件或文件夹。不能读取或写入用户电脑上仅出现在文字里的路径；需要时请用户用“+”选择该文件或文件夹。';
   }
-  const lines = ['本次用户已通过“+”授权读取（不要再要用户贴正文或列文件）：'];
-  for (const folder of auth.folders) lines.push(`- 文件夹 ${folder}`);
-  for (const file of auth.files) lines.push(`- 文件 ${file}`);
+  const lines = ['本次用户已通过“+”授权的路径（不要再要用户贴正文或列文件）：'];
+  if (auth.folders.length) {
+    lines.push('可读写文件夹（write_file / list_directory 的授权根）：');
+    for (const folder of auth.folders) lines.push(`- ${folder}`);
+    if (auth.folders.length > 1) {
+      lines.push('有多个可写根时，write_file 必须填写 root，且必须是上列某一个绝对路径。');
+    }
+  }
+  if (auth.files.length) {
+    lines.push('可读文件：');
+    for (const file of auth.files) lines.push(`- ${file}`);
+  }
   return lines.join('\n');
 }
 
@@ -110,6 +119,42 @@ export function resolveWritePath(
     return { ok: false, reason: '路径超出授权目录。' };
   }
   return { ok: true, abs };
+}
+
+/** 写盘只落在 Owner 通过「+」授权的文件夹根上。多个根时必须显式选择列出的绝对路径。 */
+export function resolveAuthorizedWritePath(
+  auth: AuthorizedFs,
+  relativePath: string,
+  requestedRoot?: string,
+): { ok: true; abs: string; root: string } | { ok: false; reason: string } {
+  const roots = uniqAbs(auth.folders);
+  if (!roots.length) {
+    return { ok: false, reason: '当前没有已授权的可写文件夹。请用户通过“+”选择该文件夹。' };
+  }
+  const asked = String(requestedRoot || '').trim();
+  let root: string | undefined;
+  if (asked) {
+    if (asked.includes('..')) return { ok: false, reason: '路径超出授权目录。' };
+    const resolvedAsked = path.resolve(asked);
+    root = roots.find((item) => path.resolve(item) === resolvedAsked);
+    if (!root) {
+      return {
+        ok: false,
+        reason: `root 不在本次授权可写目录中。请从下列路径中选一个：${roots.join('、')}`,
+      };
+    }
+  } else if (roots.length === 1) {
+    root = roots[0];
+  } else {
+    return {
+      ok: false,
+      reason: `有多个已授权可写目录，请在 root 中填写其中一个绝对路径：${roots.join('、')}`,
+    };
+  }
+  if (!root) return { ok: false, reason: '当前没有已授权的可写文件夹。请用户通过“+”选择该文件夹。' };
+  const resolved = resolveWritePath(root, relativePath);
+  if (!resolved.ok) return resolved;
+  return { ok: true, abs: resolved.abs, root };
 }
 
 function inside(root: string, abs: string): boolean {
@@ -370,13 +415,22 @@ export function parseExportArgs(raw: string): {
   format: string;
   relativePath: string;
   content: string;
+  root?: string;
 } {
   try {
-    const parsed = JSON.parse(raw) as { format?: string; relativePath?: string; path?: string; content?: string };
+    const parsed = JSON.parse(raw) as {
+      format?: string;
+      relativePath?: string;
+      path?: string;
+      content?: string;
+      root?: string;
+    };
+    const root = String(parsed.root || '').trim();
     return {
       format: String(parsed.format || '').trim().toLowerCase().replace(/^\./, ''),
       relativePath: String(parsed.relativePath || parsed.path || '').trim(),
       content: String(parsed.content ?? ''),
+      ...(root ? { root } : {}),
     };
   } catch {
     return { format: '', relativePath: '', content: '' };

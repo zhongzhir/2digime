@@ -66,6 +66,8 @@ export type TalkChatFn = (input: {
   messages: import('../infrastructure/model-http').ChatMessage[];
   tools?: import('../infrastructure/model-http').ChatToolDefinition[];
   signal?: AbortSignal;
+  /** 本轮 Talk 剩余 deadline，传给运输层，不得另套更短 HTTP timeout。 */
+  timeoutMs?: number;
 }) => Promise<TalkChatResult>;
 
 export interface ProfessionalResult {
@@ -89,12 +91,10 @@ export interface ProfessionalAgent {
   id: string;
   label: string;
   description: string;
-  /** 自然语言合同：不能做什么。不给模型做枚举路由。 */
-  cannotDo?: string;
-  /** 自然语言合同：是否产生文件 / 改代码 / 访问网络等真实效果。 */
-  effects?: string;
-  /** 运行态：单次调用上限，检索应远短于整轮 deadline。 */
-  maxCallMs?: number;
+  /** 机械授权需求，不是策略建议。 */
+  authNeeded?: string;
+  /** 专业 runtime 是否已经在本机准备好；acquirable 表示调用时才会获取。 */
+  runtimeStatus?: 'ready' | 'acquirable';
   /** 运行态：该能力返回证据而非用户交付物。 */
   returnsEvidence?: boolean;
   run(input: {

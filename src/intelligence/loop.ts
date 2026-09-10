@@ -3,7 +3,6 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import type { ChatMessage, ChatToolCall, ChatToolDefinition } from '../infrastructure/model-http';
 import { describeProfessionals } from './professionals';
-import { compileCapabilityReality } from './capability-reality';
 import {
   EXPORT_FILE_TOOL,
   LIST_DIRECTORY_TOOL,
@@ -12,7 +11,7 @@ import {
   classifyAuthorizedPaths,
   describeAuthorizedFs,
   parseExportArgs,
-  resolveWritePath,
+  resolveAuthorizedWritePath,
   runListDirectory,
   runReadFile,
   writeExportedOffice,
@@ -30,9 +29,6 @@ import { formatPublicCardsForModel } from '../subject-collab/public-card';
 export const NO_MODEL_NOTICE = '需要先连接 AI 能力，才能继续交流。';
 
 const MAX_TOOL_ROUNDS = 8;
-const DEFAULT_TOOL_CALL_TIMEOUT_MS = 75_000;
-const TOOL_SYNTHESIS_RESERVE_MS = 20_000;
-const MIN_TOOL_START_MS = 8_000;
 const EMPTY_REPLY = '我在。请再说一次你想让我做什么。';
 
 const DELEGATE_TOOL: ChatToolDefinition = {
@@ -63,17 +59,21 @@ const WRITE_FILE_TOOL: ChatToolDefinition = {
   function: {
     name: 'write_file',
     description:
-      '把你已经生成的完整文件内容写入本次授权目录。你负责生成内容；本工具只写盘并返回是否真的写成功。不要用它规划或再生成内容。',
+      '把完整文件内容写入本次已授权文件夹。relativePath 相对授权根。多个授权根时必须填写 root，且必须是系统列出的某一个绝对路径。只写盘并返回文件是否真实存在。',
     parameters: {
       type: 'object',
       properties: {
         relativePath: {
           type: 'string',
-          description: '相对文件名，例如 game.html 或 notes/todo.txt。',
+          description: '相对授权根的文件路径，例如 index.html 或 README.md。',
         },
         content: {
           type: 'string',
           description: '完整文件内容。',
+        },
+        root: {
+          type: 'string',
+          description: '授权可写根目录的绝对路径。仅当有多个授权文件夹时需要。',
         },
       },
       required: ['relativePath', 'content'],
@@ -153,12 +153,14 @@ function parseArgs(raw: string): { instruction: string; capabilityId?: string } 
   }
 }
 
-function parseWriteArgs(raw: string): { relativePath: string; content: string } {
+function parseWriteArgs(raw: string): { relativePath: string; content: string; root?: string } {
   try {
-    const parsed = JSON.parse(raw) as { relativePath?: string; content?: string; path?: string };
+    const parsed = JSON.parse(raw) as { relativePath?: string; content?: string; path?: string; root?: string };
+    const root = String(parsed.root || '').trim();
     return {
       relativePath: String(parsed.relativePath || parsed.path || '').trim(),
       content: String(parsed.content ?? ''),
+      ...(root ? { root } : {}),
     };
   } catch {
     return { relativePath: '', content: '' };
@@ -213,11 +215,9 @@ function remainingMs(deadlineAt?: number): number {
   return deadlineAt - Date.now();
 }
 
-function callTimeoutMs(agent: ProfessionalAgent, remaining: number): number {
-  const fallback = Number.isFinite(remaining) ? remaining : DEFAULT_TOOL_CALL_TIMEOUT_MS;
-  const cap = agent.maxCallMs && agent.maxCallMs > 0 ? agent.maxCallMs : fallback;
-  if (!Number.isFinite(remaining)) return cap;
-  return Math.max(1, Math.min(cap, remaining));
+function callTimeoutMs(remaining: number): number {
+  if (!Number.isFinite(remaining)) return Number.POSITIVE_INFINITY;
+  return Math.max(1, remaining);
 }
 
 function bindCallSignal(parent: AbortSignal | undefined, timeoutMs: number): {
@@ -225,7 +225,10 @@ function bindCallSignal(parent: AbortSignal | undefined, timeoutMs: number): {
   dispose: () => void;
 } {
   const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), Math.max(1, timeoutMs));
+  const timer =
+    Number.isFinite(timeoutMs) && timeoutMs > 0
+      ? setTimeout(() => ac.abort(), timeoutMs)
+      : undefined;
   const onParent = () => ac.abort();
   if (parent) {
     if (parent.aborted) ac.abort();
@@ -234,7 +237,7 @@ function bindCallSignal(parent: AbortSignal | undefined, timeoutMs: number): {
   return {
     signal: ac.signal,
     dispose: () => {
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       if (parent) parent.removeEventListener('abort', onParent);
     },
   };
@@ -253,7 +256,6 @@ export async function runTalkTurn(input: {
   subjectCollab?: SubjectCollabPort;
   confirmHint?: string;
   contextPaths?: string[];
-  capabilityReality?: string;
   /** 工具一旦完成就把执行事实交给本轮 service；不是 workflow / retry 状态。 */
   onExecution?: (rec: TalkExecution) => void;
 }): Promise<TalkThread> {
@@ -281,11 +283,6 @@ export async function runTalkTurn(input: {
 
   const cards = input.subjectCollab?.cards || [];
   const auth = classifyAuthorizedPaths(input.contextPaths);
-  const capabilityReality =
-    input.capabilityReality ||
-    (await compileCapabilityReality(
-      input.contextPaths?.length ? { contextPaths: input.contextPaths } : {},
-    ));
   const system = [
     '你是用户的兔机米。',
     '根据当前数字之我理解用户；不要编造未写入的本人事实。',
@@ -305,23 +302,27 @@ export async function runTalkTurn(input: {
     '当前对用户的必要理解：',
     input.selfContext,
     describeAuthorizedFs(auth),
-    capabilityReality,
-    input.agents.length ? `当前可立即调用的外部能力：\n${describeProfessionals(input.agents)}` : '',
+    input.agents.length ? `当前可调用的外部能力：\n${describeProfessionals(input.agents)}` : '',
   ]
     .filter(Boolean)
     .join('\n');
 
-  const tools: ChatToolDefinition[] = [WRITE_FILE_TOOL, EXPORT_FILE_TOOL];
-  if (auth.folders.length) tools.push(LIST_DIRECTORY_TOOL);
+  const tools: ChatToolDefinition[] = [];
+  if (auth.folders.length) {
+    tools.push(WRITE_FILE_TOOL, EXPORT_FILE_TOOL, LIST_DIRECTORY_TOOL);
+  }
   if (auth.folders.length || auth.files.length) tools.push(READ_FILE_TOOL);
   if (input.agents.length) tools.push(DELEGATE_TOOL);
   if (cards.length) tools.push(CONSULT_TOOL);
 
-  const chat: TalkChatFn = (req) =>
-    input.chat({
+  const chat: TalkChatFn = (req) => {
+    const left = remainingMs(input.deadlineAt);
+    return input.chat({
       ...req,
       ...(input.signal ? { signal: input.signal } : {}),
+      ...(Number.isFinite(left) ? { timeoutMs: Math.max(1, left) } : {}),
     });
+  };
 
   const messages: ChatMessage[] = [{ role: 'system', content: system }, ...history];
   const first = await chat({ messages, tools });
@@ -341,8 +342,7 @@ export async function runTalkTurn(input: {
   const runWriteFile = async (rawArgs: string): Promise<string> => {
     const parsed = parseWriteArgs(rawArgs);
     const execId = `run_${randomUUID()}`;
-    const writeRoot = path.join(input.workRoot, 'intelligence', 'outputs');
-    const resolved = resolveWritePath(writeRoot, parsed.relativePath);
+    const resolved = resolveAuthorizedWritePath(auth, parsed.relativePath, parsed.root);
     const fail = (reason: string) => {
       lastOk = false;
       lastEvidenceOnly = false;
@@ -406,7 +406,6 @@ export async function runTalkTurn(input: {
   const runExportFile = async (rawArgs: string): Promise<string> => {
     const parsed = parseExportArgs(rawArgs);
     const execId = `run_${randomUUID()}`;
-    const writeRoot = path.join(input.workRoot, 'intelligence', 'outputs');
     const fail = (reason: string) => {
       lastOk = false;
       lastEvidenceOnly = false;
@@ -431,8 +430,10 @@ export async function runTalkTurn(input: {
         summary: reason,
       });
     };
+    const dest = resolveAuthorizedWritePath(auth, parsed.relativePath, parsed.root);
+    if (!dest.ok) return fail(dest.reason);
     const written = await writeExportedOffice({
-      writeRoot,
+      writeRoot: dest.root,
       relativePath: parsed.relativePath,
       format: parsed.format,
       content: parsed.content,
@@ -495,16 +496,16 @@ export async function runTalkTurn(input: {
     const remaining = remainingMs(input.deadlineAt);
     const returnsEvidence = agent.returnsEvidence === true;
     let result: Awaited<ReturnType<ProfessionalAgent['run']>>;
-    if (remaining < MIN_TOOL_START_MS) {
+    if (Number.isFinite(remaining) && remaining <= 0) {
       result = {
         ok: false,
-        failureReason: '时间预算不足，不能再启动一次外部调用。',
-        summary: '时间预算不足，不能再启动一次外部调用。',
+        failureReason: '已到时限。',
+        summary: '已到时限。',
         producedOutputs: [],
         ...(returnsEvidence ? { evidenceOnly: true } : {}),
       };
     } else {
-      const callMs = callTimeoutMs(agent, remaining - TOOL_SYNTHESIS_RESERVE_MS);
+      const callMs = callTimeoutMs(remaining);
       const bound = bindCallSignal(input.signal, callMs);
       try {
         throwIfAborted(input.signal);

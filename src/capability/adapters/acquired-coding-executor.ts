@@ -1,6 +1,6 @@
 /**
  * 获取到的成熟 Coding runtime 执行适配器。
- * ExecutorTaskPackage → 官方 programmatic CLI → ExecutionResult。
+ * 把 Owner/模型给出的任务说明和授权目录交给官方 CLI。
  * 不复制 Agent 内部逻辑，不把单一候选写成产品架构。
  */
 import { existsSync, mkdirSync, writeFileSync, promises as fs } from 'node:fs';
@@ -13,17 +13,12 @@ import type {
   CapabilityOutput,
   ExecutionContext,
 } from '../adapter';
-import { formatCapabilityTaskAndPlan } from '../adapter';
 import type { CapabilityRegistration } from '../registration';
 import { acquireCapability, type AcquireCandidate, type AcquireResult } from '../acquire-capability';
-import { defaultCodingRuntimeCandidates } from '../coding-runtime-candidates';
+import { defaultCodingRuntimeCandidates, probeCachedOpencodeRuntime } from '../coding-runtime-candidates';
 import { mapChatModelToProviderEnv, type ChatModelConnection } from '../chat-model-credential-bridge';
 import { hiddenSpawnOptions } from '../../execution/hidden-spawn';
-import { buildExecutorTaskPackage, renderTaskPackagePrompt } from '../../execution/task-package';
-import {
-  CODE_CHANGE_ARTIFACT_TYPE,
-  type ExecutorTaskPackage,
-} from '../../execution/external-executor-contract';
+import { CODE_CHANGE_ARTIFACT_TYPE } from '../../execution/external-executor-contract';
 
 export const ACQUIRED_CODING_CAPABILITY_ID = 'cap_acquired_coding_runtime';
 export const ACQUIRED_CODING_ADAPTER_ID = 'acquired-coding-runtime-cli';
@@ -41,11 +36,33 @@ export interface AcquiredCodingExecutorOptions {
   timeoutMs?: number;
   forceAvailability?: 'available' | 'needs_setup' | 'unavailable';
   executeHook?: (input: {
-    pkg: ExecutorTaskPackage;
+    instruction: string;
+    workingDirectory: string;
     prompt: string;
     workDir: string;
   }) => Promise<AcquiredCodingRunResult>;
   acquireHook?: (ctx: { runtimeRoot: string }) => Promise<AcquireResult>;
+}
+
+function renderAcquiredCodingPrompt(instruction: string, workingDirectory: string): string {
+  return [
+    instruction,
+    '',
+    `工作目录：${workingDirectory}`,
+    '',
+    '机械边界：',
+    '- 只能操作授权工作目录内的文件',
+    '- 不得读取或泄露 API Key、模型凭证或其它密钥',
+    '- 未经用户明确要求不得 git push、发布、部署或其它对外不可逆操作',
+  ].join('\n');
+}
+
+export function acquiredCodingRuntimeStatus(options: AcquiredCodingExecutorOptions): 'ready' | 'acquirable' {
+  if (options.executeHook || options.forceAvailability === 'available') return 'ready';
+  if (options.forceAvailability === 'unavailable' || options.forceAvailability === 'needs_setup') {
+    return 'acquirable';
+  }
+  return probeCachedOpencodeRuntime(options.runtimeRoot) ? 'ready' : 'acquirable';
 }
 
 function isolatedPath(runtimeDir: string): string {
@@ -208,7 +225,7 @@ export function createAcquiredCodingExecutorAdapter(
     },
   };
 
-  return asLocalCapabilityAdapter({
+  return Object.assign(asLocalCapabilityAdapter({
     registration,
     adapterContractVersion: 'acquired-coding-runtime/1',
     describe: () => ({
@@ -222,16 +239,14 @@ export function createAcquiredCodingExecutorAdapter(
       version: 'acquired-coding-runtime/1',
     }),
     checkAvailability: async () => {
-      if (options.forceAvailability === 'available' || options.executeHook) {
-        return { available: true, detail: 'ready' };
-      }
       if (options.forceAvailability === 'unavailable') {
-        return { available: false, reason: 'unavailable', detail: '当前代码执行能力不可用。' };
+        return { available: false, reason: 'unavailable', detail: 'acquirable' };
       }
       if (options.forceAvailability === 'needs_setup') {
-        return { available: false, reason: 'needs_setup', detail: '尚未准备好代码执行能力。' };
+        return { available: false, reason: 'needs_setup', detail: 'acquirable' };
       }
-      return { available: true, detail: 'ready' };
+      const status = acquiredCodingRuntimeStatus(options);
+      return { available: true, detail: status };
     },
     async execute(input: CapabilityInput, ctx: ExecutionContext): Promise<CapabilityOutput> {
       if (ctx.signal.aborted) {
@@ -254,25 +269,18 @@ export function createAcquiredCodingExecutorAdapter(
         });
       }
 
-      const pkg = buildExecutorTaskPackage({
-        taskId: String(input.snapshot.taskId || 'task'),
-        jobId: ctx.jobId,
-        goal: formatCapabilityTaskAndPlan(input),
-        workingDirectory,
-        readScope: auth.readScope,
-        writeScope: auth.writeScope,
-        projectBrief: `本地项目：${path.basename(workingDirectory) || '项目'}`,
-        timeoutMs,
-        executorId: ACQUIRED_CODING_ADAPTER_ID,
-        executorSelectionReason: '当前没有现成代码执行能力，已获取成熟能力后执行',
-        ...(auth.projectOrigin ? { projectOrigin: auth.projectOrigin } : {}),
-      });
-      const prompt = renderTaskPackagePrompt(pkg);
+      const instruction = String(input.goal || '').trim();
+      const prompt = renderAcquiredCodingPrompt(instruction, workingDirectory);
       ctx.reportProgress('正在准备完成任务所需能力');
 
       let result: AcquiredCodingRunResult;
       if (options.executeHook) {
-        result = await options.executeHook({ pkg, prompt, workDir: ctx.workDir });
+        result = await options.executeHook({
+          instruction,
+          workingDirectory,
+          prompt,
+          workDir: ctx.workDir,
+        });
       } else {
         const acquired = options.acquireHook
           ? await options.acquireHook({ runtimeRoot: options.runtimeRoot })
@@ -357,5 +365,7 @@ export function createAcquiredCodingExecutorAdapter(
         materialUse: { usedPaths: [], includedCount: 0 },
       };
     },
+  }), {
+    mechanicalRuntimeStatus: () => acquiredCodingRuntimeStatus(options),
   });
 }

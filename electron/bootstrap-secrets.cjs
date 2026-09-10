@@ -341,7 +341,7 @@ async function resolveModelConfig(opts) {
       model: cfg.model,
       providerId: cfg.providerId,
       displayName: "对话模型",
-      timeoutMs: 120_000,
+      timeoutMs: 600_000,
     },
     secrets: store.accessor(),
     geminiSearchApiKey,

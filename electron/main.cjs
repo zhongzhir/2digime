@@ -312,7 +312,7 @@ async function bootstrapRuntime() {
     ));
     const cfg = model.openaiCompatible;
     let talkTraceSeq = 0;
-    options.talkChat = async ({ messages, tools, signal }) => {
+    options.talkChat = async ({ messages, tools, signal, timeoutMs }) => {
       const apiKey = await model.secrets.get(
         providerCredentialKey(cfg.providerId || "openai-compatible"),
       );
@@ -322,7 +322,7 @@ async function bootstrapRuntime() {
         apiKey,
         model: cfg.model,
         temperature: 0.2,
-        timeoutMs: cfg.timeoutMs || 120000,
+        timeoutMs: typeof timeoutMs === "number" && Number.isFinite(timeoutMs) ? timeoutMs : (cfg.timeoutMs || 600000),
         ...(signal ? { signal } : {}),
         ...(tools && tools.length ? { tools, toolChoice: "auto" } : {}),
       });

@@ -39,6 +39,17 @@ export interface OpenCodeAcquireDeps {
   expectedVersion?: string;
 }
 
+export function probeCachedOpencodeRuntime(
+  runtimeRoot: string,
+  expectedVersion: string = OPENCODE_PINNED_VERSION,
+): boolean {
+  const destDir = path.join(runtimeRoot, 'coding', OPENCODE_CANDIDATE_ID);
+  const existing = findExe(destDir);
+  if (!existing) return false;
+  const version = probeOpencodeVersion(existing);
+  return Boolean(version && versionMatches(version, expectedVersion));
+}
+
 function findExe(dir: string): string | null {
   try {
     const entries = readdirSync(dir, { withFileTypes: true });

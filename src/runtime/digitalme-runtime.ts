@@ -171,7 +171,6 @@ import type { DigitalSelfChatFn } from '../subject-core/digital-self/interpret';
 import {
   TalkService,
   agentsFromRegistry,
-  compileCapabilityReality,
   resolveAuthorizedWorkingDirectory,
 } from '../intelligence';
 import type { ProfessionalAgent, TalkChatFn } from '../intelligence';
@@ -467,11 +466,6 @@ export class DigitalMeRuntime {
             ? { asked: true, askHint: pending.join('；') }
             : { asked: true };
         },
-        (_pkg, turn) =>
-          compileCapabilityReality({
-            registry: this.registry,
-            ...(turn?.contextPaths?.length ? { contextPaths: turn.contextPaths } : {}),
-          }),
       );
     }
     return this.talkService;
@@ -651,7 +645,7 @@ export class DigitalMeRuntime {
     });
     const runtime = understanding.runtime;
     if (!runtime?.enabled) return null;
-    return async ({ messages, tools, signal }) => {
+    return async ({ messages, tools, signal, timeoutMs }) => {
       const result = await runtime.chatComplete({
         messages,
         baseUrl: runtime.model.baseUrl,
@@ -659,6 +653,7 @@ export class DigitalMeRuntime {
         temperature: 0.2,
         ...(tools && tools.length ? { tools, toolChoice: 'auto' as const } : {}),
         ...(signal ? { signal } : {}),
+        ...(typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) ? { timeoutMs } : {}),
       });
       return {
         text: result.text,

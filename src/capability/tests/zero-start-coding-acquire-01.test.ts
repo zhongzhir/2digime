@@ -82,9 +82,12 @@ describe('zero-start-coding-acquire-01', () => {
       externalExecutorCapability: { forceAvailability: 'needs_setup' },
       acquiredCodingCapability: {
         runtimeRoot: path.join(pkg, 'runtimes'),
-        executeHook: async ({ pkg: taskPkg }) => {
-          sawPackage = taskPkg.schemaVersion === 'executor-task-package/1';
-          assert.equal(taskPkg.workingDirectory, path.resolve(dir));
+        executeHook: async ({ workingDirectory, prompt }) => {
+          sawPackage = /executor-task-package/.test(prompt);
+          assert.equal(workingDirectory, path.resolve(dir));
+          assert.match(prompt, /帮我修改这个程序，补上减法/);
+          assert.equal(/外部代码执行器/.test(prompt), false);
+          assert.equal(/验收条件/.test(prompt), false);
           return { exitCode: 0, summary: 'done' };
         },
       },
@@ -97,9 +100,9 @@ describe('zero-start-coding-acquire-01', () => {
 
     const adapter = createAcquiredCodingExecutorAdapter({
       runtimeRoot: path.join(pkg, 'runtimes'),
-      executeHook: async ({ pkg: taskPkg }) => {
-        sawPackage = taskPkg.schemaVersion === 'executor-task-package/1';
-        assert.equal(taskPkg.workingDirectory, path.resolve(dir));
+      executeHook: async ({ workingDirectory, prompt }) => {
+        sawPackage = /executor-task-package/.test(prompt);
+        assert.equal(workingDirectory, path.resolve(dir));
         return { exitCode: 0, summary: 'done' };
       },
     });
@@ -129,7 +132,7 @@ describe('zero-start-coding-acquire-01', () => {
         workDir: path.join(pkg, 'work'),
       },
     );
-    assert.equal(sawPackage, true);
+    assert.equal(sawPackage, false);
     assert.equal(output.artifact.type, 'code-change');
     assert.equal(/OpenCode|CLI|API_KEY/i.test(JSON.stringify(output.artifact)), false);
   });

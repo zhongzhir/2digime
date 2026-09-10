@@ -9,7 +9,6 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { createDigitalMeRuntime } from '../../runtime/digitalme-runtime';
 import { createCommandBus } from '../../runtime/command-bus';
-import { TALK_TIMEOUT_NOTICE } from '../service';
 import type { ProfessionalAgent, TalkChatFn } from '../types';
 
 async function tempDir(prefix: string): Promise<string> {
@@ -32,7 +31,6 @@ function searchCap(id: string, run: ProfessionalAgent['run']): ProfessionalAgent
     label: id,
     description: '检索公开网页',
     returnsEvidence: true,
-    maxCallMs: 80,
     run,
   };
 }
@@ -111,9 +109,9 @@ test('稳定知识无工具：直接回答，不检索', async () => {
   await runtime.stop();
 });
 
-test('检索挂起：单次超时写回失败，整轮不得被杀死', async () => {
+test('检索挂起：使用 Talk 剩余 deadline，不再另套更短工具预算', async () => {
   const prev = process.env.DIGITALME_V2_TALK_TURN_DEADLINE_MS;
-  process.env.DIGITALME_V2_TALK_TURN_DEADLINE_MS = '20000';
+  process.env.DIGITALME_V2_TALK_TURN_DEADLINE_MS = '400';
   const root = await tempDir('hang');
   const search = searchCap('cap_hang_search', async () => new Promise(() => {}));
   const runtime = createDigitalMeRuntime({
@@ -133,7 +131,6 @@ test('检索挂起：单次超时写回失败，整轮不得被杀死', async ()
       async ({ messages }) => {
         const tool = String(messages.filter((m) => m.role === 'tool').pop()?.content || '');
         assert.match(tool, /actualSuccess":false/);
-        assert.match(tool, /没有在预算内返回|timeout after|时间预算不足/);
         return { text: '当前无法可靠核验这一点。' };
       },
     ]),
@@ -146,8 +143,8 @@ test('检索挂起：单次超时写回失败，整轮不得被杀死', async ()
     const talked = await bus.invoke('talk', { text: '核验一条会变化的公开事实' });
     const elapsed = Date.now() - started;
     assert.equal(elapsed < 4000, true, `call timeout too slow: ${elapsed}ms`);
-    assert.notEqual(talked.view.notice, TALK_TIMEOUT_NOTICE);
-    assert.match(talked.view.turns.map((t) => t.text).join('\n'), /无法可靠核验/);
+    const copy = talked.view.turns.map((t) => t.text).join('\n');
+    assert.equal(/已到时限|没有在预算内返回|无法可靠核验|请求超时/.test(copy), true);
   } finally {
     if (prev === undefined) delete process.env.DIGITALME_V2_TALK_TURN_DEADLINE_MS;
     else process.env.DIGITALME_V2_TALK_TURN_DEADLINE_MS = prev;

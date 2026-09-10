@@ -36,7 +36,7 @@ async function readExec(pkgDir: string): Promise<Array<{ capabilityId: string; o
   return rec.executions || [];
 }
 
-test('无附件时不暴露 list_directory / read_file，暴露 export_file', async () => {
+test('无附件时不暴露 list_directory / read_file / write_file / export_file', async () => {
   const root = await tempDir('tools');
   const pkgDir = path.join(root, 'pkg');
   const runtime = createDigitalMeRuntime({
@@ -45,8 +45,8 @@ test('无附件时不暴露 list_directory / read_file，暴露 export_file', as
     talkChat: scriptedChat([
       async ({ tools }) => {
         const names = (tools || []).map((t) => t.function.name);
-        assert.equal(names.includes('write_file'), true);
-        assert.equal(names.includes('export_file'), true);
+        assert.equal(names.includes('write_file'), false);
+        assert.equal(names.includes('export_file'), false);
         assert.equal(names.includes('list_directory'), false);
         assert.equal(names.includes('read_file'), false);
         return { text: '请用“+”附上那个文件夹。' };
@@ -210,6 +210,8 @@ test('越权路径不得 list / read', async () => {
 test('export_file 复用 export.ts 写出真实 docx 与 pptx', async () => {
   const root = await tempDir('office');
   const pkgDir = path.join(root, 'pkg');
+  const folder = path.join(root, 'docs');
+  await fs.mkdir(folder, { recursive: true });
   const outline = '# 数字资产变现大纲\n\n- 先交付真实文件\n- 再谈规模化';
   const runtime = createDigitalMeRuntime({
     documentCapability: 'fake',
@@ -243,8 +245,8 @@ test('export_file 复用 export.ts 写出真实 docx 与 pptx', async () => {
   });
   const bus = createCommandBus(runtime);
   await bus.invoke('subject.createPackage', { displayName: '导出', targetDir: pkgDir });
-  const docxTalk = await bus.invoke('talk', { text: '把刚才的大纲做成 Word。' });
-  const docxAbs = path.join(pkgDir, 'intelligence', 'outputs', 'outline.docx');
+  const docxTalk = await bus.invoke('talk', { text: '把刚才的大纲做成 Word。', contextPaths: [folder] });
+  const docxAbs = path.join(folder, 'outline.docx');
   const docxBytes = await fs.readFile(docxAbs);
   assert.equal(docxBytes.subarray(0, 2).toString(), 'PK');
   const roundtrip = await extractFile(docxAbs);
@@ -253,6 +255,8 @@ test('export_file 复用 export.ts 写出真实 docx 与 pptx', async () => {
 
   const pptRoot = await tempDir('office-ppt');
   const pptPkg = path.join(pptRoot, 'pkg');
+  const pptFolder = path.join(pptRoot, 'docs');
+  await fs.mkdir(pptFolder, { recursive: true });
   const pptRuntime = createDigitalMeRuntime({
     documentCapability: 'fake',
     registerOpenAiStub: false,
@@ -277,8 +281,8 @@ test('export_file 复用 export.ts 写出真实 docx 与 pptx', async () => {
   });
   const pptBus = createCommandBus(pptRuntime);
   await pptBus.invoke('subject.createPackage', { displayName: '导出', targetDir: pptPkg });
-  await pptBus.invoke('talk', { text: '再做成开会提案用的 PPT。' });
-  const pptxAbs = path.join(pptPkg, 'intelligence', 'outputs', 'proposal.pptx');
+  await pptBus.invoke('talk', { text: '再做成开会提案用的 PPT。', contextPaths: [pptFolder] });
+  const pptxAbs = path.join(pptFolder, 'proposal.pptx');
   const pptxBytes = await fs.readFile(pptxAbs);
   assert.equal(pptxBytes.subarray(0, 2).toString(), 'PK');
   const pptText = await extractFile(pptxAbs);

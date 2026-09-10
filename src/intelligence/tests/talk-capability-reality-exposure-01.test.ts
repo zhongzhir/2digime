@@ -64,14 +64,14 @@ function baseReg(
   };
 }
 
-function assertSemanticOnly(text: string): void {
-  assert.equal(/cap_/.test(text), false);
-  assert.equal(/adapter\.type|adapterType/.test(text), false);
-  assert.equal(/needs_setup|unavailable|checkAvailability/.test(text), false);
-  assert.equal(/\.exe\b|stderr|codexJsPath/.test(text), false);
+function assertNoStrategyProse(text: string): void {
+  assert.equal(/适合复杂代码改动/.test(text), false);
+  assert.equal(/代码执行：已连接/.test(text), false);
+  assert.equal(/代码执行：已安装，但本轮尚未授权/.test(text), false);
+  assert.equal(/应该选哪个|应该先做|fallback/.test(text), false);
 }
 
-test('compiler：Codex 已装未授权目录时可见但语义化；授权后变为可使用', async () => {
+test('compiler：Talk 不再注入能力槽位作文', async () => {
   const registry = new CapabilityRegistry();
   registry.register(
     stubAdapter(
@@ -93,62 +93,16 @@ test('compiler：Codex 已装未授权目录时可见但语义化；授权后变
       }),
     ),
   );
-  const folder = await tempDir('ws');
   const hidden = await compileCapabilityReality({ registry });
-  assert.match(hidden, /代码执行：已安装，但本轮尚未授权工作目录/);
-  assert.match(hidden, /“\+”附加项目文件夹作为本次工作目录/);
-  assert.match(hidden, /桌面应用操作：当前没有已连接的可执行能力/);
-  assert.match(hidden, /联网搜索：当前尚未连接或配置/);
-  assert.match(hidden, /设置 → 联网搜索/);
-  assert.match(hidden, /本地文件读取：本轮尚未通过/);
-  assert.equal(/不能操作电脑|不允许|此类任务不支持/.test(hidden), false);
-  assert.equal(/请安装/.test(hidden), false);
-  assert.equal(/应该选哪个|应该先做|fallback/.test(hidden), false);
-  assertSemanticOnly(hidden);
-
-  const ready = await compileCapabilityReality({ registry, contextPaths: [folder] });
-  assert.match(ready, /代码执行：已连接，可在授权工作目录中使用/);
-  assert.match(ready, new RegExp(folder.replace(/\\/g, '\\\\')));
-  assertSemanticOnly(ready);
+  assert.equal(hidden, '');
+  assertNoStrategyProse(hidden);
 });
 
-test('compiler：needs_setup 只报尚未连接或配置；MCP 仅在已注册时出现', async () => {
-  const registry = new CapabilityRegistry();
-  registry.register(
-    stubAdapter(
-      baseReg({
-        id: 'cap_external_executor_codex',
-        kind: 'agent',
-        displayName: '代码执行能力',
-        availability: 'needs_setup',
-        outputArtifactTypes: ['code-change'],
-        permissions: ['filesystem_read', 'filesystem_write'],
-        adapter: { type: 'external-executor-cli', adapterId: 'external-executor-codex-cli' },
-      }),
-    ),
-  );
-  const none = await compileCapabilityReality({ registry });
-  assert.match(none, /代码执行：当前尚未连接或配置/);
+test('compiler：不再输出尚未连接或配置的槽位作文', async () => {
+  const none = await compileCapabilityReality({ registry: new CapabilityRegistry() });
+  assert.equal(none, '');
   assert.equal(/资料查询/.test(none), false);
-  assert.equal(/请安装/.test(none), false);
-  assertSemanticOnly(none);
-
-  registry.register(
-    stubAdapter(
-      baseReg({
-        id: 'cap_mcp_readonly',
-        kind: 'tool',
-        displayName: '资料查询能力',
-        availability: 'needs_setup',
-        outputArtifactTypes: ['document'],
-        permissions: ['filesystem_read'],
-        adapter: { type: 'mcp-stdio', adapterId: 'mcp-stdio-readonly' },
-      }),
-    ),
-  );
-  const withMcp = await compileCapabilityReality({ registry });
-  assert.match(withMcp, /资料查询：当前尚未连接或配置/);
-  assertSemanticOnly(withMcp);
+  assertNoStrategyProse(none);
 });
 
 test('A Codex 已装未授权：模型看见缺口；delegate 不可调用', async () => {
@@ -163,12 +117,11 @@ test('A Codex 已装未授权：模型看见缺口；delegate 不可调用', asy
     talkChat: scriptedChat([
       async ({ messages, tools }) => {
         const sys = String(messages[0]?.content || '');
-        assert.match(sys, /代码执行：已安装，但本轮尚未授权工作目录/);
-        assert.match(sys, /“\+”附加项目文件夹作为本次工作目录/);
-        assert.equal(/cap_external_executor_codex/.test(sys), false);
-        assert.equal(/不能操作电脑|我没有代码能力/.test(sys), false);
+        assertNoStrategyProse(sys);
+        assert.equal(/“\+”附加项目文件夹作为本次工作目录/.test(sys), false);
         sawDelegate = Boolean(tools?.some((t) => t.function.name === 'delegate'));
         assert.equal(sawDelegate, false);
+        assert.equal(tools?.some((t) => t.function.name === 'write_file'), false);
         return { text: '把项目文件夹用 + 加进来，我就可以继续改并跑测试。' };
       },
     ]),
@@ -207,9 +160,11 @@ test('B 同一线程授权目录后 Codex 成为 callable，cwd 为授权 repo',
     talkChat: scriptedChat([
       async ({ messages, tools }) => {
         const sys = String(messages[0]?.content || '');
-        assert.match(sys, /代码执行：已连接，可在授权工作目录中使用/);
-        assert.match(sys, /当前可立即调用的外部能力/);
+        assertNoStrategyProse(sys);
+        assert.match(sys, /cap_external_executor_codex/);
+        assert.match(sys, /当前可调用的外部能力/);
         assert.equal(tools?.some((t) => t.function.name === 'delegate'), true);
+        assert.equal(tools?.some((t) => t.function.name === 'write_file'), true);
         return {
           text: '',
           toolCalls: [
@@ -255,10 +210,10 @@ test('C 无桌面控制：只陈述当前没有已连接桌面能力；不判死
     talkChat: scriptedChat([
       async ({ messages, tools }) => {
         const sys = String(messages[0]?.content || '');
-        assert.match(sys, /桌面应用操作：当前没有已连接的可执行能力/);
-        assert.equal(/不能操作电脑|桌面控制不允许|此类任务不支持/.test(sys), false);
+        assertNoStrategyProse(sys);
+        assert.equal(/桌面应用操作：当前没有已连接的可执行能力/.test(sys), false);
         assert.equal(tools?.some((t) => t.function.name === 'read_file'), true);
-        assert.equal(tools?.some((t) => t.function.name === 'export_file'), true);
+        assert.equal(tools?.some((t) => t.function.name === 'export_file'), false);
         return { text: '我现在不能直接点正在打开的窗口。你可以先用 + 把文件给我，我先改一版 pptx；若要操作窗口，需要先连接桌面操作能力。' };
       },
     ]),
@@ -283,9 +238,9 @@ test('D Gemini 未配置：只陈述尚未连接；不规定固定回复', async
     talkChat: scriptedChat([
       async ({ messages, tools }) => {
         const sys = String(messages[0]?.content || '');
-        assert.match(sys, /联网搜索：当前尚未连接或配置/);
-        assert.match(sys, /设置 → 联网搜索/);
-        assert.equal(/cap_gemini_web_search|cap_baseline_web_search/.test(sys), false);
+        assertNoStrategyProse(sys);
+        assert.equal(/联网搜索：当前尚未连接或配置/.test(sys), false);
+        assert.equal(/设置 → 联网搜索/.test(sys), false);
         assert.equal(tools?.some((t) => t.function.name === 'delegate'), false);
         return { text: '我这边还没连接实时检索。按已有公开知识，大致是这样；要核验今天的消息需要先在设置里接上联网能力。' };
       },
