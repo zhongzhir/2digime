@@ -43,8 +43,9 @@ test('TEST A：普通聊天正常文字不受影响', async () => {
     await bus.invoke('subject.createPackage', { displayName: 'A', targetDir: pkgDir });
     const talked = await bus.invoke('talk', { text: '帮我分析一下。' });
     const last = [...talked.view.turns].reverse().find((t) => t.role === 'assistant');
-    assert.equal(last?.text, '这是一段正常的分析结论。');
-    assert.equal(last?.text === EMPTY_REPLY, false);
+    const text = String(last?.text ?? '');
+    assert.notEqual(text, EMPTY_REPLY);
+    assert.equal(text, '这是一段正常的分析结论。');
   } finally {
     await runtime.stop();
   }
@@ -275,8 +276,9 @@ test('TEST F：无 execution + empty reply → 普通聊天 EMPTY_REPLY', async 
     await bus.invoke('subject.createPackage', { displayName: 'F', targetDir: pkgDir });
     const talked = await bus.invoke('talk', { text: '你好' });
     const last = [...talked.view.turns].reverse().find((t) => t.role === 'assistant');
-    assert.equal(last?.text, EMPTY_REPLY);
-    assert.equal(last?.text === TALK_EXECUTION_DONE_NOTICE, false);
+    const text = String(last?.text ?? '');
+    assert.notEqual(text, TALK_EXECUTION_DONE_NOTICE);
+    assert.equal(text, EMPTY_REPLY);
   } finally {
     await runtime.stop();
   }
