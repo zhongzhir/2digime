@@ -345,6 +345,19 @@
       renderView(result && result.view);
     } catch (err) {
       if (generation !== sendGeneration) return;
+      // 后端可能已在超时路径落盘最终回复；再读一次 Thread，避免「文件已成但界面只剩超时」。
+      try {
+        const recovered = await invokeTalk({});
+        const turns = recovered && recovered.view && recovered.view.turns;
+        const prevLen = (lastView && lastView.turns && lastView.turns.length) || 0;
+        if (Array.isArray(turns) && turns.length > prevLen) {
+          renderView(recovered.view);
+          if (!(recovered.view && recovered.view.notice)) setNotice(facingError(err));
+          return;
+        }
+      } catch (_recoverErr) {
+        /* 恢复失败仍走原错误展示 */
+      }
       renderView(lastView, { userText: pendingText, failed: true });
       setNotice(facingError(err));
     } finally {

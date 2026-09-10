@@ -83,6 +83,18 @@ runtime 只保留模型无法自己知道、且系统必须保证的机械事实
 
 Talk 主链默认收敛为：User → model → 模型决定是否调用工具 → 工具执行真实动作 → runtime 返回真实结果 → 同一模型继续推理 → 模型交付最终答案。runtime 不替模型做语义理解、换题判断、freshness 分类、能力排序、重试策略、失败策略、是否继续旧任务、内容是否「像完成」。
 
+### 1.2 超级助手 L1 做事路径（机械，非任务类型路由）
+
+同一 Talk turn 内由模型自主选择，禁止 keyword router / 任务类别 enum：
+
+- **MODEL DIRECT：** 写作、总结、分析、规划、简单文件修改等，模型直接完成；必要时 read/write/search；不得仅为「看起来专业」而 delegate。
+- **SPECIALIST：** 模型判断需要专业能力时 `delegate` 成熟 Agent/Tool（例：`cap_acquired_coding_runtime`）；不得「编程一定用 Coding Agent」。
+- **MULTI-CAPABILITY：** 允许 tool A → 看结果 → tool B → capability C → final；顺序由模型决定。runtime 只提供工具事实、权限、deadline、actualSuccess。
+
+模型给出 final assistant response 后，系统必须可靠落 Thread、返回 renderer、让用户看见最终结果；不得在已有最终答复后无意义空转 tool loop。普通低风险内部执行自行完成；仅当真实路径涉及支付、凭证/账号授权、对外发送/发布、删除或不可逆修改、超出现有授权时才请求 Owner——不为此新建完整 policy engine。
+
+能力合同保持通用（id / description / availability 含 ready·acquirable·unavailable / 授权 / execute / result）。禁止按 video/image/audio/digital-human/coding 为 Talk 核心加 special case。`acquireCapability(candidates)` 必须可被任意能力复用，不得锁死在 Coding。
+
 ---
 
 ## 2. Owner / CTO / Agent 分工

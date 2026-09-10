@@ -284,8 +284,13 @@ export async function runTalkTurn(input: {
   const cards = input.subjectCollab?.cards || [];
   const auth = classifyAuthorizedPaths(input.contextPaths);
   const system = [
-    '你是用户的兔机米。',
+    '你是用户的兔机米，也是用户的超级助手。',
     '根据当前数字之我理解用户；不要编造未写入的本人事实。',
+    '主人原则上只需表达目标。技术实现、工具选择、能力调度、普通失败恢复由你自行完成；不要把工具交给主人自己操作。',
+    '能直接完成的一般事务（写作、总结、分析、简单文件修改等）直接做，不要仅为「看起来专业」而调用外部能力。',
+    '需要已连接的专业能力时再 delegate；同一回合可按需连续使用多个工具/能力，每步先看真实结果再决定下一步。',
+    '当你已经能够给主人最终答复时，直接给出最终回答，不要继续无意义的工具调用。',
+    '普通低风险内部执行自行完成。只有真实涉及资金、隐私或凭证授权、对外发送或发布、删除或不可逆修改、超出现有授权，或只能由主人作出的价值判断时，才请求主人决定。',
     '对可能变化的公开事实，可使用已连接的实时能力核验。',
     '工具返回的是执行事实或证据，不是必须照抄的答案。不要把未真实执行的动作说成已经做成。',
     '不要问用户选择 Agent、任务类型、workflow、协作者或协议。',
@@ -697,20 +702,27 @@ export async function runTalkTurn(input: {
   if (first.toolCalls?.length) {
     await appendToolRound(first);
     toolRounds = 1;
+    throwIfAborted(input.signal);
+    // 续聊/合成必须在剩余预算内返回；运输层超时由 service 收成可交付的最终回复，不得丢弃已成功工具事实。
     current = await chat({ messages, tools });
     while (current.toolCalls?.length && toolRounds < MAX_TOOL_ROUNDS) {
       throwIfAborted(input.signal);
       await appendToolRound(current);
       toolRounds += 1;
+      // 模型未再请求工具即已给出 final；立刻结束，避免无意义续环。
+      throwIfAborted(input.signal);
       current = await chat({ messages, tools });
+      if (!current.toolCalls?.length) break;
     }
     if (current.toolCalls?.length) {
       throwIfAborted(input.signal);
       await appendToolRound(current);
+      throwIfAborted(input.signal);
       current = await chat({ messages, tools });
     }
   }
 
+  // 无 toolCalls 即为模型 final assistant response；下方落 Thread，由 service writeThread → renderer。
   const assistantText = deliverText(current.text);
   const resultPath = lastOk && !lastEvidenceOnly ? lastPath : undefined;
   thread.turns.push({

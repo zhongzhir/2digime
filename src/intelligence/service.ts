@@ -29,7 +29,11 @@ export function talkTurnDeadlineMs(): number {
 function isTalkTimeout(err: unknown): boolean {
   if (err instanceof TalkTimeoutError) return true;
   if (!(err instanceof Error)) return false;
-  return err.name === 'TalkTimeoutError' || err.name === 'AbortError';
+  if (err.name === 'TalkTimeoutError' || err.name === 'AbortError') return true;
+  // 工具已成功后，合成/续聊的运输层超时不得绕过 writeThread，否则 Owner 空等约整轮 deadline。
+  const kind = (err as { kind?: string }).kind;
+  if (err.name === 'ModelHttpError' && (kind === 'timeout' || kind === 'aborted')) return true;
+  return /timeout after\s+\d+ms|请求超时|TalkTimeout/i.test(err.message);
 }
 
 function wrapChatWithDeadline(chat: TalkChatFn, signal: AbortSignal): TalkChatFn {

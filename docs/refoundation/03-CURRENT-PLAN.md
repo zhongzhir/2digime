@@ -139,8 +139,15 @@ Phase 1 Digital Self、Phase 2 Talk 主链、Phase 3 协作地基仍然有效，
 
 ## 2. 下一开发任务
 
+**任务名：** DIGITALME-SUPER-ASSISTANT-L1-01（人的超级助手 L1）
+**状态：** `ACCEPTED`（`SUPER_ASSISTANT_L1_ACCEPTED`）
+**目标：** 把「数字之我 + 超级助手」写入现行产品定义；Talk 主链落实 MODEL DIRECT / SPECIALIST / MULTI-CAPABILITY；通用 capability 合同与可复用 acquisition；修复 final result 交付 P0。当前只做 L1 + L2 最小基础。
+**禁止：** 新 Agent/workflow 框架；视频/图片/数字人专项；UI 改版；能力商店；多对话；keyword router；第二套状态机；push / package / release（另令除外）。
+
+**并行保留（未取消）：** 干净 Windows 机复验已固化 ZIP
+
 **任务名：** 干净 Windows 机复验已固化 ZIP（同一 SHA256）
-**状态：** `NOT STARTED`
+**状态：** `NOT STARTED`（下一执行指针）
 **阶段：** `PUBLIC_ALPHA_WINDOWS_CANDIDATE_LIMITED`。包已打出，**尚未**干净机 zero-start。Public Alpha **尚未发布**。
 **禁止：** 重打包装却沿用旧 hash；把本机构建机预验收当成 ACCEPTED；做 P1 / Computer Use / Feed。
 

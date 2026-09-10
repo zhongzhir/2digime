@@ -1,6 +1,9 @@
 /**
  * 极薄能力获取：只负责拿到成熟 runtime 并校验可执行。
- * 不理解用户任务，不做语义判断，不绑定单一厂商。
+ * 不理解用户任务，不做语义判断，不绑定单一厂商或 Coding。
+ *
+ * L2 最小基础：任意 capability 可提供自己的 AcquireCandidate[]（acquire()），
+ * Talk 不需要为该能力增加下载/安装代码。OpenCode 是第一个真实实例，不是唯一合同。
  */
 export type AcquireFailureKind =
   | 'ACQUISITION FAILURE'
