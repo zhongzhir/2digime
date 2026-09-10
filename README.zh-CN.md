@@ -13,7 +13,8 @@
 
 ### 下载并开始（Windows x64）
 
-1. 从 [GitHub Releases](https://github.com/zhongzhir/2digime/releases/tag/v0.1.0-public-alpha) 下载 [`兔机米-0.1.0-public-alpha-win-x64.zip`](https://github.com/zhongzhir/2digime/releases/tag/v0.1.0-public-alpha)。  
+1. 从 [GitHub Releases](https://github.com/zhongzhir/2digime/releases/tag/v0.1.0-public-alpha) 下载 [`tujimi-0.1.0-public-alpha-win-x64.zip`](https://github.com/zhongzhir/2digime/releases/download/v0.1.0-public-alpha/tujimi-0.1.0-public-alpha-win-x64.zip)  
+   （已验证包身份：`兔机米-0.1.0-public-alpha-win-x64.zip`；同一文件字节）。  
 2. 解压。  
 3. 运行 `兔机米.exe`。  
 4. 在「设置」中连接支持的 AI。  

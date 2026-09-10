@@ -32,7 +32,9 @@
 
 ## 最简单开始方式
 
-1. 下载 ZIP：`兔机米-0.1.0-public-alpha-win-x64.zip`
+1. 从 [GitHub Releases](https://github.com/zhongzhir/2digime/releases/tag/v0.1.0-public-alpha) 下载 ZIP  
+   - GitHub 资源名：`tujimi-0.1.0-public-alpha-win-x64.zip`  
+   - 已验证包身份：`兔机米-0.1.0-public-alpha-win-x64.zip`（同一文件字节）
 2. 解压到任意文件夹
 3. 运行 `兔机米.exe`
 4. 在设置中连接支持的 AI
@@ -66,7 +68,8 @@
 | | |
 |---|---|
 | Platform | Windows x64 |
-| File | `兔机米-0.1.0-public-alpha-win-x64.zip` |
+| GitHub asset | `tujimi-0.1.0-public-alpha-win-x64.zip` |
+| Validated identity | `兔机米-0.1.0-public-alpha-win-x64.zip` |
 | SHA256 | `adf131a773d67c3717159bff57ff8034060cca4827b2fd87b99016f3f0b46e82` |
 | Source | `8437a7f9889e82e2575a93f045cab5e497a23224` |
 
