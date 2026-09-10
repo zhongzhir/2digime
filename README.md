@@ -2,12 +2,49 @@
 
 [English](README.md) · [中文](README.zh-CN.md)
 
-**Your digital self.**
+**兔机米（2digime）是属于你的数字之我，也是正在成长的超级助手。**
 
-Tell 兔机米 what you want to do. It understands your goal, and when needed finds and organizes the right AI capabilities to complete the work. Through ongoing conversation, real doing, choices, and connecting with the world, it keeps getting to know you, accepts your corrections, and grows into a digital self that is closer to you.
+你只需要告诉兔机米想做什么。  
+它会利用大模型本身的能力，以及可以获得的 Agent、Skill 和工具帮助你完成任务。  
+随着使用，它会逐步理解你、代表你，并最终连接其他数字主体和外部能力。
 
-> **Public Alpha** · early-stage · open source · **Windows x64 first**  
+> **Public Alpha** · early-stage · open source · **Windows x64**  
 > Not production-ready. Not a claim of market completeness.
+
+### Download and start (Windows x64)
+
+1. Download [`兔机米-0.1.0-public-alpha-win-x64.zip`](https://github.com/zhongzhir/2digime/releases/tag/v0.1.0-public-alpha) from [GitHub Releases](https://github.com/zhongzhir/2digime/releases/tag/v0.1.0-public-alpha).  
+2. Unzip.  
+3. Run `兔机米.exe`.  
+4. Connect a supported AI in **设置**.  
+5. Return to **与兔机米** and tell it what you want done.  
+6. For local files, use **添加文件 / 添加文件夹**.
+
+Trial notes for ordinary users: [PUBLIC-ALPHA.md](PUBLIC-ALPHA.md)
+
+**SHA256:** `adf131a773d67c3717159bff57ff8034060cca4827b2fd87b99016f3f0b46e82`
+
+The Windows package is **not code-signed**. Windows may show an unknown-publisher warning. Continue only if you obtained the file from this project’s official Releases and you trust that source.
+
+---
+
+## What this Public Alpha verifies
+
+- Natural conversation
+- Digital Self basics and persistence
+- Multiple conversations
+- Files / folders as real work material
+- The model completing ordinary tasks directly
+- Calling specialist capability when needed
+- Windows x64 packaged use
+
+## Product direction
+
+- **Digital Self**
+- **Super Assistant**
+- **Digital Subject Network**
+
+Current Public Alpha focuses on Digital Self + Super Assistant usability. It does **not** claim: L5 proactive digital butler, complete automatic capability discovery, full video / comic / digital-human generation, complete Computer Use, or a mass Digital Subject Network product.
 
 ---
 
@@ -19,80 +56,36 @@ These are one subject, not three products.
 
 There is one Digital Self: a living record of how 2digime currently understands you. It learns from talk and from real work. Each understanding has a source. You can open **数字之我**, see it, correct it, or delete it. What you state explicitly has the highest authority.
 
-The long-term aim is to keep approaching the real you — not to freeze a static profile, and not to claim a perfect copy or that it already knows everything.
-
 ### Getting things done
 
-You do not need to assemble an AI toolchain first.
-
-1. Tell 兔机米 the goal, in the same conversation.  
-2. It judges what capability is needed.  
-3. It calls — or obtains — a mature AI, agent, or tool.  
-4. It executes in the scope you authorized.  
-5. It checks the result.  
-6. The outcome returns to the same conversation.
-
-Talk is the only everyday entry. Doing is not a second app or a “turn this into a task” workflow.
-
-Verified example: on programming work, 2digime can obtain professional coding ability without a pre-installed coding agent, then make real edits and run checks.
+You do not need to assemble an AI toolchain first. Talk is the everyday entry. Doing happens inside the same conversation — not a second app or a “turn this into a task” workflow.
 
 ### Connecting with the world
 
-Every 2digime can be an intelligent network node that belongs to a real person.
-
-What has been verified: a Relay can offer the **same** candidate pool and transport; it does **not** own your profile and does **not** make the final personalized ranking. Each Digital Self judges locally. Different selves can make different, explainable choices. You can change your Digital Self and thereby change how selection works.
-
-**The final say over “what I should see” moves from a central platform algorithm back to your own digital subject.**
-
-Relays, search, storage, and models still matter — as **network service providers**, not as the default owners of your selection and distribution.
-
-This Alpha does **not** ship a full content feed, follow/subscribe graph, open social network, marketplace, or payments. Those are not current UI. Computer Use is not part of this Alpha.
-
----
-
-## Public Alpha status
-
-| | |
-|---|---|
-| Current Public Alpha target | **Windows x64** |
-| macOS | Not yet verified for Public Alpha. Do not treat this project as macOS-ready. |
-| Linux | Not claimed |
-| Stage | Early trial |
-
-When a Public Alpha package is published, download the latest **Windows x64** build from [GitHub Releases](https://github.com/zhongzhir/2digime/releases). This repository page does not currently point at a specific installer file.
-
-Everyday use: unzip, double-click `兔机米.exe`, connect an AI in **设置**, then talk in **与兔机米**. No Node, Git, or developer tools required for that path.
-
-The Windows package is **not code-signed**. Windows may show an unknown-publisher warning. Only continue if you obtained the file from this project’s official Releases and you trust that source.
-
-Full trial notes (for ordinary users, in Chinese): [docs/windows-preview/README.md](docs/windows-preview/README.md).
+Long-term, every 2digime can be an intelligent network node that belongs to a real person. Selection should stay with your Digital Self, not a central platform. This Alpha does **not** ship a full content feed, follow/subscribe graph, marketplace, or payments.
 
 ---
 
 ## Why 2digime
 
-Most AI products are a generic model plus a platform that ranks what you see. 2digime is different in three durable ways:
-
 - **Digital Self** — identity, memory, and corrections stay yours, on your machine.  
-- **AI Capability** — the product integrates mature models and agents instead of competing with them by reinventing coding, search, or computer use.  
-- **Digital Subject Network** — candidates can come from the network; **personal selection stays with your Digital Self**.
+- **AI Capability / Super Assistant** — integrate mature models and agents; do not reinvent them.  
+- **Digital Subject Network** — candidates can come from the network; personal selection stays local.
 
 ---
 
 ## Architecture principles
 
 - **AI First** — language understanding and tool choice belong to the model, not a keyword router.  
-- **Build-vs-Integrate** — prefer mature agents, tools, and services; do not rebuild them here.  
+- **Build-vs-Integrate** — prefer mature agents, tools, and services.  
 - **Local-first / user-owned** — keys and Digital Self stay on the user’s computer.  
-- **Platform-neutral** — capability providers are replaceable.  
-- **Relay is a service, not a recommendation authority.**  
 - **Open source** — [Apache-2.0](LICENSE).
 
 ---
 
 ## Feedback
 
-The most useful Public Alpha reports are real failures, misunderstandings, and moments that feel unnatural. Please use [GitHub Issues](https://github.com/zhongzhir/2digime/issues).
+The most useful Public Alpha reports are real successes, failures, waiting time, confusion, and moments that still need too much manual work. Please use [GitHub Issues](https://github.com/zhongzhir/2digime/issues).
 
 ---
 
