@@ -4,13 +4,14 @@ import { readDigitalSelf } from '../subject-core/digital-self/store';
 import { formatSelfContext, selectSelfContext } from './self-context';
 import { emptyThread, readThread, writeThread } from './store';
 import { randomUUID } from 'node:crypto';
-import { NO_MODEL_NOTICE, runTalkTurn, type SubjectCollabPort } from './loop';
+import { EMPTY_REPLY, NO_MODEL_NOTICE, runTalkTurn, type SubjectCollabPort } from './loop';
 import type { ProfessionalAgent, TalkChatFn, TalkExecution, TalkView } from './types';
 
 /** 做事（含首次获取代码执行能力）需要数分钟；180s 会在 runtime 仍工作时掐断。 */
 export const TALK_TURN_DEADLINE_MS = 600_000;
 export const TALK_TIMEOUT_NOTICE = '请求超时，模型在限定时间内没有返回。可重试。';
 export const TALK_SYNTHESIS_TIMEOUT_NOTICE = '操作已经完成，但最终回复生成超时';
+export const TALK_EXECUTION_DONE_NOTICE = '已完成。相关修改已经写入你授权的项目。';
 
 export class TalkTimeoutError extends Error {
   readonly kind = 'timeout';
@@ -150,6 +151,9 @@ export class TalkService {
         ...(collab ? { subjectCollab: collab } : {}),
         ...(confirmHint ? { confirmHint } : {}),
       });
+      // 模型最终回复为空或整段内部 execution JSON 时，deliverText 会变成 EMPTY_REPLY。
+      // 本轮已有 execution 则不得把 EMPTY_REPLY 交给用户；复用 execution 机械事实。
+      applyUndeliverableFinalFallback(next, turnExecutions);
     } catch (err) {
       if (!isTalkTimeout(err)) throw err;
       const last = thread.turns[thread.turns.length - 1];
@@ -162,7 +166,7 @@ export class TalkService {
         });
       }
       const userTurn = thread.turns[thread.turns.length - 1];
-      const fromExec = assistantFromTurnExecutions(turnExecutions);
+      const fromExec = assistantFromTurnExecutions(turnExecutions, 'deadline');
       timeoutNotice = fromExec.notice;
       thread.turns.push({
         id: `turn_${randomUUID()}`,
@@ -194,7 +198,16 @@ export function composeTalkUserText(text: string, contextPaths?: string[]): stri
   return body ? `${body}\n\n${suffix}` : suffix;
 }
 
-function assistantFromTurnExecutions(execs: TalkExecution[]): {
+/**
+ * 仅用 execution 机械事实生成用户可见结果。
+ * - deadline：整轮超时后的合成失败说明
+ * - undeliverable_final：模型最终回复为空或内部 actualSuccess JSON
+ * 不读自然语言目标，不声称测试通过，不编造修改内容。
+ */
+export function assistantFromTurnExecutions(
+  execs: TalkExecution[],
+  mode: 'deadline' | 'undeliverable_final' = 'deadline',
+): {
   text: string;
   notice: string;
   executionIds: string[];
@@ -215,12 +228,45 @@ function assistantFromTurnExecutions(execs: TalkExecution[]): {
   }
   const lastOk = [...execs].reverse().find((item) => item.ok);
   const outputPath = lastOk?.outputPath;
+  const changedNames = uniqueBasenames([
+    ...(lastOk?.producedOutputs || []),
+    ...(outputPath ? [outputPath] : []),
+  ]);
+  const doneText =
+    mode === 'undeliverable_final'
+      ? changedNames.length
+        ? `已完成。已修改 ${changedNames.join('、')}，结果已经写入项目目录。`
+        : TALK_EXECUTION_DONE_NOTICE
+      : TALK_SYNTHESIS_TIMEOUT_NOTICE;
   return {
-    text: TALK_SYNTHESIS_TIMEOUT_NOTICE,
-    notice: TALK_SYNTHESIS_TIMEOUT_NOTICE,
+    text: doneText,
+    notice: doneText.slice(0, 400),
     executionIds,
     ...(outputPath ? { result: { title: path.basename(outputPath), path: outputPath } } : {}),
   };
+}
+
+function uniqueBasenames(paths: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of paths) {
+    const name = path.basename(String(item || '').trim());
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    out.push(name);
+  }
+  return out;
+}
+
+function applyUndeliverableFinalFallback(thread: ReturnType<typeof emptyThread>, execs: TalkExecution[]): void {
+  if (!execs.length) return;
+  const last = thread.turns[thread.turns.length - 1];
+  if (!last || last.role !== 'assistant') return;
+  if (last.text !== EMPTY_REPLY) return;
+  const fromExec = assistantFromTurnExecutions(execs, 'undeliverable_final');
+  last.text = fromExec.text;
+  if (fromExec.executionIds.length) last.executionIds = fromExec.executionIds;
+  if (fromExec.result) last.result = fromExec.result;
 }
 
 function projectView(thread: ReturnType<typeof emptyThread>, notice?: string): TalkView {

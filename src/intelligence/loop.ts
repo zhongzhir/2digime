@@ -29,7 +29,8 @@ import { formatPublicCardsForModel } from '../subject-collab/public-card';
 export const NO_MODEL_NOTICE = '需要先连接 AI 能力，才能继续交流。';
 
 const MAX_TOOL_ROUNDS = 8;
-const EMPTY_REPLY = '我在。请再说一次你想让我做什么。';
+/** 无 execution 时的普通聊天空回复；有 execution 时不得落到用户面（见 TalkService fallback）。 */
+export const EMPTY_REPLY = '我在。请再说一次你想让我做什么。';
 
 const DELEGATE_TOOL: ChatToolDefinition = {
   type: 'function',
