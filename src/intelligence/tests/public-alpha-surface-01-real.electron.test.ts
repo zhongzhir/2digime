@@ -90,7 +90,7 @@ test('Public Alpha 真实 UI Trial A/B/C', { timeout: 2_400_000 }, async (t) => 
     assert.equal(await harness.page.locator('.empty-emblem').count(), 0);
     assert.match(await harness.page.locator('.composer-hint').innerText(), /上下文/);
     const attachFileLabel = await harness.page.locator('#btn-talk-attach-file').textContent();
-    assert.match(String(attachFileLabel || ''), /这次一起看/);
+    assert.match(String(attachFileLabel || ''), /添加文件/);
 
     await harness.page.locator('#nav-settings').click();
     await harness.page.locator('#view-settings').waitFor({ state: 'visible', timeout: 15_000 });

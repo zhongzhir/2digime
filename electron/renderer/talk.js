@@ -8,6 +8,7 @@
   const DOING_TEXT = '正在替你做';
   const CHECKING_TEXT = '正在查看结果';
   let sendGeneration = 0;
+  let viewEpoch = 0;
   let sending = false;
 
   function api() {
@@ -28,6 +29,26 @@
     const raw = String(filePath || '').replace(/\\/g, '/');
     const parts = raw.split('/');
     return parts[parts.length - 1] || raw;
+  }
+
+  async function currentSessionId() {
+    const client = api();
+    if (!client || !client.conversation || typeof client.conversation.listSessions !== 'function') {
+      return '';
+    }
+    try {
+      const listed = await client.conversation.listSessions();
+      return String((listed && listed.currentId) || '');
+    } catch (_err) {
+      return '';
+    }
+  }
+
+  function showSessionAside() {
+    const el = $('chat-session-aside');
+    if (!el) return;
+    el.hidden = false;
+    el.removeAttribute('hidden');
   }
 
   function facingError(err) {
@@ -66,7 +87,6 @@
 
   function hideLegacyChrome() {
     const hideIds = [
-      'chat-session-aside',
       'first-value',
       'growth-guide-actions',
       'btn-chat-to-task',
@@ -79,6 +99,7 @@
       el.hidden = true;
       el.setAttribute('hidden', '');
     }
+    showSessionAside();
     const title = document.querySelector('#panel-chat .page-title');
     if (title) title.textContent = '与兔机米';
     const lead = document.querySelector('#panel-chat .page-lead');
@@ -104,6 +125,38 @@
     input.addEventListener('input', autosizeInput);
     window.addEventListener('resize', autosizeInput);
     autosizeInput();
+  }
+
+  function bindComposerKeys() {
+    const input = $('chat-input');
+    const send = $('btn-chat-send');
+    if (!input || input.dataset.sendKeyBound) return;
+    input.dataset.sendKeyBound = '1';
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Enter' || ev.shiftKey) return;
+      if (ev.isComposing || ev.keyCode === 229) return;
+      ev.preventDefault();
+      if (send && !send.disabled) send.click();
+    });
+  }
+
+  async function refreshSessions() {
+    if (typeof window.refreshChatSessions === 'function') {
+      await window.refreshChatSessions();
+    }
+  }
+
+  async function onSessionChange() {
+    viewEpoch += 1;
+    sendGeneration += 1;
+    sending = false;
+    setCancelVisible(false);
+    const send = $('btn-chat-send');
+    if (send) send.disabled = false;
+    pendingPaths.length = 0;
+    renderChips();
+    lastView = { turns: [] };
+    await refresh();
   }
 
   function renderChips() {
@@ -279,10 +332,13 @@
   async function refresh() {
     hideLegacyChrome();
     bindAutosize();
+    bindComposerKeys();
+    bindAttach();
     renderChips();
     try {
       const result = await invokeTalk({});
       renderView(result && result.view);
+      await refreshSessions();
     } catch (err) {
       setNotice(facingError(err));
     }
@@ -291,6 +347,7 @@
   function cancelSend() {
     if (!sending) return;
     sendGeneration += 1;
+    viewEpoch += 1;
     sending = false;
     setCancelVisible(false);
     const send = $('btn-chat-send');
@@ -315,6 +372,8 @@
     }
     pendingPaths.length = 0;
     renderChips();
+    const sessionAtSend = await currentSessionId();
+    const epoch = viewEpoch;
     const generation = ++sendGeneration;
     sending = true;
     setNotice(DOING_TEXT);
@@ -322,7 +381,7 @@
     if (send) send.disabled = true;
     const pendingText =
       paths.length && trimmed
-        ? `${trimmed}\n\n（这次一起看：${paths.map(basename).join('、')}）`
+        ? `${trimmed}\n\n（${paths.map(basename).join('、')}）`
         : trimmed;
     renderView(lastView, { userText: pendingText, doingText: DOING_TEXT });
     let watchdog = 0;
@@ -331,7 +390,7 @@
       const payload = { text: trimmed };
       if (paths.length) payload.contextPaths = paths;
       checkTimer = setTimeout(() => {
-        if (generation !== sendGeneration) return;
+        if (generation !== sendGeneration || epoch !== viewEpoch) return;
         setDoingText(CHECKING_TEXT);
         setNotice(CHECKING_TEXT);
       }, 8000);
@@ -341,9 +400,15 @@
           watchdog = setTimeout(() => reject(new Error(TALK_TIMEOUT_NOTICE)), talkUiDeadlineMs());
         }),
       ]);
+      // 已切到其它对话：结果已落盘，返回该对话时 refresh 可见。
+      if (epoch !== viewEpoch) return;
+      const still = await currentSessionId();
+      if (sessionAtSend && still && still !== sessionAtSend) return;
       if (generation !== sendGeneration) return;
       renderView(result && result.view);
+      await refreshSessions();
     } catch (err) {
+      if (epoch !== viewEpoch) return;
       if (generation !== sendGeneration) return;
       // 后端可能已在超时路径落盘最终回复；再读一次 Thread，避免「文件已成但界面只剩超时」。
       try {
@@ -363,7 +428,7 @@
     } finally {
       if (watchdog) clearTimeout(watchdog);
       if (checkTimer) clearTimeout(checkTimer);
-      if (generation === sendGeneration) {
+      if (epoch === viewEpoch && generation === sendGeneration) {
         sending = false;
         setCancelVisible(false);
         if (send) send.disabled = false;
@@ -408,6 +473,7 @@
     refresh: refresh,
     handleSend: handleSend,
     cancel: cancelSend,
+    onSessionChange: onSessionChange,
     pendingPaths: pendingPaths,
     addContextPaths: addPaths,
     attachFiles: pickFiles,
@@ -417,6 +483,7 @@
   function start() {
     hideLegacyChrome();
     bindAutosize();
+    bindComposerKeys();
     bindAttach();
     void refresh();
   }

@@ -1,6 +1,10 @@
 import * as path from 'node:path';
 import { nowIso } from '../shared/ids';
 import { readDigitalSelf } from '../subject-core/digital-self/store';
+import {
+  listConversationSessionsSync,
+  touchConversationSessionSync,
+} from '../subject-core/conversation-sessions';
 import { formatSelfContext, selectSelfContext } from './self-context';
 import { emptyThread, readThread, writeThread } from './store';
 import { randomUUID } from 'node:crypto';
@@ -69,7 +73,8 @@ export type TalkLearnResult = {
 };
 
 export class TalkService {
-  private writeChain: Promise<void> = Promise.resolve();
+  /** 按会话串行写 Thread；不同会话互不阻塞，便于长 Doing 时切去其它对话。 */
+  private readonly writeChains = new Map<string, Promise<void>>();
 
   constructor(
     private readonly resolvePackage: () => TalkPackageRef | null,
@@ -84,25 +89,44 @@ export class TalkService {
   ) {}
 
   async invoke(input: { text?: string; contextPaths?: string[] }): Promise<{ view: TalkView }> {
-    const run = this.writeChain.then(() => this.invokeNow(input));
-    this.writeChain = run.then(
-      () => undefined,
-      () => undefined,
+    const pkg = this.resolvePackage();
+    if (!pkg) {
+      return { view: projectView(emptyThread(this.now()), '还没有可用的数字之我。') };
+    }
+    const threadId = listConversationSessionsSync(pkg.rootDir).currentId;
+    const prev = this.writeChains.get(threadId) || Promise.resolve();
+    const run = prev.then(() => this.invokeNow(input, threadId));
+    this.writeChains.set(
+      threadId,
+      run.then(
+        () => undefined,
+        () => undefined,
+      ),
     );
     return run;
   }
 
-  private async invokeNow(input: { text?: string; contextPaths?: string[] }): Promise<{ view: TalkView }> {
+  private async invokeNow(
+    input: { text?: string; contextPaths?: string[] },
+    threadId: string,
+  ): Promise<{ view: TalkView }> {
     const pkg = this.resolvePackage();
     if (!pkg) {
       return { view: projectView(emptyThread(this.now()), '还没有可用的数字之我。') };
     }
     const now = this.now();
-    const thread = await readThread(pkg.rootDir, now);
+    const thread = await readThread(pkg.rootDir, now, threadId);
     const spoken = String(input.text || '').trim();
     const text = composeTalkUserText(spoken, input.contextPaths);
     if (!text) {
       return { view: projectView(thread) };
+    }
+    if (spoken) {
+      try {
+        touchConversationSessionSync(pkg.rootDir, { titleFromUserText: spoken });
+      } catch {
+        /* 会话标题失败不得阻断 Talk */
+      }
     }
     if (!this.chat) {
       return { view: projectView(thread, NO_MODEL_NOTICE) };
@@ -184,6 +208,7 @@ export class TalkService {
     } finally {
       clearTimeout(timer);
     }
+    if (next.threadId !== threadId) next.threadId = threadId;
     await writeThread(pkg.rootDir, next);
     return { view: projectView(next, timeoutNotice) };
   }

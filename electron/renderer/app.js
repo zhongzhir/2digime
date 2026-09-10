@@ -6255,6 +6255,8 @@
     }
   }
 
+  window.refreshChatSessions = refreshChatSessions;
+
   async function createChatSession() {
     const generation = ++chatGeneration;
     if (!api.conversation || typeof api.conversation.createSession !== "function") {
@@ -6265,7 +6267,12 @@
       await api.conversation.createSession();
       if (!isLiveChatGeneration(generation)) return;
       resetChatComposer();
-      await refreshChatPanel();
+      if (window.TalkPage && typeof window.TalkPage.onSessionChange === "function") {
+        await window.TalkPage.onSessionChange();
+      } else {
+        await refreshChatPanel();
+      }
+      await refreshChatSessions();
       if (els.chatStatus) els.chatStatus.textContent = "已开始新对话。原来的对话还在左侧。";
     } catch (err) {
       if (els.chatStatus) els.chatStatus.textContent = (err && err.message) || String(err);
@@ -6274,15 +6281,17 @@
 
   async function openChatSession(id) {
     const generation = ++chatGeneration;
-    if (api.conversation && typeof api.conversation.cancel === "function") {
-      void api.conversation.cancel();
-    }
     if (!api.conversation || typeof api.conversation.openSession !== "function") return;
     try {
       await api.conversation.openSession(id);
       if (!isLiveChatGeneration(generation)) return;
       resetChatComposer();
-      await refreshChatPanel();
+      if (window.TalkPage && typeof window.TalkPage.onSessionChange === "function") {
+        await window.TalkPage.onSessionChange();
+      } else {
+        await refreshChatPanel();
+      }
+      await refreshChatSessions();
     } catch (err) {
       if (els.chatStatus) els.chatStatus.textContent = (err && err.message) || String(err);
     }

@@ -278,7 +278,7 @@
 
       <section id="view-shell" class="view" hidden>
         <section id="panel-chat" class="shell-panel chat-panel chat-with-sessions" data-panel="chat">
-          <aside id="chat-session-aside" class="chat-session-aside" aria-label="历史对话" hidden>
+          <aside id="chat-session-aside" class="chat-session-aside" aria-label="历史对话">
             <button type="button" id="btn-chat-new" class="primary">新对话</button>
             <ul id="chat-session-list" class="chat-session-list"></ul>
           </aside>
@@ -314,10 +314,10 @@
             <ul id="talk-attach-chips" class="talk-attach-chips" hidden></ul>
             <div class="talk-composer-row">
               <details id="talk-attach-menu" class="talk-attach-menu">
-                <summary id="btn-talk-attach" title="添加这次对话的上下文">＋</summary>
+                <summary id="btn-talk-attach" title="添加文件或文件夹">＋</summary>
                 <div class="talk-attach-menu-body">
-                  <button type="button" id="btn-talk-attach-file">这次一起看的文件</button>
-                  <button type="button" id="btn-talk-attach-folder">这次一起看的文件夹</button>
+                  <button type="button" id="btn-talk-attach-file">添加文件</button>
+                  <button type="button" id="btn-talk-attach-folder">添加文件夹</button>
                 </div>
               </details>
               <div class="field talk-composer-field">
@@ -326,7 +326,7 @@
               </div>
             </div>
             <div class="row composer-actions">
-              <p class="composer-hint">文件和文件夹都是这次对话的上下文。</p>
+              <p class="composer-hint">Enter 发送 · Shift + Enter 换行</p>
               <button type="button" id="btn-chat-send" class="primary">发送</button>
               <button type="button" id="btn-chat-cancel" class="ghost" hidden>取消</button>
               <button type="button" id="btn-chat-retry" class="ghost" hidden>重试回复</button>

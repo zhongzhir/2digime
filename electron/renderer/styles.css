@@ -853,6 +853,7 @@ select {
   display: grid;
   min-height: 0;
   height: 100%;
+  grid-template-columns: 220px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
 }
 
@@ -1385,7 +1386,7 @@ select {
 
 .chat-panel.chat-with-sessions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: 220px minmax(0, 1fr);
   gap: 16px;
   align-items: stretch;
   min-height: 0;
