@@ -2,11 +2,67 @@
 
 版本：v0.4
 状态：historical strategic context（不承担 current plan）
-最后更新：2026-09-06（日终指针；下文 2026-08-31 及更早条目仍为历史）
+最后更新：2026-09-11（日终收口；下文 2026-09-08 及更早条目仍为历史）
 
-> **2026-09-08 当前状态指针**：本文件不恢复为第二权威源。现行权威：`AGENTS.md` → `docs/refoundation/00` / `01` / `02` / `03`。当前执行只在 [`docs/refoundation/03-CURRENT-PLAN.md`](docs/refoundation/03-CURRENT-PLAN.md)。
+本文件不恢复为第二权威源。现行权威：`AGENTS.md` → `docs/refoundation/00` / `01` / `02` / `03`。
+
+## 当前状态 / 最新里程碑（2026-09-11）
+
+收口核验：`git fetch origin` 成功。收口前 `HEAD` = `origin/main` = `ab22b7206e796a390d1e0a3cd963b31e9a0ef2b5`。今日停止开发；本条只记录已进入正式主线的有效结论。
+
+### 1. Public Alpha
+
+- Windows Public Alpha 已正式发布（GitHub Release `v0.1.0-public-alpha.1`）。
+- 标准 Windows Installer 已发布，并通过真实安装 / 升级验证。
+- 个人版继续作为公开试用基础版本。
+
+### 2. Institution Distribution v0.1
+
+- `INSTITUTION_DISTRIBUTION_V01_ACCEPTED`（`cdffcc893c2ae255287d7355a07129e65ab521e7`）
+- `INSTITUTION_DISTRIBUTION_V01_MAINLINE_ACCEPTED`：该提交已是 `origin/main` 祖先，随后官网提交叠在其上。
+- 已进入 `origin/main`。
+
+已经真实验证：Organization / Institution User；两个用户独立映射；不同 AI 使用权益与额度；LiteLLM 负责实际额度执行与 usage；Institution Backend 最小薄服务；客户端 Institution Adapter；个人版路径继续保留；Brand Kit / 白标；同一套兔机米可生成不同机构品牌版本；不同品牌本地数据隔离；provider master key 不下发客户端；Institution Backend 不保存 Talk 正文；Digital Self / 数字之我仍本地；Demo Telecom + DeepSeek 真实闭环验证通过。
+
+仍未完成（真实合作阶段实施，不得记为已完成）：真实中国电信 / 招行 SSO；CRM / billing / settlement；生产级多租户 SaaS；HA；合规认证；深度机构运营后台。
+
+### 3. 官方网站
+
+- 官方网站 v0.1 已发布：https://zhongzhir.github.io/2digime/
+- 页面：`/`、`/personal/`、`/institution/`、`/download/`
+- 当前官网已经完成一次品牌文案修订。Owner 认可当前版本，可作为现阶段对外版本使用。
+- 核心品牌表达已经转向：「属于你的数字之我与超级助手」；「AI 越强，人越应该是主人」；机构合作：「把 AI 能力，变成你自己的用户产品」。
+- 官网语言原则：面向用户与合作伙伴说人话；不使用研发验收报告式语言；尽量不用 Core / Digital Self / Adapter / entitlement 等工程黑话；对未来能力积极表达，但不得把未来能力冒充当前事实。
+
+### 4. 官网 v0.2
+
+- Figma 设计文件已经创建：https://www.figma.com/design/NwsKzBXFdFXYn8POeuQwmk
+- 已建立基础 token。
+- Figma Starter 月度 MCP 调用额度耗尽。暂不阻塞产品推进。
+- 等 Figma MCP 额度恢复后执行：`OFFICIAL-WEBSITE-V02-DESIGN-UPGRADE`
+- v0.2 原则：不重建 IA；不重写已经认可的核心品牌叙事；重点升级视觉、排版、真实产品展示、移动端和品牌质感。
+
+### 5. 自定义域名
+
+- `www.2digime.com` 已由 Owner 准备。
+- 仓库无 `CNAME`；GitHub Pages workflow 未绑定 custom domain。
+- 2026-09-11 公网复核：https://zhongzhir.github.io/2digime/ 可用；`www.2digime.com` 返回 HTTP 500，`2digime.com` 超时。DNS / GitHub Pages custom domain **尚未完成，不得写成已上线**。
+- 当前已确认可用的官网地址：https://zhongzhir.github.io/2digime/
+
+### 6. 后续开发顺序
+
+今天收口后的单一顺序：
+
+1. 官网当前版本冻结；
+2. 如仍需要，只完成 `www.2digime.com` 的最小域名切换；
+3. 下一产品主任务：**真实漫剧内容 × 数字主体网络试验**
+4. Figma 官网 v0.2 视觉升级等待额度恢复后再做。
+
+仍坚持：`一个 Authority → 一个当前主任务 → 真实验证 → 验收 → 提交 → 下一任务`。禁止多头并行。
+
+> **2026-09-08 当前状态指针（历史）**：本文件不恢复为第二权威源。现行权威：`AGENTS.md` → `docs/refoundation/00` / `01` / `02` / `03`。当前执行只在 [`docs/refoundation/03-CURRENT-PLAN.md`](docs/refoundation/03-CURRENT-PLAN.md)。
 >
-> 已接受：`DIGITAL_SUBJECT_NETWORK_STRATEGY_ACCEPTED` / `ZERO_START_CODING_TALK_ACCEPTED`。核心定位见 00：Digital Self / AI Capability / Digital Subject Network。未 push、未 Release。
+> 已接受：`DIGITAL_SUBJECT_NETWORK_STRATEGY_ACCEPTED` / `ZERO_START_CODING_TALK_ACCEPTED`。核心定位见 00：Digital Self / AI Capability / Digital Subject Network。当时尚未 push、尚未 Release。
 >
 > **2026-09-06 当前状态指针**：本文件不恢复为第二权威源。现行权威：`AGENTS.md` → `docs/refoundation/00` / `01` / `02` / `03`。当前执行只在 [`docs/refoundation/03-CURRENT-PLAN.md`](docs/refoundation/03-CURRENT-PLAN.md)。
 >

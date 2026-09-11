@@ -5,6 +5,35 @@
 
 ---
 
+## 2026-09-11
+
+### 状态
+
+`DAY_CLOSED_20260911` / `INSTITUTION_DISTRIBUTION_V01_ACCEPTED` / `INSTITUTION_DISTRIBUTION_V01_MAINLINE_ACCEPTED` / `OFFICIAL_WEBSITE_V01_PUBLISHED` / `FIGMA_MCP_QUOTA_EXHAUSTED` / `CUSTOM_DOMAIN_NOT_LIVE` / `today_close_docs_only`
+
+收口核验：`git fetch origin` 成功。收口前 `HEAD` = `origin/main` = `ab22b7206e796a390d1e0a3cd963b31e9a0ef2b5`。今日停止开发，只更新 context / log。
+
+### 今日里程碑
+
+1. **Public Alpha Windows Installer 正式发布完成。** Installer 实现 `702cc272c84422bdb6f9b84bb5df46f38d564785`（2026-09-10）；公开历史 reconcile `7580d3df47d7a275154c6541f81219c56620f74e`（2026-09-10）；public-alpha.1 下载指向 `a291fcfb4e7b7bf4e616ed05b923df2c4b6f8665`；ASCII 资产名 `d23ede023cf68c555a79e58f433bd2d80f58f2f5`。Release / tag：`v0.1.0-public-alpha.1`。
+2. **后 Public Alpha governance 落盘并进入 main。** `3940cd301cac34687f7357c841a2bbae32d56d2d` `docs(governance): freeze post-public-alpha execution order`。
+3. **Institution Distribution 全切片通过。**
+   - Foundation：`1ebaff125109ac6bf37c3ebdfc834155c67099a0`
+   - Slice A LiteLLM privacy/quota spike：`3f1034d0cfa126b86e0e5b321f17e066539635fd`
+   - Slice B Backend：`f9367e1caf3e10dbe364f8b1dba3cffca46306d2`
+   - Slice C Client Adapter：`85d6d375f9c292d72597fea9505f5e452081587c`
+   - Slice D Brand Kit：`1a72abeaf0805d1294028522a8d2edafcbcd663d`
+   - Slice E Acceptance：`cdffcc893c2ae255287d7355a07129e65ab521e7`（`INSTITUTION_DISTRIBUTION_V01_ACCEPTED`）
+4. **Institution Distribution v0.1 进入 main。** `cdffcc893c2ae255287d7355a07129e65ab521e7` 已是 `origin/main` 祖先（无独立 merge commit；随后官网提交叠在其上）。记为 `INSTITUTION_DISTRIBUTION_V01_MAINLINE_ACCEPTED`。
+5. **官方网站 v0.1 建立并通过 GitHub Pages 发布。** `e0fd007e64e8729145f149ce8124e16a6121436a`；发布记录 `635e59f4684c69803e0a56c5626215c7b1f6ab27`。公网地址：https://zhongzhir.github.io/2digime/ （`/`、`/personal/`、`/institution/`、`/download/`）。
+6. **Figma 设计启动，但因 Starter 月度 MCP limit 暂停。** 文件：https://www.figma.com/design/NwsKzBXFdFXYn8POeuQwmk ；同日实测读取调用被 Starter 限额拦截。
+7. **决定不等待 Figma，先上线静态官网 v0.1。** 见上项 `e0fd007e64e8729145f149ce8124e16a6121436a` / `635e59f4684c69803e0a56c5626215c7b1f6ab27`。
+8. **官网完成品牌 / 营销语言修订。** `04f1d1915cc79880f497caf66e43cc3681112ebf`：强化「人在 AI 时代的主体性」、强化个人版价值、重写机构合作价值、删除大量软件工程黑话。
+9. **Owner 查看线上页面后确认：「这一版文案好很多，先这样。」** 修订记录落入 `origin/main` `ab22b7206e796a390d1e0a3cd963b31e9a0ef2b5`（同时记录 custom domain blocker：仓库无 CNAME；`www.2digime.com` 当日公网不可用）。
+10. **今日到此停止。** 官网当前版本冻结。如仍需要，只做 `www.2digime.com` 最小域名切换。下一产品主任务：真实漫剧内容 × 数字主体网络试验。Figma 官网 v0.2 等额度恢复后再做 `OFFICIAL-WEBSITE-V02-DESIGN-UPGRADE`。
+
+---
+
 ## 2026-09-09 — Windows Public Alpha Candidate
 
 ### 状态
