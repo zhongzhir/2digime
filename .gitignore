@@ -26,6 +26,8 @@ scripts/_mvp-p2a-zip-candidate-evidence/
 scripts/_mvp-security-fp-audit-evidence/
 release-staging/
 build-meta.json
+electron/brand.json
+electron-builder.brand.json
 
 scripts/_mvp-p2b1-isolated-code-change-evidence/
 scripts/_experience-redesign-b6-baselines/

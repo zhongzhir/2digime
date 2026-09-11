@@ -112,9 +112,26 @@
     parent.appendChild(section);
   }
 
+  let defaultHeadline = '兔机米现在怎样理解我';
+
+  function applyBrand(brand) {
+    if (brand && brand.strings && brand.strings.selfHeadline) {
+      defaultHeadline = brand.strings.selfHeadline;
+    }
+    const headline = $('ds-headline');
+    if (headline && (!headline.textContent || /兔机米现在怎样理解我|助手现在怎样理解我/.test(headline.textContent))) {
+      headline.textContent = defaultHeadline;
+    }
+    const emptyEl = $('ds-empty');
+    if (emptyEl && brand && brand.strings && brand.strings.talkTitle) {
+      const talkName = brand.strings.talkTitle;
+      emptyEl.textContent = `还没有任何了解。在「${talkName}」里说话，或在这里补充一件事。`;
+    }
+  }
+
   function renderView(view) {
     const headline = $('ds-headline');
-    if (headline) headline.textContent = (view && view.headline) || '兔机米现在怎样理解我';
+    if (headline) headline.textContent = (view && view.headline) || defaultHeadline;
     setNotice(view && view.notice ? view.notice : '');
     const groupsEl = $('ds-groups');
     const emptyEl = $('ds-empty');
@@ -282,6 +299,7 @@
   window.DigitalSelfPage = {
     refresh: refresh,
     show: refresh,
+    applyBrand: applyBrand,
   };
 
   if (document.readyState === 'loading') {

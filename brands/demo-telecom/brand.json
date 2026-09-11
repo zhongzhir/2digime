@@ -1,0 +1,35 @@
+{
+  "id": "demo-telecom",
+  "productName": "Demo Telecom AI",
+  "organizationName": "Demo Telecom",
+  "appId": "local.demotelecom.ai",
+  "userDataDirName": "demo-telecom-ai",
+  "copyright": "Demo Telecom",
+  "iconIco": "brands/demo-telecom/icon.ico",
+  "iconPng": "brands/demo-telecom/icon.png",
+  "supportText": "由 Demo Telecom 提供 AI 服务。密钥与数字之我保存在本机。",
+  "supportUrl": "",
+  "themeTokens": {
+    "accent": "#0b6e4f"
+  },
+  "institutionDefaults": {
+    "organizationName": "Demo Telecom",
+    "backendBaseUrl": "http://127.0.0.1:4100"
+  },
+  "strings": {
+    "windowTitle": "Demo Telecom AI",
+    "navTalk": "对话",
+    "navSelf": "数字之我",
+    "navSettings": "设置",
+    "talkTitle": "对话",
+    "talkLead": "聊聊近况，或把一件事交给助手。",
+    "talkLabel": "告诉助手",
+    "assistantRole": "助手",
+    "selfHeadline": "助手现在怎样理解我",
+    "helpIntro": "日常使用这三个页面：对话、数字之我、设置。",
+    "aboutLabel": "关于 Demo Telecom AI",
+    "hideLabel": "隐藏 Demo Telecom AI",
+    "institutionProvidedBy": "你的 AI 服务由 Demo Telecom 提供。",
+    "openSourceNote": "基于开源 2digime 构建，可互通兼容。Powered by 2digime。"
+  }
+}

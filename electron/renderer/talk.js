@@ -120,6 +120,20 @@
     else el.setAttribute('hidden', '');
   }
 
+  let assistantRoleName = '兔机米';
+
+  function applyBrand(brand) {
+    if (!brand || !brand.strings) return;
+    const s = brand.strings;
+    if (s.assistantRole) assistantRoleName = s.assistantRole;
+    const title = document.querySelector('#panel-chat .page-title');
+    if (title && s.talkTitle) title.textContent = s.talkTitle;
+    const lead = document.querySelector('#panel-chat .page-lead p, #panel-chat .page-lead');
+    if (lead && s.talkLead && lead.tagName === 'P') lead.textContent = s.talkLead;
+    const label = document.querySelector('label[for="chat-input"]');
+    if (label && s.talkLabel) label.textContent = s.talkLabel;
+  }
+
   function hideLegacyChrome() {
     const hideIds = [
       'first-value',
@@ -135,12 +149,16 @@
       el.setAttribute('hidden', '');
     }
     showSessionAside();
-    const title = document.querySelector('#panel-chat .page-title');
-    if (title) title.textContent = '与兔机米';
+    const brand = window.__digitalMeBrand;
+    if (brand) applyBrand(brand);
+    else {
+      const title = document.querySelector('#panel-chat .page-title');
+      if (title) title.textContent = '与兔机米';
+      const label = document.querySelector('label[for="chat-input"]');
+      if (label) label.textContent = '告诉兔机米';
+    }
     const lead = document.querySelector('#panel-chat .page-lead');
     if (lead) lead.hidden = true;
-    const label = document.querySelector('label[for="chat-input"]');
-    if (label) label.textContent = '告诉兔机米';
     if (!sending) setCancelVisible(false);
   }
 
@@ -304,7 +322,7 @@
       li.className = turn.role === 'user' ? 'chat-turn-user' : 'chat-turn-assistant';
       const role = document.createElement('p');
       role.className = 'talk-role';
-      role.textContent = turn.role === 'user' ? '你' : '兔机米';
+      role.textContent = turn.role === 'user' ? '你' : assistantRoleName;
       li.appendChild(role);
       const p = document.createElement('p');
       p.className = 'chat-text';
@@ -331,7 +349,7 @@
         wait.setAttribute('data-talk-processing', '1');
         const waitRole = document.createElement('p');
         waitRole.className = 'talk-role';
-        waitRole.textContent = '兔机米';
+        waitRole.textContent = assistantRoleName;
         wait.appendChild(waitRole);
         const waitText = document.createElement('p');
         waitText.className = 'chat-text';
@@ -513,6 +531,7 @@
     addContextPaths: addPaths,
     attachFiles: pickFiles,
     attachFolder: pickFolder,
+    applyBrand: applyBrand,
   };
 
   function start() {

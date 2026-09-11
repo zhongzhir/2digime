@@ -9,9 +9,11 @@ const path = require("node:path");
 const fs = require("node:fs");
 const { pathToFileURL } = require("node:url");
 const { installApplicationMenu } = require("./app-menu.cjs");
-const DISPLAY_NAME = "兔机米";
-/** 本机配置目录名保持稳定，不随窗口显示名变化，避免保存的连接与 Talk 分裂。 */
-const USER_DATA_DIR_NAME = "digitalme-v2";
+const { loadBrand, publicBrandView } = require("./brand.cjs");
+/** Brand Kit：官方默认 digitalme-v2；白标用独立 userDataDirName，避免串读用户数据。 */
+const RUNTIME_BRAND = loadBrand();
+const DISPLAY_NAME = RUNTIME_BRAND.productName || "兔机米";
+const USER_DATA_DIR_NAME = RUNTIME_BRAND.userDataDirName || "digitalme-v2";
 app.setName(DISPLAY_NAME);
 const {
   ensureDefaultPackageAttached: ensureDefaultPackageAttachedCore,
@@ -118,6 +120,7 @@ function buildBootInfo(model, appRoot, remoteCapabilityStatus) {
         }
       })(),
     },
+    brand: publicBrandView(RUNTIME_BRAND),
   };
 }
 
@@ -894,9 +897,11 @@ function registerIpc() {
 
   ipcMain.handle("shell:connectInstitution", async (_evt, input) => {
     if (!saveCredential) throw new Error("本机安全存储不可用，暂时无法保存机构凭证");
+    const defaults = (RUNTIME_BRAND && RUNTIME_BRAND.institutionDefaults) || {};
     const backendBaseUrl = String(
       (input && input.backendBaseUrl) ||
         process.env.DIGITALME_INSTITUTION_BACKEND_URL ||
+        defaults.backendBaseUrl ||
         "http://127.0.0.1:4100",
     )
       .trim()
@@ -904,7 +909,9 @@ function registerIpc() {
     const institutionUserId = String((input && input.institutionUserId) || "").trim();
     const assertion = String((input && input.assertion) || "mock").trim() || "mock";
     const organizationName =
-      String((input && input.organizationName) || "Demo Telecom").trim() || "Demo Telecom";
+      String(
+        (input && input.organizationName) || defaults.organizationName || "Demo Telecom",
+      ).trim() || "Demo Telecom";
     if (!institutionUserId) throw new Error("请选择机构用户");
 
     const {
@@ -1863,6 +1870,7 @@ function registerIpc() {
 
 app.whenReady().then(async () => {
   installApplicationMenu({
+    brand: RUNTIME_BRAND,
     openHelp: () => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send("shell:open-help", { sectionId: "help-growth" });

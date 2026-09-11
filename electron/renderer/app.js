@@ -10,7 +10,11 @@
 
   function applyHelpTopic(_topic) {
     const titleEl = document.getElementById("help-topic-title");
-    if (titleEl) titleEl.textContent = "日常使用这三个页面：与兔机米、数字之我、设置。";
+    const brand = window.__digitalMeBrand;
+    const helpIntro =
+      (brand && brand.strings && brand.strings.helpIntro) ||
+      "日常使用这三个页面：与兔机米、数字之我、设置。";
+    if (titleEl) titleEl.textContent = helpIntro;
     for (const node of document.querySelectorAll(".help-topic")) {
       const topic = node.getAttribute("data-help-topic");
       const show = topic === "chat" || topic === "subject" || topic === "settings";
@@ -6489,8 +6493,13 @@
 
   function syncInstitutionStatusUi(info) {
     if (!els.institutionStatus) return;
+    const brand = window.__digitalMeBrand;
+    const defaultOrg =
+      (brand && brand.institutionDefaults && brand.institutionDefaults.organizationName) ||
+      (brand && brand.organizationName) ||
+      "Demo Telecom";
     const enabled = !!(info && info.enabled);
-    const org = (info && info.organizationName) || "Demo Telecom";
+    const org = (info && info.organizationName) || defaultOrg;
     const user = (info && info.institutionUserId) || "";
     if (enabled && user) {
       els.institutionStatus.textContent = `机构服务：已连接 · ${org} · ${user}`;
@@ -6518,20 +6527,30 @@
   if (els.connectInstitution) {
     els.connectInstitution.addEventListener("click", async () => {
       try {
+        const brand = window.__digitalMeBrand;
+        const defaults = (brand && brand.institutionDefaults) || {};
         const institutionUserId = (els.institutionUser && els.institutionUser.value) || "demo-user-low";
+        const organizationName = defaults.organizationName || "Demo Telecom";
         els.connectInstitution.disabled = true;
         showStatus(els.institutionSettingsStatus, "正在连接机构服务…");
         const result = await api.connectInstitution({
           institutionUserId,
-          organizationName: "Demo Telecom",
+          organizationName,
           assertion: "mock",
+          backendBaseUrl: defaults.backendBaseUrl || undefined,
         });
         rememberShellMeta(result || {});
         syncInstitutionStatusUi(result && result.institution);
         await refreshConnectionFromCapabilities();
         if (isMainModelConnected()) {
           setConnectionStateLabel("已连接", "ok");
-          showStatus(els.institutionSettingsStatus, "已连接。你的 AI 服务由 Demo Telecom 提供。");
+          const provided =
+            (brand && brand.strings && brand.strings.institutionProvidedBy) ||
+            `你的 AI 服务由 ${organizationName} 提供。`;
+          showStatus(
+            els.institutionSettingsStatus,
+            provided.replace("{organizationName}", organizationName),
+          );
         } else {
           showStatus(els.institutionSettingsStatus, "机构会话已写入，但模型尚未就绪", true);
         }
@@ -9904,6 +9923,9 @@
 
   api.onBoot(async (info) => {
     rememberShellMeta(info || {});
+    if (info && info.brand && window.DigitalMeBrandUi) {
+      window.DigitalMeBrandUi.applyBrand(info.brand);
+    }
     if (info && info.institution) syncInstitutionStatusUi(info.institution);
     else await refreshInstitutionStatus();
     await refreshConnectionFromCapabilities();

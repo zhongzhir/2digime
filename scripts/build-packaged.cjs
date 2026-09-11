@@ -1,8 +1,9 @@
 "use strict";
 /**
- * 唯一 packaged 构建命令入口: npm run build:packaged
+ * 唯一 packaged 构建命令入口: npm run build:packaged [-- --brand=tujimi|demo-telecom]
+ * - Brand Kit → electron/brand.json + electron-builder.brand.json
  * - 独立 staging 目录,不覆盖旧候选;
- * - 嵌入 build-meta(gitHead/buildId);
+ * - 嵌入 build-meta(gitHead/buildId/brandId);
  * - 敏感文件扫描;
  * - 与 dev 同一 dist/ + electron/ 运行链。
  */
@@ -12,6 +13,12 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
+
+function argValue(name, fallback) {
+  const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
+  if (!hit) return fallback;
+  return hit.slice(name.length + 3);
+}
 
 function run(command, args, opts = {}) {
   const result = spawnSync(command, args, {
@@ -78,11 +85,15 @@ function sensitiveScan(stagingDir) {
     if (/Authorization:\s*Bearer\s+\S+/i.test(text)) {
       findings.push({ file: rel, reason: "authorization_header" });
     }
+    if (/LITELLM_MASTER_KEY|DEEPSEEK.*KEY\s*[:=]|INSTITUTION_ADMIN/i.test(text) && /=\s*["']?[^"'\s]{8,}/.test(text)) {
+      findings.push({ file: rel, reason: "master_key_like" });
+    }
   }
   return findings;
 }
 
 function main() {
+  const brandId = argValue("brand", process.env.DIGITALME_BRAND || "tujimi");
   const trialNote = path.join(root, "trial", "试用说明.txt");
   if (!fs.existsSync(trialNote)) {
     console.error("缺少 trial/试用说明.txt");
@@ -94,7 +105,14 @@ function main() {
     process.exit(1);
   }
 
-  const buildId = `v2-${new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z")}-${gitHead().slice(0, 8)}`;
+  // 0) materialize brand kit → runtime brand.json + builder config
+  run(process.execPath, [path.join(root, "scripts", "apply-brand.cjs"), `--brand=${brandId}`]);
+  const runtimeBrand = JSON.parse(
+    fs.readFileSync(path.join(root, "electron", "brand.json"), "utf8"),
+  );
+  const productName = runtimeBrand.productName || "兔机米";
+
+  const buildId = `v2-${brandId}-${new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z")}-${gitHead().slice(0, 8)}`;
   const staging = path.join(root, "release-staging", buildId);
   fs.mkdirSync(staging, { recursive: true });
 
@@ -107,7 +125,10 @@ function main() {
     buildId,
     gitHead: gitHead(),
     builtAt: new Date().toISOString(),
-    productName: "兔机米",
+    brandId: runtimeBrand.id || brandId,
+    productName,
+    appId: runtimeBrand.appId || null,
+    userDataDirName: runtimeBrand.userDataDirName || null,
     entry: {
       packaged: "electron/main.cjs",
       dev: "electron/main.cjs",
@@ -119,17 +140,22 @@ function main() {
   };
   fs.writeFileSync(path.join(root, "build-meta.json"), `${JSON.stringify(meta, null, 2)}\n`, "utf8");
 
-  // 3) electron-builder → staging
+  // 3) electron-builder → staging (brand-generated config)
   const ebCli = path.join(root, "node_modules", "electron-builder", "cli.js");
   if (!fs.existsSync(ebCli)) {
     console.error("electron-builder 未安装");
     process.exit(1);
   }
-  // Prefer config targets (nsis + zip). Do not pass a single target override.
-  run(process.execPath, [ebCli, "--win", "--x64", "--config", "electron-builder.yml"], {
+  const builderConfig = path.join(root, "electron-builder.brand.json");
+  if (!fs.existsSync(builderConfig)) {
+    console.error("缺少 electron-builder.brand.json（apply-brand 失败）");
+    process.exit(1);
+  }
+  run(process.execPath, [ebCli, "--win", "--x64", "--config", "electron-builder.brand.json"], {
     env: {
       ...process.env,
       CSC_IDENTITY_AUTO_DISCOVERY: "false",
+      DIGITALME_BRAND: brandId,
     },
   });
 
@@ -145,19 +171,28 @@ function main() {
     fs.renameSync(src, dest);
   }
   fs.writeFileSync(path.join(staging, "build-meta.json"), `${JSON.stringify(meta, null, 2)}\n`, "utf8");
+  fs.copyFileSync(
+    path.join(root, "electron", "brand.json"),
+    path.join(staging, "brand.json"),
+  );
 
   const allFiles = walkFiles(staging);
   const setup = allFiles.find((f) => /.*-win-x64-setup\.exe$/i.test(path.basename(f)));
   const zip = allFiles.find(
     (f) => /.*-win-x64\.zip$/i.test(f) && !/-setup\.zip$/i.test(path.basename(f)),
   );
+  const exeSafe = productName.replace(/[\\/:*?"<>|]/g, "_");
   const exe =
-    allFiles.find((f) => /兔机米\.exe$/i.test(path.basename(f)) && /win-unpacked/i.test(f)) ||
-    allFiles.find((f) => /兔机米\.exe$/i.test(path.basename(f))) ||
+    allFiles.find(
+      (f) => new RegExp(`${exeSafe.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\.exe$`, "i").test(path.basename(f)) &&
+        /win-unpacked/i.test(f),
+    ) ||
     allFiles.find((f) => /\.exe$/i.test(path.basename(f)) && /win-unpacked/i.test(f));
   const asar = allFiles.find((f) => f.toLowerCase().endsWith(".asar"));
   const integrity = {
     buildId,
+    brandId: meta.brandId,
+    productName,
     gitHead: meta.gitHead,
     staging,
     deliveryFormat: "nsis+zip",

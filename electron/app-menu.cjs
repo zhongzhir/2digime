@@ -1,5 +1,6 @@
 /**
  * Electron 原生菜单中文标签。保留 role，以免破坏快捷键与开发者工具。
+ * 产品显示名来自 Brand Kit；缺省仍为兔机米。
  */
 'use strict';
 
@@ -9,18 +10,29 @@ function isMac() {
   return process.platform === 'darwin';
 }
 
+function brandLabels(brand) {
+  const s = (brand && brand.strings) || {};
+  const product = (brand && brand.productName) || '兔机米';
+  return {
+    appMenu: product,
+    about: s.aboutLabel || `关于${product}`,
+    hide: s.hideLabel || `隐藏${product}`,
+  };
+}
+
 function buildApplicationMenuTemplate(handlers) {
   const openHelp = handlers && typeof handlers.openHelp === 'function' ? handlers.openHelp : null;
+  const labels = brandLabels(handlers && handlers.brand);
   const template = [];
   if (isMac()) {
     template.push({
-      label: '兔机米',
+      label: labels.appMenu,
       submenu: [
-        { role: 'about', label: '关于兔机米' },
+        { role: 'about', label: labels.about },
         { type: 'separator' },
         { role: 'services', label: '服务' },
         { type: 'separator' },
-        { role: 'hide', label: '隐藏兔机米' },
+        { role: 'hide', label: labels.hide },
         { role: 'hideOthers', label: '隐藏其他' },
         { role: 'unhide', label: '显示全部' },
         { type: 'separator' },
