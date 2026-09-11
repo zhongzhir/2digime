@@ -1,11 +1,12 @@
 # INSTITUTION-DISTRIBUTION-V01-IMPLEMENTATION-01
 
 日期：2026-09-11  
-状态：PLANNED（Slice A 已本地真实验证）  
+状态：PLANNED（Slice A / Slice B 已本地真实验证）  
 前置：`INSTITUTION_DISTRIBUTION_FOUNDATION_ACCEPTED`  
 权威设计：[`docs/design/INSTITUTION-DISTRIBUTION-FOUNDATION-01.md`](../design/INSTITUTION-DISTRIBUTION-FOUNDATION-01.md)  
 产品计划：[`docs/plans/INSTITUTION-DISTRIBUTION-01.md`](INSTITUTION-DISTRIBUTION-01.md)  
-Slice A 退出：`LITELLM_SPIKE_PRIVACY_AND_QUOTA_PASS`（harness：`institution/litellm-spike/`；evidence 默认不提交）
+Slice A 退出：`LITELLM_SPIKE_PRIVACY_AND_QUOTA_PASS`（harness：`institution/litellm-spike/`；evidence 默认不提交）  
+Slice B 退出：`INSTITUTION_DISTRIBUTION_V01_BACKEND_ACCEPTED`（harness：`institution/backend/`；evidence 默认不提交）
 
 ## 1. 本轮唯一目标
 
@@ -40,7 +41,7 @@ Slice A 退出：`LITELLM_SPIKE_PRIVACY_AND_QUOTA_PASS`（harness：`institution
 
 退出：`LITELLM_SPIKE_PRIVACY_AND_QUOTA_PASS` 或明确 fail 原因。
 
-### Slice B — 最小 Institution Backend
+### Slice B — 最小 Institution Backend — DONE
 
 独立小服务（勿塞进 Relay）：
 
@@ -48,8 +49,9 @@ Slice A 退出：`LITELLM_SPIKE_PRIVACY_AND_QUOTA_PASS`（harness：`institution
 - 两个 InstitutionUser + entitlement（映射到两个 LiteLLM key 策略）  
 - API：`session/exchange`、`entitlement`、`usage/summary`  
 - 仅调用 LiteLLM management API；不自研 key 账本  
+- Harness：`institution/backend/`（`server.cjs` + `run-verify.cjs`）
 
-退出：用 curl/脚本证明两用户权益与用量分离。
+退出：用 curl/脚本证明两用户权益与用量分离 → `INSTITUTION_DISTRIBUTION_V01_BACKEND_ACCEPTED`
 
 ### Slice C — 客户端 Institution Adapter（最薄）
 
