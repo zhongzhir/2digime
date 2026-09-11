@@ -16,8 +16,8 @@
 **Prefer the Windows Installer; ZIP portable is secondary.**
 
 1. From [GitHub Releases](https://github.com/zhongzhir/2digime/releases/tag/v0.1.0-public-alpha.1) download:  
-   - **Preferred:** [`兔机米-0.1.0-public-alpha-win-x64-setup.exe`](https://github.com/zhongzhir/2digime/releases/download/v0.1.0-public-alpha.1/兔机米-0.1.0-public-alpha-win-x64-setup.exe) (Installer)  
-   - **Secondary:** [`兔机米-0.1.0-public-alpha-win-x64.zip`](https://github.com/zhongzhir/2digime/releases/download/v0.1.0-public-alpha.1/兔机米-0.1.0-public-alpha-win-x64.zip) (Portable)  
+   - **Preferred:** [`tujimi-0.1.0-public-alpha-win-x64-setup.exe`](https://github.com/zhongzhir/2digime/releases/download/v0.1.0-public-alpha.1/tujimi-0.1.0-public-alpha-win-x64-setup.exe) (Installer; validated identity: `兔机米-0.1.0-public-alpha-win-x64-setup.exe`)  
+   - **Secondary:** [`tujimi-0.1.0-public-alpha-win-x64.zip`](https://github.com/zhongzhir/2digime/releases/download/v0.1.0-public-alpha.1/tujimi-0.1.0-public-alpha-win-x64.zip) (Portable; validated identity: `兔机米-0.1.0-public-alpha-win-x64.zip`)  
 2. Installer: double-click to install, then open **兔机米** from Desktop or Start Menu. ZIP: unzip and run `兔机米.exe`.  
 3. You can browse **与兔机米** first; if AI is not connected, sending a message shows a notice with **连接 AI** to open Settings.  
 4. Connect a supported AI in **设置**, then tell it what you want done.  

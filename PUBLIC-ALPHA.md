@@ -35,8 +35,8 @@
 **Windows 用户优先下载 Installer（setup.exe）。** ZIP 便携版仍可作为补充下载。
 
 1. 从 [GitHub Releases](https://github.com/zhongzhir/2digime/releases/tag/v0.1.0-public-alpha.1) 下载  
-   - **优先：** Windows Installer（`兔机米-0.1.0-public-alpha-win-x64-setup.exe`）  
-   - **补充：** ZIP 便携版（`兔机米-0.1.0-public-alpha-win-x64.zip`）
+   - **优先：** Windows Installer（GitHub 资源名：`tujimi-0.1.0-public-alpha-win-x64-setup.exe`；已验证包身份：`兔机米-0.1.0-public-alpha-win-x64-setup.exe`）  
+   - **补充：** ZIP 便携版（GitHub 资源名：`tujimi-0.1.0-public-alpha-win-x64.zip`；已验证包身份：`兔机米-0.1.0-public-alpha-win-x64.zip`）
 2. Installer：双击安装 → 桌面或开始菜单打开「兔机米」  
    ZIP：解压到任意文件夹 → 运行 `兔机米.exe`
 3. 进入「与兔机米」后可先浏览；若尚未连接 AI，发送消息时会出现提示，并可用「连接 AI」进入设置
@@ -71,10 +71,10 @@
 |---|---|
 | Platform | Windows x64 |
 | Release | `v0.1.0-public-alpha.1` |
-| Recommended | `兔机米-0.1.0-public-alpha-win-x64-setup.exe` |
+| Recommended | `tujimi-0.1.0-public-alpha-win-x64-setup.exe`（身份：`兔机米-0.1.0-public-alpha-win-x64-setup.exe`） |
 | Installer SHA256 | `7cb6c4c6d340c624cf35b4b06dc3fb34bd04c654cd2469b81f5793ebe905a492` |
-| Portable ZIP | `兔机米-0.1.0-public-alpha-win-x64.zip` |
+| Portable ZIP | `tujimi-0.1.0-public-alpha-win-x64.zip`（身份：`兔机米-0.1.0-public-alpha-win-x64.zip`） |
 | ZIP SHA256 | `05cd3c0798e3ec413cd722faa66a3050bfb3e928c369e336bacfbf9ec26d15b7` |
-| Source | `702cc272c84422bdb6f9b84bb5df46f38d564785`（README 指向最终公开 HEAD） |
+| Source | tag `v0.1.0-public-alpha.1` on public `main` |
 
 下载页：[GitHub Releases](https://github.com/zhongzhir/2digime/releases/tag/v0.1.0-public-alpha.1)
