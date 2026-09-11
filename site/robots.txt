@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://zhongzhir.github.io/2digime/sitemap.xml
