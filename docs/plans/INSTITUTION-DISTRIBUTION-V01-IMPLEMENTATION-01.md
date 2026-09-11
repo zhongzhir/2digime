@@ -1,7 +1,7 @@
 # INSTITUTION-DISTRIBUTION-V01-IMPLEMENTATION-01
 
 日期：2026-09-11
-状态：PLANNED（Slice A / B / C / D 已本地真实验证）
+状态：ACCEPTED（Slice A–E 已本地真实验证；见 `docs/reviews/INSTITUTION-DISTRIBUTION-V01-ACCEPTANCE.md`）
 前置：`INSTITUTION_DISTRIBUTION_FOUNDATION_ACCEPTED`
 权威设计：[`docs/design/INSTITUTION-DISTRIBUTION-FOUNDATION-01.md`](../design/INSTITUTION-DISTRIBUTION-FOUNDATION-01.md)
 产品计划：[`docs/plans/INSTITUTION-DISTRIBUTION-01.md`](INSTITUTION-DISTRIBUTION-01.md)
@@ -9,6 +9,7 @@ Slice A 退出：`LITELLM_SPIKE_PRIVACY_AND_QUOTA_PASS`（harness：`institution
 Slice B 退出：`INSTITUTION_DISTRIBUTION_V01_BACKEND_ACCEPTED`（harness：`institution/backend/`；evidence 默认不提交）
 Slice C 退出：`INSTITUTION_DISTRIBUTION_V01_CLIENT_ADAPTER_ACCEPTED`（harness：`institution/adapter-verify/`；evidence 默认不提交）
 Slice D 退出：`INSTITUTION_DISTRIBUTION_V01_BRAND_KIT_ACCEPTED`（harness：`institution/brand-kit/`；evidence 默认不提交）
+Slice E 退出：`INSTITUTION_DISTRIBUTION_V01_ACCEPTED`（harness：`institution/acceptance-e/`；acceptance：`docs/reviews/INSTITUTION-DISTRIBUTION-V01-ACCEPTANCE.md`）
 
 ## 1. 本轮唯一目标
 
@@ -74,9 +75,12 @@ Slice D 退出：`INSTITUTION_DISTRIBUTION_V01_BRAND_KIT_ACCEPTED`（harness：`
 
 退出：白标安装包可见机构品牌；无第二仓库 → `INSTITUTION_DISTRIBUTION_V01_BRAND_KIT_ACCEPTED`
 
-### Slice E — 验收对照
+### Slice E — 验收对照 — DONE
 
 按 `INSTITUTION-DISTRIBUTION-01.md` §8 十条逐项取证。
+Harness：`institution/acceptance-e/run-acceptance.cjs`（连续两轮）
+Acceptance：[`docs/reviews/INSTITUTION-DISTRIBUTION-V01-ACCEPTANCE.md`](../reviews/INSTITUTION-DISTRIBUTION-V01-ACCEPTANCE.md)
+
 目标：`INSTITUTION_DISTRIBUTION_V01_ACCEPTED`
 
 ## 4. 明确不做（本 Implementation）
@@ -105,8 +109,9 @@ Slice D 退出：`INSTITUTION_DISTRIBUTION_V01_BRAND_KIT_ACCEPTED`（harness：`
 - [x] 个人版路径未破坏（Slice C：个人保存凭证会退出 Institution Mode；`saveModelCredential` 保留）
 - [x] 客户端 Adapter + 双 profile Talk（Slice C）
 - [x] Brand Kit：同一 HEAD 打出官方兔机米 + Demo Telecom 两包（Slice D）
+- [x] §8 十条真实验收 + 两轮稳定性（Slice E）
 
 ## 7. Verdict
 
 成功：`INSTITUTION_DISTRIBUTION_V01_ACCEPTED`
-本文件本身不宣告该 verdict；仅定义第一轮实现切片。
+记录见 [`docs/reviews/INSTITUTION-DISTRIBUTION-V01-ACCEPTANCE.md`](../reviews/INSTITUTION-DISTRIBUTION-V01-ACCEPTANCE.md)。

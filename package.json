@@ -16,6 +16,7 @@
     "build:packaged": "node scripts/build-packaged.cjs",
     "brand:validate": "node institution/brand-kit/validate.cjs",
     "brand:verify": "node institution/brand-kit/run-verify.cjs",
+    "institution:accept": "node institution/acceptance-e/run-acceptance.cjs",
     "smoke:packaged": "node scripts/run-packaged-trial-smoke.cjs",
     "test:model-gate": "node scripts/test-model-gate-visibility.cjs",
     "verify": "npm run build && npm run smoke && npm run test && npm run test:model-gate && npm run preflight:electron"
