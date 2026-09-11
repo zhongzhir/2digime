@@ -174,6 +174,24 @@
           </details>
           </section>
 
+          <section class="settings-card settings-institution">
+          <h2>机构服务（演示）</h2>
+          <p class="muted">由机构提供 AI 服务时使用。连接后无需自己填写上游密钥。</p>
+          <p id="institution-status" class="connection-state" aria-live="polite">机构服务：未连接</p>
+          <label class="field">
+            <span>演示用户</span>
+            <select id="institution-user">
+              <option value="demo-user-low">Demo Telecom · 低额度</option>
+              <option value="demo-user-high">Demo Telecom · 高额度</option>
+            </select>
+          </label>
+          <div class="row settings-actions">
+            <button type="button" id="btn-connect-institution" class="primary">连接机构服务</button>
+            <button type="button" id="btn-disconnect-institution" class="ghost">断开机构服务</button>
+          </div>
+          <p id="institution-settings-status" class="status" aria-live="polite"></p>
+          </section>
+
           <section class="settings-card settings-search">
           <h2>联网搜索</h2>
           <p class="muted">可选。不配置也能正常聊天。</p>

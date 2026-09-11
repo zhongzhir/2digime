@@ -142,6 +142,11 @@
     testModel: document.getElementById("btn-test-model"),
     deleteModel: document.getElementById("btn-delete-model"),
     settingsStatus: document.getElementById("settings-status"),
+    institutionStatus: document.getElementById("institution-status"),
+    institutionUser: document.getElementById("institution-user"),
+    connectInstitution: document.getElementById("btn-connect-institution"),
+    disconnectInstitution: document.getElementById("btn-disconnect-institution"),
+    institutionSettingsStatus: document.getElementById("institution-settings-status"),
     geminiSearchApiKey: document.getElementById("gemini-search-api-key"),
     geminiSearchKeyState: document.getElementById("gemini-search-key-state"),
     saveGeminiSearch: document.getElementById("btn-save-gemini-search"),
@@ -1200,6 +1205,9 @@
   function userFacingModelError(err, fallback) {
     const raw = redactSecrets((err && err.message) || String(err || ""));
     const msg = raw.split("\n")[0].trim();
+    if (/budget|max_budget|Budget has been exceeded|额度/i.test(raw) || /\b429\b/.test(raw)) {
+      return "你的 AI 使用额度已用完。";
+    }
     if (/Error invoking remote method|shell:|IPC|ECONNREFUSED|ENOTFOUND|fetch failed|network|timeout|AbortError/i.test(raw)) {
       return fallback || "无法连接，请检查网络、密钥或高级连接设置";
     }
@@ -6479,6 +6487,91 @@
     els.artifactType.addEventListener("change", () => refreshConnectionFromCapabilities());
   }
 
+  function syncInstitutionStatusUi(info) {
+    if (!els.institutionStatus) return;
+    const enabled = !!(info && info.enabled);
+    const org = (info && info.organizationName) || "Demo Telecom";
+    const user = (info && info.institutionUserId) || "";
+    if (enabled && user) {
+      els.institutionStatus.textContent = `机构服务：已连接 · ${org} · ${user}`;
+      els.institutionStatus.classList.add("is-ok");
+      els.institutionStatus.classList.remove("is-error");
+    } else {
+      els.institutionStatus.textContent = "机构服务：未连接";
+      els.institutionStatus.classList.remove("is-ok", "is-error");
+    }
+    if (els.institutionUser && user) {
+      els.institutionUser.value = user;
+    }
+  }
+
+  async function refreshInstitutionStatus() {
+    if (!api || typeof api.getInstitutionStatus !== "function") return;
+    try {
+      const st = await api.getInstitutionStatus();
+      syncInstitutionStatusUi(st);
+    } catch {
+      syncInstitutionStatusUi({ enabled: false });
+    }
+  }
+
+  if (els.connectInstitution) {
+    els.connectInstitution.addEventListener("click", async () => {
+      try {
+        const institutionUserId = (els.institutionUser && els.institutionUser.value) || "demo-user-low";
+        els.connectInstitution.disabled = true;
+        showStatus(els.institutionSettingsStatus, "正在连接机构服务…");
+        const result = await api.connectInstitution({
+          institutionUserId,
+          organizationName: "Demo Telecom",
+          assertion: "mock",
+        });
+        rememberShellMeta(result || {});
+        syncInstitutionStatusUi(result && result.institution);
+        await refreshConnectionFromCapabilities();
+        if (isMainModelConnected()) {
+          setConnectionStateLabel("已连接", "ok");
+          showStatus(els.institutionSettingsStatus, "已连接。你的 AI 服务由 Demo Telecom 提供。");
+        } else {
+          showStatus(els.institutionSettingsStatus, "机构会话已写入，但模型尚未就绪", true);
+        }
+      } catch (err) {
+        const facing = userFacingModelError(err, "无法连接机构服务");
+        showStatus(els.institutionSettingsStatus, facing, true);
+        if (els.institutionStatus) {
+          els.institutionStatus.classList.add("is-error");
+        }
+      } finally {
+        els.connectInstitution.disabled = false;
+      }
+    });
+  }
+
+  if (els.disconnectInstitution) {
+    els.disconnectInstitution.addEventListener("click", async () => {
+      try {
+        els.disconnectInstitution.disabled = true;
+        const result = await api.disconnectInstitution();
+        rememberShellMeta(result || {});
+        syncInstitutionStatusUi(result && result.institution);
+        await refreshConnectionFromCapabilities();
+        syncMainModelConnectionLabel();
+        showStatus(els.institutionSettingsStatus, "已断开机构服务。可改用个人 API Key。");
+      } catch (err) {
+        showStatus(
+          els.institutionSettingsStatus,
+          userFacingModelError(err, "断开失败，请稍后重试"),
+          true,
+        );
+      } finally {
+        els.disconnectInstitution.disabled = false;
+      }
+    });
+  }
+
+  // Initial institution status (best-effort; boot may also carry it).
+  refreshInstitutionStatus();
+
   els.saveModel.addEventListener("click", async () => {
     try {
       const apiKey = (els.modelApiKey.value || "").trim();
@@ -9811,6 +9904,8 @@
 
   api.onBoot(async (info) => {
     rememberShellMeta(info || {});
+    if (info && info.institution) syncInstitutionStatusUi(info.institution);
+    else await refreshInstitutionStatus();
     await refreshConnectionFromCapabilities();
     if (currentView === "settings") fillSettingsForm();
     if (currentView === "shell") {

@@ -60,6 +60,9 @@
     if (/timeout after|请求超时|AbortError|ETIMEDOUT|TalkTimeout|超时/i.test(raw)) {
       return TALK_TIMEOUT_NOTICE;
     }
+    if (/budget|max_budget|额度已用完|Budget has been exceeded|quota/i.test(raw) || /\b429\b/.test(raw)) {
+      return '你的 AI 使用额度已用完。';
+    }
     if (/codex/i.test(raw) && /HTTP|ECONN|ENOTFOUND|unavailable|不可用|403|404/i.test(raw)) {
       return '这次没有做成。请稍后再试。';
     }

@@ -1,12 +1,13 @@
 # INSTITUTION-DISTRIBUTION-V01-IMPLEMENTATION-01
 
 日期：2026-09-11  
-状态：PLANNED（Slice A / Slice B 已本地真实验证）  
+状态：PLANNED（Slice A / B / C 已本地真实验证）  
 前置：`INSTITUTION_DISTRIBUTION_FOUNDATION_ACCEPTED`  
 权威设计：[`docs/design/INSTITUTION-DISTRIBUTION-FOUNDATION-01.md`](../design/INSTITUTION-DISTRIBUTION-FOUNDATION-01.md)  
 产品计划：[`docs/plans/INSTITUTION-DISTRIBUTION-01.md`](INSTITUTION-DISTRIBUTION-01.md)  
 Slice A 退出：`LITELLM_SPIKE_PRIVACY_AND_QUOTA_PASS`（harness：`institution/litellm-spike/`；evidence 默认不提交）  
-Slice B 退出：`INSTITUTION_DISTRIBUTION_V01_BACKEND_ACCEPTED`（harness：`institution/backend/`；evidence 默认不提交）
+Slice B 退出：`INSTITUTION_DISTRIBUTION_V01_BACKEND_ACCEPTED`（harness：`institution/backend/`；evidence 默认不提交）  
+Slice C 退出：`INSTITUTION_DISTRIBUTION_V01_CLIENT_ADAPTER_ACCEPTED`（harness：`institution/adapter-verify/`；evidence 默认不提交）
 
 ## 1. 本轮唯一目标
 
@@ -53,14 +54,15 @@ Slice B 退出：`INSTITUTION_DISTRIBUTION_V01_BACKEND_ACCEPTED`（harness：`in
 
 退出：用 curl/脚本证明两用户权益与用量分离 → `INSTITUTION_DISTRIBUTION_V01_BACKEND_ACCEPTED`
 
-### Slice C — 客户端 Institution Adapter（最薄）
+### Slice C — 客户端 Institution Adapter（最薄） — DONE
 
 - 机构模式：兑换 virtual key → 写入现有 SecretStore / model-config；`baseUrl` 指向 LiteLLM。  
 - 保留个人版「自备 API Key」路径。  
 - Talk 仍走现有 `chatComplete`；不改语义循环。  
 - 额度耗尽：透传错误 → 普通人语言提示。  
+- 实现：`electron/institution-adapter.cjs` + IPC/`settings` 最小入口；验证：`institution/adapter-verify/run-verify.cjs`
 
-退出：两台（或两 profile）客户端真实 Talk，用量进 LiteLLM/Backend 汇总。
+退出：两台（或两 profile）客户端真实 Talk，用量进 LiteLLM/Backend 汇总 → `INSTITUTION_DISTRIBUTION_V01_CLIENT_ADAPTER_ACCEPTED`
 
 ### Slice D — Brand Kit v0
 
@@ -98,7 +100,8 @@ Slice B 退出：`INSTITUTION_DISTRIBUTION_V01_BACKEND_ACCEPTED`（harness：`in
 - [ ] 白标客户端 Talk 成功  
 - [x] 用量可归集且无正文（Slice A / SpendLogs 计数验证）  
 - [x] Core 无机构 fork；Relay 未混职责（Slice A 未改 Core/Relay）  
-- [ ] 个人版路径未破坏  
+- [x] 个人版路径未破坏（Slice C：个人保存凭证会退出 Institution Mode；`saveModelCredential` 保留）  
+- [x] 客户端 Adapter + 双 profile Talk（Slice C）  
 
 ## 7. Verdict
 

@@ -94,6 +94,8 @@ function buildBootInfo(model, appRoot, remoteCapabilityStatus) {
     needsCredentialSetup: model.ok !== true,
     modelMeta: model.modelMeta || null,
   };
+  const { readMode } = require("./institution-adapter.cjs");
+  const institution = readMode(app.getPath("userData"));
   return {
     modelReady: model.ok === true,
     modelMeta: model.modelMeta || null,
@@ -103,6 +105,19 @@ function buildBootInfo(model, appRoot, remoteCapabilityStatus) {
     buildMeta: loadBuildMeta(appRoot),
     status,
     remoteCapability: remoteCapabilityStatus || null,
+    institution: {
+      enabled: Boolean(institution.enabled),
+      organizationName: institution.organizationName || null,
+      institutionUserId: institution.institutionUserId || null,
+      // never expose virtual key / master key in boot info
+      gatewayHost: (() => {
+        try {
+          return institution.gatewayBaseUrl ? new URL(institution.gatewayBaseUrl).host : null;
+        } catch {
+          return null;
+        }
+      })(),
+    },
   };
 }
 
@@ -850,12 +865,92 @@ function registerIpc() {
       providerId: "openai-compatible",
       providerPreset,
     });
+    // Personal credential save exits Institution Mode (no mode state machine).
+    const { clearMode } = require("./institution-adapter.cjs");
+    clearMode(app.getPath("userData"));
     const boot = await rebootstrapAndNotify();
     return {
       ok: true,
       modelReady: boot.modelReady,
       modelMeta: boot.modelMeta,
       status: boot.status,
+      institution: boot.institution,
+    };
+  });
+
+  ipcMain.handle("shell:getInstitutionStatus", async () => {
+    const { readMode } = require("./institution-adapter.cjs");
+    const mode = readMode(app.getPath("userData"));
+    const boot = lastBootInfo || {};
+    return {
+      enabled: Boolean(mode.enabled),
+      organizationName: mode.organizationName || null,
+      institutionUserId: mode.institutionUserId || null,
+      backendBaseUrl: mode.backendBaseUrl || null,
+      modelReady: !!boot.modelReady,
+      gatewayHost: boot.institution ? boot.institution.gatewayHost : null,
+    };
+  });
+
+  ipcMain.handle("shell:connectInstitution", async (_evt, input) => {
+    if (!saveCredential) throw new Error("本机安全存储不可用，暂时无法保存机构凭证");
+    const backendBaseUrl = String(
+      (input && input.backendBaseUrl) ||
+        process.env.DIGITALME_INSTITUTION_BACKEND_URL ||
+        "http://127.0.0.1:4100",
+    )
+      .trim()
+      .replace(/\/+$/, "");
+    const institutionUserId = String((input && input.institutionUserId) || "").trim();
+    const assertion = String((input && input.assertion) || "mock").trim() || "mock";
+    const organizationName =
+      String((input && input.organizationName) || "Demo Telecom").trim() || "Demo Telecom";
+    if (!institutionUserId) throw new Error("请选择机构用户");
+
+    const {
+      createInstitutionAdapter,
+      writeMode,
+      mapInstitutionError,
+    } = require("./institution-adapter.cjs");
+    const adapter = createInstitutionAdapter({ backendBaseUrl });
+    let session;
+    try {
+      session = await adapter.exchange({ institutionUserId, assertion });
+    } catch (err) {
+      const mapped = mapInstitutionError(err);
+      throw new Error(mapped || ((err && err.message) || "机构连接失败"));
+    }
+    await adapter.applyToCredentialStore(saveCredential, session);
+    writeMode(app.getPath("userData"), {
+      enabled: true,
+      backendBaseUrl,
+      institutionUserId: session.institutionUserId,
+      organizationId: session.organizationId,
+      organizationName,
+      assertion,
+      model: session.model,
+      gatewayBaseUrl: session.gatewayBaseUrl,
+    });
+    const boot = await rebootstrapAndNotify();
+    return {
+      ok: true,
+      modelReady: boot.modelReady,
+      institution: boot.institution,
+      // never return credential / master key to renderer
+    };
+  });
+
+  ipcMain.handle("shell:disconnectInstitution", async () => {
+    const { clearMode } = require("./institution-adapter.cjs");
+    clearMode(app.getPath("userData"));
+    if (deleteCredential) {
+      await deleteCredential({ providerId: "openai-compatible" });
+    }
+    const boot = await rebootstrapAndNotify();
+    return {
+      ok: true,
+      modelReady: boot.modelReady,
+      institution: boot.institution,
     };
   });
 
