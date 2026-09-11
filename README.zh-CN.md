@@ -15,9 +15,9 @@
 
 **优先下载 Windows Installer；ZIP 便携版为补充。**
 
-1. 从 [GitHub Releases](https://github.com/zhongzhir/2digime/releases/tag/v0.1.0-public-alpha) 下载  
-   - **优先：** `兔机米-0.1.0-public-alpha-win-x64-setup.exe`（Installer）  
-   - **补充：** [`tujimi-0.1.0-public-alpha-win-x64.zip`](https://github.com/zhongzhir/2digime/releases/download/v0.1.0-public-alpha/tujimi-0.1.0-public-alpha-win-x64.zip)（已验证包身份：`兔机米-0.1.0-public-alpha-win-x64.zip`）  
+1. 从 [GitHub Releases](https://github.com/zhongzhir/2digime/releases/tag/v0.1.0-public-alpha.1) 下载  
+   - **优先：** [`兔机米-0.1.0-public-alpha-win-x64-setup.exe`](https://github.com/zhongzhir/2digime/releases/download/v0.1.0-public-alpha.1/兔机米-0.1.0-public-alpha-win-x64-setup.exe)（Installer）  
+   - **补充：** [`兔机米-0.1.0-public-alpha-win-x64.zip`](https://github.com/zhongzhir/2digime/releases/download/v0.1.0-public-alpha.1/兔机米-0.1.0-public-alpha-win-x64.zip)（Portable）  
 2. Installer：双击安装后，从桌面或开始菜单打开「兔机米」。ZIP：解压后运行 `兔机米.exe`。  
 3. 进入「与兔机米」可先浏览；未连接 AI 时发送消息会出现提示，并可点「连接 AI」进入设置。  
 4. 在「设置」中连接支持的 AI 后，直接告诉它你想做什么。  
@@ -25,8 +25,8 @@
 
 普通试用说明：[PUBLIC-ALPHA.md](PUBLIC-ALPHA.md)
 
-**当前已发布 ZIP SHA256：** `adf131a773d67c3717159bff57ff8034060cca4827b2fd87b99016f3f0b46e82`  
-（Installer 候选由后续 Release 发布；本仓库不改写已有 `v0.1.0-public-alpha` 资源，直至 Owner 决策。）
+**Installer SHA256：** `7cb6c4c6d340c624cf35b4b06dc3fb34bd04c654cd2469b81f5793ebe905a492`  
+**Portable ZIP SHA256：** `05cd3c0798e3ec413cd722faa66a3050bfb3e928c369e336bacfbf9ec26d15b7`
 
 当前包 **尚未完成代码签名**，Windows 可能显示未知发布者提示。请只在文件来自本项目官方 Releases、且你信任该来源时继续。
 
