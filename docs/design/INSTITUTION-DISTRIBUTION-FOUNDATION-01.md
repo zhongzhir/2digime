@@ -107,7 +107,7 @@ Governance commit：`3940cd301cac34687f7357c841a2bbae32d56d2d`
 | SSO / auth | OSS：virtual key + 有限 SSO；规模化 SSO/SCIM/JWT 多为 Enterprise | **v0.1 不依赖 LiteLLM Enterprise SSO**；用 Institution Backend mock/OIDC 发 key |
 
 **不采用 LiteLLM 的条件（当前不成立）：** 仅当无法关闭正文 logging、无法 virtual key、或许可与商业实质冲突。官方文档：`store_prompts_in_spend_logs` **默认关闭**；`turn_off_message_logging` 可进一步 redact。  
-**真实验证状态：** 本 Foundation 以官方文档 + 源码审计为准；**未**在本机跑通隔离 spike（无落库测试密钥）。Implementation 切片必须做一次真实 spike 验收隐私硬门槛。
+**真实验证状态：** Slice A 隔离 spike 已在本机通过（`institution/litellm-spike/` → `LITELLM_SPIKE_PRIVACY_AND_QUOTA_PASS`）。Evidence 默认不提交；测试密钥不进 git。
 
 **许可：** LiteLLM 核心自托管为开源（MIT）；Enterprise 为可选治理增强。v0.1 路径不强制购买。若未来机构强依赖 LiteLLM Admin UI 的大规模 SSO，再走 Owner Decision Gate（付费 / 或自建 OIDC→Backend→virtual key，后者仍可避免锁定）。
 

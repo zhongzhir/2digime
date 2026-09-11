@@ -1,0 +1,20 @@
+# Institution Distribution v0.1 — Slice A privacy + quota spike config.
+# Upstream provider master key comes only from os.environ/DEEPSEEK_API_KEY.
+
+model_list:
+  - model_name: deepseek-v4-flash
+    litellm_params:
+      model: openai/deepseek-v4-flash
+      api_base: https://api.deepseek.com/v1
+      api_key: os.environ/DEEPSEEK_API_KEY
+      # Explicit costs so USD max_budget enforcement is deterministic in spike.
+      input_cost_per_token: 0.00000028
+      output_cost_per_token: 0.00000042
+
+litellm_settings:
+  turn_off_message_logging: true
+  drop_params: true
+
+general_settings:
+  store_prompts_in_spend_logs: false
+  disable_error_logs: false

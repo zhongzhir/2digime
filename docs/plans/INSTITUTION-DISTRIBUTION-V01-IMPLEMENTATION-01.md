@@ -1,10 +1,11 @@
 # INSTITUTION-DISTRIBUTION-V01-IMPLEMENTATION-01
 
 日期：2026-09-11  
-状态：PLANNED  
+状态：PLANNED（Slice A 已本地真实验证）  
 前置：`INSTITUTION_DISTRIBUTION_FOUNDATION_ACCEPTED`  
 权威设计：[`docs/design/INSTITUTION-DISTRIBUTION-FOUNDATION-01.md`](../design/INSTITUTION-DISTRIBUTION-FOUNDATION-01.md)  
-产品计划：[`docs/plans/INSTITUTION-DISTRIBUTION-01.md`](INSTITUTION-DISTRIBUTION-01.md)
+产品计划：[`docs/plans/INSTITUTION-DISTRIBUTION-01.md`](INSTITUTION-DISTRIBUTION-01.md)  
+Slice A 退出：`LITELLM_SPIKE_PRIVACY_AND_QUOTA_PASS`（harness：`institution/litellm-spike/`；evidence 默认不提交）
 
 ## 1. 本轮唯一目标
 
@@ -25,7 +26,7 @@
 
 ## 3. 第一轮切片（仅此 5 步）
 
-### Slice A — LiteLLM 隔离 spike（硬门槛）
+### Slice A — LiteLLM 隔离 spike（硬门槛） — DONE
 
 - 本地/容器启动 LiteLLM + Postgres。  
 - 配置一个测试 DeepSeek（或现有 OpenAI-compatible）provider；**master key 仅在环境变量，不提交、不进 git**。  
@@ -34,7 +35,8 @@
 - 验证：usage/spend 可见；超额方被拒绝且不影响另一方。  
 - 验证：`store_prompts_in_spend_logs=false` + `turn_off_message_logging=true`；DB/logs **无** prompt/response 正文。  
 - Evidence 可放 `build/evidence/`；**默认不提交**。  
-- Spike **不接**主产品、不改 Core。
+- Spike **不接**主产品、不改 Core。  
+- Harness：`institution/litellm-spike/`（compose + config + `run-spike.cjs`）。
 
 退出：`LITELLM_SPIKE_PRIVACY_AND_QUOTA_PASS` 或明确 fail 原因。
 
@@ -89,11 +91,11 @@
 
 ## 6. DoD
 
-- [ ] Spike 隐私 + quota 真实通过  
-- [ ] 两用户不同额度、互不影响  
+- [x] Spike 隐私 + quota 真实通过（Slice A）  
+- [x] 两用户不同额度、互不影响（Slice A / LiteLLM）  
 - [ ] 白标客户端 Talk 成功  
-- [ ] 用量可归集且无正文  
-- [ ] Core 无机构 fork；Relay 未混职责  
+- [x] 用量可归集且无正文（Slice A / SpendLogs 计数验证）  
+- [x] Core 无机构 fork；Relay 未混职责（Slice A 未改 Core/Relay）  
 - [ ] 个人版路径未破坏  
 
 ## 7. Verdict
