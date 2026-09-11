@@ -23,6 +23,10 @@ for (const page of pages) {
 }
 
 const all = pages.map((page) => readFileSync(resolve(root, page), 'utf8')).join('\n');
+const marketingPages = pages.slice(0, 4).map((page) => readFileSync(resolve(root, page), 'utf8')).join('\n');
+for (const term of ['Digital Self', 'Core', 'Brand Kit', 'Adapter', 'entitlement', 'quota', 'usage', 'LiteLLM', 'L1', 'L2', 'L3', 'L4', 'L5', 'fork', 'runtime']) {
+  if (marketingPages.includes(term)) errors.push(`engineering term in user page: ${term}`);
+}
 for (const forbidden of ['已服务中国电信', '已服务招商银行', '支持所有大模型', '银行级认证', '完全合规', '百万用户验证']) {
   if (all.includes(forbidden)) errors.push(`forbidden claim: ${forbidden}`);
 }
