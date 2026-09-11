@@ -101,3 +101,36 @@ v0.2 保持现有 URL、IA、内容事实与下载入口，主要升级 visual d
 ## 9. Blocker
 
 v0.1 发布无 blocker。Figma MCP 月度额度只影响 v0.2 视觉升级，不再阻塞正式官网。
+
+## 10. Marketing Copy Revision（2026-09-11）
+
+- Source SHA：`635e59f4684c69803e0a56c5626215c7b1f6ab27`
+- Marketing / deploy SHA：`04f1d1915cc79880f497caf66e43cc3681112ebf`
+- GitHub Actions run：<https://github.com/zhongzhir/2digime/actions/runs/34592977275>
+- Deploy result：`success`
+
+本轮保留 URL、IA 与既有视觉框架，将整站从研发验收语言改为品牌、用户与合作语言：
+
+- 首页新增“AI 越强，人越应该是主人”品牌文章，明确人在 AI 时代仍应掌握身份、目标与选择；
+- 数字之我、超级助手和数字主体网络改为普通用户能直接理解的价值表达；
+- Personal 围绕“越用越懂你、帮你做事、无需逐个学习 AI、数字之我属于你、走向主动数字管家”展开；
+- Institution 围绕机构用户入口、品牌、长期关系、模型选择权与用户主体权展开，并增加“买了 AI 能力，不等于拥有 AI 产品”的痛点叙事；
+- Download 首屏改为“开始使用兔机米”，版本号、SHA256 与安全提示保留在次级技术信息区。
+
+四个用户页面中的 `Digital Self`、`Core`、`Brand Kit`、`Adapter`、`entitlement`、`quota`、`usage`、`LiteLLM`、`L1`–`L5`、`fork`、`runtime` 已归零，并加入自动检查防止回退。未来能力继续使用“未来”“将”“正在”等时态；DeepSeek 只陈述已经完成的真实调用验证。
+
+公网 smoke：`/`、`/personal/`、`/institution/`、`/download/` 与 CSS、JavaScript、favicon 均为 HTTPS 200；1440 desktop 与 390 mobile 共 8/8 浏览器组合通过，无横向溢出、资源失败或控制台错误。
+
+## 11. Custom Domain
+
+目标域名：<https://www.2digime.com/>
+
+2026-09-11 DNS 检查结果：`www.2digime.com` 不存在，未返回 CNAME。GitHub Pages 当前 `cname = null`，因此本轮按任务约束没有执行 custom domain 切换，没有添加 `CNAME` 文件，也没有把 canonical、Open Graph 或 sitemap 提前指向不可访问域名。现有 <https://zhongzhir.github.io/2digime/> 部署保持正常。
+
+Owner 需要在 `2digime.com` 的 DNS 管理平台增加：
+
+| Type | Host | Value |
+|---|---|---|
+| CNAME | `www` | `zhongzhir.github.io` |
+
+不得把 Value 写成 `zhongzhir.github.io/2digime`。DNS 生效后再执行：设置 GitHub Pages custom domain 为 `www.2digime.com`、等待证书签发、确认 HTTPS enforced，并将全站 canonical、Open Graph、sitemap、robots 与 404 根路径迁移到正式域名。
