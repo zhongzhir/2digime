@@ -1,8 +1,9 @@
 # SUBJECT-NETWORK-REAL-CONTENT-TRIAL-01
 
-日期：2026-09-11  
-状态：PLANNED  
+日期：2026-09-11
+状态：ENGINEERING_READY_REAL_USER_TRIAL_PENDING（2026-09-12）
 前置：Institution Distribution v0.1 与 Institution Landing Page 完成
+验收报告：[`docs/trials/SUBJECT-NETWORK-REAL-CONTENT-TRIAL-01.md`](../trials/SUBJECT-NETWORK-REAL-CONTENT-TRIAL-01.md)
 
 ## 1. 目标
 

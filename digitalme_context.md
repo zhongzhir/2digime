@@ -2,7 +2,7 @@
 
 版本：v0.4
 状态：historical strategic context（不承担 current plan）
-最后更新：2026-09-11（日终收口；下文 2026-09-08 及更早条目仍为历史）
+最后更新：2026-09-12（SUBJECT-NETWORK-REAL-CONTENT-TRIAL-01 工程闭环；真人试验待 Owner 安排。下文 2026-09-11 及更早条目仍为历史）
 
 本文件不恢复为第二权威源。现行权威：`AGENTS.md` → `docs/refoundation/00` / `01` / `02` / `03`。
 
@@ -55,8 +55,18 @@
 
 1. 官网当前版本冻结；
 2. 如仍需要，只完成 `www.2digime.com` 的最小域名切换；
-3. 下一产品主任务：**真实漫剧内容 × 数字主体网络试验**
+3. 当前产品主任务：**真实漫剧内容 × 数字主体网络试验** — 工程闭环已完成。下一步只等 Owner 安排最少两个真人，不扩建系统。
 4. Figma 官网 v0.2 视觉升级等待额度恢复后再做。
+
+### 7. SUBJECT-NETWORK-REAL-CONTENT-TRIAL-01（2026-09-12）
+
+- Authority：`origin/main` `7629880f0c995d03135f4186b9c90672483774f1`
+- 裁定：`ENGINEERING_READY_REAL_USER_TRIAL_PENDING`
+- 复用现有 `NetworkItem` + Relay `/v1/network-items` + 本地 `selectNetworkItems`。未建 CMS / 推荐 / 画像 / 新 Feed runtime。
+- 真实公开内容：WEBTOON *Tower of God*（`https://www.webtoons.com/en/fantasy/tower-of-god/list?title_no=95`）。只传播 metadata + 原始链接。
+- 同一 payload 经 broadcast/relay 到两个隔离工程主体；`deepseek-v4-flash`，`stub=false`。自然分歧：A=SHOW，B=IGNORE。AI 判断未反写 Digital Self。
+- 还缺：两个真实真人的 Digital Self 与 `origin=user_action` 反馈。不得伪造 ACCEPTED。
+- 报告：[`docs/trials/SUBJECT-NETWORK-REAL-CONTENT-TRIAL-01.md`](docs/trials/SUBJECT-NETWORK-REAL-CONTENT-TRIAL-01.md)
 
 仍坚持：`一个 Authority → 一个当前主任务 → 真实验证 → 验收 → 提交 → 下一任务`。禁止多头并行。
 

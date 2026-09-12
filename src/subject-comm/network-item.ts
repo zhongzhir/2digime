@@ -232,3 +232,8 @@ export function paginateNetworkItems(
 export function candidatePoolHash(itemIds: string[]): string {
   return createHash('sha256').update(itemIds.join('\n')).digest('hex');
 }
+
+/** 对已校验 NetworkItem 做机械 payload 指纹。不是 relevance / ranking score。 */
+export function networkItemPayloadHash(item: NetworkItem): string {
+  return createHash('sha256').update(JSON.stringify(item)).digest('hex');
+}

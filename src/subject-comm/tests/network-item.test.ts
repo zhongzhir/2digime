@@ -4,6 +4,7 @@ import {
   candidatePoolHash,
   forbiddenPersonalizationKeys,
   isNetworkItemExpired,
+  networkItemPayloadHash,
   validateNetworkItem,
 } from '../network-item';
 import { FEED_01_EXPIRED_ITEM, FEED_01_SEED_ITEMS } from './subject-network-feed-01-seed';
@@ -32,6 +33,9 @@ test('NetworkItem: candidate pool hash is order-sensitive and stable', () => {
   const ids = FEED_01_SEED_ITEMS.map((item) => item.itemId);
   assert.equal(candidatePoolHash(ids), candidatePoolHash([...ids]));
   assert.notEqual(candidatePoolHash(ids), candidatePoolHash([...ids].reverse()));
+  const first = FEED_01_SEED_ITEMS[0]!;
+  assert.equal(networkItemPayloadHash(first), networkItemPayloadHash({ ...first }));
+  assert.notEqual(networkItemPayloadHash(first), networkItemPayloadHash({ ...first, itemId: 'other' }));
 });
 
 test('NetworkItem: personalization key detector', () => {

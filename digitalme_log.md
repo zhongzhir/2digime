@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-09-12 — SUBJECT-NETWORK-REAL-CONTENT-TRIAL-01
+
+### 状态
+
+`ENGINEERING_READY_REAL_USER_TRIAL_PENDING` / `not_pushed`
+
+Authority base：`origin/main` `7629880f0c995d03135f4186b9c90672483774f1`。干净 worktree：`D:\Projects\dm-subject-network-real-content-trial-01` / `build/subject-network-real-content-trial-01`。
+
+### Build-vs-Integrate
+
+REUSE / MINIMAL_EXTENSION。复用 `NetworkItem`、Relay `/v1/network-items`、`selectNetworkItems`、正式 `readDigitalSelf`。新增：payload 机械指纹、最小 `network_content_feedback` 事件（区分 `ai_decision` / `user_action`）、真实公开 listing → 既有 NetworkItem 的 trial harness。无 CMS / 推荐 / 中央画像 / 新 Feed UI。
+
+### 真实验证
+
+- 真实内容：WEBTOON *Tower of God*，HTTP 200；另试 *Omniscient Reader*。不托管媒体。
+- broadcast / relay：同一 contentId、同一 payload hash 到两个 subject。
+- 工程主体 A：SHOW；工程主体 B：IGNORE。真实模型 `deepseek-v4-flash`，`stub=false`。
+- Relay 存储无 Digital Self / preference vector / ranking。AI 判断后 `self.json` 字节不变。
+- 未伪造两个真人反馈。真人只需对 SHOW 项做打开/保留/感兴趣/稍后看/忽略/不感兴趣。
+
+证据 gitignored：`build/evidence/subject-network-real-content-trial-01/`。报告：`docs/trials/SUBJECT-NETWORK-REAL-CONTENT-TRIAL-01.md`。
+
+---
+
 ## 2026-09-11
 
 ### 状态
