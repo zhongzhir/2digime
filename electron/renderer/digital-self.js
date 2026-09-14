@@ -6,6 +6,16 @@
  */
 (function () {
   const CURRENT_ORDER = ['about_me', 'goals', 'preferences', 'boundaries'];
+  const GROUP_TITLE = {
+    learning: '最近新增',
+    about_me: '关于我',
+    goals: '关心与目标',
+    preferences: '偏好与判断',
+    boundaries: '边界',
+  };
+  const OVERVIEW_CURRENT_LIMIT = 3;
+  let ledgerOpen = false;
+  let lastGroups = null;
 
   function api() {
     return window.digitalMe;
@@ -112,6 +122,43 @@
     parent.appendChild(section);
   }
 
+  function appendCollapsedGroup(parent, key, items, query) {
+    if (!items.length) return;
+    const details = document.createElement('details');
+    details.className = 'ds-group ds-ledger-group';
+    details.dataset.group = key;
+    const q = String(query || '').trim().toLowerCase();
+    const visible = q
+      ? items.filter((item) => String(item.text || '').toLowerCase().includes(q) || String(item.sourceLabel || '').toLowerCase().includes(q))
+      : items;
+    if (!visible.length) return;
+    if (q) details.open = true;
+    const summary = document.createElement('summary');
+    summary.textContent = `${GROUP_TITLE[key] || key}（${visible.length}）`;
+    details.appendChild(summary);
+    const ul = document.createElement('ul');
+    ul.className = 'ds-list';
+    for (const item of visible) ul.appendChild(renderItem(item));
+    details.appendChild(ul);
+    parent.appendChild(details);
+  }
+
+  function setLedgerOpen(open) {
+    ledgerOpen = !!open;
+    const overview = $('ds-overview');
+    const ledger = $('ds-ledger');
+    if (overview) overview.hidden = ledgerOpen;
+    if (ledger) ledger.hidden = !ledgerOpen;
+    if (!lastGroups) return;
+    if (ledgerOpen) {
+      renderLedger(lastGroups, $('ds-fact-search') ? $('ds-fact-search').value : '');
+    } else {
+      const groupsEl = $('ds-groups');
+      if (groupsEl) groupsEl.textContent = '';
+      renderOverview(lastGroups);
+    }
+  }
+
   let defaultHeadline = '兔机米现在怎样理解我';
 
   function applyBrand(brand) {
@@ -129,20 +176,64 @@
     }
   }
 
+  function renderOverview(groups) {
+    const summary = $('ds-overview-summary');
+    const body = $('ds-overview-body');
+    if (!body) return;
+    body.textContent = '';
+    const recent = groups.learning || [];
+    const current = flattenCurrent(groups);
+    const sources = [];
+    const seen = new Set();
+    for (const item of recent.concat(current)) {
+      const label = item.sourceLabel;
+      if (!label || seen.has(label)) continue;
+      seen.add(label);
+      sources.push(label);
+    }
+    if (summary) {
+      const parts = [`当前 ${current.length} 条`, `最近新增 ${recent.length} 条`];
+      if (sources.length) parts.push(`来源：${sources.slice(0, 4).join('、')}`);
+      summary.textContent = parts.join(' · ');
+    }
+    appendSection(body, '最近它又了解了你这些', recent, 'ds-group-recent');
+    appendSection(body, '当前理解', current.slice(0, OVERVIEW_CURRENT_LIMIT), 'ds-group-current');
+    const openBtn = $('btn-ds-open-ledger');
+    if (openBtn) openBtn.hidden = recent.length + current.length === 0;
+  }
+
+  function renderLedger(groups, query) {
+    const groupsEl = $('ds-groups');
+    if (!groupsEl) return;
+    groupsEl.textContent = '';
+    appendCollapsedGroup(groupsEl, 'learning', groups.learning || [], query);
+    for (const key of CURRENT_ORDER) {
+      appendCollapsedGroup(groupsEl, key, groups[key] || [], query);
+    }
+  }
+
   function renderView(view) {
     const headline = $('ds-headline');
     if (headline) headline.textContent = (view && view.headline) || defaultHeadline;
     setNotice(view && view.notice ? view.notice : '');
-    const groupsEl = $('ds-groups');
-    const emptyEl = $('ds-empty');
-    if (!groupsEl) return;
-    groupsEl.textContent = '';
     const groups = (view && view.groups) || {};
+    lastGroups = groups;
     const recent = groups.learning || [];
     const current = flattenCurrent(groups);
-    appendSection(groupsEl, '最近它又了解了你这些', recent, 'ds-group-recent');
-    appendSection(groupsEl, '当前理解', current, 'ds-group-current');
     const any = recent.length + current.length > 0;
+    if (ledgerOpen && any) {
+      renderLedger(groups, $('ds-fact-search') ? $('ds-fact-search').value : '');
+      if ($('ds-overview')) $('ds-overview').hidden = true;
+      if ($('ds-ledger')) $('ds-ledger').hidden = false;
+    } else {
+      ledgerOpen = false;
+      renderOverview(groups);
+      const groupsEl = $('ds-groups');
+      if (groupsEl) groupsEl.textContent = '';
+      if ($('ds-overview')) $('ds-overview').hidden = !any;
+      if ($('ds-ledger')) $('ds-ledger').hidden = true;
+    }
+    const emptyEl = $('ds-empty');
     if (emptyEl) {
       emptyEl.hidden = any || (view && view.empty === false);
       if (!emptyEl.hidden) emptyEl.removeAttribute('hidden');
@@ -173,7 +264,10 @@
     const form = $('ds-tell-form');
     const importBtn = $('btn-ds-import');
     const fileInput = $('ds-import-file');
-    const groups = $('ds-groups');
+    const page = $('digital-self-page');
+    const openLedger = $('btn-ds-open-ledger');
+    const closeLedger = $('btn-ds-close-ledger');
+    const search = $('ds-fact-search');
     if (tellBtn) {
       tellBtn.addEventListener('click', () => showTellForm(true));
     }
@@ -229,8 +323,19 @@
         }
       });
     }
-    if (groups) {
-      groups.addEventListener('click', async (evt) => {
+    if (openLedger) {
+      openLedger.addEventListener('click', () => setLedgerOpen(true));
+    }
+    if (closeLedger) {
+      closeLedger.addEventListener('click', () => setLedgerOpen(false));
+    }
+    if (search) {
+      search.addEventListener('input', () => {
+        if (lastGroups) renderLedger(lastGroups, search.value);
+      });
+    }
+    if (page) {
+      page.addEventListener('click', async (evt) => {
         const btn = evt.target && evt.target.closest ? evt.target.closest('button[data-act]') : null;
         if (!btn) return;
         const item = btn.closest('.ds-item');
