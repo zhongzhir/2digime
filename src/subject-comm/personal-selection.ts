@@ -66,6 +66,8 @@ export async function selectNetworkItems(input: {
   items: NetworkItem[];
   chatComplete: ChatCompleteFn;
   model: { baseUrl: string; model: string; apiKey?: string };
+  /** 用户明确的内容偏好指令原文。不得由 AI 决策写入。 */
+  preferenceDirectives?: string;
 }): Promise<PersonalSelectionResult> {
   if (!input.items.length) {
     return { ok: true, decisions: [], shownItemIds: [], ignoredItemIds: [] };
@@ -104,9 +106,14 @@ export async function selectNetworkItems(input: {
     '必须覆盖输入的每一条 itemId，不得增删。reason 用一句中文，不超过 40 字。',
     'show：与此人已确认的关注、目标、边界相符，或对其长期意图有具体价值。',
     'ignore：与此人关系弱、越界、或只是泛泛热门。',
+    '若提供了用户明确的内容偏好指令，必须遵守：加推/关注应倾向 show，少推/屏蔽应 ignore。',
+    '这些指令不是数字之我身份，不要把它们写回用户是谁。',
     '不要用关键词表或打分规则；不要输出 score/rank。理由用普通人语言，引用数字之我中的事实。',
   ].join('\n');
-  const user = `当前数字之我：\n${selfContext}\n\n候选：\n${JSON.stringify(catalog)}`;
+  const preferenceBlock = input.preferenceDirectives?.trim()
+    ? `\n\n用户明确的内容偏好指令：\n${input.preferenceDirectives.trim()}`
+    : '';
+  const user = `当前数字之我：\n${selfContext}${preferenceBlock}\n\n候选：\n${JSON.stringify(catalog)}`;
 
   const attempts: Array<{ maxTokens: number; jsonObject: boolean }> = [
     { maxTokens: 2048, jsonObject: true },

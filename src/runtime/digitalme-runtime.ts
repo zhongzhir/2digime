@@ -177,6 +177,18 @@ import type { ProfessionalAgent, TalkChatFn } from '../intelligence';
 import { formatSelfContext, selectSelfContext } from '../intelligence/self-context';
 import { readDigitalSelf } from '../subject-core/digital-self/store';
 import { discoverForSubject, type DiscoverView } from '../subject-comm/content-discover';
+import {
+  formatPreferenceDirectives,
+  listContentPreferences,
+  reverseContentPreference,
+  upsertContentPreference,
+  type ContentPreferenceKind,
+} from '../subject-comm/content-preferences';
+import {
+  appendNetworkContentFeedback,
+  createUserContentFeedback,
+  type UserContentAction,
+} from '../subject-comm/network-content-feedback';
 import { RelayClient } from '../subject-comm/relay-client';
 import { FileNetworkItemStore } from '../relay-service/network-item-store';
 import type { ChatCompleteFn } from '../subject-core/structured-distill';
@@ -413,28 +425,95 @@ export class DigitalMeRuntime {
   async content(
     input: CommandMap['content']['input'],
   ): Promise<CommandMap['content']['output']> {
+    const pkg = this.subject.getActive();
+    const empty = async (notice: string): Promise<DiscoverView> => ({
+      headline: '发现',
+      lead: '兔机米根据你的数字之我挑选，不是中心推荐。',
+      cards: [],
+      preferences: pkg ? await this.contentPreferenceRows(pkg.rootDir) : [],
+      notice,
+    });
+    if (!pkg) return { view: await empty('还没有打开的数字之我。') };
+    const action = input.action || 'discover';
+    const itemId = String(input.itemId || '').trim();
+    const feedbackFile = path.join(pkg.rootDir, 'content', 'network-content-feedback.jsonl');
+
+    if (action === 'reverse') {
+      const directiveId = String(input.directiveId || '').trim();
+      if (!directiveId) return { view: await empty('请选择要撤销的偏好。') };
+      await reverseContentPreference(pkg.rootDir, directiveId);
+      return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl) };
+    }
+
+    if (action === 'open' || action === 'later' || action === 'boost' || action === 'reduce' || action === 'follow' || action === 'block') {
+      if (!itemId) return { view: await empty('请先选一条内容。') };
+      const items = await this.loadDiscoverItems(pkg.rootDir, input.relayUrl);
+      const item = items.find((row) => row.itemId === itemId);
+      if (!item) return { view: await empty('这条内容已经不在目录里。') };
+      const source = action === 'follow' || action === 'block';
+      if (source && !item.publisherSubjectId) return { view: await empty('这条内容没有可关注的来源。') };
+      await appendNetworkContentFeedback(
+        feedbackFile,
+        createUserContentFeedback({
+          subjectId: pkg.id,
+          contentId: item.itemId,
+          action: action as UserContentAction,
+        }),
+      );
+      if (action === 'boost' || action === 'reduce' || action === 'follow' || action === 'block') {
+        await upsertContentPreference(pkg.rootDir, {
+          kind: action as ContentPreferenceKind,
+          targetType: source ? 'source' : 'item',
+          target: source ? item.publisherSubjectId : item.itemId,
+          text: source
+            ? `${action === 'follow' ? '关注来源' : '不再看来源'} ${item.publisherDisplayName || item.publisherSubjectId}`
+            : `${action === 'boost' ? '更想看到类似' : '少推类似'}「${item.content.title}」的内容`,
+        });
+      }
+      return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl) };
+    }
+
+    return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl) };
+  }
+
+  private async contentPreferenceRows(packageRoot: string): Promise<DiscoverView['preferences']> {
+    return (await listContentPreferences(packageRoot)).map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      text: row.text,
+    }));
+  }
+
+  private async runContentDiscover(
+    packageRoot: string,
+    subjectId: string,
+    relayUrl?: string,
+  ): Promise<DiscoverView> {
+    const preferences = await this.contentPreferenceRows(packageRoot);
     const empty = (notice: string): DiscoverView => ({
       headline: '发现',
       lead: '兔机米根据你的数字之我挑选，不是中心推荐。',
       cards: [],
+      preferences,
       notice,
     });
-    const pkg = this.subject.getActive();
-    if (!pkg) return { view: empty('还没有打开的数字之我。') };
-    const self = await readDigitalSelf(pkg.rootDir, pkg.id, nowIso());
+    const self = await readDigitalSelf(packageRoot, subjectId, nowIso());
     const chatCompleteFn = this.resolveContentChat();
     const model = this.resolveContentModel();
-    if (!chatCompleteFn || !model) return { view: empty('连接 AI 之后，才能按你的数字之我挑选内容。') };
-    const items = await this.loadDiscoverItems(pkg.rootDir, input.relayUrl);
-    if (!items.length) return { view: empty('还没有新内容。') };
+    if (!chatCompleteFn || !model) return empty('连接 AI 之后，才能按你的数字之我挑选内容。');
+    const items = await this.loadDiscoverItems(packageRoot, relayUrl);
+    if (!items.length) return empty('还没有新内容。');
+    const directives = formatPreferenceDirectives(await listContentPreferences(packageRoot));
     const result = await discoverForSubject({
       digitalSelf: self,
       items,
       chatComplete: chatCompleteFn,
       model,
-      feedbackFile: path.join(pkg.rootDir, 'content', 'network-content-feedback.jsonl'),
+      feedbackFile: path.join(packageRoot, 'content', 'network-content-feedback.jsonl'),
+      preferences,
+      ...(directives ? { preferenceDirectives: directives } : {}),
     });
-    return { view: result.view };
+    return result.view;
   }
 
   private resolveContentChat(): ChatCompleteFn | null {

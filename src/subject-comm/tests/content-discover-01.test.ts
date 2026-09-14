@@ -157,6 +157,7 @@ test('Discover: identical relay pool, recipient-side SHOW, AI decision does not 
     const src = await fs.readFile(path.join(process.cwd(), 'src/subject-comm/personal-selection.ts'), 'utf8');
     assert.equal(src.includes('network-content-feedback'), false);
     assert.equal(src.includes('writeDigitalSelf'), false);
+    assert.equal(await fs.access(path.join(rootA, 'content', 'content-preferences.json')).then(() => true, () => false), false);
   } finally {
     server.close();
   }

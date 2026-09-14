@@ -70,4 +70,29 @@ test('Personal selection source has no keyword/score fallback', async () => {
   assert.equal(src.includes('keywordOverlap'), false);
   assert.equal(src.includes('cosine'), false);
   assert.equal(/\brelevanceScore\b/.test(src), false);
+  assert.equal(src.includes('content-preferences'), false);
+});
+
+test('explicit preference directives are passed as prompt text, not identity', async () => {
+  const digitalSelf = self('subj_a', ['我长期关心人工智能如何改变产品和投资判断。']);
+  const subset = FEED_01_SEED_ITEMS.slice(0, 2);
+  const result = await selectNetworkItems({
+    digitalSelf,
+    items: subset,
+    model: { baseUrl: 'http://127.0.0.1', model: 'test' },
+    preferenceDirectives: '- [boost] 更想看到类似「核聚变」的内容',
+    chatComplete: async (options) => {
+      const blob = options.messages.map((m) => m.content).join('\n');
+      assert.match(blob, /用户明确的内容偏好指令：/);
+      assert.match(blob, /核聚变/);
+      assert.match(blob, /这些指令不是数字之我身份/);
+      const decisions = subset.map((item, index) => ({
+        itemId: item.itemId,
+        decision: index === 0 ? 'show' : 'ignore',
+        reason: index === 0 ? '你明确要求加推这类内容。' : '关系弱。',
+      }));
+      return { text: JSON.stringify({ decisions }) };
+    },
+  });
+  assert.equal(result.ok, true);
 });

@@ -16,6 +16,10 @@ export const USER_CONTENT_ACTIONS = [
   'later',
   'dismiss',
   'not_interested',
+  'boost',
+  'reduce',
+  'follow',
+  'block',
 ] as const;
 
 export type UserContentAction = (typeof USER_CONTENT_ACTIONS)[number];

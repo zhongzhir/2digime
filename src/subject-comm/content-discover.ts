@@ -17,14 +17,22 @@ export interface DiscoverCard {
   title: string;
   text: string;
   url?: string;
+  publisherSubjectId?: string;
   publisherDisplayName?: string;
   reason: string;
+}
+
+export interface DiscoverPreference {
+  id: string;
+  kind: string;
+  text: string;
 }
 
 export interface DiscoverView {
   headline: string;
   lead: string;
   cards: DiscoverCard[];
+  preferences: DiscoverPreference[];
   notice: string;
 }
 
@@ -34,6 +42,8 @@ export async function discoverForSubject(input: {
   chatComplete: ChatCompleteFn;
   model: { baseUrl: string; model: string; apiKey?: string };
   feedbackFile: string;
+  preferenceDirectives?: string;
+  preferences?: DiscoverPreference[];
 }): Promise<
   | { ok: true; view: DiscoverView }
   | { ok: false; error: typeof PERSONAL_SELECTION_UNAVAILABLE; detail: string; view: DiscoverView }
@@ -42,6 +52,7 @@ export async function discoverForSubject(input: {
     headline: '发现',
     lead: '兔机米根据你的数字之我挑选，不是中心推荐。',
     cards: [],
+    preferences: input.preferences || [],
     notice,
   });
   if (!input.items.length) {
@@ -52,6 +63,7 @@ export async function discoverForSubject(input: {
     items: input.items,
     chatComplete: input.chatComplete,
     model: input.model,
+    ...(input.preferenceDirectives ? { preferenceDirectives: input.preferenceDirectives } : {}),
   });
   if (!selected.ok) {
     return {
@@ -82,6 +94,7 @@ export async function discoverForSubject(input: {
         title: item?.content.title || row.itemId,
         text: item?.content.text || '',
         ...(item?.content.url ? { url: item.content.url } : {}),
+        ...(item?.publisherSubjectId ? { publisherSubjectId: item.publisherSubjectId } : {}),
         ...(item?.publisherDisplayName ? { publisherDisplayName: item.publisherDisplayName } : {}),
         reason: row.reason,
       };
@@ -92,6 +105,7 @@ export async function discoverForSubject(input: {
       headline: '发现',
       lead: '兔机米根据你的数字之我挑选，不是中心推荐。',
       cards,
+      preferences: input.preferences || [],
       notice: cards.length ? '' : '这次没有值得现在看的内容。',
     },
   };

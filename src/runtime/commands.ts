@@ -1066,8 +1066,10 @@ export interface CommandMap {
   };
   'content': {
     input: {
-      action: 'discover';
+      action: 'discover' | 'open' | 'later' | 'boost' | 'reduce' | 'follow' | 'block' | 'reverse';
       relayUrl?: string;
+      itemId?: string;
+      directiveId?: string;
     };
     output: {
       view: import('../subject-comm/content-discover').DiscoverView;

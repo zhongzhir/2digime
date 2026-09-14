@@ -104,7 +104,12 @@ input[type=checkbox], input[type=radio] { width: auto; flex: none; }
 .content-discover-card { padding: 10px 0; border-top: 1px solid var(--line); }
 .content-discover-card:first-child { border-top: 0; padding-top: 0; }
 .content-discover-card h3 { margin: 0 0 4px; font-size: 15px; }
-.content-discover-card a { font-size: 13px; }
+.content-discover-card a, .content-discover-actions button { font-size: 13px; }
+.content-discover-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.content-discover-actions button { padding: 4px 8px; }
+.content-discover-prefs { margin-top: 12px; }
+.content-discover-pref-list { list-style: none; margin: 4px 0 0; padding: 0; }
+.content-discover-pref-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; font-size: 13px; }
 .chat-composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .talk-composer-row { display: flex; align-items: flex-start; gap: 10px; }
 .talk-composer-field { flex: 1; margin: 0; }
