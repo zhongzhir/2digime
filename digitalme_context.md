@@ -2,7 +2,7 @@
 
 版本：v0.4
 状态：historical strategic context（不承担 current plan）
-最后更新：2026-09-14（CONTENT-DISTRIBUTION-MINIMUM-CLOSED-LOOP-01 整体闭环验收 ACCEPTED。下文 2026-09-12 及更早条目仍为历史）
+最后更新：2026-09-14（PUBLIC-ALPHA-CONTENT-RELEASE-01 进行中；前序 CONTENT-DISTRIBUTION-MINIMUM-CLOSED-LOOP-01 已 ACCEPTED。下文 2026-09-12 及更早条目仍为历史）
 
 本文件不恢复为第二权威源。现行权威：`AGENTS.md` → `docs/refoundation/00` / `01` / `02` / `03`。
 
@@ -15,6 +15,7 @@
 - Windows Public Alpha 已正式发布（GitHub Release `v0.1.0-public-alpha.1`）。
 - 标准 Windows Installer 已发布，并通过真实安装 / 升级验证。
 - 个人版继续作为公开试用基础版本。
+- 2026-09-14：内容分发最小闭环已验收。当前任务 `PUBLIC-ALPHA-CONTENT-RELEASE-01` 只做公开供应商说明 + 下一份 Windows Public Alpha 包，不开发新内容功能。供应商现状：RSS/Atom 为正式路径；**无**自助发布 API。
 
 ### 2. Institution Distribution v0.1
 

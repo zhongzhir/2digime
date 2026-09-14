@@ -141,6 +141,15 @@ Phase 1 Digital Self、Phase 2 Talk 主链、Phase 3 协作地基仍然有效，
 
 ## 2. 下一开发任务
 
+**任务名：** PUBLIC-ALPHA-CONTENT-RELEASE-01
+**状态：** `IN_PROGRESS`（2026-09-14；Authority `origin/main` = `dc50eda0924f7def8b144a0f238532329378d07b`）
+**目标：** 为已验收的内容分发最小闭环形成新的 Windows Public Alpha 可下载安装版本；公开 `CONTENT-SUPPLIERS.md`；README 增加供应商入口；验收后更新 GitHub `main`、tag 与 Release。
+**禁止：** 继续开发新的内容功能；虚构公网 API / 供应商 portal / 结算 / 移动端；force / merge / rebase / cherry-pick；把 PLANNED 写成当前能力。
+**工作区：** `D:\Projects\dm-public-alpha-content-release-01` / `release/public-alpha-content-01`，从 `origin/main` `dc50eda` 建立。
+**版本意图：** 当前公开 Windows Alpha 仍为 `0.1.x` / `v0.1.0-public-alpha.1`；本轮含已验收新产品能力，取 next minor `0.2.0`，tag 遵循既有 `v0.2.0-public-alpha.1`。
+
+**已接受（同线，不再当下一步）：** `CONTENT_DISTRIBUTION_MINIMUM_CLOSED_LOOP_ACCEPTED`。
+
 **任务名：** CONTENT-DISTRIBUTION-MINIMUM-CLOSED-LOOP-01
 **状态：** `ACCEPTED`（`CONTENT_DISTRIBUTION_MINIMUM_CLOSED_LOOP_ACCEPTED`，2026-09-14 整体闭环验收；前序 SUBJECT-NETWORK-REAL-CONTENT-TRIAL 两人闸门仍冻结 `REAL_USER_GATE=1/2`，独立）
 **目标：** 用真实内容打通最小闭环：供给 → 中立目录 → 既有 NetworkItem/broadcast/relay → 接收侧 Digital Self 选择 → Discover 消费 → 显式偏好 → 下一轮选择；以及自然语言主动获取。不是中心推荐、不是 CMS、不是社交网络、不做原生移动端。

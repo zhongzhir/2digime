@@ -41,6 +41,7 @@ The Windows package is **not code-signed**. Windows may show an unknown-publishe
 - The model completing ordinary tasks directly
 - Calling specialist capability when needed
 - Windows x64 packaged use
+- Minimum content discovery beside Talk (recipient-side selection, not a central feed product)
 
 ## Product direction
 
@@ -66,7 +67,17 @@ You do not need to assemble an AI toolchain first. Talk is the everyday entry. D
 
 ### Connecting with the world
 
-Long-term, every 2digime can be an intelligent network node that belongs to a real person. Selection should stay with your Digital Self, not a central platform. This Alpha does **not** ship a full content feed, follow/subscribe graph, marketplace, or payments.
+Long-term, every 2digime can be an intelligent network node that belongs to a real person. Selection should stay with your Digital Self, not a central platform. This Alpha includes a **minimum** content loop (neutral directory → your 2digime decides). It does **not** ship a full content feed product, follow/subscribe graph, marketplace, or payments.
+
+---
+
+## Content Providers
+
+2digime can ingest public content into its Digital Subject Network. Personal selection happens on the recipient's own 2digime rather than through a centralized user-profile ranking system.
+
+Creators, publishers, and platforms can start from a standard public RSS / Atom feed. This Public Alpha does not offer a self-serve publish API.
+
+See: [Providing Content to 2digime Users](CONTENT-SUPPLIERS.md)
 
 ---
 

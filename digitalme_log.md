@@ -5,6 +5,38 @@
 
 ---
 
+## 2026-09-14 — PUBLIC-ALPHA-CONTENT-RELEASE-01 供应商审计（短）
+
+### 工作区
+
+工作区：`D:\Projects\dm-public-alpha-content-release-01` / `release/public-alpha-content-01`
+Authority：`origin/main` = `dc50eda0924f7def8b144a0f238532329378d07b`
+
+### SUPPORTED_NOW
+
+- 正式供给路径：公开 RSS / Atom（`ingestSource` / `parseFeed`）。
+- 单 URL HTML 预览摄入存在于代码，不是对外自助通道。
+- canonical URL、稳定 itemId、再摄入 dedup、provenance `origin=publisher`。
+- 中立目录 + 可选本机 Relay；Relay 拒绝个性化查询键。
+- 接收侧 Discover（Talk 旁路）；明示偏好：加推 / 少推 / 关注 / 不再看 / 撤销。
+- 主动：Talk「帮我找…」+ 已连接 Gemini Search connector（密钥只在验收环境）。
+- 过期：`expiresAt` / `purgeExpired`；无供应商 CMS 删除。
+
+### NOT_SUPPORTED（不得写成当前公开服务）
+
+- 自助内容发布 API、供应商 portal、自动注册。
+- JSON/API 对外提交、公网 ingest endpoint。
+- CMS、广告、画像购买、结算、分成、分析后台、原生视频托管、移动端。
+- NetworkItem 无独立 thumbnail / tags 字段。
+
+### 联系（只复用已有）
+
+GitHub Issues / Releases / https://zhongzhir.github.io/2digime/
+机构白标（非内容后台）：https://zhongzhir.github.io/2digime/institution/
+仓库内无单独公开供应商邮箱。
+
+---
+
 ## 2026-09-14 — CONTENT-DISTRIBUTION-FINAL-CLOSURE-01
 
 ### 状态
