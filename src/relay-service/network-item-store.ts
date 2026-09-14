@@ -19,6 +19,7 @@ function safeId(id: string): string {
 
 export interface NetworkItemStore {
   put(item: NetworkItem): Promise<{ itemId: string }>;
+  get?(itemId: string, nowIso: string): Promise<NetworkItem | undefined>;
   list(query: NetworkItemQuery, nowIso: string): Promise<{ items: NetworkItem[]; nextCursor?: string }>;
   purgeExpired(nowIso: string): Promise<number>;
 }
@@ -29,6 +30,12 @@ export class MemoryNetworkItemStore implements NetworkItemStore {
   async put(item: NetworkItem): Promise<{ itemId: string }> {
     this.items.set(item.itemId, item);
     return { itemId: item.itemId };
+  }
+
+  async get(itemId: string, nowIso: string): Promise<NetworkItem | undefined> {
+    const item = this.items.get(itemId);
+    if (!item || isNetworkItemExpired(item, nowIso)) return undefined;
+    return item;
   }
 
   async list(query: NetworkItemQuery, nowIso: string): Promise<{ items: NetworkItem[]; nextCursor?: string }> {
@@ -68,6 +75,17 @@ export class FileNetworkItemStore implements NetworkItemStore {
     await fs.writeFile(tmp, `${JSON.stringify(item, null, 2)}\n`, 'utf8');
     await fs.rename(tmp, file);
     return { itemId: item.itemId };
+  }
+
+  async get(itemId: string, nowIso: string): Promise<NetworkItem | undefined> {
+    try {
+      const parsed = JSON.parse(await fs.readFile(this.fileFor(itemId), 'utf8')) as unknown;
+      const checked = validateNetworkItem(parsed);
+      if (!checked.ok || isNetworkItemExpired(checked.item, nowIso)) return undefined;
+      return checked.item;
+    } catch {
+      return undefined;
+    }
   }
 
   async list(query: NetworkItemQuery, nowIso: string): Promise<{ items: NetworkItem[]; nextCursor?: string }> {

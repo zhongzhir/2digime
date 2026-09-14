@@ -5,6 +5,32 @@
 
 ---
 
+## 2026-09-14 — CONTENT-DISTRIBUTION Slice 1
+
+### 状态
+
+`SLICE_1_VALIDATED` / `not_pushed`
+
+### 复用
+
+`NetworkItem` v1、`FileNetworkItemStore` / `MemoryNetworkItemStore`、`validateNetworkItem`、`public-http-safety` SSRF GET。
+
+### 接入
+
+真实 BBC News RSS `https://feeds.bbci.co.uk/news/rss.xml`（本机 `hnrss.org` 解析到 `198.18/15` 被 SSRF 拒绝，改用可路由公开源）。
+
+### 新建
+
+规范化 URL / 稳定 `itemId`；RSS/Atom/单 URL 摄入；目录全文检索。无 CMS、无爬虫、无用户字段进入目录。
+
+### 验证
+
+`content-ingest-01.test.js` 6/6，含真实 RSS → FileNetworkItemStore。证据 gitignored：`build/evidence/content-distribution-01/slice-1-real-ingest.json`。
+
+下一切片：directory → recipient-side Discover。
+
+---
+
 ## 2026-09-14 — CONTENT-DISTRIBUTION-MINIMUM-CLOSED-LOOP-01 启动 / 决策 #111
 
 ### 状态
