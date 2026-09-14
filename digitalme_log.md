@@ -5,6 +5,24 @@
 
 ---
 
+## 2026-09-14 — CONTENT-DISTRIBUTION-FINAL-CLOSURE-01
+
+### 状态
+
+`CONTENT_DISTRIBUTION_MINIMUM_CLOSED_LOOP_ACCEPTED` / `not_pushed`
+
+### 闭环
+
+供给（BBC RSS）→ 中立目录 / Relay → Owner 正式 Digital Self → DeepSeek 接收侧选择 → Discover → open/later 不改偏好 → 明示 boost → 下一轮真实模型消费 directive → 可撤销。主动：Talk + `seekContent` + 真实 Gemini Search。中央个性化 = 无。
+
+### 冻结
+
+前序两人真机闸门仍为 `REAL_USER_GATE=1/2`，与本闭环独立。不做 CMS / 推荐 / 爬虫 / 原生移动端。
+
+审计：`docs/audits/CONTENT-DISTRIBUTION-FINAL-CLOSURE-01.md`。
+
+---
+
 ## 2026-09-14 — CONTENT-DISTRIBUTION Slice 2
 
 ### 状态

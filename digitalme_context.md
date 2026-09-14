@@ -2,7 +2,7 @@
 
 版本：v0.4
 状态：historical strategic context（不承担 current plan）
-最后更新：2026-09-14（Owner 确认问题完备性原则；当前主任务 CONTENT-DISTRIBUTION-MINIMUM-CLOSED-LOOP-01。下文 2026-09-12 及更早条目仍为历史）
+最后更新：2026-09-14（CONTENT-DISTRIBUTION-MINIMUM-CLOSED-LOOP-01 整体闭环验收 ACCEPTED。下文 2026-09-12 及更早条目仍为历史）
 
 本文件不恢复为第二权威源。现行权威：`AGENTS.md` → `docs/refoundation/00` / `01` / `02` / `03`。
 

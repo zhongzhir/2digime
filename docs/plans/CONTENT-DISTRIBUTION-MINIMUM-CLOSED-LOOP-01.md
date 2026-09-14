@@ -1104,3 +1104,20 @@ Audit: `docs/audits/CONTENT-DISTRIBUTION-CAPABILITY-AUDIT-01.md`. Material corre
 
 Each slice: real validation → commit → next. No push until Owner acceptance.
 
+---
+
+# Closure
+
+**2026-09-14 verdict:** `CONTENT_DISTRIBUTION_MINIMUM_CLOSED_LOOP_ACCEPTED`
+
+Audit: `docs/audits/CONTENT-DISTRIBUTION-FINAL-CLOSURE-01.md`.
+
+Demonstrated with real BBC RSS, Owner Digital Self, official DeepSeek (`stub=false`), and live Gemini Search:
+
+- content supply → consumption closed loop
+- central personalization = none
+- explicit preference only
+- active + passive acquisition
+- mobile deferred, client-neutral `content` command reserved
+- B-participant real-user gate remains frozen 1/2 and independent
+

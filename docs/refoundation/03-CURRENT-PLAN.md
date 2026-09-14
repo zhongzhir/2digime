@@ -129,7 +129,7 @@ Digital Self 不限制模型，只增加主体上下文。禁止用 Digital Self
 
 **2026-09-08：** Digital Subject Network substrate 审计已完成（04 §13）。`DIGITALME-SUBJECT-NETWORK-FEED-01` 已证明：**同一 Relay 返回完全相同候选池，不同 Digital Self 的 2digime 自主选出不同内容；Relay 不参与个性化。** 裁定 `DISTRIBUTED_PERSONAL_SELECTION_ACCEPTED`（04 §14）。同日 `DIGITALME-DIGITAL-SELF-NETWORK-EVOLUTION-01` 证明：**同一主体 Digital Self 经 Talk 演化后，面对未变候选池，选择发生合理变化**（04 §15）。禁止另起 `subject-network-v2` / `feed-runtime` / `new-relay`。不把 Opportunity 冒充内容分发。不开始 Computer Use。不恢复 `#nav-collab`。
 
-**2026-09-14：** Owner 指定 `CONTENT-DISTRIBUTION-MINIMUM-CLOSED-LOOP-01` 为当前主任务。允许在既有 NetworkItem / Relay / `selectNetworkItems` 上建立最小供给—目录—接收侧选择—消费—显式偏好闭环，以及 Talk 内主动获取。允许 Talk 旁路的轻量 Discover 投影，**仍禁止**独立 Feed 产品、中心推荐、社交网络和恢复协作中心。
+**2026-09-14：** `CONTENT-DISTRIBUTION-MINIMUM-CLOSED-LOOP-01` 整体闭环验收 `CONTENT_DISTRIBUTION_MINIMUM_CLOSED_LOOP_ACCEPTED`（审计 `docs/audits/CONTENT-DISTRIBUTION-FINAL-CLOSURE-01.md`）。允许保留 Talk 旁路 Discover 与包内显式内容偏好。**仍禁止**独立 Feed 产品、中心推荐、社交网络和恢复协作中心。移动端仍 deferred，命令边界已留在 `src/` + `content`。
 
 前三项能力仍须对真人成立；不把 Phase 3 协作试验扩成广播市场；不恢复 `#nav-collab`。中间服务（Relay / Index / Search 等）是服务商，不是网络主人。
 
@@ -142,11 +142,11 @@ Phase 1 Digital Self、Phase 2 Talk 主链、Phase 3 协作地基仍然有效，
 ## 2. 下一开发任务
 
 **任务名：** CONTENT-DISTRIBUTION-MINIMUM-CLOSED-LOOP-01
-**状态：** `CURRENT`（Owner 2026-09-14 指定；前序 SUBJECT-NETWORK-REAL-CONTENT-TRIAL 工程闸门已过，两人闸门冻结 `REAL_USER_GATE=1/2`，不阻塞本任务）
+**状态：** `ACCEPTED`（`CONTENT_DISTRIBUTION_MINIMUM_CLOSED_LOOP_ACCEPTED`，2026-09-14 整体闭环验收；前序 SUBJECT-NETWORK-REAL-CONTENT-TRIAL 两人闸门仍冻结 `REAL_USER_GATE=1/2`，独立）
 **目标：** 用真实内容打通最小闭环：供给 → 中立目录 → 既有 NetworkItem/broadcast/relay → 接收侧 Digital Self 选择 → Discover 消费 → 显式偏好 → 下一轮选择；以及自然语言主动获取。不是中心推荐、不是 CMS、不是社交网络、不做原生移动端。
 **禁止：** 自研爬虫/搜索引擎/推荐模型/中心用户画像；把 AI SHOW/IGNORE 写回偏好；Relay 个性化；把 trial HTML scrape 升成产品子系统；恢复 `#nav-collab`；push / merge / rebase（另令除外）。
 **工作区：** `D:\Projects\dm-content-distribution-01` / `build/content-distribution-minimum-closed-loop-01`，线性基于 `7d10e865c9c655693a0047c832ec69217a87a43d`。
-**计划 / 审计：** `docs/plans/CONTENT-DISTRIBUTION-MINIMUM-CLOSED-LOOP-01.md`；`docs/audits/CONTENT-DISTRIBUTION-CAPABILITY-AUDIT-01.md`。
+**计划 / 审计：** `docs/plans/CONTENT-DISTRIBUTION-MINIMUM-CLOSED-LOOP-01.md`；`docs/audits/CONTENT-DISTRIBUTION-CAPABILITY-AUDIT-01.md`；`docs/audits/CONTENT-DISTRIBUTION-FINAL-CLOSURE-01.md`。
 
 **已接受（同线，不再当下一步）：** `SUPER_ASSISTANT_L1_ACCEPTED`；`RESULT_DELIVERY_FINAL_FALLBACK_ACCEPTED`；`PUBLIC_ALPHA_UX_RECOVERY_ACCEPTED`。
 
