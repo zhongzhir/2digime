@@ -12,10 +12,11 @@ async function tempDir(prefix: string): Promise<string> {
 }
 
 test('CommandBus 覆盖全部命令且不超过上限', async () => {
-  assert.equal(COMMAND_NAMES.length, 25);
+  assert.equal(COMMAND_NAMES.length, 26);
   assert.ok(COMMAND_NAMES.length <= COMMAND_COUNT_LIMIT);
   assert.ok(COMMAND_NAMES.includes('talk'));
   assert.ok(COMMAND_NAMES.includes('digitalSelf'));
+  assert.ok(COMMAND_NAMES.includes('content'));
   assert.ok(COMMAND_NAMES.includes('work.converse'));
   assert.ok(COMMAND_NAMES.includes('work.reviseArtifact'));
   assert.ok(COMMAND_NAMES.includes('subject.importMaterial'));
@@ -88,6 +89,9 @@ test('CommandBus 覆盖全部命令且不超过上限', async () => {
 
   const talk = await bus.invoke('talk', {});
   assert.equal(talk.view.headline, '与兔机米');
+
+  const discover = await bus.invoke('content', { action: 'discover' });
+  assert.equal(discover.view.headline, '发现');
 
   await runtime.stop();
 });

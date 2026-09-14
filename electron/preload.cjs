@@ -31,6 +31,7 @@ const COMMAND_NAMES = [
   "subject.communicate",
   "digitalSelf",
   "talk",
+  "content",
 ];
 
 contextBridge.exposeInMainWorld("digitalMe", {

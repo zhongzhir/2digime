@@ -330,8 +330,8 @@ test('帮助目录为四个阶段且不评价真人', () => {
   assert.equal(blob.includes('真人能力'), false);
 });
 
-test('CommandBus 上限仍为 22', () => {
-  assert.equal(COMMAND_NAMES.length, 25);
+test('CommandBus 上限仍为 26', () => {
+  assert.equal(COMMAND_NAMES.length, 26);
   assert.ok(COMMAND_NAMES.length <= COMMAND_COUNT_LIMIT);
 });
 

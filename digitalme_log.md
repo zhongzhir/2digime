@@ -5,6 +5,32 @@
 
 ---
 
+## 2026-09-14 — CONTENT-DISTRIBUTION Slice 2
+
+### 状态
+
+`SLICE_2_VALIDATED` / `not_pushed`
+
+### 复用
+
+`selectNetworkItems`、Relay `/v1/network-items`、`readDigitalSelf`、`network_content_feedback`。
+
+### 接入
+
+无新外部服务。Talk 旁路 Discover 投影；一条 `content` 命令。
+
+### 新建
+
+`content-discover.ts`、`content` command、Talk 内发现列表。AI SHOW/IGNORE 只写 `ai_decision`，不改 `self.json`。不恢复 `#nav-collab`。
+
+### 验证
+
+`content-discover-01.test.js`：同一 Relay 池、两个 Digital Self 选出不同 SHOW、偏好查询被拒绝、self 字节不变。真实模型因本机 DashScope 密钥无效而 skip，选择路径与已通过的 `7d10e865` 试验相同。
+
+下一切片：显式偏好指令。
+
+---
+
 ## 2026-09-14 — CONTENT-DISTRIBUTION Slice 1
 
 ### 状态

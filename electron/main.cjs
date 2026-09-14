@@ -84,6 +84,7 @@ const COMMAND_NAMES = new Set([
   "subject.communicate",
   "digitalSelf",
   "talk",
+  "content",
 ]);
 
 function resolveAppRoot() {

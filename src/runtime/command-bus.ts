@@ -162,6 +162,10 @@ export function createCommandBus(runtime: DigitalMeRuntime): CommandBus {
           return (await runtime.talk(
             input as CommandMap['talk']['input'],
           )) as CommandMap[K]['output'];
+        case 'content':
+          return (await runtime.content(
+            input as CommandMap['content']['input'],
+          )) as CommandMap[K]['output'];
         default: {
           const _exhaustive: never = name;
           throw new Error(`unhandled command: ${String(_exhaustive)}`);

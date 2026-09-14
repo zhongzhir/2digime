@@ -701,6 +701,9 @@
       } else {
         await refreshChatPanel();
       }
+      if (window.ContentDiscoverPage && typeof window.ContentDiscoverPage.refresh === "function") {
+        await window.ContentDiscoverPage.refresh();
+      }
     }
     if (nav === "subject") {
       const dsPage = document.getElementById("digital-self-page");

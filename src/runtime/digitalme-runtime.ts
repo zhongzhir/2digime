@@ -176,6 +176,11 @@ import {
 import type { ProfessionalAgent, TalkChatFn } from '../intelligence';
 import { formatSelfContext, selectSelfContext } from '../intelligence/self-context';
 import { readDigitalSelf } from '../subject-core/digital-self/store';
+import { discoverForSubject, type DiscoverView } from '../subject-comm/content-discover';
+import { RelayClient } from '../subject-comm/relay-client';
+import { FileNetworkItemStore } from '../relay-service/network-item-store';
+import type { ChatCompleteFn } from '../subject-core/structured-distill';
+import type { NetworkItem } from '../subject-comm/network-item';
 import {
   appendExchange,
   bodyDigest,
@@ -319,6 +324,8 @@ export interface DigitalMeRuntimeOptions {
   digitalSelfChat?: (input: { messages: ChatMessage[] }) => Promise<{ text: string }>;
   /** Phase 2 交流模型注入（测试可双）。未提供时复用已有 generic model。 */
   talkChat?: TalkChatFn;
+  /** 内容发现用的 ChatComplete；未提供时复用已有 generic model。 */
+  contentChat?: ChatCompleteFn;
   /** 测试注入专业能力；未提供时从当前已连接 registry 生成自然语言可调用表。 */
   talkProfessionals?: ProfessionalAgent[];
   /**
@@ -401,6 +408,102 @@ export class DigitalMeRuntime {
     input: CommandMap['talk']['input'],
   ): Promise<CommandMap['talk']['output']> {
     return this.getTalkService().invoke(input);
+  }
+
+  async content(
+    input: CommandMap['content']['input'],
+  ): Promise<CommandMap['content']['output']> {
+    const empty = (notice: string): DiscoverView => ({
+      headline: '发现',
+      lead: '兔机米根据你的数字之我挑选，不是中心推荐。',
+      cards: [],
+      notice,
+    });
+    const pkg = this.subject.getActive();
+    if (!pkg) return { view: empty('还没有打开的数字之我。') };
+    const self = await readDigitalSelf(pkg.rootDir, pkg.id, nowIso());
+    const chatCompleteFn = this.resolveContentChat();
+    const model = this.resolveContentModel();
+    if (!chatCompleteFn || !model) return { view: empty('连接 AI 之后，才能按你的数字之我挑选内容。') };
+    const items = await this.loadDiscoverItems(pkg.rootDir, input.relayUrl);
+    if (!items.length) return { view: empty('还没有新内容。') };
+    const result = await discoverForSubject({
+      digitalSelf: self,
+      items,
+      chatComplete: chatCompleteFn,
+      model,
+      feedbackFile: path.join(pkg.rootDir, 'content', 'network-content-feedback.jsonl'),
+    });
+    return { view: result.view };
+  }
+
+  private resolveContentChat(): ChatCompleteFn | null {
+    if (this.options.contentChat) return this.options.contentChat;
+    const understanding = resolveSubjectUnderstandingRuntime({
+      ...(this.options.subjectUnderstanding
+        ? { specialist: this.options.subjectUnderstanding }
+        : {}),
+      ...(this.options.documentCapability !== undefined
+        ? { documentCapability: this.options.documentCapability }
+        : {}),
+      ...(this.options.openaiCompatible
+        ? { openaiCompatible: this.options.openaiCompatible }
+        : {}),
+      ...(this.options.secrets ? { secrets: this.options.secrets } : {}),
+    });
+    const runtime = understanding.runtime;
+    if (!runtime?.enabled) return null;
+    return async (options) => runtime.chatComplete(options);
+  }
+
+  private resolveContentModel(): { baseUrl: string; model: string; apiKey?: string } | null {
+    const understanding = resolveSubjectUnderstandingRuntime({
+      ...(this.options.subjectUnderstanding
+        ? { specialist: this.options.subjectUnderstanding }
+        : {}),
+      ...(this.options.documentCapability !== undefined
+        ? { documentCapability: this.options.documentCapability }
+        : {}),
+      ...(this.options.openaiCompatible
+        ? { openaiCompatible: this.options.openaiCompatible }
+        : {}),
+      ...(this.options.secrets ? { secrets: this.options.secrets } : {}),
+    });
+    const runtime = understanding.runtime;
+    if (!runtime?.enabled) {
+      if (this.options.contentChat) return { baseUrl: 'http://127.0.0.1', model: 'injected' };
+      return null;
+    }
+    return {
+      baseUrl: runtime.model.baseUrl,
+      model: runtime.model.model,
+    };
+  }
+
+  private async loadDiscoverItems(packageRoot: string, relayUrlInput?: string): Promise<NetworkItem[]> {
+    const relayUrl = String(relayUrlInput || (await this.readStoredRelayUrl(packageRoot)) || '').trim();
+    if (relayUrl) {
+      try {
+        const listed = await new RelayClient(relayUrl).listNetworkItems({ kind: 'content', visibility: 'public' });
+        if (listed.items.length) return listed.items;
+      } catch {
+        /* 回退本地目录 */
+      }
+    }
+    const local = new FileNetworkItemStore(path.join(packageRoot, 'content'));
+    const listed = await local.list({ kind: 'content', visibility: 'public', limit: 50 }, nowIso());
+    return listed.items;
+  }
+
+  private async readStoredRelayUrl(packageRoot: string): Promise<string> {
+    try {
+      const raw = JSON.parse(await fs.readFile(path.join(packageRoot, 'collaboration', 'peers.json'), 'utf8')) as {
+        self?: { relayUrl?: string };
+      };
+      return String(raw.self?.relayUrl || '').trim();
+    } catch {
+      return '';
+    }
   }
 
   private getDigitalSelfService(): DigitalSelfService {

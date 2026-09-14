@@ -98,6 +98,13 @@ input[type=checkbox], input[type=radio] { width: auto; flex: none; }
 .chat-main:has(#chat-empty:not([hidden])) .chat-stream { flex: 0 1 auto; overflow: auto; }
 .chat-main:has(#chat-empty:not([hidden])) #chat-turns { flex: none; padding: 0; margin: 0; }
 .chat-composer { border: 1px solid var(--line); border-radius: 20px; padding: 16px; margin-top: 12px; background: var(--panel); box-shadow: var(--shadow, 0 8px 24px rgba(28, 36, 48, 0.07)); position: relative; }
+.content-discover { margin: 12px 0 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); }
+.content-discover h2 { margin: 0 0 4px; font-size: 16px; }
+.content-discover-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 10px; }
+.content-discover-card { padding: 10px 0; border-top: 1px solid var(--line); }
+.content-discover-card:first-child { border-top: 0; padding-top: 0; }
+.content-discover-card h3 { margin: 0 0 4px; font-size: 15px; }
+.content-discover-card a { font-size: 13px; }
 .chat-composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .talk-composer-row { display: flex; align-items: flex-start; gap: 10px; }
 .talk-composer-field { flex: 1; margin: 0; }
