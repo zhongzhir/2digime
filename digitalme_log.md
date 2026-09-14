@@ -35,6 +35,10 @@ GitHub Issues / Releases / https://zhongzhir.github.io/2digime/
 机构白标（非内容后台）：https://zhongzhir.github.io/2digime/institution/
 仓库内无单独公开供应商邮箱。
 
+### 版本
+
+现有公开 tag 最高为 `v0.1.0-public-alpha.1`。本轮取 next minor：`0.2.0`，tag 规则沿用 `v0.2.0-public-alpha.1`。无版本冲突。
+
 ---
 
 ## 2026-09-14 — CONTENT-DISTRIBUTION-FINAL-CLOSURE-01
