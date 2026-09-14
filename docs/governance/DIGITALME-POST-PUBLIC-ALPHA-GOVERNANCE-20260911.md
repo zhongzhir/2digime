@@ -19,6 +19,7 @@ Public Alpha 已进入真实对外阶段。系统开始从单一产品验证扩�
 
 - AI Native / AI First。
 - Build-vs-Integrate First。
+- 问题完备性：Owner 意见是线索，不是完整规格。AI 必须先校验问题框架并补齐必须维度。见 `DIGITALME-PROBLEM-FIRST-COMPLETENESS-PRINCIPLE.md`（决策 #111）。
 - 用户 → 2digime → 专业 Agent / Skill / Tool / Model。
 - 2digime 核心只承担数字之我、超级助手、数字主体网络三类长期纵向能力。
 - 用户体验横向贯穿全部能力。
@@ -265,17 +266,10 @@ Relay 只负责连接和传输；最终 SHOW / IGNORE 由每个用户自己的 2
 
 ## 9. 当前唯一下一步
 
-当前只执行：
+2026-09-14 起当前主任务：
 
-`PUBLIC-ALPHA-WINDOWS-INSTALL-RELEASE-01`
+`CONTENT-DISTRIBUTION-MINIMUM-CLOSED-LOOP-01`
 
-完成并验收后，才进入：
+此前顺序中的 Public Alpha Installer、Institution Distribution v0.1、官网 v0.1、Subject Network Real Content Trial **工程闸门**均已发生。Trial 的两人终闸冻结在 `REAL_USER_GATE=1/2`，不阻塞本内容闭环任务。
 
-`INSTITUTION-DISTRIBUTION-FOUNDATION-01`
-
-在 Institution v0.1 完成并验收后：
-
-1. 发布 Institution Landing Page；
-2. 再进入 Subject Network Real Content Trial。
-
-除 P0 事故外，不改变以上顺序。
+除 P0 事故外，不得再并行开第二条产品主任务。

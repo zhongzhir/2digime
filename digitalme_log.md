@@ -5,6 +5,24 @@
 
 ---
 
+## 2026-09-14 — CONTENT-DISTRIBUTION-MINIMUM-CLOSED-LOOP-01 启动 / 决策 #111
+
+### 状态
+
+`CURRENT_MAIN_TASK` / `AUDIT_THEN_IMPLEMENT` / `not_pushed`
+
+Authority 基线：`origin/main` `7629880f0c995d03135f4186b9c90672483774f1`。线性延续未推送工程试验 `7d10e865c9c655693a0047c832ec69217a87a43d`。新 worktree：`D:\Projects\dm-content-distribution-01` / `build/content-distribution-minimum-closed-loop-01`。前一任务两人闸门冻结在 `REAL_USER_GATE=1/2`，不阻塞本任务。
+
+### 决策 #111 — 问题完备性原则
+
+强化既有「Owner 意见 = 假设与线索」：AI 对问题解决的完备性负责，而不仅对执行正确性负责。Owner 条目是线索，不是完整规格。权威落盘：`docs/governance/DIGITALME-PROBLEM-FIRST-COMPLETENESS-PRINCIPLE.md`；同步 `digitalme_context.md` §5.4、`docs/refoundation/01-DEVELOPMENT-CONSTITUTION.md` §3.13。仓库无独立 personal-context 文件，不另建政策库。
+
+### 本轮不做
+
+不改历史 dirty worktree；不 push；不在审计完成前写产品代码。
+
+---
+
 ## 2026-09-12 — SUBJECT-NETWORK-REAL-CONTENT-TRIAL-01
 
 ### 状态
