@@ -20,6 +20,7 @@ export interface DiscoverCard {
   publisherSubjectId?: string;
   publisherDisplayName?: string;
   reason: string;
+  source?: 'directory' | 'web';
 }
 
 export interface DiscoverPreference {

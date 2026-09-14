@@ -78,7 +78,7 @@
           actions.appendChild(
             btn('打开原文', () => {
               window.open(card.url, '_blank', 'noopener,noreferrer');
-              void act('open', { itemId: card.itemId });
+              if (card.source !== 'web') void act('open', { itemId: card.itemId });
             }),
           );
         }
@@ -130,7 +130,20 @@
     }
   }
 
-  window.ContentDiscoverPage = { refresh: refresh };
+  async function seek(query) {
+    const client = api();
+    if (!client || typeof client.invoke !== 'function') return;
+    const text = String(query || '').trim();
+    if (!text) return;
+    try {
+      const result = await client.invoke('content', { action: 'seek', text: text });
+      renderView(result && result.view);
+    } catch {
+      /* 主动获取失败不得挡住交谈 */
+    }
+  }
+
+  window.ContentDiscoverPage = { refresh: refresh, seek: seek };
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', refresh);

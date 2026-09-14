@@ -86,6 +86,7 @@ export class TalkService {
     private readonly now: () => string = nowIso,
     private readonly resolveCollab?: (pkg: TalkPackageRef) => Promise<SubjectCollabPort | null>,
     private readonly learnFromUtterance?: (text: string) => Promise<TalkLearnResult>,
+    private readonly resolveContentSeek?: (pkg: TalkPackageRef, query: string) => Promise<string>,
   ) {}
 
   async invoke(input: { text?: string; contextPaths?: string[] }): Promise<{ view: TalkView }> {
@@ -148,6 +149,16 @@ export class TalkService {
       selfContext = formatSelfContext(selectSelfContext(self, text));
     } catch {
       selfContext = '读取数字之我失败。不得解释为不了解用户，也不要编造本人事实。';
+    }
+    if (spoken && this.resolveContentSeek) {
+      try {
+        const block = await this.resolveContentSeek(pkg, spoken);
+        if (block.trim()) {
+          selfContext = `${selfContext}\n\n内容目录候选（保留原文链接，不是中心推荐）：\n${block}`;
+        }
+      } catch {
+        /* 目录检索失败不得阻断交流 */
+      }
     }
     const collab = this.resolveCollab ? await this.resolveCollab(pkg) : null;
     const turnCtx = input.contextPaths?.length ? { contextPaths: input.contextPaths } : {};

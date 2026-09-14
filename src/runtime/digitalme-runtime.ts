@@ -177,6 +177,7 @@ import type { ProfessionalAgent, TalkChatFn } from '../intelligence';
 import { formatSelfContext, selectSelfContext } from '../intelligence/self-context';
 import { readDigitalSelf } from '../subject-core/digital-self/store';
 import { discoverForSubject, type DiscoverView } from '../subject-comm/content-discover';
+import { formatSeekContext, seekContent } from '../subject-comm/content-seek';
 import {
   formatPreferenceDirectives,
   listContentPreferences,
@@ -191,6 +192,8 @@ import {
 } from '../subject-comm/network-content-feedback';
 import { RelayClient } from '../subject-comm/relay-client';
 import { FileNetworkItemStore } from '../relay-service/network-item-store';
+import { createGeminiSearchConnector } from '../capability/adapters/gemini-search';
+import { resolveGeminiSearchCredential } from '../capability/search-capability-discovery';
 import type { ChatCompleteFn } from '../subject-core/structured-distill';
 import type { NetworkItem } from '../subject-comm/network-item';
 import {
@@ -338,6 +341,8 @@ export interface DigitalMeRuntimeOptions {
   talkChat?: TalkChatFn;
   /** 内容发现用的 ChatComplete；未提供时复用已有 generic model。 */
   contentChat?: ChatCompleteFn;
+  /** 内容主动获取用的外部搜索；未提供时复用 Gemini Search connector。 */
+  contentSearch?: (query: string) => Promise<Array<{ title: string; url: string; snippet?: string }>>;
   /** 测试注入专业能力；未提供时从当前已连接 registry 生成自然语言可调用表。 */
   talkProfessionals?: ProfessionalAgent[];
   /**
@@ -438,6 +443,12 @@ export class DigitalMeRuntime {
     const itemId = String(input.itemId || '').trim();
     const feedbackFile = path.join(pkg.rootDir, 'content', 'network-content-feedback.jsonl');
 
+    if (action === 'seek') {
+      const query = String(input.text || '').trim();
+      if (!query) return { view: await empty('请先说想找什么。') };
+      return { view: await this.runContentSeek(pkg.rootDir, query, input.relayUrl) };
+    }
+
     if (action === 'reverse') {
       const directiveId = String(input.directiveId || '').trim();
       if (!directiveId) return { view: await empty('请选择要撤销的偏好。') };
@@ -514,6 +525,49 @@ export class DigitalMeRuntime {
       ...(directives ? { preferenceDirectives: directives } : {}),
     });
     return result.view;
+  }
+
+  private async runContentSeek(packageRoot: string, query: string, relayUrl?: string): Promise<DiscoverView> {
+    const preferences = await this.contentPreferenceRows(packageRoot);
+    const items = await this.loadDiscoverItems(packageRoot, relayUrl);
+    const searchWeb = this.resolveContentSearch();
+    const sought = await seekContent({
+      query,
+      items,
+      ...(searchWeb ? { searchWeb } : {}),
+    });
+    return {
+      headline: '发现',
+      lead: '根据你刚说的话找的内容，保留来源链接，不是中心推荐。',
+      cards: sought.cards,
+      preferences,
+      notice: sought.notice,
+    };
+  }
+
+  private resolveContentSearch():
+    | ((query: string) => Promise<Array<{ title: string; url: string; snippet?: string }>>)
+    | undefined {
+    if (this.options.contentSearch) return this.options.contentSearch;
+    const gem = resolveGeminiSearchCredential(process.env, {
+      ...(this.options.geminiSearchApiKey ? { apiKey: this.options.geminiSearchApiKey } : {}),
+      ...(this.options.geminiSearchModel ? { model: this.options.geminiSearchModel } : {}),
+    });
+    if (!gem.apiKey) return undefined;
+    const connector = createGeminiSearchConnector({
+      apiKey: gem.apiKey,
+      ...(gem.model ? { model: gem.model } : {}),
+    });
+    return async (query: string) => {
+      const sources = await connector.search(query);
+      return sources
+        .filter((row) => String(row.url || '').trim())
+        .map((row) => ({
+          title: String(row.title || row.url),
+          url: String(row.url),
+          ...(row.snippet ? { snippet: row.snippet } : {}),
+        }));
+    };
   }
 
   private resolveContentChat(): ChatCompleteFn | null {
@@ -647,6 +701,11 @@ export class DigitalMeRuntime {
           return pending.length
             ? { asked: true, askHint: pending.join('；') }
             : { asked: true };
+        },
+        async (pkg, query) => {
+          const items = await this.loadDiscoverItems(pkg.rootDir);
+          const sought = await seekContent({ query, items });
+          return formatSeekContext(sought);
         },
       );
     }
