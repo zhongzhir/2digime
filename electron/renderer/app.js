@@ -13,11 +13,11 @@
     const brand = window.__digitalMeBrand;
     const helpIntro =
       (brand && brand.strings && brand.strings.helpIntro) ||
-      "日常使用这三个页面：与兔机米、数字之我、设置。";
+      "日常使用这四个页面：与兔机米、发现、数字之我、设置。";
     if (titleEl) titleEl.textContent = helpIntro;
     for (const node of document.querySelectorAll(".help-topic")) {
       const topic = node.getAttribute("data-help-topic");
-      const show = topic === "chat" || topic === "subject" || topic === "settings";
+      const show = topic === "chat" || topic === "discover" || topic === "subject" || topic === "settings";
       node.hidden = !show;
       if (show) node.removeAttribute("hidden");
       else node.setAttribute("hidden", "");
@@ -184,11 +184,13 @@
     collabExtCapAuthPanel: document.getElementById("collab-ext-cap-auth-panel"),
     collabExtCapAuthPoints: document.getElementById("collab-ext-cap-auth-points"),
     navChat: document.getElementById("nav-chat"),
+    navDiscover: document.getElementById("nav-discover"),
     navSubject: document.getElementById("nav-subject"),
     navSettings: document.getElementById("nav-settings"),
     navWork: document.getElementById("nav-work"),
     navCollab: document.getElementById("nav-collab"),
     panelChat: document.getElementById("panel-chat"),
+    panelDiscover: document.getElementById("panel-discover"),
     panelSubject: document.getElementById("panel-subject"),
     panelWork: document.getElementById("panel-work"),
     panelCollab: document.getElementById("panel-collab"),
@@ -669,7 +671,7 @@
     }
   }
 
-  async function setNav(nav) {
+  async function setNav(nav, opts) {
     if (nav === "settings") {
       openSettings();
       return;
@@ -677,12 +679,13 @@
     if (currentView !== "shell") setView("shell");
     activeNav = nav;
     if (nav !== "chat") setChatGuideMode("normal");
-    for (const btn of [els.navWork, els.navChat, els.navSubject, els.navCollab, els.navSettings]) {
+    for (const btn of [els.navWork, els.navChat, els.navDiscover, els.navSubject, els.navCollab, els.navSettings]) {
       if (!btn) continue;
       btn.classList.toggle("active", btn.dataset.nav === nav);
     }
     const panels = [
       [els.panelChat, "chat"],
+      [els.panelDiscover, "discover"],
       [els.panelSubject, "subject"],
       [els.panelWork, "work"],
       [els.panelCollab, "collab"],
@@ -701,7 +704,9 @@
       } else {
         await refreshChatPanel();
       }
-      if (window.ContentDiscoverPage && typeof window.ContentDiscoverPage.refresh === "function") {
+    }
+    if (nav === "discover") {
+      if (!(opts && opts.skipRefresh) && window.ContentDiscoverPage && typeof window.ContentDiscoverPage.refresh === "function") {
         await window.ContentDiscoverPage.refresh();
       }
     }
@@ -728,10 +733,10 @@
   function openSettings(opts) {
     returnView = currentView === "settings" ? returnView : currentView;
     if (activeNav !== "settings") {
-      returnNav = activeNav === "subject" ? "subject" : "chat";
+      returnNav = activeNav === "chat" ? "chat" : activeNav;
     }
     activeNav = "settings";
-    for (const btn of [els.navWork, els.navChat, els.navSubject, els.navCollab, els.navSettings]) {
+    for (const btn of [els.navWork, els.navChat, els.navDiscover, els.navSubject, els.navCollab, els.navSettings]) {
       if (!btn) continue;
       btn.classList.toggle("active", btn.dataset.nav === "settings");
     }
@@ -1012,6 +1017,7 @@
       ? "subject"
       : activeNav === "settings" ||
           activeNav === "chat" ||
+          activeNav === "discover" ||
           activeNav === "work" ||
           activeNav === "collab" ||
           activeNav === "subject"
@@ -5990,6 +5996,7 @@
     setChatGuideMode("normal");
     setNav("chat");
   });
+  if (els.navDiscover) els.navDiscover.addEventListener("click", () => setNav("discover"));
   els.navSubject.addEventListener("click", () => setNav("subject"));
   if (els.navSettings) els.navSettings.addEventListener("click", () => setNav("settings"));
   els.navWork.addEventListener("click", () => setNav("work"));
@@ -6437,7 +6444,7 @@
     setView(target);
     if (target === "shell") {
       void (async () => {
-        await setNav(returnNav === "subject" ? "subject" : "chat");
+        await setNav(returnNav || "chat");
       })();
     }
   });
@@ -9941,6 +9948,8 @@
           } else {
             await refreshSubjectPanel();
           }
+        } else if (activeNav === "discover" && window.ContentDiscoverPage && typeof window.ContentDiscoverPage.refresh === "function") {
+          await window.ContentDiscoverPage.refresh();
         } else if (activeNav === "chat" && window.TalkPage && typeof window.TalkPage.refresh === "function") {
           await window.TalkPage.refresh();
         }
@@ -9973,4 +9982,6 @@
       initWelcomeFlow();
     }
   })();
+
+  window.ShellNav = { setNav };
 })();

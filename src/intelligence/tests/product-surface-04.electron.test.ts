@@ -48,6 +48,7 @@ async function assertProductNav(page: Page): Promise<void> {
   await page.locator('#nav-subject').waitFor({ state: 'visible', timeout: 10_000 });
   await page.locator('#nav-settings').waitFor({ state: 'visible', timeout: 10_000 });
   assert.equal((await navChat.innerText()).trim(), '与兔机米');
+  assert.equal((await page.locator('#nav-discover').innerText()).trim(), '发现');
   assert.equal(await page.locator('#nav-work').isVisible().catch(() => false), false);
   assert.equal(await page.locator('#nav-collab').isVisible().catch(() => false), false);
   assert.equal(await page.locator('#panel-work').isVisible().catch(() => false), false);

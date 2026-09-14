@@ -12,6 +12,8 @@
     const s = brand.strings;
     if (s.windowTitle) document.title = s.windowTitle;
     text('nav-chat', s.navTalk);
+    const navDiscover = document.getElementById('nav-discover');
+    if (navDiscover) navDiscover.textContent = '发现';
     const navSelf = document.querySelector('[data-nav="subject"]');
     if (navSelf && s.navSelf) navSelf.textContent = s.navSelf;
     const navSettings = document.getElementById('btn-open-settings');

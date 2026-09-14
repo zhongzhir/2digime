@@ -201,6 +201,7 @@ async function chat({ messages, tools }) {
   const hasTools = Array.isArray(tools) && tools.some((t) => t.function && t.function.name === 'delegate');
 
   if (hasTools && /(写|备忘|文档|说明|待办|三件)/.test(text)) {
+    const fakeDoc = /cap_fake_document/.test(sys);
     return {
       text: '',
       toolCalls: [
@@ -209,6 +210,7 @@ async function chat({ messages, tools }) {
           name: 'delegate',
           arguments: JSON.stringify({
             instruction: text,
+            ...(fakeDoc ? { capabilityId: 'cap_fake_document' } : {}),
           }),
         },
       ],

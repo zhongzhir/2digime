@@ -31,7 +31,7 @@ const FALLBACK = {
     talkLabel: '告诉兔机米',
     assistantRole: '兔机米',
     selfHeadline: '兔机米现在怎样理解我',
-    helpIntro: '日常使用这三个页面：与兔机米、数字之我、设置。',
+    helpIntro: '日常使用这四个页面：与兔机米、发现、数字之我、设置。',
     aboutLabel: '关于兔机米',
     hideLabel: '隐藏兔机米',
     institutionProvidedBy: '你的 AI 服务由 {organizationName} 提供。',

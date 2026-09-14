@@ -459,9 +459,6 @@
       if (sessionAtSend && still && still !== sessionAtSend) return;
       if (generation !== sendGeneration) return;
       renderView(result && result.view);
-      if (window.ContentDiscoverPage && typeof window.ContentDiscoverPage.seek === 'function' && trimmed) {
-        void window.ContentDiscoverPage.seek(trimmed);
-      }
       await refreshSessions();
     } catch (err) {
       if (epoch !== viewEpoch) return;
