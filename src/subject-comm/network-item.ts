@@ -34,11 +34,15 @@ export const RELAY_FORBIDDEN_QUERY_KEYS = [
 
 const FORBIDDEN_KEY_SET = new Set<string>(RELAY_FORBIDDEN_QUERY_KEYS);
 
+export type NetworkItemDiscoveryVia = 'search' | 'feed' | 'sitemap' | 'page' | 'autodiscovery';
+
 export interface NetworkItemProvenance {
   origin: DigitalSelfLikeOrigin;
   actor: 'owner' | 'model';
   statedAt: string;
   excerpt?: string;
+  /** 内容如何被发现。不是 ranking，也不是用户画像。 */
+  via?: NetworkItemDiscoveryVia;
 }
 
 /** 复用 Digital Self provenance 的 origin 语义，外加 publisher/seed。 */
@@ -79,6 +83,7 @@ export type NetworkItemValidation =
 
 const ORIGINS = new Set<string>(['user_statement', 'material', 'inference', 'publisher', 'seed']);
 const ACTORS = new Set<string>(['owner', 'model']);
+const DISCOVERY_VIA = new Set<string>(['search', 'feed', 'sitemap', 'page', 'autodiscovery']);
 
 function isIso(value: string): boolean {
   return Number.isFinite(Date.parse(value));
@@ -137,6 +142,8 @@ export function validateNetworkItem(raw: unknown): NetworkItemValidation {
 
   const displayName = String(rec.publisherDisplayName || '').trim();
   const excerpt = String(provRec.excerpt || '').trim();
+  const viaRaw = String(provRec.via || '').trim();
+  const via = DISCOVERY_VIA.has(viaRaw) ? (viaRaw as NetworkItemProvenance['via']) : undefined;
   const item: NetworkItem = {
     schemaVersion: NETWORK_ITEM_SCHEMA_VERSION,
     itemId,
@@ -154,6 +161,7 @@ export function validateNetworkItem(raw: unknown): NetworkItemValidation {
       actor: actor as NetworkItemProvenance['actor'],
       statedAt,
       ...(excerpt ? { excerpt: excerpt.slice(0, 400) } : {}),
+      ...(via ? { via } : {}),
     },
     ...(displayName ? { publisherDisplayName: displayName.slice(0, 80) } : {}),
     ...(expiresAt ? { expiresAt } : {}),

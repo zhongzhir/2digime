@@ -24,7 +24,10 @@
   "dependencies": {
     "@a2a-js/sdk": "^1.0.1",
     "express": "^5.2.1",
-    "pdf-parse": "^1.1.1"
+    "fast-xml-parser": "^5.11.1",
+    "node-html-parser": "^9.0.4",
+    "pdf-parse": "^1.1.1",
+    "robots-parser": "^3.0.1"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",

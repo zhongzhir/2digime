@@ -18,6 +18,8 @@ import {
   normalizeCanonicalUrl,
   sourcePublisherId,
 } from './content-canonical';
+import { parsePageMetadata } from './page-metadata';
+import type { NetworkItemDiscoveryVia } from './network-item';
 
 export type IngestStatus =
   | 'published'
@@ -59,6 +61,7 @@ export interface IngestSourceInput {
   limit?: number;
   enrich?: ContentEnricher;
   fetchImpl?: typeof safePublicHttpGet;
+  via?: NetworkItemDiscoveryVia;
 }
 
 function xmlUnescape(raw: string): string {
@@ -128,21 +131,12 @@ export function parseFeed(xml: string): ParsedFeed {
 }
 
 export function parseHtmlPreview(html: string, fallbackUrl: string): ParsedFeedItem {
-  const ogTitle =
-    html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)?.[1] ||
-    html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i)?.[1] ||
-    html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ||
-    fallbackUrl;
-  const ogText =
-    html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)?.[1] ||
-    html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i)?.[1] ||
-    ogTitle;
-  const ogUrl =
-    html.match(/<meta[^>]+property=["']og:url["'][^>]+content=["']([^"']+)["']/i)?.[1] || fallbackUrl;
+  const meta = parsePageMetadata(html, fallbackUrl);
   return {
-    title: xmlUnescape(ogTitle),
-    url: xmlUnescape(ogUrl),
-    text: xmlUnescape(ogText),
+    title: meta.title,
+    url: meta.canonicalUrl,
+    text: meta.description,
+    ...(meta.publishedAt ? { publishedAt: meta.publishedAt } : {}),
   };
 }
 
@@ -153,6 +147,7 @@ async function toNetworkItem(input: {
   now: string;
   enrich?: ContentEnricher;
   existing?: NetworkItem;
+  via?: NetworkItemDiscoveryVia;
 }): Promise<{ item: NetworkItem; status: 'published' | 'updated' | 'duplicate' } | { status: 'rejected'; reason: string }> {
   let canonicalUrl: string;
   try {
@@ -190,6 +185,7 @@ async function toNetworkItem(input: {
       actor,
       statedAt: input.now,
       excerpt: clipText(input.item.text || title).slice(0, 400),
+      ...(input.via ? { via: input.via } : {}),
     },
   };
   const checked = validateNetworkItem(raw);
@@ -258,6 +254,7 @@ export async function ingestSource(input: IngestSourceInput): Promise<{
       now,
       ...(input.enrich ? { enrich: input.enrich } : {}),
       ...(existing ? { existing } : {}),
+      ...(input.via ? { via: input.via } : looksFeed ? { via: 'feed' as const } : { via: 'page' as const }),
     });
     if (result.status === 'rejected') {
       records.push({ status: 'rejected', reason: result.reason, sourceTitle: parsed.sourceTitle });
