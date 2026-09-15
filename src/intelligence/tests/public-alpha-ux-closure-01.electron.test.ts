@@ -47,8 +47,8 @@ test('Electron：Public Alpha UX closure 导航 / 发现 / 数字之我 / 设置
     await harness.page.locator('#nav-discover').click();
     await harness.page.locator('#panel-discover').waitFor({ state: 'visible', timeout: 15_000 });
     const discoverCopy = await harness.page.locator('#panel-discover').innerText();
-    assert.match(discoverCopy, /想找什么内容/);
-    assert.match(discoverCopy, /还没有为你挑出的新内容|兔机米会从公开内容/);
+    assert.match(discoverCopy, /想看什么/);
+    assert.match(discoverCopy, /还没有为你挑出的新内容|这里可以直接看/);
     assert.equal(discoverCopy.includes('还没有新内容') && !discoverCopy.includes('还没有为你挑出'), false);
     assert.equal(await harness.page.locator('#content-discover-query').isVisible(), true);
     assert.equal(await harness.page.locator('#content-discover-empty').isVisible(), true);

@@ -4,6 +4,7 @@
  */
 (function () {
   const pendingPaths = [];
+  let contentContext = null;
   const TALK_TIMEOUT_NOTICE = '请求超时，模型在限定时间内没有返回。可重试。';
   const DOING_TEXT = '正在替你做';
   const CHECKING_TEXT = '正在查看结果';
@@ -207,9 +208,56 @@
     const send = $('btn-chat-send');
     if (send) send.disabled = false;
     pendingPaths.length = 0;
+    contentContext = null;
+    renderContentContext();
     renderChips();
     lastView = { turns: [] };
     await refresh();
+  }
+
+  function renderContentContext() {
+    const el = $('talk-content-context');
+    if (!el) return;
+    el.textContent = '';
+    if (!contentContext || !contentContext.title) {
+      el.hidden = true;
+      el.setAttribute('hidden', '');
+      return;
+    }
+    el.hidden = false;
+    el.removeAttribute('hidden');
+    const text = document.createElement('span');
+    text.textContent = '正在讨论：' + contentContext.title;
+    el.appendChild(text);
+    const clear = document.createElement('button');
+    clear.type = 'button';
+    clear.className = 'ghost';
+    clear.textContent = '清除';
+    clear.addEventListener('click', () => {
+      contentContext = null;
+      renderContentContext();
+    });
+    el.appendChild(clear);
+  }
+
+  function setContentContext(next) {
+    contentContext = next && typeof next === 'object' ? next : null;
+    renderContentContext();
+  }
+
+  function withContentContext(text) {
+    if (!contentContext) return text;
+    const lines = [
+      '【正在讨论的内容】',
+      contentContext.contentId ? 'contentId: ' + contentContext.contentId : '',
+      '标题：' + (contentContext.title || ''),
+      contentContext.contentType ? '类型：' + contentContext.contentType : '',
+      contentContext.source ? '来源：' + contentContext.source : '',
+      contentContext.canonicalUrl ? '链接：' + contentContext.canonicalUrl : '',
+      contentContext.summary ? '摘要：' + String(contentContext.summary).slice(0, 600) : '',
+    ].filter(Boolean);
+    const body = String(text || '').trim();
+    return body ? lines.join('\n') + '\n\n' + body : lines.join('\n');
   }
 
   function renderChips() {
@@ -440,8 +488,8 @@
     let watchdog = 0;
     let checkTimer = 0;
     try {
-      const payload = { text: trimmed };
-      if (paths.length) payload.contextPaths = paths;
+    const payload = { text: withContentContext(trimmed) };
+    if (paths.length) payload.contextPaths = paths;
       checkTimer = setTimeout(() => {
         if (generation !== sendGeneration || epoch !== viewEpoch) return;
         setDoingText(CHECKING_TEXT);
@@ -532,6 +580,7 @@
     attachFiles: pickFiles,
     attachFolder: pickFolder,
     applyBrand: applyBrand,
+    setContentContext: setContentContext,
   };
 
   function start() {

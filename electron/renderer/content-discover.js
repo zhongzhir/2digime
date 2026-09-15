@@ -11,6 +11,7 @@
   };
   const laterById = new Map();
   let lastCards = [];
+  let lastRelated = [];
   let activeSection = 'for-you';
 
   function api() {
@@ -43,32 +44,67 @@
     return Promise.resolve();
   }
 
-  function askTalk(card) {
-    const lines = ['请根据这篇原文帮我理解，并告诉我可以怎么用。', `标题：${card.title || ''}`];
-    if (card.url) lines.push(`链接：${card.url}`);
-    if (card.text) lines.push(card.text);
-    const text = lines.join('\n');
-    goTalk();
-    if (window.TalkPage && typeof window.TalkPage.handleSend === 'function') {
-      void window.TalkPage.handleSend(text);
-    }
+  function isHttps(url) {
+    return /^https:\/\//i.test(String(url || ''));
   }
 
   function sourceLine(card) {
-    if (card.publisherDisplayName) return card.publisherDisplayName;
-    if (card.url) {
+    const bits = [];
+    if (card.publisherDisplayName) bits.push(card.publisherDisplayName);
+    else if (card.url) {
       try {
-        return new URL(card.url).hostname.replace(/^www\./, '');
+        bits.push(new URL(card.url).hostname.replace(/^www\./, ''));
       } catch {
-        return card.url;
+        bits.push(card.url);
       }
     }
-    return '';
+    if (card.author && card.author !== card.publisherDisplayName) bits.push(card.author);
+    if (card.publishedAt) {
+      const d = Date.parse(card.publishedAt);
+      bits.push(Number.isFinite(d) ? new Date(d).toISOString().slice(0, 10) : String(card.publishedAt).slice(0, 10));
+    }
+    if (card.durationSeconds) {
+      const n = Math.round(Number(card.durationSeconds));
+      if (Number.isFinite(n) && n > 0) {
+        const m = Math.floor(n / 60);
+        const s = n % 60;
+        bits.push(m + ':' + String(s).padStart(2, '0'));
+      }
+    }
+    return bits.join(' · ');
+  }
+
+  function typeLabel(card) {
+    const map = { article: '文章', image: '图片', audio: '音频', video: '视频' };
+    return map[card.contentType] || '';
+  }
+
+  function consumeLabel(card) {
+    const type = String(card.contentType || '');
+    if (type === 'video') return '在来源观看';
+    if (type === 'image') return '打开原页';
+    if (type === 'audio') return '打开来源';
+    return '阅读原文';
+  }
+
+  function askTalk(card) {
+    const context = {
+      contentId: card.itemId || '',
+      title: card.title || '',
+      canonicalUrl: card.url || '',
+      source: sourceLine(card),
+      contentType: card.contentType || '',
+      summary: String(card.text || '').slice(0, 600),
+    };
+    goTalk();
+    if (window.TalkPage && typeof window.TalkPage.setContentContext === 'function') {
+      window.TalkPage.setContentContext(context);
+    }
   }
 
   function openCard(card) {
     if (card.url) window.open(card.url, '_blank', 'noopener,noreferrer');
-    if (card.source !== 'web' && card.itemId) void act('open', { itemId: card.itemId });
+    if (card.itemId) void act('open', { itemId: card.itemId });
   }
 
   function stashLater(card) {
@@ -77,7 +113,12 @@
   }
 
   function cardById(itemId) {
-    return lastCards.find((row) => row.itemId === itemId) || laterById.get(itemId) || null;
+    return (
+      lastCards.find((row) => row.itemId === itemId) ||
+      lastRelated.find((row) => row.itemId === itemId) ||
+      laterById.get(itemId) ||
+      null
+    );
   }
 
   async function act(action, extra) {
@@ -98,46 +139,70 @@
     if (action === 'reverse') showSection('prefs');
   }
 
-  function typeLabel(card) {
-    const map = { article: '文章', image: '图片', audio: '音频', video: '视频', other: '内容' };
-    return map[card.contentType] || '';
+  function coverUrl(card) {
+    if (card.contentType === 'image' && isHttps(card.mediaUrl)) return card.mediaUrl;
+    if (isHttps(card.thumbnailUrl)) return card.thumbnailUrl;
+    if (card.contentType === 'image' && isHttps(card.url) && /\.(avif|gif|jpe?g|png|webp)(\?|$)/i.test(card.url)) {
+      return card.url;
+    }
+    return '';
   }
 
   function renderCard(card, opts) {
     const li = document.createElement('li');
-    li.className = 'content-discover-card';
-    if (card.thumbnailUrl && /^https?:\/\//i.test(card.thumbnailUrl)) {
+    const type = String(card.contentType || 'article');
+    li.className = 'content-discover-card content-discover-card--' + (type || 'article');
+    const cover = coverUrl(card);
+    if (cover) {
       const img = document.createElement('img');
-      img.className = 'content-discover-thumb';
-      img.alt = '';
+      img.className = type === 'image' ? 'content-discover-cover content-discover-cover--image' : 'content-discover-cover';
+      img.alt = card.title || '';
       img.referrerPolicy = 'no-referrer';
-      img.src = card.thumbnailUrl;
+      img.src = cover;
       li.appendChild(img);
     }
-    const meta = document.createElement('p');
-    meta.className = 'content-discover-source muted tiny';
-    const bits = [typeLabel(card), sourceLine(card)].filter(Boolean);
-    if (card.durationSeconds) bits.push(Math.round(Number(card.durationSeconds)) + 's');
-    meta.textContent = bits.join(' · ');
-    if (bits.length) li.appendChild(meta);
+    const body = document.createElement('div');
+    body.className = 'content-discover-body';
+    const kind = typeLabel(card);
+    if (kind) {
+      const badge = document.createElement('p');
+      badge.className = 'content-discover-kind muted tiny';
+      badge.textContent = kind;
+      body.appendChild(badge);
+    }
     const h = document.createElement('h3');
     h.textContent = card.title || '';
-    li.appendChild(h);
-    if (card.text) {
+    body.appendChild(h);
+    const src = sourceLine(card);
+    if (src) {
+      const meta = document.createElement('p');
+      meta.className = 'content-discover-source muted tiny';
+      meta.textContent = src;
+      body.appendChild(meta);
+    }
+    if (card.text && type !== 'image') {
       const p = document.createElement('p');
       p.className = 'content-discover-excerpt';
       p.textContent = card.text;
-      li.appendChild(p);
+      body.appendChild(p);
+    }
+    if (type === 'audio' && isHttps(card.mediaUrl) && card.consumption !== 'OFFICIAL_EMBED') {
+      const audio = document.createElement('audio');
+      audio.className = 'content-discover-audio';
+      audio.controls = true;
+      audio.preload = 'none';
+      audio.src = card.mediaUrl;
+      body.appendChild(audio);
     }
     if (card.reason) {
       const why = document.createElement('p');
       why.className = 'content-discover-reason muted tiny';
       why.textContent = card.reason;
-      li.appendChild(why);
+      body.appendChild(why);
     }
     const actions = document.createElement('div');
     actions.className = 'content-discover-actions';
-    if (card.url) actions.appendChild(btn('打开', () => openCard(card), 'primary'));
+    if (card.url) actions.appendChild(btn(consumeLabel(card), () => openCard(card), 'primary'));
     if (!opts || !opts.hideLater) {
       actions.appendChild(btn('稍后看', () => void act('later', { itemId: card.itemId })));
     }
@@ -154,7 +219,8 @@
       more.appendChild(btn('不再看这个来源', () => void act('block', { itemId: card.itemId })));
       actions.appendChild(more);
     }
-    li.appendChild(actions);
+    body.appendChild(actions);
+    li.appendChild(body);
     return li;
   }
 
@@ -166,6 +232,16 @@
     const cards = Array.from(laterById.values());
     for (const card of cards) list.appendChild(renderCard(card, { hideLater: true }));
     if (empty) empty.hidden = cards.length > 0;
+  }
+
+  function renderRelated(cards) {
+    const wrap = $('content-discover-related');
+    const list = $('content-discover-related-list');
+    if (!wrap || !list) return;
+    list.innerHTML = '';
+    const rows = Array.isArray(cards) ? cards : [];
+    wrap.hidden = rows.length === 0;
+    for (const card of rows) list.appendChild(renderCard(card));
   }
 
   function friendlyNotice(notice) {
@@ -202,14 +278,16 @@
     if (title) title.textContent = (view && view.headline) || '发现';
     if (lead) {
       lead.textContent =
-        (view && view.lead) || '兔机米会从公开内容和你的内容网络中，帮你找到值得看的东西。';
+        (view && view.lead) || '这里可以直接看文章、图片、音频和视频。兔机米按你的数字之我挑选，不是中心推荐。';
     }
     lastCards = (view && view.cards) || [];
+    lastRelated = (view && view.relatedCards) || [];
     if (notice) notice.textContent = friendlyNotice(view && view.notice);
     if (list) {
       list.innerHTML = '';
       for (const card of lastCards) list.appendChild(renderCard(card));
     }
+    renderRelated(lastRelated);
     if (empty) empty.hidden = lastCards.length > 0;
     const prefs = (view && view.preferences) || [];
     if (prefsList) {
@@ -239,8 +317,9 @@
     } catch {
       renderView({
         headline: '发现',
-        lead: '兔机米会从公开内容和你的内容网络中，帮你找到值得看的东西。',
+        lead: '这里可以直接看文章、图片、音频和视频。兔机米按你的数字之我挑选，不是中心推荐。',
         cards: [],
+        relatedCards: [],
         preferences: [],
         notice: '',
       });

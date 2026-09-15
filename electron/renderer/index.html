@@ -334,6 +334,7 @@
             <button type="button" id="btn-guide-later" class="ghost">稍后再聊这个</button>
           </div>
           <div class="chat-composer">
+            <div id="talk-content-context" class="talk-content-context" hidden></div>
             <ul id="talk-attach-chips" class="talk-attach-chips" hidden></ul>
             <div class="talk-composer-row">
               <details id="talk-attach-menu" class="talk-attach-menu">
@@ -365,19 +366,20 @@
 
         <section id="panel-discover" class="shell-panel discover-panel" data-panel="discover" hidden>
           <h1 class="page-title" id="content-discover-title">发现</h1>
-          <p id="content-discover-lead" class="page-lead">兔机米会从公开内容和你的内容网络中，帮你找到值得看的东西。</p>
+          <p id="content-discover-lead" class="page-lead">这里可以直接看文章、图片、音频和视频。兔机米按你的数字之我挑选，不是中心推荐。</p>
           <form id="content-discover-search" class="discover-search" action="#">
             <label class="field discover-search-field">
-              <span class="visually-hidden">想找什么内容？</span>
-              <input id="content-discover-query" type="search" placeholder="想找什么内容？" autocomplete="off" />
+              <span class="visually-hidden">想看什么？</span>
+              <input id="content-discover-query" type="search" placeholder="想看什么？" autocomplete="off" />
             </label>
-            <button type="submit" id="btn-content-discover-search" class="primary">搜索</button>
+            <button type="submit" id="btn-content-discover-search" class="primary">看看</button>
           </form>
-          <p class="muted tiny discover-examples-label">可以直接搜索，例如：</p>
+          <p class="muted tiny discover-examples-label">可以试试：</p>
           <div id="content-discover-examples" class="discover-examples">
-            <button type="button" class="ghost discover-example" data-seek="最近有什么值得看的 AI 内容？">最近有什么值得看的 AI 内容？</button>
-            <button type="button" class="ghost discover-example" data-seek="帮我找几部漫剧">帮我找几部漫剧</button>
-            <button type="button" class="ghost discover-example" data-seek="最近核聚变有什么新进展？">最近核聚变有什么新进展？</button>
+            <button type="button" class="ghost discover-example" data-seek="最近值得看的 AI 内容">最近值得看的 AI 内容</button>
+            <button type="button" class="ghost discover-example" data-seek="找几个 AI 视频看看">找几个 AI 视频看看</button>
+            <button type="button" class="ghost discover-example" data-seek="找一些航天摄影作品">找一些航天摄影作品</button>
+            <button type="button" class="ghost discover-example" data-seek="给我听点科技播客">给我听点科技播客</button>
           </div>
           <div class="discover-switcher" role="tablist" aria-label="发现分区">
             <button type="button" class="ghost discover-switch active" data-discover-section="for-you">为你发现</button>
@@ -390,10 +392,15 @@
             <section id="content-discover-for-you" class="discover-section" data-discover-section="for-you">
               <h2>为你发现</h2>
               <div id="content-discover-empty" class="discover-empty">
-                <p>还没有为你挑出的新内容，你可以先搜索感兴趣的内容。</p>
-                <p class="muted tiny">开启联网发现后，兔机米还可以从公开网络帮你找内容。</p>
+                <p>还没有为你挑出的新内容。输入想看的文章、图片、音频或视频，兔机米会去找可以打开的作品本身。</p>
+                <p class="muted tiny">开启联网发现后，兔机米还可以从公开网络帮你找到更多内容。</p>
               </div>
               <ul id="content-discover-list" class="content-discover-list"></ul>
+              <section id="content-discover-related" class="content-discover-related" hidden>
+                <h3>相关信息</h3>
+                <p class="muted tiny">这些是报道、介绍或入口，不是上面那些可以直接看的内容。</p>
+                <ul id="content-discover-related-list" class="content-discover-list"></ul>
+              </section>
             </section>
             <section id="content-discover-later" class="discover-section" data-discover-section="later" hidden>
               <h2>稍后看</h2>
