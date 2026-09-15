@@ -8,7 +8,7 @@ import { ingestSource, parseFeed } from '../content-ingest';
 import { parseJsonFeed } from '../content-feed';
 import { discoverFeedHints, parsePageMetadata } from '../page-metadata';
 import { parseOembedBody, resolveOEmbed } from '../content-oembed';
-import { looksLikeJsonFeed } from '../content-media';
+import { looksLikeJsonFeed, mergeOpenMedia } from '../content-media';
 import { discoverForSubject } from '../content-discover';
 import { searchContentDirectory } from '../content-directory';
 import { validateNetworkItem } from '../network-item';
@@ -322,6 +322,98 @@ test('DEDUP: same canonical from feed then schema/oembed stays one NetworkItem',
   assert.equal(hits.length, 1);
   assert.equal(hits[0]!.itemId, first.items[0]!.itemId);
   assert.equal(hits[0]!.content.mediaUrl, 'https://cdn.example.org/full.mp4');
+});
+
+test('object type vs representation MIME: schema.org is not overwritten by enclosure/Media RSS', async () => {
+  const audioEnc = `<?xml version="1.0"?><rss version="2.0"><channel><title>Pub</title>
+<item>
+  <title>Watch</title>
+  <link>https://example.org/watch/v</link>
+  <description>A video with audio track.</description>
+  <enclosure url="https://cdn.example.org/track.mp3" type="audio/mpeg"/>
+</item></channel></rss>`;
+  const videoPage = `<!doctype html><html><head>
+<link rel="canonical" href="https://example.org/watch/v">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"VideoObject","name":"Watch","contentUrl":"https://cdn.example.org/v.mp4"}</script>
+</head></html>`;
+  const audioPage = `<!doctype html><html><head>
+<link rel="canonical" href="https://example.org/listen/a">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"AudioObject","name":"Listen","contentUrl":"https://cdn.example.org/a.mp3"}</script>
+</head></html>`;
+  const imagePage = `<!doctype html><html><head>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"ImageObject","name":"Photo","contentUrl":"https://cdn.example.org/i.jpg"}</script>
+</head></html>`;
+
+  const store = new MemoryNetworkItemStore();
+  await ingestSource({
+    sourceUrl: 'https://example.org/audio.xml',
+    store,
+    now: '2026-09-14T02:00:00.000Z',
+    fetchImpl: async () => ({ status: 200, body: audioEnc, finalUrl: 'https://example.org/audio.xml' }),
+  });
+  const videoMerged = await ingestSource({
+    sourceUrl: 'https://example.org/watch/v',
+    store,
+    now: '2026-09-14T03:00:00.000Z',
+    fetchImpl: async () => ({ status: 200, body: videoPage, finalUrl: 'https://example.org/watch/v' }),
+  });
+  assert.equal(videoMerged.items[0]!.content.contentType, 'video');
+  assert.equal(videoMerged.items[0]!.content.mediaUrl, 'https://cdn.example.org/track.mp3');
+  assert.equal(videoMerged.items[0]!.content.mimeType, 'audio/mpeg');
+  assert.equal(videoMerged.items[0]!.content.mediaProvenance, 'enclosure');
+
+  const audioStore = new MemoryNetworkItemStore();
+  await ingestSource({
+    sourceUrl: 'https://example.org/audio.xml',
+    store: audioStore,
+    now: '2026-09-14T02:00:00.000Z',
+    fetchImpl: async () => ({
+      status: 200,
+      body: audioEnc.replace('https://example.org/watch/v', 'https://example.org/listen/a'),
+      finalUrl: 'https://example.org/audio.xml',
+    }),
+  });
+  const audioMerged = await ingestSource({
+    sourceUrl: 'https://example.org/listen/a',
+    store: audioStore,
+    now: '2026-09-14T03:00:00.000Z',
+    fetchImpl: async () => ({ status: 200, body: audioPage, finalUrl: 'https://example.org/listen/a' }),
+  });
+  assert.equal(audioMerged.items[0]!.content.contentType, 'audio');
+
+  const image = parsePageMetadata(imagePage, 'https://example.org/i');
+  assert.equal(image.contentType, 'image');
+
+  assert.equal(parseFeed(VIDEO_RSS).items[0]!.media?.contentType, 'video');
+  assert.equal(parseFeed(AUDIO_RSS).items[0]!.media?.contentType, 'audio');
+
+  const grouped = parseFeed(MEDIA_RSS);
+  assert.equal(grouped.items.length, 1);
+
+  const conflict = mergeOpenMedia(
+    { contentType: 'video', mediaProvenance: 'schema_org', mediaUrl: 'https://cdn.example.org/v.mp4' },
+    { contentType: 'audio', mediaProvenance: 'schema_org', mediaUrl: 'https://cdn.example.org/a.mp3' },
+  );
+  assert.equal(conflict.contentType, undefined);
+  assert.ok(conflict.mediaUrl);
+
+  const listed = await store.list({ kind: 'content', limit: 20 }, '2026-09-14T03:00:00.000Z');
+  assert.equal(listed.items.filter((item) => item.content.url === 'https://example.org/watch/v').length, 1);
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-media-type-'));
+  const result = await discoverForSubject({
+    digitalSelf: selfOf(),
+    items: videoMerged.items,
+    chatComplete: async () => ({
+      text: JSON.stringify({
+        decisions: videoMerged.items.map((item) => ({ itemId: item.itemId, decision: 'show', reason: '公开视频' })),
+      }),
+    }),
+    model: { baseUrl: 'http://127.0.0.1', model: 'test' },
+    feedbackFile: path.join(tmp, 'fb.jsonl'),
+  });
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.view.cards[0]!.contentType, 'video');
 });
 
 test('Discover pipeline: ingested video card keeps type and thumbnail', async () => {

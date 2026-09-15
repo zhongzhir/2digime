@@ -39,6 +39,20 @@ const PROVENANCE_RANK: Record<MediaProvenance, number> = {
   opengraph: 10,
 };
 
+/** 内容本体类型证据。schema.org 对象类型强于单个 Feed representation 的 MIME。 */
+const OBJECT_TYPE_RANK: Record<MediaProvenance, number> = {
+  schema_org: 80,
+  media_rss: 40,
+  enclosure: 40,
+  json_feed: 40,
+  rss: 30,
+  atom: 30,
+  oembed: 20,
+  opengraph: 10,
+};
+
+const OBJECT_TYPE_KEYS: Array<keyof OpenMediaFields> = ['contentType'];
+
 export interface OpenMediaFields {
   contentType?: NetworkContentType | undefined;
   author?: string | undefined;
@@ -187,16 +201,31 @@ export function consumptionFor(input: {
 }
 
 export function mergeOpenMedia(...layers: Array<OpenMediaFields | undefined>): OpenMediaFields {
-  const ranked = layers
-    .filter((row): row is OpenMediaFields => !!row && Object.keys(row).length > 0)
-    .sort((a, b) => (PROVENANCE_RANK[b.mediaProvenance || 'opengraph'] || 0) - (PROVENANCE_RANK[a.mediaProvenance || 'opengraph'] || 0));
+  const present = layers.filter((row): row is OpenMediaFields => !!row && Object.keys(row).length > 0);
+  const byRepresentation = [...present].sort(
+    (a, b) => (PROVENANCE_RANK[b.mediaProvenance || 'opengraph'] || 0) - (PROVENANCE_RANK[a.mediaProvenance || 'opengraph'] || 0),
+  );
   const out: OpenMediaFields = {};
-  for (const layer of ranked) {
+  for (const layer of byRepresentation) {
     (Object.keys(layer) as Array<keyof OpenMediaFields>).forEach((key) => {
+      if (OBJECT_TYPE_KEYS.includes(key)) return;
       if (out[key] == null && layer[key] != null) {
         (out as Record<string, unknown>)[key as string] = layer[key];
       }
     });
+  }
+  const schemaObjectTypes = new Set(
+    present
+      .filter((row) => row.mediaProvenance === 'schema_org' && row.contentType && row.contentType !== 'other')
+      .map((row) => row.contentType),
+  );
+  if (schemaObjectTypes.size <= 1) {
+    const byObject = [...present].sort(
+      (a, b) => (OBJECT_TYPE_RANK[b.mediaProvenance || 'opengraph'] || 0) - (OBJECT_TYPE_RANK[a.mediaProvenance || 'opengraph'] || 0),
+    );
+    for (const layer of byObject) {
+      if (out.contentType == null && layer.contentType != null) out.contentType = layer.contentType;
+    }
   }
   if (out.access === 'subscriptionRequired' || out.access === 'loginRequired') {
     out.consumption = 'OPEN_SOURCE';

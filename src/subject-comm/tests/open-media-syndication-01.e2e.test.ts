@@ -6,12 +6,14 @@ import { MemoryNetworkItemStore } from '../../relay-service/network-item-store';
 import { ingestSource } from '../content-ingest';
 import { parsePageMetadata } from '../page-metadata';
 import { resolveOEmbed } from '../content-oembed';
+import { cardFromNetworkItem } from '../content-discover';
 import { directoryHoldsUserData } from '../content-directory';
 import type { NetworkItem } from '../network-item';
 import { safePublicHttpGet } from '../../work-runtime/public-http-safety';
 
 const EVIDENCE = path.join(process.cwd(), 'build', 'evidence', 'open-media-syndication-01');
 const PEERTUBE_FEED = 'https://framatube.org/feeds/videos.xml';
+const PEERTUBE_WATCH = 'https://framatube.org/w/8NKy5gzMeCKpK5nhabecoy';
 const JSON_FEED = 'https://www.jsonfeed.org/feed.json';
 
 async function writeEvidence(name: string, payload: unknown): Promise<void> {
@@ -71,29 +73,36 @@ test('real Media RSS / PeerTube feed becomes unified media items', async (t) => 
 
 test('real schema.org VideoObject page and official oEmbed', async (t) => {
   const store = new MemoryNetworkItemStore();
-  const feed = await ingestSource({ sourceUrl: PEERTUBE_FEED, store, limit: 3 });
-  const videoUrl = feed.items.find((row) => row.content.url)?.content.url;
-  if (!videoUrl) {
-    t.skip('no public PeerTube item URL');
+  const feed = await ingestSource({ sourceUrl: PEERTUBE_FEED, store, limit: 20 });
+  if (!feed.items.length) {
+    t.skip(`PeerTube/Media RSS unavailable: ${feed.records[0]?.reason || 'empty'}`);
     return;
   }
-  const page = await ingestSource({ sourceUrl: videoUrl, store, limit: 1 });
+  const page = await ingestSource({ sourceUrl: PEERTUBE_WATCH, store, limit: 1 });
   if (!page.items.length) {
     t.skip(`schema.org page unavailable: ${page.records[0]?.reason || 'empty'}`);
     return;
   }
+  const item = page.items[0]!;
+  assert.equal(item.content.url, PEERTUBE_WATCH);
   let html = '';
   try {
-    const got = await safePublicHttpGet(videoUrl, { accept: 'text/html' }, 3, { maxBodyBytes: 1_500_000 });
+    const got = await safePublicHttpGet(PEERTUBE_WATCH, { accept: 'text/html' }, 3, { maxBodyBytes: 1_500_000 });
     html = got.body || '';
   } catch {
     html = '';
   }
-  const meta = html ? parsePageMetadata(html, videoUrl) : parsePageMetadata('', videoUrl);
+  const meta = html ? parsePageMetadata(html, PEERTUBE_WATCH) : parsePageMetadata('', PEERTUBE_WATCH);
+  assert.equal(meta.schemaType, 'VideoObject');
+  assert.equal(item.content.contentType, 'video');
+  assert.equal(item.content.mediaProvenance, 'media_rss');
+  assert.ok(item.content.mediaUrl);
+  const card = cardFromNetworkItem(item, '公开视频');
+  assert.equal(card.contentType, 'video');
   await writeEvidence('real-schema-org.json', {
-    sourceUrl: videoUrl,
+    sourceUrl: PEERTUBE_WATCH,
     discoveryType: 'schema_org',
-    sample: sample(page.items[0]!),
+    sample: sample(item),
     pageHints: {
       contentType: meta.contentType || null,
       schemaType: meta.schemaType || null,
@@ -102,14 +111,14 @@ test('real schema.org VideoObject page and official oEmbed', async (t) => {
       embedUrl: meta.embedUrl || null,
     },
   });
-  const oem = await resolveOEmbed({ url: videoUrl, html });
+  const oem = await resolveOEmbed({ url: PEERTUBE_WATCH, html });
   if (!oem) {
     t.skip('oEmbed unavailable');
     return;
   }
   assert.ok(oem.title || oem.embedUrl || oem.thumbnail_url);
   await writeEvidence('real-oembed.json', {
-    sourceUrl: videoUrl,
+    sourceUrl: PEERTUBE_WATCH,
     discoveryType: 'oembed',
     type: oem.type || null,
     title: oem.title || null,
@@ -121,7 +130,7 @@ test('real schema.org VideoObject page and official oEmbed', async (t) => {
     safeEmbed: oem.embedUrl ? 'descriptor' : 'OPEN_SOURCE',
   });
   await writeEvidence('real-peertube.json', {
-    sourceUrl: videoUrl,
+    sourceUrl: PEERTUBE_WATCH,
     feed: PEERTUBE_FEED,
     discoveryType: 'feed+oembed+schema_org',
     oembed: {
@@ -132,6 +141,7 @@ test('real schema.org VideoObject page and official oEmbed', async (t) => {
       embedUrl: oem.embedUrl || null,
       type: oem.type || null,
     },
-    directory: sample(page.items[0]!),
+    directory: sample(item),
+    discoverCard: { contentType: card.contentType || null, thumbnailUrl: card.thumbnailUrl || null },
   });
 });
