@@ -357,7 +357,7 @@ export async function safePublicHttpGet(
         const type = String(res.headers['content-type'] || '').toLowerCase();
         if (
           type &&
-          !/application\/json|text\/|application\/vnd\.github|application\/xml|xml/.test(type)
+          !/application\/json|application\/feed\+json|json\+oembed|text\/|application\/vnd\.github|application\/xml|xml/.test(type)
         ) {
           releaseResponse(res);
           reject(Object.assign(new Error('内容类型不受支持'), { code: 'content_type' }));

@@ -3,6 +3,21 @@
  * 第一版 kind/visibility 固定为 content/public；类型保持可扩展，不锁成 FeedArticle。
  */
 import { createHash } from 'node:crypto';
+import {
+  asAccess,
+  asConsumption,
+  asContentType,
+  asMediaExpression,
+  asMediaProvenance,
+  isSafePublicMediaUrl,
+  parseDurationSeconds,
+  parsePositiveInt,
+  type ConsumptionMode,
+  type MediaAccess,
+  type MediaExpression,
+  type MediaProvenance,
+  type NetworkContentType,
+} from './content-media';
 
 export const NETWORK_ITEM_SCHEMA_VERSION = 1 as const;
 
@@ -51,7 +66,22 @@ export type DigitalSelfLikeOrigin = 'user_statement' | 'material' | 'inference' 
 export interface NetworkItemContent {
   title: string;
   text: string;
-  url?: string;
+  url?: string | undefined;
+  contentType?: NetworkContentType | undefined;
+  author?: string | undefined;
+  publishedAt?: string | undefined;
+  thumbnailUrl?: string | undefined;
+  mediaUrl?: string | undefined;
+  embedUrl?: string | undefined;
+  mimeType?: string | undefined;
+  durationSeconds?: number | undefined;
+  width?: number | undefined;
+  height?: number | undefined;
+  enclosureLength?: number | undefined;
+  access?: MediaAccess | undefined;
+  consumption?: ConsumptionMode | undefined;
+  mediaExpression?: MediaExpression | undefined;
+  mediaProvenance?: MediaProvenance | undefined;
 }
 
 export interface NetworkItem {
@@ -93,6 +123,16 @@ function asRecord(raw: unknown): Record<string, unknown> | null {
   return raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null;
 }
 
+function optionalText(raw: unknown, max: number): string | undefined {
+  const value = String(raw || '').trim();
+  if (!value) return undefined;
+  return value.slice(0, max);
+}
+
+function optionalHttpUrl(raw: unknown): string | undefined {
+  return isSafePublicMediaUrl(raw);
+}
+
 export function normalizeQueryKey(key: string): string {
   return key.toLowerCase().replace(/[_-]/g, '');
 }
@@ -130,6 +170,22 @@ export function validateNetworkItem(raw: unknown): NetworkItemValidation {
   if (!text || text.length > 8000) return { ok: false, reason: 'content.text' };
   const urlRaw = contentRec.url == null ? '' : String(contentRec.url).trim();
   if (urlRaw && !/^https?:\/\//i.test(urlRaw)) return { ok: false, reason: 'content.url' };
+  const contentType = asContentType(contentRec.contentType);
+  const author = optionalText(contentRec.author, 120);
+  const publishedAt = contentRec.publishedAt == null ? undefined : String(contentRec.publishedAt).trim();
+  if (publishedAt && !isIso(publishedAt)) return { ok: false, reason: 'content.publishedAt' };
+  const thumbnailUrl = optionalHttpUrl(contentRec.thumbnailUrl);
+  const mediaUrl = optionalHttpUrl(contentRec.mediaUrl);
+  const embedUrl = optionalHttpUrl(contentRec.embedUrl);
+  const mimeType = optionalText(contentRec.mimeType, 120);
+  const durationSeconds = parseDurationSeconds(contentRec.durationSeconds);
+  const width = parsePositiveInt(contentRec.width, 8192);
+  const height = parsePositiveInt(contentRec.height, 8192);
+  const enclosureLength = parsePositiveInt(contentRec.enclosureLength, 50_000_000_000);
+  const access = asAccess(contentRec.access);
+  const consumption = asConsumption(contentRec.consumption);
+  const mediaExpression = asMediaExpression(contentRec.mediaExpression);
+  const mediaProvenance = asMediaProvenance(contentRec.mediaProvenance);
 
   const provRec = asRecord(rec.provenance);
   if (!provRec) return { ok: false, reason: 'provenance' };
@@ -155,6 +211,21 @@ export function validateNetworkItem(raw: unknown): NetworkItemValidation {
       title,
       text,
       ...(urlRaw ? { url: urlRaw } : {}),
+      ...(contentType ? { contentType } : {}),
+      ...(author ? { author } : {}),
+      ...(publishedAt ? { publishedAt } : {}),
+      ...(thumbnailUrl ? { thumbnailUrl } : {}),
+      ...(mediaUrl ? { mediaUrl } : {}),
+      ...(embedUrl ? { embedUrl } : {}),
+      ...(mimeType ? { mimeType } : {}),
+      ...(durationSeconds != null ? { durationSeconds } : {}),
+      ...(width != null ? { width } : {}),
+      ...(height != null ? { height } : {}),
+      ...(enclosureLength != null ? { enclosureLength } : {}),
+      ...(access ? { access } : {}),
+      ...(consumption ? { consumption } : {}),
+      ...(mediaExpression ? { mediaExpression } : {}),
+      ...(mediaProvenance ? { mediaProvenance } : {}),
     },
     provenance: {
       origin: origin as NetworkItemProvenance['origin'],

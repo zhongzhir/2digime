@@ -21,6 +21,13 @@ export interface DiscoverCard {
   publisherDisplayName?: string;
   reason: string;
   source?: 'directory' | 'web';
+  contentType?: string;
+  thumbnailUrl?: string;
+  embedUrl?: string;
+  mediaUrl?: string;
+  durationSeconds?: number;
+  consumption?: string;
+  access?: string;
 }
 
 export interface DiscoverPreference {
@@ -35,6 +42,30 @@ export interface DiscoverView {
   cards: DiscoverCard[];
   preferences: DiscoverPreference[];
   notice: string;
+}
+
+export function cardFromNetworkItem(
+  item: NetworkItem,
+  reason: string,
+  source: 'directory' | 'web' = 'directory',
+): DiscoverCard {
+  return {
+    itemId: item.itemId,
+    title: item.content.title,
+    text: item.content.text,
+    reason,
+    source,
+    ...(item.content.url ? { url: item.content.url } : {}),
+    ...(item.publisherSubjectId ? { publisherSubjectId: item.publisherSubjectId } : {}),
+    ...(item.publisherDisplayName ? { publisherDisplayName: item.publisherDisplayName } : {}),
+    ...(item.content.contentType ? { contentType: item.content.contentType } : {}),
+    ...(item.content.thumbnailUrl ? { thumbnailUrl: item.content.thumbnailUrl } : {}),
+    ...(item.content.embedUrl ? { embedUrl: item.content.embedUrl } : {}),
+    ...(item.content.mediaUrl ? { mediaUrl: item.content.mediaUrl } : {}),
+    ...(item.content.durationSeconds != null ? { durationSeconds: item.content.durationSeconds } : {}),
+    ...(item.content.consumption ? { consumption: item.content.consumption } : {}),
+    ...(item.content.access ? { access: item.content.access } : {}),
+  };
 }
 
 export async function discoverForSubject(input: {
@@ -90,15 +121,15 @@ export async function discoverForSubject(input: {
     .filter((row) => row.decision === 'show')
     .map((row) => {
       const item = byId.get(row.itemId);
-      return {
-        itemId: row.itemId,
-        title: item?.content.title || row.itemId,
-        text: item?.content.text || '',
-        ...(item?.content.url ? { url: item.content.url } : {}),
-        ...(item?.publisherSubjectId ? { publisherSubjectId: item.publisherSubjectId } : {}),
-        ...(item?.publisherDisplayName ? { publisherDisplayName: item.publisherDisplayName } : {}),
-        reason: row.reason,
-      };
+      return cardFromNetworkItem(
+        item ||
+          ({
+            itemId: row.itemId,
+            content: { title: row.itemId, text: '' },
+          } as NetworkItem),
+        row.reason,
+        'directory',
+      );
     });
   return {
     ok: true,

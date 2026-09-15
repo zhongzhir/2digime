@@ -5,7 +5,7 @@
 import type { NetworkItem } from './network-item';
 import { searchContentDirectory } from './content-directory';
 import { normalizeCanonicalUrl } from './content-canonical';
-import type { DiscoverCard } from './content-discover';
+import { cardFromNetworkItem, type DiscoverCard } from './content-discover';
 
 export interface ExternalSeekHit {
   title: string;
@@ -60,16 +60,7 @@ export function matchDirectoryForSeek(items: NetworkItem[], query: string): Netw
 }
 
 function cardFromItem(item: NetworkItem, reason: string, source: 'directory' | 'web'): DiscoverCard {
-  return {
-    itemId: item.itemId,
-    title: item.content.title,
-    text: item.content.text,
-    reason,
-    source,
-    ...(item.content.url ? { url: item.content.url } : {}),
-    ...(item.publisherSubjectId ? { publisherSubjectId: item.publisherSubjectId } : {}),
-    ...(item.publisherDisplayName ? { publisherDisplayName: item.publisherDisplayName } : {}),
-  };
+  return cardFromNetworkItem(item, reason, source);
 }
 
 export async function seekContent(input: {
