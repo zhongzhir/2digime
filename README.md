@@ -67,15 +67,15 @@ You do not need to assemble an AI toolchain first. Talk is the everyday entry. D
 
 ### Connecting with the world
 
-Long-term, every 2digime can be an intelligent network node that belongs to a real person. Selection should stay with your Digital Self, not a central platform. This Alpha includes a **minimum** content loop (neutral directory → your 2digime decides). It does **not** ship a full content feed product, follow/subscribe graph, marketplace, or payments.
+Long-term, every 2digime can be an intelligent network node that belongs to a real person. Selection should stay with your Digital Self, not a central platform. This Alpha includes a **minimum** content loop (neutral directory → your 2digime decides). The public Web is the default eligible universe; discovery uses mature Search and standard feeds/sitemaps/page metadata. It does **not** ship a full content feed product, follow/subscribe graph, marketplace, or payments.
 
 ---
 
 ## Content Providers
 
-2digime can ingest public content into its Digital Subject Network. Personal selection happens on the recipient's own 2digime rather than through a centralized user-profile ranking system.
+The public Web is 2digime’s default discoverable content range. Personal selection happens on the recipient's own 2digime rather than through a centralized user-profile ranking system.
 
-Creators, publishers, and platforms can start from a standard public RSS / Atom feed. This Public Alpha does not offer a self-serve publish API.
+If you already publish in the open, you usually do not need a 2digime account, tags, or a proprietary API. RSS / Atom with feed autodiscovery, canonical URLs, sitemap, OpenGraph, and schema.org help machines find you more reliably. This Public Alpha does not offer a self-serve publish API or supplier portal.
 
 See: [Providing Content to 2digime Users](CONTENT-SUPPLIERS.md)
 
