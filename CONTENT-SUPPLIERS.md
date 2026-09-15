@@ -37,12 +37,54 @@ Public Alpha · 2026-09-15
 2. 每条内容有稳定的原始 URL（建议即 **canonical URL**）；
 3. Feed 或页面中尽量包含：title、原始 / canonical URL、published time、来源名称、summary / description；
 4. 标准 **sitemap**（可在 `robots.txt` 中声明 `Sitemap:`），在没有 Feed 时作为发现 URL 的补充；
-5. 页面级 **OpenGraph** 与 **schema.org / JSON-LD**（Article / NewsArticle 等），便于普通公开页成为候选；
-6. 保持内容可被公开读取；不要把正式内容只放在需登录的墙后；
-7. 内容更新、删除或过期时，保持源站状态真实；尊重 `robots.txt` 与 HTTP 访问控制。
+5. 页面级 **OpenGraph** 与 **schema.org / JSON-LD**（Article / NewsArticle，以及视频/音频/图片的 VideoObject / AudioObject / ImageObject），便于普通公开页成为候选；
+6. 如果你发布视频、音频或图片：在 Feed 中使用 **Media RSS**（`media:content` / `media:thumbnail`）或 **JSON Feed** 的 `attachments`，并尽量提供 **oEmbed**；
+7. 保持内容可被公开读取；不要把正式内容只放在需登录的墙后；
+8. 内容更新、删除或过期时，保持源站状态真实；尊重 `robots.txt` 与 HTTP 访问控制。
 
-当前会实际用到的来源信息主要是：**标题、摘要/正文预览、原始 URL、发布时间、来源名称**。
-不要求供应商维护封面图、复杂标签体系或专用 JSON 字段。不默认保存整篇版权正文。
+当前会实际用到的来源信息主要是：**标题、摘要/正文预览、原始 URL、发布时间、来源名称**，以及开放媒体元数据（如有）：封面、时长、媒体地址、官方 embed。
+不要求供应商维护兔机米专用标签或专用 JSON 字段。不默认保存整篇版权正文，也不重新托管媒体文件。
+
+### 文章
+
+RSS / Atom / JSON Feed 即可。
+
+### 视频 / 音频 / 图片
+
+推荐（都是既有开放标准，不是兔机米专有协议）：
+
+- **Media RSS**（RSS 2.0 模块，`xmlns:media="http://search.yahoo.com/mrss/"`）
+- **JSON Feed 1.1** `attachments`
+- 页面上的 **schema.org** VideoObject / AudioObject / ImageObject
+- **oEmbed**（已知 URL 的标准 embed 描述）
+
+最小 Media RSS 示例：
+
+```xml
+<item>
+  <title>示例一集</title>
+  <link>https://example.org/watch/ep1</link>
+  <media:content url="https://cdn.example.org/ep1.m4v" type="video/mp4" medium="video" duration="720" />
+  <media:thumbnail url="https://cdn.example.org/ep1.jpg" />
+</item>
+```
+
+最小 JSON Feed attachment 示例：
+
+```json
+{
+  "id": "https://example.org/watch/ep1",
+  "url": "https://example.org/watch/ep1",
+  "title": "示例一集",
+  "attachments": [
+    { "url": "https://cdn.example.org/ep1.m4v", "mime_type": "video/mp4", "duration_in_seconds": 720 }
+  ]
+}
+```
+
+不要发明 `<2digime:...>` 之类的专有标签。公开网站 + 上述标准即可被发现；**不需要**兔机米账户、SDK、专有 API 或用户画像。
+
+更完整的分级说明见仓库内 `docs/plans/OPEN-CONTENT-PUBLISHER-PROFILE-01.md`。官网入口：https://zhongzhir.github.io/2digime/suppliers/
 
 Public Alpha **当前尚未提供自助内容发布 API。** 没有对外的内容提交地址、注册接口或供应商 portal。请不要等待一份并不存在的公网 API。
 
@@ -103,6 +145,7 @@ Public Alpha **当前尚未提供自助内容发布 API。** 没有对外的内�
 - **不默认重新托管**受版权保护的媒体文件或全文。
 - 供应商应保证自己有权发布所提供的内容及其标题、摘要等 metadata。
 - 付费墙：可以索引公开可见的标题、来源和摘要；不会绕过登录、订阅或付费访问控制。当前阶段不做付费内容购买或结算。
+- **当前不支持：** 封闭平台私有内容目录自动抓取、DRM 绕过、登录墙绕过、非官方 scraper。如果内容只存在于这类平台、且没有开放 Feed / schema.org / 官方 embed / 官方公开 API，当前可能无法直接进入兔机米开放内容网络。
 - 当前没有供应商后台删除按钮。源站、Feed 或 sitemap 不可访问时，该次接入会失败；已进入目录且带有过期时间的条目会停止继续作为候选。若需要停止继续分发，Public Alpha 阶段由项目侧在接入验证时处理，而不是通过自助 CMS。
 
 ---
@@ -127,7 +170,9 @@ Public Alpha **当前尚未提供自助内容发布 API。** 没有对外的内�
 
 ## H. 如何参与
 
-大多数公开网站无需单独「接入」。把内容放在可访问的 Web 上，并尽量提供 Feed Autodiscovery / canonical / sitemap / OpenGraph / schema.org 即可。
+官网入口（与本文语义一致）：https://zhongzhir.github.io/2digime/suppliers/
+
+大多数公开网站无需单独「接入」。把内容放在可访问的 Web 上，并尽量提供 Feed Autodiscovery / canonical / sitemap / OpenGraph / schema.org，以及视频/音频/图片的 Media RSS、JSON Feed attachments 或 oEmbed 即可。
 
 若你希望项目侧知晓某个源，或标准发现未能稳定找到你的内容，请使用已经存在的公开渠道，不要另找虚构邮箱或提交地址：
 
@@ -150,7 +195,9 @@ Public Alpha **当前尚未提供自助内容发布 API。** 没有对外的内�
 
 2digime is not a central ranking platform. URLs are discovered on demand via mature Search and standard Web protocols (RSS / Atom / feed autodiscovery / sitemap / public page metadata), then stored as **neutral directory** items. Each user’s own 2digime decides SHOW or IGNORE from that user’s Digital Self and **explicit** preferences. The network does not hold or sell personal interest profiles. Users open the **original site**; full copyrighted bodies are not re-hosted by default.
 
-**Recommended (not required):** public RSS or Atom with feed autodiscovery, stable canonical URLs, sitemap, OpenGraph, and schema.org / JSON-LD.
+**Recommended (not required):** public RSS or Atom with feed autodiscovery, stable canonical URLs, sitemap, OpenGraph, and schema.org / JSON-LD. For video/audio/image: Media RSS, JSON Feed attachments, schema.org media objects, and oEmbed. No proprietary `<2digime:...>` tags.
+
+**Not supported:** scraping closed catalogs, DRM bypass, paywall bypass, unofficial platform APIs. If a work exists only behind such a wall, it may not enter 2digime’s open content network.
 
 **Not available in this Public Alpha:** a self-serve publish API, supplier portal, SDK, ads, profile targeting, payments, creator payouts, analytics product, native video hosting, a mobile app, or a general web crawler. Paid-content settlement is a future commercial layer, not shipped.
 

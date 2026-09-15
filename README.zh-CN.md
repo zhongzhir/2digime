@@ -79,9 +79,10 @@
 而由每个用户自己的兔机米根据其数字之我和明确偏好独立选择。
 如果你的网站已经公开发布，通常不必注册兔机米账户、填写专用标签或对接专有 API。
 推荐使用公开 RSS / Atom、Feed Autodiscovery、canonical URL、sitemap、OpenGraph 与 schema.org。
-Public Alpha 尚未提供自助内容发布 API 或供应商后台。
+发布视频、音频或图片时，推荐 Media RSS、JSON Feed attachments、schema.org 媒体对象与 oEmbed。
+Public Alpha 尚未提供自助内容发布 API 或供应商后台。不抓取封闭平台私有目录，也不绕过登录墙或 DRM。
 
-[查看如何为兔机米用户提供内容](CONTENT-SUPPLIERS.md)
+[查看如何为兔机米用户提供内容](CONTENT-SUPPLIERS.md) · [官网：内容供应商](https://zhongzhir.github.io/2digime/suppliers/)
 
 ---
 

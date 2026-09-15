@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>内容供应商｜兔机米 2digime</title>
+  <meta name="description" content="如果你已经在公开 Web 上发布内容，通常不必注册兔机米。使用 RSS、Media RSS、JSON Feed、schema.org 或 oEmbed，即可被发现。">
+  <link rel="canonical" href="https://zhongzhir.github.io/2digime/suppliers/">
+  <meta name="theme-color" content="#fffdf8"><link rel="icon" href="../assets/brand-mark.svg" type="image/svg+xml"><link rel="stylesheet" href="../assets/styles.css"><script src="../assets/site.js" defer></script>
+</head><body><a class="skip-link" href="#main">跳到主要内容</a>
+<header class="site-header"><div class="nav-shell"><a class="brand" href="../"><img src="../assets/brand-mark.svg" alt=""><span>兔机米 <small>2digime</small></span></a><button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" aria-label="打开导航">菜单</button><nav class="site-nav" id="site-nav" aria-label="主导航"><a href="../personal/">个人版</a><a href="../institution/">机构合作</a><a aria-current="page" href="./">内容供应商</a><a href="https://github.com/zhongzhir/2digime">GitHub</a><a class="nav-download" href="../download/">下载</a></nav></div></header>
+<main id="main">
+  <section class="page-hero"><div class="container"><p class="eyebrow">内容供应商</p><h1>公开发布，<br><span class="accent-text">就可以被发现。</span></h1><p class="lead">兔机米不是中央推荐平台。公开内容进入一份中立目录后，由每个用户自己的数字之我决定呈现或忽略。你不需要注册兔机米账户、接入专有 API，或提交用户画像。</p><div class="meta-row"><span class="meta-pill">无需注册</span><span class="meta-pill">开放 Web 标准</span><span class="meta-pill">不托管原文</span><span class="meta-pill">选择权在用户</span></div><div class="actions"><a class="button button-primary" href="https://github.com/zhongzhir/2digime/blob/main/CONTENT-SUPPLIERS.md">阅读完整说明</a><a class="button" href="https://github.com/zhongzhir/2digime/issues">通过 GitHub Issues 联系</a></div></div></section>
+
+  <section class="section"><div class="container"><div class="section-head"><p class="eyebrow">你需要准备什么</p><h2>用已经存在的开放标准</h2><p class="lead">标准越丰富，体验越完整。最低门槛仍接近普通公开网站。</p></div>
+    <div class="principles">
+      <article class="principle"><span class="principle-number">01</span><div><h3>文章</h3></div><p>公开 HTTPS 页面，加上 RSS / Atom / JSON Feed 和 Feed Autodiscovery。稳定 canonical URL 很重要。</p></article>
+      <article class="principle"><span class="principle-number">02</span><div><h3>视频、音频、图片</h3></div><p>在 Feed 里使用 Media RSS 或 JSON Feed 的 attachments；页面上提供 schema.org 的 VideoObject / AudioObject / ImageObject；已知地址可用 oEmbed。</p></article>
+      <article class="principle"><span class="principle-number">03</span><div><h3>用户打开的是你的原文</h3></div><p>兔机米发现内容，是为了让人回到你的网站。默认不重新托管版权正文或媒体文件。</p></article>
+    </div>
+  </div></section>
+
+  <section class="section paper"><div class="container"><div class="section-head"><p class="eyebrow">最小示例</p><h2>没有兔机米专有标签</h2></div>
+    <div class="content-block"><h3>Media RSS</h3>
+<pre class="notice" style="overflow:auto;white-space:pre-wrap;font-family:Consolas,monospace;font-size:14px;line-height:1.6">&lt;item&gt;
+  &lt;title&gt;示例一集&lt;/title&gt;
+  &lt;link&gt;https://example.org/watch/ep1&lt;/link&gt;
+  &lt;media:content url="https://cdn.example.org/ep1.m4v" type="video/mp4" medium="video" duration="720" /&gt;
+  &lt;media:thumbnail url="https://cdn.example.org/ep1.jpg" /&gt;
+&lt;/item&gt;</pre></div>
+    <div class="content-block"><h3>JSON Feed attachment</h3>
+<pre class="notice" style="overflow:auto;white-space:pre-wrap;font-family:Consolas,monospace;font-size:14px;line-height:1.6">{
+  "url": "https://example.org/watch/ep1",
+  "title": "示例一集",
+  "attachments": [
+    { "url": "https://cdn.example.org/ep1.m4v", "mime_type": "video/mp4", "duration_in_seconds": 720 }
+  ]
+}</pre></div>
+    <p class="lead" style="margin-top:28px">完整说明与边界写在 GitHub 的 CONTENT-SUPPLIERS.md，与本页语义一致。</p>
+  </div></section>
+
+  <section class="section"><div class="container"><div class="boundary"><div><h3>当前可以</h3><ul><li>用公开 Feed 与页面 metadata 被发现</li><li>文章、图片、音频、视频进入同一套内容模型</li><li>用户在自己的兔机米里选择看或不看</li></ul></div><div><h3>当前不会</h3><ul><li>抓取封闭平台的私有目录</li><li>绕过登录墙、付费墙或 DRM</li><li>提供供应商后台、广告投放或用户画像购买</li></ul></div></div></div></section>
+</main>
+<footer class="site-footer"><div class="container"><div class="footer-grid"><div class="footer-brand"><a class="brand" href="../"><img src="../assets/brand-mark.svg" alt=""><span>兔机米 <small>2digime</small></span></a><p>公开 Web 是默认可发现范围。选择权留在每个用户自己的数字之我。</p></div><div class="footer-col"><strong>产品</strong><a href="../personal/">个人版</a><a href="../institution/">机构合作</a><a href="./">内容供应商</a><a href="../download/">下载</a></div><div class="footer-col"><strong>开放</strong><a href="https://github.com/zhongzhir/2digime">GitHub</a><a href="https://github.com/zhongzhir/2digime/blob/main/CONTENT-SUPPLIERS.md">CONTENT-SUPPLIERS.md</a><a href="https://github.com/zhongzhir/2digime/issues">Issues</a></div></div><div class="footer-bottom"><span>© <span data-year>2026</span> 兔机米 / 2digime</span><span>不需要为兔机米发明专有协议。</span></div></div></footer>
+</body></html>

@@ -75,9 +75,9 @@ Long-term, every 2digime can be an intelligent network node that belongs to a re
 
 The public Web is 2digime’s default discoverable content range. Personal selection happens on the recipient's own 2digime rather than through a centralized user-profile ranking system.
 
-If you already publish in the open, you usually do not need a 2digime account, tags, or a proprietary API. RSS / Atom with feed autodiscovery, canonical URLs, sitemap, OpenGraph, and schema.org help machines find you more reliably. This Public Alpha does not offer a self-serve publish API or supplier portal.
+If you already publish in the open, you usually do not need a 2digime account, tags, or a proprietary API. RSS / Atom with feed autodiscovery, canonical URLs, sitemap, OpenGraph, and schema.org help machines find you more reliably. For video, audio, and images, prefer Media RSS, JSON Feed attachments, schema.org media objects, and oEmbed. This Public Alpha does not offer a self-serve publish API or supplier portal. Closed catalogs, DRM, and login walls are not scraped.
 
-See: [Providing Content to 2digime Users](CONTENT-SUPPLIERS.md)
+See: [Providing Content to 2digime Users](CONTENT-SUPPLIERS.md) · [Website: Content suppliers](https://zhongzhir.github.io/2digime/suppliers/)
 
 ---
 
