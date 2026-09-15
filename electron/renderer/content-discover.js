@@ -158,7 +158,7 @@
 
   function friendlyNotice(notice) {
     const text = String(notice || '').trim();
-    if (!text || text === '还没有新内容。' || text === '还没有新内容') {
+    if (!text || text === '还没有新内容。' || text === '还没有新内容' || /^还没有新内容/.test(text)) {
       return '';
     }
     return text;
@@ -278,6 +278,13 @@
         const btnEl = evt.target && evt.target.closest ? evt.target.closest('[data-discover-section]') : null;
         if (!btnEl) return;
         showSection(btnEl.getAttribute('data-discover-section'));
+      });
+    }
+    const refreshBtn = $('btn-discover-refresh');
+    if (refreshBtn && !refreshBtn.dataset.bound) {
+      refreshBtn.dataset.bound = '1';
+      refreshBtn.addEventListener('click', () => {
+        void refresh();
       });
     }
   }

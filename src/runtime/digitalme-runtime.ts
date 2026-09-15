@@ -179,6 +179,10 @@ import { readDigitalSelf } from '../subject-core/digital-self/store';
 import { discoverForSubject, type DiscoverView } from '../subject-comm/content-discover';
 import { formatSeekContext, seekContent } from '../subject-comm/content-seek';
 import {
+  indexSearchHits,
+  proposeOpenWebQueries,
+} from '../subject-comm/open-web-discovery';
+import {
   formatPreferenceDirectives,
   listContentPreferences,
   reverseContentPreference,
@@ -512,8 +516,25 @@ export class DigitalMeRuntime {
     const chatCompleteFn = this.resolveContentChat();
     const model = this.resolveContentModel();
     if (!chatCompleteFn || !model) return empty('连接 AI 之后，才能按你的数字之我挑选内容。');
-    const items = await this.loadDiscoverItems(packageRoot, relayUrl);
-    if (!items.length) return empty('还没有新内容。');
+    const searchWeb = this.openWebSearchEnabled() ? this.resolveContentSearch() : undefined;
+    let items = await this.loadDiscoverItems(packageRoot, relayUrl);
+    if (searchWeb && items.length < 6) {
+      await this.runOpenWebColdStart({
+        packageRoot,
+        selfContext: formatSelfContext(selectSelfContext(self, '')),
+        chatComplete: chatCompleteFn,
+        model,
+        searchWeb,
+      });
+      items = await this.loadDiscoverItems(packageRoot, relayUrl);
+    }
+    if (!items.length) {
+      return empty(
+        searchWeb
+          ? '这次没有找到可核对来源的公开内容。'
+          : '还没有新内容。开启联网发现后，兔机米还可以从公开网络帮你找内容。',
+      );
+    }
     const directives = formatPreferenceDirectives(await listContentPreferences(packageRoot));
     const result = await discoverForSubject({
       digitalSelf: self,
@@ -536,6 +557,38 @@ export class DigitalMeRuntime {
       items,
       ...(searchWeb ? { searchWeb } : {}),
     });
+    const webHits = sought.cards
+      .filter((card) => card.source === 'web' && card.url)
+      .map((card) => ({
+        title: card.title,
+        url: card.url as string,
+        ...(card.text ? { snippet: card.text } : {}),
+      }));
+    if (webHits.length) {
+      const store = new FileNetworkItemStore(path.join(packageRoot, 'content'));
+      const indexed = await indexSearchHits({ hits: webHits, store });
+      if (indexed.length) {
+        const byUrl = new Map(
+          indexed
+            .filter((item) => item.content.url)
+            .map((item) => [item.content.url as string, item]),
+        );
+        sought.cards = sought.cards.map((card) => {
+          const item = card.url ? byUrl.get(card.url) : undefined;
+          if (!item) return card;
+          return {
+            itemId: item.itemId,
+            title: item.content.title,
+            text: item.content.text,
+            reason: card.reason,
+            source: 'web' as const,
+            ...(item.content.url ? { url: item.content.url } : {}),
+            ...(item.publisherSubjectId ? { publisherSubjectId: item.publisherSubjectId } : {}),
+            ...(item.publisherDisplayName ? { publisherDisplayName: item.publisherDisplayName } : {}),
+          };
+        });
+      }
+    }
     return {
       headline: '发现',
       lead: '根据你刚说的话找的内容，保留来源链接，不是中心推荐。',
@@ -543,6 +596,45 @@ export class DigitalMeRuntime {
       preferences,
       notice: sought.notice,
     };
+  }
+
+  private openWebSearchEnabled(): boolean {
+    if (process.env.DIGITALME_V2_ELECTRON_TEST === '1' && process.env.DIGITALME_V2_OPEN_WEB_DISCOVERY !== '1') {
+      return false;
+    }
+    return true;
+  }
+
+  private async runOpenWebColdStart(input: {
+    packageRoot: string;
+    selfContext: string;
+    chatComplete: ChatCompleteFn;
+    model: { baseUrl: string; model: string; apiKey?: string };
+    searchWeb: (query: string) => Promise<Array<{ title: string; url: string; snippet?: string }>>;
+  }): Promise<void> {
+    const directives = formatPreferenceDirectives(await listContentPreferences(input.packageRoot));
+    let queries = await proposeOpenWebQueries({
+      selfContext: input.selfContext,
+      chatComplete: input.chatComplete,
+      model: input.model,
+      ...(directives ? { preferenceDirectives: directives } : {}),
+    });
+    if (!queries.length && directives) {
+      queries = (await listContentPreferences(input.packageRoot))
+        .filter((row) => row.kind === 'boost' || row.kind === 'follow')
+        .map((row) => row.text)
+        .slice(0, 2);
+    }
+    if (!queries.length) queries = ['recent noteworthy public articles'];
+    const store = new FileNetworkItemStore(path.join(input.packageRoot, 'content'));
+    for (const query of queries.slice(0, 3)) {
+      try {
+        const hits = await input.searchWeb(query);
+        await indexSearchHits({ hits, store, limit: 6 });
+      } catch {
+        /* 单次搜索失败不得阻断发现页 */
+      }
+    }
   }
 
   private resolveContentSearch():

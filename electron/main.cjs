@@ -179,9 +179,7 @@ async function bootstrapRuntime() {
         : "needs_setup";
 
   // 仅 UX 专项验收(未打包)可启用 Fake 文档能力;产品路径仍禁止 Fake。
-  const uxAcceptanceFake =
-    !app.isPackaged &&
-    (process.env.DIGITALME_V2_UX_ACCEPTANCE === "1" || isElectronTestHarness());
+  const uxAcceptanceFake = !app.isPackaged && process.env.DIGITALME_V2_UX_ACCEPTANCE === "1";
 
   // 外部专业能力：优先已保存配置；环境变量仅开发覆盖；停用则不注册。
   const {
