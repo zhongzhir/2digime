@@ -98,19 +98,31 @@
     if (action === 'reverse') showSection('prefs');
   }
 
+  function typeLabel(card) {
+    const map = { article: '文章', image: '图片', audio: '音频', video: '视频', other: '内容' };
+    return map[card.contentType] || '';
+  }
+
   function renderCard(card, opts) {
     const li = document.createElement('li');
     li.className = 'content-discover-card';
+    if (card.thumbnailUrl && /^https?:\/\//i.test(card.thumbnailUrl)) {
+      const img = document.createElement('img');
+      img.className = 'content-discover-thumb';
+      img.alt = '';
+      img.referrerPolicy = 'no-referrer';
+      img.src = card.thumbnailUrl;
+      li.appendChild(img);
+    }
+    const meta = document.createElement('p');
+    meta.className = 'content-discover-source muted tiny';
+    const bits = [typeLabel(card), sourceLine(card)].filter(Boolean);
+    if (card.durationSeconds) bits.push(Math.round(Number(card.durationSeconds)) + 's');
+    meta.textContent = bits.join(' · ');
+    if (bits.length) li.appendChild(meta);
     const h = document.createElement('h3');
     h.textContent = card.title || '';
     li.appendChild(h);
-    const source = sourceLine(card);
-    if (source) {
-      const src = document.createElement('p');
-      src.className = 'content-discover-source muted tiny';
-      src.textContent = source;
-      li.appendChild(src);
-    }
     if (card.text) {
       const p = document.createElement('p');
       p.className = 'content-discover-excerpt';
