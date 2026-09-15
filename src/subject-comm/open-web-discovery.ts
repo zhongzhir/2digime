@@ -395,7 +395,8 @@ export async function proposeOpenWebQueries(input: {
   const system = [
     '你为用户的 2digime 拟定公开网页搜索词。',
     '只输出 JSON：{"queries":["..."]}，2 到 3 条。',
-    '搜索词必须是可发给公开搜索引擎的主题，不要包含姓名、住址、账号、密钥或可识别个人身份的细节。',
+    '搜索词必须是可发给公开搜索引擎的主题，指向可直接阅读、观看或收听的具体内容，不要只搜网站首页或行业新闻盘点。',
+    '不要包含姓名、住址、账号、密钥或可识别个人身份的细节。',
     '不要指定必须关注的网站。不要输出 score。',
   ].join('\n');
   const preferenceBlock = input.preferenceDirectives?.trim()

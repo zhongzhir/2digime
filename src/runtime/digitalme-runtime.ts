@@ -178,6 +178,7 @@ import { formatSelfContext, selectSelfContext } from '../intelligence/self-conte
 import { readDigitalSelf } from '../subject-core/digital-self/store';
 import { discoverForSubject, type DiscoverView } from '../subject-comm/content-discover';
 import { formatSeekContext, seekContent } from '../subject-comm/content-seek';
+import { ingestSource } from '../subject-comm/content-ingest';
 import {
   indexSearchHits,
   proposeOpenWebQueries,
@@ -437,8 +438,9 @@ export class DigitalMeRuntime {
     const pkg = this.subject.getActive();
     const empty = async (notice: string): Promise<DiscoverView> => ({
       headline: '发现',
-      lead: '兔机米根据你的数字之我挑选，不是中心推荐。',
+      lead: '这里可以直接看文章、图片、音频和视频。兔机米按你的数字之我挑选，不是中心推荐。',
       cards: [],
+      relatedCards: [],
       preferences: pkg ? await this.contentPreferenceRows(pkg.rootDir) : [],
       notice,
     });
@@ -507,8 +509,9 @@ export class DigitalMeRuntime {
     const preferences = await this.contentPreferenceRows(packageRoot);
     const empty = (notice: string): DiscoverView => ({
       headline: '发现',
-      lead: '兔机米根据你的数字之我挑选，不是中心推荐。',
+      lead: '这里可以直接看文章、图片、音频和视频。兔机米按你的数字之我挑选，不是中心推荐。',
       cards: [],
+      relatedCards: [],
       preferences,
       notice,
     });
@@ -518,7 +521,7 @@ export class DigitalMeRuntime {
     if (!chatCompleteFn || !model) return empty('连接 AI 之后，才能按你的数字之我挑选内容。');
     const searchWeb = this.openWebSearchEnabled() ? this.resolveContentSearch() : undefined;
     let items = await this.loadDiscoverItems(packageRoot, relayUrl);
-    if (searchWeb && items.length < 6) {
+    if (searchWeb && items.length === 0) {
       await this.runOpenWebColdStart({
         packageRoot,
         selfContext: formatSelfContext(selectSelfContext(self, '')),
@@ -531,8 +534,8 @@ export class DigitalMeRuntime {
     if (!items.length) {
       return empty(
         searchWeb
-          ? '这次没有找到可核对来源的公开内容。'
-          : '还没有新内容。开启联网发现后，兔机米还可以从公开网络帮你找内容。',
+          ? '这次没有找到可直接消费的内容。'
+          : '还没有新内容。开启联网发现后，兔机米还可以从公开网络帮你找到更多内容。',
       );
     }
     const directives = formatPreferenceDirectives(await listContentPreferences(packageRoot));
@@ -551,48 +554,36 @@ export class DigitalMeRuntime {
   private async runContentSeek(packageRoot: string, query: string, relayUrl?: string): Promise<DiscoverView> {
     const preferences = await this.contentPreferenceRows(packageRoot);
     const items = await this.loadDiscoverItems(packageRoot, relayUrl);
-    const searchWeb = this.resolveContentSearch();
+    const searchWeb = this.openWebSearchEnabled() ? this.resolveContentSearch() : undefined;
+    const chatCompleteFn = this.resolveContentChat();
+    const model = this.resolveContentModel();
+    const store = new FileNetworkItemStore(path.join(packageRoot, 'content'));
     const sought = await seekContent({
       query,
       items,
       ...(searchWeb ? { searchWeb } : {}),
+      ...(chatCompleteFn && model ? { chatComplete: chatCompleteFn, model } : {}),
+      ingestHit: async (hit) => {
+        try {
+          const ingested = await ingestSource({
+            sourceUrl: hit.url,
+            store,
+            limit: 4,
+            via: 'search',
+          });
+          if (ingested.items.length) return ingested.items;
+        } catch {
+          /* 单条公开页摄入失败时退回搜索命中 */
+        }
+        return indexSearchHits({ hits: [hit], store, limit: 1 });
+      },
     });
-    const webHits = sought.cards
-      .filter((card) => card.source === 'web' && card.url)
-      .map((card) => ({
-        title: card.title,
-        url: card.url as string,
-        ...(card.text ? { snippet: card.text } : {}),
-      }));
-    if (webHits.length) {
-      const store = new FileNetworkItemStore(path.join(packageRoot, 'content'));
-      const indexed = await indexSearchHits({ hits: webHits, store });
-      if (indexed.length) {
-        const byUrl = new Map(
-          indexed
-            .filter((item) => item.content.url)
-            .map((item) => [item.content.url as string, item]),
-        );
-        sought.cards = sought.cards.map((card) => {
-          const item = card.url ? byUrl.get(card.url) : undefined;
-          if (!item) return card;
-          return {
-            itemId: item.itemId,
-            title: item.content.title,
-            text: item.content.text,
-            reason: card.reason,
-            source: 'web' as const,
-            ...(item.content.url ? { url: item.content.url } : {}),
-            ...(item.publisherSubjectId ? { publisherSubjectId: item.publisherSubjectId } : {}),
-            ...(item.publisherDisplayName ? { publisherDisplayName: item.publisherDisplayName } : {}),
-          };
-        });
-      }
-    }
     return {
       headline: '发现',
       lead: '根据你刚说的话找的内容，保留来源链接，不是中心推荐。',
       cards: sought.cards,
+      relatedCards: sought.relatedCards,
+      ...(sought.relatedCards.length ? { relatedTitle: '相关信息' } : {}),
       preferences,
       notice: sought.notice,
     };
@@ -625,7 +616,7 @@ export class DigitalMeRuntime {
         .map((row) => row.text)
         .slice(0, 2);
     }
-    if (!queries.length) queries = ['recent noteworthy public articles'];
+    if (!queries.length) queries = ['recent public articles videos podcasts photographs'];
     const store = new FileNetworkItemStore(path.join(input.packageRoot, 'content'));
     for (const query of queries.slice(0, 3)) {
       try {

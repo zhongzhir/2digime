@@ -11,6 +11,7 @@ import type { NetworkItem } from './network-item';
 import { PERSONAL_SELECTION_UNAVAILABLE } from './network-item';
 import { selectNetworkItems } from './personal-selection';
 import { appendNetworkContentFeedback, createAiJudgmentFeedback } from './network-content-feedback';
+import { isDomainLikeTitle, isGenericHubUrl } from './discover-intent';
 
 export interface DiscoverCard {
   itemId: string;
@@ -19,6 +20,8 @@ export interface DiscoverCard {
   url?: string;
   publisherSubjectId?: string;
   publisherDisplayName?: string;
+  author?: string;
+  publishedAt?: string;
   reason: string;
   source?: 'directory' | 'web';
   contentType?: string;
@@ -40,6 +43,8 @@ export interface DiscoverView {
   headline: string;
   lead: string;
   cards: DiscoverCard[];
+  relatedCards?: DiscoverCard[];
+  relatedTitle?: string;
   preferences: DiscoverPreference[];
   notice: string;
 }
@@ -65,7 +70,16 @@ export function cardFromNetworkItem(
     ...(item.content.durationSeconds != null ? { durationSeconds: item.content.durationSeconds } : {}),
     ...(item.content.consumption ? { consumption: item.content.consumption } : {}),
     ...(item.content.access ? { access: item.content.access } : {}),
+    ...(item.content.author ? { author: item.content.author } : {}),
+    ...(item.content.publishedAt ? { publishedAt: item.content.publishedAt } : {}),
   };
+}
+
+export function isConcreteContentCard(card: DiscoverCard): boolean {
+  if (!String(card.title || '').trim()) return false;
+  if (isDomainLikeTitle(card.title, card.url)) return false;
+  if (card.url && isGenericHubUrl(card.url)) return false;
+  return true;
 }
 
 export async function discoverForSubject(input: {
@@ -82,8 +96,9 @@ export async function discoverForSubject(input: {
 > {
   const empty = (notice: string): DiscoverView => ({
     headline: '发现',
-    lead: '兔机米根据你的数字之我挑选，不是中心推荐。',
+    lead: '这里可以直接看文章、图片、音频和视频。兔机米按你的数字之我挑选，不是中心推荐。',
     cards: [],
+    relatedCards: [],
     preferences: input.preferences || [],
     notice,
   });
@@ -130,15 +145,17 @@ export async function discoverForSubject(input: {
         row.reason,
         'directory',
       );
-    });
+    })
+    .filter(isConcreteContentCard);
   return {
     ok: true,
     view: {
       headline: '发现',
-      lead: '兔机米根据你的数字之我挑选，不是中心推荐。',
+      lead: '这里可以直接看文章、图片、音频和视频。兔机米按你的数字之我挑选，不是中心推荐。',
       cards,
+      relatedCards: [],
       preferences: input.preferences || [],
-      notice: cards.length ? '' : '这次没有值得现在看的内容。',
+      notice: cards.length ? '' : '这次没有找到可直接消费的内容。',
     },
   };
 }
