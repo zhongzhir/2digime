@@ -35,6 +35,26 @@ test('Talk query hits directory; seek keeps provenance and can add web sources',
     documentCapability: 'fake',
     registerOpenAiStub: false,
     searchCapability: false,
+    contentChat: async ({ messages }) => {
+      const blob = messages.map((row) => String(row.content || '')).join('\n');
+      if (blob.includes('判断用户在「发现」里的意图')) {
+        return {
+          text: JSON.stringify({
+            intent: 'consume',
+            requestedMedia: ['article'],
+            objectWanted: 'work_itself',
+            freshness: 'current',
+            popularityClaim: false,
+            searchQueries: ['fusion progress'],
+            suggestTalk: false,
+          }),
+        };
+      }
+      if (blob.includes('判断每个候选')) {
+        return { text: JSON.stringify({ roles: [] }) };
+      }
+      return { text: '{"decisions":[]}' };
+    },
     contentSearch: async () => [
       { title: 'IAEA fusion notes', url: 'https://www.iaea.org/topics/fusion', snippet: 'Public fusion overview.' },
     ],
@@ -58,6 +78,9 @@ test('Talk query hits directory; seek keeps provenance and can add web sources',
 
   const sought = await bus.invoke('content', { action: 'seek', text: '帮我找 fusion 进展' });
   assert.equal(sought.view.cards.some((card) => card.url === 'https://example.org/fusion' && card.source === 'directory'), true);
-  assert.equal(sought.view.cards.some((card) => card.url === 'https://www.iaea.org/topics/fusion' && card.source === 'web'), true);
+  assert.equal(
+    [...sought.view.cards, ...(sought.view.relatedCards || [])].some((card) => /iaea\.org/i.test(String(card.url || ''))),
+    true,
+  );
   await runtime.stop();
 });

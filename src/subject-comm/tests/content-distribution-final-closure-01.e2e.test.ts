@@ -269,7 +269,7 @@ test('CONTENT-DISTRIBUTION-FINAL-CLOSURE-01 whole-loop', { timeout: 240_000 }, a
 
     const uiSrc = await fs.readFile(path.join(process.cwd(), 'electron/renderer/content-discover.js'), 'utf8');
     assert.match(uiSrc, /问兔机米/);
-    assert.match(uiSrc, /TalkPage\.handleSend/);
+    assert.match(uiSrc, /setContentContext/);
     assert.match(uiSrc, /act\('later'/);
 
     const personalSrc = await fs.readFile(path.join(process.cwd(), 'src/subject-comm/personal-selection.ts'), 'utf8');
