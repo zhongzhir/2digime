@@ -136,6 +136,9 @@ input[type=checkbox], input[type=radio] { width: auto; flex: none; }
 .content-discover-prefs { margin-top: 0; }
 .content-discover-pref-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; }
 .content-discover-pref-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px; font-size: 13px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.discover-feed-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 8px; }
+.discover-feed-head h2 { margin: 0; }
+.discover-reset-recent { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); display: grid; gap: 10px; }
 .discover-empty { padding: 18px 4px 8px; color: var(--muted); }
 .ds-overview-summary { margin: 0 0 16px; }
 .ds-overview-body { display: grid; gap: 16px; margin-bottom: 16px; }

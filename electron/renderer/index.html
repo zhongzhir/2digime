@@ -373,8 +373,9 @@
               <input id="content-discover-query" type="search" placeholder="想看什么？" autocomplete="off" />
             </label>
             <button type="submit" id="btn-content-discover-search" class="primary">看看</button>
+            <button type="button" class="ghost" id="btn-discover-personal" hidden>为你发现</button>
           </form>
-          <p class="muted tiny discover-examples-label">可以试试：</p>
+          <p class="muted tiny discover-examples-label">也可以指定现在想看的：</p>
           <div id="content-discover-examples" class="discover-examples">
             <button type="button" class="ghost discover-example" data-seek="最近值得看的 AI 内容">最近值得看的 AI 内容</button>
             <button type="button" class="ghost discover-example" data-seek="找几个 AI 视频看看">找几个 AI 视频看看</button>
@@ -385,15 +386,17 @@
             <button type="button" class="ghost discover-switch active" data-discover-section="for-you">为你发现</button>
             <button type="button" class="ghost discover-switch" data-discover-section="later">稍后看</button>
             <button type="button" class="ghost discover-switch" data-discover-section="prefs">内容偏好</button>
-            <button type="button" class="ghost" id="btn-discover-refresh">看看新的</button>
           </div>
           <section id="content-discover" class="content-discover" aria-label="发现">
             <p id="content-discover-notice" class="muted"></p>
             <section id="content-discover-for-you" class="discover-section" data-discover-section="for-you">
-              <h2>为你发现</h2>
-              <div id="content-discover-empty" class="discover-empty">
-                <p>还没有为你挑出的新内容。输入想看的文章、图片、音频或视频，兔机米会去找可以打开的作品本身。</p>
-                <p class="muted tiny">开启联网发现后，兔机米还可以从公开网络帮你找到更多内容。</p>
+              <div class="discover-feed-head">
+                <h2>为你发现</h2>
+                <button type="button" class="ghost" id="btn-discover-refresh">换一批</button>
+              </div>
+              <p id="content-discover-status" class="muted tiny" hidden>兔机米正在帮你找些值得看的内容……</p>
+              <div id="content-discover-empty" class="discover-empty" hidden>
+                <p id="content-discover-empty-text">目前还没有可展示的内容。</p>
               </div>
               <ul id="content-discover-list" class="content-discover-list"></ul>
               <section id="content-discover-related" class="content-discover-related" hidden>
@@ -412,6 +415,10 @@
               <p class="muted tiny">只有你明确说过的加推、少推、关注或不再看来源会出现在这里，可以随时撤销。</p>
               <ul id="content-discover-pref-list" class="content-discover-pref-list"></ul>
               <p id="content-discover-pref-empty" class="muted tiny">还没有明确的内容偏好。</p>
+              <div class="discover-reset-recent">
+                <p class="muted tiny">最近的打开、查看和搜索只会影响近期推荐，不会写进数字之我。你可以随时重置。</p>
+                <button type="button" class="ghost" id="btn-reset-recent">重置最近推荐</button>
+              </div>
             </section>
           </section>
         </section>

@@ -96,6 +96,7 @@
       contentType: card.contentType || '',
       summary: String(card.text || '').slice(0, 600),
     };
+    if (card.itemId) void act('asked', { itemId: card.itemId }, { skipRender: true });
     goTalk();
     if (window.TalkPage && typeof window.TalkPage.setContentContext === 'function') {
       window.TalkPage.setContentContext(context);
@@ -121,7 +122,7 @@
     );
   }
 
-  async function act(action, extra) {
+  async function act(action, extra, opts) {
     const client = api();
     if (!client || typeof client.invoke !== 'function') return;
     if (action === 'later' && extra && extra.itemId) {
@@ -134,9 +135,11 @@
       }
     }
     const result = await client.invoke('content', Object.assign({ action: action }, extra || {}));
-    renderView(result && result.view);
+    if (opts && opts.skipRender) return result;
+    applyView(result && result.view);
     if (action === 'later') showSection('later');
-    if (action === 'reverse') showSection('prefs');
+    if (action === 'reverse' || action === 'resetRecent') showSection('prefs');
+    return result;
   }
 
   function coverUrl(card) {
@@ -245,11 +248,25 @@
   }
 
   function friendlyNotice(notice) {
-    const text = String(notice || '').trim();
-    if (!text || text === '还没有新内容。' || text === '还没有新内容' || /^还没有新内容/.test(text)) {
-      return '';
+    return String(notice || '').trim();
+  }
+
+  function setStatus(text) {
+    const status = $('content-discover-status');
+    if (!status) return;
+    const value = String(text || '').trim();
+    status.textContent = value;
+    status.hidden = !value;
+  }
+
+  function applyView(view) {
+    const incoming = (view && view.cards) || [];
+    const notice = friendlyNotice(view && view.notice);
+    if (!incoming.length && lastCards.length && /暂时无法|检查连接|检查联网/.test(notice)) {
+      renderView(Object.assign({}, view || {}, { cards: lastCards, relatedCards: lastRelated, notice: notice }));
+      return;
     }
-    return text;
+    renderView(view);
   }
 
   function showSection(name) {
@@ -282,13 +299,23 @@
     }
     lastCards = (view && view.cards) || [];
     lastRelated = (view && view.relatedCards) || [];
-    if (notice) notice.textContent = friendlyNotice(view && view.notice);
+    if (notice) {
+      notice.textContent = lastCards.length ? friendlyNotice(view && view.notice) : '';
+    }
+    setStatus('');
     if (list) {
       list.innerHTML = '';
       for (const card of lastCards) list.appendChild(renderCard(card));
     }
     renderRelated(lastRelated);
+    const emptyText = $('content-discover-empty-text');
+    if (emptyText && !lastCards.length) {
+      emptyText.textContent =
+        friendlyNotice(view && view.notice) || '目前还没有可展示的内容。';
+    }
     if (empty) empty.hidden = lastCards.length > 0;
+    const back = $('btn-discover-personal');
+    if (back) back.hidden = (view && view.feedMode) !== 'intent';
     const prefs = (view && view.preferences) || [];
     if (prefsList) {
       prefsList.innerHTML = '';
@@ -311,19 +338,47 @@
   async function refresh() {
     const client = api();
     if (!client || typeof client.invoke !== 'function') return;
+    if (!lastCards.length) setStatus('兔机米正在帮你找些值得看的内容……');
     try {
       const result = await client.invoke('content', { action: 'discover' });
-      renderView(result && result.view);
+      applyView(result && result.view);
     } catch {
-      renderView({
-        headline: '发现',
-        lead: '这里可以直接看文章、图片、音频和视频。兔机米按你的数字之我挑选，不是中心推荐。',
-        cards: [],
-        relatedCards: [],
-        preferences: [],
-        notice: '',
-      });
+      setStatus('');
+      if (!lastCards.length) {
+        renderView({
+          headline: '发现',
+          lead: '这里可以直接看文章、图片、音频和视频。兔机米按你的数字之我挑选，不是中心推荐。',
+          cards: [],
+          relatedCards: [],
+          preferences: [],
+          notice: '暂时无法获取新内容，可以稍后再试或检查联网设置。',
+        });
+      } else {
+        const notice = $('content-discover-notice');
+        if (notice) notice.textContent = '暂时无法获取新内容，可以稍后再试或检查联网设置。';
+      }
     }
+  }
+
+  async function refreshBatch() {
+    const client = api();
+    if (!client || typeof client.invoke !== 'function') return;
+    setStatus('兔机米正在帮你找些值得看的内容……');
+    try {
+      const result = await client.invoke('content', { action: 'refresh' });
+      applyView(result && result.view);
+    } catch {
+      setStatus('');
+      const notice = $('content-discover-notice');
+      if (notice) notice.textContent = '暂时无法获取新内容，可以稍后再试或检查联网设置。';
+    }
+  }
+
+  async function showPersonal() {
+    const input = $('content-discover-query');
+    if (input) input.value = '';
+    await refresh();
+    showSection('for-you');
   }
 
   async function seek(query, opts) {
@@ -337,9 +392,10 @@
     showSection('for-you');
     try {
       const result = await client.invoke('content', { action: 'seek', text: text });
-      renderView(result && result.view);
+      applyView(result && result.view);
     } catch {
-      /* 主动获取失败不得挡住交谈 */
+      const notice = $('content-discover-notice');
+      if (notice) notice.textContent = '暂时无法获取新内容，可以稍后再试或检查联网设置。';
     }
   }
 
@@ -375,12 +431,32 @@
     if (refreshBtn && !refreshBtn.dataset.bound) {
       refreshBtn.dataset.bound = '1';
       refreshBtn.addEventListener('click', () => {
-        void refresh();
+        void refreshBatch();
+      });
+    }
+    const personalBtn = $('btn-discover-personal');
+    if (personalBtn && !personalBtn.dataset.bound) {
+      personalBtn.dataset.bound = '1';
+      personalBtn.addEventListener('click', () => {
+        void showPersonal();
+      });
+    }
+    const resetRecent = $('btn-reset-recent');
+    if (resetRecent && !resetRecent.dataset.bound) {
+      resetRecent.dataset.bound = '1';
+      resetRecent.addEventListener('click', () => {
+        void act('resetRecent');
       });
     }
   }
 
-  window.ContentDiscoverPage = { refresh: refresh, seek: seek, showSection: showSection, renderView: renderView };
+  window.ContentDiscoverPage = {
+    refresh: refresh,
+    seek: seek,
+    showSection: showSection,
+    renderView: renderView,
+    showPersonal: showPersonal,
+  };
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
