@@ -19,6 +19,11 @@ import {
   type DiscoverIntent,
   type ObjectFidelity,
 } from './discover-intent';
+import {
+  networkItemFromOpenHit,
+  searchOpenMedia,
+  type OpenMediaFetch,
+} from './content-source-capabilities';
 
 export interface ExternalSeekHit {
   title: string;
@@ -98,7 +103,11 @@ function honestEmptyNotice(intent: DiscoverIntent): string {
 
 function typeMatches(card: DiscoverCard, required: string[]): boolean {
   if (!required.length) return true;
-  return required.includes(String(card.contentType || ''));
+  const declared = String(card.contentType || '');
+  if (required.includes(declared)) return true;
+  const media = required.some((row) => row === 'video' || row === 'audio' || row === 'image');
+  if (!declared && required.includes('article') && !media) return true;
+  return false;
 }
 
 export function directorySeekTerms(query: string): string[] {
@@ -178,6 +187,7 @@ export async function seekContent(input: {
   chatComplete?: ChatCompleteFn;
   model?: { baseUrl: string; model: string; apiKey?: string };
   ingestHit?: (hit: ExternalSeekHit) => Promise<NetworkItem[]>;
+  fetchOpenMedia?: OpenMediaFetch;
 }): Promise<ContentSeekResult> {
   const query = String(input.query || '').trim();
   const emptyIntent = defaultDiscoverIntent(query);
@@ -270,6 +280,61 @@ export async function seekContent(input: {
     }
   }
 
+  const mediaKinds = intent.requestedMedia.filter(
+    (row): row is 'video' | 'image' | 'audio' => row === 'video' || row === 'image' || row === 'audio',
+  );
+  if (mediaKinds.length && input.fetchOpenMedia) {
+    const topicQuery = (intent.searchQueries[0] || query).trim();
+    try {
+      const openHits = await searchOpenMedia({
+        query: topicQuery,
+        kinds: mediaKinds,
+        fetchImpl: input.fetchOpenMedia,
+      });
+      for (const hit of openHits) {
+        let ingestedFeed = false;
+        if (hit.feedUrl && input.ingestHit) {
+          try {
+            const ingested = await input.ingestHit({
+              title: hit.title,
+              url: hit.feedUrl,
+              ...(hit.snippet ? { snippet: hit.snippet } : {}),
+            });
+            for (const item of ingested) {
+              const canonical = canonicalOf(item.content.url);
+              if (canonical && seenUrls.has(canonical)) continue;
+              if (seenIds.has(item.itemId)) continue;
+              if (isDomainLikeTitle(item.content.title, item.content.url)) continue;
+              if (item.content.url && isGenericHubUrl(item.content.url)) continue;
+              if (canonical) seenUrls.add(canonical);
+              seenIds.add(item.itemId);
+              usedExternal = true;
+              ingestedFeed = true;
+              if (canonical) queryByUrl.set(canonical, topicQuery);
+              cards.push(cardFromNetworkItem(item, '开放媒体来源，不是目录推荐。', 'web'));
+              if (cards.length >= 24) break;
+            }
+          } catch {
+            /* 单条播客 feed 失败则用条目本身 */
+          }
+        }
+        if (ingestedFeed || cards.length >= 24) continue;
+        const item = networkItemFromOpenHit(hit);
+        if (!item) continue;
+        const canonical = canonicalOf(item.content.url);
+        if (canonical && seenUrls.has(canonical)) continue;
+        if (seenIds.has(item.itemId)) continue;
+        if (canonical) seenUrls.add(canonical);
+        seenIds.add(item.itemId);
+        usedExternal = true;
+        if (canonical) queryByUrl.set(canonical, topicQuery);
+        cards.push(cardFromNetworkItem(item, '开放媒体来源，不是目录推荐。', 'web'));
+      }
+    } catch {
+      /* 开放媒体来源失败不阻断文章搜索 */
+    }
+  }
+
   const concrete = cards.filter(isConcreteCandidate);
   const fidelity = new Map<string, ObjectFidelity>();
   if (input.chatComplete && input.model && concrete.length) {
@@ -288,7 +353,7 @@ export async function seekContent(input: {
     });
     if (roles.size) {
       for (const card of concrete) {
-        fidelity.set(card.itemId, objectFidelity(roles.get(card.itemId)));
+        fidelity.set(card.itemId, objectFidelity(roles.get(card.itemId), intent));
       }
     }
   }
@@ -299,7 +364,7 @@ export async function seekContent(input: {
     const matchedType = typeMatches(card, requiredTypes);
     let kind = fidelity.get(card.itemId);
     if (!kind) {
-      kind = requiredTypes.length && !matchedType ? 'UNRELATED' : 'PRIMARY_CONTENT';
+      kind = requiredTypes.length && !matchedType ? 'ABOUT_CONTENT' : 'PRIMARY_CONTENT';
     }
     if (requiredTypes.length && kind === 'PRIMARY_CONTENT' && !matchedType) {
       kind = 'ABOUT_CONTENT';

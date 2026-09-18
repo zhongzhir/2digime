@@ -23,6 +23,13 @@ import { isDomainLikeTitle, isGenericHubUrl } from './discover-intent';
 import type { ContentPreferenceDirective } from './content-preferences';
 import { isNetworkItemExpired } from './network-item';
 import {
+  catalogFeedUrls,
+  networkItemFromOpenHit,
+  searchOpenMedia,
+  sourceKindsForRequest,
+  type OpenMediaFetch,
+} from './content-source-capabilities';
+import {
   classifySearchFailure,
   humanNetworkNotice,
   type FeedReasonCode,
@@ -141,7 +148,8 @@ export async function proposeDiscoveryIntents(input: {
     '你在为这个人的 2digime 拟定内容发现方向。这不是搜索引擎运营，也不是为了让人刷得更久。',
     '只输出 JSON：{"intents":[{"topic":"","contentTypes":[],"purpose":"","freshness":"current|classic|unspecified","explorationMode":"core|adjacent|explore","searchQuery":""}]}。',
     '2 到 3 条。尽量包含一个核心方向、一个相邻方向、一个探索方向。不要写成固定栏目表。',
-    'searchQuery 是发给公开搜索的最短主题词，指向可读、可看或可听的具体内容，不要指定必须去哪个网站。',
+    'contentTypes 只允许 article / video / image / audio。在质量允许时，这一批可以包含不同媒介；不要默认三条都只搜文章，也不要写成固定比例。',
+    'searchQuery 是发给公开搜索或开放媒体现货目录的最短主题词。video 指向可看的具体视频，image 指向具体图片作品，audio 指向可听的节目，article 指向可读正文。不要指定必须去哪个网站，不要搜十大盘点。',
     '不要包含姓名、住址、账号、密钥。不要把完整数字之我、事实列表或偏好向量写进 searchQuery。',
     '除非用户明确搜索过、明确关注或明确写了内容偏好，不要把医疗/疾病、政治立场、宗教、性生活或其他高度敏感事实变成搜索词。',
     '优化目标是对人有用、相关、质量高、有必要新鲜度与多样性，而不是延长使用时间或增加打开次数。',
@@ -259,16 +267,16 @@ function directoryCards(
 
 function canSearch(input: {
   searchWeb?: (query: string) => Promise<ExternalSeekHit[]>;
+  fetchOpenMedia?: OpenMediaFetch;
   chatComplete?: ChatCompleteFn;
   model?: { baseUrl: string; model: string; apiKey?: string };
   networking: NetworkDiscoveryCode;
 }): boolean {
   return !!(
-    input.searchWeb &&
+    (input.searchWeb || input.fetchOpenMedia) &&
     input.chatComplete &&
     input.model &&
-    input.networking !== 'DISABLED' &&
-    input.networking !== 'NOT_CONFIGURED'
+    input.networking !== 'DISABLED'
   );
 }
 
@@ -292,6 +300,8 @@ export async function ensurePersonalFeed(input: {
   model?: { baseUrl: string; model: string; apiKey?: string };
   searchWeb?: (query: string) => Promise<ExternalSeekHit[]>;
   ingestHit?: (hit: ExternalSeekHit) => Promise<NetworkItem[]>;
+  fetchOpenMedia?: OpenMediaFetch;
+  putNetworkItem?: (item: NetworkItem) => Promise<void>;
   reloadItems?: () => Promise<NetworkItem[]>;
   getItem?: (itemId: string) => Promise<NetworkItem | undefined>;
   mode: 'open' | 'refresh' | 'reuse' | 'replenish';
@@ -438,11 +448,10 @@ export async function ensurePersonalFeed(input: {
 
   if (
     needReplenish &&
-    input.searchWeb &&
     input.chatComplete &&
     input.model &&
     networking !== 'DISABLED' &&
-    networking !== 'NOT_CONFIGURED'
+    (input.searchWeb || input.fetchOpenMedia)
   ) {
     const selfContext = formatSelfContext(selectSelfContext(input.digitalSelf, ''));
     const intents = await proposeDiscoveryIntents({
@@ -456,28 +465,80 @@ export async function ensurePersonalFeed(input: {
         : {}),
     });
     const queries = intents.map((row) => row.searchQuery).filter(Boolean);
-    for (const query of queries.slice(0, 3)) {
-      searchAttempted = true;
-      try {
-        const hits = await input.searchWeb(query);
-        if (hits.length) replenished = true;
-        if (input.ingestHit) {
-          for (const hit of hits.slice(0, 6)) {
-            try {
-              await input.ingestHit(hit);
-            } catch {
-              /* 单条摄入失败不阻断补量 */
+    if (input.searchWeb) {
+      for (const query of queries.slice(0, 3)) {
+        searchAttempted = true;
+        try {
+          const hits = await input.searchWeb(query);
+          if (hits.length) replenished = true;
+          if (input.ingestHit) {
+            for (const hit of hits.slice(0, 6)) {
+              try {
+                await input.ingestHit(hit);
+              } catch {
+                /* 单条摄入失败不阻断补量 */
+              }
             }
           }
+        } catch (err) {
+          networking = classifySearchFailure(err);
+          break;
         }
-      } catch (err) {
-        networking = classifySearchFailure(err);
-        replenished = false;
-        break;
+      }
+    }
+    if (input.fetchOpenMedia) {
+      const topic = queries[0] || '';
+      for (const row of intents.slice(0, 3)) {
+        const kinds = sourceKindsForRequest(row.contentTypes).filter(
+          (kind) => kind === 'video' || kind === 'image' || kind === 'audio',
+        );
+        const mediaKinds = kinds.length ? kinds : (['video', 'image', 'audio'] as const);
+        try {
+          const openHits = await searchOpenMedia({
+            query: row.searchQuery || topic,
+            kinds: [...mediaKinds],
+            fetchImpl: input.fetchOpenMedia,
+          });
+          if (openHits.length) replenished = true;
+          for (const hit of openHits.slice(0, 6)) {
+            if (hit.feedUrl && input.ingestHit) {
+              try {
+                await input.ingestHit({ title: hit.title, url: hit.feedUrl, ...(hit.snippet ? { snippet: hit.snippet } : {}) });
+                continue;
+              } catch {
+                /* feed 失败则收下单条 */
+              }
+            }
+            const item = networkItemFromOpenHit(hit, now);
+            if (!item) continue;
+            if (input.putNetworkItem) {
+              try {
+                await input.putNetworkItem(item);
+              } catch {
+                items.push(item);
+              }
+            } else {
+              items.push(item);
+            }
+          }
+        } catch {
+          /* 单个媒介来源失败不阻断其它媒介 */
+        }
+      }
+      if (input.ingestHit) {
+        for (const feedUrl of catalogFeedUrls(['video'])) {
+          try {
+            const ingested = await input.ingestHit({ title: 'open catalog', url: feedUrl });
+            if (ingested.length) replenished = true;
+          } catch {
+            /* 目录 feed 失败不阻断 */
+          }
+        }
       }
     }
     mark('SEARCH_DONE', searchAttempted ? 1 : 0);
     if (input.reloadItems) items = (await input.reloadItems()).filter((item) => isConsumableItem(item, now) && !blocked(item, prefs));
+    else items = items.filter((item) => isConsumableItem(item, now) && !blocked(item, prefs));
     mark('NORMALIZE_DONE', items.length);
   }
 

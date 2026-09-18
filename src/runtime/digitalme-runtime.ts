@@ -179,6 +179,7 @@ import { readDigitalSelf } from '../subject-core/digital-self/store';
 import { type DiscoverView } from '../subject-comm/content-discover';
 import { formatSeekContext, seekContent } from '../subject-comm/content-seek';
 import { ingestSource } from '../subject-comm/content-ingest';
+import { safePublicHttpGet } from '../work-runtime/public-http-safety';
 import { indexSearchHits } from '../subject-comm/open-web-discovery';
 import { ensurePersonalFeed, rememberIntentFeed } from '../subject-comm/personal-feed';
 import {
@@ -355,6 +356,8 @@ export interface DigitalMeRuntimeOptions {
   contentChat?: ChatCompleteFn;
   /** 内容主动获取用的外部搜索；未提供时复用 Gemini Search connector。 */
   contentSearch?: (query: string) => Promise<Array<{ title: string; url: string; snippet?: string }>>;
+  /** 开放媒体目录/官方 API。测试默认关闭以免打到真实网络。 */
+  contentOpenMediaFetch?: typeof safePublicHttpGet | false;
   /** 测试注入专业能力；未提供时从当前已连接 registry 生成自然语言可调用表。 */
   talkProfessionals?: ProfessionalAgent[];
   /**
@@ -554,6 +557,7 @@ export class DigitalMeRuntime {
     const model = this.resolveContentModel();
     const networking = this.snapshotNetworkDiscovery();
     const searchWeb = this.wrapContentSearch(this.resolveContentSearch());
+    const openMedia = this.resolveOpenMediaFetch();
     const store = new FileNetworkItemStore(path.join(packageRoot, 'content'));
     const loadItems = () => this.loadDiscoverItems(packageRoot, relayUrl);
     const items = await loadItems();
@@ -574,6 +578,10 @@ export class DigitalMeRuntime {
       ...(chatCompleteFn ? { chatComplete: chatCompleteFn } : {}),
       ...(model ? { model } : {}),
       ...(searchWeb ? { searchWeb } : {}),
+      ...(openMedia ? { fetchOpenMedia: openMedia } : {}),
+      putNetworkItem: async (item) => {
+        await store.put(item);
+      },
       ingestHit: async (hit) => {
         try {
           const ingested = await ingestSource({
@@ -606,6 +614,7 @@ export class DigitalMeRuntime {
     const searchWeb = this.wrapContentSearch(this.resolveContentSearch());
     const chatCompleteFn = this.resolveContentChat();
     const model = this.resolveContentModel();
+    const openMedia = this.resolveOpenMediaFetch();
     const store = new FileNetworkItemStore(path.join(packageRoot, 'content'));
     await appendRecentRecommendationEvent(packageRoot, { type: 'seek_topic', topic: query });
     try {
@@ -614,6 +623,7 @@ export class DigitalMeRuntime {
         items,
         ...(searchWeb ? { searchWeb } : {}),
         ...(chatCompleteFn && model ? { chatComplete: chatCompleteFn, model } : {}),
+        ...(openMedia ? { fetchOpenMedia: openMedia } : {}),
         ingestHit: async (hit) => {
           try {
             const ingested = await ingestSource({
@@ -671,6 +681,13 @@ export class DigitalMeRuntime {
       return this.lastNetworkCode;
     }
     return 'AVAILABLE';
+  }
+
+  private resolveOpenMediaFetch(): typeof safePublicHttpGet | undefined {
+    if (this.options.contentOpenMediaFetch === false) return undefined;
+    if (this.options.contentOpenMediaFetch) return this.options.contentOpenMediaFetch;
+    if (process.env.NODE_TEST_CONTEXT) return undefined;
+    return safePublicHttpGet;
   }
 
   private wrapContentSearch(

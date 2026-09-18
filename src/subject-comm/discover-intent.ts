@@ -83,8 +83,8 @@ function parseJsonObject(text: string): Record<string, unknown> | null {
 function asMediaType(raw: unknown): string | undefined {
   const value = String(raw || '').trim().toLowerCase();
   if (value === 'video' || value === '视频') return 'video';
-  if (value === 'audio' || value === '音频' || value === '播客') return 'audio';
-  if (value === 'image' || value === '图片' || value === 'photo') return 'image';
+  if (value === 'audio' || value === '音频' || value === '播客' || value === 'podcast') return 'audio';
+  if (value === 'image' || value === '图片' || value === 'photo' || value === '摄影') return 'image';
   if (value === 'article' || value === '文章') return 'article';
   return MEDIA_TYPES.has(value) ? value : undefined;
 }
@@ -151,8 +151,9 @@ export async function interpretDiscoverIntent(input: {
     '你在判断用户在「发现」里这一次主动搜索的意图。这是 CURRENT_SEARCH_MODE，不是为你发现。',
     '只输出 JSON，字段：mode, topic, requestedContentTypes, objectWanted, freshness, popularityClaim, searchQueries, suggestTalk。',
     'mode: consume 或 research。发现的强默认是 consume（看/听/读），不是做研究任务。',
-    'topic: 用户这次要的主题，短词即可，例如 AI。',
-    'requestedContentTypes: 只允许 article / video / image / audio。用户要看视频用 video，要读用 article，要看图用 image，要听用 audio。未指定媒介则空数组。',
+    'topic: 用户这次要的主题短词，不要整句。例如「找几个 AI 视频看看」的 topic 是 AI。',
+    'requestedContentTypes: 只允许 article / video / image / audio。点名要看视频→["video"]；要图/摄影作品→["image"]；要听/播客→["audio"]；要读文章→["article"]。说「内容」且未点名媒介→[]。',
+    '例子：「最近值得看的 AI 内容」→ topic:AI, requestedContentTypes:[]；「找几个 AI 视频看看」→ ["video"]；「找一些航天摄影作品」→ ["image"]；「给我听点科技播客」→ ["audio"]。',
     'objectWanted: primary_content（要作品/正文本身）/ commentary（要报道、盘点、行业分析）/ mixed。',
     'freshness: current / classic / unspecified。',
     'popularityClaim: 用户是否在要「最火/热门/排行」且你没有统一播放榜可引用。',
@@ -228,18 +229,27 @@ export function isRelatedInfoRole(role: ContentPageRole | undefined): boolean {
   return role === 'COMMENTARY' || role === 'HUB' || role === 'LISTING';
 }
 
-export function objectFidelity(role: ContentPageRole | undefined): ObjectFidelity {
+export function objectFidelity(role: ContentPageRole | undefined, intent?: DiscoverIntent): ObjectFidelity {
   if (isPrimaryContentRole(role)) return 'PRIMARY_CONTENT';
+  const mediaStrict = intent
+    ? intent.requestedMedia.filter((row) => row === 'video' || row === 'audio' || row === 'image')
+    : [];
+  if (
+    role === 'COMMENTARY' &&
+    (!intent || intent.intent === 'consume') &&
+    mediaStrict.length === 0
+  ) {
+    return 'PRIMARY_CONTENT';
+  }
   if (isRelatedInfoRole(role)) return 'ABOUT_CONTENT';
   return 'UNRELATED';
 }
 
 export function strictRequestedTypes(intent: DiscoverIntent): string[] {
   if (intent.intent !== 'consume') return [];
-  const media = intent.requestedMedia.filter((row) => row === 'video' || row === 'audio' || row === 'image');
-  const wantsArticle = intent.requestedMedia.includes('article');
-  if (media.length && !wantsArticle) return media;
-  return [];
+  return intent.requestedMedia.filter(
+    (row) => row === 'article' || row === 'video' || row === 'audio' || row === 'image',
+  );
 }
 
 export function rolesFromModelText(text: string, ids: string[]): Map<string, ContentPageRole> {
@@ -271,15 +281,17 @@ export async function classifyCandidateRoles(input: {
   const system = [
     '你在判断每个候选相对「用户这次搜索」的对象忠实度。只输出 JSON：{"roles":[{"id":"","role":""}]}。',
     'role 只能是 PRIMARY_CONTENT、SERIES、EPISODE、HUB、LISTING、COMMENTARY、UNRELATED。',
-    'PRIMARY_CONTENT：用户这次要消费的对象本身，例如要看的那条视频、要读的那篇文章、要听的那期节目。',
+    'PRIMARY_CONTENT：相对用户这次请求要消费的对象本身。未点名媒介时，主题匹配的文章、视频、图片、音频都是 PRIMARY_CONTENT；不要因为是 Article 就标 COMMENTARY。',
     'SERIES：一部作品或播客的主页/详情页。',
     'EPISODE：可直接看/读/听的一集、一章或一条内容。',
     'HUB：平台频道、分类、专题入口、网站首页。',
     'LISTING：榜单、集合、搜索页、把多部作品打包推荐的页面。',
-    'COMMENTARY：候选不是对象本身，而是在谈论该对象的新闻、行业分析、盘点或介绍。',
+    'COMMENTARY：候选不是这次要消费的对象，而是在谈论该对象。仅当用户点名要视频/图片/音频时，介绍它们的文章才是 COMMENTARY。',
     'UNRELATED：主题不在这次搜索范围内。即使它可能符合用户平时其它兴趣，也标 UNRELATED。',
-    '用户要视频时：具体视频是 PRIMARY_CONTENT；介绍/盘点视频的文章是 COMMENTARY 或 LISTING；其它主题是 UNRELATED。',
-    '用户要读文章时：那篇要读的文章是 PRIMARY_CONTENT，不要因为是文章就标 COMMENTARY。',
+    '用户要视频：具体视频是 PRIMARY_CONTENT；《最佳视频榜单》文章是 LISTING/COMMENTARY。',
+    '用户要摄影作品：具体照片/图集是 PRIMARY_CONTENT；盘点文章是 COMMENTARY。',
+    '用户要播客：podcast episode / audio 是 PRIMARY_CONTENT；十大播客推荐文章是 COMMENTARY。',
+    '用户要「AI 内容」且未点名媒介：一篇具体 AI 文章是 PRIMARY_CONTENT。',
     '不要看域名做决定。不要输出 score。不要用用户长期偏好扩大范围。',
   ].join('\n');
   const user = JSON.stringify({

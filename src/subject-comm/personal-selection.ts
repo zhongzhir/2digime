@@ -98,6 +98,7 @@ export async function selectNetworkItems(input: {
     title: item.content.title,
     text: item.content.text,
     ...(item.content.url ? { url: item.content.url } : {}),
+    ...(item.content.contentType ? { contentType: item.content.contentType } : {}),
     publisherSubjectId: item.publisherSubjectId,
     createdAt: item.createdAt,
   }));
@@ -107,6 +108,7 @@ export async function selectNetworkItems(input: {
     '只输出 JSON：{"decisions":[{"itemId":"...","decision":"show"|"ignore","reason":"..."}]}。',
     '必须覆盖输入的每一条 itemId，不得增删。reason 用一句中文，不超过 40 字，普通人能懂，不要 score。',
     '优化 USER VALUE：相关、有用、质量、新鲜、符合明确偏好与当前目标、保持多样与必要新奇。',
+    '候选可能带 contentType（article/video/image/audio）。在相关和质量足够时，不要把视频、图片、音频全部 ignore 只留文章。不要为凑媒介类型而选低质或不相关项，也不要使用固定比例。',
     '禁止优化停留时长、点击率、打开次数或让人一直刷。不要只重复一个主题，也不要为多样性塞低质内容。',
     'show：对此人现在有具体价值。ignore：关系弱、越界、低质、或刚看过不宜再当新内容。',
     '若提供了用户明确的内容偏好指令，必须遵守：加推/关注应倾向 show，少推/屏蔽应 ignore。',
