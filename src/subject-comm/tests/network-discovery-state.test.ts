@@ -8,6 +8,7 @@ test('classifySearchFailure distinguishes auth from temporary errors', () => {
   assert.equal(classifySearchFailure(Object.assign(new Error('forbidden'), { status: 403 })), 'AUTH_FAILED');
   assert.equal(classifySearchFailure(new ModelHttpError('timeout', 'slow', 0)), 'TEMPORARY_ERROR');
   assert.equal(classifySearchFailure(new ModelHttpError('server_error', 'boom', 503)), 'TEMPORARY_ERROR');
+  assert.equal(classifySearchFailure(Object.assign(new Error('quota'), { status: 429, kind: 'quota' })), 'RATE_LIMITED');
 });
 
 test('humanNetworkNotice never exposes reason codes and reflects real network state', () => {
@@ -25,6 +26,10 @@ test('humanNetworkNotice never exposes reason codes and reflects real network st
   );
   assert.match(
     humanNetworkNotice({ networking: 'TEMPORARY_ERROR', hasCachedCards: true, hasLocalItems: true }),
+    /暂时无法获取新内容/,
+  );
+  assert.match(
+    humanNetworkNotice({ networking: 'RATE_LIMITED', hasCachedCards: true, hasLocalItems: true }),
     /暂时无法获取新内容/,
   );
   const emptyLocal = humanNetworkNotice({

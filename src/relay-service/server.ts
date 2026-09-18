@@ -19,9 +19,13 @@ import {
   MemoryNetworkItemStore,
   type NetworkItemStore,
 } from './network-item-store';
+import { createGeminiSearchConnector } from '../capability/adapters/gemini-search';
+import { webDiscoveryProviderFromConnector } from '../capability/web-discovery';
+import { createWebDiscoveryGateway } from './web-discovery-gateway';
 
 export { FileNetworkItemStore, MemoryNetworkItemStore } from './network-item-store';
 export type { NetworkItemStore } from './network-item-store';
+export { createWebDiscoveryGateway } from './web-discovery-gateway';
 
 export interface RelayStoredEnvelope {
   version: 1;
@@ -149,10 +153,20 @@ export class FileRelayStore implements RelayStore {
   }
 }
 
-function readBody(req: IncomingMessage): Promise<string> {
+function readBody(req: IncomingMessage, maxBytes = 1_000_000): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on('data', (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
+    let size = 0;
+    req.on('data', (c) => {
+      const buf = Buffer.isBuffer(c) ? c : Buffer.from(c);
+      size += buf.length;
+      if (size > maxBytes) {
+        reject(Object.assign(new Error('body_too_large'), { code: 'body_too_large' }));
+        req.destroy();
+        return;
+      }
+      chunks.push(buf);
+    });
     req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
     req.on('error', reject);
   });
@@ -173,23 +187,72 @@ function logSafe(event: string, fields: Record<string, string | number | boolean
   console.log(line);
 }
 
+function resolveManagedWebDiscoveryGateway(env: NodeJS.ProcessEnv = process.env) {
+  const apiKey = String(env.WEB_DISCOVERY_PROVIDER_API_KEY || env.GEMINI_API_KEY || '').trim();
+  if (!apiKey) return createWebDiscoveryGateway({ log: logSafe });
+  const model = String(env.WEB_DISCOVERY_PROVIDER_MODEL || env.GEMINI_SEARCH_MODEL || env.GEMINI_MODEL || '').trim();
+  const connector = createGeminiSearchConnector({
+    apiKey,
+    ...(model ? { model } : {}),
+  });
+  return createWebDiscoveryGateway({
+    provider: webDiscoveryProviderFromConnector(connector, 'gemini'),
+    log: logSafe,
+  });
+}
+
 export function createRelayServer(options: {
   store: RelayStore;
   networkItems?: NetworkItemStore;
   host?: string;
   port?: number;
   defaultTtlMs?: number;
+  webDiscovery?: ReturnType<typeof createWebDiscoveryGateway>;
 }): { server: ReturnType<typeof createServer>; start: () => Promise<{ host: string; port: number }> } {
   const host = options.host || process.env.RELAY_HOST || '127.0.0.1';
   const port = options.port ?? Number(process.env.RELAY_PORT || 8787);
   const defaultTtlMs = options.defaultTtlMs ?? 7 * 24 * 3600 * 1000;
   const networkItems = options.networkItems || new MemoryNetworkItemStore();
+  const webDiscovery = options.webDiscovery || null;
 
   const server = createServer(async (req, res) => {
     try {
       const url = new URL(req.url || '/', `http://${host}:${port}`);
       if (req.method === 'GET' && url.pathname === '/health') {
-        sendJson(res, 200, { ok: true, role: 'relay', plaintext: false, publicCandidates: true });
+        sendJson(res, 200, {
+          ok: true,
+          role: 'relay',
+          plaintext: false,
+          publicCandidates: true,
+          webDiscovery: !!webDiscovery,
+        });
+        return;
+      }
+      if (req.method === 'POST' && url.pathname === '/v1/web-discovery/search') {
+        if (!webDiscovery) {
+          sendJson(res, 404, { ok: false, error: 'not_found' });
+          return;
+        }
+        let raw = '';
+        try {
+          raw = await readBody(req, 8_192);
+        } catch {
+          sendJson(res, 413, { ok: false, status: 'PROVIDER_ERROR', error: 'body_too_large' });
+          return;
+        }
+        let body: unknown = {};
+        try {
+          body = JSON.parse(raw || '{}');
+        } catch {
+          sendJson(res, 400, { ok: false, status: 'PROVIDER_ERROR', error: 'invalid_json' });
+          return;
+        }
+        const token = String(req.headers['x-install-capability-token'] || '').trim();
+        const result = await webDiscovery.search({
+          body,
+          installToken: token,
+        });
+        sendJson(res, result.statusCode, result.body);
         return;
       }
       if (req.method === 'POST' && url.pathname === '/v1/network-items') {
@@ -322,7 +385,11 @@ export function createRelayServer(options: {
     server,
     start: () =>
       new Promise((resolve, reject) => {
-        server.listen(port, host, () => resolve({ host, port }));
+        server.listen(port, host, () => {
+          const addr = server.address();
+          const bound = typeof addr === 'object' && addr ? addr.port : port;
+          resolve({ host, port: bound });
+        });
         server.on('error', reject);
       }),
   };
@@ -334,7 +401,11 @@ async function main(): Promise<void> {
   await fs.mkdir(dataDir, { recursive: true });
   const store = new FileRelayStore(dataDir);
   const networkItems = new FileNetworkItemStore(dataDir);
-  const { start } = createRelayServer({ store, networkItems });
+  const { start } = createRelayServer({
+    store,
+    networkItems,
+    webDiscovery: resolveManagedWebDiscoveryGateway(),
+  });
   const addr = await start();
   logSafe('relay_listen', { host: addr.host, port: addr.port, dataDir });
 }

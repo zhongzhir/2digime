@@ -7,6 +7,7 @@ export const NETWORK_DISCOVERY_CODES = [
   'DISABLED',
   'NOT_CONFIGURED',
   'AUTH_FAILED',
+  'RATE_LIMITED',
   'TEMPORARY_ERROR',
 ] as const;
 
@@ -30,11 +31,16 @@ export const FEED_REASON_CODES = [
 export type FeedReasonCode = (typeof FEED_REASON_CODES)[number];
 
 export function classifySearchFailure(err: unknown): Exclude<NetworkDiscoveryCode, 'AVAILABLE' | 'DISABLED' | 'NOT_CONFIGURED'> {
-  const rec = err as { kind?: string; status?: number; message?: string };
-  const status = Number(rec.status || 0);
+  const rec = err as { kind?: string; status?: number; httpStatus?: number; message?: string };
+  const status = Number(rec.status || rec.httpStatus || 0);
   const kind = String(rec.kind || '').toLowerCase();
+  const labeled = String((err as { status?: string }).status || '').toUpperCase();
   const message = String(rec.message || err || '').toLowerCase();
+  if (labeled === 'RATE_LIMITED' || kind === 'quota' || status === 429 || /rate.?limit|quota/.test(message)) {
+    return 'RATE_LIMITED';
+  }
   if (
+    labeled === 'AUTH_FAILED' ||
     kind === 'auth' ||
     kind === 'unauthorized' ||
     status === 401 ||
@@ -52,7 +58,11 @@ export function humanNetworkNotice(input: {
   hasLocalItems: boolean;
 }): string {
   if (input.hasCachedCards) {
-    if (input.networking === 'AUTH_FAILED' || input.networking === 'TEMPORARY_ERROR') {
+    if (
+      input.networking === 'AUTH_FAILED' ||
+      input.networking === 'TEMPORARY_ERROR' ||
+      input.networking === 'RATE_LIMITED'
+    ) {
       return '暂时无法获取新内容，可以稍后再试或检查联网设置。';
     }
     return '';
@@ -60,7 +70,7 @@ export function humanNetworkNotice(input: {
   if (input.networking === 'AUTH_FAILED') {
     return '联网发现暂时不可用，可以到设置中检查连接。';
   }
-  if (input.networking === 'TEMPORARY_ERROR') {
+  if (input.networking === 'TEMPORARY_ERROR' || input.networking === 'RATE_LIMITED') {
     return '暂时无法获取新内容，可以稍后再试或检查联网设置。';
   }
   if (input.networking === 'DISABLED' || input.networking === 'NOT_CONFIGURED') {

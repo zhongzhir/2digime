@@ -206,7 +206,12 @@ import {
 import { RelayClient } from '../subject-comm/relay-client';
 import { FileNetworkItemStore } from '../relay-service/network-item-store';
 import { createGeminiSearchConnector } from '../capability/adapters/gemini-search';
-import { resolveGeminiSearchCredential } from '../capability/search-capability-discovery';
+import { createManagedWebDiscoveryConnector } from '../capability/web-discovery-client';
+import {
+  resolveGeminiSearchCredential,
+  resolveWebDiscoveryGatewayUrl,
+  resolveWebDiscoveryPath,
+} from '../capability/search-capability-discovery';
 import type { ChatCompleteFn } from '../subject-core/structured-distill';
 import type { NetworkItem } from '../subject-comm/network-item';
 import {
@@ -282,11 +287,17 @@ export interface DigitalMeRuntimeOptions {
    */
   searchCapability?: boolean;
   /**
-   * Gemini 搜索凭据（SecretStore 解析结果）。无值则只回退环境变量。
-   * 无凭据时不注册 Gemini search。
+   * Gemini 搜索凭据（SecretStore 解析结果）。仅高级 BYOK 路径使用。
+   * 无凭据时不注册 Gemini BYOK search。
    */
   geminiSearchApiKey?: string | null;
   geminiSearchModel?: string | null;
+  /** 普通用户默认 managed；byok 仅高级设置。 */
+  webDiscoveryPath?: 'managed' | 'byok';
+  webDiscoveryEnabled?: boolean;
+  webDiscoveryGatewayUrl?: string | null;
+  webDiscoveryInstallToken?: string | null;
+  webDiscoveryFetch?: typeof fetch;
   /**
    * 搜索能力单次 attempt 的 job 级 deadline（毫秒）。测试可缩短。
    */
@@ -676,11 +687,12 @@ export class DigitalMeRuntime {
     if (process.env.DIGITALME_V2_ELECTRON_TEST === '1' && process.env.DIGITALME_V2_OPEN_WEB_DISCOVERY !== '1') {
       return 'DISABLED';
     }
-    if (!this.resolveContentSearch()) return 'NOT_CONFIGURED';
-    if (this.lastNetworkCode === 'AUTH_FAILED' || this.lastNetworkCode === 'TEMPORARY_ERROR') {
+    if (this.options.webDiscoveryEnabled === false) return 'DISABLED';
+    if (this.lastNetworkCode === 'AUTH_FAILED' || this.lastNetworkCode === 'RATE_LIMITED' || this.lastNetworkCode === 'TEMPORARY_ERROR') {
       return this.lastNetworkCode;
     }
-    return 'AVAILABLE';
+    if (this.resolveContentSearch() || this.resolveOpenMediaFetch()) return 'AVAILABLE';
+    return 'NOT_CONFIGURED';
   }
 
   private resolveOpenMediaFetch(): typeof safePublicHttpGet | undefined {
@@ -710,25 +722,56 @@ export class DigitalMeRuntime {
     | ((query: string) => Promise<Array<{ title: string; url: string; snippet?: string }>>)
     | undefined {
     if (this.options.contentSearch) return this.options.contentSearch;
-    const gem = resolveGeminiSearchCredential(process.env, {
-      ...(this.options.geminiSearchApiKey ? { apiKey: this.options.geminiSearchApiKey } : {}),
-      ...(this.options.geminiSearchModel ? { model: this.options.geminiSearchModel } : {}),
+    const gem = resolveGeminiSearchCredential(
+      process.env.NODE_TEST_CONTEXT ? {} : process.env,
+      {
+        ...(this.options.geminiSearchApiKey ? { apiKey: this.options.geminiSearchApiKey } : {}),
+        ...(this.options.geminiSearchModel ? { model: this.options.geminiSearchModel } : {}),
+      },
+    );
+    const gatewayUrl = resolveWebDiscoveryGatewayUrl(
+      process.env.NODE_TEST_CONTEXT ? {} : process.env,
+      { gatewayUrl: this.options.webDiscoveryGatewayUrl },
+    );
+    const path = resolveWebDiscoveryPath({
+      path: this.options.webDiscoveryPath,
+      gatewayUrl,
+      byokKey: gem.apiKey,
     });
-    if (!gem.apiKey) return undefined;
-    const connector = createGeminiSearchConnector({
-      apiKey: gem.apiKey,
-      ...(gem.model ? { model: gem.model } : {}),
-    });
-    return async (query: string) => {
-      const sources = await connector.search(query);
-      return sources
-        .filter((row) => String(row.url || '').trim())
-        .map((row) => ({
-          title: String(row.title || row.url),
-          url: String(row.url),
-          ...(row.snippet ? { snippet: row.snippet } : {}),
-        }));
-    };
+    if (path === 'byok' && gem.apiKey) {
+      const connector = createGeminiSearchConnector({
+        apiKey: gem.apiKey,
+        ...(gem.model ? { model: gem.model } : {}),
+      });
+      return async (query: string) => {
+        const sources = await connector.search(query);
+        return sources
+          .filter((row) => String(row.url || '').trim())
+          .map((row) => ({
+            title: String(row.title || row.url),
+            url: String(row.url),
+            ...(row.snippet ? { snippet: row.snippet } : {}),
+          }));
+      };
+    }
+    if (path === 'managed' && gatewayUrl) {
+      const connector = createManagedWebDiscoveryConnector({
+        gatewayUrl,
+        installToken: String(this.options.webDiscoveryInstallToken || '').trim() || 'missing-install-token',
+        ...(this.options.webDiscoveryFetch ? { fetchImpl: this.options.webDiscoveryFetch } : {}),
+      });
+      return async (query: string) => {
+        const sources = await connector.search(query);
+        return sources
+          .filter((row) => String(row.url || '').trim())
+          .map((row) => ({
+            title: String(row.title || row.url),
+            url: String(row.url),
+            ...(row.snippet ? { snippet: row.snippet } : {}),
+          }));
+      };
+    }
+    return undefined;
   }
 
   private resolveContentChat(): ChatCompleteFn | null {
@@ -3443,13 +3486,24 @@ export class DigitalMeRuntime {
     if (this.options.searchCapability !== false) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { discoverSearchCapabilities } = require('../capability/search-capability-discovery') as typeof import('../capability/search-capability-discovery');
-      for (const adapter of discoverSearchCapabilities(process.env, {
+      const searchEnv = process.env.NODE_TEST_CONTEXT
+        ? { ...process.env, DIGITALME_WEB_DISCOVERY_URL: '' }
+        : process.env;
+      for (const adapter of discoverSearchCapabilities(searchEnv, {
         ...(this.options.geminiSearchApiKey
           ? { apiKey: this.options.geminiSearchApiKey }
           : {}),
         ...(this.options.geminiSearchModel
           ? { model: this.options.geminiSearchModel }
           : {}),
+        ...(this.options.webDiscoveryPath ? { webDiscoveryPath: this.options.webDiscoveryPath } : {}),
+        ...(this.options.webDiscoveryGatewayUrl
+          ? { webDiscoveryGatewayUrl: this.options.webDiscoveryGatewayUrl }
+          : {}),
+        ...(this.options.webDiscoveryInstallToken
+          ? { webDiscoveryInstallToken: this.options.webDiscoveryInstallToken }
+          : {}),
+        ...(this.options.webDiscoveryFetch ? { webDiscoveryFetch: this.options.webDiscoveryFetch } : {}),
       })) {
         registry.register(adapter);
       }

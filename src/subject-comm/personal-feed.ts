@@ -149,7 +149,7 @@ export async function proposeDiscoveryIntents(input: {
     '只输出 JSON：{"intents":[{"topic":"","contentTypes":[],"purpose":"","freshness":"current|classic|unspecified","explorationMode":"core|adjacent|explore","searchQuery":""}]}。',
     '2 到 3 条。尽量包含一个核心方向、一个相邻方向、一个探索方向。不要写成固定栏目表。',
     'contentTypes 只允许 article / video / image / audio。在质量允许时，这一批可以包含不同媒介；不要默认三条都只搜文章，也不要写成固定比例。',
-    'searchQuery 是发给公开搜索或开放媒体现货目录的最短主题词。video 指向可看的具体视频，image 指向具体图片作品，audio 指向可听的节目，article 指向可读正文。不要指定必须去哪个网站，不要搜十大盘点。',
+    'searchQuery 是发给公开搜索或开放媒体现货目录的最短必要主题词。只写公开主题，不要写成对某个人的描述。video 指向可看的具体视频，image 指向具体图片作品，audio 指向可听的节目，article 指向可读正文。不要指定必须去哪个网站，不要搜十大盘点。',
     '不要包含姓名、住址、账号、密钥。不要把完整数字之我、事实列表或偏好向量写进 searchQuery。',
     '除非用户明确搜索过、明确关注或明确写了内容偏好，不要把医疗/疾病、政治立场、宗教、性生活或其他高度敏感事实变成搜索词。',
     '优化目标是对人有用、相关、质量高、有必要新鲜度与多样性，而不是延长使用时间或增加打开次数。',
@@ -465,27 +465,6 @@ export async function ensurePersonalFeed(input: {
         : {}),
     });
     const queries = intents.map((row) => row.searchQuery).filter(Boolean);
-    if (input.searchWeb) {
-      for (const query of queries.slice(0, 3)) {
-        searchAttempted = true;
-        try {
-          const hits = await input.searchWeb(query);
-          if (hits.length) replenished = true;
-          if (input.ingestHit) {
-            for (const hit of hits.slice(0, 6)) {
-              try {
-                await input.ingestHit(hit);
-              } catch {
-                /* 单条摄入失败不阻断补量 */
-              }
-            }
-          }
-        } catch (err) {
-          networking = classifySearchFailure(err);
-          break;
-        }
-      }
-    }
     if (input.fetchOpenMedia) {
       const topic = queries[0] || '';
       for (const row of intents.slice(0, 3)) {
@@ -536,6 +515,29 @@ export async function ensurePersonalFeed(input: {
         }
       }
     }
+    if (input.reloadItems) items = (await input.reloadItems()).filter((item) => isConsumableItem(item, now) && !blocked(item, prefs));
+    const stillShort = items.filter((item) => !shown.has(item.itemId) && !opened.has(item.itemId)).length < MIN_FEED;
+    if (input.searchWeb && stillShort) {
+      for (const query of queries.slice(0, 2)) {
+        searchAttempted = true;
+        try {
+          const hits = await input.searchWeb(query);
+          if (hits.length) replenished = true;
+          if (input.ingestHit) {
+            for (const hit of hits.slice(0, 6)) {
+              try {
+                await input.ingestHit(hit);
+              } catch {
+                /* 单条摄入失败不阻断补量 */
+              }
+            }
+          }
+        } catch (err) {
+          networking = classifySearchFailure(err);
+          break;
+        }
+      }
+    }
     mark('SEARCH_DONE', searchAttempted ? 1 : 0);
     if (input.reloadItems) items = (await input.reloadItems()).filter((item) => isConsumableItem(item, now) && !blocked(item, prefs));
     else items = items.filter((item) => isConsumableItem(item, now) && !blocked(item, prefs));
@@ -561,7 +563,7 @@ export async function ensurePersonalFeed(input: {
           ? 'NETWORK_NOT_CONFIGURED'
           : networking === 'AUTH_FAILED'
             ? 'NETWORK_AUTH_FAILED'
-            : networking === 'TEMPORARY_ERROR'
+            : networking === 'TEMPORARY_ERROR' || networking === 'RATE_LIMITED'
               ? 'NETWORK_TEMPORARY_ERROR'
               : items.length
                 ? 'NO_CONSUMABLE_CANDIDATES'
