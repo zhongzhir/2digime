@@ -70,7 +70,12 @@ test('Electron Discover cold start uses live Gemini + DeepSeek without specifyin
     while (Date.now() < deadline) {
       view = (await harness.page.evaluate(`(async () => {
         const result = await window.digitalMe.invoke('content', { action: 'discover' });
-        return result && result.view ? result.view : {};
+        let next = result && result.view ? result.view : {};
+        if (next.replenishing) {
+          const filled = await window.digitalMe.invoke('content', { action: 'replenish' });
+          next = filled && filled.view ? filled.view : next;
+        }
+        return next;
       })()`)) as typeof view;
       if ((view.cards || []).some((card) => /^https:\/\//i.test(String(card.url || '')))) break;
       await harness.page.waitForTimeout(3000);

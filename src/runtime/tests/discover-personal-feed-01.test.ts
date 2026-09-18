@@ -84,7 +84,12 @@ test('Discover command keeps last feed on search auth failure and does not rewri
   const before = await hashSelf(pkgDir);
   const first = await bus.invoke('content', { action: 'discover' });
   assert.ok(first.view.cards.length >= 4, 'expected a personal feed from local directory');
-  assert.equal(first.view.reasonCode === 'CACHED_FEED' || first.view.reasonCode === 'REPLENISHED', true);
+  assert.equal(
+    first.view.reasonCode === 'CACHED_FEED' ||
+      first.view.reasonCode === 'REPLENISHED' ||
+      first.view.reasonCode === 'LOCAL_DIRECTORY',
+    true,
+  );
   failSearch = true;
   const refreshed = await bus.invoke('content', { action: 'refresh' });
   assert.ok(refreshed.view.cards.length >= 1);
@@ -113,5 +118,9 @@ test('UI empty copy is projected from notice, not a hardcoded Settings lie', asy
   assert.match(js, /emptyText.textContent/);
   assert.equal(js.includes('view.reasonCode'), false);
   assert.match(js, /action: 'refresh'/);
+  assert.match(js, /action: 'replenish'/);
+  assert.match(js, /兔机米正在准备一些值得看的内容/);
+  assert.equal(js.includes('目前还没有可展示的内容'), false);
+  assert.equal(html.includes('目前还没有可展示的内容'), false);
   assert.match(js, /resetRecent/);
 });

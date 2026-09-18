@@ -66,7 +66,10 @@ test('Discover cold start uses search queries, not Digital Self, and indexes web
   await bus.invoke('subject.createPackage', { displayName: '公开网', targetDir: pkgDir });
   const overview = await bus.invoke('subject.getOverview', {});
   await writeDigitalSelf(pkgDir, selfOf(overview.subjectId));
-  const discovered = await bus.invoke('content', { action: 'discover' });
+  const opened = await bus.invoke('content', { action: 'discover' });
+  assert.equal(opened.view.replenishing, true);
+  assert.equal(searchQueries.length, 0);
+  const discovered = await bus.invoke('content', { action: 'replenish' });
   assert.ok(searchQueries.length >= 1);
   assert.equal(searchQueries.every((row) => !/核聚变研究进展/.test(row)), true);
   const store = new FileNetworkItemStore(path.join(pkgDir, 'content'));

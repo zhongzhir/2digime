@@ -22,6 +22,7 @@ export const FEED_REASON_CODES = [
   'MODEL_SELECTION_EMPTY',
   'AI_NOT_CONNECTED',
   'CACHED_FEED',
+  'LOCAL_DIRECTORY',
   'REPLENISHED',
   'CURRENT_INTENT',
 ] as const;
@@ -66,6 +67,6 @@ export function humanNetworkNotice(input: {
     if (input.hasLocalItems) return '目前还没有可展示的内容。';
     return '目前还没有可展示的内容。开启联网发现后，兔机米可以从公开网络帮你找。';
   }
-  if (!input.hasLocalItems) return '目前还没有可展示的内容。';
-  return '这次没有找到可直接消费的内容。';
+  if (!input.hasLocalItems) return '这次没有找到可以直接看的内容。';
+  return '这次没有找到可以直接看的内容。';
 }

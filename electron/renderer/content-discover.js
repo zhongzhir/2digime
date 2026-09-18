@@ -262,8 +262,20 @@
   function applyView(view) {
     const incoming = (view && view.cards) || [];
     const notice = friendlyNotice(view && view.notice);
-    if (!incoming.length && lastCards.length && /暂时无法|检查连接|检查联网/.test(notice)) {
-      renderView(Object.assign({}, view || {}, { cards: lastCards, relatedCards: lastRelated, notice: notice }));
+    const replenishing = !!(view && view.replenishing);
+    if (
+      !incoming.length &&
+      lastCards.length &&
+      (replenishing || /暂时无法|检查连接|检查联网|没有找到可以直接看/.test(notice))
+    ) {
+      renderView(
+        Object.assign({}, view || {}, {
+          cards: lastCards,
+          relatedCards: lastRelated,
+          notice: notice,
+          replenishing: replenishing,
+        }),
+      );
       return;
     }
     renderView(view);
@@ -302,18 +314,23 @@
     if (notice) {
       notice.textContent = lastCards.length ? friendlyNotice(view && view.notice) : '';
     }
-    setStatus('');
+    const replenishing = !!(view && view.replenishing);
+    if (replenishing && !lastCards.length) {
+      setStatus('兔机米正在准备一些值得看的内容……');
+    } else {
+      setStatus('');
+    }
     if (list) {
       list.innerHTML = '';
       for (const card of lastCards) list.appendChild(renderCard(card));
     }
     renderRelated(lastRelated);
     const emptyText = $('content-discover-empty-text');
-    if (emptyText && !lastCards.length) {
+    if (emptyText && !lastCards.length && !replenishing) {
       emptyText.textContent =
-        friendlyNotice(view && view.notice) || '目前还没有可展示的内容。';
+        friendlyNotice(view && view.notice) || '这次没有找到可以直接看的内容。';
     }
-    if (empty) empty.hidden = lastCards.length > 0;
+    if (empty) empty.hidden = lastCards.length > 0 || replenishing;
     const back = $('btn-discover-personal');
     if (back) back.hidden = (view && view.feedMode) !== 'intent';
     const prefs = (view && view.preferences) || [];
@@ -338,10 +355,15 @@
   async function refresh() {
     const client = api();
     if (!client || typeof client.invoke !== 'function') return;
-    if (!lastCards.length) setStatus('兔机米正在帮你找些值得看的内容……');
+    if (!lastCards.length) setStatus('兔机米正在准备一些值得看的内容……');
     try {
       const result = await client.invoke('content', { action: 'discover' });
       applyView(result && result.view);
+      if (result && result.view && result.view.replenishing) {
+        if (!lastCards.length) setStatus('兔机米正在准备一些值得看的内容……');
+        const next = await client.invoke('content', { action: 'replenish' });
+        applyView(next && next.view);
+      }
     } catch {
       setStatus('');
       if (!lastCards.length) {

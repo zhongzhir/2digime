@@ -51,6 +51,10 @@ export interface DiscoverView {
   reasonCode?: string;
   feedMode?: 'personal' | 'intent';
   networking?: string;
+  /** 本地已给出第一屏，后台仍在补量。UI 不得在此时显示空态。 */
+  replenishing?: boolean;
+  /** 内部供给时间线，UI 不得展示。 */
+  supplyTrace?: Array<{ event: string; ms: number; count?: number }>;
 }
 
 export function cardFromNetworkItem(

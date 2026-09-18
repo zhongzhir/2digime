@@ -480,6 +480,10 @@ export class DigitalMeRuntime {
       return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reuse') };
     }
 
+    if (action === 'replenish') {
+      return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'replenish') };
+    }
+
     if (action === 'refresh') {
       return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'refresh') };
     }
@@ -542,7 +546,7 @@ export class DigitalMeRuntime {
     packageRoot: string,
     subjectId: string,
     relayUrl?: string,
-    mode: 'open' | 'refresh' | 'reuse' = 'open',
+    mode: 'open' | 'refresh' | 'reuse' | 'replenish' = 'open',
   ): Promise<DiscoverView> {
     const preferences = await this.contentPreferenceRows(packageRoot);
     const self = await readDigitalSelf(packageRoot, subjectId, nowIso());

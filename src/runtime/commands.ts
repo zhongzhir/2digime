@@ -1068,6 +1068,7 @@ export interface CommandMap {
     input: {
       action:
         | 'discover'
+        | 'replenish'
         | 'refresh'
         | 'resetRecent'
         | 'asked'

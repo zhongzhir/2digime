@@ -33,5 +33,5 @@ test('humanNetworkNotice never exposes reason codes and reflects real network st
     hasLocalItems: true,
   });
   assert.equal(/NETWORK_|CACHED_FEED|AUTH_FAILED/.test(emptyLocal), false);
-  assert.match(emptyLocal, /没有找到可直接消费的内容/);
+  assert.match(emptyLocal, /没有找到可以直接看的内容/);
 });

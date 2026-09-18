@@ -21,6 +21,7 @@ import {
 import type { ExternalSeekHit } from './content-seek';
 import { isDomainLikeTitle, isGenericHubUrl } from './discover-intent';
 import type { ContentPreferenceDirective } from './content-preferences';
+import { isNetworkItemExpired } from './network-item';
 import {
   classifySearchFailure,
   humanNetworkNotice,
@@ -182,6 +183,8 @@ function viewOf(input: {
   feedMode: 'personal' | 'intent';
   networking: NetworkDiscoveryCode;
   lead?: string;
+  replenishing?: boolean;
+  supplyTrace?: Array<{ event: string; ms: number; count?: number }>;
 }): DiscoverView {
   return {
     headline: '发现',
@@ -193,10 +196,13 @@ function viewOf(input: {
     reasonCode: input.reasonCode,
     feedMode: input.feedMode,
     networking: input.networking,
+    ...(input.replenishing ? { replenishing: true } : {}),
+    ...(input.supplyTrace && input.supplyTrace.length ? { supplyTrace: input.supplyTrace } : {}),
   };
 }
 
-function isConsumableItem(item: NetworkItem): boolean {
+function isConsumableItem(item: NetworkItem, nowIso?: string): boolean {
+  if (nowIso && isNetworkItemExpired(item, nowIso)) return false;
   if (!String(item.content.title || '').trim()) return false;
   if (isDomainLikeTitle(item.content.title, item.content.url)) return false;
   if (item.content.url && isGenericHubUrl(item.content.url)) return false;
@@ -219,17 +225,50 @@ async function resolveCards(
   ids: string[] | undefined,
   items: NetworkItem[],
   getItem?: (itemId: string) => Promise<NetworkItem | undefined>,
+  nowIso?: string,
 ): Promise<DiscoverCard[]> {
   if (!ids?.length) return [];
   const byId = new Map(items.map((item) => [item.itemId, item]));
   const cards: DiscoverCard[] = [];
   for (const id of ids) {
     const item = byId.get(id) || (getItem ? await getItem(id) : undefined);
-    if (!item || !isConsumableItem(item)) continue;
+    if (!item || !isConsumableItem(item, nowIso)) continue;
     const card = cardFromNetworkItem(item, '继续看你这边已经挑出的内容。', 'directory');
     if (isConcreteContentCard(card)) cards.push(card);
   }
   return cards;
+}
+
+function directoryCards(
+  items: NetworkItem[],
+  prefs: ContentPreferenceDirective[],
+  limit: number,
+  nowIso?: string,
+): DiscoverCard[] {
+  const cards: DiscoverCard[] = [];
+  for (const item of items) {
+    if (!isConsumableItem(item, nowIso) || blocked(item, prefs)) continue;
+    const card = cardFromNetworkItem(item, '来自你这边已经有的内容。', 'directory');
+    if (!isConcreteContentCard(card)) continue;
+    cards.push(card);
+    if (cards.length >= limit) break;
+  }
+  return cards;
+}
+
+function canSearch(input: {
+  searchWeb?: (query: string) => Promise<ExternalSeekHit[]>;
+  chatComplete?: ChatCompleteFn;
+  model?: { baseUrl: string; model: string; apiKey?: string };
+  networking: NetworkDiscoveryCode;
+}): boolean {
+  return !!(
+    input.searchWeb &&
+    input.chatComplete &&
+    input.model &&
+    input.networking !== 'DISABLED' &&
+    input.networking !== 'NOT_CONFIGURED'
+  );
 }
 
 function cacheFresh(snapshot: FeedSnapshot | undefined, nowMs: number): boolean {
@@ -254,62 +293,145 @@ export async function ensurePersonalFeed(input: {
   ingestHit?: (hit: ExternalSeekHit) => Promise<NetworkItem[]>;
   reloadItems?: () => Promise<NetworkItem[]>;
   getItem?: (itemId: string) => Promise<NetworkItem | undefined>;
-  mode: 'open' | 'refresh' | 'reuse';
+  mode: 'open' | 'refresh' | 'reuse' | 'replenish';
   now?: string;
 }): Promise<{ view: DiscoverView; reasonCode: FeedReasonCode }> {
   const now = input.now || new Date().toISOString();
   const nowMs = Date.parse(now) || Date.now();
+  const startedAt = Date.now();
+  const supplyTrace: Array<{ event: string; ms: number; count?: number }> = [];
+  const mark = (event: string, count?: number) => {
+    supplyTrace.push(count === undefined ? { event, ms: Date.now() - startedAt } : { event, ms: Date.now() - startedAt, count });
+  };
   const prefs = input.preferenceRows || [];
   const recent = input.recentEvents || [];
   const cache = await readCache(input.packageRoot);
-  const cachedCards = await resolveCards(cache.personal?.itemIds, input.items, input.getItem);
-  const lastCards = await resolveCards(cache.lastView?.itemIds, input.items, input.getItem);
+  const cachedCards = await resolveCards(cache.personal?.itemIds, input.items, input.getItem, now);
+  const lastCards = await resolveCards(cache.lastView?.itemIds, input.items, input.getItem, now);
   let networking = input.networking;
   const noticeFor = (reasonCode: FeedReasonCode, hasCards: boolean, extra = ''): string => {
     if (extra) return extra;
-    if (hasCards && (reasonCode === 'CACHED_FEED' || reasonCode === 'REPLENISHED')) return '';
+    if (hasCards && (reasonCode === 'CACHED_FEED' || reasonCode === 'REPLENISHED' || reasonCode === 'LOCAL_DIRECTORY')) {
+      return '';
+    }
     return humanNetworkNotice({
       networking,
       hasCachedCards: hasCards,
-      hasLocalItems: input.items.some(isConsumableItem),
+      hasLocalItems: input.items.some((item) => isConsumableItem(item, now)),
     });
+  };
+  const finish = (view: DiscoverView, reasonCode: FeedReasonCode) => {
+    const traced = viewOf({
+      cards: view.cards,
+      relatedCards: view.relatedCards || [],
+      preferences: view.preferences,
+      notice: view.notice,
+      reasonCode,
+      feedMode: view.feedMode || 'personal',
+      networking: (view.networking as NetworkDiscoveryCode) || networking,
+      ...(view.lead ? { lead: view.lead } : {}),
+      ...(view.replenishing ? { replenishing: true } : {}),
+      supplyTrace,
+    });
+    return { view: traced, reasonCode };
   };
 
   if (input.mode === 'reuse') {
     const cards = lastCards.length ? lastCards : cachedCards;
     if (cards.length) {
-      const view = viewOf({
-        cards,
-        preferences: input.preferences,
-        notice: noticeFor('CACHED_FEED', true),
-        reasonCode: 'CACHED_FEED',
-        feedMode: cache.lastView?.mode || 'personal',
-        networking: input.networking,
-      });
-      return { view, reasonCode: 'CACHED_FEED' };
+      mark('LOCAL_FEED_READ', cards.length);
+      mark('FIRST_CARD_VISIBLE', cards.length);
+      return finish(
+        viewOf({
+          cards,
+          preferences: input.preferences,
+          notice: noticeFor('CACHED_FEED', true),
+          reasonCode: 'CACHED_FEED',
+          feedMode: cache.lastView?.mode || 'personal',
+          networking: input.networking,
+        }),
+        'CACHED_FEED',
+      );
     }
   }
 
-  if (input.mode === 'open' && cachedCards.length >= 4 && cacheFresh(cache.personal, nowMs)) {
-    const view = viewOf({
-      cards: cachedCards.slice(0, MAX_FEED),
-      preferences: input.preferences,
-      notice: '',
-      reasonCode: 'CACHED_FEED',
-      feedMode: 'personal',
-      networking: input.networking,
-    });
-    const snapshot = cache.personal;
-    if (snapshot) cache.lastView = snapshot;
-    await writeCache(input.packageRoot, cache);
-    return { view, reasonCode: 'CACHED_FEED' };
+  if (input.mode === 'open') {
+    mark('OPEN_DISCOVER');
+    mark('LOCAL_FEED_READ', cachedCards.length);
+    const localFromCache = cachedCards.length ? cachedCards.slice(0, MAX_FEED) : [];
+    const localFromDirectory = localFromCache.length ? [] : directoryCards(input.items, prefs, MAX_FEED, now);
+    mark('DIRECTORY_READ', localFromDirectory.length || input.items.filter((item) => isConsumableItem(item, now)).length);
+    const localCards = localFromCache.length ? localFromCache : localFromDirectory;
+    const fresh = localFromCache.length ? cacheFresh(cache.personal, nowMs) : localCards.length >= MIN_FEED;
+    const replenishing = canSearch({ ...input, networking }) && (localCards.length < MIN_FEED || !fresh);
+    if (localCards.length) {
+      const snapshot: FeedSnapshot = {
+        itemIds: localCards.map((card) => card.itemId),
+        generatedAt:
+          localFromCache.length && cache.personal && cache.personal.generatedAt
+            ? cache.personal.generatedAt
+            : now,
+        mode: 'personal',
+      };
+      cache.lastView = snapshot;
+      if (!cache.personal) cache.personal = snapshot;
+      await writeCache(input.packageRoot, cache);
+      mark('FIRST_CARD_VISIBLE', localCards.length);
+      return finish(
+        viewOf({
+          cards: localCards,
+          preferences: input.preferences,
+          notice: '',
+          reasonCode: localFromCache.length ? 'CACHED_FEED' : 'LOCAL_DIRECTORY',
+          feedMode: 'personal',
+          networking,
+          replenishing,
+        }),
+        localFromCache.length ? 'CACHED_FEED' : 'LOCAL_DIRECTORY',
+      );
+    }
+    if (replenishing) {
+      return finish(
+        viewOf({
+          cards: [],
+          preferences: input.preferences,
+          notice: '',
+          reasonCode: 'DIRECTORY_EMPTY',
+          feedMode: 'personal',
+          networking,
+          replenishing: true,
+        }),
+        'DIRECTORY_EMPTY',
+      );
+    }
+    const reasonCode: FeedReasonCode =
+      networking === 'DISABLED'
+        ? 'NETWORK_DISABLED'
+        : networking === 'NOT_CONFIGURED'
+          ? 'NETWORK_NOT_CONFIGURED'
+          : 'DIRECTORY_EMPTY';
+    return finish(
+      viewOf({
+        cards: [],
+        preferences: input.preferences,
+        notice: noticeFor(reasonCode, false),
+        reasonCode,
+        feedMode: 'personal',
+        networking,
+      }),
+      reasonCode,
+    );
   }
 
-  let items = input.items.filter((item) => isConsumableItem(item) && !blocked(item, prefs));
+  if (input.mode === 'replenish') mark('REPLENISH_START');
+  let items = input.items.filter((item) => isConsumableItem(item, now) && !blocked(item, prefs));
   const shown = new Set(input.mode === 'refresh' ? (cache.lastView?.itemIds || cache.personal?.itemIds || []) : []);
   const opened = new Set(openedItemIds(recent));
   const needReplenish =
-    items.filter((item) => !shown.has(item.itemId) && !opened.has(item.itemId)).length < MIN_FEED;
+    input.mode === 'replenish'
+      ? items.filter((item) => !shown.has(item.itemId) && !opened.has(item.itemId)).length < MIN_FEED ||
+        !cacheFresh(cache.personal, nowMs)
+      : items.filter((item) => !shown.has(item.itemId) && !opened.has(item.itemId)).length < MIN_FEED;
   let replenished = false;
   let searchAttempted = false;
 
@@ -353,7 +475,9 @@ export async function ensurePersonalFeed(input: {
         break;
       }
     }
-    if (input.reloadItems) items = (await input.reloadItems()).filter((item) => isConsumableItem(item) && !blocked(item, prefs));
+    mark('SEARCH_DONE', searchAttempted ? 1 : 0);
+    if (input.reloadItems) items = (await input.reloadItems()).filter((item) => isConsumableItem(item, now) && !blocked(item, prefs));
+    mark('NORMALIZE_DONE', items.length);
   }
 
   const pool = items.filter((item) => {
@@ -367,7 +491,7 @@ export async function ensurePersonalFeed(input: {
     if (searchAttempted && !replenished && networking === 'AVAILABLE') {
       networking = 'TEMPORARY_ERROR';
     }
-    const fallback = input.mode === 'refresh' && lastCards.length ? lastCards : cachedCards;
+    const fallback = lastCards.length ? lastCards : cachedCards;
     const reasonCode: FeedReasonCode =
       networking === 'DISABLED'
         ? 'NETWORK_DISABLED'
@@ -380,30 +504,36 @@ export async function ensurePersonalFeed(input: {
               : items.length
                 ? 'NO_CONSUMABLE_CANDIDATES'
                 : 'DIRECTORY_EMPTY';
-    const view = viewOf({
-      cards: fallback,
-      preferences: input.preferences,
-      notice: noticeFor(reasonCode, fallback.length > 0),
+    if (fallback.length) mark('FIRST_CARD_VISIBLE', fallback.length);
+    return finish(
+      viewOf({
+        cards: fallback,
+        preferences: input.preferences,
+        notice: noticeFor(reasonCode, fallback.length > 0),
+        reasonCode,
+        feedMode: 'personal',
+        networking,
+      }),
       reasonCode,
-      feedMode: 'personal',
-      networking,
-    });
-    return { view, reasonCode };
+    );
   }
 
   if (!input.chatComplete || !input.model) {
     const fallback = cachedCards.length ? cachedCards : lastCards;
-    const view = viewOf({
-      cards: fallback,
-      preferences: input.preferences,
-      notice: fallback.length
-        ? noticeFor('CACHED_FEED', true)
-        : '连接 AI 之后，才能按你的数字之我挑选内容。',
-      reasonCode: fallback.length ? 'CACHED_FEED' : 'AI_NOT_CONNECTED',
-      feedMode: 'personal',
-      networking,
-    });
-    return { view, reasonCode: view.reasonCode as FeedReasonCode };
+    if (fallback.length) mark('FIRST_CARD_VISIBLE', fallback.length);
+    return finish(
+      viewOf({
+        cards: fallback,
+        preferences: input.preferences,
+        notice: fallback.length
+          ? noticeFor('CACHED_FEED', true)
+          : '连接 AI 之后，才能按你的数字之我挑选内容。',
+        reasonCode: fallback.length ? 'CACHED_FEED' : 'AI_NOT_CONNECTED',
+        feedMode: 'personal',
+        networking,
+      }),
+      fallback.length ? 'CACHED_FEED' : 'AI_NOT_CONNECTED',
+    );
   }
 
   const recentContext = formatRecentRecommendationContext(recent);
@@ -415,19 +545,23 @@ export async function ensurePersonalFeed(input: {
     ...(input.preferenceDirectives ? { preferenceDirectives: input.preferenceDirectives } : {}),
     ...(recentContext ? { selectionNotes: recentContext } : {}),
   });
+  mark('SELECT_DONE', selected.ok ? selected.decisions.length : 0);
   if (!selected.ok) {
     const fallback = cachedCards.length ? cachedCards : lastCards;
-    const view = viewOf({
-      cards: fallback,
-      preferences: input.preferences,
-      notice: fallback.length
-        ? '暂时无法获取新内容，可以稍后再试或检查联网设置。'
-        : '这次没能判断哪些内容值得看。',
-      reasonCode: fallback.length ? 'CACHED_FEED' : 'MODEL_SELECTION_EMPTY',
-      feedMode: 'personal',
-      networking,
-    });
-    return { view, reasonCode: view.reasonCode as FeedReasonCode };
+    if (fallback.length) mark('FIRST_CARD_VISIBLE', fallback.length);
+    return finish(
+      viewOf({
+        cards: fallback,
+        preferences: input.preferences,
+        notice: fallback.length
+          ? '暂时无法获取新内容，可以稍后再试或检查联网设置。'
+          : '这次没能判断哪些内容值得看。',
+        reasonCode: fallback.length ? 'CACHED_FEED' : 'MODEL_SELECTION_EMPTY',
+        feedMode: 'personal',
+        networking,
+      }),
+      fallback.length ? 'CACHED_FEED' : 'MODEL_SELECTION_EMPTY',
+    );
   }
 
   await fs.mkdir(path.dirname(input.feedbackFile), { recursive: true });
@@ -455,15 +589,18 @@ export async function ensurePersonalFeed(input: {
 
   if (!cards.length) {
     const fallback = cachedCards.length ? cachedCards : lastCards;
-    const view = viewOf({
-      cards: fallback,
-      preferences: input.preferences,
-      notice: fallback.length ? noticeFor('CACHED_FEED', true) : '这次没有找到可直接消费的内容。',
-      reasonCode: fallback.length ? 'CACHED_FEED' : 'MODEL_SELECTION_EMPTY',
-      feedMode: 'personal',
-      networking,
-    });
-    return { view, reasonCode: view.reasonCode as FeedReasonCode };
+    if (fallback.length) mark('FIRST_CARD_VISIBLE', fallback.length);
+    return finish(
+      viewOf({
+        cards: fallback,
+        preferences: input.preferences,
+        notice: fallback.length ? noticeFor('CACHED_FEED', true) : '这次没有找到可以直接看的内容。',
+        reasonCode: fallback.length ? 'CACHED_FEED' : 'MODEL_SELECTION_EMPTY',
+        feedMode: 'personal',
+        networking,
+      }),
+      fallback.length ? 'CACHED_FEED' : 'MODEL_SELECTION_EMPTY',
+    );
   }
 
   const snapshot: FeedSnapshot = {
@@ -473,15 +610,18 @@ export async function ensurePersonalFeed(input: {
   };
   await writeCache(input.packageRoot, { version: 1, personal: snapshot, lastView: snapshot });
   const reasonCode: FeedReasonCode = replenished ? 'REPLENISHED' : 'CACHED_FEED';
-  const view = viewOf({
-    cards,
-    preferences: input.preferences,
-    notice: '',
+  mark('FIRST_CARD_VISIBLE', cards.length);
+  return finish(
+    viewOf({
+      cards,
+      preferences: input.preferences,
+      notice: '',
+      reasonCode,
+      feedMode: 'personal',
+      networking,
+    }),
     reasonCode,
-    feedMode: 'personal',
-    networking,
-  });
-  return { view, reasonCode };
+  );
 }
 
 export async function rememberIntentFeed(
