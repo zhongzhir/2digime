@@ -96,3 +96,26 @@ test('explicit preference directives are passed as prompt text, not identity', a
   });
   assert.equal(result.ok, true);
 });
+
+test('selectionNotes are short-term context, not identity', async () => {
+  const digitalSelf = self('subj_a', ['我长期关心人工智能如何改变产品和投资判断。']);
+  const subset = FEED_01_SEED_ITEMS.slice(0, 2);
+  const result = await selectNetworkItems({
+    digitalSelf,
+    items: subset,
+    model: { baseUrl: 'http://127.0.0.1', model: 'test' },
+    selectionNotes: '近期内容上下文（只存在本机、会过期、可重置，不是长期偏好，不要写成「用户喜欢」）：\n最近打开：开源模型推理成本',
+    chatComplete: async (options) => {
+      const blob = options.messages.map((m) => m.content).join('\n');
+      assert.match(blob, /不是长期偏好/);
+      assert.match(blob, /不要写成「用户喜欢」/);
+      const decisions = subset.map((item, index) => ({
+        itemId: item.itemId,
+        decision: index === 0 ? 'show' : 'ignore',
+        reason: index === 0 ? '刚看过同类，仍有后续价值。' : '关系弱。',
+      }));
+      return { text: JSON.stringify({ decisions }) };
+    },
+  });
+  assert.equal(result.ok, true);
+});

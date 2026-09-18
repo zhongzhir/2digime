@@ -47,6 +47,10 @@ export interface DiscoverView {
   relatedTitle?: string;
   preferences: DiscoverPreference[];
   notice: string;
+  /** 内部诊断，UI 不得展示。 */
+  reasonCode?: string;
+  feedMode?: 'personal' | 'intent';
+  networking?: string;
 }
 
 export function cardFromNetworkItem(

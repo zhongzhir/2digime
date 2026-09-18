@@ -176,13 +176,20 @@ import {
 import type { ProfessionalAgent, TalkChatFn } from '../intelligence';
 import { formatSelfContext, selectSelfContext } from '../intelligence/self-context';
 import { readDigitalSelf } from '../subject-core/digital-self/store';
-import { discoverForSubject, type DiscoverView } from '../subject-comm/content-discover';
+import { type DiscoverView } from '../subject-comm/content-discover';
 import { formatSeekContext, seekContent } from '../subject-comm/content-seek';
 import { ingestSource } from '../subject-comm/content-ingest';
+import { indexSearchHits } from '../subject-comm/open-web-discovery';
+import { ensurePersonalFeed, rememberIntentFeed } from '../subject-comm/personal-feed';
 import {
-  indexSearchHits,
-  proposeOpenWebQueries,
-} from '../subject-comm/open-web-discovery';
+  classifySearchFailure,
+  type NetworkDiscoveryCode,
+} from '../subject-comm/network-discovery-state';
+import {
+  appendRecentRecommendationEvent,
+  listRecentRecommendationEvents,
+  resetRecentRecommendationState,
+} from '../subject-comm/recent-recommendation-state';
 import {
   formatPreferenceDirectives,
   listContentPreferences,
@@ -388,6 +395,7 @@ export class DigitalMeRuntime {
   private talkService: TalkService | null = null;
   private detachSubjectNetwork: (() => void) | null = null;
   private relayCollab: RelaySubjectNetwork | null = null;
+  private lastNetworkCode: NetworkDiscoveryCode | null = null;
 
   constructor(options: DigitalMeRuntimeOptions = {}) {
     this.options = options;
@@ -451,15 +459,36 @@ export class DigitalMeRuntime {
 
     if (action === 'seek') {
       const query = String(input.text || '').trim();
-      if (!query) return { view: await empty('请先说想找什么。') };
+      if (!query) return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'open') };
       return { view: await this.runContentSeek(pkg.rootDir, query, input.relayUrl) };
+    }
+
+    if (action === 'resetRecent') {
+      await resetRecentRecommendationState(pkg.rootDir);
+      return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'refresh') };
+    }
+
+    if (action === 'asked') {
+      if (!itemId) return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reuse') };
+      const items = await this.loadDiscoverItems(pkg.rootDir, input.relayUrl);
+      const item = items.find((row) => row.itemId === itemId);
+      await appendRecentRecommendationEvent(pkg.rootDir, {
+        type: 'asked_2digime',
+        itemId,
+        ...(item ? { title: item.content.title } : {}),
+      });
+      return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reuse') };
+    }
+
+    if (action === 'refresh') {
+      return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'refresh') };
     }
 
     if (action === 'reverse') {
       const directiveId = String(input.directiveId || '').trim();
       if (!directiveId) return { view: await empty('请选择要撤销的偏好。') };
       await reverseContentPreference(pkg.rootDir, directiveId);
-      return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl) };
+      return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'refresh') };
     }
 
     if (action === 'open' || action === 'later' || action === 'boost' || action === 'reduce' || action === 'follow' || action === 'block') {
@@ -486,11 +515,19 @@ export class DigitalMeRuntime {
             ? `${action === 'follow' ? '关注来源' : '不再看来源'} ${item.publisherDisplayName || item.publisherSubjectId}`
             : `${action === 'boost' ? '更想看到类似' : '少推类似'}「${item.content.title}」的内容`,
         });
+        return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'refresh') };
       }
-      return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl) };
+      if (action === 'open') {
+        await appendRecentRecommendationEvent(pkg.rootDir, {
+          type: 'opened',
+          itemId: item.itemId,
+          title: item.content.title,
+        });
+      }
+      return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reuse') };
     }
 
-    return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl) };
+    return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'open') };
   }
 
   private async contentPreferenceRows(packageRoot: string): Promise<DiscoverView['preferences']> {
@@ -505,64 +542,34 @@ export class DigitalMeRuntime {
     packageRoot: string,
     subjectId: string,
     relayUrl?: string,
+    mode: 'open' | 'refresh' | 'reuse' = 'open',
   ): Promise<DiscoverView> {
     const preferences = await this.contentPreferenceRows(packageRoot);
-    const empty = (notice: string): DiscoverView => ({
-      headline: '发现',
-      lead: '这里可以直接看文章、图片、音频和视频。兔机米按你的数字之我挑选，不是中心推荐。',
-      cards: [],
-      relatedCards: [],
-      preferences,
-      notice,
-    });
     const self = await readDigitalSelf(packageRoot, subjectId, nowIso());
     const chatCompleteFn = this.resolveContentChat();
     const model = this.resolveContentModel();
-    if (!chatCompleteFn || !model) return empty('连接 AI 之后，才能按你的数字之我挑选内容。');
-    const searchWeb = this.openWebSearchEnabled() ? this.resolveContentSearch() : undefined;
-    let items = await this.loadDiscoverItems(packageRoot, relayUrl);
-    if (searchWeb && items.length === 0) {
-      await this.runOpenWebColdStart({
-        packageRoot,
-        selfContext: formatSelfContext(selectSelfContext(self, '')),
-        chatComplete: chatCompleteFn,
-        model,
-        searchWeb,
-      });
-      items = await this.loadDiscoverItems(packageRoot, relayUrl);
-    }
-    if (!items.length) {
-      return empty(
-        searchWeb
-          ? '这次没有找到可直接消费的内容。'
-          : '还没有新内容。开启联网发现后，兔机米还可以从公开网络帮你找到更多内容。',
-      );
-    }
-    const directives = formatPreferenceDirectives(await listContentPreferences(packageRoot));
-    const result = await discoverForSubject({
+    const networking = this.snapshotNetworkDiscovery();
+    const searchWeb = this.wrapContentSearch(this.resolveContentSearch());
+    const store = new FileNetworkItemStore(path.join(packageRoot, 'content'));
+    const loadItems = () => this.loadDiscoverItems(packageRoot, relayUrl);
+    const items = await loadItems();
+    const preferenceRows = await listContentPreferences(packageRoot);
+    const directives = formatPreferenceDirectives(preferenceRows);
+    const recentEvents = await listRecentRecommendationEvents(packageRoot);
+    const result = await ensurePersonalFeed({
+      packageRoot,
       digitalSelf: self,
       items,
-      chatComplete: chatCompleteFn,
-      model,
-      feedbackFile: path.join(packageRoot, 'content', 'network-content-feedback.jsonl'),
       preferences,
+      preferenceRows,
+      recentEvents,
+      feedbackFile: path.join(packageRoot, 'content', 'network-content-feedback.jsonl'),
+      networking,
+      mode,
       ...(directives ? { preferenceDirectives: directives } : {}),
-    });
-    return result.view;
-  }
-
-  private async runContentSeek(packageRoot: string, query: string, relayUrl?: string): Promise<DiscoverView> {
-    const preferences = await this.contentPreferenceRows(packageRoot);
-    const items = await this.loadDiscoverItems(packageRoot, relayUrl);
-    const searchWeb = this.openWebSearchEnabled() ? this.resolveContentSearch() : undefined;
-    const chatCompleteFn = this.resolveContentChat();
-    const model = this.resolveContentModel();
-    const store = new FileNetworkItemStore(path.join(packageRoot, 'content'));
-    const sought = await seekContent({
-      query,
-      items,
+      ...(chatCompleteFn ? { chatComplete: chatCompleteFn } : {}),
+      ...(model ? { model } : {}),
       ...(searchWeb ? { searchWeb } : {}),
-      ...(chatCompleteFn && model ? { chatComplete: chatCompleteFn, model } : {}),
       ingestHit: async (hit) => {
         try {
           const ingested = await ingestSource({
@@ -573,59 +580,113 @@ export class DigitalMeRuntime {
           });
           if (ingested.items.length) return ingested.items;
         } catch {
-          /* 单条公开页摄入失败时退回搜索命中 */
+          /* 公开页摄入失败时退回搜索命中 */
         }
         return indexSearchHits({ hits: [hit], store, limit: 1 });
       },
+      reloadItems: loadItems,
+      getItem: (itemId) => store.get(itemId, nowIso()),
     });
-    return {
-      headline: '发现',
-      lead: '根据你刚说的话找的内容，保留来源链接，不是中心推荐。',
-      cards: sought.cards,
-      relatedCards: sought.relatedCards,
-      ...(sought.relatedCards.length ? { relatedTitle: '相关信息' } : {}),
-      preferences,
-      notice: sought.notice,
-    };
+    if (result.view.networking === 'AUTH_FAILED' || result.view.networking === 'TEMPORARY_ERROR') {
+      this.lastNetworkCode = result.view.networking;
+    } else if (result.view.networking === 'AVAILABLE') {
+      this.lastNetworkCode = 'AVAILABLE';
+    }
+    return result.view;
   }
 
-  private openWebSearchEnabled(): boolean {
-    if (process.env.DIGITALME_V2_ELECTRON_TEST === '1' && process.env.DIGITALME_V2_OPEN_WEB_DISCOVERY !== '1') {
-      return false;
-    }
-    return true;
-  }
-
-  private async runOpenWebColdStart(input: {
-    packageRoot: string;
-    selfContext: string;
-    chatComplete: ChatCompleteFn;
-    model: { baseUrl: string; model: string; apiKey?: string };
-    searchWeb: (query: string) => Promise<Array<{ title: string; url: string; snippet?: string }>>;
-  }): Promise<void> {
-    const directives = formatPreferenceDirectives(await listContentPreferences(input.packageRoot));
-    let queries = await proposeOpenWebQueries({
-      selfContext: input.selfContext,
-      chatComplete: input.chatComplete,
-      model: input.model,
-      ...(directives ? { preferenceDirectives: directives } : {}),
-    });
-    if (!queries.length && directives) {
-      queries = (await listContentPreferences(input.packageRoot))
-        .filter((row) => row.kind === 'boost' || row.kind === 'follow')
-        .map((row) => row.text)
-        .slice(0, 2);
-    }
-    if (!queries.length) queries = ['recent public articles videos podcasts photographs'];
-    const store = new FileNetworkItemStore(path.join(input.packageRoot, 'content'));
-    for (const query of queries.slice(0, 3)) {
-      try {
-        const hits = await input.searchWeb(query);
-        await indexSearchHits({ hits, store, limit: 6 });
-      } catch {
-        /* 单次搜索失败不得阻断发现页 */
+  private async runContentSeek(packageRoot: string, query: string, relayUrl?: string): Promise<DiscoverView> {
+    const preferences = await this.contentPreferenceRows(packageRoot);
+    const items = await this.loadDiscoverItems(packageRoot, relayUrl);
+    const networking = this.snapshotNetworkDiscovery();
+    const searchWeb = this.wrapContentSearch(this.resolveContentSearch());
+    const chatCompleteFn = this.resolveContentChat();
+    const model = this.resolveContentModel();
+    const store = new FileNetworkItemStore(path.join(packageRoot, 'content'));
+    await appendRecentRecommendationEvent(packageRoot, { type: 'seek_topic', topic: query });
+    try {
+      const sought = await seekContent({
+        query,
+        items,
+        ...(searchWeb ? { searchWeb } : {}),
+        ...(chatCompleteFn && model ? { chatComplete: chatCompleteFn, model } : {}),
+        ingestHit: async (hit) => {
+          try {
+            const ingested = await ingestSource({
+              sourceUrl: hit.url,
+              store,
+              limit: 4,
+              via: 'search',
+            });
+            if (ingested.items.length) return ingested.items;
+          } catch {
+            /* 单条公开页摄入失败时退回搜索命中 */
+          }
+          return indexSearchHits({ hits: [hit], store, limit: 1 });
+        },
+      });
+      if (sought.cards.length) await rememberIntentFeed(packageRoot, sought.cards, query);
+      if (!sought.cards.length) {
+        const cached = await this.runContentDiscover(packageRoot, this.subject.getActive()?.id || '', relayUrl, 'reuse');
+        if (cached.cards.length) {
+          return {
+            ...cached,
+            lead: '根据你刚说的话没找到新内容，仍保留你正在看的列表。',
+            notice: cached.notice || '暂时无法获取新内容，可以稍后再试或检查联网设置。',
+            feedMode: 'personal',
+            reasonCode: cached.reasonCode || 'CACHED_FEED',
+          };
+        }
       }
+      return {
+        headline: '发现',
+        lead: '根据你刚说的话找的内容，保留来源链接，不是中心推荐。',
+        cards: sought.cards,
+        relatedCards: sought.relatedCards,
+        ...(sought.relatedCards.length ? { relatedTitle: '相关信息' } : {}),
+        preferences,
+        notice: sought.notice,
+        reasonCode: 'CURRENT_INTENT',
+        feedMode: 'intent',
+        networking,
+      };
+    } catch (err) {
+      this.lastNetworkCode = classifySearchFailure(err);
+      const cached = await this.runContentDiscover(packageRoot, this.subject.getActive()?.id || '', relayUrl, 'reuse');
+      return {
+        ...cached,
+        notice: '暂时无法获取新内容，可以稍后再试或检查联网设置。',
+        networking: this.lastNetworkCode,
+        reasonCode: this.lastNetworkCode === 'AUTH_FAILED' ? 'NETWORK_AUTH_FAILED' : 'NETWORK_TEMPORARY_ERROR',
+      };
     }
+  }
+
+  private snapshotNetworkDiscovery(): NetworkDiscoveryCode {
+    if (process.env.DIGITALME_V2_ELECTRON_TEST === '1' && process.env.DIGITALME_V2_OPEN_WEB_DISCOVERY !== '1') {
+      return 'DISABLED';
+    }
+    if (!this.resolveContentSearch()) return 'NOT_CONFIGURED';
+    if (this.lastNetworkCode === 'AUTH_FAILED' || this.lastNetworkCode === 'TEMPORARY_ERROR') {
+      return this.lastNetworkCode;
+    }
+    return 'AVAILABLE';
+  }
+
+  private wrapContentSearch(
+    searchWeb: ((query: string) => Promise<Array<{ title: string; url: string; snippet?: string }>>) | undefined,
+  ): ((query: string) => Promise<Array<{ title: string; url: string; snippet?: string }>>) | undefined {
+    if (!searchWeb) return undefined;
+    return async (query: string) => {
+      try {
+        const hits = await searchWeb(query);
+        this.lastNetworkCode = 'AVAILABLE';
+        return hits;
+      } catch (err) {
+        this.lastNetworkCode = classifySearchFailure(err);
+        throw err;
+      }
+    };
   }
 
   private resolveContentSearch():
@@ -707,7 +768,7 @@ export class DigitalMeRuntime {
       }
     }
     const local = new FileNetworkItemStore(path.join(packageRoot, 'content'));
-    const listed = await local.list({ kind: 'content', visibility: 'public', limit: 50 }, nowIso());
+    const listed = await local.list({ kind: 'content', visibility: 'public', limit: 80 }, nowIso());
     return listed.items;
   }
 

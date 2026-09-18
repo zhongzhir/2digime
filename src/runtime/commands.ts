@@ -1066,7 +1066,19 @@ export interface CommandMap {
   };
   'content': {
     input: {
-      action: 'discover' | 'open' | 'later' | 'boost' | 'reduce' | 'follow' | 'block' | 'reverse' | 'seek';
+      action:
+        | 'discover'
+        | 'refresh'
+        | 'resetRecent'
+        | 'asked'
+        | 'open'
+        | 'later'
+        | 'boost'
+        | 'reduce'
+        | 'follow'
+        | 'block'
+        | 'reverse'
+        | 'seek';
       relayUrl?: string;
       itemId?: string;
       directiveId?: string;

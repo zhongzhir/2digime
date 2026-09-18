@@ -39,8 +39,10 @@ test('Discover cold start uses search queries, not Digital Self, and indexes web
     searchCapability: false,
     contentChat: async ({ messages }) => {
       const blob = messages.map((row) => String(row.content || '')).join('\n');
-      if (blob.includes('拟定公开网页搜索词')) {
-        return { text: '{"queries":["fusion energy progress"]}' };
+      if (blob.includes('拟定内容发现方向') || blob.includes('内容发现方向') || blob.includes('拟定公开网页搜索词')) {
+        return {
+          text: '{"intents":[{"topic":"fusion energy","contentTypes":["article"],"purpose":"learn","freshness":"current","explorationMode":"core","searchQuery":"fusion energy progress"}],"queries":["fusion energy progress"]}',
+        };
       }
       const ids = [...blob.matchAll(/"itemId"\s*:\s*"(ni_[^"]+)"/g)].map((row) => row[1]!);
       const unique = [...new Set(ids)];
