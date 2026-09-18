@@ -68,6 +68,14 @@ async function openSettings(page: Page): Promise<string> {
   return (await page.locator('#gemini-search-key-state').textContent()) || '';
 }
 
+async function revealByokSearch(page: Page): Promise<void> {
+  await page.locator('#advanced-web-discovery').evaluate((el) => {
+    el.setAttribute('open', '');
+  });
+  await page.locator('#web-discovery-path-byok').check();
+  await page.locator('#gemini-search-api-key').waitFor({ state: 'visible', timeout: 10_000 });
+}
+
 async function openTalk(page: Page): Promise<void> {
   const settings = page.locator('#view-settings');
   if (await settings.isVisible().catch(() => false)) {
@@ -169,14 +177,17 @@ test(
       assert.equal(!!statusA.modelReady, true);
       assert.equal(!!statusA.status?.geminiSearchConfigured, false);
       const labelA = await openSettings(harness.page);
+      assert.match(await harness.page.locator('#view-settings').innerText(), /联网发现/);
+      assert.equal(await harness.page.locator('#gemini-search-api-key').isVisible(), false);
       assert.match(labelA, /未配置/);
       await openTalk(harness.page);
       await sendTalk(harness.page, '今天天气怎么样？');
       const sysA = systemBlob(TRACE);
       assert.equal(/cap_gemini_web_search|cap_baseline_web_search/.test(sysA), false);
-      assert.match(sysA, /联网搜索：当前尚未连接或配置/);
+      assert.equal(/请配置 Gemini API Key/.test(sysA), false);
 
       await openSettings(harness.page);
+      await revealByokSearch(harness.page);
       await harness.page.locator('#gemini-search-api-key').fill(GEMINI_KEY);
       await harness.page.locator('#btn-save-gemini-search').click();
       await harness.page.locator('#gemini-search-key-state', { hasText: '已配置' }).waitFor({ timeout: 60_000 });
@@ -221,6 +232,7 @@ test(
       assert.match(await fs.readFile(htmlPath, 'utf8'), /hi/);
 
       await openSettings(harness.page);
+      await revealByokSearch(harness.page);
       await harness.page.locator('#btn-delete-gemini-search').click();
       await harness.page.locator('#gemini-search-key-state', { hasText: '未配置' }).waitFor({ timeout: 60_000 });
       assert.equal(await secretsHasGemini(userData, GEMINI_KEY), false);

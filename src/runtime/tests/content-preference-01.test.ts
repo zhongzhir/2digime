@@ -67,12 +67,14 @@ test('content command: open does not write preferences; boost is reversible and 
     contentChat: async (options) => {
       const blob = options.messages.map((m) => m.content).join('\n');
       const honorBoost = blob.includes('更想看到类似');
+      const ids = [...blob.matchAll(/"itemId"\s*:\s*"(ni_[^"]+)"/g)].map((row) => row[1]!);
+      const catalogIds = [...new Set(ids.length ? ids : ingested.items.map((item) => item.itemId))];
       return {
         text: JSON.stringify({
-          decisions: ingested.items.map((item) => ({
-            itemId: item.itemId,
-            decision: honorBoost && item.itemId === fusion.itemId ? 'show' : item.itemId === sports.itemId ? 'show' : 'ignore',
-            reason: honorBoost && item.itemId === fusion.itemId ? '你明确要求加推这类内容' : '按数字之我挑选',
+          decisions: catalogIds.map((itemId) => ({
+            itemId,
+            decision: honorBoost && itemId === fusion.itemId ? 'show' : itemId === sports.itemId ? 'show' : 'ignore',
+            reason: honorBoost && itemId === fusion.itemId ? '你明确要求加推这类内容' : '按数字之我挑选',
           })),
         }),
       };

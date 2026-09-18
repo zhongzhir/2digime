@@ -100,7 +100,7 @@ test('Electron：统一产品表面导航与同一入口 A/B/C/D/E', { timeout: 
     await harness.page.locator('#nav-settings').click();
     await harness.page.locator('#view-settings').waitFor({ state: 'visible', timeout: 15_000 });
     const settingsCopy = await harness.page.locator('#view-settings').innerText();
-    assert.match(settingsCopy, /AI 连接|联网搜索|高级/);
+    assert.match(settingsCopy, /AI 连接|联网发现|高级/);
     assert.equal(/Relay URL|OpenCode|Codex|MCP|capability registry/i.test(settingsCopy), false);
     assert.equal(
       await harness.page.evaluate(`!!document.querySelector('#settings-advanced') && document.querySelector('#settings-advanced').open`),

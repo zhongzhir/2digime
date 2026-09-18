@@ -150,9 +150,10 @@ test('Electron：Public Alpha UX closure 导航 / 发现 / 数字之我 / 设置
     })()`);
     assert.equal(String(wide).split(' ').filter(Boolean).length >= 2, true, `desktop grid was ${wide}`);
     assert.match(await harness.page.locator('#view-settings').innerText(), /AI 连接/);
-    assert.match(await harness.page.locator('#view-settings').innerText(), /联网搜索/);
+    assert.match(await harness.page.locator('#view-settings').innerText(), /联网发现/);
     assert.equal(await harness.page.locator('#model-provider').isVisible(), true);
-    assert.equal(await harness.page.locator('#gemini-search-api-key').isVisible(), true);
+    assert.equal(await harness.page.locator('#gemini-search-api-key').isVisible(), false);
+    assert.equal(await harness.page.locator('#web-discovery-enabled').isVisible(), true);
     await harness.page.setViewportSize({ width: 520, height: 900 });
     const narrow = await harness.page.evaluate(`(() => {
       const el = document.querySelector('#view-settings .settings-panel');
