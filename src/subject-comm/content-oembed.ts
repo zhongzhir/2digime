@@ -64,7 +64,7 @@ export function parseOembedBody(body: string, contentHint?: string): OEmbedResul
   const photoUrl = type === 'photo' ? isSafePublicMediaUrl(rec.url) : undefined;
   const width = parsePositiveInt(rec.width, 8192);
   const height = parsePositiveInt(rec.height, 8192);
-  const contentType = inferContentType({ oembedType: type, mediaUrl: photoUrl, embedUrl });
+  const contentType = inferContentType({ oembedType: type, mediaUrl: photoUrl });
   const media: OpenMediaFields = {
     ...(contentType ? { contentType } : {}),
     ...(author ? { author } : {}),

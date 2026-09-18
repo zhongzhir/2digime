@@ -117,13 +117,25 @@ function typeOf(rec: Record<string, unknown>): string {
   return String(t || '');
 }
 
+function isArticleSchema(type: string): boolean {
+  return /NewsArticle|BlogPosting|(?:^|\s)Article(?:\s|$)/i.test(type);
+}
+
+function isMediaObjectSchema(type: string): boolean {
+  return /VideoObject|AudioObject|ImageObject/i.test(type);
+}
+
 function pickCreative(rows: Record<string, unknown>[]): Record<string, unknown> | null {
+  const article = rows.find((row) => isArticleSchema(typeOf(row)));
+  const media = rows.find((row) => isMediaObjectSchema(typeOf(row)));
+  if (article && media) return article;
   return (
     rows.find((row) => /VideoObject/i.test(typeOf(row))) ||
     rows.find((row) => /AudioObject/i.test(typeOf(row))) ||
     rows.find((row) => /ImageObject/i.test(typeOf(row))) ||
     rows.find((row) => /TVEpisode|Episode|CreativeWorkSeries/i.test(typeOf(row))) ||
-    rows.find((row) => /NewsArticle|Article|BlogPosting|WebPage/i.test(typeOf(row))) ||
+    article ||
+    rows.find((row) => /WebPage/i.test(typeOf(row))) ||
     rows[0] ||
     null
   );
@@ -276,10 +288,7 @@ export function parsePageMetadata(html: string, fallbackUrl: string): PageMetada
   const access: MediaAccess | undefined = requiresSubscription ? 'subscriptionRequired' : undefined;
   const contentType = inferContentType({
     schemaType,
-    mimeType: typeof ld?.encodingFormat === 'string' ? ld.encodingFormat : undefined,
     ogType,
-    mediaUrl,
-    embedUrl,
   });
   const oembedUrl = discoverOembedUrl(html, base);
   const schemaFields: OpenMediaFields | undefined =
@@ -300,9 +309,7 @@ export function parsePageMetadata(html: string, fallbackUrl: string): PageMetada
   const ogFields: OpenMediaFields | undefined =
     ogImage || ogVideo || ogAudio || ogType
       ? {
-          ...(inferContentType({ ogType, mediaUrl: ogVideo || ogAudio })
-            ? { contentType: inferContentType({ ogType, mediaUrl: ogVideo || ogAudio }) }
-            : {}),
+          ...(inferContentType({ ogType }) ? { contentType: inferContentType({ ogType }) } : {}),
           ...(ogImage ? { thumbnailUrl: ogImage } : {}),
           ...(ogVideo || ogAudio ? { mediaUrl: ogVideo || ogAudio } : {}),
           mediaProvenance: 'opengraph',

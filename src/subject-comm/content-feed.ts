@@ -120,7 +120,7 @@ function pickContent(nodes: unknown[]): OpenMediaFields | undefined {
     return rank(b) - rank(a);
   });
   const primary = parsed[0]!;
-  const contentType = inferContentType({ mimeType: primary.type, medium: primary.medium, mediaUrl: primary.url, embedUrl: primary.embedUrl });
+  const contentType = inferContentType({ mimeType: primary.type, medium: primary.medium, mediaUrl: primary.url });
   return {
     ...(contentType ? { contentType } : {}),
     ...(primary.url ? { mediaUrl: primary.url } : {}),

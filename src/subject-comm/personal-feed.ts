@@ -198,6 +198,7 @@ function viewOf(input: {
     networking: input.networking,
     ...(input.replenishing ? { replenishing: true } : {}),
     ...(input.supplyTrace && input.supplyTrace.length ? { supplyTrace: input.supplyTrace } : {}),
+    feedTitle: '为你发现',
   };
 }
 

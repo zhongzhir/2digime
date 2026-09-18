@@ -37,7 +37,7 @@ test('Talk query hits directory; seek keeps provenance and can add web sources',
     searchCapability: false,
     contentChat: async ({ messages }) => {
       const blob = messages.map((row) => String(row.content || '')).join('\n');
-      if (blob.includes('判断用户在「发现」里的意图')) {
+      if (blob.includes('判断用户在「发现」里')) {
         return {
           text: JSON.stringify({
             intent: 'consume',

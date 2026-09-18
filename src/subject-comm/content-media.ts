@@ -146,6 +146,16 @@ function suffixHint(url: string): NetworkContentType | undefined {
   return undefined;
 }
 
+function schemaObjectType(schemaType?: string): NetworkContentType | undefined {
+  const schema = String(schemaType || '').toLowerCase();
+  if (!schema) return undefined;
+  if (/newsarticle|blogposting|\barticle\b/.test(schema)) return 'article';
+  if (/videoobject|\bmovie\b|tvepisode/.test(schema) || schema === 'video') return 'video';
+  if (/audioobject/.test(schema) || schema === 'audio') return 'audio';
+  if (/imageobject/.test(schema) || schema === 'image') return 'image';
+  return undefined;
+}
+
 export function inferContentType(input: {
   schemaType?: string | undefined;
   mimeType?: string | undefined;
@@ -153,16 +163,16 @@ export function inferContentType(input: {
   oembedType?: string | undefined;
   ogType?: string | undefined;
   mediaUrl?: string | undefined;
-  embedUrl?: string | undefined;
 }): NetworkContentType | undefined {
-  const schema = String(input.schemaType || '').toLowerCase();
-  if (/videoobject|movie|tvepisode|video/.test(schema) && /object|movie|episode|video/.test(schema)) {
-    if (/videoobject|movie|tvepisode/.test(schema) || schema === 'video') return 'video';
-  }
-  if (/videoobject/.test(schema)) return 'video';
-  if (/audioobject/.test(schema)) return 'audio';
-  if (/imageobject/.test(schema)) return 'image';
-  if (/article|newsarticle|blogposting/.test(schema)) return 'article';
+  const fromSchema = schemaObjectType(input.schemaType);
+  if (fromSchema) return fromSchema;
+  const og = String(input.ogType || '').toLowerCase();
+  if (og === 'article') return 'article';
+  if (og === 'video' || og.startsWith('video.')) return 'video';
+  if (og === 'music' || og.startsWith('music.') || og.startsWith('audio')) return 'audio';
+  const oembed = String(input.oembedType || '').toLowerCase();
+  if (oembed === 'video') return 'video';
+  if (oembed === 'photo') return 'image';
   if (input.mimeType) {
     const fromMime = mimeContentType(input.mimeType);
     if (fromMime) return fromMime;
@@ -171,18 +181,7 @@ export function inferContentType(input: {
   if (medium === 'video') return 'video';
   if (medium === 'audio') return 'audio';
   if (medium === 'image') return 'image';
-  const oembed = String(input.oembedType || '').toLowerCase();
-  if (oembed === 'video') return 'video';
-  if (oembed === 'photo') return 'image';
-  const og = String(input.ogType || '').toLowerCase();
-  if (og === 'video' || og.startsWith('video.')) return 'video';
-  if (og === 'music' || og.startsWith('music.') || og.startsWith('audio')) return 'audio';
-  if (og === 'article') return 'article';
-  if (input.mediaUrl) {
-    const hinted = suffixHint(input.mediaUrl);
-    if (hinted) return hinted;
-  }
-  if (input.embedUrl) return 'video';
+  if (input.mediaUrl) return suffixHint(input.mediaUrl);
   return undefined;
 }
 
@@ -214,17 +213,23 @@ export function mergeOpenMedia(...layers: Array<OpenMediaFields | undefined>): O
       }
     });
   }
-  const schemaObjectTypes = new Set(
-    present
-      .filter((row) => row.mediaProvenance === 'schema_org' && row.contentType && row.contentType !== 'other')
-      .map((row) => row.contentType),
-  );
-  if (schemaObjectTypes.size <= 1) {
-    const byObject = [...present].sort(
-      (a, b) => (OBJECT_TYPE_RANK[b.mediaProvenance || 'opengraph'] || 0) - (OBJECT_TYPE_RANK[a.mediaProvenance || 'opengraph'] || 0),
+  const articleLocked = present.some((row) => row.contentType === 'article');
+  if (articleLocked) {
+    out.contentType = 'article';
+  } else {
+    const schemaObjectTypes = new Set(
+      present
+        .filter((row) => row.mediaProvenance === 'schema_org' && row.contentType && row.contentType !== 'other')
+        .map((row) => row.contentType),
     );
-    for (const layer of byObject) {
-      if (out.contentType == null && layer.contentType != null) out.contentType = layer.contentType;
+    if (schemaObjectTypes.size <= 1) {
+      const byObject = [...present].sort(
+        (a, b) =>
+          (OBJECT_TYPE_RANK[b.mediaProvenance || 'opengraph'] || 0) - (OBJECT_TYPE_RANK[a.mediaProvenance || 'opengraph'] || 0),
+      );
+      for (const layer of byObject) {
+        if (out.contentType == null && layer.contentType != null) out.contentType = layer.contentType;
+      }
     }
   }
   if (out.access === 'subscriptionRequired' || out.access === 'loginRequired') {

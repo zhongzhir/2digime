@@ -237,13 +237,15 @@
     if (empty) empty.hidden = cards.length > 0;
   }
 
-  function renderRelated(cards) {
+  function renderRelated(cards, title) {
     const wrap = $('content-discover-related');
     const list = $('content-discover-related-list');
+    const heading = $('content-discover-related-title');
     if (!wrap || !list) return;
     list.innerHTML = '';
     const rows = Array.isArray(cards) ? cards : [];
     wrap.hidden = rows.length === 0;
+    if (heading && title) heading.textContent = title;
     for (const card of rows) list.appendChild(renderCard(card));
   }
 
@@ -266,6 +268,7 @@
     if (
       !incoming.length &&
       lastCards.length &&
+      (view && view.feedMode) !== 'intent' &&
       (replenishing || /暂时无法|检查连接|检查联网|没有找到可以直接看/.test(notice))
     ) {
       renderView(
@@ -305,6 +308,10 @@
     const prefsList = $('content-discover-pref-list');
     const prefEmpty = $('content-discover-pref-empty');
     if (title) title.textContent = (view && view.headline) || '发现';
+    const feedTitle = $('content-discover-feed-title');
+    if (feedTitle) {
+      feedTitle.textContent = (view && view.feedTitle) || ((view && view.feedMode) === 'intent' ? '当前搜索' : '为你发现');
+    }
     if (lead) {
       lead.textContent =
         (view && view.lead) || '这里可以直接看文章、图片、音频和视频。兔机米按你的数字之我挑选，不是中心推荐。';
@@ -324,7 +331,7 @@
       list.innerHTML = '';
       for (const card of lastCards) list.appendChild(renderCard(card));
     }
-    renderRelated(lastRelated);
+    renderRelated(lastRelated, view && view.relatedTitle);
     const emptyText = $('content-discover-empty-text');
     if (emptyText && !lastCards.length && !replenishing) {
       emptyText.textContent =

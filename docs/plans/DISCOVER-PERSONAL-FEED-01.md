@@ -52,6 +52,25 @@
 ## 本轮落地
 
 主路径改为：打开 Discover → 重放本机 Feed 缓存 → 不足或过旧才 bounded 补量 → 本机 2digime 选择。  
-搜索是 `CURRENT INTENT OVERRIDE`。失败保留上次 Feed。联网空态用人话反映机械状态，不展示 reason code。  
+搜索是 `CURRENT_SEARCH_MODE`。失败显示当前搜索无结果，不把上次 Personal Feed 填进搜索主列表。联网空态用人话反映机械状态，不展示 reason code。  
 短期打开/问兔机米/搜索只写 `recent-recommendation-state.json`（可衰减、可重置），不写 Digital Self。  
 工程验收：`docs/audits/DISCOVER-PERSONAL-FEED-01-ACCEPTANCE.md`。
+
+## Search Intent
+
+搜索是 `CURRENT_SEARCH_MODE`：用户当前意图是最高优先级。
+
+```text
+CURRENT USER INTENT
+  > 其它 personalization signals
+```
+
+Digital Self、explicit preference、recent recommendation state 只能在已经符合当前 scope 的内容里排序和精选。它们不得扩大主题范围，也不得把默认 Personal Feed 混进当前搜索主列表。
+
+对象忠实度：
+
+- `PRIMARY_CONTENT`：用户这次要消费的对象本身
+- `ABOUT_CONTENT`：关于该对象的报道、盘点、介绍；可放在「相关介绍」，不得进入消费主 Feed
+- `UNRELATED`：直接排除
+
+宁可 0 个正确结果，不要 10 个错误内容对象。失败时允许返回「为你发现」，旧 Feed 仍在 cache。

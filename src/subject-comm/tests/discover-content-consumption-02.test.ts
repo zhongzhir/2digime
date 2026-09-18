@@ -64,7 +64,7 @@ function chatFromScript(script: {
 }): ChatCompleteFn {
   return async ({ messages }) => {
     const blob = messages.map((row) => String(row.content || '')).join('\n');
-    if (blob.includes('判断用户在「发现」里的意图')) {
+    if (blob.includes('判断用户在「发现」里')) {
       return { text: JSON.stringify(script.intent || { intent: 'consume', objectWanted: 'work_itself' }) };
     }
     if (blob.includes('判断每个候选')) {
@@ -219,8 +219,8 @@ test('INTENT: research keeps commentary in related info, not as fake works', asy
     model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
   });
   assert.equal(sought.intent.intent, 'research');
+  assert.equal(sought.cards.some((card) => card.itemId === COMMENTARY.itemId), true);
   assert.equal(sought.cards.some((card) => card.itemId === VIDEO.itemId), true);
-  assert.equal(sought.relatedCards.some((card) => card.itemId === COMMENTARY.itemId), true);
   assert.match(sought.notice, /问兔机米|分析/);
 });
 
@@ -253,7 +253,7 @@ test('DISCOVERY: honest empty when consume has no object', async () => {
     model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
   });
   assert.equal(sought.cards.length, 0);
-  assert.match(sought.notice, /没有找到可直接消费的内容/);
+  assert.match(sought.notice, /没有找到可以直接/);
   assert.equal(sought.relatedCards.some((card) => card.itemId === COMMENTARY.itemId), true);
 });
 

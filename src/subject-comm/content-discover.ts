@@ -55,6 +55,26 @@ export interface DiscoverView {
   replenishing?: boolean;
   /** 内部供给时间线，UI 不得展示。 */
   supplyTrace?: Array<{ event: string; ms: number; count?: number }>;
+  /** 搜索分区标题。个人 Feed 为「为你发现」。 */
+  feedTitle?: string;
+  /** 内部搜索诊断，UI 不得展示。 */
+  seekTrace?: {
+    rawCandidates: number;
+    topicMatched: number;
+    typeMatched: number;
+    primaryContent: number;
+    aboutContent: number;
+    unrelated: number;
+    selected: number;
+    visible: number;
+    items: Array<{
+      contentId: string;
+      title: string;
+      fidelity?: string;
+      visible?: boolean;
+      contentType?: string;
+    }>;
+  };
 }
 
 export function cardFromNetworkItem(

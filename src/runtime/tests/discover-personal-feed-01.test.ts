@@ -117,6 +117,10 @@ test('UI empty copy is projected from notice, not a hardcoded Settings lie', asy
   const js = await fs.readFile(path.join(process.cwd(), 'electron/renderer/content-discover.js'), 'utf8');
   assert.match(js, /emptyText.textContent/);
   assert.equal(js.includes('view.reasonCode'), false);
+  assert.equal(js.includes('view.seekTrace'), false);
+  assert.match(js, /btn-discover-personal/);
+  assert.match(js, /feedTitle/);
+  assert.match(html, /id="content-discover-feed-title"/);
   assert.match(js, /action: 'refresh'/);
   assert.match(js, /action: 'replenish'/);
   assert.match(js, /兔机米正在准备一些值得看的内容/);

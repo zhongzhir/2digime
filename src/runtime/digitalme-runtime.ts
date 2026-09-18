@@ -630,38 +630,34 @@ export class DigitalMeRuntime {
         },
       });
       if (sought.cards.length) await rememberIntentFeed(packageRoot, sought.cards, query);
-      if (!sought.cards.length) {
-        const cached = await this.runContentDiscover(packageRoot, this.subject.getActive()?.id || '', relayUrl, 'reuse');
-        if (cached.cards.length) {
-          return {
-            ...cached,
-            lead: '根据你刚说的话没找到新内容，仍保留你正在看的列表。',
-            notice: cached.notice || '暂时无法获取新内容，可以稍后再试或检查联网设置。',
-            feedMode: 'personal',
-            reasonCode: cached.reasonCode || 'CACHED_FEED',
-          };
-        }
-      }
+      const topic = sought.intent.topic || query;
       return {
         headline: '发现',
-        lead: '根据你刚说的话找的内容，保留来源链接，不是中心推荐。',
+        lead: `根据你刚说的话找「${topic}」，只显示这次搜索范围内的内容。`,
+        feedTitle: `关于「${topic}」`,
         cards: sought.cards,
         relatedCards: sought.relatedCards,
-        ...(sought.relatedCards.length ? { relatedTitle: '相关信息' } : {}),
+        ...(sought.relatedCards.length ? { relatedTitle: '相关介绍' } : {}),
         preferences,
         notice: sought.notice,
         reasonCode: 'CURRENT_INTENT',
         feedMode: 'intent',
         networking,
+        seekTrace: sought.trace,
       };
     } catch (err) {
       this.lastNetworkCode = classifySearchFailure(err);
-      const cached = await this.runContentDiscover(packageRoot, this.subject.getActive()?.id || '', relayUrl, 'reuse');
       return {
-        ...cached,
+        headline: '发现',
+        lead: '根据你刚说的话找的内容。这次搜索失败，没有改动为你发现里的列表。',
+        feedTitle: `关于「${query}」`,
+        cards: [],
+        relatedCards: [],
+        preferences,
         notice: '暂时无法获取新内容，可以稍后再试或检查联网设置。',
         networking: this.lastNetworkCode,
         reasonCode: this.lastNetworkCode === 'AUTH_FAILED' ? 'NETWORK_AUTH_FAILED' : 'NETWORK_TEMPORARY_ERROR',
+        feedMode: 'intent',
       };
     }
   }

@@ -14,15 +14,46 @@ import {
   interpretDiscoverIntent,
   isDomainLikeTitle,
   isGenericHubUrl,
-  isPrimaryContentRole,
-  isRelatedInfoRole,
+  objectFidelity,
+  strictRequestedTypes,
   type DiscoverIntent,
+  type ObjectFidelity,
 } from './discover-intent';
 
 export interface ExternalSeekHit {
   title: string;
   url: string;
   snippet?: string;
+}
+
+export interface SeekTraceItem {
+  contentId: string;
+  canonicalUrl?: string;
+  title: string;
+  contentType?: string;
+  origin: 'directory' | 'search';
+  searchQuery?: string;
+  fidelity?: ObjectFidelity;
+  typeMatched?: boolean;
+  selected?: boolean;
+  visible?: boolean;
+  reason?: string;
+}
+
+export interface SeekTrace {
+  query: string;
+  topic: string;
+  mode: 'consume' | 'research';
+  requestedContentTypes: string[];
+  rawCandidates: number;
+  topicMatched: number;
+  typeMatched: number;
+  primaryContent: number;
+  aboutContent: number;
+  unrelated: number;
+  selected: number;
+  visible: number;
+  items: SeekTraceItem[];
 }
 
 export interface ContentSeekResult {
@@ -32,10 +63,43 @@ export interface ContentSeekResult {
   usedDirectory: boolean;
   usedExternal: boolean;
   notice: string;
+  trace: SeekTrace;
 }
 
-const CONSUME_EMPTY = '这次没有找到可直接消费的内容。';
+const CONSUME_EMPTY = '这次没有找到可以直接看的内容。';
 const MAX_CARDS = 12;
+
+function emptyTrace(query: string, intent: DiscoverIntent): SeekTrace {
+  return {
+    query,
+    topic: intent.topic,
+    mode: intent.intent,
+    requestedContentTypes: intent.requestedMedia,
+    rawCandidates: 0,
+    topicMatched: 0,
+    typeMatched: 0,
+    primaryContent: 0,
+    aboutContent: 0,
+    unrelated: 0,
+    selected: 0,
+    visible: 0,
+    items: [],
+  };
+}
+
+function honestEmptyNotice(intent: DiscoverIntent): string {
+  const types = strictRequestedTypes(intent);
+  const topic = intent.topic || '这次要的';
+  if (types.includes('video')) return `这次没有找到可以直接观看的 ${topic} 视频。`;
+  if (types.includes('audio')) return `这次没有找到可以直接听的 ${topic} 音频。`;
+  if (types.includes('image')) return `这次没有找到可以直接看的 ${topic} 图片。`;
+  return CONSUME_EMPTY;
+}
+
+function typeMatches(card: DiscoverCard, required: string[]): boolean {
+  if (!required.length) return true;
+  return required.includes(String(card.contentType || ''));
+}
 
 export function directorySeekTerms(query: string): string[] {
   const raw = String(query || '').trim();
@@ -125,6 +189,7 @@ export async function seekContent(input: {
       usedDirectory: false,
       usedExternal: false,
       notice: '请先说想看什么。',
+      trace: emptyTrace(query, emptyIntent),
     };
   }
 
@@ -136,6 +201,8 @@ export async function seekContent(input: {
           model: input.model,
         })
       : emptyIntent;
+  const requiredTypes = strictRequestedTypes(intent);
+  const queryByUrl = new Map<string, string>();
 
   const directoryHits = matchDirectoryForSeek(input.items, query).filter(
     (item) => !isDomainLikeTitle(item.content.title, item.content.url) && !(item.content.url && isGenericHubUrl(item.content.url)),
@@ -147,9 +214,10 @@ export async function seekContent(input: {
   const seenIds = new Set(cards.map((card) => card.itemId));
 
   let usedExternal = false;
+  let searchFailed = false;
   if (input.searchWeb) {
     const queries = intent.searchQueries.length ? intent.searchQueries : [query];
-    const webHits: ExternalSeekHit[] = [];
+    const webHits: Array<ExternalSeekHit & { searchQuery: string }> = [];
     const seenHit = new Set<string>();
     for (const q of queries.slice(0, 2)) {
       try {
@@ -159,10 +227,10 @@ export async function seekContent(input: {
           if (!canonical || seenHit.has(canonical) || seenUrls.has(canonical)) continue;
           if (isGenericHubUrl(canonical) || isDomainLikeTitle(hit.title, canonical)) continue;
           seenHit.add(canonical);
-          webHits.push({ ...hit, url: canonical });
+          webHits.push({ ...hit, url: canonical, searchQuery: q });
         }
       } catch {
-        /* 外部搜索失败时仍返回目录命中 */
+        searchFailed = true;
       }
     }
     for (const hit of webHits) {
@@ -180,27 +248,30 @@ export async function seekContent(input: {
             seenIds.add(item.itemId);
             usedExternal = true;
             added = true;
+            if (canonical) queryByUrl.set(canonical, hit.searchQuery);
             cards.push(cardFromNetworkItem(item, '公开网页来源，不是目录推荐。', 'web'));
-            if (cards.length >= MAX_CARDS) break;
+            if (cards.length >= 24) break;
           }
         } catch {
           /* 单条摄入失败则退回搜索命中本身 */
         }
       }
-      if (!added && cards.length < MAX_CARDS) {
+      if (!added && cards.length < 24) {
         const canonical = canonicalOf(hit.url);
         if (canonical && seenUrls.has(canonical)) continue;
-        if (canonical) seenUrls.add(canonical);
+        if (canonical) {
+          seenUrls.add(canonical);
+          queryByUrl.set(canonical, hit.searchQuery);
+        }
         usedExternal = true;
         cards.push(webCardFromHit(hit, `seek_${seenUrls.size}`));
       }
-      if (cards.length >= MAX_CARDS) break;
+      if (cards.length >= 24) break;
     }
   }
 
   const concrete = cards.filter(isConcreteCandidate);
-  let primary = concrete;
-  let related: DiscoverCard[] = [];
+  const fidelity = new Map<string, ObjectFidelity>();
   if (input.chatComplete && input.model && concrete.length) {
     const roles = await classifyCandidateRoles({
       query,
@@ -210,39 +281,90 @@ export async function seekContent(input: {
         title: card.title,
         url: card.url || '',
         summary: card.text || '',
+        ...(card.contentType ? { contentType: card.contentType } : {}),
       })),
       chatComplete: input.chatComplete,
       model: input.model,
     });
     if (roles.size) {
-      primary = [];
-      related = [];
       for (const card of concrete) {
-        const role = roles.get(card.itemId);
-        if (isPrimaryContentRole(role)) primary.push(card);
-        else if (isRelatedInfoRole(role)) related.push(card);
-      }
-      if (intent.intent === 'research') {
-        related = [...primary.filter((card) => !isPrimaryContentRole(roles.get(card.itemId))), ...related];
-        primary = primary.filter((card) => isPrimaryContentRole(roles.get(card.itemId)));
-        if (!primary.length && intent.objectWanted !== 'work_itself') {
-          /* 研究请求：相关信息单独成组，不把报道冒充可消费主卡 */
-        }
+        fidelity.set(card.itemId, objectFidelity(roles.get(card.itemId)));
       }
     }
   }
 
-  primary = primary.slice(0, MAX_CARDS);
-  related = related.slice(0, 6);
+  const primary: DiscoverCard[] = [];
+  const related: DiscoverCard[] = [];
+  for (const card of concrete) {
+    const matchedType = typeMatches(card, requiredTypes);
+    let kind = fidelity.get(card.itemId);
+    if (!kind) {
+      kind = requiredTypes.length && !matchedType ? 'UNRELATED' : 'PRIMARY_CONTENT';
+    }
+    if (requiredTypes.length && kind === 'PRIMARY_CONTENT' && !matchedType) {
+      kind = 'ABOUT_CONTENT';
+    }
+    fidelity.set(card.itemId, kind);
+    if (kind === 'UNRELATED') continue;
+    if (intent.intent === 'research') {
+      if (kind === 'PRIMARY_CONTENT' || kind === 'ABOUT_CONTENT') primary.push(card);
+    } else if (kind === 'PRIMARY_CONTENT' && matchedType) {
+      primary.push(card);
+    } else if (kind === 'ABOUT_CONTENT') {
+      related.push(card);
+    }
+  }
+
+  const visible = primary.slice(0, MAX_CARDS);
+  const relatedVisible = intent.intent === 'research' ? [] : related.slice(0, 6);
+  const visibleIds = new Set([...visible, ...relatedVisible].map((card) => card.itemId));
+
+  const traceItems: SeekTraceItem[] = concrete.map((card) => {
+    const kind = fidelity.get(card.itemId) || 'UNRELATED';
+    const canonical = canonicalOf(card.url);
+    const matchedType = typeMatches(card, requiredTypes);
+    const isVisible = visibleIds.has(card.itemId);
+    const searchQuery = canonical ? queryByUrl.get(canonical) : undefined;
+    return {
+      contentId: card.itemId,
+      ...(card.url ? { canonicalUrl: card.url } : {}),
+      title: card.title,
+      ...(card.contentType ? { contentType: card.contentType } : {}),
+      origin: card.source === 'web' ? 'search' : 'directory',
+      ...(searchQuery ? { searchQuery } : {}),
+      fidelity: kind,
+      typeMatched: matchedType,
+      selected: kind === 'PRIMARY_CONTENT' && matchedType,
+      visible: isVisible,
+      reason: card.reason,
+    };
+  });
+  const trace: SeekTrace = {
+    query,
+    topic: intent.topic,
+    mode: intent.intent,
+    requestedContentTypes: intent.requestedMedia,
+    rawCandidates: concrete.length,
+    topicMatched: traceItems.filter((row) => row.fidelity !== 'UNRELATED').length,
+    typeMatched: traceItems.filter((row) => row.typeMatched).length,
+    primaryContent: traceItems.filter((row) => row.fidelity === 'PRIMARY_CONTENT').length,
+    aboutContent: traceItems.filter((row) => row.fidelity === 'ABOUT_CONTENT').length,
+    unrelated: traceItems.filter((row) => row.fidelity === 'UNRELATED').length,
+    selected: traceItems.filter((row) => row.selected).length,
+    visible: visible.length,
+    items: traceItems,
+  };
 
   let notice = '';
-  if (!primary.length) {
-    notice =
-      intent.intent === 'consume'
-        ? CONSUME_EMPTY
-        : '这次更适合当作分析材料。可点「问兔机米」，或到「与兔机米」里继续。';
-    if (!input.searchWeb && !directoryHits.length) {
+  if (!visible.length) {
+    if (searchFailed && !directoryHits.length) {
+      notice = '暂时无法获取新内容，可以稍后再试或检查联网设置。';
+    } else if (!input.searchWeb && !directoryHits.length) {
       notice = '还没有新内容。开启联网发现后，兔机米还可以从公开网络帮你找到更多内容。';
+    } else if (intent.intent === 'consume') {
+      notice = honestEmptyNotice(intent);
+    } else {
+      notice = '这次更适合当作分析材料。可点「问兔机米」，或到「与兔机米」里继续。';
     }
   } else if (intent.honestyNote) {
     notice = intent.honestyNote;
@@ -251,12 +373,13 @@ export async function seekContent(input: {
   }
 
   return {
-    cards: primary,
-    relatedCards: related,
+    cards: visible,
+    relatedCards: relatedVisible,
     intent,
     usedDirectory: directoryHits.length > 0,
     usedExternal,
     notice,
+    trace,
   };
 }
 
