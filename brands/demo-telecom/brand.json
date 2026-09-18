@@ -9,6 +9,7 @@
   "iconPng": "brands/demo-telecom/icon.png",
   "supportText": "由 Demo Telecom 提供 AI 服务。密钥与数字之我保存在本机。",
   "supportUrl": "",
+  "webDiscoveryGatewayUrl": "https://relay.muhub.cn",
   "themeTokens": {
     "accent": "#0b6e4f"
   },

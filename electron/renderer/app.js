@@ -156,6 +156,12 @@
     saveGeminiSearch: document.getElementById("btn-save-gemini-search"),
     deleteGeminiSearch: document.getElementById("btn-delete-gemini-search"),
     geminiSearchStatus: document.getElementById("gemini-search-status"),
+    webDiscoveryEnabled: document.getElementById("web-discovery-enabled"),
+    webDiscoveryServiceLabel: document.getElementById("web-discovery-service-label"),
+    webDiscoveryPathManaged: document.getElementById("web-discovery-path-managed"),
+    webDiscoveryPathByok: document.getElementById("web-discovery-path-byok"),
+    webDiscoveryByokFields: document.getElementById("web-discovery-byok-fields"),
+    advancedWebDiscovery: document.getElementById("advanced-web-discovery"),
     remoteRelayUrl: document.getElementById("remote-relay-url"),
     remoteDmConnectionState: document.getElementById("remote-dm-connection-state"),
     btnRemoteRelayConnect: document.getElementById("btn-remote-relay-connect"),
@@ -1272,6 +1278,33 @@
     return !!(shellStatus && shellStatus.geminiSearchConfigured);
   }
 
+  function webDiscoveryPath() {
+    if (els.webDiscoveryPathByok && els.webDiscoveryPathByok.checked) return "byok";
+    return "managed";
+  }
+
+  function syncWebDiscoveryUi() {
+    const enabled = !(els.webDiscoveryEnabled && els.webDiscoveryEnabled.checked === false);
+    const path = webDiscoveryPath();
+    if (els.webDiscoveryServiceLabel) {
+      els.webDiscoveryServiceLabel.textContent =
+        path === "byok" ? "联网服务：使用自己的服务" : "联网服务：兔机米提供（推荐）";
+    }
+    if (els.webDiscoveryByokFields) {
+      els.webDiscoveryByokFields.hidden = path !== "byok";
+    }
+    if (els.webDiscoveryEnabled) els.webDiscoveryEnabled.checked = enabled;
+  }
+
+  async function persistWebDiscoverySettings() {
+    if (typeof api.saveWebDiscoverySettings !== "function") return;
+    const result = await api.saveWebDiscoverySettings({
+      enabled: !(els.webDiscoveryEnabled && els.webDiscoveryEnabled.checked === false),
+      path: webDiscoveryPath(),
+    });
+    rememberShellMeta(result || {});
+  }
+
   function updateGeminiSearchKeyStateUi() {
     const configured = isGeminiSearchConfigured();
     if (els.geminiSearchKeyState) {
@@ -1281,6 +1314,13 @@
     if (els.geminiSearchApiKey) {
       els.geminiSearchApiKey.placeholder = configured ? "若要更换密钥，请输入新密钥" : "粘贴你的密钥";
     }
+    const savedPath = shellStatus && shellStatus.webDiscoveryPath === "byok" ? "byok" : "managed";
+    if (els.webDiscoveryPathManaged) els.webDiscoveryPathManaged.checked = savedPath !== "byok";
+    if (els.webDiscoveryPathByok) els.webDiscoveryPathByok.checked = savedPath === "byok";
+    if (els.webDiscoveryEnabled) {
+      els.webDiscoveryEnabled.checked = !(shellStatus && shellStatus.webDiscoveryEnabled === false);
+    }
+    syncWebDiscoveryUi();
   }
 
   function updateKeyStateUi() {
@@ -7095,6 +7135,9 @@
         }
         els.saveGeminiSearch.disabled = true;
         showStatus(els.geminiSearchStatus, "正在保存…");
+        if (els.webDiscoveryPathByok) els.webDiscoveryPathByok.checked = true;
+        syncWebDiscoveryUi();
+        await persistWebDiscoverySettings();
         const result = await api.saveGeminiSearchCredential({ geminiApiKey });
         rememberShellMeta(result || {});
         if (els.geminiSearchApiKey) {
@@ -7132,6 +7175,28 @@
           userFacingModelError(err, "清除失败，请稍后重试"),
           true,
         );
+      }
+    });
+  }
+
+  if (els.webDiscoveryEnabled) {
+    els.webDiscoveryEnabled.addEventListener("change", async () => {
+      try {
+        await persistWebDiscoverySettings();
+        syncWebDiscoveryUi();
+      } catch (err) {
+        showStatus(els.geminiSearchStatus, userFacingModelError(err, "保存失败，请稍后重试"), true);
+      }
+    });
+  }
+  for (const el of [els.webDiscoveryPathManaged, els.webDiscoveryPathByok]) {
+    if (!el) continue;
+    el.addEventListener("change", async () => {
+      try {
+        await persistWebDiscoverySettings();
+        syncWebDiscoveryUi();
+      } catch (err) {
+        showStatus(els.geminiSearchStatus, userFacingModelError(err, "保存失败，请稍后重试"), true);
       }
     });
   }

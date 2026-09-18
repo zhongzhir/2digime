@@ -87,6 +87,9 @@ const COMMAND_NAMES = new Set([
   "content",
 ]);
 
+/** @type {{ enabled: boolean, path: 'managed' | 'byok' }} */
+let webDiscoveryState = { enabled: true, path: "managed" };
+
 function resolveAppRoot() {
   return path.resolve(__dirname, "..");
 }
@@ -106,7 +109,11 @@ function buildBootInfo(model, appRoot, remoteCapabilityStatus) {
     isPackaged: app.isPackaged,
     electronTest: isElectronTestHarness(),
     buildMeta: loadBuildMeta(appRoot),
-    status,
+    status: {
+      ...status,
+      webDiscoveryEnabled: webDiscoveryState.enabled !== false,
+      webDiscoveryPath: webDiscoveryState.path === "byok" ? "byok" : "managed",
+    },
     remoteCapability: remoteCapabilityStatus || null,
     institution: {
       enabled: Boolean(institution.enabled),
@@ -157,6 +164,27 @@ async function bootstrapRuntime() {
     allowDevRuntimeFile: process.env.DIGITALME_V2_ALLOW_DEV_CREDENTIAL === "1",
   });
 
+  const userDataPath = app.getPath("userData");
+  const {
+    readWebDiscoveryPreference,
+  } = require(path.join(appRoot, "dist", "capability", "web-discovery-preference"));
+  const {
+    readOrCreateInstallCapabilityToken,
+  } = require(path.join(appRoot, "dist", "capability", "install-capability-token"));
+  const webPref = await readWebDiscoveryPreference(userDataPath);
+  webDiscoveryState = webPref;
+  const installToken = await readOrCreateInstallCapabilityToken(userDataPath);
+  const allowManagedGateway = !(isElectronTestHarness() && process.env.DIGITALME_V2_OPEN_WEB_DISCOVERY !== "1");
+  const webDiscoveryGatewayUrl = allowManagedGateway
+    ? String(process.env.DIGITALME_WEB_DISCOVERY_URL || RUNTIME_BRAND.webDiscoveryGatewayUrl || "").trim()
+    : "";
+  const webDiscoveryRuntime = {
+    webDiscoveryEnabled: webPref.enabled !== false,
+    webDiscoveryPath: webPref.path === "byok" ? "byok" : "managed",
+    ...(webDiscoveryGatewayUrl ? { webDiscoveryGatewayUrl } : {}),
+    ...(installToken ? { webDiscoveryInstallToken: installToken } : {}),
+  };
+
   saveCredential = typeof model.saveCredential === "function" ? model.saveCredential : null;
   deleteCredential = typeof model.deleteCredential === "function" ? model.deleteCredential : null;
   saveGeminiSearchCredential =
@@ -187,7 +215,6 @@ async function bootstrapRuntime() {
     resolveResearchBaseUrl,
     publicRemoteCapabilityStatus,
   } = require(path.join(__dirname, "bootstrap-remote-capability.cjs"));
-  const userDataPath = app.getPath("userData");
   const savedRemote = readRemoteCapabilityConfig(userDataPath);
   const resolvedRemote = resolveResearchBaseUrl(userDataPath);
   let a2aRemoteCapability = undefined;
@@ -230,6 +257,7 @@ async function bootstrapRuntime() {
           registerOpenAiStub: false,
           codeAnalysisCapability: "needs_setup",
           ...(a2aRemoteCapability ? { a2aRemoteCapability } : {}),
+          ...webDiscoveryRuntime,
         }
       : model.documentCapability === "openai-compatible"
         ? {
@@ -245,6 +273,7 @@ async function bootstrapRuntime() {
               runtimeRoot: path.join(userDataPath, "runtimes"),
               connection: model.openaiCompatible,
             },
+            ...webDiscoveryRuntime,
           }
         : {
             documentCapability: "none",
@@ -254,6 +283,7 @@ async function bootstrapRuntime() {
             ...(model.geminiSearchModel ? { geminiSearchModel: model.geminiSearchModel } : {}),
             codeAnalysisCapability,
             ...(a2aRemoteCapability ? { a2aRemoteCapability } : {}),
+            ...webDiscoveryRuntime,
           },
   );
   if (process.env.DIGITALME_V2_DIGITAL_SELF_STUB === "1") {
@@ -995,6 +1025,27 @@ function registerIpc() {
   ipcMain.handle("shell:deleteGeminiSearchCredential", async () => {
     if (!deleteGeminiSearchCredential) throw new Error("凭证存储不可用，请确认系统安全存储已启用");
     await deleteGeminiSearchCredential();
+    const boot = await rebootstrapAndNotify();
+    return {
+      ok: true,
+      modelReady: boot.modelReady,
+      modelMeta: boot.modelMeta,
+      status: boot.status,
+    };
+  });
+
+  ipcMain.handle("shell:saveWebDiscoverySettings", async (_evt, input) => {
+    const appRoot = resolveAppRoot();
+    const { writeWebDiscoveryPreference } = require(path.join(
+      appRoot,
+      "dist",
+      "capability",
+      "web-discovery-preference",
+    ));
+    webDiscoveryState = await writeWebDiscoveryPreference(app.getPath("userData"), {
+      enabled: input && input.enabled === false ? false : true,
+      path: input && input.path === "byok" ? "byok" : "managed",
+    });
     const boot = await rebootstrapAndNotify();
     return {
       ok: true,

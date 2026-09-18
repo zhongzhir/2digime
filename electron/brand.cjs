@@ -16,6 +16,7 @@ const FALLBACK = {
   copyright: '兔机米',
   supportText: '密钥保存在本机。',
   supportUrl: '',
+  webDiscoveryGatewayUrl: 'https://relay.muhub.cn',
   themeTokens: { accent: '#1f6feb' },
   institutionDefaults: {
     organizationName: 'Demo Telecom',

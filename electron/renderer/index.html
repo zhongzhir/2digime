@@ -106,7 +106,7 @@
       <section id="view-settings" class="view" hidden>
         <header class="page-heading">
           <h1>设置</h1>
-          <p class="page-lead">连接 AI，密钥保存在本机。也可选允许联网搜索。</p>
+          <p class="page-lead">连接 AI，密钥保存在本机。也可开启联网发现。</p>
           <button type="button" id="btn-settings-back">返回</button>
         </header>
         <div class="welcome-actions settings-panel">
@@ -176,25 +176,53 @@
           </section>
 
           <section class="settings-card settings-search">
-          <h2>联网搜索</h2>
-          <p class="muted">可选。不配置也能正常聊天。</p>
-          <label class="field">
-            <span>Gemini API Key</span>
-            <div class="key-input-row">
-              <input
-                id="gemini-search-api-key"
-                type="password"
-                placeholder="粘贴你的密钥"
-                autocomplete="new-password"
-              />
-            </div>
-            <span id="gemini-search-key-state" class="meta">未配置</span>
+          <h2>联网发现</h2>
+          <p class="muted">兔机米可以从公开网络查找最新信息和内容。搜索时只发送必要的搜索词，不会上传完整数字之我。</p>
+          <label class="field settings-toggle">
+            <span>联网发现</span>
+            <input id="web-discovery-enabled" type="checkbox" checked />
           </label>
-          <div class="row settings-actions">
-            <button type="button" id="btn-save-gemini-search" class="primary">保存</button>
-            <button type="button" id="btn-delete-gemini-search" class="ghost">清除</button>
-          </div>
-          <p id="gemini-search-status" class="status" aria-live="polite"></p>
+          <p id="web-discovery-service-label" class="meta">联网服务：兔机米提供（推荐）</p>
+          <details id="advanced-web-discovery" class="advanced-connection">
+            <summary>高级联网设置</summary>
+            <p class="muted tiny">适合开发者或希望自己承担搜索服务成本的用户。普通使用可保持收起。</p>
+            <fieldset class="field">
+              <legend>联网服务</legend>
+              <label class="choice">
+                <input type="radio" name="web-discovery-path" id="web-discovery-path-managed" value="managed" checked />
+                兔机米提供（推荐）
+              </label>
+              <label class="choice">
+                <input type="radio" name="web-discovery-path" id="web-discovery-path-byok" value="byok" />
+                使用自己的服务
+              </label>
+            </fieldset>
+            <div id="web-discovery-byok-fields" hidden>
+              <label class="field">
+                <span>Provider</span>
+                <select id="web-discovery-provider" disabled>
+                  <option value="gemini" selected>Gemini</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>API Key</span>
+                <div class="key-input-row">
+                  <input
+                    id="gemini-search-api-key"
+                    type="password"
+                    placeholder="粘贴你的密钥"
+                    autocomplete="new-password"
+                  />
+                </div>
+                <span id="gemini-search-key-state" class="meta">未配置</span>
+              </label>
+              <div class="row settings-actions">
+                <button type="button" id="btn-save-gemini-search" class="primary">保存</button>
+                <button type="button" id="btn-delete-gemini-search" class="ghost">清除</button>
+              </div>
+            </div>
+            <p id="gemini-search-status" class="status" aria-live="polite"></p>
+          </details>
           </section>
 
           <section class="settings-card settings-institution">
@@ -1221,6 +1249,7 @@
             <ul class="help-list">
               <li>打开会前往原始链接。兔机米不托管、也不播放这些内容。</li>
               <li>「问兔机米」才会把这篇内容带到对话里，请它解释或比较。</li>
+              <li>联网发现会将必要的搜索词发送给联网服务，不会上传完整数字之我用于中央推荐。</li>
             </ul>
           </div>
 
@@ -1236,7 +1265,7 @@
             <p>在这里连接 AI。连上之后即可聊天。</p>
             <ul class="help-list">
               <li>密钥只保存在这台电脑上。</li>
-              <li>日常不必打开「高级」。</li>
+              <li>日常不必打开「高级」。普通联网发现不需要填写搜索密钥。</li>
             </ul>
           </div>
 
