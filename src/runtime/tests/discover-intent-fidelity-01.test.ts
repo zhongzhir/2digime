@@ -113,6 +113,18 @@ test('CURRENT_SEARCH_MODE does not fill with Personal Feed; return restores cach
   assert.match(String(sought.view.feedTitle || sought.view.lead || ''), /AI/);
   assert.equal(sought.view.seekTrace?.visible, sought.view.cards.length);
 
+  const opened = await bus.invoke('content', { action: 'open', itemId: VIDEO.item.itemId });
+  assert.equal(opened.view.feedMode, 'intent');
+  assert.equal(opened.view.searchQuery, '找几个AI精品视频看一下');
+  assert.deepEqual(
+    opened.view.cards.map((card) => card.itemId),
+    sought.view.cards.map((card) => card.itemId),
+  );
+
+  const missing = await bus.invoke('content', { action: 'open', itemId: 'ni_missing_open' });
+  assert.equal(missing.view.feedMode, 'intent');
+  assert.equal(missing.view.cards.length, sought.view.cards.length);
+
   const cacheAfterSeek = await fs.readFile(path.join(pkgDir, 'content', 'personal-feed-cache.json'), 'utf8');
   assert.equal(JSON.parse(cacheAfterSeek).personal.itemIds.join(','), JSON.parse(cacheBefore).personal.itemIds.join(','));
 

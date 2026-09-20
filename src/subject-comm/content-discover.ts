@@ -57,6 +57,8 @@ export interface DiscoverView {
   supplyTrace?: Array<{ event: string; ms: number; count?: number }>;
   /** 搜索分区标题。个人 Feed 为「为你发现」。 */
   feedTitle?: string;
+  /** CURRENT_SEARCH_MODE 下的用户查询原文。个人 Feed 不带此字段。 */
+  searchQuery?: string;
   /** 内部搜索诊断，UI 不得展示。 */
   seekTrace?: {
     rawCandidates: number;

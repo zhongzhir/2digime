@@ -416,6 +416,8 @@ export class DigitalMeRuntime {
   private detachSubjectNetwork: (() => void) | null = null;
   private relayCollab: RelaySubjectNetwork | null = null;
   private lastNetworkCode: NetworkDiscoveryCode | null = null;
+  /** CURRENT_SEARCH_MODE 最近一次搜索视图。打开外部来源时不得换成个人 Feed。 */
+  private lastIntentView: DiscoverView | null = null;
 
   constructor(options: DigitalMeRuntimeOptions = {}) {
     this.options = options;
@@ -479,36 +481,42 @@ export class DigitalMeRuntime {
 
     if (action === 'seek') {
       const query = String(input.text || '').trim();
-      if (!query) return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'open') };
+      if (!query) {
+        this.lastIntentView = null;
+        return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'open') };
+      }
       return { view: await this.runContentSeek(pkg.rootDir, query, input.relayUrl) };
     }
 
     if (action === 'resetRecent') {
+      this.lastIntentView = null;
       await resetRecentRecommendationState(pkg.rootDir);
       return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'refresh') };
     }
 
     if (action === 'asked') {
-      if (!itemId) return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reuse') };
-      const items = await this.loadDiscoverItems(pkg.rootDir, input.relayUrl);
-      const item = items.find((row) => row.itemId === itemId);
-      await appendRecentRecommendationEvent(pkg.rootDir, {
-        type: 'asked_2digime',
-        itemId,
-        ...(item ? { title: item.content.title } : {}),
-      });
-      return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reuse') };
+      if (itemId) {
+        const items = await this.loadDiscoverItems(pkg.rootDir, input.relayUrl);
+        const item = items.find((row) => row.itemId === itemId);
+        await appendRecentRecommendationEvent(pkg.rootDir, {
+          type: 'asked_2digime',
+          itemId,
+          ...(item ? { title: item.content.title } : {}),
+        });
+      }
+      return { view: await this.currentSearchOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'reuse') };
     }
 
     if (action === 'replenish') {
-      return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'replenish') };
+      return { view: await this.currentSearchOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'replenish') };
     }
 
     if (action === 'refresh') {
-      return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'refresh') };
+      return { view: await this.currentSearchOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'refresh') };
     }
 
     if (action === 'reverse') {
+      this.lastIntentView = null;
       const directiveId = String(input.directiveId || '').trim();
       if (!directiveId) return { view: await empty('请选择要撤销的偏好。') };
       await reverseContentPreference(pkg.rootDir, directiveId);
@@ -516,12 +524,21 @@ export class DigitalMeRuntime {
     }
 
     if (action === 'open' || action === 'later' || action === 'boost' || action === 'reduce' || action === 'follow' || action === 'block') {
-      if (!itemId) return { view: await empty('请先选一条内容。') };
+      if (!itemId) {
+        if (this.lastIntentView) return { view: await this.currentSearchOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'reuse') };
+        return { view: await empty('请先选一条内容。') };
+      }
       const items = await this.loadDiscoverItems(pkg.rootDir, input.relayUrl);
       const item = items.find((row) => row.itemId === itemId);
-      if (!item) return { view: await empty('这条内容已经不在目录里。') };
+      if (!item) {
+        if (this.lastIntentView) return { view: await this.currentSearchOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'reuse') };
+        return { view: await empty('这条内容已经不在目录里。') };
+      }
       const source = action === 'follow' || action === 'block';
-      if (source && !item.publisherSubjectId) return { view: await empty('这条内容没有可关注的来源。') };
+      if (source && !item.publisherSubjectId) {
+        if (this.lastIntentView) return { view: await this.currentSearchOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'reuse') };
+        return { view: await empty('这条内容没有可关注的来源。') };
+      }
       await appendNetworkContentFeedback(
         feedbackFile,
         createUserContentFeedback({
@@ -539,7 +556,7 @@ export class DigitalMeRuntime {
             ? `${action === 'follow' ? '关注来源' : '不再看来源'} ${item.publisherDisplayName || item.publisherSubjectId}`
             : `${action === 'boost' ? '更想看到类似' : '少推类似'}「${item.content.title}」的内容`,
         });
-        return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'refresh') };
+        return { view: await this.currentSearchOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'refresh') };
       }
       if (action === 'open') {
         await appendRecentRecommendationEvent(pkg.rootDir, {
@@ -548,10 +565,26 @@ export class DigitalMeRuntime {
           title: item.content.title,
         });
       }
-      return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reuse') };
+      return { view: await this.currentSearchOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'reuse') };
     }
 
+    this.lastIntentView = null;
     return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'open') };
+  }
+
+  private async currentSearchOrPersonal(
+    packageRoot: string,
+    subjectId: string,
+    relayUrl: string | undefined,
+    personalMode: 'open' | 'refresh' | 'reuse' | 'replenish',
+  ): Promise<DiscoverView> {
+    if (this.lastIntentView) {
+      return {
+        ...this.lastIntentView,
+        preferences: await this.contentPreferenceRows(packageRoot),
+      };
+    }
+    return this.runContentDiscover(packageRoot, subjectId, relayUrl, personalMode);
   }
 
   private async contentPreferenceRows(packageRoot: string): Promise<DiscoverView['preferences']> {
@@ -658,7 +691,7 @@ export class DigitalMeRuntime {
       });
       if (sought.cards.length) await rememberIntentFeed(packageRoot, sought.cards, query);
       const topic = sought.intent.topic || query;
-      return {
+      const view: DiscoverView = {
         headline: '发现',
         lead: `根据你刚说的话找「${topic}」，只显示这次搜索范围内的内容。`,
         feedTitle: `关于「${topic}」`,
@@ -669,12 +702,15 @@ export class DigitalMeRuntime {
         notice: sought.notice,
         reasonCode: 'CURRENT_INTENT',
         feedMode: 'intent',
+        searchQuery: query,
         networking,
         seekTrace: sought.trace,
       };
+      this.lastIntentView = view;
+      return view;
     } catch (err) {
       this.lastNetworkCode = classifySearchFailure(err);
-      return {
+      const view: DiscoverView = {
         headline: '发现',
         lead: '根据你刚说的话找的内容。这次搜索失败，没有改动为你发现里的列表。',
         feedTitle: `关于「${query}」`,
@@ -685,7 +721,10 @@ export class DigitalMeRuntime {
         networking: this.lastNetworkCode,
         reasonCode: this.lastNetworkCode === 'AUTH_FAILED' ? 'NETWORK_AUTH_FAILED' : 'NETWORK_TEMPORARY_ERROR',
         feedMode: 'intent',
+        searchQuery: query,
       };
+      this.lastIntentView = view;
+      return view;
     }
   }
 
