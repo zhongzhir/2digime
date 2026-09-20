@@ -162,7 +162,8 @@ export function createAliyunIqsWebDiscoveryProvider(
         Math.min(WEB_DISCOVERY_MAX_RESULTS, Math.max(1, input.limit || 8)),
       );
       const bound = bindTimeoutSignal({ timeoutMs });
-      let res: Response;
+      let res: Response | undefined;
+      let rawText = '';
       try {
         res = await fetchWithDeadline(
           fetchImpl,
@@ -189,6 +190,7 @@ export function createAliyunIqsWebDiscoveryProvider(
           },
           bound.signal,
         );
+        rawText = await res.text();
       } catch (err) {
         if (isTimeoutAbortReason(err) || bound.timedOut() || (err as { name?: string }).name === 'AbortError') {
           throw new WebDiscoveryError('TEMPORARY_UNAVAILABLE', 'iqs_timeout', 503);
@@ -197,12 +199,8 @@ export function createAliyunIqsWebDiscoveryProvider(
       } finally {
         bound.dispose();
       }
-
-      let rawText = '';
-      try {
-        rawText = await res.text();
-      } catch {
-        rawText = '';
+      if (!res) {
+        throw new WebDiscoveryError('TEMPORARY_UNAVAILABLE', 'iqs_unreachable', 503);
       }
       const contentType = String((res.headers.get('content-type') || '').split(';')[0] || '')
         .trim()
