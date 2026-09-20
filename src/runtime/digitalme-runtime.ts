@@ -1824,9 +1824,24 @@ export class DigitalMeRuntime {
     if (mode !== 'openai-compatible' && mode !== 'both') return null;
     const config = this.options.openaiCompatible;
     const secrets = this.options.secrets;
-    if (!config || !secrets) return null;
+    if (!config) return null;
+    if (!config.complete && !secrets) return null;
     return async ({ messages }) => {
-      const apiKey = await secrets.get(
+      const run = config.complete;
+      if (run) {
+        const result = await run({
+          baseUrl: config.baseUrl,
+          model: config.model,
+          messages,
+          temperature: 0.2,
+          maxTokens: 4096,
+          timeoutMs: config.timeoutMs ?? 120_000,
+          responseFormat: { type: 'json_object' },
+          ...(this.converseAbortSignal ? { signal: this.converseAbortSignal } : {}),
+        });
+        return { text: result.text };
+      }
+      const apiKey = await secrets!.get(
         providerCredentialKey(config.providerId || 'openai-compatible'),
       );
       if (!apiKey) {
@@ -1855,17 +1870,30 @@ export class DigitalMeRuntime {
     if (mode !== 'openai-compatible' && mode !== 'both') return null;
     const config = this.options.openaiCompatible;
     const secrets = this.options.secrets;
-    if (!config || !secrets) return null;
+    if (!config) return null;
+    if (!config.complete && !secrets) return null;
     let schemaMode: 'json_schema' | 'json_object' = 'json_schema';
     return async ({ messages }) => {
-      const apiKey = await secrets.get(
-        providerCredentialKey(config.providerId || 'openai-compatible'),
-      );
-      if (!apiKey) {
-        throw new Error('model credential is not configured');
-      }
-      const run = (responseFormat: NonNullable<Parameters<typeof chatComplete>[0]['responseFormat']>) =>
-        chatComplete({
+      const completeFn = config.complete;
+      const run = async (responseFormat: NonNullable<Parameters<typeof chatComplete>[0]['responseFormat']>) => {
+        if (completeFn) {
+          return completeFn({
+            baseUrl: config.baseUrl,
+            model: config.model,
+            messages,
+            temperature: 0,
+            maxTokens: 4096,
+            timeoutMs: config.timeoutMs ?? 120_000,
+            responseFormat,
+          });
+        }
+        const apiKey = await secrets!.get(
+          providerCredentialKey(config.providerId || 'openai-compatible'),
+        );
+        if (!apiKey) {
+          throw new Error('model credential is not configured');
+        }
+        return chatComplete({
           baseUrl: config.baseUrl,
           apiKey,
           model: config.model,
@@ -1875,6 +1903,7 @@ export class DigitalMeRuntime {
           timeoutMs: config.timeoutMs ?? 120_000,
           responseFormat,
         });
+      };
       const schemaFormat = {
         type: 'json_schema' as const,
         json_schema: {

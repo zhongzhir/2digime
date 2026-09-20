@@ -76,11 +76,25 @@ export interface ChatCompleteOptions {
 export interface ChatCompleteResult {
   text: string;
   toolCalls?: ChatToolCall[];
-  usage?: { totalTokens?: number };
+  usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   /** OpenAI-compatible finish_reason: stop | length | content_filter | ... */
   finishReason?: string;
   /** true when provider stopped due to token/length limit (or equivalent). */
   truncated?: boolean;
+}
+
+export function parseChatUsage(usage: unknown): { inputTokens: number; outputTokens: number; totalTokens: number } | undefined {
+  if (!usage || typeof usage !== 'object') return undefined;
+  const row = usage as Record<string, unknown>;
+  const num = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : undefined);
+  const input = num(row.prompt_tokens) ?? num(row.input_tokens) ?? num(row.inputTokens);
+  const output = num(row.completion_tokens) ?? num(row.output_tokens) ?? num(row.outputTokens);
+  const total = num(row.total_tokens) ?? num(row.totalTokens);
+  if (input === undefined && output === undefined && total === undefined) return undefined;
+  const inputTokens = input ?? 0;
+  const outputTokens = output ?? 0;
+  const totalTokens = total ?? inputTokens + outputTokens;
+  return { inputTokens, outputTokens, totalTokens };
 }
 
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -97,7 +111,13 @@ export async function chatComplete(options: ChatCompleteOptions): Promise<ChatCo
       };
       finish_reason?: string | null;
     }>;
-    usage?: { total_tokens?: number };
+    usage?: {
+      total_tokens?: number;
+      prompt_tokens?: number;
+      completion_tokens?: number;
+      input_tokens?: number;
+      output_tokens?: number;
+    };
   };
   const choice = body.choices?.[0];
   const message = choice?.message;
@@ -127,9 +147,8 @@ export async function chatComplete(options: ChatCompleteOptions): Promise<ChatCo
     ...(finishReason ? { finishReason } : {}),
     ...(truncated ? { truncated: true } : {}),
   };
-  if (typeof body.usage?.total_tokens === 'number') {
-    result.usage = { totalTokens: body.usage.total_tokens };
-  }
+  const usage = parseChatUsage(body.usage);
+  if (usage) result.usage = usage;
   return result;
 }
 

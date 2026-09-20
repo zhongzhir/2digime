@@ -6,7 +6,12 @@ import type {
 } from '../adapter';
 import type { CapabilityRegistration } from '../registration';
 import { asLocalCapabilityAdapter } from '../local-adapter-lifecycle';
-import { chatComplete, ModelHttpError } from '../../infrastructure/model-http';
+import {
+  chatComplete,
+  ModelHttpError,
+  type ChatCompleteOptions,
+  type ChatCompleteResult,
+} from '../../infrastructure/model-http';
 import { providerCredentialKey } from '../../infrastructure/secret-store';
 import { assembleDocumentPrompt } from './prompt-assemble';
 
@@ -32,6 +37,8 @@ export interface OpenAiCompatibleAdapterConfig {
   timeoutMs?: number;
   /** 覆盖默认 availability。 */
   availability?: CapabilityRegistration['availability'];
+  /** 托管 AI 通道。存在时不读 SecretStore，上层仍只认 chatComplete 形状。 */
+  complete?: (options: ChatCompleteOptions) => Promise<ChatCompleteResult>;
 }
 
 export function buildOpenAiCompatibleRegistration(
@@ -77,14 +84,15 @@ export function createOpenAiCompatibleAdapter(
         });
       }
 
-      ctx.reportProgress('正在读取凭证');
-      const apiKey = await ctx.secrets.get(secretKey);
+      ctx.reportProgress(config.complete ? '正在准备模型通道' : '正在读取凭证');
+      const apiKey = config.complete ? 'managed' : await ctx.secrets.get(secretKey);
       if (!apiKey) {
         throw Object.assign(new Error('model credential is not configured'), {
           stage: 'capability' as const,
           actionable: '请先配置模型接口凭证后再试',
         });
       }
+      const runComplete = config.complete || chatComplete;
 
       ctx.reportProgress('正在组织材料');
       const readText =
@@ -103,7 +111,7 @@ export function createOpenAiCompatibleAdapter(
       ctx.reportProgress('正在调用模型');
       let result;
       try {
-        result = await chatComplete({
+        result = await runComplete({
           baseUrl: config.baseUrl,
           apiKey,
           model: config.model,

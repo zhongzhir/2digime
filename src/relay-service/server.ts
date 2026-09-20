@@ -24,10 +24,14 @@ import { createAliyunOpenSearchWebDiscoveryProvider } from '../capability/adapte
 import { createGeminiSearchConnector } from '../capability/adapters/gemini-search';
 import { webDiscoveryProviderFromConnector } from '../capability/web-discovery';
 import { createWebDiscoveryGateway } from './web-discovery-gateway';
+import { createFileAiAllowanceStore } from './ai-allowance';
+import { createManagedAiGateway } from './ai-inference-gateway';
 
 export { FileNetworkItemStore, MemoryNetworkItemStore } from './network-item-store';
 export type { NetworkItemStore } from './network-item-store';
 export { createWebDiscoveryGateway } from './web-discovery-gateway';
+export { createManagedAiGateway } from './ai-inference-gateway';
+export { createFileAiAllowanceStore } from './ai-allowance';
 
 export interface RelayStoredEnvelope {
   version: 1;
@@ -198,6 +202,52 @@ function managedWebDiscoveryProviderId(env: NodeJS.ProcessEnv): string {
   return 'aliyun-iqs';
 }
 
+export function resolveManagedAiGateway(
+  env: NodeJS.ProcessEnv = process.env,
+  dataDir = process.env.RELAY_DATA_DIR || path.join(process.cwd(), '.relay-data'),
+) {
+  const store = createFileAiAllowanceStore(dataDir);
+  const apiKey = String(env.MANAGED_AI_PROVIDER_API_KEY || '').trim();
+  const providerName = String(env.MANAGED_AI_PROVIDER || 'deepseek').trim() || 'deepseek';
+  const model = String(env.MANAGED_AI_PROVIDER_MODEL || 'deepseek-v4-flash').trim() || 'deepseek-v4-flash';
+  const baseUrl =
+    String(env.MANAGED_AI_PROVIDER_BASE_URL || 'https://api.deepseek.com/v1').trim().replace(/\/+$/, '') ||
+    'https://api.deepseek.com/v1';
+  const trialTokenLimit = Number(env.MANAGED_AI_TRIAL_TOKEN_LIMIT || 5_000_000);
+  const globalTokenCeiling = Number(env.MANAGED_AI_GLOBAL_TOKEN_CEILING || 50_000_000);
+  const globalDailyRequests = Number(env.MANAGED_AI_GLOBAL_DAILY_REQUESTS || 2_000);
+  const perPrincipalPerHour = Number(env.MANAGED_AI_PER_PRINCIPAL_PER_HOUR || 30);
+  const maxOutputTokens = Number(env.MANAGED_AI_MAX_OUTPUT_TOKENS || 2_048);
+  const maxInputChars = Number(env.MANAGED_AI_MAX_INPUT_CHARS || 100_000);
+  const concurrency = Number(env.MANAGED_AI_CONCURRENCY || 8);
+  const timeoutMs = Number(env.MANAGED_AI_TIMEOUT_MS || 90_000);
+  if (!apiKey) {
+    logSafe('managed_ai_unavailable', { reason: 'MANAGED_AI_PROVIDER_SECRET_REQUIRED' });
+  }
+  return createManagedAiGateway({
+    ...(apiKey
+      ? {
+          provider: {
+            provider: providerName,
+            baseUrl,
+            apiKey,
+            model,
+          },
+        }
+      : {}),
+    store,
+    trialTokenLimit: Number.isFinite(trialTokenLimit) ? trialTokenLimit : 5_000_000,
+    globalTokenCeiling: Number.isFinite(globalTokenCeiling) ? globalTokenCeiling : 50_000_000,
+    globalDailyRequests: Number.isFinite(globalDailyRequests) ? globalDailyRequests : 2_000,
+    perPrincipalPerHour: Number.isFinite(perPrincipalPerHour) ? perPrincipalPerHour : 30,
+    maxOutputTokens: Number.isFinite(maxOutputTokens) ? maxOutputTokens : 2_048,
+    maxInputChars: Number.isFinite(maxInputChars) ? maxInputChars : 100_000,
+    concurrency: Number.isFinite(concurrency) ? concurrency : 8,
+    timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : 90_000,
+    log: logSafe,
+  });
+}
+
 function emptyManagedGateway(): ReturnType<typeof createWebDiscoveryGateway> {
   return createWebDiscoveryGateway({ log: logSafe });
 }
@@ -274,12 +324,14 @@ export function createRelayServer(options: {
   port?: number;
   defaultTtlMs?: number;
   webDiscovery?: ReturnType<typeof createWebDiscoveryGateway>;
+  aiInference?: ReturnType<typeof createManagedAiGateway>;
 }): { server: ReturnType<typeof createServer>; start: () => Promise<{ host: string; port: number }> } {
   const host = options.host || process.env.RELAY_HOST || '127.0.0.1';
   const port = options.port ?? Number(process.env.RELAY_PORT || 8787);
   const defaultTtlMs = options.defaultTtlMs ?? 7 * 24 * 3600 * 1000;
   const networkItems = options.networkItems || new MemoryNetworkItemStore();
   const webDiscovery = options.webDiscovery || null;
+  const aiInference = options.aiInference || null;
 
   const server = createServer(async (req, res) => {
     try {
@@ -291,6 +343,7 @@ export function createRelayServer(options: {
           plaintext: false,
           publicCandidates: true,
           webDiscovery: !!webDiscovery,
+          managedAi: !!(aiInference && aiInference.ready),
         });
         return;
       }
@@ -318,6 +371,45 @@ export function createRelayServer(options: {
           body,
           installToken: token,
         });
+        sendJson(res, result.statusCode, result.body);
+        return;
+      }
+      if (req.method === 'POST' && url.pathname === '/v1/ai/inference') {
+        if (!aiInference) {
+          sendJson(res, 404, { ok: false, error: 'not_found' });
+          return;
+        }
+        let raw = '';
+        try {
+          raw = await readBody(req, 256_000);
+        } catch {
+          sendJson(res, 413, { ok: false, status: 'PAYLOAD_REJECTED', error: 'body_too_large' });
+          return;
+        }
+        let body: unknown = {};
+        try {
+          body = JSON.parse(raw || '{}');
+        } catch {
+          sendJson(res, 400, { ok: false, status: 'PAYLOAD_REJECTED', error: 'invalid_json' });
+          return;
+        }
+        const token = String(req.headers['x-install-capability-token'] || '').trim();
+        const requestId = String(req.headers['x-request-id'] || '').trim();
+        const result = await aiInference.infer({
+          body,
+          installToken: token,
+          ...(requestId ? { requestId } : {}),
+        });
+        sendJson(res, result.statusCode, result.body);
+        return;
+      }
+      if (req.method === 'GET' && url.pathname === '/v1/ai/allowance') {
+        if (!aiInference) {
+          sendJson(res, 404, { ok: false, error: 'not_found' });
+          return;
+        }
+        const token = String(req.headers['x-install-capability-token'] || '').trim();
+        const result = await aiInference.allowance({ installToken: token });
         sendJson(res, result.statusCode, result.body);
         return;
       }
@@ -471,6 +563,7 @@ async function main(): Promise<void> {
     store,
     networkItems,
     webDiscovery: resolveManagedWebDiscoveryGateway(),
+    aiInference: resolveManagedAiGateway(process.env, dataDir),
   });
   const addr = await start();
   logSafe('relay_listen', { host: addr.host, port: addr.port, dataDir });

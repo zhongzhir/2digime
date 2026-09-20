@@ -91,14 +91,15 @@ export function createCodeRepoAnalysisAdapter(
         });
       }
 
-      ctx.reportProgress('正在读取凭证');
-      const apiKey = await ctx.secrets.get(secretKey);
+      ctx.reportProgress(config.complete ? '正在准备模型通道' : '正在读取凭证');
+      const apiKey = config.complete ? 'managed' : await ctx.secrets.get(secretKey);
       if (!apiKey) {
         throw Object.assign(new Error('model credential is not configured'), {
           stage: 'capability' as const,
           actionable: '请先配置模型接口凭证后再试',
         });
       }
+      const runComplete = config.complete || chatComplete;
 
       if (!ctx.readExtractedText) {
         throw Object.assign(new Error('extracted text resolver is not available'), {
@@ -133,7 +134,7 @@ export function createCodeRepoAnalysisAdapter(
         ) => {
           throwIfDeadline(deadline, budget);
           budget.consume(phase);
-          const r = await chatComplete({
+          const r = await runComplete({
             baseUrl: config.baseUrl,
             apiKey,
             model: config.model,

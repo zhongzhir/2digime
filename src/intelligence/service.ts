@@ -9,6 +9,7 @@ import { formatSelfContext, selectSelfContext } from './self-context';
 import { emptyThread, readThread, writeThread } from './store';
 import { randomUUID } from 'node:crypto';
 import { EMPTY_REPLY, NO_MODEL_NOTICE, runTalkTurn, type SubjectCollabPort } from './loop';
+import { isManagedAiUserNotice } from '../capability/managed-ai-client';
 import type { ProfessionalAgent, TalkChatFn, TalkExecution, TalkView } from './types';
 
 /** 做事（含首次获取代码执行能力）需要数分钟；180s 会在 runtime 仍工作时掐断。 */
@@ -190,7 +191,26 @@ export class TalkService {
       // 本轮已有 execution 则不得把 EMPTY_REPLY 交给用户；复用 execution 机械事实。
       applyUndeliverableFinalFallback(next, turnExecutions);
     } catch (err) {
-      if (!isTalkTimeout(err)) throw err;
+      if (isManagedAiUserNotice(err)) {
+        const last = thread.turns[thread.turns.length - 1];
+        if (!last || last.role !== 'user' || last.text !== text) {
+          thread.turns.push({
+            id: `turn_${randomUUID()}`,
+            at: now,
+            role: 'user',
+            text,
+          });
+        }
+        thread.turns.push({
+          id: `turn_${randomUUID()}`,
+          at: now,
+          role: 'assistant',
+          text: String((err as Error).message || '兔机米提供的免费 AI 额度已经用完。'),
+        });
+        timeoutNotice = String((err as Error).message || '兔机米提供的免费 AI 额度已经用完。');
+        next = thread;
+      } else if (!isTalkTimeout(err)) throw err;
+      else {
       const last = thread.turns[thread.turns.length - 1];
       if (!last || last.role !== 'user' || last.text !== text) {
         thread.turns.push({
@@ -216,6 +236,7 @@ export class TalkService {
       }
       thread.executions = [...(thread.executions || []), ...turnExecutions];
       next = thread;
+      }
     } finally {
       clearTimeout(timer);
     }

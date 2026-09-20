@@ -95,6 +95,23 @@ export function resolveSubjectUnderstandingRuntime(input: {
     };
     return { runtime, source: 'specialist' };
   }
+  const managedComplete = input.openaiCompatible?.complete;
+  const managedCfg = input.openaiCompatible;
+  if (managedComplete && managedCfg) {
+    return {
+      runtime: {
+        enabled: true,
+        chatComplete: (options) => managedComplete(options),
+        model: {
+          baseUrl: managedCfg.baseUrl,
+          model: managedCfg.model,
+          providerId: managedCfg.providerId ?? 'managed-ai',
+        },
+        source: 'generic',
+      },
+      source: 'generic',
+    };
+  }
   if (input.openaiCompatible && input.secrets) {
     const runtime = runtimeFromOpenAiCompatible({
       openaiCompatible: input.openaiCompatible,
