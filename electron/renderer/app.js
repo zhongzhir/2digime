@@ -146,6 +146,13 @@
     testModel: document.getElementById("btn-test-model"),
     deleteModel: document.getElementById("btn-delete-model"),
     settingsStatus: document.getElementById("settings-status"),
+    aiCapabilityState: document.getElementById("ai-capability-state"),
+    aiServiceLabel: document.getElementById("ai-service-label"),
+    aiAllowanceLabel: document.getElementById("ai-allowance-label"),
+    advancedAiCapability: document.getElementById("advanced-ai-capability"),
+    aiCapabilityPathManaged: document.getElementById("ai-capability-path-managed"),
+    aiCapabilityPathByok: document.getElementById("ai-capability-path-byok"),
+    aiCapabilityByokFields: document.getElementById("ai-capability-byok-fields"),
     institutionStatus: document.getElementById("institution-status"),
     institutionUser: document.getElementById("institution-user"),
     connectInstitution: document.getElementById("btn-connect-institution"),
@@ -773,8 +780,15 @@
     }
   }
 
-  window.openDigitalMeAiSettings = function openDigitalMeAiSettings() {
+  window.openDigitalMeAiSettings = function openDigitalMeAiSettings(opts) {
     openSettings({ focusAi: true });
+    if (els.advancedAiCapability) els.advancedAiCapability.open = true;
+    if (opts && opts.byok && els.aiCapabilityPathByok) {
+      els.aiCapabilityPathByok.checked = true;
+      if (typeof persistAiCapabilitySettings === "function") {
+        persistAiCapabilitySettings().catch(() => undefined);
+      }
+    }
   };
 
   const REMOTE_CONNECT_FAIL =
@@ -1224,6 +1238,9 @@
   function userFacingModelError(err, fallback) {
     const raw = redactSecrets((err && err.message) || String(err || ""));
     const msg = raw.split("\n")[0].trim();
+    if (/免费 AI 额度已经用完|ALLOWANCE_EXHAUSTED/i.test(raw)) {
+      return "兔机米提供的免费 AI 额度已经用完。";
+    }
     if (/budget|max_budget|Budget has been exceeded|额度/i.test(raw) || /\b429\b/.test(raw)) {
       return "你的 AI 使用额度已用完。";
     }
@@ -1283,6 +1300,58 @@
     return "managed";
   }
 
+  function aiCapabilityPath() {
+    if (els.aiCapabilityPathByok && els.aiCapabilityPathByok.checked) return "byok";
+    return "managed";
+  }
+
+  function syncAiCapabilityUi() {
+    const path = aiCapabilityPath();
+    const ready = isMainModelConnected();
+    if (els.aiCapabilityState) {
+      els.aiCapabilityState.textContent = ready ? "AI 能力：可用" : "AI 能力：暂不可用";
+      els.aiCapabilityState.classList.toggle("is-ok", ready);
+      els.aiCapabilityState.classList.toggle("is-error", !ready);
+    }
+    if (els.aiServiceLabel) {
+      els.aiServiceLabel.textContent =
+        path === "byok" ? "服务：使用自己的 AI 服务" : "服务：兔机米提供（推荐）";
+    }
+    if (els.aiCapabilityByokFields) {
+      els.aiCapabilityByokFields.hidden = path !== "byok";
+    }
+  }
+
+  async function persistAiCapabilitySettings() {
+    if (typeof api.saveAiCapabilitySettings !== "function") return;
+    const result = await api.saveAiCapabilitySettings({ path: aiCapabilityPath() });
+    rememberShellMeta(result || {});
+    syncAiCapabilityUi();
+    syncMainModelConnectionLabel();
+  }
+
+  async function refreshAiAllowanceLabel() {
+    if (!els.aiAllowanceLabel) return;
+    if (aiCapabilityPath() !== "managed" || typeof api.getAiAllowance !== "function") {
+      els.aiAllowanceLabel.hidden = true;
+      return;
+    }
+    els.aiAllowanceLabel.hidden = false;
+    try {
+      const view = await api.getAiAllowance();
+      if (view && view.ok) {
+        const pct = Number(view.remainingPercent);
+        els.aiAllowanceLabel.textContent = Number.isFinite(pct)
+          ? `免费试用额度：剩余 ${pct}%`
+          : "免费试用额度：剩余 —";
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
+    els.aiAllowanceLabel.textContent = "免费试用额度：剩余 —";
+  }
+
   function syncWebDiscoveryUi() {
     const enabled = !(els.webDiscoveryEnabled && els.webDiscoveryEnabled.checked === false);
     const path = webDiscoveryPath();
@@ -1333,6 +1402,7 @@
       els.modelApiKey.placeholder = configured ? "若要更换密钥，请输入新密钥" : "粘贴你的密钥";
     }
     updateGeminiSearchKeyStateUi();
+    syncAiCapabilityUi();
   }
 
   function syncAdvancedOpenForProvider() {
@@ -1401,6 +1471,11 @@
     }
     updateKeyStateUi();
     syncMainModelConnectionLabel();
+    const savedAiPath = shellStatus && shellStatus.aiCapabilityPath === "byok" ? "byok" : "managed";
+    if (els.aiCapabilityPathManaged) els.aiCapabilityPathManaged.checked = savedAiPath !== "byok";
+    if (els.aiCapabilityPathByok) els.aiCapabilityPathByok.checked = savedAiPath === "byok";
+    syncAiCapabilityUi();
+    refreshAiAllowanceLabel();
     showStatus(els.settingsStatus, "");
     setSettingsTechDetail("");
   }
@@ -5950,6 +6025,11 @@
 
   if (els.btnWelcomeToModel) {
     els.btnWelcomeToModel.addEventListener("click", () => {
+      if (welcomeModelReady()) {
+        showWelcomeStep("start");
+        showWelcomeStatus("", false, true);
+        return;
+      }
       showWelcomeStep("model");
       fillWelcomeModelForm();
       showWelcomeStatus("", false, false);
@@ -7179,6 +7259,17 @@
     });
   }
 
+  for (const el of [els.aiCapabilityPathManaged, els.aiCapabilityPathByok]) {
+    if (!el) continue;
+    el.addEventListener("change", async () => {
+      try {
+        await persistAiCapabilitySettings();
+        await refreshAiAllowanceLabel();
+      } catch (err) {
+        showStatus(els.settingsStatus, userFacingModelError(err, "保存失败，请稍后重试"), true);
+      }
+    });
+  }
   if (els.webDiscoveryEnabled) {
     els.webDiscoveryEnabled.addEventListener("change", async () => {
       try {

@@ -82,6 +82,8 @@ contextBridge.exposeInMainWorld("digitalMe", {
   saveGeminiSearchCredential: (input) => ipcRenderer.invoke("shell:saveGeminiSearchCredential", input),
   deleteGeminiSearchCredential: () => ipcRenderer.invoke("shell:deleteGeminiSearchCredential"),
   saveWebDiscoverySettings: (input) => ipcRenderer.invoke("shell:saveWebDiscoverySettings", input || {}),
+  saveAiCapabilitySettings: (input) => ipcRenderer.invoke("shell:saveAiCapabilitySettings", input || {}),
+  getAiAllowance: () => ipcRenderer.invoke("shell:getAiAllowance"),
   getRemoteCapabilityStatus: () => ipcRenderer.invoke("shell:getRemoteCapabilityStatus"),
   testRemoteCapability: (input) => ipcRenderer.invoke("shell:testRemoteCapability", input),
   saveRemoteCapability: (input) => ipcRenderer.invoke("shell:saveRemoteCapability", input),

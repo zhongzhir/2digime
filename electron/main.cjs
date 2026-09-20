@@ -89,12 +89,17 @@ const COMMAND_NAMES = new Set([
 
 /** @type {{ enabled: boolean, path: 'managed' | 'byok' }} */
 let webDiscoveryState = { enabled: true, path: "managed" };
+/** @type {{ path: 'managed' | 'byok' }} */
+let aiCapabilityState = { path: "managed" };
+let managedAiRuntime = { gatewayUrl: "", installToken: "", ready: false };
 
 function resolveAppRoot() {
   return path.resolve(__dirname, "..");
 }
 
 function buildBootInfo(model, appRoot, remoteCapabilityStatus) {
+  const managedReady = managedAiRuntime.ready === true;
+  const aiPath = aiCapabilityState.path === "byok" ? "byok" : "managed";
   const status = model.status || {
     credentialConfigured: model.ok === true,
     needsCredentialSetup: model.ok !== true,
@@ -103,16 +108,22 @@ function buildBootInfo(model, appRoot, remoteCapabilityStatus) {
   const { readMode } = require("./institution-adapter.cjs");
   const institution = readMode(app.getPath("userData"));
   return {
-    modelReady: model.ok === true,
-    modelMeta: model.modelMeta || null,
-    needsCredentialSetup: !!model.needsCredentialSetup || model.ok !== true,
+    modelReady: managedReady || model.ok === true,
+    modelMeta:
+      managedReady && aiPath === "managed"
+        ? { model: "兔机米提供", baseUrlHost: "", source: "managed" }
+        : model.modelMeta || null,
+    needsCredentialSetup: managedReady ? false : !!model.needsCredentialSetup || model.ok !== true,
     isPackaged: app.isPackaged,
     electronTest: isElectronTestHarness(),
     buildMeta: loadBuildMeta(appRoot),
     status: {
       ...status,
+      needsCredentialSetup: managedReady ? false : !!status.needsCredentialSetup,
       webDiscoveryEnabled: webDiscoveryState.enabled !== false,
       webDiscoveryPath: webDiscoveryState.path === "byok" ? "byok" : "managed",
+      aiCapabilityPath: aiPath,
+      aiService: aiPath === "byok" ? "byok" : "managed",
     },
     remoteCapability: remoteCapabilityStatus || null,
     institution: {
@@ -185,6 +196,54 @@ async function bootstrapRuntime() {
     ...(installToken ? { webDiscoveryInstallToken: installToken } : {}),
   };
 
+  const {
+    readOrMigrateAiCapabilityPreference,
+  } = require(path.join(appRoot, "dist", "capability", "ai-capability-preference"));
+  const aiPref = await readOrMigrateAiCapabilityPreference(userDataPath, {
+    hasByokKey: model.ok === true,
+  });
+  aiCapabilityState = aiPref;
+  const allowManagedAi = !(
+    isElectronTestHarness() && process.env.DIGITALME_V2_OPEN_MANAGED_AI !== "1"
+  );
+  const aiGatewayUrl = allowManagedAi
+    ? String(
+        process.env.DIGITALME_AI_GATEWAY_URL ||
+          process.env.DIGITALME_WEB_DISCOVERY_URL ||
+          RUNTIME_BRAND.webDiscoveryGatewayUrl ||
+          "",
+      ).trim()
+    : "";
+  const useManagedAi = aiPref.path === "managed" && !!aiGatewayUrl && !!installToken;
+  let managedComplete = null;
+  if (useManagedAi) {
+    const { createManagedAiChatComplete } = require(path.join(
+      appRoot,
+      "dist",
+      "capability",
+      "managed-ai-client",
+    ));
+    managedComplete = createManagedAiChatComplete({
+      gatewayUrl: aiGatewayUrl,
+      installToken,
+    });
+  }
+  managedAiRuntime = {
+    gatewayUrl: aiGatewayUrl,
+    installToken: installToken || "",
+    ready: useManagedAi,
+  };
+  const managedOpenaiCompatible = useManagedAi
+    ? {
+        baseUrl: aiGatewayUrl,
+        model: "managed-ai",
+        providerId: "managed-ai",
+        displayName: "兔机米提供",
+        timeoutMs: 600000,
+        complete: managedComplete,
+      }
+    : null;
+
   saveCredential = typeof model.saveCredential === "function" ? model.saveCredential : null;
   deleteCredential = typeof model.deleteCredential === "function" ? model.deleteCredential : null;
   saveGeminiSearchCredential =
@@ -200,7 +259,7 @@ async function bootstrapRuntime() {
   // 确定性 Adapter 仅显式 DIGITALME_V2_P21_DETERMINISTIC=1 时用于工程回退。
   const forceDeterministic = process.env.DIGITALME_V2_P21_DETERMINISTIC === "1";
   const codeAnalysisCapability =
-    model.documentCapability === "openai-compatible"
+    useManagedAi || model.documentCapability === "openai-compatible"
       ? "openai-compatible"
       : forceDeterministic
         ? "deterministic"
@@ -259,6 +318,22 @@ async function bootstrapRuntime() {
           ...(a2aRemoteCapability ? { a2aRemoteCapability } : {}),
           ...webDiscoveryRuntime,
         }
+      : useManagedAi && managedOpenaiCompatible
+        ? {
+            documentCapability: "openai-compatible",
+            openaiCompatible: managedOpenaiCompatible,
+            ...(model.secrets ? { secrets: model.secrets } : {}),
+            registerOpenAiStub: false,
+            codeAnalysisCapability,
+            ...(model.geminiSearchApiKey ? { geminiSearchApiKey: model.geminiSearchApiKey } : {}),
+            ...(model.geminiSearchModel ? { geminiSearchModel: model.geminiSearchModel } : {}),
+            ...(a2aRemoteCapability ? { a2aRemoteCapability } : {}),
+            acquiredCodingCapability: {
+              runtimeRoot: path.join(userDataPath, "runtimes"),
+              connection: managedOpenaiCompatible,
+            },
+            ...webDiscoveryRuntime,
+          }
       : model.documentCapability === "openai-compatible"
         ? {
             documentCapability: "openai-compatible",
@@ -991,6 +1066,30 @@ function registerIpc() {
   });
 
   ipcMain.handle("shell:testModelConnection", async (_evt, input) => {
+    if (aiCapabilityState.path === "managed" && managedAiRuntime.ready) {
+      const appRoot = resolveAppRoot();
+      const { createManagedAiChatComplete } = require(path.join(
+        appRoot,
+        "dist",
+        "capability",
+        "managed-ai-client",
+      ));
+      const complete = createManagedAiChatComplete({
+        gatewayUrl: managedAiRuntime.gatewayUrl,
+        installToken: managedAiRuntime.installToken,
+      });
+      const result = await complete({
+        baseUrl: managedAiRuntime.gatewayUrl,
+        model: "managed-ai",
+        messages: [{ role: "user", content: "请只回复一个字：好" }],
+        maxTokens: 64,
+        temperature: 0,
+        timeoutMs: 45_000,
+      });
+      const text = String(result.text || "").trim();
+      if (!text) throw new Error("模型未返回有效内容");
+      return { ok: true, model: "兔机米提供", previewChars: text.length };
+    }
     if (!testConnection) throw new Error("凭证存储不可用，请确认系统安全存储已启用");
     const result = await testConnection(input || {});
     return result;
@@ -1053,6 +1152,45 @@ function registerIpc() {
       modelMeta: boot.modelMeta,
       status: boot.status,
     };
+  });
+
+  ipcMain.handle("shell:saveAiCapabilitySettings", async (_evt, input) => {
+    const appRoot = resolveAppRoot();
+    const { writeAiCapabilityPreference } = require(path.join(
+      appRoot,
+      "dist",
+      "capability",
+      "ai-capability-preference",
+    ));
+    aiCapabilityState = await writeAiCapabilityPreference(app.getPath("userData"), {
+      path: input && input.path === "byok" ? "byok" : "managed",
+    });
+    const boot = await rebootstrapAndNotify();
+    return {
+      ok: true,
+      modelReady: boot.modelReady,
+      modelMeta: boot.modelMeta,
+      status: boot.status,
+    };
+  });
+
+  ipcMain.handle("shell:getAiAllowance", async () => {
+    if (!managedAiRuntime.ready || !managedAiRuntime.gatewayUrl || !managedAiRuntime.installToken) {
+      return { ok: false };
+    }
+    const appRoot = resolveAppRoot();
+    const { fetchManagedAiAllowance } = require(path.join(
+      appRoot,
+      "dist",
+      "capability",
+      "managed-ai-client",
+    ));
+    const view = await fetchManagedAiAllowance({
+      gatewayUrl: managedAiRuntime.gatewayUrl,
+      installToken: managedAiRuntime.installToken,
+    });
+    if (!view) return { ok: false };
+    return { ok: true, ...view };
   });
 
   ipcMain.handle("shell:getRemoteCapabilityStatus", async () => {

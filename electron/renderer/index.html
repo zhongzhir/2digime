@@ -38,11 +38,11 @@
         <div id="welcome-step-intro" class="welcome-actions welcome-step">
           <p class="muted">先连接 AI，然后开始聊天。</p>
           <div class="row">
-            <button type="button" id="btn-welcome-to-model" class="primary">连接 AI</button>
+            <button type="button" id="btn-welcome-to-model" class="primary">开始使用</button>
             <button type="button" id="btn-welcome-skip-model" class="ghost">先看看</button>
           </div>
           <p id="welcome-skip-hint" class="muted tiny" hidden>
-            可以先看看，但聊天需要先连接 AI。
+            可以先看看界面。普通使用无需自己配置 API Key。
           </p>
           <p id="welcome-status" class="status" hidden></p>
         </div>
@@ -106,13 +106,33 @@
       <section id="view-settings" class="view" hidden>
         <header class="page-heading">
           <h1>设置</h1>
-          <p class="page-lead">连接 AI，密钥保存在本机。也可开启联网发现。</p>
+          <p class="page-lead">AI 能力由兔机米提供。高级设置里可以改用自己的服务。</p>
           <button type="button" id="btn-settings-back">返回</button>
         </header>
         <div class="welcome-actions settings-panel">
           <section class="settings-card settings-model">
-          <h2>AI 连接</h2>
-          <p class="muted">连接后即可开始聊天。密钥保存在本机。</p>
+          <h2>AI 能力</h2>
+          <p class="muted">普通使用无需申请或填写 API Key。</p>
+          <p id="ai-capability-state" class="connection-state" aria-live="polite">AI 能力：可用</p>
+          <p id="ai-service-label" class="meta">服务：兔机米提供（推荐）</p>
+          <p id="ai-allowance-label" class="meta">免费试用额度：剩余 —</p>
+
+          <details id="advanced-ai-capability" class="advanced-connection">
+            <summary>高级 AI 设置</summary>
+            <p class="muted tiny">适合开发者或希望自己承担模型费用的用户。普通使用可保持收起。</p>
+            <fieldset class="field">
+              <legend>服务</legend>
+              <label class="choice">
+                <input type="radio" name="ai-capability-path" id="ai-capability-path-managed" value="managed" checked />
+                兔机米提供（推荐）
+              </label>
+              <label class="choice">
+                <input type="radio" name="ai-capability-path" id="ai-capability-path-byok" value="byok" />
+                使用自己的 AI 服务
+              </label>
+            </fieldset>
+            <div id="ai-capability-byok-fields" hidden>
+          <p class="muted tiny">密钥只保存在本机。</p>
 
           <label class="field">
             <span>服务提供方</span>
@@ -172,6 +192,8 @@
           <details id="settings-tech-detail" class="settings-tech-detail" hidden>
             <summary>详细原因</summary>
             <pre id="settings-tech-body" class="settings-tech-body"></pre>
+          </details>
+            </div>
           </details>
           </section>
 
@@ -1236,7 +1258,7 @@
             <h2>与兔机米</h2>
             <p>在这里直接说话。聊天、把一件事做完、纠正对你的理解，都在这一页完成。</p>
             <ul class="help-list">
-              <li>还没连接 AI 时无法回复，请到「设置」连接后再试。</li>
+              <li>兔机米提供对话能力。若免费额度用完，可到「设置」使用自己的 AI 服务。</li>
               <li>对话是完善数字之我的主要方式；你确认过的内容会被记住。</li>
               <li>需要做成具体工作时，直接说出来即可。做成的文件会出现在对话里。</li>
               <li>想找内容时也可以直接说。找到的内容会放进「发现」，不在对话里堆成信息流。</li>

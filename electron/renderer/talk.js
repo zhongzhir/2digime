@@ -61,6 +61,9 @@
     if (/timeout after|请求超时|AbortError|ETIMEDOUT|TalkTimeout|超时/i.test(raw)) {
       return TALK_TIMEOUT_NOTICE;
     }
+    if (/免费 AI 额度已经用完|ALLOWANCE_EXHAUSTED/i.test(raw)) {
+      return '兔机米提供的免费 AI 额度已经用完。';
+    }
     if (/budget|max_budget|额度已用完|Budget has been exceeded|quota/i.test(raw) || /\b429\b/.test(raw)) {
       return '你的 AI 使用额度已用完。';
     }
@@ -83,7 +86,7 @@
   }
 
   function needsConnectAiNotice(text) {
-    return /需要先连接 AI 能力/.test(String(text || ''));
+    return /需要先连接 AI 能力|免费 AI 额度已经用完/.test(String(text || ''));
   }
 
   function syncConnectAiAction(text) {
@@ -91,8 +94,12 @@
     if (!btn) return;
     const show = needsConnectAiNotice(text);
     btn.hidden = !show;
-    if (show) btn.removeAttribute('hidden');
-    else btn.setAttribute('hidden', '');
+    if (show) {
+      btn.removeAttribute('hidden');
+      btn.textContent = /免费 AI 额度已经用完/.test(String(text || ''))
+        ? '使用自己的 AI 服务'
+        : '连接 AI';
+    } else btn.setAttribute('hidden', '');
   }
 
   function openAiSettings() {
@@ -109,6 +116,10 @@
     if (!btn || btn.dataset.bound) return;
     btn.dataset.bound = '1';
     btn.addEventListener('click', () => {
+      if (typeof window.openDigitalMeAiSettings === 'function') {
+        window.openDigitalMeAiSettings({ byok: /使用自己的 AI 服务/.test(btn.textContent || '') });
+        return;
+      }
       openAiSettings();
     });
   }
