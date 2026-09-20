@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { searchOpenMedia } from '../content-source-capabilities';
+import { listOpenCatalog, searchOpenMedia } from '../content-source-capabilities';
 import { ingestSource } from '../content-ingest';
 import { MemoryNetworkItemStore } from '../../relay-service/network-item-store';
 
@@ -41,4 +41,25 @@ test('live open media: PeerTube / Wikimedia / iTunes return concrete objects', {
   if (!video.length && !image.length && !audio.length && !feed.items.length) {
     t.skip('no open media source reachable');
   }
+});
+
+test('live open catalog list without query returns PeerTube / Commons / podcast / RSS', { timeout: 60_000 }, async (t) => {
+  const hits = await listOpenCatalog().catch((err) => {
+    t.skip(`open catalog unavailable: ${String(err && err.message ? err.message : err).slice(0, 160)}`);
+    return [];
+  });
+  const store = new MemoryNetworkItemStore();
+  const feed = await ingestSource({ sourceUrl: 'https://framatube.org/feeds/videos.xml', store, limit: 2 });
+  const kinds = new Set(hits.map((row) => row.contentType));
+  if (!hits.length && !feed.items.length) {
+    t.skip('no open catalog source reachable');
+    return;
+  }
+  if (hits.length) {
+    assert.ok(hits.some((row) => /^https:\/\//i.test(row.url)));
+  }
+  if (feed.items.length) {
+    assert.ok(feed.items[0]?.content.url);
+  }
+  assert.equal(kinds.has('video') || feed.items.length > 0, true);
 });

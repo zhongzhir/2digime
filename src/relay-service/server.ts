@@ -19,6 +19,7 @@ import {
   MemoryNetworkItemStore,
   type NetworkItemStore,
 } from './network-item-store';
+import { createAliyunOpenSearchWebDiscoveryProvider } from '../capability/adapters/aliyun-opensearch-web-discovery';
 import { createGeminiSearchConnector } from '../capability/adapters/gemini-search';
 import { webDiscoveryProviderFromConnector } from '../capability/web-discovery';
 import { createWebDiscoveryGateway } from './web-discovery-gateway';
@@ -187,9 +188,39 @@ function logSafe(event: string, fields: Record<string, string | number | boolean
   console.log(line);
 }
 
-function resolveManagedWebDiscoveryGateway(env: NodeJS.ProcessEnv = process.env) {
+function managedWebDiscoveryProviderId(env: NodeJS.ProcessEnv, apiKey: string): string {
+  const named = String(env.WEB_DISCOVERY_PROVIDER || '').trim().toLowerCase();
+  if (named) return named;
+  return /^os-/i.test(apiKey) ? 'aliyun-opensearch' : 'gemini';
+}
+
+export function resolveManagedWebDiscoveryGateway(env: NodeJS.ProcessEnv = process.env) {
   const apiKey = String(env.WEB_DISCOVERY_PROVIDER_API_KEY || env.GEMINI_API_KEY || '').trim();
   if (!apiKey) return createWebDiscoveryGateway({ log: logSafe });
+  const providerId = managedWebDiscoveryProviderId(env, apiKey);
+  if (providerId === 'aliyun-opensearch' || providerId === 'aliyun') {
+    const endpoint = String(env.WEB_DISCOVERY_PROVIDER_ENDPOINT || '').trim();
+    const workspace = String(env.WEB_DISCOVERY_PROVIDER_WORKSPACE || '').trim();
+    const serviceId = String(env.WEB_DISCOVERY_PROVIDER_SERVICE_ID || '').trim();
+    if (!endpoint) {
+      logSafe('web_discovery_unavailable', { reason: 'MANAGED_PROVIDER_ENDPOINT_REQUIRED' });
+      return createWebDiscoveryGateway({ log: logSafe });
+    }
+    try {
+      return createWebDiscoveryGateway({
+        provider: createAliyunOpenSearchWebDiscoveryProvider({
+          apiKey,
+          endpoint,
+          ...(workspace ? { workspace } : {}),
+          ...(serviceId ? { serviceId } : {}),
+        }),
+        log: logSafe,
+      });
+    } catch {
+      logSafe('web_discovery_unavailable', { reason: 'MANAGED_PROVIDER_CONFIG_REQUIRED' });
+      return createWebDiscoveryGateway({ log: logSafe });
+    }
+  }
   const model = String(env.WEB_DISCOVERY_PROVIDER_MODEL || env.GEMINI_SEARCH_MODEL || env.GEMINI_MODEL || '').trim();
   const connector = createGeminiSearchConnector({
     apiKey,

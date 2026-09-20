@@ -2,7 +2,12 @@
  * 非个性化开放来源登记。只存 Feed / 官方开放 API endpoint。
  * 不是用户推荐，不含 preference vector，不按人排序。
  */
-export type OpenCatalogKind = 'peertube_search' | 'media_rss' | 'wikimedia_commons' | 'itunes_podcast';
+export type OpenCatalogKind =
+  | 'peertube_search'
+  | 'media_rss'
+  | 'wikimedia_commons'
+  | 'itunes_podcast'
+  | 'itunes_rss';
 export type OpenCatalogContentType = 'article' | 'video' | 'image' | 'audio';
 
 export interface OpenSourceEndpoint {
@@ -40,6 +45,13 @@ export const OPEN_SOURCE_CATALOG: OpenSourceEndpoint[] = [
     label: 'iTunes Podcasts',
     kind: 'itunes_podcast',
     url: 'https://itunes.apple.com/search',
+    contentTypes: ['audio'],
+  },
+  {
+    id: 'itunes-top-podcasts',
+    label: 'iTunes Top Podcasts',
+    kind: 'itunes_rss',
+    url: 'https://itunes.apple.com/cn/rss/toppodcasts/limit=10/json',
     contentTypes: ['audio'],
   },
 ];

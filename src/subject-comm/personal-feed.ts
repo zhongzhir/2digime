@@ -24,6 +24,7 @@ import type { ContentPreferenceDirective } from './content-preferences';
 import { isNetworkItemExpired } from './network-item';
 import {
   catalogFeedUrls,
+  listOpenCatalog,
   networkItemFromOpenHit,
   searchOpenMedia,
   sourceKindsForRequest,
@@ -280,6 +281,23 @@ function canSearch(input: {
   );
 }
 
+function canFetchOpenCatalog(input: {
+  fetchOpenMedia?: OpenMediaFetch;
+  networking: NetworkDiscoveryCode;
+}): boolean {
+  return !!(input.fetchOpenMedia && input.networking !== 'DISABLED');
+}
+
+function canReplenishSupply(input: {
+  searchWeb?: (query: string) => Promise<ExternalSeekHit[]>;
+  fetchOpenMedia?: OpenMediaFetch;
+  chatComplete?: ChatCompleteFn;
+  model?: { baseUrl: string; model: string; apiKey?: string };
+  networking: NetworkDiscoveryCode;
+}): boolean {
+  return canSearch(input) || canFetchOpenCatalog(input);
+}
+
 function cacheFresh(snapshot: FeedSnapshot | undefined, nowMs: number): boolean {
   if (!snapshot?.generatedAt) return false;
   const at = Date.parse(snapshot.generatedAt);
@@ -374,7 +392,7 @@ export async function ensurePersonalFeed(input: {
     mark('DIRECTORY_READ', localFromDirectory.length || input.items.filter((item) => isConsumableItem(item, now)).length);
     const localCards = localFromCache.length ? localFromCache : localFromDirectory;
     const fresh = localFromCache.length ? cacheFresh(cache.personal, nowMs) : localCards.length >= MIN_FEED;
-    const replenishing = canSearch({ ...input, networking }) && (localCards.length < MIN_FEED || !fresh);
+    const replenishing = canReplenishSupply({ ...input, networking }) && (localCards.length < MIN_FEED || !fresh);
     if (localCards.length) {
       const snapshot: FeedSnapshot = {
         itemIds: localCards.map((card) => card.itemId),
@@ -446,66 +464,83 @@ export async function ensurePersonalFeed(input: {
   let replenished = false;
   let searchAttempted = false;
 
-  if (
-    needReplenish &&
-    input.chatComplete &&
-    input.model &&
-    networking !== 'DISABLED' &&
-    (input.searchWeb || input.fetchOpenMedia)
-  ) {
-    const selfContext = formatSelfContext(selectSelfContext(input.digitalSelf, ''));
-    const intents = await proposeDiscoveryIntents({
-      selfContext,
-      chatComplete: input.chatComplete,
-      model: input.model,
-      now,
-      ...(input.preferenceDirectives ? { preferenceDirectives: input.preferenceDirectives } : {}),
-      ...(formatRecentRecommendationContext(recent)
-        ? { recentContext: formatRecentRecommendationContext(recent) }
-        : {}),
-    });
-    const queries = intents.map((row) => row.searchQuery).filter(Boolean);
-    if (input.fetchOpenMedia) {
-      const topic = queries[0] || '';
-      for (const row of intents.slice(0, 3)) {
-        const kinds = sourceKindsForRequest(row.contentTypes).filter(
-          (kind) => kind === 'video' || kind === 'image' || kind === 'audio',
-        );
-        const mediaKinds = kinds.length ? kinds : (['video', 'image', 'audio'] as const);
+  const acceptOpenHits = async (openHits: Awaited<ReturnType<typeof searchOpenMedia>>) => {
+    if (openHits.length) replenished = true;
+    for (const hit of openHits.slice(0, 6)) {
+      if (hit.feedUrl && input.ingestHit) {
         try {
-          const openHits = await searchOpenMedia({
-            query: row.searchQuery || topic,
-            kinds: [...mediaKinds],
-            fetchImpl: input.fetchOpenMedia,
-          });
-          if (openHits.length) replenished = true;
-          for (const hit of openHits.slice(0, 6)) {
-            if (hit.feedUrl && input.ingestHit) {
-              try {
-                await input.ingestHit({ title: hit.title, url: hit.feedUrl, ...(hit.snippet ? { snippet: hit.snippet } : {}) });
-                continue;
-              } catch {
-                /* feed 失败则收下单条 */
-              }
-            }
-            const item = networkItemFromOpenHit(hit, now);
-            if (!item) continue;
-            if (input.putNetworkItem) {
-              try {
-                await input.putNetworkItem(item);
-              } catch {
-                items.push(item);
-              }
-            } else {
-              items.push(item);
-            }
-          }
+          await input.ingestHit({ title: hit.title, url: hit.feedUrl, ...(hit.snippet ? { snippet: hit.snippet } : {}) });
+          continue;
         } catch {
-          /* 单个媒介来源失败不阻断其它媒介 */
+          /* feed 失败则收下单条 */
+        }
+      }
+      const item = networkItemFromOpenHit(hit, now);
+      if (!item) continue;
+      if (input.putNetworkItem) {
+        try {
+          await input.putNetworkItem(item);
+        } catch {
+          items.push(item);
+        }
+      } else {
+        items.push(item);
+      }
+    }
+  };
+
+  if (needReplenish && networking !== 'DISABLED' && (input.searchWeb || input.fetchOpenMedia)) {
+    const ranked = !!(input.chatComplete && input.model);
+    let queries: string[] = [];
+    let intents: Awaited<ReturnType<typeof proposeDiscoveryIntents>> = [];
+    if (ranked && input.chatComplete && input.model) {
+      const selfContext = formatSelfContext(selectSelfContext(input.digitalSelf, ''));
+      intents = await proposeDiscoveryIntents({
+        selfContext,
+        chatComplete: input.chatComplete,
+        model: input.model,
+        now,
+        ...(input.preferenceDirectives ? { preferenceDirectives: input.preferenceDirectives } : {}),
+        ...(formatRecentRecommendationContext(recent)
+          ? { recentContext: formatRecentRecommendationContext(recent) }
+          : {}),
+      });
+      queries = intents.map((row) => row.searchQuery).filter(Boolean);
+    }
+    if (input.fetchOpenMedia) {
+      if (ranked && intents.length) {
+        const topic = queries[0] || '';
+        for (const row of intents.slice(0, 3)) {
+          const kinds = sourceKindsForRequest(row.contentTypes).filter(
+            (kind) => kind === 'video' || kind === 'image' || kind === 'audio',
+          );
+          const mediaKinds = kinds.length ? kinds : (['video', 'image', 'audio'] as const);
+          try {
+            await acceptOpenHits(
+              await searchOpenMedia({
+                query: row.searchQuery || topic,
+                kinds: [...mediaKinds],
+                fetchImpl: input.fetchOpenMedia,
+              }),
+            );
+          } catch {
+            /* 单个媒介来源失败不阻断其它媒介 */
+          }
+        }
+      } else if (!ranked) {
+        try {
+          await acceptOpenHits(
+            await listOpenCatalog({
+              kinds: ['video', 'image', 'audio'],
+              fetchImpl: input.fetchOpenMedia,
+            }),
+          );
+        } catch {
+          /* 开放目录失败不阻断 RSS */
         }
       }
       if (input.ingestHit) {
-        for (const feedUrl of catalogFeedUrls(['video'])) {
+        for (const feedUrl of catalogFeedUrls(['video', 'audio', 'article', 'image'])) {
           try {
             const ingested = await input.ingestHit({ title: 'open catalog', url: feedUrl });
             if (ingested.length) replenished = true;
@@ -517,7 +552,7 @@ export async function ensurePersonalFeed(input: {
     }
     if (input.reloadItems) items = (await input.reloadItems()).filter((item) => isConsumableItem(item, now) && !blocked(item, prefs));
     const stillShort = items.filter((item) => !shown.has(item.itemId) && !opened.has(item.itemId)).length < MIN_FEED;
-    if (input.searchWeb && stillShort) {
+    if (ranked && input.searchWeb && stillShort) {
       for (const query of queries.slice(0, 2)) {
         searchAttempted = true;
         try {
@@ -583,20 +618,44 @@ export async function ensurePersonalFeed(input: {
   }
 
   if (!input.chatComplete || !input.model) {
+    const openCards = directoryCards(candidates, prefs, MAX_FEED, now);
+    if (openCards.length) {
+      const snapshot: FeedSnapshot = {
+        itemIds: openCards.map((card) => card.itemId),
+        generatedAt: now,
+        mode: 'personal',
+      };
+      await writeCache(input.packageRoot, { version: 1, personal: snapshot, lastView: snapshot });
+      mark('FIRST_CARD_VISIBLE', openCards.length);
+      return finish(
+        viewOf({
+          cards: openCards,
+          preferences: input.preferences,
+          notice: '',
+          reasonCode: replenished ? 'REPLENISHED' : 'LOCAL_DIRECTORY',
+          feedMode: 'personal',
+          networking,
+        }),
+        replenished ? 'REPLENISHED' : 'LOCAL_DIRECTORY',
+      );
+    }
     const fallback = cachedCards.length ? cachedCards : lastCards;
     if (fallback.length) mark('FIRST_CARD_VISIBLE', fallback.length);
+    const reasonCode: FeedReasonCode = fallback.length
+      ? 'CACHED_FEED'
+      : networking === 'DISABLED'
+        ? 'NETWORK_DISABLED'
+        : 'DIRECTORY_EMPTY';
     return finish(
       viewOf({
         cards: fallback,
         preferences: input.preferences,
-        notice: fallback.length
-          ? noticeFor('CACHED_FEED', true)
-          : '连接 AI 之后，才能按你的数字之我挑选内容。',
-        reasonCode: fallback.length ? 'CACHED_FEED' : 'AI_NOT_CONNECTED',
+        notice: noticeFor(reasonCode, fallback.length > 0),
+        reasonCode,
         feedMode: 'personal',
         networking,
       }),
-      fallback.length ? 'CACHED_FEED' : 'AI_NOT_CONNECTED',
+      reasonCode,
     );
   }
 

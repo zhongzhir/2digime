@@ -366,3 +366,133 @@ test('cold open shows preparing then replenish persists directory inventory', as
   assert.ok(second.view.cards.length >= 1);
   assert.equal(second.reasonCode === 'CACHED_FEED' || second.reasonCode === 'LOCAL_DIRECTORY', true);
 });
+
+test('zero-key Discover lists open catalog without a model and does not ask for API Key', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-zerokey-'));
+  const stored: NetworkItem[] = [];
+  const opened = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items: [],
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    fetchOpenMedia: async () => ({ status: 200, body: '{}', finalUrl: 'https://example.org' }),
+    mode: 'open',
+    now: NOW,
+  });
+  assert.equal(opened.view.cards.length, 0);
+  assert.equal(opened.view.replenishing, true);
+  assert.equal(/API Key|连接 AI/.test(opened.view.notice || ''), false);
+
+  const filled = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items: [],
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    searchWeb: async () => {
+      throw new Error('managed search down');
+    },
+    fetchOpenMedia: async (url) => {
+      if (url.includes('/api/v1/videos')) {
+        return {
+          status: 200,
+          body: JSON.stringify({
+            data: [{ name: 'Open science talk', url: 'https://framatube.org/w/zero-start', description: 'public video' }],
+          }),
+          finalUrl: url,
+        };
+      }
+      if (url.includes('commons.wikimedia.org')) {
+        return {
+          status: 200,
+          body: JSON.stringify({
+            query: {
+              pages: {
+                '1': {
+                  title: 'File:OpenLab.jpg',
+                  imageinfo: [{ url: 'https://upload.wikimedia.org/wikipedia/commons/o.jpg', mime: 'image/jpeg' }],
+                },
+              },
+            },
+          }),
+          finalUrl: url,
+        };
+      }
+      if (url.includes('rss/toppodcasts')) {
+        return {
+          status: 200,
+          body: JSON.stringify({
+            feed: {
+              entry: [
+                {
+                  title: { label: 'Public tech podcast' },
+                  id: { label: 'https://podcasts.apple.com/cn/podcast/public-tech/id1' },
+                  summary: { label: 'weekly' },
+                },
+              ],
+            },
+          }),
+          finalUrl: url,
+        };
+      }
+      return { status: 404, body: '{}', finalUrl: url };
+    },
+    putNetworkItem: async (item) => {
+      stored.push(item);
+    },
+    reloadItems: async () => stored,
+    getItem: async (itemId) => stored.find((row) => row.itemId === itemId),
+    mode: 'replenish',
+    now: NOW,
+  });
+  assert.ok(filled.view.cards.length >= 1, 'open catalog should produce visible cards');
+  assert.equal(filled.reasonCode, 'REPLENISHED');
+  assert.equal(/API Key|请配置|连接 AI/.test(filled.view.notice || ''), false);
+  assert.equal(JSON.stringify(stored).includes('preferencevector'), false);
+});
+
+test('managed search fault keeps an existing feed and still tries open catalog', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-fault-'));
+  const local = FEED_01_SEED_ITEMS.slice(0, 6);
+  const seeded = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items: local,
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    mode: 'open',
+    now: NOW,
+  });
+  assert.ok(seeded.view.cards.length >= 4);
+  const cache = JSON.parse(await fs.readFile(personalFeedCachePath(root), 'utf8')) as {
+    personal: { generatedAt: string; itemIds: string[] };
+  };
+  cache.personal.generatedAt = '2020-01-01T00:00:00.000Z';
+  await fs.writeFile(personalFeedCachePath(root), `${JSON.stringify(cache, null, 2)}\n`);
+  let catalogTried = 0;
+  const failed = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items: local,
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    searchWeb: async () => {
+      throw new Error('managed provider down');
+    },
+    fetchOpenMedia: async () => {
+      catalogTried += 1;
+      throw new Error('catalog timeout');
+    },
+    getItem: async (itemId) => local.find((row) => row.itemId === itemId),
+    mode: 'replenish',
+    now: NOW,
+  });
+  assert.equal(failed.view.cards.length, seeded.view.cards.length);
+  assert.ok(catalogTried >= 1);
+  assert.equal(/API Key|请配置 Gemini/.test(failed.view.notice || ''), false);
+});

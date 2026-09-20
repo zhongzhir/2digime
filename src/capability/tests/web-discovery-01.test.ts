@@ -5,7 +5,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { createServer } from 'node:http';
 import { createWebDiscoveryGateway } from '../../relay-service/web-discovery-gateway';
-import { createRelayServer, FileRelayStore } from '../../relay-service/server';
+import { createRelayServer, FileRelayStore, resolveManagedWebDiscoveryGateway } from '../../relay-service/server';
+import { createAliyunOpenSearchWebDiscoveryProvider } from '../adapters/aliyun-opensearch-web-discovery';
 import {
   forbiddenWebDiscoveryKeys,
   parseWebDiscoveryRequest,
@@ -204,6 +205,7 @@ test('app package sources do not embed managed provider secrets', async () => {
     const text = await fs.readFile(path.join(root, rel), 'utf8');
     assert.equal(secret.test(text), false, rel);
     assert.equal(/geminiSearchResult/.test(text), false, rel);
+    assert.equal(/aliyunSearchResult/.test(text), false, rel);
   }
   const settings = await fs.readFile(path.join(root, 'electron/renderer/index.html'), 'utf8');
   assert.match(settings, /联网发现/);
@@ -211,4 +213,65 @@ test('app package sources do not embed managed provider secrets', async () => {
   assert.match(settings, /高级联网设置/);
   assert.equal(/<h2>联网搜索<\/h2>/.test(settings), false);
   assert.ok(settings.indexOf('gemini-search-api-key') > settings.indexOf('advanced-web-discovery'));
+});
+
+test('Aliyun OpenSearch provider maps official fields and gateway still returns web-discovery', async () => {
+  let authHeader = '';
+  const provider = createAliyunOpenSearchWebDiscoveryProvider({
+    apiKey: 'OS-test-not-a-real-key',
+    endpoint: 'https://example.platform-cn-shanghai.opensearch.aliyuncs.com',
+    workspace: 'tujimi',
+    fetchImpl: async (_url, init) => {
+      const headers = init?.headers as Record<string, string>;
+      authHeader = String(headers.authorization || headers.Authorization || '');
+      const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+      assert.equal(body.query, '今天 AI 有什么重要进展');
+      assert.equal(body.query_rewrite, false);
+      assert.equal(body.history, undefined);
+      assert.equal(Object.prototype.hasOwnProperty.call(body, 'digitalSelf'), false);
+      return new Response(
+        JSON.stringify({
+          result: {
+            search_result: [
+              {
+                title: '今日 AI 进展',
+                link: 'https://example.org/ai-today',
+                snippet: 'public note',
+                meta_info: { publishedTime: '2026-09-20T00:00:00Z' },
+              },
+            ],
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    },
+  });
+  const hits = await provider.search({ query: '今天 AI 有什么重要进展', limit: 5 });
+  assert.equal(provider.id, 'aliyun-opensearch');
+  assert.equal(hits[0]?.title, '今日 AI 进展');
+  assert.equal(hits[0]?.url, 'https://example.org/ai-today');
+  assert.equal(hits[0]?.snippet, 'public note');
+  assert.match(authHeader, /^Bearer OS-/);
+
+  const gateway = createWebDiscoveryGateway({ provider });
+  const result = await gateway.search({
+    body: { query: '今天 AI 有什么重要进展' },
+    installToken: 'install-capability-token-test-0001',
+  });
+  assert.equal(result.body.ok, true);
+  assert.equal(result.body.provider, 'web-discovery');
+  assert.equal(result.body.results?.[0]?.url, 'https://example.org/ai-today');
+});
+
+test('Relay env WEB_DISCOVERY_PROVIDER=aliyun-opensearch requires endpoint; missing config is not a client key prompt', async () => {
+  const missing = resolveManagedWebDiscoveryGateway({
+    WEB_DISCOVERY_PROVIDER: 'aliyun-opensearch',
+    WEB_DISCOVERY_PROVIDER_API_KEY: 'OS-test-not-a-real-key',
+  });
+  const empty = await missing.search({
+    body: { query: 'today ai' },
+    installToken: 'install-capability-token-test-0001',
+  });
+  assert.equal(empty.body.error, 'MANAGED_PROVIDER_SECRET_REQUIRED');
+  assert.equal(empty.body.status, 'TEMPORARY_UNAVAILABLE');
 });

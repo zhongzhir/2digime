@@ -84,6 +84,7 @@ export async function launchDigitalMeElectron(opts?: {
   })) {
     if (typeof value === 'string' && value !== '') env[key] = value;
   }
+  delete env.NODE_TEST_CONTEXT;
   for (const [key, value] of Object.entries(opts?.extraEnv || {})) {
     if (value === '') delete env[key];
   }

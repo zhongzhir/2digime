@@ -208,6 +208,66 @@ function itunesHits(endpoint: OpenSourceEndpoint, data: unknown): OpenMediaHit[]
   return out;
 }
 
+function itunesTopHits(endpoint: OpenSourceEndpoint, data: unknown): OpenMediaHit[] {
+  const rec = data && typeof data === 'object' ? (data as { feed?: { entry?: unknown } }) : null;
+  const rows = rec?.feed && Array.isArray(rec.feed.entry) ? rec.feed.entry : [];
+  const out: OpenMediaHit[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    const item = row as Record<string, unknown>;
+    const labelOf = (value: unknown) => {
+      if (!value) return '';
+      if (typeof value === 'string') return value;
+      if (typeof value === 'object' && 'label' in value) return String((value as { label?: string }).label || '');
+      return '';
+    };
+    const url = asSafe(labelOf(item.id) || labelOf(item.link)) || '';
+    if (!url) continue;
+    const title = clipTitle(labelOf(item['im:name']) || labelOf(item.title) || url);
+    if (!title) continue;
+    const images = Array.isArray(item['im:image']) ? item['im:image'] : [];
+    const thumb = asSafe(labelOf(images[images.length - 1]));
+    out.push({
+      title,
+      url,
+      contentType: 'audio',
+      capability: endpoint.id,
+      ...(thumb ? { thumbnailUrl: thumb } : {}),
+      ...(labelOf(item['im:artist']) ? { author: clipTitle(labelOf(item['im:artist'])).slice(0, 80) } : {}),
+      snippet: clipText(labelOf(item.summary) || title).slice(0, 400),
+    });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+function peertubeListUrl(endpoint: OpenSourceEndpoint, query: string): string {
+  if (query) return `${endpoint.url}?search=${encodeURIComponent(query)}&count=8&nsfw=false`;
+  return `${originOf(endpoint.url)}/api/v1/videos?count=8&nsfw=false`;
+}
+
+function commonsListUrl(endpoint: OpenSourceEndpoint, kind: SourceContentKind, query: string): string {
+  if (!query) {
+    if (kind === 'video') {
+      return (
+        `${endpoint.url}?action=query&format=json&generator=search` +
+        `&gsrsearch=${encodeURIComponent('filetype:video')}&gsrnamespace=6&gsrlimit=8` +
+        `&prop=imageinfo&iiprop=url|mime|size`
+      );
+    }
+    return (
+      `${endpoint.url}?action=query&format=json&generator=allimages&gailimit=8` +
+      `&prop=imageinfo&iiprop=url|mime|size`
+    );
+  }
+  const gsr = kind === 'video' ? `filetype:video ${query}` : query;
+  return (
+    `${endpoint.url}?action=query&format=json&generator=search` +
+    `&gsrsearch=${encodeURIComponent(gsr)}&gsrnamespace=6&gsrlimit=8` +
+    `&prop=imageinfo&iiprop=url|mime|size`
+  );
+}
+
 export async function searchOpenMedia(input: {
   query: string;
   kinds: SourceContentKind[];
@@ -215,7 +275,6 @@ export async function searchOpenMedia(input: {
   endpoints?: OpenSourceEndpoint[];
 }): Promise<OpenMediaHit[]> {
   const query = String(input.query || '').trim();
-  if (!query) return [];
   const kinds = input.kinds.filter(
     (row): row is SourceContentKind => row === 'video' || row === 'image' || row === 'audio',
   );
@@ -229,8 +288,7 @@ export async function searchOpenMedia(input: {
     if (!wanted.length) continue;
     try {
       if (endpoint.kind === 'peertube_search' && wanted.includes('video')) {
-        const url = `${endpoint.url}?search=${encodeURIComponent(query)}&count=8&nsfw=false`;
-        const hits = peertubeHits(endpoint, await readJson(fetchImpl, url));
+        const hits = peertubeHits(endpoint, await readJson(fetchImpl, peertubeListUrl(endpoint, query)));
         for (const hit of hits) {
           if (seen.has(hit.url)) continue;
           seen.add(hit.url);
@@ -238,12 +296,7 @@ export async function searchOpenMedia(input: {
         }
       } else if (endpoint.kind === 'wikimedia_commons') {
         for (const kind of wanted) {
-          const gsr = kind === 'video' ? `filetype:video ${query}` : query;
-          const url =
-            `${endpoint.url}?action=query&format=json&generator=search` +
-            `&gsrsearch=${encodeURIComponent(gsr)}&gsrnamespace=6&gsrlimit=8` +
-            `&prop=imageinfo&iiprop=url|mime|size`;
-          const hits = commonsHits(endpoint, await readJson(fetchImpl, url), kind);
+          const hits = commonsHits(endpoint, await readJson(fetchImpl, commonsListUrl(endpoint, kind, query)), kind);
           for (const hit of hits) {
             if (seen.has(hit.url)) continue;
             seen.add(hit.url);
@@ -251,6 +304,7 @@ export async function searchOpenMedia(input: {
           }
         }
       } else if (endpoint.kind === 'itunes_podcast' && wanted.includes('audio')) {
+        if (!query) continue;
         const episodeUrl =
           `${endpoint.url}?term=${encodeURIComponent(query)}&media=podcast&entity=podcastEpisode&limit=8`;
         const podcastUrl =
@@ -265,6 +319,13 @@ export async function searchOpenMedia(input: {
           seen.add(key);
           out.push(hit);
         }
+      } else if (endpoint.kind === 'itunes_rss' && wanted.includes('audio')) {
+        const hits = itunesTopHits(endpoint, await readJson(fetchImpl, endpoint.url));
+        for (const hit of hits) {
+          if (seen.has(hit.url)) continue;
+          seen.add(hit.url);
+          out.push(hit);
+        }
       }
     } catch {
       /* 单个开放来源失败不阻断其它来源 */
@@ -272,6 +333,20 @@ export async function searchOpenMedia(input: {
     if (out.length >= 16) break;
   }
   return out.slice(0, 16);
+}
+
+/** 无用户查询时列出开放目录样本。不是按人排序，也不从 Digital Self 抽关键词。 */
+export async function listOpenCatalog(input: {
+  kinds?: SourceContentKind[];
+  fetchImpl?: OpenMediaFetch;
+  endpoints?: OpenSourceEndpoint[];
+} = {}): Promise<OpenMediaHit[]> {
+  return searchOpenMedia({
+    query: '',
+    kinds: input.kinds && input.kinds.length ? input.kinds : ['video', 'image', 'audio'],
+    ...(input.fetchImpl ? { fetchImpl: input.fetchImpl } : {}),
+    ...(input.endpoints ? { endpoints: input.endpoints } : {}),
+  });
 }
 
 export function networkItemFromOpenHit(hit: OpenMediaHit, now?: string): NetworkItem | null {
