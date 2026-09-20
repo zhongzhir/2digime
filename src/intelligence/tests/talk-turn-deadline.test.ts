@@ -8,7 +8,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { createDigitalMeRuntime } from '../../runtime/digitalme-runtime';
 import { createCommandBus } from '../../runtime/command-bus';
-import { TALK_SYNTHESIS_TIMEOUT_NOTICE, TALK_TIMEOUT_NOTICE } from '../service';
+import { TALK_TIMEOUT_NOTICE } from '../service';
 import { talkThreadFilePath } from '../store';
 
 import type { TalkChatFn } from '../types';
@@ -201,8 +201,10 @@ test('Talk 整轮超时：已有工具成功必须保留，并说明最终回复
     await fs.mkdir(project, { recursive: true });
     const talked = await bus.invoke('talk', { text: '写一个文件', contextPaths: [project] });
     const last = talked.view.turns[talked.view.turns.length - 1];
-    assert.equal(last?.text, TALK_SYNTHESIS_TIMEOUT_NOTICE);
-    assert.equal(talked.view.notice, TALK_SYNTHESIS_TIMEOUT_NOTICE);
+    assert.match(String(last?.text || ''), /已修改 done\.txt/);
+    assert.match(String(last?.text || ''), /详细说明生成超时/);
+    assert.equal(talked.view.outcome, 'PARTIAL_SUCCESS');
+    assert.match(String(talked.view.notice || ''), /已修改 done\.txt/);
     const abs = path.join(project, 'done.txt');
     assert.equal(await fs.readFile(abs, 'utf8'), 'ok');
     const rec = JSON.parse(await fs.readFile(talkThreadFilePath(pkgDir), 'utf8')) as {

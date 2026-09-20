@@ -31,6 +31,8 @@ import { formatPublicCardsForModel } from '../subject-collab/public-card';
 export const NO_MODEL_NOTICE = '需要先连接 AI 能力，才能继续交流。';
 
 const MAX_TOOL_ROUNDS = 8;
+/** 与 Relay complete timeout 对齐；不得把整轮 leftover deadline 当成单次 HTTP 等待。 */
+export const TALK_CHAT_TRANSPORT_TIMEOUT_MS = 90_000;
 /** 无 execution 时的普通聊天空回复；有 execution 时不得落到用户面（见 TalkService fallback）。 */
 export const EMPTY_REPLY = '我在。请再说一次你想让我做什么。';
 
@@ -251,6 +253,11 @@ function callTimeoutMs(remaining: number): number {
   return Math.max(1, remaining);
 }
 
+function chatTransportTimeoutMs(remaining: number): number {
+  if (!Number.isFinite(remaining)) return TALK_CHAT_TRANSPORT_TIMEOUT_MS;
+  return Math.max(1, Math.min(remaining, TALK_CHAT_TRANSPORT_TIMEOUT_MS));
+}
+
 function bindCallSignal(parent: AbortSignal | undefined, timeoutMs: number): {
   signal: AbortSignal;
   dispose: () => void;
@@ -374,7 +381,7 @@ export async function runTalkTurn(input: {
     return input.chat({
       ...req,
       ...(input.signal ? { signal: input.signal } : {}),
-      ...(Number.isFinite(left) ? { timeoutMs: Math.max(1, left) } : {}),
+      ...(Number.isFinite(left) ? { timeoutMs: chatTransportTimeoutMs(left) } : { timeoutMs: TALK_CHAT_TRANSPORT_TIMEOUT_MS }),
     });
   };
 

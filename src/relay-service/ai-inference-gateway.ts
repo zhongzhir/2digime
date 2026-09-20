@@ -21,6 +21,12 @@ export type ManagedAiGatewayStatus =
   | 'AVAILABLE'
   | 'ALLOWANCE_EXHAUSTED'
   | 'RATE_LIMITED'
+  | 'LOCAL_RATE_LIMITED'
+  | 'CONCURRENCY_BUSY'
+  | 'GLOBAL_CEILING'
+  | 'PROVIDER_RATE_LIMITED'
+  | 'PROVIDER_TIMEOUT'
+  | 'PROVIDER_5XX'
   | 'AUTH_FAILED'
   | 'PROVIDER_ERROR'
   | 'TEMPORARY_UNAVAILABLE'
@@ -69,6 +75,9 @@ export interface ManagedAiGatewayOptions {
   maxInputChars?: number;
   concurrency?: number;
   timeoutMs?: number;
+  /** provider 瞬时失败最多再试几次（不含首次）。默认 2。 */
+  maxProviderRetries?: number;
+  retryBackoffMs?: number;
   now?: () => number;
   complete?: typeof chatComplete;
   log?: (event: string, fields: Record<string, string | number | boolean | undefined>) => void;
@@ -190,11 +199,17 @@ export function parseAiInferenceRequest(
 }
 
 function httpStatusOf(status: ManagedAiGatewayStatus): number {
-  if (status === 'AVAILABLE') return 200;
-  if (status === 'ALLOWANCE_EXHAUSTED') return 200;
-  if (status === 'RATE_LIMITED') return 429;
-  if (status === 'AUTH_FAILED') return 503;
-  if (status === 'TEMPORARY_UNAVAILABLE') return 503;
+  if (status === 'AVAILABLE' || status === 'ALLOWANCE_EXHAUSTED') return 200;
+  if (
+    status === 'RATE_LIMITED' ||
+    status === 'LOCAL_RATE_LIMITED' ||
+    status === 'CONCURRENCY_BUSY' ||
+    status === 'GLOBAL_CEILING' ||
+    status === 'PROVIDER_RATE_LIMITED'
+  ) {
+    return 429;
+  }
+  if (status === 'AUTH_FAILED' || status === 'TEMPORARY_UNAVAILABLE' || status === 'PROVIDER_TIMEOUT') return 503;
   if (status === 'PAYLOAD_REJECTED') return 400;
   return 502;
 }
@@ -202,14 +217,41 @@ function httpStatusOf(status: ManagedAiGatewayStatus): number {
 function classifyProviderError(err: unknown): { status: ManagedAiGatewayStatus; message: string } {
   if (err instanceof ModelHttpError) {
     if (err.kind === 'unauthorized') return { status: 'AUTH_FAILED', message: 'provider_auth' };
-    if (err.kind === 'rate_limited') return { status: 'RATE_LIMITED', message: 'provider_rate' };
-    if (err.kind === 'timeout' || err.kind === 'aborted' || err.kind === 'network') {
-      return { status: 'TEMPORARY_UNAVAILABLE', message: err.kind };
-    }
-    if (err.kind === 'server_error') return { status: 'TEMPORARY_UNAVAILABLE', message: 'provider_5xx' };
+    if (err.kind === 'rate_limited') return { status: 'PROVIDER_RATE_LIMITED', message: 'provider_rate' };
+    if (err.kind === 'timeout') return { status: 'PROVIDER_TIMEOUT', message: 'timeout' };
+    if (err.kind === 'aborted') return { status: 'TEMPORARY_UNAVAILABLE', message: 'aborted' };
+    if (err.kind === 'network') return { status: 'TEMPORARY_UNAVAILABLE', message: 'network' };
+    if (err.kind === 'server_error') return { status: 'PROVIDER_5XX', message: 'provider_5xx' };
     return { status: 'PROVIDER_ERROR', message: err.kind };
   }
   return { status: 'PROVIDER_ERROR', message: 'provider_error' };
+}
+
+function isRetryableProviderStatus(status: ManagedAiGatewayStatus, message: string): boolean {
+  if (message === 'aborted') return false;
+  return status === 'PROVIDER_RATE_LIMITED' || status === 'PROVIDER_5XX' || status === 'PROVIDER_TIMEOUT';
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (ms <= 0) {
+    if (signal?.aborted) return Promise.reject(new ModelHttpError('aborted', 'request aborted by caller'));
+    return Promise.resolve();
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new ModelHttpError('aborted', 'request aborted by caller'));
+    };
+    if (signal) {
+      if (signal.aborted) {
+        clearTimeout(timer);
+        reject(new ModelHttpError('aborted', 'request aborted by caller'));
+        return;
+      }
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+  });
 }
 
 export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
@@ -218,6 +260,7 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
     body: unknown;
     installToken?: string;
     requestId?: string;
+    signal?: AbortSignal;
   }) => Promise<ManagedAiGatewayResult>;
   allowance: (input: { installToken?: string }) => Promise<{
     statusCode: number;
@@ -238,6 +281,8 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
   const maxInputChars = options.maxInputChars ?? 100_000;
   const concurrencyCap = options.concurrency ?? 8;
   const timeoutMs = options.timeoutMs ?? 90_000;
+  const maxProviderRetries = Math.max(0, Math.min(2, Math.floor(options.maxProviderRetries ?? 2)));
+  const retryBackoffMs = Math.max(0, options.retryBackoffMs ?? 200);
   const now = options.now || Date.now;
   const complete = options.complete || chatComplete;
   const log = options.log || (() => undefined);
@@ -294,7 +339,12 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
     };
   }
 
-  async function infer(input: { body: unknown; installToken?: string; requestId?: string }): Promise<ManagedAiGatewayResult> {
+  async function infer(input: {
+    body: unknown;
+    installToken?: string;
+    requestId?: string;
+    signal?: AbortSignal;
+  }): Promise<ManagedAiGatewayResult> {
     const started = now();
     const token = String(input.installToken || '').trim();
     if (token.length < 32) {
@@ -351,10 +401,17 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
     }
 
     return enqueue(principalId, async () => {
+      if (input.signal?.aborted) {
+        return {
+          statusCode: 503,
+          body: { ok: false, status: 'TEMPORARY_UNAVAILABLE' as const, error: 'aborted' },
+        };
+      }
       if (inFlight >= concurrencyCap) {
+        log('ai_inference', { status: 'CONCURRENCY_BUSY', principal: principalId, inFlight });
         return {
           statusCode: 429,
-          body: { ok: false, status: 'RATE_LIMITED' as const, error: 'concurrency' },
+          body: { ok: false, status: 'CONCURRENCY_BUSY' as const, error: 'concurrency' },
         };
       }
       const hour = hourBucket(now());
@@ -364,15 +421,21 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
         window.count = 0;
       }
       if (window.count >= perPrincipalPerHour) {
-        return { statusCode: 429, body: { ok: false, status: 'RATE_LIMITED' as const, error: 'rate_limited' } };
+        log('ai_inference', {
+          status: 'LOCAL_RATE_LIMITED',
+          principal: principalId,
+          count: window.count,
+          limit: perPrincipalPerHour,
+        });
+        return { statusCode: 429, body: { ok: false, status: 'LOCAL_RATE_LIMITED' as const, error: 'rate_limited' } };
       }
 
       const nowIso = new Date(now()).toISOString();
       const global = await store.readGlobal();
       const dayRequests = global.day === nowIso.slice(0, 10) ? global.dayRequests : 0;
       if (global.tokensUsed >= globalTokenCeiling || dayRequests >= globalDailyRequests) {
-        log('ai_inference', { status: 'RATE_LIMITED', reason: 'global_ceiling' });
-        return { statusCode: 429, body: { ok: false, status: 'RATE_LIMITED' as const, error: 'global_ceiling' } };
+        log('ai_inference', { status: 'GLOBAL_CEILING', reason: 'global_ceiling', principal: principalId });
+        return { statusCode: 429, body: { ok: false, status: 'GLOBAL_CEILING' as const, error: 'global_ceiling' } };
       }
 
       let row = await loadOrCreateAllowance(principalId, nowIso);
@@ -400,20 +463,44 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
       perPrincipal.set(principalId, window);
       let result: ChatCompleteResult;
       try {
-        result = await complete({
-          baseUrl: provider.baseUrl,
-          apiKey: provider.apiKey,
-          model: provider.model,
-          messages: parsed.messages,
-          maxTokens: parsed.maxTokens,
-          timeoutMs,
-          ...(parsed.temperature !== undefined ? { temperature: parsed.temperature } : {}),
-          ...(parsed.tools ? { tools: parsed.tools } : {}),
-          ...(parsed.toolChoice ? { toolChoice: parsed.toolChoice } : {}),
-          ...(parsed.responseFormat ? { responseFormat: parsed.responseFormat } : {}),
-        });
+        result = await (async () => {
+          let lastErr: unknown;
+          for (let attempt = 0; attempt <= maxProviderRetries; attempt++) {
+            if (input.signal?.aborted) {
+              throw new ModelHttpError('aborted', 'request aborted by caller');
+            }
+            try {
+              return await complete({
+                baseUrl: provider.baseUrl,
+                apiKey: provider.apiKey,
+                model: provider.model,
+                messages: parsed.messages,
+                maxTokens: parsed.maxTokens,
+                timeoutMs,
+                ...(input.signal ? { signal: input.signal } : {}),
+                ...(parsed.temperature !== undefined ? { temperature: parsed.temperature } : {}),
+                ...(parsed.tools ? { tools: parsed.tools } : {}),
+                ...(parsed.toolChoice ? { toolChoice: parsed.toolChoice } : {}),
+                ...(parsed.responseFormat ? { responseFormat: parsed.responseFormat } : {}),
+              });
+            } catch (err) {
+              lastErr = err;
+              const mapped = classifyProviderError(err);
+              if (!isRetryableProviderStatus(mapped.status, mapped.message) || attempt >= maxProviderRetries) {
+                throw err;
+              }
+              log('ai_inference', {
+                status: mapped.status,
+                principal: principalId,
+                reason: mapped.message,
+                retry: attempt + 1,
+              });
+              await sleep(retryBackoffMs * 4 ** attempt, input.signal);
+            }
+          }
+          throw lastErr;
+        })();
       } catch (err) {
-        inFlight -= 1;
         const mapped = classifyProviderError(err);
         log('ai_inference', {
           status: mapped.status,
@@ -422,8 +509,9 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
           reason: mapped.message,
         });
         return { statusCode: httpStatusOf(mapped.status), body: { ok: false, status: mapped.status, error: mapped.message } };
+      } finally {
+        inFlight = Math.max(0, inFlight - 1);
       }
-      inFlight -= 1;
 
       const usage = parseProviderUsage(result.usage, {
         inputChars: parsed.inputChars,

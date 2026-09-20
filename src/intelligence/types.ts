@@ -46,10 +46,14 @@ export interface TalkThread {
   executions: TalkExecution[];
 }
 
+export type TalkTurnOutcome = 'SUCCESS' | 'PARTIAL_SUCCESS' | 'FAILED' | 'CANCELLED';
+
 export interface TalkView {
   headline: string;
   empty: boolean;
   notice?: string;
+  /** 本回合最终收敛状态。timeout 后不得继续停留在 checking/executing/generating。 */
+  outcome?: TalkTurnOutcome;
   turns: Array<{
     role: 'user' | 'assistant';
     text: string;

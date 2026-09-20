@@ -395,12 +395,22 @@ export function createRelayServer(options: {
         }
         const token = String(req.headers['x-install-capability-token'] || '').trim();
         const requestId = String(req.headers['x-request-id'] || '').trim();
-        const result = await aiInference.infer({
-          body,
-          installToken: token,
-          ...(requestId ? { requestId } : {}),
-        });
-        sendJson(res, result.statusCode, result.body);
+        const ac = new AbortController();
+        const abortIfClientGone = () => {
+          if (!res.writableEnded) ac.abort();
+        };
+        req.once('aborted', abortIfClientGone);
+        try {
+          const result = await aiInference.infer({
+            body,
+            installToken: token,
+            signal: ac.signal,
+            ...(requestId ? { requestId } : {}),
+          });
+          if (!res.headersSent) sendJson(res, result.statusCode, result.body);
+        } finally {
+          req.off('aborted', abortIfClientGone);
+        }
         return;
       }
       if (req.method === 'GET' && url.pathname === '/v1/ai/allowance') {

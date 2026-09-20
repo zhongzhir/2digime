@@ -11,7 +11,6 @@ import * as path from 'node:path';
 import { createDigitalMeRuntime } from '../../runtime/digitalme-runtime';
 import { createCommandBus } from '../../runtime/command-bus';
 import { talkThreadFilePath } from '../store';
-import { TALK_SYNTHESIS_TIMEOUT_NOTICE } from '../service';
 import {
   acquireCapability,
   readyAcquire,
@@ -382,8 +381,10 @@ test('FINAL_RESULT_DELIVERED：合成运输层超时后仍落 Thread 并返回�
     const talked = await bus.invoke('talk', { text: '写好文件', contextPaths: [project] });
     const last = talked.view.turns[talked.view.turns.length - 1];
     assert.equal(last?.role, 'assistant');
-    assert.equal(last?.text, TALK_SYNTHESIS_TIMEOUT_NOTICE);
-    assert.equal(talked.view.notice, TALK_SYNTHESIS_TIMEOUT_NOTICE);
+    assert.match(String(last?.text || ''), /已修改 done\.txt/);
+    assert.match(String(last?.text || ''), /详细说明生成超时/);
+    assert.equal(talked.view.outcome, 'PARTIAL_SUCCESS');
+    assert.match(String(talked.view.notice || ''), /已修改 done\.txt/);
     assert.equal(await fs.readFile(path.join(project, 'done.txt'), 'utf8'), 'ready');
     const rec = JSON.parse(await fs.readFile(talkThreadFilePath(pkgDir), 'utf8')) as {
       executions?: Array<{ ok: boolean; capabilityId: string }>;
@@ -394,7 +395,7 @@ test('FINAL_RESULT_DELIVERED：合成运输层超时后仍落 Thread 并返回�
       true,
     );
     assert.equal(
-      (rec.turns || []).some((t) => t.role === 'assistant' && t.text === TALK_SYNTHESIS_TIMEOUT_NOTICE),
+      (rec.turns || []).some((t) => t.role === 'assistant' && /已修改 done\.txt/.test(t.text)),
       true,
     );
   } finally {

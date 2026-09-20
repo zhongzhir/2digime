@@ -10,7 +10,7 @@ import { emptyThread, readThread, writeThread } from './store';
 import { randomUUID } from 'node:crypto';
 import { EMPTY_REPLY, NO_MODEL_NOTICE, runTalkTurn, type SubjectCollabPort } from './loop';
 import { isManagedAiUserNotice } from '../capability/managed-ai-client';
-import type { ProfessionalAgent, TalkChatFn, TalkExecution, TalkView } from './types';
+import type { ProfessionalAgent, TalkChatFn, TalkExecution, TalkTurnOutcome, TalkView } from './types';
 import {
   listActiveFilesystemGrantFolders,
   saveFilesystemGrant,
@@ -19,8 +19,10 @@ import {
 /** 做事（含首次获取代码执行能力）需要数分钟；180s 会在 runtime 仍工作时掐断。 */
 export const TALK_TURN_DEADLINE_MS = 600_000;
 export const TALK_TIMEOUT_NOTICE = '请求超时，模型在限定时间内没有返回。可重试。';
-export const TALK_SYNTHESIS_TIMEOUT_NOTICE = '操作已经完成，但最终回复生成超时';
+/** 最终模型说明失败时的附加句；不得单独冒充「任务失败」。 */
+export const TALK_SYNTHESIS_TIMEOUT_NOTICE = '详细说明生成超时。';
 export const TALK_EXECUTION_DONE_NOTICE = '已完成。相关修改已经写入你授权的项目。';
+const MUTATING_CAPS = new Set(['write_file', 'export_file']);
 
 export class TalkTimeoutError extends Error {
   readonly kind = 'timeout';
@@ -182,6 +184,7 @@ export class TalkService {
     const turnExecutions: TalkExecution[] = [];
     let next = thread;
     let timeoutNotice: string | undefined;
+    let outcome: TalkTurnOutcome = 'SUCCESS';
     try {
       next = await runTalkTurn({
         thread,
@@ -212,27 +215,14 @@ export class TalkService {
       // 模型最终回复为空或整段内部 execution JSON 时，deliverText 会变成 EMPTY_REPLY。
       // 本轮已有 execution 则不得把 EMPTY_REPLY 交给用户；复用 execution 机械事实。
       applyUndeliverableFinalFallback(next, turnExecutions);
-    } catch (err) {
-      if (isManagedAiUserNotice(err)) {
-        const last = thread.turns[thread.turns.length - 1];
-        if (!last || last.role !== 'user' || last.text !== text) {
-          thread.turns.push({
-            id: `turn_${randomUUID()}`,
-            at: now,
-            role: 'user',
-            text,
-          });
+      if (turnExecutions.length) {
+        const last = next.turns[next.turns.length - 1];
+        if (last?.role === 'assistant' && last.text !== EMPTY_REPLY) {
+          const fromExec = assistantFromTurnExecutions(turnExecutions, 'undeliverable_final');
+          if (last.text === fromExec.text) outcome = 'PARTIAL_SUCCESS';
         }
-        thread.turns.push({
-          id: `turn_${randomUUID()}`,
-          at: now,
-          role: 'assistant',
-          text: String((err as Error).message || '兔机米提供的免费 AI 额度已经用完。'),
-        });
-        timeoutNotice = String((err as Error).message || '兔机米提供的免费 AI 额度已经用完。');
-        next = thread;
-      } else if (!isTalkTimeout(err)) throw err;
-      else {
+      }
+    } catch (err) {
       const last = thread.turns[thread.turns.length - 1];
       if (!last || last.role !== 'user' || last.text !== text) {
         thread.turns.push({
@@ -243,28 +233,58 @@ export class TalkService {
         });
       }
       const userTurn = thread.turns[thread.turns.length - 1];
-      const fromExec = assistantFromTurnExecutions(turnExecutions, 'deadline');
-      timeoutNotice = fromExec.notice;
-      thread.turns.push({
-        id: `turn_${randomUUID()}`,
-        at: now,
-        role: 'assistant',
-        text: fromExec.text,
-        ...(fromExec.executionIds.length ? { executionIds: fromExec.executionIds } : {}),
-        ...(fromExec.result ? { result: fromExec.result } : {}),
-      });
-      if (userTurn && userTurn.role === 'user' && fromExec.executionIds.length) {
-        userTurn.executionIds = fromExec.executionIds;
-      }
-      thread.executions = [...(thread.executions || []), ...turnExecutions];
-      next = thread;
+      if (turnExecutions.length && (isManagedAiUserNotice(err) || isTalkTimeout(err))) {
+        const fromExec = assistantFromTurnExecutions(turnExecutions, 'deadline');
+        timeoutNotice = fromExec.notice;
+        outcome = fromExec.outcome;
+        thread.turns.push({
+          id: `turn_${randomUUID()}`,
+          at: now,
+          role: 'assistant',
+          text: fromExec.text,
+          ...(fromExec.executionIds.length ? { executionIds: fromExec.executionIds } : {}),
+          ...(fromExec.result ? { result: fromExec.result } : {}),
+        });
+        if (userTurn && userTurn.role === 'user' && fromExec.executionIds.length) {
+          userTurn.executionIds = fromExec.executionIds;
+        }
+        thread.executions = [...(thread.executions || []), ...turnExecutions];
+        next = thread;
+      } else if (isManagedAiUserNotice(err)) {
+        thread.turns.push({
+          id: `turn_${randomUUID()}`,
+          at: now,
+          role: 'assistant',
+          text: String((err as Error).message || '兔机米提供的免费 AI 额度已经用完。'),
+        });
+        timeoutNotice = String((err as Error).message || '兔机米提供的免费 AI 额度已经用完。');
+        outcome = 'FAILED';
+        next = thread;
+      } else if (!isTalkTimeout(err)) throw err;
+      else {
+        const fromExec = assistantFromTurnExecutions(turnExecutions, 'deadline');
+        timeoutNotice = fromExec.notice;
+        outcome = fromExec.outcome;
+        thread.turns.push({
+          id: `turn_${randomUUID()}`,
+          at: now,
+          role: 'assistant',
+          text: fromExec.text,
+          ...(fromExec.executionIds.length ? { executionIds: fromExec.executionIds } : {}),
+          ...(fromExec.result ? { result: fromExec.result } : {}),
+        });
+        if (userTurn && userTurn.role === 'user' && fromExec.executionIds.length) {
+          userTurn.executionIds = fromExec.executionIds;
+        }
+        thread.executions = [...(thread.executions || []), ...turnExecutions];
+        next = thread;
       }
     } finally {
       clearTimeout(timer);
     }
     if (next.threadId !== threadId) next.threadId = threadId;
     await writeThread(pkg.rootDir, next);
-    return { view: projectView(next, timeoutNotice) };
+    return { view: projectView(next, timeoutNotice, outcome) };
   }
 }
 
@@ -290,37 +310,71 @@ export function assistantFromTurnExecutions(
   text: string;
   notice: string;
   executionIds: string[];
+  outcome: TalkTurnOutcome;
   result?: { title: string; path?: string };
 } {
   const executionIds = execs.map((item) => item.id);
   if (!execs.length) {
-    return { text: TALK_TIMEOUT_NOTICE, notice: TALK_TIMEOUT_NOTICE, executionIds };
+    return {
+      text: TALK_TIMEOUT_NOTICE,
+      notice: TALK_TIMEOUT_NOTICE,
+      executionIds,
+      outcome: 'FAILED',
+    };
   }
+  const okWrites = execs.filter((item) => item.ok && MUTATING_CAPS.has(item.capabilityId));
+  const anyOk = execs.some((item) => item.ok);
   const failed = [...execs].reverse().find((item) => !item.ok);
-  if (failed) {
+  if (failed && !okWrites.length) {
     const fact = String(failed.summary || failed.failureReason || TALK_TIMEOUT_NOTICE).trim();
     return {
       text: fact.slice(0, 4000),
       notice: fact.slice(0, 400),
       executionIds,
+      outcome: anyOk ? 'PARTIAL_SUCCESS' : 'FAILED',
     };
   }
-  const lastOk = [...execs].reverse().find((item) => item.ok);
-  const outputPath = lastOk?.outputPath;
-  const changedNames = uniqueBasenames([
-    ...(lastOk?.producedOutputs || []),
-    ...(outputPath ? [outputPath] : []),
-  ]);
-  const doneText =
-    mode === 'undeliverable_final'
-      ? changedNames.length
-        ? `已完成。已修改 ${changedNames.join('、')}，结果已经写入项目目录。`
-        : TALK_EXECUTION_DONE_NOTICE
+  const lastWrite = [...okWrites].reverse()[0] || [...execs].reverse().find((item) => item.ok);
+  const outputPath = lastWrite?.outputPath;
+  const changedNames = uniqueBasenames(
+    okWrites.flatMap((item) => [...(item.producedOutputs || []), ...(item.outputPath ? [item.outputPath] : [])]),
+  );
+  const writePaths = new Set(
+    okWrites.flatMap((item) =>
+      [...(item.producedOutputs || []), ...(item.outputPath ? [item.outputPath] : [])].map((row) =>
+        path.basename(String(row || '').trim()).toLowerCase(),
+      ),
+    ),
+  );
+  const verified = execs.some((item) => {
+    if (!item.ok || item.capabilityId !== 'read_file') return false;
+    const blob = `${item.outputPath || ''} ${(item.producedOutputs || []).join(' ')} ${item.summary || ''}`.toLowerCase();
+    return [...writePaths].some((name) => name && blob.includes(name));
+  });
+  let doneText: string;
+  if (changedNames.length) {
+    const verifyBit = verified ? ' 并验证' : '';
+    doneText =
+      mode === 'undeliverable_final'
+        ? `已完成。已修改 ${changedNames.join('、')}${verifyBit}，结果已经写入项目目录。`
+        : `操作已完成。已修改 ${changedNames.join('、')}${verifyBit}。\n${TALK_SYNTHESIS_TIMEOUT_NOTICE}`;
+  } else if (mode === 'undeliverable_final') {
+    doneText = TALK_EXECUTION_DONE_NOTICE;
+  } else {
+    const facts = execs
+      .filter((item) => item.ok)
+      .map((item) => String(item.summary || '').trim())
+      .filter(Boolean)
+      .slice(0, 3);
+    doneText = facts.length
+      ? `${facts.join('\n')}\n${TALK_SYNTHESIS_TIMEOUT_NOTICE}`
       : TALK_SYNTHESIS_TIMEOUT_NOTICE;
+  }
   return {
     text: doneText,
     notice: doneText.slice(0, 400),
     executionIds,
+    outcome: 'PARTIAL_SUCCESS',
     ...(outputPath ? { result: { title: path.basename(outputPath), path: outputPath } } : {}),
   };
 }
@@ -348,11 +402,16 @@ function applyUndeliverableFinalFallback(thread: ReturnType<typeof emptyThread>,
   if (fromExec.result) last.result = fromExec.result;
 }
 
-function projectView(thread: ReturnType<typeof emptyThread>, notice?: string): TalkView {
+function projectView(
+  thread: ReturnType<typeof emptyThread>,
+  notice?: string,
+  outcome?: TalkTurnOutcome,
+): TalkView {
   return {
     headline: '与兔机米',
     empty: thread.turns.length === 0,
     ...(notice ? { notice } : {}),
+    ...(outcome ? { outcome } : {}),
     turns: thread.turns.map((turn) => ({
       role: turn.role,
       text: turn.text,

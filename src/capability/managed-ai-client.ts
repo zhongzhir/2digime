@@ -6,17 +6,31 @@ export type ManagedAiStatus =
   | 'AVAILABLE'
   | 'ALLOWANCE_EXHAUSTED'
   | 'RATE_LIMITED'
+  | 'LOCAL_RATE_LIMITED'
+  | 'CONCURRENCY_BUSY'
+  | 'GLOBAL_CEILING'
+  | 'PROVIDER_RATE_LIMITED'
+  | 'PROVIDER_TIMEOUT'
+  | 'PROVIDER_5XX'
   | 'AUTH_FAILED'
   | 'PROVIDER_ERROR'
   | 'TEMPORARY_UNAVAILABLE'
   | 'PAYLOAD_REJECTED';
 
 export const MANAGED_AI_EXHAUSTED_NOTICE = '兔机米提供的免费 AI 额度已经用完。';
+export const MANAGED_AI_BUSY_NOTICE = '模型服务当前比较忙，请稍后再试。';
+export const MANAGED_AI_LOCAL_RATE_NOTICE = '本机本小时请求较多，请稍后再试。';
 
 const HUMAN: Record<ManagedAiStatus, string> = {
   AVAILABLE: '',
   ALLOWANCE_EXHAUSTED: MANAGED_AI_EXHAUSTED_NOTICE,
-  RATE_LIMITED: '模型服务当前比较忙，请稍后再试。',
+  RATE_LIMITED: MANAGED_AI_BUSY_NOTICE,
+  LOCAL_RATE_LIMITED: MANAGED_AI_LOCAL_RATE_NOTICE,
+  CONCURRENCY_BUSY: MANAGED_AI_BUSY_NOTICE,
+  GLOBAL_CEILING: MANAGED_AI_BUSY_NOTICE,
+  PROVIDER_RATE_LIMITED: MANAGED_AI_BUSY_NOTICE,
+  PROVIDER_TIMEOUT: '模型响应超时，请稍后再试。',
+  PROVIDER_5XX: '模型服务暂时出错，请稍后再试。',
   AUTH_FAILED: '兔机米提供的 AI 服务暂时不可用。',
   PROVIDER_ERROR: '这次没有得到模型回复，请稍后再试。',
   TEMPORARY_UNAVAILABLE: '暂时无法联系模型服务，请稍后再试。',
@@ -26,12 +40,14 @@ const HUMAN: Record<ManagedAiStatus, string> = {
 export class ManagedAiError extends Error {
   readonly status: ManagedAiStatus;
   readonly userNotice: boolean;
+  readonly reason?: string;
 
-  constructor(status: ManagedAiStatus, message?: string) {
+  constructor(status: ManagedAiStatus, message?: string, reason?: string) {
     super(message || HUMAN[status] || HUMAN.PROVIDER_ERROR);
     this.name = 'ManagedAiError';
     this.status = status;
     this.userNotice = true;
+    if (reason) this.reason = reason;
   }
 }
 
@@ -63,19 +79,44 @@ const STATUSES: readonly ManagedAiStatus[] = [
   'AVAILABLE',
   'ALLOWANCE_EXHAUSTED',
   'RATE_LIMITED',
+  'LOCAL_RATE_LIMITED',
+  'CONCURRENCY_BUSY',
+  'GLOBAL_CEILING',
+  'PROVIDER_RATE_LIMITED',
+  'PROVIDER_TIMEOUT',
+  'PROVIDER_5XX',
   'AUTH_FAILED',
   'PROVIDER_ERROR',
   'TEMPORARY_UNAVAILABLE',
   'PAYLOAD_REJECTED',
 ];
 
-function classifyHttp(status: number, bodyStatus?: string): ManagedAiStatus {
-  const labeled = String(bodyStatus || '').toUpperCase();
+export function classifyManagedAiFailure(input: {
+  httpStatus: number;
+  bodyStatus?: string;
+  bodyError?: string;
+}): ManagedAiStatus {
+  const err = String(input.bodyError || '').toLowerCase();
+  if (err === 'concurrency') return 'CONCURRENCY_BUSY';
+  if (err === 'rate_limited') return 'LOCAL_RATE_LIMITED';
+  if (err === 'global_ceiling') return 'GLOBAL_CEILING';
+  if (err === 'provider_rate') return 'PROVIDER_RATE_LIMITED';
+  if (err === 'timeout') return 'PROVIDER_TIMEOUT';
+  if (err === 'provider_5xx') return 'PROVIDER_5XX';
+  const labeled = String(input.bodyStatus || '').toUpperCase();
   if ((STATUSES as readonly string[]).includes(labeled)) return labeled as ManagedAiStatus;
-  if (status === 429) return 'RATE_LIMITED';
-  if (status === 401 || status === 403) return 'AUTH_FAILED';
-  if (status === 503) return 'TEMPORARY_UNAVAILABLE';
+  if (input.httpStatus === 429) return 'RATE_LIMITED';
+  if (input.httpStatus === 401 || input.httpStatus === 403) return 'AUTH_FAILED';
+  if (input.httpStatus === 503) return 'TEMPORARY_UNAVAILABLE';
   return 'PROVIDER_ERROR';
+}
+
+function classifyHttp(status: number, bodyStatus?: string, bodyError?: string): ManagedAiStatus {
+  return classifyManagedAiFailure({
+    httpStatus: status,
+    ...(bodyStatus ? { bodyStatus } : {}),
+    ...(bodyError ? { bodyError } : {}),
+  });
 }
 
 export function createManagedAiChatComplete(options: ManagedAiClientOptions): ChatCompleteFn {
@@ -138,9 +179,9 @@ export function createManagedAiChatComplete(options: ManagedAiClientOptions): Ch
     } catch {
       json = {};
     }
-    const status = classifyHttp(res.status, json.status);
+    const status = classifyHttp(res.status, json.status, json.error);
     if (status !== 'AVAILABLE' || json.ok === false) {
-      throw new ManagedAiError(status, managedAiHumanMessage(status));
+      throw new ManagedAiError(status, managedAiHumanMessage(status), json.error);
     }
     const text = typeof json.text === 'string' ? json.text : '';
     const toolCalls = Array.isArray(json.toolCalls) ? json.toolCalls : undefined;
