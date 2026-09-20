@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import { createServer } from 'node:http';
 import { createWebDiscoveryGateway } from '../../relay-service/web-discovery-gateway';
 import { createRelayServer, FileRelayStore, resolveManagedWebDiscoveryGateway } from '../../relay-service/server';
+import { createAliyunIqsWebDiscoveryProvider } from '../adapters/aliyun-iqs-web-discovery';
 import { createAliyunOpenSearchWebDiscoveryProvider } from '../adapters/aliyun-opensearch-web-discovery';
 import {
   forbiddenWebDiscoveryKeys,
@@ -199,6 +200,9 @@ test('app package sources do not embed managed provider secrets', async () => {
     'electron/brand.cjs',
     'src/capability/web-discovery-client.ts',
     'src/runtime/digitalme-runtime.ts',
+    'src/capability/adapters/aliyun-iqs-web-discovery.ts',
+    'src/capability/adapters/aliyun-opensearch-web-discovery.ts',
+    'src/relay-service/server.ts',
   ];
   const secret = /AIza[0-9A-Za-z_-]{20,}|WEB_DISCOVERY_PROVIDER_API_KEY\s*[:=]\s*['"][^'"]+|geminiApiKey\s*[:=]\s*['"]AIza/;
   for (const rel of files) {
@@ -206,6 +210,7 @@ test('app package sources do not embed managed provider secrets', async () => {
     assert.equal(secret.test(text), false, rel);
     assert.equal(/geminiSearchResult/.test(text), false, rel);
     assert.equal(/aliyunSearchResult/.test(text), false, rel);
+    assert.equal(/iqsSearchResult/.test(text), false, rel);
   }
   const settings = await fs.readFile(path.join(root, 'electron/renderer/index.html'), 'utf8');
   assert.match(settings, /联网发现/);
@@ -274,4 +279,98 @@ test('Relay env WEB_DISCOVERY_PROVIDER=aliyun-opensearch requires endpoint; miss
   });
   assert.equal(empty.body.error, 'MANAGED_PROVIDER_SECRET_REQUIRED');
   assert.equal(empty.body.status, 'TEMPORARY_UNAVAILABLE');
+});
+
+test('Aliyun IQS UnifiedSearch maps pageItems and never sends Digital Self', async () => {
+  let authHeader = '';
+  let requestUrl = '';
+  const provider = createAliyunIqsWebDiscoveryProvider({
+    apiKey: 'IQS-test-not-a-real-key',
+    fetchImpl: async (url, init) => {
+      requestUrl = String(url);
+      const headers = init?.headers as Record<string, string>;
+      authHeader = String(headers.authorization || headers.Authorization || '');
+      const body = JSON.parse(String(init?.body || '{}')) as Record<string, unknown>;
+      assert.deepEqual(Object.keys(body).sort(), ['advancedParams', 'contents', 'engineType', 'query']);
+      assert.equal(body.query, '今天人工智能有什么重要进展');
+      assert.equal(body.engineType, 'Generic');
+      assert.equal((body.contents as { mainText?: boolean }).mainText, false);
+      assert.equal((body.contents as { rerankScore?: boolean }).rerankScore, false);
+      assert.equal((body.advancedParams as { numResults?: number }).numResults, 8);
+      assert.equal(body.history, undefined);
+      assert.equal(Object.prototype.hasOwnProperty.call(body, 'digitalSelf'), false);
+      return new Response(
+        JSON.stringify({
+          pageItems: [
+            {
+              title: '今日 AI 进展',
+              link: 'https://example.org/ai-today',
+              snippet: 'public note',
+              publishedTime: '2026-09-20T00:00:00Z',
+              hostname: 'example.org',
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    },
+  });
+  const hits = await provider.search({ query: '今天人工智能有什么重要进展', limit: 8 });
+  assert.equal(provider.id, 'aliyun-iqs');
+  assert.equal(requestUrl, 'https://cloud-iqs.aliyuncs.com/search/unified');
+  assert.equal(hits[0]?.title, '今日 AI 进展');
+  assert.equal(hits[0]?.url, 'https://example.org/ai-today');
+  assert.equal(hits[0]?.snippet, 'public note');
+  assert.match(authHeader, /^Bearer IQS-/);
+
+  const gateway = createWebDiscoveryGateway({ provider });
+  const result = await gateway.search({
+    body: { query: '今天人工智能有什么重要进展' },
+    installToken: 'install-capability-token-test-0001',
+  });
+  assert.equal(result.body.ok, true);
+  assert.equal(result.body.provider, 'web-discovery');
+  assert.equal(result.body.results?.[0]?.url, 'https://example.org/ai-today');
+});
+
+test('China default IQS does not send GEMINI_API_KEY; OpenSearch stays optional', async () => {
+  const geminiNotIqs = resolveManagedWebDiscoveryGateway({
+    WEB_DISCOVERY_PROVIDER: 'aliyun-iqs',
+    GEMINI_API_KEY: 'AIzaSy-not-for-iqs',
+  });
+  const rejected = await geminiNotIqs.search({
+    body: { query: 'today ai' },
+    installToken: 'install-capability-token-test-0001',
+  });
+  assert.equal(rejected.body.status, 'TEMPORARY_UNAVAILABLE');
+  assert.equal(rejected.body.error, 'MANAGED_PROVIDER_SECRET_REQUIRED');
+  assert.equal(/API Key|Gemini|IQS|Google Cloud/.test(JSON.stringify(rejected.body)), false);
+
+  const unnamedWithIqsKey = resolveManagedWebDiscoveryGateway({
+    WEB_DISCOVERY_PROVIDER_API_KEY: 'IQS-test-not-a-real-key',
+    GEMINI_API_KEY: 'AIzaSy-not-for-iqs',
+  });
+  assert.equal(typeof unnamedWithIqsKey.search, 'function');
+});
+
+test('IQS provider failure stays TEMPORARY_UNAVAILABLE and does not ask for a client key', async () => {
+  const provider = createAliyunIqsWebDiscoveryProvider({
+    apiKey: 'IQS-test-not-a-real-key',
+    fetchImpl: async () => new Response(JSON.stringify({ message: 'unavailable' }), { status: 503 }),
+  });
+  await assert.rejects(() => provider.search({ query: 'today ai' }), (err: unknown) => {
+    assert.equal(err instanceof WebDiscoveryError, true);
+    const typed = err as WebDiscoveryError;
+    assert.equal(typed.status, 'TEMPORARY_UNAVAILABLE');
+    assert.equal(/API Key|请配置|Google Cloud|阿里云控制台/.test(typed.message), false);
+    return true;
+  });
+  const gateway = createWebDiscoveryGateway({ provider });
+  const failed = await gateway.search({
+    body: { query: 'today ai' },
+    installToken: 'install-capability-token-test-0001',
+  });
+  assert.equal(failed.body.ok, false);
+  assert.equal(failed.body.status, 'TEMPORARY_UNAVAILABLE');
+  assert.equal(/API Key|请配置 Gemini|Google Cloud/.test(JSON.stringify(failed.body)), false);
 });

@@ -19,6 +19,7 @@ import {
   MemoryNetworkItemStore,
   type NetworkItemStore,
 } from './network-item-store';
+import { createAliyunIqsWebDiscoveryProvider } from '../capability/adapters/aliyun-iqs-web-discovery';
 import { createAliyunOpenSearchWebDiscoveryProvider } from '../capability/adapters/aliyun-opensearch-web-discovery';
 import { createGeminiSearchConnector } from '../capability/adapters/gemini-search';
 import { webDiscoveryProviderFromConnector } from '../capability/web-discovery';
@@ -188,23 +189,29 @@ function logSafe(event: string, fields: Record<string, string | number | boolean
   console.log(line);
 }
 
-function managedWebDiscoveryProviderId(env: NodeJS.ProcessEnv, apiKey: string): string {
+function managedWebDiscoveryProviderId(env: NodeJS.ProcessEnv): string {
   const named = String(env.WEB_DISCOVERY_PROVIDER || '').trim().toLowerCase();
   if (named) return named;
-  return /^os-/i.test(apiKey) ? 'aliyun-opensearch' : 'gemini';
+  const iqsKey = String(env.WEB_DISCOVERY_PROVIDER_API_KEY || '').trim();
+  if (iqsKey) return /^os-/i.test(iqsKey) ? 'aliyun-opensearch' : 'aliyun-iqs';
+  if (String(env.GEMINI_API_KEY || '').trim()) return 'gemini';
+  return 'aliyun-iqs';
+}
+
+function emptyManagedGateway(): ReturnType<typeof createWebDiscoveryGateway> {
+  return createWebDiscoveryGateway({ log: logSafe });
 }
 
 export function resolveManagedWebDiscoveryGateway(env: NodeJS.ProcessEnv = process.env) {
-  const apiKey = String(env.WEB_DISCOVERY_PROVIDER_API_KEY || env.GEMINI_API_KEY || '').trim();
-  if (!apiKey) return createWebDiscoveryGateway({ log: logSafe });
-  const providerId = managedWebDiscoveryProviderId(env, apiKey);
-  if (providerId === 'aliyun-opensearch' || providerId === 'aliyun') {
+  const providerId = managedWebDiscoveryProviderId(env);
+  if (providerId === 'aliyun-opensearch' || providerId === 'aliyun' || providerId === 'opensearch') {
+    const apiKey = String(env.WEB_DISCOVERY_PROVIDER_API_KEY || '').trim();
     const endpoint = String(env.WEB_DISCOVERY_PROVIDER_ENDPOINT || '').trim();
     const workspace = String(env.WEB_DISCOVERY_PROVIDER_WORKSPACE || '').trim();
     const serviceId = String(env.WEB_DISCOVERY_PROVIDER_SERVICE_ID || '').trim();
-    if (!endpoint) {
+    if (!apiKey || !endpoint) {
       logSafe('web_discovery_unavailable', { reason: 'MANAGED_PROVIDER_ENDPOINT_REQUIRED' });
-      return createWebDiscoveryGateway({ log: logSafe });
+      return emptyManagedGateway();
     }
     try {
       return createWebDiscoveryGateway({
@@ -218,9 +225,36 @@ export function resolveManagedWebDiscoveryGateway(env: NodeJS.ProcessEnv = proce
       });
     } catch {
       logSafe('web_discovery_unavailable', { reason: 'MANAGED_PROVIDER_CONFIG_REQUIRED' });
-      return createWebDiscoveryGateway({ log: logSafe });
+      return emptyManagedGateway();
     }
   }
+  if (
+    providerId === 'aliyun-iqs' ||
+    providerId === 'iqs' ||
+    providerId === 'iqs-unified' ||
+    providerId === 'cleversee'
+  ) {
+    const apiKey = String(env.WEB_DISCOVERY_PROVIDER_API_KEY || '').trim();
+    if (!apiKey) {
+      logSafe('web_discovery_unavailable', { reason: 'MANAGED_PROVIDER_SECRET_REQUIRED' });
+      return emptyManagedGateway();
+    }
+    const endpoint = String(env.WEB_DISCOVERY_PROVIDER_ENDPOINT || '').trim();
+    try {
+      return createWebDiscoveryGateway({
+        provider: createAliyunIqsWebDiscoveryProvider({
+          apiKey,
+          ...(endpoint ? { endpoint } : {}),
+        }),
+        log: logSafe,
+      });
+    } catch {
+      logSafe('web_discovery_unavailable', { reason: 'MANAGED_PROVIDER_CONFIG_REQUIRED' });
+      return emptyManagedGateway();
+    }
+  }
+  const apiKey = String(env.WEB_DISCOVERY_PROVIDER_API_KEY || env.GEMINI_API_KEY || '').trim();
+  if (!apiKey) return emptyManagedGateway();
   const model = String(env.WEB_DISCOVERY_PROVIDER_MODEL || env.GEMINI_SEARCH_MODEL || env.GEMINI_MODEL || '').trim();
   const connector = createGeminiSearchConnector({
     apiKey,
