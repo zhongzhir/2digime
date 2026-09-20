@@ -157,7 +157,8 @@ export async function interpretDiscoverIntent(input: {
     'objectWanted: primary_content（要作品/正文本身）/ commentary（要报道、盘点、行业分析）/ mixed。',
     'freshness: current / classic / unspecified。',
     'popularityClaim: 用户是否在要「最火/热门/排行」且你没有统一播放榜可引用。',
-    'searchQueries: 1 到 2 条可发给公开搜索的词。必须留在这次的 topic 与 requestedContentTypes 内。',
+    'searchQueries: 1 到 3 条发给公开搜索和开放目录的检索词，不要照抄用户整句。必须留在这次的 topic 与 requestedContentTypes 内。',
+    '若 requestedContentTypes 含 image/video/audio：词应是对应开放目录实际用来找作品本身的常用检索写法；需要时可包含该主题在目录里常见的其它语种名称。不要写排行榜、盘点、新闻。',
     '不要把当前搜索扩写成用户平时可能喜欢的其它主题。不要加入这次没要求的相邻领域。',
     '若 mode=consume：搜索词指向具体可消费对象本身，不要去搜排行榜、行业新闻、十大盘点，除非用户明确要这些。',
     'suggestTalk: 若更适合在「与兔机米」里深入分析则为 true。',
@@ -186,6 +187,9 @@ export async function interpretDiscoverIntent(input: {
 export function isDomainLikeTitle(title: string, url?: string): boolean {
   const raw = String(title || '').trim().toLowerCase();
   if (!raw) return true;
+  if (/\.(avif|bmp|gif|jpe?g|png|svg|webp|aac|flac|m4a|mp3|ogg|opus|wav|m4v|mkv|mov|mp4|ogv|webm)$/i.test(raw)) {
+    return false;
+  }
   if (/^(https?:\/\/)?([a-z0-9-]+\.)+[a-z]{2,}\/?$/i.test(raw)) return true;
   if (!url) return false;
   let host = '';

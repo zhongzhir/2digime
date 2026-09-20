@@ -136,6 +136,24 @@ export function directorySeekTerms(query: string): string[] {
   return out.slice(0, 8);
 }
 
+export function openMediaQueries(query: string, intent: DiscoverIntent): string[] {
+  const terms: string[] = [];
+  for (const row of [...intent.searchQueries, intent.topic, ...directorySeekTerms(query)]) {
+    const value = String(row || '').trim();
+    if (value.length >= 2) terms.push(value);
+  }
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const term of terms) {
+    const key = term.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(term);
+    if (out.length >= 3) break;
+  }
+  return out;
+}
+
 export function matchDirectoryForSeek(items: NetworkItem[], query: string): NetworkItem[] {
   const seen = new Set<string>();
   const matched: NetworkItem[] = [];
@@ -225,6 +243,69 @@ export async function seekContent(input: {
 
   let usedExternal = false;
   let searchFailed = false;
+  const mediaKinds = intent.requestedMedia.filter(
+    (row): row is 'video' | 'image' | 'audio' => row === 'video' || row === 'image' || row === 'audio',
+  );
+  if (mediaKinds.length && input.fetchOpenMedia) {
+    const mediaQueries = openMediaQueries(query, intent);
+    try {
+      for (const topicQuery of mediaQueries) {
+        const openHits = await searchOpenMedia({
+          query: topicQuery,
+          kinds: mediaKinds,
+          fetchImpl: input.fetchOpenMedia,
+        });
+        let mediaOfKind = cards.filter((card) => mediaKinds.includes(card.contentType as 'video' | 'image' | 'audio')).length;
+        if (mediaOfKind >= 16) break;
+        for (const hit of openHits) {
+          let ingestedFeed = false;
+          if (hit.feedUrl && input.ingestHit) {
+            try {
+              const ingested = await input.ingestHit({
+                title: hit.title,
+                url: hit.feedUrl,
+                ...(hit.snippet ? { snippet: hit.snippet } : {}),
+              });
+              for (const item of ingested) {
+                const canonical = canonicalOf(item.content.url);
+                if (canonical && seenUrls.has(canonical)) continue;
+                if (seenIds.has(item.itemId)) continue;
+                if (isDomainLikeTitle(item.content.title, item.content.url)) continue;
+                if (item.content.url && isGenericHubUrl(item.content.url)) continue;
+                if (canonical) seenUrls.add(canonical);
+                seenIds.add(item.itemId);
+                usedExternal = true;
+                ingestedFeed = true;
+                if (canonical) queryByUrl.set(canonical, topicQuery);
+                cards.push(cardFromNetworkItem(item, '开放媒体来源，不是目录推荐。', 'web'));
+                if (cards.filter((card) => mediaKinds.includes(card.contentType as 'video' | 'image' | 'audio')).length >= 16) {
+                  break;
+                }
+              }
+            } catch {
+              /* 单条播客 feed 失败则用条目本身 */
+            }
+          }
+          if (ingestedFeed) continue;
+          const item = networkItemFromOpenHit(hit);
+          if (!item) continue;
+          const canonical = canonicalOf(item.content.url);
+          if (canonical && seenUrls.has(canonical)) continue;
+          if (seenIds.has(item.itemId)) continue;
+          if (canonical) seenUrls.add(canonical);
+          seenIds.add(item.itemId);
+          usedExternal = true;
+          if (canonical) queryByUrl.set(canonical, topicQuery);
+          cards.push(cardFromNetworkItem(item, '开放媒体来源，不是目录推荐。', 'web'));
+          mediaOfKind = cards.filter((card) => mediaKinds.includes(card.contentType as 'video' | 'image' | 'audio')).length;
+          if (mediaOfKind >= 16) break;
+        }
+      }
+    } catch {
+      /* 开放媒体来源失败不阻断文章搜索 */
+    }
+  }
+
   if (input.searchWeb) {
     const queries = intent.searchQueries.length ? intent.searchQueries : [query];
     const webHits: Array<ExternalSeekHit & { searchQuery: string }> = [];
@@ -277,61 +358,6 @@ export async function seekContent(input: {
         cards.push(webCardFromHit(hit, `seek_${seenUrls.size}`));
       }
       if (cards.length >= 24) break;
-    }
-  }
-
-  const mediaKinds = intent.requestedMedia.filter(
-    (row): row is 'video' | 'image' | 'audio' => row === 'video' || row === 'image' || row === 'audio',
-  );
-  if (mediaKinds.length && input.fetchOpenMedia) {
-    const topicQuery = (intent.searchQueries[0] || query).trim();
-    try {
-      const openHits = await searchOpenMedia({
-        query: topicQuery,
-        kinds: mediaKinds,
-        fetchImpl: input.fetchOpenMedia,
-      });
-      for (const hit of openHits) {
-        let ingestedFeed = false;
-        if (hit.feedUrl && input.ingestHit) {
-          try {
-            const ingested = await input.ingestHit({
-              title: hit.title,
-              url: hit.feedUrl,
-              ...(hit.snippet ? { snippet: hit.snippet } : {}),
-            });
-            for (const item of ingested) {
-              const canonical = canonicalOf(item.content.url);
-              if (canonical && seenUrls.has(canonical)) continue;
-              if (seenIds.has(item.itemId)) continue;
-              if (isDomainLikeTitle(item.content.title, item.content.url)) continue;
-              if (item.content.url && isGenericHubUrl(item.content.url)) continue;
-              if (canonical) seenUrls.add(canonical);
-              seenIds.add(item.itemId);
-              usedExternal = true;
-              ingestedFeed = true;
-              if (canonical) queryByUrl.set(canonical, topicQuery);
-              cards.push(cardFromNetworkItem(item, '开放媒体来源，不是目录推荐。', 'web'));
-              if (cards.length >= 24) break;
-            }
-          } catch {
-            /* 单条播客 feed 失败则用条目本身 */
-          }
-        }
-        if (ingestedFeed || cards.length >= 24) continue;
-        const item = networkItemFromOpenHit(hit);
-        if (!item) continue;
-        const canonical = canonicalOf(item.content.url);
-        if (canonical && seenUrls.has(canonical)) continue;
-        if (seenIds.has(item.itemId)) continue;
-        if (canonical) seenUrls.add(canonical);
-        seenIds.add(item.itemId);
-        usedExternal = true;
-        if (canonical) queryByUrl.set(canonical, topicQuery);
-        cards.push(cardFromNetworkItem(item, '开放媒体来源，不是目录推荐。', 'web'));
-      }
-    } catch {
-      /* 开放媒体来源失败不阻断文章搜索 */
     }
   }
 

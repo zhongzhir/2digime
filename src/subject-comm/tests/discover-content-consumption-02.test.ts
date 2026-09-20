@@ -226,6 +226,8 @@ test('INTENT: research keeps commentary in related info, not as fake works', asy
 
 test('DISCOVERY: domain-only / homepage cards are not main feed items', async () => {
   assert.equal(isDomainLikeTitle('qq.com', 'https://www.qq.com/'), true);
+  assert.equal(isDomainLikeTitle('Earthrise.jpg'), false);
+  assert.equal(isDomainLikeTitle('Saturn.jpg', 'https://commons.wikimedia.org/wiki/File:Saturn.jpg'), false);
   assert.equal(isGenericHubUrl('https://example.org/'), true);
   assert.equal(isGenericHubUrl('https://example.org/search?q=ai'), true);
   assert.equal(isGenericHubUrl('https://example.org/watch/ai-talk'), false);

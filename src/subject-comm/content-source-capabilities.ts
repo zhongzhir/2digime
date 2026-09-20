@@ -5,6 +5,7 @@
 import { safePublicHttpGet, type SafePublicHttpGetResult } from '../work-runtime/public-http-safety';
 import {
   consumptionFor,
+  hasPlayableAudioRepresentation,
   inferContentType,
   isSafePublicMediaUrl,
   parseDurationSeconds,
@@ -140,13 +141,17 @@ function commonsHits(endpoint: OpenSourceEndpoint, data: unknown, kind: SourceCo
     const info = Array.isArray(item.imageinfo) ? item.imageinfo[0] : null;
     if (!info || typeof info !== 'object') continue;
     const media = info as Record<string, unknown>;
-    const mediaUrl = asSafe(String(media.url || ''));
-    if (!mediaUrl) continue;
+    const originalUrl = asSafe(String(media.url || ''));
+    const thumbUrl = asSafe(String(media.thumburl || ''));
+    if (!originalUrl && !thumbUrl) continue;
     const mime = String(media.mime || '');
-    const detected = inferContentType({ mimeType: mime, mediaUrl });
+    const detected = inferContentType({ mimeType: mime, mediaUrl: originalUrl || thumbUrl });
     if (kind === 'image' && detected !== 'image') continue;
     if (kind === 'video' && detected !== 'video') continue;
-    if (/\.(djvu|pdf)(\?|$)/i.test(mediaUrl) || /djvu/i.test(mime)) continue;
+    if (/\.(djvu|pdf)(\?|$)/i.test(originalUrl || '') || /djvu|application\/pdf/i.test(mime)) continue;
+    const displayUrl = thumbUrl || originalUrl || '';
+    const mediaUrl = detected === 'image' ? displayUrl : originalUrl || displayUrl;
+    if (!mediaUrl) continue;
     const pageUrl =
       asSafe(`https://commons.wikimedia.org/wiki/${encodeURI(String(item.title || ''))}`) || mediaUrl;
     out.push({
@@ -155,7 +160,7 @@ function commonsHits(endpoint: OpenSourceEndpoint, data: unknown, kind: SourceCo
       contentType: detected === 'video' ? 'video' : 'image',
       capability: endpoint.id,
       mediaUrl,
-      thumbnailUrl: mediaUrl,
+      thumbnailUrl: displayUrl,
       ...(mime ? { mimeType: mime.slice(0, 80) } : {}),
       snippet: clipText(fileTitle).slice(0, 400),
     });
@@ -173,12 +178,16 @@ function itunesHits(endpoint: OpenSourceEndpoint, data: unknown): OpenMediaHit[]
     const item = row as Record<string, unknown>;
     const page = asSafe(String(item.trackViewUrl || item.collectionViewUrl || '')) || '';
     const feedUrl = asSafe(String(item.feedUrl || ''));
-    const mediaUrl = asSafe(String(item.episodeUrl || item.previewUrl || ''));
-    const detected = inferContentType({
-      mimeType: String(item.episodeContentType || item.kind || ''),
-      mediaUrl,
-      ogType: item.kind === 'podcast-episode' || item.kind === 'podcast' ? 'music' : undefined,
-    });
+    const kindName = String(item.kind || '');
+    const isEpisode = kindName === 'podcast-episode';
+    const episodeUrl = asSafe(String(item.episodeUrl || ''));
+    const previewUrl = asSafe(String(item.previewUrl || ''));
+    const candidate = episodeUrl || (isEpisode ? previewUrl : undefined);
+    const mimeHint = String(item.episodeContentType || '');
+    const mediaUrl =
+      candidate && hasPlayableAudioRepresentation({ mediaUrl: candidate, mimeType: mimeHint })
+        ? candidate
+        : undefined;
     const url = page || feedUrl || mediaUrl || '';
     if (!url) continue;
     const title = clipTitle(String(item.trackName || item.collectionName || url));
@@ -187,18 +196,17 @@ function itunesHits(endpoint: OpenSourceEndpoint, data: unknown): OpenMediaHit[]
       typeof item.trackTimeMillis === 'number' ? item.trackTimeMillis / 1000 : item.trackTimeMillis,
     );
     const thumb = asSafe(String(item.artworkUrl600 || item.artworkUrl160 || item.artworkUrl100 || ''));
-    const isEpisode = String(item.kind || '') === 'podcast-episode' || Boolean(mediaUrl && !feedUrl);
     out.push({
       title,
       url,
       contentType: 'audio',
       capability: endpoint.id,
-      ...(mediaUrl && (detected === 'audio' || /\.(m4a|mp3|aac|ogg)(\?|$)/i.test(mediaUrl)) ? { mediaUrl } : {}),
+      ...(mediaUrl ? { mediaUrl } : {}),
       ...(thumb ? { thumbnailUrl: thumb } : {}),
-      ...(duration != null && duration > 0 ? { durationSeconds: duration } : {}),
+      ...(mediaUrl && duration != null && duration > 0 ? { durationSeconds: duration } : {}),
       ...(item.artistName ? { author: clipTitle(String(item.artistName)).slice(0, 80) } : {}),
       ...(feedUrl ? { feedUrl } : {}),
-      ...(isEpisode && mediaUrl && /previewUrl/i.test(String(item.previewUrl || '')) && item.previewUrl === mediaUrl
+      ...(mediaUrl && previewUrl && mediaUrl === previewUrl && !episodeUrl
         ? { mediaExpression: 'sample' as const }
         : {}),
       snippet: clipText(String(item.shortDescription || item.description || item.collectionName || title)).slice(0, 400),
@@ -252,19 +260,19 @@ function commonsListUrl(endpoint: OpenSourceEndpoint, kind: SourceContentKind, q
       return (
         `${endpoint.url}?action=query&format=json&generator=search` +
         `&gsrsearch=${encodeURIComponent('filetype:video')}&gsrnamespace=6&gsrlimit=8` +
-        `&prop=imageinfo&iiprop=url|mime|size`
+        `&prop=imageinfo&iiprop=url|mime|size&iiurlwidth=1280`
       );
     }
     return (
       `${endpoint.url}?action=query&format=json&generator=allimages&gailimit=8` +
-      `&prop=imageinfo&iiprop=url|mime|size`
+      `&prop=imageinfo&iiprop=url|mime|size&iiurlwidth=1280`
     );
   }
   const gsr = kind === 'video' ? `filetype:video ${query}` : query;
   return (
     `${endpoint.url}?action=query&format=json&generator=search` +
     `&gsrsearch=${encodeURIComponent(gsr)}&gsrnamespace=6&gsrlimit=8` +
-    `&prop=imageinfo&iiprop=url|mime|size`
+    `&prop=imageinfo&iiprop=url|mime|size&iiurlwidth=1280`
   );
 }
 

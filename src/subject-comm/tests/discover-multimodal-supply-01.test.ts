@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { seekContent } from '../content-seek';
-import { intentFromModelText, objectFidelity } from '../discover-intent';
+import { seekContent, openMediaQueries } from '../content-seek';
+import { intentFromModelText, objectFidelity, defaultDiscoverIntent } from '../discover-intent';
 import { ensurePersonalFeed } from '../personal-feed';
 import { catalogEndpointsFor, OPEN_SOURCE_CATALOG } from '../open-source-catalog';
 import { searchOpenMedia, sourceKindsForRequest } from '../content-source-capabilities';
+import { hasPlayableAudioRepresentation } from '../content-media';
 import { validateNetworkItem, type NetworkItem } from '../network-item';
 import type { DigitalSelf } from '../../subject-core/digital-self/types';
 import type { ChatCompleteFn } from '../../subject-core/structured-distill';
@@ -363,10 +364,142 @@ test('intent JSON keeps broad vs media requests distinct', () => {
 
 test('UI consumes image as visual subject, video at source, audio controls without fake 0:00', async () => {
   const ui = await fs.readFile(path.join(process.cwd(), 'electron/renderer/content-discover.js'), 'utf8');
-  assert.equal(ui.includes("card.contentType === 'image' && isHttps(card.mediaUrl)"), true);
+  assert.equal(ui.includes("card.contentType === 'image'"), true);
   assert.equal(ui.includes('content-discover-cover--image'), true);
   assert.equal(ui.includes("type === 'video'") && ui.includes('在来源观看'), true);
+  assert.equal(ui.includes("loadedmetadata"), true);
   assert.equal(ui.includes('audio.controls = true'), true);
-  assert.equal(ui.includes('n > 0'), true);
+  assert.equal(ui.includes('audio.hidden = true'), true);
+  assert.equal(ui.includes("img.addEventListener('error'"), true);
+  assert.equal(ui.includes("skipRender: true"), true);
   assert.equal(/0:00\/0:00/.test(ui), false);
+  const html = await fs.readFile(path.join(process.cwd(), 'electron/renderer/index.html'), 'utf8');
+  assert.match(html, /img-src[^"]*https:/);
+  assert.match(html, /media-src[^"]*https:/);
+});
+
+test('IMAGE: open media still runs after web articles, and full-sentence query is not the only Commons term', async () => {
+  const commonsSearches: string[] = [];
+  const fetchImpl = async (url: string) => {
+    if (url.includes('commons.wikimedia.org')) {
+      const parsed = new URL(url);
+      const gsr = parsed.searchParams.get('gsrsearch') || '';
+      commonsSearches.push(gsr);
+      if (gsr === '找一些航天摄影作品') {
+        return { status: 200, body: JSON.stringify({ query: { pages: {} } }), finalUrl: url };
+      }
+      return {
+        status: 200,
+        body: JSON.stringify({
+          query: {
+            pages: {
+              '1': {
+                title: 'File:Earthrise.jpg',
+                imageinfo: [
+                  {
+                    url: 'https://upload.wikimedia.org/wikipedia/commons/e.jpg',
+                    thumburl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e.jpg/1280px-e.jpg',
+                    mime: 'image/jpeg',
+                  },
+                ],
+              },
+            },
+          },
+        }),
+        finalUrl: url,
+      };
+    }
+    return { status: 404, body: '{}', finalUrl: url };
+  };
+  const query = '找一些航天摄影作品';
+  const intent = {
+    ...defaultDiscoverIntent(query),
+    requestedMedia: ['image'],
+    topic: '航天摄影',
+    searchQueries: [query],
+  };
+  const planned = openMediaQueries(query, intent);
+  assert.equal(planned[0], query);
+  assert.equal(planned.some((row) => row !== query), true);
+
+  const webHits = Array.from({ length: 24 }, (_, i) => ({
+    title: `航天摄影相关报道 ${i + 1}`,
+    url: `https://news.example.org/space-photo-${i + 1}`,
+    snippet: 'A news article about space photography.',
+  }));
+  const sought = await seekContent({
+    query,
+    items: [],
+    searchWeb: async () => webHits,
+    fetchOpenMedia: fetchImpl,
+    chatComplete: chatFromScript({
+      intent: {
+        mode: 'consume',
+        topic: '航天摄影',
+        requestedContentTypes: ['image'],
+        objectWanted: 'primary_content',
+        searchQueries: [query],
+      },
+      roles: [],
+    }),
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+  });
+  assert.equal(commonsSearches.some((row) => row && row !== query), true);
+  assert.equal(sought.cards.some((card) => card.contentType === 'image'), true);
+  assert.equal(sought.cards.some((card) => card.contentType === 'article'), false);
+  assert.equal(sought.relatedCards.some((card) => /相关报道/.test(card.title)), true);
+  const image = sought.cards.find((card) => card.contentType === 'image');
+  assert.ok(image?.mediaUrl || image?.thumbnailUrl);
+  assert.match(String(image?.thumbnailUrl || image?.mediaUrl || ''), /https:\/\/upload\.wikimedia\.org\//);
+});
+
+test('AUDIO: episode preview is playable representation; show landing page is not', async () => {
+  assert.equal(hasPlayableAudioRepresentation({ mediaUrl: 'https://example.org/ep.mp3' }), true);
+  assert.equal(hasPlayableAudioRepresentation({ mediaUrl: 'https://podcasts.apple.com/podcast/id1' }), false);
+  const fetchImpl = async (url: string) => {
+    if (url.includes('entity=podcastEpisode')) {
+      return {
+        status: 200,
+        body: JSON.stringify({
+          resultCount: 1,
+          results: [
+            {
+              kind: 'podcast-episode',
+              trackName: 'Chips this week',
+              trackViewUrl: 'https://podcasts.apple.com/ep/1',
+              previewUrl: 'https://example.org/ep.mp3',
+              trackTimeMillis: 90000,
+            },
+          ],
+        }),
+        finalUrl: url,
+      };
+    }
+    if (url.includes('entity=podcast')) {
+      return {
+        status: 200,
+        body: JSON.stringify({
+          resultCount: 1,
+          results: [
+            {
+              kind: 'podcast',
+              collectionName: 'Tech Daily',
+              collectionViewUrl: 'https://podcasts.apple.com/podcast/id9',
+              feedUrl: 'https://example.org/tech.xml',
+            },
+          ],
+        }),
+        finalUrl: url,
+      };
+    }
+    return { status: 404, body: '{}', finalUrl: url };
+  };
+  const audio = await searchOpenMedia({ query: '科技播客', kinds: ['audio'], fetchImpl });
+  const episode = audio.find((row) => row.title === 'Chips this week');
+  const show = audio.find((row) => row.title === 'Tech Daily');
+  assert.equal(episode?.contentType, 'audio');
+  assert.equal(episode?.mediaUrl, 'https://example.org/ep.mp3');
+  assert.equal(show?.contentType, 'audio');
+  assert.equal(show?.mediaUrl, undefined);
+  assert.equal(show?.url, 'https://podcasts.apple.com/podcast/id9');
 });

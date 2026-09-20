@@ -88,6 +88,19 @@ export function isSafePublicMediaUrl(raw: unknown): string | undefined {
   }
 }
 
+/** 机械可播放证据：有公开音频 URL，且 MIME/后缀像音频。不等于已经成功解码。 */
+export function hasPlayableAudioRepresentation(input: {
+  mediaUrl?: string | undefined;
+  mimeType?: string | undefined;
+}): boolean {
+  const url = isSafePublicMediaUrl(input.mediaUrl);
+  if (!url) return false;
+  const mime = String(input.mimeType || '').toLowerCase();
+  if (mime.startsWith('text/html') || mime.startsWith('application/xhtml')) return false;
+  if (mime.startsWith('audio/')) return true;
+  return /\.(aac|flac|m4a|mp3|ogg|opus|wav)(\?|$)/i.test(url);
+}
+
 export function parseDurationSeconds(raw: unknown): number | undefined {
   if (raw == null || raw === '') return undefined;
   if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 0) {

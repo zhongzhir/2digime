@@ -83,7 +83,7 @@
     const type = String(card.contentType || '');
     if (type === 'video') return '在来源观看';
     if (type === 'image') return '打开原页';
-    if (type === 'audio') return '打开来源';
+    if (type === 'audio') return '在来源收听';
     return '阅读原文';
   }
 
@@ -105,7 +105,7 @@
 
   function openCard(card) {
     if (card.url) window.open(card.url, '_blank', 'noopener,noreferrer');
-    if (card.itemId) void act('open', { itemId: card.itemId });
+    if (card.itemId) void act('open', { itemId: card.itemId }, { skipRender: true });
   }
 
   function stashLater(card) {
@@ -143,11 +143,13 @@
   }
 
   function coverUrl(card) {
-    if (card.contentType === 'image' && isHttps(card.mediaUrl)) return card.mediaUrl;
-    if (isHttps(card.thumbnailUrl)) return card.thumbnailUrl;
-    if (card.contentType === 'image' && isHttps(card.url) && /\.(avif|gif|jpe?g|png|webp)(\?|$)/i.test(card.url)) {
-      return card.url;
+    if (card.contentType === 'image') {
+      if (isHttps(card.thumbnailUrl)) return card.thumbnailUrl;
+      if (isHttps(card.mediaUrl)) return card.mediaUrl;
+      if (isHttps(card.url) && /\.(avif|gif|jpe?g|png|webp)(\?|$)/i.test(card.url)) return card.url;
+      return '';
     }
+    if (isHttps(card.thumbnailUrl)) return card.thumbnailUrl;
     return '';
   }
 
@@ -162,6 +164,9 @@
       img.alt = card.title || '';
       img.referrerPolicy = 'no-referrer';
       img.src = cover;
+      img.addEventListener('error', () => {
+        img.remove();
+      });
       li.appendChild(img);
     }
     const body = document.createElement('div');
@@ -192,9 +197,18 @@
     if (type === 'audio' && isHttps(card.mediaUrl) && card.consumption !== 'OFFICIAL_EMBED') {
       const audio = document.createElement('audio');
       audio.className = 'content-discover-audio';
-      audio.controls = true;
-      audio.preload = 'none';
+      audio.preload = 'metadata';
+      audio.hidden = true;
       audio.src = card.mediaUrl;
+      const reveal = () => {
+        if (!Number.isFinite(audio.duration) || audio.duration <= 0) return;
+        audio.hidden = false;
+        audio.controls = true;
+      };
+      audio.addEventListener('loadedmetadata', reveal);
+      audio.addEventListener('error', () => {
+        audio.remove();
+      });
       body.appendChild(audio);
     }
     if (card.reason) {
@@ -311,6 +325,10 @@
     const feedTitle = $('content-discover-feed-title');
     if (feedTitle) {
       feedTitle.textContent = (view && view.feedTitle) || ((view && view.feedMode) === 'intent' ? '当前搜索' : '为你发现');
+    }
+    const queryInput = $('content-discover-query');
+    if (queryInput && view && view.feedMode === 'intent' && view.searchQuery) {
+      queryInput.value = view.searchQuery;
     }
     if (lead) {
       lead.textContent =
