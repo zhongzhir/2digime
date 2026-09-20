@@ -27,17 +27,76 @@ export interface AliyunIqsWebDiscoveryOptions {
   endpoint?: string;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
+  log?: (event: string, fields: Record<string, string | number | boolean | undefined>) => void;
 }
 
-interface IqsPageItem {
-  title?: string;
-  link?: string;
-  url?: string;
-  snippet?: string;
-  summary?: string;
-  publishedTime?: string;
-  hostname?: string;
-  hostLogo?: string;
+type JsonRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): JsonRecord | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as JsonRecord;
+}
+
+function readField(value: unknown, names: string[]): unknown {
+  const rec = asRecord(value);
+  if (!rec) return undefined;
+  const wanted = new Set(names.map((name) => name.toLowerCase()));
+  for (const [key, field] of Object.entries(rec)) {
+    if (wanted.has(key.toLowerCase())) return field;
+  }
+  return undefined;
+}
+
+function readString(value: unknown, names: string[]): string {
+  const field = readField(value, names);
+  return field == null ? '' : String(field).trim();
+}
+
+function parseMaybeJson(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  const text = value.trim();
+  if (!text || (text[0] !== '{' && text[0] !== '[')) return value;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return value;
+  }
+}
+
+/** Official UnifiedSearch HTTP schema: top-level pageItems[]. Do not assume results/items. */
+export function readIqsPageItems(json: unknown): unknown[] {
+  const root = asRecord(parseMaybeJson(json));
+  if (!root) return [];
+  const direct = parseMaybeJson(readField(root, ['pageItems']));
+  if (Array.isArray(direct)) return direct;
+  const data = asRecord(parseMaybeJson(readField(root, ['data'])));
+  const nestedData = parseMaybeJson(data ? readField(data, ['pageItems']) : undefined);
+  if (Array.isArray(nestedData)) return nestedData;
+  const result = asRecord(parseMaybeJson(readField(root, ['result'])));
+  const nestedResult = parseMaybeJson(result ? readField(result, ['pageItems']) : undefined);
+  if (Array.isArray(nestedResult)) return nestedResult;
+  return [];
+}
+
+export function normalizeIqsPageItems(rows: unknown[], limit: number): WebDiscoveryHit[] {
+  const topK = Math.min(IQS_FIRST_STAGE_MAX_RESULTS, Math.max(1, limit));
+  const out: WebDiscoveryHit[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const rawUrl = readString(row, ['link', 'url']);
+    const urlHit = rawUrl.startsWith('//') ? `https:${rawUrl}` : rawUrl;
+    if (!/^https?:\/\//i.test(urlHit) || seen.has(urlHit)) continue;
+    seen.add(urlHit);
+    const title = (readString(row, ['title']) || urlHit).slice(0, 240);
+    const snippet = readString(row, ['snippet', 'summary']).slice(0, 500);
+    out.push({
+      title,
+      url: urlHit.slice(0, 500),
+      ...(snippet ? { snippet } : {}),
+    });
+    if (out.length >= topK) break;
+  }
+  return out;
 }
 
 function unifiedSearchUrl(raw: string): string {
@@ -69,15 +128,12 @@ function classifyHttp(status: number, code: string): WebDiscoveryError {
   return new WebDiscoveryError('PROVIDER_ERROR', `iqs_${labeled || 'error'}`, status >= 400 ? status : 502);
 }
 
-function pageItemsFrom(json: {
-  pageItems?: IqsPageItem[];
-  data?: { pageItems?: IqsPageItem[] };
-  result?: { pageItems?: IqsPageItem[] };
-}): IqsPageItem[] {
-  if (Array.isArray(json.pageItems)) return json.pageItems;
-  if (Array.isArray(json.data?.pageItems)) return json.data.pageItems;
-  if (Array.isArray(json.result?.pageItems)) return json.result.pageItems;
-  return [];
+function normalizationError(upstreamCount: number, normalizedCount: number): WebDiscoveryError {
+  return new WebDiscoveryError(
+    'PROVIDER_ERROR',
+    `NORMALIZATION_ERROR:upstreamCount=${upstreamCount};normalizedCount=${normalizedCount}`,
+    502,
+  );
 }
 
 export function createAliyunIqsWebDiscoveryProvider(
@@ -87,6 +143,7 @@ export function createAliyunIqsWebDiscoveryProvider(
   const url = unifiedSearchUrl(options.endpoint || '');
   const timeoutMs = options.timeoutMs ?? 8_000;
   const fetchImpl = options.fetchImpl || fetch;
+  const log = options.log || (() => undefined);
   if (!apiKey || !url) {
     throw new WebDiscoveryError('TEMPORARY_UNAVAILABLE', 'MANAGED_PROVIDER_CONFIG_REQUIRED', 503);
   }
@@ -139,41 +196,31 @@ export function createAliyunIqsWebDiscoveryProvider(
         bound.dispose();
       }
 
-      let json: {
-        code?: string | number;
-        message?: string;
-        errorCode?: string;
-        pageItems?: IqsPageItem[];
-        data?: { pageItems?: IqsPageItem[] };
-        result?: { pageItems?: IqsPageItem[] };
-      } = {};
+      let json: unknown = {};
+      let parsed = false;
       try {
-        json = (await res.json()) as typeof json;
+        json = await res.json();
+        parsed = true;
       } catch {
         json = {};
       }
       if (!res.ok) {
-        throw classifyHttp(res.status, String(json.code || json.errorCode || json.message || ''));
+        const rec = asRecord(json) || {};
+        throw classifyHttp(res.status, String(rec.code || rec.errorCode || rec.message || rec.Code || ''));
       }
-      const code = String(json.code || '').toLowerCase();
-      if (code && code !== 'success' && code !== 'ok' && code !== '200' && code !== '0') {
-        throw classifyHttp(res.status || 502, String(json.code || json.errorCode || json.message || ''));
+      if (!parsed) {
+        log('iqs_unified_search', { httpStatus: res.status, pageItemsCount: 0, normalizedCount: 0 });
+        throw normalizationError(0, 0);
       }
-      const rows = pageItemsFrom(json);
-      const out: WebDiscoveryHit[] = [];
-      const seen = new Set<string>();
-      for (const row of rows) {
-        const urlHit = String(row.link || row.url || '').trim();
-        if (!urlHit || seen.has(urlHit)) continue;
-        seen.add(urlHit);
-        const title = String(row.title || urlHit).slice(0, 240);
-        const snippet = String(row.snippet || row.summary || '').trim().slice(0, 500);
-        out.push({
-          title,
-          url: urlHit.slice(0, 500),
-          ...(snippet ? { snippet } : {}),
-        });
-        if (out.length >= topK) break;
+      const rows = readIqsPageItems(json);
+      const out = normalizeIqsPageItems(rows, topK);
+      log('iqs_unified_search', {
+        httpStatus: res.status,
+        pageItemsCount: rows.length,
+        normalizedCount: out.length,
+      });
+      if (rows.length > 0 && out.length === 0) {
+        throw normalizationError(rows.length, 0);
       }
       return out;
     },

@@ -374,3 +374,85 @@ test('IQS provider failure stays TEMPORARY_UNAVAILABLE and does not ask for a cl
   assert.equal(failed.body.status, 'TEMPORARY_UNAVAILABLE');
   assert.equal(/API Key|请配置 Gemini|Google Cloud/.test(JSON.stringify(failed.body)), false);
 });
+
+test('IQS official pageItems fixture maps title/link/snippet; empty pageItems is AVAILABLE []', async () => {
+  const logs: Array<{ event: string; fields: Record<string, string | number | boolean | undefined> }> = [];
+  const provider = createAliyunIqsWebDiscoveryProvider({
+    apiKey: 'IQS-test-not-a-real-key',
+    log: (event, fields) => logs.push({ event, fields }),
+    fetchImpl: async () =>
+      new Response(
+        JSON.stringify({
+          requestId: '35E5608A-A737-2038-test-D9D34C6BFD9E',
+          pageItems: [
+            {
+              title: 'Example',
+              link: 'https://example.com',
+              snippet: 'Example snippet',
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+  });
+  const hits = await provider.search({ query: 'example query' });
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0]?.title, 'Example');
+  assert.equal(hits[0]?.url, 'https://example.com');
+  assert.equal(hits[0]?.snippet, 'Example snippet');
+  assert.equal(logs[0]?.fields.httpStatus, 200);
+  assert.equal(logs[0]?.fields.pageItemsCount, 1);
+  assert.equal(logs[0]?.fields.normalizedCount, 1);
+
+  const emptyProvider = createAliyunIqsWebDiscoveryProvider({
+    apiKey: 'IQS-test-not-a-real-key',
+    fetchImpl: async () =>
+      new Response(JSON.stringify({ requestId: 'empty', pageItems: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+  });
+  const emptyHits = await emptyProvider.search({ query: 'example query' });
+  assert.equal(emptyHits.length, 0);
+  const emptyGateway = createWebDiscoveryGateway({ provider: emptyProvider });
+  const emptyResult = await emptyGateway.search({
+    body: { query: 'example query' },
+    installToken: 'install-capability-token-test-0001',
+  });
+  assert.equal(emptyResult.body.ok, true);
+  assert.equal(emptyResult.body.status, 'AVAILABLE');
+  assert.equal(emptyResult.body.results?.length, 0);
+});
+
+test('IQS pageItems>0 but unparseable is NORMALIZATION_ERROR and is not cached', async () => {
+  let calls = 0;
+  const provider = createAliyunIqsWebDiscoveryProvider({
+    apiKey: 'IQS-test-not-a-real-key',
+    fetchImpl: async () => {
+      calls += 1;
+      return new Response(
+        JSON.stringify({
+          requestId: 'bad-items',
+          pageItems: [{ title: 'no url here', snippet: 'cannot map' }],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    },
+  });
+  await assert.rejects(() => provider.search({ query: 'example query' }), /NORMALIZATION_ERROR:upstreamCount=1;normalizedCount=0/);
+  const gateway = createWebDiscoveryGateway({ provider, cacheTtlMs: 60_000 });
+  const first = await gateway.search({
+    body: { query: 'example query' },
+    installToken: 'install-capability-token-test-0001',
+  });
+  assert.equal(first.body.ok, false);
+  assert.equal(first.body.status, 'PROVIDER_ERROR');
+  assert.match(String(first.body.error || ''), /NORMALIZATION_ERROR/);
+  const second = await gateway.search({
+    body: { query: 'example query' },
+    installToken: 'install-capability-token-test-0001',
+  });
+  assert.equal(second.body.cacheState, undefined);
+  assert.equal(second.body.ok, false);
+  assert.equal(calls >= 3, true);
+});

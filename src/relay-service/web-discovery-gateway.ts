@@ -13,6 +13,8 @@ import {
   type WebDiscoveryStatus,
 } from '../capability/web-discovery';
 
+export const WEB_DISCOVERY_CACHE_VERSION = 'iqs-pageitems-1';
+
 export interface WebDiscoveryGatewayOptions {
   provider?: WebDiscoveryProvider | null;
   now?: () => number;
@@ -145,7 +147,7 @@ export function createWebDiscoveryGateway(options: WebDiscoveryGatewayOptions = 
         };
       }
 
-      const extra = `${(parsed.contentTypes || []).join(',')}|${parsed.freshness || ''}|${parsed.limit || 8}`;
+      const extra = `${WEB_DISCOVERY_CACHE_VERSION}|${(parsed.contentTypes || []).join(',')}|${parsed.freshness || ''}|${parsed.limit || 8}`;
       const queryHash = hashWebDiscoveryQuery(parsed.query, extra);
       const cached = cache.get(queryHash);
       if (cached && now() - cached.at <= cacheTtlMs) {

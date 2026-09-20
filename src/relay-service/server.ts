@@ -245,6 +245,7 @@ export function resolveManagedWebDiscoveryGateway(env: NodeJS.ProcessEnv = proce
         provider: createAliyunIqsWebDiscoveryProvider({
           apiKey,
           ...(endpoint ? { endpoint } : {}),
+          log: logSafe,
         }),
         log: logSafe,
       });
