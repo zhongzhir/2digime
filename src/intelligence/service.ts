@@ -11,6 +11,10 @@ import { randomUUID } from 'node:crypto';
 import { EMPTY_REPLY, NO_MODEL_NOTICE, runTalkTurn, type SubjectCollabPort } from './loop';
 import { isManagedAiUserNotice } from '../capability/managed-ai-client';
 import type { ProfessionalAgent, TalkChatFn, TalkExecution, TalkView } from './types';
+import {
+  listActiveFilesystemGrantFolders,
+  saveFilesystemGrant,
+} from '../authorization/filesystem-grant';
 
 /** 做事（含首次获取代码执行能力）需要数分钟；180s 会在 runtime 仍工作时掐断。 */
 export const TALK_TURN_DEADLINE_MS = 600_000;
@@ -163,7 +167,15 @@ export class TalkService {
       }
     }
     const collab = this.resolveCollab ? await this.resolveCollab(pkg) : null;
-    const turnCtx = input.contextPaths?.length ? { contextPaths: input.contextPaths } : {};
+    const grantedFolders = await listActiveFilesystemGrantFolders(pkg.rootDir);
+    const contextPaths = [
+      ...new Set(
+        [...(input.contextPaths || []), ...grantedFolders]
+          .map((item) => String(item || '').trim())
+          .filter(Boolean),
+      ),
+    ];
+    const turnCtx = contextPaths.length ? { contextPaths } : {};
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), talkTurnDeadlineMs());
     const boundedChat = wrapChatWithDeadline(this.chat, ac.signal);
@@ -184,11 +196,18 @@ export class TalkService {
         onExecution: (rec) => {
           turnExecutions.push(rec);
         },
-        ...(input.contextPaths?.length ? { contextPaths: input.contextPaths } : {}),
+        ...(contextPaths.length ? { contextPaths } : {}),
         ...(collab ? { subjectCollab: collab } : {}),
         ...(confirmHint ? { confirmHint } : {}),
         ...(this.requestFolderAccess ? { requestFolderAccess: this.requestFolderAccess } : {}),
-        refreshAgents: (contextPaths) => this.resolveAgents(pkg, { contextPaths }),
+        persistFolderGrant: (folder) =>
+          saveFilesystemGrant({
+            packageRoot: pkg.rootDir,
+            subjectId: pkg.subjectId,
+            folder,
+            now,
+          }).then(() => undefined),
+        refreshAgents: (paths) => this.resolveAgents(pkg, { contextPaths: paths }),
       });
       // 模型最终回复为空或整段内部 execution JSON 时，deliverText 会变成 EMPTY_REPLY。
       // 本轮已有 execution 则不得把 EMPTY_REPLY 交给用户；复用 execution 机械事实。

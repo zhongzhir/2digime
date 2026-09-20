@@ -84,6 +84,8 @@ contextBridge.exposeInMainWorld("digitalMe", {
   saveWebDiscoverySettings: (input) => ipcRenderer.invoke("shell:saveWebDiscoverySettings", input || {}),
   saveAiCapabilitySettings: (input) => ipcRenderer.invoke("shell:saveAiCapabilitySettings", input || {}),
   getAiAllowance: () => ipcRenderer.invoke("shell:getAiAllowance"),
+  listFilesystemGrants: () => ipcRenderer.invoke("shell:listFilesystemGrants"),
+  revokeFilesystemGrant: (input) => ipcRenderer.invoke("shell:revokeFilesystemGrant", input || {}),
   getRemoteCapabilityStatus: () => ipcRenderer.invoke("shell:getRemoteCapabilityStatus"),
   testRemoteCapability: (input) => ipcRenderer.invoke("shell:testRemoteCapability", input),
   saveRemoteCapability: (input) => ipcRenderer.invoke("shell:saveRemoteCapability", input),

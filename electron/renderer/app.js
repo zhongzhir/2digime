@@ -149,6 +149,9 @@
     aiCapabilityState: document.getElementById("ai-capability-state"),
     aiServiceLabel: document.getElementById("ai-service-label"),
     aiAllowanceLabel: document.getElementById("ai-allowance-label"),
+    filesystemGrantList: document.getElementById("filesystem-grant-list"),
+    filesystemGrantEmpty: document.getElementById("filesystem-grant-empty"),
+    filesystemGrantStatus: document.getElementById("filesystem-grant-status"),
     advancedAiCapability: document.getElementById("advanced-ai-capability"),
     aiCapabilityPathManaged: document.getElementById("ai-capability-path-managed"),
     aiCapabilityPathByok: document.getElementById("ai-capability-path-byok"),
@@ -754,6 +757,7 @@
       btn.classList.toggle("active", btn.dataset.nav === "settings");
     }
     fillSettingsForm();
+    void refreshFilesystemGrantUi();
     setView("settings");
     const advanced = document.getElementById("settings-advanced");
     if (advanced && !advanced.dataset.bound) {
@@ -1431,6 +1435,45 @@
         els.modelId.value = "";
         advancedFieldsDirty = false;
       }
+    }
+  }
+
+  async function refreshFilesystemGrantUi() {
+    const list = els.filesystemGrantList;
+    const empty = els.filesystemGrantEmpty;
+    if (!list) return;
+    list.textContent = "";
+    if (typeof api.listFilesystemGrants !== "function") {
+      if (empty) empty.hidden = false;
+      return;
+    }
+    try {
+      const view = await api.listFilesystemGrants();
+      const grants = view && view.ok && Array.isArray(view.grants) ? view.grants : [];
+      if (empty) empty.hidden = grants.length > 0;
+      for (const grant of grants) {
+        const li = document.createElement("li");
+        li.className = "collab-entry";
+        const pathEl = document.createElement("p");
+        pathEl.textContent = grant.folder || "";
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "ghost";
+        btn.textContent = "撤销";
+        btn.addEventListener("click", async () => {
+          if (typeof api.revokeFilesystemGrant !== "function") return;
+          const result = await api.revokeFilesystemGrant({ id: grant.id });
+          if (els.filesystemGrantStatus) {
+            els.filesystemGrantStatus.textContent = result && result.ok ? "已撤销该文件夹授权。" : "暂时无法撤销。";
+          }
+          await refreshFilesystemGrantUi();
+        });
+        li.appendChild(pathEl);
+        li.appendChild(btn);
+        list.appendChild(li);
+      }
+    } catch {
+      if (empty) empty.hidden = false;
     }
   }
 

@@ -17,6 +17,7 @@ import {
   runReadFile,
   writeExportedOffice,
 } from './mechanical-tools';
+import { folderCovers } from '../authorization/filesystem-path';
 import type {
   ProfessionalAgent,
   TalkChatFn,
@@ -289,6 +290,7 @@ export async function runTalkTurn(input: {
   /** 工具一旦完成就把执行事实交给本轮 service；不是 workflow / retry 状态。 */
   onExecution?: (rec: TalkExecution) => void;
   requestFolderAccess?: (input: { path: string; label: string }) => Promise<boolean>;
+  persistFolderGrant?: (folder: string) => Promise<void>;
   refreshAgents?: (contextPaths: string[]) => ProfessionalAgent[];
 }): Promise<TalkThread> {
   const userTurn: TalkTurn = {
@@ -315,6 +317,7 @@ export async function runTalkTurn(input: {
 
   const cards = input.subjectCollab?.cards || [];
   const auth = classifyAuthorizedPaths(input.contextPaths);
+  const deniedThisTurn = new Set<string>();
   let agents = input.agents.slice();
   const system = [
     '你是用户的兔机米，也是用户的超级助手。',
@@ -419,6 +422,40 @@ export async function runTalkTurn(input: {
     };
     const resolved = resolveProposedAccessPath(asked.path);
     if (!resolved.ok) return fail(resolved.reason);
+    const already = auth.folders.some((folder) => folderCovers(folder, resolved.abs));
+    if (already) {
+      try {
+        await fs.mkdir(resolved.abs, { recursive: true });
+      } catch (err) {
+        return fail(String(err instanceof Error ? err.message : err));
+      }
+      lastOk = true;
+      lastEvidenceOnly = false;
+      lastPath = resolved.abs;
+      recordExec({
+        id: execId,
+        at: input.now,
+        turnId: userTurn.id,
+        capabilityId: 'request_folder_access',
+        instruction: asked.path,
+        ok: true,
+        summary: `已授权 ${resolved.abs}`,
+        producedOutputs: [resolved.abs],
+        outputPath: resolved.abs,
+      });
+      return JSON.stringify({
+        actualSuccess: true,
+        ok: true,
+        capabilityId: 'request_folder_access',
+        evidenceOnly: false,
+        producedOutputs: [resolved.abs],
+        outputPath: resolved.abs,
+        summary: `已授权可写文件夹：${resolved.abs}。可用 write_file 创建和修改其中的文件；专业代码改动可 delegate 已连接的代码执行能力。不要让主人自己运行命令。`,
+      });
+    }
+    if (deniedThisTurn.has(resolved.abs)) {
+      return fail('主人没有允许访问该文件夹。不要让主人自己运行命令或安装开发工具。');
+    }
     if (!input.requestFolderAccess) {
       return fail('当前无法向主人确认文件夹访问。不要让主人自己运行命令。');
     }
@@ -429,6 +466,7 @@ export async function runTalkTurn(input: {
       return fail(String(err instanceof Error ? err.message : err));
     }
     if (!allowed) {
+      deniedThisTurn.add(resolved.abs);
       return fail('主人没有允许访问该文件夹。不要让主人自己运行命令或安装开发工具。');
     }
     try {
@@ -436,7 +474,16 @@ export async function runTalkTurn(input: {
     } catch (err) {
       return fail(String(err instanceof Error ? err.message : err));
     }
-    if (!auth.folders.includes(resolved.abs)) auth.folders.push(resolved.abs);
+    if (input.persistFolderGrant) {
+      try {
+        await input.persistFolderGrant(resolved.abs);
+      } catch {
+        /* 本轮内存授权仍有效；持久化失败不得改口让主人跑命令 */
+      }
+    }
+    if (!auth.folders.some((folder) => folderCovers(folder, resolved.abs))) {
+      auth.folders.push(resolved.abs);
+    }
     ensureFsTools();
     if (input.refreshAgents) {
       agents = input.refreshAgents([resolved.abs, ...(input.contextPaths || [])]);

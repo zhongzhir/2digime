@@ -8,6 +8,11 @@ import * as path from 'node:path';
 import type { ChatToolDefinition } from '../infrastructure/model-http';
 import { extractFile, MAX_EXTRACT_CHARS } from '../infrastructure/extract';
 import { exportDocx, exportPptx } from '../infrastructure/export';
+import {
+  canonicalizeFolderPath,
+  folderCovers,
+  isUncOrNetworkPath,
+} from '../authorization/filesystem-path';
 
 export const MAX_LIST_ENTRIES = 500;
 export const MAX_WRITE_BYTES = 2_000_000;
@@ -104,8 +109,7 @@ function knownUserRoots(): string[] {
 }
 
 function isPathInside(root: string, candidate: string): boolean {
-  const rel = path.relative(path.resolve(root), path.resolve(candidate));
-  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+  return folderCovers(root, candidate);
 }
 
 /**
@@ -116,7 +120,7 @@ export function resolveProposedAccessPath(
   raw: string,
 ): { ok: true; abs: string; label: string } | { ok: false; reason: string } {
   const trimmed = String(raw || '').trim().replace(/\\/g, '/');
-  if (!trimmed || trimmed.includes('..')) {
+  if (!trimmed || trimmed.includes('..') || isUncOrNetworkPath(raw) || isUncOrNetworkPath(trimmed)) {
     return { ok: false, reason: '路径超出可授权范围。' };
   }
   const home = path.resolve(userHomeDir());
@@ -134,10 +138,11 @@ export function resolveProposedAccessPath(
   } else {
     abs = path.resolve(home, 'Desktop', trimmed);
   }
-  if (!roots.some((root) => isPathInside(root, abs))) {
+  const canonical = canonicalizeFolderPath(abs);
+  if (!roots.some((root) => isPathInside(root, canonical))) {
     return { ok: false, reason: '只能申请桌面、文档或下载目录及其子文件夹。' };
   }
-  return { ok: true, abs, label: abs };
+  return { ok: true, abs: canonical, label: canonical };
 }
 
 export function describeAuthorizedFs(auth: AuthorizedFs): string {
@@ -148,7 +153,7 @@ export function describeAuthorizedFs(auth: AuthorizedFs): string {
       '不要让主人自己运行命令、安装开发工具、或把 PowerShell/终端步骤交给主人。',
     ].join('\n');
   }
-  const lines = ['本次用户已通过“+”授权的路径（不要再要用户贴正文或列文件）：'];
+  const lines = ['主人已授权的路径（不要再要用户贴正文、列文件或自己运行命令）：'];
   if (auth.folders.length) {
     lines.push('可读写文件夹（write_file / list_directory 的授权根）：');
     for (const folder of auth.folders) lines.push(`- ${folder}`);
@@ -172,10 +177,9 @@ export function resolveWritePath(
   if (path.isAbsolute(relativePath) || rel.includes('..')) {
     return { ok: false, reason: '路径超出授权目录。' };
   }
-  const rootResolved = path.resolve(writeRoot);
-  const abs = path.resolve(writeRoot, rel);
-  const inside = path.relative(rootResolved, abs);
-  if (!inside || inside.startsWith('..') || path.isAbsolute(inside)) {
+  const rootResolved = canonicalizeFolderPath(writeRoot);
+  const abs = path.resolve(rootResolved, rel);
+  if (!folderCovers(rootResolved, abs)) {
     return { ok: false, reason: '路径超出授权目录。' };
   }
   return { ok: true, abs };
@@ -189,7 +193,7 @@ export function resolveAuthorizedWritePath(
 ): { ok: true; abs: string; root: string } | { ok: false; reason: string } {
   const roots = uniqAbs(auth.folders);
   if (!roots.length) {
-    return { ok: false, reason: '当前没有已授权的可写文件夹。请用户通过“+”选择该文件夹。' };
+    return { ok: false, reason: '当前没有已授权的可写文件夹。' };
   }
   const asked = String(requestedRoot || '').trim();
   let root: string | undefined;
@@ -211,15 +215,14 @@ export function resolveAuthorizedWritePath(
       reason: `有多个已授权可写目录，请在 root 中填写其中一个绝对路径：${roots.join('、')}`,
     };
   }
-  if (!root) return { ok: false, reason: '当前没有已授权的可写文件夹。请用户通过“+”选择该文件夹。' };
+  if (!root) return { ok: false, reason: '当前没有已授权的可写文件夹。' };
   const resolved = resolveWritePath(root, relativePath);
   if (!resolved.ok) return resolved;
   return { ok: true, abs: resolved.abs, root };
 }
 
 function inside(root: string, abs: string): boolean {
-  const rel = path.relative(path.resolve(root), path.resolve(abs));
-  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+  return folderCovers(root, abs);
 }
 
 function posixRel(root: string, abs: string): string {
@@ -287,7 +290,7 @@ export function resolveAuthorizedDirectory(
   auth: AuthorizedFs,
   requested: string,
 ): { ok: true; abs: string; root: string } | { ok: false; reason: string } {
-  if (!auth.folders.length) return { ok: false, reason: '当前没有已授权的文件夹。请用户通过“+”选择该文件夹。' };
+  if (!auth.folders.length) return { ok: false, reason: '当前没有已授权的文件夹。' };
   const req = requestedPath(requested);
   if (req.includes('..')) return { ok: false, reason: '路径超出授权范围。' };
   const onlyFolder = auth.folders[0];

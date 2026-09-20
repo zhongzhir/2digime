@@ -1355,6 +1355,20 @@ function registerIpc() {
     };
   });
 
+  ipcMain.handle("shell:listFilesystemGrants", async () => {
+    if (!runtime || typeof runtime.listFilesystemGrants !== "function") {
+      return { ok: false, grants: [] };
+    }
+    return runtime.listFilesystemGrants();
+  });
+
+  ipcMain.handle("shell:revokeFilesystemGrant", async (_evt, input) => {
+    if (!runtime || typeof runtime.revokeFilesystemGrant !== "function") {
+      return { ok: false };
+    }
+    return runtime.revokeFilesystemGrant(input && input.id);
+  });
+
   ipcMain.handle("shell:revealPath", async (_evt, targetPath) => {
     const p = String(targetPath || "").trim();
     if (!p) return { opened: false };

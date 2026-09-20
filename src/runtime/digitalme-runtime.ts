@@ -104,6 +104,10 @@ import type { CommandMap } from '../runtime/commands';
 import type { GrowthEvent } from '../subject-core/growth-event';
 import { LocalCollaborationHost } from '../collaboration/local-collaboration';
 import { GrantStore } from '../collaboration/grant-store';
+import {
+  listActiveFilesystemGrants,
+  revokeFilesystemGrant,
+} from '../authorization/filesystem-grant';
 import { CollaborationRecordStore } from '../collaboration/record-store';
 import {
   decideDelegation,
@@ -2777,6 +2781,25 @@ export class DigitalMeRuntime {
   /** 是否已挂载 Subject 包。正式产品路径只要求包，不要求旧 Work Runtime。 */
   isPackageAttached(): boolean {
     return !!this.subject.getActive();
+  }
+
+  async listFilesystemGrants(): Promise<{
+    ok: boolean;
+    grants: Array<{ id: string; folder: string; grantedAt: string }>;
+  }> {
+    const pkg = this.subject.getActive();
+    if (!pkg) return { ok: false, grants: [] };
+    return { ok: true, grants: await listActiveFilesystemGrants(pkg.rootDir) };
+  }
+
+  async revokeFilesystemGrant(grantId: string): Promise<{ ok: boolean }> {
+    const pkg = this.subject.getActive();
+    if (!pkg) return { ok: false };
+    const id = String(grantId || '').trim();
+    if (!id) return { ok: false };
+    return {
+      ok: await revokeFilesystemGrant({ packageRoot: pkg.rootDir, grantId: id, now: nowIso() }),
+    };
   }
 
   /** 旧 Work Runtime / Job runner 是否已初始化。正式默认启动应为 false。 */
