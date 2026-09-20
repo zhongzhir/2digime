@@ -88,6 +88,7 @@ export class TalkService {
     private readonly resolveCollab?: (pkg: TalkPackageRef) => Promise<SubjectCollabPort | null>,
     private readonly learnFromUtterance?: (text: string) => Promise<TalkLearnResult>,
     private readonly resolveContentSeek?: (pkg: TalkPackageRef, query: string) => Promise<string>,
+    private readonly requestFolderAccess?: (input: { path: string; label: string }) => Promise<boolean>,
   ) {}
 
   async invoke(input: { text?: string; contextPaths?: string[] }): Promise<{ view: TalkView }> {
@@ -186,6 +187,8 @@ export class TalkService {
         ...(input.contextPaths?.length ? { contextPaths: input.contextPaths } : {}),
         ...(collab ? { subjectCollab: collab } : {}),
         ...(confirmHint ? { confirmHint } : {}),
+        ...(this.requestFolderAccess ? { requestFolderAccess: this.requestFolderAccess } : {}),
+        refreshAgents: (contextPaths) => this.resolveAgents(pkg, { contextPaths }),
       });
       // 模型最终回复为空或整段内部 execution JSON 时，deliverText 会变成 EMPTY_REPLY。
       // 本轮已有 execution 则不得把 EMPTY_REPLY 交给用户；复用 execution 机械事实。

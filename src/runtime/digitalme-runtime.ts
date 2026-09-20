@@ -371,6 +371,8 @@ export interface DigitalMeRuntimeOptions {
   contentOpenMediaFetch?: typeof safePublicHttpGet | false;
   /** 测试注入专业能力；未提供时从当前已连接 registry 生成自然语言可调用表。 */
   talkProfessionals?: ProfessionalAgent[];
+  /** Talk 需要写盘时向主人确认一次文件夹访问。未提供则无法弹出授权。 */
+  requestFolderAccess?: (input: { path: string; label: string }) => Promise<boolean>;
   /**
    * Subject ↔ Subject 发现与投递。未提供时本进程不可发现其他主体。
    * 产品代码不得写死某个实验 peer。
@@ -911,6 +913,7 @@ export class DigitalMeRuntime {
           const sought = await seekContent({ query, items });
           return formatSeekContext(sought);
         },
+        this.options.requestFolderAccess,
       );
     }
     return this.talkService;

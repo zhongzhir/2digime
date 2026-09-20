@@ -498,6 +498,25 @@ async function bootstrapRuntime() {
   }
 
   options.autonomousCollabReceive = true;
+  options.requestFolderAccess = isElectronTestHarness()
+    ? async () => false
+    : async ({ path: folderPath, label }) => {
+        const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+        const payload = {
+          type: "question",
+          buttons: ["允许", "不允许"],
+          defaultId: 0,
+          cancelId: 1,
+          title: DISPLAY_NAME,
+          message: `允许${DISPLAY_NAME}访问${label}？`,
+          detail: folderPath,
+          noLink: true,
+        };
+        const result = parent
+          ? await dialog.showMessageBox(parent, payload)
+          : await dialog.showMessageBox(payload);
+        return result.response === 0;
+      };
   runtime = createDigitalMeRuntime(options);
   bus = createCommandBus(runtime);
   unsubscribe = runtime.eventBus.subscribe((event) => {

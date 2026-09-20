@@ -3,6 +3,7 @@
  * 抽取走 extract.ts，Office 序列化走 export.ts，不做语义判断。
  */
 import { existsSync, promises as fs, statSync } from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import type { ChatToolDefinition } from '../infrastructure/model-http';
 import { extractFile, MAX_EXTRACT_CHARS } from '../infrastructure/extract';
@@ -84,9 +85,68 @@ export function classifyAuthorizedPaths(contextPaths?: string[]): AuthorizedFs {
   return { folders, files };
 }
 
+export function userHomeDir(): string {
+  return String(process.env.DIGITALME_V2_HOME || os.homedir() || '').trim() || os.homedir();
+}
+
+const KNOWN_FOLDER_ALIASES: Record<string, string> = {
+  desktop: 'Desktop',
+  桌面: 'Desktop',
+  documents: 'Documents',
+  文档: 'Documents',
+  downloads: 'Downloads',
+  下载: 'Downloads',
+};
+
+function knownUserRoots(): string[] {
+  const home = path.resolve(userHomeDir());
+  return ['Desktop', 'Documents', 'Downloads'].map((name) => path.resolve(home, name));
+}
+
+function isPathInside(root: string, candidate: string): boolean {
+  const rel = path.relative(path.resolve(root), path.resolve(candidate));
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
+/**
+ * 把模型申请的访问路径收成桌面/文档/下载围栏内的绝对路径。
+ * 不是对用户原话做关键词路由；只解释 tool 参数。
+ */
+export function resolveProposedAccessPath(
+  raw: string,
+): { ok: true; abs: string; label: string } | { ok: false; reason: string } {
+  const trimmed = String(raw || '').trim().replace(/\\/g, '/');
+  if (!trimmed || trimmed.includes('..')) {
+    return { ok: false, reason: '路径超出可授权范围。' };
+  }
+  const home = path.resolve(userHomeDir());
+  const roots = knownUserRoots();
+  const lower = trimmed.toLowerCase();
+  const alias = Object.keys(KNOWN_FOLDER_ALIASES).find(
+    (key) => lower === key.toLowerCase() || lower.startsWith(`${key.toLowerCase()}/`),
+  );
+  let abs: string;
+  if (alias) {
+    const rest = trimmed.slice(alias.length).replace(/^[/\\]+/, '');
+    abs = path.resolve(home, KNOWN_FOLDER_ALIASES[alias]!, rest);
+  } else if (path.isAbsolute(trimmed) || /^[a-zA-Z]:[\\/]/.test(trimmed)) {
+    abs = path.resolve(trimmed);
+  } else {
+    abs = path.resolve(home, 'Desktop', trimmed);
+  }
+  if (!roots.some((root) => isPathInside(root, abs))) {
+    return { ok: false, reason: '只能申请桌面、文档或下载目录及其子文件夹。' };
+  }
+  return { ok: true, abs, label: abs };
+}
+
 export function describeAuthorizedFs(auth: AuthorizedFs): string {
   if (!auth.folders.length && !auth.files.length) {
-    return '当前没有通过“+”附加的文件或文件夹。不能读取或写入用户电脑上仅出现在文字里的路径；需要时请用户用“+”选择该文件或文件夹。';
+    return [
+      '当前没有已授权的可写文件夹。',
+      '若目标需要在用户电脑上创建或修改文件，调用 request_folder_access，由主人确认一次访问范围。',
+      '不要让主人自己运行命令、安装开发工具、或把 PowerShell/终端步骤交给主人。',
+    ].join('\n');
   }
   const lines = ['本次用户已通过“+”授权的路径（不要再要用户贴正文或列文件）：'];
   if (auth.folders.length) {

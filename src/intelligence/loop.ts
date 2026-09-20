@@ -12,6 +12,7 @@ import {
   describeAuthorizedFs,
   parseExportArgs,
   resolveAuthorizedWritePath,
+  resolveProposedAccessPath,
   runListDirectory,
   runReadFile,
   writeExportedOffice,
@@ -78,6 +79,25 @@ const WRITE_FILE_TOOL: ChatToolDefinition = {
         },
       },
       required: ['relativePath', 'content'],
+    },
+  },
+};
+
+const REQUEST_FOLDER_ACCESS_TOOL: ChatToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'request_folder_access',
+    description:
+      '当任务需要在用户电脑上创建或修改文件、且当前还没有已授权文件夹时，向主人申请一次访问范围。path 可以是 desktop / 桌面、或其下子文件夹、或桌面/文档/下载下的绝对路径。主人确认后才能写盘。不要让主人自己运行命令。',
+    parameters: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: '希望访问的文件夹，例如 desktop、desktop/TujimiCodingTest，或桌面下的绝对路径。',
+        },
+      },
+      required: ['path'],
     },
   },
 };
@@ -151,6 +171,15 @@ function parseArgs(raw: string): { instruction: string; capabilityId?: string } 
     return capabilityId ? { instruction, capabilityId } : { instruction };
   } catch {
     return { instruction: raw.trim() };
+  }
+}
+
+function parseFolderAccessArgs(raw: string): { path: string } {
+  try {
+    const parsed = JSON.parse(raw) as { path?: string; folder?: string };
+    return { path: String(parsed.path || parsed.folder || '').trim() };
+  } catch {
+    return { path: raw.trim() };
   }
 }
 
@@ -259,6 +288,8 @@ export async function runTalkTurn(input: {
   contextPaths?: string[];
   /** 工具一旦完成就把执行事实交给本轮 service；不是 workflow / retry 状态。 */
   onExecution?: (rec: TalkExecution) => void;
+  requestFolderAccess?: (input: { path: string; label: string }) => Promise<boolean>;
+  refreshAgents?: (contextPaths: string[]) => ProfessionalAgent[];
 }): Promise<TalkThread> {
   const userTurn: TalkTurn = {
     id: `turn_${randomUUID()}`,
@@ -284,6 +315,7 @@ export async function runTalkTurn(input: {
 
   const cards = input.subjectCollab?.cards || [];
   const auth = classifyAuthorizedPaths(input.contextPaths);
+  let agents = input.agents.slice();
   const system = [
     '你是用户的兔机米，也是用户的超级助手。',
     '根据当前数字之我理解用户；不要编造未写入的本人事实。',
@@ -308,17 +340,30 @@ export async function runTalkTurn(input: {
     '当前对用户的必要理解：',
     input.selfContext,
     describeAuthorizedFs(auth),
-    input.agents.length ? `当前可调用的外部能力：\n${describeProfessionals(input.agents)}` : '',
+    agents.length ? `当前可调用的外部能力：\n${describeProfessionals(agents)}` : '',
   ]
     .filter(Boolean)
     .join('\n');
 
-  const tools: ChatToolDefinition[] = [];
-  if (auth.folders.length) {
-    tools.push(WRITE_FILE_TOOL, EXPORT_FILE_TOOL, LIST_DIRECTORY_TOOL);
+  const tools: ChatToolDefinition[] = [REQUEST_FOLDER_ACCESS_TOOL];
+  const ensureFsTools = () => {
+    if (!tools.some((item) => item.function.name === 'write_file')) {
+      tools.push(WRITE_FILE_TOOL, EXPORT_FILE_TOOL, LIST_DIRECTORY_TOOL);
+    }
+    if (!tools.some((item) => item.function.name === 'read_file')) {
+      tools.push(READ_FILE_TOOL);
+    }
+  };
+  const ensureDelegateTool = () => {
+    if (agents.length && !tools.some((item) => item.function.name === 'delegate')) {
+      tools.push(DELEGATE_TOOL);
+    }
+  };
+  if (auth.folders.length) ensureFsTools();
+  if (auth.folders.length || auth.files.length) {
+    if (!tools.some((item) => item.function.name === 'read_file')) tools.push(READ_FILE_TOOL);
   }
-  if (auth.folders.length || auth.files.length) tools.push(READ_FILE_TOOL);
-  if (input.agents.length) tools.push(DELEGATE_TOOL);
+  ensureDelegateTool();
   if (cards.length) tools.push(CONSULT_TOOL);
 
   const chat: TalkChatFn = (req) => {
@@ -343,6 +388,83 @@ export async function runTalkTurn(input: {
     thread.executions.push(rec);
     executionIds.push(rec.id);
     input.onExecution?.(rec);
+  };
+
+  const runRequestFolderAccess = async (rawArgs: string): Promise<string> => {
+    const asked = parseFolderAccessArgs(rawArgs);
+    const execId = `run_${randomUUID()}`;
+    const fail = (reason: string) => {
+      lastOk = false;
+      lastEvidenceOnly = false;
+      lastPath = undefined;
+      recordExec({
+        id: execId,
+        at: input.now,
+        turnId: userTurn.id,
+        capabilityId: 'request_folder_access',
+        instruction: asked.path,
+        ok: false,
+        summary: reason,
+        failureReason: reason,
+      });
+      return JSON.stringify({
+        actualSuccess: false,
+        ok: false,
+        capabilityId: 'request_folder_access',
+        evidenceOnly: false,
+        failureReason: reason,
+        producedOutputs: [],
+        summary: reason,
+      });
+    };
+    const resolved = resolveProposedAccessPath(asked.path);
+    if (!resolved.ok) return fail(resolved.reason);
+    if (!input.requestFolderAccess) {
+      return fail('当前无法向主人确认文件夹访问。不要让主人自己运行命令。');
+    }
+    let allowed = false;
+    try {
+      allowed = await input.requestFolderAccess({ path: resolved.abs, label: resolved.label });
+    } catch (err) {
+      return fail(String(err instanceof Error ? err.message : err));
+    }
+    if (!allowed) {
+      return fail('主人没有允许访问该文件夹。不要让主人自己运行命令或安装开发工具。');
+    }
+    try {
+      await fs.mkdir(resolved.abs, { recursive: true });
+    } catch (err) {
+      return fail(String(err instanceof Error ? err.message : err));
+    }
+    if (!auth.folders.includes(resolved.abs)) auth.folders.push(resolved.abs);
+    ensureFsTools();
+    if (input.refreshAgents) {
+      agents = input.refreshAgents([resolved.abs, ...(input.contextPaths || [])]);
+      ensureDelegateTool();
+    }
+    lastOk = true;
+    lastEvidenceOnly = false;
+    lastPath = resolved.abs;
+    recordExec({
+      id: execId,
+      at: input.now,
+      turnId: userTurn.id,
+      capabilityId: 'request_folder_access',
+      instruction: asked.path,
+      ok: true,
+      summary: `已授权 ${resolved.abs}`,
+      producedOutputs: [resolved.abs],
+      outputPath: resolved.abs,
+    });
+    return JSON.stringify({
+      actualSuccess: true,
+      ok: true,
+      capabilityId: 'request_folder_access',
+      evidenceOnly: false,
+      producedOutputs: [resolved.abs],
+      outputPath: resolved.abs,
+      summary: `已授权可写文件夹：${resolved.abs}。可用 write_file 创建和修改其中的文件；专业代码改动可 delegate 已连接的代码执行能力。不要让主人自己运行命令。`,
+    });
   };
 
   const runWriteFile = async (rawArgs: string): Promise<string> => {
@@ -475,14 +597,14 @@ export async function runTalkTurn(input: {
     const parsed = parseArgs(rawArgs);
     const requested = parsed.capabilityId;
     const agent = requested
-      ? input.agents.find((item) => item.id === requested)
-      : input.agents.length === 1
-        ? input.agents[0]
+      ? agents.find((item) => item.id === requested)
+      : agents.length === 1
+        ? agents[0]
         : undefined;
     if (!agent) {
       const failureReason = requested
         ? `没有名为 ${requested} 的已连接能力。`
-        : `未指定 capabilityId。当前已连接：${input.agents.map((item) => item.id).join('、') || '无'}。请选择其中一个。`;
+        : `未指定 capabilityId。当前已连接：${agents.map((item) => item.id).join('、') || '无'}。请选择其中一个。`;
       lastOk = false;
       lastEvidenceOnly = false;
       lastPath = undefined;
@@ -581,6 +703,7 @@ export async function runTalkTurn(input: {
 
   const runOneTool = async (call: ModelToolCall): Promise<string> => {
     throwIfAborted(input.signal);
+    if (call.name === 'request_folder_access') return runRequestFolderAccess(call.arguments);
     if (call.name === 'write_file') return runWriteFile(call.arguments);
     if (call.name === 'export_file') return runExportFile(call.arguments);
     if (call.name === 'list_directory') {
