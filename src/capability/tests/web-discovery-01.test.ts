@@ -424,6 +424,20 @@ test('IQS official pageItems fixture maps title/link/snippet; empty pageItems is
   assert.equal(emptyResult.body.results?.length, 0);
 });
 
+test('IQS HTTP body with BOM still maps official pageItems', async () => {
+  const provider = createAliyunIqsWebDiscoveryProvider({
+    apiKey: 'IQS-test-not-a-real-key',
+    fetchImpl: async () =>
+      new Response(`\uFEFF${JSON.stringify({
+        requestId: 'bom',
+        pageItems: [{ title: 'Example', link: 'https://example.com', snippet: 'Example snippet' }],
+      })}`, { status: 200, headers: { 'content-type': 'application/json' } }),
+  });
+  const hits = await provider.search({ query: 'example query' });
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0]?.url, 'https://example.com');
+});
+
 test('IQS pageItems>0 but unparseable is NORMALIZATION_ERROR and is not cached', async () => {
   let calls = 0;
   const provider = createAliyunIqsWebDiscoveryProvider({

@@ -65,7 +65,9 @@ function parseMaybeJson(value: unknown): unknown {
 
 /** Official UnifiedSearch HTTP schema: top-level pageItems[]. Do not assume results/items. */
 export function readIqsPageItems(json: unknown): unknown[] {
-  const root = asRecord(parseMaybeJson(json));
+  const parsed = parseMaybeJson(json);
+  if (Array.isArray(parsed)) return parsed;
+  const root = asRecord(parsed);
   if (!root) return [];
   const direct = parseMaybeJson(readField(root, ['pageItems']));
   if (Array.isArray(direct)) return direct;
@@ -196,21 +198,45 @@ export function createAliyunIqsWebDiscoveryProvider(
         bound.dispose();
       }
 
+      let rawText = '';
+      try {
+        rawText = await res.text();
+      } catch {
+        rawText = '';
+      }
+      const contentType = String((res.headers.get('content-type') || '').split(';')[0] || '')
+        .trim()
+        .slice(0, 60);
+      const bodyChars = rawText.length;
       let json: unknown = {};
       let parsed = false;
       try {
-        json = await res.json();
-        parsed = true;
+        json = parseMaybeJson(rawText.replace(/^\uFEFF/, '')) ?? {};
+        if (typeof json === 'string') json = parseMaybeJson(json);
+        parsed = typeof json === 'object' && json !== null;
       } catch {
         json = {};
       }
+      if (!parsed && rawText.trim()) {
+        try {
+          json = JSON.parse(rawText.replace(/^\uFEFF/, '').replace(/^[^{[]+/, '').trim());
+          parsed = typeof json === 'object' && json !== null;
+        } catch {
+          parsed = false;
+        }
+      }
+      const rec = asRecord(json);
+      const jsonKeys = rec ? Object.keys(rec).slice(0, 12).join(',') : '';
       if (!res.ok) {
-        const rec = asRecord(json) || {};
-        throw classifyHttp(res.status, String(rec.code || rec.errorCode || rec.message || rec.Code || ''));
+        throw classifyHttp(res.status, String(rec?.code || rec?.errorCode || rec?.message || rec?.Code || ''));
       }
       if (!parsed) {
-        log('iqs_unified_search', { httpStatus: res.status, pageItemsCount: 0, normalizedCount: 0 });
-        throw normalizationError(0, 0);
+        log('iqs_unified_search', {
+          httpStatus: res.status,
+          pageItemsCount: 0,
+          normalizedCount: 0,
+        });
+        throw new WebDiscoveryError('PROVIDER_ERROR', `iqs_invalid_json:${contentType}:${bodyChars}`, 502);
       }
       const rows = readIqsPageItems(json);
       const out = normalizeIqsPageItems(rows, topK);
@@ -218,6 +244,8 @@ export function createAliyunIqsWebDiscoveryProvider(
         httpStatus: res.status,
         pageItemsCount: rows.length,
         normalizedCount: out.length,
+        ...(jsonKeys ? { jsonKeys: jsonKeys.slice(0, 120) } : {}),
+        bodyChars,
       });
       if (rows.length > 0 && out.length === 0) {
         throw normalizationError(rows.length, 0);
