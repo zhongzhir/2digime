@@ -85,6 +85,8 @@ function main() {
     extraMetadata: { main: 'electron/main.cjs' },
     win: {
       signAndEditExecutable: false,
+      executableName: brand.productName,
+      publisherName: brand.organizationName || brand.productName,
       icon,
       target: [
         { target: 'nsis', arch: ['x64'] },

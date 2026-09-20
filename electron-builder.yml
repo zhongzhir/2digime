@@ -32,7 +32,10 @@ extraMetadata:
 win:
   # Avoid winCodeSign (symlink privilege failures on typical Windows).
   # Icon / ProductName are applied in scripts/after-pack-win-icon.cjs via rcedit.
+  # Identity must stay stable across Candidates (WINDOWS-INSTALLER-TRUST-01).
   signAndEditExecutable: false
+  executableName: 兔机米
+  publisherName: 兔机米
   icon: electron/build-resources/icon.ico
   target:
     - target: nsis
