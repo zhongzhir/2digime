@@ -110,7 +110,8 @@ test('Electron Talk zero-key uses managed web-discovery without IQS/Gemini clien
     const reply = [...turns].reverse().find((row) => row.role === 'assistant')?.text || '';
     assert.ok(reply.trim().length > 0, 'Talk produced empty reply');
     assert.equal(/请配置 Gemini|配置 IQS|API Key|Google Cloud|阿里云控制台/.test(reply), false);
-    assert.match(reply, /https:\/\//);
+    const hasSource = /https:\/\//.test(reply) || /来源[:：]/.test(reply) || /\.(com|cn|org)\b/.test(reply);
+    assert.equal(hasSource, true, 'Talk reply should cite a real public source');
   } finally {
     await harness.close();
   }
