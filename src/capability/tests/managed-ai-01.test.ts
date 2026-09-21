@@ -66,7 +66,6 @@ test('trial allowance is configurable, deducted, exhausted, and idempotent', asy
     store,
     trialTokenLimit: 20,
     globalTokenCeiling: 10_000,
-    perPrincipalPerHour: 20,
     maxOutputTokens: 16,
     provider: {
       provider: 'deepseek',

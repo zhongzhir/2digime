@@ -180,9 +180,16 @@ function readBody(req: IncomingMessage, maxBytes = 1_000_000): Promise<string> {
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   const raw = JSON.stringify(body);
+  const retryAfterMs =
+    body && typeof body === 'object' && !Array.isArray(body)
+      ? Number((body as { retryAfterMs?: unknown }).retryAfterMs)
+      : NaN;
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
     'content-length': Buffer.byteLength(raw),
+    ...(Number.isFinite(retryAfterMs) && retryAfterMs > 0
+      ? { 'retry-after': String(Math.ceil(retryAfterMs / 1000)) }
+      : {}),
   });
   res.end(raw);
 }
@@ -216,7 +223,8 @@ export function resolveManagedAiGateway(
   const trialTokenLimit = Number(env.MANAGED_AI_TRIAL_TOKEN_LIMIT || 5_000_000);
   const globalTokenCeiling = Number(env.MANAGED_AI_GLOBAL_TOKEN_CEILING || 50_000_000);
   const globalDailyRequests = Number(env.MANAGED_AI_GLOBAL_DAILY_REQUESTS || 2_000);
-  const perPrincipalPerHour = Number(env.MANAGED_AI_PER_PRINCIPAL_PER_HOUR || 30);
+  const burstWindowMs = Number(env.MANAGED_AI_BURST_WINDOW_MS || 15_000);
+  const burstMax = Number(env.MANAGED_AI_BURST_MAX || 16);
   const maxOutputTokens = Number(env.MANAGED_AI_MAX_OUTPUT_TOKENS || 2_048);
   const maxInputChars = Number(env.MANAGED_AI_MAX_INPUT_CHARS || 100_000);
   const concurrency = Number(env.MANAGED_AI_CONCURRENCY || 8);
@@ -239,7 +247,8 @@ export function resolveManagedAiGateway(
     trialTokenLimit: Number.isFinite(trialTokenLimit) ? trialTokenLimit : 5_000_000,
     globalTokenCeiling: Number.isFinite(globalTokenCeiling) ? globalTokenCeiling : 50_000_000,
     globalDailyRequests: Number.isFinite(globalDailyRequests) ? globalDailyRequests : 2_000,
-    perPrincipalPerHour: Number.isFinite(perPrincipalPerHour) ? perPrincipalPerHour : 30,
+    burstWindowMs: Number.isFinite(burstWindowMs) ? burstWindowMs : 15_000,
+    burstMax: Number.isFinite(burstMax) ? burstMax : 16,
     maxOutputTokens: Number.isFinite(maxOutputTokens) ? maxOutputTokens : 2_048,
     maxInputChars: Number.isFinite(maxInputChars) ? maxInputChars : 100_000,
     concurrency: Number.isFinite(concurrency) ? concurrency : 8,

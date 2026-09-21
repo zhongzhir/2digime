@@ -70,7 +70,14 @@ export interface ManagedAiGatewayOptions {
   trialTokenLimit?: number;
   globalTokenCeiling?: number;
   globalDailyRequests?: number;
-  perPrincipalPerHour?: number;
+  /**
+   * 短窗口 burst 防护，不是用户额度。
+   * 默认 15s / 16 次：覆盖实测 tool-loop 峰值（4–5 次/2–3s）和单回合上限
+   * （Digital Self interpret + first + MAX_TOOL_ROUNDS=8 + final ≈ 11 HTTP），
+   * 不把日历小时内 30 次内部 inference 当成普通用户硬上限。
+   */
+  burstWindowMs?: number;
+  burstMax?: number;
   maxOutputTokens?: number;
   maxInputChars?: number;
   concurrency?: number;
@@ -96,22 +103,28 @@ export interface ManagedAiGatewayResult {
     remainingPercent?: number;
     error?: string;
     provider?: string;
+    retryAfterMs?: number;
   };
+}
+
+/** 实测复杂任务峰值 4–5 HTTP/2–3s；单回合最多约 11 次内部 inference。 */
+export const DEFAULT_BURST_WINDOW_MS = 15_000;
+export const DEFAULT_BURST_MAX = 16;
+
+export function pruneBurstTimestamps(stamps: number[], nowMs: number, windowMs: number): number[] {
+  return stamps.filter((at) => nowMs - at < windowMs && at <= nowMs);
+}
+
+export function burstRetryAfterMs(stamps: number[], nowMs: number, windowMs: number): number {
+  if (!stamps.length) return 0;
+  const oldest = stamps[0] || nowMs;
+  return Math.max(1, windowMs - (nowMs - oldest));
 }
 
 interface ReplayRow {
   at: number;
   result: ChatCompleteResult;
   usage: TokenUsage;
-}
-
-interface WindowCount {
-  hour: number;
-  count: number;
-}
-
-function hourBucket(nowMs: number): number {
-  return Math.round(nowMs / 3_600_000);
 }
 
 function num(value: unknown): number | undefined {
@@ -276,7 +289,8 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
   const trialTokenLimit = options.trialTokenLimit ?? 5_000_000;
   const globalTokenCeiling = options.globalTokenCeiling ?? 50_000_000;
   const globalDailyRequests = options.globalDailyRequests ?? 2_000;
-  const perPrincipalPerHour = options.perPrincipalPerHour ?? 30;
+  const burstWindowMs = Math.max(1_000, options.burstWindowMs ?? DEFAULT_BURST_WINDOW_MS);
+  const burstMax = Math.max(1, Math.floor(options.burstMax ?? DEFAULT_BURST_MAX));
   const maxOutputTokens = options.maxOutputTokens ?? 2_048;
   const maxInputChars = options.maxInputChars ?? 100_000;
   const concurrencyCap = options.concurrency ?? 8;
@@ -289,7 +303,7 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
   const provider = options.provider || null;
   const store = options.store;
   const replay = new Map<string, ReplayRow>();
-  const perPrincipal = new Map<string, WindowCount>();
+  const bursts = new Map<string, number[]>();
   const locks = new Map<string, Promise<unknown>>();
   let inFlight = 0;
 
@@ -408,34 +422,58 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
         };
       }
       if (inFlight >= concurrencyCap) {
-        log('ai_inference', { status: 'CONCURRENCY_BUSY', principal: principalId, inFlight });
+        log('ai_inference', { status: 'CONCURRENCY_BUSY', principal: principalId, inFlight, limitType: 'concurrency' });
         return {
           statusCode: 429,
           body: { ok: false, status: 'CONCURRENCY_BUSY' as const, error: 'concurrency' },
         };
       }
-      const hour = hourBucket(now());
-      const window = perPrincipal.get(principalId) || { hour, count: 0 };
-      if (window.hour !== hour) {
-        window.hour = hour;
-        window.count = 0;
-      }
-      if (window.count >= perPrincipalPerHour) {
+      const nowMs = now();
+      const recent = pruneBurstTimestamps(bursts.get(principalId) || [], nowMs, burstWindowMs);
+      if (recent.length >= burstMax) {
+        const retryAfterMs = burstRetryAfterMs(recent, nowMs, burstWindowMs);
         log('ai_inference', {
           status: 'LOCAL_RATE_LIMITED',
           principal: principalId,
-          count: window.count,
-          limit: perPrincipalPerHour,
+          limitType: 'burst',
+          count: recent.length,
+          limit: burstMax,
+          windowMs: burstWindowMs,
+          retryAfterMs,
         });
-        return { statusCode: 429, body: { ok: false, status: 'LOCAL_RATE_LIMITED' as const, error: 'rate_limited' } };
+        return {
+          statusCode: 429,
+          body: {
+            ok: false,
+            status: 'LOCAL_RATE_LIMITED' as const,
+            error: 'rate_limited',
+            retryAfterMs,
+          },
+        };
       }
+      bursts.set(principalId, recent);
 
-      const nowIso = new Date(now()).toISOString();
+      const nowIso = new Date(nowMs).toISOString();
       const global = await store.readGlobal();
       const dayRequests = global.day === nowIso.slice(0, 10) ? global.dayRequests : 0;
       if (global.tokensUsed >= globalTokenCeiling || dayRequests >= globalDailyRequests) {
-        log('ai_inference', { status: 'GLOBAL_CEILING', reason: 'global_ceiling', principal: principalId });
-        return { statusCode: 429, body: { ok: false, status: 'GLOBAL_CEILING' as const, error: 'global_ceiling' } };
+        const nextDay = Date.parse(`${nowIso.slice(0, 10)}T00:00:00.000Z`) + 86_400_000;
+        const retryAfterMs = global.tokensUsed >= globalTokenCeiling ? 0 : Math.max(1, nextDay - nowMs);
+        log('ai_inference', {
+          status: 'GLOBAL_CEILING',
+          reason: 'global_ceiling',
+          principal: principalId,
+          limitType: 'global_ceiling',
+          tokensUsed: global.tokensUsed,
+          tokenCeiling: globalTokenCeiling,
+          dayRequests,
+          dailyRequestLimit: globalDailyRequests,
+          retryAfterMs,
+        });
+        return {
+          statusCode: 429,
+          body: { ok: false, status: 'GLOBAL_CEILING' as const, error: 'global_ceiling', retryAfterMs },
+        };
       }
 
       let row = await loadOrCreateAllowance(principalId, nowIso);
@@ -444,6 +482,7 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
         log('ai_inference', {
           status: 'ALLOWANCE_EXHAUSTED',
           principal: principalId,
+          limitType: 'allowance',
           used: row.tokensUsed,
           limit: row.tokenLimit,
         });
@@ -459,8 +498,8 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
       }
 
       inFlight += 1;
-      window.count += 1;
-      perPrincipal.set(principalId, window);
+      recent.push(nowMs);
+      bursts.set(principalId, recent);
       let result: ChatCompleteResult;
       try {
         result = await (async () => {

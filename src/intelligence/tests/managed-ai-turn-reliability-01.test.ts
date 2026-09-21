@@ -341,7 +341,8 @@ test('重试耗尽仍不重复计费；未到达 provider 的 local 429 不计 t
   const gateway = createManagedAiGateway({
     store,
     trialTokenLimit: 50_000,
-    perPrincipalPerHour: 1,
+    burstMax: 1,
+    burstWindowMs: 60_000,
     maxProviderRetries: 2,
     retryBackoffMs: 0,
     provider: {
@@ -386,7 +387,7 @@ test('managed client 把 error=rate_limited 映射为 LOCAL_RATE_LIMITED', async
     (err: unknown) => {
       assert.equal(err instanceof ManagedAiError, true);
       assert.equal((err as ManagedAiError).status, 'LOCAL_RATE_LIMITED');
-      assert.match(String((err as Error).message), /本机本小时/);
+      assert.match(String((err as Error).message), /这一会儿请求比较多/);
       return true;
     },
   );

@@ -19,7 +19,8 @@ export type ManagedAiStatus =
 
 export const MANAGED_AI_EXHAUSTED_NOTICE = '兔机米提供的免费 AI 额度已经用完。';
 export const MANAGED_AI_BUSY_NOTICE = '模型服务当前比较忙，请稍后再试。';
-export const MANAGED_AI_LOCAL_RATE_NOTICE = '本机本小时请求较多，请稍后再试。';
+export const MANAGED_AI_LOCAL_RATE_NOTICE = '这一会儿请求比较多，请稍后再试。';
+export const MANAGED_AI_GLOBAL_CEILING_NOTICE = '模型服务当前已达运营上限，请稍后再试。';
 
 const HUMAN: Record<ManagedAiStatus, string> = {
   AVAILABLE: '',
@@ -27,7 +28,7 @@ const HUMAN: Record<ManagedAiStatus, string> = {
   RATE_LIMITED: MANAGED_AI_BUSY_NOTICE,
   LOCAL_RATE_LIMITED: MANAGED_AI_LOCAL_RATE_NOTICE,
   CONCURRENCY_BUSY: MANAGED_AI_BUSY_NOTICE,
-  GLOBAL_CEILING: MANAGED_AI_BUSY_NOTICE,
+  GLOBAL_CEILING: MANAGED_AI_GLOBAL_CEILING_NOTICE,
   PROVIDER_RATE_LIMITED: MANAGED_AI_BUSY_NOTICE,
   PROVIDER_TIMEOUT: '模型响应超时，请稍后再试。',
   PROVIDER_5XX: '模型服务暂时出错，请稍后再试。',
