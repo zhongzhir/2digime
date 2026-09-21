@@ -122,6 +122,36 @@ test('极短时间打满滑动窗口 → LOCAL_RATE_LIMITED，且带 retryAfterM
   assert.equal(/模型服务当前比较忙/.test(MANAGED_AI_LOCAL_RATE_NOTICE), false);
 });
 
+test('并发请求在 provider 返回前就触发 LOCAL_RATE_LIMITED', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-burst-parallel-'));
+  let calls = 0;
+  const gateway = createManagedAiGateway(
+    gatewayOpts(root, {
+      burstMax: 4,
+      burstWindowMs: 15_000,
+      complete: async () => {
+        calls += 1;
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        return { text: 'ok', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } };
+      },
+    }),
+  );
+  const rows = await Promise.all(
+    Array.from({ length: 8 }, (_, i) =>
+      gateway.infer({
+        body: { messages: [{ role: 'user', content: `para-${i}` }] },
+        installToken: TOKEN,
+      }),
+    ),
+  );
+  const limited = rows.filter((row) => row.body.status === 'LOCAL_RATE_LIMITED');
+  const available = rows.filter((row) => row.body.status === 'AVAILABLE');
+  assert.equal(limited.length, 4);
+  assert.equal(available.length, 4);
+  assert.equal(calls, 4);
+  assert.equal(limited.every((row) => (row.body.retryAfterMs || 0) > 0), true);
+});
+
 test('token allowance 仍扣减；耗尽后不再打 provider', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-burst-alw-'));
   let calls = 0;

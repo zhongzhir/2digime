@@ -414,6 +414,35 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
       }
     }
 
+    // Burst 按入场次数计，不按 provider 完成次数计。
+    // 同一 principal 的 enqueue 会串行等待上一次 complete；若只在出队后打点，
+    // 真实 latency 下 15s 窗口永远凑不满 16 次，abuse 门形同虚设。
+    const admitAt = now();
+    const admitted = pruneBurstTimestamps(bursts.get(principalId) || [], admitAt, burstWindowMs);
+    if (admitted.length >= burstMax) {
+      const retryAfterMs = burstRetryAfterMs(admitted, admitAt, burstWindowMs);
+      log('ai_inference', {
+        status: 'LOCAL_RATE_LIMITED',
+        principal: principalId,
+        limitType: 'burst',
+        count: admitted.length,
+        limit: burstMax,
+        windowMs: burstWindowMs,
+        retryAfterMs,
+      });
+      return {
+        statusCode: 429,
+        body: {
+          ok: false,
+          status: 'LOCAL_RATE_LIMITED' as const,
+          error: 'rate_limited',
+          retryAfterMs,
+        },
+      };
+    }
+    admitted.push(admitAt);
+    bursts.set(principalId, admitted);
+
     return enqueue(principalId, async () => {
       if (input.signal?.aborted) {
         return {
@@ -429,30 +458,6 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
         };
       }
       const nowMs = now();
-      const recent = pruneBurstTimestamps(bursts.get(principalId) || [], nowMs, burstWindowMs);
-      if (recent.length >= burstMax) {
-        const retryAfterMs = burstRetryAfterMs(recent, nowMs, burstWindowMs);
-        log('ai_inference', {
-          status: 'LOCAL_RATE_LIMITED',
-          principal: principalId,
-          limitType: 'burst',
-          count: recent.length,
-          limit: burstMax,
-          windowMs: burstWindowMs,
-          retryAfterMs,
-        });
-        return {
-          statusCode: 429,
-          body: {
-            ok: false,
-            status: 'LOCAL_RATE_LIMITED' as const,
-            error: 'rate_limited',
-            retryAfterMs,
-          },
-        };
-      }
-      bursts.set(principalId, recent);
-
       const nowIso = new Date(nowMs).toISOString();
       const global = await store.readGlobal();
       const dayRequests = global.day === nowIso.slice(0, 10) ? global.dayRequests : 0;
@@ -498,8 +503,6 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
       }
 
       inFlight += 1;
-      recent.push(nowMs);
-      bursts.set(principalId, recent);
       let result: ChatCompleteResult;
       try {
         result = await (async () => {
