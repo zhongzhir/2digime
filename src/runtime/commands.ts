@@ -1084,6 +1084,8 @@ export interface CommandMap {
       itemId?: string;
       directiveId?: string;
       text?: string;
+      /** 一次主动搜索 / 个人 Feed 打开的请求身份。迟到结果必须核对。 */
+      searchGenerationId?: string;
     };
     output: {
       view: import('../subject-comm/content-discover').DiscoverView;

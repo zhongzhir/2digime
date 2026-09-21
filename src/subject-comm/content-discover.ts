@@ -31,6 +31,8 @@ export interface DiscoverCard {
   durationSeconds?: number;
   consumption?: string;
   access?: string;
+  /** 相对当前搜索的对象忠实度。合并时 PRIMARY 不得被 ABOUT 覆盖。 */
+  objectFidelity?: 'PRIMARY_CONTENT' | 'ABOUT_CONTENT' | 'UNRELATED';
 }
 
 export interface DiscoverPreference {
@@ -59,6 +61,8 @@ export interface DiscoverView {
   feedTitle?: string;
   /** CURRENT_SEARCH_MODE 下的用户查询原文。个人 Feed 不带此字段。 */
   searchQuery?: string;
+  /** 一次主动搜索的请求身份。过期 generation 不得覆盖当前可见状态。 */
+  searchGenerationId?: string;
   /** 内部搜索诊断，UI 不得展示。 */
   seekTrace?: {
     rawCandidates: number;

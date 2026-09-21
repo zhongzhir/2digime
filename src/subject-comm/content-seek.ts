@@ -20,6 +20,10 @@ import {
   type ObjectFidelity,
 } from './discover-intent';
 import {
+  hasDirectMediaRepresentation,
+  mergeSeekCardSets,
+} from './discover-search-generation';
+import {
   networkItemFromOpenHit,
   searchOpenMedia,
   type OpenMediaFetch,
@@ -206,6 +210,10 @@ export async function seekContent(input: {
   model?: { baseUrl: string; model: string; apiKey?: string };
   ingestHit?: (hit: ExternalSeekHit) => Promise<NetworkItem[]>;
   fetchOpenMedia?: OpenMediaFetch;
+  intent?: DiscoverIntent;
+  skipWeb?: boolean;
+  skipOpenMedia?: boolean;
+  previous?: { cards: DiscoverCard[]; relatedCards: DiscoverCard[] };
 }): Promise<ContentSeekResult> {
   const query = String(input.query || '').trim();
   const emptyIntent = defaultDiscoverIntent(query);
@@ -222,13 +230,14 @@ export async function seekContent(input: {
   }
 
   const intent =
-    input.chatComplete && input.model
+    input.intent ||
+    (input.chatComplete && input.model
       ? await interpretDiscoverIntent({
           query,
           chatComplete: input.chatComplete,
           model: input.model,
         })
-      : emptyIntent;
+      : emptyIntent);
   const requiredTypes = strictRequestedTypes(intent);
   const queryByUrl = new Map<string, string>();
 
@@ -246,7 +255,7 @@ export async function seekContent(input: {
   const mediaKinds = intent.requestedMedia.filter(
     (row): row is 'video' | 'image' | 'audio' => row === 'video' || row === 'image' || row === 'audio',
   );
-  if (mediaKinds.length && input.fetchOpenMedia) {
+  if (mediaKinds.length && input.fetchOpenMedia && !input.skipOpenMedia) {
     const mediaQueries = openMediaQueries(query, intent);
     try {
       for (const topicQuery of mediaQueries) {
@@ -306,7 +315,7 @@ export async function seekContent(input: {
     }
   }
 
-  if (input.searchWeb) {
+  if (input.searchWeb && !input.skipWeb) {
     const queries = intent.searchQueries.length ? intent.searchQueries : [query];
     const webHits: Array<ExternalSeekHit & { searchQuery: string }> = [];
     const seenHit = new Set<string>();
@@ -389,6 +398,9 @@ export async function seekContent(input: {
   for (const card of concrete) {
     const matchedType = typeMatches(card, requiredTypes);
     let kind = fidelity.get(card.itemId);
+    if (hasDirectMediaRepresentation(card) && matchedType) {
+      kind = 'PRIMARY_CONTENT';
+    }
     if (!kind) {
       kind = requiredTypes.length && !matchedType ? 'ABOUT_CONTENT' : 'PRIMARY_CONTENT';
     }
@@ -398,16 +410,23 @@ export async function seekContent(input: {
     fidelity.set(card.itemId, kind);
     if (kind === 'UNRELATED') continue;
     if (intent.intent === 'research') {
-      if (kind === 'PRIMARY_CONTENT' || kind === 'ABOUT_CONTENT') primary.push(card);
+      if (kind === 'PRIMARY_CONTENT' || kind === 'ABOUT_CONTENT') {
+        primary.push({ ...card, objectFidelity: 'PRIMARY_CONTENT' });
+      }
     } else if (kind === 'PRIMARY_CONTENT' && matchedType) {
-      primary.push(card);
+      primary.push({ ...card, objectFidelity: 'PRIMARY_CONTENT' });
     } else if (kind === 'ABOUT_CONTENT') {
-      related.push(card);
+      related.push({ ...card, objectFidelity: 'ABOUT_CONTENT' });
     }
   }
 
-  const visible = primary.slice(0, MAX_CARDS);
-  const relatedVisible = intent.intent === 'research' ? [] : related.slice(0, 6);
+  let visible = primary.slice(0, MAX_CARDS);
+  let relatedVisible = intent.intent === 'research' ? [] : related.slice(0, 6);
+  if (input.previous) {
+    const merged = mergeSeekCardSets(input.previous, { cards: visible, relatedCards: relatedVisible });
+    visible = merged.cards.slice(0, MAX_CARDS);
+    relatedVisible = merged.relatedCards;
+  }
   const visibleIds = new Set([...visible, ...relatedVisible].map((card) => card.itemId));
 
   const traceItems: SeekTraceItem[] = concrete.map((card) => {

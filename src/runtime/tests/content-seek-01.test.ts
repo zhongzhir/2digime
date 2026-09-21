@@ -77,9 +77,19 @@ test('Talk query hits directory; seek keeps provenance and can add web sources',
   assert.match(talked.view.turns.map((turn) => turn.text).join('\n'), /example\.org\/fusion/);
 
   const sought = await bus.invoke('content', { action: 'seek', text: '帮我找 fusion 进展' });
-  assert.equal(sought.view.cards.some((card) => card.url === 'https://example.org/fusion' && card.source === 'directory'), true);
+  let view = sought.view;
+  if (view.replenishing) {
+    const gen = view.searchGenerationId;
+    view = (
+      await bus.invoke(
+        'content',
+        gen ? { action: 'replenish', searchGenerationId: gen } : { action: 'replenish' },
+      )
+    ).view;
+  }
+  assert.equal(view.cards.some((card) => card.url === 'https://example.org/fusion' && card.source === 'directory'), true);
   assert.equal(
-    [...sought.view.cards, ...(sought.view.relatedCards || [])].some((card) => /iaea\.org/i.test(String(card.url || ''))),
+    [...view.cards, ...(view.relatedCards || [])].some((card) => /iaea\.org/i.test(String(card.url || ''))),
     true,
   );
   await runtime.stop();

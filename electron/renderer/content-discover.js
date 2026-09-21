@@ -12,7 +12,14 @@
   const laterById = new Map();
   let lastCards = [];
   let lastRelated = [];
+  let lastView = null;
   let activeSection = 'for-you';
+  let activeSearchGenerationId = '';
+  let activeFeedMode = 'personal';
+
+  function newSearchGenerationId() {
+    return 'sg_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+  }
 
   function api() {
     return window.digitalMe;
@@ -134,7 +141,15 @@
         return;
       }
     }
-    const result = await client.invoke('content', Object.assign({ action: action }, extra || {}));
+    if (action === 'reverse' || action === 'resetRecent') {
+      activeSearchGenerationId = newSearchGenerationId();
+      activeFeedMode = 'personal';
+      lastView = null;
+    }
+    const result = await client.invoke(
+      'content',
+      Object.assign({ action: action, searchGenerationId: activeSearchGenerationId }, extra || {}),
+    );
     if (opts && opts.skipRender) return result;
     applyView(result && result.view);
     if (action === 'later') showSection('later');
@@ -157,6 +172,11 @@
     const li = document.createElement('li');
     const type = String(card.contentType || 'article');
     li.className = 'content-discover-card content-discover-card--' + (type || 'article');
+    if (card.itemId) li.setAttribute('data-item-id', card.itemId);
+    li.setAttribute(
+      'data-card-sig',
+      [card.itemId || '', type, card.thumbnailUrl || '', card.mediaUrl || '', card.title || ''].join('|'),
+    );
     const cover = coverUrl(card);
     if (cover) {
       const img = document.createElement('img');
@@ -275,27 +295,81 @@
     status.hidden = !value;
   }
 
+  function cardKey(card) {
+    return String((card && (card.itemId || card.url)) || '');
+  }
+
+  function isPrimaryMediaCard(card) {
+    const type = String((card && card.contentType) || '');
+    if (type === 'image') return isHttps(card.thumbnailUrl) || isHttps(card.mediaUrl);
+    if (type === 'video') return isHttps(card.embedUrl) || isHttps(card.mediaUrl) || isHttps(card.thumbnailUrl);
+    if (type === 'audio') return isHttps(card.mediaUrl) || isHttps(card.embedUrl);
+    return false;
+  }
+
+  function shouldApplyView(view) {
+    if (!view) return false;
+    const gen = String(view.searchGenerationId || '');
+    const mode = view.feedMode === 'intent' ? 'intent' : 'personal';
+    if (activeFeedMode === 'intent') {
+      return mode === 'intent' && !!activeSearchGenerationId && gen === activeSearchGenerationId;
+    }
+    if (mode === 'intent') return false;
+    if (gen && activeSearchGenerationId && gen !== activeSearchGenerationId) return false;
+    return true;
+  }
+
+  function mergeClientIntent(current, incoming) {
+    const incomingCards = (incoming && incoming.cards) || [];
+    const incomingRelated = (incoming && incoming.relatedCards) || [];
+    const incomingKeys = new Set(incomingCards.map(cardKey));
+    const currentCards = (current && current.cards) || [];
+    const preserved = currentCards.filter((card) => isPrimaryMediaCard(card) && !incomingKeys.has(cardKey(card)));
+    const pulled = incomingRelated.filter((card) =>
+      currentCards.some((row) => cardKey(row) === cardKey(card) && isPrimaryMediaCard(row)),
+    );
+    const pulledKeys = new Set(pulled.map(cardKey));
+    const mergedCards = [];
+    const seen = new Set();
+    for (const row of incomingCards.concat(pulled, preserved)) {
+      const key = cardKey(row);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      mergedCards.push(row);
+    }
+    return Object.assign({}, incoming, {
+      cards: mergedCards,
+      relatedCards: incomingRelated.filter((card) => !pulledKeys.has(cardKey(card))),
+      feedMode: 'intent',
+      searchGenerationId: current.searchGenerationId || incoming.searchGenerationId,
+      searchQuery: incoming.searchQuery || current.searchQuery,
+    });
+  }
+
   function applyView(view) {
-    const incoming = (view && view.cards) || [];
-    const notice = friendlyNotice(view && view.notice);
-    const replenishing = !!(view && view.replenishing);
+    if (!shouldApplyView(view)) return;
+    let next = view;
+    if (activeFeedMode === 'intent' && view.feedMode === 'intent' && lastView && lastView.feedMode === 'intent') {
+      next = mergeClientIntent(lastView, view);
+    }
+    const incoming = (next && next.cards) || [];
+    const notice = friendlyNotice(next && next.notice);
+    const replenishing = !!(next && next.replenishing);
     if (
       !incoming.length &&
       lastCards.length &&
-      (view && view.feedMode) !== 'intent' &&
+      (next && next.feedMode) !== 'intent' &&
       (replenishing || /暂时无法|检查连接|检查联网|没有找到可以直接看/.test(notice))
     ) {
-      renderView(
-        Object.assign({}, view || {}, {
-          cards: lastCards,
-          relatedCards: lastRelated,
-          notice: notice,
-          replenishing: replenishing,
-        }),
-      );
-      return;
+      next = Object.assign({}, next || {}, {
+        cards: lastCards,
+        relatedCards: lastRelated,
+        notice: notice,
+        replenishing: replenishing,
+      });
     }
-    renderView(view);
+    lastView = next;
+    renderView(next);
   }
 
   function showSection(name) {
@@ -336,6 +410,7 @@
     }
     lastCards = (view && view.cards) || [];
     lastRelated = (view && view.relatedCards) || [];
+    lastView = view;
     if (notice) {
       notice.textContent = lastCards.length ? friendlyNotice(view && view.notice) : '';
     }
@@ -346,8 +421,23 @@
       setStatus('');
     }
     if (list) {
-      list.innerHTML = '';
-      for (const card of lastCards) list.appendChild(renderCard(card));
+      const scrollTop = list.scrollTop;
+      const byId = new Map();
+      Array.prototype.forEach.call(list.children, (node) => {
+        const id = node.getAttribute('data-item-id');
+        if (id) byId.set(id, node);
+      });
+      lastCards.forEach((card, index) => {
+        const id = String(card.itemId || '');
+        const sig = [id, String(card.contentType || 'article'), card.thumbnailUrl || '', card.mediaUrl || '', card.title || ''].join('|');
+        let node = id ? byId.get(id) : null;
+        if (node && node.getAttribute('data-card-sig') !== sig) node = null;
+        if (!node) node = renderCard(card);
+        const current = list.children[index];
+        if (current !== node) list.insertBefore(node, current || null);
+      });
+      while (list.children.length > lastCards.length) list.removeChild(list.lastChild);
+      list.scrollTop = scrollTop;
     }
     renderRelated(lastRelated, view && view.relatedTitle);
     const emptyText = $('content-discover-empty-text');
@@ -380,13 +470,21 @@
   async function refresh() {
     const client = api();
     if (!client || typeof client.invoke !== 'function') return;
+    if (!activeSearchGenerationId) activeSearchGenerationId = newSearchGenerationId();
+    activeFeedMode = 'personal';
     if (!lastCards.length) setStatus('兔机米正在准备一些值得看的内容……');
     try {
-      const result = await client.invoke('content', { action: 'discover' });
+      const result = await client.invoke('content', {
+        action: 'discover',
+        searchGenerationId: activeSearchGenerationId,
+      });
       applyView(result && result.view);
-      if (result && result.view && result.view.replenishing) {
+      if (result && result.view && result.view.replenishing && activeFeedMode === 'personal') {
         if (!lastCards.length) setStatus('兔机米正在准备一些值得看的内容……');
-        const next = await client.invoke('content', { action: 'replenish' });
+        const next = await client.invoke('content', {
+          action: 'replenish',
+          searchGenerationId: activeSearchGenerationId,
+        });
         applyView(next && next.view);
       }
     } catch {
@@ -412,7 +510,10 @@
     if (!client || typeof client.invoke !== 'function') return;
     setStatus('兔机米正在帮你找些值得看的内容……');
     try {
-      const result = await client.invoke('content', { action: 'refresh' });
+      const result = await client.invoke('content', {
+        action: 'refresh',
+        searchGenerationId: activeSearchGenerationId,
+      });
       applyView(result && result.view);
     } catch {
       setStatus('');
@@ -424,6 +525,9 @@
   async function showPersonal() {
     const input = $('content-discover-query');
     if (input) input.value = '';
+    activeSearchGenerationId = newSearchGenerationId();
+    activeFeedMode = 'personal';
+    lastView = null;
     await refresh();
     showSection('for-you');
   }
@@ -435,11 +539,32 @@
     if (!text) return;
     const input = $('content-discover-query');
     if (input) input.value = text;
+    const gen = newSearchGenerationId();
+    activeSearchGenerationId = gen;
+    activeFeedMode = 'intent';
+    lastView = null;
     if (opts && opts.navigate) await goDiscover({ skipRefresh: true });
     showSection('for-you');
     try {
-      const result = await client.invoke('content', { action: 'seek', text: text });
+      const result = await client.invoke('content', {
+        action: 'seek',
+        text: text,
+        searchGenerationId: gen,
+      });
       applyView(result && result.view);
+      if (
+        result &&
+        result.view &&
+        result.view.replenishing &&
+        activeSearchGenerationId === gen &&
+        activeFeedMode === 'intent'
+      ) {
+        const next = await client.invoke('content', {
+          action: 'replenish',
+          searchGenerationId: gen,
+        });
+        applyView(next && next.view);
+      }
     } catch {
       const notice = $('content-discover-notice');
       if (notice) notice.textContent = '暂时无法获取新内容，可以稍后再试或检查联网设置。';

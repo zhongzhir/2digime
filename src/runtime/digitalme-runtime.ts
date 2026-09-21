@@ -181,7 +181,13 @@ import type { ProfessionalAgent, TalkChatFn } from '../intelligence';
 import { formatSelfContext, selectSelfContext } from '../intelligence/self-context';
 import { readDigitalSelf } from '../subject-core/digital-self/store';
 import { type DiscoverView } from '../subject-comm/content-discover';
-import { formatSeekContext, seekContent } from '../subject-comm/content-seek';
+import { formatSeekContext, seekContent, type ContentSeekResult } from '../subject-comm/content-seek';
+import {
+  createSearchGenerationId,
+  mergeIntentViews,
+  mergeSeekCardSets,
+} from '../subject-comm/discover-search-generation';
+import { defaultDiscoverIntent, interpretDiscoverIntent } from '../subject-comm/discover-intent';
 import { ingestSource } from '../subject-comm/content-ingest';
 import { safePublicHttpGet } from '../work-runtime/public-http-safety';
 import { indexSearchHits } from '../subject-comm/open-web-discovery';
@@ -418,6 +424,12 @@ export class DigitalMeRuntime {
   private lastNetworkCode: NetworkDiscoveryCode | null = null;
   /** CURRENT_SEARCH_MODE 最近一次搜索视图。打开外部来源时不得换成个人 Feed。 */
   private lastIntentView: DiscoverView | null = null;
+  /** 当前可见搜索 / 个人 Feed 的请求身份。迟到结果必须与此一致。 */
+  private currentSearchGenerationId = '';
+  private pendingSeekMerge: {
+    generationId: string;
+    leftover: Promise<ContentSeekResult | null>;
+  } | null = null;
 
   constructor(options: DigitalMeRuntimeOptions = {}) {
     this.options = options;
@@ -481,14 +493,16 @@ export class DigitalMeRuntime {
 
     if (action === 'seek') {
       const query = String(input.text || '').trim();
+      this.beginSearchGeneration(input.searchGenerationId);
+      this.lastIntentView = null;
       if (!query) {
-        this.lastIntentView = null;
         return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'open') };
       }
       return { view: await this.runContentSeek(pkg.rootDir, query, input.relayUrl) };
     }
 
     if (action === 'resetRecent') {
+      this.beginSearchGeneration(input.searchGenerationId);
       this.lastIntentView = null;
       await resetRecentRecommendationState(pkg.rootDir);
       return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'refresh') };
@@ -508,14 +522,15 @@ export class DigitalMeRuntime {
     }
 
     if (action === 'replenish') {
-      return { view: await this.currentSearchOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'replenish') };
+      return { view: await this.finishSeekOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'replenish', input.searchGenerationId) };
     }
 
     if (action === 'refresh') {
-      return { view: await this.currentSearchOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'refresh') };
+      return { view: await this.finishSeekOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'refresh', input.searchGenerationId) };
     }
 
     if (action === 'reverse') {
+      this.beginSearchGeneration(input.searchGenerationId);
       this.lastIntentView = null;
       const directiveId = String(input.directiveId || '').trim();
       if (!directiveId) return { view: await empty('请选择要撤销的偏好。') };
@@ -568,8 +583,108 @@ export class DigitalMeRuntime {
       return { view: await this.currentSearchOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'reuse') };
     }
 
+    this.beginSearchGeneration(input.searchGenerationId);
     this.lastIntentView = null;
     return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'open') };
+  }
+
+  private beginSearchGeneration(requested?: string): string {
+    const gen = String(requested || '').trim() || createSearchGenerationId();
+    this.currentSearchGenerationId = gen;
+    this.pendingSeekMerge = null;
+    return gen;
+  }
+
+  private stampSearchGeneration(view: DiscoverView): DiscoverView {
+    const gen = this.currentSearchGenerationId || view.searchGenerationId;
+    return {
+      ...view,
+      ...(gen ? { searchGenerationId: gen } : {}),
+      feedMode: view.feedMode === 'intent' ? 'intent' : view.feedMode || 'personal',
+    };
+  }
+
+  private intentViewFromSeek(
+    query: string,
+    sought: ContentSeekResult,
+    preferences: DiscoverView['preferences'],
+    networking: NetworkDiscoveryCode,
+    extra?: Partial<DiscoverView>,
+  ): DiscoverView {
+    const topic = sought.intent.topic || query;
+    return {
+      headline: '发现',
+      lead: `根据你刚说的话找「${topic}」，只显示这次搜索范围内的内容。`,
+      feedTitle: `关于「${topic}」`,
+      cards: sought.cards,
+      relatedCards: sought.relatedCards,
+      ...(sought.relatedCards.length ? { relatedTitle: '相关介绍' } : {}),
+      preferences,
+      notice: sought.notice,
+      reasonCode: 'CURRENT_INTENT',
+      feedMode: 'intent',
+      searchQuery: query,
+      networking,
+      seekTrace: sought.trace,
+      searchGenerationId: this.currentSearchGenerationId,
+      ...extra,
+    };
+  }
+
+  private async finishSeekOrPersonal(
+    packageRoot: string,
+    subjectId: string,
+    relayUrl: string | undefined,
+    personalMode: 'open' | 'refresh' | 'reuse' | 'replenish',
+    requestedGeneration?: string,
+  ): Promise<DiscoverView> {
+    const requested = String(requestedGeneration || '').trim();
+    if (requested && this.currentSearchGenerationId && requested !== this.currentSearchGenerationId) {
+      if (this.lastIntentView && this.lastIntentView.searchGenerationId === this.currentSearchGenerationId) {
+        return this.stampSearchGeneration({
+          ...this.lastIntentView,
+          preferences: await this.contentPreferenceRows(packageRoot),
+          replenishing: false,
+        });
+      }
+      return this.runContentDiscover(packageRoot, subjectId, relayUrl, personalMode);
+    }
+    const pending = this.pendingSeekMerge;
+    if (
+      personalMode === 'replenish' &&
+      pending &&
+      pending.generationId === this.currentSearchGenerationId &&
+      this.lastIntentView?.feedMode === 'intent'
+    ) {
+      const late = await pending.leftover;
+      if (this.pendingSeekMerge === pending) this.pendingSeekMerge = null;
+      if (
+        pending.generationId !== this.currentSearchGenerationId ||
+        this.lastIntentView?.feedMode !== 'intent' ||
+        this.lastIntentView.searchGenerationId !== pending.generationId
+      ) {
+        return this.currentSearchOrPersonal(packageRoot, subjectId, relayUrl, 'reuse');
+      }
+      if (!late) {
+        this.lastIntentView = { ...this.lastIntentView, replenishing: false };
+        return this.lastIntentView;
+      }
+      const preferences = await this.contentPreferenceRows(packageRoot);
+      const incoming = this.intentViewFromSeek(
+        String(this.lastIntentView.searchQuery || late.intent.topic || ''),
+        late,
+        preferences,
+        this.snapshotNetworkDiscovery(),
+        { replenishing: false },
+      );
+      const merged = mergeIntentViews(this.lastIntentView, incoming);
+      this.lastIntentView = { ...merged, replenishing: false };
+      if (merged.cards.length) {
+        await rememberIntentFeed(packageRoot, merged.cards, String(merged.searchQuery || ''));
+      }
+      return this.lastIntentView;
+    }
+    return this.currentSearchOrPersonal(packageRoot, subjectId, relayUrl, personalMode);
   }
 
   private async currentSearchOrPersonal(
@@ -579,10 +694,10 @@ export class DigitalMeRuntime {
     personalMode: 'open' | 'refresh' | 'reuse' | 'replenish',
   ): Promise<DiscoverView> {
     if (this.lastIntentView) {
-      return {
+      return this.stampSearchGeneration({
         ...this.lastIntentView,
         preferences: await this.contentPreferenceRows(packageRoot),
-      };
+      });
     }
     return this.runContentDiscover(packageRoot, subjectId, relayUrl, personalMode);
   }
@@ -654,10 +769,14 @@ export class DigitalMeRuntime {
     } else if (result.view.networking === 'AVAILABLE') {
       this.lastNetworkCode = 'AVAILABLE';
     }
-    return result.view;
+    return this.stampSearchGeneration({
+      ...result.view,
+      feedMode: result.view.feedMode === 'intent' ? 'intent' : 'personal',
+    });
   }
 
   private async runContentSeek(packageRoot: string, query: string, relayUrl?: string): Promise<DiscoverView> {
+    const generationId = this.currentSearchGenerationId || this.beginSearchGeneration();
     const preferences = await this.contentPreferenceRows(packageRoot);
     const items = await this.loadDiscoverItems(packageRoot, relayUrl);
     const networking = this.snapshotNetworkDiscovery();
@@ -667,50 +786,23 @@ export class DigitalMeRuntime {
     const openMedia = this.resolveOpenMediaFetch();
     const store = new FileNetworkItemStore(path.join(packageRoot, 'content'));
     await appendRecentRecommendationEvent(packageRoot, { type: 'seek_topic', topic: query });
-    try {
-      const sought = await seekContent({
-        query,
-        items,
-        ...(searchWeb ? { searchWeb } : {}),
-        ...(chatCompleteFn && model ? { chatComplete: chatCompleteFn, model } : {}),
-        ...(openMedia ? { fetchOpenMedia: openMedia } : {}),
-        ingestHit: async (hit) => {
-          try {
-            const ingested = await ingestSource({
-              sourceUrl: hit.url,
-              store,
-              limit: 4,
-              via: 'search',
-            });
-            if (ingested.items.length) return ingested.items;
-          } catch {
-            /* 单条公开页摄入失败时退回搜索命中 */
-          }
-          return indexSearchHits({ hits: [hit], store, limit: 1 });
-        },
-      });
-      if (sought.cards.length) await rememberIntentFeed(packageRoot, sought.cards, query);
-      const topic = sought.intent.topic || query;
-      const view: DiscoverView = {
-        headline: '发现',
-        lead: `根据你刚说的话找「${topic}」，只显示这次搜索范围内的内容。`,
-        feedTitle: `关于「${topic}」`,
-        cards: sought.cards,
-        relatedCards: sought.relatedCards,
-        ...(sought.relatedCards.length ? { relatedTitle: '相关介绍' } : {}),
-        preferences,
-        notice: sought.notice,
-        reasonCode: 'CURRENT_INTENT',
-        feedMode: 'intent',
-        searchQuery: query,
-        networking,
-        seekTrace: sought.trace,
-      };
-      this.lastIntentView = view;
-      return view;
-    } catch (err) {
+    const ingestHit = async (hit: { title: string; url: string; snippet?: string }) => {
+      try {
+        const ingested = await ingestSource({
+          sourceUrl: hit.url,
+          store,
+          limit: 4,
+          via: 'search',
+        });
+        if (ingested.items.length) return ingested.items;
+      } catch {
+        /* 单条公开页摄入失败时退回搜索命中 */
+      }
+      return indexSearchHits({ hits: [hit], store, limit: 1 });
+    };
+    const failedView = (err: unknown): DiscoverView => {
       this.lastNetworkCode = classifySearchFailure(err);
-      const view: DiscoverView = {
+      return {
         headline: '发现',
         lead: '根据你刚说的话找的内容。这次搜索失败，没有改动为你发现里的列表。',
         feedTitle: `关于「${query}」`,
@@ -722,8 +814,108 @@ export class DigitalMeRuntime {
         reasonCode: this.lastNetworkCode === 'AUTH_FAILED' ? 'NETWORK_AUTH_FAILED' : 'NETWORK_TEMPORARY_ERROR',
         feedMode: 'intent',
         searchQuery: query,
+        searchGenerationId: generationId,
       };
+    };
+    try {
+      const intent =
+        chatCompleteFn && model
+          ? await interpretDiscoverIntent({
+              query,
+              chatComplete: chatCompleteFn,
+              model,
+            })
+          : defaultDiscoverIntent(query);
+      if (generationId !== this.currentSearchGenerationId) {
+        const empty = await seekContent({ query, items, intent });
+        return this.intentViewFromSeek(query, empty, preferences, networking, { replenishing: false });
+      }
+      const common = {
+        query,
+        items,
+        intent,
+        ingestHit,
+        ...(chatCompleteFn && model ? { chatComplete: chatCompleteFn, model } : {}),
+      };
+      const firstWave = () =>
+        seekContent({
+          ...common,
+          skipWeb: !!searchWeb,
+          ...(searchWeb ? { searchWeb } : {}),
+          ...(openMedia ? { fetchOpenMedia: openMedia } : {}),
+        });
+      const webWave = searchWeb
+        ? () =>
+            seekContent({
+              ...common,
+              searchWeb,
+              skipOpenMedia: true,
+            })
+        : null;
+      if (!webWave) {
+        const sought = await firstWave();
+        if (generationId !== this.currentSearchGenerationId) {
+          return this.intentViewFromSeek(query, sought, preferences, networking, { replenishing: false });
+        }
+        if (sought.cards.length) await rememberIntentFeed(packageRoot, sought.cards, query);
+        const view = this.intentViewFromSeek(query, sought, preferences, networking, { replenishing: false });
+        this.lastIntentView = view;
+        return view;
+      }
+      const mediaResult = firstWave().then(
+        (r) => r,
+        (err) => {
+          this.lastNetworkCode = classifySearchFailure(err);
+          return null;
+        },
+      );
+      const webResult = webWave().then(
+        (r) => r,
+        (err) => {
+          this.lastNetworkCode = classifySearchFailure(err);
+          return null;
+        },
+      );
+      const first = await Promise.race([
+        mediaResult.then((r) => ({ src: 'media' as const, r })),
+        webResult.then((r) => ({ src: 'web' as const, r })),
+      ]);
+      let firstResult = first.r;
+      if (!firstResult) {
+        const other = first.src === 'media' ? await webResult : await mediaResult;
+        if (!other) throw Object.assign(new Error('search failed'), { status: 503 });
+        firstResult = other;
+      }
+      if (generationId !== this.currentSearchGenerationId) {
+        return this.intentViewFromSeek(query, firstResult, preferences, networking, { replenishing: false });
+      }
+      if (firstResult.cards.length) await rememberIntentFeed(packageRoot, firstResult.cards, query);
+      const view = this.intentViewFromSeek(query, firstResult, preferences, networking, { replenishing: true });
       this.lastIntentView = view;
+      this.pendingSeekMerge = {
+        generationId,
+        leftover: Promise.all([mediaResult, webResult]).then((parts) => {
+          const ok = parts.filter((row): row is ContentSeekResult => !!row);
+          if (!ok.length) return null;
+          if (ok.length === 1) return ok[0]!;
+          const mergedCards = mergeSeekCardSets(
+            { cards: ok[0]!.cards, relatedCards: ok[0]!.relatedCards },
+            { cards: ok[1]!.cards, relatedCards: ok[1]!.relatedCards },
+          );
+          return {
+            ...ok[1]!,
+            cards: mergedCards.cards,
+            relatedCards: mergedCards.relatedCards,
+            usedDirectory: ok[0]!.usedDirectory || ok[1]!.usedDirectory,
+            usedExternal: ok[0]!.usedExternal || ok[1]!.usedExternal,
+            notice: mergedCards.cards.length ? ok[1]!.notice || ok[0]!.notice : ok[0]!.notice || ok[1]!.notice,
+          };
+        }),
+      };
+      return view;
+    } catch (err) {
+      const view = failedView(err);
+      if (generationId === this.currentSearchGenerationId) this.lastIntentView = view;
       return view;
     }
   }
