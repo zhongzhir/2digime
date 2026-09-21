@@ -123,6 +123,10 @@ test('UI empty copy is projected from notice, not a hardcoded Settings lie', asy
   assert.match(html, /id="content-discover-feed-title"/);
   assert.match(js, /action: 'refresh'/);
   assert.match(js, /action: 'replenish'/);
+  assert.ok(
+    js.includes("String(lastView.searchGenerationId || '') === String(view.searchGenerationId || '')"),
+    'renderer intent merge must keep generation identity before merging',
+  );
   assert.match(js, /兔机米正在准备一些值得看的内容/);
   assert.equal(js.includes('目前还没有可展示的内容'), false);
   assert.equal(html.includes('目前还没有可展示的内容'), false);

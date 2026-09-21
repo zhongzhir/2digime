@@ -609,6 +609,7 @@ export class DigitalMeRuntime {
     sought: ContentSeekResult,
     preferences: DiscoverView['preferences'],
     networking: NetworkDiscoveryCode,
+    generationId: string,
     extra?: Partial<DiscoverView>,
   ): DiscoverView {
     const topic = sought.intent.topic || query;
@@ -626,7 +627,9 @@ export class DigitalMeRuntime {
       searchQuery: query,
       networking,
       seekTrace: sought.trace,
-      searchGenerationId: this.currentSearchGenerationId,
+      // 视图身份属于产生它的那次搜索请求。被取代的迟到完成不得盖上当前 generation，
+      // 否则渲染层的过期守卫会被绕过，旧搜索内容会作为新搜索结果合并进可见列表。
+      searchGenerationId: generationId,
       ...extra,
     };
   }
@@ -675,6 +678,7 @@ export class DigitalMeRuntime {
         late,
         preferences,
         this.snapshotNetworkDiscovery(),
+        pending.generationId,
         { replenishing: false },
       );
       const merged = mergeIntentViews(this.lastIntentView, incoming);
@@ -828,7 +832,7 @@ export class DigitalMeRuntime {
           : defaultDiscoverIntent(query);
       if (generationId !== this.currentSearchGenerationId) {
         const empty = await seekContent({ query, items, intent });
-        return this.intentViewFromSeek(query, empty, preferences, networking, { replenishing: false });
+        return this.intentViewFromSeek(query, empty, preferences, networking, generationId, { replenishing: false });
       }
       const common = {
         query,
@@ -855,10 +859,10 @@ export class DigitalMeRuntime {
       if (!webWave) {
         const sought = await firstWave();
         if (generationId !== this.currentSearchGenerationId) {
-          return this.intentViewFromSeek(query, sought, preferences, networking, { replenishing: false });
+          return this.intentViewFromSeek(query, sought, preferences, networking, generationId, { replenishing: false });
         }
         if (sought.cards.length) await rememberIntentFeed(packageRoot, sought.cards, query);
-        const view = this.intentViewFromSeek(query, sought, preferences, networking, { replenishing: false });
+        const view = this.intentViewFromSeek(query, sought, preferences, networking, generationId, { replenishing: false });
         this.lastIntentView = view;
         return view;
       }
@@ -887,10 +891,10 @@ export class DigitalMeRuntime {
         firstResult = other;
       }
       if (generationId !== this.currentSearchGenerationId) {
-        return this.intentViewFromSeek(query, firstResult, preferences, networking, { replenishing: false });
+        return this.intentViewFromSeek(query, firstResult, preferences, networking, generationId, { replenishing: false });
       }
       if (firstResult.cards.length) await rememberIntentFeed(packageRoot, firstResult.cards, query);
-      const view = this.intentViewFromSeek(query, firstResult, preferences, networking, { replenishing: true });
+      const view = this.intentViewFromSeek(query, firstResult, preferences, networking, generationId, { replenishing: true });
       this.lastIntentView = view;
       this.pendingSeekMerge = {
         generationId,

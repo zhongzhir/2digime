@@ -349,7 +349,13 @@
   function applyView(view) {
     if (!shouldApplyView(view)) return;
     let next = view;
-    if (activeFeedMode === 'intent' && view.feedMode === 'intent' && lastView && lastView.feedMode === 'intent') {
+    if (
+      activeFeedMode === 'intent' &&
+      view.feedMode === 'intent' &&
+      lastView &&
+      lastView.feedMode === 'intent' &&
+      String(lastView.searchGenerationId || '') === String(view.searchGenerationId || '')
+    ) {
       next = mergeClientIntent(lastView, view);
     }
     const incoming = (next && next.cards) || [];

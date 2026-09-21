@@ -10,7 +10,7 @@ import { writeDigitalSelf } from '../../subject-core/digital-self/store';
 import { FEED_01_SEED_ITEMS } from '../../subject-comm/tests/subject-network-feed-01-seed';
 import { validateNetworkItem } from '../../subject-comm/network-item';
 import type { DigitalSelf } from '../../subject-core/digital-self/types';
-import { audioPlaybackKind } from '../../subject-comm/discover-search-generation';
+import { audioPlaybackKind, shouldApplyDiscoverView } from '../../subject-comm/discover-search-generation';
 
 function selfOf(subjectId: string): DigitalSelf {
   const now = '2026-09-21T00:00:00.000Z';
@@ -320,6 +320,204 @@ test('CASE 5: repeating the same query uses a new generation', async () => {
   assert.equal(stale.view.searchGenerationId, 'sg_repeat_2');
   await runtime.stop();
 });
+
+test('CASE 6: overlapping in-flight Search A cannot enter Search B visible results', async () => {
+  const pkgDir = await withPackage();
+  const runtime = createDigitalMeRuntime({
+    documentCapability: 'fake',
+    registerOpenAiStub: false,
+    searchCapability: false,
+    contentChat: raceIntentChat(),
+    contentSearch: raceSearch,
+  });
+  const bus = createCommandBus(runtime);
+  await bus.invoke('subject.createPackage', { displayName: 'AB 在飞', targetDir: pkgDir });
+  const overview = await bus.invoke('subject.getOverview', {});
+  await writeDigitalSelf(pkgDir, selfOf(overview.subjectId));
+  const store = new FileNetworkItemStore(path.join(pkgDir, 'content'));
+  await store.put(IMAGE.item);
+  await store.put(VIDEO.item);
+
+  // Search A is still in flight (first wave not returned) when Search B is submitted.
+  const aPromise = bus.invoke('content', {
+    action: 'seek',
+    text: '找一些航天摄影作品',
+    searchGenerationId: 'sg_a',
+  });
+  const b = await bus.invoke('content', {
+    action: 'seek',
+    text: '找几个 AI 视频看看',
+    searchGenerationId: 'sg_b',
+  });
+  const a = await aPromise;
+
+  // Provenance of A's late completion: it must keep its own generation identity.
+  assert.equal(a.view.searchQuery, '找一些航天摄影作品');
+  assert.equal(a.view.feedMode, 'intent');
+  assert.equal(
+    a.view.searchGenerationId,
+    'sg_a',
+    'stale A completion must never be stamped with the current generation B',
+  );
+  assert.equal(
+    shouldApplyDiscoverView({ searchGenerationId: 'sg_b', feedMode: 'intent' }, a.view),
+    false,
+    'renderer with active generation B must reject A late view',
+  );
+  assert.equal(b.view.searchGenerationId, 'sg_b');
+  assert.equal(b.view.searchQuery, '找几个 AI 视频看看');
+  assert.equal(
+    b.view.cards.some((card) => card.itemId === IMAGE.item.itemId),
+    false,
+    'A space image must not appear in B visible results',
+  );
+
+  const stableB = await bus.invoke('content', { action: 'replenish', searchGenerationId: 'sg_b' });
+  assert.equal(stableB.view.searchGenerationId, 'sg_b');
+  assert.equal(stableB.view.cards.some((card) => card.itemId === VIDEO.item.itemId), true);
+  assert.equal(
+    stableB.view.cards.some((card) => card.itemId === IMAGE.item.itemId),
+    false,
+    'A late completion must not change B visible results',
+  );
+  await runtime.stop();
+});
+
+test('CASE 7: reverse race — in-flight AI video search cannot enter later space-image search', async () => {
+  const pkgDir = await withPackage();
+  const runtime = createDigitalMeRuntime({
+    documentCapability: 'fake',
+    registerOpenAiStub: false,
+    searchCapability: false,
+    contentChat: raceIntentChat(),
+    contentSearch: raceSearch,
+  });
+  const bus = createCommandBus(runtime);
+  await bus.invoke('subject.createPackage', { displayName: 'BA 在飞', targetDir: pkgDir });
+  const overview = await bus.invoke('subject.getOverview', {});
+  await writeDigitalSelf(pkgDir, selfOf(overview.subjectId));
+  const store = new FileNetworkItemStore(path.join(pkgDir, 'content'));
+  await store.put(IMAGE.item);
+  await store.put(VIDEO.item);
+
+  const aPromise = bus.invoke('content', {
+    action: 'seek',
+    text: '找几个 AI 视频看看',
+    searchGenerationId: 'sg_v',
+  });
+  const b = await bus.invoke('content', {
+    action: 'seek',
+    text: '找一些航天摄影作品',
+    searchGenerationId: 'sg_i',
+  });
+  const a = await aPromise;
+
+  assert.equal(a.view.searchGenerationId, 'sg_v');
+  assert.equal(
+    shouldApplyDiscoverView({ searchGenerationId: 'sg_i', feedMode: 'intent' }, a.view),
+    false,
+  );
+  assert.equal(b.view.searchGenerationId, 'sg_i');
+  assert.equal(
+    b.view.cards.some((card) => card.itemId === VIDEO.item.itemId),
+    false,
+    'A video must not appear in B visible results',
+  );
+
+  const stableI = await bus.invoke('content', { action: 'replenish', searchGenerationId: 'sg_i' });
+  assert.equal(stableI.view.searchGenerationId, 'sg_i');
+  assert.equal(stableI.view.cards.some((card) => card.itemId === IMAGE.item.itemId), true);
+  assert.equal(stableI.view.cards.some((card) => card.itemId === VIDEO.item.itemId), false);
+  await runtime.stop();
+});
+
+test('CASE 8: three rapid searches A → B → C — final view consumes only generation C', async () => {
+  const pkgDir = await withPackage();
+  const runtime = createDigitalMeRuntime({
+    documentCapability: 'fake',
+    registerOpenAiStub: false,
+    searchCapability: false,
+    contentChat: raceIntentChat(),
+    contentSearch: raceSearch,
+  });
+  const bus = createCommandBus(runtime);
+  await bus.invoke('subject.createPackage', { displayName: 'ABC 在飞', targetDir: pkgDir });
+  const overview = await bus.invoke('subject.getOverview', {});
+  await writeDigitalSelf(pkgDir, selfOf(overview.subjectId));
+  const store = new FileNetworkItemStore(path.join(pkgDir, 'content'));
+  await store.put(IMAGE.item);
+  await store.put(VIDEO.item);
+  await store.put(AUDIO_PLAYABLE.item);
+
+  const aPromise = bus.invoke('content', {
+    action: 'seek',
+    text: '找一些航天摄影作品',
+    searchGenerationId: 'sg_a',
+  });
+  const bPromise = bus.invoke('content', {
+    action: 'seek',
+    text: '找几个 AI 视频看看',
+    searchGenerationId: 'sg_b',
+  });
+  const c = await bus.invoke('content', {
+    action: 'seek',
+    text: '给我听点科技播客',
+    searchGenerationId: 'sg_c',
+  });
+  const [a, b] = await Promise.all([aPromise, bPromise]);
+
+  assert.equal(a.view.searchGenerationId, 'sg_a');
+  assert.equal(b.view.searchGenerationId, 'sg_b');
+  assert.equal(c.view.searchGenerationId, 'sg_c');
+  assert.equal(
+    shouldApplyDiscoverView({ searchGenerationId: 'sg_c', feedMode: 'intent' }, a.view),
+    false,
+  );
+  assert.equal(
+    shouldApplyDiscoverView({ searchGenerationId: 'sg_c', feedMode: 'intent' }, b.view),
+    false,
+  );
+  assert.equal(c.view.cards.some((card) => card.itemId === IMAGE.item.itemId), false);
+  assert.equal(c.view.cards.some((card) => card.itemId === VIDEO.item.itemId), false);
+
+  const stableC = await bus.invoke('content', { action: 'replenish', searchGenerationId: 'sg_c' });
+  assert.equal(stableC.view.searchGenerationId, 'sg_c');
+  assert.equal(stableC.view.cards.some((card) => card.itemId === AUDIO_PLAYABLE.item.itemId), true);
+  assert.equal(stableC.view.cards.some((card) => card.itemId === IMAGE.item.itemId), false);
+  assert.equal(stableC.view.cards.some((card) => card.itemId === VIDEO.item.itemId), false);
+  await runtime.stop();
+});
+
+function raceIntentChat() {
+  return async ({ messages }: { messages: Array<{ content?: string }> }) => {
+    const blob = messages.map((row) => String(row.content || '')).join('\n');
+    if (blob.includes('判断用户在「发现」里')) {
+      const user = String(messages[messages.length - 1]?.content || '');
+      const audio = /播客/.test(user);
+      const video = !audio && /视频|AI/.test(user);
+      return {
+        text: JSON.stringify({
+          intent: 'consume',
+          requestedMedia: audio ? ['audio'] : video ? ['video'] : ['image'],
+          objectWanted: 'work_itself',
+          searchQueries: [audio ? '科技播客' : video ? 'AI video' : '航天摄影'],
+        }),
+      };
+    }
+    if (blob.includes('判断每个候选')) return { text: '{"roles":[]}' };
+    return { text: '{"decisions":[]}' };
+  };
+}
+
+async function raceSearch(query: string) {
+  if (/航天|space|earthrise/i.test(query)) {
+    return [{ title: 'A late space article', url: 'https://example.org/a-late-space', snippet: 'A late' }];
+  }
+  if (/播客|podcast/i.test(query)) {
+    return [{ title: 'C tech podcast page', url: 'https://example.org/c-tech-podcast', snippet: 'C late' }];
+  }
+  return [{ title: 'B ai video page', url: 'https://example.org/b-ai-video', snippet: 'B late' }];
+}
 
 test('AI video / broad AI / audio playable vs source-only / personal restore', async () => {
   const pkgDir = await withPackage();
