@@ -22,11 +22,19 @@ import type {
   ProfessionalAgent,
   TalkChatFn,
   TalkExecution,
+  TalkExpectedEffect,
   TalkThread,
   TalkTurn,
+  TalkTurnOutcome,
 } from './types';
 import type { ConsultResult, PublicSubjectCard } from '../subject-collab/types';
 import { formatPublicCardsForModel } from '../subject-collab/public-card';
+import {
+  deriveTalkOutcome,
+  expectedFromExecutions,
+  hasObservedMutation,
+  unsatisfiedRequiredEffects,
+} from './talk-effects';
 
 export const NO_MODEL_NOTICE = '需要先连接 AI 能力，才能继续交流。';
 
@@ -55,6 +63,36 @@ const DELEGATE_TOOL: ChatToolDefinition = {
         },
       },
       required: ['instruction'],
+    },
+  },
+};
+
+const SET_EXPECTED_EFFECTS_TOOL: ChatToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'set_expected_effects',
+    description:
+      '记下这次目标完成后应能观察到的结果。改文件用 content_modified 或 file_created；只看不改用 observation。这不是完成任务，只是声明验收标准。真正的创建/修改仍要调用 write_file 或其他已连接能力。',
+    parameters: {
+      type: 'object',
+      properties: {
+        effects: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              target: { type: 'string', description: '文件名或相对路径。observation 可省略。' },
+              effect: {
+                type: 'string',
+                description: 'observation | file_created | content_modified',
+              },
+              expectedState: { type: 'string', description: '完成后应能在文件中看到的关键片段。' },
+            },
+            required: ['effect'],
+          },
+        },
+      },
+      required: ['effects'],
     },
   },
 };
@@ -186,6 +224,22 @@ function parseFolderAccessArgs(raw: string): { path: string } {
   }
 }
 
+function parseExpectedEffectsArgs(raw: string): TalkExpectedEffect[] {
+  try {
+    const parsed = JSON.parse(raw) as { effects?: TalkExpectedEffect[] };
+    if (!Array.isArray(parsed.effects)) return [];
+    return parsed.effects
+      .map((row) => ({
+        effect: String(row?.effect || '').trim(),
+        ...(row?.target ? { target: String(row.target).trim() } : {}),
+        ...(row?.expectedState ? { expectedState: String(row.expectedState).trim() } : {}),
+      }))
+      .filter((row) => row.effect);
+  } catch {
+    return [];
+  }
+}
+
 function parseWriteArgs(raw: string): { relativePath: string; content: string; root?: string } {
   try {
     const parsed = JSON.parse(raw) as { relativePath?: string; content?: string; path?: string; root?: string };
@@ -299,7 +353,7 @@ export async function runTalkTurn(input: {
   requestFolderAccess?: (input: { path: string; label: string }) => Promise<boolean>;
   persistFolderGrant?: (folder: string) => Promise<void>;
   refreshAgents?: (contextPaths: string[]) => ProfessionalAgent[];
-}): Promise<TalkThread> {
+}): Promise<{ thread: TalkThread; outcome: TalkTurnOutcome }> {
   const userTurn: TalkTurn = {
     id: `turn_${randomUUID()}`,
     at: input.now,
@@ -336,6 +390,7 @@ export async function runTalkTurn(input: {
     '普通低风险内部执行自行完成。只有真实涉及资金、隐私或凭证授权、对外发送或发布、删除或不可逆修改、超出现有授权，或只能由主人作出的价值判断时，才请求主人决定。',
     '对可能变化的公开事实，可使用已连接的实时能力核验。',
     '工具返回的是执行事实或证据，不是必须照抄的答案。不要把未真实执行的动作说成已经做成。',
+    '需要改动世界时，先用 set_expected_effects 记下完成后应观察到的结果，再动手。只看不改则 effect=observation。工具返回 ok 不等于目标完成；没有所需 effect 证据时不要宣布完成。',
     '不要问用户选择 Agent、任务类型、workflow、协作者或协议。',
     input.confirmHint
       ? `有一件关于用户本人的理解需要用户亲自确认：${input.confirmHint}。用普通人语言问一句，不要提内部机制。`
@@ -355,7 +410,7 @@ export async function runTalkTurn(input: {
     .filter(Boolean)
     .join('\n');
 
-  const tools: ChatToolDefinition[] = [REQUEST_FOLDER_ACCESS_TOOL];
+  const tools: ChatToolDefinition[] = [SET_EXPECTED_EFFECTS_TOOL, REQUEST_FOLDER_ACCESS_TOOL];
   const ensureFsTools = () => {
     if (!tools.some((item) => item.function.name === 'write_file')) {
       tools.push(WRITE_FILE_TOOL, EXPORT_FILE_TOOL, LIST_DIRECTORY_TOOL);
@@ -393,6 +448,9 @@ export async function runTalkTurn(input: {
   let lastPath: string | undefined;
   let lastOk = false;
   let lastEvidenceOnly = false;
+  let seq = 0;
+  const reads: Array<{ target: string; content: string; seq: number }> = [];
+  const mutations: Array<{ target: string; seq: number }> = [];
 
   const recordExec = (rec: TalkExecution) => {
     thread.executions.push(rec);
@@ -552,6 +610,13 @@ export async function runTalkTurn(input: {
     if (!resolved.ok) return fail(resolved.reason);
     const bytes = Buffer.byteLength(parsed.content, 'utf8');
     if (bytes > MAX_WRITE_BYTES) return fail(`文件超过 ${MAX_WRITE_BYTES} 字节上限。`);
+    let existed = false;
+    try {
+      const before = await fs.stat(resolved.abs);
+      existed = before.isFile();
+    } catch {
+      existed = false;
+    }
     try {
       await fs.mkdir(path.dirname(resolved.abs), { recursive: true });
       await fs.writeFile(resolved.abs, parsed.content, 'utf8');
@@ -560,6 +625,9 @@ export async function runTalkTurn(input: {
       lastOk = true;
       lastEvidenceOnly = false;
       lastPath = resolved.abs;
+      seq += 1;
+      mutations.push({ target: resolved.abs, seq });
+      const kind = existed ? 'content_modified' : 'file_created';
       recordExec({
         id: execId,
         at: input.now,
@@ -570,6 +638,7 @@ export async function runTalkTurn(input: {
         summary: `已写入 ${resolved.abs}`,
         producedOutputs: [resolved.abs],
         outputPath: resolved.abs,
+        observedEffect: { kind, target: resolved.abs, mutated: true },
       });
       return JSON.stringify({
         actualSuccess: true,
@@ -624,6 +693,8 @@ export async function runTalkTurn(input: {
     lastOk = true;
     lastEvidenceOnly = false;
     lastPath = written.abs;
+    seq += 1;
+    mutations.push({ target: written.abs, seq });
     recordExec({
       id: execId,
       at: input.now,
@@ -634,6 +705,7 @@ export async function runTalkTurn(input: {
       summary: `已导出 ${written.abs}`,
       producedOutputs: [written.abs],
       outputPath: written.abs,
+      observedEffect: { kind: 'file_created', target: written.abs, mutated: true },
     });
     return JSON.stringify({
       actualSuccess: true,
@@ -728,6 +800,10 @@ export async function runTalkTurn(input: {
     lastOk = result.ok;
     lastEvidenceOnly = evidenceOnly;
     lastPath = result.ok && !evidenceOnly ? result.outputPath || outputs[0] : undefined;
+    if (lastPath) {
+      seq += 1;
+      mutations.push({ target: lastPath, seq });
+    }
     recordExec({
       id: execId,
       at: input.now,
@@ -740,6 +816,9 @@ export async function runTalkTurn(input: {
       ...(result.safeDetail ? { safeDetail: result.safeDetail } : {}),
       ...(outputs.length ? { producedOutputs: outputs } : {}),
       ...(lastPath ? { outputPath: lastPath } : {}),
+      ...(result.ok && lastPath
+        ? { observedEffect: { kind: 'content_modified', target: lastPath, mutated: true } }
+        : {}),
     });
     return JSON.stringify({
       actualSuccess: result.ok,
@@ -757,6 +836,30 @@ export async function runTalkTurn(input: {
 
   const runOneTool = async (call: ModelToolCall): Promise<string> => {
     throwIfAborted(input.signal);
+    if (call.name === 'set_expected_effects') {
+      const effects = parseExpectedEffectsArgs(call.arguments);
+      const execId = `run_${randomUUID()}`;
+      const ok = effects.length > 0;
+      recordExec({
+        id: execId,
+        at: input.now,
+        turnId: userTurn.id,
+        capabilityId: 'set_expected_effects',
+        instruction: input.userText,
+        ok,
+        summary: ok
+          ? `expected: ${effects.map((row) => row.effect).join(', ')}`
+          : 'expected effects 为空',
+        ...(ok ? { safeDetail: JSON.stringify({ effects }) } : { failureReason: 'expected effects 为空' }),
+      });
+      return JSON.stringify({
+        actualSuccess: ok,
+        ok,
+        capabilityId: 'set_expected_effects',
+        effects,
+        summary: ok ? '已记录 expected effects。请继续执行，不要把这一步当成任务完成。' : 'effects 不能为空。',
+      });
+    }
     if (call.name === 'request_folder_access') return runRequestFolderAccess(call.arguments);
     if (call.name === 'write_file') return runWriteFile(call.arguments);
     if (call.name === 'export_file') return runExportFile(call.arguments);
@@ -780,16 +883,27 @@ export async function runTalkTurn(input: {
             ? `列出 ${Array.isArray(parsed.entries) ? parsed.entries.length : 0} 项`
             : parsed.failureReason || '列出失败',
         ...(parsed.failureReason ? { failureReason: parsed.failureReason } : {}),
+        ...(parsed.actualSuccess === true ? { observedEffect: { kind: 'directory_listed', mutated: false } } : {}),
       });
       return payload;
     }
     if (call.name === 'read_file') {
       const payload = await runReadFile(auth, call.arguments);
-      let parsed: { actualSuccess?: boolean; failureReason?: string; path?: string } = {};
+      let parsed: { actualSuccess?: boolean; failureReason?: string; path?: string; content?: string } = {};
       try {
         parsed = JSON.parse(payload) as typeof parsed;
       } catch {
         parsed = {};
+      }
+      if (parsed.actualSuccess === true && parsed.path) {
+        seq += 1;
+        let content = String(parsed.content || '');
+        try {
+          content = await fs.readFile(parsed.path, 'utf8');
+        } catch {
+          /* 验证用正文读盘失败时退回工具返回 */
+        }
+        reads.push({ target: parsed.path, content, seq });
       }
       recordExec({
         id: `run_${randomUUID()}`,
@@ -800,6 +914,9 @@ export async function runTalkTurn(input: {
         ok: parsed.actualSuccess === true,
         summary: parsed.actualSuccess === true ? `已读取 ${parsed.path || ''}` : parsed.failureReason || '读取失败',
         ...(parsed.failureReason ? { failureReason: parsed.failureReason } : {}),
+        ...(parsed.actualSuccess === true && parsed.path
+          ? { outputPath: parsed.path, observedEffect: { kind: 'file_read', target: parsed.path, mutated: false } }
+          : {}),
       });
       return payload;
     }
@@ -877,17 +994,16 @@ export async function runTalkTurn(input: {
 
   let current = first;
   let toolRounds = 0;
-  if (first.toolCalls?.length) {
-    await appendToolRound(first);
-    toolRounds = 1;
+  const drainTools = async () => {
+    if (!current.toolCalls?.length) return;
+    await appendToolRound(current);
+    toolRounds += 1;
     throwIfAborted(input.signal);
-    // 续聊/合成必须在剩余预算内返回；运输层超时由 service 收成可交付的最终回复，不得丢弃已成功工具事实。
     current = await chat({ messages, tools });
     while (current.toolCalls?.length && toolRounds < MAX_TOOL_ROUNDS) {
       throwIfAborted(input.signal);
       await appendToolRound(current);
       toolRounds += 1;
-      // 模型未再请求工具即已给出 final；立刻结束，避免无意义续环。
       throwIfAborted(input.signal);
       current = await chat({ messages, tools });
       if (!current.toolCalls?.length) break;
@@ -898,10 +1014,37 @@ export async function runTalkTurn(input: {
       throwIfAborted(input.signal);
       current = await chat({ messages, tools });
     }
+  };
+  await drainTools();
+
+  const MAX_NUDGES = 2;
+  let nudges = 0;
+  while (nudges < MAX_NUDGES && toolRounds < MAX_TOOL_ROUNDS) {
+    const turnExecs = thread.executions.filter((item) => executionIds.includes(item.id));
+    const expected = expectedFromExecutions(turnExecs);
+    const reason = unsatisfiedRequiredEffects(expected, turnExecs, reads, mutations);
+    if (!reason) break;
+    nudges += 1;
+    messages.push({
+      role: 'system',
+      content: `机械事实：${reason} 继续使用已有能力完成目标，不要宣布成功。`,
+    });
+    throwIfAborted(input.signal);
+    current = await chat({ messages, tools });
+    await drainTools();
   }
 
+  const turnExecs = thread.executions.filter((item) => executionIds.includes(item.id));
+  const expected = expectedFromExecutions(turnExecs);
+  const stillOpen = Boolean(unsatisfiedRequiredEffects(expected, turnExecs, reads, mutations));
+  const outcome = deriveTalkOutcome({ execs: turnExecs, expected, stillOpen });
+  const openReason = unsatisfiedRequiredEffects(expected, turnExecs, reads, mutations);
+
   // 无 toolCalls 即为模型 final assistant response；下方落 Thread，由 service writeThread → renderer。
-  const assistantText = deliverText(current.text);
+  let assistantText = deliverText(current.text);
+  if (stillOpen && !hasObservedMutation(turnExecs) && openReason) {
+    assistantText = openReason;
+  }
   const resultPath = lastOk && !lastEvidenceOnly ? lastPath : undefined;
   thread.turns.push({
     id: `turn_${randomUUID()}`,
@@ -912,5 +1055,5 @@ export async function runTalkTurn(input: {
     ...(exchangeIds.length ? { exchangeIds } : {}),
     ...(resultPath ? { result: { title: path.basename(resultPath), path: resultPath } } : {}),
   });
-  return thread;
+  return { thread, outcome };
 }

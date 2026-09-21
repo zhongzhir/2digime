@@ -15,6 +15,7 @@ import {
   listActiveFilesystemGrantFolders,
   saveFilesystemGrant,
 } from '../authorization/filesystem-grant';
+import { expectedFromExecutions, hasObservedMutation, isMutationEffectName } from './talk-effects';
 
 /** 做事（含首次获取代码执行能力）需要数分钟；180s 会在 runtime 仍工作时掐断。 */
 export const TALK_TURN_DEADLINE_MS = 600_000;
@@ -186,7 +187,7 @@ export class TalkService {
     let timeoutNotice: string | undefined;
     let outcome: TalkTurnOutcome = 'SUCCESS';
     try {
-      next = await runTalkTurn({
+      const ran = await runTalkTurn({
         thread,
         userText: text,
         selfContext,
@@ -212,6 +213,8 @@ export class TalkService {
           }).then(() => undefined),
         refreshAgents: (paths) => this.resolveAgents(pkg, { contextPaths: paths }),
       });
+      next = ran.thread;
+      outcome = ran.outcome;
       // 模型最终回复为空或整段内部 execution JSON 时，deliverText 会变成 EMPTY_REPLY。
       // 本轮已有 execution 则不得把 EMPTY_REPLY 交给用户；复用 execution 机械事实。
       applyUndeliverableFinalFallback(next, turnExecutions);
@@ -219,7 +222,7 @@ export class TalkService {
         const last = next.turns[next.turns.length - 1];
         if (last?.role === 'assistant' && last.text !== EMPTY_REPLY) {
           const fromExec = assistantFromTurnExecutions(turnExecutions, 'undeliverable_final');
-          if (last.text === fromExec.text) outcome = 'PARTIAL_SUCCESS';
+          if (last.text === fromExec.text) outcome = fromExec.outcome;
         }
       }
     } catch (err) {
@@ -322,16 +325,21 @@ export function assistantFromTurnExecutions(
       outcome: 'FAILED',
     };
   }
-  const okWrites = execs.filter((item) => item.ok && MUTATING_CAPS.has(item.capabilityId));
+  const okWrites = execs.filter(
+    (item) => item.ok && (MUTATING_CAPS.has(item.capabilityId) || item.observedEffect?.mutated === true),
+  );
   const anyOk = execs.some((item) => item.ok);
+  const expected = expectedFromExecutions(execs);
+  const needsMutation = expected.some((row) => isMutationEffectName(row.effect));
+  const mutated = hasObservedMutation(execs) || okWrites.length > 0;
   const failed = [...execs].reverse().find((item) => !item.ok);
-  if (failed && !okWrites.length) {
-    const fact = String(failed.summary || failed.failureReason || TALK_TIMEOUT_NOTICE).trim();
+  if ((failed && !okWrites.length && !mutated) || (needsMutation && !mutated)) {
+    const fact = String(failed?.summary || failed?.failureReason || '目标还没有完成：没有观察到所需修改。').trim();
     return {
       text: fact.slice(0, 4000),
       notice: fact.slice(0, 400),
       executionIds,
-      outcome: anyOk ? 'PARTIAL_SUCCESS' : 'FAILED',
+      outcome: needsMutation && !mutated ? 'FAILED' : anyOk ? 'PARTIAL_SUCCESS' : 'FAILED',
     };
   }
   const lastWrite = [...okWrites].reverse()[0] || [...execs].reverse().find((item) => item.ok);
@@ -359,7 +367,14 @@ export function assistantFromTurnExecutions(
         ? `已完成。已修改 ${changedNames.join('、')}${verifyBit}，结果已经写入项目目录。`
         : `操作已完成。已修改 ${changedNames.join('、')}${verifyBit}。\n${TALK_SYNTHESIS_TIMEOUT_NOTICE}`;
   } else if (mode === 'undeliverable_final') {
-    doneText = TALK_EXECUTION_DONE_NOTICE;
+    doneText = anyOk
+      ? execs
+          .filter((item) => item.ok)
+          .map((item) => String(item.summary || '').trim())
+          .filter(Boolean)
+          .slice(0, 3)
+          .join('\n') || TALK_TIMEOUT_NOTICE
+      : TALK_TIMEOUT_NOTICE;
   } else {
     const facts = execs
       .filter((item) => item.ok)

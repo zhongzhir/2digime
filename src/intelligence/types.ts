@@ -19,6 +19,20 @@ export interface TalkTurn {
   result?: { title: string; path?: string };
 }
 
+/** 模型声明的目标可观察结果；不是对用户原句的关键词分类。 */
+export interface TalkExpectedEffect {
+  target?: string;
+  effect: string;
+  expectedState?: string;
+}
+
+/** 工具实际产生的机械 effect。 */
+export interface TalkObservedEffect {
+  kind: string;
+  target?: string;
+  mutated?: boolean;
+}
+
 export interface TalkExecution {
   id: string;
   at: string;
@@ -34,6 +48,7 @@ export interface TalkExecution {
   reviewNotes?: string;
   /** 内部审计，不含密钥，不作为对用户的诊断文案。 */
   safeDetail?: string;
+  observedEffect?: TalkObservedEffect;
 }
 
 export interface TalkThread {
