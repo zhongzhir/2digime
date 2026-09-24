@@ -175,7 +175,8 @@ export async function interpretDiscoverIntent(input: {
         { role: 'user', content: query },
       ],
       temperature: 0,
-      maxTokens: 500,
+      // Leave room for reasoning before the small structured intent answer.
+      maxTokens: 4096,
       timeoutMs: 45_000,
       responseFormat: { type: 'json_object' },
     });

@@ -113,7 +113,8 @@ export async function selectSupply(input: {
   const response = await input.chatComplete({
     ...input.model,
     temperature: 0,
-    maxTokens: 3000,
+    // Reasoning-capable providers share this budget with the final structured answer.
+    maxTokens: 8192,
     timeoutMs: 60000,
     responseFormat: { type: 'json_object' },
     messages: [

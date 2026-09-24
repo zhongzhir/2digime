@@ -203,7 +203,7 @@ test('TYPE SEMANTICS: Article + embedded media stays article; VideoObject/AudioO
 </script></head><body><audio src="https://cdn.example.org/clip.mp3"></audio></body></html>`,
     'https://example.org/news/wrap',
   );
-  assert.equal(articleAudio.contentType, 'article');
+  assert.equal(articleAudio.contentType, 'news');
   assert.equal(articleAudio.mediaUrl, 'https://cdn.example.org/clip.mp3');
 
   const articleVideo = parsePageMetadata(

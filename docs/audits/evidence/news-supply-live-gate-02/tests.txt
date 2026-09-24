@@ -1,0 +1,40 @@
+✔ canonical URL strips tracking and yields stable item id (2.705ms)
+✔ RSS and Atom parse title, link, summary (7.8645ms)
+✔ ingest feed: normalize, dedup, searchable directory, no user fields (24.5891ms)
+✔ AI descriptor may rewrite text but still must not store user identity (3.4447ms)
+✔ invalid URL is rejected without entering the directory (1.223ms)
+✔ real public RSS ingest lands in FileNetworkItemStore (1330.9032ms)
+✔ open/later/AI do not write preferences; boost writes user_action and next selection consumes it; reverse works (94.2458ms)
+✔ block source is consumed by the next decision and remains reversible (31.3465ms)
+✔ real BBC item can receive explicit boost without rewriting Digital Self (1281.6363ms)
+✔ seek matches directory, keeps provenance URL, dedups web, and is not a crawler (22.4956ms)
+✔ real BBC title can be found by a natural-language request (1223.4204ms)
+✔ stale generation is ignored; same generation merges (4.1708ms)
+✔ PRIMARY cannot be downgraded by ABOUT; Directory cannot replace current search (1.773ms)
+✔ CASE 1/2: late web ABOUT keeps images; late images upgrade PRIMARY (38.6726ms)
+✔ valid image representation remains image; broken image may be removed (1.0243ms)
+✔ audio playable vs source-only; no fake 0:00/0:00 (1.3697ms)
+✔ late search cannot override Personal Feed; Search A cannot override Search B (0.3462ms)
+✔ renderer keeps generation gate, skipRefresh, audio duration guard (10.2712ms)
+✔ SEARCH SCOPE: current intent overrides Personal Feed and cached/default items do not leak (32.4818ms)
+✔ SEARCH SCOPE: recent state / explicit preference cannot broaden current search (9.0881ms)
+✔ OBJECT FIDELITY: video request keeps primary video, about articles, unrelated RWA (2.0414ms)
+✔ OBJECT FIDELITY: broad AI content allows AI article; research allows commentary (2.2989ms)
+✔ TYPE SEMANTICS: Article + embedded media stays article; VideoObject/AudioObject/ImageObject stay themselves (14.3214ms)
+✔ FAILURE: zero matching video is honest empty and does not use cached feed cards (1.9492ms)
+✔ TYPE SEMANTICS: RSS enclosure audio is still audio (8.318ms)
+✔ formal renderer exposes plain-text reading and passes quoted body only on explicit Ask (166.3597ms)
+✔ reingest preserves publisher date; acquisition time never replaces unknown publication (7.2492ms)
+✔ NewsArticle remains news; feed full content is independent of summary (8.5413ms)
+✔ network discovery opt-out does not call direct feeds or search (107.0949ms)
+✔ resolver refuses restricted pages and robots, returns only inert plain text (18.3096ms)
+✔ selection can only reference supplied candidates, clusters retain sources, undated news rejected (1.34ms)
+✔ formal command joins direct supply and search, clusters locally and leaves Digital Self unchanged (342.2452ms)
+ℹ tests 32
+ℹ suites 0
+ℹ pass 32
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1619.0973

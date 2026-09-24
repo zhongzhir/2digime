@@ -1,0 +1,64 @@
+{
+  "entry": "Electron main.cjs / preload IPC / formal renderer seek handler",
+  "stub": false,
+  "at": "2026-09-24T06:48:14.784Z",
+  "credentialAdapter": "existing read-only accessor; no credential import or persistence",
+  "isolatedUserData": "C:\\Users\\46554\\AppData\\Local\\Temp\\news-supply-ui-lPLSwn",
+  "rows": [
+    {
+      "case": 1,
+      "query": "今天 AI 有什么重要新闻？",
+      "ms": 22812,
+      "title": "发现",
+      "notice": "",
+      "cards": []
+    },
+    {
+      "case": 2,
+      "query": "最近有哪些被多家媒体报道的同一新闻事件？请合并同事件报道并保留各来源，不要把不同事件合并。",
+      "ms": 22264,
+      "title": "发现",
+      "notice": "",
+      "cards": []
+    },
+    {
+      "case": 3,
+      "query": "找一篇少数派最近的普通图文文章，直接阅读正文",
+      "ms": 11328,
+      "title": "发现",
+      "notice": "联网搜索暂不可用，以下内容来自已读取的公开来源。",
+      "cards": [
+        {
+          "title": "古董电脑室十周年记：为什么我不再是收藏家（上）",
+          "source": "少数派 - 高品质数字消费指南 · 蓬岸 · 2026/9/24 12:15:24",
+          "type": "文章",
+          "links": [],
+          "reader": true
+        }
+      ]
+    },
+    {
+      "case": 4,
+      "query": "找一个机核的音频节目听听",
+      "ms": 13714,
+      "title": "发现",
+      "notice": "联网搜索暂不可用，以下内容来自已读取的公开来源。",
+      "cards": [
+        {
+          "title": "离去的索岛婚姻和无限的魔兽世界 再荐茶社41",
+          "source": "机核 · NoSleepLee,雏雏 · 2026/9/24 02:20:37",
+          "type": "音频",
+          "links": [],
+          "reader": false
+        },
+        {
+          "title": "Vol.191｜东京电玩展见闻｜Snap SPECS 发售｜Meta VR Glasses 泄漏",
+          "source": "机核 · VRplay · 2026/9/24 00:29:28",
+          "type": "音频",
+          "links": [],
+          "reader": false
+        }
+      ]
+    }
+  ]
+}

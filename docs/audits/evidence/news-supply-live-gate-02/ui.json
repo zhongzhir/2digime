@@ -1,0 +1,132 @@
+{
+  "entry": "Electron main.cjs / preload IPC / formal renderer seek handler",
+  "stub": false,
+  "at": "2026-09-24T06:53:44.216Z",
+  "credentialAdapter": "existing read-only accessor; no credential import or persistence",
+  "isolatedUserData": "C:\\Users\\46554\\AppData\\Local\\Temp\\news-supply-ui-LLva6S",
+  "rows": [
+    {
+      "case": 1,
+      "query": "今天 AI 有什么重要新闻？",
+      "ms": 38140,
+      "title": "发现",
+      "notice": "联网搜索暂不可用，以下内容来自已读取的公开来源。",
+      "cards": [
+        {
+          "title": "ChatGPT 移动端新增基于语音的智能体功能，可语音撰写文档、总结邮件",
+          "source": "IT之家 · 2026/9/24 14:35:16",
+          "type": "新闻",
+          "bodyCharacters": 277,
+          "links": [],
+          "reader": true
+        },
+        {
+          "title": "AI 眼镜离线也能识图问答：高通携手 PrismML 发布 1-bit Bonsai，内存占用降至 1/4",
+          "source": "IT之家 · 2026/9/24 14:34:07",
+          "type": "新闻",
+          "bodyCharacters": 400,
+          "links": [],
+          "reader": true
+        },
+        {
+          "title": "腾讯混元宣布“腾讯 Hy 翻译”App 上线，支持 33 种语言互译",
+          "source": "IT之家 · 2026/9/24 14:20:36",
+          "type": "新闻",
+          "bodyCharacters": 477,
+          "links": [],
+          "reader": true
+        },
+        {
+          "title": "特斯拉向 HW3 版 Model S/X 推送 FSD v14.2 Lite",
+          "source": "IT之家 · 2026/9/24 14:46:53",
+          "type": "新闻",
+          "bodyCharacters": 973,
+          "links": [],
+          "reader": true
+        },
+        {
+          "title": "派早报：小米召开秋季新品发布会、千问发布 Qwen-Audio-3.1系列模型等",
+          "source": "少数派 - 高品质数字消费指南 · 少数派编辑部 · 2026/9/24 08:19:37",
+          "type": "文章",
+          "bodyCharacters": 993,
+          "links": [],
+          "reader": true
+        },
+        {
+          "title": "早报｜iOS27测试版新功能可阻止摇一摇广告/5999起，小米18 Pro发布/宾利发布首款纯电车Torcal，888马力",
+          "source": "爱范儿 · 郑廷旭 · 2026/9/24 08:17:26",
+          "type": "文章",
+          "bodyCharacters": 9894,
+          "links": [],
+          "reader": true
+        },
+        {
+          "title": "刚刚，苹果「液态玻璃」缔造者，给 Muse 造了个 AI 拓麻歌子",
+          "source": "爱范儿 · 莫崇宇 · 2026/9/24 09:59:48",
+          "type": "文章",
+          "bodyCharacters": 3862,
+          "links": [],
+          "reader": true
+        },
+        {
+          "title": "AI 想包办你的一切，高通想包办你的 AI",
+          "source": "爱范儿 · 肖钦鹏 · 2026/9/24 13:35:32",
+          "type": "文章",
+          "bodyCharacters": 3795,
+          "links": [],
+          "reader": true
+        }
+      ],
+      "lead": "根据你刚说的话找「AI」，只显示这次搜索范围内的内容。",
+      "empty": "\n                这次没有找到可以直接看的内容。\n              "
+    },
+    {
+      "case": 2,
+      "query": "最近有哪些被多家媒体报道的同一新闻事件？请合并同事件报道并保留各来源，不要把不同事件合并。",
+      "ms": 60432,
+      "title": "发现",
+      "notice": "",
+      "cards": [],
+      "lead": "根据你刚说的话找的内容。这次搜索失败，没有改动为你发现里的列表。",
+      "empty": "\n                暂时无法获取新内容，可以稍后再试或检查联网设置。\n              "
+    },
+    {
+      "case": 3,
+      "query": "找一篇少数派最近的普通图文文章，直接阅读正文",
+      "ms": 11712,
+      "title": "发现",
+      "notice": "联网搜索暂不可用，以下内容来自已读取的公开来源。",
+      "cards": [
+        {
+          "title": "古董电脑室十周年记：为什么我不再是收藏家（上）",
+          "source": "少数派 - 高品质数字消费指南 · 蓬岸 · 2026/9/24 12:15:24",
+          "type": "文章",
+          "bodyCharacters": 6401,
+          "links": [],
+          "reader": true
+        }
+      ],
+      "lead": "根据你刚说的话找「少数派」，只显示这次搜索范围内的内容。",
+      "empty": "\n                暂时无法获取新内容，可以稍后再试或检查联网设置。\n              "
+    },
+    {
+      "case": 4,
+      "query": "找一个机核的音频节目听听",
+      "ms": 10195,
+      "title": "发现",
+      "notice": "联网搜索暂不可用，以下内容来自已读取的公开来源。",
+      "cards": [
+        {
+          "title": "离去的索岛婚姻和无限的魔兽世界 再荐茶社41",
+          "source": "机核 · NoSleepLee,雏雏 · 2026/9/24 02:20:37",
+          "type": "音频",
+          "bodyCharacters": 0,
+          "links": [],
+          "reader": false
+        }
+      ],
+      "lead": "根据你刚说的话找「机核」，只显示这次搜索范围内的内容。",
+      "empty": "\n                暂时无法获取新内容，可以稍后再试或检查联网设置。\n              "
+    }
+  ]
+}

@@ -15,7 +15,6 @@ const os = require('node:os');
   const env = {
     ...process.env,
     DIGITALME_V2_USER_DATA: userData,
-    DIGITALME_V2_CREDENTIAL_IMPORT: process.env.DIGITALME_MODEL_RUNTIME_FILE,
     DIGITALME_V2_ELECTRON_TEST: '0',
     DIGITALME_V2_UX_ACCEPTANCE: '0',
     DIGITALME_V2_DIGITAL_SELF_STUB: '0',
@@ -23,9 +22,14 @@ const os = require('node:os');
   };
   delete env.NODE_TEST_CONTEXT;
   delete env.ELECTRON_RUN_AS_NODE;
+  delete env.DIGITALME_V2_CREDENTIAL_IMPORT;
+  delete env.DIGITALME_V2_ALLOW_DEV_CREDENTIAL;
+  delete env.DIGITALME_V2_DIGITAL_SELF_TRACE_DIR;
+  delete env.DIGITALME_V2_TALK_TRACE_DIR;
+  delete env.DIGITALME_V2_PACKAGED_SMOKE;
   const app = await _electron.launch({
     executablePath: process.env.DIGITALME_TEST_ELECTRON,
-    args: [path.resolve('electron/main.cjs')],
+    args: [path.resolve('scripts/news-supply-electron-entry.cjs')],
     cwd: process.cwd(),
     env,
     timeout: 60000,
@@ -37,17 +41,19 @@ const os = require('node:os');
     await page.waitForFunction(
       () => !!window.ContentDiscoverPage && !!window.digitalMe,
     );
+    await page.locator('#view-shell').waitFor({ state: 'visible' });
     await page.evaluate(() =>
       window.ShellNav.setNav('discover', { skipRefresh: true }),
     );
     const queries = [
       '今天 AI 有什么重要新闻？',
-      '最近有哪些关于具身智能的重要消息？',
+      '最近有哪些被多家媒体报道的同一新闻事件？请合并同事件报道并保留各来源，不要把不同事件合并。',
       '找一篇少数派最近的普通图文文章，直接阅读正文',
       '找一个机核的音频节目听听',
     ];
-    await fs.mkdir('build/evidence/news-supply-01', { recursive: true });
-    for (let i = 0; i < queries.length; i++) {
+    await fs.mkdir('build/evidence/news-supply-live-gate-02', { recursive: true });
+    await fs.mkdir('docs/audits/evidence/news-supply-live-gate-02', { recursive: true });
+    for (let i = 0; i < (Number(process.env.NEWS_UI_CASES) || queries.length); i++) {
       console.log('UI START', i + 1);
       const at = Date.now();
       // Call the exact handler bound to the user's search form. No response injection.
@@ -63,11 +69,15 @@ const os = require('node:os');
             title: el.querySelector('h3')?.textContent,
             source: el.querySelector('.content-discover-source')?.textContent,
             type: el.querySelector('.content-discover-kind')?.textContent,
+            bodyCharacters: el.querySelector('details > div')?.textContent.length || 0,
+            links: [...el.querySelectorAll('a')].map(a => a.href),
             reader: !![...el.querySelectorAll('summary')].find(
               (s) => s.textContent === '直接阅读',
             ),
           }),
         ),
+        lead: document.querySelector('#content-discover-lead')?.textContent,
+        empty: document.querySelector('#content-discover-empty')?.textContent,
       }));
       const reader = page
         .locator('summary')
@@ -75,7 +85,7 @@ const os = require('node:os');
         .first();
       if (await reader.count()) await reader.click();
       await page.screenshot({
-        path: `build/evidence/news-supply-01/ui-${i + 1}.png`,
+        path: `build/evidence/news-supply-live-gate-02/ui-${i + 1}.png`,
         fullPage: true,
       });
       rows.push({
@@ -86,12 +96,15 @@ const os = require('node:os');
       });
       console.log('UI END', i + 1, 'cards', state.cards.length);
       await fs.writeFile(
-        'docs/audits/evidence/news-supply-01/ui.json',
+        'docs/audits/evidence/news-supply-live-gate-02/ui.json',
         JSON.stringify(
           {
             entry:
               'Electron main.cjs / preload IPC / formal renderer seek handler',
             stub: false,
+            at: new Date().toISOString(),
+            credentialAdapter: 'existing read-only accessor; no credential import or persistence',
+            isolatedUserData: userData,
             rows,
           },
           null,

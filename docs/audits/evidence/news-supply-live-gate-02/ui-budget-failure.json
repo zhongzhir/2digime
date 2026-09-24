@@ -1,0 +1,29 @@
+{
+  "entry": "Electron main.cjs / preload IPC / formal renderer seek handler",
+  "stub": false,
+  "at": "2026-09-24T06:50:04.678Z",
+  "credentialAdapter": "existing read-only accessor; no credential import or persistence",
+  "isolatedUserData": "C:\\Users\\46554\\AppData\\Local\\Temp\\news-supply-ui-hnIZ1h",
+  "rows": [
+    {
+      "case": 1,
+      "query": "今天 AI 有什么重要新闻？",
+      "ms": 22163,
+      "title": "发现",
+      "notice": "",
+      "cards": [],
+      "lead": "根据你刚说的话找的内容。这次搜索失败，没有改动为你发现里的列表。",
+      "empty": "\n                暂时无法获取新内容，可以稍后再试或检查联网设置。\n              "
+    },
+    {
+      "case": 2,
+      "query": "最近有哪些被多家媒体报道的同一新闻事件？请合并同事件报道并保留各来源，不要把不同事件合并。",
+      "ms": 20276,
+      "title": "发现",
+      "notice": "",
+      "cards": [],
+      "lead": "根据你刚说的话找的内容。这次搜索失败，没有改动为你发现里的列表。",
+      "empty": "\n                暂时无法获取新内容，可以稍后再试或检查联网设置。\n              "
+    }
+  ]
+}

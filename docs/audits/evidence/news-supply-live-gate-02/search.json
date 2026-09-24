@@ -1,0 +1,8 @@
+{
+  "at": "2026-09-24T06:50:00.929Z",
+  "query": "今天 AI 新闻",
+  "provider": "existing Gemini Search",
+  "maxRetries": 0,
+  "kind": "quota",
+  "status": 429
+}

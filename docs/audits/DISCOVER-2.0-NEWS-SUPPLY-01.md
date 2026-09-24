@@ -1,5 +1,7 @@
 # DISCOVER-2.0-NEWS-SUPPLY-01
 
+Follow-up: [LIVE-GATE-02](DISCOVER-2.0-NEWS-SUPPLY-LIVE-GATE-02.md) records the newly authorized isolated DeepSeek/Electron run. It supersedes the authorization/UI-blocker status below, while retaining PARTIAL due to Search quota, event clustering and freshness gaps. The earlier observations below remain historical evidence.
+
 Baseline: `29a7d4043942d689b7ebf9e027f9e909d6b34c1e`, fetched 2026-09-24.
 Branch: `build/discover-2-news-supply-01`; isolated worktree. Original detached worktree and staged/untracked changes protected. No push/package/release.
 
