@@ -35,6 +35,7 @@ export interface DiscoverCard {
   thumbnailUrl?: string;
   embedUrl?: string;
   mediaUrl?: string;
+  mimeType?: string;
   durationSeconds?: number;
   consumption?: string;
   access?: string;
@@ -109,6 +110,7 @@ export function cardFromNetworkItem(
     ...(item.content.thumbnailUrl ? { thumbnailUrl: item.content.thumbnailUrl } : {}),
     ...(item.content.embedUrl ? { embedUrl: item.content.embedUrl } : {}),
     ...(item.content.mediaUrl ? { mediaUrl: item.content.mediaUrl } : {}),
+    ...(item.content.mimeType ? { mimeType: item.content.mimeType } : {}),
     ...(item.content.durationSeconds != null ? { durationSeconds: item.content.durationSeconds } : {}),
     ...(item.content.consumption ? { consumption: item.content.consumption } : {}),
     ...(item.content.access ? { access: item.content.access } : {}),

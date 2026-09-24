@@ -270,7 +270,11 @@ test('ASK 2DIGIME: renderer preserves content context without auto-send', async 
   assert.equal(ui.includes('handleSend(text'), false);
   assert.match(talk, /【正在讨论的内容】/);
   assert.match(talk, /withContentContext/);
-  assert.equal(/iframe/i.test(ui), false);
+  // No raw third-party HTML is injected. The only iframe allowed is a sandboxed official
+  // embed URL taken from structured metadata (never innerHTML from the source).
+  assert.equal(/innerHTML\s*=\s*[^'"]*embed/i.test(ui), false);
+  const iframeLines = ui.split('\n').filter((line) => /iframe/i.test(line));
+  for (const line of iframeLines) assert.match(line, /createElement|sandbox|embedUrl/);
 });
 
 test('REGRESSION: no hub crawler / mentioned-object factory / site listing table', async () => {

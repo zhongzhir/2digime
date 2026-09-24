@@ -124,6 +124,8 @@ input[type=checkbox], input[type=radio] { width: auto; flex: none; }
 .content-discover-excerpt { margin: 0 0 10px; color: var(--ink); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .content-discover-reason { margin: 0 0 8px; }
 .content-discover-audio { display: block; width: 100%; margin: 8px 0 12px; }
+.content-discover-video { display: block; width: 100%; max-height: 420px; margin: 8px 0 12px; background: #000; border-radius: 12px; }
+.content-discover-embed { display: block; width: 100%; aspect-ratio: 16 / 9; margin: 8px 0 12px; border: 0; border-radius: 12px; background: #000; }
 .content-discover-card a, .content-discover-actions button { font-size: 13px; }
 .content-discover-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; align-items: center; }
 .content-discover-related { margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--line); }

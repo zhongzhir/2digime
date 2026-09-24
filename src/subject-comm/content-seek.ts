@@ -220,6 +220,8 @@ export async function seekContent(input: {
   previous?: { cards: DiscoverCard[]; relatedCards: DiscoverCard[] };
   acquireCandidates?: () => Promise<DiscoverCard[]>;
   selectCandidates?: (cards: DiscoverCard[]) => Promise<DiscoverCard[]>;
+  /** Persist a neutral candidate so later feedback/open can resolve it by id. Best-effort. */
+  putNetworkItem?: (item: NetworkItem) => Promise<void>;
 }): Promise<ContentSeekResult> {
   const query = String(input.query || '').trim();
   const emptyIntent = defaultDiscoverIntent(query);
@@ -312,6 +314,9 @@ export async function seekContent(input: {
           seenIds.add(item.itemId);
           usedExternal = true;
           if (canonical) queryByUrl.set(canonical, topicQuery);
+          if (input.putNetworkItem) {
+            try { await input.putNetworkItem(item); } catch { /* 反馈持久化失败不影响本次展示 */ }
+          }
           cards.push(cardFromNetworkItem(item, '开放媒体来源，不是目录推荐。', 'web'));
           mediaOfKind = cards.filter((card) => mediaKinds.includes(card.contentType as 'video' | 'image' | 'audio')).length;
           if (mediaOfKind >= 16) break;

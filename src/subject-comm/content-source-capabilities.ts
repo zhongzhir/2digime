@@ -2,6 +2,7 @@
  * 极薄内容来源选择：按 requestedContentTypes 调用已有成熟开放能力。
  * 不自建搜索引擎，不 scraper 中心平台，不产出第二套 MediaItem。
  */
+import { parse } from 'node-html-parser';
 import { safePublicHttpGet, type SafePublicHttpGetResult } from '../work-runtime/public-http-safety';
 import {
   consumptionFor,
@@ -249,6 +250,44 @@ function itunesTopHits(endpoint: OpenSourceEndpoint, data: unknown): OpenMediaHi
   return out;
 }
 
+/**
+ * 国内公开视频列表页：扫描公开 HTML 属性里的直链 MP4 与其文章页链接。
+ * 通用属性扫描，不写站点专用正文 selector，不调用平台内部接口。
+ * 仅接受 http(s) 直链 MP4；找不到直链时该条不入池（不伪造直接播放）。
+ */
+export function listingVideoHits(endpoint: OpenSourceEndpoint, html: string): OpenMediaHit[] {
+  const root = parse(html);
+  const out: OpenMediaHit[] = [];
+  const seen = new Set<string>();
+  for (const node of root.querySelectorAll('[video-src],[data-video-src],[node-url],[data-node-url]')) {
+    const rawVideo = String(node.getAttribute('video-src') || node.getAttribute('data-video-src') || '').trim();
+    const rawPage = String(node.getAttribute('node-url') || node.getAttribute('data-node-url') || '').trim();
+    const mediaUrl = asSafe(absUrl(endpoint.url, rawVideo));
+    // Only accept a natively playable progressive container; never a page or HLS/DASH manifest.
+    if (!mediaUrl || !/\.(mp4|m4v|mov|webm|ogv)(\?|$)/i.test(mediaUrl)) continue;
+    const pageUrl = asSafe(absUrl(endpoint.url, rawPage)) || mediaUrl;
+    if (seen.has(mediaUrl)) continue;
+    // 标题来自同节点内链接文本或图片 alt，缺失时退回页面 URL（不臆造标题）。
+    // 相关性由模型在同一候选池内判断，这里不做关键词过滤。
+    const titleText =
+      clipTitle(String(node.querySelector('a')?.text || '').trim()) ||
+      clipTitle(String(node.querySelector('img')?.getAttribute('alt') || '').trim());
+    seen.add(mediaUrl);
+    out.push({
+      title: titleText || clipTitle(pageUrl),
+      url: pageUrl,
+      contentType: 'video',
+      capability: endpoint.id,
+      mediaUrl,
+      mimeType: /\.webm(\?|$)/i.test(mediaUrl) ? 'video/webm' : 'video/mp4',
+      mediaExpression: 'full',
+      snippet: clipText(titleText || pageUrl).slice(0, 400),
+    });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
 function peertubeListUrl(endpoint: OpenSourceEndpoint, query: string): string {
   if (query) return `${endpoint.url}?search=${encodeURIComponent(query)}&count=8&nsfw=false`;
   return `${originOf(endpoint.url)}/api/v1/videos?count=8&nsfw=false`;
@@ -326,6 +365,16 @@ export async function searchOpenMedia(input: {
           if (seen.has(key)) continue;
           seen.add(key);
           out.push(hit);
+        }
+      } else if (endpoint.kind === 'media_listing' && wanted.includes('video')) {
+        const got = await fetchImpl(endpoint.url, { accept: 'text/html, application/xhtml+xml, */*;q=0.1' });
+        if (got.status >= 200 && got.status < 300) {
+          const hits = listingVideoHits(endpoint, got.body || '');
+          for (const hit of hits) {
+            if (seen.has(hit.url)) continue;
+            seen.add(hit.url);
+            out.push(hit);
+          }
         }
       } else if (endpoint.kind === 'itunes_rss' && wanted.includes('audio')) {
         const hits = itunesTopHits(endpoint, await readJson(fetchImpl, endpoint.url));

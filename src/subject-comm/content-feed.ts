@@ -181,11 +181,15 @@ function mediaFromItem(node: unknown): OpenMediaFields | undefined {
   }
   const title = textNode(child(node, ['media:title']));
   const description = textNode(child(node, ['media:description']));
-  return mergeOpenMedia(fromMedia, enclosure, {
+  const itemDuration = parseDurationSeconds(textNode(child(node, ['itunes:duration'])));
+  const merged = mergeOpenMedia(fromMedia, enclosure, {
     ...(thumbnailUrl ? { thumbnailUrl } : {}),
     ...(playerUrl ? { embedUrl: playerUrl } : {}),
     ...(title || description ? { mediaProvenance: fromMedia?.mediaProvenance || enclosure?.mediaProvenance || 'media_rss' } : {}),
   });
+  // Podcast RSS commonly exposes duration only as <itunes:duration>, independent of the enclosure.
+  if (itemDuration != null && merged.durationSeconds == null) merged.durationSeconds = itemDuration;
+  return merged;
 }
 
 function rssLink(node: unknown): string {

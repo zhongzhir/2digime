@@ -7,7 +7,8 @@ export type OpenCatalogKind =
   | 'media_rss'
   | 'wikimedia_commons'
   | 'itunes_podcast'
-  | 'itunes_rss';
+  | 'itunes_rss'
+  | 'media_listing';
 export type OpenCatalogContentType = 'article' | 'video' | 'image' | 'audio';
 
 export interface OpenSourceEndpoint {
@@ -19,6 +20,30 @@ export interface OpenSourceEndpoint {
 }
 
 export const OPEN_SOURCE_CATALOG: OpenSourceEndpoint[] = [
+  // 国内公开视频列表页：页面公开 node-url（文章页）与 video-src（直链 MP4）。
+  // 只读公开 HTML 属性，不调用平台内部接口，不下载/转码媒体。国内可达优先。
+  {
+    id: 'chinanews-video-listing',
+    label: '中国新闻网视频',
+    kind: 'media_listing',
+    url: 'https://www.chinanews.com.cn/shipin/',
+    contentTypes: ['video'],
+  },
+  {
+    id: 'itunes-podcast-search',
+    label: 'iTunes Podcasts',
+    kind: 'itunes_podcast',
+    url: 'https://itunes.apple.com/search',
+    contentTypes: ['audio'],
+  },
+  {
+    id: 'itunes-top-podcasts',
+    label: 'iTunes Top Podcasts',
+    kind: 'itunes_rss',
+    url: 'https://itunes.apple.com/cn/rss/toppodcasts/limit=10/json',
+    contentTypes: ['audio'],
+  },
+  // 兼容保留：海外开放视频/图片来源，非国内默认主力。
   {
     id: 'peertube-framatube-search',
     label: 'Framatube',
@@ -39,20 +64,6 @@ export const OPEN_SOURCE_CATALOG: OpenSourceEndpoint[] = [
     kind: 'wikimedia_commons',
     url: 'https://commons.wikimedia.org/w/api.php',
     contentTypes: ['image', 'video'],
-  },
-  {
-    id: 'itunes-podcast-search',
-    label: 'iTunes Podcasts',
-    kind: 'itunes_podcast',
-    url: 'https://itunes.apple.com/search',
-    contentTypes: ['audio'],
-  },
-  {
-    id: 'itunes-top-podcasts',
-    label: 'iTunes Top Podcasts',
-    kind: 'itunes_rss',
-    url: 'https://itunes.apple.com/cn/rss/toppodcasts/limit=10/json',
-    contentTypes: ['audio'],
   },
 ];
 

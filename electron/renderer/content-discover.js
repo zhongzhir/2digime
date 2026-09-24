@@ -88,11 +88,29 @@
     return map[card.contentType] || '';
   }
 
+  function isNativeMediaUrl(url) {
+    // Chromium plays these containers directly. HLS/DASH (.m3u8/.mpd) are not native.
+    if (!isHttps(url)) return false;
+    if (/\.(m3u8|mpd)(\?|$)/i.test(url)) return false;
+    return /\.(m4v|mov|mp4|ogv|webm|mp3|m4a|aac|ogg|opus|wav|flac)(\?|$)/i.test(url);
+  }
+
+  function isDirectPlayableVideo(card) {
+    if (String(card.contentType || '') !== 'video') return false;
+    if (card.embedUrl) return false;
+    const mime = String(card.mimeType || '').toLowerCase();
+    if (mime.startsWith('video/') && !mime.includes('mpegurl') && !mime.includes('dash')) return true;
+    return isNativeMediaUrl(card.mediaUrl);
+  }
+
   function consumeLabel(card) {
     const type = String(card.contentType || '');
-    if (type === 'video') return '在来源观看';
+    if (type === 'video') {
+      if (isDirectPlayableVideo(card)) return '在来源观看';
+      return '去原平台看';
+    }
     if (type === 'image') return '打开原页';
-    if (type === 'audio') return '在来源收听';
+    if (type === 'audio') return isNativeMediaUrl(card.mediaUrl) ? '在来源收听' : '去原平台听';
     return '阅读原文';
   }
 
@@ -214,7 +232,7 @@
       p.textContent = card.text;
       body.appendChild(p);
     }
-    if (type === 'audio' && isHttps(card.mediaUrl) && card.consumption !== 'OFFICIAL_EMBED') {
+    if (type === 'audio' && card.consumption !== 'OFFICIAL_EMBED' && isNativeMediaUrl(card.mediaUrl)) {
       const audio = document.createElement('audio');
       audio.className = 'content-discover-audio';
       audio.preload = 'metadata';
@@ -230,6 +248,39 @@
         audio.remove();
       });
       body.appendChild(audio);
+    }
+    if (type === 'video' && isDirectPlayableVideo(card)) {
+      // Chromium/Electron plays MP4/WebM natively. HLS/DASH are not native and are
+      // intentionally not faked here; those fall through to embed or external.
+      if (isNativeMediaUrl(card.mediaUrl)) {
+        const video = document.createElement('video');
+        video.className = 'content-discover-video';
+        video.controls = true;
+        video.preload = 'metadata';
+        video.hidden = true;
+        video.setAttribute('playsinline', '');
+        if (isHttps(card.thumbnailUrl)) video.poster = card.thumbnailUrl;
+        video.src = card.mediaUrl;
+        const reveal = () => {
+          video.hidden = false;
+        };
+        video.addEventListener('loadedmetadata', reveal);
+        video.addEventListener('loadeddata', reveal);
+        video.addEventListener('error', () => {
+          video.remove();
+        });
+        body.appendChild(video);
+      }
+    }
+    if (type === 'video' && !isDirectPlayableVideo(card) && isHttps(card.embedUrl)) {
+      // Official/public embed only; sandboxed, no allow-same-origin, never arbitrary HTML.
+      const frame = document.createElement('iframe');
+      frame.className = 'content-discover-embed';
+      frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation');
+      frame.setAttribute('referrerpolicy', 'no-referrer');
+      frame.setAttribute('allow', 'autoplay; fullscreen; encrypted-media');
+      frame.src = card.embedUrl;
+      body.appendChild(frame);
     }
     if (card.reason) {
       const why = document.createElement('p');
@@ -335,6 +386,7 @@
       type,
       (card && card.thumbnailUrl) || '',
       (card && card.mediaUrl) || '',
+      (card && card.embedUrl) || '',
       (card && card.title) || '',
       card && card.sources ? card.sources.length : 0,
       card && card.representation && card.representation.bodyText ? 1 : 0,

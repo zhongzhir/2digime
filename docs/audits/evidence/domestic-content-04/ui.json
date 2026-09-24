@@ -1,0 +1,2426 @@
+{
+  "entry": "real form submit -> renderer seek -> preload IPC -> runtime",
+  "stub": false,
+  "at": "2026-09-24T11:06:22.166Z",
+  "userData": "C:\\Users\\46554\\AppData\\Local\\Temp\\domestic-content-ui-SCilkQ",
+  "rows": [
+    {
+      "key": "A",
+      "query": "今天有什么重要科技新闻？",
+      "ms": 205358,
+      "providers": [
+        {
+          "provider": "gemini",
+          "status": "RATE_LIMITED",
+          "attempted": true,
+          "count": 0,
+          "httpStatus": 429
+        },
+        {
+          "provider": "dashscope",
+          "status": "FAILED",
+          "attempted": true,
+          "count": 0,
+          "httpStatus": 401
+        },
+        {
+          "provider": "managed",
+          "status": "AVAILABLE",
+          "attempted": true,
+          "count": 16
+        }
+      ],
+      "trace": {
+        "query": "今天有什么重要科技新闻？",
+        "topic": "科技",
+        "mode": "consume",
+        "requestedContentTypes": [
+          "news"
+        ],
+        "rawCandidates": 164,
+        "candidateSourceCount": 16,
+        "candidateFeedCount": 152,
+        "candidateSearchCount": 12,
+        "candidateDirectoryCount": 0,
+        "topicMatched": 12,
+        "typeMatched": 11,
+        "primaryContent": 11,
+        "aboutContent": 1,
+        "unrelated": 0,
+        "selected": 11,
+        "visible": 11,
+        "items": [
+          {
+            "contentId": "ni_8551d6f1b85aa97c8659eb8c8cdfdd86ae6ac371",
+            "canonicalUrl": "https://www.ifanr.com/1682002",
+            "title": "5999 起！无需多言｜小米 18 Pro 系列发布会",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "小米18 Pro发布会今日举行，5999元起"
+          },
+          {
+            "contentId": "ni_87250584e56eff40974a0267d4bb0a2dc735c562",
+            "canonicalUrl": "https://www.ifanr.com/1682048",
+            "title": "高通新王牌：个人 AI 时代来了",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "高通骁龙峰会发布个人AI多端平台"
+          },
+          {
+            "contentId": "ni_6f9531213c2d3bd8f450ff251e960299cd9d1640",
+            "canonicalUrl": "https://www.ithome.com/1/006/965.htm",
+            "title": "超 300 台机器人陪你玩：全球首个大规模具身智能主题乐园今日开园",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "全球首个具身智能主题乐园今日开园"
+          },
+          {
+            "contentId": "ni_79137c06bb896698cea9001f1d04d20bae5abc79",
+            "canonicalUrl": "https://www.ithome.com/1/006/915.htm",
+            "title": "我国成功发射遥感四十号 04 组卫星",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "我国成功发射遥感四十号04组卫星"
+          },
+          {
+            "contentId": "ni_b23c51059af763a917de5c0a8308fb5aeb343028",
+            "canonicalUrl": "https://www.ithome.com/1/006/958.htm",
+            "title": "Counterpoint 数据：四足机器人 2026H1 全球出货约 3.5 万台，达 2025 全年 3/4",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "上半年全球四足机器人出货约3.5万台"
+          },
+          {
+            "contentId": "ni_24f5c056110d801ed95fe39ea8be536affb48fb4",
+            "canonicalUrl": "https://www.ifanr.com/1681909",
+            "title": "早报｜iOS27测试版新功能可阻止摇一摇广告/5999起，小米18 Pro发布/宾利发布首款纯电车Torcal，888马力",
+            "contentType": "article",
+            "origin": "search",
+            "fidelity": "ABOUT_CONTENT",
+            "typeMatched": false,
+            "selected": false,
+            "visible": true,
+            "reason": "科技早报汇总今日多条重要科技新闻"
+          },
+          {
+            "contentId": "ni_0dcbd2f2fe898c76c6103fdd74d5a8902bc725d6",
+            "canonicalUrl": "https://www.ithome.com/1/006/898.htm",
+            "title": "28.29%！隆基晶硅电池效率再破世界纪录",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "隆基晶硅电池效率28.29%再破世界纪录"
+          },
+          {
+            "contentId": "ni_8066d5eec818cfa88f5c17db89ac7ad30a99f241",
+            "canonicalUrl": "https://www.ithome.com/1/006/894.htm",
+            "title": "武汉光谷将建 6G 产业试验片区，预计明年建成国内规划规模最大的 6G 综合试验网",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "武汉光谷将建国内最大6G综合试验网"
+          },
+          {
+            "contentId": "ni_6a396f9175b32e1834f810bb6faa9ace821ef156",
+            "canonicalUrl": "https://www.ithome.com/1/006/839.htm",
+            "title": "小米公开 MiMo-V3 核心架构 HySparse2：面向长程多轮 Agent 优化推理效率",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "小米公布MiMo-V3核心架构HySparse2"
+          },
+          {
+            "contentId": "ni_1f7f470e69c0d684998dbd739b7a109e454fcc72",
+            "canonicalUrl": "https://www.ithome.com/1/006/888.htm",
+            "title": "UBI Research：京东方 9 月启动苹果 iPad OLED 面板验证工作",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "京东方启动苹果iPad OLED面板验证"
+          },
+          {
+            "contentId": "ni_6fd0e22e6f4a82a7426ebe5fc279a6230e95b00a",
+            "canonicalUrl": "https://www.ithome.com/1/006/845.htm",
+            "title": "全球首发“会感知、能判断”的中国智能地铁列车亮相柏林",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "中国智能地铁列车全球首发，具身智能应用于轨交"
+          },
+          {
+            "contentId": "ni_111fa8f711450a318da0145a398bd0c2d6010dfd",
+            "canonicalUrl": "https://www.ithome.com/1/006/956.htm",
+            "title": "海外金融巨头 Revolut 推出英国首个线下刷脸支付服务，看镜头笑一笑即可结账",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "英国首个线下刷脸支付服务推出"
+          }
+        ]
+      },
+      "supply": [
+        {
+          "event": "directory/feed",
+          "ms": 4840,
+          "count": 152
+        },
+        {
+          "event": "search",
+          "ms": 2713
+        },
+        {
+          "event": "search",
+          "ms": 693
+        },
+        {
+          "event": "date-resolution",
+          "ms": 15486,
+          "count": 164
+        },
+        {
+          "event": "batch",
+          "ms": 8774,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 5186,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 15055,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 18053,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 4588,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 6324,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 9554,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 13907,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 6377,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 11889,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 7865,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 2350,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 3319,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 5318,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1173,
+          "count": 4
+        },
+        {
+          "event": "batch",
+          "ms": 6120,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 9217,
+          "count": 10
+        },
+        {
+          "event": "merge",
+          "ms": 6665,
+          "count": 10
+        },
+        {
+          "event": "merge",
+          "ms": 13169,
+          "count": 10
+        },
+        {
+          "event": "merge",
+          "ms": 7987,
+          "count": 10
+        },
+        {
+          "event": "merge",
+          "ms": 5227,
+          "count": 4
+        },
+        {
+          "event": "merge-failed",
+          "ms": 20671,
+          "count": 10
+        },
+        {
+          "event": "merge",
+          "ms": 10131,
+          "count": 10
+        },
+        {
+          "event": "merge",
+          "ms": 8144,
+          "count": 10
+        },
+        {
+          "event": "merge",
+          "ms": 9888,
+          "count": 10
+        },
+        {
+          "event": "merge",
+          "ms": 10188,
+          "count": 8
+        },
+        {
+          "event": "merge-failed",
+          "ms": 20490,
+          "count": 10
+        },
+        {
+          "event": "merge",
+          "ms": 17319,
+          "count": 8
+        },
+        {
+          "event": "merge-failed",
+          "ms": 19681,
+          "count": 10
+        },
+        {
+          "event": "merge-failed",
+          "ms": 20151,
+          "count": 10
+        },
+        {
+          "event": "merge",
+          "ms": 2870,
+          "count": 6
+        },
+        {
+          "event": "merge",
+          "ms": 17469,
+          "count": 10
+        },
+        {
+          "event": "merge-failed",
+          "ms": 21087,
+          "count": 10
+        },
+        {
+          "event": "merge",
+          "ms": 1255,
+          "count": 2
+        },
+        {
+          "event": "merge",
+          "ms": 7318,
+          "count": 10
+        },
+        {
+          "event": "merge",
+          "ms": 18856,
+          "count": 10
+        },
+        {
+          "event": "merge",
+          "ms": 2306,
+          "count": 4
+        },
+        {
+          "event": "merge-failed",
+          "ms": 20308,
+          "count": 10
+        },
+        {
+          "event": "selected",
+          "ms": 188483,
+          "count": 12
+        },
+        {
+          "event": "total",
+          "ms": 201998
+        }
+      ],
+      "commandCards": [
+        {
+          "title": "5999 起！无需多言｜小米 18 Pro 系列发布会",
+          "url": "https://www.ifanr.com/1682002",
+          "type": "news",
+          "publishedAt": "2026-09-24T08:30:28.000Z",
+          "originalPublishedAt": "2026-09-24T08:30:28.000Z",
+          "sources": 1
+        },
+        {
+          "title": "高通新王牌：个人 AI 时代来了",
+          "url": "https://www.ifanr.com/1682048",
+          "type": "news",
+          "publishedAt": "2026-09-24T08:08:16.000Z",
+          "originalPublishedAt": "2026-09-24T08:08:16.000Z",
+          "sources": 2
+        },
+        {
+          "title": "超 300 台机器人陪你玩：全球首个大规模具身智能主题乐园今日开园",
+          "url": "https://www.ithome.com/1/006/965.htm",
+          "type": "news",
+          "publishedAt": "2026-09-24T10:08:42.000Z",
+          "sources": 1
+        },
+        {
+          "title": "我国成功发射遥感四十号 04 组卫星",
+          "url": "https://www.ithome.com/1/006/915.htm",
+          "type": "news",
+          "publishedAt": "2026-09-24T09:19:32.000Z",
+          "sources": 1
+        },
+        {
+          "title": "Counterpoint 数据：四足机器人 2026H1 全球出货约 3.5 万台，达 2025 全年 3/4",
+          "url": "https://www.ithome.com/1/006/958.htm",
+          "type": "news",
+          "publishedAt": "2026-09-24T09:57:29.000Z",
+          "sources": 1
+        },
+        {
+          "title": "28.29%！隆基晶硅电池效率再破世界纪录",
+          "url": "https://www.ithome.com/1/006/898.htm",
+          "type": "news",
+          "publishedAt": "2026-09-24T09:09:40.000Z",
+          "sources": 1
+        },
+        {
+          "title": "武汉光谷将建 6G 产业试验片区，预计明年建成国内规划规模最大的 6G 综合试验网",
+          "url": "https://www.ithome.com/1/006/894.htm",
+          "type": "news",
+          "publishedAt": "2026-09-24T09:08:01.000Z",
+          "sources": 1
+        },
+        {
+          "title": "小米公开 MiMo-V3 核心架构 HySparse2：面向长程多轮 Agent 优化推理效率",
+          "url": "https://www.ithome.com/1/006/839.htm",
+          "type": "news",
+          "publishedAt": "2026-09-24T08:28:04.000Z",
+          "sources": 1
+        },
+        {
+          "title": "UBI Research：京东方 9 月启动苹果 iPad OLED 面板验证工作",
+          "url": "https://www.ithome.com/1/006/888.htm",
+          "type": "news",
+          "publishedAt": "2026-09-24T09:02:12.000Z",
+          "sources": 1
+        },
+        {
+          "title": "全球首发“会感知、能判断”的中国智能地铁列车亮相柏林",
+          "url": "https://www.ithome.com/1/006/845.htm",
+          "type": "news",
+          "publishedAt": "2026-09-24T08:37:22.000Z",
+          "sources": 1
+        },
+        {
+          "title": "海外金融巨头 Revolut 推出英国首个线下刷脸支付服务，看镜头笑一笑即可结账",
+          "url": "https://www.ithome.com/1/006/956.htm",
+          "type": "news",
+          "publishedAt": "2026-09-24T09:52:37.000Z",
+          "sources": 1
+        }
+      ],
+      "dom": [
+        {
+          "title": "5999 起！无需多言｜小米 18 Pro 系列发布会",
+          "source": "ifanr · 肖钦鹏 · 原文发布 2026/9/24 16:30:28",
+          "kind": "新闻",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": true,
+          "bodyCharacters": 3567
+        },
+        {
+          "title": "高通新王牌：个人 AI 时代来了",
+          "source": "ifanr · 爱范儿视频 · 原文发布 2026/9/24 16:08:16",
+          "kind": "新闻",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": true,
+          "bodyCharacters": 462
+        },
+        {
+          "title": "超 300 台机器人陪你玩：全球首个大规模具身智能主题乐园今日开园",
+          "source": "IT之家 · Feed 时间 2026/9/24 18:08:42",
+          "kind": "新闻",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": true,
+          "bodyCharacters": 390
+        },
+        {
+          "title": "我国成功发射遥感四十号 04 组卫星",
+          "source": "IT之家 · Feed 时间 2026/9/24 17:19:32",
+          "kind": "新闻",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": true,
+          "bodyCharacters": 303
+        },
+        {
+          "title": "Counterpoint 数据：四足机器人 2026H1 全球出货约 3.5 万台，达 2025 全年 3/4",
+          "source": "IT之家 · Feed 时间 2026/9/24 17:57:29",
+          "kind": "新闻",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": true,
+          "bodyCharacters": 728
+        },
+        {
+          "title": "28.29%！隆基晶硅电池效率再破世界纪录",
+          "source": "IT之家 · Feed 时间 2026/9/24 17:09:40",
+          "kind": "新闻",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": true,
+          "bodyCharacters": 375
+        },
+        {
+          "title": "武汉光谷将建 6G 产业试验片区，预计明年建成国内规划规模最大的 6G 综合试验网",
+          "source": "IT之家 · Feed 时间 2026/9/24 17:08:01",
+          "kind": "新闻",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": true,
+          "bodyCharacters": 495
+        },
+        {
+          "title": "小米公开 MiMo-V3 核心架构 HySparse2：面向长程多轮 Agent 优化推理效率",
+          "source": "IT之家 · Feed 时间 2026/9/24 16:28:04",
+          "kind": "新闻",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": true,
+          "bodyCharacters": 3855
+        },
+        {
+          "title": "UBI Research：京东方 9 月启动苹果 iPad OLED 面板验证工作",
+          "source": "IT之家 · Feed 时间 2026/9/24 17:02:12",
+          "kind": "新闻",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": true,
+          "bodyCharacters": 380
+        },
+        {
+          "title": "全球首发“会感知、能判断”的中国智能地铁列车亮相柏林",
+          "source": "IT之家 · Feed 时间 2026/9/24 16:37:22",
+          "kind": "新闻",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": true,
+          "bodyCharacters": 458
+        },
+        {
+          "title": "海外金融巨头 Revolut 推出英国首个线下刷脸支付服务，看镜头笑一笑即可结账",
+          "source": "IT之家 · Feed 时间 2026/9/24 17:52:37",
+          "kind": "新闻",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": true,
+          "bodyCharacters": 587
+        },
+        {
+          "title": "早报｜iOS27测试版新功能可阻止摇一摇广告/5999起，小米18 Pro发布/宾利发布首款纯电车Torcal，888马力",
+          "source": "爱范儿 · https://www.ifanr.com/author/zhengtingxu · 原文发布 2026/9/24 16:17:26",
+          "kind": "文章",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": true,
+          "bodyCharacters": 9899
+        }
+      ],
+      "notice": ""
+    },
+    {
+      "key": "B",
+      "query": "最近有什么值得看的 AI 深度内容？",
+      "ms": 104201,
+      "providers": [
+        {
+          "provider": "gemini",
+          "status": "RATE_LIMITED",
+          "attempted": true,
+          "count": 0,
+          "httpStatus": 429
+        },
+        {
+          "provider": "dashscope",
+          "status": "FAILED",
+          "attempted": true,
+          "count": 0,
+          "httpStatus": 401
+        },
+        {
+          "provider": "managed",
+          "status": "AVAILABLE",
+          "attempted": true,
+          "count": 16
+        }
+      ],
+      "trace": {
+        "query": "最近有什么值得看的 AI 深度内容？",
+        "topic": "AI",
+        "mode": "consume",
+        "requestedContentTypes": [],
+        "rawCandidates": 177,
+        "candidateSourceCount": 13,
+        "candidateFeedCount": 152,
+        "candidateSearchCount": 13,
+        "candidateDirectoryCount": 12,
+        "topicMatched": 6,
+        "typeMatched": 6,
+        "primaryContent": 6,
+        "aboutContent": 0,
+        "unrelated": 0,
+        "selected": 6,
+        "visible": 6,
+        "items": [
+          {
+            "contentId": "ni_467bf355dac24bdbd1a561f299bc0ac90672d3a9",
+            "canonicalUrl": "https://sv101.fireside.fm/265",
+            "title": "外滩大会线下圆桌｜敢把钱包交给AI吗？聊聊Agent交易爆发前夜的信任基建",
+            "contentType": "audio",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "外滩大会圆桌深聊Agent交易信任基建，可播放"
+          },
+          {
+            "contentId": "ni_6a396f9175b32e1834f810bb6faa9ace821ef156",
+            "canonicalUrl": "https://www.ithome.com/1/006/839.htm",
+            "title": "小米公开 MiMo-V3 核心架构 HySparse2：面向长程多轮 Agent 优化推理效率",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "小米公开MiMo-V3架构，优化长程Agent推理"
+          },
+          {
+            "contentId": "ni_7c0230e666c3fa9689240ae2cf0d60e9b6c5a88e",
+            "canonicalUrl": "https://www.ifanr.com/1681649",
+            "title": "‌​⁣‌‌⁤⁡⁤‬⁡ ​ ‌⁤‬‬⁣​‌⁢​‬⁣‬​​⁤​‬​‬‍​⁤ ⁤​⁢⁣⁢​‍⁡​‬‬ ⁢WorkBuddy 把办公 Agent，做成了人人可搭的「赛博乐高」",
+            "contentType": "article",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "办公Agent平台化，像赛博乐高一样搭建"
+          },
+          {
+            "contentId": "ni_e53ec8ee8723da2f324d7f49a64830d8713456d7",
+            "canonicalUrl": "https://blog.csdn.net/zhengliebin/article/details/164431599",
+            "title": "AI大模型深度分析（2026年9月）：纵向产业链与横向行业全景",
+            "contentType": "article",
+            "origin": "search",
+            "searchQuery": "AI 长文 深度分析 2026年9月",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "9月AI大模型产业链与行业全景深度分析"
+          },
+          {
+            "contentId": "ni_23c69189a39e1f42807c1868f5afa6dc753fff74",
+            "canonicalUrl": "https://blog.csdn.net/yifan99/article/details/166008428",
+            "title": "AI 新闻周报 | 2026年9月14日 — 9月20日",
+            "contentType": "article",
+            "origin": "search",
+            "searchQuery": "AI 长文 深度分析 2026年9月",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "AI新闻周报，梳理一周安全与资本动向"
+          },
+          {
+            "contentId": "seek_165",
+            "canonicalUrl": "https://m.toutiao.com/article/7681471389269885482",
+            "title": "2026年9月AI热点：巨头格局重构，技术落地与合规发展双向提速",
+            "contentType": "article",
+            "origin": "search",
+            "searchQuery": "AI 长文 深度分析 2026年9月",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "9月AI热点：巨头格局重构与合规提速"
+          }
+        ]
+      },
+      "supply": [
+        {
+          "event": "directory/feed",
+          "ms": 4230,
+          "count": 152
+        },
+        {
+          "event": "search",
+          "ms": 2271
+        },
+        {
+          "event": "search",
+          "ms": 866
+        },
+        {
+          "event": "date-resolution",
+          "ms": 14963,
+          "count": 164
+        },
+        {
+          "event": "batch",
+          "ms": 2945,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 3229,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 5222,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 8146,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 15359,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 8045,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 4174,
+          "count": 10
+        },
+        {
+          "event": "batch-failed",
+          "ms": 20306,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 3127,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 11817,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 2663,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 11149,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 6133,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 2467,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 3487,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 3975,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 5978,
+          "count": 4
+        },
+        {
+          "event": "merge",
+          "ms": 8931,
+          "count": 10
+        },
+        {
+          "event": "merge",
+          "ms": 10333,
+          "count": 5
+        },
+        {
+          "event": "merge",
+          "ms": 17085,
+          "count": 10
+        },
+        {
+          "event": "selected",
+          "ms": 85616,
+          "count": 6
+        },
+        {
+          "event": "total",
+          "ms": 99975
+        }
+      ],
+      "commandCards": [
+        {
+          "title": "外滩大会线下圆桌｜敢把钱包交给AI吗？聊聊Agent交易爆发前夜的信任基建",
+          "url": "https://sv101.fireside.fm/265",
+          "type": "audio",
+          "publishedAt": "2026-09-18T00:00:00.000Z",
+          "originalPublishedAt": "2026-09-18T00:00:00.000Z",
+          "sources": 1
+        },
+        {
+          "title": "小米公开 MiMo-V3 核心架构 HySparse2：面向长程多轮 Agent 优化推理效率",
+          "url": "https://www.ithome.com/1/006/839.htm",
+          "type": "news",
+          "publishedAt": "2026-09-24T08:28:04.000Z",
+          "sources": 1
+        },
+        {
+          "title": "‌​⁣‌‌⁤⁡⁤‬⁡ ​ ‌⁤‬‬⁣​‌⁢​‬⁣‬​​⁤​‬​‬‍​⁤ ⁤​⁢⁣⁢​‍⁡​‬‬ ⁢WorkBuddy 把办公 Agent，做成了人人可搭的「赛博乐高」",
+          "url": "https://www.ifanr.com/1681649",
+          "type": "article",
+          "publishedAt": "2026-09-23T09:02:23.000Z",
+          "originalPublishedAt": "2026-09-23T09:02:23.000Z",
+          "sources": 1
+        },
+        {
+          "title": "AI大模型深度分析（2026年9月）：纵向产业链与横向行业全景",
+          "url": "https://blog.csdn.net/zhengliebin/article/details/164431599",
+          "type": "article",
+          "sources": 1
+        },
+        {
+          "title": "AI 新闻周报 | 2026年9月14日 — 9月20日",
+          "url": "https://blog.csdn.net/yifan99/article/details/166008428",
+          "type": "article",
+          "sources": 1
+        },
+        {
+          "title": "2026年9月AI热点：巨头格局重构，技术落地与合规发展双向提速",
+          "url": "https://m.toutiao.com/article/7681471389269885482",
+          "type": "article",
+          "sources": 1
+        }
+      ],
+      "dom": [
+        {
+          "title": "外滩大会线下圆桌｜敢把钱包交给AI吗？聊聊Agent交易爆发前夜的信任基建",
+          "source": "硅谷101 · 原文发布 2026/9/18 08:00:00 · 35:43",
+          "kind": "音频",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": true,
+          "audioDuration": 2144,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": true,
+          "bodyCharacters": 1445
+        },
+        {
+          "title": "小米公开 MiMo-V3 核心架构 HySparse2：面向长程多轮 Agent 优化推理效率",
+          "source": "IT之家 · Feed 时间 2026/9/24 16:28:04",
+          "kind": "新闻",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": true,
+          "bodyCharacters": 3855
+        },
+        {
+          "title": "‌​⁣‌‌⁤⁡⁤‬⁡ ​ ‌⁤‬‬⁣​‌⁢​‬⁣‬​​⁤​‬​‬‍​⁤ ⁤​⁢⁣⁢​‍⁡​‬‬ ⁢WorkBuddy 把办公 Agent，做成了人人可搭的「赛博乐高」",
+          "source": "ifanr · 李超凡 · 原文发布 2026/9/23 17:02:23",
+          "kind": "文章",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": true,
+          "bodyCharacters": 3927
+        },
+        {
+          "title": "AI大模型深度分析（2026年9月）：纵向产业链与横向行业全景",
+          "source": "blog.csdn.net",
+          "kind": "文章",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": false,
+          "bodyCharacters": 0
+        },
+        {
+          "title": "AI 新闻周报 | 2026年9月14日 — 9月20日",
+          "source": "blog.csdn.net",
+          "kind": "文章",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": false,
+          "bodyCharacters": 0
+        },
+        {
+          "title": "2026年9月AI热点：巨头格局重构，技术落地与合规发展双向提速",
+          "source": "m.toutiao.com",
+          "kind": "文章",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": false,
+          "bodyCharacters": 0
+        }
+      ],
+      "notice": ""
+    },
+    {
+      "key": "C",
+      "query": "给我找一些最近值得看的 AI 视频。",
+      "ms": 174783,
+      "providers": [
+        {
+          "provider": "gemini",
+          "status": "RATE_LIMITED",
+          "attempted": true,
+          "count": 0,
+          "httpStatus": 429
+        },
+        {
+          "provider": "dashscope",
+          "status": "FAILED",
+          "attempted": true,
+          "count": 0,
+          "httpStatus": 401
+        },
+        {
+          "provider": "managed",
+          "status": "AVAILABLE",
+          "attempted": true,
+          "count": 16
+        }
+      ],
+      "trace": {
+        "query": "给我找一些最近值得看的 AI 视频。",
+        "topic": "AI",
+        "mode": "consume",
+        "requestedContentTypes": [
+          "video"
+        ],
+        "rawCandidates": 193,
+        "candidateSourceCount": 20,
+        "candidateFeedCount": 152,
+        "candidateSearchCount": 29,
+        "candidateDirectoryCount": 12,
+        "topicMatched": 6,
+        "typeMatched": 0,
+        "primaryContent": 0,
+        "aboutContent": 6,
+        "unrelated": 0,
+        "selected": 0,
+        "visible": 0,
+        "items": [
+          {
+            "contentId": "ni_467bf355dac24bdbd1a561f299bc0ac90672d3a9",
+            "canonicalUrl": "https://sv101.fireside.fm/265",
+            "title": "外滩大会线下圆桌｜敢把钱包交给AI吗？聊聊Agent交易爆发前夜的信任基建",
+            "contentType": "audio",
+            "origin": "search",
+            "fidelity": "ABOUT_CONTENT",
+            "typeMatched": false,
+            "selected": false,
+            "visible": true,
+            "reason": "无AI视频，最相关可播放AI音频"
+          },
+          {
+            "contentId": "ni_87250584e56eff40974a0267d4bb0a2dc735c562",
+            "canonicalUrl": "https://www.ifanr.com/1682048",
+            "title": "高通新王牌：个人 AI 时代来了",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "ABOUT_CONTENT",
+            "typeMatched": false,
+            "selected": false,
+            "visible": true,
+            "reason": "今日高通个人AI新品发布"
+          },
+          {
+            "contentId": "ni_6f9531213c2d3bd8f450ff251e960299cd9d1640",
+            "canonicalUrl": "https://www.ithome.com/1/006/965.htm",
+            "title": "超 300 台机器人陪你玩：全球首个大规模具身智能主题乐园今日开园",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "ABOUT_CONTENT",
+            "typeMatched": false,
+            "selected": false,
+            "visible": true,
+            "reason": "全球首个具身智能主题乐园开园"
+          },
+          {
+            "contentId": "ni_707c05e7da4f6a20efce36170fd7dcbe4cce153b",
+            "canonicalUrl": "https://www.ifanr.com/1681605",
+            "title": "⁡⁤‬‍⁤‬​‌‍⁢⁡⁢⁣‌‌ ⁡⁡​⁤​​ ⁢⁡‬⁡‬​‍⁣​​ ⁤⁡‍​⁡‬‌‬⁣⁡⁣​⁡‬⁤刚刚，GPT-6 新模型掀桌！「白菜价」杀进 DeepSeek 腹地",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "ABOUT_CONTENT",
+            "typeMatched": false,
+            "selected": false,
+            "visible": true,
+            "reason": "GPT-6新模型发布，AI热点"
+          },
+          {
+            "contentId": "ni_b1f5e6e719fd0f5111dfd095cd44f7ecaa497981",
+            "canonicalUrl": "https://www.ifanr.com/1681629",
+            "title": "Claude 5.5 发布，性能直逼 Fable，还要卷价格",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "ABOUT_CONTENT",
+            "typeMatched": false,
+            "selected": false,
+            "visible": true,
+            "reason": "Claude 5.5发布，性能价格竞争"
+          },
+          {
+            "contentId": "ni_6fd0e22e6f4a82a7426ebe5fc279a6230e95b00a",
+            "canonicalUrl": "https://www.ithome.com/1/006/845.htm",
+            "title": "全球首发“会感知、能判断”的中国智能地铁列车亮相柏林",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "ABOUT_CONTENT",
+            "typeMatched": false,
+            "selected": false,
+            "visible": true,
+            "reason": "具身智能地铁全球首发，AI应用"
+          }
+        ]
+      },
+      "supply": [
+        {
+          "event": "directory/feed",
+          "ms": 7127,
+          "count": 152
+        },
+        {
+          "event": "search",
+          "ms": 2146
+        },
+        {
+          "event": "search",
+          "ms": 375
+        },
+        {
+          "event": "date-resolution",
+          "ms": 23014,
+          "count": 181
+        },
+        {
+          "event": "batch",
+          "ms": 2193,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 5243,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 5414,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 9908,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 9065,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 11640,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 10974,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 9156,
+          "count": 10
+        },
+        {
+          "event": "batch-failed",
+          "ms": 20410,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 6573,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 8033,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1498,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 2648,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 3745,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1571,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 5348,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1670,
+          "count": 1
+        },
+        {
+          "event": "batch",
+          "ms": 8453,
+          "count": 10
+        },
+        {
+          "event": "batch-failed",
+          "ms": 19442,
+          "count": 10
+        },
+        {
+          "event": "merge",
+          "ms": 15549,
+          "count": 10
+        },
+        {
+          "event": "merge-failed",
+          "ms": 18755,
+          "count": 10
+        },
+        {
+          "event": "merge",
+          "ms": 9909,
+          "count": 6
+        },
+        {
+          "event": "merge",
+          "ms": 17120,
+          "count": 10
+        },
+        {
+          "event": "merge",
+          "ms": 7924,
+          "count": 2
+        },
+        {
+          "event": "merge",
+          "ms": 15618,
+          "count": 10
+        },
+        {
+          "event": "merge",
+          "ms": 15370,
+          "count": 8
+        },
+        {
+          "event": "selected",
+          "ms": 146152,
+          "count": 6
+        },
+        {
+          "event": "total",
+          "ms": 171330
+        }
+      ],
+      "commandCards": [],
+      "dom": [
+        {
+          "title": "外滩大会线下圆桌｜敢把钱包交给AI吗？聊聊Agent交易爆发前夜的信任基建",
+          "source": "硅谷101 · 原文发布 2026/9/18 08:00:00 · 35:43",
+          "kind": "音频",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": true,
+          "audioDuration": 2144,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": true,
+          "bodyCharacters": 1445
+        },
+        {
+          "title": "高通新王牌：个人 AI 时代来了",
+          "source": "ifanr · 爱范儿视频 · 原文发布 2026/9/24 16:08:16",
+          "kind": "新闻",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": true,
+          "bodyCharacters": 462
+        },
+        {
+          "title": "超 300 台机器人陪你玩：全球首个大规模具身智能主题乐园今日开园",
+          "source": "IT之家 · Feed 时间 2026/9/24 18:08:42",
+          "kind": "新闻",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": true,
+          "bodyCharacters": 390
+        },
+        {
+          "title": "⁡⁤‬‍⁤‬​‌‍⁢⁡⁢⁣‌‌ ⁡⁡​⁤​​ ⁢⁡‬⁡‬​‍⁣​​ ⁤⁡‍​⁡‬‌‬⁣⁡⁣​⁡‬⁤刚刚，GPT-6 新模型掀桌！「白菜价」杀进 DeepSeek 腹地",
+          "source": "ifanr · 莫崇宇 · 原文发布 2026/9/23 10:21:17",
+          "kind": "新闻",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": true,
+          "bodyCharacters": 4485
+        },
+        {
+          "title": "Claude 5.5 发布，性能直逼 Fable，还要卷价格",
+          "source": "ifanr · 莫崇宇 · 原文发布 2026/9/23 10:25:19",
+          "kind": "新闻",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": true,
+          "bodyCharacters": 3979
+        },
+        {
+          "title": "全球首发“会感知、能判断”的中国智能地铁列车亮相柏林",
+          "source": "IT之家 · Feed 时间 2026/9/24 16:37:22",
+          "kind": "新闻",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": true,
+          "bodyCharacters": 458
+        }
+      ],
+      "notice": ""
+    },
+    {
+      "key": "D",
+      "query": "最近有什么值得听的科技/商业音频？",
+      "ms": 183174,
+      "providers": [
+        {
+          "provider": "gemini",
+          "status": "RATE_LIMITED",
+          "attempted": true,
+          "count": 0,
+          "httpStatus": 429
+        },
+        {
+          "provider": "dashscope",
+          "status": "FAILED",
+          "attempted": true,
+          "count": 0,
+          "httpStatus": 401
+        },
+        {
+          "provider": "managed",
+          "status": "AVAILABLE",
+          "attempted": true,
+          "count": 16
+        }
+      ],
+      "trace": {
+        "query": "最近有什么值得听的科技/商业音频？",
+        "topic": "科技商业",
+        "mode": "consume",
+        "requestedContentTypes": [
+          "audio"
+        ],
+        "rawCandidates": 167,
+        "candidateSourceCount": 15,
+        "candidateFeedCount": 152,
+        "candidateSearchCount": 15,
+        "candidateDirectoryCount": 0,
+        "topicMatched": 4,
+        "typeMatched": 4,
+        "primaryContent": 4,
+        "aboutContent": 0,
+        "unrelated": 0,
+        "selected": 4,
+        "visible": 4,
+        "items": [
+          {
+            "contentId": "ni_6398e04c4be8c2f356a14c2eb86eca68fd98efe3",
+            "canonicalUrl": "https://sv101.fireside.fm/266",
+            "title": "E252｜硅谷睡眠外挂：富人的玩具，还是预防医疗的入口？｜对话Eight Sleep创始人",
+            "contentType": "audio",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "今日上线，对话Eight Sleep创始人，科技商业"
+          },
+          {
+            "contentId": "ni_467bf355dac24bdbd1a561f299bc0ac90672d3a9",
+            "canonicalUrl": "https://sv101.fireside.fm/265",
+            "title": "外滩大会线下圆桌｜敢把钱包交给AI吗？聊聊Agent交易爆发前夜的信任基建",
+            "contentType": "audio",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "6天前，聊Agent交易信任基建，科技商业"
+          },
+          {
+            "contentId": "ni_27adaa92378541d404780888416a32b6907c725c",
+            "canonicalUrl": "https://podcasts.apple.com/cn/podcast/%E5%85%A8%E7%90%83%E7%A7%91%E6%8A%80%E9%87%91%E8%9E%8D3%E5%88%86%E9%92%9F/id1896584391",
+            "title": "全球科技金融3分钟",
+            "contentType": "audio",
+            "origin": "search",
+            "searchQuery": "科技 商业 播客 2026年9月",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "科技金融商务播客，近期更新，适合收听"
+          },
+          {
+            "contentId": "ni_f3e2c492e613be4be47b542177c46bf5c7d780b5",
+            "canonicalUrl": "https://podcasts.apple.com/cn/podcast/whats-next-%E7%A7%91%E6%8A%80%E6%97%A9%E7%9F%A5%E9%81%93/id1494812579",
+            "title": "What's Next｜科技早知道",
+            "contentType": "audio",
+            "origin": "search",
+            "searchQuery": "科技 商业 播客 2026年9月",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "AI科研主题科技播客，近期更新"
+          }
+        ]
+      },
+      "supply": [
+        {
+          "event": "directory/feed",
+          "ms": 4018,
+          "count": 152
+        },
+        {
+          "event": "search",
+          "ms": 1709
+        },
+        {
+          "event": "search",
+          "ms": 381
+        },
+        {
+          "event": "date-resolution",
+          "ms": 24199,
+          "count": 167
+        },
+        {
+          "event": "batch",
+          "ms": 1384,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 6294,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 4798,
+          "count": 10
+        },
+        {
+          "event": "batch-failed",
+          "ms": 20527,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 19332,
+          "count": 10
+        },
+        {
+          "event": "batch-failed",
+          "ms": 20678,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 17208,
+          "count": 10
+        },
+        {
+          "event": "batch-failed",
+          "ms": 21572,
+          "count": 10
+        },
+        {
+          "event": "batch-failed",
+          "ms": 22175,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 19608,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 8828,
+          "count": 10
+        },
+        {
+          "event": "batch-failed",
+          "ms": 20796,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 3141,
+          "count": 10
+        },
+        {
+          "event": "batch-failed",
+          "ms": 20673,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 18725,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 16863,
+          "count": 10
+        },
+        {
+          "event": "batch-failed",
+          "ms": 20620,
+          "count": 7
+        },
+        {
+          "event": "merge",
+          "ms": 2434,
+          "count": 2
+        },
+        {
+          "event": "merge",
+          "ms": 3270,
+          "count": 10
+        },
+        {
+          "event": "selected",
+          "ms": 126295,
+          "count": 4
+        },
+        {
+          "event": "total",
+          "ms": 179895
+        }
+      ],
+      "commandCards": [
+        {
+          "title": "E252｜硅谷睡眠外挂：富人的玩具，还是预防医疗的入口？｜对话Eight Sleep创始人",
+          "url": "https://sv101.fireside.fm/266",
+          "type": "audio",
+          "publishedAt": "2026-09-24T00:00:00.000Z",
+          "originalPublishedAt": "2026-09-24T00:00:00.000Z",
+          "sources": 1
+        },
+        {
+          "title": "外滩大会线下圆桌｜敢把钱包交给AI吗？聊聊Agent交易爆发前夜的信任基建",
+          "url": "https://sv101.fireside.fm/265",
+          "type": "audio",
+          "publishedAt": "2026-09-18T00:00:00.000Z",
+          "originalPublishedAt": "2026-09-18T00:00:00.000Z",
+          "sources": 1
+        },
+        {
+          "title": "全球科技金融3分钟",
+          "url": "https://podcasts.apple.com/cn/podcast/%E5%85%A8%E7%90%83%E7%A7%91%E6%8A%80%E9%87%91%E8%9E%8D3%E5%88%86%E9%92%9F/id1896584391",
+          "type": "audio",
+          "sources": 1
+        },
+        {
+          "title": "What's Next｜科技早知道",
+          "url": "https://podcasts.apple.com/cn/podcast/whats-next-%E7%A7%91%E6%8A%80%E6%97%A9%E7%9F%A5%E9%81%93/id1494812579",
+          "type": "audio",
+          "sources": 1
+        }
+      ],
+      "dom": [
+        {
+          "title": "E252｜硅谷睡眠外挂：富人的玩具，还是预防医疗的入口？｜对话Eight Sleep创始人",
+          "source": "硅谷101 · 原文发布 2026/9/24 08:00:00 · 54:32",
+          "kind": "音频",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": true,
+          "audioDuration": 3272,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": true,
+          "bodyCharacters": 2534
+        },
+        {
+          "title": "外滩大会线下圆桌｜敢把钱包交给AI吗？聊聊Agent交易爆发前夜的信任基建",
+          "source": "硅谷101 · 原文发布 2026/9/18 08:00:00 · 35:43",
+          "kind": "音频",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": true,
+          "audioDuration": 2144,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": true,
+          "bodyCharacters": 1445
+        },
+        {
+          "title": "全球科技金融3分钟",
+          "source": "Apple 播客 · 全球科技金融3分钟",
+          "kind": "音频",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": true,
+          "bodyCharacters": 12197
+        },
+        {
+          "title": "What's Next｜科技早知道",
+          "source": "Apple 播客",
+          "kind": "音频",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": true,
+          "bodyCharacters": 3737
+        }
+      ],
+      "notice": ""
+    },
+    {
+      "key": "V1",
+      "query": "给我找几个最近值得看的视频，要能直接播放的。",
+      "ms": 88121,
+      "providers": [
+        {
+          "provider": "gemini",
+          "status": "RATE_LIMITED",
+          "attempted": true,
+          "count": 0,
+          "httpStatus": 429
+        },
+        {
+          "provider": "dashscope",
+          "status": "FAILED",
+          "attempted": true,
+          "count": 0,
+          "httpStatus": 401
+        },
+        {
+          "provider": "managed",
+          "status": "AVAILABLE",
+          "attempted": true,
+          "count": 16
+        }
+      ],
+      "trace": {
+        "query": "给我找几个最近值得看的视频，要能直接播放的。",
+        "topic": "给我找几个最近值得看的视频，要能直接播放的。",
+        "mode": "consume",
+        "requestedContentTypes": [
+          "video"
+        ],
+        "rawCandidates": 136,
+        "candidateSourceCount": 15,
+        "candidateFeedCount": 116,
+        "candidateSearchCount": 20,
+        "candidateDirectoryCount": 0,
+        "topicMatched": 4,
+        "typeMatched": 4,
+        "primaryContent": 4,
+        "aboutContent": 0,
+        "unrelated": 0,
+        "selected": 4,
+        "visible": 4,
+        "items": [
+          {
+            "contentId": "ni_d64cf2c80a9cf9d93ddf2d9dc60f29f5e225c536",
+            "canonicalUrl": "https://www.chinanews.com.cn/sh/shipin/2026/09-23/news1069857.shtml",
+            "title": "【循着节气看山河】秋分：稻香果熟时 愿你收获满",
+            "contentType": "video",
+            "origin": "search",
+            "searchQuery": "精选视频 2026年9月",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "秋分主题短视频，直接可播放"
+          },
+          {
+            "contentId": "ni_f2982a40bed0d0648bb82f375dfabed2492afeec",
+            "canonicalUrl": "https://www.chinanews.com.cn/hr/shipin/2026/09-23/news1069887.shtml",
+            "title": "同心坐标｜一把刻着“为国增光”的龙泉剑，为何送给了陈嘉庚？",
+            "contentType": "video",
+            "origin": "search",
+            "searchQuery": "精选视频 2026年9月",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "历史故事短视频，直接可播放"
+          },
+          {
+            "contentId": "ni_44b008ad648367221c7b7a21b8a2b9ea8d361404",
+            "canonicalUrl": "https://www.chinanews.com.cn/sh/shipin/2026/09-23/news1069850.shtml",
+            "title": "青春华章｜什么是科学家精神？他们给出答案",
+            "contentType": "video",
+            "origin": "search",
+            "searchQuery": "精选视频 2026年9月",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "科学家精神短视频，直接可播放"
+          },
+          {
+            "contentId": "ni_247f8d828bcada599869088054cb7d13147107f7",
+            "canonicalUrl": "https://www.chinanews.com.cn/sh/shipin/cns/2026/09-23/news1069889.shtml",
+            "title": "新疆女孩地道河南话出圈：一口乡音连两地 市井烟火话团结",
+            "contentType": "video",
+            "origin": "search",
+            "searchQuery": "精选视频 2026年9月",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "新疆女孩乡音短视频，直接可播放"
+          }
+        ]
+      },
+      "supply": [
+        {
+          "event": "directory/feed",
+          "ms": 8112,
+          "count": 116
+        },
+        {
+          "event": "search",
+          "ms": 2567
+        },
+        {
+          "event": "search",
+          "ms": 768
+        },
+        {
+          "event": "date-resolution",
+          "ms": 17599,
+          "count": 135
+        },
+        {
+          "event": "batch",
+          "ms": 2384,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 2783,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 4767,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 2466,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 3989,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 3532,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 3365,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 5314,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 2507,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 3583,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 2776,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 5643,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 18535,
+          "count": 5
+        },
+        {
+          "event": "batch-failed",
+          "ms": 19601,
+          "count": 10
+        },
+        {
+          "event": "merge",
+          "ms": 6521,
+          "count": 9
+        },
+        {
+          "event": "selected",
+          "ms": 57043,
+          "count": 4
+        },
+        {
+          "event": "total",
+          "ms": 84117
+        }
+      ],
+      "commandCards": [
+        {
+          "title": "【循着节气看山河】秋分：稻香果熟时 愿你收获满",
+          "url": "https://www.chinanews.com.cn/sh/shipin/2026/09-23/news1069857.shtml",
+          "type": "video",
+          "sources": 1
+        },
+        {
+          "title": "同心坐标｜一把刻着“为国增光”的龙泉剑，为何送给了陈嘉庚？",
+          "url": "https://www.chinanews.com.cn/hr/shipin/2026/09-23/news1069887.shtml",
+          "type": "video",
+          "sources": 1
+        },
+        {
+          "title": "青春华章｜什么是科学家精神？他们给出答案",
+          "url": "https://www.chinanews.com.cn/sh/shipin/2026/09-23/news1069850.shtml",
+          "type": "video",
+          "sources": 1
+        },
+        {
+          "title": "新疆女孩地道河南话出圈：一口乡音连两地 市井烟火话团结",
+          "url": "https://www.chinanews.com.cn/sh/shipin/cns/2026/09-23/news1069889.shtml",
+          "type": "video",
+          "sources": 1
+        }
+      ],
+      "dom": [
+        {
+          "title": "【循着节气看山河】秋分：稻香果熟时 愿你收获满",
+          "source": "chinanews.com.cn · chinanews",
+          "kind": "视频",
+          "videoTag": true,
+          "videoSrc": "https://poss-videocloud.cns.com.cn/oss/2026/09/21/chinanews/MEIZI_YUNSHI/onair/A70CD4E01C704DCF975533971EA71108.mp4",
+          "videoDuration": 44,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": false,
+          "bodyCharacters": 0
+        },
+        {
+          "title": "同心坐标｜一把刻着“为国增光”的龙泉剑，为何送给了陈嘉庚？",
+          "source": "chinanews.com.cn · chinanews",
+          "kind": "视频",
+          "videoTag": true,
+          "videoSrc": "https://v-oss.cnsimg.net/cspimp/2026/09/21/0320aed9-a197-41e1-b326-866cb91f5df7.mp4",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": false,
+          "bodyCharacters": 0
+        },
+        {
+          "title": "青春华章｜什么是科学家精神？他们给出答案",
+          "source": "chinanews.com.cn · chinanews",
+          "kind": "视频",
+          "videoTag": true,
+          "videoSrc": "https://v-oss.cnsimg.net/cspimp/2026/09/22/281083ed-4805-4aaa-82e9-b11e8d8161ea.mp4",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": false,
+          "bodyCharacters": 0
+        },
+        {
+          "title": "新疆女孩地道河南话出圈：一口乡音连两地 市井烟火话团结",
+          "source": "chinanews.com.cn · chinanews",
+          "kind": "视频",
+          "videoTag": true,
+          "videoSrc": "https://poss-videocloud.cns.com.cn/oss/2026/09/23/chinanews/MEIZI_YUNSHI/onair/B3E8D001D0704470B50CF6F7B47D5F63.mp4",
+          "videoDuration": 314,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": false,
+          "embedSrc": "",
+          "reader": false,
+          "bodyCharacters": 0
+        }
+      ],
+      "notice": ""
+    },
+    {
+      "key": "V2",
+      "query": "给我找一些国外开源社区或 Blender 相关的视频。",
+      "ms": 120476,
+      "providers": [
+        {
+          "provider": "gemini",
+          "status": "RATE_LIMITED",
+          "attempted": true,
+          "count": 0,
+          "httpStatus": 429
+        },
+        {
+          "provider": "dashscope",
+          "status": "FAILED",
+          "attempted": true,
+          "count": 0,
+          "httpStatus": 401
+        },
+        {
+          "provider": "managed",
+          "status": "AVAILABLE",
+          "attempted": true,
+          "count": 16
+        }
+      ],
+      "trace": {
+        "query": "给我找一些国外开源社区或 Blender 相关的视频。",
+        "topic": "Blender 与开源社区",
+        "mode": "consume",
+        "requestedContentTypes": [
+          "video"
+        ],
+        "rawCandidates": 184,
+        "candidateSourceCount": 21,
+        "candidateFeedCount": 152,
+        "candidateSearchCount": 32,
+        "candidateDirectoryCount": 0,
+        "topicMatched": 6,
+        "typeMatched": 6,
+        "primaryContent": 6,
+        "aboutContent": 0,
+        "unrelated": 0,
+        "selected": 6,
+        "visible": 6,
+        "items": [
+          {
+            "contentId": "ni_327fb7d8f7ac12e0d8a9fb56548621b8d27d5c47",
+            "canonicalUrl": "https://video.blender.org/videos/watch/90fd324b-9adb-4167-b8d4-7d0faa65422a",
+            "title": "Mapping Pipelines Lessons from Three Open Source Studios — Blender Conference 2025",
+            "contentType": "video",
+            "origin": "search",
+            "searchQuery": "Blender open source community talk video",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "Blender大会2025开源工作室管线分享视频"
+          },
+          {
+            "contentId": "ni_4327e90c691e30263ed99efdcec30043624f50f2",
+            "canonicalUrl": "https://video.blender.org/videos/watch/5bc7112a-09a8-43e6-b561-b3a294f9e1eb",
+            "title": "Co-Creating 3D Data Animations With Code — BCON26",
+            "contentType": "video",
+            "origin": "search",
+            "searchQuery": "Blender Conference talk video",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "Blender大会2026用代码共创3D数据动画"
+          },
+          {
+            "contentId": "ni_48c01a55cebd01c2b4b7a52a3f3e6e315f246730",
+            "canonicalUrl": "https://video.blender.org/videos/watch/21514a83-ee1b-4e90-86af-49c5bc0d5175",
+            "title": "3D Nebulae and the Power of the Blender Community - Gleb Alexandrov",
+            "contentType": "video",
+            "origin": "search",
+            "searchQuery": "Blender open source community talk video",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "Blender社区力量与3D星云讲座视频"
+          },
+          {
+            "contentId": "ni_abc28dd64b5cb8d8c0836cec7d752d9aa35da7bd",
+            "canonicalUrl": "https://video.blender.org/videos/watch/6b3d78bd-8cbb-4ef2-b0d1-e7040041246f",
+            "title": "Blender Italia Community Meeting - Part 1",
+            "contentType": "video",
+            "origin": "search",
+            "searchQuery": "Blender open source community talk video",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "Blender意大利社区会议视频"
+          },
+          {
+            "contentId": "ni_a69f1d681e3c0fb2d54c2833776504b94828b403",
+            "canonicalUrl": "https://video.blender.org/videos/watch/2530424a-ba77-4e0e-bee7-77045fec4276",
+            "title": "Lightning Talks – Blender Conference 2018 Open Stage",
+            "contentType": "video",
+            "origin": "search",
+            "searchQuery": "Blender Conference talk video",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "Blender大会2018闪电演讲视频"
+          },
+          {
+            "contentId": "ni_2e9c1179f37ec52f038f485f58785f13adc7166f",
+            "canonicalUrl": "https://peertube.opencloud.lu/videos/watch/16425fe1-ddc7-4721-b3d5-e11f6e181363",
+            "title": "Governing the Open-Source Community: Challenges in an Evolving Landscape",
+            "contentType": "video",
+            "origin": "search",
+            "searchQuery": "Blender open source community talk video",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "开源社区治理主题视频"
+          }
+        ]
+      },
+      "supply": [
+        {
+          "event": "directory/feed",
+          "ms": 3954,
+          "count": 152
+        },
+        {
+          "event": "search",
+          "ms": 1429
+        },
+        {
+          "event": "search",
+          "ms": 352
+        },
+        {
+          "event": "date-resolution",
+          "ms": 18311,
+          "count": 184
+        },
+        {
+          "event": "batch",
+          "ms": 1089,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1464,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1765,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1532,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1742,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1473,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 2287,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1718,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1016,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 2051,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 7164,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1228,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 2299,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 2189,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 8613,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 8449,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 11146,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 7589,
+          "count": 4
+        },
+        {
+          "event": "batch",
+          "ms": 18060,
+          "count": 10
+        },
+        {
+          "event": "merge",
+          "ms": 12022,
+          "count": 10
+        },
+        {
+          "event": "merge",
+          "ms": 16651,
+          "count": 7
+        },
+        {
+          "event": "merge",
+          "ms": 10379,
+          "count": 2
+        },
+        {
+          "event": "merge",
+          "ms": 15049,
+          "count": 10
+        },
+        {
+          "event": "merge",
+          "ms": 10635,
+          "count": 8
+        },
+        {
+          "event": "selected",
+          "ms": 95950,
+          "count": 6
+        },
+        {
+          "event": "total",
+          "ms": 116893
+        }
+      ],
+      "commandCards": [
+        {
+          "title": "Mapping Pipelines Lessons from Three Open Source Studios — Blender Conference 2025",
+          "url": "https://video.blender.org/videos/watch/90fd324b-9adb-4167-b8d4-7d0faa65422a",
+          "type": "video",
+          "sources": 4
+        },
+        {
+          "title": "Co-Creating 3D Data Animations With Code — BCON26",
+          "url": "https://video.blender.org/videos/watch/5bc7112a-09a8-43e6-b561-b3a294f9e1eb",
+          "type": "video",
+          "sources": 1
+        },
+        {
+          "title": "3D Nebulae and the Power of the Blender Community - Gleb Alexandrov",
+          "url": "https://video.blender.org/videos/watch/21514a83-ee1b-4e90-86af-49c5bc0d5175",
+          "type": "video",
+          "sources": 1
+        },
+        {
+          "title": "Blender Italia Community Meeting - Part 1",
+          "url": "https://video.blender.org/videos/watch/6b3d78bd-8cbb-4ef2-b0d1-e7040041246f",
+          "type": "video",
+          "sources": 3
+        },
+        {
+          "title": "Lightning Talks – Blender Conference 2018 Open Stage",
+          "url": "https://video.blender.org/videos/watch/2530424a-ba77-4e0e-bee7-77045fec4276",
+          "type": "video",
+          "sources": 1
+        },
+        {
+          "title": "Governing the Open-Source Community: Challenges in an Evolving Landscape",
+          "url": "https://peertube.opencloud.lu/videos/watch/16425fe1-ddc7-4721-b3d5-e11f6e181363",
+          "type": "video",
+          "publishedAt": "2025-12-01T06:44:17.000Z",
+          "originalPublishedAt": "2025-12-01T06:44:17.000Z",
+          "sources": 1
+        }
+      ],
+      "dom": [
+        {
+          "title": "Mapping Pipelines Lessons from Three Open Source Studios — Blender Conference 2025",
+          "source": "video.blender.org · Blender · 48:59",
+          "kind": "视频",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": true,
+          "embedSrc": "https://framatube.org/videos/embed/iUqB5jWpPMpPRABfKxTyKC",
+          "reader": false,
+          "bodyCharacters": 0
+        },
+        {
+          "title": "Co-Creating 3D Data Animations With Code — BCON26",
+          "source": "video.blender.org · Blender · 30:38",
+          "kind": "视频",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": true,
+          "embedSrc": "https://framatube.org/videos/embed/ckjvRPQY6Ld8K9ML1nUwAg",
+          "reader": false,
+          "bodyCharacters": 0
+        },
+        {
+          "title": "3D Nebulae and the Power of the Blender Community - Gleb Alexandrov",
+          "source": "video.blender.org · Blender · 36:10",
+          "kind": "视频",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": true,
+          "embedSrc": "https://framatube.org/videos/embed/57C9hvvtBT72Vo2qf52uAH",
+          "reader": false,
+          "bodyCharacters": 0
+        },
+        {
+          "title": "Blender Italia Community Meeting - Part 1",
+          "source": "video.blender.org · Blender · 31:15",
+          "kind": "视频",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": true,
+          "embedSrc": "https://framatube.org/videos/embed/ef4EmdbEm13sqwhuz4fNUP",
+          "reader": false,
+          "bodyCharacters": 0
+        },
+        {
+          "title": "Lightning Talks – Blender Conference 2018 Open Stage",
+          "source": "video.blender.org · Blender · 78:24",
+          "kind": "视频",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": true,
+          "embedSrc": "https://framatube.org/videos/embed/5Am9x53HcdjukA3VyiET1b",
+          "reader": false,
+          "bodyCharacters": 0
+        },
+        {
+          "title": "Governing the Open-Source Community: Challenges in an Evolving Landscape",
+          "source": "PeerTube Luxembourg · Open Source Conference Luxembourg 2025 · 原文发布 2025/12/1 14:44:17 · 27:46",
+          "kind": "视频",
+          "videoTag": false,
+          "videoSrc": "",
+          "videoDuration": null,
+          "audioTag": false,
+          "audioDuration": null,
+          "embedTag": true,
+          "embedSrc": "https://framatube.org/videos/embed/3KqwxMFN56x8M3HFgHgck2",
+          "reader": false,
+          "bodyCharacters": 0
+        }
+      ],
+      "notice": ""
+    }
+  ]
+}

@@ -73,6 +73,12 @@ export interface IngestSourceInput {
   enrich?: ContentEnricher;
   fetchImpl?: typeof safePublicHttpGet;
   via?: NetworkItemDiscoveryVia;
+  /**
+   * Optional canonical-URL → parsed feed item map carrying an enclosure/media representation
+   * (e.g. podcast MP3, Media RSS video). Used only for the Feed body path, whose lightweight
+   * parser does not read media tags; the rich parser stays the single source of media fields.
+   */
+  mediaByUrl?: Map<string, ParsedFeedItem>;
 }
 
 function xmlUnescape(raw: string): string {
@@ -364,6 +370,19 @@ export async function ingestSource(input: IngestSourceInput): Promise<{
   const parsed = looksFeed
     ? parseFeed(body)
     : { sourceTitle: clipTitle(parsePageMetadata(body, fetched.finalUrl).publisher || new URL(fetched.finalUrl).hostname), items: [parseHtmlPreview(body, fetched.finalUrl)] };
+  if (looksFeed && input.mediaByUrl?.size) {
+    for (const item of parsed.items) {
+      if (item.media && Object.keys(item.media).length) continue;
+      let canonical = '';
+      try {
+        canonical = normalizeCanonicalUrl(item.url);
+      } catch {
+        continue;
+      }
+      const rich = input.mediaByUrl.get(canonical);
+      if (rich?.media && Object.keys(rich.media).length) item.media = rich.media;
+    }
+  }
   if (!looksFeed) {
     const preview = parsed.items[0];
     const meta = parsePageMetadata(body, fetched.finalUrl);

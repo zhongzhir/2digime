@@ -1,0 +1,78 @@
+{
+  "at": "2026-09-24T10:48:53.284Z",
+  "rows": [
+    {
+      "site": "chinanews.com.cn",
+      "url": "https://www.chinanews.com.cn/txy/2026/09-24/10703202.shtml",
+      "title": "车间里的“石榴籽”班组：同心共进绽放劳动光彩",
+      "contentType": null,
+      "bodyCharacters": 915,
+      "parse": "readability",
+      "publishedAt": "2026-09-24T10:46:24.000Z",
+      "originalPublishedAt": null,
+      "sourceFeedTimestamp": "2026-09-24T10:46:24.000Z",
+      "provenance": {
+        "feed": "https://www.chinanews.com.cn/rss/scroll-news.xml"
+      }
+    },
+    {
+      "site": "ithome.com",
+      "url": "https://www.ithome.com/1/006/980.htm",
+      "title": "比亚迪第二代海鸥座舱草图公布，采用最新设计语言",
+      "contentType": null,
+      "bodyCharacters": 489,
+      "parse": "readability",
+      "publishedAt": "2026-09-24T10:41:26.000Z",
+      "originalPublishedAt": null,
+      "sourceFeedTimestamp": "2026-09-24T10:41:26.000Z",
+      "provenance": {
+        "feed": "https://www.ithome.com/rss/"
+      }
+    },
+    {
+      "site": "sspai.com",
+      "url": "https://sspai.com/post/114954",
+      "title": "新玩意 252｜少数派的编辑们最近买了啥？",
+      "contentType": null,
+      "bodyCharacters": 6942,
+      "parse": "readability",
+      "publishedAt": "2026-09-24T09:30:00.000Z",
+      "originalPublishedAt": "2026-09-24T09:30:00.000Z",
+      "sourceFeedTimestamp": "2026-09-24T09:30:00.000Z",
+      "provenance": {
+        "feed": "https://sspai.com/feed",
+        "original": "https://sspai.com/post/114954#datePublished"
+      }
+    },
+    {
+      "site": "ifanr.com",
+      "url": "https://www.ifanr.com/1682109",
+      "title": "00 后开发者，给我安利了这几个超好用的鸿蒙新能力",
+      "contentType": null,
+      "bodyCharacters": 461,
+      "parse": "readability",
+      "publishedAt": "2026-09-24T09:58:12.000Z",
+      "originalPublishedAt": "2026-09-24T09:58:12.000Z",
+      "sourceFeedTimestamp": "2026-09-24T09:58:12.000Z",
+      "provenance": {
+        "feed": "https://www.ifanr.com/feed",
+        "original": "https://www.ifanr.com/1682109#datePublished",
+        "updated": "https://www.ifanr.com/1682109#dateModified"
+      }
+    },
+    {
+      "site": "gcores.com",
+      "url": "https://www.gcores.com/articles/220191",
+      "title": "我那随叫随到的满级队友，和那些藏在游戏设备里的避风港",
+      "contentType": null,
+      "bodyCharacters": 2431,
+      "parse": "readability",
+      "publishedAt": "2026-09-24T10:09:54.000Z",
+      "originalPublishedAt": null,
+      "sourceFeedTimestamp": "2026-09-24T10:09:54.000Z",
+      "provenance": {
+        "feed": "https://www.gcores.com/rss"
+      }
+    }
+  ]
+}

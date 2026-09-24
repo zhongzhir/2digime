@@ -121,12 +121,15 @@ export function parseDurationSeconds(raw: unknown): number | undefined {
     const total = days * 86400 + hours * 3600 + minutes * 60 + seconds;
     if (total >= 0) return Math.min(Math.round(total), 7 * 24 * 3600);
   }
+  // Media convention: "H:MM:SS" when three parts, but a bare "M:SS" when two.
+  // Podcast apps, players and Media RSS all read "58:12" as 58 min 12 s, not 58 h 12 m.
   const clock = /^(\d+):([0-5]?\d)(?::([0-5]?\d))?$/.exec(text);
   if (clock) {
-    const h = Number(clock[1]);
-    const m = Number(clock[2]);
-    const s = Number(clock[3] || 0);
-    return Math.min(h * 3600 + m * 60 + s, 7 * 24 * 3600);
+    const first = Number(clock[1]);
+    const second = Number(clock[2]);
+    const third = clock[3];
+    const total = third == null ? first * 60 + second : first * 3600 + second * 60 + Number(third);
+    return Math.min(total, 7 * 24 * 3600);
   }
   return undefined;
 }

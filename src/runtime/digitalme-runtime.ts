@@ -849,6 +849,8 @@ export class DigitalMeRuntime {
         items,
         intent,
         ingestHit,
+        ...(openMedia ? { fetchOpenMedia: openMedia } : {}),
+        putNetworkItem: async (item: NetworkItem) => { await store.put(item); },
         ...(chatCompleteFn && model ? { chatComplete: chatCompleteFn, model } : {}),
       };
       // Same local model and Digital Self; no Relay personalization or second profile.
@@ -991,7 +993,9 @@ export class DigitalMeRuntime {
     if (this.options.contentOpenMediaFetch === false) return undefined;
     if (this.options.contentOpenMediaFetch) return this.options.contentOpenMediaFetch;
     if (process.env.NODE_TEST_CONTEXT) return undefined;
-    return undefined; // Overseas catalogs remain opt-in through contentOpenMediaFetch.
+    // Domestic open-media listing is a first-class default source; overseas catalogs stay
+    // compatible but are ordered after it and capped. Public HTML/JSON only, no media hosting.
+    return safePublicHttpGet;
   }
 
   private wrapContentSearch(

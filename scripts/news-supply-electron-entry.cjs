@@ -4,7 +4,10 @@
 const path = require('node:path');
 const os = require('node:os');
 const fs = require('node:fs');
-const evidenceDir = process.env.NEWS_RELIABILITY === '1' ? 'build/evidence/news-reliability-03' : 'build/evidence/news-supply-live-gate-02';
+const evidenceDir = process.env.DOMESTIC_CONTENT === '1' ? 'build/evidence/domestic-content-04'
+  : process.env.NEWS_RELIABILITY === '1' ? 'build/evidence/news-reliability-03'
+  : 'build/evidence/news-supply-live-gate-02';
+const ACCEPTANCE = process.env.DOMESTIC_CONTENT === '1' || process.env.NEWS_RELIABILITY === '1';
 const evidencePath = path.resolve(evidenceDir, 'model.jsonl');
 fs.mkdirSync(path.dirname(evidencePath), { recursive: true });
 const http = require('../dist/infrastructure/model-http');
@@ -37,7 +40,9 @@ http.chatComplete = async (options) => {
 const { readRuntimeModelCredential, createEnvSecretAccessor } = require('../dist/infrastructure/env-secrets');
 const bootstrap = require('../electron/bootstrap-secrets.cjs');
 bootstrap.resolveModelConfig = async ({ userDataPath, isPackaged }) => {
-  if (isPackaged || !path.resolve(userDataPath).startsWith(path.join(os.tmpdir(), 'news-supply-ui-'))) {
+  const isolatedPrefixes = ['news-supply-ui-', 'domestic-content-ui-'];
+  const isolated = isolatedPrefixes.some((prefix) => path.resolve(userDataPath).startsWith(path.join(os.tmpdir(), prefix)));
+  if (isPackaged || !isolated) {
     throw new Error('Isolated acceptance directory required');
   }
   const credential = await readRuntimeModelCredential(process.cwd(), {
@@ -55,7 +60,7 @@ bootstrap.resolveModelConfig = async ({ userDataPath, isPackaged }) => {
     modelMeta: { model, baseUrlHost: 'api.deepseek.com', source: 'existing_readonly_runtime_credential' },
   };
 };
-if (process.env.NEWS_RELIABILITY === '1') {
+if (ACCEPTANCE) {
   const commands = require('../dist/runtime/command-bus');
   const create = commands.createCommandBus;
   commands.createCommandBus = (...args) => {
