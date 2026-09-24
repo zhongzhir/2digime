@@ -17,6 +17,8 @@ export interface ParsedFeedItem {
   title: string;
   url: string;
   text: string;
+  bodyText?: string;
+  updatedAt?: string;
   publishedAt?: string | undefined;
   author?: string | undefined;
   media?: OpenMediaFields | undefined;
@@ -232,6 +234,8 @@ export function parseXmlFeed(xml: string): ParsedFeed | null {
         title: clipTitle(textNode(child(node, ['title'])) || media?.mediaUrl || ''),
         url: rssLink(node),
         text: clipText(textNode(child(node, ['description', 'summary', 'content:encoded'])) || textNode(child(node, ['media:description'])) || ''),
+        ...(textNode(child(node, ['content:encoded'])) ? { bodyText: textNode(child(node, ['content:encoded'])).slice(0,100000) } : {}),
+        ...(textNode(child(node, ['updated'])) ? {updatedAt:textNode(child(node, ['updated']))} : {}),
         ...(textNode(child(node, ['pubDate', 'published', 'updated', 'dc:date']))
           ? { publishedAt: textNode(child(node, ['pubDate', 'published', 'updated', 'dc:date'])) }
           : {}),
@@ -250,6 +254,8 @@ export function parseXmlFeed(xml: string): ParsedFeed | null {
         title: clipTitle(textNode(child(node, ['title'])) || ''),
         url: atomLink(node),
         text: clipText(textNode(child(node, ['summary', 'content'])) || ''),
+        ...(textNode(child(node, ['content'])) ? { bodyText: textNode(child(node, ['content'])).slice(0,100000) } : {}),
+        ...(textNode(child(node, ['updated'])) ? {updatedAt:textNode(child(node, ['updated']))} : {}),
         ...(textNode(child(node, ['published', 'updated'])) ? { publishedAt: textNode(child(node, ['published', 'updated'])) } : {}),
         ...(authorName(node) ? { author: authorName(node) } : {}),
         ...(media && Object.keys(media).length ? { media } : {}),
@@ -309,6 +315,8 @@ export function parseJsonFeed(body: string): ParsedFeed | { error: 'malformed_js
       title: clipTitle(String(item.title || url)),
       url,
       text: clipText(String(item.summary || item.content_text || item.content_html || item.title || url)),
+      ...(item.content_text || item.content_html ? { bodyText: String(item.content_text || item.content_html).slice(0,100000) } : {}),
+      ...(item.date_modified ? {updatedAt:String(item.date_modified)} : {}),
       ...(item.date_published ? { publishedAt: String(item.date_published) } : {}),
       ...(authors ? { author: clipTitle(authors).slice(0, 120) } : {}),
       ...(Object.keys(media).length ? { media } : {}),

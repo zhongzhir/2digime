@@ -41,7 +41,7 @@ const PAGE_ROLES = new Set<string>([
   'UNRELATED',
 ]);
 
-const MEDIA_TYPES = new Set(['article', 'video', 'image', 'audio']);
+const MEDIA_TYPES = new Set(['news', 'article', 'video', 'image', 'audio']);
 
 export interface ConsumableCandidate {
   id: string;
@@ -152,7 +152,7 @@ export async function interpretDiscoverIntent(input: {
     '只输出 JSON，字段：mode, topic, requestedContentTypes, objectWanted, freshness, popularityClaim, searchQueries, suggestTalk。',
     'mode: consume 或 research。发现的强默认是 consume（看/听/读），不是做研究任务。',
     'topic: 用户这次要的主题短词，不要整句。例如「找几个 AI 视频看看」的 topic 是 AI。',
-    'requestedContentTypes: 只允许 article / video / image / audio。点名要看视频→["video"]；要图/摄影作品→["image"]；要听/播客→["audio"]；要读文章→["article"]。说「内容」且未点名媒介→[]。',
+    'requestedContentTypes: 只允许 news / article / video / image / audio。新闻消息用 news，普通文章用 article，未点名媒介用 []。新闻可为 consume，不必当研究材料。',
     '例子：「最近值得看的 AI 内容」→ topic:AI, requestedContentTypes:[]；「找几个 AI 视频看看」→ ["video"]；「找一些航天摄影作品」→ ["image"]；「给我听点科技播客」→ ["audio"]。',
     'objectWanted: primary_content（要作品/正文本身）/ commentary（要报道、盘点、行业分析）/ mixed。',
     'freshness: current / classic / unspecified。',
@@ -160,7 +160,8 @@ export async function interpretDiscoverIntent(input: {
     'searchQueries: 1 到 3 条发给公开搜索和开放目录的检索词，不要照抄用户整句。必须留在这次的 topic 与 requestedContentTypes 内。',
     '若 requestedContentTypes 含 image/video/audio：词应是对应开放目录实际用来找作品本身的常用检索写法；需要时可包含该主题在目录里常见的其它语种名称。不要写排行榜、盘点、新闻。',
     '不要把当前搜索扩写成用户平时可能喜欢的其它主题。不要加入这次没要求的相邻领域。',
-    '若 mode=consume：搜索词指向具体可消费对象本身，不要去搜排行榜、行业新闻、十大盘点，除非用户明确要这些。',
+    '若 mode=consume：搜索词指向具体可消费对象本身；新闻请求必须搜索新闻与明确时间范围。',
+    `当前时间：${new Date().toISOString()}，用户时区：${Intl.DateTimeFormat().resolvedOptions().timeZone}。今天/最近须在搜索词保留日期范围。`,
     'suggestTalk: 若更适合在「与兔机米」里深入分析则为 true。',
     '不要使用数字之我、长期偏好或最近浏览去扩大范围。不要输出 score。不要编造播放量。',
   ].join('\n');
@@ -252,7 +253,7 @@ export function objectFidelity(role: ContentPageRole | undefined, intent?: Disco
 export function strictRequestedTypes(intent: DiscoverIntent): string[] {
   if (intent.intent !== 'consume') return [];
   return intent.requestedMedia.filter(
-    (row) => row === 'article' || row === 'video' || row === 'audio' || row === 'image',
+    (row) => row === 'news' || row === 'article' || row === 'video' || row === 'audio' || row === 'image',
   );
 }
 

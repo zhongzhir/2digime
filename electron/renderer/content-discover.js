@@ -68,7 +68,7 @@
     if (card.author && card.author !== card.publisherDisplayName) bits.push(card.author);
     if (card.publishedAt) {
       const d = Date.parse(card.publishedAt);
-      bits.push(Number.isFinite(d) ? new Date(d).toISOString().slice(0, 10) : String(card.publishedAt).slice(0, 10));
+      bits.push(Number.isFinite(d) ? new Date(d).toLocaleString() : '发布时间未知');
     }
     if (card.durationSeconds) {
       const n = Math.round(Number(card.durationSeconds));
@@ -82,7 +82,7 @@
   }
 
   function typeLabel(card) {
-    const map = { article: '文章', image: '图片', audio: '音频', video: '视频' };
+    const map = { news: '新闻', article: '文章', image: '图片', audio: '音频', video: '视频' };
     return map[card.contentType] || '';
   }
 
@@ -102,6 +102,7 @@
       source: sourceLine(card),
       contentType: card.contentType || '',
       summary: String(card.text || '').slice(0, 600),
+      bodyText: String(card.representation && card.representation.bodyText || '').slice(0, 16000),
     };
     if (card.itemId) void act('asked', { itemId: card.itemId }, { skipRender: true });
     goTalk();
@@ -239,6 +240,35 @@
     }
     const actions = document.createElement('div');
     actions.className = 'content-discover-actions';
+    if (card.representation && card.representation.bodyText) {
+      const reader = document.createElement('details');
+      const heading = document.createElement('summary');
+      heading.textContent = '直接阅读';
+      const text = document.createElement('div');
+      text.style.whiteSpace = 'pre-wrap';
+      text.textContent = card.representation.bodyText;
+      reader.append(heading, text);
+      body.appendChild(reader);
+    }
+    if (card.sources && card.sources.length > 1) {
+      const sources = document.createElement('details');
+      const heading = document.createElement('summary');
+      const publishers = new Set(card.sources.map(source => {
+        try { return new URL(source.url).hostname.replace(/^www\./, ''); } catch { return source.publisher || source.url; }
+      }));
+      heading.textContent = '来自 ' + publishers.size + ' 个来源';
+      sources.appendChild(heading);
+      card.sources.forEach(source => {
+        if (!/^https?:\/\//i.test(source.url || '')) return;
+        const link = document.createElement('a');
+        link.href = source.url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = (source.publisher || source.title) + ' ';
+        sources.appendChild(link);
+      });
+      body.appendChild(sources);
+    }
     if (card.url) actions.appendChild(btn(consumeLabel(card), () => openCard(card), 'primary'));
     if (!opts || !opts.hideLater) {
       actions.appendChild(btn('稍后看', () => void act('later', { itemId: card.itemId })));

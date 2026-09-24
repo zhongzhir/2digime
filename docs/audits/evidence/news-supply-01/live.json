@@ -1,0 +1,468 @@
+{
+  "at": "2026-09-24T06:06:11.008Z",
+  "model": "deepseek-v4-flash",
+  "search": "Gemini BYOK",
+  "stub": false,
+  "entry": "commandBus content.seek",
+  "uiAcceptance": false,
+  "searchEvidence": [
+    {
+      "query": "AI 重要新闻 2026年9月24日",
+      "error": "quota",
+      "status": 429
+    },
+    {
+      "query": "AI news September 24 2026",
+      "error": "quota",
+      "status": 429
+    },
+    {
+      "query": "具身智能 最新消息 2026年9月",
+      "error": "quota",
+      "status": 429
+    },
+    {
+      "query": "embodied AI humanoid robot news September 2026",
+      "error": "quota",
+      "status": 429
+    },
+    {
+      "query": "少数派 sspai 最新文章 2026年9月",
+      "error": "quota",
+      "status": 429
+    },
+    {
+      "query": "sspai.com 少数派 图文 2026-09",
+      "error": "quota",
+      "status": 429
+    },
+    {
+      "query": "机核 电台 播客",
+      "error": "quota",
+      "status": 429
+    },
+    {
+      "query": "机核 Gadio 音频节目",
+      "error": "quota",
+      "status": 429
+    }
+  ],
+  "modelEvidence": [
+    {
+      "call": 1,
+      "finishReason": "stop",
+      "text": "{\"mode\":\"consume\",\"topic\":\"AI\",\"requestedContentTypes\":[\"news\"],\"objectWanted\":\"commentary\",\"freshness\":\"current\",\"popularityClaim\":false,\"searchQueries\":[\"AI 重要新闻 2026年9月24日\",\"AI news September 24 2026\",\"人工智能 行业新闻 2026-09-24\"],\"suggestTalk\":false}"
+    },
+    {
+      "call": 2,
+      "finishReason": "stop",
+      "text": "{\"groups\":[{\"ids\":[41],\"type\":\"news\",\"reason\":\"今日报道月之暗面 Kimi K3.1 模型动向，属 AI 模型重要动态\"},{\"ids\":[36],\"type\":\"news\",\"reason\":\"阿里达摩院今日发布食管癌筛查 AI 模型，事实性 AI 医疗进展\"},{\"ids\":[30],\"type\":\"news\",\"reason\":\"爱奇艺今日发布 All in AI 赋能影视长片制作的战略，AI 行业应用新闻\"},{\"ids\":[3],\"type\":\"article\",\"reason\":\"高通端侧 AI 布局的分析评论，属 AI 相关深度解读\"},{\"ids\":[13],\"type\":\"article\",\"reason\":\"苹果前设计人物参与 Muse AI 硬件产品，今日 AI 消费硬件报道\"},{\"ids\":[7],\"type\":\"news\",\"reason\":\"今日早报，包含千问 Qwen-Audio-3.1 系列模型发布等 AI 事实动态\"},{\"ids\":[18],\"type\":\"news\",\"reason\":\"今日早报，包含 DeepSeek 公开 Agent 训练沙箱 DSec 的 AI 动态\"},{\"ids\":[16],\"type\":\"news\",\"reason\":\"京东七鲜大厨含 Health Brain 膳食 AI 模型，今日 AI 家庭应用报道\"}]}"
+    },
+    {
+      "call": 3,
+      "finishReason": "stop",
+      "text": "{\"mode\":\"consume\",\"topic\":\"具身智能\",\"requestedContentTypes\":[\"news\"],\"objectWanted\":\"commentary\",\"freshness\":\"current\",\"popularityClaim\":false,\"searchQueries\":[\"具身智能 最新消息 2026年9月\",\"embodied AI humanoid robot news September 2026\",\"人形机器人 具身智能 重要进展 2026年9月\"],\"suggestTalk\":false}"
+    },
+    {
+      "call": 4,
+      "finishReason": "stop",
+      "text": "{\"groups\":[{\"ids\":[52],\"type\":\"news\",\"reason\":\"早报中报道前小米XLA负责人陈龙创业研发“自进化”具身大模型，与具身智能直接相关。\"}]}"
+    },
+    {
+      "call": 5,
+      "finishReason": "stop",
+      "text": "{\"mode\":\"consume\",\"topic\":\"少数派\",\"requestedContentTypes\":[\"article\"],\"objectWanted\":\"primary_content\",\"freshness\":\"current\",\"popularityClaim\":false,\"searchQueries\":[\"少数派 sspai 最新文章 2026年9月\",\"sspai.com 少数派 图文 2026-09\",\"少数派 文章 2026年9月\"],\"suggestTalk\":false}"
+    },
+    {
+      "call": 6,
+      "finishReason": "stop",
+      "text": "{\"groups\":[{\"ids\":[2],\"type\":\"article\",\"reason\":\"少数派站内普通图文长文，发布于今天，符合最近要求，可直接阅读正文。\"}]}"
+    },
+    {
+      "call": 7,
+      "finishReason": "stop",
+      "text": "{\"mode\":\"consume\",\"topic\":\"机核\",\"requestedContentTypes\":[\"audio\"],\"objectWanted\":\"primary_content\",\"freshness\":\"unspecified\",\"popularityClaim\":false,\"searchQueries\":[\"机核 电台 播客\",\"机核 Gadio 音频节目\",\"Gcores 机核电台 podcast\"],\"suggestTalk\":false}"
+    },
+    {
+      "call": 8,
+      "finishReason": "stop",
+      "text": "{\"groups\":[{\"ids\":[49],\"type\":\"audio\",\"reason\":\"机核广播电台节目（radios），2026-09-23 发布，符合近期时段\"},{\"ids\":[44],\"type\":\"audio\",\"reason\":\"机核电台《再荐茶社》音频节目，2026-09-23 发布，符合近期时段\"}]}"
+    }
+  ],
+  "rows": [
+    {
+      "query": "今天 AI 有什么重要新闻？",
+      "ms": 26485,
+      "modelCalls": 2,
+      "notice": "",
+      "trace": [
+        {
+          "event": "directory/feed",
+          "ms": 679,
+          "count": 58
+        },
+        {
+          "event": "search",
+          "ms": 4883
+        },
+        {
+          "event": "search",
+          "ms": 2665
+        },
+        {
+          "event": "selection",
+          "ms": 12715
+        },
+        {
+          "event": "resolver",
+          "ms": 3778
+        },
+        {
+          "event": "total",
+          "ms": 26475
+        }
+      ],
+      "candidates": 58,
+      "cards": [
+        {
+          "title": "月之暗面最强 AI：消息称 Kimi K3.1 下月登场",
+          "url": "https://www.ithome.com/1/006/719.htm",
+          "type": "news",
+          "publisher": "IT之家",
+          "publishedAt": "2026-09-24T05:16:03.000Z",
+          "reason": "今日报道月之暗面 Kimi K3.1 模型动向，属 AI 模型重要动态",
+          "sources": [
+            {
+              "title": "月之暗面最强 AI：消息称 Kimi K3.1 下月登场",
+              "url": "https://www.ithome.com/1/006/719.htm",
+              "publisher": "IT之家",
+              "publishedAt": "2026-09-24T05:16:03.000Z"
+            }
+          ],
+          "consumption": "OPEN_SOURCE",
+          "representation": {
+            "kind": "news",
+            "provenance": "readability",
+            "characters": 547,
+            "sha256": "0e8e1d0a014b161a2f9905ebdaa951ccff6036ce335ee81482b61bc1f9aed1b3"
+          }
+        },
+        {
+          "title": "阿里达摩院发布食管癌 AI 模型，“不插管”发现早期和癌前病变",
+          "url": "https://www.ithome.com/1/006/720.htm",
+          "type": "news",
+          "publisher": "IT之家",
+          "publishedAt": "2026-09-24T05:22:08.000Z",
+          "reason": "阿里达摩院今日发布食管癌筛查 AI 模型，事实性 AI 医疗进展",
+          "sources": [
+            {
+              "title": "阿里达摩院发布食管癌 AI 模型，“不插管”发现早期和癌前病变",
+              "url": "https://www.ithome.com/1/006/720.htm",
+              "publisher": "IT之家",
+              "publishedAt": "2026-09-24T05:22:08.000Z"
+            }
+          ],
+          "consumption": "OPEN_SOURCE",
+          "representation": {
+            "kind": "news",
+            "provenance": "readability",
+            "characters": 1072,
+            "sha256": "25552dbb2f6e83cc16a16ecba1ff4a447918a892190a5966aa5c47c05a5b5081"
+          }
+        },
+        {
+          "title": "“用AI打破传统影视行业高门槛，让创作者有钱赚、有荣誉”",
+          "url": "https://www.chinanews.com.cn/cul/2026/09-24/10702927.shtml",
+          "type": "news",
+          "publisher": "中新网即时新闻",
+          "publishedAt": "2026-09-24T05:11:53.000Z",
+          "reason": "爱奇艺今日发布 All in AI 赋能影视长片制作的战略，AI 行业应用新闻",
+          "sources": [
+            {
+              "title": "“用AI打破传统影视行业高门槛，让创作者有钱赚、有荣誉”",
+              "url": "https://www.chinanews.com.cn/cul/2026/09-24/10702927.shtml",
+              "publisher": "中新网即时新闻",
+              "publishedAt": "2026-09-24T05:11:53.000Z"
+            }
+          ],
+          "consumption": "OPEN_SOURCE",
+          "representation": {
+            "kind": "news",
+            "provenance": "readability",
+            "characters": 985,
+            "sha256": "086f219e052bf83fa5fae19c7afa99eea50e8604509501bacbd11e3875eb8180"
+          }
+        },
+        {
+          "title": "派早报：小米召开秋季新品发布会、千问发布 Qwen-Audio-3.1系列模型等",
+          "url": "https://sspai.com/post/114913",
+          "type": "news",
+          "publisher": "少数派 - 高品质数字消费指南",
+          "publishedAt": "2026-09-24T00:19:37.000Z",
+          "reason": "今日早报，包含千问 Qwen-Audio-3.1 系列模型发布等 AI 事实动态",
+          "sources": [
+            {
+              "title": "派早报：小米召开秋季新品发布会、千问发布 Qwen-Audio-3.1系列模型等",
+              "url": "https://sspai.com/post/114913",
+              "publisher": "少数派",
+              "publishedAt": "2026-09-24T00:19:37.000Z"
+            }
+          ],
+          "consumption": "OPEN_SOURCE",
+          "representation": {
+            "kind": "news",
+            "provenance": "readability",
+            "characters": 993,
+            "sha256": "004dae465482633d5061e3ac0aa4f402f30b12db3014d07788cd1013c5613359"
+          }
+        },
+        {
+          "title": "早报｜iOS27测试版新功能可阻止摇一摇广告/5999起，小米18 Pro发布/宾利发布首款纯电车Torcal，888马力",
+          "url": "https://www.ifanr.com/1681909",
+          "type": "news",
+          "publisher": "爱范儿",
+          "publishedAt": "2026-09-24T00:17:26.000Z",
+          "reason": "今日早报，包含 DeepSeek 公开 Agent 训练沙箱 DSec 的 AI 动态",
+          "sources": [
+            {
+              "title": "早报｜iOS27测试版新功能可阻止摇一摇广告/5999起，小米18 Pro发布/宾利发布首款纯电车Torcal，888马力",
+              "url": "https://www.ifanr.com/1681909",
+              "publisher": "爱范儿",
+              "publishedAt": "2026-09-24T00:17:26.000Z"
+            }
+          ],
+          "consumption": "OPEN_SOURCE",
+          "representation": {
+            "kind": "news",
+            "provenance": "feed:https://www.ifanr.com/feed",
+            "characters": 9894,
+            "sha256": "d8039576e091e892c2ebae9cfc1a309c8fd96db21bfda2dbc4881c891d9a200e"
+          }
+        },
+        {
+          "title": "京东七鲜大厨专业版首发价 19888 元：含智能烹饪机器人及 15000 元膳食权益",
+          "url": "https://www.ithome.com/1/006/724.htm",
+          "type": "news",
+          "publisher": "IT之家",
+          "publishedAt": "2026-09-24T05:29:41.000Z",
+          "reason": "京东七鲜大厨含 Health Brain 膳食 AI 模型，今日 AI 家庭应用报道",
+          "sources": [
+            {
+              "title": "京东七鲜大厨专业版首发价 19888 元：含智能烹饪机器人及 15000 元膳食权益",
+              "url": "https://www.ithome.com/1/006/724.htm",
+              "publisher": "IT之家",
+              "publishedAt": "2026-09-24T05:29:41.000Z"
+            }
+          ],
+          "consumption": "OPEN_SOURCE",
+          "representation": {
+            "kind": "news",
+            "provenance": "readability",
+            "characters": 540,
+            "sha256": "81874993960e37bf586e5a2ea67447d15e9486a0d0ec2c19547c9120220bf000"
+          }
+        }
+      ]
+    },
+    {
+      "query": "最近有哪些关于具身智能的重要消息？",
+      "ms": 18992,
+      "modelCalls": 4,
+      "notice": "",
+      "trace": [
+        {
+          "event": "directory/feed",
+          "ms": 539,
+          "count": 58
+        },
+        {
+          "event": "search",
+          "ms": 3798
+        },
+        {
+          "event": "search",
+          "ms": 2425
+        },
+        {
+          "event": "selection",
+          "ms": 10738
+        },
+        {
+          "event": "resolver",
+          "ms": 0
+        },
+        {
+          "event": "total",
+          "ms": 18982
+        }
+      ],
+      "candidates": 58,
+      "cards": [
+        {
+          "title": "早报｜GPT-6 Sol发布，价格腰斩/特努斯：Siri AI不应代替人际关系/4999起，OPPO Find X10系列发布",
+          "url": "https://www.ifanr.com/1681566",
+          "type": "news",
+          "publisher": "爱范儿",
+          "publishedAt": "2026-09-23T00:05:46.000Z",
+          "reason": "早报中报道前小米XLA负责人陈龙创业研发“自进化”具身大模型，与具身智能直接相关。",
+          "sources": [
+            {
+              "title": "早报｜GPT-6 Sol发布，价格腰斩/特努斯：Siri AI不应代替人际关系/4999起，OPPO Find X10系列发布",
+              "url": "https://www.ifanr.com/1681566",
+              "publisher": "爱范儿",
+              "publishedAt": "2026-09-23T00:05:46.000Z"
+            }
+          ],
+          "consumption": "OPEN_SOURCE",
+          "representation": {
+            "kind": "news",
+            "provenance": "feed:https://www.ifanr.com/feed",
+            "characters": 13031,
+            "sha256": "f7e6fe87b6d9df90f39d461fa8a0c0c4499901254b9796721d45887a8c5ac686"
+          }
+        }
+      ]
+    },
+    {
+      "query": "找一篇少数派最近的普通图文文章，直接阅读正文",
+      "ms": 22682,
+      "modelCalls": 6,
+      "notice": "",
+      "trace": [
+        {
+          "event": "directory/feed",
+          "ms": 706,
+          "count": 58
+        },
+        {
+          "event": "search",
+          "ms": 3106
+        },
+        {
+          "event": "search",
+          "ms": 2303
+        },
+        {
+          "event": "selection",
+          "ms": 5132
+        },
+        {
+          "event": "resolver",
+          "ms": 10128
+        },
+        {
+          "event": "total",
+          "ms": 22667
+        }
+      ],
+      "candidates": 58,
+      "cards": [
+        {
+          "title": "古董电脑室十周年记：为什么我不再是收藏家（上）",
+          "url": "https://sspai.com/post/114395",
+          "type": "article",
+          "publisher": "少数派 - 高品质数字消费指南",
+          "publishedAt": "2026-09-24T04:15:24.000Z",
+          "reason": "少数派站内普通图文长文，发布于今天，符合最近要求，可直接阅读正文。",
+          "sources": [
+            {
+              "title": "古董电脑室十周年记：为什么我不再是收藏家（上）",
+              "url": "https://sspai.com/post/114395",
+              "publisher": "少数派",
+              "publishedAt": "2026-09-24T04:15:24.000Z"
+            }
+          ],
+          "consumption": "OPEN_SOURCE",
+          "representation": {
+            "kind": "article",
+            "provenance": "readability",
+            "characters": 6401,
+            "sha256": "3fdb3579bf6d94fed6be1dcd505193597af33a61cd5f479a01a222c266ed66bb"
+          }
+        }
+      ]
+    },
+    {
+      "query": "找一个机核的音频节目听听",
+      "ms": 17459,
+      "modelCalls": 8,
+      "notice": "",
+      "trace": [
+        {
+          "event": "directory/feed",
+          "ms": 5399,
+          "count": 58
+        },
+        {
+          "event": "search",
+          "ms": 3288
+        },
+        {
+          "event": "search",
+          "ms": 2767
+        },
+        {
+          "event": "selection",
+          "ms": 3433
+        },
+        {
+          "event": "resolver",
+          "ms": 510
+        },
+        {
+          "event": "total",
+          "ms": 17440
+        }
+      ],
+      "candidates": 58,
+      "cards": [
+        {
+          "title": "Vol.191｜东京电玩展见闻｜Snap SPECS 发售｜Meta VR Glasses 泄漏",
+          "url": "https://www.gcores.com/radios/220183",
+          "type": "audio",
+          "publisher": "机核",
+          "publishedAt": "2026-09-23T16:29:28.000Z",
+          "reason": "机核广播电台节目（radios），2026-09-23 发布，符合近期时段",
+          "sources": [
+            {
+              "title": "Vol.191｜东京电玩展见闻｜Snap SPECS 发售｜Meta VR Glasses 泄漏",
+              "url": "https://www.gcores.com/radios/220183",
+              "publisher": "机核",
+              "publishedAt": "2026-09-23T16:29:28.000Z"
+            }
+          ],
+          "consumption": "OPEN_SOURCE",
+          "representation": {
+            "kind": "audio",
+            "provenance": "structured-metadata",
+            "characters": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        {
+          "title": "离去的索岛婚姻和无限的魔兽世界 再荐茶社41",
+          "url": "https://www.gcores.com/radios/220180",
+          "type": "audio",
+          "publisher": "机核",
+          "publishedAt": "2026-09-23T18:20:37.000Z",
+          "reason": "机核电台《再荐茶社》音频节目，2026-09-23 发布，符合近期时段",
+          "sources": [
+            {
+              "title": "离去的索岛婚姻和无限的魔兽世界 再荐茶社41",
+              "url": "https://www.gcores.com/radios/220180",
+              "publisher": "机核",
+              "publishedAt": "2026-09-23T18:20:37.000Z"
+            }
+          ],
+          "consumption": "OPEN_SOURCE",
+          "representation": {
+            "kind": "audio",
+            "provenance": "structured-metadata",
+            "characters": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        }
+      ]
+    }
+  ]
+}

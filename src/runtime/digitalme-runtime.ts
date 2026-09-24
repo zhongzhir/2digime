@@ -179,6 +179,8 @@ import {
 } from '../intelligence';
 import type { ProfessionalAgent, TalkChatFn } from '../intelligence';
 import { formatSelfContext, selectSelfContext } from '../intelligence/self-context';
+import { acquirePublicFeeds, selectSupply } from '../subject-comm/news-supply';
+import type { DiscoverCard } from '../subject-comm/content-discover';
 import { readDigitalSelf } from '../subject-core/digital-self/store';
 import { type DiscoverView } from '../subject-comm/content-discover';
 import { formatSeekContext, seekContent, type ContentSeekResult } from '../subject-comm/content-seek';
@@ -379,6 +381,7 @@ export interface DigitalMeRuntimeOptions {
   contentSearch?: (query: string) => Promise<Array<{ title: string; url: string; snippet?: string }>>;
   /** 开放媒体目录/官方 API。测试默认关闭以免打到真实网络。 */
   contentOpenMediaFetch?: typeof safePublicHttpGet | false;
+  contentCandidateSupply?: false | (() => Promise<DiscoverCard[]>);
   /** 测试注入专业能力；未提供时从当前已连接 registry 生成自然语言可调用表。 */
   talkProfessionals?: ProfessionalAgent[];
   /** Talk 需要写盘时向主人确认一次文件夹访问。未提供则无法弹出授权。 */
@@ -498,7 +501,7 @@ export class DigitalMeRuntime {
       if (!query) {
         return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'open') };
       }
-      return { view: await this.runContentSeek(pkg.rootDir, query, input.relayUrl) };
+      return { view: await this.runContentSeek(pkg.rootDir, query, input.relayUrl, pkg.id) };
     }
 
     if (action === 'resetRecent') {
@@ -729,6 +732,9 @@ export class DigitalMeRuntime {
     const openMedia = this.resolveOpenMediaFetch();
     const store = new FileNetworkItemStore(path.join(packageRoot, 'content'));
     const loadItems = () => this.loadDiscoverItems(packageRoot, relayUrl);
+    if (networking !== 'DISABLED' && chatCompleteFn && model && !process.env.NODE_TEST_CONTEXT && this.options.contentCandidateSupply !== false) {
+      await acquirePublicFeeds(store);
+    }
     const items = await loadItems();
     const preferenceRows = await listContentPreferences(packageRoot);
     const directives = formatPreferenceDirectives(preferenceRows);
@@ -779,7 +785,8 @@ export class DigitalMeRuntime {
     });
   }
 
-  private async runContentSeek(packageRoot: string, query: string, relayUrl?: string): Promise<DiscoverView> {
+  private async runContentSeek(packageRoot: string, query: string, relayUrl?: string, subjectId = ''): Promise<DiscoverView> {
+    const requestStarted=Date.now();
     const generationId = this.currentSearchGenerationId || this.beginSearchGeneration();
     const preferences = await this.contentPreferenceRows(packageRoot);
     const items = await this.loadDiscoverItems(packageRoot, relayUrl);
@@ -841,6 +848,42 @@ export class DigitalMeRuntime {
         ingestHit,
         ...(chatCompleteFn && model ? { chatComplete: chatCompleteFn, model } : {}),
       };
+      // Same local model and Digital Self; no Relay personalization or second profile.
+      const supply = this.options.contentCandidateSupply === false || networking === 'DISABLED'
+        ? undefined : this.options.contentCandidateSupply || (process.env.NODE_TEST_CONTEXT ? undefined : () => acquirePublicFeeds(store));
+      if (supply && chatCompleteFn && model) {
+        const self = await readDigitalSelf(packageRoot, subjectId, nowIso());
+        const directives = formatPreferenceDirectives(await listContentPreferences(packageRoot));
+        const timings: Array<{event:string;ms:number;count?:number}> = [];
+        const sought = await seekContent({
+          ...common,
+          ...(searchWeb ? { searchWeb: async (q:string) => {
+            const at=Date.now();
+            try { return await searchWeb(q); } finally { timings.push({event:'search',ms:Date.now()-at}); }
+          } } : {}),
+          acquireCandidates: async () => {
+            const at=Date.now(); const cards=await supply();
+            timings.push({event:'directory/feed',ms:Date.now()-at,count:cards.length});
+            return cards;
+          },
+          selectCandidates: async cards => {
+            const result=await selectSupply({cards,query,topic:intent.topic,selfContext:formatSelfContext(selectSelfContext(self,query)),preferences:directives,chatComplete:chatCompleteFn,model,onTiming:(event,ms)=>timings.push({event,ms})});
+            return result;
+          },
+        });
+        timings.push({event:'total',ms:Date.now()-requestStarted});
+        const currentNetworking=this.snapshotNetworkDiscovery();
+        const view=this.intentViewFromSeek(query,sought,preferences,currentNetworking,generationId,{replenishing:false});
+        if(sought.cards.length && ['AUTH_FAILED','RATE_LIMITED','TEMPORARY_ERROR'].includes(currentNetworking)) {
+          view.notice='联网搜索暂不可用，以下内容来自已读取的公开来源。';
+        }
+        view.supplyTrace=timings;
+        if(generationId===this.currentSearchGenerationId) {
+          if(sought.cards.length) await rememberIntentFeed(packageRoot,sought.cards,query);
+          this.lastIntentView=view;
+        }
+        return view;
+      }
       const firstWave = () =>
         seekContent({
           ...common,
@@ -932,15 +975,16 @@ export class DigitalMeRuntime {
     if (this.lastNetworkCode === 'AUTH_FAILED' || this.lastNetworkCode === 'RATE_LIMITED' || this.lastNetworkCode === 'TEMPORARY_ERROR') {
       return this.lastNetworkCode;
     }
-    if (this.resolveContentSearch() || this.resolveOpenMediaFetch()) return 'AVAILABLE';
+    if (this.resolveContentSearch() || this.resolveOpenMediaFetch() || this.options.contentCandidateSupply || (!process.env.NODE_TEST_CONTEXT && this.options.contentCandidateSupply !== false)) return 'AVAILABLE';
     return 'NOT_CONFIGURED';
   }
 
   private resolveOpenMediaFetch(): typeof safePublicHttpGet | undefined {
+    if (this.options.webDiscoveryEnabled === false) return undefined;
     if (this.options.contentOpenMediaFetch === false) return undefined;
     if (this.options.contentOpenMediaFetch) return this.options.contentOpenMediaFetch;
     if (process.env.NODE_TEST_CONTEXT) return undefined;
-    return safePublicHttpGet;
+    return undefined; // Overseas catalogs remain opt-in through contentOpenMediaFetch.
   }
 
   private wrapContentSearch(
@@ -962,6 +1006,7 @@ export class DigitalMeRuntime {
   private resolveContentSearch():
     | ((query: string) => Promise<Array<{ title: string; url: string; snippet?: string }>>)
     | undefined {
+    if (this.options.webDiscoveryEnabled === false) return undefined;
     if (this.options.contentSearch) return this.options.contentSearch;
     const gem = resolveGeminiSearchCredential(
       process.env.NODE_TEST_CONTEXT ? {} : process.env,

@@ -19,6 +19,7 @@ export interface PageMetadata {
   title: string;
   description: string;
   publishedAt?: string;
+  updatedAt?: string;
   author?: string;
   publisher?: string;
   contentType?: NetworkContentType;
@@ -284,7 +285,7 @@ export function parsePageMetadata(html: string, fallbackUrl: string): PageMetada
   const durationSeconds = parseDurationSeconds(ld?.duration);
   const width = parsePositiveInt(ld?.width, 8192);
   const height = parsePositiveInt(ld?.height, 8192);
-  const requiresSubscription = truthyFlag(ld?.requiresSubscription);
+  const requiresSubscription = truthyFlag(ld?.requiresSubscription) || ld?.isAccessibleForFree === false || ld?.isAccessibleForFree === 'false';
   const access: MediaAccess | undefined = requiresSubscription ? 'subscriptionRequired' : undefined;
   const contentType = inferContentType({
     schemaType,
@@ -320,6 +321,7 @@ export function parsePageMetadata(html: string, fallbackUrl: string): PageMetada
     title: clipTitle(title),
     description: clipText(description),
     ...(publishedAt ? { publishedAt } : {}),
+    ...(textOf(ld?.dateModified) ? { updatedAt: textOf(ld?.dateModified) } : {}),
     ...(author ? { author } : {}),
     ...(publisher ? { publisher } : {}),
     ...(contentType ? { contentType } : {}),

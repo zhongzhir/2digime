@@ -4,7 +4,7 @@
 import { parse } from 'node-html-parser';
 import { assertSafePublicHttpUrl } from '../work-runtime/public-http-safety';
 
-export const NETWORK_CONTENT_TYPES = ['article', 'image', 'audio', 'video', 'other'] as const;
+export const NETWORK_CONTENT_TYPES = ['news', 'article', 'image', 'audio', 'video', 'other'] as const;
 export type NetworkContentType = (typeof NETWORK_CONTENT_TYPES)[number];
 
 export const CONSUMPTION_MODES = ['INLINE_MEDIA', 'OFFICIAL_EMBED', 'OPEN_SOURCE'] as const;
@@ -162,7 +162,8 @@ function suffixHint(url: string): NetworkContentType | undefined {
 function schemaObjectType(schemaType?: string): NetworkContentType | undefined {
   const schema = String(schemaType || '').toLowerCase();
   if (!schema) return undefined;
-  if (/newsarticle|blogposting|\barticle\b/.test(schema)) return 'article';
+  if (/newsarticle/.test(schema)) return 'news';
+  if (/blogposting|\barticle\b/.test(schema)) return 'article';
   if (/videoobject|\bmovie\b|tvepisode/.test(schema) || schema === 'video') return 'video';
   if (/audioobject/.test(schema) || schema === 'audio') return 'audio';
   if (/imageobject/.test(schema) || schema === 'image') return 'image';

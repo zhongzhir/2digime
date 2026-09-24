@@ -1,0 +1,912 @@
+{
+  "checkedAt": "2026-09-24T06:12:22.988Z",
+  "network": "Current Windows host; domestic routing and long-term stability not independently established",
+  "rows": [
+    {
+      "source": "新华社",
+      "type": "news",
+      "url": "https://www.news.cn/",
+      "feed": null,
+      "checks": [
+        {
+          "url": "https://www.news.cn/",
+          "status": 200,
+          "finalUrl": "https://www.news.cn/",
+          "ms": 181,
+          "bytes": 151978,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [],
+          "title": "新华网_让新闻离你更近"
+        },
+        {
+          "url": "https://www.news.cn/robots.txt",
+          "status": 200,
+          "finalUrl": "https://www.news.cn/robots.txt",
+          "ms": 131,
+          "bytes": 71,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": []
+        }
+      ],
+      "sitemapChecks": []
+    },
+    {
+      "source": "人民网",
+      "type": "news",
+      "url": "http://www.people.com.cn/",
+      "feed": null,
+      "checks": [
+        {
+          "url": "http://www.people.com.cn/",
+          "status": 200,
+          "finalUrl": "http://www.people.com.cn/",
+          "ms": 144,
+          "bytes": 114367,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [],
+          "title": "人民网_网上的人民日报"
+        },
+        {
+          "url": "http://www.people.com.cn/robots.txt",
+          "status": 200,
+          "finalUrl": "http://www.people.com.cn/robots.txt",
+          "ms": 136,
+          "bytes": 90,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [
+            "http://www.people.cn/sitemap_index.xml"
+          ]
+        }
+      ],
+      "sitemapChecks": [
+        {
+          "url": "http://www.people.cn/sitemap_index.xml",
+          "status": 200,
+          "finalUrl": "http://www.people.cn/sitemap_index.xml",
+          "ms": 295,
+          "bytes": 8181,
+          "feed": false,
+          "sitemapXml": true,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": []
+        }
+      ]
+    },
+    {
+      "source": "中国新闻网",
+      "type": "news",
+      "url": "https://www.chinanews.com.cn/",
+      "feed": "https://www.chinanews.com.cn/rss/scroll-news.xml",
+      "checks": [
+        {
+          "url": "https://www.chinanews.com.cn/",
+          "status": 200,
+          "finalUrl": "https://www.chinanews.com.cn/",
+          "ms": 342,
+          "bytes": 191351,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [],
+          "title": "中国新闻网_梳理天下新闻"
+        },
+        {
+          "url": "https://www.chinanews.com.cn/robots.txt",
+          "status": 200,
+          "finalUrl": "https://www.chinanews.com.cn/robots.txt",
+          "ms": 327,
+          "bytes": 858,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [
+            "http://www.chinanews.com/sitemap.xml"
+          ]
+        },
+        {
+          "url": "https://www.chinanews.com.cn/rss/scroll-news.xml",
+          "status": 200,
+          "finalUrl": "https://www.chinanews.com.cn/rss/scroll-news.xml",
+          "ms": 339,
+          "bytes": 9796,
+          "feed": true,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [],
+          "title": "中新网即时新闻"
+        }
+      ],
+      "sitemapChecks": [
+        {
+          "url": "http://www.chinanews.com/sitemap.xml",
+          "status": 200,
+          "finalUrl": "https://www.chinanews.com.cn/sitemap.xml",
+          "ms": 165,
+          "bytes": 3302,
+          "feed": false,
+          "sitemapXml": true,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": []
+        }
+      ]
+    },
+    {
+      "source": "央视网",
+      "type": "video/news",
+      "url": "https://www.cctv.com/",
+      "feed": null,
+      "checks": [
+        {
+          "url": "https://www.cctv.com/",
+          "status": 200,
+          "finalUrl": "https://www.cctv.com/",
+          "ms": 643,
+          "bytes": 308477,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [],
+          "title": "央视网_世界就在眼前"
+        },
+        {
+          "url": "https://www.cctv.com/robots.txt",
+          "status": 200,
+          "finalUrl": "https://www.cctv.com/robots.txt",
+          "ms": 725,
+          "bytes": 9053,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": []
+        }
+      ],
+      "sitemapChecks": []
+    },
+    {
+      "source": "中国政府网",
+      "type": "public",
+      "url": "https://www.gov.cn/",
+      "feed": null,
+      "checks": [
+        {
+          "url": "https://www.gov.cn/",
+          "status": 200,
+          "finalUrl": "https://www.gov.cn/",
+          "ms": 369,
+          "bytes": 63268,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [],
+          "title": "中国政府网_中央人民政府门户网站"
+        },
+        {
+          "url": "https://www.gov.cn/robots.txt",
+          "status": 200,
+          "finalUrl": "https://www.gov.cn/robots.txt",
+          "ms": 599,
+          "bytes": 808,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [
+            "http://www.gov.cn/baidu.xml",
+            "http://www.gov.cn/google.xml",
+            "http://www.gov.cn/bing.xml",
+            "http://www.gov.cn/sogou.xml"
+          ]
+        }
+      ],
+      "sitemapChecks": [
+        {
+          "url": "http://www.gov.cn/baidu.xml",
+          "status": 200,
+          "finalUrl": "https://www.gov.cn/baidu.xml",
+          "ms": 323,
+          "bytes": 12229,
+          "feed": false,
+          "sitemapXml": true,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": []
+        },
+        {
+          "url": "http://www.gov.cn/google.xml",
+          "status": 200,
+          "finalUrl": "https://www.gov.cn/google.xml",
+          "ms": 367,
+          "bytes": 12281,
+          "feed": false,
+          "sitemapXml": true,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": []
+        }
+      ]
+    },
+    {
+      "source": "IT之家",
+      "type": "technology",
+      "url": "https://www.ithome.com/",
+      "feed": "https://www.ithome.com/rss/",
+      "checks": [
+        {
+          "url": "https://www.ithome.com/",
+          "status": 200,
+          "finalUrl": "https://www.ithome.com/",
+          "ms": 442,
+          "bytes": 110609,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [
+            "<link rel=\"alternate\" type=\"application/rss+xml\" title=\"RSS 2.0\" href=\"https://www.ithome.com/rss/\">"
+          ],
+          "sitemaps": [],
+          "title": "IT之家"
+        },
+        {
+          "url": "https://www.ithome.com/robots.txt",
+          "status": 200,
+          "finalUrl": "https://www.ithome.com/robots.txt",
+          "ms": 438,
+          "bytes": 379,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": []
+        },
+        {
+          "url": "https://www.ithome.com/rss/",
+          "status": 200,
+          "finalUrl": "https://www.ithome.com/rss/",
+          "ms": 440,
+          "bytes": 158418,
+          "feed": true,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [],
+          "title": "IT之家"
+        }
+      ],
+      "sitemapChecks": []
+    },
+    {
+      "source": "证券时报",
+      "type": "finance",
+      "url": "https://www.stcn.com/",
+      "feed": null,
+      "checks": [
+        {
+          "url": "https://www.stcn.com/",
+          "status": 200,
+          "finalUrl": "https://www.stcn.com/",
+          "ms": 422,
+          "bytes": 156740,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [],
+          "title": "证券时报官方网站-中国资本市场信息披露平台"
+        },
+        {
+          "url": "https://www.stcn.com/robots.txt",
+          "status": 404,
+          "finalUrl": "https://www.stcn.com/robots.txt",
+          "ms": 473,
+          "bytes": 27361,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [],
+          "title": "404 Not Found - 证券时报"
+        }
+      ],
+      "sitemapChecks": []
+    },
+    {
+      "source": "北京市政府",
+      "type": "public",
+      "url": "https://www.beijing.gov.cn/",
+      "feed": null,
+      "checks": [
+        {
+          "url": "https://www.beijing.gov.cn/",
+          "status": 200,
+          "finalUrl": "https://www.beijing.gov.cn/",
+          "ms": 341,
+          "bytes": 184993,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": true,
+          "feedLinks": [],
+          "sitemaps": [],
+          "title": "北京市人民政府门户网站"
+        },
+        {
+          "url": "https://www.beijing.gov.cn/robots.txt",
+          "status": 200,
+          "finalUrl": "https://www.beijing.gov.cn/robots.txt",
+          "ms": 261,
+          "bytes": 592,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [
+            "https://www.beijing.gov.cn/sitemap_1701.xml",
+            "https://www.beijing.gov.cn/hudong/jianyi/sitemap.xml",
+            "https://www.beijing.gov.cn/hudong/wsdc/sitemap_42374.xml",
+            "https://www.beijing.gov.cn/hudong/hdjl/common/site/hdjl/sitemap.xml",
+            "https://www.beijing.gov.cn/shipin/sitemaps.xml"
+          ]
+        }
+      ],
+      "sitemapChecks": [
+        {
+          "url": "https://www.beijing.gov.cn/sitemap_1701.xml",
+          "status": 200,
+          "finalUrl": "https://www.beijing.gov.cn/sitemap_1701.xml",
+          "ms": 165,
+          "bytes": 2774,
+          "feed": false,
+          "sitemapXml": true,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": []
+        },
+        {
+          "url": "https://www.beijing.gov.cn/hudong/jianyi/sitemap.xml",
+          "status": 200,
+          "finalUrl": "https://www.beijing.gov.cn/hudong/jianyi/sitemap.xml",
+          "ms": 92,
+          "bytes": 796,
+          "feed": false,
+          "sitemapXml": true,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": []
+        }
+      ]
+    },
+    {
+      "source": "财新",
+      "type": "finance",
+      "url": "https://www.caixin.com/",
+      "feed": null,
+      "checks": [
+        {
+          "url": "https://www.caixin.com/",
+          "status": 200,
+          "finalUrl": "https://www.caixin.com/",
+          "ms": 613,
+          "bytes": 91384,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [],
+          "title": "财新网"
+        },
+        {
+          "url": "https://www.caixin.com/robots.txt",
+          "status": 200,
+          "finalUrl": "https://www.caixin.com/robots.txt",
+          "ms": 535,
+          "bytes": 232,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": []
+        }
+      ],
+      "sitemapChecks": []
+    },
+    {
+      "source": "36氪",
+      "type": "PEVC/technology",
+      "url": "https://36kr.com/",
+      "feed": "https://36kr.com/feed",
+      "checks": [
+        {
+          "url": "https://36kr.com/",
+          "status": 200,
+          "finalUrl": "https://36kr.com/",
+          "ms": 398,
+          "bytes": 17501,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": []
+        },
+        {
+          "url": "https://36kr.com/robots.txt",
+          "status": 200,
+          "finalUrl": "https://36kr.com/robots.txt",
+          "ms": 1068,
+          "bytes": 17501,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": []
+        },
+        {
+          "url": "https://36kr.com/feed",
+          "status": 200,
+          "finalUrl": "https://36kr.com/feed",
+          "ms": 397,
+          "bytes": 17501,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": []
+        }
+      ],
+      "sitemapChecks": []
+    },
+    {
+      "source": "机器之心",
+      "type": "AI",
+      "url": "https://www.jiqizhixin.com/",
+      "feed": null,
+      "checks": [
+        {
+          "url": "https://www.jiqizhixin.com/",
+          "status": 200,
+          "finalUrl": "https://www.jiqizhixin.com/",
+          "ms": 282,
+          "bytes": 3251,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [],
+          "title": "机器之心·数据服务"
+        },
+        {
+          "url": "https://www.jiqizhixin.com/robots.txt",
+          "status": 200,
+          "finalUrl": "https://www.jiqizhixin.com/robots.txt",
+          "ms": 289,
+          "bytes": 299,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [
+            "https://www.jiqizhixin.com/shared/sitemap.xml.gz"
+          ]
+        }
+      ],
+      "sitemapChecks": [
+        {
+          "url": "https://www.jiqizhixin.com/shared/sitemap.xml.gz",
+          "status": 200,
+          "finalUrl": "https://www.jiqizhixin.com/shared/sitemap.xml.gz",
+          "ms": 99,
+          "bytes": 258841,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": []
+        }
+      ]
+    },
+    {
+      "source": "投中网",
+      "type": "PEVC",
+      "url": "https://www.chinaventure.com.cn/",
+      "feed": null,
+      "checks": [
+        {
+          "url": "https://www.chinaventure.com.cn/",
+          "status": 200,
+          "finalUrl": "https://www.chinaventure.com.cn/",
+          "ms": 420,
+          "bytes": 52910,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [],
+          "title": "投中网 | 创新经济的智识、洞见和未来"
+        },
+        {
+          "url": "https://www.chinaventure.com.cn/robots.txt",
+          "status": 404,
+          "finalUrl": "https://www.chinaventure.com.cn/robots.txt",
+          "ms": 453,
+          "bytes": 2182,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [],
+          "title": "投中网"
+        }
+      ],
+      "sitemapChecks": []
+    },
+    {
+      "source": "澎湃新闻",
+      "type": "news/culture",
+      "url": "https://www.thepaper.cn/",
+      "feed": null,
+      "checks": [
+        {
+          "url": "https://www.thepaper.cn/",
+          "status": 200,
+          "finalUrl": "https://www.thepaper.cn/",
+          "ms": 791,
+          "bytes": 57792,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [],
+          "title": "澎湃新闻-专注时政与思想-ThePaper.cn"
+        },
+        {
+          "url": "https://www.thepaper.cn/robots.txt",
+          "status": 200,
+          "finalUrl": "https://www.thepaper.cn/robots.txt",
+          "ms": 866,
+          "bytes": 56867,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [
+            "http://www.thepaper.cn/sitemap/sitemap.xml"
+          ]
+        }
+      ],
+      "sitemapChecks": [
+        {
+          "url": "http://www.thepaper.cn/sitemap/sitemap.xml",
+          "status": 200,
+          "finalUrl": "https://www.thepaper.cn/sitemap/sitemap.xml",
+          "ms": 173,
+          "bytes": 1397,
+          "feed": false,
+          "sitemapXml": true,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": []
+        }
+      ]
+    },
+    {
+      "source": "少数派",
+      "type": "article",
+      "url": "https://sspai.com/",
+      "feed": "https://sspai.com/feed",
+      "checks": [
+        {
+          "url": "https://sspai.com/",
+          "status": 200,
+          "finalUrl": "https://sspai.com/",
+          "ms": 1095,
+          "bytes": 110369,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [
+            "<link href=\"/feed\" title=\"少数派\" type=\"application/rss+xml\">"
+          ],
+          "sitemaps": [],
+          "title": "少数派 - 高效工作，品质生活"
+        },
+        {
+          "url": "https://sspai.com/robots.txt",
+          "status": 200,
+          "finalUrl": "https://sspai.com/robots.txt",
+          "ms": 724,
+          "bytes": 153,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": []
+        },
+        {
+          "url": "https://sspai.com/feed",
+          "status": 200,
+          "finalUrl": "https://sspai.com/feed",
+          "ms": 744,
+          "bytes": 4420,
+          "feed": true,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [],
+          "title": "少数派"
+        }
+      ],
+      "sitemapChecks": []
+    },
+    {
+      "source": "中国出版传媒商报",
+      "type": "publishing",
+      "url": "https://www.cbbr.com.cn/",
+      "feed": null,
+      "checks": [
+        {
+          "url": "https://www.cbbr.com.cn/",
+          "status": 200,
+          "finalUrl": "https://www.cbbr.com.cn/",
+          "ms": 1438,
+          "bytes": 239553,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [],
+          "title": "\r\n  中国出版传媒商报\r\n"
+        },
+        {
+          "url": "https://www.cbbr.com.cn/robots.txt",
+          "status": 200,
+          "finalUrl": "https://www.cbbr.com.cn/robots.txt",
+          "ms": 426,
+          "bytes": 1414,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [],
+          "title": "哎呀404…您访问的页面不存在"
+        }
+      ],
+      "sitemapChecks": []
+    },
+    {
+      "source": "机核",
+      "type": "culture/audio",
+      "url": "https://www.gcores.com/",
+      "feed": "https://www.gcores.com/rss",
+      "checks": [
+        {
+          "url": "https://www.gcores.com/",
+          "status": 200,
+          "finalUrl": "https://www.gcores.com/",
+          "ms": 811,
+          "bytes": 221193,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [],
+          "title": "机核 GCORES"
+        },
+        {
+          "url": "https://www.gcores.com/robots.txt",
+          "status": 200,
+          "finalUrl": "https://www.gcores.com/robots.txt",
+          "ms": 367,
+          "bytes": 404,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": []
+        },
+        {
+          "url": "https://www.gcores.com/rss",
+          "status": 200,
+          "finalUrl": "https://www.gcores.com/rss",
+          "ms": 509,
+          "bytes": 92543,
+          "feed": true,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [],
+          "title": "机核"
+        }
+      ],
+      "sitemapChecks": []
+    },
+    {
+      "source": "哔哩哔哩",
+      "type": "video",
+      "url": "https://www.bilibili.com/",
+      "feed": null,
+      "checks": [
+        {
+          "url": "https://www.bilibili.com/",
+          "status": 200,
+          "finalUrl": "https://www.bilibili.com/",
+          "ms": 1137,
+          "bytes": 153600,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [],
+          "title": "哔哩哔哩 (゜-゜)つロ 干杯~-bilibili"
+        },
+        {
+          "url": "https://www.bilibili.com/robots.txt",
+          "status": 200,
+          "finalUrl": "https://www.bilibili.com/robots.txt",
+          "ms": 1036,
+          "bytes": 65,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": []
+        }
+      ],
+      "sitemapChecks": []
+    },
+    {
+      "source": "津津乐道",
+      "type": "audio",
+      "url": "https://www.jinjinledao.org/",
+      "feed": "https://feeds.jinjinledao.org/all.xml",
+      "checks": [
+        {
+          "url": "https://www.jinjinledao.org/",
+          "ms": 1333,
+          "error": "ERR_SSL_SSL/TLS_ALERT_HANDSHAKE_FAILURE"
+        },
+        {
+          "url": "https://www.jinjinledao.org/robots.txt",
+          "ms": 1337,
+          "error": "ERR_SSL_SSL/TLS_ALERT_HANDSHAKE_FAILURE"
+        },
+        {
+          "url": "https://feeds.jinjinledao.org/all.xml",
+          "ms": 828,
+          "error": "ENOTFOUND"
+        }
+      ],
+      "sitemapChecks": []
+    },
+    {
+      "source": "阮一峰",
+      "type": "independent",
+      "url": "https://www.ruanyifeng.com/blog/",
+      "feed": "https://www.ruanyifeng.com/blog/atom.xml",
+      "checks": [
+        {
+          "url": "https://www.ruanyifeng.com/blog/",
+          "status": 200,
+          "finalUrl": "https://www.ruanyifeng.com/blog/index.html",
+          "ms": 1604,
+          "bytes": 18762,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [
+            "<link rel=\"alternate\" type=\"application/atom+xml\" title=\"Recent Entries\" href=\"https://feeds.feedburner.com/ruanyifeng\" />"
+          ],
+          "sitemaps": [],
+          "title": "阮一峰的网络日志"
+        },
+        {
+          "url": "https://www.ruanyifeng.com/robots.txt",
+          "status": 200,
+          "finalUrl": "https://www.ruanyifeng.com/robots.txt",
+          "ms": 1242,
+          "bytes": 0,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": []
+        },
+        {
+          "url": "https://www.ruanyifeng.com/blog/atom.xml",
+          "status": 200,
+          "finalUrl": "https://www.ruanyifeng.com/blog/atom.xml",
+          "ms": 1598,
+          "bytes": 44319,
+          "feed": true,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [
+            "<link rel=\"self\" type=\"application/atom+xml\" href=\"http://www.ruanyifeng.com/blog/atom.xml\" />"
+          ],
+          "sitemaps": [],
+          "title": "阮一峰的网络日志"
+        }
+      ],
+      "sitemapChecks": []
+    },
+    {
+      "source": "爱范儿",
+      "type": "technology",
+      "url": "https://www.ifanr.com/",
+      "feed": "https://www.ifanr.com/feed",
+      "checks": [
+        {
+          "url": "https://www.ifanr.com/",
+          "status": 200,
+          "finalUrl": "https://www.ifanr.com/",
+          "ms": 873,
+          "bytes": 129178,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": true,
+          "feedLinks": [],
+          "sitemaps": [],
+          "title": "  爱范儿 · 关注明日产品的数字潮牌\n"
+        },
+        {
+          "url": "https://www.ifanr.com/robots.txt",
+          "status": 200,
+          "finalUrl": "https://www.ifanr.com/robots.txt",
+          "ms": 832,
+          "bytes": 308,
+          "feed": false,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [
+            "https://www.ifanr.com/sitemap.xml"
+          ]
+        },
+        {
+          "url": "https://www.ifanr.com/feed",
+          "status": 200,
+          "finalUrl": "https://www.ifanr.com/feed",
+          "ms": 971,
+          "bytes": 341381,
+          "feed": true,
+          "sitemapXml": false,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": [],
+          "title": "爱范儿"
+        }
+      ],
+      "sitemapChecks": [
+        {
+          "url": "https://www.ifanr.com/sitemap.xml",
+          "status": 200,
+          "finalUrl": "https://www.ifanr.com/sitemap.xml",
+          "ms": 2031,
+          "bytes": 123854,
+          "feed": false,
+          "sitemapXml": true,
+          "jsonLd": false,
+          "feedLinks": [],
+          "sitemaps": []
+        }
+      ]
+    }
+  ]
+}

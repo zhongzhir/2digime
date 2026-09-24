@@ -22,6 +22,8 @@ export interface DiscoverCard {
   publisherDisplayName?: string;
   author?: string;
   publishedAt?: string;
+  representation?: import('./content-resolution').ContentRepresentation;
+  sources?: Array<{ title: string; url: string; publisher?: string; publishedAt?: string }>;
   reason: string;
   source?: 'directory' | 'web';
   contentType?: string;

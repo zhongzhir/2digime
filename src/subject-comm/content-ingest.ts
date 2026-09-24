@@ -184,6 +184,7 @@ function sameItem(a: NetworkItem, b: NetworkItem): boolean {
     a.content.title === b.content.title &&
     a.content.text === b.content.text &&
     a.content.url === b.content.url &&
+    a.content.publishedAt === b.content.publishedAt &&
     a.content.contentType === b.content.contentType &&
     a.content.thumbnailUrl === b.content.thumbnailUrl &&
     a.content.mediaUrl === b.content.mediaUrl &&
@@ -293,6 +294,8 @@ async function toNetworkItem(input: {
         title: checked.item.content.title,
         text: checked.item.content.text,
         ...(checked.item.content.url ? { url: checked.item.content.url } : {}),
+        ...(checked.item.content.publishedAt || input.existing.content.publishedAt
+          ? { publishedAt: checked.item.content.publishedAt || input.existing.content.publishedAt } : {}),
         ...mergedMedia,
         consumption: mergedMedia.consumption || consumptionFor(mergedMedia),
       },
@@ -360,7 +363,7 @@ export async function ingestSource(input: IngestSourceInput): Promise<{
   const looksFeed = looksLikeXmlFeed(body);
   const parsed = looksFeed
     ? parseFeed(body)
-    : { sourceTitle: clipTitle(parseHtmlPreview(body, fetched.finalUrl).title), items: [parseHtmlPreview(body, fetched.finalUrl)] };
+    : { sourceTitle: clipTitle(parsePageMetadata(body, fetched.finalUrl).publisher || new URL(fetched.finalUrl).hostname), items: [parseHtmlPreview(body, fetched.finalUrl)] };
   if (!looksFeed) {
     const preview = parsed.items[0];
     const meta = parsePageMetadata(body, fetched.finalUrl);
