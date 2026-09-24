@@ -105,14 +105,23 @@ export function shouldApplyDiscoverView(
 }
 
 export function mergeCardPair(existing: DiscoverCard, incoming: DiscoverCard): DiscoverCard {
+  // A progressive first pass and a later full pass may describe the same event with different
+  // grouped-source sets; keep the union so clustering from the fuller pass is not lost.
+  const sourceByUrl = new Map<string, NonNullable<DiscoverCard['sources']>[number]>();
+  for (const source of [...(existing.sources || []), ...(incoming.sources || [])]) {
+    if (source && source.url) sourceByUrl.set(source.url, source);
+  }
+  const mergedSources = sourceByUrl.size > 1 ? [...sourceByUrl.values()] : (incoming.sources || existing.sources);
+  const withSources = <T extends DiscoverCard>(card: T): T =>
+    mergedSources && mergedSources.length ? { ...card, sources: mergedSources } : card;
   if (fidelityOf(incoming) === 'UNRELATED' && fidelityOf(existing) !== 'UNRELATED') {
-    return existing;
+    return withSources(existing);
   }
   if (isBrokenImageRepresentation(incoming) && hasDirectMediaRepresentation(existing)) {
-    return existing;
+    return withSources(existing);
   }
   if (hasDirectMediaRepresentation(existing) && !hasDirectMediaRepresentation(incoming)) {
-    return {
+    return withSources({
       ...incoming,
       ...(existing.contentType ? { contentType: existing.contentType } : {}),
       ...(existing.thumbnailUrl || incoming.thumbnailUrl
@@ -131,19 +140,19 @@ export function mergeCardPair(existing: DiscoverCard, incoming: DiscoverCard): D
         : incoming.objectFidelity
           ? { objectFidelity: incoming.objectFidelity }
           : {}),
-    };
+    });
   }
   if (cardQualityRank(incoming) > cardQualityRank(existing)) {
-    return {
+    return withSources({
       ...incoming,
       ...(incoming.thumbnailUrl || existing.thumbnailUrl
         ? { thumbnailUrl: incoming.thumbnailUrl || existing.thumbnailUrl }
         : {}),
       ...(incoming.mediaUrl || existing.mediaUrl ? { mediaUrl: incoming.mediaUrl || existing.mediaUrl } : {}),
       ...(incoming.embedUrl || existing.embedUrl ? { embedUrl: incoming.embedUrl || existing.embedUrl } : {}),
-    };
+    });
   }
-  return existing;
+  return withSources(existing);
 }
 
 export function mergeCardLists(current: DiscoverCard[], incoming: DiscoverCard[]): DiscoverCard[] {

@@ -4,9 +4,9 @@
 const path = require('node:path');
 const os = require('node:os');
 const fs = require('node:fs');
-const evidenceDir = process.env.DOMESTIC_CONTENT === '1' ? 'build/evidence/domestic-content-04'
+const evidenceDir = process.env.EVIDENCE_DIR || (process.env.DOMESTIC_CONTENT === '1' ? 'build/evidence/domestic-content-04'
   : process.env.NEWS_RELIABILITY === '1' ? 'build/evidence/news-reliability-03'
-  : 'build/evidence/news-supply-live-gate-02';
+  : 'build/evidence/news-supply-live-gate-02');
 const ACCEPTANCE = process.env.DOMESTIC_CONTENT === '1' || process.env.NEWS_RELIABILITY === '1';
 const evidencePath = path.resolve(evidenceDir, 'model.jsonl');
 fs.mkdirSync(path.dirname(evidencePath), { recursive: true });
@@ -29,7 +29,7 @@ http.chatComplete = async (options) => {
       }
     } catch { /* ignore */ }
     fs.appendFileSync(evidencePath, JSON.stringify({ at: new Date().toISOString(), ok: true,
-      finishReason: result.finishReason, text: result.text, ...(judge ? { judge } : {}) }) + '\n');
+      finishReason: result.finishReason, usage: result.usage, text: result.text, ...(judge ? { judge } : {}) }) + '\n');
     return result;
   } catch (error) {
     fs.appendFileSync(evidencePath, JSON.stringify({ at: new Date().toISOString(), ok: false,

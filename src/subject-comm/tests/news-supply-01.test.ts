@@ -157,14 +157,19 @@ test('selection can only reference supplied candidates, clusters retain sources,
     preferences: '',
     model: { baseUrl: '', model: '' },
     resolve: false,
-    chatComplete: async () => ({
-      text: JSON.stringify({
-        groups: [
-          { ids: [0, 0, 1, 999], type: 'news', reason: 'same event' },
-          { ids: [2], type: 'news', reason: 'invalid date' },
-        ],
-      }),
-    }),
+    chatComplete: async (options) => {
+      const sys = String(options.messages[0]?.content || '');
+      return (!sys.includes('groups') && sys.includes('"selected"'))
+        ? { text: JSON.stringify({ selected: [{ id: 0, type: 'news' }, { id: 1, type: 'news' }] }) }
+        : {
+            text: JSON.stringify({
+              groups: [
+                { ids: [0, 0, 1, 999], type: 'news', reason: 'same event' },
+                { ids: [2], type: 'news', reason: 'invalid date' },
+              ],
+            }),
+          };
+    },
   });
   assert.equal(result.length, 1);
   assert.equal(result[0]?.sources?.length, 2);
@@ -209,9 +214,11 @@ test('formal command joins direct supply and search, clusters locally and leaves
         model: 'test',
         providerId: 'test',
       },
-      chatComplete: async (options) => ({
-        text: options.messages[0]?.content.includes('groups')
-          ? JSON.stringify({
+      chatComplete: async (options) => {
+        const sys = String(options.messages[0]?.content || '');
+        if (sys.includes('groups')) {
+          return {
+            text: JSON.stringify({
               groups: [
                 {
                   ids: [0, 1],
@@ -219,14 +226,19 @@ test('formal command joins direct supply and search, clusters locally and leaves
                   reason: 'Same event from two publishers',
                 },
               ],
-            })
-          : JSON.stringify({
-              mode: 'consume',
-              topic: 'test',
-              requestedContentTypes: ['news'],
-              searchQueries: ['test'],
             }),
-      }),
+          };
+        }
+        if (sys.includes('"selected"')) return { text: JSON.stringify({ selected: [{ id: 0, type: 'news' }, { id: 1, type: 'news' }] }) };
+        return {
+          text: JSON.stringify({
+            mode: 'consume',
+            topic: 'test',
+            requestedContentTypes: ['news'],
+            searchQueries: ['test'],
+          }),
+        };
+      },
     },
     contentCandidateSupply: async () => {
       supplyCalls++;
@@ -250,9 +262,15 @@ test('formal command joins direct supply and search, clusters locally and leaves
   });
   const selfPath = path.join(root, 'digital-self', 'self.json');
   const before = await fs.readFile(selfPath, 'utf8').catch(() => null);
-  const result = await bus.invoke('content', {
+  const first = await bus.invoke('content', {
     action: 'seek',
     text: 'Recent news',
+  });
+  // Progressive: the first seek returns Feed/direct cards quickly and marks replenishing.
+  assert.equal(first.view.replenishing, true);
+  const result = await bus.invoke('content', {
+    action: 'replenish',
+    searchGenerationId: first.view.searchGenerationId || '',
   });
   assert.equal(result.view.cards.length, 1);
   assert.equal(result.view.cards[0]?.sources?.length, 2);

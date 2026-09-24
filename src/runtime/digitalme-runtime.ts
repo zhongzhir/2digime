@@ -400,6 +400,10 @@ export interface DigitalMeRuntimeOptions {
   autonomousCollabReceive?: boolean;
 }
 
+// First-pass (progressive) candidate pool. Small enough that Feed-only selection is quick,
+// large enough to stay publisher-diverse (Feed cards are interleaved across sources).
+const FAST_SUPPLY_POOL = 12;
+
 /**
  * DigitalMeRuntime — Subject + Work + Artifact Workspace 装配。
  * 单实例挂载一个 SubjectPackage;Work 数据落在 package/runtime/ 下随包迁移。
@@ -433,6 +437,7 @@ export class DigitalMeRuntime {
   private pendingSeekMerge: {
     generationId: string;
     leftover: Promise<ContentSeekResult | null>;
+    timings?: Array<{ event: string; ms: number; count?: number }>;
   } | null = null;
 
   constructor(options: DigitalMeRuntimeOptions = {}) {
@@ -688,7 +693,14 @@ export class DigitalMeRuntime {
         { replenishing: false },
       );
       const merged = mergeIntentViews(this.lastIntentView, incoming);
-      this.lastIntentView = { ...merged, replenishing: false };
+      const mergedView = { ...merged, replenishing: false,
+        ...(pending.timings ? { supplyTrace: pending.timings.slice() } : {}),
+        searchProviders: this.searchProviderEvidence.map((row) => ({ ...row })) };
+      if (mergedView.cards.length && this.searchProviderEvidence.length
+        && !this.searchProviderEvidence.some((row) => row.status === 'AVAILABLE')) {
+        mergedView.notice = '联网搜索暂不可用，以下内容来自已读取的公开来源。';
+      }
+      this.lastIntentView = mergedView;
       if (merged.cards.length) {
         await rememberIntentFeed(packageRoot, merged.cards, String(merged.searchQuery || ''));
       }
@@ -831,6 +843,13 @@ export class DigitalMeRuntime {
         searchGenerationId: generationId,
       };
     };
+    // Same local model and Digital Self; no Relay personalization or second profile.
+    const supply = this.options.contentCandidateSupply === false || networking === 'DISABLED'
+      ? undefined : this.options.contentCandidateSupply || (process.env.NODE_TEST_CONTEXT ? undefined : () => acquirePublicFeeds(store));
+    // Start Feed acquisition before intent understanding so the two overlap; the first pass
+    // otherwise pays their latencies serially.
+    const feedStartAt = Date.now();
+    const feedPromise: Promise<DiscoverCard[]> | null = supply && chatCompleteFn && model ? supply() : null;
     try {
       const intent =
         chatCompleteFn && model
@@ -853,43 +872,51 @@ export class DigitalMeRuntime {
         putNetworkItem: async (item: NetworkItem) => { await store.put(item); },
         ...(chatCompleteFn && model ? { chatComplete: chatCompleteFn, model } : {}),
       };
-      // Same local model and Digital Self; no Relay personalization or second profile.
-      const supply = this.options.contentCandidateSupply === false || networking === 'DISABLED'
-        ? undefined : this.options.contentCandidateSupply || (process.env.NODE_TEST_CONTEXT ? undefined : () => acquirePublicFeeds(store));
       if (supply && chatCompleteFn && model) {
         const self = await readDigitalSelf(packageRoot, subjectId, nowIso());
         const directives = formatPreferenceDirectives(await listContentPreferences(packageRoot));
+        const selfContext = formatSelfContext(selectSelfContext(self, query));
         const timings: Array<{event:string;ms:number;count?:number}> = [];
-        const sought = await seekContent({
-          ...common,
-          ...(searchWeb ? { searchWeb: async (q:string) => {
-            const at=Date.now();
-            try { return await searchWeb(q); } finally { timings.push({event:'search',ms:Date.now()-at}); }
-          } } : {}),
-          acquireCandidates: async () => {
-            const at=Date.now(); const cards=await supply();
-            timings.push({event:'directory/feed',ms:Date.now()-at,count:cards.length});
-            return cards;
-          },
-          selectCandidates: async cards => {
-            const result=await selectSupply({cards,query,topic:intent.topic,selfContext:formatSelfContext(selectSelfContext(self,query)),preferences:directives,chatComplete:chatCompleteFn,model,onTiming:(event,ms,count)=>timings.push({event,ms,...(count !== undefined ? {count} : {})})});
-            return result;
-          },
+        const feedCards = (await feedPromise) ?? [];
+        timings.push({ event: 'directory/feed', ms: Date.now() - feedStartAt, count: feedCards.length });
+        const selectCandidates = (cards: DiscoverCard[], opts?: { limit?: number; mode?: 'fast' | 'full' }) => selectSupply({
+          cards, query, topic: intent.topic, selfContext, preferences: directives, chatComplete: chatCompleteFn, model,
+          ...(opts?.limit ? { limit: opts.limit } : {}),
+          ...(opts?.mode ? { mode: opts.mode } : {}),
+          onTiming: (event, ms, count) => timings.push({ event, ms, ...(count !== undefined ? { count } : {}) }),
         });
-        timings.push({event:'total',ms:Date.now()-requestStarted});
-        const currentNetworking=this.snapshotNetworkDiscovery();
-        const view=this.intentViewFromSeek(query,sought,preferences,currentNetworking,generationId,{replenishing:false});
-        if(sought.cards.length && ['AUTH_FAILED','RATE_LIMITED','TEMPORARY_ERROR'].includes(currentNetworking)) {
-          view.notice='联网搜索暂不可用，以下内容来自已读取的公开来源。';
-        }
-        view.supplyTrace=timings;
-        view.searchProviders=this.searchProviderEvidence.map(row => ({...row}));
-        if (sought.cards.length && !this.searchProviderEvidence.some(row => row.status === 'AVAILABLE')) {
-          view.notice='联网搜索暂不可用，以下内容来自已读取的公开来源。';
-        }
-        if(generationId===this.currentSearchGenerationId) {
-          if(sought.cards.length) await rememberIntentFeed(packageRoot,sought.cards,query);
-          this.lastIntentView=view;
+        // Progressive: the first pass uses Feed/direct only and a bounded pool, so first cards
+        // render without waiting for Search. The full pass (Search + full pool) runs in the
+        // background and is merged by the replenish step.
+        const fastSought = await seekContent({
+          ...common,
+          skipWeb: true,
+          acquireCandidates: async () => feedCards,
+          selectCandidates: (cards) => selectCandidates(cards, { limit: FAST_SUPPLY_POOL, mode: 'fast' }),
+        });
+        const currentNetworking = this.snapshotNetworkDiscovery();
+        const view = this.intentViewFromSeek(query, fastSought, preferences, currentNetworking, generationId, { replenishing: true });
+        timings.push({ event: 'first-cards', ms: Date.now() - requestStarted });
+        view.supplyTrace = timings.slice();
+        if (generationId === this.currentSearchGenerationId) {
+          if (fastSought.cards.length) await rememberIntentFeed(packageRoot, fastSought.cards, query);
+          this.lastIntentView = view;
+          const leftover = (async (): Promise<ContentSeekResult | null> => {
+            try {
+              return await seekContent({
+                ...common,
+                ...(searchWeb ? { searchWeb: async (q: string) => {
+                  const at = Date.now();
+                  try { return await searchWeb(q); } finally { timings.push({ event: 'search', ms: Date.now() - at }); }
+                } } : {}),
+                acquireCandidates: async () => feedCards,
+                selectCandidates: (cards) => selectCandidates(cards),
+              });
+            } catch {
+              return null;
+            }
+          })();
+          this.pendingSeekMerge = { generationId, leftover, timings };
         }
         return view;
       }
@@ -989,6 +1016,7 @@ export class DigitalMeRuntime {
   }
 
   private resolveOpenMediaFetch(): typeof safePublicHttpGet | undefined {
+    if (this.options.searchCapability === false) return undefined;
     if (this.options.webDiscoveryEnabled === false) return undefined;
     if (this.options.contentOpenMediaFetch === false) return undefined;
     if (this.options.contentOpenMediaFetch) return this.options.contentOpenMediaFetch;

@@ -1,0 +1,723 @@
+{
+  "at": "2026-09-24T13:57:04.104Z",
+  "userData": "C:\\Users\\46554\\AppData\\Local\\Temp\\domestic-content-ui-ydekja",
+  "rows": [
+    {
+      "key": "A",
+      "query": "今天有什么重要科技新闻？",
+      "ttfvMs": 9915,
+      "ttfvDomMs": 9915,
+      "ttfvRecordMs": 9916,
+      "ttfcMs": 90425,
+      "modelCalls": 27,
+      "modelTokens": 81840,
+      "fastTrace": [
+        {
+          "event": "directory/feed",
+          "ms": 3554,
+          "count": 152
+        },
+        {
+          "event": "shortlist",
+          "ms": 5523,
+          "count": 3
+        },
+        {
+          "event": "resolve-shortlist",
+          "ms": 722,
+          "count": 3
+        },
+        {
+          "event": "selected",
+          "ms": 6245,
+          "count": 3
+        },
+        {
+          "event": "first-cards",
+          "ms": 9812
+        }
+      ],
+      "fullTrace": [
+        {
+          "event": "directory/feed",
+          "ms": 3554,
+          "count": 152
+        },
+        {
+          "event": "shortlist",
+          "ms": 5523,
+          "count": 3
+        },
+        {
+          "event": "resolve-shortlist",
+          "ms": 722,
+          "count": 3
+        },
+        {
+          "event": "selected",
+          "ms": 6245,
+          "count": 3
+        },
+        {
+          "event": "first-cards",
+          "ms": 9812
+        },
+        {
+          "event": "search",
+          "ms": 797
+        },
+        {
+          "event": "search",
+          "ms": 1596
+        },
+        {
+          "event": "shortlist",
+          "ms": 49497,
+          "count": 36
+        },
+        {
+          "event": "resolve-shortlist",
+          "ms": 2900,
+          "count": 36
+        },
+        {
+          "event": "cluster",
+          "ms": 13258,
+          "count": 12
+        },
+        {
+          "event": "cluster",
+          "ms": 18940,
+          "count": 12
+        },
+        {
+          "event": "cluster-failed",
+          "ms": 20275,
+          "count": 12
+        },
+        {
+          "event": "clustered",
+          "ms": 20276,
+          "count": 12
+        },
+        {
+          "event": "selected",
+          "ms": 72674,
+          "count": 12
+        }
+      ],
+      "fastCards": 3,
+      "finalCards": 14,
+      "dom": [
+        {
+          "title": "美国将投入近 20 亿美元升级老化电网，有望为近 1 亿美国人降低用电成本",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "《控制：共振》游戏发售当日遭破解，部分盗版玩家坚持入正力挺开发商 Remedy",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "奕境 X9 上市 28.98 万元起！华为系大六座有了一个新选项",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "三巨头联手，曝谷歌、OpenAI、Anthropic 拟共同组建 AI 安全标准自律组织",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "Waymo 公布 2.71 亿英里自动驾驶数据：严重事故比人类驾驶员少 95%",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "亚马逊将投资超 1 亿美元在美国新建机器人制造工厂，2028 年投入运营",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "全国首例AI芯片商业秘密案背后：知识产权检察守护浦东创新密码",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "5999 起！无需多言｜小米 18 Pro 系列发布会",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "OpenAI 奥尔特曼、 Anthropic 阿莫迪罕见“同台”，呼吁全球合作应对 AI 安全",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "高通宣布与苹果续签全球专利许可协议，2027 年 4 月 1 日起生效",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "软银豪赌 AI：完成 111 亿美元创纪录债券发行，全力押注 OpenAI",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "摩尔线程官宣：MTT S5000 适配字节跳动 Protenix-v2 开源生物分子结构预测模型",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "研究警示：美国 AI 基建投入规模空前，潜藏系统性金融风险",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "微软总裁布拉德 · 史密斯支持独立评估 AI 安全，还要确保系统处于人类控制之下",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        }
+      ]
+    },
+    {
+      "key": "B",
+      "query": "最近有什么值得看的 AI 深度内容？",
+      "ttfvMs": 70207,
+      "ttfvDomMs": 70207,
+      "ttfvRecordMs": 70208,
+      "ttfcMs": 175817,
+      "modelCalls": 35,
+      "modelTokens": 77117,
+      "fastTrace": [
+        {
+          "event": "directory/feed",
+          "ms": 3982,
+          "count": 152
+        },
+        {
+          "event": "shortlist",
+          "ms": 64309,
+          "count": 4
+        },
+        {
+          "event": "resolve-shortlist",
+          "ms": 1612,
+          "count": 4
+        },
+        {
+          "event": "selected",
+          "ms": 65921,
+          "count": 4
+        },
+        {
+          "event": "first-cards",
+          "ms": 70031
+        }
+      ],
+      "fullTrace": [
+        {
+          "event": "directory/feed",
+          "ms": 3982,
+          "count": 152
+        },
+        {
+          "event": "shortlist",
+          "ms": 64309,
+          "count": 4
+        },
+        {
+          "event": "resolve-shortlist",
+          "ms": 1612,
+          "count": 4
+        },
+        {
+          "event": "selected",
+          "ms": 65921,
+          "count": 4
+        },
+        {
+          "event": "first-cards",
+          "ms": 70031
+        },
+        {
+          "event": "search",
+          "ms": 990
+        },
+        {
+          "event": "search",
+          "ms": 1185
+        },
+        {
+          "event": "shortlist",
+          "ms": 71010,
+          "count": 32
+        },
+        {
+          "event": "resolve-shortlist",
+          "ms": 5466,
+          "count": 32
+        },
+        {
+          "event": "cluster",
+          "ms": 12925,
+          "count": 12
+        },
+        {
+          "event": "cluster-failed",
+          "ms": 20420,
+          "count": 8
+        },
+        {
+          "event": "cluster-failed",
+          "ms": 21014,
+          "count": 12
+        },
+        {
+          "event": "clustered",
+          "ms": 21014,
+          "count": 6
+        },
+        {
+          "event": "selected",
+          "ms": 97492,
+          "count": 6
+        }
+      ],
+      "fastCards": 4,
+      "finalCards": 10,
+      "dom": [
+        {
+          "title": "E225｜SaaS业数千亿市值蒸发：AI如何变革组织架构？",
+          "kind": "音频",
+          "videoTag": false,
+          "audioTag": true,
+          "embedTag": false,
+          "reader": false
+        },
+        {
+          "title": "E226｜聊聊DeepMind创始人哈萨比斯：一个科学家与失控的AI竞赛",
+          "kind": "音频",
+          "videoTag": false,
+          "audioTag": true,
+          "embedTag": false,
+          "reader": false
+        },
+        {
+          "title": "E227｜美国医疗市场AI争夺战：巨头押注，创业公司能赢吗？",
+          "kind": "音频",
+          "videoTag": false,
+          "audioTag": true,
+          "embedTag": false,
+          "reader": false
+        },
+        {
+          "title": "E228｜谷歌TPU能撼动英伟达吗？前TPU工程师首次揭秘",
+          "kind": "音频",
+          "videoTag": false,
+          "audioTag": true,
+          "embedTag": false,
+          "reader": false
+        },
+        {
+          "title": "研究警示：美国 AI 基建投入规模空前，潜藏系统性金融风险",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "⁡⁤‬‍⁤‬​‌‍⁢⁡⁢⁣‌‌ ⁡⁡​⁤​​ ⁢⁡‬⁡‬​‍⁣​​ ⁤⁡‍​⁡‬‌‬⁣⁡⁣​⁡‬⁤刚刚，GPT-6 新模型掀桌！「白菜价」杀进 DeepSeek 腹地",
+          "kind": "文章",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "‌​⁣‌‌⁤⁡⁤‬⁡ ​ ‌⁤‬‬⁣​‌⁢​‬⁣‬​​⁤​‬​‬‍​⁤ ⁤​⁢⁣⁢​‍⁡​‬‬ ⁢WorkBuddy 把办公 Agent，做成了人人可搭的「赛博乐高」",
+          "kind": "文章",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "AI 想包办你的一切，高通想包办你的 AI",
+          "kind": "文章",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "刚刚，苹果「液态玻璃」缔造者，给 Muse 造了个 AI 拓麻歌子",
+          "kind": "文章",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "Meta 承认 Muse 产品设计深受 OpenClaw 启发，但强调从零构建",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        }
+      ]
+    },
+    {
+      "key": "C",
+      "query": "给我找一些最近值得看的 AI 视频。",
+      "ttfvMs": 41574,
+      "ttfvDomMs": 41574,
+      "ttfvRecordMs": 8403,
+      "ttfcMs": 41780,
+      "modelCalls": 28,
+      "modelTokens": 49114,
+      "fastTrace": [
+        {
+          "event": "directory/feed",
+          "ms": 4594,
+          "count": 152
+        },
+        {
+          "event": "shortlist",
+          "ms": 1299,
+          "count": 0
+        },
+        {
+          "event": "resolve-shortlist",
+          "ms": 0,
+          "count": 0
+        },
+        {
+          "event": "selected",
+          "ms": 1299,
+          "count": 0
+        },
+        {
+          "event": "first-cards",
+          "ms": 8304
+        }
+      ],
+      "fullTrace": [
+        {
+          "event": "directory/feed",
+          "ms": 4594,
+          "count": 152
+        },
+        {
+          "event": "shortlist",
+          "ms": 1299,
+          "count": 0
+        },
+        {
+          "event": "resolve-shortlist",
+          "ms": 0,
+          "count": 0
+        },
+        {
+          "event": "selected",
+          "ms": 1299,
+          "count": 0
+        },
+        {
+          "event": "first-cards",
+          "ms": 8304
+        },
+        {
+          "event": "search",
+          "ms": 839
+        },
+        {
+          "event": "search",
+          "ms": 1613
+        },
+        {
+          "event": "shortlist",
+          "ms": 21327,
+          "count": 5
+        },
+        {
+          "event": "resolve-shortlist",
+          "ms": 1657,
+          "count": 5
+        },
+        {
+          "event": "cluster",
+          "ms": 2218,
+          "count": 5
+        },
+        {
+          "event": "clustered",
+          "ms": 2218,
+          "count": 5
+        },
+        {
+          "event": "selected",
+          "ms": 25203,
+          "count": 5
+        }
+      ],
+      "fastCards": 0,
+      "finalCards": 5,
+      "dom": [
+        {
+          "title": "2026-08-17 Could AI do this?.webm",
+          "kind": "视频",
+          "videoTag": true,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": false
+        },
+        {
+          "title": "《焦点访谈》 20260720 点亮全球人工智能新图景",
+          "kind": "视频",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "《焦点访谈》 20260716 智能向善 共创未来",
+          "kind": "视频",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "[视频]2026世界人工智能大会将于7月17日至20日举办",
+          "kind": "视频",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "2026外滩大会上海启幕 AI走进生产生活真实场景-中新网视频",
+          "kind": "视频",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        }
+      ]
+    },
+    {
+      "key": "D",
+      "query": "最近有什么值得听的科技/商业音频？",
+      "ttfvMs": 20809,
+      "ttfvDomMs": 20809,
+      "ttfvRecordMs": 20810,
+      "ttfcMs": 143361,
+      "modelCalls": 28,
+      "modelTokens": 62365,
+      "fastTrace": [
+        {
+          "event": "directory/feed",
+          "ms": 3261,
+          "count": 152
+        },
+        {
+          "event": "shortlist",
+          "ms": 13895,
+          "count": 8
+        },
+        {
+          "event": "resolve-shortlist",
+          "ms": 2440,
+          "count": 8
+        },
+        {
+          "event": "selected",
+          "ms": 16335,
+          "count": 8
+        },
+        {
+          "event": "first-cards",
+          "ms": 20660
+        }
+      ],
+      "fullTrace": [
+        {
+          "event": "directory/feed",
+          "ms": 3261,
+          "count": 152
+        },
+        {
+          "event": "shortlist",
+          "ms": 13895,
+          "count": 8
+        },
+        {
+          "event": "resolve-shortlist",
+          "ms": 2440,
+          "count": 8
+        },
+        {
+          "event": "selected",
+          "ms": 16335,
+          "count": 8
+        },
+        {
+          "event": "first-cards",
+          "ms": 20660
+        },
+        {
+          "event": "search",
+          "ms": 486
+        },
+        {
+          "event": "search",
+          "ms": 1685
+        },
+        {
+          "event": "shortlist",
+          "ms": 64147,
+          "count": 22
+        },
+        {
+          "event": "resolve-shortlist",
+          "ms": 17556,
+          "count": 22
+        },
+        {
+          "event": "cluster",
+          "ms": 3231,
+          "count": 10
+        },
+        {
+          "event": "cluster",
+          "ms": 4573,
+          "count": 12
+        },
+        {
+          "event": "clustered",
+          "ms": 4573,
+          "count": 2
+        },
+        {
+          "event": "selected",
+          "ms": 86278,
+          "count": 2
+        }
+      ],
+      "fastCards": 8,
+      "finalCards": 8,
+      "dom": [
+        {
+          "title": "E252｜硅谷睡眠外挂：富人的玩具，还是预防医疗的入口？｜对话Eight Sleep创始人",
+          "kind": "音频",
+          "videoTag": false,
+          "audioTag": true,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "外滩大会线下圆桌｜敢把钱包交给AI吗？聊聊Agent交易爆发前夜的信任基建",
+          "kind": "音频",
+          "videoTag": false,
+          "audioTag": true,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "E251｜推理芯片之战：聊聊Groq、Cerebras与OpenAI三大路径与Bill Dally的设计哲学",
+          "kind": "音频",
+          "videoTag": false,
+          "audioTag": true,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "E250｜mRNA的第二战场：对话英博，拆解Moderna人类首个肿瘤疫苗三期突破",
+          "kind": "音频",
+          "videoTag": false,
+          "audioTag": true,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "E245｜藏在大模型背后的新闻人：GPT们的回复是这样写出来的",
+          "kind": "音频",
+          "videoTag": false,
+          "audioTag": true,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "E244｜机器人走错路了？与苏度韩铮聊聊具身智能的3D数据、路径分野与硅谷竞赛",
+          "kind": "音频",
+          "videoTag": false,
+          "audioTag": true,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "E243｜特朗普“缓刑”红牌之外，美国资本如何硬控全球足坛",
+          "kind": "音频",
+          "videoTag": false,
+          "audioTag": true,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "E242｜最快半年AI跑通自进化？与陈天桥首席科学家聊聊硅谷模型必争之地",
+          "kind": "音频",
+          "videoTag": false,
+          "audioTag": true,
+          "embedTag": false,
+          "reader": true
+        }
+      ]
+    }
+  ]
+}

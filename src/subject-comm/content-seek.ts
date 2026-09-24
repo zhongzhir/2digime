@@ -27,6 +27,7 @@ import {
   networkItemFromOpenHit,
   searchOpenMedia,
   type OpenMediaFetch,
+  type OpenMediaHit,
 } from './content-source-capabilities';
 
 export interface ExternalSeekHit {
@@ -252,101 +253,103 @@ export async function seekContent(input: {
   const directoryHits = matchDirectoryForSeek(input.items, query).filter(
     (item) => !isDomainLikeTitle(item.content.title, item.content.url) && !(item.content.url && isGenericHubUrl(item.content.url)),
   );
-  const cards: DiscoverCard[] = directoryHits.map((item) =>
+  const directoryCards: DiscoverCard[] = directoryHits.map((item) =>
     cardFromNetworkItem(item, '目录里已有这条内容。', 'directory'),
   );
-  if (input.acquireCandidates) cards.push(...await input.acquireCandidates());
-  const seenUrls = new Set(cards.map((card) => canonicalOf(card.url)).filter(Boolean));
-  const seenIds = new Set(cards.map((card) => card.itemId));
-
-  let usedExternal = cards.some(card => card.representation?.provenance.startsWith('feed:'));
-  let searchFailed = false;
   const mediaKinds = intent.requestedMedia.filter(
     (row): row is 'video' | 'image' | 'audio' => row === 'video' || row === 'image' || row === 'audio',
   );
-  if (mediaKinds.length && input.fetchOpenMedia && !input.skipOpenMedia) {
-    const mediaQueries = openMediaQueries(query, intent);
-    try {
-      for (const topicQuery of mediaQueries) {
-        const openHits = await searchOpenMedia({
-          query: topicQuery,
-          kinds: mediaKinds,
-          fetchImpl: input.fetchOpenMedia,
-        });
-        let mediaOfKind = cards.filter((card) => mediaKinds.includes(card.contentType as 'video' | 'image' | 'audio')).length;
-        if (mediaOfKind >= 16) break;
-        for (const hit of openHits) {
-          let ingestedFeed = false;
-          if (hit.feedUrl && input.ingestHit) {
+  const mediaQueries = mediaKinds.length ? openMediaQueries(query, intent) : [];
+  const webQueries = input.searchWeb && !input.skipWeb
+    ? (intent.searchQueries.length ? intent.searchQueries : [query]).slice(0, 2)
+    : [];
+
+  // Feed, open media and Search are independent acquisitions. They run concurrently so a slow
+  // Feed or provider cannot serialize the others; merging/dedup stays deterministic afterward.
+  const feedPromise: Promise<DiscoverCard[]> = input.acquireCandidates ? input.acquireCandidates() : Promise.resolve([]);
+  const mediaPromise: Promise<Array<OpenMediaHit & { searchQuery: string }>> =
+    (mediaKinds.length && input.fetchOpenMedia && !input.skipOpenMedia)
+      ? (async () => {
+          const collected: Array<OpenMediaHit & { searchQuery: string }> = [];
+          await Promise.all(mediaQueries.map(async (topicQuery) => {
             try {
-              const ingested = await input.ingestHit({
-                title: hit.title,
-                url: hit.feedUrl,
-                ...(hit.snippet ? { snippet: hit.snippet } : {}),
-              });
-              for (const item of ingested) {
-                const canonical = canonicalOf(item.content.url);
-                if (canonical && seenUrls.has(canonical)) continue;
-                if (seenIds.has(item.itemId)) continue;
-                if (isDomainLikeTitle(item.content.title, item.content.url)) continue;
-                if (item.content.url && isGenericHubUrl(item.content.url)) continue;
-                if (canonical) seenUrls.add(canonical);
-                seenIds.add(item.itemId);
-                usedExternal = true;
-                ingestedFeed = true;
-                if (canonical) queryByUrl.set(canonical, topicQuery);
-                cards.push(cardFromNetworkItem(item, '开放媒体来源，不是目录推荐。', 'web'));
-                if (cards.filter((card) => mediaKinds.includes(card.contentType as 'video' | 'image' | 'audio')).length >= 16) {
-                  break;
-                }
+              const rows = await searchOpenMedia({ query: topicQuery, kinds: mediaKinds, fetchImpl: input.fetchOpenMedia! });
+              for (const hit of rows) collected.push({ ...hit, searchQuery: topicQuery });
+            } catch { /* 单个开放来源失败不阻断其它来源 */ }
+          }));
+          return collected;
+        })()
+      : Promise.resolve([]);
+  const webPromise: Promise<{ hits: Array<ExternalSeekHit & { searchQuery: string }>; failed: boolean }> =
+    webQueries.length && input.searchWeb
+      ? (async () => {
+          const hits: Array<ExternalSeekHit & { searchQuery: string }> = [];
+          const seenHit = new Set<string>();
+          let failed = false;
+          await Promise.all(webQueries.map(async (q) => {
+            try {
+              for (const hit of await input.searchWeb!(q)) {
+                const canonical = canonicalOf(hit.url);
+                if (!canonical || seenHit.has(canonical)) continue;
+                if (isGenericHubUrl(canonical) || isDomainLikeTitle(hit.title, canonical)) continue;
+                seenHit.add(canonical);
+                hits.push({ ...hit, url: canonical, searchQuery: q });
               }
-            } catch {
-              /* 单条播客 feed 失败则用条目本身 */
-            }
-          }
-          if (ingestedFeed) continue;
-          const item = networkItemFromOpenHit(hit);
-          if (!item) continue;
+            } catch { failed = true; }
+          }));
+          return { hits, failed };
+        })()
+      : Promise.resolve({ hits: [], failed: false });
+
+  const [feedCards, mediaHits, web] = await Promise.all([feedPromise, mediaPromise, webPromise]);
+  const searchFailed = web.failed;
+  const cards: DiscoverCard[] = [...directoryCards, ...feedCards];
+  const seenUrls = new Set(cards.map((card) => canonicalOf(card.url)).filter(Boolean));
+  const seenIds = new Set(cards.map((card) => card.itemId));
+  let usedExternal = cards.some((card) => card.representation?.provenance.startsWith('feed:'));
+  const mediaCount = () => cards.filter((card) => mediaKinds.includes(card.contentType as 'video' | 'image' | 'audio')).length;
+
+  for (const hit of mediaHits) {
+    if (mediaCount() >= 16) break;
+    let ingestedFeed = false;
+    if (hit.feedUrl && input.ingestHit) {
+      try {
+        const ingested = await input.ingestHit({ title: hit.title, url: hit.feedUrl, ...(hit.snippet ? { snippet: hit.snippet } : {}) });
+        for (const item of ingested) {
           const canonical = canonicalOf(item.content.url);
           if (canonical && seenUrls.has(canonical)) continue;
           if (seenIds.has(item.itemId)) continue;
+          if (isDomainLikeTitle(item.content.title, item.content.url)) continue;
+          if (item.content.url && isGenericHubUrl(item.content.url)) continue;
           if (canonical) seenUrls.add(canonical);
           seenIds.add(item.itemId);
           usedExternal = true;
-          if (canonical) queryByUrl.set(canonical, topicQuery);
-          if (input.putNetworkItem) {
-            try { await input.putNetworkItem(item); } catch { /* 反馈持久化失败不影响本次展示 */ }
-          }
+          ingestedFeed = true;
+          if (canonical) queryByUrl.set(canonical, hit.searchQuery);
           cards.push(cardFromNetworkItem(item, '开放媒体来源，不是目录推荐。', 'web'));
-          mediaOfKind = cards.filter((card) => mediaKinds.includes(card.contentType as 'video' | 'image' | 'audio')).length;
-          if (mediaOfKind >= 16) break;
+          if (mediaCount() >= 16) break;
         }
-      }
-    } catch {
-      /* 开放媒体来源失败不阻断文章搜索 */
+      } catch { /* 单条播客 feed 失败则用条目本身 */ }
     }
+    if (ingestedFeed) continue;
+    const item = networkItemFromOpenHit(hit);
+    if (!item) continue;
+    const canonical = canonicalOf(item.content.url);
+    if (canonical && seenUrls.has(canonical)) continue;
+    if (seenIds.has(item.itemId)) continue;
+    if (canonical) seenUrls.add(canonical);
+    seenIds.add(item.itemId);
+    usedExternal = true;
+    if (canonical) queryByUrl.set(canonical, hit.searchQuery);
+    if (input.putNetworkItem) {
+      try { await input.putNetworkItem(item); } catch { /* 反馈持久化失败不影响本次展示 */ }
+    }
+    cards.push(cardFromNetworkItem(item, '开放媒体来源，不是目录推荐。', 'web'));
   }
 
-  if (input.searchWeb && !input.skipWeb) {
-    const searchBudget = cards.length + 24;
-    const queries = intent.searchQueries.length ? intent.searchQueries : [query];
-    const webHits: Array<ExternalSeekHit & { searchQuery: string }> = [];
-    const seenHit = new Set<string>();
-    for (const q of queries.slice(0, 2)) {
-      try {
-        const web = await input.searchWeb(q);
-        for (const hit of web) {
-          const canonical = canonicalOf(hit.url);
-          if (!canonical || seenHit.has(canonical) || seenUrls.has(canonical)) continue;
-          if (isGenericHubUrl(canonical) || isDomainLikeTitle(hit.title, canonical)) continue;
-          seenHit.add(canonical);
-          webHits.push({ ...hit, url: canonical, searchQuery: q });
-        }
-      } catch {
-        searchFailed = true;
-      }
-    }
-    for (const hit of webHits) {
+  const searchBudget = cards.length + 24;
+  {
+    for (const hit of web.hits) {
       let added = false;
       if (input.ingestHit) {
         try {
@@ -383,7 +386,13 @@ export async function seekContent(input: {
     }
   }
 
-  const pool = cards.filter(isConcreteCandidate);
+  // When the request names a media kind, surface those candidates first so a bounded first
+  // pass (which may skip open-media) still sees the right type near the front of the pool.
+  const ordered = mediaKinds.length
+    ? [...cards.filter((card) => mediaKinds.includes(card.contentType as 'video' | 'image' | 'audio')),
+       ...cards.filter((card) => !mediaKinds.includes(card.contentType as 'video' | 'image' | 'audio'))]
+    : cards;
+  const pool = ordered.filter(isConcreteCandidate);
   const concrete = input.selectCandidates ? await input.selectCandidates(pool) : pool;
   const fidelity = new Map<string, ObjectFidelity>();
   if (input.selectCandidates) {

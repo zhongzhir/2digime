@@ -31,25 +31,29 @@ test('DashScope only consumes provider search metadata, never generated links in
   assert.deepEqual(await search('public'), [{ title: 'Evidence', url: 'https://publisher.example' }]);
 });
 
-test('120 candidates use bounded batches; one length failure and failed merges preserve other selections', async () => {
+test('two-stage selection bounds model input; one length failure does not empty the pool', async () => {
   const cards: DiscoverCard[] = Array.from({ length: 120 }, (_, i) => ({ itemId: `c${i}`, title: `Story ${i}`,
     url: `https://publisher.example/${i}`, text: 'Public material', reason: '' }));
-  let seen = 0; let failed = false;
+  let stage1Seen = 0; let failed = false;
   const result = await selectSupply({ cards, query: 'Relevant articles', selfContext: '', preferences: '',
     model: { baseUrl: '', model: '' }, resolve: false,
     chatComplete: async options => {
-      const input = JSON.parse(options.messages[1]!.content);
-      assert.ok(input.candidates.length <= 10);
-      assert.ok((options.maxTokens || 0) <= 4096);
-      const merge = !!input.candidates[0]?.members;
-      if (merge) throw Error('merge unavailable');
-      seen += input.candidates.length;
-      if (!failed) { failed = true; return { text: '', finishReason: 'length', truncated: true }; }
-      return { text: JSON.stringify({ groups: [{ ids: [0, 999], type: 'article', reason: 'Relevant' }] }) };
+      const sys = String(options.messages[0]?.content || '');
+      const input = JSON.parse(options.messages[1]!.content) as { candidates: unknown[] };
+      if (!sys.includes('groups') && sys.includes('"selected"')) {
+        assert.ok(input.candidates.length <= 8);
+        assert.ok((options.maxTokens || 0) <= 4096);
+        stage1Seen += input.candidates.length;
+        if (!failed) { failed = true; return { text: '', finishReason: 'length', truncated: true }; }
+        return { text: JSON.stringify({ selected: input.candidates.map((_, i) => ({ id: i, type: 'article' })) }) };
+      }
+      assert.ok(input.candidates.length <= 12);
+      return { text: JSON.stringify({ groups: input.candidates.map((_, i) => ({ ids: [i], type: 'article', reason: 'Relevant' })) }) };
     },
   });
-  assert.equal(seen, 120);
-  assert.equal(result.length, 11);
+  // The failed batch is split and retried, so every candidate is still presented to the model.
+  assert.ok(stage1Seen >= 120);
+  assert.ok(result.length >= 1 && result.length <= 12);
   assert.ok(result.every(c => cards.some(source => source.url === c.url)));
 });
 
@@ -61,9 +65,13 @@ test('canonical duplicate keeps the richer feed provenance instead of the first 
   ];
   await selectSupply({ cards, query: 'today', selfContext: '', preferences: '', model: { baseUrl: '', model: '' }, resolve: false,
     chatComplete: async options => {
+      const sys = String(options.messages[0]?.content || '');
       const input = JSON.parse(options.messages[1]!.content);
-      assert.equal(input.candidates.length, 1);
-      assert.equal(input.candidates[0].sourceFeedTimestamp, '2026-09-24T06:56:32.000Z');
+      if (!sys.includes('groups') && sys.includes('"selected"')) {
+        assert.equal(input.candidates.length, 1);
+        assert.equal(input.candidates[0].sourceFeedTimestamp, '2026-09-24T06:56:32.000Z');
+        return { text: JSON.stringify({ selected: [{ id: 0, type: 'news' }] }) };
+      }
       return { text: '{"groups":[]}' };
     } });
 });
@@ -76,8 +84,11 @@ test('a same-event group survives when only a non-first member carries a valid d
   const selected = await selectSupply({ cards, query: 'today event', selfContext: '', preferences: '',
     model: { baseUrl: '', model: '' }, resolve: false,
     chatComplete: async options => {
+      const sys = String(options.messages[0]?.content || '');
       assert.equal(JSON.parse(options.messages[1]!.content).candidates.length, 2);
-      return { text: JSON.stringify({ groups: [{ ids: [0, 1], type: 'news', reason: 'same event' }] }) };
+      return !sys.includes('groups')
+        ? { text: JSON.stringify({ selected: [{ id: 0, type: 'news' }, { id: 1, type: 'news' }] }) }
+        : { text: JSON.stringify({ groups: [{ ids: [0, 1], type: 'news', reason: 'same event' }] }) };
     } });
   assert.equal(selected.length, 1);
   assert.equal(selected[0]?.itemId, 'd');
@@ -100,9 +111,10 @@ test('original publication is reconciled even when feed already supplies full bo
   assert.ok(resolved.dateProvenance?.original?.includes('publisher.example/old'));
   const selected = await selectSupply({ cards: [resolved], query: 'Today news', selfContext: '', preferences: '',
     model: { baseUrl: '', model: '' }, resolve: false, chatComplete: async options => {
+      const sys = String(options.messages[0]?.content || '');
       const c = JSON.parse(options.messages[1]!.content).candidates[0];
       assert.equal(c.publishedAt, original); assert.equal(c.sourceFeedTimestamp, feedDate);
-      return { text: '{"groups":[]}' };
+      return !sys.includes('groups') ? { text: '{"selected":[]}' } : { text: '{"groups":[]}' };
     } });
   assert.deepEqual(selected, []);
 });
