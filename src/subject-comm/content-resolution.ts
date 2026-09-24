@@ -37,7 +37,8 @@ export async function resolveContent(
     card.access === 'subscriptionRequired'
   )
     return fallback;
-  if (card.representation?.bodyText) return card;
+  if (card.representation?.bodyText) representation.bodyText = card.representation.bodyText;
+  if (card.originalPublishedAt && card.representation?.bodyText) return card;
   try {
     const robotsUrl = new URL('/robots.txt', card.url).href;
     const robots = await fetchImpl(robotsUrl, {}, 3, {
@@ -72,8 +73,17 @@ export async function resolveContent(
           ? new Readability(dom.window.document).parse()
           : null;
       const bodyText = article?.textContent?.trim();
+      const originalPublishedAt = meta.publishedAt && Number.isFinite(Date.parse(meta.publishedAt))
+        ? new Date(meta.publishedAt).toISOString() : undefined;
       return {
         ...card,
+        ...(originalPublishedAt ? { originalPublishedAt } : {}),
+        discoveredAt: card.discoveredAt || representation.resolvedAt,
+        ...(updated && Number.isFinite(Date.parse(updated)) ? { updatedAt: new Date(updated).toISOString() } : {}),
+        dateProvenance: { ...card.dateProvenance,
+          ...(originalPublishedAt ? { original: `${page.finalUrl}#datePublished` } : {}),
+          ...(updated ? { updated: `${page.finalUrl}#dateModified` } : {}),
+        },
         ...(meta.publisher ? { publisherDisplayName: meta.publisher } : {}),
         ...(meta.author ? { author: meta.author } : {}),
         ...(!card.publishedAt &&
@@ -89,7 +99,7 @@ export async function resolveContent(
             : 'external',
           canonicalUrl: meta.canonicalUrl,
           provenance: bodyText ? 'readability' : 'structured-metadata',
-          ...(bodyText ? { bodyText: bodyText.slice(0, 60000) } : {}),
+          ...(bodyText || card.representation?.bodyText ? { bodyText: (bodyText || card.representation!.bodyText!).slice(0, 60000) } : {}),
           ...(updated && Number.isFinite(Date.parse(updated))
             ? { updatedAt: new Date(updated).toISOString() }
             : {}),

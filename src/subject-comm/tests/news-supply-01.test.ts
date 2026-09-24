@@ -169,8 +169,8 @@ test('selection can only reference supplied candidates, clusters retain sources,
   assert.equal(result.length, 1);
   assert.equal(result[0]?.sources?.length, 2);
   assert.equal(result[0]?.url, card.url);
-  await assert.rejects(
-    selectSupply({
+  assert.deepEqual(
+    await selectSupply({
       cards,
       query: 'news',
       selfContext: '',
@@ -178,7 +178,7 @@ test('selection can only reference supplied candidates, clusters retain sources,
       model: { baseUrl: '', model: '' },
       resolve: false,
       chatComplete: async () => ({ text: 'invalid' }),
-    }),
+    }), [],
   );
 });
 

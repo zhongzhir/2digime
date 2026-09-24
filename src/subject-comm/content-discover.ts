@@ -22,6 +22,11 @@ export interface DiscoverCard {
   publisherDisplayName?: string;
   author?: string;
   publishedAt?: string;
+  originalPublishedAt?: string;
+  sourceFeedTimestamp?: string;
+  updatedAt?: string;
+  discoveredAt?: string;
+  dateProvenance?: { original?: string; feed?: string; updated?: string };
   representation?: import('./content-resolution').ContentRepresentation;
   sources?: Array<{ title: string; url: string; publisher?: string; publishedAt?: string }>;
   reason: string;
@@ -44,6 +49,7 @@ export interface DiscoverPreference {
 }
 
 export interface DiscoverView {
+  searchProviders?: import('../capability/supplemental-search').SearchProviderEvidence[];
   headline: string;
   lead: string;
   cards: DiscoverCard[];

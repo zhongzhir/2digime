@@ -66,9 +66,11 @@
       }
     }
     if (card.author && card.author !== card.publisherDisplayName) bits.push(card.author);
-    if (card.publishedAt) {
-      const d = Date.parse(card.publishedAt);
-      bits.push(Number.isFinite(d) ? new Date(d).toLocaleString() : '发布时间未知');
+    const displayDate = card.originalPublishedAt || card.publishedAt;
+    if (displayDate) {
+      const d = Date.parse(displayDate);
+      const label = card.originalPublishedAt ? '原文发布 ' : card.sourceFeedTimestamp ? 'Feed 时间 ' : '';
+      bits.push(Number.isFinite(d) ? label + new Date(d).toLocaleString() : '发布时间未知');
     }
     if (card.durationSeconds) {
       const n = Math.round(Number(card.durationSeconds));
@@ -174,10 +176,7 @@
     const type = String(card.contentType || 'article');
     li.className = 'content-discover-card content-discover-card--' + (type || 'article');
     if (card.itemId) li.setAttribute('data-item-id', card.itemId);
-    li.setAttribute(
-      'data-card-sig',
-      [card.itemId || '', type, card.thumbnailUrl || '', card.mediaUrl || '', card.title || ''].join('|'),
-    );
+    li.setAttribute('data-card-sig', cardSig(card));
     const cover = coverUrl(card);
     if (cover) {
       const img = document.createElement('img');
@@ -329,6 +328,20 @@
     return String((card && (card.itemId || card.url)) || '');
   }
 
+  function cardSig(card) {
+    const type = String((card && card.contentType) || 'article');
+    return [
+      (card && card.itemId) || '',
+      type,
+      (card && card.thumbnailUrl) || '',
+      (card && card.mediaUrl) || '',
+      (card && card.title) || '',
+      card && card.sources ? card.sources.length : 0,
+      card && card.representation && card.representation.bodyText ? 1 : 0,
+      (card && (card.originalPublishedAt || card.publishedAt)) || '',
+    ].join('|');
+  }
+
   function isPrimaryMediaCard(card) {
     const type = String((card && card.contentType) || '');
     if (type === 'image') return isHttps(card.thumbnailUrl) || isHttps(card.mediaUrl);
@@ -465,7 +478,7 @@
       });
       lastCards.forEach((card, index) => {
         const id = String(card.itemId || '');
-        const sig = [id, String(card.contentType || 'article'), card.thumbnailUrl || '', card.mediaUrl || '', card.title || ''].join('|');
+        const sig = cardSig(card);
         let node = id ? byId.get(id) : null;
         if (node && node.getAttribute('data-card-sig') !== sig) node = null;
         if (!node) node = renderCard(card);

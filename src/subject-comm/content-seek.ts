@@ -55,6 +55,10 @@ export interface SeekTrace {
   mode: 'consume' | 'research';
   requestedContentTypes: string[];
   rawCandidates: number;
+  candidateSourceCount?: number;
+  candidateFeedCount?: number;
+  candidateSearchCount?: number;
+  candidateDirectoryCount?: number;
   topicMatched: number;
   typeMatched: number;
   primaryContent: number;
@@ -462,6 +466,10 @@ export async function seekContent(input: {
     mode: intent.intent,
     requestedContentTypes: intent.requestedMedia,
     rawCandidates: pool.length,
+    candidateSourceCount: new Set(pool.map(c => { try { return new URL(c.url!).hostname.replace(/^www\./, ''); } catch { return ''; } }).filter(Boolean)).size,
+    candidateFeedCount: pool.filter(c => c.representation?.provenance.startsWith('feed:')).length,
+    candidateSearchCount: pool.filter(c => queryByUrl.has(canonicalOf(c.url))).length,
+    candidateDirectoryCount: pool.filter(c => c.source === 'directory').length,
     topicMatched: traceItems.filter((row) => row.fidelity !== 'UNRELATED').length,
     typeMatched: traceItems.filter((row) => row.typeMatched).length,
     primaryContent: traceItems.filter((row) => row.fidelity === 'PRIMARY_CONTENT').length,

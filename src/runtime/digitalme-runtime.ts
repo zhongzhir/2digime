@@ -180,6 +180,7 @@ import {
 import type { ProfessionalAgent, TalkChatFn } from '../intelligence';
 import { formatSelfContext, selectSelfContext } from '../intelligence/self-context';
 import { acquirePublicFeeds, selectSupply } from '../subject-comm/news-supply';
+import { discoverSupplementalSearch, type SearchProviderEvidence } from '../capability/supplemental-search';
 import type { DiscoverCard } from '../subject-comm/content-discover';
 import { readDigitalSelf } from '../subject-core/digital-self/store';
 import { type DiscoverView } from '../subject-comm/content-discover';
@@ -547,7 +548,9 @@ export class DigitalMeRuntime {
         return { view: await empty('请先选一条内容。') };
       }
       const items = await this.loadDiscoverItems(pkg.rootDir, input.relayUrl);
-      const item = items.find((row) => row.itemId === itemId);
+      // The bounded directory listing may not include a specific search-origin card.
+      // Resolve the exact item so open/boost/reduce/follow/block still act on it.
+      const item = items.find((row) => row.itemId === itemId) || await this.loadDiscoverItemById(pkg.rootDir, itemId);
       if (!item) {
         if (this.lastIntentView) return { view: await this.currentSearchOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'reuse') };
         return { view: await empty('这条内容已经不在目录里。') };
@@ -867,7 +870,7 @@ export class DigitalMeRuntime {
             return cards;
           },
           selectCandidates: async cards => {
-            const result=await selectSupply({cards,query,topic:intent.topic,selfContext:formatSelfContext(selectSelfContext(self,query)),preferences:directives,chatComplete:chatCompleteFn,model,onTiming:(event,ms)=>timings.push({event,ms})});
+            const result=await selectSupply({cards,query,topic:intent.topic,selfContext:formatSelfContext(selectSelfContext(self,query)),preferences:directives,chatComplete:chatCompleteFn,model,onTiming:(event,ms,count)=>timings.push({event,ms,...(count !== undefined ? {count} : {})})});
             return result;
           },
         });
@@ -878,6 +881,10 @@ export class DigitalMeRuntime {
           view.notice='联网搜索暂不可用，以下内容来自已读取的公开来源。';
         }
         view.supplyTrace=timings;
+        view.searchProviders=this.searchProviderEvidence.map(row => ({...row}));
+        if (sought.cards.length && !this.searchProviderEvidence.some(row => row.status === 'AVAILABLE')) {
+          view.notice='联网搜索暂不可用，以下内容来自已读取的公开来源。';
+        }
         if(generationId===this.currentSearchGenerationId) {
           if(sought.cards.length) await rememberIntentFeed(packageRoot,sought.cards,query);
           this.lastIntentView=view;
@@ -1003,6 +1010,8 @@ export class DigitalMeRuntime {
     };
   }
 
+  private searchProviderEvidence: SearchProviderEvidence[] = [];
+
   private resolveContentSearch():
     | ((query: string) => Promise<Array<{ title: string; url: string; snippet?: string }>>)
     | undefined {
@@ -1019,45 +1028,15 @@ export class DigitalMeRuntime {
       process.env.NODE_TEST_CONTEXT ? {} : process.env,
       { gatewayUrl: this.options.webDiscoveryGatewayUrl },
     );
-    const path = resolveWebDiscoveryPath({
-      path: this.options.webDiscoveryPath,
+    return discoverSupplementalSearch({
+      geminiKey: gem.apiKey, geminiModel: gem.model,
+      ...(process.env.NODE_TEST_CONTEXT ? {} : { dashscopeKey: process.env.DASHSCOPE_API_KEY || '' }),
       gatewayUrl,
-      byokKey: gem.apiKey,
+      installToken: this.options.webDiscoveryInstallToken || '',
+      managedFirst: this.options.webDiscoveryPath === 'managed',
+      ...(this.options.webDiscoveryFetch ? { fetchImpl: this.options.webDiscoveryFetch } : {}),
+      report: rows => { this.searchProviderEvidence = rows; },
     });
-    if (path === 'byok' && gem.apiKey) {
-      const connector = createGeminiSearchConnector({
-        apiKey: gem.apiKey,
-        ...(gem.model ? { model: gem.model } : {}),
-      });
-      return async (query: string) => {
-        const sources = await connector.search(query);
-        return sources
-          .filter((row) => String(row.url || '').trim())
-          .map((row) => ({
-            title: String(row.title || row.url),
-            url: String(row.url),
-            ...(row.snippet ? { snippet: row.snippet } : {}),
-          }));
-      };
-    }
-    if (path === 'managed' && gatewayUrl) {
-      const connector = createManagedWebDiscoveryConnector({
-        gatewayUrl,
-        installToken: String(this.options.webDiscoveryInstallToken || '').trim() || 'missing-install-token',
-        ...(this.options.webDiscoveryFetch ? { fetchImpl: this.options.webDiscoveryFetch } : {}),
-      });
-      return async (query: string) => {
-        const sources = await connector.search(query);
-        return sources
-          .filter((row) => String(row.url || '').trim())
-          .map((row) => ({
-            title: String(row.title || row.url),
-            url: String(row.url),
-            ...(row.snippet ? { snippet: row.snippet } : {}),
-          }));
-      };
-    }
-    return undefined;
   }
 
   private resolveContentChat(): ChatCompleteFn | null {
@@ -1101,6 +1080,11 @@ export class DigitalMeRuntime {
       baseUrl: runtime.model.baseUrl,
       model: runtime.model.model,
     };
+  }
+
+  private async loadDiscoverItemById(packageRoot: string, itemId: string): Promise<NetworkItem | undefined> {
+    const local = new FileNetworkItemStore(path.join(packageRoot, 'content'));
+    return local.get(itemId, nowIso());
   }
 
   private async loadDiscoverItems(packageRoot: string, relayUrlInput?: string): Promise<NetworkItem[]> {

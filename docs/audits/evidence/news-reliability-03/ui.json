@@ -1,0 +1,953 @@
+{
+  "entry": "real form submit -> renderer seek -> preload IPC -> runtime",
+  "stub": false,
+  "at": "2026-09-24T08:26:46.411Z",
+  "userData": "C:\\Users\\46554\\AppData\\Local\\Temp\\news-supply-ui-zEnVou",
+  "rows": [
+    {
+      "query": "今天 AI 有什么重要新闻？",
+      "ms": 75847,
+      "providers": [
+        {
+          "provider": "gemini",
+          "status": "RATE_LIMITED",
+          "attempted": true,
+          "count": 0,
+          "httpStatus": 429
+        },
+        {
+          "provider": "dashscope",
+          "status": "FAILED",
+          "attempted": true,
+          "count": 0,
+          "httpStatus": 401
+        },
+        {
+          "provider": "managed",
+          "status": "FAILED",
+          "attempted": true,
+          "count": 8
+        }
+      ],
+      "trace": {
+        "query": "今天 AI 有什么重要新闻？",
+        "topic": "AI",
+        "mode": "consume",
+        "requestedContentTypes": [
+          "news"
+        ],
+        "rawCandidates": 124,
+        "candidateSourceCount": 13,
+        "candidateFeedCount": 116,
+        "candidateSearchCount": 8,
+        "candidateDirectoryCount": 0,
+        "topicMatched": 12,
+        "typeMatched": 10,
+        "primaryContent": 10,
+        "aboutContent": 2,
+        "unrelated": 0,
+        "selected": 10,
+        "visible": 10,
+        "items": [
+          {
+            "contentId": "ni_87250584e56eff40974a0267d4bb0a2dc735c562",
+            "canonicalUrl": "https://www.ifanr.com/1682048",
+            "title": "高通新王牌：个人 AI 时代来了",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "高通骁龙峰会发布个人AI平台，两篇同日报道"
+          },
+          {
+            "contentId": "ni_5c28e38a9196a63301a29a97ccacf005ea69cf99",
+            "canonicalUrl": "https://sspai.com/post/114913",
+            "title": "派早报：小米召开秋季新品发布会、千问发布 Qwen-Audio-3.1系列模型等",
+            "contentType": "article",
+            "origin": "search",
+            "fidelity": "ABOUT_CONTENT",
+            "typeMatched": false,
+            "selected": false,
+            "visible": true,
+            "reason": "早报提及千问发布Qwen-Audio-3.1模型"
+          },
+          {
+            "contentId": "ni_70e3dcfe0ba50cc314b0a3725b5475ace6cc99f5",
+            "canonicalUrl": "https://www.ifanr.com/1681928",
+            "title": "刚刚，苹果「液态玻璃」缔造者，给 Muse 造了个 AI 拓麻歌子",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "Muse推出AI拓麻歌子，苹果液态玻璃缔造者打造"
+          },
+          {
+            "contentId": "ni_24f5c056110d801ed95fe39ea8be536affb48fb4",
+            "canonicalUrl": "https://www.ifanr.com/1681909",
+            "title": "早报｜iOS27测试版新功能可阻止摇一摇广告/5999起，小米18 Pro发布/宾利发布首款纯电车Torcal，888马力",
+            "contentType": "article",
+            "origin": "search",
+            "fidelity": "ABOUT_CONTENT",
+            "typeMatched": false,
+            "selected": false,
+            "visible": true,
+            "reason": "早报提及DeepSeek发布Agent训练沙箱DSec"
+          },
+          {
+            "contentId": "ni_a36b2807b3b68466e4fade6add8c82f5fa037897",
+            "canonicalUrl": "https://www.chinanews.com.cn/cj/2026/09-24/10703053.shtml",
+            "title": "WorkRally首发接入Hy Image3.5 preview，为专业影视创作开放两周免费体验",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "腾讯混元Hy Image3.5 preview接入影视创作平台"
+          },
+          {
+            "contentId": "ni_332412d1d61982d74e19610ad9b35d8e577e3bf0",
+            "canonicalUrl": "https://www.chinanews.com.cn/cj/2026/09-24/10703075.shtml",
+            "title": "西部的风给东部企业“供智能” 解锁宁夏中卫东西部算力互济新范式",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "宁夏中卫算力互济，AI基础设施"
+          },
+          {
+            "contentId": "ni_f70386f9e2c94ea28c6812896fb7dd1787b43d63",
+            "canonicalUrl": "https://www.chinanews.com.cn/cj/2026/09-24/10702993.shtml",
+            "title": "从智能汽车到具身智能：斑马智能探索AI走向物理世界的新路径",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "斑马智能探讨AI从数字走向物理世界"
+          },
+          {
+            "contentId": "ni_652498ea31860773b4370ebd33dc96b3ef4cd7b2",
+            "canonicalUrl": "https://www.ithome.com/1/006/812.htm",
+            "title": "腾讯 WorkBuddy 上线微信小程序发布能力：可使用自然语言生成、上线小程序",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "腾讯WorkBuddy上线自然语言生成小程序"
+          },
+          {
+            "contentId": "ni_9e22ccb25bbf4bd538962e6e95753ef84d0b08db",
+            "canonicalUrl": "https://www.ithome.com/1/006/809.htm",
+            "title": "高通官宣超低分辨率感知摄像头：能发现人脸，不能识别身份",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "高通发布超低分辨率感知摄像头方案"
+          },
+          {
+            "contentId": "ni_36f90a1f06f792d3994523f4802ef46b0d6d3d38",
+            "canonicalUrl": "https://www.ithome.com/1/006/808.htm",
+            "title": "曝 DeepSeek 确定 75 亿美元第二轮融资，年化营收突破 10 亿美元",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "DeepSeek确认75亿美元融资，年化营收超10亿美元"
+          },
+          {
+            "contentId": "ni_e11ca932da00329ffa778d4971d76fbdd3dfc716",
+            "canonicalUrl": "https://www.ithome.com/1/006/800.htm",
+            "title": "谷歌确认新一代旗舰模型 Gemini 4 即将推出，有望不用等到年底",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "谷歌确认Gemini 4即将推出"
+          },
+          {
+            "contentId": "ni_4dfdfba851aa03b839b77dc57b5337856cc6b09e",
+            "canonicalUrl": "https://www.ithome.com/1/006/805.htm",
+            "title": "OpenAI 发布 MentalHealthBench：1215 段对话评估 AI 心理健康应对能力",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "OpenAI发布心理健康评估基准"
+          }
+        ]
+      },
+      "supply": [
+        {
+          "event": "directory/feed",
+          "ms": 767,
+          "count": 116
+        },
+        {
+          "event": "search",
+          "ms": 1877
+        },
+        {
+          "event": "search",
+          "ms": 10744
+        },
+        {
+          "event": "date-resolution",
+          "ms": 10870,
+          "count": 124
+        },
+        {
+          "event": "batch",
+          "ms": 5805,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 7094,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 8341,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 3678,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 4599,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 3262,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 5768,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1416,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 12840,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 9797,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 3724,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1725,
+          "count": 4
+        },
+        {
+          "event": "batch",
+          "ms": 3985,
+          "count": 10
+        },
+        {
+          "event": "merge",
+          "ms": 3680,
+          "count": 4
+        },
+        {
+          "event": "merge-failed",
+          "ms": 19342,
+          "count": 10
+        },
+        {
+          "event": "selected",
+          "ms": 55379,
+          "count": 12
+        },
+        {
+          "event": "total",
+          "ms": 74000
+        }
+      ],
+      "commandCards": [
+        {
+          "title": "高通新王牌：个人 AI 时代来了",
+          "url": "https://www.ifanr.com/1682048",
+          "type": "news",
+          "publishedAt": "2026-09-24T08:08:16.000Z",
+          "originalPublishedAt": "2026-09-24T08:08:16.000Z",
+          "sourceFeedTimestamp": "2026-09-24T08:08:16.000Z",
+          "discoveredAt": "2026-09-24T08:23:50.177Z",
+          "dateProvenance": {
+            "feed": "https://www.ifanr.com/feed",
+            "original": "https://www.ifanr.com/1682048#datePublished",
+            "updated": "https://www.ifanr.com/1682048#dateModified"
+          },
+          "sources": 2
+        },
+        {
+          "title": "刚刚，苹果「液态玻璃」缔造者，给 Muse 造了个 AI 拓麻歌子",
+          "url": "https://www.ifanr.com/1681928",
+          "type": "news",
+          "publishedAt": "2026-09-24T01:59:48.000Z",
+          "originalPublishedAt": "2026-09-24T01:59:48.000Z",
+          "sourceFeedTimestamp": "2026-09-24T01:59:48.000Z",
+          "discoveredAt": "2026-09-24T08:23:50.179Z",
+          "dateProvenance": {
+            "feed": "https://www.ifanr.com/feed",
+            "original": "https://www.ifanr.com/1681928#datePublished",
+            "updated": "https://www.ifanr.com/1681928#dateModified"
+          },
+          "sources": 1
+        },
+        {
+          "title": "WorkRally首发接入Hy Image3.5 preview，为专业影视创作开放两周免费体验",
+          "url": "https://www.chinanews.com.cn/cj/2026/09-24/10703053.shtml",
+          "type": "news",
+          "publishedAt": "2026-09-24T08:13:23.000Z",
+          "sourceFeedTimestamp": "2026-09-24T08:13:23.000Z",
+          "discoveredAt": "2026-09-24T08:23:49.903Z",
+          "dateProvenance": {
+            "feed": "https://www.chinanews.com.cn/rss/scroll-news.xml"
+          },
+          "sources": 1
+        },
+        {
+          "title": "西部的风给东部企业“供智能” 解锁宁夏中卫东西部算力互济新范式",
+          "url": "https://www.chinanews.com.cn/cj/2026/09-24/10703075.shtml",
+          "type": "news",
+          "publishedAt": "2026-09-24T08:09:25.000Z",
+          "sourceFeedTimestamp": "2026-09-24T08:09:25.000Z",
+          "discoveredAt": "2026-09-24T08:23:49.904Z",
+          "dateProvenance": {
+            "feed": "https://www.chinanews.com.cn/rss/scroll-news.xml"
+          },
+          "sources": 1
+        },
+        {
+          "title": "从智能汽车到具身智能：斑马智能探索AI走向物理世界的新路径",
+          "url": "https://www.chinanews.com.cn/cj/2026/09-24/10702993.shtml",
+          "type": "news",
+          "publishedAt": "2026-09-24T08:09:09.000Z",
+          "sourceFeedTimestamp": "2026-09-24T08:09:09.000Z",
+          "discoveredAt": "2026-09-24T08:23:49.904Z",
+          "dateProvenance": {
+            "feed": "https://www.chinanews.com.cn/rss/scroll-news.xml"
+          },
+          "sources": 1
+        },
+        {
+          "title": "腾讯 WorkBuddy 上线微信小程序发布能力：可使用自然语言生成、上线小程序",
+          "url": "https://www.ithome.com/1/006/812.htm",
+          "type": "news",
+          "publishedAt": "2026-09-24T07:32:25.000Z",
+          "sourceFeedTimestamp": "2026-09-24T07:32:25.000Z",
+          "discoveredAt": "2026-09-24T08:23:49.926Z",
+          "dateProvenance": {
+            "feed": "https://www.ithome.com/rss/"
+          },
+          "sources": 1
+        },
+        {
+          "title": "高通官宣超低分辨率感知摄像头：能发现人脸，不能识别身份",
+          "url": "https://www.ithome.com/1/006/809.htm",
+          "type": "news",
+          "publishedAt": "2026-09-24T07:29:42.000Z",
+          "sourceFeedTimestamp": "2026-09-24T07:29:42.000Z",
+          "discoveredAt": "2026-09-24T08:23:49.926Z",
+          "dateProvenance": {
+            "feed": "https://www.ithome.com/rss/"
+          },
+          "sources": 1
+        },
+        {
+          "title": "曝 DeepSeek 确定 75 亿美元第二轮融资，年化营收突破 10 亿美元",
+          "url": "https://www.ithome.com/1/006/808.htm",
+          "type": "news",
+          "publishedAt": "2026-09-24T07:28:02.000Z",
+          "sourceFeedTimestamp": "2026-09-24T07:28:02.000Z",
+          "discoveredAt": "2026-09-24T08:23:49.926Z",
+          "dateProvenance": {
+            "feed": "https://www.ithome.com/rss/"
+          },
+          "sources": 1
+        },
+        {
+          "title": "谷歌确认新一代旗舰模型 Gemini 4 即将推出，有望不用等到年底",
+          "url": "https://www.ithome.com/1/006/800.htm",
+          "type": "news",
+          "publishedAt": "2026-09-24T07:17:50.000Z",
+          "sourceFeedTimestamp": "2026-09-24T07:17:50.000Z",
+          "discoveredAt": "2026-09-24T08:23:49.927Z",
+          "dateProvenance": {
+            "feed": "https://www.ithome.com/rss/"
+          },
+          "sources": 1
+        },
+        {
+          "title": "OpenAI 发布 MentalHealthBench：1215 段对话评估 AI 心理健康应对能力",
+          "url": "https://www.ithome.com/1/006/805.htm",
+          "type": "news",
+          "publishedAt": "2026-09-24T07:22:21.000Z",
+          "sourceFeedTimestamp": "2026-09-24T07:22:21.000Z",
+          "discoveredAt": "2026-09-24T08:23:49.926Z",
+          "dateProvenance": {
+            "feed": "https://www.ithome.com/rss/"
+          },
+          "sources": 1
+        }
+      ],
+      "cards": [
+        {
+          "title": "高通新王牌：个人 AI 时代来了",
+          "source": "ifanr · 爱范儿视频 · 原文发布 2026/9/24 16:08:16",
+          "kind": "新闻",
+          "sources": [
+            "https://www.ifanr.com/1682048",
+            "https://www.ifanr.com/1681946"
+          ],
+          "bodyCharacters": 462
+        },
+        {
+          "title": "刚刚，苹果「液态玻璃」缔造者，给 Muse 造了个 AI 拓麻歌子",
+          "source": "ifanr · 莫崇宇 · 原文发布 2026/9/24 09:59:48",
+          "kind": "新闻",
+          "sources": [],
+          "bodyCharacters": 3815
+        },
+        {
+          "title": "WorkRally首发接入Hy Image3.5 preview，为专业影视创作开放两周免费体验",
+          "source": "中新网即时新闻 · chinanews · Feed 时间 2026/9/24 16:13:23",
+          "kind": "新闻",
+          "sources": [],
+          "bodyCharacters": 1505
+        },
+        {
+          "title": "西部的风给东部企业“供智能” 解锁宁夏中卫东西部算力互济新范式",
+          "source": "中新网即时新闻 · chinanews · Feed 时间 2026/9/24 16:09:25",
+          "kind": "新闻",
+          "sources": [],
+          "bodyCharacters": 1573
+        },
+        {
+          "title": "从智能汽车到具身智能：斑马智能探索AI走向物理世界的新路径",
+          "source": "中新网即时新闻 · chinanews · Feed 时间 2026/9/24 16:09:09",
+          "kind": "新闻",
+          "sources": [],
+          "bodyCharacters": 3516
+        },
+        {
+          "title": "腾讯 WorkBuddy 上线微信小程序发布能力：可使用自然语言生成、上线小程序",
+          "source": "IT之家 · Feed 时间 2026/9/24 15:32:25",
+          "kind": "新闻",
+          "sources": [],
+          "bodyCharacters": 1633
+        },
+        {
+          "title": "高通官宣超低分辨率感知摄像头：能发现人脸，不能识别身份",
+          "source": "IT之家 · Feed 时间 2026/9/24 15:29:42",
+          "kind": "新闻",
+          "sources": [],
+          "bodyCharacters": 655
+        },
+        {
+          "title": "曝 DeepSeek 确定 75 亿美元第二轮融资，年化营收突破 10 亿美元",
+          "source": "IT之家 · Feed 时间 2026/9/24 15:28:02",
+          "kind": "新闻",
+          "sources": [],
+          "bodyCharacters": 542
+        },
+        {
+          "title": "谷歌确认新一代旗舰模型 Gemini 4 即将推出，有望不用等到年底",
+          "source": "IT之家 · Feed 时间 2026/9/24 15:17:50",
+          "kind": "新闻",
+          "sources": [],
+          "bodyCharacters": 861
+        },
+        {
+          "title": "OpenAI 发布 MentalHealthBench：1215 段对话评估 AI 心理健康应对能力",
+          "source": "IT之家 · Feed 时间 2026/9/24 15:22:21",
+          "kind": "新闻",
+          "sources": [],
+          "bodyCharacters": 3024
+        },
+        {
+          "title": "派早报：小米召开秋季新品发布会、千问发布 Qwen-Audio-3.1系列模型等",
+          "source": "少数派 - 高品质数字消费指南 · 少数派编辑部 · 原文发布 2026/9/24 08:19:37",
+          "kind": "文章",
+          "sources": [],
+          "bodyCharacters": 993
+        },
+        {
+          "title": "早报｜iOS27测试版新功能可阻止摇一摇广告/5999起，小米18 Pro发布/宾利发布首款纯电车Torcal，888马力",
+          "source": "爱范儿 · https://www.ifanr.com/author/zhengtingxu · 原文发布 2026/9/24 16:17:26",
+          "kind": "文章",
+          "sources": [],
+          "bodyCharacters": 9899
+        }
+      ],
+      "notice": "联网搜索暂不可用，以下内容来自已读取的公开来源。",
+      "feedTitle": "关于「AI」"
+    },
+    {
+      "query": "最近具身智能有什么重要消息？",
+      "ms": 60772,
+      "providers": [
+        {
+          "provider": "gemini",
+          "status": "RATE_LIMITED",
+          "attempted": true,
+          "count": 0,
+          "httpStatus": 429
+        },
+        {
+          "provider": "dashscope",
+          "status": "FAILED",
+          "attempted": true,
+          "count": 0,
+          "httpStatus": 401
+        },
+        {
+          "provider": "managed",
+          "status": "AVAILABLE",
+          "attempted": true,
+          "count": 16
+        }
+      ],
+      "trace": {
+        "query": "最近具身智能有什么重要消息？",
+        "topic": "具身智能",
+        "mode": "consume",
+        "requestedContentTypes": [
+          "news"
+        ],
+        "rawCandidates": 132,
+        "candidateSourceCount": 18,
+        "candidateFeedCount": 116,
+        "candidateSearchCount": 16,
+        "candidateDirectoryCount": 0,
+        "topicMatched": 3,
+        "typeMatched": 2,
+        "primaryContent": 2,
+        "aboutContent": 1,
+        "unrelated": 0,
+        "selected": 2,
+        "visible": 2,
+        "items": [
+          {
+            "contentId": "ni_5b31ef6e19718d016d7623c358fdd904e0121e53",
+            "canonicalUrl": "https://www.ithome.com/1/006/793.htm",
+            "title": "密封关节设计，特斯拉 App 意外泄露第三代 Optimus 人形机器人",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "特斯拉App泄露第三代Optimus，人形机器人重要进展"
+          },
+          {
+            "contentId": "ni_f70386f9e2c94ea28c6812896fb7dd1787b43d63",
+            "canonicalUrl": "https://www.chinanews.com.cn/cj/2026/09-24/10702993.shtml",
+            "title": "从智能汽车到具身智能：斑马智能探索AI走向物理世界的新路径",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "斑马智能云栖大会探讨具身智能落地路径"
+          },
+          {
+            "contentId": "ni_1b93244f0c039153610b2b463e1394d38f446f08",
+            "canonicalUrl": "https://www.ifanr.com/1681566",
+            "title": "早报｜GPT-6 Sol发布，价格腰斩/特努斯：Siri AI不应代替人际关系/4999起，OPPO Find X10系列发布",
+            "contentType": "article",
+            "origin": "search",
+            "fidelity": "ABOUT_CONTENT",
+            "typeMatched": false,
+            "selected": false,
+            "visible": true,
+            "reason": "早报提及前小米陈龙创业研发具身大模型"
+          }
+        ]
+      },
+      "supply": [
+        {
+          "event": "directory/feed",
+          "ms": 535,
+          "count": 116
+        },
+        {
+          "event": "search",
+          "ms": 1890
+        },
+        {
+          "event": "search",
+          "ms": 803
+        },
+        {
+          "event": "date-resolution",
+          "ms": 11831,
+          "count": 130
+        },
+        {
+          "event": "batch",
+          "ms": 1253,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1703,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1838,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 817,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1375,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1602,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1954,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1214,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1169,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 4460,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1233,
+          "count": 10
+        },
+        {
+          "event": "batch-failed",
+          "ms": 19163,
+          "count": 10
+        },
+        {
+          "event": "batch-failed",
+          "ms": 20852,
+          "count": 10
+        },
+        {
+          "event": "merge",
+          "ms": 4691,
+          "count": 3
+        },
+        {
+          "event": "selected",
+          "ms": 43125,
+          "count": 3
+        },
+        {
+          "event": "total",
+          "ms": 59455
+        }
+      ],
+      "commandCards": [
+        {
+          "title": "密封关节设计，特斯拉 App 意外泄露第三代 Optimus 人形机器人",
+          "url": "https://www.ithome.com/1/006/793.htm",
+          "type": "news",
+          "publishedAt": "2026-09-24T06:56:32.000Z",
+          "sourceFeedTimestamp": "2026-09-24T06:56:32.000Z",
+          "discoveredAt": "2026-09-24T08:25:04.746Z",
+          "dateProvenance": {
+            "feed": "https://www.ithome.com/rss/"
+          },
+          "sources": 1
+        },
+        {
+          "title": "从智能汽车到具身智能：斑马智能探索AI走向物理世界的新路径",
+          "url": "https://www.chinanews.com.cn/cj/2026/09-24/10702993.shtml",
+          "type": "news",
+          "publishedAt": "2026-09-24T08:09:09.000Z",
+          "sourceFeedTimestamp": "2026-09-24T08:09:09.000Z",
+          "discoveredAt": "2026-09-24T08:25:04.494Z",
+          "dateProvenance": {
+            "feed": "https://www.chinanews.com.cn/rss/scroll-news.xml"
+          },
+          "sources": 1
+        }
+      ],
+      "cards": [
+        {
+          "title": "密封关节设计，特斯拉 App 意外泄露第三代 Optimus 人形机器人",
+          "source": "IT之家 · Feed 时间 2026/9/24 14:56:32",
+          "kind": "新闻",
+          "sources": [],
+          "bodyCharacters": 1449
+        },
+        {
+          "title": "从智能汽车到具身智能：斑马智能探索AI走向物理世界的新路径",
+          "source": "中新网即时新闻 · chinanews · Feed 时间 2026/9/24 16:09:09",
+          "kind": "新闻",
+          "sources": [],
+          "bodyCharacters": 3516
+        },
+        {
+          "title": "早报｜GPT-6 Sol发布，价格腰斩/特努斯：Siri AI不应代替人际关系/4999起，OPPO Find X10系列发布",
+          "source": "爱范儿 · https://www.ifanr.com/author/zhengtingxu · 原文发布 2026/9/23 16:05:46",
+          "kind": "文章",
+          "sources": [],
+          "bodyCharacters": 13051
+        }
+      ],
+      "notice": "",
+      "feedTitle": "关于「具身智能」"
+    },
+    {
+      "query": "今天特斯拉 App 泄露第三代 Optimus 人形机器人的具体消息，合并同一事件的独立媒体报道并保留各来源。",
+      "ms": 42467,
+      "providers": [
+        {
+          "provider": "gemini",
+          "status": "RATE_LIMITED",
+          "attempted": true,
+          "count": 0,
+          "httpStatus": 429
+        },
+        {
+          "provider": "dashscope",
+          "status": "FAILED",
+          "attempted": true,
+          "count": 0,
+          "httpStatus": 401
+        },
+        {
+          "provider": "managed",
+          "status": "AVAILABLE",
+          "attempted": true,
+          "count": 16
+        }
+      ],
+      "trace": {
+        "query": "今天特斯拉 App 泄露第三代 Optimus 人形机器人的具体消息，合并同一事件的独立媒体报道并保留各来源。",
+        "topic": "特斯拉 Optimus 第三代",
+        "mode": "research",
+        "requestedContentTypes": [
+          "news"
+        ],
+        "rawCandidates": 136,
+        "candidateSourceCount": 16,
+        "candidateFeedCount": 116,
+        "candidateSearchCount": 13,
+        "candidateDirectoryCount": 7,
+        "topicMatched": 1,
+        "typeMatched": 1,
+        "primaryContent": 1,
+        "aboutContent": 0,
+        "unrelated": 0,
+        "selected": 1,
+        "visible": 1,
+        "items": [
+          {
+            "contentId": "ni_5b31ef6e19718d016d7623c358fdd904e0121e53",
+            "canonicalUrl": "https://www.ithome.com/1/006/793.htm",
+            "title": "密封关节设计，特斯拉 App 意外泄露第三代 Optimus 人形机器人",
+            "contentType": "news",
+            "origin": "search",
+            "fidelity": "PRIMARY_CONTENT",
+            "typeMatched": true,
+            "selected": true,
+            "visible": true,
+            "reason": "特斯拉App泄露第三代Optimus，多源报道同一事件"
+          }
+        ]
+      },
+      "supply": [
+        {
+          "event": "directory/feed",
+          "ms": 547,
+          "count": 116
+        },
+        {
+          "event": "search",
+          "ms": 2092
+        },
+        {
+          "event": "search",
+          "ms": 408
+        },
+        {
+          "event": "date-resolution",
+          "ms": 11297,
+          "count": 129
+        },
+        {
+          "event": "batch",
+          "ms": 983,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1200,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1542,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 845,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1022,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 915,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1402,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 802,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1530,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 959,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 1257,
+          "count": 10
+        },
+        {
+          "event": "batch",
+          "ms": 5772,
+          "count": 9
+        },
+        {
+          "event": "batch",
+          "ms": 10054,
+          "count": 10
+        },
+        {
+          "event": "merge",
+          "ms": 2547,
+          "count": 3
+        },
+        {
+          "event": "selected",
+          "ms": 27650,
+          "count": 1
+        },
+        {
+          "event": "total",
+          "ms": 41129
+        }
+      ],
+      "commandCards": [
+        {
+          "title": "密封关节设计，特斯拉 App 意外泄露第三代 Optimus 人形机器人",
+          "url": "https://www.ithome.com/1/006/793.htm",
+          "type": "news",
+          "publishedAt": "2026-09-24T06:56:32.000Z",
+          "sourceFeedTimestamp": "2026-09-24T06:56:32.000Z",
+          "discoveredAt": "2026-09-24T08:26:10.671Z",
+          "dateProvenance": {
+            "feed": "https://www.ithome.com/rss/"
+          },
+          "sources": 11
+        }
+      ],
+      "cards": [
+        {
+          "title": "密封关节设计，特斯拉 App 意外泄露第三代 Optimus 人形机器人",
+          "source": "IT之家 · Feed 时间 2026/9/24 14:56:32",
+          "kind": "新闻",
+          "sources": [
+            "https://www.ithome.com/1/006/793.htm",
+            "https://auto.sina.cn/2026-09-24/detail-inisxhpf0466088.d.html?vt=4",
+            "https://mparticle.uc.cn/article_org.html?uc_param_str=frdnsnpfvecpntnwprdssskt",
+            "https://www.donews.com/news/detail/8/6723027.html",
+            "https://auto.sina.cn/2026-09-24/detail-inisxaez5327159.d.html?vt=4",
+            "https://wap.eastmoney.com/a/202609243883493045.html",
+            "https://k.sina.cn/article_5953740931_162dee0830670401c8.html?from=auto&ab=qiche&_rewriteTime=1790238383691",
+            "https://stock.10jqka.com.cn/usstock/20260924/c680257988.shtml",
+            "https://www.ithome.com/html/digi/1006793.htm",
+            "https://www.sohu.com/a/1080413041_114760",
+            "https://www.163.com/dy/article/L7JGR98S051191D6.html"
+          ],
+          "bodyCharacters": 1449
+        }
+      ],
+      "notice": "这更像需要深入分析的材料。可点「问兔机米」继续。",
+      "feedTitle": "关于「特斯拉 Optimus 第三代」"
+    }
+  ]
+}
