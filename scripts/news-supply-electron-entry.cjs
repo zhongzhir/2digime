@@ -71,10 +71,10 @@ if (ACCEPTANCE) {
       if (name === 'content') {
         const view = result?.view;
         const record = { at: new Date().toISOString(), action: input.action, query: input.text,
-          ...(view ? { trace: view.seekTrace, supply: view.supplyTrace, providers: view.searchProviders, notice: view.notice,
+          ...(view ? { replenishing: view.replenishing, trace: view.seekTrace, supply: view.supplyTrace, providers: view.searchProviders, notice: view.notice,
             cards: view.cards.map(c => ({ itemId: c.itemId, title: c.title, url: c.url, type: c.contentType,
               publishedAt: c.publishedAt, originalPublishedAt: c.originalPublishedAt, sourceFeedTimestamp: c.sourceFeedTimestamp,
-              discoveredAt: c.discoveredAt, updatedAt: c.updatedAt, dateProvenance: c.dateProvenance,
+              discoveredAt: c.discoveredAt, updatedAt: c.updatedAt, dateProvenance: c.dateProvenance, reason: c.reason,
               sources: c.sources, bodyCharacters: c.representation?.bodyText?.length || 0 })) } : {}) };
         fs.appendFileSync(path.join(evidenceDir, 'commands.jsonl'), JSON.stringify(record) + '\n');
       }

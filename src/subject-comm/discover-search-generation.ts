@@ -112,8 +112,13 @@ export function mergeCardPair(existing: DiscoverCard, incoming: DiscoverCard): D
     if (source && source.url) sourceByUrl.set(source.url, source);
   }
   const mergedSources = sourceByUrl.size > 1 ? [...sourceByUrl.values()] : (incoming.sources || existing.sources);
-  const withSources = <T extends DiscoverCard>(card: T): T =>
-    mergedSources && mergedSources.length ? { ...card, sources: mergedSources } : card;
+  // Keep the fuller explanation when a progressive first pass produced none; never invent one.
+  const mergedReason = (incoming.reason || '').length > (existing.reason || '').length ? incoming.reason : existing.reason;
+  const withSources = <T extends DiscoverCard>(card: T): T => ({
+    ...card,
+    ...(mergedSources && mergedSources.length ? { sources: mergedSources } : {}),
+    ...(mergedReason ? { reason: mergedReason } : {}),
+  });
   if (fidelityOf(incoming) === 'UNRELATED' && fidelityOf(existing) !== 'UNRELATED') {
     return withSources(existing);
   }

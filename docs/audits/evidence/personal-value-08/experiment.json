@@ -1,0 +1,890 @@
+{
+  "at": "2026-09-26T09:44:56.571Z",
+  "poolSize": 476,
+  "usedPool": 200,
+  "subjects": {},
+  "controlled": [
+    {
+      "subject": "A",
+      "label": "AI/创业/投资/前沿科技",
+      "query": "最近有什么值得我看的？",
+      "ms": 31867,
+      "cards": [
+        {
+          "rank": 1,
+          "title": "中科宇航力箭一号总装周期缩短至约 15 天：南沙总装厂房年产能 30 发，接单到发射周期压缩至半年内",
+          "type": "news",
+          "publisher": "IT之家",
+          "reason": "商业航天总装提速，前沿制造动态"
+        },
+        {
+          "rank": 2,
+          "title": "在云栖大会，我终于看懂了米哈游千亿AI野心",
+          "type": "article",
+          "publisher": "量子位",
+          "reason": "米哈游AI布局深度观察"
+        },
+        {
+          "rank": 3,
+          "title": "智元第20000台具身机器人交付长隆，首期超300台机器人常驻乐园。",
+          "type": "news",
+          "publisher": "雷峰网",
+          "reason": "具身机器人规模化交付落地"
+        },
+        {
+          "rank": 4,
+          "title": "Deepseek 桌面版悄悄上线；Muse 大火，扎克伯格跃升全球第四大富豪；OpenAI 被曝筹备推出 ProMax ",
+          "type": "article",
+          "publisher": "GeekPark",
+          "reason": "AI巨头动态与算力合作早报"
+        },
+        {
+          "rank": 5,
+          "title": "谷歌TPU跑Kimi比英伟达GPU快57%！用的还是DeepSeek推理框架",
+          "type": "news",
+          "publisher": "量子位",
+          "reason": "AI推理硬件竞争格局新进展"
+        },
+        {
+          "rank": 6,
+          "title": "从模型上手机到让智能体落地，高通的AI时代新故事｜焦点分析",
+          "type": "article",
+          "publisher": "36氪",
+          "reason": "端侧AI与智能体商业化分析"
+        },
+        {
+          "rank": 7,
+          "title": "从地下8000米到机器人高温关节，清华系特种功率芯片公司完成数亿元C轮融资｜36氪首发",
+          "type": "news",
+          "publisher": "36氪",
+          "reason": "一级市场芯片融资，契合硬科技与创业关注"
+        },
+        {
+          "rank": 8,
+          "title": "OpenAI闯大祸！GPT竟黑进医保系统，黄仁勋：管不住就关掉",
+          "type": "news",
+          "publisher": "量子位",
+          "reason": "AI安全与监管热点，影响行业趋势"
+        }
+      ]
+    },
+    {
+      "subject": "B",
+      "label": "文化/阅读/影视/创作",
+      "query": "最近有什么值得我看的？",
+      "ms": 28066,
+      "cards": [
+        {
+          "rank": 1,
+          "title": "「济公」游本昌去世；罗永浩再评小米 18 Fold；Meta 推出手持设备 Muse Charm｜极客早知道",
+          "type": "article",
+          "publisher": "GeekPark",
+          "reason": "综合早报，含游本昌去世等文化新闻"
+        },
+        {
+          "rank": 2,
+          "title": "微软在游戏行业的早期试水：一段与梦工厂的「梦幻联动」",
+          "type": "article",
+          "publisher": "少数派 - 高品质数字消费指南",
+          "reason": "游戏行业历史，与影视内容创作相关"
+        },
+        {
+          "rank": 3,
+          "title": "以微观切口承载宏大史诗 网络纪录片《长征二十夜》多平台上线",
+          "type": "news",
+          "publisher": "中新网即时新闻",
+          "reason": "今日上线纪录片，适合关注纪录片与内容创作。"
+        },
+        {
+          "rank": 4,
+          "title": "剪映，杀入 AI 互动影游",
+          "type": "news",
+          "publisher": "GeekPark",
+          "reason": "剪映AI互动影游发布，内容创作与影视相关。"
+        },
+        {
+          "rank": 5,
+          "title": "从“完成”到“准确” 北京人艺《小郡之秋》二轮登台",
+          "type": "news",
+          "publisher": "中新网即时新闻",
+          "reason": "北京人艺剧目二轮登台，文化影视类演出动态。"
+        }
+      ]
+    },
+    {
+      "subject": "C",
+      "label": "消费/旅行/娱乐/健康",
+      "query": "最近有什么值得我看的？",
+      "ms": 26905,
+      "cards": [
+        {
+          "rank": 1,
+          "title": "E252｜硅谷睡眠外挂：富人的玩具，还是预防医疗的入口？｜对话Eight Sleep创始人",
+          "type": "audio",
+          "publisher": "硅谷101",
+          "reason": "睡眠科技与健康生活，值得听的播客"
+        },
+        {
+          "rank": 2,
+          "title": "Episode 61: 为了护眼，我们从离焦镜聊到诺贝尔奖",
+          "type": "audio",
+          "publisher": "Byte.Coffee",
+          "reason": "护眼与健康生活，实用建议"
+        },
+        {
+          "rank": 3,
+          "title": "Episode 62: Draw a map and get lost・陪你跑五公里",
+          "type": "audio",
+          "publisher": "Byte.Coffee",
+          "reason": "跑步与旅行生活方式，放松身心"
+        },
+        {
+          "rank": 4,
+          "title": "本周看什么 | 最近值得一看的 6 部作品",
+          "type": "article",
+          "publisher": "少数派 - 高品质数字消费指南",
+          "reason": "影视作品推荐，最近值得一看"
+        },
+        {
+          "rank": 5,
+          "title": "从买东西到买体验：为什么4个周末替代不了一个8天长假？",
+          "type": "article",
+          "publisher": "钛媒体：引领未来商业与生活新知",
+          "reason": "消费体验与长假旅行趋势分析"
+        },
+        {
+          "rank": 6,
+          "title": "抽“锦鲤”享美食！“点亮杭州 碰见好运”服务消费季活动启动",
+          "type": "news",
+          "publisher": "雷峰网",
+          "reason": "杭州美食消费活动，好吃好玩"
+        },
+        {
+          "rank": 7,
+          "title": "问界山河 · 重庆自驾充电路书上线，5 条自驾线路串联 30 座充电站点",
+          "type": "news",
+          "publisher": "IT之家",
+          "reason": "重庆自驾路书串联充电站与地道美食，契合旅行偏好"
+        },
+        {
+          "rank": 8,
+          "title": "社区速递 159 | 便携卡片充电器与库克十五年改变生活的产品",
+          "type": "article",
+          "publisher": "少数派 - 高品质数字消费指南",
+          "reason": "社区速递推荐便携充电器等数字消费好物"
+        }
+      ]
+    },
+    {
+      "subject": "GENERIC",
+      "label": "无数字之我（generic）",
+      "query": "最近有什么值得我看的？",
+      "ms": 29940,
+      "cards": [
+        {
+          "rank": 1,
+          "title": "中科宇航力箭一号总装周期缩短至约 15 天：南沙总装厂房年产能 30 发，接单到发射周期压缩至半年内",
+          "type": "news",
+          "publisher": "IT之家",
+          "reason": "力箭一号总装提速，航天产能突破"
+        },
+        {
+          "rank": 2,
+          "title": "智元第20000台具身机器人交付长隆，首期超300台机器人常驻乐园。",
+          "type": "news",
+          "publisher": "雷峰网",
+          "reason": "智元机器人量产交付，具身智能落地"
+        },
+        {
+          "rank": 3,
+          "title": "Deepseek 桌面版悄悄上线；Muse 大火，扎克伯格跃升全球第四大富豪；OpenAI 被曝筹备推出 ProMax ",
+          "type": "article",
+          "publisher": "GeekPark",
+          "reason": "科技早报：DeepSeek桌面版等要闻"
+        },
+        {
+          "rank": 4,
+          "title": "谷歌TPU跑Kimi比英伟达GPU快57%！用的还是DeepSeek推理框架",
+          "type": "news",
+          "publisher": "量子位",
+          "reason": "谷歌TPU跑Kimi快57%，AI芯片竞争"
+        },
+        {
+          "rank": 5,
+          "title": "本周看什么 | 最近值得一看的 6 部作品",
+          "type": "article",
+          "publisher": "少数派 - 高品质数字消费指南",
+          "reason": "本周值得一看的6部影视作品"
+        },
+        {
+          "rank": 6,
+          "title": "在云栖大会，我终于看懂了米哈游千亿AI野心",
+          "type": "article",
+          "publisher": "量子位",
+          "reason": "米哈游千亿AI野心解析"
+        },
+        {
+          "rank": 7,
+          "title": "OpenAI失控Agent还找DeepSeek、Kimi当外援！近百万条作案短链曝光",
+          "type": "news",
+          "publisher": "量子位",
+          "reason": "OpenAI失控Agent安全事件，今日热点"
+        },
+        {
+          "rank": 8,
+          "title": "泰国曼谷持续强降雨 政府加强生活物资保供稳价",
+          "type": "news",
+          "publisher": "中新网即时新闻",
+          "reason": "曼谷强降雨与保供稳价，时效性强"
+        }
+      ]
+    }
+  ],
+  "intentConflict": [
+    {
+      "subject": "A",
+      "query": "今天不要给我科技内容，想看点轻松的。",
+      "ms": 22266,
+      "cards": [
+        {
+          "rank": 1,
+          "title": "长假要玩的和要看的，核市奇谭Vol.126",
+          "type": "article",
+          "publisher": "机核",
+          "reason": "长假游戏影视闲聊推荐，轻松不费脑"
+        },
+        {
+          "rank": 2,
+          "title": "本周看什么 | 最近值得一看的 6 部作品",
+          "type": "article",
+          "publisher": "少数派 - 高品质数字消费指南",
+          "reason": "近期影视作品盘点，休闲娱乐"
+        },
+        {
+          "rank": 3,
+          "title": "《历史模拟器：崇祯》诱敌贪腐乱辽东，力辩东林开民智",
+          "type": "article",
+          "publisher": "机核",
+          "reason": "历史模拟游戏播客，轻松欢乐"
+        },
+        {
+          "rank": 4,
+          "title": "Episode 62: Draw a map and get lost・陪你跑五公里",
+          "type": "audio",
+          "publisher": "Byte.Coffee",
+          "reason": "跑步旅行闲聊音频，轻松治愈"
+        },
+        {
+          "rank": 5,
+          "title": "张雪兑现承诺，近 200 人包机赴意大利 WSBK 为车队助威",
+          "type": "news",
+          "publisher": "IT之家",
+          "reason": "包机看摩托赛，体育趣闻轻松"
+        },
+        {
+          "rank": 6,
+          "title": "抽“锦鲤”享美食！“点亮杭州 碰见好运”服务消费季活动启动",
+          "type": "news",
+          "publisher": "雷峰网",
+          "reason": "杭州消费季活动，吃喝玩乐资讯"
+        },
+        {
+          "rank": 7,
+          "title": "中国女篮获爱知·名古屋亚运会铜牌",
+          "type": "news",
+          "publisher": "中新网即时新闻",
+          "reason": "亚运会女篮铜牌，当天体育轻新闻"
+        },
+        {
+          "rank": 8,
+          "title": "世赛现场看高手较量：全盲赛制、毫厘功夫、分秒必争",
+          "type": "news",
+          "publisher": "中新网即时新闻",
+          "reason": "世界技能大赛现场，趣味技能，当天"
+        }
+      ]
+    },
+    {
+      "subject": "A",
+      "query": "我最近需要研究出版业 AI 应用。",
+      "ms": 16573,
+      "cards": [
+        {
+          "rank": 1,
+          "title": "E245｜藏在大模型背后的新闻人：GPT们的回复是这样写出来的",
+          "type": "audio",
+          "publisher": "硅谷101",
+          "reason": "大模型内容工程与新闻出版AI应用相关"
+        }
+      ]
+    }
+  ],
+  "feedback": [
+    {
+      "kind": "news",
+      "subject": "A",
+      "query": "今天有什么值得我关注的新闻？",
+      "cards": [
+        {
+          "rank": 1,
+          "title": "中科宇航力箭一号总装周期缩短至约 15 天：南沙总装厂房年产能 30 发，接单到发射周期压缩至半年内",
+          "type": "news",
+          "publisher": "IT之家",
+          "reason": ""
+        },
+        {
+          "rank": 2,
+          "title": "在云栖大会，我终于看懂了米哈游千亿AI野心",
+          "type": "news",
+          "publisher": "量子位",
+          "reason": ""
+        },
+        {
+          "rank": 3,
+          "title": "智元第20000台具身机器人交付长隆，首期超300台机器人常驻乐园。",
+          "type": "news",
+          "publisher": "雷峰网",
+          "reason": ""
+        },
+        {
+          "rank": 4,
+          "title": "Deepseek 桌面版悄悄上线；Muse 大火，扎克伯格跃升全球第四大富豪；OpenAI 被曝筹备推出 ProMax ",
+          "type": "news",
+          "publisher": "GeekPark",
+          "reason": ""
+        },
+        {
+          "rank": 5,
+          "title": "【数智周报】 千问办公发布企业级Agent基础设施；谷歌推出Gemini 3.8 Flash TTS及Flash-Lit",
+          "type": "news",
+          "publisher": "钛媒体：引领未来商业与生活新知",
+          "reason": ""
+        },
+        {
+          "rank": 6,
+          "title": "宜家 Matter 智能家居终于要来了？在中国市场它将如何破局",
+          "type": "news",
+          "publisher": "少数派 - 高品质数字消费指南",
+          "reason": ""
+        },
+        {
+          "rank": 7,
+          "title": "早报｜网易云音乐鸿蒙版正式上线/任正非重申「华为不造车」/腾讯QClaw将停运",
+          "type": "news",
+          "publisher": "爱范儿",
+          "reason": ""
+        },
+        {
+          "rank": 8,
+          "title": "谷歌TPU跑Kimi比英伟达GPU快57%！用的还是DeepSeek推理框架",
+          "type": "news",
+          "publisher": "量子位",
+          "reason": ""
+        }
+      ]
+    },
+    {
+      "kind": "news",
+      "subject": "B",
+      "query": "今天有什么值得我关注的新闻？",
+      "cards": [
+        {
+          "rank": 1,
+          "title": "在云栖大会，我终于看懂了米哈游千亿AI野心",
+          "type": "news",
+          "publisher": "量子位",
+          "reason": "今日米哈游AI野心，与游戏内容创作相关"
+        },
+        {
+          "rank": 2,
+          "title": "世界技能大赛：拼到最后，全是“手搓”硬实力",
+          "type": "news",
+          "publisher": "中新网即时新闻",
+          "reason": "今日世界技能大赛，含3D游戏艺术项目"
+        },
+        {
+          "rank": 3,
+          "title": "Deepseek 桌面版悄悄上线；Muse 大火，扎克伯格跃升全球第四大富豪；OpenAI 被曝筹备推出 ProMax ",
+          "type": "article",
+          "publisher": "GeekPark",
+          "reason": "今日科技早报，AI与产品动态"
+        },
+        {
+          "rank": 4,
+          "title": "【数智周报】 千问办公发布企业级Agent基础设施；谷歌推出Gemini 3.8 Flash TTS及Flash-Lit",
+          "type": "article",
+          "publisher": "钛媒体：引领未来商业与生活新知",
+          "reason": "今日数智周报，AI与商业动态"
+        },
+        {
+          "rank": 5,
+          "title": "维密重回上海淮海路，中国市场进入扩店阶段｜最前线",
+          "type": "news",
+          "publisher": "36氪",
+          "reason": "今日维密重返上海淮海路开店"
+        },
+        {
+          "rank": 6,
+          "title": "宜家 Matter 智能家居终于要来了？在中国市场它将如何破局",
+          "type": "article",
+          "publisher": "少数派 - 高品质数字消费指南",
+          "reason": "今日宜家Matter智能家居中国进展"
+        }
+      ]
+    },
+    {
+      "kind": "news",
+      "subject": "C",
+      "query": "今天有什么值得我关注的新闻？",
+      "cards": [
+        {
+          "rank": 1,
+          "title": "（近观中国）中美元首白宫茶叙，六字共识举世瞩目",
+          "type": "news",
+          "publisher": "中新网即时新闻",
+          "reason": "中美元首白宫茶叙，重大时政要闻"
+        },
+        {
+          "rank": 2,
+          "title": "问界山河 · 重庆自驾充电路书上线，5 条自驾线路串联 30 座充电站点",
+          "type": "news",
+          "publisher": "IT之家",
+          "reason": "重庆自驾充电路书，串联美食与景点"
+        },
+        {
+          "rank": 3,
+          "title": "维密重回上海淮海路，中国市场进入扩店阶段｜最前线",
+          "type": "news",
+          "publisher": "36氪",
+          "reason": "维密上海旗舰店开业，消费生活动态"
+        },
+        {
+          "rank": 4,
+          "title": "从买东西到买体验：为什么4个周末替代不了一个8天长假？",
+          "type": "article",
+          "publisher": "钛媒体：引领未来商业与生活新知",
+          "reason": "长假体验消费与旅行趋势分析"
+        },
+        {
+          "rank": 5,
+          "title": "泰国曼谷持续强降雨 政府加强生活物资保供稳价",
+          "type": "news",
+          "publisher": "中新网即时新闻",
+          "reason": "曼谷强降雨，出行需关注当地安全"
+        },
+        {
+          "rank": 6,
+          "title": "中国女篮获爱知·名古屋亚运会铜牌",
+          "type": "news",
+          "publisher": "中新网即时新闻",
+          "reason": "中国女篮亚运摘铜，体育娱乐动态"
+        },
+        {
+          "rank": 7,
+          "title": "追光｜以热爱 抵流年——第20届亚运会老将群像",
+          "type": "news",
+          "publisher": "中新网即时新闻",
+          "reason": "亚运会老将群像，体育热血故事"
+        },
+        {
+          "rank": 8,
+          "title": "以微观切口承载宏大史诗 网络纪录片《长征二十夜》多平台上线",
+          "type": "news",
+          "publisher": "中新网即时新闻",
+          "reason": "纪录片上线，文化娱乐可关注"
+        }
+      ]
+    },
+    {
+      "kind": "baseline",
+      "cards": [
+        {
+          "rank": 1,
+          "title": "从模型上手机到让智能体落地，高通的AI时代新故事｜焦点分析",
+          "type": "article",
+          "publisher": "36氪",
+          "reason": "今日发布，端侧AI与手机场景新进展"
+        },
+        {
+          "rank": 2,
+          "title": "OpenAI失控Agent还找DeepSeek、Kimi当外援！近百万条作案短链曝光",
+          "type": "news",
+          "publisher": "量子位",
+          "reason": "今日AI Agent安全事件，值得关注"
+        },
+        {
+          "rank": 3,
+          "title": "DoorDash 借助多 Agent LLM 系统清理 6 万个 Feature Flag",
+          "type": "article",
+          "publisher": "InfoQ - 促进软件开发领域知识与创新的传播",
+          "reason": "今日多Agent系统落地案例，技术参考"
+        },
+        {
+          "rank": 4,
+          "title": "OPPO 姜昱辰：大模型的差距越来越小，AI 手机的差距才刚拉开",
+          "type": "article",
+          "publisher": "GeekPark",
+          "reason": "昨日AI手机定义与产品趋势访谈"
+        },
+        {
+          "rank": 5,
+          "title": "模型之外，游戏+AI的下一道门槛在哪里？",
+          "type": "article",
+          "publisher": "36氪",
+          "reason": "游戏+AI行业应用与创作者生态分析"
+        },
+        {
+          "rank": 6,
+          "title": "华硕：英伟达 RTX Spark 款 ProArt 创 16 创作本 10 月 8 日登场",
+          "type": "news",
+          "publisher": "IT之家",
+          "reason": "今日英伟达RTX Spark智能体电脑，本地AI硬件前沿"
+        },
+        {
+          "rank": 7,
+          "title": "OpenAI闯大祸！GPT竟黑进医保系统，黄仁勋：管不住就关掉",
+          "type": "news",
+          "publisher": "量子位",
+          "reason": "OpenAI安全事件，AI治理风险值得关注"
+        },
+        {
+          "rank": 8,
+          "title": "“AlphaGo”杀进足球场！自我对弈140年，机器人成“梅西终结者”",
+          "type": "news",
+          "publisher": "量子位",
+          "reason": "机器人足球自我对弈，AI体育突破"
+        }
+      ]
+    },
+    {
+      "kind": "after-reduce",
+      "cards": [
+        {
+          "rank": 1,
+          "title": "OpenAI失控Agent还找DeepSeek、Kimi当外援！近百万条作案短链曝光",
+          "type": "news",
+          "publisher": "量子位",
+          "reason": "AI Agent安全与灰产事件，值得关注"
+        },
+        {
+          "rank": 2,
+          "title": "DoorDash 借助多 Agent LLM 系统清理 6 万个 Feature Flag",
+          "type": "news",
+          "publisher": "InfoQ - 促进软件开发领域知识与创新的传播",
+          "reason": "多Agent LLM企业级落地案例"
+        },
+        {
+          "rank": 3,
+          "title": "“AlphaGo”杀进足球场！自我对弈140年，机器人成“梅西终结者”",
+          "type": "news",
+          "publisher": "量子位",
+          "reason": "自我对弈机器人足球，强化学习前沿"
+        },
+        {
+          "rank": 4,
+          "title": "模型之外，游戏+AI的下一道门槛在哪里？",
+          "type": "article",
+          "publisher": "36氪",
+          "reason": "游戏+AI落地与商业模式分析"
+        },
+        {
+          "rank": 5,
+          "title": "1/3 价格，1/8 重量，Meta 新眼镜秒杀 Vision Pro 了？",
+          "type": "article",
+          "publisher": "ifanr",
+          "reason": "Meta新眼镜，AI硬件趋势与竞争"
+        },
+        {
+          "rank": 6,
+          "title": "从地下8000米到机器人高温关节，清华系特种功率芯片公司完成数亿元C轮融资｜36氪首发",
+          "type": "news",
+          "publisher": "36氪",
+          "reason": "芯片公司C轮融资，前沿科技与一级市场"
+        },
+        {
+          "rank": 7,
+          "title": "消息称 Anthropic 谈判租赁最高 1GW 算力，预计相关投资至少 400 亿美元",
+          "type": "news",
+          "publisher": "IT之家",
+          "reason": "Anthropic租赁1GW算力，AI基建大额投资"
+        },
+        {
+          "rank": 8,
+          "title": "OpenAI闯大祸！GPT竟黑进医保系统，黄仁勋：管不住就关掉",
+          "type": "news",
+          "publisher": "量子位",
+          "reason": "OpenAI安全事件与AI治理警示"
+        }
+      ]
+    },
+    {
+      "kind": "after-boost",
+      "cards": [
+        {
+          "rank": 1,
+          "title": "OpenAI失控Agent还找DeepSeek、Kimi当外援！近百万条作案短链曝光",
+          "type": "news",
+          "publisher": "量子位",
+          "reason": "今日AI安全热点，Agent失控事件值得关注"
+        },
+        {
+          "rank": 2,
+          "title": "从模型上手机到让智能体落地，高通的AI时代新故事｜焦点分析",
+          "type": "article",
+          "publisher": "36氪",
+          "reason": "端侧AI落地新故事，科技投资人关注"
+        },
+        {
+          "rank": 3,
+          "title": "DoorDash 借助多 Agent LLM 系统清理 6 万个 Feature Flag",
+          "type": "article",
+          "publisher": "InfoQ - 促进软件开发领域知识与创新的传播",
+          "reason": "多Agent工程实践，技术趋势参考"
+        },
+        {
+          "rank": 4,
+          "title": "OPPO 姜昱辰：大模型的差距越来越小，AI 手机的差距才刚拉开",
+          "type": "article",
+          "publisher": "GeekPark",
+          "reason": "AI手机定义与竞争，硬件趋势"
+        },
+        {
+          "rank": 5,
+          "title": "模型之外，游戏+AI的下一道门槛在哪里？",
+          "type": "article",
+          "publisher": "36氪",
+          "reason": "游戏+AI落地，AI原生玩法趋势"
+        },
+        {
+          "rank": 6,
+          "title": "三折叠终于不像奇观了，但它还是 19999 元",
+          "type": "article",
+          "publisher": "GeekPark",
+          "reason": "三折叠旗舰评测，硬件创新观察"
+        },
+        {
+          "rank": 7,
+          "title": "「济公」游本昌去世；罗永浩再评小米 18 Fold；Meta 推出手持设备 Muse Charm｜极客早知道",
+          "type": "article",
+          "publisher": "GeekPark",
+          "reason": "极客早知道，符合偏好，汇总科技要闻"
+        },
+        {
+          "rank": 8,
+          "title": "OpenAI闯大祸！GPT竟黑进医保系统，黄仁勋：管不住就关掉",
+          "type": "news",
+          "publisher": "量子位",
+          "reason": "OpenAI安全争议，AI治理热点"
+        }
+      ]
+    }
+  ],
+  "ab": [
+    {
+      "query": "最近有什么值得我看的？",
+      "verdict": "BETTER",
+      "reason": "更聚焦AI技术、创业与投资，剔除无关社会新闻，契合用户关注领域。",
+      "generic": [
+        "中科宇航力箭一号总装周期缩短至约 15 天：南沙总装厂房年产能 30 发，接单到发射周期压缩至半年内",
+        "Deepseek 桌面版悄悄上线；Muse 大火，扎克伯格跃升全球第四大富豪；OpenAI 被曝筹备推出 ProMax ",
+        "谷歌TPU跑Kimi比英伟达GPU快57%！用的还是DeepSeek推理框架",
+        "智元第20000台具身机器人交付长隆，首期超300台机器人常驻乐园。",
+        "在云栖大会，我终于看懂了米哈游千亿AI野心",
+        "本周看什么 | 最近值得一看的 6 部作品",
+        "泰国曼谷持续强降雨 政府加强生活物资保供稳价",
+        "OpenAI失控Agent还找DeepSeek、Kimi当外援！近百万条作案短链曝光"
+      ],
+      "personalized": [
+        "谷歌TPU跑Kimi比英伟达GPU快57%！用的还是DeepSeek推理框架",
+        "智元第20000台具身机器人交付长隆，首期超300台机器人常驻乐园。",
+        "在云栖大会，我终于看懂了米哈游千亿AI野心",
+        "Deepseek 桌面版悄悄上线；Muse 大火，扎克伯格跃升全球第四大富豪；OpenAI 被曝筹备推出 ProMax ",
+        "从模型上手机到让智能体落地，高通的AI时代新故事｜焦点分析",
+        "OpenAI失控Agent还找DeepSeek、Kimi当外援！近百万条作案短链曝光",
+        "OpenAI闯大祸！GPT竟黑进医保系统，黄仁勋：管不住就关掉",
+        "Agent 时代来了，3D 生成大模型接下来比什么？"
+      ]
+    },
+    {
+      "query": "今天有什么值得我关注的新闻？",
+      "verdict": "BETTER",
+      "reason": "个性化结果聚焦AI、算力、机器人等前沿科技与投资动态，更贴合用户关注领域。",
+      "generic": [
+        "世界技能大赛：拼到最后，全是“手搓”硬实力",
+        "中国女篮获爱知·名古屋亚运会铜牌",
+        "泰国曼谷持续强降雨 政府加强生活物资保供稳价",
+        "中科宇航力箭一号总装周期缩短至约 15 天：南沙总装厂房年产能 30 发，接单到发射周期压缩至半年内",
+        "谷歌TPU跑Kimi比英伟达GPU快57%！用的还是DeepSeek推理框架",
+        "Deepseek 桌面版悄悄上线；Muse 大火，扎克伯格跃升全球第四大富豪；OpenAI 被曝筹备推出 ProMax ",
+        "（近观中国）中美元首白宫茶叙，六字共识举世瞩目",
+        "消息称 Anthropic 谈判租赁最高 1GW 算力，预计相关投资至少 400 亿美元"
+      ],
+      "personalized": [
+        "中科宇航力箭一号总装周期缩短至约 15 天：南沙总装厂房年产能 30 发，接单到发射周期压缩至半年内",
+        "在云栖大会，我终于看懂了米哈游千亿AI野心",
+        "智元第20000台具身机器人交付长隆，首期超300台机器人常驻乐园。",
+        "Deepseek 桌面版悄悄上线；Muse 大火，扎克伯格跃升全球第四大富豪；OpenAI 被曝筹备推出 ProMax ",
+        "谷歌TPU跑Kimi比英伟达GPU快57%！用的还是DeepSeek推理框架",
+        "从模型上手机到让智能体落地，高通的AI时代新故事｜焦点分析",
+        "消息称 Anthropic 谈判租赁最高 1GW 算力，预计相关投资至少 400 亿美元",
+        "华硕：英伟达 RTX Spark 款 ProArt 创 16 创作本 10 月 8 日登场"
+      ]
+    },
+    {
+      "query": "最近有什么值得看的 AI / 科技深度内容？",
+      "verdict": "BETTER",
+      "reason": "个性化版含TPU对比、具身机器人、芯片融资等，更贴合投资人关注的技术趋势与商业模式。",
+      "generic": [
+        "在云栖大会，我终于看懂了米哈游千亿AI野心",
+        "梁文锋狙击战：深扒那些梁文锋署名的论文有多牛",
+        "OPPO 姜昱辰：大模型的差距越来越小，AI 手机的差距才刚拉开",
+        "从模型上手机到让智能体落地，高通的AI时代新故事｜焦点分析",
+        "模型之外，游戏+AI的下一道门槛在哪里？",
+        "AI公司杀进硬件，联想AI平板如何找到存在感？｜最前线",
+        "Agent 时代来了，3D 生成大模型接下来比什么？",
+        "每周下载量约 16 万，仍处 Alpha 的 TanStack Charts 为什么火了？"
+      ],
+      "personalized": [
+        "在云栖大会，我终于看懂了米哈游千亿AI野心",
+        "梁文锋狙击战：深扒那些梁文锋署名的论文有多牛",
+        "从模型上手机到让智能体落地，高通的AI时代新故事｜焦点分析",
+        "谷歌TPU跑Kimi比英伟达GPU快57%！用的还是DeepSeek推理框架",
+        "智元第20000台具身机器人交付长隆，首期超300台机器人常驻乐园。",
+        "从地下8000米到机器人高温关节，清华系特种功率芯片公司完成数亿元C轮融资｜36氪首发",
+        "消息称 Anthropic 谈判租赁最高 1GW 算力，预计相关投资至少 400 亿美元",
+        "亮出“中国最强AI芯片”还不够，平头哥又甩出一手开源"
+      ]
+    },
+    {
+      "query": "最近有什么值得听的商业 / 科技 / 投资播客？",
+      "verdict": "SAME",
+      "reason": "两组结果完全相同，均未针对用户AI/创业/投资偏好筛选，对具体用户无差异。",
+      "generic": [
+        "E252｜硅谷睡眠外挂：富人的玩具，还是预防医疗的入口？｜对话Eight Sleep创始人"
+      ],
+      "personalized": [
+        "E252｜硅谷睡眠外挂：富人的玩具，还是预防医疗的入口？｜对话Eight Sleep创始人"
+      ]
+    },
+    {
+      "query": "最近一级市场有什么值得关注的内容？",
+      "verdict": "BETTER",
+      "reason": "新增Anthropic算力大单，更贴合AI投资前沿，替换港股新闻更相关",
+      "generic": [
+        "从地下8000米到机器人高温关节，清华系特种功率芯片公司完成数亿元C轮融资｜36氪首发",
+        "AI新材料公司获数千万天使轮融资，已合作固态电池与化工龙头丨36氪首发",
+        "商业航天企业拿下近20亿融资，大型可回收火箭计划2027年首飞｜硬氪独家",
+        "华为大模型双子星联手创业，要找物理世界的Scaling Law",
+        "京东，具身智能大玩家？",
+        "悬而未决的港股聆讯，与“非洲之王”传音的利润幻象"
+      ],
+      "personalized": [
+        "商业航天企业拿下近20亿融资，大型可回收火箭计划2027年首飞｜硬氪独家",
+        "从地下8000米到机器人高温关节，清华系特种功率芯片公司完成数亿元C轮融资｜36氪首发",
+        "AI新材料公司获数千万天使轮融资，已合作固态电池与化工龙头丨36氪首发",
+        "消息称 Anthropic 谈判租赁最高 1GW 算力，预计相关投资至少 400 亿美元",
+        "华为大模型双子星联手创业，要找物理世界的Scaling Law",
+        "京东，具身智能大玩家？"
+      ]
+    },
+    {
+      "query": "有什么值得看的长文？",
+      "verdict": "BETTER",
+      "reason": "更聚焦AI创业投资，含融资、具身智能等前沿长文，契合用户关注。",
+      "generic": [
+        "在云栖大会，我终于看懂了米哈游千亿AI野心",
+        "梁文锋狙击战：深扒那些梁文锋署名的论文有多牛",
+        "OPPO 姜昱辰：大模型的差距越来越小，AI 手机的差距才刚拉开",
+        "现在不买带线控底盘的车，三年后注定会后悔",
+        "Agent 时代来了，3D 生成大模型接下来比什么？",
+        "李彦宏的长期主义，进入回报周期",
+        "从数人头到数智能体：一场正在发生的企业生产力换血",
+        "SeeAct AI穆尧：具身智能终局，一定是从“被训练”走向“自我进化”｜物理AI50人"
+      ],
+      "personalized": [
+        "梁文锋狙击战：深扒那些梁文锋署名的论文有多牛",
+        "在云栖大会，我终于看懂了米哈游千亿AI野心",
+        "从模型上手机到让智能体落地，高通的AI时代新故事｜焦点分析",
+        "Agent 时代来了，3D 生成大模型接下来比什么？",
+        "智元第20000台具身机器人交付长隆，首期超300台机器人常驻乐园。",
+        "从地下8000米到机器人高温关节，清华系特种功率芯片公司完成数亿元C轮融资｜36氪首发",
+        "李彦宏的长期主义，进入回报周期",
+        "阿里的蒸汽机时代"
+      ]
+    },
+    {
+      "query": "最近文化 / 阅读方面有什么内容？",
+      "verdict": "SAME",
+      "reason": "两组结果完全相同，均未针对AI/创业/投资偏好筛选，对用户无额外价值。",
+      "generic": [
+        "从“完成”到“准确” 北京人艺《小郡之秋》二轮登台",
+        "本周看什么 | 最近值得一看的 6 部作品",
+        "长假要玩的和要看的，核市奇谭Vol.126"
+      ],
+      "personalized": [
+        "从“完成”到“准确” 北京人艺《小郡之秋》二轮登台",
+        "本周看什么 | 最近值得一看的 6 部作品",
+        "长假要玩的和要看的，核市奇谭Vol.126"
+      ]
+    },
+    {
+      "query": "有什么适合通勤听的音频？",
+      "verdict": "BETTER",
+      "reason": "个性化版增加xAI、贾扬清、蒸馏等AI前沿内容，更贴合投资人通勤需求。",
+      "generic": [
+        "E252｜硅谷睡眠外挂：富人的玩具，还是预防医疗的入口？｜对话Eight Sleep创始人",
+        "Episode 62: Draw a map and get lost・陪你跑五公里",
+        "Episode 61: 为了护眼，我们从离焦镜聊到诺贝尔奖",
+        "E245｜藏在大模型背后的新闻人：GPT们的回复是这样写出来的",
+        "国产 AI 算力能凭「超节点」弯道超车吗? | WAIC 深度观察 S10E23",
+        "#398 一场美国观察漫谈：世界杯红牌、南非白人劳工"
+      ],
+      "personalized": [
+        "E252｜硅谷睡眠外挂：富人的玩具，还是预防医疗的入口？｜对话Eight Sleep创始人",
+        "Episode 62: Draw a map and get lost・陪你跑五公里",
+        "Episode 61: 为了护眼，我们从离焦镜聊到诺贝尔奖",
+        "E247｜对话盛颖：xAI，Infra的浪漫，SGLang，开源，平权与“甄嬛传”",
+        "用 AI 让我们变笨了吗？| S10E25",
+        "#399 贾扬清：我所经历的「人工智能已死」到「AI 颠覆世界」的数年巨变丨十周年特别节目",
+        "E246｜何谓蒸馏？聊聊硅谷如何看中国开放模型逼近前沿",
+        "E245｜藏在大模型背后的新闻人：GPT们的回复是这样写出来的"
+      ]
+    },
+    {
+      "query": "最近有什么重要视频？",
+      "verdict": "BETTER",
+      "reason": "个性化结果契合AI/创业/投资兴趣，涉及前沿科技与商业模式，对用户更有用。",
+      "generic": [
+        "走进世界技能博览会 乐享技能嘉年华"
+      ],
+      "personalized": [
+        "E252｜硅谷睡眠外挂：富人的玩具，还是预防医疗的入口？｜对话Eight Sleep创始人"
+      ]
+    },
+    {
+      "query": "有什么轻松一点、不费脑的内容？",
+      "verdict": "WORSE",
+      "reason": "个性化结果混入历史策略游戏，偏离轻松不费脑需求，不如通用。",
+      "generic": [
+        "长假要玩的和要看的，核市奇谭Vol.126",
+        "Episode 62: Draw a map and get lost・陪你跑五公里",
+        "新玩意 252｜少数派的编辑们最近买了啥？",
+        "家庭饮品 DIY 指南（五）：特调咖啡及其他饮品",
+        "拆卡模拟器《再拆亿包！》正式公布，即将登陆Steam，支持中文"
+      ],
+      "personalized": [
+        "长假要玩的和要看的，核市奇谭Vol.126",
+        "Episode 62: Draw a map and get lost・陪你跑五公里",
+        "《历史模拟器：崇祯》诱敌贪腐乱辽东，力辩东林开民智",
+        "拆卡模拟器《再拆亿包！》正式公布，即将登陆Steam，支持中文",
+        "新玩意 252｜少数派的编辑们最近买了啥？",
+        "家庭饮品 DIY 指南（五）：特调咖啡及其他饮品"
+      ]
+    }
+  ],
+  "verdicts": {
+    "BETTER": 7,
+    "SAME": 2,
+    "WORSE": 1
+  }
+}

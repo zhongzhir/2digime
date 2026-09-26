@@ -389,6 +389,7 @@
       (card && card.embedUrl) || '',
       (card && card.title) || '',
       card && card.sources ? card.sources.length : 0,
+      (card && card.reason) || '',
       card && card.representation && card.representation.bodyText ? 1 : 0,
       (card && (card.originalPublishedAt || card.publishedAt)) || '',
     ].join('|');
