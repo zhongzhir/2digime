@@ -1,0 +1,264 @@
+{
+  "at": "2026-09-26T08:20:02.480Z",
+  "elapsedMs": 5152,
+  "totalCards": 476,
+  "distinctHosts": 21,
+  "byType": {
+    "article": 335,
+    "audio": 141
+  },
+  "byCategory": {
+    "general": 3,
+    "tech": 6,
+    "business": 3,
+    "pevc": 1,
+    "culture": 3,
+    "audio": 6
+  },
+  "available": 22,
+  "unavailable": [],
+  "sources": [
+    {
+      "url": "https://www.chinanews.com.cn/rss/scroll-news.xml",
+      "label": "中国新闻网",
+      "category": "general",
+      "lastSuccessfulFetch": "2026-09-26T08:19:57.442Z",
+      "contentCount": 24,
+      "representationTypes": [
+        "article"
+      ],
+      "availability": "AVAILABLE"
+    },
+    {
+      "url": "http://www.people.com.cn/rss/politics.xml",
+      "label": "人民网·时政",
+      "category": "general",
+      "lastSuccessfulFetch": "2026-09-26T08:19:57.464Z",
+      "contentCount": 24,
+      "representationTypes": [
+        "article"
+      ],
+      "availability": "AVAILABLE"
+    },
+    {
+      "url": "http://www.news.cn/politics/news_politics.xml",
+      "label": "新华网·时政",
+      "category": "general",
+      "lastSuccessfulFetch": "2026-09-26T08:19:57.680Z",
+      "contentCount": 24,
+      "representationTypes": [
+        "article"
+      ],
+      "availability": "AVAILABLE"
+    },
+    {
+      "url": "https://www.ithome.com/rss/",
+      "label": "IT之家",
+      "category": "tech",
+      "lastSuccessfulFetch": "2026-09-26T08:19:57.808Z",
+      "contentCount": 24,
+      "representationTypes": [
+        "article"
+      ],
+      "availability": "AVAILABLE"
+    },
+    {
+      "url": "https://www.qbitai.com/feed",
+      "label": "量子位",
+      "category": "tech",
+      "lastSuccessfulFetch": "2026-09-26T08:19:57.547Z",
+      "contentCount": 10,
+      "representationTypes": [
+        "article"
+      ],
+      "availability": "AVAILABLE"
+    },
+    {
+      "url": "https://www.leiphone.com/feed",
+      "label": "雷峰网",
+      "category": "tech",
+      "lastSuccessfulFetch": "2026-09-26T08:19:58.301Z",
+      "contentCount": 20,
+      "representationTypes": [
+        "article"
+      ],
+      "availability": "AVAILABLE"
+    },
+    {
+      "url": "https://www.geekpark.net/rss",
+      "label": "极客公园",
+      "category": "tech",
+      "lastSuccessfulFetch": "2026-09-26T08:20:02.479Z",
+      "contentCount": 24,
+      "representationTypes": [
+        "article"
+      ],
+      "availability": "AVAILABLE"
+    },
+    {
+      "url": "https://www.infoq.cn/feed",
+      "label": "InfoQ",
+      "category": "tech",
+      "lastSuccessfulFetch": "2026-09-26T08:19:57.542Z",
+      "contentCount": 20,
+      "representationTypes": [
+        "article"
+      ],
+      "availability": "AVAILABLE"
+    },
+    {
+      "url": "http://www.people.com.cn/rss/finance.xml",
+      "label": "人民网·财经",
+      "category": "business",
+      "lastSuccessfulFetch": "2026-09-26T08:19:57.509Z",
+      "contentCount": 24,
+      "representationTypes": [
+        "article"
+      ],
+      "availability": "AVAILABLE"
+    },
+    {
+      "url": "http://www.news.cn/fortune/news_fortune.xml",
+      "label": "新华网·财经",
+      "category": "business",
+      "lastSuccessfulFetch": "2026-09-26T08:19:57.785Z",
+      "contentCount": 24,
+      "representationTypes": [
+        "article"
+      ],
+      "availability": "AVAILABLE"
+    },
+    {
+      "url": "https://www.tmtpost.com/rss.xml",
+      "label": "钛媒体",
+      "category": "business",
+      "lastSuccessfulFetch": "2026-09-26T08:19:58.315Z",
+      "contentCount": 19,
+      "representationTypes": [
+        "article"
+      ],
+      "availability": "AVAILABLE"
+    },
+    {
+      "url": "https://www.36kr.com/feed",
+      "label": "36氪",
+      "category": "pevc",
+      "lastSuccessfulFetch": "2026-09-26T08:19:58.068Z",
+      "contentCount": 24,
+      "representationTypes": [
+        "article"
+      ],
+      "availability": "AVAILABLE"
+    },
+    {
+      "url": "http://www.people.com.cn/rss/culture.xml",
+      "label": "人民网·文化",
+      "category": "culture",
+      "lastSuccessfulFetch": "2026-09-26T08:19:57.627Z",
+      "contentCount": 24,
+      "representationTypes": [
+        "article"
+      ],
+      "availability": "AVAILABLE"
+    },
+    {
+      "url": "https://sspai.com/feed",
+      "label": "少数派",
+      "category": "culture",
+      "lastSuccessfulFetch": "2026-09-26T08:19:57.891Z",
+      "contentCount": 10,
+      "representationTypes": [
+        "article"
+      ],
+      "availability": "AVAILABLE"
+    },
+    {
+      "url": "https://www.ifanr.com/feed",
+      "label": "爱范儿",
+      "category": "tech",
+      "lastSuccessfulFetch": "2026-09-26T08:19:58.133Z",
+      "contentCount": 20,
+      "representationTypes": [
+        "article"
+      ],
+      "availability": "AVAILABLE"
+    },
+    {
+      "url": "https://www.gcores.com/rss",
+      "label": "机核",
+      "category": "culture",
+      "lastSuccessfulFetch": "2026-09-26T08:19:57.954Z",
+      "contentCount": 20,
+      "representationTypes": [
+        "article"
+      ],
+      "availability": "AVAILABLE"
+    },
+    {
+      "url": "https://sv101.fireside.fm/rss",
+      "label": "硅谷101",
+      "category": "audio",
+      "lastSuccessfulFetch": "2026-09-26T08:20:02.132Z",
+      "contentCount": 24,
+      "representationTypes": [
+        "audio"
+      ],
+      "availability": "AVAILABLE"
+    },
+    {
+      "url": "https://feeds.fireside.fm/guiguzaozhidao/rss",
+      "label": "What's Next｜科技早知道",
+      "category": "audio",
+      "lastSuccessfulFetch": "2026-09-26T08:20:00.862Z",
+      "contentCount": 24,
+      "representationTypes": [
+        "audio"
+      ],
+      "availability": "AVAILABLE"
+    },
+    {
+      "url": "https://feeds.fireside.fm/101weekly/rss",
+      "label": "101 Weekly",
+      "category": "audio",
+      "lastSuccessfulFetch": "2026-09-26T08:19:59.408Z",
+      "contentCount": 21,
+      "representationTypes": [
+        "audio"
+      ],
+      "availability": "AVAILABLE"
+    },
+    {
+      "url": "https://etw.fm/rss",
+      "label": "声东击西",
+      "category": "audio",
+      "lastSuccessfulFetch": "2026-09-26T08:20:01.726Z",
+      "contentCount": 24,
+      "representationTypes": [
+        "audio"
+      ],
+      "availability": "AVAILABLE"
+    },
+    {
+      "url": "https://byte.coffee/feed",
+      "label": "Byte.Coffee",
+      "category": "audio",
+      "lastSuccessfulFetch": "2026-09-26T08:20:00.897Z",
+      "contentCount": 24,
+      "representationTypes": [
+        "audio"
+      ],
+      "availability": "AVAILABLE"
+    },
+    {
+      "url": "https://pythonhunter.org/feed",
+      "label": "捕蛇者说",
+      "category": "audio",
+      "lastSuccessfulFetch": "2026-09-26T08:20:00.993Z",
+      "contentCount": 24,
+      "representationTypes": [
+        "audio"
+      ],
+      "availability": "AVAILABLE"
+    }
+  ]
+}

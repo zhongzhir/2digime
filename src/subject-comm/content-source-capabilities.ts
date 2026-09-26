@@ -259,29 +259,85 @@ export function listingVideoHits(endpoint: OpenSourceEndpoint, html: string): Op
   const root = parse(html);
   const out: OpenMediaHit[] = [];
   const seen = new Set<string>();
-  for (const node of root.querySelectorAll('[video-src],[data-video-src],[node-url],[data-node-url]')) {
-    const rawVideo = String(node.getAttribute('video-src') || node.getAttribute('data-video-src') || '').trim();
-    const rawPage = String(node.getAttribute('node-url') || node.getAttribute('data-node-url') || '').trim();
-    const mediaUrl = asSafe(absUrl(endpoint.url, rawVideo));
+  const MEDIA_ATTRS = ['video-src', 'data-video-src', 'data-src', 'data-video', 'data-url', 'src'];
+  const PAGE_ATTRS = ['node-url', 'data-node-url', 'data-href'];
+  for (const node of root.querySelectorAll('[video-src],[data-video-src],[data-src],[data-video],[data-url],video[src],source[src]')) {
+    const rawVideo = MEDIA_ATTRS.map((attr) => node.getAttribute(attr)).find((value) => value && /\.(mp4|m4v|mov|webm|ogv)(\?|$)/i.test(value)) || '';
+    const mediaUrl = asSafe(absUrl(endpoint.url, String(rawVideo).trim()));
     // Only accept a natively playable progressive container; never a page or HLS/DASH manifest.
     if (!mediaUrl || !/\.(mp4|m4v|mov|webm|ogv)(\?|$)/i.test(mediaUrl)) continue;
-    const pageUrl = asSafe(absUrl(endpoint.url, rawPage)) || mediaUrl;
     if (seen.has(mediaUrl)) continue;
-    // 标题来自同节点内链接文本或图片 alt，缺失时退回页面 URL（不臆造标题）。
-    // 相关性由模型在同一候选池内判断，这里不做关键词过滤。
-    const titleText =
+    // Page URL: the node's own attribute, else the nearest anchor inside the node or its parent.
+    const scope = (node.parentNode as typeof node | null) ?? node;
+    let pageUrl = '';
+    for (const attr of PAGE_ATTRS) {
+      pageUrl = asSafe(absUrl(endpoint.url, String(node.getAttribute(attr) || '').trim())) || '';
+      if (pageUrl) break;
+    }
+    const anchor = node.querySelector('a[href]') || scope.querySelector('a[href]');
+    if (!pageUrl && anchor) pageUrl = asSafe(absUrl(endpoint.url, String(anchor.getAttribute('href') || '').trim())) || '';
+    // Title: same-node anchor text / title attr / image alt, else the nearest anchor text in scope.
+    let titleText =
       clipTitle(String(node.querySelector('a')?.text || '').trim()) ||
+      clipTitle(String(node.getAttribute('title') || '').trim()) ||
       clipTitle(String(node.querySelector('img')?.getAttribute('alt') || '').trim());
+    if (!titleText) {
+      // The nearest anchor is often an image-only link; prefer the longest readable anchor text.
+      const candidates = [scope, scope.parentNode].filter(Boolean) as ReturnType<typeof parse>[];
+      let best = '';
+      for (const container of candidates) {
+        for (const a of container.querySelectorAll('a')) {
+          const text = clipTitle(String(a.text || '').trim());
+          if (text.length > best.length && text.length <= 140) best = text;
+        }
+      }
+      if (best) titleText = best;
+    }
     seen.add(mediaUrl);
     out.push({
-      title: titleText || clipTitle(pageUrl),
-      url: pageUrl,
+      title: titleText || clipTitle(pageUrl || mediaUrl),
+      url: pageUrl || mediaUrl,
       contentType: 'video',
       capability: endpoint.id,
       mediaUrl,
       mimeType: /\.webm(\?|$)/i.test(mediaUrl) ? 'video/webm' : 'video/mp4',
       mediaExpression: 'full',
-      snippet: clipText(titleText || pageUrl).slice(0, 400),
+      snippet: clipText(titleText || pageUrl || mediaUrl).slice(0, 400),
+    });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+/**
+ * 哔哩哔哩官方公开播放器（player.bilibili.com）。只从公开列表页读取视频 id 与其标题，
+ * 组装官方 embed；不调用平台内部 API，不解析私有播放地址。找不到标题时退回页面标题。
+ */
+export function bilibiliHits(endpoint: OpenSourceEndpoint, html: string): OpenMediaHit[] {
+  const root = parse(html);
+  const out: OpenMediaHit[] = [];
+  const seen = new Set<string>();
+  for (const anchor of root.querySelectorAll('a[href*="/video/BV"]')) {
+    const href = String(anchor.getAttribute('href') || '');
+    const bvid = (href.match(/BV[0-9A-Za-z]{10}/) || [])[0];
+    if (!bvid || seen.has(bvid)) continue;
+    const card = anchor.closest('.bili-video-card') || (anchor.parentNode as typeof anchor | null);
+    const anchorText = clipTitle(String(anchor.text || '').trim());
+    const title =
+      clipTitle(String(anchor.getAttribute('title') || '').trim()) ||
+      clipTitle(String(card?.querySelector('.bili-video-card__title')?.getAttribute('title') || '').trim()) ||
+      clipTitle(String(anchor.querySelector('img')?.getAttribute('alt') || '').trim()) ||
+      clipTitle(String(card?.querySelector('.bili-video-card__title')?.text || '').trim()) ||
+      (anchorText.length > 6 ? anchorText : '');
+    seen.add(bvid);
+    out.push({
+      title: title || bvid,
+      url: `https://www.bilibili.com/video/${bvid}`,
+      contentType: 'video',
+      capability: endpoint.id,
+      embedUrl: `https://player.bilibili.com/player.html?bvid=${bvid}&autoplay=0`,
+      mediaExpression: 'full',
+      snippet: clipText(title || bvid).slice(0, 400),
     });
     if (out.length >= 8) break;
   }
@@ -354,6 +410,9 @@ export async function searchOpenMedia(input: {
       } else if (endpoint.kind === 'media_listing' && wanted.includes('video')) {
         const got = await fetchImpl(endpoint.url, { accept: 'text/html, application/xhtml+xml, */*;q=0.1' });
         if (got.status >= 200 && got.status < 300) hits.push(...listingVideoHits(endpoint, got.body || ''));
+      } else if (endpoint.kind === 'bilibili_listing' && wanted.includes('video')) {
+        const got = await fetchImpl(endpoint.url, { accept: 'text/html, application/xhtml+xml, */*;q=0.1' });
+        if (got.status >= 200 && got.status < 300) hits.push(...bilibiliHits(endpoint, got.body || ''));
       } else if (endpoint.kind === 'itunes_rss' && wanted.includes('audio')) {
         hits.push(...itunesTopHits(endpoint, await readJson(fetchImpl, endpoint.url)));
       }
@@ -362,17 +421,20 @@ export async function searchOpenMedia(input: {
     }
     return hits;
   }));
+  // Interleave sources round-robin so one large listing cannot crowd out the others.
   const out: OpenMediaHit[] = [];
   const seen = new Set<string>();
-  for (const hits of perEndpoint) {
-    for (const hit of hits) {
+  const depth = perEndpoint.reduce((max, hits) => Math.max(max, hits.length), 0);
+  for (let i = 0; i < depth && out.length < 16; i++) {
+    for (const hits of perEndpoint) {
+      const hit = hits[i];
+      if (!hit) continue;
       const key = (hit.capability === 'itunes-podcast-search' || hit.capability === 'itunes-top-podcasts') ? (hit.feedUrl || hit.url) : hit.url;
       if (seen.has(key)) continue;
       seen.add(key);
       out.push(hit);
       if (out.length >= 16) break;
     }
-    if (out.length >= 16) break;
   }
   return out;
 }

@@ -386,11 +386,14 @@ export async function seekContent(input: {
     }
   }
 
-  // When the request names a media kind, surface those candidates first so a bounded first
-  // pass (which may skip open-media) still sees the right type near the front of the pool.
+  // When the request names a media kind, interleave those candidates with the rest so a bounded
+  // first pass sees the requested type near the front without crowding out Feed/Search results.
+  const isWantedMedia = (card: DiscoverCard) => mediaKinds.includes(card.contentType as 'video' | 'image' | 'audio');
+  const mediaPool = cards.filter(isWantedMedia);
+  const otherPool = cards.filter((card) => !isWantedMedia(card));
   const ordered = mediaKinds.length
-    ? [...cards.filter((card) => mediaKinds.includes(card.contentType as 'video' | 'image' | 'audio')),
-       ...cards.filter((card) => !mediaKinds.includes(card.contentType as 'video' | 'image' | 'audio'))]
+    ? Array.from({ length: Math.max(mediaPool.length, otherPool.length) },
+        (_, i) => [mediaPool[i], otherPool[i]]).flat().filter((card): card is DiscoverCard => !!card)
     : cards;
   const pool = ordered.filter(isConcreteCandidate);
   const concrete = input.selectCandidates ? await input.selectCandidates(pool) : pool;

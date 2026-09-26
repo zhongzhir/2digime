@@ -1,0 +1,190 @@
+{
+  "at": "2026-09-26T08:24:31.744Z",
+  "rows": [
+    {
+      "key": "A",
+      "query": "今天有什么重要新闻？",
+      "ttfvMs": 33980,
+      "ttfvDomMs": 33980,
+      "ttfcMs": 81854,
+      "rawCandidates": 476,
+      "candidateSourceCount": 21,
+      "candidateFeedCount": 476,
+      "candidateSearchCount": 0,
+      "distinctHosts": 9,
+      "distinctPublishers": 9,
+      "publishers": [
+        "中新网即时新闻",
+        "IT之家",
+        "量子位",
+        "雷峰网",
+        "GeekPark",
+        "钛媒体：引领未来商业与生活新知",
+        "36氪",
+        "少数派 - 高品质数字消费指南",
+        "爱范儿"
+      ],
+      "cards": 18,
+      "types": {
+        "新闻": 18
+      },
+      "directConsumable": 18,
+      "externalOnly": 0,
+      "modelCalls": 31,
+      "modelTokens": 99133,
+      "reasoningTokens": 1801,
+      "representative": [
+        "新闻:北京人艺小剧场话剧《画眉》中秋幕启",
+        "新闻:因转向系统存在隐患，大众将在全球范围内召回约 286 万辆汽",
+        "新闻:在云栖大会，我终于看懂了米哈游千亿AI野心"
+      ]
+    },
+    {
+      "key": "B",
+      "query": "最近有什么值得看的 AI / 科技深度内容？",
+      "ttfvMs": 12853,
+      "ttfvDomMs": 12853,
+      "ttfcMs": 39190,
+      "rawCandidates": 478,
+      "candidateSourceCount": 20,
+      "candidateFeedCount": 466,
+      "candidateSearchCount": 0,
+      "distinctHosts": 8,
+      "distinctPublishers": 9,
+      "publishers": [
+        "量子位",
+        "雷峰网",
+        "GeekPark",
+        "InfoQ - 促进软件开发领域知识与创新的传播",
+        "钛媒体：引领未来商业与生活新知",
+        "爱范儿",
+        "硅谷101",
+        "What's Next｜科技早知道",
+        "捕蛇者说"
+      ],
+      "cards": 12,
+      "types": {
+        "文章": 4,
+        "新闻": 5,
+        "音频": 3
+      },
+      "directConsumable": 12,
+      "externalOnly": 0,
+      "modelCalls": 30,
+      "modelTokens": 93556,
+      "reasoningTokens": 0,
+      "representative": [
+        "文章:在云栖大会，我终于看懂了米哈游千亿AI野心",
+        "文章:智元第20000台具身机器人交付长隆，首期超300台机器人常",
+        "文章:Deepseek 桌面版悄悄上线；Muse 大火，扎克伯格跃"
+      ]
+    },
+    {
+      "key": "C",
+      "query": "最近有什么值得看的 AI / 科技视频？",
+      "ttfvMs": 10961,
+      "ttfvDomMs": 10961,
+      "ttfcMs": 47933,
+      "rawCandidates": 504,
+      "candidateSourceCount": 25,
+      "candidateFeedCount": 476,
+      "candidateSearchCount": 16,
+      "distinctHosts": 2,
+      "distinctPublishers": 8,
+      "publishers": [
+        "bilibili.com",
+        "chinanews.com.cn",
+        "video.lqdn.fr",
+        "commons.wikimedia.org",
+        "video.tedomum.net",
+        "What's Next｜科技早知道",
+        "捕蛇者说",
+        "硅谷101"
+      ],
+      "cards": 14,
+      "types": {
+        "视频": 8,
+        "音频": 6
+      },
+      "directConsumable": 8,
+      "externalOnly": 6,
+      "modelCalls": 31,
+      "modelTokens": 100929,
+      "reasoningTokens": 2044,
+      "representative": [
+        "视频:告别笨重大机箱，方寸机身撑起全场景高性能",
+        "视频:立即观看",
+        "视频:开着挖机全国游，给平板车装个驻车空调。以后可以睡车上。"
+      ]
+    },
+    {
+      "key": "D",
+      "query": "最近有什么值得听的商业 / 科技 / 投资播客？",
+      "ttfvMs": 9547,
+      "ttfvDomMs": 9547,
+      "ttfcMs": 42831,
+      "rawCandidates": 487,
+      "candidateSourceCount": 21,
+      "candidateFeedCount": 476,
+      "candidateSearchCount": 0,
+      "distinctHosts": 4,
+      "distinctPublishers": 4,
+      "publishers": [
+        "硅谷101",
+        "What's Next｜科技早知道",
+        "捕蛇者说",
+        "声东击西"
+      ],
+      "cards": 6,
+      "types": {
+        "音频": 6
+      },
+      "directConsumable": 6,
+      "externalOnly": 0,
+      "modelCalls": 31,
+      "modelTokens": 106579,
+      "reasoningTokens": 2380,
+      "representative": [
+        "音频:E252｜硅谷睡眠外挂：富人的玩具，还是预防医疗的入口？｜对",
+        "音频:Snap 做了十年眼镜，终于等到它的时代了吗？| S10E3",
+        "音频:Ep 59. 2026 Agent 编程新趋势"
+      ]
+    },
+    {
+      "key": "E",
+      "query": "最近一级市场有什么值得关注的内容？",
+      "ttfvMs": 7989,
+      "ttfvDomMs": 7989,
+      "ttfcMs": 29495,
+      "rawCandidates": 476,
+      "candidateSourceCount": 21,
+      "candidateFeedCount": 476,
+      "candidateSearchCount": 0,
+      "distinctHosts": 7,
+      "distinctPublishers": 7,
+      "publishers": [
+        "量子位",
+        "雷峰网",
+        "GeekPark",
+        "钛媒体：引领未来商业与生活新知",
+        "36氪",
+        "少数派 - 高品质数字消费指南",
+        "爱范儿"
+      ],
+      "cards": 10,
+      "types": {
+        "新闻": 10
+      },
+      "directConsumable": 6,
+      "externalOnly": 4,
+      "modelCalls": 30,
+      "modelTokens": 98333,
+      "reasoningTokens": 1949,
+      "representative": [
+        "新闻:在云栖大会，我终于看懂了米哈游千亿AI野心",
+        "新闻:智元第20000台具身机器人交付长隆，首期超300台机器人常",
+        "新闻:Deepseek 桌面版悄悄上线；Muse 大火，扎克伯格跃"
+      ]
+    }
+  ]
+}

@@ -402,7 +402,7 @@ export interface DigitalMeRuntimeOptions {
 
 // First-pass (progressive) candidate pool. Small enough that Feed-only selection is quick,
 // large enough to stay publisher-diverse (Feed cards are interleaved across sources).
-const FAST_SUPPLY_POOL = 12;
+const FAST_SUPPLY_POOL = 30;
 
 /**
  * DigitalMeRuntime — Subject + Work + Artifact Workspace 装配。
@@ -888,6 +888,9 @@ export class DigitalMeRuntime {
         // Progressive: the first pass uses Feed/direct only and a bounded pool, so first cards
         // render without waiting for Search. The full pass (Search + full pool) runs in the
         // background and is merged by the replenish step.
+        // The first pass is Feed + open-media only. Running Search here was tried and rejected:
+        // ingesting Search hits is sequential and made a media query's first pass slower, not
+        // faster, so Search stays in the full pass until ingestion is bounded in parallel.
         const fastSought = await seekContent({
           ...common,
           skipWeb: true,

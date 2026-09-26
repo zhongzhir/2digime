@@ -8,7 +8,8 @@ export type OpenCatalogKind =
   | 'wikimedia_commons'
   | 'itunes_podcast'
   | 'itunes_rss'
-  | 'media_listing';
+  | 'media_listing'
+  | 'bilibili_listing';
 export type OpenCatalogContentType = 'article' | 'video' | 'image' | 'audio';
 
 export interface OpenSourceEndpoint {
@@ -20,13 +21,42 @@ export interface OpenSourceEndpoint {
 }
 
 export const OPEN_SOURCE_CATALOG: OpenSourceEndpoint[] = [
-  // 国内公开视频列表页：页面公开 node-url（文章页）与 video-src（直链 MP4）。
-  // 只读公开 HTML 属性，不调用平台内部接口，不下载/转码媒体。国内可达优先。
+  // 国内公开视频列表页：只读公开 HTML 中已有的直链 MP4/WebM 与其页面链接。
+  // 通用属性扫描，不调用平台内部接口，不下载/转码媒体。国内可达优先。
   {
     id: 'chinanews-video-listing',
     label: '中国新闻网视频',
     kind: 'media_listing',
     url: 'https://www.chinanews.com.cn/shipin/',
+    contentTypes: ['video'],
+  },
+  {
+    id: 'cctv-video-listing',
+    label: '央视网视频',
+    kind: 'media_listing',
+    url: 'https://www.cctv.com/',
+    contentTypes: ['video'],
+  },
+  {
+    id: 'china-com-video-listing',
+    label: '中国网视频',
+    kind: 'media_listing',
+    url: 'https://www.china.com.cn/',
+    contentTypes: ['video'],
+  },
+  {
+    id: 'cri-video-listing',
+    label: '国际在线视频',
+    kind: 'media_listing',
+    url: 'https://www.cri.cn/',
+    contentTypes: ['video'],
+  },
+  // 哔哩哔哩官方公开播放器 embed（player.bilibili.com），只从公开页面取 bvid，不逆向内部 API。
+  {
+    id: 'bilibili-public-listing',
+    label: '哔哩哔哩科技区',
+    kind: 'bilibili_listing',
+    url: 'https://www.bilibili.com/v/tech/',
     contentTypes: ['video'],
   },
   {
