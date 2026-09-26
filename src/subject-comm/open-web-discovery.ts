@@ -414,8 +414,9 @@ export async function proposeOpenWebQueries(input: {
         { role: 'user', content: user },
       ],
       temperature: 0,
+      thinking: 'disabled',
       maxTokens: 400,
-      timeoutMs: 60_000,
+      timeoutMs: 30_000,
       responseFormat: { type: 'json_object' },
     });
     const start = result.text.indexOf('{');

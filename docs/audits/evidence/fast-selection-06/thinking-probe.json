@@ -1,0 +1,47 @@
+{
+  "at": "2026-09-26T06:44:28.938Z",
+  "model": "deepseek-v4-flash",
+  "baseUrl": "https://api.deepseek.com/v1",
+  "rows": [
+    {
+      "label": "A thinking enabled",
+      "status": 200,
+      "ms": 1350,
+      "usage": {
+        "input": 134,
+        "output": 65,
+        "total": 199,
+        "reasoningTokens": 57
+      },
+      "reasoningChars": 203,
+      "finish": "stop",
+      "content": "{\"ids\":[0,2]}"
+    },
+    {
+      "label": "B thinking.type=disabled",
+      "status": 200,
+      "ms": 482,
+      "usage": {
+        "input": 109,
+        "output": 7,
+        "total": 116
+      },
+      "reasoningChars": 0,
+      "finish": "stop",
+      "content": "{\"ids\":[0,2]}"
+    },
+    {
+      "label": "C reasoning_effort=none",
+      "status": 200,
+      "ms": 379,
+      "usage": {
+        "input": 109,
+        "output": 7,
+        "total": 116
+      },
+      "reasoningChars": 0,
+      "finish": "stop",
+      "content": "{\"ids\":[0,2]}"
+    }
+  ]
+}

@@ -1,0 +1,672 @@
+{
+  "at": "2026-09-26T07:24:09.866Z",
+  "userData": "C:\\Users\\46554\\AppData\\Local\\Temp\\domestic-content-ui-RqpVFH",
+  "rows": [
+    {
+      "key": "A",
+      "query": "今天有什么重要科技新闻？",
+      "ttfvMs": 5957,
+      "ttfvDomMs": 5957,
+      "ttfvRecordMs": 5958,
+      "ttfcMs": 29102,
+      "modelCalls": 14,
+      "modelTokens": 43686,
+      "reasoningTokens": 2908,
+      "reasoningCalls": 2,
+      "outputTokens": 3716,
+      "inputTokens": 39970,
+      "fastTrace": [
+        {
+          "event": "directory/feed",
+          "ms": 3786,
+          "count": 152
+        },
+        {
+          "event": "shortlist",
+          "ms": 1231,
+          "count": 3
+        },
+        {
+          "event": "resolve-shortlist",
+          "ms": 654,
+          "count": 3
+        },
+        {
+          "event": "selected",
+          "ms": 1886,
+          "count": 3
+        },
+        {
+          "event": "first-cards",
+          "ms": 5694
+        }
+      ],
+      "fullTrace": [
+        {
+          "event": "directory/feed",
+          "ms": 3786,
+          "count": 152
+        },
+        {
+          "event": "shortlist",
+          "ms": 1231,
+          "count": 3
+        },
+        {
+          "event": "resolve-shortlist",
+          "ms": 654,
+          "count": 3
+        },
+        {
+          "event": "selected",
+          "ms": 1886,
+          "count": 3
+        },
+        {
+          "event": "first-cards",
+          "ms": 5694
+        },
+        {
+          "event": "search",
+          "ms": 823
+        },
+        {
+          "event": "search",
+          "ms": 1461
+        },
+        {
+          "event": "shortlist",
+          "ms": 1800,
+          "count": 36
+        },
+        {
+          "event": "resolve-shortlist",
+          "ms": 2956,
+          "count": 36
+        },
+        {
+          "event": "cluster",
+          "ms": 7342,
+          "count": 12
+        },
+        {
+          "event": "cluster",
+          "ms": 8795,
+          "count": 12
+        },
+        {
+          "event": "cluster-failed",
+          "ms": 10855,
+          "count": 12
+        },
+        {
+          "event": "clustered",
+          "ms": 10856,
+          "count": 12
+        },
+        {
+          "event": "selected",
+          "ms": 15613,
+          "count": 12
+        }
+      ],
+      "fastCards": 3,
+      "finalCards": 14,
+      "dom": [
+        {
+          "title": "Claude Code 新机制：AI 任务中途触发 5 小时上限将优雅收尾",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "宜家 Matter 智能家居终于要来了？在中国市场它将如何破局",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "利民推出 TR-A30 ARGB / Vision 机箱：三面玻璃海景房，支持 ATX 主板",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "美团上线 LongCat-2.5-Preview 模型：1.6T 参数，主打 AI 长程任务与多模态能力",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "比亚迪首席科学家廉玉波：计划未来两年多时间建成 9 万座充电站，目标让充电站密度对标加油站",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "“中国天眼”FAST 项目有望 2028 年前后实现全链条国产化",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "华为 LOGO 印上大疆云台相机：HUAWEI × DJI Osmo Pocket 4 官宣 9 月 26 日起陆续到店",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "微软提醒 Win11 禁用 8.3 文件名：可提升文件操作速度，但影响应用兼容性",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "十年一“镜” 凝望苍穹——数览“中国天眼”成长记",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "英伟达获批 AI 工具专利：缩短游戏优化周期，让游戏体验更稳定",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "煤电储能深度联动：我国首个千万千瓦级“沙戈荒”基地建设取得关键进展",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "突破单散热器能力上限，猫头鹰正探索 2000W 微通道阵列散热方案",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "跨界融合重塑先进制造业",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "建成通车后将创下四个“世界第一”，石沱长江大桥公路桥今日顺利合龙",
+          "kind": "新闻",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        }
+      ]
+    },
+    {
+      "key": "B",
+      "query": "最近有什么值得看的 AI 深度内容？",
+      "ttfvMs": 5834,
+      "ttfvDomMs": 5834,
+      "ttfvRecordMs": 5835,
+      "ttfcMs": 34289,
+      "modelCalls": 14,
+      "modelTokens": 42513,
+      "reasoningTokens": 2711,
+      "reasoningCalls": 2,
+      "outputTokens": 3237,
+      "inputTokens": 39276,
+      "fastTrace": [
+        {
+          "event": "directory/feed",
+          "ms": 3259,
+          "count": 152
+        },
+        {
+          "event": "shortlist",
+          "ms": 741,
+          "count": 4
+        },
+        {
+          "event": "resolve-shortlist",
+          "ms": 1497,
+          "count": 4
+        },
+        {
+          "event": "selected",
+          "ms": 2239,
+          "count": 4
+        },
+        {
+          "event": "first-cards",
+          "ms": 5641
+        }
+      ],
+      "fullTrace": [
+        {
+          "event": "directory/feed",
+          "ms": 3259,
+          "count": 152
+        },
+        {
+          "event": "shortlist",
+          "ms": 741,
+          "count": 4
+        },
+        {
+          "event": "resolve-shortlist",
+          "ms": 1497,
+          "count": 4
+        },
+        {
+          "event": "selected",
+          "ms": 2239,
+          "count": 4
+        },
+        {
+          "event": "first-cards",
+          "ms": 5641
+        },
+        {
+          "event": "search",
+          "ms": 825
+        },
+        {
+          "event": "search",
+          "ms": 1956
+        },
+        {
+          "event": "shortlist",
+          "ms": 2003,
+          "count": 34
+        },
+        {
+          "event": "resolve-shortlist",
+          "ms": 5818,
+          "count": 34
+        },
+        {
+          "event": "cluster",
+          "ms": 6177,
+          "count": 10
+        },
+        {
+          "event": "cluster",
+          "ms": 8466,
+          "count": 12
+        },
+        {
+          "event": "cluster-failed",
+          "ms": 11674,
+          "count": 12
+        },
+        {
+          "event": "clustered",
+          "ms": 11674,
+          "count": 2
+        },
+        {
+          "event": "selected",
+          "ms": 19497,
+          "count": 2
+        }
+      ],
+      "fastCards": 4,
+      "finalCards": 6,
+      "dom": [
+        {
+          "title": "E224｜深度拆解Clawdbot，为何它能成为2026年第一个现象级产品？",
+          "kind": "音频",
+          "videoTag": false,
+          "audioTag": true,
+          "embedTag": false,
+          "reader": false
+        },
+        {
+          "title": "E225｜SaaS业数千亿市值蒸发：AI如何变革组织架构？",
+          "kind": "音频",
+          "videoTag": false,
+          "audioTag": true,
+          "embedTag": false,
+          "reader": false
+        },
+        {
+          "title": "E226｜聊聊DeepMind创始人哈萨比斯：一个科学家与失控的AI竞赛",
+          "kind": "音频",
+          "videoTag": false,
+          "audioTag": true,
+          "embedTag": false,
+          "reader": false
+        },
+        {
+          "title": "E228｜谷歌TPU能撼动英伟达吗？前TPU工程师首次揭秘",
+          "kind": "音频",
+          "videoTag": false,
+          "audioTag": true,
+          "embedTag": false,
+          "reader": false
+        },
+        {
+          "title": "硅谷巨头呼吁AI减速，是真心的吗？能减得动吗？",
+          "kind": "文章",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "AI 想包办你的一切，高通想包办你的 AI",
+          "kind": "文章",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        }
+      ]
+    },
+    {
+      "key": "C",
+      "query": "给我找一些最近值得看的 AI 视频。",
+      "ttfvMs": 22742,
+      "ttfvDomMs": 22742,
+      "ttfvRecordMs": 6543,
+      "ttfcMs": 22945,
+      "modelCalls": 13,
+      "modelTokens": 36164,
+      "reasoningTokens": 275,
+      "reasoningCalls": 1,
+      "outputTokens": 445,
+      "inputTokens": 35719,
+      "fastTrace": [
+        {
+          "event": "directory/feed",
+          "ms": 3369,
+          "count": 152
+        },
+        {
+          "event": "shortlist",
+          "ms": 645,
+          "count": 0
+        },
+        {
+          "event": "resolve-shortlist",
+          "ms": 0,
+          "count": 0
+        },
+        {
+          "event": "selected",
+          "ms": 645,
+          "count": 0
+        },
+        {
+          "event": "first-cards",
+          "ms": 6376
+        }
+      ],
+      "fullTrace": [
+        {
+          "event": "directory/feed",
+          "ms": 3369,
+          "count": 152
+        },
+        {
+          "event": "shortlist",
+          "ms": 645,
+          "count": 0
+        },
+        {
+          "event": "resolve-shortlist",
+          "ms": 0,
+          "count": 0
+        },
+        {
+          "event": "selected",
+          "ms": 645,
+          "count": 0
+        },
+        {
+          "event": "first-cards",
+          "ms": 6376
+        },
+        {
+          "event": "search",
+          "ms": 705
+        },
+        {
+          "event": "search",
+          "ms": 1684
+        },
+        {
+          "event": "shortlist",
+          "ms": 1964,
+          "count": 4
+        },
+        {
+          "event": "resolve-shortlist",
+          "ms": 2838,
+          "count": 4
+        },
+        {
+          "event": "cluster",
+          "ms": 1821,
+          "count": 4
+        },
+        {
+          "event": "clustered",
+          "ms": 1821,
+          "count": 4
+        },
+        {
+          "event": "selected",
+          "ms": 6624,
+          "count": 4
+        }
+      ],
+      "fastCards": 0,
+      "finalCards": 4,
+      "dom": [
+        {
+          "title": "2026-08-17 Could AI do this?.webm",
+          "kind": "视频",
+          "videoTag": true,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": false
+        },
+        {
+          "title": "Mateiu Caragiale (restore AI).webm",
+          "kind": "视频",
+          "videoTag": true,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": false
+        },
+        {
+          "title": "Ion Luca Caragiale și Mateiu Caragiale (restaurare AI).webm",
+          "kind": "视频",
+          "videoTag": true,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": false
+        },
+        {
+          "title": "Ana și Petru Florianu (restaurare AI) (0).webm",
+          "kind": "视频",
+          "videoTag": true,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": false
+        }
+      ]
+    },
+    {
+      "key": "D",
+      "query": "最近有什么值得听的科技/商业音频？",
+      "ttfvMs": 6366,
+      "ttfvDomMs": 6366,
+      "ttfvRecordMs": 6366,
+      "ttfcMs": 41379,
+      "modelCalls": 14,
+      "modelTokens": 43457,
+      "reasoningTokens": 2066,
+      "reasoningCalls": 3,
+      "outputTokens": 2513,
+      "inputTokens": 40944,
+      "fastTrace": [
+        {
+          "event": "directory/feed",
+          "ms": 3529,
+          "count": 152
+        },
+        {
+          "event": "shortlist",
+          "ms": 530,
+          "count": 3
+        },
+        {
+          "event": "resolve-shortlist",
+          "ms": 1453,
+          "count": 3
+        },
+        {
+          "event": "selected",
+          "ms": 1983,
+          "count": 3
+        },
+        {
+          "event": "first-cards",
+          "ms": 6208
+        }
+      ],
+      "fullTrace": [
+        {
+          "event": "directory/feed",
+          "ms": 3529,
+          "count": 152
+        },
+        {
+          "event": "shortlist",
+          "ms": 530,
+          "count": 3
+        },
+        {
+          "event": "resolve-shortlist",
+          "ms": 1453,
+          "count": 3
+        },
+        {
+          "event": "selected",
+          "ms": 1983,
+          "count": 3
+        },
+        {
+          "event": "first-cards",
+          "ms": 6208
+        },
+        {
+          "event": "search",
+          "ms": 424
+        },
+        {
+          "event": "search",
+          "ms": 2134
+        },
+        {
+          "event": "shortlist",
+          "ms": 1676,
+          "count": 25
+        },
+        {
+          "event": "resolve-shortlist",
+          "ms": 8180,
+          "count": 25
+        },
+        {
+          "event": "cluster",
+          "ms": 2595,
+          "count": 1
+        },
+        {
+          "event": "cluster",
+          "ms": 4723,
+          "count": 12
+        },
+        {
+          "event": "cluster",
+          "ms": 5033,
+          "count": 12
+        },
+        {
+          "event": "clustered",
+          "ms": 5035,
+          "count": 2
+        },
+        {
+          "event": "selected",
+          "ms": 14892,
+          "count": 2
+        }
+      ],
+      "fastCards": 3,
+      "finalCards": 4,
+      "dom": [
+        {
+          "title": "E252｜硅谷睡眠外挂：富人的玩具，还是预防医疗的入口？｜对话Eight Sleep创始人",
+          "kind": "音频",
+          "videoTag": false,
+          "audioTag": true,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "外滩大会线下圆桌｜敢把钱包交给AI吗？聊聊Agent交易爆发前夜的信任基建",
+          "kind": "音频",
+          "videoTag": false,
+          "audioTag": true,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "E251｜推理芯片之战：聊聊Groq、Cerebras与OpenAI三大路径与Bill Dally的设计哲学",
+          "kind": "音频",
+          "videoTag": false,
+          "audioTag": true,
+          "embedTag": false,
+          "reader": true
+        },
+        {
+          "title": "AI观测站-AI Observatory",
+          "kind": "音频",
+          "videoTag": false,
+          "audioTag": false,
+          "embedTag": false,
+          "reader": true
+        }
+      ]
+    }
+  ]
+}

@@ -5,8 +5,8 @@ const { _electron } = require('playwright');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
-const local = 'build/evidence/discover-latency-05';
-const audit = 'docs/audits/evidence/discover-latency-05';
+const local = process.env.LATENCY_EVIDENCE_DIR || 'build/evidence/discover-latency-05';
+const audit = process.env.LATENCY_AUDIT_DIR || 'docs/audits/evidence/discover-latency-05';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const QUERIES = [
   { key: 'A', query: '今天有什么重要科技新闻？' },
@@ -73,6 +73,10 @@ const ONLY = process.env.LATENCY_ONLY_KEY;
       }
       const modelRows = (await readJsonl(modelFile)).slice(modelBefore);
       const tokens = modelRows.reduce((sum, r) => sum + (r.usage && r.usage.totalTokens ? r.usage.totalTokens : 0), 0);
+      const reasoning = modelRows.reduce((sum, r) => sum + (r.usage && r.usage.reasoningTokens ? r.usage.reasoningTokens : 0), 0);
+      const reasoningCalls = modelRows.filter(r => r.usage && r.usage.reasoningTokens > 0).length;
+      const outputTokens = modelRows.reduce((sum, r) => sum + (r.usage && r.usage.outputTokens ? r.usage.outputTokens : 0), 0);
+      const inputTokens = modelRows.reduce((sum, r) => sum + (r.usage && r.usage.inputTokens ? r.usage.inputTokens : 0), 0);
       const dom = await page.evaluate(() => ([...document.querySelectorAll('.content-discover-card')].map(c => ({
         title: c.querySelector('h3')?.textContent, kind: c.querySelector('.content-discover-kind')?.textContent,
         videoTag: !!c.querySelector('video.content-discover-video'), audioTag: !!c.querySelector('audio.content-discover-audio'),
@@ -80,6 +84,7 @@ const ONLY = process.env.LATENCY_ONLY_KEY;
       }))));
       rows.push({ key, query, ttfvMs: ttfvDom ?? ttfvRecord, ttfvDomMs: ttfvDom, ttfvRecordMs: ttfvRecord,
         ttfcMs: ttfcRecord, modelCalls: modelRows.length, modelTokens: tokens,
+        reasoningTokens: reasoning, reasoningCalls, outputTokens, inputTokens,
         fastTrace: seekTrace, fullTrace: replenish && replenish.supply ? replenish.supply : null,
         fastCards: command ? (command.cards || []).length : null, finalCards: dom.length, dom });
       await page.screenshot({ path: `${local}/query-${key}.png`, fullPage: true });

@@ -175,9 +175,10 @@ export async function interpretDiscoverIntent(input: {
         { role: 'user', content: query },
       ],
       temperature: 0,
-      // Leave room for reasoning before the small structured intent answer.
-      maxTokens: 4096,
-      timeoutMs: 45_000,
+      // Intent extraction is shallow structured output; thinking is not required.
+      thinking: 'disabled',
+      maxTokens: 1024,
+      timeoutMs: 30_000,
       responseFormat: { type: 'json_object' },
     });
     return intentFromModelText(result.text, query);
@@ -325,8 +326,9 @@ export async function classifyCandidateRoles(input: {
         { role: 'user', content: user },
       ],
       temperature: 0,
-      maxTokens: 800,
-      timeoutMs: 45_000,
+      thinking: 'disabled',
+      maxTokens: 1024,
+      timeoutMs: 30_000,
       responseFormat: { type: 'json_object' },
     });
     return rolesFromModelText(result.text, ids);

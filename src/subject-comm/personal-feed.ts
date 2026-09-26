@@ -173,8 +173,9 @@ export async function proposeDiscoveryIntents(input: {
         { role: 'user', content: user },
       ],
       temperature: 0,
+      thinking: 'disabled',
       maxTokens: 700,
-      timeoutMs: 60_000,
+      timeoutMs: 30_000,
       responseFormat: { type: 'json_object' },
     });
     return discoveryIntentsFromModelText(result.text);

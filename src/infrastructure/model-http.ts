@@ -71,30 +71,40 @@ export interface ChatCompleteOptions {
   /** OpenAI-compatible tool calling. 工具是能力合同，不是任务类型枚举。 */
   tools?: ChatToolDefinition[];
   toolChoice?: 'auto' | 'none';
+  /**
+   * DeepSeek / OpenAI-compatible reasoning control. Absent = provider default (thinking on).
+   * FAST structured extraction sets 'disabled'; deeper judgments leave it or use low effort.
+   */
+  thinking?: 'enabled' | 'disabled';
+  reasoningEffort?: 'none' | 'low' | 'medium' | 'high';
 }
 
 export interface ChatCompleteResult {
   text: string;
   toolCalls?: ChatToolCall[];
-  usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+  usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number; reasoningTokens?: number };
   /** OpenAI-compatible finish_reason: stop | length | content_filter | ... */
   finishReason?: string;
   /** true when provider stopped due to token/length limit (or equivalent). */
   truncated?: boolean;
 }
 
-export function parseChatUsage(usage: unknown): { inputTokens: number; outputTokens: number; totalTokens: number } | undefined {
+export function parseChatUsage(usage: unknown): { inputTokens: number; outputTokens: number; totalTokens: number; reasoningTokens?: number } | undefined {
   if (!usage || typeof usage !== 'object') return undefined;
   const row = usage as Record<string, unknown>;
   const num = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : undefined);
   const input = num(row.prompt_tokens) ?? num(row.input_tokens) ?? num(row.inputTokens);
   const output = num(row.completion_tokens) ?? num(row.output_tokens) ?? num(row.outputTokens);
   const total = num(row.total_tokens) ?? num(row.totalTokens);
+  const details = row.completion_tokens_details;
+  const reasoning =
+    (details && typeof details === 'object' ? num((details as Record<string, unknown>).reasoning_tokens) : undefined)
+    ?? num(row.reasoning_tokens);
   if (input === undefined && output === undefined && total === undefined) return undefined;
   const inputTokens = input ?? 0;
   const outputTokens = output ?? 0;
   const totalTokens = total ?? inputTokens + outputTokens;
-  return { inputTokens, outputTokens, totalTokens };
+  return { inputTokens, outputTokens, totalTokens, ...(reasoning !== undefined ? { reasoningTokens: reasoning } : {}) };
 }
 
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -224,6 +234,8 @@ async function requestCompletion(options: ChatCompleteOptions, stream: boolean):
     if (options.responseFormat) payload.response_format = options.responseFormat;
     if (options.tools && options.tools.length > 0) payload.tools = options.tools;
     if (options.toolChoice) payload.tool_choice = options.toolChoice;
+    if (options.thinking) payload.thinking = { type: options.thinking };
+    if (options.reasoningEffort) payload.reasoning_effort = options.reasoningEffort;
 
     let response: Response;
     try {

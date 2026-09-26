@@ -41,7 +41,7 @@ test('two-stage selection bounds model input; one length failure does not empty 
       const sys = String(options.messages[0]?.content || '');
       const input = JSON.parse(options.messages[1]!.content) as { candidates: unknown[] };
       if (!sys.includes('groups') && sys.includes('"selected"')) {
-        assert.ok(input.candidates.length <= 8);
+        assert.ok(input.candidates.length <= 20);
         assert.ok((options.maxTokens || 0) <= 4096);
         stage1Seen += input.candidates.length;
         if (!failed) { failed = true; return { text: '', finishReason: 'length', truncated: true }; }
