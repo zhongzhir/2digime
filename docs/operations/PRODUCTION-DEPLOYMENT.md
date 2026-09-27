@@ -2,7 +2,7 @@
 
 ## 结论
 
-2digime.com 与 www.2digime.com 当前都通过 A 记录指向 47.94.210.18，服务器运行 Nginx。正式发布因此采用 GitHub Actions 通过受限 SSH 身份同步静态站点；GitHub Pages 仅保留为灾备预览。
+2digime.com 与 www.2digime.com 当前都通过 A 记录指向 47.94.210.18。该地址属于阿里云轻量应用服务器 `92fd4c0d20d44bf4b2616eacf1b3ef1e`（宝塔Linux面板-rmtg），与 allmeme.online 同机。2digime 使用独立 Nginx vhost 和独立目录；正式发布采用 GitHub Actions 通过受限 SSH 身份只同步该目录，GitHub Pages 仅保留为灾备预览。
 
 ## GitHub production environment
 
@@ -19,7 +19,7 @@ Variables：
 - PROD_SSH_HOST：47.94.210.18
 - PROD_SSH_PORT：22
 - PROD_SSH_USER：专用部署用户，不使用日常管理员账号
-- PROD_SITE_PATH：Nginx 当前 server_name 2digime.com www.2digime.com 对应的真实 root
+- PROD_SITE_PATH：`/www/wwwroot/2digime.com`
 
 Secrets：
 
@@ -30,10 +30,13 @@ Secrets：
 
 ## 服务端条件
 
-- 部署目标必须是 /usr/share/nginx/html 或 /var/www/ 下的目录；其他路径会被工作流拒绝。
+- 部署目标被硬限制为 `/www/wwwroot/2digime.com`；任何其他路径都会被工作流拒绝。
 - 服务器需要 tar、rsync。
+- 不修改 `/var/www/allmeme`、allmeme 的 Nginx vhost、进程或证书。
 - Nginx 应同时接收 2digime.com 与 www.2digime.com，建议将 www 301 跳转到 https://2digime.com$request_uri。
 - 正式 canonical、Open Graph、RSS 与 sitemap 统一使用 https://2digime.com。
+
+2026-09-27 现场核验：Nginx root 为 `/www/wwwroot/2digime.com`，配置语法通过，tar/rsync/realpath 均已安装；系统盘使用率 95%，主要占用来自与官网无关的 `/root/fisco-bcos/nodes`。官网发布包很小，但磁盘清理须作为独立运维任务处理，不得在官网发布流程中自动删除其他业务数据。
 
 ## 发布链
 

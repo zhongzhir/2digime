@@ -79,7 +79,7 @@ jobs:
           archive="$1"
           target="$(realpath -m "$2")"
           case "$target" in
-            /usr/share/nginx/html|/var/www/*) ;;
+            /www/wwwroot/2digime.com) ;;
             *) echo "Refusing unsafe deployment target: $target" >&2; exit 1 ;;
           esac
           test -f "$archive"
