@@ -8,6 +8,7 @@ on:
       - "content/news/**"
       - "scripts/news/**"
       - ".github/workflows/pages.yml"
+      - ".github/workflows/deploy-production.yml"
   workflow_dispatch:
 
 permissions:
@@ -41,3 +42,8 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+  deploy-production:
+    if: ${{ vars.PRODUCTION_DEPLOY_ENABLED == 'true' }}
+    needs: deploy
+    uses: ./.github/workflows/deploy-production.yml
+    secrets: inherit

@@ -1,0 +1,109 @@
+name: Deploy official site to 2digime.com
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: 2digime-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ vars.PRODUCTION_DEPLOY_ENABLED == 'true' }}
+    environment:
+      name: production
+      url: https://2digime.com/
+    runs-on: ubuntu-latest
+    env:
+      SITE_ORIGIN: https://2digime.com
+      SSH_HOST: ${{ vars.PROD_SSH_HOST }}
+      SSH_PORT: ${{ vars.PROD_SSH_PORT }}
+      SSH_USER: ${{ vars.PROD_SSH_USER }}
+      SITE_PATH: ${{ vars.PROD_SITE_PATH }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate deployment configuration
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          for name in SSH_HOST SSH_PORT SSH_USER SITE_PATH SSH_PRIVATE_KEY SSH_KNOWN_HOSTS; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing production deployment setting: $name"
+              exit 1
+            fi
+          done
+          case "$SSH_PORT" in (*[!0-9]*|'') echo "::error::SSH_PORT must be numeric"; exit 1;; esac
+      - name: Build and verify official-domain site
+        run: |
+          set -euo pipefail
+          node scripts/news/build-news.mjs
+          node site/check-site.mjs
+          if grep -R "https://zhongzhir.github.io/2digime" site; then
+            echo "::error::GitHub Pages URL remains in the production site"
+            exit 1
+          fi
+          tar -czf site.tar.gz -C site .
+      - name: Prepare pinned SSH identity
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Upload release archive
+        run: |
+          set -euo pipefail
+          archive="/tmp/2digime-site-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.tar.gz"
+          echo "REMOTE_ARCHIVE=$archive" >> "$GITHUB_ENV"
+          scp -P "$SSH_PORT" -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes site.tar.gz "$SSH_USER@$SSH_HOST:$archive"
+      - name: Deploy with backup and rollback
+        run: |
+          set -euo pipefail
+          ssh -p "$SSH_PORT" -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes "$SSH_USER@$SSH_HOST" \
+            bash -s -- "$REMOTE_ARCHIVE" "$SITE_PATH" <<'REMOTE'
+          set -euo pipefail
+          archive="$1"
+          target="$(realpath -m "$2")"
+          case "$target" in
+            /usr/share/nginx/html|/var/www/*) ;;
+            *) echo "Refusing unsafe deployment target: $target" >&2; exit 1 ;;
+          esac
+          test -f "$archive"
+          test -d "$target"
+          command -v rsync >/dev/null
+          stage="$(mktemp -d)"
+          restore="$(mktemp -d)"
+          cleanup() { rm -rf "$stage" "$restore" "$archive"; }
+          trap cleanup EXIT
+          tar -xzf "$archive" -C "$stage"
+          test -f "$stage/index.html"
+          test -f "$stage/news/index.html"
+          test -f "$stage/news/feed.xml"
+          rsync -a "$target/" "$restore/"
+          if ! rsync -a --delete "$stage/" "$target/"; then
+            echo "Deployment failed; restoring previous site" >&2
+            rsync -a --delete "$restore/" "$target/"
+            exit 1
+          fi
+          REMOTE
+      - name: Verify production
+        run: |
+          set -euo pipefail
+          for path in / /personal/ /institution/ /download/ /news/ /news/feed.xml; do
+            curl --fail --silent --show-error --retry 5 --retry-delay 3 "https://2digime.com$path" > /dev/null
+          done
+          curl --fail --silent --show-error --retry 5 --retry-delay 3 https://2digime.com/news/ | grep -q "兔机米资讯"

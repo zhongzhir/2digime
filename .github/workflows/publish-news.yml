@@ -50,3 +50,8 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+  deploy-production:
+    if: ${{ vars.PRODUCTION_DEPLOY_ENABLED == 'true' }}
+    needs: validate-build-publish
+    uses: ./.github/workflows/deploy-production.yml
+    secrets: inherit

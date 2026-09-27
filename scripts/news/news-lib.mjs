@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 export const CATEGORIES = ['人的主体性', 'AI 与人', '兔机米进展'];
-export const SITE_ORIGIN = process.env.SITE_ORIGIN || 'https://zhongzhir.github.io/2digime';
+export const SITE_ORIGIN = process.env.SITE_ORIGIN || 'https://2digime.com';
 
 export function escapeHtml(value) {
   return String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');

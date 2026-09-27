@@ -134,3 +134,11 @@ Owner 需要在 `2digime.com` 的 DNS 管理平台增加：
 | CNAME | `www` | `zhongzhir.github.io` |
 
 不得把 Value 写成 `zhongzhir.github.io/2digime`。DNS 生效后再执行：设置 GitHub Pages custom domain 为 `www.2digime.com`、等待证书签发、确认 HTTPS enforced，并将全站 canonical、Open Graph、sitemap、robots 与 404 根路径迁移到正式域名。
+
+## 12. 正式服务器发布路线（2026-09-27）
+
+DNS 已发生变化：`2digime.com` 与 `www.2digime.com` 均以 A 记录指向 `47.94.210.18`，HTTPS 下由 Nginx 正常提供旧版官网。因此不再把生产域名迁回 GitHub Pages；GitHub Pages 只保留灾备预览。
+
+新增 `.github/workflows/deploy-production.yml`：主分支与 Grok 资讯发布均可调用同一正式发布链。工作流在本地构建后，通过固定 host key 的专用 SSH 身份上传，校验部署目录，保留即时回滚副本，同步后再检查正式域名的首页、主要页面、资讯和 RSS。
+
+正式 canonical、Open Graph、RSS、sitemap 与 robots 已统一为 `https://2digime.com`。首次启用仍需确认 Nginx root、建立专用部署用户，并在 GitHub production environment 中配置密钥与变量；开关启用前生产任务安全跳过。
