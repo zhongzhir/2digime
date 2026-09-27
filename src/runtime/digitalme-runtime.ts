@@ -1063,11 +1063,16 @@ export class DigitalMeRuntime {
       process.env.NODE_TEST_CONTEXT ? {} : process.env,
       { gatewayUrl: this.options.webDiscoveryGatewayUrl },
     );
+    const dashscopeKey = process.env.NODE_TEST_CONTEXT ? '' : (process.env.DASHSCOPE_API_KEY || '');
+    const installToken = this.options.webDiscoveryInstallToken || '';
+    // The fallback chain is not a search provider by itself: with none configured there is no
+    // search capability, so the caller must still see "no search" (offline notice, no searchWeb).
+    if (!gem.apiKey && !dashscopeKey && !(gatewayUrl && installToken)) return undefined;
     return discoverSupplementalSearch({
       geminiKey: gem.apiKey, geminiModel: gem.model,
-      ...(process.env.NODE_TEST_CONTEXT ? {} : { dashscopeKey: process.env.DASHSCOPE_API_KEY || '' }),
+      ...(dashscopeKey ? { dashscopeKey } : {}),
       gatewayUrl,
-      installToken: this.options.webDiscoveryInstallToken || '',
+      installToken,
       managedFirst: this.options.webDiscoveryPath === 'managed',
       ...(this.options.webDiscoveryFetch ? { fetchImpl: this.options.webDiscoveryFetch } : {}),
       report: rows => { this.searchProviderEvidence = rows; },

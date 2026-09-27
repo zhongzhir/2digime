@@ -1,0 +1,547 @@
+{
+  "at": "2026-09-26T13:48:59.827Z",
+  "userData": "C:\\Users\\46554\\AppData\\Local\\Temp\\domestic-content-ui-b6OUya",
+  "steps": [
+    {
+      "step": "今天有什么值得关注的新闻？",
+      "query": "今天有什么值得关注的新闻？",
+      "ttfv": 8006,
+      "ttfc": 52907,
+      "cards": [
+        {
+          "title": "欧盟拟增加卫星发射，或向挪威、英国、加拿大等寻求域外发射场",
+          "kind": "新闻",
+          "source": "IT之家 · Feed 时间 2026/9/26 21:31:52",
+          "reason": "欧盟拟向挪威英国加拿大寻求域外卫星发射场",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "智元第20000台具身机器人交付长隆，首期超300台机器人常驻乐园。",
+          "kind": "新闻",
+          "source": "雷峰网 · Feed 时间 2026/9/26 00:33:00",
+          "reason": "智元第2万台具身机器人交付，落地文旅场景",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "Deepseek 桌面版悄悄上线；Muse 大火，扎克伯格跃升全球第四大富豪；OpenAI 被曝筹备推出 ProMax 订阅层级，月费或达 500-600 美元",
+          "kind": "新闻",
+          "source": "GeekPark · Feed 时间 2026/9/26 08:45:21",
+          "reason": "今日AI要闻：Deepseek桌面版、OpenAI高价订阅、Anthropic大单",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "外国人来华科技游，看见了什么？",
+          "kind": "新闻",
+          "source": "钛媒体：引领未来商业与生活新知 · 镜相工作室 · Feed 时间 2026/9/26 17:55:16",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "宜家 Matter 智能家居终于要来了？在中国市场它将如何破局",
+          "kind": "新闻",
+          "source": "少数派 - 高品质数字消费指南 · 南桥北桥不是桥 · 原文发布 2026/9/26 14:00:00",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "早报｜网易云音乐鸿蒙版正式上线/任正非重申「华为不造车」/腾讯QClaw将停运",
+          "kind": "新闻",
+          "source": "爱范儿 · https://www.ifanr.com/author/zhengtingxu · 原文发布 2026/9/25 16:24:44",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "第48届世界技能大赛收官 热门赛项亮点频出",
+          "kind": "新闻",
+          "source": "中新网即时新闻 · chinanews · Feed 时间 2026/9/26 21:30:00",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "1931 年理论预言终获验证：科学家首次在超冷原子气体中观测到贝特弦",
+          "kind": "新闻",
+          "source": "IT之家 · Feed 时间 2026/9/26 21:18:31",
+          "reason": "首次观测贝特弦，验证1931年量子理论预言",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "梁文锋狙击战：深扒那些梁文锋署名的论文有多牛",
+          "kind": "新闻",
+          "source": "雷峰网 · Feed 时间 2026/9/25 18:48:00",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "OPPO 姜昱辰：大模型的差距越来越小，AI 手机的差距才刚拉开",
+          "kind": "新闻",
+          "source": "GeekPark · Feed 时间 2026/9/25 09:50:25",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "AI 时代，技术人靠什么赢？｜QCon上海",
+          "kind": "新闻",
+          "source": "InfoQ - 促进软件开发领域知识与创新的传播 · QCon全球软件开发大会 · Feed 时间 2026/9/26 18:00:00",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "谷歌，准备升空",
+          "kind": "新闻",
+          "source": "钛媒体：引领未来商业与生活新知 · 字母AI · Feed 时间 2026/9/26 17:55:05",
+          "reason": "谷歌官宣10月1日将TPU送入轨道，太空计算前沿",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "英国第二大图书馆：牛津大学博德利图书馆藏书被曝用于 OpenAI 模型训练",
+          "kind": "新闻",
+          "source": "IT之家 · Feed 时间 2026/9/26 20:01:03",
+          "reason": "OpenAI 训练数据与图书馆版权，AI 热点",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "北京越野泰钽 700 开启首批交付：搭载华为乾崑智驾 ADS 5，超级焕新价 24.98 万元起",
+          "kind": "新闻",
+          "source": "IT之家 · Feed 时间 2026/9/26 20:36:45",
+          "reason": "华为乾崑智驾新车交付，智能汽车动态",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "荣耀 Magic9 Pro Max 手机搭载自研至臻黑钻屏：反射率 1.5%、峰值亮度 1 万尼特",
+          "kind": "新闻",
+          "source": "IT之家 · Feed 时间 2026/9/26 20:16:23",
+          "reason": "荣耀新旗舰屏幕技术，消费电子新品",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "厦金大桥关键工程合龙",
+          "kind": "新闻",
+          "source": "中新网即时新闻 · chinanews · Feed 时间 2026/9/26 21:20:43",
+          "reason": "厦金大桥关键工程合龙，基础设施要闻",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "【数智周报】 千问办公发布企业级Agent基础设施；谷歌推出Gemini 3.8 Flash TTS及Flash-Lite TTS；Anthropic诉特朗普政府受挫",
+          "kind": "文章",
+          "source": "钛媒体：引领未来商业与生活新知 · ITValue · Feed 时间 2026/9/26 12:46:19",
+          "reason": "数智周报：千问Agent基础设施、谷歌TTS等",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "山姆没有捷径，中国零售平台集体追赶30%自营率",
+          "kind": "文章",
+          "source": "钛媒体：引领未来商业与生活新知 · 窄播 · Feed 时间 2026/9/26 12:31:16",
+          "reason": "中国零售自营率竞争，商业模式分析",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "0元购机，卒于2026",
+          "kind": "文章",
+          "source": "钛媒体：引领未来商业与生活新知 · 超聚焦 · Feed 时间 2026/9/26 12:14:54",
+          "reason": "0元购机模式退场，电信渠道观察",
+          "reader": true,
+          "video": false,
+          "audio": false
+        }
+      ],
+      "notice": "",
+      "jargon": []
+    },
+    {
+      "step": "最近有什么值得我看的？",
+      "query": "最近有什么值得我看的？",
+      "ttfv": 10737,
+      "ttfc": 45937,
+      "cards": [
+        {
+          "title": "欧盟拟增加卫星发射，或向挪威、英国、加拿大等寻求域外发射场",
+          "kind": "新闻",
+          "source": "IT之家 · Feed 时间 2026/9/26 21:31:52",
+          "reason": "欧盟太空发射，前沿科技政策",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "智元第20000台具身机器人交付长隆，首期超300台机器人常驻乐园。",
+          "kind": "新闻",
+          "source": "雷峰网 · Feed 时间 2026/9/26 00:33:00",
+          "reason": "具身智能量产落地，创业投资关注",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "Deepseek 桌面版悄悄上线；Muse 大火，扎克伯格跃升全球第四大富豪；OpenAI 被曝筹备推出 ProMax 订阅层级，月费或达 500-600 美元",
+          "kind": "新闻",
+          "source": "GeekPark · Feed 时间 2026/9/26 08:45:21",
+          "reason": "AI行业综合动态，含大模型与算力合作",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "外国人来华科技游，看见了什么？",
+          "kind": "新闻",
+          "source": "钛媒体：引领未来商业与生活新知 · 镜相工作室 · Feed 时间 2026/9/26 17:55:16",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "E252｜硅谷睡眠外挂：富人的玩具，还是预防医疗的入口？｜对话Eight Sleep创始人",
+          "kind": "音频",
+          "source": "硅谷101 · 原文发布 2026/9/24 08:00:00 · 54:32",
+          "reason": "睡眠科技访谈，健康科技投资",
+          "reader": true,
+          "video": false,
+          "audio": true
+        },
+        {
+          "title": "Snap 做了十年眼镜，终于等到它的时代了吗？| S10E30",
+          "kind": "音频",
+          "source": "What's Next｜科技早知道 · 声动活泼 · 原文发布 2026/9/18 17:30:00 · 62:49",
+          "reader": true,
+          "video": false,
+          "audio": true
+        },
+        {
+          "title": "Ep 59. 2026 Agent 编程新趋势",
+          "kind": "音频",
+          "source": "捕蛇者说 · 原文发布 2026/6/16 05:43:19 · 31:59",
+          "reader": true,
+          "video": false,
+          "audio": true
+        },
+        {
+          "title": "1931 年理论预言终获验证：科学家首次在超冷原子气体中观测到贝特弦",
+          "kind": "新闻",
+          "source": "IT之家 · Feed 时间 2026/9/26 21:18:31",
+          "reason": "量子物理实验突破，前沿科技",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "梁文锋狙击战：深扒那些梁文锋署名的论文有多牛",
+          "kind": "新闻",
+          "source": "雷峰网 · Feed 时间 2026/9/25 18:48:00",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "OPPO 姜昱辰：大模型的差距越来越小，AI 手机的差距才刚拉开",
+          "kind": "新闻",
+          "source": "GeekPark · Feed 时间 2026/9/25 09:50:25",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "AI 时代，技术人靠什么赢？｜QCon上海",
+          "kind": "新闻",
+          "source": "InfoQ - 促进软件开发领域知识与创新的传播 · QCon全球软件开发大会 · Feed 时间 2026/9/26 18:00:00",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "从地下8000米到机器人高温关节，清华系特种功率芯片公司完成数亿元C轮融资｜36氪首发",
+          "kind": "新闻",
+          "source": "36氪 · Feed 时间 2026/9/24 10:41:55",
+          "reason": "一级市场芯片融资，硬科技投资风向",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "Agent 时代来了，3D 生成大模型接下来比什么？",
+          "kind": "文章",
+          "source": "GeekPark · Feed 时间 2026/9/24 22:49:18",
+          "reason": "AI 3D生成与Agent趋势，前沿科技",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "AI公司杀进硬件，联想AI平板如何找到存在感？｜最前线",
+          "kind": "文章",
+          "source": "36氪 · Feed 时间 2026/9/24 18:22:23",
+          "reason": "AI硬件落地与公司战略，值得投资人看",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "1/3 价格，1/8 重量，Meta 新眼镜秒杀 Vision Pro 了？",
+          "kind": "文章",
+          "source": "ifanr · 彭海星 · 原文发布 2026/9/24 20:00:38",
+          "reason": "Meta AR眼镜新品，前沿硬件竞争",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "现在不买带线控底盘的车，三年后注定会后悔",
+          "kind": "文章",
+          "source": "雷峰网 · Feed 时间 2026/9/24 18:42:00",
+          "reason": "线控底盘技术趋势，汽车产业投资参考",
+          "reader": true,
+          "video": false,
+          "audio": false
+        },
+        {
+          "title": "三折叠终于不像奇观了，但它还是 19999 元",
+          "kind": "文章",
+          "source": "GeekPark · Feed 时间 2026/9/25 09:48:55",
+          "reason": "华为三折叠新机体验，消费电子观察",
+          "reader": true,
+          "video": false,
+          "audio": false
+        }
+      ],
+      "notice": "",
+      "jargon": []
+    },
+    {
+      "step": "最近有什么值得看的 AI / 科技视频？",
+      "query": "最近有什么值得看的 AI / 科技视频？",
+      "ttfv": 8908,
+      "ttfc": 50621,
+      "cards": [
+        {
+          "title": "E252｜硅谷睡眠外挂：富人的玩具，还是预防医疗的入口？｜对话Eight Sleep创始人",
+          "kind": "音频",
+          "source": "硅谷101 · 原文发布 2026/9/24 08:00:00 · 54:32",
+          "reason": "近期无AI视频，推荐近期科技音频",
+          "reader": true,
+          "video": false,
+          "audio": true
+        },
+        {
+          "title": "可以给你的 Agent 发一点零花钱了 | S10E22",
+          "kind": "音频",
+          "source": "What's Next｜科技早知道 · 声动活泼 · 原文发布 2026/7/22 17:15:00 · 41:47",
+          "reason": "AI智能体支付主题，无视频候选",
+          "reader": true,
+          "video": false,
+          "audio": true
+        },
+        {
+          "title": "E244｜机器人走错路了？与苏度韩铮聊聊具身智能的3D数据、路径分野与硅谷竞赛",
+          "kind": "音频",
+          "source": "硅谷101 · 原文发布 2026/7/16 08:00:00 · 77:19",
+          "reason": "具身智能机器人主题，无视频候选",
+          "reader": true,
+          "video": false,
+          "audio": true
+        },
+        {
+          "title": "如何「兜住」一颗火箭？| S10E21",
+          "kind": "音频",
+          "source": "What's Next｜科技早知道 · 声动活泼 · 原文发布 2026/7/14 21:30:00 · 63:42",
+          "reason": "商业航天火箭回收，无视频候选",
+          "reader": true,
+          "video": false,
+          "audio": true
+        },
+        {
+          "title": "为什么硅谷开始重新定义「AI 记忆」| S10E20",
+          "kind": "音频",
+          "source": "What's Next｜科技早知道 · 声动活泼 · 原文发布 2026/7/8 17:45:00 · 57:23",
+          "reason": "AI记忆与端侧AI，无视频候选",
+          "reader": true,
+          "video": false,
+          "audio": true
+        },
+        {
+          "title": "E242｜最快半年AI跑通自进化？与陈天桥首席科学家聊聊硅谷模型必争之地",
+          "kind": "音频",
+          "source": "硅谷101 · 原文发布 2026/7/6 08:00:00 · 70:54",
+          "reason": "AI自我进化主题，无视频候选",
+          "reader": true,
+          "video": false,
+          "audio": true
+        }
+      ],
+      "notice": "",
+      "jargon": []
+    },
+    {
+      "step": "最近有什么值得听的内容？",
+      "query": "最近有什么值得听的内容？",
+      "ttfv": 12027,
+      "ttfc": 59872,
+      "cards": [
+        {
+          "title": "E252｜硅谷睡眠外挂：富人的玩具，还是预防医疗的入口？｜对话Eight Sleep创始人",
+          "kind": "音频",
+          "source": "硅谷101 · 原文发布 2026/9/24 08:00:00 · 54:32",
+          "reason": "健康科技与创业前沿，近期值得听",
+          "reader": true,
+          "video": false,
+          "audio": true
+        },
+        {
+          "title": "Snap 做了十年眼镜，终于等到它的时代了吗？| S10E30",
+          "kind": "音频",
+          "source": "What's Next｜科技早知道 · 声动活泼 · 原文发布 2026/9/18 17:30:00 · 62:49",
+          "reader": true,
+          "video": false,
+          "audio": true
+        },
+        {
+          "title": "#405 从地理边界到思维边界：我们如何被「划界」塑造？",
+          "kind": "音频",
+          "source": "声东击西 · ETW Studio · 原文发布 2026/9/17 19:15:00 · 75:09",
+          "reader": true,
+          "video": false,
+          "audio": true
+        },
+        {
+          "title": "Episode 62: Draw a map and get lost・陪你跑五公里",
+          "kind": "音频",
+          "source": "Byte.Coffee · 原文发布 2026/9/25 07:00:00 · 35:20",
+          "reader": true,
+          "video": false,
+          "audio": true
+        },
+        {
+          "title": "Ep 59. 2026 Agent 编程新趋势",
+          "kind": "音频",
+          "source": "捕蛇者说 · 原文发布 2026/6/16 05:43:19 · 31:59",
+          "reader": true,
+          "video": false,
+          "audio": true
+        },
+        {
+          "title": "外滩大会线下圆桌｜敢把钱包交给AI吗？聊聊Agent交易爆发前夜的信任基建",
+          "kind": "音频",
+          "source": "硅谷101 · 原文发布 2026/9/18 08:00:00 · 35:43",
+          "reader": true,
+          "video": false,
+          "audio": true
+        },
+        {
+          "title": "AI for Science 爆发：AI 能解锁伟大的科学发现吗？ | S10E29",
+          "kind": "音频",
+          "source": "What's Next｜科技早知道 · 声动活泼 · 原文发布 2026/9/9 17:45:00 · 68:59",
+          "reader": true,
+          "video": false,
+          "audio": true
+        },
+        {
+          "title": "#404 邵阳：一位华人市议员亲历的美国地方政治丨十周年特别节目",
+          "kind": "音频",
+          "source": "声东击西 · ETW Studio · 原文发布 2026/9/10 17:30:00 · 147:38",
+          "reader": true,
+          "video": false,
+          "audio": true
+        },
+        {
+          "title": "Episode 61: 为了护眼，我们从离焦镜聊到诺贝尔奖",
+          "kind": "音频",
+          "source": "Byte.Coffee · 原文发布 2026/9/22 17:01:50 · 78:33",
+          "reader": true,
+          "video": false,
+          "audio": true
+        },
+        {
+          "title": "E251｜推理芯片之战：聊聊Groq、Cerebras与OpenAI三大路径与Bill Dally的设计哲学",
+          "kind": "音频",
+          "source": "硅谷101 · 原文发布 2026/9/16 08:00:00 · 91:32",
+          "reader": true,
+          "video": false,
+          "audio": true
+        },
+        {
+          "title": "Hassabis 卸任、Jeff Dean 离开，Google DeepMind 为什么突然大洗牌？| S10E28",
+          "kind": "音频",
+          "source": "What's Next｜科技早知道 · 声动活泼 · 原文发布 2026/9/2 16:45:00 · 47:12",
+          "reader": true,
+          "video": false,
+          "audio": true
+        }
+      ],
+      "notice": "",
+      "jargon": []
+    },
+    {
+      "step": "E read+ask",
+      "bodyCharacters": 2534,
+      "asked": {
+        "title": "E252｜硅谷睡眠外挂：富人的玩具，还是预防医疗的入口？｜对话Eight Sleep创始人",
+        "bodyCharacters": 2534
+      },
+      "talkLabel": "正在讨论：E252｜硅谷睡眠外挂：富人的玩具，还是预防医疗的入口？｜对话Eight Sleep创始人清除"
+    },
+    {
+      "step": "F video",
+      "query": "最近有什么值得看的 AI / 科技视频？",
+      "directPlayer": true,
+      "duration": 1262,
+      "currentTime": 2.6,
+      "officialEmbed": true,
+      "embedSrc": "https://player.bilibili.com/player.html?bvid=BV1g3th65Ebh&autoplay=0"
+    },
+    {
+      "step": "G audio",
+      "query": "最近有什么值得听的内容？",
+      "directPlayer": true,
+      "duration": 3272,
+      "currentTime": 2.3,
+      "officialEmbed": false,
+      "embedSrc": ""
+    },
+    {
+      "step": "H feedback",
+      "firstTitle": "欧盟拟增加卫星发射，或向挪威、英国、加拿大等寻求域外发射场",
+      "reduceOk": true,
+      "reducedOut": true,
+      "reverseOk": true,
+      "restored": true
+    },
+    {
+      "step": "I intent override",
+      "query": "今天不要给我科技内容，想看点轻松的。",
+      "cards": 15,
+      "techTitles": 0,
+      "sample": [
+        "维密重回上海淮海路，中国市场进入扩店阶段｜最前线",
+        "从“正统进化”出发，重新审视《怪物猎人》的核心：TGS2026《怪物猎人荒野 凌越》制作团队采访",
+        "#405 从地理边界到思维边界：我们如何被「划界」塑造？",
+        "Episode 62: Draw a map and get lost・陪你跑五公里"
+      ]
+    }
+  ]
+}

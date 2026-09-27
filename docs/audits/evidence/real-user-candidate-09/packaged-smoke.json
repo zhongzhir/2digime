@@ -1,0 +1,13 @@
+{
+  "at": "2026-09-26T13:55:00.000Z",
+  "exe": "release-staging/v2-tujimi-20260926T135041Z-e0d5da65/win-unpacked/兔机米.exe",
+  "isolatedBlankProfile": true,
+  "windowStarted": true,
+  "blankSubjectCreated": true,
+  "notePresent": true,
+  "noCredentialCreated": true,
+  "secretsFileCreated": false,
+  "modelConfigFileCreated": false,
+  "method": "Start-Process with DIGITALME_V2_USER_DATA=<temp>; wait for Local State; stop by handle",
+  "note": "The packaged app sets userData from DIGITALME_V2_USER_DATA and ignores --user-data-dir, so the smoke script was updated to pass that env var; it then starts on a blank profile with no credential/config file."
+}

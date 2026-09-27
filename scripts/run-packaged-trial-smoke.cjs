@@ -74,6 +74,9 @@ function main() {
   for (const k of Object.keys(env)) {
     if (/^DIGITALME_/.test(k) || /API_KEY|OPENAI|ANTHROPIC|DEEPSEEK|MINIMAX/.test(k)) delete env[k];
   }
+  // main.cjs sets userData from DIGITALME_V2_USER_DATA and ignores --user-data-dir, so this is
+  // the only way to keep the packaged smoke on an isolated blank profile.
+  env.DIGITALME_V2_USER_DATA = userData;
 
   const child = spawn(exe, [`--user-data-dir=${userData}`], {
     cwd: path.dirname(exe),
