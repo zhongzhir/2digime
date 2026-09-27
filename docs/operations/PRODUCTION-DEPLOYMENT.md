@@ -48,5 +48,6 @@ Secrets：
 6. 服务端确认目标路径、创建暂存与回滚副本，再用 rsync --delete 同步。
 7. 自动访问首页、个人版、机构版、下载、资讯与 RSS，全部为 200 才通过。
 8. Grok 的 publish_news 工作流使用同一个正式站发布流程。
+9. GitHub 发布任一新 Release 后，`sync-latest-release.yml` 自动选取最新已发布版本的 Windows 安装包与 ZIP，同步下载链接、版本号和 SHA256，随后发布 Pages 与正式站；资产命名可以随版本变化。
 
 首次启用前必须先确认 Nginx root、建立专用部署用户并配置 GitHub environment；仓库级 PRODUCTION_DEPLOY_ENABLED 未设置为 true 时，正式部署任务会安全跳过。

@@ -1,0 +1,60 @@
+name: Sync latest release to official website
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: release-site-sync
+  cancel-in-progress: false
+
+jobs:
+  sync-build-publish:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Sync newest published release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/site/sync-latest-release.mjs
+      - name: Build and verify website
+        run: |
+          node scripts/news/build-news.mjs
+          node site/check-site.mjs
+      - name: Commit updated download links
+        run: |
+          git config user.name "2digime-release-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add site/download/index.html
+          if git diff --cached --quiet; then
+            echo "Download page already points at the newest release"
+          else
+            git commit -m "chore(site): sync download links to ${{ github.event.release.tag_name || 'latest release' }}"
+            git push origin HEAD:main
+          fi
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+  deploy-production:
+    if: ${{ vars.PRODUCTION_DEPLOY_ENABLED == 'true' }}
+    needs: sync-build-publish
+    uses: ./.github/workflows/deploy-production.yml
+    secrets: inherit

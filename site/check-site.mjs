@@ -38,8 +38,15 @@ for (const term of ['Digital Self', 'Core', 'Brand Kit', 'Adapter', 'entitlement
 for (const forbidden of ['已服务中国电信', '已服务招商银行', '支持所有大模型', '银行级认证', '完全合规', '百万用户验证']) {
   if (all.includes(forbidden)) errors.push(`forbidden claim: ${forbidden}`);
 }
-for (const asset of ['tujimi-0.1.0-public-alpha-win-x64-setup.exe', 'tujimi-0.1.0-public-alpha-win-x64.zip']) {
-  if (!all.includes(asset)) errors.push(`missing release asset: ${asset}`);
+const downloadPage = readFileSync(resolve(root, 'download/index.html'), 'utf8');
+for (const marker of ['data-release-download="installer"', 'data-release-download="portable"', 'data-release-link', 'data-release-version', 'data-release-sha="installer"', 'data-release-sha="portable"']) {
+  if (!downloadPage.includes(marker)) errors.push(`missing release marker: ${marker}`);
+}
+const releaseDownloads = [...downloadPage.matchAll(/href="(https:\/\/github\.com\/zhongzhir\/2digime\/releases\/download\/[^" ]+)"/g)].map((match) => match[1]);
+if (releaseDownloads.length < 3) errors.push('missing current GitHub release download links');
+for (const kind of ['installer', 'portable']) {
+  const hash = downloadPage.match(new RegExp(`data-release-sha="${kind}">([0-9a-f]{64})<`));
+  if (!hash) errors.push(`missing valid ${kind} SHA256`);
 }
 if (!existsSync(resolve(root, 'news/feed.xml'))) errors.push('missing news RSS feed');
 if (!readFileSync(resolve(root, 'sitemap.xml'), 'utf8').includes('/news/')) errors.push('sitemap is missing news');
