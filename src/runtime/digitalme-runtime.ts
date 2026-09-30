@@ -429,6 +429,7 @@ export class DigitalMeRuntime {
   private ctoReviewAbort = new AbortController();
   private readonly ctoReviewInflight = new Set<Promise<void>>();
   private converseAbortSignal: AbortSignal | null = null;
+  private talkAbortSignal: AbortSignal | null = null;
   private digitalSelfService: DigitalSelfService | null = null;
   private talkService: TalkService | null = null;
   private detachSubjectNetwork: (() => void) | null = null;
@@ -469,6 +470,11 @@ export class DigitalMeRuntime {
     this.converseAbortSignal = signal;
   }
 
+  /** 主进程取消当前对话时中止模型请求和授权等待。 */
+  setTalkAbortSignal(signal: AbortSignal | null): void {
+    this.talkAbortSignal = signal;
+  }
+
   /** 当前文档能力模式（供协作验收区分 Fake / 真实模型）。 */
   get documentCapabilityMode(): DigitalMeRuntimeOptions['documentCapability'] {
     return this.options.documentCapability ?? 'fake';
@@ -482,8 +488,9 @@ export class DigitalMeRuntime {
 
   async talk(
     input: CommandMap['talk']['input'],
+    externalSignal?: AbortSignal | null,
   ): Promise<CommandMap['talk']['output']> {
-    return this.getTalkService().invoke(input);
+    return this.getTalkService().invoke(input, externalSignal || this.talkAbortSignal);
   }
 
   async content(
@@ -559,7 +566,7 @@ export class DigitalMeRuntime {
       const directiveId = String(input.directiveId || '').trim();
       if (!directiveId) return { view: await empty('请选择要撤销的偏好。') };
       await reverseContentPreference(pkg.rootDir, directiveId);
-      return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'refresh') };
+      return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reset') };
     }
 
     if (action === 'open' || action === 'later' || action === 'boost' || action === 'reduce' || action === 'follow' || action === 'block') {
@@ -597,7 +604,8 @@ export class DigitalMeRuntime {
               ? `多推荐和「${item.content.title}」相近的内容，但不要只重复这一条。`
               : `不喜欢「${item.content.title}」这一条。结合语境理解，不要因此封禁整个主题或来源。`,
         });
-        return { view: await this.currentSearchOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'refresh') };
+        this.lastIntentView = null;
+        return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reset') };
       }
       if (action === 'open') {
         await appendRecentRecommendationEvent(pkg.rootDir, {
@@ -782,13 +790,17 @@ export class DigitalMeRuntime {
           const ingested = await ingestSource({
             sourceUrl: hit.url,
             store,
-            limit: hit.title === 'open catalog' ? 12 : 4,
+            limit:
+              typeof (hit as { limit?: number }).limit === 'number'
+                ? Math.min(Math.max((hit as { limit?: number }).limit || 4, 1), 24)
+                : 4,
             via: 'search',
           });
           if (ingested.items.length) return ingested.items;
         } catch {
           /* 公开页摄入失败时退回搜索命中 */
         }
+        if (hit.title === 'open catalog') return [];
         return indexSearchHits({ hits: [hit], store, limit: 1 });
       },
       reloadItems: loadItems,

@@ -33,6 +33,8 @@ export interface ExternalSeekHit {
   title: string;
   url: string;
   snippet?: string;
+  /** 点播一部作品时多取一些章节。默认信息流不传，由摄入方保持小批量。 */
+  limit?: number;
 }
 
 export interface SeekTraceItem {
@@ -273,6 +275,7 @@ export async function seekContent(input: {
               const ingested = await input.ingestHit({
                 title: hit.title,
                 url: hit.feedUrl,
+                limit: 12,
                 ...(hit.snippet ? { snippet: hit.snippet } : {}),
               });
               for (const item of ingested) {

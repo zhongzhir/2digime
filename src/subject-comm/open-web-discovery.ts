@@ -353,7 +353,10 @@ export async function indexSearchHits(input: {
       }
     })();
     const title = clipTitle(hit.title || canonical);
-    const text = clipText(hit.snippet || hit.title || canonical);
+    const snippet = String(hit.snippet || '').trim();
+    const text = snippet && snippet !== title
+      ? clipText(snippet)
+      : clipText(`来自 ${host}，搜索结果没有单独摘录。`);
     const raw: NetworkItem = {
       schemaVersion: NETWORK_ITEM_SCHEMA_VERSION,
       itemId: contentItemId(canonical),

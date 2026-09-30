@@ -57,6 +57,17 @@
     return /^https:\/\//i.test(String(url || ''));
   }
 
+  function decodeEntities(value) {
+    return String(value || '')
+      .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+      .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&#039;|&apos;/g, "'")
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>');
+  }
+
   function sourceLine(card) {
     const bits = [];
     if (card.publisherDisplayName && card.publisherDisplayName !== card.title) bits.push(card.publisherDisplayName);
@@ -80,7 +91,7 @@
         bits.push(m + ':' + String(s).padStart(2, '0'));
       }
     }
-    return bits.join(' · ');
+    return decodeEntities(bits.join(' · '));
   }
 
   function typeLabel(card) {
@@ -212,7 +223,7 @@
       body.appendChild(meta);
     }
     if (card.text && type !== 'image') {
-      const raw = String(card.text || '').replace(/\s+/g, ' ').trim();
+      const raw = decodeEntities(card.text).replace(/\s+/g, ' ').trim();
       if (raw && raw !== String(card.title || '').trim()) {
         const p = document.createElement('p');
         p.className = 'content-discover-excerpt';

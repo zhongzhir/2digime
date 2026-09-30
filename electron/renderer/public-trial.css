@@ -168,6 +168,14 @@ input[type=checkbox], input[type=radio] { width: auto; flex: none; }
 .talk-attach-menu-body { bottom: calc(100% + 10px); top: auto; left: 0; min-width: 200px; border-radius: 12px; background: var(--panel); box-shadow: 0 8px 32px rgba(28, 36, 48, 0.12); z-index: 10; padding: 6px; }
 .talk-attach-menu-body button { width: 100%; text-align: left; border: 0; }
 .composer-actions { justify-content: flex-end; align-items: center; gap: 8px; margin-top: 4px; }
+.folder-access-dialog {
+  margin: 8px 16px 12px;
+  padding: 12px;
+  border: 1px solid var(--line, #d7d3cc);
+  border-radius: 10px;
+  background: var(--paper, #fff);
+}
+.folder-access-dialog p { margin: 0 0 8px; }
 .composer-hint { margin-right: auto; color: var(--muted); font-size: 12px; }
 .talk-connect-ai-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 8px; min-height: 0; }
 .talk-connect-ai-row #chat-status { margin: 0; flex: 1 1 auto; }

@@ -209,7 +209,14 @@ async function toNetworkItem(input: {
     return { status: 'rejected', reason: (err as { code?: string }).code || 'invalid_url' };
   }
   const title = clipTitle(input.item.title || canonicalUrl);
-  let text = clipText(input.item.text || title);
+  const provided = clipText(input.item.text || '');
+  let host = '';
+  try {
+    host = new URL(canonicalUrl).hostname.replace(/^www\./, '');
+  } catch {
+    host = '';
+  }
+  let text = provided && provided !== title ? provided : clipText(host ? `来自 ${host}，页面没有单独摘录。` : '页面没有单独摘录。');
   if (!title || !text) return { status: 'rejected', reason: 'empty_item' };
   let actor: 'owner' | 'model' = 'owner';
   if (input.enrich) {
@@ -360,13 +367,24 @@ export async function ingestSource(input: IngestSourceInput): Promise<{
     });
   }
   const looksFeed = looksLikeXmlFeed(body);
+  const pagePreview = looksFeed ? null : parseHtmlPreview(body, fetched.finalUrl);
+  const pageMeta = looksFeed ? null : parsePageMetadata(body, fetched.finalUrl);
   const parsed = looksFeed
     ? parseFeed(body)
-    : { sourceTitle: clipTitle(parseHtmlPreview(body, fetched.finalUrl).title), items: [parseHtmlPreview(body, fetched.finalUrl)] };
+    : {
+        sourceTitle: clipTitle(pageMeta?.publisher || (() => {
+          try {
+            return new URL(fetched.finalUrl).hostname.replace(/^www\./, '');
+          } catch {
+            return fetched.finalUrl;
+          }
+        })()),
+        items: pagePreview ? [pagePreview] : [],
+      };
   if (!looksFeed) {
     const preview = parsed.items[0];
-    const meta = parsePageMetadata(body, fetched.finalUrl);
-    if (preview && meta.oembedUrl) {
+    const meta = pageMeta;
+    if (preview && meta?.oembedUrl) {
       const oem = await resolveOEmbed({ url: fetched.finalUrl, html: body, fetchImpl });
       if (oem) preview.media = mergeOpenMedia(preview.media, oem.media);
     }

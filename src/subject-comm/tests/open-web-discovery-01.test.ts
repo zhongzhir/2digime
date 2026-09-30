@@ -74,11 +74,12 @@ test('page metadata prefers canonical, OpenGraph, JSON-LD; does not keep full bo
   assert.equal(/full article body/.test(meta.description), false);
 });
 
-test('missing metadata falls back to title/url', () => {
+test('missing metadata keeps the title and does not copy it into the excerpt', () => {
   const meta = parsePageMetadata('<html><head><title>Only title</title></head></html>', 'https://example.org/plain');
   assert.equal(meta.canonicalUrl, 'https://example.org/plain');
   assert.equal(meta.title, 'Only title');
-  assert.equal(meta.description, 'Only title');
+  assert.equal(meta.description, '');
+  assert.equal(meta.publishedAt, undefined);
 });
 
 test('duplicate canonical URLs collapse', () => {

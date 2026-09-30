@@ -41,20 +41,20 @@ function parseDecisions(raw: string, expectedIds: Set<string>): PersonalSelectio
     const out: PersonalSelectionDecision[] = [];
     const seen = new Set<string>();
     for (const row of parsed.decisions) {
-      if (!row || typeof row !== 'object') return null;
+      if (!row || typeof row !== 'object') continue;
       const rec = row as Record<string, unknown>;
       const itemId = String(rec.itemId || '').trim();
       const decision = String(rec.decision || '')
         .trim()
         .toLowerCase();
       const reason = String(rec.reason || '').trim();
-      if (!expectedIds.has(itemId) || seen.has(itemId)) return null;
-      if (decision !== 'show' && decision !== 'ignore') return null;
-      if (!reason) return null;
+      if (!expectedIds.has(itemId) || seen.has(itemId)) continue;
+      if (decision !== 'show' && decision !== 'ignore') continue;
+      if (!reason) continue;
       seen.add(itemId);
       out.push({ itemId, decision, reason: reason.slice(0, 400) });
     }
-    if (seen.size !== expectedIds.size) return null;
+    if (!out.length) return null;
     return out;
   } catch {
     return null;
@@ -77,13 +77,21 @@ export async function selectNetworkItems(input: {
   const BATCH = 8;
   if (input.items.length > BATCH) {
     const decisions: PersonalSelectionDecision[] = [];
+    let modelRanked = 0;
     for (let i = 0; i < input.items.length; i += BATCH) {
-      const part = await selectNetworkItems({
-        ...input,
-        items: input.items.slice(i, i + BATCH),
-      });
-      if (!part.ok) return part;
+      const slice = input.items.slice(i, i + BATCH);
+      const part = await selectNetworkItems({ ...input, items: slice });
+      if (!part.ok) {
+        for (const item of slice) {
+          decisions.push({ itemId: item.itemId, decision: 'ignore', reason: '这一轮没有排到。' });
+        }
+        continue;
+      }
+      modelRanked += part.decisions.filter((row) => row.reason !== '这一轮没有排到。').length;
       decisions.push(...part.decisions);
+    }
+    if (!modelRanked) {
+      return { ok: false, error: PERSONAL_SELECTION_UNAVAILABLE, detail: 'unparseable_or_incomplete' };
     }
     return {
       ok: true,
@@ -145,6 +153,10 @@ export async function selectNetworkItems(input: {
       });
       const parsed = parseDecisions(result.text || '', expected);
       if (parsed) {
+        const seen = new Set(parsed.map((row) => row.itemId));
+        for (const itemId of expected) {
+          if (!seen.has(itemId)) parsed.push({ itemId, decision: 'ignore', reason: '这一轮没有排到。' });
+        }
         const shownItemIds = parsed.filter((row) => row.decision === 'show').map((row) => row.itemId);
         const ignoredItemIds = parsed.filter((row) => row.decision === 'ignore').map((row) => row.itemId);
         return { ok: true, decisions: parsed, shownItemIds, ignoredItemIds };

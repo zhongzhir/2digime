@@ -41,21 +41,38 @@ export function talkTurnDeadlineMs(): number {
   return Number.isFinite(n) && n > 0 ? n : TALK_TURN_DEADLINE_MS;
 }
 
+export function isTalkCancelled(err: unknown): boolean {
+  return err instanceof Error && err.name === 'TalkCancelled';
+}
+
 function isTalkTimeout(err: unknown): boolean {
+  if (isTalkCancelled(err)) return false;
   if (err instanceof TalkTimeoutError) return true;
   if (!(err instanceof Error)) return false;
-  if (err.name === 'TalkTimeoutError' || err.name === 'AbortError') return true;
-  // 工具已成功后，合成/续聊的运输层超时不得绕过 writeThread，否则 Owner 空等约整轮 deadline。
+  if (err.name === 'TalkTimeoutError') return true;
   const kind = (err as { kind?: string }).kind;
-  if (err.name === 'ModelHttpError' && (kind === 'timeout' || kind === 'aborted')) return true;
+  if (err.name === 'ModelHttpError' && kind === 'timeout') return true;
   return /timeout after\s+\d+ms|请求超时|TalkTimeout/i.test(err.message);
+}
+
+function errorFromAbort(signal: AbortSignal): Error {
+  const reason = signal.reason;
+  if (reason instanceof Error) return reason;
+  return new TalkTimeoutError();
+}
+
+const turnSignals: AbortSignal[] = [];
+
+/** 当前正在执行的对话回合信号。授权等待用它结束，避免原生对话框把下一次发送卡住。 */
+export function currentTalkTurnSignal(): AbortSignal | null {
+  return turnSignals[turnSignals.length - 1] || null;
 }
 
 function wrapChatWithDeadline(chat: TalkChatFn, signal: AbortSignal): TalkChatFn {
   return async (input) => {
-    if (signal.aborted) throw new TalkTimeoutError();
+    if (signal.aborted) throw errorFromAbort(signal);
     return await new Promise((resolve, reject) => {
-      const onAbort = () => reject(new TalkTimeoutError());
+      const onAbort = () => reject(errorFromAbort(signal));
       signal.addEventListener('abort', onAbort, { once: true });
       Promise.resolve(chat({ ...input, signal })).then(
         (value) => {
@@ -64,7 +81,7 @@ function wrapChatWithDeadline(chat: TalkChatFn, signal: AbortSignal): TalkChatFn
         },
         (err) => {
           signal.removeEventListener('abort', onAbort);
-          if (signal.aborted) reject(new TalkTimeoutError());
+          if (signal.aborted) reject(errorFromAbort(signal));
           else reject(err);
         },
       );
@@ -100,14 +117,17 @@ export class TalkService {
     private readonly requestFolderAccess?: (input: { path: string; label: string }) => Promise<boolean>,
   ) {}
 
-  async invoke(input: { text?: string; contextPaths?: string[] }): Promise<{ view: TalkView }> {
+  async invoke(
+    input: { text?: string; contextPaths?: string[] },
+    externalSignal?: AbortSignal | null,
+  ): Promise<{ view: TalkView }> {
     const pkg = this.resolvePackage();
     if (!pkg) {
       return { view: projectView(emptyThread(this.now()), '还没有可用的数字之我。') };
     }
     const threadId = listConversationSessionsSync(pkg.rootDir).currentId;
     const prev = this.writeChains.get(threadId) || Promise.resolve();
-    const run = prev.then(() => this.invokeNow(input, threadId));
+    const run = prev.then(() => this.invokeNow(input, threadId, externalSignal));
     this.writeChains.set(
       threadId,
       run.then(
@@ -121,6 +141,7 @@ export class TalkService {
   private async invokeNow(
     input: { text?: string; contextPaths?: string[] },
     threadId: string,
+    externalSignal?: AbortSignal | null,
   ): Promise<{ view: TalkView }> {
     const pkg = this.resolvePackage();
     if (!pkg) {
@@ -186,7 +207,19 @@ export class TalkService {
     ];
     const turnCtx = contextPaths.length ? { contextPaths } : {};
     const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), talkTurnDeadlineMs());
+    const timer = setTimeout(() => {
+      if (!ac.signal.aborted) ac.abort(new TalkTimeoutError());
+    }, talkTurnDeadlineMs());
+    const onExternal = () => {
+      if (ac.signal.aborted) return;
+      const reason = externalSignal?.reason;
+      ac.abort(reason instanceof Error ? reason : Object.assign(new Error('已取消。'), { name: 'TalkCancelled' }));
+    };
+    if (externalSignal) {
+      if (externalSignal.aborted) onExternal();
+      else externalSignal.addEventListener('abort', onExternal, { once: true });
+    }
+    turnSignals.push(ac.signal);
     const boundedChat = wrapChatWithDeadline(this.chat, ac.signal);
     const turnExecutions: TalkExecution[] = [];
     let next = thread;
@@ -242,23 +275,37 @@ export class TalkService {
         });
       }
       const userTurn = thread.turns[thread.turns.length - 1];
-      if (turnExecutions.length && (isManagedAiUserNotice(err) || isTalkTimeout(err))) {
-        const fromExec = assistantFromTurnExecutions(turnExecutions, 'deadline');
-        timeoutNotice = fromExec.notice;
-        outcome = fromExec.outcome;
+      const pushStopped = (text: string, stoppedOutcome: TalkTurnOutcome, notice: string, result?: { title: string; path?: string }) => {
         thread.turns.push({
           id: `turn_${randomUUID()}`,
           at: now,
           role: 'assistant',
-          text: fromExec.text,
-          ...(fromExec.executionIds.length ? { executionIds: fromExec.executionIds } : {}),
-          ...(fromExec.result ? { result: fromExec.result } : {}),
+          text,
+          ...(turnExecutions.length ? { executionIds: turnExecutions.map((item) => item.id) } : {}),
+          ...(result?.path ? { result: { title: result.title, path: result.path } } : {}),
         });
-        if (userTurn && userTurn.role === 'user' && fromExec.executionIds.length) {
-          userTurn.executionIds = fromExec.executionIds;
+        if (userTurn && userTurn.role === 'user' && turnExecutions.length) {
+          userTurn.executionIds = turnExecutions.map((item) => item.id);
         }
         thread.executions = [...(thread.executions || []), ...turnExecutions];
+        timeoutNotice = notice;
+        outcome = stoppedOutcome;
         next = thread;
+      };
+      if (isTalkCancelled(err)) {
+        const writes = turnExecutions.filter(
+          (item) => item.ok && (MUTATING_CAPS.has(item.capabilityId) || item.observedEffect?.mutated === true),
+        );
+        const written = [...writes].reverse().find((item) => item.outputPath);
+        const text = written?.outputPath
+          ? `已取消。已经写入的文件还在：${path.basename(written.outputPath)}`
+          : '已取消。';
+        pushStopped(text, 'CANCELLED', '已取消。', written?.outputPath ? { title: path.basename(written.outputPath), path: written.outputPath } : undefined);
+      } else if (turnExecutions.length && isManagedAiUserNotice(err)) {
+        const fromExec = assistantFromTurnExecutions(turnExecutions, 'undeliverable_final');
+        const reason = String((err as Error).message || '').trim();
+        const text = reason && !fromExec.text.includes(reason.slice(0, 24)) ? `${fromExec.text}\n\n${reason}` : fromExec.text;
+        pushStopped(text, fromExec.outcome, reason || fromExec.notice, fromExec.result);
       } else if (isManagedAiUserNotice(err)) {
         thread.turns.push({
           id: `turn_${randomUUID()}`,
@@ -290,6 +337,9 @@ export class TalkService {
       }
     } finally {
       clearTimeout(timer);
+      externalSignal?.removeEventListener('abort', onExternal);
+      const idx = turnSignals.lastIndexOf(ac.signal);
+      if (idx >= 0) turnSignals.splice(idx, 1);
     }
     if (next.threadId !== threadId) next.threadId = threadId;
     await writeThread(pkg.rootDir, next);
@@ -338,8 +388,8 @@ export async function attachedMaterialBlock(contextPaths?: string[]): Promise<st
       const omitted = text.length - body.length;
       const tail =
         omitted > 0
-          ? `\n（未读完：原文 ${text.length} 字，这次摘录 ${body.length} 字，省略 ${omitted} 字。需要其余部分时 read_file。不得说成已经读完。）`
-          : `\n（这次摘录覆盖抽出的 ${text.length} 字。）`;
+          ? `\n（读取状态：excerpt；未读完；offset=0；length=${body.length}；total=${text.length}；complete=false。这一段不是全文。）`
+          : `\n（读取状态：full；offset=0；length=${text.length}；total=${text.length}；complete=true。）`;
       blocks.push(`- ${file}\n${body}${tail}`);
     } catch (err) {
       blocks.push(`- ${file}：读取失败（${err instanceof Error ? err.message : String(err)}）。不得说成已经读过。`);

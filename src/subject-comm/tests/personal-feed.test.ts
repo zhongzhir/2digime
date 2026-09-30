@@ -514,6 +514,139 @@ test('selection failure still shows the items already fetched', async () => {
   });
   assert.equal(result.view.cards.length, items.length);
   assert.match(result.view.notice || '', /没能排好顺序/);
+  assert.match(result.view.notice || '', /不同来源/);
+});
+
+test('同一来源的重复章节不会占满排序失败时的第一页', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-diverse-'));
+  const items: NetworkItem[] = [];
+  for (let i = 0; i < 12; i += 1) {
+    const checked = validateNetworkItem({
+      schemaVersion: 1,
+      itemId: `ni_novel_${i}`,
+      publisherSubjectId: 'pub_novel',
+      publisherDisplayName: '一部小说',
+      kind: 'content',
+      createdAt: NOW,
+      visibility: 'public',
+      content: {
+        title: `霸体诀 第${i + 1}章`,
+        text: `第${i + 1}章正文`,
+        url: `https://audio.example/novel/${i + 1}`,
+        contentType: 'audio',
+      },
+      provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'feed' },
+    });
+    if (!checked.ok) throw new Error(checked.reason);
+    items.push(checked.item);
+  }
+  for (const [id, title, host] of [
+    ['ni_bbc', '世界新闻一则', 'https://www.bbc.com/news/story'],
+    ['ni_npr', '另一则广播', 'https://www.npr.org/story'],
+  ] as const) {
+    const checked = validateNetworkItem({
+      schemaVersion: 1,
+      itemId: id,
+      publisherSubjectId: `pub_${id}`,
+      publisherDisplayName: id,
+      kind: 'content',
+      createdAt: NOW,
+      visibility: 'public',
+      content: { title, text: title, url: host, contentType: 'article' },
+      provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'feed' },
+    });
+    if (!checked.ok) throw new Error(checked.reason);
+    items.push(checked.item);
+  }
+  const result = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items,
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'DISABLED',
+    chatComplete: async () => ({ text: 'not json' }),
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    mode: 'reset',
+    now: NOW,
+  });
+  const titles = result.view.cards.map((card) => card.title);
+  const novelCards = titles.filter((title) => title.includes('霸体诀'));
+  assert.ok(novelCards.length <= 2, titles.join(' | '));
+  assert.ok(titles.some((title) => title.includes('世界新闻')));
+  assert.ok(titles.some((title) => title.includes('另一则广播')));
+});
+
+test('已保存的屏蔽会从下一轮缓存页移除，不喜欢的一条不再排在前面', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-block-cache-'));
+  const items: NetworkItem[] = [];
+  for (const [itemId, publisherSubjectId, title] of [
+    ['ni_novel', 'pub_novel', '霸体诀 第1章'],
+    ['ni_bbc', 'pub_bbc', '世界新闻一则'],
+    ['ni_npr', 'pub_npr', '另一则广播'],
+  ] as const) {
+    const checked = validateNetworkItem({
+      schemaVersion: 1,
+      itemId,
+      publisherSubjectId,
+      publisherDisplayName: publisherSubjectId,
+      kind: 'content',
+      createdAt: NOW,
+      visibility: 'public',
+      content: { title, text: title, url: `https://example.com/${itemId}`, contentType: 'article' },
+      provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'feed' },
+    });
+    if (!checked.ok) throw new Error(checked.reason);
+    items.push(checked.item);
+  }
+  const base = {
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items,
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'DISABLED' as const,
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    now: NOW,
+  };
+  const first = await ensurePersonalFeed({
+    ...base,
+    chatComplete: async () => ({ text: 'not json' }),
+    mode: 'reset',
+  });
+  assert.ok(first.view.cards.some((card) => card.title.includes('霸体诀')));
+  const second = await ensurePersonalFeed({
+    ...base,
+    chatComplete: async () => {
+      throw new Error('reuse must not ask the model');
+    },
+    mode: 'reuse',
+    preferenceRows: [
+      {
+        id: 'block-novel',
+        kind: 'block',
+        targetType: 'source',
+        target: 'pub_novel',
+        text: '不再看来源 一部小说',
+        origin: 'user_action',
+        updatedAt: NOW,
+      },
+      {
+        id: 'reduce-bbc',
+        kind: 'reduce',
+        targetType: 'item',
+        target: 'ni_bbc',
+        text: '不喜欢这一条',
+        origin: 'user_action',
+        updatedAt: NOW,
+      },
+    ],
+  });
+  const titles = second.view.cards.map((card) => card.title);
+  assert.equal(titles.some((title) => title.includes('霸体诀')), false);
+  assert.ok(titles.includes('另一则广播'));
+  assert.ok(titles.includes('世界新闻一则'));
+  assert.notEqual(titles[0], '世界新闻一则');
 });
 
 test('ranked ignore stays available instead of being dropped', async () => {

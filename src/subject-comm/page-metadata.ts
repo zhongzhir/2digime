@@ -253,7 +253,7 @@ export function parsePageMetadata(html: string, fallbackUrl: string): PageMetada
     metaContent(root, 'og:description') ||
     metaContent(root, 'description') ||
     textOf(ld?.description) ||
-    title;
+    '';
   const publishedAt =
     textOf(ld?.datePublished) ||
     textOf(ld?.uploadDate) ||

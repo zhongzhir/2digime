@@ -121,4 +121,17 @@ contextBridge.exposeInMainWorld("digitalMe", {
     ipcRenderer.on("shell:open-help", handler);
     return () => ipcRenderer.removeListener("shell:open-help", handler);
   },
+  onFolderAccess(listener) {
+    const show = (_evt, info) => listener(info || {});
+    const hide = () => listener(null);
+    ipcRenderer.on("shell:folder-access", show);
+    ipcRenderer.on("shell:folder-access-dismiss", hide);
+    return () => {
+      ipcRenderer.removeListener("shell:folder-access", show);
+      ipcRenderer.removeListener("shell:folder-access-dismiss", hide);
+    };
+  },
+  replyFolderAccess(id, allowed) {
+    ipcRenderer.send("shell:folder-access-reply", { id, allowed: allowed === true });
+  },
 });

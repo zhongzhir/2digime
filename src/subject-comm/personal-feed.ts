@@ -233,6 +233,26 @@ function isConsumableItem(item: NetworkItem, nowIso?: string): boolean {
   return true;
 }
 
+function applyExplicitFeedback(cards: DiscoverCard[], prefs: ContentPreferenceDirective[]): DiscoverCard[] {
+  const blockedSources = new Set(
+    prefs.filter((row) => row.kind === 'block' && row.targetType === 'source').map((row) => row.target),
+  );
+  const blockedItems = new Set(
+    prefs.filter((row) => row.kind === 'block' && row.targetType === 'item').map((row) => row.target),
+  );
+  const reduced = new Set(
+    prefs.filter((row) => row.kind === 'reduce' && row.targetType === 'item').map((row) => row.target),
+  );
+  const kept = cards.filter(
+    (card) =>
+      !blockedItems.has(card.itemId) && !(card.publisherSubjectId && blockedSources.has(card.publisherSubjectId)),
+  );
+  return [
+    ...kept.filter((card) => !reduced.has(card.itemId)),
+    ...kept.filter((card) => reduced.has(card.itemId)),
+  ];
+}
+
 function blocked(item: NetworkItem, prefs: ContentPreferenceDirective[]): boolean {
   return prefs.some((row) => {
     if (row.kind !== 'block') return false;
@@ -314,6 +334,51 @@ function cacheFresh(snapshot: FeedSnapshot | undefined, nowMs: number): boolean 
   return Number.isFinite(at) && nowMs - at <= STALE_MS;
 }
 
+function repeatedWork(items: NetworkItem[]): boolean {
+  if (items.length < 3) return false;
+  const stems = items.map((item) => {
+    const title = String(item.content.title || '').replace(/\s+/g, ' ').trim();
+    const stem = title.replace(/(?:第\s*)?\d+\s*(?:章|节|回|话|集|期).*$/u, '').trim();
+    return stem.length >= 2 && stem.length < title.length ? stem : '';
+  });
+  const stem = stems[0] || '';
+  return stem.length > 0 && stems.every((row) => row === stem);
+}
+
+/** 默认信息流轮流取不同来源。同一作品的重复章节在还有其它来源时最多占几条；不同文章不按来源名额裁掉。只有一个来源时仍可看完已取到的内容。明确点播走检索，不走这里。 */
+export function diverseFeedCandidates(items: NetworkItem[], limit = 24, perSource = 2): NetworkItem[] {
+  const groups: NetworkItem[][] = [];
+  const index = new Map<string, number>();
+  for (const item of items) {
+    const key = item.publisherSubjectId || item.itemId;
+    let at = index.get(key);
+    if (at === undefined) {
+      at = groups.length;
+      index.set(key, at);
+      groups.push([]);
+    }
+    groups[at]!.push(item);
+  }
+  const capped = groups.map((group) => groups.length > 1 && repeatedWork(group));
+  const out: NetworkItem[] = [];
+  const cursors = groups.map(() => 0);
+  while (out.length < limit) {
+    let added = false;
+    for (let i = 0; i < groups.length; i += 1) {
+      const cursor = cursors[i] || 0;
+      if (capped[i] && cursor >= perSource) continue;
+      const item = groups[i]?.[cursor];
+      if (!item) continue;
+      cursors[i] = cursor + 1;
+      out.push(item);
+      added = true;
+      if (out.length >= limit) break;
+    }
+    if (!added) break;
+  }
+  return out;
+}
+
 export async function ensurePersonalFeed(input: {
   packageRoot: string;
   digitalSelf: DigitalSelf;
@@ -359,7 +424,7 @@ export async function ensurePersonalFeed(input: {
       mark('FIRST_CARD_VISIBLE', nextCards.length);
       return {
         view: viewOf({
-          cards: nextCards,
+          cards: applyExplicitFeedback(nextCards, prefs),
           preferences: input.preferences,
           notice: '',
           reasonCode: 'CACHED_FEED',
@@ -387,7 +452,7 @@ export async function ensurePersonalFeed(input: {
   };
   const finish = (view: DiscoverView, reasonCode: FeedReasonCode) => {
     const traced = viewOf({
-      cards: view.cards,
+      cards: applyExplicitFeedback(view.cards, prefs),
       relatedCards: view.relatedCards || [],
       preferences: view.preferences,
       notice: view.notice,
@@ -423,8 +488,10 @@ export async function ensurePersonalFeed(input: {
   if (input.mode === 'open') {
     mark('OPEN_DISCOVER');
     mark('LOCAL_FEED_READ', cachedCards.length);
-    const localFromCache = cachedCards.length ? cachedCards.slice(0, MAX_FEED) : [];
-    const localFromDirectory = localFromCache.length ? [] : directoryCards(input.items, prefs, MAX_FEED, now);
+    const localFromCache = cachedCards.length ? applyExplicitFeedback(cachedCards, prefs).slice(0, MAX_FEED) : [];
+    const localFromDirectory = localFromCache.length
+      ? []
+      : directoryCards(diverseFeedCandidates(input.items, MAX_FEED, 2), prefs, MAX_FEED, now);
     mark('DIRECTORY_READ', localFromDirectory.length || input.items.filter((item) => isConsumableItem(item, now)).length);
     const localCards = localFromCache.length ? localFromCache : localFromDirectory;
     const fresh = localFromCache.length ? cacheFresh(cache.personal, nowMs) : localCards.length >= MIN_FEED;
@@ -496,13 +563,16 @@ export async function ensurePersonalFeed(input: {
       : [],
   );
   const opened = new Set(openedItemIds(recent));
-  const unseenCount = items.filter((item) => !shown.has(item.itemId) && !opened.has(item.itemId)).length;
+  const unseen = items.filter((item) => !shown.has(item.itemId) && !opened.has(item.itemId));
+  const diverseReady = diverseFeedCandidates(unseen, MIN_FEED, 2).length;
   const needReplenish =
     input.mode === 'refresh' || input.mode === 'reset'
       ? true
-      : input.mode === 'replenish'
-        ? unseenCount < MIN_FEED || !cacheFresh(cache.personal, nowMs)
-        : unseenCount < MIN_FEED;
+      : input.mode === 'more'
+        ? diverseReady < MIN_FEED
+        : input.mode === 'replenish'
+          ? diverseReady < MIN_FEED || !cacheFresh(cache.personal, nowMs)
+          : diverseReady < MIN_FEED;
   let replenished = false;
   let searchAttempted = false;
 
@@ -626,7 +696,8 @@ export async function ensurePersonalFeed(input: {
     return true;
   });
   const freshPool = pool.filter((item) => !opened.has(item.itemId));
-  const candidates = (freshPool.length >= 3 ? freshPool : pool).slice(0, 24);
+  const candidates = diverseFeedCandidates(freshPool.length >= 3 ? freshPool : pool, 24, 2);
+  mark('CANDIDATES', candidates.length);
 
   if (!candidates.length) {
     if (searchAttempted && !replenished && networking === 'AVAILABLE') {
@@ -755,7 +826,7 @@ export async function ensurePersonalFeed(input: {
         viewOf({
           cards: page,
           preferences: input.preferences,
-          notice: '已经取到这些内容。这一轮没能排好顺序，先按取到的顺序放在这里。',
+          notice: '已经取到这些内容。这一轮没能排好顺序，先按不同来源放在这里。',
           reasonCode: replenished ? 'REPLENISHED' : 'LOCAL_DIRECTORY',
           feedMode: 'personal',
           networking,

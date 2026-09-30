@@ -464,6 +464,10 @@
     setCancelVisible(false);
     const send = $('btn-chat-send');
     if (send) send.disabled = false;
+    const client = api();
+    if (client && client.conversation && typeof client.conversation.cancel === 'function') {
+      void client.conversation.cancel();
+    }
     renderView(lastView);
     setNotice('已取消。');
   }
@@ -594,12 +598,47 @@
     setContentContext: setContentContext,
   };
 
+  function bindFolderAccess() {
+    const client = api();
+    const box = $('folder-access-dialog');
+    if (!client || typeof client.onFolderAccess !== 'function' || !box || box.dataset.bound) return;
+    box.dataset.bound = '1';
+    let currentId = '';
+    const hide = () => {
+      currentId = '';
+      box.hidden = true;
+    };
+    client.onFolderAccess((info) => {
+      if (!info || !info.id) {
+        hide();
+        return;
+      }
+      currentId = String(info.id);
+      const message = $('folder-access-message');
+      const pathEl = $('folder-access-path');
+      if (message) message.textContent = `允许访问${info.label || '这个文件夹'}？`;
+      if (pathEl) pathEl.textContent = String(info.path || '');
+      box.hidden = false;
+    });
+    const reply = (allowed) => {
+      if (!currentId) return;
+      const id = currentId;
+      hide();
+      if (typeof client.replyFolderAccess === 'function') client.replyFolderAccess(id, allowed);
+    };
+    const allow = $('btn-folder-allow');
+    const deny = $('btn-folder-deny');
+    if (allow) allow.addEventListener('click', () => reply(true));
+    if (deny) deny.addEventListener('click', () => reply(false));
+  }
+
   function start() {
     hideLegacyChrome();
     bindAutosize();
     bindComposerKeys();
     bindAttach();
     bindConnectAi();
+    bindFolderAccess();
     void refresh();
   }
 

@@ -7,6 +7,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Menu } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
+const crypto = require("node:crypto");
 const { pathToFileURL } = require("node:url");
 const { installApplicationMenu } = require("./app-menu.cjs");
 const { loadBrand, publicBrandView } = require("./brand.cjs");
@@ -41,6 +42,61 @@ let runtime = null;
 let bus = null;
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
+const activeTalkAborts = new Set();
+const pendingFolderAccess = new Map();
+
+function currentTalkTurnSignal() {
+  try {
+    const mod = require(path.join(__dirname, "..", "dist", "intelligence", "service.js"));
+    return typeof mod.currentTalkTurnSignal === "function" ? mod.currentTalkTurnSignal() : null;
+  } catch {
+    return null;
+  }
+}
+
+function dismissFolderAccess() {
+  for (const finish of pendingFolderAccess.values()) {
+    try {
+      finish(false, true);
+    } catch {
+      /* ignore */
+    }
+  }
+  pendingFolderAccess.clear();
+  const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+  if (win) win.webContents.send("shell:folder-access-dismiss");
+}
+
+function askFolderAccessInPage(folderPath, label) {
+  const signal = currentTalkTurnSignal();
+  if (signal && signal.aborted) {
+    const reason = signal.reason;
+    if (reason instanceof Error) throw reason;
+    return Promise.resolve(false);
+  }
+  const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+  if (!win) return Promise.resolve(false);
+  return new Promise((resolve, reject) => {
+    const id = crypto.randomUUID();
+    let settled = false;
+    const finish = (allowed, aborted) => {
+      if (settled) return;
+      settled = true;
+      pendingFolderAccess.delete(id);
+      if (signal) signal.removeEventListener("abort", onAbort);
+      if (aborted) {
+        const reason = signal && signal.reason;
+        reject(reason instanceof Error ? reason : Object.assign(new Error("已取消。"), { name: "TalkCancelled" }));
+        return;
+      }
+      resolve(allowed === true);
+    };
+    const onAbort = () => finish(false, true);
+    pendingFolderAccess.set(id, finish);
+    if (signal) signal.addEventListener("abort", onAbort, { once: true });
+    win.webContents.send("shell:folder-access", { id, path: folderPath, label: label || folderPath });
+  });
+}
 /** @type {(() => void) | null} */
 let unsubscribe = null;
 /** @type {null | ((input: any) => Promise<any>)} */
@@ -500,23 +556,7 @@ async function bootstrapRuntime() {
   options.autonomousCollabReceive = true;
   options.requestFolderAccess = isElectronTestHarness()
     ? async () => false
-    : async ({ path: folderPath, label }) => {
-        const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
-        const payload = {
-          type: "question",
-          buttons: ["允许", "不允许"],
-          defaultId: 0,
-          cancelId: 1,
-          title: DISPLAY_NAME,
-          message: `允许${DISPLAY_NAME}访问${label}？`,
-          detail: folderPath,
-          noLink: true,
-        };
-        const result = parent
-          ? await dialog.showMessageBox(parent, payload)
-          : await dialog.showMessageBox(payload);
-        return result.response === 0;
-      };
+    : async ({ path: folderPath, label }) => askFolderAccessInPage(folderPath, label);
   runtime = createDigitalMeRuntime(options);
   bus = createCommandBus(runtime);
   unsubscribe = runtime.eventBus.subscribe((event) => {
@@ -746,6 +786,20 @@ function registerIpc() {
             runtime.setConverseAbortSignal(null);
           }
           if (requestId) workConverseAborts.delete(requestId);
+        }
+      }
+
+      if (name === "talk" && runtime && typeof runtime.setTalkAbortSignal === "function") {
+        const ac = new AbortController();
+        activeTalkAborts.add(ac);
+        runtime.setTalkAbortSignal(ac.signal);
+        try {
+          return await bus.invoke(name, input || {});
+        } finally {
+          activeTalkAborts.delete(ac);
+          if (runtime && typeof runtime.setTalkAbortSignal === "function") {
+            runtime.setTalkAbortSignal(activeTalkAborts.size ? [...activeTalkAborts].at(-1).signal : null);
+          }
         }
       }
 
@@ -2062,7 +2116,24 @@ function registerIpc() {
       }
       conversationAbort = null;
     }
+    const err = new Error("已取消。");
+    err.name = "TalkCancelled";
+    for (const ac of activeTalkAborts) {
+      try {
+        if (!ac.signal.aborted) ac.abort(err);
+      } catch {
+        /* ignore */
+      }
+    }
+    dismissFolderAccess();
     return { ok: true };
+  });
+
+  ipcMain.on("shell:folder-access-reply", (_evt, payload) => {
+    const id = payload && payload.id ? String(payload.id) : "";
+    const finish = pendingFolderAccess.get(id);
+    if (!finish) return;
+    finish(payload.allowed === true, false);
   });
 
   ipcMain.handle("shell:cancelWorkRequest", async (_evt, input) => {

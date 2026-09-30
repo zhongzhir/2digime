@@ -261,18 +261,45 @@ function abortError(): Error {
   return err;
 }
 
+function abortedError(signal: AbortSignal): Error {
+  const reason = signal.reason;
+  if (reason instanceof Error) return reason;
+  return abortError();
+}
+
 function waitForAbort(signal: AbortSignal): Promise<never> {
   return new Promise((_resolve, reject) => {
     if (signal.aborted) {
-      reject(abortError());
+      reject(abortedError(signal));
       return;
     }
-    signal.addEventListener('abort', () => reject(abortError()), { once: true });
+    signal.addEventListener('abort', () => reject(abortedError(signal)), { once: true });
   });
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
-  if (signal?.aborted) throw abortError();
+  if (!signal?.aborted) return;
+  const reason = signal.reason;
+  if (reason instanceof Error) throw reason;
+  throw abortError();
+}
+
+function isRetryableModelError(err: unknown): boolean {
+  if (err instanceof Error && (err.name === 'TalkCancelled' || err.name === 'TalkTimeoutError')) return false;
+  const kind = (err as { kind?: string }).kind;
+  if (kind === 'network' || kind === 'timeout' || kind === 'server_error' || kind === 'rate_limited' || kind === 'bad_response') {
+    return true;
+  }
+  const status = (err as { status?: string }).status;
+  return (
+    status === 'PROVIDER_ERROR' ||
+    status === 'PROVIDER_5XX' ||
+    status === 'PROVIDER_TIMEOUT' ||
+    status === 'TEMPORARY_UNAVAILABLE' ||
+    status === 'RATE_LIMITED' ||
+    status === 'PROVIDER_RATE_LIMITED' ||
+    status === 'CONCURRENCY_BUSY'
+  );
 }
 
 function isInternalToolPayload(text: string): boolean {
@@ -426,13 +453,23 @@ export async function runTalkTurn(input: {
   ensureDelegateTool();
   if (cards.length) tools.push(CONSULT_TOOL);
 
-  const chat: TalkChatFn = (req) => {
-    const left = remainingMs(input.deadlineAt);
-    return input.chat({
-      ...req,
-      ...(input.signal ? { signal: input.signal } : {}),
-      ...(Number.isFinite(left) ? { timeoutMs: chatTransportTimeoutMs(left) } : { timeoutMs: TALK_CHAT_TRANSPORT_TIMEOUT_MS }),
-    });
+  const chat: TalkChatFn = async (req) => {
+    throwIfAborted(input.signal);
+    const call = () => {
+      const left = remainingMs(input.deadlineAt);
+      return input.chat({
+        ...req,
+        ...(input.signal ? { signal: input.signal } : {}),
+        ...(Number.isFinite(left) ? { timeoutMs: chatTransportTimeoutMs(left) } : { timeoutMs: TALK_CHAT_TRANSPORT_TIMEOUT_MS }),
+      });
+    };
+    try {
+      return await call();
+    } catch (err) {
+      throwIfAborted(input.signal);
+      if (!isRetryableModelError(err) || remainingMs(input.deadlineAt) < 8000) throw err;
+      return await call();
+    }
   };
 
   const messages: ChatMessage[] = [{ role: 'system', content: system }, ...history];
@@ -523,8 +560,11 @@ export async function runTalkTurn(input: {
     try {
       allowed = await input.requestFolderAccess({ path: resolved.abs, label: resolved.label });
     } catch (err) {
+      if (err instanceof Error && (err.name === 'TalkCancelled' || err.name === 'TalkTimeoutError')) throw err;
+      throwIfAborted(input.signal);
       return fail(String(err instanceof Error ? err.message : err));
     }
+    throwIfAborted(input.signal);
     if (!allowed) {
       deniedThisTurn.add(resolved.abs);
       return fail('主人没有允许访问该文件夹。不要让主人自己运行命令或安装开发工具。');
@@ -769,7 +809,7 @@ export async function runTalkTurn(input: {
           waitForAbort(bound.signal),
         ]);
       } catch (err) {
-        if (input.signal?.aborted) throw err;
+        if (input.signal?.aborted) throw abortedError(input.signal);
         if (isAbortLike(err) || bound.signal.aborted) {
           result = {
             ok: false,

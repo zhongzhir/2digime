@@ -293,6 +293,61 @@ test('import interpret 失败时不得把 source 写成已导入', async () => {
   assert.equal(stored.understandings.length, 0);
 });
 
+test('模型标成边界的原话保持待确认，不会自动变成已确认事实', () => {
+  const self = emptyDigitalSelf('subj_test', '2026-09-05T00:00:00.000Z');
+  const result = applyTellProposals(
+    self,
+    [
+      {
+        text: '不希望助手用写文件的方式产出结果，要求直接在回复里给出内容。',
+        facet: 'boundaries',
+        aboutUser: true,
+        origin: 'user_statement',
+        excerpt: '仍然不要写文件',
+        lasting: true,
+        isBoundary: true,
+      },
+    ],
+    '2026-09-05T00:00:00.000Z',
+  );
+  assert.equal(result.asked, true);
+  assert.equal(self.understandings.length, 1);
+  assert.equal(self.understandings[0]?.status, 'needs_ask');
+  assert.equal(self.understandings[0]?.confirmed, false);
+});
+
+test('用边界替换旧理解时仍待确认，不会顺手变成已确认', () => {
+  const self = emptyDigitalSelf('subj_test', '2026-09-05T00:00:00.000Z');
+  self.understandings.push({
+    id: 'u_old',
+    text: '用户要求对话中不要写入或创建文件',
+    facet: 'boundaries',
+    status: 'needs_ask',
+    confirmed: false,
+    provenance: { origin: 'user_statement', actor: 'owner', statedAt: '2026-09-05T00:00:00.000Z' },
+    updatedAt: '2026-09-05T00:00:00.000Z',
+  });
+  applyTellProposals(
+    self,
+    [
+      {
+        text: '用户要求不要写文件，即在本次及同类任务中不要创建或写入任何文件',
+        facet: 'boundaries',
+        aboutUser: true,
+        origin: 'user_statement',
+        lasting: true,
+        isBoundary: true,
+        replacesId: 'u_old',
+      },
+    ],
+    '2026-09-05T00:00:01.000Z',
+  );
+  const next = self.understandings.find((item) => item.id !== 'u_old');
+  assert.equal(self.understandings.find((item) => item.id === 'u_old')?.status, 'superseded');
+  assert.equal(next?.status, 'needs_ask');
+  assert.equal(next?.confirmed, false);
+});
+
 test('lasting=false 的一次性任务不得写入 current', () => {
   const self = emptyDigitalSelf('subj_test', '2026-09-05T00:00:00.000Z');
   const result = applyTellProposals(
