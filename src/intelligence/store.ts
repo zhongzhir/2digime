@@ -48,11 +48,15 @@ function parseThread(content: string, now: string, fallbackId: string): TalkThre
     if (!parsed || parsed.schemaVersion !== TALK_SCHEMA_VERSION || !Array.isArray(parsed.turns)) {
       return null;
     }
+    const materialPaths = Array.isArray(parsed.materialPaths)
+      ? parsed.materialPaths.map((item) => String(item || '').trim()).filter(Boolean)
+      : [];
     return {
       schemaVersion: TALK_SCHEMA_VERSION,
       threadId: parsed.threadId || fallbackId,
       updatedAt: parsed.updatedAt || now,
       ...(parsed.openGoal ? { openGoal: parsed.openGoal } : {}),
+      ...(materialPaths.length ? { materialPaths } : {}),
       turns: parsed.turns || [],
       executions: parsed.executions || [],
     };

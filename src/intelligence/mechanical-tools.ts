@@ -149,11 +149,11 @@ export function describeAuthorizedFs(auth: AuthorizedFs): string {
   if (!auth.folders.length && !auth.files.length) {
     return [
       '当前没有已授权的可写文件夹。',
-      '只有用户要求在电脑上创建或修改文件、且现有授权覆盖不了目标路径时，才调用 request_folder_access。',
-      '询问、讨论或核对材料时不要申请。不要让主人自己运行命令。',
+      '需要在电脑上创建或修改文件、且现有授权覆盖不了目标路径时，调用 request_folder_access。',
+      '已经覆盖的路径不要再次申请。不要让主人自己运行命令。',
     ].join('\n');
   }
-  const lines = ['已有可复用的本机授权。覆盖范围内不要再次申请。只有用户要求改文件时才写入：'];
+  const lines = ['已有可复用的本机授权。覆盖范围内不要再次申请，也不要扩大到相邻目录。'];
   if (auth.folders.length) {
     lines.push('可读写文件夹（write_file / list_directory 的授权根）：');
     for (const folder of auth.folders) lines.push(`- ${folder}`);

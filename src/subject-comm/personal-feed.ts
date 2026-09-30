@@ -62,6 +62,8 @@ interface FeedCacheFile {
   version: 1;
   personal?: FeedSnapshot;
   lastView?: FeedSnapshot;
+  /** 本轮排序后的完整 id，翻页从这里取，不把 ignore 当成删除。 */
+  rankedIds?: string[];
 }
 
 const MIN_FEED = 6;
@@ -330,7 +332,7 @@ export async function ensurePersonalFeed(input: {
   putNetworkItem?: (item: NetworkItem) => Promise<void>;
   reloadItems?: () => Promise<NetworkItem[]>;
   getItem?: (itemId: string) => Promise<NetworkItem | undefined>;
-  mode: 'open' | 'refresh' | 'reuse' | 'replenish' | 'more';
+  mode: 'open' | 'refresh' | 'reuse' | 'replenish' | 'more' | 'reset';
   now?: string;
 }): Promise<{ view: DiscoverView; reasonCode: FeedReasonCode }> {
   const now = input.now || new Date().toISOString();
@@ -343,6 +345,32 @@ export async function ensurePersonalFeed(input: {
   const prefs = input.preferenceRows || [];
   const recent = input.recentEvents || [];
   const cache = await readCache(input.packageRoot);
+  if (input.mode === 'more' && cache.rankedIds?.length) {
+    const delivered = new Set(cache.lastView?.itemIds || []);
+    const nextIds = cache.rankedIds.filter((id) => !delivered.has(id)).slice(0, MAX_FEED);
+    const nextCards = await resolveCards(nextIds, input.items, input.getItem, now);
+    if (nextCards.length) {
+      const merged = [...(cache.lastView?.itemIds || [])];
+      for (const id of nextCards.map((card) => card.itemId)) {
+        if (!merged.includes(id)) merged.push(id);
+      }
+      cache.lastView = { itemIds: merged, generatedAt: now, mode: 'personal' };
+      await writeCache(input.packageRoot, cache);
+      mark('FIRST_CARD_VISIBLE', nextCards.length);
+      return {
+        view: viewOf({
+          cards: nextCards,
+          preferences: input.preferences,
+          notice: '',
+          reasonCode: 'CACHED_FEED',
+          feedMode: 'personal',
+          networking: input.networking,
+          supplyTrace,
+        }),
+        reasonCode: 'CACHED_FEED',
+      };
+    }
+  }
   const cachedCards = await resolveCards(cache.personal?.itemIds, input.items, input.getItem, now);
   const lastCards = await resolveCards(cache.lastView?.itemIds, input.items, input.getItem, now);
   let networking = input.networking;
@@ -468,11 +496,13 @@ export async function ensurePersonalFeed(input: {
       : [],
   );
   const opened = new Set(openedItemIds(recent));
+  const unseenCount = items.filter((item) => !shown.has(item.itemId) && !opened.has(item.itemId)).length;
   const needReplenish =
-    input.mode === 'replenish'
-      ? items.filter((item) => !shown.has(item.itemId) && !opened.has(item.itemId)).length < MIN_FEED ||
-        !cacheFresh(cache.personal, nowMs)
-      : items.filter((item) => !shown.has(item.itemId) && !opened.has(item.itemId)).length < MIN_FEED;
+    input.mode === 'refresh' || input.mode === 'reset'
+      ? true
+      : input.mode === 'replenish'
+        ? unseenCount < MIN_FEED || !cacheFresh(cache.personal, nowMs)
+        : unseenCount < MIN_FEED;
   let replenished = false;
   let searchAttempted = false;
 
@@ -564,7 +594,7 @@ export async function ensurePersonalFeed(input: {
     }
     if (input.reloadItems) items = (await input.reloadItems()).filter((item) => isConsumableItem(item, now) && !blocked(item, prefs));
     const stillShort = items.filter((item) => !shown.has(item.itemId) && !opened.has(item.itemId)).length < MIN_FEED;
-    if (ranked && input.searchWeb && stillShort) {
+    if (ranked && input.searchWeb && (stillShort || input.mode === 'refresh' || input.mode === 'more' || input.mode === 'reset')) {
       for (const query of queries.slice(0, 2)) {
         searchAttempted = true;
         try {
@@ -650,7 +680,12 @@ export async function ensurePersonalFeed(input: {
         generatedAt: now,
         mode: 'personal',
       };
-      await writeCache(input.packageRoot, { version: 1, personal: snapshot, lastView: snapshot });
+      await writeCache(input.packageRoot, {
+        version: 1,
+        personal: snapshot,
+        lastView: snapshot,
+        ...(cache.rankedIds?.length ? { rankedIds: cache.rankedIds } : {}),
+      });
       mark('FIRST_CARD_VISIBLE', openCards.length);
       return finish(
         viewOf({
@@ -695,7 +730,40 @@ export async function ensurePersonalFeed(input: {
   });
   mark('SELECT_DONE', selected.ok ? selected.decisions.length : 0);
   if (!selected.ok) {
-    const fallback = input.mode === 'more' ? [] : cachedCards.length ? cachedCards : lastCards;
+    const fetched =
+      input.mode === 'more'
+        ? []
+        : candidates
+            .map((item) => cardFromNetworkItem(item, '已经取到，这一轮还没排好顺序。', 'directory'))
+            .filter(isConcreteContentCard);
+    const page = fetched.slice(0, MAX_FEED);
+    if (page.length) {
+      cache.rankedIds = fetched.map((card) => card.itemId);
+      const snapshot: FeedSnapshot = {
+        itemIds: page.map((card) => card.itemId),
+        generatedAt: now,
+        mode: 'personal',
+      };
+      await writeCache(input.packageRoot, {
+        version: 1,
+        personal: snapshot,
+        lastView: snapshot,
+        rankedIds: cache.rankedIds,
+      });
+      mark('FIRST_CARD_VISIBLE', page.length);
+      return finish(
+        viewOf({
+          cards: page,
+          preferences: input.preferences,
+          notice: '已经取到这些内容。这一轮没能排好顺序，先按取到的顺序放在这里。',
+          reasonCode: replenished ? 'REPLENISHED' : 'LOCAL_DIRECTORY',
+          feedMode: 'personal',
+          networking,
+        }),
+        replenished ? 'REPLENISHED' : 'LOCAL_DIRECTORY',
+      );
+    }
+    const fallback = cachedCards.length ? cachedCards : lastCards;
     if (fallback.length) mark('FIRST_CARD_VISIBLE', fallback.length);
     return finish(
       viewOf({
@@ -727,27 +795,16 @@ export async function ensurePersonalFeed(input: {
     );
   }
   const byId = new Map(candidates.map((item) => [item.itemId, item]));
-  const cards = selected.decisions
-    .filter((row) => row.decision === 'show')
+  const ordered = selected.decisions
     .map((row) => {
       const item = byId.get(row.itemId);
-      if (!item) return null;
+      if (!item || blocked(item, prefs)) return null;
       const card = cardFromNetworkItem(item, row.reason, 'directory');
       return isConcreteContentCard(card) ? card : null;
     })
-    .filter((card): card is DiscoverCard => !!card)
-    .slice(0, MAX_FEED);
-  if (cards.length < MIN_FEED) {
-    const kept = new Set(cards.map((card) => card.itemId));
-    for (const item of candidates) {
-      if (kept.has(item.itemId) || blocked(item, prefs)) continue;
-      const card = cardFromNetworkItem(item, '也留一条不同的内容，方便你自己看。', 'directory');
-      if (!isConcreteContentCard(card)) continue;
-      cards.push(card);
-      kept.add(card.itemId);
-      if (cards.length >= MIN_FEED) break;
-    }
-  }
+    .filter((card): card is DiscoverCard => !!card);
+  const cards = ordered.slice(0, MAX_FEED);
+  cache.rankedIds = ordered.map((card) => card.itemId);
 
   if (!cards.length) {
     const fallback = input.mode === 'more' ? [] : cachedCards.length ? cachedCards : lastCards;
@@ -775,7 +832,12 @@ export async function ensurePersonalFeed(input: {
     generatedAt: now,
     mode: 'personal',
   };
-  await writeCache(input.packageRoot, { version: 1, personal: snapshot, lastView: snapshot });
+  await writeCache(input.packageRoot, {
+    version: 1,
+    personal: snapshot,
+    lastView: snapshot,
+    rankedIds: cache.rankedIds,
+  });
   const reasonCode: FeedReasonCode = replenished ? 'REPLENISHED' : 'CACHED_FEED';
   mark('FIRST_CARD_VISIBLE', cards.length);
   return finish(

@@ -17,7 +17,7 @@ import {
   listActiveFilesystemGrantFolders,
   saveFilesystemGrant,
 } from '../authorization/filesystem-grant';
-import { expectedFromExecutions, hasObservedMutation, isMutationEffectName } from './talk-effects';
+import { hasObservedMutation } from './talk-effects';
 
 /** 做事（含首次获取代码执行能力）需要数分钟；180s 会在 runtime 仍工作时掐断。 */
 export const TALK_TURN_DEADLINE_MS = 600_000;
@@ -161,7 +161,9 @@ export class TalkService {
     } catch {
       selfContext = '读取数字之我失败。不得解释为不了解用户，也不要编造本人事实。';
     }
-    const materialBlock = await attachedMaterialBlock(input.contextPaths);
+    const attachedNow = (input.contextPaths || []).map((item) => String(item || '').trim()).filter(isExistingFile);
+    thread.materialPaths = [...new Set([...(thread.materialPaths || []), ...attachedNow])];
+    const materialBlock = await attachedMaterialBlock(thread.materialPaths);
     if (materialBlock) selfContext = `${selfContext}\n\n${materialBlock}`;
     if (spoken && this.resolveContentSeek) {
       try {
@@ -177,7 +179,7 @@ export class TalkService {
     const grantedFolders = await listActiveFilesystemGrantFolders(pkg.rootDir);
     const contextPaths = [
       ...new Set(
-        [...(input.contextPaths || []), ...grantedFolders]
+        [...(input.contextPaths || []), ...(thread.materialPaths || []), ...grantedFolders]
           .map((item) => String(item || '').trim())
           .filter(Boolean),
       ),
@@ -295,39 +297,58 @@ export class TalkService {
   }
 }
 
-const MATERIAL_CHARS = 4000;
-const MATERIAL_FILES = 3;
+const MATERIAL_FILE_CHARS = 4000;
+const MATERIAL_TOTAL_CHARS = 12000;
+const MATERIAL_FILES = 6;
 
-/** 把本次附上的文件正文交给模型。授权文件夹不整树读取。读失败必须可见，不能当成空白。 */
+function isExistingFile(file: string): boolean {
+  try {
+    return statSync(file).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/** 把已附文件的摘录交给模型，并写明未纳入的部分。授权文件夹不整树读取。 */
 export async function attachedMaterialBlock(contextPaths?: string[]): Promise<string> {
+  const files = [...new Set((contextPaths || []).map((item) => String(item || '').trim()).filter(Boolean))].filter(
+    isExistingFile,
+  );
+  if (!files.length) return '';
   const blocks: string[] = [];
-  for (const raw of contextPaths || []) {
-    const file = String(raw || '').trim();
-    if (!file) continue;
-    let isFile = false;
-    try {
-      isFile = statSync(file).isFile();
-    } catch {
-      isFile = false;
+  let used = 0;
+  const listed = files.slice(0, MATERIAL_FILES);
+  const skipped = files.slice(MATERIAL_FILES);
+  for (const file of listed) {
+    const room = MATERIAL_TOTAL_CHARS - used;
+    if (room <= 0) {
+      blocks.push(`- ${file}：本轮摘录容量已用完，正文未放入上下文。需要时用 read_file 读取。不得说成已经读完。`);
+      continue;
     }
-    if (!isFile) continue;
     try {
       const extracted = await extractFile(file);
       const text = String(extracted.text || '').trim();
       if (!text) {
         blocks.push(`- ${file}：文件在，但没有抽出可用正文。不得说成已经读过内容。`);
-      } else {
-        const body = text.slice(0, MATERIAL_CHARS);
-        const tail = text.length > MATERIAL_CHARS ? '\n（正文在此截断，需要时再读取该文件。）' : '';
-        blocks.push(`- ${file}\n${body}${tail}`);
+        continue;
       }
+      const take = Math.min(MATERIAL_FILE_CHARS, room, text.length);
+      const body = text.slice(0, take);
+      used += body.length;
+      const omitted = text.length - body.length;
+      const tail =
+        omitted > 0
+          ? `\n（未读完：原文 ${text.length} 字，这次摘录 ${body.length} 字，省略 ${omitted} 字。需要其余部分时 read_file。不得说成已经读完。）`
+          : `\n（这次摘录覆盖抽出的 ${text.length} 字。）`;
+      blocks.push(`- ${file}\n${body}${tail}`);
     } catch (err) {
       blocks.push(`- ${file}：读取失败（${err instanceof Error ? err.message : String(err)}）。不得说成已经读过。`);
     }
-    if (blocks.length >= MATERIAL_FILES) break;
   }
-  if (!blocks.length) return '';
-  return `本次用户附上的材料正文（证据，不是新的写作任务）：\n${blocks.join('\n\n')}`;
+  for (const file of skipped) {
+    blocks.push(`- ${file}：本轮未放入摘录。需要时用 read_file 读取。不得说成已经读完。`);
+  }
+  return `已附材料（路径会留在这个对话里，后续回合仍可 read_file；下面的摘录不是全文记忆）：\n${blocks.join('\n\n')}`;
 }
 
 export function composeTalkUserText(text: string, contextPaths?: string[]): string {
@@ -368,20 +389,18 @@ export function assistantFromTurnExecutions(
     (item) => item.ok && (MUTATING_CAPS.has(item.capabilityId) || item.observedEffect?.mutated === true),
   );
   const anyOk = execs.some((item) => item.ok);
-  const expected = expectedFromExecutions(execs);
-  const needsMutation = expected.some((row) => isMutationEffectName(row.effect));
   const mutated = hasObservedMutation(execs) || okWrites.length > 0;
   const failed = [...execs].reverse().find((item) => !item.ok);
-  if ((failed && !okWrites.length && !mutated) || (needsMutation && !mutated)) {
-    const fact = String(failed?.summary || failed?.failureReason || '目标还没有完成：没有观察到所需修改。').trim();
+  if (failed && !okWrites.length && !mutated) {
+    const fact = String(failed.summary || failed.failureReason || '这次没有完成。').trim();
     return {
       text: fact.slice(0, 4000),
       notice: fact.slice(0, 400),
       executionIds,
-      outcome: needsMutation && !mutated ? 'FAILED' : anyOk ? 'PARTIAL_SUCCESS' : 'FAILED',
+      outcome: anyOk ? 'PARTIAL_SUCCESS' : 'FAILED',
     };
   }
-  const lastWrite = [...okWrites].reverse()[0] || [...execs].reverse().find((item) => item.ok);
+  const lastWrite = [...okWrites].reverse()[0];
   const outputPath = lastWrite?.outputPath;
   const changedNames = uniqueBasenames(
     okWrites.flatMap((item) => [...(item.producedOutputs || []), ...(item.outputPath ? [item.outputPath] : [])]),

@@ -29,12 +29,7 @@ import type {
 } from './types';
 import type { ConsultResult, PublicSubjectCard } from '../subject-collab/types';
 import { formatPublicCardsForModel } from '../subject-collab/public-card';
-import {
-  deriveTalkOutcome,
-  expectedFromExecutions,
-  hasObservedMutation,
-  unsatisfiedRequiredEffects,
-} from './talk-effects';
+import { deriveTalkOutcome, hasObservedMutation } from './talk-effects';
 
 export const NO_MODEL_NOTICE = '需要先连接 AI 能力，才能继续交流。';
 
@@ -72,7 +67,7 @@ const SET_EXPECTED_EFFECTS_TOOL: ChatToolDefinition = {
   function: {
     name: 'set_expected_effects',
     description:
-      '仅当用户已经委托你改变文件或外部结果时，记下完成后应能观察到的结果。改文件用 content_modified 或 file_created；只看不改用 observation。询问、讨论或确认能力时不要调用。这不是完成任务，也不会自动开始写文件。',
+      '可选：记下你准备核对的结果。这不是任务开关，也不会强迫继续调用工具或写文件。完成与否由你根据用户要求和工具回读判断。',
     parameters: {
       type: 'object',
       properties: {
@@ -129,7 +124,7 @@ const REQUEST_FOLDER_ACCESS_TOOL: ChatToolDefinition = {
   function: {
     name: 'request_folder_access',
     description:
-      '仅当用户已经要求在电脑上创建或修改文件、且当前授权覆盖不了目标路径时，向主人申请一次访问范围。path 可以是 desktop / 桌面、或其下子文件夹、或桌面/文档/下载下的绝对路径。询问能力、讨论写法、或核对已有材料时不要调用。已覆盖的路径不要再次申请。',
+      '需要在用户电脑上创建或修改文件、且现有授权覆盖不了目标路径时，向主人申请一次访问范围。path 可以是 desktop / 桌面、其子文件夹，或桌面/文档/下载下的绝对路径。已经覆盖的路径不要再次申请，也不要借路径写法扩大范围。',
     parameters: {
       type: 'object',
       properties: {
@@ -382,16 +377,15 @@ export async function runTalkTurn(input: {
   let agents = input.agents.slice();
   const system = [
     '你是用户的兔机米，也是用户的超级助手。',
-    '根据当前数字之我和本次材料理解用户；不要编造未写入的本人事实，也不要把没读到的材料说成已经读过。',
-    '先分清这次是询问、讨论、委托，还是对上一句的纠正。询问能力和机制时先准确回答。需要核对材料时可以读取，但不要把询问扩展成改写、生成文件或其他没有委托的任务。',
-    '只有用户明确要求创建、修改、保存或交付文件时，才申请文件夹或写入。已有授权覆盖目标路径时直接使用，不要再次申请。',
-    '用户明确委托之后，技术实现、工具选择和普通失败恢复由你完成，直到交付或说明真实阻碍。不要把工具交给主人自己操作。',
-    '能直接完成的委托不要仅为「看起来专业」而调用外部能力。需要已连接的专业能力时再 delegate。每步先看真实结果再决定下一步。',
-    '当你已经能够给出最终答复时，直接回答，不要继续无意义的工具调用。',
+    '根据当前数字之我和本次能读到的材料理解用户。摘录若标明未读完，不得说成已经读完；需要其余部分时读取原文件。后续回合仍可读取已附上的文件，不要把上一轮摘录当成全文仍在上下文里。',
+    '是否搜索、读取、写入或调用外部能力，由你根据用户这次要什么来决定。询问也可以查证；委托也可以只在对话里交付。不要另做用户没要求的事，也不要因为句式而拒绝需要的工具。',
+    '已有授权覆盖目标路径时直接使用，不要再次申请，也不要扩大到相邻目录。',
+    '技术实现、工具选择和普通失败恢复由你完成。不要把工具交给主人自己操作。',
+    '需要已连接的专业能力时再 delegate。每步先看真实结果再决定下一步。',
+    '能够回答时就回答，不要无意义地继续调用工具。',
     '只有真实涉及资金、隐私或凭证授权、对外发送或发布、删除或不可逆修改、超出现有授权，或只能由主人作出的价值判断时，才请求主人决定。',
     '对可能变化的公开事实，可使用已连接的实时能力核验。',
-    '工具返回的是执行事实或证据，不是必须照抄的答案。不要把未读取说成已读取，不要把未修改说成已修改，不要把未保存说成已保存。',
-    '用户要求改动文件时，先用 set_expected_effects 记下完成后应观察到的结果，再动手。只看不改则 effect=observation。工具返回 ok 不等于目标完成。',
+    '工具回读是文件和执行的机械事实。完成与否由你对照用户要求和这些事实判断，不要另造验收句子去否定已经写对的文件，也不要把没发生的读取、修改或保存说成已经发生。',
     '不要问用户选择 Agent、任务类型、workflow、协作者或协议。',
     input.confirmHint
       ? `有一件关于用户本人的理解需要用户亲自确认：${input.confirmHint}。用普通人语言问一句，不要提内部机制。`
@@ -516,7 +510,7 @@ export async function runTalkTurn(input: {
         evidenceOnly: false,
         producedOutputs: [resolved.abs],
         outputPath: resolved.abs,
-        summary: `该文件夹已在授权范围内：${resolved.abs}。不要再次申请。只有用户要求创建或修改文件时才写入。`,
+        summary: `该文件夹已在授权范围内：${resolved.abs}。不要再次申请，也不要扩大到相邻目录。`,
       });
     }
     if (deniedThisTurn.has(resolved.abs)) {
@@ -576,7 +570,7 @@ export async function runTalkTurn(input: {
       evidenceOnly: false,
       producedOutputs: [resolved.abs],
       outputPath: resolved.abs,
-        summary: `主人允许访问 ${resolved.abs}。不要对同一范围再次申请。只有用户要求创建或修改文件时才写入。`,
+        summary: `主人允许访问 ${resolved.abs}。同一范围不要再次申请，也不要扩大到相邻目录。`,
     });
   };
 
@@ -621,8 +615,11 @@ export async function runTalkTurn(input: {
     try {
       await fs.mkdir(path.dirname(resolved.abs), { recursive: true });
       await fs.writeFile(resolved.abs, parsed.content, 'utf8');
+      const readback = await fs.readFile(resolved.abs, 'utf8');
       const st = await fs.stat(resolved.abs);
       if (!st.isFile() || st.size <= 0) return fail('写入后文件不存在或为空。');
+      const preview = readback.slice(0, 2000);
+      const readbackNote = readback.length > 2000 ? `回读前 2000 字，文件共 ${readback.length} 字。` : `回读全文 ${readback.length} 字。`;
       lastOk = true;
       lastEvidenceOnly = false;
       lastPath = resolved.abs;
@@ -636,7 +633,7 @@ export async function runTalkTurn(input: {
         capabilityId: 'write_file',
         instruction: parsed.relativePath,
         ok: true,
-        summary: `已写入 ${resolved.abs}`,
+        summary: `已写入 ${resolved.abs}。${readbackNote}`,
         producedOutputs: [resolved.abs],
         outputPath: resolved.abs,
         observedEffect: { kind, target: resolved.abs, mutated: true },
@@ -648,7 +645,10 @@ export async function runTalkTurn(input: {
         evidenceOnly: false,
         producedOutputs: [resolved.abs],
         outputPath: resolved.abs,
-        summary: `已写入 ${resolved.abs}`,
+        readback: preview,
+        readbackChars: readback.length,
+        readbackTruncated: readback.length > preview.length,
+        summary: `已写入 ${resolved.abs}。${readbackNote} 以这次回读为文件事实，不要另造验收句子否定它。`,
       });
     } catch (err) {
       return fail(String(err instanceof Error ? err.message : err));
@@ -859,7 +859,7 @@ export async function runTalkTurn(input: {
         capabilityId: 'set_expected_effects',
         effects,
         summary: ok
-          ? '已记录验收标准。这不是任务完成，也不会因此开始写文件。只有用户要求改文件时才继续写入。'
+          ? '已记下你声明的核对点。这不是完成判断，也不会强迫继续调用工具。以随后的工具回读和用户要求为准。'
           : 'effects 不能为空。',
       });
     }
@@ -1020,43 +1020,28 @@ export async function runTalkTurn(input: {
   };
   await drainTools();
 
-  const MAX_NUDGES = 2;
-  let nudges = 0;
-  const mutatingAttempt = () =>
-    thread.executions.some(
-      (item) =>
-        executionIds.includes(item.id) &&
-        (item.capabilityId === 'write_file' ||
-          item.capabilityId === 'export_file' ||
-          item.observedEffect?.mutated === true),
-    );
-  while (nudges < MAX_NUDGES && toolRounds < MAX_TOOL_ROUNDS && mutatingAttempt()) {
-    const turnExecs = thread.executions.filter((item) => executionIds.includes(item.id));
-    const expected = expectedFromExecutions(turnExecs);
-    const reason = unsatisfiedRequiredEffects(expected, turnExecs, reads, mutations);
-    if (!reason) break;
-    nudges += 1;
-    messages.push({
-      role: 'system',
-      content: `机械事实：${reason} 继续使用已有能力完成目标，不要宣布成功。`,
-    });
-    throwIfAborted(input.signal);
-    current = await chat({ messages, tools });
-    await drainTools();
-  }
-
   const turnExecs = thread.executions.filter((item) => executionIds.includes(item.id));
-  const expected = expectedFromExecutions(turnExecs);
-  const stillOpen = Boolean(unsatisfiedRequiredEffects(expected, turnExecs, reads, mutations));
-  const outcome = deriveTalkOutcome({ execs: turnExecs, expected, stillOpen });
-  const openReason = unsatisfiedRequiredEffects(expected, turnExecs, reads, mutations);
+  const failedWrites = turnExecs.filter(
+    (item) => !item.ok && (item.capabilityId === 'write_file' || item.capabilityId === 'export_file'),
+  );
+  const accessDenied = turnExecs.some((item) => !item.ok && item.capabilityId === 'request_folder_access');
+  const wrote = hasObservedMutation(turnExecs);
+  const outcome = deriveTalkOutcome({
+    execs: turnExecs,
+    expected: [],
+    stillOpen: (failedWrites.length > 0 || accessDenied) && !wrote,
+  });
 
   // 无 toolCalls 即为模型 final assistant response；下方落 Thread，由 service writeThread → renderer。
+  // 完成判断不看模型自定的验收句子。写失败时附上工具事实；写成功不以字符串不一致改口失败。
   let assistantText = deliverText(current.text);
-  if (stillOpen && mutatingAttempt() && !hasObservedMutation(turnExecs) && openReason) {
-    assistantText = openReason;
+  if (failedWrites.length && !wrote) {
+    const fact = String(failedWrites[failedWrites.length - 1]?.summary || failedWrites[failedWrites.length - 1]?.failureReason || '').trim();
+    if (fact && !assistantText.includes(fact.slice(0, 24))) {
+      assistantText = `${assistantText}\n\n${fact}`.trim();
+    }
   }
-  const resultPath = lastOk && !lastEvidenceOnly ? lastPath : undefined;
+  const resultPath = wrote && lastOk && !lastEvidenceOnly ? lastPath : undefined;
   thread.turns.push({
     id: `turn_${randomUUID()}`,
     at: input.now,

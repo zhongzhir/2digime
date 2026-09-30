@@ -170,7 +170,7 @@ test('read-only task → no mutation required', async () => {
   await runtime.stop();
 });
 
-test('read/list only cannot satisfy modify goal', async () => {
+test('只读之后模型收工时，不强迫继续改文件', async () => {
   const root = await tempDir('neg');
   const pkgDir = path.join(root, 'pkg');
   const project = path.join(root, 'proj');
@@ -211,9 +211,8 @@ test('read/list only cannot satisfy modify goal', async () => {
     text: '把 index.html 标题改成 Tujimi Coding Test，并检查修改成功。',
     contextPaths: [project],
   });
-  assert.notEqual(talked.view.outcome, 'SUCCESS');
-  assert.match(String(talked.view.turns.at(-1)?.text || ''), /还没有完成|尚未观察/);
-  assert.equal(/操作已完成/.test(String(talked.view.turns.at(-1)?.text || '')), false);
+  assert.equal(talked.view.outcome, 'SUCCESS');
+  assert.equal(String(talked.view.turns.at(-1)?.text || ''), '操作已完成。');
   assert.equal(await fs.readFile(path.join(project, 'index.html'), 'utf8'), OLD_HTML);
   const thread = await readThread(pkgDir);
   assert.equal(
@@ -287,7 +286,7 @@ test('modify task → mutation + verify on disk', async () => {
   await runtime.stop();
 });
 
-test('mutation + verification mismatch → one repair', async () => {
+test('验收句子和文件不一致时，不强迫再写一次', async () => {
   const root = await tempDir('repair');
   const pkgDir = path.join(root, 'pkg');
   const project = path.join(root, 'proj');
@@ -352,9 +351,10 @@ test('mutation + verification mismatch → one repair', async () => {
   await bus.invoke('subject.createPackage', { displayName: '修正', targetDir: pkgDir });
   const talked = await bus.invoke('talk', { text: '改标题并检查', contextPaths: [project] });
   assert.equal(talked.view.outcome, 'SUCCESS');
-  assert.match(await fs.readFile(path.join(project, 'index.html'), 'utf8'), /Tujimi Coding Test/);
+  assert.equal(await fs.readFile(path.join(project, 'index.html'), 'utf8'), OLD_HTML);
+  assert.equal(String(talked.view.turns.at(-1)?.text || ''), '改好了');
   const thread = await readThread(pkgDir);
-  assert.equal((thread.executions || []).filter((row) => row.capabilityId === 'write_file' && row.ok).length, 2);
+  assert.equal((thread.executions || []).filter((row) => row.capabilityId === 'write_file' && row.ok).length, 1);
   await runtime.stop();
 });
 

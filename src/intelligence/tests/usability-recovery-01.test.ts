@@ -81,7 +81,8 @@ test('询问写法时材料进入上下文，且只声明验收标准不会改�
       contextPaths: [manuscript],
     });
     assert.match(seen, /短句/);
-    assert.match(seen, /先分清这次是询问/);
+    assert.match(seen, /是否搜索、读取、写入/);
+    assert.equal(seen.includes('先分清这次是询问'), false);
     assert.equal(seen.includes('直接做'), false);
     assert.equal(calls, 2);
     const reply = talked.view.turns.map((turn) => turn.text).join('\n');
@@ -133,6 +134,34 @@ test('同一目录的第二种写法不再弹出授权', async () => {
     await bus.invoke('subject.createPackage', { displayName: '授权', targetDir: pkgDir });
     await bus.invoke('talk', { text: '请在 SameFolder 里放一个说明文件' });
     assert.equal(asked.length, 1);
+    await runtime.stop();
+  });
+});
+
+test('后续追问仍能读到已附材料，摘录未读完时不会说成读完', async () => {
+  const home = await tempDir('follow-home');
+  const pkgDir = path.join(await tempDir('follow-pkg'), 'pkg');
+  const manuscript = path.join(home, 'long-note.md');
+  await fs.writeFile(manuscript, `开头规则：先写对方在做什么。${'续'.repeat(5000)}`, 'utf8');
+  const seen: string[] = [];
+  await withHome(home, async () => {
+    const runtime = createDigitalMeRuntime({
+      documentCapability: 'fake',
+      registerOpenAiStub: false,
+      searchCapability: false,
+      talkChat: async ({ messages }) => {
+        seen.push(messages.map((item) => String(item.content || '')).join('\n'));
+        return { text: '我按摘录里的规则回答。' };
+      },
+      talkProfessionals: [],
+    });
+    const bus = createCommandBus(runtime);
+    await bus.invoke('subject.createPackage', { displayName: '追问', targetDir: pkgDir });
+    await bus.invoke('talk', { text: '看看这份笔记怎么开头', contextPaths: [manuscript] });
+    await bus.invoke('talk', { text: '那下一句呢' });
+    assert.match(seen[0] || '', /未读完/);
+    assert.match(seen[1] || '', /先写对方在做什么/);
+    assert.match(seen[1] || '', /long-note\.md/);
     await runtime.stop();
   });
 });

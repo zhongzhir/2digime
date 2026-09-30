@@ -96,7 +96,7 @@ export async function selectNetworkItems(input: {
   const catalog = input.items.map((item) => ({
     itemId: item.itemId,
     title: item.content.title,
-    text: item.content.text,
+    text: String(item.content.text || '').replace(/\s+/g, ' ').trim().slice(0, 180),
     ...(item.content.url ? { url: item.content.url } : {}),
     ...(item.content.contentType ? { contentType: item.content.contentType } : {}),
     publisherSubjectId: item.publisherSubjectId,
@@ -104,14 +104,14 @@ export async function selectNetworkItems(input: {
   }));
   const expected = new Set(input.items.map((item) => item.itemId));
   const system = [
-    '你是这个人的 2digime。根据数字之我、当前需要和明确反馈，为这些公开候选排序。',
-    '数字之我不是准入过滤器。不确定时可以 show，并保留新主题、新来源和意外发现。',
+    '你是这个人的 2digime。给这些公开候选排序，而不是做准入审查。',
+    'show 表示现在更靠前，ignore 表示靠后，不是删除。用户这次明确要看的主题优先于历史偏好。单条不喜欢不要变成封禁整个主题。',
     '只输出 JSON：{"decisions":[{"itemId":"...","decision":"show"|"ignore","reason":"..."}]}。',
-    '必须覆盖输入的每一条 itemId，不得增删。reason 用一句中文，不超过 40 字，普通人能懂，不要 score。',
+    'decisions 按你认为现在该先看到的顺序排列。必须覆盖每一条 itemId。reason 用一句中文，不超过 40 字，普通人能懂，不要 score。',
     '优化 USER VALUE：相关、有用、质量、新鲜、符合明确偏好与当前目标、保持多样与必要新奇。',
     '候选可能带 contentType（article/video/image/audio）。在相关和质量足够时，不要把视频、图片、音频全部 ignore 只留文章。不要为凑媒介类型而选低质或不相关项，也不要使用固定比例。',
     '禁止优化停留时长、点击率、打开次数或让人一直刷。不要只重复一个主题，也不要为多样性塞低质内容。',
-    'show：现在值得看到，包括相邻或意外但仍然可用的内容。ignore：明显低质、越界、失效，或用户明确不再看的那一条。',
+    'show：现在更靠前，包括相邻或意外但仍然可用的内容。ignore：先排后，不是从信息流删掉。只有用户明确不再看的来源才排除。',
     '加推和关注提高相近内容的优先级。不喜欢只针对用户指出的那一条，不要因此封禁整个主题或来源。只有 block 才排除对应来源。',
     '这些指令不是数字之我身份，不要把它们写回用户是谁。',
     '近期打开/搜索只是会过期的短期上下文，不是长期「喜欢」，不要写回数字之我。',

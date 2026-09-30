@@ -71,6 +71,12 @@ test('canonical path：拒绝 UNC / ..，兄弟目录互不覆盖，子路径被
   assert.equal(folderCovers(granted, child), true);
   assert.equal(folderCovers(granted, sibling), false);
   assert.equal(folderCovers(granted, canonicalizeFolderPath(granted)), true);
+  const prefix = path.join(home, 'Desktop', 'Tide');
+  const neighbor = path.join(home, 'Desktop', 'TideNote');
+  assert.equal(folderCovers(prefix, neighbor), false);
+  assert.equal(folderCovers(prefix, path.join(prefix, 'note.txt')), true);
+  assert.equal(folderCovers(prefix.toUpperCase(), path.join(prefix, 'note.txt')), true);
+  assert.equal(folderCovers(prefix.replace(/\\/g, '/'), path.join(prefix, 'note.txt')), true);
 });
 
 test('同目录第二回合与重启后不再询问；子路径可用', async () => {

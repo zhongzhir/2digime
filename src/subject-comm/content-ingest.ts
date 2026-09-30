@@ -238,7 +238,9 @@ async function toNetworkItem(input: {
       title,
       text,
       url: canonicalUrl,
-      ...(media.contentType ? { contentType: media.contentType } : {}),
+      ...((media.contentType || (!media.mediaUrl && !media.embedUrl ? 'article' : ''))
+        ? { contentType: media.contentType || 'article' }
+        : {}),
       ...(media.author || input.item.author ? { author: media.author || input.item.author } : {}),
       ...(input.item.publishedAt && Number.isFinite(Date.parse(input.item.publishedAt))
         ? { publishedAt: new Date(input.item.publishedAt).toISOString() }

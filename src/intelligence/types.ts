@@ -59,6 +59,8 @@ export interface TalkThread {
   openGoal?: string;
   turns: TalkTurn[];
   executions: TalkExecution[];
+  /** 本对话用户附上的文件路径。后续回合仍可读取，不是另一套记忆。 */
+  materialPaths?: string[];
 }
 
 export type TalkTurnOutcome = 'SUCCESS' | 'PARTIAL_SUCCESS' | 'FAILED' | 'CANCELLED';

@@ -18,7 +18,6 @@
   let activeFeedMode = 'personal';
   let moreInFlight = false;
   let moreExhausted = false;
-  let autoMore = 0;
 
   function newSearchGenerationId() {
     return 'sg_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
@@ -60,7 +59,7 @@
 
   function sourceLine(card) {
     const bits = [];
-    if (card.publisherDisplayName) bits.push(card.publisherDisplayName);
+    if (card.publisherDisplayName && card.publisherDisplayName !== card.title) bits.push(card.publisherDisplayName);
     else if (card.url) {
       try {
         bits.push(new URL(card.url).hostname.replace(/^www\./, ''));
@@ -86,7 +85,7 @@
 
   function typeLabel(card) {
     const map = { article: '文章', image: '图片', audio: '音频', video: '视频' };
-    return map[card.contentType] || '';
+    return map[card.contentType] || (!card.mediaUrl && !card.embedUrl && card.url ? '文章' : '');
   }
 
   function consumeLabel(card) {
@@ -213,10 +212,13 @@
       body.appendChild(meta);
     }
     if (card.text && type !== 'image') {
-      const p = document.createElement('p');
-      p.className = 'content-discover-excerpt';
-      p.textContent = card.text;
-      body.appendChild(p);
+      const raw = String(card.text || '').replace(/\s+/g, ' ').trim();
+      if (raw && raw !== String(card.title || '').trim()) {
+        const p = document.createElement('p');
+        p.className = 'content-discover-excerpt';
+        p.textContent = raw.length > 180 ? raw.slice(0, 180) + '…' : raw;
+        body.appendChild(p);
+      }
     }
     if (type === 'audio' && isHttps(card.mediaUrl) && card.consumption !== 'OFFICIAL_EMBED') {
       const audio = document.createElement('audio');
@@ -552,18 +554,20 @@
     } finally {
       moreInFlight = false;
     }
-    if (!moreExhausted) maybeLoadMore(false);
+    if (!moreExhausted) maybeLoadMore();
   }
 
-  function maybeLoadMore(fromUser) {
-    if (!fromUser && autoMore >= 2) return;
+  function feedScroller() {
+    return document.getElementById('panel-discover') || document.scrollingElement || document.documentElement;
+  }
+
+  function maybeLoadMore() {
     if (moreInFlight || moreExhausted || activeFeedMode !== 'personal' || activeSection !== 'for-you') return;
-    const scroller = document.scrollingElement || document.documentElement;
+    const scroller = feedScroller();
     if (!scroller) return;
     const nearEnd = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 280;
     const shortPage = scroller.scrollHeight <= scroller.clientHeight + 8;
     if (!nearEnd && !shortPage) return;
-    if (!fromUser) autoMore += 1;
     void loadMore();
   }
 
@@ -571,7 +575,6 @@
     const client = api();
     if (!client || typeof client.invoke !== 'function') return;
     moreExhausted = false;
-    autoMore = 0;
     setStatus('兔机米正在帮你找些值得看的内容……');
     try {
       const result = await client.invoke('content', {
@@ -608,7 +611,6 @@
     activeFeedMode = 'intent';
     lastView = null;
     moreExhausted = false;
-    autoMore = 0;
     if (opts && opts.navigate) await goDiscover({ skipRefresh: true });
     showSection('for-you');
     try {
@@ -683,7 +685,9 @@
     }
     if (!document.documentElement.dataset.discoverScrollBound) {
       document.documentElement.dataset.discoverScrollBound = '1';
-      window.addEventListener('scroll', () => maybeLoadMore(true), { passive: true });
+      window.addEventListener('scroll', () => maybeLoadMore(), { passive: true });
+      const panel = document.getElementById('panel-discover');
+      if (panel) panel.addEventListener('scroll', () => maybeLoadMore(), { passive: true });
     }
   }
 

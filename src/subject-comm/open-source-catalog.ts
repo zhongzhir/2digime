@@ -34,6 +34,27 @@ export const OPEN_SOURCE_CATALOG: OpenSourceEndpoint[] = [
     contentTypes: ['article'],
   },
   {
+    id: 'guardian-world',
+    label: 'The Guardian',
+    kind: 'media_rss',
+    url: 'https://www.theguardian.com/world/rss',
+    contentTypes: ['article'],
+  },
+  {
+    id: 'npr-news',
+    label: 'NPR',
+    kind: 'media_rss',
+    url: 'https://feeds.npr.org/1001/rss.xml',
+    contentTypes: ['article'],
+  },
+  {
+    id: 'aljazeera-all',
+    label: 'Al Jazeera',
+    kind: 'media_rss',
+    url: 'https://www.aljazeera.com/xml/rss/all.xml',
+    contentTypes: ['article'],
+  },
+  {
     id: 'peertube-framatube-search',
     label: 'Framatube',
     kind: 'peertube_search',

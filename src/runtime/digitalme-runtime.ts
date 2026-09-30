@@ -518,7 +518,7 @@ export class DigitalMeRuntime {
       this.lastIntentView = null;
       const beforeIds = await readPersonalFeedIds(pkg.rootDir);
       await resetRecentRecommendationState(pkg.rootDir);
-      const view = await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'refresh');
+      const view = await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reset');
       const afterIds = view.cards.map((card) => card.itemId);
       const same = beforeIds.length > 0 && beforeIds.join('\n') === afterIds.join('\n');
       view.notice = same
@@ -744,7 +744,7 @@ export class DigitalMeRuntime {
     packageRoot: string,
     subjectId: string,
     relayUrl?: string,
-    mode: 'open' | 'refresh' | 'reuse' | 'replenish' | 'more' = 'open',
+    mode: 'open' | 'refresh' | 'reuse' | 'replenish' | 'more' | 'reset' = 'open',
   ): Promise<DiscoverView> {
     const preferences = await this.contentPreferenceRows(packageRoot);
     const self = await readDigitalSelf(packageRoot, subjectId, nowIso());

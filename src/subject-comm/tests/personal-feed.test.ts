@@ -497,6 +497,52 @@ test('managed search fault keeps an existing feed and still tries open catalog',
   assert.equal(/API Key|请配置 Gemini/.test(failed.view.notice || ''), false);
 });
 
+test('selection failure still shows the items already fetched', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-unranked-'));
+  const items = FEED_01_SEED_ITEMS.slice(0, 3);
+  const result = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items,
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'DISABLED',
+    chatComplete: async () => ({ text: 'not json' }),
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    mode: 'reset',
+    now: NOW,
+  });
+  assert.equal(result.view.cards.length, items.length);
+  assert.match(result.view.notice || '', /没能排好顺序/);
+});
+
+test('ranked ignore stays available instead of being dropped', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-rank-'));
+  const items = FEED_01_SEED_ITEMS.slice(0, 3);
+  const result = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items,
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'DISABLED',
+    chatComplete: async () => ({
+      text: JSON.stringify({
+        decisions: items.map((item, index) => ({
+          itemId: item.itemId,
+          decision: index === 0 ? 'ignore' : 'show',
+          reason: index === 0 ? '先排后' : '先看',
+        })),
+      }),
+    }),
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    mode: 'reset',
+    now: NOW,
+  });
+  assert.equal(result.view.cards.length, items.length);
+  assert.equal(result.view.cards.some((card) => card.reason === '先排后'), true);
+});
+
 test('more returns only unseen cards, or says there is nothing new', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-more-'));
   const items = FEED_01_SEED_ITEMS.slice(0, 8);
