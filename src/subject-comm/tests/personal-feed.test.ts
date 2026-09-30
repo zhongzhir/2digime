@@ -496,3 +496,41 @@ test('managed search fault keeps an existing feed and still tries open catalog',
   assert.ok(catalogTried >= 1);
   assert.equal(/API Key|请配置 Gemini/.test(failed.view.notice || ''), false);
 });
+
+test('more returns only unseen cards, or says there is nothing new', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-more-'));
+  const items = FEED_01_SEED_ITEMS.slice(0, 8);
+  const first = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items,
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'DISABLED',
+    chatComplete: showAllChat(),
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    mode: 'open',
+    now: NOW,
+  });
+  const seen = new Set(first.view.cards.map((row) => row.itemId));
+  const more = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items,
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'DISABLED',
+    chatComplete: showAllChat(),
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    mode: 'more',
+    now: NOW,
+  });
+  if (!more.view.cards.length) {
+    assert.match(more.view.notice, /暂时没有更多新内容/);
+  } else {
+    assert.equal(
+      more.view.cards.every((card) => !seen.has(card.itemId)),
+      true,
+    );
+  }
+});

@@ -72,7 +72,7 @@ const SET_EXPECTED_EFFECTS_TOOL: ChatToolDefinition = {
   function: {
     name: 'set_expected_effects',
     description:
-      '记下这次目标完成后应能观察到的结果。改文件用 content_modified 或 file_created；只看不改用 observation。这不是完成任务，只是声明验收标准。真正的创建/修改仍要调用 write_file 或其他已连接能力。',
+      '仅当用户已经委托你改变文件或外部结果时，记下完成后应能观察到的结果。改文件用 content_modified 或 file_created；只看不改用 observation。询问、讨论或确认能力时不要调用。这不是完成任务，也不会自动开始写文件。',
     parameters: {
       type: 'object',
       properties: {
@@ -129,7 +129,7 @@ const REQUEST_FOLDER_ACCESS_TOOL: ChatToolDefinition = {
   function: {
     name: 'request_folder_access',
     description:
-      '当任务需要在用户电脑上创建或修改文件、且当前还没有已授权文件夹时，向主人申请一次访问范围。path 可以是 desktop / 桌面、或其下子文件夹、或桌面/文档/下载下的绝对路径。主人确认后才能写盘。不要让主人自己运行命令。',
+      '仅当用户已经要求在电脑上创建或修改文件、且当前授权覆盖不了目标路径时，向主人申请一次访问范围。path 可以是 desktop / 桌面、或其下子文件夹、或桌面/文档/下载下的绝对路径。询问能力、讨论写法、或核对已有材料时不要调用。已覆盖的路径不要再次申请。',
     parameters: {
       type: 'object',
       properties: {
@@ -382,15 +382,16 @@ export async function runTalkTurn(input: {
   let agents = input.agents.slice();
   const system = [
     '你是用户的兔机米，也是用户的超级助手。',
-    '根据当前数字之我理解用户；不要编造未写入的本人事实。',
-    '主人原则上只需表达目标。技术实现、工具选择、能力调度、普通失败恢复由你自行完成；不要把工具交给主人自己操作。',
-    '能直接完成的一般事务（写作、总结、分析、简单文件修改等）直接做，不要仅为「看起来专业」而调用外部能力。',
-    '需要已连接的专业能力时再 delegate；同一回合可按需连续使用多个工具/能力，每步先看真实结果再决定下一步。',
-    '当你已经能够给主人最终答复时，直接给出最终回答，不要继续无意义的工具调用。',
-    '普通低风险内部执行自行完成。只有真实涉及资金、隐私或凭证授权、对外发送或发布、删除或不可逆修改、超出现有授权，或只能由主人作出的价值判断时，才请求主人决定。',
+    '根据当前数字之我和本次材料理解用户；不要编造未写入的本人事实，也不要把没读到的材料说成已经读过。',
+    '先分清这次是询问、讨论、委托，还是对上一句的纠正。询问能力和机制时先准确回答。需要核对材料时可以读取，但不要把询问扩展成改写、生成文件或其他没有委托的任务。',
+    '只有用户明确要求创建、修改、保存或交付文件时，才申请文件夹或写入。已有授权覆盖目标路径时直接使用，不要再次申请。',
+    '用户明确委托之后，技术实现、工具选择和普通失败恢复由你完成，直到交付或说明真实阻碍。不要把工具交给主人自己操作。',
+    '能直接完成的委托不要仅为「看起来专业」而调用外部能力。需要已连接的专业能力时再 delegate。每步先看真实结果再决定下一步。',
+    '当你已经能够给出最终答复时，直接回答，不要继续无意义的工具调用。',
+    '只有真实涉及资金、隐私或凭证授权、对外发送或发布、删除或不可逆修改、超出现有授权，或只能由主人作出的价值判断时，才请求主人决定。',
     '对可能变化的公开事实，可使用已连接的实时能力核验。',
-    '工具返回的是执行事实或证据，不是必须照抄的答案。不要把未真实执行的动作说成已经做成。',
-    '需要改动世界时，先用 set_expected_effects 记下完成后应观察到的结果，再动手。只看不改则 effect=observation。工具返回 ok 不等于目标完成；没有所需 effect 证据时不要宣布完成。',
+    '工具返回的是执行事实或证据，不是必须照抄的答案。不要把未读取说成已读取，不要把未修改说成已修改，不要把未保存说成已保存。',
+    '用户要求改动文件时，先用 set_expected_effects 记下完成后应观察到的结果，再动手。只看不改则 effect=observation。工具返回 ok 不等于目标完成。',
     '不要问用户选择 Agent、任务类型、workflow、协作者或协议。',
     input.confirmHint
       ? `有一件关于用户本人的理解需要用户亲自确认：${input.confirmHint}。用普通人语言问一句，不要提内部机制。`
@@ -515,7 +516,7 @@ export async function runTalkTurn(input: {
         evidenceOnly: false,
         producedOutputs: [resolved.abs],
         outputPath: resolved.abs,
-        summary: `已授权可写文件夹：${resolved.abs}。可用 write_file 创建和修改其中的文件；专业代码改动可 delegate 已连接的代码执行能力。不要让主人自己运行命令。`,
+        summary: `该文件夹已在授权范围内：${resolved.abs}。不要再次申请。只有用户要求创建或修改文件时才写入。`,
       });
     }
     if (deniedThisTurn.has(resolved.abs)) {
@@ -575,7 +576,7 @@ export async function runTalkTurn(input: {
       evidenceOnly: false,
       producedOutputs: [resolved.abs],
       outputPath: resolved.abs,
-      summary: `已授权可写文件夹：${resolved.abs}。可用 write_file 创建和修改其中的文件；专业代码改动可 delegate 已连接的代码执行能力。不要让主人自己运行命令。`,
+        summary: `主人允许访问 ${resolved.abs}。不要对同一范围再次申请。只有用户要求创建或修改文件时才写入。`,
     });
   };
 
@@ -857,7 +858,9 @@ export async function runTalkTurn(input: {
         ok,
         capabilityId: 'set_expected_effects',
         effects,
-        summary: ok ? '已记录 expected effects。请继续执行，不要把这一步当成任务完成。' : 'effects 不能为空。',
+        summary: ok
+          ? '已记录验收标准。这不是任务完成，也不会因此开始写文件。只有用户要求改文件时才继续写入。'
+          : 'effects 不能为空。',
       });
     }
     if (call.name === 'request_folder_access') return runRequestFolderAccess(call.arguments);
@@ -1019,7 +1022,15 @@ export async function runTalkTurn(input: {
 
   const MAX_NUDGES = 2;
   let nudges = 0;
-  while (nudges < MAX_NUDGES && toolRounds < MAX_TOOL_ROUNDS) {
+  const mutatingAttempt = () =>
+    thread.executions.some(
+      (item) =>
+        executionIds.includes(item.id) &&
+        (item.capabilityId === 'write_file' ||
+          item.capabilityId === 'export_file' ||
+          item.observedEffect?.mutated === true),
+    );
+  while (nudges < MAX_NUDGES && toolRounds < MAX_TOOL_ROUNDS && mutatingAttempt()) {
     const turnExecs = thread.executions.filter((item) => executionIds.includes(item.id));
     const expected = expectedFromExecutions(turnExecs);
     const reason = unsatisfiedRequiredEffects(expected, turnExecs, reads, mutations);
@@ -1042,7 +1053,7 @@ export async function runTalkTurn(input: {
 
   // 无 toolCalls 即为模型 final assistant response；下方落 Thread，由 service writeThread → renderer。
   let assistantText = deliverText(current.text);
-  if (stillOpen && !hasObservedMutation(turnExecs) && openReason) {
+  if (stillOpen && mutatingAttempt() && !hasObservedMutation(turnExecs) && openReason) {
     assistantText = openReason;
   }
   const resultPath = lastOk && !lastEvidenceOnly ? lastPath : undefined;

@@ -63,6 +63,8 @@ export interface DiscoverView {
   searchQuery?: string;
   /** 一次主动搜索的请求身份。过期 generation 不得覆盖当前可见状态。 */
   searchGenerationId?: string;
+  /** 连续浏览时只追加，不替换当前列表。 */
+  append?: boolean;
   /** 内部搜索诊断，UI 不得展示。 */
   seekTrace?: {
     rawCandidates: number;
@@ -130,7 +132,7 @@ export async function discoverForSubject(input: {
 > {
   const empty = (notice: string): DiscoverView => ({
     headline: '发现',
-    lead: '这里可以直接看文章、图片、音频和视频。兔机米按你的数字之我挑选，不是中心推荐。',
+    lead: '看文章、图片、音频和视频。',
     cards: [],
     relatedCards: [],
     preferences: input.preferences || [],
@@ -185,7 +187,7 @@ export async function discoverForSubject(input: {
     ok: true,
     view: {
       headline: '发现',
-      lead: '这里可以直接看文章、图片、音频和视频。兔机米按你的数字之我挑选，不是中心推荐。',
+      lead: '看文章、图片、音频和视频。',
       cards,
       relatedCards: [],
       preferences: input.preferences || [],

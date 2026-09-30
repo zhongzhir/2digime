@@ -67,8 +67,7 @@ interface FeedCacheFile {
 const MIN_FEED = 6;
 const MAX_FEED = 12;
 const STALE_MS = 24 * 60 * 60 * 1000;
-const LEAD =
-  '这里可以直接看文章、图片、音频和视频。兔机米按你的数字之我挑选，不是中心推荐。';
+const LEAD = '看文章、图片、音频和视频。';
 
 export function personalFeedCachePath(packageRoot: string): string {
   return path.join(packageRoot, 'content', 'personal-feed-cache.json');
@@ -76,6 +75,15 @@ export function personalFeedCachePath(packageRoot: string): string {
 
 function emptyCache(): FeedCacheFile {
   return { version: 1 };
+}
+
+function rememberShownIds(previous: string[] | undefined, next: string[], append: boolean): string[] {
+  if (!append) return next;
+  const ids = [...(previous || [])];
+  for (const id of next) {
+    if (id && !ids.includes(id)) ids.push(id);
+  }
+  return ids;
 }
 
 async function readCache(packageRoot: string): Promise<FeedCacheFile> {
@@ -322,7 +330,7 @@ export async function ensurePersonalFeed(input: {
   putNetworkItem?: (item: NetworkItem) => Promise<void>;
   reloadItems?: () => Promise<NetworkItem[]>;
   getItem?: (itemId: string) => Promise<NetworkItem | undefined>;
-  mode: 'open' | 'refresh' | 'reuse' | 'replenish';
+  mode: 'open' | 'refresh' | 'reuse' | 'replenish' | 'more';
   now?: string;
 }): Promise<{ view: DiscoverView; reasonCode: FeedReasonCode }> {
   const now = input.now || new Date().toISOString();
@@ -454,7 +462,11 @@ export async function ensurePersonalFeed(input: {
 
   if (input.mode === 'replenish') mark('REPLENISH_START');
   let items = input.items.filter((item) => isConsumableItem(item, now) && !blocked(item, prefs));
-  const shown = new Set(input.mode === 'refresh' ? (cache.lastView?.itemIds || cache.personal?.itemIds || []) : []);
+  const shown = new Set(
+    input.mode === 'refresh' || input.mode === 'more'
+      ? cache.lastView?.itemIds || cache.personal?.itemIds || []
+      : [],
+  );
   const opened = new Set(openedItemIds(recent));
   const needReplenish =
     input.mode === 'replenish'
@@ -603,6 +615,19 @@ export async function ensurePersonalFeed(input: {
               : items.length
                 ? 'NO_CONSUMABLE_CANDIDATES'
                 : 'DIRECTORY_EMPTY';
+    if (input.mode === 'more') {
+      return finish(
+        viewOf({
+          cards: [],
+          preferences: input.preferences,
+          notice: '暂时没有更多新内容。',
+          reasonCode,
+          feedMode: 'personal',
+          networking,
+        }),
+        reasonCode,
+      );
+    }
     if (fallback.length) mark('FIRST_CARD_VISIBLE', fallback.length);
     return finish(
       viewOf({
@@ -621,7 +646,7 @@ export async function ensurePersonalFeed(input: {
     const openCards = directoryCards(candidates, prefs, MAX_FEED, now);
     if (openCards.length) {
       const snapshot: FeedSnapshot = {
-        itemIds: openCards.map((card) => card.itemId),
+        itemIds: rememberShownIds(cache.lastView?.itemIds, openCards.map((card) => card.itemId), input.mode === 'more'),
         generatedAt: now,
         mode: 'personal',
       };
@@ -639,7 +664,7 @@ export async function ensurePersonalFeed(input: {
         replenished ? 'REPLENISHED' : 'LOCAL_DIRECTORY',
       );
     }
-    const fallback = cachedCards.length ? cachedCards : lastCards;
+    const fallback = input.mode === 'more' ? [] : cachedCards.length ? cachedCards : lastCards;
     if (fallback.length) mark('FIRST_CARD_VISIBLE', fallback.length);
     const reasonCode: FeedReasonCode = fallback.length
       ? 'CACHED_FEED'
@@ -650,7 +675,7 @@ export async function ensurePersonalFeed(input: {
       viewOf({
         cards: fallback,
         preferences: input.preferences,
-        notice: noticeFor(reasonCode, fallback.length > 0),
+        notice: input.mode === 'more' ? '暂时没有更多新内容。' : noticeFor(reasonCode, fallback.length > 0),
         reasonCode,
         feedMode: 'personal',
         networking,
@@ -670,15 +695,18 @@ export async function ensurePersonalFeed(input: {
   });
   mark('SELECT_DONE', selected.ok ? selected.decisions.length : 0);
   if (!selected.ok) {
-    const fallback = cachedCards.length ? cachedCards : lastCards;
+    const fallback = input.mode === 'more' ? [] : cachedCards.length ? cachedCards : lastCards;
     if (fallback.length) mark('FIRST_CARD_VISIBLE', fallback.length);
     return finish(
       viewOf({
         cards: fallback,
         preferences: input.preferences,
-        notice: fallback.length
-          ? '暂时无法获取新内容，可以稍后再试或检查联网设置。'
-          : '这次没能判断哪些内容值得看。',
+        notice:
+          input.mode === 'more'
+            ? '暂时没有更多新内容。'
+            : fallback.length
+              ? '暂时无法获取新内容，可以稍后再试或检查联网设置。'
+              : '这次没能判断哪些内容值得看。',
         reasonCode: fallback.length ? 'CACHED_FEED' : 'MODEL_SELECTION_EMPTY',
         feedMode: 'personal',
         networking,
@@ -709,15 +737,31 @@ export async function ensurePersonalFeed(input: {
     })
     .filter((card): card is DiscoverCard => !!card)
     .slice(0, MAX_FEED);
+  if (cards.length < MIN_FEED) {
+    const kept = new Set(cards.map((card) => card.itemId));
+    for (const item of candidates) {
+      if (kept.has(item.itemId) || blocked(item, prefs)) continue;
+      const card = cardFromNetworkItem(item, '也留一条不同的内容，方便你自己看。', 'directory');
+      if (!isConcreteContentCard(card)) continue;
+      cards.push(card);
+      kept.add(card.itemId);
+      if (cards.length >= MIN_FEED) break;
+    }
+  }
 
   if (!cards.length) {
-    const fallback = cachedCards.length ? cachedCards : lastCards;
+    const fallback = input.mode === 'more' ? [] : cachedCards.length ? cachedCards : lastCards;
     if (fallback.length) mark('FIRST_CARD_VISIBLE', fallback.length);
     return finish(
       viewOf({
         cards: fallback,
         preferences: input.preferences,
-        notice: fallback.length ? noticeFor('CACHED_FEED', true) : '这次没有找到可以直接看的内容。',
+        notice:
+          input.mode === 'more'
+            ? '暂时没有更多新内容。'
+            : fallback.length
+              ? noticeFor('CACHED_FEED', true)
+              : '这次没有找到可以直接看的内容。',
         reasonCode: fallback.length ? 'CACHED_FEED' : 'MODEL_SELECTION_EMPTY',
         feedMode: 'personal',
         networking,
@@ -727,7 +771,7 @@ export async function ensurePersonalFeed(input: {
   }
 
   const snapshot: FeedSnapshot = {
-    itemIds: cards.map((card) => card.itemId),
+    itemIds: rememberShownIds(cache.lastView?.itemIds, cards.map((card) => card.itemId), input.mode === 'more'),
     generatedAt: now,
     mode: 'personal',
   };

@@ -191,7 +191,7 @@ import { defaultDiscoverIntent, interpretDiscoverIntent } from '../subject-comm/
 import { ingestSource } from '../subject-comm/content-ingest';
 import { safePublicHttpGet } from '../work-runtime/public-http-safety';
 import { indexSearchHits } from '../subject-comm/open-web-discovery';
-import { ensurePersonalFeed, rememberIntentFeed } from '../subject-comm/personal-feed';
+import { ensurePersonalFeed, personalFeedCachePath, rememberIntentFeed } from '../subject-comm/personal-feed';
 import {
   classifySearchFailure,
   type NetworkDiscoveryCode,
@@ -396,6 +396,18 @@ export interface DigitalMeRuntimeOptions {
   autonomousCollabReceive?: boolean;
 }
 
+async function readPersonalFeedIds(packageRoot: string): Promise<string[]> {
+  try {
+    const parsed = JSON.parse(await fs.readFile(personalFeedCachePath(packageRoot), 'utf8')) as {
+      lastView?: { itemIds?: string[] };
+      personal?: { itemIds?: string[] };
+    };
+    return parsed.lastView?.itemIds || parsed.personal?.itemIds || [];
+  } catch {
+    return [];
+  }
+}
+
 /**
  * DigitalMeRuntime — Subject + Work + Artifact Workspace 装配。
  * 单实例挂载一个 SubjectPackage;Work 数据落在 package/runtime/ 下随包迁移。
@@ -480,7 +492,7 @@ export class DigitalMeRuntime {
     const pkg = this.subject.getActive();
     const empty = async (notice: string): Promise<DiscoverView> => ({
       headline: '发现',
-      lead: '这里可以直接看文章、图片、音频和视频。兔机米按你的数字之我挑选，不是中心推荐。',
+      lead: '看文章、图片、音频和视频。',
       cards: [],
       relatedCards: [],
       preferences: pkg ? await this.contentPreferenceRows(pkg.rootDir) : [],
@@ -504,8 +516,20 @@ export class DigitalMeRuntime {
     if (action === 'resetRecent') {
       this.beginSearchGeneration(input.searchGenerationId);
       this.lastIntentView = null;
+      const beforeIds = await readPersonalFeedIds(pkg.rootDir);
       await resetRecentRecommendationState(pkg.rootDir);
-      return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'refresh') };
+      const view = await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'refresh');
+      const afterIds = view.cards.map((card) => card.itemId);
+      const same = beforeIds.length > 0 && beforeIds.join('\n') === afterIds.join('\n');
+      view.notice = same
+        ? '最近推荐已经清空。这次没有换出不同的内容，可以换一批，或直接说想看什么。'
+        : '最近推荐已经清空，并按当前理解重新挑选。';
+      return { view };
+    }
+
+    if (action === 'more') {
+      const view = await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'more');
+      return { view: { ...view, append: true } };
     }
 
     if (action === 'asked') {
@@ -569,7 +593,9 @@ export class DigitalMeRuntime {
           target: source ? item.publisherSubjectId : item.itemId,
           text: source
             ? `${action === 'follow' ? '关注来源' : '不再看来源'} ${item.publisherDisplayName || item.publisherSubjectId}`
-            : `${action === 'boost' ? '更想看到类似' : '少推类似'}「${item.content.title}」的内容`,
+            : action === 'boost'
+              ? `多推荐和「${item.content.title}」相近的内容，但不要只重复这一条。`
+              : `不喜欢「${item.content.title}」这一条。结合语境理解，不要因此封禁整个主题或来源。`,
         });
         return { view: await this.currentSearchOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'refresh') };
       }
@@ -718,7 +744,7 @@ export class DigitalMeRuntime {
     packageRoot: string,
     subjectId: string,
     relayUrl?: string,
-    mode: 'open' | 'refresh' | 'reuse' | 'replenish' = 'open',
+    mode: 'open' | 'refresh' | 'reuse' | 'replenish' | 'more' = 'open',
   ): Promise<DiscoverView> {
     const preferences = await this.contentPreferenceRows(packageRoot);
     const self = await readDigitalSelf(packageRoot, subjectId, nowIso());
@@ -756,7 +782,7 @@ export class DigitalMeRuntime {
           const ingested = await ingestSource({
             sourceUrl: hit.url,
             store,
-            limit: 4,
+            limit: hit.title === 'open catalog' ? 12 : 4,
             via: 'search',
           });
           if (ingested.items.length) return ingested.items;

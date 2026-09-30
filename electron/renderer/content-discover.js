@@ -4,8 +4,8 @@
  */
 (function () {
   const KIND_LABEL = {
-    boost: '加推类似',
-    reduce: '少推类似',
+    boost: '多推荐',
+    reduce: '不喜欢',
     follow: '关注来源',
     block: '不再看来源',
   };
@@ -16,6 +16,9 @@
   let activeSection = 'for-you';
   let activeSearchGenerationId = '';
   let activeFeedMode = 'personal';
+  let moreInFlight = false;
+  let moreExhausted = false;
+  let autoMore = 0;
 
   function newSearchGenerationId() {
     return 'sg_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
@@ -153,7 +156,8 @@
     if (opts && opts.skipRender) return result;
     applyView(result && result.view);
     if (action === 'later') showSection('later');
-    if (action === 'reverse' || action === 'resetRecent') showSection('prefs');
+    if (action === 'reverse') showSection('prefs');
+    if (action === 'resetRecent') showSection('for-you');
     return result;
   }
 
@@ -243,9 +247,9 @@
     if (!opts || !opts.hideLater) {
       actions.appendChild(btn('稍后看', () => void act('later', { itemId: card.itemId })));
     }
+    actions.appendChild(btn('不喜欢', () => void act('reduce', { itemId: card.itemId })));
+    actions.appendChild(btn('多推荐', () => void act('boost', { itemId: card.itemId })));
     actions.appendChild(btn('问兔机米', () => askTalk(card)));
-    actions.appendChild(btn('加推类似', () => void act('boost', { itemId: card.itemId })));
-    actions.appendChild(btn('少推类似', () => void act('reduce', { itemId: card.itemId })));
     if (card.publisherSubjectId) {
       const more = document.createElement('details');
       more.className = 'content-discover-more';
@@ -349,6 +353,20 @@
   function applyView(view) {
     if (!shouldApplyView(view)) return;
     let next = view;
+    if (next && next.append && lastView && Array.isArray(lastView.cards)) {
+      const seen = new Set((lastView.cards || []).map(cardKey));
+      const extra = (next.cards || []).filter((card) => {
+        const key = cardKey(card);
+        return key && !seen.has(key);
+      });
+      moreExhausted = extra.length === 0;
+      next = Object.assign({}, next, {
+        cards: (lastView.cards || []).concat(extra),
+        relatedCards: lastView.relatedCards || next.relatedCards || [],
+        append: false,
+        notice: extra.length ? next.notice || '' : next.notice || '暂时没有更多新内容。',
+      });
+    }
     if (
       activeFeedMode === 'intent' &&
       view.feedMode === 'intent' &&
@@ -412,7 +430,7 @@
     }
     if (lead) {
       lead.textContent =
-        (view && view.lead) || '这里可以直接看文章、图片、音频和视频。兔机米按你的数字之我挑选，不是中心推荐。';
+        (view && view.lead) || '看文章、图片、音频和视频。';
     }
     lastCards = (view && view.cards) || [];
     lastRelated = (view && view.relatedCards) || [];
@@ -498,7 +516,7 @@
       if (!lastCards.length) {
         renderView({
           headline: '发现',
-          lead: '这里可以直接看文章、图片、音频和视频。兔机米按你的数字之我挑选，不是中心推荐。',
+          lead: '看文章、图片、音频和视频。',
           cards: [],
           relatedCards: [],
           preferences: [],
@@ -511,9 +529,49 @@
     }
   }
 
+  async function loadMore() {
+    if (moreInFlight || moreExhausted || activeFeedMode !== 'personal' || activeSection !== 'for-you') return;
+    if (!lastCards.length) return;
+    const client = api();
+    if (!client || typeof client.invoke !== 'function') return;
+    moreInFlight = true;
+    setStatus('正在继续加载……');
+    try {
+      const result = await act('more');
+      const view = result && result.view;
+      if (!view || !((view.cards || []).length)) {
+        moreExhausted = true;
+        setStatus('');
+        const notice = $('content-discover-notice');
+        if (notice && !notice.textContent) notice.textContent = '暂时没有更多新内容。';
+      } else {
+        setStatus('');
+      }
+    } catch {
+      setStatus('继续加载没有成功，可以稍后再试。');
+    } finally {
+      moreInFlight = false;
+    }
+    if (!moreExhausted) maybeLoadMore(false);
+  }
+
+  function maybeLoadMore(fromUser) {
+    if (!fromUser && autoMore >= 2) return;
+    if (moreInFlight || moreExhausted || activeFeedMode !== 'personal' || activeSection !== 'for-you') return;
+    const scroller = document.scrollingElement || document.documentElement;
+    if (!scroller) return;
+    const nearEnd = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 280;
+    const shortPage = scroller.scrollHeight <= scroller.clientHeight + 8;
+    if (!nearEnd && !shortPage) return;
+    if (!fromUser) autoMore += 1;
+    void loadMore();
+  }
+
   async function refreshBatch() {
     const client = api();
     if (!client || typeof client.invoke !== 'function') return;
+    moreExhausted = false;
+    autoMore = 0;
     setStatus('兔机米正在帮你找些值得看的内容……');
     try {
       const result = await client.invoke('content', {
@@ -549,6 +607,8 @@
     activeSearchGenerationId = gen;
     activeFeedMode = 'intent';
     lastView = null;
+    moreExhausted = false;
+    autoMore = 0;
     if (opts && opts.navigate) await goDiscover({ skipRefresh: true });
     showSection('for-you');
     try {
@@ -587,15 +647,6 @@
         void seek(input ? input.value : '');
       });
     }
-    const examples = $('content-discover-examples');
-    if (examples && !examples.dataset.bound) {
-      examples.dataset.bound = '1';
-      examples.addEventListener('click', (evt) => {
-        const btnEl = evt.target && evt.target.closest ? evt.target.closest('[data-seek]') : null;
-        if (!btnEl) return;
-        void seek(btnEl.getAttribute('data-seek'));
-      });
-    }
     const switcher = document.querySelector('.discover-switcher');
     if (switcher && !switcher.dataset.bound) {
       switcher.dataset.bound = '1';
@@ -609,6 +660,7 @@
     if (refreshBtn && !refreshBtn.dataset.bound) {
       refreshBtn.dataset.bound = '1';
       refreshBtn.addEventListener('click', () => {
+        moreExhausted = false;
         void refreshBatch();
       });
     }
@@ -623,8 +675,15 @@
     if (resetRecent && !resetRecent.dataset.bound) {
       resetRecent.dataset.bound = '1';
       resetRecent.addEventListener('click', () => {
+        moreExhausted = false;
+        showSection('for-you');
+        setStatus('正在清空最近推荐并重新挑选……');
         void act('resetRecent');
       });
+    }
+    if (!document.documentElement.dataset.discoverScrollBound) {
+      document.documentElement.dataset.discoverScrollBound = '1';
+      window.addEventListener('scroll', () => maybeLoadMore(true), { passive: true });
     }
   }
 

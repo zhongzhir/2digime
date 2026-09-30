@@ -20,6 +20,20 @@ export interface OpenSourceEndpoint {
 
 export const OPEN_SOURCE_CATALOG: OpenSourceEndpoint[] = [
   {
+    id: 'bbc-news-world',
+    label: 'BBC News',
+    kind: 'media_rss',
+    url: 'https://feeds.bbci.co.uk/news/world/rss.xml',
+    contentTypes: ['article'],
+  },
+  {
+    id: 'bbc-zhongwen',
+    label: 'BBC 中文',
+    kind: 'media_rss',
+    url: 'https://feeds.bbci.co.uk/zhongwen/simp/rss.xml',
+    contentTypes: ['article'],
+  },
+  {
     id: 'peertube-framatube-search',
     label: 'Framatube',
     kind: 'peertube_search',

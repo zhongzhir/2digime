@@ -110,7 +110,7 @@ test('Electron：Public Alpha UX closure 导航 / 发现 / 数字之我 / 设置
     await harness.page.evaluate(`(() => window.ContentDiscoverPage.refresh())()`);
     await harness.page.locator('.discover-switch[data-discover-section="prefs"]').click();
     await harness.page.locator('#content-discover-prefs').waitFor({ state: 'visible', timeout: 10_000 });
-    assert.match(await harness.page.locator('#content-discover-prefs').innerText(), /加推类似|更想看到类似/);
+    assert.match(await harness.page.locator('#content-discover-prefs').innerText(), /多推荐|更想看到类似/);
     await harness.page.locator('#content-discover-pref-list button', { hasText: '撤销' }).click();
     await harness.page.waitForTimeout(400);
     assert.equal((await listContentPreferences(pkgDir)).length, 0);

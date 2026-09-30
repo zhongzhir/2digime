@@ -1,4 +1,6 @@
+import { statSync } from 'node:fs';
 import * as path from 'node:path';
+import { extractFile } from '../infrastructure/extract';
 import { nowIso } from '../shared/ids';
 import { readDigitalSelf } from '../subject-core/digital-self/store';
 import {
@@ -159,11 +161,13 @@ export class TalkService {
     } catch {
       selfContext = '读取数字之我失败。不得解释为不了解用户，也不要编造本人事实。';
     }
+    const materialBlock = await attachedMaterialBlock(input.contextPaths);
+    if (materialBlock) selfContext = `${selfContext}\n\n${materialBlock}`;
     if (spoken && this.resolveContentSeek) {
       try {
         const block = await this.resolveContentSeek(pkg, spoken);
         if (block.trim()) {
-          selfContext = `${selfContext}\n\n内容目录候选（保留原文链接，不是中心推荐）：\n${block}`;
+          selfContext = `${selfContext}\n\n内容目录候选（保留原文链接）：\n${block}`;
         }
       } catch {
         /* 目录检索失败不得阻断交流 */
@@ -289,6 +293,41 @@ export class TalkService {
     await writeThread(pkg.rootDir, next);
     return { view: projectView(next, timeoutNotice, outcome) };
   }
+}
+
+const MATERIAL_CHARS = 4000;
+const MATERIAL_FILES = 3;
+
+/** 把本次附上的文件正文交给模型。授权文件夹不整树读取。读失败必须可见，不能当成空白。 */
+export async function attachedMaterialBlock(contextPaths?: string[]): Promise<string> {
+  const blocks: string[] = [];
+  for (const raw of contextPaths || []) {
+    const file = String(raw || '').trim();
+    if (!file) continue;
+    let isFile = false;
+    try {
+      isFile = statSync(file).isFile();
+    } catch {
+      isFile = false;
+    }
+    if (!isFile) continue;
+    try {
+      const extracted = await extractFile(file);
+      const text = String(extracted.text || '').trim();
+      if (!text) {
+        blocks.push(`- ${file}：文件在，但没有抽出可用正文。不得说成已经读过内容。`);
+      } else {
+        const body = text.slice(0, MATERIAL_CHARS);
+        const tail = text.length > MATERIAL_CHARS ? '\n（正文在此截断，需要时再读取该文件。）' : '';
+        blocks.push(`- ${file}\n${body}${tail}`);
+      }
+    } catch (err) {
+      blocks.push(`- ${file}：读取失败（${err instanceof Error ? err.message : String(err)}）。不得说成已经读过。`);
+    }
+    if (blocks.length >= MATERIAL_FILES) break;
+  }
+  if (!blocks.length) return '';
+  return `本次用户附上的材料正文（证据，不是新的写作任务）：\n${blocks.join('\n\n')}`;
 }
 
 export function composeTalkUserText(text: string, contextPaths?: string[]): string {

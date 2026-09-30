@@ -1070,6 +1070,7 @@ export interface CommandMap {
         | 'discover'
         | 'replenish'
         | 'refresh'
+        | 'more'
         | 'resetRecent'
         | 'asked'
         | 'open'

@@ -81,8 +81,8 @@ export function classifyAuthorizedPaths(contextPaths?: string[]): AuthorizedFs {
     try {
       if (!existsSync(candidate)) continue;
       const st = statSync(candidate);
-      if (st.isDirectory()) folders.push(candidate);
-      else if (st.isFile()) files.push(candidate);
+      if (st.isDirectory()) folders.push(canonicalizeFolderPath(candidate));
+      else if (st.isFile()) files.push(canonicalizeFolderPath(candidate));
     } catch {
       /* skip */
     }
@@ -149,11 +149,11 @@ export function describeAuthorizedFs(auth: AuthorizedFs): string {
   if (!auth.folders.length && !auth.files.length) {
     return [
       '当前没有已授权的可写文件夹。',
-      '若目标需要在用户电脑上创建或修改文件，调用 request_folder_access，由主人确认一次访问范围。',
-      '不要让主人自己运行命令、安装开发工具、或把 PowerShell/终端步骤交给主人。',
+      '只有用户要求在电脑上创建或修改文件、且现有授权覆盖不了目标路径时，才调用 request_folder_access。',
+      '询问、讨论或核对材料时不要申请。不要让主人自己运行命令。',
     ].join('\n');
   }
-  const lines = ['主人已授权的路径（不要再要用户贴正文、列文件或自己运行命令）：'];
+  const lines = ['已有可复用的本机授权。覆盖范围内不要再次申请。只有用户要求改文件时才写入：'];
   if (auth.folders.length) {
     lines.push('可读写文件夹（write_file / list_directory 的授权根）：');
     for (const folder of auth.folders) lines.push(`- ${folder}`);
@@ -199,8 +199,8 @@ export function resolveAuthorizedWritePath(
   let root: string | undefined;
   if (asked) {
     if (asked.includes('..')) return { ok: false, reason: '路径超出授权目录。' };
-    const resolvedAsked = path.resolve(asked);
-    root = roots.find((item) => path.resolve(item) === resolvedAsked);
+    const resolvedAsked = canonicalizeFolderPath(path.resolve(asked));
+    root = roots.find((item) => folderCovers(item, resolvedAsked) && folderCovers(resolvedAsked, item));
     if (!root) {
       return {
         ok: false,
