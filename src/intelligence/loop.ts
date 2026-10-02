@@ -39,6 +39,22 @@ export const TALK_CHAT_TRANSPORT_TIMEOUT_MS = 90_000;
 /** 无 execution 时的普通聊天空回复；有 execution 时不得落到用户面（见 TalkService fallback）。 */
 export const EMPTY_REPLY = '我在。请再说一次你想让我做什么。';
 
+const WEB_SEARCH_TOOL: ChatToolDefinition = {
+  type: 'function',
+  function: {
+    name: 'web_search',
+    description:
+      '搜索公开网页。返回标题、链接和来源摘要。你自己决定要不要搜、搜什么。稳定知识直接回答。失败时说明没搜到，不要编造链接。',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: '发给已有搜索连接的查询。' },
+      },
+      required: ['query'],
+    },
+  },
+};
+
 const DELEGATE_TOOL: ChatToolDefinition = {
   type: 'function',
   function: {
@@ -380,6 +396,8 @@ export async function runTalkTurn(input: {
   requestFolderAccess?: (input: { path: string; label: string }) => Promise<boolean>;
   persistFolderGrant?: (folder: string) => Promise<void>;
   refreshAgents?: (contextPaths: string[]) => ProfessionalAgent[];
+  /** 已有托管搜索。模型自己决定是否调用，不按话题关键词开关。 */
+  searchWeb?: (query: string) => Promise<Array<{ title: string; url: string; snippet?: string }>>;
 }): Promise<{ thread: TalkThread; outcome: TalkTurnOutcome }> {
   const userTurn: TalkTurn = {
     id: `turn_${randomUUID()}`,
@@ -414,6 +432,9 @@ export async function runTalkTurn(input: {
     '已有授权覆盖目标路径时直接使用，不要再次申请，也不要扩大到相邻目录。',
     '技术实现、工具选择和普通失败恢复由你完成。不要把工具交给主人自己操作。',
     '需要已连接的专业能力时再 delegate。每步先看真实结果再决定下一步。',
+    input.searchWeb
+      ? 'web_search 是已接上的公开网页搜索。只有它的返回能当作网上来源。上一轮工具返回的来源可以继续引用。搜失败就说明失败。'
+      : '',
     '能够回答时就回答，不要无意义地继续调用工具。',
     '只有真实涉及资金、隐私或凭证授权、对外发送或发布、删除或不可逆修改、超出现有授权，或只能由主人作出的价值判断时，才请求主人决定。',
     '对可能变化的公开事实，可使用已连接的实时能力核验。',
@@ -457,6 +478,9 @@ export async function runTalkTurn(input: {
   }
   ensureDelegateTool();
   if (cards.length) tools.push(CONSULT_TOOL);
+  if (input.searchWeb && !tools.some((item) => item.function.name === 'web_search')) {
+    tools.push(WEB_SEARCH_TOOL);
+  }
 
   const chat: TalkChatFn = async (req) => {
     throwIfAborted(input.signal);
@@ -1003,6 +1027,63 @@ export async function runTalkTurn(input: {
       });
     }
     if (call.name === 'delegate') return runDelegate(call.arguments);
+    if (call.name === 'web_search') {
+      let query = '';
+      try {
+        query = String(JSON.parse(call.arguments || '{}').query || '').trim();
+      } catch {
+        query = '';
+      }
+      const execId = `run_${randomUUID()}`;
+      if (!input.searchWeb || !query) {
+        recordExec({
+          id: execId,
+          at: input.now,
+          turnId: userTurn.id,
+          capabilityId: 'web_search',
+          instruction: query || input.userText,
+          ok: false,
+          summary: '搜索没有发出',
+          failureReason: query ? '搜索还没有接上' : 'query 不能为空',
+        });
+        return JSON.stringify({
+          ok: false,
+          actualSuccess: false,
+          failureReason: query ? '搜索还没有接上' : 'query 不能为空',
+        });
+      }
+      try {
+        const hits = await input.searchWeb(query);
+        const results = hits.slice(0, 6).map((hit) => ({
+          title: hit.title,
+          url: hit.url,
+          ...(hit.snippet ? { snippet: hit.snippet } : {}),
+        }));
+        recordExec({
+          id: execId,
+          at: input.now,
+          turnId: userTurn.id,
+          capabilityId: 'web_search',
+          instruction: query,
+          ok: true,
+          summary: results.length ? `搜到 ${results.length} 条` : '搜索没有返回结果',
+        });
+        return JSON.stringify({ ok: true, actualSuccess: true, query, results });
+      } catch (err) {
+        const failureReason = err instanceof Error ? err.message.slice(0, 200) : '搜索没有完成';
+        recordExec({
+          id: execId,
+          at: input.now,
+          turnId: userTurn.id,
+          capabilityId: 'web_search',
+          instruction: query,
+          ok: false,
+          summary: '搜索没有完成',
+          failureReason,
+        });
+        return JSON.stringify({ ok: false, actualSuccess: false, failureReason });
+      }
+    }
     return JSON.stringify({
       actualSuccess: false,
       ok: false,

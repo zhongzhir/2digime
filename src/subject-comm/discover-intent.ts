@@ -324,7 +324,7 @@ export async function classifyCandidateRoles(input: {
     '用户要摄影作品：具体照片/图集是 PRIMARY_CONTENT；盘点文章是 COMMENTARY。',
     '用户要播客或音乐：可播放的音频或进入播放的页面是 PRIMARY_CONTENT；介绍文章是 COMMENTARY。',
     '用户要「AI 内容」且未点名媒介：一篇具体 AI 文章是 PRIMARY_CONTENT。',
-    '若 freshness 为 current：带日期的具体报道是 PRIMARY_CONTENT。百科栏目介绍、词条说明、网站首页不是报道，标 HUB 或 UNRELATED，不要标 PRIMARY_CONTENT。',
+    '若 freshness 为 current：带发布时间、且标题和正文对得上的具体报道才是 PRIMARY_CONTENT。查询里的日期只是线索，不是时效证据。综述、盘点、事件日历、百科栏目、词条说明和网站首页不是当天报道，标 LISTING、HUB 或 UNRELATED，不要标 PRIMARY_CONTENT。没有发布时间的候选，不要因为它出现在搜索里就当成当天新闻。',
     '每个候选都要有一条 role。不要看域名做决定。不要输出 score。不要用用户长期偏好扩大范围。',
   ].join('\n');
   const today = localCalendarDate();

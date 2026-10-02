@@ -203,10 +203,29 @@ function isConcreteCandidate(card: DiscoverCard): boolean {
   return true;
 }
 
+/** 拉取到的页面本身是验证或拒绝，不是用户问题里的关键词。 */
+export function pageAccessState(input: { title?: string; text?: string }): 'ok' | 'challenge' {
+  const text = String(input.text || '').replace(/\s+/g, ' ').trim();
+  const title = String(input.title || '').trim();
+  if (/安全验证|人机验证|captcha|verify you are human|are you a human/i.test(title)) return 'challenge';
+  const challenge = /安全验证|人机验证|captcha|verify you are human|are you a human|access denied|just a moment/i.test(
+    `${title}\n${text}`,
+  );
+  if (challenge && text.length < 500) return 'challenge';
+  return 'ok';
+}
+
+export function snippetCardsFromHits(hits: ExternalSeekHit[]): DiscoverCard[] {
+  return hits.slice(0, 8).map((hit, index) => {
+    const url = canonicalOf(hit.url) || hit.url;
+    return webCardFromHit(hit, `snippet_${index}_${url}`);
+  });
+}
+
 function webCardFromHit(hit: ExternalSeekHit, itemId: string): DiscoverCard {
   const title = String(hit.title || hit.url).slice(0, 240);
   const snippet = String(hit.snippet || '').trim();
-  return {
+  const card: DiscoverCard = {
     itemId,
     title,
     text: snippet && snippet !== title ? snippet.slice(0, 800) : '',
@@ -214,6 +233,12 @@ function webCardFromHit(hit: ExternalSeekHit, itemId: string): DiscoverCard {
     reason: '公开网页来源，不是目录推荐。',
     source: 'web',
   };
+  if (pageAccessState({ title: card.title, text: card.text }) === 'challenge') {
+    card.accessState = 'challenge';
+    card.unavailable = true;
+    card.reason = '这个页面是访问验证，不是正文。可以打开原站；搜索摘要只说明来源当时给了什么。';
+  }
+  return card;
 }
 
 export async function seekContent(input: {
@@ -342,9 +367,21 @@ export async function seekContent(input: {
     const queries = intent.searchQueries.length ? intent.searchQueries : [query];
     const webHits: Array<ExternalSeekHit & { searchQuery: string; entrance?: boolean }> = [];
     const seenHit = new Set<string>();
-    for (const q of queries.slice(0, 3)) {
+    const queryList = queries.slice(0, 3);
+    const batches = await Promise.all(
+      queryList.map(async (q) => {
+        try {
+          return { q, web: await input.searchWeb!(q), failed: false };
+        } catch {
+          return { q, web: [] as ExternalSeekHit[], failed: true };
+        }
+      }),
+    );
+    for (const batch of batches) {
+      if (batch.failed) searchFailed = true;
+      const web = batch.web;
+      const q = batch.q;
       try {
-        const web = await input.searchWeb(q);
         rawSearchHits += web.length;
         for (const hit of web) {
           const canonical = canonicalOf(hit.url);
@@ -373,55 +410,73 @@ export async function seekContent(input: {
         searchFailed = true;
       }
     }
-    for (const hit of webHits) {
-      let added = false;
-      if (input.ingestHit) {
+    const bodyHits = webHits.slice(0, 8);
+    const snippetHits = webHits.slice(8);
+    const ingestedGroups = await Promise.all(
+      bodyHits.map(async (hit) => {
+        if (!input.ingestHit) return { hit, items: [] as NetworkItem[] };
         try {
-          const ingested = await input.ingestHit(hit);
-          for (const item of ingested) {
-            const canonical = canonicalOf(item.content.url);
-            if (canonical && seenUrls.has(canonical)) continue;
-            if (seenIds.has(item.itemId)) continue;
-            if (isDomainLikeTitle(item.content.title, item.content.url)) continue;
-            if (item.content.url && isGenericHubUrl(item.content.url)) continue;
-            if (canonical) seenUrls.add(canonical);
-            seenIds.add(item.itemId);
-            usedExternal = true;
-            added = true;
-            if (canonical) queryByUrl.set(canonical, hit.searchQuery);
-            cards.push(cardFromNetworkItem(item, '公开网页来源，不是目录推荐。', 'web'));
-            if (cards.length >= 24) break;
-          }
+          return { hit, items: await input.ingestHit(hit) };
         } catch {
-          /* 单条摄入失败则退回搜索命中本身 */
+          return { hit, items: [] as NetworkItem[] };
         }
+      }),
+    );
+    const pushSnippet = (hit: (typeof webHits)[number]) => {
+      if (cards.length >= 24) return;
+      const canonical = canonicalOf(hit.url);
+      if (canonical && seenUrls.has(canonical)) return;
+      if (canonical) {
+        seenUrls.add(canonical);
+        queryByUrl.set(canonical, hit.searchQuery);
+      }
+      usedExternal = true;
+      cards.push(webCardFromHit(hit, `seek_${seenUrls.size}`));
+    };
+    for (const group of ingestedGroups) {
+      const hit = group.hit;
+      let added = false;
+      for (const item of group.items) {
+        const canonical = canonicalOf(item.content.url);
+        if (canonical && seenUrls.has(canonical)) continue;
+        if (seenIds.has(item.itemId)) continue;
+        if (isDomainLikeTitle(item.content.title, item.content.url)) continue;
+        if (item.content.url && isGenericHubUrl(item.content.url)) continue;
+        if (canonical) seenUrls.add(canonical);
+        seenIds.add(item.itemId);
+        usedExternal = true;
+        added = true;
+        if (canonical) queryByUrl.set(canonical, hit.searchQuery);
+        const card = cardFromNetworkItem(item, '公开网页来源，不是目录推荐。', 'web');
+        if (pageAccessState({ title: card.title, text: card.text }) === 'challenge') {
+          card.accessState = 'challenge';
+          card.unavailable = true;
+          card.reason = '这个页面是访问验证，不是正文。可以打开原站；搜索摘要只说明来源当时给了什么。';
+        }
+        cards.push(card);
+        if (cards.length >= 24) break;
       }
       if (!added && hit.entrance) {
         excludedHub += 1;
         continue;
       }
-      if (!added && cards.length < 24) {
-        const canonical = canonicalOf(hit.url);
-        if (canonical && seenUrls.has(canonical)) continue;
-        if (canonical) {
-          seenUrls.add(canonical);
-          queryByUrl.set(canonical, hit.searchQuery);
-        }
-        usedExternal = true;
-        cards.push(webCardFromHit(hit, `seek_${seenUrls.size}`));
-      }
-      if (cards.length >= 24) break;
+      if (!added) pushSnippet(hit);
     }
+    for (const hit of snippetHits) pushSnippet(hit);
   }
 
   const concrete = cards.filter(isConcreteCandidate);
   const fidelity = new Map<string, ObjectFidelity | 'UNJUDGED'>();
   const unjudgedIds = new Set<string>();
-  if (input.chatComplete && input.model && concrete.length) {
+  const judgePool = concrete.filter((card) => card.accessState !== 'challenge').slice(0, 8);
+  for (const card of concrete) {
+    if (!judgePool.includes(card)) unjudgedIds.add(card.itemId);
+  }
+  if (input.chatComplete && input.model && judgePool.length) {
     const judged = await classifyCandidateRoles({
       query,
       intent,
-      candidates: concrete.map((card) => ({
+      candidates: judgePool.map((card) => ({
         id: card.itemId,
         title: card.title,
         url: card.url || '',
@@ -447,6 +502,10 @@ export async function seekContent(input: {
   const related: DiscoverCard[] = [];
   const unjudged: DiscoverCard[] = [];
   for (const card of concrete) {
+    if (card.accessState === 'challenge') {
+      unjudged.push(card);
+      continue;
+    }
     const matchedType = typeMatches(card, requiredTypes);
     let kind = fidelity.get(card.itemId);
     if (unjudgedIds.has(card.itemId)) kind = 'UNJUDGED';

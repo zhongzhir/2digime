@@ -416,6 +416,8 @@ export async function ensurePersonalFeed(input: {
   reloadItems?: () => Promise<NetworkItem[]>;
   getItem?: (itemId: string) => Promise<NetworkItem | undefined>;
   mode: 'open' | 'refresh' | 'reuse' | 'replenish' | 'more' | 'reset';
+  /** catalog：只并行取公开目录，不等待查询生成和排序。 */
+  supplyPhase?: 'catalog' | 'full';
   now?: string;
 }): Promise<{ view: DiscoverView; reasonCode: FeedReasonCode }> {
   const now = input.now || new Date().toISOString();
@@ -624,6 +626,48 @@ export async function ensurePersonalFeed(input: {
   let replenished = false;
   let searchAttempted = false;
 
+  if (input.mode === 'replenish' && input.supplyPhase === 'catalog') {
+    mark('CATALOG_START');
+    if (input.ingestHit && networking !== 'DISABLED') {
+      await Promise.all(
+        catalogFeedUrls(['article', 'video', 'audio', 'image']).map(async (feedUrl) => {
+          try {
+            const ingested = await input.ingestHit!({ title: 'open catalog', url: feedUrl });
+            if (ingested.length) replenished = true;
+          } catch {
+            /* 单条目录失败不挡住其它目录 */
+          }
+        }),
+      );
+    }
+    if (input.reloadItems) {
+      items = candidatesForDefault(await input.reloadItems(), now).filter((item) => !blocked(item, prefs));
+    }
+    const cards = directoryCards(
+      diverseFeedCandidates(
+        items.filter((item) => !shown.has(item.itemId)),
+        MAX_FEED,
+        2,
+      ),
+      prefs,
+      MAX_FEED,
+      now,
+    );
+    mark('FIRST_CARD_VISIBLE', cards.length);
+    return finish(
+      viewOf({
+        cards,
+        preferences: input.preferences,
+        notice: cards.length ? '这些是刚取到的公开来源。正在按你的情况继续挑。' : '',
+        reasonCode: cards.length ? 'REPLENISHED' : 'DIRECTORY_EMPTY',
+        feedMode: 'personal',
+        networking,
+        replenishing: true,
+      }),
+      cards.length ? 'REPLENISHED' : 'DIRECTORY_EMPTY',
+    );
+  }
+
   const acceptOpenHits = async (openHits: Awaited<ReturnType<typeof searchOpenMedia>>) => {
     if (openHits.length) replenished = true;
     for (const hit of openHits.slice(0, 6)) {
@@ -653,18 +697,33 @@ export async function ensurePersonalFeed(input: {
     const ranked = !!(input.chatComplete && input.model);
     let queries: string[] = [];
     let intents: Awaited<ReturnType<typeof proposeDiscoveryIntents>> = [];
+    const intentPromise =
+      ranked && input.chatComplete && input.model
+        ? proposeDiscoveryIntents({
+            selfContext: formatSelfContext(selectSelfContext(input.digitalSelf, '')),
+            chatComplete: input.chatComplete,
+            model: input.model,
+            now,
+            ...(input.preferenceDirectives ? { preferenceDirectives: input.preferenceDirectives } : {}),
+            ...(formatRecentRecommendationContext(recent)
+              ? { recentContext: formatRecentRecommendationContext(recent) }
+              : {}),
+          })
+        : Promise.resolve([]);
+    if (input.fetchOpenMedia && input.ingestHit) {
+      await Promise.all(
+        catalogFeedUrls(['article', 'video', 'audio', 'image']).map(async (feedUrl) => {
+          try {
+            const ingested = await input.ingestHit!({ title: 'open catalog', url: feedUrl });
+            if (ingested.length) replenished = true;
+          } catch {
+            /* 目录 feed 失败不阻断 */
+          }
+        }),
+      );
+    }
     if (ranked && input.chatComplete && input.model) {
-      const selfContext = formatSelfContext(selectSelfContext(input.digitalSelf, ''));
-      intents = await proposeDiscoveryIntents({
-        selfContext,
-        chatComplete: input.chatComplete,
-        model: input.model,
-        now,
-        ...(input.preferenceDirectives ? { preferenceDirectives: input.preferenceDirectives } : {}),
-        ...(formatRecentRecommendationContext(recent)
-          ? { recentContext: formatRecentRecommendationContext(recent) }
-          : {}),
-      });
+      intents = await intentPromise;
       queries = intents.map((row) => row.searchQuery).filter(Boolean);
       mark('INTENT_QUERIES', queries.length);
       if (!queries.length) supplement = 'no_query';
@@ -704,16 +763,6 @@ export async function ensurePersonalFeed(input: {
           /* 开放目录失败不阻断 RSS */
         }
       }
-      if (input.ingestHit) {
-        for (const feedUrl of catalogFeedUrls(['video', 'audio', 'article', 'image'])) {
-          try {
-            const ingested = await input.ingestHit({ title: 'open catalog', url: feedUrl });
-            if (ingested.length) replenished = true;
-          } catch {
-            /* 目录 feed 失败不阻断 */
-          }
-        }
-      }
     }
     if (input.reloadItems) items = candidatesForDefault(await input.reloadItems(), now).filter((item) => !blocked(item, prefs));
     const stillShort = items.filter((item) => !shown.has(item.itemId) && !opened.has(item.itemId)).length < MIN_FEED;
@@ -726,13 +775,15 @@ export async function ensurePersonalFeed(input: {
           searchRaw += hits.length;
           if (hits.length) replenished = true;
           if (input.ingestHit) {
-            for (const hit of hits.slice(0, 6)) {
-              try {
-                await input.ingestHit(hit);
-              } catch {
-                /* 单条摄入失败不阻断补量 */
-              }
-            }
+            await Promise.all(
+              hits.slice(0, 6).map(async (hit) => {
+                try {
+                  await input.ingestHit!(hit);
+                } catch {
+                  /* 单条摄入失败不阻断补量 */
+                }
+              }),
+            );
           }
         } catch (err) {
           networking = classifySearchFailure(err);

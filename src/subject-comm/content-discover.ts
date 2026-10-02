@@ -28,9 +28,12 @@ export interface DiscoverCard {
   thumbnailUrl?: string;
   embedUrl?: string;
   mediaUrl?: string;
+  mimeType?: string;
   durationSeconds?: number;
   consumption?: string;
   access?: string;
+  /** 打开后的页面状态。验证页和读失败不是正常正文。 */
+  accessState?: 'challenge' | 'unreadable';
   /** 相对当前搜索的对象忠实度。合并时 PRIMARY 不得被 ABOUT 覆盖。 */
   objectFidelity?: 'PRIMARY_CONTENT' | 'ABOUT_CONTENT' | 'UNRELATED';
   /** 稍后看来源已不在目录里。收藏记录仍保留。 */
@@ -110,6 +113,7 @@ export function cardFromNetworkItem(
     ...(item.content.thumbnailUrl ? { thumbnailUrl: item.content.thumbnailUrl } : {}),
     ...(item.content.embedUrl ? { embedUrl: item.content.embedUrl } : {}),
     ...(item.content.mediaUrl ? { mediaUrl: item.content.mediaUrl } : {}),
+    ...(item.content.mimeType ? { mimeType: item.content.mimeType } : {}),
     ...(item.content.durationSeconds != null ? { durationSeconds: item.content.durationSeconds } : {}),
     ...(item.content.consumption ? { consumption: item.content.consumption } : {}),
     ...(item.content.access ? { access: item.content.access } : {}),

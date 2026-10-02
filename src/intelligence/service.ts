@@ -115,6 +115,9 @@ export class TalkService {
     private readonly learnFromUtterance?: (text: string) => Promise<TalkLearnResult>,
     private readonly resolveContentSeek?: (pkg: TalkPackageRef, query: string) => Promise<string>,
     private readonly requestFolderAccess?: (input: { path: string; label: string }) => Promise<boolean>,
+    private readonly resolveWebSearch?: () =>
+      | ((query: string) => Promise<Array<{ title: string; url: string; snippet?: string }>>)
+      | undefined,
   ) {}
 
   async invoke(
@@ -251,6 +254,15 @@ export class TalkService {
             now,
           }).then(() => undefined),
         refreshAgents: (paths) => this.resolveAgents(pkg, { contextPaths: paths }),
+        ...(this.resolveWebSearch
+          ? {
+              searchWeb: async (query: string) => {
+                const search = this.resolveWebSearch?.();
+                if (!search) throw new Error('搜索还没有接上');
+                return search(query);
+              },
+            }
+          : {}),
       });
       next = ran.thread;
       outcome = ran.outcome;

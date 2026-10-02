@@ -223,7 +223,10 @@
     if (card.unavailable) {
       const gone = document.createElement('p');
       gone.className = 'content-discover-source muted tiny';
-      gone.textContent = '来源暂时打不开，收藏仍在。';
+      gone.textContent =
+        card.accessState === 'challenge'
+          ? '这个页面是访问验证，不是正文。'
+          : '来源暂时打不开，收藏仍在。';
       body.appendChild(gone);
     }
     const src = sourceLine(card);
@@ -242,7 +245,7 @@
         body.appendChild(p);
       }
     }
-    if (type === 'audio' && isHttps(card.mediaUrl) && card.consumption !== 'OFFICIAL_EMBED') {
+    if (type === 'audio' && canPlayMedia(card, 'audio')) {
       const audio = document.createElement('audio');
       audio.className = 'content-discover-audio';
       audio.preload = 'metadata';
@@ -259,12 +262,7 @@
       });
       body.appendChild(audio);
     }
-    if (
-      type === 'video' &&
-      isHttps(card.mediaUrl) &&
-      card.consumption !== 'OFFICIAL_EMBED' &&
-      /\.(m4v|mp4|webm)(\?|$)/i.test(String(card.mediaUrl || ''))
-    ) {
+    if (type === 'video' && canPlayMedia(card, 'video')) {
       const video = document.createElement('video');
       video.className = 'content-discover-video';
       video.preload = 'metadata';
@@ -359,6 +357,20 @@
 
   function cardKey(card) {
     return String((card && (card.itemId || card.url)) || '');
+  }
+
+  function canPlayMedia(card, kind) {
+    if (!card || !isHttps(card.mediaUrl) || card.consumption === 'OFFICIAL_EMBED') return false;
+    const mime = String(card.mimeType || '').toLowerCase();
+    if (mime.startsWith('text/html') || mime.startsWith('application/xhtml')) return false;
+    if (kind === 'audio') {
+      if (mime.startsWith('audio/')) return true;
+      if (mime.startsWith('video/') || mime.startsWith('image/')) return false;
+      return /\.(aac|flac|m4a|mp3|ogg|opus|wav)(\?|$)/i.test(String(card.mediaUrl || ''));
+    }
+    if (mime === 'video/mp4' || mime === 'video/webm') return true;
+    if (mime.startsWith('video/') || mime.startsWith('audio/') || mime.startsWith('image/')) return false;
+    return /\.(m4v|mp4|webm)(\?|$)/i.test(String(card.mediaUrl || ''));
   }
 
   function isPrimaryMediaCard(card) {
@@ -561,26 +573,44 @@
     showSection(activeSection);
   }
 
+  async function followReplenish(client, gen) {
+    let guard = 0;
+    while (guard < 2 && lastView && lastView.replenishing && activeSearchGenerationId === gen) {
+      guard += 1;
+      if (!lastCards.length) {
+        setStatus('兔机米正在准备一些值得看的内容……');
+      }
+      const next = await client.invoke('content', {
+        action: 'replenish',
+        searchGenerationId: gen,
+      });
+      if (activeSearchGenerationId !== gen) return;
+      applyView(next && next.view);
+    }
+  }
+
+  function noteSlowSearch(gen) {
+    return setTimeout(() => {
+      if (activeSearchGenerationId !== gen) return;
+      setStatus('还在向来源核对。再搜一次会停掉这一次，旧结果不会留在新主题上。');
+    }, 10000);
+  }
+
   async function refresh() {
     const client = api();
     if (!client || typeof client.invoke !== 'function') return;
     if (!activeSearchGenerationId) activeSearchGenerationId = newSearchGenerationId();
     activeFeedMode = 'personal';
     if (!lastCards.length) setStatus('兔机米正在准备一些值得看的内容……');
+    const slowNote = noteSlowSearch(activeSearchGenerationId);
     try {
       const result = await client.invoke('content', {
         action: 'discover',
         searchGenerationId: activeSearchGenerationId,
       });
       applyView(result && result.view);
-      if (result && result.view && result.view.replenishing && activeFeedMode === 'personal') {
-        if (!lastCards.length) setStatus('兔机米正在准备一些值得看的内容……');
-        const next = await client.invoke('content', {
-          action: 'replenish',
-          searchGenerationId: activeSearchGenerationId,
-        });
-        applyView(next && next.view);
-      }
+      await followReplenish(client, activeSearchGenerationId);
+      clearTimeout(slowNote);
     } catch {
       setStatus('');
       if (!lastCards.length) {
@@ -691,6 +721,7 @@
     if (feedTitle) feedTitle.textContent = '正在找「' + text.slice(0, 24) + '」';
     if (opts && opts.navigate) await goDiscover({ skipRefresh: true });
     showSection('for-you');
+    const slowNote = noteSlowSearch(gen);
     try {
       const result = await client.invoke('content', {
         action: 'seek',
@@ -698,19 +729,8 @@
         searchGenerationId: gen,
       });
       applyView(result && result.view);
-      if (
-        result &&
-        result.view &&
-        result.view.replenishing &&
-        activeSearchGenerationId === gen &&
-        activeFeedMode === 'intent'
-      ) {
-        const next = await client.invoke('content', {
-          action: 'replenish',
-          searchGenerationId: gen,
-        });
-        applyView(next && next.view);
-      }
+      await followReplenish(client, gen);
+      clearTimeout(slowNote);
     } catch {
       const notice = $('content-discover-notice');
       if (notice) notice.textContent = '暂时无法获取新内容，可以稍后再试或检查联网设置。';

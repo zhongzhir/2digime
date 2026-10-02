@@ -181,7 +181,7 @@ import type { ProfessionalAgent, TalkChatFn } from '../intelligence';
 import { formatSelfContext, selectSelfContext } from '../intelligence/self-context';
 import { readDigitalSelf } from '../subject-core/digital-self/store';
 import { type DiscoverView } from '../subject-comm/content-discover';
-import { formatSeekContext, seekContent, type ContentSeekResult } from '../subject-comm/content-seek';
+import { formatSeekContext, seekContent, snippetCardsFromHits, type ContentSeekResult } from '../subject-comm/content-seek';
 import {
   createSearchGenerationId,
   mergeIntentViews,
@@ -445,6 +445,7 @@ export class DigitalMeRuntime {
     generationId: string;
     leftover: Promise<ContentSeekResult | null>;
   } | null = null;
+  private pendingPersonal: Promise<DiscoverView> | null = null;
 
   constructor(options: DigitalMeRuntimeOptions = {}) {
     this.options = options;
@@ -641,6 +642,7 @@ export class DigitalMeRuntime {
     const gen = String(requested || '').trim() || createSearchGenerationId();
     this.currentSearchGenerationId = gen;
     this.pendingSeekMerge = null;
+    this.pendingPersonal = null;
     return gen;
   }
 
@@ -748,6 +750,23 @@ export class DigitalMeRuntime {
       }
       return this.lastIntentView;
     }
+    if (personalMode === 'replenish' && this.lastIntentView?.feedMode !== 'intent') {
+      const gen = this.currentSearchGenerationId;
+      if (!this.pendingPersonal) {
+        const fast = await this.runContentDiscover(packageRoot, subjectId, relayUrl, 'replenish', 'catalog');
+        if (requested && gen && requested !== this.currentSearchGenerationId) {
+          return this.currentSearchOrPersonal(packageRoot, subjectId, relayUrl, 'reuse');
+        }
+        this.pendingPersonal = this.runContentDiscover(packageRoot, subjectId, relayUrl, 'replenish', 'full');
+        return this.stampSearchGeneration({ ...fast, replenishing: true });
+      }
+      const full = await this.pendingPersonal;
+      if (this.pendingPersonal) this.pendingPersonal = null;
+      if (requested && this.currentSearchGenerationId && requested !== this.currentSearchGenerationId) {
+        return this.currentSearchOrPersonal(packageRoot, subjectId, relayUrl, 'reuse');
+      }
+      return this.stampSearchGeneration({ ...full, replenishing: false });
+    }
     return this.currentSearchOrPersonal(packageRoot, subjectId, relayUrl, personalMode);
   }
 
@@ -779,6 +798,7 @@ export class DigitalMeRuntime {
     subjectId: string,
     relayUrl?: string,
     mode: 'open' | 'refresh' | 'reuse' | 'replenish' | 'more' | 'reset' = 'open',
+    supplyPhase?: 'catalog' | 'full',
   ): Promise<DiscoverView> {
     const preferences = await this.contentPreferenceRows(packageRoot);
     const self = await readDigitalSelf(packageRoot, subjectId, nowIso());
@@ -804,6 +824,7 @@ export class DigitalMeRuntime {
       networking,
       mode,
       ...(directives ? { preferenceDirectives: directives } : {}),
+      ...(supplyPhase ? { supplyPhase } : {}),
       ...(chatCompleteFn ? { chatComplete: chatCompleteFn } : {}),
       ...(model ? { model } : {}),
       ...(searchWeb ? { searchWeb } : {}),
@@ -922,14 +943,59 @@ export class DigitalMeRuntime {
       };
     };
     try {
-      const intent =
+      const intentPromise =
         chatCompleteFn && model
-          ? await interpretDiscoverIntent({
+          ? interpretDiscoverIntent({
               query,
               chatComplete: chatCompleteFn,
               model,
             })
-          : defaultDiscoverIntent(query);
+          : Promise.resolve(defaultDiscoverIntent(query));
+      const quickHits = searchWeb ? await searchWeb(query).catch(() => []) : [];
+      if (generationId !== this.currentSearchGenerationId) {
+        const intent = await intentPromise;
+        const empty = await seekContent({ query, items, intent });
+        return this.intentViewFromSeek(query, empty, preferences, networking, generationId, { replenishing: false });
+      }
+      if (quickHits.length) {
+        const snippets = snippetCardsFromHits(quickHits);
+        this.pendingSeekMerge = {
+          generationId,
+          leftover: (async () => {
+            const intent = await intentPromise;
+            if (generationId !== this.currentSearchGenerationId) return null;
+            return seekContent({
+              query,
+              items,
+              intent,
+              ingestHit,
+              ...(searchWeb ? { searchWeb } : {}),
+              ...(openMedia ? { fetchOpenMedia: openMedia } : {}),
+              ...(chatCompleteFn && model ? { chatComplete: chatCompleteFn, model } : {}),
+            });
+          })(),
+        };
+        const preview: DiscoverView = {
+          headline: '发现',
+          lead: `根据你刚说的话找「${query}」，只显示这次搜索范围内的内容。`,
+          feedTitle: `关于「${query.slice(0, 24)}」`,
+          cards: [],
+          relatedCards: [],
+          unjudgedCards: snippets,
+          unjudgedTitle: '来源摘要已经返回，还没核对是不是这次要的内容',
+          preferences,
+          notice: '这些是来源摘要，不是已确认的报道。正在读正文并核对。',
+          reasonCode: 'CURRENT_INTENT',
+          feedMode: 'intent',
+          searchQuery: query,
+          networking,
+          searchGenerationId: generationId,
+          replenishing: true,
+        };
+        this.lastIntentView = preview;
+        return preview;
+      }
+      const intent = await intentPromise;
       if (generationId !== this.currentSearchGenerationId) {
         const empty = await seekContent({ query, items, intent });
         return this.intentViewFromSeek(query, empty, preferences, networking, generationId, { replenishing: false });
@@ -1256,6 +1322,7 @@ export class DigitalMeRuntime {
           return formatSeekContext(sought);
         },
         this.options.requestFolderAccess,
+        () => this.resolveContentSearch(),
       );
     }
     return this.talkService;
