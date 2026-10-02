@@ -19,6 +19,10 @@ export interface DiscoverIntent {
   searchQueries: string[];
   suggestTalk: boolean;
   scope: 'current_search';
+  /** 模型决定这次要不要用已连接的新闻来源。不是查询词路由。 */
+  newsFeed?: boolean;
+  /** 模型给出的报道日期 YYYY-MM-DD。要今天时就是用户本地今天。 */
+  reportDay?: string;
   honestyNote?: string;
 }
 
@@ -129,6 +133,9 @@ export function intentFromModelText(text: string, query: string): DiscoverIntent
   const topic = String(rec.topic || '').trim().slice(0, 80) || fallback.topic;
   const popularityClaim = rec.popularityClaim === true;
   const suggestTalk = intent === 'research' || rec.suggestTalk === true;
+  const newsFeed = rec.newsFeed === true;
+  const reportDayRaw = String(rec.reportDay || '').trim();
+  const reportDay = /^\d{4}-\d{2}-\d{2}$/.test(reportDayRaw) ? reportDayRaw : undefined;
   const honestyNote =
     popularityClaim && intent === 'consume'
       ? '没有跨平台统一播放榜，先找近期公开、可以看/听/读的内容。'
@@ -143,6 +150,8 @@ export function intentFromModelText(text: string, query: string): DiscoverIntent
     searchQueries: searchQueries.length ? searchQueries : fallback.searchQueries,
     suggestTalk,
     scope: 'current_search',
+    ...(newsFeed ? { newsFeed: true } : {}),
+    ...(reportDay ? { reportDay } : {}),
     ...(honestyNote ? { honestyNote } : {}),
   };
 }
@@ -157,7 +166,7 @@ export async function interpretDiscoverIntent(input: {
   if (!query) return fallback;
   const system = [
     '你在判断用户在「发现」里这一次主动搜索的意图。这是 CURRENT_SEARCH_MODE，不是为你发现。',
-    '只输出 JSON，字段：mode, topic, requestedContentTypes, objectWanted, freshness, popularityClaim, searchQueries, suggestTalk。',
+    '只输出 JSON，字段：mode, topic, requestedContentTypes, objectWanted, freshness, popularityClaim, searchQueries, suggestTalk, newsFeed, reportDay。',
     'mode: consume 或 research。发现的强默认是 consume（看/听/读），不是做研究任务。',
     'topic: 用户这次要的主题短词，不要整句。例如「找几个 AI 视频看看」的 topic 是 AI。',
     'requestedContentTypes: 只允许 article / video / image / audio。点名要看视频、影像、纪录片、片子→["video"]；要图/摄影作品→["image"]；要听、曲子、播客、音乐→["audio"]；要读文章或新闻报道→["article"]。说「内容」且未点名媒介→[]。',
@@ -171,11 +180,13 @@ export async function interpretDiscoverIntent(input: {
     '不要把当前搜索扩写成用户平时可能喜欢的其它主题。不要加入这次没要求的相邻领域。',
     '若 mode=consume：搜索词指向具体可消费对象本身，不要去搜排行榜、行业新闻、十大盘点，除非用户明确要这些。',
     'suggestTalk: 若更适合在「与兔机米」里深入分析则为 true。',
+    'newsFeed: 这次要看近期公开报道，并且应该使用已连接的新闻来源时为 true。图片、音频、视频作品和稳定知识为 false。',
+    'reportDay: 用户要看哪一天的报道，写成 YYYY-MM-DD。要今天就填用户消息里的今天。没有指定某一天就省略。',
     '不要使用数字之我、长期偏好或最近浏览去扩大范围。不要输出 score。不要编造播放量。',
   ].join('\n');
   try {
     const today = localCalendarDate();
-    const ask = (maxTokens: number) =>
+    const ask = (maxTokens: number, disableThinking: boolean) =>
       input.chatComplete({
         baseUrl: input.model.baseUrl,
         ...(input.model.apiKey ? { apiKey: input.model.apiKey } : {}),
@@ -188,10 +199,16 @@ export async function interpretDiscoverIntent(input: {
         maxTokens,
         timeoutMs: 45_000,
         responseFormat: { type: 'json_object' },
+        ...(disableThinking ? { thinking: { type: 'disabled' as const } } : {}),
       });
-    let result = await ask(800);
+    let result;
+    try {
+      result = await ask(800, true);
+    } catch {
+      result = await ask(800, false);
+    }
     if (result.truncated || !parseJsonObject(result.text)) {
-      result = await ask(1600);
+      result = await ask(1600, false);
     }
     return intentFromModelText(result.text, query);
   } catch {
@@ -307,8 +324,8 @@ export async function classifyCandidateRoles(input: {
   candidates: ConsumableCandidate[];
   chatComplete?: ChatCompleteFn;
   model?: { baseUrl: string; model: string; apiKey?: string };
-}): Promise<{ roles: Map<string, ContentPageRole>; unjudgedIds: string[] }> {
-  const empty = { roles: new Map<string, ContentPageRole>(), unjudgedIds: [] as string[] };
+}): Promise<{ roles: Map<string, ContentPageRole>; unjudgedIds: string[]; attempts: number }> {
+  const empty = { roles: new Map<string, ContentPageRole>(), unjudgedIds: [] as string[], attempts: 0 };
   if (!input.candidates.length || !input.chatComplete || !input.model) return empty;
   const system = [
     '你在判断每个候选相对「用户这次搜索」的对象忠实度。只输出 JSON：{"roles":[{"id":"","role":""}]}。',
@@ -333,6 +350,7 @@ export async function classifyCandidateRoles(input: {
   const roles = new Map<string, ContentPageRole>();
   const unjudgedIds: string[] = [];
   const batchSize = 4;
+  let attempts = 0;
 
   const judgeBatch = async (batch: ConsumableCandidate[]): Promise<Map<string, ContentPageRole> | null> => {
     const ids = batch.map((row) => row.id);
@@ -354,11 +372,14 @@ export async function classifyCandidateRoles(input: {
         summary: row.summary.slice(0, 240),
       })),
     });
-    const attempts: Array<{ maxTokens: number; jsonObject: boolean }> = [
-      { maxTokens: 1600, jsonObject: true },
-      { maxTokens: 4096, jsonObject: false },
+    // 1600 预算会被推理占满，finish_reason=length，正文只剩半截 JSON。先关掉推理。
+    // 空对象或截断都不算判断完成，再试一次不带该字段的请求。
+    const passes: Array<{ maxTokens: number; disableThinking: boolean }> = [
+      { maxTokens: 800, disableThinking: true },
+      { maxTokens: 4096, disableThinking: false },
     ];
-    for (const attempt of attempts) {
+    for (const pass of passes) {
+      attempts += 1;
       try {
         const result = await chat({
           baseUrl: model.baseUrl,
@@ -369,15 +390,15 @@ export async function classifyCandidateRoles(input: {
             { role: 'user', content: user },
           ],
           temperature: 0,
-          maxTokens: attempt.maxTokens,
+          maxTokens: pass.maxTokens,
           timeoutMs: 45_000,
-          ...(attempt.jsonObject ? { responseFormat: { type: 'json_object' as const } } : {}),
+          responseFormat: { type: 'json_object' },
+          ...(pass.disableThinking ? { thinking: { type: 'disabled' as const } } : {}),
         });
         const parsed = rolesFromModelText(result.text, ids);
-        if (parsed.size) return parsed;
-        if (!result.truncated && parseJsonObject(result.text)) return parsed;
+        if (parsed.size && !result.truncated) return parsed;
       } catch {
-        /* 这一轮失败就换预算再判，不结束整次搜索 */
+        /* 端点拒绝或没有正文时换下一次请求，不结束整次搜索 */
       }
     }
     return null;
@@ -395,5 +416,5 @@ export async function classifyCandidateRoles(input: {
       if (!judged.has(row.id)) unjudgedIds.push(row.id);
     }
   }
-  return { roles, unjudgedIds };
+  return { roles, unjudgedIds, attempts };
 }

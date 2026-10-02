@@ -34,6 +34,8 @@ export interface DiscoverCard {
   access?: string;
   /** 打开后的页面状态。验证页和读失败不是正常正文。 */
   accessState?: 'challenge' | 'unreadable';
+  /** snippet 是来源摘要；body 才是读过的正文。 */
+  textOrigin?: 'snippet' | 'body';
   /** 相对当前搜索的对象忠实度。合并时 PRIMARY 不得被 ABOUT 覆盖。 */
   objectFidelity?: 'PRIMARY_CONTENT' | 'ABOUT_CONTENT' | 'UNRELATED';
   /** 稍后看来源已不在目录里。收藏记录仍保留。 */

@@ -201,7 +201,11 @@ export function mergeIntentViews(current: DiscoverView, incoming: DiscoverView):
   const incomingHasBody =
     (incoming.cards || []).length + (incoming.relatedCards || []).length + (incoming.unjudgedCards || []).length > 0;
   const keptCurrent = (current.unjudgedCards || []).filter(
-    (card) => !(incomingHasBody && String(card.itemId || '').startsWith('snippet_')),
+    (card) =>
+      !(
+        incomingHasBody &&
+        (String(card.itemId || '').startsWith('snippet_') || String(card.itemId || '').startsWith('news_'))
+      ),
   );
   const unjudged = [...keptCurrent, ...(incoming.unjudgedCards || [])].filter((card) => {
     const key = String(card.itemId || card.url || '');

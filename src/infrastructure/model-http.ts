@@ -71,6 +71,11 @@ export interface ChatCompleteOptions {
   /** OpenAI-compatible tool calling. 工具是能力合同，不是任务类型枚举。 */
   tools?: ChatToolDefinition[];
   toolChoice?: 'auto' | 'none';
+  /**
+   * 短 JSON 判断不必先写长推理。当前端点接受 `{ type: 'disabled' }`。
+   * 端点拒绝时由调用方再试一次不带该字段的请求。
+   */
+  thinking?: { type: 'disabled' };
 }
 
 export interface ChatCompleteResult {
@@ -224,6 +229,7 @@ async function requestCompletion(options: ChatCompleteOptions, stream: boolean):
     if (options.responseFormat) payload.response_format = options.responseFormat;
     if (options.tools && options.tools.length > 0) payload.tools = options.tools;
     if (options.toolChoice) payload.tool_choice = options.toolChoice;
+    if (options.thinking) payload.thinking = options.thinking;
 
     let response: Response;
     try {

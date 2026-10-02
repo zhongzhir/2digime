@@ -118,6 +118,20 @@ export class TalkService {
     private readonly resolveWebSearch?: () =>
       | ((query: string) => Promise<Array<{ title: string; url: string; snippet?: string }>>)
       | undefined,
+    private readonly resolveNewsSearch?: () =>
+      | ((query: string) => Promise<
+          Array<{
+            title: string;
+            url: string;
+            snippet?: string;
+            publisherName?: string;
+            publisherUrl?: string;
+            publishedAt?: string;
+            fetchedAt?: string;
+            bodyRead?: boolean;
+          }>
+        >)
+      | undefined,
   ) {}
 
   async invoke(
@@ -259,6 +273,15 @@ export class TalkService {
               searchWeb: async (query: string) => {
                 const search = this.resolveWebSearch?.();
                 if (!search) throw new Error('搜索还没有接上');
+                return search(query);
+              },
+            }
+          : {}),
+        ...(this.resolveNewsSearch
+          ? {
+              newsSearch: async (query: string) => {
+                const search = this.resolveNewsSearch?.();
+                if (!search) throw new Error('新闻来源还没有接上');
                 return search(query);
               },
             }

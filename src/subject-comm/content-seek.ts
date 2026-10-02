@@ -15,11 +15,14 @@ import {
   isDomainLikeTitle,
   isGenericHubUrl,
   isSiteEntranceUrl,
+  localCalendarDate,
   objectFidelity,
   strictRequestedTypes,
+  type ContentPageRole,
   type DiscoverIntent,
   type ObjectFidelity,
 } from './discover-intent';
+import { type NewsHeadline } from './news-headlines';
 import { hasDirectMediaRepresentation, mergeSeekCardSets } from './discover-search-generation';
 import {
   networkItemFromOpenHit,
@@ -31,6 +34,9 @@ export interface ExternalSeekHit {
   title: string;
   url: string;
   snippet?: string;
+  publishedAt?: string;
+  publisherDisplayName?: string;
+  textOrigin?: 'snippet' | 'body';
   /** 点播一部作品时多取一些章节。默认信息流不传，由摄入方保持小批量。 */
   limit?: number;
 }
@@ -215,6 +221,64 @@ export function pageAccessState(input: { title?: string; text?: string }): 'ok' 
   return 'ok';
 }
 
+export function publishedLocalDay(value: string | undefined): string | null {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return null;
+  return localCalendarDate(new Date(parsed));
+}
+
+export function cardsFromNewsHeadlines(rows: NewsHeadline[]): DiscoverCard[] {
+  return rows.slice(0, 8).map((row, index) => {
+    const url = canonicalOf(row.url) || row.url;
+    const card: DiscoverCard = {
+      itemId: `news_${index}_${url}`,
+      title: row.title,
+      text: row.snippet && row.snippet !== row.title ? row.snippet : '',
+      url,
+      reason: '新闻来源给出的标题、来源和发布时间。还没有读取正文。',
+      source: 'web',
+      contentType: 'article',
+      textOrigin: 'snippet',
+      ...(row.publishedAt ? { publishedAt: row.publishedAt } : {}),
+      ...(row.publisherName ? { publisherDisplayName: row.publisherName } : {}),
+    };
+    if (pageAccessState({ title: card.title, text: card.text }) === 'challenge') {
+      card.accessState = 'challenge';
+      card.unavailable = true;
+      card.reason = '这个页面是访问验证，不是正文。可以打开原站；搜索摘要只说明来源当时给了什么。';
+    }
+    return card;
+  });
+}
+
+/** 当天报道只收来源发布时间落在用户本地今天、且已经判为具体报道的条目。 */
+export function splitCurrentReports(input: {
+  primary: DiscoverCard[];
+  related: DiscoverCard[];
+  today: string;
+}): { todayReports: DiscoverCard[]; background: DiscoverCard[] } {
+  const todayReports: DiscoverCard[] = [];
+  const moved: DiscoverCard[] = [];
+  for (const card of input.primary) {
+    if (card.accessState === 'challenge' || card.accessState === 'unreadable') {
+      moved.push(card);
+      continue;
+    }
+    const day = publishedLocalDay(card.publishedAt);
+    if (day === input.today) {
+      todayReports.push(card);
+      continue;
+    }
+    if (!day) {
+      moved.push({ ...card, reason: '来源没有给出发布时间，不能当作当天报道。' });
+      continue;
+    }
+    moved.push({ ...card, reason: `来源发布时间是 ${day}，不是今天。` });
+  }
+  return { todayReports, background: [...moved, ...input.related] };
+}
+
 export function snippetCardsFromHits(hits: ExternalSeekHit[]): DiscoverCard[] {
   return hits.slice(0, 8).map((hit, index) => {
     const url = canonicalOf(hit.url) || hit.url;
@@ -232,6 +296,9 @@ function webCardFromHit(hit: ExternalSeekHit, itemId: string): DiscoverCard {
     url: canonicalOf(hit.url) || hit.url,
     reason: '公开网页来源，不是目录推荐。',
     source: 'web',
+    textOrigin: hit.textOrigin || 'snippet',
+    ...(hit.publishedAt ? { publishedAt: hit.publishedAt } : {}),
+    ...(hit.publisherDisplayName ? { publisherDisplayName: hit.publisherDisplayName } : {}),
   };
   if (pageAccessState({ title: card.title, text: card.text }) === 'challenge') {
     card.accessState = 'challenge';
@@ -249,6 +316,7 @@ export async function seekContent(input: {
   model?: { baseUrl: string; model: string; apiKey?: string };
   ingestHit?: (hit: ExternalSeekHit) => Promise<NetworkItem[]>;
   fetchOpenMedia?: OpenMediaFetch;
+  newsHeadlines?: NewsHeadline[];
   intent?: DiscoverIntent;
   skipWeb?: boolean;
   skipOpenMedia?: boolean;
@@ -289,6 +357,7 @@ export async function seekContent(input: {
   );
   const seenUrls = new Set(cards.map((card) => canonicalOf(card.url)).filter(Boolean));
   const seenIds = new Set(cards.map((card) => card.itemId));
+  const groupToday = intent.freshness === 'current' || intent.newsFeed === true;
 
   let usedExternal = false;
   let searchFailed = false;
@@ -297,6 +366,17 @@ export async function seekContent(input: {
   let excludedHub = 0;
   let excludedDomain = 0;
   let excludedPlaceholder = 0;
+  if (input.newsHeadlines?.length) {
+    for (const card of cardsFromNewsHeadlines(input.newsHeadlines)) {
+      const canonical = canonicalOf(card.url);
+      if (canonical && seenUrls.has(canonical)) continue;
+      if (seenIds.has(card.itemId)) continue;
+      if (canonical) seenUrls.add(canonical);
+      seenIds.add(card.itemId);
+      usedExternal = true;
+      cards.push(card);
+    }
+  }
   const mediaKinds = intent.requestedMedia.filter(
     (row): row is 'video' | 'image' | 'audio' => row === 'video' || row === 'image' || row === 'audio',
   );
@@ -448,6 +528,7 @@ export async function seekContent(input: {
         added = true;
         if (canonical) queryByUrl.set(canonical, hit.searchQuery);
         const card = cardFromNetworkItem(item, '公开网页来源，不是目录推荐。', 'web');
+        card.textOrigin = 'body';
         if (pageAccessState({ title: card.title, text: card.text }) === 'challenge') {
           card.accessState = 'challenge';
           card.unavailable = true;
@@ -493,7 +574,11 @@ export async function seekContent(input: {
         if (unjudgedIds.has(card.itemId)) continue;
         const role = judged.roles.get(card.itemId);
         if (!role) continue;
-        fidelity.set(card.itemId, objectFidelity(role, intent));
+        const backgroundRole: ContentPageRole[] = ['LISTING', 'HUB', 'COMMENTARY'];
+        fidelity.set(
+          card.itemId,
+          groupToday && backgroundRole.includes(role) ? 'ABOUT_CONTENT' : objectFidelity(role, intent),
+        );
       }
     }
   }
@@ -526,7 +611,14 @@ export async function seekContent(input: {
     }
     fidelity.set(card.itemId, kind);
     if (kind === 'UNJUDGED') {
-      unjudged.push(card);
+      if (groupToday && publishedLocalDay(card.publishedAt) === (intent.reportDay || localCalendarDate())) {
+        unjudged.push({
+          ...card,
+          reason: `来源日期是 ${intent.reportDay || localCalendarDate()}，但这轮没有完成判断，还不能当成已确认的这一天报道。`,
+        });
+      } else {
+        unjudged.push(card);
+      }
       continue;
     }
     if (kind === 'UNRELATED') continue;
@@ -541,8 +633,12 @@ export async function seekContent(input: {
     }
   }
 
-  let visible = primary.slice(0, MAX_CARDS);
-  let relatedVisible = intent.intent === 'research' ? [] : related.slice(0, 6);
+  const reportDay = intent.reportDay || localCalendarDate();
+  const placed = groupToday
+    ? splitCurrentReports({ primary, related, today: reportDay })
+    : { todayReports: primary, background: related };
+  let visible = placed.todayReports.slice(0, MAX_CARDS);
+  let relatedVisible = intent.intent === 'research' ? [] : placed.background.slice(0, 6);
   if (input.previous) {
     const merged = mergeSeekCardSets(input.previous, { cards: visible, relatedCards: relatedVisible });
     visible = merged.cards.slice(0, MAX_CARDS);
@@ -602,7 +698,11 @@ export async function seekContent(input: {
   };
 
   let notice = '';
-  if (!visible.length) {
+  if (groupToday && !visible.length) {
+    notice = `没有找到发布日期是 ${reportDay} 的具体报道。综述、其它日期和还没判断完的条目不能当作这一天的结果。`;
+  } else if (groupToday && visible.length) {
+    notice = `这一组只包括来源发布时间是 ${reportDay}、并且判断为具体报道的条目。综述在补充背景里。还没读到的正文仍标为来源摘要。`;
+  } else if (!visible.length) {
     if (searchFailed && rawSearchHits === 0 && !directoryHits.length) {
       notice = '暂时无法获取新内容，可以稍后再试或检查联网设置。';
     } else if (!input.searchWeb && !directoryHits.length) {

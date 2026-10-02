@@ -181,13 +181,20 @@ import type { ProfessionalAgent, TalkChatFn } from '../intelligence';
 import { formatSelfContext, selectSelfContext } from '../intelligence/self-context';
 import { readDigitalSelf } from '../subject-core/digital-self/store';
 import { type DiscoverView } from '../subject-comm/content-discover';
-import { formatSeekContext, seekContent, snippetCardsFromHits, type ContentSeekResult } from '../subject-comm/content-seek';
+import {
+  cardsFromNewsHeadlines,
+  formatSeekContext,
+  seekContent,
+  snippetCardsFromHits,
+  type ContentSeekResult,
+} from '../subject-comm/content-seek';
+import { fetchNewsHeadlines } from '../subject-comm/news-headlines';
 import {
   createSearchGenerationId,
   mergeIntentViews,
   mergeSeekCardSets,
 } from '../subject-comm/discover-search-generation';
-import { defaultDiscoverIntent, interpretDiscoverIntent } from '../subject-comm/discover-intent';
+import { defaultDiscoverIntent, interpretDiscoverIntent, localCalendarDate } from '../subject-comm/discover-intent';
 import { ingestSource } from '../subject-comm/content-ingest';
 import { safePublicHttpGet } from '../work-runtime/public-http-safety';
 import { indexSearchHits, ingestDiscoveredEntrance, preferProviderSnippet } from '../subject-comm/open-web-discovery';
@@ -673,14 +680,20 @@ export class DigitalMeRuntime {
     extra?: Partial<DiscoverView>,
   ): DiscoverView {
     const topic = sought.intent.topic || query;
+    const currentNews = sought.intent.freshness === 'current' || sought.intent.newsFeed === true;
     return {
       headline: '发现',
       lead: `根据你刚说的话找「${topic}」，只显示这次搜索范围内的内容。`,
-      feedTitle: `关于「${topic}」`,
+      feedTitle:
+        currentNews && sought.cards.length
+          ? sought.intent.reportDay && sought.intent.reportDay !== localCalendarDate()
+            ? `${sought.intent.reportDay} 的报道`
+            : '当天报道'
+          : `关于「${topic}」`,
       cards: sought.cards,
       relatedCards: sought.relatedCards,
       unjudgedCards: sought.unjudgedCards,
-      ...(sought.relatedCards.length ? { relatedTitle: '相关介绍' } : {}),
+      ...(sought.relatedCards.length ? { relatedTitle: currentNews ? '补充背景' : '相关介绍' } : {}),
       ...(sought.unjudgedCards.length ? { unjudgedTitle: '这些还没完成判断，不是已确认的推荐' } : {}),
       preferences,
       notice: sought.notice,
@@ -951,23 +964,75 @@ export class DigitalMeRuntime {
               model,
             })
           : Promise.resolve(defaultDiscoverIntent(query));
-      const quickHits = searchWeb ? await searchWeb(query).catch(() => []) : [];
+      const quickPromise = searchWeb ? searchWeb(query).catch(() => []) : Promise.resolve([]);
+      const intentReady = await intentPromise;
       if (generationId !== this.currentSearchGenerationId) {
         const intent = await intentPromise;
         const empty = await seekContent({ query, items, intent });
         return this.intentViewFromSeek(query, empty, preferences, networking, generationId, { replenishing: false });
       }
+      let headlines: Awaited<ReturnType<typeof fetchNewsHeadlines>> = [];
+      let newsFailed = false;
+      if (intentReady.newsFeed) {
+        try {
+          headlines = await fetchNewsHeadlines(intentReady.searchQueries[0] || query);
+        } catch {
+          newsFailed = true;
+          headlines = [];
+        }
+      }
+      if (generationId !== this.currentSearchGenerationId) {
+        const empty = await seekContent({ query, items, intent: intentReady });
+        return this.intentViewFromSeek(query, empty, preferences, networking, generationId, { replenishing: false });
+      }
+      if (headlines.length) {
+        this.pendingSeekMerge = {
+          generationId,
+          leftover: (async () => {
+            if (generationId !== this.currentSearchGenerationId) return null;
+            return seekContent({
+              query,
+              items,
+              intent: intentReady,
+              newsHeadlines: headlines,
+              ingestHit,
+              ...(searchWeb ? { searchWeb } : {}),
+              ...(openMedia ? { fetchOpenMedia: openMedia } : {}),
+              ...(chatCompleteFn && model ? { chatComplete: chatCompleteFn, model } : {}),
+            });
+          })(),
+        };
+        const preview: DiscoverView = {
+          headline: '发现',
+          lead: `根据你刚说的话找「${query}」，只显示这次搜索范围内的内容。`,
+          feedTitle: '新闻来源',
+          cards: [],
+          relatedCards: [],
+          unjudgedCards: cardsFromNewsHeadlines(headlines),
+          unjudgedTitle: '来源已经给出条目和发布时间，还没有读正文，也还没有分出当天报道',
+          preferences,
+          notice: '这些是新闻来源的标题和发布时间，不是已读正文。日期对不上或没有日期的，不会被说成今天的报道。',
+          reasonCode: 'CURRENT_INTENT',
+          feedMode: 'intent',
+          searchQuery: query,
+          networking,
+          searchGenerationId: generationId,
+          replenishing: true,
+        };
+        this.lastIntentView = preview;
+        return preview;
+      }
+      const quickHits = await quickPromise;
       if (quickHits.length) {
         const snippets = snippetCardsFromHits(quickHits);
         this.pendingSeekMerge = {
           generationId,
           leftover: (async () => {
-            const intent = await intentPromise;
             if (generationId !== this.currentSearchGenerationId) return null;
             return seekContent({
               query,
               items,
-              intent,
+              intent: intentReady,
               ingestHit,
               ...(searchWeb ? { searchWeb } : {}),
               ...(openMedia ? { fetchOpenMedia: openMedia } : {}),
@@ -984,7 +1049,9 @@ export class DigitalMeRuntime {
           unjudgedCards: snippets,
           unjudgedTitle: '来源摘要已经返回，还没核对是不是这次要的内容',
           preferences,
-          notice: '这些是来源摘要，不是已确认的报道。正在读正文并核对。',
+          notice: newsFailed
+            ? '新闻来源这次没有返回。这些是网页搜索摘要，不是已确认的报道，也还没有读取正文。'
+            : '这些是来源摘要，不是已确认的报道。正在读正文并核对。',
           reasonCode: 'CURRENT_INTENT',
           feedMode: 'intent',
           searchQuery: query,
@@ -995,7 +1062,7 @@ export class DigitalMeRuntime {
         this.lastIntentView = preview;
         return preview;
       }
-      const intent = await intentPromise;
+      const intent = intentReady;
       if (generationId !== this.currentSearchGenerationId) {
         const empty = await seekContent({ query, items, intent });
         return this.intentViewFromSeek(query, empty, preferences, networking, generationId, { replenishing: false });
@@ -1323,6 +1390,7 @@ export class DigitalMeRuntime {
         },
         this.options.requestFolderAccess,
         () => this.resolveContentSearch(),
+        () => fetchNewsHeadlines,
       );
     }
     return this.talkService;

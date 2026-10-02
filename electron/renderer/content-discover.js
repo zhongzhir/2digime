@@ -81,8 +81,14 @@
     }
     if (card.author && card.author !== card.publisherDisplayName) bits.push(card.author);
     if (card.publishedAt) {
-      const d = Date.parse(card.publishedAt);
-      bits.push(Number.isFinite(d) ? new Date(d).toISOString().slice(0, 10) : String(card.publishedAt).slice(0, 10));
+      const d = new Date(card.publishedAt);
+      if (Number.isFinite(d.getTime())) {
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        bits.push(d.getFullYear() + '-' + month + '-' + day);
+      } else {
+        bits.push(String(card.publishedAt).slice(0, 10));
+      }
     }
     if (card.durationSeconds) {
       const n = Math.round(Number(card.durationSeconds));
@@ -192,6 +198,16 @@
     const type = String(card.contentType || 'article');
     li.className = 'content-discover-card content-discover-card--' + (type || 'article');
     if (card.itemId) li.setAttribute('data-item-id', card.itemId);
+    if (card.url) li.setAttribute('data-url', card.url);
+    if (card.textOrigin) li.setAttribute('data-text-origin', card.textOrigin);
+    if (card.publishedAt) {
+      const published = new Date(card.publishedAt);
+      if (Number.isFinite(published.getTime())) {
+        const month = String(published.getMonth() + 1).padStart(2, '0');
+        const day = String(published.getDate()).padStart(2, '0');
+        li.setAttribute('data-published-day', published.getFullYear() + '-' + month + '-' + day);
+      }
+    }
     li.setAttribute(
       'data-card-sig',
       [card.itemId || '', type, card.thumbnailUrl || '', card.mediaUrl || '', card.title || ''].join('|'),
@@ -235,6 +251,12 @@
       meta.className = 'content-discover-source muted tiny';
       meta.textContent = src;
       body.appendChild(meta);
+    }
+    if (card.textOrigin === 'snippet' || card.textOrigin === 'body') {
+      const origin = document.createElement('p');
+      origin.className = 'content-discover-source muted tiny';
+      origin.textContent = card.textOrigin === 'body' ? '已读取正文。' : '来源摘要，还没有读取正文。';
+      body.appendChild(origin);
     }
     if (card.text) {
       const raw = decodeEntities(card.text).replace(/\s+/g, ' ').trim();
@@ -517,7 +539,8 @@
     lastUnjudged = (view && view.unjudgedCards) || [];
     lastView = view;
     if (notice) {
-      notice.textContent = lastCards.length ? friendlyNotice(view && view.notice) : '';
+      notice.textContent =
+        lastCards.length || (view && view.feedMode === 'intent') ? friendlyNotice(view && view.notice) : '';
     }
     const replenishing = !!(view && view.replenishing);
     if (replenishing && !lastCards.length) {
