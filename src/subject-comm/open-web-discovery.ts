@@ -332,6 +332,7 @@ export async function indexSearchHits(input: {
   store: NetworkItemStore;
   now?: string;
   limit?: number;
+  via?: NetworkItemDiscoveryVia;
 }): Promise<NetworkItem[]> {
   const now = input.now || new Date().toISOString();
   const items: NetworkItem[] = [];
@@ -372,7 +373,7 @@ export async function indexSearchHits(input: {
         actor: 'owner',
         statedAt: now,
         excerpt: text.slice(0, 400),
-        via: 'search',
+        via: input.via || 'search',
       },
     };
     const checked = validateNetworkItem(raw);

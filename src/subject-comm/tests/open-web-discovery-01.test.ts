@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MemoryNetworkItemStore } from '../../relay-service/network-item-store';
 import { discoverFeedHints, parsePageMetadata } from '../page-metadata';
+import { decodePublicBody } from '../../work-runtime/public-http-safety';
 import {
   discoverOpenWebSource,
   ingestOpenWebSource,
@@ -72,6 +73,20 @@ test('page metadata prefers canonical, OpenGraph, JSON-LD; does not keep full bo
   assert.equal(meta.publishedAt, '2026-09-01T00:00:00Z');
   assert.equal(meta.author, 'Ada');
   assert.equal(/full article body/.test(meta.description), false);
+});
+
+test('gb18030 page title is decoded instead of kept as mojibake', () => {
+  const bytes = Buffer.from(
+    'PGh0bWw+PGhlYWQ+PG1ldGEgY2hhcnNldD0iZ2IxODAzMCI+PHRpdGxlPsS+0Me087rssN88L3RpdGxlPjwvaGVhZD48Ym9keT48cD7V4srH0rvGqr2yxL7Qx7Tzuuyw37fnsam3ts6nus2527LiwPrKt7XE1f3OxKOs1+O5u7Oky/nS1Lvhsbu1sbPJ1arCvKGjsrmz5LnbsuK8x8K8oaM8L3A+PC9ib2R5PjwvaHRtbD4=',
+    'base64',
+  );
+  const decoded = decodePublicBody(bytes, 'text/html');
+  const meta = parsePageMetadata(decoded, 'https://example.org/jupiter');
+  assert.equal(meta.title, '木星大红斑');
+  assert.match(meta.description, /木星大红斑/);
+  assert.equal(meta.mediaUrl, undefined);
+  assert.equal(meta.thumbnailUrl, undefined);
+  assert.equal(decoded.includes('\uFFFD'), false);
 });
 
 test('placeholder title is not a real title, and a slogan in the page chrome yields to the article paragraph', () => {

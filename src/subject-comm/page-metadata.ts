@@ -101,6 +101,12 @@ function absUrl(href: string, base: string): string | null {
   }
 }
 
+function publicMedia(href: string, base: string): string | undefined {
+  const raw = String(href || '').trim();
+  if (!raw) return undefined;
+  return isSafePublicMediaUrl(absUrl(raw, base) || '');
+}
+
 function feedKind(type: string): FeedHint['type'] {
   const t = type.toLowerCase();
   if (t.includes('feed+json') || t === 'application/json') return 'json';
@@ -302,15 +308,11 @@ export function parsePageMetadata(html: string, fallbackUrl: string): PageMetada
   const schemaMedia = urlFromLd(ld?.contentUrl, base);
   const schemaEmbed = urlFromLd(ld?.embedUrl, base);
   const schemaThumb = urlFromLd(ld?.thumbnailUrl || ld?.image, base);
-  const ogImage = isSafePublicMediaUrl(absUrl(metaContent(root, 'og:image'), base) || '');
+  const ogImage = publicMedia(metaContent(root, 'og:image'), base);
   const thumbnailUrl = schemaThumb || ogImage;
-  const ogVideo = isSafePublicMediaUrl(absUrl(metaContent(root, 'og:video') || metaContent(root, 'og:video:url'), base) || '');
-  const ogAudio = isSafePublicMediaUrl(absUrl(metaContent(root, 'og:audio'), base) || '');
-  const mediaUrl =
-    schemaMedia ||
-    isSafePublicMediaUrl(absUrl(html5Video || html5Audio, base) || '') ||
-    ogVideo ||
-    ogAudio;
+  const ogVideo = publicMedia(metaContent(root, 'og:video') || metaContent(root, 'og:video:url'), base);
+  const ogAudio = publicMedia(metaContent(root, 'og:audio'), base);
+  const mediaUrl = schemaMedia || publicMedia(html5Video || html5Audio, base) || ogVideo || ogAudio;
   const embedUrl = schemaEmbed;
   const durationSeconds = parseDurationSeconds(ld?.duration);
   const width = parsePositiveInt(ld?.width, 8192);

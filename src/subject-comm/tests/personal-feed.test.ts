@@ -800,6 +800,45 @@ test('搜索结果不会因为进了同一目录就占据默认流', async () =>
   assert.equal(titles.includes('木星搜索残留'), false);
 });
 
+test('换一批采用新供给，临时搜索不进入默认流；没有新增时如实说明', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-batch-'));
+  const make = (itemId: string, title: string, via: 'feed' | 'search') => {
+    const checked = validateNetworkItem({
+      schemaVersion: 1,
+      itemId,
+      publisherSubjectId: `pub_${itemId}`,
+      publisherDisplayName: title,
+      kind: 'content',
+      createdAt: NOW,
+      visibility: 'public',
+      content: { title, text: `${title}正文`, url: `https://example.org/${itemId}`, contentType: 'article' },
+      provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via },
+    });
+    if (!checked.ok) throw new Error(checked.reason);
+    return checked.item;
+  };
+  const first = make('ni_a', '目录文章甲', 'feed');
+  const added = make('ni_b', '新补充的文章', 'feed');
+  const search = make('ni_c', '临时搜索残留', 'search');
+  const base = {
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    preferences: [] as [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'DISABLED' as const,
+    mode: 'open' as const,
+    now: NOW,
+  };
+  const opened = await ensurePersonalFeed({ ...base, items: [first] });
+  assert.equal(opened.view.cards.some((card) => card.title === '目录文章甲'), true);
+  const same = await ensurePersonalFeed({ ...base, items: [first], mode: 'refresh' });
+  assert.match(same.view.notice, /没有换出不同的内容/);
+  const refreshed = await ensurePersonalFeed({ ...base, items: [first, added, search], mode: 'refresh' });
+  const titles = refreshed.view.cards.map((card) => card.title);
+  assert.equal(titles.includes('新补充的文章'), true);
+  assert.equal(titles.includes('临时搜索残留'), false);
+});
+
 test('稍后看记住稳定标识，来源不在目录里时仍保留', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-later-'));
   await saveLaterItem(root, {

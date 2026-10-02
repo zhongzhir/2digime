@@ -26,7 +26,7 @@ function extractCommandArray(source: string, marker: string): string[] {
   assert.ok(end >= 0, `missing array end after ${marker}`);
   const block = slice.slice(0, end);
   const out: string[] = [];
-  const re = /"([a-z]+\.[a-zA-Z]+)"/g;
+  const re = /"([A-Za-z]+(?:\.[A-Za-z]+)?)"/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(block))) out.push(m[1]!);
   return out;

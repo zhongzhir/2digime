@@ -457,12 +457,20 @@ export async function ensurePersonalFeed(input: {
       hasLocalItems: input.items.some((item) => isConsumableItem(item, now)),
     });
   };
+  const previousShown = [...(cache.lastView?.itemIds || [])];
   const finish = (view: DiscoverView, reasonCode: FeedReasonCode) => {
+    const cards = applyExplicitFeedback(view.cards, prefs);
+    const sameAsShown =
+      input.mode === 'refresh' &&
+      previousShown.length > 0 &&
+      cards.length > 0 &&
+      previousShown.length === cards.length &&
+      previousShown.every((id) => cards.some((card) => card.itemId === id));
     const traced = viewOf({
-      cards: applyExplicitFeedback(view.cards, prefs),
+      cards,
       relatedCards: view.relatedCards || [],
       preferences: view.preferences,
-      notice: view.notice,
+      notice: sameAsShown && !String(view.notice || '').trim() ? '这次没有换出不同的内容。' : view.notice,
       reasonCode,
       feedMode: view.feedMode || 'personal',
       networking: (view.networking as NetworkDiscoveryCode) || networking,
@@ -711,8 +719,13 @@ export async function ensurePersonalFeed(input: {
     if (shown.has(item.itemId)) return false;
     return true;
   });
-  const freshPool = pool.filter((item) => !opened.has(item.itemId));
-  const candidates = diverseFeedCandidates(freshPool.length >= 3 ? freshPool : pool, 24, 2);
+  const notYetOpened = pool.filter((item) => !opened.has(item.itemId));
+  const openedAgain = pool.filter((item) => opened.has(item.itemId));
+  const candidates = diverseFeedCandidates(
+    notYetOpened.length >= 3 ? notYetOpened : [...notYetOpened, ...openedAgain],
+    24,
+    2,
+  );
   mark('CANDIDATES', candidates.length);
 
   if (!candidates.length) {

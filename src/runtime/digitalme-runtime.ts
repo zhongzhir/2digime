@@ -818,14 +818,14 @@ export class DigitalMeRuntime {
               typeof (hit as { limit?: number }).limit === 'number'
                 ? Math.min(Math.max((hit as { limit?: number }).limit || 4, 1), 24)
                 : 4,
-            via: hit.title === 'open catalog' ? 'feed' : 'search',
+            via: 'feed',
           });
           if (ingested.items.length) return ingested.items;
         } catch {
           /* 公开页摄入失败时退回搜索命中 */
         }
         if (hit.title === 'open catalog') return [];
-        return indexSearchHits({ hits: [hit], store, limit: 1 });
+        return indexSearchHits({ hits: [hit], store, limit: 1, via: 'feed' });
       },
       reloadItems: loadItems,
       getItem: (itemId) => store.get(itemId, nowIso()),

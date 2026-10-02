@@ -29,7 +29,7 @@ import type {
 } from './types';
 import type { ConsultResult, PublicSubjectCard } from '../subject-collab/types';
 import { formatPublicCardsForModel } from '../subject-collab/public-card';
-import { deriveTalkOutcome, expectedFromExecutions, hasObservedMutation, unsatisfiedRequiredEffects } from './talk-effects';
+import { deriveTalkOutcome, hasObservedMutation } from './talk-effects';
 
 export const NO_MODEL_NOTICE = '需要先连接 AI 能力，才能继续交流。';
 
@@ -1065,18 +1065,9 @@ export async function runTalkTurn(input: {
   };
   await drainTools();
 
-  const turnExecs = thread.executions.filter((item) => executionIds.includes(item.id));
-  const failedWrites = turnExecs.filter(
-    (item) => !item.ok && (item.capabilityId === 'write_file' || item.capabilityId === 'export_file'),
-  );
-  const accessDenied = turnExecs.some((item) => !item.ok && item.capabilityId === 'request_folder_access');
-  const wrote = hasObservedMutation(turnExecs);
-  const expected = expectedFromExecutions(turnExecs);
-  const gap = unsatisfiedRequiredEffects(expected, turnExecs, reads, mutations);
-  const needsEvidenceReply = Boolean(gap) || ((failedWrites.length > 0 || accessDenied) && !wrote);
-  if (needsEvidenceReply) {
-    throwIfAborted(input.signal);
-    const facts = turnExecs
+  const executionSnapshot = () => thread.executions.filter((item) => executionIds.includes(item.id));
+  const factsOf = (execs: typeof thread.executions) =>
+    execs
       .map((item) => {
         const bits = [item.capabilityId, item.ok ? 'ok' : 'failed'];
         if (item.outputPath) bits.push(item.outputPath);
@@ -1086,19 +1077,51 @@ export async function runTalkTurn(input: {
         return bits.join(' | ');
       })
       .join('\n');
+  const failedWrite = (execs: typeof thread.executions) =>
+    execs.filter((item) => !item.ok && (item.capabilityId === 'write_file' || item.capabilityId === 'export_file'));
+  const denied = (execs: typeof thread.executions) =>
+    execs.some((item) => !item.ok && item.capabilityId === 'request_folder_access');
+
+  let turnExecs = executionSnapshot();
+  if (failedWrite(turnExecs).length > 0 && !denied(turnExecs) && toolRounds < MAX_TOOL_ROUNDS) {
+    throwIfAborted(input.signal);
     messages.push({
       role: 'user',
-      content: `工具执行记录（机械事实，不是新的任务）：\n${facts || '这一轮没有工具成功。'}\n${gap || ''}\n请根据这些记录回答主人。`,
+      content: `工具执行记录（机械事实，不是新的任务）：\n${factsOf(turnExecs)}\n已授权范围内还可以继续完成。不能继续时，说明已经完成的部分和阻碍。`,
+    });
+    current = await chat({ messages, tools });
+    if (current.toolCalls?.length) await drainTools();
+    turnExecs = executionSnapshot();
+  }
+
+  const failedWrites = failedWrite(turnExecs).filter((item) => {
+    const target = item.outputPath || item.observedEffect?.target || '';
+    if (target) return !hasObservedMutation(turnExecs, target);
+    const index = turnExecs.indexOf(item);
+    const recoveredLater = turnExecs
+      .slice(index + 1)
+      .some((other) => other.ok && other.observedEffect?.mutated === true);
+    return !recoveredLater;
+  });
+  const accessDenied = denied(turnExecs);
+  const wrote = hasObservedMutation(turnExecs);
+  const toolsRan = turnExecs.length > 0;
+  const needsExplanation = toolsRan && (accessDenied || failedWrites.length > 0 || !wrote);
+  if (needsExplanation) {
+    throwIfAborted(input.signal);
+    messages.push({
+      role: 'user',
+      content: `工具执行记录（机械事实，不是新的任务）：\n${factsOf(turnExecs) || '这一轮没有工具成功。'}\n执行已经结束。请根据这些记录回答主人。`,
     });
     current = await chat({ messages, tools: [] });
   }
   let outcome = deriveTalkOutcome({
     execs: turnExecs,
-    expected,
+    expected: [],
     stillOpen: (failedWrites.length > 0 || accessDenied) && !wrote,
   });
-  if (gap && wrote) outcome = 'PARTIAL_SUCCESS';
-  if (gap && !wrote) outcome = 'FAILED';
+  if (failedWrites.length > 0 && wrote) outcome = 'PARTIAL_SUCCESS';
+  if ((failedWrites.length > 0 || accessDenied) && !wrote) outcome = 'FAILED';
 
   // 无 toolCalls 即为模型 final assistant response；下方落 Thread，由 service writeThread → renderer。
   // 完成判断不看模型自定的验收句子。写失败时附上工具事实；写成功不以字符串不一致改口失败。

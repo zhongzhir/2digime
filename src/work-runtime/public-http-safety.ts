@@ -280,6 +280,19 @@ function ipv6InCidr(value: bigint, base: string, bits: number): boolean {
   return value >> shift === baseVal >> shift;
 }
 
+export function decodePublicBody(body: Buffer, contentType: string): string {
+  const headerCharset = /charset\s*=\s*"?([a-z0-9._-]+)/i.exec(contentType)?.[1]?.toLowerCase();
+  const head = body.subarray(0, 4096).toString('latin1');
+  const metaCharset = /charset\s*=\s*["']?\s*([a-z0-9._-]+)/i.exec(head)?.[1]?.toLowerCase();
+  const raw = headerCharset || metaCharset || 'utf-8';
+  const charset = raw === 'gb2312' || raw === 'gbk' || raw === 'x-gbk' ? 'gb18030' : raw === 'utf8' ? 'utf-8' : raw;
+  try {
+    return new TextDecoder(charset).decode(body);
+  } catch {
+    return body.toString('utf8');
+  }
+}
+
 function releaseResponse(res: IncomingMessage): void {
   res.resume();
   res.destroy();
@@ -375,7 +388,11 @@ export async function safePublicHttpGet(
           chunks.push(Buffer.from(c));
         });
         res.on('end', () => {
-          resolve({ status, body: Buffer.concat(chunks).toString('utf8'), finalUrl: parsed.toString() });
+          resolve({
+            status,
+            body: decodePublicBody(Buffer.concat(chunks), type),
+            finalUrl: parsed.toString(),
+          });
         });
       },
     );
