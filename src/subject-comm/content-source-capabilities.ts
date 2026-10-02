@@ -405,30 +405,22 @@ export async function searchOpenMedia(input: {
   if (!kinds.length) return [];
   const fetchImpl = input.fetchImpl || safePublicHttpGet;
   const endpoints = input.endpoints || catalogEndpointsFor(kinds);
-  const out: OpenMediaHit[] = [];
-  const seen = new Set<string>();
-  for (const endpoint of endpoints) {
-    const wanted = endpoint.contentTypes.filter((type) => kinds.includes(type));
-    if (!wanted.length) continue;
-    try {
-      if (endpoint.kind === 'peertube_search' && wanted.includes('video')) {
+  const batches = await Promise.all(
+    endpoints.map(async (endpoint) => {
+      const wanted = endpoint.contentTypes.filter((type) => kinds.includes(type));
+      const found: OpenMediaHit[] = [];
+      if (!wanted.length) return found;
+      try {
+        if (endpoint.kind === 'peertube_search' && wanted.includes('video')) {
         const hits = peertubeHits(endpoint, await readJson(fetchImpl, peertubeListUrl(endpoint, query)));
-        for (const hit of hits) {
-          if (seen.has(hit.url)) continue;
-          seen.add(hit.url);
-          out.push(hit);
-        }
+        for (const hit of hits) found.push(hit);
       } else if (endpoint.kind === 'wikimedia_commons') {
         for (const kind of wanted) {
           const hits = commonsHits(endpoint, await readJson(fetchImpl, commonsListUrl(endpoint, kind, query)), kind);
-          for (const hit of hits) {
-            if (seen.has(hit.url)) continue;
-            seen.add(hit.url);
-            out.push(hit);
-          }
+          for (const hit of hits) found.push(hit);
         }
       } else if (endpoint.kind === 'itunes_podcast' && wanted.includes('audio')) {
-        if (!query) continue;
+        if (!query) return found;
         const episodeUrl =
           `${endpoint.url}?term=${encodeURIComponent(query)}&media=podcast&entity=podcastEpisode&limit=8`;
         const podcastUrl =
@@ -437,33 +429,30 @@ export async function searchOpenMedia(input: {
           ...itunesHits(endpoint, await readJson(fetchImpl, episodeUrl)),
           ...itunesHits(endpoint, await readJson(fetchImpl, podcastUrl)),
         ];
-        for (const hit of hits) {
-          const key = hit.feedUrl || hit.url;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          out.push(hit);
-        }
+        for (const hit of hits) found.push(hit);
       } else if (endpoint.kind === 'itunes_rss' && wanted.includes('audio')) {
         const hits = itunesTopHits(endpoint, await readJson(fetchImpl, endpoint.url));
-        for (const hit of hits) {
-          if (seen.has(hit.url)) continue;
-          seen.add(hit.url);
-          out.push(hit);
-        }
+        for (const hit of hits) found.push(hit);
       } else if (endpoint.kind === 'internet_archive') {
         for (const kind of wanted) {
           if (kind !== 'audio' && kind !== 'video') continue;
           const hits = await archiveHits(endpoint, fetchImpl, kind, query);
-          for (const hit of hits) {
-            if (seen.has(hit.url)) continue;
-            seen.add(hit.url);
-            out.push(hit);
-          }
+          for (const hit of hits) found.push(hit);
         }
       }
     } catch {
       /* 单个开放来源失败不阻断其它来源 */
     }
+    return found;
+    }),
+  );
+  const out: OpenMediaHit[] = [];
+  const seen = new Set<string>();
+  for (const hit of batches.flat()) {
+    const key = hit.feedUrl || hit.url;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(hit);
   }
   const playableFirst = [...out].sort((a, b) => Number(Boolean(b.mediaUrl)) - Number(Boolean(a.mediaUrl)));
   return playableFirst.slice(0, 16);

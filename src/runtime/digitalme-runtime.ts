@@ -182,7 +182,6 @@ import { formatSelfContext, selectSelfContext } from '../intelligence/self-conte
 import { readDigitalSelf } from '../subject-core/digital-self/store';
 import { type DiscoverView } from '../subject-comm/content-discover';
 import {
-  cardsFromNewsHeadlines,
   formatSeekContext,
   seekContent,
   snippetCardsFromHits,
@@ -693,6 +692,7 @@ export class DigitalMeRuntime {
       cards: sought.cards,
       relatedCards: sought.relatedCards,
       unjudgedCards: sought.unjudgedCards,
+      accessCards: sought.accessCards,
       ...(sought.relatedCards.length ? { relatedTitle: currentNews ? '补充背景' : '相关介绍' } : {}),
       ...(sought.unjudgedCards.length ? { unjudgedTitle: '这些还没完成判断，不是已确认的推荐' } : {}),
       preferences,
@@ -985,44 +985,51 @@ export class DigitalMeRuntime {
         const empty = await seekContent({ query, items, intent: intentReady });
         return this.intentViewFromSeek(query, empty, preferences, networking, generationId, { replenishing: false });
       }
-      if (headlines.length) {
+      const wantsPlayableMedia = intentReady.requestedMedia.some(
+        (row) => row === 'audio' || row === 'video' || row === 'image',
+      );
+      if (headlines.length && chatCompleteFn && model && !wantsPlayableMedia) {
+        const judged = await seekContent({
+          query,
+          items,
+          intent: intentReady,
+          newsHeadlines: headlines,
+          skipWeb: true,
+          chatComplete: chatCompleteFn,
+          model,
+        });
+        if (generationId !== this.currentSearchGenerationId) {
+          return this.intentViewFromSeek(query, judged, preferences, networking, generationId, { replenishing: false });
+        }
         this.pendingSeekMerge = {
           generationId,
           leftover: (async () => {
-            if (generationId !== this.currentSearchGenerationId) return null;
-            return seekContent({
-              query,
-              items,
-              intent: intentReady,
-              newsHeadlines: headlines,
-              ingestHit,
-              ...(searchWeb ? { searchWeb } : {}),
-              ...(openMedia ? { fetchOpenMedia: openMedia } : {}),
-              ...(chatCompleteFn && model ? { chatComplete: chatCompleteFn, model } : {}),
-            });
+            try {
+              if (generationId !== this.currentSearchGenerationId) return null;
+              return await seekContent({
+                query,
+                items,
+                intent: intentReady,
+                newsHeadlines: headlines,
+                previous: { cards: judged.cards, relatedCards: judged.relatedCards },
+                ingestHit,
+                ...(searchWeb ? { searchWeb } : {}),
+                ...(openMedia ? { fetchOpenMedia: openMedia } : {}),
+                chatComplete: chatCompleteFn,
+                model,
+              });
+            } catch {
+              return null;
+            }
           })(),
         };
-        const preview: DiscoverView = {
-          headline: '发现',
-          lead: `根据你刚说的话找「${query}」，只显示这次搜索范围内的内容。`,
-          feedTitle: '新闻来源',
-          cards: [],
-          relatedCards: [],
-          unjudgedCards: cardsFromNewsHeadlines(headlines),
-          unjudgedTitle: '来源已经给出条目和发布时间，还没有读正文，也还没有分出当天报道',
-          preferences,
-          notice: '这些是新闻来源的标题和发布时间，不是已读正文。日期对不上或没有日期的，不会被说成今天的报道。',
-          reasonCode: 'CURRENT_INTENT',
-          feedMode: 'intent',
-          searchQuery: query,
-          networking,
-          searchGenerationId: generationId,
+        const view = this.intentViewFromSeek(query, judged, preferences, networking, generationId, {
           replenishing: true,
-        };
-        this.lastIntentView = preview;
-        return preview;
+        });
+        this.lastIntentView = view;
+        return view;
       }
-      const quickHits = await quickPromise;
+      const quickHits = wantsPlayableMedia ? [] : await quickPromise;
       if (quickHits.length) {
         const snippets = snippetCardsFromHits(quickHits);
         this.pendingSeekMerge = {
@@ -1072,6 +1079,7 @@ export class DigitalMeRuntime {
         items,
         intent,
         ingestHit,
+        ...(headlines.length ? { newsHeadlines: headlines } : {}),
         ...(chatCompleteFn && model ? { chatComplete: chatCompleteFn, model } : {}),
       };
       const firstWave = () =>
@@ -1113,10 +1121,16 @@ export class DigitalMeRuntime {
           return null;
         },
       );
-      const first = await Promise.race([
-        mediaResult.then((r) => ({ src: 'media' as const, r })),
-        webResult.then((r) => ({ src: 'web' as const, r })),
-      ]);
+      const first = wantsPlayableMedia
+        ? await (async () => {
+            const media = await mediaResult;
+            if (media) return { src: 'media' as const, r: media };
+            return { src: 'web' as const, r: await webResult };
+          })()
+        : await Promise.race([
+            mediaResult.then((r) => ({ src: 'media' as const, r })),
+            webResult.then((r) => ({ src: 'web' as const, r })),
+          ]);
       let firstResult = first.r;
       if (!firstResult) {
         const other = first.src === 'media' ? await webResult : await mediaResult;
@@ -1144,6 +1158,7 @@ export class DigitalMeRuntime {
             cards: mergedCards.cards,
             relatedCards: mergedCards.relatedCards,
             unjudgedCards: [...(ok[0]!.unjudgedCards || []), ...(ok[1]!.unjudgedCards || [])].slice(0, 8),
+            accessCards: [...(ok[0]!.accessCards || []), ...(ok[1]!.accessCards || [])].slice(0, 8),
             usedDirectory: ok[0]!.usedDirectory || ok[1]!.usedDirectory,
             usedExternal: ok[0]!.usedExternal || ok[1]!.usedExternal,
             notice: mergedCards.cards.length

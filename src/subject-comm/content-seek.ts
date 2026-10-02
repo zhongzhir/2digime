@@ -82,6 +82,8 @@ export interface ContentSeekResult {
   relatedCards: DiscoverCard[];
   /** 取到了，但相关性判断没完成。不是已确认推荐，也不是确认无关。 */
   unjudgedCards: DiscoverCard[];
+  /** 验证、登录墙和读取失败。不是未判断的内容。 */
+  accessCards: DiscoverCard[];
   intent: DiscoverIntent;
   usedDirectory: boolean;
   usedExternal: boolean;
@@ -210,15 +212,40 @@ function isConcreteCandidate(card: DiscoverCard): boolean {
 }
 
 /** 拉取到的页面本身是验证或拒绝，不是用户问题里的关键词。 */
-export function pageAccessState(input: { title?: string; text?: string }): 'ok' | 'challenge' {
+export function pageAccessState(input: { title?: string; text?: string }): 'ok' | 'challenge' | 'login' | 'unreadable' {
   const text = String(input.text || '').replace(/\s+/g, ' ').trim();
   const title = String(input.title || '').trim();
+  const blob = `${title}\n${text}`;
   if (/安全验证|人机验证|captcha|verify you are human|are you a human/i.test(title)) return 'challenge';
-  const challenge = /安全验证|人机验证|captcha|verify you are human|are you a human|access denied|just a moment/i.test(
-    `${title}\n${text}`,
-  );
-  if (challenge && text.length < 500) return 'challenge';
+  if (title.length < 48 && /请登录|登录后继续|sign in to continue|log in to continue|login required/i.test(title)) {
+    return 'login';
+  }
+  if (title.length < 80 && /^(403|404)\b|forbidden|page not found|无法访问|读取失败/i.test(title)) return 'unreadable';
+  if (/安全验证|人机验证|captcha|verify you are human|are you a human|access denied|just a moment/i.test(blob) && text.length < 500) {
+    return 'challenge';
+  }
+  if (/请登录|登录后继续|sign in to continue|log in to continue|login required/i.test(blob) && text.length < 400) {
+    return 'login';
+  }
   return 'ok';
+}
+
+export function isAccessCard(card: { accessState?: string }): boolean {
+  return card.accessState === 'challenge' || card.accessState === 'login' || card.accessState === 'unreadable';
+}
+
+function markAccess(card: DiscoverCard): DiscoverCard {
+  const state = pageAccessState({ title: card.title, text: card.text });
+  if (state === 'ok') return card;
+  card.accessState = state;
+  card.unavailable = true;
+  card.reason =
+    state === 'login'
+      ? '这个页面要登录，不是正文。入口还在，来源摘要只说明当时给出了什么。'
+      : state === 'unreadable'
+        ? '正文没有读到。下面保留来源摘要和入口，没有把它当成已经读过。'
+        : '这个页面是访问验证，不是正文。可以打开原站；搜索摘要只说明来源当时给了什么。';
+  return card;
 }
 
 export function publishedLocalDay(value: string | undefined): string | null {
@@ -231,24 +258,31 @@ export function publishedLocalDay(value: string | undefined): string | null {
 export function cardsFromNewsHeadlines(rows: NewsHeadline[]): DiscoverCard[] {
   return rows.slice(0, 8).map((row, index) => {
     const url = canonicalOf(row.url) || row.url;
+    let host = '';
+    try {
+      host = new URL(url).hostname;
+    } catch {
+      host = '';
+    }
+    const aggregator = /(^|\.)news\.google\.com$/i.test(host);
     const card: DiscoverCard = {
       itemId: `news_${index}_${url}`,
       title: row.title,
       text: row.snippet && row.snippet !== row.title ? row.snippet : '',
       url,
-      reason: '新闻来源给出的标题、来源和发布时间。还没有读取正文。',
+      reason: aggregator
+        ? '新闻来源给出的标题和发布时间。打开的是聚合入口，没有解析出媒体原文。还没有读取正文。'
+        : '新闻来源给出的标题、来源和发布时间。还没有读取正文。',
       source: 'web',
       contentType: 'article',
       textOrigin: 'snippet',
+      linkKind: aggregator ? 'aggregator' : 'original',
+      ...(aggregator ? { entryUrl: url } : {}),
       ...(row.publishedAt ? { publishedAt: row.publishedAt } : {}),
       ...(row.publisherName ? { publisherDisplayName: row.publisherName } : {}),
+      ...(row.publisherUrl ? { publisherUrl: row.publisherUrl } : {}),
     };
-    if (pageAccessState({ title: card.title, text: card.text }) === 'challenge') {
-      card.accessState = 'challenge';
-      card.unavailable = true;
-      card.reason = '这个页面是访问验证，不是正文。可以打开原站；搜索摘要只说明来源当时给了什么。';
-    }
-    return card;
+    return markAccess(card);
   });
 }
 
@@ -300,12 +334,7 @@ function webCardFromHit(hit: ExternalSeekHit, itemId: string): DiscoverCard {
     ...(hit.publishedAt ? { publishedAt: hit.publishedAt } : {}),
     ...(hit.publisherDisplayName ? { publisherDisplayName: hit.publisherDisplayName } : {}),
   };
-  if (pageAccessState({ title: card.title, text: card.text }) === 'challenge') {
-    card.accessState = 'challenge';
-    card.unavailable = true;
-    card.reason = '这个页面是访问验证，不是正文。可以打开原站；搜索摘要只说明来源当时给了什么。';
-  }
-  return card;
+  return markAccess(card);
 }
 
 export async function seekContent(input: {
@@ -329,6 +358,7 @@ export async function seekContent(input: {
       cards: [],
       relatedCards: [],
       unjudgedCards: [],
+      accessCards: [],
       intent: emptyIntent,
       usedDirectory: false,
       usedExternal: false,
@@ -393,6 +423,7 @@ export async function seekContent(input: {
         if (mediaOfKind >= 16) break;
         for (const hit of openHits) {
           let ingestedFeed = false;
+          if (hit.feedUrl && input.ingestHit && !hit.mediaUrl && mediaOfKind > 0) continue;
           if (hit.feedUrl && input.ingestHit && !hit.mediaUrl) {
             try {
               const ingested = await input.ingestHit({
@@ -529,12 +560,7 @@ export async function seekContent(input: {
         if (canonical) queryByUrl.set(canonical, hit.searchQuery);
         const card = cardFromNetworkItem(item, '公开网页来源，不是目录推荐。', 'web');
         card.textOrigin = 'body';
-        if (pageAccessState({ title: card.title, text: card.text }) === 'challenge') {
-          card.accessState = 'challenge';
-          card.unavailable = true;
-          card.reason = '这个页面是访问验证，不是正文。可以打开原站；搜索摘要只说明来源当时给了什么。';
-        }
-        cards.push(card);
+        cards.push(markAccess(card));
         if (cards.length >= 24) break;
       }
       if (!added && hit.entrance) {
@@ -549,7 +575,7 @@ export async function seekContent(input: {
   const concrete = cards.filter(isConcreteCandidate);
   const fidelity = new Map<string, ObjectFidelity | 'UNJUDGED'>();
   const unjudgedIds = new Set<string>();
-  const judgePool = concrete.filter((card) => card.accessState !== 'challenge').slice(0, 8);
+  const judgePool = concrete.filter((card) => !isAccessCard(card)).slice(0, 8);
   for (const card of concrete) {
     if (!judgePool.includes(card)) unjudgedIds.add(card.itemId);
   }
@@ -586,9 +612,10 @@ export async function seekContent(input: {
   const primary: DiscoverCard[] = [];
   const related: DiscoverCard[] = [];
   const unjudged: DiscoverCard[] = [];
+  const access: DiscoverCard[] = [];
   for (const card of concrete) {
-    if (card.accessState === 'challenge') {
-      unjudged.push(card);
+    if (isAccessCard(card)) {
+      access.push(card);
       continue;
     }
     const matchedType = typeMatches(card, requiredTypes);
@@ -742,6 +769,7 @@ export async function seekContent(input: {
     cards: visible,
     relatedCards: relatedVisible,
     unjudgedCards: unjudgedVisible,
+    accessCards: access.slice(0, 8),
     intent,
     usedDirectory: directoryHits.length > 0,
     usedExternal,

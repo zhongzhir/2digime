@@ -54,6 +54,41 @@ test('today group keeps a dated report and leaves a roundup and a missing date o
   assert.equal(split.background.some((card) => card.itemId === 'b'), true);
 });
 
+test('a challenge page is an access state, not an unjudged article', async () => {
+  const sought = await seekContent({
+    query: '今天的地方新闻',
+    items: [],
+    intent: {
+      ...defaultDiscoverIntent('今天的地方新闻'),
+      freshness: 'current',
+      newsFeed: true,
+      requestedMedia: ['article'],
+    },
+    newsHeadlines: [
+      {
+        title: '百度安全验证',
+        url: 'https://example.org/verify',
+        fetchedAt: '2026-10-02T08:00:00.000Z',
+        snippet: '请完成安全验证',
+        bodyRead: false,
+      },
+      {
+        title: '请登录后继续',
+        url: 'https://example.org/login',
+        fetchedAt: '2026-10-02T08:00:00.000Z',
+        snippet: '登录后继续',
+        bodyRead: false,
+      },
+    ],
+    model: { baseUrl: 'https://example.invalid', model: 'm' },
+    chatComplete: async () => ({ text: '{"roles":[]}' }),
+  });
+  assert.equal(sought.unjudgedCards.some((card) => /安全验证|请登录/.test(card.title)), false);
+  assert.equal(sought.cards.length, 0);
+  assert.equal(sought.accessCards.some((card) => card.accessState === 'challenge'), true);
+  assert.equal(sought.accessCards.some((card) => card.accessState === 'login'), true);
+});
+
 test('intent newsFeed is only true when the model sets it', () => {
   const on = intentFromModelText('{"mode":"consume","newsFeed":true,"freshness":"current"}', '今天的新闻');
   const off = intentFromModelText('{"mode":"consume","freshness":"unspecified"}', '巴赫');

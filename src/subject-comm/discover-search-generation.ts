@@ -207,9 +207,17 @@ export function mergeIntentViews(current: DiscoverView, incoming: DiscoverView):
         (String(card.itemId || '').startsWith('snippet_') || String(card.itemId || '').startsWith('news_'))
       ),
   );
+  const accessSeen = new Set<string>();
+  const accessCards = [...(current.accessCards || []), ...(incoming.accessCards || [])].filter((card) => {
+    const key = String(card.itemId || card.url || '');
+    if (!key || accessSeen.has(key)) return false;
+    accessSeen.add(key);
+    return true;
+  }).slice(0, 8);
   const unjudged = [...keptCurrent, ...(incoming.unjudgedCards || [])].filter((card) => {
     const key = String(card.itemId || card.url || '');
-    if (!key || unjudgedSeen.has(key)) return false;
+    if (!key || unjudgedSeen.has(key) || accessSeen.has(key)) return false;
+    if (card.accessState === 'challenge' || card.accessState === 'login' || card.accessState === 'unreadable') return false;
     unjudgedSeen.add(key);
     return true;
   }).slice(0, 8);
@@ -227,6 +235,7 @@ export function mergeIntentViews(current: DiscoverView, incoming: DiscoverView):
     relatedCards: related,
     ...(related.length ? { relatedTitle: incoming.relatedTitle || current.relatedTitle || '相关介绍' } : {}),
     unjudgedCards: unjudged,
+    accessCards,
     ...(unjudged.length
       ? { unjudgedTitle: incoming.unjudgedTitle || current.unjudgedTitle || '这些还没完成判断，不是已确认的推荐' }
       : {}),

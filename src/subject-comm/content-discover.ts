@@ -33,7 +33,11 @@ export interface DiscoverCard {
   consumption?: string;
   access?: string;
   /** 打开后的页面状态。验证页和读失败不是正常正文。 */
-  accessState?: 'challenge' | 'unreadable';
+  accessState?: 'challenge' | 'login' | 'unreadable';
+  /** 新闻聚合入口。和媒体原文不是同一个地址。 */
+  entryUrl?: string;
+  publisherUrl?: string;
+  linkKind?: 'original' | 'aggregator';
   /** snippet 是来源摘要；body 才是读过的正文。 */
   textOrigin?: 'snippet' | 'body';
   /** 相对当前搜索的对象忠实度。合并时 PRIMARY 不得被 ABOUT 覆盖。 */
@@ -57,6 +61,8 @@ export interface DiscoverView {
   /** 判断没完成的候选。可以打开，但不是已确认推荐。 */
   unjudgedCards?: DiscoverCard[];
   unjudgedTitle?: string;
+  /** 访问验证、登录墙、读取失败。不是未判断内容。 */
+  accessCards?: DiscoverCard[];
   preferences: DiscoverPreference[];
   notice: string;
   /** 内部诊断，UI 不得展示。 */

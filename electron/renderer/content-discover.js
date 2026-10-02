@@ -79,6 +79,7 @@
         bits.push(card.url);
       }
     }
+    if (card.linkKind === 'aggregator') bits.push('聚合入口');
     if (card.author && card.author !== card.publisherDisplayName) bits.push(card.author);
     if (card.publishedAt) {
       const d = new Date(card.publishedAt);
@@ -199,6 +200,9 @@
     li.className = 'content-discover-card content-discover-card--' + (type || 'article');
     if (card.itemId) li.setAttribute('data-item-id', card.itemId);
     if (card.url) li.setAttribute('data-url', card.url);
+    if (card.linkKind) li.setAttribute('data-link-kind', card.linkKind);
+    if (card.publisherUrl) li.setAttribute('data-publisher-url', card.publisherUrl);
+    if (card.entryUrl) li.setAttribute('data-entry-url', card.entryUrl);
     if (card.textOrigin) li.setAttribute('data-text-origin', card.textOrigin);
     if (card.publishedAt) {
       const published = new Date(card.publishedAt);
@@ -242,7 +246,11 @@
       gone.textContent =
         card.accessState === 'challenge'
           ? '这个页面是访问验证，不是正文。'
-          : '来源暂时打不开，收藏仍在。';
+          : card.accessState === 'login'
+            ? '这个页面要登录，不是正文。'
+            : card.accessState === 'unreadable'
+              ? '正文没有读到。'
+              : '来源暂时打不开，收藏仍在。';
       body.appendChild(gone);
     }
     const src = sourceLine(card);
@@ -280,7 +288,10 @@
       };
       audio.addEventListener('loadedmetadata', reveal);
       audio.addEventListener('error', () => {
-        audio.remove();
+        const failed = document.createElement('p');
+        failed.className = 'content-discover-source muted tiny';
+        failed.textContent = '这段音频地址打不开。';
+        audio.replaceWith(failed);
       });
       body.appendChild(audio);
     }
@@ -297,7 +308,10 @@
       };
       video.addEventListener('loadedmetadata', revealVideo);
       video.addEventListener('error', () => {
-        video.remove();
+        const failed = document.createElement('p');
+        failed.className = 'content-discover-source muted tiny';
+        failed.textContent = '这段视频地址打不开。';
+        video.replaceWith(failed);
       });
       body.appendChild(video);
     }
@@ -350,6 +364,16 @@
     const rows = Array.isArray(cards) ? cards : [];
     wrap.hidden = rows.length === 0;
     if (heading && title) heading.textContent = title;
+    for (const card of rows) list.appendChild(renderCard(card));
+  }
+
+  function renderAccess(cards) {
+    const wrap = $('content-discover-access');
+    const list = $('content-discover-access-list');
+    if (!wrap || !list) return;
+    list.innerHTML = '';
+    const rows = Array.isArray(cards) ? cards : [];
+    wrap.hidden = rows.length === 0;
     for (const card of rows) list.appendChild(renderCard(card));
   }
 
@@ -420,7 +444,7 @@
     const incomingRelated = (incoming && incoming.relatedCards) || [];
     const incomingKeys = new Set(incomingCards.map(cardKey));
     const currentCards = (current && current.cards) || [];
-    const preserved = currentCards.filter((card) => isPrimaryMediaCard(card) && !incomingKeys.has(cardKey(card)));
+    const preserved = currentCards.filter((card) => !incomingKeys.has(cardKey(card)));
     const pulled = incomingRelated.filter((card) =>
       currentCards.some((row) => cardKey(row) === cardKey(card) && isPrimaryMediaCard(row)),
     );
@@ -454,6 +478,13 @@
   function applyView(view) {
     hydrateLater(view);
     if (!shouldApplyView(view)) return;
+    const scroller = feedScroller();
+    const sameSearch =
+      lastView &&
+      view &&
+      String(lastView.searchGenerationId || '') &&
+      String(lastView.searchGenerationId || '') === String(view.searchGenerationId || '');
+    const savedScroll = sameSearch && scroller ? scroller.scrollTop : null;
     let next = view;
     if (next && next.append && lastView && Array.isArray(lastView.cards)) {
       const seen = new Set((lastView.cards || []).map(cardKey));
@@ -543,6 +574,7 @@
         lastCards.length || (view && view.feedMode === 'intent') ? friendlyNotice(view && view.notice) : '';
     }
     const replenishing = !!(view && view.replenishing);
+    if (root) root.dataset.replenishing = replenishing ? '1' : '0';
     if (replenishing && !lastCards.length) {
       setStatus('兔机米正在准备一些值得看的内容……');
     } else {
@@ -569,6 +601,7 @@
     }
     renderRelated(lastRelated, view && view.relatedTitle);
     renderUnjudged(lastUnjudged, view && view.unjudgedTitle);
+    renderAccess(view && view.accessCards);
     const emptyText = $('content-discover-empty-text');
     if (emptyText && !lastCards.length && !replenishing) {
       emptyText.textContent =
@@ -594,6 +627,7 @@
     renderLater();
     root.hidden = false;
     showSection(activeSection);
+    if (savedScroll != null && scroller) scroller.scrollTop = savedScroll;
   }
 
   async function followReplenish(client, gen) {
@@ -603,10 +637,16 @@
       if (!lastCards.length) {
         setStatus('兔机米正在准备一些值得看的内容……');
       }
-      const next = await client.invoke('content', {
-        action: 'replenish',
-        searchGenerationId: gen,
-      });
+      let next = null;
+      try {
+        next = await client.invoke('content', {
+          action: 'replenish',
+          searchGenerationId: gen,
+        });
+      } catch {
+        if (activeSearchGenerationId === gen && lastView) applyView(Object.assign({}, lastView, { replenishing: false }));
+        return;
+      }
       if (activeSearchGenerationId !== gen) return;
       applyView(next && next.view);
     }
@@ -736,7 +776,7 @@
     lastUnjudged = [];
     moreExhausted = false;
     setStatus('兔机米正在准备一些值得看的内容……');
-    for (const id of ['content-discover-list', 'content-discover-related-list', 'content-discover-unjudged-list']) {
+    for (const id of ['content-discover-list', 'content-discover-related-list', 'content-discover-unjudged-list', 'content-discover-access-list']) {
       const node = $(id);
       if (node) node.innerHTML = '';
     }
@@ -753,10 +793,15 @@
       });
       applyView(result && result.view);
       await followReplenish(client, gen);
-      clearTimeout(slowNote);
     } catch {
-      const notice = $('content-discover-notice');
-      if (notice) notice.textContent = '暂时无法获取新内容，可以稍后再试或检查联网设置。';
+      if (activeSearchGenerationId !== gen) return;
+      if (!lastCards.length) {
+        const notice = $('content-discover-notice');
+        if (notice) notice.textContent = '暂时无法获取新内容，可以稍后再试或检查联网设置。';
+      }
+    } finally {
+      clearTimeout(slowNote);
+      if (activeSearchGenerationId === gen && lastCards.length) setStatus('');
     }
   }
 
