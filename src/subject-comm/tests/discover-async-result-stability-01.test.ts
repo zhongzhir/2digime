@@ -9,6 +9,7 @@ import {
   audioPlaybackKind,
   createSearchGenerationId,
   durationLabel,
+  settleBackgroundSeek,
   hasDirectMediaRepresentation,
   isBrokenImageRepresentation,
   mergeIntentViews,
@@ -398,4 +399,21 @@ test('renderer keeps generation gate, skipRefresh, audio duration guard', async 
   assert.match(js, /在来源收听/);
   const html = await fs.readFile(path.join(process.cwd(), 'electron/renderer/index.html'), 'utf8');
   assert.match(html, /id="content-discover-feed-title"/);
+  assert.match(html, /id="btn-discover-cancel"/);
+  assert.match(js, /action: 'cancel'/);
+});
+
+test('background seek settles on timeout instead of staying pending', async () => {
+  let finished = false;
+  const late = new Promise<null>((resolve) => {
+    setTimeout(() => {
+      finished = true;
+      resolve(null);
+    }, 80);
+  });
+  const started = Date.now();
+  const settled = await settleBackgroundSeek(late, 20);
+  assert.equal(settled, null);
+  assert.equal(finished, false);
+  assert.ok(Date.now() - started < 70);
 });

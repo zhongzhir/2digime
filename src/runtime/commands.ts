@@ -1080,7 +1080,8 @@ export interface CommandMap {
         | 'follow'
         | 'block'
         | 'reverse'
-        | 'seek';
+        | 'seek'
+        | 'cancel';
       relayUrl?: string;
       itemId?: string;
       directiveId?: string;

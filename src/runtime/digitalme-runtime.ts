@@ -192,6 +192,7 @@ import {
   createSearchGenerationId,
   mergeIntentViews,
   mergeSeekCardSets,
+  settleBackgroundSeek,
 } from '../subject-comm/discover-search-generation';
 import { defaultDiscoverIntent, interpretDiscoverIntent, localCalendarDate } from '../subject-comm/discover-intent';
 import { ingestSource } from '../subject-comm/content-ingest';
@@ -563,6 +564,23 @@ export class DigitalMeRuntime {
       return { view: await this.currentSearchOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'reuse') };
     }
 
+    if (action === 'cancel') {
+      const nextGen = String(input.searchGenerationId || '').trim() || createSearchGenerationId();
+      this.currentSearchGenerationId = nextGen;
+      this.pendingSeekMerge = null;
+      this.pendingPersonal = null;
+      if (this.lastIntentView?.feedMode === 'intent') {
+        this.lastIntentView = {
+          ...this.lastIntentView,
+          replenishing: false,
+          searchGenerationId: nextGen,
+          notice: terminalSupplementNotice(this.lastIntentView.notice, '补充已停止。'),
+        };
+        return { view: this.stampSearchGeneration(this.lastIntentView) };
+      }
+      return { view: await this.currentSearchOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'reuse') };
+    }
+
     if (action === 'replenish') {
       return { view: await this.finishSeekOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'replenish', input.searchGenerationId) };
     }
@@ -744,7 +762,11 @@ export class DigitalMeRuntime {
         return this.currentSearchOrPersonal(packageRoot, subjectId, relayUrl, 'reuse');
       }
       if (!late) {
-        this.lastIntentView = { ...this.lastIntentView, replenishing: false };
+        this.lastIntentView = {
+          ...this.lastIntentView,
+          replenishing: false,
+          notice: terminalSupplementNotice(this.lastIntentView.notice, '补充没有完成。'),
+        };
         return this.lastIntentView;
       }
       const preferences = await this.contentPreferenceRows(packageRoot);
@@ -846,6 +868,9 @@ export class DigitalMeRuntime {
         await store.put(item);
       },
       ingestHit: async (hit) => {
+        if (isGoogleNewsAggregatorUrl(hit.url)) {
+          return indexSearchHits({ hits: [hit], store, limit: 1, via: 'feed' });
+        }
         try {
           const entrance = await ingestDiscoveredEntrance({
             url: hit.url,
@@ -907,6 +932,9 @@ export class DigitalMeRuntime {
     const store = new FileNetworkItemStore(path.join(packageRoot, 'content'));
     await appendRecentRecommendationEvent(packageRoot, { type: 'seek_topic', topic: query });
     const ingestHit = async (hit: { title: string; url: string; snippet?: string }) => {
+      if (isGoogleNewsAggregatorUrl(hit.url)) {
+        return indexSearchHits({ hits: [hit], store, limit: 1 });
+      }
       try {
         const entrance = await ingestDiscoveredEntrance({
           url: hit.url,
@@ -1003,7 +1031,7 @@ export class DigitalMeRuntime {
         }
         this.pendingSeekMerge = {
           generationId,
-          leftover: (async () => {
+          leftover: settleBackgroundSeek((async () => {
             try {
               if (generationId !== this.currentSearchGenerationId) return null;
               return await seekContent({
@@ -1021,7 +1049,7 @@ export class DigitalMeRuntime {
             } catch {
               return null;
             }
-          })(),
+          })()),
         };
         const view = this.intentViewFromSeek(query, judged, preferences, networking, generationId, {
           replenishing: true,
@@ -1034,7 +1062,7 @@ export class DigitalMeRuntime {
         const snippets = snippetCardsFromHits(quickHits);
         this.pendingSeekMerge = {
           generationId,
-          leftover: (async () => {
+          leftover: settleBackgroundSeek((async () => {
             if (generationId !== this.currentSearchGenerationId) return null;
             return seekContent({
               query,
@@ -1045,7 +1073,7 @@ export class DigitalMeRuntime {
               ...(openMedia ? { fetchOpenMedia: openMedia } : {}),
               ...(chatCompleteFn && model ? { chatComplete: chatCompleteFn, model } : {}),
             });
-          })(),
+          })()),
         };
         const preview: DiscoverView = {
           headline: '发现',
@@ -1145,7 +1173,7 @@ export class DigitalMeRuntime {
       this.lastIntentView = view;
       this.pendingSeekMerge = {
         generationId,
-        leftover: Promise.all([mediaResult, webResult]).then((parts) => {
+        leftover: settleBackgroundSeek(Promise.all([mediaResult, webResult]).then((parts) => {
           const ok = parts.filter((row): row is ContentSeekResult => !!row);
           if (!ok.length) return null;
           if (ok.length === 1) return ok[0]!;
@@ -1165,7 +1193,7 @@ export class DigitalMeRuntime {
               ? (ok[1]!.cards.length ? ok[1]!.notice : '') || (ok[0]!.cards.length ? ok[0]!.notice : '')
               : ok[1]!.notice || ok[0]!.notice,
           };
-        }),
+        })),
       };
       return view;
     } catch (err) {
@@ -4178,6 +4206,25 @@ export class DigitalMeRuntime {
     }
     return this.workspace;
   }
+}
+
+function isGoogleNewsAggregatorUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, '');
+    return host === 'news.google.com' || host.endsWith('.news.google.com');
+  } catch {
+    return false;
+  }
+}
+
+function terminalSupplementNotice(current: string | undefined, extra: string): string {
+  const base = String(current || '')
+    .replace(/正在读正文并核对。?/g, '')
+    .trim();
+  const add = String(extra || '').trim();
+  if (!add) return base;
+  if (base.includes(add)) return base;
+  return [base, add].filter(Boolean).join('');
 }
 
 function waitForAbort(signal: AbortSignal): Promise<void> {

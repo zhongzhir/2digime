@@ -79,7 +79,10 @@
         bits.push(card.url);
       }
     }
-    if (card.linkKind === 'aggregator') bits.push('聚合入口');
+    if (card.linkKind === 'aggregator') {
+      bits.push('聚合入口');
+      if (card.publisherUrl) bits.push('来源首页，不是媒体原文');
+    }
     if (card.author && card.author !== card.publisherDisplayName) bits.push(card.author);
     if (card.publishedAt) {
       const d = new Date(card.publishedAt);
@@ -109,6 +112,7 @@
 
   function consumeLabel(card) {
     const type = String(card.contentType || '');
+    if (card.linkKind === 'aggregator') return '打开聚合入口';
     if (type === 'video') return '在来源观看';
     if (type === 'image') return '打开原页';
     if (type === 'audio') return '在来源收听';
@@ -575,6 +579,8 @@
     }
     const replenishing = !!(view && view.replenishing);
     if (root) root.dataset.replenishing = replenishing ? '1' : '0';
+    const cancelBtn = $('btn-discover-cancel');
+    if (cancelBtn) cancelBtn.hidden = !replenishing;
     if (replenishing && !lastCards.length) {
       setStatus('兔机米正在准备一些值得看的内容……');
     } else {
@@ -771,11 +777,17 @@
     activeSearchGenerationId = gen;
     activeFeedMode = 'intent';
     lastView = null;
+    const cancelBtn = $('btn-discover-cancel');
+    if (cancelBtn) cancelBtn.hidden = true;
     lastCards = [];
     lastRelated = [];
     lastUnjudged = [];
     moreExhausted = false;
     setStatus('兔机米正在准备一些值得看的内容……');
+    const notice = $('content-discover-notice');
+    if (notice) notice.textContent = '';
+    const root = $('content-discover');
+    if (root) root.dataset.replenishing = '1';
     for (const id of ['content-discover-list', 'content-discover-related-list', 'content-discover-unjudged-list', 'content-discover-access-list']) {
       const node = $(id);
       if (node) node.innerHTML = '';
@@ -803,6 +815,26 @@
       clearTimeout(slowNote);
       if (activeSearchGenerationId === gen && lastCards.length) setStatus('');
     }
+  }
+
+  async function cancelSeek() {
+    const client = api();
+    if (!client || typeof client.invoke !== 'function') return;
+    if (!lastView || !lastView.replenishing) return;
+    const gen = newSearchGenerationId();
+    activeSearchGenerationId = gen;
+    try {
+      const result = await client.invoke('content', {
+        action: 'cancel',
+        searchGenerationId: gen,
+      });
+      if (activeSearchGenerationId !== gen) return;
+      applyView(result && result.view);
+    } catch {
+      if (activeSearchGenerationId !== gen) return;
+      if (lastView) applyView(Object.assign({}, lastView, { replenishing: false }));
+    }
+    setStatus('');
   }
 
   function bind() {
@@ -835,6 +867,13 @@
       refreshBtn.addEventListener('click', () => {
         moreExhausted = false;
         void refreshBatch();
+      });
+    }
+    const cancelBtn = $('btn-discover-cancel');
+    if (cancelBtn && !cancelBtn.dataset.bound) {
+      cancelBtn.dataset.bound = '1';
+      cancelBtn.addEventListener('click', () => {
+        void cancelSeek();
       });
     }
     const personalBtn = $('btn-discover-personal');

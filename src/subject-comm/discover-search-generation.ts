@@ -24,6 +24,28 @@ export function createSearchGenerationId(): string {
   return `sg_${Date.now().toString(36)}_${randomBytes(4).toString('hex')}`;
 }
 
+/** 背景补充必须在截止时间内进入成功或失败终态，不能一直停在进行中。 */
+export const BACKGROUND_SEEK_DEADLINE_MS = 40_000;
+
+export function settleBackgroundSeek<T>(
+  work: Promise<T | null>,
+  deadlineMs = BACKGROUND_SEEK_DEADLINE_MS,
+): Promise<T | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), Math.max(1, deadlineMs));
+    work.then(
+      (row) => {
+        clearTimeout(timer);
+        resolve(row);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(null);
+      },
+    );
+  });
+}
+
 export function canonicalCardKey(card: Pick<DiscoverCard, 'itemId' | 'url'>): string {
   const url = String(card.url || '').trim();
   if (url) {
