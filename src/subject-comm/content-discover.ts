@@ -49,6 +49,9 @@ export interface DiscoverView {
   cards: DiscoverCard[];
   relatedCards?: DiscoverCard[];
   relatedTitle?: string;
+  /** 判断没完成的候选。可以打开，但不是已确认推荐。 */
+  unjudgedCards?: DiscoverCard[];
+  unjudgedTitle?: string;
   preferences: DiscoverPreference[];
   notice: string;
   /** 内部诊断，UI 不得展示。 */

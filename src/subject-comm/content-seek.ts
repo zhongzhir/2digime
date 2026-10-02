@@ -14,6 +14,7 @@ import {
   interpretDiscoverIntent,
   isDomainLikeTitle,
   isGenericHubUrl,
+  isSiteEntranceUrl,
   objectFidelity,
   strictRequestedTypes,
   type DiscoverIntent,
@@ -73,6 +74,8 @@ export interface SeekTrace {
 export interface ContentSeekResult {
   cards: DiscoverCard[];
   relatedCards: DiscoverCard[];
+  /** 取到了，但相关性判断没完成。不是已确认推荐，也不是确认无关。 */
+  unjudgedCards: DiscoverCard[];
   intent: DiscoverIntent;
   usedDirectory: boolean;
   usedExternal: boolean;
@@ -232,6 +235,7 @@ export async function seekContent(input: {
     return {
       cards: [],
       relatedCards: [],
+      unjudgedCards: [],
       intent: emptyIntent,
       usedDirectory: false,
       usedExternal: false,
@@ -335,15 +339,20 @@ export async function seekContent(input: {
   if (input.searchWeb && !input.skipWeb) {
     searchCalled = true;
     const queries = intent.searchQueries.length ? intent.searchQueries : [query];
-    const webHits: Array<ExternalSeekHit & { searchQuery: string }> = [];
+    const webHits: Array<ExternalSeekHit & { searchQuery: string; entrance?: boolean }> = [];
     const seenHit = new Set<string>();
-    for (const q of queries.slice(0, 2)) {
+    for (const q of queries.slice(0, 3)) {
       try {
         const web = await input.searchWeb(q);
         rawSearchHits += web.length;
         for (const hit of web) {
           const canonical = canonicalOf(hit.url);
           if (!canonical || seenHit.has(canonical) || seenUrls.has(canonical)) continue;
+          if (isSiteEntranceUrl(canonical)) {
+            seenHit.add(canonical);
+            webHits.push({ ...hit, url: canonical, searchQuery: q, entrance: true });
+            continue;
+          }
           if (isGenericHubUrl(canonical)) {
             excludedHub += 1;
             continue;
@@ -386,6 +395,10 @@ export async function seekContent(input: {
           /* 单条摄入失败则退回搜索命中本身 */
         }
       }
+      if (!added && hit.entrance) {
+        excludedHub += 1;
+        continue;
+      }
       if (!added && cards.length < 24) {
         const canonical = canonicalOf(hit.url);
         if (canonical && seenUrls.has(canonical)) continue;
@@ -401,10 +414,10 @@ export async function seekContent(input: {
   }
 
   const concrete = cards.filter(isConcreteCandidate);
-  const fidelity = new Map<string, ObjectFidelity>();
-  let classificationMissed = false;
+  const fidelity = new Map<string, ObjectFidelity | 'UNJUDGED'>();
+  const unjudgedIds = new Set<string>();
   if (input.chatComplete && input.model && concrete.length) {
-    const roles = await classifyCandidateRoles({
+    const judged = await classifyCandidateRoles({
       query,
       intent,
       candidates: concrete.map((card) => ({
@@ -413,45 +426,49 @@ export async function seekContent(input: {
         url: card.url || '',
         summary: card.text || '',
         ...(card.contentType ? { contentType: card.contentType } : {}),
+        ...(card.publishedAt ? { publishedAt: card.publishedAt } : {}),
       })),
       chatComplete: input.chatComplete,
       model: input.model,
     });
-    if (roles.size) {
+    for (const id of judged.unjudgedIds) unjudgedIds.add(id);
+    if (judged.roles.size) {
       for (const card of concrete) {
-        fidelity.set(card.itemId, objectFidelity(roles.get(card.itemId), intent));
+        if (unjudgedIds.has(card.itemId)) continue;
+        const role = judged.roles.get(card.itemId);
+        if (!role) continue;
+        fidelity.set(card.itemId, objectFidelity(role, intent));
       }
-    } else {
-      classificationMissed = true;
     }
   }
 
   const primary: DiscoverCard[] = [];
   const related: DiscoverCard[] = [];
+  const unjudged: DiscoverCard[] = [];
   for (const card of concrete) {
     const matchedType = typeMatches(card, requiredTypes);
     let kind = fidelity.get(card.itemId);
+    if (unjudgedIds.has(card.itemId)) kind = 'UNJUDGED';
     if (
       card.contentType === 'image' &&
       hasDirectMediaRepresentation(card) &&
       matchedType &&
-      kind !== 'UNRELATED'
+      kind !== 'UNRELATED' &&
+      kind !== 'UNJUDGED'
     ) {
       kind = 'PRIMARY_CONTENT';
     }
     if (!kind) {
-      const needsJudgment = requiredTypes.some((row) => row === 'video' || row === 'audio');
-      kind =
-        classificationMissed && needsJudgment
-          ? 'UNRELATED'
-          : requiredTypes.length && !matchedType
-            ? 'ABOUT_CONTENT'
-            : 'PRIMARY_CONTENT';
+      kind = requiredTypes.length && !matchedType ? 'ABOUT_CONTENT' : 'PRIMARY_CONTENT';
     }
     if (requiredTypes.length && kind === 'PRIMARY_CONTENT' && !matchedType) {
       kind = 'ABOUT_CONTENT';
     }
     fidelity.set(card.itemId, kind);
+    if (kind === 'UNJUDGED') {
+      unjudged.push(card);
+      continue;
+    }
     if (kind === 'UNRELATED') continue;
     if (intent.intent === 'research') {
       if (kind === 'PRIMARY_CONTENT' || kind === 'ABOUT_CONTENT') {
@@ -471,10 +488,13 @@ export async function seekContent(input: {
     visible = merged.cards.slice(0, MAX_CARDS);
     relatedVisible = merged.relatedCards;
   }
-  const visibleIds = new Set([...visible, ...relatedVisible].map((card) => card.itemId));
+  const unjudgedVisible = unjudged.slice(0, 8);
+  const visibleIds = new Set([...visible, ...relatedVisible, ...unjudgedVisible].map((card) => card.itemId));
 
   const traceItems: SeekTraceItem[] = concrete.map((card) => {
-    const kind = fidelity.get(card.itemId) || 'UNRELATED';
+    const rawKind = fidelity.get(card.itemId);
+    const unjudgedCard = rawKind === 'UNJUDGED';
+    const kind = unjudgedCard ? undefined : rawKind;
     const canonical = canonicalOf(card.url);
     const matchedType = typeMatches(card, requiredTypes);
     const isVisible = visibleIds.has(card.itemId);
@@ -486,11 +506,11 @@ export async function seekContent(input: {
       ...(card.contentType ? { contentType: card.contentType } : {}),
       origin: card.source === 'web' ? 'search' : 'directory',
       ...(searchQuery ? { searchQuery } : {}),
-      fidelity: kind,
+      ...(kind ? { fidelity: kind } : {}),
       typeMatched: matchedType,
       selected: kind === 'PRIMARY_CONTENT' && matchedType,
       visible: isVisible,
-      reason: card.reason,
+      reason: unjudgedCard ? '这轮没有完成相关性判断。' : card.reason,
     };
   });
   const trace: SeekTrace = {
@@ -499,7 +519,9 @@ export async function seekContent(input: {
     mode: intent.intent,
     requestedContentTypes: intent.requestedMedia,
     rawCandidates: concrete.length,
-    topicMatched: traceItems.filter((row) => row.fidelity !== 'UNRELATED').length,
+    topicMatched: traceItems.filter(
+      (row) => row.fidelity === 'PRIMARY_CONTENT' || row.fidelity === 'ABOUT_CONTENT',
+    ).length,
     typeMatched: traceItems.filter((row) => row.typeMatched).length,
     primaryContent: traceItems.filter((row) => row.fidelity === 'PRIMARY_CONTENT').length,
     aboutContent: traceItems.filter((row) => row.fidelity === 'ABOUT_CONTENT').length,
@@ -530,10 +552,17 @@ export async function seekContent(input: {
     } else if (searchCalled && rawSearchHits > 0 && concrete.length === 0) {
       notice =
         excludedHub > 0
-          ? '搜索有返回，但都是网站入口，没有可以直接看的内容。'
+          ? '搜索有返回，但都是网站入口，没有从中取出具体报道。'
           : '搜索有返回，但没有可以直接看的内容。';
-    } else if (classificationMissed && concrete.length > 0) {
-      notice = '搜索有返回，但这轮没有完成相关性判断，所以没有把它们当成要找的内容。';
+    } else if (unjudgedVisible.length > 0) {
+      notice = '搜索有返回，但这轮没有完成相关性判断，所以没有把它们当成已确认的推荐。可以打开看看，或再搜一次。';
+    } else if (
+      relatedVisible.length > 0 &&
+      requiredTypes.some((row) => row === 'audio' || row === 'video')
+    ) {
+      notice = requiredTypes.includes('audio')
+        ? `找到了介绍，但还没有可以播放的${intent.topic || '这段'}音频。介绍不能当作已经听完。`
+        : `找到了介绍，但还没有可以播放的${intent.topic || '这段'}视频。介绍不能当作已经看完。`;
     } else if (concrete.length > 0 && trace.unrelated === concrete.length) {
       notice = '搜索有返回，判断后和这次要找的对不上。';
     } else if (intent.intent === 'consume') {
@@ -541,6 +570,8 @@ export async function seekContent(input: {
     } else {
       notice = '这次更适合当作分析材料。可点「问兔机米」，或到「与兔机米」里继续。';
     }
+  } else if (unjudgedVisible.length > 0) {
+    notice = '还有一些结果这轮没有完成判断，没有放进推荐。';
   } else if (intent.honestyNote) {
     notice = intent.honestyNote;
   } else if (intent.intent === 'research' && intent.suggestTalk) {
@@ -550,6 +581,7 @@ export async function seekContent(input: {
   return {
     cards: visible,
     relatedCards: relatedVisible,
+    unjudgedCards: unjudgedVisible,
     intent,
     usedDirectory: directoryHits.length > 0,
     usedExternal,

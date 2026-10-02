@@ -127,14 +127,19 @@ export async function skipWelcomeAndEnterShell(page: Page): Promise<void> {
     const input = page.locator('#chat-input');
     return (await shell.isVisible().catch(() => false)) && (await input.isVisible().catch(() => false));
   };
-  if (await shellReady()) return;
-  const skipModel = page.locator('#btn-welcome-skip-model');
-  if (await skipModel.isVisible().catch(() => false)) {
-    await skipModel.click({ force: true });
+  // 测试态会在 boot 后自动离开欢迎页，并收起「先看看」。
+  // 这时再对正在隐藏的按钮做点击会失败，所以先等壳出现，到点了再走当前入口。
+  const deadline = Date.now() + 12_000;
+  while (Date.now() < deadline && !(await shellReady())) {
+    await page.waitForTimeout(200);
   }
-  const skipIntro = page.locator('#btn-create-skip');
-  if (await skipIntro.isVisible().catch(() => false)) {
-    await skipIntro.click({ force: true });
+  if (!(await shellReady())) {
+    await page.evaluate(`(() => {
+      const skip = document.getElementById('btn-welcome-skip-model');
+      const intro = document.getElementById('btn-create-skip');
+      if (skip) skip.click();
+      else if (intro) intro.click();
+    })()`);
   }
   await page.locator('#view-shell').waitFor({ state: 'visible', timeout: 20_000 });
   const chatNav = page.locator('#nav-chat');

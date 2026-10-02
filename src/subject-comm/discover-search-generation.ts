@@ -197,6 +197,16 @@ export function mergeIntentViews(current: DiscoverView, incoming: DiscoverView):
     { cards: incoming.cards || [], relatedCards: incoming.relatedCards || [] },
   );
   const related = merged.relatedCards;
+  const unjudgedSeen = new Set<string>();
+  const unjudged = [...(current.unjudgedCards || []), ...(incoming.unjudgedCards || [])].filter((card) => {
+    const key = String(card.itemId || card.url || '');
+    if (!key || unjudgedSeen.has(key)) return false;
+    unjudgedSeen.add(key);
+    return true;
+  }).slice(0, 8);
+  const notice = merged.cards.length
+    ? (incoming.cards.length ? incoming.notice : '') || (current.cards.length ? current.notice : '')
+    : incoming.notice || current.notice;
   return {
     ...incoming,
     ...(current.searchGenerationId ? { searchGenerationId: current.searchGenerationId } : {}),
@@ -207,9 +217,13 @@ export function mergeIntentViews(current: DiscoverView, incoming: DiscoverView):
     cards: merged.cards,
     relatedCards: related,
     ...(related.length ? { relatedTitle: incoming.relatedTitle || current.relatedTitle || '相关介绍' } : {}),
-    notice: merged.cards.length
-      ? (incoming.cards.length ? incoming.notice : '') || (current.cards.length ? current.notice : '')
-      : incoming.notice || current.notice,
+    unjudgedCards: unjudged,
+    ...(unjudged.length
+      ? { unjudgedTitle: incoming.unjudgedTitle || current.unjudgedTitle || '这些还没完成判断，不是已确认的推荐' }
+      : {}),
+    notice:
+      notice ||
+      (unjudged.length ? '还有一些结果这轮没有完成判断，没有放进推荐。' : ''),
     ...(typeof incoming.replenishing === 'boolean' ? { replenishing: incoming.replenishing } : {}),
   };
 }

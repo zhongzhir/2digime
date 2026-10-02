@@ -12,6 +12,7 @@
   const laterById = new Map();
   let lastCards = [];
   let lastRelated = [];
+  let lastUnjudged = [];
   let lastView = null;
   let activeSection = 'for-you';
   let activeSearchGenerationId = '';
@@ -137,6 +138,7 @@
     return (
       lastCards.find((row) => row.itemId === itemId) ||
       lastRelated.find((row) => row.itemId === itemId) ||
+      lastUnjudged.find((row) => row.itemId === itemId) ||
       laterById.get(itemId) ||
       null
     );
@@ -309,6 +311,18 @@
     for (const card of rows) list.appendChild(renderCard(card));
   }
 
+  function renderUnjudged(cards, title) {
+    const wrap = $('content-discover-unjudged');
+    const list = $('content-discover-unjudged-list');
+    const heading = $('content-discover-unjudged-title');
+    if (!wrap || !list) return;
+    list.innerHTML = '';
+    const rows = Array.isArray(cards) ? cards : [];
+    wrap.hidden = rows.length === 0;
+    if (heading && title) heading.textContent = title;
+    for (const card of rows) list.appendChild(renderCard(card));
+  }
+
   function friendlyNotice(notice) {
     return String(notice || '').trim();
   }
@@ -466,6 +480,7 @@
     }
     lastCards = (view && view.cards) || [];
     lastRelated = (view && view.relatedCards) || [];
+    lastUnjudged = (view && view.unjudgedCards) || [];
     lastView = view;
     if (notice) {
       notice.textContent = lastCards.length ? friendlyNotice(view && view.notice) : '';
@@ -496,6 +511,7 @@
       list.scrollTop = scrollTop;
     }
     renderRelated(lastRelated, view && view.relatedTitle);
+    renderUnjudged(lastUnjudged, view && view.unjudgedTitle);
     const emptyText = $('content-discover-empty-text');
     if (emptyText && !lastCards.length && !replenishing) {
       emptyText.textContent =

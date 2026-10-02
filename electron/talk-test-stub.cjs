@@ -34,6 +34,10 @@ async function chat({ messages, tools }) {
   if (process.env.DIGITALME_V2_TALK_STUB_HANG === '1') {
     await new Promise(() => {});
   }
+  const delayMs = Number(process.env.DIGITALME_V2_TALK_STUB_DELAY_MS || '');
+  if (Number.isFinite(delayMs) && delayMs > 0) {
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
   const sys = systemText(messages);
   if (/另一主体发来合作请求/.test(sys)) {
     const requestBlob = messages

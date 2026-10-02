@@ -114,8 +114,8 @@ test('SEARCH SCOPE: current intent overrides Personal Feed and cached/default it
   assert.equal(sought.cards.some((card) => card.itemId === RWA.itemId), false);
   assert.equal(sought.cards.some((card) => card.itemId === ABOUT.itemId), false);
   assert.equal(sought.relatedCards.some((card) => card.itemId === ABOUT.itemId), true);
-  assert.equal(sought.trace.unrelated >= 1, true);
-  assert.equal(sought.trace.items.some((row) => row.contentId === RWA.itemId && row.visible), false);
+  assert.equal(sought.cards.some((card) => /finance\/rwa/.test(String(card.url || ''))), false);
+  assert.equal(sought.unjudgedCards.some((card) => /finance\/rwa/.test(String(card.url || ''))), true);
   assert.equal(sought.intent.scope, 'current_search');
 });
 
@@ -154,9 +154,10 @@ test('OBJECT FIDELITY: video request keeps primary video, about articles, unrela
   });
   assert.equal(sought.trace.primaryContent, 1);
   assert.equal(sought.trace.aboutContent, 1);
-  assert.equal(sought.trace.unrelated, 1);
   assert.equal(sought.cards.length, 1);
   assert.equal(sought.cards[0]?.contentType, 'video');
+  assert.equal(sought.cards.some((card) => /finance\/rwa/.test(String(card.url || ''))), false);
+  assert.equal(sought.unjudgedCards.some((card) => /finance\/rwa/.test(String(card.url || ''))), true);
 });
 
 test('OBJECT FIDELITY: broad AI content allows AI article; research allows commentary', async () => {
@@ -258,7 +259,7 @@ test('FAILURE: zero matching video is honest empty and does not use cached feed 
     model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
   });
   assert.equal(sought.cards.length, 0);
-  assert.match(sought.notice, /没有找到可以直接观看的 AI 视频/);
+  assert.match(sought.notice, /还没有可以播放的AI视频|没有找到可以直接观看的 AI 视频/);
   assert.equal(sought.cards.some((card) => card.itemId === RWA.itemId), false);
   assert.equal(sought.trace.visible, 0);
 });
@@ -298,7 +299,13 @@ test('video and audio are not treated as relevant when relevance was not judged'
     model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
   });
   assert.equal(sought.cards.some((card) => card.itemId === VIDEO.itemId), false);
+  assert.equal(sought.unjudgedCards.some((card) => card.itemId === VIDEO.itemId), true);
+  assert.equal(
+    sought.trace.items.some((row) => row.contentId === VIDEO.itemId && row.fidelity === 'UNRELATED'),
+    false,
+  );
   assert.match(sought.notice, /没有完成相关性判断/);
+  assert.match(sought.notice, /已确认/);
 });
 
 test('hub-only search is reported as excluded entrances, not as no request', async () => {
@@ -312,6 +319,60 @@ test('hub-only search is reported as excluded entrances, not as no request', asy
   assert.equal(sought.trace.rawSearchHits, 1);
   assert.equal(sought.trace.excludedHub, 1);
   assert.match(sought.notice, /网站入口/);
+});
+
+test('a site entrance can be continued into a concrete story', async () => {
+  const story = itemOf({
+    id: 'ni_news_story',
+    title: '周五早报里的一条具体报道',
+    text: '这是一条带日期的报道，不是栏目介绍。',
+    url: 'https://news.example.com/2026/1002/story.html',
+    contentType: 'article',
+  });
+  const sought = await seekContent({
+    query: '今日新闻',
+    items: [],
+    searchWeb: async () => [{ title: '新闻网', url: 'https://news.example.com/', snippet: '入口' }],
+    ingestHit: async (hit) => (hit.url === 'https://news.example.com/' ? [story] : []),
+  });
+  assert.equal(sought.cards.some((card) => card.itemId === story.itemId), true);
+  assert.equal(sought.cards.some((card) => card.url === 'https://news.example.com/'), false);
+});
+
+test('an audio request keeps an article as introduction, not as playback', async () => {
+  const note = itemOf({
+    id: 'ni_chopin_note',
+    title: '肖邦夜曲介绍',
+    text: '这是一篇介绍，不是录音。',
+    url: 'https://example.org/chopin-note',
+    contentType: 'article',
+  });
+  const sought = await seekContent({
+    query: '肖邦夜曲',
+    items: [note],
+    chatComplete: async ({ messages }) => {
+      const blob = messages.map((row) => String(row.content || '')).join('\n');
+      if (blob.includes('判断用户在「发现」里')) {
+        return {
+          text: JSON.stringify({
+            mode: 'consume',
+            topic: '肖邦夜曲',
+            requestedContentTypes: ['audio'],
+            objectWanted: 'primary_content',
+            freshness: 'classic',
+          }),
+        };
+      }
+      return {
+        text: JSON.stringify({ roles: [{ id: note.itemId, role: 'COMMENTARY' }] }),
+      };
+    },
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+  });
+  assert.equal(sought.cards.length, 0);
+  assert.equal(sought.relatedCards.some((card) => card.itemId === note.itemId), true);
+  assert.match(sought.notice, /介绍/);
+  assert.match(sought.notice, /播放/);
 });
 
 test('TYPE SEMANTICS: RSS enclosure audio is still audio', async () => {

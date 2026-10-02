@@ -49,6 +49,14 @@ export interface ConsumableCandidate {
   url: string;
   summary: string;
   contentType?: string;
+  publishedAt?: string;
+}
+
+export function localCalendarDate(now = new Date()): string {
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 export function defaultDiscoverIntent(query: string): DiscoverIntent {
@@ -152,32 +160,39 @@ export async function interpretDiscoverIntent(input: {
     '只输出 JSON，字段：mode, topic, requestedContentTypes, objectWanted, freshness, popularityClaim, searchQueries, suggestTalk。',
     'mode: consume 或 research。发现的强默认是 consume（看/听/读），不是做研究任务。',
     'topic: 用户这次要的主题短词，不要整句。例如「找几个 AI 视频看看」的 topic 是 AI。',
-    'requestedContentTypes: 只允许 article / video / image / audio。点名要看视频→["video"]；要图/摄影作品→["image"]；要听/播客→["audio"]；要读文章→["article"]。说「内容」且未点名媒介→[]。',
-    '例子：「最近值得看的 AI 内容」→ topic:AI, requestedContentTypes:[]；「找几个 AI 视频看看」→ ["video"]；「找一些航天摄影作品」→ ["image"]；「给我听点科技播客」→ ["audio"]。',
+    'requestedContentTypes: 只允许 article / video / image / audio。点名要看视频、影像、纪录片、片子→["video"]；要图/摄影作品→["image"]；要听、曲子、播客、音乐→["audio"]；要读文章或新闻报道→["article"]。说「内容」且未点名媒介→[]。',
+    '例子：「最近值得看的 AI 内容」→ topic:AI, requestedContentTypes:[]；「找几个 AI 视频看看」→ ["video"]；「找一些航天摄影作品」→ ["image"]；「给我听点科技播客」→ ["audio"]；「今天的新闻」→ ["article"]。',
     'objectWanted: primary_content（要作品/正文本身）/ commentary（要报道、盘点、行业分析）/ mixed。',
     'freshness: current / classic / unspecified。',
     'popularityClaim: 用户是否在要「最火/热门/排行」且你没有统一播放榜可引用。',
     'searchQueries: 1 到 3 条发给公开搜索和开放目录的检索词，不要照抄用户整句。必须留在这次的 topic 与 requestedContentTypes 内。',
-    '若 requestedContentTypes 含 image/video/audio：词应是对应开放目录实际用来找作品本身的常用检索写法；需要时可包含该主题在目录里常见的其它语种名称。不要写排行榜、盘点、新闻。',
+    '托管搜索只按查询文本返回结果，不会另吃时效或新闻分类参数。用户消息里有今天的日期。若 freshness 为 current，第一条 searchQuery 要包含这个日期，用来找具体报道，而不是栏目名或百科词条。',
+    '若 requestedContentTypes 含 image/video/audio：词应是对应开放目录实际用来找作品本身的常用检索写法；需要时可包含该主题在目录里常见的其它语种名称。不要写排行榜或十大盘点。',
     '不要把当前搜索扩写成用户平时可能喜欢的其它主题。不要加入这次没要求的相邻领域。',
     '若 mode=consume：搜索词指向具体可消费对象本身，不要去搜排行榜、行业新闻、十大盘点，除非用户明确要这些。',
     'suggestTalk: 若更适合在「与兔机米」里深入分析则为 true。',
     '不要使用数字之我、长期偏好或最近浏览去扩大范围。不要输出 score。不要编造播放量。',
   ].join('\n');
   try {
-    const result = await input.chatComplete({
-      baseUrl: input.model.baseUrl,
-      ...(input.model.apiKey ? { apiKey: input.model.apiKey } : {}),
-      model: input.model.model,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: query },
-      ],
-      temperature: 0,
-      maxTokens: 500,
-      timeoutMs: 45_000,
-      responseFormat: { type: 'json_object' },
-    });
+    const today = localCalendarDate();
+    const ask = (maxTokens: number) =>
+      input.chatComplete({
+        baseUrl: input.model.baseUrl,
+        ...(input.model.apiKey ? { apiKey: input.model.apiKey } : {}),
+        model: input.model.model,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: `${query}\n今天的日期是 ${today}。` },
+        ],
+        temperature: 0,
+        maxTokens,
+        timeoutMs: 45_000,
+        responseFormat: { type: 'json_object' },
+      });
+    let result = await ask(800);
+    if (result.truncated || !parseJsonObject(result.text)) {
+      result = await ask(1600);
+    }
     return intentFromModelText(result.text, query);
   } catch {
     return fallback;
@@ -204,25 +219,38 @@ export function isDomainLikeTitle(title: string, url?: string): boolean {
   return false;
 }
 
-/** 机械 URL 结构：首页或搜索结果页。不是站点特例表。 */
-export function isGenericHubUrl(raw: string): boolean {
-  let parsed: URL;
+function parsedPublicUrl(raw: string): URL | null {
   try {
-    parsed = new URL(raw);
+    return new URL(raw);
   } catch {
-    return false;
+    return null;
   }
-  const path = (parsed.pathname || '/').replace(/\/+$/, '') || '/';
-  if (path === '/' || /^\/index\.html?$/i.test(path)) return true;
-  if (
+}
+
+function isSearchResultsUrl(parsed: URL): boolean {
+  return (
     parsed.searchParams.has('q') ||
     parsed.searchParams.has('wd') ||
     parsed.searchParams.has('query') ||
     parsed.searchParams.has('search')
-  ) {
-    return true;
-  }
-  return false;
+  );
+}
+
+/** 机械 URL 结构：首页或搜索结果页。不是站点特例表。 */
+export function isGenericHubUrl(raw: string): boolean {
+  const parsed = parsedPublicUrl(raw);
+  if (!parsed) return false;
+  const path = (parsed.pathname || '/').replace(/\/+$/, '') || '/';
+  if (path === '/' || /^\/index\.html?$/i.test(path)) return true;
+  return isSearchResultsUrl(parsed);
+}
+
+/** 网站首页。搜索结果页不是可继续取报道的入口。 */
+export function isSiteEntranceUrl(raw: string): boolean {
+  const parsed = parsedPublicUrl(raw);
+  if (!parsed || isSearchResultsUrl(parsed)) return false;
+  const path = (parsed.pathname || '/').replace(/\/+$/, '') || '/';
+  return path === '/' || /^\/index\.html?$/i.test(path);
 }
 
 export function isPrimaryContentRole(role: ContentPageRole | undefined): boolean {
@@ -279,9 +307,9 @@ export async function classifyCandidateRoles(input: {
   candidates: ConsumableCandidate[];
   chatComplete?: ChatCompleteFn;
   model?: { baseUrl: string; model: string; apiKey?: string };
-}): Promise<Map<string, ContentPageRole>> {
-  const ids = input.candidates.map((row) => row.id);
-  if (!input.candidates.length || !input.chatComplete || !input.model) return new Map();
+}): Promise<{ roles: Map<string, ContentPageRole>; unjudgedIds: string[] }> {
+  const empty = { roles: new Map<string, ContentPageRole>(), unjudgedIds: [] as string[] };
+  if (!input.candidates.length || !input.chatComplete || !input.model) return empty;
   const system = [
     '你在判断每个候选相对「用户这次搜索」的对象忠实度。只输出 JSON：{"roles":[{"id":"","role":""}]}。',
     'role 只能是 PRIMARY_CONTENT、SERIES、EPISODE、HUB、LISTING、COMMENTARY、UNRELATED。',
@@ -294,56 +322,78 @@ export async function classifyCandidateRoles(input: {
     'UNRELATED：主题不在这次搜索范围内。即使它可能符合用户平时其它兴趣，也标 UNRELATED。',
     '用户要视频：具体视频是 PRIMARY_CONTENT；《最佳视频榜单》文章是 LISTING/COMMENTARY。',
     '用户要摄影作品：具体照片/图集是 PRIMARY_CONTENT；盘点文章是 COMMENTARY。',
-    '用户要播客：podcast episode / audio 是 PRIMARY_CONTENT；十大播客推荐文章是 COMMENTARY。',
+    '用户要播客或音乐：可播放的音频或进入播放的页面是 PRIMARY_CONTENT；介绍文章是 COMMENTARY。',
     '用户要「AI 内容」且未点名媒介：一篇具体 AI 文章是 PRIMARY_CONTENT。',
-    '不要看域名做决定。不要输出 score。不要用用户长期偏好扩大范围。',
+    '若 freshness 为 current：带日期的具体报道是 PRIMARY_CONTENT。百科栏目介绍、词条说明、网站首页不是报道，标 HUB 或 UNRELATED，不要标 PRIMARY_CONTENT。',
+    '每个候选都要有一条 role。不要看域名做决定。不要输出 score。不要用用户长期偏好扩大范围。',
   ].join('\n');
-  const user = JSON.stringify({
-    query: input.query,
-    mode: input.intent.intent,
-    topic: input.intent.topic,
-    scope: 'current_search',
-    objectWanted: input.intent.objectWanted,
-    requestedContentTypes: input.intent.requestedMedia,
-    candidates: input.candidates.map((row) => ({
-      id: row.id,
-      title: row.title,
-      url: row.url,
-      contentType: row.contentType || '',
-      summary: row.summary.slice(0, 240),
-    })),
-  });
+  const today = localCalendarDate();
   const chat = input.chatComplete;
   const model = input.model;
-  if (!chat || !model) return new Map();
-  const request = async () => {
-    const result = await chat({
-      baseUrl: model.baseUrl,
-      ...(model.apiKey ? { apiKey: model.apiKey } : {}),
-      model: model.model,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-      temperature: 0,
-      maxTokens: 1600,
-      timeoutMs: 45_000,
-      responseFormat: { type: 'json_object' },
+  const roles = new Map<string, ContentPageRole>();
+  const unjudgedIds: string[] = [];
+  const batchSize = 4;
+
+  const judgeBatch = async (batch: ConsumableCandidate[]): Promise<Map<string, ContentPageRole> | null> => {
+    const ids = batch.map((row) => row.id);
+    const user = JSON.stringify({
+      query: input.query,
+      mode: input.intent.intent,
+      topic: input.intent.topic,
+      scope: 'current_search',
+      objectWanted: input.intent.objectWanted,
+      freshness: input.intent.freshness,
+      today,
+      requestedContentTypes: input.intent.requestedMedia,
+      candidates: batch.map((row) => ({
+        id: row.id,
+        title: row.title,
+        url: row.url,
+        contentType: row.contentType || '',
+        ...(row.publishedAt ? { publishedAt: row.publishedAt } : {}),
+        summary: row.summary.slice(0, 240),
+      })),
     });
-    const roles = rolesFromModelText(result.text, ids);
-    const rec = parseJsonObject(result.text);
-    const explicitEmpty = !!rec && Array.isArray(rec.roles) && rec.roles.length === 0;
-    return { roles, explicitEmpty };
+    const attempts: Array<{ maxTokens: number; jsonObject: boolean }> = [
+      { maxTokens: 1600, jsonObject: true },
+      { maxTokens: 4096, jsonObject: false },
+    ];
+    for (const attempt of attempts) {
+      try {
+        const result = await chat({
+          baseUrl: model.baseUrl,
+          ...(model.apiKey ? { apiKey: model.apiKey } : {}),
+          model: model.model,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user },
+          ],
+          temperature: 0,
+          maxTokens: attempt.maxTokens,
+          timeoutMs: 45_000,
+          ...(attempt.jsonObject ? { responseFormat: { type: 'json_object' as const } } : {}),
+        });
+        const parsed = rolesFromModelText(result.text, ids);
+        if (parsed.size) return parsed;
+        if (!result.truncated && parseJsonObject(result.text)) return parsed;
+      } catch {
+        /* 这一轮失败就换预算再判，不结束整次搜索 */
+      }
+    }
+    return null;
   };
-  try {
-    const first = await request();
-    if (first.roles.size || first.explicitEmpty) return first.roles;
-  } catch {
-    /* 空响应时再请求一次，不改判断标准 */
+
+  for (let index = 0; index < input.candidates.length; index += batchSize) {
+    const batch = input.candidates.slice(index, index + batchSize);
+    const judged = await judgeBatch(batch);
+    if (!judged) {
+      unjudgedIds.push(...batch.map((row) => row.id));
+      continue;
+    }
+    for (const [id, role] of judged) roles.set(id, role);
+    for (const row of batch) {
+      if (!judged.has(row.id)) unjudgedIds.push(row.id);
+    }
   }
-  try {
-    return (await request()).roles;
-  } catch {
-    return new Map();
-  }
+  return { roles, unjudgedIds };
 }

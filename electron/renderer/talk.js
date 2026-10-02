@@ -378,7 +378,7 @@
     const turns = (lastView && lastView.turns) || [];
     for (const turn of turns) {
       const li = document.createElement('li');
-      li.className = turn.role === 'user' ? 'chat-turn-user' : 'chat-turn-assistant';
+      li.className = turn.role === 'user' ? 'chat-turn chat-turn-user' : 'chat-turn chat-turn-assistant';
       const role = document.createElement('p');
       role.className = 'talk-role';
       role.textContent = turn.role === 'user' ? '你' : assistantRoleName;
@@ -392,7 +392,7 @@
     }
     if (pending && pending.userText) {
       const userLi = document.createElement('li');
-      userLi.className = 'chat-turn-user';
+      userLi.className = 'chat-turn chat-turn-user';
       const role = document.createElement('p');
       role.className = 'talk-role';
       role.textContent = '你';
@@ -404,7 +404,7 @@
       list.appendChild(userLi);
       if (!pending.failed) {
         const wait = document.createElement('li');
-        wait.className = 'chat-turn-assistant talk-processing';
+        wait.className = 'chat-turn chat-turn-assistant talk-processing';
         wait.setAttribute('data-talk-processing', '1');
         const waitRole = document.createElement('p');
         waitRole.className = 'talk-role';

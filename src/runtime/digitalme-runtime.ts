@@ -190,7 +190,7 @@ import {
 import { defaultDiscoverIntent, interpretDiscoverIntent } from '../subject-comm/discover-intent';
 import { ingestSource } from '../subject-comm/content-ingest';
 import { safePublicHttpGet } from '../work-runtime/public-http-safety';
-import { indexSearchHits, preferProviderSnippet } from '../subject-comm/open-web-discovery';
+import { indexSearchHits, ingestDiscoveredEntrance, preferProviderSnippet } from '../subject-comm/open-web-discovery';
 import { ensurePersonalFeed, personalFeedCachePath, rememberIntentFeed } from '../subject-comm/personal-feed';
 import {
   classifySearchFailure,
@@ -677,7 +677,9 @@ export class DigitalMeRuntime {
       feedTitle: `关于「${topic}」`,
       cards: sought.cards,
       relatedCards: sought.relatedCards,
+      unjudgedCards: sought.unjudgedCards,
       ...(sought.relatedCards.length ? { relatedTitle: '相关介绍' } : {}),
+      ...(sought.unjudgedCards.length ? { unjudgedTitle: '这些还没完成判断，不是已确认的推荐' } : {}),
       preferences,
       notice: sought.notice,
       reasonCode: 'CURRENT_INTENT',
@@ -811,6 +813,18 @@ export class DigitalMeRuntime {
       },
       ingestHit: async (hit) => {
         try {
+          const entrance = await ingestDiscoveredEntrance({
+            url: hit.url,
+            store,
+            limit: 8,
+          });
+          if (entrance) {
+            const kept = entrance.map((item) => preferProviderSnippet(item, hit.snippet));
+            for (let i = 0; i < kept.length; i += 1) {
+              if (kept[i] !== entrance[i]) await store.put(kept[i]!);
+            }
+            return kept;
+          }
           const ingested = await ingestSource({
             sourceUrl: hit.url,
             store,
@@ -860,6 +874,18 @@ export class DigitalMeRuntime {
     await appendRecentRecommendationEvent(packageRoot, { type: 'seek_topic', topic: query });
     const ingestHit = async (hit: { title: string; url: string; snippet?: string }) => {
       try {
+        const entrance = await ingestDiscoveredEntrance({
+          url: hit.url,
+          store,
+          limit: 8,
+        });
+        if (entrance) {
+          const kept = entrance.map((item) => preferProviderSnippet(item, hit.snippet));
+          for (let i = 0; i < kept.length; i += 1) {
+            if (kept[i] !== entrance[i]) await store.put(kept[i]!);
+          }
+          return kept;
+        }
         const ingested = await ingestSource({
           sourceUrl: hit.url,
           store,
@@ -984,6 +1010,7 @@ export class DigitalMeRuntime {
             ...ok[1]!,
             cards: mergedCards.cards,
             relatedCards: mergedCards.relatedCards,
+            unjudgedCards: [...(ok[0]!.unjudgedCards || []), ...(ok[1]!.unjudgedCards || [])].slice(0, 8),
             usedDirectory: ok[0]!.usedDirectory || ok[1]!.usedDirectory,
             usedExternal: ok[0]!.usedExternal || ok[1]!.usedExternal,
             notice: mergedCards.cards.length

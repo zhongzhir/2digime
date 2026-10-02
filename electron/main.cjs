@@ -649,6 +649,30 @@ function createWindow(bootInfo) {
   });
   const indexHtml = rendererIndexUrl();
   mainWindow.loadURL(indexHtml);
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return { action: "deny" };
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return { action: "deny" };
+    }
+    return {
+      action: "allow",
+      overrideBrowserWindowOptions: {
+        width: 1100,
+        height: 800,
+        autoHideMenuBar: true,
+        webPreferences: {
+          sandbox: true,
+          contextIsolation: true,
+          nodeIntegration: false,
+        },
+      },
+    };
+  });
   mainWindow.webContents.on("did-finish-load", () => {
     mainWindow.webContents.send("shell:boot", bootInfo || lastBootInfo);
   });

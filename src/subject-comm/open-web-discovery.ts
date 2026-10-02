@@ -8,6 +8,7 @@ import { safePublicHttpGet } from '../work-runtime/public-http-safety';
 import { normalizeCanonicalUrl, clipText, clipTitle, contentItemId, sourcePublisherId } from './content-canonical';
 import { ingestSource, type IngestRecord, type IngestSourceInput } from './content-ingest';
 import { discoverFeedHints, parsePageMetadata, type FeedHint, type PageMetadata } from './page-metadata';
+import { isGenericHubUrl, isSiteEntranceUrl } from './discover-intent';
 import {
   NETWORK_ITEM_KIND_CONTENT,
   NETWORK_ITEM_SCHEMA_VERSION,
@@ -235,6 +236,48 @@ export async function discoverOpenWebSource(input: {
     via,
     access: 'ok',
   };
+}
+
+/** 网站首页继续取它声明的 feed。搜索结果页不走这里。没有 feed 就返回空，不把首页本身当成报道。 */
+export async function ingestDiscoveredEntrance(input: {
+  url: string;
+  store: NetworkItemStore;
+  limit?: number;
+  fetchImpl?: typeof safePublicHttpGet;
+}): Promise<NetworkItem[] | null> {
+  if (!isSiteEntranceUrl(input.url)) return null;
+  const fetchImpl = input.fetchImpl || safePublicHttpGet;
+  let fetched;
+  try {
+    fetched = await fetchImpl(input.url, {
+      accept: 'text/html, application/xhtml+xml, application/rss+xml, application/atom+xml, */*;q=0.1',
+    });
+  } catch {
+    return [];
+  }
+  if (fetched.status < 200 || fetched.status >= 300) return [];
+  const feeds = discoverFeedHints(fetched.body || '', fetched.finalUrl || input.url).slice(0, 2);
+  const items: NetworkItem[] = [];
+  const limit = Math.min(Math.max(input.limit ?? 8, 1), 12);
+  for (const feed of feeds) {
+    try {
+      const ingested = await ingestSource({
+        sourceUrl: feed.url,
+        store: input.store,
+        fetchImpl,
+        limit,
+        via: 'autodiscovery',
+      });
+      for (const item of ingested.items) {
+        if (item.content.url && (isSiteEntranceUrl(item.content.url) || isGenericHubUrl(item.content.url))) continue;
+        items.push(item);
+        if (items.length >= limit) return items;
+      }
+    } catch {
+      /* 一个 feed 失败不放弃另一个 */
+    }
+  }
+  return items;
 }
 
 export async function ingestOpenWebSource(input: {

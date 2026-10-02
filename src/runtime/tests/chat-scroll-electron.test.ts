@@ -36,7 +36,9 @@ async function measureSendInViewport(page: import('playwright').Page) {
 }
 
 test('Electron 对话：消息再多也不挤出发送钮，滚轮在卡片上能滚列表', { timeout: 240_000 }, async () => {
-  const harness = await launchDigitalMeElectron();
+  const harness = await launchDigitalMeElectron({
+    extraEnv: { DIGITALME_V2_TALK_STUB: '1' },
+  });
   const { page, app } = harness;
   try {
     await skipWelcomeAndEnterShell(page);
