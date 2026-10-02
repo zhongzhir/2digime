@@ -7,10 +7,12 @@ import type { DigitalSelf } from '../../subject-core/digital-self/types';
 import { validateNetworkItem, type NetworkItem } from '../network-item';
 import {
   discoveryIntentsFromModelText,
+  diverseFeedCandidates,
   ensurePersonalFeed,
   personalFeedCachePath,
 } from '../personal-feed';
 import { FEED_01_SEED_ITEMS } from './subject-network-feed-01-seed';
+import { laterCards, listLaterItems, saveLaterItem } from '../later-items';
 
 const NOW = '2026-09-18T08:00:00.000Z';
 
@@ -712,4 +714,106 @@ test('more returns only unseen cards, or says there is nothing new', async () =>
       true,
     );
   }
+});
+
+test('不同作品不会因为都有章节号就被收成同一部', () => {
+  const items: NetworkItem[] = [];
+  for (const work of ['霸体诀', '雪中悍刀行']) {
+    for (let i = 1; i <= 4; i += 1) {
+      const checked = validateNetworkItem({
+        schemaVersion: 1,
+        itemId: `ni_${work}_${i}`,
+        publisherSubjectId: 'pub_audio',
+        publisherDisplayName: '有声书',
+        kind: 'content',
+        createdAt: NOW,
+        visibility: 'public',
+        content: {
+          title: `${work} 第${i}章`,
+          text: `${work}第${i}章`,
+          url: `https://audio.example/${encodeURIComponent(work)}/${i}`,
+          contentType: 'audio',
+        },
+        provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'feed' },
+      });
+      if (!checked.ok) throw new Error(checked.reason);
+      items.push(checked.item);
+    }
+  }
+  const other = validateNetworkItem({
+    schemaVersion: 1,
+    itemId: 'ni_news',
+    publisherSubjectId: 'pub_news',
+    publisherDisplayName: '新闻',
+    kind: 'content',
+    createdAt: NOW,
+    visibility: 'public',
+    content: { title: '今日新闻', text: '新闻正文', url: 'https://news.example/today', contentType: 'article' },
+    provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'feed' },
+  });
+  if (!other.ok) throw new Error(other.reason);
+  items.push(other.item);
+  const picked = diverseFeedCandidates(items, 12, 2);
+  assert.ok(picked.filter((item) => item.content.title.includes('霸体诀')).length >= 3);
+  assert.ok(picked.filter((item) => item.content.title.includes('雪中悍刀行')).length >= 3);
+});
+
+test('搜索结果不会因为进了同一目录就占据默认流', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-search-'));
+  const feed = validateNetworkItem({
+    schemaVersion: 1,
+    itemId: 'ni_feed',
+    publisherSubjectId: 'pub_feed',
+    publisherDisplayName: '目录',
+    kind: 'content',
+    createdAt: NOW,
+    visibility: 'public',
+    content: { title: '目录里的文章', text: '目录正文', url: 'https://example.org/feed-story', contentType: 'article' },
+    provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'feed' },
+  });
+  const search = validateNetworkItem({
+    schemaVersion: 1,
+    itemId: 'ni_search',
+    publisherSubjectId: 'pub_search',
+    publisherDisplayName: '搜索',
+    kind: 'content',
+    createdAt: NOW,
+    visibility: 'public',
+    content: { title: '木星搜索残留', text: '搜索正文', url: 'https://example.org/jupiter', contentType: 'article' },
+    provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'search' },
+  });
+  if (!feed.ok || !search.ok) throw new Error('item');
+  const result = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items: [search.item, feed.item],
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'DISABLED',
+    chatComplete: async () => ({ text: 'not json' }),
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    mode: 'reset',
+    now: NOW,
+  });
+  const titles = result.view.cards.map((card) => card.title);
+  assert.equal(titles.includes('目录里的文章'), true);
+  assert.equal(titles.includes('木星搜索残留'), false);
+});
+
+test('稍后看记住稳定标识，来源不在目录里时仍保留', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-later-'));
+  await saveLaterItem(root, {
+    itemId: 'ni_saved',
+    url: 'https://example.org/saved',
+    title: '稍后再看的文章',
+    text: '摘要',
+    publisher: 'Example',
+    savedAt: NOW,
+  });
+  const rows = await listLaterItems(root);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]!.url, 'https://example.org/saved');
+  const cards = laterCards(rows, new Set());
+  assert.equal(cards[0]!.unavailable, true);
+  assert.match(cards[0]!.text, /来源暂时打不开/);
 });

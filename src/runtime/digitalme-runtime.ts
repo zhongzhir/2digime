@@ -208,6 +208,7 @@ import {
   upsertContentPreference,
   type ContentPreferenceKind,
 } from '../subject-comm/content-preferences';
+import { laterCards, listLaterItems, saveLaterItem } from '../subject-comm/later-items';
 import {
   appendNetworkContentFeedback,
   createUserContentFeedback,
@@ -437,6 +438,7 @@ export class DigitalMeRuntime {
   private lastNetworkCode: NetworkDiscoveryCode | null = null;
   /** CURRENT_SEARCH_MODE 最近一次搜索视图。打开外部来源时不得换成个人 Feed。 */
   private lastIntentView: DiscoverView | null = null;
+  private pendingLaterCards: NonNullable<DiscoverView['laterCards']> = [];
   /** 当前可见搜索 / 个人 Feed 的请求身份。迟到结果必须与此一致。 */
   private currentSearchGenerationId = '';
   private pendingSeekMerge: {
@@ -503,12 +505,14 @@ export class DigitalMeRuntime {
       cards: [],
       relatedCards: [],
       preferences: pkg ? await this.contentPreferenceRows(pkg.rootDir) : [],
+      laterCards: this.pendingLaterCards,
       notice,
     });
     if (!pkg) return { view: await empty('还没有打开的数字之我。') };
     const action = input.action || 'discover';
     const itemId = String(input.itemId || '').trim();
     const feedbackFile = path.join(pkg.rootDir, 'content', 'network-content-feedback.jsonl');
+    await this.refreshLaterCards(pkg.rootDir);
 
     if (action === 'seek') {
       const query = String(input.text || '').trim();
@@ -576,6 +580,17 @@ export class DigitalMeRuntime {
       }
       const items = await this.loadDiscoverItems(pkg.rootDir, input.relayUrl);
       const item = items.find((row) => row.itemId === itemId);
+      if (action === 'later') {
+        await saveLaterItem(pkg.rootDir, {
+          itemId,
+          url: String(input.url || item?.content.url || ''),
+          title: String(input.title || item?.content.title || ''),
+          text: String(input.text || item?.content.text || ''),
+          publisher: String(input.publisher || item?.publisherDisplayName || ''),
+          savedAt: new Date().toISOString(),
+        });
+        await this.refreshLaterCards(pkg.rootDir, new Set(items.map((row) => row.itemId)));
+      }
       if (!item) {
         if (this.lastIntentView) return { view: await this.currentSearchOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'reuse') };
         return { view: await empty('这条内容已经不在目录里。') };
@@ -635,7 +650,16 @@ export class DigitalMeRuntime {
       ...view,
       ...(gen ? { searchGenerationId: gen } : {}),
       feedMode: view.feedMode === 'intent' ? 'intent' : view.feedMode || 'personal',
+      laterCards: this.pendingLaterCards,
     };
+  }
+
+  private async refreshLaterCards(packageRoot: string, liveIds?: Set<string>): Promise<void> {
+    const rows = await listLaterItems(packageRoot);
+    const ids =
+      liveIds ||
+      new Set((await this.loadDiscoverItems(packageRoot)).map((row) => row.itemId));
+    this.pendingLaterCards = laterCards(rows, ids);
   }
 
   private intentViewFromSeek(
@@ -794,7 +818,7 @@ export class DigitalMeRuntime {
               typeof (hit as { limit?: number }).limit === 'number'
                 ? Math.min(Math.max((hit as { limit?: number }).limit || 4, 1), 24)
                 : 4,
-            via: 'search',
+            via: hit.title === 'open catalog' ? 'feed' : 'search',
           });
           if (ingested.items.length) return ingested.items;
         } catch {

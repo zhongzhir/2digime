@@ -48,7 +48,7 @@ test('Electron：Public Alpha UX closure 导航 / 发现 / 数字之我 / 设置
     await harness.page.locator('#panel-discover').waitFor({ state: 'visible', timeout: 15_000 });
     const discoverCopy = await harness.page.locator('#panel-discover').innerText();
     assert.match(discoverCopy, /想看什么/);
-    assert.match(discoverCopy, /还没有为你挑出的新内容|这里可以直接看/);
+    assert.match(discoverCopy, /目前还没有可展示的内容|还没有为你挑出的新内容|这里可以直接看/);
     assert.equal(discoverCopy.includes('还没有新内容') && !discoverCopy.includes('还没有为你挑出'), false);
     assert.equal(await harness.page.locator('#content-discover-query').isVisible(), true);
     assert.equal(await harness.page.locator('#content-discover-empty').isVisible(), true);
@@ -73,7 +73,10 @@ test('Electron：Public Alpha UX closure 导航 / 发现 / 数字之我 / 设置
       state: 'visible',
       timeout: 10_000,
     });
-    assert.equal(await harness.page.locator('.content-discover-card a, .content-discover-actions button', { hasText: '打开' }).count() >= 1, true);
+    assert.equal(
+      await harness.page.locator('.content-discover-actions button', { hasText: '阅读原文' }).count() >= 1,
+      true,
+    );
     await harness.page.locator('.content-discover-actions button', { hasText: '稍后看' }).click();
     await harness.page.locator('#content-discover-later').waitFor({ state: 'visible', timeout: 10_000 });
     assert.match(await harness.page.locator('#content-discover-later').innerText(), /Fusion progress this week/);
@@ -149,9 +152,10 @@ test('Electron：Public Alpha UX closure 导航 / 发现 / 数字之我 / 设置
       return el ? getComputedStyle(el).gridTemplateColumns : '';
     })()`);
     assert.equal(String(wide).split(' ').filter(Boolean).length >= 2, true, `desktop grid was ${wide}`);
-    assert.match(await harness.page.locator('#view-settings').innerText(), /AI 连接/);
+    assert.match(await harness.page.locator('#view-settings').innerText(), /AI 能力|AI 连接/);
     assert.match(await harness.page.locator('#view-settings').innerText(), /联网发现/);
-    assert.equal(await harness.page.locator('#model-provider').isVisible(), true);
+    assert.equal(await harness.page.locator('#model-provider').count(), 1);
+    assert.equal(await harness.page.locator('#model-provider').isVisible(), false);
     assert.equal(await harness.page.locator('#gemini-search-api-key').isVisible(), false);
     assert.equal(await harness.page.locator('#web-discovery-enabled').isVisible(), true);
     await harness.page.setViewportSize({ width: 520, height: 900 });

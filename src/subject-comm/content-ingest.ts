@@ -208,7 +208,11 @@ async function toNetworkItem(input: {
   } catch (err) {
     return { status: 'rejected', reason: (err as { code?: string }).code || 'invalid_url' };
   }
-  const title = clipTitle(input.item.title || canonicalUrl);
+  const sourceTitle = String(input.item.title || '').trim();
+  if (/^(title|untitled|undefined|null)$/i.test(sourceTitle)) {
+    return { status: 'rejected', reason: 'placeholder_title' };
+  }
+  const title = clipTitle(sourceTitle || canonicalUrl);
   const provided = clipText(input.item.text || '');
   let host = '';
   try {

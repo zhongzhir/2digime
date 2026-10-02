@@ -352,6 +352,7 @@ export async function indexSearchHits(input: {
         return canonical;
       }
     })();
+    if (/^(title|untitled|undefined|null)$/i.test(String(hit.title || '').trim())) continue;
     const title = clipTitle(hit.title || canonical);
     const snippet = String(hit.snippet || '').trim();
     const text = snippet && snippet !== title

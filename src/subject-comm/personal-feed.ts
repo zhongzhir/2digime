@@ -221,6 +221,12 @@ function viewOf(input: {
   };
 }
 
+function candidatesForDefault(items: NetworkItem[], nowIso?: string): NetworkItem[] {
+  const consumable = items.filter((item) => isConsumableItem(item, nowIso));
+  const steady = consumable.filter((item) => item.provenance?.via !== 'search');
+  return steady.length ? steady : consumable;
+}
+
 function isConsumableItem(item: NetworkItem, nowIso?: string): boolean {
   if (nowIso && isNetworkItemExpired(item, nowIso)) return false;
   if (!String(item.content.title || '').trim()) return false;
@@ -269,10 +275,11 @@ async function resolveCards(
 ): Promise<DiscoverCard[]> {
   if (!ids?.length) return [];
   const byId = new Map(items.map((item) => [item.itemId, item]));
+  const hasSteadyFeed = items.some((row) => row.provenance?.via !== 'search' && isConsumableItem(row, nowIso));
   const cards: DiscoverCard[] = [];
   for (const id of ids) {
     const item = byId.get(id) || (getItem ? await getItem(id) : undefined);
-    if (!item || !isConsumableItem(item, nowIso)) continue;
+    if (!item || (hasSteadyFeed && item.provenance?.via === 'search') || !isConsumableItem(item, nowIso)) continue;
     const card = cardFromNetworkItem(item, '继续看你这边已经挑出的内容。', 'directory');
     if (isConcreteContentCard(card)) cards.push(card);
   }
@@ -491,7 +498,16 @@ export async function ensurePersonalFeed(input: {
     const localFromCache = cachedCards.length ? applyExplicitFeedback(cachedCards, prefs).slice(0, MAX_FEED) : [];
     const localFromDirectory = localFromCache.length
       ? []
-      : directoryCards(diverseFeedCandidates(input.items, MAX_FEED, 2), prefs, MAX_FEED, now);
+      : directoryCards(
+          diverseFeedCandidates(
+            candidatesForDefault(input.items, now),
+            MAX_FEED,
+            2,
+          ),
+          prefs,
+          MAX_FEED,
+          now,
+        );
     mark('DIRECTORY_READ', localFromDirectory.length || input.items.filter((item) => isConsumableItem(item, now)).length);
     const localCards = localFromCache.length ? localFromCache : localFromDirectory;
     const fresh = localFromCache.length ? cacheFresh(cache.personal, nowMs) : localCards.length >= MIN_FEED;
@@ -556,7 +572,7 @@ export async function ensurePersonalFeed(input: {
   }
 
   if (input.mode === 'replenish') mark('REPLENISH_START');
-  let items = input.items.filter((item) => isConsumableItem(item, now) && !blocked(item, prefs));
+  let items = candidatesForDefault(input.items, now).filter((item) => !blocked(item, prefs));
   const shown = new Set(
     input.mode === 'refresh' || input.mode === 'more'
       ? cache.lastView?.itemIds || cache.personal?.itemIds || []
@@ -662,7 +678,7 @@ export async function ensurePersonalFeed(input: {
         }
       }
     }
-    if (input.reloadItems) items = (await input.reloadItems()).filter((item) => isConsumableItem(item, now) && !blocked(item, prefs));
+    if (input.reloadItems) items = candidatesForDefault(await input.reloadItems(), now).filter((item) => !blocked(item, prefs));
     const stillShort = items.filter((item) => !shown.has(item.itemId) && !opened.has(item.itemId)).length < MIN_FEED;
     if (ranked && input.searchWeb && (stillShort || input.mode === 'refresh' || input.mode === 'more' || input.mode === 'reset')) {
       for (const query of queries.slice(0, 2)) {
@@ -686,8 +702,8 @@ export async function ensurePersonalFeed(input: {
       }
     }
     mark('SEARCH_DONE', searchAttempted ? 1 : 0);
-    if (input.reloadItems) items = (await input.reloadItems()).filter((item) => isConsumableItem(item, now) && !blocked(item, prefs));
-    else items = items.filter((item) => isConsumableItem(item, now) && !blocked(item, prefs));
+    if (input.reloadItems) items = candidatesForDefault(await input.reloadItems(), now).filter((item) => !blocked(item, prefs));
+    else items = candidatesForDefault(items, now).filter((item) => !blocked(item, prefs));
     mark('NORMALIZE_DONE', items.length);
   }
 

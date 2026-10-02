@@ -457,6 +457,8 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
           body: { ok: false, status: 'CONCURRENCY_BUSY' as const, error: 'concurrency' },
         };
       }
+      inFlight += 1;
+      try {
       const nowMs = now();
       const nowIso = new Date(nowMs).toISOString();
       const global = await store.readGlobal();
@@ -502,7 +504,6 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
         };
       }
 
-      inFlight += 1;
       let result: ChatCompleteResult;
       try {
         result = await (async () => {
@@ -551,8 +552,6 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
           reason: mapped.message,
         });
         return { statusCode: httpStatusOf(mapped.status), body: { ok: false, status: mapped.status, error: mapped.message } };
-      } finally {
-        inFlight = Math.max(0, inFlight - 1);
       }
 
       const usage = parseProviderUsage(result.usage, {
@@ -600,6 +599,9 @@ export function createManagedAiGateway(options: ManagedAiGatewayOptions): {
           provider: 'managed-ai',
         },
       };
+      } finally {
+        inFlight = Math.max(0, inFlight - 1);
+      }
     });
   }
 

@@ -186,18 +186,24 @@ function canonicalOf(url?: string): string {
   }
 }
 
+function isPlaceholderTitle(title: string): boolean {
+  return /^(title|untitled|undefined|null)$/i.test(title.trim());
+}
+
 function isConcreteCandidate(card: DiscoverCard): boolean {
-  if (!card.title.trim()) return false;
+  if (!card.title.trim() || isPlaceholderTitle(card.title)) return false;
   if (isDomainOnlyCard(card)) return false;
   if (card.url && isGenericHubUrl(card.url)) return false;
   return true;
 }
 
 function webCardFromHit(hit: ExternalSeekHit, itemId: string): DiscoverCard {
+  const title = String(hit.title || hit.url).slice(0, 240);
+  const snippet = String(hit.snippet || '').trim();
   return {
     itemId,
-    title: String(hit.title || hit.url).slice(0, 240),
-    text: String(hit.snippet || hit.title || '').slice(0, 800),
+    title,
+    text: snippet && snippet !== title ? snippet.slice(0, 800) : '',
     url: canonicalOf(hit.url) || hit.url,
     reason: '公开网页来源，不是目录推荐。',
     source: 'web',
@@ -328,7 +334,7 @@ export async function seekContent(input: {
         for (const hit of web) {
           const canonical = canonicalOf(hit.url);
           if (!canonical || seenHit.has(canonical) || seenUrls.has(canonical)) continue;
-          if (isGenericHubUrl(canonical) || isDomainLikeTitle(hit.title, canonical)) continue;
+          if (isGenericHubUrl(canonical) || isDomainLikeTitle(hit.title, canonical) || isPlaceholderTitle(hit.title || '')) continue;
           seenHit.add(canonical);
           webHits.push({ ...hit, url: canonical, searchQuery: q });
         }

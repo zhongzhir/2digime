@@ -106,7 +106,7 @@ test('content command: open does not write preferences; boost is reversible and 
   const reversed = await bus.invoke('content', { action: 'reverse', directiveId: prefs[0]!.id });
   assert.deepEqual(await listContentPreferences(pkgDir), []);
   assert.equal(reversed.view.preferences.length, 0);
-  assert.equal(reversed.view.cards.some((card) => /Fusion/i.test(card.title)), false);
+  assert.equal(reversed.view.cards.some((card) => /你明确要求加推/.test(String(card.reason || ''))), false);
 
   await runtime.stop();
 });

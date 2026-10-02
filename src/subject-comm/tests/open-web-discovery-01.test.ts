@@ -74,6 +74,16 @@ test('page metadata prefers canonical, OpenGraph, JSON-LD; does not keep full bo
   assert.equal(/full article body/.test(meta.description), false);
 });
 
+test('placeholder title is not a real title, and a slogan in the page chrome yields to the article paragraph', () => {
+  const html = `<html><head><title>Title</title>
+    <meta property="og:description" content="打开世界的一扇窗">
+    </head><body><header>打开世界的一扇窗</header><article><p>${'这是正文第一段，讲的是南极科考队本周的航线和取样。'.repeat(2)}</p></article></body></html>`;
+  const meta = parsePageMetadata(html, 'https://example.org/story');
+  assert.equal(meta.title, '');
+  assert.match(meta.description, /南极科考队/);
+  assert.equal(/打开世界的一扇窗/.test(meta.description), false);
+});
+
 test('missing metadata keeps the title and does not copy it into the excerpt', () => {
   const meta = parsePageMetadata('<html><head><title>Only title</title></head></html>', 'https://example.org/plain');
   assert.equal(meta.canonicalUrl, 'https://example.org/plain');

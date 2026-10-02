@@ -84,7 +84,8 @@ test('询问写法时材料进入上下文，且只声明验收标准不会改�
     assert.match(seen, /是否搜索、读取、写入/);
     assert.equal(seen.includes('先分清这次是询问'), false);
     assert.equal(seen.includes('直接做'), false);
-    assert.equal(calls, 2);
+    assert.equal(calls, 3);
+    assert.equal(talked.view.outcome, 'FAILED');
     const reply = talked.view.turns.map((turn) => turn.text).join('\n');
     assert.match(reply, /没有另存文件/);
     assert.equal(reply.includes('不能收工'), false);

@@ -1085,6 +1085,9 @@ export interface CommandMap {
       itemId?: string;
       directiveId?: string;
       text?: string;
+      title?: string;
+      url?: string;
+      publisher?: string;
       /** 一次主动搜索 / 个人 Feed 打开的请求身份。迟到结果必须核对。 */
       searchGenerationId?: string;
     };

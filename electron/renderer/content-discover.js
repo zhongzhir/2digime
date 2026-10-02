@@ -147,11 +147,14 @@
     if (!client || typeof client.invoke !== 'function') return;
     if (action === 'later' && extra && extra.itemId) {
       const card = cardById(extra.itemId);
-      if (card) stashLater(card);
-      if (card && card.source === 'web') {
-        renderLater();
-        showSection('later');
-        return;
+      if (card) {
+        stashLater(card);
+        extra = Object.assign({}, extra, {
+          title: card.title || '',
+          url: card.url || '',
+          text: card.text || '',
+          publisher: card.publisherDisplayName || '',
+        });
       }
     }
     if (action === 'reverse' || action === 'resetRecent') {
@@ -215,6 +218,12 @@
     const h = document.createElement('h3');
     h.textContent = card.title || '';
     body.appendChild(h);
+    if (card.unavailable) {
+      const gone = document.createElement('p');
+      gone.className = 'content-discover-source muted tiny';
+      gone.textContent = '来源暂时打不开，收藏仍在。';
+      body.appendChild(gone);
+    }
     const src = sourceLine(card);
     if (src) {
       const meta = document.createElement('p');
@@ -363,7 +372,17 @@
     });
   }
 
+  function hydrateLater(view) {
+    if (!view || !Array.isArray(view.laterCards)) return;
+    laterById.clear();
+    for (const card of view.laterCards) {
+      if (card && card.itemId) laterById.set(card.itemId, card);
+    }
+    renderLater();
+  }
+
   function applyView(view) {
+    hydrateLater(view);
     if (!shouldApplyView(view)) return;
     let next = view;
     if (next && next.append && lastView && Array.isArray(lastView.cards)) {
@@ -666,7 +685,12 @@
       switcher.addEventListener('click', (evt) => {
         const btnEl = evt.target && evt.target.closest ? evt.target.closest('[data-discover-section]') : null;
         if (!btnEl) return;
-        showSection(btnEl.getAttribute('data-discover-section'));
+        const section = btnEl.getAttribute('data-discover-section');
+        if (section === 'for-you' && activeFeedMode === 'intent') {
+          void showPersonal();
+          return;
+        }
+        showSection(section);
       });
     }
     const refreshBtn = $('btn-discover-refresh');

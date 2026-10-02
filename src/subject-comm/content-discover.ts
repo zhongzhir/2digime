@@ -33,6 +33,8 @@ export interface DiscoverCard {
   access?: string;
   /** 相对当前搜索的对象忠实度。合并时 PRIMARY 不得被 ABOUT 覆盖。 */
   objectFidelity?: 'PRIMARY_CONTENT' | 'ABOUT_CONTENT' | 'UNRELATED';
+  /** 稍后看来源已不在目录里。收藏记录仍保留。 */
+  unavailable?: boolean;
 }
 
 export interface DiscoverPreference {
@@ -65,6 +67,8 @@ export interface DiscoverView {
   searchGenerationId?: string;
   /** 连续浏览时只追加，不替换当前列表。 */
   append?: boolean;
+  /** 稍后看收藏。刷新和重置不得清空。 */
+  laterCards?: DiscoverCard[];
   /** 内部搜索诊断，UI 不得展示。 */
   seekTrace?: {
     rawCandidates: number;

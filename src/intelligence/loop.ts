@@ -29,7 +29,7 @@ import type {
 } from './types';
 import type { ConsultResult, PublicSubjectCard } from '../subject-collab/types';
 import { formatPublicCardsForModel } from '../subject-collab/public-card';
-import { deriveTalkOutcome, hasObservedMutation } from './talk-effects';
+import { deriveTalkOutcome, expectedFromExecutions, hasObservedMutation, unsatisfiedRequiredEffects } from './talk-effects';
 
 export const NO_MODEL_NOTICE = '需要先连接 AI 能力，才能继续交流。';
 
@@ -313,9 +313,14 @@ function isInternalToolPayload(text: string): boolean {
   }
 }
 
+function isToolProtocolText(text: string): boolean {
+  const t = String(text || '').trim();
+  return t.includes('DSML') || /<\s*invoke\b/i.test(t) || /<\s*tool_call\b/i.test(t);
+}
+
 function deliverText(text: string): string {
   const t = String(text || '').trim();
-  if (!t || isInternalToolPayload(t)) return EMPTY_REPLY;
+  if (!t || isInternalToolPayload(t) || isToolProtocolText(t)) return EMPTY_REPLY;
   return t;
 }
 
@@ -1066,15 +1071,49 @@ export async function runTalkTurn(input: {
   );
   const accessDenied = turnExecs.some((item) => !item.ok && item.capabilityId === 'request_folder_access');
   const wrote = hasObservedMutation(turnExecs);
-  const outcome = deriveTalkOutcome({
+  const expected = expectedFromExecutions(turnExecs);
+  const gap = unsatisfiedRequiredEffects(expected, turnExecs, reads, mutations);
+  const needsEvidenceReply = Boolean(gap) || ((failedWrites.length > 0 || accessDenied) && !wrote);
+  if (needsEvidenceReply) {
+    throwIfAborted(input.signal);
+    const facts = turnExecs
+      .map((item) => {
+        const bits = [item.capabilityId, item.ok ? 'ok' : 'failed'];
+        if (item.outputPath) bits.push(item.outputPath);
+        if (item.observedEffect) bits.push(`mutated=${item.observedEffect.mutated === true}`);
+        if (item.summary) bits.push(item.summary.slice(0, 180));
+        if (item.failureReason) bits.push(item.failureReason.slice(0, 180));
+        return bits.join(' | ');
+      })
+      .join('\n');
+    messages.push({
+      role: 'user',
+      content: `工具执行记录（机械事实，不是新的任务）：\n${facts || '这一轮没有工具成功。'}\n${gap || ''}\n请根据这些记录回答主人。`,
+    });
+    current = await chat({ messages, tools: [] });
+  }
+  let outcome = deriveTalkOutcome({
     execs: turnExecs,
-    expected: [],
+    expected,
     stillOpen: (failedWrites.length > 0 || accessDenied) && !wrote,
   });
+  if (gap && wrote) outcome = 'PARTIAL_SUCCESS';
+  if (gap && !wrote) outcome = 'FAILED';
 
   // 无 toolCalls 即为模型 final assistant response；下方落 Thread，由 service writeThread → renderer。
   // 完成判断不看模型自定的验收句子。写失败时附上工具事实；写成功不以字符串不一致改口失败。
+  if (isToolProtocolText(current.text)) {
+    throwIfAborted(input.signal);
+    messages.push({
+      role: 'user',
+      content: '上一条是工具调用标记，不是给主人的话。请只用普通句子说明工具记录里的实际结果。',
+    });
+    current = await chat({ messages, tools: [] });
+  }
   let assistantText = deliverText(current.text);
+  if (assistantText === EMPTY_REPLY && wrote && lastPath) {
+    assistantText = `已写入 ${lastPath}`;
+  }
   if (failedWrites.length && !wrote) {
     const fact = String(failedWrites[failedWrites.length - 1]?.summary || failedWrites[failedWrites.length - 1]?.failureReason || '').trim();
     if (fact && !assistantText.includes(fact.slice(0, 24))) {
