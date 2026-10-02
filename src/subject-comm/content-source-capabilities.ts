@@ -183,6 +183,7 @@ function commonsHits(endpoint: OpenSourceEndpoint, data: unknown, kind: SourceCo
     const detected = inferContentType({ mimeType: mime, mediaUrl: originalUrl || thumbUrl });
     if (kind === 'image' && detected !== 'image') continue;
     if (kind === 'video' && detected !== 'video') continue;
+    if (kind === 'audio' && detected !== 'audio') continue;
     if (/\.(djvu|pdf)(\?|$)/i.test(originalUrl || '') || /djvu|application\/pdf/i.test(mime)) continue;
     const displayUrl = thumbUrl || originalUrl || '';
     const mediaUrl = detected === 'image' ? displayUrl : originalUrl || displayUrl;
@@ -202,7 +203,7 @@ function commonsHits(endpoint: OpenSourceEndpoint, data: unknown, kind: SourceCo
     out.push({
       title,
       url: pageUrl,
-      contentType: detected === 'video' ? 'video' : 'image',
+      contentType: detected === 'video' ? 'video' : detected === 'audio' ? 'audio' : 'image',
       capability: endpoint.id,
       mediaUrl,
       thumbnailUrl: displayUrl,
@@ -302,10 +303,10 @@ function peertubeListUrl(endpoint: OpenSourceEndpoint, query: string): string {
 
 function commonsListUrl(endpoint: OpenSourceEndpoint, kind: SourceContentKind, query: string): string {
   if (!query) {
-    if (kind === 'video') {
+    if (kind === 'video' || kind === 'audio') {
       return (
         `${endpoint.url}?action=query&format=json&generator=search` +
-        `&gsrsearch=${encodeURIComponent('filetype:video')}&gsrnamespace=6&gsrlimit=8` +
+        `&gsrsearch=${encodeURIComponent(kind === 'audio' ? 'filetype:audio' : 'filetype:video')}&gsrnamespace=6&gsrlimit=8` +
         `&prop=imageinfo&iiprop=url|mime|size|extmetadata&iiurlwidth=1280`
       );
     }
@@ -314,12 +315,81 @@ function commonsListUrl(endpoint: OpenSourceEndpoint, kind: SourceContentKind, q
       `&prop=imageinfo&iiprop=url|mime|size|extmetadata&iiurlwidth=1280`
     );
   }
-  const gsr = kind === 'video' ? `filetype:video ${query}` : query;
+  const gsr =
+    kind === 'video' ? `filetype:video ${query}` : kind === 'audio' ? `filetype:audio ${query}` : query;
   return (
     `${endpoint.url}?action=query&format=json&generator=search` +
     `&gsrsearch=${encodeURIComponent(gsr)}&gsrnamespace=6&gsrlimit=8` +
     `&prop=imageinfo&iiprop=url|mime|size|extmetadata&iiurlwidth=1280`
   );
+}
+
+function archiveSearchUrl(endpoint: OpenSourceEndpoint, kind: 'audio' | 'video', query: string): string {
+  const mediatype = kind === 'video' ? 'movies' : 'audio';
+  const q = query ? `${query} AND mediatype:${mediatype}` : `mediatype:${mediatype}`;
+  return `${endpoint.url}?q=${encodeURIComponent(q)}&fl[]=identifier&fl[]=title&output=json&rows=4`;
+}
+
+function archiveDownloadUrl(identifier: string, name: string): string | undefined {
+  const id = encodeURIComponent(identifier);
+  const filePath = name
+    .split('/')
+    .filter(Boolean)
+    .map((part) => encodeURIComponent(part))
+    .join('/');
+  if (!filePath) return undefined;
+  return asSafe(`https://archive.org/download/${id}/${filePath}`);
+}
+
+function pickArchiveFile(files: unknown, kind: 'audio' | 'video'): string | undefined {
+  if (!Array.isArray(files)) return undefined;
+  const wanted = kind === 'audio' ? /\.(mp3|ogg|opus|m4a|wav|flac)$/i : /\.(mp4|webm|ogv|m4v)$/i;
+  for (const row of files) {
+    if (!row || typeof row !== 'object') continue;
+    const name = String((row as { name?: unknown }).name || '');
+    if (!wanted.test(name)) continue;
+    if (/thumb|\.torrent$|_files\.xml/i.test(name)) continue;
+    return name;
+  }
+  return undefined;
+}
+
+async function archiveHits(
+  endpoint: OpenSourceEndpoint,
+  fetchImpl: OpenMediaFetch,
+  kind: 'audio' | 'video',
+  query: string,
+): Promise<OpenMediaHit[]> {
+  const data = await readJson(fetchImpl, archiveSearchUrl(endpoint, kind, query));
+  const response = data && typeof data === 'object' ? (data as { response?: { docs?: unknown } }).response : null;
+  const docs = response && Array.isArray(response.docs) ? response.docs : [];
+  const out: OpenMediaHit[] = [];
+  for (const row of docs) {
+    if (!row || typeof row !== 'object') continue;
+    const doc = row as { identifier?: unknown; title?: unknown };
+    const identifier = String(doc.identifier || '').trim();
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,180}$/.test(identifier)) continue;
+    const meta = await readJson(fetchImpl, `https://archive.org/metadata/${encodeURIComponent(identifier)}`);
+    const record = meta && typeof meta === 'object' ? (meta as { metadata?: unknown; files?: unknown }) : {};
+    const metadata = record.metadata && typeof record.metadata === 'object' ? (record.metadata as Record<string, unknown>) : {};
+    if (metadata['access-restricted-item'] === true || metadata['access-restricted-item'] === 'true') continue;
+    const fileName = pickArchiveFile(record.files, kind);
+    const mediaUrl = fileName ? archiveDownloadUrl(identifier, fileName) : undefined;
+    if (!mediaUrl) continue;
+    const title = clipTitle(String(doc.title || metadata.title || identifier));
+    if (!title) continue;
+    const page = asSafe(`https://archive.org/details/${encodeURIComponent(identifier)}`) || mediaUrl;
+    out.push({
+      title,
+      url: page,
+      contentType: kind,
+      capability: endpoint.id,
+      mediaUrl,
+      snippet: clipText(String(metadata.description || title)).slice(0, 400),
+    });
+    if (out.length >= 4) break;
+  }
+  return out;
 }
 
 export async function searchOpenMedia(input: {
@@ -380,13 +450,23 @@ export async function searchOpenMedia(input: {
           seen.add(hit.url);
           out.push(hit);
         }
+      } else if (endpoint.kind === 'internet_archive') {
+        for (const kind of wanted) {
+          if (kind !== 'audio' && kind !== 'video') continue;
+          const hits = await archiveHits(endpoint, fetchImpl, kind, query);
+          for (const hit of hits) {
+            if (seen.has(hit.url)) continue;
+            seen.add(hit.url);
+            out.push(hit);
+          }
+        }
       }
     } catch {
       /* 单个开放来源失败不阻断其它来源 */
     }
-    if (out.length >= 16) break;
   }
-  return out.slice(0, 16);
+  const playableFirst = [...out].sort((a, b) => Number(Boolean(b.mediaUrl)) - Number(Boolean(a.mediaUrl)));
+  return playableFirst.slice(0, 16);
 }
 
 /** 无用户查询时列出开放目录样本。不是按人排序，也不从 Digital Self 抽关键词。 */

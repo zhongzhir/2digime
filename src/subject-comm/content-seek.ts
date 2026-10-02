@@ -288,7 +288,7 @@ export async function seekContent(input: {
         if (mediaOfKind >= 16) break;
         for (const hit of openHits) {
           let ingestedFeed = false;
-          if (hit.feedUrl && input.ingestHit) {
+          if (hit.feedUrl && input.ingestHit && !hit.mediaUrl) {
             try {
               const ingested = await input.ingestHit({
                 title: hit.title,
@@ -317,6 +317,7 @@ export async function seekContent(input: {
             }
           }
           if (ingestedFeed) continue;
+          if (!hit.mediaUrl && !hit.embedUrl) continue;
           const item = networkItemFromOpenHit(hit);
           if (!item) continue;
           const canonical = canonicalOf(item.content.url);

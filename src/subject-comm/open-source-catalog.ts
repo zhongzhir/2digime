@@ -7,7 +7,8 @@ export type OpenCatalogKind =
   | 'media_rss'
   | 'wikimedia_commons'
   | 'itunes_podcast'
-  | 'itunes_rss';
+  | 'itunes_rss'
+  | 'internet_archive';
 export type OpenCatalogContentType = 'article' | 'video' | 'image' | 'audio';
 
 export interface OpenSourceEndpoint {
@@ -73,7 +74,14 @@ export const OPEN_SOURCE_CATALOG: OpenSourceEndpoint[] = [
     label: 'Wikimedia Commons',
     kind: 'wikimedia_commons',
     url: 'https://commons.wikimedia.org/w/api.php',
-    contentTypes: ['image', 'video'],
+    contentTypes: ['image', 'video', 'audio'],
+  },
+  {
+    id: 'internet-archive',
+    label: 'Internet Archive',
+    kind: 'internet_archive',
+    url: 'https://archive.org/advancedsearch.php',
+    contentTypes: ['audio', 'video'],
   },
   {
     id: 'itunes-podcast-search',

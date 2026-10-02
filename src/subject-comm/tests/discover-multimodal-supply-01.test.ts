@@ -277,7 +277,8 @@ test('SOURCE ROUTING: article / video / image / audio pick distinct open capabil
     }),
     model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
   });
-  assert.equal(routed.cards.some((card) => card.contentType === 'video'), true);
+  const routedMedia = [...routed.cards, ...routed.unjudgedCards];
+  assert.equal(routedMedia.some((card) => card.contentType === 'video'), true);
   assert.equal(routed.cards.some((card) => card.contentType === 'article'), false);
 });
 
@@ -369,6 +370,8 @@ test('UI consumes image as visual subject, video at source, audio controls witho
   assert.equal(ui.includes("type === 'video'") && ui.includes('在来源观看'), true);
   assert.equal(ui.includes("loadedmetadata"), true);
   assert.equal(ui.includes('audio.controls = true'), true);
+  assert.equal(ui.includes("video.className = 'content-discover-video'"), true);
+  assert.equal(ui.includes('video.controls = true'), true);
   assert.equal(ui.includes('audio.hidden = true'), true);
   assert.equal(ui.includes("img.addEventListener('error'"), true);
   assert.equal(ui.includes("skipRender: true"), true);
@@ -445,10 +448,11 @@ test('IMAGE: open media still runs after web articles, and full-sentence query i
     model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
   });
   assert.equal(commonsSearches.some((row) => row && row !== query), true);
-  assert.equal(sought.cards.some((card) => card.contentType === 'image'), true);
+  const visible = [...sought.cards, ...sought.unjudgedCards, ...sought.relatedCards];
+  assert.equal(visible.some((card) => card.contentType === 'image'), true);
   assert.equal(sought.cards.some((card) => card.contentType === 'article'), false);
-  assert.equal(sought.relatedCards.some((card) => /相关报道/.test(card.title)), true);
-  const image = sought.cards.find((card) => card.contentType === 'image');
+  assert.equal(visible.some((card) => /相关报道/.test(card.title)), true);
+  const image = visible.find((card) => card.contentType === 'image');
   assert.ok(image?.mediaUrl || image?.thumbnailUrl);
   assert.match(String(image?.thumbnailUrl || image?.mediaUrl || ''), /https:\/\/upload\.wikimedia\.org\//);
 });
@@ -547,4 +551,79 @@ test('commons image keeps the API description, preview and original date', async
   assert.match(hits[0]?.snippet || '', /Great Red Spot/);
   assert.equal(hits[0]?.thumbnailUrl, 'https://upload.wikimedia.org/wikipedia/commons/thumb/j.jpg');
   assert.equal(hits[0]?.publishedAt, '2000-12-29T00:00:00.000Z');
+});
+
+test('internet archive returns a public file, and a page without a file is not an audio card', async () => {
+  const fetchImpl = async (url: string) => {
+    if (url.includes('advancedsearch.php')) {
+      return {
+        status: 200,
+        body: JSON.stringify({
+          response: { docs: [{ identifier: 'bach-cello-suite', title: 'Bach Cello Suite No. 1' }] },
+        }),
+        finalUrl: url,
+      };
+    }
+    if (url.includes('/metadata/')) {
+      return {
+        status: 200,
+        body: JSON.stringify({
+          metadata: { title: 'Bach Cello Suite No. 1' },
+          files: [{ name: 'disc1/prelude.mp3', format: 'VBR MP3' }],
+        }),
+        finalUrl: url,
+      };
+    }
+    if (url.includes('itunes.apple.com')) {
+      return {
+        status: 200,
+        body: JSON.stringify({
+          resultCount: 1,
+          results: [
+            {
+              kind: 'podcast',
+              collectionName: 'A blog about the suite',
+              collectionViewUrl: 'https://example.org/blog/suite',
+            },
+          ],
+        }),
+        finalUrl: url,
+      };
+    }
+    return { status: 404, body: '{}', finalUrl: url };
+  };
+  const hits = await searchOpenMedia({
+    query: 'Bach Cello Suite',
+    kinds: ['audio'],
+    fetchImpl,
+    endpoints: [
+      {
+        id: 'internet-archive',
+        label: 'Internet Archive',
+        kind: 'internet_archive',
+        url: 'https://archive.org/advancedsearch.php',
+        contentTypes: ['audio'],
+      },
+    ],
+  });
+  assert.equal(hits[0]?.contentType, 'audio');
+  assert.equal(hits[0]?.mediaUrl, 'https://archive.org/download/bach-cello-suite/disc1/prelude.mp3');
+  const sought = await seekContent({
+    query: 'Bach Cello Suite',
+    items: [],
+    fetchOpenMedia: fetchImpl,
+    intent: {
+      intent: 'consume',
+      topic: 'Bach Cello Suite',
+      requestedMedia: ['audio'],
+      objectWanted: 'work_itself',
+      freshness: 'classic',
+      popularityClaim: false,
+      searchQueries: ['Bach Cello Suite'],
+      suggestTalk: false,
+      scope: 'current_search',
+    },
+  });
+  assert.equal(sought.cards.some((card) => card.mediaUrl && card.mediaUrl.endsWith('.mp3')), true);
+  assert.equal(sought.cards.some((card) => /blog\/suite/.test(String(card.url || ''))), false);
 });

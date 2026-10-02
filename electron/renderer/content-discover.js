@@ -259,6 +259,28 @@
       });
       body.appendChild(audio);
     }
+    if (
+      type === 'video' &&
+      isHttps(card.mediaUrl) &&
+      card.consumption !== 'OFFICIAL_EMBED' &&
+      /\.(m4v|mp4|webm)(\?|$)/i.test(String(card.mediaUrl || ''))
+    ) {
+      const video = document.createElement('video');
+      video.className = 'content-discover-video';
+      video.preload = 'metadata';
+      video.hidden = true;
+      video.src = card.mediaUrl;
+      const revealVideo = () => {
+        if (!Number.isFinite(video.duration) || video.duration <= 0) return;
+        video.hidden = false;
+        video.controls = true;
+      };
+      video.addEventListener('loadedmetadata', revealVideo);
+      video.addEventListener('error', () => {
+        video.remove();
+      });
+      body.appendChild(video);
+    }
     if (card.reason) {
       const why = document.createElement('p');
       why.className = 'content-discover-reason muted tiny';
@@ -656,7 +678,17 @@
     activeSearchGenerationId = gen;
     activeFeedMode = 'intent';
     lastView = null;
+    lastCards = [];
+    lastRelated = [];
+    lastUnjudged = [];
     moreExhausted = false;
+    setStatus('兔机米正在准备一些值得看的内容……');
+    for (const id of ['content-discover-list', 'content-discover-related-list', 'content-discover-unjudged-list']) {
+      const node = $(id);
+      if (node) node.innerHTML = '';
+    }
+    const feedTitle = $('content-discover-feed-title');
+    if (feedTitle) feedTitle.textContent = '正在找「' + text.slice(0, 24) + '」';
     if (opts && opts.navigate) await goDiscover({ skipRefresh: true });
     showSection('for-you');
     try {
