@@ -360,6 +360,31 @@ test('late search cannot override Personal Feed; Search A cannot override Search
   assert.equal(personal.feedMode, 'personal');
 });
 
+test('an in-flight empty notice is replaced once later cards arrive', () => {
+  const gen = 'sg_notice';
+  const current = intentView({
+    searchGenerationId: gen,
+    cards: [],
+    notice: '这次没有找到可以直接看的内容。',
+  });
+  const incoming = intentView({
+    searchGenerationId: gen,
+    cards: [
+      card({
+        itemId: IMAGE.itemId,
+        title: IMAGE.content.title,
+        contentType: 'image',
+        mediaUrl: IMAGE.content.mediaUrl,
+        objectFidelity: 'PRIMARY_CONTENT',
+      }),
+    ],
+    notice: '',
+  });
+  const merged = mergeIntentViews(current, incoming);
+  assert.equal(merged.cards.length, 1);
+  assert.equal(merged.notice, '');
+});
+
 test('renderer keeps generation gate, skipRefresh, audio duration guard', async () => {
   const js = await fs.readFile(path.join(process.cwd(), 'electron/renderer/content-discover.js'), 'utf8');
   assert.match(js, /searchGenerationId/);

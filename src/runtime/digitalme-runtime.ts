@@ -190,7 +190,7 @@ import {
 import { defaultDiscoverIntent, interpretDiscoverIntent } from '../subject-comm/discover-intent';
 import { ingestSource } from '../subject-comm/content-ingest';
 import { safePublicHttpGet } from '../work-runtime/public-http-safety';
-import { indexSearchHits } from '../subject-comm/open-web-discovery';
+import { indexSearchHits, preferProviderSnippet } from '../subject-comm/open-web-discovery';
 import { ensurePersonalFeed, personalFeedCachePath, rememberIntentFeed } from '../subject-comm/personal-feed';
 import {
   classifySearchFailure,
@@ -820,7 +820,13 @@ export class DigitalMeRuntime {
                 : 4,
             via: 'feed',
           });
-          if (ingested.items.length) return ingested.items;
+          if (ingested.items.length) {
+            const kept = ingested.items.map((item) => preferProviderSnippet(item, hit.snippet));
+            for (let i = 0; i < kept.length; i += 1) {
+              if (kept[i] !== ingested.items[i]) await store.put(kept[i]!);
+            }
+            return kept;
+          }
         } catch {
           /* 公开页摄入失败时退回搜索命中 */
         }
@@ -860,7 +866,13 @@ export class DigitalMeRuntime {
           limit: 4,
           via: 'search',
         });
-        if (ingested.items.length) return ingested.items;
+        if (ingested.items.length) {
+          const kept = ingested.items.map((item) => preferProviderSnippet(item, hit.snippet));
+          for (let i = 0; i < kept.length; i += 1) {
+            if (kept[i] !== ingested.items[i]) await store.put(kept[i]!);
+          }
+          return kept;
+        }
       } catch {
         /* 单条公开页摄入失败时退回搜索命中 */
       }
@@ -974,7 +986,9 @@ export class DigitalMeRuntime {
             relatedCards: mergedCards.relatedCards,
             usedDirectory: ok[0]!.usedDirectory || ok[1]!.usedDirectory,
             usedExternal: ok[0]!.usedExternal || ok[1]!.usedExternal,
-            notice: mergedCards.cards.length ? ok[1]!.notice || ok[0]!.notice : ok[0]!.notice || ok[1]!.notice,
+            notice: mergedCards.cards.length
+              ? (ok[1]!.cards.length ? ok[1]!.notice : '') || (ok[0]!.cards.length ? ok[0]!.notice : '')
+              : ok[1]!.notice || ok[0]!.notice,
           };
         }),
       };

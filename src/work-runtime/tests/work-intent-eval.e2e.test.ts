@@ -106,7 +106,7 @@ test('D11-A 意图评测：≥50 条真实输入，误建执行=0，正确率≥
           model: modelEnv.model,
           messages,
           temperature: 0,
-          maxTokens: 768,
+          maxTokens: 2048,
           timeoutMs: 90_000,
         });
         parsed = parseConverseModelOutput(out.text);

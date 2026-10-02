@@ -503,3 +503,48 @@ test('AUDIO: episode preview is playable representation; show landing page is no
   assert.equal(show?.mediaUrl, undefined);
   assert.equal(show?.url, 'https://podcasts.apple.com/podcast/id9');
 });
+
+test('commons image keeps the API description, preview and original date', async () => {
+  const hits = await searchOpenMedia({
+    query: 'Jupiter',
+    kinds: ['image'],
+    endpoints: [
+      {
+        id: 'commons-test',
+        label: 'Wikimedia Commons',
+        kind: 'wikimedia_commons',
+        url: 'https://commons.wikimedia.org/w/api.php',
+        contentTypes: ['image'],
+      },
+    ],
+    fetchImpl: async () => ({
+      status: 200,
+      body: JSON.stringify({
+        query: {
+          pages: {
+            '1': {
+              title: 'File:Jupiter_from_Cassini.jpg',
+              imageinfo: [
+                {
+                  url: 'https://upload.wikimedia.org/wikipedia/commons/j.jpg',
+                  thumburl: 'https://upload.wikimedia.org/wikipedia/commons/thumb/j.jpg',
+                  mime: 'image/jpeg',
+                  extmetadata: {
+                    ObjectName: { value: 'Jupiter from Cassini' },
+                    ImageDescription: { value: '<p>The Great Red Spot seen by Cassini.</p>' },
+                    DateTimeOriginal: { value: '2000-12-29 00:00:00' },
+                  },
+                },
+              ],
+            },
+          },
+        },
+      }),
+      finalUrl: 'https://commons.wikimedia.org/w/api.php',
+    }),
+  });
+  assert.equal(hits[0]?.title, 'Jupiter from Cassini');
+  assert.match(hits[0]?.snippet || '', /Great Red Spot/);
+  assert.equal(hits[0]?.thumbnailUrl, 'https://upload.wikimedia.org/wikipedia/commons/thumb/j.jpg');
+  assert.equal(hits[0]?.publishedAt, '2000-12-29T00:00:00.000Z');
+});

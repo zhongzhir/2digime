@@ -19,10 +19,7 @@ import {
   type DiscoverIntent,
   type ObjectFidelity,
 } from './discover-intent';
-import {
-  hasDirectMediaRepresentation,
-  mergeSeekCardSets,
-} from './discover-search-generation';
+import { hasDirectMediaRepresentation, mergeSeekCardSets } from './discover-search-generation';
 import {
   networkItemFromOpenHit,
   searchOpenMedia,
@@ -65,6 +62,12 @@ export interface SeekTrace {
   selected: number;
   visible: number;
   items: SeekTraceItem[];
+  searchCalled?: boolean;
+  rawSearchHits?: number;
+  excludedHub?: number;
+  excludedDomainTitle?: number;
+  excludedPlaceholder?: number;
+  searchFailed?: boolean;
 }
 
 export interface ContentSeekResult {
@@ -260,6 +263,11 @@ export async function seekContent(input: {
 
   let usedExternal = false;
   let searchFailed = false;
+  let searchCalled = false;
+  let rawSearchHits = 0;
+  let excludedHub = 0;
+  let excludedDomain = 0;
+  let excludedPlaceholder = 0;
   const mediaKinds = intent.requestedMedia.filter(
     (row): row is 'video' | 'image' | 'audio' => row === 'video' || row === 'image' || row === 'audio',
   );
@@ -325,16 +333,29 @@ export async function seekContent(input: {
   }
 
   if (input.searchWeb && !input.skipWeb) {
+    searchCalled = true;
     const queries = intent.searchQueries.length ? intent.searchQueries : [query];
     const webHits: Array<ExternalSeekHit & { searchQuery: string }> = [];
     const seenHit = new Set<string>();
     for (const q of queries.slice(0, 2)) {
       try {
         const web = await input.searchWeb(q);
+        rawSearchHits += web.length;
         for (const hit of web) {
           const canonical = canonicalOf(hit.url);
           if (!canonical || seenHit.has(canonical) || seenUrls.has(canonical)) continue;
-          if (isGenericHubUrl(canonical) || isDomainLikeTitle(hit.title, canonical) || isPlaceholderTitle(hit.title || '')) continue;
+          if (isGenericHubUrl(canonical)) {
+            excludedHub += 1;
+            continue;
+          }
+          if (isDomainLikeTitle(hit.title, canonical)) {
+            excludedDomain += 1;
+            continue;
+          }
+          if (isPlaceholderTitle(hit.title || '')) {
+            excludedPlaceholder += 1;
+            continue;
+          }
           seenHit.add(canonical);
           webHits.push({ ...hit, url: canonical, searchQuery: q });
         }
@@ -381,6 +402,7 @@ export async function seekContent(input: {
 
   const concrete = cards.filter(isConcreteCandidate);
   const fidelity = new Map<string, ObjectFidelity>();
+  let classificationMissed = false;
   if (input.chatComplete && input.model && concrete.length) {
     const roles = await classifyCandidateRoles({
       query,
@@ -399,6 +421,8 @@ export async function seekContent(input: {
       for (const card of concrete) {
         fidelity.set(card.itemId, objectFidelity(roles.get(card.itemId), intent));
       }
+    } else {
+      classificationMissed = true;
     }
   }
 
@@ -407,11 +431,22 @@ export async function seekContent(input: {
   for (const card of concrete) {
     const matchedType = typeMatches(card, requiredTypes);
     let kind = fidelity.get(card.itemId);
-    if (hasDirectMediaRepresentation(card) && matchedType) {
+    if (
+      card.contentType === 'image' &&
+      hasDirectMediaRepresentation(card) &&
+      matchedType &&
+      kind !== 'UNRELATED'
+    ) {
       kind = 'PRIMARY_CONTENT';
     }
     if (!kind) {
-      kind = requiredTypes.length && !matchedType ? 'ABOUT_CONTENT' : 'PRIMARY_CONTENT';
+      const needsJudgment = requiredTypes.some((row) => row === 'video' || row === 'audio');
+      kind =
+        classificationMissed && needsJudgment
+          ? 'UNRELATED'
+          : requiredTypes.length && !matchedType
+            ? 'ABOUT_CONTENT'
+            : 'PRIMARY_CONTENT';
     }
     if (requiredTypes.length && kind === 'PRIMARY_CONTENT' && !matchedType) {
       kind = 'ABOUT_CONTENT';
@@ -472,14 +507,35 @@ export async function seekContent(input: {
     selected: traceItems.filter((row) => row.selected).length,
     visible: visible.length,
     items: traceItems,
+    ...(searchCalled
+      ? {
+          searchCalled: true,
+          rawSearchHits,
+          excludedHub,
+          excludedDomainTitle: excludedDomain,
+          excludedPlaceholder,
+          ...(searchFailed ? { searchFailed: true } : {}),
+        }
+      : { searchCalled: false }),
   };
 
   let notice = '';
   if (!visible.length) {
-    if (searchFailed && !directoryHits.length) {
+    if (searchFailed && rawSearchHits === 0 && !directoryHits.length) {
       notice = '暂时无法获取新内容，可以稍后再试或检查联网设置。';
     } else if (!input.searchWeb && !directoryHits.length) {
       notice = '还没有新内容。开启联网发现后，兔机米还可以从公开网络帮你找到更多内容。';
+    } else if (searchCalled && rawSearchHits === 0 && !directoryHits.length) {
+      notice = '搜索已经发出，这次没有返回结果。';
+    } else if (searchCalled && rawSearchHits > 0 && concrete.length === 0) {
+      notice =
+        excludedHub > 0
+          ? '搜索有返回，但都是网站入口，没有可以直接看的内容。'
+          : '搜索有返回，但没有可以直接看的内容。';
+    } else if (classificationMissed && concrete.length > 0) {
+      notice = '搜索有返回，但这轮没有完成相关性判断，所以没有把它们当成要找的内容。';
+    } else if (concrete.length > 0 && trace.unrelated === concrete.length) {
+      notice = '搜索有返回，判断后和这次要找的对不上。';
     } else if (intent.intent === 'consume') {
       notice = honestEmptyNotice(intent);
     } else {

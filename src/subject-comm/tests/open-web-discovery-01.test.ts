@@ -8,6 +8,7 @@ import {
   ingestOpenWebSource,
   indexSearchHits,
   parseSitemapLocs,
+  preferProviderSnippet,
   proposeOpenWebQueries,
 } from '../open-web-discovery';
 import { ingestSource } from '../content-ingest';
@@ -276,4 +277,17 @@ test('proposeOpenWebQueries only returns short topical queries, not a Digital Se
   });
   assert.deepEqual(queries, ['fusion energy progress', 'public science news']);
   assert.equal(queries.some((row) => /张三|12 号/.test(row)), false);
+});
+
+test('a failed page excerpt keeps the provider note and marks that the body was not extracted', async () => {
+  const store = new MemoryNetworkItemStore();
+  const [item] = await indexSearchHits({
+    store,
+    hits: [{ title: '夸克百科', url: 'https://page.example.org/baike' }],
+  });
+  assert.match(item!.content.text, /没有单独摘录/);
+  const kept = preferProviderSnippet(item!, '木星大红斑是木星大气中的风暴。');
+  assert.match(kept.content.text, /木星大红斑是木星大气中的风暴/);
+  assert.match(kept.content.text, /页面正文没有单独摘录/);
+  assert.equal(preferProviderSnippet(kept, '另一段'), kept);
 });

@@ -313,21 +313,36 @@ export async function classifyCandidateRoles(input: {
       summary: row.summary.slice(0, 240),
     })),
   });
-  try {
-    const result = await input.chatComplete({
-      baseUrl: input.model.baseUrl,
-      ...(input.model.apiKey ? { apiKey: input.model.apiKey } : {}),
-      model: input.model.model,
+  const chat = input.chatComplete;
+  const model = input.model;
+  if (!chat || !model) return new Map();
+  const request = async () => {
+    const result = await chat({
+      baseUrl: model.baseUrl,
+      ...(model.apiKey ? { apiKey: model.apiKey } : {}),
+      model: model.model,
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: user },
       ],
       temperature: 0,
-      maxTokens: 800,
+      maxTokens: 1600,
       timeoutMs: 45_000,
       responseFormat: { type: 'json_object' },
     });
-    return rolesFromModelText(result.text, ids);
+    const roles = rolesFromModelText(result.text, ids);
+    const rec = parseJsonObject(result.text);
+    const explicitEmpty = !!rec && Array.isArray(rec.roles) && rec.roles.length === 0;
+    return { roles, explicitEmpty };
+  };
+  try {
+    const first = await request();
+    if (first.roles.size || first.explicitEmpty) return first.roles;
+  } catch {
+    /* 空响应时再请求一次，不改判断标准 */
+  }
+  try {
+    return (await request()).roles;
   } catch {
     return new Map();
   }

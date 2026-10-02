@@ -263,6 +263,57 @@ test('FAILURE: zero matching video is honest empty and does not use cached feed 
   assert.equal(sought.trace.visible, 0);
 });
 
+test('a playable video stays unrelated when the model says it is unrelated', async () => {
+  const sought = await seekContent({
+    query: 'A public AI short film',
+    items: [VIDEO],
+    chatComplete: chatFromScript({
+      intent: { mode: 'consume', topic: '木星', requestedContentTypes: ['video'], objectWanted: 'primary_content' },
+      roles: [{ id: VIDEO.itemId, role: 'UNRELATED' }],
+    }),
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+  });
+  assert.equal(sought.cards.some((card) => card.itemId === VIDEO.itemId), false);
+  assert.equal(sought.trace.items.some((row) => row.contentId === VIDEO.itemId && row.fidelity === 'UNRELATED'), true);
+});
+
+test('video and audio are not treated as relevant when relevance was not judged', async () => {
+  const sought = await seekContent({
+    query: 'A public AI short film',
+    items: [VIDEO],
+    chatComplete: async ({ messages }) => {
+      const blob = messages.map((row) => String(row.content || '')).join('\n');
+      if (blob.includes('判断用户在「发现」里')) {
+        return {
+          text: JSON.stringify({
+            mode: 'consume',
+            topic: '木星',
+            requestedContentTypes: ['video'],
+            objectWanted: 'primary_content',
+          }),
+        };
+      }
+      return { text: 'not json' };
+    },
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+  });
+  assert.equal(sought.cards.some((card) => card.itemId === VIDEO.itemId), false);
+  assert.match(sought.notice, /没有完成相关性判断/);
+});
+
+test('hub-only search is reported as excluded entrances, not as no request', async () => {
+  const sought = await seekContent({
+    query: '今日新闻',
+    items: [],
+    searchWeb: async () => [{ title: '今日新闻', url: 'https://news.example.com/', snippet: '门户' }],
+  });
+  assert.equal(sought.cards.length, 0);
+  assert.equal(sought.trace.searchCalled, true);
+  assert.equal(sought.trace.rawSearchHits, 1);
+  assert.equal(sought.trace.excludedHub, 1);
+  assert.match(sought.notice, /网站入口/);
+});
+
 test('TYPE SEMANTICS: RSS enclosure audio is still audio', async () => {
   const ingested = await ingestSource({
     sourceUrl: 'https://example.org/audio.xml',

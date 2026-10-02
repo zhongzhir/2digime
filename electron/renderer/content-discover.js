@@ -231,7 +231,7 @@
       meta.textContent = src;
       body.appendChild(meta);
     }
-    if (card.text && type !== 'image') {
+    if (card.text) {
       const raw = decodeEntities(card.text).replace(/\s+/g, ' ').trim();
       if (raw && raw !== String(card.title || '').trim()) {
         const p = document.createElement('p');

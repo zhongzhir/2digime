@@ -173,7 +173,7 @@ export async function proposeDiscoveryIntents(input: {
   ]
     .filter(Boolean)
     .join('\n\n');
-  try {
+  const request = async (): Promise<{ intents: DiscoveryIntent[]; explicitEmpty: boolean }> => {
     const result = await input.chatComplete({
       baseUrl: input.model.baseUrl,
       ...(input.model.apiKey ? { apiKey: input.model.apiKey } : {}),
@@ -187,7 +187,18 @@ export async function proposeDiscoveryIntents(input: {
       timeoutMs: 60_000,
       responseFormat: { type: 'json_object' },
     });
-    return discoveryIntentsFromModelText(result.text);
+    const intents = discoveryIntentsFromModelText(result.text);
+    const rec = parseJsonObject(result.text);
+    return { intents, explicitEmpty: !!rec && Array.isArray(rec.intents) && rec.intents.length === 0 };
+  };
+  try {
+    const first = await request();
+    if (first.intents.length || first.explicitEmpty) return first.intents;
+  } catch {
+    /* 空响应或传输失败时再请求一次，不另造搜索词 */
+  }
+  try {
+    return (await request()).intents;
   } catch {
     return [];
   }
@@ -458,6 +469,7 @@ export async function ensurePersonalFeed(input: {
     });
   };
   const previousShown = [...(cache.lastView?.itemIds || [])];
+  let supplement: 'idle' | 'no_model' | 'no_query' | 'called' | 'called_empty' | 'failed' = 'idle';
   const finish = (view: DiscoverView, reasonCode: FeedReasonCode) => {
     const cards = applyExplicitFeedback(view.cards, prefs);
     const sameAsShown =
@@ -466,11 +478,23 @@ export async function ensurePersonalFeed(input: {
       cards.length > 0 &&
       previousShown.length === cards.length &&
       previousShown.every((id) => cards.some((card) => card.itemId === id));
+    const sameBatchNotice =
+      supplement === 'no_query'
+        ? '这次没有形成补充搜索，所以没有换出新内容。'
+        : supplement === 'no_model'
+          ? '这次没有可用的模型来形成补充搜索，所以没有换出新内容。'
+          : supplement === 'called_empty'
+            ? '补充搜索已经发出，没有返回新的内容。'
+            : supplement === 'failed'
+              ? '补充搜索没有完成，可以稍后再试。'
+              : supplement === 'called'
+                ? '补充搜索有返回，但没有换成不同的内容。'
+                : '这次没有换出不同的内容。';
     const traced = viewOf({
       cards,
       relatedCards: view.relatedCards || [],
       preferences: view.preferences,
-      notice: sameAsShown && !String(view.notice || '').trim() ? '这次没有换出不同的内容。' : view.notice,
+      notice: sameAsShown && !String(view.notice || '').trim() ? sameBatchNotice : view.notice,
       reasonCode,
       feedMode: view.feedMode || 'personal',
       networking: (view.networking as NetworkDiscoveryCode) || networking,
@@ -642,6 +666,11 @@ export async function ensurePersonalFeed(input: {
           : {}),
       });
       queries = intents.map((row) => row.searchQuery).filter(Boolean);
+      mark('INTENT_QUERIES', queries.length);
+      if (!queries.length) supplement = 'no_query';
+    } else if (needReplenish) {
+      supplement = 'no_model';
+      mark('INTENT_QUERIES', 0);
     }
     if (input.fetchOpenMedia) {
       if (ranked && intents.length) {
@@ -688,11 +717,13 @@ export async function ensurePersonalFeed(input: {
     }
     if (input.reloadItems) items = candidatesForDefault(await input.reloadItems(), now).filter((item) => !blocked(item, prefs));
     const stillShort = items.filter((item) => !shown.has(item.itemId) && !opened.has(item.itemId)).length < MIN_FEED;
+    let searchRaw = 0;
     if (ranked && input.searchWeb && (stillShort || input.mode === 'refresh' || input.mode === 'more' || input.mode === 'reset')) {
       for (const query of queries.slice(0, 2)) {
         searchAttempted = true;
         try {
           const hits = await input.searchWeb(query);
+          searchRaw += hits.length;
           if (hits.length) replenished = true;
           if (input.ingestHit) {
             for (const hit of hits.slice(0, 6)) {
@@ -705,10 +736,15 @@ export async function ensurePersonalFeed(input: {
           }
         } catch (err) {
           networking = classifySearchFailure(err);
+          supplement = 'failed';
           break;
         }
       }
+      if (searchAttempted && supplement !== 'failed') {
+        supplement = searchRaw > 0 ? 'called' : 'called_empty';
+      }
     }
+    if (searchAttempted) mark('SEARCH_RAW', searchRaw);
     mark('SEARCH_DONE', searchAttempted ? 1 : 0);
     if (input.reloadItems) items = candidatesForDefault(await input.reloadItems(), now).filter((item) => !blocked(item, prefs));
     else items = candidatesForDefault(items, now).filter((item) => !blocked(item, prefs));

@@ -327,6 +327,24 @@ export async function ingestOpenWebSource(input: {
   return { discovery, records, items };
 }
 
+function isMissingExcerpt(text: string): boolean {
+  return /^(来自 [^，]+，)?(页面|搜索结果)没有单独摘录。$/.test(text.trim());
+}
+
+/** 页面没有正文摘录时，保留搜索结果里的说明，并标明它不是页面正文。 */
+export function preferProviderSnippet(item: NetworkItem, snippet: string | undefined): NetworkItem {
+  const current = String(item.content.text || '');
+  if (!isMissingExcerpt(current)) return item;
+  const snip = String(snippet || '').trim();
+  if (!snip || snip === String(item.content.title || '').trim()) return item;
+  const text = clipText(`${snip}（页面正文没有单独摘录，这是搜索结果里的说明。）`);
+  return {
+    ...item,
+    content: { ...item.content, text },
+    provenance: { ...item.provenance, excerpt: text.slice(0, 400) },
+  };
+}
+
 export async function indexSearchHits(input: {
   hits: ExternalSeekHit[];
   store: NetworkItemStore;

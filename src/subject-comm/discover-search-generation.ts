@@ -207,7 +207,9 @@ export function mergeIntentViews(current: DiscoverView, incoming: DiscoverView):
     cards: merged.cards,
     relatedCards: related,
     ...(related.length ? { relatedTitle: incoming.relatedTitle || current.relatedTitle || '相关介绍' } : {}),
-    notice: merged.cards.length ? incoming.notice || current.notice : current.notice || incoming.notice,
+    notice: merged.cards.length
+      ? (incoming.cards.length ? incoming.notice : '') || (current.cards.length ? current.notice : '')
+      : incoming.notice || current.notice,
     ...(typeof incoming.replenishing === 'boolean' ? { replenishing: incoming.replenishing } : {}),
   };
 }

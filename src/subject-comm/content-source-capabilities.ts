@@ -43,6 +43,7 @@ export interface OpenMediaHit {
   author?: string;
   feedUrl?: string;
   mediaExpression?: 'full' | 'sample';
+  publishedAt?: string;
 }
 
 export type OpenMediaFetch = (
@@ -130,6 +131,40 @@ function peertubeHits(endpoint: OpenSourceEndpoint, data: unknown): OpenMediaHit
   return out;
 }
 
+function commonsPlain(value: unknown): string {
+  const raw =
+    value && typeof value === 'object' && 'value' in (value as Record<string, unknown>)
+      ? String((value as { value?: unknown }).value || '')
+      : String(value || '');
+  return clipText(
+    raw
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\[\[(?:[^|\]]+\|)?([^\]]+)\]\]/g, '$1')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+      .replace(/&#039;|&apos;/g, "'")
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/\s+/g, ' '),
+  ).trim();
+}
+
+function commonsMeta(media: Record<string, unknown>, key: string): string {
+  const ext = media.extmetadata;
+  if (!ext || typeof ext !== 'object') return '';
+  return commonsPlain((ext as Record<string, unknown>)[key]);
+}
+
+function commonsDate(raw: string): string | undefined {
+  const text = raw.trim();
+  const match = text.match(/^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}:\d{2}))?/);
+  if (!match) return undefined;
+  const iso = match[2] ? `${match[1]}T${match[2]}Z` : `${match[1]}T00:00:00Z`;
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return undefined;
+  return new Date(ms).toISOString();
+}
+
 function commonsHits(endpoint: OpenSourceEndpoint, data: unknown, kind: SourceContentKind): OpenMediaHit[] {
   const rec = data && typeof data === 'object' ? (data as { query?: { pages?: unknown } }) : null;
   const pages = rec?.query?.pages && typeof rec.query.pages === 'object' ? rec.query.pages : {};
@@ -154,15 +189,26 @@ function commonsHits(endpoint: OpenSourceEndpoint, data: unknown, kind: SourceCo
     if (!mediaUrl) continue;
     const pageUrl =
       asSafe(`https://commons.wikimedia.org/wiki/${encodeURI(String(item.title || ''))}`) || mediaUrl;
+    const objectName = commonsMeta(media, 'ObjectName');
+    const description = commonsMeta(media, 'ImageDescription');
+    const title = clipTitle(
+      objectName && objectName.toLowerCase() !== fileTitle.toLowerCase() ? objectName : fileTitle || pageUrl,
+    );
+    const snippet =
+      description && description !== title && description.toLowerCase() !== fileTitle.toLowerCase()
+        ? description.slice(0, 400)
+        : '';
+    const publishedAt = commonsDate(commonsMeta(media, 'DateTimeOriginal'));
     out.push({
-      title: clipTitle(fileTitle || pageUrl),
+      title,
       url: pageUrl,
       contentType: detected === 'video' ? 'video' : 'image',
       capability: endpoint.id,
       mediaUrl,
       thumbnailUrl: displayUrl,
       ...(mime ? { mimeType: mime.slice(0, 80) } : {}),
-      snippet: clipText(fileTitle).slice(0, 400),
+      ...(snippet ? { snippet } : {}),
+      ...(publishedAt ? { publishedAt } : {}),
     });
     if (out.length >= 8) break;
   }
@@ -260,19 +306,19 @@ function commonsListUrl(endpoint: OpenSourceEndpoint, kind: SourceContentKind, q
       return (
         `${endpoint.url}?action=query&format=json&generator=search` +
         `&gsrsearch=${encodeURIComponent('filetype:video')}&gsrnamespace=6&gsrlimit=8` +
-        `&prop=imageinfo&iiprop=url|mime|size&iiurlwidth=1280`
+        `&prop=imageinfo&iiprop=url|mime|size|extmetadata&iiurlwidth=1280`
       );
     }
     return (
       `${endpoint.url}?action=query&format=json&generator=allimages&gailimit=8` +
-      `&prop=imageinfo&iiprop=url|mime|size&iiurlwidth=1280`
+      `&prop=imageinfo&iiprop=url|mime|size|extmetadata&iiurlwidth=1280`
     );
   }
   const gsr = kind === 'video' ? `filetype:video ${query}` : query;
   return (
     `${endpoint.url}?action=query&format=json&generator=search` +
     `&gsrsearch=${encodeURIComponent(gsr)}&gsrnamespace=6&gsrlimit=8` +
-    `&prop=imageinfo&iiprop=url|mime|size&iiurlwidth=1280`
+    `&prop=imageinfo&iiprop=url|mime|size|extmetadata&iiurlwidth=1280`
   );
 }
 
@@ -374,6 +420,7 @@ export function networkItemFromOpenHit(hit: OpenMediaHit, now?: string): Network
     ...(hit.mimeType ? { mimeType: hit.mimeType } : {}),
     ...(hit.durationSeconds != null ? { durationSeconds: hit.durationSeconds } : {}),
     ...(hit.author ? { author: hit.author } : {}),
+    ...(hit.publishedAt ? { publishedAt: hit.publishedAt } : {}),
     ...(hit.mediaExpression ? { mediaExpression: hit.mediaExpression } : {}),
     access: 'public' as const,
     consumption: consumptionFor({
