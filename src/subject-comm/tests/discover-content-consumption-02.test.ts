@@ -389,6 +389,46 @@ test('PROGRAMS: listing is basis, named works verified by search; unread names a
   assert.ok(limited.length <= 2, `verification stops after a failed search, got ${limited.length}`);
   assert.equal(throttled.cards.length, 0);
   assert.match(throttled.relatedCards.find((card) => card.url === listing.content.url)?.reason || '', /还没有核实/);
+
+  // 作品页连不上（例如证书不匹配）就不是可用的观看入口：不进主结果，在依据文章上说明打不开。
+  // 读取端返回 403 之类状态不代表浏览器里打不开，仍算入口。
+  const opened: string[] = [];
+  const unreachable = await seekContent({
+    query: '适合周末看的纪录片',
+    items: [],
+    intent: {
+      intent: 'consume',
+      topic: '纪录片',
+      requestedMedia: ['video'],
+      objectWanted: 'work_itself',
+      freshness: 'unspecified',
+      popularityClaim: false,
+      searchQueries: ['周末 纪录片 片单'],
+      suggestTalk: false,
+    } as never,
+    chatComplete: chat,
+    model: { baseUrl: 'https://model.example', model: 'm' },
+    searchWeb: async (q) => {
+      if (q.includes('河西走廊')) return [{ title: '河西走廊 第1集', url: 'https://tv.example.org/show/hexi', snippet: '纪录片正片' }];
+      if (q.includes('人生七年')) return [{ title: '人生七年 第1集', url: 'https://tv.example.org/show/7up', snippet: '纪录片正片' }];
+      return [{ title: listing.content.title, url: listing.content.url!, snippet: listing.content.text }];
+    },
+    openPage: async (url) => {
+      opened.push(url);
+      if (url.includes('/show/hexi')) {
+        throw Object.assign(new Error("Hostname/IP does not match certificate's altnames"), { code: 'ERR_TLS_CERT_ALTNAME_INVALID' });
+      }
+      return { status: 403, body: '', finalUrl: url };
+    },
+    ingestHit: async () => [listing],
+  });
+  assert.ok(opened.includes('https://tv.example.org/show/hexi'));
+  assert.equal(unreachable.cards.some((card) => card.url === 'https://tv.example.org/show/hexi'), false);
+  assert.ok(unreachable.cards.some((card) => card.url === 'https://tv.example.org/show/7up'), '403 from the reader still counts as an entrance');
+  assert.match(
+    unreachable.relatedCards.find((card) => card.url === listing.content.url)?.reason || '',
+    /《河西走廊》，找到的作品页目前打不开/,
+  );
 });
 
 test('REGRESSION: Media RSS / JSON Feed / schema.org / oEmbed still parse', async () => {

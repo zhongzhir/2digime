@@ -104,11 +104,13 @@ const clickMenu = async (page, id, label) => {
   for (const f of before) { try { beforeHash[f] = hashOf(userData, f); } catch { /* locked */ } }
   rec('protected.count.before', before.length);
 
-  const [a, b, c] = rows.slice(0, 3).map((r) => r.id);
-  // 改名
-  await clickMenu(app.page, a, '改名');
-  const input = app.page.locator('#chat-session-list .chat-session-form input'); await input.fill('旅行计划'); await input.press('Enter');
-  await new Promise((r) => setTimeout(r, 800));
+  const [a, b, c, d] = rows.slice(0, 4).map((r) => r.id);
+  // 改名：a 改名后会被删除；d 改名后保留，用来验证重启后名字还在
+  for (const [id, name] of [[a, '旅行计划'], [d, '周末观影']]) {
+    await clickMenu(app.page, id, '改名');
+    const input = app.page.locator('#chat-session-list .chat-session-form input'); await input.fill(name); await input.press('Enter');
+    await new Promise((r) => setTimeout(r, 800));
+  }
   // 新建项目并移入
   await clickMenu(app.page, b, '归入项目');
   await app.page.locator(`#chat-session-list li[data-session-id="${b}"] .chat-session-menu button`, { hasText: '新建项目并移入' }).click();
@@ -145,6 +147,7 @@ const clickMenu = async (page, id, label) => {
   rec('restart.deleted-stays-gone', !rows.some((r) => r.id === a));
   rec('restart.project-kept', rows.some((r) => r.id === b && r.project === '家庭事务'));
   rec('restart.archived-kept', rows.some((r) => r.id === c && r.archived));
+  rec('restart.rename-kept', rows.some((r) => r.id === d && r.title === '周末观影'));
   await shot(app.ctx, app.page, 'conv-restart');
   const after = protectedFiles(userData);
   const missing = before.filter((f) => !after.includes(f));

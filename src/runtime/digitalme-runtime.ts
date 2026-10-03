@@ -1191,6 +1191,7 @@ export class DigitalMeRuntime {
               ...common,
               searchWeb,
               skipOpenMedia: true,
+              ...(openMedia ? { openPage: openMedia } : {}),
             })
         : null;
       if (!webWave) {

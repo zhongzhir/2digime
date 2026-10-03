@@ -1,5 +1,5 @@
 /**
- * 真实界面重放：Owner 同一个 5b75e45 打包程序 + Owner 数据副本，通过 CDP 驱动「发现」页，
+ * 真实界面重放：打包程序（默认 5b75e45，AUDIT_EXE 可换）+ Owner 数据副本，通过 CDP 驱动「发现」页，
  * 按秒记录页面状态。不改产品代码，不碰 Owner 正式目录。
  * 用法: node ui-replay.cjs <runName> "<query>" [maxSeekMs=450000] [waitBeforeSeekMs=15000] [source=owner-copy]
  */
@@ -131,6 +131,28 @@ const PORT = 9400 + Math.floor(Math.random() * 400);
   await new Promise((r) => setTimeout(r, 800));
   await shots('open');
 
+  const cardDetails = () => page.evaluate(() => Array.from(document.querySelectorAll('#content-discover-list > li')).map((n) => ({
+    title: ((n.querySelector('h3,h4,.card-title,strong') || n).textContent || '').trim().replace(/\s+/g, ' ').slice(0, 60),
+    meta: ((n.querySelector('.content-discover-kind, .muted') || {}).textContent || '').trim().replace(/\s+/g, ' ').slice(0, 80),
+    reason: ((n.querySelector('.content-discover-reason') || {}).textContent || '').trim().slice(0, 160),
+    buttons: Array.from(n.querySelectorAll('button')).map((b) => b.textContent.trim()),
+  })));
+
+  if (process.env.SCROLL === '1') {
+    // 瀑布流连续加载：滚到底部，记录卡片数是否增长、是否重复
+    const titles = async () => (await cardDetails()).map((c) => c.title);
+    const t0 = await titles();
+    const steps = [];
+    for (let i = 0; i < 6; i += 1) {
+      await page.evaluate(() => { const s = document.getElementById('panel-discover') || document.scrollingElement; s.scrollTop = s.scrollHeight; s.dispatchEvent(new Event('scroll')); });
+      await new Promise((r) => setTimeout(r, 6000));
+      const t = await titles();
+      steps.push({ cards: t.length, unique: new Set(t).size, status: (await snap()).status });
+    }
+    log('scroll.probe', { before: t0.length, steps });
+    await shot('scroll-end');
+  }
+
   if (process.env.PROBE_REPLENISH === '1') {
     const r = await page.evaluate(async () => {
       const t0 = performance.now();
@@ -177,6 +199,30 @@ const PORT = 9400 + Math.floor(Math.random() * 400);
     }
     log('seek.end', { elapsedMs: at() - submitAt, capHit: at() - submitAt >= MAX_SEEK, final: await snap() });
     await shots('seek');
+    log('cards.detail', { cards: await cardDetails() });
+    if (process.env.OPEN_SITE === '1') {
+      // 去原站 / 看推荐依据：主进程只放行 http(s)，在应用内子窗口打开；记录打开的地址与页面标题
+      const opened = [];
+      const labels = /^(去原站观看|去原站收听|去原站看|去原站|看推荐依据)$/;
+      const targets = await page.evaluate((src) => {
+        const re = new RegExp(src);
+        const out = [];
+        Array.from(document.querySelectorAll('#content-discover-list > li')).slice(0, 3).forEach((n, i) => {
+          Array.from(n.querySelectorAll('button')).forEach((b, j) => { if (re.test(b.textContent.trim())) out.push({ i, j, label: b.textContent.trim() }); });
+        });
+        return out;
+      }, labels.source);
+      for (const tg of targets.slice(0, 4)) {
+        const pop = ctx.waitForEvent('page', { timeout: 15000 }).catch(() => null);
+        await page.evaluate(({ i, j }) => document.querySelectorAll('#content-discover-list > li')[i].querySelectorAll('button')[j].click(), tg);
+        const p = await pop;
+        if (!p) { opened.push(Object.assign({ opened: false }, tg)); continue; }
+        await p.waitForLoadState('domcontentloaded', { timeout: 20000 }).catch(() => {});
+        opened.push(Object.assign({ opened: true, url: p.url().slice(0, 160), title: (await p.title().catch(() => '')).slice(0, 80) }, tg));
+        await p.close().catch(() => {});
+      }
+      log('open.site', { opened });
+    }
     if (process.env.PLAY === '1') {
       // 应用内播放：逐张点击“在这里播放/收听”，记录播放器是否在本卡片内展开、是否读到时长、是否真的在走
       const results = [];

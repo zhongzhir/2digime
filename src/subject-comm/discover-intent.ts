@@ -525,7 +525,7 @@ export async function extractMentionedWorks(input: {
     'medium：video、audio 或 unknown。',
     'sourceId：这部作品出现在哪一篇材料里。',
     'basis：只转述这篇材料对这部作品的评价或介绍。材料里没有的评分、排名、时长、播放量一律不写，不要编造。',
-    'searchQuery：用来核实这部作品、找到它观看或收听入口的搜索词，通常是作品名加类型。',
+    'searchQuery：用来找到这部作品能直接观看或收听的页面（正片、播放页、官方节目页）的搜索词，不是找百科或影评；材料提到播出平台时可以带上。',
     '按用户这次的条件挑（例如长视频、纪录片、适合周末），明显不符合的不要输出。最多 4 部，挑材料里评价最明确的，宁缺毋滥；多篇材料提到的同一部只输出一次。',
   ].join('\n');
   const user = JSON.stringify({

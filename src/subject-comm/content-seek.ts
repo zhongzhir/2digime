@@ -341,6 +341,30 @@ function webCardFromHit(hit: ExternalSeekHit, itemId: string): DiscoverCard {
   return markAccess(card);
 }
 
+const ENTRANCE_CHECK_MS = 10_000;
+
+// 入口是否真的打得开：只认连接层失败（证书、域名、拒绝连接、超时）和页面已不存在。
+// 读取用的不是浏览器，其余状态码、内容过大或类型不支持都不代表浏览器里打不开；
+// 解析到内网地址（例如本机代理的 fake-ip）时不读，也不能据此说打不开。
+async function entranceOpens(openPage: OpenMediaFetch | undefined, url: string | undefined): Promise<boolean> {
+  if (!openPage || !url) return true;
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    const res = await Promise.race([
+      openPage(url),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(Object.assign(new Error('entrance check timeout'), { code: 'timeout' })), ENTRANCE_CHECK_MS);
+      }),
+    ]);
+    return res.status !== 404 && res.status !== 410;
+  } catch (err) {
+    const code = (err as { code?: string } | undefined)?.code;
+    return code === 'too_large' || code === 'content_type' || code === 'redirect' || code === 'ssrf';
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 async function programsFromSources(input: {
   query: string;
   intent: DiscoverIntent;
@@ -349,6 +373,7 @@ async function programsFromSources(input: {
   chatComplete: ChatCompleteFn;
   model: { baseUrl: string; model: string; apiKey?: string };
   seenUrls: Set<string>;
+  openPage?: OpenMediaFetch;
   signal?: AbortSignal;
 }): Promise<{ verified: DiscoverCard[]; unverified: DiscoverCard[] }> {
   const verified: DiscoverCard[] = [];
@@ -367,7 +392,7 @@ async function programsFromSources(input: {
   // 搜索有配额（网关按安装计次）：两两核实；一次搜索失败或被限流后不再发新的核实，其余如实标为未核实。
   let searchBlocked = false;
   const checkOne = async (work: (typeof works)[number], index: number) => {
-    if (searchBlocked || input.signal?.aborted) return { work, card: null, judgment: undefined };
+    if (searchBlocked || input.signal?.aborted) return { work, card: null, judgment: undefined, broken: false };
     let hits: ExternalSeekHit[] = [];
     try {
       hits = await input.searchWeb(work.searchQuery);
@@ -386,7 +411,7 @@ async function programsFromSources(input: {
       candidates.push(card);
       if (candidates.length >= 3) break;
     }
-    if (!candidates.length || input.signal?.aborted) return { work, card: null, judgment: undefined };
+    if (!candidates.length || input.signal?.aborted) return { work, card: null, judgment: undefined, broken: false };
     const judged = await classifyCandidateRoles({
       query: work.kind ? `《${work.title}》（${work.kind}）` : `《${work.title}》`,
       intent: { ...input.intent, topic: work.title },
@@ -400,17 +425,23 @@ async function programsFromSources(input: {
       model: input.model,
       ...(input.signal ? { signal: input.signal } : {}),
     });
-    const card = candidates.find(
+    const pages = candidates.filter(
       (row) => isPrimaryContentRole(judged.roles.get(row.itemId)) && judged.judgments.get(row.itemId)?.medium !== 'article',
     );
-    return { work, card: card || null, judgment: card ? judged.judgments.get(card.itemId) : undefined };
+    for (const card of pages) {
+      if (input.signal?.aborted) break;
+      if (await entranceOpens(input.openPage, card.url)) {
+        return { work, card, judgment: judged.judgments.get(card.itemId), broken: false };
+      }
+    }
+    return { work, card: null, judgment: undefined, broken: pages.length > 0 };
   };
   const checked: Array<Awaited<ReturnType<typeof checkOne>>> = [];
   for (let index = 0; index < works.length; index += 2) {
     checked.push(...(await Promise.all(works.slice(index, index + 2).map((work, j) => checkOne(work, index + j)))));
   }
   const taken = new Set<string>();
-  const notChecked = new Map<string, string[]>();
+  const notChecked = new Map<string, { pending: string[]; broken: string[] }>();
   for (const row of checked) {
     const source = sourceById.get(row.work.sourceId);
     if (!source) continue;
@@ -429,16 +460,18 @@ async function programsFromSources(input: {
       });
       continue;
     }
-    notChecked.set(source.itemId, [...(notChecked.get(source.itemId) || []), `《${row.work.title}》`]);
+    const marks = notChecked.get(source.itemId) || { pending: [], broken: [] };
+    (row.broken ? marks.broken : marks.pending).push(`《${row.work.title}》`);
+    notChecked.set(source.itemId, marks);
   }
   // 未核实的作品不单独成卡：标在提到它们的那篇文章上，文章仍只是依据。
-  for (const [sourceId, names] of notChecked) {
+  for (const [sourceId, marks] of notChecked) {
     const source = sourceById.get(sourceId)!;
-    unverified.push({
-      ...source,
-      objectFidelity: 'ABOUT_CONTENT',
-      reason: `这篇提到了${names.join('')}，还没有核实到它们的作品页或观看入口。`,
-    });
+    const pending = marks.pending.join('');
+    const broken = marks.broken.join('');
+    let reason = pending ? `这篇提到了${pending}，还没有核实到它们的作品页或观看入口。` : `这篇提到了${broken}，找到的作品页目前打不开。`;
+    if (pending && broken) reason += `${broken}找到的作品页目前打不开。`;
+    unverified.push({ ...source, objectFidelity: 'ABOUT_CONTENT', reason });
   }
   return { verified, unverified };
 }
@@ -451,6 +484,8 @@ export async function seekContent(input: {
   model?: { baseUrl: string; model: string; apiKey?: string };
   ingestHit?: (hit: ExternalSeekHit) => Promise<NetworkItem[]>;
   fetchOpenMedia?: OpenMediaFetch;
+  /** 只用来确认核实到的作品页能否打开。 */
+  openPage?: OpenMediaFetch;
   newsHeadlines?: NewsHeadline[];
   intent?: DiscoverIntent;
   skipWeb?: boolean;
@@ -833,6 +868,7 @@ export async function seekContent(input: {
       chatComplete: input.chatComplete,
       model: input.model,
       seenUrls,
+      ...(input.openPage ? { openPage: input.openPage } : {}),
       ...(input.signal ? { signal: input.signal } : {}),
     });
     primary.unshift(...found.verified);
