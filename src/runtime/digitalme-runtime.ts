@@ -177,6 +177,7 @@ import {
   agentsFromRegistry,
   resolveAuthorizedWorkingDirectory,
 } from '../intelligence';
+import { readThread, writeThread } from '../intelligence/store';
 import type { ProfessionalAgent, TalkChatFn } from '../intelligence';
 import { formatSelfContext, selectSelfContext } from '../intelligence/self-context';
 import { readDigitalSelf } from '../subject-core/digital-self/store';
@@ -223,6 +224,7 @@ import {
   type ContentPreferenceKind,
 } from '../subject-comm/content-preferences';
 import { laterCards, listLaterItems, saveLaterItem } from '../subject-comm/later-items';
+import { allowsDefaultSupply } from '../subject-comm/domestic-source-boundary';
 import {
   appendNetworkContentFeedback,
   createUserContentFeedback,
@@ -884,9 +886,7 @@ export class DigitalMeRuntime {
         await store.put(item);
       },
       ingestHit: async (hit) => {
-        if (isGoogleNewsAggregatorUrl(hit.url)) {
-          return indexSearchHits({ hits: [hit], store, limit: 1, via: 'feed' });
-        }
+        if (!allowsDefaultSupply({ url: hit.url })) return [];
         try {
           const entrance = await ingestDiscoveredEntrance({
             url: hit.url,
@@ -956,9 +956,7 @@ export class DigitalMeRuntime {
     await appendRecentRecommendationEvent(packageRoot, { type: 'seek_topic', topic: query });
     const ingestHit = async (hit: { title: string; url: string; snippet?: string }) => {
       if (signal.aborted) return [];
-      if (isGoogleNewsAggregatorUrl(hit.url)) {
-        return indexSearchHits({ hits: [hit], store, limit: 1 });
-      }
+      if (!allowsDefaultSupply({ url: hit.url })) return [];
       try {
         const entrance = await ingestDiscoveredEntrance({
           url: hit.url,
@@ -1049,7 +1047,13 @@ export class DigitalMeRuntime {
       let newsFailed = false;
       if (intentReady.newsFeed) {
         try {
-          headlines = await fetchNewsHeadlines(intentReady.searchQueries[0] || query, fetch, new Date(), signal);
+          headlines = await fetchNewsHeadlines(
+            intentReady.searchQueries[0] || query,
+            fetch,
+            new Date(),
+            signal,
+            searchWeb,
+          );
         } catch {
           newsFailed = true;
           headlines = [];
@@ -1502,7 +1506,8 @@ export class DigitalMeRuntime {
         },
         this.options.requestFolderAccess,
         () => this.resolveContentSearch(),
-        () => fetchNewsHeadlines,
+        () => (query: string) =>
+          fetchNewsHeadlines(query, fetch, new Date(), undefined, this.resolveContentSearch()),
       );
     }
     return this.talkService;
@@ -2039,8 +2044,28 @@ export class DigitalMeRuntime {
 
   async importSubjectMaterial(input: CommandMap['subject.importMaterial']['input']) {
     const result = await this.subject.importSubjectMaterial(input);
+    await this.bindImportedMaterialToCurrentTalk(result.materialRef);
     await this.maybeRecordGrowthStage();
     return result;
+  }
+
+  /** 导入的包内副本进入当前对话线程。不是语义选文件，只绑定这次导入的真实路径。 */
+  private async bindImportedMaterialToCurrentTalk(materialRef: string): Promise<void> {
+    const pkg = this.subject.getActive();
+    if (!pkg) return;
+    const dest = path.join(pkg.rootDir, ...String(materialRef || '').split('/').filter(Boolean));
+    try {
+      await fs.access(dest);
+    } catch {
+      return;
+    }
+    const now = nowIso();
+    const thread = await readThread(pkg.rootDir, now);
+    const next = [...new Set([...(thread.materialPaths || []), dest])];
+    if (next.length === (thread.materialPaths || []).length) return;
+    thread.materialPaths = next;
+    thread.updatedAt = now;
+    await writeThread(pkg.rootDir, thread);
   }
 
   removeSubjectMaterial(input: CommandMap['subject.removeMaterial']['input']) {
@@ -4274,15 +4299,6 @@ export class DigitalMeRuntime {
       throw new Error('artifact workspace not attached; open or create a package first');
     }
     return this.workspace;
-  }
-}
-
-function isGoogleNewsAggregatorUrl(url: string): boolean {
-  try {
-    const host = new URL(url).hostname.replace(/^www\./, '');
-    return host === 'news.google.com' || host.endsWith('.news.google.com');
-  } catch {
-    return false;
   }
 }
 

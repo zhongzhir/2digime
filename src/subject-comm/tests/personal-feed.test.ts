@@ -278,7 +278,7 @@ test('search queries come from the model, not a hardcoded fallback or Digital Se
   assert.deepEqual(silent, []);
 });
 
-test('cold open shows preparing then replenish persists directory inventory', async () => {
+test('cold open ingests catalog before return, not after more', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-cold-'));
   const queries: string[] = [];
   const stored: NetworkItem[] = [];
@@ -291,7 +291,7 @@ test('cold open shows preparing then replenish persists directory inventory', as
     createdAt: NOW,
     visibility: 'public',
     content: { title: 'Public fusion note', text: 'A public lab update.', url: 'https://example.org/fusion-open' },
-    provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'search' },
+    provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'feed' },
   });
   if (!web.ok) throw new Error(web.reason);
 
@@ -306,16 +306,22 @@ test('cold open shows preparing then replenish persists directory inventory', as
     model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
     searchWeb: async (query) => {
       queries.push(query);
-      return [{ title: 'Public fusion note', url: 'https://example.org/fusion-open', snippet: 'lab' }];
+      throw new Error('first screen must not wait for search');
     },
+    ingestHit: async () => {
+      stored.splice(0, stored.length, web.item);
+      return [web.item];
+    },
+    reloadItems: async () => stored,
+    getItem: async (itemId) => stored.find((row) => row.itemId === itemId),
     mode: 'open',
     now: NOW,
   });
-  assert.equal(opened.view.cards.length, 0);
-  assert.equal(opened.view.replenishing, true);
-  assert.equal(opened.view.notice, '');
+  assert.ok(opened.view.cards.length >= 1);
+  assert.equal(opened.view.cards[0]?.url, 'https://example.org/fusion-open');
+  assert.equal(opened.reasonCode, 'REPLENISHED');
   assert.equal(queries.length, 0);
-  assert.equal((opened.view.supplyTrace || []).some((row) => row.event === 'OPEN_DISCOVER'), true);
+  assert.equal((opened.view.supplyTrace || []).some((row) => row.event === 'FIRST_CARD_VISIBLE'), true);
 
   const filled = await ensurePersonalFeed({
     packageRoot: root,
@@ -342,7 +348,7 @@ test('cold open shows preparing then replenish persists directory inventory', as
   assert.ok(filled.view.cards.length >= 1);
   assert.equal(filled.view.cards[0]?.url, 'https://example.org/fusion-open');
   assert.equal(stored[0]?.content.url, 'https://example.org/fusion-open');
-  assert.equal(stored[0]?.provenance.via, 'search');
+  assert.equal(stored[0]?.provenance.via, 'feed');
   assert.equal(JSON.stringify(stored).includes('preferencevector'), false);
 
   const replayQueries: string[] = [];
@@ -372,6 +378,42 @@ test('cold open shows preparing then replenish persists directory inventory', as
 test('zero-key Discover lists open catalog without a model and does not ask for API Key', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-zerokey-'));
   const stored: NetworkItem[] = [];
+  const fetchOpenMedia = async (url: string) => {
+    if (url.includes('commons.wikimedia.org')) {
+      return {
+        status: 200,
+        body: JSON.stringify({
+          query: {
+            pages: {
+              '1': {
+                title: 'File:OpenLab.jpg',
+                imageinfo: [{ url: 'https://upload.wikimedia.org/wikipedia/commons/o.jpg', mime: 'image/jpeg' }],
+              },
+            },
+          },
+        }),
+        finalUrl: url,
+      };
+    }
+    if (url.includes('rss/toppodcasts')) {
+      return {
+        status: 200,
+        body: JSON.stringify({
+          feed: {
+            entry: [
+              {
+                title: { label: 'Public tech podcast' },
+                id: { label: 'https://podcasts.apple.com/cn/podcast/public-tech/id1' },
+                summary: { label: 'weekly' },
+              },
+            ],
+          },
+        }),
+        finalUrl: url,
+      };
+    }
+    return { status: 404, body: '{}', finalUrl: url };
+  };
   const opened = await ensurePersonalFeed({
     packageRoot: root,
     digitalSelf: selfOf('subj_a'),
@@ -379,80 +421,17 @@ test('zero-key Discover lists open catalog without a model and does not ask for 
     preferences: [],
     feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
     networking: 'AVAILABLE',
-    fetchOpenMedia: async () => ({ status: 200, body: '{}', finalUrl: 'https://example.org' }),
-    mode: 'open',
-    now: NOW,
-  });
-  assert.equal(opened.view.cards.length, 0);
-  assert.equal(opened.view.replenishing, true);
-  assert.equal(/API Key|连接 AI/.test(opened.view.notice || ''), false);
-
-  const filled = await ensurePersonalFeed({
-    packageRoot: root,
-    digitalSelf: selfOf('subj_a'),
-    items: [],
-    preferences: [],
-    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
-    networking: 'AVAILABLE',
-    searchWeb: async () => {
-      throw new Error('managed search down');
-    },
-    fetchOpenMedia: async (url) => {
-      if (url.includes('/api/v1/videos')) {
-        return {
-          status: 200,
-          body: JSON.stringify({
-            data: [{ name: 'Open science talk', url: 'https://framatube.org/w/zero-start', description: 'public video' }],
-          }),
-          finalUrl: url,
-        };
-      }
-      if (url.includes('commons.wikimedia.org')) {
-        return {
-          status: 200,
-          body: JSON.stringify({
-            query: {
-              pages: {
-                '1': {
-                  title: 'File:OpenLab.jpg',
-                  imageinfo: [{ url: 'https://upload.wikimedia.org/wikipedia/commons/o.jpg', mime: 'image/jpeg' }],
-                },
-              },
-            },
-          }),
-          finalUrl: url,
-        };
-      }
-      if (url.includes('rss/toppodcasts')) {
-        return {
-          status: 200,
-          body: JSON.stringify({
-            feed: {
-              entry: [
-                {
-                  title: { label: 'Public tech podcast' },
-                  id: { label: 'https://podcasts.apple.com/cn/podcast/public-tech/id1' },
-                  summary: { label: 'weekly' },
-                },
-              ],
-            },
-          }),
-          finalUrl: url,
-        };
-      }
-      return { status: 404, body: '{}', finalUrl: url };
-    },
+    fetchOpenMedia,
     putNetworkItem: async (item) => {
       stored.push(item);
     },
     reloadItems: async () => stored,
     getItem: async (itemId) => stored.find((row) => row.itemId === itemId),
-    mode: 'replenish',
+    mode: 'open',
     now: NOW,
   });
-  assert.ok(filled.view.cards.length >= 1, 'open catalog should produce visible cards');
-  assert.equal(filled.reasonCode, 'REPLENISHED');
-  assert.equal(/API Key|请配置|连接 AI/.test(filled.view.notice || ''), false);
+  assert.ok(opened.view.cards.length >= 1, 'first screen must show catalog without more');
+  assert.equal(/API Key|请配置|连接 AI/.test(opened.view.notice || ''), false);
   assert.equal(JSON.stringify(stored).includes('preferencevector'), false);
 });
 
@@ -543,8 +522,8 @@ test('同一来源的重复章节不会占满排序失败时的第一页', async
     items.push(checked.item);
   }
   for (const [id, title, host] of [
-    ['ni_bbc', '世界新闻一则', 'https://www.bbc.com/news/story'],
-    ['ni_npr', '另一则广播', 'https://www.npr.org/story'],
+    ['ni_paper', '世界新闻一则', 'https://www.thepaper.cn/news/story'],
+    ['ni_ithome', '另一则广播', 'https://www.ithome.com/story'],
   ] as const) {
     const checked = validateNetworkItem({
       schemaVersion: 1,
@@ -855,4 +834,87 @@ test('稍后看记住稳定标识，来源不在目录里时仍保留', async ()
   const cards = laterCards(rows, new Set());
   assert.equal(cards[0]!.unavailable, true);
   assert.match(cards[0]!.text, /来源暂时打不开/);
+});
+
+test('默认推荐去掉境外核心来源，稍后看仍保留并标明状态', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-boundary-'));
+  const items: NetworkItem[] = [];
+  for (const [id, title, url, publisher] of [
+    ['ni_ok', '国内科技一则', 'https://www.ithome.com/0/123.htm', 'IT之家'],
+    ['ni_bbc', 'BBC 世界新闻', 'https://www.bbc.com/news/world-123', 'BBC'],
+    ['ni_epoch', '大纪元一则', 'https://www.epochtimes.com/gb/n.html', '大纪元'],
+  ] as const) {
+    const checked = validateNetworkItem({
+      schemaVersion: 1,
+      itemId: id,
+      publisherSubjectId: `pub_${id}`,
+      publisherDisplayName: publisher,
+      kind: 'content',
+      createdAt: NOW,
+      visibility: 'public',
+      content: { title, text: title, url, contentType: 'article' },
+      provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'feed' },
+    });
+    if (!checked.ok) throw new Error(checked.reason);
+    items.push(checked.item);
+  }
+  const result = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items,
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'DISABLED',
+    chatComplete: async () => ({ text: 'not json' }),
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    mode: 'reset',
+    now: NOW,
+  });
+  const titles = result.view.cards.map((card) => card.title);
+  assert.equal(titles.includes('国内科技一则'), true);
+  assert.equal(titles.includes('BBC 世界新闻'), false);
+  assert.equal(titles.includes('大纪元一则'), false);
+
+  await saveLaterItem(root, {
+    itemId: 'ni_bbc',
+    url: 'https://www.bbc.com/news/world-123',
+    title: 'BBC 世界新闻',
+    text: '已收藏',
+    publisher: 'BBC',
+    savedAt: NOW,
+  });
+  const later = laterCards(await listLaterItems(root), new Set(['ni_bbc']));
+  assert.equal(later.length, 1);
+  assert.equal(later[0]!.unavailable, false);
+  assert.equal(later[0]!.sourceBoundary, 'excluded_from_default');
+  assert.match(later[0]!.reason || '', /不在国内默认供给/);
+});
+
+test('ranking empty still shows already-fetched directory cards', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-rank-empty-'));
+  const items = FEED_01_SEED_ITEMS.slice(0, 6);
+  await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items,
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    mode: 'open',
+    now: NOW,
+  });
+  const ranked = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items,
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    chatComplete: async () => ({ text: '{"decisions":[]}' }),
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    mode: 'replenish',
+    now: NOW,
+  });
+  assert.ok(ranked.view.cards.length >= 1);
+  assert.equal(ranked.view.cards.some((card) => !card.title), false);
 });

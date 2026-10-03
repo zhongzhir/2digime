@@ -20,6 +20,7 @@ import {
 } from './content-discover';
 import type { ExternalSeekHit } from './content-seek';
 import { isDomainLikeTitle, isGenericHubUrl } from './discover-intent';
+import { allowsDefaultSupply } from './domestic-source-boundary';
 import type { ContentPreferenceDirective } from './content-preferences';
 import { isNetworkItemExpired } from './network-item';
 import {
@@ -232,10 +233,24 @@ function viewOf(input: {
   };
 }
 
+const RECENT_DEFAULT_MS = 21 * 24 * 60 * 60 * 1000;
+
+function isRecentDefaultItem(item: NetworkItem, nowIso?: string): boolean {
+  const raw = String(item.content.publishedAt || '').trim();
+  if (!raw || !nowIso) return true;
+  const published = Date.parse(raw);
+  const now = Date.parse(nowIso);
+  if (!Number.isFinite(published) || !Number.isFinite(now)) return true;
+  return now - published <= RECENT_DEFAULT_MS;
+}
+
 function candidatesForDefault(items: NetworkItem[], nowIso?: string): NetworkItem[] {
-  const consumable = items.filter((item) => isConsumableItem(item, nowIso));
-  const steady = consumable.filter((item) => item.provenance?.via !== 'search');
-  return steady.length ? steady : consumable;
+  const consumable = items.filter((item) => isConsumableItem(item, nowIso) && isRecentDefaultItem(item, nowIso));
+  const inBound = consumable.filter((item) =>
+    allowsDefaultSupply({ url: item.content.url, publisher: item.publisherDisplayName }),
+  );
+  const steady = inBound.filter((item) => item.provenance?.via !== 'search');
+  return steady.length ? steady : inBound;
 }
 
 function isConsumableItem(item: NetworkItem, nowIso?: string): boolean {
@@ -331,19 +346,76 @@ function canSearch(input: {
 
 function canFetchOpenCatalog(input: {
   fetchOpenMedia?: OpenMediaFetch;
+  ingestHit?: (hit: ExternalSeekHit) => Promise<NetworkItem[]>;
   networking: NetworkDiscoveryCode;
 }): boolean {
-  return !!(input.fetchOpenMedia && input.networking !== 'DISABLED');
+  return !!(
+    input.networking !== 'DISABLED' &&
+    (input.fetchOpenMedia || input.ingestHit)
+  );
 }
 
 function canReplenishSupply(input: {
   searchWeb?: (query: string) => Promise<ExternalSeekHit[]>;
   fetchOpenMedia?: OpenMediaFetch;
+  ingestHit?: (hit: ExternalSeekHit) => Promise<NetworkItem[]>;
   chatComplete?: ChatCompleteFn;
   model?: { baseUrl: string; model: string; apiKey?: string };
   networking: NetworkDiscoveryCode;
 }): boolean {
   return canSearch(input) || canFetchOpenCatalog(input);
+}
+
+async function ingestCatalogFeeds(input: {
+  ingestHit?: (hit: ExternalSeekHit) => Promise<NetworkItem[]>;
+  networking: NetworkDiscoveryCode;
+}): Promise<boolean> {
+  if (!input.ingestHit || input.networking === 'DISABLED') return false;
+  let replenished = false;
+  await Promise.all(
+    catalogFeedUrls(['article', 'video', 'audio', 'image']).map(async (feedUrl) => {
+      try {
+        const ingested = await input.ingestHit!({ title: 'open catalog', url: feedUrl });
+        if (ingested.length) replenished = true;
+      } catch {
+        /* 单条目录失败不挡住其它目录 */
+      }
+    }),
+  );
+  return replenished;
+}
+
+async function ingestOpenCatalogMedia(input: {
+  fetchOpenMedia?: OpenMediaFetch;
+  putNetworkItem?: (item: NetworkItem) => Promise<void>;
+  networking: NetworkDiscoveryCode;
+  now: string;
+}): Promise<boolean> {
+  if (!input.fetchOpenMedia || input.networking === 'DISABLED') return false;
+  let filled = false;
+  try {
+    const hits = await listOpenCatalog({
+      kinds: ['video', 'image', 'audio'],
+      fetchImpl: input.fetchOpenMedia,
+    });
+    for (const hit of hits.slice(0, 12)) {
+      const item = networkItemFromOpenHit(hit, input.now);
+      if (!item) continue;
+      if (input.putNetworkItem) {
+        try {
+          await input.putNetworkItem(item);
+          filled = true;
+        } catch {
+          /* 单条媒介入库失败不挡住其它条目 */
+        }
+      } else {
+        filled = true;
+      }
+    }
+  } catch {
+    /* 开放目录失败不挡住 RSS */
+  }
+  return filled;
 }
 
 function cacheFresh(snapshot: FeedSnapshot | undefined, nowMs: number): boolean {
@@ -543,7 +615,19 @@ export async function ensurePersonalFeed(input: {
           now,
         );
     mark('DIRECTORY_READ', localFromDirectory.length || input.items.filter((item) => isConsumableItem(item, now)).length);
-    const localCards = localFromCache.length ? localFromCache : localFromDirectory;
+    let localCards = localFromCache.length ? localFromCache : localFromDirectory;
+    let catalogFilled = false;
+    if (!localCards.length && canFetchOpenCatalog({ ...input, networking })) {
+      mark('CATALOG_START');
+      const feedsFilled = await ingestCatalogFeeds({ ...input, networking });
+      const mediaFilled = await ingestOpenCatalogMedia({ ...input, networking, now });
+      catalogFilled = feedsFilled || mediaFilled;
+      const reloaded = input.reloadItems
+        ? candidatesForDefault(await input.reloadItems(), now).filter((item) => !blocked(item, prefs))
+        : candidatesForDefault(input.items, now).filter((item) => !blocked(item, prefs));
+      localCards = directoryCards(diverseFeedCandidates(reloaded, MAX_FEED, 2), prefs, MAX_FEED, now);
+      mark('DIRECTORY_READ', localCards.length);
+    }
     const fresh = localFromCache.length ? cacheFresh(cache.personal, nowMs) : localCards.length >= MIN_FEED;
     const replenishing = canReplenishSupply({ ...input, networking }) && (localCards.length < MIN_FEED || !fresh);
     if (localCards.length) {
@@ -564,12 +648,12 @@ export async function ensurePersonalFeed(input: {
           cards: localCards,
           preferences: input.preferences,
           notice: '',
-          reasonCode: localFromCache.length ? 'CACHED_FEED' : 'LOCAL_DIRECTORY',
+          reasonCode: localFromCache.length ? 'CACHED_FEED' : catalogFilled ? 'REPLENISHED' : 'LOCAL_DIRECTORY',
           feedMode: 'personal',
           networking,
           replenishing,
         }),
-        localFromCache.length ? 'CACHED_FEED' : 'LOCAL_DIRECTORY',
+        localFromCache.length ? 'CACHED_FEED' : catalogFilled ? 'REPLENISHED' : 'LOCAL_DIRECTORY',
       );
     }
     if (replenishing) {
@@ -628,18 +712,7 @@ export async function ensurePersonalFeed(input: {
 
   if (input.mode === 'replenish' && input.supplyPhase === 'catalog') {
     mark('CATALOG_START');
-    if (input.ingestHit && networking !== 'DISABLED') {
-      await Promise.all(
-        catalogFeedUrls(['article', 'video', 'audio', 'image']).map(async (feedUrl) => {
-          try {
-            const ingested = await input.ingestHit!({ title: 'open catalog', url: feedUrl });
-            if (ingested.length) replenished = true;
-          } catch {
-            /* 单条目录失败不挡住其它目录 */
-          }
-        }),
-      );
-    }
+    if (await ingestCatalogFeeds({ ...input, networking })) replenished = true;
     if (input.reloadItems) {
       items = candidatesForDefault(await input.reloadItems(), now).filter((item) => !blocked(item, prefs));
     }
@@ -771,7 +844,9 @@ export async function ensurePersonalFeed(input: {
       for (const query of queries.slice(0, 2)) {
         searchAttempted = true;
         try {
-          const hits = await input.searchWeb(query);
+          const hits = (await input.searchWeb(query)).filter((hit) =>
+            allowsDefaultSupply({ url: hit.url }),
+          );
           searchRaw += hits.length;
           if (hits.length) replenished = true;
           if (input.ingestHit) {
@@ -994,6 +1069,35 @@ export async function ensurePersonalFeed(input: {
   cache.rankedIds = ordered.map((card) => card.itemId);
 
   if (!cards.length) {
+    const alreadyHave = input.mode === 'more' ? [] : candidates
+      .map((item) => cardFromNetworkItem(item, '已经取到，这一轮没有排进推荐，先按来源放在这里。', 'directory'))
+      .filter(isConcreteContentCard)
+      .slice(0, MAX_FEED);
+    if (alreadyHave.length) {
+      const snapshot: FeedSnapshot = {
+        itemIds: rememberShownIds(cache.lastView?.itemIds, alreadyHave.map((card) => card.itemId), false),
+        generatedAt: now,
+        mode: 'personal',
+      };
+      await writeCache(input.packageRoot, {
+        version: 1,
+        personal: snapshot,
+        lastView: snapshot,
+        ...(cache.rankedIds?.length ? { rankedIds: cache.rankedIds } : {}),
+      });
+      mark('FIRST_CARD_VISIBLE', alreadyHave.length);
+      return finish(
+        viewOf({
+          cards: alreadyHave,
+          preferences: input.preferences,
+          notice: '已经取到这些内容。这一轮没有排进推荐，先按不同来源放在这里。',
+          reasonCode: replenished ? 'REPLENISHED' : 'LOCAL_DIRECTORY',
+          feedMode: 'personal',
+          networking,
+        }),
+        replenished ? 'REPLENISHED' : 'LOCAL_DIRECTORY',
+      );
+    }
     const fallback = input.mode === 'more' ? [] : cachedCards.length ? cachedCards : lastCards;
     if (fallback.length) mark('FIRST_CARD_VISIBLE', fallback.length);
     return finish(

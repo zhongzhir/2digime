@@ -12,11 +12,11 @@ import { headlinesFromRss } from '../news-headlines';
 import type { DiscoverCard } from '../content-discover';
 
 const RSS = `<?xml version="1.0"?><rss version="2.0"><channel><title>News</title>
-<item><title>嘉兴今日入秋 - 新浪财经</title><link>https://news.google.com/rss/articles/abc</link>
+<item><title>嘉兴今日入秋 - 新浪财经</title><link>https://finance.sina.cn/2026-10-02/doc-abc.shtml</link>
 <pubDate>Fri, 02 Oct 2026 07:19:37 GMT</pubDate>
 <description>嘉兴今日入秋</description>
 <source url="https://finance.sina.cn">新浪财经</source></item>
-<item><title>没有日期的条目</title><link>https://news.google.com/rss/articles/nodate</link>
+<item><title>没有日期的条目</title><link>https://finance.sina.cn/nodate</link>
 <description>没有 pubDate</description></item>
 </channel></rss>`;
 

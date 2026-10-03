@@ -33,9 +33,9 @@ test('live open media: PeerTube / Wikimedia / iTunes return concrete objects', {
   }
 
   const store = new MemoryNetworkItemStore();
-  const feed = await ingestSource({ sourceUrl: 'https://framatube.org/feeds/videos.xml', store, limit: 2 });
+  const feed = await ingestSource({ sourceUrl: 'https://www.ithome.com/rss/', store, limit: 2 });
   if (feed.items.length) {
-    assert.equal(feed.items[0]?.content.contentType, 'video');
+    assert.ok(feed.items[0]?.content.title);
   }
 
   if (!video.length && !image.length && !audio.length && !feed.items.length) {
@@ -49,7 +49,7 @@ test('live open catalog list without query returns PeerTube / Commons / podcast 
     return [];
   });
   const store = new MemoryNetworkItemStore();
-  const feed = await ingestSource({ sourceUrl: 'https://framatube.org/feeds/videos.xml', store, limit: 2 });
+  const feed = await ingestSource({ sourceUrl: 'https://www.ithome.com/rss/', store, limit: 2 });
   const kinds = new Set(hits.map((row) => row.contentType));
   if (!hits.length && !feed.items.length) {
     t.skip('no open catalog source reachable');

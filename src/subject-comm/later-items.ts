@@ -5,6 +5,7 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { atomicWriteFile } from '../infrastructure/fs-atomic';
 import type { DiscoverCard } from './content-discover';
+import { allowsDefaultSupply } from './domestic-source-boundary';
 
 export interface LaterItem {
   itemId: string;
@@ -46,15 +47,23 @@ export async function saveLaterItem(packageRoot: string, item: LaterItem): Promi
 export function laterCards(rows: LaterItem[], liveIds: Set<string>): DiscoverCard[] {
   return rows.map((row) => {
     const available = liveIds.has(row.itemId);
+    const excluded = !allowsDefaultSupply({ url: row.url, publisher: row.publisher });
     return {
       itemId: row.itemId,
       title: row.title || row.url || row.itemId,
-      text: available ? row.text : `${row.text ? `${row.text} ` : ''}来源暂时打不开，收藏仍在。`.trim(),
+      text: available
+        ? row.text
+        : `${row.text ? `${row.text} ` : ''}来源暂时打不开，收藏仍在。`.trim(),
       ...(row.url ? { url: row.url } : {}),
       ...(row.publisher ? { publisherDisplayName: row.publisher } : {}),
-      reason: available ? '稍后看' : '稍后看 · 来源暂时打不开',
+      reason: excluded
+        ? '稍后看 · 不在国内默认供给'
+        : available
+          ? '稍后看'
+          : '稍后看 · 来源暂时打不开',
       source: 'directory',
       unavailable: !available,
+      ...(excluded ? { sourceBoundary: 'excluded_from_default' as const } : {}),
     };
   });
 }

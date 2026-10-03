@@ -192,31 +192,27 @@ test('SOURCE ROUTING: current search does not spray all media APIs when type is 
 test('SOURCE ROUTING: article / video / image / audio pick distinct open capabilities', async () => {
   assert.deepEqual(sourceKindsForRequest([]), ['article', 'video', 'image', 'audio']);
   assert.deepEqual(sourceKindsForRequest(['video']), ['video']);
-  assert.equal(catalogEndpointsFor(['video']).some((row) => row.kind === 'peertube_search'), true);
+  assert.equal(catalogEndpointsFor(['video']).some((row) => row.kind === 'wikimedia_commons' || row.kind === 'internet_archive'), true);
   assert.equal(OPEN_SOURCE_CATALOG.some((row) => row.contentTypes.includes('image')), true);
   assert.equal(OPEN_SOURCE_CATALOG.some((row) => row.kind === 'itunes_podcast'), true);
+  assert.equal(OPEN_SOURCE_CATALOG.some((row) => /bbc|guardian|npr|aljazeera|epoch/i.test(row.url)), false);
 
   const fetchImpl = async (url: string) => {
-    if (url.includes('framatube.org/api')) {
+    if (url.includes('commons.wikimedia.org') && url.includes('filetype')) {
       return {
         status: 200,
         body: JSON.stringify({
-          total: 1,
-          data: [
-            {
-              name: 'AI talk',
-              url: 'https://framatube.org/w/abc',
-              thumbnailPath: '/t.jpg',
-              embedPath: '/videos/embed/abc',
-              duration: 42,
+          query: {
+            pages: {
+              '2': {
+                title: 'File:AI-talk.webm',
+                imageinfo: [{ url: 'https://upload.wikimedia.org/wikipedia/commons/ai.webm', mime: 'video/webm' }],
+              },
             },
-          ],
+          },
         }),
         finalUrl: url,
       };
-    }
-    if (url.includes('commons.wikimedia.org') && url.includes('filetype')) {
-      return { status: 200, body: JSON.stringify({ query: { pages: {} } }), finalUrl: url };
     }
     if (url.includes('commons.wikimedia.org')) {
       return {
@@ -261,7 +257,7 @@ test('SOURCE ROUTING: article / video / image / audio pick distinct open capabil
 
   const videos = await searchOpenMedia({ query: 'AI', kinds: ['video'], fetchImpl });
   assert.equal(videos[0]?.contentType, 'video');
-  assert.equal(videos[0]?.capability, 'peertube-framatube-search');
+  assert.equal(videos[0]?.capability, 'wikimedia-commons');
   const images = await searchOpenMedia({ query: '航天摄影', kinds: ['image'], fetchImpl });
   assert.equal(images[0]?.contentType, 'image');
   const audio = await searchOpenMedia({ query: '科技播客', kinds: ['audio'], fetchImpl });

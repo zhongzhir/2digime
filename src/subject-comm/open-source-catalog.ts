@@ -1,7 +1,10 @@
 /**
  * 非个性化开放来源登记。只存 Feed / 官方开放 API endpoint。
  * 不是用户推荐，不含 preference vector，不按人排序。
+ * 默认目录只放国内常规供给优先的来源；排除规则见 domestic-source-boundary。
  */
+import { allowsDefaultSupply } from './domestic-source-boundary';
+
 export type OpenCatalogKind =
   | 'peertube_search'
   | 'media_rss'
@@ -21,53 +24,18 @@ export interface OpenSourceEndpoint {
 
 export const OPEN_SOURCE_CATALOG: OpenSourceEndpoint[] = [
   {
-    id: 'bbc-news-world',
-    label: 'BBC News',
+    id: 'ithome-news',
+    label: 'IT之家',
     kind: 'media_rss',
-    url: 'https://feeds.bbci.co.uk/news/world/rss.xml',
+    url: 'https://www.ithome.com/rss/',
     contentTypes: ['article'],
   },
   {
-    id: 'bbc-zhongwen',
-    label: 'BBC 中文',
+    id: 'solidot-news',
+    label: 'Solidot',
     kind: 'media_rss',
-    url: 'https://feeds.bbci.co.uk/zhongwen/simp/rss.xml',
+    url: 'https://www.solidot.org/index.rss',
     contentTypes: ['article'],
-  },
-  {
-    id: 'guardian-world',
-    label: 'The Guardian',
-    kind: 'media_rss',
-    url: 'https://www.theguardian.com/world/rss',
-    contentTypes: ['article'],
-  },
-  {
-    id: 'npr-news',
-    label: 'NPR',
-    kind: 'media_rss',
-    url: 'https://feeds.npr.org/1001/rss.xml',
-    contentTypes: ['article'],
-  },
-  {
-    id: 'aljazeera-all',
-    label: 'Al Jazeera',
-    kind: 'media_rss',
-    url: 'https://www.aljazeera.com/xml/rss/all.xml',
-    contentTypes: ['article'],
-  },
-  {
-    id: 'peertube-framatube-search',
-    label: 'Framatube',
-    kind: 'peertube_search',
-    url: 'https://framatube.org/api/v1/search/videos',
-    contentTypes: ['video'],
-  },
-  {
-    id: 'peertube-framatube-feed',
-    label: 'Framatube videos',
-    kind: 'media_rss',
-    url: 'https://framatube.org/feeds/videos.xml',
-    contentTypes: ['video'],
   },
   {
     id: 'wikimedia-commons',
@@ -101,6 +69,8 @@ export const OPEN_SOURCE_CATALOG: OpenSourceEndpoint[] = [
 
 export function catalogEndpointsFor(kinds: string[]): OpenSourceEndpoint[] {
   const wanted = new Set(kinds.filter((row) => row === 'article' || row === 'video' || row === 'image' || row === 'audio'));
-  if (!wanted.size) return OPEN_SOURCE_CATALOG.slice();
-  return OPEN_SOURCE_CATALOG.filter((row) => row.contentTypes.some((type) => wanted.has(type)));
+  const rows = !wanted.size
+    ? OPEN_SOURCE_CATALOG.slice()
+    : OPEN_SOURCE_CATALOG.filter((row) => row.contentTypes.some((type) => wanted.has(type)));
+  return rows.filter((row) => allowsDefaultSupply({ url: row.url, publisher: row.label }));
 }

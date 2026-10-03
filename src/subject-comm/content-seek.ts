@@ -23,6 +23,7 @@ import {
   type ObjectFidelity,
 } from './discover-intent';
 import { type NewsHeadline } from './news-headlines';
+import { allowsDefaultSupply, filterDefaultSupply } from './domestic-source-boundary';
 import { hasDirectMediaRepresentation, mergeSeekCardSets } from './discover-search-generation';
 import {
   networkItemFromOpenHit,
@@ -256,7 +257,7 @@ export function publishedLocalDay(value: string | undefined): string | null {
 }
 
 export function cardsFromNewsHeadlines(rows: NewsHeadline[]): DiscoverCard[] {
-  return rows.slice(0, 8).map((row, index) => {
+  return filterDefaultSupply(rows).slice(0, 8).map((row, index) => {
     const url = canonicalOf(row.url) || row.url;
     let host = '';
     try {
@@ -395,7 +396,10 @@ export async function seekContent(input: {
   const queryByUrl = new Map<string, string>();
 
   const directoryHits = matchDirectoryForSeek(input.items, query).filter(
-    (item) => !isDomainLikeTitle(item.content.title, item.content.url) && !(item.content.url && isGenericHubUrl(item.content.url)),
+    (item) =>
+      allowsDefaultSupply({ url: item.content.url, publisher: item.publisherDisplayName }) &&
+      !isDomainLikeTitle(item.content.title, item.content.url) &&
+      !(item.content.url && isGenericHubUrl(item.content.url)),
   );
   const cards: DiscoverCard[] = directoryHits.map((item) =>
     cardFromNetworkItem(item, '目录里已有这条内容。', 'directory'),
@@ -513,6 +517,7 @@ export async function seekContent(input: {
         for (const hit of web) {
           const canonical = canonicalOf(hit.url);
           if (!canonical || seenHit.has(canonical) || seenUrls.has(canonical)) continue;
+          if (!allowsDefaultSupply({ url: canonical })) continue;
           if (isSiteEntranceUrl(canonical)) {
             seenHit.add(canonical);
             webHits.push({ ...hit, url: canonical, searchQuery: q, entrance: true });

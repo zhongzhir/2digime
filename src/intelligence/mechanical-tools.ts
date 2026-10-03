@@ -147,8 +147,8 @@ export function resolveProposedAccessPath(
   return { ok: true, abs: canonical, label: canonical };
 }
 
-export function describeAuthorizedFs(auth: AuthorizedFs): string {
-  if (!auth.folders.length && !auth.files.length) {
+export function describeAuthorizedFs(writeAuth: AuthorizedFs, readAuth: AuthorizedFs = writeAuth): string {
+  if (!writeAuth.folders.length && !writeAuth.files.length && !readAuth.files.length && !readAuth.folders.length) {
     return [
       '当前没有已授权的可写文件夹。',
       '需要在电脑上创建或修改文件、且现有授权覆盖不了目标路径时，调用 request_folder_access。',
@@ -156,16 +156,20 @@ export function describeAuthorizedFs(auth: AuthorizedFs): string {
     ].join('\n');
   }
   const lines = ['已有可复用的本机授权。覆盖范围内不要再次申请，也不要扩大到相邻目录。'];
-  if (auth.folders.length) {
-    lines.push('可读写文件夹（write_file / list_directory 的授权根）：');
-    for (const folder of auth.folders) lines.push(`- ${folder}`);
-    if (auth.folders.length > 1) {
+  if (writeAuth.folders.length) {
+    lines.push('可写入文件夹（write_file 的授权根；不是已附材料，不要去翻里面的其它文稿）：');
+    for (const folder of writeAuth.folders) lines.push(`- ${folder}`);
+    if (writeAuth.folders.length > 1) {
       lines.push('有多个可写根时，write_file 必须填写 root，且必须是上列某一个绝对路径。');
     }
   }
-  if (auth.files.length) {
+  if (readAuth.folders.length) {
+    lines.push('可列出的文件夹（list_directory）：');
+    for (const folder of readAuth.folders) lines.push(`- ${folder}`);
+  }
+  if (readAuth.files.length) {
     lines.push('可读文件：');
-    for (const file of auth.files) lines.push(`- ${file}`);
+    for (const file of readAuth.files) lines.push(`- ${file}`);
   }
   return lines.join('\n');
 }

@@ -407,6 +407,8 @@ export async function runTalkTurn(input: {
   subjectCollab?: SubjectCollabPort;
   confirmHint?: string;
   contextPaths?: string[];
+  /** 已授权可写文件夹。不是已附材料，不得当作可随意翻阅的文稿目录。 */
+  writeFolders?: string[];
   /** 工具一旦完成就把执行事实交给本轮 service；不是 workflow / retry 状态。 */
   onExecution?: (rec: TalkExecution) => void;
   requestFolderAccess?: (input: { path: string; label: string }) => Promise<boolean>;
@@ -451,7 +453,9 @@ export async function runTalkTurn(input: {
   }
 
   const cards = input.subjectCollab?.cards || [];
-  const auth = classifyAuthorizedPaths(input.contextPaths);
+  const readAuth = classifyAuthorizedPaths(input.contextPaths);
+  const writeAuth = classifyAuthorizedPaths([...(input.contextPaths || []), ...(input.writeFolders || [])]);
+  const auth = writeAuth;
   const deniedThisTurn = new Set<string>();
   let agents = input.agents.slice();
   const system = [
@@ -484,30 +488,40 @@ export async function runTalkTurn(input: {
       : '',
     '当前对用户的必要理解：',
     input.selfContext,
-    describeAuthorizedFs(auth),
+    describeAuthorizedFs(writeAuth, readAuth),
     agents.length ? `当前可调用的外部能力：\n${describeProfessionals(agents)}` : '',
   ]
     .filter(Boolean)
     .join('\n');
 
   const tools: ChatToolDefinition[] = [SET_EXPECTED_EFFECTS_TOOL, REQUEST_FOLDER_ACCESS_TOOL];
-  const ensureFsTools = () => {
-    if (!tools.some((item) => item.function.name === 'write_file')) {
-      tools.push(WRITE_FILE_TOOL, EXPORT_FILE_TOOL, LIST_DIRECTORY_TOOL);
+  const ensureWriteTools = () => {
+    if (writeAuth.folders.length && !tools.some((item) => item.function.name === 'write_file')) {
+      tools.push(WRITE_FILE_TOOL, EXPORT_FILE_TOOL);
     }
-    if (!tools.some((item) => item.function.name === 'read_file')) {
+  };
+  const ensureReadTools = () => {
+    if (readAuth.folders.length && !tools.some((item) => item.function.name === 'list_directory')) {
+      tools.push(LIST_DIRECTORY_TOOL);
+    }
+    if (
+      (readAuth.folders.length || readAuth.files.length) &&
+      !tools.some((item) => item.function.name === 'read_file')
+    ) {
       tools.push(READ_FILE_TOOL);
     }
+  };
+  const ensureFsTools = () => {
+    ensureWriteTools();
+    ensureReadTools();
   };
   const ensureDelegateTool = () => {
     if (agents.length && !tools.some((item) => item.function.name === 'delegate')) {
       tools.push(DELEGATE_TOOL);
     }
   };
-  if (auth.folders.length) ensureFsTools();
-  if (auth.folders.length || auth.files.length) {
-    if (!tools.some((item) => item.function.name === 'read_file')) tools.push(READ_FILE_TOOL);
-  }
+  ensureWriteTools();
+  ensureReadTools();
   ensureDelegateTool();
   if (cards.length) tools.push(CONSULT_TOOL);
   if (input.searchWeb && !tools.some((item) => item.function.name === 'web_search')) {
@@ -742,6 +756,8 @@ export async function runTalkTurn(input: {
         outputPath: resolved.abs,
         observedEffect: { kind, target: resolved.abs, mutated: true },
       });
+      if (!readAuth.files.includes(resolved.abs)) readAuth.files.push(resolved.abs);
+      ensureReadTools();
       return JSON.stringify({
         actualSuccess: true,
         ok: true,
@@ -812,6 +828,8 @@ export async function runTalkTurn(input: {
       outputPath: written.abs,
       observedEffect: { kind: 'file_created', target: written.abs, mutated: true },
     });
+    if (!readAuth.files.includes(written.abs)) readAuth.files.push(written.abs);
+    ensureReadTools();
     return JSON.stringify({
       actualSuccess: true,
       ok: true,
@@ -971,7 +989,7 @@ export async function runTalkTurn(input: {
     if (call.name === 'write_file') return runWriteFile(call.arguments);
     if (call.name === 'export_file') return runExportFile(call.arguments);
     if (call.name === 'list_directory') {
-      const payload = await runListDirectory(auth, call.arguments);
+      const payload = await runListDirectory(readAuth, call.arguments);
       let parsed: { actualSuccess?: boolean; failureReason?: string; entries?: unknown[] } = {};
       try {
         parsed = JSON.parse(payload) as typeof parsed;
@@ -995,7 +1013,7 @@ export async function runTalkTurn(input: {
       return payload;
     }
     if (call.name === 'read_file') {
-      const payload = await runReadFile(auth, call.arguments);
+      const payload = await runReadFile(readAuth, call.arguments);
       let parsed: { actualSuccess?: boolean; failureReason?: string; path?: string; content?: string } = {};
       try {
         parsed = JSON.parse(payload) as typeof parsed;

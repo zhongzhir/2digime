@@ -244,7 +244,12 @@
     const h = document.createElement('h3');
     h.textContent = card.title || '';
     body.appendChild(h);
-    if (card.unavailable) {
+    if (card.sourceBoundary === 'excluded_from_default') {
+      const mark = document.createElement('p');
+      mark.className = 'content-discover-source muted tiny';
+      mark.textContent = '不在国内默认供给，收藏仍在。';
+      body.appendChild(mark);
+    } else if (card.unavailable) {
       const gone = document.createElement('p');
       gone.className = 'content-discover-source muted tiny';
       gone.textContent =

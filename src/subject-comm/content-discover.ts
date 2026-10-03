@@ -44,6 +44,8 @@ export interface DiscoverCard {
   objectFidelity?: 'PRIMARY_CONTENT' | 'ABOUT_CONTENT' | 'UNRELATED';
   /** 稍后看来源已不在目录里。收藏记录仍保留。 */
   unavailable?: boolean;
+  /** 收藏仍在，但不进入国内默认供给。 */
+  sourceBoundary?: 'excluded_from_default';
 }
 
 export interface DiscoverPreference {

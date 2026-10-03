@@ -26,6 +26,7 @@ import {
   type NetworkItem,
 } from './network-item';
 import { catalogEndpointsFor, type OpenSourceEndpoint } from './open-source-catalog';
+import { allowsDefaultSupply } from './domestic-source-boundary';
 
 export type SourceContentKind = 'article' | 'video' | 'image' | 'audio';
 
@@ -454,7 +455,9 @@ export async function searchOpenMedia(input: {
     seen.add(key);
     out.push(hit);
   }
-  const playableFirst = [...out].sort((a, b) => Number(Boolean(b.mediaUrl)) - Number(Boolean(a.mediaUrl)));
+  const playableFirst = [...out]
+    .filter((hit) => allowsDefaultSupply({ url: hit.url, publisher: hit.author }))
+    .sort((a, b) => Number(Boolean(b.mediaUrl)) - Number(Boolean(a.mediaUrl)));
   return playableFirst.slice(0, 16);
 }
 
@@ -479,6 +482,7 @@ export function networkItemFromOpenHit(hit: OpenMediaHit, now?: string): Network
   } catch {
     return null;
   }
+  if (!allowsDefaultSupply({ url: canonical, publisher: hit.author })) return null;
   const createdAt = now || NOW_FALLBACK();
   const contentType = hit.contentType as NetworkContentType;
   const media = {

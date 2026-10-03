@@ -217,11 +217,12 @@ export class TalkService {
     const grantedFolders = await listActiveFilesystemGrantFolders(pkg.rootDir);
     const contextPaths = [
       ...new Set(
-        [...(input.contextPaths || []), ...(thread.materialPaths || []), ...grantedFolders]
+        [...(input.contextPaths || []), ...(thread.materialPaths || [])]
           .map((item) => String(item || '').trim())
           .filter(Boolean),
       ),
     ];
+    const writeFolders = [...new Set(grantedFolders.map((item) => String(item || '').trim()).filter(Boolean))];
     const turnCtx = contextPaths.length ? { contextPaths } : {};
     const ac = new AbortController();
     const timer = setTimeout(() => {
@@ -257,6 +258,7 @@ export class TalkService {
           turnExecutions.push(rec);
         },
         ...(contextPaths.length ? { contextPaths } : {}),
+        ...(writeFolders.length ? { writeFolders } : {}),
         ...(collab ? { subjectCollab: collab } : {}),
         ...(confirmHint ? { confirmHint } : {}),
         ...(this.requestFolderAccess ? { requestFolderAccess: this.requestFolderAccess } : {}),
