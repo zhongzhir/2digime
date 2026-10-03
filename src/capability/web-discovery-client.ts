@@ -40,9 +40,16 @@ export function createManagedWebDiscoveryConnector(
 
   return {
     id: 'web-discovery',
-    async search(query) {
+    async search(query, opts) {
       const parsed = parseWebDiscoveryRequest({ query, limit: 8 });
       const ac = new AbortController();
+      const onAbort = () => ac.abort();
+      if (opts?.signal) {
+        if (opts.signal.aborted) {
+          throw new WebDiscoveryError('TEMPORARY_UNAVAILABLE', 'web_discovery_aborted', 503);
+        }
+        opts.signal.addEventListener('abort', onAbort, { once: true });
+      }
       const timer = setTimeout(() => ac.abort(), timeoutMs);
       let res: Response;
       try {
@@ -59,11 +66,12 @@ export function createManagedWebDiscoveryConnector(
         const aborted = ac.signal.aborted || (err as { name?: string }).name === 'AbortError';
         throw new WebDiscoveryError(
           'TEMPORARY_UNAVAILABLE',
-          aborted ? 'web_discovery_timeout' : 'web_discovery_unreachable',
+          aborted ? (opts?.signal?.aborted ? 'web_discovery_aborted' : 'web_discovery_timeout') : 'web_discovery_unreachable',
           503,
         );
       } finally {
         clearTimeout(timer);
+        opts?.signal?.removeEventListener('abort', onAbort);
       }
 
       let json: {

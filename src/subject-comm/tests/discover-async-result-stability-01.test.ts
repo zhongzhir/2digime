@@ -417,3 +417,33 @@ test('background seek settles on timeout instead of staying pending', async () =
   assert.equal(finished, false);
   assert.ok(Date.now() - started < 70);
 });
+
+test('background seek timeout aborts work and drops the late value', async () => {
+  const abort = new AbortController();
+  let wrote = false;
+  const late = new Promise<string | null>((resolve) => {
+    const timer = setTimeout(() => {
+      if (abort.signal.aborted) {
+        resolve(null);
+        return;
+      }
+      wrote = true;
+      resolve('late');
+    }, 80);
+    abort.signal.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer);
+        resolve(null);
+      },
+      { once: true },
+    );
+  });
+  const started = Date.now();
+  const settled = await settleBackgroundSeek(late, 20, abort);
+  assert.equal(settled, null);
+  assert.equal(abort.signal.aborted, true);
+  assert.ok(Date.now() - started < 70);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(wrote, false);
+});

@@ -63,6 +63,16 @@ export function localCalendarDate(now = new Date()): string {
   return `${y}-${m}-${d}`;
 }
 
+export class DiscoverIntentError extends Error {
+  readonly kind: 'model' | 'parse';
+
+  constructor(kind: 'model' | 'parse', message: string) {
+    super(message);
+    this.name = 'DiscoverIntentError';
+    this.kind = kind;
+  }
+}
+
 export function defaultDiscoverIntent(query: string): DiscoverIntent {
   const q = String(query || '').trim();
   return {
@@ -160,6 +170,7 @@ export async function interpretDiscoverIntent(input: {
   query: string;
   chatComplete: ChatCompleteFn;
   model: { baseUrl: string; model: string; apiKey?: string };
+  signal?: AbortSignal;
 }): Promise<DiscoverIntent> {
   const query = String(input.query || '').trim();
   const fallback = defaultDiscoverIntent(query);
@@ -184,36 +195,48 @@ export async function interpretDiscoverIntent(input: {
     'reportDay: 用户要看哪一天的报道，写成 YYYY-MM-DD。要今天就填用户消息里的今天。没有指定某一天就省略。',
     '不要使用数字之我、长期偏好或最近浏览去扩大范围。不要输出 score。不要编造播放量。',
   ].join('\n');
-  try {
-    const today = localCalendarDate();
-    const ask = (maxTokens: number, disableThinking: boolean) =>
-      input.chatComplete({
-        baseUrl: input.model.baseUrl,
-        ...(input.model.apiKey ? { apiKey: input.model.apiKey } : {}),
-        model: input.model.model,
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: `${query}\n今天的日期是 ${today}。` },
-        ],
-        temperature: 0,
-        maxTokens,
-        timeoutMs: 45_000,
-        responseFormat: { type: 'json_object' },
-        ...(disableThinking ? { thinking: { type: 'disabled' as const } } : {}),
-      });
-    let result;
+  const today = localCalendarDate();
+  const ask = (maxTokens: number, disableThinking: boolean) =>
+    input.chatComplete({
+      baseUrl: input.model.baseUrl,
+      ...(input.model.apiKey ? { apiKey: input.model.apiKey } : {}),
+      model: input.model.model,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: `${query}\n今天的日期是 ${today}。` },
+      ],
+      temperature: 0,
+      maxTokens,
+      timeoutMs: 45_000,
+      responseFormat: { type: 'json_object' },
+      ...(input.signal ? { signal: input.signal } : {}),
+      ...(disableThinking ? { thinking: { type: 'disabled' as const } } : {}),
+    });
+  // 托管中继拒绝 thinking，隐藏推理会占满 800 预算。两端都用中继上限，避免默默退回默认意图。
+  const passes: Array<{ maxTokens: number; disableThinking: boolean }> = [
+    { maxTokens: 2048, disableThinking: true },
+    { maxTokens: 2048, disableThinking: false },
+  ];
+  let lastError: unknown;
+  for (const pass of passes) {
+    if (input.signal?.aborted) {
+      throw new DiscoverIntentError('model', '这次搜索已经取消。');
+    }
     try {
-      result = await ask(800, true);
-    } catch {
-      result = await ask(800, false);
+      const result = await ask(pass.maxTokens, pass.disableThinking);
+      if (result.truncated || !parseJsonObject(result.text)) {
+        lastError = new DiscoverIntentError('parse', '这次模型没有给出可用的搜索意图。');
+        continue;
+      }
+      return intentFromModelText(result.text, query);
+    } catch (err) {
+      if (err instanceof DiscoverIntentError) throw err;
+      if (input.signal?.aborted) throw err;
+      lastError = err;
     }
-    if (result.truncated || !parseJsonObject(result.text)) {
-      result = await ask(1600, false);
-    }
-    return intentFromModelText(result.text, query);
-  } catch {
-    return fallback;
   }
+  if (lastError instanceof Error) throw lastError;
+  throw new DiscoverIntentError('model', '这次模型没有完成意图理解。');
 }
 
 export function isDomainLikeTitle(title: string, url?: string): boolean {
@@ -324,6 +347,7 @@ export async function classifyCandidateRoles(input: {
   candidates: ConsumableCandidate[];
   chatComplete?: ChatCompleteFn;
   model?: { baseUrl: string; model: string; apiKey?: string };
+  signal?: AbortSignal;
 }): Promise<{ roles: Map<string, ContentPageRole>; unjudgedIds: string[]; attempts: number }> {
   const empty = { roles: new Map<string, ContentPageRole>(), unjudgedIds: [] as string[], attempts: 0 };
   if (!input.candidates.length || !input.chatComplete || !input.model) return empty;
@@ -375,10 +399,11 @@ export async function classifyCandidateRoles(input: {
     // 1600 预算会被推理占满，finish_reason=length，正文只剩半截 JSON。先关掉推理。
     // 空对象或截断都不算判断完成，再试一次不带该字段的请求。
     const passes: Array<{ maxTokens: number; disableThinking: boolean }> = [
-      { maxTokens: 800, disableThinking: true },
-      { maxTokens: 4096, disableThinking: false },
+      { maxTokens: 2048, disableThinking: true },
+      { maxTokens: 2048, disableThinking: false },
     ];
     for (const pass of passes) {
+      if (input.signal?.aborted) return null;
       attempts += 1;
       try {
         const result = await chat({
@@ -393,6 +418,7 @@ export async function classifyCandidateRoles(input: {
           maxTokens: pass.maxTokens,
           timeoutMs: 45_000,
           responseFormat: { type: 'json_object' },
+          ...(input.signal ? { signal: input.signal } : {}),
           ...(pass.disableThinking ? { thinking: { type: 'disabled' as const } } : {}),
         });
         const parsed = rolesFromModelText(result.text, ids);

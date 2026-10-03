@@ -244,7 +244,9 @@ export async function ingestDiscoveredEntrance(input: {
   store: NetworkItemStore;
   limit?: number;
   fetchImpl?: typeof safePublicHttpGet;
+  signal?: AbortSignal;
 }): Promise<NetworkItem[] | null> {
+  if (input.signal?.aborted) return [];
   if (!isSiteEntranceUrl(input.url)) return null;
   const fetchImpl = input.fetchImpl || safePublicHttpGet;
   let fetched;
@@ -267,6 +269,7 @@ export async function ingestDiscoveredEntrance(input: {
         fetchImpl,
         limit,
         via: 'autodiscovery',
+        ...(input.signal ? { signal: input.signal } : {}),
       });
       for (const item of ingested.items) {
         if (item.content.url && (isSiteEntranceUrl(item.content.url) || isGenericHubUrl(item.content.url))) continue;

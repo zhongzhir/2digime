@@ -73,6 +73,7 @@ export interface IngestSourceInput {
   enrich?: ContentEnricher;
   fetchImpl?: typeof safePublicHttpGet;
   via?: NetworkItemDiscoveryVia;
+  signal?: AbortSignal;
 }
 
 function xmlUnescape(raw: string): string {
@@ -328,6 +329,9 @@ export async function ingestSource(input: IngestSourceInput): Promise<{
   records: IngestRecord[];
   items: NetworkItem[];
 }> {
+  if (input.signal?.aborted) {
+    return { sourceTitle: '', records: [{ status: 'unavailable', reason: 'aborted', canonicalUrl: input.sourceUrl }], items: [] };
+  }
   const now = input.now || new Date().toISOString();
   const fetchImpl = input.fetchImpl || safePublicHttpGet;
   let fetched;
@@ -368,6 +372,7 @@ export async function ingestSource(input: IngestSourceInput): Promise<{
       limit: Math.min(Math.max(input.limit ?? 12, 1), 50),
       via: input.via || 'feed',
       ...(input.enrich ? { enrich: input.enrich } : {}),
+      ...(input.signal ? { signal: input.signal } : {}),
     });
   }
   const looksFeed = looksLikeXmlFeed(body);
@@ -401,6 +406,7 @@ export async function ingestSource(input: IngestSourceInput): Promise<{
     limit: Math.min(Math.max(input.limit ?? 12, 1), 50),
     via: input.via || (looksFeed ? 'feed' : 'page'),
     ...(input.enrich ? { enrich: input.enrich } : {}),
+    ...(input.signal ? { signal: input.signal } : {}),
   });
 }
 
@@ -412,10 +418,15 @@ async function persistParsed(input: {
   limit: number;
   enrich?: ContentEnricher;
   via?: NetworkItemDiscoveryVia;
+  signal?: AbortSignal;
 }): Promise<{ sourceTitle: string; records: IngestRecord[]; items: NetworkItem[] }> {
   const records: IngestRecord[] = [];
   const items: NetworkItem[] = [];
   for (const rawItem of input.parsed.items.slice(0, input.limit)) {
+    if (input.signal?.aborted) {
+      records.push({ status: 'unavailable', reason: 'aborted', canonicalUrl: input.sourceUrl });
+      break;
+    }
     const itemIdGuess = (() => {
       try {
         return contentItemId(normalizeCanonicalUrl(rawItem.url));
@@ -436,6 +447,10 @@ async function persistParsed(input: {
     if (result.status === 'rejected') {
       records.push({ status: 'rejected', reason: result.reason, sourceTitle: input.parsed.sourceTitle });
       continue;
+    }
+    if (input.signal?.aborted) {
+      records.push({ status: 'unavailable', reason: 'aborted', canonicalUrl: input.sourceUrl });
+      break;
     }
     await input.store.put(result.item);
     items.push(result.item);

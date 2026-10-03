@@ -30,18 +30,30 @@ export const BACKGROUND_SEEK_DEADLINE_MS = 40_000;
 export function settleBackgroundSeek<T>(
   work: Promise<T | null>,
   deadlineMs = BACKGROUND_SEEK_DEADLINE_MS,
+  abort?: AbortController,
 ): Promise<T | null> {
   return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(null), Math.max(1, deadlineMs));
+    let settled = false;
+    const finish = (value: T | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      abort?.signal.removeEventListener('abort', onAbort);
+      resolve(value);
+    };
+    const onAbort = () => finish(null);
+    const timer = setTimeout(() => {
+      abort?.abort();
+      finish(null);
+    }, Math.max(1, deadlineMs));
+    if (abort?.signal.aborted) {
+      finish(null);
+      return;
+    }
+    abort?.signal.addEventListener('abort', onAbort, { once: true });
     work.then(
-      (row) => {
-        clearTimeout(timer);
-        resolve(row);
-      },
-      () => {
-        clearTimeout(timer);
-        resolve(null);
-      },
+      (row) => finish(row),
+      () => finish(null),
     );
   });
 }

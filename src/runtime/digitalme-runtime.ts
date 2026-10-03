@@ -189,12 +189,19 @@ import {
 } from '../subject-comm/content-seek';
 import { fetchNewsHeadlines } from '../subject-comm/news-headlines';
 import {
+  BACKGROUND_SEEK_DEADLINE_MS,
   createSearchGenerationId,
   mergeIntentViews,
   mergeSeekCardSets,
   settleBackgroundSeek,
 } from '../subject-comm/discover-search-generation';
-import { defaultDiscoverIntent, interpretDiscoverIntent, localCalendarDate } from '../subject-comm/discover-intent';
+import {
+  defaultDiscoverIntent,
+  DiscoverIntentError,
+  interpretDiscoverIntent,
+  localCalendarDate,
+} from '../subject-comm/discover-intent';
+import { ManagedAiError } from '../capability/managed-ai-client';
 import { ingestSource } from '../subject-comm/content-ingest';
 import { safePublicHttpGet } from '../work-runtime/public-http-safety';
 import { indexSearchHits, ingestDiscoveredEntrance, preferProviderSnippet } from '../subject-comm/open-web-discovery';
@@ -451,8 +458,10 @@ export class DigitalMeRuntime {
   private pendingSeekMerge: {
     generationId: string;
     leftover: Promise<ContentSeekResult | null>;
+    abort: AbortController;
   } | null = null;
   private pendingPersonal: Promise<DiscoverView> | null = null;
+  private searchAbort = new AbortController();
 
   constructor(options: DigitalMeRuntimeOptions = {}) {
     this.options = options;
@@ -524,12 +533,12 @@ export class DigitalMeRuntime {
 
     if (action === 'seek') {
       const query = String(input.text || '').trim();
-      this.beginSearchGeneration(input.searchGenerationId);
+      const started = this.beginSearchGeneration(input.searchGenerationId);
       this.lastIntentView = null;
       if (!query) {
         return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'open') };
       }
-      return { view: await this.runContentSeek(pkg.rootDir, query, input.relayUrl) };
+      return { view: await this.runContentSeek(pkg.rootDir, query, input.relayUrl, started) };
     }
 
     if (action === 'resetRecent') {
@@ -565,6 +574,8 @@ export class DigitalMeRuntime {
     }
 
     if (action === 'cancel') {
+      this.searchAbort.abort();
+      this.searchAbort = new AbortController();
       const nextGen = String(input.searchGenerationId || '').trim() || createSearchGenerationId();
       this.currentSearchGenerationId = nextGen;
       this.pendingSeekMerge = null;
@@ -662,12 +673,16 @@ export class DigitalMeRuntime {
     return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'open') };
   }
 
-  private beginSearchGeneration(requested?: string): string {
-    const gen = String(requested || '').trim() || createSearchGenerationId();
-    this.currentSearchGenerationId = gen;
+  private beginSearchGeneration(requested?: string): { generationId: string; abort: AbortController } {
+    const abort = new AbortController();
+    const previous = this.searchAbort;
+    this.searchAbort = abort;
+    previous.abort();
+    const generationId = String(requested || '').trim() || createSearchGenerationId();
+    this.currentSearchGenerationId = generationId;
     this.pendingSeekMerge = null;
     this.pendingPersonal = null;
-    return gen;
+    return { generationId, abort };
   }
 
   private stampSearchGeneration(view: DiscoverView): DiscoverView {
@@ -702,8 +717,8 @@ export class DigitalMeRuntime {
       headline: '发现',
       lead: `根据你刚说的话找「${topic}」，只显示这次搜索范围内的内容。`,
       feedTitle:
-        currentNews && sought.cards.length
-          ? sought.intent.reportDay && sought.intent.reportDay !== localCalendarDate()
+        currentNews && sought.cards.length && sought.intent.reportDay
+          ? sought.intent.reportDay !== localCalendarDate()
             ? `${sought.intent.reportDay} 的报道`
             : '当天报道'
           : `关于「${topic}」`,
@@ -762,10 +777,11 @@ export class DigitalMeRuntime {
         return this.currentSearchOrPersonal(packageRoot, subjectId, relayUrl, 'reuse');
       }
       if (!late) {
+        const extra = pending.abort?.signal.aborted ? '补充已超时停止。' : '补充没有完成。';
         this.lastIntentView = {
           ...this.lastIntentView,
           replenishing: false,
-          notice: terminalSupplementNotice(this.lastIntentView.notice, '补充没有完成。'),
+          notice: terminalSupplementNotice(this.lastIntentView.notice, extra),
         };
         return this.lastIntentView;
       }
@@ -920,18 +936,26 @@ export class DigitalMeRuntime {
     });
   }
 
-  private async runContentSeek(packageRoot: string, query: string, relayUrl?: string): Promise<DiscoverView> {
-    const generationId = this.currentSearchGenerationId || this.beginSearchGeneration();
+  private async runContentSeek(
+    packageRoot: string,
+    query: string,
+    relayUrl?: string,
+    started?: { generationId: string; abort: AbortController },
+  ): Promise<DiscoverView> {
+    const generationId = started?.generationId || this.currentSearchGenerationId || this.beginSearchGeneration().generationId;
+    const abort = started?.abort || this.searchAbort;
+    const signal = abort.signal;
     const preferences = await this.contentPreferenceRows(packageRoot);
     const items = await this.loadDiscoverItems(packageRoot, relayUrl);
     const networking = this.snapshotNetworkDiscovery();
-    const searchWeb = this.wrapContentSearch(this.resolveContentSearch());
+    const searchWeb = this.wrapContentSearch(this.resolveContentSearch(), signal);
     const chatCompleteFn = this.resolveContentChat();
     const model = this.resolveContentModel();
     const openMedia = this.resolveOpenMediaFetch();
     const store = new FileNetworkItemStore(path.join(packageRoot, 'content'));
     await appendRecentRecommendationEvent(packageRoot, { type: 'seek_topic', topic: query });
     const ingestHit = async (hit: { title: string; url: string; snippet?: string }) => {
+      if (signal.aborted) return [];
       if (isGoogleNewsAggregatorUrl(hit.url)) {
         return indexSearchHits({ hits: [hit], store, limit: 1 });
       }
@@ -940,6 +964,7 @@ export class DigitalMeRuntime {
           url: hit.url,
           store,
           limit: 8,
+          signal,
         });
         if (entrance) {
           const kept = entrance.map((item) => preferProviderSnippet(item, hit.snippet));
@@ -948,13 +973,16 @@ export class DigitalMeRuntime {
           }
           return kept;
         }
+        if (signal.aborted) return [];
         const ingested = await ingestSource({
           sourceUrl: hit.url,
           store,
           limit: 4,
           via: 'search',
+          signal,
         });
         if (ingested.items.length) {
+          if (signal.aborted) return [];
           const kept = ingested.items.map((item) => preferProviderSnippet(item, hit.snippet));
           for (let i = 0; i < kept.length; i += 1) {
             if (kept[i] !== ingested.items[i]) await store.put(kept[i]!);
@@ -964,9 +992,26 @@ export class DigitalMeRuntime {
       } catch {
         /* 单条公开页摄入失败时退回搜索命中 */
       }
+      if (signal.aborted) return [];
       return indexSearchHits({ hits: [hit], store, limit: 1 });
     };
     const failedView = (err: unknown): DiscoverView => {
+      if (err instanceof DiscoverIntentError || err instanceof ManagedAiError) {
+        return {
+          headline: '发现',
+          lead: '根据你刚说的话找的内容。这次模型没有完成判断，没有改动为你发现里的列表。',
+          feedTitle: `关于「${query}」`,
+          cards: [],
+          relatedCards: [],
+          preferences,
+          notice: err.message,
+          networking,
+          reasonCode: 'CURRENT_INTENT',
+          feedMode: 'intent',
+          searchQuery: query,
+          searchGenerationId: generationId,
+        };
+      }
       this.lastNetworkCode = classifySearchFailure(err);
       return {
         headline: '发现',
@@ -990,6 +1035,7 @@ export class DigitalMeRuntime {
               query,
               chatComplete: chatCompleteFn,
               model,
+              signal,
             })
           : Promise.resolve(defaultDiscoverIntent(query));
       const quickPromise = searchWeb ? searchWeb(query).catch(() => []) : Promise.resolve([]);
@@ -1003,7 +1049,7 @@ export class DigitalMeRuntime {
       let newsFailed = false;
       if (intentReady.newsFeed) {
         try {
-          headlines = await fetchNewsHeadlines(intentReady.searchQueries[0] || query);
+          headlines = await fetchNewsHeadlines(intentReady.searchQueries[0] || query, fetch, new Date(), signal);
         } catch {
           newsFailed = true;
           headlines = [];
@@ -1023,6 +1069,7 @@ export class DigitalMeRuntime {
           intent: intentReady,
           newsHeadlines: headlines,
           skipWeb: true,
+          signal,
           chatComplete: chatCompleteFn,
           model,
         });
@@ -1031,9 +1078,10 @@ export class DigitalMeRuntime {
         }
         this.pendingSeekMerge = {
           generationId,
+          abort,
           leftover: settleBackgroundSeek((async () => {
             try {
-              if (generationId !== this.currentSearchGenerationId) return null;
+              if (generationId !== this.currentSearchGenerationId || signal.aborted) return null;
               return await seekContent({
                 query,
                 items,
@@ -1041,6 +1089,7 @@ export class DigitalMeRuntime {
                 newsHeadlines: headlines,
                 previous: { cards: judged.cards, relatedCards: judged.relatedCards },
                 ingestHit,
+                signal,
                 ...(searchWeb ? { searchWeb } : {}),
                 ...(openMedia ? { fetchOpenMedia: openMedia } : {}),
                 chatComplete: chatCompleteFn,
@@ -1049,7 +1098,7 @@ export class DigitalMeRuntime {
             } catch {
               return null;
             }
-          })()),
+          })(), BACKGROUND_SEEK_DEADLINE_MS, abort),
         };
         const view = this.intentViewFromSeek(query, judged, preferences, networking, generationId, {
           replenishing: true,
@@ -1062,18 +1111,24 @@ export class DigitalMeRuntime {
         const snippets = snippetCardsFromHits(quickHits);
         this.pendingSeekMerge = {
           generationId,
+          abort,
           leftover: settleBackgroundSeek((async () => {
-            if (generationId !== this.currentSearchGenerationId) return null;
-            return seekContent({
-              query,
-              items,
-              intent: intentReady,
-              ingestHit,
-              ...(searchWeb ? { searchWeb } : {}),
-              ...(openMedia ? { fetchOpenMedia: openMedia } : {}),
-              ...(chatCompleteFn && model ? { chatComplete: chatCompleteFn, model } : {}),
-            });
-          })()),
+            try {
+              if (generationId !== this.currentSearchGenerationId || signal.aborted) return null;
+              return await seekContent({
+                query,
+                items,
+                intent: intentReady,
+                ingestHit,
+                signal,
+                ...(searchWeb ? { searchWeb } : {}),
+                ...(openMedia ? { fetchOpenMedia: openMedia } : {}),
+                ...(chatCompleteFn && model ? { chatComplete: chatCompleteFn, model } : {}),
+              });
+            } catch {
+              return null;
+            }
+          })(), BACKGROUND_SEEK_DEADLINE_MS, abort),
         };
         const preview: DiscoverView = {
           headline: '发现',
@@ -1107,6 +1162,7 @@ export class DigitalMeRuntime {
         items,
         intent,
         ingestHit,
+        signal,
         ...(headlines.length ? { newsHeadlines: headlines } : {}),
         ...(chatCompleteFn && model ? { chatComplete: chatCompleteFn, model } : {}),
       };
@@ -1173,7 +1229,9 @@ export class DigitalMeRuntime {
       this.lastIntentView = view;
       this.pendingSeekMerge = {
         generationId,
+        abort,
         leftover: settleBackgroundSeek(Promise.all([mediaResult, webResult]).then((parts) => {
+          if (signal.aborted || generationId !== this.currentSearchGenerationId) return null;
           const ok = parts.filter((row): row is ContentSeekResult => !!row);
           if (!ok.length) return null;
           if (ok.length === 1) return ok[0]!;
@@ -1193,7 +1251,7 @@ export class DigitalMeRuntime {
               ? (ok[1]!.cards.length ? ok[1]!.notice : '') || (ok[0]!.cards.length ? ok[0]!.notice : '')
               : ok[1]!.notice || ok[0]!.notice,
           };
-        })),
+        }), BACKGROUND_SEEK_DEADLINE_MS, abort),
       };
       return view;
     } catch (err) {
@@ -1223,12 +1281,18 @@ export class DigitalMeRuntime {
   }
 
   private wrapContentSearch(
-    searchWeb: ((query: string) => Promise<Array<{ title: string; url: string; snippet?: string }>>) | undefined,
+    searchWeb:
+      | ((query: string, signal?: AbortSignal) => Promise<Array<{ title: string; url: string; snippet?: string }>>)
+      | undefined,
+    signal?: AbortSignal,
   ): ((query: string) => Promise<Array<{ title: string; url: string; snippet?: string }>>) | undefined {
     if (!searchWeb) return undefined;
     return async (query: string) => {
+      if (signal?.aborted) {
+        throw Object.assign(new Error('search aborted'), { name: 'AbortError' });
+      }
       try {
-        const hits = await searchWeb(query);
+        const hits = await searchWeb(query, signal);
         this.lastNetworkCode = 'AVAILABLE';
         return hits;
       } catch (err) {
@@ -1239,7 +1303,7 @@ export class DigitalMeRuntime {
   }
 
   private resolveContentSearch():
-    | ((query: string) => Promise<Array<{ title: string; url: string; snippet?: string }>>)
+    | ((query: string, signal?: AbortSignal) => Promise<Array<{ title: string; url: string; snippet?: string }>>)
     | undefined {
     if (this.options.contentSearch) return this.options.contentSearch;
     const gem = resolveGeminiSearchCredential(
@@ -1263,8 +1327,8 @@ export class DigitalMeRuntime {
         apiKey: gem.apiKey,
         ...(gem.model ? { model: gem.model } : {}),
       });
-      return async (query: string) => {
-        const sources = await connector.search(query);
+      return async (query: string, signal?: AbortSignal) => {
+        const sources = await connector.search(query, signal ? { signal } : undefined);
         return sources
           .filter((row) => String(row.url || '').trim())
           .map((row) => ({
@@ -1280,8 +1344,8 @@ export class DigitalMeRuntime {
         installToken: String(this.options.webDiscoveryInstallToken || '').trim() || 'missing-install-token',
         ...(this.options.webDiscoveryFetch ? { fetchImpl: this.options.webDiscoveryFetch } : {}),
       });
-      return async (query: string) => {
-        const sources = await connector.search(query);
+      return async (query: string, signal?: AbortSignal) => {
+        const sources = await connector.search(query, signal ? { signal } : undefined);
         return sources
           .filter((row) => String(row.url || '').trim())
           .map((row) => ({
@@ -1295,22 +1359,27 @@ export class DigitalMeRuntime {
   }
 
   private resolveContentChat(): ChatCompleteFn | null {
-    if (this.options.contentChat) return this.options.contentChat;
-    const understanding = resolveSubjectUnderstandingRuntime({
-      ...(this.options.subjectUnderstanding
-        ? { specialist: this.options.subjectUnderstanding }
-        : {}),
-      ...(this.options.documentCapability !== undefined
-        ? { documentCapability: this.options.documentCapability }
-        : {}),
-      ...(this.options.openaiCompatible
-        ? { openaiCompatible: this.options.openaiCompatible }
-        : {}),
-      ...(this.options.secrets ? { secrets: this.options.secrets } : {}),
-    });
-    const runtime = understanding.runtime;
-    if (!runtime?.enabled) return null;
-    return async (options) => runtime.chatComplete(options);
+    const inner = this.options.contentChat
+      ? this.options.contentChat
+      : (() => {
+          const understanding = resolveSubjectUnderstandingRuntime({
+            ...(this.options.subjectUnderstanding
+              ? { specialist: this.options.subjectUnderstanding }
+              : {}),
+            ...(this.options.documentCapability !== undefined
+              ? { documentCapability: this.options.documentCapability }
+              : {}),
+            ...(this.options.openaiCompatible
+              ? { openaiCompatible: this.options.openaiCompatible }
+              : {}),
+            ...(this.options.secrets ? { secrets: this.options.secrets } : {}),
+          });
+          const runtime = understanding.runtime;
+          if (!runtime?.enabled) return null;
+          return (options: Parameters<ChatCompleteFn>[0]) => runtime.chatComplete(options);
+        })();
+    if (!inner) return null;
+    return inner;
   }
 
   private resolveContentModel(): { baseUrl: string; model: string; apiKey?: string } | null {

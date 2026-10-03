@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyCandidateRoles, defaultDiscoverIntent, intentFromModelText } from '../discover-intent';
+import {
+  classifyCandidateRoles,
+  defaultDiscoverIntent,
+  intentFromModelText,
+  interpretDiscoverIntent,
+  localCalendarDate,
+} from '../discover-intent';
 import { cardsFromNewsHeadlines, seekContent, splitCurrentReports } from '../content-seek';
 import { headlinesFromRss } from '../news-headlines';
 import type { DiscoverCard } from '../content-discover';
@@ -50,7 +56,7 @@ test('today group keeps a dated report and leaves a roundup and a missing date o
     today: '2026-10-02',
   });
   assert.deepEqual(split.todayReports.map((card) => card.itemId), ['a']);
-  assert.equal(split.background.some((card) => card.itemId === 'c' && /不能当作当天报道/.test(card.reason)), true);
+  assert.equal(split.background.some((card) => card.itemId === 'c' && /不能当作这一天的报道/.test(card.reason)), true);
   assert.equal(split.background.some((card) => card.itemId === 'b'), true);
 });
 
@@ -133,6 +139,7 @@ test('a current news seek does not promote an undated or commentary item into to
       ...defaultDiscoverIntent('今天的地方新闻'),
       freshness: 'current',
       newsFeed: true,
+      reportDay: localDay,
       requestedMedia: ['article'],
     },
     newsHeadlines: [
@@ -173,4 +180,104 @@ test('a current news seek does not promote an undated or commentary item into to
   assert.equal(sought.relatedCards.some((card) => /综述/.test(card.title)), true);
   assert.match(sought.notice, /具体报道/);
   assert.equal(localDay.length, 10);
+});
+
+test('historical reportDay is kept and not replaced by today', async () => {
+  const today = localCalendarDate();
+  const sought = await seekContent({
+    query: '2026年9月28日的公开报道',
+    items: [],
+    intent: {
+      ...defaultDiscoverIntent('2026年9月28日的公开报道'),
+      freshness: 'current',
+      newsFeed: true,
+      reportDay: '2026-09-28',
+      requestedMedia: ['article'],
+    },
+    newsHeadlines: [
+      {
+        title: '9月28日通报',
+        url: 'https://example.org/sep28',
+        publishedAt: '2026-09-28T01:00:00.000Z',
+        fetchedAt: '2026-09-28T01:00:00.000Z',
+        snippet: '当天通报',
+        bodyRead: false,
+      },
+      {
+        title: '今天的通报',
+        url: 'https://example.org/today',
+        publishedAt: `${today}T01:00:00.000Z`,
+        fetchedAt: `${today}T01:00:00.000Z`,
+        snippet: '另一天',
+        bodyRead: false,
+      },
+    ],
+    model: { baseUrl: 'https://example.invalid', model: 'm' },
+    chatComplete: async (options) => {
+      const user = String(options.messages.find((message) => message.role === 'user')?.content || '');
+      const payload = JSON.parse(user) as { candidates: Array<{ id: string }> };
+      return {
+        text: JSON.stringify({
+          roles: payload.candidates.map((row) => ({ id: row.id, role: 'PRIMARY_CONTENT' })),
+        }),
+      };
+    },
+  });
+  assert.equal(sought.cards.length, 1);
+  assert.match(sought.cards[0]?.title || '', /9月28日/);
+  assert.match(sought.notice, /2026-09-28/);
+  assert.equal(sought.notice.includes(today) && today !== '2026-09-28', false);
+});
+
+test('missing reportDay does not silently fall back to today', async () => {
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yIso = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 9, 0, 0).toISOString();
+  const sought = await seekContent({
+    query: '欧洲能源供应',
+    items: [],
+    intent: {
+      ...defaultDiscoverIntent('欧洲能源供应'),
+      freshness: 'current',
+      newsFeed: true,
+      requestedMedia: ['article'],
+    },
+    newsHeadlines: [
+      {
+        title: '一条昨天的报道',
+        url: 'https://example.org/yesterday-energy',
+        publishedAt: yIso,
+        fetchedAt: yIso,
+        snippet: '昨天',
+        bodyRead: false,
+      },
+    ],
+    model: { baseUrl: 'https://example.invalid', model: 'm' },
+    chatComplete: async (options) => {
+      const user = String(options.messages.find((message) => message.role === 'user')?.content || '');
+      const payload = JSON.parse(user) as { candidates: Array<{ id: string }> };
+      return {
+        text: JSON.stringify({
+          roles: payload.candidates.map((row) => ({ id: row.id, role: 'PRIMARY_CONTENT' })),
+        }),
+      };
+    },
+  });
+  assert.equal(sought.cards.length, 1);
+  assert.match(sought.cards[0]?.title || '', /昨天/);
+  assert.match(sought.notice, /没有明确报道日期/);
+});
+
+test('interpretDiscoverIntent does not swallow a model failure', async () => {
+  await assert.rejects(
+    () =>
+      interpretDiscoverIntent({
+        query: '欧洲能源供应',
+        model: { baseUrl: 'https://example.invalid', model: 'm' },
+        chatComplete: async () => {
+          throw new Error('provider down');
+        },
+      }),
+    /provider down/,
+  );
 });

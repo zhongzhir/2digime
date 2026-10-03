@@ -65,6 +65,7 @@ export async function fetchNewsHeadlines(
   query: string,
   fetchImpl: typeof fetch = fetch,
   now = new Date(),
+  signal?: AbortSignal,
 ): Promise<NewsHeadline[]> {
   const q = String(query || '').replace(/\s+/g, ' ').trim();
   if (q.length < 2) return [];
@@ -77,6 +78,7 @@ export async function fetchNewsHeadlines(
       accept: 'application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.1',
       'user-agent': 'digitalme-news',
     },
+    ...(signal ? { signal } : {}),
   });
   if (!response.ok) {
     throw new Error(`新闻来源没有返回条目（${response.status}）`);

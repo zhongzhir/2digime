@@ -305,10 +305,10 @@ export function splitCurrentReports(input: {
       continue;
     }
     if (!day) {
-      moved.push({ ...card, reason: '来源没有给出发布时间，不能当作当天报道。' });
+      moved.push({ ...card, reason: '来源没有给出发布时间，不能当作这一天的报道。' });
       continue;
     }
-    moved.push({ ...card, reason: `来源发布时间是 ${day}，不是今天。` });
+    moved.push({ ...card, reason: `来源发布时间是 ${day}，不是这一天。` });
   }
   return { todayReports, background: [...moved, ...input.related] };
 }
@@ -350,6 +350,7 @@ export async function seekContent(input: {
   skipWeb?: boolean;
   skipOpenMedia?: boolean;
   previous?: { cards: DiscoverCard[]; relatedCards: DiscoverCard[] };
+  signal?: AbortSignal;
 }): Promise<ContentSeekResult> {
   const query = String(input.query || '').trim();
   const emptyIntent = defaultDiscoverIntent(query);
@@ -374,8 +375,22 @@ export async function seekContent(input: {
           query,
           chatComplete: input.chatComplete,
           model: input.model,
+          ...(input.signal ? { signal: input.signal } : {}),
         })
       : emptyIntent);
+  if (input.signal?.aborted) {
+    return {
+      cards: [],
+      relatedCards: [],
+      unjudgedCards: [],
+      accessCards: [],
+      intent,
+      usedDirectory: false,
+      usedExternal: false,
+      notice: '这次搜索已经取消。',
+      trace: emptyTrace(query, intent),
+    };
+  }
   const requiredTypes = strictRequestedTypes(intent);
   const queryByUrl = new Map<string, string>();
 
@@ -387,7 +402,8 @@ export async function seekContent(input: {
   );
   const seenUrls = new Set(cards.map((card) => canonicalOf(card.url)).filter(Boolean));
   const seenIds = new Set(cards.map((card) => card.itemId));
-  const groupToday = intent.freshness === 'current' || intent.newsFeed === true;
+  const reportDay = intent.reportDay;
+  const datedNews = (intent.freshness === 'current' || intent.newsFeed === true) && !!reportDay;
 
   let usedExternal = false;
   let searchFailed = false;
@@ -593,6 +609,7 @@ export async function seekContent(input: {
       })),
       chatComplete: input.chatComplete,
       model: input.model,
+      ...(input.signal ? { signal: input.signal } : {}),
     });
     for (const id of judged.unjudgedIds) unjudgedIds.add(id);
     if (judged.roles.size) {
@@ -603,7 +620,7 @@ export async function seekContent(input: {
         const backgroundRole: ContentPageRole[] = ['LISTING', 'HUB', 'COMMENTARY'];
         fidelity.set(
           card.itemId,
-          groupToday && backgroundRole.includes(role) ? 'ABOUT_CONTENT' : objectFidelity(role, intent),
+          datedNews && backgroundRole.includes(role) ? 'ABOUT_CONTENT' : objectFidelity(role, intent),
         );
       }
     }
@@ -638,10 +655,10 @@ export async function seekContent(input: {
     }
     fidelity.set(card.itemId, kind);
     if (kind === 'UNJUDGED') {
-      if (groupToday && publishedLocalDay(card.publishedAt) === (intent.reportDay || localCalendarDate())) {
+      if (datedNews && reportDay && publishedLocalDay(card.publishedAt) === reportDay) {
         unjudged.push({
           ...card,
-          reason: `来源日期是 ${intent.reportDay || localCalendarDate()}，但这轮没有完成判断，还不能当成已确认的这一天报道。`,
+          reason: `来源日期是 ${reportDay}，但这轮没有完成判断，还不能当成已确认的这一天报道。`,
         });
       } else {
         unjudged.push(card);
@@ -660,8 +677,7 @@ export async function seekContent(input: {
     }
   }
 
-  const reportDay = intent.reportDay || localCalendarDate();
-  const placed = groupToday
+  const placed = datedNews && reportDay
     ? splitCurrentReports({ primary, related, today: reportDay })
     : { todayReports: primary, background: related };
   let visible = placed.todayReports.slice(0, MAX_CARDS);
@@ -725,10 +741,14 @@ export async function seekContent(input: {
   };
 
   let notice = '';
-  if (groupToday && !visible.length) {
+  if (datedNews && reportDay && !visible.length) {
     notice = `没有找到发布日期是 ${reportDay} 的具体报道。综述、其它日期和还没判断完的条目不能当作这一天的结果。`;
-  } else if (groupToday && visible.length) {
+  } else if (datedNews && reportDay && visible.length) {
     notice = `这一组只包括来源发布时间是 ${reportDay}、并且判断为具体报道的条目。综述在补充背景里。还没读到的正文仍标为来源摘要。`;
+  } else if ((intent.freshness === 'current' || intent.newsFeed === true) && !reportDay) {
+    notice = visible.length
+      ? '这次没有明确报道日期，没有按某一天筛选。'
+      : '这次没有明确报道日期，也没有找到可确认的报道。日期不清楚时需要再说一次要哪一天。';
   } else if (!visible.length) {
     if (searchFailed && rawSearchHits === 0 && !directoryHits.length) {
       notice = '暂时无法获取新内容，可以稍后再试或检查联网设置。';
