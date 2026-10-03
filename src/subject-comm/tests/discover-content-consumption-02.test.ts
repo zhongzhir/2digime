@@ -255,7 +255,7 @@ test('DISCOVERY: honest empty when consume has no object', async () => {
     model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
   });
   assert.equal(sought.cards.length, 0);
-  assert.match(sought.notice, /没有找到可以直接/);
+  assert.match(sought.notice, /没有找到这个视频节目本身/);
   assert.equal(sought.relatedCards.some((card) => card.itemId === COMMENTARY.itemId), true);
 });
 

@@ -259,7 +259,7 @@ test('FAILURE: zero matching video is honest empty and does not use cached feed 
     model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
   });
   assert.equal(sought.cards.length, 0);
-  assert.match(sought.notice, /还没有可以播放的AI视频|没有找到可以直接观看的 AI 视频/);
+  assert.match(sought.notice, /还没有可以播放的AI视频|没有找到可以直接观看的 AI 视频|没有找到这个视频节目本身/);
   assert.equal(sought.cards.some((card) => card.itemId === RWA.itemId), false);
   assert.equal(sought.trace.visible, 0);
 });
@@ -372,7 +372,7 @@ test('an audio request keeps an article as introduction, not as playback', async
   assert.equal(sought.cards.length, 0);
   assert.equal(sought.relatedCards.some((card) => card.itemId === note.itemId), true);
   assert.match(sought.notice, /介绍/);
-  assert.match(sought.notice, /播放/);
+  assert.match(sought.notice, /播放|听完|没有找到这个音频节目本身/);
 });
 
 test('TYPE SEMANTICS: RSS enclosure audio is still audio', async () => {

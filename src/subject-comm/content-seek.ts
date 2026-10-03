@@ -10,6 +10,7 @@ import { normalizeCanonicalUrl } from './content-canonical';
 import { cardFromNetworkItem, type DiscoverCard } from './content-discover';
 import {
   classifyCandidateRoles,
+  type CandidateJudgment,
   defaultDiscoverIntent,
   interpretDiscoverIntent,
   isDomainLikeTitle,
@@ -407,7 +408,8 @@ export async function seekContent(input: {
   const seenUrls = new Set(cards.map((card) => canonicalOf(card.url)).filter(Boolean));
   const seenIds = new Set(cards.map((card) => card.itemId));
   const reportDay = intent.reportDay;
-  const datedNews = (intent.freshness === 'current' || intent.newsFeed === true) && !!reportDay;
+  // "当下/最近"只是时效偏好，不是指定某一天；按天筛选只在模型判定为新闻报道并给出日期时才启用。
+  const datedNews = intent.newsFeed === true && !!reportDay;
 
   let usedExternal = false;
   let searchFailed = false;
@@ -596,10 +598,12 @@ export async function seekContent(input: {
   const concrete = cards.filter(isConcreteCandidate);
   const fidelity = new Map<string, ObjectFidelity | 'UNJUDGED'>();
   const unjudgedIds = new Set<string>();
-  const judgePool = concrete.filter((card) => !isAccessCard(card)).slice(0, 8);
+  // 各批并行判断，多判断一些候选，少留"还没完成判断"的尾巴。
+  const judgePool = concrete.filter((card) => !isAccessCard(card)).slice(0, 16);
   for (const card of concrete) {
     if (!judgePool.includes(card)) unjudgedIds.add(card.itemId);
   }
+  const judgments = new Map<string, CandidateJudgment>();
   if (input.chatComplete && input.model && judgePool.length) {
     const judged = await classifyCandidateRoles({
       query,
@@ -617,6 +621,7 @@ export async function seekContent(input: {
       ...(input.signal ? { signal: input.signal } : {}),
     });
     for (const id of judged.unjudgedIds) unjudgedIds.add(id);
+    for (const [id, row] of judged.judgments) judgments.set(id, row);
     if (judged.roles.size) {
       for (const card of concrete) {
         if (unjudgedIds.has(card.itemId)) continue;
@@ -640,7 +645,12 @@ export async function seekContent(input: {
       access.push(card);
       continue;
     }
-    const matchedType = typeMatches(card, requiredTypes);
+    // 形态由页面本身决定：模型从内容判断出是视频/音频节目，就算有效推荐，即使没有直接播放文件。
+    // 能否应用内播放只看媒体字段，不影响是否入选。
+    const judgment = judgments.get(card.itemId);
+    const matchedType =
+      typeMatches(card, requiredTypes) ||
+      (!!judgment && requiredTypes.includes(judgment.medium) && judgment.role !== 'UNRELATED');
     let kind = fidelity.get(card.itemId);
     if (unjudgedIds.has(card.itemId)) kind = 'UNJUDGED';
     if (
@@ -676,9 +686,22 @@ export async function seekContent(input: {
         primary.push({ ...card, objectFidelity: 'PRIMARY_CONTENT' });
       }
     } else if (kind === 'PRIMARY_CONTENT' && matchedType) {
-      primary.push({ ...card, objectFidelity: 'PRIMARY_CONTENT' });
+      const basis = judgment?.basis || '';
+      const medium = judgment?.medium;
+      primary.push({
+        ...card,
+        objectFidelity: 'PRIMARY_CONTENT',
+        ...(medium && medium !== 'unknown' && !hasDirectMediaRepresentation(card) ? { contentType: medium } : {}),
+        ...(basis ? { reason: basis } : {}),
+        ...(judgment?.summary ? { text: judgment.summary } : {}),
+      });
     } else if (kind === 'ABOUT_CONTENT') {
-      related.push({ ...card, objectFidelity: 'ABOUT_CONTENT' });
+      related.push({
+        ...card,
+        objectFidelity: 'ABOUT_CONTENT',
+        ...(judgment?.basis ? { reason: judgment.basis } : {}),
+        ...(judgment?.summary ? { text: judgment.summary } : {}),
+      });
     }
   }
 
@@ -750,7 +773,7 @@ export async function seekContent(input: {
     notice = `没有找到发布日期是 ${reportDay} 的具体报道。综述、其它日期和还没判断完的条目不能当作这一天的结果。`;
   } else if (datedNews && reportDay && visible.length) {
     notice = `这一组只包括来源发布时间是 ${reportDay}、并且判断为具体报道的条目。综述在补充背景里。还没读到的正文仍标为来源摘要。`;
-  } else if ((intent.freshness === 'current' || intent.newsFeed === true) && !reportDay) {
+  } else if (intent.newsFeed === true && !reportDay) {
     notice = visible.length
       ? '这次没有明确报道日期，没有按某一天筛选。'
       : '这次没有明确报道日期，也没有找到可确认的报道。日期不清楚时需要再说一次要哪一天。';
@@ -773,8 +796,8 @@ export async function seekContent(input: {
       requiredTypes.some((row) => row === 'audio' || row === 'video')
     ) {
       notice = requiredTypes.includes('audio')
-        ? `找到了介绍，但还没有可以播放的${intent.topic || '这段'}音频。介绍不能当作已经听完。`
-        : `找到了介绍，但还没有可以播放的${intent.topic || '这段'}视频。介绍不能当作已经看完。`;
+        ? '没有找到这个音频节目本身，只找到了介绍文章。介绍不能当作已经听完。'
+        : '没有找到这个视频节目本身，只找到了介绍文章。介绍不能当作已经看完。';
     } else if (concrete.length > 0 && trace.unrelated === concrete.length) {
       notice = '搜索有返回，判断后和这次要找的对不上。';
     } else if (intent.intent === 'consume') {

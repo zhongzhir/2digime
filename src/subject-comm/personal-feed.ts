@@ -22,7 +22,8 @@ import type { ExternalSeekHit } from './content-seek';
 import { isDomainLikeTitle, isGenericHubUrl } from './discover-intent';
 import { allowsDefaultSupply } from './domestic-source-boundary';
 import type { ContentPreferenceDirective } from './content-preferences';
-import { isNetworkItemExpired } from './network-item';
+import { isNetworkItemExpired, trustedPublishedMs } from './network-item';
+import { completeStructured, type StructuredAttempt } from './structured-call';
 import {
   catalogFeedUrls,
   listOpenCatalog,
@@ -155,6 +156,7 @@ export async function proposeDiscoveryIntents(input: {
   chatComplete: ChatCompleteFn;
   model: { baseUrl: string; model: string; apiKey?: string };
   now?: string;
+  onAttempt?: (attempt: StructuredAttempt) => void;
 }): Promise<DiscoveryIntent[]> {
   const system = [
     '你在为这个人的 2digime 拟定内容发现方向。这不是搜索引擎运营，也不是为了让人刷得更久。',
@@ -174,8 +176,11 @@ export async function proposeDiscoveryIntents(input: {
   ]
     .filter(Boolean)
     .join('\n\n');
-  const request = async (): Promise<{ intents: DiscoveryIntent[]; explicitEmpty: boolean }> => {
-    const result = await input.chatComplete({
+  // 先关隐藏推理快速要一份；被截断、空正文或解析不出时，保留推理并放大预算再要一次。
+  // 模型明确返回空列表是有效答案；两次都拿不到可用结果才返回空，不另造搜索词。
+  const outcome = await completeStructured<DiscoveryIntent[]>({
+    chat: input.chatComplete,
+    request: {
       baseUrl: input.model.baseUrl,
       ...(input.model.apiKey ? { apiKey: input.model.apiKey } : {}),
       model: input.model.model,
@@ -184,25 +189,17 @@ export async function proposeDiscoveryIntents(input: {
         { role: 'user', content: user },
       ],
       temperature: 0,
-      maxTokens: 700,
-      timeoutMs: 60_000,
       responseFormat: { type: 'json_object' },
-    });
-    const intents = discoveryIntentsFromModelText(result.text);
-    const rec = parseJsonObject(result.text);
-    return { intents, explicitEmpty: !!rec && Array.isArray(rec.intents) && rec.intents.length === 0 };
-  };
-  try {
-    const first = await request();
-    if (first.intents.length || first.explicitEmpty) return first.intents;
-  } catch {
-    /* 空响应或传输失败时再请求一次，不另造搜索词 */
-  }
-  try {
-    return (await request()).intents;
-  } catch {
-    return [];
-  }
+    },
+    parse: (text) => {
+      const intents = discoveryIntentsFromModelText(text);
+      const rec = parseJsonObject(text);
+      const explicitEmpty = !!rec && Array.isArray(rec.intents) && rec.intents.length === 0;
+      return intents.length || explicitEmpty ? intents : null;
+    },
+    ...(input.onAttempt ? { onAttempt: input.onAttempt } : {}),
+  });
+  return outcome.value || [];
 }
 
 function viewOf(input: {
@@ -235,13 +232,31 @@ function viewOf(input: {
 
 const RECENT_DEFAULT_MS = 21 * 24 * 60 * 60 * 1000;
 
+/** 只有来源声明了可信发布时间且超出窗口，才算"不是近期"。没有可信日期的内容不在这里被淘汰。 */
 function isRecentDefaultItem(item: NetworkItem, nowIso?: string): boolean {
-  const raw = String(item.content.publishedAt || '').trim();
-  if (!raw || !nowIso) return true;
-  const published = Date.parse(raw);
+  if (!nowIso) return true;
   const now = Date.parse(nowIso);
-  if (!Number.isFinite(published) || !Number.isFinite(now)) return true;
+  if (!Number.isFinite(now)) return true;
+  const published = trustedPublishedMs(item, now);
+  if (published === undefined) return true;
   return now - published <= RECENT_DEFAULT_MS;
+}
+
+/**
+ * 候选池的机械排布：有可信发布日期的按发布时间新到旧；没有日期的排在其后，按入库时间新到旧。
+ * 这只决定"先把谁放进候选池"，不是推荐排序；挑什么、怎么排由模型决定。
+ */
+function byTrustedRecency(items: NetworkItem[], nowIso?: string): NetworkItem[] {
+  const now = nowIso ? Date.parse(nowIso) : Date.now();
+  const nowMs = Number.isFinite(now) ? now : Date.now();
+  const keyed = items.map((item) => ({ item, published: trustedPublishedMs(item, nowMs) }));
+  keyed.sort((a, b) => {
+    if (a.published !== undefined && b.published !== undefined) return b.published - a.published;
+    if (a.published !== undefined) return -1;
+    if (b.published !== undefined) return 1;
+    return b.item.createdAt.localeCompare(a.item.createdAt);
+  });
+  return keyed.map((row) => row.item);
 }
 
 function candidatesForDefault(items: NetworkItem[], nowIso?: string): NetworkItem[] {
@@ -250,7 +265,7 @@ function candidatesForDefault(items: NetworkItem[], nowIso?: string): NetworkIte
     allowsDefaultSupply({ url: item.content.url, publisher: item.publisherDisplayName }),
   );
   const steady = inBound.filter((item) => item.provenance?.via !== 'search');
-  return steady.length ? steady : inBound;
+  return byTrustedRecency(steady.length ? steady : inBound, nowIso);
 }
 
 function isConsumableItem(item: NetworkItem, nowIso?: string): boolean {
@@ -602,20 +617,25 @@ export async function ensurePersonalFeed(input: {
     mark('OPEN_DISCOVER');
     mark('LOCAL_FEED_READ', cachedCards.length);
     const localFromCache = cachedCards.length ? applyExplicitFeedback(cachedCards, prefs).slice(0, MAX_FEED) : [];
-    const localFromDirectory = localFromCache.length
-      ? []
-      : directoryCards(
+    // 缓存太少（少于一屏的最低数量）时，用目录里的候选补足；不让两三张旧卡片单独充当"今天的推荐"。
+    const cachedIds = new Set(localFromCache.map((card) => card.itemId));
+    const topUpNeeded = localFromCache.length < MIN_FEED;
+    const localFromDirectory = topUpNeeded
+      ? directoryCards(
           diverseFeedCandidates(
-            candidatesForDefault(input.items, now),
+            candidatesForDefault(input.items, now).filter(
+              (item) => !blocked(item, prefs) && !cachedIds.has(item.itemId),
+            ),
             MAX_FEED,
             2,
           ),
           prefs,
-          MAX_FEED,
+          MAX_FEED - localFromCache.length,
           now,
-        );
+        )
+      : [];
     mark('DIRECTORY_READ', localFromDirectory.length || input.items.filter((item) => isConsumableItem(item, now)).length);
-    let localCards = localFromCache.length ? localFromCache : localFromDirectory;
+    let localCards = [...localFromCache, ...localFromDirectory].slice(0, MAX_FEED);
     let catalogFilled = false;
     if (!localCards.length && canFetchOpenCatalog({ ...input, networking })) {
       mark('CATALOG_START');
@@ -628,7 +648,8 @@ export async function ensurePersonalFeed(input: {
       localCards = directoryCards(diverseFeedCandidates(reloaded, MAX_FEED, 2), prefs, MAX_FEED, now);
       mark('DIRECTORY_READ', localCards.length);
     }
-    const fresh = localFromCache.length ? cacheFresh(cache.personal, nowMs) : localCards.length >= MIN_FEED;
+    const fresh =
+      localFromCache.length >= MIN_FEED ? cacheFresh(cache.personal, nowMs) : localCards.length >= MIN_FEED;
     const replenishing = canReplenishSupply({ ...input, networking }) && (localCards.length < MIN_FEED || !fresh);
     if (localCards.length) {
       const snapshot: FeedSnapshot = {

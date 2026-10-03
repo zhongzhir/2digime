@@ -1425,6 +1425,69 @@ select {
   background: var(--accent-soft);
 }
 
+/* 历史对话管理：行内菜单、项目分组、归档区 */
+.chat-session-list .chat-session-item,
+.chat-session-list .chat-session-project,
+.chat-session-list .chat-session-archived {
+  margin: 0 0 6px;
+}
+.chat-session-row {
+  display: flex;
+  gap: 4px;
+  align-items: stretch;
+}
+.chat-session-list .chat-session-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-session-list button.chat-session-small {
+  width: auto;
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  font-size: var(--font-xs, 12px);
+}
+.chat-session-menu {
+  margin: 4px 0 2px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.chat-session-menu p {
+  margin: 0 0 6px;
+}
+.chat-session-bar,
+.chat-session-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.chat-session-form input {
+  flex: 1 1 100px;
+  min-width: 0;
+}
+.chat-session-project-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  font-weight: 600;
+  font-size: var(--font-sm);
+}
+.chat-session-sublist {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0 0 0 10px;
+  border-left: 2px solid var(--line);
+}
+.chat-session-list button.danger {
+  color: #a32020;
+  border-color: rgba(163, 32, 32, 0.4);
+}
+
 .chat-main {
   display: flex;
   flex-direction: column;

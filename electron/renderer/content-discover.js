@@ -16,6 +16,7 @@
   let lastView = null;
   let activeSection = 'for-you';
   let activeSearchGenerationId = '';
+  let seekPendingGen = '';
   let activeFeedMode = 'personal';
   let moreInFlight = false;
   let moreExhausted = false;
@@ -113,10 +114,47 @@
   function consumeLabel(card) {
     const type = String(card.contentType || '');
     if (card.linkKind === 'aggregator') return '打开聚合入口';
-    if (type === 'video') return '在来源观看';
+    if (type === 'video') return '去原站观看';
     if (type === 'image') return '打开原页';
-    if (type === 'audio') return '在来源收听';
+    if (type === 'audio') return '去原站收听';
     return '阅读原文';
+  }
+
+  // 在对应卡片内展开/收起播放器。地址打不开时在卡片内说明，并保留“去原站”。
+  function togglePlayer(card, type, host, button, idleLabel) {
+    if (!host.hidden) {
+      const current = host.querySelector('audio, video');
+      if (current) current.pause();
+      host.textContent = '';
+      host.hidden = true;
+      button.textContent = idleLabel;
+      return;
+    }
+    const media = document.createElement(type === 'video' ? 'video' : 'audio');
+    media.className = type === 'video' ? 'content-discover-video' : 'content-discover-audio';
+    media.controls = true;
+    media.preload = 'metadata';
+    media.hidden = true;
+    media.src = card.mediaUrl;
+    const loading = document.createElement('p');
+    loading.className = 'content-discover-source muted tiny';
+    loading.textContent = '正在加载……';
+    // 读到真实时长再显示控件，避免出现没有时长的假播放器。
+    media.addEventListener('loadedmetadata', () => {
+      if (!Number.isFinite(media.duration) || media.duration <= 0) return;
+      loading.remove();
+      media.hidden = false;
+    });
+    media.addEventListener('error', () => {
+      host.textContent = '这段' + (type === 'video' ? '视频' : '音频') + '地址打不开，可以去原站看。';
+    });
+    host.textContent = '';
+    host.appendChild(loading);
+    host.appendChild(media);
+    host.hidden = false;
+    button.textContent = '收起';
+    const started = media.play();
+    if (started && typeof started.catch === 'function') started.catch(() => {});
   }
 
   function askTalk(card) {
@@ -198,8 +236,25 @@
     return '';
   }
 
+  // 瀑布流：列表是自动多列的网格（宽屏多列、窄屏单列），每张卡片按自己的高度占若干行，
+  // 追加新卡片时已有卡片的位置不变。高度变化（图片加载、播放器展开、窗口缩放）由 ResizeObserver 重新计算。
+  const WATERFALL_ROW_PX = 8;
+  const WATERFALL_GAP_PX = 18;
+  const waterfallObserver =
+    typeof ResizeObserver === 'function'
+      ? new ResizeObserver((entries) => {
+          for (const entry of entries) {
+            const el = entry.target;
+            const height = el.getBoundingClientRect().height;
+            if (!height) continue;
+            el.style.gridRowEnd = 'span ' + Math.max(1, Math.ceil((height + WATERFALL_GAP_PX) / WATERFALL_ROW_PX));
+          }
+        })
+      : null;
+
   function renderCard(card, opts) {
     const li = document.createElement('li');
+    if (waterfallObserver) waterfallObserver.observe(li);
     const type = String(card.contentType || 'article');
     li.className = 'content-discover-card content-discover-card--' + (type || 'article');
     if (card.itemId) li.setAttribute('data-item-id', card.itemId);
@@ -221,20 +276,34 @@
       [card.itemId || '', type, card.thumbnailUrl || '', card.mediaUrl || '', card.title || ''].join('|'),
     );
     const cover = coverUrl(card);
+    const playable = (type === 'audio' || type === 'video') && canPlayMedia(card, type);
     if (cover) {
       const img = document.createElement('img');
       img.className = type === 'image' ? 'content-discover-cover content-discover-cover--image' : 'content-discover-cover';
       img.alt = card.title || '';
       img.referrerPolicy = 'no-referrer';
+      img.loading = 'lazy';
       img.src = cover;
       img.addEventListener('error', () => {
         img.remove();
       });
       li.appendChild(img);
+    } else if (type === 'video' && playable) {
+      // 没有封面图但有可播放地址：用视频第一帧做静音预览，不自动播放。
+      const still = document.createElement('video');
+      still.className = 'content-discover-cover content-discover-cover--still';
+      still.muted = true;
+      still.preload = 'metadata';
+      still.setAttribute('playsinline', '');
+      still.src = card.mediaUrl + (card.mediaUrl.indexOf('#') < 0 ? '#t=0.5' : '');
+      still.addEventListener('error', () => {
+        still.remove();
+      });
+      li.appendChild(still);
     }
     const body = document.createElement('div');
     body.className = 'content-discover-body';
-    const kind = typeLabel(card);
+    const kind = typeLabel(card) + (playable ? ' · 可在这里播放' : type === 'video' || type === 'audio' ? ' · 去原站' : '');
     if (kind) {
       const badge = document.createElement('p');
       badge.className = 'content-discover-kind muted tiny';
@@ -284,46 +353,12 @@
         body.appendChild(p);
       }
     }
-    if (type === 'audio' && canPlayMedia(card, 'audio')) {
-      const audio = document.createElement('audio');
-      audio.className = 'content-discover-audio';
-      audio.preload = 'metadata';
-      audio.hidden = true;
-      audio.src = card.mediaUrl;
-      const reveal = () => {
-        if (!Number.isFinite(audio.duration) || audio.duration <= 0) return;
-        audio.hidden = false;
-        audio.controls = true;
-      };
-      audio.addEventListener('loadedmetadata', reveal);
-      audio.addEventListener('error', () => {
-        const failed = document.createElement('p');
-        failed.className = 'content-discover-source muted tiny';
-        failed.textContent = '这段音频地址打不开。';
-        audio.replaceWith(failed);
-      });
-      body.appendChild(audio);
-    }
-    if (type === 'video' && canPlayMedia(card, 'video')) {
-      const video = document.createElement('video');
-      video.className = 'content-discover-video';
-      video.preload = 'metadata';
-      video.hidden = true;
-      video.src = card.mediaUrl;
-      const revealVideo = () => {
-        if (!Number.isFinite(video.duration) || video.duration <= 0) return;
-        video.hidden = false;
-        video.controls = true;
-      };
-      video.addEventListener('loadedmetadata', revealVideo);
-      video.addEventListener('error', () => {
-        const failed = document.createElement('p');
-        failed.className = 'content-discover-source muted tiny';
-        failed.textContent = '这段视频地址打不开。';
-        video.replaceWith(failed);
-      });
-      body.appendChild(video);
-    }
+    // 应用内播放：播放器只在用户点“在这里播放/收听”后才在这张卡片内展开，
+    // 不是每张卡片都先摆一个播放器占满首屏。没有可直接播放的地址就只给“去原站”。
+    const playHost = document.createElement('div');
+    playHost.className = 'content-discover-player';
+    playHost.hidden = true;
+    if (playable) body.appendChild(playHost);
     if (card.reason) {
       const why = document.createElement('p');
       why.className = 'content-discover-reason muted tiny';
@@ -332,7 +367,12 @@
     }
     const actions = document.createElement('div');
     actions.className = 'content-discover-actions';
-    if (card.url) actions.appendChild(btn(consumeLabel(card), () => openCard(card), 'primary'));
+    if (playable) {
+      const idle = type === 'video' ? '在这里播放' : '在这里收听';
+      const playBtn = btn(idle, () => togglePlayer(card, type, playHost, playBtn, idle), 'primary');
+      actions.appendChild(playBtn);
+    }
+    if (card.url) actions.appendChild(btn(consumeLabel(card), () => openCard(card), playable ? 'ghost' : 'primary'));
     if (!opts || !opts.hideLater) {
       actions.appendChild(btn('稍后看', () => void act('later', { itemId: card.itemId })));
     }
@@ -536,6 +576,7 @@
     }
     lastView = next;
     renderView(next);
+    if (savedScroll != null && scroller) scroller.scrollTop = savedScroll;
   }
 
   function showSection(name) {
@@ -638,7 +679,6 @@
     renderLater();
     root.hidden = false;
     showSection(activeSection);
-    if (savedScroll != null && scroller) scroller.scrollTop = savedScroll;
   }
 
   async function followReplenish(client, gen) {
@@ -661,6 +701,10 @@
       if (activeSearchGenerationId !== gen) return;
       applyView(next && next.view);
     }
+    // 两轮补充后仍显示"补充中"，说明后端没有给出终态：用现有 cancel 收尾，不让页面一直转。
+    if (activeSearchGenerationId === gen && lastView && lastView.replenishing) {
+      await terminate('补充没有完成，已停止。已显示的内容保留。');
+    }
   }
 
   function noteSlowSearch(gen) {
@@ -670,36 +714,78 @@
     }, 10000);
   }
 
+  // 页面整体兜底：后端仍在补充超过此时间，就走现有 cancel（中止后端这一代请求），再让页面进入终态。
+  const PAGE_DEADLINE_MS = 75000;
+
+  function watchDeadline(gen) {
+    return setTimeout(() => {
+      const root = $('content-discover');
+      if (activeSearchGenerationId !== gen || !root || root.dataset.replenishing !== '1') return;
+      void terminate('这次等得太久，已停止补充。已显示的内容保留。');
+    }, PAGE_DEADLINE_MS);
+  }
+
+  function showTerminal(message) {
+    if (lastView) lastView = Object.assign({}, lastView, { replenishing: false });
+    const root = $('content-discover');
+    if (root) {
+      root.dataset.replenishing = '0';
+      root.hidden = false;
+    }
+    const cancelBtn = $('btn-discover-cancel');
+    if (cancelBtn) cancelBtn.hidden = true;
+    setStatus('');
+    const notice = $('content-discover-notice');
+    if (notice && message) notice.textContent = message;
+    const empty = $('content-discover-empty');
+    const emptyText = $('content-discover-empty-text');
+    if (empty) empty.hidden = lastCards.length > 0;
+    if (emptyText && !lastCards.length && message) emptyText.textContent = message;
+  }
+
+  // 收尾：换到新一代请求（旧请求的迟到结果会被守卫丢弃），通知后端用现有 cancel 中止，然后让页面进入可操作的终态。
+  async function terminate(message) {
+    const client = api();
+    const gen = newSearchGenerationId();
+    activeSearchGenerationId = gen;
+    if (client && typeof client.invoke === 'function') {
+      try {
+        const result = await client.invoke('content', { action: 'cancel', searchGenerationId: gen });
+        if (activeSearchGenerationId === gen) applyView(result && result.view);
+      } catch {
+        /* 后端不可达或渲染再次失败：下面直接落终态 */
+      }
+    }
+    if (activeSearchGenerationId === gen) showTerminal(message);
+  }
+
+  function failureMessage(err) {
+    const detail = err && err.message ? String(err.message).replace(/\s+/g, ' ').slice(0, 100) : '';
+    const base = '暂时无法获取新内容，可以稍后再试或检查联网设置。';
+    return detail ? base + '（' + detail + '）' : base;
+  }
+
   async function refresh() {
     const client = api();
     if (!client || typeof client.invoke !== 'function') return;
     if (!activeSearchGenerationId) activeSearchGenerationId = newSearchGenerationId();
     activeFeedMode = 'personal';
+    const gen = activeSearchGenerationId;
     if (!lastCards.length) setStatus('兔机米正在准备一些值得看的内容……');
-    const slowNote = noteSlowSearch(activeSearchGenerationId);
+    const slowNote = noteSlowSearch(gen);
+    const deadline = watchDeadline(gen);
     try {
       const result = await client.invoke('content', {
         action: 'discover',
-        searchGenerationId: activeSearchGenerationId,
+        searchGenerationId: gen,
       });
       applyView(result && result.view);
-      await followReplenish(client, activeSearchGenerationId);
+      await followReplenish(client, gen);
+    } catch (err) {
+      if (activeSearchGenerationId === gen) await terminate(failureMessage(err));
+    } finally {
       clearTimeout(slowNote);
-    } catch {
-      setStatus('');
-      if (!lastCards.length) {
-        renderView({
-          headline: '发现',
-          lead: '看文章、图片、音频和视频。',
-          cards: [],
-          relatedCards: [],
-          preferences: [],
-          notice: '暂时无法获取新内容，可以稍后再试或检查联网设置。',
-        });
-      } else {
-        const notice = $('content-discover-notice');
-        if (notice) notice.textContent = '暂时无法获取新内容，可以稍后再试或检查联网设置。';
-      }
+      clearTimeout(deadline);
     }
   }
 
@@ -782,8 +868,10 @@
     activeSearchGenerationId = gen;
     activeFeedMode = 'intent';
     lastView = null;
+    // 搜索一开始就可以取消：最长的等待恰恰发生在第一个 seek 返回之前。
+    seekPendingGen = gen;
     const cancelBtn = $('btn-discover-cancel');
-    if (cancelBtn) cancelBtn.hidden = true;
+    if (cancelBtn) cancelBtn.hidden = false;
     lastCards = [];
     lastRelated = [];
     lastUnjudged = [];
@@ -802,6 +890,7 @@
     if (opts && opts.navigate) await goDiscover({ skipRefresh: true });
     showSection('for-you');
     const slowNote = noteSlowSearch(gen);
+    const deadline = watchDeadline(gen);
     try {
       const result = await client.invoke('content', {
         action: 'seek',
@@ -810,14 +899,12 @@
       });
       applyView(result && result.view);
       await followReplenish(client, gen);
-    } catch {
-      if (activeSearchGenerationId !== gen) return;
-      if (!lastCards.length) {
-        const notice = $('content-discover-notice');
-        if (notice) notice.textContent = '暂时无法获取新内容，可以稍后再试或检查联网设置。';
-      }
+    } catch (err) {
+      if (activeSearchGenerationId === gen) await terminate(failureMessage(err));
     } finally {
       clearTimeout(slowNote);
+      clearTimeout(deadline);
+      if (seekPendingGen === gen) seekPendingGen = '';
       if (activeSearchGenerationId === gen && lastCards.length) setStatus('');
     }
   }
@@ -825,7 +912,8 @@
   async function cancelSeek() {
     const client = api();
     if (!client || typeof client.invoke !== 'function') return;
-    if (!lastView || !lastView.replenishing) return;
+    if (!seekPendingGen && !(lastView && lastView.replenishing)) return;
+    seekPendingGen = '';
     const gen = newSearchGenerationId();
     activeSearchGenerationId = gen;
     try {
@@ -834,10 +922,17 @@
         searchGenerationId: gen,
       });
       if (activeSearchGenerationId !== gen) return;
+      // 搜索还没出第一批结果就被取消时，后端回到默认信息流；页面也要回到默认信息流，
+      // 否则 intent 模式会把这份视图拒收，页面就一直停在“正在找……”。
+      if (result && result.view && result.view.feedMode !== 'intent') {
+        activeFeedMode = 'personal';
+        lastView = null;
+      }
       applyView(result && result.view);
     } catch {
       if (activeSearchGenerationId !== gen) return;
       if (lastView) applyView(Object.assign({}, lastView, { replenishing: false }));
+      else await terminate('已停止。');
     }
     setStatus('');
   }

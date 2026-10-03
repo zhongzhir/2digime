@@ -363,12 +363,12 @@ test('UI consumes image as visual subject, video at source, audio controls witho
   const ui = await fs.readFile(path.join(process.cwd(), 'electron/renderer/content-discover.js'), 'utf8');
   assert.equal(ui.includes("card.contentType === 'image'"), true);
   assert.equal(ui.includes('content-discover-cover--image'), true);
-  assert.equal(ui.includes("type === 'video'") && ui.includes('在来源观看'), true);
+  assert.equal(ui.includes("type === 'video'") && ui.includes('去原站观看'), true);
   assert.equal(ui.includes("loadedmetadata"), true);
-  assert.equal(ui.includes('audio.controls = true'), true);
-  assert.equal(ui.includes("video.className = 'content-discover-video'"), true);
-  assert.equal(ui.includes('video.controls = true'), true);
-  assert.equal(ui.includes('audio.hidden = true'), true);
+  assert.equal(ui.includes('media.controls = true'), true);
+  assert.equal(ui.includes("'content-discover-video'"), true);
+  assert.equal(ui.includes('togglePlayer'), true);
+  assert.equal(ui.includes('media.hidden = true'), true);
   assert.equal(ui.includes("img.addEventListener('error'"), true);
   assert.equal(ui.includes("skipRender: true"), true);
   assert.equal(/0:00\/0:00/.test(ui), false);

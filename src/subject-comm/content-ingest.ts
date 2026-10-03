@@ -3,6 +3,11 @@
  * 不爬站、不托管原文、不写用户偏好。AI 描述只看内容本身。
  */
 import { safePublicHttpGet } from '../work-runtime/public-http-safety';
+
+/** 读一个来源页最多等这么久。一个慢站不应让整次搜索跟着等 20 秒。 */
+const PAGE_READ_TIMEOUT_MS = 8_000;
+const pageReadGet: typeof safePublicHttpGet = (url, headers, redirectLeft, deps) =>
+  safePublicHttpGet(url, headers, redirectLeft, { timeoutMs: PAGE_READ_TIMEOUT_MS, ...(deps || {}) });
 import type { NetworkItemStore } from '../relay-service/network-item-store';
 import {
   NETWORK_ITEM_KIND_CONTENT,
@@ -333,7 +338,7 @@ export async function ingestSource(input: IngestSourceInput): Promise<{
     return { sourceTitle: '', records: [{ status: 'unavailable', reason: 'aborted', canonicalUrl: input.sourceUrl }], items: [] };
   }
   const now = input.now || new Date().toISOString();
-  const fetchImpl = input.fetchImpl || safePublicHttpGet;
+  const fetchImpl = input.fetchImpl || pageReadGet;
   let fetched;
   try {
     fetched = await fetchImpl(input.sourceUrl, {

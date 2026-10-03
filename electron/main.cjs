@@ -1546,6 +1546,18 @@ function registerIpc() {
     return { currentId: "", sessions: [] };
   });
 
+  ipcMain.handle("shell:conversationManage", async (_evt, input) => {
+    if (!runtime || typeof runtime.manageConversation !== "function") {
+      throw new Error("请先建立数字之我");
+    }
+    // 删除或归档的对话如果正在回复，让它的回复不再落到别的对话上。
+    if (input && (input.op === "delete" || input.op === "archive")) {
+      const listed = typeof runtime.listConversationSessions === "function" ? runtime.listConversationSessions() : null;
+      if (listed && listed.currentId === String(input.id || "")) conversationGeneration += 1;
+    }
+    return runtime.manageConversation(input || {});
+  });
+
   ipcMain.handle("shell:conversationCreateSession", async () => {
     if (!runtime || typeof runtime.createConversationSession !== "function") {
       throw new Error("请先建立数字之我");

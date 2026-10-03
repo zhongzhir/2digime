@@ -141,10 +141,17 @@ import {
   type GrowthCaptureStatusRecord,
 } from '../subject-core/conversation-transcript';
 import {
+  archiveConversationSessionSync,
+  createConversationProjectSync,
   createConversationSessionSync,
   currentConversationFilePathSync,
+  deleteConversationSessionSync,
   listConversationSessionsSync,
+  moveConversationSessionSync,
   openConversationSessionSync,
+  removeConversationProjectSync,
+  renameConversationProjectSync,
+  renameConversationSessionSync,
   touchConversationSessionSync,
 } from '../subject-core/conversation-sessions';
 import { extractExplicitSelfName, looksLikeIdentityClaim } from '../subject-core/candidate-distill';
@@ -714,7 +721,7 @@ export class DigitalMeRuntime {
     extra?: Partial<DiscoverView>,
   ): DiscoverView {
     const topic = sought.intent.topic || query;
-    const currentNews = sought.intent.freshness === 'current' || sought.intent.newsFeed === true;
+    const currentNews = sought.intent.newsFeed === true;
     return {
       headline: '发现',
       lead: `根据你刚说的话找「${topic}」，只显示这次搜索范围内的内容。`,
@@ -1414,15 +1421,28 @@ export class DigitalMeRuntime {
     const relayUrl = String(relayUrlInput || (await this.readStoredRelayUrl(packageRoot)) || '').trim();
     if (relayUrl) {
       try {
-        const listed = await new RelayClient(relayUrl).listNetworkItems({ kind: 'content', visibility: 'public' });
-        if (listed.items.length) return listed.items;
+        const client = new RelayClient(relayUrl);
+        const all: NetworkItem[] = [];
+        let cursor: string | undefined;
+        for (let page = 0; page < 50; page += 1) {
+          const listed = await client.listNetworkItems({
+            kind: 'content',
+            visibility: 'public',
+            limit: 100,
+            ...(cursor ? { cursor } : {}),
+          });
+          all.push(...listed.items);
+          cursor = listed.nextCursor;
+          if (!cursor || !listed.items.length) break;
+        }
+        if (all.length) return all;
       } catch {
         /* 回退本地目录 */
       }
     }
+    // 取数拿全目录；"哪些值得看、先看哪些"留给后面的候选池与模型排序，这里不按固定窗口截断。
     const local = new FileNetworkItemStore(path.join(packageRoot, 'content'));
-    const listed = await local.list({ kind: 'content', visibility: 'public', limit: 80 }, nowIso());
-    return listed.items;
+    return local.listAll({ kind: 'content', visibility: 'public' }, nowIso());
   }
 
   private async readStoredRelayUrl(packageRoot: string): Promise<string> {
@@ -3756,9 +3776,53 @@ export class DigitalMeRuntime {
     return currentConversationFilePathSync(pkg.rootDir);
   }
 
-  listConversationSessions(): { currentId: string; sessions: Array<{ id: string; title: string; createdAt: string; updatedAt: string }> } {
+  listConversationSessions(): ReturnType<typeof listConversationSessionsSync> {
     const pkg = this.subject.requireActive();
     return listConversationSessionsSync(pkg.rootDir);
+  }
+
+  /** 对话管理：改名、归档、项目、删除。全部落在同一份会话索引上。 */
+  manageConversation(input: {
+    op: 'rename' | 'archive' | 'unarchive' | 'move' | 'delete' | 'createProject' | 'renameProject' | 'removeProject';
+    id?: string;
+    title?: string;
+    projectId?: string | null;
+    scope?: string;
+  }): ReturnType<typeof listConversationSessionsSync> {
+    const pkg = this.subject.requireActive();
+    const root = pkg.rootDir;
+    const id = String(input.id || '').trim();
+    switch (input.op) {
+      case 'rename':
+        renameConversationSessionSync(root, id, String(input.title || ''));
+        break;
+      case 'archive':
+        archiveConversationSessionSync(root, id, true);
+        break;
+      case 'unarchive':
+        archiveConversationSessionSync(root, id, false);
+        break;
+      case 'move':
+        moveConversationSessionSync(root, id, input.projectId ? String(input.projectId) : null);
+        break;
+      case 'delete':
+        deleteConversationSessionSync(root, id, String(input.scope || ''));
+        break;
+      case 'createProject': {
+        const project = createConversationProjectSync(root, String(input.title || ''));
+        if (id) moveConversationSessionSync(root, id, project.id);
+        break;
+      }
+      case 'renameProject':
+        renameConversationProjectSync(root, String(input.projectId || ''), String(input.title || ''));
+        break;
+      case 'removeProject':
+        removeConversationProjectSync(root, String(input.projectId || ''));
+        break;
+      default:
+        throw new Error('不支持的对话操作');
+    }
+    return listConversationSessionsSync(root);
   }
 
   createConversationSession(): { session: { id: string; title: string; createdAt: string; updatedAt: string } } {

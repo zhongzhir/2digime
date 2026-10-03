@@ -3,6 +3,7 @@
  * 禁止按查询词 if/else 分流 consume / research。
  */
 import type { ChatCompleteFn } from '../subject-core/structured-distill';
+import { completeStructured, JUDGMENT_JSON_PASSES, type StructuredAttempt } from './structured-call';
 
 export type DiscoverIntentKind = 'consume' | 'research';
 export type DiscoverObjectWanted = 'work_itself' | 'commentary' | 'mixed';
@@ -24,6 +25,10 @@ export interface DiscoverIntent {
   /** 模型给出的报道日期 YYYY-MM-DD。要今天时就是用户本地今天。 */
   reportDay?: string;
   honestyNote?: string;
+  /** 用户希望在哪里看：应用内播放 / 去原站 / 都可以。由模型从请求里读出，缺省 any。 */
+  viewing?: 'in_app' | 'original_site' | 'any';
+  /** 用户这次明确提出的质量、风格、时长等偏好，一句话。推荐依据按它来写，不编造。 */
+  preferences?: string;
 }
 
 export type ContentPageRole =
@@ -148,8 +153,11 @@ export function intentFromModelText(text: string, query: string): DiscoverIntent
   const reportDay = /^\d{4}-\d{2}-\d{2}$/.test(reportDayRaw) ? reportDayRaw : undefined;
   const honestyNote =
     popularityClaim && intent === 'consume'
-      ? '没有跨平台统一播放榜，先找近期公开、可以看/听/读的内容。'
+      ? '没有跨平台统一榜单。下面的推荐依据来自来源里能看到的评价、口碑和内容特点，不是官方排名。'
       : undefined;
+  const viewing =
+    rec.viewing === 'in_app' || rec.viewing === 'original_site' ? rec.viewing : 'any';
+  const preferences = String(rec.preferences || '').trim().slice(0, 160);
   return {
     intent,
     topic,
@@ -163,6 +171,8 @@ export function intentFromModelText(text: string, query: string): DiscoverIntent
     ...(newsFeed ? { newsFeed: true } : {}),
     ...(reportDay ? { reportDay } : {}),
     ...(honestyNote ? { honestyNote } : {}),
+    ...(viewing !== 'any' ? { viewing } : {}),
+    ...(preferences ? { preferences } : {}),
   };
 }
 
@@ -171,33 +181,38 @@ export async function interpretDiscoverIntent(input: {
   chatComplete: ChatCompleteFn;
   model: { baseUrl: string; model: string; apiKey?: string };
   signal?: AbortSignal;
+  onAttempt?: (attempt: StructuredAttempt) => void;
 }): Promise<DiscoverIntent> {
   const query = String(input.query || '').trim();
   const fallback = defaultDiscoverIntent(query);
   if (!query) return fallback;
   const system = [
     '你在判断用户在「发现」里这一次主动搜索的意图。这是 CURRENT_SEARCH_MODE，不是为你发现。',
-    '只输出 JSON，字段：mode, topic, requestedContentTypes, objectWanted, freshness, popularityClaim, searchQueries, suggestTalk, newsFeed, reportDay。',
+    '只输出 JSON，字段：mode, topic, requestedContentTypes, objectWanted, freshness, popularityClaim, searchQueries, suggestTalk, newsFeed, reportDay, viewing, preferences。',
     'mode: consume 或 research。发现的强默认是 consume（看/听/读），不是做研究任务。',
     'topic: 用户这次要的主题短词，不要整句。例如「找几个 AI 视频看看」的 topic 是 AI。',
     'requestedContentTypes: 只允许 article / video / image / audio。点名要看视频、影像、纪录片、片子→["video"]；要图/摄影作品→["image"]；要听、曲子、播客、音乐→["audio"]；要读文章或新闻报道→["article"]。说「内容」且未点名媒介→[]。',
     '例子：「最近值得看的 AI 内容」→ topic:AI, requestedContentTypes:[]；「找几个 AI 视频看看」→ ["video"]；「找一些航天摄影作品」→ ["image"]；「给我听点科技播客」→ ["audio"]；「今天的新闻」→ ["article"]。',
     'objectWanted: primary_content（要作品/正文本身）/ commentary（要报道、盘点、行业分析）/ mixed。',
-    'freshness: current / classic / unspecified。',
-    'popularityClaim: 用户是否在要「最火/热门/排行」且你没有统一播放榜可引用。',
+    'freshness: current / classic / unspecified。current 表示用户在意时效：当下、最近、最新、这阵子。它不等于「今天发布」；只有用户明确要某一天（今天、昨天、某月某日）才算指定日期。',
+    'popularityClaim: 用户是否在要「最好/最火/热门/口碑/排行」这类带评价的推荐。为 true 时 searchQueries 里第一条仍然指向作品/节目本身（节目名、系列、官方主页或播放页这类具体对象），另一条才带能找到评价依据的词（如 口碑、评分、获奖），避免全部搜回行业盘点文章。',
     'searchQueries: 1 到 3 条发给公开搜索和开放目录的检索词，不要照抄用户整句。必须留在这次的 topic 与 requestedContentTypes 内。',
-    '托管搜索只按查询文本返回结果，不会另吃时效或新闻分类参数。用户消息里有今天的日期。若 freshness 为 current，第一条 searchQuery 要包含这个日期，用来找具体报道，而不是栏目名或百科词条。',
+    '搜索只按查询文本返回结果，不会另吃时效或新闻分类参数。仅当用户明确要某一天的报道时，第一条 searchQuery 才包含那一天的日期；「当下/最近/最新」不要写成今天的日期。',
+    'viewing: 用户说了想在哪里看——「在这里看/应用里播放」填 in_app，「去原站/官网看」填 original_site，没提就填 any。',
+    'preferences: 用户这次明确提出的质量、风格、时长、人群等偏好，用一句话保留（例如「口碑好、长视频」）。没有就留空。不要加用户没说的偏好。',
     '若 requestedContentTypes 含 image/video/audio：词应是对应开放目录实际用来找作品本身的常用检索写法；需要时可包含该主题在目录里常见的其它语种名称。不要写排行榜或十大盘点。',
     '不要把当前搜索扩写成用户平时可能喜欢的其它主题。不要加入这次没要求的相邻领域。',
     '若 mode=consume：搜索词指向具体可消费对象本身，不要去搜排行榜、行业新闻、十大盘点，除非用户明确要这些。',
     'suggestTalk: 若更适合在「与兔机米」里深入分析则为 true。',
     'newsFeed: 这次要看近期公开报道，并且应该使用已连接的新闻来源时为 true。图片、音频、视频作品和稳定知识为 false。',
-    'reportDay: 用户要看哪一天的报道，写成 YYYY-MM-DD。要今天就填用户消息里的今天。没有指定某一天就省略。',
+    'reportDay: 仅当用户明确要某一天的报道时才填，写成 YYYY-MM-DD；要今天就填用户消息里的今天。「当下/最近/最新/最好」不是指定某一天，省略。',
+    'newsFeed 只用于新闻报道。节目、纪录片、播客、影视、图片、音乐、教程等作品推荐即使要「最新/当下」，也是 false。',
     '不要使用数字之我、长期偏好或最近浏览去扩大范围。不要输出 score。不要编造播放量。',
   ].join('\n');
   const today = localCalendarDate();
-  const ask = (maxTokens: number, disableThinking: boolean) =>
-    input.chatComplete({
+  const outcome = await completeStructured<DiscoverIntent>({
+    chat: input.chatComplete,
+    request: {
       baseUrl: input.model.baseUrl,
       ...(input.model.apiKey ? { apiKey: input.model.apiKey } : {}),
       model: input.model.model,
@@ -206,37 +221,17 @@ export async function interpretDiscoverIntent(input: {
         { role: 'user', content: `${query}\n今天的日期是 ${today}。` },
       ],
       temperature: 0,
-      maxTokens,
-      timeoutMs: 45_000,
       responseFormat: { type: 'json_object' },
-      ...(input.signal ? { signal: input.signal } : {}),
-      ...(disableThinking ? { thinking: { type: 'disabled' as const } } : {}),
-    });
-  // 托管中继拒绝 thinking，隐藏推理会占满 800 预算。两端都用中继上限，避免默默退回默认意图。
-  const passes: Array<{ maxTokens: number; disableThinking: boolean }> = [
-    { maxTokens: 2048, disableThinking: true },
-    { maxTokens: 2048, disableThinking: false },
-  ];
-  let lastError: unknown;
-  for (const pass of passes) {
-    if (input.signal?.aborted) {
-      throw new DiscoverIntentError('model', '这次搜索已经取消。');
-    }
-    try {
-      const result = await ask(pass.maxTokens, pass.disableThinking);
-      if (result.truncated || !parseJsonObject(result.text)) {
-        lastError = new DiscoverIntentError('parse', '这次模型没有给出可用的搜索意图。');
-        continue;
-      }
-      return intentFromModelText(result.text, query);
-    } catch (err) {
-      if (err instanceof DiscoverIntentError) throw err;
-      if (input.signal?.aborted) throw err;
-      lastError = err;
-    }
-  }
-  if (lastError instanceof Error) throw lastError;
-  throw new DiscoverIntentError('model', '这次模型没有完成意图理解。');
+    },
+    passes: JUDGMENT_JSON_PASSES,
+    parse: (text) => (parseJsonObject(text) ? intentFromModelText(text, query) : null),
+    ...(input.signal ? { signal: input.signal } : {}),
+    ...(input.onAttempt ? { onAttempt: input.onAttempt } : {}),
+  });
+  if (outcome.value) return outcome.value;
+  if (input.signal?.aborted) throw new DiscoverIntentError('model', '这次搜索已经取消。');
+  if (outcome.lastError instanceof Error) throw outcome.lastError;
+  throw new DiscoverIntentError('parse', '这次模型没有给出可用的搜索意图。');
 }
 
 export function isDomainLikeTitle(title: string, url?: string): boolean {
@@ -324,9 +319,23 @@ export function strictRequestedTypes(intent: DiscoverIntent): string[] {
   );
 }
 
-export function rolesFromModelText(text: string, ids: string[]): Map<string, ContentPageRole> {
+export type CandidateMedium = 'article' | 'video' | 'audio' | 'image' | 'unknown';
+
+export interface CandidateJudgment {
+  role: ContentPageRole;
+  /** 模型从页面内容判断的主要消费形态。不要求页面有直接播放文件。 */
+  medium: CandidateMedium;
+  /** 推荐依据：只来自候选材料里可见的评价、口碑、内容特点，没有就为空。 */
+  basis: string;
+  /** 去掉导航、赞助、目录杂项后的简短摘要。只依据候选给出的文字，没有可用信息则为空。 */
+  summary: string;
+}
+
+const CANDIDATE_MEDIA = new Set(['article', 'video', 'audio', 'image']);
+
+export function judgmentsFromModelText(text: string, ids: string[]): Map<string, CandidateJudgment> {
   const rec = parseJsonObject(text);
-  const out = new Map<string, ContentPageRole>();
+  const out = new Map<string, CandidateJudgment>();
   const rows = rec && Array.isArray(rec.roles) ? rec.roles : [];
   for (const row of rows) {
     if (!row || typeof row !== 'object') continue;
@@ -336,8 +345,20 @@ export function rolesFromModelText(text: string, ids: string[]): Map<string, Con
       .trim()
       .toUpperCase();
     if (!ids.includes(id) || !PAGE_ROLES.has(role)) continue;
-    out.set(id, role as ContentPageRole);
+    const mediumRaw = asMediaType(recRow.medium);
+    out.set(id, {
+      role: role as ContentPageRole,
+      medium: mediumRaw && CANDIDATE_MEDIA.has(mediumRaw) ? (mediumRaw as CandidateMedium) : 'unknown',
+      basis: String(recRow.basis || '').replace(/\s+/g, ' ').trim().slice(0, 200),
+      summary: String(recRow.summary || '').replace(/\s+/g, ' ').trim().slice(0, 240),
+    });
   }
+  return out;
+}
+
+export function rolesFromModelText(text: string, ids: string[]): Map<string, ContentPageRole> {
+  const out = new Map<string, ContentPageRole>();
+  for (const [id, row] of judgmentsFromModelText(text, ids)) out.set(id, row.role);
   return out;
 }
 
@@ -348,35 +369,47 @@ export async function classifyCandidateRoles(input: {
   chatComplete?: ChatCompleteFn;
   model?: { baseUrl: string; model: string; apiKey?: string };
   signal?: AbortSignal;
-}): Promise<{ roles: Map<string, ContentPageRole>; unjudgedIds: string[]; attempts: number }> {
-  const empty = { roles: new Map<string, ContentPageRole>(), unjudgedIds: [] as string[], attempts: 0 };
+  onAttempt?: (attempt: StructuredAttempt) => void;
+}): Promise<{
+  roles: Map<string, ContentPageRole>;
+  judgments: Map<string, CandidateJudgment>;
+  unjudgedIds: string[];
+  attempts: number;
+}> {
+  const empty = {
+    roles: new Map<string, ContentPageRole>(),
+    judgments: new Map<string, CandidateJudgment>(),
+    unjudgedIds: [] as string[],
+    attempts: 0,
+  };
   if (!input.candidates.length || !input.chatComplete || !input.model) return empty;
   const system = [
-    '你在判断每个候选相对「用户这次搜索」的对象忠实度。只输出 JSON：{"roles":[{"id":"","role":""}]}。',
+    '你在判断每个候选相对「用户这次搜索」的对象忠实度，并写出推荐依据。只输出 JSON：{"roles":[{"id":"","role":"","medium":"","basis":"","summary":""}]}。',
     'role 只能是 PRIMARY_CONTENT、SERIES、EPISODE、HUB、LISTING、COMMENTARY、UNRELATED。',
     'PRIMARY_CONTENT：相对用户这次请求要消费的对象本身。未点名媒介时，主题匹配的文章、视频、图片、音频都是 PRIMARY_CONTENT；不要因为是 Article 就标 COMMENTARY。',
-    'SERIES：一部作品或播客的主页/详情页。',
-    'EPISODE：可直接看/读/听的一集、一章或一条内容。',
+    'SERIES：一部作品、节目或播客的主页/详情页。',
+    'EPISODE：一集、一章或一条具体内容。',
     'HUB：平台频道、分类、专题入口、网站首页。',
     'LISTING：榜单、集合、搜索页、把多部作品打包推荐的页面。',
     'COMMENTARY：候选不是这次要消费的对象，而是在谈论该对象。仅当用户点名要视频/图片/音频时，介绍它们的文章才是 COMMENTARY。',
     'UNRELATED：主题不在这次搜索范围内。即使它可能符合用户平时其它兴趣，也标 UNRELATED。',
-    '用户要视频：具体视频是 PRIMARY_CONTENT；《最佳视频榜单》文章是 LISTING/COMMENTARY。',
+    'medium：该候选本身主要是 article / video / audio / image 哪一种，由页面内容判断；看不出就写 unknown。节目主页、系列页、单集页是否有直接播放文件，不影响 role，也不影响 medium。',
+    '用户要视频或节目：具体视频、节目主页、系列页、单集页都是有效的推荐对象，用户可以去原站观看；《最佳视频榜单》这类文章是 LISTING/COMMENTARY。',
     '用户要摄影作品：具体照片/图集是 PRIMARY_CONTENT；盘点文章是 COMMENTARY。',
-    '用户要播客或音乐：可播放的音频或进入播放的页面是 PRIMARY_CONTENT；介绍文章是 COMMENTARY。',
+    '用户要播客或音乐：节目、专辑或单集页面是 PRIMARY_CONTENT；介绍文章是 COMMENTARY。',
     '用户要「AI 内容」且未点名媒介：一篇具体 AI 文章是 PRIMARY_CONTENT。',
-    '若 freshness 为 current：带发布时间、且标题和正文对得上的具体报道才是 PRIMARY_CONTENT。查询里的日期只是线索，不是时效证据。综述、盘点、事件日历、百科栏目、词条说明和网站首页不是当天报道，标 LISTING、HUB 或 UNRELATED，不要标 PRIMARY_CONTENT。没有发布时间的候选，不要因为它出现在搜索里就当成当天新闻。',
+    '仅当 newsFeed 为 true（用户要的是某段时间的新闻报道）时：带发布时间、且标题和正文对得上的具体报道才是 PRIMARY_CONTENT。综述、盘点、事件日历、百科栏目、词条说明和网站首页不是报道，标 LISTING、HUB 或 UNRELATED。没有发布时间的候选，不要当成新闻。newsFeed 不是 true 时，freshness 只是用户对时效的偏好：来源给出的发布时间可以作为依据，但没有日期的好作品不因此被排除。',
+    'basis：一句话说明为什么值得推荐。只能依据候选的标题、摘要、发布时间和其中明确出现的评价、口碑、获奖、内容特点，并对照用户这次的 preferences。材料里没有评价依据时留空，不要编造排名、评分、播放量。popularityClaim 为 true 时尤其不能凭空说"最好"。',
+    'summary：把候选给出的文字整理成一两句有用的介绍。去掉导航、赞助、版权、目录、推广这类与内容无关的杂项；只能用候选原文里已有的信息，不要补充；原文里没有有用信息就留空。',
     '每个候选都要有一条 role。不要看域名做决定。不要输出 score。不要用用户长期偏好扩大范围。',
   ].join('\n');
   const today = localCalendarDate();
   const chat = input.chatComplete;
   const model = input.model;
-  const roles = new Map<string, ContentPageRole>();
-  const unjudgedIds: string[] = [];
   const batchSize = 4;
   let attempts = 0;
 
-  const judgeBatch = async (batch: ConsumableCandidate[]): Promise<Map<string, ContentPageRole> | null> => {
+  const judgeBatch = async (batch: ConsumableCandidate[]): Promise<Map<string, CandidateJudgment> | null> => {
     const ids = batch.map((row) => row.id);
     const user = JSON.stringify({
       query: input.query,
@@ -385,6 +418,10 @@ export async function classifyCandidateRoles(input: {
       scope: 'current_search',
       objectWanted: input.intent.objectWanted,
       freshness: input.intent.freshness,
+      newsFeed: input.intent.newsFeed === true,
+      popularityClaim: input.intent.popularityClaim,
+      ...(input.intent.preferences ? { preferences: input.intent.preferences } : {}),
+      ...(input.intent.reportDay ? { reportDay: input.intent.reportDay } : {}),
       today,
       requestedContentTypes: input.intent.requestedMedia,
       candidates: batch.map((row) => ({
@@ -393,54 +430,56 @@ export async function classifyCandidateRoles(input: {
         url: row.url,
         contentType: row.contentType || '',
         ...(row.publishedAt ? { publishedAt: row.publishedAt } : {}),
-        summary: row.summary.slice(0, 240),
+        summary: row.summary.slice(0, 400),
       })),
     });
-    // 1600 预算会被推理占满，finish_reason=length，正文只剩半截 JSON。先关掉推理。
-    // 空对象或截断都不算判断完成，再试一次不带该字段的请求。
-    const passes: Array<{ maxTokens: number; disableThinking: boolean }> = [
-      { maxTokens: 2048, disableThinking: true },
-      { maxTokens: 2048, disableThinking: false },
-    ];
-    for (const pass of passes) {
-      if (input.signal?.aborted) return null;
-      attempts += 1;
-      try {
-        const result = await chat({
-          baseUrl: model.baseUrl,
-          ...(model.apiKey ? { apiKey: model.apiKey } : {}),
-          model: model.model,
-          messages: [
-            { role: 'system', content: system },
-            { role: 'user', content: user },
-          ],
-          temperature: 0,
-          maxTokens: pass.maxTokens,
-          timeoutMs: 45_000,
-          responseFormat: { type: 'json_object' },
-          ...(input.signal ? { signal: input.signal } : {}),
-          ...(pass.disableThinking ? { thinking: { type: 'disabled' as const } } : {}),
-        });
-        const parsed = rolesFromModelText(result.text, ids);
-        if (parsed.size && !result.truncated) return parsed;
-      } catch {
-        /* 端点拒绝或没有正文时换下一次请求，不结束整次搜索 */
-      }
-    }
-    return null;
+    const outcome = await completeStructured<Map<string, CandidateJudgment>>({
+      chat,
+      request: {
+        baseUrl: model.baseUrl,
+        ...(model.apiKey ? { apiKey: model.apiKey } : {}),
+        model: model.model,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+        temperature: 0,
+        responseFormat: { type: 'json_object' },
+      },
+      passes: JUDGMENT_JSON_PASSES,
+      parse: (text) => {
+        const parsed = judgmentsFromModelText(text, ids);
+        return parsed.size ? parsed : null;
+      },
+      ...(input.signal ? { signal: input.signal } : {}),
+      ...(input.onAttempt ? { onAttempt: input.onAttempt } : {}),
+    });
+    attempts += outcome.attempts;
+    return outcome.value;
   };
 
+  const batches: ConsumableCandidate[][] = [];
   for (let index = 0; index < input.candidates.length; index += batchSize) {
-    const batch = input.candidates.slice(index, index + batchSize);
-    const judged = await judgeBatch(batch);
+    batches.push(input.candidates.slice(index, index + batchSize));
+  }
+  // 各批互不依赖，并行判断；任一批失败只影响它自己的候选。
+  const results = await Promise.all(batches.map((batch) => judgeBatch(batch)));
+  const roles = new Map<string, ContentPageRole>();
+  const judgments = new Map<string, CandidateJudgment>();
+  const unjudgedIds: string[] = [];
+  batches.forEach((batch, i) => {
+    const judged = results[i];
     if (!judged) {
       unjudgedIds.push(...batch.map((row) => row.id));
-      continue;
+      return;
     }
-    for (const [id, role] of judged) roles.set(id, role);
+    for (const [id, row] of judged) {
+      judgments.set(id, row);
+      roles.set(id, row.role);
+    }
     for (const row of batch) {
       if (!judged.has(row.id)) unjudgedIds.push(row.id);
     }
-  }
-  return { roles, unjudgedIds, attempts };
+  });
+  return { roles, judgments, unjudgedIds, attempts };
 }

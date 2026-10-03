@@ -101,6 +101,7 @@ contextBridge.exposeInMainWorld("digitalMe", {
     listSessions: () => ipcRenderer.invoke("shell:conversationListSessions"),
     createSession: () => ipcRenderer.invoke("shell:conversationCreateSession"),
     openSession: (id) => ipcRenderer.invoke("shell:conversationOpenSession", { id }),
+    manage: (input) => ipcRenderer.invoke("shell:conversationManage", input),
     cancel: () => ipcRenderer.invoke("shell:conversationCancel"),
   },
   cancelWorkRequest: (requestId) =>

@@ -394,9 +394,9 @@ test('renderer keeps generation gate, skipRefresh, audio duration guard', async 
   assert.match(js, /skipRefresh: true/);
   assert.match(js, /btn-discover-personal/);
   assert.match(js, /Number\.isFinite\(n\) && n > 0/);
-  assert.match(js, /audio\.duration <= 0/);
+  assert.match(js, /media\.duration <= 0/);
   assert.equal(js.includes('0:00/0:00'), false);
-  assert.match(js, /在来源收听/);
+  assert.match(js, /去原站收听/);
   const html = await fs.readFile(path.join(process.cwd(), 'electron/renderer/index.html'), 'utf8');
   assert.match(html, /id="content-discover-feed-title"/);
   assert.match(html, /id="btn-discover-cancel"/);

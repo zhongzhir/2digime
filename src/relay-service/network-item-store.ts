@@ -106,6 +106,28 @@ export class FileNetworkItemStore implements NetworkItemStore {
     return paginateNetworkItems(filtered, query);
   }
 
+  /**
+   * 取出目录里全部符合条件的条目（上限 maxItems）。取数与 AI 排序分开：
+   * 这里只负责"目录里有什么"，按稳定的入库顺序返回，不替模型决定哪条更值得看。
+   */
+  async listAll(query: NetworkItemQuery, nowIso: string, maxItems = 5000): Promise<NetworkItem[]> {
+    const names = await fs.readdir(this.dir()).catch(() => [] as string[]);
+    const loaded: NetworkItem[] = [];
+    for (const name of names) {
+      if (!name.endsWith('.json')) continue;
+      try {
+        const parsed = JSON.parse(await fs.readFile(path.join(this.dir(), name), 'utf8')) as unknown;
+        const checked = validateNetworkItem(parsed);
+        if (checked.ok && !isNetworkItemExpired(checked.item, nowIso)) loaded.push(checked.item);
+      } catch {
+        /* skip corrupt */
+      }
+    }
+    const all = filterNetworkItems(loaded, query, nowIso);
+    // 超出上限时保留较新入库的，而不是较老的。
+    return all.length > maxItems ? all.slice(all.length - maxItems) : all;
+  }
+
   async purgeExpired(nowIso: string): Promise<number> {
     const names = await fs.readdir(this.dir()).catch(() => [] as string[]);
     let n = 0;
