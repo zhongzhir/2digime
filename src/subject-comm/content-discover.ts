@@ -44,6 +44,8 @@ export interface DiscoverCard {
   objectFidelity?: 'PRIMARY_CONTENT' | 'ABOUT_CONTENT' | 'UNRELATED';
   /** 推荐依据出自哪篇片单、榜单或评论。依据文章不是作品本身。 */
   basisSource?: { title: string; url?: string };
+  /** 模型依据页面判断这是片段、预告或剪辑，不是完整节目。 */
+  excerpt?: boolean;
   /** 稍后看来源已不在目录里。收藏记录仍保留。 */
   unavailable?: boolean;
   /** 收藏仍在，但不进入国内默认供给。 */
@@ -87,6 +89,8 @@ export interface DiscoverView {
   append?: boolean;
   /** 稍后看收藏。刷新和重置不得清空。 */
   laterCards?: DiscoverCard[];
+  /** 这次请求实际发给联网搜索的次数；同一请求内重复的搜索词复用结果，不再计次。UI 不得展示。 */
+  searchUsage?: { calls: number; reused: number; skippedAfterQuota: number; rateLimited: boolean };
   /** 内部搜索诊断，UI 不得展示。 */
   seekTrace?: {
     rawCandidates: number;

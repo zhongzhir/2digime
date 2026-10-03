@@ -33,6 +33,7 @@ import {
   searchOpenMedia,
   type OpenMediaFetch,
 } from './content-source-capabilities';
+import { classifySearchFailure, SEARCH_QUOTA_NOTICE } from './network-discovery-state';
 
 export interface ExternalSeekHit {
   title: string;
@@ -78,9 +79,15 @@ export interface SeekTrace {
   excludedHub?: number;
   excludedDomainTitle?: number;
   excludedPlaceholder?: number;
-  /** 超过本轮判断上限、没有送去判断的候选数。它们不展示，也不算"没有完成判断"。 */
+  /** 链接或标题与已有候选完全相同、合并掉的条数。 */
+  duplicates?: number;
+  /** 分页判断后仍没送去判断的候选数。它们列为未判断，不算无关。 */
   notSentToJudge?: number;
+  /** 送去判断的页数，每页最多 JUDGE_PAGE 条。 */
+  judgePages?: number;
   searchFailed?: boolean;
+  /** 联网搜索额度用完。与"没有结果"和网络故障分开。 */
+  searchRateLimited?: boolean;
 }
 
 export interface ContentSeekResult {
@@ -99,6 +106,11 @@ export interface ContentSeekResult {
 
 const CONSUME_EMPTY = '这次没有找到可以直接看的内容。';
 const MAX_CARDS = 12;
+const JUDGE_PAGE = 16;
+/** 开始下一页判断前至少要剩的时间；不够就停在这里，留给已经拿到的结果交付。 */
+const JUDGE_PAGE_ROOM_MS = 25_000;
+
+const isQuotaError = (err: unknown) => classifySearchFailure(err) === 'RATE_LIMITED';
 
 function emptyTrace(query: string, intent: DiscoverIntent): SeekTrace {
   return {
@@ -377,10 +389,10 @@ async function programsFromSources(input: {
   seenUrls: Set<string>;
   openPage?: OpenMediaFetch;
   signal?: AbortSignal;
-}): Promise<{ verified: DiscoverCard[]; unverified: DiscoverCard[] }> {
+}): Promise<{ verified: DiscoverCard[]; unverified: DiscoverCard[]; quotaHit: boolean }> {
   const verified: DiscoverCard[] = [];
   const unverified: DiscoverCard[] = [];
-  if (!input.sources.length) return { verified, unverified };
+  if (!input.sources.length) return { verified, unverified, quotaHit: false };
   const works = await extractMentionedWorks({
     query: input.query,
     intent: input.intent,
@@ -389,17 +401,25 @@ async function programsFromSources(input: {
     model: input.model,
     ...(input.signal ? { signal: input.signal } : {}),
   });
-  if (!works.length || input.signal?.aborted) return { verified, unverified };
+  if (!works.length || input.signal?.aborted) return { verified, unverified, quotaHit: false };
   const sourceById = new Map(input.sources.map((card) => [card.itemId, card]));
   // 搜索有配额（网关按安装计次）：两两核实；一次搜索失败或被限流后不再发新的核实，其余如实标为未核实。
   let searchBlocked = false;
-  const checkOne = async (work: (typeof works)[number], index: number) => {
-    if (searchBlocked || input.signal?.aborted) return { work, card: null, judgment: undefined, broken: false };
+  let quotaHit = false;
+  type Checked = {
+    work: (typeof works)[number];
+    card: DiscoverCard | null;
+    judgment: CandidateJudgment | undefined;
+    miss: 'pending' | 'broken' | 'uncertain';
+  };
+  const checkOne = async (work: (typeof works)[number], index: number): Promise<Checked> => {
+    if (searchBlocked || input.signal?.aborted) return { work, card: null, judgment: undefined, miss: 'pending' };
     let hits: ExternalSeekHit[] = [];
     try {
       hits = await input.searchWeb(work.searchQuery);
-    } catch {
+    } catch (err) {
       searchBlocked = true;
+      if (isQuotaError(err)) quotaHit = true;
       hits = [];
     }
     const candidates: DiscoverCard[] = [];
@@ -413,7 +433,7 @@ async function programsFromSources(input: {
       candidates.push(card);
       if (candidates.length >= 3) break;
     }
-    if (!candidates.length || input.signal?.aborted) return { work, card: null, judgment: undefined, broken: false };
+    if (!candidates.length || input.signal?.aborted) return { work, card: null, judgment: undefined, miss: 'pending' };
     // 这里只核实页面是不是这部作品本身；口碑、长短这些条件的依据来自提到它的那篇文章。
     const { preferences: _preferences, ...workIntent } = input.intent;
     const judged = await classifyCandidateRoles({
@@ -432,20 +452,26 @@ async function programsFromSources(input: {
     const pages = candidates.filter(
       (row) => isPrimaryContentRole(judged.roles.get(row.itemId)) && judged.judgments.get(row.itemId)?.medium !== 'article',
     );
-    for (const card of pages) {
+    // 完整且来源可信的入口优先；片段可以给，但要标明；自称全集却看不出来源的页面不算核实到的入口。
+    const entranceOf = (card: DiscoverCard) => judged.judgments.get(card.itemId)?.entrance;
+    const usable = [
+      ...pages.filter((card) => entranceOf(card) === 'full'),
+      ...pages.filter((card) => entranceOf(card) === 'excerpt'),
+    ];
+    for (const card of usable) {
       if (input.signal?.aborted) break;
       if (await entranceOpens(input.openPage, card.url)) {
-        return { work, card, judgment: judged.judgments.get(card.itemId), broken: false };
+        return { work, card, judgment: judged.judgments.get(card.itemId), miss: 'pending' };
       }
     }
-    return { work, card: null, judgment: undefined, broken: pages.length > 0 };
+    return { work, card: null, judgment: undefined, miss: usable.length ? 'broken' : pages.length ? 'uncertain' : 'pending' };
   };
-  const checked: Array<Awaited<ReturnType<typeof checkOne>>> = [];
+  const checked: Checked[] = [];
   for (let index = 0; index < works.length; index += 2) {
     checked.push(...(await Promise.all(works.slice(index, index + 2).map((work, j) => checkOne(work, index + j)))));
   }
   const taken = new Set<string>();
-  const notChecked = new Map<string, { pending: string[]; broken: string[] }>();
+  const notChecked = new Map<string, Record<Checked['miss'], string[]>>();
   for (const row of checked) {
     const source = sourceById.get(row.work.sourceId);
     if (!source) continue;
@@ -459,25 +485,32 @@ async function programsFromSources(input: {
         objectFidelity: 'PRIMARY_CONTENT',
         ...(medium === 'video' || medium === 'audio' ? { contentType: medium } : {}),
         ...(row.judgment?.summary ? { text: row.judgment.summary } : {}),
+        ...(row.judgment?.entrance === 'excerpt' ? { excerpt: true } : {}),
         reason: `推荐依据来自「${source.title}」${row.work.basis ? `：${row.work.basis}` : '。'}`,
         basisSource: { title: source.title, ...(source.url ? { url: source.url } : {}) },
       });
       continue;
     }
-    const marks = notChecked.get(source.itemId) || { pending: [], broken: [] };
-    (row.broken ? marks.broken : marks.pending).push(`《${row.work.title}》`);
+    const marks = notChecked.get(source.itemId) || { pending: [], broken: [], uncertain: [] };
+    marks[row.miss].push(`《${row.work.title}》`);
     notChecked.set(source.itemId, marks);
   }
   // 未核实的作品不单独成卡：标在提到它们的那篇文章上，文章仍只是依据。
   for (const [sourceId, marks] of notChecked) {
     const source = sourceById.get(sourceId)!;
-    const pending = marks.pending.join('');
-    const broken = marks.broken.join('');
-    let reason = pending ? `这篇提到了${pending}，还没有核实到它们的作品页或观看入口。` : `这篇提到了${broken}，找到的作品页目前打不开。`;
-    if (pending && broken) reason += `${broken}找到的作品页目前打不开。`;
+    const tails: Record<Checked['miss'], string> = {
+      pending: quotaHit ? '还没有核实，这个小时的联网搜索额度已经用完。' : '还没有核实到作品页或观看入口。',
+      uncertain: '找到的页面没能确认是完整节目或可信来源。',
+      broken: '找到的作品页目前打不开。',
+    };
+    const groups = (['pending', 'uncertain', 'broken'] as const).filter((key) => marks[key].length);
+    const reason =
+      groups.length === 1
+        ? `这篇提到了${marks[groups[0]!].join('')}，${tails[groups[0]!]}`
+        : `这篇提到了${groups.map((key) => marks[key].join('')).join('')}。${groups.map((key) => `${marks[key].join('')}${tails[key]}`).join('')}`;
     unverified.push({ ...source, objectFidelity: 'ABOUT_CONTENT', reason });
   }
-  return { verified, unverified };
+  return { verified, unverified, quotaHit };
 }
 
 export async function seekContent(input: {
@@ -496,6 +529,8 @@ export async function seekContent(input: {
   skipOpenMedia?: boolean;
   previous?: { cards: DiscoverCard[]; relatedCards: DiscoverCard[] };
   signal?: AbortSignal;
+  /** 这次请求的交付期限（epoch ms）。只用来决定还要不要开始下一页判断。 */
+  deadlineAt?: number;
 }): Promise<ContentSeekResult> {
   const query = String(input.query || '').trim();
   const emptyIntent = defaultDiscoverIntent(query);
@@ -556,6 +591,7 @@ export async function seekContent(input: {
 
   let usedExternal = false;
   let searchFailed = false;
+  let searchRateLimited = false;
   let searchCalled = false;
   let rawSearchHits = 0;
   let excludedHub = 0;
@@ -647,14 +683,15 @@ export async function seekContent(input: {
     const batches = await Promise.all(
       queryList.map(async (q) => {
         try {
-          return { q, web: await input.searchWeb!(q), failed: false };
-        } catch {
-          return { q, web: [] as ExternalSeekHit[], failed: true };
+          return { q, web: await input.searchWeb!(q), failed: false, quota: false };
+        } catch (err) {
+          return { q, web: [] as ExternalSeekHit[], failed: true, quota: isQuotaError(err) };
         }
       }),
     );
     for (const batch of batches) {
       if (batch.failed) searchFailed = true;
+      if (batch.quota) searchRateLimited = true;
       const web = batch.web;
       const q = batch.q;
       try {
@@ -738,21 +775,51 @@ export async function seekContent(input: {
     for (const hit of snippetHits) pushSnippet(hit);
   }
 
-  const concrete = cards.filter(isConcreteCandidate);
+  // 链接已按 canonical URL 去重；同一站点上标题完全相同的再合并一次，然后才送判断。
+  const sameEntry = (card: DiscoverCard) => {
+    const title = String(card.title || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    if (!title) return '';
+    let host = '';
+    try {
+      host = card.url ? new URL(card.url).hostname : '';
+    } catch {
+      host = '';
+    }
+    return `${host}|${title}`;
+  };
+  const seenEntry = new Set<string>();
+  let duplicates = 0;
+  const concrete = cards.filter(isConcreteCandidate).filter((card) => {
+    const key = sameEntry(card);
+    if (!key) return true;
+    if (seenEntry.has(key)) {
+      duplicates += 1;
+      return false;
+    }
+    seenEntry.add(key);
+    return true;
+  });
   const fidelity = new Map<string, ObjectFidelity | 'UNJUDGED'>();
   const unjudgedIds = new Set<string>();
-  // 各批并行判断，多判断一些候选，少留"还没完成判断"的尾巴。
-  const judgePool = concrete.filter((card) => !isAccessCard(card)).slice(0, 16);
-  // 超出上限的这轮没有看过：不展示，也不能说成"判断没完成"。只有送去判断却没拿到结果的才算没完成。
-  const notSent = new Set(
-    concrete.filter((card) => !isAccessCard(card) && !judgePool.includes(card)).map((card) => card.itemId),
-  );
   const judgments = new Map<string, CandidateJudgment>();
-  if (input.chatComplete && input.model && judgePool.length) {
+  const toJudge = concrete.filter((card) => !isAccessCard(card));
+  const sentIds = new Set<string>();
+  let judgePages = 0;
+  const judging = !!(input.chatComplete && input.model);
+  // 超过一页的候选按页依次判断。已经够一屏主结果、或剩余时间不够再判一页时停下；
+  // 停下时没送去的候选列为"还没判断"，不当作无关，也不悄悄丢掉。
+  const roomForPage = () => !input.deadlineAt || input.deadlineAt - Date.now() > JUDGE_PAGE_ROOM_MS;
+  const primaryJudged = () => [...judgments.values()].filter((row) => isPrimaryContentRole(row.role)).length;
+  for (let start = 0; judging && start < toJudge.length; start += JUDGE_PAGE) {
+    if (input.signal?.aborted) break;
+    if (start > 0 && (primaryJudged() >= MAX_CARDS || !roomForPage())) break;
+    const page = toJudge.slice(start, start + JUDGE_PAGE);
+    judgePages += 1;
+    for (const card of page) sentIds.add(card.itemId);
     const judged = await classifyCandidateRoles({
       query,
       intent,
-      candidates: judgePool.map((card) => ({
+      candidates: page.map((card) => ({
         id: card.itemId,
         title: card.title,
         url: card.url || '',
@@ -761,25 +828,24 @@ export async function seekContent(input: {
         ...(card.publishedAt ? { publishedAt: card.publishedAt } : {}),
         ...(card.durationSeconds ? { durationSeconds: card.durationSeconds } : {}),
       })),
-      chatComplete: input.chatComplete,
-      model: input.model,
+      chatComplete: input.chatComplete!,
+      model: input.model!,
       ...(input.signal ? { signal: input.signal } : {}),
     });
     for (const id of judged.unjudgedIds) unjudgedIds.add(id);
     for (const [id, row] of judged.judgments) judgments.set(id, row);
-    if (judged.roles.size) {
-      for (const card of concrete) {
-        if (unjudgedIds.has(card.itemId)) continue;
-        const role = judged.roles.get(card.itemId);
-        if (!role) continue;
-        const backgroundRole: ContentPageRole[] = ['LISTING', 'HUB', 'COMMENTARY'];
-        fidelity.set(
-          card.itemId,
-          datedNews && backgroundRole.includes(role) ? 'ABOUT_CONTENT' : objectFidelity(role, intent),
-        );
-      }
+    for (const card of page) {
+      if (unjudgedIds.has(card.itemId)) continue;
+      const role = judged.roles.get(card.itemId);
+      if (!role) continue;
+      const backgroundRole: ContentPageRole[] = ['LISTING', 'HUB', 'COMMENTARY'];
+      fidelity.set(
+        card.itemId,
+        datedNews && backgroundRole.includes(role) ? 'ABOUT_CONTENT' : objectFidelity(role, intent),
+      );
     }
   }
+  const notSent = new Set(judging ? toJudge.filter((card) => !sentIds.has(card.itemId)).map((card) => card.itemId) : []);
 
   const primary: DiscoverCard[] = [];
   const related: DiscoverCard[] = [];
@@ -790,7 +856,10 @@ export async function seekContent(input: {
       access.push(card);
       continue;
     }
-    if (notSent.has(card.itemId)) continue;
+    if (notSent.has(card.itemId)) {
+      unjudged.push({ ...card, reason: '这条还没送去判断，不代表不相关。' });
+      continue;
+    }
     // 形态由页面本身决定：模型从内容判断出是视频/音频节目，就算有效推荐，即使没有直接播放文件。
     // 能否应用内播放只看媒体字段，不影响是否入选。
     const judgment = judgments.get(card.itemId);
@@ -807,6 +876,9 @@ export async function seekContent(input: {
     }
     // 用户明确提出的条件模型确认不了，就不拿来充当主结果，只放在可能相关里，依据里写着哪条没确认。
     if (kind === 'PRIMARY_CONTENT' && judgment?.conditions === 'unconfirmed') kind = 'ABOUT_CONTENT';
+    // 自称完整却看不出来源或是否完整的观看页，不当作已确认的观看入口。
+    const uncertainEntrance = kind === 'PRIMARY_CONTENT' && judgment?.entrance === 'unverified' && intent.intent === 'consume';
+    if (uncertainEntrance) kind = 'ABOUT_CONTENT';
     fidelity.set(card.itemId, kind);
     if (kind === 'UNJUDGED') {
       if (datedNews && reportDay && publishedLocalDay(card.publishedAt) === reportDay) {
@@ -833,12 +905,18 @@ export async function seekContent(input: {
         ...(medium && medium !== 'unknown' && !hasDirectMediaRepresentation(card) ? { contentType: medium } : {}),
         ...(basis ? { reason: basis } : {}),
         ...(judgment?.summary ? { text: judgment.summary } : {}),
+        ...(judgment?.entrance === 'excerpt' ? { excerpt: true } : {}),
       });
     } else if (kind === 'ABOUT_CONTENT') {
+      const basis = judgment?.basis || '';
       related.push({
         ...card,
         objectFidelity: 'ABOUT_CONTENT',
-        ...(judgment?.basis ? { reason: judgment.basis } : {}),
+        ...(uncertainEntrance
+          ? { reason: `${basis ? `${basis} ` : ''}没能确认这是完整节目或来自可信来源，不当作已确认的观看入口。` }
+          : basis
+            ? { reason: basis }
+            : {}),
         ...(judgment?.summary ? { text: judgment.summary } : {}),
       });
     }
@@ -879,12 +957,17 @@ export async function seekContent(input: {
       ...(input.openPage ? { openPage: input.openPage } : {}),
       ...(input.signal ? { signal: input.signal } : {}),
     });
+    if (found.quotaHit) searchRateLimited = true;
     primary.unshift(...found.verified);
     const annotated = new Set(found.unverified.map((card) => card.itemId));
     const rest = related.filter((card) => !annotated.has(card.itemId));
     related.length = 0;
     related.push(...found.unverified, ...rest);
   }
+  // 完整节目排在片段前面；片段保留，并标明是片段。
+  const ordered = [...primary.filter((card) => !card.excerpt), ...primary.filter((card) => card.excerpt)];
+  primary.length = 0;
+  primary.push(...ordered);
 
   const placed = datedNews && reportDay
     ? splitCurrentReports({ primary, related, today: reportDay })
@@ -919,7 +1002,7 @@ export async function seekContent(input: {
       selected: kind === 'PRIMARY_CONTENT' && matchedType,
       visible: isVisible,
       reason: notSent.has(card.itemId)
-        ? '超过本轮判断上限，没有送去判断。'
+        ? '还没送去判断，不代表不相关。'
         : unjudgedCard
           ? '这轮没有完成相关性判断。'
           : card.reason,
@@ -948,14 +1031,19 @@ export async function seekContent(input: {
           excludedHub,
           excludedDomainTitle: excludedDomain,
           excludedPlaceholder,
-          ...(notSent.size ? { notSentToJudge: notSent.size } : {}),
           ...(searchFailed ? { searchFailed: true } : {}),
         }
       : { searchCalled: false }),
+    ...(duplicates ? { duplicates } : {}),
+    ...(judgePages ? { judgePages } : {}),
+    ...(notSent.size ? { notSentToJudge: notSent.size } : {}),
+    ...(searchRateLimited ? { searchRateLimited: true } : {}),
   };
 
   let notice = '';
-  if (datedNews && reportDay && !visible.length) {
+  if (!visible.length && searchRateLimited) {
+    notice = SEARCH_QUOTA_NOTICE;
+  } else if (datedNews && reportDay && !visible.length) {
     notice = `没有找到发布日期是 ${reportDay} 的具体报道。综述、其它日期和还没判断完的条目不能当作这一天的结果。`;
   } else if (datedNews && reportDay && visible.length) {
     notice = `这一组只包括来源发布时间是 ${reportDay}、并且判断为具体报道的条目。综述在补充背景里。还没读到的正文仍标为来源摘要。`;
@@ -984,7 +1072,7 @@ export async function seekContent(input: {
       notice = requiredTypes.includes('audio')
         ? '没有找到这个音频节目本身，只找到了介绍文章。介绍不能当作已经听完。'
         : '没有找到这个视频节目本身，只找到了介绍文章。介绍不能当作已经看完。';
-    } else if (concrete.length > 0 && trace.unrelated === concrete.length - notSent.size) {
+    } else if (concrete.length > 0 && trace.unrelated === concrete.length) {
       notice = '搜索有返回，判断后和这次要找的对不上。';
     } else if (intent.intent === 'consume') {
       notice = honestEmptyNotice(intent);
@@ -997,6 +1085,9 @@ export async function seekContent(input: {
     notice = intent.honestyNote;
   } else if (intent.intent === 'research' && intent.suggestTalk) {
     notice = '这更像需要深入分析的材料。可点「问兔机米」继续。';
+  }
+  if (searchRateLimited && notice !== SEARCH_QUOTA_NOTICE) {
+    notice = `${notice ? `${notice} ` : ''}这个小时的联网搜索额度已经用完，还有一部分没能搜索，下一个整点后恢复。`;
   }
 
   return {

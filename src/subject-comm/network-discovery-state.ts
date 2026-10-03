@@ -19,6 +19,7 @@ export const FEED_REASON_CODES = [
   'NETWORK_NOT_CONFIGURED',
   'NETWORK_AUTH_FAILED',
   'NETWORK_TEMPORARY_ERROR',
+  'NETWORK_RATE_LIMITED',
   'NO_CONSUMABLE_CANDIDATES',
   'MODEL_SELECTION_EMPTY',
   'AI_NOT_CONNECTED',
@@ -52,17 +53,18 @@ export function classifySearchFailure(err: unknown): Exclude<NetworkDiscoveryCod
   return 'TEMPORARY_ERROR';
 }
 
+/** 托管联网搜索按安装、按整点小时计次；用完不是"没有找到"，也不是网络故障。 */
+export const SEARCH_QUOTA_NOTICE =
+  '这个小时的联网搜索额度已经用完，这次没能继续搜索。这不代表没有相关内容，下一个整点后额度恢复。';
+
 export function humanNetworkNotice(input: {
   networking: NetworkDiscoveryCode;
   hasCachedCards: boolean;
   hasLocalItems: boolean;
 }): string {
+  if (input.networking === 'RATE_LIMITED') return SEARCH_QUOTA_NOTICE;
   if (input.hasCachedCards) {
-    if (
-      input.networking === 'AUTH_FAILED' ||
-      input.networking === 'TEMPORARY_ERROR' ||
-      input.networking === 'RATE_LIMITED'
-    ) {
+    if (input.networking === 'AUTH_FAILED' || input.networking === 'TEMPORARY_ERROR') {
       return '暂时无法获取新内容，可以稍后再试或检查联网设置。';
     }
     return '';
@@ -70,7 +72,7 @@ export function humanNetworkNotice(input: {
   if (input.networking === 'AUTH_FAILED') {
     return '联网发现暂时不可用，可以到设置中检查连接。';
   }
-  if (input.networking === 'TEMPORARY_ERROR' || input.networking === 'RATE_LIMITED') {
+  if (input.networking === 'TEMPORARY_ERROR') {
     return '暂时无法获取新内容，可以稍后再试或检查联网设置。';
   }
   if (input.networking === 'DISABLED' || input.networking === 'NOT_CONFIGURED') {

@@ -923,7 +923,9 @@ export async function ensurePersonalFeed(input: {
           ? 'NETWORK_NOT_CONFIGURED'
           : networking === 'AUTH_FAILED'
             ? 'NETWORK_AUTH_FAILED'
-            : networking === 'TEMPORARY_ERROR' || networking === 'RATE_LIMITED'
+            : networking === 'RATE_LIMITED'
+              ? 'NETWORK_RATE_LIMITED'
+              : networking === 'TEMPORARY_ERROR'
               ? 'NETWORK_TEMPORARY_ERROR'
               : items.length
                 ? 'NO_CONSUMABLE_CANDIDATES'

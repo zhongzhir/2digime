@@ -303,7 +303,11 @@
     }
     const body = document.createElement('div');
     body.className = 'content-discover-body';
-    const kind = typeLabel(card) + (playable ? ' · 可在这里播放' : type === 'video' || type === 'audio' ? ' · 去原站' : '');
+    if (card.excerpt) li.setAttribute('data-excerpt', '1');
+    const kind =
+      typeLabel(card) +
+      (card.excerpt ? ' · 片段，不是完整节目' : '') +
+      (playable ? ' · 可在这里播放' : type === 'video' || type === 'audio' ? ' · 去原站' : '');
     if (kind) {
       const badge = document.createElement('p');
       badge.className = 'content-discover-kind muted tiny';
@@ -569,7 +573,7 @@
       !incoming.length &&
       lastCards.length &&
       (next && next.feedMode) !== 'intent' &&
-      (replenishing || /暂时无法|检查连接|检查联网|没有找到可以直接看/.test(notice))
+      (replenishing || /暂时无法|检查连接|检查联网|没有找到可以直接看|搜索额度已经用完/.test(notice))
     ) {
       next = Object.assign({}, next || {}, {
         cards: lastCards,
@@ -629,6 +633,9 @@
     }
     const replenishing = !!(view && view.replenishing);
     if (root) root.dataset.replenishing = replenishing ? '1' : '0';
+    // 只供诊断读取，不显示。
+    const usage = view && view.searchUsage;
+    if (root) root.dataset.searchUsage = usage ? JSON.stringify(usage) : '';
     const cancelBtn = $('btn-discover-cancel');
     if (cancelBtn) cancelBtn.hidden = !replenishing;
     if (replenishing && !lastCards.length) {

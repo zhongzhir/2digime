@@ -316,6 +316,7 @@ test('PROGRAMS: listing is basis, named works verified by search; unread names a
             id: row.id,
             role: row.url.includes('/list/') ? 'LISTING' : row.url.includes('/show/') ? 'SERIES' : 'COMMENTARY',
             medium: row.url.includes('/show/') ? 'video' : 'article',
+            entrance: row.url.includes('/show/') ? 'full' : 'none',
           })),
         }),
       };
@@ -388,7 +389,10 @@ test('PROGRAMS: listing is basis, named works verified by search; unread names a
   });
   assert.ok(limited.length <= 2, `verification stops after a failed search, got ${limited.length}`);
   assert.equal(throttled.cards.length, 0);
-  assert.match(throttled.relatedCards.find((card) => card.url === listing.content.url)?.reason || '', /还没有核实/);
+  assert.match(throttled.relatedCards.find((card) => card.url === listing.content.url)?.reason || '', /还没有核实.*额度已经用完/);
+  assert.equal(throttled.trace.searchRateLimited, true);
+  assert.match(throttled.notice, /搜索额度已经用完/);
+  assert.doesNotMatch(throttled.notice, /没有找到|检查联网/);
 
   // 作品页连不上（例如证书不匹配）就不是可用的观看入口：不进主结果，在依据文章上说明打不开。
   // 读取端返回 403 之类状态不代表浏览器里打不开，仍算入口。
@@ -480,49 +484,184 @@ test('CONDITIONS: a work whose stated conditions the model cannot confirm stays 
   assert.match(maybe!.reason, /还没确认/);
 });
 
-test('JUDGE LIMIT: candidates beyond the judge limit are not reported as "judgment not finished"', async () => {
-  const sent: string[] = [];
-  const chat: ChatCompleteFn = async ({ messages }) => {
+test('JUDGE PAGES: duplicates merge first, later pages are judged, candidates not sent stay visible as not judged', async () => {
+  const albumHits = () => [
+    ...Array.from({ length: 20 }, (_, i) => ({
+      title: `古典专辑 第${i + 1}张`,
+      url: `https://music.example.org/album/${i + 1}`,
+      snippet: '一张古典音乐专辑，可在线收听。',
+    })),
+    // 同一站点、标题完全相同的另一条链接：合并，不重复送判断。
+    { title: '古典专辑 第1张', url: 'https://music.example.org/album/1?from=share', snippet: '同一张专辑' },
+    { title: '古典专辑 第2张', url: 'https://music.example.org/mirror/2', snippet: '同一张专辑' },
+  ];
+  const intent = {
+    intent: 'consume',
+    topic: '古典音乐',
+    requestedMedia: ['audio'],
+    objectWanted: 'work_itself',
+    freshness: 'unspecified',
+    popularityClaim: false,
+    searchQueries: ['古典音乐 专辑'],
+    suggestTalk: false,
+  } as never;
+  const judgeWith = (primaryIds: (id: string, url: string) => boolean, sent: string[]): ChatCompleteFn => async ({ messages }) => {
     const system = String(messages[0]?.content || '');
     const user = JSON.parse(String(messages[messages.length - 1]?.content || '{}')) as {
-      candidates?: Array<{ id: string }>;
+      candidates?: Array<{ id: string; url: string }>;
     };
     if (system.includes('判断每个候选')) {
       sent.push(...(user.candidates || []).map((row) => row.id));
       return {
         text: JSON.stringify({
-          roles: (user.candidates || []).map((row) => ({ id: row.id, role: 'PRIMARY_CONTENT', medium: 'audio', conditions: 'none' })),
+          roles: (user.candidates || []).map((row) => ({
+            id: row.id,
+            role: primaryIds(row.id, row.url) ? 'PRIMARY_CONTENT' : 'UNRELATED',
+            medium: 'audio',
+            conditions: 'none',
+          })),
         }),
       };
     }
     return { text: '{}' };
   };
-  const sought = await seekContent({
+
+  // 第一页主结果不够一屏：继续判断第二页，20 条都判断过。
+  const sentAll: string[] = [];
+  const paged = await seekContent({
     query: '经典古典音乐专辑',
+    items: [],
+    intent,
+    chatComplete: judgeWith((_id, url) => /album\/[1-4]$/.test(url), sentAll),
+    model: { baseUrl: 'https://model.example', model: 'm' },
+    searchWeb: async () => albumHits(),
+  });
+  assert.equal(sentAll.length, 20);
+  assert.equal(new Set(sentAll).size, 20);
+  assert.equal(paged.trace.duplicates, 2);
+  assert.equal(paged.trace.judgePages, 2);
+  assert.equal(paged.trace.notSentToJudge, undefined);
+  assert.equal(paged.unjudgedCards.length, 0);
+
+  // 第一页已经够一屏：后面不再判断，没送去的仍列出，标明还没判断，不算无关。
+  const sentFirst: string[] = [];
+  const stopped = await seekContent({
+    query: '经典古典音乐专辑',
+    items: [],
+    intent,
+    chatComplete: judgeWith(() => true, sentFirst),
+    model: { baseUrl: 'https://model.example', model: 'm' },
+    searchWeb: async () => albumHits(),
+  });
+  assert.equal(sentFirst.length, 16);
+  assert.equal(stopped.trace.notSentToJudge, 4);
+  assert.equal(stopped.trace.judgePages, 1);
+  assert.equal(stopped.unjudgedCards.length, 4);
+  assert.ok(stopped.unjudgedCards.every((card) => /还没送去判断，不代表不相关/.test(card.reason)));
+  assert.equal(stopped.trace.unrelated, 0);
+
+  // 剩余时间不够再判一页：同样停下，并如实列出。
+  const sentLate: string[] = [];
+  const late = await seekContent({
+    query: '经典古典音乐专辑',
+    items: [],
+    intent,
+    chatComplete: judgeWith((_id, url) => /album\/1$/.test(url), sentLate),
+    model: { baseUrl: 'https://model.example', model: 'm' },
+    searchWeb: async () => albumHits(),
+    deadlineAt: Date.now() + 5_000,
+  });
+  assert.equal(sentLate.length, 16);
+  assert.equal(late.trace.notSentToJudge, 4);
+  assert.equal(late.unjudgedCards.length, 4);
+});
+
+test('ENTRANCE: excerpts are labeled and ranked after full programs; unconfirmed "full episode" reposts are not confirmed entrances', async () => {
+  const chat: ChatCompleteFn = async ({ messages }) => {
+    const system = String(messages[0]?.content || '');
+    const user = JSON.parse(String(messages[messages.length - 1]?.content || '{}')) as {
+      candidates?: Array<{ id: string; url: string }>;
+      sources?: Array<{ id: string }>;
+    };
+    if (system.includes('取出被明确点名')) {
+      const sourceId = user.sources![0]!.id;
+      return {
+        text: JSON.stringify({
+          works: [
+            { title: '大江大河', kind: '电视剧', medium: 'video', sourceId, basis: '片单说口碑很好。', searchQuery: '大江大河 正片' },
+            { title: '山海情', kind: '电视剧', medium: 'video', sourceId, basis: '片单说值得追。', searchQuery: '山海情 正片' },
+          ],
+        }),
+      };
+    }
+    if (system.includes('判断每个候选')) {
+      // 模型依据页面证据给出 entrance；这里用固定页面模拟模型的判断结果。
+      const entranceOf = (url: string) =>
+        url.includes('/official/') ? 'full' : url.includes('/clip/') ? 'excerpt' : url.includes('/repost/') ? 'unverified' : 'none';
+      return {
+        text: JSON.stringify({
+          roles: (user.candidates || []).map((row) => ({
+            id: row.id,
+            role: row.url.includes('/list/') ? 'LISTING' : 'PRIMARY_CONTENT',
+            medium: row.url.includes('/list/') ? 'article' : 'video',
+            conditions: 'none',
+            entrance: entranceOf(row.url),
+          })),
+        }),
+      };
+    }
+    return { text: '{}' };
+  };
+  const listingText = '这份周末追剧片单推荐《大江大河》，豆瓣口碑很好；还推荐《山海情》，讲西海固移民，值得追。都适合周末一口气看完。';
+  const sought = await seekContent({
+    query: '适合周末追的国产剧',
     items: [],
     intent: {
       intent: 'consume',
-      topic: '古典音乐',
-      requestedMedia: ['audio'],
+      topic: '国产剧',
+      requestedMedia: ['video'],
       objectWanted: 'work_itself',
       freshness: 'unspecified',
       popularityClaim: false,
-      searchQueries: ['古典音乐 专辑'],
+      searchQueries: ['周末 国产剧'],
       suggestTalk: false,
     } as never,
     chatComplete: chat,
     model: { baseUrl: 'https://model.example', model: 'm' },
-    searchWeb: async () =>
-      Array.from({ length: 20 }, (_, i) => ({
-        title: `古典专辑 第${i + 1}张`,
-        url: `https://music.example.org/album/${i + 1}`,
-        snippet: '一张古典音乐专辑，可在线收听。',
-      })),
+    searchWeb: async (q) => {
+      if (q.includes('大江大河')) {
+        return [
+          { title: '大江大河 精彩片段', url: 'https://tv.example.org/clip/djdh', snippet: '第3集片段' },
+          { title: '大江大河 第1集', url: 'https://tv.example.org/official/djdh', snippet: '出品方官方频道正片' },
+        ];
+      }
+      if (q.includes('山海情')) {
+        return [{ title: '山海情 HD高清全集', url: 'https://blog.example.net/repost/shq', snippet: '全集在线看' }];
+      }
+      return [
+        { title: '周末追剧片单', url: 'https://example.org/list/weekend', snippet: listingText },
+        { title: '某剧 片段合集', url: 'https://tv.example.org/clip/other', snippet: '剪辑片段' },
+        { title: '某剧 第1集', url: 'https://tv.example.org/official/other', snippet: '平台正片' },
+        { title: '某剧 高清全集', url: 'https://blog.example.net/repost/other', snippet: '全集' },
+      ];
+    },
   });
-  assert.equal(sent.length, 16);
-  assert.equal(sought.unjudgedCards.length, 0);
-  assert.doesNotMatch(sought.notice, /没有完成判断/);
-  assert.equal(sought.trace.notSentToJudge, 4);
+  const urls = sought.cards.map((card) => card.url);
+  // 节目核实优先取完整入口：同一部作品有正片就不用片段。
+  assert.ok(urls.includes('https://tv.example.org/official/djdh'));
+  assert.equal(urls.includes('https://tv.example.org/clip/djdh'), false);
+  // 只找到来源不明的"高清全集"页：不算核实到的观看入口，在依据文章上说明。
+  assert.equal(urls.includes('https://blog.example.net/repost/shq'), false);
+  const listing = sought.relatedCards.find((card) => card.url === 'https://example.org/list/weekend');
+  assert.match(listing?.reason || '', /《山海情》，找到的页面没能确认是完整节目或可信来源/);
+  // 主路径：片段保留并标明，排在完整节目后面；来源不明的全集页不进主结果。
+  const clip = sought.cards.find((card) => card.url === 'https://tv.example.org/clip/other');
+  assert.ok(clip, 'a clip stays, labeled');
+  assert.equal(clip!.excerpt, true);
+  assert.ok(urls.indexOf('https://tv.example.org/official/other') < urls.indexOf('https://tv.example.org/clip/other'));
+  assert.equal(urls.includes('https://blog.example.net/repost/other'), false);
+  const repost = sought.relatedCards.find((card) => card.url === 'https://blog.example.net/repost/other');
+  assert.match(repost?.reason || '', /没能确认这是完整节目或来自可信来源/);
 });
 
 test('REGRESSION: Media RSS / JSON Feed / schema.org / oEmbed still parse', async () => {

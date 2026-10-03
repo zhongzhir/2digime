@@ -27,10 +27,10 @@ const PORT = 9400 + Math.floor(Math.random() * 400);
     spawnSync('robocopy', [path.join(DATA, SOURCE, 'userData'), path.join(RUN, 'userData'), '/E', '/NFL', '/NDL', '/NJH', '/NJS', '/NP']);
   }
   fs.mkdirSync(path.join(RUN, 'userData'), { recursive: true });
-  // FRESH_INSTALL=1：只在本次运行的副本里换一个新的安装身份（网关按安装每小时 30 次搜索）。
-  if (process.env.FRESH_INSTALL === '1') fs.rmSync(path.join(RUN, 'userData', 'install-capability-token.json'), { force: true });
+  // 不换安装身份绕过搜索额度；不覆盖 HOME/USERPROFILE，只用兔机米自己的两项隔离目录。
+  if (process.env.FRESH_INSTALL) { console.error('FRESH_INSTALL is no longer allowed'); process.exit(2); }
   const env = Object.assign({}, process.env, {
-    HOME: path.join(RUN, 'home'), USERPROFILE: path.join(RUN, 'home'), DIGITALME_V2_HOME: path.join(RUN, 'home'),
+    DIGITALME_V2_HOME: path.join(RUN, 'home'),
     DIGITALME_V2_USER_DATA: path.join(RUN, 'userData'),
   });
   let child;
@@ -68,6 +68,7 @@ const PORT = 9400 + Math.floor(Math.random() * 400);
     return {
       statusShown: !!status && !status.hidden, status: status && !status.hidden ? status.textContent.trim().slice(0, 60) : '',
       replenishing: root ? root.dataset.replenishing : null,
+      searchUsage: root && root.dataset.searchUsage ? JSON.parse(root.dataset.searchUsage) : null,
       cancelShown: !!cancel && !cancel.hidden,
       notice: ($('content-discover-notice') || {}).textContent ? $('content-discover-notice').textContent.trim().slice(0, 90) : '',
       emptyShown: !!$('content-discover-empty') && !$('content-discover-empty').hidden,

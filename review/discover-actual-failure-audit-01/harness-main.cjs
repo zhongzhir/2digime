@@ -28,8 +28,6 @@ const OUT = process.env.AUDIT_OUT || path.join(__dirname, 'trace.json');
 const CAP_MS = Number(process.env.AUDIT_CAP_MS || 480000);
 if (!USER_DATA || !HOME) throw new Error('AUDIT_USER_DATA / AUDIT_HOME required');
 
-process.env.HOME = HOME;
-process.env.USERPROFILE = HOME;
 process.env.DIGITALME_V2_HOME = HOME;
 process.env.DIGITALME_V2_USER_DATA = USER_DATA;
 
@@ -130,6 +128,8 @@ function cardRow(card) {
     thumb: !!card.thumbnailUrl,
     consumption: card.consumption || '',
     fidelity: card.objectFidelity || '',
+    excerpt: !!card.excerpt,
+    reason: cut(card.reason || '', 120),
   };
 }
 function viewRow(v) {
@@ -144,10 +144,13 @@ function viewRow(v) {
     access: (v.accessCards || []).length,
     unjudgedTitles: (v.unjudgedCards || []).slice(0, 5).map((c) => cut(c.title, 40)),
     relatedRows: (v.relatedCards || []).map(cardRow),
+    searchUsage: v.searchUsage || null,
     seekTrace: v.seekTrace
       ? {
           raw: v.seekTrace.rawCandidates, primary: v.seekTrace.primaryContent, about: v.seekTrace.aboutContent,
           unrelated: v.seekTrace.unrelated, selected: v.seekTrace.selected, hits: v.seekTrace.rawSearchHits,
+          duplicates: v.seekTrace.duplicates, judgePages: v.seekTrace.judgePages, notSent: v.seekTrace.notSentToJudge,
+          rateLimited: !!v.seekTrace.searchRateLimited,
           items: (v.seekTrace.items || []).map((r) => ({
             id: String(r.contentId || '').slice(0, 14), type: r.contentType || '', origin: r.origin,
             fid: r.fidelity || 'UNJUDGED', typeOk: r.typeMatched, sel: r.selected, vis: r.visible,

@@ -35,7 +35,7 @@ const hashOf = (userData, rel) => crypto.createHash('sha1').update(fs.readFileSy
 
 async function launch(userData, home) {
   const port = 9400 + Math.floor(Math.random() * 400);
-  const env = Object.assign({}, process.env, { HOME: home, USERPROFILE: home, DIGITALME_V2_HOME: home, DIGITALME_V2_USER_DATA: userData });
+  const env = Object.assign({}, process.env, { DIGITALME_V2_HOME: home, DIGITALME_V2_USER_DATA: userData });
   // AUDIT_EXE 指向打包程序时检查打包版；否则用源码版 Electron。
   const child = process.env.AUDIT_EXE
     ? spawn(process.env.AUDIT_EXE, [`--remote-debugging-port=${port}`], { env, stdio: 'ignore' })

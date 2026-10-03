@@ -30,7 +30,11 @@ test('humanNetworkNotice never exposes reason codes and reflects real network st
   );
   assert.match(
     humanNetworkNotice({ networking: 'RATE_LIMITED', hasCachedCards: true, hasLocalItems: true }),
-    /暂时无法获取新内容/,
+    /搜索额度已经用完/,
+  );
+  assert.match(
+    humanNetworkNotice({ networking: 'RATE_LIMITED', hasCachedCards: false, hasLocalItems: false }),
+    /搜索额度已经用完/,
   );
   const emptyLocal = humanNetworkNotice({
     networking: 'AVAILABLE',

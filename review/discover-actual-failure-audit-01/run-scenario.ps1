@@ -2,9 +2,7 @@ param(
   [Parameter(Mandatory=$true)][string]$Name,
   [Parameter(Mandatory=$true)][string]$Scenario,
   [string]$Source = 'owner-copy',
-  [int]$CapMs = 480000,
-  # 只在本次运行的副本里换一个新的安装身份（网关按安装每小时 30 次搜索）。不碰 Owner 副本本身。
-  [switch]$FreshInstall
+  [int]$CapMs = 480000
 )
 $ErrorActionPreference = 'Stop'
 $audit = $PSScriptRoot
@@ -17,7 +15,6 @@ New-Item -ItemType Directory -Force $run | Out-Null
 if ($Source -ne 'clean') {
   robocopy (Join-Path $data "$Source\userData") (Join-Path $run 'userData') /E /NFL /NDL /NJH /NJS /NP | Out-Null
 }
-if ($FreshInstall) { Remove-Item (Join-Path $run 'userData\install-capability-token.json') -ErrorAction SilentlyContinue }
 New-Item -ItemType Directory -Force (Join-Path $run 'userData'), (Join-Path $run 'home') | Out-Null
 $env:AUDIT_USER_DATA = Join-Path $run 'userData'
 $env:AUDIT_HOME = Join-Path $run 'home'

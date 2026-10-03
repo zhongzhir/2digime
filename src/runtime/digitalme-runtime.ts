@@ -216,6 +216,7 @@ import { indexSearchHits, ingestDiscoveredEntrance, preferProviderSnippet } from
 import { ensurePersonalFeed, personalFeedCachePath, rememberIntentFeed } from '../subject-comm/personal-feed';
 import {
   classifySearchFailure,
+  SEARCH_QUOTA_NOTICE,
   type NetworkDiscoveryCode,
 } from '../subject-comm/network-discovery-state';
 import {
@@ -464,6 +465,8 @@ export class DigitalMeRuntime {
   private pendingLaterCards: NonNullable<DiscoverView['laterCards']> = [];
   /** 当前可见搜索 / 个人 Feed 的请求身份。迟到结果必须与此一致。 */
   private currentSearchGenerationId = '';
+  /** 当前搜索请求实际发出的联网搜索次数。 */
+  private searchUsage: { generationId: string; usage: NonNullable<DiscoverView['searchUsage']> } | null = null;
   private pendingSeekMerge: {
     generationId: string;
     leftover: Promise<ContentSeekResult | null>;
@@ -709,6 +712,11 @@ export class DigitalMeRuntime {
     this.pendingLaterCards = laterCards(rows, ids);
   }
 
+  private searchUsageOf(generationId: string): Pick<DiscoverView, 'searchUsage'> {
+    if (!this.searchUsage || this.searchUsage.generationId !== generationId) return {};
+    return { searchUsage: { ...this.searchUsage.usage } };
+  }
+
   private intentViewFromSeek(
     query: string,
     sought: ContentSeekResult,
@@ -742,6 +750,7 @@ export class DigitalMeRuntime {
       searchQuery: query,
       networking,
       seekTrace: sought.trace,
+      ...this.searchUsageOf(generationId),
       // 视图身份属于产生它的那次搜索请求。被取代的迟到完成不得盖上当前 generation，
       // 否则渲染层的过期守卫会被绕过，旧搜索内容会作为新搜索结果合并进可见列表。
       searchGenerationId: generationId,
@@ -955,7 +964,9 @@ export class DigitalMeRuntime {
     const preferences = await this.contentPreferenceRows(packageRoot);
     const items = await this.loadDiscoverItems(packageRoot, relayUrl);
     const networking = this.snapshotNetworkDiscovery();
-    const searchWeb = this.wrapContentSearch(this.resolveContentSearch(), signal);
+    const usage = { calls: 0, reused: 0, skippedAfterQuota: 0, rateLimited: false };
+    this.searchUsage = { generationId, usage };
+    const searchWeb = this.wrapContentSearch(this.resolveContentSearch(), signal, usage);
     const chatCompleteFn = this.resolveContentChat();
     const model = this.resolveContentModel();
     const openMedia = this.resolveOpenMediaFetch();
@@ -1017,20 +1028,28 @@ export class DigitalMeRuntime {
           searchGenerationId: generationId,
         };
       }
-      this.lastNetworkCode = classifySearchFailure(err);
+      this.lastNetworkCode = usage.rateLimited ? 'RATE_LIMITED' : classifySearchFailure(err);
+      const quota = this.lastNetworkCode === 'RATE_LIMITED';
       return {
         headline: '发现',
-        lead: '根据你刚说的话找的内容。这次搜索失败，没有改动为你发现里的列表。',
+        lead: quota
+          ? '根据你刚说的话找的内容。联网搜索额度用完了，没有改动为你发现里的列表。'
+          : '根据你刚说的话找的内容。这次搜索失败，没有改动为你发现里的列表。',
         feedTitle: `关于「${query}」`,
         cards: [],
         relatedCards: [],
         preferences,
-        notice: '暂时无法获取新内容，可以稍后再试或检查联网设置。',
+        notice: quota ? SEARCH_QUOTA_NOTICE : '暂时无法获取新内容，可以稍后再试或检查联网设置。',
         networking: this.lastNetworkCode,
-        reasonCode: this.lastNetworkCode === 'AUTH_FAILED' ? 'NETWORK_AUTH_FAILED' : 'NETWORK_TEMPORARY_ERROR',
+        reasonCode: quota
+          ? 'NETWORK_RATE_LIMITED'
+          : this.lastNetworkCode === 'AUTH_FAILED'
+            ? 'NETWORK_AUTH_FAILED'
+            : 'NETWORK_TEMPORARY_ERROR',
         feedMode: 'intent',
         searchQuery: query,
         searchGenerationId: generationId,
+        ...this.searchUsageOf(generationId),
       };
     };
     try {
@@ -1043,7 +1062,6 @@ export class DigitalMeRuntime {
               signal,
             })
           : Promise.resolve(defaultDiscoverIntent(query));
-      const quickPromise = searchWeb ? searchWeb(query).catch(() => []) : Promise.resolve([]);
       const intentReady = await intentPromise;
       if (generationId !== this.currentSearchGenerationId) {
         const intent = await intentPromise;
@@ -1106,6 +1124,7 @@ export class DigitalMeRuntime {
                 ...(openMedia ? { fetchOpenMedia: openMedia } : {}),
                 chatComplete: chatCompleteFn,
                 model,
+                deadlineAt: seekDeadlineAt,
               });
             } catch {
               return null;
@@ -1118,7 +1137,12 @@ export class DigitalMeRuntime {
         this.lastIntentView = view;
         return view;
       }
-      const quickHits = wantsPlayableMedia ? [] : await quickPromise;
+      // 快速摘要用后面正式搜索的第一个搜索词：结果在本次请求里复用，不多花一次搜索。
+      // 要看/听节目时摘要预览不会展示，不发这次搜索。
+      const quickHits =
+        wantsPlayableMedia || !searchWeb
+          ? []
+          : await searchWeb(intentReady.searchQueries[0] || query).catch(() => []);
       if (quickHits.length) {
         const snippets = snippetCardsFromHits(quickHits);
         this.pendingSeekMerge = {
@@ -1136,6 +1160,7 @@ export class DigitalMeRuntime {
                 ...(searchWeb ? { searchWeb } : {}),
                 ...(openMedia ? { fetchOpenMedia: openMedia } : {}),
                 ...(chatCompleteFn && model ? { chatComplete: chatCompleteFn, model } : {}),
+                deadlineAt: seekDeadlineAt,
               });
             } catch {
               return null;
@@ -1160,6 +1185,7 @@ export class DigitalMeRuntime {
           networking,
           searchGenerationId: generationId,
           replenishing: true,
+          ...this.searchUsageOf(generationId),
         };
         this.lastIntentView = preview;
         return preview;
@@ -1177,6 +1203,7 @@ export class DigitalMeRuntime {
         signal,
         ...(headlines.length ? { newsHeadlines: headlines } : {}),
         ...(chatCompleteFn && model ? { chatComplete: chatCompleteFn, model } : {}),
+        deadlineAt: seekDeadlineAt,
       };
       const firstWave = () =>
         seekContent({
@@ -1310,20 +1337,40 @@ export class DigitalMeRuntime {
       | ((query: string, signal?: AbortSignal) => Promise<Array<{ title: string; url: string; snippet?: string }>>)
       | undefined,
     signal?: AbortSignal,
+    usage?: NonNullable<DiscoverView['searchUsage']>,
   ): ((query: string) => Promise<Array<{ title: string; url: string; snippet?: string }>>) | undefined {
     if (!searchWeb) return undefined;
-    return async (query: string) => {
+    type Hits = Array<{ title: string; url: string; snippet?: string }>;
+    // 托管搜索按次计额度（缓存命中也计）：同一请求里同一个搜索词只发一次；额度用完后不再发。
+    const memo = new Map<string, Promise<Hits>>();
+    return (query: string) => {
       if (signal?.aborted) {
-        throw Object.assign(new Error('search aborted'), { name: 'AbortError' });
+        return Promise.reject(Object.assign(new Error('search aborted'), { name: 'AbortError' }));
       }
-      try {
-        const hits = await searchWeb(query, signal);
-        this.lastNetworkCode = 'AVAILABLE';
-        return hits;
-      } catch (err) {
-        this.lastNetworkCode = classifySearchFailure(err);
-        throw err;
+      const key = String(query || '').replace(/\s+/g, ' ').trim();
+      const known = memo.get(key);
+      if (known) {
+        if (usage) usage.reused += 1;
+        return known;
       }
+      if (usage?.rateLimited) {
+        usage.skippedAfterQuota += 1;
+        return Promise.reject(Object.assign(new Error('rate_limited'), { status: 'RATE_LIMITED', httpStatus: 429 }));
+      }
+      if (usage) usage.calls += 1;
+      const pending = (async () => {
+        try {
+          const hits = await searchWeb(query, signal);
+          this.lastNetworkCode = 'AVAILABLE';
+          return hits;
+        } catch (err) {
+          this.lastNetworkCode = classifySearchFailure(err);
+          if (usage && this.lastNetworkCode === 'RATE_LIMITED') usage.rateLimited = true;
+          throw err;
+        }
+      })();
+      memo.set(key, pending);
+      return pending;
     };
   }
 

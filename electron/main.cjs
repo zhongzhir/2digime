@@ -31,6 +31,12 @@ if (process.env.DIGITALME_V2_USER_DATA) {
 } else {
   app.setPath("userData", path.join(app.getPath("appData"), USER_DATA_DIR_NAME));
 }
+// Windows 的"文档"来自系统已知文件夹，不跟随 HOME/USERPROFILE；隔离运行时项目目录必须落在 DIGITALME_V2_HOME 下。
+if (process.env.DIGITALME_V2_HOME) {
+  const isolatedDocuments = path.join(process.env.DIGITALME_V2_HOME, "Documents");
+  fs.mkdirSync(isolatedDocuments, { recursive: true });
+  app.setPath("documents", isolatedDocuments);
+}
 if (isElectronTestHarness()) {
   app.commandLine.appendSwitch("disable-gpu");
   app.commandLine.appendSwitch("disable-dev-shm-usage");
