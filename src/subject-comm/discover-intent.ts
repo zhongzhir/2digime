@@ -331,9 +331,14 @@ export interface CandidateJudgment {
   basis: string;
   /** 去掉导航、赞助、目录杂项后的简短摘要。只依据候选给出的文字，没有可用信息则为空。 */
   summary: string;
+  /** 用户这次明确提出的条件（高分、长视频、适合周末……）材料是否确认满足；没提条件为 none。 */
+  conditions: CandidateConditions;
 }
 
+export type CandidateConditions = 'met' | 'unconfirmed' | 'none';
+
 const CANDIDATE_MEDIA = new Set(['article', 'video', 'audio', 'image']);
+const CANDIDATE_CONDITIONS = new Set(['met', 'unconfirmed', 'none']);
 
 export function judgmentsFromModelText(text: string, ids: string[]): Map<string, CandidateJudgment> {
   const rec = parseJsonObject(text);
@@ -348,11 +353,13 @@ export function judgmentsFromModelText(text: string, ids: string[]): Map<string,
       .toUpperCase();
     if (!ids.includes(id) || !PAGE_ROLES.has(role)) continue;
     const mediumRaw = asMediaType(recRow.medium);
+    const conditionsRaw = String(recRow.conditions || '').trim().toLowerCase();
     out.set(id, {
       role: role as ContentPageRole,
       medium: mediumRaw && CANDIDATE_MEDIA.has(mediumRaw) ? (mediumRaw as CandidateMedium) : 'unknown',
       basis: String(recRow.basis || '').replace(/\s+/g, ' ').trim().slice(0, 200),
       summary: String(recRow.summary || '').replace(/\s+/g, ' ').trim().slice(0, 240),
+      conditions: CANDIDATE_CONDITIONS.has(conditionsRaw) ? (conditionsRaw as CandidateConditions) : 'none',
     });
   }
   return out;
@@ -386,7 +393,7 @@ export async function classifyCandidateRoles(input: {
   };
   if (!input.candidates.length || !input.chatComplete || !input.model) return empty;
   const system = [
-    '你在判断每个候选相对「用户这次搜索」的对象忠实度，并写出推荐依据。只输出 JSON：{"roles":[{"id":"","role":"","medium":"","basis":"","summary":""}]}。',
+    '你在判断每个候选相对「用户这次搜索」的对象忠实度，并写出推荐依据。只输出 JSON：{"roles":[{"id":"","role":"","medium":"","conditions":"","basis":"","summary":""}]}。',
     'role 只能是 PRIMARY_CONTENT、SERIES、EPISODE、HUB、LISTING、COMMENTARY、UNRELATED。',
     'PRIMARY_CONTENT：相对用户这次请求要消费的对象本身。未点名媒介时，主题匹配的文章、视频、图片、音频都是 PRIMARY_CONTENT；不要因为是 Article 就标 COMMENTARY。',
     'SERIES：一部作品、节目或播客的主页/详情页。',
@@ -395,7 +402,8 @@ export async function classifyCandidateRoles(input: {
     'LISTING：榜单、集合、搜索页、把多部作品打包推荐的页面。',
     'COMMENTARY：候选不是这次要消费的对象，而是在谈论该对象。仅当用户点名要视频/图片/音频时，介绍它们的文章才是 COMMENTARY。',
     'UNRELATED：主题不在这次搜索范围内。即使它可能符合用户平时其它兴趣，也标 UNRELATED。',
-    '用户这次在 query / preferences 里明确提出的条件（例如纪录片、长视频、适合周末看）也属于这次的范围：候选虽然是作品本身，但明显不满足这些条件（例如要长视频，它只是几分钟的片段），标 UNRELATED；材料不足以确认是否满足时，按其它条件判断，并在 basis 里写明哪一条还没确认。durationSeconds 是来源给出的时长，没有就是不知道。',
+    '用户这次在 query / preferences 里明确提出的条件（例如纪录片、长视频、适合周末看、高分、口碑好）也属于这次的范围：候选虽然是作品本身，但明显不满足这些条件（例如要长视频，它只是几分钟的片段），标 UNRELATED。durationSeconds 是来源给出的时长，没有就是不知道。',
+    'conditions：用户这次没有提出这类条件写 none；候选材料能确认满足写 met；材料不足以确认写 unconfirmed，并在 basis 里写明哪一条还没确认。只看候选材料，不凭作品名气替材料确认。',
     '能不能在应用里直接播放，与它是否符合这次请求无关，不能因此判为 PRIMARY_CONTENT。',
     'medium：该候选本身主要是 article / video / audio / image 哪一种，由页面内容判断；看不出就写 unknown。节目主页、系列页、单集页是否有直接播放文件，不影响 role，也不影响 medium。',
     '用户要视频或节目：具体视频、节目主页、系列页、单集页都是有效的推荐对象，用户可以去原站观看；《最佳视频榜单》这类文章是 LISTING/COMMENTARY。',

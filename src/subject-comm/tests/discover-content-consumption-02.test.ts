@@ -431,6 +431,55 @@ test('PROGRAMS: listing is basis, named works verified by search; unread names a
   );
 });
 
+test('CONDITIONS: a work whose stated conditions the model cannot confirm stays out of main results', async () => {
+  const chat: ChatCompleteFn = async ({ messages }) => {
+    const system = String(messages[0]?.content || '');
+    const user = JSON.parse(String(messages[messages.length - 1]?.content || '{}')) as {
+      candidates?: Array<{ id: string; url: string }>;
+    };
+    if (system.includes('判断每个候选')) {
+      return {
+        text: JSON.stringify({
+          roles: (user.candidates || []).map((row) => ({
+            id: row.id,
+            role: 'PRIMARY_CONTENT',
+            medium: 'video',
+            conditions: row.url.includes('/silent/') ? 'unconfirmed' : 'met',
+            basis: row.url.includes('/silent/') ? '材料没有评分或口碑，还没确认是否高分。' : '材料写明口碑很好。',
+          })),
+        }),
+      };
+    }
+    return { text: '{}' };
+  };
+  const sought = await seekContent({
+    query: '值得一看的高分科幻电影',
+    items: [],
+    intent: {
+      intent: 'consume',
+      topic: '科幻电影',
+      requestedMedia: ['video'],
+      objectWanted: 'work_itself',
+      freshness: 'unspecified',
+      popularityClaim: false,
+      preferences: '高分',
+      searchQueries: ['高分 科幻电影'],
+      suggestTalk: false,
+    } as never,
+    chatComplete: chat,
+    model: { baseUrl: 'https://model.example', model: 'm' },
+    searchWeb: async () => [
+      { title: 'A Trip to the Moon (1902)', url: 'https://films.example.org/silent/moon', snippet: '一部早期科幻默片' },
+      { title: '高分科幻 正片', url: 'https://tv.example.org/show/scifi', snippet: '口碑很好的科幻电影正片' },
+    ],
+  });
+  assert.ok(sought.cards.some((card) => card.url === 'https://tv.example.org/show/scifi'));
+  assert.equal(sought.cards.some((card) => card.url === 'https://films.example.org/silent/moon'), false);
+  const maybe = sought.relatedCards.find((card) => card.url === 'https://films.example.org/silent/moon');
+  assert.ok(maybe, 'unconfirmed work is still shown as related');
+  assert.match(maybe!.reason, /还没确认/);
+});
+
 test('REGRESSION: Media RSS / JSON Feed / schema.org / oEmbed still parse', async () => {
   const store = new MemoryNetworkItemStore();
   const mediaRss = `<?xml version="1.0"?><rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel><title>MRSS</title>

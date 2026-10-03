@@ -412,9 +412,11 @@ async function programsFromSources(input: {
       if (candidates.length >= 3) break;
     }
     if (!candidates.length || input.signal?.aborted) return { work, card: null, judgment: undefined, broken: false };
+    // 这里只核实页面是不是这部作品本身；口碑、长短这些条件的依据来自提到它的那篇文章。
+    const { preferences: _preferences, ...workIntent } = input.intent;
     const judged = await classifyCandidateRoles({
       query: work.kind ? `《${work.title}》（${work.kind}）` : `《${work.title}》`,
-      intent: { ...input.intent, topic: work.title },
+      intent: { ...workIntent, topic: work.title, popularityClaim: false },
       candidates: candidates.map((card) => ({
         id: card.itemId,
         title: card.title,
@@ -799,6 +801,8 @@ export async function seekContent(input: {
     if (requiredTypes.length && kind === 'PRIMARY_CONTENT' && !matchedType) {
       kind = 'ABOUT_CONTENT';
     }
+    // 用户明确提出的条件模型确认不了，就不拿来充当主结果，只放在可能相关里，依据里写着哪条没确认。
+    if (kind === 'PRIMARY_CONTENT' && judgment?.conditions === 'unconfirmed') kind = 'ABOUT_CONTENT';
     fidelity.set(card.itemId, kind);
     if (kind === 'UNJUDGED') {
       if (datedNews && reportDay && publishedLocalDay(card.publishedAt) === reportDay) {
