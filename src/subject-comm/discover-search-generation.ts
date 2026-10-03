@@ -27,6 +27,9 @@ export function createSearchGenerationId(): string {
 /** 背景补充必须在截止时间内进入成功或失败终态，不能一直停在进行中。 */
 export const BACKGROUND_SEEK_DEADLINE_MS = 40_000;
 
+/** 一次搜索从开始到终态共用这一个截止点；各阶段只用剩余时间，不各自重新计时。 */
+export const SEEK_DEADLINE_MS = 60_000;
+
 export function settleBackgroundSeek<T>(
   work: Promise<T | null>,
   deadlineMs = BACKGROUND_SEEK_DEADLINE_MS,
@@ -108,7 +111,7 @@ export function fidelityOf(card: DiscoverCard): ObjectFidelityKind {
   if (raw === 'PRIMARY_CONTENT' || raw === 'ABOUT_CONTENT' || raw === 'UNRELATED') {
     return raw;
   }
-  if (hasDirectMediaRepresentation(card)) return 'PRIMARY_CONTENT';
+  // 能否直接播放只决定怎么看，不代表和这次请求相关。
   return 'ABOUT_CONTENT';
 }
 

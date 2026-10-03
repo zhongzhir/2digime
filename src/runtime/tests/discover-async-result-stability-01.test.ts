@@ -213,7 +213,7 @@ test('CASE 3: Search A late result cannot override Search B', async () => {
           }),
         };
       }
-      if (blob.includes('判断每个候选')) return { text: '{"roles":[]}' };
+      if (blob.includes('判断每个候选')) return judgeAllPrimary(messages);
       return { text: '{"decisions":[]}' };
     },
     contentSearch: async (query: string) => {
@@ -488,6 +488,13 @@ test('CASE 8: three rapid searches A → B → C — final view consumes only ge
   await runtime.stop();
 });
 
+// 竞态用例只测代次，不测判断：判断桩对每个候选都给出判断（类型过滤仍由产品逻辑负责）。
+function judgeAllPrimary(messages: Array<{ content?: string }>) {
+  const user = String(messages[messages.length - 1]?.content || '{}');
+  const parsed = JSON.parse(user) as { candidates?: Array<{ id: string }> };
+  return { text: JSON.stringify({ roles: (parsed.candidates || []).map((row) => ({ id: row.id, role: 'PRIMARY_CONTENT' })) }) };
+}
+
 function raceIntentChat() {
   return async ({ messages }: { messages: Array<{ content?: string }> }) => {
     const blob = messages.map((row) => String(row.content || '')).join('\n');
@@ -504,7 +511,7 @@ function raceIntentChat() {
         }),
       };
     }
-    if (blob.includes('判断每个候选')) return { text: '{"roles":[]}' };
+    if (blob.includes('判断每个候选')) return judgeAllPrimary(messages);
     return { text: '{"decisions":[]}' };
   };
 }
@@ -545,7 +552,7 @@ test('AI video / broad AI / audio playable vs source-only / personal restore', a
           }),
         };
       }
-      if (blob.includes('判断每个候选')) return { text: '{"roles":[]}' };
+      if (blob.includes('判断每个候选')) return judgeAllPrimary(messages);
       const ids = [...blob.matchAll(/"itemId"\s*:\s*"(ni_[^"]+)"/g)].map((row) => row[1]!);
       return {
         text: JSON.stringify({

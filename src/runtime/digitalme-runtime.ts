@@ -197,7 +197,7 @@ import {
 } from '../subject-comm/content-seek';
 import { fetchNewsHeadlines } from '../subject-comm/news-headlines';
 import {
-  BACKGROUND_SEEK_DEADLINE_MS,
+  SEEK_DEADLINE_MS,
   createSearchGenerationId,
   mergeIntentViews,
   mergeSeekCardSets,
@@ -468,6 +468,8 @@ export class DigitalMeRuntime {
     generationId: string;
     leftover: Promise<ContentSeekResult | null>;
     abort: AbortController;
+    /** 首批结果自己的结论，补充没到终态前不显示，补充失败时才用。 */
+    firstNotice?: string;
   } | null = null;
   private pendingPersonal: Promise<DiscoverView> | null = null;
   private searchAbort = new AbortController();
@@ -538,20 +540,22 @@ export class DigitalMeRuntime {
     const action = input.action || 'discover';
     const itemId = String(input.itemId || '').trim();
     const feedbackFile = path.join(pkg.rootDir, 'content', 'network-content-feedback.jsonl');
+    // 切换代次必须在第一个 await 之前完成：否则两次几乎同时的请求，谁的文件读取后结束谁就成了"当前"，
+    // 先发的旧请求可以反过来盖掉后发的新请求。
+    const keepsGeneration = new Set(['more', 'asked', 'replenish', 'refresh', 'open', 'later', 'boost', 'reduce', 'follow', 'block']);
+    const started = keepsGeneration.has(action) ? null : this.beginSearchGeneration(input.searchGenerationId);
     await this.refreshLaterCards(pkg.rootDir);
 
     if (action === 'seek') {
       const query = String(input.text || '').trim();
-      const started = this.beginSearchGeneration(input.searchGenerationId);
       this.lastIntentView = null;
       if (!query) {
         return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'open') };
       }
-      return { view: await this.runContentSeek(pkg.rootDir, query, input.relayUrl, started) };
+      return { view: await this.runContentSeek(pkg.rootDir, query, input.relayUrl, started!) };
     }
 
     if (action === 'resetRecent') {
-      this.beginSearchGeneration(input.searchGenerationId);
       this.lastIntentView = null;
       const beforeIds = await readPersonalFeedIds(pkg.rootDir);
       await resetRecentRecommendationState(pkg.rootDir);
@@ -583,12 +587,7 @@ export class DigitalMeRuntime {
     }
 
     if (action === 'cancel') {
-      this.searchAbort.abort();
-      this.searchAbort = new AbortController();
-      const nextGen = String(input.searchGenerationId || '').trim() || createSearchGenerationId();
-      this.currentSearchGenerationId = nextGen;
-      this.pendingSeekMerge = null;
-      this.pendingPersonal = null;
+      const nextGen = started!.generationId;
       if (this.lastIntentView?.feedMode === 'intent') {
         this.lastIntentView = {
           ...this.lastIntentView,
@@ -610,7 +609,6 @@ export class DigitalMeRuntime {
     }
 
     if (action === 'reverse') {
-      this.beginSearchGeneration(input.searchGenerationId);
       this.lastIntentView = null;
       const directiveId = String(input.directiveId || '').trim();
       if (!directiveId) return { view: await empty('请选择要撤销的偏好。') };
@@ -677,7 +675,6 @@ export class DigitalMeRuntime {
       return { view: await this.currentSearchOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'reuse') };
     }
 
-    this.beginSearchGeneration(input.searchGenerationId);
     this.lastIntentView = null;
     return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'open') };
   }
@@ -738,7 +735,8 @@ export class DigitalMeRuntime {
       ...(sought.relatedCards.length ? { relatedTitle: currentNews ? '补充背景' : '相关介绍' } : {}),
       ...(sought.unjudgedCards.length ? { unjudgedTitle: '这些还没完成判断，不是已确认的推荐' } : {}),
       preferences,
-      notice: sought.notice,
+      // 获取与判断尚未到终态时，不下"没有找到"之类的结论。
+      notice: extra?.replenishing ? '' : sought.notice,
       reasonCode: 'CURRENT_INTENT',
       feedMode: 'intent',
       searchQuery: query,
@@ -790,7 +788,7 @@ export class DigitalMeRuntime {
         this.lastIntentView = {
           ...this.lastIntentView,
           replenishing: false,
-          notice: terminalSupplementNotice(this.lastIntentView.notice, extra),
+          notice: terminalSupplementNotice(this.lastIntentView.notice || pending.firstNotice, extra),
         };
         return this.lastIntentView;
       }
@@ -952,6 +950,8 @@ export class DigitalMeRuntime {
     const generationId = started?.generationId || this.currentSearchGenerationId || this.beginSearchGeneration().generationId;
     const abort = started?.abort || this.searchAbort;
     const signal = abort.signal;
+    const seekDeadlineAt = Date.now() + SEEK_DEADLINE_MS;
+    const seekRemainingMs = () => Math.max(1, seekDeadlineAt - Date.now());
     const preferences = await this.contentPreferenceRows(packageRoot);
     const items = await this.loadDiscoverItems(packageRoot, relayUrl);
     const networking = this.snapshotNetworkDiscovery();
@@ -1090,6 +1090,7 @@ export class DigitalMeRuntime {
         this.pendingSeekMerge = {
           generationId,
           abort,
+          firstNotice: judged.notice,
           leftover: settleBackgroundSeek((async () => {
             try {
               if (generationId !== this.currentSearchGenerationId || signal.aborted) return null;
@@ -1109,7 +1110,7 @@ export class DigitalMeRuntime {
             } catch {
               return null;
             }
-          })(), BACKGROUND_SEEK_DEADLINE_MS, abort),
+          })(), seekRemainingMs(), abort),
         };
         const view = this.intentViewFromSeek(query, judged, preferences, networking, generationId, {
           replenishing: true,
@@ -1139,7 +1140,7 @@ export class DigitalMeRuntime {
             } catch {
               return null;
             }
-          })(), BACKGROUND_SEEK_DEADLINE_MS, abort),
+          })(), seekRemainingMs(), abort),
         };
         const preview: DiscoverView = {
           headline: '发现',
@@ -1202,38 +1203,67 @@ export class DigitalMeRuntime {
         this.lastIntentView = view;
         return view;
       }
+      let settledWaves = 0;
       const mediaResult = firstWave().then(
         (r) => r,
         (err) => {
           this.lastNetworkCode = classifySearchFailure(err);
           return null;
         },
-      );
+      ).finally(() => { settledWaves += 1; });
       const webResult = webWave().then(
         (r) => r,
         (err) => {
           this.lastNetworkCode = classifySearchFailure(err);
           return null;
         },
-      );
-      const first = wantsPlayableMedia
-        ? await (async () => {
-            const media = await mediaResult;
-            if (media) return { src: 'media' as const, r: media };
-            return { src: 'web' as const, r: await webResult };
-          })()
-        : await Promise.race([
-            mediaResult.then((r) => ({ src: 'media' as const, r })),
-            webResult.then((r) => ({ src: 'web' as const, r })),
-          ]);
-      let firstResult = first.r;
+      ).finally(() => { settledWaves += 1; });
+      const mergeWaves = (parts: Array<ContentSeekResult | null>): ContentSeekResult | null => {
+        const ok = parts.filter((row): row is ContentSeekResult => !!row);
+        if (!ok.length) return null;
+        if (ok.length === 1) return ok[0]!;
+        const mergedCards = mergeSeekCardSets(
+          { cards: ok[0]!.cards, relatedCards: ok[0]!.relatedCards },
+          { cards: ok[1]!.cards, relatedCards: ok[1]!.relatedCards },
+        );
+        return {
+          ...ok[1]!,
+          cards: mergedCards.cards,
+          relatedCards: mergedCards.relatedCards,
+          unjudgedCards: [...(ok[0]!.unjudgedCards || []), ...(ok[1]!.unjudgedCards || [])].slice(0, 8),
+          accessCards: [...(ok[0]!.accessCards || []), ...(ok[1]!.accessCards || [])].slice(0, 8),
+          usedDirectory: ok[0]!.usedDirectory || ok[1]!.usedDirectory,
+          usedExternal: ok[0]!.usedExternal || ok[1]!.usedExternal,
+          notice: mergedCards.cards.length
+            ? (ok[1]!.cards.length ? ok[1]!.notice : '') || (ok[0]!.cards.length ? ok[0]!.notice : '')
+            : ok[1]!.notice || ok[0]!.notice,
+        };
+      };
+      const firstResult = await settleBackgroundSeek((async () => {
+        const first = wantsPlayableMedia
+          ? await (async () => {
+              const media = await mediaResult;
+              if (media) return { src: 'media' as const, r: media };
+              return { src: 'web' as const, r: await webResult };
+            })()
+          : await Promise.race([
+              mediaResult.then((r) => ({ src: 'media' as const, r })),
+              webResult.then((r) => ({ src: 'web' as const, r })),
+            ]);
+        return first.r || (first.src === 'media' ? await webResult : await mediaResult);
+      })(), seekRemainingMs(), abort);
       if (!firstResult) {
-        const other = first.src === 'media' ? await webResult : await mediaResult;
-        if (!other) throw Object.assign(new Error('search failed'), { status: 503 });
-        firstResult = other;
+        throw Object.assign(new Error(signal.aborted ? 'search stopped' : 'search failed'), { status: 503 });
       }
       if (generationId !== this.currentSearchGenerationId) {
         return this.intentViewFromSeek(query, firstResult, preferences, networking, generationId, { replenishing: false });
+      }
+      if (settledWaves === 2) {
+        const final = mergeWaves(await Promise.all([mediaResult, webResult])) || firstResult;
+        if (final.cards.length) await rememberIntentFeed(packageRoot, final.cards, query);
+        const done = this.intentViewFromSeek(query, final, preferences, networking, generationId, { replenishing: false });
+        this.lastIntentView = done;
+        return done;
       }
       if (firstResult.cards.length) await rememberIntentFeed(packageRoot, firstResult.cards, query);
       const view = this.intentViewFromSeek(query, firstResult, preferences, networking, generationId, { replenishing: true });
@@ -1241,28 +1271,11 @@ export class DigitalMeRuntime {
       this.pendingSeekMerge = {
         generationId,
         abort,
+        firstNotice: firstResult.notice,
         leftover: settleBackgroundSeek(Promise.all([mediaResult, webResult]).then((parts) => {
           if (signal.aborted || generationId !== this.currentSearchGenerationId) return null;
-          const ok = parts.filter((row): row is ContentSeekResult => !!row);
-          if (!ok.length) return null;
-          if (ok.length === 1) return ok[0]!;
-          const mergedCards = mergeSeekCardSets(
-            { cards: ok[0]!.cards, relatedCards: ok[0]!.relatedCards },
-            { cards: ok[1]!.cards, relatedCards: ok[1]!.relatedCards },
-          );
-          return {
-            ...ok[1]!,
-            cards: mergedCards.cards,
-            relatedCards: mergedCards.relatedCards,
-            unjudgedCards: [...(ok[0]!.unjudgedCards || []), ...(ok[1]!.unjudgedCards || [])].slice(0, 8),
-            accessCards: [...(ok[0]!.accessCards || []), ...(ok[1]!.accessCards || [])].slice(0, 8),
-            usedDirectory: ok[0]!.usedDirectory || ok[1]!.usedDirectory,
-            usedExternal: ok[0]!.usedExternal || ok[1]!.usedExternal,
-            notice: mergedCards.cards.length
-              ? (ok[1]!.cards.length ? ok[1]!.notice : '') || (ok[0]!.cards.length ? ok[0]!.notice : '')
-              : ok[1]!.notice || ok[0]!.notice,
-          };
-        }), BACKGROUND_SEEK_DEADLINE_MS, abort),
+          return mergeWaves(parts);
+        }), seekRemainingMs(), abort),
       };
       return view;
     } catch (err) {

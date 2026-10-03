@@ -373,6 +373,10 @@
       actions.appendChild(playBtn);
     }
     if (card.url) actions.appendChild(btn(consumeLabel(card), () => openCard(card), playable ? 'ghost' : 'primary'));
+    const basis = card.basisSource;
+    if (basis && basis.url && basis.url !== card.url) {
+      actions.appendChild(btn('看推荐依据', () => window.open(basis.url, '_blank', 'noopener,noreferrer')));
+    }
     if (!opts || !opts.hideLater) {
       actions.appendChild(btn('稍后看', () => void act('later', { itemId: card.itemId })));
     }

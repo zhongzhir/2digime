@@ -42,6 +42,8 @@ export interface DiscoverCard {
   textOrigin?: 'snippet' | 'body';
   /** 相对当前搜索的对象忠实度。合并时 PRIMARY 不得被 ABOUT 覆盖。 */
   objectFidelity?: 'PRIMARY_CONTENT' | 'ABOUT_CONTENT' | 'UNRELATED';
+  /** 推荐依据出自哪篇片单、榜单或评论。依据文章不是作品本身。 */
+  basisSource?: { title: string; url?: string };
   /** 稍后看来源已不在目录里。收藏记录仍保留。 */
   unavailable?: boolean;
   /** 收藏仍在，但不进入国内默认供给。 */

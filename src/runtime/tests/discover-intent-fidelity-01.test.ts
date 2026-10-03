@@ -178,8 +178,14 @@ test('search failure keeps Personal Feed cache and shows search empty', async ()
   const cacheBefore = await fs.readFile(path.join(pkgDir, 'content', 'personal-feed-cache.json'), 'utf8');
   const sought = await bus.invoke('content', { action: 'seek', text: '找几个AI精品视频看一下' });
   assert.equal(sought.view.feedMode, 'intent');
-  assert.equal(sought.view.cards.length, 0);
-  assert.match(String(sought.view.notice || ''), /暂时无法|没有找到可以直接/);
+  // 还在补充时不下"没有找到"的结论；终态才有。
+  if (sought.view.replenishing) assert.equal(sought.view.notice, '');
+  const settled = sought.view.replenishing
+    ? (await bus.invoke('content', { action: 'replenish', searchGenerationId: String(sought.view.searchGenerationId || '') })).view
+    : sought.view;
+  assert.equal(settled.replenishing, false);
+  assert.equal(settled.cards.length, 0);
+  assert.match(String(settled.notice || ''), /暂时无法|没有找到可以直接/);
   const cacheAfter = await fs.readFile(path.join(pkgDir, 'content', 'personal-feed-cache.json'), 'utf8');
   assert.equal(JSON.parse(cacheAfter).personal.itemIds.join(','), JSON.parse(cacheBefore).personal.itemIds.join(','));
   const back = await bus.invoke('content', { action: 'discover' });

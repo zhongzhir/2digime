@@ -1,6 +1,7 @@
 // 只读：汇总 owner-copy 里今天写入的 network-items
 const fs = require('fs'), path = require('path');
-const dir = path.join(__dirname, 'owner-copy/userData/subjects/default/content/network-items');
+const DATA = require('./data-root.cjs');
+const dir = path.join(DATA, 'owner-copy/userData/subjects/default/content/network-items');
 const since = new Date('2026-10-03T11:50:00+08:00').getTime();
 const rows = [];
 for (const f of fs.readdirSync(dir)) {

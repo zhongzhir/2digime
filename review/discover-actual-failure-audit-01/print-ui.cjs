@@ -1,6 +1,7 @@
 // 用法: node print-ui.cjs <run-name> [--net]   合并 UI 状态时间线(相对启动)与主进程 IPC/网络时间线(相对主进程启动)
 const fs = require('fs'), path = require('path');
-const run = path.join(__dirname, 'runs', process.argv[2]);
+const DATA = require('./data-root.cjs');
+const run = path.join(DATA, 'runs', process.argv[2]);
 const net = process.argv.includes('--net');
 const ui = JSON.parse(fs.readFileSync(path.join(run, 'ui-trace.json'), 'utf8'));
 console.log('=== UI (t=秒, 相对脚本启动)');

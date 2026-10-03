@@ -273,12 +273,122 @@ test('ASK 2DIGIME: renderer preserves content context without auto-send', async 
   assert.equal(/iframe/i.test(ui), false);
 });
 
-test('REGRESSION: no hub crawler / mentioned-object factory / site listing table', async () => {
+// 原意（CONTENT-SOURCE-CAPABILITY-GATE-01）：不在读不到正文的入口页上"猜片名再搜"，不爬站、不收链接、不写站点表。
+// 从这次实际读到的片单/评论里由模型点名作品、再用现有搜索核实一次，是允许的；名字必须出现在原文里。
+test('REGRESSION: no hub crawler / link harvest / site listing table', async () => {
   const seekSrc = await fs.readFile(path.join(process.cwd(), 'src/subject-comm/content-seek.ts'), 'utf8');
   const intentSrc = await fs.readFile(path.join(process.cwd(), 'src/subject-comm/discover-intent.ts'), 'utf8');
-  assert.equal(/puppeteer|playwright|crawlSite|extractMentionedObjects|querySelectorAll\(['"]a/i.test(seekSrc), false);
-  assert.equal(intentSrc.includes('extractMentionedObjects'), false);
+  assert.equal(/puppeteer|playwright|crawlSite|querySelectorAll\(['"]a/i.test(seekSrc), false);
   assert.equal(/youtube\.com|bilibili|iqiyi|douyin/i.test(seekSrc + intentSrc), false);
+});
+
+test('PROGRAMS: listing is basis, named works verified by search; unread names and unverified works are not programs', async () => {
+  const listing = itemOf({
+    id: 'ni_listing_doc',
+    title: '周末纪录片片单',
+    text: '这份片单推荐《河西走廊》，豆瓣口碑很好，共十集；还推荐《人生七年》，跟拍几十年。适合周末慢慢看。',
+    url: 'https://example.org/list/weekend-docs',
+  });
+  const searched: string[] = [];
+  const chat: ChatCompleteFn = async ({ messages }) => {
+    const system = String(messages[0]?.content || '');
+    const user = JSON.parse(String(messages[messages.length - 1]?.content || '{}')) as {
+      query: string;
+      candidates?: Array<{ id: string; url: string }>;
+      sources?: Array<{ id: string }>;
+    };
+    if (system.includes('取出被明确点名')) {
+      const sourceId = user.sources![0]!.id;
+      return {
+        text: JSON.stringify({
+          works: [
+            { title: '河西走廊', kind: '纪录片', medium: 'video', sourceId, basis: '片单说口碑很好，共十集。', searchQuery: '河西走廊 纪录片' },
+            { title: '人生七年', kind: '纪录片', medium: 'video', sourceId, basis: '片单说跟拍几十年。', searchQuery: '人生七年 纪录片' },
+            { title: '地球脉动', kind: '纪录片', medium: 'video', sourceId, basis: '评分 9.9', searchQuery: '地球脉动' },
+          ],
+        }),
+      };
+    }
+    if (system.includes('判断每个候选')) {
+      return {
+        text: JSON.stringify({
+          roles: (user.candidates || []).map((row) => ({
+            id: row.id,
+            role: row.url.includes('/list/') ? 'LISTING' : row.url.includes('/show/') ? 'SERIES' : 'COMMENTARY',
+            medium: row.url.includes('/show/') ? 'video' : 'article',
+          })),
+        }),
+      };
+    }
+    return { text: '{}' };
+  };
+  const sought = await seekContent({
+    query: '适合周末看的纪录片',
+    items: [],
+    intent: {
+      intent: 'consume',
+      topic: '纪录片',
+      requestedMedia: ['video'],
+      objectWanted: 'work_itself',
+      freshness: 'unspecified',
+      popularityClaim: false,
+      searchQueries: ['周末 纪录片 片单'],
+      suggestTalk: false,
+    } as never,
+    chatComplete: chat,
+    model: { baseUrl: 'https://model.example', model: 'm' },
+    searchWeb: async (q) => {
+      searched.push(q);
+      if (q.includes('河西走廊')) return [{ title: '河西走廊 第1集', url: 'https://tv.example.org/show/hexi', snippet: '纪录片正片' }];
+      if (q.includes('人生七年')) return [{ title: '人生七年 影评', url: 'https://news.example.org/review/7up', snippet: '一篇影评' }];
+      return [{ title: listing.content.title, url: listing.content.url!, snippet: listing.content.text }];
+    },
+    ingestHit: async () => [listing],
+  });
+  // 名字不在原文里的《地球脉动》不会被拿去搜索，也不会出现。
+  assert.equal(searched.some((q) => q.includes('地球脉动')), false);
+  const program = sought.cards.find((card) => card.url === 'https://tv.example.org/show/hexi');
+  assert.ok(program, 'verified program page becomes a card');
+  assert.equal(program!.contentType, 'video');
+  assert.equal(program!.basisSource?.url, 'https://example.org/list/weekend-docs');
+  assert.match(program!.reason, /周末纪录片片单/);
+  // 片单本身不冒充节目。
+  assert.equal(sought.cards.some((card) => card.url === 'https://example.org/list/weekend-docs'), false);
+  // 只找到影评的《人生七年》列为"提到过、未核实"，不进主结果。
+  assert.equal(sought.cards.some((card) => /人生七年/.test(card.title)), false);
+  const mention = sought.relatedCards.find((card) => card.url === 'https://example.org/list/weekend-docs');
+  assert.ok(mention, 'the listing stays as related basis');
+  assert.match(mention!.reason, /《人生七年》.*还没有核实/);
+  assert.equal(mention!.title, '周末纪录片片单');
+  assert.equal(/评分|9\.9/.test(JSON.stringify(sought.cards)), false);
+
+  // 搜索有配额：核实遇到限流就停，不再继续发；没核实的仍标在依据文章上。
+  const limited: string[] = [];
+  const throttled = await seekContent({
+    query: '适合周末看的纪录片',
+    items: [],
+    intent: {
+      intent: 'consume',
+      topic: '纪录片',
+      requestedMedia: ['video'],
+      objectWanted: 'work_itself',
+      freshness: 'unspecified',
+      popularityClaim: false,
+      searchQueries: ['周末 纪录片 片单'],
+      suggestTalk: false,
+    } as never,
+    chatComplete: chat,
+    model: { baseUrl: 'https://model.example', model: 'm' },
+    searchWeb: async (q) => {
+      if (q.includes('片单')) return [{ title: listing.content.title, url: listing.content.url!, snippet: listing.content.text }];
+      limited.push(q);
+      throw Object.assign(new Error('rate_limited'), { status: 429 });
+    },
+    ingestHit: async () => [listing],
+  });
+  assert.ok(limited.length <= 2, `verification stops after a failed search, got ${limited.length}`);
+  assert.equal(throttled.cards.length, 0);
+  assert.match(throttled.relatedCards.find((card) => card.url === listing.content.url)?.reason || '', /还没有核实/);
 });
 
 test('REGRESSION: Media RSS / JSON Feed / schema.org / oEmbed still parse', async () => {

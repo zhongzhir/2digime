@@ -5,6 +5,7 @@
  */
 'use strict';
 const path = require('node:path');
+const DATA = require('./data-root.cjs');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 const { spawn, spawnSync } = require('node:child_process');
@@ -13,7 +14,7 @@ const { chromium } = require(path.join(ROOT, 'node_modules', 'playwright'));
 
 const NAME = process.argv[2] || 'conv1';
 const SOURCE = process.argv[3] || 'owner-copy';
-const RUN = path.join(__dirname, 'runs', NAME);
+const RUN = path.join(DATA, 'runs', NAME);
 const out = [];
 const rec = (k, v) => { out.push({ k, v }); console.log(k, JSON.stringify(v)); };
 
@@ -35,7 +36,10 @@ const hashOf = (userData, rel) => crypto.createHash('sha1').update(fs.readFileSy
 async function launch(userData, home) {
   const port = 9400 + Math.floor(Math.random() * 400);
   const env = Object.assign({}, process.env, { HOME: home, USERPROFILE: home, DIGITALME_V2_HOME: home, DIGITALME_V2_USER_DATA: userData });
-  const child = spawn(path.join(ROOT, 'node_modules', 'electron', 'dist', 'electron.exe'), ['.', `--remote-debugging-port=${port}`], { env, cwd: ROOT, stdio: 'ignore' });
+  // AUDIT_EXE 指向打包程序时检查打包版；否则用源码版 Electron。
+  const child = process.env.AUDIT_EXE
+    ? spawn(process.env.AUDIT_EXE, [`--remote-debugging-port=${port}`], { env, stdio: 'ignore' })
+    : spawn(path.join(ROOT, 'node_modules', 'electron', 'dist', 'electron.exe'), ['.', `--remote-debugging-port=${port}`], { env, cwd: ROOT, stdio: 'ignore' });
   let browser;
   for (let i = 0; i < 60 && !browser; i += 1) {
     try { browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`); } catch { await new Promise((r) => setTimeout(r, 1000)); }
@@ -83,7 +87,7 @@ const clickMenu = async (page, id, label) => {
   fs.rmSync(RUN, { recursive: true, force: true });
   const userData = path.join(RUN, 'userData'); const home = path.join(RUN, 'home');
   fs.mkdirSync(home, { recursive: true });
-  if (SOURCE !== 'clean') spawnSync('robocopy', [path.join(__dirname, SOURCE, 'userData'), userData, '/E', '/NFL', '/NDL', '/NJH', '/NJS', '/NP']);
+  if (SOURCE !== 'clean') spawnSync('robocopy', [path.join(DATA, SOURCE, 'userData'), userData, '/E', '/NFL', '/NDL', '/NJH', '/NJS', '/NP']);
   fs.mkdirSync(userData, { recursive: true });
 
   let app = await launch(userData, home);

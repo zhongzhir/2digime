@@ -1,8 +1,9 @@
 // 用法: node print-trace.cjs <run-name> [--llm] [--noevents]
 const fs = require('fs'), path = require('path');
+const DATA = require('./data-root.cjs');
 const name = process.argv[2];
 const llm = process.argv.includes('--llm');
-const t = JSON.parse(fs.readFileSync(path.join(__dirname, 'runs', name, 'trace.json'), 'utf8'));
+const t = JSON.parse(fs.readFileSync(path.join(DATA, 'runs', name, 'trace.json'), 'utf8'));
 console.log(`scenario=${t.scenario} totalMs=${t.totalMs}`);
 const starts = new Map();
 for (const e of t.trace) {

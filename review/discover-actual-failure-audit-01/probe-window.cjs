@@ -1,8 +1,9 @@
 // 只读探针（在 owner-copy 副本上）：loadDiscoverItems 的 limit:80 窗口到底取到了哪些条目
 const path = require('path');
+const DATA = require('./data-root.cjs');
 const ROOT = path.resolve(__dirname, '..', '..');
 const { FileNetworkItemStore } = require(path.join(ROOT, 'dist/relay-service/network-item-store'));
-const dir = path.join(__dirname, process.argv[2] || 'owner-copy', 'userData/subjects/default/content');
+const dir = path.join(DATA, process.argv[2] || 'owner-copy', 'userData/subjects/default/content');
 (async () => {
   const s = new FileNetworkItemStore(dir);
   const now = new Date().toISOString();

@@ -143,6 +143,18 @@ function viewRow(v) {
     unjudged: (v.unjudgedCards || []).length,
     access: (v.accessCards || []).length,
     unjudgedTitles: (v.unjudgedCards || []).slice(0, 5).map((c) => cut(c.title, 40)),
+    relatedRows: (v.relatedCards || []).map(cardRow),
+    seekTrace: v.seekTrace
+      ? {
+          raw: v.seekTrace.rawCandidates, primary: v.seekTrace.primaryContent, about: v.seekTrace.aboutContent,
+          unrelated: v.seekTrace.unrelated, selected: v.seekTrace.selected, hits: v.seekTrace.rawSearchHits,
+          items: (v.seekTrace.items || []).map((r) => ({
+            id: String(r.contentId || '').slice(0, 14), type: r.contentType || '', origin: r.origin,
+            fid: r.fidelity || 'UNJUDGED', typeOk: r.typeMatched, sel: r.selected, vis: r.visible,
+            title: cut(r.title || '', 50),
+          })),
+        }
+      : null,
   };
 }
 

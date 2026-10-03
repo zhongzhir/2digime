@@ -59,6 +59,8 @@ export interface ConsumableCandidate {
   summary: string;
   contentType?: string;
   publishedAt?: string;
+  /** 来源给出的时长（秒）。没有就不传，不估算。 */
+  durationSeconds?: number;
 }
 
 export function localCalendarDate(now = new Date()): string {
@@ -393,6 +395,8 @@ export async function classifyCandidateRoles(input: {
     'LISTING：榜单、集合、搜索页、把多部作品打包推荐的页面。',
     'COMMENTARY：候选不是这次要消费的对象，而是在谈论该对象。仅当用户点名要视频/图片/音频时，介绍它们的文章才是 COMMENTARY。',
     'UNRELATED：主题不在这次搜索范围内。即使它可能符合用户平时其它兴趣，也标 UNRELATED。',
+    '用户这次在 query / preferences 里明确提出的条件（例如纪录片、长视频、适合周末看）也属于这次的范围：候选虽然是作品本身，但明显不满足这些条件（例如要长视频，它只是几分钟的片段），标 UNRELATED；材料不足以确认是否满足时，按其它条件判断，并在 basis 里写明哪一条还没确认。durationSeconds 是来源给出的时长，没有就是不知道。',
+    '能不能在应用里直接播放，与它是否符合这次请求无关，不能因此判为 PRIMARY_CONTENT。',
     'medium：该候选本身主要是 article / video / audio / image 哪一种，由页面内容判断；看不出就写 unknown。节目主页、系列页、单集页是否有直接播放文件，不影响 role，也不影响 medium。',
     '用户要视频或节目：具体视频、节目主页、系列页、单集页都是有效的推荐对象，用户可以去原站观看；《最佳视频榜单》这类文章是 LISTING/COMMENTARY。',
     '用户要摄影作品：具体照片/图集是 PRIMARY_CONTENT；盘点文章是 COMMENTARY。',
@@ -430,6 +434,7 @@ export async function classifyCandidateRoles(input: {
         url: row.url,
         contentType: row.contentType || '',
         ...(row.publishedAt ? { publishedAt: row.publishedAt } : {}),
+        ...(row.durationSeconds ? { durationSeconds: row.durationSeconds } : {}),
         summary: row.summary.slice(0, 400),
       })),
     });
@@ -482,4 +487,98 @@ export async function classifyCandidateRoles(input: {
     }
   });
   return { roles, judgments, unjudgedIds, attempts };
+}
+
+export interface MentionedWork {
+  title: string;
+  kind: string;
+  medium: CandidateMedium;
+  sourceId: string;
+  /** 只转述来源材料对这部作品的评价或介绍。 */
+  basis: string;
+  searchQuery: string;
+}
+
+const groundKey = (value: string) =>
+  String(value || '')
+    .replace(/[《》〈〉「」『』“”"'‘’\s·・:：,，。.!！?？()（）\-—_]/g, '')
+    .toLowerCase();
+
+/**
+ * 从这次实际读到的片单、榜单、评论里取出被点名、并符合这次请求的作品。
+ * 只收原文里出现过的名字（机械核对），作品是否存在、去哪里看由调用方用现有搜索再核实。
+ */
+export async function extractMentionedWorks(input: {
+  query: string;
+  intent: DiscoverIntent;
+  sources: Array<{ id: string; title: string; text: string }>;
+  chatComplete?: ChatCompleteFn;
+  model?: { baseUrl: string; model: string; apiKey?: string };
+  signal?: AbortSignal;
+  onAttempt?: (attempt: StructuredAttempt) => void;
+}): Promise<MentionedWork[]> {
+  if (!input.sources.length || !input.chatComplete || !input.model) return [];
+  const system = [
+    '你在读用户这次搜索读到的片单、榜单和评论文章，从中取出被明确点名、并且符合用户这次请求的具体作品（节目、剧集、电影、纪录片、播客、专辑等）。只输出 JSON：{"works":[{"title":"","kind":"","medium":"","sourceId":"","basis":"","searchQuery":""}]}。',
+    'title：作品名，必须和材料原文里写的一致，不翻译、不补全、不改写。材料没有点名的作品不要输出。',
+    'kind：材料能确定的作品类型，例如纪录片、电视剧、电影、综艺、播客；不确定就留空。',
+    'medium：video、audio 或 unknown。',
+    'sourceId：这部作品出现在哪一篇材料里。',
+    'basis：只转述这篇材料对这部作品的评价或介绍。材料里没有的评分、排名、时长、播放量一律不写，不要编造。',
+    'searchQuery：用来核实这部作品、找到它观看或收听入口的搜索词，通常是作品名加类型。',
+    '按用户这次的条件挑（例如长视频、纪录片、适合周末），明显不符合的不要输出。最多 4 部，挑材料里评价最明确的，宁缺毋滥；多篇材料提到的同一部只输出一次。',
+  ].join('\n');
+  const user = JSON.stringify({
+    query: input.query,
+    topic: input.intent.topic,
+    requestedContentTypes: input.intent.requestedMedia,
+    ...(input.intent.preferences ? { preferences: input.intent.preferences } : {}),
+    sources: input.sources.map((row) => ({ id: row.id, title: row.title, text: row.text.slice(0, 1800) })),
+  });
+  const byId = new Map(input.sources.map((row) => [row.id, groundKey(`${row.title}\n${row.text}`)]));
+  const outcome = await completeStructured<MentionedWork[]>({
+    chat: input.chatComplete,
+    request: {
+      baseUrl: input.model.baseUrl,
+      ...(input.model.apiKey ? { apiKey: input.model.apiKey } : {}),
+      model: input.model.model,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+      temperature: 0,
+      responseFormat: { type: 'json_object' },
+    },
+    passes: JUDGMENT_JSON_PASSES,
+    parse: (text) => {
+      const rec = parseJsonObject(text);
+      if (!rec || !Array.isArray(rec.works)) return null;
+      const seen = new Set<string>();
+      const out: MentionedWork[] = [];
+      for (const row of rec.works) {
+        if (!row || typeof row !== 'object') continue;
+        const r = row as Record<string, unknown>;
+        const title = String(r.title || '').replace(/[《》]/g, '').trim().slice(0, 80);
+        const sourceId = String(r.sourceId || '').trim();
+        const key = groundKey(title);
+        const source = byId.get(sourceId);
+        if (key.length < 2 || !source || !source.includes(key) || seen.has(key)) continue;
+        seen.add(key);
+        const medium = asMediaType(r.medium);
+        out.push({
+          title,
+          kind: String(r.kind || '').trim().slice(0, 20),
+          medium: medium === 'video' || medium === 'audio' ? medium : 'unknown',
+          sourceId,
+          basis: String(r.basis || '').replace(/\s+/g, ' ').trim().slice(0, 200),
+          searchQuery: String(r.searchQuery || '').trim().slice(0, 80) || title,
+        });
+        if (out.length >= 4) break;
+      }
+      return out;
+    },
+    ...(input.signal ? { signal: input.signal } : {}),
+    ...(input.onAttempt ? { onAttempt: input.onAttempt } : {}),
+  });
+  return outcome.value || [];
 }

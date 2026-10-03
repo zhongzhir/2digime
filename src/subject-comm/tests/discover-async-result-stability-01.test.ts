@@ -246,11 +246,24 @@ test('CASE 1/2: late web ABOUT keeps images; late images upgrade PRIMARY', async
         objectWanted: 'work_itself',
         searchQueries: ['航天摄影'],
       },
-      roles: [{ id: IMAGE.itemId, role: 'COMMENTARY' }],
+      roles: [{ id: IMAGE.itemId, role: 'PRIMARY_CONTENT' }],
     }),
     model: { baseUrl: 'https://example.invalid', model: 'x' },
   });
   assert.equal(imageSeek.cards.some((row) => row.itemId === IMAGE.itemId && row.contentType === 'image'), true);
+
+  // 能直接显示不等于相关：模型判为评论的图片不会因为可显示而升为主结果。
+  const judgedAway = await seekContent({
+    query: '找一些航天摄影作品',
+    items: [IMAGE],
+    skipWeb: true,
+    chatComplete: chatFromScript({
+      intent: { intent: 'consume', requestedMedia: ['image'], objectWanted: 'work_itself', searchQueries: ['航天摄影'] },
+      roles: [{ id: IMAGE.itemId, role: 'COMMENTARY' }],
+    }),
+    model: { baseUrl: 'https://example.invalid', model: 'x' },
+  });
+  assert.equal(judgedAway.cards.some((row) => row.itemId === IMAGE.itemId), false);
 
   const webSeek = await seekContent({
     query: '找一些航天摄影作品',

@@ -12,9 +12,11 @@ import {
   classifyCandidateRoles,
   type CandidateJudgment,
   defaultDiscoverIntent,
+  extractMentionedWorks,
   interpretDiscoverIntent,
   isDomainLikeTitle,
   isGenericHubUrl,
+  isPrimaryContentRole,
   isSiteEntranceUrl,
   localCalendarDate,
   objectFidelity,
@@ -339,6 +341,108 @@ function webCardFromHit(hit: ExternalSeekHit, itemId: string): DiscoverCard {
   return markAccess(card);
 }
 
+async function programsFromSources(input: {
+  query: string;
+  intent: DiscoverIntent;
+  sources: DiscoverCard[];
+  searchWeb: (query: string) => Promise<ExternalSeekHit[]>;
+  chatComplete: ChatCompleteFn;
+  model: { baseUrl: string; model: string; apiKey?: string };
+  seenUrls: Set<string>;
+  signal?: AbortSignal;
+}): Promise<{ verified: DiscoverCard[]; unverified: DiscoverCard[] }> {
+  const verified: DiscoverCard[] = [];
+  const unverified: DiscoverCard[] = [];
+  if (!input.sources.length) return { verified, unverified };
+  const works = await extractMentionedWorks({
+    query: input.query,
+    intent: input.intent,
+    sources: input.sources.map((card) => ({ id: card.itemId, title: card.title, text: card.text || '' })),
+    chatComplete: input.chatComplete,
+    model: input.model,
+    ...(input.signal ? { signal: input.signal } : {}),
+  });
+  if (!works.length || input.signal?.aborted) return { verified, unverified };
+  const sourceById = new Map(input.sources.map((card) => [card.itemId, card]));
+  // 搜索有配额（网关按安装计次）：两两核实；一次搜索失败或被限流后不再发新的核实，其余如实标为未核实。
+  let searchBlocked = false;
+  const checkOne = async (work: (typeof works)[number], index: number) => {
+    if (searchBlocked || input.signal?.aborted) return { work, card: null, judgment: undefined };
+    let hits: ExternalSeekHit[] = [];
+    try {
+      hits = await input.searchWeb(work.searchQuery);
+    } catch {
+      searchBlocked = true;
+      hits = [];
+    }
+    const candidates: DiscoverCard[] = [];
+    for (const hit of hits) {
+      const canonical = canonicalOf(hit.url);
+      if (!canonical || input.seenUrls.has(canonical)) continue;
+      if (!allowsDefaultSupply({ url: canonical })) continue;
+      if (isSiteEntranceUrl(canonical) || isGenericHubUrl(canonical) || isDomainLikeTitle(hit.title, canonical)) continue;
+      const card = webCardFromHit({ ...hit, url: canonical }, `work_${index}_${candidates.length}_${canonical}`);
+      if (isAccessCard(card)) continue;
+      candidates.push(card);
+      if (candidates.length >= 3) break;
+    }
+    if (!candidates.length || input.signal?.aborted) return { work, card: null, judgment: undefined };
+    const judged = await classifyCandidateRoles({
+      query: work.kind ? `《${work.title}》（${work.kind}）` : `《${work.title}》`,
+      intent: { ...input.intent, topic: work.title },
+      candidates: candidates.map((card) => ({
+        id: card.itemId,
+        title: card.title,
+        url: card.url || '',
+        summary: card.text || '',
+      })),
+      chatComplete: input.chatComplete,
+      model: input.model,
+      ...(input.signal ? { signal: input.signal } : {}),
+    });
+    const card = candidates.find(
+      (row) => isPrimaryContentRole(judged.roles.get(row.itemId)) && judged.judgments.get(row.itemId)?.medium !== 'article',
+    );
+    return { work, card: card || null, judgment: card ? judged.judgments.get(card.itemId) : undefined };
+  };
+  const checked: Array<Awaited<ReturnType<typeof checkOne>>> = [];
+  for (let index = 0; index < works.length; index += 2) {
+    checked.push(...(await Promise.all(works.slice(index, index + 2).map((work, j) => checkOne(work, index + j)))));
+  }
+  const taken = new Set<string>();
+  const notChecked = new Map<string, string[]>();
+  for (const row of checked) {
+    const source = sourceById.get(row.work.sourceId);
+    if (!source) continue;
+    const key = row.card ? canonicalOf(row.card.url) : '';
+    if (row.card && key && !taken.has(key)) {
+      taken.add(key);
+      input.seenUrls.add(key);
+      const medium = row.work.medium !== 'unknown' ? row.work.medium : row.judgment?.medium;
+      verified.push({
+        ...row.card,
+        objectFidelity: 'PRIMARY_CONTENT',
+        ...(medium === 'video' || medium === 'audio' ? { contentType: medium } : {}),
+        ...(row.judgment?.summary ? { text: row.judgment.summary } : {}),
+        reason: `推荐依据来自「${source.title}」${row.work.basis ? `：${row.work.basis}` : '。'}`,
+        basisSource: { title: source.title, ...(source.url ? { url: source.url } : {}) },
+      });
+      continue;
+    }
+    notChecked.set(source.itemId, [...(notChecked.get(source.itemId) || []), `《${row.work.title}》`]);
+  }
+  // 未核实的作品不单独成卡：标在提到它们的那篇文章上，文章仍只是依据。
+  for (const [sourceId, names] of notChecked) {
+    const source = sourceById.get(sourceId)!;
+    unverified.push({
+      ...source,
+      objectFidelity: 'ABOUT_CONTENT',
+      reason: `这篇提到了${names.join('')}，还没有核实到它们的作品页或观看入口。`,
+    });
+  }
+  return { verified, unverified };
+}
+
 export async function seekContent(input: {
   query: string;
   items: NetworkItem[];
@@ -615,6 +719,7 @@ export async function seekContent(input: {
         summary: card.text || '',
         ...(card.contentType ? { contentType: card.contentType } : {}),
         ...(card.publishedAt ? { publishedAt: card.publishedAt } : {}),
+        ...(card.durationSeconds ? { durationSeconds: card.durationSeconds } : {}),
       })),
       chatComplete: input.chatComplete,
       model: input.model,
@@ -653,15 +758,6 @@ export async function seekContent(input: {
       (!!judgment && requiredTypes.includes(judgment.medium) && judgment.role !== 'UNRELATED');
     let kind = fidelity.get(card.itemId);
     if (unjudgedIds.has(card.itemId)) kind = 'UNJUDGED';
-    if (
-      card.contentType === 'image' &&
-      hasDirectMediaRepresentation(card) &&
-      matchedType &&
-      kind !== 'UNRELATED' &&
-      kind !== 'UNJUDGED'
-    ) {
-      kind = 'PRIMARY_CONTENT';
-    }
     if (!kind) {
       kind = requiredTypes.length && !matchedType ? 'ABOUT_CONTENT' : 'PRIMARY_CONTENT';
     }
@@ -703,6 +799,47 @@ export async function seekContent(input: {
         ...(judgment?.summary ? { text: judgment.summary } : {}),
       });
     }
+  }
+
+  // 片单、榜单和评论只作依据，不冒充节目本身：模型从这次读到的原文里取出被点名的作品，
+  // 再用同一个搜索核实作品页与观看入口；核实不到的作品只作"提到过"列出，并注明未核实。
+  const wantsProgram =
+    intent.intent === 'consume' && requiredTypes.some((row) => row === 'video' || row === 'audio');
+  if (
+    wantsProgram &&
+    !datedNews &&
+    input.searchWeb &&
+    !input.skipWeb &&
+    input.chatComplete &&
+    input.model &&
+    primary.length < MAX_CARDS &&
+    !input.signal?.aborted
+  ) {
+    const sources = concrete
+      .filter((card) => {
+        const role = judgments.get(card.itemId)?.role;
+        return (
+          (role === 'LISTING' || role === 'COMMENTARY') &&
+          fidelity.get(card.itemId) !== 'UNRELATED' &&
+          String(card.text || '').trim().length >= 40
+        );
+      })
+      .slice(0, 6);
+    const found = await programsFromSources({
+      query,
+      intent,
+      sources,
+      searchWeb: input.searchWeb,
+      chatComplete: input.chatComplete,
+      model: input.model,
+      seenUrls,
+      ...(input.signal ? { signal: input.signal } : {}),
+    });
+    primary.unshift(...found.verified);
+    const annotated = new Set(found.unverified.map((card) => card.itemId));
+    const rest = related.filter((card) => !annotated.has(card.itemId));
+    related.length = 0;
+    related.push(...found.unverified, ...rest);
   }
 
   const placed = datedNews && reportDay
