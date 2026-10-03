@@ -190,6 +190,13 @@ const PORT = 9400 + Math.floor(Math.random() * 400);
         await page.press('#content-discover-query', 'Enter');
         log('submit2', { query: process.env.SECOND_QUERY });
       }
+    } else if (process.env.SWITCH_AFTER_MS && process.env.SECOND_QUERY) {
+      // 不取消、直接换主题：旧搜索的结果不能出现在新主题上
+      await new Promise((r) => setTimeout(r, Number(process.env.SWITCH_AFTER_MS)));
+      log('pre-switch', await snap());
+      await page.fill('#content-discover-query', process.env.SECOND_QUERY);
+      await page.press('#content-discover-query', 'Enter');
+      log('submit2', { query: process.env.SECOND_QUERY });
     }
     while (at() - submitAt < MAX_SEEK) {
       const s = await poll('seek');

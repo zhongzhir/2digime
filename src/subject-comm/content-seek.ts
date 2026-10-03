@@ -78,6 +78,8 @@ export interface SeekTrace {
   excludedHub?: number;
   excludedDomainTitle?: number;
   excludedPlaceholder?: number;
+  /** 超过本轮判断上限、没有送去判断的候选数。它们不展示，也不算"没有完成判断"。 */
+  notSentToJudge?: number;
   searchFailed?: boolean;
 }
 
@@ -741,9 +743,10 @@ export async function seekContent(input: {
   const unjudgedIds = new Set<string>();
   // 各批并行判断，多判断一些候选，少留"还没完成判断"的尾巴。
   const judgePool = concrete.filter((card) => !isAccessCard(card)).slice(0, 16);
-  for (const card of concrete) {
-    if (!judgePool.includes(card)) unjudgedIds.add(card.itemId);
-  }
+  // 超出上限的这轮没有看过：不展示，也不能说成"判断没完成"。只有送去判断却没拿到结果的才算没完成。
+  const notSent = new Set(
+    concrete.filter((card) => !isAccessCard(card) && !judgePool.includes(card)).map((card) => card.itemId),
+  );
   const judgments = new Map<string, CandidateJudgment>();
   if (input.chatComplete && input.model && judgePool.length) {
     const judged = await classifyCandidateRoles({
@@ -787,6 +790,7 @@ export async function seekContent(input: {
       access.push(card);
       continue;
     }
+    if (notSent.has(card.itemId)) continue;
     // 形态由页面本身决定：模型从内容判断出是视频/音频节目，就算有效推荐，即使没有直接播放文件。
     // 能否应用内播放只看媒体字段，不影响是否入选。
     const judgment = judgments.get(card.itemId);
@@ -914,7 +918,11 @@ export async function seekContent(input: {
       typeMatched: matchedType,
       selected: kind === 'PRIMARY_CONTENT' && matchedType,
       visible: isVisible,
-      reason: unjudgedCard ? '这轮没有完成相关性判断。' : card.reason,
+      reason: notSent.has(card.itemId)
+        ? '超过本轮判断上限，没有送去判断。'
+        : unjudgedCard
+          ? '这轮没有完成相关性判断。'
+          : card.reason,
     };
   });
   const trace: SeekTrace = {
@@ -940,6 +948,7 @@ export async function seekContent(input: {
           excludedHub,
           excludedDomainTitle: excludedDomain,
           excludedPlaceholder,
+          ...(notSent.size ? { notSentToJudge: notSent.size } : {}),
           ...(searchFailed ? { searchFailed: true } : {}),
         }
       : { searchCalled: false }),
@@ -975,7 +984,7 @@ export async function seekContent(input: {
       notice = requiredTypes.includes('audio')
         ? '没有找到这个音频节目本身，只找到了介绍文章。介绍不能当作已经听完。'
         : '没有找到这个视频节目本身，只找到了介绍文章。介绍不能当作已经看完。';
-    } else if (concrete.length > 0 && trace.unrelated === concrete.length) {
+    } else if (concrete.length > 0 && trace.unrelated === concrete.length - notSent.size) {
       notice = '搜索有返回，判断后和这次要找的对不上。';
     } else if (intent.intent === 'consume') {
       notice = honestEmptyNotice(intent);

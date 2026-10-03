@@ -480,6 +480,51 @@ test('CONDITIONS: a work whose stated conditions the model cannot confirm stays 
   assert.match(maybe!.reason, /还没确认/);
 });
 
+test('JUDGE LIMIT: candidates beyond the judge limit are not reported as "judgment not finished"', async () => {
+  const sent: string[] = [];
+  const chat: ChatCompleteFn = async ({ messages }) => {
+    const system = String(messages[0]?.content || '');
+    const user = JSON.parse(String(messages[messages.length - 1]?.content || '{}')) as {
+      candidates?: Array<{ id: string }>;
+    };
+    if (system.includes('判断每个候选')) {
+      sent.push(...(user.candidates || []).map((row) => row.id));
+      return {
+        text: JSON.stringify({
+          roles: (user.candidates || []).map((row) => ({ id: row.id, role: 'PRIMARY_CONTENT', medium: 'audio', conditions: 'none' })),
+        }),
+      };
+    }
+    return { text: '{}' };
+  };
+  const sought = await seekContent({
+    query: '经典古典音乐专辑',
+    items: [],
+    intent: {
+      intent: 'consume',
+      topic: '古典音乐',
+      requestedMedia: ['audio'],
+      objectWanted: 'work_itself',
+      freshness: 'unspecified',
+      popularityClaim: false,
+      searchQueries: ['古典音乐 专辑'],
+      suggestTalk: false,
+    } as never,
+    chatComplete: chat,
+    model: { baseUrl: 'https://model.example', model: 'm' },
+    searchWeb: async () =>
+      Array.from({ length: 20 }, (_, i) => ({
+        title: `古典专辑 第${i + 1}张`,
+        url: `https://music.example.org/album/${i + 1}`,
+        snippet: '一张古典音乐专辑，可在线收听。',
+      })),
+  });
+  assert.equal(sent.length, 16);
+  assert.equal(sought.unjudgedCards.length, 0);
+  assert.doesNotMatch(sought.notice, /没有完成判断/);
+  assert.equal(sought.trace.notSentToJudge, 4);
+});
+
 test('REGRESSION: Media RSS / JSON Feed / schema.org / oEmbed still parse', async () => {
   const store = new MemoryNetworkItemStore();
   const mediaRss = `<?xml version="1.0"?><rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel><title>MRSS</title>
