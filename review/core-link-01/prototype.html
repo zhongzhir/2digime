@@ -1,0 +1,45 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>发现 · 联动流程审查</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f6f7f9;color:#242936;font:16px/1.65 system-ui,"Microsoft YaHei",sans-serif}header{background:white;border-bottom:1px solid #e5e7ed;padding:18px 5%;display:flex;align-items:center;justify-content:space-between}header strong{font-size:22px}nav{display:flex;gap:8px}button,a{cursor:pointer}button{font:inherit;padding:9px 17px;border:1px solid #cbd0da;border-radius:9px;background:white;color:inherit}button.primary{background:#4659bd;color:white;border-color:#4659bd}button:disabled{opacity:.45;cursor:default}main{max-width:1080px;margin:30px auto;padding:0 22px}h1{font-size:30px;margin:0 0 8px}h2{font-size:20px;margin:0 0 12px}p{margin:8px 0}.muted{color:#667085;font-size:14px}.notice{background:#fff8e6;padding:12px 16px;border-radius:10px;margin:16px 0}.panel,.card{background:white;border:1px solid #e1e4ec;border-radius:14px;padding:22px;margin:16px 0}.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.card{margin:0;display:flex;flex-direction:column;gap:12px}.card.selected{border:2px solid #4659bd;padding:21px}.tag{background:#edf0fb;border-radius:20px;padding:3px 11px;font-size:13px;display:inline-block}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:auto}textarea,input{font:inherit;border:1px solid #cbd0da;border-radius:9px;padding:12px;width:100%;background:#fff}textarea{min-height:100px;resize:vertical}a{color:#3c51b0}.bar{position:sticky;bottom:16px;background:#252f60;color:white;padding:14px 20px;border-radius:12px;display:flex;justify-content:space-between;gap:16px;margin-top:20px;box-shadow:0 8px 26px #20284422}.bar button{color:#242936}.message{padding:18px;background:#eef1fc;border-radius:12px;white-space:pre-wrap;margin:14px 0}table{border-collapse:collapse;width:100%}td,th{padding:12px;text-align:left;border-bottom:1px solid #e1e4ec}details{margin:12px 0}#status{min-height:24px;color:#4659bd}footer{margin:26px 0;font-size:13px;color:#667085}@media(max-width:720px){.grid{grid-template-columns:1fr}header{align-items:flex-start;gap:15px;flex-direction:column}h1{font-size:25px}.bar{flex-direction:column}}
+.bar:has(button:disabled){position:static;box-shadow:none}
+</style>
+<header><strong>兔机米</strong><nav><button data-view="discover">发现</button><button data-view="talk">与兔机米聊</button><button id="new-session">换一个会话</button></nav></header><main id="app"></main>
+<script>
+'use strict';
+// Review-only interaction simulation. No runtime, model, account or network write.
+const samples=[
+ {id:'ms',title:'面向初学者的生成式 AI',source:'Microsoft · 官方课程仓库',url:'https://github.com/microsoft/generative-ai-for-beginners/blob/main/translations/zh-CN/README.md',language:'简体中文材料',format:'21 课 · 学习与构建',reason:'有 Python / TypeScript 构建示例，可围绕 AI 应用做练习。',unknown:'总练习时长、模型调用费用未核实。'},
+ {id:'dl',title:'生成式 AI 初学者课程 · .NET',source:'Microsoft · .NET 官方课程仓库',url:'https://github.com/microsoft/Generative-AI-for-beginners-dotnet/blob/main/translations/zh/README.md',language:'简体中文材料',format:'5 课 · .NET 应用实践',reason:'面向 C# / .NET 应用构建，适合已有 .NET 基础的学习者。',unknown:'用户是否有 .NET 基础、练习时长与云资源费用未核实。'}
+];
+const initial=()=>({view:'discover',request:'近期少看剧，每天有一小时，希望学习 AI 产品落地，优先中文或有中文字幕。',selected:[],searched:false,goal:null,correction:'工作日半小时，周末一小时',messages:[],plan:null});
+let state;try{state=JSON.parse(localStorage.getItem('core-link-review-v1'))||initial()}catch{state=initial()}
+const $=s=>document.querySelector(s), esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function save(){localStorage.setItem('core-link-review-v1',JSON.stringify(state))}
+function selected(){return samples.filter(s=>state.selected.includes(s.id))}
+function render(){save();const app=$('#app');app.innerHTML=`<p class="muted">本地可点击审查原型 · 非 Figma · 不调用模型或写入产品数据</p><div class="notice">产品真实搜索本轮受额度限制，返回 0 门课程。下面两门是人工核对官方入口的流程样本，不是产品搜索已交付的结果；两门均有中文材料，技术基础与练习成本仍需确认。</div>`;
+ if(state.view==='discover'){
+ app.innerHTML+=`<h1>发现适合这件事的内容</h1><p class="muted">说清这次想做什么，选择对象后带回同一对话。</p><section class="panel"><label for="request">这次的需求</label><textarea id="request">${esc(state.request)}</textarea><p class="muted">作用范围：当前会话中的这个目标；重开本页会保留审查状态，换会话不会带入目标。</p><button id="find" class="primary">查看课程样本</button><p id="status" role="status"></p></section>`;
+ if(state.goal)app.innerHTML+=`<section class="panel"><h2>当前目标</h2><p>${esc(state.goal.latest)}</p><p class="muted">原需求：${esc(state.goal.original)}</p><button id="revoke">撤销这个目标</button></section>`;
+ if(state.searched)app.innerHTML+=`<p class="muted">样本范围：AI 应用构建课程。输入原样保留；此原型不理解任意新主题，也不把样本冒充实时推荐。</p><div class="grid">${samples.map(s=>`<article class="card ${state.selected.includes(s.id)?'selected':''}"><span class="tag">课程 · 官方入口</span><h2>${esc(s.title)}</h2><p>${esc(s.reason)}</p><p>${esc(s.language)}<br>${esc(s.format)}</p><p class="muted">${esc(s.unknown)}</p><p class="muted">来源：${esc(s.source)}</p><div class="actions"><a href="${s.url}" target="_blank" rel="noopener">查看课程 ↗</a><button data-select="${s.id}" aria-pressed="${state.selected.includes(s.id)}">${state.selected.includes(s.id)?'取消选择':'选择比较'}</button></div></article>`).join('')}</div><div class="bar"><span>已选 ${state.selected.length} 门${selected().map(s=>' · '+esc(s.title)).join('')}</span><button id="compare" ${state.selected.length<2?'disabled':''}>带回对话比较</button></div>`;
+ }else{
+ app.innerHTML+=`<h1>与兔机米聊</h1><button id="back">← 返回发现，保留选择</button>`;
+ if(!state.goal)app.innerHTML+=`<section class="panel">本会话尚未带入发现目标。选择两门课程后可以比较。</section>`;
+ else{app.innerHTML+=`<section class="panel"><h2>本次带入</h2><p>${esc(state.goal.latest)}</p><p class="muted">作用范围：当前会话 · ${selected().map(s=>esc(s.title)).join(' / ')}</p><details><summary>查看原需求和来源</summary><p>${esc(state.goal.original)}</p>${selected().map(s=>`<p><a href="${s.url}" target="_blank" rel="noopener">${esc(s.source)}：${esc(s.title)}</a></p>`).join('')}</details></section><div class="message">比较示例：第一门覆盖 Python / TypeScript 与多个 AI 应用主题；第二门集中在 C# / .NET 应用实践。两门都有中文材料，先确认编程基础再选择主课。此段为审查样本文案，不是模型答复。</div><button id="delegate" class="primary">明确委托：生成计划示例</button><section class="panel"><label for="correction">纠正同一个目标（原文保留）</label><input id="correction" value="${esc(state.correction)}"><p><button id="correct">保存纠正，回到发现</button> <button id="revoke">撤销这个目标</button></p><p class="muted">纠正只属于这个目标；不会成为长期本人事实。撤销不会删除已交付文件。</p></section>`;
+ if(state.plan)app.innerHTML+=`<section class="panel"><h2>学习计划 · 可回读示例</h2><p>采用条件：${esc(state.plan.condition)}</p><table><tr><th>阶段</th><th>练习与成果</th></tr><tr><td>第 1 周</td><td>选一个 AI 产品场景，学习输入与输出设计，完成可运行的最小原型。</td></tr><tr><td>第 2 周</td><td>补充模型调用链与评估，记录失败样例，整理演示和下一步。</td></tr></table><p class="muted">这是可修改的建议；没有报名、付费或联网执行。每天任务还需真实模型依据已确认课程细化。</p><button id="readback">回读已生成示例</button> <button id="download">下载计划示例</button><div id="readback-text"></div></section>`;
+ }}app.innerHTML+=`<footer>审查顺序：输入需求 → 查看课程入口 → 选择两门 → 带回比较 → 明确委托 → 回读 → 纠正 → 返回查看 → 再生成 → 换会话／撤销。<button id="reset">重置审查状态</button></footer>`;wire();}
+function wire(){
+ if($('#request'))$('#request').oninput=e=>{state.request=e.target.value;save()};
+ if($('#find'))$('#find').onclick=()=>{if(!state.request.trim()){ $('#status').textContent='请先表达这次的需求。';return;}state.searched=true;render()};
+ document.querySelectorAll('[data-select]').forEach(b=>b.onclick=()=>{state.selected=state.selected.includes(b.dataset.select)?state.selected.filter(id=>id!==b.dataset.select):[...state.selected,b.dataset.select];render()});
+ if($('#compare'))$('#compare').onclick=()=>{state.goal={original:state.request,latest:state.request};state.view='talk';render()};
+ if($('#back'))$('#back').onclick=()=>{state.view='discover';render()};
+ if($('#correction'))$('#correction').oninput=e=>{state.correction=e.target.value;save()};
+ if($('#correct'))$('#correct').onclick=()=>{if(!state.correction.trim())return;state.goal.latest=state.goal.original+'\n用户最新纠正：'+state.correction;state.view='discover';render()};
+ if($('#delegate'))$('#delegate').onclick=()=>{state.plan={condition:state.goal.latest};render()};
+ if($('#readback'))$('#readback').onclick=()=>{$('#readback-text').textContent='示例回读：'+state.plan.condition+'；两周成果：最小原型、失败样例、演示记录。'};
+ if($('#download'))$('#download').onclick=()=>{let blob=new Blob(['# 学习计划审查示例\n'+state.plan.condition+'\n第1周：最小产品原型\n第2周：评估与演示\n课程来源：\n'+selected().map(s=>s.url).join('\n')],{type:'text/plain;charset=utf-8'});let a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='learning-plan-review.md';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
+ if($('#revoke'))$('#revoke').onclick=()=>{state.goal=null;state.selected=[];state.plan=null;render()};
+ $('#reset').onclick=()=>{state=initial();render()};
+}
+document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;render()});$('#new-session').onclick=()=>{state=initial();render()};render();
+</script></html>

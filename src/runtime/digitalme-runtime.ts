@@ -533,7 +533,44 @@ export class DigitalMeRuntime {
     input: CommandMap['talk']['input'],
     externalSignal?: AbortSignal | null,
   ): Promise<CommandMap['talk']['output']> {
-    return this.getTalkService().invoke(input, externalSignal || this.talkAbortSignal);
+    const pkg = this.subject.getActive();
+    if (!pkg) return this.getTalkService().invoke(input, externalSignal || this.talkAbortSignal);
+    if (!input.contentIds?.length) {
+      const threadId = listConversationSessionsSync(pkg.rootDir).currentId;
+      const before = (await readThread(pkg.rootDir, nowIso(), threadId)).discoveryGoal?.request;
+      const result = await this.getTalkService().invoke(input, externalSignal || this.talkAbortSignal);
+      const after = (await readThread(pkg.rootDir, nowIso(), threadId)).discoveryGoal?.request;
+      if (before && before !== after) {
+        this.lastIntentView = null;
+        this.beginSearchGeneration();
+      }
+      return result;
+    }
+    const ids = new Set(input.contentIds);
+    const items = await this.loadDiscoverItems(pkg.rootDir);
+    const prefs = await listContentPreferences(pkg.rootDir);
+    const selected = items.filter((item) => ids.has(item.itemId) && !prefs.some((p) =>
+      p.kind === 'block' && p.targetType === 'source' && p.target === item.publisherSubjectId));
+    if (selected.length !== ids.size) throw new Error('所选对象已不可用或来源已被屏蔽，请重新选择。');
+    const adjustment = await this.currentAdjustment(pkg.rootDir);
+    const request = this.lastIntentView?.searchQuery || adjustment?.text || '比较我从发现选中的内容';
+    const threadId = listConversationSessionsSync(pkg.rootDir).currentId;
+    const thread = await readThread(pkg.rootDir, nowIso(), threadId);
+    const previous = thread.discoveryGoal;
+    const same = previous && (previous.originalRequest === request || previous.request === request);
+    const objects = selected.map((item) => ({ contentId: item.itemId, title: item.content.title,
+      url: item.content.url || '', source: item.publisherDisplayName || item.publisherSubjectId,
+      publisherSubjectId: item.publisherSubjectId, summary: item.content.text }));
+    const discoveryGoal = same ? { ...previous, objects } : {
+      originalRequest: request, request, scope: adjustment?.scope || 'session' as const, objects,
+    };
+    await saveRecommendationAdjustment(pkg.rootDir, {
+      text: request, summary: `本次目标：${request}`, scope: discoveryGoal.scope,
+      runtimeId: this.discoverRuntimeId, goalThreadId: threadId,
+    });
+    // 关联后不让旧 steer 成为另一份有效条件。
+    await this.reverseSteerPreference(pkg.rootDir);
+    return this.getTalkService().invoke({ ...input, discoveryGoal }, externalSignal || this.talkAbortSignal);
   }
 
   async content(
@@ -574,6 +611,10 @@ export class DigitalMeRuntime {
 
     if (action === 'adjust' || action === 'adjustKeep' || action === 'adjustRevoke') {
       if (action === 'adjustRevoke') {
+        const linked = await this.currentAdjustment(pkg.rootDir);
+        if (linked?.goalThreadId) {
+          await this.getTalkService().revokeDiscoveryGoal(linked.goalThreadId);
+        }
         await clearRecommendationAdjustment(pkg.rootDir);
         await this.reverseSteerPreference(pkg.rootDir);
         this.lastIntentView = null;
@@ -601,6 +642,12 @@ export class DigitalMeRuntime {
           target: STEER_PREFERENCE_TARGET,
           text: `${kept.summary}（持续保留的本次调整，不是数字之我，也不表示长期不喜欢某类内容。）`,
         });
+        if (kept.goalThreadId) {
+          const thread = await readThread(pkg.rootDir, nowIso(), kept.goalThreadId);
+          if (thread.discoveryGoal) thread.discoveryGoal.scope = 'keep';
+          await writeThread(pkg.rootDir, thread);
+          await this.reverseSteerPreference(pkg.rootDir);
+        }
         this.lastIntentView = null;
         return { view: await this.withAdjustment(pkg.rootDir, await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reset')) };
       }
@@ -970,7 +1017,17 @@ export class DigitalMeRuntime {
   }
 
   private async currentAdjustment(packageRoot: string) {
-    return loadRecommendationAdjustment(packageRoot, this.discoverRuntimeId);
+    const row = await loadRecommendationAdjustment(packageRoot, this.discoverRuntimeId);
+    if (row && !row.goalThreadId) return row;
+    const threadId = listConversationSessionsSync(packageRoot).currentId;
+    const thread = await readThread(packageRoot, nowIso(), threadId);
+    if (!thread.discoveryGoal) return null;
+    // The singleton adjustment is a Discover projection; switching between two
+    // linked conversations must still read each conversation's own goal.
+    return { id: row?.id || `ra_${threadId}`, runtimeId: this.discoverRuntimeId,
+      origin: 'user_expression' as const, createdAt: row?.createdAt || '', updatedAt: row?.updatedAt || '',
+      goalThreadId: threadId, text: thread.discoveryGoal.request,
+      summary: `本次目标：${thread.discoveryGoal.request}`, scope: thread.discoveryGoal.scope };
   }
 
   private adjustmentView(
@@ -1042,6 +1099,8 @@ export class DigitalMeRuntime {
     const items = await loadItems();
     const preferenceRows = await listContentPreferences(packageRoot);
     const adjustment = await this.currentAdjustment(packageRoot);
+    // 关联任务的发现结果必须按 thread 最新条件判断，不回放更正前的整表。
+    if (adjustment?.goalThreadId && (mode === 'open' || mode === 'more' || mode === 'reuse')) mode = 'reset';
     const directives = [
       formatPreferenceDirectives(preferenceRows),
       adjustmentSteersFeed(adjustment, 'personal') ? formatAdjustmentDirective(adjustment) : '',
@@ -1704,6 +1763,14 @@ export class DigitalMeRuntime {
           return { rootDir: pkg.rootDir, subjectId: pkg.id };
         },
         this.resolveDigitalSelfChat(),
+        nowIso,
+        async (sourceCopy) => {
+          const pkg = this.subject.getActive();
+          if (!pkg) return;
+          const thread = await readThread(pkg.rootDir, nowIso());
+          thread.materialPaths = [...new Set([...(thread.materialPaths || []), sourceCopy])];
+          await writeThread(pkg.rootDir, thread);
+        },
       );
     }
     return this.digitalSelfService;
@@ -1760,7 +1827,9 @@ export class DigitalMeRuntime {
         },
         async (pkg, query) => {
           const items = await this.loadDiscoverItems(pkg.rootDir);
-          const sought = await seekContent({ query, items });
+          const directives = await listContentPreferences(pkg.rootDir);
+          const allowed = items.filter((item) => !directives.some((p) => p.kind === 'block' && p.targetType === 'source' && p.target === item.publisherSubjectId));
+          const sought = await seekContent({ query, items: allowed });
           return formatSeekContext(sought);
         },
         this.options.requestFolderAccess,
@@ -4066,11 +4135,15 @@ export class DigitalMeRuntime {
 
   createConversationSession(): { session: { id: string; title: string; createdAt: string; updatedAt: string } } {
     const pkg = this.subject.requireActive();
+    this.lastIntentView = null;
+    this.beginSearchGeneration();
     return { session: createConversationSessionSync(pkg.rootDir) };
   }
 
   openConversationSession(sessionId: string): { session: { id: string; title: string; createdAt: string; updatedAt: string } } {
     const pkg = this.subject.requireActive();
+    this.lastIntentView = null;
+    this.beginSearchGeneration();
     return { session: openConversationSessionSync(pkg.rootDir, sessionId) };
   }
 

@@ -61,6 +61,13 @@ export interface TalkThread {
   executions: TalkExecution[];
   /** 本对话用户附上的文件路径。后续回合仍可读取，不是另一套记忆。 */
   materialPaths?: string[];
+  /** 从发现进入的同一任务；当前条件唯一保存在本 thread，不是本人长期事实。 */
+  discoveryGoal?: {
+    originalRequest: string;
+    request: string;
+    scope: 'session' | 'keep';
+    objects: Array<{ contentId: string; title: string; url: string; source: string; publisherSubjectId?: string; summary: string }>;
+  };
 }
 
 export type TalkTurnOutcome = 'SUCCESS' | 'PARTIAL_SUCCESS' | 'FAILED' | 'CANCELLED';

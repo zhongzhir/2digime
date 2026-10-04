@@ -243,7 +243,7 @@
     const clear = document.createElement('button');
     clear.type = 'button';
     clear.className = 'ghost';
-    clear.textContent = '清除';
+    clear.textContent = '移除待带入对象';
     clear.addEventListener('click', () => {
       contentContext = null;
       renderContentContext();
@@ -503,7 +503,8 @@
     let watchdog = 0;
     let checkTimer = 0;
     try {
-    const payload = { text: withContentContext(trimmed) };
+    const payload = { text: contentContext && contentContext.contentIds ? trimmed : withContentContext(trimmed) };
+    if (contentContext && contentContext.contentIds) payload.contentIds = contentContext.contentIds.slice();
     if (paths.length) payload.contextPaths = paths;
       checkTimer = setTimeout(() => {
         if (generation !== sendGeneration || epoch !== viewEpoch) return;
@@ -522,6 +523,8 @@
       if (sessionAtSend && still && still !== sessionAtSend) return;
       if (generation !== sendGeneration) return;
       renderView(result && result.view);
+      contentContext = null;
+      renderContentContext();
       await refreshSessions();
     } catch (err) {
       if (epoch !== viewEpoch) return;

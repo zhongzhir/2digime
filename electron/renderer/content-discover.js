@@ -22,6 +22,7 @@
   let activeFeedMode = 'personal';
   let moreInFlight = false;
   let moreExhausted = false;
+  const selectedForTalk = new Map();
 
   function newSearchGenerationId() {
     return 'sg_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
@@ -170,6 +171,7 @@
 
   function askTalk(card) {
     const context = {
+      contentIds: [card.itemId],
       contentId: card.itemId || '',
       title: card.title || '',
       canonicalUrl: card.url || '',
@@ -182,6 +184,28 @@
     if (window.TalkPage && typeof window.TalkPage.setContentContext === 'function') {
       window.TalkPage.setContentContext(context);
     }
+  }
+
+  function renderSelection() {
+    const list = $('content-discover-list');
+    if (!list || !list.parentNode) return;
+    let bar = $('content-discover-selection');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'content-discover-selection';
+      list.parentNode.insertBefore(bar, list);
+    }
+    bar.textContent = '';
+    bar.hidden = selectedForTalk.size === 0;
+    if (!selectedForTalk.size) return;
+    const label = document.createElement('span');
+    label.textContent = '已选 ' + selectedForTalk.size + ' 个对象：' + Array.from(selectedForTalk.values()).map(c => c.title).join('、');
+    bar.appendChild(label);
+    bar.appendChild(btn('一起比较', () => {
+      goTalk();
+      window.TalkPage.setContentContext({ contentIds: Array.from(selectedForTalk.keys()), title: Array.from(selectedForTalk.values()).map(c => c.title).join('、') });
+    }, 'primary'));
+    bar.appendChild(btn('取消选择', () => { selectedForTalk.clear(); renderSelection(); }));
   }
 
   function openCard(card) {
@@ -438,6 +462,11 @@
     actions.appendChild(btn('不喜欢', () => void act('reduce', { itemId: card.itemId })));
     actions.appendChild(btn('多推荐', () => void act('boost', { itemId: card.itemId })));
     actions.appendChild(btn('问兔机米', () => askTalk(card)));
+    actions.appendChild(btn('选择 / 取消比较', () => {
+      if (selectedForTalk.has(card.itemId)) selectedForTalk.delete(card.itemId);
+      else selectedForTalk.set(card.itemId, card);
+      renderSelection();
+    }));
     if (card.publisherSubjectId) {
       const more = document.createElement('details');
       more.className = 'content-discover-more';
@@ -586,6 +615,8 @@
   function applyView(view) {
     hydrateLater(view);
     if (!shouldApplyView(view)) return;
+    if (lastView && view && (view.searchQuery || '') !== (lastView.searchQuery || '')) selectedForTalk.clear();
+    renderSelection();
     const scroller = feedScroller();
     const sameSearch =
       lastView &&

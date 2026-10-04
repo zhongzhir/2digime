@@ -1059,6 +1059,8 @@ export interface CommandMap {
     input: {
       text?: string;
       contextPaths?: string[];
+      /** 只传引用；需求和来源由 runtime 从现有发现结果解析。 */
+      contentIds?: string[];
     };
     output: {
       view: import('../intelligence').TalkView;

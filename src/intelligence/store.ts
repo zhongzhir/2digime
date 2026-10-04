@@ -57,6 +57,7 @@ function parseThread(content: string, now: string, fallbackId: string): TalkThre
       updatedAt: parsed.updatedAt || now,
       ...(parsed.openGoal ? { openGoal: parsed.openGoal } : {}),
       ...(materialPaths.length ? { materialPaths } : {}),
+      ...(parsed.discoveryGoal ? { discoveryGoal: parsed.discoveryGoal } : {}),
       turns: parsed.turns || [],
       executions: parsed.executions || [],
     };

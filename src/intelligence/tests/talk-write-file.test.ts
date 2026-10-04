@@ -11,6 +11,30 @@ import { createCommandBus } from '../../runtime/command-bus';
 import { talkThreadFilePath } from '../store';
 import { resolveAuthorizedWritePath, classifyAuthorizedPaths } from '../mechanical-tools';
 import type { TalkChatFn } from '../types';
+import { runTalkTurn } from '../loop';
+import { emptyThread } from '../store';
+
+test('folder grant without attached material exposes exact output readback and refuses adjacent files', async () => {
+  const root = await tempDir('grant-readback');
+  const folder = path.join(root, 'allowed');
+  await fs.mkdir(folder);
+  await fs.writeFile(path.join(folder, 'result.md'), 'actual saved plan');
+  await fs.writeFile(path.join(root, 'outside.md'), 'outside');
+  const executions: Array<{ capabilityId: string; ok: boolean }> = [];
+  let step = 0;
+  await runTalkTurn({thread: emptyThread(new Date().toISOString()), userText:'回读成果', selfContext:'', agents:[], workRoot:folder, writeFolders:[folder], now:new Date().toISOString(),
+    onExecution: row => { executions.push(row); },
+    chat:async ({tools,messages}) => {
+      if (step === 0) assert.ok(tools?.some(t => t.function.name === 'read_file'));
+      if (step++ === 0) return {text:'',toolCalls:[{id:'w1',name:'write_file',arguments:JSON.stringify({relativePath:'result.md',content:'actual saved plan'})},{id:'r1',name:'read_file',arguments:JSON.stringify({path:path.join(folder,'result.md')})}]};
+      if (step === 2) {
+        assert.match(String(messages.at(-1)?.content), /actual saved plan/);
+        return {text:'',toolCalls:[{id:'r2',name:'read_file',arguments:JSON.stringify({path:path.join(root,'outside.md')})}]};
+      }
+      return {text:'已回读授权成果，未读取目录外文件。'};
+    }});
+  assert.deepEqual(executions.filter(e=>e.capabilityId==='read_file').map(e=>e.ok),[true,false]);
+});
 
 async function tempDir(prefix: string): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), `dm-write-${prefix}-`));

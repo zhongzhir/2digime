@@ -32,6 +32,7 @@ export class DigitalSelfService {
     private readonly resolvePackage: () => DigitalSelfPackageRef | null,
     private readonly chat: DigitalSelfChatFn | null,
     private readonly now: () => string = nowIso,
+    private readonly onMaterialImported?: (sourceCopy: string) => Promise<void>,
   ) {}
 
   async invoke(input: DigitalSelfCommandInput): Promise<DigitalSelfCommandOutput> {
@@ -161,7 +162,8 @@ export class DigitalSelfService {
         materialName,
       );
       await writeDigitalSelf(pkg.rootDir, result.self);
-      await writeSourceCopy(pkg.rootDir, digest, extracted.text);
+      const sourceCopy = await writeSourceCopy(pkg.rootDir, digest, extracted.text);
+      await this.onMaterialImported?.(path.join(pkg.rootDir, sourceCopy));
       const notice =
         interpreted.notice ||
         result.notice ||

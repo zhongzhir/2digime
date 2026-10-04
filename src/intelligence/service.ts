@@ -12,7 +12,8 @@ import { emptyThread, readThread, writeThread } from './store';
 import { randomUUID } from 'node:crypto';
 import { EMPTY_REPLY, NO_MODEL_NOTICE, runTalkTurn, type SubjectCollabPort } from './loop';
 import { isManagedAiUserNotice } from '../capability/managed-ai-client';
-import type { ProfessionalAgent, TalkChatFn, TalkExecution, TalkTurnOutcome, TalkView } from './types';
+import type { ProfessionalAgent, TalkChatFn, TalkExecution, TalkTurnOutcome, TalkView, TalkThread } from './types';
+import { listContentPreferences, formatPreferenceDirectives } from '../subject-comm/content-preferences';
 import {
   listActiveFilesystemGrantFolders,
   saveFilesystemGrant,
@@ -134,8 +135,24 @@ export class TalkService {
       | undefined,
   ) {}
 
+  /** 与回合写入使用同一串行链，撤销不能被在途回合的迟到保存覆盖。 */
+  async revokeDiscoveryGoal(threadId: string): Promise<void> {
+    const prev = this.writeChains.get(threadId) || Promise.resolve();
+    const run = prev.then(async () => {
+      const pkg = this.resolvePackage();
+      if (!pkg) return;
+      const thread = await readThread(pkg.rootDir, this.now(), threadId);
+      delete thread.discoveryGoal;
+      thread.turns.push({ id: `turn_${randomUUID()}`, at: this.now(), role: 'user',
+        text: '我撤销了从发现带入的当前目标。后续不要自动沿用它的条件；已有材料和成果仍保留。' });
+      await writeThread(pkg.rootDir, thread);
+    });
+    this.writeChains.set(threadId, run.catch(() => undefined));
+    await run;
+  }
+
   async invoke(
-    input: { text?: string; contextPaths?: string[] },
+    input: { text?: string; contextPaths?: string[]; discoveryGoal?: TalkThread['discoveryGoal'] },
     externalSignal?: AbortSignal | null,
   ): Promise<{ view: TalkView }> {
     const pkg = this.resolvePackage();
@@ -156,7 +173,7 @@ export class TalkService {
   }
 
   private async invokeNow(
-    input: { text?: string; contextPaths?: string[] },
+    input: { text?: string; contextPaths?: string[]; discoveryGoal?: TalkThread['discoveryGoal'] },
     threadId: string,
     externalSignal?: AbortSignal | null,
   ): Promise<{ view: TalkView }> {
@@ -166,6 +183,7 @@ export class TalkService {
     }
     const now = this.now();
     const thread = await readThread(pkg.rootDir, now, threadId);
+    if (input.discoveryGoal) thread.discoveryGoal = input.discoveryGoal;
     const spoken = String(input.text || '').trim();
     const text = composeTalkUserText(spoken, input.contextPaths);
     if (!text) {
@@ -184,7 +202,7 @@ export class TalkService {
     let confirmHint: string | undefined;
     // DIGITAL_SELF_LEARNING_BLOCKS_TALK = YES
     // 每个 Talk turn 在真正 Talk 前同步调用 Digital Self interpret。本轮不改成异步。
-    if (spoken && this.learnFromUtterance) {
+    if (spoken && this.learnFromUtterance && !thread.discoveryGoal) {
       try {
         const learned = await this.learnFromUtterance(spoken);
         if (learned.asked && learned.askHint) confirmHint = learned.askHint;
@@ -203,6 +221,9 @@ export class TalkService {
     thread.materialPaths = [...new Set([...(thread.materialPaths || []), ...attachedNow])];
     const materialBlock = await attachedMaterialBlock(thread.materialPaths);
     if (materialBlock) selfContext = `${selfContext}\n\n${materialBlock}`;
+    const directives = await listContentPreferences(pkg.rootDir);
+    const explicit = directives.filter((row) => row.kind !== 'steer');
+    if (explicit.length) selfContext += `\n\n用户显式内容边界（跨入口有效；单条 reduce 只指该对象，不能扩大为主题禁令）：\n${formatPreferenceDirectives(explicit)}\n目标引用：${JSON.stringify(explicit.map(({kind,targetType,target}) => ({kind,targetType,target})))}`;
     if (spoken && this.resolveContentSeek) {
       try {
         const block = await this.resolveContentSeek(pkg, spoken);

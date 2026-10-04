@@ -23,6 +23,8 @@ export interface RecommendationAdjustment {
   origin: 'user_expression';
   createdAt: string;
   updatedAt: string;
+  /** 关联已有 Talk 任务；有效条件从 thread 派生，不双写。 */
+  goalThreadId?: string;
 }
 
 export const STEER_PREFERENCE_TARGET = 'recommendation_adjust';
@@ -60,6 +62,7 @@ function sanitize(raw: unknown, runtimeId?: string): RecommendationAdjustment | 
     updatedAt: String(rec.updatedAt || ''),
   };
   const question = String(rec.question || '').trim().slice(0, 120);
+  if (typeof rec.goalThreadId === 'string') next.goalThreadId = rec.goalThreadId;
   if (question) next.question = question;
   return next;
 }
@@ -115,6 +118,7 @@ export async function saveRecommendationAdjustment(
     createdAt: input.createdAt || existing?.createdAt || now,
     updatedAt: now,
     ...(input.question?.trim() ? { question: input.question.trim().slice(0, 120) } : {}),
+    ...(input.goalThreadId ? { goalThreadId: input.goalThreadId } : {}),
   };
   await writeFile(packageRoot, { version: 1, current: next });
   return next;
