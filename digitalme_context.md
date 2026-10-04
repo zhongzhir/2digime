@@ -2,7 +2,7 @@
 
 版本：v0.4
 状态：historical strategic context（不承担 current plan）
-最后更新：2026-10-04（Discover 质量/核实/撤销工程提交，见 `docs/audits/DISCOVER-QUALITY-05.md`。产品试用基线仍是 `230cfc6`。仍是限定试用接受，不是质量通过，不是 95 分位达标。）
+最后更新：2026-10-04（Discover 对象匹配与撤销画面，见 `docs/audits/DISCOVER-QUALITY-06.md`。产品试用基线仍是 `230cfc6`。`79de7e0` 是工程改善。仍是限定试用接受，不是质量通过，不是 95 分位达标。）
 
 本文件不恢复为第二权威源。现行权威：`AGENTS.md` → `docs/refoundation/00` / `01` / `02` / `03`。
 

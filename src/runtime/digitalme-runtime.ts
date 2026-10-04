@@ -577,7 +577,7 @@ export class DigitalMeRuntime {
         await clearRecommendationAdjustment(pkg.rootDir);
         await this.reverseSteerPreference(pkg.rootDir);
         this.lastIntentView = null;
-        const cached = await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reuse');
+        const cached = await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reuse', undefined, true);
         this.pendingPersonal = this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reset');
         return {
           view: await this.withAdjustment(pkg.rootDir, {
@@ -1018,6 +1018,7 @@ export class DigitalMeRuntime {
     relayUrl?: string,
     mode: 'open' | 'refresh' | 'reuse' | 'replenish' | 'more' | 'reset' = 'open',
     supplyPhase?: 'catalog' | 'full' | 'seated' | 'rank',
+    preferPersonalCache?: boolean,
   ): Promise<DiscoverView> {
     const preferences = await this.contentPreferenceRows(packageRoot);
     const self = await readDigitalSelf(packageRoot, subjectId, nowIso());
@@ -1052,6 +1053,7 @@ export class DigitalMeRuntime {
       ...(this.adjustmentView(adjustment) ? { adjustment: this.adjustmentView(adjustment) } : {}),
       ...(directives ? { preferenceDirectives: directives } : {}),
       ...(supplyPhase ? { supplyPhase } : {}),
+      ...(preferPersonalCache ? { preferPersonalCache: true } : {}),
       ...(chatCompleteFn ? { chatComplete: chatCompleteFn } : {}),
       ...(model ? { model } : {}),
       ...(searchWeb ? { searchWeb } : {}),

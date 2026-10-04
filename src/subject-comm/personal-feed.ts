@@ -19,7 +19,14 @@ import {
   type DiscoverView,
 } from './content-discover';
 import { isAccessCard, markAccess, pageAccessState, type ExternalSeekHit } from './content-seek';
-import { isDomainLikeTitle, isGenericHubUrl } from './discover-intent';
+import {
+  classifyCandidateRoles,
+  defaultDiscoverIntent,
+  isPrimaryContentRole,
+  isRelatedInfoRole,
+  isDomainLikeTitle,
+  isGenericHubUrl,
+} from './discover-intent';
 import { allowsDefaultSupply } from './domestic-source-boundary';
 import type { ContentPreferenceDirective } from './content-preferences';
 import { isNetworkItemExpired, trustedPublishedMs } from './network-item';
@@ -211,6 +218,7 @@ function viewOf(input: {
   relatedCards?: DiscoverCard[];
   unjudgedCards?: DiscoverCard[];
   unjudgedTitle?: string;
+  relatedTitle?: string;
   accessCards?: DiscoverCard[];
   preferences: DiscoverPreference[];
   notice: string;
@@ -227,6 +235,7 @@ function viewOf(input: {
     lead: input.lead || LEAD,
     cards: input.cards,
     relatedCards: input.relatedCards || [],
+    ...(input.relatedTitle ? { relatedTitle: input.relatedTitle } : {}),
     ...(input.unjudgedCards?.length
       ? { unjudgedCards: input.unjudgedCards, unjudgedTitle: input.unjudgedTitle || '这些还没完成判断，不是已确认的推荐' }
       : {}),
@@ -324,8 +333,104 @@ function splitAccessCards(cards: DiscoverCard[]): { visible: DiscoverCard[]; acc
   return { visible, access };
 }
 
+function honestyFromJudgment(
+  card: DiscoverCard,
+  judgment?: { conditions?: string; medium?: string; entrance?: string; basis?: string },
+): DiscoverCard {
+  const marked = withCandidateHonesty(card, false);
+  if (isAccessCard(marked)) return marked;
+  const conditions =
+    judgment?.conditions === 'met' || judgment?.conditions === 'unconfirmed'
+      ? judgment.conditions
+      : marked.conditionStatus || 'unconfirmed';
+  const conditionNote =
+    conditions === 'unconfirmed'
+      ? judgment?.basis
+        ? `未核实：${judgment.basis}`
+        : marked.conditionNote
+      : marked.conditionNote;
+  return {
+    ...marked,
+    conditionStatus: conditions,
+    objectKind: (judgment?.medium && judgment.medium !== 'unknown' ? judgment.medium : marked.objectKind) || marked.contentType || 'article',
+    ...(conditionNote ? { conditionNote } : {}),
+    ...(judgment?.basis && !marked.reason.includes('未核实') ? { reason: judgment.basis } : {}),
+  };
+}
+
+async function matchSteeredObjects(input: {
+  items: NetworkItem[];
+  query: string;
+  prefs: ContentPreferenceDirective[];
+  now: string;
+  chatComplete?: ChatCompleteFn;
+  model?: { baseUrl: string; model: string; apiKey?: string };
+}): Promise<{ cards: DiscoverCard[]; relatedCards: DiscoverCard[]; accessCards: DiscoverCard[] }> {
+  const accessCards: DiscoverCard[] = [];
+  const concrete: Array<{ item: NetworkItem; card: DiscoverCard }> = [];
+  for (const item of input.items) {
+    if (blocked(item, input.prefs)) continue;
+    const raw = cardFromNetworkItem(
+      item,
+      '来源给出了标题和摘要。价格、课时、平台等条件未核实。还没有标成已确认。',
+      item.provenance?.via === 'search' ? 'web' : 'directory',
+    );
+    const card = withCandidateHonesty(raw, false);
+    if (isAccessCard(card) || isAccessNetworkItem(item)) {
+      accessCards.push(isAccessCard(card) ? card : markAccess(card));
+      continue;
+    }
+    if (!isConcreteContentCard(card)) continue;
+    concrete.push({ item, card });
+  }
+  if (!concrete.length) return { cards: [], relatedCards: [], accessCards };
+  if (!input.chatComplete || !input.model) {
+    return { cards: concrete.map((row) => row.card).slice(0, MAX_FEED), relatedCards: [], accessCards };
+  }
+  const judged = await classifyCandidateRoles({
+    query: input.query,
+    intent: {
+      ...defaultDiscoverIntent(input.query),
+      objectWanted: 'work_itself',
+      preferences: input.query,
+    },
+    candidates: concrete.map(({ card }) => ({
+      id: card.itemId,
+      title: card.title,
+      url: card.url || '',
+      summary: card.text || '',
+      ...(card.contentType ? { contentType: card.contentType } : {}),
+    })),
+    chatComplete: input.chatComplete,
+    model: input.model,
+  });
+  const cards: DiscoverCard[] = [];
+  const relatedCards: DiscoverCard[] = [];
+  for (const { card } of concrete) {
+    if (judged.unjudgedIds.includes(card.itemId)) continue;
+    const role = judged.roles.get(card.itemId);
+    const judgment = judged.judgments.get(card.itemId);
+    const honest = honestyFromJudgment(card, judgment);
+    if (!role || role === 'UNRELATED' || role === 'HUB') continue;
+    if (isPrimaryContentRole(role)) {
+      cards.push({
+        ...honest,
+        ...(judgment?.conditions === 'unconfirmed' ? {} : { objectFidelity: 'PRIMARY_CONTENT' as const }),
+      });
+    } else if (isRelatedInfoRole(role)) {
+      relatedCards.push({ ...honest, objectFidelity: 'ABOUT_CONTENT' });
+    }
+  }
+  return {
+    cards: cards.slice(0, MAX_FEED),
+    relatedCards: relatedCards.slice(0, 8),
+    accessCards,
+  };
+}
+
 function firstWaveCards(items: NetworkItem[], prefs: ContentPreferenceDirective[], nowIso?: string): {
   cards: DiscoverCard[];
+  relatedCards: DiscoverCard[];
   accessCards: DiscoverCard[];
 } {
   const cards: DiscoverCard[] = [];
@@ -350,7 +455,7 @@ function firstWaveCards(items: NetworkItem[], prefs: ContentPreferenceDirective[
     cards.push(card);
     if (cards.length >= MAX_FEED) break;
   }
-  return { cards, accessCards };
+  return { cards, relatedCards: [], accessCards };
 }
 
 function applyExplicitFeedback(cards: DiscoverCard[], prefs: ContentPreferenceDirective[]): DiscoverCard[] {
@@ -663,6 +768,8 @@ export async function ensurePersonalFeed(input: {
   mode: 'open' | 'refresh' | 'reuse' | 'replenish' | 'more' | 'reset';
   /** catalog：只并行取公开目录。seated：检索后先交付有依据的候选。rank：只排序，不再检索。 */
   supplyPhase?: 'catalog' | 'full' | 'seated' | 'rank';
+  /** 撤销时只读默认流缓存，不读调整后的 lastView。 */
+  preferPersonalCache?: boolean;
   now?: string;
   adjustment?: DiscoverView['adjustment'];
 }): Promise<{ view: DiscoverView; reasonCode: FeedReasonCode }> {
@@ -745,6 +852,7 @@ export async function ensurePersonalFeed(input: {
         ? { unjudgedCards: view.unjudgedCards, ...(view.unjudgedTitle ? { unjudgedTitle: view.unjudgedTitle } : {}) }
         : {}),
       ...(view.accessCards?.length ? { accessCards: view.accessCards } : {}),
+      ...(view.relatedTitle ? { relatedTitle: view.relatedTitle } : {}),
       preferences: view.preferences,
       notice: sameAsShown && !String(view.notice || '').trim() ? sameBatchNotice : view.notice,
       reasonCode,
@@ -759,7 +867,7 @@ export async function ensurePersonalFeed(input: {
   };
 
   if (input.mode === 'reuse') {
-    const cards = lastCards.length ? lastCards : cachedCards;
+    const cards = input.preferPersonalCache ? cachedCards : lastCards.length ? lastCards : cachedCards;
     if (cards.length) {
       mark('LOCAL_FEED_READ', cards.length);
       mark('FIRST_CARD_VISIBLE', cards.length);
@@ -767,12 +875,28 @@ export async function ensurePersonalFeed(input: {
         viewOf({
           cards,
           preferences: input.preferences,
-          notice: noticeFor('CACHED_FEED', true),
+          notice: input.preferPersonalCache ? '已撤销这次调整，正在恢复默认推荐。' : noticeFor('CACHED_FEED', true),
           reasonCode: 'CACHED_FEED',
-          feedMode: cache.lastView?.mode || 'personal',
+          feedMode: 'personal',
           networking: input.networking,
+          ...(input.preferPersonalCache ? { replenishing: true } : {}),
         }),
         'CACHED_FEED',
+      );
+    }
+    if (input.preferPersonalCache) {
+      mark('FIRST_CARD_VISIBLE', 0);
+      return finish(
+        viewOf({
+          cards: [],
+          preferences: input.preferences,
+          notice: '正在恢复默认推荐。',
+          reasonCode: 'DIRECTORY_EMPTY',
+          feedMode: 'personal',
+          networking: input.networking,
+          replenishing: true,
+        }),
+        'DIRECTORY_EMPTY',
       );
     }
   }
@@ -1133,11 +1257,22 @@ export async function ensurePersonalFeed(input: {
   mark('CANDIDATES', candidates.length);
   const accessFromFresh = firstWaveCards(freshAccessItems, prefs, now).accessCards;
 
-  if (input.supplyPhase === 'seated' && (candidates.length || accessFromFresh.length)) {
-    const first = firstWaveCards(candidates, prefs, now);
-    const accessCards = [...first.accessCards, ...accessFromFresh].slice(0, 8);
-    const page = first.cards.slice(0, MAX_FEED);
-    if (page.length) {
+  if (input.supplyPhase === 'seated' && (candidates.length || accessFromFresh.length || freshSearchItems.length)) {
+    const waveItems = freshSearchItems.length ? freshSearchItems : candidates;
+    const matched = steered
+      ? await matchSteeredObjects({
+          items: waveItems,
+          query: String(input.adjustment?.text || input.adjustment?.summary || ''),
+          prefs,
+          now,
+          ...(input.chatComplete ? { chatComplete: input.chatComplete } : {}),
+          ...(input.model ? { model: input.model } : {}),
+        })
+      : firstWaveCards(waveItems, prefs, now);
+    const accessCards = [...(matched.accessCards || []), ...accessFromFresh].slice(0, 8);
+    const page = matched.cards.slice(0, MAX_FEED);
+    const relatedCards = 'relatedCards' in matched ? matched.relatedCards : [];
+    if (page.length || relatedCards.length) {
       const snapshot: FeedSnapshot = {
         itemIds: page.map((card) => card.itemId),
         generatedAt: now,
@@ -1145,7 +1280,7 @@ export async function ensurePersonalFeed(input: {
       };
       await writeCache(input.packageRoot, {
         version: 1,
-        personal: snapshot,
+        ...(cache.personal ? { personal: cache.personal } : {}),
         lastView: snapshot,
         rankedIds: page.map((card) => card.itemId),
       });
@@ -1154,17 +1289,21 @@ export async function ensurePersonalFeed(input: {
     return finish(
       viewOf({
         cards: page,
+        relatedCards,
         accessCards,
         preferences: input.preferences,
         notice: page.length
-          ? '先按来源已经给出的标题和摘要放在这里。价格、课时、平台等条件未核实，还没有标成已确认。'
-          : '',
-        reasonCode: page.length ? 'REPLENISHED' : 'DIRECTORY_EMPTY',
+          ? '先按已经能确认的对象放在这里。价格、课时、平台等条件未核实的已标明，还没有标成已确认。'
+          : relatedCards.length
+            ? '先找到这些相关介绍，还不是这次要的对象本身。'
+            : '',
+        ...(relatedCards.length ? { relatedTitle: '相关介绍' } : {}),
+        reasonCode: page.length || relatedCards.length ? 'REPLENISHED' : 'DIRECTORY_EMPTY',
         feedMode: 'personal',
         networking,
         replenishing: true,
       }),
-      page.length ? 'REPLENISHED' : 'DIRECTORY_EMPTY',
+      page.length || relatedCards.length ? 'REPLENISHED' : 'DIRECTORY_EMPTY',
     );
   }
 
@@ -1224,7 +1363,7 @@ export async function ensurePersonalFeed(input: {
       };
       await writeCache(input.packageRoot, {
         version: 1,
-        personal: snapshot,
+        ...(steered && cache.personal ? { personal: cache.personal } : { personal: snapshot }),
         lastView: snapshot,
         ...(cache.rankedIds?.length ? { rankedIds: cache.rankedIds } : {}),
       });
@@ -1288,7 +1427,7 @@ export async function ensurePersonalFeed(input: {
       };
       await writeCache(input.packageRoot, {
         version: 1,
-        personal: snapshot,
+        ...(steered && cache.personal ? { personal: cache.personal } : { personal: snapshot }),
         lastView: snapshot,
         rankedIds: cache.rankedIds,
       });
@@ -1364,7 +1503,7 @@ export async function ensurePersonalFeed(input: {
       };
       await writeCache(input.packageRoot, {
         version: 1,
-        personal: snapshot,
+        ...(steered && cache.personal ? { personal: cache.personal } : { personal: snapshot }),
         lastView: snapshot,
         ...(cache.rankedIds?.length ? { rankedIds: cache.rankedIds } : {}),
       });
@@ -1408,7 +1547,7 @@ export async function ensurePersonalFeed(input: {
   };
   await writeCache(input.packageRoot, {
     version: 1,
-    personal: snapshot,
+    ...(steered && cache.personal ? { personal: cache.personal } : { personal: snapshot }),
     lastView: snapshot,
     rankedIds: cache.rankedIds,
   });

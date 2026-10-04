@@ -1064,18 +1064,6 @@ export async function seekContent(input: {
     visible = merged.cards.slice(0, MAX_CARDS);
     relatedVisible = merged.relatedCards;
   }
-  let promotedRelated = false;
-  if (
-    !visible.length &&
-    relatedVisible.length &&
-    intent.intent === 'consume' &&
-    !datedNews &&
-    !requiredTypes.some((row) => row === 'video' || row === 'audio')
-  ) {
-    visible = relatedVisible.slice(0, MAX_CARDS);
-    relatedVisible = [];
-    promotedRelated = true;
-  }
   const unjudgedVisible = unjudged.slice(0, 8);
   const visibleIds = new Set([...visible, ...relatedVisible, ...unjudgedVisible].map((card) => card.itemId));
 
@@ -1162,13 +1150,12 @@ export async function seekContent(input: {
           : '搜索有返回，但没有可以直接看的内容。';
     } else if (unjudgedVisible.length > 0) {
       notice = '搜索有返回，但这轮没有完成相关性判断，所以没有把它们当成已确认的推荐。可以打开看看，或再搜一次。';
-    } else if (
-      relatedVisible.length > 0 &&
-      requiredTypes.some((row) => row === 'audio' || row === 'video')
-    ) {
-      notice = requiredTypes.includes('audio')
-        ? '没有找到这个音频节目本身，只找到了介绍文章。介绍不能当作已经听完。'
-        : '没有找到这个视频节目本身，只找到了介绍文章。介绍不能当作已经看完。';
+    } else if (relatedVisible.length > 0) {
+      notice = requiredTypes.some((row) => row === 'audio' || row === 'video')
+        ? requiredTypes.includes('audio')
+          ? '没有找到这个音频节目本身，只找到了介绍文章。介绍不能当作已经听完。'
+          : '没有找到这个视频节目本身，只找到了介绍文章。介绍不能当作已经看完。'
+        : '先找到这些相关介绍，还不是这次要的对象本身。';
     } else if (concrete.length > 0 && trace.unrelated === concrete.length) {
       notice = '搜索有返回，判断后和这次要找的对不上。';
     } else if (intent.intent === 'consume') {
@@ -1176,8 +1163,6 @@ export async function seekContent(input: {
     } else {
       notice = '这次更适合当作分析材料。可点「问兔机米」，或到「与兔机米」里继续。';
     }
-  } else if (promotedRelated) {
-    notice = '先给出这次能核对到的候选。价格、课时或对象页还没核到的，依据里已标明。';
   } else if (unjudgedVisible.length > 0) {
     notice = '还有一些结果这轮没有完成判断，没有放进推荐。';
   } else if (intent.honestyNote) {

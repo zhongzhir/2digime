@@ -15,6 +15,7 @@
   let lastRelated = [];
   let lastUnjudged = [];
   let lastView = null;
+  let defaultFeedCards = [];
   let activeSection = 'for-you';
   let activeSearchGenerationId = '';
   let seekPendingGen = '';
@@ -221,14 +222,19 @@
     if (action === 'adjustRevoke') {
       activeSearchGenerationId = newSearchGenerationId();
       activeFeedMode = 'personal';
-      if (lastView) {
-        lastView = Object.assign({}, lastView, {
-          adjustment: undefined,
-          searchGenerationId: activeSearchGenerationId,
-          replenishing: true,
-        });
-        renderAdjustment(lastView);
-      }
+      lastView = {
+        headline: '发现',
+        lead: '看文章、图片、音频和视频。',
+        feedTitle: '为你发现',
+        feedMode: 'personal',
+        cards: defaultFeedCards.slice(),
+        relatedCards: [],
+        accessCards: [],
+        notice: defaultFeedCards.length ? '已撤销这次调整，正在恢复默认推荐。' : '正在恢复默认推荐。',
+        replenishing: true,
+        searchGenerationId: activeSearchGenerationId,
+      };
+      renderView(lastView);
     } else if (action === 'reverse' || action === 'resetRecent' || action === 'adjust' || action === 'adjustKeep') {
       activeSearchGenerationId = newSearchGenerationId();
       activeFeedMode = 'personal';
@@ -614,6 +620,9 @@
       });
     }
     lastView = next;
+    if (next && next.feedMode !== 'intent' && !next.adjustment && (next.cards || []).length) {
+      defaultFeedCards = next.cards.slice();
+    }
     renderView(next);
     if (savedScroll != null && scroller) scroller.scrollTop = savedScroll;
   }
@@ -1097,11 +1106,19 @@
       adjustRevoke.dataset.bound = '1';
       adjustRevoke.addEventListener('click', () => {
         hideAdjustForm();
-        if (lastView) {
-          lastView = Object.assign({}, lastView, { adjustment: undefined });
-          renderAdjustment(lastView);
-        }
-        setStatus('正在恢复默认推荐……');
+        lastView = {
+          headline: '发现',
+          lead: '看文章、图片、音频和视频。',
+          feedTitle: '为你发现',
+          feedMode: 'personal',
+          cards: defaultFeedCards.slice(),
+          relatedCards: [],
+          accessCards: [],
+          notice: defaultFeedCards.length ? '已撤销这次调整，正在恢复默认推荐。' : '正在恢复默认推荐。',
+          replenishing: true,
+        };
+        renderView(lastView);
+        setStatus(defaultFeedCards.length ? '正在恢复默认推荐……' : '正在恢复默认推荐……');
         void act('adjustRevoke');
       });
     }

@@ -609,11 +609,13 @@ test('listing-only game seek still delivers named or listing candidates', async 
       return [item.item];
     },
   });
-  assert.ok(sought.cards.length > 0, 'game seek must not empty the main list');
+  const visible = [...sought.cards, ...sought.relatedCards];
+  assert.ok(visible.length > 0, 'game seek must still surface named works or listings');
   assert.equal(
-    sought.cards.some((card) => /战场女武神|回合制策略/.test(`${card.title} ${card.reason || ''}`)),
+    visible.some((card) => /战场女武神|回合制策略/.test(`${card.title} ${card.reason || ''}`)),
     true,
   );
+  assert.equal(sought.cards.some((card) => /盘点/.test(card.title || '')), false);
 });
 
 test('explicit seek reuses work catalog for a new game request and does not pad calendar', async () => {
@@ -740,6 +742,22 @@ test('seated first wave shows evidenced cards without waiting for ranking or mar
           }),
         };
       }
+      if (blob.includes('判断每个候选')) {
+        const user = JSON.parse(String(messages[messages.length - 1]?.content || '{}')) as {
+          candidates?: Array<{ id: string }>;
+        };
+        return {
+          text: JSON.stringify({
+            roles: (user.candidates || []).map((row) => ({
+              id: row.id,
+              role: 'PRIMARY_CONTENT',
+              medium: 'article',
+              conditions: 'unconfirmed',
+              basis: '课程页标题和摘要在，价格课时未写明。',
+            })),
+          }),
+        };
+      }
       ranked = true;
       return { text: JSON.stringify({ decisions: [] }) };
     },
@@ -803,6 +821,13 @@ test('rank phase does not issue another search, and steered search starts both q
               { topic: '投资课', contentTypes: ['article'], searchQuery: 'AI 投资课', explorationMode: 'core' },
               { topic: '落地课', contentTypes: ['article'], searchQuery: 'AI 落地课', explorationMode: 'core' },
             ],
+          }),
+        };
+      }
+      if (blob.includes('判断每个候选')) {
+        return {
+          text: JSON.stringify({
+            roles: [{ id: course.item.itemId, role: 'PRIMARY_CONTENT', medium: 'article', conditions: 'unconfirmed', basis: '课时未核实' }],
           }),
         };
       }
@@ -916,6 +941,22 @@ test('rank phase keeps the seated this-turn cards and does not replace them with
           }),
         };
       }
+      if (blob.includes('判断每个候选')) {
+        const user = JSON.parse(String(messages[messages.length - 1]?.content || '{}')) as {
+          candidates?: Array<{ id: string }>;
+        };
+        return {
+          text: JSON.stringify({
+            roles: (user.candidates || []).map((row) => ({
+              id: row.id,
+              role: row.id === course.item.itemId ? 'PRIMARY_CONTENT' : 'UNRELATED',
+              medium: 'article',
+              conditions: 'unconfirmed',
+              basis: '价格课时未核实',
+            })),
+          }),
+        };
+      }
       throw new Error('seated must not rank');
     },
     searchWeb: async () => [{ title: course.item.content.title, url: course.item.content.url || '', snippet: course.item.content.text }],
@@ -963,4 +1004,211 @@ test('rank phase keeps the seated this-turn cards and does not replace them with
   });
   assert.equal(ranked.view.cards[0]?.itemId, course.item.itemId);
   assert.equal(ranked.view.cards.some((card) => card.itemId === course.item.itemId), true);
+});
+
+test('steered first wave keeps objects in main and intro articles in related, without news padding', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-match-'));
+  const self = selfOf('我关心公开课。');
+  await writeDigitalSelf(root, self);
+  const news = validateNetworkItem({
+    schemaVersion: 1,
+    itemId: 'ni_pad_news',
+    publisherSubjectId: 'pub_news',
+    publisherDisplayName: '新闻',
+    kind: 'content',
+    createdAt: NOW,
+    visibility: 'public',
+    content: {
+      title: '今日要闻填位',
+      text: '新闻正文',
+      url: 'https://news.example/pad',
+      contentType: 'article',
+      publishedAt: NOW,
+    },
+    provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'feed' },
+  });
+  const course = validateNetworkItem({
+    schemaVersion: 1,
+    itemId: 'ni_match_course',
+    publisherSubjectId: 'pub_course',
+    publisherDisplayName: '公开课',
+    kind: 'content',
+    createdAt: NOW,
+    visibility: 'public',
+    content: {
+      title: 'AI 投研实战课',
+      text: '一门可报名的课，价格未知。',
+      url: 'https://learn.example.org/match',
+      contentType: 'article',
+    },
+    provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'search' },
+  });
+  const intro = validateNetworkItem({
+    schemaVersion: 1,
+    itemId: 'ni_match_intro',
+    publisherSubjectId: 'pub_blog',
+    publisherDisplayName: '博客',
+    kind: 'content',
+    createdAt: NOW,
+    visibility: 'public',
+    content: {
+      title: 'AI 产品经理学习路线图',
+      text: '介绍如何转行，不是一门课。',
+      url: 'https://blog.example.org/roadmap',
+      contentType: 'article',
+    },
+    provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'search' },
+  });
+  if (!news.ok || !course.ok || !intro.ok) throw new Error('fixture');
+  const result = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: self,
+    items: [news.item, course.item, intro.item],
+    preferences: [],
+    adjustment: {
+      id: 'adj_match',
+      summary: '本次找课程',
+      text: '帮我找几门能上手的投研课',
+      scope: 'session',
+    },
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    chatComplete: async ({ messages }) => {
+      const blob = messages.map((row) => String(row.content || '')).join('\n');
+      if (blob.includes('拟定内容发现方向')) {
+        return {
+          text: JSON.stringify({
+            intents: [{ topic: '投研课', contentTypes: ['article'], searchQuery: '投研课', explorationMode: 'core' }],
+          }),
+        };
+      }
+      const user = JSON.parse(String(messages[messages.length - 1]?.content || '{}')) as {
+        candidates?: Array<{ id: string }>;
+      };
+      return {
+        text: JSON.stringify({
+          roles: (user.candidates || []).map((row) => ({
+            id: row.id,
+            role:
+              row.id === course.item.itemId ? 'PRIMARY_CONTENT' : row.id === intro.item.itemId ? 'COMMENTARY' : 'UNRELATED',
+            medium: 'article',
+            conditions: row.id === course.item.itemId ? 'unconfirmed' : 'none',
+            basis: row.id === course.item.itemId ? '是一门课，价格课时未核实' : '这是介绍文章',
+          })),
+        }),
+      };
+    },
+    searchWeb: async () => [
+      { title: course.item.content.title, url: course.item.content.url || '', snippet: course.item.content.text },
+      { title: intro.item.content.title, url: intro.item.content.url || '', snippet: intro.item.content.text },
+    ],
+    ingestHit: async (hit) => [course.item, intro.item].filter((item) => item.content.url === hit.url),
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    mode: 'reset',
+    supplyPhase: 'seated',
+    now: NOW,
+  });
+  assert.equal(result.view.cards.map((card) => card.itemId).includes(course.item.itemId), true);
+  assert.equal(result.view.cards.some((card) => card.itemId === intro.item.itemId), false);
+  assert.equal(result.view.cards.some((card) => card.itemId === news.item.itemId), false);
+  assert.equal((result.view.relatedCards || []).some((card) => card.itemId === intro.item.itemId), true);
+  assert.match(result.view.cards.find((card) => card.itemId === course.item.itemId)?.conditionNote || '', /未核实/);
+});
+
+test('revoke reuses the default personal cache, not the adjusted last view', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-revoke-cache-'));
+  const self = selfOf('我关心公开科学。');
+  await writeDigitalSelf(root, self);
+  const podcast = validateNetworkItem({
+    schemaVersion: 1,
+    itemId: 'ni_default_pod',
+    publisherSubjectId: 'pub_pod',
+    publisherDisplayName: '播客',
+    kind: 'content',
+    createdAt: NOW,
+    visibility: 'public',
+    content: {
+      title: '默认播客一集',
+      text: '目录里的节目',
+      url: 'https://podcasts.example/ep1',
+      contentType: 'audio',
+    },
+    provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'feed' },
+  });
+  const course = validateNetworkItem({
+    schemaVersion: 1,
+    itemId: 'ni_adj_course',
+    publisherSubjectId: 'pub_course',
+    publisherDisplayName: '公开课',
+    kind: 'content',
+    createdAt: NOW,
+    visibility: 'public',
+    content: {
+      title: '调整后的课',
+      text: '不该在撤销后还占着默认流',
+      url: 'https://learn.example.org/revoke',
+      contentType: 'article',
+    },
+    provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'search' },
+  });
+  if (!podcast.ok || !course.ok) throw new Error('fixture');
+  await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: self,
+    items: [podcast.item],
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    mode: 'open',
+    now: NOW,
+  });
+  await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: self,
+    items: [podcast.item, course.item],
+    preferences: [],
+    adjustment: {
+      id: 'adj_rev',
+      summary: '本次找课',
+      text: '找课',
+      scope: 'session',
+    },
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    chatComplete: async ({ messages }) => {
+      const blob = messages.map((row) => String(row.content || '')).join('\n');
+      if (blob.includes('拟定内容发现方向')) {
+        return {
+          text: JSON.stringify({
+            intents: [{ topic: '课', contentTypes: ['article'], searchQuery: '课', explorationMode: 'core' }],
+          }),
+        };
+      }
+      return {
+        text: JSON.stringify({
+          roles: [{ id: course.item.itemId, role: 'PRIMARY_CONTENT', medium: 'article', conditions: 'unconfirmed', basis: '未核实' }],
+        }),
+      };
+    },
+    searchWeb: async () => [{ title: course.item.content.title, url: course.item.content.url || '', snippet: course.item.content.text }],
+    ingestHit: async () => [course.item],
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    mode: 'reset',
+    supplyPhase: 'seated',
+    now: NOW,
+  });
+  const revoked = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: self,
+    items: [podcast.item, course.item],
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    mode: 'reuse',
+    preferPersonalCache: true,
+    now: NOW,
+  });
+  assert.equal(revoked.view.cards.some((card) => card.itemId === podcast.item.itemId), true);
+  assert.equal(revoked.view.cards.some((card) => card.itemId === course.item.itemId), false);
+  assert.match(revoked.view.notice, /恢复默认推荐/);
 });
