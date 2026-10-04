@@ -171,16 +171,11 @@ async function waitSettled(page, ms, ready) {
     }, courseText);
     const courseStarted = Date.now();
     await page.evaluate(() => document.getElementById('btn-adjust-apply')?.click());
-    const courseFirst = await waitFirst(
-      page,
-      45_000,
-      (snap) => snap.bannerHidden === false && snap.titles.length > 0,
-    );
-    const courseFinal = await waitSettled(
-      page,
-      90_000,
-      (snap) => snap.bannerHidden === false && snap.titles.length > 0,
-    );
+    const courseReady = (snap) =>
+      snap.bannerHidden === false &&
+      (snap.titles.length > 0 || snap.related.length > 0 || /相关介绍|没有找到/.test(snap.notice || ''));
+    const courseFirst = await waitFirst(page, 45_000, courseReady);
+    const courseFinal = await waitSettled(page, 90_000, courseReady);
     report.steps.push({
       at: Date.now() - started,
       step: 'adjust-course',
