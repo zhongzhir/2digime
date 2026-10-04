@@ -274,7 +274,12 @@ export function markAccess(card: DiscoverCard): DiscoverCard {
 function attachCandidateHonesty(card: DiscoverCard, judgment?: { conditions?: string; medium?: string; entrance?: string; basis?: string }): DiscoverCard {
   const marked = markAccess(card);
   if (isAccessCard(marked)) return marked;
-  const conditions = judgment?.conditions === 'met' || judgment?.conditions === 'unconfirmed' ? judgment.conditions : 'none';
+  const conditions =
+    judgment?.conditions === 'met' ||
+    judgment?.conditions === 'unconfirmed' ||
+    judgment?.conditions === 'unmet'
+      ? judgment.conditions
+      : 'none';
   const objectKind = (judgment?.medium && judgment.medium !== 'unknown' ? judgment.medium : marked.contentType) || 'article';
   const entrance = judgment?.entrance || 'none';
   const entrancePurpose =
@@ -290,7 +295,11 @@ function attachCandidateHonesty(card: DiscoverCard, judgment?: { conditions?: st
       ? judgment?.basis
         ? `未核实：${judgment.basis}`
         : '用户提出的条件未核实'
-      : undefined;
+      : conditions === 'unmet'
+        ? judgment?.basis
+          ? `不完全符合：${judgment.basis}`
+          : '来源写明的类型或风格和这次要的不一致。'
+        : undefined;
   return {
     ...marked,
     conditionStatus: conditions,
@@ -969,6 +978,20 @@ export async function seekContent(input: {
       if (kind === 'PRIMARY_CONTENT' || kind === 'ABOUT_CONTENT') {
         primary.push(attachCandidateHonesty({ ...card, objectFidelity: 'PRIMARY_CONTENT' }, judgment));
       }
+    } else if (kind === 'PRIMARY_CONTENT' && matchedType && judgment?.conditions === 'unmet') {
+      const basis = judgment.basis || '';
+      related.push(
+        attachCandidateHonesty(
+          {
+            ...card,
+            objectFidelity: 'ABOUT_CONTENT',
+            ...(basis ? { reason: basis } : {}),
+            ...(judgment.summary ? { text: judgment.summary } : {}),
+            ...(judgment.entrance === 'excerpt' ? { excerpt: true } : {}),
+          },
+          judgment,
+        ),
+      );
     } else if (kind === 'PRIMARY_CONTENT' && matchedType) {
       const basis = judgment?.basis || '';
       const medium = judgment?.medium;
@@ -1151,11 +1174,13 @@ export async function seekContent(input: {
     } else if (unjudgedVisible.length > 0) {
       notice = '搜索有返回，但这轮没有完成相关性判断，所以没有把它们当成已确认的推荐。可以打开看看，或再搜一次。';
     } else if (relatedVisible.length > 0) {
-      notice = requiredTypes.some((row) => row === 'audio' || row === 'video')
-        ? requiredTypes.includes('audio')
-          ? '没有找到这个音频节目本身，只找到了介绍文章。介绍不能当作已经听完。'
-          : '没有找到这个视频节目本身，只找到了介绍文章。介绍不能当作已经看完。'
-        : '先找到这些相关介绍，还不是这次要的对象本身。';
+      notice = relatedVisible.some((card) => card.conditionStatus === 'unmet')
+        ? '这次没有找到完全符合的对象。下面是来源里能看到的相近选择，并已标明哪里不合。没有把条件放宽。'
+        : requiredTypes.some((row) => row === 'audio' || row === 'video')
+          ? requiredTypes.includes('audio')
+            ? '没有找到这个音频节目本身，只找到了介绍文章。介绍不能当作已经听完。'
+            : '没有找到这个视频节目本身，只找到了介绍文章。介绍不能当作已经看完。'
+          : '先找到这些相关介绍，还不是这次要的对象本身。';
     } else if (concrete.length > 0 && trace.unrelated === concrete.length) {
       notice = '搜索有返回，判断后和这次要找的对不上。';
     } else if (intent.intent === 'consume') {
@@ -1172,6 +1197,11 @@ export async function seekContent(input: {
   }
   if (searchRateLimited && notice !== SEARCH_QUOTA_NOTICE) {
     notice = `${notice ? `${notice} ` : ''}这个小时的联网搜索额度已经用完，还有一部分没能搜索，下一个整点后恢复。`;
+  }
+  const noExactMatch = !visible.some((card) => card.conditionStatus === 'met');
+  const nearbyUnmet = relatedVisible.some((card) => card.conditionStatus === 'unmet');
+  if (nearbyUnmet && noExactMatch && !datedNews && !searchRateLimited) {
+    notice = '这次没有找到完全符合的对象。下面是来源里能看到的相近选择，并已标明哪里不合。没有把条件放宽。';
   }
 
   return {

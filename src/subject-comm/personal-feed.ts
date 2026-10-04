@@ -103,19 +103,31 @@ function mergeDefaultFeed(
   existing: DiscoverCard[],
   incoming: DiscoverCard[],
   prefs: ContentPreferenceDirective[],
-): DiscoverCard[] {
+): { page: DiscoverCard[]; moreIds: string[] } {
   const validExisting = applyExplicitFeedback(
     existing.filter((card) => card.itemId && isConcreteContentCard(card) && !isAccessCard(card)),
     prefs,
   );
   const seen = new Set<string>();
-  const out: DiscoverCard[] = [];
-  for (const card of incoming.concat(validExisting)) {
+  const front: DiscoverCard[] = [];
+  for (const card of incoming) {
     if (!card.itemId || seen.has(card.itemId) || isAccessCard(card)) continue;
     seen.add(card.itemId);
-    out.push(card);
+    front.push(card);
   }
-  return out.slice(0, MAX_FEED);
+  const oldRest = validExisting.filter((card) => card.itemId && !seen.has(card.itemId));
+  if (!front.length) {
+    const page = validExisting.slice(0, MAX_FEED);
+    return { page, moreIds: validExisting.slice(page.length).map((card) => card.itemId) };
+  }
+  const pageCap = front.length >= MIN_FEED ? Math.min(front.length, MAX_FEED) : Math.min(MIN_FEED, MAX_FEED);
+  const page = front.concat(oldRest).slice(0, pageCap);
+  const moreIds: string[] = [];
+  for (const card of front.concat(oldRest)) {
+    if (page.some((row) => row.itemId === card.itemId)) continue;
+    moreIds.push(card.itemId);
+  }
+  return { page, moreIds };
 }
 
 function terminalDefaultNotice(notice: string, replenishing?: boolean): string {
@@ -254,6 +266,7 @@ function viewOf(input: {
   replenishing?: boolean;
   supplyTrace?: Array<{ event: string; ms: number; count?: number }>;
   adjustment?: DiscoverView['adjustment'];
+  searchQuery?: string;
 }): DiscoverView {
   return {
     headline: '发现',
@@ -273,6 +286,7 @@ function viewOf(input: {
     ...(input.replenishing ? { replenishing: true } : {}),
     ...(input.supplyTrace && input.supplyTrace.length ? { supplyTrace: input.supplyTrace } : {}),
     ...(input.adjustment ? { adjustment: input.adjustment } : {}),
+    ...(input.searchQuery ? { searchQuery: input.searchQuery } : {}),
     feedTitle: '为你发现',
   };
 }
@@ -365,7 +379,9 @@ function honestyFromJudgment(
   const marked = withCandidateHonesty(card, false);
   if (isAccessCard(marked)) return marked;
   const conditions =
-    judgment?.conditions === 'met' || judgment?.conditions === 'unconfirmed'
+    judgment?.conditions === 'met' ||
+    judgment?.conditions === 'unconfirmed' ||
+    judgment?.conditions === 'unmet'
       ? judgment.conditions
       : marked.conditionStatus || 'unconfirmed';
   const conditionNote =
@@ -373,12 +389,17 @@ function honestyFromJudgment(
       ? judgment?.basis
         ? `未核实：${judgment.basis}`
         : marked.conditionNote
-      : marked.conditionNote;
+      : conditions === 'unmet'
+        ? judgment?.basis
+          ? `不完全符合：${judgment.basis}`
+          : '来源写明的类型或风格和这次要的不一致。'
+        : marked.conditionNote;
   return {
     ...marked,
     conditionStatus: conditions,
     objectKind: (judgment?.medium && judgment.medium !== 'unknown' ? judgment.medium : marked.objectKind) || marked.contentType || 'article',
     ...(conditionNote ? { conditionNote } : {}),
+    ...(judgment?.entrance === 'excerpt' ? { excerpt: true, entrancePurpose: '去原站打开片段入口' } : {}),
     ...(judgment?.basis && !marked.reason.includes('未核实') ? { reason: judgment.basis } : {}),
   };
 }
@@ -437,12 +458,12 @@ async function matchSteeredObjects(input: {
     const judgment = judged.judgments.get(card.itemId);
     const honest = honestyFromJudgment(card, judgment);
     if (!role || role === 'UNRELATED' || role === 'HUB') continue;
-    if (isPrimaryContentRole(role)) {
+    if (isPrimaryContentRole(role) && judgment?.conditions !== 'unmet') {
       cards.push({
         ...honest,
         ...(judgment?.conditions === 'unconfirmed' ? {} : { objectFidelity: 'PRIMARY_CONTENT' as const }),
       });
-    } else if (isRelatedInfoRole(role)) {
+    } else if (isRelatedInfoRole(role) || (isPrimaryContentRole(role) && judgment?.conditions === 'unmet')) {
       relatedCards.push({ ...honest, objectFidelity: 'ABOUT_CONTENT' });
     }
   }
@@ -807,6 +828,7 @@ export async function ensurePersonalFeed(input: {
   const mark = (event: string, count?: number) => {
     supplyTrace.push(count === undefined ? { event, ms: Date.now() - startedAt } : { event, ms: Date.now() - startedAt, count });
   };
+  let steeredQueries: string[] = [];
   const persistCache = async (file: FeedCacheFile) => {
     if (input.isCurrentGeneration && !input.isCurrentGeneration()) return;
     await writeCache(input.packageRoot, file);
@@ -896,6 +918,7 @@ export async function ensurePersonalFeed(input: {
       ...(view.replenishing ? { replenishing: true } : {}),
       ...(input.adjustment ? { adjustment: input.adjustment } : {}),
       supplyTrace,
+      ...(steeredQueries.length ? { searchQuery: steeredQueries.join(' | ') } : {}),
     });
     return { view: traced, reasonCode };
   };
@@ -1060,7 +1083,9 @@ export async function ensurePersonalFeed(input: {
   const steered = !!input.adjustment;
   const restoreDefault = !steered && (input.mode === 'reset' || input.mode === 'replenish');
   const pageForDefault = (incoming: DiscoverCard[]) =>
-    restoreDefault ? mergeDefaultFeed(cachedCards, incoming, prefs) : incoming.slice(0, MAX_FEED);
+    restoreDefault
+      ? mergeDefaultFeed(cachedCards, incoming, prefs)
+      : { page: incoming.slice(0, MAX_FEED), moreIds: incoming.slice(MAX_FEED).map((card) => card.itemId) };
   const freshSearchItems: NetworkItem[] = [];
   const freshAccessItems: NetworkItem[] = [];
   const rememberFresh = (item: NetworkItem | undefined) => {
@@ -1168,6 +1193,7 @@ export async function ensurePersonalFeed(input: {
             model: input.model,
           });
           queries = intent.searchQueries.filter(Boolean);
+          steeredQueries = queries.slice();
           intents = queries.map((searchQuery) => ({
             topic: intent.topic || searchQuery,
             contentTypes: intent.requestedMedia || [],
@@ -1183,6 +1209,7 @@ export async function ensurePersonalFeed(input: {
         if (!queries.length) {
           const fallbackQuery = input.adjustment.text.trim().slice(0, 120);
           queries = [fallbackQuery];
+          steeredQueries = queries.slice();
           intents = [
             {
               topic: fallbackQuery,
@@ -1346,6 +1373,7 @@ export async function ensurePersonalFeed(input: {
     const accessCards = [...(matched.accessCards || []), ...accessFromFresh].slice(0, 8);
     const page = matched.cards.slice(0, MAX_FEED);
     const relatedCards = 'relatedCards' in matched ? matched.relatedCards : [];
+    const nearby = relatedCards.some((card) => card.conditionStatus === 'unmet');
     if (page.length || relatedCards.length) {
       const snapshot: FeedSnapshot = {
         itemIds: page.map((card) => card.itemId),
@@ -1366,12 +1394,16 @@ export async function ensurePersonalFeed(input: {
         relatedCards,
         accessCards,
         preferences: input.preferences,
-        notice: page.length
-          ? '先按已经能确认的对象放在这里。价格、课时、平台等条件未核实的已标明，还没有标成已确认。'
-          : relatedCards.length
-            ? '先找到这些相关介绍，还不是这次要的对象本身。'
-            : '',
-        ...(relatedCards.length ? { relatedTitle: '相关介绍' } : {}),
+        notice: nearby && !page.some((card) => card.conditionStatus === 'met')
+          ? '这次没有找到完全符合的对象。下面是来源里能看到的相近选择，并已标明哪里不合。没有把条件放宽。'
+          : page.length
+            ? '先按已经能确认的对象放在这里。价格、课时、平台等条件未核实的已标明，还没有标成已确认。'
+            : relatedCards.length
+              ? '先找到这些相关介绍，还不是这次要的对象本身。'
+              : '',
+        ...(relatedCards.length
+          ? { relatedTitle: nearby ? '相近选择（不完全符合这次的条件）' : '相关介绍' }
+          : {}),
         reasonCode: page.length || relatedCards.length ? 'REPLENISHED' : 'DIRECTORY_EMPTY',
         feedMode: 'personal',
         networking,
@@ -1429,9 +1461,9 @@ export async function ensurePersonalFeed(input: {
 
   if (!input.chatComplete || !input.model) {
     const openCards = pageForDefault(directoryCards(candidates, prefs, MAX_FEED, now));
-    if (openCards.length) {
+    if (openCards.page.length) {
       const snapshot: FeedSnapshot = {
-        itemIds: rememberShownIds(cache.lastView?.itemIds, openCards.map((card) => card.itemId), input.mode === 'more'),
+        itemIds: rememberShownIds(cache.lastView?.itemIds, openCards.page.map((card) => card.itemId), input.mode === 'more'),
         generatedAt: now,
         mode: 'personal',
       };
@@ -1439,12 +1471,12 @@ export async function ensurePersonalFeed(input: {
         version: 1,
         ...(steered && cache.personal ? { personal: cache.personal } : { personal: snapshot }),
         lastView: snapshot,
-        ...(cache.rankedIds?.length ? { rankedIds: cache.rankedIds } : {}),
+        rankedIds: [...snapshot.itemIds, ...openCards.moreIds],
       });
-      mark('FIRST_CARD_VISIBLE', openCards.length);
+      mark('FIRST_CARD_VISIBLE', openCards.page.length);
       return finish(
         viewOf({
-          cards: openCards,
+          cards: openCards.page,
           preferences: input.preferences,
           notice: '',
           reasonCode: replenished ? 'REPLENISHED' : 'LOCAL_DIRECTORY',
@@ -1560,9 +1592,17 @@ export async function ensurePersonalFeed(input: {
     })
     .filter((card): card is DiscoverCard => !!card);
   const { visible: rankedVisible, access: rankedAccess } = splitAccessCards(ordered);
-  const cards = pageForDefault(rankedVisible);
+  const shownIds = new Set(selected.shownItemIds);
+  const incomingRank = rankedVisible.filter((card) => shownIds.has(card.itemId));
+  const merged = pageForDefault(incomingRank.length ? incomingRank : rankedVisible);
+  const cards = merged.page;
   const accessCards = [...rankedAccess, ...accessFromFresh].slice(0, 8);
-  cache.rankedIds = [...new Set([...cards.map((card) => card.itemId), ...ordered.map((card) => card.itemId)])];
+  cache.rankedIds = [...new Set([
+    ...cards.map((card) => card.itemId),
+    ...merged.moreIds,
+    ...rankedVisible.filter((card) => !shownIds.has(card.itemId)).map((card) => card.itemId),
+    ...ordered.map((card) => card.itemId),
+  ])];
 
   if (!cards.length) {
     const alreadyHave = input.mode === 'more' ? [] : candidates
@@ -1570,9 +1610,9 @@ export async function ensurePersonalFeed(input: {
       .filter(isConcreteContentCard)
       .slice(0, MAX_FEED);
     const keptHave = pageForDefault(alreadyHave);
-    if (keptHave.length) {
+    if (keptHave.page.length) {
       const snapshot: FeedSnapshot = {
-        itemIds: rememberShownIds(cache.lastView?.itemIds, keptHave.map((card) => card.itemId), false),
+        itemIds: rememberShownIds(cache.lastView?.itemIds, keptHave.page.map((card) => card.itemId), false),
         generatedAt: now,
         mode: 'personal',
       };
@@ -1580,12 +1620,12 @@ export async function ensurePersonalFeed(input: {
         version: 1,
         ...(steered && cache.personal ? { personal: cache.personal } : { personal: snapshot }),
         lastView: snapshot,
-        ...(cache.rankedIds?.length ? { rankedIds: cache.rankedIds } : {}),
+        rankedIds: [...snapshot.itemIds, ...keptHave.moreIds],
       });
-      mark('FIRST_CARD_VISIBLE', keptHave.length);
+      mark('FIRST_CARD_VISIBLE', keptHave.page.length);
       return finish(
         viewOf({
-          cards: keptHave,
+          cards: keptHave.page,
           preferences: input.preferences,
           notice: '已经取到这些内容。这一轮没有排进推荐，先按不同来源放在这里。',
           reasonCode: replenished ? 'REPLENISHED' : 'LOCAL_DIRECTORY',

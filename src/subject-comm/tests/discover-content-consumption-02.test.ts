@@ -723,4 +723,66 @@ test('STATE/UI: later and explicit preference stay explicit; opened is not a pre
   assert.equal(pref.includes("origin: 'user_action'"), true);
   assert.match(runtime, /action === 'open' \|\| action === 'later'/);
   assert.match(runtime, /action === 'boost' \|\| action === 'reduce' \|\| action === 'follow' \|\| action === 'block'/);
+  assert.match(ui, /action === 'adjust' \|\| action === 'adjustKeep' \|\| action === 'adjustRevoke'/);
+  assert.match(ui, /followReplenish\(client, activeSearchGenerationId\)/);
+});
+
+test('TYPE/STYLE: a bangumi page that is not a light manju stays nearby; excerpts stay labeled', async () => {
+  const chat: ChatCompleteFn = async ({ messages }) => {
+    const system = String(messages[0]?.content || '');
+    const user = JSON.parse(String(messages[messages.length - 1]?.content || '{}')) as {
+      candidates?: Array<{ id: string; url?: string; title?: string }>;
+    };
+    if (system.includes('判断每个候选')) {
+      return {
+        text: JSON.stringify({
+          roles: (user.candidates || []).map((row) => {
+            const wushan = /雾山五行/.test(String(row.title || row.url || ''));
+            return {
+              id: row.id,
+              role: 'SERIES',
+              medium: 'video',
+              conditions: wushan ? 'unmet' : 'unconfirmed',
+              entrance: wushan ? 'full' : 'excerpt',
+              basis: wushan
+                ? '来源写的是国风热血动画，不是轻松古风漫剧。'
+                : '来源只提供片段，完整一集未核实。',
+            };
+          }),
+        }),
+      };
+    }
+    return { text: '{}' };
+  };
+  const sought = await seekContent({
+    query: '有没有气氛轻松的古风国创漫剧可以追',
+    items: [],
+    intent: {
+      intent: 'consume',
+      topic: '古风国创漫剧',
+      requestedMedia: ['video'],
+      objectWanted: 'work_itself',
+      freshness: 'unspecified',
+      popularityClaim: false,
+      preferences: '气氛轻松的古风国创漫剧',
+      searchQueries: ['古风 国创 漫剧'],
+      suggestTalk: false,
+    } as never,
+    chatComplete: chat,
+    model: { baseUrl: 'https://model.example', model: 'm' },
+    searchWeb: async () => [
+      { title: '雾山五行', url: 'https://m.bilibili.com/bangumi/play/ss34410', snippet: '国风热血动画，五行家族对抗妖兽。' },
+      { title: '花手情缘 片段', url: 'https://3g.sina.com.cn/clip/huashou', snippet: 'AI 古风搞笑漫剧片段。' },
+    ],
+  });
+  assert.equal(sought.cards.some((card) => /雾山五行/.test(card.title)), false);
+  const nearby = sought.relatedCards.find((card) => /雾山五行/.test(card.title));
+  assert.ok(nearby);
+  assert.equal(nearby!.conditionStatus, 'unmet');
+  assert.match(String(nearby!.conditionNote || nearby!.reason), /不完全符合|不是轻松古风漫剧/);
+  const clip = [...sought.cards, ...sought.relatedCards].find((card) => /花手情缘/.test(card.title));
+  assert.ok(clip);
+  assert.equal(clip!.excerpt, true);
+  assert.match(String(clip!.entrancePurpose || ''), /片段/);
+  assert.match(sought.notice, /没有找到完全符合|相近选择/);
 });

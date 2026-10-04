@@ -249,6 +249,19 @@
     if (action === 'later') showSection('later');
     if (action === 'reverse') showSection('prefs');
     if (action === 'resetRecent' || action === 'adjust' || action === 'adjustKeep' || action === 'adjustRevoke') showSection('for-you');
+    if (
+      (action === 'adjust' || action === 'adjustKeep' || action === 'adjustRevoke') &&
+      result &&
+      result.view &&
+      result.view.replenishing
+    ) {
+      const deadline = watchDeadline(activeSearchGenerationId);
+      try {
+        await followReplenish(client, activeSearchGenerationId);
+      } finally {
+        clearTimeout(deadline);
+      }
+    }
     return result;
   }
 

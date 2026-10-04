@@ -157,6 +157,8 @@ function viewRow(v) {
           question: cut(v.adjustment.question || '', 120),
         }
       : null,
+    relatedTitle: v.relatedTitle || '',
+    supplyTrace: (v.supplyTrace || []).map((row) => ({ event: row.event, ms: row.ms, count: row.count })),
     searchUsage: v.searchUsage || null,
     seekTrace: v.seekTrace
       ? {
@@ -352,6 +354,14 @@ async function main() {
       const revFirst = await call('revoke', { action: 'adjustRevoke', searchGenerationId: gen });
       const afterRev = await follow(revFirst && revFirst.view);
       log('after-revoke', { view: viewRow(afterRev) });
+    } else if (SCENARIO.startsWith('adjust:')) {
+      const text = SCENARIO.slice(7);
+      log('input', { raw: text });
+      gen = 'sg_audit_adj_' + Date.now().toString(36);
+      const first = await call('adjust', { action: 'adjust', text, searchGenerationId: gen });
+      log('adjust-first-paint', { view: viewRow(first && first.view) });
+      const last = await follow(first && first.view);
+      log('final', { view: viewRow(last) });
     } else if (SCENARIO.startsWith('seek:')) {
       const text = SCENARIO.slice(5);
       log('input', { raw: text });

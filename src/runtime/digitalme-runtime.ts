@@ -840,7 +840,15 @@ export class DigitalMeRuntime {
       relatedCards: sought.relatedCards,
       unjudgedCards: sought.unjudgedCards,
       accessCards: sought.accessCards,
-      ...(sought.relatedCards.length ? { relatedTitle: currentNews ? '补充背景' : '相关介绍' } : {}),
+      ...(sought.relatedCards.length
+        ? {
+            relatedTitle: currentNews
+              ? '补充背景'
+              : sought.relatedCards.some((card) => card.conditionStatus === 'unmet')
+                ? '相近选择（不完全符合这次的条件）'
+                : '相关介绍',
+          }
+        : {}),
       ...(sought.unjudgedCards.length ? { unjudgedTitle: '这些还没完成判断，不是已确认的推荐' } : {}),
       preferences,
       // 获取与判断尚未到终态时，不下"没有找到"之类的结论。

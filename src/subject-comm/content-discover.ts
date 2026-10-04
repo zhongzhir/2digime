@@ -45,7 +45,7 @@ export interface DiscoverCard {
   /** 推荐依据出自哪篇片单、榜单或评论。依据文章不是作品本身。 */
   basisSource?: { title: string; url?: string };
   /** 用户这次提出的条件：材料能确认、不足，或这次没有这类条件。 */
-  conditionStatus?: 'met' | 'unconfirmed' | 'none';
+  conditionStatus?: 'met' | 'unconfirmed' | 'unmet' | 'none';
   /** 证据不足时写明哪一条还没核实。不得写成已确认。 */
   conditionNote?: string;
   /** 对象类型，来自页面或判断，不是排序分。 */

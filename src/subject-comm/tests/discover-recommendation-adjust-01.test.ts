@@ -1444,3 +1444,56 @@ test('stale generation does not overwrite the personal cache', async () => {
   assert.deepEqual(after.personal?.itemIds, before.personal?.itemIds);
   assert.equal(after.personal?.itemIds?.includes(keep.itemId), true);
 });
+
+test('default-feed merge keeps new rank in front and leftover cache for more', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-merge-order-'));
+  const self = selfOf('我关心公开科学。');
+  await writeDigitalSelf(root, self);
+  const oldCards = Array.from({ length: 8 }, (_, i) =>
+    itemOf(`ni_old_${i}`, `旧内容 ${i + 1}`, `https://news-${i}.example/old/${i}`, 'article'),
+  );
+  const fresh = itemOf('ni_new_front', '新补的一集', 'https://podcasts.example/new', 'audio');
+  await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: self,
+    items: oldCards,
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    mode: 'open',
+    now: NOW,
+  });
+  const done = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: self,
+    items: [...oldCards, fresh],
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    chatComplete: async ({ messages }) => {
+      const blob = messages.map((row) => String(row.content || '')).join('\n');
+      const ids = [...blob.matchAll(/"itemId":"(ni_[^"]+)"/g)].map((row) => row[1]!);
+      return {
+        text: JSON.stringify({
+          decisions: [
+            ...(ids.includes(fresh.itemId) ? [{ itemId: fresh.itemId, decision: 'show', reason: '新补的排前面' }] : []),
+            ...ids.filter((id) => id !== fresh.itemId).map((itemId) => ({ itemId, decision: 'ignore', reason: '旧的靠后' })),
+          ],
+        }),
+      };
+    },
+    searchWeb: async () => [],
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    mode: 'reset',
+    now: NOW,
+  });
+  assert.equal(done.view.cards[0]?.itemId, fresh.itemId);
+  assert.ok(done.view.cards.length >= 2 && done.view.cards.length <= 6);
+  const leftover = oldCards.filter((row) => !done.view.cards.some((card) => card.itemId === row.itemId));
+  assert.ok(leftover.length >= 2);
+  const { readFile } = await import('node:fs/promises');
+  const cache = JSON.parse(await readFile(path.join(root, 'content', 'personal-feed-cache.json'), 'utf8')) as {
+    rankedIds?: string[];
+  };
+  assert.ok((cache.rankedIds || []).some((id) => leftover.some((row) => row.itemId === id)));
+});

@@ -337,11 +337,11 @@ export interface CandidateJudgment {
   entrance: CandidateEntrance;
 }
 
-export type CandidateConditions = 'met' | 'unconfirmed' | 'none';
+export type CandidateConditions = 'met' | 'unconfirmed' | 'unmet' | 'none';
 export type CandidateEntrance = 'full' | 'excerpt' | 'unverified' | 'none';
 
 const CANDIDATE_MEDIA = new Set(['article', 'video', 'audio', 'image']);
-const CANDIDATE_CONDITIONS = new Set(['met', 'unconfirmed', 'none']);
+const CANDIDATE_CONDITIONS = new Set(['met', 'unconfirmed', 'unmet', 'none']);
 const CANDIDATE_ENTRANCE = new Set(['full', 'excerpt', 'unverified', 'none']);
 
 export function judgmentsFromModelText(text: string, ids: string[]): Map<string, CandidateJudgment> {
@@ -401,7 +401,7 @@ export async function classifyCandidateRoles(input: {
   const system = [
     '你在判断每个候选相对「用户这次搜索」的对象忠实度，并写出推荐依据。只输出 JSON：{"roles":[{"id":"","role":"","medium":"","conditions":"","entrance":"","basis":"","summary":""}]}。',
     'role 只能是 PRIMARY_CONTENT、SERIES、EPISODE、HUB、LISTING、COMMENTARY、UNRELATED。',
-    'PRIMARY_CONTENT：相对用户这次请求要消费的对象本身。先判断这个页面是什么，再判断条件够不够；两件事不要混成一条。',
+    'PRIMARY_CONTENT：相对用户这次请求要消费的对象本身。先分开写三件事：来源说这是什么类型，来源有没有写风格或氛围，观看入口是完整节目还是片段。不要混成一条，也不要用作品名气补材料。',
     '未点名媒介时，主题匹配的正文、视频、图片、音频可以是 PRIMARY_CONTENT；不要因为是 Article 就标 COMMENTARY。',
     '用户要的是对象本身（一门可上的课、一部可看的动画或漫剧、一处可住的住宿、一部作品）时：只有对象页是 PRIMARY_CONTENT / SERIES / EPISODE。介绍文章、学习路线图、行业新闻、盘点不是对象本身，标 COMMENTARY 或 LISTING。不要用相关话题把主结果填满。',
     'SERIES：一部作品、节目或播客的主页/详情页。',
@@ -410,8 +410,8 @@ export async function classifyCandidateRoles(input: {
     'LISTING：榜单、集合、搜索页、把多部作品打包推荐的页面。',
     'COMMENTARY：候选不是这次要消费的对象，而是在谈论该对象。仅当用户点名要视频/图片/音频时，介绍它们的文章才是 COMMENTARY。',
     'UNRELATED：主题不在这次搜索范围内。即使它可能符合用户平时其它兴趣，也标 UNRELATED。',
-    '用户这次在 query / preferences 里明确提出的条件（例如纪录片、长视频、适合周末看、高分、口碑好）也属于这次的范围：候选虽然是作品本身，但明显不满足这些条件（例如要长视频，它只是几分钟的片段），标 UNRELATED。durationSeconds 是来源给出的时长，没有就是不知道。价格、课时、时长材料里没有时，不要标 UNRELATED。',
-    'conditions：与 role 分开写。用户这次没有提出这类条件写 none；材料能确认满足写 met；材料不足以确认写 unconfirmed，并在 basis 里写明哪一条还没确认。条件不够只改 conditions，不要因此把对象页改成 COMMENTARY 或 UNRELATED。只看候选材料，不凭作品名气替材料确认。价格或课时核不到时写 unconfirmed，仍把对象本身当作候选。',
+    '用户这次在 query / preferences 里明确提出的类型、风格、人群等条件，只看来源有没有写。来源写明的类型或风格和用户要的不一致，不要当成已经符合，也不要把条件放宽后再标 met。',
+    'conditions：与 role 分开写。用户这次没有提出这类条件写 none；材料能确认满足写 met；材料没写、无法确认写 unconfirmed，并在 basis 里写明哪一条还没确认；来源写明的类型或风格和用户要的不一致写 unmet，并在 basis 里写明哪一条不合。条件只改 conditions：对象页不要因此改成 COMMENTARY 或 UNRELATED。价格、课时材料里没有时写 unconfirmed，不要写成 unmet，仍把课程或作品本身当作候选。',
     'entrance：只在候选本身是视频或音频的观看/收听页时填写，其它写 none。full：材料能确认是完整的一部、一集或一整期，并且来自出品方、播出平台、获得授权的平台或创作者本人；excerpt：片段、预告、花絮、剪辑、解说；unverified：自称全集、高清完整版之类，但看不出来源或授权，或者看不出是否完整。只依据候选材料，标题里的说法不能替来源作保。',
     '能不能在应用里直接播放，与它是否符合这次请求无关，不能因此判为 PRIMARY_CONTENT。',
     'medium：该候选本身主要是 article / video / audio / image 哪一种，由页面内容判断；看不出就写 unknown。节目主页、系列页、单集页是否有直接播放文件，不影响 role，也不影响 medium。',
