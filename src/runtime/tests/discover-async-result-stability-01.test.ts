@@ -431,6 +431,76 @@ test('CASE 7: reverse race — in-flight AI video search cannot enter later spac
   await runtime.stop();
 });
 
+test('revoke restores cached cards then background finish keeps them; stale generation cannot write back', async () => {
+  const pkgDir = await withPackage();
+  const runtime = createDigitalMeRuntime({
+    documentCapability: 'fake',
+    registerOpenAiStub: false,
+    searchCapability: false,
+    contentChat: async ({ messages }: { messages: Array<{ content?: string }> }) => {
+      const blob = messages.map((row) => String(row.content || '')).join('\n');
+      if (blob.includes('判断用户在「发现」里') || blob.includes('拟定内容发现方向')) {
+        return { text: JSON.stringify({ intents: [], searchQueries: ['science'] }) };
+      }
+      const user = String(messages[messages.length - 1]?.content || '{}');
+      let ids: string[] = [];
+      try {
+        const parsed = JSON.parse(user) as { candidates?: Array<{ id?: string; itemId?: string }> };
+        ids = (parsed.candidates || []).map((row) => String(row.id || row.itemId || '')).filter(Boolean);
+      } catch {
+        ids = [];
+      }
+      if (blob.includes('判断每个候选')) {
+        return { text: JSON.stringify({ roles: ids.map((id) => ({ id, role: 'PRIMARY_CONTENT' })) }) };
+      }
+      return {
+        text: JSON.stringify({
+          decisions: ids.slice(0, 2).map((itemId) => ({ itemId, decision: 'show', reason: '先看这两张' })),
+        }),
+      };
+    },
+    contentSearch: async () => [],
+  });
+  const bus = createCommandBus(runtime);
+  await bus.invoke('subject.createPackage', { displayName: '撤销回归', targetDir: pkgDir });
+  const overview = await bus.invoke('subject.getOverview', {});
+  await writeDigitalSelf(pkgDir, selfOf(overview.subjectId));
+  const store = new FileNetworkItemStore(path.join(pkgDir, 'content'));
+  for (const seed of FEED_01_SEED_ITEMS.slice(0, 6)) await store.put(seed);
+
+  const opened = await bus.invoke('content', { action: 'discover', searchGenerationId: 'sg_open' });
+  const keptIds = opened.view.cards.map((card: { itemId: string }) => card.itemId);
+  assert.ok(keptIds.length >= 3, 'default feed should already have browsable cards');
+
+  await bus.invoke('content', {
+    action: 'adjust',
+    text: '先随便调一下，随后撤销',
+    searchGenerationId: 'sg_adj',
+  });
+  const revoked = await bus.invoke('content', { action: 'adjustRevoke', searchGenerationId: 'sg_rev' });
+  assert.equal(revoked.view.replenishing, true);
+  assert.match(revoked.view.notice || '', /恢复默认推荐/);
+  for (const id of keptIds) {
+    assert.equal(revoked.view.cards.some((card: { itemId: string }) => card.itemId === id), true);
+  }
+
+  const finished = await bus.invoke('content', { action: 'replenish', searchGenerationId: 'sg_rev' });
+  assert.equal(finished.view.replenishing, false);
+  assert.equal(/正在恢复/.test(finished.view.notice || ''), false);
+  for (const id of keptIds) {
+    assert.equal(finished.view.cards.some((card: { itemId: string }) => card.itemId === id), true);
+  }
+
+  const stale = await bus.invoke('content', { action: 'replenish', searchGenerationId: 'sg_adj' });
+  assert.equal(stale.view.searchGenerationId, 'sg_rev');
+  assert.equal(shouldApplyDiscoverView({ searchGenerationId: 'sg_rev', feedMode: 'personal' }, stale.view), true);
+  assert.equal(shouldApplyDiscoverView({ searchGenerationId: 'sg_adj', feedMode: 'personal' }, stale.view), false);
+  for (const id of keptIds) {
+    assert.equal(finished.view.cards.some((card: { itemId: string }) => card.itemId === id), true);
+  }
+  await runtime.stop();
+});
+
 test('CASE 8: three rapid searches A → B → C — final view consumes only generation C', async () => {
   const pkgDir = await withPackage();
   const runtime = createDigitalMeRuntime({

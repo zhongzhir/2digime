@@ -122,4 +122,4 @@ Owner 真人试用机复验通过后，才可将本任务升为 `DISCOVER_PERSON
 **不是：** 全部产品验收通过；市场 95 分位达标；`DISCOVER_PERSONAL_FEED_ACCEPTED`。  
 **未：** push、发布。
 
-后续改进顺序由 Owner 指定：排版 → 来源 → 质量 → 运行可靠性。第 2 批来源与行为闭环见 `docs/audits/DISCOVER-SOURCE-FEEDBACK-02.md`。第 3 批大众供给与调整推荐见 `docs/audits/DISCOVER-ADJUST-03.md`。课程与复杂查询交付修复见 `docs/audits/DISCOVER-DELIVERY-04.md`。核实诚实、验证页、撤销与课程耗时见 `docs/audits/DISCOVER-QUALITY-05.md`。对象匹配、撤销后默认流与合并试用包 `v2-tujimi-20261004T032734Z-c9356686`（gitHead `c9356686`）见 `docs/audits/DISCOVER-QUALITY-06.md`。已知缺陷见 `digitalme_context.md` 2026-10-04 条，不得在本附录里写成已关闭。`230cfc6` 仍是已接受试用基线，不代表这些新增改动已接受。
+后续改进顺序由 Owner 指定：排版 → 来源 → 质量 → 运行可靠性。第 2 批来源与行为闭环见 `docs/audits/DISCOVER-SOURCE-FEEDBACK-02.md`。第 3 批大众供给与调整推荐见 `docs/audits/DISCOVER-ADJUST-03.md`。课程与复杂查询交付修复见 `docs/audits/DISCOVER-DELIVERY-04.md`。核实诚实、验证页、撤销与课程耗时见 `docs/audits/DISCOVER-QUALITY-05.md`。对象匹配与试用包 `c9356686` 见 `docs/audits/DISCOVER-QUALITY-06.md`。课程查询偏离、漫剧额度分记、默认流缩水定向修复见 `docs/audits/DISCOVER-QUALITY-07.md`（本轮不打包）。已知缺陷见 `digitalme_context.md` 2026-10-04 条，不得在本附录里写成已关闭。`230cfc6` 仍是已接受试用基线，不代表这些新增改动已接受。

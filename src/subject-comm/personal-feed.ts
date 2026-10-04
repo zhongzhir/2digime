@@ -22,6 +22,7 @@ import { isAccessCard, markAccess, pageAccessState, type ExternalSeekHit } from 
 import {
   classifyCandidateRoles,
   defaultDiscoverIntent,
+  interpretDiscoverIntent,
   isPrimaryContentRole,
   isRelatedInfoRole,
   isDomainLikeTitle,
@@ -96,6 +97,30 @@ function rememberShownIds(previous: string[] | undefined, next: string[], append
     if (id && !ids.includes(id)) ids.push(id);
   }
   return ids;
+}
+
+function mergeDefaultFeed(
+  existing: DiscoverCard[],
+  incoming: DiscoverCard[],
+  prefs: ContentPreferenceDirective[],
+): DiscoverCard[] {
+  const validExisting = applyExplicitFeedback(
+    existing.filter((card) => card.itemId && isConcreteContentCard(card) && !isAccessCard(card)),
+    prefs,
+  );
+  const seen = new Set<string>();
+  const out: DiscoverCard[] = [];
+  for (const card of incoming.concat(validExisting)) {
+    if (!card.itemId || seen.has(card.itemId) || isAccessCard(card)) continue;
+    seen.add(card.itemId);
+    out.push(card);
+  }
+  return out.slice(0, MAX_FEED);
+}
+
+function terminalDefaultNotice(notice: string, replenishing?: boolean): string {
+  if (replenishing) return notice;
+  return /正在恢复/.test(notice) ? '' : notice;
 }
 
 async function readCache(packageRoot: string): Promise<FeedCacheFile> {
@@ -770,6 +795,8 @@ export async function ensurePersonalFeed(input: {
   supplyPhase?: 'catalog' | 'full' | 'seated' | 'rank';
   /** 撤销时只读默认流缓存，不读调整后的 lastView。 */
   preferPersonalCache?: boolean;
+  /** 代次已切换时不得回写缓存。 */
+  isCurrentGeneration?: () => boolean;
   now?: string;
   adjustment?: DiscoverView['adjustment'];
 }): Promise<{ view: DiscoverView; reasonCode: FeedReasonCode }> {
@@ -779,6 +806,10 @@ export async function ensurePersonalFeed(input: {
   const supplyTrace: Array<{ event: string; ms: number; count?: number }> = [];
   const mark = (event: string, count?: number) => {
     supplyTrace.push(count === undefined ? { event, ms: Date.now() - startedAt } : { event, ms: Date.now() - startedAt, count });
+  };
+  const persistCache = async (file: FeedCacheFile) => {
+    if (input.isCurrentGeneration && !input.isCurrentGeneration()) return;
+    await writeCache(input.packageRoot, file);
   };
   const prefs = input.preferenceRows || [];
   const recent = input.recentEvents || [];
@@ -793,7 +824,7 @@ export async function ensurePersonalFeed(input: {
         if (!merged.includes(id)) merged.push(id);
       }
       cache.lastView = { itemIds: merged, generatedAt: now, mode: 'personal' };
-      await writeCache(input.packageRoot, cache);
+      await persistCache(cache);
       mark('FIRST_CARD_VISIBLE', nextCards.length);
       return {
         view: viewOf({
@@ -854,7 +885,10 @@ export async function ensurePersonalFeed(input: {
       ...(view.accessCards?.length ? { accessCards: view.accessCards } : {}),
       ...(view.relatedTitle ? { relatedTitle: view.relatedTitle } : {}),
       preferences: view.preferences,
-      notice: sameAsShown && !String(view.notice || '').trim() ? sameBatchNotice : view.notice,
+      notice: terminalDefaultNotice(
+        sameAsShown && !String(view.notice || '').trim() ? sameBatchNotice : String(view.notice || ''),
+        view.replenishing,
+      ),
       reasonCode,
       feedMode: view.feedMode || 'personal',
       networking: (view.networking as NetworkDiscoveryCode) || networking,
@@ -950,7 +984,7 @@ export async function ensurePersonalFeed(input: {
       };
       cache.lastView = snapshot;
       if (!cache.personal) cache.personal = snapshot;
-      await writeCache(input.packageRoot, cache);
+      await persistCache(cache);
       mark('FIRST_CARD_VISIBLE', localCards.length);
       return finish(
         viewOf({
@@ -1024,6 +1058,9 @@ export async function ensurePersonalFeed(input: {
   let replenished = false;
   let searchAttempted = false;
   const steered = !!input.adjustment;
+  const restoreDefault = !steered && (input.mode === 'reset' || input.mode === 'replenish');
+  const pageForDefault = (incoming: DiscoverCard[]) =>
+    restoreDefault ? mergeDefaultFeed(cachedCards, incoming, prefs) : incoming.slice(0, MAX_FEED);
   const freshSearchItems: NetworkItem[] = [];
   const freshAccessItems: NetworkItem[] = [];
   const rememberFresh = (item: NetworkItem | undefined) => {
@@ -1098,7 +1135,7 @@ export async function ensurePersonalFeed(input: {
     let queries: string[] = [];
     let intents: Awaited<ReturnType<typeof proposeDiscoveryIntents>> = [];
     const intentPromise =
-      ranked && input.chatComplete && input.model
+      ranked && input.chatComplete && input.model && !steered
         ? proposeDiscoveryIntents({
             selfContext: formatSelfContext(selectSelfContext(input.digitalSelf, '')),
             chatComplete: input.chatComplete,
@@ -1123,10 +1160,47 @@ export async function ensurePersonalFeed(input: {
       );
     }
     if (ranked && input.chatComplete && input.model) {
-      intents = await intentPromise;
-      queries = intents.map((row) => row.searchQuery).filter(Boolean);
-      mark('INTENT_QUERIES', queries.length);
-      if (!queries.length) supplement = 'no_query';
+      if (steered && input.adjustment?.text) {
+        try {
+          const intent = await interpretDiscoverIntent({
+            query: input.adjustment.text,
+            chatComplete: input.chatComplete,
+            model: input.model,
+          });
+          queries = intent.searchQueries.filter(Boolean);
+          intents = queries.map((searchQuery) => ({
+            topic: intent.topic || searchQuery,
+            contentTypes: intent.requestedMedia || [],
+            purpose: 'learn',
+            freshness: intent.freshness || 'unspecified',
+            explorationMode: 'core' as const,
+            searchQuery,
+          }));
+        } catch {
+          queries = [];
+          intents = [];
+        }
+        if (!queries.length) {
+          const fallbackQuery = input.adjustment.text.trim().slice(0, 120);
+          queries = [fallbackQuery];
+          intents = [
+            {
+              topic: fallbackQuery,
+              contentTypes: [],
+              purpose: 'learn',
+              freshness: 'unspecified',
+              explorationMode: 'core',
+              searchQuery: fallbackQuery,
+            },
+          ];
+        }
+        mark('INTENT_QUERIES', queries.length);
+      } else {
+        intents = await intentPromise;
+        queries = intents.map((row) => row.searchQuery).filter(Boolean);
+        mark('INTENT_QUERIES', queries.length);
+        if (!queries.length) supplement = 'no_query';
+      }
     } else if (needReplenish) {
       supplement = 'no_model';
       mark('INTENT_QUERIES', 0);
@@ -1278,7 +1352,7 @@ export async function ensurePersonalFeed(input: {
         generatedAt: now,
         mode: 'personal',
       };
-      await writeCache(input.packageRoot, {
+      await persistCache({
         version: 1,
         ...(cache.personal ? { personal: cache.personal } : {}),
         lastView: snapshot,
@@ -1354,14 +1428,14 @@ export async function ensurePersonalFeed(input: {
   }
 
   if (!input.chatComplete || !input.model) {
-    const openCards = directoryCards(candidates, prefs, MAX_FEED, now);
+    const openCards = pageForDefault(directoryCards(candidates, prefs, MAX_FEED, now));
     if (openCards.length) {
       const snapshot: FeedSnapshot = {
         itemIds: rememberShownIds(cache.lastView?.itemIds, openCards.map((card) => card.itemId), input.mode === 'more'),
         generatedAt: now,
         mode: 'personal',
       };
-      await writeCache(input.packageRoot, {
+      await persistCache({
         version: 1,
         ...(steered && cache.personal ? { personal: cache.personal } : { personal: snapshot }),
         lastView: snapshot,
@@ -1425,7 +1499,7 @@ export async function ensurePersonalFeed(input: {
         generatedAt: now,
         mode: 'personal',
       };
-      await writeCache(input.packageRoot, {
+      await persistCache({
         version: 1,
         ...(steered && cache.personal ? { personal: cache.personal } : { personal: snapshot }),
         lastView: snapshot,
@@ -1486,31 +1560,32 @@ export async function ensurePersonalFeed(input: {
     })
     .filter((card): card is DiscoverCard => !!card);
   const { visible: rankedVisible, access: rankedAccess } = splitAccessCards(ordered);
-  const cards = rankedVisible.slice(0, MAX_FEED);
+  const cards = pageForDefault(rankedVisible);
   const accessCards = [...rankedAccess, ...accessFromFresh].slice(0, 8);
-  cache.rankedIds = ordered.map((card) => card.itemId);
+  cache.rankedIds = [...new Set([...cards.map((card) => card.itemId), ...ordered.map((card) => card.itemId)])];
 
   if (!cards.length) {
     const alreadyHave = input.mode === 'more' ? [] : candidates
       .map((item) => cardFromNetworkItem(item, '已经取到，这一轮没有排进推荐，先按来源放在这里。', 'directory'))
       .filter(isConcreteContentCard)
       .slice(0, MAX_FEED);
-    if (alreadyHave.length) {
+    const keptHave = pageForDefault(alreadyHave);
+    if (keptHave.length) {
       const snapshot: FeedSnapshot = {
-        itemIds: rememberShownIds(cache.lastView?.itemIds, alreadyHave.map((card) => card.itemId), false),
+        itemIds: rememberShownIds(cache.lastView?.itemIds, keptHave.map((card) => card.itemId), false),
         generatedAt: now,
         mode: 'personal',
       };
-      await writeCache(input.packageRoot, {
+      await persistCache({
         version: 1,
         ...(steered && cache.personal ? { personal: cache.personal } : { personal: snapshot }),
         lastView: snapshot,
         ...(cache.rankedIds?.length ? { rankedIds: cache.rankedIds } : {}),
       });
-      mark('FIRST_CARD_VISIBLE', alreadyHave.length);
+      mark('FIRST_CARD_VISIBLE', keptHave.length);
       return finish(
         viewOf({
-          cards: alreadyHave,
+          cards: keptHave,
           preferences: input.preferences,
           notice: '已经取到这些内容。这一轮没有排进推荐，先按不同来源放在这里。',
           reasonCode: replenished ? 'REPLENISHED' : 'LOCAL_DIRECTORY',
@@ -1545,7 +1620,7 @@ export async function ensurePersonalFeed(input: {
     generatedAt: now,
     mode: 'personal',
   };
-  await writeCache(input.packageRoot, {
+  await persistCache({
     version: 1,
     ...(steered && cache.personal ? { personal: cache.personal } : { personal: snapshot }),
     lastView: snapshot,

@@ -2,7 +2,7 @@
 
 版本：v0.4
 状态：historical strategic context（不承担 current plan）
-最后更新：2026-10-04（Discover 对象匹配与撤销画面，合并试用包 `v2-tujimi-20261004T032734Z-c9356686` / `c9356686`，见 `docs/audits/DISCOVER-QUALITY-06.md`。产品试用基线仍是 `230cfc6`。`79de7e0` 是工程改善。仍是限定试用接受，不是质量通过，不是 95 分位达标。）
+最后更新：2026-10-04（Discover 课程查询偏离、漫剧额度分记、默认流缩水定向修复，见 `docs/audits/DISCOVER-QUALITY-07.md`。继续使用试用包 `c9356686`，停用 `6f38106b`。产品试用基线仍是 `230cfc6`。`79de7e0` 是工程改善。本轮不打包。仍是限定试用接受，不是质量通过，不是 95 分位达标。）
 
 本文件不恢复为第二权威源。现行权威：`AGENTS.md` → `docs/refoundation/00` / `01` / `02` / `03`。
 
@@ -17,7 +17,7 @@
   1. 卡片排版 — 已做（`65ae831`），未打包
   2. 信息来源 + 行为闭环 — 已做，见 `docs/audits/DISCOVER-SOURCE-FEEDBACK-02.md`
   3. 大众供给 + 调整推荐 — 工程对照 + 隔离复验，见 `docs/audits/DISCOVER-ADJUST-03.md`。课程/复杂查询交付修复见 `DISCOVER-DELIVERY-04.md`。来源接入见 `DISCOVER-SOURCE-FEEDBACK-02.md`。
-  4. 信息质量 — 核实诚实见 `docs/audits/DISCOVER-QUALITY-05.md`；对象匹配、撤销画面与合并试用包见 `docs/audits/DISCOVER-QUALITY-06.md`。时效/去重/摘要仍待后续。
+  4. 信息质量 — 核实诚实见 `docs/audits/DISCOVER-QUALITY-05.md`；对象匹配与试用包见 `docs/audits/DISCOVER-QUALITY-06.md`；课程查询、额度分记、默认流缩水见 `docs/audits/DISCOVER-QUALITY-07.md`。时效/去重/摘要仍待后续。
   5. 运行可靠性（配额、取消、迟写、CASE R3；保留已知缺陷清单）
 
 已知仍开放的缺陷（限定试用接受时一并记下，不是已修好）：

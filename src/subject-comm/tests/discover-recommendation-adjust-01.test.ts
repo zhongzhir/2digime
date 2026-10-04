@@ -192,8 +192,20 @@ test('user expression changes default-feed search direction; a single search is 
     networking: 'AVAILABLE',
     chatComplete: async ({ messages }) => {
       const blob = messages.map((row) => String(row.content || '')).join('\n');
-      if (blob.includes('拟定内容发现方向')) {
+      if (blob.includes('判断用户在「发现」里')) {
         intentBlob = blob;
+        return {
+          text: JSON.stringify({
+            mode: 'consume',
+            topic: '课程',
+            requestedContentTypes: ['article'],
+            objectWanted: 'work_itself',
+            searchQueries: ['photography course'],
+          }),
+        };
+      }
+      if (blob.includes('拟定内容发现方向')) {
+        intentBlob = `unexpected-default-planner\n${blob}`;
         return {
           text: JSON.stringify({
             intents: [
@@ -223,7 +235,8 @@ test('user expression changes default-feed search direction; a single search is 
     mode: 'reset',
     now: NOW,
   });
-  assert.match(intentBlob, /本次减少剧集推荐/);
+  assert.match(intentBlob, /适合我的课程/);
+  assert.equal(intentBlob.includes('unexpected-default-planner'), false);
   assert.equal(intentBlob.includes('木星大红斑'), false);
   assert.equal(result.view.adjustment?.summary, adjustment.summary);
   assert.equal(result.view.cards.some((card) => card.itemId === item.item.itemId), true);
@@ -735,6 +748,17 @@ test('seated first wave shows evidenced cards without waiting for ranking or mar
     networking: 'AVAILABLE',
     chatComplete: async ({ messages }) => {
       const blob = messages.map((row) => String(row.content || '')).join('\n');
+      if (blob.includes('判断用户在「发现」里')) {
+        return {
+          text: JSON.stringify({
+            mode: 'consume',
+            topic: 'AI 课程',
+            requestedContentTypes: ['article'],
+            objectWanted: 'work_itself',
+            searchQueries: ['AI 课程'],
+          }),
+        };
+      }
       if (blob.includes('拟定内容发现方向')) {
         return {
           text: JSON.stringify({
@@ -814,6 +838,17 @@ test('rank phase does not issue another search, and steered search starts both q
     networking: 'AVAILABLE',
     chatComplete: async ({ messages }) => {
       const blob = messages.map((row) => String(row.content || '')).join('\n');
+      if (blob.includes('判断用户在「发现」里')) {
+        return {
+          text: JSON.stringify({
+            mode: 'consume',
+            topic: '课程',
+            requestedContentTypes: ['article'],
+            objectWanted: 'work_itself',
+            searchQueries: ['AI 投资课', 'AI 落地课'],
+          }),
+        };
+      }
       if (blob.includes('拟定内容发现方向')) {
         return {
           text: JSON.stringify({
@@ -1211,4 +1246,201 @@ test('revoke reuses the default personal cache, not the adjusted last view', asy
   assert.equal(revoked.view.cards.some((card) => card.itemId === podcast.item.itemId), true);
   assert.equal(revoked.view.cards.some((card) => card.itemId === course.item.itemId), false);
   assert.match(revoked.view.notice, /恢复默认推荐/);
+});
+
+function itemOf(id: string, title: string, url: string, type: 'article' | 'audio' = 'article') {
+  const got = validateNetworkItem({
+    schemaVersion: 1,
+    itemId: id,
+    publisherSubjectId: `pub_${id}`,
+    publisherDisplayName: '来源',
+    kind: 'content',
+    createdAt: NOW,
+    visibility: 'public',
+    content: { title, text: title, url, contentType: type },
+    provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'feed' },
+  });
+  if (!got.ok) throw new Error(got.reason);
+  return got.item;
+}
+
+test('steered course search uses the consume query, not an adjacent how-to query', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-course-query-'));
+  const self = selfOf('我关心公开课。');
+  await writeDigitalSelf(root, self);
+  const course = itemOf('ni_quant_course', '量化投研实战课', 'https://learn.example.org/quant', 'article');
+  const howto = itemOf('ni_quant_howto', '三步构建你的AI投资分析系统', 'https://blog.example.org/build', 'article');
+  const seen: string[] = [];
+  let proposedDefault = false;
+  const result = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: self,
+    items: [course, howto],
+    preferences: [],
+    adjustment: {
+      id: 'adj_q',
+      summary: '本次找量化投研课',
+      text: '工作日晚上想上几门能上手的量化投研课',
+      scope: 'session',
+    },
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    chatComplete: async ({ messages }) => {
+      const blob = messages.map((row) => String(row.content || '')).join('\n');
+      if (blob.includes('拟定内容发现方向')) {
+        proposedDefault = true;
+        return {
+          text: JSON.stringify({
+            intents: [{ topic: 'AI投资', searchQuery: 'AI投资分析系统搭建', explorationMode: 'adjacent' }],
+          }),
+        };
+      }
+      if (blob.includes('判断用户在「发现」里')) {
+        return {
+          text: JSON.stringify({
+            mode: 'consume',
+            topic: '量化投研课',
+            requestedContentTypes: ['article'],
+            objectWanted: 'work_itself',
+            searchQueries: ['量化投研课', '量化投资课程'],
+          }),
+        };
+      }
+      const user = JSON.parse(String(messages[messages.length - 1]?.content || '{}')) as {
+        candidates?: Array<{ id: string; title?: string }>;
+      };
+      return {
+        text: JSON.stringify({
+          roles: (user.candidates || []).map((row) => ({
+            id: row.id,
+            role: row.id === course.itemId ? 'PRIMARY_CONTENT' : 'COMMENTARY',
+            medium: 'article',
+            conditions: 'unconfirmed',
+            basis: row.id === course.itemId ? '是一门课' : '搭建介绍',
+          })),
+        }),
+      };
+    },
+    searchWeb: async (query) => {
+      seen.push(query);
+      if (/搭建|分析系统/.test(query)) {
+        return [{ title: howto.content.title, url: howto.content.url || '', snippet: howto.content.text }];
+      }
+      return [{ title: course.content.title, url: course.content.url || '', snippet: course.content.text }];
+    },
+    ingestHit: async (hit) => [course, howto].filter((item) => item.content.url === hit.url),
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    mode: 'reset',
+    supplyPhase: 'seated',
+    now: NOW,
+  });
+  assert.equal(proposedDefault, false);
+  assert.deepEqual(seen, ['量化投研课', '量化投资课程']);
+  assert.equal(result.view.cards.some((card) => card.itemId === course.itemId), true);
+  assert.equal(result.view.cards.some((card) => card.itemId === howto.itemId), false);
+  assert.equal((result.view.relatedCards || []).some((card) => card.itemId === howto.itemId), false);
+});
+
+test('revoke background reset keeps valid cached cards and does not stay restoring', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-revoke-merge-'));
+  const self = selfOf('我关心公开科学。');
+  await writeDigitalSelf(root, self);
+  const cached = [
+    itemOf('ni_keep_1', '默认播客一集', 'https://podcasts.example/ep1', 'audio'),
+    itemOf('ni_keep_2', '蔚来充电服务', 'https://news.example/nio', 'article'),
+    itemOf('ni_keep_3', '港科大遥感影像', 'https://news.example/hkust', 'article'),
+  ];
+  const extra = itemOf('ni_new_pod', '另一集播客', 'https://podcasts.example/ep2', 'audio');
+  await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: self,
+    items: cached,
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    mode: 'open',
+    now: NOW,
+  });
+  const immediate = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: self,
+    items: [...cached, extra],
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    mode: 'reuse',
+    preferPersonalCache: true,
+    now: NOW,
+  });
+  assert.equal(immediate.view.cards.length >= 3, true);
+  assert.match(immediate.view.notice, /恢复默认推荐/);
+  assert.equal(immediate.view.replenishing, true);
+  const done = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: self,
+    items: [...cached, extra],
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    chatComplete: async () => ({
+      text: JSON.stringify({
+        decisions: [
+          { itemId: extra.itemId, decision: 'show', reason: '新补的一集' },
+          { itemId: cached[0]!.itemId, decision: 'ignore', reason: '先排后' },
+        ],
+      }),
+    }),
+    searchWeb: async () => [],
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    mode: 'reset',
+    now: NOW,
+  });
+  assert.equal(done.view.cards.some((card) => card.itemId === cached[0]!.itemId), true);
+  assert.equal(done.view.cards.some((card) => card.itemId === cached[1]!.itemId), true);
+  assert.equal(done.view.cards.some((card) => card.itemId === cached[2]!.itemId), true);
+  assert.equal(done.view.cards.some((card) => card.itemId === extra.itemId), true);
+  assert.equal(done.view.replenishing, undefined);
+  assert.equal(/正在恢复/.test(done.view.notice || ''), false);
+});
+
+test('stale generation does not overwrite the personal cache', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-stale-gen-'));
+  const self = selfOf('我关心公开科学。');
+  await writeDigitalSelf(root, self);
+  const keep = itemOf('ni_keep_cache', '默认播客一集', 'https://podcasts.example/keep', 'audio');
+  const late = itemOf('ni_late_two', '迟到的两张之一', 'https://podcasts.example/late', 'audio');
+  await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: self,
+    items: [keep],
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    mode: 'open',
+    now: NOW,
+  });
+  const { readFile } = await import('node:fs/promises');
+  const cachePath = path.join(root, 'content', 'personal-feed-cache.json');
+  const before = JSON.parse(await readFile(cachePath, 'utf8')) as { personal?: { itemIds?: string[] } };
+  await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: self,
+    items: [keep, late],
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    chatComplete: async () => ({
+      text: JSON.stringify({
+        decisions: [{ itemId: late.itemId, decision: 'show', reason: '迟到排序' }],
+      }),
+    }),
+    searchWeb: async () => [],
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    mode: 'reset',
+    isCurrentGeneration: () => false,
+    now: NOW,
+  });
+  const after = JSON.parse(await readFile(cachePath, 'utf8')) as { personal?: { itemIds?: string[] } };
+  assert.deepEqual(after.personal?.itemIds, before.personal?.itemIds);
+  assert.equal(after.personal?.itemIds?.includes(keep.itemId), true);
 });

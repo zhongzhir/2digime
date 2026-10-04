@@ -932,7 +932,8 @@ export class DigitalMeRuntime {
       if (requested && this.currentSearchGenerationId && requested !== this.currentSearchGenerationId) {
         return this.currentSearchOrPersonal(packageRoot, subjectId, relayUrl, 'reuse');
       }
-      return this.stampSearchGeneration({ ...full, replenishing: false });
+      const doneNotice = full.replenishing || /正在恢复/.test(full.notice || '') ? '' : full.notice || '';
+      return this.stampSearchGeneration({ ...full, replenishing: false, notice: doneNotice });
     }
     return this.currentSearchOrPersonal(packageRoot, subjectId, relayUrl, personalMode);
   }
@@ -1054,6 +1055,8 @@ export class DigitalMeRuntime {
       ...(directives ? { preferenceDirectives: directives } : {}),
       ...(supplyPhase ? { supplyPhase } : {}),
       ...(preferPersonalCache ? { preferPersonalCache: true } : {}),
+      isCurrentGeneration: () =>
+        !generationAtStart || generationAtStart === this.currentSearchGenerationId,
       ...(chatCompleteFn ? { chatComplete: chatCompleteFn } : {}),
       ...(model ? { model } : {}),
       ...(searchWeb ? { searchWeb } : {}),
