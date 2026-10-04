@@ -6,7 +6,7 @@
  * 第 2 次：保留推理（复杂判断需要），预算和超时都放大。
  * 两次都没有可用结果，就如实返回 null，调用方负责说明"这次没有完成判断"，不用默认值冒充。
  */
-import type { ChatCompleteOptions, ChatCompleteResult } from '../infrastructure/model-http';
+import type { ChatCompleteOptions, ChatCompleteResult, ModelCallDiagnostic } from '../infrastructure/model-http';
 import type { ChatCompleteFn } from '../subject-core/structured-distill';
 
 export interface StructuredPass {
@@ -16,11 +16,17 @@ export interface StructuredPass {
 }
 
 export interface StructuredAttempt {
+  stage: string;
+  httpStatus: number | null;
+  parseError: ModelCallDiagnostic['parseError'];
+  cancellation: ModelCallDiagnostic['cancellation'];
+  failure: ModelCallDiagnostic['failure'];
   pass: number;
   maxTokens: number;
   disableThinking: boolean;
   ms: number;
-  finishReason?: string;
+  finishReason: string | null;
+  outputLength: number | null;
   truncated: boolean;
   textLength: number;
   parsed: boolean;
@@ -43,6 +49,8 @@ export async function completeStructured<T>(input: {
   parse: (text: string) => T | null;
   passes?: StructuredPass[];
   signal?: AbortSignal;
+  deadlineAt?: number;
+  stage?: string;
   onAttempt?: (attempt: StructuredAttempt) => void;
 }): Promise<{ value: T | null; attempts: number; lastError?: unknown }> {
   const passes = input.passes || SHORT_JSON_PASSES;
@@ -50,10 +58,12 @@ export async function completeStructured<T>(input: {
   let lastError: unknown;
   for (let i = 0; i < passes.length; i += 1) {
     const pass = passes[i]!;
-    if (input.signal?.aborted) break;
+    if (input.signal?.aborted || (input.deadlineAt !== undefined && Date.now() >= input.deadlineAt)) break;
     attempts += 1;
     const started = Date.now();
     const note: StructuredAttempt = {
+      stage: input.stage || input.request.stage || 'structured', httpStatus: null, parseError: null, cancellation: null, failure: null,
+      finishReason: null, outputLength: null,
       pass: i + 1,
       maxTokens: pass.maxTokens,
       disableThinking: pass.disableThinking,
@@ -66,25 +76,43 @@ export async function completeStructured<T>(input: {
       const result: ChatCompleteResult = await input.chat({
         ...input.request,
         maxTokens: pass.maxTokens,
-        timeoutMs: pass.timeoutMs,
+        timeoutMs: Math.min(pass.timeoutMs, input.deadlineAt === undefined ? Infinity : input.deadlineAt - started),
+        ...(input.deadlineAt !== undefined ? { deadlineAt: input.deadlineAt } : {}),
+        stage: note.stage,
         ...(input.signal ? { signal: input.signal } : {}),
         ...(pass.disableThinking ? { thinking: { type: 'disabled' as const } } : {}),
       });
       note.truncated = !!result.truncated;
       note.textLength = (result.text || '').length;
-      if (result.finishReason) note.finishReason = result.finishReason;
+      note.outputLength = note.textLength;
+      note.httpStatus = result.diagnostic?.httpStatus ?? null;
+      if (result.finishReason && /^[a-z_]{1,40}$/.test(result.finishReason)) note.finishReason = result.finishReason;
       // 被截断的半截 JSON 即使碰巧能解析，也不算完成。
-      const value = result.truncated ? null : input.parse(result.text || '');
+      const expired = input.signal?.aborted || (input.deadlineAt !== undefined && Date.now() >= input.deadlineAt);
+      note.cancellation = expired ? (input.signal?.reason === 'user' ? 'user' : input.signal?.reason === 'superseded' ? 'superseded' : input.signal?.aborted && input.signal.reason !== 'deadline' ? 'caller' : 'deadline') : null;
+      note.failure = expired ? 'cancelled' : result.truncated ? 'truncated' : !(result.text || '').trim() ? 'empty' : null;
+      let value: T | null = null;
+      if (!expired && !result.truncated && (result.text || '').trim()) {
+        try { value = input.parse(result.text); } catch { note.parseError = 'schema'; }
+        if (value === null) note.parseError = 'schema';
+      }
+      if (note.parseError) note.failure = 'format';
       note.parsed = value !== null;
       note.ms = Date.now() - started;
       input.onAttempt?.(note);
       if (value !== null) return { value, attempts };
+      if (expired) break;
     } catch (err) {
       lastError = err;
       note.ms = Date.now() - started;
-      note.error = err instanceof Error ? err.message.slice(0, 120) : String(err).slice(0, 120);
+      const detail = (err as { diagnostic?: ModelCallDiagnostic }).diagnostic;
+      note.httpStatus = detail?.httpStatus ?? null; note.parseError = detail?.parseError ?? null;
+      note.outputLength = detail?.outputLength ?? null; note.finishReason = detail?.finishReason ?? null;
+      note.cancellation = detail?.cancellation ?? (input.signal?.aborted ? (input.signal.reason === 'user' ? 'user' : input.signal.reason === 'superseded' ? 'superseded' : 'caller') : null);
+      note.failure = detail?.failure ?? 'network';
+      note.error = note.failure || 'unknown'; // Never log raw provider/error text.
       input.onAttempt?.(note);
-      if (input.signal?.aborted) break;
+      if (input.signal?.aborted || note.cancellation || ['network','http','empty'].includes(note.failure || '')) break;
     }
   }
   return { value: null, attempts, ...(lastError !== undefined ? { lastError } : {}) };

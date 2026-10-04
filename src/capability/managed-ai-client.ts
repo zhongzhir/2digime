@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { ChatCompleteFn } from '../subject-core/structured-distill';
-import type { ChatCompleteResult } from '../infrastructure/model-http';
+import type { ChatCompleteResult, ModelCallDiagnostic } from '../infrastructure/model-http';
 
 export type ManagedAiStatus =
   | 'AVAILABLE'
@@ -39,6 +39,7 @@ const HUMAN: Record<ManagedAiStatus, string> = {
 };
 
 export class ManagedAiError extends Error {
+  diagnostic?: ModelCallDiagnostic;
   readonly status: ManagedAiStatus;
   readonly userNotice: boolean;
   readonly reason?: string;
@@ -127,14 +128,26 @@ export function createManagedAiChatComplete(options: ManagedAiClientOptions): Ch
 
   return async (input) => {
     const ac = new AbortController();
-    const onAbort = () => ac.abort();
+    const diagnostic: ModelCallDiagnostic = { stage: input.stage || 'model', requestId: randomUUID(), httpStatus: null,
+      finishReason: null, outputLength: null, parseError: null, cancellation: null, failure: null };
+    const fail = (status: ManagedAiStatus, failure: ModelCallDiagnostic['failure'], message?: string): never => {
+      diagnostic.failure = failure;
+      throw Object.assign(new ManagedAiError(status, message), { diagnostic: { ...diagnostic } });
+    };
+    const onAbort = () => {
+      diagnostic.cancellation = input.signal?.reason === 'deadline' ? 'deadline'
+        : input.signal?.reason === 'user' ? 'user' : input.signal?.reason === 'superseded' ? 'superseded' : 'caller';
+      ac.abort(input.signal?.reason);
+    };
     if (input.signal) {
-      if (input.signal.aborted) throw new ManagedAiError('TEMPORARY_UNAVAILABLE', 'request aborted by caller');
+      if (input.signal.aborted) { onAbort(); fail('TEMPORARY_UNAVAILABLE', 'cancelled', '这次请求已取消。'); }
       input.signal.addEventListener('abort', onAbort, { once: true });
     }
-    const timer = setTimeout(() => ac.abort(), input.timeoutMs ?? timeoutMs);
-    const idempotencyKey = randomUUID();
-    let res: Response;
+    const remaining = Math.min(input.timeoutMs ?? timeoutMs, input.deadlineAt === undefined ? Infinity : input.deadlineAt - Date.now());
+    if (remaining <= 0) { diagnostic.cancellation = 'deadline'; input.signal?.removeEventListener('abort', onAbort); fail('PROVIDER_TIMEOUT', 'timeout'); }
+    const timer = setTimeout(() => { diagnostic.cancellation = 'deadline'; ac.abort('deadline'); }, remaining);
+    const idempotencyKey = diagnostic.requestId!;
+    let res!: Response;
     try {
       res = await fetchImpl(`${base}/v1/ai/inference`, {
         method: 'POST',
@@ -150,19 +163,17 @@ export function createManagedAiChatComplete(options: ManagedAiClientOptions): Ch
           ...(input.responseFormat ? { responseFormat: input.responseFormat } : {}),
           ...(input.tools && input.tools.length ? { tools: input.tools } : {}),
           ...(input.toolChoice ? { toolChoice: input.toolChoice } : {}),
+          ...(input.thinking ? { thinking: input.thinking } : {}),
           idempotencyKey,
         }),
         signal: ac.signal,
       });
+      diagnostic.httpStatus = res.status;
     } catch (err) {
-      const aborted = ac.signal.aborted || (err as { name?: string }).name === 'AbortError';
-      throw new ManagedAiError(
-        'TEMPORARY_UNAVAILABLE',
-        aborted ? '暂时无法联系模型服务，请稍后再试。' : '暂时无法联系模型服务，请稍后再试。',
-      );
-    } finally {
-      clearTimeout(timer);
-      input.signal?.removeEventListener('abort', onAbort);
+      clearTimeout(timer); input.signal?.removeEventListener('abort', onAbort);
+      if (diagnostic.cancellation === 'deadline') fail('PROVIDER_TIMEOUT', 'timeout');
+      if (ac.signal.aborted) fail('TEMPORARY_UNAVAILABLE', 'cancelled', '这次请求已取消。');
+      fail('TEMPORARY_UNAVAILABLE', 'network');
     }
 
     let json: {
@@ -177,23 +188,37 @@ export function createManagedAiChatComplete(options: ManagedAiClientOptions): Ch
     } = {};
     try {
       json = (await res.json()) as typeof json;
-    } catch {
-      json = {};
+    } catch (err) {
+      if (ac.signal.aborted) {
+        clearTimeout(timer); input.signal?.removeEventListener('abort', onAbort);
+        fail(diagnostic.cancellation === 'deadline' ? 'PROVIDER_TIMEOUT' : 'TEMPORARY_UNAVAILABLE', diagnostic.cancellation === 'deadline' ? 'timeout' : 'cancelled');
+      }
+      diagnostic.parseError = 'json';
+      clearTimeout(timer); input.signal?.removeEventListener('abort', onAbort);
+      fail('PROVIDER_ERROR', 'format', '模型服务返回了无法解析的格式。');
     }
+    clearTimeout(timer); input.signal?.removeEventListener('abort', onAbort);
+    if (ac.signal.aborted) fail(diagnostic.cancellation === 'deadline' ? 'PROVIDER_TIMEOUT' : 'TEMPORARY_UNAVAILABLE', diagnostic.cancellation === 'deadline' ? 'timeout' : 'cancelled');
+    if (!json || typeof json !== 'object' || Array.isArray(json)) { diagnostic.parseError = 'envelope'; fail('PROVIDER_ERROR', 'format', '模型服务返回了无效格式。'); }
+    diagnostic.finishReason = typeof json.finishReason === 'string' && /^[a-z_]{1,40}$/.test(json.finishReason) ? json.finishReason : null;
+    diagnostic.outputLength = typeof json.text === 'string' ? json.text.length : null;
     const status = classifyHttp(res.status, json.status, json.error);
     if (status !== 'AVAILABLE' || json.ok === false) {
-      throw new ManagedAiError(status, managedAiHumanMessage(status), json.error);
+      fail(status, 'http');
     }
     const text = typeof json.text === 'string' ? json.text : '';
     const toolCalls = Array.isArray(json.toolCalls) ? json.toolCalls : undefined;
-    if (!text.trim() && !(toolCalls && toolCalls.length)) {
-      throw new ManagedAiError('PROVIDER_ERROR');
+    const truncated = json.truncated === true || json.finishReason === 'length';
+    if (!text.trim() && !(toolCalls && toolCalls.length) && !truncated) {
+      fail('PROVIDER_ERROR', 'empty', '模型服务返回了空正文。');
     }
+    diagnostic.failure = truncated ? 'truncated' : null;
     return {
+      diagnostic,
       text,
       ...(toolCalls && toolCalls.length ? { toolCalls } : {}),
       ...(json.finishReason ? { finishReason: json.finishReason } : {}),
-      ...(json.truncated ? { truncated: true as const } : {}),
+      ...(truncated ? { truncated: true as const } : {}),
       ...(json.usage &&
       typeof json.usage.totalTokens === 'number' &&
       typeof json.usage.inputTokens === 'number' &&

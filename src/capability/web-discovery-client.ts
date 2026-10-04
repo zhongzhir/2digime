@@ -1,4 +1,5 @@
 import type { SearchConnector } from './search-connector';
+import type { ModelCallDiagnostic } from '../infrastructure/model-http';
 import {
   hitsToSearchSources,
   parseWebDiscoveryRequest,
@@ -11,6 +12,7 @@ export interface ManagedWebDiscoveryClientOptions {
   installToken: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  onDiagnostic?: (row: ModelCallDiagnostic) => void;
 }
 
 const WEB_STATUSES = ['AVAILABLE', 'RATE_LIMITED', 'AUTH_FAILED', 'PROVIDER_ERROR', 'TEMPORARY_UNAVAILABLE'] as const;
@@ -63,15 +65,14 @@ export function createManagedWebDiscoveryConnector(
           signal: ac.signal,
         });
       } catch (err) {
+        clearTimeout(timer); opts?.signal?.removeEventListener('abort', onAbort);
         const aborted = ac.signal.aborted || (err as { name?: string }).name === 'AbortError';
-        throw new WebDiscoveryError(
+        throw Object.assign(new WebDiscoveryError(
           'TEMPORARY_UNAVAILABLE',
           aborted ? (opts?.signal?.aborted ? 'web_discovery_aborted' : 'web_discovery_timeout') : 'web_discovery_unreachable',
           503,
-        );
-      } finally {
-        clearTimeout(timer);
-        opts?.signal?.removeEventListener('abort', onAbort);
+        ), { diagnostic: { stage: 'discover.search', httpStatus: null, finishReason: null, outputLength: null, parseError: null,
+          cancellation: aborted ? (opts?.signal?.reason === 'user' ? 'user' : opts?.signal?.reason === 'superseded' ? 'superseded' : 'deadline') : null, failure: aborted ? 'cancelled' : 'network' } });
       }
 
       let json: {
@@ -83,13 +84,29 @@ export function createManagedWebDiscoveryConnector(
       try {
         json = (await res.json()) as typeof json;
       } catch {
-        json = {};
+        throw Object.assign(new WebDiscoveryError('PROVIDER_ERROR', ac.signal.aborted ? 'web_discovery_aborted' : 'web_discovery_format', res.status), {
+          diagnostic: { stage: 'discover.search', httpStatus: res.status, finishReason: null, outputLength: null, parseError: ac.signal.aborted ? null : 'json', cancellation: opts?.signal?.aborted ? (opts.signal.reason === 'user' ? 'user' : opts.signal.reason === 'superseded' ? 'superseded' : 'deadline') : ac.signal.aborted ? 'deadline' : null, failure: ac.signal.aborted ? 'cancelled' : 'format' },
+        });
+      } finally {
+        clearTimeout(timer);
+        opts?.signal?.removeEventListener('abort', onAbort);
+      }
+
+      if (ac.signal.aborted) {
+        throw Object.assign(new WebDiscoveryError('TEMPORARY_UNAVAILABLE', 'web_discovery_aborted', res.status), {
+          diagnostic: { stage: 'discover.search', httpStatus: res.status, finishReason: null, outputLength: null, parseError: null,
+            cancellation: opts?.signal?.aborted ? (opts.signal.reason === 'user' ? 'user' : opts.signal.reason === 'superseded' ? 'superseded' : opts.signal.reason === 'deadline' ? 'deadline' : 'caller') : 'deadline', failure: 'cancelled' },
+        });
+      }
+      if (!json || typeof json !== 'object' || Array.isArray(json) || !Array.isArray(json.results) && json.ok !== false) {
+        throw Object.assign(new WebDiscoveryError('PROVIDER_ERROR', 'web_discovery_format', res.status), { diagnostic: { stage: 'discover.search', httpStatus: res.status, finishReason: null, outputLength: null, parseError: 'envelope', cancellation: null, failure: 'format' } });
       }
       const status = classifyHttp(res.status, json.status);
-      if (status !== 'AVAILABLE') {
-        throw new WebDiscoveryError(status, String(json.error || status).slice(0, 80), httpStatusOf(status));
+      if (status !== 'AVAILABLE' || json.ok === false || !res.ok) {
+        throw Object.assign(new WebDiscoveryError(status, status, res.status), { diagnostic: { stage: 'discover.search', httpStatus: res.status, finishReason: null, outputLength: null, parseError: null, cancellation: null, failure: 'http' } });
       }
       const results = Array.isArray(json.results) ? json.results : [];
+      options.onDiagnostic?.({ stage: 'discover.search', httpStatus: res.status, finishReason: null, outputLength: results.length, parseError: null, cancellation: null, failure: null });
       return hitsToSearchSources(
         results.map((row) => ({
           title: String(row.title || row.url || ''),

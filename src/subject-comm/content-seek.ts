@@ -456,6 +456,8 @@ async function programsFromSources(input: {
   seenUrls: Set<string>;
   openPage?: OpenMediaFetch;
   signal?: AbortSignal;
+  deadlineAt?: number;
+  onAttempt?: (attempt: import('./structured-call').StructuredAttempt) => void;
 }): Promise<{ verified: DiscoverCard[]; unverified: DiscoverCard[]; quotaHit: boolean }> {
   const verified: DiscoverCard[] = [];
   const unverified: DiscoverCard[] = [];
@@ -467,6 +469,8 @@ async function programsFromSources(input: {
     chatComplete: input.chatComplete,
     model: input.model,
     ...(input.signal ? { signal: input.signal } : {}),
+          ...(input.deadlineAt !== undefined ? { deadlineAt: input.deadlineAt } : {}),
+          ...(input.onAttempt ? { onAttempt: input.onAttempt } : {}),
   });
   if (!works.length || input.signal?.aborted) return { verified, unverified, quotaHit: false };
   const sourceById = new Map(input.sources.map((card) => [card.itemId, card]));
@@ -515,6 +519,8 @@ async function programsFromSources(input: {
       chatComplete: input.chatComplete,
       model: input.model,
       ...(input.signal ? { signal: input.signal } : {}),
+          ...(input.deadlineAt !== undefined ? { deadlineAt: input.deadlineAt } : {}),
+          ...(input.onAttempt ? { onAttempt: input.onAttempt } : {}),
     });
     const requiresPlayable = input.intent.requestedMedia.some((row) => row === 'video' || row === 'audio');
     const pages = candidates.filter((row) => {
@@ -625,6 +631,7 @@ export async function seekContent(input: {
   signal?: AbortSignal;
   /** 这次请求的交付期限（epoch ms）。只用来决定还要不要开始下一页判断。 */
   deadlineAt?: number;
+  onAttempt?: (attempt: import('./structured-call').StructuredAttempt) => void;
 }): Promise<ContentSeekResult> {
   const query = String(input.query || '').trim();
   const emptyIntent = defaultDiscoverIntent(query);
@@ -650,6 +657,8 @@ export async function seekContent(input: {
           chatComplete: input.chatComplete,
           model: input.model,
           ...(input.signal ? { signal: input.signal } : {}),
+          ...(input.deadlineAt !== undefined ? { deadlineAt: input.deadlineAt } : {}),
+          ...(input.onAttempt ? { onAttempt: input.onAttempt } : {}),
         })
       : emptyIntent);
   if (input.signal?.aborted) {
@@ -958,6 +967,8 @@ export async function seekContent(input: {
       chatComplete: input.chatComplete!,
       model: input.model!,
       ...(input.signal ? { signal: input.signal } : {}),
+          ...(input.deadlineAt !== undefined ? { deadlineAt: input.deadlineAt } : {}),
+          ...(input.onAttempt ? { onAttempt: input.onAttempt } : {}),
     });
     for (const id of judged.unjudgedIds) unjudgedIds.add(id);
     for (const [id, row] of judged.judgments) judgments.set(id, row);
@@ -1121,6 +1132,8 @@ export async function seekContent(input: {
       seenUrls,
       ...(input.openPage ? { openPage: input.openPage } : {}),
       ...(input.signal ? { signal: input.signal } : {}),
+          ...(input.deadlineAt !== undefined ? { deadlineAt: input.deadlineAt } : {}),
+          ...(input.onAttempt ? { onAttempt: input.onAttempt } : {}),
     });
     if (found.quotaHit) searchRateLimited = true;
     primary.unshift(...found.verified);

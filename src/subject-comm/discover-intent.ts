@@ -184,6 +184,7 @@ export async function interpretDiscoverIntent(input: {
   model: { baseUrl: string; model: string; apiKey?: string };
   signal?: AbortSignal;
   onAttempt?: (attempt: StructuredAttempt) => void;
+  deadlineAt?: number;
 }): Promise<DiscoverIntent> {
   const query = String(input.query || '').trim();
   const fallback = defaultDiscoverIntent(query);
@@ -229,6 +230,8 @@ export async function interpretDiscoverIntent(input: {
     parse: (text) => (parseJsonObject(text) ? intentFromModelText(text, query) : null),
     ...(input.signal ? { signal: input.signal } : {}),
     ...(input.onAttempt ? { onAttempt: input.onAttempt } : {}),
+    ...(input.deadlineAt !== undefined ? { deadlineAt: input.deadlineAt } : {}),
+    stage: 'discover.intent',
   });
   if (outcome.value) return outcome.value;
   if (input.signal?.aborted) throw new DiscoverIntentError('model', '这次搜索已经取消。');
@@ -391,6 +394,7 @@ export async function classifyCandidateRoles(input: {
   model?: { baseUrl: string; model: string; apiKey?: string };
   signal?: AbortSignal;
   onAttempt?: (attempt: StructuredAttempt) => void;
+  deadlineAt?: number;
 }): Promise<{
   roles: Map<string, ContentPageRole>;
   judgments: Map<string, CandidateJudgment>;
@@ -483,6 +487,8 @@ export async function classifyCandidateRoles(input: {
       },
       ...(input.signal ? { signal: input.signal } : {}),
       ...(input.onAttempt ? { onAttempt: input.onAttempt } : {}),
+    ...(input.deadlineAt !== undefined ? { deadlineAt: input.deadlineAt } : {}),
+    stage: 'discover.judgment',
     });
     attempts += outcome.attempts;
     return outcome.value;
@@ -541,6 +547,7 @@ export async function extractMentionedWorks(input: {
   model?: { baseUrl: string; model: string; apiKey?: string };
   signal?: AbortSignal;
   onAttempt?: (attempt: StructuredAttempt) => void;
+  deadlineAt?: number;
 }): Promise<MentionedWork[]> {
   if (!input.sources.length || !input.chatComplete || !input.model) return [];
   const system = [
@@ -607,6 +614,8 @@ export async function extractMentionedWorks(input: {
     },
     ...(input.signal ? { signal: input.signal } : {}),
     ...(input.onAttempt ? { onAttempt: input.onAttempt } : {}),
+    ...(input.deadlineAt !== undefined ? { deadlineAt: input.deadlineAt } : {}),
+    stage: 'discover.extract',
   });
   return outcome.value || [];
 }

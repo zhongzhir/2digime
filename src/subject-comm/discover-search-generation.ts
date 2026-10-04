@@ -46,7 +46,7 @@ export function settleBackgroundSeek<T>(
     };
     const onAbort = () => finish(null);
     const timer = setTimeout(() => {
-      abort?.abort();
+      abort?.abort('deadline');
       finish(null);
     }, Math.max(1, deadlineMs));
     if (abort?.signal.aborted) {

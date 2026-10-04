@@ -599,7 +599,7 @@ export class DigitalMeRuntime {
     // 切换代次必须在第一个 await 之前完成：否则两次几乎同时的请求，谁的文件读取后结束谁就成了"当前"，
     // 先发的旧请求可以反过来盖掉后发的新请求。
     const keepsGeneration = new Set(['more', 'asked', 'replenish', 'refresh', 'open', 'later', 'boost', 'reduce', 'follow', 'block']);
-    const started = keepsGeneration.has(action) ? null : this.beginSearchGeneration(input.searchGenerationId);
+    const started = keepsGeneration.has(action) ? null : this.beginSearchGeneration(input.searchGenerationId, action === 'cancel' ? 'user' : 'superseded');
     await this.refreshLaterCards(pkg.rootDir);
 
     if (action === 'seek') {
@@ -831,11 +831,11 @@ export class DigitalMeRuntime {
     return { view: await this.withAdjustment(pkg.rootDir, await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'open')) };
   }
 
-  private beginSearchGeneration(requested?: string): { generationId: string; abort: AbortController } {
+  private beginSearchGeneration(requested?: string, reason: 'user' | 'superseded' = 'superseded'): { generationId: string; abort: AbortController } {
     const abort = new AbortController();
     const previous = this.searchAbort;
     this.searchAbort = abort;
-    previous.abort();
+    previous.abort(reason);
     const generationId = String(requested || '').trim() || createSearchGenerationId();
     this.currentSearchGenerationId = generationId;
     this.pendingSeekMerge = null;
@@ -950,7 +950,7 @@ export class DigitalMeRuntime {
         return this.currentSearchOrPersonal(packageRoot, subjectId, relayUrl, 'reuse');
       }
       if (!late) {
-        const extra = pending.abort?.signal.aborted ? '补充已超时停止。' : '补充没有完成。';
+        const extra = pending.abort?.signal.reason === 'deadline' ? '补充已超时停止。' : pending.abort?.signal.aborted ? '补充已停止。' : '补充没有完成。';
         this.lastIntentView = {
           ...this.lastIntentView,
           replenishing: false,
@@ -1207,6 +1207,11 @@ export class DigitalMeRuntime {
     const abort = started?.abort || this.searchAbort;
     const signal = abort.signal;
     const seekDeadlineAt = Date.now() + SEEK_DEADLINE_MS;
+    const previousView = this.lastIntentView?.searchQuery === query ? this.lastIntentView : null;
+    const deadlineTimer = setTimeout(() => abort.abort('deadline'), SEEK_DEADLINE_MS);
+    deadlineTimer.unref();
+    const logDiagnostic = (row: object) => { void fs.appendFile(path.join(packageRoot, 'content', 'discovery-diagnostics.ndjson'), JSON.stringify({ at: nowIso(), generationId, ...row }) + '\n').catch(() => {}); };
+    const onAttempt = (row: import('../subject-comm/structured-call').StructuredAttempt) => logDiagnostic({ event: 'structured', ...row });
     const seekRemainingMs = () => Math.max(1, seekDeadlineAt - Date.now());
     const preferences = await this.contentPreferenceRows(packageRoot);
     const sourceItems = await this.loadDiscoverItems(packageRoot, relayUrl);
@@ -1215,10 +1220,37 @@ export class DigitalMeRuntime {
     const networking = this.snapshotNetworkDiscovery();
     const usage = { calls: 0, reused: 0, skippedAfterQuota: 0, rateLimited: false };
     this.searchUsage = { generationId, usage };
-    const searchWeb = this.wrapContentSearch(this.resolveContentSearch(), signal, usage);
-    const chatCompleteFn = this.resolveContentChat();
+    const rawSearch = this.resolveContentSearch();
+    const searchWeb = this.wrapContentSearch(rawSearch ? async (query, passedSignal) => {
+      try { const hits = await rawSearch(query, passedSignal); logDiagnostic({ event: 'search', stage: 'discover.search', httpStatus: null, candidates: hits.length }); return hits; }
+      catch (err) { const detail = (err as { diagnostic?: import('../infrastructure/model-http').ModelCallDiagnostic }).diagnostic;
+        logDiagnostic({ event: 'search_error', ...(detail || { stage: 'discover.search', httpStatus: null, finishReason: null, outputLength: null, parseError: null, cancellation: signal.aborted ? (signal.reason === 'user' ? 'user' : signal.reason === 'superseded' ? 'superseded' : 'deadline') : null, failure: signal.aborted ? 'cancelled' : 'network' }) }); throw err; }
+    } : undefined, signal, usage);
+    const rawChat = this.resolveContentChat();
+    const chatCompleteFn: import('../subject-core/structured-distill').ChatCompleteFn | undefined = rawChat ? async (request) => {
+      if (signal.aborted || Date.now() >= seekDeadlineAt) throw Object.assign(new Error('request cancelled'), { name: 'AbortError' });
+      const began = Date.now();
+      try {
+        const result = await rawChat({ ...request, signal, deadlineAt: seekDeadlineAt,
+        timeoutMs: Math.min(request.timeoutMs ?? SEEK_DEADLINE_MS, seekRemainingMs()) });
+        logDiagnostic({ event: 'model', ms: Date.now()-began, ...(result.diagnostic || { stage: request.stage || 'discover.model', httpStatus: null, finishReason: /^[a-z_]{1,40}$/.test(result.finishReason || '') ? result.finishReason : null, outputLength: result.text.length, parseError: null, cancellation: signal.aborted ? 'caller' : null, failure: result.truncated ? 'truncated' : null }) });
+        if (signal.aborted || Date.now() >= seekDeadlineAt) throw Object.assign(new Error('request cancelled'), { name: 'AbortError' });
+        return result;
+      } catch (err) {
+        const detail = (err as { diagnostic?: import('../infrastructure/model-http').ModelCallDiagnostic }).diagnostic;
+        logDiagnostic({ event: 'model_error', ms: Date.now()-began, ...(detail || { stage: request.stage || 'discover.model', httpStatus: null, finishReason: null, outputLength: null, parseError: null, cancellation: signal.aborted ? (signal.reason === 'user' ? 'user' : signal.reason === 'superseded' ? 'superseded' : 'deadline') : null, failure: signal.aborted ? 'cancelled' : 'network' }) });
+        throw err;
+      }
+    } : undefined;
     const model = this.resolveContentModel();
-    const openMedia = this.resolveOpenMediaFetch();
+    const rawOpenMedia = this.resolveOpenMediaFetch();
+    const openMedia: typeof safePublicHttpGet | undefined = rawOpenMedia ? async (url, headers, redirects, deps) => {
+      if (signal.aborted || Date.now() >= seekDeadlineAt) throw Object.assign(new Error('request stopped'), { name: 'AbortError' });
+      const result = await rawOpenMedia(url, headers, redirects, { ...deps, signal, deadlineAt: seekDeadlineAt, timeoutMs: Math.min(deps?.timeoutMs ?? SEEK_DEADLINE_MS, seekRemainingMs()) });
+      logDiagnostic({ event: 'page', stage: 'discover.read', httpStatus: result.status, outputLength: result.body.length });
+      if (signal.aborted || Date.now() >= seekDeadlineAt) throw Object.assign(new Error('request stopped'), { name: 'AbortError' });
+      return result;
+    } : undefined;
     const store = new FileNetworkItemStore(path.join(packageRoot, 'content'));
     await appendRecentRecommendationEvent(packageRoot, { type: 'seek_topic', topic: query });
     const ingestHit = async (hit: { title: string; url: string; snippet?: string }) => {
@@ -1267,8 +1299,10 @@ export class DigitalMeRuntime {
           headline: '发现',
           lead: '根据你刚说的话找的内容。这次模型没有完成判断，没有改动为你发现里的列表。',
           feedTitle: `关于「${query}」`,
-          cards: [],
-          relatedCards: [],
+          cards: previousView?.cards || [],
+          relatedCards: previousView?.relatedCards || [],
+          unjudgedCards: previousView?.unjudgedCards || [],
+          replenishing: false,
           preferences,
           notice: err.message,
           networking,
@@ -1286,8 +1320,10 @@ export class DigitalMeRuntime {
           ? '根据你刚说的话找的内容。联网搜索额度用完了，没有改动为你发现里的列表。'
           : '根据你刚说的话找的内容。这次搜索失败，没有改动为你发现里的列表。',
         feedTitle: `关于「${query}」`,
-        cards: [],
-        relatedCards: [],
+        cards: previousView?.cards || [],
+        relatedCards: previousView?.relatedCards || [],
+          unjudgedCards: previousView?.unjudgedCards || [],
+          replenishing: false,
         preferences,
         notice: quota ? SEARCH_QUOTA_NOTICE : '暂时无法获取新内容，可以稍后再试或检查联网设置。',
         networking: this.lastNetworkCode,
@@ -1310,6 +1346,8 @@ export class DigitalMeRuntime {
               chatComplete: chatCompleteFn,
               model,
               signal,
+              deadlineAt: seekDeadlineAt,
+              onAttempt,
             })
           : Promise.resolve(defaultDiscoverIntent(query));
       const intentReady = await intentPromise;
@@ -1375,6 +1413,7 @@ export class DigitalMeRuntime {
                 chatComplete: chatCompleteFn,
                 model,
                 deadlineAt: seekDeadlineAt,
+                onAttempt,
               });
             } catch {
               return null;
@@ -1394,7 +1433,8 @@ export class DigitalMeRuntime {
           ? []
           : await searchWeb(intentReady.searchQueries[0] || query).catch(() => []);
       if (quickHits.length) {
-        const snippets = snippetCardsFromHits(quickHits);
+        const archived = await indexSearchHits({ hits: quickHits, store, limit: quickHits.length });
+        const snippets = snippetCardsFromHits(quickHits).map(card => ({ ...card, itemId: archived.find(item => item.content.url === card.url)?.itemId || card.itemId }));
         this.pendingSeekMerge = {
           generationId,
           abort,
@@ -1411,6 +1451,7 @@ export class DigitalMeRuntime {
                 ...(openMedia ? { fetchOpenMedia: openMedia } : {}),
                 ...(chatCompleteFn && model ? { chatComplete: chatCompleteFn, model } : {}),
                 deadlineAt: seekDeadlineAt,
+                onAttempt,
               });
             } catch {
               return null;
@@ -1421,8 +1462,8 @@ export class DigitalMeRuntime {
           headline: '发现',
           lead: `根据你刚说的话找「${query}」，只显示这次搜索范围内的内容。`,
           feedTitle: `关于「${query.slice(0, 24)}」`,
-          cards: [],
-          relatedCards: [],
+          cards: previousView?.cards || [],
+          relatedCards: previousView?.relatedCards || [],
           unjudgedCards: snippets,
           unjudgedTitle: '来源摘要已经返回，还没核对是不是这次要的内容',
           preferences,
@@ -1454,6 +1495,7 @@ export class DigitalMeRuntime {
         ...(headlines.length ? { newsHeadlines: headlines } : {}),
         ...(chatCompleteFn && model ? { chatComplete: chatCompleteFn, model } : {}),
         deadlineAt: seekDeadlineAt,
+                onAttempt,
       };
       const firstWave = () =>
         seekContent({
@@ -1560,6 +1602,9 @@ export class DigitalMeRuntime {
       const view = failedView(err);
       if (generationId === this.currentSearchGenerationId) this.lastIntentView = view;
       return view;
+    } finally {
+      if (this.pendingSeekMerge?.generationId === generationId) void this.pendingSeekMerge.leftover.finally(() => clearTimeout(deadlineTimer));
+      else clearTimeout(deadlineTimer);
     }
   }
 
@@ -1639,12 +1684,12 @@ export class DigitalMeRuntime {
       process.env.NODE_TEST_CONTEXT ? {} : process.env,
       { gatewayUrl: this.options.webDiscoveryGatewayUrl },
     );
-    const path = resolveWebDiscoveryPath({
+    const discoveryPath = resolveWebDiscoveryPath({
       path: this.options.webDiscoveryPath,
       gatewayUrl,
       byokKey: gem.apiKey,
     });
-    if (path === 'byok' && gem.apiKey) {
+    if (discoveryPath === 'byok' && gem.apiKey) {
       const connector = createGeminiSearchConnector({
         apiKey: gem.apiKey,
         ...(gem.model ? { model: gem.model } : {}),
@@ -1660,11 +1705,15 @@ export class DigitalMeRuntime {
           })));
       };
     }
-    if (path === 'managed' && gatewayUrl) {
+    if (discoveryPath === 'managed' && gatewayUrl) {
       const connector = createManagedWebDiscoveryConnector({
         gatewayUrl,
         installToken: String(this.options.webDiscoveryInstallToken || '').trim() || 'missing-install-token',
         ...(this.options.webDiscoveryFetch ? { fetchImpl: this.options.webDiscoveryFetch } : {}),
+        onDiagnostic: (row) => {
+          const pkg = this.subject.getActive();
+          if (pkg) void fs.appendFile(path.join(pkg.rootDir, 'content', 'discovery-diagnostics.ndjson'), JSON.stringify({ at: nowIso(), generationId: this.currentSearchGenerationId, event: 'search_transport', ...row }) + '\n').catch(() => {});
+        },
       });
       return async (query: string, signal?: AbortSignal) => {
         const sources = await connector.search(query, signal ? { signal } : undefined);

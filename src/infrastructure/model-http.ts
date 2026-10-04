@@ -49,6 +49,9 @@ export interface ChatMessage {
 }
 
 export interface ChatCompleteOptions {
+  /** Transient request metadata; never contains prompt/body/credentials. */
+  deadlineAt?: number;
+  stage?: string;
   baseUrl: string; // 例:https://api.example.com/v1
   apiKey?: string;
   model: string;
@@ -79,6 +82,7 @@ export interface ChatCompleteOptions {
 }
 
 export interface ChatCompleteResult {
+  diagnostic?: ModelCallDiagnostic;
   text: string;
   toolCalls?: ChatToolCall[];
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
@@ -86,6 +90,17 @@ export interface ChatCompleteResult {
   finishReason?: string;
   /** true when provider stopped due to token/length limit (or equivalent). */
   truncated?: boolean;
+}
+
+export interface ModelCallDiagnostic {
+  stage: string;
+  requestId?: string;
+  httpStatus: number | null;
+  finishReason: string | null;
+  outputLength: number | null;
+  parseError: 'json' | 'envelope' | 'schema' | null;
+  cancellation: 'deadline' | 'user' | 'superseded' | 'caller' | null;
+  failure: 'truncated' | 'empty' | 'format' | 'network' | 'cancelled' | 'timeout' | 'http' | null;
 }
 
 export function parseChatUsage(usage: unknown): { inputTokens: number; outputTokens: number; totalTokens: number } | undefined {
