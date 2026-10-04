@@ -6,13 +6,13 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { atomicWriteFile } from '../infrastructure/fs-atomic';
 
-export const CONTENT_PREFERENCE_KINDS = ['boost', 'reduce', 'follow', 'block'] as const;
+export const CONTENT_PREFERENCE_KINDS = ['boost', 'reduce', 'follow', 'block', 'steer'] as const;
 export type ContentPreferenceKind = (typeof CONTENT_PREFERENCE_KINDS)[number];
 
 export interface ContentPreferenceDirective {
   id: string;
   kind: ContentPreferenceKind;
-  targetType: 'item' | 'source';
+  targetType: 'item' | 'source' | 'directive';
   target: string;
   text: string;
   origin: 'user_action';
@@ -64,7 +64,7 @@ export async function upsertContentPreference(
   packageRoot: string,
   input: {
     kind: ContentPreferenceKind;
-    targetType: 'item' | 'source';
+    targetType: 'item' | 'source' | 'directive';
     target: string;
     text: string;
     now?: string;

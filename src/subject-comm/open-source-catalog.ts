@@ -11,7 +11,9 @@ export type OpenCatalogKind =
   | 'wikimedia_commons'
   | 'itunes_podcast'
   | 'itunes_rss'
-  | 'internet_archive';
+  | 'internet_archive'
+  | 'bangumi_api'
+  | 'wikivoyage';
 export type OpenCatalogContentType = 'article' | 'video' | 'image' | 'audio';
 
 export interface OpenSourceEndpoint {
@@ -24,6 +26,13 @@ export interface OpenSourceEndpoint {
 
 export const OPEN_SOURCE_CATALOG: OpenSourceEndpoint[] = [
   {
+    id: 'chinanews-scroll',
+    label: '中新网即时新闻',
+    kind: 'media_rss',
+    url: 'https://www.chinanews.com.cn/rss/scroll-news.xml',
+    contentTypes: ['article'],
+  },
+  {
     id: 'ithome-news',
     label: 'IT之家',
     kind: 'media_rss',
@@ -35,6 +44,48 @@ export const OPEN_SOURCE_CATALOG: OpenSourceEndpoint[] = [
     label: 'Solidot',
     kind: 'media_rss',
     url: 'https://www.solidot.org/index.rss',
+    contentTypes: ['article'],
+  },
+  {
+    id: 'sspai-feed',
+    label: '少数派',
+    kind: 'media_rss',
+    url: 'https://sspai.com/feed',
+    contentTypes: ['article'],
+  },
+  {
+    id: 'kr36-feed',
+    label: '36氪',
+    kind: 'media_rss',
+    url: 'https://www.36kr.com/feed',
+    contentTypes: ['article'],
+  },
+  {
+    id: 'gcores-feed',
+    label: '机核',
+    kind: 'media_rss',
+    url: 'https://www.gcores.com/rss',
+    contentTypes: ['article'],
+  },
+  {
+    id: 'douban-book-review',
+    label: '豆瓣书评',
+    kind: 'media_rss',
+    url: 'https://www.douban.com/feed/review/book',
+    contentTypes: ['article'],
+  },
+  {
+    id: 'douban-movie-review',
+    label: '豆瓣影评',
+    kind: 'media_rss',
+    url: 'https://movie.douban.com/feed/review/movie',
+    contentTypes: ['article'],
+  },
+  {
+    id: 'douban-music-review',
+    label: '豆瓣乐评',
+    kind: 'media_rss',
+    url: 'https://www.douban.com/feed/review/music',
     contentTypes: ['article'],
   },
   {
@@ -64,6 +115,34 @@ export const OPEN_SOURCE_CATALOG: OpenSourceEndpoint[] = [
     kind: 'itunes_rss',
     url: 'https://itunes.apple.com/cn/rss/toppodcasts/limit=10/json',
     contentTypes: ['audio'],
+  },
+  {
+    id: 'bangumi-calendar',
+    label: 'Bangumi 放送',
+    kind: 'bangumi_api',
+    url: 'https://api.bgm.tv/calendar',
+    contentTypes: ['article'],
+  },
+  {
+    id: 'bangumi-search',
+    label: 'Bangumi 条目',
+    kind: 'bangumi_api',
+    url: 'https://api.bgm.tv/search/subject',
+    contentTypes: ['article'],
+  },
+  {
+    id: 'wikivoyage-zh',
+    label: '维基导游',
+    kind: 'wikivoyage',
+    url: 'https://zh.wikivoyage.org/w/api.php',
+    contentTypes: ['article'],
+  },
+  {
+    id: 'steam-featured',
+    label: 'Steam 精选',
+    kind: 'media_rss',
+    url: 'https://store.steampowered.com/feeds/featured/',
+    contentTypes: ['article'],
   },
 ];
 

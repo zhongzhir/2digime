@@ -144,6 +144,14 @@ function viewRow(v) {
     access: (v.accessCards || []).length,
     unjudgedTitles: (v.unjudgedCards || []).slice(0, 5).map((c) => cut(c.title, 40)),
     relatedRows: (v.relatedCards || []).map(cardRow),
+    adjustment: v.adjustment
+      ? {
+          summary: cut(v.adjustment.summary || '', 160),
+          scope: v.adjustment.scope || '',
+          scopeNote: cut(v.adjustment.scopeNote || '', 120),
+          question: cut(v.adjustment.question || '', 120),
+        }
+      : null,
     searchUsage: v.searchUsage || null,
     seekTrace: v.seekTrace
       ? {
@@ -280,6 +288,62 @@ async function main() {
       const r = await runtime.talk({ text });
       const turns = (r && r.view && r.view.turns) || [];
       log('talk.return', { ms: at() - s, notice: cut(r && r.view && r.view.notice, 200), last: turns.slice(-2).map((t) => ({ role: t.role, text: cut(t.text, 1500) })) });
+    } else if (SCENARIO === 'delivery-04') {
+      gen = 'sg_audit_d4_' + Date.now().toString(36);
+      const adj = await call('adjust-course', {
+        action: 'adjust',
+        text: '最近看剧有点多了，帮我找几门适合我的AI投资与产品落地课程，每天大约一小时。',
+        searchGenerationId: gen,
+      });
+      const afterAdj = await follow(adj && adj.view);
+      log('after-course-adjust', { view: viewRow(afterAdj) });
+      const unused = [
+        ['seek-gannan', '带孩子去甘南若尔盖住哪里'],
+        ['seek-minguo', '找几本完结的民国探案'],
+        ['seek-coop', '想找能联机的合作解谜'],
+      ];
+      for (const [label, text] of unused) {
+        gen = 'sg_audit_d4_' + Date.now().toString(36);
+        const first = await call(label, { action: 'seek', text, searchGenerationId: gen });
+        const last = await follow(first && first.view);
+        log('after-' + label, { view: viewRow(last) });
+      }
+      gen = 'sg_audit_d4rev_' + Date.now().toString(36);
+      const rev = await call('revoke', { action: 'adjustRevoke', searchGenerationId: gen });
+      log('after-revoke', { view: viewRow(await follow(rev && rev.view)) });
+    } else if (SCENARIO === 'adjust-03-course') {
+      gen = 'sg_audit_course_' + Date.now().toString(36);
+      const first = await call('adjust-course', {
+        action: 'adjust',
+        text: '最近看剧有点多了，帮我找几门适合我的AI投资与产品落地课程，每天大约一小时。',
+        searchGenerationId: gen,
+      });
+      const last = await follow(first && first.view);
+      log('after-course-adjust', { view: viewRow(last) });
+    } else if (SCENARIO === 'adjust-03') {
+      const openFirst = await call('discover', { action: 'discover', searchGenerationId: gen });
+      const before = await follow(openFirst && openFirst.view);
+      log('before-adjust', { view: viewRow(before) });
+      gen = 'sg_audit_adj_' + Date.now().toString(36);
+      const adjFirst = await call('adjust', {
+        action: 'adjust',
+        text: '最近看剧有点多了，帮我看看有哪些适合我的课程。',
+        searchGenerationId: gen,
+      });
+      const afterAdj = await follow(adjFirst && adjFirst.view);
+      log('after-adjust', { view: viewRow(afterAdj) });
+      gen = 'sg_audit_game_' + Date.now().toString(36);
+      const gameFirst = await call('seek-game', {
+        action: 'seek',
+        text: '适合周末一个人玩的回合制策略',
+        searchGenerationId: gen,
+      });
+      const afterGame = await follow(gameFirst && gameFirst.view);
+      log('after-game-seek', { view: viewRow(afterGame) });
+      gen = 'sg_audit_rev_' + Date.now().toString(36);
+      const revFirst = await call('revoke', { action: 'adjustRevoke', searchGenerationId: gen });
+      const afterRev = await follow(revFirst && revFirst.view);
+      log('after-revoke', { view: viewRow(afterRev) });
     } else if (SCENARIO.startsWith('seek:')) {
       const text = SCENARIO.slice(5);
       log('input', { raw: text });

@@ -29,6 +29,7 @@ import {
   listOpenCatalog,
   networkItemFromOpenHit,
   searchOpenMedia,
+  searchOpenWorks,
   sourceKindsForRequest,
   type OpenMediaFetch,
 } from './content-source-capabilities';
@@ -163,9 +164,12 @@ export async function proposeDiscoveryIntents(input: {
     '只输出 JSON：{"intents":[{"topic":"","contentTypes":[],"purpose":"","freshness":"current|classic|unspecified","explorationMode":"core|adjacent|explore","searchQuery":""}]}。',
     '2 到 3 条。尽量包含一个核心方向、一个相邻方向、一个探索方向。不要写成固定栏目表。',
     'contentTypes 只允许 article / video / image / audio。在质量允许时，这一批可以包含不同媒介；不要默认三条都只搜文章，也不要写成固定比例。',
-    'searchQuery 是发给公开搜索或开放媒体现货目录的最短必要主题词。只写公开主题，不要写成对某个人的描述。video 指向可看的具体视频，image 指向具体图片作品，audio 指向可听的节目，article 指向可读正文。不要指定必须去哪个网站，不要搜十大盘点。',
+    'searchQuery 是发给公开搜索或开放媒体现货目录的最短必要主题词。只写公开主题，不要写成对某个人的描述。优先指向具体作品、节目、攻略或课程，而不是盘点文。video 指向可看的具体视频，image 指向具体图片作品，audio 指向可听的节目，article 指向可读正文。不要指定必须去哪个网站，不要搜十大盘点。',
+    '用户这次主动提出的调整优先于历史偏好和近期打开。那是本次要求，不是长期「不喜欢某类内容」。调整已经指向具体内容时，searchQuery 必须能检索到那些对象本身，不要只搜新闻或评论。',
     '不要包含姓名、住址、账号、密钥。不要把完整数字之我、事实列表或偏好向量写进 searchQuery。',
     '除非用户明确搜索过、明确关注或明确写了内容偏好，不要把医疗/疾病、政治立场、宗教、性生活或其他高度敏感事实变成搜索词。',
+    '一次性检索不得自动变成默认信息流的长期方向。只有用户明确加推、关注或写了内容偏好，才可以把该主题当作常驻方向。',
+    '加推要找相近的新条目，不要只重复已经加推过的那一条。单条不喜欢只针对那一条，不要封禁整个主题。',
     '优化目标是对人有用、相关、质量高、有必要新鲜度与多样性，而不是延长使用时间或增加打开次数。',
   ].join('\n');
   const user = [
@@ -213,6 +217,7 @@ function viewOf(input: {
   lead?: string;
   replenishing?: boolean;
   supplyTrace?: Array<{ event: string; ms: number; count?: number }>;
+  adjustment?: DiscoverView['adjustment'];
 }): DiscoverView {
   return {
     headline: '发现',
@@ -226,14 +231,17 @@ function viewOf(input: {
     networking: input.networking,
     ...(input.replenishing ? { replenishing: true } : {}),
     ...(input.supplyTrace && input.supplyTrace.length ? { supplyTrace: input.supplyTrace } : {}),
+    ...(input.adjustment ? { adjustment: input.adjustment } : {}),
     feedTitle: '为你发现',
   };
 }
 
 const RECENT_DEFAULT_MS = 21 * 24 * 60 * 60 * 1000;
 
-/** 只有来源声明了可信发布时间且超出窗口，才算"不是近期"。没有可信日期的内容不在这里被淘汰。 */
+/** 只有来源声明了可信发布时间且超出窗口，才算"不是近期"。没有可信日期的内容不在这里被淘汰。图片/音视频是作品，不按新闻时效丢掉。 */
 function isRecentDefaultItem(item: NetworkItem, nowIso?: string): boolean {
+  const type = String(item.content.contentType || '');
+  if (type === 'image' || type === 'video' || type === 'audio') return true;
   if (!nowIso) return true;
   const now = Date.parse(nowIso);
   if (!Number.isFinite(now)) return true;
@@ -409,12 +417,14 @@ async function ingestOpenCatalogMedia(input: {
   if (!input.fetchOpenMedia || input.networking === 'DISABLED') return false;
   let filled = false;
   try {
-    const hits = await listOpenCatalog({
+    const media = await listOpenCatalog({
       kinds: ['video', 'image', 'audio'],
       fetchImpl: input.fetchOpenMedia,
     });
-    for (const hit of hits.slice(0, 12)) {
-      const item = networkItemFromOpenHit(hit, input.now);
+    const works = await searchOpenWorks({ fetchImpl: input.fetchOpenMedia });
+    const hits = interleaveHits(media, works).slice(0, 16);
+    for (const hit of hits) {
+      const item = networkItemFromOpenHit(hit, input.now, 'feed');
       if (!item) continue;
       if (input.putNetworkItem) {
         try {
@@ -448,6 +458,88 @@ function repeatedWork(items: NetworkItem[]): boolean {
   });
   const stem = stems[0] || '';
   return stem.length > 0 && stems.every((row) => row === stem);
+}
+
+function hostOf(url?: string): string {
+  try {
+    return new URL(String(url || '')).hostname.replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+}
+
+/** 已取到的作品/媒介种类。按目录身份和 contentType，不是主题分类器。 */
+export function presentationKind(item: NetworkItem): string {
+  const type = String(item.content.contentType || 'article');
+  if (type === 'video' || type === 'image' || type === 'audio') return type;
+  const host = hostOf(item.content.url);
+  if (host === 'bgm.tv' || host === 'bangumi.tv' || host.endsWith('steampowered.com')) return 'work';
+  if (host === 'zh.wikivoyage.org') return 'guide';
+  return type || 'article';
+}
+
+/**
+ * 候选窗：先按来源轮转，再让已经取到、但还没进窗的作品/媒介有机会被模型看见。
+ * 不是类型配额，也不为凑数塞无关条目。
+ */
+export function presentableFeedCandidates(items: NetworkItem[], limit = 24, perSource = 2): NetworkItem[] {
+  const rotated = diverseFeedCandidates(items, limit, perSource);
+  const kindsInPool = new Set(items.map(presentationKind));
+  const kindsInWindow = new Set(rotated.map(presentationKind));
+  const missing = [...kindsInPool].filter((kind) => kind !== 'article' && !kindsInWindow.has(kind));
+  if (!missing.length) return rotated;
+  const used = new Set(rotated.map((item) => item.itemId));
+  const extras: NetworkItem[] = [];
+  for (const kind of missing) {
+    const found = items.find((item) => presentationKind(item) === kind && !used.has(item.itemId));
+    if (!found) continue;
+    extras.push(found);
+    used.add(found.itemId);
+  }
+  if (!extras.length) return rotated;
+  const out = rotated.slice();
+  for (const extra of extras) {
+    let replaceAt = -1;
+    for (let i = out.length - 1; i >= 0; i -= 1) {
+      if (presentationKind(out[i]!) === 'article') {
+        replaceAt = i;
+        break;
+      }
+    }
+    if (replaceAt >= 0) out[replaceAt] = extra;
+    else if (out.length < limit) out.push(extra);
+  }
+  return out;
+}
+
+/** 本轮按理解发出的检索结果必须进排序窗，不能被已有新闻池挤掉。 */
+export function seatThisTurnItems(
+  window: NetworkItem[],
+  fresh: NetworkItem[],
+  limit = 24,
+  maxFresh = 8,
+): NetworkItem[] {
+  const extras: NetworkItem[] = [];
+  const seen = new Set<string>();
+  for (const item of fresh) {
+    if (seen.has(item.itemId)) continue;
+    seen.add(item.itemId);
+    extras.push(item);
+    if (extras.length >= maxFresh) break;
+  }
+  if (!extras.length) return window;
+  const extraIds = new Set(extras.map((item) => item.itemId));
+  return [...extras, ...window.filter((item) => !extraIds.has(item.itemId))].slice(0, limit);
+}
+
+function interleaveHits<T>(left: T[], right: T[]): T[] {
+  const out: T[] = [];
+  const n = Math.max(left.length, right.length);
+  for (let i = 0; i < n; i += 1) {
+    if (i < left.length) out.push(left[i]!);
+    if (i < right.length) out.push(right[i]!);
+  }
+  return out;
 }
 
 /** 默认信息流轮流取不同来源。同一作品的重复章节在还有其它来源时最多占几条；不同文章不按来源名额裁掉。只有一个来源时仍可看完已取到的内容。明确点播走检索，不走这里。 */
@@ -506,6 +598,7 @@ export async function ensurePersonalFeed(input: {
   /** catalog：只并行取公开目录，不等待查询生成和排序。 */
   supplyPhase?: 'catalog' | 'full';
   now?: string;
+  adjustment?: DiscoverView['adjustment'];
 }): Promise<{ view: DiscoverView; reasonCode: FeedReasonCode }> {
   const now = input.now || new Date().toISOString();
   const nowMs = Date.parse(now) || Date.now();
@@ -589,6 +682,7 @@ export async function ensurePersonalFeed(input: {
       networking: (view.networking as NetworkDiscoveryCode) || networking,
       ...(view.lead ? { lead: view.lead } : {}),
       ...(view.replenishing ? { replenishing: true } : {}),
+      ...(input.adjustment ? { adjustment: input.adjustment } : {}),
       supplyTrace,
     });
     return { view: traced, reasonCode };
@@ -622,7 +716,7 @@ export async function ensurePersonalFeed(input: {
     const topUpNeeded = localFromCache.length < MIN_FEED;
     const localFromDirectory = topUpNeeded
       ? directoryCards(
-          diverseFeedCandidates(
+          presentableFeedCandidates(
             candidatesForDefault(input.items, now).filter(
               (item) => !blocked(item, prefs) && !cachedIds.has(item.itemId),
             ),
@@ -645,7 +739,7 @@ export async function ensurePersonalFeed(input: {
       const reloaded = input.reloadItems
         ? candidatesForDefault(await input.reloadItems(), now).filter((item) => !blocked(item, prefs))
         : candidatesForDefault(input.items, now).filter((item) => !blocked(item, prefs));
-      localCards = directoryCards(diverseFeedCandidates(reloaded, MAX_FEED, 2), prefs, MAX_FEED, now);
+      localCards = directoryCards(presentableFeedCandidates(reloaded, MAX_FEED, 2), prefs, MAX_FEED, now);
       mark('DIRECTORY_READ', localCards.length);
     }
     const fresh =
@@ -718,8 +812,11 @@ export async function ensurePersonalFeed(input: {
       : [],
   );
   const opened = new Set(openedItemIds(recent));
+  const boostedExact = new Set(
+    prefs.filter((row) => row.kind === 'boost' && row.targetType === 'item').map((row) => row.target),
+  );
   const unseen = items.filter((item) => !shown.has(item.itemId) && !opened.has(item.itemId));
-  const diverseReady = diverseFeedCandidates(unseen, MIN_FEED, 2).length;
+  const diverseReady = presentableFeedCandidates(unseen, MIN_FEED, 2).length;
   const needReplenish =
     input.mode === 'refresh' || input.mode === 'reset'
       ? true
@@ -730,6 +827,12 @@ export async function ensurePersonalFeed(input: {
           : diverseReady < MIN_FEED;
   let replenished = false;
   let searchAttempted = false;
+  const freshSearchItems: NetworkItem[] = [];
+  const rememberFresh = (item: NetworkItem | undefined) => {
+    if (!item || !isConsumableItem(item, now)) return;
+    if (freshSearchItems.some((row) => row.itemId === item.itemId)) return;
+    freshSearchItems.push(item);
+  };
 
   if (input.mode === 'replenish' && input.supplyPhase === 'catalog') {
     mark('CATALOG_START');
@@ -738,7 +841,7 @@ export async function ensurePersonalFeed(input: {
       items = candidatesForDefault(await input.reloadItems(), now).filter((item) => !blocked(item, prefs));
     }
     const cards = directoryCards(
-      diverseFeedCandidates(
+      presentableFeedCandidates(
         items.filter((item) => !shown.has(item.itemId)),
         MAX_FEED,
         2,
@@ -773,7 +876,7 @@ export async function ensurePersonalFeed(input: {
           /* feed 失败则收下单条 */
         }
       }
-      const item = networkItemFromOpenHit(hit, now);
+      const item = networkItemFromOpenHit(hit, now, 'feed');
       if (!item) continue;
       if (input.putNetworkItem) {
         try {
@@ -799,8 +902,8 @@ export async function ensurePersonalFeed(input: {
             model: input.model,
             now,
             ...(input.preferenceDirectives ? { preferenceDirectives: input.preferenceDirectives } : {}),
-            ...(formatRecentRecommendationContext(recent)
-              ? { recentContext: formatRecentRecommendationContext(recent) }
+            ...(formatRecentRecommendationContext(recent, { includeOneOffSeeks: false })
+              ? { recentContext: formatRecentRecommendationContext(recent, { includeOneOffSeeks: false }) }
               : {}),
           })
         : Promise.resolve([]);
@@ -841,6 +944,12 @@ export async function ensurePersonalFeed(input: {
                 fetchImpl: input.fetchOpenMedia,
               }),
             );
+            await acceptOpenHits(
+              await searchOpenWorks({
+                query: row.searchQuery || topic,
+                fetchImpl: input.fetchOpenMedia,
+              }),
+            );
           } catch {
             /* 单个媒介来源失败不阻断其它媒介 */
           }
@@ -853,6 +962,7 @@ export async function ensurePersonalFeed(input: {
               fetchImpl: input.fetchOpenMedia,
             }),
           );
+          await acceptOpenHits(await searchOpenWorks({ fetchImpl: input.fetchOpenMedia }));
         } catch {
           /* 开放目录失败不阻断 RSS */
         }
@@ -861,7 +971,13 @@ export async function ensurePersonalFeed(input: {
     if (input.reloadItems) items = candidatesForDefault(await input.reloadItems(), now).filter((item) => !blocked(item, prefs));
     const stillShort = items.filter((item) => !shown.has(item.itemId) && !opened.has(item.itemId)).length < MIN_FEED;
     let searchRaw = 0;
-    if (ranked && input.searchWeb && (stillShort || input.mode === 'refresh' || input.mode === 'more' || input.mode === 'reset')) {
+    const shouldSearch =
+      stillShort ||
+      input.mode === 'refresh' ||
+      input.mode === 'more' ||
+      input.mode === 'reset' ||
+      !!input.adjustment;
+    if (ranked && input.searchWeb && shouldSearch) {
       for (const query of queries.slice(0, 2)) {
         searchAttempted = true;
         try {
@@ -874,7 +990,8 @@ export async function ensurePersonalFeed(input: {
             await Promise.all(
               hits.slice(0, 6).map(async (hit) => {
                 try {
-                  await input.ingestHit!(hit);
+                  const ingested = await input.ingestHit!(hit);
+                  for (const item of ingested || []) rememberFresh(item);
                 } catch {
                   /* 单条摄入失败不阻断补量 */
                 }
@@ -902,12 +1019,18 @@ export async function ensurePersonalFeed(input: {
     if (shown.has(item.itemId)) return false;
     return true;
   });
-  const notYetOpened = pool.filter((item) => !opened.has(item.itemId));
-  const openedAgain = pool.filter((item) => opened.has(item.itemId));
-  const candidates = diverseFeedCandidates(
-    notYetOpened.length >= 3 ? notYetOpened : [...notYetOpened, ...openedAgain],
+  const alreadySeen = new Set([...opened, ...boostedExact]);
+  const notYetOpened = pool.filter((item) => !alreadySeen.has(item.itemId));
+  const openedAgain = pool.filter((item) => alreadySeen.has(item.itemId));
+  const rankedPool = notYetOpened.length >= 3 ? notYetOpened : [...notYetOpened, ...openedAgain];
+  const freshIds = new Set(freshSearchItems.map((item) => item.itemId));
+  const freshInPool = rankedPool.filter((item) => freshIds.has(item.itemId));
+  const freshMissing = freshSearchItems.filter((item) => !rankedPool.some((row) => row.itemId === item.itemId));
+  const candidates = seatThisTurnItems(
+    presentableFeedCandidates(rankedPool, 24, 2),
+    [...freshInPool, ...freshMissing],
     24,
-    2,
+    8,
   );
   mark('CANDIDATES', candidates.length);
 

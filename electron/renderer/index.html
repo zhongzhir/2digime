@@ -449,8 +449,31 @@
             <section id="content-discover-for-you" class="discover-section" data-discover-section="for-you">
               <div class="discover-feed-head">
                 <h2 id="content-discover-feed-title">为你发现</h2>
-                <button type="button" class="ghost" id="btn-discover-refresh">换一批</button>
+                <div class="discover-feed-actions">
+                  <button type="button" class="ghost" id="btn-discover-adjust">调整推荐</button>
+                  <button type="button" class="ghost" id="btn-discover-refresh">换一批</button>
+                </div>
               </div>
+              <section id="content-discover-adjust-banner" class="discover-adjust" hidden>
+                <p id="content-discover-adjust-summary"></p>
+                <p id="content-discover-adjust-scope" class="muted tiny" hidden></p>
+                <p id="content-discover-adjust-question" class="muted tiny" hidden></p>
+                <div class="discover-adjust-actions">
+                  <button type="button" class="ghost" id="btn-adjust-edit">修改调整</button>
+                  <button type="button" class="ghost" id="btn-adjust-revoke">撤销</button>
+                  <button type="button" class="ghost" id="btn-adjust-keep">持续保留</button>
+                </div>
+              </section>
+              <form id="content-discover-adjust-form" class="discover-adjust-form" hidden>
+                <label class="field">
+                  <span>想多看、少看或换成什么？</span>
+                  <textarea id="content-discover-adjust-text" rows="3" maxlength="400" placeholder="例如：最近看剧有点多了，帮我看看有哪些适合我的课程。"></textarea>
+                </label>
+                <div class="discover-adjust-actions">
+                  <button type="submit" class="primary" id="btn-adjust-apply">用这次调整</button>
+                  <button type="button" class="ghost" id="btn-adjust-cancel">取消</button>
+                </div>
+              </form>
               <p id="content-discover-status" class="muted tiny" hidden>兔机米正在准备一些值得看的内容……</p>
               <div id="content-discover-empty" class="discover-empty" hidden>
                 <p id="content-discover-empty-text">这次没有找到可以直接看的内容。</p>
@@ -479,7 +502,7 @@
             </section>
             <section id="content-discover-prefs" class="discover-section content-discover-prefs" data-discover-section="prefs" hidden>
               <h2>内容偏好</h2>
-              <p class="muted tiny">只有你明确说过的加推、少推、关注或不再看来源会出现在这里，可以随时撤销。</p>
+              <p class="muted tiny">只有你明确说过的加推、少推、关注、不再看来源，或选择持续保留的推荐调整会出现在这里，可以随时撤销。</p>
               <ul id="content-discover-pref-list" class="content-discover-pref-list"></ul>
               <p id="content-discover-pref-empty" class="muted tiny">还没有明确的内容偏好。</p>
               <div class="discover-reset-recent">

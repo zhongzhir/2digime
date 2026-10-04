@@ -91,6 +91,16 @@ export interface DiscoverView {
   laterCards?: DiscoverCard[];
   /** 这次请求实际发给联网搜索的次数；同一请求内重复的搜索词复用结果，不再计次。UI 不得展示。 */
   searchUsage?: { calls: number; reused: number; skippedAfterQuota: number; rateLimited: boolean };
+  /** 发现页「本次调整」。不是数字之我，也不是打开/收藏推断。 */
+  adjustment?: {
+    id: string;
+    summary: string;
+    text: string;
+    scope: 'session' | 'keep';
+    appliesTo?: 'default_feed' | 'all';
+    scopeNote?: string;
+    question?: string;
+  };
   /** 内部搜索诊断，UI 不得展示。 */
   seekTrace?: {
     rawCandidates: number;

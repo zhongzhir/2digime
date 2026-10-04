@@ -31,6 +31,7 @@ import { hasDirectMediaRepresentation, mergeSeekCardSets } from './discover-sear
 import {
   networkItemFromOpenHit,
   searchOpenMedia,
+  searchOpenWorks,
   type OpenMediaFetch,
 } from './content-source-capabilities';
 import { classifySearchFailure, SEARCH_QUOTA_NOTICE } from './network-discovery-state';
@@ -175,8 +176,11 @@ export function directorySeekTerms(query: string): string[] {
 }
 
 export function openMediaQueries(query: string, intent: DiscoverIntent): string[] {
+  const preferred = [...intent.searchQueries, intent.topic]
+    .map((row) => String(row || '').trim())
+    .filter((value) => value.length >= 2);
   const terms: string[] = [];
-  for (const row of [...intent.searchQueries, intent.topic, ...directorySeekTerms(query)]) {
+  for (const row of preferred.length ? preferred : directorySeekTerms(query)) {
     const value = String(row || '').trim();
     if (value.length >= 2) terms.push(value);
   }
@@ -449,9 +453,17 @@ async function programsFromSources(input: {
       model: input.model,
       ...(input.signal ? { signal: input.signal } : {}),
     });
-    const pages = candidates.filter(
-      (row) => isPrimaryContentRole(judged.roles.get(row.itemId)) && judged.judgments.get(row.itemId)?.medium !== 'article',
-    );
+    const requiresPlayable = input.intent.requestedMedia.some((row) => row === 'video' || row === 'audio');
+    const pages = candidates.filter((row) => {
+      if (!isPrimaryContentRole(judged.roles.get(row.itemId))) return false;
+      if (requiresPlayable && judged.judgments.get(row.itemId)?.medium === 'article') return false;
+      return true;
+    });
+    if (!requiresPlayable) {
+      const page = pages[0];
+      if (page) return { work, card: page, judgment: judged.judgments.get(page.itemId), miss: 'pending' };
+      return { work, card: null, judgment: undefined, miss: 'pending' };
+    }
     // 完整且来源可信的入口优先；片段可以给，但要标明；自称全集却看不出来源的页面不算核实到的入口。
     const entranceOf = (card: DiscoverCard) => judged.judgments.get(card.itemId)?.entrance;
     const usable = [
@@ -671,6 +683,39 @@ export async function seekContent(input: {
       }
     } catch {
       /* 开放媒体来源失败不阻断文章搜索 */
+    }
+  }
+  if (input.fetchOpenMedia && !input.skipOpenMedia && cards.length === 0) {
+    try {
+      const workQueries = openMediaQueries(query, intent);
+      for (const topicQuery of workQueries) {
+        if (cards.length >= 24) break;
+        const workHits = await searchOpenWorks({
+          query: topicQuery,
+          fetchImpl: input.fetchOpenMedia,
+        });
+        for (const hit of workHits) {
+          const item = networkItemFromOpenHit(hit);
+          if (!item) continue;
+          const canonical = canonicalOf(item.content.url);
+          if (canonical && seenUrls.has(canonical)) continue;
+          if (seenIds.has(item.itemId)) continue;
+          if (canonical) seenUrls.add(canonical);
+          seenIds.add(item.itemId);
+          usedExternal = true;
+          if (canonical) queryByUrl.set(canonical, topicQuery);
+          cards.push(
+            cardFromNetworkItem(
+              item,
+              hit.pageKind === 'guide' ? '开放攻略来源，不是目录推荐。' : '开放作品来源，不是目录推荐。',
+              'web',
+            ),
+          );
+          if (cards.length >= 24) break;
+        }
+      }
+    } catch {
+      /* 作品 / 攻略目录失败不阻断网页搜索 */
     }
   }
 
@@ -922,13 +967,14 @@ export async function seekContent(input: {
     }
   }
 
-  // 片单、榜单和评论只作依据，不冒充节目本身：模型从这次读到的原文里取出被点名的作品，
-  // 再用同一个搜索核实作品页与观看入口；核实不到的作品只作"提到过"列出，并注明未核实。
-  const wantsProgram =
-    intent.intent === 'consume' && requiredTypes.some((row) => row === 'video' || row === 'audio');
-  if (
-    wantsProgram &&
+  // 片单、榜单和评论只作依据，不冒充对象本身：模型从这次读到的原文里取出被点名的对象，
+  // 再用同一个搜索核实对象页；核实不到的只作"提到过"列出，并注明未核实。
+  const wantsNamedWorks =
+    intent.intent === 'consume' &&
     !datedNews &&
+    (requiredTypes.some((row) => row === 'video' || row === 'audio') || primary.length === 0);
+  if (
+    wantsNamedWorks &&
     input.searchWeb &&
     !input.skipWeb &&
     input.chatComplete &&
@@ -978,6 +1024,18 @@ export async function seekContent(input: {
     const merged = mergeSeekCardSets(input.previous, { cards: visible, relatedCards: relatedVisible });
     visible = merged.cards.slice(0, MAX_CARDS);
     relatedVisible = merged.relatedCards;
+  }
+  let promotedRelated = false;
+  if (
+    !visible.length &&
+    relatedVisible.length &&
+    intent.intent === 'consume' &&
+    !datedNews &&
+    !requiredTypes.some((row) => row === 'video' || row === 'audio')
+  ) {
+    visible = relatedVisible.slice(0, MAX_CARDS);
+    relatedVisible = [];
+    promotedRelated = true;
   }
   const unjudgedVisible = unjudged.slice(0, 8);
   const visibleIds = new Set([...visible, ...relatedVisible, ...unjudgedVisible].map((card) => card.itemId));
@@ -1079,6 +1137,8 @@ export async function seekContent(input: {
     } else {
       notice = '这次更适合当作分析材料。可点「问兔机米」，或到「与兔机米」里继续。';
     }
+  } else if (promotedRelated) {
+    notice = '先给出这次能核对到的候选。价格、课时或对象页还没核到的，依据里已标明。';
   } else if (unjudgedVisible.length > 0) {
     notice = '还有一些结果这轮没有完成判断，没有放进推荐。';
   } else if (intent.honestyNote) {

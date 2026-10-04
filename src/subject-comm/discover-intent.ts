@@ -198,7 +198,7 @@ export async function interpretDiscoverIntent(input: {
     'objectWanted: primary_content（要作品/正文本身）/ commentary（要报道、盘点、行业分析）/ mixed。',
     'freshness: current / classic / unspecified。current 表示用户在意时效：当下、最近、最新、这阵子。它不等于「今天发布」；只有用户明确要某一天（今天、昨天、某月某日）才算指定日期。',
     'popularityClaim: 用户是否在要「最好/最火/热门/口碑/排行」这类带评价的推荐。为 true 时 searchQueries 里第一条仍然指向作品/节目本身（节目名、系列、官方主页或播放页这类具体对象），另一条才带能找到评价依据的词（如 口碑、评分、获奖），避免全部搜回行业盘点文章。',
-    'searchQueries: 1 到 3 条发给公开搜索和开放目录的检索词，不要照抄用户整句。必须留在这次的 topic 与 requestedContentTypes 内。',
+    'searchQueries: 1 到 3 条发给公开搜索和开放目录的短检索词。必须拆成对象名、地名、作品名或主题短词；不要照抄用户整句。复杂需求拆成目录和搜索能命中的短词，再由系统分别检索后整合。必须留在这次的 topic 与 requestedContentTypes 内。',
     '搜索只按查询文本返回结果，不会另吃时效或新闻分类参数。仅当用户明确要某一天的报道时，第一条 searchQuery 才包含那一天的日期；「当下/最近/最新」不要写成今天的日期。',
     'viewing: 用户说了想在哪里看——「在这里看/应用里播放」填 in_app，「去原站/官网看」填 original_site，没提就填 any。',
     'preferences: 用户这次明确提出的质量、风格、时长、人群等偏好，用一句话保留（例如「口碑好、长视频」）。没有就留空。不要加用户没说的偏好。',
@@ -408,8 +408,8 @@ export async function classifyCandidateRoles(input: {
     'LISTING：榜单、集合、搜索页、把多部作品打包推荐的页面。',
     'COMMENTARY：候选不是这次要消费的对象，而是在谈论该对象。仅当用户点名要视频/图片/音频时，介绍它们的文章才是 COMMENTARY。',
     'UNRELATED：主题不在这次搜索范围内。即使它可能符合用户平时其它兴趣，也标 UNRELATED。',
-    '用户这次在 query / preferences 里明确提出的条件（例如纪录片、长视频、适合周末看、高分、口碑好）也属于这次的范围：候选虽然是作品本身，但明显不满足这些条件（例如要长视频，它只是几分钟的片段），标 UNRELATED。durationSeconds 是来源给出的时长，没有就是不知道。',
-    'conditions：用户这次没有提出这类条件写 none；候选材料能确认满足写 met；材料不足以确认写 unconfirmed，并在 basis 里写明哪一条还没确认。只看候选材料，不凭作品名气替材料确认。',
+    '用户这次在 query / preferences 里明确提出的条件（例如纪录片、长视频、适合周末看、高分、口碑好）也属于这次的范围：候选虽然是作品本身，但明显不满足这些条件（例如要长视频，它只是几分钟的片段），标 UNRELATED。durationSeconds 是来源给出的时长，没有就是不知道。价格、课时、时长材料里没有时，不要标 UNRELATED。',
+    'conditions：用户这次没有提出这类条件写 none；候选材料能确认满足写 met；材料不足以确认写 unconfirmed，并在 basis 里写明哪一条还没确认。只看候选材料，不凭作品名气替材料确认。价格或课时核不到时写 unconfirmed，仍把对象本身当作候选。',
     'entrance：只在候选本身是视频或音频的观看/收听页时填写，其它写 none。full：材料能确认是完整的一部、一集或一整期，并且来自出品方、播出平台、获得授权的平台或创作者本人；excerpt：片段、预告、花絮、剪辑、解说；unverified：自称全集、高清完整版之类，但看不出来源或授权，或者看不出是否完整。只依据候选材料，标题里的说法不能替来源作保。',
     '能不能在应用里直接播放，与它是否符合这次请求无关，不能因此判为 PRIMARY_CONTENT。',
     'medium：该候选本身主要是 article / video / audio / image 哪一种，由页面内容判断；看不出就写 unknown。节目主页、系列页、单集页是否有直接播放文件，不影响 role，也不影响 medium。',
@@ -534,13 +534,13 @@ export async function extractMentionedWorks(input: {
 }): Promise<MentionedWork[]> {
   if (!input.sources.length || !input.chatComplete || !input.model) return [];
   const system = [
-    '你在读用户这次搜索读到的片单、榜单和评论文章，从中取出被明确点名、并且符合用户这次请求的具体作品（节目、剧集、电影、纪录片、播客、专辑等）。只输出 JSON：{"works":[{"title":"","kind":"","medium":"","sourceId":"","basis":"","searchQuery":""}]}。',
-    'title：作品名，必须和材料原文里写的一致，不翻译、不补全、不改写。材料没有点名的作品不要输出。',
-    'kind：材料能确定的作品类型，例如纪录片、电视剧、电影、综艺、播客；不确定就留空。',
-    'medium：video、audio 或 unknown。',
-    'sourceId：这部作品出现在哪一篇材料里。',
-    'basis：只转述这篇材料对这部作品的评价或介绍。材料里没有的评分、排名、时长、播放量一律不写，不要编造。',
-    'searchQuery：用来找到这部作品能直接观看或收听的页面（正片、播放页、官方节目页）的搜索词，不是找百科或影评；材料提到播出平台时可以带上。',
+    '你在读用户这次搜索读到的片单、榜单和评论文章，从中取出被明确点名、并且符合用户这次请求的具体对象。只输出 JSON：{"works":[{"title":"","kind":"","medium":"","sourceId":"","basis":"","searchQuery":""}]}。',
+    'title：对象名，必须和材料原文里写的一致，不翻译、不补全、不改写。材料没有点名的不要输出。',
+    'kind：材料能确定的类型；不确定就留空。',
+    'medium：article、video、audio、image 或 unknown。',
+    'sourceId：这个对象出现在哪一篇材料里。',
+    'basis：只转述这篇材料对它的评价或介绍。材料里没有的评分、排名、时长、价格、播放量一律不写，不要编造。',
+    'searchQuery：用来找到这个对象本身的页面（作品页、课程页、攻略页、播放页）的搜索词，不是找盘点或评论；材料提到出处时可以带上。',
     '按用户这次的条件挑（例如长视频、纪录片、适合周末），明显不符合的不要输出。最多 4 部，挑材料里评价最明确的，宁缺毋滥；多篇材料提到的同一部只输出一次。',
   ].join('\n');
   const user = JSON.stringify({
@@ -583,7 +583,10 @@ export async function extractMentionedWorks(input: {
         out.push({
           title,
           kind: String(r.kind || '').trim().slice(0, 20),
-          medium: medium === 'video' || medium === 'audio' ? medium : 'unknown',
+          medium:
+            medium === 'video' || medium === 'audio' || medium === 'article' || medium === 'image'
+              ? medium
+              : 'unknown',
           sourceId,
           basis: String(r.basis || '').replace(/\s+/g, ' ').trim().slice(0, 200),
           searchQuery: String(r.searchQuery || '').trim().slice(0, 80) || title,

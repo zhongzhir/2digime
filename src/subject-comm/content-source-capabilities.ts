@@ -24,6 +24,7 @@ import {
   NETWORK_ITEM_VISIBILITY_PUBLIC,
   validateNetworkItem,
   type NetworkItem,
+  type NetworkItemDiscoveryVia,
 } from './network-item';
 import { catalogEndpointsFor, type OpenSourceEndpoint } from './open-source-catalog';
 import { allowsDefaultSupply } from './domestic-source-boundary';
@@ -45,6 +46,7 @@ export interface OpenMediaHit {
   feedUrl?: string;
   mediaExpression?: 'full' | 'sample';
   publishedAt?: string;
+  pageKind?: 'work' | 'guide' | 'course';
 }
 
 export type OpenMediaFetch = (
@@ -475,7 +477,11 @@ export async function listOpenCatalog(input: {
   });
 }
 
-export function networkItemFromOpenHit(hit: OpenMediaHit, now?: string): NetworkItem | null {
+export function networkItemFromOpenHit(
+  hit: OpenMediaHit,
+  now?: string,
+  via: NetworkItemDiscoveryVia = 'search',
+): NetworkItem | null {
   let canonical = '';
   try {
     canonical = normalizeCanonicalUrl(hit.url);
@@ -529,10 +535,122 @@ export function networkItemFromOpenHit(hit: OpenMediaHit, now?: string): Network
       actor: 'owner',
       statedAt: createdAt,
       excerpt: clipText(hit.snippet || hit.title).slice(0, 400),
-      via: 'search',
+      via,
     },
   });
   return checked.ok ? checked.item : null;
+}
+
+function bangumiPage(id: unknown): string {
+  const num = Number(id);
+  if (!Number.isFinite(num) || num <= 0) return '';
+  return `https://bgm.tv/subject/${Math.trunc(num)}`;
+}
+
+function bangumiHits(endpoint: OpenSourceEndpoint, data: unknown, limit = 8): OpenMediaHit[] {
+  const rows: unknown[] = [];
+  if (Array.isArray(data)) {
+    for (const day of data) {
+      const items = day && typeof day === 'object' ? (day as { items?: unknown }).items : null;
+      if (Array.isArray(items)) rows.push(...items);
+    }
+  } else if (data && typeof data === 'object') {
+    const list = (data as { list?: unknown }).list;
+    if (Array.isArray(list)) rows.push(...list);
+  }
+  const out: OpenMediaHit[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    const item = row as Record<string, unknown>;
+    const url = asSafe(bangumiPage(item.id)) || asSafe(String(item.url || '').replace(/^http:\/\//, 'https://'));
+    if (!url) continue;
+    const title = clipTitle(String(item.name_cn || item.name || url));
+    if (!title) continue;
+    const snippet = clipText(String(item.summary || item.name || title)).slice(0, 400);
+    out.push({
+      title,
+      url,
+      contentType: 'article',
+      capability: endpoint.id,
+      snippet,
+      pageKind: 'work',
+      author: 'Bangumi',
+    });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+function wikivoyageHits(endpoint: OpenSourceEndpoint, data: unknown): OpenMediaHit[] {
+  const rec = data && typeof data === 'object' ? (data as { query?: { search?: unknown } }) : null;
+  const rows = rec?.query?.search && Array.isArray(rec.query.search) ? rec.query.search : [];
+  const out: OpenMediaHit[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    const item = row as Record<string, unknown>;
+    const title = clipTitle(String(item.title || ''));
+    if (!title) continue;
+    const url = asSafe(`https://zh.wikivoyage.org/wiki/${encodeURI(title)}`);
+    if (!url) continue;
+    out.push({
+      title,
+      url,
+      contentType: 'article',
+      capability: endpoint.id,
+      snippet: clipText(String(item.snippet || `${title} 旅行攻略`).replace(/<[^>]+>/g, ' ')).slice(0, 400),
+      pageKind: 'guide',
+      author: '维基导游',
+    });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+/** 具体作品 / 攻略页。不是自建搜索，只调用已有开放 API。 */
+export async function searchOpenWorks(input: {
+  query?: string;
+  fetchImpl?: OpenMediaFetch;
+  endpoints?: OpenSourceEndpoint[];
+} = {}): Promise<OpenMediaHit[]> {
+  const query = String(input.query || '').trim();
+  const fetchImpl = input.fetchImpl || safePublicHttpGet;
+  const endpoints = (input.endpoints || catalogEndpointsFor(['article'])).filter(
+    (row) => row.kind === 'bangumi_api' || row.kind === 'wikivoyage',
+  );
+  const batches = await Promise.all(
+    endpoints.map(async (endpoint) => {
+      try {
+        if (endpoint.kind === 'bangumi_api') {
+          if (!query && /calendar/i.test(endpoint.url)) {
+            return bangumiHits(endpoint, await readJson(fetchImpl, endpoint.url), 10);
+          }
+          if (query && /search\/subject/i.test(endpoint.url)) {
+            return bangumiHits(
+              endpoint,
+              await readJson(fetchImpl, `${endpoint.url}/${encodeURIComponent(query)}?responseGroup=small`),
+              8,
+            );
+          }
+          return [];
+        }
+        if (endpoint.kind === 'wikivoyage' && query) {
+          const url = `${endpoint.url}?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=8&format=json`;
+          return wikivoyageHits(endpoint, await readJson(fetchImpl, url));
+        }
+      } catch {
+        return [];
+      }
+      return [];
+    }),
+  );
+  const out: OpenMediaHit[] = [];
+  const seen = new Set<string>();
+  for (const hit of batches.flat()) {
+    if (seen.has(hit.url) || !allowsDefaultSupply({ url: hit.url, publisher: hit.author })) continue;
+    seen.add(hit.url);
+    out.push(hit);
+  }
+  return out.slice(0, 16);
 }
 
 export function catalogFeedUrls(kinds: string[]): string[] {

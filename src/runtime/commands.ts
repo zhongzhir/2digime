@@ -1081,11 +1081,15 @@ export interface CommandMap {
         | 'block'
         | 'reverse'
         | 'seek'
-        | 'cancel';
+        | 'cancel'
+        | 'adjust'
+        | 'adjustKeep'
+        | 'adjustRevoke';
       relayUrl?: string;
       itemId?: string;
       directiveId?: string;
       text?: string;
+      scope?: 'session' | 'keep';
       title?: string;
       url?: string;
       publisher?: string;

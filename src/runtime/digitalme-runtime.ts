@@ -231,6 +231,15 @@ import {
   upsertContentPreference,
   type ContentPreferenceKind,
 } from '../subject-comm/content-preferences';
+import {
+  STEER_PREFERENCE_TARGET,
+  adjustmentSteersFeed,
+  clearRecommendationAdjustment,
+  formatAdjustmentDirective,
+  interpretRecommendationAdjust,
+  loadRecommendationAdjustment,
+  saveRecommendationAdjustment,
+} from '../subject-comm/recommendation-adjustment';
 import { laterCards, listLaterItems, saveLaterItem } from '../subject-comm/later-items';
 import { allowsDefaultSupply } from '../subject-comm/domestic-source-boundary';
 import {
@@ -462,6 +471,7 @@ export class DigitalMeRuntime {
   private lastNetworkCode: NetworkDiscoveryCode | null = null;
   /** CURRENT_SEARCH_MODE 最近一次搜索视图。打开外部来源时不得换成个人 Feed。 */
   private lastIntentView: DiscoverView | null = null;
+  private readonly discoverRuntimeId = `rt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   private pendingLaterCards: NonNullable<DiscoverView['laterCards']> = [];
   /** 当前可见搜索 / 个人 Feed 的请求身份。迟到结果必须与此一致。 */
   private currentSearchGenerationId = '';
@@ -530,15 +540,19 @@ export class DigitalMeRuntime {
     input: CommandMap['content']['input'],
   ): Promise<CommandMap['content']['output']> {
     const pkg = this.subject.getActive();
-    const empty = async (notice: string): Promise<DiscoverView> => ({
-      headline: '发现',
-      lead: '看文章、图片、音频和视频。',
-      cards: [],
-      relatedCards: [],
-      preferences: pkg ? await this.contentPreferenceRows(pkg.rootDir) : [],
-      laterCards: this.pendingLaterCards,
-      notice,
-    });
+    const empty = async (notice: string): Promise<DiscoverView> => {
+      const adjustment = pkg ? this.adjustmentView(await this.currentAdjustment(pkg.rootDir)) : undefined;
+      return {
+        headline: '发现',
+        lead: '看文章、图片、音频和视频。',
+        cards: [],
+        relatedCards: [],
+        preferences: pkg ? await this.contentPreferenceRows(pkg.rootDir) : [],
+        laterCards: this.pendingLaterCards,
+        notice,
+        ...(adjustment ? { adjustment } : {}),
+      };
+    };
     if (!pkg) return { view: await empty('还没有打开的数字之我。') };
     const action = input.action || 'discover';
     const itemId = String(input.itemId || '').trim();
@@ -555,7 +569,71 @@ export class DigitalMeRuntime {
       if (!query) {
         return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'open') };
       }
-      return { view: await this.runContentSeek(pkg.rootDir, query, input.relayUrl, started!) };
+      return { view: await this.withAdjustment(pkg.rootDir, await this.runContentSeek(pkg.rootDir, query, input.relayUrl, started!)) };
+    }
+
+    if (action === 'adjust' || action === 'adjustKeep' || action === 'adjustRevoke') {
+      if (action === 'adjustRevoke') {
+        await clearRecommendationAdjustment(pkg.rootDir);
+        await this.reverseSteerPreference(pkg.rootDir);
+        this.lastIntentView = null;
+        return { view: await this.withAdjustment(pkg.rootDir, await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reset')) };
+      }
+      if (action === 'adjustKeep') {
+        const current = await this.currentAdjustment(pkg.rootDir);
+        if (!current) return { view: await this.withAdjustment(pkg.rootDir, await empty('还没有可保留的调整。')) };
+        const kept = await saveRecommendationAdjustment(pkg.rootDir, {
+          ...current,
+          scope: 'keep',
+          runtimeId: this.discoverRuntimeId,
+        });
+        await upsertContentPreference(pkg.rootDir, {
+          kind: 'steer',
+          targetType: 'directive',
+          target: STEER_PREFERENCE_TARGET,
+          text: `${kept.summary}（持续保留的本次调整，不是数字之我，也不表示长期不喜欢某类内容。）`,
+        });
+        this.lastIntentView = null;
+        return { view: await this.withAdjustment(pkg.rootDir, await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reset')) };
+      }
+      const text = String(input.text || '').trim();
+      if (!text) return { view: await this.withAdjustment(pkg.rootDir, await empty('请先说说想多看、少看或换成什么。')) };
+      const self = await readDigitalSelf(pkg.rootDir, pkg.id, new Date().toISOString());
+      const chatCompleteFn = this.resolveContentChat();
+      const model = this.resolveContentModel();
+      let interpreted: { summary: string; sufficient: boolean; question?: string } = {
+        summary: `本次按你刚才说的调整推荐：${text.slice(0, 40)}`,
+        sufficient: true,
+      };
+      if (chatCompleteFn && model) {
+        interpreted = await interpretRecommendationAdjust({
+          text,
+          selfContext: formatSelfContext(selectSelfContext(self, '')),
+          chatComplete: chatCompleteFn,
+          model,
+        });
+      }
+      const scope = input.scope === 'keep' ? 'keep' : 'session';
+      const saved = await saveRecommendationAdjustment(pkg.rootDir, {
+        text,
+        summary: interpreted.summary,
+        scope,
+        runtimeId: this.discoverRuntimeId,
+        ...(interpreted.question ? { question: interpreted.question } : {}),
+      });
+      if (scope === 'keep') {
+        await upsertContentPreference(pkg.rootDir, {
+          kind: 'steer',
+          targetType: 'directive',
+          target: STEER_PREFERENCE_TARGET,
+          text: `${saved.summary}（持续保留的本次调整，不是数字之我，也不表示长期不喜欢某类内容。）`,
+        });
+      } else {
+        await this.reverseSteerPreference(pkg.rootDir);
+      }
+      this.lastIntentView = null;
+      const view = await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reset');
+      return { view: await this.withAdjustment(pkg.rootDir, view) };
     }
 
     if (action === 'resetRecent') {
@@ -572,7 +650,10 @@ export class DigitalMeRuntime {
     }
 
     if (action === 'more') {
-      const view = await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'more');
+      const view = await this.withAdjustment(
+        pkg.rootDir,
+        await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'more'),
+      );
       return { view: { ...view, append: true } };
     }
 
@@ -604,11 +685,21 @@ export class DigitalMeRuntime {
     }
 
     if (action === 'replenish') {
-      return { view: await this.finishSeekOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'replenish', input.searchGenerationId) };
+      return {
+        view: await this.withAdjustment(
+          pkg.rootDir,
+          await this.finishSeekOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'replenish', input.searchGenerationId),
+        ),
+      };
     }
 
     if (action === 'refresh') {
-      return { view: await this.finishSeekOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'refresh', input.searchGenerationId) };
+      return {
+        view: await this.withAdjustment(
+          pkg.rootDir,
+          await this.finishSeekOrPersonal(pkg.rootDir, pkg.id, input.relayUrl, 'refresh', input.searchGenerationId),
+        ),
+      };
     }
 
     if (action === 'reverse') {
@@ -679,7 +770,7 @@ export class DigitalMeRuntime {
     }
 
     this.lastIntentView = null;
-    return { view: await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'open') };
+    return { view: await this.withAdjustment(pkg.rootDir, await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'open')) };
   }
 
   private beginSearchGeneration(requested?: string): { generationId: string; abort: AbortController } {
@@ -860,6 +951,58 @@ export class DigitalMeRuntime {
     }));
   }
 
+  private async currentAdjustment(packageRoot: string) {
+    return loadRecommendationAdjustment(packageRoot, this.discoverRuntimeId);
+  }
+
+  private adjustmentView(
+    row: Awaited<ReturnType<typeof loadRecommendationAdjustment>>,
+    feedMode?: DiscoverView['feedMode'],
+  ): {
+    id: string;
+    summary: string;
+    text: string;
+    scope: 'session' | 'keep';
+    appliesTo?: 'default_feed' | 'all';
+    scopeNote?: string;
+    question?: string;
+  } | undefined {
+    if (!row) return undefined;
+    const sessionOnSeek = row.scope === 'session' && feedMode === 'intent';
+    return {
+      id: row.id,
+      summary: row.summary,
+      text: row.text,
+      scope: row.scope,
+      appliesTo: row.scope === 'keep' ? 'all' : 'default_feed',
+      scopeNote: sessionOnSeek
+        ? '本次调整仍作用于默认推荐，这次搜索按你刚说的主题来找。'
+        : row.scope === 'session'
+          ? '仅作用于这次默认推荐。换主题搜索不自动套用。'
+          : '已持续保留，可在内容偏好里撤销。',
+      ...(row.question ? { question: row.question } : {}),
+    };
+  }
+
+  private async withAdjustment(packageRoot: string, view: DiscoverView): Promise<DiscoverView> {
+    const adjustment = this.adjustmentView(await this.currentAdjustment(packageRoot), view.feedMode);
+    const next = adjustment ? { ...view, adjustment } : view;
+    if (this.lastIntentView && this.lastIntentView.searchGenerationId === next.searchGenerationId) {
+      const { adjustment: _ignored, ...rest } = this.lastIntentView;
+      this.lastIntentView = adjustment ? { ...rest, adjustment } : rest;
+    }
+    return next;
+  }
+
+  private async reverseSteerPreference(packageRoot: string): Promise<void> {
+    const rows = await listContentPreferences(packageRoot);
+    for (const row of rows) {
+      if (row.kind === 'steer' && row.target === STEER_PREFERENCE_TARGET) {
+        await reverseContentPreference(packageRoot, row.id);
+      }
+    }
+  }
+
   private async runContentDiscover(
     packageRoot: string,
     subjectId: string,
@@ -878,7 +1021,13 @@ export class DigitalMeRuntime {
     const loadItems = () => this.loadDiscoverItems(packageRoot, relayUrl);
     const items = await loadItems();
     const preferenceRows = await listContentPreferences(packageRoot);
-    const directives = formatPreferenceDirectives(preferenceRows);
+    const adjustment = await this.currentAdjustment(packageRoot);
+    const directives = [
+      formatPreferenceDirectives(preferenceRows),
+      adjustmentSteersFeed(adjustment, 'personal') ? formatAdjustmentDirective(adjustment) : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n');
     const recentEvents = await listRecentRecommendationEvents(packageRoot);
     const result = await ensurePersonalFeed({
       packageRoot,
@@ -890,6 +1039,7 @@ export class DigitalMeRuntime {
       feedbackFile: path.join(packageRoot, 'content', 'network-content-feedback.jsonl'),
       networking,
       mode,
+      ...(this.adjustmentView(adjustment) ? { adjustment: this.adjustmentView(adjustment) } : {}),
       ...(directives ? { preferenceDirectives: directives } : {}),
       ...(supplyPhase ? { supplyPhase } : {}),
       ...(chatCompleteFn ? { chatComplete: chatCompleteFn } : {}),
@@ -944,9 +1094,11 @@ export class DigitalMeRuntime {
     } else if (result.view.networking === 'AVAILABLE') {
       this.lastNetworkCode = 'AVAILABLE';
     }
+    const shownAdjustment = this.adjustmentView(adjustment, result.view.feedMode === 'intent' ? 'intent' : 'personal');
     return this.stampSearchGeneration({
       ...result.view,
       feedMode: result.view.feedMode === 'intent' ? 'intent' : 'personal',
+      ...(shownAdjustment ? { adjustment: shownAdjustment } : {}),
     });
   }
 

@@ -8,6 +8,7 @@
     reduce: '不喜欢',
     follow: '关注来源',
     block: '不再看来源',
+    steer: '推荐调整',
   };
   const laterById = new Map();
   let lastCards = [];
@@ -113,7 +114,16 @@
 
   function consumeLabel(card) {
     const type = String(card.contentType || '');
+    const host = (() => {
+      try {
+        return new URL(String(card.url || '')).hostname.replace(/^www\./, '');
+      } catch {
+        return '';
+      }
+    })();
     if (card.linkKind === 'aggregator') return '打开聚合入口';
+    if (host === 'bgm.tv' || host === 'bangumi.tv') return '打开作品页';
+    if (host === 'zh.wikivoyage.org') return '打开攻略';
     if (type === 'video') return '去原站观看';
     if (type === 'image') return '打开原页';
     if (type === 'audio') return '去原站收听';
@@ -208,7 +218,7 @@
         });
       }
     }
-    if (action === 'reverse' || action === 'resetRecent') {
+    if (action === 'reverse' || action === 'resetRecent' || action === 'adjust' || action === 'adjustKeep' || action === 'adjustRevoke') {
       activeSearchGenerationId = newSearchGenerationId();
       activeFeedMode = 'personal';
       lastView = null;
@@ -221,7 +231,7 @@
     applyView(result && result.view);
     if (action === 'later') showSection('later');
     if (action === 'reverse') showSection('prefs');
-    if (action === 'resetRecent') showSection('for-you');
+    if (action === 'resetRecent' || action === 'adjust' || action === 'adjustKeep' || action === 'adjustRevoke') showSection('for-you');
     return result;
   }
 
@@ -686,8 +696,42 @@
     }
     if (prefEmpty) prefEmpty.hidden = prefs.length > 0;
     renderLater();
+    renderAdjustment(view);
     root.hidden = false;
     showSection(activeSection);
+  }
+
+  function renderAdjustment(view) {
+    const banner = $('content-discover-adjust-banner');
+    const summary = $('content-discover-adjust-summary');
+    const scope = $('content-discover-adjust-scope');
+    const question = $('content-discover-adjust-question');
+    const keepBtn = $('btn-adjust-keep');
+    const row = view && view.adjustment;
+    if (banner) banner.hidden = !row;
+    if (summary) summary.textContent = row ? row.summary : '';
+    if (scope) {
+      scope.textContent = row && row.scopeNote ? row.scopeNote : '';
+      scope.hidden = !(row && row.scopeNote);
+    }
+    if (question) {
+      question.textContent = row && row.question ? row.question : '';
+      question.hidden = !(row && row.question);
+    }
+    if (keepBtn) keepBtn.hidden = !row || row.scope === 'keep';
+  }
+
+  function showAdjustForm(prefill) {
+    const form = $('content-discover-adjust-form');
+    const box = $('content-discover-adjust-text');
+    if (box && prefill != null) box.value = prefill;
+    if (form) form.hidden = false;
+    if (box) box.focus();
+  }
+
+  function hideAdjustForm() {
+    const form = $('content-discover-adjust-form');
+    if (form) form.hidden = true;
   }
 
   async function followReplenish(client, gen) {
@@ -990,6 +1034,56 @@
       personalBtn.dataset.bound = '1';
       personalBtn.addEventListener('click', () => {
         void showPersonal();
+      });
+    }
+    const adjustBtn = $('btn-discover-adjust');
+    if (adjustBtn && !adjustBtn.dataset.bound) {
+      adjustBtn.dataset.bound = '1';
+      adjustBtn.addEventListener('click', () => {
+        showAdjustForm(lastView && lastView.adjustment ? lastView.adjustment.text : '');
+      });
+    }
+    const adjustForm = $('content-discover-adjust-form');
+    if (adjustForm && !adjustForm.dataset.bound) {
+      adjustForm.dataset.bound = '1';
+      adjustForm.addEventListener('submit', (evt) => {
+        evt.preventDefault();
+        const box = $('content-discover-adjust-text');
+        const text = box ? String(box.value || '').trim() : '';
+        if (!text) return;
+        hideAdjustForm();
+        showSection('for-you');
+        setStatus('正在按你的话调整推荐……');
+        void act('adjust', { text: text });
+      });
+    }
+    const adjustCancel = $('btn-adjust-cancel');
+    if (adjustCancel && !adjustCancel.dataset.bound) {
+      adjustCancel.dataset.bound = '1';
+      adjustCancel.addEventListener('click', () => hideAdjustForm());
+    }
+    const adjustEdit = $('btn-adjust-edit');
+    if (adjustEdit && !adjustEdit.dataset.bound) {
+      adjustEdit.dataset.bound = '1';
+      adjustEdit.addEventListener('click', () => {
+        showAdjustForm(lastView && lastView.adjustment ? lastView.adjustment.text : '');
+      });
+    }
+    const adjustRevoke = $('btn-adjust-revoke');
+    if (adjustRevoke && !adjustRevoke.dataset.bound) {
+      adjustRevoke.dataset.bound = '1';
+      adjustRevoke.addEventListener('click', () => {
+        hideAdjustForm();
+        setStatus('正在撤销这次调整……');
+        void act('adjustRevoke');
+      });
+    }
+    const adjustKeep = $('btn-adjust-keep');
+    if (adjustKeep && !adjustKeep.dataset.bound) {
+      adjustKeep.dataset.bound = '1';
+      adjustKeep.addEventListener('click', () => {
+        setStatus('正在把这次调整持续保留……');
+        void act('adjustKeep');
       });
     }
     const resetRecent = $('btn-reset-recent');

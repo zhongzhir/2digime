@@ -37,6 +37,12 @@ test('recent recommendation state decays, resets, and is not labeled as like', a
   const context = formatRecentRecommendationContext(listed);
   assert.match(context, /不是长期偏好/);
   assert.match(context, /不要写成「用户喜欢」/);
+  assert.match(context, /打开不等于喜欢/);
+  assert.match(context, /一次性检索/);
+  assert.match(context, /fusion energy/);
+  const defaultFeed = formatRecentRecommendationContext(listed, { includeOneOffSeeks: false });
+  assert.equal(defaultFeed.includes('fusion energy'), false);
+  assert.match(defaultFeed, /打开不等于喜欢/);
   await resetRecentRecommendationState(root);
   const after = await listRecentRecommendationEvents(root, '2026-09-18T00:03:00.000Z');
   assert.equal(after.length, 0);
