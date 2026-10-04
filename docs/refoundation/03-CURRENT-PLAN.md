@@ -131,6 +131,8 @@ Digital Self 不限制模型，只增加主体上下文。禁止用 Digital Self
 
 **2026-09-14：** `CONTENT-DISTRIBUTION-MINIMUM-CLOSED-LOOP-01` 整体闭环验收 `CONTENT_DISTRIBUTION_MINIMUM_CLOSED_LOOP_ACCEPTED`（审计 `docs/audits/CONTENT-DISTRIBUTION-FINAL-CLOSURE-01.md`）。允许保留 Talk 旁路 Discover 与包内显式内容偏好。**仍禁止**独立 Feed 产品、中心推荐、社交网络和恢复协作中心。移动端仍 deferred，命令边界已留在 `src/` + `content`。
 
+**2026-10-04（Discover，不是新 Phase）：** 限定试用接受仍是 `230cfc6`。质量工程线停在 `8d888b0` / 试用包 `8d888b09`。暂停扩来源和连续打包，转入使用反馈观察（`docs/reviews/使用反馈-5.md`）。配额与 CASE R3 继续跟踪。未 push、未发布。不另开独立 Feed 产品。
+
 前三项能力仍须对真人成立；不把 Phase 3 协作试验扩成广播市场；不恢复 `#nav-collab`。中间服务（Relay / Index / Search 等）是服务商，不是网络主人。
 
 ### 与已接受 Refoundation 的关系

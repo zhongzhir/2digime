@@ -10,11 +10,19 @@ Owner 已对上述试用版做**限定试用接受**。不是全部产品验收�
 
 后续只按此顺序改进，每批与当时基线比较，不每修一处就打包：
 
-1. 卡片排版 — 已做，未打包
+1. 卡片排版 — 已做
 2. 信息来源 + 行为闭环 — 见 `docs/audits/DISCOVER-SOURCE-FEEDBACK-02.md`
 3. 大众供给 + 调整推荐 — 见 `docs/audits/DISCOVER-ADJUST-03.md`；交付修复见 `docs/audits/DISCOVER-DELIVERY-04.md`
-4. 信息质量 — 核实诚实见 `docs/audits/DISCOVER-QUALITY-05.md`；对象匹配与试用包见 `docs/audits/DISCOVER-QUALITY-06.md`；课程查询、额度分记、默认流缩水见 `docs/audits/DISCOVER-QUALITY-07.md`
-5. 运行可靠性（配额、取消、迟写、CASE R3；保留已知缺陷）
+4. 信息质量 — 核实诚实见 `DISCOVER-QUALITY-05.md`；对象匹配见 `DISCOVER-QUALITY-06.md`；课程/额度/默认流见 `DISCOVER-QUALITY-07.md`；课程/撤销/默认流合并包见 `DISCOVER-QUALITY-08.md`（`fbe30f41`）；来源渠道、条件标注、屏蔽、连续加载见 `DISCOVER-QUALITY-09.md`（当前试用包 `8d888b09`）
+5. 运行可靠性（配额、取消、迟写、CASE R3）— 继续跟踪，不单独开一轮施工
+
+**2026-10-04 当前指针：** 暂停扩来源和连续打包。工程线停在产品提交 `8d888b0` / 试用包 `8d888b09`。转入使用反馈驱动的改善，见 `docs/reviews/使用反馈-5.md`。`230cfc6` 限定试用接受不变。未 push、未发布。
+
+后续重点观察，不预写成已通过：
+
+- 推荐调整是否持续带来符合用户关注点的新内容。
+- 课程、节目等具体对象与入口是否准确。
+- 浏览是否丰富、顺畅，避免重复和单一来源占满。
 
 个人分布式内容选择是为了让内容服务于人，不以延长使用时间或增加使用频率为优化目标。
 

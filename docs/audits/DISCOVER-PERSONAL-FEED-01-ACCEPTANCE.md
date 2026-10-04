@@ -122,4 +122,15 @@ Owner 真人试用机复验通过后，才可将本任务升为 `DISCOVER_PERSON
 **不是：** 全部产品验收通过；市场 95 分位达标；`DISCOVER_PERSONAL_FEED_ACCEPTED`。  
 **未：** push、发布。
 
-后续改进顺序由 Owner 指定：排版 → 来源 → 质量 → 运行可靠性。第 2 批来源与行为闭环见 `docs/audits/DISCOVER-SOURCE-FEEDBACK-02.md`。第 3 批大众供给与调整推荐见 `docs/audits/DISCOVER-ADJUST-03.md`。课程与复杂查询交付修复见 `docs/audits/DISCOVER-DELIVERY-04.md`。核实诚实、验证页、撤销与课程耗时见 `docs/audits/DISCOVER-QUALITY-05.md`。对象匹配与试用包 `c9356686` 见 `docs/audits/DISCOVER-QUALITY-06.md`。课程查询偏离、漫剧额度分记、默认流缩水定向修复见 `docs/audits/DISCOVER-QUALITY-07.md`（本轮不打包）。已知缺陷见 `digitalme_context.md` 2026-10-04 条，不得在本附录里写成已关闭。`230cfc6` 仍是已接受试用基线，不代表这些新增改动已接受。
+后续改进顺序由 Owner 指定：排版 → 来源 → 质量 → 运行可靠性。第 2 批来源与行为闭环见 `docs/audits/DISCOVER-SOURCE-FEEDBACK-02.md`。第 3 批大众供给与调整推荐见 `docs/audits/DISCOVER-ADJUST-03.md`。课程与复杂查询交付修复见 `docs/audits/DISCOVER-DELIVERY-04.md`。核实诚实、验证页、撤销与课程耗时见 `docs/audits/DISCOVER-QUALITY-05.md`。对象匹配与试用包 `c9356686` 见 `docs/audits/DISCOVER-QUALITY-06.md`。课程查询偏离、漫剧额度分记、默认流缩水定向修复见 `docs/audits/DISCOVER-QUALITY-07.md`。课程 / 撤销 / 默认流合并包见 `docs/audits/DISCOVER-QUALITY-08.md`（`fbe30f41`；家庭纪录片未在该包验证）。来源渠道、条件标注、屏蔽与连续加载见 `docs/audits/DISCOVER-QUALITY-09.md`（产品提交 `8d888b0`，当前试用包 `8d888b09`）。已知缺陷见 `digitalme_context.md` 2026-10-04 条，不得在本附录里写成已关闭。`230cfc6` 仍是已接受试用基线，不代表这些新增改动已接受。
+
+---
+
+## 2026-10-04 附录续：QUALITY-09 收口与使用反馈移交
+
+**当前工程线：** 产品提交 `8d888b09399f988425865ff1ed0ef6dd505f87d9`  
+**当前试用包：** `release-staging/v2-tujimi-20261004T081507Z-8d888b09`（setup sha256 `ba809866cb1cb22e4793c3c14ddc0075f1e81f775e1cb8280f5be20b3d85e554`）  
+**不再作为合并候选：** QUALITY-08 / `fbe30f41`（该包只有课程 / 撤销 / 默认流）  
+**试用基线不变：** `230cfc6`
+
+Owner 令：暂停扩来源和连续打包。后续改善由使用反馈驱动，观察清单见 `docs/reviews/使用反馈-5.md`。运行可靠性（配额、取消、迟写、CASE R3）继续跟踪，不单独开一轮施工。未 push、未发布。不得升格为 `DISCOVER_PERSONAL_FEED_ACCEPTED` 或 95 分位达标。
