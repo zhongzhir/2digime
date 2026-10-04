@@ -4,7 +4,7 @@
 **试用基线：** `230cfc6`（限定试用接受不变）  
 **继续使用至本包之前：** `v2-tujimi-20261004T032734Z-c9356686`  
 **工程前序：** `79de7e0`  
-**本轮修复提交：** 见文末；定向修复前序 `d38b9b1`  
+**本轮修复提交：** `fbe30f413d561e9b15190e28a059e261cbb7a6b9`（前序定向修复 `d38b9b1`）  
 **日期：** 2026-10-04
 
 本轮先复验 QUALITY-07 的课程查询修复，再收紧漫剧条件与默认流合并顺序，界面复验后打合并候选。未 push、未发布。不扩大到时效 / 去重 / 摘要 / 额度可查询。
@@ -107,4 +107,14 @@
 
 ## 5. 合并试用包
 
-打包后回填。`230cfc6` 限定试用接受不变。不要装进真实 `AppData\Roaming\digitalme-v2`。
+| 项 | 值 |
+|---|---|
+| gitHead | `fbe30f413d561e9b15190e28a059e261cbb7a6b9` |
+| 打包目录 | `D:\Projects\dm-discover-personal-feed-01\release-staging\v2-tujimi-20261004T074321Z-fbe30f41` |
+| 可执行文件 | `...\win-unpacked\兔机米.exe` |
+| setup | `兔机米-0.2.0-public-alpha-win-x64-setup.exe` |
+| setup sha256 | `8a9a401e45bfee535dfab04b76f5439cbbe856b9d1193890e3b37fb0a7492c94` |
+| zip sha256 | `a8d4f17287ad01fb830d050a5e8d9eae72076f52d647720910f29e44e9a75865` |
+| 复验 | 隔离 owner-copy；源码已复验。本包未再跑一遍界面，避免扩范围 |
+
+`230cfc6` 限定试用接受不变。停用继续用 `c9356686` 体验本批修复。未 push、未发布。不要装进真实 `AppData\Roaming\digitalme-v2`。
