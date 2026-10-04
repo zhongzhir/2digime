@@ -1,9 +1,19 @@
 # DISCOVER-PERSONAL-FEED-01
 
-**状态：** `READY_FOR_OWNER_ACCEPTANCE`  
-**日期：** 2026-09-18  
-**基线：** `60b3278736c421a30a4862e199797327b75a3dbf`  
+**状态：** `LIMITED_TRIAL_ACCEPTED`（`DISCOVER_PERSONAL_FEED_LIMITED_TRIAL_ACCEPTED`，2026-10-04）  
+**日期：** 2026-10-04  
+**试用版本：** `230cfc6` / `v2-tujimi-20261003T111446Z-230cfc69`  
+**工程基线（历史）：** `60b3278736c421a30a4862e199797327b75a3dbf`  
 **工作区：** `D:\Projects\dm-discover-personal-feed-01` / `build/discover-personal-feed-01`
+
+Owner 已对上述试用版做**限定试用接受**。不是全部产品验收，不是 95 分位达标，不得升格为 `DISCOVER_PERSONAL_FEED_ACCEPTED`。未 push、未发布。
+
+后续只按此顺序改进，每批与当时基线比较，不每修一处就打包：
+
+1. 卡片排版
+2. 信息来源
+3. 信息质量
+4. 运行可靠性（配额、取消、迟写、CASE R3；保留已知缺陷）
 
 个人分布式内容选择是为了让内容服务于人，不以延长使用时间或增加使用频率为优化目标。
 

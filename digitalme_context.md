@@ -2,9 +2,29 @@
 
 版本：v0.4
 状态：historical strategic context（不承担 current plan）
-最后更新：2026-09-14（PUBLIC-ALPHA-CONTENT-RELEASE-01 进行中；前序 CONTENT-DISTRIBUTION-MINIMUM-CLOSED-LOOP-01 已 ACCEPTED。下文 2026-09-12 及更早条目仍为历史）
+最后更新：2026-10-04（`DISCOVER_PERSONAL_FEED_LIMITED_TRIAL_ACCEPTED`：Owner 对试用版 `230cfc6` 限定试用接受。不是全部产品验收，不是 95 分位达标。下文 2026-09-14 及更早条目仍为历史）
 
 本文件不恢复为第二权威源。现行权威：`AGENTS.md` → `docs/refoundation/00` / `01` / `02` / `03`。
+
+## 当前状态 / Discover 限定试用（2026-10-04）
+
+- 裁定：`DISCOVER_PERSONAL_FEED_LIMITED_TRIAL_ACCEPTED`
+- 关联试用版本：产品提交 `230cfc6`；打包目录 `release-staging/v2-tujimi-20261003T111446Z-230cfc69`
+- 工作区：`D:\Projects\dm-discover-personal-feed-01` / `build/discover-personal-feed-01`
+- **只接受这次隔离试用范围内的 Discover 节目搜索与入口核实。** 不得写成 `DISCOVER_PERSONAL_FEED_ACCEPTED`、全部产品验收通过、或市场 95 分位达标。
+- 未 push、未发布。
+- Owner 要求后续按顺序持续改进，每批与当前基线比较，不再每修一个问题就打包：
+  1. 卡片排版（边缘、列宽、间距、内部对齐；摘要长度与封面比例一致；瀑布流允许高度不同，禁止错位/重叠/大块异常空白）
+  2. 信息来源（扩大国内普通网络可用来源，复用成熟获取能力，避免少数站点或单一类型长期占满默认流）
+  3. 信息质量（相关性、时效、去重、摘要可读性、推荐依据、观看入口；由 AI 判断，不加僵硬筛选规则）
+  4. 运行可靠性（配额、取消、迟写、CASE R3；保留已知缺陷清单）
+
+已知仍开放的缺陷（限定试用接受时一并记下，不是已修好）：
+
+- 托管搜索无剩余额度查询；缓存命中仍计次；安装默认 30 次/小时
+- 节目主结果仍偏少（模型把不少播放页标 `unverified`）
+- 全量套件相对 `6d55579` 多 1 条：`CASE R3` 真实文档 Do（复跑仍失败，原因未定）
+- Discover 子集仍有 4 条陈旧失败 + 基线已有的 Electron「使用反馈（2）」对话项
 
 ## 当前状态 / 最新里程碑（2026-09-11）
 

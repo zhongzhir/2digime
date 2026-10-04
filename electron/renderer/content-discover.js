@@ -239,16 +239,18 @@
   // 瀑布流：列表是自动多列的网格（宽屏多列、窄屏单列），每张卡片按自己的高度占若干行，
   // 追加新卡片时已有卡片的位置不变。高度变化（图片加载、播放器展开、窗口缩放）由 ResizeObserver 重新计算。
   const WATERFALL_ROW_PX = 8;
-  const WATERFALL_GAP_PX = 18;
+  const WATERFALL_GAP_PX = 16;
+  function placeWaterfallCard(el) {
+    if (!el || !el.isConnected) return;
+    el.style.gridRowEnd = 'auto';
+    const height = el.offsetHeight;
+    if (!height) return;
+    el.style.gridRowEnd = 'span ' + Math.max(1, Math.ceil((height + WATERFALL_GAP_PX) / WATERFALL_ROW_PX));
+  }
   const waterfallObserver =
     typeof ResizeObserver === 'function'
       ? new ResizeObserver((entries) => {
-          for (const entry of entries) {
-            const el = entry.target;
-            const height = el.getBoundingClientRect().height;
-            if (!height) continue;
-            el.style.gridRowEnd = 'span ' + Math.max(1, Math.ceil((height + WATERFALL_GAP_PX) / WATERFALL_ROW_PX));
-          }
+          for (const entry of entries) placeWaterfallCard(entry.target);
         })
       : null;
 
@@ -348,15 +350,11 @@
       origin.textContent = card.textOrigin === 'body' ? '已读取正文。' : '来源摘要，还没有读取正文。';
       body.appendChild(origin);
     }
-    if (card.text) {
-      const raw = decodeEntities(card.text).replace(/\s+/g, ' ').trim();
-      if (raw && raw !== String(card.title || '').trim()) {
-        const p = document.createElement('p');
-        p.className = 'content-discover-excerpt';
-        p.textContent = raw.length > 180 ? raw.slice(0, 180) + '…' : raw;
-        body.appendChild(p);
-      }
-    }
+    const excerpt = document.createElement('p');
+    excerpt.className = 'content-discover-excerpt';
+    const raw = decodeEntities(card.text || '').replace(/\s+/g, ' ').trim();
+    excerpt.textContent = raw && raw !== String(card.title || '').trim() ? raw : '';
+    body.appendChild(excerpt);
     // 应用内播放：播放器只在用户点“在这里播放/收听”后才在这张卡片内展开，
     // 不是每张卡片都先摆一个播放器占满首屏。没有可直接播放的地址就只给“去原站”。
     const playHost = document.createElement('div');

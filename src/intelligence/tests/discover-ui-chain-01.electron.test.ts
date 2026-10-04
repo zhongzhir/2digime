@@ -65,6 +65,25 @@ test('发现页：真实渲染、卡片内播放、多列瀑布流，且页面�
     const wide = await layout();
     assert.ok(wide.columns >= 2, `宽屏应为多列，实际 ${wide.columns}`);
     assert.equal(wide.overlaps, 0);
+    const rhythm = (await page.evaluate(`(() => {
+      const cards = Array.from(document.querySelectorAll('#content-discover-list > li'));
+      const excerpts = cards.map((n) => {
+        const el = n.querySelector('.content-discover-excerpt');
+        return el ? Math.round(el.getBoundingClientRect().height) : 0;
+      });
+      const covers = cards.map((n) => {
+        const el = n.querySelector('.content-discover-cover');
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return r.height ? Number((r.width / r.height).toFixed(2)) : null;
+      }).filter((n) => n);
+      return { excerpts, covers };
+    })()`)) as { excerpts: number[]; covers: number[] };
+    const excerptSpread = Math.max(...rhythm.excerpts) - Math.min(...rhythm.excerpts);
+    assert.ok(excerptSpread <= 4, `摘要块高度应一致，实际相差 ${excerptSpread}px`);
+    for (const ratio of rhythm.covers) {
+      assert.ok(Math.abs(ratio - 16 / 9) < 0.08, `封面比例应为 16:9，实际 ${ratio}`);
+    }
     await page.setViewportSize({ width: 560, height: 900 });
     await page.waitForTimeout(500);
     const narrow = await layout();

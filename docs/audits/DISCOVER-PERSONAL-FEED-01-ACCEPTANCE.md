@@ -111,3 +111,15 @@ dist/runtime/tests/discover-personal-feed-01.test.js
 工程上，Owner 空页面的根因已被对准：默认 Discover 不再在「目录非空就不补、空了才搜、失败被吞、空态永远写开启联网发现」上打转。个人 Feed 缓存、联网机械态、失败保留、两层学习已经接到 `content` 命令和一级发现页。
 
 Owner 真人试用机复验通过后，才可将本任务升为 `DISCOVER_PERSONAL_FEED_ACCEPTED`。
+
+---
+
+## 2026-10-04 附录：限定试用接受
+
+**裁定：** `DISCOVER_PERSONAL_FEED_LIMITED_TRIAL_ACCEPTED`  
+**试用版本：** 产品提交 `230cfc6`；打包 `release-staging/v2-tujimi-20261003T111446Z-230cfc69`  
+**范围：** 隔离 `DIGITALME_V2_USER_DATA` / `DIGITALME_V2_HOME` 下的 Discover 节目搜索、入口核实、额度与判断分页。  
+**不是：** 全部产品验收通过；市场 95 分位达标；`DISCOVER_PERSONAL_FEED_ACCEPTED`。  
+**未：** push、发布。
+
+后续改进顺序由 Owner 指定：排版 → 来源 → 质量 → 运行可靠性。已知缺陷见 `digitalme_context.md` 2026-10-04 条，不得在本附录里写成已关闭。
