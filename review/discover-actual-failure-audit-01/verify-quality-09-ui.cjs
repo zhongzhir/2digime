@@ -129,26 +129,38 @@ async function skipWelcome(page) {
 
     const target = opened.snap.cards.find((card) => card.publisherId) || opened.snap.cards[0] || {};
     if (target.publisherId || target.itemId) {
-      await page.evaluate(() => {
-        const more = document.querySelector('#content-discover-list > li details.content-discover-more');
-        if (more) more.open = true;
+      const clicked = await page.evaluate(() => {
+        const li = document.querySelector('#content-discover-list > li');
+        const details = li && li.querySelector('details.content-discover-more');
+        if (details) details.open = true;
+        const btn = Array.from(li ? li.querySelectorAll('button') : []).find((n) =>
+          /不再看这个来源/.test(n.textContent || ''),
+        );
+        if (btn) btn.click();
+        return !!btn;
       });
-      const clicked = await page.locator('#content-discover-list > li >> text=不再看这个来源').first().click({ timeout: 8_000 }).then(() => true).catch(() => false);
-      await page.waitForTimeout(600);
+      const afterBlock = await waitSettled(page, 40_000, (snap) => {
+        if (!clicked) return snap.titles.length > 0;
+        return (
+          snap.titles.length > 0 &&
+          !snap.cards.some((card) => target.itemId && card.itemId === target.itemId)
+        );
+      });
       await page.evaluate(() => document.getElementById('btn-discover-refresh')?.click());
-      const afterBlock = await waitSettled(page, 40_000, (snap) => snap.titles.length > 0);
-      const stillSameItem = afterBlock.snap.cards.some((card) => target.itemId && card.itemId === target.itemId);
-      const stillSameSource = afterBlock.snap.cards.some((card) => target.publisherId && card.publisherId === target.publisherId);
+      const afterRefresh = await waitSettled(page, 40_000, (snap) => snap.titles.length > 0);
+      const stillSameItem = afterRefresh.snap.cards.some((card) => target.itemId && card.itemId === target.itemId);
+      const stillSameSource = afterRefresh.snap.cards.some((card) => target.publisherId && card.publisherId === target.publisherId);
       report.steps.push({
         at: Date.now() - started,
         step: 'block-source-then-refresh',
         clicked,
         blockedTitle: target.title,
         blockedPublisher: target.publisherId,
+        afterBlockGone: !afterBlock.snap.cards.some((card) => target.itemId && card.itemId === target.itemId),
         stillSameItem,
         stillSameSource,
         ok: clicked && !stillSameItem && !stillSameSource,
-        ...afterBlock.snap,
+        ...afterRefresh.snap,
       });
     } else {
       report.steps.push({ at: Date.now() - started, step: 'block-source-then-refresh', skipped: true });
@@ -158,10 +170,14 @@ async function skipWelcome(page) {
     const beforeMore = await cardsOf(page);
     await page.evaluate(() => {
       const panel = document.getElementById('panel-discover');
-      if (panel) panel.scrollTop = panel.scrollHeight;
+      if (panel) {
+        panel.scrollTop = panel.scrollHeight;
+        panel.dispatchEvent(new Event('scroll'));
+      }
       window.scrollTo(0, document.body.scrollHeight);
+      window.dispatchEvent(new Event('scroll'));
     });
-    const afterMore = await waitFirst(page, 18_000, (snap) => {
+    const afterMore = await waitFirst(page, 20_000, (snap) => {
       return snap.titles.length > beforeMore.titles.length || /暂时没有更多新内容/.test(snap.notice || '');
     });
     const appended = afterMore.snap.titles.length > beforeMore.titles.length;

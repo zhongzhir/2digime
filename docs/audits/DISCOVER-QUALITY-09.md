@@ -24,7 +24,7 @@
 |---|---|---|
 | `discover-recommendation-adjust-01` + `discover-content-consumption-02` + `personal-feed` | 61 | 通过 |
 | 源码 harness：家庭自然纪录片 / 未用过的历史人文纪录片 | 2 | 在**未提交源码**上跑过，不是 `fbe30f41` 包 |
-| 打包界面：屏蔽 / 条件标注 / 连续加载 | 1 | 不重复整套主题搜索 |
+| 打包界面：屏蔽 / 条件标注 / 连续加载 | 1 | 隔离 owner-copy，未再搜主题。见 §6 |
 
 ## 1. 家庭共看（源码 harness，非 08 包）
 
@@ -72,4 +72,22 @@ QUALITY-08 界面仍是 12 张，当时没分清是候选耗尽还是分页故�
 
 ## 6. 合并试用包
 
-打包后填写。当前试用在核对完成前仍用 `fbe30f41`。`230cfc6` 限定试用接受不变。不要装进真实 `AppData\Roaming\digitalme-v2`。
+| 项 | 值 |
+|---|---|
+| gitHead | `8d888b09399f988425865ff1ed0ef6dd505f87d9` |
+| 打包目录 | `D:\Projects\dm-discover-personal-feed-01\release-staging\v2-tujimi-20261004T081507Z-8d888b09` |
+| 可执行文件 | `...\win-unpacked\兔机米.exe` |
+| setup | `兔机米-0.2.0-public-alpha-win-x64-setup.exe` |
+| setup sha256 | `ba809866cb1cb22e4793c3c14ddc0075f1e81f775e1cb8280f5be20b3d85e554` |
+| zip sha256 | `e787888a11d124648df0c64f698abe0ee3fd377ad68d53df50fabc760c2a1570` |
+| 包内 build-meta.gitHead | 与提交一致 |
+
+打包界面（`quality-09-ui`，隔离 owner-copy，49.9s，未搜主题）：
+
+| 步骤 | 结果 |
+|---|---|
+| 打开发现 | 6.1s / 12 张。默认流没有用户提出的「不想开会员」，因此没有会员未核实标注。这是对的：没有这次条件就不标。条件文案由专项测试覆盖。 |
+| 屏蔽来源后换一批 | 点了「不再看这个来源」。换一批后该条和该来源都不在。屏蔽对象是来源。 |
+| 连续加载 | 12 → 24，追加成功。不是候选耗尽。 |
+
+当前试用改用本包 `8d888b09`。QUALITY-08 的 `fbe30f41` 不再作为合并候选。`230cfc6` 限定试用接受不变。未 push、未发布。不要装进真实 `AppData\Roaming\digitalme-v2`。保持隔离目录。
