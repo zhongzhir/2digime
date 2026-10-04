@@ -54,7 +54,45 @@ async function save(name,data){await fs.writeFile(path.join(out,name+'.json'),JS
       console.log(label+': '+String(result.view.turns.at(-1)?.text).slice(0,1300));
       return result.view;
     }
-    if(phase==='document-diagnose'){
+    if(phase==='cancel-before' || phase==='cancel-after'){
+      const target=path.join(out,'artifacts',phase+'.md');
+      await fs.rm(target,{force:true});
+      await h.app.evaluate(({app},args)=>{
+        const f=process.getBuiltinModule('fs').promises;global.__relGate={reached:false};
+        const method=args.phase==='cancel-before'?'stat':'writeFile',original=f[method];
+        f[method]=async function(p,...rest){
+          let value,error;try{value=await original.call(f,p,...rest)}catch(e){error=e;}
+          if(String(p)===args.target&&!global.__relGate.reached){
+            global.__relGate.reached=true;await new Promise(resolve=>{global.__relGate.release=resolve});
+          }
+          if(error)throw error;return value;
+        };
+      },{phase,target});
+      await h.page.locator('#nav-chat').click();
+      await h.page.locator('#chat-input').fill(`明确委托：写一个约50字的中性测试说明，保存到已授权目录的 ${phase}.md。请实际写文件，不需要联网。`);
+      await h.page.locator('#btn-chat-send').click();
+      let reached=false;
+      for(let i=0;i<120;i++){reached=await h.app.evaluate(()=>global.__relGate.reached);if(reached)break;await new Promise(r=>setTimeout(r,500));}
+      if(!reached)throw Error('Real model did not reach requested file boundary');
+      await h.page.locator('#btn-chat-cancel').click();
+      await h.app.evaluate(()=>global.__relGate.release());
+      await h.page.locator('#btn-chat-send:not([disabled])').waitFor({state:'visible',timeout:120000});
+      const view=(await command('talk',{})).view;
+      const exists=await fs.stat(target).then(()=>true,()=>false);
+      const threadFiles=await fs.readdir(path.join(pkg,'intelligence/threads'));
+      let matching=[];for(const f of threadFiles.filter(f=>f.endsWith('.json'))){const t=JSON.parse(await fs.readFile(path.join(pkg,'intelligence/threads',f),'utf8'));matching.push(...t.executions.filter(e=>e.outputPath===target));}
+      if(exists !== (phase==='cancel-after'))throw Error('Unexpected file mutation across cancellation boundary');
+      await save('rel-'+phase,{kind:'real model + formal Electron Talk; controlled filesystem boundary; real cancellation click',reached,fileExists:exists,executions:matching,view});
+      console.log(JSON.stringify({phase,fileExists:exists,lastAssistant:view.turns.at(-1)?.text}));
+    } else if(phase==='office-regression'){
+      for(const format of ['docx','pptx']){
+        const name='talk-office.'+format;
+        await send('rel-office-'+format,`明确委托：制作一个中性测试说明${format==='docx'?'文档':'演示文稿'}，保存到已授权目录的 ${name}。只需一个标题和两个简短要点，请用 export_file 实际导出，不需要联网。`);
+        const bytes=await fs.readFile(path.join(out,'artifacts',name));
+        if(bytes.subarray(0,2).toString()!=='PK')throw Error('Office export is not a ZIP container');
+        await save('rel-office-'+format+'-file',{name,bytes:bytes.length,zipSignature:true});
+      }
+    } else if(phase==='document-diagnose'){
       await fs.mkdir(path.join(out,'artifacts'),{recursive:true});
       const {saveFilesystemGrant}=require('../dist/authorization/filesystem-grant');
       const overview=await command('subject.getOverview',{});

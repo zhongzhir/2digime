@@ -2,11 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
-import { buildDocxFromMarkdown, buildPptxFromMarkdown, exportDocx, exportMarkdown, exportPptx, splitMarkdownIntoSlides } from '../export';
+import { buildDocxFromMarkdown, buildPptxFromMarkdown, exportDocx, exportMarkdown, exportPptx, splitMarkdownIntoSlides, collectPptxVisibleTexts } from '../export';
 import { readZipEntries } from '../zip';
 import { makeTempDir } from './helpers';
 
 const SAMPLE_MD = '# 项目周报\n\n本周完成基础设施。\n\n- 事项一\n- 事项二 & 验证\n\n**加粗**内容';
+
+test('short first heading retains both requested points in actual PPTX text',()=>{
+ const texts=collectPptxVisibleTexts(buildPptxFromMarkdown('# 中性测试说明\n\n- 用途：验证导出\n- 说明：仅供测试'));
+ assert.ok(texts.some(t=>t.includes('用途：验证导出')));
+ assert.ok(texts.some(t=>t.includes('说明：仅供测试')));
+});
 
 test('DOCX 结构可解析且包含正文', () => {
   const docx = buildDocxFromMarkdown(SAMPLE_MD);

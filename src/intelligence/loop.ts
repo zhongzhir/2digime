@@ -766,9 +766,22 @@ export async function runTalkTurn(input: {
     } catch {
       existed = false;
     }
+    throwIfAborted(input.signal);
     try {
       await fs.mkdir(path.dirname(resolved.abs), { recursive: true });
+      throwIfAborted(input.signal);
+      // Submission is the cancellation boundary. An in-flight write cannot be
+      // rolled back; finish recording its actual effect even if cancelled.
       await fs.writeFile(resolved.abs, parsed.content, 'utf8');
+      // Record the completed mutation before verification can fail or observe
+      // cancellation. Verification failure cannot erase an actual file effect.
+      seq += 1;
+      mutations.push({ target: resolved.abs, seq });
+      const completedWrite: TalkExecution = { id:execId, at:input.now, turnId:userTurn.id, capabilityId:'write_file',
+        instruction:parsed.relativePath, ok:true, summary:`已写入 ${resolved.abs}，等待回读。`,
+        producedOutputs:[resolved.abs], outputPath:resolved.abs,
+        observedEffect:{kind:existed?'content_modified':'file_created',target:resolved.abs,mutated:true} };
+      recordExec(completedWrite);
       const readback = await fs.readFile(resolved.abs, 'utf8');
       const st = await fs.stat(resolved.abs);
       if (!st.isFile() || st.size <= 0) return fail('写入后文件不存在或为空。');
@@ -777,21 +790,7 @@ export async function runTalkTurn(input: {
       lastOk = true;
       lastEvidenceOnly = false;
       lastPath = resolved.abs;
-      seq += 1;
-      mutations.push({ target: resolved.abs, seq });
-      const kind = existed ? 'content_modified' : 'file_created';
-      recordExec({
-        id: execId,
-        at: input.now,
-        turnId: userTurn.id,
-        capabilityId: 'write_file',
-        instruction: parsed.relativePath,
-        ok: true,
-        summary: `已写入 ${resolved.abs}。${readbackNote}`,
-        producedOutputs: [resolved.abs],
-        outputPath: resolved.abs,
-        observedEffect: { kind, target: resolved.abs, mutated: true },
-      });
+      completedWrite.summary = `已写入 ${resolved.abs}。${readbackNote}`;
       if (!readAuth.files.includes(resolved.abs)) readAuth.files.push(resolved.abs);
       ensureReadTools();
       return JSON.stringify({
@@ -807,6 +806,7 @@ export async function runTalkTurn(input: {
         summary: `已写入 ${resolved.abs}。${readbackNote} 以这次回读为文件事实，不要另造验收句子否定它。`,
       });
     } catch (err) {
+      throwIfAborted(input.signal);
       return fail(String(err instanceof Error ? err.message : err));
     }
   };
@@ -840,11 +840,15 @@ export async function runTalkTurn(input: {
     };
     const dest = resolveAuthorizedWritePath(auth, parsed.relativePath, parsed.root);
     if (!dest.ok) return fail(dest.reason);
+    const expectedPath = dest.abs.toLowerCase().endsWith(`.${parsed.format}`) ? dest.abs : `${dest.abs}.${parsed.format}`;
+    const existed = await fs.stat(expectedPath).then(st => st.isFile(), () => false);
+    throwIfAborted(input.signal);
     const written = await writeExportedOffice({
       writeRoot: dest.root,
       relativePath: parsed.relativePath,
       format: parsed.format,
       content: parsed.content,
+      ...(input.signal ? {signal: input.signal} : {}),
     });
     if (!written.ok) return fail(written.reason);
     lastOk = true;
@@ -862,7 +866,7 @@ export async function runTalkTurn(input: {
       summary: `已导出 ${written.abs}`,
       producedOutputs: [written.abs],
       outputPath: written.abs,
-      observedEffect: { kind: 'file_created', target: written.abs, mutated: true },
+      observedEffect: { kind: existed ? 'content_modified' : 'file_created', target: written.abs, mutated: true },
     });
     if (!readAuth.files.includes(written.abs)) readAuth.files.push(written.abs);
     ensureReadTools();

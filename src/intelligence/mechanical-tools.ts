@@ -559,6 +559,7 @@ export async function writeExportedOffice(input: {
   relativePath: string;
   format: string;
   content: string;
+  signal?: AbortSignal;
 }): Promise<{ ok: true; abs: string } | { ok: false; reason: string }> {
   if (input.format !== 'docx' && input.format !== 'pptx') {
     return { ok: false, reason: 'format 只支持 docx 或 pptx。' };
@@ -571,12 +572,13 @@ export async function writeExportedOffice(input: {
   try {
     const exported =
       input.format === 'docx'
-        ? await exportDocx(input.content, resolved.abs)
-        : await exportPptx(input.content, resolved.abs);
+        ? await exportDocx(input.content, resolved.abs, input.signal)
+        : await exportPptx(input.content, resolved.abs, input.signal);
     const st = await fs.stat(exported.path);
     if (!st.isFile() || st.size <= 0) return { ok: false, reason: '导出后文件不存在或为空。' };
     return { ok: true, abs: exported.path };
   } catch (err) {
+    input.signal?.throwIfAborted();
     return { ok: false, reason: String(err instanceof Error ? err.message : err) };
   }
 }

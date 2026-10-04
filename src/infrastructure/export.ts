@@ -30,17 +30,23 @@ export async function exportMarkdown(markdown: string, targetPath: string): Prom
   return { path: finalPath };
 }
 
-export async function exportDocx(markdown: string, targetPath: string): Promise<{ path: string }> {
+export async function exportDocx(markdown: string, targetPath: string, signal?: AbortSignal): Promise<{ path: string }> {
   const finalPath = ensureExtension(targetPath, '.docx');
+  signal?.throwIfAborted();
   await fs.mkdir(path.dirname(finalPath), { recursive: true });
-  await fs.writeFile(finalPath, buildDocxFromMarkdown(markdown));
+  const bytes = buildDocxFromMarkdown(markdown);
+  signal?.throwIfAborted();
+  await fs.writeFile(finalPath, bytes);
   return { path: finalPath };
 }
 
-export async function exportPptx(markdown: string, targetPath: string): Promise<{ path: string }> {
+export async function exportPptx(markdown: string, targetPath: string, signal?: AbortSignal): Promise<{ path: string }> {
   const finalPath = ensureExtension(targetPath, '.pptx');
+  signal?.throwIfAborted();
   await fs.mkdir(path.dirname(finalPath), { recursive: true });
-  await fs.writeFile(finalPath, buildPptxFromMarkdown(markdown));
+  const bytes = buildPptxFromMarkdown(markdown);
+  signal?.throwIfAborted();
+  await fs.writeFile(finalPath, bytes);
   return { path: finalPath };
 }
 
@@ -287,7 +293,9 @@ export function splitMarkdownIntoSlides(markdown: string): PptxSlideDraft[] {
         lines: rewritten.subtitle ? block.lines : block.lines.slice(1),
       });
       const overflow = (rewritten.subtitle ? block.lines : block.lines.slice(1)).filter((l) => l.trim());
-      if (overflow.length > 4) {
+      // The cover renders only its subtitle. Preserve every remaining line
+      // on content slides, including short one- or two-point documents.
+      if (overflow.length > 0) {
         chunkLines(overflow, PPTX_BODY_LINES).forEach((chunk, i) => {
           drafts.push({
             kind: 'bullets',
