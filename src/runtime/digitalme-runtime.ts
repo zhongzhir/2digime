@@ -577,7 +577,15 @@ export class DigitalMeRuntime {
         await clearRecommendationAdjustment(pkg.rootDir);
         await this.reverseSteerPreference(pkg.rootDir);
         this.lastIntentView = null;
-        return { view: await this.withAdjustment(pkg.rootDir, await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reset')) };
+        const cached = await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reuse');
+        this.pendingPersonal = this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reset');
+        return {
+          view: await this.withAdjustment(pkg.rootDir, {
+            ...cached,
+            replenishing: true,
+            notice: cached.notice || '已撤销这次调整，正在恢复默认推荐。',
+          }),
+        };
       }
       if (action === 'adjustKeep') {
         const current = await this.currentAdjustment(pkg.rootDir);
@@ -632,8 +640,9 @@ export class DigitalMeRuntime {
         await this.reverseSteerPreference(pkg.rootDir);
       }
       this.lastIntentView = null;
-      const view = await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reset');
-      return { view: await this.withAdjustment(pkg.rootDir, view) };
+      const first = await this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'reset', 'seated');
+      this.pendingPersonal = this.runContentDiscover(pkg.rootDir, pkg.id, input.relayUrl, 'replenish', 'rank');
+      return { view: await this.withAdjustment(pkg.rootDir, { ...first, replenishing: true }) };
     }
 
     if (action === 'resetRecent') {
@@ -785,8 +794,8 @@ export class DigitalMeRuntime {
     return { generationId, abort };
   }
 
-  private stampSearchGeneration(view: DiscoverView): DiscoverView {
-    const gen = this.currentSearchGenerationId || view.searchGenerationId;
+  private stampSearchGeneration(view: DiscoverView, generationId?: string): DiscoverView {
+    const gen = generationId || this.currentSearchGenerationId || view.searchGenerationId;
     return {
       ...view,
       ...(gen ? { searchGenerationId: gen } : {}),
@@ -1008,14 +1017,15 @@ export class DigitalMeRuntime {
     subjectId: string,
     relayUrl?: string,
     mode: 'open' | 'refresh' | 'reuse' | 'replenish' | 'more' | 'reset' = 'open',
-    supplyPhase?: 'catalog' | 'full',
+    supplyPhase?: 'catalog' | 'full' | 'seated' | 'rank',
   ): Promise<DiscoverView> {
     const preferences = await this.contentPreferenceRows(packageRoot);
     const self = await readDigitalSelf(packageRoot, subjectId, nowIso());
     const chatCompleteFn = this.resolveContentChat();
     const model = this.resolveContentModel();
     const networking = this.snapshotNetworkDiscovery();
-    const searchWeb = this.wrapContentSearch(this.resolveContentSearch());
+    const generationAtStart = this.currentSearchGenerationId;
+    const searchWeb = this.wrapContentSearch(this.resolveContentSearch(), this.searchAbort?.signal);
     const openMedia = this.resolveOpenMediaFetch();
     const store = new FileNetworkItemStore(path.join(packageRoot, 'content'));
     const loadItems = () => this.loadDiscoverItems(packageRoot, relayUrl);
@@ -1095,11 +1105,14 @@ export class DigitalMeRuntime {
       this.lastNetworkCode = 'AVAILABLE';
     }
     const shownAdjustment = this.adjustmentView(adjustment, result.view.feedMode === 'intent' ? 'intent' : 'personal');
-    return this.stampSearchGeneration({
-      ...result.view,
-      feedMode: result.view.feedMode === 'intent' ? 'intent' : 'personal',
-      ...(shownAdjustment ? { adjustment: shownAdjustment } : {}),
-    });
+    return this.stampSearchGeneration(
+      {
+        ...result.view,
+        feedMode: result.view.feedMode === 'intent' ? 'intent' : 'personal',
+        ...(shownAdjustment ? { adjustment: shownAdjustment } : {}),
+      },
+      generationAtStart,
+    );
   }
 
   private async runContentSeek(

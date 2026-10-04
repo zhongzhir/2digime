@@ -13,7 +13,7 @@ Owner 已对上述试用版做**限定试用接受**。不是全部产品验收�
 1. 卡片排版 — 已做，未打包
 2. 信息来源 + 行为闭环 — 见 `docs/audits/DISCOVER-SOURCE-FEEDBACK-02.md`
 3. 大众供给 + 调整推荐 — 见 `docs/audits/DISCOVER-ADJUST-03.md`；交付修复见 `docs/audits/DISCOVER-DELIVERY-04.md`
-4. 信息质量
+4. 信息质量 — 核实诚实 / 验证页 / 撤销 / 课程耗时见 `docs/audits/DISCOVER-QUALITY-05.md`
 5. 运行可靠性（配额、取消、迟写、CASE R3；保留已知缺陷）
 
 个人分布式内容选择是为了让内容服务于人，不以延长使用时间或增加使用频率为优化目标。

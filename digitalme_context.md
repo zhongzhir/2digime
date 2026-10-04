@@ -2,7 +2,7 @@
 
 版本：v0.4
 状态：historical strategic context（不承担 current plan）
-最后更新：2026-10-04（Discover 交付修复已做工程提交，见 `docs/audits/DISCOVER-DELIVERY-04.md`。产品试用基线仍是 `230cfc6`。仍是限定试用接受，不是质量通过，不是 95 分位达标。）
+最后更新：2026-10-04（Discover 质量/核实/撤销工程提交，见 `docs/audits/DISCOVER-QUALITY-05.md`。产品试用基线仍是 `230cfc6`。仍是限定试用接受，不是质量通过，不是 95 分位达标。）
 
 本文件不恢复为第二权威源。现行权威：`AGENTS.md` → `docs/refoundation/00` / `01` / `02` / `03`。
 
@@ -17,7 +17,7 @@
   1. 卡片排版 — 已做（`65ae831`），未打包
   2. 信息来源 + 行为闭环 — 已做，见 `docs/audits/DISCOVER-SOURCE-FEEDBACK-02.md`
   3. 大众供给 + 调整推荐 — 工程对照 + 隔离复验，见 `docs/audits/DISCOVER-ADJUST-03.md`。课程/复杂查询交付修复见 `DISCOVER-DELIVERY-04.md`。来源接入见 `DISCOVER-SOURCE-FEEDBACK-02.md`。
-  4. 信息质量（相关性、时效、去重、摘要可读性、推荐依据、观看入口；由 AI 判断，不加僵硬筛选规则）
+  4. 信息质量 — 本批先做核实诚实、验证页、撤销与课程耗时，见 `docs/audits/DISCOVER-QUALITY-05.md`。相关性/时效/去重等仍待后续。
   5. 运行可靠性（配额、取消、迟写、CASE R3；保留已知缺陷清单）
 
 已知仍开放的缺陷（限定试用接受时一并记下，不是已修好）：

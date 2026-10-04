@@ -18,7 +18,7 @@ import {
   type DiscoverPreference,
   type DiscoverView,
 } from './content-discover';
-import type { ExternalSeekHit } from './content-seek';
+import { isAccessCard, markAccess, pageAccessState, type ExternalSeekHit } from './content-seek';
 import { isDomainLikeTitle, isGenericHubUrl } from './discover-intent';
 import { allowsDefaultSupply } from './domestic-source-boundary';
 import type { ContentPreferenceDirective } from './content-preferences';
@@ -209,6 +209,9 @@ export async function proposeDiscoveryIntents(input: {
 function viewOf(input: {
   cards: DiscoverCard[];
   relatedCards?: DiscoverCard[];
+  unjudgedCards?: DiscoverCard[];
+  unjudgedTitle?: string;
+  accessCards?: DiscoverCard[];
   preferences: DiscoverPreference[];
   notice: string;
   reasonCode: FeedReasonCode;
@@ -224,6 +227,10 @@ function viewOf(input: {
     lead: input.lead || LEAD,
     cards: input.cards,
     relatedCards: input.relatedCards || [],
+    ...(input.unjudgedCards?.length
+      ? { unjudgedCards: input.unjudgedCards, unjudgedTitle: input.unjudgedTitle || '这些还没完成判断，不是已确认的推荐' }
+      : {}),
+    ...(input.accessCards?.length ? { accessCards: input.accessCards } : {}),
     preferences: input.preferences,
     notice: input.notice,
     reasonCode: input.reasonCode,
@@ -276,16 +283,74 @@ function candidatesForDefault(items: NetworkItem[], nowIso?: string): NetworkIte
   return byTrustedRecency(steady.length ? steady : inBound, nowIso);
 }
 
+export function isAccessNetworkItem(item: NetworkItem): boolean {
+  return pageAccessState({ title: item.content.title, text: item.content.text }) !== 'ok';
+}
+
 function isConsumableItem(item: NetworkItem, nowIso?: string): boolean {
   if (nowIso && isNetworkItemExpired(item, nowIso)) return false;
   if (!String(item.content.title || '').trim()) return false;
   if (isDomainLikeTitle(item.content.title, item.content.url)) return false;
   if (item.content.url && isGenericHubUrl(item.content.url)) return false;
+  if (isAccessNetworkItem(item)) return false;
   const access = String(item.content.access || '');
   if (access && access !== 'open' && access !== 'public' && access !== 'available') {
     if (/restricted|paywall|login|unavailable/i.test(access)) return false;
   }
   return true;
+}
+
+function withCandidateHonesty(card: DiscoverCard, confirmed: boolean): DiscoverCard {
+  const marked = markAccess(card);
+  if (isAccessCard(marked)) return marked;
+  if (confirmed) return marked;
+  return {
+    ...marked,
+    textOrigin: marked.textOrigin || 'snippet',
+    conditionStatus: marked.conditionStatus || 'unconfirmed',
+    conditionNote: marked.conditionNote || '价格、课时、平台等条件未核实',
+    objectKind: marked.objectKind || marked.contentType || 'article',
+    entrancePurpose: marked.entrancePurpose || '去原站打开',
+  };
+}
+
+function splitAccessCards(cards: DiscoverCard[]): { visible: DiscoverCard[]; access: DiscoverCard[] } {
+  const visible: DiscoverCard[] = [];
+  const access: DiscoverCard[] = [];
+  for (const card of cards) {
+    if (isAccessCard(card)) access.push(card);
+    else visible.push(card);
+  }
+  return { visible, access };
+}
+
+function firstWaveCards(items: NetworkItem[], prefs: ContentPreferenceDirective[], nowIso?: string): {
+  cards: DiscoverCard[];
+  accessCards: DiscoverCard[];
+} {
+  const cards: DiscoverCard[] = [];
+  const accessCards: DiscoverCard[] = [];
+  for (const item of items) {
+    if (blocked(item, prefs)) continue;
+    const accessItem = isAccessNetworkItem(item);
+    if (!accessItem && !isConsumableItem(item, nowIso)) continue;
+    const card = withCandidateHonesty(
+      cardFromNetworkItem(
+        item,
+        '来源给出了标题和摘要。价格、课时、平台等条件未核实。还没有标成已确认。',
+        item.provenance?.via === 'search' ? 'web' : 'directory',
+      ),
+      false,
+    );
+    if (isAccessCard(card) || accessItem) {
+      accessCards.push(isAccessCard(card) ? card : markAccess({ ...card, title: item.content.title, text: item.content.text, reason: card.reason }));
+      continue;
+    }
+    if (!isConcreteContentCard(card)) continue;
+    cards.push(card);
+    if (cards.length >= MAX_FEED) break;
+  }
+  return { cards, accessCards };
 }
 
 function applyExplicitFeedback(cards: DiscoverCard[], prefs: ContentPreferenceDirective[]): DiscoverCard[] {
@@ -523,6 +588,7 @@ export function seatThisTurnItems(
   const seen = new Set<string>();
   for (const item of fresh) {
     if (seen.has(item.itemId)) continue;
+    if (isAccessNetworkItem(item)) continue;
     seen.add(item.itemId);
     extras.push(item);
     if (extras.length >= maxFresh) break;
@@ -595,8 +661,8 @@ export async function ensurePersonalFeed(input: {
   reloadItems?: () => Promise<NetworkItem[]>;
   getItem?: (itemId: string) => Promise<NetworkItem | undefined>;
   mode: 'open' | 'refresh' | 'reuse' | 'replenish' | 'more' | 'reset';
-  /** catalog：只并行取公开目录，不等待查询生成和排序。 */
-  supplyPhase?: 'catalog' | 'full';
+  /** catalog：只并行取公开目录。seated：检索后先交付有依据的候选。rank：只排序，不再检索。 */
+  supplyPhase?: 'catalog' | 'full' | 'seated' | 'rank';
   now?: string;
   adjustment?: DiscoverView['adjustment'];
 }): Promise<{ view: DiscoverView; reasonCode: FeedReasonCode }> {
@@ -675,6 +741,10 @@ export async function ensurePersonalFeed(input: {
     const traced = viewOf({
       cards,
       relatedCards: view.relatedCards || [],
+      ...(view.unjudgedCards?.length
+        ? { unjudgedCards: view.unjudgedCards, ...(view.unjudgedTitle ? { unjudgedTitle: view.unjudgedTitle } : {}) }
+        : {}),
+      ...(view.accessCards?.length ? { accessCards: view.accessCards } : {}),
       preferences: view.preferences,
       notice: sameAsShown && !String(view.notice || '').trim() ? sameBatchNotice : view.notice,
       reasonCode,
@@ -818,18 +888,27 @@ export async function ensurePersonalFeed(input: {
   const unseen = items.filter((item) => !shown.has(item.itemId) && !opened.has(item.itemId));
   const diverseReady = presentableFeedCandidates(unseen, MIN_FEED, 2).length;
   const needReplenish =
-    input.mode === 'refresh' || input.mode === 'reset'
-      ? true
-      : input.mode === 'more'
-        ? diverseReady < MIN_FEED
-        : input.mode === 'replenish'
-          ? diverseReady < MIN_FEED || !cacheFresh(cache.personal, nowMs)
-          : diverseReady < MIN_FEED;
+    input.supplyPhase === 'rank'
+      ? false
+      : input.mode === 'refresh' || input.mode === 'reset'
+        ? true
+        : input.mode === 'more'
+          ? diverseReady < MIN_FEED
+          : input.mode === 'replenish'
+            ? diverseReady < MIN_FEED || !cacheFresh(cache.personal, nowMs)
+            : diverseReady < MIN_FEED;
   let replenished = false;
   let searchAttempted = false;
+  const steered = !!input.adjustment;
   const freshSearchItems: NetworkItem[] = [];
+  const freshAccessItems: NetworkItem[] = [];
   const rememberFresh = (item: NetworkItem | undefined) => {
-    if (!item || !isConsumableItem(item, now)) return;
+    if (!item) return;
+    if (isAccessNetworkItem(item)) {
+      if (!freshAccessItems.some((row) => row.itemId === item.itemId)) freshAccessItems.push(item);
+      return;
+    }
+    if (!isConsumableItem(item, now)) return;
     if (freshSearchItems.some((row) => row.itemId === item.itemId)) return;
     freshSearchItems.push(item);
   };
@@ -907,7 +986,7 @@ export async function ensurePersonalFeed(input: {
               : {}),
           })
         : Promise.resolve([]);
-    if (input.fetchOpenMedia && input.ingestHit) {
+    if (!steered && input.fetchOpenMedia && input.ingestHit) {
       await Promise.all(
         catalogFeedUrls(['article', 'video', 'audio', 'image']).map(async (feedUrl) => {
           try {
@@ -928,7 +1007,7 @@ export async function ensurePersonalFeed(input: {
       supplement = 'no_model';
       mark('INTENT_QUERIES', 0);
     }
-    if (input.fetchOpenMedia) {
+    if (input.fetchOpenMedia && !steered) {
       if (ranked && intents.length) {
         const topic = queries[0] || '';
         for (const row of intents.slice(0, 3)) {
@@ -978,30 +1057,37 @@ export async function ensurePersonalFeed(input: {
       input.mode === 'reset' ||
       !!input.adjustment;
     if (ranked && input.searchWeb && shouldSearch) {
-      for (const query of queries.slice(0, 2)) {
-        searchAttempted = true;
-        try {
-          const hits = (await input.searchWeb(query)).filter((hit) =>
-            allowsDefaultSupply({ url: hit.url }),
-          );
-          searchRaw += hits.length;
-          if (hits.length) replenished = true;
-          if (input.ingestHit) {
-            await Promise.all(
-              hits.slice(0, 6).map(async (hit) => {
-                try {
-                  const ingested = await input.ingestHit!(hit);
-                  for (const item of ingested || []) rememberFresh(item);
-                } catch {
-                  /* 单条摄入失败不阻断补量 */
-                }
-              }),
-            );
+      const planned = queries.slice(0, 2);
+      searchAttempted = planned.length > 0;
+      const searched = await Promise.all(
+        planned.map(async (query) => {
+          try {
+            const hits = (await input.searchWeb!(query)).filter((hit) => allowsDefaultSupply({ url: hit.url }));
+            return { hits, error: null as unknown };
+          } catch (err) {
+            return { hits: [] as ExternalSeekHit[], error: err };
           }
-        } catch (err) {
-          networking = classifySearchFailure(err);
+        }),
+      );
+      for (const row of searched) {
+        if (row.error) {
+          networking = classifySearchFailure(row.error);
           supplement = 'failed';
           break;
+        }
+        searchRaw += row.hits.length;
+        if (row.hits.length) replenished = true;
+        if (input.ingestHit) {
+          await Promise.all(
+            row.hits.slice(0, 6).map(async (hit) => {
+              try {
+                const ingested = await input.ingestHit!(hit);
+                for (const item of ingested || []) rememberFresh(item);
+              } catch {
+                /* 单条摄入失败不阻断补量 */
+              }
+            }),
+          );
         }
       }
       if (searchAttempted && supplement !== 'failed') {
@@ -1026,13 +1112,61 @@ export async function ensurePersonalFeed(input: {
   const freshIds = new Set(freshSearchItems.map((item) => item.itemId));
   const freshInPool = rankedPool.filter((item) => freshIds.has(item.itemId));
   const freshMissing = freshSearchItems.filter((item) => !rankedPool.some((row) => row.itemId === item.itemId));
-  const candidates = seatThisTurnItems(
-    presentableFeedCandidates(rankedPool, 24, 2),
+  let candidates = seatThisTurnItems(
+    presentableFeedCandidates(rankedPool.filter((item) => !isAccessNetworkItem(item)), 24, 2),
     [...freshInPool, ...freshMissing],
     24,
     8,
   );
+  if (input.supplyPhase === 'rank') {
+    const ids = cache.rankedIds?.length ? cache.rankedIds : cache.lastView?.itemIds || [];
+    const byId = new Map(items.map((item) => [item.itemId, item]));
+    const seated: NetworkItem[] = [];
+    for (const id of ids) {
+      let item = byId.get(id);
+      if (!item && input.getItem) item = await input.getItem(id);
+      if (!item || blocked(item, prefs) || isAccessNetworkItem(item)) continue;
+      seated.push(item);
+    }
+    if (seated.length) candidates = seated.slice(0, 24);
+  }
   mark('CANDIDATES', candidates.length);
+  const accessFromFresh = firstWaveCards(freshAccessItems, prefs, now).accessCards;
+
+  if (input.supplyPhase === 'seated' && (candidates.length || accessFromFresh.length)) {
+    const first = firstWaveCards(candidates, prefs, now);
+    const accessCards = [...first.accessCards, ...accessFromFresh].slice(0, 8);
+    const page = first.cards.slice(0, MAX_FEED);
+    if (page.length) {
+      const snapshot: FeedSnapshot = {
+        itemIds: page.map((card) => card.itemId),
+        generatedAt: now,
+        mode: 'personal',
+      };
+      await writeCache(input.packageRoot, {
+        version: 1,
+        personal: snapshot,
+        lastView: snapshot,
+        rankedIds: page.map((card) => card.itemId),
+      });
+    }
+    mark('FIRST_CARD_VISIBLE', page.length);
+    return finish(
+      viewOf({
+        cards: page,
+        accessCards,
+        preferences: input.preferences,
+        notice: page.length
+          ? '先按来源已经给出的标题和摘要放在这里。价格、课时、平台等条件未核实，还没有标成已确认。'
+          : '',
+        reasonCode: page.length ? 'REPLENISHED' : 'DIRECTORY_EMPTY',
+        feedMode: 'personal',
+        networking,
+        replenishing: true,
+      }),
+      page.length ? 'REPLENISHED' : 'DIRECTORY_EMPTY',
+    );
+  }
 
   if (!candidates.length) {
     if (searchAttempted && !replenished && networking === 'AVAILABLE') {
@@ -1206,12 +1340,15 @@ export async function ensurePersonalFeed(input: {
   const ordered = selected.decisions
     .map((row) => {
       const item = byId.get(row.itemId);
-      if (!item || blocked(item, prefs)) return null;
-      const card = cardFromNetworkItem(item, row.reason, 'directory');
-      return isConcreteContentCard(card) ? card : null;
+      if (!item || blocked(item, prefs) || isAccessNetworkItem(item)) return null;
+      const thisTurn = freshIds.has(item.itemId) || !!input.adjustment;
+      const card = withCandidateHonesty(cardFromNetworkItem(item, row.reason, 'directory'), !thisTurn);
+      return isConcreteContentCard(card) && !isAccessCard(card) ? card : null;
     })
     .filter((card): card is DiscoverCard => !!card);
-  const cards = ordered.slice(0, MAX_FEED);
+  const { visible: rankedVisible, access: rankedAccess } = splitAccessCards(ordered);
+  const cards = rankedVisible.slice(0, MAX_FEED);
+  const accessCards = [...rankedAccess, ...accessFromFresh].slice(0, 8);
   cache.rankedIds = ordered.map((card) => card.itemId);
 
   if (!cards.length) {
@@ -1280,6 +1417,7 @@ export async function ensurePersonalFeed(input: {
   return finish(
     viewOf({
       cards,
+      accessCards,
       preferences: input.preferences,
       notice: '',
       reasonCode,

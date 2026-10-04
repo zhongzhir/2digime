@@ -435,7 +435,7 @@ test('PROGRAMS: listing is basis, named works verified by search; unread names a
   );
 });
 
-test('CONDITIONS: a work whose stated conditions the model cannot confirm stays out of main results', async () => {
+test('CONDITIONS: a work whose stated conditions the model cannot confirm stays visible and is labeled 未核实', async () => {
   const chat: ChatCompleteFn = async ({ messages }) => {
     const system = String(messages[0]?.content || '');
     const user = JSON.parse(String(messages[messages.length - 1]?.content || '{}')) as {
@@ -478,10 +478,11 @@ test('CONDITIONS: a work whose stated conditions the model cannot confirm stays 
     ],
   });
   assert.ok(sought.cards.some((card) => card.url === 'https://tv.example.org/show/scifi'));
-  assert.equal(sought.cards.some((card) => card.url === 'https://films.example.org/silent/moon'), false);
-  const maybe = sought.relatedCards.find((card) => card.url === 'https://films.example.org/silent/moon');
-  assert.ok(maybe, 'unconfirmed work is still shown as related');
-  assert.match(maybe!.reason, /还没确认/);
+  const maybe = sought.cards.find((card) => card.url === 'https://films.example.org/silent/moon');
+  assert.ok(maybe, 'unconfirmed work stays as a candidate');
+  assert.notEqual(maybe!.objectFidelity, 'PRIMARY_CONTENT');
+  assert.equal(maybe!.conditionStatus, 'unconfirmed');
+  assert.match(String(maybe!.conditionNote || maybe!.reason), /未核实|还没确认/);
 });
 
 test('JUDGE PAGES: duplicates merge first, later pages are judged, candidates not sent stay visible as not judged', async () => {

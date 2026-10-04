@@ -7,7 +7,7 @@ import * as path from 'node:path';
 import type { DigitalSelf } from '../../subject-core/digital-self/types';
 import { writeDigitalSelf } from '../../subject-core/digital-self/store';
 import { digitalSelfBytes } from '../content-discover';
-import { ensurePersonalFeed, presentableFeedCandidates, seatThisTurnItems } from '../personal-feed';
+import { ensurePersonalFeed, isAccessNetworkItem, presentableFeedCandidates, seatThisTurnItems } from '../personal-feed';
 import { OPEN_SOURCE_CATALOG } from '../open-source-catalog';
 import { searchOpenWorks } from '../content-source-capabilities';
 import { seekContent } from '../content-seek';
@@ -25,7 +25,7 @@ import {
   loadRecommendationAdjustment,
   saveRecommendationAdjustment,
 } from '../recommendation-adjustment';
-import { validateNetworkItem } from '../network-item';
+import { validateNetworkItem, type NetworkItem } from '../network-item';
 
 const NOW = '2026-10-04T02:00:00.000Z';
 
@@ -652,4 +652,315 @@ test('explicit seek reuses work catalog for a new game request and does not pad 
   assert.equal(calendarCalled, false);
   assert.equal(result.cards.some((card) => card.title === '战场女武神'), true);
   assert.equal(result.cards.some((card) => /十大|盘点/.test(card.title || '')), false);
+});
+
+test('challenge pages are access items and never enter the ranking window', () => {
+  const challenge = validateNetworkItem({
+    schemaVersion: 1,
+    itemId: 'ni_wappass',
+    publisherSubjectId: 'pub_baidu',
+    publisherDisplayName: '百度',
+    kind: 'content',
+    createdAt: NOW,
+    visibility: 'public',
+    content: {
+      title: '百度安全验证',
+      text: '请完成安全验证',
+      url: 'https://wappass.baidu.com/static/captcha/tuxing.html',
+      contentType: 'article',
+    },
+    provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'search' },
+  });
+  if (!challenge.ok) throw new Error(challenge.reason);
+  const course = validateNetworkItem({
+    schemaVersion: 1,
+    itemId: 'ni_ok_course',
+    publisherSubjectId: 'pub_ok',
+    publisherDisplayName: '公开课',
+    kind: 'content',
+    createdAt: NOW,
+    visibility: 'public',
+    content: {
+      title: 'AI 投研实战课',
+      text: '公开课简介',
+      url: 'https://learn.example.org/ai',
+      contentType: 'article',
+    },
+    provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'search' },
+  });
+  if (!course.ok) throw new Error(course.reason);
+  assert.equal(isAccessNetworkItem(challenge.item), true);
+  assert.equal(isAccessNetworkItem(course.item), false);
+  const seated = seatThisTurnItems([], [challenge.item, course.item], 8, 8);
+  assert.equal(seated.some((item) => item.itemId === 'ni_wappass'), false);
+  assert.equal(seated[0]?.itemId, 'ni_ok_course');
+});
+
+test('seated first wave shows evidenced cards without waiting for ranking or marking them confirmed', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-seated-'));
+  const self = selfOf('我关心公开课。');
+  await writeDigitalSelf(root, self);
+  const course = validateNetworkItem({
+    schemaVersion: 1,
+    itemId: 'ni_seated_course',
+    publisherSubjectId: 'pub_course',
+    publisherDisplayName: '公开课',
+    kind: 'content',
+    createdAt: NOW,
+    visibility: 'public',
+    content: {
+      title: 'AI 产品落地课',
+      text: '来源摘要。价格未知。',
+      url: 'https://learn.example.org/product',
+      contentType: 'article',
+    },
+    provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'search' },
+  });
+  if (!course.ok) throw new Error(course.reason);
+  let ranked = false;
+  const result = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: self,
+    items: [],
+    preferences: [],
+    adjustment: {
+      id: 'adj_1',
+      summary: '本次找 AI 课程',
+      text: '每天一小时的 AI 课程',
+      scope: 'session',
+    },
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    chatComplete: async ({ messages }) => {
+      const blob = messages.map((row) => String(row.content || '')).join('\n');
+      if (blob.includes('拟定内容发现方向')) {
+        return {
+          text: JSON.stringify({
+            intents: [{ topic: 'AI 课程', contentTypes: ['article'], searchQuery: 'AI 课程', explorationMode: 'core' }],
+          }),
+        };
+      }
+      ranked = true;
+      return { text: JSON.stringify({ decisions: [] }) };
+    },
+    searchWeb: async () => [{ title: course.item.content.title, url: course.item.content.url || '', snippet: course.item.content.text }],
+    ingestHit: async () => [course.item],
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    mode: 'reset',
+    supplyPhase: 'seated',
+    now: NOW,
+  });
+  assert.equal(ranked, false);
+  assert.equal(result.view.replenishing, true);
+  const card = result.view.cards.find((row) => row.itemId === course.item.itemId);
+  assert.ok(card);
+  assert.notEqual(card!.objectFidelity, 'PRIMARY_CONTENT');
+  assert.match(String(card!.conditionNote || card!.reason), /未核实/);
+});
+
+test('rank phase does not issue another search, and steered search starts both queries together', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-rank-'));
+  const self = selfOf('我关心公开课。');
+  await writeDigitalSelf(root, self);
+  const course = validateNetworkItem({
+    schemaVersion: 1,
+    itemId: 'ni_rank_course',
+    publisherSubjectId: 'pub_course',
+    publisherDisplayName: '公开课',
+    kind: 'content',
+    createdAt: NOW,
+    visibility: 'public',
+    content: {
+      title: 'AI 尽调课',
+      text: '来源摘要。',
+      url: 'https://learn.example.org/dd',
+      contentType: 'article',
+    },
+    provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'search' },
+  });
+  if (!course.ok) throw new Error(course.reason);
+  const started: number[] = [];
+  let searches = 0;
+  await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: self,
+    items: [course.item],
+    preferences: [],
+    adjustment: {
+      id: 'adj_2',
+      summary: '本次找课程',
+      text: '找课程',
+      scope: 'session',
+    },
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    chatComplete: async ({ messages }) => {
+      const blob = messages.map((row) => String(row.content || '')).join('\n');
+      if (blob.includes('拟定内容发现方向')) {
+        return {
+          text: JSON.stringify({
+            intents: [
+              { topic: '投资课', contentTypes: ['article'], searchQuery: 'AI 投资课', explorationMode: 'core' },
+              { topic: '落地课', contentTypes: ['article'], searchQuery: 'AI 落地课', explorationMode: 'core' },
+            ],
+          }),
+        };
+      }
+      return {
+        text: JSON.stringify({
+          decisions: [{ itemId: course.item.itemId, decision: 'show', reason: '本次课程候选' }],
+        }),
+      };
+    },
+    searchWeb: async (query) => {
+      searches += 1;
+      started.push(Date.now());
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      return [{ title: query, url: `https://learn.example.org/${encodeURIComponent(query)}`, snippet: query }];
+    },
+    ingestHit: async () => [course.item],
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    mode: 'reset',
+    now: NOW,
+  });
+  assert.equal(searches, 2);
+  assert.ok((started[1] || 0) - (started[0] || 0) < 40, 'both searches start before either finishes');
+  searches = 0;
+  const ranked = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: self,
+    items: [course.item],
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    chatComplete: async () => ({
+      text: JSON.stringify({
+        decisions: [{ itemId: course.item.itemId, decision: 'show', reason: '继续按已取到的候选排' }],
+      }),
+    }),
+    searchWeb: async () => {
+      searches += 1;
+      return [];
+    },
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    mode: 'replenish',
+    supplyPhase: 'rank',
+    now: NOW,
+  });
+  assert.equal(searches, 0);
+  assert.equal(ranked.view.cards.some((card) => card.itemId === course.item.itemId), true);
+});
+
+test('rank phase keeps the seated this-turn cards and does not replace them with dated news', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-rank-keep-'));
+  const self = selfOf('我关心公开课。');
+  await writeDigitalSelf(root, self);
+  const news: NetworkItem[] = [];
+  for (let i = 1; i <= 8; i += 1) {
+    const checked = validateNetworkItem({
+      schemaVersion: 1,
+      itemId: `ni_news_keep_${i}`,
+      publisherSubjectId: `pub_news_${i}`,
+      publisherDisplayName: `新闻${i}`,
+      kind: 'content',
+      createdAt: NOW,
+      visibility: 'public',
+      content: {
+        title: `今日要闻${i}`,
+        text: '新闻正文',
+        url: `https://news.example/keep${i}`,
+        contentType: 'article',
+        publishedAt: NOW,
+      },
+      provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'feed' },
+    });
+    if (!checked.ok) throw new Error(checked.reason);
+    news.push(checked.item);
+  }
+  const course = validateNetworkItem({
+    schemaVersion: 1,
+    itemId: 'ni_keep_course',
+    publisherSubjectId: 'pub_course',
+    publisherDisplayName: '公开课',
+    kind: 'content',
+    createdAt: NOW,
+    visibility: 'public',
+    content: {
+      title: 'AI 投资落地课',
+      text: '来源摘要。价格未知。',
+      url: 'https://learn.example.org/keep',
+      contentType: 'article',
+    },
+    provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'search' },
+  });
+  if (!course.ok) throw new Error(course.reason);
+  const first = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: self,
+    items: [...news, course.item],
+    preferences: [],
+    adjustment: {
+      id: 'adj_keep',
+      summary: '本次找课程',
+      text: '找课程',
+      scope: 'session',
+    },
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    chatComplete: async ({ messages }) => {
+      const blob = messages.map((row) => String(row.content || '')).join('\n');
+      if (blob.includes('拟定内容发现方向')) {
+        return {
+          text: JSON.stringify({
+            intents: [{ topic: '课程', contentTypes: ['article'], searchQuery: 'AI 课程', explorationMode: 'core' }],
+          }),
+        };
+      }
+      throw new Error('seated must not rank');
+    },
+    searchWeb: async () => [{ title: course.item.content.title, url: course.item.content.url || '', snippet: course.item.content.text }],
+    ingestHit: async () => [course.item],
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    mode: 'reset',
+    supplyPhase: 'seated',
+    now: NOW,
+  });
+  assert.equal(first.view.cards[0]?.itemId, course.item.itemId);
+  const ranked = await ensurePersonalFeed({
+    packageRoot: root,
+    digitalSelf: self,
+    items: [...news, course.item],
+    preferences: [],
+    adjustment: {
+      id: 'adj_keep',
+      summary: '本次找课程',
+      text: '找课程',
+      scope: 'session',
+    },
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'AVAILABLE',
+    chatComplete: async ({ messages }) => {
+      const blob = messages.map((row) => String(row.content || '')).join('\n');
+      const ids = [...blob.matchAll(/"itemId"\s*:\s*"(ni_[^"]+)"/g)].map((row) => row[1]!);
+      return {
+        text: JSON.stringify({
+          decisions: [...new Set(ids)].map((itemId) => ({
+            itemId,
+            decision: itemId === course.item.itemId ? 'show' : 'ignore',
+            reason: itemId === course.item.itemId ? '本次课程候选' : '先少看新闻',
+          })),
+        }),
+      };
+    },
+    searchWeb: async () => {
+      throw new Error('rank must not search');
+    },
+    getItem: async (itemId) => [...news, course.item].find((item) => item.itemId === itemId),
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    mode: 'replenish',
+    supplyPhase: 'rank',
+    now: NOW,
+  });
+  assert.equal(ranked.view.cards[0]?.itemId, course.item.itemId);
+  assert.equal(ranked.view.cards.some((card) => card.itemId === course.item.itemId), true);
 });

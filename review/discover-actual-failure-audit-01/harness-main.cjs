@@ -129,6 +129,11 @@ function cardRow(card) {
     consumption: card.consumption || '',
     fidelity: card.objectFidelity || '',
     excerpt: !!card.excerpt,
+    access: card.accessState || '',
+    cond: card.conditionStatus || '',
+    condNote: cut(card.conditionNote || '', 80),
+    kind: card.objectKind || '',
+    entrance: cut(card.entrancePurpose || '', 40),
     reason: cut(card.reason || '', 120),
   };
 }
@@ -288,19 +293,21 @@ async function main() {
       const r = await runtime.talk({ text });
       const turns = (r && r.view && r.view.turns) || [];
       log('talk.return', { ms: at() - s, notice: cut(r && r.view && r.view.notice, 200), last: turns.slice(-2).map((t) => ({ role: t.role, text: cut(t.text, 1500) })) });
-    } else if (SCENARIO === 'delivery-04') {
+    } else if (SCENARIO === 'quality-05' || SCENARIO === 'delivery-04') {
       gen = 'sg_audit_d4_' + Date.now().toString(36);
       const adj = await call('adjust-course', {
         action: 'adjust',
         text: '最近看剧有点多了，帮我找几门适合我的AI投资与产品落地课程，每天大约一小时。',
         searchGenerationId: gen,
       });
+      log('adjust-first-paint', { view: viewRow(adj && adj.view) });
       const afterAdj = await follow(adj && adj.view);
       log('after-course-adjust', { view: viewRow(afterAdj) });
       const unused = [
         ['seek-gannan', '带孩子去甘南若尔盖住哪里'],
         ['seek-minguo', '找几本完结的民国探案'],
         ['seek-coop', '想找能联机的合作解谜'],
+        ['seek-manju', '周末想看点轻松的国创奇幻漫剧'],
       ];
       for (const [label, text] of unused) {
         gen = 'sg_audit_d4_' + Date.now().toString(36);
@@ -310,6 +317,7 @@ async function main() {
       }
       gen = 'sg_audit_d4rev_' + Date.now().toString(36);
       const rev = await call('revoke', { action: 'adjustRevoke', searchGenerationId: gen });
+      log('revoke-first-paint', { view: viewRow(rev && rev.view) });
       log('after-revoke', { view: viewRow(await follow(rev && rev.view)) });
     } else if (SCENARIO === 'adjust-03-course') {
       gen = 'sg_audit_course_' + Date.now().toString(36);

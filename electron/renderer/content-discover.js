@@ -218,7 +218,18 @@
         });
       }
     }
-    if (action === 'reverse' || action === 'resetRecent' || action === 'adjust' || action === 'adjustKeep' || action === 'adjustRevoke') {
+    if (action === 'adjustRevoke') {
+      activeSearchGenerationId = newSearchGenerationId();
+      activeFeedMode = 'personal';
+      if (lastView) {
+        lastView = Object.assign({}, lastView, {
+          adjustment: undefined,
+          searchGenerationId: activeSearchGenerationId,
+          replenishing: true,
+        });
+        renderAdjustment(lastView);
+      }
+    } else if (action === 'reverse' || action === 'resetRecent' || action === 'adjust' || action === 'adjustKeep') {
       activeSearchGenerationId = newSearchGenerationId();
       activeFeedMode = 'personal';
       lastView = null;
@@ -271,6 +282,10 @@
     li.className = 'content-discover-card content-discover-card--' + (type || 'article');
     if (card.itemId) li.setAttribute('data-item-id', card.itemId);
     if (card.url) li.setAttribute('data-url', card.url);
+    if (card.accessState) li.setAttribute('data-access-state', card.accessState);
+    if (card.conditionStatus) li.setAttribute('data-condition-status', card.conditionStatus);
+    if (card.objectKind) li.setAttribute('data-object-kind', card.objectKind);
+    if (card.entrancePurpose) li.setAttribute('data-entrance-purpose', card.entrancePurpose);
     if (card.linkKind) li.setAttribute('data-link-kind', card.linkKind);
     if (card.publisherUrl) li.setAttribute('data-publisher-url', card.publisherUrl);
     if (card.entryUrl) li.setAttribute('data-entry-url', card.entryUrl);
@@ -318,13 +333,21 @@
     if (card.excerpt) li.setAttribute('data-excerpt', '1');
     const kind =
       typeLabel(card) +
+      (card.objectKind && card.objectKind !== type ? ' · ' + card.objectKind : '') +
       (card.excerpt ? ' · 片段，不是完整节目' : '') +
-      (playable ? ' · 可在这里播放' : type === 'video' || type === 'audio' ? ' · 去原站' : '');
+      (playable ? ' · 可在这里播放' : type === 'video' || type === 'audio' ? ' · 去原站' : '') +
+      (card.entrancePurpose ? ' · ' + card.entrancePurpose : '');
     if (kind) {
       const badge = document.createElement('p');
       badge.className = 'content-discover-kind muted tiny';
       badge.textContent = kind;
       body.appendChild(badge);
+    }
+    if (card.conditionNote) {
+      const cond = document.createElement('p');
+      cond.className = 'content-discover-condition muted tiny';
+      cond.textContent = card.conditionNote;
+      body.appendChild(cond);
     }
     const h = document.createElement('h3');
     h.textContent = card.title || '';
@@ -1074,7 +1097,11 @@
       adjustRevoke.dataset.bound = '1';
       adjustRevoke.addEventListener('click', () => {
         hideAdjustForm();
-        setStatus('正在撤销这次调整……');
+        if (lastView) {
+          lastView = Object.assign({}, lastView, { adjustment: undefined });
+          renderAdjustment(lastView);
+        }
+        setStatus('正在恢复默认推荐……');
         void act('adjustRevoke');
       });
     }

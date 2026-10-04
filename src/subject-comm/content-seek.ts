@@ -256,18 +256,48 @@ export function isAccessCard(card: { accessState?: string }): boolean {
   return card.accessState === 'challenge' || card.accessState === 'login' || card.accessState === 'unreadable';
 }
 
-function markAccess(card: DiscoverCard): DiscoverCard {
+export function markAccess(card: DiscoverCard): DiscoverCard {
   const state = pageAccessState({ title: card.title, text: card.text });
   if (state === 'ok') return card;
   card.accessState = state;
   card.unavailable = true;
+  card.entrancePurpose = '访问验证，不是内容入口';
   card.reason =
     state === 'login'
       ? '这个页面要登录，不是正文。入口还在，来源摘要只说明当时给出了什么。'
       : state === 'unreadable'
         ? '正文没有读到。下面保留来源摘要和入口，没有把它当成已经读过。'
-        : '这个页面是访问验证，不是正文。可以打开原站；搜索摘要只说明来源当时给了什么。';
+        : '这个页面是访问验证，不是正文。可以打开原站；搜索摘要只说明当时给出了什么。';
   return card;
+}
+
+function attachCandidateHonesty(card: DiscoverCard, judgment?: { conditions?: string; medium?: string; entrance?: string; basis?: string }): DiscoverCard {
+  const marked = markAccess(card);
+  if (isAccessCard(marked)) return marked;
+  const conditions = judgment?.conditions === 'met' || judgment?.conditions === 'unconfirmed' ? judgment.conditions : 'none';
+  const objectKind = (judgment?.medium && judgment.medium !== 'unknown' ? judgment.medium : marked.contentType) || 'article';
+  const entrance = judgment?.entrance || 'none';
+  const entrancePurpose =
+    entrance === 'full'
+      ? '去原站打开完整入口'
+      : entrance === 'excerpt'
+        ? '去原站打开片段入口'
+        : entrance === 'unverified'
+          ? '入口未核实，去原站打开'
+          : '去原站打开';
+  const conditionNote =
+    conditions === 'unconfirmed'
+      ? judgment?.basis
+        ? `未核实：${judgment.basis}`
+        : '用户提出的条件未核实'
+      : undefined;
+  return {
+    ...marked,
+    conditionStatus: conditions,
+    objectKind,
+    entrancePurpose,
+    ...(conditionNote ? { conditionNote } : {}),
+  };
 }
 
 export function publishedLocalDay(value: string | undefined): string | null {
@@ -919,8 +949,6 @@ export async function seekContent(input: {
     if (requiredTypes.length && kind === 'PRIMARY_CONTENT' && !matchedType) {
       kind = 'ABOUT_CONTENT';
     }
-    // 用户明确提出的条件模型确认不了，就不拿来充当主结果，只放在可能相关里，依据里写着哪条没确认。
-    if (kind === 'PRIMARY_CONTENT' && judgment?.conditions === 'unconfirmed') kind = 'ABOUT_CONTENT';
     // 自称完整却看不出来源或是否完整的观看页，不当作已确认的观看入口。
     const uncertainEntrance = kind === 'PRIMARY_CONTENT' && judgment?.entrance === 'unverified' && intent.intent === 'consume';
     if (uncertainEntrance) kind = 'ABOUT_CONTENT';
@@ -939,31 +967,42 @@ export async function seekContent(input: {
     if (kind === 'UNRELATED') continue;
     if (intent.intent === 'research') {
       if (kind === 'PRIMARY_CONTENT' || kind === 'ABOUT_CONTENT') {
-        primary.push({ ...card, objectFidelity: 'PRIMARY_CONTENT' });
+        primary.push(attachCandidateHonesty({ ...card, objectFidelity: 'PRIMARY_CONTENT' }, judgment));
       }
     } else if (kind === 'PRIMARY_CONTENT' && matchedType) {
       const basis = judgment?.basis || '';
       const medium = judgment?.medium;
-      primary.push({
-        ...card,
-        objectFidelity: 'PRIMARY_CONTENT',
-        ...(medium && medium !== 'unknown' && !hasDirectMediaRepresentation(card) ? { contentType: medium } : {}),
-        ...(basis ? { reason: basis } : {}),
-        ...(judgment?.summary ? { text: judgment.summary } : {}),
-        ...(judgment?.entrance === 'excerpt' ? { excerpt: true } : {}),
-      });
+      const confirmed = judgment?.conditions !== 'unconfirmed';
+      primary.push(
+        attachCandidateHonesty(
+          {
+            ...card,
+            ...(confirmed ? { objectFidelity: 'PRIMARY_CONTENT' as const } : {}),
+            ...(medium && medium !== 'unknown' && !hasDirectMediaRepresentation(card) ? { contentType: medium } : {}),
+            ...(basis ? { reason: basis } : {}),
+            ...(judgment?.summary ? { text: judgment.summary } : {}),
+            ...(judgment?.entrance === 'excerpt' ? { excerpt: true } : {}),
+          },
+          judgment,
+        ),
+      );
     } else if (kind === 'ABOUT_CONTENT') {
       const basis = judgment?.basis || '';
-      related.push({
-        ...card,
-        objectFidelity: 'ABOUT_CONTENT',
-        ...(uncertainEntrance
-          ? { reason: `${basis ? `${basis} ` : ''}没能确认这是完整节目或来自可信来源，不当作已确认的观看入口。` }
-          : basis
-            ? { reason: basis }
-            : {}),
-        ...(judgment?.summary ? { text: judgment.summary } : {}),
-      });
+      related.push(
+        attachCandidateHonesty(
+          {
+            ...card,
+            objectFidelity: 'ABOUT_CONTENT',
+            ...(uncertainEntrance
+              ? { reason: `${basis ? `${basis} ` : ''}没能确认这是完整节目或来自可信来源，不当作已确认的观看入口。` }
+              : basis
+                ? { reason: basis }
+                : {}),
+            ...(judgment?.summary ? { text: judgment.summary } : {}),
+          },
+          judgment,
+        ),
+      );
     }
   }
 
