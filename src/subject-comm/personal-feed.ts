@@ -110,8 +110,11 @@ function mergeDefaultFeed(
   );
   const seen = new Set<string>();
   const front: DiscoverCard[] = [];
-  for (const card of incoming) {
-    if (!card.itemId || seen.has(card.itemId) || isAccessCard(card)) continue;
+  for (const card of applyExplicitFeedback(
+    incoming.filter((card) => card.itemId && isConcreteContentCard(card) && !isAccessCard(card)),
+    prefs,
+  )) {
+    if (seen.has(card.itemId)) continue;
     seen.add(card.itemId);
     front.push(card);
   }
@@ -374,7 +377,7 @@ function splitAccessCards(cards: DiscoverCard[]): { visible: DiscoverCard[]; acc
 
 function honestyFromJudgment(
   card: DiscoverCard,
-  judgment?: { conditions?: string; medium?: string; entrance?: string; basis?: string },
+  judgment?: { conditions?: string; medium?: string; entrance?: string; channel?: string; basis?: string },
 ): DiscoverCard {
   const marked = withCandidateHonesty(card, false);
   if (isAccessCard(marked)) return marked;
@@ -399,7 +402,22 @@ function honestyFromJudgment(
     conditionStatus: conditions,
     objectKind: (judgment?.medium && judgment.medium !== 'unknown' ? judgment.medium : marked.objectKind) || marked.contentType || 'article',
     ...(conditionNote ? { conditionNote } : {}),
-    ...(judgment?.entrance === 'excerpt' ? { excerpt: true, entrancePurpose: '去原站打开片段入口' } : {}),
+    ...(judgment?.channel === 'watch' || judgment?.channel === 'discover' || judgment?.channel === 'supplement'
+      ? { channelUse: judgment.channel as 'watch' | 'discover' | 'supplement' }
+      : {}),
+    ...(judgment?.channel === 'supplement'
+      ? { entrancePurpose: '补充入口，去原站打开；国内官方观看页未核实' }
+      : judgment?.channel === 'discover'
+        ? { entrancePurpose: '发现依据，不是观看入口' }
+        : judgment?.entrance === 'excerpt'
+          ? {
+              excerpt: true,
+              entrancePurpose: '部分匹配：去原站打开片段入口，不是完整节目',
+              ...(judgment?.conditions === 'unmet' || judgment?.conditions === 'unconfirmed'
+                ? {}
+                : { conditionNote: marked.conditionNote || '部分匹配：当前页是片段，不是完整节目。' }),
+            }
+          : {}),
     ...(judgment?.basis && !marked.reason.includes('未核实') ? { reason: judgment.basis } : {}),
   };
 }
@@ -537,6 +555,7 @@ async function resolveCards(
   items: NetworkItem[],
   getItem?: (itemId: string) => Promise<NetworkItem | undefined>,
   nowIso?: string,
+  prefs: ContentPreferenceDirective[] = [],
 ): Promise<DiscoverCard[]> {
   if (!ids?.length) return [];
   const byId = new Map(items.map((item) => [item.itemId, item]));
@@ -544,11 +563,11 @@ async function resolveCards(
   const cards: DiscoverCard[] = [];
   for (const id of ids) {
     const item = byId.get(id) || (getItem ? await getItem(id) : undefined);
-    if (!item || (hasSteadyFeed && item.provenance?.via === 'search') || !isConsumableItem(item, nowIso)) continue;
+    if (!item || blocked(item, prefs) || (hasSteadyFeed && item.provenance?.via === 'search') || !isConsumableItem(item, nowIso)) continue;
     const card = cardFromNetworkItem(item, '继续看你这边已经挑出的内容。', 'directory');
     if (isConcreteContentCard(card)) cards.push(card);
   }
-  return cards;
+  return applyExplicitFeedback(cards, prefs);
 }
 
 function directoryCards(
@@ -838,19 +857,23 @@ export async function ensurePersonalFeed(input: {
   const cache = await readCache(input.packageRoot);
   if (input.mode === 'more' && cache.rankedIds?.length) {
     const delivered = new Set(cache.lastView?.itemIds || []);
-    const nextIds = cache.rankedIds.filter((id) => !delivered.has(id)).slice(0, MAX_FEED);
-    const nextCards = await resolveCards(nextIds, input.items, input.getItem, now);
+    const nextIds = cache.rankedIds.filter((id) => !delivered.has(id));
+    const nextCards = (await resolveCards(nextIds, input.items, input.getItem, now, prefs)).slice(0, MAX_FEED);
     if (nextCards.length) {
       const merged = [...(cache.lastView?.itemIds || [])];
       for (const id of nextCards.map((card) => card.itemId)) {
         if (!merged.includes(id)) merged.push(id);
       }
       cache.lastView = { itemIds: merged, generatedAt: now, mode: 'personal' };
+      cache.rankedIds = cache.rankedIds.filter((id) => {
+        const item = input.items.find((row) => row.itemId === id);
+        return !item || !blocked(item, prefs);
+      });
       await persistCache(cache);
       mark('FIRST_CARD_VISIBLE', nextCards.length);
       return {
         view: viewOf({
-          cards: applyExplicitFeedback(nextCards, prefs),
+          cards: nextCards,
           preferences: input.preferences,
           notice: '',
           reasonCode: 'CACHED_FEED',
@@ -862,8 +885,8 @@ export async function ensurePersonalFeed(input: {
       };
     }
   }
-  const cachedCards = await resolveCards(cache.personal?.itemIds, input.items, input.getItem, now);
-  const lastCards = await resolveCards(cache.lastView?.itemIds, input.items, input.getItem, now);
+  const cachedCards = await resolveCards(cache.personal?.itemIds, input.items, input.getItem, now, prefs);
+  const lastCards = await resolveCards(cache.lastView?.itemIds, input.items, input.getItem, now, prefs);
   let networking = input.networking;
   const noticeFor = (reasonCode: FeedReasonCode, hasCards: boolean, extra = ''): string => {
     if (extra) return extra;
@@ -1357,6 +1380,15 @@ export async function ensurePersonalFeed(input: {
   }
   mark('CANDIDATES', candidates.length);
   const accessFromFresh = firstWaveCards(freshAccessItems, prefs, now).accessCards;
+  const unusedIds = (page: DiscoverCard[], pool: NetworkItem[] = candidates) =>
+    pool
+      .filter(
+        (item) =>
+          !blocked(item, prefs) &&
+          isConsumableItem(item, now) &&
+          !page.some((card) => card.itemId === item.itemId),
+      )
+      .map((item) => item.itemId);
 
   if (input.supplyPhase === 'seated' && (candidates.length || accessFromFresh.length || freshSearchItems.length)) {
     const waveItems = freshSearchItems.length ? freshSearchItems : candidates;
@@ -1384,7 +1416,7 @@ export async function ensurePersonalFeed(input: {
         version: 1,
         ...(cache.personal ? { personal: cache.personal } : {}),
         lastView: snapshot,
-        rankedIds: page.map((card) => card.itemId),
+        rankedIds: [...page.map((card) => card.itemId), ...unusedIds(page, waveItems.length ? waveItems : candidates)],
       });
     }
     mark('FIRST_CARD_VISIBLE', page.length);
@@ -1471,7 +1503,7 @@ export async function ensurePersonalFeed(input: {
         version: 1,
         ...(steered && cache.personal ? { personal: cache.personal } : { personal: snapshot }),
         lastView: snapshot,
-        rankedIds: [...snapshot.itemIds, ...openCards.moreIds],
+        rankedIds: [...snapshot.itemIds, ...openCards.moreIds, ...unusedIds(openCards.page)],
       });
       mark('FIRST_CARD_VISIBLE', openCards.page.length);
       return finish(
@@ -1594,7 +1626,16 @@ export async function ensurePersonalFeed(input: {
   const { visible: rankedVisible, access: rankedAccess } = splitAccessCards(ordered);
   const shownIds = new Set(selected.shownItemIds);
   const incomingRank = rankedVisible.filter((card) => shownIds.has(card.itemId));
+  const rankedLater = rankedVisible.filter((card) => !shownIds.has(card.itemId));
   const merged = pageForDefault(incomingRank.length ? incomingRank : rankedVisible);
+  if (merged.page.length < MIN_FEED) {
+    for (const card of rankedLater) {
+      if (merged.page.length >= MIN_FEED) break;
+      if (merged.page.some((row) => row.itemId === card.itemId)) continue;
+      merged.page.push(card);
+    }
+    merged.moreIds = merged.moreIds.filter((id) => !merged.page.some((card) => card.itemId === id));
+  }
   const cards = merged.page;
   const accessCards = [...rankedAccess, ...accessFromFresh].slice(0, 8);
   cache.rankedIds = [...new Set([
@@ -1602,7 +1643,11 @@ export async function ensurePersonalFeed(input: {
     ...merged.moreIds,
     ...rankedVisible.filter((card) => !shownIds.has(card.itemId)).map((card) => card.itemId),
     ...ordered.map((card) => card.itemId),
-  ])];
+    ...unusedIds(cards),
+  ])].filter((id) => {
+    const item = byId.get(id) || input.items.find((row) => row.itemId === id);
+    return !item || !blocked(item, prefs);
+  });
 
   if (!cards.length) {
     const alreadyHave = input.mode === 'more' ? [] : candidates
@@ -1620,7 +1665,7 @@ export async function ensurePersonalFeed(input: {
         version: 1,
         ...(steered && cache.personal ? { personal: cache.personal } : { personal: snapshot }),
         lastView: snapshot,
-        rankedIds: [...snapshot.itemIds, ...keptHave.moreIds],
+        rankedIds: [...snapshot.itemIds, ...keptHave.moreIds, ...unusedIds(keptHave.page)],
       });
       mark('FIRST_CARD_VISIBLE', keptHave.page.length);
       return finish(

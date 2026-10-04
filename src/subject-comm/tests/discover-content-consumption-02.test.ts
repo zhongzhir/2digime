@@ -783,6 +783,208 @@ test('TYPE/STYLE: a bangumi page that is not a light manju stays nearby; excerpt
   const clip = [...sought.cards, ...sought.relatedCards].find((card) => /花手情缘/.test(card.title));
   assert.ok(clip);
   assert.equal(clip!.excerpt, true);
-  assert.match(String(clip!.entrancePurpose || ''), /片段/);
+  assert.match(String(clip!.entrancePurpose || ''), /部分匹配|片段/);
+  assert.match(String(clip!.conditionNote || clip!.entrancePurpose || ''), /部分匹配|片段/);
   assert.match(sought.notice, /没有找到完全符合|相近选择/);
+});
+
+test('WATCH PAGE: an official series page without RSS or a media file is still a delivered entrance', async () => {
+  const chat: ChatCompleteFn = async ({ messages }) => {
+    const system = String(messages[0]?.content || '');
+    const user = JSON.parse(String(messages[messages.length - 1]?.content || '{}')) as {
+      candidates?: Array<{ id: string; url?: string }>;
+    };
+    if (system.includes('判断每个候选')) {
+      return {
+        text: JSON.stringify({
+          roles: (user.candidates || []).map((row) => ({
+            id: row.id,
+            role: 'SERIES',
+            medium: 'article',
+            conditions: 'unconfirmed',
+            entrance: 'full',
+            channel: 'watch',
+            basis: '出品方节目页，没有写是否免会员。',
+          })),
+        }),
+      };
+    }
+    return { text: '{}' };
+  };
+  const sought = await seekContent({
+    query: '周末和小学孩子看一部自然纪录片，不想开会员',
+    items: [],
+    intent: {
+      intent: 'consume',
+      topic: '自然纪录片',
+      requestedMedia: ['video'],
+      objectWanted: 'work_itself',
+      freshness: 'unspecified',
+      popularityClaim: false,
+      preferences: '适合小学孩子，不想开会员',
+      searchQueries: ['自然 纪录片 节目'],
+      suggestTalk: false,
+    } as never,
+    chatComplete: chat,
+    model: { baseUrl: 'https://model.example', model: 'm' },
+    searchWeb: async () => [
+      {
+        title: '自然的力量 第1集',
+        url: 'https://tv.example.org/series/nature-1',
+        snippet: '出品方纪录片合集页，可在原站观看。没有直链文件。',
+      },
+    ],
+  });
+  const page = sought.cards.find((card) => card.url === 'https://tv.example.org/series/nature-1');
+  assert.ok(page, 'official page without a media file is still delivered');
+  assert.equal(page!.conditionStatus, 'unconfirmed');
+  assert.match(String(page!.conditionNote || page!.reason), /免会员|未核实/);
+  assert.match(String(page!.conditionNote || ''), /官方入口只说明能去原站打开/);
+  assert.match(String(page!.entrancePurpose || ''), /完整入口|原站/);
+});
+
+test('CLAIMS: listing free/public-domain wording is not copied; official page stays unconfirmed', async () => {
+  const chat: ChatCompleteFn = async ({ messages }) => {
+    const system = String(messages[0]?.content || '');
+    const user = JSON.parse(String(messages[messages.length - 1]?.content || '{}')) as {
+      candidates?: Array<{ id: string; url?: string }>;
+      sources?: Array<{ id: string }>;
+    };
+    if (system.includes('取出被明确点名')) {
+      return {
+        text: JSON.stringify({
+          works: [
+            {
+              title: '森林日记',
+              kind: '纪录片',
+              medium: 'video',
+              sourceId: user.sources![0]!.id,
+              basis: '片单说免费全集无广告。',
+              searchQuery: '森林日记 纪录片',
+            },
+          ],
+        }),
+      };
+    }
+    if (system.includes('判断每个候选')) {
+      return {
+        text: JSON.stringify({
+          roles: (user.candidates || []).map((row) => ({
+            id: row.id,
+            role: String(row.url || '').includes('/list/') ? 'LISTING' : 'SERIES',
+            medium: String(row.url || '').includes('/list/') ? 'article' : 'video',
+            conditions: String(row.url || '').includes('/list/') ? 'none' : undefined,
+            entrance: String(row.url || '').includes('/play/') ? 'full' : 'none',
+            channel: String(row.url || '').includes('/list/') ? 'discover' : 'watch',
+            basis: String(row.url || '').includes('/list/')
+              ? '这是片单，不是观看页。'
+              : '节目页没有写是否免费或已获授权。',
+          })),
+        }),
+      };
+    }
+    return { text: '{}' };
+  };
+  const listingText = '周末亲子必看纪录片片单详细介绍：《森林日记》被写成免费全集无广告，还说公共领域可下载。这只是文章说法。';
+  const sought = await seekContent({
+    query: '周末和小学孩子看一部自然纪录片，不想开会员',
+    items: [],
+    intent: {
+      intent: 'consume',
+      topic: '自然纪录片',
+      requestedMedia: ['video'],
+      objectWanted: 'work_itself',
+      freshness: 'unspecified',
+      popularityClaim: false,
+      preferences: '适合小学孩子，不想开会员',
+      searchQueries: ['自然 纪录片'],
+      suggestTalk: false,
+    } as never,
+    chatComplete: chat,
+    model: { baseUrl: 'https://model.example', model: 'm' },
+    searchWeb: async (q) => {
+      if (q.includes('森林日记')) {
+        return [{ title: '森林日记', url: 'https://tv.example.org/play/forest', snippet: '官方节目页' }];
+      }
+      return [{ title: '免费纪录片盘点', url: 'https://reviews.example.org/list/free-docs', snippet: listingText }];
+    },
+  });
+  const official = sought.cards.find((card) => card.url === 'https://tv.example.org/play/forest');
+  assert.ok(official);
+  assert.equal(official!.conditionStatus, 'unconfirmed');
+  assert.match(String(official!.conditionNote || ''), /未核实|官方入口只说明能去原站打开/);
+  assert.equal(/免费全集|公共领域|无广告/.test(String(official!.conditionNote || '')), false);
+  const listing = sought.relatedCards.find((card) => /list\/free-docs/.test(card.url || ''));
+  assert.ok(listing);
+  assert.equal(sought.cards.some((card) => /list\/free-docs/.test(card.url || '')), false);
+});
+
+test('CHANNEL: official watch beats a supplement library; supplement-only is labeled', async () => {
+  const chat: ChatCompleteFn = async ({ messages }) => {
+    const system = String(messages[0]?.content || '');
+    const user = JSON.parse(String(messages[messages.length - 1]?.content || '{}')) as {
+      candidates?: Array<{ id: string; url?: string }>;
+    };
+    if (system.includes('判断每个候选')) {
+      return {
+        text: JSON.stringify({
+          roles: (user.candidates || []).map((row) => ({
+            id: row.id,
+            role: 'SERIES',
+            medium: 'video',
+            conditions: 'unconfirmed',
+            entrance: 'full',
+            channel: /openlib/.test(String(row.url || '')) ? 'supplement' : 'watch',
+          })),
+        }),
+      };
+    }
+    return { text: '{}' };
+  };
+  const both = await seekContent({
+    query: '适合家人一起看的自然纪录片',
+    items: [],
+    intent: {
+      intent: 'consume',
+      topic: '自然纪录片',
+      requestedMedia: ['video'],
+      objectWanted: 'work_itself',
+      freshness: 'unspecified',
+      popularityClaim: false,
+      searchQueries: ['自然 纪录片'],
+      suggestTalk: false,
+    } as never,
+    chatComplete: chat,
+    model: { baseUrl: 'https://model.example', model: 'm' },
+    searchWeb: async () => [
+      { title: '江河纪事 开放库', url: 'https://openlib.example.org/details/river', snippet: '可下载拷贝以及节目介绍，方便对照来源。' },
+      { title: '江河纪事', url: 'https://tv.example.org/show/river', snippet: '官方节目页，可在原站打开完整一集。' },
+    ],
+  });
+  assert.equal(both.cards.some((card) => card.url === 'https://tv.example.org/show/river'), true);
+  assert.equal(both.cards.some((card) => /openlib/.test(card.url || '')), false);
+
+  const onlyLib = await seekContent({
+    query: '适合家人一起看的自然纪录片',
+    items: [],
+    intent: {
+      intent: 'consume',
+      topic: '自然纪录片',
+      requestedMedia: ['video'],
+      objectWanted: 'work_itself',
+      freshness: 'unspecified',
+      popularityClaim: false,
+      searchQueries: ['自然 纪录片'],
+      suggestTalk: false,
+    } as never,
+    chatComplete: chat,
+    model: { baseUrl: 'https://model.example', model: 'm' },
+    searchWeb: async () => [
+      { title: '江河纪事 开放库', url: 'https://openlib.example.org/details/river', snippet: '可下载拷贝' },
+    ],
+  });
+  const extra = onlyLib.cards.find((card) => /openlib/.test(card.url || ''));
+  assert.ok(extra);
+  assert.match(String(extra!.entrancePurpose || ''), /补充入口/);
+  assert.match(onlyLib.notice, /补充入口|国内官方/);
 });

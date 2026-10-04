@@ -918,3 +918,87 @@ test('ranking empty still shows already-fetched directory cards', async () => {
   assert.ok(ranked.view.cards.length >= 1);
   assert.equal(ranked.view.cards.some((card) => !card.title), false);
 });
+
+function itemAt(id: string, publisher: string, title: string): NetworkItem {
+  const checked = validateNetworkItem({
+    schemaVersion: 1,
+    itemId: id,
+    publisherSubjectId: publisher,
+    publisherDisplayName: publisher,
+    kind: 'content',
+    createdAt: NOW,
+    visibility: 'public',
+    content: { title, text: title, url: `https://${publisher}.example/${id}`, contentType: 'article' },
+    provenance: { origin: 'publisher', actor: 'owner', statedAt: NOW, via: 'feed' },
+  });
+  if (!checked.ok) throw new Error(checked.reason);
+  return checked.item;
+}
+
+test('block source is filtered on reset, refresh and more', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-block-paths-'));
+  const blockedSource = Array.from({ length: 4 }, (_, i) => itemAt(`ni_gone_${i}`, 'pub_gone', `屏蔽来源 ${i + 1}`));
+  const keepSource = Array.from({ length: 8 }, (_, i) => itemAt(`ni_keep_${i}`, 'pub_keep', `保留来源 ${i + 1}`));
+  const items = [...blockedSource, ...keepSource];
+  const base = {
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items,
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'DISABLED' as const,
+    chatComplete: showAllChat(),
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    now: NOW,
+  };
+  const opened = await ensurePersonalFeed({ ...base, mode: 'open' });
+  assert.ok(opened.view.cards.some((card) => card.publisherSubjectId === 'pub_gone'));
+  const prefs = [
+    {
+      id: 'block-gone',
+      kind: 'block' as const,
+      targetType: 'source' as const,
+      target: 'pub_gone',
+      text: '不再看来源 屏蔽来源',
+      origin: 'user_action' as const,
+      updatedAt: NOW,
+    },
+  ];
+  const afterReset = await ensurePersonalFeed({ ...base, mode: 'reset', preferenceRows: prefs });
+  assert.equal(afterReset.view.cards.some((card) => card.publisherSubjectId === 'pub_gone'), false);
+  const afterRefresh = await ensurePersonalFeed({ ...base, mode: 'refresh', preferenceRows: prefs });
+  assert.equal(afterRefresh.view.cards.some((card) => card.publisherSubjectId === 'pub_gone'), false);
+  const afterMore = await ensurePersonalFeed({ ...base, mode: 'more', preferenceRows: prefs });
+  assert.equal(afterMore.view.cards.some((card) => card.publisherSubjectId === 'pub_gone'), false);
+  if (!afterMore.view.cards.length) {
+    assert.match(afterMore.view.notice, /暂时没有更多新内容/);
+  }
+});
+
+test('more appends leftover ranked ids, or says the pool is exhausted', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dm-feed-more-left-'));
+  const items = Array.from({ length: 16 }, (_, i) => itemAt(`ni_more_${i}`, `pub_more_${i}`, `连续 ${i + 1}`));
+  const base = {
+    packageRoot: root,
+    digitalSelf: selfOf('subj_a'),
+    items,
+    preferences: [],
+    feedbackFile: path.join(root, 'content', 'network-content-feedback.jsonl'),
+    networking: 'DISABLED' as const,
+    chatComplete: showAllChat(),
+    model: { baseUrl: 'http://127.0.0.1', model: 'stub' },
+    now: NOW,
+  };
+  const first = await ensurePersonalFeed({ ...base, mode: 'open' });
+  assert.ok(first.view.cards.length >= 1);
+  const seen = new Set(first.view.cards.map((card) => card.itemId));
+  const more = await ensurePersonalFeed({ ...base, mode: 'more' });
+  if (seen.size >= items.length) {
+    assert.equal(more.view.cards.length, 0);
+    assert.match(more.view.notice, /暂时没有更多新内容/);
+  } else if (!more.view.cards.length) {
+    assert.match(more.view.notice, /暂时没有更多新内容/);
+  } else {
+    assert.equal(more.view.cards.every((card) => !seen.has(card.itemId)), true);
+  }
+});

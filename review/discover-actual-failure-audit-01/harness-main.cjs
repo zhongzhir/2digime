@@ -121,6 +121,7 @@ function cardRow(card) {
     id: String(card.itemId || '').slice(0, 11),
     type: card.contentType || '',
     title: cut(card.title || '', 40),
+    url: cut(card.url || '', 160),
     host,
     pub: String(card.publishedAt || '').slice(0, 10),
     media: !!card.mediaUrl,
@@ -133,6 +134,8 @@ function cardRow(card) {
     cond: card.conditionStatus || '',
     condNote: cut(card.conditionNote || '', 80),
     kind: card.objectKind || '',
+    channel: card.channelUse || '',
+    duration: card.durationSeconds || '',
     entrance: cut(card.entrancePurpose || '', 40),
     reason: cut(card.reason || '', 120),
   };

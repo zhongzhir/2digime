@@ -306,6 +306,7 @@
     if (card.objectKind) li.setAttribute('data-object-kind', card.objectKind);
     if (card.entrancePurpose) li.setAttribute('data-entrance-purpose', card.entrancePurpose);
     if (card.linkKind) li.setAttribute('data-link-kind', card.linkKind);
+    if (card.publisherSubjectId) li.setAttribute('data-publisher-id', card.publisherSubjectId);
     if (card.publisherUrl) li.setAttribute('data-publisher-url', card.publisherUrl);
     if (card.entryUrl) li.setAttribute('data-entry-url', card.entryUrl);
     if (card.textOrigin) li.setAttribute('data-text-origin', card.textOrigin);

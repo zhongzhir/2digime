@@ -54,6 +54,8 @@ export interface DiscoverCard {
   entrancePurpose?: string;
   /** 模型依据页面判断这是片段、预告或剪辑，不是完整节目。 */
   excerpt?: boolean;
+  /** 观看入口 / 发现依据 / 补充入口。由模型依据页面材料判断。 */
+  channelUse?: 'watch' | 'discover' | 'supplement';
   /** 稍后看来源已不在目录里。收藏记录仍保留。 */
   unavailable?: boolean;
   /** 收藏仍在，但不进入国内默认供给。 */

@@ -204,7 +204,7 @@ export async function interpretDiscoverIntent(input: {
     'preferences: 用户这次明确提出的质量、风格、时长、人群等偏好，用一句话保留（例如「口碑好、长视频」）。没有就留空。不要加用户没说的偏好。',
     '若 requestedContentTypes 含 image/video/audio：词应是对应开放目录实际用来找作品本身的常用检索写法；需要时可包含该主题在目录里常见的其它语种名称。不要写排行榜或十大盘点。',
     '不要把当前搜索扩写成用户平时可能喜欢的其它主题。不要加入这次没要求的相邻领域。',
-    '若 mode=consume：搜索词指向具体可消费对象本身，不要去搜排行榜、行业新闻、十大盘点，除非用户明确要这些。用户要课、动画、漫剧、住宿或一部作品时，searchQueries 必须指向这些对象页，不要改写成搭建教程、学习路线、行业分析或介绍文章。',
+    '若 mode=consume：搜索词指向具体可消费对象本身，不要去搜排行榜、行业新闻、十大盘点，除非用户明确要这些。用户要课、动画、漫剧、纪录片、住宿或一部作品时，searchQueries 必须指向对象本身：作品名、合集名、单集名，需要时可带出品方、国内播出平台或创作者；不要改写成搭建教程、学习路线、行业分析、介绍文章。用户说「不想开会员 / 免费 / 全集 / 无广告」时，只写进 preferences，不要写进 searchQueries。是否免费、是否要会员由作品页核实，检索词不要带这些营销词。不要把海外平台写成唯一检索词。',
     'suggestTalk: 若更适合在「与兔机米」里深入分析则为 true。',
     'newsFeed: 这次要看近期公开报道，并且应该使用已连接的新闻来源时为 true。图片、音频、视频作品和稳定知识为 false。',
     'reportDay: 仅当用户明确要某一天的报道时才填，写成 YYYY-MM-DD；要今天就填用户消息里的今天。「当下/最近/最新/最好」不是指定某一天，省略。',
@@ -335,14 +335,18 @@ export interface CandidateJudgment {
   conditions: CandidateConditions;
   /** 观看/收听页本身是不是完整节目、来源可信；只由模型依据页面材料判断。不是观看页为 none。 */
   entrance: CandidateEntrance;
+  /** 这个页面是观看入口、发现依据，还是补充入口。由模型依据页面材料判断。 */
+  channel: CandidateChannel;
 }
 
 export type CandidateConditions = 'met' | 'unconfirmed' | 'unmet' | 'none';
 export type CandidateEntrance = 'full' | 'excerpt' | 'unverified' | 'none';
+export type CandidateChannel = 'watch' | 'discover' | 'supplement' | 'none';
 
 const CANDIDATE_MEDIA = new Set(['article', 'video', 'audio', 'image']);
 const CANDIDATE_CONDITIONS = new Set(['met', 'unconfirmed', 'unmet', 'none']);
 const CANDIDATE_ENTRANCE = new Set(['full', 'excerpt', 'unverified', 'none']);
+const CANDIDATE_CHANNEL = new Set(['watch', 'discover', 'supplement', 'none']);
 
 export function judgmentsFromModelText(text: string, ids: string[]): Map<string, CandidateJudgment> {
   const rec = parseJsonObject(text);
@@ -359,6 +363,7 @@ export function judgmentsFromModelText(text: string, ids: string[]): Map<string,
     const mediumRaw = asMediaType(recRow.medium);
     const conditionsRaw = String(recRow.conditions || '').trim().toLowerCase();
     const entranceRaw = String(recRow.entrance || '').trim().toLowerCase();
+    const channelRaw = String(recRow.channel || '').trim().toLowerCase();
     out.set(id, {
       role: role as ContentPageRole,
       medium: mediumRaw && CANDIDATE_MEDIA.has(mediumRaw) ? (mediumRaw as CandidateMedium) : 'unknown',
@@ -366,6 +371,7 @@ export function judgmentsFromModelText(text: string, ids: string[]): Map<string,
       summary: String(recRow.summary || '').replace(/\s+/g, ' ').trim().slice(0, 240),
       conditions: CANDIDATE_CONDITIONS.has(conditionsRaw) ? (conditionsRaw as CandidateConditions) : 'none',
       entrance: CANDIDATE_ENTRANCE.has(entranceRaw) ? (entranceRaw as CandidateEntrance) : 'none',
+      channel: CANDIDATE_CHANNEL.has(channelRaw) ? (channelRaw as CandidateChannel) : 'none',
     });
   }
   return out;
@@ -399,7 +405,7 @@ export async function classifyCandidateRoles(input: {
   };
   if (!input.candidates.length || !input.chatComplete || !input.model) return empty;
   const system = [
-    '你在判断每个候选相对「用户这次搜索」的对象忠实度，并写出推荐依据。只输出 JSON：{"roles":[{"id":"","role":"","medium":"","conditions":"","entrance":"","basis":"","summary":""}]}。',
+    '你在判断每个候选相对「用户这次搜索」的对象忠实度，并写出推荐依据。只输出 JSON：{"roles":[{"id":"","role":"","medium":"","conditions":"","entrance":"","channel":"","basis":"","summary":""}]}。',
     'role 只能是 PRIMARY_CONTENT、SERIES、EPISODE、HUB、LISTING、COMMENTARY、UNRELATED。',
     'PRIMARY_CONTENT：相对用户这次请求要消费的对象本身。先分开写三件事：来源说这是什么类型，来源有没有写风格或氛围，观看入口是完整节目还是片段。不要混成一条，也不要用作品名气补材料。',
     '未点名媒介时，主题匹配的正文、视频、图片、音频可以是 PRIMARY_CONTENT；不要因为是 Article 就标 COMMENTARY。',
@@ -411,11 +417,13 @@ export async function classifyCandidateRoles(input: {
     'COMMENTARY：候选不是这次要消费的对象，而是在谈论该对象。仅当用户点名要视频/图片/音频时，介绍它们的文章才是 COMMENTARY。',
     'UNRELATED：主题不在这次搜索范围内。即使它可能符合用户平时其它兴趣，也标 UNRELATED。',
     '用户这次在 query / preferences 里明确提出的类型、风格、人群等条件，只看来源有没有写。来源写明的类型或风格和用户要的不一致，不要当成已经符合，也不要把条件放宽后再标 met。',
-    'conditions：与 role 分开写。用户这次没有提出这类条件写 none；材料能确认满足写 met；材料没写、无法确认写 unconfirmed，并在 basis 里写明哪一条还没确认；来源写明的类型或风格和用户要的不一致写 unmet，并在 basis 里写明哪一条不合。条件只改 conditions：对象页不要因此改成 COMMENTARY 或 UNRELATED。价格、课时材料里没有时写 unconfirmed，不要写成 unmet，仍把课程或作品本身当作候选。',
-    'entrance：只在候选本身是视频或音频的观看/收听页时填写，其它写 none。full：材料能确认是完整的一部、一集或一整期，并且来自出品方、播出平台、获得授权的平台或创作者本人；excerpt：片段、预告、花絮、剪辑、解说；unverified：自称全集、高清完整版之类，但看不出来源或授权，或者看不出是否完整。只依据候选材料，标题里的说法不能替来源作保。',
-    '能不能在应用里直接播放，与它是否符合这次请求无关，不能因此判为 PRIMARY_CONTENT。',
-    'medium：该候选本身主要是 article / video / audio / image 哪一种，由页面内容判断；看不出就写 unknown。节目主页、系列页、单集页是否有直接播放文件，不影响 role，也不影响 medium。',
-    '用户要视频或节目：具体视频、节目主页、系列页、单集页都是有效的推荐对象，用户可以去原站观看；《最佳视频榜单》这类文章是 LISTING/COMMENTARY。',
+    'conditions：与 role 分开写。用户这次没有提出这类条件写 none；材料能确认满足写 met；材料没写、无法确认写 unconfirmed，并在 basis 里写明哪一条还没确认；来源写明的类型或风格和用户要的不一致写 unmet，并在 basis 里写明哪一条不合。条件只改 conditions：对象页不要因此改成 COMMENTARY 或 UNRELATED。价格、课时、是否要会员、单集时长材料里没有时写 unconfirmed，不要写成 unmet，仍把课程或作品本身当作候选。',
+    '文章里的「免费、全集、无广告、公共领域、不用会员」只是文章说法，不能直接标 met。必须看这部作品当前页面或权利说明。文件可下载不等于已经获得授权。当前页没写就 unconfirmed。',
+    'entrance：只在候选本身是视频或音频的观看/收听页时填写，其它写 none。full：材料能确认是完整的一部、一集或一整期，并且来自出品方、播出平台、获得授权的平台或创作者本人；excerpt：片段、预告、花絮、剪辑、解说；unverified：自称全集、高清完整版之类，但看不出来源或授权，或者看不出是否完整。只依据候选材料，标题里的说法不能替来源作保。没有 RSS 或直链媒体文件，只要能在原站打开作品/合集/单集页，仍可写 full 或 excerpt。',
+    'channel：watch=出品方、国内播出平台或创作者本人的观看/收听入口；discover=评分站、片单、百科、评论，只作发现依据，不是观看入口；supplement=开放影像库或海外平台等补充入口，不能当作国内用户的唯一入口；不是这三类写 none。不要看域名表，只看这个页面自己在说什么。',
+    '能不能在应用里直接播放，与它是否符合这次请求无关，不能因此判为 PRIMARY_CONTENT。能在原站观看就是有效交付。',
+    'medium：该候选本身主要是 article / video / audio / image 哪一种，由页面内容判断；看不出就写 unknown。作品页、合集页、单集页即使是 HTML、没有直链，只要是给用户看/听的，medium 仍写 video 或 audio，不要写成 article。',
+    '用户要视频或节目：具体视频、节目主页、系列页、单集页都是有效的推荐对象，用户可以去原站观看；没有 RSS 或直链也不要改成 HUB 或 UNRELATED。《最佳视频榜单》这类文章是 LISTING/COMMENTARY。',
     '用户要摄影作品：具体照片/图集是 PRIMARY_CONTENT；盘点文章是 COMMENTARY。',
     '用户要播客或音乐：节目、专辑或单集页面是 PRIMARY_CONTENT；介绍文章是 COMMENTARY。',
     '用户要「AI 内容」且未点名媒介：一篇具体 AI 文章是 PRIMARY_CONTENT。',
@@ -542,7 +550,7 @@ export async function extractMentionedWorks(input: {
     'medium：article、video、audio、image 或 unknown。',
     'sourceId：这个对象出现在哪一篇材料里。',
     'basis：只转述这篇材料对它的评价或介绍。材料里没有的评分、排名、时长、价格、播放量一律不写，不要编造。',
-    'searchQuery：用来找到这个对象本身的页面（作品页、课程页、攻略页、播放页）的搜索词，不是找盘点或评论；材料提到出处时可以带上。',
+    'searchQuery：用来找到这个对象本身的页面（作品页、合集页、单集页、课程页、攻略页）的搜索词，优先指向出品方、国内播出平台或创作者本人的观看入口，不是找盘点、评分站或评论；材料提到出处时可以带上。不要只搜开放影像库，也不要写成「免费全集无广告」。',
     '按用户这次的条件挑（例如长视频、纪录片、适合周末），明显不符合的不要输出。最多 4 部，挑材料里评价最明确的，宁缺毋滥；多篇材料提到的同一部只输出一次。',
   ].join('\n');
   const user = JSON.stringify({

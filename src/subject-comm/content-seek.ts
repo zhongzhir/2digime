@@ -271,41 +271,65 @@ export function markAccess(card: DiscoverCard): DiscoverCard {
   return card;
 }
 
-function attachCandidateHonesty(card: DiscoverCard, judgment?: { conditions?: string; medium?: string; entrance?: string; basis?: string }): DiscoverCard {
+function attachCandidateHonesty(
+  card: DiscoverCard,
+  judgment?: { conditions?: string; medium?: string; entrance?: string; channel?: string; basis?: string },
+  stated?: string,
+): DiscoverCard {
   const marked = markAccess(card);
   if (isAccessCard(marked)) return marked;
-  const conditions =
+  const statedPref = String(stated || '').trim();
+  let conditions: 'met' | 'unconfirmed' | 'unmet' | 'none' =
     judgment?.conditions === 'met' ||
     judgment?.conditions === 'unconfirmed' ||
     judgment?.conditions === 'unmet'
       ? judgment.conditions
       : 'none';
+  if (statedPref && conditions === 'none') conditions = 'unconfirmed';
   const objectKind = (judgment?.medium && judgment.medium !== 'unknown' ? judgment.medium : marked.contentType) || 'article';
   const entrance = judgment?.entrance || 'none';
   const entrancePurpose =
-    entrance === 'full'
-      ? '去原站打开完整入口'
-      : entrance === 'excerpt'
-        ? '去原站打开片段入口'
-        : entrance === 'unverified'
-          ? '入口未核实，去原站打开'
-          : '去原站打开';
+    judgment?.channel === 'supplement'
+      ? '补充入口，去原站打开；国内官方观看页未核实'
+      : judgment?.channel === 'discover'
+        ? '发现依据，不是观看入口'
+        : entrance === 'excerpt'
+          ? '部分匹配：去原站打开片段入口，不是完整节目'
+          : entrance === 'full'
+            ? '去原站打开完整入口'
+            : entrance === 'unverified'
+              ? '入口未核实，去原站打开'
+              : '去原站打开';
+  const entranceDoesNotProve =
+    statedPref && (conditions === 'unconfirmed' || conditions === 'unmet')
+      ? '官方入口只说明能去原站打开，不表示已经满足这次提出的条件。'
+      : '';
   const conditionNote =
     conditions === 'unconfirmed'
-      ? judgment?.basis
-        ? `未核实：${judgment.basis}`
-        : '用户提出的条件未核实'
+      ? [judgment?.basis ? `未核实：${judgment.basis}` : '未核实：这次提出的条件还没有被当前页面证实。', entranceDoesNotProve]
+          .filter(Boolean)
+          .join('')
       : conditions === 'unmet'
-        ? judgment?.basis
-          ? `不完全符合：${judgment.basis}`
-          : '来源写明的类型或风格和这次要的不一致。'
-        : undefined;
+        ? [
+            judgment?.basis ? `不完全符合：${judgment.basis}` : '来源写明的类型或风格和这次要的不一致。',
+            entrance === 'excerpt' ? '这是片段，只是部分匹配。' : '',
+            entranceDoesNotProve,
+          ]
+            .filter(Boolean)
+            .join('')
+        : entrance === 'excerpt'
+          ? '部分匹配：当前页是片段，不是完整节目。'
+          : undefined;
   return {
     ...marked,
     conditionStatus: conditions,
     objectKind,
     entrancePurpose,
+    ...(entrance === 'excerpt' ? { excerpt: true } : {}),
     ...(conditionNote ? { conditionNote } : {}),
+    ...(judgment?.channel === 'watch' || judgment?.channel === 'discover' || judgment?.channel === 'supplement'
+      ? { channelUse: judgment.channel }
+      : {}),
   };
 }
 
@@ -477,11 +501,11 @@ async function programsFromSources(input: {
       if (candidates.length >= 3) break;
     }
     if (!candidates.length || input.signal?.aborted) return { work, card: null, judgment: undefined, miss: 'pending' };
-    // 这里只核实页面是不是这部作品本身；口碑、长短这些条件的依据来自提到它的那篇文章。
-    const { preferences: _preferences, ...workIntent } = input.intent;
+    // 作品页只回答这是不是这部作品、入口和用户这次的条件（例如是否要会员）。
+    // 口碑、适龄、时长仍以提到它的那篇文章为推荐依据，不把文章里的「免费全集」抄成已核实。
     const judged = await classifyCandidateRoles({
       query: work.kind ? `《${work.title}》（${work.kind}）` : `《${work.title}》`,
-      intent: { ...workIntent, topic: work.title, popularityClaim: false },
+      intent: { ...input.intent, topic: work.title, popularityClaim: false },
       candidates: candidates.map((card) => ({
         id: card.itemId,
         title: card.title,
@@ -494,8 +518,12 @@ async function programsFromSources(input: {
     });
     const requiresPlayable = input.intent.requestedMedia.some((row) => row === 'video' || row === 'audio');
     const pages = candidates.filter((row) => {
+      const judgment = judged.judgments.get(row.itemId);
       if (!isPrimaryContentRole(judged.roles.get(row.itemId))) return false;
-      if (requiresPlayable && judged.judgments.get(row.itemId)?.medium === 'article') return false;
+      if (judgment?.channel === 'discover') return false;
+      if (requiresPlayable && judgment?.medium === 'article' && judgment.entrance === 'none' && judgment.role === 'PRIMARY_CONTENT') {
+        return false;
+      }
       return true;
     });
     if (!requiresPlayable) {
@@ -503,12 +531,21 @@ async function programsFromSources(input: {
       if (page) return { work, card: page, judgment: judged.judgments.get(page.itemId), miss: 'pending' };
       return { work, card: null, judgment: undefined, miss: 'pending' };
     }
-    // 完整且来源可信的入口优先；片段可以给，但要标明；自称全集却看不出来源的页面不算核实到的入口。
-    const entranceOf = (card: DiscoverCard) => judged.judgments.get(card.itemId)?.entrance;
+    // 能在原站打开的作品/合集/单集页即可；不要求 RSS 或直链。完整官方入口优先，片段其次，补充入口最后。
+    const judgmentOf = (card: DiscoverCard) => judged.judgments.get(card.itemId);
+    const entranceOf = (card: DiscoverCard) => judgmentOf(card)?.entrance;
+    const channelOf = (card: DiscoverCard) => judgmentOf(card)?.channel;
+    const originalSite = (card: DiscoverCard) =>
+      entranceOf(card) === 'full' ||
+      entranceOf(card) === 'excerpt' ||
+      (isPrimaryContentRole(judgmentOf(card)?.role) && entranceOf(card) !== 'unverified');
     const usable = [
-      ...pages.filter((card) => entranceOf(card) === 'full'),
-      ...pages.filter((card) => entranceOf(card) === 'excerpt'),
-    ];
+      ...pages.filter((card) => originalSite(card) && channelOf(card) === 'watch' && entranceOf(card) === 'full'),
+      ...pages.filter((card) => originalSite(card) && channelOf(card) !== 'supplement' && entranceOf(card) === 'full'),
+      ...pages.filter((card) => originalSite(card) && channelOf(card) !== 'supplement' && entranceOf(card) === 'excerpt'),
+      ...pages.filter((card) => originalSite(card) && channelOf(card) !== 'supplement' && entranceOf(card) !== 'unverified'),
+      ...pages.filter((card) => originalSite(card) && channelOf(card) === 'supplement'),
+    ].filter((card, index, all) => all.findIndex((row) => row.itemId === card.itemId) === index);
     for (const card of usable) {
       if (input.signal?.aborted) break;
       if (await entranceOpens(input.openPage, card.url)) {
@@ -531,15 +568,21 @@ async function programsFromSources(input: {
       taken.add(key);
       input.seenUrls.add(key);
       const medium = row.work.medium !== 'unknown' ? row.work.medium : row.judgment?.medium;
-      verified.push({
-        ...row.card,
-        objectFidelity: 'PRIMARY_CONTENT',
-        ...(medium === 'video' || medium === 'audio' ? { contentType: medium } : {}),
-        ...(row.judgment?.summary ? { text: row.judgment.summary } : {}),
-        ...(row.judgment?.entrance === 'excerpt' ? { excerpt: true } : {}),
-        reason: `推荐依据来自「${source.title}」${row.work.basis ? `：${row.work.basis}` : '。'}`,
-        basisSource: { title: source.title, ...(source.url ? { url: source.url } : {}) },
-      });
+          verified.push(
+        attachCandidateHonesty(
+          {
+            ...row.card,
+            objectFidelity: 'PRIMARY_CONTENT',
+            ...(medium === 'video' || medium === 'audio' ? { contentType: medium } : {}),
+            ...(row.judgment?.summary ? { text: row.judgment.summary } : {}),
+            ...(row.judgment?.entrance === 'excerpt' ? { excerpt: true } : {}),
+            reason: `推荐依据来自「${source.title}」${row.work.basis ? `：${row.work.basis}` : '。'}`,
+            basisSource: { title: source.title, ...(source.url ? { url: source.url } : {}) },
+          },
+          row.judgment,
+          input.intent.preferences,
+        ),
+      );
       continue;
     }
     const marks = notChecked.get(source.itemId) || { pending: [], broken: [], uncertain: [] };
@@ -947,15 +990,26 @@ export async function seekContent(input: {
     // 形态由页面本身决定：模型从内容判断出是视频/音频节目，就算有效推荐，即使没有直接播放文件。
     // 能否应用内播放只看媒体字段，不影响是否入选。
     const judgment = judgments.get(card.itemId);
+    const watchPage =
+      !!judgment &&
+      isPrimaryContentRole(judgment.role) &&
+      (judgment.role === 'SERIES' ||
+        judgment.role === 'EPISODE' ||
+        judgment.entrance === 'full' ||
+        judgment.entrance === 'excerpt');
     const matchedType =
       typeMatches(card, requiredTypes) ||
-      (!!judgment && requiredTypes.includes(judgment.medium) && judgment.role !== 'UNRELATED');
+      (!!judgment && requiredTypes.includes(judgment.medium) && judgment.role !== 'UNRELATED') ||
+      (watchPage && requiredTypes.some((row) => row === 'video' || row === 'audio'));
     let kind = fidelity.get(card.itemId);
     if (unjudgedIds.has(card.itemId)) kind = 'UNJUDGED';
     if (!kind) {
       kind = requiredTypes.length && !matchedType ? 'ABOUT_CONTENT' : 'PRIMARY_CONTENT';
     }
     if (requiredTypes.length && kind === 'PRIMARY_CONTENT' && !matchedType) {
+      kind = 'ABOUT_CONTENT';
+    }
+    if (kind === 'PRIMARY_CONTENT' && judgment?.channel === 'discover') {
       kind = 'ABOUT_CONTENT';
     }
     // 自称完整却看不出来源或是否完整的观看页，不当作已确认的观看入口。
@@ -976,7 +1030,7 @@ export async function seekContent(input: {
     if (kind === 'UNRELATED') continue;
     if (intent.intent === 'research') {
       if (kind === 'PRIMARY_CONTENT' || kind === 'ABOUT_CONTENT') {
-        primary.push(attachCandidateHonesty({ ...card, objectFidelity: 'PRIMARY_CONTENT' }, judgment));
+        primary.push(attachCandidateHonesty({ ...card, objectFidelity: 'PRIMARY_CONTENT' }, judgment, intent.preferences));
       }
     } else if (kind === 'PRIMARY_CONTENT' && matchedType && judgment?.conditions === 'unmet') {
       const basis = judgment.basis || '';
@@ -990,6 +1044,7 @@ export async function seekContent(input: {
             ...(judgment.entrance === 'excerpt' ? { excerpt: true } : {}),
           },
           judgment,
+          intent.preferences,
         ),
       );
     } else if (kind === 'PRIMARY_CONTENT' && matchedType) {
@@ -1007,6 +1062,7 @@ export async function seekContent(input: {
             ...(judgment?.entrance === 'excerpt' ? { excerpt: true } : {}),
           },
           judgment,
+          intent.preferences,
         ),
       );
     } else if (kind === 'ABOUT_CONTENT') {
@@ -1024,6 +1080,7 @@ export async function seekContent(input: {
             ...(judgment?.summary ? { text: judgment.summary } : {}),
           },
           judgment,
+          intent.preferences,
         ),
       );
     }
@@ -1071,6 +1128,13 @@ export async function seekContent(input: {
     const rest = related.filter((card) => !annotated.has(card.itemId));
     related.length = 0;
     related.push(...found.unverified, ...rest);
+  }
+  const watchCards = primary.filter((card) => card.channelUse !== 'supplement');
+  const supplementCards = primary.filter((card) => card.channelUse === 'supplement');
+  if (watchCards.length && supplementCards.length) {
+    primary.length = 0;
+    primary.push(...watchCards);
+    related.unshift(...supplementCards);
   }
   // 完整节目排在片段前面；片段保留，并标明是片段。
   const ordered = [...primary.filter((card) => !card.excerpt), ...primary.filter((card) => card.excerpt)];
@@ -1202,6 +1266,12 @@ export async function seekContent(input: {
   const nearbyUnmet = relatedVisible.some((card) => card.conditionStatus === 'unmet');
   if (nearbyUnmet && noExactMatch && !datedNews && !searchRateLimited) {
     notice = '这次没有找到完全符合的对象。下面是来源里能看到的相近选择，并已标明哪里不合。没有把条件放宽。';
+  }
+  const onlySupplement =
+    visible.length > 0 &&
+    visible.every((card) => card.channelUse === 'supplement' || /补充入口/.test(String(card.entrancePurpose || '')));
+  if (onlySupplement && !datedNews) {
+    notice = `${notice ? `${notice} ` : ''}这次只找到补充入口，国内官方观看页还没有核实。能在原站打开仍可作为交付，不是应用内播放。`;
   }
 
   return {
