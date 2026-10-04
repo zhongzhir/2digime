@@ -30,7 +30,7 @@ function cardsOf(page) {
       entrance: n.getAttribute('data-entrance-purpose') || '',
       note: String(n.querySelector('.content-discover-condition')?.textContent || '').trim(),
     }));
-    const related = Array.from(document.querySelectorAll('#content-discover-related-list h3, #content-discover-related h3'))
+    const related = Array.from(document.querySelectorAll('#content-discover-related-list > li h3'))
       .map((n) => String(n.textContent || '').replace(/\s+/g, ' ').trim())
       .filter(Boolean);
     return {
@@ -117,22 +117,27 @@ async function waitSettled(page, ms, ready) {
     }
     await page.locator('#view-shell').waitFor({ state: 'visible', timeout: 20_000 });
 
-    await page.locator('#nav-talk').dispatchEvent('click').catch(() => {});
-    const talkBox = page.locator('#talk-input, #composer-input, textarea, [contenteditable="true"]').first();
+    await page.locator('#nav-chat').dispatchEvent('click');
     let talkOk = false;
+    let talkReply = '';
     try {
-      if (await talkBox.count()) {
-        await talkBox.fill('记住：这只是试用对话，不要改发现里的列表。');
-        await page.evaluate(() => {
-          document.getElementById('btn-talk-send')?.click();
-          document.querySelector('[data-action="send"]')?.click();
+      await page.locator('#chat-input').waitFor({ state: 'visible', timeout: 8_000 });
+      await page.fill('#chat-input', '请用一句话打个招呼，不要改发现里的列表。');
+      await page.locator('#btn-chat-send').click();
+      const talkDeadline = Date.now() + 40_000;
+      while (Date.now() < talkDeadline) {
+        talkReply = await page.evaluate(() => {
+          const turns = Array.from(document.querySelectorAll('#chat-turns .turn-assistant, #chat-turns li, #chat-turns p'));
+          return turns.map((n) => String(n.textContent || '').replace(/\s+/g, ' ').trim()).filter(Boolean).slice(-1)[0] || '';
         });
-        talkOk = true;
+        if (talkReply && !/正在|思考/.test(talkReply)) break;
+        await page.waitForTimeout(1000);
       }
+      talkOk = !!talkReply;
     } catch {
       talkOk = false;
     }
-    report.steps.push({ at: Date.now() - started, step: 'talk-smoke', talkOk });
+    report.steps.push({ at: Date.now() - started, step: 'talk-smoke', talkOk, talkReply: String(talkReply || '').slice(0, 160) });
 
     await page.locator('#nav-discover').waitFor({ state: 'visible', timeout: 15_000 });
     await page.locator('#nav-discover').dispatchEvent('click');

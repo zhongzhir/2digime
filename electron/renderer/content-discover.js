@@ -610,6 +610,7 @@
       !incoming.length &&
       lastCards.length &&
       (next && next.feedMode) !== 'intent' &&
+      !(next && next.adjustment) &&
       (replenishing || /暂时无法|检查连接|检查联网|没有找到可以直接看|搜索额度已经用完/.test(notice))
     ) {
       next = Object.assign({}, next || {}, {
