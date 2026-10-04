@@ -1,0 +1,24 @@
+{
+  "at": "2026-10-04T10:55:26.193Z",
+  "config": {
+    "searchPath": "byok",
+    "geminiKeyPresent": true,
+    "geminiModel": "gemini-3.5-flash",
+    "managedGatewayHost": "relay.muhub.cn",
+    "installationIdentityChanged": false
+  },
+  "managed": {
+    "status": "AUTH_FAILED",
+    "httpStatus": 401,
+    "kind": "auth",
+    "message": "iqs_Retrieval.PackageExhausted"
+  },
+  "gemini": {
+    "kind": "quota",
+    "status": 429,
+    "httpStatus": 429,
+    "providerStatus": "RESOURCE_EXHAUSTED",
+    "message": "You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. ",
+    "quotaViolations": []
+  }
+}

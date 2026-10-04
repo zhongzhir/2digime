@@ -37,7 +37,7 @@ export function classifySearchFailure(err: unknown): Exclude<NetworkDiscoveryCod
   const kind = String(rec.kind || '').toLowerCase();
   const labeled = String((err as { status?: string }).status || '').toUpperCase();
   const message = String(rec.message || err || '').toLowerCase();
-  if (labeled === 'RATE_LIMITED' || kind === 'quota' || status === 429 || /rate.?limit|quota/.test(message)) {
+  if (labeled === 'RATE_LIMITED' || kind === 'quota' || status === 429 || /rate.?limit|quota|packageexhausted/.test(message)) {
     return 'RATE_LIMITED';
   }
   if (
@@ -53,9 +53,9 @@ export function classifySearchFailure(err: unknown): Exclude<NetworkDiscoveryCod
   return 'TEMPORARY_ERROR';
 }
 
-/** 托管联网搜索按安装、按整点小时计次；用完不是"没有找到"，也不是网络故障。 */
+/** Provider quota / throttling does not imply an installation hourly window. */
 export const SEARCH_QUOTA_NOTICE =
-  '这个小时的联网搜索额度已经用完，这次没能继续搜索。这不代表没有相关内容，下一个整点后额度恢复。';
+  '联网搜索受到额度或频率限制，这次没能继续搜索。这不代表没有相关内容；恢复时间尚未确认。';
 
 export function humanNetworkNotice(input: {
   networking: NetworkDiscoveryCode;

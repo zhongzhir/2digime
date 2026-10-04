@@ -593,7 +593,7 @@ async function programsFromSources(input: {
   for (const [sourceId, marks] of notChecked) {
     const source = sourceById.get(sourceId)!;
     const tails: Record<Checked['miss'], string> = {
-      pending: quotaHit ? '还没有核实，这个小时的联网搜索额度已经用完。' : '还没有核实到作品页或观看入口。',
+      pending: quotaHit ? '还没有核实，联网搜索受到额度或频率限制。' : '还没有核实到作品页或观看入口。',
       uncertain: '找到的页面没能确认是完整节目或可信来源。',
       broken: '找到的作品页目前打不开。',
     };
@@ -1260,7 +1260,7 @@ export async function seekContent(input: {
     notice = '这更像需要深入分析的材料。可点「问兔机米」继续。';
   }
   if (searchRateLimited && notice !== SEARCH_QUOTA_NOTICE) {
-    notice = `${notice ? `${notice} ` : ''}这个小时的联网搜索额度已经用完，还有一部分没能搜索，下一个整点后恢复。`;
+    notice = `${notice ? `${notice} ` : ''}${SEARCH_QUOTA_NOTICE}`;
   }
   const noExactMatch = !visible.some((card) => card.conditionStatus === 'met');
   const nearbyUnmet = relatedVisible.some((card) => card.conditionStatus === 'unmet');

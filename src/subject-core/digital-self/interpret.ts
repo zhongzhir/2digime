@@ -18,6 +18,7 @@ const SYSTEM = `你在帮助 2digime 理解「用户本人」。只判断与用�
 
 规则：
 - lasting 必须给出。资料里属于用户本人、会持续存在的主体事实 lasting=true；本轮具体要做的事、一次性任务、这次想要的成品、临时安排 lasting=false，且不要写入 understandings。
+- TASK_CONTEXT 仅是当前任务条件，不能据此推断长期本人事实。有任务时仍逐条理解本人原话：独立持续信息可形成认识；同目标的时间、预算、范围与方案纠正只属于该目标。混合表达分别判断，不整体停掉学习。不得把任务或来源对象的内容冒充本人表达。
 - 你看到的是完整资料或原话。资料中属于用户本人、可持续使用的主体信息，都应写成各自独立的理解。不要做摘要式挑选，不要只保留若干重点，不要概括成用户画像而漏掉资料里已经写明的本人事实。
 - 资料里的无关内容、百科、他人不要写成用户事实。
 - 用户亲口明确说自己 → origin=user_statement；来自资料 → material；其余推断 → inference。
@@ -103,6 +104,7 @@ export function buildInterpretPrompt(input: {
   self: DigitalSelf;
   text: string;
   materialName?: string;
+  taskContext?: string;
 }): string {
   const current = liveUnderstandings(input.self).map((item) => ({
     id: item.id,
@@ -119,6 +121,8 @@ export function buildInterpretPrompt(input: {
     JSON.stringify(current),
     '===DIGITAL_SELF_MATERIAL_NAME===',
     materialName,
+    '===TASK_CONTEXT_NOT_SELF_FACTS===',
+    input.taskContext || '',
     '===DIGITAL_SELF_INPUT===',
     input.text,
   ].join('\n');
@@ -130,6 +134,7 @@ export async function interpretWithModel(input: {
   self: DigitalSelf;
   text: string;
   materialName?: string;
+  taskContext?: string;
 }): Promise<ModelInterpretResult> {
   const user = buildInterpretPrompt(input);
   const result = await input.chat({

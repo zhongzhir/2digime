@@ -113,7 +113,7 @@ export class TalkService {
     ) => ProfessionalAgent[],
     private readonly now: () => string = nowIso,
     private readonly resolveCollab?: (pkg: TalkPackageRef) => Promise<SubjectCollabPort | null>,
-    private readonly learnFromUtterance?: (text: string) => Promise<TalkLearnResult>,
+    private readonly learnFromUtterance?: (text: string, taskContext?: string) => Promise<TalkLearnResult>,
     private readonly resolveContentSeek?: (pkg: TalkPackageRef, query: string) => Promise<string>,
     private readonly requestFolderAccess?: (input: { path: string; label: string }) => Promise<boolean>,
     private readonly resolveWebSearch?: () =>
@@ -202,9 +202,10 @@ export class TalkService {
     let confirmHint: string | undefined;
     // DIGITAL_SELF_LEARNING_BLOCKS_TALK = YES
     // 每个 Talk turn 在真正 Talk 前同步调用 Digital Self interpret。本轮不改成异步。
-    if (spoken && this.learnFromUtterance && !thread.discoveryGoal) {
+    if (spoken && this.learnFromUtterance) {
       try {
-        const learned = await this.learnFromUtterance(spoken);
+        const learned = await this.learnFromUtterance(spoken, thread.discoveryGoal
+          ? JSON.stringify({ originalRequest: thread.discoveryGoal.originalRequest, currentRequest: thread.discoveryGoal.request, scope: thread.discoveryGoal.scope }) : undefined);
         if (learned.asked && learned.askHint) confirmHint = learned.askHint;
       } catch {
         /* 学习失败不得阻断交流 */

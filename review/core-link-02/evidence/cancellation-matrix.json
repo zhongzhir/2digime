@@ -1,0 +1,347 @@
+{
+  "kind": "scripted model, controlled async boundaries, real filesystem; no rollback claimed",
+  "results": [
+    {
+      "format": "md",
+      "overwrite": false,
+      "boundary": "prewrite-mkdir",
+      "stopped": "TalkCancelled",
+      "fileExists": false,
+      "oldContentPreserved": false,
+      "timeline": [
+        "cancel requested"
+      ],
+      "executions": []
+    },
+    {
+      "format": "md",
+      "overwrite": false,
+      "boundary": "after-write",
+      "stopped": "TalkCancelled",
+      "fileExists": true,
+      "oldContentPreserved": false,
+      "timeline": [
+        "file write completed",
+        "cancel requested",
+        "actual mutation recorded"
+      ],
+      "executions": [
+        {
+          "id": "run_16fe5bfe-3ab7-495f-859c-e28010cbd90f",
+          "at": "2026-10-04T11:11:26.488Z",
+          "turnId": "turn_a94db02e-dc9a-450e-8165-b7a7d29e9772",
+          "capabilityId": "write_file",
+          "instruction": "md-false-after-write.md",
+          "ok": true,
+          "summary": "已写入 D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\rel-do-01-fixed\\md-false-after-write.md。回读全文 43 字。",
+          "producedOutputs": [
+            "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\rel-do-01-fixed\\md-false-after-write.md"
+          ],
+          "outputPath": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\rel-do-01-fixed\\md-false-after-write.md",
+          "observedEffect": {
+            "kind": "file_created",
+            "target": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\rel-do-01-fixed\\md-false-after-write.md",
+            "mutated": true
+          }
+        }
+      ]
+    },
+    {
+      "format": "md",
+      "overwrite": false,
+      "boundary": "preflight-stat",
+      "stopped": "TalkCancelled",
+      "fileExists": false,
+      "oldContentPreserved": false,
+      "timeline": [
+        "cancel requested"
+      ],
+      "executions": []
+    },
+    {
+      "format": "md",
+      "overwrite": true,
+      "boundary": "prewrite-mkdir",
+      "stopped": "TalkCancelled",
+      "fileExists": true,
+      "oldContentPreserved": true,
+      "timeline": [
+        "cancel requested"
+      ],
+      "executions": []
+    },
+    {
+      "format": "md",
+      "overwrite": true,
+      "boundary": "after-write",
+      "stopped": "TalkCancelled",
+      "fileExists": true,
+      "oldContentPreserved": false,
+      "timeline": [
+        "file write completed",
+        "cancel requested",
+        "actual mutation recorded"
+      ],
+      "executions": [
+        {
+          "id": "run_3cacc2b5-0c07-47e9-8266-e53ee0b26cfc",
+          "at": "2026-10-04T11:11:26.501Z",
+          "turnId": "turn_10abdbbd-8c7a-45af-aa66-d6da014fe5c1",
+          "capabilityId": "write_file",
+          "instruction": "md-true-after-write.md",
+          "ok": true,
+          "summary": "已写入 D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\rel-do-01-fixed\\md-true-after-write.md。回读全文 43 字。",
+          "producedOutputs": [
+            "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\rel-do-01-fixed\\md-true-after-write.md"
+          ],
+          "outputPath": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\rel-do-01-fixed\\md-true-after-write.md",
+          "observedEffect": {
+            "kind": "content_modified",
+            "target": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\rel-do-01-fixed\\md-true-after-write.md",
+            "mutated": true
+          }
+        }
+      ]
+    },
+    {
+      "format": "md",
+      "overwrite": true,
+      "boundary": "preflight-stat",
+      "stopped": "TalkCancelled",
+      "fileExists": true,
+      "oldContentPreserved": true,
+      "timeline": [
+        "cancel requested"
+      ],
+      "executions": []
+    },
+    {
+      "format": "docx",
+      "overwrite": false,
+      "boundary": "prewrite-mkdir",
+      "stopped": "TalkCancelled",
+      "fileExists": false,
+      "oldContentPreserved": false,
+      "timeline": [
+        "cancel requested"
+      ],
+      "executions": []
+    },
+    {
+      "format": "docx",
+      "overwrite": false,
+      "boundary": "after-write",
+      "stopped": "TalkCancelled",
+      "fileExists": true,
+      "oldContentPreserved": false,
+      "timeline": [
+        "file write completed",
+        "cancel requested",
+        "actual mutation recorded"
+      ],
+      "executions": [
+        {
+          "id": "run_982b5fce-38ef-4bea-9838-53569131acb6",
+          "at": "2026-10-04T11:11:26.517Z",
+          "turnId": "turn_a4e2a62f-96eb-46d2-99cf-18d06af7ecaa",
+          "capabilityId": "export_file",
+          "instruction": "docx:docx-false-after-write.docx",
+          "ok": true,
+          "summary": "已导出 D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\rel-do-01-fixed\\docx-false-after-write.docx",
+          "producedOutputs": [
+            "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\rel-do-01-fixed\\docx-false-after-write.docx"
+          ],
+          "outputPath": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\rel-do-01-fixed\\docx-false-after-write.docx",
+          "observedEffect": {
+            "kind": "file_created",
+            "target": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\rel-do-01-fixed\\docx-false-after-write.docx",
+            "mutated": true
+          }
+        }
+      ]
+    },
+    {
+      "format": "docx",
+      "overwrite": false,
+      "boundary": "preflight-stat",
+      "stopped": "TalkCancelled",
+      "fileExists": false,
+      "oldContentPreserved": false,
+      "timeline": [
+        "cancel requested"
+      ],
+      "executions": []
+    },
+    {
+      "format": "docx",
+      "overwrite": true,
+      "boundary": "prewrite-mkdir",
+      "stopped": "TalkCancelled",
+      "fileExists": true,
+      "oldContentPreserved": true,
+      "timeline": [
+        "cancel requested"
+      ],
+      "executions": []
+    },
+    {
+      "format": "docx",
+      "overwrite": true,
+      "boundary": "after-write",
+      "stopped": "TalkCancelled",
+      "fileExists": true,
+      "oldContentPreserved": false,
+      "timeline": [
+        "file write completed",
+        "cancel requested",
+        "actual mutation recorded"
+      ],
+      "executions": [
+        {
+          "id": "run_74c504be-2dbe-4399-8341-b51a4de85a0a",
+          "at": "2026-10-04T11:11:26.536Z",
+          "turnId": "turn_7295789c-b860-4380-8f82-17562d7b7ae3",
+          "capabilityId": "export_file",
+          "instruction": "docx:docx-true-after-write.docx",
+          "ok": true,
+          "summary": "已导出 D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\rel-do-01-fixed\\docx-true-after-write.docx",
+          "producedOutputs": [
+            "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\rel-do-01-fixed\\docx-true-after-write.docx"
+          ],
+          "outputPath": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\rel-do-01-fixed\\docx-true-after-write.docx",
+          "observedEffect": {
+            "kind": "content_modified",
+            "target": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\rel-do-01-fixed\\docx-true-after-write.docx",
+            "mutated": true
+          }
+        }
+      ]
+    },
+    {
+      "format": "docx",
+      "overwrite": true,
+      "boundary": "preflight-stat",
+      "stopped": "TalkCancelled",
+      "fileExists": true,
+      "oldContentPreserved": true,
+      "timeline": [
+        "cancel requested"
+      ],
+      "executions": []
+    },
+    {
+      "format": "pptx",
+      "overwrite": false,
+      "boundary": "prewrite-mkdir",
+      "stopped": "TalkCancelled",
+      "fileExists": false,
+      "oldContentPreserved": false,
+      "timeline": [
+        "cancel requested"
+      ],
+      "executions": []
+    },
+    {
+      "format": "pptx",
+      "overwrite": false,
+      "boundary": "after-write",
+      "stopped": "TalkCancelled",
+      "fileExists": true,
+      "oldContentPreserved": false,
+      "timeline": [
+        "file write completed",
+        "cancel requested",
+        "actual mutation recorded"
+      ],
+      "executions": [
+        {
+          "id": "run_42d32175-065e-464e-8646-c9cd7184f7a2",
+          "at": "2026-10-04T11:11:26.554Z",
+          "turnId": "turn_de7b2dba-3bbb-4cf6-838a-c2bfb9fec531",
+          "capabilityId": "export_file",
+          "instruction": "pptx:pptx-false-after-write.pptx",
+          "ok": true,
+          "summary": "已导出 D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\rel-do-01-fixed\\pptx-false-after-write.pptx",
+          "producedOutputs": [
+            "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\rel-do-01-fixed\\pptx-false-after-write.pptx"
+          ],
+          "outputPath": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\rel-do-01-fixed\\pptx-false-after-write.pptx",
+          "observedEffect": {
+            "kind": "file_created",
+            "target": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\rel-do-01-fixed\\pptx-false-after-write.pptx",
+            "mutated": true
+          }
+        }
+      ]
+    },
+    {
+      "format": "pptx",
+      "overwrite": false,
+      "boundary": "preflight-stat",
+      "stopped": "TalkCancelled",
+      "fileExists": false,
+      "oldContentPreserved": false,
+      "timeline": [
+        "cancel requested"
+      ],
+      "executions": []
+    },
+    {
+      "format": "pptx",
+      "overwrite": true,
+      "boundary": "prewrite-mkdir",
+      "stopped": "TalkCancelled",
+      "fileExists": true,
+      "oldContentPreserved": true,
+      "timeline": [
+        "cancel requested"
+      ],
+      "executions": []
+    },
+    {
+      "format": "pptx",
+      "overwrite": true,
+      "boundary": "after-write",
+      "stopped": "TalkCancelled",
+      "fileExists": true,
+      "oldContentPreserved": false,
+      "timeline": [
+        "file write completed",
+        "cancel requested",
+        "actual mutation recorded"
+      ],
+      "executions": [
+        {
+          "id": "run_ab068b5e-41dd-4ae7-99eb-25b515c9fa43",
+          "at": "2026-10-04T11:11:26.573Z",
+          "turnId": "turn_8ba57d87-20a0-42f0-a503-fdbaacd17875",
+          "capabilityId": "export_file",
+          "instruction": "pptx:pptx-true-after-write.pptx",
+          "ok": true,
+          "summary": "已导出 D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\rel-do-01-fixed\\pptx-true-after-write.pptx",
+          "producedOutputs": [
+            "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\rel-do-01-fixed\\pptx-true-after-write.pptx"
+          ],
+          "outputPath": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\rel-do-01-fixed\\pptx-true-after-write.pptx",
+          "observedEffect": {
+            "kind": "content_modified",
+            "target": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\rel-do-01-fixed\\pptx-true-after-write.pptx",
+            "mutated": true
+          }
+        }
+      ]
+    },
+    {
+      "format": "pptx",
+      "overwrite": true,
+      "boundary": "preflight-stat",
+      "stopped": "TalkCancelled",
+      "fileExists": true,
+      "oldContentPreserved": true,
+      "timeline": [
+        "cancel requested"
+      ],
+      "executions": []
+    }
+  ]
+}

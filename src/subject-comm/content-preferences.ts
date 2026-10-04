@@ -5,6 +5,31 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { atomicWriteFile } from '../infrastructure/fs-atomic';
+import type { NetworkItem } from './network-item';
+import { normalizeCanonicalUrl, sourcePublisherId } from './content-canonical';
+import { OPEN_SOURCE_CATALOG } from './open-source-catalog';
+
+/** Derived aliases only: no new source identity or preference store. Exact
+ * hostname evidence, never parent-domain guessing or item-dislike expansion. */
+export function contentSourceAllowed(
+  directives: ContentPreferenceDirective[], items: NetworkItem[],
+): (candidate: { url?: string | undefined; publisherSubjectId?: string | undefined }) => boolean {
+  const blocked = new Set(directives.filter(d => d.kind === 'block' && d.targetType === 'source').map(d => d.target));
+  const host = (url: string) => { try { return new URL(url).hostname.toLowerCase().replace(/^www\./, ''); } catch { return ''; } };
+  const domains = new Set<string>();
+  for (const source of OPEN_SOURCE_CATALOG) {
+    if (blocked.has(sourcePublisherId(normalizeCanonicalUrl(source.url)))) domains.add(host(source.url));
+  }
+  for (const item of items) {
+    if (!blocked.has(item.publisherSubjectId)) continue;
+    const domain = host(item.content.url || '');
+    // Search ingests use the evidenced hostname as publisherDisplayName.
+    if (domain && host(`https://${item.publisherDisplayName || ''}`) === domain) domains.add(domain);
+  }
+  return candidate => !blocked.has(candidate.publisherSubjectId || '') &&
+    !(candidate.url && blocked.has(sourcePublisherId(normalizeCanonicalUrl(candidate.url)))) &&
+    !domains.has(host(candidate.url || ''));
+}
 
 export const CONTENT_PREFERENCE_KINDS = ['boost', 'reduce', 'follow', 'block', 'steer'] as const;
 export type ContentPreferenceKind = (typeof CONTENT_PREFERENCE_KINDS)[number];

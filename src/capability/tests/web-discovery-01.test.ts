@@ -424,6 +424,16 @@ test('IQS official pageItems fixture maps title/link/snippet; empty pageItems is
   assert.equal(emptyResult.body.results?.length, 0);
 });
 
+test('IQS explicit package exhaustion is quota even when upstream uses HTTP 401', async () => {
+  const provider = createAliyunIqsWebDiscoveryProvider({
+    apiKey: 'IQS-test-not-a-real-key',
+    fetchImpl: async () => new Response(JSON.stringify({code:'iqs_Retrieval.PackageExhausted',message:'package exhausted'}), {status:401}),
+  });
+  await assert.rejects(() => provider.search({query:'course'}), (error: any) => {
+    assert.equal(error.status,'RATE_LIMITED'); assert.equal(error.httpStatus,401); return true;
+  });
+});
+
 test('IQS HTTP body with BOM still maps official pageItems', async () => {
   const provider = createAliyunIqsWebDiscoveryProvider({
     apiKey: 'IQS-test-not-a-real-key',

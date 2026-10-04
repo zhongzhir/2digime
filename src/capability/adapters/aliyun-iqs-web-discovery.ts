@@ -118,6 +118,9 @@ function unifiedSearchUrl(raw: string): string {
 
 function classifyHttp(status: number, code: string): WebDiscoveryError {
   const labeled = `${code || status}`.slice(0, 60);
+  if (/PackageExhausted/i.test(code)) {
+    return new WebDiscoveryError('RATE_LIMITED', `iqs_${labeled}`, status);
+  }
   if (status === 401 || status === 403 || /unauthoriz|forbidden|invalid.*key|accessdenied|apikey/i.test(code)) {
     return new WebDiscoveryError('AUTH_FAILED', `iqs_${labeled || 'auth'}`, status === 403 ? 403 : 401);
   }

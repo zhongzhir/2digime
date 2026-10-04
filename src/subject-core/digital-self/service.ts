@@ -35,8 +35,8 @@ export class DigitalSelfService {
     private readonly onMaterialImported?: (sourceCopy: string) => Promise<void>,
   ) {}
 
-  async invoke(input: DigitalSelfCommandInput): Promise<DigitalSelfCommandOutput> {
-    const run = this.writeChain.then(() => this.invokeNow(input));
+  async invoke(input: DigitalSelfCommandInput, taskContext?: string): Promise<DigitalSelfCommandOutput> {
+    const run = this.writeChain.then(() => this.invokeNow(input, taskContext));
     this.writeChain = run.then(
       () => undefined,
       () => undefined,
@@ -46,6 +46,7 @@ export class DigitalSelfService {
 
   private async invokeNow(
     input: DigitalSelfCommandInput,
+    taskContext?: string,
   ): Promise<DigitalSelfCommandOutput> {
     const pkg = this.resolvePackage();
     if (!pkg) {
@@ -110,6 +111,7 @@ export class DigitalSelfService {
         mode: 'tell',
         self,
         text,
+        ...(taskContext ? {taskContext} : {}),
       });
       const result = applyTellProposals(self, interpreted.understandings, this.now());
       await writeDigitalSelf(pkg.rootDir, result.self);

@@ -71,6 +71,8 @@ interface FeedSnapshot {
 
 interface FeedCacheFile {
   version: 1;
+  /** Derived task cache key, not an authoritative goal or profile. */
+  selectionContextKey?: string;
   personal?: FeedSnapshot;
   lastView?: FeedSnapshot;
   /** 本轮排序后的完整 id，翻页从这里取，不把 ignore 当成删除。 */
@@ -814,6 +816,7 @@ export function diverseFeedCandidates(items: NetworkItem[], limit = 24, perSourc
 
 export async function ensurePersonalFeed(input: {
   packageRoot: string;
+  selectionContextKey?: string;
   digitalSelf: DigitalSelf;
   items: NetworkItem[];
   preferences: DiscoverPreference[];
@@ -850,11 +853,20 @@ export async function ensurePersonalFeed(input: {
   let steeredQueries: string[] = [];
   const persistCache = async (file: FeedCacheFile) => {
     if (input.isCurrentGeneration && !input.isCurrentGeneration()) return;
-    await writeCache(input.packageRoot, file);
+    await writeCache(input.packageRoot, {...file, selectionContextKey: input.selectionContextKey || ''});
   };
   const prefs = input.preferenceRows || [];
   const recent = input.recentEvents || [];
   const cache = await readCache(input.packageRoot);
+  if (!input.preferPersonalCache && (cache.selectionContextKey || '') !== (input.selectionContextKey || '')) {
+    // Discard only the previous task's projection; default personal cache stays
+    // available for revoke/session switch. Rejudge once when the task changes.
+    delete cache.lastView;
+    delete cache.rankedIds;
+    if (input.selectionContextKey) input = {...input, mode:'reset'};
+  } else if (input.selectionContextKey && input.mode === 'open' && cache.lastView?.itemIds.length) {
+    input = {...input, mode:'reuse'};
+  }
   if (input.mode === 'more' && cache.rankedIds?.length) {
     const delivered = new Set(cache.lastView?.itemIds || []);
     const nextIds = cache.rankedIds.filter((id) => !delivered.has(id));

@@ -1,4 +1,5 @@
 import { promises as fs } from 'node:fs';
+import { createHash } from 'node:crypto';
 import * as path from 'node:path';
 import { JsonObjectStore } from '../infrastructure/json-store';
 import { ContentStore } from '../infrastructure/content-store';
@@ -226,6 +227,7 @@ import {
 } from '../subject-comm/recent-recommendation-state';
 import {
   formatPreferenceDirectives,
+  contentSourceAllowed,
   listContentPreferences,
   reverseContentPreference,
   upsertContentPreference,
@@ -549,8 +551,8 @@ export class DigitalMeRuntime {
     const ids = new Set(input.contentIds);
     const items = await this.loadDiscoverItems(pkg.rootDir);
     const prefs = await listContentPreferences(pkg.rootDir);
-    const selected = items.filter((item) => ids.has(item.itemId) && !prefs.some((p) =>
-      p.kind === 'block' && p.targetType === 'source' && p.target === item.publisherSubjectId));
+    const allowed = contentSourceAllowed(prefs, items);
+    const selected = items.filter((item) => ids.has(item.itemId) && allowed({url:item.content.url,publisherSubjectId:item.publisherSubjectId}));
     if (selected.length !== ids.size) throw new Error('所选对象已不可用或来源已被屏蔽，请重新选择。');
     const adjustment = await this.currentAdjustment(pkg.rootDir);
     const request = this.lastIntentView?.searchQuery || adjustment?.text || '比较我从发现选中的内容';
@@ -1095,12 +1097,16 @@ export class DigitalMeRuntime {
     const searchWeb = this.wrapContentSearch(this.resolveContentSearch(), this.searchAbort?.signal);
     const openMedia = this.resolveOpenMediaFetch();
     const store = new FileNetworkItemStore(path.join(packageRoot, 'content'));
-    const loadItems = () => this.loadDiscoverItems(packageRoot, relayUrl);
-    const items = await loadItems();
     const preferenceRows = await listContentPreferences(packageRoot);
+    let sourceAllows: ReturnType<typeof contentSourceAllowed> = () => true;
+    const loadItems = async () => {
+      const rows = await this.loadDiscoverItems(packageRoot, relayUrl);
+      const allowed = contentSourceAllowed(preferenceRows, rows);
+      sourceAllows = allowed;
+      return rows.filter(item => allowed({url:item.content.url,publisherSubjectId:item.publisherSubjectId}));
+    };
+    const items = await loadItems();
     const adjustment = await this.currentAdjustment(packageRoot);
-    // 关联任务的发现结果必须按 thread 最新条件判断，不回放更正前的整表。
-    if (adjustment?.goalThreadId && (mode === 'open' || mode === 'more' || mode === 'reuse')) mode = 'reset';
     const directives = [
       formatPreferenceDirectives(preferenceRows),
       adjustmentSteersFeed(adjustment, 'personal') ? formatAdjustmentDirective(adjustment) : '',
@@ -1118,6 +1124,7 @@ export class DigitalMeRuntime {
       feedbackFile: path.join(packageRoot, 'content', 'network-content-feedback.jsonl'),
       networking,
       mode,
+      selectionContextKey: adjustment?.goalThreadId ? createHash('sha256').update(JSON.stringify([adjustment.goalThreadId, adjustment.text])).digest('hex') : '',
       ...(this.adjustmentView(adjustment) ? { adjustment: this.adjustmentView(adjustment) } : {}),
       ...(directives ? { preferenceDirectives: directives } : {}),
       ...(supplyPhase ? { supplyPhase } : {}),
@@ -1132,7 +1139,7 @@ export class DigitalMeRuntime {
         await store.put(item);
       },
       ingestHit: async (hit) => {
-        if (!allowsDefaultSupply({ url: hit.url })) return [];
+        if (!allowsDefaultSupply({ url: hit.url }) || !sourceAllows(hit)) return [];
         try {
           const entrance = await ingestDiscoveredEntrance({
             url: hit.url,
@@ -1169,7 +1176,10 @@ export class DigitalMeRuntime {
         return indexSearchHits({ hits: [hit], store, limit: 1, via: 'feed' });
       },
       reloadItems: loadItems,
-      getItem: (itemId) => store.get(itemId, nowIso()),
+      getItem: async (itemId) => {
+        const item = await store.get(itemId, nowIso());
+        return item && sourceAllows({url:item.content.url,publisherSubjectId:item.publisherSubjectId}) ? item : undefined;
+      },
     });
     if (result.view.networking === 'AUTH_FAILED' || result.view.networking === 'TEMPORARY_ERROR') {
       this.lastNetworkCode = result.view.networking;
@@ -1199,7 +1209,9 @@ export class DigitalMeRuntime {
     const seekDeadlineAt = Date.now() + SEEK_DEADLINE_MS;
     const seekRemainingMs = () => Math.max(1, seekDeadlineAt - Date.now());
     const preferences = await this.contentPreferenceRows(packageRoot);
-    const items = await this.loadDiscoverItems(packageRoot, relayUrl);
+    const sourceItems = await this.loadDiscoverItems(packageRoot, relayUrl);
+    const sourceAllows = contentSourceAllowed(await listContentPreferences(packageRoot), sourceItems);
+    const items = sourceItems.filter(item => sourceAllows({url:item.content.url,publisherSubjectId:item.publisherSubjectId}));
     const networking = this.snapshotNetworkDiscovery();
     const usage = { calls: 0, reused: 0, skippedAfterQuota: 0, rateLimited: false };
     this.searchUsage = { generationId, usage };
@@ -1210,6 +1222,7 @@ export class DigitalMeRuntime {
     const store = new FileNetworkItemStore(path.join(packageRoot, 'content'));
     await appendRecentRecommendationEvent(packageRoot, { type: 'seek_topic', topic: query });
     const ingestHit = async (hit: { title: string; url: string; snippet?: string }) => {
+      if (!sourceAllows(hit)) return [];
       if (signal.aborted) return [];
       if (!allowsDefaultSupply({ url: hit.url })) return [];
       try {
@@ -1309,13 +1322,13 @@ export class DigitalMeRuntime {
       let newsFailed = false;
       if (intentReady.newsFeed) {
         try {
-          headlines = await fetchNewsHeadlines(
+          headlines = await this.filterSourceSearchHits(await fetchNewsHeadlines(
             intentReady.searchQueries[0] || query,
             fetch,
             new Date(),
             signal,
             searchWeb,
-          );
+          ));
         } catch {
           newsFailed = true;
           headlines = [];
@@ -1614,7 +1627,7 @@ export class DigitalMeRuntime {
   private resolveContentSearch():
     | ((query: string, signal?: AbortSignal) => Promise<Array<{ title: string; url: string; snippet?: string }>>)
     | undefined {
-    if (this.options.contentSearch) return this.options.contentSearch;
+    if (this.options.contentSearch) return async query => this.filterSourceSearchHits(await this.options.contentSearch!(query));
     const gem = resolveGeminiSearchCredential(
       process.env.NODE_TEST_CONTEXT ? {} : process.env,
       {
@@ -1638,13 +1651,13 @@ export class DigitalMeRuntime {
       });
       return async (query: string, signal?: AbortSignal) => {
         const sources = await connector.search(query, signal ? { signal } : undefined);
-        return sources
+        return this.filterSourceSearchHits(sources
           .filter((row) => String(row.url || '').trim())
           .map((row) => ({
             title: String(row.title || row.url),
             url: String(row.url),
             ...(row.snippet ? { snippet: row.snippet } : {}),
-          }));
+          })));
       };
     }
     if (path === 'managed' && gatewayUrl) {
@@ -1655,16 +1668,23 @@ export class DigitalMeRuntime {
       });
       return async (query: string, signal?: AbortSignal) => {
         const sources = await connector.search(query, signal ? { signal } : undefined);
-        return sources
+        return this.filterSourceSearchHits(sources
           .filter((row) => String(row.url || '').trim())
           .map((row) => ({
             title: String(row.title || row.url),
             url: String(row.url),
             ...(row.snippet ? { snippet: row.snippet } : {}),
-          }));
+          })));
       };
     }
     return undefined;
+  }
+
+  private async filterSourceSearchHits<T extends {url?: string; publisherSubjectId?: string}>(hits: T[]): Promise<T[]> {
+    const pkg = this.subject.getActive();
+    if (!pkg) return hits;
+    const allowed = contentSourceAllowed(await listContentPreferences(pkg.rootDir), await this.loadDiscoverItems(pkg.rootDir));
+    return hits.filter(allowed);
   }
 
   private resolveContentChat(): ChatCompleteFn | null {
@@ -1814,8 +1834,8 @@ export class DigitalMeRuntime {
               }),
           };
         },
-        async (text) => {
-          const learned = await this.getDigitalSelfService().invoke({ action: 'tell', text });
+        async (text, taskContext) => {
+          const learned = await this.getDigitalSelfService().invoke({ action: 'tell', text }, taskContext);
           if (!learned.view.asked) return { asked: false };
           const pending = learned.view.groups.learning
             .filter((item) => item.confirmationLabel === '需要你确认')
@@ -1828,14 +1848,14 @@ export class DigitalMeRuntime {
         async (pkg, query) => {
           const items = await this.loadDiscoverItems(pkg.rootDir);
           const directives = await listContentPreferences(pkg.rootDir);
-          const allowed = items.filter((item) => !directives.some((p) => p.kind === 'block' && p.targetType === 'source' && p.target === item.publisherSubjectId));
-          const sought = await seekContent({ query, items: allowed });
+          const allows = contentSourceAllowed(directives, items);
+          const sought = await seekContent({ query, items: items.filter(item => allows({url:item.content.url,publisherSubjectId:item.publisherSubjectId})) });
           return formatSeekContext(sought);
         },
         this.options.requestFolderAccess,
         () => this.resolveContentSearch(),
-        () => (query: string) =>
-          fetchNewsHeadlines(query, fetch, new Date(), undefined, this.resolveContentSearch()),
+        () => async (query: string) =>
+          this.filterSourceSearchHits(await fetchNewsHeadlines(query, fetch, new Date(), undefined, this.resolveContentSearch())),
       );
     }
     return this.talkService;

@@ -81,7 +81,8 @@ test('SEARCH QUOTA: an exhausted search quota is shown as quota, not as "nothing
   const first = await bus.invoke('content', { action: 'seek', text: '找几部纪录片看看', searchGenerationId: 'sg_quota' });
   const view = await settle(bus, first, 'sg_quota');
   assert.equal(calls, 1);
-  assert.match(view.notice, /搜索额度已经用完/);
+  assert.match(view.notice, /额度或频率限制/);
+  assert.doesNotMatch(view.notice, /整点|这个小时/);
   assert.doesNotMatch(view.notice, /没有找到|检查联网/);
   assert.equal(view.searchUsage?.rateLimited, true);
   await runtime.stop();
