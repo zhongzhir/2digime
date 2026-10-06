@@ -163,7 +163,7 @@ export function createManagedAiChatComplete(options: ManagedAiClientOptions): Ch
           ...(input.responseFormat ? { responseFormat: input.responseFormat } : {}),
           ...(input.tools && input.tools.length ? { tools: input.tools } : {}),
           ...(input.toolChoice ? { toolChoice: input.toolChoice } : {}),
-          ...(input.thinking ? { thinking: input.thinking } : {}),
+          // Managed gateway allowlist does not accept thinking yet; keep its existing contract.
           idempotencyKey,
         }),
         signal: ac.signal,

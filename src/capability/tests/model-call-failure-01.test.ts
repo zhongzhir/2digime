@@ -90,3 +90,10 @@ test('public page redirects cannot start after cancellation or shared deadline',
   assert.equal(calls,1);
  }
 });
+
+
+test('managed structured request conforms to current gateway allowlist',async()=>{
+ const {parseAiInferenceRequest}=await import('../../relay-service/ai-inference-gateway');let checked=false;
+ const chat=createManagedAiChatComplete({gatewayUrl:'https://offline.invalid',installToken:'fixture',fetchImpl:async(_url,o)=>{const body=JSON.parse(String(o?.body));parseAiInferenceRequest(body,{maxInputChars:100000,maxOutputTokens:2048});assert.equal(body.thinking,undefined);checked=true;return new Response(JSON.stringify({ok:true,status:'AVAILABLE',text:'{}'}),{status:200})}});
+ await chat({...request,thinking:{type:'disabled'}});assert.equal(checked,true);
+});

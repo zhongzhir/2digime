@@ -1,0 +1,33 @@
+✔ MANAGED AI rejects Digital Self payload and keeps messages only (1.8793ms)
+✔ provider usage parses input/output/total from DeepSeek-shaped payload (0.1726ms)
+✔ trial allowance is configurable, deducted, exhausted, and idempotent (56.4008ms)
+✔ concurrent requests cannot skip exhaustion; institution fixture reuses gateway (37.3769ms)
+✔ Relay inference does not persist prompt/response and health reports managedAi (121.1916ms)
+✔ preference migration keeps existing BYOK users; new installs default managed (47.9985ms)
+✔ no-key Talk/Digital Self runtime uses managed complete and does not mention API Key (186.1661ms)
+✔ managed client maps exhaustion to human notice, never 402 (1.4656ms)
+{"ts":"2026-10-06T01:03:00.250Z","event":"managed_ai_unavailable","reason":"MANAGED_AI_PROVIDER_SECRET_REQUIRED"}
+✔ app package sources do not embed managed AI provider secrets (6.9054ms)
+✔ resolveManagedAiGateway without secret stays unready and does not throw (0.5468ms)
+✔ empty truncated response preserves finish reason and HTTP without becoming empty failure (16.1657ms)
+✔ transport distinguishes empty and redacts diagnostic (1.1049ms)
+✔ transport distinguishes json and redacts diagnostic (0.5127ms)
+✔ transport distinguishes envelope and redacts diagnostic (0.3478ms)
+✔ transport distinguishes http and redacts diagnostic (0.3321ms)
+✔ network failure has unknown HTTP; user cancellation prevents even the first call (0.4144ms)
+✔ deadline includes response body reading; no second structured attempt after timeout (37.1751ms)
+✔ remaining deadline is passed downstream and expired success is discarded (47.6424ms)
+✔ active cancellation after a response prevents parse and retry; no raw parser error in log (0.4616ms)
+✔ search preserves actual HTTP and distinguishes bad format (1.2685ms)
+✔ formal runtime failure retains same-request candidates, reaches terminal and logs no material (232.5726ms)
+✔ search cancellation during body read discards success (0.4352ms)
+✔ public page redirects cannot start after cancellation or shared deadline (46.2794ms)
+✔ managed structured request conforms to current gateway allowlist (3.008ms)
+ℹ tests 24
+ℹ suites 0
+ℹ pass 24
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 750.0268
