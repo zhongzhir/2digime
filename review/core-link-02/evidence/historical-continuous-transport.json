@@ -1,0 +1,262 @@
+{
+  "requests": [
+    {
+      "requestId": "87b42615-cbc0-4033-9abe-7647921a15ae",
+      "phase": "01-plan",
+      "startedAt": "2026-10-06T09:53:56.769Z",
+      "toolCount": 0,
+      "responseFormat": "json_object",
+      "httpStatus": 200,
+      "status": "AVAILABLE",
+      "finishReason": "stop",
+      "outputLength": 2422,
+      "toolCallCount": 0,
+      "usage": {
+        "inputTokens": 1018,
+        "outputTokens": 857,
+        "totalTokens": 1875
+      },
+      "elapsedMs": 3578
+    },
+    {
+      "requestId": "5abeef39-ac68-47a2-b224-e4663720b312",
+      "phase": "01-plan",
+      "startedAt": "2026-10-06T09:54:00.541Z",
+      "toolCount": 9,
+      "responseFormat": null,
+      "httpStatus": 200,
+      "status": "AVAILABLE",
+      "finishReason": "tool_calls",
+      "outputLength": 91,
+      "toolCallCount": 1,
+      "usage": {
+        "inputTokens": 3527,
+        "outputTokens": 108,
+        "totalTokens": 3635
+      },
+      "elapsedMs": 838
+    },
+    {
+      "requestId": "aeaf3d34-ce39-4add-a136-bf54adf91dc3",
+      "phase": "01-plan",
+      "startedAt": "2026-10-06T09:54:01.380Z",
+      "toolCount": 9,
+      "responseFormat": null,
+      "httpStatus": 200,
+      "status": "AVAILABLE",
+      "finishReason": "tool_calls",
+      "outputLength": 0,
+      "toolCallCount": 1,
+      "usage": {
+        "inputTokens": 3746,
+        "outputTokens": 1118,
+        "totalTokens": 4864
+      },
+      "elapsedMs": 5072
+    },
+    {
+      "requestId": "fd1686c5-3a27-42c4-814b-61bbfd85e876",
+      "phase": "01-plan",
+      "startedAt": "2026-10-06T09:54:06.463Z",
+      "toolCount": 9,
+      "responseFormat": null,
+      "httpStatus": 200,
+      "status": "AVAILABLE",
+      "finishReason": "tool_calls",
+      "outputLength": 0,
+      "toolCallCount": 1,
+      "usage": {
+        "inputTokens": 6187,
+        "outputTokens": 39,
+        "totalTokens": 6226
+      },
+      "elapsedMs": 941
+    },
+    {
+      "requestId": "729cd3d9-1d20-4447-b588-0f5a96d2e6f0",
+      "phase": "01-plan",
+      "startedAt": "2026-10-06T09:54:07.407Z",
+      "toolCount": 9,
+      "responseFormat": null,
+      "httpStatus": 200,
+      "status": "AVAILABLE",
+      "finishReason": "stop",
+      "outputLength": 795,
+      "toolCallCount": 0,
+      "usage": {
+        "inputTokens": 7443,
+        "outputTokens": 435,
+        "totalTokens": 7878
+      },
+      "elapsedMs": 2178
+    },
+    {
+      "requestId": "f3ea0d40-41dc-46d0-8321-6e22a511a5ea",
+      "phase": "02-correction",
+      "startedAt": "2026-10-06T09:54:10.163Z",
+      "toolCount": 0,
+      "responseFormat": "json_object",
+      "httpStatus": 200,
+      "status": "AVAILABLE",
+      "finishReason": "stop",
+      "outputLength": 1341,
+      "toolCallCount": 0,
+      "usage": {
+        "inputTokens": 1007,
+        "outputTokens": 463,
+        "totalTokens": 1470
+      },
+      "elapsedMs": 1941
+    },
+    {
+      "requestId": "ab7a0b70-7817-412c-91a4-da3d0bc6620a",
+      "phase": "02-correction",
+      "startedAt": "2026-10-06T09:54:12.154Z",
+      "toolCount": 9,
+      "responseFormat": null,
+      "httpStatus": 200,
+      "status": "AVAILABLE",
+      "finishReason": "tool_calls",
+      "outputLength": 0,
+      "toolCallCount": 1,
+      "usage": {
+        "inputTokens": 4071,
+        "outputTokens": 172,
+        "totalTokens": 4243
+      },
+      "elapsedMs": 1065
+    },
+    {
+      "requestId": "17e8b234-1318-4105-b09a-a68a0aa43bc0",
+      "phase": "02-correction",
+      "startedAt": "2026-10-06T09:54:13.219Z",
+      "toolCount": 9,
+      "responseFormat": null,
+      "httpStatus": 200,
+      "status": "AVAILABLE",
+      "finishReason": "stop",
+      "outputLength": 514,
+      "toolCallCount": 0,
+      "usage": {
+        "inputTokens": 5215,
+        "outputTokens": 293,
+        "totalTokens": 5508
+      },
+      "elapsedMs": 1968
+    },
+    {
+      "requestId": "2c46a711-ecc5-4360-a5d5-92ad4c2d7085",
+      "phase": "02-correction",
+      "startedAt": "2026-10-06T09:54:15.188Z",
+      "toolCount": 0,
+      "responseFormat": null,
+      "httpStatus": 200,
+      "status": "AVAILABLE",
+      "finishReason": "stop",
+      "outputLength": 423,
+      "toolCallCount": 0,
+      "usage": {
+        "inputTokens": 3824,
+        "outputTokens": 225,
+        "totalTokens": 4049
+      },
+      "elapsedMs": 1375
+    },
+    {
+      "requestId": "c2e1ff4c-0136-4681-9339-816b618ea61d",
+      "phase": "04-discover",
+      "startedAt": "2026-10-06T09:55:58.114Z",
+      "maxTokens": 2048,
+      "toolCount": 0,
+      "responseFormat": "json_object",
+      "httpStatus": 200,
+      "status": "AVAILABLE",
+      "finishReason": "stop",
+      "outputLength": 266,
+      "toolCallCount": 0,
+      "usage": {
+        "inputTokens": 1338,
+        "outputTokens": 102,
+        "totalTokens": 1440
+      },
+      "elapsedMs": 1308
+    },
+    {
+      "requestId": "56b843c7-6f71-4eba-8515-4dfd84916376",
+      "phase": "05-revised-plan",
+      "startedAt": "2026-10-06T09:55:59.633Z",
+      "toolCount": 0,
+      "responseFormat": "json_object",
+      "httpStatus": 200,
+      "status": "AVAILABLE",
+      "finishReason": "stop",
+      "outputLength": 2140,
+      "toolCallCount": 0,
+      "usage": {
+        "inputTokens": 1166,
+        "outputTokens": 775,
+        "totalTokens": 1941
+      },
+      "elapsedMs": 2569
+    },
+    {
+      "requestId": "49b35775-f7f1-4e6c-8b78-3a99feb692a0",
+      "phase": "05-revised-plan",
+      "startedAt": "2026-10-06T09:56:02.243Z",
+      "toolCount": 9,
+      "responseFormat": null,
+      "httpStatus": 200,
+      "status": "AVAILABLE",
+      "finishReason": "tool_calls",
+      "outputLength": 0,
+      "toolCallCount": 1,
+      "usage": {
+        "inputTokens": 4557,
+        "outputTokens": 1035,
+        "totalTokens": 5592
+      },
+      "elapsedMs": 4396
+    },
+    {
+      "requestId": "caa29ba0-ec1f-4960-aa94-a63df4b03543",
+      "phase": "05-revised-plan",
+      "startedAt": "2026-10-06T09:56:06.651Z",
+      "toolCount": 9,
+      "responseFormat": null,
+      "httpStatus": 200,
+      "status": "AVAILABLE",
+      "finishReason": "tool_calls",
+      "outputLength": 0,
+      "toolCallCount": 1,
+      "usage": {
+        "inputTokens": 6854,
+        "outputTokens": 41,
+        "totalTokens": 6895
+      },
+      "elapsedMs": 515
+    },
+    {
+      "requestId": "2aeeadc5-8312-4038-8e25-0f23ca85c0c4",
+      "phase": "05-revised-plan",
+      "startedAt": "2026-10-06T09:56:07.168Z",
+      "toolCount": 9,
+      "responseFormat": null,
+      "httpStatus": 200,
+      "status": "AVAILABLE",
+      "finishReason": "stop",
+      "outputLength": 894,
+      "toolCallCount": 0,
+      "usage": {
+        "inputTokens": 8047,
+        "outputTokens": 483,
+        "totalTokens": 8530
+      },
+      "elapsedMs": 2231
+    }
+  ],
+  "allowanceRequests": 0,
+  "blockedSearchCalls": 0,
+  "blockedOtherNetwork": 0,
+  "failed": false,
+  "budget": 16
+}

@@ -1,0 +1,34 @@
+✔ empty truncated response preserves finish reason and HTTP without becoming empty failure (16.9793ms)
+✔ transport distinguishes empty and redacts diagnostic (1.0384ms)
+✔ transport distinguishes json and redacts diagnostic (1.1573ms)
+✔ transport distinguishes envelope and redacts diagnostic (0.4145ms)
+✔ transport distinguishes http and redacts diagnostic (0.3272ms)
+✔ network failure has unknown HTTP; user cancellation prevents even the first call (0.4214ms)
+✔ deadline includes response body reading; no second structured attempt after timeout (46.4924ms)
+✔ remaining deadline is passed downstream and expired success is discarded (46.3239ms)
+✔ active cancellation after a response prevents parse and retry; no raw parser error in log (0.6196ms)
+✔ search preserves actual HTTP and distinguishes bad format (1.5103ms)
+✔ formal runtime failure retains same-request candidates, reaches terminal and logs no material (142.5366ms)
+✔ search cancellation during body read discards success (0.4931ms)
+✔ public page redirects cannot start after cancellation or shared deadline (30.4884ms)
+✔ managed structured request conforms to current gateway allowlist (3.004ms)
+✔ short first heading retains both requested points in actual PPTX text (4.7886ms)
+✔ DOCX 结构可解析且包含正文 (0.9415ms)
+✔ exportDocx / exportMarkdown 落盘且不改动源内容 (25.4719ms)
+✔ PPTX 按标题拆页且含中文字体，不得整篇塞进一页 (74.4605ms)
+✔ 中文长文导出为真实 DOCX 与 PPTX 文件 (10.1293ms)
+✔ folder grant without attached material exposes exact output readback and refuses adjacent files (17.4089ms)
+✔ write_file 把模型生成的 HTML 写入授权文件夹，不调用 Coding Agent (131.2943ms)
+✔ 无授权文件夹时 write_file 不得写盘 (108.2017ms)
+✔ write_file 越权路径不得写盘 (90.0749ms)
+✔ 多个授权根时必须显式选择列出的 root，不做语义路由 (4.6309ms)
+✔ SEARCH USAGE: a program request sends no preview search and reuses identical queries; the view records actual calls (375.1852ms)
+✔ SEARCH QUOTA: an exhausted search quota is shown as quota, not as "nothing found" or a network failure (92.7364ms)
+ℹ tests 26
+ℹ suites 0
+ℹ pass 26
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 819.601

@@ -1,0 +1,49 @@
+{
+  "success": true,
+  "startedAt": "2026-10-06T09:53:56.769Z",
+  "phases": [
+    {
+      "stage": "01-plan",
+      "modelRequests": 5,
+      "elapsedMs": 13404
+    },
+    {
+      "stage": "02-correction",
+      "modelRequests": 4,
+      "elapsedMs": 7110
+    },
+    {
+      "stage": "03-restart",
+      "modelRequests": 0,
+      "elapsedMs": 3885
+    },
+    {
+      "stage": "04-discover",
+      "modelRequests": 1
+    },
+    {
+      "stage": "05-revised-plan",
+      "modelRequests": 4,
+      "elapsedMs": 10336
+    }
+  ],
+  "maxApplicationRequests": 16,
+  "maxUpstreamAttempts": 48,
+  "testHarnessInterruption": {
+    "after": "correction and first restart",
+    "modelCallsDuringInterruption": 0,
+    "successfulStagesNotRepeated": true
+  },
+  "artifact": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\build\\evidence\\core-link-continuous-20261006\\artifacts\\learning-plan-revised.md",
+  "endedAt": "2026-10-06T09:56:09.922Z",
+  "elapsedMs": 133153,
+  "applicationRequests": 14,
+  "usage": {
+    "inputTokens": 58000,
+    "outputTokens": 6146,
+    "totalTokens": 64146,
+    "unknownCalls": 0
+  },
+  "searchCalls": 0,
+  "blockedSearchCalls": 0
+}
