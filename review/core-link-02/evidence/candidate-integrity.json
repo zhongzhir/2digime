@@ -1,0 +1,67 @@
+{
+  "integrity": {
+    "buildId": "v2-tujimi-20261006T100113Z-229d0921",
+    "brandId": "tujimi",
+    "productName": "兔机米",
+    "gitHead": "229d0921eb89113aa2320600014bef0f1d440a1f",
+    "staging": "D:\\Projects\\Digital Me\\.task-worktrees\\core-link-01\\release-staging\\v2-tujimi-20261006T100113Z-229d0921",
+    "deliveryFormat": "nsis+zip",
+    "primaryDelivery": "nsis",
+    "setup": {
+      "path": "release-staging\\v2-tujimi-20261006T100113Z-229d0921\\兔机米-0.2.0-public-alpha-win-x64-setup.exe",
+      "sha256": "6c8fa40124409492dc6ccf2fe9c4f7b7f932d8f0e8dc6f417f641548694711b5",
+      "bytes": 84232499
+    },
+    "zip": {
+      "path": "release-staging\\v2-tujimi-20261006T100113Z-229d0921\\兔机米-0.2.0-public-alpha-win-x64.zip",
+      "sha256": "bf09e4b81c4e8cd02e7d7222ef36b8a4cefd3cc89a8d386d312876f6cfad6a37",
+      "bytes": 116185717
+    },
+    "exe": {
+      "path": "release-staging\\v2-tujimi-20261006T100113Z-229d0921\\win-unpacked\\兔机米.exe",
+      "sha256": "ed437abdf17c5e124371a70f3c58812d41f3e285ae1c79d162d69947b12df337",
+      "bytes": 186300416
+    },
+    "asar": {
+      "path": "release-staging\\v2-tujimi-20261006T100113Z-229d0921\\win-unpacked\\resources\\app.asar",
+      "sha256": "d9c831c5275208b13fbf35ea0c3ab3faa6d8d35ace312404e0c8173eb74723bc",
+      "bytes": 29129971
+    },
+    "sensitiveFindings": [],
+    "entryCompare": {
+      "packaged": "electron/main.cjs",
+      "dev": "electron/main.cjs",
+      "domain": "dist/runtime/digitalme-runtime.js",
+      "jobRunner": "dist/work-runtime/job-runner.js",
+      "adapter": "dist/capability/adapters/openai-compatible.js"
+    }
+  },
+  "signature": "NotSigned",
+  "hashes": {
+    "electron/main.cjs": {
+      "matches": true,
+      "sha256": "bd9eb0196324ac4e8a68f2e5e0f4af80be37a50274f4a91eee03c258ed8e01c6"
+    },
+    "electron/preload.cjs": {
+      "matches": true,
+      "sha256": "97b8768c0a771ffc1de1a3cfc8040800fedd1bd4b42f3407c2472ed29916daa3"
+    },
+    "dist/intelligence/loop.js": {
+      "matches": true,
+      "sha256": "2422b7e2c1998b324960b181451f74a0710b79c3745149d73455acc1891c5fa9"
+    },
+    "dist/runtime/digitalme-runtime.js": {
+      "matches": true,
+      "sha256": "4d88272541b07d10dec558b2bb50ea5cd62afbc284302fa7794fea3689500469"
+    },
+    "dist/infrastructure/model-http.js": {
+      "matches": true,
+      "sha256": "aa57a97fdaf47ca1db87f2b06784a5bda51826a1aefc5a97c8d04c563f0c77b1"
+    },
+    "build-meta.json": {
+      "matches": true,
+      "sha256": "41aa232f4dcb89e1573bf489e5992856d8098ba2961cda6c96506371033f3687"
+    }
+  },
+  "allArtifactHashesRechecked": true
+}
